@@ -2,7 +2,7 @@
 
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::collider::{
-	queue_terrain_trimesh_colliders, release_cpu_on_visual_only_meshes, TerrainColliderSystems,
+	cook_and_release_cpu_before_extract, queue_terrain_trimesh_colliders, TerrainColliderSystems,
 	TerrainFrictionConfig,
 };
 use crate::terrain::stamps::TerrainStampConfigs;
@@ -44,7 +44,6 @@ impl Plugin for TerrainResourcesPlugin {
 					TerrainColliderSystems::SyncOverlays,
 					TerrainColliderSystems::SyncHosts,
 					TerrainColliderSystems::QueueMeshes,
-					TerrainColliderSystems::ReleaseCpu,
 				)
 					.chain(),
 			)
@@ -56,9 +55,6 @@ impl Plugin for TerrainResourcesPlugin {
 						terrain_layer_model::TerrainLayerSystems::<crate::Durham>::QueueColliders,
 					),
 			)
-			.add_systems(
-				Update,
-				release_cpu_on_visual_only_meshes.in_set(TerrainColliderSystems::ReleaseCpu),
-			);
+			.add_systems(Last, cook_and_release_cpu_before_extract);
 	}
 }

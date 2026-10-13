@@ -41,8 +41,6 @@ pub enum TerrainColliderSystems {
 	SyncOverlays,
 	SyncHosts,
 	QueueMeshes,
-	/// Drop MAIN_WORLD vertex copies once Avian has the trimesh (or never needed it).
-	ReleaseCpu,
 }
 
 /// Fill scene that should receive a trimesh once [`Mesh3d`] is fulfilled.
@@ -65,10 +63,14 @@ pub fn terrain_collider_covers_xz<'a>(
 pub(crate) struct TerrainColliderReady;
 
 /// Cooks a trimesh onto each fill that asked for collision and now has [`Mesh3d`].
+///
+/// Fallback for heals after the first extract. Does **not** flip
+/// [`RenderAssetUsages`]: changing `MAIN_WORLD` after extract makes Bevy try
+/// to extract the same asset twice and panic on the compute pool.
 pub(crate) fn queue_terrain_trimesh_colliders(
 	mut commands: Commands,
 	friction: Res<TerrainFrictionConfig>,
-	mut meshes: ResMut<Assets<Mesh>>,
+	meshes: Res<Assets<Mesh>>,
 	sources: Query<
 		(Entity, &Mesh3d),
 		(With<TerrainColliderMeshSource>, Without<TerrainColliderReady>),
@@ -81,9 +83,6 @@ pub(crate) fn queue_terrain_trimesh_colliders(
 		let Some(collider) = Collider::trimesh_from_mesh(mesh) else {
 			continue;
 		};
-		if let Some(mut mesh) = meshes.get_mut(&mesh3d.0) {
-			release_cpu_mesh_after_extract(&mut mesh);
-		}
 		commands.entity(entity).insert((
 			TerrainTrimeshCollider,
 			TerrainColliderReady,
@@ -95,30 +94,44 @@ pub(crate) fn queue_terrain_trimesh_colliders(
 	}
 }
 
-/// Far / overlay CpuShot meshes never cook a trimesh, but they still start
-/// with `MAIN_WORLD` so a shared fill handle can bake first. Once no fill is
-/// waiting on that asset, drop the CPU copy so extract can free it.
-pub(crate) fn release_cpu_on_visual_only_meshes(
+/// Cook (if needed) and drop `MAIN_WORLD` on the same frame [`Mesh3d`] appears.
+///
+/// `Last` runs before render extract. Flipping usage here lets extract *take*
+/// the CpuShot buffers instead of cloning them for the rest of the session.
+pub(crate) fn cook_and_release_cpu_before_extract(
+	mut commands: Commands,
+	friction: Res<TerrainFrictionConfig>,
 	mut meshes: ResMut<Assets<Mesh>>,
-	pending: Query<&Mesh3d, (With<TerrainColliderMeshSource>, Without<TerrainColliderReady>)>,
-	live: Query<&Mesh3d>,
+	added: Query<
+		(Entity, &Mesh3d, Has<TerrainColliderMeshSource>, Has<TerrainColliderReady>),
+		Added<Mesh3d>,
+	>,
 ) {
-	let pending: std::collections::HashSet<_> = pending.iter().map(|mesh| mesh.0.id()).collect();
-	let mut seen = std::collections::HashSet::new();
-	for mesh3d in &live {
+	let mut released = std::collections::HashSet::new();
+	for (entity, mesh3d, is_source, ready) in &added {
+		if is_source && !ready {
+			if let Some(mesh) = meshes.get(&mesh3d.0) {
+				if let Some(collider) = Collider::trimesh_from_mesh(mesh) {
+					commands.entity(entity).insert((
+						TerrainTrimeshCollider,
+						TerrainColliderReady,
+						RigidBody::Static,
+						collider,
+						PhysicsInteractionLayer::fixed_layers(),
+						friction.0,
+					));
+				}
+			}
+		}
 		let id = mesh3d.0.id();
-		if !seen.insert(id) || pending.contains(&id) {
+		if !released.insert(id) {
 			continue;
 		}
 		if let Some(mut mesh) = meshes.get_mut(id) {
-			release_cpu_mesh_after_extract(&mut mesh);
+			if mesh.asset_usage.contains(bevy::asset::RenderAssetUsages::MAIN_WORLD) {
+				mesh.asset_usage = bevy::asset::RenderAssetUsages::RENDER_WORLD;
+			}
 		}
-	}
-}
-
-fn release_cpu_mesh_after_extract(mesh: &mut Mesh) {
-	if mesh.asset_usage.contains(bevy::asset::RenderAssetUsages::MAIN_WORLD) {
-		mesh.asset_usage = bevy::asset::RenderAssetUsages::RENDER_WORLD;
 	}
 }
 
@@ -177,20 +190,9 @@ mod tests {
 
 		app.update();
 		assert!(app.world().get::<TerrainTrimeshCollider>(scene).is_some());
-		let usage = app.world().resource::<Assets<Mesh>>().get(&mesh).expect("mesh").asset_usage;
-		assert_eq!(
-			usage,
-			bevy::asset::RenderAssetUsages::RENDER_WORLD,
-			"CPU verts should drop after the trimesh bake"
-		);
 	}
 
-	#[test]
-	fn visual_only_mesh_drops_main_world_when_no_cook_is_pending() {
-		let mut app = App::new();
-		app.insert_resource(Assets::<Mesh>::default())
-			.add_systems(Update, release_cpu_on_visual_only_meshes);
-
+	fn both_worlds_triangle() -> Mesh {
 		let mut mesh = Mesh::new(
 			bevy::mesh::PrimitiveTopology::TriangleList,
 			bevy::asset::RenderAssetUsages::MAIN_WORLD
@@ -200,35 +202,42 @@ mod tests {
 			Mesh::ATTRIBUTE_POSITION,
 			vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
 		);
-		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(mesh);
-		app.world_mut().spawn(Mesh3d(handle.clone()));
+		mesh.insert_indices(bevy::mesh::Indices::U32(vec![0, 1, 2]));
+		mesh
+	}
+
+	#[test]
+	fn last_cooks_and_drops_main_world_before_extract() {
+		let mut app = App::new();
+		app.insert_resource(Assets::<Mesh>::default())
+			.insert_resource(TerrainFrictionConfig::default())
+			.add_systems(Last, cook_and_release_cpu_before_extract);
+
+		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
+		let scene = app
+			.world_mut()
+			.spawn((TerrainColliderMeshSource, Mesh3d(handle.clone())))
+			.id();
 		app.update();
 
+		assert!(app.world().get::<TerrainTrimeshCollider>(scene).is_some());
 		let usage = app.world().resource::<Assets<Mesh>>().get(&handle).expect("mesh").asset_usage;
 		assert_eq!(usage, bevy::asset::RenderAssetUsages::RENDER_WORLD);
 	}
 
 	#[test]
-	fn pending_collider_keeps_main_world_until_cook() {
+	fn last_drops_main_world_on_visual_only_mesh3d() {
 		let mut app = App::new();
 		app.insert_resource(Assets::<Mesh>::default())
-			.add_systems(Update, release_cpu_on_visual_only_meshes);
+			.insert_resource(TerrainFrictionConfig::default())
+			.add_systems(Last, cook_and_release_cpu_before_extract);
 
-		let mut mesh = Mesh::new(
-			bevy::mesh::PrimitiveTopology::TriangleList,
-			bevy::asset::RenderAssetUsages::MAIN_WORLD
-				| bevy::asset::RenderAssetUsages::RENDER_WORLD,
-		);
-		mesh.insert_attribute(
-			Mesh::ATTRIBUTE_POSITION,
-			vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
-		);
-		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(mesh);
-		app.world_mut().spawn((TerrainColliderMeshSource, Mesh3d(handle.clone())));
+		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
+		app.world_mut().spawn(Mesh3d(handle.clone()));
 		app.update();
 
 		let usage = app.world().resource::<Assets<Mesh>>().get(&handle).expect("mesh").asset_usage;
-		assert!(usage.contains(bevy::asset::RenderAssetUsages::MAIN_WORLD));
+		assert_eq!(usage, bevy::asset::RenderAssetUsages::RENDER_WORLD);
 	}
 
 	#[test]
