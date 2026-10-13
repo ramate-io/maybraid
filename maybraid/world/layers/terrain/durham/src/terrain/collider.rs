@@ -11,7 +11,11 @@ use avian3d::prelude::{CoefficientCombine, Collider, Friction, RigidBody};
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
 use lod_avian::PhysicsInteractionLayer;
+use render_item::mesh::handle::Cached;
 use terrain_chunk_ref::TerrainChunkRefResolved;
+
+use crate::terrain::TerrainMeshBuilder;
+use crate::water::ComposedWater;
 
 /// Dirt / grass grip. [`CoefficientCombine::Max`] beats the character controller's
 /// `Friction::ZERO` + `Min` (Avian dynamic-character default), otherwise the
@@ -127,6 +131,10 @@ pub(crate) fn queue_terrain_trimesh_colliders(
 
 /// Cook (if needed) and drop `MAIN_WORLD` on the same frame [`Mesh3d`] appears.
 ///
+/// Only terrain / water CpuShot fills (`Cached`) and overlay chunk refs
+/// (`TerrainChunkRefResolved`). Other `Mesh3d` (characters, buildings) keep
+/// `MAIN_WORLD` so later attribute readers do not panic.
+///
 /// `Last` runs before render extract. Flipping usage here lets extract *take*
 /// the CpuShot buffers instead of cloning them for the rest of the session.
 /// Collider fills keep a cached trimesh so a later shared handle can attach
@@ -139,7 +147,14 @@ pub(crate) fn cook_and_release_cpu_before_extract(
 	mut cooked: ResMut<CookedTerrainColliders>,
 	added: Query<
 		(Entity, &Mesh3d, Has<TerrainColliderMeshSource>, Has<TerrainColliderReady>),
-		(Added<Mesh3d>, With<TerrainChunkRefResolved>),
+		(
+			Added<Mesh3d>,
+			Or<(
+				With<TerrainChunkRefResolved>,
+				With<Cached<TerrainMeshBuilder>>,
+				With<Cached<ComposedWater>>,
+			)>,
+		),
 	>,
 ) {
 	for (entity, mesh3d, is_source, ready) in &added {
