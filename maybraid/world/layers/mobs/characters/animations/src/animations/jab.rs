@@ -25,9 +25,12 @@ pub const DEFAULT_JAB_TARGET: Vec3 = Vec3::new(0.0, 0.35, 0.7);
 /// Nominal chamber depth (`1.0` matches the tuned preparatory motion).
 pub const DEFAULT_BACKSWING: f32 = 1.0;
 
-const BACKSWING_END: f32 = 0.18;
-const EXTEND_END: f32 = 0.42;
-const HOLD_END: f32 = 0.52;
+/// Clip progress where chamber ends and the fist starts to extend.
+pub const BACKSWING_END: f32 = 0.18;
+/// Clip progress where the fist first reaches full extension.
+pub const EXTEND_END: f32 = 0.42;
+/// Clip progress where the hold ends and recovery begins.
+pub const HOLD_END: f32 = 0.52;
 
 // --- Elbow ---
 const GUARD_ELBOW: f32 = 1.5;
@@ -352,7 +355,8 @@ mod tests {
 		let hold = peak();
 		let cover = cover_tip(&jab, hold);
 		assert!(
-			(cover.x - -0.1203).abs() < 1e-3 && (cover.y - 0.9349).abs() < 1e-3
+			(cover.x - -0.1203).abs() < 1e-3
+				&& (cover.y - 0.9349).abs() < 1e-3
 				&& (cover.z - 0.5251).abs() < 1e-3,
 			"cover hand tip at hold should stay tucked, got {:?}",
 			cover

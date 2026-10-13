@@ -139,6 +139,23 @@ impl AnimMailbox {
 	fn blending(&self) -> bool {
 		self.blend_progress < 1.0
 	}
+
+	/// Capture the currently displayed pose as a blend source and restart clip time.
+	///
+	/// Use this when the next sample stays on the same [`AnimId`] (left jab →
+	/// right jab) so the mailbox still crossfades from the visible pose, the same
+	/// way [`tick_anim_mailbox`] does when [`AnimId`] changes. Authoring
+	/// [`character_animations::animations::Transition::from_visible`] is the
+	/// offline equivalent; the mailbox already owns the runtime crossfade.
+	pub fn restart_from_visible(&mut self) {
+		if self.posed {
+			let AnimMailbox { output, from_pose, .. } = &mut *self;
+			from_pose.copy_from(output);
+		}
+		self.from_offset = self.displayed_offset;
+		self.blend_progress = 0.0;
+		self.clip_progress = 0.0;
+	}
 }
 
 /// Insert typed rigs, [`AnimBone`]s, and [`AnimMailbox`] once the bone map is ready.
@@ -850,6 +867,17 @@ mod tests {
 	use std::collections::HashMap;
 	use std::hint::black_box;
 	use std::time::Instant;
+
+	#[test]
+	fn restart_from_visible_starts_a_mailbox_blend() {
+		let mut mailbox = AnimMailbox::new(Transform::default());
+		mailbox.posed = true;
+		mailbox.blend_progress = 1.0;
+		mailbox.clip_progress = 0.4;
+		mailbox.restart_from_visible();
+		assert!(mailbox.blending());
+		assert_eq!(mailbox.clip_progress, 0.0);
+	}
 
 	fn run_select(world: &mut World) {
 		world.init_resource::<MailboxApplySet>();

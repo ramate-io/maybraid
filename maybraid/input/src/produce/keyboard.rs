@@ -63,6 +63,13 @@ pub fn produce_keyboard(
 	if keyboard.pressed(KeyCode::KeyC) {
 		pad.hold_digital(PadButton::BumperFocus);
 	}
+	// F / G are the keyboard fallbacks for LT / RT (left / right jab when unarmed).
+	if keyboard.pressed(KeyCode::KeyF) {
+		pad.max_triggers(1.0, 0.0);
+	}
+	if keyboard.pressed(KeyCode::KeyG) {
+		pad.max_triggers(0.0, 1.0);
+	}
 	// V is RB: hold to steer the skill map, then flick a stick.
 	if keyboard.pressed(KeyCode::KeyV) {
 		pad.hold_digital(PadButton::BumperFire);
@@ -167,6 +174,30 @@ mod tests {
 			pad.hold_digital(PadButton::BumperFire);
 		}
 		assert!(pad.digital_held(PadButton::BumperFire));
+	}
+
+	#[test]
+	fn f_squeezes_left_trigger() {
+		let mut app = App::new();
+		app.init_resource::<ButtonInput<KeyCode>>()
+			.init_resource::<VirtualPad>()
+			.add_message::<KeyboardInput>()
+			.add_systems(Update, produce_keyboard);
+		app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::KeyF);
+		app.update();
+		assert_eq!(app.world().resource::<VirtualPad>().trigger_focus, 1.0);
+	}
+
+	#[test]
+	fn g_squeezes_right_trigger() {
+		let mut app = App::new();
+		app.init_resource::<ButtonInput<KeyCode>>()
+			.init_resource::<VirtualPad>()
+			.add_message::<KeyboardInput>()
+			.add_systems(Update, produce_keyboard);
+		app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::KeyG);
+		app.update();
+		assert_eq!(app.world().resource::<VirtualPad>().trigger_fire, 1.0);
 	}
 
 	#[test]

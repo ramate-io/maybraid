@@ -1,4 +1,4 @@
-//! Mouse motion → [`VirtualPad::look_stick`]; LMB → [`VirtualPad::trigger_fire`].
+//! Mouse motion → [`VirtualPad::look_stick`]; LMB → fire trigger; RMB → focus trigger.
 
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
@@ -27,6 +27,9 @@ pub fn produce_mouse(
 	if mouse.pressed(MouseButton::Left) {
 		pad.max_triggers(0.0, 1.0);
 	}
+	if mouse.pressed(MouseButton::Right) {
+		pad.max_triggers(1.0, 0.0);
+	}
 }
 
 #[cfg(test)]
@@ -46,6 +49,22 @@ mod tests {
 			.press(MouseButton::Left);
 		app.update();
 		assert_eq!(app.world().resource::<VirtualPad>().trigger_fire, 1.0);
+		Ok(())
+	}
+
+	#[test]
+	fn right_click_sets_trigger_focus() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.init_resource::<ButtonInput<KeyCode>>()
+			.init_resource::<ButtonInput<MouseButton>>()
+			.init_resource::<VirtualPad>()
+			.add_message::<MouseMotion>()
+			.add_systems(Update, produce_mouse);
+		app.world_mut()
+			.resource_mut::<ButtonInput<MouseButton>>()
+			.press(MouseButton::Right);
+		app.update();
+		assert_eq!(app.world().resource::<VirtualPad>().trigger_focus, 1.0);
 		Ok(())
 	}
 }

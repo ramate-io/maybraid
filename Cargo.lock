@@ -4588,6 +4588,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "fisticuffs-user"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "character-animations",
+ "character-rigs",
+ "characters",
+ "maybraid-character-controller",
+ "maybraid-input",
+ "player",
+]
+
+[[package]]
 name = "fixedbitset"
 version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7022,6 +7036,7 @@ dependencies = [
  "firearm-intelligence",
  "firearm-user",
  "firearms",
+ "fisticuffs-user",
  "fleeing-intelligence",
  "furnishing-layer-model",
  "furniture-assemblies",

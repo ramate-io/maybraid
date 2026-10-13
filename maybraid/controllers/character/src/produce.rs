@@ -44,6 +44,12 @@ pub fn collect(
 	if pad.pressed(PadButton::TriggerFire) || pad.trigger_fire >= trigger_threshold {
 		out.push(CharacterIntent::UseItem(pad.trigger_fire.max(trigger_threshold)));
 	}
+	if pad.just_pressed(PadButton::TriggerFocus) {
+		out.push(CharacterIntent::AttackLeft);
+	}
+	if pad.just_pressed(PadButton::TriggerFire) {
+		out.push(CharacterIntent::AttackRight);
+	}
 
 	if pad.pressed(PadButton::StickClickMove) {
 		out.push(CharacterIntent::StartSprint);
@@ -281,7 +287,9 @@ mod tests {
 		pad.max_triggers(0.0, 0.9);
 		pad.apply_trigger_digital(0.5);
 		finish(&mut pad);
-		assert!(intents(&pad).contains(&CharacterIntent::UseItem(0.9)));
+		let collected = intents(&pad);
+		assert!(collected.contains(&CharacterIntent::UseItem(0.9)));
+		assert!(collected.contains(&CharacterIntent::AttackRight));
 		Ok(())
 	}
 
@@ -295,6 +303,7 @@ mod tests {
 		finish(&mut pad);
 		let intents = intents(&pad);
 		assert!(intents.contains(&CharacterIntent::UseItem(0.9)));
+		assert!(intents.contains(&CharacterIntent::AttackRight));
 		assert!(intents.contains(&CharacterIntent::PowerUseItem));
 		assert!(!intents.contains(&CharacterIntent::StartInteraction));
 		Ok(())
@@ -307,6 +316,53 @@ mod tests {
 		pad.max_triggers(0.4, 0.0);
 		finish(&mut pad);
 		assert_eq!(intents(&pad), vec![CharacterIntent::Focus(0.4)]);
+		Ok(())
+	}
+
+	#[test]
+	fn left_trigger_press_is_attack_left() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.0);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let collected = intents(&pad);
+		assert!(collected.contains(&CharacterIntent::AttackLeft));
+		assert!(!collected.contains(&CharacterIntent::AttackRight));
+		assert!(collected.contains(&CharacterIntent::Focus(0.9)));
+		Ok(())
+	}
+
+	#[test]
+	fn right_trigger_press_is_attack_right() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.0, 0.9);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let collected = intents(&pad);
+		assert!(collected.contains(&CharacterIntent::AttackRight));
+		assert!(!collected.contains(&CharacterIntent::AttackLeft));
+		Ok(())
+	}
+
+	#[test]
+	fn held_triggers_do_not_repeat_attack() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.9);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		assert!(intents(&pad).contains(&CharacterIntent::AttackLeft));
+		assert!(intents(&pad).contains(&CharacterIntent::AttackRight));
+
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.9);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let held = intents(&pad);
+		assert!(!held.contains(&CharacterIntent::AttackLeft));
+		assert!(!held.contains(&CharacterIntent::AttackRight));
 		Ok(())
 	}
 

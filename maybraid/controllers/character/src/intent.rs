@@ -13,6 +13,10 @@ pub enum CharacterIntent {
 	/// Unused hold chord. Discover maps now read stick flicks, not bumpers.
 	SkillMap,
 	UseItem(f32),
+	/// Rising edge on the left trigger (LT / RMB / **F**). Fisticuffs maps this to a left jab.
+	AttackLeft,
+	/// Rising edge on the right trigger (RT / LMB / **G**). Fisticuffs maps this to a right jab.
+	AttackRight,
 	StartSprint,
 	StopSprint,
 	SwapPov,
@@ -48,6 +52,8 @@ impl CharacterIntent {
 			Self::Ads(_) => "ads",
 			Self::SkillMap => "skill-map",
 			Self::UseItem(_) => "use-item",
+			Self::AttackLeft => "attack-left",
+			Self::AttackRight => "attack-right",
 			Self::StartSprint => "start-sprint",
 			Self::StopSprint => "stop-sprint",
 			Self::SwapPov => "swap-pov",

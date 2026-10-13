@@ -41,12 +41,12 @@ mod world_layers;
 pub use world_furnished::WorldFurnished;
 
 pub use agent::AgentDrive;
-pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 #[cfg(feature = "debug-commands")]
 pub use commands::{
 	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestPeaceful,
 	RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
 };
+pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
 	InventoryEditCameraFollow, WorldGameplayEnabled, WorldPlaySessionEnded, WorldSceneryVisible,
 	WorldSurfaceReady, WorldSurfaceSet,
@@ -103,6 +103,7 @@ use characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use combat_hud::CombatHudPlugin;
 use durham::TerrainFrictionConfig;
 use firearms::EnergyMaterialPlugin;
+use fisticuffs_user::FisticuffsUserPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
@@ -295,6 +296,9 @@ impl Plugin for WorldPlugin {
 		if !app.is_plugin_added::<PlayerPlugin>() {
 			app.add_plugins(PlayerPlugin);
 		}
+		if !app.is_plugin_added::<FisticuffsUserPlugin>() {
+			app.add_plugins(FisticuffsUserPlugin);
+		}
 		app.add_systems(
 			Update,
 			(
@@ -332,11 +336,9 @@ impl Plugin for WorldPlugin {
 	}
 }
 
-
 fn spawn_default_braidman(mut commands: Commands) {
 	commands.spawn(RequestSetCharacter { species: CharacterSpecies::Braidman });
 }
-
 
 #[cfg(test)]
 mod tests {
