@@ -2,6 +2,14 @@ use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
 use crate::Animation;
 
+/// Quadruped twin of humanoid [`crate::rigs::mix::blend_clips`].
+///
+/// Humanoid [`Mix`](crate::animations::Mix) is typed on [`HumanoidV0Rig`] and nests
+/// through humanoid-only composites. Quadruped launch uses the same PoseScratch
+/// capture/blend path without pulling humanoid mix into quadruped rigs. Each child
+/// `apply_for` writes a full resolved pose from rest, so unwritten bones stay at
+/// bind rest and re-sampling does not accumulate.
+///
 /// Sample two clips into the rig scratch and blend transforms. Weight 0 keeps `from`.
 pub(crate) fn blend_clips<A, B>(
 	rig: &mut QuadrupedV0Rig,

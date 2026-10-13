@@ -4,12 +4,11 @@ use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
 use characters::{
 	AnimClip, AnimProgress, AnimRef, AnimRefRoot, CharacterHeading, CharacterMembers, CharacterRig,
-	CharacterRigRole, CharacterRoot, JumpParams, RigSkeletonKind,
+	CharacterRigRole, CharacterRoot, JumpParams, QuadrupedRunStartBlend, RigSkeletonKind,
 };
 
 use crate::body::{CharacterController, Jumping, MoveWish, LEAP_SPEED};
 use crate::identity::PlayerYawOwner;
-use crate::quadruped_run_start::QuadrupedRunStartBlend;
 use crate::stance::{CharacterStance, StanceKind};
 
 pub(crate) const WALK_SPEED: f32 = 1.0;
@@ -39,27 +38,20 @@ pub(crate) fn face_wish_yaw(
 pub fn drive_player_locomotion(
 	mut commands: Commands,
 	controllers: Query<
-		(
-			&LinearVelocity,
-			&MoveWish,
-			Option<&Jumping>,
-			Option<&CharacterStance>,
-			Option<&QuadrupedRunStartBlend>,
-		),
+		(&LinearVelocity, &MoveWish, Option<&Jumping>, Option<&CharacterStance>),
 		With<CharacterController>,
 	>,
 	visuals: Query<(&CharacterMembers, &ChildOf), With<CharacterRoot>>,
 	rigs: Query<&CharacterRig>,
+	blends: Query<&QuadrupedRunStartBlend>,
 	anims: Query<&AnimRefRoot>,
 ) {
 	for (members, child_of) in &visuals {
-		let Ok((velocity, _wish, jumping, stance, run_start)) = controllers.get(child_of.parent())
-		else {
+		let Ok((velocity, _wish, jumping, stance)) = controllers.get(child_of.parent()) else {
 			continue;
 		};
 		let speed = Vec3::new(velocity.x, 0.0, velocity.z).length();
 		let stance = stance.copied().unwrap_or_else(|| CharacterStance::settled(StanceKind::Stand));
-		let run_start = run_start.copied().unwrap_or_default();
 		for member in members.iter() {
 			let Ok(rig) = rigs.get(member) else {
 				continue;
@@ -67,6 +59,7 @@ pub fn drive_player_locomotion(
 			if rig.role != CharacterRigRole::Body {
 				continue;
 			}
+			let run_start = blends.get(member).map(|blend| *blend).unwrap_or_default();
 			let clip = locomotion_clip(rig.skeleton, jumping, &stance, &run_start, speed);
 			let desired = AnimRef::new(clip);
 			let needs = match anims.get(member) {
@@ -159,8 +152,7 @@ fn locomotion_clip(
 mod tests {
 	use super::*;
 	use crate::body::{JumpPhase, JOG_SPEED, MOVE_SPEED};
-	use crate::quadruped_run_start::QuadrupedRunStartBlend;
-	use characters::AnimId;
+	use characters::{AnimId, QuadrupedRunStartBlend};
 
 	fn settled_trot() -> QuadrupedRunStartBlend {
 		QuadrupedRunStartBlend { progress: 1.0 }

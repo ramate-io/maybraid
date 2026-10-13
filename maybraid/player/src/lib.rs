@@ -26,6 +26,7 @@ pub use body::{
 	Sprinting, WalkableGround,
 };
 pub use buoyancy::{Buoyant, Wading, WaterRegime};
+pub use characters::QuadrupedRunStartBlend;
 pub use characters::{HeadCapsule, HitCapsule};
 pub use contact::{
 	motor_traction_bundle, register_motor_traction_physics, MotorTraction, MotorTractionHooks,
@@ -37,7 +38,6 @@ pub use identity::{
 };
 pub use locomotion::drive_player_locomotion;
 pub use look::{clamp_aim_pitch, look_delta, look_forward, wrap_pi, yaw_xz, AIM_PITCH_MARGIN};
-pub use quadruped_run_start::QuadrupedRunStartBlend;
 pub use separation::{SoftBump, NPC_SEPARATION};
 pub use spawn::{
 	capsule_spawn_height, needs_npc_visual, needs_player_visual, spawn_npc, spawn_npc_visual,

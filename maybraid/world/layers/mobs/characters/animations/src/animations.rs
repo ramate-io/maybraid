@@ -48,7 +48,9 @@ pub use quadruped_gallop::QuadrupedGallop;
 pub use quadruped_idle::QuadrupedIdle;
 pub use quadruped_leap::QuadrupedLeap;
 pub use quadruped_run::{QuadrupedRun, QuadrupedRunPose};
-pub use quadruped_run_start::{QuadrupedRunStart, DEFAULT_QUADRUPED_RUN_START_SPEED};
+pub use quadruped_run_start::{
+	QuadrupedRunStart, DEFAULT_QUADRUPED_RUN_START_SPEED, QUADRUPED_RUN_CYCLE_SPEED,
+};
 pub use run::Run;
 pub use soaring::Soaring;
 pub use spring::Spring;

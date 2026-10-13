@@ -18,6 +18,7 @@ pub mod pitch;
 pub mod plant;
 pub mod plugin;
 pub mod policy;
+pub mod quadruped_run_start;
 pub mod rig;
 pub mod shown;
 pub mod sync;
@@ -46,6 +47,7 @@ pub use markers::{
 pub use pitch::{CharacterHeading, TerrainPitch};
 pub use plugin::{CharacterMotionPlugin, CharacterMotionSystems};
 pub use policy::{clamp_intelligence, motion_policy, MotionPolicy};
+pub use quadruped_run_start::QuadrupedRunStartBlend;
 pub use rig::{
 	bone_map_ready, missing_landmark_bones, BoneMap, CharacterRig, CharacterRigRole,
 	RigSkeletonKind,

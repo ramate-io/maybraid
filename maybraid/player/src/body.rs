@@ -237,9 +237,6 @@ pub fn apply_character_controller(commands: &mut Commands, body: Entity, hull: L
 	commands
 		.entity(body)
 		.insert_if_new(crate::stance::CharacterStance::settled(crate::stance::StanceKind::Stand));
-	commands
-		.entity(body)
-		.insert_if_new(crate::quadruped_run_start::QuadrupedRunStartBlend::default());
 	apply_locomotion_capsule(commands, body, hull);
 }
 
@@ -826,6 +823,16 @@ mod tests {
 			tangent.length() < 0.05,
 			"idle motor must cancel slope slide, leftover {tangent:?}"
 		);
+	}
+
+	#[test]
+	fn motor_path_does_not_read_quadruped_run_start_blend() {
+		let mut velocity = LinearVelocity(Vec3::ZERO);
+		control_ground_velocity(&mut velocity, Vec3::X, MOVE_ACCEL, 1.0, Vec3::Y, MOVE_SPEED);
+		let baseline = velocity.0;
+		let _animation_only = characters::QuadrupedRunStartBlend { progress: 0.5 };
+		control_ground_velocity(&mut velocity, Vec3::X, MOVE_ACCEL, 1.0, Vec3::Y, MOVE_SPEED);
+		assert_eq!(velocity.0, baseline);
 	}
 
 	#[test]

@@ -1,42 +1,48 @@
-//! Trot launch blend from quadruped still into the run cycle.
+//! Advance trot launch progress on the body rig (animation-side component).
 
 use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
-use character_animations::animations::DEFAULT_QUADRUPED_RUN_START_SPEED;
+use characters::{
+	CharacterMembers, CharacterRig, CharacterRigRole, CharacterRoot, QuadrupedRunStartBlend,
+};
 
 use crate::body::{CharacterController, Jumping};
 use crate::locomotion::WALK_SPEED;
 
-/// Progress from quadruped idle into run phase zero. `1.0` means settled.
-#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
-pub struct QuadrupedRunStartBlend {
-	pub progress: f32,
-}
-
-impl QuadrupedRunStartBlend {
-	pub fn settled(self) -> bool {
-		self.progress >= 1.0
-	}
-}
-
 /// Ease trot launch while moving in the jog band; reset when still, airborne, or galloping.
 pub(crate) fn advance_quadruped_run_start_blend(
 	time: Res<Time>,
-	mut controllers: Query<
-		(&LinearVelocity, Option<&Jumping>, &mut QuadrupedRunStartBlend),
-		With<CharacterController>,
-	>,
+	controllers: Query<(&LinearVelocity, Option<&Jumping>), With<CharacterController>>,
+	visuals: Query<(&CharacterMembers, &ChildOf), With<CharacterRoot>>,
+	rigs: Query<&CharacterRig>,
+	mut blends: Query<&mut QuadrupedRunStartBlend>,
 ) {
 	let dt = time.delta_secs();
-	for (velocity, jumping, mut blend) in &mut controllers {
+	for (members, child_of) in &visuals {
+		let Ok((velocity, jumping)) = controllers.get(child_of.parent()) else {
+			continue;
+		};
 		let speed = Vec3::new(velocity.x, 0.0, velocity.z).length();
-		if speed <= WALK_SPEED
-			|| jumping.is_some_and(|jump| jump.airborne())
-			|| speed > crate::body::LEAP_SPEED
-		{
-			blend.progress = 0.0;
-		} else if blend.progress < 1.0 {
-			blend.progress = (blend.progress + dt * DEFAULT_QUADRUPED_RUN_START_SPEED).min(1.0);
+		for member in members.iter() {
+			let Ok(rig) = rigs.get(member) else {
+				continue;
+			};
+			if rig.role != CharacterRigRole::Body {
+				continue;
+			}
+			let Ok(mut blend) = blends.get_mut(member) else {
+				continue;
+			};
+			if speed <= WALK_SPEED
+				|| jumping.is_some_and(|jump| jump.airborne())
+				|| speed > crate::body::LEAP_SPEED
+			{
+				blend.progress = 0.0;
+			} else if blend.progress < 1.0 {
+				blend.progress = (blend.progress
+					+ dt * character_animations::animations::DEFAULT_QUADRUPED_RUN_START_SPEED)
+					.min(1.0);
+			}
 		}
 	}
 }
