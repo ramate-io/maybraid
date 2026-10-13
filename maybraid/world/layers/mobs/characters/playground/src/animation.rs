@@ -24,6 +24,7 @@ pub enum AnimationMode {
 	TwoFootedTuckedFlip,
 	Soaring,
 	Flapping,
+	GlideFromFlap,
 	Jab,
 	Prone,
 }
@@ -48,6 +49,7 @@ impl AnimationMode {
 			Self::TwoFootedTuckedFlip => "two-footed-tucked-flip",
 			Self::Soaring => "soaring",
 			Self::Flapping => "flapping",
+			Self::GlideFromFlap => "glide-from-flap",
 			Self::Jab => "jab",
 			Self::Prone => "prone",
 		}
@@ -67,6 +69,7 @@ impl AnimationMode {
 			Self::TwoFootedTuckedFlip => AnimClip::two_footed_tucked_flip(),
 			Self::Soaring => AnimClip::soaring(),
 			Self::Flapping => AnimClip::flapping(),
+			Self::GlideFromFlap => AnimClip::glide_from_flap(),
 			Self::Jab => AnimClip::Jab(JabParams {
 				side,
 				backswing: DEFAULT_BACKSWING,
