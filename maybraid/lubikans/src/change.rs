@@ -20,8 +20,13 @@ impl LubikanChargeReason {
 	pub const COMBAT_KILL: Self = Self(2);
 	/// Semantic cell occupancy (#1111).
 	pub const OCCUPANCY: Self = Self(10);
-	/// Activation spend (#1110).
+	/// Activation spend (#1110 / #1135).
 	pub const ACTIVATION: Self = Self(20);
+	/// Refund of an accepted spend when the summon consumer rejects spawn.
+	///
+	/// PLACEHOLDER (#1135): invalid placement / missing recipe / limit. Uses the
+	/// existing Award path — not a second spend owner.
+	pub const ACTIVATION_REFUND: Self = Self(21);
 	/// Manual, debug, or test adjustment.
 	pub const ADJUSTMENT: Self = Self(30);
 	/// First code reserved for other crates.
@@ -41,6 +46,7 @@ impl LubikanChargeReason {
 			2 => "kill",
 			10 => "occupancy",
 			20 => "activation",
+			21 => "activation-refund",
 			30 => "adjustment",
 			_ => "custom",
 		}
@@ -138,6 +144,7 @@ mod tests {
 		assert_eq!(LubikanChargeReason::COMBAT_KILL.raw(), 2);
 		assert_eq!(LubikanChargeReason::OCCUPANCY.raw(), 10);
 		assert_eq!(LubikanChargeReason::ACTIVATION.raw(), 20);
+		assert_eq!(LubikanChargeReason::ACTIVATION_REFUND.raw(), 21);
 		assert_eq!(LubikanChargeReason::CUSTOM.raw(), 1_000);
 		assert_eq!(LubikanChargeReason::COMBAT_HIT.label(), "hit");
 		assert_eq!(LubikanChargeReason::COMBAT_KILL.label(), "kill");

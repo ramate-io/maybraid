@@ -96,6 +96,7 @@ impl Plugin for LubikansPlugin {
 			);
 		crate::award::configure(app);
 		crate::heal::configure(app);
+		crate::summon::configure(app);
 	}
 }
 
