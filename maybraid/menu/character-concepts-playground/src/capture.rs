@@ -1,7 +1,8 @@
 //! Headless tattoo captures. Active only when `MAYBRAID_TATTOO_CAPTURE_DIR` is set.
 //!
 //! Uses Bevy `Screenshot` (GPU readback). X11 `scrot` stays black on xvfb.
-//! After preview reveal, shoots front, three-quarter, and side views.
+//! After preview reveal, shoots head front / three-quarter / side, then a
+//! full-body side view.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -10,6 +11,7 @@ use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use characters_playground::camera::CameraController;
 
+use crate::camera_focus::PendingCameraFocus;
 use crate::preview::{ConceptPreviewRoot, PreviewAwaitingReveal};
 
 fn capture_dir() -> Option<PathBuf> {
@@ -26,19 +28,30 @@ struct Shot {
 	target: Vec3,
 }
 
-const SHOTS: [Shot; 3] = [
+const SHOTS: [Shot; 5] = [
+	// First GPU readback is a stale frame; discard it.
 	Shot {
-		name: "epiphant_tattoos_front.png",
-		eye: Vec3::new(0.0, 1.15, 4.0),
-		target: Vec3::new(0.0, 0.55, 0.2),
+		name: "epiphant_tattoos_warmup.png",
+		eye: Vec3::new(2.2, 0.85, 2.9),
+		target: Vec3::new(0.0, 0.70, 0.70),
 	},
 	Shot {
-		name: "epiphant_tattoos_three_quarter.png",
-		eye: Vec3::new(2.6, 1.45, 3.2),
-		target: Vec3::new(0.0, 0.7, 0.25),
+		name: "epiphant_tattoos_head_front.png",
+		eye: Vec3::new(0.0, 0.42, 2.85),
+		target: Vec3::new(0.0, 0.56, 0.75),
 	},
 	Shot {
-		name: "epiphant_tattoos_side.png",
+		name: "epiphant_tattoos_head_three_quarter.png",
+		eye: Vec3::new(2.2, 0.85, 2.9),
+		target: Vec3::new(0.0, 0.70, 0.70),
+	},
+	Shot {
+		name: "epiphant_tattoos_head_side.png",
+		eye: Vec3::new(3.2, 0.75, 0.90),
+		target: Vec3::new(0.0, 0.68, 0.75),
+	},
+	Shot {
+		name: "epiphant_tattoos_body_side.png",
 		eye: Vec3::new(4.0, 1.1, 0.35),
 		target: Vec3::new(0.0, 0.55, 0.1),
 	},
@@ -70,6 +83,7 @@ fn drive_tattoo_captures(
 	pending_reveal: Query<(), With<PreviewAwaitingReveal>>,
 	preview: Query<&Visibility, With<ConceptPreviewRoot>>,
 	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
+	mut pending_focus: ResMut<PendingCameraFocus>,
 ) {
 	if preview.is_empty() || !pending_reveal.is_empty() {
 		return;
@@ -79,6 +93,9 @@ fn drive_tattoo_captures(
 	}
 	if state.revealed_at.is_none() {
 		state.revealed_at = Some(time.elapsed());
+		pending_focus.focus = None;
+		pending_focus.focus_trigger = None;
+		pending_focus.resolved_target = None;
 		info!("tattoo capture: preview revealed");
 	}
 	let Some(revealed_at) = state.revealed_at else {
@@ -91,15 +108,18 @@ fn drive_tattoo_captures(
 		return;
 	}
 	let shot = SHOTS[state.index];
+	pending_focus.focus = None;
+	pending_focus.focus_trigger = None;
+	pending_focus.resolved_target = None;
+	if let Ok((mut transform, mut controller)) = cameras.single_mut() {
+		characters_playground::camera::orient_camera(
+			&mut transform,
+			&mut controller,
+			shot.eye,
+			shot.target,
+		);
+	}
 	if state.posed_at.is_none() {
-		if let Ok((mut transform, mut controller)) = cameras.single_mut() {
-			characters_playground::camera::orient_camera(
-				&mut transform,
-				&mut controller,
-				shot.eye,
-				shot.target,
-			);
-		}
 		state.posed_at = Some(time.elapsed());
 		state.shot = false;
 		return;

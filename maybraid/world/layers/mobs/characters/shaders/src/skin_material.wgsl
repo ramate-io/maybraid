@@ -2,9 +2,9 @@
 // Bikanwarda / Epiphant skin: palette[0] hide + UV0 tattoo emission.
 //
 // Mapping 1 ([#1128](https://github.com/ramate-io/maybraid/issues/1128)):
-// sample the authored mask on mesh UV0 when present. The body GLB has
-// no TEXCOORD_0 yet — VERTEX_UVS_A is off and the vertex shader uses
-// the documented provisional cylindrical unwrap (see tattoos README).
+// sample the authored mask on mesh UV0 when present. Body / ear / trunk
+// GLBs have no TEXCOORD_0 yet; the head's UV0 is a collapsed pole. Those
+// kinds use the documented provisional unwraps (see tattoos README).
 //---------------------------------------------------------
 
 #import bevy_pbr::{
@@ -51,6 +51,8 @@ const EAR_UNWRAP_Y_MIN: f32 = -1.6527351;
 const EAR_UNWRAP_Y_SPAN: f32 = 2.9819443;
 const TRUNK_UNWRAP_Y_MIN: f32 = -1.932509;
 const TRUNK_UNWRAP_Y_SPAN: f32 = 2.4697547;
+const HEAD_UNWRAP_Y_MIN: f32 = -0.9791473;
+const HEAD_UNWRAP_Y_SPAN: f32 = 2.0418647;
 const INV_TWO_PI: f32 = 0.15915494309189535;
 
 struct SkinVertexOutput {
@@ -109,6 +111,14 @@ fn trunk_provisional_uv(local: vec3<f32>) -> vec2<f32> {
     return vec2<f32>(u, v);
 }
 
+fn head_provisional_uv(local: vec3<f32>) -> vec2<f32> {
+    // Authored UV0 is a collapsed pole plus a tiny forehead island, so the
+    // placeholder samples this cylindrical-about-Y unwrap (face at u = 0.5).
+    let u = atan2(local.x, local.z) * INV_TWO_PI + 0.5;
+    let v = saturate((local.y - HEAD_UNWRAP_Y_MIN) / HEAD_UNWRAP_Y_SPAN);
+    return vec2<f32>(u, v);
+}
+
 @vertex
 fn vertex(vertex_no_morph: Vertex) -> SkinVertexOutput {
     var out: SkinVertexOutput;
@@ -158,6 +168,9 @@ fn vertex(vertex_no_morph: Vertex) -> SkinVertexOutput {
 }
 
 fn tattoo_uv(mesh: SkinVertexOutput) -> vec2<f32> {
+    if material.kind == KIND_HEAD {
+        return head_provisional_uv(mesh.local_pos);
+    }
 #ifdef VERTEX_UVS_A
     return mesh.uv;
 #else

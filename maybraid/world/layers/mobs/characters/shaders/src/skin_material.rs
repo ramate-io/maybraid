@@ -380,6 +380,16 @@ pub fn trunk_provisional_uv(local: Vec3) -> Vec2 {
 	Vec2::new(u, v)
 }
 
+/// Cylindrical-about-Y UV for the meerkat head. Authored `TEXCOORD_0` collapses
+/// most verts to `(0, 1)`; this unwrap puts the face at `u = 0.5`.
+pub fn head_provisional_uv(local: Vec3) -> Vec2 {
+	const Y_MIN: f32 = -0.979_147_3;
+	const Y_SPAN: f32 = 2.041_864_7;
+	let u = local.x.atan2(local.z) * std::f32::consts::FRAC_1_PI * 0.5 + 0.5;
+	let v = ((local.y - Y_MIN) / Y_SPAN).clamp(0.0, 1.0);
+	Vec2::new(u, v)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -455,5 +465,12 @@ mod tests {
 	fn trunk_provisional_uv_puts_forward_at_u_half() {
 		let uv = trunk_provisional_uv(Vec3::new(0.0, 0.0, 0.4));
 		assert!((uv.x - 0.5).abs() < 1e-4, "forward u={}", uv.x);
+	}
+
+	#[test]
+	fn head_provisional_uv_puts_face_at_u_half() {
+		let uv = head_provisional_uv(Vec3::new(0.0, 0.0, 0.8));
+		assert!((uv.x - 0.5).abs() < 1e-4, "face u={}", uv.x);
+		assert!((uv.y - ((0.0 + 0.979_147_3) / 2.041_864_7)).abs() < 1e-4);
 	}
 }

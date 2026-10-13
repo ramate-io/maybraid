@@ -1,6 +1,6 @@
 # Epiphant / Bikanwarda tattoo masks
 
-Placeholder UV0 (or documented provisional unwrap) masks for [\#1128](https://github.com/ramate-io/maybraid/issues/1128). Liam chose **art A + mapping 1** on Oct 12, 2026: ritual linework on existing UV0 — no second UV channel. [#1231](https://github.com/ramate-io/maybraid/pull/1231) review asked for **denser** strokes so marks read from front, side, and three-quarter, including flanks, belly, back, legs, ears, trunk, and crown.
+Placeholder UV0 (or documented provisional unwrap) masks for [\#1128](https://github.com/ramate-io/maybraid/issues/1128). Liam chose **art A + mapping 1** on Oct 12, 2026: ritual linework on existing UV0 — no second UV channel. [#1231](https://github.com/ramate-io/maybraid/pull/1231) review asked for **denser** strokes so marks read from front, side, and three-quarter, including flanks, belly, back, legs, ears, trunk, and crown, then for the **whole head** to carry the same density — face, cheeks, around the eyes, brow, and the sides and back of the skull, not just the crown.
 
 These PNGs are **placeholders only**. Replace them in place for final art. Do not add `TEXCOORD_1`.
 
@@ -23,9 +23,30 @@ Ears and trunk are separate meshes with **no `TEXCOORD_0`**. They stay on mappin
 
 ## Mapping 1 — UV0 / provisional regions
 
-### Head (authored UV0)
+### Head (authored UV0 is degenerate — provisional cylindrical about +Y)
 
-`meerkat_head_pronograde.glb` already has `TEXCOORD_0`. Used islands sit approximately in **u 0.00–0.70, v 0.60–1.00**. Crown, forehead, and brow paint belong in that island.
+`meerkat_head_pronograde.glb` has `TEXCOORD_0`, but **875 / 956 verts collapse to `(0, 1)`**. The remaining 81 verts are a forehead island at **u 0.31–0.70, v 0.60–1.00**. That island cannot carry distinct linework on the face, cheeks, eyes, sides, or back of the skull.
+
+The placeholder therefore uses this **provisional cylindrical unwrap** of bind-pose local space (must match `skin_material.wgsl`). No `TEXCOORD_1`. Face at `u = 0.5`:
+
+```
+u = atan2(x, z) / (2π) + 0.5
+v = saturate((y - y_min) / y_span)
+y_min  = -0.9791473
+y_span =  2.0418647
+```
+
+Dense ritual regions in this unwrap:
+
+| Region | Unwrap |
+|--------|--------|
+| Face / muzzle | u ≈ 0.42–0.58, v 0.36–0.60 |
+| Brow | u ≈ 0.34–0.66, v 0.62–0.70 |
+| Around the eyes | u ≈ 0.32–0.40 and 0.60–0.68, v 0.52–0.64 |
+| Cheeks | u ≈ 0.26–0.34 and 0.66–0.74, v 0.36–0.58 |
+| Crown | u ≈ 0.32–0.68, v 0.72–0.94 |
+| Skull sides | u ≈ 0.14–0.26 and 0.74–0.86, v 0.38–0.82 |
+| Skull back | u ≈ 0.00–0.14 and 0.86–1.00, v 0.40–0.86 |
 
 ### Body (GLB requirement)
 
@@ -66,7 +87,7 @@ v = saturate((y - y_min) / y_span)
 y_min = -1.932509     y_span = 2.4697547
 ```
 
-**Final GLB work for Liam:** add a single `TEXCOORD_0` to `epiphant.glb`, `epiphant_ear_left.glb`, and `trunkish_nose.glb` (no `TEXCOORD_1`). Keep existing skinning and joint names. Re-export the same paths. Then replace the placeholder PNGs so strokes sit on the authored islands. Once UV0 exists, the shader samples mesh UV0 and the provisional unwrap for that mesh is unused.
+**Final GLB work for Liam:** add a single `TEXCOORD_0` to `epiphant.glb`, `epiphant_ear_left.glb`, and `trunkish_nose.glb`, and **re-unwrap** `meerkat_head_pronograde.glb` so the whole head (not a collapsed pole) has usable UV0 (no `TEXCOORD_1`). Keep existing skinning and joint names. Re-export the same paths. Then replace the placeholder PNGs so strokes sit on the authored islands. Once UV0 exists, the shader samples mesh UV0 and the provisional unwrap for that mesh is unused.
 
 Do **not** edit the `.blend` in this lane; this folder is the contract for the later art pass.
 
