@@ -3,12 +3,13 @@
 use bevy::prelude::*;
 use character_animations::animations::{DEFAULT_BACKSWING, DEFAULT_JAB_TARGET};
 use characters::{
-	AnimClip, AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, CharacterMembers, CharacterRig,
-	CharacterRigRole, CharacterRoot, JabParams,
+	AnimClip, AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, CharacterHeading, CharacterMembers,
+	CharacterRig, CharacterRigRole, CharacterRoot, JabParams,
 };
 use maybraid_character_controller::CharacterIntent;
-use player::{Player, PlayerUse};
+use player::{Player, PlayerLook, PlayerUse};
 
+use crate::aim::JabAim;
 use crate::attack::AttackSpec;
 use crate::{FisticuffsStrike, FisticuffsUser};
 
@@ -44,6 +45,29 @@ pub(crate) fn apply_attack_intents(
 	}
 }
 
+/// Sample look into a quantized jab target when the punch chambers.
+///
+/// Latch is start-time ([`crate::attack::AttackState::just_started`]), not
+/// Active, so the chamber already points at the cone and mid-punch look
+/// does not wobble the fist.
+pub(crate) fn latch_jab_aim(
+	mut users: Query<(Entity, &mut FisticuffsUser, Option<&PlayerLook>), With<Player>>,
+	visuals: Query<(&CharacterHeading, &ChildOf), With<CharacterRoot>>,
+) {
+	for (entity, mut user, look) in &mut users {
+		if !user.state.just_started() {
+			continue;
+		}
+		let heading = visuals
+			.iter()
+			.find(|(_, child_of)| child_of.parent() == entity)
+			.map(|(heading, _)| heading.0)
+			.unwrap_or(-Vec3::Z);
+		let look = look.copied().unwrap_or_default();
+		user.state.latch_aim(JabAim::from_look(&look, heading));
+	}
+}
+
 pub(crate) fn tick_attack_state(
 	time: Res<Time>,
 	mut users: Query<(Entity, &mut FisticuffsUser)>,
@@ -59,6 +83,7 @@ pub(crate) fn tick_attack_state(
 					side: spec.side,
 					kind: spec.kind,
 					progress,
+					target: user.state.aim().map(|aim| aim.target).unwrap_or(DEFAULT_JAB_TARGET),
 				});
 			}
 		}
@@ -88,6 +113,7 @@ pub(crate) fn apply_fisticuffs_visual(
 		let Some(progress) = user.state.clip_progress() else {
 			continue;
 		};
+		let target = user.state.aim().map(|aim| aim.target).unwrap_or(DEFAULT_JAB_TARGET);
 		for member in members.iter() {
 			let Ok(rig) = rigs.get(member) else {
 				continue;
@@ -104,7 +130,7 @@ pub(crate) fn apply_fisticuffs_visual(
 				AnimRefRoot(AnimRef::new(AnimClip::Jab(JabParams {
 					side,
 					backswing: DEFAULT_BACKSWING,
-					target: DEFAULT_JAB_TARGET,
+					target,
 				}))),
 				AnimProgress(progress),
 			));

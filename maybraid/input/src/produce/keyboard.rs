@@ -63,7 +63,8 @@ pub fn produce_keyboard(
 	if keyboard.pressed(KeyCode::KeyC) {
 		pad.hold_digital(PadButton::BumperFocus);
 	}
-	// F / G are the keyboard fallbacks for LT / RT (left / right jab when unarmed).
+	// F / G are the keyboard fallbacks for LT / RT (jabs when unarmed). Mouse
+	// buttons stay analog focus/fire only — they do not emit Attack intents.
 	if keyboard.pressed(KeyCode::KeyF) {
 		pad.max_triggers(1.0, 0.0);
 	}

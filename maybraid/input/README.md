@@ -19,7 +19,7 @@ event. Chords are queries. Text / IME stays on Bevy `KeyboardInput`.
 |---|---|
 | `move_stick` | Left stick, WASD / arrows |
 | `look_stick` | Right stick (camera-space) + mouse delta |
-| `trigger_focus` / `trigger_fire` | LT / RT, RMB / LMB, **F** / **G**, digital after threshold |
+| `trigger_focus` / `trigger_fire` | LT / RT, RMB / LMB, **F** / **G**, digital after threshold. Attack edges ignore mouse. |
 | `dpad` | Hat + arrow keys |
 | `buttons` | Xbox-letter face (`South` → A) |
 | `keys` | Full physical `KeyCode` overlay |
@@ -27,8 +27,9 @@ event. Chords are queries. Text / IME stays on Bevy `KeyboardInput`.
 Default keyboard faces: Space → A, Shift → L3 (sprint), Escape → B (menu Back;
 character tap squat / hold prone when no menu is focused), Enter → Start,
 Tab → Select, C → left bumper (iron ADS), E / X → X (interact),
-F → left trigger, G → right trigger. LMB is the right trigger; RMB is the left
-trigger.
+F → left trigger, G → right trigger. LMB is analog UseItem (right trigger);
+RMB is analog focus (left trigger). Mouse buttons do not emit jab Attack
+intents — those stay on **F** / **G** and the gamepad triggers.
 
 Gameplay systems should read sticks / buttons. `keys` is the escape hatch
 (`/`, F1, chords). Set [`PadGameplayEnabled`] to `false` while text is focused

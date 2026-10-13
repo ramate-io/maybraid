@@ -22,8 +22,10 @@ const GALLOP_CYCLE_SPEED: f32 = 0.35;
 const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.5;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
-/// One jab cycle lasts `1 / JAB_CYCLE_SPEED` seconds (~1.11 s).
-pub const JAB_CYCLE_SPEED: f32 = 0.9;
+/// Wall-clock length of one jab. Fast enough for a combo (~0.42 s).
+pub const JAB_DURATION_SECS: f32 = 0.42;
+/// One jab cycle lasts [`JAB_DURATION_SECS`] (`1 / JAB_CYCLE_SPEED`).
+pub const JAB_CYCLE_SPEED: f32 = 1.0 / JAB_DURATION_SECS;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
 /// One-shot leap lasts ~1.25 s so it covers the physics hang time.

@@ -13,9 +13,11 @@ pub enum CharacterIntent {
 	/// Unused hold chord. Discover maps now read stick flicks, not bumpers.
 	SkillMap,
 	UseItem(f32),
-	/// Rising edge on the left trigger (LT / RMB / **F**). Fisticuffs maps this to a left jab.
+	/// Rising edge on the left trigger (LT / **F**). Fisticuffs maps this to a left jab.
+	/// RMB still writes analog focus and must not emit this (see `collect_with_mouse`).
 	AttackLeft,
-	/// Rising edge on the right trigger (RT / LMB / **G**). Fisticuffs maps this to a right jab.
+	/// Rising edge on the right trigger (RT / **G**). Fisticuffs maps this to a right jab.
+	/// LMB still writes analog UseItem and must not emit this.
 	AttackRight,
 	StartSprint,
 	StopSprint,
