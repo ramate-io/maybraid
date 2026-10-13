@@ -35,8 +35,21 @@ if pgrep -x tracy-capture >/dev/null; then
 	echo "another tracy-capture is already running" >&2
 	exit 2
 fi
-if pgrep -x maybraid >/dev/null; then
+if pgrep -x maybraid >/dev/null || pgrep -x maybraid-base >/dev/null || pgrep -x maybraid-after >/dev/null; then
 	echo "maybraid is already running; this machine is one-at-a-time" >&2
+	exit 2
+fi
+if [[ "${MAYBRAID_FULLSCREEN:-}" == 1 || "${MAYBRAID_FULLSCREEN:-}" == true ]]; then
+	echo "refusing MAYBRAID_FULLSCREEN — stay windowed on this machine" >&2
+	exit 2
+fi
+unset MAYBRAID_FULLSCREEN || true
+if ! system_profiler SPDisplaysDataType 2>/dev/null | grep -q 'Online: Yes'; then
+	echo "no online display — wake the panel before profiling" >&2
+	exit 2
+fi
+if system_profiler SPDisplaysDataType 2>/dev/null | grep -q 'Display Asleep: Yes'; then
+	echo "display is asleep — wake the panel before profiling" >&2
 	exit 2
 fi
 
@@ -73,8 +86,14 @@ cleanup() {
 		kill "$cap_pid" 2>/dev/null || true
 		wait "$cap_pid" 2>/dev/null || true
 	fi
+	if [[ -n "${caffeinate_pid:-}" ]]; then
+		kill "$caffeinate_pid" 2>/dev/null || true
+	fi
 }
 trap cleanup EXIT
+
+caffeinate -d -i >/dev/null 2>&1 &
+caffeinate_pid=$!
 
 {
 	echo "scenario=$scenario"

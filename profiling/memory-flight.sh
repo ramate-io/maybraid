@@ -41,7 +41,8 @@ if command -v strings >/dev/null && strings "$bin" | grep -q 'tracy-client'; the
 	exit 2
 fi
 
-live="$(pgrep -x maybraid || true)"
+# MAYBRAID_BIN copies are named maybraid-base / maybraid-after, not maybraid.
+live="$(pgrep -x maybraid || true; pgrep -x maybraid-base || true; pgrep -x maybraid-after || true)"
 if [[ -n "$live" ]]; then
 	echo "maybraid is already running (pid $live); this machine is one-at-a-time" >&2
 	exit 3
@@ -56,9 +57,13 @@ if pgrep -x xctrace >/dev/null; then
 fi
 
 # Display must be awake: this machine has panicked the display driver when
-# a flight ran against a sleeping panel. Online + caffeinate -d is required.
+# a flight ran against a sleeping panel. Online + not-asleep + caffeinate -d.
 if ! system_profiler SPDisplaysDataType 2>/dev/null | grep -q 'Online: Yes'; then
 	echo "no online display — wake the panel before profiling" >&2
+	exit 3
+fi
+if system_profiler SPDisplaysDataType 2>/dev/null | grep -q 'Display Asleep: Yes'; then
+	echo "display is asleep — wake the panel before profiling" >&2
 	exit 3
 fi
 

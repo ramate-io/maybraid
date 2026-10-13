@@ -128,10 +128,11 @@ passes about 8 GiB (`MAYBRAID_MEMORY_CAP_BYTES`).
 `memory-flight.sh` writes under `profiling/captures/memory/<phase>/<scenario>/r<repeat>/`
 (gitignored): `*-memory.csv`, `*-memory.txt` / `*-memory.json`, a mid-window
 `vmmap --summary`, events, and the game log. It keeps the display awake
-(`caffeinate -d`) and refuses to start when no display is online, when
-`MAYBRAID_FULLSCREEN` is set, or when `maybraid` / `tracy-capture` /
-`xctrace` is already running. Stay windowed. Never `screencapture`. Never
-send `stats vsync` — the process already has `MAYBRAID_VSYNC=off`.
+(`caffeinate -d`) and refuses to start when no display is online, when the
+panel is asleep, when `MAYBRAID_FULLSCREEN` is set, or when `maybraid` /
+`maybraid-base` / `maybraid-after` / `tracy-capture` / `xctrace` is already
+running. Stay windowed. Never `screencapture`. Never send `stats vsync` —
+the process already has `MAYBRAID_VSYNC=off`.
 
 A/B is the same interleave as Tracy: copy the baseline binary and alternate
 it with the current build.
