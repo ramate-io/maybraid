@@ -68,35 +68,59 @@ pub(crate) struct TerrainColliderReady;
 #[derive(Resource, Default)]
 pub(crate) struct ReleasedCpuMeshes(std::collections::HashSet<bevy::asset::AssetId<Mesh>>);
 
+/// Colliders cooked from a mesh before its CPU verts were released.
+///
+/// HandleMap can stamp the same `Handle<Mesh>` onto a later fill. After extract
+/// *takes* the asset, `TrimeshFromMesh` panics on the compute pool. Replay the
+/// cached collider instead of reading attributes again.
+#[derive(Resource, Default)]
+pub(crate) struct CookedTerrainColliders(
+	std::collections::HashMap<bevy::asset::AssetId<Mesh>, Collider>,
+);
+
+fn insert_trimesh(commands: &mut Commands, entity: Entity, collider: Collider, friction: Friction) {
+	commands.entity(entity).insert((
+		TerrainTrimeshCollider,
+		TerrainColliderReady,
+		RigidBody::Static,
+		collider,
+		PhysicsInteractionLayer::fixed_layers(),
+		friction,
+	));
+}
+
+fn cook_trimesh(meshes: &Assets<Mesh>, handle: &Handle<Mesh>) -> Option<Collider> {
+	Collider::trimesh_from_mesh(meshes.get(handle)?)
+}
+
 /// Cooks a trimesh onto each fill that asked for collision and now has [`Mesh3d`].
 ///
-/// Fallback for heals after the first extract. Does **not** flip
-/// [`RenderAssetUsages`]: changing `MAIN_WORLD` after extract makes Bevy try
-/// to extract the same asset twice and panic on the compute pool.
+/// Fallback when `Last` missed the birth frame. Never reads a mesh whose
+/// `MAIN_WORLD` usage was already dropped — use [`CookedTerrainColliders`].
 pub(crate) fn queue_terrain_trimesh_colliders(
 	mut commands: Commands,
 	friction: Res<TerrainFrictionConfig>,
 	meshes: Res<Assets<Mesh>>,
+	released: Res<ReleasedCpuMeshes>,
+	mut cooked: ResMut<CookedTerrainColliders>,
 	sources: Query<
 		(Entity, &Mesh3d),
 		(With<TerrainColliderMeshSource>, Without<TerrainColliderReady>),
 	>,
 ) {
 	for (entity, mesh3d) in &sources {
-		let Some(mesh) = meshes.get(&mesh3d.0) else {
+		let id = mesh3d.0.id();
+		if let Some(collider) = cooked.0.get(&id).cloned() {
+			insert_trimesh(&mut commands, entity, collider, friction.0);
 			continue;
-		};
-		let Some(collider) = Collider::trimesh_from_mesh(mesh) else {
+		}
+		if released.0.contains(&id) {
 			continue;
-		};
-		commands.entity(entity).insert((
-			TerrainTrimeshCollider,
-			TerrainColliderReady,
-			RigidBody::Static,
-			collider,
-			PhysicsInteractionLayer::fixed_layers(),
-			friction.0,
-		));
+		}
+		if let Some(collider) = cook_trimesh(&meshes, &mesh3d.0) {
+			cooked.0.insert(id, collider.clone());
+			insert_trimesh(&mut commands, entity, collider, friction.0);
+		}
 	}
 }
 
@@ -104,32 +128,37 @@ pub(crate) fn queue_terrain_trimesh_colliders(
 ///
 /// `Last` runs before render extract. Flipping usage here lets extract *take*
 /// the CpuShot buffers instead of cloning them for the rest of the session.
+/// Collider fills keep a cached trimesh so a later shared handle can attach
+/// without reading extracted attributes.
 pub(crate) fn cook_and_release_cpu_before_extract(
 	mut commands: Commands,
 	friction: Res<TerrainFrictionConfig>,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut released: ResMut<ReleasedCpuMeshes>,
+	mut cooked: ResMut<CookedTerrainColliders>,
 	added: Query<
 		(Entity, &Mesh3d, Has<TerrainColliderMeshSource>, Has<TerrainColliderReady>),
 		Added<Mesh3d>,
 	>,
 ) {
 	for (entity, mesh3d, is_source, ready) in &added {
+		let id = mesh3d.0.id();
+		let mut can_release = !is_source || ready;
 		if is_source && !ready {
-			if let Some(mesh) = meshes.get(&mesh3d.0) {
-				if let Some(collider) = Collider::trimesh_from_mesh(mesh) {
-					commands.entity(entity).insert((
-						TerrainTrimeshCollider,
-						TerrainColliderReady,
-						RigidBody::Static,
-						collider,
-						PhysicsInteractionLayer::fixed_layers(),
-						friction.0,
-					));
+			if let Some(collider) = cooked.0.get(&id).cloned() {
+				insert_trimesh(&mut commands, entity, collider, friction.0);
+				can_release = true;
+			} else if !released.0.contains(&id) {
+				if let Some(collider) = cook_trimesh(&meshes, &mesh3d.0) {
+					cooked.0.insert(id, collider.clone());
+					insert_trimesh(&mut commands, entity, collider, friction.0);
+					can_release = true;
 				}
 			}
 		}
-		let id = mesh3d.0.id();
+		if !can_release {
+			continue;
+		}
 		if !released.0.insert(id) {
 			continue;
 		}
@@ -169,6 +198,8 @@ mod tests {
 		let mut app = App::new();
 		app.insert_resource(Assets::<Mesh>::default())
 			.insert_resource(TerrainFrictionConfig::default())
+			.init_resource::<ReleasedCpuMeshes>()
+			.init_resource::<CookedTerrainColliders>()
 			.add_systems(Update, queue_terrain_trimesh_colliders);
 
 		let mut mesh = Mesh::new(
@@ -218,6 +249,7 @@ mod tests {
 		app.insert_resource(Assets::<Mesh>::default())
 			.insert_resource(TerrainFrictionConfig::default())
 			.init_resource::<ReleasedCpuMeshes>()
+			.init_resource::<CookedTerrainColliders>()
 			.add_systems(Last, cook_and_release_cpu_before_extract);
 
 		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
@@ -238,6 +270,7 @@ mod tests {
 		app.insert_resource(Assets::<Mesh>::default())
 			.insert_resource(TerrainFrictionConfig::default())
 			.init_resource::<ReleasedCpuMeshes>()
+			.init_resource::<CookedTerrainColliders>()
 			.add_systems(Last, cook_and_release_cpu_before_extract);
 
 		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
@@ -254,6 +287,7 @@ mod tests {
 		app.insert_resource(Assets::<Mesh>::default())
 			.insert_resource(TerrainFrictionConfig::default())
 			.init_resource::<ReleasedCpuMeshes>()
+			.init_resource::<CookedTerrainColliders>()
 			.add_systems(Last, cook_and_release_cpu_before_extract);
 
 		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
@@ -269,6 +303,36 @@ mod tests {
 		let usage = app.world().resource::<Assets<Mesh>>().get(&handle).expect("mesh").asset_usage;
 		assert_eq!(usage, bevy::asset::RenderAssetUsages::RENDER_WORLD);
 		assert_eq!(app.world().resource::<ReleasedCpuMeshes>().0.len(), 1);
+	}
+
+	#[test]
+	fn shared_handle_reuses_cached_collider_after_release() {
+		let mut app = App::new();
+		app.insert_resource(Assets::<Mesh>::default())
+			.insert_resource(TerrainFrictionConfig::default())
+			.init_resource::<ReleasedCpuMeshes>()
+			.init_resource::<CookedTerrainColliders>()
+			.add_systems(Last, cook_and_release_cpu_before_extract);
+
+		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
+		let first = app
+			.world_mut()
+			.spawn((TerrainColliderMeshSource, Mesh3d(handle.clone())))
+			.id();
+		app.update();
+		assert!(app.world().get::<TerrainTrimeshCollider>(first).is_some());
+		assert_eq!(
+			app.world().resource::<Assets<Mesh>>().get(&handle).expect("mesh").asset_usage,
+			bevy::asset::RenderAssetUsages::RENDER_WORLD
+		);
+
+		let second = app
+			.world_mut()
+			.spawn((TerrainColliderMeshSource, Mesh3d(handle.clone())))
+			.id();
+		app.update();
+		assert!(app.world().get::<TerrainTrimeshCollider>(second).is_some());
+		assert!(app.world().resource::<CookedTerrainColliders>().0.contains_key(&handle.id()));
 	}
 
 	#[test]

@@ -39,6 +39,7 @@ impl Plugin for TerrainResourcesPlugin {
 			.init_resource::<WatershedConfigs>()
 			.init_resource::<TerrainFrictionConfig>()
 			.init_resource::<crate::terrain::collider::ReleasedCpuMeshes>()
+			.init_resource::<crate::terrain::collider::CookedTerrainColliders>()
 			.configure_sets(
 				Update,
 				(
