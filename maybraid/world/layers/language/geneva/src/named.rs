@@ -26,7 +26,9 @@ use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext};
 use maybraid_language_core::lexicalizer::mix;
 use procedural_common::Bounds2;
-use urbanization_cells::SelectedUrbanization;
+use urbanization_cells::{
+	select_cell, select_cell_as, SelectedUrbanization, UrbanizationExtent, UrbanizationSelection,
+};
 
 use crate::bundle::LanguageBundle;
 use crate::english::{
@@ -233,6 +235,29 @@ impl<W: LanguageGround> NameSource for Groves<W> {
 /// Urbanization cells and their development leaves.
 pub struct Urban;
 
+fn urban_nameables(id: Id, cell: &SelectedUrbanization, bounds: Aabb3d) -> Vec<Nameable> {
+	let key = NameKey::Urban(id);
+	let mut out =
+		vec![feature(key, bounds, named_urban_english(cell.kind, None, name_key_salt(key)))];
+	for leaf in &cell.leaves {
+		let key = NameKey::UrbanLeaf(leaf.id());
+		let english = named_urban_english(cell.kind, Some(leaf.kind), name_key_salt(key));
+		out.push(feature(key, leaf.bounds, english));
+	}
+	out
+}
+
+/// Selection for one urbanization extent from the session root (no storage read).
+fn selected_urbanization(
+	extent: UrbanizationExtent,
+	selection: &UrbanizationSelection,
+) -> SelectedUrbanization {
+	match selection.kind {
+		Some(kind) => select_cell_as(extent, selection.noise, kind),
+		None => select_cell(extent, selection.noise),
+	}
+}
+
 impl NameSource for Urban {
 	const INDEX_SCALE: DVec3 = crate::hcsg::TILE_INDEX_SCALE;
 
@@ -241,16 +266,11 @@ impl NameSource for Urban {
 	}
 
 	fn nameables(cx: &mut GenerationContext, id: Id) -> Option<(Vec<Nameable>, Aabb3d)> {
-		let (cell, bounds) = cx.get_or_generate_stored::<SelectedUrbanization>(id)?;
-		let key = NameKey::Urban(id);
-		let mut out =
-			vec![feature(key, bounds, named_urban_english(cell.kind, None, name_key_salt(key)))];
-		for leaf in &cell.leaves {
-			let key = NameKey::UrbanLeaf(leaf.id());
-			let english = named_urban_english(cell.kind, Some(leaf.kind), name_key_salt(key));
-			out.push(feature(key, leaf.bounds, english));
-		}
-		Some((out, bounds))
+		let extent = UrbanizationExtent::from_id(id)?;
+		let selection = cx.get::<UrbanizationSelection>(Id::Universal)?;
+		let bounds = extent.aabb();
+		let cell = selected_urbanization(extent, selection.as_ref());
+		Some((urban_nameables(id, &cell, bounds), bounds))
 	}
 }
 
@@ -391,4 +411,132 @@ fn geographic(id: GeographicFeatureId, kind: GeographicFeatureKind, source: Boun
 		Vec2::new(source.max.x, source.max.y),
 	);
 	Nameable { key, xz: extent.center(), extent, english, speaks: Speaks::Here }
+}
+
+#[cfg(test)]
+mod scheme_perf_tests {
+	use super::*;
+	use bevy::math::Vec3;
+	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
+	use procedural_common::NoiseParams;
+	use std::time::Instant;
+	use urbanization_cells::{
+		UrbanizationKind, DEVELOPMENT_GENERATE_RADIUS_M, UrbanizationExtent,
+	};
+
+	fn seed(storage: &HcsgStorage) {
+		storage.seed(
+			UrbanizationSelection {
+				noise: NoiseParams::from_scalar(1337.0, 0.0005, 1.0, 1),
+				kind: Some(UrbanizationKind::Frontier),
+			},
+			universal_bounds(),
+		);
+		storage.seed(crate::hcsg::LanguageWorldSeed::default(), universal_bounds());
+	}
+
+	fn discovery_region(center: Vec3) -> Aabb3d {
+		UrbanizationExtent::xz_radius_aabb(center, DEVELOPMENT_GENERATE_RADIUS_M)
+	}
+
+	fn nameables_materialized(cx: &mut GenerationContext, id: Id) -> Option<Vec<Nameable>> {
+		let (cell, bounds) = cx.get_or_generate_stored::<SelectedUrbanization>(id)?;
+		Some(urban_nameables(id, &cell, bounds))
+	}
+
+	fn assert_urban_nameables_match_materialized(center: Vec3) -> anyhow::Result<()> {
+		let region = discovery_region(center);
+		let storage = HcsgStorage::default();
+		seed(&storage);
+		let mut materialized_cx = GenerationContext::new(&storage);
+		let mut local_cx = GenerationContext::new(&storage);
+		for extent in UrbanizationExtent::cells_overlapping(region) {
+			let id = extent.id();
+			let materialized = nameables_materialized(&mut materialized_cx, id)
+				.ok_or_else(|| anyhow::anyhow!("materialized urban names missing for {id:?}"))?;
+			let local = Urban::nameables(&mut local_cx, id)
+				.map(|(names, _)| names)
+				.ok_or_else(|| anyhow::anyhow!("local urban names missing for {id:?}"))?;
+			assert_eq!(materialized, local, "center {center:?} extent {extent:?}");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn urban_nameables_match_materialized_selections() -> anyhow::Result<()> {
+		for center in [
+			Vec3::ZERO,
+			Vec3::new(640.0, 0.0, -320.0),
+			Vec3::new(-1_200.0, 0.0, 800.0),
+		] {
+			assert_urban_nameables_match_materialized(center)?;
+		}
+		for seed in [11u32, 42, 99, 7_001] {
+			let storage = HcsgStorage::default();
+			storage.seed(
+				UrbanizationSelection {
+					noise: NoiseParams::from_scalar(seed as f32, 0.0005, 1.0, 1),
+					kind: Some(UrbanizationKind::Frontier),
+				},
+				universal_bounds(),
+			);
+			storage.seed(crate::hcsg::LanguageWorldSeed::default(), universal_bounds());
+			let region = UrbanizationExtent::ring_aabb((2, -2), 1);
+			let mut materialized_cx = GenerationContext::new(&storage);
+			let mut local_cx = GenerationContext::new(&storage);
+			for extent in UrbanizationExtent::cells_overlapping(region) {
+				let id = extent.id();
+				let materialized = nameables_materialized(&mut materialized_cx, id)
+					.ok_or_else(|| anyhow::anyhow!("materialized"))?;
+				let local = Urban::nameables(&mut local_cx, id).map(|(n, _)| n).unwrap();
+				assert_eq!(materialized, local, "seed {seed} extent {extent:?}");
+			}
+		}
+		Ok(())
+	}
+
+	/// `cargo test -p geneva urban_nameables_microbench --release -- --ignored --nocapture`
+	#[test]
+	#[ignore = "microbench"]
+	fn urban_nameables_microbench() {
+		let region = discovery_region(Vec3::ZERO);
+		let ids: Vec<Id> = UrbanizationExtent::cells_overlapping(region)
+			.into_iter()
+			.map(|extent| extent.id())
+			.collect();
+		let runs = 40;
+
+		let bench = |materialize: bool| -> std::time::Duration {
+			let start = Instant::now();
+			for _ in 0..runs {
+				let storage = HcsgStorage::default();
+				seed(&storage);
+				let mut cx = GenerationContext::new(&storage);
+				for id in &ids {
+					if materialize {
+						nameables_materialized(&mut cx, *id);
+					} else {
+						Urban::nameables(&mut cx, *id);
+					}
+				}
+			}
+			start.elapsed()
+		};
+
+		let materialize = bench(true);
+		let local = bench(false);
+		let materialize_ms = materialize.as_secs_f64() * 1000.0 / runs as f64;
+		let local_ms = local.as_secs_f64() * 1000.0 / runs as f64;
+		eprintln!(
+			"urban_nameables_microbench ({} m generate ring, {} cells, Frontier, cold storage): \
+			 materialize={materialize_ms:.2} ms/batch local={local_ms:.2} ms/batch ({:.2}x)",
+			DEVELOPMENT_GENERATE_RADIUS_M,
+			ids.len(),
+			materialize_ms / local_ms.max(1e-9)
+		);
+		assert!(
+			local_ms < materialize_ms * 0.98,
+			"local hopscotch selection should beat materializing every SelectedUrbanization"
+		);
+	}
 }
