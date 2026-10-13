@@ -12,7 +12,7 @@ const NOD_HALF_WIDTH: f32 = 0.10;
 /// Peak chin nod per dip (radians on the neck twist / nod channel).
 const NOD_DEPTH: f32 = 0.26;
 /// Light upper-spine follow so the read is not a rigid neck hinge.
-const SPINE_FOLLOW: f32 = 0.07;
+const SPINE_FOLLOW: f32 = 0.04;
 
 /// One-shot head-nod knobs. The rig resolver maps these onto V0 channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

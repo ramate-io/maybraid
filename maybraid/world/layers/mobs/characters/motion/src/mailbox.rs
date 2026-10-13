@@ -773,13 +773,9 @@ fn sample_humanoid(
 			write_bones,
 			write_effects,
 		),
-		AnimClip::HeadNod => sample_split(
-			&HeadNod,
-			rig,
-			progress.clamp(0.0, 1.0),
-			write_bones,
-			write_effects,
-		),
+		AnimClip::HeadNod => {
+			sample_split(&HeadNod, rig, progress.clamp(0.0, 1.0), write_bones, write_effects)
+		}
 		AnimClip::Squat => sample_split(&Squat::held(), rig, progress, write_bones, write_effects),
 		AnimClip::SquatDescent => sample_split(
 			&SquatDescent::default(),
@@ -1011,12 +1007,17 @@ mod tests {
 	fn head_nod_mailbox_sample_is_playback_only() -> anyhow::Result<()> {
 		use anyhow::anyhow;
 
+		let head_tip = |rig: &HumanoidV0Rig| {
+			rig.character_point("upper_neck") + rig.character_length("upper_neck")
+		};
+
 		let mut at_rest = HumanoidV0Rig::for_clip_test();
+		let rest_tip = head_tip(&at_rest);
 		let rest_effects = sample_humanoid(AnimClip::head_nod(), &mut at_rest, 0.0, true, true);
 		if !rest_effects.is_identity() {
 			return Err(anyhow!("head nod entry must not offset the armature"));
 		}
-		if at_rest.posed_angle("upper_neck") > 0.01 {
+		if (head_tip(&at_rest) - rest_tip).length() > 1e-3 {
 			return Err(anyhow!("head nod entry stays at rest"));
 		}
 
@@ -1025,8 +1026,9 @@ mod tests {
 		if !peak_effects.is_identity() {
 			return Err(anyhow!("head nod must not move the armature"));
 		}
-		if at_peak.posed_angle("upper_neck") < 0.05 {
-			return Err(anyhow!("neck should nod at the first dip"));
+		let dip = head_tip(&at_peak) - rest_tip;
+		if dip.z < 0.03 || dip.y > -0.02 {
+			return Err(anyhow!("first dip pitches forward/down, Δ={dip:?}"));
 		}
 		if at_peak.posed_angle("humerus.R") > 0.01 {
 			return Err(anyhow!("arms stay at rest during head nod"));
