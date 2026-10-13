@@ -1,8 +1,7 @@
 //! Headless tattoo captures. Active only when `MAYBRAID_TATTOO_CAPTURE_DIR` is set.
 //!
 //! Uses Bevy `Screenshot` (GPU readback). X11 `scrot` stays black on xvfb.
-//! Waits for preview reveal and species camera focus to settle, then shoots
-//! the default framing and a yawed side view one frame after each camera move.
+//! After preview reveal, shoots front, three-quarter, and side views.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -11,7 +10,6 @@ use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use characters_playground::camera::CameraController;
 
-use crate::camera_focus::PendingCameraFocus;
 use crate::preview::{ConceptPreviewRoot, PreviewAwaitingReveal};
 
 fn capture_dir() -> Option<PathBuf> {
@@ -21,14 +19,37 @@ fn capture_dir() -> Option<PathBuf> {
 #[derive(Resource)]
 struct TattooCaptureDir(PathBuf);
 
+#[derive(Clone, Copy)]
+struct Shot {
+	name: &'static str,
+	eye: Vec3,
+	target: Vec3,
+}
+
+const SHOTS: [Shot; 3] = [
+	Shot {
+		name: "epiphant_tattoos_front.png",
+		eye: Vec3::new(0.0, 1.15, 4.0),
+		target: Vec3::new(0.0, 0.55, 0.2),
+	},
+	Shot {
+		name: "epiphant_tattoos_three_quarter.png",
+		eye: Vec3::new(2.6, 1.45, 3.2),
+		target: Vec3::new(0.0, 0.7, 0.25),
+	},
+	Shot {
+		name: "epiphant_tattoos_side.png",
+		eye: Vec3::new(4.0, 1.1, 0.35),
+		target: Vec3::new(0.0, 0.55, 0.1),
+	},
+];
+
 #[derive(Resource, Default)]
 struct TattooCaptureState {
 	revealed_at: Option<Duration>,
-	saw_focus: bool,
-	focus_settled: bool,
-	default_shot: bool,
-	side_posed_at: Option<Duration>,
-	side_shot: bool,
+	index: usize,
+	posed_at: Option<Duration>,
+	shot: bool,
 }
 
 pub fn install(app: &mut App) {
@@ -48,7 +69,6 @@ fn drive_tattoo_captures(
 	mut state: ResMut<TattooCaptureState>,
 	pending_reveal: Query<(), With<PreviewAwaitingReveal>>,
 	preview: Query<&Visibility, With<ConceptPreviewRoot>>,
-	focus: Res<PendingCameraFocus>,
 	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	if preview.is_empty() || !pending_reveal.is_empty() {
@@ -64,47 +84,38 @@ fn drive_tattoo_captures(
 	let Some(revealed_at) = state.revealed_at else {
 		return;
 	};
-	let elapsed = time.elapsed().saturating_sub(revealed_at);
-
-	if focus.focus.is_some() {
-		state.saw_focus = true;
-	}
-	if state.saw_focus && focus.focus.is_none() {
-		state.focus_settled = true;
-	}
-	let framing_ready = (state.focus_settled && elapsed >= Duration::from_millis(400))
-		|| elapsed >= Duration::from_secs(4);
-
-	if framing_ready && !state.default_shot {
-		request_shot(&mut commands, dir.0.join("epiphant_tattoos_three_quarter.png"));
-		state.default_shot = true;
+	if time.elapsed().saturating_sub(revealed_at) < Duration::from_millis(1500) {
 		return;
 	}
-
-	if state.default_shot
-		&& state.side_posed_at.is_none()
-		&& dir.0.join("epiphant_tattoos_three_quarter.png").is_file()
-	{
+	if state.index >= SHOTS.len() {
+		return;
+	}
+	let shot = SHOTS[state.index];
+	if state.posed_at.is_none() {
 		if let Ok((mut transform, mut controller)) = cameras.single_mut() {
-			let target = transform.translation + transform.forward() * 3.0;
-			let offset = transform.right() * 3.4 + Vec3::Y * 0.15;
 			characters_playground::camera::orient_camera(
 				&mut transform,
 				&mut controller,
-				target + offset,
-				target,
+				shot.eye,
+				shot.target,
 			);
 		}
-		state.side_posed_at = Some(time.elapsed());
+		state.posed_at = Some(time.elapsed());
+		state.shot = false;
 		return;
 	}
-
-	if let Some(posed_at) = state.side_posed_at {
-		if !state.side_shot && time.elapsed().saturating_sub(posed_at) >= Duration::from_millis(400)
-		{
-			request_shot(&mut commands, dir.0.join("epiphant_tattoos_side.png"));
-			state.side_shot = true;
-		}
+	let Some(posed_at) = state.posed_at else {
+		return;
+	};
+	if !state.shot && time.elapsed().saturating_sub(posed_at) >= Duration::from_millis(450) {
+		request_shot(&mut commands, dir.0.join(shot.name));
+		state.shot = true;
+		return;
+	}
+	if state.shot && dir.0.join(shot.name).is_file() {
+		state.index += 1;
+		state.posed_at = None;
+		state.shot = false;
 	}
 }
 
@@ -122,10 +133,8 @@ fn quit_after_tattoo_captures(
 	mut exit: MessageWriter<AppExit>,
 	mut ready_at: Local<Option<Duration>>,
 ) {
-	let files_ready = state.default_shot
-		&& state.side_shot
-		&& dir.0.join("epiphant_tattoos_side.png").is_file()
-		&& dir.0.join("epiphant_tattoos_three_quarter.png").is_file();
+	let files_ready =
+		state.index >= SHOTS.len() && SHOTS.iter().all(|shot| dir.0.join(shot.name).is_file());
 	if files_ready && capturing.is_empty() && ready_at.is_none() {
 		*ready_at = Some(time.elapsed());
 	}

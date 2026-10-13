@@ -23,11 +23,12 @@ pub use face_material::{
 	RECIPE_FACE_MOUTH,
 };
 pub use skin_material::{
-	body_provisional_uv, SkinMaterialUniform, SkinShaderMaterial, SkinShaderMaterialPlugin,
-	SkinTattoo, SkinTattooMask, SkinTattooMasks, DEFAULT_TATTOO_GLOW, DEFAULT_TATTOO_INTENSITY,
-	DEFAULT_TATTOO_PULSE_AMP, DEFAULT_TATTOO_PULSE_RATE, KIND_BODY, KIND_HEAD,
-	RECIPE_SKIN_TATTOO_BODY, RECIPE_SKIN_TATTOO_HEAD, SKIN_PALETTE_BASE, SKIN_PALETTE_GLOW,
-	SKIN_SCALAR_INTENSITY, SKIN_SCALAR_PULSE_AMP, SKIN_SCALAR_PULSE_RATE,
+	body_provisional_uv, ear_provisional_uv, trunk_provisional_uv, SkinMaterialUniform,
+	SkinShaderMaterial, SkinShaderMaterialPlugin, SkinTattoo, SkinTattooMask, SkinTattooMasks,
+	DEFAULT_TATTOO_GLOW, DEFAULT_TATTOO_INTENSITY, DEFAULT_TATTOO_PULSE_AMP,
+	DEFAULT_TATTOO_PULSE_RATE, KIND_BODY, KIND_EAR, KIND_HEAD, KIND_TRUNK, RECIPE_SKIN_TATTOO_BODY,
+	RECIPE_SKIN_TATTOO_EAR, RECIPE_SKIN_TATTOO_HEAD, RECIPE_SKIN_TATTOO_TRUNK, SKIN_PALETTE_BASE,
+	SKIN_PALETTE_GLOW, SKIN_SCALAR_INTENSITY, SKIN_SCALAR_PULSE_AMP, SKIN_SCALAR_PULSE_RATE,
 };
 
 /// Registers clothing, face, and skin-tattoo materials used by character [`material_ref::MaterialLib`]s.

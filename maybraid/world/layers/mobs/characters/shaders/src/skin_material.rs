@@ -28,9 +28,15 @@ use material_ref::{
 pub const RECIPE_SKIN_TATTOO_BODY: &str = "skin_tattoo_body";
 /// Head hide + tattoo mask on existing meerkat UV0.
 pub const RECIPE_SKIN_TATTOO_HEAD: &str = "skin_tattoo_head";
+/// Ear hide + tattoo mask (planar XY unwrap; ear GLB has no UV0).
+pub const RECIPE_SKIN_TATTOO_EAR: &str = "skin_tattoo_ear";
+/// Trunk hide + tattoo mask (cylindrical about Y; trunk GLB has no UV0).
+pub const RECIPE_SKIN_TATTOO_TRUNK: &str = "skin_tattoo_trunk";
 
 pub const KIND_BODY: u32 = 0;
 pub const KIND_HEAD: u32 = 1;
+pub const KIND_EAR: u32 = 2;
+pub const KIND_TRUNK: u32 = 3;
 
 pub const SKIN_PALETTE_BASE: usize = 0;
 pub const SKIN_PALETTE_GLOW: usize = 1;
@@ -58,12 +64,22 @@ const HEAD_MASK_PNG: &[u8] = include_bytes!(concat!(
 	env!("CARGO_MANIFEST_DIR"),
 	"/../../../../../assets/characters/tattoos/epiphant_head_uv0_placeholder.png"
 ));
+const EAR_MASK_PNG: &[u8] = include_bytes!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/../../../../../assets/characters/tattoos/epiphant_ear_uv0_placeholder.png"
+));
+const TRUNK_MASK_PNG: &[u8] = include_bytes!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/../../../../../assets/characters/tattoos/epiphant_trunk_uv0_placeholder.png"
+));
 
 /// Which UV0 mask a part host should stamp.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SkinTattooMask {
 	Body,
 	Head,
+	Ear,
+	Trunk,
 }
 
 impl SkinTattooMask {
@@ -71,19 +87,28 @@ impl SkinTattooMask {
 		match self {
 			Self::Body => RECIPE_SKIN_TATTOO_BODY,
 			Self::Head => RECIPE_SKIN_TATTOO_HEAD,
+			Self::Ear => RECIPE_SKIN_TATTOO_EAR,
+			Self::Trunk => RECIPE_SKIN_TATTOO_TRUNK,
 		}
 	}
 
 	pub fn from_recipe_name(name: &str) -> Self {
-		if name == RECIPE_SKIN_TATTOO_HEAD {
-			Self::Head
-		} else {
-			Self::Body
+		match name {
+			RECIPE_SKIN_TATTOO_HEAD => Self::Head,
+			RECIPE_SKIN_TATTOO_EAR => Self::Ear,
+			RECIPE_SKIN_TATTOO_TRUNK => Self::Trunk,
+			_ => Self::Body,
 		}
 	}
 
 	pub fn is_skin_tattoo_recipe(name: &str) -> bool {
-		matches!(name, RECIPE_SKIN_TATTOO_BODY | RECIPE_SKIN_TATTOO_HEAD)
+		matches!(
+			name,
+			RECIPE_SKIN_TATTOO_BODY
+				| RECIPE_SKIN_TATTOO_HEAD
+				| RECIPE_SKIN_TATTOO_EAR
+				| RECIPE_SKIN_TATTOO_TRUNK
+		)
 	}
 }
 
@@ -120,6 +145,8 @@ impl SkinTattoo {
 pub struct SkinTattooMasks {
 	pub body: Handle<Image>,
 	pub head: Handle<Image>,
+	pub ear: Handle<Image>,
+	pub trunk: Handle<Image>,
 }
 
 impl SkinTattooMasks {
@@ -127,6 +154,8 @@ impl SkinTattooMasks {
 		match mask {
 			SkinTattooMask::Body => self.body.clone(),
 			SkinTattooMask::Head => self.head.clone(),
+			SkinTattooMask::Ear => self.ear.clone(),
+			SkinTattooMask::Trunk => self.trunk.clone(),
 		}
 	}
 
@@ -155,7 +184,14 @@ fn install_skin_tattoo_masks(app: &mut App) {
 		let mut images = app.world_mut().resource_mut::<Assets<Image>>();
 		let body = decode_mask_png(BODY_MASK_PNG).unwrap_or_else(fallback_mask);
 		let head = decode_mask_png(HEAD_MASK_PNG).unwrap_or_else(fallback_mask);
-		SkinTattooMasks { body: images.add(body), head: images.add(head) }
+		let ear = decode_mask_png(EAR_MASK_PNG).unwrap_or_else(fallback_mask);
+		let trunk = decode_mask_png(TRUNK_MASK_PNG).unwrap_or_else(fallback_mask);
+		SkinTattooMasks {
+			body: images.add(body),
+			head: images.add(head),
+			ear: images.add(ear),
+			trunk: images.add(trunk),
+		}
 	};
 	app.insert_resource(masks);
 }
@@ -248,6 +284,8 @@ impl SkinMaterialUniform {
 			kind: match kind {
 				SkinTattooMask::Body => KIND_BODY,
 				SkinTattooMask::Head => KIND_HEAD,
+				SkinTattooMask::Ear => KIND_EAR,
+				SkinTattooMask::Trunk => KIND_TRUNK,
 			},
 			flags: 0,
 			_pad: UVec2::ZERO,
@@ -322,6 +360,26 @@ pub fn body_provisional_uv(local: Vec3) -> Vec2 {
 	Vec2::new(u, v)
 }
 
+/// Planar XY UV used when `epiphant_ear_left.glb` has no TEXCOORD_0.
+pub fn ear_provisional_uv(local: Vec3) -> Vec2 {
+	const X_MIN: f32 = -0.295_222_76;
+	const X_SPAN: f32 = 2.330_160_9;
+	const Y_MIN: f32 = -1.652_735_1;
+	const Y_SPAN: f32 = 2.981_944_3;
+	let u = ((local.x - X_MIN) / X_SPAN).clamp(0.0, 1.0);
+	let v = ((local.y - Y_MIN) / Y_SPAN).clamp(0.0, 1.0);
+	Vec2::new(u, v)
+}
+
+/// Cylindrical-about-Y UV used when `trunkish_nose.glb` has no TEXCOORD_0.
+pub fn trunk_provisional_uv(local: Vec3) -> Vec2 {
+	const Y_MIN: f32 = -1.932_509;
+	const Y_SPAN: f32 = 2.469_754_7;
+	let u = local.x.atan2(local.z) * std::f32::consts::FRAC_1_PI * 0.5 + 0.5;
+	let v = ((local.y - Y_MIN) / Y_SPAN).clamp(0.0, 1.0);
+	Vec2::new(u, v)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -357,6 +415,8 @@ mod tests {
 	fn tattoo_recipe_names() {
 		assert!(SkinTattooMask::is_skin_tattoo_recipe(RECIPE_SKIN_TATTOO_BODY));
 		assert!(SkinTattooMask::is_skin_tattoo_recipe(RECIPE_SKIN_TATTOO_HEAD));
+		assert!(SkinTattooMask::is_skin_tattoo_recipe(RECIPE_SKIN_TATTOO_EAR));
+		assert!(SkinTattooMask::is_skin_tattoo_recipe(RECIPE_SKIN_TATTOO_TRUNK));
 		assert!(!SkinTattooMask::is_skin_tattoo_recipe("face_eye"));
 	}
 
@@ -381,5 +441,19 @@ mod tests {
 	fn placeholder_pngs_decode() {
 		assert!(decode_mask_png(BODY_MASK_PNG).is_some());
 		assert!(decode_mask_png(HEAD_MASK_PNG).is_some());
+		assert!(decode_mask_png(EAR_MASK_PNG).is_some());
+		assert!(decode_mask_png(TRUNK_MASK_PNG).is_some());
+	}
+
+	#[test]
+	fn ear_provisional_uv_uses_planar_xy() {
+		let uv = ear_provisional_uv(Vec3::new(-0.295_222_76, -1.652_735_1, 0.0));
+		assert!(uv.x.abs() < 1e-4 && uv.y.abs() < 1e-4);
+	}
+
+	#[test]
+	fn trunk_provisional_uv_puts_forward_at_u_half() {
+		let uv = trunk_provisional_uv(Vec3::new(0.0, 0.0, 0.4));
+		assert!((uv.x - 0.5).abs() < 1e-4, "forward u={}", uv.x);
 	}
 }

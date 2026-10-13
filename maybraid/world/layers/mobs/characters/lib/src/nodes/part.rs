@@ -131,6 +131,10 @@ impl PartNode {
 			CharacterPartSlot::HeadMesh | CharacterPartSlot::HeadRig => {
 				character_shaders::SkinTattooMask::Head
 			}
+			CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+				character_shaders::SkinTattooMask::Ear
+			}
+			CharacterPartSlot::Nose => character_shaders::SkinTattooMask::Trunk,
 			_ => character_shaders::SkinTattooMask::Body,
 		};
 		self.with_material(tattoo.material_ref(mask, skin))
@@ -341,5 +345,25 @@ mod tests {
 		.with_base_color(Color::srgb(0.5, 0.5, 0.5))
 		.with_skin_tattoo(&SkinTattoo::default());
 		assert_eq!(part.material.name, MaterialId::named("skin_tattoo_head"));
+	}
+
+	#[test]
+	fn with_skin_tattoo_claims_ear_and_trunk_recipes() {
+		let ear = PartNode::glb(
+			CharacterPartSlot::EarLeft,
+			"ear",
+			"characters/ears/epiphant_ear_left.glb",
+			AssetNormalization::IDENTITY,
+		)
+		.with_skin_tattoo(&SkinTattoo::default());
+		assert_eq!(ear.material.name, MaterialId::named("skin_tattoo_ear"));
+		let trunk = PartNode::glb(
+			CharacterPartSlot::Nose,
+			"trunk",
+			"characters/noses/trunkish_nose.glb",
+			AssetNormalization::IDENTITY,
+		)
+		.with_skin_tattoo(&SkinTattoo::default());
+		assert_eq!(trunk.material.name, MaterialId::named("skin_tattoo_trunk"));
 	}
 }

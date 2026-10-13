@@ -39,10 +39,18 @@ var tattoo_sampler: sampler;
 
 const KIND_BODY: u32 = 0u;
 const KIND_HEAD: u32 = 1u;
+const KIND_EAR: u32 = 2u;
+const KIND_TRUNK: u32 = 3u;
 
 // Bind-pose AABB of `characters/bodies/quadruped/epiphant.glb` (Z long axis).
 const BODY_UNWRAP_Z_MIN: f32 = -0.9804133;
 const BODY_UNWRAP_Z_SPAN: f32 = 2.0035005;
+const EAR_UNWRAP_X_MIN: f32 = -0.29522276;
+const EAR_UNWRAP_X_SPAN: f32 = 2.3301609;
+const EAR_UNWRAP_Y_MIN: f32 = -1.6527351;
+const EAR_UNWRAP_Y_SPAN: f32 = 2.9819443;
+const TRUNK_UNWRAP_Y_MIN: f32 = -1.932509;
+const TRUNK_UNWRAP_Y_SPAN: f32 = 2.4697547;
 const INV_TWO_PI: f32 = 0.15915494309189535;
 
 struct SkinVertexOutput {
@@ -85,6 +93,19 @@ fn body_provisional_uv(local: vec3<f32>) -> vec2<f32> {
     // Cylindrical about +Z; seam on the belly (u = 0/1), spine at u = 0.5.
     let u = atan2(local.x, local.y) * INV_TWO_PI + 0.5;
     let v = saturate((local.z - BODY_UNWRAP_Z_MIN) / BODY_UNWRAP_Z_SPAN);
+    return vec2<f32>(u, v);
+}
+
+fn ear_provisional_uv(local: vec3<f32>) -> vec2<f32> {
+    let u = saturate((local.x - EAR_UNWRAP_X_MIN) / EAR_UNWRAP_X_SPAN);
+    let v = saturate((local.y - EAR_UNWRAP_Y_MIN) / EAR_UNWRAP_Y_SPAN);
+    return vec2<f32>(u, v);
+}
+
+fn trunk_provisional_uv(local: vec3<f32>) -> vec2<f32> {
+    // Cylindrical about +Y (trunk hangs down); rings are constant v.
+    let u = atan2(local.x, local.z) * INV_TWO_PI + 0.5;
+    let v = saturate((local.y - TRUNK_UNWRAP_Y_MIN) / TRUNK_UNWRAP_Y_SPAN);
     return vec2<f32>(u, v);
 }
 
@@ -140,6 +161,11 @@ fn tattoo_uv(mesh: SkinVertexOutput) -> vec2<f32> {
 #ifdef VERTEX_UVS_A
     return mesh.uv;
 #else
+    if material.kind == KIND_EAR {
+        return ear_provisional_uv(mesh.local_pos);
+    } else if material.kind == KIND_TRUNK {
+        return trunk_provisional_uv(mesh.local_pos);
+    }
     return body_provisional_uv(mesh.local_pos);
 #endif
 }
