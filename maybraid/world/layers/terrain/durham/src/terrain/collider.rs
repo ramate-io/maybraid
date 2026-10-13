@@ -62,6 +62,12 @@ pub fn terrain_collider_covers_xz<'a>(
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub(crate) struct TerrainColliderReady;
 
+/// Asset ids whose `MAIN_WORLD` usage was already dropped before first extract.
+/// Re-inserting [`Mesh3d`] (heal) must not flip usage again — extract would
+/// try to take an already-extracted mesh.
+#[derive(Resource, Default)]
+pub(crate) struct ReleasedCpuMeshes(std::collections::HashSet<bevy::asset::AssetId<Mesh>>);
+
 /// Cooks a trimesh onto each fill that asked for collision and now has [`Mesh3d`].
 ///
 /// Fallback for heals after the first extract. Does **not** flip
@@ -102,12 +108,12 @@ pub(crate) fn cook_and_release_cpu_before_extract(
 	mut commands: Commands,
 	friction: Res<TerrainFrictionConfig>,
 	mut meshes: ResMut<Assets<Mesh>>,
+	mut released: ResMut<ReleasedCpuMeshes>,
 	added: Query<
 		(Entity, &Mesh3d, Has<TerrainColliderMeshSource>, Has<TerrainColliderReady>),
 		Added<Mesh3d>,
 	>,
 ) {
-	let mut released = std::collections::HashSet::new();
 	for (entity, mesh3d, is_source, ready) in &added {
 		if is_source && !ready {
 			if let Some(mesh) = meshes.get(&mesh3d.0) {
@@ -124,7 +130,7 @@ pub(crate) fn cook_and_release_cpu_before_extract(
 			}
 		}
 		let id = mesh3d.0.id();
-		if !released.insert(id) {
+		if !released.0.insert(id) {
 			continue;
 		}
 		if let Some(mut mesh) = meshes.get_mut(id) {
@@ -211,6 +217,7 @@ mod tests {
 		let mut app = App::new();
 		app.insert_resource(Assets::<Mesh>::default())
 			.insert_resource(TerrainFrictionConfig::default())
+			.init_resource::<ReleasedCpuMeshes>()
 			.add_systems(Last, cook_and_release_cpu_before_extract);
 
 		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
@@ -230,6 +237,7 @@ mod tests {
 		let mut app = App::new();
 		app.insert_resource(Assets::<Mesh>::default())
 			.insert_resource(TerrainFrictionConfig::default())
+			.init_resource::<ReleasedCpuMeshes>()
 			.add_systems(Last, cook_and_release_cpu_before_extract);
 
 		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
@@ -238,6 +246,29 @@ mod tests {
 
 		let usage = app.world().resource::<Assets<Mesh>>().get(&handle).expect("mesh").asset_usage;
 		assert_eq!(usage, bevy::asset::RenderAssetUsages::RENDER_WORLD);
+	}
+
+	#[test]
+	fn heal_reinsert_skips_already_released_mesh() {
+		let mut app = App::new();
+		app.insert_resource(Assets::<Mesh>::default())
+			.insert_resource(TerrainFrictionConfig::default())
+			.init_resource::<ReleasedCpuMeshes>()
+			.add_systems(Last, cook_and_release_cpu_before_extract);
+
+		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
+		let scene = app.world_mut().spawn(Mesh3d(handle.clone())).id();
+		app.update();
+		assert!(app.world().resource::<ReleasedCpuMeshes>().0.contains(&handle.id()));
+
+		app.world_mut().entity_mut(scene).remove::<Mesh3d>();
+		app.update();
+		app.world_mut().entity_mut(scene).insert(Mesh3d(handle.clone()));
+		app.update();
+
+		let usage = app.world().resource::<Assets<Mesh>>().get(&handle).expect("mesh").asset_usage;
+		assert_eq!(usage, bevy::asset::RenderAssetUsages::RENDER_WORLD);
+		assert_eq!(app.world().resource::<ReleasedCpuMeshes>().0.len(), 1);
 	}
 
 	#[test]

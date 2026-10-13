@@ -38,6 +38,7 @@ impl Plugin for TerrainResourcesPlugin {
 			.init_resource::<TerrainStampConfigs>()
 			.init_resource::<WatershedConfigs>()
 			.init_resource::<TerrainFrictionConfig>()
+			.init_resource::<crate::terrain::collider::ReleasedCpuMeshes>()
 			.configure_sets(
 				Update,
 				(
