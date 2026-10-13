@@ -23,10 +23,14 @@ pub enum CharacterIntent {
 	ChangeProne,
 	ExitInteraction,
 	StartInteraction,
-	/// Cycle the weapon queue (pad **Y** / keyboard **Y**).
+	/// Cycle the weapon queue. D-Pad left/right while weapons are the cycle target.
 	SwapActive,
-	/// Cycle the equipped skill-map queue. D-Pad left/right, or **[** / **]**.
-	/// Negative steps backward; non-negative advances.
+	/// Choose which equipped queue the D-Pad cycles: Lubikan, weapons, or skill map
+	/// (pad **Y** / keyboard **Y**).
+	CycleInventoryTarget,
+	/// Cycle the active equipped queue. D-Pad left/right, or **[** / **]**.
+	/// Negative steps backward; non-negative advances. World routes this to
+	/// weapons, skill maps, or Lubikans from the current cycle target.
 	CycleSkillMap(i8),
 	InGameMenu,
 	Inventory,
@@ -57,6 +61,7 @@ impl CharacterIntent {
 			Self::ExitInteraction => "exit-interaction",
 			Self::StartInteraction => "start-interaction",
 			Self::SwapActive => "swap-active",
+			Self::CycleInventoryTarget => "cycle-inventory-target",
 			Self::CycleSkillMap(_) => "cycle-skill-map",
 			Self::InGameMenu => "in-game-menu",
 			Self::Inventory => "inventory",

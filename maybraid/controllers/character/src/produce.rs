@@ -76,7 +76,7 @@ pub fn collect(
 		}
 	}
 	if pad.just_pressed(PadButton::Y) {
-		out.push(CharacterIntent::SwapActive);
+		out.push(CharacterIntent::CycleInventoryTarget);
 	}
 	// Arrow keys also hold D-Pad (menus + walk). Do not cycle maps on arrows.
 	if pad.just_pressed(PadButton::DpadLeft) && !pad.keys.just_pressed(KeyCode::ArrowLeft) {
@@ -177,7 +177,7 @@ mod tests {
 			intents(&pad),
 			vec![
 				CharacterIntent::Jump,
-				CharacterIntent::SwapActive,
+				CharacterIntent::CycleInventoryTarget,
 				CharacterIntent::InGameMenu,
 				CharacterIntent::ToggleMap,
 			]
@@ -328,6 +328,17 @@ mod tests {
 		pad.hold_digital(PadButton::BumperFire);
 		finish(&mut pad);
 		assert_eq!(intents(&pad), vec![CharacterIntent::Ads(1.0)]);
+		Ok(())
+	}
+
+	#[test]
+	fn y_cycles_the_inventory_target() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.hold_digital(PadButton::Y);
+		finish(&mut pad);
+		assert_eq!(intents(&pad), vec![CharacterIntent::CycleInventoryTarget]);
+		assert!(!intents(&pad).contains(&CharacterIntent::SwapActive));
 		Ok(())
 	}
 
