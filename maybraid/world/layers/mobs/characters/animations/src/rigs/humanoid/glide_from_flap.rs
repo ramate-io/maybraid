@@ -1,6 +1,7 @@
+use character_rigs::authoring::ArmatureOffset;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 
-use crate::animations::{smoothstep, GlideFromFlap};
+use crate::animations::{smoothstep, Flapping, GlideFromFlap, Soaring, GLIDE_FROM_FLAP_BLEND_SECS};
 use crate::rigs::mix::blend_clips;
 use crate::{Animation, Effects};
 
@@ -10,7 +11,8 @@ impl Animation<HumanoidV0Rig> for GlideFromFlap {
 		let blend = self.blend_secs.max(f32::EPSILON);
 		if elapsed < blend {
 			let weight = smoothstep((elapsed / blend).clamp(0.0, 1.0));
-			blend_clips(rig, &self.flap, elapsed, &self.soar, soar_progress, weight);
+			let flap_progress = self.flap_elapsed_start + elapsed;
+			blend_clips(rig, &self.flap, flap_progress, &self.soar, soar_progress, weight);
 		} else {
 			self.soar.apply_for(rig, soar_progress);
 		}
@@ -70,7 +72,7 @@ mod tests {
 		let mut flap_only = HumanoidV0Rig::for_clip_test();
 		let mut glide = HumanoidV0Rig::for_clip_test();
 		exit.apply(&mut mid, mid_t);
-		Flapping::default().apply(&mut flap_only, mid_t);
+		Flapping::default().apply(&mut flap_only, exit.flap_elapsed_start + mid_t);
 		Soaring::default().apply(&mut glide, exit.soar_glide_progress() + mid_t);
 		let mid_tip = wing_tip(&mid);
 		let flap_tip = wing_tip(&flap_only);
@@ -106,15 +108,37 @@ mod tests {
 	}
 
 	#[test]
-	fn interrupted_transition_preserves_visible_pose() -> anyhow::Result<()> {
-		let exit = GlideFromFlap::default();
+	fn interrupted_from_visible_mid_band_preserves_pose() -> anyhow::Result<()> {
+		let exit = GlideFromFlap::default().with_flap_elapsed_start(0.17);
 		let mut rig = HumanoidV0Rig::for_clip_test();
-		Flapping::default().apply(&mut rig, 0.2);
+		Flapping::default().apply(&mut rig, 0.17);
 		let from_pose = rig.pose.clone();
-		let from_offset = ArmatureOffset::IDENTITY;
-		let transition = Transition::from_visible(exit, from_pose, from_offset);
-		transition.apply(&mut rig, exit.blend_secs * 0.35, 0.4);
-		assert!(rig.posed_angle("shoulder.L") > 0.1);
+		let from_tip = wing_tip(&rig);
+		let transition = Transition::from_visible(exit, from_pose, ArmatureOffset::IDENTITY);
+		let anim_t = exit.blend_secs * 0.35;
+
+		let mut at_trans_zero = HumanoidV0Rig::for_clip_test();
+		transition.apply(&mut at_trans_zero, anim_t, 0.0);
+		assert!(
+			(wing_tip(&at_trans_zero) - from_tip).length() < 1e-4,
+			"transition weight 0 must restore the captured mid-flap pose"
+		);
+
+		let mut mid = HumanoidV0Rig::for_clip_test();
+		let trans_t = 0.4;
+		transition.apply(&mut mid, anim_t, trans_t);
+		let mut clip_only = HumanoidV0Rig::for_clip_test();
+		exit.apply(&mut clip_only, anim_t);
+		let clip_tip = wing_tip(&clip_only);
+		let mid_tip = wing_tip(&mid);
+		assert!(
+			(mid_tip - from_tip).length() > 0.01 && (mid_tip - clip_tip).length() > 0.01,
+			"mid-band interrupt should sit strictly between captured pose and clip sample"
+		);
+		assert!(
+			(mid_tip - from_tip).length() < (clip_tip - from_tip).length(),
+			"partial weight should not overshoot the clip endpoint"
+		);
 		Ok(())
 	}
 
@@ -143,11 +167,126 @@ mod tests {
 		Ok(())
 	}
 
+	fn wing_elbow(rig: &HumanoidV0Rig) -> (Vec3, Vec3) {
+		(rig.character_point("forearm.L"), rig.character_point("forearm.R"))
+	}
+
+	fn wing_tips(rig: &HumanoidV0Rig) -> (Vec3, Vec3) {
+		(
+			rig.character_point("forearm.L") + rig.character_length("forearm.L"),
+			rig.character_point("forearm.R") + rig.character_length("forearm.R"),
+		)
+	}
+
+	fn assert_mirrored_wings(rig: &HumanoidV0Rig, label: &str) {
+		let (el_l, el_r) = wing_elbow(rig);
+		let (tip_l, tip_r) = wing_tips(rig);
+		assert!(
+			(el_l.x + el_r.x).abs() < 0.02 && (tip_l.x + tip_r.x).abs() < 0.02,
+			"{label}: left/right wings should mirror about the sagittal plane"
+		);
+	}
+
 	#[test]
-	fn wing_rig_fixture_band_edge() -> anyhow::Result<()> {
-		let exit = GlideFromFlap::default();
+	#[ignore = "prints wing-rig pose tables for transition review"]
+	fn wing_rig_fixture_pose_report() {
 		let soar = Soaring::default();
 		let flap = Flapping::default();
+		let glide_t = GlideFromFlap::default().soar_glide_progress();
+		let times = [0.0, 0.1, 0.2, 0.4, 0.41];
+		let entry_phases = [0.0, 0.1, 0.2, 0.3];
+		eprintln!("soar_glide_progress={glide_t:.4}");
+		for flap_start in entry_phases {
+			let exit = GlideFromFlap::default().with_flap_elapsed_start(flap_start);
+			eprintln!("\n=== entry flap phase {flap_start:.2} s ===");
+			eprintln!("elapsed | GFF tip.L (x,y,z) | GFF elbow.L | Flap tip.L | Soar tip.L");
+			for t in times {
+				let mut gff = HumanoidV0Rig::for_clip_test();
+				exit.apply(&mut gff, t);
+				let mut flap_ref = HumanoidV0Rig::for_clip_test();
+				let mut soar_ref = HumanoidV0Rig::for_clip_test();
+				flap.apply(&mut flap_ref, flap_start + t);
+				soar.apply(&mut soar_ref, glide_t + t);
+				let (tip_l, tip_r) = wing_tips(&gff);
+				let (el_l, el_r) = wing_elbow(&gff);
+				let flap_l = wing_tips(&flap_ref).0;
+				let soar_l = wing_tips(&soar_ref).0;
+				eprintln!(
+					"{t:4.2} | tip.L {tip_l:?} elbow.L {el_l:?} | flap tip.L {flap_l:?} | soar tip.L {soar_l:?}"
+				);
+				eprintln!("       | tip.R {tip_r:?} elbow.R {el_r:?}");
+			}
+		}
+	}
+
+	#[test]
+	fn wing_rig_fixture_pose_continuity_and_band_edge() -> anyhow::Result<()> {
+		let soar = Soaring::default();
+		let flap = Flapping::default();
+		let glide_t = GlideFromFlap::default().soar_glide_progress();
+		let times = [0.0, 0.1, 0.2, 0.4, 0.41];
+		let entry_phases = [0.0, 0.1, 0.2, 0.3];
+
+		for flap_start in entry_phases {
+			let exit = GlideFromFlap::default().with_flap_elapsed_start(flap_start);
+			let mut flap_at_entry = HumanoidV0Rig::for_clip_test();
+			flap.apply(&mut flap_at_entry, flap_start);
+			let entry_tip = wing_tip(&flap_at_entry);
+			let entry_elbow = wing_elbow(&flap_at_entry).0;
+
+			let mut at_zero = HumanoidV0Rig::for_clip_test();
+			exit.apply(&mut at_zero, 0.0);
+			assert!(
+				(wing_tip(&at_zero) - entry_tip).length() < 1e-3,
+				"phase {flap_start}: elapsed=0 must match visible flapping, not phase 0"
+			);
+			assert!(
+				(wing_elbow(&at_zero).0 - entry_elbow).length() < 1e-3,
+				"phase {flap_start}: elbow at entry"
+			);
+
+			for t in times {
+				let mut gff = HumanoidV0Rig::for_clip_test();
+				exit.apply(&mut gff, t);
+				assert_mirrored_wings(&gff, &format!("phase {flap_start} @ {t}s"));
+
+				let mut flap_ref = HumanoidV0Rig::for_clip_test();
+				let mut soar_ref = HumanoidV0Rig::for_clip_test();
+				flap.apply(&mut flap_ref, flap_start + t);
+				soar.apply(&mut soar_ref, glide_t + t);
+
+				let (tip_l, tip_r) = wing_tips(&gff);
+				let (flap_l, flap_r) = wing_tips(&flap_ref);
+				let (soar_l, soar_r) = wing_tips(&soar_ref);
+				if t > 0.0 && t < GLIDE_FROM_FLAP_BLEND_SECS {
+					for (tip, flap_tip, soar_tip) in
+						[(tip_l, flap_l, soar_l), (tip_r, flap_r, soar_r)]
+					{
+						let span = (flap_tip - soar_tip).length();
+						if span < 0.02 {
+							continue;
+						}
+						let flap_dist = (tip - flap_tip).length();
+						let soar_dist = (tip - soar_tip).length();
+						assert!(
+							flap_dist > 1e-4 && soar_dist > 1e-4,
+							"phase {flap_start} @ {t}s should sit between flap and soar samples"
+						);
+						assert!(
+							flap_dist < span && soar_dist < span,
+							"phase {flap_start} @ {t}s should stay inside the flap↔soar span"
+						);
+					}
+				} else if t >= GLIDE_FROM_FLAP_BLEND_SECS {
+					assert!(
+						(tip_l - soar_l).length() < 1e-3 && (tip_r - soar_r).length() < 1e-3,
+						"phase {flap_start} @ {t}s should match pure soaring"
+					);
+				}
+			}
+		}
+
+		let exit = GlideFromFlap::default();
 		let mut at_band = HumanoidV0Rig::for_clip_test();
 		let mut past_band = HumanoidV0Rig::for_clip_test();
 		exit.apply(&mut at_band, 0.4);
@@ -156,12 +295,12 @@ mod tests {
 		let past_tip = wing_tip(&past_band);
 		let soar_at_40 = {
 			let mut r = HumanoidV0Rig::for_clip_test();
-			soar.apply(&mut r, exit.soar_glide_progress() + 0.4);
+			soar.apply(&mut r, glide_t + 0.4);
 			wing_tip(&r)
 		};
 		let soar_at_41 = {
 			let mut r = HumanoidV0Rig::for_clip_test();
-			soar.apply(&mut r, exit.soar_glide_progress() + 0.41);
+			soar.apply(&mut r, glide_t + 0.41);
 			wing_tip(&r)
 		};
 		let band_delta = (band_tip - soar_at_40).length();

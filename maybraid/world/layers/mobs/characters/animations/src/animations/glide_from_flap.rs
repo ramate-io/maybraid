@@ -1,8 +1,8 @@
 //! Blend from continuous wing flapping into a held soar glide.
 //!
 //! `progress` is wall-clock seconds. The first [`GLIDE_FROM_FLAP_BLEND_SECS`] seconds
-//! mix [`Flapping`] into [`Soaring`] sampled at a glide pause (zero flap phase), then
-//! the clip continues as pure soar with elapsed time.
+//! mix [`Flapping`] (from [`GlideFromFlap::flap_elapsed_start`] + elapsed) into [`Soaring`]
+//! sampled at a glide pause (zero flap phase), then the clip continues as pure soar.
 
 use super::{Flapping, Soaring};
 
@@ -14,6 +14,8 @@ pub const GLIDE_FROM_FLAP_BLEND_SECS: f32 = 0.4;
 pub struct GlideFromFlap {
 	pub flap: Flapping,
 	pub soar: Soaring,
+	/// Flapping `progress` at clip start (source phase when leaving continuous flap).
+	pub flap_elapsed_start: f32,
 	/// Wall-clock blend window at clip start.
 	pub blend_secs: f32,
 }
@@ -23,6 +25,7 @@ impl Default for GlideFromFlap {
 		Self {
 			flap: Flapping::default(),
 			soar: Soaring::default(),
+			flap_elapsed_start: 0.0,
 			blend_secs: GLIDE_FROM_FLAP_BLEND_SECS,
 		}
 	}
@@ -36,6 +39,11 @@ impl GlideFromFlap {
 
 	pub fn with_flap(mut self, flap: Flapping) -> Self {
 		self.flap = flap;
+		self
+	}
+
+	pub fn with_flap_elapsed_start(mut self, flap_elapsed_start: f32) -> Self {
+		self.flap_elapsed_start = flap_elapsed_start.max(0.0);
 		self
 	}
 
