@@ -22,7 +22,8 @@ cd "$root"
 bin="${MAYBRAID_BIN:-$root/target/release/maybraid}"
 if [[ ! -x "$bin" ]]; then
 	echo "missing $bin — build with:" >&2
-	echo "  cargo build -p maybraid --release --features bevy/trace_tracy" >&2
+	echo "  cargo build -p maybraid --release" >&2
+	echo "  (do not enable bevy/trace_tracy — with no listener it buffers zones)" >&2
 	exit 2
 fi
 
@@ -31,6 +32,14 @@ if [[ "${MAYBRAID_FULLSCREEN:-}" == 1 || "${MAYBRAID_FULLSCREEN:-}" == true ]]; 
 	exit 2
 fi
 unset MAYBRAID_FULLSCREEN || true
+
+# Tracy builds buffer zones until tracy-capture attaches. That is not a
+# memory flight — refuse a binary that looks Tracy-enabled.
+if command -v strings >/dev/null && strings "$bin" | grep -q 'tracy-client'; then
+	echo "refusing $bin: looks like a bevy/trace_tracy build" >&2
+	echo "memory flights use a plain release; Tracy is for tracy-flight.sh only" >&2
+	exit 2
+fi
 
 live="$(pgrep -x maybraid || true)"
 if [[ -n "$live" ]]; then
@@ -63,6 +72,10 @@ esac
 timeout_secs="${MAYBRAID_FLIGHT_TIMEOUT:-$timeout_secs}"
 sample_hz="${MAYBRAID_MEMORY_SAMPLE_SECS:-1}"
 footprint_every="${MAYBRAID_FOOTPRINT_EVERY:-2}"
+# Protect this machine: a Tracy build without tracy-capture, or a leak,
+# can fill RAM. Default cap is 8 GiB phys / RSS.
+cap_bytes="${MAYBRAID_MEMORY_CAP_BYTES:-$((8 * 1024 * 1024 * 1024))}"
+cap_rss_kb="$((cap_bytes / 1024))"
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 captures_root="${MAYBRAID_TRACY_CAPTURES:-$root/profiling/captures}"
@@ -89,6 +102,8 @@ vmmap_txt="${base}-vmmap.txt"
 	echo "fullscreen=off"
 	echo "sample_secs=$sample_hz"
 	echo "footprint_every=$footprint_every"
+	echo "memory_cap_bytes=$cap_bytes"
+	echo "tracy=off (plain release only; Tracy builds must attach tracy-capture)"
 	if [[ "${MAYBRAID_NO_START_AT:-}" == 1 ]]; then
 		echo "start_at= (Home-first; picker and per-character resume stay live)"
 	else
@@ -165,6 +180,19 @@ while kill -0 "$game_pid" 2>/dev/null; do
 		fi
 	fi
 	echo "${elapsed},${rss},${phys},${gpu}" >>"$samples_csv"
+
+	if [[ -n "$rss" && "$rss" -gt "$cap_rss_kb" ]]; then
+		echo "RSS ${rss} KB exceeds ${cap_rss_kb} KB cap — killing maybraid" >&2
+		echo "killed=rss_cap" >>"$meta_file"
+		kill "$game_pid" 2>/dev/null || true
+		break
+	fi
+	if [[ -n "$phys" && "$phys" -gt "$cap_bytes" ]]; then
+		echo "phys_footprint ${phys} B exceeds ${cap_bytes} B cap — killing maybraid" >&2
+		echo "killed=phys_cap" >>"$meta_file"
+		kill "$game_pid" 2>/dev/null || true
+		break
+	fi
 
 	# One vmmap during the measure window (after warmup), never at quit.
 	if (( vmmap_taken == 0 )) && [[ -s "$events_jsonl" ]] && grep -q "\"name\":\"${scenario}\",\"mark\":\"start\"" "$events_jsonl" 2>/dev/null; then

@@ -106,12 +106,20 @@ no `xctrace` — this machine runs one game or capture at a time.
 
 ```bash
 nix develop --command bash -lc '
-  cargo build -p maybraid --release --features bevy/trace_tracy
+  cargo build -p maybraid --release
   profiling/memory-flight.sh crowd-0 baseline 1
   profiling/memory-flight.sh dusk-night-raid baseline 1
   profiling/memory-flight.sh biome-traverse baseline 1
 '
 ```
+
+Do **not** use `--features bevy/trace_tracy` for memory flights. A Tracy
+build must always run with `tracy-capture` attached; otherwise zones never
+drain and RSS grows without bound (crowd-0 hit ~14 GiB in 75 s).
+`memory-flight.sh` refuses a binary that links `tracy-client`. Frame-time
+A/B still uses `tracy-flight.sh` (capture attached) and a Tracy-enabled
+binary. The memory script kills the game if RSS or `phys_footprint`
+passes about 8 GiB (`MAYBRAID_MEMORY_CAP_BYTES`).
 
 `dusk-night-raid` is an alias for [`dusk-spawn`](../maybraid/agent/scripts/dusk-spawn.jsonl)
 (the dusk-night-raid cell at `[1800,700]`). The long traversal is
