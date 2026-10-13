@@ -1,9 +1,16 @@
 //! Body-relative jab aim from [`PlayerLook`].
 //!
-//! `PlayerLook` is camera −Z forward ([`player::look_forward`]). The `Jab` clip
-//! is character space: **+Z** fight-forward, **+X** right, **+Y** up. This
-//! module converts look yaw/pitch into that frame, clamps to a punching cone,
-//! and quantizes to 12° buckets so punches snap to repeatable angles.
+//! `PlayerLook` is camera −Z forward ([`player::look_forward`]). The posed
+//! humanoid (`for_clip_test` / [`ArmAim`]) is character space: **+Z**
+//! fight-forward, **+Y** up, **+X = character left** (the left-hand side).
+//! Camera-to-character is a **180° yaw**: negate X and Z together. Flipping
+//! only Z mirrors yaw.
+//!
+//! # Look-left (player view)
+//!
+//! Camera **+yaw** is looking left — the player turns their view toward the
+//! left-hand side. After the 180° yaw that is character **+X**. Looking right
+//! (camera −yaw) is character **−X**.
 //!
 //! # Cone and buckets
 //!
@@ -48,7 +55,7 @@ pub struct JabAim {
 	pub pitch: f32,
 	/// Quantized yaw off body facing, radians. Positive is look-left (camera +yaw).
 	pub yaw: f32,
-	/// Character-space point for [`Jab::target`] (+Z forward, +X right).
+	/// Character-space point for [`Jab::target`] (+Z forward, +X character left).
 	pub target: Vec3,
 }
 
@@ -73,6 +80,16 @@ impl JabAim {
 	pub fn level() -> Self {
 		Self::from_camera_angles(0.0, 0.0)
 	}
+
+	/// Character-space unit look (+X left, +Y up, +Z forward).
+	pub fn direction(&self) -> Vec3 {
+		let dir = Vec3::new(self.target.x, self.target.y - LEVEL_Y, self.target.z);
+		if dir.length_squared() < 1e-8 {
+			Vec3::Z
+		} else {
+			dir.normalize()
+		}
+	}
 }
 
 /// Camera −Z yaw of a character-space heading (+Z fight-forward).
@@ -95,12 +112,16 @@ pub fn quantize(angle: f32, step: f32) -> f32 {
 	(angle / step).round() * step
 }
 
-fn target_from_quantized(pitch: f32, yaw: f32) -> Vec3 {
-	// Camera body-relative look, then flip Z into character +Z forward.
-	// X is not flipped: camera +X and character +X are both right.
-	// ArmAim is character-space and not resolver-mirrored; this target is shared.
+/// Camera look → character space by a 180° yaw (negate X and Z).
+///
+/// Camera +X is the player's right; posed character +X is the player's left.
+fn character_look_dir(pitch: f32, yaw: f32) -> Vec3 {
 	let camera = look_forward(&PlayerLook { yaw, pitch, first_person: true, focus: 0.0 });
-	let dir = Vec3::new(camera.x, camera.y, -camera.z);
+	Vec3::new(-camera.x, camera.y, -camera.z)
+}
+
+fn target_from_quantized(pitch: f32, yaw: f32) -> Vec3 {
+	let dir = character_look_dir(pitch, yaw);
 	Vec3::new(dir.x * REACH, LEVEL_Y + dir.y * REACH, dir.z * REACH)
 }
 
@@ -158,12 +179,28 @@ mod tests {
 	}
 
 	#[test]
-	fn look_left_moves_target_toward_character_minus_x() {
-		// Camera +yaw is look-left; character +X is right, so left is −X.
+	fn look_left_moves_target_toward_character_plus_x() {
+		// Player-view look-left is camera +yaw. Posed +X is the left-hand side.
 		let left = JabAim::from_camera_angles(0.0, YAW_LIMIT);
 		let right = JabAim::from_camera_angles(0.0, -YAW_LIMIT);
-		assert!(left.target.x < -0.15, "look-left target {left:?}");
-		assert!(right.target.x > 0.15, "look-right target {right:?}");
+		assert!(left.target.x > 0.15, "look-left must be +X, got {left:?}");
+		assert!(right.target.x < -0.15, "look-right must be −X, got {right:?}");
+		assert!(left.direction().x > 0.0);
+		assert!(right.direction().x < 0.0);
+	}
+
+	#[test]
+	fn camera_to_character_is_a_180_yaw() {
+		let left = character_look_dir(0.0, YAW_LIMIT);
+		let camera = look_forward(&PlayerLook {
+			yaw: YAW_LIMIT,
+			pitch: 0.0,
+			first_person: true,
+			focus: 0.0,
+		});
+		assert!((left - Vec3::new(-camera.x, camera.y, -camera.z)).length() < 1e-5);
+		assert!(left.x > 0.0, "look-left is +X after the 180° yaw, got {left:?}");
+		assert!(left.z > 0.0);
 	}
 
 	#[test]

@@ -23,9 +23,11 @@ grenades keep LT/RT as focus/fire. Drop or holster the item to punch.
 
 ## Aim
 
-[`PlayerLook`](../../player/src/identity.rs) is camera **−Z** forward. The `Jab`
-clip is character space (**+Z** fight-forward, **+X** right). [`JabAim`](src/aim.rs)
-converts look into that frame, clamps to a punching cone, and quantizes:
+[`PlayerLook`](../../player/src/identity.rs) is camera **−Z** forward. The posed
+humanoid is character space (**+Z** fight-forward, **+X = character left**).
+**Look left** is camera **+yaw** (player view). Camera-to-character is a
+**180° yaw** (negate X and Z). [`JabAim`](src/aim.rs) converts look into that
+frame, clamps to a punching cone, and quantizes:
 
 | Axis | Clamp | Step | Buckets |
 |---|---|---|---|
@@ -38,10 +40,10 @@ point is written to `JabParams.target` and [`FisticuffsStrike::target`].
 Aim is **latched when the jab starts** (`just_started`), not at Active. Chamber
 already points at the cone; look changes mid-punch do not retarget.
 
-`ArmAim` / shoulder lift are character-space and **not** resolver-mirrored.
-The target is shared for both sides (X is not flipped). Per-side tests assert
-the punching hand stays on its own side (`left.x > 0`, `right.x < 0`) and
-does not cross the midline.
+`ArmAim` is character-space and **not** resolver-mirrored. The punching arm
+lerps onto the look direction as it extends, so shoulder→tip tracks the
+quantized angle at Active. Level jabs sit outboard of the midline (`left.x > 0`,
+`right.x < 0`). A full opposite-side yaw is a cross-body shot.
 
 ## Timing
 

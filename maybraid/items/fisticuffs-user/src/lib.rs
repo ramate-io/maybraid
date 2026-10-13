@@ -34,7 +34,7 @@ pub struct FisticuffsStrike {
 	pub side: Side,
 	pub kind: AttackKind,
 	pub progress: f32,
-	/// Quantized character-space aim (`+X` right, `+Y` up, `+Z` forward).
+	/// Quantized character-space aim (`+X` character left, `+Y` up, `+Z` forward).
 	pub target: Vec3,
 }
 
@@ -110,15 +110,40 @@ mod pose_tests {
 		pose_jab_aim(side, JabAim::level())
 	}
 
-	fn pose_jab_aim(side: Side, aim: JabAim) -> (Vec3, Vec3) {
+	fn pose_rig(side: Side, aim: JabAim) -> HumanoidV0Rig {
 		let mut rig = HumanoidV0Rig::for_clip_test();
 		Jab::default().with_side(side).with_target(aim.target).apply(&mut rig, HOLD);
+		rig
+	}
+
+	fn pose_jab_aim(side: Side, aim: JabAim) -> (Vec3, Vec3) {
+		let rig = pose_rig(side, aim);
 		(forearm_hand_tip(&rig, side), forearm_hand_tip(&rig, side.opposite()))
 	}
 
-	fn assert_tip(label: &str, got: Vec3, expected: Vec3) {
-		assert!((got - expected).length() < 1e-3, "{label} tip {got} expected {expected}");
+	fn shoulder(rig: &HumanoidV0Rig, side: Side) -> Vec3 {
+		let name = match side {
+			Side::Left => "humerus.L",
+			Side::Right => "humerus.R",
+		};
+		rig.character_point(name)
 	}
+
+	fn yaw_pitch(dir: Vec3) -> (f32, f32) {
+		let yaw = dir.x.atan2(dir.z);
+		let pitch = dir.y.atan2(Vec3::new(dir.x, 0.0, dir.z).length());
+		(yaw, pitch)
+	}
+
+	fn shoulder_to_tip(side: Side, aim: JabAim) -> (Vec3, Vec3, f32, f32) {
+		let rig = pose_rig(side, aim);
+		let tip = forearm_hand_tip(&rig, side);
+		let dir = tip - shoulder(&rig, side);
+		let (yaw, pitch) = yaw_pitch(dir);
+		(tip, dir, yaw, pitch)
+	}
+
+	const AIM_ANGLE_SLACK: f32 = 8.0 * std::f32::consts::PI / 180.0;
 
 	#[test]
 	fn left_trigger_extends_left_hand_forward_on_plus_x() -> anyhow::Result<()> {
@@ -160,8 +185,8 @@ mod pose_tests {
 			let (level, _) = pose_jab_aim(side, JabAim::level());
 			let (up, _) = pose_jab_aim(side, JabAim::from_camera_angles(PITCH_MAX, 0.0));
 			let (down, _) = pose_jab_aim(side, JabAim::from_camera_angles(PITCH_MIN, 0.0));
-			assert!(up.y > level.y + 0.04, "{side:?} up {up:?} level {level:?}");
-			assert!(down.y < level.y - 0.03, "{side:?} down {down:?} level {level:?}");
+			assert!(up.y > level.y + 0.35, "{side:?} up {up:?} level {level:?}");
+			assert!(down.y < level.y - 0.25, "{side:?} down {down:?} level {level:?}");
 			match side {
 				Side::Left => {
 					assert!(
@@ -181,31 +206,81 @@ mod pose_tests {
 	}
 
 	#[test]
-	fn look_yaw_shifts_tips_without_crossing_the_midline() -> anyhow::Result<()> {
+	fn look_left_is_character_plus_x_from_the_player_view() -> anyhow::Result<()> {
+		// Camera +yaw = player looks left. Posed +X is the left-hand side.
 		for side in [Side::Left, Side::Right] {
-			let (level, _) = pose_jab_aim(side, JabAim::level());
-			let (look_left, _) = pose_jab_aim(side, JabAim::from_camera_angles(0.0, YAW_LIMIT));
-			let (look_right, _) = pose_jab_aim(side, JabAim::from_camera_angles(0.0, -YAW_LIMIT));
+			let (level, _, level_yaw, _) = shoulder_to_tip(side, JabAim::level());
+			let (look_left, _, left_yaw, _) =
+				shoulder_to_tip(side, JabAim::from_camera_angles(0.0, YAW_LIMIT));
+			let (look_right, _, right_yaw, _) =
+				shoulder_to_tip(side, JabAim::from_camera_angles(0.0, -YAW_LIMIT));
 			assert!(
-				look_left.x < level.x - 0.02,
-				"{side:?} look-left {look_left:?} level {level:?}"
+				look_left.x > level.x + 0.08,
+				"{side:?} look-left must move toward +X, {look_left:?} vs {level:?}"
 			);
 			assert!(
-				look_right.x > level.x + 0.02,
-				"{side:?} look-right {look_right:?} level {level:?}"
+				look_right.x < level.x - 0.08,
+				"{side:?} look-right must move toward −X, {look_right:?} vs {level:?}"
 			);
+			assert!(
+				left_yaw > level_yaw + 0.15,
+				"{side:?} look-left yaw {left_yaw} vs {level_yaw}"
+			);
+			assert!(
+				right_yaw < level_yaw - 0.15,
+				"{side:?} look-right yaw {right_yaw} vs {level_yaw}"
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn level_fists_sit_outboard_of_the_midline() -> anyhow::Result<()> {
+		let (left, _) = pose_jab(Side::Left);
+		let (right, _) = pose_jab(Side::Right);
+		assert!(left.x > 0.12, "left level should sit outboard on +X, {left:?}");
+		assert!(right.x < -0.08, "right level should sit outboard on −X, {right:?}");
+		Ok(())
+	}
+
+	#[test]
+	fn active_fist_tracks_look_angle_within_eight_degrees() -> anyhow::Result<()> {
+		let cases = [
+			("level", JabAim::level()),
+			("up", JabAim::from_camera_angles(PITCH_MAX, 0.0)),
+			("down", JabAim::from_camera_angles(PITCH_MIN, 0.0)),
+			("yaw_left", JabAim::from_camera_angles(0.0, YAW_LIMIT)),
+			("yaw_right", JabAim::from_camera_angles(0.0, -YAW_LIMIT)),
+		];
+		for side in [Side::Left, Side::Right] {
+			for (label, aim) in cases {
+				let (tip, _, yaw, pitch) = shoulder_to_tip(side, aim);
+				let yaw_err = (yaw - aim.yaw).abs();
+				let pitch_err = (pitch - aim.pitch).abs();
+				assert!(
+					yaw_err < AIM_ANGLE_SLACK,
+					"{side:?} {label} yaw err {:.1}° (got {:.1} want {:.1}) tip={tip:?}",
+					yaw_err.to_degrees(),
+					yaw.to_degrees(),
+					aim.yaw.to_degrees()
+				);
+				assert!(
+					pitch_err < AIM_ANGLE_SLACK,
+					"{side:?} {label} pitch err {:.1}° (got {:.1} want {:.1}) tip={tip:?}",
+					pitch_err.to_degrees(),
+					pitch.to_degrees(),
+					aim.pitch.to_degrees()
+				);
+			}
+			let (level, _) = pose_jab(side);
+			let (up, _) = pose_jab_aim(side, JabAim::from_camera_angles(PITCH_MAX, 0.0));
+			let (down, _) = pose_jab_aim(side, JabAim::from_camera_angles(PITCH_MIN, 0.0));
 			match side {
 				Side::Left => {
-					assert!(
-						look_left.x > 0.0 && look_right.x > 0.0,
-						"left crossed {look_left:?} {look_right:?}"
-					);
+					assert!(level.x > 0.12 && up.x > 0.08 && down.x > 0.08, "left {level:?}");
 				}
 				Side::Right => {
-					assert!(
-						look_left.x < 0.0 && look_right.x < 0.0,
-						"right crossed {look_left:?} {look_right:?}"
-					);
+					assert!(level.x < -0.08 && up.x < -0.08 && down.x < -0.08, "right {level:?}");
 				}
 			}
 		}
@@ -214,62 +289,64 @@ mod pose_tests {
 
 	#[test]
 	fn active_hand_tips_match_look_cone_table() -> anyhow::Result<()> {
-		// `HumanoidV0Rig::for_clip_test()` punching-hand tips at HOLD (Active).
 		let cases = [
-			(Side::Left, "level", JabAim::level(), Vec3::new(0.1123, 0.4747, 1.4086)),
+			(Side::Left, "level", JabAim::level(), Vec3::new(0.1674, 0.6390, 1.4267)),
 			(
 				Side::Left,
 				"up",
 				JabAim::from_camera_angles(PITCH_MAX, 0.0),
-				Vec3::new(0.1829, 0.5763, 1.3041),
+				Vec3::new(0.2566, 1.2431, 1.1420),
 			),
 			(
 				Side::Left,
 				"down",
 				JabAim::from_camera_angles(PITCH_MIN, 0.0),
-				Vec3::new(0.1140, 0.3756, 1.3668),
+				Vec3::new(0.1722, 0.2643, 1.3289),
 			),
 			(
 				Side::Left,
 				"yaw_left",
 				JabAim::from_camera_angles(0.0, YAW_LIMIT),
-				Vec3::new(0.0730, 0.4930, 1.3201),
+				Vec3::new(0.5419, 0.6437, 1.3504),
 			),
 			(
 				Side::Left,
 				"yaw_right",
 				JabAim::from_camera_angles(0.0, -YAW_LIMIT),
-				Vec3::new(0.1932, 0.4646, 1.4058),
+				Vec3::new(-0.1537, 0.6699, 1.2625),
 			),
-			(Side::Right, "level", JabAim::level(), Vec3::new(-0.0424, 0.4521, 1.4488)),
+			(Side::Right, "level", JabAim::level(), Vec3::new(-0.0973, 0.6169, 1.4668)),
 			(
 				Side::Right,
 				"up",
 				JabAim::from_camera_angles(PITCH_MAX, 0.0),
-				Vec3::new(-0.0612, 0.5342, 1.4132),
+				Vec3::new(-0.1314, 1.2039, 1.2480),
 			),
 			(
 				Side::Right,
 				"down",
 				JabAim::from_camera_angles(PITCH_MIN, 0.0),
-				Vec3::new(-0.0950, 0.3690, 1.3803),
+				Vec3::new(-0.1532, 0.2577, 1.3423),
 			),
 			(
 				Side::Right,
 				"yaw_left",
 				JabAim::from_camera_angles(0.0, YAW_LIMIT),
-				Vec3::new(-0.1202, 0.4448, 1.4419),
+				Vec3::new(0.2109, 0.6465, 1.3185),
 			),
 			(
 				Side::Right,
 				"yaw_right",
 				JabAim::from_camera_angles(0.0, -YAW_LIMIT),
-				Vec3::new(-0.0159, 0.4688, 1.3763),
+				Vec3::new(-0.4687, 0.6242, 1.3866),
 			),
 		];
 		for (side, label, aim, expected) in cases {
 			let (punch, _) = pose_jab_aim(side, aim);
-			assert_tip(&format!("{side:?} {label}"), punch, expected);
+			assert!(
+				(punch - expected).length() < 1e-3,
+				"{side:?} {label} tip {punch} expected {expected}"
+			);
 		}
 		Ok(())
 	}
