@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use maybraid_agent::{take_agent_args, AgentArgs};
-use maybraid_input::PadHidPlugins;
 use maybraid_world::{
 	default_window_present_mode, player_spawn_xz, resolve_start_at, AgentDrive,
 	PendingStartupCommand, PlaygroundCommand, WorldPlugin,
@@ -45,8 +44,7 @@ fn main() {
 				}),
 				..default()
 			})
-			.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() })
-			.with_pad_hid(),
+			.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
 	)
 	.add_plugins(WorldPlugin::default())
 	.run();

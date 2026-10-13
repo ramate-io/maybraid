@@ -3,7 +3,6 @@ use character_persist::SaveRoot;
 use clap::Parser;
 use maybraid::{assets_root, GamePlugin};
 use maybraid_agent::AgentArgs;
-use maybraid_input::PadHidPlugins;
 use maybraid_world::{
 	default_window_present_mode, parse_xz_metres, player_spawn_xz, start_at_from_env, AgentDrive,
 };
@@ -48,8 +47,7 @@ fn main() {
 				}),
 				..default()
 			})
-			.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() })
-			.with_pad_hid(),
+			.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
 	)
 	.add_plugins(GamePlugin)
 	.run();

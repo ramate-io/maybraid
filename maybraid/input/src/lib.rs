@@ -6,7 +6,6 @@ pub mod button;
 pub mod config;
 pub mod debug;
 pub mod gate;
-pub mod hid;
 pub mod history;
 pub mod overlay;
 pub mod pad;
@@ -18,7 +17,6 @@ pub use analog::{Cardinal, Deadzone};
 pub use button::{ButtonPhase, ButtonStroke, PadButton, PAD_BUTTON_COUNT};
 pub use config::VirtualPadConfig;
 pub use gate::{MenuOwnsBack, PadGameplayEnabled};
-pub use hid::{with_pad_hid, PadHidPlugins};
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};
 pub use overlay::PadOverlay;
 pub use pad::VirtualPad;
@@ -50,16 +48,11 @@ impl Plugin for VirtualPadPlugin {
 	fn build(&self, app: &mut App) {
 		app.configure_sets(
 			PostUpdate,
-			rumble::PadRumbleSystems::Play.after(rumble::PadRumbleSystems::FanOut),
-		);
-		#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-		{
-			app.configure_sets(
-				PostUpdate,
+			(
+				rumble::PadRumbleSystems::Play.after(rumble::PadRumbleSystems::FanOut),
 				bevy::gilrs::RumbleSystems.after(rumble::PadRumbleSystems::FanOut),
-			);
-		}
-		hid::configure_backend(app);
+			),
+		);
 		app.insert_resource(self.config.clone())
 			.init_resource::<VirtualPad>()
 			.init_resource::<PadHistory>()

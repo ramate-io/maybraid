@@ -6,8 +6,7 @@ use bevy::input::gamepad::{GamepadRumbleIntensity, GamepadRumbleRequest};
 use bevy::prelude::*;
 
 /// Gameplay rumble pulse. [`fan_out_pad_rumble`] copies it onto every live
-/// [`Gamepad`]. Linux / Windows play that through gilrs; Apple plays it through
-/// GameController haptics.
+/// [`Gamepad`]. Bevy's `GilrsPlugin` plays those requests through gilrs.
 #[derive(Message, Clone, Copy, Debug, PartialEq)]
 pub struct PadRumble {
 	pub duration: Duration,
