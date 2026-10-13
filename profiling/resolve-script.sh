@@ -6,6 +6,10 @@
 
 resolve_script() {
 	local arg="$1"
+	# Published traces names that map to an in-repo script.
+	case "$arg" in
+		dusk-night-raid) arg=dusk-spawn ;;
+	esac
 	if [[ -f "$arg" ]]; then
 		script="$(cd "$(dirname "$arg")" && pwd)/$(basename "$arg")"
 	else

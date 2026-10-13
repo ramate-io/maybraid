@@ -97,3 +97,48 @@ the current build via `MAYBRAID_BIN`.
 MAYBRAID_BIN=/tmp/maybraid-base profiling/tracy-flight.sh crowd-16 ab-base 1
 profiling/tracy-flight.sh crowd-16 ab-after 1
 ```
+
+## Memory flights
+
+Process RSS, `phys_footprint`, and GPU-ish bytes (`footprint` GPU Dirty /
+IOAccelerator / IOSurface) over a scripted flight. No `tracy-capture` and
+no `xctrace` — this machine runs one game or capture at a time.
+
+```bash
+nix develop --command bash -lc '
+  cargo build -p maybraid --release --features bevy/trace_tracy
+  profiling/memory-flight.sh crowd-0 baseline 1
+  profiling/memory-flight.sh dusk-night-raid baseline 1
+  profiling/memory-flight.sh biome-traverse baseline 1
+'
+```
+
+`dusk-night-raid` is an alias for [`dusk-spawn`](../maybraid/agent/scripts/dusk-spawn.jsonl)
+(the dusk-night-raid cell at `[1800,700]`). The long traversal is
+[`biome-traverse`](../maybraid/agent/scripts/biome-traverse.jsonl).
+
+`memory-flight.sh` writes under `profiling/captures/memory/<phase>/<scenario>/r<repeat>/`
+(gitignored): `*-memory.csv`, `*-memory.txt` / `*-memory.json`, a mid-window
+`vmmap --summary`, events, and the game log. It keeps the display awake
+(`caffeinate -d`) and refuses to start when no display is online, when
+`MAYBRAID_FULLSCREEN` is set, or when `maybraid` / `tracy-capture` /
+`xctrace` is already running. Stay windowed. Never `screencapture`. Never
+send `stats vsync` — the process already has `MAYBRAID_VSYNC=off`.
+
+A/B is the same interleave as Tracy: copy the baseline binary and alternate
+it with the current build.
+
+```bash
+MAYBRAID_BIN=/tmp/maybraid-base profiling/memory-flight.sh biome-traverse ab-base 1
+profiling/memory-flight.sh biome-traverse ab-after 1
+```
+
+Peak and steady `phys_footprint` come from the measure window (last
+non-`-warmup` scenario). Confirm no main-thread regression with
+`tracy-flight.sh` on the same binaries — do not run that in parallel with
+a memory flight.
+
+For a Metal/GPU allocation breakdown, use Instruments Allocations or
+`metal-flight.sh` on a separate pass, never while a memory flight is live.
+Tracy memory zones need a tracking allocator behind a feature; Bevy's
+Metal backend does not emit GPU zones on macOS.
