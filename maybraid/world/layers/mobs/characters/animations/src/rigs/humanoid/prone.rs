@@ -17,9 +17,25 @@ impl Animation<HumanoidV0Rig> for Prone {
 		pose.apply_spine_pitch(self.spine_pitch(progress));
 		let neck = self.neck_swing(progress);
 		pose.apply_neck_twisted(0.0, 0.0, neck, 0.0, 0.0, neck);
-		let hold = self.arm_hold(progress);
-		pose.apply_arm(Side::Left, 0.0, 0.0, 0.0, hold, hold);
-		pose.apply_arm(Side::Right, 0.0, 0.0, 0.0, hold, hold);
+		let reach = self.arm_reach(progress);
+		let humerus_forward = self.arm_humerus_forward(progress);
+		let humerus_lateral = self.arm_humerus_lateral(progress);
+		pose.apply_arm(
+			Side::Left,
+			reach,
+			0.0,
+			humerus_forward,
+			humerus_lateral,
+			self.arm_elbow_flex(Side::Left, progress),
+		);
+		pose.apply_arm(
+			Side::Right,
+			reach,
+			0.0,
+			humerus_forward,
+			humerus_lateral,
+			self.arm_elbow_flex(Side::Right, progress),
+		);
 		rig.write_pose(&pose);
 	}
 
@@ -36,6 +52,29 @@ mod tests {
 
 	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
 		rig.rotation(name) * Vec3::Y
+	}
+
+	#[test]
+	fn settled_prone_reaches_arms_forward_on_imported_rest() -> anyhow::Result<()> {
+		let rest = HumanoidV0Rig::for_clip_test();
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		Prone::default().apply(&mut rig, 1.0);
+		let rest_z = rest.character_point("forearm.L").z;
+		let posed_z = rig.character_point("forearm.L").z;
+		assert!(
+			posed_z > rest_z + 0.08,
+			"prone should reach forward (+Z), rest={rest_z:.4} posed={posed_z:.4}",
+		);
+		assert!(
+			rig.posed_angle("shoulder.L") > 0.12,
+			"shoulder should drive the reach, got {}",
+			rig.posed_angle("shoulder.L"),
+		);
+		assert!(
+			(rig.posed_angle("forearm.L") - rig.posed_angle("forearm.R")).abs() > 0.03,
+			"elbows should be mildly asymmetric",
+		);
+		Ok(())
 	}
 
 	#[test]

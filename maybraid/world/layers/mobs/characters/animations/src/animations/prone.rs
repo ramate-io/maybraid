@@ -13,6 +13,10 @@ pub struct Prone {
 	pub neck_peak: f32,
 	/// Hold-ready arm flex at full depth (radians).
 	pub arm_flex: f32,
+	/// Shoulder-forward reach along the ground at full depth (radians).
+	pub arm_reach_peak: f32,
+	/// Extra elbow flex on the left; subtracted on the right for a natural offset.
+	pub arm_elbow_bias: f32,
 }
 
 impl Prone {
@@ -43,6 +47,27 @@ impl Prone {
 	pub fn arm_hold(&self, progress: f32) -> f32 {
 		Self::depth(progress) * self.arm_flex
 	}
+
+	pub fn arm_reach(&self, progress: f32) -> f32 {
+		Self::depth(progress) * self.arm_reach_peak
+	}
+
+	pub fn arm_humerus_forward(&self, progress: f32) -> f32 {
+		self.arm_reach(progress) * 0.4
+	}
+
+	pub fn arm_humerus_lateral(&self, progress: f32) -> f32 {
+		self.arm_hold(progress) * 0.7
+	}
+
+	pub fn arm_elbow_flex(&self, side: character_rigs::Side, progress: f32) -> f32 {
+		let base = self.arm_hold(progress);
+		let bias = match side {
+			character_rigs::Side::Left => self.arm_elbow_bias,
+			character_rigs::Side::Right => -self.arm_elbow_bias,
+		};
+		base + bias
+	}
 }
 
 impl Default for Prone {
@@ -53,6 +78,8 @@ impl Default for Prone {
 			shin_peak: 0.15,
 			neck_peak: -FRAC_PI_2 * 0.35,
 			arm_flex: 0.35,
+			arm_reach_peak: 0.30,
+			arm_elbow_bias: 0.04,
 		}
 	}
 }
