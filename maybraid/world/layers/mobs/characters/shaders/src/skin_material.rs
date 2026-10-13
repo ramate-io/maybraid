@@ -37,6 +37,8 @@ pub const KIND_BODY: u32 = 0;
 pub const KIND_HEAD: u32 = 1;
 pub const KIND_EAR: u32 = 2;
 pub const KIND_TRUNK: u32 = 3;
+/// `MAYBRAID_TATTOO_UV_DEBUG=1` — checker + mask overlay (investigation only).
+pub const FLAG_UV_DEBUG: u32 = 1;
 
 pub const SKIN_PALETTE_BASE: usize = 0;
 pub const SKIN_PALETTE_GLOW: usize = 1;
@@ -287,7 +289,11 @@ impl SkinMaterialUniform {
 				SkinTattooMask::Ear => KIND_EAR,
 				SkinTattooMask::Trunk => KIND_TRUNK,
 			},
-			flags: 0,
+			flags: if std::env::var_os("MAYBRAID_TATTOO_UV_DEBUG").is_some() {
+				FLAG_UV_DEBUG
+			} else {
+				0
+			},
 			_pad: UVec2::ZERO,
 		}
 	}
@@ -472,5 +478,14 @@ mod tests {
 		let uv = head_provisional_uv(Vec3::new(0.0, 0.0, 0.8));
 		assert!((uv.x - 0.5).abs() < 1e-4, "face u={}", uv.x);
 		assert!((uv.y - ((0.0 + 0.979_147_3) / 2.041_864_7)).abs() < 1e-4);
+	}
+
+	#[test]
+	fn uv_debug_flag_is_off_by_default() {
+		let material = SkinShaderMaterial::from_material_ref(
+			&MaterialRef::named(RECIPE_SKIN_TATTOO_HEAD),
+			Handle::default(),
+		);
+		assert_eq!(material.params.flags & FLAG_UV_DEBUG, 0);
 	}
 }

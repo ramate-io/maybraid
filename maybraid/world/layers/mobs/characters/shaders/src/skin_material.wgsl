@@ -210,6 +210,14 @@ fn fragment(
     let mask = max(max(mask_s.r, mask_s.g), mask_s.b) * mask_s.a;
     let emissive = glow * mask * intensity * pulse;
 
+    // Investigation overlay: 8×8 UV checker (stretch / pinch) + mask in red.
+    if (material.flags & 1u) != 0u {
+        let cx = step(0.5, fract(uv.x * 8.0));
+        let cy = step(0.5, fract(uv.y * 8.0));
+        let checker = abs(cx - cy);
+        return vec4<f32>(mask * 0.85 + checker * 0.25, checker * 0.55, checker * 0.15 + mask * 0.15, 1.0);
+    }
+
     pbr_input.material.base_color = vec4<f32>(skin, 1.0);
     pbr_input.material.perceptual_roughness = 0.72;
     pbr_input.material.metallic = 0.0;

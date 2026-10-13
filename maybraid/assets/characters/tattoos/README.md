@@ -69,6 +69,9 @@ Z is the long axis (rear → front). Dense ritual regions in this unwrap:
 | Hind legs | v ≈ 0.06–0.26 |
 | Front legs | v ≈ 0.74–0.94 |
 | Chest / trunk-root rings | v ≈ 0.74–0.90, around u 0.50 |
+| Hips / rump barrel | v ≈ 0.08–0.32, u 0.18–0.42 and 0.58–0.82 |
+
+**Hips vs forehead (why they looked empty):** measured on the current placeholders. Lighting / facing does **not** suppress marks (emission is added after PBR). Body hip stretch is the same as the flanks (median world/UV ≈ 8). The hip/rump UV island was a **mask gap** — flank strokes stop near v 0.18 and hind-leg strokes sit on the u-edges, so 40% of hip triangles had no stroke. The forehead dome is the **+Y pole of the cylindrical-about-Y unwrap**: U collapses toward 0.5, the crown cap becomes a thin high-v ring, and an in-engine UV checker shows horizontal stripes across the dome with no mask. Placeholder fix: hip lattice + denser meridians in the collapsed forehead column + full-U pole rings. **Liam's final UV0** should include a crown *cap* island (not a cylinder) so the top of the skull is not a pole.
 
 ### Ear (provisional planar XY)
 

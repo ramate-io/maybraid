@@ -1,8 +1,7 @@
 //! Headless tattoo captures. Active only when `MAYBRAID_TATTOO_CAPTURE_DIR` is set.
 //!
 //! Uses Bevy `Screenshot` (GPU readback). X11 `scrot` stays black on xvfb.
-//! After preview reveal, shoots head front / three-quarter / side, then a
-//! full-body side view.
+//! After preview reveal, shoots hip and forehead close-ups (plus a warmup).
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -28,7 +27,7 @@ struct Shot {
 	target: Vec3,
 }
 
-const SHOTS: [Shot; 5] = [
+const SHOTS: [Shot; 4] = [
 	// First GPU readback is a stale frame; discard it.
 	Shot {
 		name: "epiphant_tattoos_warmup.png",
@@ -36,19 +35,14 @@ const SHOTS: [Shot; 5] = [
 		target: Vec3::new(0.0, 0.70, 0.70),
 	},
 	Shot {
-		name: "epiphant_tattoos_head_front.png",
+		name: "epiphant_tattoos_forehead.png",
 		eye: Vec3::new(0.0, 0.42, 2.85),
 		target: Vec3::new(0.0, 0.56, 0.75),
 	},
 	Shot {
-		name: "epiphant_tattoos_head_three_quarter.png",
-		eye: Vec3::new(2.2, 0.85, 2.9),
-		target: Vec3::new(0.0, 0.70, 0.70),
-	},
-	Shot {
-		name: "epiphant_tattoos_head_side.png",
-		eye: Vec3::new(3.2, 0.75, 0.90),
-		target: Vec3::new(0.0, 0.68, 0.75),
+		name: "epiphant_tattoos_hips.png",
+		eye: Vec3::new(2.9, 0.72, -0.55),
+		target: Vec3::new(0.0, 0.48, -0.45),
 	},
 	Shot {
 		name: "epiphant_tattoos_body_side.png",
