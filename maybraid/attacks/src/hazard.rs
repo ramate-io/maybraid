@@ -8,7 +8,9 @@ use crate::{AimSnapshot, AttackDefaults, FriendlyFire};
 pub enum HazardOrigin {
 	Owner,
 	AimPoint,
-	AlongAim { distance: f32 },
+	AlongAim {
+		distance: f32,
+	},
 	/// Mouth / socket sampled into [`crate::AimSnapshot::emission`].
 	Emission,
 }
@@ -90,7 +92,11 @@ impl WavefrontSpec {
 	}
 
 	pub const fn wave_count(self) -> u8 {
-		if self.waves == 0 { 1 } else { self.waves }
+		if self.waves == 0 {
+			1
+		} else {
+			self.waves
+		}
 	}
 
 	pub fn heading(self, snapshot: crate::AimSnapshot) -> Vec3 {
@@ -116,12 +122,14 @@ impl WavefrontSpec {
 	}
 
 	pub fn pose(self, emission: Vec3, heading: Vec3, travel: f32) -> HazardPose {
-		let heading = if heading.length_squared() <= 1e-8 { Vec3::NEG_Z } else { heading.normalize() };
+		let heading =
+			if heading.length_squared() <= 1e-8 { Vec3::NEG_Z } else { heading.normalize() };
 		HazardPose::new(emission + heading * travel, Quat::from_rotation_arc(Vec3::Z, heading))
 	}
 
 	pub fn contains_disc(self, emission: Vec3, heading: Vec3, travel: f32, point: Vec3) -> bool {
-		let heading = if heading.length_squared() <= 1e-8 { Vec3::NEG_Z } else { heading.normalize() };
+		let heading =
+			if heading.length_squared() <= 1e-8 { Vec3::NEG_Z } else { heading.normalize() };
 		let center = emission + heading * travel;
 		let offset = point - center;
 		let along = offset.dot(heading);
@@ -138,7 +146,8 @@ impl WavefrontSpec {
 		to: f32,
 		point: Vec3,
 	) -> bool {
-		let heading = if heading.length_squared() <= 1e-8 { Vec3::NEG_Z } else { heading.normalize() };
+		let heading =
+			if heading.length_squared() <= 1e-8 { Vec3::NEG_Z } else { heading.normalize() };
 		let lo = from.min(to);
 		let hi = from.max(to);
 		let along = (point - emission).dot(heading);
@@ -152,7 +161,8 @@ impl WavefrontSpec {
 	}
 
 	pub fn sample_distance(self, emission: Vec3, heading: Vec3, travel: f32, point: Vec3) -> f32 {
-		let heading = if heading.length_squared() <= 1e-8 { Vec3::NEG_Z } else { heading.normalize() };
+		let heading =
+			if heading.length_squared() <= 1e-8 { Vec3::NEG_Z } else { heading.normalize() };
 		let center = emission + heading * travel;
 		let offset = point - center;
 		(offset - heading * offset.dot(heading)).length()
@@ -401,13 +411,7 @@ fn collect_hazard_hits(pass: HazardHitPass<'_>) -> Vec<Hit> {
 		} else {
 			hit_clock.insert(target, now);
 		}
-		hits.push(Hit {
-			target,
-			source: Some(owner),
-			amount,
-			point,
-			allow_self: target == owner,
-		});
+		hits.push(Hit { target, source: Some(owner), amount, point, allow_self: false });
 	}
 	hits
 }
@@ -498,8 +502,9 @@ mod tests {
 
 	#[test]
 	fn origin_variants_keep_owner_aim_and_emission_distinct() {
-		let snapshot = AimSnapshot::toward(Vec3::new(0.0, 1.0, 4.0), Vec3::new(3.0, 2.0, -2.0), None)
-			.with_emission(Vec3::new(0.1, 1.6, 3.4));
+		let snapshot =
+			AimSnapshot::toward(Vec3::new(0.0, 1.0, 4.0), Vec3::new(3.0, 2.0, -2.0), None)
+				.with_emission(Vec3::new(0.1, 1.6, 3.4));
 		assert!((HazardOrigin::Owner.resolve(snapshot) - snapshot.origin).length() < 1e-4);
 		assert!((HazardOrigin::AimPoint.resolve(snapshot) - snapshot.aim_point).length() < 1e-4);
 		assert!((HazardOrigin::Emission.resolve(snapshot) - snapshot.emission).length() < 1e-4);
@@ -521,8 +526,8 @@ mod tests {
 
 	#[test]
 	fn wavefront_advances_from_emission_and_caps_at_range() {
-		let snapshot = AimSnapshot::toward(Vec3::ZERO, Vec3::Z, None)
-			.with_emission(Vec3::new(0.0, 0.4, 0.2));
+		let snapshot =
+			AimSnapshot::toward(Vec3::ZERO, Vec3::Z, None).with_emission(Vec3::new(0.0, 0.4, 0.2));
 		let spec = HazardSpec {
 			shape: HazardShape::Wavefront(WavefrontSpec::new(1.0, 4.0, 10.0)),
 			origin: HazardOrigin::Emission,

@@ -115,6 +115,8 @@ members = [
   "maybraid/damage",
   "maybraid/attacks",
   "maybraid/attacks/playground",
+  "maybraid/attacks/bikanwarda",
+  "maybraid/attacks/bikanwarda/playground",
   "maybraid/items/firearms-components",
   "maybraid/items/icons",
   "maybraid/items/firearms",
@@ -372,6 +374,8 @@ projectiles = { path = "maybraid/projectiles" }
 damage = { path = "maybraid/damage" }
 attacks = { path = "maybraid/attacks" }
 attacks-playground = { path = "maybraid/attacks/playground" }
+bikanwarda-attacks = { path = "maybraid/attacks/bikanwarda" }
+bikanwarda-attacks-playground = { path = "maybraid/attacks/bikanwarda/playground" }
 firearms-components = { path = "maybraid/items/firearms-components" }
 item-icons = { path = "maybraid/items/icons" }
 firearms = { path = "maybraid/items/firearms" }
