@@ -1,9 +1,10 @@
 //! Shared POI identity, spatial discovery, retained knowledge, and goal handoff.
 //!
-//! [`LocalPoi`] values are indexed through Gimme for bounded scans.
-//! [`GlobalPoi`] values form a deliberately sparse whole-map set. Both scans
-//! feed the same per-user [`PoiKnowledge`] that external systems can augment
-//! with [`PoiObservation`] messages.
+//! [`LocalPoi`] and [`GlobalPoi`] poses share a Gimme spatial index for
+//! radius- and tile-bounded queries. [`GlobalPoi`] ids also sit in a sparse
+//! whole-map set for telepathic discovery scans. Both paths feed the same
+//! per-user [`PoiKnowledge`] that external systems can augment with
+//! [`PoiObservation`] messages.
 
 mod discovery;
 mod goal;
@@ -36,5 +37,7 @@ pub use registry::{PoiRecord, PoiRegistry};
 pub use source::PoiSource;
 pub use visit::{choose_poi, PoiVisitState};
 
+#[cfg(test)]
+mod registry_timing;
 #[cfg(test)]
 mod tests;

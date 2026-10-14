@@ -55,7 +55,8 @@ impl SpatialId for PoiRecord {
 	}
 }
 
-/// Gimme-backed local index plus a sparse global set.
+/// Gimme-backed spatial index for [`LocalPoi`] and [`GlobalPoi`] poses, plus a
+/// sparse global-id set for whole-map discovery scans.
 #[derive(Resource)]
 pub struct PoiRegistry {
 	local: TypedIndex<PoiRecord, HashMapStore<PoiRecord>>,
@@ -122,12 +123,8 @@ impl PoiRegistry {
 		};
 		self.records.insert(poi.id, record);
 
-		if local {
-			let extent = Vec3::splat(record.arrival_radius.max(0.05));
-			let bounds = Aabb3d::from_min_max(position - extent, position + extent);
-			let base = BaseScale::new(self.local.grid().base_scale())?;
-			self.local_max_level = self.local_max_level.max(base.insertion_level(&bounds));
-			self.local.insert_value(record, bounds)?;
+		if local || global {
+			self.insert_spatial(record, position)?;
 		}
 		if global {
 			self.globals.insert(poi.id);
@@ -240,20 +237,6 @@ impl PoiRegistry {
 		let radius = query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
 		let min_radius = query.min_radius.max(0.0);
 		self.collect_local_matching(center, radius, interests, out);
-		for id in &self.globals {
-			if out.contains(id) {
-				continue;
-			}
-			let Some(record) = self.records.get(id) else {
-				continue;
-			};
-			if !interests.contains(record.kind) {
-				continue;
-			}
-			if center.distance(record.position) <= radius + record.arrival_radius {
-				out.push(*id);
-			}
-		}
 		out.retain(|id| {
 			self.records
 				.get(id)
@@ -338,11 +321,6 @@ impl PoiRegistry {
 				records.insert(record.id, *record);
 			}
 		}
-		for record in self.global_matching(interests) {
-			if xz_tile(record.position, size) == tile {
-				records.insert(record.id, record);
-			}
-		}
 		records.into_values().collect()
 	}
 
@@ -352,6 +330,19 @@ impl PoiRegistry {
 
 	pub fn is_empty(&self) -> bool {
 		self.records.is_empty()
+	}
+
+	fn insert_spatial(
+		&mut self,
+		record: PoiRecord,
+		position: Vec3,
+	) -> Result<(), SpatialIndexError> {
+		let extent = Vec3::splat(record.arrival_radius.max(0.05));
+		let bounds = Aabb3d::from_min_max(position - extent, position + extent);
+		let base = BaseScale::new(self.local.grid().base_scale())?;
+		self.local_max_level = self.local_max_level.max(base.insertion_level(&bounds));
+		self.local.insert_value(record, bounds)?;
+		Ok(())
 	}
 
 	fn drop_excluded_ids(candidates: &mut Vec<PoiId>, excluded: &[PoiId]) {

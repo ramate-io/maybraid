@@ -3,7 +3,8 @@
 Shared point-of-interest discovery and retained knowledge.
 
 - `Poi` carries a stable `PoiId`, semantic `PoiKind`, arrival radius, and salience.
-- `LocalPoi` enters a Gimme-backed bounded index; `GlobalPoi` enters a sparse whole-map set.
+- `LocalPoi` and `GlobalPoi` poses share a Gimme spatial index for radius- and tile-bounded
+  queries; `GlobalPoi` ids also sit in a sparse whole-map set for telepathic discovery scans.
 - `PoiIntelligenceUser` scans both sets according to its interests and learning policy.
 - `PoiKnowledge` unions source ownership, retains old findings, and accepts directed
   `PoiObservation` messages from any other discovery system.

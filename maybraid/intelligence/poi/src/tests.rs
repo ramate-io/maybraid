@@ -679,3 +679,129 @@ fn choose_in_clone_timing() {
 		id_elapsed,
 	);
 }
+
+fn naive_collect_nearby_in(
+	registry: &PoiRegistry,
+	center: Vec3,
+	query: crate::NearbyQuery,
+	interests: &PoiInterests,
+	excluded: &[PoiId],
+	out: &mut Vec<PoiId>,
+) {
+	out.clear();
+	if interests.is_empty() || !center.is_finite() || !query.radius.is_finite() {
+		return;
+	}
+	let radius = query.radius.clamp(0.0, crate::MAX_POI_ARRIVAL_RADIUS.max(1_000.0));
+	let min_radius = query.min_radius.max(0.0);
+	registry.collect_local_matching(center, radius, interests, out);
+	for record in registry.global_matching(interests) {
+		if out.contains(&record.id) {
+			continue;
+		}
+		if center.distance(record.position) <= radius + record.arrival_radius {
+			out.push(record.id);
+		}
+	}
+	out.retain(|id| {
+		registry
+			.get(*id)
+			.is_some_and(|record| (center.xz() - record.position.xz()).length() >= min_radius)
+	});
+	out.sort_unstable_by_key(|id| *id);
+	for id in excluded {
+		if out.len() <= 1 {
+			break;
+		}
+		out.retain(|candidate| *candidate != *id);
+	}
+}
+
+fn naive_matching_in_xz_tile(
+	registry: &PoiRegistry,
+	tile: IVec2,
+	tile_size: f32,
+	center_y: f32,
+	interests: &PoiInterests,
+) -> Vec<PoiId> {
+	let mut ids: Vec<PoiId> = registry
+		.matching_in_xz_tile(tile, tile_size, center_y, interests)
+		.into_iter()
+		.filter(|record| record.local)
+		.map(|record| record.id)
+		.collect();
+	for record in registry.global_matching(interests) {
+		if (record.position.xz() / tile_size).floor().as_ivec2() == tile
+			&& !ids.contains(&record.id)
+		{
+			ids.push(record.id);
+		}
+	}
+	ids.sort_unstable();
+	ids
+}
+
+#[test]
+fn spatial_queries_match_naive_global_catalog_scan() -> anyhow::Result<()> {
+	let interests = PoiInterests::one(CAMP);
+	let queries = [
+		crate::NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),
+		crate::NearbyQuery::nearest_beyond(DEFAULT_NEARBY_RADIUS, 60.0),
+	];
+	let mut registry = PoiRegistry::default();
+	for index in 0..96 {
+		let entity = Entity::from_bits(index as u64 + 1);
+		let id = PoiId(index as u64 + 1);
+		let angle = (index as f32 / 96.0) * core::f32::consts::TAU;
+		let position = Vec3::new(angle.cos() * 120.0, 0.0, angle.sin() * 120.0);
+		let global = index % 5 == 0;
+		let local = index % 2 == 0 || !global;
+		registry.upsert(
+			entity,
+			Poi::new(id, if index % 7 == 0 { WATER } else { CAMP })
+				.with_arrival_radius(3.0 + (index % 4) as f32),
+			position,
+			local,
+			global,
+		)?;
+	}
+	let mut spatial_scratch = Vec::new();
+	let mut naive_scratch = Vec::new();
+	for center in [
+		Vec3::ZERO,
+		Vec3::new(40.0, 0.0, -80.0),
+		Vec3::new(-200.0, 0.0, 50.0),
+	] {
+		for query in queries {
+			let excluded_sets: [&[PoiId]; 3] = [&[], &[PoiId(3)], &[PoiId(1), PoiId(7)]];
+			for excluded in excluded_sets {
+				registry.collect_nearby_in(
+					center,
+					query,
+					&interests,
+					&excluded,
+					&mut spatial_scratch,
+				);
+				naive_collect_nearby_in(
+					&registry,
+					center,
+					query,
+					&interests,
+					&excluded,
+					&mut naive_scratch,
+				);
+				anyhow::ensure!(spatial_scratch == naive_scratch, "nearby mismatch at {center}");
+			}
+		}
+	}
+	for tile in [IVec2::ZERO, IVec2::new(-1, 2), IVec2::new(3, -2)] {
+		let spatial = registry
+			.matching_in_xz_tile(tile, 256.0, 0.0, &interests)
+			.into_iter()
+			.map(|record| record.id)
+			.collect::<Vec<_>>();
+		let naive = naive_matching_in_xz_tile(&registry, tile, 256.0, 0.0, &interests);
+		anyhow::ensure!(spatial == naive, "tile mismatch at {tile}");
+	}
+	Ok(())
+}
