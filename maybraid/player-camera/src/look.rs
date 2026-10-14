@@ -1,5 +1,6 @@
 //! Look intents, POV, body cone, and copy onto [`PlayerLook`].
 
+use crate::zoom::ThirdPersonZoom;
 use crate::FollowCamera;
 use bevy::prelude::*;
 use characters::CharacterHeading;
@@ -116,12 +117,12 @@ pub(crate) fn apply_look_intents(
 	suppressed: Option<Res<CameraLookSuppressed>>,
 	mut intents: MessageReader<CharacterIntent>,
 	mut cameras: Query<
-		(&mut CameraController, &FollowCamera, Option<&Projection>),
+		(&mut CameraController, &FollowCamera, Option<&Projection>, &mut ThirdPersonZoom),
 		With<FollowCamera>,
 	>,
 ) {
 	if suppressed.is_some_and(|suppressed| suppressed.0)
-		|| cameras.iter().any(|(controller, _, _)| controller.pov.is_map())
+		|| cameras.iter().any(|(controller, _, _, _)| controller.pov.is_map())
 	{
 		for _ in intents.read() {}
 		return;
@@ -133,7 +134,7 @@ pub(crate) fn apply_look_intents(
 	for intent in intents.read() {
 		match *intent {
 			CharacterIntent::Look(value) => {
-				if let Ok((mut controller, follow, projection)) = cameras.single_mut() {
+				if let Ok((mut controller, follow, projection, _)) = cameras.single_mut() {
 					let fov = match projection {
 						Some(Projection::Perspective(perspective)) => perspective.fov,
 						_ => follow.hip_fov(controller.pov),
@@ -154,11 +155,15 @@ pub(crate) fn apply_look_intents(
 	if skill_map {
 		ads = 0.0;
 	}
-	if let Ok((mut controller, _, _)) = cameras.single_mut() {
+	if let Ok((mut controller, _, _, mut zoom)) = cameras.single_mut() {
 		controller.focus = focus.clamp(0.0, 1.0);
 		controller.ads = ads.clamp(0.0, 1.0);
 		if swap_pov && !locked.is_some_and(|locked| locked.0) {
-			controller.pov.toggle();
+			if zoom.lock.is_some() {
+				zoom.release();
+			} else {
+				controller.pov.toggle();
+			}
 		}
 	}
 }
@@ -304,6 +309,7 @@ mod tests {
 			Camera3d::default(),
 			FollowCamera::default(),
 			CameraController { pov: CameraPov::ThirdPerson, ..default() },
+			crate::ThirdPersonZoom::default(),
 		));
 		world
 			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
@@ -351,6 +357,7 @@ mod tests {
 			FollowCamera::default(),
 			Projection::Perspective(PerspectiveProjection { fov, ..default() }),
 			CameraController { pov, ..default() },
+			crate::ThirdPersonZoom::default(),
 		));
 		world.write_message(CharacterIntent::Look(Vec2::X));
 		world
@@ -380,6 +387,43 @@ mod tests {
 	}
 
 	#[test]
+	fn r3_releases_zoom_instead_of_swapping_pov() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+		use maybraid_character_controller::CharacterIntent;
+
+		use crate::zoom::next_zoom_lock;
+
+		let mut world = World::new();
+		world.init_resource::<ButtonInput<MouseButton>>();
+		world.init_resource::<Messages<CharacterIntent>>();
+		let camera = world
+			.spawn((
+				Camera3d::default(),
+				FollowCamera::default(),
+				CameraController { pov: CameraPov::ThirdPerson, ..default() },
+				crate::ThirdPersonZoom::default(),
+			))
+			.id();
+		world
+			.get_mut::<crate::ThirdPersonZoom>(camera)
+			.expect("zoom")
+			.apply(next_zoom_lock(None, Vec2::X, Vec2::X));
+		world.write_message(CharacterIntent::SwapPov);
+		world
+			.run_system_once(apply_look_intents)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let (pov, active) = world
+			.query::<(&CameraController, &crate::ThirdPersonZoom)>()
+			.iter(&world)
+			.next()
+			.map(|(controller, zoom)| (controller.pov, zoom.is_active()))
+			.ok_or_else(|| anyhow::anyhow!("camera"))?;
+		assert_eq!(pov, CameraPov::ThirdPerson);
+		assert!(!active);
+		Ok(())
+	}
+
+	#[test]
 	fn focus_intent_still_writes_controller_focus() {
 		let mut app = App::new();
 		app.init_resource::<ButtonInput<MouseButton>>()
@@ -387,7 +431,12 @@ mod tests {
 			.add_systems(Update, apply_look_intents);
 		let camera = app
 			.world_mut()
-			.spawn((Camera3d::default(), CameraController::default(), FollowCamera::default()))
+			.spawn((
+				Camera3d::default(),
+				CameraController::default(),
+				FollowCamera::default(),
+				crate::ThirdPersonZoom::default(),
+			))
 			.id();
 		app.world_mut().write_message(CharacterIntent::Focus(1.0));
 		app.update();

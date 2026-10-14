@@ -15,6 +15,9 @@ use crate::button::{ButtonPhase, ButtonStroke, PadButton, PAD_BUTTON_COUNT};
 pub struct VirtualPad {
 	pub move_stick: Vec2,
 	pub look_stick: Vec2,
+	/// Raw right-stick analog (−1..1), deadzoned. For flick classifiers.
+	/// [`Self::look_stick`] is the look *delta* (mouse pixels / scaled gamepad).
+	pub look_analog: Vec2,
 	pub trigger_focus: f32,
 	pub trigger_fire: f32,
 	pub dpad: Vec2,
@@ -33,6 +36,7 @@ impl Default for VirtualPad {
 		Self {
 			move_stick: Vec2::ZERO,
 			look_stick: Vec2::ZERO,
+			look_analog: Vec2::ZERO,
 			trigger_focus: 0.0,
 			trigger_fire: 0.0,
 			dpad: Vec2::ZERO,
@@ -71,6 +75,7 @@ impl VirtualPad {
 	pub fn begin_frame(&mut self) {
 		self.move_stick = Vec2::ZERO;
 		self.look_stick = Vec2::ZERO;
+		self.look_analog = Vec2::ZERO;
 		self.trigger_focus = 0.0;
 		self.trigger_fire = 0.0;
 		self.dpad = Vec2::ZERO;
@@ -86,6 +91,16 @@ impl VirtualPad {
 
 	pub fn add_look(&mut self, value: Vec2) {
 		self.look_stick += value;
+	}
+
+	pub fn add_look_analog(&mut self, value: Vec2) {
+		self.look_analog += value;
+	}
+
+	/// Both shoulders down (Xbox **LB+RB**). Skill-map steer and Tanzer toggle
+	/// share this chord; gameplay that samples look flicks should sit it out.
+	pub fn bumper_chord_held(&self) -> bool {
+		self.pressed(PadButton::BumperFocus) && self.pressed(PadButton::BumperFire)
 	}
 
 	pub fn add_dpad(&mut self, value: Vec2) {
@@ -109,6 +124,7 @@ impl VirtualPad {
 	pub fn suppress_gameplay(&mut self) {
 		self.move_stick = Vec2::ZERO;
 		self.look_stick = Vec2::ZERO;
+		self.look_analog = Vec2::ZERO;
 		self.trigger_focus = 0.0;
 		self.trigger_fire = 0.0;
 		self.dpad = Vec2::ZERO;
@@ -256,6 +272,21 @@ mod tests {
 		pad.finish_digital();
 		assert!(!pad.pressed(PadButton::TriggerFocus));
 		assert!(pad.just_pressed(PadButton::TriggerFire));
+		Ok(())
+	}
+
+	#[test]
+	fn bumper_chord_needs_both_shoulders() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.hold_digital(PadButton::BumperFocus);
+		pad.finish_digital();
+		assert!(!pad.bumper_chord_held());
+		pad.begin_frame();
+		pad.hold_digital(PadButton::BumperFocus);
+		pad.hold_digital(PadButton::BumperFire);
+		pad.finish_digital();
+		assert!(pad.bumper_chord_held());
 		Ok(())
 	}
 }

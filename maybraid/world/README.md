@@ -9,7 +9,10 @@ and firearm presentation stack: R3 / look-stick click toggles first person,
 focus blends onto the firearm sight (LT / right mouse uses the optic FOV; left
 bumper / middle mouse keeps iron FOV), and the third-person camera
 shapecasts against Fixed terrain and vegetation sticks so it does not clip
-through. Outgoing hits show FFA-style score markers, and incoming damage shows
+through. A right-stick flick parks that camera 10 m or 20 m from the player
+(second flick in the same direction steps out); R3 or an opposite flick
+returns to the normal orbit. The same shapecast clamps the lock short of
+walls and terrain. Outgoing hits show FFA-style score markers, and incoming damage shows
 directional indicators; health bars remain hidden. Vegetation continues to own
 the player capsule locomotion. Downed players leave a ragdoll corpse under a
 fading red screen glaze, wait four active-gameplay seconds, then receive a fresh

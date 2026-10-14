@@ -2,6 +2,7 @@
 
 mod follow;
 mod look;
+mod zoom;
 
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
@@ -13,6 +14,10 @@ pub use follow::{
 	apply_camera_shake, map_pose, sync_camera_fov, sync_first_person_head_visibility, CameraShake,
 };
 pub use look::{CameraController, CameraLookSuppressed, CameraPov, CameraPovLocked};
+pub use zoom::{
+	next_zoom_lock, third_person_obstruction_origin, zoom_flick_allowed, ThirdPersonZoom, ZoomLock,
+	ZOOM_FAR, ZOOM_NEAR,
+};
 
 /// Camera schedule. Item crates add aim writers to [`PlayerCameraSystems::Aim`].
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -110,7 +115,7 @@ impl Plugin for PlayerCameraPlugin {
 			)
 			.add_systems(
 				Update,
-				(look::apply_look_intents, look::sync_player_look)
+				(look::apply_look_intents, zoom::detect_zoom_flicks, look::sync_player_look)
 					.chain()
 					.in_set(PlayerCameraSystems::Look),
 			)
@@ -167,6 +172,7 @@ pub fn spawn_follow_camera(commands: &mut Commands) -> Entity {
 				..default()
 			}),
 			CameraController { yaw, pitch, ..default() },
+			zoom::ThirdPersonZoom::default(),
 			CameraShake::default(),
 		))
 		.id()
@@ -213,6 +219,7 @@ mod tests {
 			);
 		}
 		assert!(world.get::<CameraShake>(camera).is_some());
+		assert!(world.get::<zoom::ThirdPersonZoom>(camera).is_some());
 	}
 
 	#[test]

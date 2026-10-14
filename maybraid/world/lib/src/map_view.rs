@@ -17,6 +17,7 @@ use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::CameraFollow;
 use player_camera::{
 	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
+	ThirdPersonZoom,
 };
 use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiRegistry};
 use richmond::DiscoverablePlace;
@@ -379,7 +380,7 @@ fn stamp_map_camera(
 	gameplay: Res<WorldGameplayEnabled>,
 	mut map: ResMut<WorldMapView>,
 	surface: DurhamSurface,
-	mut cameras: Query<&mut CameraController, With<FollowCamera>>,
+	mut cameras: Query<(&mut CameraController, Option<&mut ThirdPersonZoom>), With<FollowCamera>>,
 ) {
 	let Ok(ground) = surface.height_or_fallback(map.focus) else {
 		return;
@@ -388,11 +389,14 @@ fn stamp_map_camera(
 	if begin_life {
 		map.begin_life = false;
 	}
-	for mut controller in &mut cameras {
+	for (mut controller, zoom) in &mut cameras {
 		if map.open && gameplay.0 {
 			controller.enter_map(map.focus, map.height, ground);
 		} else if begin_life {
 			controller.begin_life();
+			if let Some(mut zoom) = zoom {
+				zoom.release();
+			}
 		} else {
 			controller.exit_map();
 		}
