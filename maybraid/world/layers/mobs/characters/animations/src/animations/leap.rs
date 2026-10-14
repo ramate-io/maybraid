@@ -15,6 +15,30 @@ pub const AIR_END: f32 = 0.72;
 /// Fraction of the **land** segment used to blend the last air pose into landing absorb.
 pub const LEAP_LAND_BLEND_FRACTION: f32 = 0.22;
 
+/// Takeoff, air, or land slice of a [`Leap`] shot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LeapPhase {
+	Takeoff,
+	Air,
+	Land,
+}
+
+/// Maps normalized leap progress to a phase and smoothstepped local weight.
+pub struct LeapTimeline;
+
+impl LeapTimeline {
+	pub fn sample(t: f32) -> (LeapPhase, f32) {
+		use super::mix::smoothstep;
+		if t < TAKEOFF_END {
+			(LeapPhase::Takeoff, smoothstep(t / TAKEOFF_END))
+		} else if t < AIR_END {
+			(LeapPhase::Air, smoothstep((t - TAKEOFF_END) / (AIR_END - TAKEOFF_END)))
+		} else {
+			(LeapPhase::Land, smoothstep((t - AIR_END) / (1.0 - AIR_END).max(f32::EPSILON)))
+		}
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Leap {
 	/// Air tuck amount; 1.0 = tuned default.
@@ -48,5 +72,15 @@ mod tests {
 		assert!(TAKEOFF_END > 0.0);
 		assert!(AIR_END > TAKEOFF_END);
 		assert!(AIR_END < 1.0);
+	}
+
+	#[test]
+	fn timeline_phase_boundaries() {
+		assert_eq!(LeapTimeline::sample(0.0).0, LeapPhase::Takeoff);
+		assert_eq!(LeapTimeline::sample(TAKEOFF_END - 1e-4).0, LeapPhase::Takeoff);
+		assert_eq!(LeapTimeline::sample(TAKEOFF_END).0, LeapPhase::Air);
+		assert_eq!(LeapTimeline::sample(AIR_END - 1e-4).0, LeapPhase::Air);
+		assert_eq!(LeapTimeline::sample(AIR_END).0, LeapPhase::Land);
+		assert_eq!(LeapTimeline::sample(1.0).0, LeapPhase::Land);
 	}
 }

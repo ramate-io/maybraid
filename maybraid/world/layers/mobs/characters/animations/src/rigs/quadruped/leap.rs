@@ -3,7 +3,8 @@ use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 use character_rigs::Side;
 
 use crate::animations::{
-	smoothstep, QuadrupedLeap, AIR_END, LEAP_LAND_BLEND_FRACTION, TAKEOFF_END,
+	LeapPhase, LeapTimeline, LinearBlend, smoothstep, QuadrupedLeap, AIR_END, LEAP_LAND_BLEND_FRACTION,
+	TAKEOFF_END,
 };
 use crate::rigs::quadruped::apply::{apply_front_leg, apply_hind_leg, apply_neck, apply_spine};
 use crate::{Animation, Progress};
@@ -60,22 +61,21 @@ fn sample_leap(leap: &QuadrupedLeap, progress: f32, pose: &mut QuadrupedPose) {
 
 impl QuadrupedLeap {
 	fn pose_at(&self, t: f32) -> QuadLeapPose {
-		if t < TAKEOFF_END {
-			self.takeoff(smoothstep(t / TAKEOFF_END))
-		} else if t < AIR_END {
-			self.air(smoothstep((t - TAKEOFF_END) / (AIR_END - TAKEOFF_END)))
-		} else {
-			let land_span = (1.0 - AIR_END).max(f32::EPSILON);
-			let land_local = (t - AIR_END) / land_span;
-			let land_u = smoothstep(land_local);
-			let land_pose = self.land(land_u);
-			let blend_end = LEAP_LAND_BLEND_FRACTION;
-			if land_local < blend_end {
-				let air_pose = self.air(1.0);
-				let weight = smoothstep((land_local / blend_end).clamp(0.0, 1.0));
-				blend_quad_leap_pose(air_pose, land_pose, weight)
-			} else {
-				land_pose
+		match LeapTimeline::sample(t) {
+			(LeapPhase::Takeoff, u) => self.takeoff(u),
+			(LeapPhase::Air, u) => self.air(u),
+			(LeapPhase::Land, land_u) => {
+				let land_span = (1.0 - AIR_END).max(f32::EPSILON);
+				let land_local = (t - AIR_END) / land_span;
+				let land_pose = self.land(land_u);
+				let blend_end = LEAP_LAND_BLEND_FRACTION;
+				if land_local < blend_end {
+					let air_pose = self.air(1.0);
+					let weight = smoothstep((land_local / blend_end).clamp(0.0, 1.0));
+					blend_quad_leap_pose(air_pose, land_pose, weight)
+				} else {
+					land_pose
+				}
 			}
 		}
 	}
@@ -83,24 +83,24 @@ impl QuadrupedLeap {
 	/// Hind push / front gather, then both extend off the ground.
 	fn takeoff(&self, u: f32) -> QuadLeapPose {
 		QuadLeapPose {
-			hind_thigh: lerp(self.hind_push, self.hind_push * 0.25, u),
-			front_thigh: lerp(-self.front_gather, -self.front_gather * 0.2, u),
-			hind_shin: lerp(self.knee_extended, self.knee_extended * 0.4, u),
-			front_shin: lerp(self.knee_air() * 0.7, self.knee_extended, u),
-			spine: lerp(self.spine_gather * 0.4, self.spine_gather, u),
+			hind_thigh: LinearBlend::eval(self.hind_push, self.hind_push * 0.25, u),
+			front_thigh: LinearBlend::eval(-self.front_gather, -self.front_gather * 0.2, u),
+			hind_shin: LinearBlend::eval(self.knee_extended, self.knee_extended * 0.4, u),
+			front_shin: LinearBlend::eval(self.knee_air() * 0.7, self.knee_extended, u),
+			spine: LinearBlend::eval(self.spine_gather * 0.4, self.spine_gather, u),
 		}
 	}
 
 	/// Bound gather peaks mid-air; legs reach down toward the end.
 	fn air(&self, u: f32) -> QuadLeapPose {
 		let gather = (u * std::f32::consts::PI).sin();
-		let tuck = lerp(0.15, self.air_tuck, gather);
+		let tuck = LinearBlend::eval(0.15, self.air_tuck, gather);
 		QuadLeapPose {
 			hind_thigh: -tuck * 0.35,
 			front_thigh: -tuck,
-			hind_shin: lerp(self.knee_extended, self.knee_air(), gather),
-			front_shin: lerp(self.knee_extended, self.knee_air(), gather),
-			spine: lerp(self.spine_gather * 0.5, self.spine_gather, gather),
+			hind_shin: LinearBlend::eval(self.knee_extended, self.knee_air(), gather),
+			front_shin: LinearBlend::eval(self.knee_extended, self.knee_air(), gather),
+			spine: LinearBlend::eval(self.spine_gather * 0.5, self.spine_gather, gather),
 		}
 	}
 
