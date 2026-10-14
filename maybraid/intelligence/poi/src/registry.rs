@@ -32,6 +32,18 @@ impl PoiRecord {
 		ArrivalDisk::new(self.position, self.arrival_radius)
 	}
 
+	pub fn as_entry(&self) -> crate::PoiEntry {
+		crate::PoiEntry {
+			id: self.id,
+			kind: self.kind,
+			position: self.position,
+			arrival_radius: self.arrival_radius,
+			salience: self.salience,
+			local: self.local,
+			global: self.global,
+		}
+	}
+
 	pub fn observation(self, user: Entity, source: PoiSource) -> PoiObservation {
 		PoiObservation {
 			user,
@@ -55,8 +67,8 @@ impl SpatialId for PoiRecord {
 	}
 }
 
-/// Gimme-backed spatial index for [`LocalPoi`] and [`GlobalPoi`] poses, plus a
-/// sparse global-id set for whole-map discovery scans.
+/// Gimme-backed local index for live entity poses, plus a sparse global set
+/// for telepathic discovery. Generated-world spatial queries use [`crate::PoiSet`].
 #[derive(Resource)]
 pub struct PoiRegistry {
 	local: TypedIndex<PoiRecord, HashMapStore<PoiRecord>>,
@@ -123,7 +135,7 @@ impl PoiRegistry {
 		};
 		self.records.insert(poi.id, record);
 
-		if local || global {
+		if local {
 			self.insert_spatial(record, position)?;
 		}
 		if global {
@@ -237,6 +249,20 @@ impl PoiRegistry {
 		let radius = query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
 		let min_radius = query.min_radius.max(0.0);
 		self.collect_local_matching(center, radius, interests, out);
+		for id in &self.globals {
+			if out.contains(id) {
+				continue;
+			}
+			let Some(record) = self.records.get(id) else {
+				continue;
+			};
+			if !interests.contains(record.kind) {
+				continue;
+			}
+			if center.distance(record.position) <= radius + record.arrival_radius {
+				out.push(*id);
+			}
+		}
 		out.retain(|id| {
 			self.records
 				.get(id)
@@ -290,38 +316,6 @@ impl PoiRegistry {
 				choose_weighted(center, radius, interests, self, &candidates, seed)
 			}
 		}
-	}
-
-	pub fn matching_in_xz_tile(
-		&self,
-		tile: IVec2,
-		tile_size: f32,
-		center_y: f32,
-		interests: &PoiInterests,
-	) -> Vec<PoiRecord> {
-		if !tile_size.is_finite() || !center_y.is_finite() {
-			return Vec::new();
-		}
-		let size = tile_size.clamp(1.0, MAX_LOCAL_QUERY_RADIUS);
-		let min_xz = tile.as_vec2() * size;
-		let max_xz = min_xz + Vec2::splat(size);
-		let region = Aabb3d::from_min_max(
-			Vec3::new(min_xz.x, center_y - MAX_LOCAL_QUERY_RADIUS, min_xz.y),
-			Vec3::new(max_xz.x, center_y + MAX_LOCAL_QUERY_RADIUS, max_xz.y),
-		);
-		let query_level = BaseScale::new(self.local.grid().base_scale())
-			.map(|base| base.insertion_level(&region))
-			.unwrap_or(0);
-		let mut records = BTreeMap::new();
-		for (record, _) in self
-			.local
-			.query_values(region, BaseScale::levels_through(query_level.max(self.local_max_level)))
-		{
-			if interests.contains(record.kind) && xz_tile(record.position, size) == tile {
-				records.insert(record.id, *record);
-			}
-		}
-		records.into_values().collect()
 	}
 
 	pub fn len(&self) -> usize {
@@ -402,8 +396,4 @@ fn choose_weighted(
 
 fn xz_distance(a: Vec3, b: Vec3) -> f32 {
 	(a.xz() - b.xz()).length()
-}
-
-fn xz_tile(position: Vec3, tile_size: f32) -> IVec2 {
-	(position.xz() / tile_size).floor().as_ivec2()
 }

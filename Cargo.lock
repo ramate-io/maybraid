@@ -6309,6 +6309,7 @@ version = "0.1.3"
 dependencies = [
  "anyhow",
  "bevy",
+ "lod",
  "meandering-intelligence",
  "poi-intelligence",
 ]
@@ -7612,6 +7613,7 @@ dependencies = [
  "damage",
  "firearm-intelligence",
  "journeying-intelligence",
+ "lod",
  "meandering-intelligence",
  "npc-intelligence",
  "poi-intelligence",
@@ -9051,6 +9053,7 @@ dependencies = [
  "bevy",
  "gimme-core",
  "intelligence-lod",
+ "lod",
  "movement-intelligence",
  "routing-intelligence",
 ]
