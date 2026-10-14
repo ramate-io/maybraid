@@ -1,6 +1,9 @@
 //! Apply [`CharacterIntent`] to the vegetation capsule / camera-relative wish.
 
 use bevy::prelude::*;
+use character_inventory_user::InventoryUser;
+use character_items::{Inventory, InventorySlot};
+use combat_hud::{CombatHudEquippedQueue, CombatHudEquippedSlot, CombatHudInventoryCycleCategory};
 use durham::{
 	terrain_collider_covers_xz, CascadeChunk, DurhamSurface, TerrainCellLayout,
 	TerrainTrimeshCollider,
@@ -142,6 +145,60 @@ pub(crate) fn sync_combat_hud_visible(
 	if hud.0 != next {
 		hud.0 = next;
 	}
+}
+
+/// Snapshot the equipped weapon / skill-map queue for the HUD strip.
+///
+/// Selection stays in inventory; the HUD only reads [`CombatHudEquippedQueue`].
+pub(crate) fn sync_combat_hud_equipped_queue(
+	category: Option<Res<CombatHudInventoryCycleCategory>>,
+	queue: Option<ResMut<CombatHudEquippedQueue>>,
+	players: Query<&InventoryUser, With<Player>>,
+	bags: Query<&Inventory>,
+) {
+	let Some(mut queue) = queue else {
+		return;
+	};
+	let category = category.as_deref().copied().unwrap_or_default();
+	let Some(user) = players.iter().next() else {
+		if !queue.slots.is_empty() {
+			*queue = CombatHudEquippedQueue::default();
+		}
+		return;
+	};
+	let Ok(bag) = bags.get(user.bag) else {
+		return;
+	};
+	let next = equipped_queue_from_inventory(bag, category);
+	if *queue != next {
+		*queue = next;
+	}
+}
+
+pub(crate) fn equipped_queue_from_inventory(
+	bag: &Inventory,
+	category: CombatHudInventoryCycleCategory,
+) -> CombatHudEquippedQueue {
+	let indices = match category {
+		CombatHudInventoryCycleCategory::Weapons => bag.selected(InventorySlot::Weapons),
+		CombatHudInventoryCycleCategory::SkillMaps => bag.selected(InventorySlot::Skills),
+		CombatHudInventoryCycleCategory::Lubikans => return CombatHudEquippedQueue::default(),
+	};
+	let primary = indices.first().copied();
+	let mut slots: Vec<CombatHudEquippedSlot> = indices
+		.iter()
+		.filter_map(|&index| {
+			bag.items.get(index).map(|item| CombatHudEquippedSlot {
+				key: index as u64,
+				label: item.label().to_string(),
+			})
+		})
+		.collect();
+	slots.sort_by_key(|slot| slot.key);
+	let selected = primary
+		.and_then(|index| slots.iter().position(|slot| slot.key == index as u64))
+		.unwrap_or(0);
+	CombatHudEquippedQueue { slots, selected }
 }
 
 pub(crate) fn sync_skill_map_enabled(
@@ -507,5 +564,35 @@ mod tests {
 		let notices = world.run_system_once(take_notices).expect("read restart notices");
 		assert_eq!(notices.len(), 1);
 		assert_eq!(notices[0].kind, LubikanOwnerLifetimeKind::RestartSession);
+	}
+
+	#[test]
+	fn equipped_queue_highlight_moves_in_stable_item_order() {
+		use character_items::{FirearmMesh, InventoryItem};
+
+		let mut bag = Inventory {
+			items: vec![
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::firearm(FirearmMesh::Reltor),
+				InventoryItem::firearm(FirearmMesh::Snailer),
+			],
+			weapons: vec![0, 1, 2],
+			..Default::default()
+		};
+		let first = equipped_queue_from_inventory(&bag, CombatHudInventoryCycleCategory::Weapons);
+		assert_eq!(first.selected, 0);
+		assert_eq!(first.slots.iter().map(|slot| slot.key).collect::<Vec<_>>(), vec![0, 1, 2]);
+		bag.weapons.rotate_left(1);
+		let second = equipped_queue_from_inventory(&bag, CombatHudInventoryCycleCategory::Weapons);
+		assert_eq!(second.selected, 1);
+		bag.weapons.rotate_left(1);
+		let third = equipped_queue_from_inventory(&bag, CombatHudInventoryCycleCategory::Weapons);
+		assert_eq!(third.selected, 2);
+		bag.weapons.rotate_left(1);
+		let wrapped = equipped_queue_from_inventory(&bag, CombatHudInventoryCycleCategory::Weapons);
+		assert_eq!(wrapped.selected, 0);
+		bag.weapons.rotate_right(1);
+		let back = equipped_queue_from_inventory(&bag, CombatHudInventoryCycleCategory::Weapons);
+		assert_eq!(back.selected, 2);
 	}
 }
