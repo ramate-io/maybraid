@@ -292,6 +292,7 @@ impl<G: ForestGround> GroveWorldSample for GroundSurface<G> {
 pub struct GrownGrove<G> {
 	pub layer: ForestLayer,
 	pub tiles: Vec<ForestGroveTile>,
+	pub grove_id: Id,
 	_ground: PhantomData<fn() -> G>,
 }
 
@@ -316,7 +317,7 @@ impl<G: ForestGround> hcsg::GenerationScheme for GrownGrove<G> {
 				.map(ForestGroveTile::scene_bounds)
 				.filter(|bounds| bounds.min.is_finite() && bounds.max.is_finite()),
 		)?;
-		Some((Self { layer: grove.layer, tiles, _ground: PhantomData }, bounds))
+		Some((Self { layer: grove.layer, tiles, grove_id: id, _ground: PhantomData }, bounds))
 	}
 }
 
@@ -332,7 +333,7 @@ impl<G: ForestGround> LodScene for GrownGrove<G> {
 			self.tiles
 				.iter()
 				.map(|tile| {
-					let host = ChicoGroveHost::new(tile.clone(), self.layer);
+					let host = ChicoGroveHost::new(tile.clone(), self.layer, self.grove_id);
 					Box::new(host.scene(lod_ref)) as Box<dyn Scene>
 				})
 				.collect(),

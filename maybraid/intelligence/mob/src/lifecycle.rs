@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use damage::{DespawnAfter, Downed, Health};
 use lod::hcsg::HcsgStorage;
 use poi_intelligence::{
-	mix_seed, place_nearby_among_from, DistantTilePoiLookup, GeneratedNearby, PoiId, PoiInterests,
+	mix_seed, place_nearby_among, DistantTilePoiLookup, GeneratedNearby, PoiId, PoiInterests,
 	PoiRegistry, AGENT_SEPARATION,
 };
 
@@ -153,6 +153,10 @@ pub(crate) fn respawn_mob_members(
 	mut rosters: Query<RespawnHost<'_>, With<Mob>>,
 ) {
 	let now = time.elapsed_secs();
+	let generated = storage
+		.as_deref()
+		.zip(lookup.as_deref())
+		.map(|(storage, lookup)| GeneratedNearby::new(storage, lookup));
 	for (host, id, transform, mut roster, respawn, interests) in &mut rosters {
 		let policy = policy(respawn);
 		let ready: Vec<u16> = roster
@@ -174,10 +178,6 @@ pub(crate) fn respawn_mob_members(
 			let excluded = member.excluded_pois().to_vec();
 			let last = member.pose;
 			let used = member.replacements_used;
-			let generated = storage
-				.as_deref()
-				.zip(lookup.as_deref())
-				.map(|(storage, lookup)| GeneratedNearby::new(storage, lookup));
 			let (pose, poi) = policy.placement(
 				transform.translation,
 				last,
@@ -227,7 +227,7 @@ impl MobRespawn {
 			return (spawn_pose(self.at, host, last), None);
 		}
 		let seed = respawn_seed(mob, slot, generation);
-		let placed = place_nearby_among_from(
+		let placed = place_nearby_among(
 			registry,
 			generated,
 			host,

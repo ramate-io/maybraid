@@ -1,9 +1,12 @@
 //! Shared POI identity, spatial discovery, retained knowledge, and goal handoff.
 //!
-//! Generated-world nearby and xz-tile lookups resolve through a [`PoiOrigin`]
-//! [`lod::hcsg::GenerationScheme`] (`get_or_generate_in`), not a global list.
-//! [`PoiRegistry`] indexes live entity poses: [`LocalPoi`] through Gimme for
-//! bounded nearby scans, and a sparse [`GlobalPoi`] set for telepathic scans.
+//! [`LocalPoi`] values are indexed through Gimme for bounded nearby scans of
+//! live, mutable entity poses. [`GlobalPoi`] values form a deliberately sparse
+//! whole-map set for telepathic discovery. Generated-world spatial lookups
+//! (nearby and distant xz-tile) resolve through a [`PoiOrigin`]
+//! [`lod::hcsg::GenerationScheme`] (`get_or_generate_in`), not a second POI
+//! index. Both paths feed the same per-user [`PoiKnowledge`] that external
+//! systems can augment with [`PoiObservation`] messages.
 
 mod discovery;
 mod goal;
@@ -30,16 +33,14 @@ pub use kind::{PoiId, PoiKind};
 pub use knowledge::{KnownPoi, PoiIntelligenceUser, PoiKnowledge, PoiObservation};
 pub use marker::{GlobalPoi, LocalPoi, Poi, MAX_POI_ARRIVAL_RADIUS};
 pub use nearby::{NearbyChoice, NearbyFallback, NearbyQuery, DEFAULT_NEARBY_RADIUS};
-pub use place::{
-	place_nearby, place_nearby_among, place_nearby_among_from, place_nearby_from, ArrivalDisk,
-	NearbyPlace, AGENT_SEPARATION,
-};
+pub use place::{place_nearby, place_nearby_among, ArrivalDisk, NearbyPlace, AGENT_SEPARATION};
 pub use plugin::{PoiDiscoverLimits, PoiIntelligencePlugin, PoiSystems};
 pub use policy::{PoiInterest, PoiInterests, PoiLearningPolicy, PoiVisitPolicy};
 pub use registry::{PoiRecord, PoiRegistry};
 pub use scheme::{
-	choose_matching_nearby, collect_matching_in_xz_tile, collect_matching_nearby, nearby_region,
-	xz_tile, xz_tile_region, Catalog, DistantTilePoiLookup, DistantTilePois, GeneratedNearby,
+	choose_matching_nearby, choose_nearby_among, collect_matching_in, collect_matching_in_xz_tile,
+	collect_matching_nearby, collect_nearby_entries, nearby_region, xz_tile, xz_tile_region,
+	Catalog, DistantTilePoiLookup, DistantTilePois, GeneratedNearby, GeneratedNearbyAccess,
 	GridTiles, PoiCatalog, PoiEntry, PoiOrigin, PoiSet, GRID_KIND,
 };
 pub use source::PoiSource;

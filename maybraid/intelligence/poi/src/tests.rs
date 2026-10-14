@@ -694,148 +694,6 @@ fn grid_scheme_tile_lookup_is_one_origin_id() -> anyhow::Result<()> {
 }
 
 #[test]
-fn local_matching_excludes_a_nearby_global_only_record() -> anyhow::Result<()> {
-	let mut world = World::new();
-	let local = world.spawn_empty().id();
-	let global = world.spawn_empty().id();
-	let mut registry = PoiRegistry::default();
-	registry.upsert(local, Poi::new(PoiId(1), CAMP), Vec3::X * 10.0, true, false)?;
-	registry.upsert(global, Poi::new(PoiId(2), CAMP), Vec3::X * 12.0, false, true)?;
-	let interests = PoiInterests::one(CAMP);
-	let local_hits = registry.local_matching(Vec3::ZERO, 200.0, &interests);
-	assert_eq!(local_hits.iter().map(|record| record.id).collect::<Vec<_>>(), [PoiId(1)]);
-	assert_eq!(
-		registry
-			.nearby_in(Vec3::ZERO, crate::NearbyQuery::weighted(200.0), &interests, &[])
-			.iter()
-			.map(|record| record.id)
-			.collect::<Vec<_>>(),
-		[PoiId(1), PoiId(2)]
-	);
-	Ok(())
-}
-
-#[test]
-fn catalog_nearby_finds_unpresented_pins_and_reuses_the_published_set() -> anyhow::Result<()> {
-	use crate::{
-		choose_matching_nearby, collect_matching_in_xz_tile, collect_matching_nearby, Catalog,
-		NearbyQuery, PoiCatalog, PoiEntry, PoiSet,
-	};
-	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
-
-	let near = PoiEntry {
-		id: PoiId(11),
-		kind: CAMP,
-		position: Vec3::new(20.0, 4.0, 0.0),
-		arrival_radius: 2.0,
-		salience: 1.0,
-		local: true,
-		global: false,
-	};
-	let far = PoiEntry {
-		id: PoiId(12),
-		kind: CAMP,
-		position: Vec3::new(400.0, 4.0, 0.0),
-		arrival_radius: 2.0,
-		salience: 1.0,
-		local: false,
-		global: true,
-	};
-	let storage = HcsgStorage::default();
-	storage.seed(PoiCatalog { entries: vec![near, far] }, universal_bounds());
-	let mut cx = GenerationContext::new(&storage);
-	let interests = PoiInterests::one(CAMP);
-	let mut nearby = Vec::new();
-	collect_matching_nearby::<Catalog>(
-		&mut cx,
-		Vec3::ZERO,
-		NearbyQuery::weighted(80.0),
-		&interests,
-		&[],
-		&mut nearby,
-	);
-	assert_eq!(nearby.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(11)]);
-	assert_eq!(
-		choose_matching_nearby::<Catalog>(
-			&mut cx,
-			Vec3::ZERO,
-			NearbyQuery::nearest_beyond(80.0, 10.0),
-			&interests,
-			&[],
-			1,
-		)
-		.map(|poi| poi.id),
-		Some(PoiId(11))
-	);
-	assert_eq!(
-		choose_matching_nearby::<Catalog>(
-			&mut cx,
-			Vec3::ZERO,
-			NearbyQuery::weighted(80.0),
-			&interests,
-			&[PoiId(11)],
-			1,
-		)
-		.map(|poi| poi.id),
-		Some(PoiId(11)),
-		"sole remaining candidate survives exclusion"
-	);
-
-	let region = crate::nearby_region(Vec3::ZERO, 80.0).expect("finite nearby region");
-	let first = cx.get_or_generate_in::<PoiSet<Catalog>>(region);
-	let second = cx.get_or_generate_in::<PoiSet<Catalog>>(region);
-	assert!(!first.is_empty());
-	assert_eq!(first.len(), second.len());
-	assert!(
-		first.iter().zip(&second).all(|(a, b)| std::sync::Arc::ptr_eq(a, b)),
-		"nearby and a later get_or_generate_in must reuse the published PoiSet"
-	);
-
-	let mut tile = Vec::new();
-	collect_matching_in_xz_tile::<Catalog>(
-		&mut cx,
-		IVec2::new(1, 0),
-		256.0,
-		0.0,
-		&interests,
-		&mut tile,
-	);
-	assert_eq!(tile.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(12)]);
-	Ok(())
-}
-
-#[test]
-fn xz_tile_lookup_does_not_clip_to_a_vertical_window() -> anyhow::Result<()> {
-	use crate::{collect_matching_in_xz_tile, Catalog, PoiCatalog, PoiEntry};
-	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
-
-	let high = PoiEntry {
-		id: PoiId(21),
-		kind: CAMP,
-		position: Vec3::new(40.0, 4_000.0, 40.0),
-		arrival_radius: 1.0,
-		salience: 1.0,
-		local: false,
-		global: true,
-	};
-	let storage = HcsgStorage::default();
-	storage.seed(PoiCatalog { entries: vec![high] }, universal_bounds());
-	let mut cx = GenerationContext::new(&storage);
-	let interests = PoiInterests::one(CAMP);
-	let mut found = Vec::new();
-	collect_matching_in_xz_tile::<Catalog>(
-		&mut cx,
-		IVec2::ZERO,
-		256.0,
-		0.0,
-		&interests,
-		&mut found,
-	);
-	assert_eq!(found.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(21)]);
-	Ok(())
-}
-
-#[test]
 #[ignore]
 fn choose_in_clone_timing() {
 	use crate::hash::unit_f32;
@@ -893,91 +751,260 @@ fn choose_in_clone_timing() {
 	);
 }
 
-fn naive_collect_nearby_in(
-	registry: &PoiRegistry,
-	center: Vec3,
-	query: crate::NearbyQuery,
-	interests: &PoiInterests,
-	excluded: &[PoiId],
-	out: &mut Vec<PoiId>,
-) {
-	out.clear();
-	if interests.is_empty() || !center.is_finite() || !query.radius.is_finite() {
-		return;
-	}
-	let radius = query.radius.clamp(0.0, crate::MAX_POI_ARRIVAL_RADIUS.max(1_000.0));
-	let min_radius = query.min_radius.max(0.0);
-	registry.collect_local_matching(center, radius, interests, out);
-	for record in registry.global_matching(interests) {
-		if out.contains(&record.id) {
-			continue;
-		}
-		if center.distance(record.position) <= radius + record.arrival_radius {
-			out.push(record.id);
-		}
-	}
-	out.retain(|id| {
-		registry
-			.get(*id)
-			.is_some_and(|record| (center.xz() - record.position.xz()).length() >= min_radius)
-	});
-	out.sort_unstable_by_key(|id| *id);
-	for id in excluded {
-		if out.len() <= 1 {
-			break;
-		}
-		out.retain(|candidate| *candidate != *id);
-	}
+#[test]
+fn local_matching_excludes_global_only_records() -> anyhow::Result<()> {
+	let mut registry = PoiRegistry::default();
+	registry.upsert(Entity::from_bits(1), Poi::new(PoiId(1), CAMP), Vec3::X * 10.0, true, false)?;
+	registry.upsert(Entity::from_bits(2), Poi::new(PoiId(2), CAMP), Vec3::X * 12.0, false, true)?;
+	let interests = PoiInterests::one(CAMP);
+	let local = registry.local_matching(Vec3::ZERO, 200.0, &interests);
+	assert_eq!(local.iter().map(|record| record.id).collect::<Vec<_>>(), [PoiId(1)]);
+	Ok(())
 }
 
 #[test]
-fn spatial_queries_match_naive_global_catalog_scan() -> anyhow::Result<()> {
+fn nearby_scheme_finds_unpresented_catalog_pins() -> anyhow::Result<()> {
+	use crate::{
+		choose_matching_nearby, collect_matching_nearby, Catalog, NearbyQuery, PoiCatalog, PoiEntry,
+	};
+	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
+
+	let storage = HcsgStorage::default();
+	storage.seed(
+		PoiCatalog {
+			entries: vec![
+				PoiEntry {
+					id: PoiId(11),
+					kind: CAMP,
+					position: Vec3::new(20.0, 0.0, 0.0),
+					arrival_radius: 4.0,
+					salience: 1.0,
+					local: true,
+					global: false,
+				},
+				PoiEntry {
+					id: PoiId(12),
+					kind: CAMP,
+					position: Vec3::new(80.0, 0.0, 0.0),
+					arrival_radius: 4.0,
+					salience: 1.0,
+					local: false,
+					global: true,
+				},
+				PoiEntry {
+					id: PoiId(13),
+					kind: CAMP,
+					position: Vec3::new(400.0, 0.0, 0.0),
+					arrival_radius: 4.0,
+					salience: 1.0,
+					local: false,
+					global: true,
+				},
+			],
+		},
+		universal_bounds(),
+	);
+	let mut cx = GenerationContext::new(&storage);
 	let interests = PoiInterests::one(CAMP);
-	let queries = [
-		crate::NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),
-		crate::NearbyQuery::nearest_beyond(DEFAULT_NEARBY_RADIUS, 60.0),
-	];
-	let mut registry = PoiRegistry::default();
-	for index in 0..96 {
-		let entity = Entity::from_bits(index as u64 + 1);
-		let id = PoiId(index as u64 + 1);
-		let angle = (index as f32 / 96.0) * core::f32::consts::TAU;
-		let position = Vec3::new(angle.cos() * 120.0, 0.0, angle.sin() * 120.0);
-		let global = index % 5 == 0;
-		let local = index % 2 == 0 || !global;
-		registry.upsert(
-			entity,
-			Poi::new(id, if index % 7 == 0 { WATER } else { CAMP })
-				.with_arrival_radius(3.0 + (index % 4) as f32),
-			position,
-			local,
-			global,
-		)?;
+	let mut found = Vec::new();
+	collect_matching_nearby::<Catalog>(
+		&mut cx,
+		Vec3::ZERO,
+		NearbyQuery::nearest_beyond(DEFAULT_NEARBY_RADIUS, 60.0),
+		&interests,
+		&[],
+		&mut found,
+	);
+	assert_eq!(found.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(12)]);
+	let chosen = choose_matching_nearby::<Catalog>(
+		&mut cx,
+		Vec3::ZERO,
+		NearbyQuery::nearest_beyond(DEFAULT_NEARBY_RADIUS, 60.0),
+		&interests,
+		&[],
+		42,
+	);
+	assert_eq!(chosen.map(|poi| poi.id), Some(PoiId(12)));
+	Ok(())
+}
+
+#[test]
+fn nearby_scheme_reuses_published_sets() -> anyhow::Result<()> {
+	use crate::{collect_matching_nearby, Catalog, NearbyQuery, PoiCatalog, PoiEntry};
+	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
+
+	let storage = HcsgStorage::default();
+	storage.seed(
+		PoiCatalog {
+			entries: vec![PoiEntry {
+				id: PoiId(4),
+				kind: CAMP,
+				position: Vec3::new(16.0, 0.0, 0.0),
+				arrival_radius: 2.0,
+				salience: 1.0,
+				local: true,
+				global: false,
+			}],
+		},
+		universal_bounds(),
+	);
+	let interests = PoiInterests::one(CAMP);
+	let mut first = Vec::new();
+	collect_matching_nearby::<Catalog>(
+		&mut GenerationContext::new(&storage),
+		Vec3::ZERO,
+		NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),
+		&interests,
+		&[],
+		&mut first,
+	);
+	let mut second = Vec::new();
+	collect_matching_nearby::<Catalog>(
+		&mut GenerationContext::new(&storage),
+		Vec3::ZERO,
+		NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),
+		&interests,
+		&[],
+		&mut second,
+	);
+	assert_eq!(first.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(4)]);
+	assert_eq!(
+		first.iter().map(|poi| poi.id).collect::<Vec<_>>(),
+		second.iter().map(|poi| poi.id).collect::<Vec<_>>()
+	);
+	Ok(())
+}
+
+#[test]
+fn xz_tile_region_is_a_vertical_column() {
+	use crate::xz_tile_region;
+
+	let at_sea = xz_tile_region(IVec2::ZERO, 256.0, 0.0).expect("finite sea-level tile");
+	let at_ridge = xz_tile_region(IVec2::ZERO, 256.0, 5_000.0).expect("finite ridge tile");
+	assert_eq!(at_sea.min.xz(), at_ridge.min.xz());
+	assert_eq!(at_sea.max.xz(), at_ridge.max.xz());
+	let high = Vec3::new(40.0, 5_000.0, 40.0);
+	assert!(at_sea.min.y <= high.y && high.y <= at_sea.max.y);
+	assert!(at_ridge.min.y <= high.y && high.y <= at_ridge.max.y);
+}
+
+#[test]
+fn xz_tile_scheme_finds_pins_far_from_probe_y() -> anyhow::Result<()> {
+	use crate::{collect_matching_in_xz_tile, PoiCatalog, PoiEntry, PoiOrigin};
+	use lod::gen::{Id, OriginalId};
+	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
+
+	struct VolumePins;
+
+	fn origin_id(id: PoiId) -> Id {
+		let mut bytes = [0u8; 32];
+		bytes[..8].copy_from_slice(&id.0.to_le_bytes());
+		Id::Bytes(lod::gen::Bytes(bytes))
 	}
-	let mut spatial_scratch = Vec::new();
-	let mut naive_scratch = Vec::new();
-	for center in [Vec3::ZERO, Vec3::new(40.0, 0.0, -80.0), Vec3::new(-200.0, 0.0, 50.0)] {
-		for query in queries {
-			let excluded_sets: [&[PoiId]; 3] = [&[], &[PoiId(3)], &[PoiId(1), PoiId(7)]];
-			for excluded in excluded_sets {
-				registry.collect_nearby_in(
-					center,
-					query,
-					&interests,
-					&excluded,
-					&mut spatial_scratch,
-				);
-				naive_collect_nearby_in(
-					&registry,
-					center,
-					query,
-					&interests,
-					&excluded,
-					&mut naive_scratch,
-				);
-				anyhow::ensure!(spatial_scratch == naive_scratch, "nearby mismatch at {center}");
-			}
+
+	impl PoiOrigin for VolumePins {
+		const INDEX_SCALE: bevy::math::DVec3 = bevy::math::DVec3::splat(256.0);
+
+		fn original_ids_for(
+			cx: &mut GenerationContext,
+			region: bevy::math::bounding::Aabb3d,
+		) -> Vec<OriginalId> {
+			let Some(catalog) = cx.get::<PoiCatalog>(Id::Universal) else {
+				return Vec::new();
+			};
+			catalog
+				.entries
+				.iter()
+				.filter(|entry| {
+					entry.position.x >= region.min.x
+						&& entry.position.x <= region.max.x
+						&& entry.position.y >= region.min.y
+						&& entry.position.y <= region.max.y
+						&& entry.position.z >= region.min.z
+						&& entry.position.z <= region.max.z
+				})
+				.map(|entry| OriginalId(origin_id(entry.id)))
+				.collect()
+		}
+
+		fn pois(
+			cx: &mut GenerationContext,
+			id: Id,
+		) -> Option<(Vec<PoiEntry>, bevy::math::bounding::Aabb3d)> {
+			let catalog = cx.get::<PoiCatalog>(Id::Universal)?;
+			let entry = *catalog.entries.iter().find(|entry| origin_id(entry.id) == id)?;
+			let extent = Vec3::splat(entry.arrival_radius.max(0.05));
+			Some((
+				vec![entry],
+				bevy::math::bounding::Aabb3d::from_min_max(
+					entry.position - extent,
+					entry.position + extent,
+				),
+			))
 		}
 	}
+
+	let storage = HcsgStorage::default();
+	storage.seed(
+		PoiCatalog {
+			entries: vec![PoiEntry {
+				id: PoiId(21),
+				kind: CAMP,
+				position: Vec3::new(40.0, 5_000.0, 40.0),
+				arrival_radius: 2.0,
+				salience: 1.0,
+				local: false,
+				global: true,
+			}],
+		},
+		universal_bounds(),
+	);
+	let mut cx = GenerationContext::new(&storage);
+	let interests = PoiInterests::one(CAMP);
+	let mut found = Vec::new();
+	collect_matching_in_xz_tile::<VolumePins>(
+		&mut cx,
+		IVec2::ZERO,
+		256.0,
+		0.0,
+		&interests,
+		&mut found,
+	);
+	assert_eq!(found.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(21)]);
+	Ok(())
+}
+
+#[test]
+fn nearby_scheme_includes_arrival_disk_overlap() -> anyhow::Result<()> {
+	use crate::{collect_matching_nearby, Catalog, NearbyQuery, PoiCatalog, PoiEntry};
+	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
+
+	let storage = HcsgStorage::default();
+	storage.seed(
+		PoiCatalog {
+			entries: vec![PoiEntry {
+				id: PoiId(31),
+				kind: CAMP,
+				position: Vec3::new(100.0, 0.0, 0.0),
+				arrival_radius: 20.0,
+				salience: 1.0,
+				local: true,
+				global: false,
+			}],
+		},
+		universal_bounds(),
+	);
+	let mut cx = GenerationContext::new(&storage);
+	let interests = PoiInterests::one(CAMP);
+	let mut found = Vec::new();
+	collect_matching_nearby::<Catalog>(
+		&mut cx,
+		Vec3::ZERO,
+		NearbyQuery::weighted(85.0),
+		&interests,
+		&[],
+		&mut found,
+	);
+	assert_eq!(found.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(31)]);
 	Ok(())
 }

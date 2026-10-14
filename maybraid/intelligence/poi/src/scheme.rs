@@ -1,13 +1,14 @@
 //! Generated POIs as an HCSG [`GenerationScheme`].
 //!
-//! Nearby and xz-tile lookups go through [`GenerationContext::get_or_generate_in`]:
-//! a source's `original_ids_for` is the discovery set for that region, and
+//! Tile / xz lookups go through [`GenerationContext::get_or_generate_in`]: a
+//! source's `original_ids_for` is the discovery set for that region, and
 //! `build_with_id` resolves one source cell. [`HcsgStorage`] is the index;
 //! there is no side list or extra spatial structure for this path.
 
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
@@ -16,14 +17,13 @@ use lod::hcsg::{self, GenerationContext, HcsgStorage};
 
 use crate::hash::unit_f32;
 use crate::{
-	NearbyChoice, NearbyQuery, PoiId, PoiInterests, PoiKind, PoiObservation, PoiSource,
-	MAX_POI_ARRIVAL_RADIUS,
+	NearbyChoice, NearbyQuery, PoiId, PoiInterests, PoiKind, PoiObservation, PoiRecord,
+	PoiRegistry, PoiSource, MAX_POI_ARRIVAL_RADIUS,
 };
 
 const MAX_TILE_QUERY: f32 = 1_000.0;
-const MAX_NEARBY_QUERY_RADIUS: f32 = 1_000.0;
-/// XZ-tile discovery is a vertical column: origins that only overlap on XZ
-/// must still be found when the probe Y is far from the pin.
+/// XZ-tile discovery is a vertical column: `center_y` must be finite but
+/// does not clip origins that only overlap the tile on XZ.
 const XZ_COLUMN_Y: f32 = 1.0e9;
 
 /// One generated POI pin. Not an ECS entity; pair with [`Self::observation`].
@@ -94,6 +94,30 @@ impl<S: PoiOrigin> hcsg::GenerationScheme for PoiSet<S> {
 	}
 }
 
+/// Resolve POIs originating in `region` through [`PoiSet<S>`].
+///
+/// Discovery is `S::original_ids_for` on that box — O(cells in the query),
+/// not a walk of every generated or authored POI in the world.
+pub fn collect_matching_in<S: PoiOrigin>(
+	cx: &mut GenerationContext,
+	region: Aabb3d,
+	interests: &PoiInterests,
+	out: &mut Vec<PoiEntry>,
+) {
+	out.clear();
+	if interests.is_empty() {
+		return;
+	}
+	for set in cx.get_or_generate_in::<PoiSet<S>>(region) {
+		for poi in &set.pois {
+			if interests.contains(poi.kind) {
+				out.push(*poi);
+			}
+		}
+	}
+	out.sort_unstable_by_key(|poi| poi.id);
+}
+
 /// Resolve POIs for xz tile `tile` through [`PoiSet<S>`].
 ///
 /// Discovery is `S::original_ids_for` on the tile column — O(tile), not a
@@ -114,21 +138,14 @@ pub fn collect_matching_in_xz_tile<S: PoiOrigin>(
 		return;
 	};
 	let size = normalized_tile_size(tile_size);
-	for set in cx.get_or_generate_in::<PoiSet<S>>(region) {
-		for poi in &set.pois {
-			if interests.contains(poi.kind) && xz_tile(poi.position, size) == tile {
-				out.push(*poi);
-			}
-		}
-	}
-	out.sort_unstable_by_key(|poi| poi.id);
+	collect_matching_in::<S>(cx, region, interests, out);
+	out.retain(|poi| xz_tile(poi.position, size) == tile);
 }
 
 /// Resolve POIs inside [`NearbyQuery`] through [`PoiSet<S>`].
 ///
-/// Discovery is `S::original_ids_for` on the bounded region — O(origins in
-/// the window), not a walk of every generated POI. Distance uses 3D overlap
-/// with arrival radius; the inner hole is XZ, matching [`crate::PoiRegistry`].
+/// Outer membership is 3D distance plus arrival radius, matching
+/// [`crate::PoiRegistry::collect_nearby_in`]. The inner hole is XZ-only.
 pub fn collect_matching_nearby<S: PoiOrigin>(
 	cx: &mut GenerationContext,
 	center: Vec3,
@@ -141,23 +158,15 @@ pub fn collect_matching_nearby<S: PoiOrigin>(
 	if interests.is_empty() || !center.is_finite() || !query.radius.is_finite() {
 		return;
 	}
-	let Some(region) = nearby_region(center, query.radius) else {
+	let radius = query.radius.clamp(0.0, MAX_TILE_QUERY);
+	let Some(region) = nearby_region(center, radius) else {
 		return;
 	};
-	let radius = query.radius.clamp(0.0, MAX_NEARBY_QUERY_RADIUS);
-	let min_radius = query.min_radius.max(0.0);
-	for set in cx.get_or_generate_in::<PoiSet<S>>(region) {
-		for poi in &set.pois {
-			if nearby_candidate(center, radius, min_radius, interests, poi) {
-				out.push(*poi);
-			}
-		}
-	}
-	out.sort_unstable_by_key(|poi| poi.id);
-	drop_excluded_entries(out, excluded);
+	collect_matching_in::<S>(cx, region, interests, out);
+	retain_nearby(center, query, excluded, out);
 }
 
-/// Choose one generated POI inside [`NearbyQuery`] using the same policies as
+/// Choose one nearby generated POI using the same policies as
 /// [`crate::PoiRegistry::choose_in`].
 pub fn choose_matching_nearby<S: PoiOrigin>(
 	cx: &mut GenerationContext,
@@ -169,7 +178,20 @@ pub fn choose_matching_nearby<S: PoiOrigin>(
 ) -> Option<PoiEntry> {
 	let mut candidates = Vec::new();
 	collect_matching_nearby::<S>(cx, center, query, interests, excluded, &mut candidates);
-	choose_nearby_entry(center, query, interests, &candidates, seed)
+	choose_nearby_entries(center, query, interests, seed, &candidates)
+}
+
+/// AABB used by nearby scheme queries (radius clamped to [`MAX_TILE_QUERY`]).
+///
+/// Padded by [`MAX_POI_ARRIVAL_RADIUS`] so pins whose centers sit just outside
+/// the radius still enter discovery when their arrival disk overlaps.
+pub fn nearby_region(center: Vec3, radius: f32) -> Option<Aabb3d> {
+	if !center.is_finite() || !radius.is_finite() {
+		return None;
+	}
+	let radius = radius.clamp(0.0, MAX_TILE_QUERY) + MAX_POI_ARRIVAL_RADIUS;
+	let extent = Vec3::splat(radius);
+	Some(Aabb3d::from_min_max(center - extent, center + extent))
 }
 
 /// Authored / test POIs seeded at [`Id::Universal`].
@@ -242,7 +264,7 @@ impl PoiOrigin for GridTiles {
 
 pub const GRID_KIND: PoiKind = PoiKind::new("test/grid-tile");
 
-/// Frame / test wiring: collect a tile or nearby window through [`HcsgStorage`].
+/// Frame / test wiring: collect a tile or nearby region through [`HcsgStorage`].
 pub trait DistantTilePois: Send + Sync + 'static {
 	fn collect_matching_in_xz_tile(
 		&self,
@@ -293,23 +315,7 @@ impl DistantTilePois for Catalog {
 	}
 }
 
-/// Bevy handle to generated-world tile / nearby lookup. World replaces the default [`Catalog`].
-#[derive(Resource, Clone)]
-pub struct DistantTilePoiLookup(pub Arc<dyn DistantTilePois>);
-
-impl DistantTilePoiLookup {
-	pub fn new(lookup: impl DistantTilePois) -> Self {
-		Self(Arc::new(lookup))
-	}
-}
-
-impl Default for DistantTilePoiLookup {
-	fn default() -> Self {
-		Self::new(Catalog)
-	}
-}
-
-/// Storage plus the installed generated-world lookup.
+/// Optional generated-world nearby source used by placement and discovery.
 #[derive(Clone, Copy)]
 pub struct GeneratedNearby<'a> {
 	pub storage: &'a HcsgStorage,
@@ -319,6 +325,13 @@ pub struct GeneratedNearby<'a> {
 impl<'a> GeneratedNearby<'a> {
 	pub fn new(storage: &'a HcsgStorage, lookup: &'a DistantTilePoiLookup) -> Self {
 		Self { storage, lookup }
+	}
+
+	pub fn from_resources(
+		storage: Option<&'a HcsgStorage>,
+		lookup: Option<&'a DistantTilePoiLookup>,
+	) -> Option<Self> {
+		storage.zip(lookup).map(|(storage, lookup)| Self::new(storage, lookup))
 	}
 
 	pub fn collect_matching_nearby(
@@ -338,33 +351,107 @@ impl<'a> GeneratedNearby<'a> {
 			out,
 		);
 	}
+}
 
-	pub fn choose_matching_nearby(
-		self,
+/// Frame access to published generated-world POIs without two extra system params.
+#[derive(SystemParam)]
+pub struct GeneratedNearbyAccess<'w> {
+	storage: Option<Res<'w, HcsgStorage>>,
+	lookup: Option<Res<'w, DistantTilePoiLookup>>,
+}
+
+impl GeneratedNearbyAccess<'_> {
+	pub fn get(&self) -> Option<GeneratedNearby<'_>> {
+		GeneratedNearby::from_resources(self.storage.as_deref(), self.lookup.as_deref())
+	}
+}
+
+impl PoiRegistry {
+	pub fn collect_nearby_entries(
+		&self,
 		center: Vec3,
 		query: NearbyQuery,
 		interests: &PoiInterests,
 		excluded: &[PoiId],
-		seed: u64,
-	) -> Option<PoiEntry> {
-		let mut candidates = Vec::new();
-		self.collect_matching_nearby(center, query, interests, excluded, &mut candidates);
-		choose_nearby_entry(center, query, interests, &candidates, seed)
+		out: &mut Vec<PoiEntry>,
+	) {
+		let mut ids = Vec::new();
+		self.collect_nearby_in(center, query, interests, excluded, &mut ids);
+		out.clear();
+		out.extend(ids.iter().filter_map(|id| self.get(*id).map(PoiRecord::as_entry)));
 	}
 }
 
-/// Bounded 3D region for a nearby scheme query, padded by the max arrival disk.
-pub fn nearby_region(center: Vec3, radius: f32) -> Option<Aabb3d> {
-	if !center.is_finite() || !radius.is_finite() {
-		return None;
+/// Union live registry pins with generated-world scheme pins, then apply the
+/// same nearby filters and stable id order.
+pub fn collect_nearby_entries(
+	registry: Option<&PoiRegistry>,
+	generated: Option<GeneratedNearby<'_>>,
+	center: Vec3,
+	query: NearbyQuery,
+	interests: &PoiInterests,
+	excluded: &[PoiId],
+	out: &mut Vec<PoiEntry>,
+) {
+	out.clear();
+	if interests.is_empty() {
+		return;
 	}
-	let radius = radius.clamp(0.0, MAX_NEARBY_QUERY_RADIUS) + MAX_POI_ARRIVAL_RADIUS;
-	let extent = Vec3::splat(radius);
-	Some(Aabb3d::from_min_max(center - extent, center + extent))
+	if let Some(registry) = registry {
+		registry.collect_nearby_entries(center, query, interests, excluded, out);
+	}
+	if let Some(generated) = generated {
+		let mut generated_entries = Vec::new();
+		generated.collect_matching_nearby(
+			center,
+			query,
+			interests,
+			excluded,
+			&mut generated_entries,
+		);
+		merge_entries(out, generated_entries);
+	}
 }
 
-/// XZ column for tile `tile`. `center_y` is accepted for call-site compatibility
-/// and must be finite, but it does not clip the column.
+/// Choose among the merged nearby set using [`NearbyQuery::choice`].
+pub fn choose_nearby_among(
+	registry: Option<&PoiRegistry>,
+	generated: Option<GeneratedNearby<'_>>,
+	center: Vec3,
+	query: NearbyQuery,
+	interests: &PoiInterests,
+	excluded: &[PoiId],
+	seed: u64,
+) -> Option<PoiEntry> {
+	let mut candidates = Vec::new();
+	collect_nearby_entries(
+		registry,
+		generated,
+		center,
+		query,
+		interests,
+		excluded,
+		&mut candidates,
+	);
+	choose_nearby_entries(center, query, interests, seed, &candidates)
+}
+
+/// Bevy handle to the tile lookup. World replaces the default [`Catalog`].
+#[derive(Resource, Clone)]
+pub struct DistantTilePoiLookup(pub Arc<dyn DistantTilePois>);
+
+impl DistantTilePoiLookup {
+	pub fn new(lookup: impl DistantTilePois) -> Self {
+		Self(Arc::new(lookup))
+	}
+}
+
+impl Default for DistantTilePoiLookup {
+	fn default() -> Self {
+		Self::new(Catalog)
+	}
+}
+
 pub fn xz_tile_region(tile: IVec2, tile_size: f32, center_y: f32) -> Option<Aabb3d> {
 	if !tile_size.is_finite() || !center_y.is_finite() {
 		return None;
@@ -388,6 +475,95 @@ fn normalized_tile_size(tile_size: f32) -> f32 {
 	} else {
 		256.0
 	}
+}
+
+pub(crate) fn retain_nearby(
+	center: Vec3,
+	query: NearbyQuery,
+	excluded: &[PoiId],
+	out: &mut Vec<PoiEntry>,
+) {
+	let radius = query.radius.clamp(0.0, MAX_TILE_QUERY);
+	let min_radius = query.min_radius.max(0.0);
+	out.retain(|poi| {
+		center.distance(poi.position) <= radius + poi.arrival_radius
+			&& xz_distance(center, poi.position) >= min_radius
+	});
+	out.sort_unstable_by_key(|poi| poi.id);
+	drop_excluded_entries(out, excluded);
+}
+
+pub(crate) fn choose_nearby_entries(
+	center: Vec3,
+	query: NearbyQuery,
+	interests: &PoiInterests,
+	seed: u64,
+	candidates: &[PoiEntry],
+) -> Option<PoiEntry> {
+	let radius = query.radius.clamp(0.0, MAX_TILE_QUERY);
+	match query.choice {
+		NearbyChoice::Nearest => candidates
+			.iter()
+			.min_by(|a, b| {
+				xz_distance(center, a.position)
+					.total_cmp(&xz_distance(center, b.position))
+					.then_with(|| a.id.cmp(&b.id))
+			})
+			.copied(),
+		NearbyChoice::Weighted => {
+			choose_weighted_entries(center, radius, interests, candidates, seed)
+		}
+	}
+}
+
+fn choose_weighted_entries(
+	center: Vec3,
+	radius: f32,
+	interests: &PoiInterests,
+	candidates: &[PoiEntry],
+	seed: u64,
+) -> Option<PoiEntry> {
+	let weight = |entry: &PoiEntry| -> f32 {
+		let interest = interests.weight(entry.kind).unwrap_or(0.0);
+		let proximity = 1.0 / (1.0 + center.distance(entry.position) / radius.max(1.0));
+		interest * entry.salience.max(0.1) * proximity
+	};
+	let total: f32 = candidates.iter().map(weight).sum();
+	if total <= 0.0 {
+		return None;
+	}
+	let mut draw = unit_f32(seed) * total;
+	let mut fallback = None;
+	for entry in candidates {
+		fallback = Some(*entry);
+		draw -= weight(entry);
+		if draw <= 0.0 {
+			return Some(*entry);
+		}
+	}
+	fallback
+}
+
+fn merge_entries(out: &mut Vec<PoiEntry>, extra: Vec<PoiEntry>) {
+	if extra.is_empty() {
+		return;
+	}
+	out.extend(extra);
+	out.sort_unstable_by_key(|poi| poi.id);
+	out.dedup_by_key(|poi| poi.id);
+}
+
+fn drop_excluded_entries(candidates: &mut Vec<PoiEntry>, excluded: &[PoiId]) {
+	for id in excluded {
+		if candidates.len() <= 1 {
+			return;
+		}
+		candidates.retain(|candidate| candidate.id != *id);
+	}
+}
+
+fn xz_distance(a: Vec3, b: Vec3) -> f32 {
+	(a.xz() - b.xz()).length()
 }
 
 fn xz_point_in_region(position: Vec3, region: Aabb3d) -> bool {
@@ -447,82 +623,6 @@ fn xz_tile_cell(tile: IVec2, tile_size: f32) -> Option<Aabb3d> {
 		Vec3::new(min_xz.x, -0.5, min_xz.y),
 		Vec3::new(max_xz.x, 0.5, max_xz.y),
 	))
-}
-
-fn nearby_candidate(
-	center: Vec3,
-	radius: f32,
-	min_radius: f32,
-	interests: &PoiInterests,
-	poi: &PoiEntry,
-) -> bool {
-	interests.contains(poi.kind)
-		&& center.distance(poi.position) <= radius + poi.arrival_radius
-		&& xz_distance(center, poi.position) >= min_radius
-}
-
-fn drop_excluded_entries(candidates: &mut Vec<PoiEntry>, excluded: &[PoiId]) {
-	for id in excluded {
-		if candidates.len() <= 1 {
-			return;
-		}
-		candidates.retain(|candidate| candidate.id != *id);
-	}
-}
-
-pub(crate) fn choose_nearby_entry(
-	center: Vec3,
-	query: NearbyQuery,
-	interests: &PoiInterests,
-	candidates: &[PoiEntry],
-	seed: u64,
-) -> Option<PoiEntry> {
-	let radius = query.radius.clamp(0.0, MAX_NEARBY_QUERY_RADIUS);
-	match query.choice {
-		NearbyChoice::Nearest => candidates
-			.iter()
-			.min_by(|a, b| {
-				xz_distance(center, a.position)
-					.total_cmp(&xz_distance(center, b.position))
-					.then_with(|| a.id.cmp(&b.id))
-			})
-			.copied(),
-		NearbyChoice::Weighted => {
-			choose_weighted_entry(center, radius, interests, candidates, seed)
-		}
-	}
-}
-
-fn choose_weighted_entry(
-	center: Vec3,
-	radius: f32,
-	interests: &PoiInterests,
-	candidates: &[PoiEntry],
-	seed: u64,
-) -> Option<PoiEntry> {
-	let weight = |entry: &PoiEntry| -> f32 {
-		let interest = interests.weight(entry.kind).unwrap_or(0.0);
-		let proximity = 1.0 / (1.0 + center.distance(entry.position) / radius.max(1.0));
-		interest * entry.salience.max(0.1) * proximity
-	};
-	let total: f32 = candidates.iter().map(weight).sum();
-	if total <= 0.0 {
-		return None;
-	}
-	let mut draw = unit_f32(seed) * total;
-	let mut fallback = None;
-	for entry in candidates {
-		fallback = Some(*entry);
-		draw -= weight(entry);
-		if draw <= 0.0 {
-			return Some(*entry);
-		}
-	}
-	fallback
-}
-
-fn xz_distance(a: Vec3, b: Vec3) -> f32 {
-	(a.xz() - b.xz()).length()
 }
 
 fn grid_poi_id(tile: IVec2) -> u64 {

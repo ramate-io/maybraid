@@ -6,9 +6,9 @@ use bevy::prelude::*;
 use movement_intelligence::MovementLocation;
 
 use crate::hash::{mix, unit_f32};
-use crate::scheme::choose_nearby_entry;
 use crate::{
-	GeneratedNearby, NearbyFallback, NearbyQuery, PoiEntry, PoiId, PoiInterests, PoiRegistry,
+	choose_nearby_among, GeneratedNearby, NearbyFallback, NearbyQuery, PoiId, PoiInterests,
+	PoiRegistry,
 };
 
 const DISK_DISTANCE_SALT: u64 = 0x736f_6d65_706c_6179;
@@ -67,9 +67,9 @@ pub struct NearbyPlace {
 
 /// Choose a nearby POI disk, or a fallback ring around `center`.
 ///
-/// `previous` is excluded when another candidate exists. Missing registry,
-/// generated lookup, or interests skip the POI scan and use the fallback ring.
-/// Callers own vertical snap (terrain, last body height).
+/// `previous` is excluded when another candidate exists. Missing registry or
+/// interests skip the POI scan and use the fallback ring. Callers own vertical
+/// snap (terrain, last body height).
 pub fn place_nearby(
 	registry: Option<&PoiRegistry>,
 	center: Vec3,
@@ -79,63 +79,13 @@ pub fn place_nearby(
 	seed: u64,
 	fallback: NearbyFallback,
 ) -> NearbyPlace {
-	place_nearby_from(registry, None, center, query, interests, previous, seed, fallback)
-}
-
-/// [`place_nearby`] using generated-world [`PoiSet`] pins when `generated` is set.
-pub fn place_nearby_from(
-	registry: Option<&PoiRegistry>,
-	generated: Option<GeneratedNearby<'_>>,
-	center: Vec3,
-	query: NearbyQuery,
-	interests: Option<&PoiInterests>,
-	previous: Option<PoiId>,
-	seed: u64,
-	fallback: NearbyFallback,
-) -> NearbyPlace {
 	let excluded = previous.as_ref().map(core::slice::from_ref).unwrap_or(&[]);
-	place_nearby_among_from(
-		registry,
-		generated,
-		center,
-		query,
-		interests,
-		excluded,
-		seed,
-		fallback,
-		&[],
-		0.0,
-	)
+	place_nearby_among(registry, None, center, query, interests, excluded, seed, fallback, &[], 0.0)
 }
 
-/// [`place_nearby`] plus last-N exclusion and sibling occupancy.
+/// [`place_nearby`] plus last-N exclusion, sibling occupancy, and optional
+/// generated-world scheme pins.
 pub fn place_nearby_among(
-	registry: Option<&PoiRegistry>,
-	center: Vec3,
-	query: NearbyQuery,
-	interests: Option<&PoiInterests>,
-	excluded: &[PoiId],
-	seed: u64,
-	fallback: NearbyFallback,
-	occupied: &[Vec3],
-	min_separation: f32,
-) -> NearbyPlace {
-	place_nearby_among_from(
-		registry,
-		None,
-		center,
-		query,
-		interests,
-		excluded,
-		seed,
-		fallback,
-		occupied,
-		min_separation,
-	)
-}
-
-/// [`place_nearby_among`] unioning runtime registry poses with generated-world pins.
-pub fn place_nearby_among_from(
 	registry: Option<&PoiRegistry>,
 	generated: Option<GeneratedNearby<'_>>,
 	center: Vec3,
@@ -148,7 +98,13 @@ pub fn place_nearby_among_from(
 	min_separation: f32,
 ) -> NearbyPlace {
 	let poi = interests.and_then(|interests| {
-		choose_nearby_sources(registry, generated, center, query, interests, excluded, seed)
+		if generated.is_some() {
+			choose_nearby_among(registry, generated, center, query, interests, excluded, seed)
+		} else {
+			registry
+				.and_then(|registry| registry.choose_in(center, query, interests, excluded, seed))
+				.map(|record| record.as_entry())
+		}
 	});
 	let placed = match poi {
 		Some(poi) => NearbyPlace {
@@ -160,48 +116,6 @@ pub fn place_nearby_among_from(
 		}
 	};
 	placed.clear_of(center, occupied, min_separation, seed)
-}
-
-fn choose_nearby_sources(
-	registry: Option<&PoiRegistry>,
-	generated: Option<GeneratedNearby<'_>>,
-	center: Vec3,
-	query: NearbyQuery,
-	interests: &PoiInterests,
-	excluded: &[PoiId],
-	seed: u64,
-) -> Option<PoiEntry> {
-	let mut candidates = Vec::new();
-	if let Some(generated) = generated {
-		generated.collect_matching_nearby(center, query, interests, excluded, &mut candidates);
-	}
-	if let Some(registry) = registry {
-		let mut ids = Vec::new();
-		registry.collect_nearby_in(center, query, interests, excluded, &mut ids);
-		for id in ids {
-			if candidates.iter().any(|entry| entry.id == id) {
-				continue;
-			}
-			let Some(record) = registry.get(id) else {
-				continue;
-			};
-			candidates.push(PoiEntry {
-				id: record.id,
-				kind: record.kind,
-				position: record.position,
-				arrival_radius: record.arrival_radius,
-				salience: record.salience,
-				local: record.local,
-				global: record.global,
-			});
-		}
-		candidates.sort_unstable_by_key(|entry| entry.id);
-		candidates.dedup_by_key(|entry| entry.id);
-	}
-	if candidates.is_empty() {
-		return None;
-	}
-	choose_nearby_entry(center, query, interests, &candidates, seed)
 }
 
 impl NearbyPlace {
@@ -282,6 +196,7 @@ impl PoiRegistry {
 	) -> NearbyPlace {
 		place_nearby_among(
 			Some(self),
+			None,
 			center,
 			query,
 			Some(interests),
@@ -473,6 +388,7 @@ mod tests {
 			NearbyFallback::new(4.0, 4.0),
 		);
 		let second = place_nearby_among(
+			None,
 			None,
 			Vec3::ZERO,
 			NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),

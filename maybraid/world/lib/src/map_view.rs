@@ -18,7 +18,7 @@ use player::CameraFollow;
 use player_camera::{
 	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
 };
-use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiRegistry};
+use poi_intelligence::{PoiEntry, PoiId, PoiKind, PoiRecord, PoiRegistry};
 use richmond::DiscoverablePlace;
 use world_player::{Player as VegetationPlayer, PlayerLifeSet, PlaygroundMode};
 
@@ -686,26 +686,39 @@ fn map_pin_targets(
 		if pending.map_opened {
 			if let Some(registry) = registry {
 				for id in &pending.candidates {
-					let Some(record) = registry.get(*id) else {
+					let record = registry.get(*id);
+					let pin = pending.pin(*id);
+					let Some(xz) = record
+						.map(|record| record.position.xz())
+						.or_else(|| pin.map(|entry| entry.position.xz()))
+					else {
 						continue;
 					};
-					let xz = record.position.xz();
 					let selected = Some(*id) == highlighted;
 					if !selected && !near_view_rect(xz, view) {
 						continue;
 					}
-					let name_key = named.and_then(|names| names.get(&record.entity)).copied();
+					let name_key = record
+						.and_then(|record| named.and_then(|names| names.get(&record.entity)))
+						.copied();
 					wanted.push(MapPinWanted {
 						id: MapPinTarget::Poi(*id),
 						xz,
 						extent: Rect::from_center_size(xz, Vec2::splat(12.0)),
-						label: label_for_poi(record, overlay, name_key),
+						label: record
+							.map(|record| label_for_poi(record, overlay, name_key))
+							.or_else(|| pin.map(|entry| label_for_generated_pin(entry, overlay)))
+							.unwrap_or_default(),
 						size: if selected {
 							SELECTED_POI_LABEL_PX
 						} else {
 							map_label_size(MapLabelKind::Poi)
 						},
-						mark: mark_for_poi(record, overlay, name_key),
+						mark: record
+							.and_then(|record| mark_for_poi(record, overlay, name_key))
+							.or_else(|| {
+								pin.and_then(|entry| mark_for_generated_pin(entry, overlay))
+							}),
 					});
 				}
 			}
@@ -969,6 +982,27 @@ pub(crate) fn label_for_poi(
 	overlay_name_for_poi(poi, overlay, named)
 		.map(|name| map_name_label(&name.surface, &name.english))
 		.unwrap_or_else(|| kind_label(poi.kind))
+}
+
+fn generated_pin_record(entry: PoiEntry) -> PoiRecord {
+	PoiRecord {
+		id: entry.id,
+		entity: Entity::PLACEHOLDER,
+		kind: entry.kind,
+		position: entry.position,
+		arrival_radius: entry.arrival_radius,
+		salience: entry.salience,
+		local: entry.local,
+		global: entry.global,
+	}
+}
+
+fn label_for_generated_pin(entry: PoiEntry, overlay: &LanguageOverlay) -> String {
+	label_for_poi(&generated_pin_record(entry), overlay, None)
+}
+
+fn mark_for_generated_pin(entry: PoiEntry, overlay: &LanguageOverlay) -> Option<MapMarkKind> {
+	mark_for_poi(&generated_pin_record(entry), overlay, None)
 }
 
 fn overlay_name_for_poi<'a>(

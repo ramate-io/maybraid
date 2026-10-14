@@ -1,9 +1,8 @@
 //! World POIs as [`PoiOrigin`] schemes over existing HCSG grids.
 //!
-//! Distant-tile journeying and nearby respawn / replacement call
-//! [`DistantTilePois`], which resolves each family through
-//! `get_or_generate_in` — O(origins in the window), not a walk of every
-//! global POI.
+//! Distant-tile journeying and nearby placement call [`DistantTilePois`],
+//! which resolves each family through `get_or_generate_in` — O(cells in the
+//! query), not a walk of every global POI.
 
 use std::marker::PhantomData;
 

@@ -9,14 +9,13 @@ pub use hcsg::{GrovePois, PlacePois, UrbanPois, WorldPoiTiles};
 use std::collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use chico::{grove_id, ChicoGroveHost, ForestExtent};
+use chico::ChicoGroveHost;
 use lod::LodScene;
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
-	hashed_poi_id as scheme_hashed_poi_id, DistantTilePoiLookup, GlobalPoi, LocalPoi, Poi, PoiId,
-	PoiIntelligencePlugin, PoiKind, PoiRegistry, PoiSystems,
+	DistantTilePoiLookup, GlobalPoi, LocalPoi, Poi, PoiId, PoiIntelligencePlugin, PoiKind,
+	PoiRegistry, PoiSystems,
 };
 use richmond::{DiscoverablePlace, DiscoverablePlaceLabel};
 use urbanization_layer_model::UrbanSetting;
@@ -144,17 +143,16 @@ fn collect_vegetation_instances(
 
 /// Grove-host pin. Always-on: proxy UltraLow trees never spawn `VegetationInstance`.
 fn queue_global_groves(
-	groves: Query<(Entity, &ChicoGroveHost, &GlobalTransform), Added<ChicoGroveHost>>,
+	groves: Query<(Entity, &ChicoGroveHost), Added<ChicoGroveHost>>,
 	mut state: ResMut<WorldPoiDiscoveryState>,
 ) {
-	for (entity, grove, transform) in &groves {
+	for (entity, grove) in &groves {
 		let bounds = grove.scene_bounds();
 		let anchor = (bounds.min + bounds.max) * 0.5;
 		let anchor: Vec3 = anchor.into();
-		let world = transform.transform_point(anchor);
 		let radius = ((bounds.max.x - bounds.min.x).max(bounds.max.z - bounds.min.z) * 0.5)
 			.clamp(1.0, 256.0);
-		let id = grove_poi_id(grove, world);
+		let id = hashed_poi_id(GROVE_POI_SALT, grove.grove_id);
 		state.pending_pois.push_back(PendingPoi {
 			target: PendingPoiTarget::Child {
 				parent: entity,
@@ -215,9 +213,15 @@ fn queue_place(
 ) {
 	let kind = place_kind(place.label);
 	let salience = place.salience.unwrap_or(place.label.default_salience());
+	let id = match place.host {
+		Some(host) => hashed_poi_id(INTERIOR_POI_SALT ^ place.label.salt(), (host, place.local)),
+		None => {
+			spatial_poi_id(INTERIOR_POI_SALT ^ place.label.salt() ^ entity.to_bits(), translation)
+		}
+	};
 	state.pending_pois.push_back(PendingPoi {
 		target: PendingPoiTarget::Entity(entity),
-		poi: Poi::new(place_poi_id(place, entity, translation), kind)
+		poi: Poi::new(id, kind)
 			.with_arrival_radius(place.arrival_radius)
 			.with_salience(salience),
 		tier: PendingPoiTier::Local,
@@ -379,26 +383,6 @@ fn vegetation_tile(position: Vec3) -> IVec2 {
 	(Vec2::new(position.x, position.z) / LOCAL_VEGETATION_TILE).floor().as_ivec2()
 }
 
-/// Same id [`GrovePois`] stores: `hashed_poi_id(GROVE_POI_SALT, grove.id())`.
-fn grove_poi_id(grove: &ChicoGroveHost, world: Vec3) -> PoiId {
-	let pad = Vec3::new(0.05, 0.05, 0.05);
-	let region = Aabb3d::from_min_max(world - pad, world + pad);
-	if let Some(extent) = ForestExtent::grove_tiles_overlapping(region).into_iter().next() {
-		scheme_hashed_poi_id(GROVE_POI_SALT, grove_id(extent, grove.layer))
-	} else {
-		spatial_poi_id(GROVE_POI_SALT ^ u64::from(grove.layer.id_y().to_bits()), world)
-	}
-}
-
-/// Same id [`PlacePois`] stores when the presenter attached host + local.
-fn place_poi_id(place: &DiscoverablePlace, entity: Entity, translation: Vec3) -> PoiId {
-	if let Some(host) = place.host {
-		scheme_hashed_poi_id(INTERIOR_POI_SALT ^ place.label.salt(), (host, place.local))
-	} else {
-		spatial_poi_id(INTERIOR_POI_SALT ^ place.label.salt() ^ entity.to_bits(), translation)
-	}
-}
-
 fn spatial_poi_id(salt: u64, position: Vec3) -> PoiId {
 	hashed_poi_id(
 		salt,
@@ -435,32 +419,40 @@ mod tests {
 	}
 
 	#[test]
-	fn presented_places_reuse_scheme_host_local_ids() {
-		use lod::gen::Id;
-		let host = Id::Universal;
-		let place =
-			DiscoverablePlace::host(DiscoverablePlaceLabel::House, 8.0, 1.1).with_identity(host, 4);
-		assert_eq!(
-			place_poi_id(&place, Entity::from_bits(99), Vec3::new(3.0, 1.0, -2.0)),
-			scheme_hashed_poi_id(
-				INTERIOR_POI_SALT ^ DiscoverablePlaceLabel::House.salt(),
-				(host, 4)
-			)
-		);
-		let unnamed = DiscoverablePlace::host(DiscoverablePlaceLabel::House, 8.0, 1.1);
-		assert_ne!(
-			place_poi_id(&unnamed, Entity::from_bits(1), Vec3::ZERO),
-			place_poi_id(&unnamed, Entity::from_bits(2), Vec3::ZERO)
-		);
-	}
-
-	#[test]
 	fn semantic_salts_keep_equal_positions_distinct() {
 		let at = Vec3::new(10.0, 2.0, 30.0);
 		assert_ne!(spatial_poi_id(VEGETATION_POI_SALT, at), spatial_poi_id(GROVE_POI_SALT, at));
 		assert_ne!(
 			spatial_poi_id(INTERIOR_POI_SALT ^ DiscoverablePlaceLabel::House.salt(), at),
 			spatial_poi_id(INTERIOR_POI_SALT ^ DiscoverablePlaceLabel::Lounge.salt(), at)
+		);
+	}
+
+	#[test]
+	fn presented_place_ids_match_scheme_when_host_is_set() {
+		let host = lod::gen::Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
+			Vec3::ZERO,
+			Vec3::ONE,
+		));
+		let place =
+			DiscoverablePlace::host(DiscoverablePlaceLabel::House, 8.0, 1.1).with_identity(host, 3);
+		let presented = hashed_poi_id(INTERIOR_POI_SALT ^ place.label.salt(), (host, place.local));
+		let scheme = poi_intelligence::hashed_poi_id(
+			INTERIOR_POI_SALT ^ place.label.salt(),
+			(host, place.local),
+		);
+		assert_eq!(presented, scheme);
+	}
+
+	#[test]
+	fn presented_grove_ids_use_the_generation_id() {
+		let grove_id = lod::gen::Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
+			Vec3::new(0.0, 0.0, 0.0),
+			Vec3::new(100.0, 1.0, 100.0),
+		));
+		assert_eq!(
+			hashed_poi_id(GROVE_POI_SALT, grove_id),
+			poi_intelligence::hashed_poi_id(GROVE_POI_SALT, grove_id)
 		);
 	}
 
