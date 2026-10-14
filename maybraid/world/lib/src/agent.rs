@@ -4,7 +4,7 @@ use avian3d::prelude::{LinearVelocity, Position};
 use bevy::app::AppExit;
 use bevy::prelude::*;
 use damage::{Health, Hit};
-use durham::{CascadeChunk, DurhamSurface, WorldBaseTerrain};
+use durham::{CascadeChunk, Durham, DurhamSurface, WorldBaseTerrain};
 use maybraid_agent::{
 	read_script_commands, take_leading_start, AgentArgs, AgentButton, AgentCommand, AgentEvent,
 	AgentEventBody, CommandStatus, EventSink, LineInbox, PadIntent, Playback, TickEffect, TickView,
@@ -15,17 +15,22 @@ use mob_characters::CharacterSceneRecipe;
 use mob_scenes::MobScene;
 use player::Player as MotorPlayer;
 use player_camera::CameraController;
+use terrain_layer_model::TerrainStreaming;
 use threat_management_intelligence::ThreatManagementIntelligence;
 use world_player::player::{holding_elevation, player_spawn_point_at, AwaitingTerrainSurface};
 use world_player::Player as VegetationPlayer;
 
 use crate::commands::PlaygroundCommand;
-use crate::control::{WorldGameplayEnabled, WorldSurfaceReady};
+use crate::control::{WorldGameplayEnabled, WorldMenuShell, WorldSurfaceReady};
 use crate::map_view::WorldMapView;
+use crate::render_scale::{PresentationChurn, RequestVisualStyle, VisualStyle};
 use crate::PlayerSpawnXz;
 
 const DEFAULT_SAMPLE_PERIOD: f32 = 0.5;
 const DEFAULT_READY_TIMEOUT: f32 = 90.0;
+/// Home / Characters have gameplay and streaming off. Wait just long enough
+/// for the shell to spawn before a script can press Discovery.
+const MENU_READY_SECS: f32 = 2.0;
 
 /// Insert before [`crate::WorldPlugin`] to enable the agent. Missing = no systems.
 #[derive(Resource, Clone, Debug)]
@@ -132,6 +137,7 @@ impl Plugin for WorldAgentPlugin {
 				Update,
 				(
 					agent_apply_world_ops,
+					agent_emit_presentation_churn,
 					agent_sample_player,
 					agent_sample_picker,
 					agent_chunk_loads,
@@ -211,6 +217,8 @@ fn agent_sync_ready(
 	mut runtime: ResMut<AgentRuntime>,
 	gameplay: Res<WorldGameplayEnabled>,
 	surface: Res<WorldSurfaceReady>,
+	streaming: Res<TerrainStreaming<Durham>>,
+	menu_shell: Option<Res<WorldMenuShell>>,
 	time: Res<Time>,
 ) {
 	if runtime.ready {
@@ -235,12 +243,23 @@ fn agent_sync_ready(
 	}
 	let elapsed = time.elapsed_secs();
 	let surface_ready = gameplay.0 && surface.0;
+	// Prefer the shell bit the game writes from GameFlow. Streaming-off is a
+	// fallback, but Home has leaked streaming=on in live boots and that sat
+	// Home-first scripts on the 90 s timeout.
+	let menu_shell_ready = elapsed >= MENU_READY_SECS
+		&& (menu_shell.is_some_and(|shell| shell.0) || !streaming.enabled);
 	let timed_out = elapsed >= runtime.ready_timeout;
-	if !surface_ready && !timed_out {
+	if !surface_ready && !menu_shell_ready && !timed_out {
 		return;
 	}
 	runtime.ready = true;
-	let detail = if surface_ready { "surface" } else { "timeout" };
+	let detail = if surface_ready {
+		"surface"
+	} else if menu_shell_ready {
+		"menu"
+	} else {
+		"timeout"
+	};
 	emit(
 		&runtime.sink,
 		AgentEvent {
@@ -360,6 +379,15 @@ fn apply_intent(overlay: &mut PadOverlay, intent: &PadIntent) {
 	}
 }
 
+fn visual_style_applied_detail(
+	style: VisualStyle,
+	window_physical: UVec2,
+	window_scale_factor: f32,
+) -> String {
+	let plan = style.plan(window_physical, window_scale_factor);
+	format!("applied {} {}x{}", style.script_id(), plan.target_size.x, plan.target_size.y)
+}
+
 fn pad_button(button: AgentButton) -> PadButton {
 	match button {
 		AgentButton::Jump => PadButton::A,
@@ -384,8 +412,11 @@ fn pad_button(button: AgentButton) -> PadButton {
 fn agent_apply_world_ops(
 	mut runtime: ResMut<AgentRuntime>,
 	mut commands: Commands,
+	mut visual_style_req: MessageWriter<RequestVisualStyle>,
 	surface: DurhamSurface,
 	base: Res<WorldBaseTerrain>,
+	windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+	time: Res<Time>,
 	mut hits: MessageWriter<Hit>,
 	mut players: Query<
 		(
@@ -400,7 +431,9 @@ fn agent_apply_world_ops(
 	>,
 ) {
 	let pending = std::mem::take(&mut runtime.pending);
-	for (_id, command) in pending {
+	let t = time.elapsed_secs();
+	let frame = runtime.frame;
+	for (id, command) in pending {
 		let command = match command {
 			AgentCommand::Start { xz } => AgentCommand::Teleport { xz, y: None },
 			other => other,
@@ -456,6 +489,49 @@ fn agent_apply_world_ops(
 				}
 				if !console.is_empty() {
 					info!(target: "maybraid.agent", "{console}");
+				}
+			}
+			AgentCommand::VisualStyle { style } => {
+				if let Some(visual_style) = VisualStyle::from_script_id(&style) {
+					visual_style_req.write(RequestVisualStyle(visual_style));
+					let (physical, factor) = match windows.single() {
+						Ok(window) => (
+							UVec2::new(window.physical_width(), window.physical_height()),
+							window.scale_factor(),
+						),
+						Err(_) => (UVec2::ZERO, 1.0),
+					};
+					emit(
+						&runtime.sink,
+						AgentEvent {
+							t,
+							frame,
+							body: AgentEventBody::Command {
+								id,
+								status: CommandStatus::Finished,
+								cmd: format!("visual_style {style}"),
+								detail: Some(visual_style_applied_detail(
+									visual_style,
+									physical,
+									factor,
+								)),
+							},
+						},
+					);
+				} else {
+					emit(
+						&runtime.sink,
+						AgentEvent {
+							t,
+							frame,
+							body: AgentEventBody::Command {
+								id,
+								status: CommandStatus::Failed,
+								cmd: format!("visual_style {style}"),
+								detail: Some(format!("unknown visual style: {style}")),
+							},
+						},
+					);
 				}
 			}
 			AgentCommand::Quit => runtime.quit = true,
@@ -531,6 +607,27 @@ fn agent_sample_picker(
 			body: AgentEventBody::Picker { open },
 		},
 	);
+}
+
+fn agent_emit_presentation_churn(
+	runtime: Res<AgentRuntime>,
+	time: Res<Time>,
+	mut churn: MessageReader<PresentationChurn>,
+) {
+	for event in churn.read() {
+		emit(
+			&runtime.sink,
+			AgentEvent {
+				t: time.elapsed_secs(),
+				frame: runtime.frame,
+				body: AgentEventBody::Presentation {
+					action: event.action.as_str().into(),
+					window: [event.window.x, event.window.y],
+					target: [event.target.x, event.target.y],
+				},
+			},
+		);
+	}
 }
 
 fn agent_chunk_loads(
@@ -647,6 +744,8 @@ fn agent_maybe_quit(
 
 #[cfg(test)]
 mod tests {
+	use bevy::ecs::system::RunSystemOnce;
+
 	use super::*;
 
 	#[test]
@@ -656,9 +755,118 @@ mod tests {
 	}
 
 	#[test]
+	fn visual_style_applied_detail_includes_resolved_size() {
+		assert_eq!(
+			visual_style_applied_detail(VisualStyle::Impressionist, UVec2::new(1920, 1080), 1.0),
+			"applied impressionist 700x394"
+		);
+		assert_eq!(
+			visual_style_applied_detail(VisualStyle::Watercolor, UVec2::new(1920, 1080), 1.0),
+			"applied watercolor 1280x720"
+		);
+		assert_eq!(
+			visual_style_applied_detail(VisualStyle::Native, UVec2::new(1920, 1080), 1.0),
+			"applied native 1920x1080"
+		);
+		assert_eq!(
+			visual_style_applied_detail(VisualStyle::Sharp, UVec2::new(1920, 1080), 1.0),
+			"applied sharp 1920x1080"
+		);
+		assert_eq!(
+			visual_style_applied_detail(VisualStyle::Sharp, UVec2::new(2560, 1440), 1.0),
+			"applied sharp 1920x1080"
+		);
+	}
+
+	#[test]
 	fn overlay_copies_move_stick() {
 		let mut overlay = PadOverlay::default();
 		apply_intent(&mut overlay, &PadIntent { move_stick: [0.0, 1.0], ..PadIntent::default() });
 		assert_eq!(overlay.move_stick, Vec2::Y);
+	}
+
+	fn idle_runtime() -> AgentRuntime {
+		AgentRuntime {
+			playback: Playback::new(),
+			sink: EventSink::none(),
+			inbox: None,
+			ready: false,
+			frame: 0,
+			last_sample: -1_000.0,
+			last_intent: PadIntent::default(),
+			pending: Vec::new(),
+			quit: false,
+			quit_when_idle: false,
+			load_error: None,
+			ready_timeout: DEFAULT_READY_TIMEOUT,
+			sample_period: DEFAULT_SAMPLE_PERIOD,
+		}
+	}
+
+	fn advance_time(secs: f32) -> Time {
+		let mut time = Time::<()>::default();
+		time.advance_by(std::time::Duration::from_secs_f32(secs));
+		time
+	}
+
+	#[test]
+	fn menu_shell_is_ready_before_discovery_surface() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(idle_runtime());
+		world.insert_resource(WorldGameplayEnabled(false));
+		world.insert_resource(WorldSurfaceReady(false));
+		world.insert_resource(TerrainStreaming::<Durham>::new(false));
+		world.insert_resource(advance_time(MENU_READY_SECS));
+		world
+			.run_system_once(agent_sync_ready)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<AgentRuntime>().ready);
+		Ok(())
+	}
+
+	#[test]
+	fn loading_world_does_not_count_as_menu_ready() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(idle_runtime());
+		world.insert_resource(WorldGameplayEnabled(false));
+		world.insert_resource(WorldSurfaceReady(false));
+		world.insert_resource(TerrainStreaming::<Durham>::new(true));
+		world.insert_resource(advance_time(MENU_READY_SECS));
+		world
+			.run_system_once(agent_sync_ready)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.resource::<AgentRuntime>().ready);
+		Ok(())
+	}
+
+	#[test]
+	fn menu_shell_bit_is_ready_even_when_streaming_leaked_on() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(idle_runtime());
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(WorldSurfaceReady(false));
+		world.insert_resource(TerrainStreaming::<Durham>::new(true));
+		world.insert_resource(WorldMenuShell(true));
+		world.insert_resource(advance_time(MENU_READY_SECS));
+		world
+			.run_system_once(agent_sync_ready)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<AgentRuntime>().ready);
+		Ok(())
+	}
+
+	#[test]
+	fn menu_shell_is_ready_even_when_gameplay_leaked_on() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(idle_runtime());
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(WorldSurfaceReady(false));
+		world.insert_resource(TerrainStreaming::<Durham>::new(false));
+		world.insert_resource(advance_time(MENU_READY_SECS));
+		world
+			.run_system_once(agent_sync_ready)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<AgentRuntime>().ready);
+		Ok(())
 	}
 }

@@ -14,13 +14,13 @@ use continuous_health::{
 	trigger_completion_flash, update_continuous_health_bar_content, ContinuousHealthConfig,
 };
 use damage::{DamageApplied, HeadshotBand};
-use lubikans::LubikanSystems;
-use player::Player;
 use lubikan_charge::{
 	ingest_lubikan_activation_finished_pulse, spawn_lubikan_charge, sync_lubikan_charge,
 	LubikanActivationFinishedHudPulse,
 };
 use lubikan_points::{ingest_lubikan_point_flyers, update_lubikan_point_flyers};
+use lubikans::LubikanSystems;
+use player::Player;
 use score::{ingest_combat_score, spawn_combat_score, sync_combat_score};
 use vitals::{spawn_player_vitals, sync_player_vitals, vitals_fonts};
 
@@ -93,6 +93,9 @@ impl Plugin for CombatHudPlugin {
 		if !any {
 			return;
 		}
+		if self.player_vitals || self.lubikan_charge {
+			app.add_message::<lubikans::LubikanActivationFinished>();
+		}
 		app.insert_resource(CombatHudConfig(*self))
 			.init_resource::<CombatHudVisible>()
 			.init_resource::<CombatHudInventoryCycleCategory>();
@@ -132,14 +135,9 @@ impl Plugin for CombatHudPlugin {
 
 /// Shared meter content for the persistent player health widget.
 fn configure_health_content(app: &mut App) {
-	app.init_resource::<ContinuousHealthConfig>()
-		.add_message::<lubikans::LubikanActivationFinished>()
-		.add_systems(
+	app.init_resource::<ContinuousHealthConfig>().add_systems(
 			PostUpdate,
-			(
-				update_continuous_health_bar_content,
-				trigger_completion_flash,
-			)
+			(update_continuous_health_bar_content, trigger_completion_flash)
 				.chain()
 				.in_set(CombatHudSystems::Health)
 				.after(sync_player_vitals),
@@ -193,10 +191,7 @@ fn configure_hit_markers(app: &mut App) {
 fn configure_directional_damage(app: &mut App) {
 	app.init_resource::<DamageTicks>()
 		.add_systems(Update, update_directional_damage)
-		.add_systems(
-			PostUpdate,
-			ingest_directional_damage.after(damage::DamageSystems::Down),
-		);
+		.add_systems(PostUpdate, ingest_directional_damage.after(damage::DamageSystems::Down));
 }
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -235,11 +230,7 @@ fn sync_combat_hud_root_visibility(
 	hud: Res<CombatHudVisible>,
 	mut roots: Query<&mut Visibility, With<CombatHudRoot>>,
 ) {
-	let next = if hud.0 {
-		Visibility::Inherited
-	} else {
-		Visibility::Hidden
-	};
+	let next = if hud.0 { Visibility::Inherited } else { Visibility::Hidden };
 	for mut visibility in &mut roots {
 		if *visibility != next {
 			*visibility = next;
@@ -272,17 +263,17 @@ fn spawn_combat_hud(
 			if config.0.directional_damage {
 				spawn_directional_damage_ring(root);
 			}
-		let fonts = vitals_fonts(asset_server.as_deref());
-		let health_config = ContinuousHealthConfig::default();
-		if config.0.lubikan_charge {
-			spawn_lubikan_charge(root, &fonts, &health_config);
-		}
-		if config.0.player_vitals {
-			spawn_player_vitals(root, &fonts, &health_config, Entity::PLACEHOLDER);
-		}
-		if config.0.score {
-			spawn_combat_score(root, &fonts);
-		}
+			let fonts = vitals_fonts(asset_server.as_deref());
+			let health_config = ContinuousHealthConfig::default();
+			if config.0.lubikan_charge {
+				spawn_lubikan_charge(root, &fonts, &health_config);
+			}
+			if config.0.player_vitals {
+				spawn_player_vitals(root, &fonts, &health_config, Entity::PLACEHOLDER);
+			}
+			if config.0.score {
+				spawn_combat_score(root, &fonts);
+			}
 		});
 }
 
@@ -692,10 +683,7 @@ mod tests {
 			.expect("character name");
 		assert_eq!(name.0, "Ada");
 		// Check continuous health bar exists
-		let bar_count = world
-			.query::<&ContinuousHealthBar>()
-			.iter(world)
-			.count();
+		let bar_count = world.query::<&ContinuousHealthBar>().iter(world).count();
 		assert_eq!(bar_count, 1, "should have one continuous health bar");
 	}
 
@@ -709,11 +697,7 @@ mod tests {
 			.id();
 		let npc = app
 			.world_mut()
-			.spawn((
-				player::Npc,
-				Health { current: 80.0, max: 100.0 },
-				Name::new("Pack"),
-			))
+			.spawn((player::Npc, Health { current: 80.0, max: 100.0 }, Name::new("Pack")))
 			.id();
 		app.update();
 		let bar = {
@@ -897,10 +881,9 @@ mod tests {
 		let mut app = lubikan_app();
 		app.update();
 		let owner = lubikans::fixtures::spawn_self_owner(app.world_mut());
-		app.world_mut().entity_mut(owner).insert((
-			Player,
-			Health { current: 50.0, max: 100.0 },
-		));
+		app.world_mut()
+			.entity_mut(owner)
+			.insert((Player, Health { current: 50.0, max: 100.0 }));
 		app.world_mut().insert_resource(CombatHudVisible(false));
 		app.update();
 		let world = app.world_mut();
@@ -935,6 +918,44 @@ mod tests {
 			.map(|ledger| ledger.equipped().charge().current());
 		assert_eq!(stored, Some(80.0));
 		assert!(world.query::<&Text>().iter(world).any(|text| text.0 == "80"));
+		Ok(())
+	}
+
+	#[test]
+	fn lubikan_charge_catches_up_after_hud_was_hidden() -> anyhow::Result<()> {
+		let mut app = lubikan_app();
+		app.update();
+		let owner = lubikans::fixtures::spawn_self_owner(app.world_mut());
+		app.world_mut().entity_mut(owner).insert((Player, Health::default()));
+		{
+			let mut ledger = app
+				.world_mut()
+				.get_mut::<lubikans::LubikanLedger>(owner)
+				.ok_or_else(|| anyhow::anyhow!("ledger"))?;
+			ledger.apply_to_equipped(12.0);
+		}
+		app.world_mut().insert_resource(CombatHudVisible(false));
+		app.update();
+		{
+			let mut ledger = app
+				.world_mut()
+				.get_mut::<lubikans::LubikanLedger>(owner)
+				.ok_or_else(|| anyhow::anyhow!("ledger"))?;
+			ledger.apply_to_equipped(33.0);
+		}
+		app.world_mut().insert_resource(CombatHudVisible(true));
+		app.update();
+		let world = app.world_mut();
+		assert_eq!(
+			world
+				.get::<lubikans::LubikanLedger>(owner)
+				.map(|ledger| ledger.equipped().charge().current()),
+			Some(45.0)
+		);
+		assert!(
+			world.query::<&Text>().iter(world).any(|text| text.0 == "45"),
+			"charge plate must reflect awards applied while the HUD was hidden"
+		);
 		Ok(())
 	}
 

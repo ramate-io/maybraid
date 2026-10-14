@@ -56,6 +56,11 @@ impl Default for WorldSceneryVisible {
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct WorldSurfaceReady(pub bool);
 
+/// Home / Characters shell. The game sets this from [`GameFlow`] so the agent
+/// can start Home-first scripts without inferring the menu from streaming.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct WorldMenuShell(pub bool);
+
 /// Terrain column under the player. The shell unveils after this.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct WorldSurfaceSet;
@@ -92,7 +97,8 @@ fn discovery_xz(
 	layout.region_center_xz().xz()
 }
 
-type WorldOnlyPlayerQuery<'w, 's> = Query<'w, 's, Entity, (With<Player>, Without<MaybraidPlayer>, Added<Player>)>;
+type WorldOnlyPlayerQuery<'w, 's> =
+	Query<'w, 's, Entity, (With<Player>, Without<MaybraidPlayer>, Added<Player>)>;
 
 /// Mark the world capsule as a Lubikan owner. [`lubikans::LubikansPlugin`]
 /// attaches the Self ledger in `LubikanSystems::Owner`; do not insert
@@ -291,8 +297,19 @@ pub(crate) fn stamp_vegetation_motor_traction(
 	}
 }
 
-type PlayerMotorMissingQuery<'w, 's> = Query<'w, 's, Entity, (With<Player>, Without<CharacterController>)>;
-type PlayerMotorPresentQuery<'w, 's> = Query<'w, 's, (Entity, Option<&'static CharacterStance>, Option<&'static RestLocomotionCapsule>, Option<&'static LocomotionCapsule>), (With<Player>, With<CharacterController>)>;
+type PlayerMotorMissingQuery<'w, 's> =
+	Query<'w, 's, Entity, (With<Player>, Without<CharacterController>)>;
+type PlayerMotorPresentQuery<'w, 's> = Query<
+	'w,
+	's,
+	(
+		Entity,
+		Option<&'static CharacterStance>,
+		Option<&'static RestLocomotionCapsule>,
+		Option<&'static LocomotionCapsule>,
+	),
+	(With<Player>, With<CharacterController>),
+>;
 
 /// Put the world player on the player-crate capsule motor so column buoyancy runs.
 pub(crate) fn stamp_world_player_motor(
