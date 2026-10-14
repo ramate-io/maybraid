@@ -6,10 +6,10 @@
 use bevy::prelude::*;
 use character_animations::animations::{
 	BallisticJump, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop,
-	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
-	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
-	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
-	DEFAULT_SPRING_DURATION, TAKEOFF_END,
+	LateralUndulation, Leap, QuadrupedRun, Run, RunToWalk, Soaring, TuckProfile, TuckedFlip,
+	TwoFootedJump, Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY,
+	DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
+	DEFAULT_RUN_TO_WALK_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
 };
 use character_animations::{ClipTimePolicy, SampleAddress};
 use character_rigs::Side;
@@ -50,6 +50,7 @@ pub enum AnimId {
 	Prone,
 	LateralUndulation,
 	DorsoventralUndulation,
+	RunToWalk,
 }
 
 impl AnimId {
@@ -73,7 +74,29 @@ impl AnimId {
 			Self::Prone => 1.0,
 			Self::LateralUndulation => 1.0,
 			Self::DorsoventralUndulation => 1.0,
+			Self::RunToWalk => DEFAULT_RUN_TO_WALK_SPEED,
 		}
+	}
+}
+
+/// Knobs for [`RunToWalk`]: walk/run tuning stay separate from rig binding.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RunToWalkParams {
+	pub run: Run,
+	pub walk: Walk,
+	/// Shared gait cycle phase for both endpoints (`0..1`).
+	pub gait_phase: f32,
+}
+
+impl Default for RunToWalkParams {
+	fn default() -> Self {
+		Self { run: Run::default(), walk: Walk::default(), gait_phase: 0.0 }
+	}
+}
+
+impl RunToWalkParams {
+	pub fn apply(self) -> RunToWalk {
+		RunToWalk { run: self.run, walk: self.walk, gait_phase: self.gait_phase }
 	}
 }
 
@@ -210,6 +233,7 @@ pub enum AnimClip {
 	Prone,
 	LateralUndulation(LateralUndulation),
 	DorsoventralUndulation(DorsoventralUndulation),
+	RunToWalk(RunToWalkParams),
 }
 
 impl AnimClip {
@@ -233,6 +257,7 @@ impl AnimClip {
 			Self::Prone => AnimId::Prone,
 			Self::LateralUndulation(_) => AnimId::LateralUndulation,
 			Self::DorsoventralUndulation(_) => AnimId::DorsoventralUndulation,
+			Self::RunToWalk(_) => AnimId::RunToWalk,
 		}
 	}
 
@@ -312,6 +337,10 @@ impl AnimClip {
 		Self::DorsoventralUndulation(DorsoventralUndulation::default())
 	}
 
+	pub fn run_to_walk() -> Self {
+		Self::RunToWalk(RunToWalkParams::default())
+	}
+
 	/// Content generation included in prepared-clip identity.
 	pub const fn revision(self) -> u64 {
 		0
@@ -336,7 +365,8 @@ impl AnimClip {
 			| Self::TwoFootedTuckedFlip(_)
 			| Self::Squat
 			| Self::SquatDescent
-			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
+			| Self::Prone
+			| Self::RunToWalk(_) => ClipTimePolicy::Clamp { duration: 1.0 },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }

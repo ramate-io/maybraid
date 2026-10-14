@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use character_animations::{
 	animations::{
 		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		RunToWalk, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -798,6 +798,13 @@ fn sample_humanoid(
 		AnimClip::Prone => {
 			sample_split(&Prone::default(), rig, progress, write_bones, write_effects)
 		}
+		AnimClip::RunToWalk(params) => sample_split(
+			&params.apply(),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
 		AnimClip::Gallop(_)
 		| AnimClip::QuadrupedRun(_)
 		| AnimClip::LateralUndulation(_)
