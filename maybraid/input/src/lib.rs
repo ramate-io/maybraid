@@ -19,7 +19,7 @@ pub use analog::{Cardinal, Deadzone};
 pub use button::{ButtonPhase, ButtonStroke, PadButton, PAD_BUTTON_COUNT};
 pub use config::VirtualPadConfig;
 pub use flick::{FlickLane, FLICK_MAX_SECS, FLICK_MIN_PEAK, FLICK_MIN_SECS, FLICK_REST};
-pub use gate::{MenuOwnsBack, PadGameplayEnabled};
+pub use gate::{KeyboardPadMap, MenuOwnsBack, PadGameplayEnabled};
 pub use hid::{with_pad_hid, PadHidPlugins};
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};
 pub use overlay::PadOverlay;
@@ -66,6 +66,7 @@ impl Plugin for VirtualPadPlugin {
 			.init_resource::<VirtualPad>()
 			.init_resource::<PadHistory>()
 			.init_resource::<PadGameplayEnabled>()
+			.init_resource::<KeyboardPadMap>()
 			.init_resource::<MenuOwnsBack>()
 			.init_resource::<MenuNavPad>()
 			.init_resource::<PadCursor>()
