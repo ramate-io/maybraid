@@ -55,8 +55,14 @@ impl SpatialId for PoiRecord {
 	}
 }
 
-/// Gimme-backed spatial index for [`LocalPoi`] and [`GlobalPoi`] poses, plus a
-/// sparse global-id set for whole-map discovery scans.
+/// Mutable entity index for live poses the generated-world [`crate::PoiSet`]
+/// path cannot represent.
+///
+/// Remaining consumers: local discovery and nearby of **runtime** [`crate::LocalPoi`]
+/// poses (vegetation tiles, playground / test pins, anything that can move);
+/// telepathic [`crate::discover_pois`] scans of presented [`crate::GlobalPoi`]
+/// ids; [`crate::refresh_poi_goals`] binding a known id to a live entity.
+/// Generated-world nearby and xz-tile queries go through [`crate::PoiOrigin`].
 #[derive(Resource)]
 pub struct PoiRegistry {
 	local: TypedIndex<PoiRecord, HashMapStore<PoiRecord>>,
@@ -123,8 +129,12 @@ impl PoiRegistry {
 		};
 		self.records.insert(poi.id, record);
 
-		if local || global {
-			self.insert_spatial(record, position)?;
+		if local {
+			let extent = Vec3::splat(record.arrival_radius.max(0.05));
+			let bounds = Aabb3d::from_min_max(position - extent, position + extent);
+			let base = BaseScale::new(self.local.grid().base_scale())?;
+			self.local_max_level = self.local_max_level.max(base.insertion_level(&bounds));
+			self.local.insert_value(record, bounds)?;
 		}
 		if global {
 			self.globals.insert(poi.id);
@@ -171,7 +181,8 @@ impl PoiRegistry {
 			.local
 			.query_values(region, BaseScale::levels_through(query_level.max(self.local_max_level)))
 		{
-			if interests.contains(record.kind)
+			if record.local
+				&& interests.contains(record.kind)
 				&& center.distance(record.position) <= radius + record.arrival_radius
 			{
 				out.push(record.id);
@@ -237,6 +248,20 @@ impl PoiRegistry {
 		let radius = query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
 		let min_radius = query.min_radius.max(0.0);
 		self.collect_local_matching(center, radius, interests, out);
+		for id in &self.globals {
+			if out.contains(id) {
+				continue;
+			}
+			let Some(record) = self.records.get(id) else {
+				continue;
+			};
+			if !interests.contains(record.kind) {
+				continue;
+			}
+			if center.distance(record.position) <= radius + record.arrival_radius {
+				out.push(*id);
+			}
+		}
 		out.retain(|id| {
 			self.records
 				.get(id)
@@ -292,57 +317,12 @@ impl PoiRegistry {
 		}
 	}
 
-	pub fn matching_in_xz_tile(
-		&self,
-		tile: IVec2,
-		tile_size: f32,
-		center_y: f32,
-		interests: &PoiInterests,
-	) -> Vec<PoiRecord> {
-		if !tile_size.is_finite() || !center_y.is_finite() {
-			return Vec::new();
-		}
-		let size = tile_size.clamp(1.0, MAX_LOCAL_QUERY_RADIUS);
-		let min_xz = tile.as_vec2() * size;
-		let max_xz = min_xz + Vec2::splat(size);
-		let region = Aabb3d::from_min_max(
-			Vec3::new(min_xz.x, center_y - MAX_LOCAL_QUERY_RADIUS, min_xz.y),
-			Vec3::new(max_xz.x, center_y + MAX_LOCAL_QUERY_RADIUS, max_xz.y),
-		);
-		let query_level = BaseScale::new(self.local.grid().base_scale())
-			.map(|base| base.insertion_level(&region))
-			.unwrap_or(0);
-		let mut records = BTreeMap::new();
-		for (record, _) in self
-			.local
-			.query_values(region, BaseScale::levels_through(query_level.max(self.local_max_level)))
-		{
-			if interests.contains(record.kind) && xz_tile(record.position, size) == tile {
-				records.insert(record.id, *record);
-			}
-		}
-		records.into_values().collect()
-	}
-
 	pub fn len(&self) -> usize {
 		self.records.len()
 	}
 
 	pub fn is_empty(&self) -> bool {
 		self.records.is_empty()
-	}
-
-	fn insert_spatial(
-		&mut self,
-		record: PoiRecord,
-		position: Vec3,
-	) -> Result<(), SpatialIndexError> {
-		let extent = Vec3::splat(record.arrival_radius.max(0.05));
-		let bounds = Aabb3d::from_min_max(position - extent, position + extent);
-		let base = BaseScale::new(self.local.grid().base_scale())?;
-		self.local_max_level = self.local_max_level.max(base.insertion_level(&bounds));
-		self.local.insert_value(record, bounds)?;
-		Ok(())
 	}
 
 	fn drop_excluded_ids(candidates: &mut Vec<PoiId>, excluded: &[PoiId]) {
@@ -402,8 +382,4 @@ fn choose_weighted(
 
 fn xz_distance(a: Vec3, b: Vec3) -> f32 {
 	(a.xz() - b.xz()).length()
-}
-
-fn xz_tile(position: Vec3, tile_size: f32) -> IVec2 {
-	(position.xz() / tile_size).floor().as_ivec2()
 }

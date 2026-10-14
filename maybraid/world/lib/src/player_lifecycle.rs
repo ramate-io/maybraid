@@ -1,6 +1,7 @@
 //! Downed world-player retirement and POI-based replacement.
 
 use avian3d::prelude::LinearVelocity;
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_ragdoll::CharacterRagdollSystems;
@@ -9,6 +10,7 @@ use durham::{DurhamSurface, TerrainCellLayout, WorldBaseTerrain};
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use grenade_user::{GrenadeUser, GrenadeUserSystems};
+use lod::hcsg::HcsgStorage;
 use lubikans::LubikanOwner;
 use maybraid_character_controller::CharacterIntent;
 use maybraid_input::{PadButton, VirtualPad};
@@ -16,8 +18,8 @@ use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use player_camera::{CameraController, FollowCamera};
 use poi_intelligence::{
-	place_nearby, NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiKind,
-	PoiRecord, PoiRegistry, PoiSystems,
+	place_nearby_from, DistantTilePoiLookup, GeneratedNearby, NearbyFallback, NearbyQuery,
+	PoiEntry, PoiId, PoiInterest, PoiInterests, PoiKind, PoiRecord, PoiRegistry, PoiSystems,
 };
 use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
@@ -38,6 +40,19 @@ use crate::{
 	FirstWave, HcsgDemand, LodJobCounter, PlayerPositionWaypoints, WorldGameplayEnabled,
 	WorldPlayerLoadout,
 };
+
+#[derive(SystemParam)]
+struct NearbyPoiSources<'w> {
+	registry: Res<'w, PoiRegistry>,
+	storage: Option<Res<'w, HcsgStorage>>,
+	lookup: Option<Res<'w, DistantTilePoiLookup>>,
+}
+
+impl NearbyPoiSources<'_> {
+	fn generated(&self) -> Option<GeneratedNearby<'_>> {
+		generated_nearby(self.storage.as_deref(), self.lookup.as_deref())
+	}
+}
 
 const MAP_OPEN_SECS: f32 = 0.18;
 const STICK_REST: f32 = 0.28;
@@ -96,6 +111,8 @@ pub(crate) struct PendingPlayerRespawn {
 	pub registry_revision: u64,
 	/// Reused by [`refresh_picker_candidates`] while the respawn map is open.
 	picker_nearby_scratch: Vec<PoiId>,
+	/// Generated-world pins from the last scheme nearby query.
+	generated_poses: Vec<poi_intelligence::PoiEntry>,
 }
 
 #[derive(Resource, Default)]
@@ -247,6 +264,7 @@ fn queue_downed_world_player(
 			fallback_at: transform.translation,
 			registry_revision: 0,
 			picker_nearby_scratch: Vec::new(),
+			generated_poses: Vec::new(),
 		});
 		velocity.0 = Vec3::ZERO;
 		if let Some(firearm) = firearm {
@@ -341,6 +359,7 @@ fn queue_first_spawn_picker(
 		fallback_at: transform.translation,
 		registry_revision: 0,
 		picker_nearby_scratch: Vec::new(),
+		generated_poses: Vec::new(),
 	});
 	retire_startup_player(&mut commands, player, firearm, inventory, &mut triggers);
 }
@@ -409,6 +428,7 @@ fn drive_respawn_picker(
 				if let Some(next) = next_candidate_in_direction(
 					&pending.candidates,
 					&registry,
+					&pending.generated_poses,
 					from,
 					pending.highlighted,
 					dir,
@@ -427,9 +447,12 @@ fn drive_respawn_picker(
 				set_highlighted(pending, id, &registry);
 			}
 		} else if pending.highlighted.is_none() {
-			if let Some(nearest) =
-				nearest_candidate(&pending.candidates, &registry, pending.death_at.xz())
-			{
+			if let Some(nearest) = nearest_candidate(
+				&pending.candidates,
+				&registry,
+				&pending.generated_poses,
+				pending.death_at.xz(),
+			) {
 				set_highlighted(pending, nearest, &registry);
 			}
 		}
@@ -476,7 +499,7 @@ fn respawn_world_player(
 	time: Res<Time>,
 	gameplay: Res<WorldGameplayEnabled>,
 	config: Res<WorldPlayerRespawnConfig>,
-	registry: Res<PoiRegistry>,
+	sources: NearbyPoiSources,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	locomotion: Res<CharacterLocomotion>,
 	surface: DurhamSurface,
@@ -542,9 +565,23 @@ fn respawn_world_player(
 			|| pending.timer.elapsed_secs() >= MAP_OPEN_SECS
 			|| pending.timer.is_finished())
 	{
-		open_respawn_picker(pending, &mut map, &registry, &config, last_poi);
+		open_respawn_picker(
+			pending,
+			&mut map,
+			&sources.registry,
+			sources.generated(),
+			&config,
+			last_poi,
+		);
 	} else if pending.map_opened {
-		refresh_picker_candidates(pending, &map, &registry, &config, last_poi);
+		refresh_picker_candidates(
+			pending,
+			&map,
+			&sources.registry,
+			sources.generated(),
+			&config,
+			last_poi,
+		);
 	}
 
 	let Some(choice) = chosen.read().next().copied() else {
@@ -552,13 +589,16 @@ fn respawn_world_player(
 	};
 	let origin = pending.origin;
 	let fallback_at = pending.fallback_at;
-	let placed = choice.poi.and_then(|id| registry.get(id).copied());
+	let placed = choice.poi.and_then(|id| {
+		picker_pin(id, &sources.registry, &pending.generated_poses)
+			.map(|(kind, position, _, local)| (id, kind, position, local))
+	});
 	close_respawn_map(&mut map);
 	state.pending = None;
 	let spawn = match placed {
-		Some(record) => {
-			state.last_poi = Some(record.id);
-			spawn_pose_for_chosen_poi(&record, &surface)
+		Some((id, kind, position, local)) => {
+			state.last_poi = Some(id);
+			spawn_pose_for_pin(kind, position, local, &surface)
 		}
 		None => ChosenPoiSpawn {
 			position: player_spawn_point_at(
@@ -585,10 +625,11 @@ fn open_respawn_picker(
 	pending: &mut PendingPlayerRespawn,
 	map: &mut WorldMapView,
 	registry: &PoiRegistry,
+	generated: Option<GeneratedNearby<'_>>,
 	config: &WorldPlayerRespawnConfig,
 	last_poi: Option<PoiId>,
 ) {
-	refresh_picker_candidates(pending, map, registry, config, last_poi);
+	refresh_picker_candidates(pending, map, registry, generated, config, last_poi);
 	pending.stick_resting = true;
 	pending.map_opened = true;
 	map.open_at(pending.death_at.xz(), true);
@@ -598,11 +639,13 @@ fn refresh_picker_candidates(
 	pending: &mut PendingPlayerRespawn,
 	map: &WorldMapView,
 	registry: &PoiRegistry,
+	generated: Option<GeneratedNearby<'_>>,
 	config: &WorldPlayerRespawnConfig,
 	last_poi: Option<PoiId>,
 ) {
-	pending.fallback_at = place_nearby(
+	pending.fallback_at = place_nearby_from(
 		Some(registry),
+		generated,
 		pending.death_at,
 		config.nearby_query(),
 		Some(&config.interests),
@@ -618,7 +661,27 @@ fn refresh_picker_candidates(
 		last_poi.as_slice(),
 		&mut pending.picker_nearby_scratch,
 	);
-	let ids = prefer_building_poi_ids(&pending.picker_nearby_scratch, registry, pending.death_at);
+	pending.generated_poses.clear();
+	if let Some(generated) = generated {
+		generated.collect_matching_nearby(
+			pending.death_at,
+			config.picker_query(map.height),
+			&config.interests,
+			last_poi.as_slice(),
+			&mut pending.generated_poses,
+		);
+		for entry in &pending.generated_poses {
+			if !pending.picker_nearby_scratch.contains(&entry.id) {
+				pending.picker_nearby_scratch.push(entry.id);
+			}
+		}
+	}
+	let ids = prefer_building_poi_ids(
+		&pending.picker_nearby_scratch,
+		registry,
+		&pending.generated_poses,
+		pending.death_at,
+	);
 	let revision = registry.membership_revision();
 	if pending.registry_revision != revision || pending.candidates != ids {
 		pending.registry_revision = revision;
@@ -628,14 +691,20 @@ fn refresh_picker_candidates(
 }
 
 fn validate_highlight(pending: &mut PendingPlayerRespawn, registry: &PoiRegistry) {
-	let still_valid = pending
-		.highlighted
-		.filter(|id| pending.candidates.contains(id) && registry.get(*id).is_some());
+	let still_valid = pending.highlighted.filter(|id| {
+		pending.candidates.contains(id)
+			&& picker_xz(*id, registry, &pending.generated_poses).is_some()
+	});
 	if let Some(id) = still_valid {
-		pending.highlighted_at = registry.get(id).map(|record| record.position.xz());
+		pending.highlighted_at = picker_xz(id, registry, &pending.generated_poses);
 		return;
 	}
-	if let Some(nearest) = nearest_candidate(&pending.candidates, registry, pending.death_at.xz()) {
+	if let Some(nearest) = nearest_candidate(
+		&pending.candidates,
+		registry,
+		&pending.generated_poses,
+		pending.death_at.xz(),
+	) {
 		set_highlighted(pending, nearest, registry);
 	} else {
 		pending.highlighted = None;
@@ -671,14 +740,34 @@ fn current_highlight_xz(pending: &PendingPlayerRespawn, registry: &PoiRegistry) 
 	pending.highlighted_at.or_else(|| {
 		pending
 			.highlighted
-			.and_then(|id| registry.get(id))
-			.map(|record| record.position.xz())
+			.and_then(|id| picker_xz(id, registry, &pending.generated_poses))
 	})
 }
 
 fn set_highlighted(pending: &mut PendingPlayerRespawn, id: PoiId, registry: &PoiRegistry) {
 	pending.highlighted = Some(id);
-	pending.highlighted_at = registry.get(id).map(|record| record.position.xz());
+	pending.highlighted_at = picker_xz(id, registry, &pending.generated_poses);
+}
+
+fn picker_xz(id: PoiId, registry: &PoiRegistry, generated: &[PoiEntry]) -> Option<Vec2> {
+	registry
+		.get(id)
+		.map(|record| record.position.xz())
+		.or_else(|| generated.iter().find(|entry| entry.id == id).map(|entry| entry.position.xz()))
+}
+
+fn picker_pin(
+	id: PoiId,
+	registry: &PoiRegistry,
+	generated: &[PoiEntry],
+) -> Option<(PoiKind, Vec3, f32, bool)> {
+	if let Some(record) = registry.get(id) {
+		return Some((record.kind, record.position, record.arrival_radius, record.local));
+	}
+	generated
+		.iter()
+		.find(|entry| entry.id == id)
+		.map(|entry| (entry.kind, entry.position, entry.arrival_radius, entry.local))
 }
 
 /// North-up map looks down with world +Z as screen up, so screen-right is world −X.
@@ -703,13 +792,14 @@ fn consume_stick_flick(resting: &mut bool, stick: Vec2) -> Option<Vec2> {
 fn next_candidate_in_direction(
 	candidates: &[PoiId],
 	registry: &PoiRegistry,
+	generated: &[PoiEntry],
 	from: Vec2,
 	current: Option<PoiId>,
 	dir: Vec2,
 ) -> Option<PoiId> {
 	let points: Vec<_> = candidates
 		.iter()
-		.filter_map(|id| registry.get(*id).map(|record| (*id, record.position.xz())))
+		.filter_map(|id| picker_xz(*id, registry, generated).map(|xz| (*id, xz)))
 		.collect();
 	nearest_in_direction(from, current, dir, &points)
 }
@@ -753,18 +843,19 @@ fn nearest_in_direction(
 		.map(|(id, _, _, _)| id)
 }
 
-fn nearest_candidate(candidates: &[PoiId], registry: &PoiRegistry, focus: Vec2) -> Option<PoiId> {
+fn nearest_candidate(
+	candidates: &[PoiId],
+	registry: &PoiRegistry,
+	generated: &[PoiEntry],
+	focus: Vec2,
+) -> Option<PoiId> {
 	candidates
 		.iter()
-		.filter_map(|id| registry.get(*id).copied())
+		.filter_map(|id| picker_xz(*id, registry, generated).map(|xz| (*id, xz)))
 		.min_by(|a, b| {
-			a.position
-				.xz()
-				.distance(focus)
-				.total_cmp(&b.position.xz().distance(focus))
-				.then_with(|| a.id.cmp(&b.id))
+			a.1.distance(focus).total_cmp(&b.1.distance(focus)).then_with(|| a.0.cmp(&b.0))
 		})
-		.map(|record| record.id)
+		.map(|(id, _)| id)
 }
 
 fn xz_distance(a: Vec3, b: Vec3) -> f32 {
@@ -844,21 +935,38 @@ struct ChosenPoiSpawn {
 }
 
 /// Local interiors keep the POI floor. Outdoor pins snap to composed terrain.
-fn spawn_pose_for_chosen_poi(record: &PoiRecord, surface: &DurhamSurface) -> ChosenPoiSpawn {
-	if is_interior_building_poi(record) {
-		ChosenPoiSpawn { position: player_position_above_surface(record.position), interior: true }
+fn spawn_pose_for_pin(
+	kind: PoiKind,
+	position: Vec3,
+	local: bool,
+	surface: &DurhamSurface,
+) -> ChosenPoiSpawn {
+	if local && (kind == LOCAL_POI || kind == SALOON_POI) {
+		ChosenPoiSpawn { position: player_position_above_surface(position), interior: true }
 	} else {
 		ChosenPoiSpawn {
 			position: player_spawn_point_at(
-				record.position.xz(),
-				surface_or_hold_at(surface, record.position.xz()),
+				position.xz(),
+				surface_or_hold_at(surface, position.xz()),
 			),
 			interior: false,
 		}
 	}
 }
 
-fn prefer_building_poi_ids(ids: &[PoiId], registry: &PoiRegistry, death_at: Vec3) -> Vec<PoiId> {
+fn generated_nearby<'a>(
+	storage: Option<&'a HcsgStorage>,
+	lookup: Option<&'a DistantTilePoiLookup>,
+) -> Option<GeneratedNearby<'a>> {
+	Some(GeneratedNearby::new(storage?, lookup?))
+}
+
+fn prefer_building_poi_ids(
+	ids: &[PoiId],
+	registry: &PoiRegistry,
+	generated: &[PoiEntry],
+	death_at: Vec3,
+) -> Vec<PoiId> {
 	let nearer =
 		|a: &(PoiId, f32), b: &(PoiId, f32)| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(&b.0));
 	let mut buildings = Vec::new();
@@ -866,13 +974,15 @@ fn prefer_building_poi_ids(ids: &[PoiId], registry: &PoiRegistry, death_at: Vec3
 	let mut trees = Vec::new();
 	let mut other = Vec::new();
 	for id in ids {
-		let record = registry.get(*id).expect("picker ids are indexed");
-		let entry = (*id, xz_distance(death_at, record.position));
-		if is_building_poi(record.kind) {
+		let Some((kind, position, _, local)) = picker_pin(*id, registry, generated) else {
+			continue;
+		};
+		let entry = (*id, xz_distance(death_at, position));
+		if is_building_poi(kind) {
 			buildings.push(entry);
-		} else if record.kind == VEGETATION_POI && record.global {
+		} else if kind == VEGETATION_POI && !local {
 			groves.push(entry);
-		} else if record.kind == VEGETATION_POI {
+		} else if kind == VEGETATION_POI {
 			trees.push(entry);
 		} else {
 			other.push(entry);
@@ -968,7 +1078,7 @@ mod tests {
 		}
 		let registry = registry_from_records(&records);
 		let ids = records.iter().map(|record| record.id).collect::<Vec<_>>();
-		let ordered = prefer_building_poi_ids(&ids, &registry, death);
+		let ordered = prefer_building_poi_ids(&ids, &registry, &[], death);
 		assert_eq!(registry.get(ordered[0]).expect("ordered").kind, LOCAL_POI);
 		assert_eq!(
 			ordered
@@ -1010,7 +1120,7 @@ mod tests {
 		});
 		let registry = registry_from_records(&records);
 		let ids = records.iter().map(|record| record.id).collect::<Vec<_>>();
-		let ordered = prefer_building_poi_ids(&ids, &registry, death);
+		let ordered = prefer_building_poi_ids(&ids, &registry, &[], death);
 		assert!(ordered.contains(&PoiId(99)));
 		assert_eq!(
 			ordered
@@ -1103,7 +1213,7 @@ mod tests {
 		let id_start = std::time::Instant::now();
 		for _ in 0..REFRESHES {
 			registry.collect_nearby_in(death, query, &interests, &[], &mut scratch);
-			let ordered = prefer_building_poi_ids(&scratch, &registry, death);
+			let ordered = prefer_building_poi_ids(&scratch, &registry, &[], death);
 			std::hint::black_box(ordered);
 		}
 		let id_elapsed = id_start.elapsed();
@@ -1197,6 +1307,7 @@ mod tests {
 				fallback_at: Vec3::new(3.0, 4.0, 5.0),
 				registry_revision: 0,
 				picker_nearby_scratch: Vec::new(),
+				generated_poses: Vec::new(),
 			}),
 			..default()
 		});
@@ -1837,6 +1948,7 @@ mod tests {
 				fallback_at: Vec3::ZERO,
 				registry_revision: 0,
 				picker_nearby_scratch: Vec::new(),
+				generated_poses: Vec::new(),
 			}),
 			..default()
 		});
@@ -1874,6 +1986,7 @@ mod tests {
 				fallback_at: Vec3::ZERO,
 				registry_revision: 0,
 				picker_nearby_scratch: Vec::new(),
+				generated_poses: Vec::new(),
 			}),
 			..default()
 		});
@@ -1916,6 +2029,7 @@ mod tests {
 				fallback_at: Vec3::ZERO,
 				registry_revision: 0,
 				picker_nearby_scratch: Vec::new(),
+				generated_poses: Vec::new(),
 			}),
 			..default()
 		});

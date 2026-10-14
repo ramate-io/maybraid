@@ -1,14 +1,22 @@
 //! Hierarchical world POIs over streamed Chico and Richmond scenes.
 
+mod hcsg;
+#[cfg(test)]
+mod scheme_timing;
+
+pub use hcsg::{GrovePois, PlacePois, UrbanPois, WorldPoiTiles};
+
 use std::collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use chico::ChicoGroveHost;
+use chico::{grove_id, ChicoGroveHost, ForestExtent};
 use lod::LodScene;
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
-	GlobalPoi, LocalPoi, Poi, PoiId, PoiIntelligencePlugin, PoiKind, PoiRegistry, PoiSystems,
+	hashed_poi_id as scheme_hashed_poi_id, DistantTilePoiLookup, GlobalPoi, LocalPoi, Poi, PoiId,
+	PoiIntelligencePlugin, PoiKind, PoiRegistry, PoiSystems,
 };
 use richmond::{DiscoverablePlace, DiscoverablePlaceLabel};
 use urbanization_layer_model::UrbanSetting;
@@ -82,6 +90,7 @@ impl Plugin for WorldPoiPlugin {
 		}
 		app.init_resource::<WorldPoiDiscoveryBudget>()
 			.init_resource::<WorldPoiDiscoveryState>()
+			.insert_resource(DistantTilePoiLookup::new(hcsg::WorldPoiTiles))
 			.configure_sets(
 				Update,
 				(WorldPoiSystems::Collect, WorldPoiSystems::Discover)
@@ -104,6 +113,7 @@ impl Plugin for WorldPoiPlugin {
 					.chain()
 					.in_set(WorldPoiSystems::Discover),
 			);
+		hcsg::register_world_poi_generation(app);
 	}
 }
 
@@ -144,7 +154,7 @@ fn queue_global_groves(
 		let world = transform.transform_point(anchor);
 		let radius = ((bounds.max.x - bounds.min.x).max(bounds.max.z - bounds.min.z) * 0.5)
 			.clamp(1.0, 256.0);
-		let id = spatial_poi_id(GROVE_POI_SALT ^ u64::from(grove.layer.id_y().to_bits()), world);
+		let id = grove_poi_id(grove, world);
 		state.pending_pois.push_back(PendingPoi {
 			target: PendingPoiTarget::Child {
 				parent: entity,
@@ -207,17 +217,14 @@ fn queue_place(
 	let salience = place.salience.unwrap_or(place.label.default_salience());
 	state.pending_pois.push_back(PendingPoi {
 		target: PendingPoiTarget::Entity(entity),
-		poi: Poi::new(
-			spatial_poi_id(INTERIOR_POI_SALT ^ place.label.salt() ^ entity.to_bits(), translation),
-			kind,
-		)
-		.with_arrival_radius(place.arrival_radius)
-		.with_salience(salience),
+		poi: Poi::new(place_poi_id(place, entity, translation), kind)
+			.with_arrival_radius(place.arrival_radius)
+			.with_salience(salience),
 		tier: PendingPoiTier::Local,
 	});
 }
 
-fn place_kind(label: DiscoverablePlaceLabel) -> PoiKind {
+pub(super) fn place_kind(label: DiscoverablePlaceLabel) -> PoiKind {
 	match label {
 		DiscoverablePlaceLabel::Stall
 		| DiscoverablePlaceLabel::Lounge
@@ -372,6 +379,26 @@ fn vegetation_tile(position: Vec3) -> IVec2 {
 	(Vec2::new(position.x, position.z) / LOCAL_VEGETATION_TILE).floor().as_ivec2()
 }
 
+/// Same id [`GrovePois`] stores: `hashed_poi_id(GROVE_POI_SALT, grove.id())`.
+fn grove_poi_id(grove: &ChicoGroveHost, world: Vec3) -> PoiId {
+	let pad = Vec3::new(0.05, 0.05, 0.05);
+	let region = Aabb3d::from_min_max(world - pad, world + pad);
+	if let Some(extent) = ForestExtent::grove_tiles_overlapping(region).into_iter().next() {
+		scheme_hashed_poi_id(GROVE_POI_SALT, grove_id(extent, grove.layer))
+	} else {
+		spatial_poi_id(GROVE_POI_SALT ^ u64::from(grove.layer.id_y().to_bits()), world)
+	}
+}
+
+/// Same id [`PlacePois`] stores when the presenter attached host + local.
+fn place_poi_id(place: &DiscoverablePlace, entity: Entity, translation: Vec3) -> PoiId {
+	if let Some(host) = place.host {
+		scheme_hashed_poi_id(INTERIOR_POI_SALT ^ place.label.salt(), (host, place.local))
+	} else {
+		spatial_poi_id(INTERIOR_POI_SALT ^ place.label.salt() ^ entity.to_bits(), translation)
+	}
+}
+
 fn spatial_poi_id(salt: u64, position: Vec3) -> PoiId {
 	hashed_poi_id(
 		salt,
@@ -404,6 +431,26 @@ mod tests {
 		assert_ne!(
 			vegetation_tile(Vec3::new(0.0, 0.0, 0.0)),
 			vegetation_tile(Vec3::new(LOCAL_VEGETATION_TILE, 0.0, 0.0))
+		);
+	}
+
+	#[test]
+	fn presented_places_reuse_scheme_host_local_ids() {
+		use lod::gen::Id;
+		let host = Id::Universal;
+		let place =
+			DiscoverablePlace::host(DiscoverablePlaceLabel::House, 8.0, 1.1).with_identity(host, 4);
+		assert_eq!(
+			place_poi_id(&place, Entity::from_bits(99), Vec3::new(3.0, 1.0, -2.0)),
+			scheme_hashed_poi_id(
+				INTERIOR_POI_SALT ^ DiscoverablePlaceLabel::House.salt(),
+				(host, 4)
+			)
+		);
+		let unnamed = DiscoverablePlace::host(DiscoverablePlaceLabel::House, 8.0, 1.1);
+		assert_ne!(
+			place_poi_id(&unnamed, Entity::from_bits(1), Vec3::ZERO),
+			place_poi_id(&unnamed, Entity::from_bits(2), Vec3::ZERO)
 		);
 	}
 

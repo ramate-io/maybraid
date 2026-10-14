@@ -2,10 +2,12 @@ use bevy::prelude::*;
 use intelligence_lod::{
 	due_by_rank, staggered_interval, IntelligenceBand, IntelligenceLod, IntelligencePriority,
 };
+use lod::hcsg::HcsgStorage;
 
 use crate::{
-	GlobalPoi, LocalPoi, Poi, PoiDiscoverLimits, PoiId, PoiIntelligenceUser, PoiKnowledge,
-	PoiObservation, PoiRegistry, PoiSource,
+	DistantTilePoiLookup, GeneratedNearby, GlobalPoi, LocalPoi, NearbyQuery, Poi,
+	PoiDiscoverLimits, PoiEntry, PoiId, PoiIntelligenceUser, PoiKnowledge, PoiObservation,
+	PoiRegistry, PoiSource,
 };
 
 type PoiEntity<'a> = (Entity, &'a Poi, &'a GlobalTransform, Has<LocalPoi>, Has<GlobalPoi>);
@@ -89,6 +91,8 @@ pub fn ingest_poi_observations(
 pub fn discover_pois(
 	time: Res<Time>,
 	registry: Res<PoiRegistry>,
+	storage: Option<Res<HcsgStorage>>,
+	lookup: Option<Res<DistantTilePoiLookup>>,
 	priority: Res<IntelligencePriority>,
 	limits: Res<PoiDiscoverLimits>,
 	mut users: Query<(
@@ -100,6 +104,7 @@ pub fn discover_pois(
 	)>,
 	mut local_candidates: Local<Vec<PoiId>>,
 	mut global_candidates: Local<Vec<PoiId>>,
+	mut generated_local: Local<Vec<PoiEntry>>,
 ) {
 	let now = time.elapsed_secs();
 	let delta = time.delta_secs();
@@ -154,18 +159,32 @@ pub fn discover_pois(
 				&user.interests,
 				&mut local_candidates,
 			);
+			generated_local.clear();
+			if let (Some(storage), Some(lookup)) = (storage.as_deref(), lookup.as_deref()) {
+				GeneratedNearby::new(storage, lookup).collect_matching_nearby(
+					position,
+					NearbyQuery::weighted(user.policy.local_radius),
+					&user.interests,
+					&[],
+					&mut generated_local,
+				);
+				generated_local.retain(|entry| entry.local);
+			}
+			let mut observations =
+				Vec::with_capacity(local_candidates.len() + generated_local.len());
+			for id in local_candidates.iter() {
+				if let Some(record) = registry.get(*id) {
+					observations.push(record.observation(entity, PoiSource::LOCAL_SCAN));
+				}
+			}
+			for entry in generated_local.iter() {
+				if !observations.iter().any(|known| known.id == entry.id) {
+					observations.push(entry.observation(entity, PoiSource::LOCAL_SCAN));
+				}
+			}
+			observations.sort_unstable_by_key(|observation| observation.id);
 			let cursor = user.local_cursor;
-			learn_records(
-				entity,
-				&local_candidates,
-				&registry,
-				PoiSource::LOCAL_SCAN,
-				now,
-				cursor,
-				n,
-				&mut user,
-				&mut knowledge,
-			);
+			learn_observations(&observations, now, cursor, n, &mut user, &mut knowledge);
 			user.local_cursor = user.local_cursor.wrapping_add(n);
 		}
 		if now >= user.next_global_scan_at && band != IntelligenceBand::Far {
@@ -233,5 +252,26 @@ fn learn_records(
 			continue;
 		}
 		knowledge.observe(record.observation(user_entity, source), now);
+	}
+}
+
+fn learn_observations(
+	observations: &[PoiObservation],
+	now: f32,
+	cursor: usize,
+	budget: usize,
+	user: &mut PoiIntelligenceUser,
+	knowledge: &mut PoiKnowledge,
+) {
+	if observations.is_empty() {
+		return;
+	}
+	let budget = budget.min(observations.len());
+	for offset in 0..budget {
+		let observation = observations[(cursor + offset) % observations.len()];
+		if knowledge.get(observation.id).is_none() && !user.try_take_learning_credit() {
+			continue;
+		}
+		knowledge.observe(observation, now);
 	}
 }
