@@ -65,6 +65,14 @@ fn produce_gameplay_keys(keyboard: &ButtonInput<KeyCode>, pad: &mut VirtualPad) 
 	if keyboard.pressed(KeyCode::KeyC) {
 		pad.hold_digital(PadButton::BumperFocus);
 	}
+	// F / G are the keyboard fallbacks for LT / RT (jabs when unarmed). Mouse
+	// buttons stay analog focus/fire only — they do not emit Attack intents.
+	if keyboard.pressed(KeyCode::KeyF) {
+		pad.max_triggers(1.0, 0.0);
+	}
+	if keyboard.pressed(KeyCode::KeyG) {
+		pad.max_triggers(0.0, 1.0);
+	}
 	// V is RB: hold to steer the skill map, then flick a stick.
 	if keyboard.pressed(KeyCode::KeyV) {
 		pad.hold_digital(PadButton::BumperFire);
@@ -196,6 +204,20 @@ mod tests {
 		assert!(pad.digital_held(PadButton::BumperFire));
 	}
 
+	#[test]
+	fn f_squeezes_left_trigger() {
+		let mut app = produce_app(KeyboardPadMap::Gameplay);
+		press(&mut app, KeyCode::KeyF);
+		assert_eq!(app.world().resource::<VirtualPad>().trigger_focus, 1.0);
+	}
+
+	#[test]
+	fn g_squeezes_right_trigger() {
+		let mut app = produce_app(KeyboardPadMap::Gameplay);
+		press(&mut app, KeyCode::KeyG);
+		assert_eq!(app.world().resource::<VirtualPad>().trigger_fire, 1.0);
+	}
+
 	fn produce_app(map: KeyboardPadMap) -> App {
 		let mut app = App::new();
 		app.init_resource::<ButtonInput<KeyCode>>()
@@ -204,6 +226,17 @@ mod tests {
 			.add_message::<KeyboardInput>()
 			.add_systems(Update, produce_keyboard);
 		app
+	}
+
+	#[test]
+	fn brackets_hold_dpad() {
+		let mut pad = VirtualPad::default();
+		let mut keyboard = ButtonInput::<KeyCode>::default();
+		keyboard.press(KeyCode::BracketLeft);
+		if keyboard.pressed(KeyCode::BracketLeft) {
+			pad.hold_digital(PadButton::DpadLeft);
+		}
+		assert!(pad.digital_held(PadButton::DpadLeft));
 	}
 
 	#[test]

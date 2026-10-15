@@ -52,7 +52,8 @@ stays on the body.
 ```text
 CharacterIntent ─► wish / jump          (this crate)
                ─► look / POV            (player-camera)
-               ─► UseItem               (firearm-user, melee-user)
+               ─► UseItem               (firearm-user, grenade-user)
+               ─► AttackLeft/Right      (fisticuffs-user, unarmed jabs)
 
 PlayerLook          camera → item users read this, not Camera3d
 PlayerCameraAim     item users → camera follow blends toward pose

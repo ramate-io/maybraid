@@ -37,7 +37,7 @@ pub use fixed_tuck::FixedTuck;
 pub use flapping::Flapping;
 pub use gallop::Gallop;
 pub use idle::Idle;
-pub use jab::{Jab, DEFAULT_BACKSWING, DEFAULT_JAB_TARGET};
+pub use jab::{Jab, BACKSWING_END, DEFAULT_BACKSWING, DEFAULT_JAB_TARGET, EXTEND_END, HOLD_END};
 pub use land::Land;
 pub use lateral_undulation::LateralUndulation;
 pub use leap::{Leap, LeapPhase, LeapTimeline, AIR_END, TAKEOFF_END};

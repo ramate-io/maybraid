@@ -14,9 +14,9 @@ mod camera;
 pub mod commands;
 pub mod control;
 mod crate_loot;
+mod cycle_target;
 mod first_wave;
 mod intelligence;
-mod cycle_target;
 mod inventory_cycling;
 mod item_icons;
 mod map_view;
@@ -53,13 +53,13 @@ pub use control::{
 	InventoryEditCameraFollow, WorldGameplayEnabled, WorldMenuShell, WorldPlaySessionEnded,
 	WorldSceneryVisible, WorldSurfaceReady, WorldSurfaceSet,
 };
+pub use cycle_target::InventoryCycleTarget;
 pub use durham::Durham;
 #[cfg(any(test, feature = "test-support"))]
 pub use first_wave::UnitXTile;
 pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
-pub use cycle_target::InventoryCycleTarget;
 pub use inventory_cycling::ActiveInventoryCyclingCategory;
 pub use item_icons::{
 	discover_icon_cache_dir, item_icon_requests, InventoryItemSubject, ItemIconCache,
@@ -116,6 +116,7 @@ use characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use combat_hud::CombatHudPlugin;
 use durham::TerrainFrictionConfig;
 use firearms::EnergyMaterialPlugin;
+use fisticuffs_user::FisticuffsUserPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
@@ -310,6 +311,9 @@ impl Plugin for WorldPlugin {
 		// Locomotion → Anim → Camera Body.
 		if !app.is_plugin_added::<PlayerPlugin>() {
 			app.add_plugins(PlayerPlugin);
+		}
+		if !app.is_plugin_added::<FisticuffsUserPlugin>() {
+			app.add_plugins(FisticuffsUserPlugin);
 		}
 		app.add_systems(
 			Update,

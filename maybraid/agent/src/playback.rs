@@ -411,9 +411,8 @@ mod tests {
 
 	#[test]
 	fn visual_style_is_receipt_then_instant() -> anyhow::Result<()> {
-		let mut playback = Playback::from_commands([AgentCommand::VisualStyle {
-			style: "retro".into(),
-		}]);
+		let mut playback =
+			Playback::from_commands([AgentCommand::VisualStyle { style: "retro".into() }]);
 		let tick = playback.tick(0.016, &TickView::default());
 		assert_eq!(started(&tick.effects), vec![0]);
 		assert!(tick.effects.iter().any(|effect| matches!(

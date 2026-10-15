@@ -7,7 +7,11 @@ resolved here so consumers do not re-read the pad.
 `RightTrigger` + `X` is `PowerUseItem` and suppresses `StartInteraction`.
 L3 hold is sprint (`StartSprint` every hold frame, `StopSprint` on release).
 Shift maps to L3. R3 click swaps first / third person.
-LT is optic `Focus`; left bumper is iron `Ads`. **B** tap is `ChangeSquat`,
+LT is optic `Focus`; left bumper is iron `Ads`. Trigger *edges* are
+`AttackLeft` / `AttackRight` (fisticuffs jabs when unarmed). Keyboard **F**
+and gamepad LT share the left trigger; **G** / RT share the right trigger.
+RMB stays analog focus and LMB stays UseItem — they do not emit Attack.
+**B** tap is `ChangeSquat`,
 **B** hold (~0.35 s) is `ChangeProne`. Menu still owns **B** as `MenuNav::Back`
 when a `MenuController` has focus; character collect skips stance then.
 Discover maps read stick flicks in `maybraid-skill-map`, not a bumper chord.
