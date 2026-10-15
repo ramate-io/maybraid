@@ -1,9 +1,19 @@
 use character_rigs::humanoid::LegSegmentLengths;
+use character_rigs::Side;
 
 use crate::animations::{vertical_drop, Squat};
 
 /// Peak landing flex as a fraction of a full pre-jump squat.
 const DEFAULT_LAND_SCALE: f32 = 0.35;
+
+/// Medial humerus elevation that brings the forearms in front of the chest at peak absorb.
+const HUMERUS_FLEX_FORWARD: f32 = 1.3;
+/// Shared elbow flexion sign for both arms (right forearm axis is −Z).
+const FOREARM_GUARD_FLEX: f32 = -0.35;
+/// When blending off a fall spread, pull the humerus stroke closed (opposite [`Fall`] signs).
+const HUMERUS_SWING_CLOSE: f32 = 0.45;
+/// Shoulder lift that opposes a fall spread (opposite [`Fall`] shoulder_flex signs).
+const SHOULDER_FLEX_TUCK: f32 = 0.5;
 
 #[derive(Debug, Clone)]
 pub struct Land {
@@ -54,6 +64,35 @@ impl Land {
 		self.depth(progress) * self.scale * self.squat.root_peak
 	}
 
+	/// Arm tuck follows the same compression envelope as the legs (0 at stand, 1 at peak).
+	pub fn arm_amount(&self, progress: f32) -> f32 {
+		self.depth(progress)
+	}
+
+	pub fn shoulder_flex(&self, side: Side, progress: f32) -> f32 {
+		let sign = match side {
+			Side::Left => -1.0,
+			Side::Right => 1.0,
+		};
+		self.arm_amount(progress) * SHOULDER_FLEX_TUCK * sign
+	}
+
+	pub fn humerus_swing(&self, side: Side, progress: f32) -> f32 {
+		let sign = match side {
+			Side::Left => 1.0,
+			Side::Right => -1.0,
+		};
+		self.arm_amount(progress) * HUMERUS_SWING_CLOSE * sign
+	}
+
+	pub fn humerus_flex(&self, side: Side, progress: f32) -> f32 {
+		side.sign() * self.arm_amount(progress) * HUMERUS_FLEX_FORWARD
+	}
+
+	pub fn forearm_flex(&self, progress: f32) -> f32 {
+		self.arm_amount(progress) * FOREARM_GUARD_FLEX
+	}
+
 	pub fn vertical_drop(&self, progress: f32, lengths: LegSegmentLengths) -> f32 {
 		vertical_drop(self.femur_swing(progress), self.shin_flex(progress), lengths)
 	}
@@ -102,6 +141,17 @@ mod tests {
 		let land = Land::with_speeds(10.0, 1.0, Squat::default());
 		let early = land.descent_duration() * 0.5 / land.cycle_duration();
 		assert!(land.depth(early) > 0.0);
+		Ok(())
+	}
+
+	#[test]
+	fn land_arm_channels_peak_with_compression() -> anyhow::Result<()> {
+		let land = Land::default();
+		let peak = land.descent_duration() / land.cycle_duration();
+		assert!(land.arm_amount(0.0).abs() < 1e-5);
+		assert!(land.arm_amount(peak) > 0.9);
+		assert!(land.shoulder_flex(Side::Left, peak).signum() < 0.0);
+		assert!(land.shoulder_flex(Side::Right, peak).signum() > 0.0);
 		Ok(())
 	}
 }
