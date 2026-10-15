@@ -30,6 +30,7 @@ impl From<ConceptAnimation> for AnimClip {
 			ConceptAnimation::TwoFootedTuckedFlip => Self::two_footed_tucked_flip(),
 			ConceptAnimation::Soaring => Self::soaring(),
 			ConceptAnimation::Flapping => Self::flapping(),
+			ConceptAnimation::FlapFromGlide => Self::flap_from_glide(),
 			ConceptAnimation::Jab => Self::jab(),
 			ConceptAnimation::Squat => Self::squat(),
 			ConceptAnimation::Prone => Self::prone(),
