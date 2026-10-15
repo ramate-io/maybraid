@@ -1,8 +1,10 @@
 //! Assemble a character recipe in-process and write a Wavefront OBJ for DCC import.
 
+mod camera;
 mod capture;
 mod diagnose;
 mod export;
+mod obj_preview;
 mod reference;
 mod skin;
 mod validate;
@@ -44,9 +46,9 @@ struct Cli {
 	#[arg(long, default_value_t = 600)]
 	timeout_frames: u32,
 
-	/// Optional directory for runtime PNG captures (front/side/three-quarter).
+	/// Directory for GPU runtime captures + OBJ silhouette compare artifacts.
 	#[arg(long)]
-	capture_dir: Option<PathBuf>,
+	compare_dir: Option<PathBuf>,
 }
 
 #[derive(Resource)]
@@ -56,7 +58,8 @@ struct ExportJob {
 	frames: u32,
 	root: Option<Entity>,
 	species: Species,
-	capture_dir: Option<PathBuf>,
+	compare_dir: Option<PathBuf>,
+	exported: bool,
 }
 
 fn main() -> ExitCode {
@@ -68,14 +71,14 @@ fn main() -> ExitCode {
 	}
 
 	let mut app = App::new();
-	let capture_dir = cli.capture_dir.clone();
+	let compare_dir = cli.compare_dir.clone();
 	app.add_plugins(
 		DefaultPlugins
 			.set(WindowPlugin {
-				primary_window: if capture_dir.is_some() {
+				primary_window: if compare_dir.is_some() {
 					Some(Window {
 						title: "character-mesh-export".into(),
-						resolution: (1280, 720).into(),
+						resolution: (camera::CAPTURE_WIDTH, camera::CAPTURE_HEIGHT).into(),
 						..default()
 					})
 				} else {
@@ -96,7 +99,8 @@ fn main() -> ExitCode {
 		frames: 0,
 		root: None,
 		species: cli.species,
-		capture_dir,
+		compare_dir,
+		exported: false,
 	})
 	.insert_resource(CharacterAssemblyBudget {
 		spawn_weights_per_frame: 10_000,
@@ -110,7 +114,8 @@ fn main() -> ExitCode {
 			.after(CharacterHostSystems::Fulfill)
 			.after(RigSystems::Fulfill)
 			.after(RigSystems::Pose),
-	);
+	)
+	.add_systems(Update, capture::tick_gpu_capture);
 
 	let exit = app.run();
 	match exit {
@@ -148,8 +153,20 @@ fn tick_export(world: &mut World) {
 			return;
 		}
 
-		if let Some(dir) = job.capture_dir.clone() {
-			capture::setup_capture_world(world, root, dir);
+		if job.exported {
+			if job.compare_dir.is_some() && capture::gpu_capture_finished(world) {
+				if let Some(dir) = &job.compare_dir {
+					println!("GPU compare artifacts: {}", dir.display());
+					println!("  cameras: {}", dir.join("cameras.json").display());
+					println!(
+						"  silhouettes: run scripts/character-mesh-export/compare_silhouettes.py \"{}\" \"{}\"",
+						dir.display(),
+						job.output.display()
+					);
+				}
+				finished = true;
+			}
+			return;
 		}
 
 		let groups = collect_groups(world, root);
@@ -176,8 +193,10 @@ fn tick_export(world: &mut World) {
 		write_validation_json(&validation_path, &validation);
 		let report = write_obj_bundle(&output, &groups);
 
-		if let Some(dir) = job.capture_dir.clone() {
-			capture::request_runtime_shots(world, &dir);
+		job.exported = true;
+		if let Some(dir) = job.compare_dir.clone() {
+			capture::init_gpu_capture(world, root, dir, output.clone());
+			return;
 		}
 		println!("Wrote {}", output.display());
 		println!("Wrote {}", validation_path.display());
@@ -201,7 +220,9 @@ fn tick_export(world: &mut World) {
 			report.obj_bytes,
 			report.mtl_bytes,
 		);
-		finished = true;
+		if job.compare_dir.is_none() {
+			finished = true;
+		}
 	});
 
 	if finished {

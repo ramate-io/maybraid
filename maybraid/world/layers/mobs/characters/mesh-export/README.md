@@ -10,6 +10,22 @@ cargo run -p character-mesh-export -- \
   --output maybraid/art/characters/exports/epiphant/epiphant_default_preview.obj
 ```
 
+### GPU runtime vs OBJ silhouette compare (headless)
+
+Writes `runtime_*.png`, `obj_reimport_*.png`, `compare_*.png`, `cameras.json`, and `silhouette_compare.json` under `--compare-dir` (xvfb + Lavapipe, same window size as capture rig):
+
+```bash
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json WGPU_BACKEND=vulkan \
+  xvfb-run -a -s "-screen 0 640x640x24" \
+  cargo run -p character-mesh-export --release -- \
+  --output maybraid/art/characters/exports/epiphant/epiphant_default_preview.obj \
+  --compare-dir maybraid/art/characters/exports/epiphant/compare
+
+python3 scripts/character-mesh-export/compare_silhouettes.py \
+  maybraid/art/characters/exports/epiphant/compare \
+  maybraid/art/characters/exports/epiphant/epiphant_default_preview.obj
+```
+
 ### Headless Linux (no GPU)
 
 Bevy still initializes a Vulkan adapter; Lavapipe works:

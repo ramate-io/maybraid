@@ -34,7 +34,19 @@ Rest-pose axis-aligned bounds (2026-10-15 export, post skinning/mesh-selection f
 
 **Note:** Source GLBs name the render mesh `BézierCurve` for body/ears/tail; that is the authored mesh name in Blender exports, not a stray curve helper.
 
-**Unverified:** in-game GPU screenshot at the same camera as OBJ previews (Lavapipe export has no shaded character pass); Procreate import.
+**GPU compare (2026-10-15, Lavapipe + xvfb):** see [`compare/`](compare/) — `runtime_*` (live `CharacterHostsPlugin` draw) vs `obj_reimport_*` (same camera, OBJ loaded in Bevy). Mask IoU (RGB silhouette, not opaque-alpha):
+
+| View | IoU runtime vs OBJ re-import | Runtime mask H×W (px) | OBJ re-import H×W (px) |
+|------|-----------------------------:|----------------------:|-----------------------:|
+| front | 0.328 | 146×153 | 258×256 |
+| side | 0.852 | 261×325 | 263×329 |
+| three_quarter | 0.904 | 264×272 | 264×272 |
+
+Side-by-side PNGs: `compare/compare_{front,side,three_quarter}.png`. Numeric report: `compare/silhouette_compare.json`.
+
+**Interpretation:** baked OBJ vertices match the intended socketed assembly (OBJ re-import silhouette). The **live GPU skinned draw** still diverges on the front view (floating head / missing body mass in the mask) while side and three-quarter largely agree — consistent with GPU palette skinning + part hosts not matching the CPU-baked world positions, not a wrong OBJ vertex bake (`diagnose.json` bbox Δ = 0 on all eight parts).
+
+**Unverified:** Procreate / Blender manual import (Blender should see the same assembled world-space vertices as `obj_reimport_*` if import scale is 1 m).
 
 ## Regenerating
 
@@ -80,10 +92,13 @@ See [`mesh-export/README.md`](../../../../world/layers/mobs/characters/mesh-expo
 | ECS ↔ OBJ per-group bbox Δ | **0** m (`character-mesh-validate`) |
 | `diagnose.json` reference vs OBJ | **no divergence** on all parts |
 
+### Part / proportion audit
+
+`parts_audit.json` (from `scripts/character-mesh-export/audit_parts.py`): all eight recipe groups present; head-to-body extent ratio ≈ **0.54**; tail center z ≈ **−1.00** m (rear of body); head center above body center on Y.
+
 ### Unverified
 
-- Import/paint in **Procreate**.
-- Side-by-side **in-game runtime screenshot** vs OBJ at matched camera (previews are matplotlib point clouds from the OBJ).
+- Import/paint in **Procreate** or **Blender** (automated check is Bevy GPU re-import only).
 
 ## Git LFS
 

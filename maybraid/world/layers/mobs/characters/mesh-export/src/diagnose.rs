@@ -20,7 +20,7 @@ use characters::{
 use rigs::{SocketRefApplied, SocketRefRoot};
 use serde::Serialize;
 
-use crate::export::{part_group_name, part_mesh_entities, primary_mesh_under};
+use crate::export::{part_group_name, primary_mesh_under};
 use crate::reference::{bbox, skin_mesh_world_reference};
 use crate::skin::skin_weight_coverage;
 
