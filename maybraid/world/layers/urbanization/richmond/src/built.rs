@@ -14,7 +14,6 @@ use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 use urbanization_layer_model::UrbanSetting;
 
 use crate::artifact::BuiltDevelopment;
-use crate::developments::site::DevelopmentSite;
 use crate::developments::RichmondDevelopment;
 use crate::ground::RichmondGround;
 use crate::host::DevelopmentHosts;
@@ -50,10 +49,7 @@ impl<G: RichmondGround> hcsg::GenerationScheme for Built<G> {
 
 	/// The filled developments originating in `region`.
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		cx.original_ids_for::<DevelopmentSite>(region)
-			.into_iter()
-			.filter(|OriginalId(id)| RichmondDevelopment::<G>::builds_filled(cx, *id))
-			.collect()
+		RichmondDevelopment::<G>::original_filled_site_ids(cx, region)
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
