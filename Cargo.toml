@@ -83,6 +83,7 @@ members = [
   "maybraid/world/layers/mobs/characters/lib",
   "maybraid/world/layers/mobs/characters/rigs",
   "maybraid/world/layers/mobs/characters/playground",
+  "maybraid/world/layers/mobs/characters/mesh-export",
 
   "maybraid/procedural/common",
   "maybraid/procedural/comproc",
@@ -327,6 +328,7 @@ sdf-common = { path = "maybraid/sdf/common" }
 sdf-common-playground = { path = "maybraid/sdf/common-playground" }
 character-concepts-playground = { path = "maybraid/menu/character-concepts-playground" }
 characters-playground = { path = "maybraid/world/layers/mobs/characters/playground" }
+character-mesh-export = { path = "maybraid/world/layers/mobs/characters/mesh-export" }
 character-items = { path = "maybraid/world/layers/mobs/characters/items" }
 character-persist = { path = "maybraid/world/layers/mobs/characters/persist" }
 character-inventory-user = { path = "maybraid/world/layers/mobs/characters/inventory-user" }

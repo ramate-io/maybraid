@@ -1,0 +1,31 @@
+# character-mesh-export
+
+Headless-friendly exporter that spawns a character through the real **fixed assembly** pipeline (`CharacterHostsPlugin` + `spawn_fixed_character_assembly`), waits for GLB load and skin remap, CPU-skins meshes, and writes a Wavefront OBJ/MTL bundle for DCC tools (e.g. Procreate 3D paint).
+
+## Usage
+
+```bash
+cargo run -p character-mesh-export -- \
+  --species epiphant \
+  --output maybraid/art/characters/exports/epiphant/epiphant_default_preview.obj
+```
+
+### Headless Linux (no GPU)
+
+Bevy still initializes a Vulkan adapter; Lavapipe works:
+
+```bash
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json WGPU_BACKEND=vulkan \
+  cargo run -p character-mesh-export -- --output /path/to/out.obj
+```
+
+## Output conventions
+
+- Rest/bind pose, character root at origin.
+- Y-up, metres.
+- One OBJ group per component (`body__…`, `head__…`, etc.).
+- Materials: palette `Kd` only (no texture maps).
+
+## Scope
+
+Does not modify game assets or gameplay crates. Only this binary crate and checked-in export artifacts under `maybraid/art/characters/exports/`.
