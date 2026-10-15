@@ -7067,9 +7067,11 @@ dependencies = [
  "poi-intelligence",
  "richmond",
  "routing-intelligence",
+ "screen-capture",
  "serde",
  "serde_json",
  "spotting-intelligence",
+ "tanz-user",
  "tempfile",
  "terrain-layer-model",
  "tether-intelligence",
@@ -11354,6 +11356,22 @@ dependencies = [
  "grid",
  "serde",
  "slotmap",
+]
+
+[[package]]
+name = "tanz-user"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "characters",
+ "damage",
+ "item-icons",
+ "maybraid-character-controller",
+ "maybraid-input",
+ "maybraid-skill-map",
+ "player",
+ "screen-capture",
 ]
 
 [[package]]

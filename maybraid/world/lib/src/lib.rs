@@ -31,6 +31,7 @@ mod player_lifecycle;
 mod player_position;
 mod poi;
 pub mod render_scale;
+mod screenshot;
 mod spawn_surface;
 mod start;
 mod stash;
@@ -274,6 +275,7 @@ impl Plugin for WorldPlugin {
 			),
 		);
 		render_scale::configure(app);
+		screenshot::configure(app);
 		app.add_systems(PostStartup, spawn_default_braidman)
 			.add_systems(
 				PreUpdate,
