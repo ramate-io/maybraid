@@ -1,15 +1,15 @@
 # Maybraid character mesh export
-newmtl head__meerkat_mat
-Kd 0.48 0.52 0.56
-d 1.0
 newmtl nose__trunkish_mat
 Kd 0.77 0.64 0.6
+d 1.0
+newmtl eye_left__standard_mat
+Kd 0.18 0.3 0.76
 d 1.0
 newmtl eye_right__standard_mat
 Kd 0.18 0.3 0.76
 d 1.0
-newmtl eye_left__standard_mat
-Kd 0.18 0.3 0.76
+newmtl body__epiphant_mat
+Kd 0.48 0.52 0.56
 d 1.0
 newmtl ear_left__epiphant_mat
 Kd 0.48 0.52 0.56
@@ -17,7 +17,7 @@ d 1.0
 newmtl ear_right__epiphant_mat
 Kd 0.48 0.52 0.56
 d 1.0
-newmtl body__epiphant_mat
+newmtl head__meerkat_mat
 Kd 0.48 0.52 0.56
 d 1.0
 newmtl tail__cat-tail_mat

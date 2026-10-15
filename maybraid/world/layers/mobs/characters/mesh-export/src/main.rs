@@ -2,6 +2,7 @@
 
 mod export;
 mod skin;
+mod validate;
 
 use std::num::NonZeroU8;
 use std::path::PathBuf;
@@ -12,10 +13,12 @@ use bevy::window::WindowPlugin;
 use characters::{
 	spawn_fixed_character_assembly,
 	species::epiphant::EpiphantConfig,
-	CharacterAssemblyBudget, CharacterHostsPlugin, CharacterRecipe,
+	CharacterAssemblyBudget, CharacterHostSystems, CharacterHostsPlugin, CharacterRecipe,
 };
 use clap::{Parser, ValueEnum};
-use export::{assembly_ready, assets_root, collect_groups, write_obj_bundle};
+use export::{assembly_block_reason, assembly_ready, assets_root, collect_groups, write_obj_bundle};
+use rigs::RigSystems;
+use validate::{build_validation_report, write_validation_json};
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Species {
@@ -81,7 +84,14 @@ fn main() -> ExitCode {
 		spawn_time_per_frame: std::time::Duration::from_secs(30),
 	})
 	.add_systems(Startup, spawn_character)
-	.add_systems(Update, tick_export);
+	.add_systems(
+		PostUpdate,
+		tick_export
+			.after(TransformSystems::Propagate)
+			.after(CharacterHostSystems::Fulfill)
+			.after(RigSystems::Fulfill)
+			.after(RigSystems::Pose),
+	);
 
 	let exit = app.run();
 	match exit {
@@ -107,7 +117,12 @@ fn tick_export(world: &mut World) {
 		let root = job.root.expect("spawned root");
 		if !assembly_ready(world, root) {
 			if job.frames >= job.timeout_frames {
-				eprintln!("timed out waiting for character assembly ({} frames)", job.frames);
+				let reason = assembly_block_reason(world, root).unwrap_or("unknown");
+				eprintln!(
+					"timed out waiting for character assembly ({} frames; last blocker: {})",
+					job.frames,
+					reason
+				);
 				exit = AppExit::Error(NonZeroU8::new(3).expect("nonzero"));
 				finished = true;
 			}
@@ -125,8 +140,12 @@ fn tick_export(world: &mut World) {
 		}
 
 		let output = job.output.clone();
+		let validation = build_validation_report(world, root, &groups);
+		let validation_path = output.with_extension("validation.json");
+		write_validation_json(&validation_path, &validation);
 		let report = write_obj_bundle(&output, &groups);
 		println!("Wrote {}", output.display());
+		println!("Wrote {}", validation_path.display());
 		println!(
 			"groups={} vertices={} faces={} uvs={} normals={} bbox_min=({:.3}, {:.3}, {:.3}) bbox_max=({:.3}, {:.3}, {:.3}) obj_bytes={} mtl_bytes={}",
 			report.groups,

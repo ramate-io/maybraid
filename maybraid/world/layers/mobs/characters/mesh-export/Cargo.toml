@@ -18,6 +18,9 @@ bevy = { workspace = true }
 characters = { workspace = true }
 clap = { workspace = true }
 material-ref = { workspace = true }
+rigs = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

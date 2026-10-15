@@ -25,6 +25,9 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json WGPU_BACKEND=vulkan \
 - Y-up, metres.
 - One OBJ group per component (`body__…`, `head__…`, etc.).
 - Materials: palette `Kd` only (no texture maps).
+- Waits for socket fulfill + skin remap/prune; exports only `CharacterPart` meshes.
+- Schedules export in `PostUpdate` after transforms and rig pose propagate.
+- Writes `<output>.validation.json` (ECS bounds + socket positions) for `scripts/character-mesh-validate/main.py`.
 
 ## Scope
 

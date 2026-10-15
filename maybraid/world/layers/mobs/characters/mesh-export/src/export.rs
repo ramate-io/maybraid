@@ -8,15 +8,20 @@ use std::path::{Path, PathBuf};
 use bevy::asset::Assets;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::hierarchy::{Children, ChildOf};
+use bevy::ecs::relationship::RelationshipTarget;
 use bevy::math::{Affine3A, Vec2, Vec3};
 use bevy::mesh::skinning::{SkinnedMesh, SkinnedMeshInverseBindposes};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::{GlobalTransform, Mesh, Mesh3d, Name};
 use bevy::render::mesh::Indices;
 use characters::{
-	assembly::CharacterPartSlot, nodes::PartNode, rig::CharacterPart, rig::NeedsSkinRemap,
+	assembly::CharacterPartSlot,
+	member::CharacterMembers,
+	nodes::PartNode,
+	rig::{BoneMap, CharacterPart, CharacterRig, NeedsDuplicateScenePrune, NeedsSkinRemap},
 	CharacterRoot,
 };
+use rigs::{SocketRefApplied, SocketRefRoot};
 use material_ref::MaterialRefRoot;
 
 use crate::skin::skin_mesh_world;
@@ -76,12 +81,7 @@ pub fn collect_groups(world: &mut bevy::prelude::World, root: Entity) -> Vec<Mes
 		.map(|t| t.affine().inverse())
 		.unwrap_or(Affine3A::IDENTITY);
 
-	let mesh_entities: Vec<Entity> = {
-		let mut out = Vec::new();
-		collect_descendants(world, root, &mut out);
-		out.retain(|e| world.get::<Mesh3d>(*e).is_some());
-		out
-	};
+	let mesh_entities: Vec<Entity> = part_mesh_entities(world, root);
 
 	for mesh_entity in mesh_entities {
 		let Some(mesh_3d) = world.get::<Mesh3d>(mesh_entity) else {
@@ -167,14 +167,27 @@ fn part_material(
 	([0.75, 0.75, 0.75], format!("{}_mat", fallback.replace('/', "_")))
 }
 
-fn collect_descendants(world: &bevy::prelude::World, root: Entity, out: &mut Vec<Entity>) {
-	let mut stack = vec![root];
-	while let Some(entity) = stack.pop() {
-		out.push(entity);
-		if let Some(children) = world.get::<Children>(entity) {
-			stack.extend(children.iter());
+/// Meshes under [`CharacterPart`] hosts only (excludes rig GLB armature duplicates).
+fn part_mesh_entities(world: &bevy::prelude::World, root: Entity) -> Vec<Entity> {
+	let Some(members) = world.get::<CharacterMembers>(root) else {
+		return Vec::new();
+	};
+	let mut meshes = Vec::new();
+	for member in members.iter() {
+		if world.get::<CharacterPart>(member).is_none() {
+			continue;
+		}
+		let mut stack = vec![member];
+		while let Some(entity) = stack.pop() {
+			if world.get::<Mesh3d>(entity).is_some() {
+				meshes.push(entity);
+			}
+			if let Some(children) = world.get::<Children>(entity) {
+				stack.extend(children.iter());
+			}
 		}
 	}
+	meshes
 }
 
 fn extract_mesh_local(
@@ -338,26 +351,53 @@ pub fn write_obj_bundle(obj_path: &Path, groups: &[MeshGroup]) -> ExportReport {
 	report
 }
 
-pub fn assembly_ready(world: &bevy::prelude::World, root: Entity) -> bool {
+pub fn assembly_block_reason(world: &bevy::prelude::World, root: Entity) -> Option<&'static str> {
 	if world.get::<characters::PendingCharacterAssembly>(root).is_some() {
-		return false;
+		return Some("pending assembly queue");
 	}
-	let mut stack = vec![root];
-	while let Some(entity) = stack.pop() {
-		if world.get::<NeedsSkinRemap>(entity).is_some() {
-			return false;
+	if world.get::<CharacterRoot>(root).is_none() {
+		return Some("missing CharacterRoot");
+	}
+	let Some(members) = world.get::<CharacterMembers>(root) else {
+		return Some("missing CharacterMembers");
+	};
+
+	for member in members.iter() {
+		if world.get::<SocketRefRoot>(member).is_some()
+			&& world.get::<SocketRefApplied>(member).is_none()
+		{
+			return Some("socket ref not fulfilled");
 		}
-		if let Some(mesh) = world.get::<Mesh3d>(entity) {
-			let meshes = world.resource::<Assets<Mesh>>();
-			if meshes.get(&mesh.0).is_none() {
-				return false;
+		if world.get::<NeedsSkinRemap>(member).is_some()
+			|| world.get::<NeedsDuplicateScenePrune>(member).is_some()
+		{
+			return Some("skin remap / prune pending");
+		}
+		if world.get::<CharacterRig>(member).is_some() {
+			let bone_map = world.get::<BoneMap>(member);
+			if bone_map.is_none_or(|map| map.by_name.is_empty()) {
+				return Some("rig bone map empty");
 			}
 		}
-		if let Some(children) = world.get::<Children>(entity) {
-			stack.extend(children.iter());
+	}
+
+	for mesh_entity in part_mesh_entities(world, root) {
+		let Some(mesh) = world.get::<Mesh3d>(mesh_entity) else {
+			continue;
+		};
+		if world.resource::<Assets<Mesh>>().get(&mesh.0).is_none() {
+			return Some("mesh asset not loaded");
 		}
 	}
-	world.get::<CharacterRoot>(root).is_some()
+
+	if part_mesh_entities(world, root).is_empty() {
+		return Some("no part meshes");
+	}
+	None
+}
+
+pub fn assembly_ready(world: &bevy::prelude::World, root: Entity) -> bool {
+	assembly_block_reason(world, root).is_none()
 }
 
 pub fn assets_root() -> PathBuf {

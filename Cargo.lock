@@ -2810,6 +2810,9 @@ dependencies = [
  "characters",
  "clap",
  "material-ref",
+ "rigs",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
