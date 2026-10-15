@@ -10,6 +10,7 @@ pub mod commands;
 pub mod diagnostics;
 pub mod player;
 pub mod policy;
+pub mod quadruped_run_stop;
 pub mod seat;
 mod ui;
 
@@ -46,6 +47,7 @@ use game_commands::command::TextEntryFocus;
 use game_commands::ui::GameCommandStatusText;
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use player::{respawn_player_on_layout, snap_player_to_composed_surface};
+use quadruped_run_stop::advance_quadruped_run_stop_blend;
 
 /// Character, camera, snap, and locomotion without owning Durham fill.
 pub struct VegetationHostPlugin {
@@ -79,8 +81,11 @@ impl Plugin for VegetationHostPlugin {
 					snap_player_to_composed_surface
 						.after(apply_mode_commands)
 						.before(PlayerControlSystems),
-					drive_player_locomotion
+					advance_quadruped_run_stop_blend
 						.after(PlayerControlSystems)
+						.before(drive_player_locomotion),
+					drive_player_locomotion
+						.after(advance_quadruped_run_stop_blend)
 						.before(CharacterMotionSystems::Anim),
 				),
 			);

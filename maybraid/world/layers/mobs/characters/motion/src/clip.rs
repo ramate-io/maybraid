@@ -9,7 +9,7 @@ use character_animations::animations::{
 	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
 	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
 	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
-	DEFAULT_SPRING_DURATION, TAKEOFF_END,
+	DEFAULT_QUADRUPED_RUN_STOP_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
 };
 use character_animations::{ClipTimePolicy, SampleAddress};
 use character_rigs::Side;
@@ -36,6 +36,7 @@ pub enum AnimId {
 	Walk,
 	Run,
 	QuadrupedRun,
+	QuadrupedRunStop,
 	Gallop,
 	Jump,
 	Leap,
@@ -59,6 +60,7 @@ impl AnimId {
 			Self::Walk => WALK_CYCLE_SPEED,
 			Self::Run => RUN_CYCLE_SPEED,
 			Self::QuadrupedRun => QUADRUPED_RUN_CYCLE_SPEED,
+			Self::QuadrupedRunStop => DEFAULT_QUADRUPED_RUN_STOP_SPEED,
 			Self::Gallop => GALLOP_CYCLE_SPEED,
 			Self::Jump => 1.0,
 			Self::Leap => LEAP_CYCLE_SPEED,
@@ -196,6 +198,7 @@ pub enum AnimClip {
 	Walk(Walk),
 	Run(Run),
 	QuadrupedRun(QuadrupedRun),
+	QuadrupedRunStop,
 	Gallop(Gallop),
 	Jump(JumpParams),
 	Leap(Leap),
@@ -219,6 +222,7 @@ impl AnimClip {
 			Self::Walk(_) => AnimId::Walk,
 			Self::Run(_) => AnimId::Run,
 			Self::QuadrupedRun(_) => AnimId::QuadrupedRun,
+			Self::QuadrupedRunStop => AnimId::QuadrupedRunStop,
 			Self::Gallop(_) => AnimId::Gallop,
 			Self::Jump(_) => AnimId::Jump,
 			Self::Leap(_) => AnimId::Leap,
@@ -254,6 +258,10 @@ impl AnimClip {
 
 	pub fn quadruped_run() -> Self {
 		Self::QuadrupedRun(QuadrupedRun::default())
+	}
+
+	pub fn quadruped_run_stop() -> Self {
+		Self::QuadrupedRunStop
 	}
 
 	pub fn gallop() -> Self {
@@ -336,6 +344,7 @@ impl AnimClip {
 			| Self::TwoFootedTuckedFlip(_)
 			| Self::Squat
 			| Self::SquatDescent
+			| Self::QuadrupedRunStop
 			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
