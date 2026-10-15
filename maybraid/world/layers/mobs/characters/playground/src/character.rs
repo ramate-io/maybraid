@@ -66,8 +66,8 @@ impl CharacterConfig {
 		format!("{:?}|{:?}|{:?}", self.species, self.transform.translation, self.transform.rotation,)
 	}
 
-	pub fn anim_ref(&self) -> characters::AnimRef {
-		self.animation.anim_ref(self.side)
+	pub fn anim_ref(&self, playback: &AnimationPlayback) -> characters::AnimRef {
+		self.animation.anim_ref(self.side, playback)
 	}
 }
 
@@ -103,11 +103,12 @@ pub(crate) fn sync_character(
 pub(crate) fn stamp_anim(
 	mut commands: Commands,
 	config: Res<CharacterConfig>,
+	playback: Res<AnimationPlayback>,
 	roots: Query<&CharacterMembers, With<CharacterRoot>>,
 	rigs: Query<&CharacterRig>,
 	anims: Query<&AnimRefRoot>,
 ) {
-	let desired = config.anim_ref();
+	let desired = config.anim_ref(&playback);
 	for members in &roots {
 		for member in members.iter() {
 			if !rigs.get(member).is_ok_and(|rig| rig.role == CharacterRigRole::Body) {
