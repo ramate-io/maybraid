@@ -830,6 +830,7 @@ fn sample_humanoid(
 		}
 		AnimClip::Gallop(_)
 		| AnimClip::QuadrupedRun(_)
+		| AnimClip::QuadrupedRunToGallop(_)
 		| AnimClip::LateralUndulation(_)
 		| AnimClip::DorsoventralUndulation(_) => Effects::default(),
 	}
@@ -861,6 +862,9 @@ fn sample_quadruped(
 		),
 		AnimClip::Still => {
 			sample_split(&QuadrupedIdle::default(), rig, progress, write_bones, write_effects)
+		}
+		AnimClip::QuadrupedRunToGallop(params) => {
+			sample_split(&params.apply(), rig, progress.clamp(0.0, 1.0), write_bones, write_effects)
 		}
 		_ => Effects::default(),
 	}
