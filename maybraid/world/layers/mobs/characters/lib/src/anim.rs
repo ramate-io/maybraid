@@ -31,6 +31,7 @@ impl From<ConceptAnimation> for AnimClip {
 			ConceptAnimation::Soaring => Self::soaring(),
 			ConceptAnimation::Flapping => Self::flapping(),
 			ConceptAnimation::Jab => Self::jab(),
+			ConceptAnimation::HeadNod => Self::head_nod(),
 			ConceptAnimation::Squat => Self::squat(),
 			ConceptAnimation::Prone => Self::prone(),
 			ConceptAnimation::LateralUndulation => Self::lateral_undulation(),
