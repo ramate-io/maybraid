@@ -10,6 +10,7 @@ mod intent;
 mod locomotion;
 mod look;
 mod movement;
+mod quadruped_run_start;
 mod separation;
 mod spawn;
 mod stance;
@@ -25,6 +26,7 @@ pub use body::{
 	Sprinting, WalkableGround,
 };
 pub use buoyancy::{Buoyant, Wading, WaterRegime};
+pub use characters::QuadrupedRunStartBlend;
 pub use characters::{HeadCapsule, HitCapsule};
 pub use contact::{
 	motor_traction_bundle, register_motor_traction_physics, MotorTraction, MotorTractionHooks,
@@ -107,6 +109,7 @@ impl Plugin for PlayerPlugin {
 					body::apply_wish_jump,
 					stance::stand_when_airborne,
 					stance::advance_stance_blend,
+					quadruped_run_start::advance_quadruped_run_start_blend,
 					stance::apply_stance_hulls,
 					stance::sync_stance_pitch,
 					body::advance_jump_phases,
