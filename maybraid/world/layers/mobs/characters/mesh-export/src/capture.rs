@@ -63,13 +63,19 @@ pub fn init_gpu_capture(world: &mut World, root: Entity, dir: PathBuf, obj_path:
 	fs::write(dir.join("cameras.json"), json).expect("write cameras.json");
 
 	world.insert_resource(ClearColor(Color::srgb(0.12, 0.13, 0.16)));
+	// Camera + lights must exist for the whole settle window so clothing/face
+	// shader pipelines specialize before the first screenshot. Spawning the rig
+	// on the shoot frame produced a first-view (front) that only drew the head.
+	if let Some(first) = cam_manifest.views.first() {
+		ensure_capture_rig(world, first);
+	}
 	world.insert_resource(GpuCaptureJob {
 		dir,
 		obj_path,
 		views: cam_manifest.views,
 		phase: CapturePhase::Runtime,
 		index: 0,
-		settle_frames: 50,
+		settle_frames: 90,
 		readback_frames: 0,
 		done: false,
 		phase_switch_pending: false,
@@ -173,6 +179,7 @@ fn shot_prefix(phase: CapturePhase) -> &'static str {
 pub fn tick_gpu_capture(world: &mut World) {
 	let mut shoot: Option<(PathBuf, CaptureViewDef)> = None;
 	let mut switch_obj = false;
+	let mut aim: Option<CaptureViewDef> = None;
 	{
 		let Some(mut job) = world.get_resource_mut::<GpuCaptureJob>() else {
 			return;
@@ -194,7 +201,8 @@ pub fn tick_gpu_capture(world: &mut World) {
 				if job.index >= job.views.len() {
 					job.phase_switch_pending = true;
 				} else {
-					job.settle_frames = 15;
+					aim = Some(job.views[job.index].clone());
+					job.settle_frames = 20;
 				}
 			}
 		} else if job.settle_frames > 0 {
@@ -209,9 +217,9 @@ pub fn tick_gpu_capture(world: &mut World) {
 	}
 
 	if switch_obj {
-		let (character_root, obj_path) = {
+		let (character_root, obj_path, first_view) = {
 			let job = world.resource::<GpuCaptureJob>();
-			(job.character_root, job.obj_path.clone())
+			(job.character_root, job.obj_path.clone(), job.views.first().cloned())
 		};
 		let obj_entity = spawn_obj_reimport_preview(world, character_root, &obj_path);
 		let mut job = world.resource_mut::<GpuCaptureJob>();
@@ -219,16 +227,23 @@ pub fn tick_gpu_capture(world: &mut World) {
 			job.obj_entity = Some(entity);
 			job.phase = CapturePhase::ObjReimport;
 			job.index = 0;
-			job.settle_frames = 25;
+			job.settle_frames = 30;
+			aim = first_view.or(aim);
 		} else {
 			job.done = true;
 		}
 	}
 
+	if let Some(view) = aim {
+		ensure_capture_rig(world, &view);
+		let camera = world.resource::<CaptureRig>().camera;
+		world.entity_mut(camera).insert(view_transform(&view));
+	}
+
 	if let Some((path, view)) = shoot {
 		ensure_capture_rig(world, &view);
-		let rig = world.resource::<CaptureRig>();
-		world.entity_mut(rig.camera).insert(view_transform(&view));
+		let camera = world.resource::<CaptureRig>().camera;
+		world.entity_mut(camera).insert(view_transform(&view));
 		world
 			.spawn(Screenshot::primary_window())
 			.observe(save_to_disk(path.clone()));

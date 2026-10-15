@@ -34,19 +34,21 @@ Rest-pose axis-aligned bounds (2026-10-15 export, post skinning/mesh-selection f
 
 **Note:** Source GLBs name the render mesh `BézierCurve` for body/ears/tail; that is the authored mesh name in Blender exports, not a stray curve helper.
 
-**GPU compare (2026-10-15, Lavapipe + xvfb):** see [`compare/`](compare/) — `runtime_*` (live `CharacterHostsPlugin` draw) vs `obj_reimport_*` (same camera, OBJ loaded in Bevy). Mask IoU (RGB silhouette, not opaque-alpha):
+**GPU compare (2026-10-15, Lavapipe + xvfb, after capture-rig warmup):** see [`compare/`](compare/) — `runtime_*` (live `CharacterHostsPlugin` draw) vs `obj_reimport_*` (same camera, OBJ loaded in Bevy). Mask IoU (RGB vs clear-color; Bevy PNGs are opaque):
 
-| View | IoU runtime vs OBJ re-import | Runtime mask H×W (px) | OBJ re-import H×W (px) |
-|------|-----------------------------:|----------------------:|-----------------------:|
-| front | 0.328 | 146×153 | 258×256 |
-| side | 0.852 | 261×325 | 263×329 |
-| three_quarter | 0.904 | 264×272 | 264×272 |
+| View | IoU runtime vs OBJ re-import | Runtime mask H×W (px) | OBJ re-import H×W (px) | H/W ratio |
+|------|-----------------------------:|----------------------:|-----------------------:|----------:|
+| front | **0.996** | 258×256 | 258×256 | 1.00 |
+| side | **1.000** | 263×329 | 263×329 | 1.00 |
+| three_quarter | **1.000** | 264×272 | 264×272 | 1.00 |
 
-Side-by-side PNGs: `compare/compare_{front,side,three_quarter}.png`. Numeric report: `compare/silhouette_compare.json`.
+Side-by-side: `compare/compare_{front,side,three_quarter}.png`. Numbers: `compare/silhouette_compare.json`.
 
-**Interpretation:** baked OBJ vertices match the intended socketed assembly (OBJ re-import silhouette). The **live GPU skinned draw** still diverges on the front view (floating head / missing body mass in the mask) while side and three-quarter largely agree — consistent with GPU palette skinning + part hosts not matching the CPU-baked world positions, not a wrong OBJ vertex bake (`diagnose.json` bbox Δ = 0 on all eight parts).
+**Root cause of the earlier front-only-head shot:** the capture camera was spawned on the first screenshot frame, so clothing/face shader pipelines had not specialized. Side/TQ (later frames) already showed the assembled character. Spawning the rig at compare init and settling ~90 frames with that camera present makes all three runtime views match the OBJ.
 
-**Unverified:** Procreate / Blender manual import (Blender should see the same assembled world-space vertices as `obj_reimport_*` if import scale is 1 m).
+**Exporter vertices:** no bake-math change. CPU diagnose bbox Δ = 0; GPU silhouettes now agree. Liam-style “parts not socketed” is not reproduced against the real renderer once the first frame is valid.
+
+**Unverified:** Procreate / Blender GUI import (automated check is Bevy GPU re-import at 1 m). Matplotlib OBJ IoU (~0.43–0.55) uses a different camera model — not the gate.
 
 ## Regenerating
 
@@ -91,6 +93,7 @@ See [`mesh-export/README.md`](../../../../world/layers/mobs/characters/mesh-expo
 | Image textures | none (`Kd` in `.mtl` only) |
 | ECS ↔ OBJ per-group bbox Δ | **0** m (`character-mesh-validate`) |
 | `diagnose.json` reference vs OBJ | **no divergence** on all parts |
+| GPU mask IoU (runtime vs OBJ re-import) | **0.996 / 1.000 / 1.000** (front / side / three-quarter) |
 
 ### Part / proportion audit
 

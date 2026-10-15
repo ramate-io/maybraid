@@ -107,6 +107,33 @@ def main() -> int:
         tmn, tmx = bbox(tail)
         proportions["tail_center"] = ((tmn + tmx) * 0.5).tolist()
         proportions["body_rear_z"] = float(bmn[2])
+        proportions["tail_behind_body"] = float((tmn[2] + tmx[2]) * 0.5) < float(
+            (bmn[2] + bmx[2]) * 0.5
+        )
+    ear_l = part_mesh("ear_left__epiphant")
+    ear_r = part_mesh("ear_right__epiphant")
+    eye_l = part_mesh("eye_left__standard")
+    eye_r = part_mesh("eye_right__standard")
+    if ear_l is not None and ear_r is not None:
+        lmn, lmx = bbox(ear_l)
+        rmn, rmx = bbox(ear_r)
+        proportions["ear_left_center_x"] = float((lmn[0] + lmx[0]) * 0.5)
+        proportions["ear_right_center_x"] = float((rmn[0] + rmx[0]) * 0.5)
+        proportions["ears_left_right_order"] = proportions["ear_left_center_x"] > 0.0 and (
+            proportions["ear_right_center_x"] < 0.0
+        )
+    if head is not None and eye_l is not None and eye_r is not None:
+        hmn, hmx = bbox(head)
+        lmn, lmx = bbox(eye_l)
+        rmn, rmx = bbox(eye_r)
+        proportions["eye_left_center"] = ((lmn + lmx) * 0.5).tolist()
+        proportions["eye_right_center"] = ((rmn + rmx) * 0.5).tolist()
+        proportions["eyes_on_head"] = (
+            float(lmn[2]) >= float(hmn[2]) - 0.05
+            and float(rmn[2]) >= float(hmn[2]) - 0.05
+            and float(lmx[2]) <= float(hmx[2]) + 0.05
+            and float(rmx[2]) <= float(hmx[2]) + 0.05
+        )
 
     report = {
         "expected_groups": EXPECTED,

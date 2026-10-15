@@ -12,7 +12,7 @@ cargo run -p character-mesh-export -- \
 
 ### GPU runtime vs OBJ silhouette compare (headless)
 
-Writes `runtime_*.png`, `obj_reimport_*.png`, `compare_*.png`, `cameras.json`, and `silhouette_compare.json` under `--compare-dir` (xvfb + Lavapipe, same window size as capture rig):
+Writes `runtime_*.png`, `obj_reimport_*.png`, `cameras.json` under `--compare-dir` (xvfb + Lavapipe). The capture camera is spawned at job init and settled before the first shot so character shader pipelines are specialized (a first-frame-only camera produced a head-only front view).
 
 ```bash
 VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json WGPU_BACKEND=vulkan \
