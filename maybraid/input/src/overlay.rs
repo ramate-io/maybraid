@@ -42,6 +42,7 @@ impl PadOverlay {
 	pub fn apply(&self, pad: &mut VirtualPad) {
 		pad.add_move(self.move_stick);
 		pad.add_look(self.look_stick);
+		pad.add_look_analog(self.look_stick);
 		pad.max_triggers(self.trigger_focus, self.trigger_fire);
 		for button in PadButton::ALL {
 			if self.buttons[button.index()] {
@@ -69,10 +70,12 @@ mod tests {
 		pad.add_move(Vec2::new(0.2, 0.0));
 		let mut overlay = PadOverlay::default();
 		overlay.move_stick = Vec2::new(0.0, 1.0);
+		overlay.look_stick = Vec2::new(1.0, 0.0);
 		overlay.hold(PadButton::A);
 		overlay.apply(&mut pad);
 		pad.finish_digital();
 		assert!((pad.move_stick - Vec2::new(0.2, 1.0)).length() < 1e-5);
+		assert!((pad.look_analog - Vec2::X).length() < 1e-5);
 		assert!(pad.just_pressed(PadButton::A));
 		Ok(())
 	}

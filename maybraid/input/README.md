@@ -18,7 +18,8 @@ event. Chords are queries. Text / IME stays on Bevy `KeyboardInput`.
 | Field | Source |
 |---|---|
 | `move_stick` | Left stick, WASD / arrows (gameplay map) |
-| `look_stick` | Right stick (camera-space) + mouse delta |
+| `look_stick` | Right stick (camera-space look *delta*) + mouse delta |
+| `look_analog` | Raw right-stick −1..1 (gamepad + [`PadOverlay`]); flick classifiers use this |
 | `trigger_focus` / `trigger_fire` | LT / RT, digital after threshold |
 | `dpad` | Hat + arrow keys |
 | `buttons` | Xbox-letter face (`South` → A) |

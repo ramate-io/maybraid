@@ -10,6 +10,7 @@ use player::{
 };
 
 use crate::look::{CameraController, CameraPov};
+use crate::zoom::{blend_third_person_pose, ThirdPersonZoom};
 use crate::FollowCamera;
 
 /// Decaying translation kick applied after follow. Gameplay writes [`Self::kick`].
@@ -55,12 +56,15 @@ pub(crate) fn follow_character_camera(
 	maps: Query<&BoneMap>,
 	mut transforms: ParamSet<(
 		TransformHelper,
-		Query<(&mut Transform, &mut CameraController, &FollowCamera), With<Camera3d>>,
+		Query<
+			(&mut Transform, &mut CameraController, &FollowCamera, &mut ThirdPersonZoom),
+			With<Camera3d>,
+		>,
 	)>,
 ) {
 	{
 		let mut cameras = transforms.p1();
-		let Ok((mut camera_transform, controller, _)) = cameras.single_mut() else {
+		let Ok((mut camera_transform, controller, _, _)) = cameras.single_mut() else {
 			return;
 		};
 		if controller.pov.is_map() {
@@ -82,7 +86,7 @@ pub(crate) fn follow_character_camera(
 	let head = head_camera_translation(&visuals, &maps, &current);
 	drop(current);
 	let mut cameras = transforms.p1();
-	let Ok((mut camera_transform, mut controller, follow)) = cameras.single_mut() else {
+	let Ok((mut camera_transform, mut controller, follow, mut zoom)) = cameras.single_mut() else {
 		return;
 	};
 
@@ -99,9 +103,12 @@ pub(crate) fn follow_character_camera(
 		time.delta_secs(),
 	);
 
+	zoom.tick_blend(time.delta_secs());
 	let mut pose = match controller.pov {
 		CameraPov::ThirdPerson => {
-			third_person_pose(player.translation(), yaw, look_rotation, follow, height_scale)
+			let follow_pose =
+				third_person_pose(player.translation(), yaw, look_rotation, follow, height_scale);
+			blend_third_person_pose(follow_pose, player.translation(), follow, height_scale, &zoom)
 		}
 		CameraPov::FirstPerson => {
 			first_person_pose(player.translation(), head, look_rotation, follow, height_scale)
@@ -385,6 +392,7 @@ mod tests {
 				map_ground_y: 2.0,
 				..default()
 			},
+			crate::ThirdPersonZoom::default(),
 			Transform::default(),
 		));
 		world

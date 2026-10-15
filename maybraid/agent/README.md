@@ -65,6 +65,7 @@ Buttons: `jump` (`a`), `sprint` (`l3`), `stance` (`b`), `interact` (`x`),
 
 See [`scripts/origin-walk.jsonl`](scripts/origin-walk.jsonl),
 [`scripts/origin-idle.jsonl`](scripts/origin-idle.jsonl),
+[`scripts/look-zoom-flick.jsonl`](scripts/look-zoom-flick.jsonl),
 [`scripts/biome-traverse.jsonl`](scripts/biome-traverse.jsonl),
 [`scripts/locomotion-mix.jsonl`](scripts/locomotion-mix.jsonl),
 [`scripts/crowd-16.jsonl`](scripts/crowd-16.jsonl),
