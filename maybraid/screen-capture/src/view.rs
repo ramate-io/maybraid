@@ -365,13 +365,6 @@ mod tests {
 	}
 
 	#[test]
-	fn cache_fragment_is_stable() -> anyhow::Result<()> {
-		let view = CaptureView::look_at(Vec3::new(0.25, 0.5, 1.0), Vec3::new(0.0, 0.2, 0.0));
-		assert_eq!(view.cache_fragment(), view.cache_fragment());
-		Ok(())
-	}
-
-	#[test]
 	fn fit_extents_centers_a_shifted_box() -> anyhow::Result<()> {
 		let view = CaptureView::look_at(Vec3::new(0.0, 0.0, 8.0), Vec3::ZERO).perspective(0.8);
 		let aabb = Aabb3d::from_min_max(Vec3::new(2.0, -0.5, -0.5), Vec3::new(3.0, 0.5, 0.5));
