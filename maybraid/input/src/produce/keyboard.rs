@@ -83,13 +83,7 @@ fn produce_gameplay_keys(keyboard: &ButtonInput<KeyCode>, pad: &mut VirtualPad) 
 	if keyboard.pressed(KeyCode::KeyY) {
 		pad.hold_digital(PadButton::Y);
 	}
-	// Brackets cycle skill maps. Arrows already walk and feed the analog D-Pad.
-	if keyboard.pressed(KeyCode::BracketLeft) {
-		pad.hold_digital(PadButton::DpadLeft);
-	}
-	if keyboard.pressed(KeyCode::BracketRight) {
-		pad.hold_digital(PadButton::DpadRight);
-	}
+	// Brackets cycle the active equipped queue in character intent production.
 }
 
 /// Letter keys type. Arrows move the focused menu / keypad; Escape backs out;
@@ -212,26 +206,26 @@ mod tests {
 
 	#[test]
 	fn f_squeezes_left_trigger() {
-		let mut app = App::new();
-		app.init_resource::<ButtonInput<KeyCode>>()
-			.init_resource::<VirtualPad>()
-			.add_message::<KeyboardInput>()
-			.add_systems(Update, produce_keyboard);
-		app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::KeyF);
-		app.update();
+		let mut app = produce_app(KeyboardPadMap::Gameplay);
+		press(&mut app, KeyCode::KeyF);
 		assert_eq!(app.world().resource::<VirtualPad>().trigger_focus, 1.0);
 	}
 
 	#[test]
 	fn g_squeezes_right_trigger() {
+		let mut app = produce_app(KeyboardPadMap::Gameplay);
+		press(&mut app, KeyCode::KeyG);
+		assert_eq!(app.world().resource::<VirtualPad>().trigger_fire, 1.0);
+	}
+
+	fn produce_app(map: KeyboardPadMap) -> App {
 		let mut app = App::new();
 		app.init_resource::<ButtonInput<KeyCode>>()
 			.init_resource::<VirtualPad>()
+			.insert_resource(map)
 			.add_message::<KeyboardInput>()
 			.add_systems(Update, produce_keyboard);
-		app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::KeyG);
-		app.update();
-		assert_eq!(app.world().resource::<VirtualPad>().trigger_fire, 1.0);
+		app
 	}
 
 	#[test]
@@ -243,16 +237,6 @@ mod tests {
 			pad.hold_digital(PadButton::DpadLeft);
 		}
 		assert!(pad.digital_held(PadButton::DpadLeft));
-	}
-
-	fn produce_app(map: KeyboardPadMap) -> App {
-		let mut app = App::new();
-		app.init_resource::<ButtonInput<KeyCode>>()
-			.init_resource::<VirtualPad>()
-			.insert_resource(map)
-			.add_message::<KeyboardInput>()
-			.add_systems(Update, produce_keyboard);
-		app
 	}
 
 	#[test]

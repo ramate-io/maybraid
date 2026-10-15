@@ -14,8 +14,10 @@ mod camera;
 pub mod commands;
 pub mod control;
 mod crate_loot;
+mod cycle_target;
 mod first_wave;
 mod intelligence;
+mod inventory_cycling;
 mod item_icons;
 mod map_view;
 pub mod world_lubikan;
@@ -51,12 +53,14 @@ pub use control::{
 	InventoryEditCameraFollow, WorldGameplayEnabled, WorldMenuShell, WorldPlaySessionEnded,
 	WorldSceneryVisible, WorldSurfaceReady, WorldSurfaceSet,
 };
+pub use cycle_target::InventoryCycleTarget;
 pub use durham::Durham;
 #[cfg(any(test, feature = "test-support"))]
 pub use first_wave::UnitXTile;
 pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
+pub use inventory_cycling::ActiveInventoryCyclingCategory;
 pub use item_icons::{
 	discover_icon_cache_dir, item_icon_requests, InventoryItemSubject, ItemIconCache,
 	ItemIconPlugin, ITEM_ICON_RESOLUTION,
@@ -75,7 +79,10 @@ pub use player_lifecycle::{
 pub use player_position::{
 	resume_discovery_from_saved_waypoints, PlayerPositionPlugin, PlayerPositionWaypoints,
 };
-pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
+pub use poi::{
+	GrovePois, PlacePois, UrbanPois, WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems,
+	WorldPoiTiles,
+};
 pub use render_scale::{
 	host_memory_bytes, map_render_to_window, map_window_to_render, parse_device_tier_env,
 	parse_force_offscreen_env, parse_meminfo_total_bytes, parse_presentation_treatment_env,
@@ -290,6 +297,8 @@ impl Plugin for WorldPlugin {
 				),
 			);
 		camera::configure(app);
+		inventory_cycling::configure(app);
+		cycle_target::configure(app);
 		weapon::configure(app);
 		app.configure_sets(
 			Update,
