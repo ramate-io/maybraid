@@ -25,6 +25,7 @@ pub enum AnimationMode {
 	Soaring,
 	Flapping,
 	Jab,
+	WalkStop,
 	Prone,
 }
 
@@ -49,6 +50,7 @@ impl AnimationMode {
 			Self::Soaring => "soaring",
 			Self::Flapping => "flapping",
 			Self::Jab => "jab",
+			Self::WalkStop => "walk-stop",
 			Self::Prone => "prone",
 		}
 	}
@@ -72,6 +74,7 @@ impl AnimationMode {
 				backswing: DEFAULT_BACKSWING,
 				target: DEFAULT_JAB_TARGET,
 			}),
+			Self::WalkStop => AnimClip::walk_stop(),
 			Self::Prone => AnimClip::prone(),
 		}
 	}
