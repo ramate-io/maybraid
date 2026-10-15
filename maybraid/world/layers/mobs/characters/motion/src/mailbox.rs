@@ -12,8 +12,8 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatAscent,
+		SquatDescent, Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -825,6 +825,13 @@ fn sample_humanoid(
 			write_bones,
 			write_effects,
 		),
+		AnimClip::SquatAscent => sample_split(
+			&SquatAscent::default(),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
 		AnimClip::Prone => {
 			sample_split(&Prone::default(), rig, progress, write_bones, write_effects)
 		}
@@ -988,6 +995,72 @@ mod tests {
 		assert!(rig.posed_angle("shoulder.L") > 0.0);
 		assert!(rig.posed_angle("shoulder.L") < 0.15);
 		assert!(rig.posed_angle("humerus.L") > 0.2, "Still should hang the arms");
+	}
+
+	#[test]
+	fn squat_ascent_to_descent_switch_captures_pose_for_blend() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+
+		let mut world = World::new();
+		world.insert_resource(Time::<()>::default());
+		world.init_resource::<MailboxApplySet>();
+		let host = spawn_mailbox_apply_host(&mut world, AnimClip::squat_ascent(), 0.5);
+		let before = world.get::<AnimMailbox>(host).unwrap().output.clone();
+		world.entity_mut(host).insert(AnimProgress(0.5));
+		world
+			.entity_mut(host)
+			.insert(AnimRefRoot(AnimRef::new(AnimClip::squat_descent())));
+		world
+			.run_system_once(tick_anim_mailbox)
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+		let mailbox = world.get::<AnimMailbox>(host).unwrap();
+		assert_eq!(mailbox.last, Some(AnimId::SquatDescent));
+		assert_eq!(mailbox.clip_progress, 0.5);
+		assert_eq!(mailbox.blend_progress, 0.0);
+		assert_eq!(mailbox.from_pose, before);
+		Ok(())
+	}
+
+	#[test]
+	fn squat_descent_to_ascent_switch_captures_pose_for_blend() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+
+		let mut world = World::new();
+		world.insert_resource(Time::<()>::default());
+		world.init_resource::<MailboxApplySet>();
+		let host = spawn_mailbox_apply_host(&mut world, AnimClip::squat_descent(), 0.35);
+		let before = world.get::<AnimMailbox>(host).unwrap().output.clone();
+		world.entity_mut(host).insert(AnimProgress(0.35));
+		world
+			.entity_mut(host)
+			.insert(AnimRefRoot(AnimRef::new(AnimClip::squat_ascent())));
+		world
+			.run_system_once(tick_anim_mailbox)
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+		let mailbox = world.get::<AnimMailbox>(host).unwrap();
+		assert_eq!(mailbox.last, Some(AnimId::SquatAscent));
+		assert_eq!(mailbox.clip_progress, 0.35);
+		assert_eq!(mailbox.blend_progress, 0.0);
+		assert_eq!(mailbox.from_pose, before);
+		Ok(())
+	}
+
+	#[test]
+	fn squat_ascent_matches_upright_at_full_extension() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		let mut ascent = HumanoidV0Rig::for_clip_test();
+		let mut still = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::squat_ascent(), &mut ascent, 1.0, true, true);
+		sample_humanoid(AnimClip::Still, &mut still, 0.0, true, true);
+		for name in ["femur.L", "shin.L", "root"] {
+			let a = ascent.rotation(name);
+			let b = still.rotation(name);
+			if a.dot(b).abs() < 1.0 - 1e-5 {
+				return Err(anyhow!("ascent end must match upright on {name}"));
+			}
+		}
+		Ok(())
 	}
 
 	#[test]
