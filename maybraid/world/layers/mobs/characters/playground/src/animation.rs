@@ -26,6 +26,7 @@ pub enum AnimationMode {
 	Flapping,
 	Jab,
 	Prone,
+	ProneAscent,
 }
 
 impl AnimationMode {
@@ -50,6 +51,7 @@ impl AnimationMode {
 			Self::Flapping => "flapping",
 			Self::Jab => "jab",
 			Self::Prone => "prone",
+			Self::ProneAscent => "prone-ascent",
 		}
 	}
 
@@ -73,6 +75,7 @@ impl AnimationMode {
 				target: DEFAULT_JAB_TARGET,
 			}),
 			Self::Prone => AnimClip::prone(),
+			Self::ProneAscent => AnimClip::prone_ascent(),
 		}
 	}
 

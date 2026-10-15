@@ -7,6 +7,7 @@ pub mod jab;
 pub mod land;
 pub mod leap;
 pub mod prone;
+pub mod prone_ascent;
 pub mod run;
 pub mod soaring;
 pub mod spring;
