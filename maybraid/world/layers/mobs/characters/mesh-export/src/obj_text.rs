@@ -14,7 +14,6 @@ pub struct ObjGroupStats {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ObjValidationError {
 	ZeroFaces { group: String, vertices: usize },
-	MissingUvs { group: String, faces: usize },
 	IndexOutOfRange {
 		group: String,
 		kind: &'static str,
@@ -28,9 +27,6 @@ impl fmt::Display for ObjValidationError {
 		match self {
 			Self::ZeroFaces { group, vertices } => {
 				write!(f, "group {group} has {vertices} vertices and 0 faces")
-			}
-			Self::MissingUvs { group, faces } => {
-				write!(f, "group {group} has {faces} faces but no vt (Procreate needs UVs)")
 			}
 			Self::IndexOutOfRange { group, kind, index, count } => {
 				write!(
@@ -121,12 +117,6 @@ pub fn parse_obj_groups(text: &str) -> (Vec<ObjGroupStats>, Vec<ObjValidationErr
 				vertices: group.stats.vertices,
 			});
 		}
-		if group.stats.faces > 0 && group.stats.texcoords == 0 {
-			errors.push(ObjValidationError::MissingUvs {
-				group: group.stats.name.clone(),
-				faces: group.stats.faces,
-			});
-		}
 		for corner in &group.face_corners {
 			push_range_error(
 				&mut errors,
@@ -213,16 +203,6 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn rejects_faces_without_uvs() {
-		let obj = "o body\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nvn 0 0 1\nvn 0 0 1\nf 1//1 2//2 3//3\n";
-		let err = validate_obj_text(obj).unwrap_err();
-		assert!(
-			err.iter().any(|e| matches!(e, ObjValidationError::MissingUvs { group, .. } if group == "body")),
-			"{err:?}"
-		);
-	}
-
-	#[test]
 	fn rejects_zero_faces() {
 		let obj = "o head\nv 0 0 0\nv 1 0 0\nv 0 1 0\n";
 		let err = validate_obj_text(obj).unwrap_err();
@@ -277,13 +257,10 @@ o body
 v 0 0 0
 v 1 0 0
 v 0 1 0
-vt 0 0
-vt 1 0
-vt 0 1
 vn 0 0 1
 vn 0 0 1
 vn 0 0 1
-f 1/1/1 2/2/2 3/3/3
+f 1//1 2//2 3//3
 o head
 v 0 0 1
 v 1 0 1
@@ -294,7 +271,7 @@ vt 0 1
 vn 0 0 1
 vn 0 0 1
 vn 0 0 1
-f 4/4/4 5/5/5 6/6/6
+f 4/1/4 5/2/5 6/3/6
 ";
 		let stats = validate_obj_text(obj).expect("valid");
 		assert_eq!(stats.len(), 2);

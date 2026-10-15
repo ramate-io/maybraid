@@ -23,7 +23,6 @@ use characters::{
 use rigs::{SocketRefApplied, SocketRefRoot};
 use material_ref::MaterialRefRoot;
 
-use crate::compact::{fmt_f32, order_parts_for_obj, prepare_group_for_obj, solid_png_rgb};
 use crate::obj_text::validate_obj_text;
 use crate::skin::skin_mesh_world;
 
@@ -50,7 +49,6 @@ pub struct ExportReport {
 	pub obj_bytes: u64,
 	pub mtl_bytes: u64,
 	pub validation_ok: bool,
-	pub welded_vertices: usize,
 }
 
 impl Default for ExportReport {
@@ -66,7 +64,6 @@ impl Default for ExportReport {
 			obj_bytes: 0,
 			mtl_bytes: 0,
 			validation_ok: false,
-			welded_vertices: 0,
 		}
 	}
 }
@@ -383,18 +380,9 @@ fn in_range_tri(a: u32, b: u32, c: u32, n: u32) -> Option<[u32; 3]> {
 	}
 }
 
-/// Format Wavefront OBJ text. Every object has `v`/`vt`/`vn` and `f v/vt/vn`.
-/// `vt`/`vn` are independent global streams. `mtllib` is a relative filename.
+/// Format Wavefront OBJ text. `v` / `vt` / `vn` are independent global streams
+/// (OBJ spec). Face corners must not reuse the vertex index for missing UVs.
 pub fn format_obj(groups: &[MeshGroup], mtl_name: &str) -> String {
-	debug_assert!(
-		!mtl_name.contains('/') && !mtl_name.contains('\\'),
-		"mtllib must be a relative filename"
-	);
-	let prepared = order_parts_for_obj(groups.iter().cloned().map(prepare_group_for_obj).collect());
-	format_obj_prepared(&prepared, mtl_name)
-}
-
-fn format_obj_prepared(groups: &[MeshGroup], mtl_name: &str) -> String {
 	let mut obj = String::new();
 	obj.push_str("# Maybraid character mesh export\n");
 	obj.push_str(&format!("mtllib {mtl_name}\n"));
@@ -403,18 +391,24 @@ fn format_obj_prepared(groups: &[MeshGroup], mtl_name: &str) -> String {
 	let mut vt_base = 0u32;
 	let mut vn_base = 0u32;
 	for group in groups {
-		// `o` only (no `g`) — iOS ModelIO / Procreate treat `o` as the mesh.
+		obj.push_str(&format!("g {}\n", group.name));
 		obj.push_str(&format!("o {}\n", group.name));
 		obj.push_str(&format!("usemtl {}\n", group.material_name));
 
 		for p in &group.positions {
-			obj.push_str(&format!("v {} {} {}\n", fmt_f32(p.x), fmt_f32(p.y), fmt_f32(p.z)));
+			obj.push_str(&format!("v {} {} {}\n", p.x, p.y, p.z));
 		}
-		for uv in &group.uvs {
-			obj.push_str(&format!("vt {} {}\n", fmt_f32(uv.x), fmt_f32(1.0 - uv.y)));
+		let has_uv = !group.uvs.is_empty() && group.uvs.len() == group.positions.len();
+		if has_uv {
+			for uv in &group.uvs {
+				obj.push_str(&format!("vt {} {}\n", uv.x, 1.0 - uv.y));
+			}
 		}
-		for n in &group.normals {
-			obj.push_str(&format!("vn {} {} {}\n", fmt_f32(n.x), fmt_f32(n.y), fmt_f32(n.z)));
+		let has_n = !group.normals.is_empty() && group.normals.len() == group.positions.len();
+		if has_n {
+			for n in &group.normals {
+				obj.push_str(&format!("vn {} {} {}\n", n.x, n.y, n.z));
+			}
 		}
 
 		let nverts = group.positions.len() as u32;
@@ -422,24 +416,32 @@ fn format_obj_prepared(groups: &[MeshGroup], mtl_name: &str) -> String {
 			if *a >= nverts || *b >= nverts || *c >= nverts {
 				continue;
 			}
-			obj.push_str(&format!(
-				"f {}/{}/{} {}/{}/{} {}/{}/{}\n",
-				v_base + *a + 1,
-				vt_base + *a + 1,
-				vn_base + *a + 1,
-				v_base + *b + 1,
-				vt_base + *b + 1,
-				vn_base + *b + 1,
-				v_base + *c + 1,
-				vt_base + *c + 1,
-				vn_base + *c + 1,
-			));
+			obj.push_str("f ");
+			obj.push_str(&face_corner(v_base + *a + 1, has_uv, vt_base + *a + 1, has_n, vn_base + *a + 1));
+			obj.push(' ');
+			obj.push_str(&face_corner(v_base + *b + 1, has_uv, vt_base + *b + 1, has_n, vn_base + *b + 1));
+			obj.push(' ');
+			obj.push_str(&face_corner(v_base + *c + 1, has_uv, vt_base + *c + 1, has_n, vn_base + *c + 1));
+			obj.push('\n');
 		}
 		v_base += group.positions.len() as u32;
-		vt_base += group.uvs.len() as u32;
-		vn_base += group.normals.len() as u32;
+		if has_uv {
+			vt_base += group.uvs.len() as u32;
+		}
+		if has_n {
+			vn_base += group.normals.len() as u32;
+		}
 	}
 	obj
+}
+
+fn face_corner(v: u32, has_uv: bool, vt: u32, has_n: bool, vn: u32) -> String {
+	match (has_uv, has_n) {
+		(true, true) => format!("{v}/{vt}/{vn}"),
+		(false, true) => format!("{v}//{vn}"),
+		(true, false) => format!("{v}/{vt}"),
+		(false, false) => format!("{v}"),
+	}
 }
 
 pub fn write_obj_bundle(obj_path: &Path, groups: &[MeshGroup]) -> ExportReport {
@@ -451,47 +453,33 @@ pub fn write_obj_bundle(obj_path: &Path, groups: &[MeshGroup]) -> ExportReport {
 
 	let mut report = ExportReport::default();
 	report.groups = groups.len();
-
-	let prepared = order_parts_for_obj(groups.iter().cloned().map(prepare_group_for_obj).collect());
-	report.welded_vertices = prepared.iter().map(|g| g.positions.len()).sum();
-	report.vertices = report.welded_vertices;
-	report.faces = prepared.iter().map(|g| g.faces.len()).sum();
-	report.has_uvs = prepared.iter().all(|g| g.uvs.len() == g.positions.len() && !g.uvs.is_empty());
-	report.has_normals = true;
-	report.bounds_min = Vec3::splat(f32::MAX);
-	report.bounds_max = Vec3::splat(f32::MIN);
-	for group in &prepared {
+	for group in groups {
+		report.vertices += group.positions.len();
+		report.faces += group.faces.len();
+		report.has_uvs |= !group.uvs.is_empty();
+		report.has_normals |= !group.normals.is_empty();
 		for p in &group.positions {
 			report.bounds_min = report.bounds_min.min(*p);
 			report.bounds_max = report.bounds_max.max(*p);
 		}
 	}
 
-	let obj_text = format_obj_prepared(&prepared, &mtl_name);
+	let obj_text = format_obj(groups, &mtl_name);
 	std::fs::write(obj_path, &obj_text).expect("write obj");
-
-	let albedo_name = "albedo.png";
-	let albedo_path = obj_path.with_file_name(albedo_name);
-	std::fs::write(&albedo_path, solid_png_rgb(180, 180, 188)).expect("write albedo png");
 
 	let mut mtl = BufWriter::new(File::create(&mtl_path).expect("create mtl"));
 	writeln!(mtl, "# Maybraid character mesh export").unwrap();
-	let mut seen = std::collections::HashSet::new();
-	for group in &prepared {
-		if !seen.insert(group.material_name.clone()) {
-			continue;
-		}
+	for group in groups {
 		writeln!(mtl, "newmtl {}", group.material_name).unwrap();
 		writeln!(
 			mtl,
 			"Kd {} {} {}",
-			fmt_f32(group.diffuse[0]),
-			fmt_f32(group.diffuse[1]),
-			fmt_f32(group.diffuse[2])
+			group.diffuse[0],
+			group.diffuse[1],
+			group.diffuse[2]
 		)
 		.unwrap();
 		writeln!(mtl, "d 1.0").unwrap();
-		writeln!(mtl, "map_Kd {albedo_name}").unwrap();
 	}
 	mtl.flush().unwrap();
 
@@ -585,32 +573,13 @@ mod tests {
 	}
 
 	#[test]
-	fn every_object_has_uvs_and_relative_mtllib() {
+	fn mixed_uv_groups_keep_vt_in_range() {
+		// UV-less body then UV head — the old writer reused the vertex index for vt.
 		let text = format_obj(&[tri("body", 0.0, false), tri("head", 1.0, true)], "x.mtl");
 		let stats = validate_obj_text(&text).expect(&text);
-		assert!(stats.iter().all(|s| s.texcoords > 0 && s.faces > 0), "{stats:?}");
-		assert!(text.contains("mtllib x.mtl\n"), "{text}");
-		assert!(!text.contains("mtllib /"), "{text}");
-		assert!(!text.lines().any(|l| l.starts_with("f ") && l.contains("//")), "{text}");
-		assert!(!text.contains("\ng "), "{text}");
-		let first_o = text.lines().find(|l| l.starts_with("o ")).unwrap();
-		assert_eq!(first_o, "o root", "{text}");
-		for line in text.lines().filter(|l| {
-			l.starts_with("v ") || l.starts_with("vt ") || l.starts_with("vn ")
-		}) {
-			for tok in line.split_whitespace().skip(1) {
-				if let Some((_, frac)) = tok.split_once('.') {
-					assert!(frac.len() <= 5, "precision {tok}");
-				}
-			}
-		}
-	}
-
-	#[test]
-	fn mixed_uv_groups_keep_vt_in_range() {
-		let text = format_obj(&[tri("body", 0.0, false), tri("head", 1.0, true)], "x.mtl");
-		validate_obj_text(&text).expect(&text);
-		assert!(text.contains("f 4/4/4 5/5/5 6/6/6"), "{text}");
+		assert_eq!(stats.iter().map(|s| s.faces).collect::<Vec<_>>(), vec![1, 1]);
+		assert!(text.contains("f 4/1/4 5/2/5 6/3/6"), "{text}");
+		assert!(!text.contains("f 4/4/4"), "{text}");
 	}
 
 	#[test]
