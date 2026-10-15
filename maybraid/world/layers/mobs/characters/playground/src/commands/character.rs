@@ -31,7 +31,7 @@ pub struct AssembleArgs {
 	#[arg(long, value_enum, default_value_t = CharacterSpecies::Braidman)]
 	pub species: CharacterSpecies,
 
-	/// Procedural clip (`still`, `walk`, `run`, `jab`, `leap`, …).
+	/// Procedural clip (`still`, `walk`, `run`, `jab`, `victory-wave`, `leap`, …).
 	#[arg(long, value_enum, default_value_t = AnimationMode::Run)]
 	pub animation: AnimationMode,
 

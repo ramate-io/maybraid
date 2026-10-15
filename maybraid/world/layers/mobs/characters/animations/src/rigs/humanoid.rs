@@ -16,6 +16,7 @@ pub mod tuck;
 pub mod tucked_flip;
 pub mod two_footed_jump;
 pub mod two_footed_tucked_flip;
+pub mod victory_wave;
 pub mod walk;
 pub mod wing;
 pub mod write_masks;
