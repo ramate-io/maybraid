@@ -1,4255 +1,8 @@
 {
   "parts": [
     {
-      "group": "tail__cat-tail",
-      "part_host": "446v0",
-      "part_slot": "Tail",
-      "part_node": {
-        "label": "cat-tail",
-        "normalization_scale": 1.0,
-        "feature_translation": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "feature_scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      },
-      "socket": {
-        "bone": "tailbone",
-        "local_translation": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "local_scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "applied": true
-      },
-      "mesh_entity": "BézierCurve",
-      "mesh_global": [
-        -0.000001693225,
-        4.4703484e-8,
-        -0.74999994
-      ],
-      "mesh_local_scale": [
-        1.0,
-        1.0,
-        1.0
-      ],
-      "has_skinned_mesh": false,
-      "joint_count": 0,
-      "sample_bind_v0": [
-        -0.029129835,
-        0.54190934,
-        -0.42415243
-      ],
-      "sample_skinned_world_v0": [
-        -0.03932881,
-        -0.5726056,
-        -1.2919092
-      ],
-      "sample_obj_character_v0": [
-        -0.03932881,
-        -0.5726056,
-        -1.2919092
-      ],
-      "reference_bbox_min": [
-        -0.0650927,
-        -0.6513086,
-        -1.3030581
-      ],
-      "reference_bbox_max": [
-        0.07120119,
-        -0.05044877,
-        -0.69765705
-      ],
-      "obj_bbox_min": [
-        -0.0650927,
-        -0.6513086,
-        -1.3030581
-      ],
-      "obj_bbox_max": [
-        0.07120119,
-        -0.05044877,
-        -0.69765705
-      ],
-      "bbox_delta_m": 0.0,
-      "bind_local_bbox_min": [
-        -0.04821535,
-        -0.05234294,
-        -0.4824509
-      ],
-      "bind_local_bbox_max": [
-        0.05274392,
-        0.55305827,
-        -0.037369493
-      ],
-      "mesh_world_scale": [
-        1.35,
-        0.99999994,
-        1.3499999
-      ],
-      "live_weight_vertex_fraction": 1.0,
-      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
-      "chain_to_root": [
-        {
-          "entity": "718v0",
-          "name": "BézierCurve",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.000001693225,
-            4.4703484e-8,
-            -0.74999994
-          ],
-          "global_scale": [
-            1.35,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "717v0",
-          "name": "BézierCurve",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.000001693225,
-            4.4703484e-8,
-            -0.74999994
-          ],
-          "global_scale": [
-            1.35,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "719v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.000001693225,
-            4.4703484e-8,
-            -0.74999994
-          ],
-          "global_scale": [
-            1.35,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "446v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.000001693225,
-            4.4703484e-8,
-            -0.74999994
-          ],
-          "global_scale": [
-            1.35,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "615v0",
-          "name": "tailbone",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.000001693225,
-            4.4703484e-8,
-            -0.74999994
-          ],
-          "global_scale": [
-            1.35,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "634v0",
-          "name": "lumbar",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0000012542407,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            1.4901161e-8,
-            -0.24999999
-          ],
-          "global_scale": [
-            1.35,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "633v0",
-          "name": "posterior_mid_back",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            -0.70710677,
-            0.0,
-            0.0,
-            0.70710677
-          ],
-          "local_scale": [
-            1.35,
-            1.0,
-            1.35
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.35,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "625v0",
-          "name": "Quadruped",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "639v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "443v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "442v0",
-          "name": "character-visual",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        }
-      ]
-    },
-    {
-      "group": "eye_left__standard",
-      "part_host": "447v0",
-      "part_slot": "EyeLeft",
-      "part_node": {
-        "label": "standard",
-        "normalization_scale": 0.35,
-        "feature_translation": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "feature_scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      },
-      "socket": {
-        "bone": "eye_socket.L",
-        "local_translation": [
-          0.0,
-          -0.3,
-          -0.2
-        ],
-        "local_scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "applied": true
-      },
-      "mesh_entity": "HumanoidEyeLeft",
-      "mesh_global": [
-        0.29362577,
-        0.11745086,
-        1.3479996
-      ],
-      "mesh_local_scale": [
-        1.0,
-        1.0,
-        1.0
-      ],
-      "has_skinned_mesh": false,
-      "joint_count": 0,
-      "sample_bind_v0": [
-        0.003102377,
-        -0.5008329,
-        0.54999995
-      ],
-      "sample_skinned_world_v0": [
-        0.29426357,
-        0.014511056,
-        1.4317371
-      ],
-      "sample_obj_character_v0": [
-        0.29426357,
-        0.014511056,
-        1.4317371
-      ],
-      "reference_bbox_min": [
-        0.17123824,
-        0.014511056,
-        1.384159
-      ],
-      "reference_bbox_max": [
-        0.41643727,
-        0.21936546,
-        1.4741762
-      ],
-      "obj_bbox_min": [
-        0.17123824,
-        0.014511056,
-        1.384159
-      ],
-      "obj_bbox_max": [
-        0.41643727,
-        0.21936546,
-        1.4741762
-      ],
-      "bbox_delta_m": 0.0,
-      "bind_local_bbox_min": [
-        -0.5954518,
-        -0.5008329,
-        0.23749998
-      ],
-      "bind_local_bbox_max": [
-        0.5975135,
-        0.4958439,
-        0.8287462
-      ],
-      "mesh_world_scale": [
-        0.20553744,
-        0.20553745,
-        0.15224998
-      ],
-      "live_weight_vertex_fraction": 1.0,
-      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
-      "chain_to_root": [
-        {
-          "entity": "527v0",
-          "name": "HumanoidEyeLeft",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.29362577,
-            0.11745086,
-            1.3479996
-          ],
-          "global_scale": [
-            0.20553744,
-            0.20553745,
-            0.15224998
-          ]
-        },
-        {
-          "entity": "528v0",
-          "name": "HumanoidEyeLeft",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.29362577,
-            0.11745086,
-            1.3479996
-          ],
-          "global_scale": [
-            0.20553744,
-            0.20553745,
-            0.15224998
-          ]
-        },
-        {
-          "entity": "526v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.29362577,
-            0.11745086,
-            1.3479996
-          ],
-          "global_scale": [
-            0.20553744,
-            0.20553745,
-            0.15224998
-          ]
-        },
-        {
-          "entity": "447v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            -0.3,
-            -0.2
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            0.35,
-            0.35,
-            0.35
-          ],
-          "global_translation": [
-            0.29362577,
-            0.11745086,
-            1.3479996
-          ],
-          "global_scale": [
-            0.20553744,
-            0.20553745,
-            0.15224998
-          ]
-        },
-        {
-          "entity": "560v0",
-          "name": "eye_socket.L",
-          "local_translation": [
-            -7.946628e-9,
-            1.0,
-            -2.1855694e-8
-          ],
-          "local_rotation": [
-            -0.5,
-            0.5,
-            0.5,
-            0.5
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.2936259,
-            0.29362595,
-            1.4349995
-          ],
-          "global_scale": [
-            0.5872498,
-            0.5872499,
-            0.43499994
-          ]
-        },
-        {
-          "entity": "580v0",
-          "name": "eye_socket_protrusion.L",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            0.70710677,
-            0.0,
-            3.090862e-8,
-            0.70710677
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.29362524,
-            0.29362535,
-            0.9999995
-          ],
-          "global_scale": [
-            0.5872499,
-            0.43499994,
-            0.5872498
-          ]
-        },
-        {
-          "entity": "578v0",
-          "name": "eye_width.L",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            1.545431e-8,
-            1.545431e-8,
-            -0.70710677,
-            0.70710677
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.9662877e-7,
-            0.29362532,
-            0.99999976
-          ],
-          "global_scale": [
-            0.5872499,
-            0.5872499,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "576v0",
-          "name": "nose_eye",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "575v0",
-          "name": "Armature",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "589v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "444v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            0.43500003,
-            0.43500003,
-            0.43500003
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "606v0",
-          "name": "head_socket",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            5.3385076e-8,
-            -0.70710677,
-            -0.70710677,
-            5.3385076e-8
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            1.3499998,
-            1.3499998,
-            0.9999999
-          ]
-        },
-        {
-          "entity": "628v0",
-          "name": "neck",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            4.3898402e-7,
-            -5.358161e-10,
-            4.3898402e-7,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            4.4703484e-8,
-            0.74999994
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "627v0",
-          "name": "upper_back",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            1.4901161e-8,
-            0.24999999
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "626v0",
-          "name": "anterior_mid_back",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.70710677,
-            0.70710677,
-            0.0
-          ],
-          "local_scale": [
-            1.35,
-            1.0,
-            1.35
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "625v0",
-          "name": "Quadruped",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "639v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "443v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "442v0",
-          "name": "character-visual",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        }
-      ]
-    },
-    {
-      "group": "eye_right__standard",
-      "part_host": "448v0",
-      "part_slot": "EyeRight",
-      "part_node": {
-        "label": "standard",
-        "normalization_scale": 0.3,
-        "feature_translation": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "feature_scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      },
-      "socket": {
-        "bone": "eye_socket.R",
-        "local_translation": [
-          0.0,
-          -0.35,
-          -0.2
-        ],
-        "local_scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "applied": true
-      },
-      "mesh_entity": "HumanoidEyeLeft",
-      "mesh_global": [
-        -0.29362422,
-        0.08808838,
-        1.348
-      ],
-      "mesh_local_scale": [
-        1.0,
-        1.0,
-        1.0
-      ],
-      "has_skinned_mesh": false,
-      "joint_count": 0,
-      "sample_bind_v0": [
-        -0.003102377,
-        -0.5008329,
-        0.54999995
-      ],
-      "sample_skinned_world_v0": [
-        -0.2941707,
-        -0.00014574826,
-        1.4197751
-      ],
-      "sample_obj_character_v0": [
-        -0.2941707,
-        -0.00014574826,
-        1.4197751
-      ],
-      "reference_bbox_min": [
-        -0.39889106,
-        -0.00014574826,
-        1.3789937
-      ],
-      "reference_bbox_max": [
-        -0.18872046,
-        0.17544375,
-        1.4561514
-      ],
-      "obj_bbox_min": [
-        -0.39889106,
-        -0.00014574826,
-        1.3789937
-      ],
-      "obj_bbox_max": [
-        -0.18872046,
-        0.17544375,
-        1.4561514
-      ],
-      "bbox_delta_m": 0.0,
-      "bind_local_bbox_min": [
-        -0.5975135,
-        -0.5008329,
-        0.23749998
-      ],
-      "bind_local_bbox_max": [
-        0.5954518,
-        0.4958439,
-        0.8287462
-      ],
-      "mesh_world_scale": [
-        0.17617495,
-        0.17617497,
-        0.13049999
-      ],
-      "live_weight_vertex_fraction": 1.0,
-      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
-      "chain_to_root": [
-        {
-          "entity": "520v0",
-          "name": "HumanoidEyeLeft",
-          "local_translation": [
-            -0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            -0.0,
-            -0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.29362422,
-            0.08808838,
-            1.348
-          ],
-          "global_scale": [
-            0.17617495,
-            0.17617497,
-            0.13049999
-          ]
-        },
-        {
-          "entity": "521v0",
-          "name": "HumanoidEyeLeft",
-          "local_translation": [
-            -0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            -0.0,
-            -0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.29362422,
-            0.08808838,
-            1.348
-          ],
-          "global_scale": [
-            0.17617495,
-            0.17617497,
-            0.13049999
-          ]
-        },
-        {
-          "entity": "519v0",
-          "name": "Scene",
-          "local_translation": [
-            -0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            -0.0,
-            -0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.29362422,
-            0.08808838,
-            1.348
-          ],
-          "global_scale": [
-            0.17617495,
-            0.17617497,
-            0.13049999
-          ]
-        },
-        {
-          "entity": "448v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            -0.35,
-            -0.2
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            0.3,
-            0.3,
-            0.3
-          ],
-          "global_translation": [
-            -0.29362422,
-            0.08808838,
-            1.348
-          ],
-          "global_scale": [
-            0.17617495,
-            0.17617497,
-            0.13049999
-          ]
-        },
-        {
-          "entity": "563v0",
-          "name": "eye_socket.R",
-          "local_translation": [
-            7.946628e-9,
-            1.0,
-            -2.1855694e-8
-          ],
-          "local_rotation": [
-            -0.5,
-            -0.5,
-            -0.5,
-            0.5
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.29362407,
-            0.29362595,
-            1.435
-          ],
-          "global_scale": [
-            0.5872498,
-            0.5872499,
-            0.43499994
-          ]
-        },
-        {
-          "entity": "583v0",
-          "name": "eye_socket_protrusion.R",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            0.70710677,
-            0.0,
-            -3.090862e-8,
-            0.70710677
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.29362464,
-            0.29362535,
-            1.0
-          ],
-          "global_scale": [
-            0.5872499,
-            0.43499994,
-            0.5872498
-          ]
-        },
-        {
-          "entity": "581v0",
-          "name": "eye_width.R",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            1.545431e-8,
-            -1.545431e-8,
-            0.70710677,
-            0.70710677
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.9662877e-7,
-            0.29362532,
-            0.99999976
-          ],
-          "global_scale": [
-            0.5872499,
-            0.5872499,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "576v0",
-          "name": "nose_eye",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "575v0",
-          "name": "Armature",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "589v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "444v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            0.43500003,
-            0.43500003,
-            0.43500003
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "606v0",
-          "name": "head_socket",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            5.3385076e-8,
-            -0.70710677,
-            -0.70710677,
-            5.3385076e-8
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            1.3499998,
-            1.3499998,
-            0.9999999
-          ]
-        },
-        {
-          "entity": "628v0",
-          "name": "neck",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            4.3898402e-7,
-            -5.358161e-10,
-            4.3898402e-7,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            4.4703484e-8,
-            0.74999994
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "627v0",
-          "name": "upper_back",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            1.4901161e-8,
-            0.24999999
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "626v0",
-          "name": "anterior_mid_back",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.70710677,
-            0.70710677,
-            0.0
-          ],
-          "local_scale": [
-            1.35,
-            1.0,
-            1.35
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "625v0",
-          "name": "Quadruped",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "639v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "443v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "442v0",
-          "name": "character-visual",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        }
-      ]
-    },
-    {
-      "group": "nose__trunkish",
-      "part_host": "449v0",
-      "part_slot": "Nose",
-      "part_node": {
-        "label": "trunkish",
-        "normalization_scale": 0.6,
-        "feature_translation": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "feature_scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      },
-      "socket": {
-        "bone": "nose_socket",
-        "local_translation": [
-          0.0,
-          -0.1,
-          0.1
-        ],
-        "local_scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "applied": true
-      },
-      "mesh_entity": "TrunkishNose",
-      "mesh_global": [
-        9.698033e-7,
-        -0.05872395,
-        1.4785
-      ],
-      "mesh_local_scale": [
-        1.0,
-        1.0,
-        1.0
-      ],
-      "has_skinned_mesh": false,
-      "joint_count": 0,
-      "sample_bind_v0": [
-        -0.40845883,
-        -1.5682077,
-        0.8758922
-      ],
-      "sample_skinned_world_v0": [
-        -0.14391911,
-        -0.6112814,
-        1.7071083
-      ],
-      "sample_obj_character_v0": [
-        -0.14391911,
-        -0.6112814,
-        1.7071083
-      ],
-      "reference_bbox_min": [
-        -0.1725437,
-        -0.739643,
-        1.2183807
-      ],
-      "reference_bbox_max": [
-        0.16972063,
-        0.13057458,
-        1.7806504
-      ],
-      "obj_bbox_min": [
-        -0.1725437,
-        -0.739643,
-        1.2183807
-      ],
-      "obj_bbox_max": [
-        0.16972063,
-        0.13057458,
-        1.7806504
-      ],
-      "bbox_delta_m": 0.0,
-      "bind_local_bbox_min": [
-        -0.48969743,
-        -1.932509,
-        -0.9966255
-      ],
-      "bind_local_bbox_max": [
-        0.48167887,
-        0.53724587,
-        1.157664
-      ],
-      "mesh_world_scale": [
-        0.3523499,
-        0.3523499,
-        0.26099995
-      ],
-      "live_weight_vertex_fraction": 1.0,
-      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
-      "chain_to_root": [
-        {
-          "entity": "661v0",
-          "name": "TrunkishNose",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            9.698033e-7,
-            -0.05872395,
-            1.4785
-          ],
-          "global_scale": [
-            0.3523499,
-            0.3523499,
-            0.26099995
-          ]
-        },
-        {
-          "entity": "662v0",
-          "name": "TrunkishNose",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            9.698033e-7,
-            -0.05872395,
-            1.4785
-          ],
-          "global_scale": [
-            0.3523499,
-            0.3523499,
-            0.26099995
-          ]
-        },
-        {
-          "entity": "660v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            9.698033e-7,
-            -0.05872395,
-            1.4785
-          ],
-          "global_scale": [
-            0.3523499,
-            0.3523499,
-            0.26099995
-          ]
-        },
-        {
-          "entity": "449v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            -0.1,
-            0.1
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            0.6,
-            0.6,
-            0.6
-          ],
-          "global_translation": [
-            9.698033e-7,
-            -0.05872395,
-            1.4785
-          ],
-          "global_scale": [
-            0.3523499,
-            0.3523499,
-            0.26099995
-          ]
-        },
-        {
-          "entity": "573v0",
-          "name": "nose_socket",
-          "local_translation": [
-            0.0,
-            1.0,
-            0.0
-          ],
-          "local_rotation": [
-            5.3385076e-8,
-            -0.70710677,
-            -0.70710677,
-            5.3385076e-8
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            9.005731e-7,
-            9.674392e-7,
-            1.435
-          ],
-          "global_scale": [
-            0.5872498,
-            0.5872498,
-            0.4349999
-          ]
-        },
-        {
-          "entity": "587v0",
-          "name": "nose_protrusion",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.70710677,
-            0.70710677,
-            0.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.5872499,
-            0.43499994,
-            0.5872499
-          ]
-        },
-        {
-          "entity": "575v0",
-          "name": "Armature",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "589v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "444v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            0.43500003,
-            0.43500003,
-            0.43500003
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "606v0",
-          "name": "head_socket",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            5.3385076e-8,
-            -0.70710677,
-            -0.70710677,
-            5.3385076e-8
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            1.3499998,
-            1.3499998,
-            0.9999999
-          ]
-        },
-        {
-          "entity": "628v0",
-          "name": "neck",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            4.3898402e-7,
-            -5.358161e-10,
-            4.3898402e-7,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            4.4703484e-8,
-            0.74999994
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "627v0",
-          "name": "upper_back",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            1.4901161e-8,
-            0.24999999
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "626v0",
-          "name": "anterior_mid_back",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.70710677,
-            0.70710677,
-            0.0
-          ],
-          "local_scale": [
-            1.35,
-            1.0,
-            1.35
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "625v0",
-          "name": "Quadruped",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "639v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "443v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "442v0",
-          "name": "character-visual",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        }
-      ]
-    },
-    {
-      "group": "ear_left__epiphant",
-      "part_host": "450v0",
-      "part_slot": "EarLeft",
-      "part_node": {
-        "label": "epiphant",
-        "normalization_scale": 0.6,
-        "feature_translation": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "feature_scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      },
-      "socket": {
-        "bone": "ear_socket.L",
-        "local_translation": [
-          -0.4,
-          0.15,
-          -0.05
-        ],
-        "local_scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "applied": true
-      },
-      "mesh_entity": "BézierCurve",
-      "mesh_global": [
-        0.35235023,
-        0.38171282,
-        0.97824943
-      ],
-      "mesh_local_scale": [
-        1.0,
-        1.0,
-        1.0
-      ],
-      "has_skinned_mesh": false,
-      "joint_count": 0,
-      "sample_bind_v0": [
-        -0.243561,
-        -0.53583467,
-        0.019996962
-      ],
-      "sample_skinned_world_v0": [
-        0.26653156,
-        0.19291155,
-        0.9834688
-      ],
-      "sample_obj_character_v0": [
-        0.26653156,
-        0.19291155,
-        0.9834688
-      ],
-      "reference_bbox_min": [
-        0.2483285,
-        -0.20062813,
-        0.8691095
-      ],
-      "reference_bbox_max": [
-        1.0693605,
-        0.85005957,
-        1.1104126
-      ],
-      "obj_bbox_min": [
-        0.2483285,
-        -0.20062813,
-        0.8691095
-      ],
-      "obj_bbox_max": [
-        1.0693605,
-        0.85005957,
-        1.1104126
-      ],
-      "bbox_delta_m": 0.0,
-      "bind_local_bbox_min": [
-        -0.29522276,
-        -1.6527351,
-        -0.41815978
-      ],
-      "bind_local_bbox_max": [
-        2.034938,
-        1.3292092,
-        0.50637364
-      ],
-      "mesh_world_scale": [
-        0.3523499,
-        0.35234988,
-        0.26099998
-      ],
-      "live_weight_vertex_fraction": 1.0,
-      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
-      "chain_to_root": [
-        {
-          "entity": "508v0",
-          "name": "BézierCurve",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.35235023,
-            0.38171282,
-            0.97824943
-          ],
-          "global_scale": [
-            0.3523499,
-            0.35234988,
-            0.26099998
-          ]
-        },
-        {
-          "entity": "509v0",
-          "name": "BézierCurve",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.35235023,
-            0.38171282,
-            0.97824943
-          ],
-          "global_scale": [
-            0.3523499,
-            0.35234988,
-            0.26099998
-          ]
-        },
-        {
-          "entity": "507v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.35235023,
-            0.38171282,
-            0.97824943
-          ],
-          "global_scale": [
-            0.3523499,
-            0.35234988,
-            0.26099998
-          ]
-        },
-        {
-          "entity": "450v0",
-          "name": null,
-          "local_translation": [
-            -0.4,
-            0.15,
-            -0.05
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            0.6,
-            0.6,
-            0.6
-          ],
-          "global_translation": [
-            0.35235023,
-            0.38171282,
-            0.97824943
-          ],
-          "global_scale": [
-            0.3523499,
-            0.35234988,
-            0.26099998
-          ]
-        },
-        {
-          "entity": "559v0",
-          "name": "ear_socket.L",
-          "local_translation": [
-            0.0,
-            0.50000006,
-            0.0
-          ],
-          "local_rotation": [
-            0.5,
-            0.5,
-            0.5,
-            0.5
-          ],
-          "local_scale": [
-            1.0,
-            0.99999994,
-            1.0
-          ],
-          "global_translation": [
-            0.5872502,
-            0.29362538,
-            0.9999993
-          ],
-          "global_scale": [
-            0.5872498,
-            0.58724976,
-            0.43499994
-          ]
-        },
-        {
-          "entity": "579v0",
-          "name": "temple.L",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            -0.70710677,
-            0.0,
-            0.70710677
-          ],
-          "local_scale": [
-            1.0,
-            0.99999994,
-            1.0
-          ],
-          "global_translation": [
-            0.29362524,
-            0.29362535,
-            0.9999995
-          ],
-          "global_scale": [
-            0.43499994,
-            0.5872498,
-            0.5872498
-          ]
-        },
-        {
-          "entity": "578v0",
-          "name": "eye_width.L",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            1.545431e-8,
-            1.545431e-8,
-            -0.70710677,
-            0.70710677
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.9662877e-7,
-            0.29362532,
-            0.99999976
-          ],
-          "global_scale": [
-            0.5872499,
-            0.5872499,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "576v0",
-          "name": "nose_eye",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "575v0",
-          "name": "Armature",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "589v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "444v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            0.43500003,
-            0.43500003,
-            0.43500003
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "606v0",
-          "name": "head_socket",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            5.3385076e-8,
-            -0.70710677,
-            -0.70710677,
-            5.3385076e-8
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            1.3499998,
-            1.3499998,
-            0.9999999
-          ]
-        },
-        {
-          "entity": "628v0",
-          "name": "neck",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            4.3898402e-7,
-            -5.358161e-10,
-            4.3898402e-7,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            4.4703484e-8,
-            0.74999994
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "627v0",
-          "name": "upper_back",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            1.4901161e-8,
-            0.24999999
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "626v0",
-          "name": "anterior_mid_back",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.70710677,
-            0.70710677,
-            0.0
-          ],
-          "local_scale": [
-            1.35,
-            1.0,
-            1.35
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "625v0",
-          "name": "Quadruped",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "639v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "443v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "442v0",
-          "name": "character-visual",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        }
-      ]
-    },
-    {
-      "group": "ear_right__epiphant",
-      "part_host": "451v0",
-      "part_slot": "EarRight",
-      "part_node": {
-        "label": "epiphant",
-        "normalization_scale": 0.6,
-        "feature_translation": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "feature_scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      },
-      "socket": {
-        "bone": "ear_socket.R",
-        "local_translation": [
-          0.4,
-          0.15,
-          -0.05
-        ],
-        "local_scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "applied": true
-      },
-      "mesh_entity": "BézierCurve",
-      "mesh_global": [
-        -0.3523497,
-        0.38171282,
-        0.97825
-      ],
-      "mesh_local_scale": [
-        1.0,
-        1.0,
-        1.0
-      ],
-      "has_skinned_mesh": false,
-      "joint_count": 0,
-      "sample_bind_v0": [
-        0.243561,
-        -0.53583467,
-        0.019996962
-      ],
-      "sample_skinned_world_v0": [
-        -0.266531,
-        0.19291152,
-        0.98346925
-      ],
-      "sample_obj_character_v0": [
-        -0.266531,
-        0.19291152,
-        0.98346925
-      ],
-      "reference_bbox_min": [
-        -1.06936,
-        -0.20062825,
-        0.8691108
-      ],
-      "reference_bbox_max": [
-        -0.248328,
-        0.85005957,
-        1.1104137
-      ],
-      "obj_bbox_min": [
-        -1.06936,
-        -0.20062825,
-        0.8691108
-      ],
-      "obj_bbox_max": [
-        -0.248328,
-        0.85005957,
-        1.1104137
-      ],
-      "bbox_delta_m": 0.0,
-      "bind_local_bbox_min": [
-        -2.034938,
-        -1.6527351,
-        -0.41815978
-      ],
-      "bind_local_bbox_max": [
-        0.29522276,
-        1.3292092,
-        0.50637364
-      ],
-      "mesh_world_scale": [
-        0.3523499,
-        0.3523499,
-        0.261
-      ],
-      "live_weight_vertex_fraction": 1.0,
-      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
-      "chain_to_root": [
-        {
-          "entity": "756v0",
-          "name": "BézierCurve",
-          "local_translation": [
-            -0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            -0.0,
-            -0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.3523497,
-            0.38171282,
-            0.97825
-          ],
-          "global_scale": [
-            0.3523499,
-            0.3523499,
-            0.261
-          ]
-        },
-        {
-          "entity": "755v0",
-          "name": "BézierCurve",
-          "local_translation": [
-            -0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            -0.0,
-            -0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.3523497,
-            0.38171282,
-            0.97825
-          ],
-          "global_scale": [
-            0.3523499,
-            0.3523499,
-            0.261
-          ]
-        },
-        {
-          "entity": "757v0",
-          "name": "Scene",
-          "local_translation": [
-            -0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            -0.0,
-            -0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.3523497,
-            0.38171282,
-            0.97825
-          ],
-          "global_scale": [
-            0.3523499,
-            0.3523499,
-            0.261
-          ]
-        },
-        {
-          "entity": "451v0",
-          "name": null,
-          "local_translation": [
-            0.4,
-            0.15,
-            -0.05
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            0.6,
-            0.6,
-            0.6
-          ],
-          "global_translation": [
-            -0.3523497,
-            0.38171282,
-            0.97825
-          ],
-          "global_scale": [
-            0.3523499,
-            0.3523499,
-            0.261
-          ]
-        },
-        {
-          "entity": "562v0",
-          "name": "ear_socket.R",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            -1.545431e-8,
-            1.545431e-8,
-            -0.70710677,
-            0.70710677
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.5872496,
-            0.29362538,
-            1.0000002
-          ],
-          "global_scale": [
-            0.5872498,
-            0.5872498,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "582v0",
-          "name": "temple.R",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            -0.29362464,
-            0.29362535,
-            1.0
-          ],
-          "global_scale": [
-            0.5872499,
-            0.5872499,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "581v0",
-          "name": "eye_width.R",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            1.545431e-8,
-            -1.545431e-8,
-            0.70710677,
-            0.70710677
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.9662877e-7,
-            0.29362532,
-            0.99999976
-          ],
-          "global_scale": [
-            0.5872499,
-            0.5872499,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "576v0",
-          "name": "nose_eye",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "575v0",
-          "name": "Armature",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "589v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "444v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            0.43500003,
-            0.43500003,
-            0.43500003
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "606v0",
-          "name": "head_socket",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            5.3385076e-8,
-            -0.70710677,
-            -0.70710677,
-            5.3385076e-8
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            1.3499998,
-            1.3499998,
-            0.9999999
-          ]
-        },
-        {
-          "entity": "628v0",
-          "name": "neck",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            4.3898402e-7,
-            -5.358161e-10,
-            4.3898402e-7,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            4.4703484e-8,
-            0.74999994
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "627v0",
-          "name": "upper_back",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            1.4901161e-8,
-            0.24999999
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "626v0",
-          "name": "anterior_mid_back",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.70710677,
-            0.70710677,
-            0.0
-          ],
-          "local_scale": [
-            1.35,
-            1.0,
-            1.35
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "625v0",
-          "name": "Quadruped",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "639v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "443v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "442v0",
-          "name": "character-visual",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        }
-      ]
-    },
-    {
-      "group": "head__meerkat",
-      "part_host": "452v0",
-      "part_slot": "HeadMesh",
-      "part_node": {
-        "label": "meerkat",
-        "normalization_scale": 1.0,
-        "feature_translation": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "feature_scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      },
-      "socket": {
-        "bone": "root",
-        "local_translation": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "local_scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "applied": true
-      },
-      "mesh_entity": "MeerkatHead",
-      "mesh_global": [
-        2.963142e-7,
-        3.5591884e-7,
-        0.99999994
-      ],
-      "mesh_local_scale": [
-        1.0,
-        1.0,
-        1.0
-      ],
-      "has_skinned_mesh": true,
-      "joint_count": 30,
-      "sample_bind_v0": [
-        -0.28264275,
-        -0.011326042,
-        0.9280019
-      ],
-      "sample_skinned_world_v0": [
-        -0.16598105,
-        -0.006650309,
-        1.4036807
-      ],
-      "sample_obj_character_v0": [
-        -0.16598105,
-        -0.006650309,
-        1.4036807
-      ],
-      "reference_bbox_min": [
-        -0.6223411,
-        -0.57500356,
-        0.6472971
-      ],
-      "reference_bbox_max": [
-        0.6293584,
-        0.62408113,
-        1.46687
-      ],
-      "obj_bbox_min": [
-        -0.6223411,
-        -0.57500356,
-        0.6472971
-      ],
-      "obj_bbox_max": [
-        0.6293584,
-        0.62408113,
-        1.46687
-      ],
-      "bbox_delta_m": 0.0,
-      "bind_local_bbox_min": [
-        -1.0597558,
-        -0.9791473,
-        -0.8108113
-      ],
-      "bind_local_bbox_max": [
-        1.0717037,
-        1.0627174,
-        1.0732644
-      ],
-      "mesh_world_scale": [
-        0.58724993,
-        0.58724993,
-        0.43499997
-      ],
-      "live_weight_vertex_fraction": 1.0,
-      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
-      "chain_to_root": [
-        {
-          "entity": "818v0",
-          "name": "MeerkatHead",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "452v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "572v0",
-          "name": "root",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "575v0",
-          "name": "Armature",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "589v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "444v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            0.43500003,
-            0.43500003,
-            0.43500003
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            0.58724993,
-            0.58724993,
-            0.43499997
-          ]
-        },
-        {
-          "entity": "606v0",
-          "name": "head_socket",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            5.3385076e-8,
-            -0.70710677,
-            -0.70710677,
-            5.3385076e-8
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            2.963142e-7,
-            3.5591884e-7,
-            0.99999994
-          ],
-          "global_scale": [
-            1.3499998,
-            1.3499998,
-            0.9999999
-          ]
-        },
-        {
-          "entity": "628v0",
-          "name": "neck",
-          "local_translation": [
-            0.0,
-            0.5,
-            0.0
-          ],
-          "local_rotation": [
-            4.3898402e-7,
-            -5.358161e-10,
-            4.3898402e-7,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            4.4703484e-8,
-            0.74999994
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "627v0",
-          "name": "upper_back",
-          "local_translation": [
-            0.0,
-            0.25,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            1.4901161e-8,
-            0.24999999
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "626v0",
-          "name": "anterior_mid_back",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.70710677,
-            0.70710677,
-            0.0
-          ],
-          "local_scale": [
-            1.35,
-            1.0,
-            1.35
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.3499999,
-            0.99999994,
-            1.3499999
-          ]
-        },
-        {
-          "entity": "625v0",
-          "name": "Quadruped",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "639v0",
-          "name": "Scene",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "443v0",
-          "name": null,
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        },
-        {
-          "entity": "442v0",
-          "name": "character-visual",
-          "local_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "local_rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "local_scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "global_translation": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "global_scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        }
-      ]
-    },
-    {
       "group": "body__epiphant",
-      "part_host": "445v0",
+      "part_host": "444v0",
       "part_slot": "BodyMesh",
       "part_node": {
         "label": "epiphant",
@@ -4285,34 +38,34 @@
         0.8473724
       ],
       "sample_skinned_world_v0": [
-        -0.9616979,
-        -1.1863223,
-        0.8902158
+        -0.9616982,
+        -1.1863151,
+        0.8902599
       ],
       "sample_obj_character_v0": [
-        -0.9616979,
-        -1.1863223,
-        0.8902158
+        -0.9616982,
+        -1.1863151,
+        0.8902599
       ],
       "reference_bbox_min": [
-        -1.0380335,
-        -1.3620268,
-        -1.0039366
+        -1.0380336,
+        -1.3620262,
+        -1.0038955
       ],
       "reference_bbox_max": [
-        1.038116,
-        0.66638076,
-        1.023087
+        1.0381162,
+        0.66637856,
+        1.023071
       ],
       "obj_bbox_min": [
-        -1.0380335,
-        -1.3620268,
-        -1.0039366
+        -1.0380336,
+        -1.3620262,
+        -1.0038955
       ],
       "obj_bbox_max": [
-        1.038116,
-        0.66638076,
-        1.023087
+        1.0381162,
+        0.66637856,
+        1.023071
       ],
       "bbox_delta_m": 0.0,
       "bind_local_bbox_min": [
@@ -4334,7 +87,7 @@
       "first_divergence_step": "none (OBJ matches runtime reference skinning)",
       "chain_to_root": [
         {
-          "entity": "498v0",
+          "entity": "571v0",
           "name": "BézierCurve",
           "local_translation": [
             0.0,
@@ -4364,7 +117,7 @@
           ]
         },
         {
-          "entity": "445v0",
+          "entity": "444v0",
           "name": null,
           "local_translation": [
             0.0,
@@ -4394,7 +147,4254 @@
           ]
         },
         {
+          "entity": "441v0",
+          "name": "character-visual",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "group": "tail__cat-tail",
+      "part_host": "445v0",
+      "part_slot": "Tail",
+      "part_node": {
+        "label": "cat-tail",
+        "normalization_scale": 1.0,
+        "feature_translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "feature_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "socket": {
+        "bone": "tailbone",
+        "local_translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "local_scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "applied": true
+      },
+      "mesh_entity": "BézierCurve",
+      "mesh_global": [
+        -0.00010709947,
+        4.4703484e-8,
+        -0.74999994
+      ],
+      "mesh_local_scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "has_skinned_mesh": false,
+      "joint_count": 0,
+      "sample_bind_v0": [
+        -0.029129835,
+        0.54190934,
+        -0.42415243
+      ],
+      "sample_skinned_world_v0": [
+        -0.039548453,
+        -0.5726056,
+        -1.2919047
+      ],
+      "sample_obj_character_v0": [
+        -0.039548453,
+        -0.5726056,
+        -1.2919047
+      ],
+      "reference_bbox_min": [
+        -0.065215655,
+        -0.6513086,
+        -1.3030571
+      ],
+      "reference_bbox_max": [
+        0.07100796,
+        -0.05044877,
+        -0.697658
+      ],
+      "obj_bbox_min": [
+        -0.065215655,
+        -0.6513086,
+        -1.3030571
+      ],
+      "obj_bbox_max": [
+        0.07100796,
+        -0.05044877,
+        -0.697658
+      ],
+      "bbox_delta_m": 0.0,
+      "bind_local_bbox_min": [
+        -0.04821535,
+        -0.05234294,
+        -0.4824509
+      ],
+      "bind_local_bbox_max": [
+        0.05274392,
+        0.55305827,
+        -0.037369493
+      ],
+      "mesh_world_scale": [
+        1.35,
+        0.99999994,
+        1.3499999
+      ],
+      "live_weight_vertex_fraction": 1.0,
+      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
+      "chain_to_root": [
+        {
+          "entity": "717v0",
+          "name": "BézierCurve",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00010709947,
+            4.4703484e-8,
+            -0.74999994
+          ],
+          "global_scale": [
+            1.35,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "716v0",
+          "name": "BézierCurve",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00010709947,
+            4.4703484e-8,
+            -0.74999994
+          ],
+          "global_scale": [
+            1.35,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "718v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00010709947,
+            4.4703484e-8,
+            -0.74999994
+          ],
+          "global_scale": [
+            1.35,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "445v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00010709947,
+            4.4703484e-8,
+            -0.74999994
+          ],
+          "global_scale": [
+            1.35,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "471v0",
+          "name": "tailbone",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00010709947,
+            4.4703484e-8,
+            -0.74999994
+          ],
+          "global_scale": [
+            1.35,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "490v0",
+          "name": "lumbar",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.00007933294,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            1.4901161e-8,
+            -0.24999999
+          ],
+          "global_scale": [
+            1.35,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "489v0",
+          "name": "posterior_mid_back",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            -0.70710677,
+            0.0,
+            0.0,
+            0.70710677
+          ],
+          "local_scale": [
+            1.35,
+            1.0,
+            1.35
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.35,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "481v0",
+          "name": "Quadruped",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "495v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
           "entity": "442v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "441v0",
+          "name": "character-visual",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "group": "eye_left__standard",
+      "part_host": "446v0",
+      "part_slot": "EyeLeft",
+      "part_node": {
+        "label": "standard",
+        "normalization_scale": 0.35,
+        "feature_translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "feature_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "socket": {
+        "bone": "eye_socket.L",
+        "local_translation": [
+          0.0,
+          -0.3,
+          -0.2
+        ],
+        "local_scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "applied": true
+      },
+      "mesh_entity": "HumanoidEyeLeft",
+      "mesh_global": [
+        0.2930713,
+        0.11705926,
+        1.3481909
+      ],
+      "mesh_local_scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "has_skinned_mesh": false,
+      "joint_count": 0,
+      "sample_bind_v0": [
+        0.003102377,
+        -0.5008329,
+        0.54999995
+      ],
+      "sample_skinned_world_v0": [
+        0.2936133,
+        0.014070794,
+        1.431896
+      ],
+      "sample_obj_character_v0": [
+        0.2936133,
+        0.014070794,
+        1.431896
+      ],
+      "reference_bbox_min": [
+        0.17061785,
+        0.014070794,
+        1.3843505
+      ],
+      "reference_bbox_max": [
+        0.4158167,
+        0.21892518,
+        1.4743668
+      ],
+      "obj_bbox_min": [
+        0.17061785,
+        0.014070794,
+        1.3843505
+      ],
+      "obj_bbox_max": [
+        0.4158167,
+        0.21892518,
+        1.4743668
+      ],
+      "bbox_delta_m": 0.0,
+      "bind_local_bbox_min": [
+        -0.5954518,
+        -0.5008329,
+        0.23749998
+      ],
+      "bind_local_bbox_max": [
+        0.5975135,
+        0.4958439,
+        0.8287462
+      ],
+      "mesh_world_scale": [
+        0.20553742,
+        0.20553744,
+        0.15225002
+      ],
+      "live_weight_vertex_fraction": 1.0,
+      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
+      "chain_to_root": [
+        {
+          "entity": "524v0",
+          "name": "HumanoidEyeLeft",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.2930713,
+            0.11705926,
+            1.3481909
+          ],
+          "global_scale": [
+            0.20553742,
+            0.20553744,
+            0.15225002
+          ]
+        },
+        {
+          "entity": "525v0",
+          "name": "HumanoidEyeLeft",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.2930713,
+            0.11705926,
+            1.3481909
+          ],
+          "global_scale": [
+            0.20553742,
+            0.20553744,
+            0.15225002
+          ]
+        },
+        {
+          "entity": "523v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.2930713,
+            0.11705926,
+            1.3481909
+          ],
+          "global_scale": [
+            0.20553742,
+            0.20553744,
+            0.15225002
+          ]
+        },
+        {
+          "entity": "446v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            -0.3,
+            -0.2
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            0.35,
+            0.35,
+            0.35
+          ],
+          "global_translation": [
+            0.2930713,
+            0.11705926,
+            1.3481909
+          ],
+          "global_scale": [
+            0.20553742,
+            0.20553744,
+            0.15225002
+          ]
+        },
+        {
+          "entity": "633v0",
+          "name": "eye_socket.L",
+          "local_translation": [
+            -7.946628e-9,
+            1.0,
+            -2.1855694e-8
+          ],
+          "local_rotation": [
+            -0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.2930149,
+            0.29318386,
+            1.4352468
+          ],
+          "global_scale": [
+            0.58724976,
+            0.5872498,
+            0.43500006
+          ]
+        },
+        {
+          "entity": "653v0",
+          "name": "eye_socket_protrusion.L",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            0.70710677,
+            0.0,
+            3.090862e-8,
+            0.70710677
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.29343054,
+            0.2934356,
+            1.000247
+          ],
+          "global_scale": [
+            0.5872498,
+            0.43500006,
+            0.58724976
+          ]
+        },
+        {
+          "entity": "651v0",
+          "name": "eye_width.L",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            1.545431e-8,
+            1.545431e-8,
+            -0.70710677,
+            0.70710677
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00019433569,
+            0.29348028,
+            1.0000931
+          ],
+          "global_scale": [
+            0.5872498,
+            0.5872498,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "649v0",
+          "name": "nose_eye",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "648v0",
+          "name": "Armature",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "662v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "443v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            0.43500003,
+            0.43500003,
+            0.43500003
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "462v0",
+          "name": "head_socket",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            5.3385076e-8,
+            -0.70710677,
+            -0.70710677,
+            5.3385076e-8
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            1.3499995,
+            1.3499998,
+            1.0000001
+          ]
+        },
+        {
+          "entity": "484v0",
+          "name": "neck",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            -0.00021441205,
+            -0.00007603947,
+            -0.00035397676,
+            0.99999994
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            4.4703484e-8,
+            0.74999994
+          ],
+          "global_scale": [
+            1.3499998,
+            1.0000001,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "483v0",
+          "name": "upper_back",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            1.4901161e-8,
+            0.24999999
+          ],
+          "global_scale": [
+            1.3499999,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "482v0",
+          "name": "anterior_mid_back",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.70710677,
+            0.70710677,
+            0.0
+          ],
+          "local_scale": [
+            1.35,
+            1.0,
+            1.35
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.3499999,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "481v0",
+          "name": "Quadruped",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "495v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "442v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "441v0",
+          "name": "character-visual",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "group": "eye_right__standard",
+      "part_host": "447v0",
+      "part_slot": "EyeRight",
+      "part_node": {
+        "label": "standard",
+        "normalization_scale": 0.3,
+        "feature_translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "feature_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "socket": {
+        "bone": "eye_socket.R",
+        "local_translation": [
+          0.0,
+          -0.35,
+          -0.2
+        ],
+        "local_scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "applied": true
+      },
+      "mesh_entity": "HumanoidEyeLeft",
+      "mesh_global": [
+        -0.29418305,
+        0.08778615,
+        1.3478737
+      ],
+      "mesh_local_scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "has_skinned_mesh": false,
+      "joint_count": 0,
+      "sample_bind_v0": [
+        -0.003102377,
+        -0.5008329,
+        0.54999995
+      ],
+      "sample_skinned_world_v0": [
+        -0.2948116,
+        -0.00048951805,
+        1.4196203
+      ],
+      "sample_obj_character_v0": [
+        -0.2948116,
+        -0.00048951805,
+        1.4196203
+      ],
+      "reference_bbox_min": [
+        -0.3995065,
+        -0.00048951805,
+        1.378867
+      ],
+      "reference_bbox_max": [
+        -0.18933584,
+        0.17509998,
+        1.456061
+      ],
+      "obj_bbox_min": [
+        -0.3995065,
+        -0.00048951805,
+        1.378867
+      ],
+      "obj_bbox_max": [
+        -0.18933584,
+        0.17509998,
+        1.456061
+      ],
+      "bbox_delta_m": 0.0,
+      "bind_local_bbox_min": [
+        -0.5975135,
+        -0.5008329,
+        0.23749998
+      ],
+      "bind_local_bbox_max": [
+        0.5954518,
+        0.4958439,
+        0.8287462
+      ],
+      "mesh_world_scale": [
+        0.17617494,
+        0.17617497,
+        0.13050002
+      ],
+      "live_weight_vertex_fraction": 1.0,
+      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
+      "chain_to_root": [
+        {
+          "entity": "517v0",
+          "name": "HumanoidEyeLeft",
+          "local_translation": [
+            -0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            -0.0,
+            -0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.29418305,
+            0.08778615,
+            1.3478737
+          ],
+          "global_scale": [
+            0.17617494,
+            0.17617497,
+            0.13050002
+          ]
+        },
+        {
+          "entity": "518v0",
+          "name": "HumanoidEyeLeft",
+          "local_translation": [
+            -0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            -0.0,
+            -0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.29418305,
+            0.08778615,
+            1.3478737
+          ],
+          "global_scale": [
+            0.17617494,
+            0.17617497,
+            0.13050002
+          ]
+        },
+        {
+          "entity": "516v0",
+          "name": "Scene",
+          "local_translation": [
+            -0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            -0.0,
+            -0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.29418305,
+            0.08778615,
+            1.3478737
+          ],
+          "global_scale": [
+            0.17617494,
+            0.17617497,
+            0.13050002
+          ]
+        },
+        {
+          "entity": "447v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            -0.35,
+            -0.2
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            0.3,
+            0.3,
+            0.3
+          ],
+          "global_translation": [
+            -0.29418305,
+            0.08778615,
+            1.3478737
+          ],
+          "global_scale": [
+            0.17617494,
+            0.17617497,
+            0.13050002
+          ]
+        },
+        {
+          "entity": "636v0",
+          "name": "eye_socket.R",
+          "local_translation": [
+            7.946628e-9,
+            1.0,
+            -2.1855694e-8
+          ],
+          "local_rotation": [
+            -0.5,
+            -0.5,
+            -0.5,
+            0.5
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.29423493,
+            0.29327324,
+            1.4349389
+          ],
+          "global_scale": [
+            0.58724976,
+            0.5872498,
+            0.43500006
+          ]
+        },
+        {
+          "entity": "656v0",
+          "name": "eye_socket_protrusion.R",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            0.70710677,
+            0.0,
+            -3.090862e-8,
+            0.70710677
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.29381922,
+            0.29352498,
+            0.99993914
+          ],
+          "global_scale": [
+            0.5872498,
+            0.43500006,
+            0.58724976
+          ]
+        },
+        {
+          "entity": "654v0",
+          "name": "eye_width.R",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            1.545431e-8,
+            -1.545431e-8,
+            0.70710677,
+            0.70710677
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00019433569,
+            0.29348028,
+            1.0000931
+          ],
+          "global_scale": [
+            0.5872498,
+            0.5872498,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "649v0",
+          "name": "nose_eye",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "648v0",
+          "name": "Armature",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "662v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "443v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            0.43500003,
+            0.43500003,
+            0.43500003
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "462v0",
+          "name": "head_socket",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            5.3385076e-8,
+            -0.70710677,
+            -0.70710677,
+            5.3385076e-8
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            1.3499995,
+            1.3499998,
+            1.0000001
+          ]
+        },
+        {
+          "entity": "484v0",
+          "name": "neck",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            -0.00021441205,
+            -0.00007603947,
+            -0.00035397676,
+            0.99999994
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            4.4703484e-8,
+            0.74999994
+          ],
+          "global_scale": [
+            1.3499998,
+            1.0000001,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "483v0",
+          "name": "upper_back",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            1.4901161e-8,
+            0.24999999
+          ],
+          "global_scale": [
+            1.3499999,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "482v0",
+          "name": "anterior_mid_back",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.70710677,
+            0.70710677,
+            0.0
+          ],
+          "local_scale": [
+            1.35,
+            1.0,
+            1.35
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.3499999,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "481v0",
+          "name": "Quadruped",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "495v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "442v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "441v0",
+          "name": "character-visual",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "group": "nose__trunkish",
+      "part_host": "448v0",
+      "part_slot": "Nose",
+      "part_node": {
+        "label": "trunkish",
+        "normalization_scale": 0.6,
+        "feature_translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "feature_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "socket": {
+        "bone": "nose_socket",
+        "local_translation": [
+          0.0,
+          -0.1,
+          0.1
+        ],
+        "local_scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "applied": true
+      },
+      "mesh_entity": "TrunkishNose",
+      "mesh_global": [
+        -0.00070510205,
+        -0.059146494,
+        1.4784809
+      ],
+      "mesh_local_scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "has_skinned_mesh": false,
+      "joint_count": 0,
+      "sample_bind_v0": [
+        -0.40845883,
+        -1.5682077,
+        0.8758922
+      ],
+      "sample_skinned_world_v0": [
+        -0.14492786,
+        -0.6118146,
+        1.7068377
+      ],
+      "sample_obj_character_v0": [
+        -0.14492786,
+        -0.6118146,
+        1.7068377
+      ],
+      "reference_bbox_min": [
+        -0.1733654,
+        -0.7401836,
+        1.2183124
+      ],
+      "reference_bbox_max": [
+        0.1689156,
+        0.13013811,
+        1.7804945
+      ],
+      "obj_bbox_min": [
+        -0.1733654,
+        -0.7401836,
+        1.2183124
+      ],
+      "obj_bbox_max": [
+        0.1689156,
+        0.13013811,
+        1.7804945
+      ],
+      "bbox_delta_m": 0.0,
+      "bind_local_bbox_min": [
+        -0.48969743,
+        -1.932509,
+        -0.9966255
+      ],
+      "bind_local_bbox_max": [
+        0.48167887,
+        0.53724587,
+        1.157664
+      ],
+      "mesh_world_scale": [
+        0.35234988,
+        0.3523499,
+        0.261
+      ],
+      "live_weight_vertex_fraction": 1.0,
+      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
+      "chain_to_root": [
+        {
+          "entity": "628v0",
+          "name": "TrunkishNose",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00070510205,
+            -0.059146494,
+            1.4784809
+          ],
+          "global_scale": [
+            0.35234988,
+            0.3523499,
+            0.261
+          ]
+        },
+        {
+          "entity": "629v0",
+          "name": "TrunkishNose",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00070510205,
+            -0.059146494,
+            1.4784809
+          ],
+          "global_scale": [
+            0.35234988,
+            0.3523499,
+            0.261
+          ]
+        },
+        {
+          "entity": "627v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00070510205,
+            -0.059146494,
+            1.4784809
+          ],
+          "global_scale": [
+            0.35234988,
+            0.3523499,
+            0.261
+          ]
+        },
+        {
+          "entity": "448v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            -0.1,
+            0.1
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            0.6,
+            0.6,
+            0.6
+          ],
+          "global_translation": [
+            -0.00070510205,
+            -0.059146494,
+            1.4784809
+          ],
+          "global_scale": [
+            0.35234988,
+            0.3523499,
+            0.261
+          ]
+        },
+        {
+          "entity": "646v0",
+          "name": "nose_socket",
+          "local_translation": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "local_rotation": [
+            5.3385076e-8,
+            -0.70710677,
+            -0.70710677,
+            5.3385076e-8
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.0006546214,
+            -0.0003963497,
+            1.4349996
+          ],
+          "global_scale": [
+            0.58724976,
+            0.5872498,
+            0.43500003
+          ]
+        },
+        {
+          "entity": "660v0",
+          "name": "nose_protrusion",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.70710677,
+            0.70710677,
+            0.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872498,
+            0.43500006,
+            0.5872498
+          ]
+        },
+        {
+          "entity": "648v0",
+          "name": "Armature",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "662v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "443v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            0.43500003,
+            0.43500003,
+            0.43500003
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "462v0",
+          "name": "head_socket",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            5.3385076e-8,
+            -0.70710677,
+            -0.70710677,
+            5.3385076e-8
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            1.3499995,
+            1.3499998,
+            1.0000001
+          ]
+        },
+        {
+          "entity": "484v0",
+          "name": "neck",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            -0.00021441205,
+            -0.00007603947,
+            -0.00035397676,
+            0.99999994
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            4.4703484e-8,
+            0.74999994
+          ],
+          "global_scale": [
+            1.3499998,
+            1.0000001,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "483v0",
+          "name": "upper_back",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            1.4901161e-8,
+            0.24999999
+          ],
+          "global_scale": [
+            1.3499999,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "482v0",
+          "name": "anterior_mid_back",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.70710677,
+            0.70710677,
+            0.0
+          ],
+          "local_scale": [
+            1.35,
+            1.0,
+            1.35
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.3499999,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "481v0",
+          "name": "Quadruped",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "495v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "442v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "441v0",
+          "name": "character-visual",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "group": "ear_left__epiphant",
+      "part_host": "449v0",
+      "part_slot": "EarLeft",
+      "part_node": {
+        "label": "epiphant",
+        "normalization_scale": 0.6,
+        "feature_translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "feature_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "socket": {
+        "bone": "ear_socket.L",
+        "local_translation": [
+          -0.4,
+          0.15,
+          -0.05
+        ],
+        "local_scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "applied": true
+      },
+      "mesh_entity": "BézierCurve",
+      "mesh_global": [
+        0.35218972,
+        0.3815267,
+        0.97855574
+      ],
+      "mesh_local_scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "has_skinned_mesh": false,
+      "joint_count": 0,
+      "sample_bind_v0": [
+        -0.243561,
+        -0.53583467,
+        0.019996962
+      ],
+      "sample_skinned_world_v0": [
+        0.2663374,
+        0.1927355,
+        0.98366994
+      ],
+      "sample_obj_character_v0": [
+        0.2663374,
+        0.1927355,
+        0.98366994
+      ],
+      "reference_bbox_min": [
+        0.24815536,
+        -0.20089275,
+        0.8695931
+      ],
+      "reference_bbox_max": [
+        1.069179,
+        0.8498245,
+        1.1109588
+      ],
+      "obj_bbox_min": [
+        0.24815536,
+        -0.20089275,
+        0.8695931
+      ],
+      "obj_bbox_max": [
+        1.069179,
+        0.8498245,
+        1.1109588
+      ],
+      "bbox_delta_m": 0.0,
+      "bind_local_bbox_min": [
+        -0.29522276,
+        -1.6527351,
+        -0.41815978
+      ],
+      "bind_local_bbox_max": [
+        2.034938,
+        1.3292092,
+        0.50637364
+      ],
+      "mesh_world_scale": [
+        0.35234988,
+        0.35234985,
+        0.26100004
+      ],
+      "live_weight_vertex_fraction": 1.0,
+      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
+      "chain_to_root": [
+        {
+          "entity": "505v0",
+          "name": "BézierCurve",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.35218972,
+            0.3815267,
+            0.97855574
+          ],
+          "global_scale": [
+            0.35234988,
+            0.35234985,
+            0.26100004
+          ]
+        },
+        {
+          "entity": "506v0",
+          "name": "BézierCurve",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.35218972,
+            0.3815267,
+            0.97855574
+          ],
+          "global_scale": [
+            0.35234988,
+            0.35234985,
+            0.26100004
+          ]
+        },
+        {
+          "entity": "504v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.35218972,
+            0.3815267,
+            0.97855574
+          ],
+          "global_scale": [
+            0.35234988,
+            0.35234985,
+            0.26100004
+          ]
+        },
+        {
+          "entity": "449v0",
+          "name": null,
+          "local_translation": [
+            -0.4,
+            0.15,
+            -0.05
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            0.6,
+            0.6,
+            0.6
+          ],
+          "global_translation": [
+            0.35218972,
+            0.3815267,
+            0.97855574
+          ],
+          "global_scale": [
+            0.35234988,
+            0.35234985,
+            0.26100004
+          ]
+        },
+        {
+          "entity": "632v0",
+          "name": "ear_socket.L",
+          "local_translation": [
+            0.0,
+            0.50000006,
+            0.0
+          ],
+          "local_rotation": [
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "local_scale": [
+            1.0,
+            0.99999994,
+            1.0
+          ],
+          "global_translation": [
+            0.58705544,
+            0.29339093,
+            1.0004009
+          ],
+          "global_scale": [
+            0.58724976,
+            0.5872497,
+            0.43500006
+          ]
+        },
+        {
+          "entity": "652v0",
+          "name": "temple.L",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            -0.70710677,
+            0.0,
+            0.70710677
+          ],
+          "local_scale": [
+            1.0,
+            0.99999994,
+            1.0
+          ],
+          "global_translation": [
+            0.29343054,
+            0.2934356,
+            1.000247
+          ],
+          "global_scale": [
+            0.43500006,
+            0.58724976,
+            0.5872498
+          ]
+        },
+        {
+          "entity": "651v0",
+          "name": "eye_width.L",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            1.545431e-8,
+            1.545431e-8,
+            -0.70710677,
+            0.70710677
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00019433569,
+            0.29348028,
+            1.0000931
+          ],
+          "global_scale": [
+            0.5872498,
+            0.5872498,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "649v0",
+          "name": "nose_eye",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "648v0",
+          "name": "Armature",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "662v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "443v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            0.43500003,
+            0.43500003,
+            0.43500003
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "462v0",
+          "name": "head_socket",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            5.3385076e-8,
+            -0.70710677,
+            -0.70710677,
+            5.3385076e-8
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            1.3499995,
+            1.3499998,
+            1.0000001
+          ]
+        },
+        {
+          "entity": "484v0",
+          "name": "neck",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            -0.00021441205,
+            -0.00007603947,
+            -0.00035397676,
+            0.99999994
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            4.4703484e-8,
+            0.74999994
+          ],
+          "global_scale": [
+            1.3499998,
+            1.0000001,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "483v0",
+          "name": "upper_back",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            1.4901161e-8,
+            0.24999999
+          ],
+          "global_scale": [
+            1.3499999,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "482v0",
+          "name": "anterior_mid_back",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.70710677,
+            0.70710677,
+            0.0
+          ],
+          "local_scale": [
+            1.35,
+            1.0,
+            1.35
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.3499999,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "481v0",
+          "name": "Quadruped",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "495v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "442v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "441v0",
+          "name": "character-visual",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "group": "ear_right__epiphant",
+      "part_host": "450v0",
+      "part_slot": "EarRight",
+      "part_node": {
+        "label": "epiphant",
+        "normalization_scale": 0.6,
+        "feature_translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "feature_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "socket": {
+        "bone": "ear_socket.R",
+        "local_translation": [
+          0.4,
+          0.15,
+          -0.05
+        ],
+        "local_scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "applied": true
+      },
+      "mesh_entity": "BézierCurve",
+      "mesh_global": [
+        -0.35251004,
+        0.381634,
+        0.97818637
+      ],
+      "mesh_local_scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "has_skinned_mesh": false,
+      "joint_count": 0,
+      "sample_bind_v0": [
+        0.243561,
+        -0.53583467,
+        0.019996962
+      ],
+      "sample_skinned_world_v0": [
+        -0.26672503,
+        0.19281663,
+        0.98339057
+      ],
+      "sample_obj_character_v0": [
+        -0.26672503,
+        0.19281663,
+        0.98339057
+      ],
+      "reference_bbox_min": [
+        -1.069541,
+        -0.20062834,
+        0.8687225
+      ],
+      "reference_bbox_max": [
+        -0.24850103,
+        0.8500297,
+        1.1102241
+      ],
+      "obj_bbox_min": [
+        -1.069541,
+        -0.20062834,
+        0.8687225
+      ],
+      "obj_bbox_max": [
+        -0.24850103,
+        0.8500297,
+        1.1102241
+      ],
+      "bbox_delta_m": 0.0,
+      "bind_local_bbox_min": [
+        -2.034938,
+        -1.6527351,
+        -0.41815978
+      ],
+      "bind_local_bbox_max": [
+        0.29522276,
+        1.3292092,
+        0.50637364
+      ],
+      "mesh_world_scale": [
+        0.35234988,
+        0.3523499,
+        0.26100007
+      ],
+      "live_weight_vertex_fraction": 1.0,
+      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
+      "chain_to_root": [
+        {
+          "entity": "755v0",
+          "name": "BézierCurve",
+          "local_translation": [
+            -0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            -0.0,
+            -0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.35251004,
+            0.381634,
+            0.97818637
+          ],
+          "global_scale": [
+            0.35234988,
+            0.3523499,
+            0.26100007
+          ]
+        },
+        {
+          "entity": "754v0",
+          "name": "BézierCurve",
+          "local_translation": [
+            -0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            -0.0,
+            -0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.35251004,
+            0.381634,
+            0.97818637
+          ],
+          "global_scale": [
+            0.35234988,
+            0.3523499,
+            0.26100007
+          ]
+        },
+        {
+          "entity": "756v0",
+          "name": "Scene",
+          "local_translation": [
+            -0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            -0.0,
+            -0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.35251004,
+            0.381634,
+            0.97818637
+          ],
+          "global_scale": [
+            0.35234988,
+            0.3523499,
+            0.26100007
+          ]
+        },
+        {
+          "entity": "450v0",
+          "name": null,
+          "local_translation": [
+            0.4,
+            0.15,
+            -0.05
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            0.6,
+            0.6,
+            0.6
+          ],
+          "global_translation": [
+            -0.35251004,
+            0.381634,
+            0.97818637
+          ],
+          "global_scale": [
+            0.35234988,
+            0.3523499,
+            0.26100007
+          ]
+        },
+        {
+          "entity": "635v0",
+          "name": "ear_socket.R",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            -1.545431e-8,
+            1.545431e-8,
+            -0.70710677,
+            0.70710677
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.58744407,
+            0.29356968,
+            0.9997852
+          ],
+          "global_scale": [
+            0.58724976,
+            0.5872498,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "655v0",
+          "name": "temple.R",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.29381922,
+            0.29352498,
+            0.99993914
+          ],
+          "global_scale": [
+            0.5872498,
+            0.5872498,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "654v0",
+          "name": "eye_width.R",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            1.545431e-8,
+            -1.545431e-8,
+            0.70710677,
+            0.70710677
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00019433569,
+            0.29348028,
+            1.0000931
+          ],
+          "global_scale": [
+            0.5872498,
+            0.5872498,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "649v0",
+          "name": "nose_eye",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "648v0",
+          "name": "Armature",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "662v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "443v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            0.43500003,
+            0.43500003,
+            0.43500003
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "462v0",
+          "name": "head_socket",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            5.3385076e-8,
+            -0.70710677,
+            -0.70710677,
+            5.3385076e-8
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            1.3499995,
+            1.3499998,
+            1.0000001
+          ]
+        },
+        {
+          "entity": "484v0",
+          "name": "neck",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            -0.00021441205,
+            -0.00007603947,
+            -0.00035397676,
+            0.99999994
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            4.4703484e-8,
+            0.74999994
+          ],
+          "global_scale": [
+            1.3499998,
+            1.0000001,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "483v0",
+          "name": "upper_back",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            1.4901161e-8,
+            0.24999999
+          ],
+          "global_scale": [
+            1.3499999,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "482v0",
+          "name": "anterior_mid_back",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.70710677,
+            0.70710677,
+            0.0
+          ],
+          "local_scale": [
+            1.35,
+            1.0,
+            1.35
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.3499999,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "481v0",
+          "name": "Quadruped",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "495v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "442v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "441v0",
+          "name": "character-visual",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "group": "head__meerkat",
+      "part_host": "451v0",
+      "part_slot": "HeadMesh",
+      "part_node": {
+        "label": "meerkat",
+        "normalization_scale": 1.0,
+        "feature_translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "feature_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "socket": {
+        "bone": "root",
+        "local_translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "local_scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "applied": true
+      },
+      "mesh_entity": "MeerkatHead",
+      "mesh_global": [
+        -0.00023894529,
+        -0.00014465034,
+        0.9999998
+      ],
+      "mesh_local_scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "has_skinned_mesh": true,
+      "joint_count": 30,
+      "sample_bind_v0": [
+        -0.28264275,
+        -0.011326042,
+        0.9280019
+      ],
+      "sample_skinned_world_v0": [
+        -0.16660759,
+        -0.0070042033,
+        1.4035912
+      ],
+      "sample_obj_character_v0": [
+        -0.16660759,
+        -0.0070042033,
+        1.4035912
+      ],
+      "reference_bbox_min": [
+        -0.6226979,
+        -0.57534057,
+        0.64730644
+      ],
+      "reference_bbox_max": [
+        0.6290095,
+        0.62389624,
+        1.4668413
+      ],
+      "obj_bbox_min": [
+        -0.6226979,
+        -0.57534057,
+        0.64730644
+      ],
+      "obj_bbox_max": [
+        0.6290095,
+        0.62389624,
+        1.4668413
+      ],
+      "bbox_delta_m": 0.0,
+      "bind_local_bbox_min": [
+        -1.0597558,
+        -0.9791473,
+        -0.8108113
+      ],
+      "bind_local_bbox_max": [
+        1.0717037,
+        1.0627174,
+        1.0732644
+      ],
+      "mesh_world_scale": [
+        0.5872499,
+        0.5872499,
+        0.4350001
+      ],
+      "live_weight_vertex_fraction": 1.0,
+      "first_divergence_step": "none (OBJ matches runtime reference skinning)",
+      "chain_to_root": [
+        {
+          "entity": "817v0",
+          "name": "MeerkatHead",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "451v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "645v0",
+          "name": "root",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "648v0",
+          "name": "Armature",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "662v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "443v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            0.43500003,
+            0.43500003,
+            0.43500003
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            0.5872499,
+            0.5872499,
+            0.4350001
+          ]
+        },
+        {
+          "entity": "462v0",
+          "name": "head_socket",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            5.3385076e-8,
+            -0.70710677,
+            -0.70710677,
+            5.3385076e-8
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            -0.00023894529,
+            -0.00014465034,
+            0.9999998
+          ],
+          "global_scale": [
+            1.3499995,
+            1.3499998,
+            1.0000001
+          ]
+        },
+        {
+          "entity": "484v0",
+          "name": "neck",
+          "local_translation": [
+            0.0,
+            0.5,
+            0.0
+          ],
+          "local_rotation": [
+            -0.00021441205,
+            -0.00007603947,
+            -0.00035397676,
+            0.99999994
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            4.4703484e-8,
+            0.74999994
+          ],
+          "global_scale": [
+            1.3499998,
+            1.0000001,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "483v0",
+          "name": "upper_back",
+          "local_translation": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            1.4901161e-8,
+            0.24999999
+          ],
+          "global_scale": [
+            1.3499999,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "482v0",
+          "name": "anterior_mid_back",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.70710677,
+            0.70710677,
+            0.0
+          ],
+          "local_scale": [
+            1.35,
+            1.0,
+            1.35
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.3499999,
+            0.99999994,
+            1.3499999
+          ]
+        },
+        {
+          "entity": "481v0",
+          "name": "Quadruped",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "495v0",
+          "name": "Scene",
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "442v0",
+          "name": null,
+          "local_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "local_rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "local_scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "global_translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "global_scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "entity": "441v0",
           "name": "character-visual",
           "local_translation": [
             0.0,

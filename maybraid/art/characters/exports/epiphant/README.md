@@ -46,7 +46,18 @@ Side-by-side: `compare/compare_{front,side,three_quarter}.png`. Numbers: `compar
 
 **Root cause of the earlier front-only-head shot:** the capture camera was spawned on the first screenshot frame, so clothing/face shader pipelines had not specialized. Side/TQ (later frames) already showed the assembled character. Spawning the rig at compare init and settling ~90 frames with that camera present makes all three runtime views match the OBJ.
 
-**Exporter vertices:** no bake-math change. CPU diagnose bbox Δ = 0; GPU silhouettes now agree. Liam-style “parts not socketed” is not reproduced against the real renderer once the first frame is valid.
+**Blender “scattered dots” on head/tail (2026-10-15):** not missing faces in the writer — `f` lines existed — but **`vt` indices reused the global `v` index**. Body/ears/nose write no `vt` (`f v//vn`). Head/tail write `f v/vt/vn`. After UV-less groups, `vt` 7951…9087 referenced a file with only **1665** texcoords, so Blender dropped those faces and left vertices. Bevy re-import ignored `vt` and still drew triangles.
+
+Fix: independent `v` / `vt` / `vn` bases. Head sample is now `f 7153/529/7153`; tail `f 8859/1437/8859`. Validator rejects zero faces or out-of-range indices.
+
+| Group | `v` | `vt` | `vn` | `f` | form | OOB | winding vs `vn` |
+|-------|----:|-----:|-----:|----:|------|----:|----------------:|
+| body__epiphant | 5148 | 0 | 5148 | 1808 | v//vn | 0 | 1808/0 agree |
+| head__meerkat | 956 | 956 | 956 | **324** | v/vt/vn | 0 | 324/0 |
+| tail__cat-tail | 229 | 229 | 229 | **122** | v/vt/vn | 0 | 122/0 |
+| ear_left / ear_right | 738 | 0 | 738 | 246 | v//vn | 0 | 246/0 |
+| eye_left / eye_right | 240 | 240 | 240 | 80 | v/vt/vn | 0 | 80/0 |
+| nose__trunkish | 798 | 0 | 798 | 272 | v//vn | 0 | 272/0 |
 
 **Unverified:** Procreate / Blender GUI import (automated check is Bevy GPU re-import at 1 m). Matplotlib OBJ IoU (~0.43–0.55) uses a different camera model — not the gate.
 

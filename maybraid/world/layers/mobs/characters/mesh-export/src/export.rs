@@ -11,9 +11,8 @@ use bevy::ecs::hierarchy::{Children, ChildOf};
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::math::{Affine3A, Vec2, Vec3};
 use bevy::mesh::skinning::{SkinnedMesh, SkinnedMeshInverseBindposes};
-use bevy::mesh::VertexAttributeValues;
+use bevy::mesh::{Indices, PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::{GlobalTransform, Mesh, Mesh3d, Name};
-use bevy::render::mesh::Indices;
 use characters::{
 	assembly::CharacterPartSlot,
 	member::CharacterMembers,
@@ -24,6 +23,7 @@ use characters::{
 use rigs::{SocketRefApplied, SocketRefRoot};
 use material_ref::MaterialRefRoot;
 
+use crate::obj_text::validate_obj_text;
 use crate::skin::skin_mesh_world;
 
 #[derive(Debug, Clone)]
@@ -48,6 +48,7 @@ pub struct ExportReport {
 	pub bounds_max: Vec3,
 	pub obj_bytes: u64,
 	pub mtl_bytes: u64,
+	pub validation_ok: bool,
 }
 
 impl Default for ExportReport {
@@ -62,6 +63,7 @@ impl Default for ExportReport {
 			bounds_max: Vec3::splat(f32::MIN),
 			obj_bytes: 0,
 			mtl_bytes: 0,
+			validation_ok: false,
 		}
 	}
 }
@@ -114,7 +116,9 @@ pub fn collect_groups(world: &mut bevy::prelude::World, root: Entity) -> Vec<Mes
 		entry.faces.extend(faces.into_iter().map(|[a, b, c]| [a + base, b + base, c + base]));
 	}
 
-	groups.into_values().collect()
+	let mut groups: Vec<MeshGroup> = groups.into_values().collect();
+	groups.sort_by(|a, b| a.name.cmp(&b.name));
+	groups
 }
 
 pub(crate) fn part_group_name(world: &bevy::prelude::World, entity: Entity) -> String {
@@ -243,12 +247,12 @@ fn extract_mesh_local(
 			.get(&skin.inverse_bindposes)
 			.expect("bindposes loaded");
 		let skinned = skin_mesh_world(mesh, skin, bind, globals, mesh_world).expect("skin mesh");
-		let positions = skinned
+		let positions: Vec<Vec3> = skinned
 			.positions
 			.iter()
 			.map(|p| root_inverse.transform_point3(*p))
 			.collect();
-		let normals = skinned
+		let normals: Vec<Vec3> = skinned
 			.normals
 			.iter()
 			.map(|n| root_inverse.transform_vector3(*n).normalize())
@@ -257,18 +261,54 @@ fn extract_mesh_local(
 	} else {
 		let world_tf = world.get::<GlobalTransform>(entity).expect("global");
 		let local = root_inverse * world_tf.affine();
-		let positions = mesh_positions(mesh)
+		let positions: Vec<Vec3> = mesh_positions(mesh)
 			.iter()
 			.map(|p| local.transform_point3(*p))
 			.collect();
-		let normals = mesh_normals(mesh)
+		let normals: Vec<Vec3> = mesh_normals(mesh)
 			.iter()
 			.map(|n| local.transform_vector3(*n).normalize())
 			.collect();
 		(positions, normals)
 	};
 
+	let mut faces = faces;
+	align_winding(&positions, &normals, &mut faces);
+	let uvs = if uvs.len() == positions.len() { uvs } else { Vec::new() };
+	let normals = if normals.len() == positions.len() {
+		normals
+	} else {
+		Vec::<Vec3>::new()
+	};
 	(positions, normals, uvs, faces)
+}
+
+/// Flip triangle winding so geometric normal agrees with vertex normals (Blender culls CW).
+fn align_winding(positions: &[Vec3], normals: &[Vec3], faces: &mut [[u32; 3]]) {
+	if normals.len() != positions.len() {
+		return;
+	}
+	for face in faces.iter_mut() {
+		let [ia, ib, ic] = *face;
+		let (Some(&pa), Some(&pb), Some(&pc)) = (
+			positions.get(ia as usize),
+			positions.get(ib as usize),
+			positions.get(ic as usize),
+		) else {
+			continue;
+		};
+		let (Some(&na), Some(&nb), Some(&nc)) = (
+			normals.get(ia as usize),
+			normals.get(ib as usize),
+			normals.get(ic as usize),
+		) else {
+			continue;
+		};
+		let geo = (pb - pa).cross(pc - pa);
+		if geo.dot(na + nb + nc) < 0.0 {
+			*face = [ia, ic, ib];
+		}
+	}
 }
 
 fn mesh_positions(mesh: &Mesh) -> Vec<Vec3> {
@@ -299,15 +339,109 @@ fn mesh_uvs(mesh: &Mesh) -> Vec<Vec2> {
 }
 
 fn mesh_faces(mesh: &Mesh) -> Vec<[u32; 3]> {
-	let indices = match mesh.indices() {
+	let n = mesh_positions(mesh).len() as u32;
+	let indices: Vec<u32> = match mesh.indices() {
 		Some(Indices::U32(i)) => i.clone(),
 		Some(Indices::U16(i)) => i.iter().map(|&x| x as u32).collect(),
-		None => {
-			let n = mesh_positions(mesh).len();
-			(0..n as u32).collect()
-		}
+		None => (0..n).collect(),
 	};
-	indices.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect()
+	match mesh.primitive_topology() {
+		PrimitiveTopology::TriangleList => indices
+			.chunks_exact(3)
+			.filter_map(|c| in_range_tri(c[0], c[1], c[2], n))
+			.collect(),
+		PrimitiveTopology::TriangleStrip => {
+			let mut faces = Vec::new();
+			if indices.len() < 3 {
+				return faces;
+			}
+			for i in 0..indices.len() - 2 {
+				let (a, b, c) = if i % 2 == 0 {
+					(indices[i], indices[i + 1], indices[i + 2])
+				} else {
+					(indices[i + 1], indices[i], indices[i + 2])
+				};
+				if let Some(tri) = in_range_tri(a, b, c, n) {
+					faces.push(tri);
+				}
+			}
+			faces
+		}
+		// Point / line / fan topologies are not triangle meshes — do not invent faces.
+		_ => Vec::new(),
+	}
+}
+
+fn in_range_tri(a: u32, b: u32, c: u32, n: u32) -> Option<[u32; 3]> {
+	if a == b || b == c || a == c || a >= n || b >= n || c >= n {
+		None
+	} else {
+		Some([a, b, c])
+	}
+}
+
+/// Format Wavefront OBJ text. `v` / `vt` / `vn` are independent global streams
+/// (OBJ spec). Face corners must not reuse the vertex index for missing UVs.
+pub fn format_obj(groups: &[MeshGroup], mtl_name: &str) -> String {
+	let mut obj = String::new();
+	obj.push_str("# Maybraid character mesh export\n");
+	obj.push_str(&format!("mtllib {mtl_name}\n"));
+
+	let mut v_base = 0u32;
+	let mut vt_base = 0u32;
+	let mut vn_base = 0u32;
+	for group in groups {
+		obj.push_str(&format!("g {}\n", group.name));
+		obj.push_str(&format!("o {}\n", group.name));
+		obj.push_str(&format!("usemtl {}\n", group.material_name));
+
+		for p in &group.positions {
+			obj.push_str(&format!("v {} {} {}\n", p.x, p.y, p.z));
+		}
+		let has_uv = !group.uvs.is_empty() && group.uvs.len() == group.positions.len();
+		if has_uv {
+			for uv in &group.uvs {
+				obj.push_str(&format!("vt {} {}\n", uv.x, 1.0 - uv.y));
+			}
+		}
+		let has_n = !group.normals.is_empty() && group.normals.len() == group.positions.len();
+		if has_n {
+			for n in &group.normals {
+				obj.push_str(&format!("vn {} {} {}\n", n.x, n.y, n.z));
+			}
+		}
+
+		let nverts = group.positions.len() as u32;
+		for [a, b, c] in &group.faces {
+			if *a >= nverts || *b >= nverts || *c >= nverts {
+				continue;
+			}
+			obj.push_str("f ");
+			obj.push_str(&face_corner(v_base + *a + 1, has_uv, vt_base + *a + 1, has_n, vn_base + *a + 1));
+			obj.push(' ');
+			obj.push_str(&face_corner(v_base + *b + 1, has_uv, vt_base + *b + 1, has_n, vn_base + *b + 1));
+			obj.push(' ');
+			obj.push_str(&face_corner(v_base + *c + 1, has_uv, vt_base + *c + 1, has_n, vn_base + *c + 1));
+			obj.push('\n');
+		}
+		v_base += group.positions.len() as u32;
+		if has_uv {
+			vt_base += group.uvs.len() as u32;
+		}
+		if has_n {
+			vn_base += group.normals.len() as u32;
+		}
+	}
+	obj
+}
+
+fn face_corner(v: u32, has_uv: bool, vt: u32, has_n: bool, vn: u32) -> String {
+	match (has_uv, has_n) {
+		(true, true) => format!("{v}/{vt}/{vn}"),
+		(false, true) => format!("{v}//{vn}"),
+		(true, false) => format!("{v}/{vt}"),
+		(false, false) => format!("{v}"),
+	}
 }
 
 pub fn write_obj_bundle(obj_path: &Path, groups: &[MeshGroup]) -> ExportReport {
@@ -318,19 +452,24 @@ pub fn write_obj_bundle(obj_path: &Path, groups: &[MeshGroup]) -> ExportReport {
 		.unwrap_or_else(|| "materials.mtl".to_string());
 
 	let mut report = ExportReport::default();
-	let mut obj = BufWriter::new(File::create(obj_path).expect("create obj"));
-	writeln!(obj, "# Maybraid character mesh export").unwrap();
-	writeln!(obj, "mtllib {}", mtl_name).unwrap();
+	report.groups = groups.len();
+	for group in groups {
+		report.vertices += group.positions.len();
+		report.faces += group.faces.len();
+		report.has_uvs |= !group.uvs.is_empty();
+		report.has_normals |= !group.normals.is_empty();
+		for p in &group.positions {
+			report.bounds_min = report.bounds_min.min(*p);
+			report.bounds_max = report.bounds_max.max(*p);
+		}
+	}
+
+	let obj_text = format_obj(groups, &mtl_name);
+	std::fs::write(obj_path, &obj_text).expect("write obj");
 
 	let mut mtl = BufWriter::new(File::create(&mtl_path).expect("create mtl"));
 	writeln!(mtl, "# Maybraid character mesh export").unwrap();
-
-	let mut v_offset = 0u32;
 	for group in groups {
-		report.groups += 1;
-		writeln!(obj, "g {}", group.name).unwrap();
-		writeln!(obj, "o {}", group.name).unwrap();
-		writeln!(obj, "usemtl {}", group.material_name).unwrap();
 		writeln!(mtl, "newmtl {}", group.material_name).unwrap();
 		writeln!(
 			mtl,
@@ -341,47 +480,18 @@ pub fn write_obj_bundle(obj_path: &Path, groups: &[MeshGroup]) -> ExportReport {
 		)
 		.unwrap();
 		writeln!(mtl, "d 1.0").unwrap();
-
-		for p in &group.positions {
-			writeln!(obj, "v {} {} {}", p.x, p.y, p.z).unwrap();
-			report.vertices += 1;
-			report.bounds_min = report.bounds_min.min(*p);
-			report.bounds_max = report.bounds_max.max(*p);
-		}
-		if !group.uvs.is_empty() {
-			report.has_uvs = true;
-			for uv in &group.uvs {
-				writeln!(obj, "vt {} {}", uv.x, 1.0 - uv.y).unwrap();
-			}
-		}
-		if !group.normals.is_empty() {
-			report.has_normals = true;
-			for n in &group.normals {
-				writeln!(obj, "vn {} {} {}", n.x, n.y, n.z).unwrap();
-			}
-		}
-
-		let has_uv = !group.uvs.is_empty();
-		let has_n = !group.normals.is_empty();
-		for [a, b, c] in &group.faces {
-			let fa = *a + 1 + v_offset;
-			let fb = *b + 1 + v_offset;
-			let fc = *c + 1 + v_offset;
-			if has_uv && has_n {
-				writeln!(obj, "f {}/{}/{} {}/{}/{} {}/{}/{}", fa, fa, fa, fb, fb, fb, fc, fc, fc)
-					.unwrap();
-			} else if has_n {
-				writeln!(obj, "f {}//{} {}//{} {}//{}", fa, fa, fb, fb, fc, fc).unwrap();
-			} else {
-				writeln!(obj, "f {} {} {}", fa, fb, fc).unwrap();
-			}
-			report.faces += 1;
-		}
-		v_offset += group.positions.len() as u32;
 	}
-
-	obj.flush().unwrap();
 	mtl.flush().unwrap();
+
+	report.validation_ok = match validate_obj_text(&obj_text) {
+		Ok(_) => true,
+		Err(errors) => {
+			for error in errors {
+				eprintln!("obj validation: {error}");
+			}
+			false
+		}
+	};
 
 	report.obj_bytes = std::fs::metadata(obj_path).map(|m| m.len()).unwrap_or(0);
 	report.mtl_bytes = std::fs::metadata(&mtl_path).map(|m| m.len()).unwrap_or(0);
@@ -439,4 +549,62 @@ pub fn assembly_ready(world: &bevy::prelude::World, root: Entity) -> bool {
 
 pub fn assets_root() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../../assets")
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::obj_text::{validate_obj_text, ObjValidationError};
+
+	fn tri(name: &str, z: f32, uvs: bool) -> MeshGroup {
+		MeshGroup {
+			name: name.into(),
+			material_name: format!("{name}_mat"),
+			diffuse: [0.5, 0.5, 0.5],
+			positions: vec![Vec3::new(0.0, 0.0, z), Vec3::new(1.0, 0.0, z), Vec3::new(0.0, 1.0, z)],
+			normals: vec![Vec3::Z, Vec3::Z, Vec3::Z],
+			uvs: if uvs {
+				vec![Vec2::ZERO, Vec2::X, Vec2::Y]
+			} else {
+				Vec::new()
+			},
+			faces: vec![[0, 1, 2]],
+		}
+	}
+
+	#[test]
+	fn mixed_uv_groups_keep_vt_in_range() {
+		// UV-less body then UV head — the old writer reused the vertex index for vt.
+		let text = format_obj(&[tri("body", 0.0, false), tri("head", 1.0, true)], "x.mtl");
+		let stats = validate_obj_text(&text).expect(&text);
+		assert_eq!(stats.iter().map(|s| s.faces).collect::<Vec<_>>(), vec![1, 1]);
+		assert!(text.contains("f 4/1/4 5/2/5 6/3/6"), "{text}");
+		assert!(!text.contains("f 4/4/4"), "{text}");
+	}
+
+	#[test]
+	fn zero_faces_or_oob_indices_fail_validation() {
+		let empty_faces = MeshGroup {
+			name: "tail".into(),
+			material_name: "tail_mat".into(),
+			diffuse: [1.0, 1.0, 1.0],
+			positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
+			normals: vec![Vec3::Z, Vec3::Z, Vec3::Z],
+			uvs: Vec::new(),
+			faces: Vec::new(),
+		};
+		let text = format_obj(&[empty_faces], "x.mtl");
+		let err = validate_obj_text(&text).unwrap_err();
+		assert!(
+			err.iter().any(|e| matches!(e, ObjValidationError::ZeroFaces { group, .. } if group == "tail")),
+			"{err:?}"
+		);
+
+		let oob = "o head\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nf 1/9/1 2/9/1 3/9/1\n";
+		let err = validate_obj_text(oob).unwrap_err();
+		assert!(
+			err.iter().any(|e| matches!(e, ObjValidationError::IndexOutOfRange { kind: "vt", .. })),
+			"{err:?}"
+		);
+	}
 }

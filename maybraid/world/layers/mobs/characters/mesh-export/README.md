@@ -40,6 +40,7 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json WGPU_BACKEND=vulkan \
 - Rest/bind pose, character root at origin.
 - Y-up, metres.
 - One OBJ group per component (`body__…`, `head__…`, etc.).
+- Face indices use **independent** global `v` / `vt` / `vn` streams (do not reuse the vertex index for texcoords when earlier groups omitted `vt`). Export fails if any group has zero faces or an out-of-range index.
 - Materials: palette `Kd` only (no texture maps).
 - Waits for socket fulfill + skin remap/prune; exports only `CharacterPart` meshes.
 - Schedules export in `PostUpdate` after transforms and rig pose propagate.

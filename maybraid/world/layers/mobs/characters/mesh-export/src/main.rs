@@ -5,6 +5,7 @@ mod capture;
 mod diagnose;
 mod export;
 mod obj_preview;
+mod obj_text;
 mod reference;
 mod skin;
 mod validate;
@@ -192,6 +193,12 @@ fn tick_export(world: &mut World) {
 		let validation_path = output.with_extension("validation.json");
 		write_validation_json(&validation_path, &validation);
 		let report = write_obj_bundle(&output, &groups);
+		if !report.validation_ok {
+			eprintln!("OBJ face/index validation failed");
+			exit = AppExit::Error(NonZeroU8::new(5).expect("nonzero"));
+			finished = true;
+			return;
+		}
 
 		job.exported = true;
 		if let Some(dir) = job.compare_dir.clone() {
