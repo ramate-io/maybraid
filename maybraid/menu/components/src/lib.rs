@@ -10,6 +10,7 @@ pub mod controls;
 pub mod icons;
 pub mod info;
 pub mod loading;
+pub mod modal;
 pub mod single_select;
 pub mod spin_reveal;
 pub mod theme;
@@ -32,27 +33,31 @@ pub use controls::{
 };
 pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{
-	set_brand_mode_title, set_description_for_menu, set_hint_for_menu, spawn_hud_text_card,
-	spawn_hud_text_card_label, spawn_menu_objective, BrandModeCorner, BrandModeLine,
-	BrandModeTitle, HudTextCard, MenuObjective, TextMenuDescription, TextMenuHint,
-	TextMenuHintLabel, BRAND_NAME, HUD_TEXT_CARD_FACE_PX,
+	set_brand_mode_title, set_description_for_menu, set_hint_for_menu, set_info_box_for_menu,
+	spawn_hud_text_card, spawn_hud_text_card_label, spawn_menu_objective, BrandModeCorner,
+	BrandModeLine, BrandModeTitle, HudTextCard, MenuInfoBox, MenuInfoBoxLabel, MenuObjective,
+	TextMenuDescription, TextMenuHint, TextMenuHintLabel, BRAND_NAME, HUD_TEXT_CARD_FACE_PX,
 };
 pub use loading::{
 	set_loading_explainer, set_loading_progress, sync_loading_bar_fill, LoadingBarFill,
 	LoadingExplainer, LoadingPanel, LoadingStack,
 };
+pub use modal::{
+	begin_menu_modal_frame, consume_menu_modal_back, consume_screen_back, sync_menu_modal_stack,
+	tick_menu_modal_holds, MenuModal, MenuModalDismiss, MenuModalId, MenuModalLayer,
+	MenuModalStack, MenuModalSystems,
+};
 pub use single_select::{
-	apply_text_menu_nav, clear_menu_back_consumed, consume_screen_back,
-	emit_menu_activate_on_click, emit_menu_activate_on_enter, emit_menu_activate_on_nav,
-	emit_menu_focus, emit_screen_back_on_click, emit_screen_edit_on_click, navigate_text_menus,
-	republish_menu_activate, screen_back_scene, screen_edit_scene,
-	scroll_text_cursor_selection_into_view, select_text_menu_item_on_over, sync_screen_edit_cursor,
-	sync_text_cursor_icons, sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav,
-	MenuActivate, MenuBackConsumed, MenuFocus, MenuItemLocked, MenuObjectiveKind,
-	MenuObjectiveMarker, ScreenBack, ScreenBackPressed, ScreenEdit, ScreenEditPressed,
-	TextColumnAlign, TextColumnAnchor, TextCursorColumn, TextCursorMenu, TextCursorRow,
-	TextCursorScroll, TextCursorSlot, TextMenu, TextMenuColumn, TextMenuHeader, TextMenuInputLock,
-	TextMenuItem, TextMenuItemLabel,
+	apply_text_menu_nav, emit_menu_activate_on_click, emit_menu_activate_on_enter,
+	emit_menu_activate_on_nav, emit_menu_focus, emit_menu_step, emit_screen_back_on_click,
+	emit_screen_edit_on_click, navigate_text_menus, republish_menu_activate, screen_back_scene,
+	screen_edit_scene, scroll_text_cursor_selection_into_view, select_text_menu_item_on_over,
+	sync_screen_edit_cursor, sync_text_cursor_icons, sync_text_menu_item_colors, ButtonWithSubtext,
+	KeyboardMenuNav, MenuActivate, MenuFocus, MenuItemLocked, MenuObjectiveKind,
+	MenuObjectiveMarker, MenuStep, MenuStepRow, MenuStepper, ScreenBack, ScreenBackPressed,
+	ScreenEdit, ScreenEditPressed, TextColumnAlign, TextColumnAnchor, TextCursorColumn,
+	TextCursorMenu, TextCursorRow, TextCursorScroll, TextCursorSlot, TextMenu, TextMenuColumn,
+	TextMenuHeader, TextMenuInputLock, TextMenuItem, TextMenuItemLabel,
 };
 pub use spin_reveal::{
 	SpinRevealCover, SpinRevealFace, SpinRevealPayload, SpinRevealSlot, SpinRevealViewport,
@@ -86,14 +91,44 @@ impl Plugin for MenuComponentsPlugin {
 			.init_resource::<ActiveOverlayKey>()
 			.init_resource::<ActiveShortText>()
 			.init_resource::<ShortTextModal>()
-			.init_resource::<MenuBackConsumed>()
+			.init_resource::<MenuModalStack>()
 			.add_message::<ScreenBackPressed>()
 			.add_message::<ScreenEditPressed>()
-			.configure_sets(Update, TextMenuSystems::InputLock.before(TextMenuSystems::Navigate))
+			.add_message::<MenuModalDismiss>()
+			.configure_sets(
+				Update,
+				(
+					TextMenuSystems::InputLock.before(TextMenuSystems::Navigate),
+					MenuModalSystems::Sync
+						.in_set(TextMenuSystems::InputLock)
+						.before(MenuModalSystems::Consume),
+					MenuModalSystems::Consume
+						.in_set(TextMenuSystems::InputLock)
+						.before(MenuModalSystems::Apply),
+					MenuModalSystems::Apply.in_set(TextMenuSystems::InputLock),
+				),
+			)
 			.add_systems(
 				Update,
-				(clear_menu_back_consumed, controls::emit_short_text_submit_on_confirm)
+				(begin_menu_modal_frame, sync_menu_modal_stack)
 					.chain()
+					.in_set(MenuModalSystems::Sync),
+			)
+			.add_systems(
+				Update,
+				(consume_menu_modal_back, tick_menu_modal_holds)
+					.chain()
+					.in_set(MenuModalSystems::Consume),
+			)
+			.add_systems(
+				Update,
+				controls::close_short_text_on_modal_dismiss.in_set(MenuModalSystems::Apply),
+			)
+			.add_systems(
+				Update,
+				controls::emit_short_text_submit_on_confirm
+					.after(MenuModalSystems::Sync)
+					.before(MenuModalSystems::Consume)
 					.in_set(TextMenuSystems::InputLock),
 			)
 			.add_systems(Last, clear_short_text_dismissed)
@@ -178,6 +213,7 @@ where
 		app.add_message::<E>()
 			.add_observer(emit_menu_activate_on_click::<E>)
 			.add_observer(emit_menu_activate_on_nav::<E>)
+			.add_observer(emit_menu_step::<E>)
 			.add_systems(
 				Update,
 				(

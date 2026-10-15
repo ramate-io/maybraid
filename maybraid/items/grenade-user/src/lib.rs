@@ -1,5 +1,7 @@
 //! Held grenade, overhand throw, and owned recharge clocks.
 
+mod cook_hud;
+mod feel;
 mod hold;
 mod throw;
 
@@ -9,8 +11,12 @@ use character_items::{Inventory, InventoryItem};
 use characters::CharacterMotionSystems;
 use player::{PlayerPoseSystems, PlayerSystems, PlayerUse};
 
+pub use feel::{blast_presence, blast_rumble, rumble_presence};
 pub use hold::{spawn_held_grenade, HeldGrenade, HoldingGrenade};
-pub use throw::{GrenadePhase, GrenadeThrow, GrenadeUser, GrenadeUserSettings};
+pub use throw::{
+	landing_range, landing_time, launch_velocity, throw_aim, GrenadePhase, GrenadeThrow,
+	GrenadeUser, GrenadeUserSettings, GrenadeUserSystems, STANDING_RELEASE_HEIGHT, THROW_GRAVITY,
+};
 
 /// Held-side 1:1 target of [`GrenadeUser`].
 #[derive(Component, Debug)]
@@ -25,6 +31,7 @@ impl Plugin for GrenadeUserPlugin {
 			app.add_plugins(grenades::GrenadesPlugin);
 		}
 		app.add_systems(Update, throw::apply_throw_intents.in_set(PlayerSystems::Intent))
+			.add_systems(Startup, cook_hud::spawn_cook_fuse_hud)
 			.add_systems(
 				Update,
 				(
@@ -42,15 +49,32 @@ impl Plugin for GrenadeUserPlugin {
 					.in_set(PlayerPoseSystems::Overlay)
 					.after(CharacterMotionSystems::Anim),
 			)
+			.add_systems(
+				Update,
+				throw::play_throw_jingles
+					.after(PlayerPoseSystems::Overlay)
+					.before(throw::advance_throw),
+			)
 			.add_systems(Update, throw::advance_throw.after(PlayerPoseSystems::Overlay))
+			.add_systems(Update, throw::interrupt_live_cooks.in_set(GrenadeUserSystems::Interrupt))
+			.add_systems(
+				PostUpdate,
+				throw::interrupt_live_cooks
+					.in_set(GrenadeUserSystems::Interrupt)
+					.after(damage::DamageSystems::Down),
+			)
+			.add_systems(Update, cook_hud::sync_cook_fuse_hud.after(throw::advance_throw))
+			.add_systems(Update, feel::pulse_blast_feel.after(grenades::apply_grenade_blasts))
 			.add_systems(
 				Update,
 				(
 					hold::realize_held_grenade_visuals,
 					tick_owned_recharge,
 					despawn_orphaned_held_grenades,
-				),
-			);
+				)
+					.chain(),
+			)
+			.add_message::<maybraid_input::PadRumble>();
 	}
 }
 
@@ -70,9 +94,9 @@ fn tick_owned_recharge(
 	}
 	due.clear();
 	for (entity, bag) in bags.p0().iter() {
-		if bag.items.iter().any(|item| {
-			matches!(item, InventoryItem::Grenade { recharge, .. } if recharge.remaining > 0.0)
-		}) {
+		if bag.items.iter().any(
+			|item| matches!(item, InventoryItem::Grenade { recharge, .. } if recharge.remaining > 0.0),
+		) {
 			due.push(entity);
 		}
 	}
@@ -124,7 +148,9 @@ mod tests {
 			weapons: vec![0],
 			skills: Vec::new(),
 		});
-		world.run_system_once(tick_owned_recharge).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(tick_owned_recharge)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let bag = world
 			.query::<&Inventory>()
 			.single(&world)
@@ -155,15 +181,14 @@ mod tests {
 			})
 			.id();
 		world.clear_trackers();
-		world.run_system_once(tick_owned_recharge).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(tick_owned_recharge)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let bag = world
 			.query::<Ref<Inventory>>()
 			.get(&world, entity)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		anyhow::ensure!(
-			!bag.is_changed(),
-			"idle grenade recharge must not dirty the inventory"
-		);
+		anyhow::ensure!(!bag.is_changed(), "idle grenade recharge must not dirty the inventory");
 		let InventoryItem::Grenade { recharge, .. } = &bag.items[0] else {
 			anyhow::bail!("expected grenade inventory item");
 		};

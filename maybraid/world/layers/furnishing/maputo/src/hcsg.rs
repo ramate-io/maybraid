@@ -20,6 +20,7 @@ use lod::hcsg::{self, GenerationContext, HcsgClass, PresentationPlugin, ViewerHc
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::SceneChunk;
+use procedural_common::union_aabb3_iter;
 
 use crate::cell::{
 	intersects_xz, xz_radius_aabb, FurnitureCellExtent, FURNITURE_CELL_SIZE,
@@ -45,10 +46,7 @@ impl<U: FurnitureSlots> hcsg::GenerationScheme for DevelopmentSlots<U> {
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
 		let development = cx.get_or_generate::<U::Development>(id)?;
 		let slots = U::development_slots(&development);
-		let bounds = slots
-			.iter()
-			.map(|slot| slot.scene_bounds())
-			.reduce(|a, b| Aabb3d { min: a.min.min(b.min), max: a.max.max(b.max) })?;
+		let bounds = union_aabb3_iter(slots.iter().map(|slot| slot.scene_bounds()))?;
 		Some((Self { slots, _ground: PhantomData }, bounds))
 	}
 }
@@ -70,13 +68,9 @@ impl<U: FurnitureSlots> Furnished<U> {
 	fn developments(cx: &mut GenerationContext, region: Aabb3d) -> Vec<Arc<DevelopmentSlots<U>>> {
 		cx.get_or_generate_in::<DevelopmentSlots<U>>(region)
 	}
-}
 
-impl<U: FurnitureSlots> hcsg::GenerationScheme for Furnished<U> {
-	lod::hcsg_index_scale!(CELL_SCALE);
-
-	/// The cells overlapping `region` that hold a slot.
-	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+	/// Furniture cells in `region` that hold a slot from one of `U`'s developments.
+	fn furnished_cell_ids(cx: &mut GenerationContext, region: Aabb3d) -> BTreeSet<Id> {
 		let mut ids = BTreeSet::new();
 		for development in Self::developments(cx, region) {
 			for slot in &development.slots {
@@ -88,7 +82,16 @@ impl<U: FurnitureSlots> hcsg::GenerationScheme for Furnished<U> {
 				}
 			}
 		}
-		ids.into_iter().map(OriginalId).collect()
+		ids
+	}
+}
+
+impl<U: FurnitureSlots> hcsg::GenerationScheme for Furnished<U> {
+	lod::hcsg_index_scale!(CELL_SCALE);
+
+	/// The cells overlapping `region` that hold a slot.
+	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		Self::furnished_cell_ids(cx, region).into_iter().map(OriginalId).collect()
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
@@ -191,8 +194,10 @@ mod tests {
 	use bevy::scene::ScenePlugin;
 	use bevy::state::app::StatesPlugin;
 	use durham::Durham;
-	use lod::gen::Version;
-	use lod::hcsg::{HcsgDemand, HcsgNode, HcsgRestartRequest, HcsgValue};
+	use lod::hcsg::{
+		hcsg_hosts, settle_presentation, wait_replaced_hosts, HcsgNode, HcsgRestartRequest,
+		RetiredHost, SettlePresentation,
+	};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
 	use richmond::{
@@ -256,26 +261,7 @@ mod tests {
 	}
 
 	fn settle(app: &mut App) -> anyhow::Result<()> {
-		for _ in 0..2 {
-			app.update();
-			let demand = app.world().resource::<HcsgDemand>().clone();
-			anyhow::ensure!(demand.wait_idle(IDLE), "worker did not go idle");
-		}
-		for _ in 0..8 {
-			app.update();
-		}
-		Ok(())
-	}
-
-	fn hosts<T: HcsgValue>(app: &mut App) -> Vec<(Id, Version)> {
-		let mut hosts: Vec<_> = app
-			.world_mut()
-			.query::<&HcsgNode<T>>()
-			.iter(app.world())
-			.map(|node| (node.id, node.version))
-			.collect();
-		hosts.sort();
-		hosts
+		settle_presentation(app, SettlePresentation::layer_integration(IDLE)).map_err(Into::into)
 	}
 
 	fn center() -> Vec3 {
@@ -313,7 +299,7 @@ mod tests {
 	fn furnished(app: &mut App) -> Vec<(Id, usize)> {
 		let mut cells: Vec<_> = app
 			.world_mut()
-			.query::<&HcsgNode<Furnished<Urban>>>()
+			.query_filtered::<&HcsgNode<Furnished<Urban>>, Without<RetiredHost>>()
 			.iter(app.world())
 			.map(|node| (node.id, node.value.cell.slots.len()))
 			.collect();
@@ -342,13 +328,13 @@ mod tests {
 	fn leaving_the_neighborhood_retires_its_hosts() -> anyhow::Result<()> {
 		let mut app = app(center());
 		settle(&mut app)?;
-		assert!(!hosts::<Furnished<Urban>>(&mut app).is_empty());
+		assert!(!hcsg_hosts::<Furnished<Urban>>(&mut app).is_empty());
 
 		let away = Transform::from_xyz(5_000.0, 0.0, 5_000.0);
 		let mut viewers = app.world_mut().query_filtered::<&mut Transform, With<LodViewer>>();
 		*viewers.single_mut(app.world_mut())? = away;
 		settle(&mut app)?;
-		assert!(hosts::<Furnished<Urban>>(&mut app).is_empty());
+		assert!(hcsg_hosts::<Furnished<Urban>>(&mut app).is_empty());
 		Ok(())
 	}
 
@@ -356,11 +342,13 @@ mod tests {
 	fn a_restart_replaces_every_furnished_host() -> anyhow::Result<()> {
 		let mut app = app(center());
 		settle(&mut app)?;
-		let before = hosts::<Furnished<Urban>>(&mut app);
+		let before = hcsg_hosts::<Furnished<Urban>>(&mut app);
 
 		seed_resources(&mut app, 20.0);
 		settle(&mut app)?;
-		let after = hosts::<Furnished<Urban>>(&mut app);
+		// Presentation keeps the previous session until new versions publish.
+		// `settle` only runs a fixed reconcile budget; wait on versions.
+		let after = wait_replaced_hosts::<Furnished<Urban>>(&mut app, &before, IDLE, 64)?;
 
 		assert_eq!(after.len(), before.len());
 		for ((id, old), (new_id, new)) in before.iter().zip(&after) {

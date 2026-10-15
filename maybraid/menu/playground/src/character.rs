@@ -1,12 +1,13 @@
 //! Right-justified character-creator panel over the playground camera.
 
-use std::collections::HashMap;
-
 use bevy::prelude::*;
-use bevy::ui::widget::ViewportNode;
 use character_creation_menus::{CharacterMenu, MenuEvent};
-use character_items::{Inventory, InventoryItem};
+use character_items::Inventory;
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
+use item_icons::{
+	request_inventory_icons, CaptureClient, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery,
+	ItemIconPlugin, ItemIconSystems,
+};
 use maybraid_character_ui_menu_renderer::{
 	find_overlay_node, overlay_closes_on_pick, render_overlay_body, spawn_overlay_shell,
 	CharacterHudSystems, CharacterMenuEvent, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
@@ -15,18 +16,19 @@ use maybraid_character_ui_menu_renderer::{
 };
 use maybraid_menu_controller::MenuController;
 use maybraid_skill_map::{
-	spawn_skill_map_catalog_preview, spawn_skill_map_spin_reveal_hud, SkillMapCatalogPreview,
-	SkillMapMember, SkillMapSpinRevealHud, SkillMapSpinRevealHudView, SkillMapTileAssets,
+	spawn_skill_map_spin_reveal_image, SkillMapSpinRevealHud, SkillMapSpinRevealHudView,
 	SkillMapTileMaterialPlugin,
 };
 use menu_components::theme::{CORNER_BOTTOM, CORNER_INSET};
 use menu_components::{
 	spawn_corner_action, spawn_scroll_pane, ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem,
-	HudOverlayMenu, MenuActivate, MenuFocus, ScreenBack, ShortTextChange, PANEL_ROW_GAP,
-	SPIN_REVEAL_SLOT_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	HudOverlayMenu, MenuActivate, MenuFocus, MenuModalId, MenuModalLayer, MenuModalStack,
+	ScreenBack, ShortTextChange, PANEL_ROW_GAP, SPIN_REVEAL_SLOT_SIZE, TEXT_YELLOW,
+	TEXT_YELLOW_FAINT,
 };
 use menu_screens::{
-	take_menu_show_request, MenuScreen, SpinRevealCurrent, SpinRevealItems, SpinRevealScreen,
+	add_menu_show_systems, MenuScreen, MenuScreens, MenuShowRequest, SpinRevealCurrent,
+	SpinRevealItems, SpinRevealScreen,
 };
 
 use crate::leave_prompt::CharacterLeavePromptPlugin;
@@ -36,6 +38,7 @@ const PANEL_HEIGHT_PERCENT: f32 = 82.0;
 
 /// Queue a character-panel spawn (despawns any existing menu screen first).
 #[derive(Component, Debug, Clone, Copy)]
+#[require(MenuShowRequest = MenuShowRequest::next())]
 pub struct RequestShowCharacter;
 
 /// Marker on the spawned character-panel root.
@@ -78,6 +81,12 @@ impl CharacterEditBaseline {
 			None => self.inventory != Inventory::default(),
 		}
 	}
+
+	/// Put the editor back to the snapshot taken when it opened or last saved.
+	pub fn restore_into(&self, menu: &mut CharacterMenu) {
+		menu.name.clone_from(&self.name);
+		menu.inventory = Some(self.inventory.clone());
+	}
 }
 
 /// Create always offers Save Character. Saved characters offer Save Changes once dirty.
@@ -98,6 +107,7 @@ pub fn save_chrome(
 struct CharacterUiSyncState {
 	menu_dirty: bool,
 	save_label: Option<&'static str>,
+	icon_generation: u64,
 }
 
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,6 +119,7 @@ struct OverlaySelectState {
 struct OverlayUiSyncState {
 	open: Option<&'static str>,
 	menu_dirty: bool,
+	icon_generation: u64,
 }
 
 #[derive(Component)]
@@ -120,17 +131,11 @@ struct CharacterSaveCorner;
 #[derive(Component)]
 struct CharacterBackCorner;
 
-#[derive(Resource, Default)]
-struct SkillMapMenuPreviewCache {
-	entries: HashMap<u64, SkillMapCatalogPreview>,
-	next_slot: u32,
+struct CatalogThumbs<'a> {
+	icons: Option<&'a ItemIconCache>,
 }
 
-struct SkillMapCatalogThumbs<'a> {
-	entries: &'a HashMap<u64, SkillMapCatalogPreview>,
-}
-
-impl MenuThumbnailContext for SkillMapCatalogThumbs<'_> {
+impl MenuThumbnailContext for CatalogThumbs<'_> {
 	fn image_for_asset(
 		&mut self,
 		_label: &'static str,
@@ -142,11 +147,11 @@ impl MenuThumbnailContext for SkillMapCatalogThumbs<'_> {
 	}
 
 	fn image_for_key(&mut self, key: u64) -> Option<Handle<Image>> {
-		self.entries.get(&key).map(|entry| entry.image.clone())
+		self.icons.and_then(|cache| cache.shaded_for_key(key))
 	}
 
-	fn viewport_for_key(&mut self, key: u64) -> Option<Entity> {
-		self.entries.get(&key).map(|entry| entry.camera)
+	fn viewport_for_key(&mut self, _key: u64) -> Option<Entity> {
+		None
 	}
 }
 
@@ -165,54 +170,54 @@ impl Plugin for CharacterScreenPlugin {
 		if !app.is_plugin_added::<CharacterLeavePromptPlugin>() {
 			app.add_plugins(CharacterLeavePromptPlugin);
 		}
+		if !app.is_plugin_added::<ItemIconPlugin>() {
+			app.add_plugins(ItemIconPlugin);
+		}
 		app.init_resource::<CharacterMenuState>()
 			.init_resource::<CharacterUiSyncState>()
 			.init_resource::<OverlaySelectState>()
 			.init_resource::<OverlayUiSyncState>()
-			.init_resource::<SkillMapMenuPreviewCache>()
 			.add_observer(on_overlay_open)
 			.add_observer(on_overlay_close)
 			.add_observer(on_menu_activate)
 			.add_observer(on_menu_focus)
 			.add_observer(on_short_text_change)
-			.add_systems(Update, ensure_skill_map_menu_previews.before(CharacterHudSystems::Sync))
+			.add_systems(Update, discover_menu_item_icons.in_set(ItemIconSystems::Discover))
 			.add_systems(
 				Update,
-				(
-					apply_show_character,
-					sync_character_ui,
-					sync_overlay_select,
-					sync_spin_reveal_skill_map,
-					clear_skill_map_menu_previews,
-				)
+				(sync_character_ui, sync_overlay_select, sync_spin_reveal_item_icon)
 					.chain()
 					.in_set(CharacterHudSystems::Sync),
 			);
+		add_menu_show_systems(app, apply_show_character);
 	}
 }
 
 fn apply_show_character(
 	mut commands: Commands,
 	asset_server: Res<AssetServer>,
-	requests: Query<Entity, With<RequestShowCharacter>>,
-	existing: Query<Entity, With<MenuScreen>>,
+	requests: Query<(), With<RequestShowCharacter>>,
+	screens: MenuScreens,
 	menu_state: Res<CharacterMenuState>,
 	baseline: Option<Res<CharacterEditBaseline>>,
 	mut sync_state: ResMut<CharacterUiSyncState>,
 	mut overlay: ResMut<OverlaySelectState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
-	previews: Res<SkillMapMenuPreviewCache>,
+	mut stack: ResMut<MenuModalStack>,
+	icons: Option<Res<ItemIconCache>>,
 ) {
-	if !take_menu_show_request(&mut commands, &requests, &existing) {
+	if screens.take(&mut commands, &requests).is_none() {
 		return;
 	}
 	overlay.open = None;
 	overlay_sync.open = None;
 	overlay_sync.menu_dirty = false;
 	active_overlay.0 = None;
+	stack.close(MenuModalId::OVERLAY_SELECT);
 	sync_state.menu_dirty = false;
 	sync_state.save_label = save_chrome(&menu_state.0, baseline.as_deref());
+	sync_state.icon_generation = icons.as_ref().map(|cache| cache.generation).unwrap_or(0);
 	let (viewport, save_corner, back_corner) = spawn_character_ui_shell(&mut commands);
 	rebuild_character_ui_panel(
 		&mut commands,
@@ -223,7 +228,7 @@ fn apply_show_character(
 		Some(save_corner),
 		Some(back_corner),
 		&[],
-		&previews.entries,
+		icons.as_deref(),
 	);
 }
 
@@ -237,17 +242,23 @@ fn sync_character_ui(
 	viewports: Query<(Entity, Option<&HudMenu>), With<CharacterPanelViewport>>,
 	save_corners: Query<Entity, With<CharacterSaveCorner>>,
 	back_corners: Query<Entity, With<CharacterBackCorner>>,
-	previews: Res<SkillMapMenuPreviewCache>,
+	icons: Option<Res<ItemIconCache>>,
 ) {
 	if screens.is_empty() {
 		return;
 	}
 	let save_label = save_chrome(&menu_state.0, baseline.as_deref());
-	if !sync_state.menu_dirty && !menu_state.is_changed() && sync_state.save_label == save_label {
+	let icon_generation = icons.as_ref().map(|cache| cache.generation).unwrap_or(0);
+	if !sync_state.menu_dirty
+		&& !menu_state.is_changed()
+		&& sync_state.save_label == save_label
+		&& sync_state.icon_generation == icon_generation
+	{
 		return;
 	}
 	sync_state.menu_dirty = false;
 	sync_state.save_label = save_label;
+	sync_state.icon_generation = icon_generation;
 	let previous: Vec<(Entity, Option<HudMenu>)> =
 		viewports.iter().map(|(entity, menu)| (entity, menu.copied())).collect();
 	let save_corner = save_corners.iter().next();
@@ -261,7 +272,7 @@ fn sync_character_ui(
 		save_corner,
 		back_corner,
 		&previous,
-		&previews.entries,
+		icons.as_deref(),
 	);
 }
 
@@ -339,7 +350,7 @@ fn rebuild_character_ui_panel(
 	save_corner: Option<Entity>,
 	back_corner: Option<Entity>,
 	previous: &[(Entity, Option<HudMenu>)],
-	thumbnails: &HashMap<u64, SkillMapCatalogPreview>,
+	icons: Option<&ItemIconCache>,
 ) {
 	let mut prewarm = Vec::new();
 	for viewport in viewports {
@@ -347,42 +358,52 @@ fn rebuild_character_ui_panel(
 			.iter()
 			.find(|(entity, _)| *entity == viewport)
 			.and_then(|(_, menu)| *menu);
-		commands.entity(viewport).despawn_related::<Children>();
+		let Ok(mut entity) = commands.get_entity(viewport) else {
+			continue;
+		};
+		entity.despawn_related::<Children>();
 		let mut item_count = 0;
-		commands.entity(viewport).with_children(|panel| {
+		entity.with_children(|panel| {
 			item_count = populate_character_ui_panel(
 				panel,
 				fonts,
 				menu_state,
 				viewport,
 				&mut prewarm,
-				thumbnails,
+				icons,
 			);
 		});
+		drop(entity);
 		if let Some(corner) = back_corner {
-			commands.entity(corner).despawn_related::<Children>();
-			commands.entity(corner).with_children(|corner| {
-				spawn_corner_action(corner, fonts, "Back", ScreenBack);
-			});
-		}
-		if let Some(corner) = save_corner {
-			commands.entity(corner).despawn_related::<Children>();
-			if let Some(label) = save_chrome(&menu_state.0, baseline) {
-				commands.entity(corner).with_children(|corner| {
-					spawn_corner_action(
-						corner,
-						fonts,
-						label,
-						(
-							MenuButton(MenuEvent::Save),
-							HudMenuItem { index: item_count, menu: viewport },
-						),
-					);
+			if let Ok(mut corner) = commands.get_entity(corner) {
+				corner.despawn_related::<Children>();
+				corner.with_children(|corner| {
+					spawn_corner_action(corner, fonts, "Back", ScreenBack);
 				});
-				item_count += 1;
 			}
 		}
-		commands.entity(viewport).insert(HudMenu::retain(item_count, keep));
+		if let Some(corner) = save_corner {
+			if let Ok(mut corner) = commands.get_entity(corner) {
+				corner.despawn_related::<Children>();
+				if let Some(label) = save_chrome(&menu_state.0, baseline) {
+					corner.with_children(|corner| {
+						spawn_corner_action(
+							corner,
+							fonts,
+							label,
+							(
+								MenuButton(MenuEvent::Save),
+								HudMenuItem { index: item_count, menu: viewport },
+							),
+						);
+					});
+					item_count += 1;
+				}
+			}
+		}
+		if let Ok(mut entity) = commands.get_entity(viewport) {
+			entity.insert(HudMenu::retain(item_count, keep));
+		}
 	}
 }
 
@@ -392,9 +413,9 @@ fn populate_character_ui_panel(
 	menu_state: &CharacterMenuState,
 	hud_menu: Entity,
 	prewarm: &mut Vec<character_ui_menu::ThumbnailRequest>,
-	images: &HashMap<u64, SkillMapCatalogPreview>,
+	icons: Option<&ItemIconCache>,
 ) -> usize {
-	let mut thumbnails = SkillMapCatalogThumbs { entries: images };
+	let mut thumbnails = CatalogThumbs { icons };
 	let mut context = RenderContext {
 		fonts,
 		thumbnails: &mut thumbnails,
@@ -422,18 +443,22 @@ fn sync_overlay_select(
 	menu_state: Res<CharacterMenuState>,
 	overlay: Res<OverlaySelectState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
-	previews: Res<SkillMapMenuPreviewCache>,
+	icons: Option<Res<ItemIconCache>>,
 ) {
 	let Ok(screen) = screens.single() else {
 		return;
 	};
-	let menu_changed = overlay_sync.menu_dirty || menu_state.is_changed();
+	let icon_generation = icons.as_ref().map(|cache| cache.generation).unwrap_or(0);
+	let menu_changed = overlay_sync.menu_dirty
+		|| menu_state.is_changed()
+		|| overlay_sync.icon_generation != icon_generation;
 	let open_changed = overlay_sync.open != overlay.open;
 	if !open_changed && !menu_changed {
 		return;
 	}
 	overlay_sync.open = overlay.open;
 	overlay_sync.menu_dirty = false;
+	overlay_sync.icon_generation = icon_generation;
 
 	let Some(key) = overlay.open else {
 		for entity in &overlays {
@@ -458,9 +483,13 @@ fn sync_overlay_select(
 		let mut viewport = Entity::PLACEHOLDER;
 		let title_color =
 			if menu_state.0.overlay_editable(key) { TEXT_YELLOW } else { TEXT_YELLOW_FAINT };
-		commands.entity(screen).with_children(|root| {
+		let Ok(mut root) = commands.get_entity(screen) else {
+			return;
+		};
+		root.with_children(|root| {
 			viewport = spawn_overlay_shell(root, &fonts, key, title_color);
 		});
+		drop(root);
 		populate_overlay_viewport(
 			&mut commands,
 			viewport,
@@ -468,7 +497,7 @@ fn sync_overlay_select(
 			node,
 			None,
 			menu_state.0.overlay_editable(key),
-			&previews.entries,
+			icons.as_deref(),
 		);
 		return;
 	}
@@ -481,7 +510,7 @@ fn sync_overlay_select(
 			node,
 			menu.copied(),
 			menu_state.0.overlay_editable(key),
-			&previews.entries,
+			icons.as_deref(),
 		);
 	}
 }
@@ -493,13 +522,16 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 	node: &character_ui_menu::MenuNode<E>,
 	previous: Option<HudMenu>,
 	interactive: bool,
-	images: &HashMap<u64, SkillMapCatalogPreview>,
+	icons: Option<&ItemIconCache>,
 ) {
 	let mut prewarm = Vec::new();
-	let mut thumbnails = SkillMapCatalogThumbs { entries: images };
-	commands.entity(viewport).despawn_related::<Children>();
+	let mut thumbnails = CatalogThumbs { icons };
+	let Ok(mut entity) = commands.get_entity(viewport) else {
+		return;
+	};
+	entity.despawn_related::<Children>();
 	let mut item_count = 0;
-	commands.entity(viewport).with_children(|body| {
+	entity.with_children(|body| {
 		let mut context = RenderContext {
 			fonts,
 			thumbnails: &mut thumbnails,
@@ -513,123 +545,66 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 		render_overlay_body(node, body, &mut context, MenuJustify::Left);
 		item_count = context.hud_item_count;
 	});
-	commands
-		.entity(viewport)
-		.insert((HudMenu::retain(item_count, previous), HudOverlayMenu));
+	drop(entity);
+	if let Ok(mut entity) = commands.get_entity(viewport) {
+		entity.insert((HudMenu::retain(item_count, previous), HudOverlayMenu));
+	}
 }
 
-fn ensure_skill_map_menu_previews(
-	mut commands: Commands,
-	mut images: ResMut<Assets<Image>>,
-	tiles: Option<Res<SkillMapTileAssets>>,
+fn discover_menu_item_icons(
 	menu_state: Res<CharacterMenuState>,
 	spin_items: Option<Res<SpinRevealItems>>,
-	mut cache: ResMut<SkillMapMenuPreviewCache>,
-	mut ui_sync: ResMut<CharacterUiSyncState>,
-	mut overlay_sync: ResMut<OverlayUiSyncState>,
+	mut discovery: ResMut<ItemIconDiscovery>,
+	mut subjects: ResMut<ItemCaptureSubjects>,
+	mut client: CaptureClient,
 ) {
-	let Some(tiles) = tiles else {
-		return;
-	};
-	let mut spawned = false;
-	for spec in skill_map_specs_to_preview(menu_state.0.inventory.as_ref(), spin_items.as_deref()) {
-		let key = spec.catalog_key();
-		if cache.entries.contains_key(&key) {
-			continue;
-		}
-		let slot = cache.next_slot;
-		cache.next_slot += 1;
-		let preview =
-			spawn_skill_map_catalog_preview(&mut commands, images.as_mut(), &tiles, spec, slot);
-		cache.entries.insert(key, preview);
-		spawned = true;
+	if let Some(inventory) = menu_state.0.inventory.as_ref() {
+		request_inventory_icons(inventory, &mut discovery, &mut subjects, &mut client);
 	}
-	if spawned {
-		ui_sync.menu_dirty = true;
-		overlay_sync.menu_dirty = true;
+	if let Some(spin) = spin_items.as_deref() {
+		let bag = Inventory { items: spin.0.clone(), ..Inventory::default() };
+		request_inventory_icons(&bag, &mut discovery, &mut subjects, &mut client);
 	}
 }
 
-fn skill_map_specs_to_preview(
-	inventory: Option<&Inventory>,
-	spin: Option<&SpinRevealItems>,
-) -> Vec<character_items::SkillMapSpec> {
-	let mut specs = Vec::new();
-	if let Some(inventory) = inventory {
-		specs.extend(inventory.items.iter().filter_map(InventoryItem::skill_map_spec));
-	}
-	if let Some(spin) = spin {
-		specs.extend(spin.0.iter().filter_map(InventoryItem::skill_map_spec));
-	}
-	specs
-}
-
-fn sync_spin_reveal_skill_map(
+/// Bind the shaded catalog PNG for the current starter item. The live inspect
+/// mesh is not spawned on this screen — that pair stacked two item views.
+fn sync_spin_reveal_item_icon(
 	mut commands: Commands,
 	spin: Option<Res<SpinRevealCurrent>>,
 	spin_screens: Query<(), With<SpinRevealScreen>>,
-	cache: Res<SkillMapMenuPreviewCache>,
+	icons: Option<Res<ItemIconCache>>,
 	mut hosts: Query<&mut Visibility, With<SkillMapSpinRevealHud>>,
-	mut views: Query<&mut ViewportNode, With<SkillMapSpinRevealHudView>>,
+	mut views: Query<&mut ImageNode, With<SkillMapSpinRevealHudView>>,
 ) {
 	let wanted = (!spin_screens.is_empty())
 		.then_some(spin.as_deref())
 		.flatten()
 		.filter(|spin| spin.revealed)
-		.and_then(|spin| spin.item.skill_map_spec())
-		.and_then(|spec| cache.entries.get(&spec.catalog_key()));
-	let Some(preview) = wanted else {
+		.and_then(|spin| icons.as_ref().and_then(|cache| cache.shaded_for_item(&spin.item)));
+	let Some(image) = wanted else {
 		for mut visibility in &mut hosts {
 			*visibility = Visibility::Hidden;
 		}
 		return;
 	};
 	if hosts.is_empty() {
-		spawn_skill_map_spin_reveal_hud(&mut commands, preview.camera, SPIN_REVEAL_SLOT_SIZE);
+		spawn_skill_map_spin_reveal_image(&mut commands, image, SPIN_REVEAL_SLOT_SIZE);
 		return;
 	}
 	for mut visibility in &mut hosts {
 		*visibility = Visibility::Inherited;
 	}
-	for mut viewport in &mut views {
-		viewport.camera = Some(preview.camera);
+	for mut node in &mut views {
+		node.image = image.clone();
 	}
-}
-
-fn clear_skill_map_menu_previews(
-	screens: Query<(), With<CharacterScreen>>,
-	spin_screens: Query<(), With<SpinRevealScreen>>,
-	mut cache: ResMut<SkillMapMenuPreviewCache>,
-	members: Query<(Entity, &SkillMapMember)>,
-	huds: Query<Entity, With<SkillMapSpinRevealHud>>,
-	mut commands: Commands,
-) {
-	if !screens.is_empty() || !spin_screens.is_empty() {
-		return;
-	}
-	if cache.entries.is_empty() && huds.is_empty() {
-		return;
-	}
-	let hosts: Vec<Entity> = cache.entries.values().map(|entry| entry.host).collect();
-	for (entity, member) in &members {
-		if hosts.contains(&member.session) {
-			commands.entity(entity).try_despawn();
-		}
-	}
-	for host in hosts {
-		commands.entity(host).try_despawn();
-	}
-	for hud in &huds {
-		commands.entity(hud).try_despawn();
-	}
-	cache.entries.clear();
-	cache.next_slot = 0;
 }
 
 fn on_overlay_open(
 	open: On<OverlayOpen>,
 	mut overlay: ResMut<OverlaySelectState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
+	mut stack: ResMut<MenuModalStack>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() {
@@ -637,12 +612,14 @@ fn on_overlay_open(
 	}
 	overlay.open = Some(open.event().key);
 	active_overlay.0 = Some(open.event().key);
+	stack.open(MenuModalLayer::OVERLAY_SELECT);
 }
 
 fn on_overlay_close(
 	_close: On<OverlayClose>,
 	mut overlay: ResMut<OverlaySelectState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
+	mut stack: ResMut<MenuModalStack>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() {
@@ -650,6 +627,7 @@ fn on_overlay_close(
 	}
 	overlay.open = None;
 	active_overlay.0 = None;
+	stack.close(MenuModalId::OVERLAY_SELECT);
 }
 
 fn on_menu_activate(
@@ -660,6 +638,7 @@ fn on_menu_activate(
 	mut overlay: ResMut<OverlaySelectState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
+	mut stack: ResMut<MenuModalStack>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() {
@@ -677,6 +656,7 @@ fn on_menu_activate(
 		if find_overlay_node(&nodes, key).is_some_and(overlay_closes_on_pick) {
 			overlay.open = None;
 			active_overlay.0 = None;
+			stack.close(MenuModalId::OVERLAY_SELECT);
 		}
 	}
 }
@@ -739,5 +719,61 @@ mod tests {
 		assert_eq!(save_chrome(&dirty, Some(&baseline)), Some("Save Changes"));
 		assert!(baseline.is_dirty(&dirty));
 		assert!(!baseline.is_dirty(&saved));
+
+		baseline.restore_into(&mut dirty);
+		assert_eq!(dirty.name, baseline.name);
+		assert!(!baseline.is_dirty(&dirty));
+	}
+
+	#[test]
+	fn catalog_thumbs_use_shaded_item_icons_when_ready() -> anyhow::Result<()> {
+		use super::CatalogThumbs;
+		use character_items::{FirearmMesh, InventoryItem};
+		use item_icons::{CaptureId, ItemIconCache};
+		use maybraid_character_ui_menu_renderer::MenuThumbnailContext;
+
+		let item = InventoryItem::firearm(FirearmMesh::Bullpup);
+		let key = item.icon_catalog_key().ok_or_else(|| anyhow::anyhow!("firearm catalog key"))?;
+		let label = item.capture_id_label().ok_or_else(|| anyhow::anyhow!("firearm capture id"))?;
+		let mut cache = ItemIconCache::default();
+		cache.insert_shaded(CaptureId::new(label), bevy::prelude::Handle::default());
+		let mut ready = CatalogThumbs { icons: Some(&cache) };
+		if ready.image_for_key(key).is_none() {
+			anyhow::bail!("ready catalog should show the shaded icon");
+		}
+		let mut pending = CatalogThumbs { icons: None };
+		if pending.image_for_key(key).is_some() {
+			anyhow::bail!("pending catalog should keep the placeholder");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn spin_reveal_shows_the_shaded_clothing_png() -> anyhow::Result<()> {
+		use super::{sync_spin_reveal_item_icon, SkillMapSpinRevealHudView};
+		use bevy::ecs::system::RunSystemOnce;
+		use bevy::prelude::World;
+		use character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
+		use item_icons::{CaptureId, ItemIconCache};
+		use menu_screens::{SpinRevealCurrent, SpinRevealScreen};
+
+		let item =
+			InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Red);
+		let label =
+			item.capture_id_label().ok_or_else(|| anyhow::anyhow!("clothing capture id"))?;
+		let mut cache = ItemIconCache::default();
+		cache.insert_shaded(CaptureId::new(label), bevy::prelude::Handle::default());
+
+		let mut world = World::new();
+		world.spawn(SpinRevealScreen);
+		world.insert_resource(SpinRevealCurrent { item, revealed: true });
+		world.insert_resource(cache);
+		world.run_system_once(sync_spin_reveal_item_icon).expect("sync");
+		world.flush();
+		let count = world.query::<&SkillMapSpinRevealHudView>().iter(&world).count();
+		if count != 1 {
+			anyhow::bail!("revealed clothing should spawn the catalog PNG slot, got {count}");
+		}
+		Ok(())
 	}
 }

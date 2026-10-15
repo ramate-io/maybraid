@@ -22,6 +22,9 @@ pub use state::SubscriptionId;
 pub(crate) use retention::WorkerWait;
 pub(crate) use schedule::{quantum_cost, Job, QuantumProgress, QUANTUM_IDS, QUANTUM_TIME};
 
+#[cfg(test)]
+pub(crate) use state::generate;
+
 /// One subscription per generation or presentation system, filled in
 /// weighted quanta by the [`super::HcsgWorker`].
 ///
@@ -46,7 +49,8 @@ impl HcsgDemand {
 		}
 	}
 
-	pub fn epoch(&self) -> u64 {
+	#[cfg(test)]
+	pub(crate) fn epoch(&self) -> u64 {
 		self.lock().epoch
 	}
 

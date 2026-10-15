@@ -37,20 +37,17 @@ pub use firearm_material::{BoltMaterial, FirearmMaterial};
 pub use firearm_roll::{
 	generate_firearm_stats, realize_firearm_stats, Dist, FirearmBuff, FirearmPriors,
 };
-pub use grenade::{GrenadeMesh, GrenadeRecharge, GrenadeSpec, GrenadeStats};
+pub use grenade::{GrenadeMesh, GrenadeRecharge, GrenadeSpec, GrenadeStats, STANDARD_LAUNCH_SPEED};
 pub use grenade_roll::{
 	effect_scale_for_blast, generate_grenade_stats, realize_grenade_stats, BLAST_DAMAGE_MAX,
-	BLAST_DAMAGE_MIN, BLAST_RADIUS_MAX, BLAST_RADIUS_MIN, FIERY_EXPLOSION_METERS,
+	BLAST_DAMAGE_MIN, BLAST_RADIUS_MAX, BLAST_RADIUS_MIN, FIERY_EXPLOSION_METERS, LAUNCH_SPEED_MAX,
+	LAUNCH_SPEED_MIN,
 };
 pub use inventory::{
-	random_clothing_item, random_gallery_firearms, random_starter_clothing,
-	random_starter_firearms, random_starter_loadout, random_starter_skill_maps, Inventory,
-	InventoryItem, InventorySlot, ItemRng, LootFraction, MaterialRefParams, SKILL_MAP_BAG_LIMIT,
-	SKILL_MAP_QUEUE_LIMIT, STARTER_CLOTHING_COUNT, STARTER_GRENADE_COUNT, STARTER_SKILL_MAP_COUNT,
-	STARTER_WEAPON_COUNT, WEAPON_QUEUE_LIMIT, WORN_CLOTHING_LIMIT,
-};
-pub use names::{
-	hashed_firearm_name, hashed_grenade_name, hashed_item_name, hashed_skill_map_name,
+	icon_catalog_key_for_label, Inventory, InventoryItem, InventorySlot, ItemRng, LootFraction,
+	MaterialRefParams, ITEM_ICON_CATALOG_TAG, SKILL_MAP_BAG_LIMIT, SKILL_MAP_QUEUE_LIMIT,
+	STARTER_CLOTHING_COUNT, STARTER_GRENADE_COUNT, STARTER_SKILL_MAP_COUNT, STARTER_WEAPON_COUNT,
+	WEAPON_QUEUE_LIMIT, WORN_CLOTHING_LIMIT,
 };
 pub use palette::ItemColor;
 pub use skill_map::{SkillMapKind, SkillMapSpec};

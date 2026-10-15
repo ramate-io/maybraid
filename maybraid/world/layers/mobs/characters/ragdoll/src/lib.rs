@@ -12,12 +12,12 @@ use character_motion::{
 	AnimBone, ApplyTerrainPitch, CharacterMotionSystems, CharacterRig, CharacterRigRole,
 	RigSkeletonKind, SuspendAnimation,
 };
-use characters::CharacterRoot;
+use characters::{CharacterRoot, HeadCapsule, HitCapsule};
 use damage::{DamageSystems, DespawnAfter, Downed};
 use lod_avian::PhysicsInteractionLayer;
 use player::{
-	CameraFollow, CharacterController, MoveWish, Npc, Player, PlayerCameraAim, PlayerVisual,
-	PlayerYawOwner,
+	CameraFollow, CharacterController, HitVolume, MoveWish, Npc, Player, PlayerCameraAim,
+	PlayerVisual, PlayerYawOwner,
 };
 
 const PARTICLE_SKIN: f32 = 0.01;
@@ -295,6 +295,7 @@ fn begin_corpse_handoffs(
 	mut commands: Commands,
 	mut downed: DownedBodies,
 	visuals: Query<(Entity, &ChildOf), With<CharacterRoot>>,
+	hit_volumes: Query<(Entity, &ChildOf), With<HitVolume>>,
 ) {
 	let now = time.elapsed_secs();
 	for (body, downed, velocity, wish, player, npc) in &mut downed {
@@ -311,23 +312,35 @@ fn begin_corpse_handoffs(
 		if let Some(mut wish) = wish {
 			wish.0 = Vec3::ZERO;
 		}
-		commands
-			.entity(body)
-			.remove::<CharacterController>()
-			.try_insert((RigidBodyDisabled, ColliderDisabled));
+		if let Ok(mut entity) = commands.get_entity(body) {
+			entity
+				.remove::<(CharacterController, HitCapsule, HeadCapsule)>()
+				.try_insert((RigidBodyDisabled, ColliderDisabled));
+		}
+		for (volume, child_of) in &hit_volumes {
+			if child_of.parent() == body {
+				if let Ok(mut entity) = commands.get_entity(volume) {
+					entity.try_despawn();
+				}
+			}
+		}
 		for (visual, child_of) in &visuals {
 			if child_of.parent() != body {
 				continue;
 			}
-			commands.entity(visual).insert((
-				Corpse {
-					source: downed.source,
-					point: downed.point,
-					inherited_velocity: inherited,
-				},
-				SuspendAnimation,
-			));
-			commands.entity(body).try_insert(CorpseHandoff { visual, started_at: now });
+			if let Ok(mut entity) = commands.get_entity(visual) {
+				entity.try_insert((
+					Corpse {
+						source: downed.source,
+						point: downed.point,
+						inherited_velocity: inherited,
+					},
+					SuspendAnimation,
+				));
+			}
+			if let Ok(mut entity) = commands.get_entity(body) {
+				entity.try_insert(CorpseHandoff { visual, started_at: now });
+			}
 			break;
 		}
 	}
@@ -345,36 +358,54 @@ fn finish_corpse_handoffs(
 	let now = time.elapsed_secs();
 	for (body, handoff) in &handoffs {
 		let Ok((child_of, corpse)) = visuals.get(handoff.visual) else {
+			retire_gameplay_body(
+				&mut commands,
+				body,
+				queued.get(body).is_err(),
+				settings.corpse_lifetime_secs,
+			);
 			continue;
 		};
 		let retained = child_of.is_some_and(|child_of| child_of.parent() == body);
 		if !retained || corpse.is_none() {
+			retire_gameplay_body(
+				&mut commands,
+				body,
+				queued.get(body).is_err(),
+				settings.corpse_lifetime_secs,
+			);
 			continue;
 		}
 		let ragdoll_ready = ragdolls.iter().any(|ragdoll| ragdoll.corpse == handoff.visual);
 		let timed_out = now - handoff.started_at >= settings.handoff_wait_secs.max(0.0);
 		if ragdoll_ready || timed_out {
-			commands
-				.entity(handoff.visual)
-				.remove::<(PlayerVisual, PlayerYawOwner, ApplyTerrainPitch)>();
-			let missing_ttl = queued.get(body).is_err();
-			if missing_ttl {
-				commands
-					.entity(body)
-					.remove::<(Player, Npc, CameraFollow, PlayerCameraAim, CharacterController)>()
-					.try_insert((
-						RigidBodyDisabled,
-						ColliderDisabled,
-						CorpseRetired,
-						DespawnAfter::seconds(settings.corpse_lifetime_secs),
-					));
-			} else {
-				commands
-					.entity(body)
-					.remove::<(Player, Npc, CameraFollow, PlayerCameraAim, CharacterController)>()
-					.try_insert((RigidBodyDisabled, ColliderDisabled, CorpseRetired));
+			if let Ok(mut entity) = commands.get_entity(handoff.visual) {
+				entity.try_remove::<(PlayerVisual, PlayerYawOwner, ApplyTerrainPitch)>();
 			}
+			retire_gameplay_body(
+				&mut commands,
+				body,
+				queued.get(body).is_err(),
+				settings.corpse_lifetime_secs,
+			);
 		}
+	}
+}
+
+fn retire_gameplay_body(
+	commands: &mut Commands,
+	body: Entity,
+	missing_ttl: bool,
+	corpse_secs: f32,
+) {
+	let Ok(mut entity) = commands.get_entity(body) else {
+		return;
+	};
+	entity
+		.remove::<(Player, Npc, CameraFollow, PlayerCameraAim, CharacterController)>()
+		.try_insert((RigidBodyDisabled, ColliderDisabled, CorpseRetired));
+	if missing_ttl {
+		entity.try_insert(DespawnAfter::seconds(corpse_secs));
 	}
 }
 
@@ -404,7 +435,9 @@ fn initialize_ragdolls(
 		) else {
 			continue;
 		};
-		commands.entity(host).insert((state, SuspendAnimation));
+		if let Ok(mut entity) = commands.get_entity(host) {
+			entity.try_insert((state, SuspendAnimation));
+		}
 	}
 }
 
@@ -678,7 +711,9 @@ fn apply_impulse(state: &mut RagdollState, impulse: RagdollImpulse, dt: f32) {
 }
 
 fn solve_distance(particles: &mut [RagdollParticle], constraint: DistanceConstraint) {
-	let (a, b) = two_mut(particles, constraint.a, constraint.b);
+	let Some((a, b)) = two_mut(particles, constraint.a, constraint.b) else {
+		return;
+	};
 	let delta = b.position - a.position;
 	let distance = delta.length();
 	if distance <= 1e-5 {
@@ -693,14 +728,16 @@ fn solve_distance(particles: &mut [RagdollParticle], constraint: DistanceConstra
 	b.position -= correction * (b.inverse_mass / total_mass);
 }
 
-fn two_mut<T>(values: &mut [T], a: usize, b: usize) -> (&mut T, &mut T) {
-	debug_assert_ne!(a, b);
+fn two_mut<T>(values: &mut [T], a: usize, b: usize) -> Option<(&mut T, &mut T)> {
+	if a == b || a >= values.len() || b >= values.len() {
+		return None;
+	}
 	if a < b {
 		let (left, right) = values.split_at_mut(b);
-		(&mut left[a], &mut right[0])
+		Some((&mut left[a], &mut right[0]))
 	} else {
 		let (left, right) = values.split_at_mut(a);
-		(&mut right[0], &mut left[b])
+		Some((&mut right[0], &mut left[b]))
 	}
 }
 
@@ -843,6 +880,13 @@ mod tests {
 	}
 
 	#[test]
+	fn distance_solver_ignores_a_self_constraint() {
+		let mut particles = vec![particle(Vec3::ZERO), particle(Vec3::X)];
+		solve_distance(&mut particles, DistanceConstraint { a: 1, b: 1, length: 1.0 });
+		assert_eq!(particles[1].position, Vec3::X);
+	}
+
+	#[test]
 	fn every_body_skeleton_has_a_ragdoll_profile() {
 		assert!(!profile_bones(RigSkeletonKind::Humanoid).is_empty());
 		assert!(!profile_bones(RigSkeletonKind::Quadruped).is_empty());
@@ -964,6 +1008,117 @@ mod tests {
 		assert!(world
 			.get::<LinearVelocity>(body)
 			.is_some_and(|velocity| velocity.0 == Vec3::ZERO));
+		assert!(world.get::<DespawnAfter>(body).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn multi_hit_kill_then_handoff_does_not_command_despawned_volumes() -> anyhow::Result<()> {
+		use damage::{apply_hits, mark_downed, DamageApplied, Health, Hit};
+
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<CharacterRagdollTargets>()
+			.add_message::<Hit>()
+			.add_message::<DamageApplied>()
+			.add_message::<damage::Died>()
+			.add_systems(Update, (apply_hits, mark_downed, begin_corpse_handoffs).chain());
+		let body = app
+			.world_mut()
+			.spawn((
+				Health::from_max(10.0),
+				Npc,
+				HitCapsule { radius: 0.4, length: 0.8, along: 0.0 },
+			))
+			.id();
+		let volume = app.world_mut().spawn((HitVolume, ChildOf(body))).id();
+		for _ in 0..6 {
+			app.world_mut().write_message(Hit {
+				target: volume,
+				source: None,
+				amount: 4.0,
+				point: Vec3::new(0.0, 1.2, 0.0),
+				allow_self: false,
+			});
+		}
+		app.update();
+		app.update();
+		assert_eq!(app.world().get::<Health>(body).map(|health| health.current), Some(0.0));
+		assert!(app.world().get::<Downed>(body).is_some());
+		assert!(app.world().get_entity(volume).is_err());
+		Ok(())
+	}
+
+	#[test]
+	fn handoff_strips_hit_volumes_and_disables_the_body() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.init_resource::<CharacterRagdollTargets>();
+		let body = world
+			.spawn((
+				Downed { source: None, point: Vec3::ZERO, at: 0.0 },
+				Npc,
+				HitCapsule { radius: 0.4, length: 0.8, along: 0.0 },
+			))
+			.id();
+		let volume = world.spawn((HitVolume, ChildOf(body))).id();
+
+		world
+			.run_system_once(begin_corpse_handoffs)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.flush();
+
+		assert!(world.get_entity(volume).is_err());
+		assert!(world.get::<HitCapsule>(body).is_none());
+		assert!(world.get::<ColliderDisabled>(body).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn missing_visual_still_disables_combat_and_a_fallback_clock_despawns() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<CharacterRagdollTargets>()
+			.init_resource::<CharacterRagdollSettings>()
+			.add_systems(
+				Update,
+				(begin_corpse_handoffs, finish_corpse_handoffs, damage::ensure_downed_have_despawn)
+					.chain(),
+			);
+		let body = app
+			.world_mut()
+			.spawn((Downed { source: None, point: Vec3::ZERO, at: 0.0 }, Npc))
+			.id();
+
+		app.update();
+
+		assert!(app.world().get::<ColliderDisabled>(body).is_some());
+		assert!(app.world().get::<DespawnAfter>(body).is_some());
+		assert!(app.world().get::<CorpseHandoff>(body).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn lost_handoff_visual_still_retires_the_body() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.init_resource::<CharacterRagdollSettings>();
+		let visual = world.spawn_empty().id();
+		let body = world
+			.spawn((
+				Downed { source: None, point: Vec3::ZERO, at: 0.0 },
+				Npc,
+				CorpseHandoff { visual, started_at: 0.0 },
+			))
+			.id();
+		world.entity_mut(visual).despawn();
+
+		world
+			.run_system_once(finish_corpse_handoffs)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.flush();
+
+		assert!(world.get::<Npc>(body).is_none());
 		assert!(world.get::<DespawnAfter>(body).is_some());
 		Ok(())
 	}

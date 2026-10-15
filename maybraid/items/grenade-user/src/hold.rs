@@ -17,12 +17,10 @@ use characters::{
 };
 use firearm_user::{HoldingArms, WeaponSwap};
 use grenades::{grenade_material, grenade_mesh, GrenadeMaterial};
-use player::{PlayerLook, PlayerUse};
+use player::{look_forward, yaw_xz, PlayerLook, PlayerUse};
 use std::f32::consts::FRAC_PI_2;
 
-use crate::throw::{
-	look_forward, yaw_xz, GrenadePhase, GrenadeThrow, GrenadeUser, GrenadeUserSettings,
-};
+use crate::throw::{GrenadePhase, GrenadeThrow, GrenadeUser, GrenadeUserSettings};
 
 /// Preferred grip points. A later `hand_socket.R` on the body rig is picked first.
 pub const RIGHT_HAND_SOCKETS: &[&str] = &["hand_socket.R", "hand.R", "palm.R"];
@@ -65,7 +63,7 @@ pub fn realize_held_grenade_visuals(
 	held: Query<Entity, (With<HeldGrenade>, Without<Mesh3d>)>,
 ) {
 	for entity in &held {
-		commands.entity(entity).insert((
+		commands.entity(entity).try_insert((
 			Mesh3d(meshes.add(grenade_mesh())),
 			MeshMaterial3d(materials.add(grenade_material())),
 		));
@@ -88,7 +86,7 @@ pub fn stamp_holding_grenade(
 				continue;
 			}
 			if overlay && !holding {
-				commands.entity(entity).insert(HoldingGrenade);
+				commands.entity(entity).try_insert(HoldingGrenade);
 			}
 			if overlay && armed {
 				commands.entity(entity).remove::<HoldingArms>();
@@ -244,6 +242,10 @@ pub fn sync_held_visibility(
 fn throw_phase_t(phase: GrenadePhase, throw_secs: f32) -> f32 {
 	match phase {
 		GrenadePhase::Ready => 0.0,
+		GrenadePhase::Cooking { age } => {
+			// Hold the authored cock keyframe (0.45) while the pin is pulled.
+			(age / throw_secs.max(1e-3)).min(0.45).clamp(0.0, 1.0)
+		}
 		GrenadePhase::Windup { age } | GrenadePhase::Recovery { age } => {
 			(age / throw_secs.max(1e-3)).clamp(0.0, 1.0)
 		}
@@ -458,6 +460,10 @@ mod tests {
 		assert_eq!(
 			throw_phase_t(GrenadePhase::Recovery { age: stats.throw_secs }, stats.throw_secs),
 			1.0
+		);
+		assert_eq!(
+			throw_phase_t(GrenadePhase::Cooking { age: stats.fuse }, stats.throw_secs),
+			0.45
 		);
 		Ok(())
 	}

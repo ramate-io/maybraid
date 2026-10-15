@@ -9,7 +9,7 @@ use bevy::math::DVec3;
 
 use crate::gen::{Id, OriginalId};
 
-use super::node_store::{StoredEntry, DEFAULT_BASE_SCALE};
+use super::node_store::DEFAULT_BASE_SCALE;
 use super::storage::{HcsgStorage, HcsgValue};
 
 /// How one generated type is discovered and built.
@@ -62,13 +62,6 @@ impl<'a> GenerationContext<'a> {
 		}
 	}
 
-	/// Crate-only escape hatch. Schemes must read through `get` / `entry` so
-	/// reach is recorded.
-	#[allow(dead_code)]
-	pub(crate) fn storage(&self) -> &HcsgStorage {
-		self.storage
-	}
-
 	pub fn is_stale(&self) -> bool {
 		(self.stale)()
 	}
@@ -77,29 +70,26 @@ impl<'a> GenerationContext<'a> {
 		self.reached.insert(TypeId::of::<T>());
 	}
 
+	/// Records `T` on reach and returns whether `id` is already stored.
+	pub(super) fn has_stored<T: HcsgValue>(&mut self, id: Id) -> bool {
+		self.touch::<T>();
+		self.storage.contains::<T>(id)
+	}
+
 	/// Types this context read since it was created.
 	pub(super) fn take_reached(&mut self) -> HashSet<TypeId> {
 		std::mem::take(&mut self.reached)
 	}
 
-	/// Bounds of a value already stored for `id`.
-	pub fn stored_bounds<T: HcsgValue>(&self, id: Id) -> Option<Aabb3d> {
+	/// Bounds of a value already stored for `id`, recording `T` on this fill's reach.
+	pub fn stored_bounds<T: HcsgValue>(&mut self, id: Id) -> Option<Aabb3d> {
+		self.touch::<T>();
 		self.storage.entry::<T>(id).map(|entry| entry.bounds)
 	}
 
 	pub fn get<T: HcsgValue>(&mut self, id: Id) -> Option<Arc<T>> {
 		self.touch::<T>();
 		self.storage.get(id)
-	}
-
-	/// The stored entry, recording `T` on this fill's reach.
-	pub fn entry<T: HcsgValue>(&mut self, id: Id) -> Option<StoredEntry<Arc<T>>> {
-		self.touch::<T>();
-		self.storage.entry(id)
-	}
-
-	pub fn overlapping<T: HcsgValue>(&self, region: Aabb3d) -> Vec<Id> {
-		self.storage.overlapping::<T>(region)
 	}
 
 	pub fn original_ids_for<T: GenerationScheme>(&mut self, region: Aabb3d) -> Vec<OriginalId> {
@@ -132,12 +122,36 @@ impl<'a> GenerationContext<'a> {
 		Some(value)
 	}
 
+	/// The stored value for `id` and its published bounds after generate.
+	pub fn get_or_generate_stored<T: GenerationScheme>(
+		&mut self,
+		id: Id,
+	) -> Option<(Arc<T>, Aabb3d)> {
+		let value = self.get_or_generate::<T>(id)?;
+		let bounds = self.stored_bounds::<T>(id)?;
+		Some((value, bounds))
+	}
+
 	/// Every `T` originating in `region` that exists, in id order.
 	pub fn get_or_generate_in<T: GenerationScheme>(&mut self, region: Aabb3d) -> Vec<Arc<T>> {
 		self.sorted_ids_for::<T>(region)
 			.into_iter()
 			.filter_map(|id| self.get_or_generate::<T>(id))
 			.collect()
+	}
+
+	/// Like [`get_or_generate_in`], but sorted narrowest `footprint` first.
+	///
+	/// Overlapping cells at different resolutions sample correctly when the
+	/// finest cell covering a point should win.
+	pub fn get_or_generate_in_finest_first<T: GenerationScheme>(
+		&mut self,
+		region: Aabb3d,
+		footprint: impl Fn(&T) -> Aabb3d,
+	) -> Vec<Arc<T>> {
+		let mut cells = self.get_or_generate_in::<T>(region);
+		cells.sort_by(|a, b| aabb3_span_x(footprint(a)).total_cmp(&aabb3_span_x(footprint(b))));
+		cells
 	}
 
 	/// Every `T` originating in `region`, in id order; `None` if one of them
@@ -162,4 +176,8 @@ impl<'a> GenerationContext<'a> {
 		ids.dedup();
 		ids
 	}
+}
+
+fn aabb3_span_x(bounds: Aabb3d) -> f32 {
+	bounds.max.x - bounds.min.x
 }

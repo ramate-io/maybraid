@@ -38,6 +38,12 @@ impl GrenadeSpec {
 	}
 }
 
+/// Authored throw-speed median in m/s. Catalog "Throw" and `GrenadeStats::standard`
+/// use this; rolls sample around it into 15..=30 m/s. A standing third-person lob
+/// at this speed lands around 30 m under Avian gravity (9.81 m/s², unit gravity
+/// scale on the thrown body).
+pub const STANDARD_LAUNCH_SPEED: f32 = 22.0;
+
 /// Fuse, recharge, and launch numbers. Seconds, not process-time deadlines.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct GrenadeStats {
@@ -105,7 +111,7 @@ impl GrenadeStats {
 		Self {
 			fuse: 2.5,
 			recharge: 5.0,
-			launch_speed: 10.0,
+			launch_speed: STANDARD_LAUNCH_SPEED,
 			upward_bias: 0.28,
 			inherit_velocity: 0.28,
 			radius: 0.08,
@@ -115,8 +121,8 @@ impl GrenadeStats {
 			throw_secs: 0.92,
 			release_at: 0.56,
 			weight: 12,
-			blast_radius: 6.5,
-			blast_damage: 65.0,
+			blast_radius: 10.5,
+			blast_damage: 95.0,
 			effect_scale: 13.0,
 			effect_intensity: 1.0,
 			effect_playback: 1.0,
@@ -202,12 +208,10 @@ mod tests {
 
 		let spec = GrenadeSpec::standard();
 		let stats = GrenadeStats::standard();
-		let ready = InventoryItem::Grenade { spec, stats, recharge: GrenadeRecharge { remaining: 0.0 } };
-		let cooling = InventoryItem::Grenade {
-			spec,
-			stats,
-			recharge: GrenadeRecharge { remaining: 4.0 },
-		};
+		let ready =
+			InventoryItem::Grenade { spec, stats, recharge: GrenadeRecharge { remaining: 0.0 } };
+		let cooling =
+			InventoryItem::Grenade { spec, stats, recharge: GrenadeRecharge { remaining: 4.0 } };
 		anyhow::ensure!(ready != cooling);
 		anyhow::ensure!(ready.same_catalog_identity(&cooling));
 		Ok(())
@@ -224,9 +228,16 @@ mod tests {
 	#[test]
 	fn standard_blast_is_street_scale() {
 		let stats = GrenadeStats::standard();
-		assert!(stats.blast_radius >= 5.0);
-		assert!(stats.blast_damage >= 50.0);
+		assert!(stats.blast_radius >= 10.0);
+		assert!(stats.blast_damage >= 90.0);
 		assert!((stats.effect_scale - 13.0).abs() < 1e-4);
+	}
+
+	#[test]
+	fn standard_throw_is_street_scale() {
+		let stats = GrenadeStats::standard();
+		assert!((stats.launch_speed - STANDARD_LAUNCH_SPEED).abs() < 1e-4);
+		assert!(stats.launch_speed > 20.0);
 	}
 
 	#[test]
