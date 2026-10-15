@@ -10,6 +10,10 @@ use crate::Progress;
 /// Default descent rate: full transition in ~0.35 s at speed `1.0`.
 pub const DEFAULT_DESCENT_SPEED: f32 = 2.85;
 
+/// Knee flex reaches its held share when overall depth hits this fraction so the
+/// shins fold before the hips finish pitching — weight drops into the heels first.
+pub const KNEE_LEAD_DEPTH: f32 = 0.82;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SquatDescent;
 
@@ -34,7 +38,8 @@ impl SquatDescent {
 
 	pub fn shin_flex(&self, progress: f32) -> f32 {
 		let depth = self.depth(progress);
-		self.held_squat().shin_peak * depth
+		let knee_depth = (depth / KNEE_LEAD_DEPTH).min(1.0);
+		self.held_squat().shin_peak * knee_depth
 	}
 
 	pub fn root_swing(&self, progress: f32) -> f32 {
