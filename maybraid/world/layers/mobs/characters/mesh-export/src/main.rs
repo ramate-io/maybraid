@@ -1,6 +1,9 @@
 //! Assemble a character recipe in-process and write a Wavefront OBJ for DCC import.
 
+mod capture;
+mod diagnose;
 mod export;
+mod reference;
 mod skin;
 mod validate;
 
@@ -16,6 +19,7 @@ use characters::{
 	CharacterAssemblyBudget, CharacterHostSystems, CharacterHostsPlugin, CharacterRecipe,
 };
 use clap::{Parser, ValueEnum};
+use diagnose::{build_diagnose_report, write_diagnose_json};
 use export::{assembly_block_reason, assembly_ready, assets_root, collect_groups, write_obj_bundle};
 use rigs::RigSystems;
 use validate::{build_validation_report, write_validation_json};
@@ -39,6 +43,10 @@ struct Cli {
 	/// Maximum frames to wait for GLB load + skin remap.
 	#[arg(long, default_value_t = 600)]
 	timeout_frames: u32,
+
+	/// Optional directory for runtime PNG captures (front/side/three-quarter).
+	#[arg(long)]
+	capture_dir: Option<PathBuf>,
 }
 
 #[derive(Resource)]
@@ -48,6 +56,7 @@ struct ExportJob {
 	frames: u32,
 	root: Option<Entity>,
 	species: Species,
+	capture_dir: Option<PathBuf>,
 }
 
 fn main() -> ExitCode {
@@ -59,10 +68,19 @@ fn main() -> ExitCode {
 	}
 
 	let mut app = App::new();
+	let capture_dir = cli.capture_dir.clone();
 	app.add_plugins(
 		DefaultPlugins
 			.set(WindowPlugin {
-				primary_window: None,
+				primary_window: if capture_dir.is_some() {
+					Some(Window {
+						title: "character-mesh-export".into(),
+						resolution: (1280, 720).into(),
+						..default()
+					})
+				} else {
+					None
+				},
 				exit_condition: bevy::window::ExitCondition::DontExit,
 				..default()
 			})
@@ -78,6 +96,7 @@ fn main() -> ExitCode {
 		frames: 0,
 		root: None,
 		species: cli.species,
+		capture_dir,
 	})
 	.insert_resource(CharacterAssemblyBudget {
 		spawn_weights_per_frame: 10_000,
@@ -129,6 +148,10 @@ fn tick_export(world: &mut World) {
 			return;
 		}
 
+		if let Some(dir) = job.capture_dir.clone() {
+			capture::setup_capture_world(world, root, dir);
+		}
+
 		let groups = collect_groups(world, root);
 		if groups.is_empty() {
 			if job.frames >= job.timeout_frames {
@@ -140,12 +163,28 @@ fn tick_export(world: &mut World) {
 		}
 
 		let output = job.output.clone();
+		let obj_by_group: std::collections::HashMap<_, _> = groups
+			.iter()
+			.map(|g| (g.name.clone(), g.positions.clone()))
+			.collect();
+		let diagnose = build_diagnose_report(world, root, &obj_by_group);
+		let diagnose_path = output.with_extension("diagnose.json");
+		write_diagnose_json(&diagnose_path, &diagnose);
+
 		let validation = build_validation_report(world, root, &groups);
 		let validation_path = output.with_extension("validation.json");
 		write_validation_json(&validation_path, &validation);
 		let report = write_obj_bundle(&output, &groups);
+
+		if let Some(dir) = job.capture_dir.clone() {
+			capture::request_runtime_shots(world, &dir);
+		}
 		println!("Wrote {}", output.display());
 		println!("Wrote {}", validation_path.display());
+		println!("Wrote {}", diagnose_path.display());
+		if let Some(summary) = &diagnose.divergence_summary {
+			eprintln!("diagnose: {}", summary);
+		}
 		println!(
 			"groups={} vertices={} faces={} uvs={} normals={} bbox_min=({:.3}, {:.3}, {:.3}) bbox_max=({:.3}, {:.3}, {:.3}) obj_bytes={} mtl_bytes={}",
 			report.groups,

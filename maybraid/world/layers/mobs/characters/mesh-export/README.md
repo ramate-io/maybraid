@@ -27,7 +27,8 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json WGPU_BACKEND=vulkan \
 - Materials: palette `Kd` only (no texture maps).
 - Waits for socket fulfill + skin remap/prune; exports only `CharacterPart` meshes.
 - Schedules export in `PostUpdate` after transforms and rig pose propagate.
-- Writes `<output>.validation.json` (ECS bounds + socket positions) for `scripts/character-mesh-validate/main.py`.
+- Writes `<output>.validation.json` (ECS bounds + socket positions) and `<output>.diagnose.json` (per-part transform chains + divergence vs reference skinning).
+- Validate with `scripts/character-mesh-validate/main.py` (OBJ vs validation JSON) and inspect `diagnose.json` for assembly evidence.
 
 ## Scope
 

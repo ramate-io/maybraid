@@ -117,7 +117,7 @@ pub fn collect_groups(world: &mut bevy::prelude::World, root: Entity) -> Vec<Mes
 	groups.into_values().collect()
 }
 
-fn part_group_name(world: &bevy::prelude::World, entity: Entity) -> String {
+pub(crate) fn part_group_name(world: &bevy::prelude::World, entity: Entity) -> String {
 	let mut current = Some(entity);
 	while let Some(e) = current {
 		if let Some(part) = world.get::<PartNode>(e) {
@@ -167,8 +167,8 @@ fn part_material(
 	([0.75, 0.75, 0.75], format!("{}_mat", fallback.replace('/', "_")))
 }
 
-/// Meshes under [`CharacterPart`] hosts only (excludes rig GLB armature duplicates).
-fn part_mesh_entities(world: &bevy::prelude::World, root: Entity) -> Vec<Entity> {
+/// One primary render mesh per [`CharacterPart`] host (largest `Mesh3d` under the host).
+pub(crate) fn part_mesh_entities(world: &bevy::prelude::World, root: Entity) -> Vec<Entity> {
 	let Some(members) = world.get::<CharacterMembers>(root) else {
 		return Vec::new();
 	};
@@ -177,17 +177,49 @@ fn part_mesh_entities(world: &bevy::prelude::World, root: Entity) -> Vec<Entity>
 		if world.get::<CharacterPart>(member).is_none() {
 			continue;
 		}
-		let mut stack = vec![member];
-		while let Some(entity) = stack.pop() {
-			if world.get::<Mesh3d>(entity).is_some() {
-				meshes.push(entity);
-			}
-			if let Some(children) = world.get::<Children>(entity) {
-				stack.extend(children.iter());
-			}
+		if let Some(entity) = primary_mesh_under(world, member) {
+			meshes.push(entity);
 		}
 	}
 	meshes
+}
+
+fn mesh_vertex_count(world: &bevy::prelude::World, entity: Entity) -> usize {
+	let Some(mesh_3d) = world.get::<Mesh3d>(entity) else {
+		return 0;
+	};
+	let Some(mesh) = world.resource::<Assets<Mesh>>().get(&mesh_3d.0) else {
+		return 0;
+	};
+	mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+		.map(|a| a.len())
+		.unwrap_or(0)
+}
+
+/// Largest mesh under `root` (skips rig helper curves / duplicate armature junk).
+pub(crate) fn primary_mesh_under(world: &bevy::prelude::World, root: Entity) -> Option<Entity> {
+	let mut stack = vec![root];
+	let mut skinned_best: Option<(Entity, usize)> = None;
+	let mut rigid_best: Option<(Entity, usize)> = None;
+	while let Some(entity) = stack.pop() {
+		if world.get::<Mesh3d>(entity).is_some() {
+			let count = mesh_vertex_count(world, entity);
+			if count >= 3 {
+				let slot = if world.get::<SkinnedMesh>(entity).is_some() {
+					&mut skinned_best
+				} else {
+					&mut rigid_best
+				};
+				if slot.is_none_or(|(_, c)| count > c) {
+					*slot = Some((entity, count));
+				}
+			}
+		}
+		if let Some(children) = world.get::<Children>(entity) {
+			stack.extend(children.iter());
+		}
+	}
+	skinned_best.or(rigid_best).map(|(e, _)| e)
 }
 
 fn extract_mesh_local(
@@ -200,12 +232,17 @@ fn extract_mesh_local(
 	let uvs = mesh_uvs(mesh);
 	let faces = mesh_faces(mesh);
 
+	let mesh_world = world
+		.get::<GlobalTransform>(entity)
+		.map(|t| t.affine())
+		.unwrap_or(Affine3A::IDENTITY);
+
 	let (positions, normals) = if let Some(skin) = world.get::<SkinnedMesh>(entity) {
 		let bind = world
 			.resource::<Assets<SkinnedMeshInverseBindposes>>()
 			.get(&skin.inverse_bindposes)
 			.expect("bindposes loaded");
-		let skinned = skin_mesh_world(mesh, skin, bind, globals).expect("skin mesh");
+		let skinned = skin_mesh_world(mesh, skin, bind, globals, mesh_world).expect("skin mesh");
 		let positions = skinned
 			.positions
 			.iter()

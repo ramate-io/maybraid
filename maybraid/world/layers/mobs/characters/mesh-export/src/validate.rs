@@ -15,7 +15,7 @@ use characters::{
 };
 use serde::Serialize;
 
-use crate::export::{collect_groups, MeshGroup};
+use crate::export::MeshGroup;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PartBounds {
