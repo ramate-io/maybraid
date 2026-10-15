@@ -36,6 +36,7 @@ struct IconPose {
 	/// Mailbox seconds; Tanz clips clamp to `[0, 1]`.
 	progress: f32,
 	eye: Vec3,
+	look_at: Vec3,
 }
 
 /// Readable beats: salute hold, strafe slide peak, dash lunge.
@@ -46,6 +47,7 @@ const POSES: &[IconPose] = &[
 		side: Side::Right,
 		progress: 0.36,
 		eye: Vec3::new(2.2, 1.5, 2.4),
+		look_at: Vec3::new(0.0, 1.0, 0.0),
 	},
 	IconPose {
 		filename: "left_strafe.png",
@@ -53,6 +55,7 @@ const POSES: &[IconPose] = &[
 		side: Side::Left,
 		progress: 0.48,
 		eye: Vec3::new(3.4, 1.15, 0.15),
+		look_at: Vec3::new(0.0, 1.0, 0.0),
 	},
 	IconPose {
 		filename: "right_strafe.png",
@@ -60,19 +63,77 @@ const POSES: &[IconPose] = &[
 		side: Side::Right,
 		progress: 0.48,
 		eye: Vec3::new(-3.4, 1.15, 0.15),
+		look_at: Vec3::new(0.0, 1.0, 0.0),
 	},
 	IconPose {
 		filename: "forward_dash.png",
 		animation: AnimationMode::PowerDash,
 		side: Side::Right,
-		progress: 0.42,
-		eye: Vec3::new(2.6, 1.45, 2.8),
+		progress: 0.50,
+		eye: Vec3::new(2.7, 0.55, 2.8),
+		look_at: Vec3::new(0.0, 0.10, 0.25),
 	},
 ];
+
+const DASH_SIDE_EYE: Vec3 = Vec3::new(3.3, 0.35, 0.40);
+const DASH_FRONT_EYE: Vec3 = Vec3::new(0.20, 0.45, 3.5);
+const DASH_REAR_EYE: Vec3 = Vec3::new(0.20, 0.45, -3.4);
+const DASH_Q3_EYE: Vec3 = Vec3::new(2.6, 0.50, 2.7);
+const DASH_GAMEPLAY_EYE: Vec3 = Vec3::new(0.0, 1.6, 3.5);
+const DASH_LOOK: Vec3 = Vec3::new(0.0, 0.05, 0.25);
+const DASH_GAMEPLAY_LOOK: Vec3 = Vec3::new(0.0, 1.0, 0.0);
+
+const fn dash_pose(filename: &'static str, progress: f32, eye: Vec3, look_at: Vec3) -> IconPose {
+	IconPose {
+		filename,
+		animation: AnimationMode::PowerDash,
+		side: Side::Right,
+		progress,
+		eye,
+		look_at,
+	}
+}
+
+/// Held 4-views, side-view choreography, gameplay camera, and a 0.38 s frame strip.
+const DASH_POSES: &[IconPose] = &[
+	dash_pose("power_dash_50_held_front.png", 0.50, DASH_FRONT_EYE, DASH_LOOK),
+	dash_pose("power_dash_50_held_side.png", 0.50, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_50_held_rear.png", 0.50, DASH_REAR_EYE, DASH_LOOK),
+	dash_pose("power_dash_50_held_3q.png", 0.50, DASH_Q3_EYE, DASH_LOOK),
+	dash_pose("power_dash_50_held_gameplay.png", 0.50, DASH_GAMEPLAY_EYE, DASH_GAMEPLAY_LOOK),
+	dash_pose("power_dash_10_compress_side.png", 0.10, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_25_push_side.png", 0.25, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_50_hold_side.png", 0.50, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_68_brake_side.png", 0.68, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_85_recover_side.png", 0.85, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_95_rise_side.png", 0.95, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_100_guard_side.png", 1.00, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_play_00.png", 0.00, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_play_08.png", 0.08, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_play_16.png", 0.16, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_play_25.png", 0.25, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_play_36.png", 0.36, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_play_50.png", 0.50, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_play_62.png", 0.62, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_play_68.png", 0.68, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_play_78.png", 0.78, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_play_85.png", 0.85, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_play_92.png", 0.92, DASH_SIDE_EYE, DASH_LOOK),
+	dash_pose("power_dash_play_100.png", 1.00, DASH_SIDE_EYE, DASH_LOOK),
+];
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct CapturePowerDashPosesArgs {
+	/// Directory for raw playground screenshots of PowerDash keyframes.
+	#[arg(long)]
+	pub out_dir: PathBuf,
+}
 
 #[derive(Resource)]
 pub struct TanzIconCapture {
 	out_dir: PathBuf,
+	poses: &'static [IconPose],
 	index: usize,
 	phase: CapturePhase,
 }
@@ -87,8 +148,44 @@ enum CapturePhase {
 
 impl TanzIconCapture {
 	pub fn new(out_dir: PathBuf) -> Self {
-		Self { out_dir, index: 0, phase: CapturePhase::Pose }
+		Self { out_dir, poses: POSES, index: 0, phase: CapturePhase::Pose }
 	}
+
+	pub fn power_dash_poses(out_dir: PathBuf) -> Self {
+		Self { out_dir, poses: DASH_POSES, index: 0, phase: CapturePhase::Pose }
+	}
+}
+
+/// Ground disc at rest-foot height so review shots show planted feet and floor.
+fn spawn_review_floor(world: &mut World) {
+	let mesh = {
+		let mut meshes = world.resource_mut::<Assets<Mesh>>();
+		meshes.add(Plane3d::default().mesh().size(16.0, 16.0))
+	};
+	let material = {
+		let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
+		materials.add(StandardMaterial {
+			base_color: Color::srgb(0.40, 0.36, 0.30),
+			perceptual_roughness: 0.92,
+			..default()
+		})
+	};
+	world.spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::from_xyz(0.0, -1.52, 0.0)));
+}
+
+pub fn start_power_dash_pose_capture(commands: &mut Commands, args: CapturePowerDashPosesArgs) {
+	let out_dir = args.out_dir;
+	commands.queue(move |world: &mut World| {
+		if let Some(mut visible) = world.get_resource_mut::<GameCommandDrawerVisible>() {
+			visible.0 = false;
+		}
+		world.insert_resource(ClearColor(CAPTURE_CLEAR));
+		if let Err(error) = std::fs::create_dir_all(&out_dir) {
+			error!("power dash pose capture: create {}: {error}", out_dir.display());
+		}
+		spawn_review_floor(world);
+		world.insert_resource(TanzIconCapture::power_dash_poses(out_dir));
+	});
 }
 
 pub fn start_tanz_icon_capture(commands: &mut Commands, args: CaptureTanzIconsArgs) {
@@ -113,12 +210,12 @@ pub fn drive_tanz_icon_capture(
 	mut capture: ResMut<TanzIconCapture>,
 	mut exit: MessageWriter<AppExit>,
 ) {
-	if capture.index >= POSES.len() {
+	if capture.index >= capture.poses.len() {
 		info!("tanz icon capture: finished {}", capture.out_dir.display());
 		exit.write(AppExit::Success);
 		return;
 	}
-	let pose = POSES[capture.index];
+	let pose = capture.poses[capture.index];
 	let path = capture.out_dir.join(pose.filename);
 	let now = time.elapsed_secs();
 	match capture.phase {
@@ -181,7 +278,7 @@ fn apply_pose(commands: &mut Commands, pose: IconPose) {
 		}
 		let mut cameras = world.query::<(&mut Transform, &mut CameraController)>();
 		if let Some((mut transform, mut controller)) = cameras.iter_mut(world).next() {
-			orient_camera(&mut transform, &mut controller, pose.eye, Vec3::new(0.0, 1.0, 0.0));
+			orient_camera(&mut transform, &mut controller, pose.eye, pose.look_at);
 		}
 	});
 }
