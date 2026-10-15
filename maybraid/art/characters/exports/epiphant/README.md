@@ -6,8 +6,9 @@ Wavefront export of the **default preview** Epiphant (`EpiphantConfig::default_p
 
 | File | Description |
 |------|-------------|
-| `epiphant_default_preview.obj` | Combined mesh; one `g` / `o` group per component (body, head, features, tail). |
-| `epiphant_default_preview.mtl` | Diffuse (`Kd`) tints from character recipe palette — **no image textures**. |
+| `epiphant_default_preview.obj` | Separate `o` objects; **first is `root` (body)**, then head/tail/features. Every object has UVs. |
+| `epiphant_default_preview.mtl` | Relative `mtllib`; `Kd` plus `map_Kd albedo.png`. |
+| `albedo.png` | 1×1 placeholder color map (folder-import with the OBJ). |
 | `epiphant_default_preview.validation.json` | ECS bounds + socket bone positions at export time (same code path as OBJ). |
 | `epiphant_default_preview.diagnose.json` | Per-part transform chains, socket snapshot, mesh entity globals, reference vs OBJ divergence. |
 | `previews/*.png` | matplotlib re-import sanity renders (not Procreate). |
@@ -59,7 +60,9 @@ Fix: independent `v` / `vt` / `vn` bases. Head sample is now `f 7153/529/7153`; 
 | eye_left / eye_right | 240 | 240 | 240 | 80 | v/vt/vn | 0 | 80/0 |
 | nose__trunkish | 798 | 0 | 798 | 272 | v//vn | 0 | 272/0 |
 
-**Unverified:** Procreate / Blender GUI import (automated check is Bevy GPU re-import at 1 m). Matplotlib OBJ IoU (~0.43–0.55) uses a different camera model — not the gate.
+**Procreate “no mesh” (docs/forums, not run here):** Savage [Handbook](https://help.procreate.com/procreate/handbook/3d-painting/import) requires a UV map on any paintable OBJ. Official missing-UV copy is “This model has missing UVs is currently unsupported.” Forum reports of **“model contains no valid meshes” / “no meshes”** ([r/ProCreate](https://www.reddit.com/r/ProCreate/comments/qkw8i6/model_import_failing/)) match OBJ exports **without UVs** (or only `f v//vn`). The previous file’s first object was the body with **no `vt`** — iOS ModelIO can treat that as an empty mesh / no root. We do **not** merge parts (breaks authoring). Layout now: `o root` (body) first, then separate part objects, every face `v/vt/vn`, relative `mtllib`, no `g` lines.
+
+**Unverified:** Procreate on iPad (cannot be run in this environment). Blender GUI re-open. Matplotlib OBJ IoU (~0.43–0.55) uses a different camera model — not the gate.
 
 ## Regenerating
 

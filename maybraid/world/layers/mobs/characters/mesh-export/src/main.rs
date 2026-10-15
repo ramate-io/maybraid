@@ -2,6 +2,7 @@
 
 mod camera;
 mod capture;
+mod compact;
 mod diagnose;
 mod export;
 mod obj_preview;

@@ -19,7 +19,7 @@ def obj_object_names(path: Path) -> list[str]:
 
 
 EXPECTED = [
-    "body__epiphant",
+    "root",
     "head__meerkat",
     "tail__cat-tail",
     "eye_left__standard",
@@ -91,7 +91,7 @@ def main() -> int:
     def part_mesh(name: str):
         return meshes.get(name) or meshes.get(f"{name}_mat")
 
-    body = part_mesh("body__epiphant")
+    body = part_mesh("root") or part_mesh("body__epiphant")
     head = part_mesh("head__meerkat")
     tail = part_mesh("tail__cat-tail")
     proportions = {}
