@@ -1,5 +1,6 @@
 pub mod dorsoventral_undulation;
 pub mod fall;
+pub mod fist_pump;
 pub mod fixed;
 pub mod fixed_tuck;
 pub mod flapping;
@@ -32,6 +33,7 @@ pub mod walk;
 
 pub use dorsoventral_undulation::DorsoventralUndulation;
 pub use fall::Fall;
+pub use fist_pump::FistPump;
 pub use fixed::FixedPosition;
 pub use fixed_tuck::FixedTuck;
 pub use flapping::Flapping;
