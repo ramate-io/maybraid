@@ -14,12 +14,7 @@ pub struct ObjGroupStats {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ObjValidationError {
 	ZeroFaces { group: String, vertices: usize },
-	IndexOutOfRange {
-		group: String,
-		kind: &'static str,
-		index: i64,
-		count: usize,
-	},
+	IndexOutOfRange { group: String, kind: &'static str, index: i64, count: usize },
 }
 
 impl fmt::Display for ObjValidationError {
@@ -29,10 +24,7 @@ impl fmt::Display for ObjValidationError {
 				write!(f, "group {group} has {vertices} vertices and 0 faces")
 			}
 			Self::IndexOutOfRange { group, kind, index, count } => {
-				write!(
-					f,
-					"group {group} face {kind} index {index} out of range (file has {count})"
-				)
+				write!(f, "group {group} face {kind} index {index} out of range (file has {count})")
 			}
 		}
 	}
@@ -72,13 +64,7 @@ pub fn parse_obj_groups(text: &str) -> (Vec<ObjGroupStats>, Vec<ObjValidationErr
 			let name = name.trim().to_string();
 			if current.is_none_or(|i| groups[i].stats.name != name) {
 				groups.push(ParsedGroup {
-					stats: ObjGroupStats {
-						name,
-						vertices: 0,
-						texcoords: 0,
-						normals: 0,
-						faces: 0,
-					},
+					stats: ObjGroupStats { name, vertices: 0, texcoords: 0, normals: 0, faces: 0 },
 					face_corners: Vec::new(),
 				});
 				current = Some(groups.len() - 1);
@@ -118,13 +104,7 @@ pub fn parse_obj_groups(text: &str) -> (Vec<ObjGroupStats>, Vec<ObjValidationErr
 			});
 		}
 		for corner in &group.face_corners {
-			push_range_error(
-				&mut errors,
-				&group.stats.name,
-				"v",
-				corner.v,
-				file_v,
-			);
+			push_range_error(&mut errors, &group.stats.name, "v", corner.v, file_v);
 			if let Some(vt) = corner.vt {
 				push_range_error(&mut errors, &group.stats.name, "vt", vt, file_vt);
 			}
@@ -149,20 +129,8 @@ pub fn validate_obj_text(text: &str) -> Result<Vec<ObjGroupStats>, Vec<ObjValida
 fn parse_corner(token: &str) -> FaceCorner {
 	let mut parts = token.split('/');
 	let v = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
-	let vt = parts.next().and_then(|s| {
-		if s.is_empty() {
-			None
-		} else {
-			s.parse().ok()
-		}
-	});
-	let vn = parts.next().and_then(|s| {
-		if s.is_empty() {
-			None
-		} else {
-			s.parse().ok()
-		}
-	});
+	let vt = parts.next().and_then(|s| if s.is_empty() { None } else { s.parse().ok() });
+	let vn = parts.next().and_then(|s| if s.is_empty() { None } else { s.parse().ok() });
 	FaceCorner { v, vt, vn }
 }
 

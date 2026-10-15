@@ -1,14 +1,9 @@
 //! Assemble a character recipe in-process and write a Wavefront OBJ for DCC import.
 
-mod camera;
-mod capture;
-mod diagnose;
 mod export;
-mod obj_preview;
 mod obj_text;
-mod reference;
 mod skin;
-mod validate;
+mod uv;
 
 use std::num::NonZeroU8;
 use std::path::PathBuf;
@@ -17,15 +12,14 @@ use std::process::ExitCode;
 use bevy::prelude::*;
 use bevy::window::WindowPlugin;
 use characters::{
-	spawn_fixed_character_assembly,
-	species::epiphant::EpiphantConfig,
-	CharacterAssemblyBudget, CharacterHostSystems, CharacterHostsPlugin, CharacterRecipe,
+	spawn_fixed_character_assembly, species::epiphant::EpiphantConfig, CharacterAssemblyBudget,
+	CharacterHostSystems, CharacterHostsPlugin, CharacterRecipe,
 };
 use clap::{Parser, ValueEnum};
-use diagnose::{build_diagnose_report, write_diagnose_json};
-use export::{assembly_block_reason, assembly_ready, assets_root, collect_groups, write_obj_bundle};
+use export::{
+	assembly_block_reason, assembly_ready, assets_root, collect_groups, write_obj_bundle,
+};
 use rigs::RigSystems;
-use validate::{build_validation_report, write_validation_json};
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Species {
@@ -46,10 +40,6 @@ struct Cli {
 	/// Maximum frames to wait for GLB load + skin remap.
 	#[arg(long, default_value_t = 600)]
 	timeout_frames: u32,
-
-	/// Directory for GPU runtime captures + OBJ silhouette compare artifacts.
-	#[arg(long)]
-	compare_dir: Option<PathBuf>,
 }
 
 #[derive(Resource)]
@@ -59,8 +49,6 @@ struct ExportJob {
 	frames: u32,
 	root: Option<Entity>,
 	species: Species,
-	compare_dir: Option<PathBuf>,
-	exported: bool,
 }
 
 fn main() -> ExitCode {
@@ -72,26 +60,14 @@ fn main() -> ExitCode {
 	}
 
 	let mut app = App::new();
-	let compare_dir = cli.compare_dir.clone();
 	app.add_plugins(
 		DefaultPlugins
 			.set(WindowPlugin {
-				primary_window: if compare_dir.is_some() {
-					Some(Window {
-						title: "character-mesh-export".into(),
-						resolution: (camera::CAPTURE_WIDTH, camera::CAPTURE_HEIGHT).into(),
-						..default()
-					})
-				} else {
-					None
-				},
+				primary_window: None,
 				exit_condition: bevy::window::ExitCondition::DontExit,
 				..default()
 			})
-			.set(AssetPlugin {
-				file_path: assets_path.to_string_lossy().into(),
-				..default()
-			}),
+			.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
 	)
 	.add_plugins(CharacterHostsPlugin)
 	.insert_resource(ExportJob {
@@ -100,8 +76,6 @@ fn main() -> ExitCode {
 		frames: 0,
 		root: None,
 		species: cli.species,
-		compare_dir,
-		exported: false,
 	})
 	.insert_resource(CharacterAssemblyBudget {
 		spawn_weights_per_frame: 10_000,
@@ -115,8 +89,7 @@ fn main() -> ExitCode {
 			.after(CharacterHostSystems::Fulfill)
 			.after(RigSystems::Fulfill)
 			.after(RigSystems::Pose),
-	)
-	.add_systems(Update, capture::tick_gpu_capture);
+	);
 
 	let exit = app.run();
 	match exit {
@@ -145,26 +118,9 @@ fn tick_export(world: &mut World) {
 				let reason = assembly_block_reason(world, root).unwrap_or("unknown");
 				eprintln!(
 					"timed out waiting for character assembly ({} frames; last blocker: {})",
-					job.frames,
-					reason
+					job.frames, reason
 				);
 				exit = AppExit::Error(NonZeroU8::new(3).expect("nonzero"));
-				finished = true;
-			}
-			return;
-		}
-
-		if job.exported {
-			if job.compare_dir.is_some() && capture::gpu_capture_finished(world) {
-				if let Some(dir) = &job.compare_dir {
-					println!("GPU compare artifacts: {}", dir.display());
-					println!("  cameras: {}", dir.join("cameras.json").display());
-					println!(
-						"  silhouettes: run scripts/character-mesh-export/compare_silhouettes.py \"{}\" \"{}\"",
-						dir.display(),
-						job.output.display()
-					);
-				}
 				finished = true;
 			}
 			return;
@@ -181,17 +137,6 @@ fn tick_export(world: &mut World) {
 		}
 
 		let output = job.output.clone();
-		let obj_by_group: std::collections::HashMap<_, _> = groups
-			.iter()
-			.map(|g| (g.name.clone(), g.positions.clone()))
-			.collect();
-		let diagnose = build_diagnose_report(world, root, &obj_by_group);
-		let diagnose_path = output.with_extension("diagnose.json");
-		write_diagnose_json(&diagnose_path, &diagnose);
-
-		let validation = build_validation_report(world, root, &groups);
-		let validation_path = output.with_extension("validation.json");
-		write_validation_json(&validation_path, &validation);
 		let report = write_obj_bundle(&output, &groups);
 		if !report.validation_ok {
 			eprintln!("OBJ face/index validation failed");
@@ -200,17 +145,7 @@ fn tick_export(world: &mut World) {
 			return;
 		}
 
-		job.exported = true;
-		if let Some(dir) = job.compare_dir.clone() {
-			capture::init_gpu_capture(world, root, dir, output.clone());
-			return;
-		}
 		println!("Wrote {}", output.display());
-		println!("Wrote {}", validation_path.display());
-		println!("Wrote {}", diagnose_path.display());
-		if let Some(summary) = &diagnose.divergence_summary {
-			eprintln!("diagnose: {}", summary);
-		}
 		println!(
 			"groups={} vertices={} faces={} uvs={} normals={} bbox_min=({:.3}, {:.3}, {:.3}) bbox_max=({:.3}, {:.3}, {:.3}) obj_bytes={} mtl_bytes={}",
 			report.groups,
@@ -227,9 +162,7 @@ fn tick_export(world: &mut World) {
 			report.obj_bytes,
 			report.mtl_bytes,
 		);
-		if job.compare_dir.is_none() {
-			finished = true;
-		}
+		finished = true;
 	});
 
 	if finished {

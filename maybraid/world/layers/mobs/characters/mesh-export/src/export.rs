@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use bevy::asset::Assets;
 use bevy::ecs::entity::Entity;
-use bevy::ecs::hierarchy::{Children, ChildOf};
+use bevy::ecs::hierarchy::{ChildOf, Children};
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::math::{Affine3A, Vec2, Vec3};
 use bevy::mesh::skinning::{SkinnedMesh, SkinnedMeshInverseBindposes};
@@ -20,11 +20,12 @@ use characters::{
 	rig::{BoneMap, CharacterPart, CharacterRig, NeedsDuplicateScenePrune, NeedsSkinRemap},
 	CharacterRoot,
 };
-use rigs::{SocketRefApplied, SocketRefRoot};
 use material_ref::MaterialRefRoot;
+use rigs::{SocketRefApplied, SocketRefRoot};
 
 use crate::obj_text::validate_obj_text;
 use crate::skin::skin_mesh_world;
+use crate::uv::{islands_from_uvs, islands_overlap, pack_part_uvs};
 
 #[derive(Debug, Clone)]
 pub struct MeshGroup {
@@ -113,7 +114,9 @@ pub fn collect_groups(world: &mut bevy::prelude::World, root: Entity) -> Vec<Mes
 		entry.positions.extend(positions);
 		entry.normals.extend(normals);
 		entry.uvs.extend(uvs);
-		entry.faces.extend(faces.into_iter().map(|[a, b, c]| [a + base, b + base, c + base]));
+		entry
+			.faces
+			.extend(faces.into_iter().map(|[a, b, c]| [a + base, b + base, c + base]));
 	}
 
 	let mut groups: Vec<MeshGroup> = groups.into_values().collect();
@@ -195,9 +198,7 @@ fn mesh_vertex_count(world: &bevy::prelude::World, entity: Entity) -> usize {
 	let Some(mesh) = world.resource::<Assets<Mesh>>().get(&mesh_3d.0) else {
 		return 0;
 	};
-	mesh.attribute(Mesh::ATTRIBUTE_POSITION)
-		.map(|a| a.len())
-		.unwrap_or(0)
+	mesh.attribute(Mesh::ATTRIBUTE_POSITION).map(|a| a.len()).unwrap_or(0)
 }
 
 /// Largest mesh under `root` (skips rig helper curves / duplicate armature junk).
@@ -247,11 +248,8 @@ fn extract_mesh_local(
 			.get(&skin.inverse_bindposes)
 			.expect("bindposes loaded");
 		let skinned = skin_mesh_world(mesh, skin, bind, globals, mesh_world).expect("skin mesh");
-		let positions: Vec<Vec3> = skinned
-			.positions
-			.iter()
-			.map(|p| root_inverse.transform_point3(*p))
-			.collect();
+		let positions: Vec<Vec3> =
+			skinned.positions.iter().map(|p| root_inverse.transform_point3(*p)).collect();
 		let normals: Vec<Vec3> = skinned
 			.normals
 			.iter()
@@ -261,10 +259,8 @@ fn extract_mesh_local(
 	} else {
 		let world_tf = world.get::<GlobalTransform>(entity).expect("global");
 		let local = root_inverse * world_tf.affine();
-		let positions: Vec<Vec3> = mesh_positions(mesh)
-			.iter()
-			.map(|p| local.transform_point3(*p))
-			.collect();
+		let positions: Vec<Vec3> =
+			mesh_positions(mesh).iter().map(|p| local.transform_point3(*p)).collect();
 		let normals: Vec<Vec3> = mesh_normals(mesh)
 			.iter()
 			.map(|n| local.transform_vector3(*n).normalize())
@@ -275,11 +271,7 @@ fn extract_mesh_local(
 	let mut faces = faces;
 	align_winding(&positions, &normals, &mut faces);
 	let uvs = if uvs.len() == positions.len() { uvs } else { Vec::new() };
-	let normals = if normals.len() == positions.len() {
-		normals
-	} else {
-		Vec::<Vec3>::new()
-	};
+	let normals = if normals.len() == positions.len() { normals } else { Vec::<Vec3>::new() };
 	(positions, normals, uvs, faces)
 }
 
@@ -290,18 +282,14 @@ fn align_winding(positions: &[Vec3], normals: &[Vec3], faces: &mut [[u32; 3]]) {
 	}
 	for face in faces.iter_mut() {
 		let [ia, ib, ic] = *face;
-		let (Some(&pa), Some(&pb), Some(&pc)) = (
-			positions.get(ia as usize),
-			positions.get(ib as usize),
-			positions.get(ic as usize),
-		) else {
+		let (Some(&pa), Some(&pb), Some(&pc)) =
+			(positions.get(ia as usize), positions.get(ib as usize), positions.get(ic as usize))
+		else {
 			continue;
 		};
-		let (Some(&na), Some(&nb), Some(&nc)) = (
-			normals.get(ia as usize),
-			normals.get(ib as usize),
-			normals.get(ic as usize),
-		) else {
+		let (Some(&na), Some(&nb), Some(&nc)) =
+			(normals.get(ia as usize), normals.get(ib as usize), normals.get(ic as usize))
+		else {
 			continue;
 		};
 		let geo = (pb - pa).cross(pc - pa);
@@ -417,11 +405,29 @@ pub fn format_obj(groups: &[MeshGroup], mtl_name: &str) -> String {
 				continue;
 			}
 			obj.push_str("f ");
-			obj.push_str(&face_corner(v_base + *a + 1, has_uv, vt_base + *a + 1, has_n, vn_base + *a + 1));
+			obj.push_str(&face_corner(
+				v_base + *a + 1,
+				has_uv,
+				vt_base + *a + 1,
+				has_n,
+				vn_base + *a + 1,
+			));
 			obj.push(' ');
-			obj.push_str(&face_corner(v_base + *b + 1, has_uv, vt_base + *b + 1, has_n, vn_base + *b + 1));
+			obj.push_str(&face_corner(
+				v_base + *b + 1,
+				has_uv,
+				vt_base + *b + 1,
+				has_n,
+				vn_base + *b + 1,
+			));
 			obj.push(' ');
-			obj.push_str(&face_corner(v_base + *c + 1, has_uv, vt_base + *c + 1, has_n, vn_base + *c + 1));
+			obj.push_str(&face_corner(
+				v_base + *c + 1,
+				has_uv,
+				vt_base + *c + 1,
+				has_n,
+				vn_base + *c + 1,
+			));
 			obj.push('\n');
 		}
 		v_base += group.positions.len() as u32;
@@ -444,7 +450,20 @@ fn face_corner(v: u32, has_uv: bool, vt: u32, has_n: bool, vn: u32) -> String {
 	}
 }
 
+/// Unwrap missing UVs and pack every part into its own 0..1 atlas tile.
+pub fn apply_atlas_uvs(groups: &mut [MeshGroup]) {
+	let mut parts: Vec<(Vec<Vec3>, Vec<Vec2>)> =
+		groups.iter().map(|g| (g.positions.clone(), g.uvs.clone())).collect();
+	pack_part_uvs(&mut parts);
+	for (group, (_, uvs)) in groups.iter_mut().zip(parts) {
+		group.uvs = uvs;
+	}
+}
+
 pub fn write_obj_bundle(obj_path: &Path, groups: &[MeshGroup]) -> ExportReport {
+	let mut groups = groups.to_vec();
+	apply_atlas_uvs(&mut groups);
+
 	let mtl_path = obj_path.with_extension("mtl");
 	let mtl_name = mtl_path
 		.file_name()
@@ -453,7 +472,7 @@ pub fn write_obj_bundle(obj_path: &Path, groups: &[MeshGroup]) -> ExportReport {
 
 	let mut report = ExportReport::default();
 	report.groups = groups.len();
-	for group in groups {
+	for group in &groups {
 		report.vertices += group.positions.len();
 		report.faces += group.faces.len();
 		report.has_uvs |= !group.uvs.is_empty();
@@ -464,27 +483,26 @@ pub fn write_obj_bundle(obj_path: &Path, groups: &[MeshGroup]) -> ExportReport {
 		}
 	}
 
-	let obj_text = format_obj(groups, &mtl_name);
+	let obj_text = format_obj(&groups, &mtl_name);
 	std::fs::write(obj_path, &obj_text).expect("write obj");
 
 	let mut mtl = BufWriter::new(File::create(&mtl_path).expect("create mtl"));
 	writeln!(mtl, "# Maybraid character mesh export").unwrap();
-	for group in groups {
+	for group in &groups {
 		writeln!(mtl, "newmtl {}", group.material_name).unwrap();
-		writeln!(
-			mtl,
-			"Kd {} {} {}",
-			group.diffuse[0],
-			group.diffuse[1],
-			group.diffuse[2]
-		)
-		.unwrap();
+		writeln!(mtl, "Kd {} {} {}", group.diffuse[0], group.diffuse[1], group.diffuse[2]).unwrap();
 		writeln!(mtl, "d 1.0").unwrap();
 	}
 	mtl.flush().unwrap();
 
+	let islands = islands_from_uvs(&groups.iter().map(|g| g.uvs.clone()).collect::<Vec<_>>());
+	let atlas_ok = !islands_overlap(&islands) && islands.iter().all(|i| i.in_unit_square());
+	if !atlas_ok {
+		eprintln!("obj validation: UV atlas islands overlap or leave 0..1");
+	}
+
 	report.validation_ok = match validate_obj_text(&obj_text) {
-		Ok(_) => true,
+		Ok(_) => atlas_ok,
 		Err(errors) => {
 			for error in errors {
 				eprintln!("obj validation: {error}");
@@ -555,6 +573,7 @@ pub fn assets_root() -> PathBuf {
 mod tests {
 	use super::*;
 	use crate::obj_text::{validate_obj_text, ObjValidationError};
+	use crate::uv::{islands_from_uvs, islands_overlap, UvIsland};
 
 	fn tri(name: &str, z: f32, uvs: bool) -> MeshGroup {
 		MeshGroup {
@@ -563,11 +582,7 @@ mod tests {
 			diffuse: [0.5, 0.5, 0.5],
 			positions: vec![Vec3::new(0.0, 0.0, z), Vec3::new(1.0, 0.0, z), Vec3::new(0.0, 1.0, z)],
 			normals: vec![Vec3::Z, Vec3::Z, Vec3::Z],
-			uvs: if uvs {
-				vec![Vec2::ZERO, Vec2::X, Vec2::Y]
-			} else {
-				Vec::new()
-			},
+			uvs: if uvs { vec![Vec2::ZERO, Vec2::X, Vec2::Y] } else { Vec::new() },
 			faces: vec![[0, 1, 2]],
 		}
 	}
@@ -575,11 +590,68 @@ mod tests {
 	#[test]
 	fn mixed_uv_groups_keep_vt_in_range() {
 		// UV-less body then UV head — the old writer reused the vertex index for vt.
+		// format_obj itself still emits v//vn when a group has no UVs; atlas packing
+		// is applied in write_obj_bundle so shipped files always have vt.
 		let text = format_obj(&[tri("body", 0.0, false), tri("head", 1.0, true)], "x.mtl");
 		let stats = validate_obj_text(&text).expect(&text);
 		assert_eq!(stats.iter().map(|s| s.faces).collect::<Vec<_>>(), vec![1, 1]);
 		assert!(text.contains("f 4/1/4 5/2/5 6/3/6"), "{text}");
 		assert!(!text.contains("f 4/4/4"), "{text}");
+	}
+
+	#[test]
+	fn atlas_pack_writes_non_overlapping_vt_islands() {
+		let mut groups =
+			vec![tri("eye_left", 0.0, true), tri("eye_right", 0.0, true), tri("body", 1.0, false)];
+		apply_atlas_uvs(&mut groups);
+		let packed: Vec<Vec<Vec2>> = groups.iter().map(|g| g.uvs.clone()).collect();
+		let islands = islands_from_uvs(&packed);
+		assert_eq!(islands.len(), 3);
+		assert!(!islands_overlap(&islands), "{islands:?}");
+		for group in &groups {
+			assert_eq!(group.uvs.len(), group.positions.len());
+		}
+
+		let text = format_obj(&groups, "x.mtl");
+		let stats = validate_obj_text(&text).expect(&text);
+		assert!(stats.iter().all(|s| s.texcoords == s.vertices && s.faces == 1), "{stats:?}");
+		assert!(text.contains("f 1/1/1"), "{text}");
+		assert!(text.contains("f 4/4/4"), "{text}");
+		assert!(text.contains("f 7/7/7"), "{text}");
+	}
+
+	#[test]
+	fn shipped_epiphant_obj_islands_do_not_overlap() {
+		let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+			.join("../../../../../art/characters/exports/epiphant/epiphant_default_preview.obj");
+		let text = std::fs::read_to_string(&path).expect("read shipped obj");
+		let stats = validate_obj_text(&text).expect(&text);
+		assert_eq!(stats.len(), 8, "{stats:?}");
+		assert!(stats.iter().all(|s| s.texcoords == s.vertices && s.faces > 0), "{stats:?}");
+
+		let mut current = None::<String>;
+		let mut by_obj: HashMap<String, Vec<Vec2>> = HashMap::new();
+		for line in text.lines() {
+			let line = line.trim();
+			if let Some(name) = line.strip_prefix("o ") {
+				current = Some(name.trim().to_string());
+			} else if let Some(rest) = line.strip_prefix("vt ") {
+				let mut parts = rest.split_whitespace();
+				let u: f32 = parts.next().and_then(|s| s.parse().ok()).expect("vt u");
+				let v: f32 = parts.next().and_then(|s| s.parse().ok()).expect("vt v");
+				if let Some(name) = &current {
+					by_obj.entry(name.clone()).or_default().push(Vec2::new(u, v));
+				}
+			}
+		}
+		assert_eq!(by_obj.len(), 8, "{:?}", by_obj.keys().collect::<Vec<_>>());
+		let islands: Vec<UvIsland> =
+			by_obj.values().filter_map(|uvs| UvIsland::from_uvs(uvs)).collect();
+		assert_eq!(islands.len(), 8);
+		assert!(!islands_overlap(&islands), "{islands:?}");
+		for island in &islands {
+			assert!(island.in_unit_square(), "{island:?}");
+		}
 	}
 
 	#[test]
@@ -596,14 +668,17 @@ mod tests {
 		let text = format_obj(&[empty_faces], "x.mtl");
 		let err = validate_obj_text(&text).unwrap_err();
 		assert!(
-			err.iter().any(|e| matches!(e, ObjValidationError::ZeroFaces { group, .. } if group == "tail")),
+			err.iter().any(
+				|e| matches!(e, ObjValidationError::ZeroFaces { group, .. } if group == "tail")
+			),
 			"{err:?}"
 		);
 
 		let oob = "o head\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nf 1/9/1 2/9/1 3/9/1\n";
 		let err = validate_obj_text(oob).unwrap_err();
 		assert!(
-			err.iter().any(|e| matches!(e, ObjValidationError::IndexOutOfRange { kind: "vt", .. })),
+			err.iter()
+				.any(|e| matches!(e, ObjValidationError::IndexOutOfRange { kind: "vt", .. })),
 			"{err:?}"
 		);
 	}

@@ -23,7 +23,8 @@ pub fn skin_mesh_world(
 	globals: &[(Entity, &GlobalTransform)],
 	mesh_world: Affine3A,
 ) -> Option<SkinnedSurface> {
-	let Some(VertexAttributeValues::Float32x3(positions)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+	let Some(VertexAttributeValues::Float32x3(positions)) =
+		mesh.attribute(Mesh::ATTRIBUTE_POSITION)
 	else {
 		return None;
 	};
@@ -95,53 +96,4 @@ pub fn skin_mesh_world(
 	}
 
 	Some(SkinnedSurface { positions: out_pos, normals: out_nrm })
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct SkinWeightCoverage {
-	pub live_fraction: f32,
-	pub zero_weight_vertices: usize,
-}
-
-/// Fraction of vertices with non-collapsed skin influences (see `screen-capture`).
-pub fn skin_weight_coverage(
-	mesh: &Mesh,
-	skin: &SkinnedMesh,
-	bindposes: &SkinnedMeshInverseBindposes,
-	globals: &[(Entity, &GlobalTransform)],
-) -> SkinWeightCoverage {
-	let Some(VertexAttributeValues::Float32x3(positions)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
-	else {
-		return SkinWeightCoverage { live_fraction: 0.0, zero_weight_vertices: 0 };
-	};
-	let influences = InfluenceIterator::new(mesh).ok();
-	let joint_lookup: Vec<Option<bool>> = skin
-		.joints
-		.iter()
-		.zip(bindposes.iter())
-		.map(|(&joint, _bindpose)| {
-			globals.iter().find(|(e, _)| *e == joint).map(|(_, world)| {
-				world.to_scale_rotation_translation().0.max_element() >= 1e-3
-			})
-		})
-		.collect();
-
-	let mut live = vec![0.0_f32; positions.len()];
-	if let Some(influences) = influences {
-		for influence in influences {
-			let Some(Some(joint_live)) = joint_lookup.get(influence.joint_index.0 as usize) else {
-				continue;
-			};
-			if *joint_live {
-				live[influence.vertex_index] += influence.joint_weight;
-			}
-		}
-	}
-	let zero_weight_vertices = live.iter().filter(|w| **w <= 1e-4).count();
-	let live_fraction = if positions.is_empty() {
-		0.0
-	} else {
-		(positions.len() - zero_weight_vertices) as f32 / positions.len() as f32
-	};
-	SkinWeightCoverage { live_fraction, zero_weight_vertices }
 }

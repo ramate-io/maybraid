@@ -2811,8 +2811,6 @@ dependencies = [
  "clap",
  "material-ref",
  "rigs",
- "serde",
- "serde_json",
 ]
 
 [[package]]
