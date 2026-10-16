@@ -22,6 +22,18 @@ GGUF files are gitignored. Fetch the Unsloth Qwen3 0.6B Q4_K_M weights with:
 
 Override the path with `--model-path` or `MAYBRAID_QWEN_GGUF`.
 
+Build the CLI with LLM support before using `--respond` (default `cargo check` skips it):
+
+```bash
+cargo build -p maybraid-language --features llm
+```
+
+On macOS add Metal:
+
+```bash
+cargo build -p maybraid-language --features llm,metal
+```
+
 On macOS the language crates enable Metal so Qwen can run on the GPU. Darwin 25+
 (GPUCompiler 32023+) rejects Candle 0.11's `mlx_gemm.metal` (`thread
 simdgroup_matrix`), so load falls back to CPU automatically. The workspace pins
