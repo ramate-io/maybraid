@@ -61,7 +61,7 @@ pub fn hide_lod_tree_world(entity: &mut EntityWorldMut) {
 }
 
 fn hide_lod_tree_now(world: &mut World, root: Entity) {
-	let children = {
+	let has_children = {
 		let Ok(mut entity) = world.get_entity_mut(root) else {
 			return;
 		};
@@ -69,21 +69,44 @@ fn hide_lod_tree_now(world: &mut World, root: Entity) {
 			entity.insert(Visibility::Hidden);
 			return;
 		}
-		let children = entity
-			.get::<Children>()
-			.map(|c| c.iter().collect::<Vec<_>>())
-			.unwrap_or_default();
+		let has_children = entity.get::<Children>().is_some_and(|c| !c.is_empty());
 		entity.insert((Visibility::Hidden, Disabled, LodTreeHideActive));
-		children
+		has_children
 	};
-	if children.is_empty() {
+	if !has_children {
 		return;
 	}
 	if world.get_resource::<LodTreeVisQueue>().is_some() {
-		world.resource_mut::<LodTreeVisQueue>().enqueue_hide(root, children);
+		enqueue_root_children(world, root, LodTreeVisKind::Hide);
 		return;
 	}
+	let children = child_entities(world, root);
 	hide_lod_tree_children_now(world, &children);
+}
+
+fn child_entities(world: &World, entity: Entity) -> Vec<Entity> {
+	world
+		.get::<Children>(entity)
+		.map(|children| children.iter().collect())
+		.unwrap_or_default()
+}
+
+fn enqueue_root_children(world: &mut World, root: Entity, kind: LodTreeVisKind) {
+	let mut buf = std::mem::take(&mut world.resource_mut::<LodTreeVisQueue>().child_buf);
+	buf.clear();
+	if let Some(children) = world.get::<Children>(root) {
+		buf.extend(children.iter());
+	}
+	let mut queue = world.resource_mut::<LodTreeVisQueue>();
+	if buf.is_empty() {
+		queue.child_buf = buf;
+		return;
+	}
+	match kind {
+		LodTreeVisKind::Hide => queue.enqueue_hide(root, std::mem::take(&mut buf)),
+		LodTreeVisKind::Show => queue.enqueue_show(root, std::mem::take(&mut buf)),
+	}
+	queue.child_buf = buf;
 }
 
 fn hide_lod_tree_children_now(world: &mut World, children: &[Entity]) {
@@ -121,21 +144,19 @@ fn show_lod_tree_now(world: &mut World, root: Entity) {
 	}
 
 	world.entity_mut(root).remove::<(LodTreeHideActive, Disabled)>();
-	let children = world
-		.get::<Children>(root)
-		.map(|c| c.iter().collect::<Vec<_>>())
-		.unwrap_or_default();
-	if children.is_empty() {
+	let has_children = world.get::<Children>(root).is_some_and(|c| !c.is_empty());
+	if !has_children {
 		return;
 	}
 	if world.get_resource::<LodTreeVisQueue>().is_some() {
-		world.resource_mut::<LodTreeVisQueue>().enqueue_show(root, children);
+		enqueue_root_children(world, root, LodTreeVisKind::Show);
 		return;
 	}
-	show_lod_tree_descendants_now(world, root, children);
+	show_lod_tree_descendants_now(world, root, child_entities(world, root));
 }
 
 fn show_lod_tree_descendants_now(world: &mut World, root: Entity, mut stack: Vec<Entity>) {
+	let mut child_buf = Vec::new();
 	while let Some(entity) = stack.pop() {
 		let Ok(mut entity_mut) = world.get_entity_mut(entity) else {
 			continue;
@@ -143,12 +164,12 @@ fn show_lod_tree_descendants_now(world: &mut World, root: Entity, mut stack: Vec
 		if entity != root && entity_mut.contains::<LodTreeHideActive>() {
 			continue;
 		}
-		let children = entity_mut
-			.get::<Children>()
-			.map(|c| c.iter().collect::<Vec<_>>())
-			.unwrap_or_default();
+		child_buf.clear();
+		if let Some(children) = entity_mut.get::<Children>() {
+			child_buf.extend(children.iter());
+		}
 		entity_mut.remove::<Disabled>();
-		stack.extend(children);
+		stack.extend(child_buf.iter().copied());
 	}
 }
 
@@ -160,8 +181,7 @@ fn show_lod_tree_descendants_now(world: &mut World, root: Entity, mut stack: Vec
 ///
 /// [`Self::time_per_frame`] is checked **between** visits, not a hard cap: one
 /// node that copies a large [`Children`] list can still overrun (Tracy drain
-/// max ~6 ms against the 2 ms target). The initial root-child collect in
-/// hide/show is also outside the drain loop.
+/// max ~6 ms against the 2 ms target).
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LodTreeVisBudget {
 	/// Wall-clock **target** for [`drain_lod_tree_vis`]. Default 2 ms.
@@ -195,6 +215,8 @@ struct LodTreeVisJob {
 pub struct LodTreeVisQueue {
 	shows: VecDeque<LodTreeVisJob>,
 	hides: VecDeque<LodTreeVisJob>,
+	/// Reused when enqueueing roots and on each budgeted drain visit.
+	child_buf: Vec<Entity>,
 }
 
 impl LodTreeVisQueue {
@@ -289,45 +311,46 @@ pub fn drain_lod_tree_vis(world: &mut World) {
 		let Some((kind, root, entity)) = world.resource_mut::<LodTreeVisQueue>().pop_visit() else {
 			break;
 		};
-		let children = match kind {
-			LodTreeVisKind::Hide => hide_lod_tree_visit(world, root, entity),
-			LodTreeVisKind::Show => show_lod_tree_visit(world, root, entity),
+		let mut children = std::mem::take(&mut world.resource_mut::<LodTreeVisQueue>().child_buf);
+		children.clear();
+		match kind {
+			LodTreeVisKind::Hide => hide_lod_tree_visit(world, &mut children, root, entity),
+			LodTreeVisKind::Show => show_lod_tree_visit(world, &mut children, root, entity),
 		};
-		if !children.is_empty() {
-			world.resource_mut::<LodTreeVisQueue>().push_children(kind, root, children);
+		let mut queue = world.resource_mut::<LodTreeVisQueue>();
+		if children.is_empty() {
+			queue.child_buf = children;
+		} else {
+			queue.push_children(kind, root, children);
 		}
 		visited += 1;
 	}
 }
 
-fn hide_lod_tree_visit(world: &mut World, root: Entity, entity: Entity) -> Vec<Entity> {
+fn hide_lod_tree_visit(world: &mut World, scratch: &mut Vec<Entity>, root: Entity, entity: Entity) {
 	let Ok(mut entity_mut) = world.get_entity_mut(entity) else {
-		return Vec::new();
+		return;
 	};
 	if entity != root && entity_mut.contains::<LodTreeHideActive>() {
-		return Vec::new();
+		return;
 	}
-	let children = entity_mut
-		.get::<Children>()
-		.map(|c| c.iter().collect::<Vec<_>>())
-		.unwrap_or_default();
+	if let Some(children) = entity_mut.get::<Children>() {
+		scratch.extend(children.iter());
+	}
 	entity_mut.insert(Disabled);
-	children
 }
 
-fn show_lod_tree_visit(world: &mut World, root: Entity, entity: Entity) -> Vec<Entity> {
+fn show_lod_tree_visit(world: &mut World, scratch: &mut Vec<Entity>, root: Entity, entity: Entity) {
 	let Ok(mut entity_mut) = world.get_entity_mut(entity) else {
-		return Vec::new();
+		return;
 	};
 	if entity != root && entity_mut.contains::<LodTreeHideActive>() {
-		return Vec::new();
+		return;
 	}
-	let children = entity_mut
-		.get::<Children>()
-		.map(|c| c.iter().collect::<Vec<_>>())
-		.unwrap_or_default();
+	if let Some(children) = entity_mut.get::<Children>() {
+		scratch.extend(children.iter());
+	}
 	entity_mut.remove::<Disabled>();
-	children
 }
 
 /// True when this entity or an ancestor [`LodSceneHost`] is Hidden or [`Disabled`].
