@@ -27,6 +27,7 @@ mod presentation;
 mod runtime;
 mod session;
 mod storage;
+#[cfg(any(test, feature = "test-support"))]
 mod test_support;
 mod worker;
 
