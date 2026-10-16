@@ -29,7 +29,7 @@ use bevy_hanabi::Gradient;
 use damage::{DamageSystems, Hit, HitPayload};
 use firearms_components::{BoneMap, FirearmHostSystems, FirearmMembers, FirearmRoot, RigRoot};
 use lod_avian::PhysicsInteractionLayer;
-use maybraid_audio::{Audio, AudioClip, AudioPlugin, AudioSystems, Mixer};
+use maybraid_audio::{Audio, AudioClip, AudioPlugin, AudioSystems, Mixer, SpatialListener};
 
 use crate::cadence::{
 	advance_shot_clock, catch_up_limit, idle_shot_clock, trigger_allows_fire, Cadence, FireControl,

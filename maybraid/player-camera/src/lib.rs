@@ -5,6 +5,7 @@ mod look;
 
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
+use maybraid_audio::SpatialListener;
 use maybraid_character_controller::CharacterControlSystems;
 use player::{PlayerPlugin, PlayerPoseSystems, PlayerSystems};
 use std::f32::consts::FRAC_PI_2;

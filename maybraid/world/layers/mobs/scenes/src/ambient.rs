@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use fleeing_intelligence::FleeingUser;
 use maybraid_audio::{
 	AmbientPick, AmbientSounds, Audio, AudioClip, AudioPlugin, AudioSystems, Mixer,
+	SpatialListener,
 };
 
 use crate::MobKind;

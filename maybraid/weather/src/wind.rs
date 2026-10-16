@@ -4,7 +4,8 @@ use std::f32::consts::TAU;
 
 use bevy::prelude::*;
 use maybraid_audio::{
-	Audio, AudioBus, AudioClip, AudioVelocity, Mixer, SpatialEmitter, SpatialOneShot,
+	Audio, AudioBus, AudioClip, AudioVelocity, Mixer, SpatialEmitter, SpatialListener,
+	SpatialOneShot,
 };
 
 pub const BREEZE_CLIP: &str = "sound-effects/environment/wind/breeze_001.wav";

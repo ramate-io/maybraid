@@ -3,7 +3,8 @@
 use avian3d::prelude::{CollidingEntities, LinearVelocity};
 use bevy::prelude::*;
 use maybraid_audio::{
-	Audio, AudioBus, AudioClip, AudioPlugin, AudioSystems, Mixer, MovementClip, SpatialOneShot,
+	Audio, AudioBus, AudioClip, AudioPlugin, AudioSystems, Mixer, MovementClip, SpatialListener,
+	SpatialOneShot,
 };
 
 use crate::{GrenadeDetonated, ThrownGrenade};

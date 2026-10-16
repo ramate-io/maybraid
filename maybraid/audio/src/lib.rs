@@ -29,7 +29,8 @@ pub use movement::{
 	SPRINT_INHALE_SECS,
 };
 pub use spatial::{
-	amplitude_to_db, AudioVelocity, SpatialEmitter, SpatialOneShot, SpatialVoice, FIRE_LISTENER_GAP,
+	amplitude_to_db, AudioVelocity, SpatialEmitter, SpatialListener, SpatialOneShot, SpatialVoice,
+	FIRE_LISTENER_GAP,
 };
 
 /// Registers [`AudioClip`], starts CPAL, and syncs listener / voices.
@@ -83,8 +84,7 @@ fn setup_audio(mut commands: Commands) {
 	}
 }
 
-/// Bevy listener marker. Oddio uses its own head radius; the gap only
-/// constructs [`SpatialListener`].
+/// Listener marker with the firearms ear spacing (`FIRE_LISTENER_GAP`).
 pub fn listener() -> SpatialListener {
 	SpatialListener::new(FIRE_LISTENER_GAP)
 }
