@@ -31,6 +31,7 @@ urbanization-layer-model = { workspace = true }
 [dev-dependencies]
 anyhow = { workspace = true }
 buildings = { workspace = true }
+lod = { workspace = true, features = ["test-support"] }
 durham = { workspace = true }
 procedural-common = { workspace = true }
 urbanization-cells = { workspace = true }

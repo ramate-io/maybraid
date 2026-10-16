@@ -437,7 +437,7 @@ Tests keep the real worker thread and wait for it explicitly:
 ```rust
 impl HcsgDemand {
     /// Blocks until no subscription has outstanding work, or `timeout` passes
-    /// (`false`). Needs a running worker.
+    /// (`false`). Needs a running worker. Outside `lod`, only with `test-support`.
     pub fn wait_idle(&self, timeout: Duration) -> bool;
 }
 ```

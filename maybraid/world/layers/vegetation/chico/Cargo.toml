@@ -39,6 +39,7 @@ futures = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+lod = { workspace = true, features = ["test-support"] }
 urbanization-cells = { workspace = true }
 
 [lints]

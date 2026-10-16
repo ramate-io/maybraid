@@ -36,6 +36,7 @@ urbanization-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+lod = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true
