@@ -43,7 +43,7 @@ mod world_layers;
 
 pub use world_furnished::WorldFurnished;
 
-pub use agent::AgentDrive;
+pub use agent::{AgentDrive, AgentMenuState};
 pub use character_items::{
 	ActiveInventoryDropPolicy, InventoryDrop, InventoryDropError, InventoryDropPolicy,
 	InventoryDropRefused, InventoryDropRequest, InventoryDropped, InventoryMenuDropped,
