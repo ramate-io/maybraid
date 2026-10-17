@@ -11,10 +11,12 @@ pub mod lateral_undulation;
 pub mod leap;
 pub mod mix;
 pub mod prone;
+pub mod quadruped_bray;
 pub mod quadruped_gallop;
 pub mod quadruped_idle;
 pub mod quadruped_leap;
 pub mod quadruped_run;
+pub mod quadruped_sleep;
 pub mod run;
 pub mod soaring;
 pub mod spring;
@@ -43,9 +45,15 @@ pub use lateral_undulation::LateralUndulation;
 pub use leap::{Leap, LeapPhase, LeapTimeline, AIR_END, TAKEOFF_END};
 pub use mix::{burst_envelope, smoothstep, LinearBlend, Mix, Smooth, DEFAULT_BURST_EDGE};
 pub use prone::Prone;
+pub use quadruped_bray::{
+	EpiphantBray, MOUTH_EMIT_NECK_LOCAL, MOUTH_EMIT_SOCKET, SONIC_EMIT_NORM,
+};
 pub use quadruped_gallop::QuadrupedGallop;
 pub use quadruped_idle::QuadrupedIdle;
 pub use quadruped_leap::QuadrupedLeap;
+pub use quadruped_sleep::{
+	EpiphantSleepEnter, EpiphantSleepHold, EpiphantWake, SLEEP_ENTER_IMPACT_NORM, WAKE_IMPACT_NORM,
+};
 pub use quadruped_run::{QuadrupedRun, QuadrupedRunPose};
 pub use run::Run;
 pub use soaring::Soaring;
