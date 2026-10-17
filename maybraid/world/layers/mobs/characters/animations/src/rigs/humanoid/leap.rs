@@ -2,7 +2,11 @@ use character_rigs::authoring::HumanoidPose;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
-use crate::animations::{LeapPhase, LeapTimeline, LinearBlend, UprightLeap};
+use crate::animations::{
+	smoothstep, LeapPhase, LeapTimeline, LinearBlend, Run, UprightLeap, AIR_END,
+	LEAP_RUN_RECOVERY_BLEND_FRACTION,
+};
+use crate::rigs::mix::blend_clips;
 use crate::{Animation, Progress};
 
 #[derive(Clone, Copy)]
@@ -19,30 +23,54 @@ struct LeapPose {
 	elbow: f32,
 }
 
+/// Samples a fixed land pose for [`blend_clips`].
+#[derive(Clone, Copy)]
+struct LeapLandFrame<'a> {
+	leap: &'a UprightLeap,
+	u: f32,
+}
+
+impl Animation<HumanoidV0Rig> for LeapLandFrame<'_> {
+	fn apply_for(&self, rig: &mut HumanoidV0Rig, _progress: f32) {
+		write_leap_pose(rig, self.leap.land(self.u));
+	}
+}
+
+fn write_leap_pose(rig: &mut HumanoidV0Rig, sample: LeapPose) {
+	let mut pose = HumanoidPose::default();
+	pose.apply_leg(Side::Left, sample.left_femur, sample.left_shin);
+	pose.apply_leg(Side::Right, sample.right_femur, sample.right_shin);
+	pose.apply_root(sample.lean);
+	pose.apply_arm(Side::Left, sample.left_shoulder, 0.0, sample.left_humerus, 0.0, sample.elbow);
+	pose.apply_arm(
+		Side::Right,
+		sample.right_shoulder,
+		0.0,
+		sample.right_humerus,
+		0.0,
+		sample.elbow,
+	);
+	rig.write_pose(&pose);
+}
+
 impl Animation<HumanoidV0Rig> for UprightLeap {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		let mut pose = HumanoidPose::default();
-		let sample = self.pose_at(Progress(progress).clamp());
-		pose.apply_leg(Side::Left, sample.left_femur, sample.left_shin);
-		pose.apply_leg(Side::Right, sample.right_femur, sample.right_shin);
-		pose.apply_root(sample.lean);
-		pose.apply_arm(
-			Side::Left,
-			sample.left_shoulder,
-			0.0,
-			sample.left_humerus,
-			0.0,
-			sample.elbow,
-		);
-		pose.apply_arm(
-			Side::Right,
-			sample.right_shoulder,
-			0.0,
-			sample.right_humerus,
-			0.0,
-			sample.elbow,
-		);
-		rig.write_pose(&pose);
+		let t = Progress(progress).clamp();
+		if t >= AIR_END {
+			let land_span = (1.0 - AIR_END).max(f32::EPSILON);
+			let land_local = (t - AIR_END) / land_span;
+			let recovery_start = 1.0 - LEAP_RUN_RECOVERY_BLEND_FRACTION;
+			if land_local >= recovery_start {
+				let blend_span = LEAP_RUN_RECOVERY_BLEND_FRACTION.max(f32::EPSILON);
+				let weight =
+					smoothstep(((land_local - recovery_start) / blend_span).clamp(0.0, 1.0));
+				let (_, land_u) = LeapTimeline::sample(t);
+				let land = LeapLandFrame { leap: self, u: land_u };
+				blend_clips(rig, &land, land_u, &Run::default(), 0.0, weight);
+				return;
+			}
+		}
+		write_leap_pose(rig, self.pose_at(t));
 	}
 }
 
@@ -118,12 +146,18 @@ impl UprightLeap {
 			elbow: self.elbow * (1.0 - u * 0.25),
 		}
 	}
+
+	#[cfg(test)]
+	fn pose_at_unblended(&self, t: f32) -> LeapPose {
+		self.pose_at(t)
+	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use crate::animations::{Leap, Squat, TwoFootedJump};
+	use bevy::prelude::Vec3;
 
 	fn femur_z(rig: &HumanoidV0Rig, side: Side) -> f32 {
 		let name = match side {
@@ -133,8 +167,30 @@ mod tests {
 		rig.character_length(name).z
 	}
 
+	fn bone_tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
+		rig.character_point(name) + rig.character_length(name)
+	}
+
+	fn max_bone_tip_jump(before: &HumanoidV0Rig, after: &HumanoidV0Rig) -> (f32, &'static str) {
+		let mut worst = 0.0f32;
+		let mut worst_name = "";
+		for name in before.animation_bone_names() {
+			let delta = (bone_tip(after, name) - bone_tip(before, name)).length();
+			if delta > worst {
+				worst = delta;
+				worst_name = name;
+			}
+		}
+		(worst, worst_name)
+	}
+
 	fn apply_leap(rig: &mut HumanoidV0Rig, progress: f32) -> crate::Effects {
 		UprightLeap::from_leap(&Leap::default()).apply(rig, progress)
+	}
+
+	fn apply_unblended_land(rig: &mut HumanoidV0Rig, progress: f32) {
+		let leap = UprightLeap::from_leap(&Leap::default());
+		write_leap_pose(rig, leap.pose_at_unblended(Progress(progress).clamp()));
 	}
 
 	#[test]
@@ -212,7 +268,7 @@ mod tests {
 		let mut mid = HumanoidV0Rig::imported();
 		apply_leap(&mut mid, 0.86);
 		let mut end = HumanoidV0Rig::imported();
-		apply_leap(&mut end, 1.0);
+		apply_leap(&mut end, 0.94);
 		assert!(mid.posed_angle("femur.L") > end.posed_angle("femur.L") + 0.04);
 	}
 
@@ -230,5 +286,81 @@ mod tests {
 		apply_leap(&mut a, 1.0);
 		apply_leap(&mut b, 1.7);
 		assert!((femur_z(&a, Side::Left) - femur_z(&b, Side::Left)).abs() < 1e-5);
+	}
+
+	#[test]
+	fn shot_end_matches_run_cycle_start() -> anyhow::Result<()> {
+		let mut leap_rig = HumanoidV0Rig::for_clip_test();
+		apply_leap(&mut leap_rig, 1.0);
+		let mut run_rig = HumanoidV0Rig::for_clip_test();
+		Run::default().apply(&mut run_rig, 0.0);
+		for name in leap_rig.animation_bone_names() {
+			let a = leap_rig.rotation(name);
+			let b = run_rig.rotation(name);
+			assert!(a.dot(b).abs() > 1.0 - 1e-4, "leap end should match run phase 0 on {name}");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn pre_recovery_land_matches_unblended_sampler() -> anyhow::Result<()> {
+		let land_span = 1.0 - AIR_END;
+		let t = AIR_END + land_span * (1.0 - LEAP_RUN_RECOVERY_BLEND_FRACTION - 0.05);
+		let mut blended = HumanoidV0Rig::for_clip_test();
+		let mut raw = HumanoidV0Rig::for_clip_test();
+		apply_leap(&mut blended, t);
+		apply_unblended_land(&mut raw, t);
+		for name in blended.animation_bone_names() {
+			let a = blended.rotation(name);
+			let b = raw.rotation(name);
+			assert!(a.dot(b).abs() > 1.0 - 1e-5, "pre-recovery band unchanged on {name}");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn unblended_land_end_pops_against_run() -> anyhow::Result<()> {
+		let mut leap_rig = HumanoidV0Rig::for_clip_test();
+		apply_unblended_land(&mut leap_rig, 1.0);
+		let mut run_rig = HumanoidV0Rig::for_clip_test();
+		Run::default().apply(&mut run_rig, 0.0);
+		let (jump, bone) = max_bone_tip_jump(&leap_rig, &run_rig);
+		assert!(
+			jump > 0.05,
+			"unblended leap land end should diverge from run on at least one bone, got {jump} on {bone}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn recovery_band_is_continuous_at_entry() -> anyhow::Result<()> {
+		let land_span = 1.0 - AIR_END;
+		let entry = AIR_END + land_span * (1.0 - LEAP_RUN_RECOVERY_BLEND_FRACTION);
+		let mut a = HumanoidV0Rig::for_clip_test();
+		apply_leap(&mut a, entry);
+		let mut b = HumanoidV0Rig::for_clip_test();
+		apply_leap(&mut b, entry + 1e-5);
+		let (jump, bone) = max_bone_tip_jump(&a, &b);
+		assert!(jump < 1e-3, "recovery band entry should be continuous, got {jump} m on {bone}");
+		Ok(())
+	}
+
+	#[test]
+	fn nested_blend_uses_apply_at_progress() -> anyhow::Result<()> {
+		use crate::animations::Mix;
+		let leap = UprightLeap::from_leap(&Leap::default());
+		let land_u = 0.9;
+		let land = LeapLandFrame { leap: &leap, u: land_u };
+		let mix = Mix::new(land, Run::default(), 0.5);
+		let mut rig_a = HumanoidV0Rig::for_clip_test();
+		mix.apply_at(&mut rig_a, land_u, 0.0);
+		let mut rig_b = HumanoidV0Rig::for_clip_test();
+		blend_clips(&mut rig_b, &land, land_u, &Run::default(), 0.0, 0.5);
+		for name in rig_a.animation_bone_names() {
+			let a = rig_a.rotation(name);
+			let b = rig_b.rotation(name);
+			assert!(a.dot(b).abs() > 1.0 - 1e-5, "Mix apply_at matches blend_clips on {name}");
+		}
+		Ok(())
 	}
 }
