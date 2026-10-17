@@ -43,7 +43,8 @@ pub(crate) fn apply_flight_body(pose: &mut HumanoidPose) {
 pub(crate) fn apply_flight_wings(pose: &mut HumanoidPose, flap_amount: f32) {
 	let shoulder_swing = SOAR_SHOULDER_SWING + FLAP_SHOULDER_SWING_AMP * flap_amount;
 	let humerus_swing = SOAR_HUMERUS_SWING + FLAP_HUMERUS_AMP * flap_amount;
-	let forearm_flex = FOREARM_EXTEND + FLAP_ELBOW_AMP * flap_amount.max(0.0);
+	// Signed stroke: flex on the rearward (positive) half, extend on the forward sweep.
+	let forearm_flex = FOREARM_EXTEND + FLAP_ELBOW_AMP * flap_amount;
 
 	for side in [Side::Left, Side::Right] {
 		let lateral = lateral_sign(side);

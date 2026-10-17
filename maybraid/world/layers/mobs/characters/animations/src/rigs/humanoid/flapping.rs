@@ -52,4 +52,25 @@ mod tests {
 			"right wing must share the same stroke, {right_a:?} vs {right_b:?}"
 		);
 	}
+
+	#[test]
+	fn flapping_elbow_follows_both_strokes() -> anyhow::Result<()> {
+		let flap = Flapping { speed: 1.0, range: 1.0 };
+		let mut up = HumanoidV0Rig::for_clip_test();
+		let mut down = HumanoidV0Rig::for_clip_test();
+		flap.apply(&mut up, 0.125);
+		flap.apply(&mut down, 0.625);
+		let up_elbow = up.posed_angle("forearm.L");
+		let down_elbow = down.posed_angle("forearm.L");
+		assert!(
+			(up_elbow - down_elbow).abs() > 0.05,
+			"elbow hinge should differ between up- and down-stroke, up={up_elbow} down={down_elbow}"
+		);
+		assert_eq!(
+			up.posed_angle("forearm.R"),
+			up_elbow,
+			"mirrored flex channel on for_clip_test rest"
+		);
+		Ok(())
+	}
 }
