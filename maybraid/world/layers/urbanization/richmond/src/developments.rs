@@ -161,6 +161,17 @@ impl<G: RichmondGround> RichmondDevelopment<G> {
 		Self::try_get_filled(cx, id).is_some()
 	}
 
+	/// Development site ids in `region` whose [`RichmondDevelopment`] is filled.
+	pub fn original_filled_site_ids(
+		cx: &mut GenerationContext,
+		region: Aabb3d,
+	) -> Vec<OriginalId> {
+		cx.original_ids_for::<DevelopmentSite>(region)
+			.into_iter()
+			.filter(|OriginalId(id)| Self::builds_filled(cx, *id))
+			.collect()
+	}
+
 	/// Filled developments originating in `bounds`, for pad composition.
 	pub fn filled_in(cx: &mut GenerationContext, bounds: Aabb3d) -> Vec<Arc<Self>> {
 		cx.original_ids_for::<DevelopmentSite>(bounds)

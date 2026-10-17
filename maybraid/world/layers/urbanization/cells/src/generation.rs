@@ -56,17 +56,27 @@ impl SelectedUrbanization {
 		})
 	}
 
+	/// Each non-empty development leaf overlapping `region`, from cached or
+	/// generated selections in `region`.
+	pub fn for_filled_leaves_in(
+		cx: &mut GenerationContext,
+		region: Aabb3d,
+		mut visit: impl FnMut(&DevelopmentLeaf),
+	) {
+		for selected in cx.get_or_generate_in::<Self>(region) {
+			for leaf in selected.filled_leaves_overlapping(region) {
+				visit(leaf);
+			}
+		}
+	}
+
 	/// Development leaf ids originating in `region`.
 	///
 	/// Materializes overlapping [`SelectedUrbanization`] cells through `cx` so
 	/// later consumers reuse the same cached selections.
 	pub fn original_leaf_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		let mut ids: Vec<OriginalId> = cx
-			.get_or_generate_in::<Self>(region)
-			.iter()
-			.flat_map(|selected| selected.filled_leaves_overlapping(region))
-			.map(|leaf| OriginalId(leaf.id()))
-			.collect();
+		let mut ids = Vec::new();
+		Self::for_filled_leaves_in(cx, region, |leaf| ids.push(OriginalId(leaf.id())));
 		ids.sort_unstable();
 		ids.dedup();
 		ids

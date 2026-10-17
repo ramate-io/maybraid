@@ -11,7 +11,7 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
+use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use chico::{ForestGround, GroundSurface};
@@ -21,9 +21,7 @@ use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 use mob_intelligence::{MemberOf, Mob};
 use richmond::{column_bounds, Built, DevelopmentHosts, Richmond, RichmondGround};
-use urbanization_cells::{
-	SelectedUrbanization, UrbanDevelopmentKind, UrbanizationKind, UrbanizationSelection,
-};
+use urbanization_cells::{SelectedUrbanization, UrbanizationKind, UrbanizationSelection};
 use urbanization_layer_model::Urbanization;
 
 use crate::generation::{
@@ -53,17 +51,9 @@ where
 {
 	fn plant_hosts(cx: &mut GenerationContext, region: Aabb3d) -> Vec<MobPlantHost> {
 		let mut hosts = Vec::new();
-		for selected in cx.get_or_generate_in::<SelectedUrbanization>(region) {
-			hosts.extend(
-				selected
-					.leaves
-					.iter()
-					.filter(|leaf| {
-						leaf.kind != UrbanDevelopmentKind::Empty && region.intersects(&leaf.bounds)
-					})
-					.map(|leaf| host_at(leaf.bounds)),
-			);
-		}
+		SelectedUrbanization::for_filled_leaves_in(cx, region, |leaf| {
+			hosts.push(host_at(leaf.bounds));
+		});
 		for built in cx.get_or_generate_in::<Built<T>>(region) {
 			hosts.push(MobPlantHost {
 				xz: built.setting_at.xz(),
