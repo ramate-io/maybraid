@@ -12,6 +12,7 @@ pub mod soaring;
 pub mod spring;
 pub mod squat;
 pub mod squat_descent;
+pub mod stomp_beat;
 pub mod tuck;
 pub mod tucked_flip;
 pub mod two_footed_jump;

@@ -12,8 +12,8 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent,
+		StompBeat, Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -817,6 +817,13 @@ fn sample_humanoid(
 			write_bones,
 			write_effects,
 		),
+		AnimClip::StompBeat(params) => sample_split(
+			&StompBeat::new(params.side),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
 		AnimClip::Squat => sample_split(&Squat::held(), rig, progress, write_bones, write_effects),
 		AnimClip::SquatDescent => sample_split(
 			&SquatDescent::default(),
@@ -978,6 +985,55 @@ mod tests {
 		assert!(only.contains(&top));
 		assert!(only.contains(&leftover));
 		assert_eq!(world.get::<AnimMailbox>(leftover).unwrap().apply_skips, 0);
+	}
+
+	#[test]
+	fn stomp_beat_mailbox_sample_is_playback_only() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+		use character_rigs::Side;
+
+		use crate::StompBeatParams;
+
+		let shin_tip = |rig: &HumanoidV0Rig, side: Side| {
+			rig.character_point(&format!("shin.{}", side.suffix()))
+		};
+
+		let mut at_rest = HumanoidV0Rig::for_clip_test();
+		let rest_shin = shin_tip(&at_rest, Side::Right);
+		let rest_effects = sample_humanoid(
+			AnimClip::StompBeat(StompBeatParams { side: Side::Right }),
+			&mut at_rest,
+			0.0,
+			true,
+			true,
+		);
+		if !rest_effects.is_identity() {
+			return Err(anyhow!("stomp beat entry must not offset the armature"));
+		}
+		if (shin_tip(&at_rest, Side::Right) - rest_shin).length() > 1e-3 {
+			return Err(anyhow!("stomp beat entry stays at rest"));
+		}
+
+		let mut at_lift = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::stomp_beat(), &mut at_lift, 0.26, true, true);
+		let lift_delta = shin_tip(&at_lift, Side::Right) - rest_shin;
+		if lift_delta.z > -0.15 {
+			return Err(anyhow!("lift folds the stomping knee forward, Δ={lift_delta:?}"));
+		}
+
+		let mut at_impact = HumanoidV0Rig::for_clip_test();
+		let impact_effects =
+			sample_humanoid(AnimClip::stomp_beat(), &mut at_impact, 0.40, true, true);
+		if !impact_effects.is_identity() {
+			return Err(anyhow!("stomp beat must not move the armature"));
+		}
+		if at_impact.posed_angle("humerus.R") > 0.02 {
+			return Err(anyhow!("stomping-side arm stays at rest"));
+		}
+		if at_impact.posed_angle("humerus.L") < 0.05 {
+			return Err(anyhow!("opposite arm whips on impact"));
+		}
+		Ok(())
 	}
 
 	#[test]
