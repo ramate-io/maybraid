@@ -4,7 +4,7 @@
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
-use crate::animations::{Flapping, Jab, QuadrupedRun, Squat, Walk};
+use crate::animations::{Flapping, Jab, Lay, QuadrupedRun, Sit, Squat, Walk};
 use crate::Animation;
 
 #[test]
@@ -21,6 +21,39 @@ fn squat_folds_the_t_pose_thigh_in_z() {
 	assert!(
 		(posed_knee.z - rest_knee.z).abs() > 0.05,
 		"knee must move front/back, {posed_knee:?} vs {rest_knee:?}"
+	);
+}
+
+#[test]
+fn ground_sit_folds_the_t_pose_thigh_in_z() {
+	let rest = HumanoidV0Rig::for_clip_test();
+	let mut posed = HumanoidV0Rig::for_clip_test();
+	Sit::ground().apply(&mut posed, 0.0);
+	let rest_dir = rest.character_length("femur.L");
+	let posed_dir = posed.character_length("femur.L");
+	assert!(posed_dir.z.abs() > rest_dir.z.abs() + 0.15, "sit is sagittal, {posed_dir:?}");
+	assert!(posed_dir.x.abs() < 0.20, "sit is not a side swing, {posed_dir:?}");
+	let rest_knee = rest.character_point("shin.L");
+	let posed_knee = posed.character_point("shin.L");
+	assert!(
+		(posed_knee.z - rest_knee.z).abs() > 0.05,
+		"knee must move front/back, {posed_knee:?} vs {rest_knee:?}"
+	);
+}
+
+#[test]
+fn back_lie_is_an_offset_roll_not_a_length_twist() {
+	let rest = HumanoidV0Rig::for_clip_test();
+	let mut posed = HumanoidV0Rig::for_clip_test();
+	let effects = Lay::back().apply(&mut posed, 0.0);
+	let up = effects.0.rotation * bevy::prelude::Vec3::Y;
+	assert!(up.y.abs() < 0.2, "lie rotation takes character up off world Y, {up:?}");
+	assert!(up.z.abs() > 0.8, "supine maps up along Z, {up:?}");
+	let rest_knee = rest.character_point("shin.L");
+	let posed_knee = posed.character_point("shin.L");
+	assert!(
+		(posed_knee - rest_knee).length() > 0.05,
+		"knees must actually bend, {posed_knee:?} vs {rest_knee:?}"
 	);
 }
 
