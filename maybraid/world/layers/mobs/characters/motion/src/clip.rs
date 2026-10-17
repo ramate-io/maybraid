@@ -6,9 +6,9 @@
 use bevy::prelude::*;
 use character_animations::animations::{
 	BallisticJump, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop,
-	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
-	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
-	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
+	LateralUndulation, Lay, Leap, QuadrupedRun, Run, Sit, Soaring, TuckProfile, TuckedFlip,
+	TwoFootedJump, Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY,
+	DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	DEFAULT_SPRING_DURATION, TAKEOFF_END,
 };
 use character_animations::{ClipTimePolicy, SampleAddress};
@@ -48,6 +48,8 @@ pub enum AnimId {
 	Squat,
 	SquatDescent,
 	Prone,
+	Sit,
+	Lay,
 	LateralUndulation,
 	DorsoventralUndulation,
 }
@@ -68,9 +70,8 @@ impl AnimId {
 			Self::Soaring => 1.0,
 			Self::Flapping => 1.0,
 			Self::Jab => JAB_CYCLE_SPEED,
-			Self::Squat => 1.0,
+			Self::Squat | Self::Prone | Self::Sit | Self::Lay => 1.0,
 			Self::SquatDescent => DEFAULT_DESCENT_SPEED,
-			Self::Prone => 1.0,
 			Self::LateralUndulation => 1.0,
 			Self::DorsoventralUndulation => 1.0,
 		}
@@ -208,6 +209,8 @@ pub enum AnimClip {
 	Squat,
 	SquatDescent,
 	Prone,
+	Sit(Sit),
+	Lay(Lay),
 	LateralUndulation(LateralUndulation),
 	DorsoventralUndulation(DorsoventralUndulation),
 }
@@ -231,6 +234,8 @@ impl AnimClip {
 			Self::Squat => AnimId::Squat,
 			Self::SquatDescent => AnimId::SquatDescent,
 			Self::Prone => AnimId::Prone,
+			Self::Sit(_) => AnimId::Sit,
+			Self::Lay(_) => AnimId::Lay,
 			Self::LateralUndulation(_) => AnimId::LateralUndulation,
 			Self::DorsoventralUndulation(_) => AnimId::DorsoventralUndulation,
 		}
@@ -304,6 +309,22 @@ impl AnimClip {
 		Self::Prone
 	}
 
+	pub fn sit_ground() -> Self {
+		Self::Sit(Sit::ground())
+	}
+
+	pub fn sit_seat() -> Self {
+		Self::Sit(Sit::seat())
+	}
+
+	pub fn lay_back() -> Self {
+		Self::Lay(Lay::back())
+	}
+
+	pub fn lay_side(side: Side) -> Self {
+		Self::Lay(Lay::side(side))
+	}
+
 	pub fn lateral_undulation() -> Self {
 		Self::LateralUndulation(LateralUndulation::default())
 	}
@@ -324,7 +345,9 @@ impl AnimClip {
 
 	pub const fn time_policy(self) -> ClipTimePolicy {
 		match self {
-			Self::Still => ClipTimePolicy::Unbounded,
+			Self::Still | Self::Soaring(_) | Self::Flapping(_) | Self::Sit(_) | Self::Lay(_) => {
+				ClipTimePolicy::Unbounded
+			}
 			Self::Walk(_) | Self::Run(_) | Self::QuadrupedRun(_) | Self::Gallop(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
 			}
@@ -337,7 +360,6 @@ impl AnimClip {
 			| Self::Squat
 			| Self::SquatDescent
 			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
-			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
 			}
@@ -404,6 +426,22 @@ mod tests {
 		assert_eq!(AnimClip::still().default_speed(), IDLE_CYCLE_SPEED);
 		assert!(IDLE_CYCLE_SPEED < WALK_CYCLE_SPEED);
 		assert_ne!(AnimClip::still().id(), AnimClip::walk().id());
+	}
+
+	#[test]
+	fn sit_and_lay_are_distinct_unbounded_idles() {
+		assert_eq!(AnimClip::sit_ground().id(), AnimId::Sit);
+		assert_eq!(AnimClip::sit_seat().id(), AnimId::Sit);
+		assert_ne!(AnimClip::sit_ground(), AnimClip::sit_seat());
+		assert_eq!(AnimClip::lay_back().id(), AnimId::Lay);
+		assert_eq!(AnimClip::lay_side(Side::Left).id(), AnimId::Lay);
+		assert_ne!(AnimClip::lay_back(), AnimClip::lay_side(Side::Right));
+		assert_ne!(AnimClip::sit_ground().id(), AnimClip::still().id());
+		assert_ne!(AnimClip::lay_back().id(), AnimClip::prone().id());
+		assert!(!AnimClip::sit_ground().is_sample_cacheable());
+		assert!(!AnimClip::lay_back().is_sample_cacheable());
+		assert_eq!(AnimClip::sit_ground().default_speed(), 1.0);
+		assert!(matches!(AnimClip::sit_ground().time_policy(), ClipTimePolicy::Unbounded));
 	}
 
 	#[test]

@@ -542,7 +542,9 @@ fn indexed_cache_valid(
 
 fn clip_progress(clip: AnimClip, clip_progress: f32, entity: Entity) -> f32 {
 	match clip {
-		AnimClip::Still => clip_progress + Idle::phase_from_entity_bits(entity.to_bits()),
+		AnimClip::Still | AnimClip::Sit(_) | AnimClip::Lay(_) => {
+			clip_progress + Idle::phase_from_entity_bits(entity.to_bits())
+		}
 		_ => clip_progress,
 	}
 }
@@ -828,6 +830,8 @@ fn sample_humanoid(
 		AnimClip::Prone => {
 			sample_split(&Prone::default(), rig, progress, write_bones, write_effects)
 		}
+		AnimClip::Sit(sit) => sample_split(&sit, rig, progress, write_bones, write_effects),
+		AnimClip::Lay(lay) => sample_split(&lay, rig, progress, write_bones, write_effects),
 		AnimClip::Gallop(_)
 		| AnimClip::QuadrupedRun(_)
 		| AnimClip::LateralUndulation(_)
@@ -1040,6 +1044,34 @@ mod tests {
 		let root = rig.rotation("root") * Vec3::Y;
 		if root.z.abs() < 0.2 || root.x.abs() > 0.2 {
 			return Err(anyhow!("prone should pitch the spine, got {root:?}"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn sit_ground_drops_the_armature_and_folds_the_hips() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		let effects = sample_humanoid(AnimClip::sit_ground(), &mut rig, 0.0, true, true);
+		if effects.0.translation.y >= -0.2 {
+			return Err(anyhow!("sit should visually drop, {effects:?}"));
+		}
+		if rig.posed_angle("femur.L") < 0.8 {
+			return Err(anyhow!("sit should fold the hips"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn lay_back_rotates_the_armature_off_prone() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		let effects = sample_humanoid(AnimClip::lay_back(), &mut rig, 0.0, true, true);
+		let up = effects.0.rotation * Vec3::Y;
+		if up.y.abs() > 0.2 {
+			return Err(anyhow!("lay back should put character up off world Y, {up:?}"));
 		}
 		Ok(())
 	}
