@@ -2429,6 +2429,7 @@ dependencies = [
 name = "building-shaders"
 version = "0.1.5"
 dependencies = [
+ "anyhow",
  "bevy",
  "material-ref",
 ]
@@ -13722,6 +13723,7 @@ name = "world-materials-playground"
 version = "0.1.5"
 dependencies = [
  "bevy",
+ "building-shaders",
  "clap",
  "firearms",
  "game-commands",
