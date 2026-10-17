@@ -327,6 +327,7 @@ fn fragment(
     var metallic = 0.02;
     var tint = base;
 
+    var emissive = vec3<f32>(0.0);
     if material.kind == KIND_EYE {
         tint = eye_look(mesh.local_pos, mesh.blink);
         let lid_m = lid_wrap(mesh.local_pos.xy, mesh.blink);
@@ -334,6 +335,16 @@ fn fragment(
         roughness = mix(0.42, 0.16, iris_m);
         roughness = mix(roughness, 0.72, lid_m);
         metallic = mix(0.04, 0.12, iris_m);
+        let glow_i = material.scalars[0].y;
+        if glow_i > 1e-4 {
+            let glow_col = material.scalars[1].xyz;
+            var glow_gain = material.scalars[1].w;
+            if glow_gain < 1e-4 {
+                glow_gain = 16.0;
+            }
+            let pulse = 0.82 + 0.18 * sin(globals.time * 14.0);
+            emissive = glow_col * glow_gain * glow_i * iris_m * pulse;
+        }
     } else {
         tint = mouth_look(mesh.local_pos, mesh.blink);
         let opening = lip_opening(mesh.local_pos.xy, mesh.blink);
@@ -358,5 +369,5 @@ fn fragment(
     pbr_input.N = n;
 
     let lit_color = fns::apply_pbr_lighting(pbr_input);
-    return tone_mapping(vec4<f32>(lit_color.rgb, 1.0), view.color_grading);
+    return tone_mapping(vec4<f32>(lit_color.rgb + emissive, 1.0), view.color_grading);
 }

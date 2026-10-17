@@ -3,6 +3,38 @@ use camera_controls::look::{look_input_active, CameraLookEnabled};
 use game_commands::command::TextEntryFocus;
 use std::f32::consts::PI;
 
+use crate::character::CharacterSpecies;
+
+/// How far the capture camera sits from the face target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FaceCaptureRange {
+	/// Tight framing on both eyes.
+	Close,
+	/// Boss-distance framing for warning readability.
+	WarningDistance,
+}
+
+/// Species-tuned eye socket framing (world space, character at origin, facing +Z).
+pub fn species_face_capture(
+	species: CharacterSpecies,
+	range: FaceCaptureRange,
+) -> (Vec3, Vec3) {
+	match (species, range) {
+		(CharacterSpecies::Braidman, FaceCaptureRange::Close) => {
+			(Vec3::new(0.0, 1.42, 0.46), Vec3::new(0.0, 1.38, 0.0))
+		},
+		(CharacterSpecies::Braidman, FaceCaptureRange::WarningDistance) => {
+			(Vec3::new(0.0, 1.34, 2.75), Vec3::new(0.0, 1.22, 0.0))
+		},
+		(CharacterSpecies::Epiphant, FaceCaptureRange::Close) => {
+			(Vec3::new(0.0, 0.80, 1.85), Vec3::new(0.0, 0.76, 1.08))
+		},
+		(CharacterSpecies::Epiphant, FaceCaptureRange::WarningDistance) => {
+			(Vec3::new(0.0, 0.92, 3.35), Vec3::new(0.0, 0.82, 1.05))
+		},
+	}
+}
+
 #[derive(Component)]
 pub struct CameraController {
 	pub speed: f32,

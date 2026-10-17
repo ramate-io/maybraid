@@ -2,7 +2,8 @@
 //!
 //! Phase is `globals.time` + instance seed. No mailbox. No blendshapes.
 //! `face_eye` palette: iris primary, pupil, sclera, iris secondary, lid, catchlight.
-//! `face_eye` scalars[0]: pupil shape (`0` round, `1` slit).
+//! `face_eye` scalars[0]: pupil shape (`0` round, `1` slit), glow intensity in `y`.
+//! `face_eye` scalars[1]: glow color (`xyz`) and emissive gain (`w`).
 //! `face_mouth` palette: lip, crease, interior, highlight, teeth.
 //! `face_mouth` scalars[0]: open rate (higher = more frequent parts).
 
@@ -39,8 +40,19 @@ const EYE_PALETTE_DETAIL_SLOTS: usize = 6;
 
 /// `scalars[0].x` — `0` round, `1` vertical slit.
 pub const EYE_SCALAR_PUPIL_SHAPE: usize = 0;
+/// `scalars[0].y` — warning glow strength (`0` = ordinary eyes).
+pub const EYE_SCALAR_GLOW_INTENSITY_COMPONENT: usize = 1;
+/// Flat scalar index for [`set_eye_glow_uniform`].
+pub const EYE_SCALAR_GLOW_INTENSITY: usize = EYE_SCALAR_GLOW_INTENSITY_COMPONENT;
+/// `scalars[1]` — glow color (`xyz`) and emissive gain (`w`).
+pub const EYE_SCALAR_GLOW_COLOR_VEC: usize = 1;
 pub const PUPIL_SHAPE_ROUND: f32 = 0.0;
 pub const PUPIL_SHAPE_SLIT: f32 = 1.0;
+/// Readable boss-distance warning tint for God Beam telegraphs.
+pub const GOD_BEAM_EYE_GLOW_COLOR: Color = Color::linear_rgb(1.0, 0.38, 0.06);
+pub const GOD_BEAM_EYE_GLOW_INTENSITY: f32 = 1.0;
+pub const GOD_BEAM_EYE_GLOW_EMISSIVE_GAIN: f32 = 22.0;
+pub const DEFAULT_EYE_GLOW_EMISSIVE_GAIN: f32 = 16.0;
 
 /// `face_mouth` palette: lip, crease, interior, highlight, teeth.
 pub const MOUTH_PALETTE_LIP: usize = 0;
@@ -202,10 +214,9 @@ impl FaceMaterialUniform {
 		}
 
 		let mut rasters = [[Vec4::ZERO; MATERIAL_RASTER_WIDTH]; MATERIAL_RASTER_CHANNELS];
-		for channel in 0..MATERIAL_RASTER_CHANNELS {
+		for (channel, slot) in rasters.iter_mut().enumerate().take(MATERIAL_RASTER_CHANNELS) {
 			let samples = material_ref.rasters.get_or(channel, 0.0);
-			let rows = MaterialRasters::packed_rows(samples);
-			rasters[channel] = rows.map(Vec4::from_array);
+			*slot = MaterialRasters::packed_rows(samples).map(Vec4::from_array);
 		}
 
 		Self {
@@ -232,7 +243,40 @@ fn packed_face_scalars(
 	if kind == FaceShaderKind::Mouth && scalars[0][MOUTH_SCALAR_OPEN_RATE] <= 1e-4 {
 		scalars[0][MOUTH_SCALAR_OPEN_RATE] = DEFAULT_MOUTH_OPEN_RATE;
 	}
+	if kind == FaceShaderKind::Eye {
+		default_eye_glow_gain(&mut scalars);
+	}
 	scalars
+}
+
+fn default_eye_glow_gain(scalars: &mut [Vec4; SCALAR_VEC4S]) {
+	if scalars[EYE_SCALAR_GLOW_COLOR_VEC].w <= 1e-4
+		&& scalars[0][EYE_SCALAR_GLOW_INTENSITY_COMPONENT] > 1e-4
+	{
+		scalars[EYE_SCALAR_GLOW_COLOR_VEC].w = DEFAULT_EYE_GLOW_EMISSIVE_GAIN;
+	}
+}
+
+/// Runtime + authored eye-glow scalars on [`FaceMaterialUniform`].
+pub fn set_eye_glow_uniform(
+	params: &mut FaceMaterialUniform,
+	color: Color,
+	intensity: f32,
+	emissive_gain: f32,
+) {
+	let linear = LinearRgba::from(color);
+	let gain = if emissive_gain > 1e-4 {
+		emissive_gain
+	} else {
+		DEFAULT_EYE_GLOW_EMISSIVE_GAIN
+	};
+	params.scalars[0][EYE_SCALAR_GLOW_INTENSITY_COMPONENT] = intensity.max(0.0);
+	params.scalars[EYE_SCALAR_GLOW_COLOR_VEC] =
+		Vec4::new(linear.red, linear.green, linear.blue, gain);
+}
+
+pub fn eye_glow_intensity(params: &FaceMaterialUniform) -> f32 {
+	params.scalars[0][EYE_SCALAR_GLOW_INTENSITY_COMPONENT]
 }
 
 pub fn mouth_open_rate(raw: f32) -> f32 {
@@ -470,6 +514,22 @@ mod tests {
 			&MaterialRef::named(RECIPE_FACE_MOUTH).with_scalars([3.5]),
 		);
 		assert!((frequent.params.scalars[0][MOUTH_SCALAR_OPEN_RATE] - 3.5).abs() < 1e-5);
+	}
+
+	#[test]
+	fn eye_glow_uniform_packs_scalars() {
+		let mut params = FaceShaderMaterial::default().params;
+		set_eye_glow_uniform(
+			&mut params,
+			GOD_BEAM_EYE_GLOW_COLOR,
+			GOD_BEAM_EYE_GLOW_INTENSITY,
+			GOD_BEAM_EYE_GLOW_EMISSIVE_GAIN,
+		);
+		assert!((eye_glow_intensity(&params) - 1.0).abs() < 1e-5);
+		assert!(params.scalars[EYE_SCALAR_GLOW_COLOR_VEC].w > 20.0);
+
+		set_eye_glow_uniform(&mut params, Color::srgb(1.0, 0.0, 0.0), 0.0, 0.0);
+		assert!(eye_glow_intensity(&params) < 1e-4);
 	}
 
 	#[test]
