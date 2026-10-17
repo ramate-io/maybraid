@@ -5,9 +5,10 @@ use bevy::prelude::*;
 use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
 
 use crate::composition::{
-	EffectDefinition, EffectLayer, EffectPart, LobeKind, ScaleBounds, DEFAULT_SCALE_MAX,
-	DEFAULT_SCALE_MIN,
+	EffectDefinition, EffectKind, EffectLayer, EffectPart, LobeKind, ScaleBounds,
+	DEFAULT_SCALE_MAX, DEFAULT_SCALE_MIN,
 };
+use crate::drive::VfxDrive;
 use crate::lobe_material::LobeMaterial;
 use crate::lobes::{lobe_transform, vary_lobe, LobeMaterialSlot, VfxLobe};
 use crate::membership::VfxMemberOf;
@@ -35,6 +36,8 @@ pub struct VfxSpawn {
 	pub seed: Option<u64>,
 	/// `None` uses [`ExplosionPalette::maybraid`].
 	pub palette: Option<ExplosionPalette>,
+	/// Spatial / lifetime overrides for driven effects. Burst definitions ignore this.
+	pub drive: VfxDrive,
 }
 
 impl Default for VfxSpawn {
@@ -47,6 +50,7 @@ impl Default for VfxSpawn {
 			tint: None,
 			seed: None,
 			palette: None,
+			drive: VfxDrive::default(),
 		}
 	}
 }
@@ -90,6 +94,7 @@ impl VfxSpawn {
 			tint: self.tint,
 			seed: Some(self.seed.unwrap_or_else(seed::generate)),
 			palette: self.palette,
+			drive: self.drive,
 		}
 	}
 
@@ -103,8 +108,69 @@ impl VfxSpawn {
 			tint: self.tint,
 			seed: Some(self.seed.unwrap_or_else(seed::generate)),
 			palette: self.palette,
+			drive: Self::resolve_drive(self.drive, definition.kind),
 		}
 	}
+
+	fn resolve_drive(drive: VfxDrive, kind: EffectKind) -> VfxDrive {
+		if drive == VfxDrive::default() {
+			return match kind {
+				EffectKind::GodBeam => VfxDrive::god_beam(),
+				EffectKind::SonicWave => VfxDrive::sonic_wave(),
+				EffectKind::Burst => VfxDrive::default(),
+			};
+		}
+		drive.resolved_for(kind)
+	}
+}
+
+/// Fade-out then despawn. Inserted by [`cancel_vfx`].
+#[derive(Component, Debug, Clone, Copy)]
+pub struct VfxCancel {
+	pub started_age: f32,
+	pub fade: f32,
+}
+
+/// Fade the instance out using its drive fade, then let lifecycle despawn it.
+pub fn cancel_vfx(commands: &mut Commands, instance: Entity) {
+	commands.queue(move |world: &mut World| {
+		apply_cancel(world, instance);
+	});
+}
+
+/// Immediate recursive despawn. Use when an owner dies and fade is skipped.
+pub fn despawn_vfx(commands: &mut Commands, instance: Entity) {
+	commands.entity(instance).try_despawn();
+}
+
+pub fn apply_cancel(world: &mut World, instance: Entity) {
+	if world.get::<VfxCancel>(instance).is_some() {
+		return;
+	}
+	let Some(current) = world.get::<VfxInstance>(instance) else {
+		return;
+	};
+	let age = current.age;
+	let fade = world
+		.get::<VfxPendingLayers>(instance)
+		.map(|pending| pending.spawn.drive.fade_out.max(crate::drive::FADE_OUT_MIN))
+		.unwrap_or(0.35);
+	if let Some(mut current) = world.get_mut::<VfxInstance>(instance) {
+		current.duration = age + fade;
+	}
+	if let Some(mut pending) = world.get_mut::<VfxPendingLayers>(instance) {
+		pending.layers.clear();
+	}
+	let members = world
+		.get::<crate::membership::VfxInstanceMembers>(instance)
+		.map(|members| members.iter().collect::<Vec<_>>())
+		.unwrap_or_default();
+	for member in members {
+		if let Some(mut life) = world.get_mut::<VfxLayerLife>(member) {
+			life.duration = life.age + fade;
+		}
+	}
+	world.entity_mut(instance).insert(VfxCancel { started_age: age, fade });
 }
 
 /// Root of one spawned instance.
@@ -164,6 +230,15 @@ pub fn spawn_vfx(
 	spawn: VfxSpawn,
 ) -> Entity {
 	let spawn = spawn.resolved_for(definition);
+	match definition.kind {
+		EffectKind::GodBeam => {
+			return crate::effects::god_beam::spawn(commands, definition, spawn);
+		}
+		EffectKind::SonicWave => {
+			return crate::effects::sonic_wave::spawn(commands, definition, spawn);
+		}
+		EffectKind::Burst => {}
+	}
 	let duration = definition.duration();
 	let mut pending = Vec::new();
 	let mut immediate = Vec::new();
@@ -207,11 +282,21 @@ pub fn spawn_vfx(
 /// `Commands` extension: `commands.spawn_vfx(&library.fiery_explosion, VfxSpawn { .. })`.
 pub trait SpawnVfxExt {
 	fn spawn_vfx(&mut self, definition: &EffectDefinition, spawn: VfxSpawn) -> Entity;
+	fn cancel_vfx(&mut self, instance: Entity);
+	fn despawn_vfx(&mut self, instance: Entity);
 }
 
 impl SpawnVfxExt for Commands<'_, '_> {
 	fn spawn_vfx(&mut self, definition: &EffectDefinition, spawn: VfxSpawn) -> Entity {
 		spawn_vfx(self, definition, spawn)
+	}
+
+	fn cancel_vfx(&mut self, instance: Entity) {
+		cancel_vfx(self, instance);
+	}
+
+	fn despawn_vfx(&mut self, instance: Entity) {
+		despawn_vfx(self, instance);
 	}
 }
 
@@ -386,6 +471,49 @@ mod tests {
 		let actual_start = 0.08;
 		let duration = planned.max(actual_start + 2.4);
 		assert!((duration - 2.48).abs() < 1e-4);
+	}
+
+	#[test]
+	fn default_drive_fills_god_beam_preset() {
+		let def = EffectDefinition::new("god_beam", []).with_kind(EffectKind::GodBeam);
+		let spawn = VfxSpawn::default().resolved_for(&def);
+		assert!((spawn.drive.size - crate::drive::GOD_BEAM_WIDTH).abs() < 1e-4);
+		assert!((spawn.drive.active_secs() - crate::drive::GOD_BEAM_ACTIVE).abs() < 1e-4);
+	}
+
+	#[test]
+	fn cancel_shortens_lifetime_and_clears_pending() -> Result<(), String> {
+		let mut world = World::new();
+		let entity = world
+			.spawn((
+				VfxInstance {
+					name: "god_beam".into(),
+					age: 3.0,
+					duration: 11.0,
+					playback: 1.0,
+					seed: 1,
+					armed: true,
+				},
+				VfxPendingLayers {
+					layers: Vec::new(),
+					spawn: VfxSpawn { drive: VfxDrive::god_beam(), ..default() },
+				},
+			))
+			.id();
+		apply_cancel(&mut world, entity);
+		let instance = world.get::<VfxInstance>(entity).ok_or("missing instance")?;
+		let cancel = world.get::<VfxCancel>(entity).ok_or("missing cancel")?;
+		if (instance.duration - (3.0 + cancel.fade)).abs() >= 1e-4 {
+			return Err(format!("duration {}", instance.duration));
+		}
+		if (cancel.started_age - 3.0).abs() >= 1e-4 {
+			return Err(format!("started {}", cancel.started_age));
+		}
+		if world.get::<VfxCancel>(entity).is_none() {
+			return Err("cancel missing".into());
+		}
+		apply_cancel(&mut world, entity);
+		Ok(())
 	}
 
 	#[test]

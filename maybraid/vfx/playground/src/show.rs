@@ -2,8 +2,12 @@
 
 use bevy::prelude::*;
 use game_commands::ui::GameCommandStatusText;
-use maybraid_vfx::{spawn_vfx, VfxLibrary, VfxSpawn};
+use maybraid_vfx::{
+	canonicalize_effect_name, spawn_vfx, VfxLibrary, VfxSpawn, GOD_BEAM, SONIC_WAVE,
+};
 
+use crate::camera::CameraController;
+use crate::capture;
 use crate::commands::{LoopEnabled, PendingVfxShows, PreviewFreeze, SpreadOnce, VfxShowRequest};
 
 pub const SHOW_ORIGIN: Vec3 = Vec3::new(0.0, 1.2, 0.0);
@@ -21,6 +25,7 @@ pub struct RepeatingVfxShow {
 	pub wait: f32,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn apply_pending_shows(
 	mut commands: Commands,
 	library: Option<Res<VfxLibrary>>,
@@ -30,6 +35,7 @@ pub fn apply_pending_shows(
 	mut spread: ResMut<SpreadOnce>,
 	mut status: ResMut<GameCommandStatusText>,
 	looping: Res<LoopEnabled>,
+	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	let Some(library) = library else {
 		return;
@@ -63,15 +69,17 @@ pub fn apply_pending_shows(
 		}
 		last.request = Some(VfxShowRequest { seed: spawn.seed, ..request.clone() });
 		last.label = format!(
-			"{} · scale {:.2} · intensity {:.2} · playback {:.2} · d {:.1} · seed {}",
+			"{} · scale {:.2} · intensity {:.2} · playback {:.2} · d {:.1} · seed {} · size {:.1}",
 			definition.name,
 			request.scale,
 			request.intensity,
 			request.playback,
 			request.distance,
-			spawn.resolved_seed()
+			spawn.resolved_seed(),
+			spawn.drive.size
 		);
 		status.0 = format!("show {}", last.label);
+		frame_camera(&request, &mut cameras);
 	}
 }
 
@@ -124,15 +132,90 @@ fn burst(
 	definition: &maybraid_vfx::EffectDefinition,
 	request: &VfxShowRequest,
 ) -> VfxSpawn {
+	let origin = show_origin(&request.effect, &request.drive) + Vec3::Z * request.distance;
 	let spawn = VfxSpawn {
-		transform: Transform::from_translation(SHOW_ORIGIN + Vec3::Z * request.distance),
+		transform: Transform::from_translation(origin),
 		scale: request.scale,
 		intensity: request.intensity,
 		seed: request.seed,
 		playback: request.playback,
+		drive: request.drive,
 		..default()
 	}
 	.resolved_for(definition);
 	spawn_vfx(commands, definition, spawn.clone());
 	spawn
+}
+
+pub fn mouth_height(drive: &maybraid_vfx::VfxDrive) -> f32 {
+	if drive.size >= 16.0 || drive.radius >= 0.7 {
+		3.2
+	} else {
+		1.55
+	}
+}
+
+fn show_origin(effect: &str, drive: &maybraid_vfx::VfxDrive) -> Vec3 {
+	match canonicalize_effect_name(effect) {
+		Some(GOD_BEAM) => Vec3::ZERO,
+		Some(SONIC_WAVE) => Vec3::new(0.0, mouth_height(drive), 0.0),
+		_ => SHOW_ORIGIN,
+	}
+}
+
+fn frame_camera(
+	request: &VfxShowRequest,
+	cameras: &mut Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
+) {
+	let Some(name) = canonicalize_effect_name(&request.effect) else {
+		return;
+	};
+	let (pos, look) = match name {
+		GOD_BEAM => {
+			let height = request.drive.reach.clamp(16.0, 160.0) * request.scale;
+			let width = request.drive.size.clamp(3.0, 16.0) * request.scale;
+			if capture::frame().as_deref() == Some("base") {
+				(
+					Vec3::new(width * 1.15 + 6.0, 3.6, width * 1.35 + 8.0),
+					Vec3::new(2.2, 1.1, request.distance + 1.4),
+				)
+			} else {
+				// 45° vfov needs ~1.25× height of back-distance to show ground + top.
+				let back = (height * 1.25).max(width * 8.0);
+				(
+					Vec3::new(width * 4.0 + height * 0.22, height * 0.18 + 8.0, back),
+					Vec3::new(0.0, height * 0.42, request.distance),
+				)
+			}
+		}
+		SONIC_WAVE => {
+			let range = request.drive.size.max(6.0) * request.scale;
+			let mouth = mouth_height(&request.drive);
+			let mid = request.distance + range * 0.38;
+			let look = Vec3::new(0.0, mouth, mid);
+			match capture::frame().as_deref() {
+				Some("side") => (Vec3::new((range * 0.70).max(9.0), mouth, mid), look),
+				_ => (
+					Vec3::new(
+						range * 0.22 + 2.8,
+						mouth + 1.6,
+						request.distance - range * 0.06 - 1.6,
+					),
+					look,
+				),
+			}
+		}
+		_ => return,
+	};
+	let Ok((mut transform, mut controller)) = cameras.single_mut() else {
+		return;
+	};
+	*transform = Transform::from_translation(pos).looking_at(look, Vec3::Y);
+	let rotation = transform.rotation;
+	let (x, y, z, w) = (rotation.x, rotation.y, rotation.z, rotation.w);
+	let sin_yaw = 2.0 * (w * y + x * z);
+	let cos_yaw = 1.0 - 2.0 * (y * y + z * z);
+	controller.yaw = sin_yaw.atan2(cos_yaw);
+	let sin_pitch = 2.0 * (w * x - y * z);
+	controller.pitch = sin_pitch.asin();
 }

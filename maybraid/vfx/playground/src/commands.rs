@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use clap::Parser;
 use game_commands::command::{CommandScript, GameCommand};
-use maybraid_vfx::canonicalize_effect_name;
+use maybraid_vfx::{canonicalize_effect_name, VfxDrive, GOD_BEAM, SONIC_WAVE};
 
 pub const PLAYGROUND_CLI_NAME: &str = "vfx";
 pub type Script = CommandScript<PlaygroundCommand>;
@@ -50,6 +50,60 @@ pub enum PlaygroundCommand {
 		#[arg(long, default_value_t = 1.0)]
 		playback: f32,
 	},
+	/// 7 m heavenly column, 10 s active. Width is diameter in meters.
+	GodBeam {
+		#[arg(long, default_value_t = 1.0)]
+		scale: f32,
+		#[arg(long, default_value_t = 1.0)]
+		intensity: f32,
+		#[arg(long, default_value_t = 0.0)]
+		distance: f32,
+		#[arg(long)]
+		seed: Option<u64>,
+		#[arg(long, default_value_t = 1.0)]
+		playback: f32,
+		/// Column diameter in meters. B04 convention is 7.
+		#[arg(long, default_value_t = 7.0)]
+		width: f32,
+		#[arg(long, default_value_t = 96.0)]
+		height: f32,
+		#[arg(long, default_value_t = 10.0)]
+		lifetime: f32,
+		#[arg(long, default_value_t = 0.4)]
+		fade_in: f32,
+		#[arg(long, default_value_t = 0.55)]
+		fade_out: f32,
+	},
+	/// Mouth-emitted vortex rings at constant size. The playground driver writes poses.
+	SonicWave {
+		#[arg(long, default_value_t = 1.0)]
+		scale: f32,
+		#[arg(long, default_value_t = 1.0)]
+		intensity: f32,
+		#[arg(long, default_value_t = 0.0)]
+		distance: f32,
+		#[arg(long)]
+		seed: Option<u64>,
+		#[arg(long, default_value_t = 1.0)]
+		playback: f32,
+		#[arg(long, default_value_t = 20.0)]
+		range: f32,
+		/// Fan cone in radians. `0` is a single path.
+		#[arg(long, default_value_t = 0.0)]
+		spread: f32,
+		#[arg(long, default_value_t = 22.0)]
+		speed: f32,
+		#[arg(long, default_value_t = 3)]
+		count: u32,
+		#[arg(long, default_value_t = 0.55)]
+		radius: f32,
+		#[arg(long, default_value_t = 0.14)]
+		thickness: f32,
+		#[arg(long, default_value_t = 0.28)]
+		interval: f32,
+	},
+	/// Fade and clean up every live VFX instance.
+	Cancel,
 	/// Spawn the last effect at near, mid, and far distances.
 	Spread,
 	/// Orbit the camera around the burst origin.
@@ -63,6 +117,8 @@ pub enum PlaygroundCommand {
 	Play,
 	/// Stop automatically repeating the last show.
 	Noloop,
+	/// Toggle the bottom command drawer (same as F1). Hide it for captures.
+	Hud,
 }
 
 /// Queued `/show` requests. Applied once [`maybraid_vfx::VfxLibrary`] exists.
@@ -80,6 +136,7 @@ pub struct VfxShowRequest {
 	pub distance: f32,
 	pub seed: Option<u64>,
 	pub playback: f32,
+	pub drive: VfxDrive,
 }
 
 #[derive(Resource, Default, Clone, Debug)]
@@ -121,22 +178,116 @@ impl PlaygroundCommand {
 				queue_show(
 					commands,
 					console,
-					"fiery_explosion",
-					scale,
-					intensity,
-					distance,
-					seed,
-					playback,
+					VfxShowRequest {
+						effect: "fiery_explosion".into(),
+						scale,
+						intensity,
+						distance,
+						seed,
+						playback,
+						drive: VfxDrive::default(),
+					},
 				);
 			}
 			Self::Show { effect, scale, intensity, distance, seed, playback } => {
 				let Some(name) = canonicalize_effect_name(&effect) else {
 					*console = format!(
-						"unknown effect `{effect}` — try fiery-explosion, flash, fireball, smoke, sparks"
+						"unknown effect `{effect}` — try fiery-explosion, god-beam, sonic-wave, flash, fireball, smoke, sparks"
 					);
 					return;
 				};
-				queue_show(commands, console, name, scale, intensity, distance, seed, playback);
+				queue_show(
+					commands,
+					console,
+					VfxShowRequest {
+						effect: name.into(),
+						scale,
+						intensity,
+						distance,
+						seed,
+						playback,
+						drive: default_drive(name),
+					},
+				);
+			}
+			Self::GodBeam {
+				scale,
+				intensity,
+				distance,
+				seed,
+				playback,
+				width,
+				height,
+				lifetime,
+				fade_in,
+				fade_out,
+			} => {
+				queue_show(
+					commands,
+					console,
+					VfxShowRequest {
+						effect: GOD_BEAM.into(),
+						scale,
+						intensity,
+						distance,
+						seed,
+						playback,
+						drive: VfxDrive::god_beam()
+							.with_size(width)
+							.with_reach(height)
+							.with_lifetime(lifetime)
+							.with_fade_in(fade_in)
+							.with_fade_out(fade_out),
+					},
+				);
+			}
+			Self::SonicWave {
+				scale,
+				intensity,
+				distance,
+				seed,
+				playback,
+				range,
+				spread,
+				speed,
+				count,
+				radius,
+				thickness,
+				interval,
+			} => {
+				queue_show(
+					commands,
+					console,
+					VfxShowRequest {
+						effect: SONIC_WAVE.into(),
+						scale,
+						intensity,
+						distance,
+						seed,
+						playback,
+						drive: VfxDrive::sonic_wave()
+							.with_size(range)
+							.with_reach(spread)
+							.with_speed(speed)
+							.with_count(count)
+							.with_radius(radius)
+							.with_thickness(thickness)
+							.with_interval(interval),
+					},
+				);
+			}
+			Self::Cancel => {
+				*console = "cancel live vfx".into();
+				commands.queue(|world: &mut World| {
+					let instances = {
+						let mut query =
+							world.query_filtered::<Entity, With<maybraid_vfx::VfxInstance>>();
+						query.iter(world).collect::<Vec<_>>()
+					};
+					for entity in instances {
+						maybraid_vfx::apply_cancel(world, entity);
+					}
+				});
 			}
 			Self::Spread => {
 				*console = "spread near / mid / far".into();
@@ -179,6 +330,14 @@ impl PlaygroundCommand {
 				});
 				*console = "loop off".into();
 			}
+			Self::Hud => {
+				commands.queue(|world: &mut World| {
+					let mut visible =
+						world.resource_mut::<game_commands::GameCommandDrawerVisible>();
+					visible.0 = !visible.0;
+				});
+				*console = "drawer toggled".into();
+			}
 		}
 	}
 }
@@ -191,31 +350,23 @@ impl GameCommand for PlaygroundCommand {
 	}
 }
 
-fn queue_show(
-	commands: &mut Commands,
-	console: &mut String,
-	name: &str,
-	scale: f32,
-	intensity: f32,
-	distance: f32,
-	seed: Option<u64>,
-	playback: f32,
-) {
-	let seed_label = seed.map(|s| s.to_string()).unwrap_or_else(|| "auto".into());
+fn default_drive(name: &str) -> VfxDrive {
+	match name {
+		GOD_BEAM => VfxDrive::god_beam(),
+		SONIC_WAVE => VfxDrive::sonic_wave(),
+		_ => VfxDrive::default(),
+	}
+}
+
+fn queue_show(commands: &mut Commands, console: &mut String, request: VfxShowRequest) {
+	let seed_label = request.seed.map(|s| s.to_string()).unwrap_or_else(|| "auto".into());
 	*console = format!(
-		"show {name} --scale {scale} --intensity {intensity} --distance {distance} --seed {seed_label} --playback {playback}"
+		"show {} --scale {} --intensity {} --distance {} --seed {seed_label} --playback {}",
+		request.effect, request.scale, request.intensity, request.distance, request.playback
 	);
-	let name = name.to_string();
 	commands.queue(move |world: &mut World| {
 		world.resource_mut::<LoopEnabled>().0 = true;
 		world.resource_mut::<Time<Virtual>>().unpause();
-		world.resource_mut::<PendingVfxShows>().0.push(VfxShowRequest {
-			effect: name,
-			scale,
-			intensity,
-			distance,
-			seed,
-			playback,
-		});
+		world.resource_mut::<PendingVfxShows>().0.push(request);
 	});
 }
