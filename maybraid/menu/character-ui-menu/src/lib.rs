@@ -7,12 +7,14 @@
 //! `bevy-character-ui-menu-renderer`.
 
 pub mod camera_focus;
+pub mod hex;
 pub mod node;
 pub mod primitives;
 pub mod section_open;
 pub mod traits;
 
 pub use camera_focus::{CameraFocus, FocusRig};
+pub use hex::parse_rrggbb_srgb;
 pub use node::{
 	normalize, AssetChoice, GridCatalogChoice, ItemRow, MenuComponent, MenuNode, PreviewColor,
 	SelectChoice, SelectGroup, StatCard, StatLine, StatTone, SwatchChoice,
