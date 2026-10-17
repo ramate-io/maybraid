@@ -1,4 +1,4 @@
-//! character [`MaterialLib`]: face, then clothing shader recipes.
+//! character [`MaterialLib`]: face, clothing, then skin-tattoo shader recipes.
 //!
 //! [`CharacterMaterialLib`] is the composable domain lib. Standalone apps
 //! ([`CharacterMaterialRefPlugin`]) add [`StandardMaterial`] via
@@ -8,7 +8,10 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use character_items::{ClothingMaterial, FirearmMaterial};
-use character_shaders::{ClothingShaderMaterial, FaceShaderKind, FaceShaderMaterial};
+use character_shaders::{
+	ClothingShaderMaterial, FaceShaderKind, FaceShaderMaterial, SkinShaderMaterial, SkinTattooMask,
+	SkinTattooMasks,
+};
 use material_ref::{
 	material_ref_plugin_installed, MaterialId, MaterialLib, MaterialRef, MaterialRefCache,
 	MaterialRefKey, MaterialRefPlugin, StandardMaterialLib, StandardMaterialRefCache,
@@ -20,11 +23,18 @@ pub type ClothingShaderMaterialRefCache = MaterialRefCache<ClothingShaderMateria
 /// Cache of resolved [`FaceShaderMaterial`] handles.
 pub type FaceShaderMaterialRefCache = MaterialRefCache<FaceShaderMaterial>;
 
-/// Inserts clothing and face material caches. Idempotent.
+/// Cache of resolved [`SkinShaderMaterial`] handles.
+pub type SkinShaderMaterialRefCache = MaterialRefCache<SkinShaderMaterial>;
+
+/// Inserts clothing, face, and skin-tattoo material caches. Idempotent.
 pub fn init_character_material_caches(app: &mut App) {
 	app.init_resource::<StandardMaterialRefCache>()
 		.init_resource::<ClothingShaderMaterialRefCache>()
-		.init_resource::<FaceShaderMaterialRefCache>();
+		.init_resource::<FaceShaderMaterialRefCache>()
+		.init_resource::<SkinShaderMaterialRefCache>();
+	if !app.world().contains_resource::<SkinTattooMasks>() {
+		app.init_resource::<SkinTattooMasks>();
+	}
 }
 
 /// Claims face recipe names only. Does not fall through to [`StandardMaterial`].
@@ -112,7 +122,54 @@ impl MaterialLib for ClothingMaterialLib<'_> {
 	}
 }
 
-/// Face + clothing / firearm recipes. Does not fall through to [`StandardMaterial`].
+/// Claims skin-tattoo recipe names only. Does not fall through to [`StandardMaterial`].
+#[derive(SystemParam)]
+pub struct SkinMaterialLib<'w> {
+	pub skin_materials: ResMut<'w, Assets<SkinShaderMaterial>>,
+	pub skin_cache: ResMut<'w, SkinShaderMaterialRefCache>,
+	pub masks: Res<'w, SkinTattooMasks>,
+}
+
+impl SkinMaterialLib<'_> {
+	fn resolve_skin(&mut self, material_ref: &MaterialRef) -> Handle<SkinShaderMaterial> {
+		let key = MaterialRefKey::from(material_ref);
+		if let Some(handle) = self.skin_cache.get(&key) {
+			return handle;
+		}
+		let mask = match &material_ref.name {
+			MaterialId::Name(name) => self.masks.handle_for_recipe(name),
+			MaterialId::Default => self.masks.body.clone(),
+		};
+		let handle = self
+			.skin_materials
+			.add(SkinShaderMaterial::from_material_ref(material_ref, mask));
+		self.skin_cache.insert(key, handle.clone());
+		handle
+	}
+}
+
+impl MaterialLib for SkinMaterialLib<'_> {
+	fn try_fulfill(
+		&mut self,
+		entity: Entity,
+		material_ref: &MaterialRef,
+		commands: &mut Commands,
+	) -> bool {
+		match &material_ref.name {
+			MaterialId::Name(name) if SkinTattooMask::is_skin_tattoo_recipe(name) => {
+				let handle = self.resolve_skin(material_ref);
+				commands
+					.entity(entity)
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle));
+				true
+			}
+			_ => false,
+		}
+	}
+}
+
+/// Face + clothing / firearm + skin-tattoo recipes. Does not fall through to [`StandardMaterial`].
 ///
 /// Standalone apps use [`StandaloneCharacterMaterialLib`]. Composed apps (Maybraid
 /// World) nest this and supply their own fallback.
@@ -120,6 +177,7 @@ impl MaterialLib for ClothingMaterialLib<'_> {
 pub struct CharacterMaterialLib<'w> {
 	pub face: FaceMaterialLib<'w>,
 	pub clothing: ClothingMaterialLib<'w>,
+	pub skin: SkinMaterialLib<'w>,
 }
 
 impl MaterialLib for CharacterMaterialLib<'_> {
@@ -131,6 +189,7 @@ impl MaterialLib for CharacterMaterialLib<'_> {
 	) -> bool {
 		self.face.try_fulfill(entity, material_ref, commands)
 			|| self.clothing.try_fulfill(entity, material_ref, commands)
+			|| self.skin.try_fulfill(entity, material_ref, commands)
 	}
 
 	fn fulfill(&mut self, entity: Entity, material_ref: &MaterialRef, commands: &mut Commands) {
@@ -161,7 +220,7 @@ impl MaterialLib for StandaloneCharacterMaterialLib<'_> {
 	}
 }
 
-/// Registers clothing / face caches + [`MaterialRefPlugin`] for
+/// Registers clothing / face / skin-tattoo caches + [`MaterialRefPlugin`] for
 /// [`StandaloneCharacterMaterialLib`].
 ///
 /// Composed apps that already installed a fulfill plugin (Maybraid World) skip

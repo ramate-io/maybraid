@@ -344,6 +344,7 @@ impl From<&EpiphantMenu> for EpiphantConfig {
 				menu.head_features.value.feature_sliders.write_config(&mut sliders);
 				sliders.clamped()
 			},
+			tattoo: Default::default(),
 		}
 	}
 }

@@ -6,6 +6,7 @@
 
 mod animation;
 mod camera_focus;
+mod capture;
 mod character_lod;
 pub mod commands;
 mod diagnostics;
@@ -61,6 +62,7 @@ impl Plugin for CharacterConceptsPlaygroundPlugin {
 		if diagnostics::fps_debug_enabled() {
 			app.add_plugins(diagnostics::FpsDiagnosticsPlugin);
 		}
+		capture::install(app);
 		app.init_resource::<ConceptPreviewConfig>()
 			.init_resource::<ConceptPreviewSyncState>()
 			.init_resource::<FocusReferenceSyncState>()

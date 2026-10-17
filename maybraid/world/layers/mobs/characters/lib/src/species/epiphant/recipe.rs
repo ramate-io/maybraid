@@ -22,6 +22,7 @@ use crate::{
 		epiphant::assets::{EpiphantBodyMesh, EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh},
 	},
 };
+use character_shaders::SkinTattoo;
 use lod::scene::LodSceneLevel;
 
 /// Semantic Epiphant data attached to the character root entity.
@@ -39,6 +40,7 @@ pub struct Epiphant {
 	pub eye: EyeMesh,
 	pub colors: EpiphantColors,
 	pub sliders: EpiphantSliders,
+	pub tattoo: SkinTattoo,
 }
 
 impl Epiphant {
@@ -53,6 +55,7 @@ impl Epiphant {
 			eye: config.eye,
 			colors: config.colors.clone(),
 			sliders: config.sliders,
+			tattoo: config.tattoo,
 		}
 	}
 }
@@ -156,7 +159,15 @@ impl CharacterComponents for Epiphant {
 		);
 		out.map(|part| {
 			let color = self.colors.color_for_slot(part.slot);
-			part.with_base_color(color)
+			let part = part.with_base_color(color);
+			match part.slot {
+				CharacterPartSlot::BodyMesh
+				| CharacterPartSlot::HeadMesh
+				| CharacterPartSlot::EarLeft
+				| CharacterPartSlot::EarRight
+				| CharacterPartSlot::Nose => part.with_skin_tattoo(&self.tattoo),
+				_ => part,
+			}
 		})
 	}
 }
@@ -165,3 +176,55 @@ const _: EpiphantBodyMesh = EpiphantBodyMesh::Epiphant;
 const _: EpiphantHeadMesh = EpiphantHeadMesh::Meerkat;
 const _: EpiphantEarMesh = EpiphantEarMesh::Epiphant;
 const _: EpiphantNoseMesh = EpiphantNoseMesh::Trunkish;
+
+#[cfg(test)]
+mod tests {
+	use character_shaders::{
+		RECIPE_SKIN_TATTOO_BODY, RECIPE_SKIN_TATTOO_EAR, RECIPE_SKIN_TATTOO_HEAD,
+		RECIPE_SKIN_TATTOO_TRUNK,
+	};
+	use lod::scene::LodSceneLevel;
+	use material_ref::MaterialId;
+
+	use super::*;
+	use crate::assembly::CharacterPartSlot;
+
+	#[test]
+	fn body_head_ear_trunk_stamp_tattoo_recipes_tail_does_not() -> anyhow::Result<()> {
+		let parts = Epiphant::default().part_nodes_for_level(LodSceneLevel::High).flatten();
+		let mut saw_body = false;
+		let mut saw_head = false;
+		let mut saw_ear = false;
+		let mut saw_trunk = false;
+		for part in parts {
+			match part.slot {
+				CharacterPartSlot::BodyMesh => {
+					saw_body = true;
+					assert_eq!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_BODY));
+					assert_eq!(part.material.palette.len(), 2);
+				}
+				CharacterPartSlot::HeadMesh => {
+					saw_head = true;
+					assert_eq!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_HEAD));
+				}
+				CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+					saw_ear = true;
+					assert_eq!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_EAR));
+				}
+				CharacterPartSlot::Nose => {
+					saw_trunk = true;
+					assert_eq!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_TRUNK));
+				}
+				CharacterPartSlot::Tail => {
+					assert_ne!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_BODY));
+					assert_ne!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_HEAD));
+					assert_ne!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_EAR));
+					assert_ne!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_TRUNK));
+				}
+				_ => {}
+			}
+		}
+		assert!(saw_body && saw_head && saw_ear && saw_trunk, "expected tattooed parts");
+		Ok(())
+	}
+}

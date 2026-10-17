@@ -57,7 +57,7 @@ pub use character_motion::{
 	SuspendAnimation, SuspendTerrainPitch,
 };
 pub use character_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
-pub use character_shaders::CharacterShadersPlugin;
+pub use character_shaders::{CharacterShadersPlugin, SkinTattoo, SkinTattooMask};
 pub use components::{
 	character_bounds, clothing_layers, CharacterComponents, CharacterRecipe, Clothed,
 	ClothingLayer, ComponentsOnly, HeadCapsule, HitCapsule, LocomotionCapsule,

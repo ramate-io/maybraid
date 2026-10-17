@@ -3,7 +3,9 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform, Vec3, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use character_shaders::{eye_palette, mouth_palette, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
+use character_shaders::{
+	eye_palette, mouth_palette, SkinTattoo, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH,
+};
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::SceneChunk;
@@ -112,6 +114,30 @@ impl PartNode {
 	pub fn with_material(mut self, material: MaterialRef) -> Self {
 		self.material = material;
 		self
+	}
+
+	/// Stamp a skin-tattoo recipe on this part host (body / head UV0 masks).
+	///
+	/// Palette[0] (hide) is kept when present. Live paint stays an insert of
+	/// [`MaterialRefRoot`] on this host — no post-spawn repaint scan.
+	pub fn with_skin_tattoo(self, tattoo: &SkinTattoo) -> Self {
+		let skin = self
+			.material
+			.palette
+			.first()
+			.copied()
+			.unwrap_or(bevy::prelude::Color::srgb(0.42, 0.44, 0.48));
+		let mask = match self.slot {
+			CharacterPartSlot::HeadMesh | CharacterPartSlot::HeadRig => {
+				character_shaders::SkinTattooMask::Head
+			}
+			CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+				character_shaders::SkinTattooMask::Ear
+			}
+			CharacterPartSlot::Nose => character_shaders::SkinTattooMask::Trunk,
+			_ => character_shaders::SkinTattooMask::Body,
+		};
+		self.with_material(tattoo.material_ref(mask, skin))
 	}
 
 	/// Tint via [`MaterialRef`] palette[0]. Eye and mouth slots claim the face
@@ -235,7 +261,7 @@ impl LodScene for PartNode {
 #[cfg(test)]
 mod tests {
 	use bevy::prelude::Color;
-	use character_shaders::EYE_PALETTE_PUPIL;
+	use character_shaders::{SkinTattoo, EYE_PALETTE_PUPIL};
 	use material_ref::MaterialId;
 
 	use super::*;
@@ -291,5 +317,53 @@ mod tests {
 		assert_eq!(part.material.palette[0], lip);
 		assert_ne!(part.material.palette[MOUTH_PALETTE_CREASE], lip);
 		assert_eq!(part.material.scalar_values(), &[3.0]);
+	}
+
+	#[test]
+	fn with_skin_tattoo_keeps_hide_and_claims_body_recipe() {
+		let part = PartNode::glb(
+			CharacterPartSlot::BodyMesh,
+			"body",
+			"characters/bodies/quadruped/epiphant.glb",
+			AssetNormalization::IDENTITY,
+		)
+		.with_base_color(Color::srgb(0.2, 0.3, 0.4))
+		.with_skin_tattoo(&SkinTattoo::default());
+		assert_eq!(part.material.name, MaterialId::named("skin_tattoo_body"));
+		assert_eq!(part.material.palette.len(), 2);
+		assert_eq!(part.material.palette[0], Color::srgb(0.2, 0.3, 0.4));
+	}
+
+	#[test]
+	fn with_skin_tattoo_claims_head_recipe() {
+		let part = PartNode::glb(
+			CharacterPartSlot::HeadMesh,
+			"head",
+			"characters/heads/meerkat_head_pronograde.glb",
+			AssetNormalization::IDENTITY,
+		)
+		.with_base_color(Color::srgb(0.5, 0.5, 0.5))
+		.with_skin_tattoo(&SkinTattoo::default());
+		assert_eq!(part.material.name, MaterialId::named("skin_tattoo_head"));
+	}
+
+	#[test]
+	fn with_skin_tattoo_claims_ear_and_trunk_recipes() {
+		let ear = PartNode::glb(
+			CharacterPartSlot::EarLeft,
+			"ear",
+			"characters/ears/epiphant_ear_left.glb",
+			AssetNormalization::IDENTITY,
+		)
+		.with_skin_tattoo(&SkinTattoo::default());
+		assert_eq!(ear.material.name, MaterialId::named("skin_tattoo_ear"));
+		let trunk = PartNode::glb(
+			CharacterPartSlot::Nose,
+			"trunk",
+			"characters/noses/trunkish_nose.glb",
+			AssetNormalization::IDENTITY,
+		)
+		.with_skin_tattoo(&SkinTattoo::default());
+		assert_eq!(trunk.material.name, MaterialId::named("skin_tattoo_trunk"));
 	}
 }

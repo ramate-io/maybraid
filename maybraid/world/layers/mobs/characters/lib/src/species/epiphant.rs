@@ -20,6 +20,7 @@ use crate::species::common::EyeMesh;
 use sliders::EpiphantSliders;
 
 pub use assets::{EpiphantBodyMesh, EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh};
+pub use character_shaders::SkinTattoo;
 pub use palette::EpiphantColor;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,6 +84,8 @@ pub struct EpiphantConfig {
 	pub eye: EyeMesh,
 	pub colors: EpiphantColors,
 	pub sliders: EpiphantSliders,
+	/// Glow color / intensity / pulse. Open knobs; Ward/Enraged recolor `glow`.
+	pub tattoo: SkinTattoo,
 }
 
 impl Default for EpiphantConfig {
@@ -103,6 +106,7 @@ impl EpiphantConfig {
 			eye: EyeMesh::Standard,
 			colors: EpiphantColors::default(),
 			sliders: EpiphantSliders::default(),
+			tattoo: SkinTattoo::default(),
 		}
 	}
 

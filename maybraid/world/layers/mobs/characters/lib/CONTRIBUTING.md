@@ -45,6 +45,8 @@ shown LOD band (and the look frustum for visible High Mid/Far plants) and filter
 the expensive systems. Do not
 grow a post-spawn prepare pass that copies materials or poses.
 
+Epiphant / Bikanwarda tattoos ([#1128](https://github.com/ramate-io/maybraid/issues/1128), art A + mapping 1) are `skin_tattoo_body` / `skin_tattoo_head` / `skin_tattoo_ear` / `skin_tattoo_trunk` recipes stamped on the **body, head, ear, and trunk part hosts** via [`PartNode::with_skin_tattoo`](src/nodes/part.rs). Live recolor inserts [`MaterialRefRoot`](src/nodes/part.rs). Mask paths, UV0 regions, and GLB UV requirements are in [`assets/characters/tattoos/README.md`](../../../../../assets/characters/tattoos/README.md).
+
 Runtime world, mob, and player visuals spawn a **fixed assembly**
 ([`spawn_fixed_character_visual`](src/fixed.rs)) — ordinary [`CharacterRoot`](src/member.rs)
 / rig / part entities without query-only [`LodSceneHost`](../../../../../lod/lib/src/scene/lod_scene.rs)s.
