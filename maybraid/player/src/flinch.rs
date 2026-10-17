@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use damage::{DamageApplied, Health};
 use maybraid_audio::{
 	Audio, AudioClip, AudioSystems, FlinchProfile, FlinchSounds, FlinchState, Mixer,
+	SpatialListener,
 };
 
 use crate::{Npc, Player};

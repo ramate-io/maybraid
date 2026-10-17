@@ -13,6 +13,7 @@ rust-version = { workspace = true }
 bevy = { workspace = true }
 characters = { workspace = true }
 lod = { workspace = true }
+maybraid-audio = { workspace = true }
 maybraid-character-controller = { workspace = true }
 player = { workspace = true }
 

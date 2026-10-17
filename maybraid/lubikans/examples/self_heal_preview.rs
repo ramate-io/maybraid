@@ -12,7 +12,6 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use bevy::audio::AudioPlugin;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use damage::Health;
@@ -32,8 +31,7 @@ fn main() {
 						..default()
 					}),
 					..default()
-				})
-				.disable::<AudioPlugin>(),
+				}),
 		)
 		.add_plugins(LubikansPlugin)
 		.insert_resource(LubikanSelfHealConfig {

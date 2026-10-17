@@ -7,7 +7,8 @@
 
 use bevy::prelude::*;
 use maybraid_audio::{
-	listener, Audio, AudioBus, AudioClip, AudioVelocity, Mixer, SpatialEmitter, SpatialOneShot,
+	listener, Audio, AudioBus, AudioClip, AudioVelocity, Mixer, SpatialEmitter, SpatialListener,
+	SpatialOneShot,
 };
 
 use firearms_components::AssetPath;
