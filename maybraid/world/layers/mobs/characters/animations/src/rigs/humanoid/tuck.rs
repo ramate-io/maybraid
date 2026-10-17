@@ -54,6 +54,26 @@ mod tests {
 	}
 
 	#[test]
+	fn early_tuck_folds_knees_less_than_linear_ramp_on_for_clip_test() -> anyhow::Result<()> {
+		let progress = 0.05;
+		let mut eased = HumanoidV0Rig::for_clip_test();
+		Tuck::default().apply(&mut eased, progress);
+		let linear_amount = progress / 0.15;
+		let mut linear_pose = HumanoidV0Rig::for_clip_test();
+		let profile = Tuck::default().profile();
+		crate::rigs::humanoid::tuck::apply_tuck_profile(&mut linear_pose, &profile, linear_amount);
+		assert!(
+			eased.posed_angle("shin.L") < linear_pose.posed_angle("shin.L") - 0.05,
+			"eased ramp should delay early knee flex"
+		);
+		assert!(
+			(eased.posed_angle("shin.L") - eased.posed_angle("shin.R")).abs() < 1e-3,
+			"mirrored knees stay matched"
+		);
+		Ok(())
+	}
+
+	#[test]
 	fn tuck_shoulders_roll_inward_symmetrically() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		Tuck::default().apply(&mut rig, 1.0);

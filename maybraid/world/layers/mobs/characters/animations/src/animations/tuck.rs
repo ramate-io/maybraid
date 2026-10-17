@@ -4,7 +4,7 @@ mod profile;
 
 pub use profile::TuckProfile;
 
-use crate::animations::FixedTuck;
+use crate::animations::{smoothstep, FixedTuck};
 use crate::Progress;
 
 #[derive(Debug, Clone)]
@@ -35,7 +35,7 @@ impl Tuck {
 	pub fn tuck_amount(&self, progress: f32) -> f32 {
 		let t = Progress(progress).clamp();
 		if t < 0.15 {
-			t / 0.15
+			smoothstep(t / 0.15)
 		} else {
 			1.0
 		}
@@ -52,6 +52,18 @@ mod tests {
 		assert!(tuck.tuck_amount(0.0).abs() < 1e-5);
 		assert!((tuck.tuck_amount(0.15) - 1.0).abs() < 1e-5);
 		assert_eq!(tuck.tuck_amount(0.5), 1.0);
+		Ok(())
+	}
+
+	#[test]
+	fn tuck_amount_eases_in_slower_than_linear_early() -> anyhow::Result<()> {
+		let tuck = Tuck::default();
+		let early = 0.05;
+		let linear = early / 0.15;
+		assert!(
+			tuck.tuck_amount(early) < linear - 0.02,
+			"early tuck should anticipate before the knees catch up"
+		);
 		Ok(())
 	}
 }
