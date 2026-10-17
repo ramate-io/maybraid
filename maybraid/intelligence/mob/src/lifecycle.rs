@@ -2,8 +2,10 @@
 
 use bevy::prelude::*;
 use damage::{DespawnAfter, Downed, Health};
+use lod::hcsg::HcsgStorage;
 use poi_intelligence::{
-	mix_seed, place_nearby_among, PoiId, PoiInterests, PoiRegistry, AGENT_SEPARATION,
+	mix_seed, place_nearby_among, DistantTilePoiLookup, GeneratedNearby, PoiId, PoiInterests,
+	PoiRegistry, AGENT_SEPARATION,
 };
 
 use crate::host::{Mob, MobId};
@@ -145,10 +147,16 @@ fn member_translation(transform: &Transform, global: &GlobalTransform, parented:
 pub(crate) fn respawn_mob_members(
 	time: Res<Time>,
 	registry: Option<Res<PoiRegistry>>,
+	storage: Option<Res<HcsgStorage>>,
+	lookup: Option<Res<DistantTilePoiLookup>>,
 	mut needed: MessageWriter<MobMemberNeeded>,
 	mut rosters: Query<RespawnHost<'_>, With<Mob>>,
 ) {
 	let now = time.elapsed_secs();
+	let generated = storage
+		.as_deref()
+		.zip(lookup.as_deref())
+		.map(|(storage, lookup)| GeneratedNearby::new(storage, lookup));
 	for (host, id, transform, mut roster, respawn, interests) in &mut rosters {
 		let policy = policy(respawn);
 		let ready: Vec<u16> = roster
@@ -179,6 +187,7 @@ pub(crate) fn respawn_mob_members(
 				&excluded,
 				&occupied,
 				registry.as_deref(),
+				generated,
 				interests.map(|interests| &interests.0),
 			);
 			member.remember_respawn_poi(poi);
@@ -211,6 +220,7 @@ impl MobRespawn {
 		excluded: &[PoiId],
 		occupied: &[Vec3],
 		registry: Option<&PoiRegistry>,
+		generated: Option<GeneratedNearby<'_>>,
 		interests: Option<&PoiInterests>,
 	) -> (Vec3, Option<PoiId>) {
 		if self.at != MobRespawnAt::Poi {
@@ -219,6 +229,7 @@ impl MobRespawn {
 		let seed = respawn_seed(mob, slot, generation);
 		let placed = place_nearby_among(
 			registry,
+			generated,
 			host,
 			self.nearby_query(),
 			interests,
@@ -300,8 +311,12 @@ mod tests {
 	#[test]
 	fn poi_respawn_fallback_varies_around_the_host() {
 		let policy = MobRespawn::default();
-		let first = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, &[], &[], None, None).0;
-		let second = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 2, &[], &[], None, None).0;
+		let first = policy
+			.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, &[], &[], None, None, None)
+			.0;
+		let second = policy
+			.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 2, &[], &[], None, None, None)
+			.0;
 		assert_ne!(first, second);
 		assert!((policy.fallback.min_radius..=policy.fallback.max_radius)
 			.contains(&first.xz().length()));
@@ -324,9 +339,11 @@ mod tests {
 	#[test]
 	fn death_replace_keeps_siblings_apart_on_an_empty_registry() {
 		let policy = MobRespawn::default();
-		let first = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, &[], &[], None, None).0;
+		let first = policy
+			.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, &[], &[], None, None, None)
+			.0;
 		let second = policy
-			.placement(Vec3::ZERO, Vec3::Y, MobId(3), 1, 1, &[], &[first], None, None)
+			.placement(Vec3::ZERO, Vec3::Y, MobId(3), 1, 1, &[], &[first], None, None, None)
 			.0;
 		assert!((first.xz() - second.xz()).length() >= AGENT_SEPARATION - 1e-3);
 	}

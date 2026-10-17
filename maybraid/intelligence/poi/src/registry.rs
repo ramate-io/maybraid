@@ -32,6 +32,18 @@ impl PoiRecord {
 		ArrivalDisk::new(self.position, self.arrival_radius)
 	}
 
+	pub fn as_entry(&self) -> crate::PoiEntry {
+		crate::PoiEntry {
+			id: self.id,
+			kind: self.kind,
+			position: self.position,
+			arrival_radius: self.arrival_radius,
+			salience: self.salience,
+			local: self.local,
+			global: self.global,
+		}
+	}
+
 	pub fn observation(self, user: Entity, source: PoiSource) -> PoiObservation {
 		PoiObservation {
 			user,
@@ -55,7 +67,8 @@ impl SpatialId for PoiRecord {
 	}
 }
 
-/// Gimme-backed local index plus a sparse global set.
+/// Gimme-backed local index for live entity poses, plus a sparse global set
+/// for telepathic discovery. Generated-world spatial queries use [`crate::PoiSet`].
 #[derive(Resource)]
 pub struct PoiRegistry {
 	local: TypedIndex<PoiRecord, HashMapStore<PoiRecord>>,
@@ -123,11 +136,7 @@ impl PoiRegistry {
 		self.records.insert(poi.id, record);
 
 		if local {
-			let extent = Vec3::splat(record.arrival_radius.max(0.05));
-			let bounds = Aabb3d::from_min_max(position - extent, position + extent);
-			let base = BaseScale::new(self.local.grid().base_scale())?;
-			self.local_max_level = self.local_max_level.max(base.insertion_level(&bounds));
-			self.local.insert_value(record, bounds)?;
+			self.insert_spatial(record, position)?;
 		}
 		if global {
 			self.globals.insert(poi.id);
@@ -174,7 +183,8 @@ impl PoiRegistry {
 			.local
 			.query_values(region, BaseScale::levels_through(query_level.max(self.local_max_level)))
 		{
-			if interests.contains(record.kind)
+			if record.local
+				&& interests.contains(record.kind)
 				&& center.distance(record.position) <= radius + record.arrival_radius
 			{
 				out.push(record.id);
@@ -315,6 +325,19 @@ impl PoiRegistry {
 
 	pub fn is_empty(&self) -> bool {
 		self.records.is_empty()
+	}
+
+	fn insert_spatial(
+		&mut self,
+		record: PoiRecord,
+		position: Vec3,
+	) -> Result<(), SpatialIndexError> {
+		let extent = Vec3::splat(record.arrival_radius.max(0.05));
+		let bounds = Aabb3d::from_min_max(position - extent, position + extent);
+		let base = BaseScale::new(self.local.grid().base_scale())?;
+		self.local_max_level = self.local_max_level.max(base.insertion_level(&bounds));
+		self.local.insert_value(record, bounds)?;
+		Ok(())
 	}
 
 	fn drop_excluded_ids(candidates: &mut Vec<PoiId>, excluded: &[PoiId]) {

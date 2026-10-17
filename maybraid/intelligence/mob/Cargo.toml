@@ -15,6 +15,7 @@ combat-targeting = { workspace = true }
 damage = { workspace = true }
 firearm-intelligence = { workspace = true }
 journeying-intelligence = { workspace = true }
+lod = { workspace = true }
 meandering-intelligence = { workspace = true }
 npc-intelligence = { workspace = true }
 poi-intelligence = { workspace = true }

@@ -7618,6 +7618,7 @@ dependencies = [
  "damage",
  "firearm-intelligence",
  "journeying-intelligence",
+ "lod",
  "meandering-intelligence",
  "npc-intelligence",
  "poi-intelligence",

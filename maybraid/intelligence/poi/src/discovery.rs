@@ -3,8 +3,11 @@ use intelligence_lod::{
 	due_by_rank, staggered_interval, IntelligenceBand, IntelligenceLod, IntelligencePriority,
 };
 
+use lod::hcsg::HcsgStorage;
+
 use crate::{
-	GlobalPoi, LocalPoi, Poi, PoiDiscoverLimits, PoiId, PoiIntelligenceUser, PoiKnowledge,
+	collect_nearby_entries, DistantTilePoiLookup, GeneratedNearby, GlobalPoi, LocalPoi,
+	NearbyQuery, Poi, PoiDiscoverLimits, PoiEntry, PoiId, PoiIntelligenceUser, PoiKnowledge,
 	PoiObservation, PoiRegistry, PoiSource,
 };
 
@@ -89,6 +92,8 @@ pub fn ingest_poi_observations(
 pub fn discover_pois(
 	time: Res<Time>,
 	registry: Res<PoiRegistry>,
+	storage: Option<Res<HcsgStorage>>,
+	lookup: Option<Res<DistantTilePoiLookup>>,
 	priority: Res<IntelligencePriority>,
 	limits: Res<PoiDiscoverLimits>,
 	mut users: Query<(
@@ -99,8 +104,13 @@ pub fn discover_pois(
 		Option<&mut IntelligenceLod>,
 	)>,
 	mut local_candidates: Local<Vec<PoiId>>,
+	mut local_entries: Local<Vec<PoiEntry>>,
 	mut global_candidates: Local<Vec<PoiId>>,
 ) {
+	let generated = storage
+		.as_deref()
+		.zip(lookup.as_deref())
+		.map(|(storage, lookup)| GeneratedNearby::new(storage, lookup));
 	let now = time.elapsed_secs();
 	let delta = time.delta_secs();
 	for (entity, _, mut user, mut knowledge, _) in &mut users {
@@ -148,16 +158,33 @@ pub fn discover_pois(
 			user.next_local_scan_at = now
 				+ staggered_interval(user.policy.local_scan_interval, entity, 0)
 					* band.interval_scale();
-			registry.collect_local_matching(
-				position,
-				user.policy.local_radius,
-				&user.interests,
-				&mut local_candidates,
-			);
+			if generated.is_some() {
+				collect_nearby_entries(
+					Some(&registry),
+					generated,
+					position,
+					NearbyQuery::weighted(user.policy.local_radius),
+					&user.interests,
+					&[],
+					&mut local_entries,
+				);
+				local_entries.retain(|entry| entry.local);
+				local_candidates.clear();
+				local_candidates.extend(local_entries.iter().map(|entry| entry.id));
+			} else {
+				registry.collect_local_matching(
+					position,
+					user.policy.local_radius,
+					&user.interests,
+					&mut local_candidates,
+				);
+				local_entries.clear();
+			}
 			let cursor = user.local_cursor;
-			learn_records(
+			learn_pins(
 				entity,
 				&local_candidates,
+				&local_entries,
 				&registry,
 				PoiSource::LOCAL_SCAN,
 				now,
@@ -174,9 +201,10 @@ pub fn discover_pois(
 					* band.interval_scale();
 			registry.collect_global_matching(&user.interests, &mut global_candidates);
 			let cursor = user.global_cursor;
-			learn_records(
+			learn_pins(
 				entity,
 				&global_candidates,
+				&[],
 				&registry,
 				PoiSource::GLOBAL_SCAN,
 				now,
@@ -210,9 +238,10 @@ fn forget_if_due(
 	user.next_forget_at = now + staggered_interval(FORGET_INTERVAL, entity, 2);
 }
 
-fn learn_records(
+fn learn_pins(
 	user_entity: Entity,
 	ids: &[PoiId],
+	entries: &[PoiEntry],
 	registry: &PoiRegistry,
 	source: PoiSource,
 	now: f32,
@@ -226,12 +255,22 @@ fn learn_records(
 	}
 	let budget = budget.min(ids.len());
 	for offset in 0..budget {
-		let record = registry
-			.get(ids[(cursor + offset) % ids.len()])
-			.expect("collect_*_matching ids are indexed");
-		if knowledge.get(record.id).is_none() && !user.try_take_learning_credit() {
+		let id = ids[(cursor + offset) % ids.len()];
+		let observation = registry
+			.get(id)
+			.map(|record| record.observation(user_entity, source))
+			.or_else(|| {
+				entries
+					.iter()
+					.find(|entry| entry.id == id)
+					.map(|entry| entry.observation(user_entity, source))
+			});
+		let Some(observation) = observation else {
+			continue;
+		};
+		if knowledge.get(observation.id).is_none() && !user.try_take_learning_credit() {
 			continue;
 		}
-		knowledge.observe(record.observation(user_entity, source), now);
+		knowledge.observe(observation, now);
 	}
 }
