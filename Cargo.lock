@@ -2733,6 +2733,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "chain-playground"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chain-shaders",
+ "clap",
+ "game-commands",
+ "material-ref",
+ "world-materials",
+]
+
+[[package]]
+name = "chain-shaders"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "material-ref",
+ "procedural-common",
+]
+
+[[package]]
 name = "character-animations"
 version = "0.1.5"
 dependencies = [
@@ -13708,6 +13731,7 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "building-shaders",
+ "chain-shaders",
  "characters",
  "chico",
  "firearms",
