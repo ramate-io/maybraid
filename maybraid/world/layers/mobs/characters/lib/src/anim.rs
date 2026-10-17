@@ -4,7 +4,7 @@
 
 pub use character_motion::{
 	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId,
-	AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, JabParams, JumpParams, TuckParams,
+	AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, FacePalmParams, JabParams, JumpParams,
 	TuckedFlipParams, TwoFootedTuckedFlipParams,
 };
 

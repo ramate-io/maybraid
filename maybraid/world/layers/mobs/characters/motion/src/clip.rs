@@ -23,6 +23,7 @@ const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.5;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
 const JAB_CYCLE_SPEED: f32 = 0.9;
+const FACE_PALM_CYCLE_SPEED: f32 = 0.95;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
 /// One-shot leap lasts ~1.25 s so it covers the physics hang time.
@@ -45,6 +46,7 @@ pub enum AnimId {
 	Soaring,
 	Flapping,
 	Jab,
+	FacePalm,
 	Squat,
 	SquatDescent,
 	Prone,
@@ -68,6 +70,7 @@ impl AnimId {
 			Self::Soaring => 1.0,
 			Self::Flapping => 1.0,
 			Self::Jab => JAB_CYCLE_SPEED,
+			Self::FacePalm => FACE_PALM_CYCLE_SPEED,
 			Self::Squat => 1.0,
 			Self::SquatDescent => DEFAULT_DESCENT_SPEED,
 			Self::Prone => 1.0,
@@ -188,6 +191,18 @@ impl Default for JabParams {
 	}
 }
 
+/// Untyped face-palm knobs ([`FacePalm`](character_animations::animations::FacePalm) is rig-generic).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FacePalmParams {
+	pub side: Side,
+}
+
+impl Default for FacePalmParams {
+	fn default() -> Self {
+		Self { side: Side::Right }
+	}
+}
+
 /// Clip identity: variant + sampler knobs. Mailbox transitions use [`Self::id`].
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum AnimClip {
@@ -205,6 +220,7 @@ pub enum AnimClip {
 	Soaring(Soaring),
 	Flapping(Flapping),
 	Jab(JabParams),
+	FacePalm(FacePalmParams),
 	Squat,
 	SquatDescent,
 	Prone,
@@ -228,6 +244,7 @@ impl AnimClip {
 			Self::Soaring(_) => AnimId::Soaring,
 			Self::Flapping(_) => AnimId::Flapping,
 			Self::Jab(_) => AnimId::Jab,
+			Self::FacePalm(_) => AnimId::FacePalm,
 			Self::Squat => AnimId::Squat,
 			Self::SquatDescent => AnimId::SquatDescent,
 			Self::Prone => AnimId::Prone,
@@ -292,6 +309,10 @@ impl AnimClip {
 		Self::Jab(JabParams::default())
 	}
 
+	pub fn face_palm() -> Self {
+		Self::FacePalm(FacePalmParams::default())
+	}
+
 	pub fn squat() -> Self {
 		Self::Squat
 	}
@@ -336,7 +357,8 @@ impl AnimClip {
 			| Self::TwoFootedTuckedFlip(_)
 			| Self::Squat
 			| Self::SquatDescent
-			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
+			| Self::Prone
+			| Self::FacePalm(_) => ClipTimePolicy::Clamp { duration: 1.0 },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
@@ -412,9 +434,19 @@ mod tests {
 		assert!(AnimClip::walk().is_sample_cacheable());
 		assert!(AnimClip::run().is_sample_cacheable());
 		assert!(!AnimClip::jab().is_sample_cacheable());
+		assert!(!AnimClip::face_palm().is_sample_cacheable());
 		assert!(!AnimClip::leap().is_sample_cacheable());
 		assert_eq!(AnimClip::walk().revision(), 0);
 		assert_eq!(AnimClip::walk().sample_address(0.123, 10_000).canonical_time, 0.12);
+	}
+
+	#[test]
+	fn face_palm_is_a_clamped_one_shot_clip() {
+		let palm = AnimClip::face_palm();
+		assert_eq!(palm.id(), AnimId::FacePalm);
+		assert_eq!(palm.default_speed(), FACE_PALM_CYCLE_SPEED);
+		assert_eq!(palm.time_policy(), ClipTimePolicy::Clamp { duration: 1.0 });
+		assert!(!palm.is_sample_cacheable());
 	}
 
 	#[test]

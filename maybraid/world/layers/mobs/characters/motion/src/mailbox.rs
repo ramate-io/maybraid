@@ -12,8 +12,8 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		FacePalm, Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat,
+		SquatDescent, Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -817,6 +817,13 @@ fn sample_humanoid(
 			write_bones,
 			write_effects,
 		),
+		AnimClip::FacePalm(params) => sample_split(
+			&FacePalm::new(params.side),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
 		AnimClip::Squat => sample_split(&Squat::held(), rig, progress, write_bones, write_effects),
 		AnimClip::SquatDescent => sample_split(
 			&SquatDescent::default(),
@@ -1007,6 +1014,44 @@ mod tests {
 		let mut mid = HumanoidV0Rig::for_clip_test();
 		sample_humanoid(AnimClip::squat_descent(), &mut mid, 0.5, true, true);
 		assert!(mid.posed_angle("femur.L") > 0.15, "mid descent should fold hips");
+		Ok(())
+	}
+
+	#[test]
+	fn face_palm_mailbox_sample_is_playback_only() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+		use character_rigs::Side;
+
+		let hand_tip = |rig: &HumanoidV0Rig| {
+			let bone = format!("forearm.{}", Side::Right.suffix());
+			rig.character_point(&bone) + rig.character_length(&bone) * 0.48
+		};
+
+		let mut at_rest = HumanoidV0Rig::for_clip_test();
+		let rest_hand = hand_tip(&at_rest);
+		let rest_effects = sample_humanoid(AnimClip::face_palm(), &mut at_rest, 0.0, true, true);
+		if !rest_effects.is_identity() {
+			return Err(anyhow!("face palm entry must not offset the armature"));
+		}
+		if (hand_tip(&at_rest) - rest_hand).length() > 1e-3 {
+			return Err(anyhow!("face palm entry stays at rest"));
+		}
+
+		let mut at_peak = HumanoidV0Rig::for_clip_test();
+		let peak_effects = sample_humanoid(AnimClip::face_palm(), &mut at_peak, 0.48, true, true);
+		if !peak_effects.is_identity() {
+			return Err(anyhow!("face palm must not move the armature"));
+		}
+		let hand = hand_tip(&at_peak);
+		if rest_hand.x.abs() - hand.x.abs() < 0.75 {
+			return Err(anyhow!("peak crosses palm inboard, hand {hand:?} rest {rest_hand:?}"));
+		}
+		if hand.z < rest_hand.z + 0.2 {
+			return Err(anyhow!("peak brings palm forward, hand {hand:?} rest {rest_hand:?}"));
+		}
+		if at_peak.posed_angle("humerus.L") > 0.01 {
+			return Err(anyhow!("opposite arm stays at rest"));
+		}
 		Ok(())
 	}
 
