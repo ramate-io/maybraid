@@ -279,6 +279,7 @@ pub fn spawn_player_body(
 			Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
 			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 			GravityScale(0.0),
+			crate::quadruped_run_stop::QuadrupedRunStopBlend::default(),
 		))
 		.id();
 	commands.spawn((
