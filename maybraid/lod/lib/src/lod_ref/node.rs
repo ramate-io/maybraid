@@ -105,6 +105,23 @@ pub fn lod_refs_from_snapshots<'a>(snapshots: &'a [LodNodeSnapshot]) -> Vec<LodR
 	snapshots.iter().map(LodNodeSnapshot::as_lod_ref).collect()
 }
 
+/// First [`LodNodeSnapshot`] in query iteration order (same as [`collect_node_snapshots`][0]).
+pub fn first_lod_node_snapshot<F: bevy::ecs::query::QueryFilter>(
+	nodes: &Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
+) -> Option<LodNodeSnapshot> {
+	nodes.iter().next().map(|(entity, pose, bounds)| LodNodeSnapshot {
+		entity,
+		previous: pose.previous,
+		current: pose.current,
+		bounds: bounds.map(|b| b.0).unwrap_or_else(|| point_bounds(pose.current.translation)),
+	})
+}
+
+/// Viewer [`LodRef`] without allocating a full ref vector (same as `lod_refs_from_snapshots`[0]).
+pub fn first_lod_ref_from_snapshots<'a>(snapshots: &'a [LodNodeSnapshot]) -> Option<LodRef<'a>> {
+	snapshots.first().map(LodNodeSnapshot::as_lod_ref)
+}
+
 /// Shared driver tracking. Generate, present, and scene plugins add this once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum LodNodeSystems {
@@ -119,5 +136,59 @@ impl Plugin for LodNodePlugin {
 	fn build(&self, app: &mut App) {
 		app.configure_sets(Update, LodNodeSystems::Track)
 			.add_systems(Update, track_lod_nodes.in_set(LodNodeSystems::Track));
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn first_lod_ref_from_snapshots_matches_lod_refs_head() {
+		let a = LodNodeSnapshot {
+			entity: Entity::PLACEHOLDER,
+			previous: Transform::IDENTITY,
+			current: Transform::from_xyz(1.0, 0.0, 0.0),
+			bounds: point_bounds(Vec3::ZERO),
+		};
+		let b = LodNodeSnapshot {
+			entity: Entity::PLACEHOLDER,
+			previous: Transform::IDENTITY,
+			current: Transform::from_xyz(2.0, 0.0, 0.0),
+			bounds: point_bounds(Vec3::ONE),
+		};
+		let snapshots = [a, b];
+		let refs = lod_refs_from_snapshots(&snapshots);
+		let first = first_lod_ref_from_snapshots(&snapshots).expect("viewer ref");
+		assert_eq!(first.entity, refs[0].entity);
+		assert_eq!(first.current_transform.translation, refs[0].current_transform.translation);
+	}
+
+	/// `cargo test --release first_lod_ref_collect_microbench -- --ignored --nocapture`
+	#[test]
+	#[ignore]
+	fn first_lod_ref_collect_microbench() {
+		let snapshots: Vec<LodNodeSnapshot> = (0..8)
+			.map(|i| LodNodeSnapshot {
+				entity: Entity::PLACEHOLDER,
+				previous: Transform::IDENTITY,
+				current: Transform::from_xyz(i as f32, 0.0, 0.0),
+				bounds: point_bounds(Vec3::ZERO),
+			})
+			.collect();
+		const ITERS: usize = 500_000;
+		let start = std::time::Instant::now();
+		for _ in 0..ITERS {
+			std::hint::black_box(lod_refs_from_snapshots(&snapshots));
+		}
+		let collect_ms = start.elapsed().as_secs_f64() * 1000.0;
+		let start = std::time::Instant::now();
+		for _ in 0..ITERS {
+			std::hint::black_box(first_lod_ref_from_snapshots(&snapshots));
+		}
+		let first_ms = start.elapsed().as_secs_f64() * 1000.0;
+		eprintln!(
+			"lod_refs_from_snapshots(8): {collect_ms:.1}ms vs first_lod_ref_from_snapshots: {first_ms:.1}ms over {ITERS} iters"
+		);
 	}
 }

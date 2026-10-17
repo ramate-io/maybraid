@@ -9,9 +9,7 @@ use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 
-use crate::lod_ref::{
-	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose,
-};
+use crate::lod_ref::{first_lod_node_snapshot, LodNode, LodNodeBounds, LodNodePose};
 use crate::scene::chunk::DEFAULT_CHUNK_WEIGHT;
 use crate::scene::cull::LodSceneCulls;
 use crate::scene::host::{
@@ -107,11 +105,10 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	FHost: QueryFilter + 'static,
 	FNode: QueryFilter + 'static,
 {
-	let snapshots = collect_node_snapshots(&nodes);
-	if snapshots.is_empty() {
+	let Some(viewer_snapshot) = first_lod_node_snapshot(&nodes) else {
 		return;
-	}
-	let refs = lod_refs_from_snapshots(&snapshots);
+	};
+	let viewer_ref = viewer_snapshot.as_lod_ref();
 
 	for (host, scene, current) in &hosts {
 		if lod_scene_host_or_ancestor_hidden(host, &child_of, &all_hosts, &visibilities) {
@@ -129,10 +126,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 			continue;
 		}
 		// Viewer-only ref (no per-host dominant level vote).
-		let Some(lod_ref) = refs.first() else {
-			continue;
-		};
-		let culls = scene.scene_lod_culls(lod_ref, *current);
+		let culls = scene.scene_lod_culls(&viewer_ref, *current);
 		if matches!(culls, LodSceneCulls::None) {
 			continue;
 		}
