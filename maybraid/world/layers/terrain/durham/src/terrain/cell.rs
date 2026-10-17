@@ -242,6 +242,16 @@ impl TerrainCellRing {
 			})
 			.collect()
 	}
+
+	/// [`Self::cell_ids`] on the context's Universal [`TerrainCellLayout`].
+	///
+	/// Each [`crate::Streamed`] ring discovers through this helper so stream
+	/// schemes share the same layout lookup as [`TerrainCellLayout::origin_ids_in`].
+	pub fn origin_ids_in(self, cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		cx.get_or_generate::<TerrainCellLayout>(Id::Universal)
+			.map(|layout| self.cell_ids(region, layout.vertical_half_extent))
+			.unwrap_or_default()
+	}
 }
 
 /// Layout for tiling terrain origin cells in the XZ plane.
@@ -735,6 +745,25 @@ mod tests {
 		assert!(count_edge(&ids, TERRAIN_CELL_SIZE) >= 1);
 		assert!(count_edge(&ids, 2.0 * TERRAIN_CELL_SIZE) >= 1);
 		assert!(count_edge(&ids, 4.0 * TERRAIN_CELL_SIZE) >= 1);
+	}
+
+	#[test]
+	fn stream_ring_origin_ids_in_matches_direct_cell_ids() {
+		use lod::gen::Id;
+		use lod::hcsg::{GenerationContext, HcsgStorage};
+
+		let layout = streamed_layout();
+		let region = layout.request_region();
+		let ring = layout.stream_rings[1];
+		let vertical_half_extent = layout.vertical_half_extent;
+		let storage = HcsgStorage::default();
+		storage.seed(layout, universal_bounds());
+		let mut cx = GenerationContext::new(&storage);
+		assert_eq!(
+			ring.origin_ids_in(&mut cx, region),
+			ring.cell_ids(region, vertical_half_extent)
+		);
+		assert!(cx.get_or_generate::<TerrainCellLayout>(Id::Universal).is_some());
 	}
 
 	#[test]

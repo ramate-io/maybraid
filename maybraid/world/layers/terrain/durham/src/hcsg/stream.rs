@@ -19,7 +19,7 @@ use lod::lod_ref::LodRef;
 use lod::scene::{LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk, SemanticLodScene};
 
 use crate::terrain::host::{WORLD_BACKGROUND_RING, WORLD_FAR_RING, WORLD_NEAR_RING};
-use crate::terrain::{TerrainCellLayout, TerrainCellRing};
+use crate::terrain::TerrainCellRing;
 
 /// One terrain stream: the ring its cells tile.
 pub trait TerrainStream: Send + Sync + 'static {
@@ -68,10 +68,7 @@ pub struct PlayableStreams;
 
 impl<R: TerrainStream, T: hcsg::GenerationScheme> hcsg::GenerationScheme for Streamed<R, T> {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		let Some(layout) = cx.get_or_generate::<TerrainCellLayout>(Id::Universal) else {
-			return Vec::new();
-		};
-		R::RING.cell_ids(region, layout.vertical_half_extent)
+		R::RING.origin_ids_in(cx, region)
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
