@@ -31,11 +31,11 @@ pub struct AssembleArgs {
 	#[arg(long, value_enum, default_value_t = CharacterSpecies::Braidman)]
 	pub species: CharacterSpecies,
 
-	/// Procedural clip (`still`, `walk`, `run`, `jab`, `leap`, …).
+	/// Procedural clip (`still`, `walk`, `run`, `jab`, `sit-ground`, `lay-back`, …).
 	#[arg(long, value_enum, default_value_t = AnimationMode::Run)]
 	pub animation: AnimationMode,
 
-	/// Lead side for sided gestures (`jab`). Ignored by symmetric clips.
+	/// Lead side for sided clips (`jab`, `lay-side`). Ignored by symmetric clips.
 	#[arg(long, value_enum, default_value_t = GestureSide::Right)]
 	pub side: GestureSide,
 
@@ -205,11 +205,11 @@ impl GestureSide {
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct AnimateArgs {
-	/// Clip to sample (`still`, `walk`, `run`, `jab`, `leap`, `soaring`, …).
+	/// Clip to sample (`still`, `walk`, `run`, `jab`, `sit-ground`, `lay-back`, …).
 	#[arg(value_enum)]
 	pub animation: AnimationMode,
 
-	/// Lead side for sided gestures (`jab`).
+	/// Lead side for sided clips (`jab`, `lay-side`).
 	#[arg(long, value_enum, default_value_t = GestureSide::Right)]
 	pub side: GestureSide,
 }

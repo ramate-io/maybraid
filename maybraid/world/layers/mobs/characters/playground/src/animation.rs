@@ -26,11 +26,15 @@ pub enum AnimationMode {
 	Flapping,
 	Jab,
 	Prone,
+	SitGround,
+	SitSeat,
+	LayBack,
+	LaySide,
 }
 
 impl AnimationMode {
 	pub const fn uses_side(self) -> bool {
-		matches!(self, Self::Jab)
+		matches!(self, Self::Jab | Self::LaySide)
 	}
 
 	pub const fn label(self) -> &'static str {
@@ -50,6 +54,10 @@ impl AnimationMode {
 			Self::Flapping => "flapping",
 			Self::Jab => "jab",
 			Self::Prone => "prone",
+			Self::SitGround => "sit-ground",
+			Self::SitSeat => "sit-seat",
+			Self::LayBack => "lay-back",
+			Self::LaySide => "lay-side",
 		}
 	}
 
@@ -73,6 +81,10 @@ impl AnimationMode {
 				target: DEFAULT_JAB_TARGET,
 			}),
 			Self::Prone => AnimClip::prone(),
+			Self::SitGround => AnimClip::sit_ground(),
+			Self::SitSeat => AnimClip::sit_seat(),
+			Self::LayBack => AnimClip::lay_back(),
+			Self::LaySide => AnimClip::lay_side(side),
 		}
 	}
 
