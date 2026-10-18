@@ -2,6 +2,7 @@ pub mod fall;
 pub mod fixed_tuck;
 pub mod flapping;
 pub mod gait_knee;
+pub mod head_nod;
 pub mod idle;
 pub mod jab;
 pub mod land;
