@@ -1,5 +1,6 @@
 pub mod fall;
 pub mod fixed_tuck;
+pub mod flap_from_glide;
 pub mod flapping;
 pub mod gait_knee;
 pub mod idle;

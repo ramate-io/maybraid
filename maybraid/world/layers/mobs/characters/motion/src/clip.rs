@@ -5,8 +5,9 @@
 
 use bevy::prelude::*;
 use character_animations::animations::{
-	BallisticJump, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop,
-	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
+	BallisticJump, DorsoventralUndulation, FixedTuck, FlapFromGlide, Flapping, FlipDirection,
+	Gallop, LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip,
+	TwoFootedJump,
 	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
 	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	DEFAULT_SPRING_DURATION, TAKEOFF_END,
@@ -44,6 +45,7 @@ pub enum AnimId {
 	TwoFootedTuckedFlip,
 	Soaring,
 	Flapping,
+	FlapFromGlide,
 	Jab,
 	Squat,
 	SquatDescent,
@@ -67,6 +69,7 @@ impl AnimId {
 			Self::TwoFootedTuckedFlip => 1.0,
 			Self::Soaring => 1.0,
 			Self::Flapping => 1.0,
+			Self::FlapFromGlide => 1.0,
 			Self::Jab => JAB_CYCLE_SPEED,
 			Self::Squat => 1.0,
 			Self::SquatDescent => DEFAULT_DESCENT_SPEED,
@@ -204,6 +207,7 @@ pub enum AnimClip {
 	TwoFootedTuckedFlip(TwoFootedTuckedFlipParams),
 	Soaring(Soaring),
 	Flapping(Flapping),
+	FlapFromGlide(FlapFromGlide),
 	Jab(JabParams),
 	Squat,
 	SquatDescent,
@@ -227,6 +231,7 @@ impl AnimClip {
 			Self::TwoFootedTuckedFlip(_) => AnimId::TwoFootedTuckedFlip,
 			Self::Soaring(_) => AnimId::Soaring,
 			Self::Flapping(_) => AnimId::Flapping,
+			Self::FlapFromGlide(_) => AnimId::FlapFromGlide,
 			Self::Jab(_) => AnimId::Jab,
 			Self::Squat => AnimId::Squat,
 			Self::SquatDescent => AnimId::SquatDescent,
@@ -288,6 +293,10 @@ impl AnimClip {
 		Self::Flapping(Flapping::default())
 	}
 
+	pub fn flap_from_glide() -> Self {
+		Self::FlapFromGlide(FlapFromGlide::default())
+	}
+
 	pub fn jab() -> Self {
 		Self::Jab(JabParams::default())
 	}
@@ -337,7 +346,9 @@ impl AnimClip {
 			| Self::Squat
 			| Self::SquatDescent
 			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
-			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
+			Self::Soaring(_) | Self::Flapping(_) | Self::FlapFromGlide(_) => {
+				ClipTimePolicy::Unbounded
+			}
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
 			}

@@ -12,8 +12,8 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat,
+		SquatDescent, Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -809,6 +809,9 @@ fn sample_humanoid(
 		}
 		AnimClip::Flapping(flapping) => {
 			sample_split(&flapping, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::FlapFromGlide(entry) => {
+			sample_split(&entry, rig, progress, write_bones, write_effects)
 		}
 		AnimClip::Jab(params) => sample_split(
 			&Jab::new(params.side, params.backswing, params.target),
