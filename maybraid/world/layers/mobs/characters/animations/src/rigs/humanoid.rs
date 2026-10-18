@@ -9,6 +9,7 @@ pub mod leap;
 pub mod prone;
 pub mod run;
 pub mod soaring;
+pub mod spot_scan;
 pub mod spring;
 pub mod squat;
 pub mod squat_descent;
