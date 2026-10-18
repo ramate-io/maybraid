@@ -14,7 +14,8 @@ pub use aim::{
 pub use attack::{AttackKind, AttackPhase, AttackSpec, AttackState, AttackTiming, JAB_STARTUP_END};
 pub use character_rigs::Side;
 
-/// Player-side fisticuffs machine. Inserted on every [`player::Player`].
+/// Player-side fisticuffs machine. Inserted by equipment when Fisticuffs is the
+/// active primary item; removed when another tool is selected.
 #[derive(Component, Clone, Debug, Default)]
 pub struct FisticuffsUser {
 	pub state: AttackState,
@@ -45,12 +46,7 @@ impl Plugin for FisticuffsUserPlugin {
 		app.add_message::<FisticuffsStrike>()
 			.add_systems(
 				Update,
-				(
-					drive::ensure_fisticuffs_user,
-					drive::tick_attack_state,
-					drive::apply_attack_intents,
-					drive::latch_jab_aim,
-				)
+				(drive::tick_attack_state, drive::apply_attack_intents, drive::latch_jab_aim)
 					.chain()
 					.in_set(PlayerSystems::Intent),
 			)

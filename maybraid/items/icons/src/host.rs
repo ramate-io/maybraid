@@ -3,7 +3,9 @@
 use bevy::camera::primitives::MeshAabb;
 use bevy::camera::visibility::RenderLayers;
 use bevy::ecs::entity_disabling::Disabled;
+use bevy::math::bounding::Aabb3d;
 use bevy::mesh::skinning::SkinnedMesh;
+use bevy::mesh::{Indices, VertexAttributeValues};
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 use bevy::world_serialization::WorldAssetRoot;
@@ -31,7 +33,8 @@ use lod::{
 use material_ref::{MaterialRefApplied, StandardMaterialRefPlugin};
 use scene_ref::SceneRefRoot;
 use screen_capture::{
-	CaptureHostReady, CaptureHostRoot, CaptureId, CaptureSilhouetteRoot, CAPTURE_RENDER_LAYER,
+	CaptureExtents, CaptureHostReady, CaptureHostRoot, CaptureId, CaptureSilhouetteRoot,
+	CAPTURE_RENDER_LAYER,
 };
 use std::collections::HashMap;
 
@@ -40,6 +43,7 @@ pub const HOST_CLOTHING: &str = "clothing-preview";
 pub const HOST_GRENADE: &str = "grenade-preview";
 pub const HOST_SKILL_MAP: &str = "skill-map-preview";
 pub const HOST_SELF_LUBIKAN: &str = "self-lubikan-preview";
+pub const HOST_FISTICUFFS_ARMS: &str = "fisticuffs-arms-preview";
 
 #[derive(Resource, Default, Debug)]
 pub struct ItemCaptureSubjects {
@@ -173,6 +177,11 @@ pub fn realize_capture_hosts(
 			commands.entity(root).try_insert(CaptureHostRealized);
 			continue;
 		}
+		if host.kind == HOST_FISTICUFFS_ARMS {
+			spawn_fisticuffs_arms_host(&mut commands, root);
+			commands.entity(root).try_insert(CaptureHostRealized);
+			continue;
+		}
 		let Some(item) = subjects.get(&host.id) else {
 			continue;
 		};
@@ -202,10 +211,12 @@ pub fn mark_capture_hosts_ready(
 	posed: Query<(), With<PoseApplied>>,
 	pending_scene: Query<(), (With<SceneRefRoot>, Without<WorldAssetRoot>)>,
 	hosts_meta: Query<&CaptureHostRoot>,
-	bind_pose: Query<(), With<SelfLubikanBindPose>>,
+	bind_pose: Query<(), Or<(With<SelfLubikanBindPose>, With<FisticuffsArmsBindPose>)>>,
 ) {
 	for root in &hosts {
-		if hosts_meta.get(root).is_ok_and(|host| host.kind == HOST_SELF_LUBIKAN)
+		if hosts_meta
+			.get(root)
+			.is_ok_and(|host| host.kind == HOST_SELF_LUBIKAN || host.kind == HOST_FISTICUFFS_ARMS)
 			&& bind_pose.get(root).is_err()
 		{
 			continue;
@@ -329,7 +340,22 @@ fn spawn_item_host(
 			true
 		}
 		InventoryItem::SkillMap { .. } => false,
+		InventoryItem::Fisticuffs => {
+			spawn_fisticuffs_arms_host(commands, root);
+			true
+		}
 	}
+}
+
+fn spawn_fisticuffs_arms_host(commands: &mut Commands, root: Entity) {
+	commands.spawn((
+		Name::new("fisticuffs-arms-body"),
+		SceneRefRoot(braidman_icon_body().scene),
+		Transform::IDENTITY,
+		Visibility::default(),
+		RenderLayers::layer(CAPTURE_RENDER_LAYER),
+		ChildOf(root),
+	));
 }
 
 fn spawn_self_lubikan_host(
@@ -353,6 +379,10 @@ fn spawn_self_lubikan_host(
 /// Finished destemming the Self Lubikan body so bind-pose vertices draw.
 #[derive(Component)]
 pub(crate) struct SelfLubikanBindPose;
+
+/// Finished destemming, posing, and isolating the Fisticuffs arms mesh.
+#[derive(Component)]
+pub(crate) struct FisticuffsArmsBindPose;
 
 /// Isolated captures have no posed body rig. The GLB still instantiates
 /// `SkinnedMesh` plus JOINTS/WEIGHTS; Bevy's PBR path skips those meshes
@@ -430,6 +460,211 @@ pub fn rest_pose_self_lubikan_skins(
 		place_cross_in_corner(&mut commands, &meshes, root, &children, &mesh_3d, &crosses);
 		commands.entity(root).try_insert(SelfLubikanBindPose);
 	}
+}
+
+/// Destem the Braidman GLB, keep both arms, and fold them into a guard so the
+/// thumbnail is the character's fists rather than a full-body silhouette.
+pub fn rest_pose_fisticuffs_arms_skins(
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut standard_materials: Option<ResMut<Assets<StandardMaterial>>>,
+	hosts: Query<
+		(Entity, &CaptureHostRoot),
+		(With<CaptureHostRealized>, Without<FisticuffsArmsBindPose>),
+	>,
+	children: Query<&Children>,
+	pending_scene: Query<(), (With<SceneRefRoot>, Without<WorldAssetRoot>)>,
+	mesh_3d: Query<&Mesh3d>,
+	skinned: Query<Entity, With<SkinnedMesh>>,
+) {
+	for (root, host) in &hosts {
+		if host.kind != HOST_FISTICUFFS_ARMS {
+			continue;
+		}
+		let mut pending = false;
+		visit_descendants(root, &children, &mut |entity| {
+			if pending_scene.get(entity).is_ok() {
+				pending = true;
+			}
+		});
+		if pending {
+			continue;
+		}
+		let mut destemmed_any = false;
+		let mut saw_loaded_body = false;
+		let mut pending_mesh = false;
+		let mut extents: Option<Aabb3d> = None;
+		visit_descendants(root, &children, &mut |entity| {
+			if entity == root {
+				return;
+			}
+			commands.entity(entity).try_insert(RenderLayers::layer(CAPTURE_RENDER_LAYER));
+			let Ok(handle) = mesh_3d.get(entity) else {
+				return;
+			};
+			let Some(mesh) = meshes.get(&handle.0) else {
+				pending_mesh = true;
+				return;
+			};
+			saw_loaded_body = true;
+			let destemmed = destem_bind_pose_mesh(mesh).unwrap_or_else(|| mesh.clone());
+			let posed = isolate_guard_pose_arms(&destemmed).unwrap_or(destemmed);
+			if let Some(local) = posed.compute_aabb() {
+				let min = Vec3::from(local.min());
+				let max = Vec3::from(local.max());
+				let next = Aabb3d::from_min_max(min, max);
+				extents = Some(match extents {
+					Some(previous) => union_capture_aabb(previous, next),
+					None => next,
+				});
+			}
+			commands.entity(entity).try_insert(Mesh3d(meshes.add(posed)));
+			destemmed_any = true;
+			if let Some(materials) = standard_materials.as_mut() {
+				commands.entity(entity).try_insert(MeshMaterial3d(materials.add(
+					StandardMaterial {
+						perceptual_roughness: 0.6,
+						metallic: 0.0,
+						alpha_mode: AlphaMode::Opaque,
+						..Default::default()
+					},
+				)));
+			}
+			if skinned.get(entity).is_ok() {
+				commands.entity(entity).try_remove::<SkinnedMesh>();
+			}
+		});
+		if pending_mesh || !(saw_loaded_body || destemmed_any) {
+			continue;
+		}
+		if let Some(extents) = extents {
+			commands.entity(root).try_insert(CaptureExtents(extents));
+		}
+		commands.entity(root).try_insert(FisticuffsArmsBindPose);
+	}
+}
+
+fn union_capture_aabb(a: Aabb3d, b: Aabb3d) -> Aabb3d {
+	Aabb3d::from_min_max(
+		Vec3::from(a.min).min(Vec3::from(b.min)),
+		Vec3::from(a.max).max(Vec3::from(b.max)),
+	)
+}
+
+/// Keep the destemmed arm vertices and swing them from a T-pose into a guard.
+///
+/// Isolation is spatial (preview posing, not the live `Jab` clip) so a capture
+/// without a body rig still shows Braidman geometry instead of a fist glyph.
+fn isolate_guard_pose_arms(mesh: &Mesh) -> Option<Mesh> {
+	let VertexAttributeValues::Float32x3(positions) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)?
+	else {
+		return None;
+	};
+	if positions.len() < 3 {
+		return None;
+	}
+	let mut min = Vec3::splat(f32::MAX);
+	let mut max = Vec3::splat(f32::MIN);
+	for position in positions {
+		let point = Vec3::from(*position);
+		min = min.min(point);
+		max = max.max(point);
+	}
+	let size = (max - min).max(Vec3::splat(1e-4));
+	let center = (min + max) * 0.5;
+	// T-pose arms occupy the sides. Keep a wide slab from just outside the
+	// ribcage out to the hands so the thumbnail is Braidman geometry, not a
+	// handful of leftover triangles.
+	let keep_point = |point: Vec3| -> bool {
+		let u = (point - min) / size;
+		let from_mid = (point.x - center.x).abs() / size.x;
+		let arm_height = u.y > 0.45 && u.y < 0.86;
+		let shoulder = u.y > 0.58 && u.y < 0.82 && from_mid > 0.06;
+		(arm_height && from_mid > 0.10) || shoulder
+	};
+	let triangles = mesh_triangles(mesh, positions.len())?;
+	let kept: Vec<[u32; 3]> = triangles
+		.into_iter()
+		.filter(|tri| {
+			let verts = tri.map(|index| Vec3::from(positions[index as usize]));
+			let centroid = (verts[0] + verts[1] + verts[2]) / 3.0;
+			keep_point(centroid) || verts.into_iter().any(keep_point)
+		})
+		.collect();
+	if kept.len() < 2 {
+		return None;
+	}
+	let mut remap = vec![None; positions.len()];
+	let mut new_positions = Vec::new();
+	let normals = match mesh.attribute(Mesh::ATTRIBUTE_NORMAL) {
+		Some(VertexAttributeValues::Float32x3(values)) if values.len() == positions.len() => {
+			Some(values.as_slice())
+		}
+		_ => None,
+	};
+	let mut new_normals = Vec::new();
+	let mut new_indices = Vec::new();
+	for tri in &kept {
+		for &index in tri {
+			if remap[index as usize].is_none() {
+				remap[index as usize] = Some(new_positions.len() as u32);
+				new_positions.push(Vec3::from(positions[index as usize]));
+				if let Some(normals) = normals {
+					new_normals.push(Vec3::from(normals[index as usize]));
+				}
+			}
+			new_indices.push(remap[index as usize].expect("remapped"));
+		}
+	}
+	let left_shoulder = Vec3::new(center.x + size.x * 0.16, min.y + size.y * 0.76, center.z);
+	let right_shoulder = Vec3::new(center.x - size.x * 0.16, min.y + size.y * 0.76, center.z);
+	let left_rot = Quat::from_rotation_y(-1.05) * Quat::from_rotation_x(-0.42);
+	let right_rot = Quat::from_rotation_y(1.05) * Quat::from_rotation_x(-0.42);
+	for (index, point) in new_positions.iter_mut().enumerate() {
+		let left = point.x >= center.x;
+		let shoulder = if left { left_shoulder } else { right_shoulder };
+		let rot = if left { left_rot } else { right_rot };
+		*point = shoulder + rot * (*point - shoulder);
+		if let Some(normal) = new_normals.get_mut(index) {
+			*normal = rot * *normal;
+		}
+	}
+	let mut posed = Mesh::new(mesh.primitive_topology(), mesh.asset_usage);
+	posed.insert_attribute(
+		Mesh::ATTRIBUTE_POSITION,
+		new_positions.into_iter().map(|point| point.to_array()).collect::<Vec<_>>(),
+	);
+	if !new_normals.is_empty() {
+		posed.insert_attribute(
+			Mesh::ATTRIBUTE_NORMAL,
+			new_normals.into_iter().map(|normal| normal.to_array()).collect::<Vec<_>>(),
+		);
+	}
+	posed.insert_indices(Indices::U32(new_indices));
+	Some(posed)
+}
+
+fn mesh_triangles(mesh: &Mesh, vertex_count: usize) -> Option<Vec<[u32; 3]>> {
+	match mesh.indices() {
+		Some(Indices::U32(indices)) => triangles_from_indices(indices),
+		Some(Indices::U16(indices)) => {
+			let indices: Vec<u32> = indices.iter().copied().map(u32::from).collect();
+			triangles_from_indices(&indices)
+		}
+		None => {
+			if vertex_count % 3 != 0 {
+				return None;
+			}
+			Some((0..vertex_count as u32).step_by(3).map(|i| [i, i + 1, i + 2]).collect())
+		}
+	}
+}
+
+fn triangles_from_indices(indices: &[u32]) -> Option<Vec<[u32; 3]>> {
+	if indices.len() % 3 != 0 {
+		return None;
+	}
+	Some(indices.chunks_exact(3).map(|chunk| [chunk[0], chunk[1], chunk[2]]).collect())
 }
 
 fn place_cross_in_corner(
@@ -844,5 +1079,111 @@ mod tests {
 		assert_eq!(app.world().get::<ChildOf>(cross).map(|parent| parent.0), Some(child));
 		let placed = app.world().get::<Transform>(cross).expect("corner");
 		assert!(placed.translation.x > 0.0 && placed.translation.y > 0.0);
+	}
+
+	fn triangle_at(origin: Vec3) -> (Vec<[f32; 3]>, Vec<u32>) {
+		(
+			vec![
+				(origin + Vec3::new(-0.05, 0.0, 0.0)).to_array(),
+				(origin + Vec3::new(0.05, 0.0, 0.0)).to_array(),
+				(origin + Vec3::new(0.0, 0.05, 0.0)).to_array(),
+			],
+			vec![0, 1, 2],
+		)
+	}
+
+	fn body_with_arms_mesh() -> Mesh {
+		use bevy::asset::RenderAssetUsages;
+		use bevy::mesh::PrimitiveTopology;
+
+		let parts = [
+			Vec3::new(0.0, 1.0, 0.0),
+			Vec3::new(0.85, 1.25, 0.0),
+			Vec3::new(-0.85, 1.25, 0.0),
+			Vec3::new(0.0, 0.12, 0.0),
+			Vec3::new(0.0, 1.85, 0.0),
+		];
+		let mut positions = Vec::new();
+		let mut indices = Vec::new();
+		for origin in parts {
+			let base = positions.len() as u32;
+			let (verts, _) = triangle_at(origin);
+			positions.extend(verts);
+			indices.extend([base, base + 1, base + 2]);
+		}
+		Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
+			.with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+			.with_inserted_indices(Indices::U32(indices))
+	}
+
+	#[test]
+	fn isolate_guard_pose_keeps_both_arms_and_drops_the_body() {
+		let posed = isolate_guard_pose_arms(&body_with_arms_mesh()).expect("arms isolate");
+		let VertexAttributeValues::Float32x3(positions) =
+			posed.attribute(Mesh::ATTRIBUTE_POSITION).expect("positions")
+		else {
+			panic!("float3 positions");
+		};
+		assert!(positions.len() >= 6);
+		let mut min = Vec3::splat(f32::MAX);
+		let mut max = Vec3::splat(f32::MIN);
+		let mut saw_left = false;
+		let mut saw_right = false;
+		for position in positions {
+			let point = Vec3::from(*position);
+			min = min.min(point);
+			max = max.max(point);
+			if point.x > 0.05 {
+				saw_left = true;
+			}
+			if point.x < -0.05 {
+				saw_right = true;
+			}
+		}
+		assert!(saw_left && saw_right, "both arms must remain, {positions:?}");
+		assert!(
+			(max.y - min.y) < 1.4,
+			"isolated arms should not keep full-body height, got {:?}",
+			max - min
+		);
+		assert!(max.z > 0.15, "guard pose should swing the fists forward, max z {}", max.z);
+	}
+
+	#[test]
+	fn fisticuffs_waits_for_loaded_body_mesh() {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+			.init_asset::<Mesh>()
+			.init_asset::<StandardMaterial>()
+			.add_systems(Update, rest_pose_fisticuffs_arms_skins);
+		let root = app
+			.world_mut()
+			.spawn((
+				CaptureHostRoot {
+					kind: HOST_FISTICUFFS_ARMS.to_string(),
+					id: CaptureId::new("fisticuffs:braidman-arms"),
+				},
+				CaptureHostRealized,
+			))
+			.id();
+		app.world_mut().spawn((Mesh3d(Handle::default()), ChildOf(root)));
+		app.update();
+		assert!(
+			app.world().get::<FisticuffsArmsBindPose>(root).is_none(),
+			"Mesh3d without an asset must not ready the host"
+		);
+	}
+
+	#[test]
+	fn fisticuffs_host_uses_the_preview_braidman() {
+		let config = BraidmanConfig::default_preview();
+		assert!(config.clothing.is_empty());
+		let braidman = Braidman::from_config(&config);
+		let preview = BraidmanIconPreview::default();
+		let nodes = preview.part_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(nodes.len(), 1);
+		assert_eq!(nodes[0].scene, braidman.body.path().scene_ref());
+		assert!(nodes[0].skin.is_none(), "icon body must be bind-pose, like clothing");
+		assert_eq!(HOST_FISTICUFFS_ARMS, "fisticuffs-arms-preview");
 	}
 }

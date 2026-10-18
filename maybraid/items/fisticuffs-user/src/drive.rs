@@ -13,18 +13,9 @@ use crate::aim::JabAim;
 use crate::attack::AttackSpec;
 use crate::{FisticuffsStrike, FisticuffsUser};
 
-pub(crate) fn ensure_fisticuffs_user(
-	mut commands: Commands,
-	players: Query<Entity, (With<Player>, Without<FisticuffsUser>)>,
-) {
-	for entity in &players {
-		commands.entity(entity).insert(FisticuffsUser::default());
-	}
-}
-
 pub(crate) fn apply_attack_intents(
 	mut intents: MessageReader<CharacterIntent>,
-	mut users: Query<(&mut FisticuffsUser, Has<PlayerUse>), With<Player>>,
+	mut users: Query<&mut FisticuffsUser, (With<Player>, Without<PlayerUse>)>,
 ) {
 	let mut requested = Vec::new();
 	for intent in intents.read() {
@@ -32,13 +23,10 @@ pub(crate) fn apply_attack_intents(
 			requested.push(spec);
 		}
 	}
-	for (mut user, occupied) in &mut users {
-		if occupied {
-			if user.state.is_busy() {
-				user.state.cancel();
-			}
-			continue;
-		}
+	if requested.is_empty() {
+		return;
+	}
+	for mut user in &mut users {
 		for spec in &requested {
 			user.state.request(*spec);
 		}
@@ -95,16 +83,16 @@ pub(crate) fn tick_attack_state(
 /// untouched. Same-`AnimId` restarts blend from the visible mailbox pose.
 pub(crate) fn apply_fisticuffs_visual(
 	mut commands: Commands,
-	users: Query<(&FisticuffsUser, Has<PlayerUse>), With<Player>>,
+	users: Query<&FisticuffsUser, (With<Player>, Without<PlayerUse>)>,
 	visuals: Query<(&CharacterMembers, &ChildOf), With<CharacterRoot>>,
 	rigs: Query<&CharacterRig>,
 	mut mailboxes: Query<&mut AnimMailbox>,
 ) {
 	for (members, child_of) in &visuals {
-		let Ok((user, occupied)) = users.get(child_of.parent()) else {
+		let Ok(user) = users.get(child_of.parent()) else {
 			continue;
 		};
-		if occupied || !user.state.is_busy() {
+		if !user.state.is_busy() {
 			continue;
 		}
 		let Some(side) = user.state.side() else {
@@ -135,5 +123,70 @@ pub(crate) fn apply_fisticuffs_visual(
 				AnimProgress(progress),
 			));
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::{AttackSpec, AttackTiming, FisticuffsStrike, JAB_STARTUP_END};
+	use character_rigs::Side;
+	use maybraid_character_controller::CharacterIntent;
+
+	#[test]
+	fn intents_do_not_punch_without_the_driver() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_message::<CharacterIntent>();
+		let player = app.world_mut().spawn(Player).id();
+		app.world_mut().write_message(CharacterIntent::AttackLeft);
+		app.add_systems(Update, apply_attack_intents);
+		app.update();
+		assert!(app.world().get::<FisticuffsUser>(player).is_none());
+	}
+
+	#[test]
+	fn intents_queue_only_while_fisticuffs_is_equipped() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_message::<CharacterIntent>();
+		let player = app.world_mut().spawn((Player, FisticuffsUser::default())).id();
+		app.world_mut().write_message(CharacterIntent::AttackLeft);
+		app.add_systems(Update, apply_attack_intents);
+		app.update();
+		let user = app.world().get::<FisticuffsUser>(player).expect("driver");
+		assert!(user.state.is_busy());
+		assert_eq!(user.state.side(), Some(Side::Left));
+	}
+
+	#[test]
+	fn held_item_occupancy_blocks_jabs_even_with_the_driver() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_message::<CharacterIntent>();
+		let held = app.world_mut().spawn_empty().id();
+		let player = app
+			.world_mut()
+			.spawn((Player, PlayerUse { driver: held }, FisticuffsUser::default()))
+			.id();
+		app.world_mut().write_message(CharacterIntent::AttackRight);
+		app.add_systems(Update, apply_attack_intents);
+		app.update();
+		let user = app.world().get::<FisticuffsUser>(player).expect("driver");
+		assert!(!user.state.is_busy());
+	}
+
+	#[test]
+	fn cancel_before_tick_does_not_emit_a_strike() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_message::<FisticuffsStrike>();
+		let mut user = FisticuffsUser::default();
+		user.state.request(AttackSpec::jab(Side::Left));
+		user.state.tick(AttackTiming::JAB.duration_secs * JAB_STARTUP_END);
+		assert!(user.state.just_entered_active() || user.state.is_busy());
+		user.state.cancel();
+		let player = app.world_mut().spawn((Player, user)).id();
+		app.add_systems(Update, tick_attack_state);
+		app.update();
+		let user = app.world().get::<FisticuffsUser>(player).expect("driver");
+		assert!(!user.state.just_entered_active());
+		assert!(!user.state.is_busy());
 	}
 }

@@ -927,6 +927,22 @@ fn drop_inventory_removes_an_item_and_unequips_it() -> anyhow::Result<()> {
 }
 
 #[test]
+fn apply_drop_refuses_intrinsic_fisticuffs() -> anyhow::Result<()> {
+	use character_items::{FirearmMesh, InventoryItem};
+
+	let items = vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)];
+	let mut menu = CharacterMenu::for_create(items);
+	assert!(!menu.apply(MenuEvent::DropInventory(0)));
+	let inventory = menu.inventory.as_ref().ok_or_else(|| anyhow::anyhow!("inventory"))?;
+	assert_eq!(inventory.items.iter().filter(|item| item.is_fisticuffs()).count(), 1);
+	assert_eq!(inventory.items.len(), 2);
+	assert!(menu.apply(MenuEvent::DropInventory(1)));
+	let inventory = menu.inventory.as_ref().ok_or_else(|| anyhow::anyhow!("inventory"))?;
+	assert_eq!(inventory.items, vec![InventoryItem::Fisticuffs]);
+	Ok(())
+}
+
+#[test]
 fn saved_menu_can_drop_after_appearance_lock() -> anyhow::Result<()> {
 	use character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
 

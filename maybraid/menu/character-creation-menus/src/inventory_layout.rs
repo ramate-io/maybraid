@@ -139,6 +139,9 @@ fn required_captures_for(inventory: &Inventory) -> Vec<InventoryIconNeed> {
 			continue;
 		}
 		if let Some(key) = item.icon_catalog_key() {
+			if item.catalog_thumb_is_silhouette() {
+				needs.push(InventoryIconNeed::silhouette(key));
+			}
 			needs.push(InventoryIconNeed::shaded(key));
 		}
 	}
@@ -189,7 +192,10 @@ fn tools_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
 		TOOLS_LABEL,
 		InventorySlot::Weapons.capacity(),
 		inventory.items.iter().enumerate().filter_map(|(index, item)| {
-			if item.firearm_mesh().is_none() && item.grenade_spec().is_none() {
+			if item.firearm_mesh().is_none()
+				&& item.grenade_spec().is_none()
+				&& !item.is_fisticuffs()
+			{
 				return None;
 			}
 			let rank = inventory.rank(index);
@@ -293,6 +299,7 @@ mod tests {
 			.collect();
 		items.extend(FirearmMesh::VALUES.iter().copied().map(InventoryItem::firearm));
 		items.push(InventoryItem::standard_grenade());
+		items.push(InventoryItem::Fisticuffs);
 		items.push(InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)));
 		items.push(InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Dumbwave, 2)));
 		items
@@ -383,6 +390,21 @@ mod tests {
 	}
 
 	#[test]
+	fn fisticuffs_capture_is_required_before_the_layout_paints() {
+		use super::InventoryIconNeed;
+		use character_items::fisticuffs_catalog_key;
+
+		let items = vec![
+			InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Red),
+			InventoryItem::Fisticuffs,
+		];
+		let layout = InventoryLayout::character_menu(&Inventory::with_starter_outfit(items));
+		let key = fisticuffs_catalog_key();
+		assert!(layout.captures.contains(&InventoryIconNeed::silhouette(key)));
+		assert!(layout.captures.contains(&InventoryIconNeed::shaded(key)));
+	}
+
+	#[test]
 	fn generated_starter_kit_has_exactly_three_clothing_tiles() {
 		let mut rng = ItemRng::from_seed(42);
 		let items = rng.random_starter_loadout();
@@ -390,9 +412,28 @@ mod tests {
 			items.iter().filter(|item| item.mesh().is_some()).count(),
 			STARTER_CLOTHING_COUNT
 		);
+		assert!(items.iter().any(InventoryItem::is_fisticuffs));
 		let layout = InventoryLayout::starter_kit(items);
 		assert_eq!(clothing_tile_count(&layout), STARTER_CLOTHING_COUNT);
 		assert_eq!(STARTER_CLOTHING_COUNT, 3);
+		assert!(tools_tile_labels(&layout).iter().any(|label| label == "Fisticuffs"));
+	}
+
+	fn tools_tile_labels(layout: &InventoryLayout) -> Vec<String> {
+		let MenuNode::Section { children, .. } = &layout.node else {
+			return Vec::new();
+		};
+		for child in children {
+			let MenuNode::Section { label: "Tools", children } = child else {
+				continue;
+			};
+			for inner in children {
+				if let MenuNode::GridCatalog { choices, .. } = inner {
+					return choices.iter().map(|choice| choice.label.clone()).collect();
+				}
+			}
+		}
+		Vec::new()
 	}
 
 	#[test]

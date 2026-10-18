@@ -343,6 +343,23 @@ mod tests {
 	}
 
 	#[test]
+	fn cancel_clears_a_pending_active_window() {
+		let mut state = AttackState::default();
+		state.request(AttackSpec::jab(Side::Left));
+		state.tick(jab_dt(JAB_STARTUP_END));
+		assert!(state.just_entered_active() || state.phase() == Some(AttackPhase::Active));
+		state.request(AttackSpec::jab(Side::Right));
+		assert!(state.queued().is_some());
+		state.cancel();
+		assert!(!state.is_busy());
+		assert!(!state.just_entered_active());
+		assert!(state.queued().is_none());
+		state.tick(jab_dt(0.05));
+		assert!(!state.just_entered_active());
+		assert!(!state.is_busy());
+	}
+
+	#[test]
 	fn queued_jab_relatches_when_it_starts() {
 		let mut state = AttackState::default();
 		state.request(AttackSpec::jab(Side::Left));

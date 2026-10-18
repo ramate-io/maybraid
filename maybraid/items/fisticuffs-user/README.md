@@ -18,8 +18,11 @@ Mouse **RMB** is analog focus / aim and **LMB** is UseItem. They share the
 trigger axes but **do not** emit `AttackLeft` / `AttackRight` — starting to aim
 must not throw a jab.
 
-Jabs only start when the player is unarmed (`PlayerUse` absent). Held guns and
-grenades keep LT/RT as focus/fire. Drop or holster the item to punch.
+Jabs only start while **Fisticuffs** is the equipped primary tool. The world
+equipment adapter inserts [`FisticuffsUser`](src/lib.rs) for that selection and
+removes it (canceling a pending strike) when another item is queued. An empty
+weapon queue does not enable punches. Held guns and grenades keep LT/RT as
+focus/fire.
 
 ## Aim
 
@@ -85,8 +88,11 @@ pose. Same-`AnimId` restarts (left ↔ right, or recovery cancel) call
 
 ## Play
 
-In the world / game, drop the held item, then tap LT/RT (or F/G). Look aims
-the jab; RMB aims the camera without punching.
+In the world / game, equip **Fisticuffs** from Inventory → Tools (it is an
+intrinsic, non-droppable bag item), then tap LT/RT (or F/G). Default starter
+loadouts queue firearms and a grenade first; Fisticuffs stays in the bag until
+selected. Look aims the jab; RMB aims the camera without punching. Switching
+to a gun or grenade cancels a chambered punch before it can fire.
 
 The authored clip can still be scrubbed in `characters-playground`:
 

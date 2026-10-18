@@ -11,8 +11,8 @@ use character_persist::SaveRoot;
 use firearms_components::firearm_preview_camera;
 use host::{
 	install_capture_hosts, keep_capture_hosts_visible, mark_capture_hosts_ready,
-	prepare_silhouette_hosts, realize_capture_hosts, remember_item, rest_pose_self_lubikan_skins,
-	HOST_CLOTHING, HOST_FIREARM,
+	prepare_silhouette_hosts, realize_capture_hosts, remember_item,
+	rest_pose_fisticuffs_arms_skins, rest_pose_self_lubikan_skins, HOST_CLOTHING, HOST_FIREARM,
 };
 use screen_capture::{
 	CaptureFraming, CaptureLighting, CaptureRequest, CaptureResolution, CaptureRevision,
@@ -20,7 +20,8 @@ use screen_capture::{
 };
 
 pub use host::{
-	CaptureHostRealized, ItemCaptureSubjects, HOST_GRENADE, HOST_SELF_LUBIKAN, HOST_SKILL_MAP,
+	CaptureHostRealized, ItemCaptureSubjects, HOST_FISTICUFFS_ARMS, HOST_GRENADE,
+	HOST_SELF_LUBIKAN, HOST_SKILL_MAP,
 };
 pub use prune::{
 	kept_icon_file_names, prune_icon_cache, prune_icon_cache_to_saved_inventories,
@@ -48,6 +49,10 @@ const CLOTHING_LOOK: Vec3 = Vec3::new(0.0, 0.65, 0.0);
 /// Full-body Braidman plus chest-front medical cross.
 const SELF_LUBIKAN_EYE: Vec3 = Vec3::new(0.0, 1.0, 3.8);
 const SELF_LUBIKAN_LOOK: Vec3 = Vec3::new(0.0, 0.95, 0.0);
+
+/// Isolated Braidman arms in a fighting guard, framed for a thumbnail.
+const FISTICUFFS_EYE: Vec3 = Vec3::new(0.55, 1.28, 1.35);
+const FISTICUFFS_LOOK: Vec3 = Vec3::new(0.0, 1.18, 0.22);
 
 /// Systems that request icons run before completed handles are stored.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -172,6 +177,10 @@ impl Plugin for ItemIconPlugin {
 			)
 			.add_systems(
 				PostUpdate,
+				rest_pose_fisticuffs_arms_skins.before(prepare_silhouette_hosts),
+			)
+			.add_systems(
+				PostUpdate,
 				(
 					keep_capture_hosts_visible,
 					rest_pose_self_lubikan_skins,
@@ -230,6 +239,12 @@ impl InventoryItemSubject {
 				scene: CaptureScene::image(Handle::default()),
 				view: CaptureView::unused(),
 			}),
+			InventoryItem::Fisticuffs => Some(Self {
+				id: id.clone(),
+				scene: CaptureScene::host(HOST_FISTICUFFS_ARMS, id.as_str()),
+				view: CaptureView::look_at(FISTICUFFS_EYE, FISTICUFFS_LOOK)
+					.perspective(CaptureView::DEFAULT_FOV),
+			}),
 		}
 	}
 }
@@ -276,6 +291,7 @@ fn resolution_for(item: &InventoryItem, mode: CaptureMode) -> CaptureResolution 
 	match (item, mode) {
 		(InventoryItem::Firearm { .. }, CaptureMode::Silhouette) => FIREARM_SILHOUETTE_RESOLUTION,
 		(InventoryItem::Grenade { .. }, CaptureMode::Silhouette) => GRENADE_SILHOUETTE_RESOLUTION,
+		(InventoryItem::Fisticuffs, CaptureMode::Silhouette) => ITEM_ICON_RESOLUTION,
 		_ => ITEM_ICON_RESOLUTION,
 	}
 }
@@ -580,6 +596,31 @@ mod tests {
 			icon_catalog_key_for_label(SELF_LUBIKAN_CAPTURE_LABEL),
 			self_lubikan_catalog_key()
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn fisticuffs_icon_is_a_braidman_arms_host() -> anyhow::Result<()> {
+		use character_items::{fisticuffs_catalog_key, FISTICUFFS_CAPTURE_LABEL};
+
+		let item = InventoryItem::Fisticuffs;
+		let subject =
+			InventoryItemSubject::from_item(&item).ok_or_else(|| anyhow::anyhow!("fisticuffs"))?;
+		assert_eq!(subject.capture_id(), CaptureId::new(FISTICUFFS_CAPTURE_LABEL));
+		assert!(matches!(
+			subject.capture_scene(),
+			CaptureScene::Host { kind, .. } if kind == HOST_FISTICUFFS_ARMS
+		));
+		let requests =
+			item_icon_requests(&item, CaptureLighting::studio(), CaptureRevision::CURRENT);
+		assert_eq!(requests.len(), 2);
+		assert_eq!(requests[0].mode, CaptureMode::Shaded);
+		assert_eq!(requests[1].mode, CaptureMode::Silhouette);
+		assert_eq!(requests[0].framing, CaptureFraming::ICON);
+		assert_eq!(requests[0].resolution, ITEM_ICON_RESOLUTION);
+		assert_eq!(requests[1].resolution, ITEM_ICON_RESOLUTION);
+		assert_eq!(item.icon_catalog_key(), Some(fisticuffs_catalog_key()));
+		assert_eq!(icon_catalog_key_for_label(FISTICUFFS_CAPTURE_LABEL), fisticuffs_catalog_key());
 		Ok(())
 	}
 

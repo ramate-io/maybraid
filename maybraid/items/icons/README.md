@@ -21,11 +21,16 @@ capture landscape so the HUD slot can match the gun's aspect.
 
 Inventory catalogs look up **shaded** handles by
 [`character_items::InventoryItem::icon_catalog_key`]. The skill-map HUD looks
-up **silhouette** handles from [`ItemIconCache`]. Pending and failed captures
-leave those lookups empty so callers can keep a placeholder.
+up **silhouette** handles from [`ItemIconCache`]. Fisticuffs and Self Lubikan
+are grayscale scene captures of the real Braidman GLB; the inventory multiplies
+those silhouettes by yellow. Fisticuffs destems the bind-pose mesh, isolates
+both arms, and folds them into a guard so the thumbnail is fists rather than
+the full body. Pending and failed captures leave those lookups empty so
+callers can keep a placeholder.
 
 Home-menu load spawns [`RequestPruneItemIconCache`], which deletes PNG files
-whose names are not in any saved character inventory.
+whose names are not in any saved character inventory. Self Lubikan and
+Fisticuffs cache identities are always retained.
 
 ```rust
 use item_icons::{request_inventory_icons, ItemIconPlugin};

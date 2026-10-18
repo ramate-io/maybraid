@@ -21,6 +21,12 @@ pub const STARTER_CLOTHING_COUNT: usize = 3;
 /// Lubikans are not bag items; this label only keys the scene-captured icon.
 pub const SELF_LUBIKAN_CAPTURE_LABEL: &str = "self-lubikan";
 
+/// Capture-id label for the intrinsic Fisticuffs tool.
+///
+/// Unlike Self Lubikan, Fisticuffs is a real bag item. The label is stable so
+/// inventory thumbs and HUD silhouettes share one cache identity.
+pub const FISTICUFFS_CAPTURE_LABEL: &str = "fisticuffs:braidman-arms";
+
 /// How many firearms character creation rolls into the bag.
 pub const STARTER_WEAPON_COUNT: usize = 2;
 
@@ -108,10 +114,25 @@ impl MaterialRefParams {
 /// One owned instance in a character inventory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InventoryItem {
-	Clothing { mesh: ClothingMesh, material: MaterialRefParams, stats: ClothingStats },
-	Firearm { spec: FirearmSpec, stats: FirearmStats },
-	Grenade { spec: GrenadeSpec, stats: GrenadeStats, recharge: GrenadeRecharge },
-	SkillMap { spec: SkillMapSpec },
+	Clothing {
+		mesh: ClothingMesh,
+		material: MaterialRefParams,
+		stats: ClothingStats,
+	},
+	Firearm {
+		spec: FirearmSpec,
+		stats: FirearmStats,
+	},
+	Grenade {
+		spec: GrenadeSpec,
+		stats: GrenadeStats,
+		recharge: GrenadeRecharge,
+	},
+	SkillMap {
+		spec: SkillMapSpec,
+	},
+	/// Intrinsic bare-handed tool. Every playable character owns exactly one.
+	Fisticuffs,
 }
 
 impl InventoryItem {
@@ -147,10 +168,26 @@ impl InventoryItem {
 		Self::grenade(GrenadeSpec::standard(), GrenadeStats::realize(rng))
 	}
 
+	pub const fn fisticuffs() -> Self {
+		Self::Fisticuffs
+	}
+
+	pub const fn is_fisticuffs(&self) -> bool {
+		matches!(self, Self::Fisticuffs)
+	}
+
+	/// Gameplay drop paths may not remove intrinsic tools. Caller policy cannot
+	/// override this.
+	pub const fn is_droppable(&self) -> bool {
+		!self.is_fisticuffs()
+	}
+
 	pub const fn slot(&self) -> InventorySlot {
 		match self {
 			Self::Clothing { .. } => InventorySlot::Clothing,
-			Self::Firearm { .. } | Self::Grenade { .. } => InventorySlot::Weapons,
+			Self::Firearm { .. } | Self::Grenade { .. } | Self::Fisticuffs => {
+				InventorySlot::Weapons
+			}
 			Self::SkillMap { .. } => InventorySlot::Skills,
 		}
 	}
@@ -158,63 +195,90 @@ impl InventoryItem {
 	pub const fn mesh(&self) -> Option<ClothingMesh> {
 		match self {
 			Self::Clothing { mesh, .. } => Some(*mesh),
-			Self::Firearm { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+			Self::Firearm { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn firearm_mesh(&self) -> Option<FirearmMesh> {
 		match self {
 			Self::Firearm { spec, .. } => Some(spec.kit.body),
-			Self::Clothing { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn firearm_spec(&self) -> Option<FirearmSpec> {
 		match self {
 			Self::Firearm { spec, .. } => Some(*spec),
-			Self::Clothing { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn skill_map_spec(&self) -> Option<SkillMapSpec> {
 		match self {
 			Self::SkillMap { spec } => Some(*spec),
-			Self::Clothing { .. } | Self::Firearm { .. } | Self::Grenade { .. } => None,
+			Self::Clothing { .. }
+			| Self::Firearm { .. }
+			| Self::Grenade { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn material(&self) -> Option<MaterialRefParams> {
 		match self {
 			Self::Clothing { material, .. } => Some(*material),
-			Self::Firearm { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+			Self::Firearm { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn clothing_stats(&self) -> Option<ClothingStats> {
 		match self {
 			Self::Clothing { stats, .. } => Some(*stats),
-			Self::Firearm { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+			Self::Firearm { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn firearm_stats(&self) -> Option<FirearmStats> {
 		match self {
 			Self::Firearm { stats, .. } => Some(*stats),
-			Self::Clothing { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn grenade_stats(&self) -> Option<GrenadeStats> {
 		match self {
 			Self::Grenade { stats, .. } => Some(*stats),
-			Self::Clothing { .. } | Self::Firearm { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. }
+			| Self::Firearm { .. }
+			| Self::SkillMap { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn grenade_spec(&self) -> Option<GrenadeSpec> {
 		match self {
 			Self::Grenade { spec, .. } => Some(*spec),
-			Self::Clothing { .. } | Self::Firearm { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. }
+			| Self::Firearm { .. }
+			| Self::SkillMap { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
@@ -226,6 +290,7 @@ impl InventoryItem {
 			Self::SkillMap { spec } => {
 				format!("{} · {:04X}", spec.kind.display_name(), spec.seed as u16)
 			}
+			Self::Fisticuffs => String::from("Bare hands · left and right jabs"),
 		}
 	}
 
@@ -238,6 +303,10 @@ impl InventoryItem {
 				(String::from("Kind"), spec.kind.display_name().to_string()),
 				(String::from("Seed"), format!("{:08X}", spec.seed)),
 			],
+			Self::Fisticuffs => vec![
+				(String::from("Kind"), String::from("Tool")),
+				(String::from("Use"), String::from("Left / right jabs")),
+			],
 		}
 	}
 
@@ -247,6 +316,7 @@ impl InventoryItem {
 			Self::Firearm { spec, .. } => spec.kit.body.label(),
 			Self::Grenade { spec, .. } => spec.mesh.label(),
 			Self::SkillMap { spec } => spec.kind.label(),
+			Self::Fisticuffs => "Fisticuffs",
 		}
 	}
 
@@ -256,6 +326,7 @@ impl InventoryItem {
 			Self::Firearm { spec, .. } => spec.hashed_name(),
 			Self::Grenade { spec, .. } => spec.hashed_name(),
 			Self::SkillMap { spec } => spec.hashed_name(),
+			Self::Fisticuffs => String::from("Fisticuffs"),
 		}
 	}
 
@@ -263,7 +334,7 @@ impl InventoryItem {
 		match self {
 			Self::Clothing { mesh, .. } => mesh.path(),
 			Self::Firearm { spec, .. } => spec.kit.body.path(),
-			Self::Grenade { .. } | Self::SkillMap { .. } => "",
+			Self::Grenade { .. } | Self::SkillMap { .. } | Self::Fisticuffs => "",
 		}
 	}
 
@@ -281,6 +352,7 @@ impl InventoryItem {
 			Self::SkillMap { spec } => {
 				Some(format!("skill-map:{}:{}", spec.kind.label(), spec.seed))
 			}
+			Self::Fisticuffs => Some(String::from(FISTICUFFS_CAPTURE_LABEL)),
 		}
 	}
 
@@ -305,8 +377,14 @@ impl InventoryItem {
 				Self::Grenade { spec: other_spec, stats: other_stats, .. },
 			) => spec == other_spec && stats == other_stats,
 			(Self::SkillMap { spec }, Self::SkillMap { spec: other_spec }) => spec == other_spec,
+			(Self::Fisticuffs, Self::Fisticuffs) => true,
 			_ => false,
 		}
+	}
+
+	/// Catalog thumbs that capture grayscale geometry and tint yellow in UI.
+	pub const fn catalog_thumb_is_silhouette(&self) -> bool {
+		self.is_fisticuffs()
 	}
 }
 
@@ -568,6 +646,7 @@ impl Inventory {
 	pub fn explode(self) -> Vec<Self> {
 		self.items
 			.into_iter()
+			.filter(InventoryItem::is_droppable)
 			.map(|item| {
 				let mut bag = Self {
 					items: vec![item],
@@ -583,6 +662,70 @@ impl Inventory {
 
 	pub fn character_sheet(&self) -> crate::CharacterSheet {
 		crate::CharacterSheet::from_inventory(self)
+	}
+
+	/// Ensure the bag owns exactly one intrinsic Fisticuffs tool.
+	///
+	/// Older saves get one appended. An existing copy stays put so the current
+	/// primary selection does not change. Extra copies are stripped. The weapon
+	/// queue is not auto-filled: starter loadouts already sit at capacity, and
+	/// selecting Fisticuffs is an explicit toggle.
+	pub fn ensure_fisticuffs(&mut self) {
+		let found: Vec<usize> = self
+			.items
+			.iter()
+			.enumerate()
+			.filter(|(_, item)| item.is_fisticuffs())
+			.map(|(index, _)| index)
+			.collect();
+		match found.as_slice() {
+			[] => self.items.push(InventoryItem::Fisticuffs),
+			[_] => {}
+			[_, extras @ ..] => {
+				let mut extras = extras.to_vec();
+				extras.sort_unstable();
+				let _ = self.take_indices(&extras);
+			}
+		}
+	}
+
+	/// Drain every droppable item. Intrinsic tools stay on `self` with
+	/// remapped selections. This is the gameplay bulk-drop path; [`Self::take_all`]
+	/// remains a full bag move for snapshots and claims.
+	pub fn take_droppable(&mut self) -> Self {
+		let mut keep: Vec<usize> = self
+			.items
+			.iter()
+			.enumerate()
+			.filter(|(_, item)| item.is_droppable())
+			.map(|(index, _)| index)
+			.collect();
+		keep.sort_unstable();
+		self.take_indices(&keep)
+	}
+
+	/// Like [`Self::take_fraction`], but only droppable items are candidates.
+	pub fn take_droppable_fraction(&mut self, rng: &mut ItemRng, fraction: LootFraction) -> Self {
+		let droppable: Vec<usize> = self
+			.items
+			.iter()
+			.enumerate()
+			.filter(|(_, item)| item.is_droppable())
+			.map(|(index, _)| index)
+			.collect();
+		let count = fraction.count(droppable.len(), rng);
+		if count == 0 || droppable.is_empty() {
+			return Self::default();
+		}
+		if count >= droppable.len() {
+			return self.take_droppable();
+		}
+		let mut keep = rng.choose_indices(droppable.len(), count);
+		for index in &mut keep {
+			*index = droppable[*index];
+		}
+		keep.sort_unstable();
+		self.take_indices(&keep)
 	}
 }
 
@@ -749,11 +892,14 @@ impl ItemRng {
 		items
 	}
 
-	/// Clothing starter, two unique firearms, one grenade, and one rolled skill map.
+	/// Clothing starter, two unique firearms, one grenade, Fisticuffs, and one
+	/// rolled skill map. Fisticuffs is last among weapons so [`Inventory::with_starter_outfit`]
+	/// queues the guns and grenade (cap 3) and leaves fists selectable in the bag.
 	pub fn random_starter_loadout(&mut self) -> Vec<InventoryItem> {
 		let mut items = self.random_starter_clothing(STARTER_CLOTHING_COUNT);
 		items.extend(self.random_starter_firearms(STARTER_WEAPON_COUNT));
 		items.push(InventoryItem::rolled_grenade(self));
+		items.push(InventoryItem::Fisticuffs);
 		items.extend(self.random_starter_skill_maps(STARTER_SKILL_MAP_COUNT));
 		items
 	}
@@ -781,6 +927,16 @@ pub fn icon_catalog_key_for_label(label: &str) -> u64 {
 /// Catalog thumbnail key for the Self Lubikan tile.
 pub fn self_lubikan_catalog_key() -> u64 {
 	icon_catalog_key_for_label(SELF_LUBIKAN_CAPTURE_LABEL)
+}
+
+/// Catalog thumbnail key for the intrinsic Fisticuffs tool.
+pub fn fisticuffs_catalog_key() -> u64 {
+	icon_catalog_key_for_label(FISTICUFFS_CAPTURE_LABEL)
+}
+
+/// Grayscale silhouette thumbs that the inventory multiplies by yellow.
+pub fn catalog_key_uses_yellow_silhouette(key: u64) -> bool {
+	key == self_lubikan_catalog_key() || key == fisticuffs_catalog_key()
 }
 
 fn remap_selected(selected: &[usize], remap: &[Option<usize>]) -> Vec<usize> {
@@ -900,9 +1056,11 @@ mod tests {
 				+ STARTER_WEAPON_COUNT
 				+ STARTER_GRENADE_COUNT
 				+ STARTER_SKILL_MAP_COUNT
+				+ 1
 		);
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Clothing).count(), 3);
-		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Weapons).count(), 3);
+		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Weapons).count(), 4);
+		assert_eq!(items.iter().filter(|item| item.is_fisticuffs()).count(), 1);
 		assert_eq!(items.iter().filter_map(InventoryItem::grenade_spec).count(), 1);
 		let blast = items.iter().find_map(InventoryItem::grenade_stats).expect("grenade");
 		assert!((crate::BLAST_RADIUS_MIN..=crate::BLAST_RADIUS_MAX).contains(&blast.blast_radius));
@@ -916,6 +1074,13 @@ mod tests {
 		assert_eq!(outfit.weapons.len(), 3);
 		assert_eq!(outfit.skills.len(), 1);
 		assert!(outfit.primary_skill_map().and_then(InventoryItem::skill_map_spec).is_some());
+		assert!(!outfit.primary_weapon().is_some_and(InventoryItem::is_fisticuffs));
+		assert!(outfit.items.iter().any(InventoryItem::is_fisticuffs));
+		assert!(outfit
+			.items
+			.iter()
+			.enumerate()
+			.any(|(index, item)| { item.is_fisticuffs() && outfit.rank(index).is_none() }));
 	}
 
 	#[test]
@@ -1216,6 +1381,10 @@ mod tests {
 				.as_deref(),
 			Some("skill-map:fireball:1")
 		);
+		assert_eq!(
+			InventoryItem::Fisticuffs.capture_id_label().as_deref(),
+			Some(FISTICUFFS_CAPTURE_LABEL)
+		);
 		Ok(())
 	}
 
@@ -1237,7 +1406,88 @@ mod tests {
 			icon_catalog_key_for_label(SELF_LUBIKAN_CAPTURE_LABEL)
 		);
 		assert_ne!(self_lubikan_catalog_key(), key);
+		assert_eq!(fisticuffs_catalog_key(), icon_catalog_key_for_label(FISTICUFFS_CAPTURE_LABEL));
+		assert_ne!(fisticuffs_catalog_key(), self_lubikan_catalog_key());
+		assert_ne!(fisticuffs_catalog_key(), key);
 		Ok(())
+	}
+
+	#[test]
+	fn ensure_fisticuffs_appends_without_changing_primary() {
+		let mut bag = Inventory {
+			items: vec![InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: vec![0],
+			skills: Vec::new(),
+		};
+		bag.ensure_fisticuffs();
+		assert_eq!(bag.items.len(), 2);
+		assert!(bag.items[1].is_fisticuffs());
+		assert_eq!(bag.weapons, vec![0]);
+		assert_eq!(
+			bag.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
+		bag.ensure_fisticuffs();
+		assert_eq!(bag.items.iter().filter(|item| item.is_fisticuffs()).count(), 1);
+		assert_eq!(bag.weapons, vec![0]);
+	}
+
+	#[test]
+	fn ensure_fisticuffs_strips_duplicates_and_keeps_the_first() {
+		let mut bag = Inventory {
+			items: vec![
+				InventoryItem::Fisticuffs,
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::Fisticuffs,
+			],
+			clothing: Vec::new(),
+			weapons: vec![0, 1, 2],
+			skills: Vec::new(),
+		};
+		bag.ensure_fisticuffs();
+		assert_eq!(
+			bag.items,
+			vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)]
+		);
+		assert_eq!(bag.weapons, vec![0, 1]);
+		assert!(bag.primary_weapon().is_some_and(InventoryItem::is_fisticuffs));
+	}
+
+	#[test]
+	fn take_droppable_keeps_fisticuffs_and_remaps_the_queue() {
+		let mut bag = Inventory {
+			items: vec![
+				InventoryItem::Fisticuffs,
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::firearm(FirearmMesh::Reltor),
+			],
+			clothing: Vec::new(),
+			weapons: vec![0, 1, 2],
+			skills: Vec::new(),
+		};
+		let loot = bag.take_droppable();
+		assert_eq!(loot.items.len(), 2);
+		assert!(loot.items.iter().all(|item| !item.is_fisticuffs()));
+		assert_eq!(bag.items, vec![InventoryItem::Fisticuffs]);
+		assert_eq!(bag.weapons, vec![0]);
+		assert!(bag.primary_weapon().is_some_and(InventoryItem::is_fisticuffs));
+	}
+
+	#[test]
+	fn explode_skips_intrinsic_arms() {
+		let bag = Inventory {
+			items: vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: vec![0, 1],
+			skills: Vec::new(),
+		};
+		let exploded = bag.explode();
+		assert_eq!(exploded.len(), 1);
+		assert_eq!(
+			exploded[0].primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
 	}
 
 	#[test]
