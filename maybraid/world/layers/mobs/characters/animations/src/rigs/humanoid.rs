@@ -8,6 +8,7 @@ pub mod land;
 pub mod leap;
 pub mod prone;
 pub mod run;
+pub mod shrug;
 pub mod soaring;
 pub mod spring;
 pub mod squat;

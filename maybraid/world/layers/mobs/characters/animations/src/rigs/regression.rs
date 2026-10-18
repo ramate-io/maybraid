@@ -4,7 +4,7 @@
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
-use crate::animations::{Flapping, Jab, QuadrupedRun, Squat, Walk};
+use crate::animations::{Flapping, Jab, QuadrupedRun, Shrug, Squat, Walk};
 use crate::Animation;
 
 #[test]
@@ -47,6 +47,22 @@ fn flapping_keeps_the_previous_front_back_stroke() {
 	let b = back.character_length("forearm.L");
 	assert!((a.z - b.z).abs() > (a.y - b.y).abs(), "previous flap is XZ, {a:?} vs {b:?}");
 	assert!((a - b).length() > 0.3, "wing tip must move, {a:?} vs {b:?}");
+}
+
+#[test]
+fn shrug_lifts_both_forearm_tips_on_the_t_pose() {
+	let rest = HumanoidV0Rig::for_clip_test();
+	let mut posed = HumanoidV0Rig::for_clip_test();
+	Shrug.apply(&mut posed, 0.45);
+	for (bone, side_sign) in [("forearm.L", 1.0_f32), ("forearm.R", -1.0)] {
+		let rest_tip = rest.character_point(bone);
+		let posed_tip = posed.character_point(bone);
+		assert!(posed_tip.y > rest_tip.y + 0.06, "{bone} rises, {posed_tip:?} vs {rest_tip:?}");
+		assert!(
+			posed_tip.x.signum() == side_sign,
+			"{bone} stays on its side of midline, {posed_tip:?}"
+		);
+	}
 }
 
 #[test]
