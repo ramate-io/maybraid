@@ -25,6 +25,9 @@ pub enum AnimationMode {
 	Soaring,
 	Flapping,
 	Jab,
+	/// Idle→walk [`Mix`]. Scrub with `/character playback --progress 0..1` for walk weight.
+	
+	Approach,
 	Prone,
 }
 
@@ -49,11 +52,12 @@ impl AnimationMode {
 			Self::Soaring => "soaring",
 			Self::Flapping => "flapping",
 			Self::Jab => "jab",
+			Self::Approach => "approach",
 			Self::Prone => "prone",
 		}
 	}
 
-	pub fn anim_clip(self, side: Side) -> AnimClip {
+	pub fn anim_clip(self, side: Side, playback: &AnimationPlayback) -> AnimClip {
 		match self {
 			Self::Still => AnimClip::still(),
 			Self::Walk => AnimClip::walk(),
@@ -72,12 +76,13 @@ impl AnimationMode {
 				backswing: DEFAULT_BACKSWING,
 				target: DEFAULT_JAB_TARGET,
 			}),
+			Self::Approach => AnimClip::approach(playback.approach_walk_weight),
 			Self::Prone => AnimClip::prone(),
 		}
 	}
 
-	pub fn anim_ref(self, side: Side) -> AnimRef {
-		AnimRef::new(self.anim_clip(side))
+	pub fn anim_ref(self, side: Side, playback: &AnimationPlayback) -> AnimRef {
+		AnimRef::new(self.anim_clip(side, playback))
 	}
 
 	/// Mailbox sample coordinate. Held tuck stays at full fold.
