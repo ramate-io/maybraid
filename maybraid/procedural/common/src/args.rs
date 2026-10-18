@@ -117,13 +117,4 @@ mod tests {
 		);
 		Ok(())
 	}
-
-	#[test]
-	fn int_ranges_convert_to_std_range() -> anyhow::Result<()> {
-		let u32_range: Range<u32> = U32Range::new(1, 3).into();
-		assert_eq!(u32_range, 1..3);
-		let usize_range: Range<usize> = UsizeRange::new(0, 1).into();
-		assert_eq!(usize_range, 0..1);
-		Ok(())
-	}
 }

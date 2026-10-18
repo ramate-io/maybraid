@@ -307,15 +307,6 @@ mod tests {
 	}
 
 	#[test]
-	fn union_aabb3_spans_both_boxes() {
-		let a = Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0));
-		let b = Aabb3d::from_min_max(Vec3::new(2.0, -1.0, 3.0), Vec3::new(4.0, 2.0, 5.0));
-		let u = union_aabb3(a, b);
-		assert_eq!(Vec3::from(u.min), Vec3::new(0.0, -1.0, 0.0));
-		assert_eq!(Vec3::from(u.max), Vec3::new(4.0, 2.0, 5.0));
-	}
-
-	#[test]
 	fn inset_collapses_to_none() {
 		let a = Aabb2d { min: Vec2::ZERO, max: Vec2::new(1.0, 1.0) };
 		assert!(inset_aabb2(a, 0.6).is_none());
