@@ -12,7 +12,7 @@ use super::demand::{HcsgDemand, SubscriptionId};
 use super::runtime::{ensure_runtime, HcsgSystems};
 
 /// Per-system request state for [`generation`].
-pub struct Generated<T> {
+struct Generated<T> {
 	/// The channel's latest regions.
 	wanted: Vec<Aabb3d>,
 	focus: Option<Vec3>,

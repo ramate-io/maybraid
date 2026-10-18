@@ -1,18 +1,18 @@
 //! [`HcsgStorage`] records for urbanization selection.
 
-use std::sync::Arc;
-
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::DVec3;
 use bevy::prelude::*;
-use lod::gen::Id;
-use lod::hcsg::{Busy, HcsgStorage, StoredEntry};
 use procedural_common::NoiseParams;
 
-use crate::{
-	DevelopmentLeaf, SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent,
-	UrbanizationKind, DEFAULT_URBANIZATION_EXTENT_XZ,
-};
+#[cfg(test)]
+use lod::gen::Id;
+#[cfg(test)]
+use lod::hcsg::{Busy, HcsgStorage};
+
+use crate::{UrbanizationKind, DEFAULT_URBANIZATION_EXTENT_XZ};
+
+#[cfg(test)]
+use crate::{DevelopmentLeaf, SelectedUrbanization, UrbanizationExtent};
 
 /// Root input every [`SelectedUrbanization`] is thrown from.
 #[derive(Resource, Debug, Clone, PartialEq, Default)]
@@ -27,69 +27,21 @@ lod::seeded_root!(UrbanizationSelection);
 /// Selections are bucketed one extent (1600 m) apart.
 pub(crate) const SELECTION_INDEX_SCALE: DVec3 =
 	DVec3::new(DEFAULT_URBANIZATION_EXTENT_XZ as f64, 1.0, DEFAULT_URBANIZATION_EXTENT_XZ as f64);
-/// Urbanization reads over [`HcsgStorage`]. GET only: nothing is selected here.
-pub trait UrbanizationStorage {
-	fn selected(&self, id: Id) -> Result<Option<Arc<SelectedUrbanization>>, Busy>;
 
-	/// Stored selections whose extents overlap `region`.
-	fn selected_overlapping(
-		&self,
-		region: Aabb3d,
-	) -> Result<Vec<(Id, StoredEntry<Arc<SelectedUrbanization>>)>, Busy>;
-
-	/// Advances whenever a selection is stored or dropped.
-	fn urbanization_revision(&self) -> Result<u64, Busy>;
-
-	/// The stored leaf whose [`DevelopmentLeaf::id`] is `id`.
-	fn leaf(&self, id: Id) -> Result<Option<DevelopmentLeaf>, Busy>;
-
-	/// Stored non-empty leaves whose bounds intersect `region`.
-	fn filled_leaves_overlapping(&self, region: Aabb3d) -> Result<Vec<DevelopmentLeaf>, Busy>;
-}
-
-impl UrbanizationStorage for HcsgStorage {
-	fn selected(&self, id: Id) -> Result<Option<Arc<SelectedUrbanization>>, Busy> {
-		self.try_entry::<SelectedUrbanization>(id)
-			.map(|entry| entry.map(|stored| stored.value))
-	}
-
-	fn selected_overlapping(
-		&self,
-		region: Aabb3d,
-	) -> Result<Vec<(Id, StoredEntry<Arc<SelectedUrbanization>>)>, Busy> {
-		let ids = self.try_overlapping::<SelectedUrbanization>(region)?;
-		let mut out = Vec::with_capacity(ids.len());
-		for id in ids {
-			if let Some(entry) = self.try_entry::<SelectedUrbanization>(id)? {
-				out.push((id, entry));
-			}
-		}
-		Ok(out)
-	}
-
-	fn urbanization_revision(&self) -> Result<u64, Busy> {
-		self.try_membership_revision::<SelectedUrbanization>()
-	}
-
-	fn leaf(&self, id: Id) -> Result<Option<DevelopmentLeaf>, Busy> {
-		let Some(extent) = UrbanizationExtent::owning_leaf(id) else {
-			return Ok(None);
-		};
-		Ok(self
-			.selected(extent.id())?
-			.and_then(|selected| selected.as_ref().leaf(id).cloned()))
-	}
-
-	fn filled_leaves_overlapping(&self, region: Aabb3d) -> Result<Vec<DevelopmentLeaf>, Busy> {
-		Ok(self
-			.selected_overlapping(region)?
-			.into_iter()
-			.flat_map(|(_, entry)| entry.value.leaves.clone())
-			.filter(|leaf| {
-				leaf.kind != UrbanDevelopmentKind::Empty && region.intersects(&leaf.bounds)
-			})
-			.collect())
-	}
+/// The stored leaf whose [`DevelopmentLeaf::id`] is `id`, if its selection is
+/// already published.
+#[cfg(test)]
+pub(crate) fn try_urbanization_leaf(
+	storage: &HcsgStorage,
+	id: Id,
+) -> Result<Option<DevelopmentLeaf>, Busy> {
+	let Some(extent) = UrbanizationExtent::owning_leaf(id) else {
+		return Ok(None);
+	};
+	Ok(storage
+		.try_entry::<SelectedUrbanization>(extent.id())?
+		.map(|entry| entry.value)
+		.and_then(|selected| selected.leaf(id).cloned()))
 }
 
 #[cfg(test)]
@@ -169,7 +121,9 @@ mod tests {
 			.get_or_generate::<SelectedUrbanization>(extent.id())
 			.and_then(|selected| selected.leaves.first().cloned())
 			.ok_or_else(|| anyhow::anyhow!("expected leaves"))?;
-		anyhow::ensure!(storage.leaf(leaf.id()).map_err(storage_busy)? == Some(leaf));
+		anyhow::ensure!(
+			try_urbanization_leaf(&storage, leaf.id()).map_err(storage_busy)? == Some(leaf)
+		);
 		Ok(())
 	}
 }

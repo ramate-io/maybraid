@@ -16,9 +16,9 @@ use super::state::{lock_mutex, DemandState, Discover, Generate};
 use super::HcsgDemand;
 
 /// Ids the worker generates in one quantum before returning to the scheduler.
-pub const QUANTUM_IDS: usize = 32;
+pub(crate) const QUANTUM_IDS: usize = 32;
 /// Wall time after which a quantum yields, even if fewer ids have run.
-pub const QUANTUM_TIME: Duration = Duration::from_millis(30);
+pub(crate) const QUANTUM_TIME: Duration = Duration::from_millis(30);
 
 /// One subscription the worker is filling for a quantum.
 pub(crate) struct Job {
@@ -124,13 +124,15 @@ impl HcsgDemand {
 
 	/// How many times the worker has taken a quantum. Tests use this to check
 	/// that a lone subscription yields once per quantum, not once per id.
-	pub fn scheduler_picks(&self) -> u64 {
+	#[cfg(test)]
+	pub(crate) fn scheduler_picks(&self) -> u64 {
 		self.0.picks.load(Ordering::Relaxed)
 	}
 
 	/// How many times the worker has swept. Tests use this to check that a
 	/// sweep runs only when the live subscription set changes.
-	pub fn sweep_count(&self) -> u64 {
+	#[cfg(test)]
+	pub(crate) fn sweep_count(&self) -> u64 {
 		self.0.sweeps.load(Ordering::Relaxed)
 	}
 
