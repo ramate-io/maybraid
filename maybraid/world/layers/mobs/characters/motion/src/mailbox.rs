@@ -12,8 +12,8 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		Bow, Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent,
+		Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -817,6 +817,9 @@ fn sample_humanoid(
 			write_bones,
 			write_effects,
 		),
+		AnimClip::Bow => {
+			sample_split(&Bow::default(), rig, progress.clamp(0.0, 1.0), write_bones, write_effects)
+		}
 		AnimClip::Squat => sample_split(&Squat::held(), rig, progress, write_bones, write_effects),
 		AnimClip::SquatDescent => sample_split(
 			&SquatDescent::default(),
@@ -1025,6 +1028,25 @@ mod tests {
 		if rig.posed_angle("pelvis.L") < 0.1 {
 			return Err(anyhow!("held squat should crease the pelvis"));
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn bow_mailbox_sample_is_playback_only() -> anyhow::Result<()> {
+		let mut at_rest = HumanoidV0Rig::for_clip_test();
+		let rest_effects = sample_humanoid(AnimClip::bow(), &mut at_rest, 0.0, true, true);
+		assert!(rest_effects.is_identity());
+		assert!(at_rest.posed_angle("upper_back") < 0.01, "bow entry stays at rest");
+
+		let mut at_hold = HumanoidV0Rig::for_clip_test();
+		let hold_effects = sample_humanoid(AnimClip::bow(), &mut at_hold, 0.45, true, true);
+		assert!(!hold_effects.is_identity(), "knee flex uses armature planting");
+		assert!(at_hold.posed_angle("upper_back") > 0.1, "torso folds at hold");
+
+		let mut at_end = HumanoidV0Rig::for_clip_test();
+		let end_effects = sample_humanoid(AnimClip::bow(), &mut at_end, 1.0, true, true);
+		assert!(end_effects.is_identity());
+		assert!(at_end.posed_angle("upper_back") < 0.05, "bow exit returns to rest");
 		Ok(())
 	}
 
