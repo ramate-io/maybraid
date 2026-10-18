@@ -259,6 +259,26 @@ mod tests {
 	}
 
 	#[test]
+	fn locomotion_never_selects_quadruped_run_to_gallop_blend() {
+		let stance = CharacterStance::settled(StanceKind::Stand);
+		for speed in [0.0, WALK_SPEED, LEAP_SPEED, LEAP_SPEED + 1.0, LEAP_SPEED + 5.0] {
+			for skeleton in [
+				RigSkeletonKind::Humanoid,
+				RigSkeletonKind::Neck,
+				RigSkeletonKind::Quadruped,
+				RigSkeletonKind::Forelimbed,
+			] {
+				let clip = locomotion_clip(skeleton, None, &stance, speed);
+				assert_ne!(
+					clip.id(),
+					AnimId::QuadrupedRunToGallop,
+					"speed {speed} skeleton {skeleton:?} must not wire QuadrupedRunToGallop yet"
+				);
+			}
+		}
+	}
+
+	#[test]
 	fn settled_wish_does_not_rewrite_heading() -> anyhow::Result<()> {
 		use bevy::ecs::system::RunSystemOnce;
 

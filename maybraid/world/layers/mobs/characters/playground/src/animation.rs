@@ -14,6 +14,7 @@ pub enum AnimationMode {
 	Walk,
 	#[default]
 	Run,
+	QuadrupedRunToGallop,
 	Squat,
 	SquatDescent,
 	Jump,
@@ -38,6 +39,7 @@ impl AnimationMode {
 			Self::Still => "still",
 			Self::Walk => "walk",
 			Self::Run => "run",
+			Self::QuadrupedRunToGallop => "quadruped-run-to-gallop",
 			Self::Squat => "squat",
 			Self::SquatDescent => "squat-descent",
 			Self::Jump => "jump",
@@ -58,6 +60,7 @@ impl AnimationMode {
 			Self::Still => AnimClip::still(),
 			Self::Walk => AnimClip::walk(),
 			Self::Run => AnimClip::run(),
+			Self::QuadrupedRunToGallop => AnimClip::quadruped_run_to_gallop(),
 			Self::Squat => AnimClip::squat(),
 			Self::SquatDescent => AnimClip::squat_descent(),
 			Self::Jump => AnimClip::jump(),
@@ -84,6 +87,7 @@ impl AnimationMode {
 	pub fn mailbox_progress(self, elapsed: f32) -> f32 {
 		match self {
 			Self::FixedTuck => 1.0,
+			Self::QuadrupedRunToGallop => elapsed.min(1.0),
 			_ => elapsed,
 		}
 	}
