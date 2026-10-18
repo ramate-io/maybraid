@@ -5,22 +5,27 @@ use character_rigs::Side;
 use crate::animations::{Tuck, TuckProfile};
 use crate::{Animation, Effects};
 
+impl TuckProfile {
+	pub fn sample_pose(&self, amount: f32) -> HumanoidPose {
+		let mut pose = HumanoidPose::default();
+		pose.apply_leg(Side::Left, self.femur_swing(amount), self.shin_flex(amount));
+		pose.apply_leg(Side::Right, self.femur_swing(amount), self.shin_flex(amount));
+
+		for side in [Side::Left, Side::Right] {
+			let arm = pose.arm_mut(side);
+			arm.shoulder_forward = self.shoulder_roll(side, amount);
+			arm.forward_elevation = self.humerus_swing(side, amount);
+			arm.lateral_elevation = self.humerus_flex(side, amount);
+			arm.axial_rotation = self.humerus_twist(side, amount);
+			arm.elbow_flexion = self.forearm_flex(amount);
+		}
+		pose
+	}
+}
+
 /// Apply tuck articulation scaled by `amount` in `[0.0, 1.0]`.
 pub fn apply_tuck_profile(rig: &mut HumanoidV0Rig, profile: &TuckProfile, amount: f32) -> Effects {
-	let mut pose = HumanoidPose::default();
-	pose.apply_leg(Side::Left, profile.femur_swing(amount), profile.shin_flex(amount));
-	pose.apply_leg(Side::Right, profile.femur_swing(amount), profile.shin_flex(amount));
-
-	for side in [Side::Left, Side::Right] {
-		let arm = pose.arm_mut(side);
-		arm.shoulder_forward = profile.shoulder_roll(side, amount);
-		arm.forward_elevation = profile.humerus_swing(side, amount);
-		arm.lateral_elevation = profile.humerus_flex(side, amount);
-		arm.axial_rotation = profile.humerus_twist(side, amount);
-		arm.elbow_flexion = profile.forearm_flex(amount);
-	}
-
-	rig.write_pose(&pose);
+	rig.write_pose(&profile.sample_pose(amount));
 	ArmatureOffset::IDENTITY
 }
 

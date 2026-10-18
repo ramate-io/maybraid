@@ -43,14 +43,17 @@ impl TwoFootedTuckedFlip {
 		self.jump.vertical_offset(lengths, elapsed)
 	}
 
+	pub(crate) fn sample(
+		&self,
+		lengths: LegSegmentLengths,
+		elapsed: f32,
+	) -> crate::animations::JumpSample {
+		self.jump.sample(lengths, elapsed)
+	}
+
 	/// Flip pitch during the airborne segment; zero on ground phases.
 	pub fn flip_pitch_radians(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
-		let (segment, local) = self.segment(lengths, elapsed);
-		if segment == JumpSegment::Fall {
-			self.flip.pitch_radians(local)
-		} else {
-			0.0
-		}
+		self.sample(lengths, elapsed).flip_pitch_radians(&self.flip)
 	}
 }
 

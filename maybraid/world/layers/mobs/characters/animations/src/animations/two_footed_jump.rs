@@ -125,6 +125,52 @@ pub enum JumpSegment {
 	Land,
 }
 
+/// One jump sample: timings, segment, and blend window, computed once per elapsed time.
+///
+/// Pose and effects both consume this so LOD can keep split entry points while the
+/// combined [`crate::Animation::apply`] path shares the work.
+#[derive(Debug, Clone)]
+pub(crate) struct JumpSample {
+	pub timings: JumpTiming,
+	pub windup: Squat,
+	pub landing: Land,
+	pub segment: JumpSegment,
+	/// Segment-local coordinate from [`TwoFootedJump::segment_at_time`].
+	pub local: f32,
+	/// Progress passed to squat / land clips (`local` for spring / fall).
+	pub pose_progress: f32,
+	/// Linear 0–1 progress through the active pose blend; `1.0` when not blending.
+	pub blend_progress: f32,
+	pub cycle_t: f32,
+	pub time_since_launch: f32,
+}
+
+impl JumpSample {
+	pub(crate) fn vertical_offset(&self, jump: &TwoFootedJump, lengths: LegSegmentLengths) -> f32 {
+		match self.segment {
+			JumpSegment::Squat => -self.windup.vertical_drop(self.pose_progress, lengths),
+			JumpSegment::Spring | JumpSegment::Fall => jump
+				.ballistic_height(self.time_since_launch.min(jump.touchdown_time_since_launch())),
+			JumpSegment::Land => -self.landing.vertical_drop(self.pose_progress, lengths),
+		}
+	}
+
+	pub(crate) fn landing_depth(&self) -> f32 {
+		if self.segment != JumpSegment::Land {
+			return 0.0;
+		}
+		self.landing.depth(self.pose_progress)
+	}
+
+	pub(crate) fn flip_pitch_radians(&self, flip: &crate::animations::TuckedFlip) -> f32 {
+		if self.segment == JumpSegment::Fall {
+			flip.pitch_radians(self.local)
+		} else {
+			0.0
+		}
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct TwoFootedJump {
 	/// Downward acceleration for ballistic motion (units/s²).
@@ -188,8 +234,7 @@ impl TwoFootedJump {
 		(windup, landing)
 	}
 
-	pub fn timings(&self, lengths: LegSegmentLengths) -> JumpTiming {
-		let (windup, landing) = self.squat_configs(lengths);
+	fn timings_from_configs(&self, windup: &Squat, landing: &Land) -> JumpTiming {
 		let touchdown = self.ballistic().touchdown_time_since_launch();
 		// Fall runs from spring end until ballistic height returns to zero. Spring already
 		// consumes part of the post-launch clock, so subtract it from the full arc.
@@ -204,6 +249,54 @@ impl TwoFootedJump {
 		}
 	}
 
+	/// Resolve squat configs, timings, segment, and blend window once for this sample.
+	pub(crate) fn sample(&self, lengths: LegSegmentLengths, elapsed: f32) -> JumpSample {
+		let (windup, landing) = self.squat_configs(lengths);
+		let timings = self.timings_from_configs(&windup, &landing);
+		let cycle = timings.cycle_duration();
+		let cycle_t = if cycle <= f32::EPSILON { 0.0 } else { elapsed % cycle };
+		let (segment, local) = Self::segment_at_time(cycle_t, &timings);
+		let time_since_launch = (cycle_t - timings.squat_end()).max(0.0);
+		let (pose_progress, blend_progress) = match segment {
+			JumpSegment::Squat => (local / timings.squat_duration().max(f32::EPSILON), 1.0),
+			JumpSegment::Spring => (local, local),
+			JumpSegment::Fall => {
+				let blend = if local < FALL_BLEND_FRACTION {
+					(local / FALL_BLEND_FRACTION).clamp(0.0, 1.0)
+				} else {
+					1.0
+				};
+				(local, blend)
+			}
+			JumpSegment::Land => {
+				let pose_progress = local / timings.land_duration().max(f32::EPSILON);
+				let blend_window = timings.land_pose_blend_duration();
+				let blend = if blend_window > f32::EPSILON {
+					(local / blend_window).clamp(0.0, 1.0)
+				} else {
+					1.0
+				};
+				(pose_progress, blend)
+			}
+		};
+		JumpSample {
+			timings,
+			windup,
+			landing,
+			segment,
+			local,
+			pose_progress,
+			blend_progress,
+			cycle_t,
+			time_since_launch,
+		}
+	}
+
+	pub fn timings(&self, lengths: LegSegmentLengths) -> JumpTiming {
+		let (windup, landing) = self.squat_configs(lengths);
+		self.timings_from_configs(&windup, &landing)
+	}
+
 	/// Seconds after take-off when [`ballistic_height`] returns to zero on descent.
 	pub fn touchdown_time_since_launch(&self) -> f32 {
 		self.ballistic().touchdown_time_since_launch()
@@ -214,11 +307,7 @@ impl TwoFootedJump {
 	}
 
 	pub fn time_in_cycle(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
-		let cycle = self.cycle_duration(lengths);
-		if cycle <= f32::EPSILON {
-			return 0.0;
-		}
-		elapsed % cycle
+		self.sample(lengths, elapsed).cycle_t
 	}
 
 	pub fn launch_speed(&self) -> f32 {
@@ -247,11 +336,12 @@ impl TwoFootedJump {
 	}
 
 	pub fn segment(&self, lengths: LegSegmentLengths, elapsed: f32) -> (JumpSegment, f32) {
-		Self::segment_at_time(self.time_in_cycle(lengths, elapsed), &self.timings(lengths))
+		let sample = self.sample(lengths, elapsed);
+		(sample.segment, sample.local)
 	}
 
 	pub fn time_since_launch(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
-		(self.time_in_cycle(lengths, elapsed) - self.timings(lengths).squat_end()).max(0.0)
+		self.sample(lengths, elapsed).time_since_launch
 	}
 
 	pub fn prejump_squat(&self, lengths: LegSegmentLengths) -> Squat {
@@ -263,35 +353,11 @@ impl TwoFootedJump {
 	}
 
 	pub fn landing_depth(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
-		let land = self.landing_squat(lengths);
-		let (segment, local) = self.segment(lengths, elapsed);
-		if segment != JumpSegment::Land {
-			return 0.0;
-		}
-		let duration = land.cycle_duration().max(f32::EPSILON);
-		land.depth(local / duration)
+		self.sample(lengths, elapsed).landing_depth()
 	}
 
 	pub fn vertical_offset(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
-		let (segment, local) = self.segment(lengths, elapsed);
-		let timings = self.timings(lengths);
-
-		match segment {
-			JumpSegment::Squat => {
-				let squat = self.prejump_squat(lengths);
-				let p = local / timings.squat_duration().max(f32::EPSILON);
-				-squat.vertical_drop(p, lengths)
-			}
-			JumpSegment::Spring | JumpSegment::Fall => {
-				let since_launch = self.time_since_launch(lengths, elapsed);
-				self.ballistic_height(since_launch.min(self.touchdown_time_since_launch()))
-			}
-			JumpSegment::Land => {
-				let land = self.landing_squat(lengths);
-				let p = local / timings.land_duration().max(f32::EPSILON);
-				-land.vertical_drop(p, lengths)
-			}
-		}
+		self.sample(lengths, elapsed).vertical_offset(self, lengths)
 	}
 }
 
@@ -428,6 +494,26 @@ mod tests {
 		let t_peak = arc.launch_speed() / arc.gravity;
 		let apex = arc.ballistic_height(t_peak);
 		assert!((apex - DEFAULT_JUMP_HEIGHT).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn sample_reuses_timings_for_segment_and_offset() -> anyhow::Result<()> {
+		let lengths = LegSegmentLengths::default();
+		let jump = default_jump();
+		let timings = jump.timings(lengths);
+		for elapsed in
+			[0.0, timings.squat_end() * 0.5, timings.spring_end(), timings.air_end() + 0.05]
+		{
+			let sample = jump.sample(lengths, elapsed);
+			assert_eq!(sample.timings, timings);
+			assert_eq!(sample.segment, jump.segment(lengths, elapsed).0);
+			assert!(
+				(sample.vertical_offset(&jump, lengths) - jump.vertical_offset(lengths, elapsed))
+					.abs() < 1e-6
+			);
+			assert!((sample.landing_depth() - jump.landing_depth(lengths, elapsed)).abs() < 1e-6);
+		}
 		Ok(())
 	}
 

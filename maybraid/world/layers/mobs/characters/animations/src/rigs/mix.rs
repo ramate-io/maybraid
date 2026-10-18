@@ -576,4 +576,202 @@ mod tests {
 		assert!(rig.posed_angle("shoulder.L") > 0.02, "blended shoulder leaves rest");
 		Ok(())
 	}
+
+	fn lerp_channel(a: f32, b: f32, t: f32) -> f32 {
+		a + (b - a) * t
+	}
+
+	fn lerp_array<const N: usize>(a: [f32; N], b: [f32; N], t: f32) -> [f32; N] {
+		std::array::from_fn(|i| lerp_channel(a[i], b[i], t))
+	}
+
+	fn lerp_humanoid_pose(
+		from: character_rigs::authoring::HumanoidPose,
+		to: character_rigs::authoring::HumanoidPose,
+		weight: f32,
+	) -> character_rigs::authoring::HumanoidPose {
+		use character_rigs::authoring::{
+			ArmPose, HumanoidPose, LegPose, NeckBone, NeckPose, SpinePose,
+		};
+		let t = weight.clamp(0.0, 1.0);
+		let lerp_neck = |a: NeckBone, b: NeckBone| NeckBone {
+			nod: lerp_channel(a.nod, b.nod, t),
+			side_tilt: lerp_channel(a.side_tilt, b.side_tilt, t),
+			turn: lerp_channel(a.turn, b.turn, t),
+		};
+		let lerp_leg = |a: LegPose, b: LegPose| LegPose {
+			hip_flexion: lerp_channel(a.hip_flexion, b.hip_flexion, t),
+			hip_abduction: lerp_channel(a.hip_abduction, b.hip_abduction, t),
+			hip_rotation: lerp_channel(a.hip_rotation, b.hip_rotation, t),
+			knee_flexion: lerp_channel(a.knee_flexion, b.knee_flexion, t),
+			pelvis_flexion: lerp_channel(a.pelvis_flexion, b.pelvis_flexion, t),
+			pelvis_lateral: lerp_channel(a.pelvis_lateral, b.pelvis_lateral, t),
+			pelvis_turn: lerp_channel(a.pelvis_turn, b.pelvis_turn, t),
+		};
+		let lerp_arm = |a: ArmPose, b: ArmPose| ArmPose {
+			forward_elevation: lerp_channel(a.forward_elevation, b.forward_elevation, t),
+			lateral_elevation: lerp_channel(a.lateral_elevation, b.lateral_elevation, t),
+			axial_rotation: lerp_channel(a.axial_rotation, b.axial_rotation, t),
+			elbow_flexion: lerp_channel(a.elbow_flexion, b.elbow_flexion, t),
+			shoulder_forward: lerp_channel(a.shoulder_forward, b.shoulder_forward, t),
+			shoulder_lift: lerp_channel(a.shoulder_lift, b.shoulder_lift, t),
+			shoulder_twist: lerp_channel(a.shoulder_twist, b.shoulder_twist, t),
+			aim: if t >= 0.5 { b.aim } else { a.aim },
+		};
+		HumanoidPose {
+			spine: SpinePose {
+				forward_bend: lerp_array(from.spine.forward_bend, to.spine.forward_bend, t),
+				side_bend: lerp_array(from.spine.side_bend, to.spine.side_bend, t),
+				turn: lerp_array(from.spine.turn, to.spine.turn, t),
+			},
+			neck: NeckPose {
+				lower: lerp_neck(from.neck.lower, to.neck.lower),
+				upper: lerp_neck(from.neck.upper, to.neck.upper),
+			},
+			legs: [lerp_leg(from.legs[0], to.legs[0]), lerp_leg(from.legs[1], to.legs[1])],
+			arms: [lerp_arm(from.arms[0], to.arms[0]), lerp_arm(from.arms[1], to.arms[1])],
+		}
+	}
+
+	fn blend_authored_then_resolve(
+		rig: &mut HumanoidV0Rig,
+		from: character_rigs::authoring::HumanoidPose,
+		to: character_rigs::authoring::HumanoidPose,
+		weight: f32,
+	) {
+		let weight = weight.clamp(0.0, 1.0);
+		if weight <= 0.0 {
+			rig.write_pose(&from);
+			return;
+		}
+		if weight >= 1.0 {
+			rig.write_pose(&to);
+			return;
+		}
+		rig.write_pose(&lerp_humanoid_pose(from, to, weight));
+	}
+
+	fn apply_jump_authored_blend(jump: &TwoFootedJump, rig: &mut HumanoidV0Rig, elapsed: f32) {
+		use crate::animations::{Fall, JumpSegment, Spring, Squat};
+		let sample = jump.sample(rig.segment_lengths, elapsed);
+		match sample.segment {
+			JumpSegment::Squat => sample.windup.apply_for(rig, sample.pose_progress),
+			JumpSegment::Spring => blend_authored_then_resolve(
+				rig,
+				Squat::for_loop(1.0, 1.0).sample_pose(0.0),
+				Spring::default().sample_pose(sample.local),
+				crate::animations::smoothstep(sample.blend_progress),
+			),
+			JumpSegment::Fall => {
+				if sample.blend_progress < 1.0 {
+					blend_authored_then_resolve(
+						rig,
+						Spring::default().sample_pose(1.0),
+						Fall::default().sample_pose(sample.local),
+						crate::animations::smoothstep(sample.blend_progress),
+					);
+				} else {
+					Fall::default().apply_for(rig, sample.local);
+				}
+			}
+			JumpSegment::Land => {
+				if sample.blend_progress < 1.0 {
+					blend_authored_then_resolve(
+						rig,
+						Fall::default().sample_pose(1.0),
+						sample.landing.sample_pose(sample.pose_progress),
+						crate::animations::smoothstep(sample.blend_progress),
+					);
+				} else {
+					sample.landing.apply_for(rig, sample.pose_progress);
+				}
+			}
+		}
+	}
+
+	fn max_pose_angle_delta(a: &HumanoidV0Rig, b: &HumanoidV0Rig) -> f32 {
+		a.animation_bone_names()
+			.map(|name| a.rotation(name).angle_between(b.rotation(name)))
+			.fold(0.0_f32, f32::max)
+	}
+
+	#[test]
+	fn authored_pose_blend_numerical_delta_from_resolved_slerp() -> anyhow::Result<()> {
+		let jump = TwoFootedJump::default();
+		let lengths = HumanoidV0Rig::imported().segment_lengths;
+		let timings = jump.timings(lengths);
+		let blend_times = [
+			timings.squat_end() + timings.spring_duration * 0.5,
+			timings.spring_end()
+				+ timings.air_duration * crate::animations::FALL_BLEND_FRACTION * 0.5,
+			timings.air_end() + timings.land_pose_blend_duration() * 0.5,
+		];
+		let mut max_delta = 0.0_f32;
+		for elapsed in blend_times {
+			let mut resolved = HumanoidV0Rig::imported();
+			jump.apply_for(&mut resolved, elapsed);
+			let mut authored = HumanoidV0Rig::imported();
+			apply_jump_authored_blend(&jump, &mut authored, elapsed);
+			max_delta = max_delta.max(max_pose_angle_delta(&resolved, &authored));
+		}
+		eprintln!(
+			"authored_pose_blend max bone angle delta vs resolved slerp: {max_delta:.6} rad ({:.4} deg)",
+			max_delta.to_degrees()
+		);
+		if max_delta <= 1e-4 {
+			eprintln!(
+				"authored_pose_blend: numerically equivalent at sampled blend windows (delta={max_delta})"
+			);
+		}
+		Ok(())
+	}
+
+	fn bench_jump_authored_vs_resolved(authored: bool) -> Vec<u128> {
+		const FRAMES: u32 = 400;
+		const CHARACTERS: u32 = 32;
+		const RUNS: u32 = 7;
+		let jump = TwoFootedJump::default();
+		let cycle = {
+			let rig = HumanoidV0Rig::imported();
+			jump.timings(rig.segment_lengths).cycle_duration()
+		};
+		let mut rigs: Vec<HumanoidV0Rig> =
+			(0..CHARACTERS).map(|_| HumanoidV0Rig::imported()).collect();
+		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
+		for _ in 0..RUNS {
+			let start = Instant::now();
+			for frame in 0..FRAMES {
+				let frame = black_box(frame);
+				for (index, rig) in rigs.iter_mut().enumerate() {
+					let elapsed = black_box(
+						(frame as f32 * 0.016 + index as f32 * 0.11) % cycle.max(f32::EPSILON),
+					);
+					if authored {
+						apply_jump_authored_blend(&jump, rig, elapsed);
+					} else {
+						jump.apply_for(rig, elapsed);
+					}
+					black_box(&rig.pose);
+				}
+			}
+			let samples = FRAMES as u64 * CHARACTERS as u64;
+			run_ns.push(start.elapsed().as_nanos() / samples as u128);
+		}
+		run_ns.sort_unstable();
+		run_ns
+	}
+
+	/// `cargo test -p character-animations authored_pose_blend_microbench --release -- --ignored --nocapture`
+	#[test]
+	#[ignore]
+	fn authored_pose_blend_microbench() {
+		eprintln!(
+			"32 characters × 400 frames × 7 runs; complete jump cycles; resolved slerp vs authored lerp then resolve once"
+		);
+		report_bench(
+			"resolved quaternion slerp (production)",
+			&bench_jump_authored_vs_resolved(false),
+		);
+		report_bench("authored pose lerp then resolve", &bench_jump_authored_vs_resolved(true));
+	}
 }

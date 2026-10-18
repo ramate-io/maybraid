@@ -55,6 +55,7 @@ pub use squat_descent::{SquatDescent, DEFAULT_DESCENT_SPEED};
 pub use transition::{BlendCurve, Transition, TransitionCurve};
 pub use tuck::{Tuck, TuckProfile};
 pub use tucked_flip::{FlipDirection, TuckedFlip};
+pub(crate) use two_footed_jump::JumpSample;
 pub use two_footed_jump::{
 	BallisticJump, JumpSegment, JumpTiming, TwoFootedJump, DEFAULT_GRAVITY, DEFAULT_JUMP_HEIGHT,
 	DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPRING_DURATION,

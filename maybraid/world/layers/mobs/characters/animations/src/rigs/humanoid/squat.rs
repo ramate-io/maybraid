@@ -6,8 +6,8 @@ use character_rigs::Side;
 use crate::animations::Squat;
 use crate::{Animation, Effects};
 
-impl Animation<HumanoidV0Rig> for Squat {
-	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+impl Squat {
+	pub fn sample_pose(&self, progress: f32) -> HumanoidPose {
 		let mut pose = HumanoidPose::default();
 		let femur_swing = self.femur_swing(progress);
 		let shin_flex = self.shin_flex(progress);
@@ -22,7 +22,13 @@ impl Animation<HumanoidV0Rig> for Squat {
 		// Held and looping squat share the same sagittal stack. The authored
 		// angle is the total fold, split across root, lumbar, mid-back, and upper back.
 		pose.apply_spine_pitch(self.root_swing(progress));
-		rig.write_pose(&pose);
+		pose
+	}
+}
+
+impl Animation<HumanoidV0Rig> for Squat {
+	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+		rig.write_pose(&self.sample_pose(progress));
 	}
 
 	fn effects_for(&self, rig: &HumanoidV0Rig, progress: f32) -> Effects {

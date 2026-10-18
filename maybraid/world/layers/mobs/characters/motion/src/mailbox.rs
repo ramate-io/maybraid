@@ -819,13 +819,14 @@ fn sample_split<A, R>(
 where
 	A: Animation<R>,
 {
-	if write_bones {
-		anim.apply_for(rig, progress);
-	}
-	if write_effects {
-		anim.effects_for(rig, progress)
-	} else {
-		Effects::IDENTITY
+	match (write_bones, write_effects) {
+		(true, true) => anim.apply(rig, progress),
+		(true, false) => {
+			anim.apply_for(rig, progress);
+			Effects::IDENTITY
+		}
+		(false, true) => anim.effects_for(rig, progress),
+		(false, false) => Effects::IDENTITY,
 	}
 }
 
@@ -2236,5 +2237,218 @@ mod tests {
 			return Err(anyhow!("uncacheable clips must drop the handle"));
 		}
 		Ok(())
+	}
+
+	fn sample_split_legacy<A>(
+		anim: &A,
+		rig: &mut HumanoidV0Rig,
+		progress: f32,
+		write_bones: bool,
+		write_effects: bool,
+	) -> Effects
+	where
+		A: Animation<HumanoidV0Rig>,
+	{
+		if write_bones {
+			anim.apply_for(rig, progress);
+		}
+		if write_effects {
+			anim.effects_for(rig, progress)
+		} else {
+			Effects::IDENTITY
+		}
+	}
+
+	fn assert_mailbox_pose_near(a: &HumanoidV0Rig, b: &HumanoidV0Rig, label: &str) {
+		for name in a.animation_bone_names() {
+			assert!(a.rotation(name).dot(b.rotation(name)).abs() > 1.0 - 1e-5, "{label}: {name}");
+		}
+	}
+
+	#[test]
+	fn jump_mailbox_combined_matches_legacy_split() -> anyhow::Result<()> {
+		use character_animations::animations::TwoFootedJump;
+
+		let jump = TwoFootedJump::default();
+		let lengths = HumanoidV0Rig::imported().segment_lengths;
+		let timings = jump.timings(lengths);
+		let samples = [
+			0.0,
+			timings.squat_end() * 0.5,
+			timings.spring_end() + timings.air_duration * 0.5,
+			timings.air_end() + timings.land_descent_duration * 0.25,
+		];
+		for elapsed in samples {
+			let mut legacy = HumanoidV0Rig::imported();
+			let legacy_effects = sample_split_legacy(&jump, &mut legacy, elapsed, true, true);
+			let mut combined = HumanoidV0Rig::imported();
+			let combined_effects = sample_split(&jump, &mut combined, elapsed, true, true);
+			assert_mailbox_pose_near(&legacy, &combined, &format!("jump elapsed={elapsed}"));
+			assert_eq!(legacy_effects, combined_effects, "jump effects elapsed={elapsed}");
+
+			let mut pose_only = HumanoidV0Rig::imported();
+			let pose_effects = sample_split(&jump, &mut pose_only, elapsed, true, false);
+			assert!(pose_effects.is_identity());
+			assert_mailbox_pose_near(
+				&legacy,
+				&pose_only,
+				&format!("jump pose-only elapsed={elapsed}"),
+			);
+
+			let effects_only =
+				sample_split(&jump, &mut HumanoidV0Rig::imported(), elapsed, false, true);
+			assert_eq!(effects_only, legacy_effects, "jump effects-only elapsed={elapsed}");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn tucked_flip_mailbox_combined_matches_legacy_split() -> anyhow::Result<()> {
+		let flip = TwoFootedTuckedFlip::default();
+		let lengths = HumanoidV0Rig::imported().segment_lengths;
+		let timings = flip.timings(lengths);
+		let elapsed = timings.spring_end() + timings.air_duration * 0.5;
+		let mut legacy = HumanoidV0Rig::imported();
+		let legacy_effects = sample_split_legacy(&flip, &mut legacy, elapsed, true, true);
+		let mut combined = HumanoidV0Rig::imported();
+		let combined_effects = sample_split(&flip, &mut combined, elapsed, true, true);
+		assert_mailbox_pose_near(&legacy, &combined, "flip mid-air");
+		assert_eq!(legacy_effects, combined_effects);
+		assert!(combined_effects.0.rotation.to_euler(EulerRot::XYZ).0.abs() > 0.1);
+		Ok(())
+	}
+
+	#[test]
+	fn jump_interrupted_crossfade_matches_legacy_publish() {
+		use character_animations::animations::TwoFootedJump;
+
+		let jump = TwoFootedJump::default();
+		let mut from = HumanoidV0Rig::imported();
+		character_animations::animations::Walk::default().apply_for(&mut from, 0.3);
+		let mut mailbox = AnimMailbox::with_bones(Transform::IDENTITY, from.pose.len());
+		mailbox.from_pose.copy_from(&from.pose);
+		mailbox.set_crossfade_for_test(
+			0.35,
+			ArmatureOffset::from_translation(Vec3::new(0.0, 0.1, 0.0)),
+		);
+
+		let mut sampled = HumanoidV0Rig::imported();
+		let effects = sample_split(&jump, &mut sampled, 0.4, true, true);
+		let weight = clip_crossfade_weight(0.35);
+		publish_sampled_pose(&mut mailbox, &sampled.pose, weight, true);
+		let shown = blend_mailbox_effects(mailbox.from_offset, effects, 0.35);
+
+		let mut legacy_mailbox = AnimMailbox::with_bones(Transform::IDENTITY, from.pose.len());
+		legacy_mailbox.from_pose.copy_from(&from.pose);
+		legacy_mailbox.set_crossfade_for_test(
+			0.35,
+			ArmatureOffset::from_translation(Vec3::new(0.0, 0.1, 0.0)),
+		);
+		publish_pose_legacy(&mut legacy_mailbox, &sampled.pose, weight);
+		assert_eq!(mailbox.output, legacy_mailbox.output);
+		assert!(!shown.is_identity());
+	}
+
+	fn jump_cycle_progress(index: usize, frame: u32) -> f32 {
+		use character_animations::animations::TwoFootedJump;
+		let jump = TwoFootedJump::default();
+		let cycle = jump.cycle_duration(HumanoidV0Rig::imported().segment_lengths);
+		((frame as f32 * 0.016) + index as f32 * 0.11) % cycle.max(f32::EPSILON)
+	}
+
+	fn bench_jump_flip_mailbox(
+		legacy: bool,
+		write_bones: bool,
+		write_effects: bool,
+		crossfade: bool,
+	) -> Vec<u128> {
+		use character_animations::animations::{TwoFootedJump, TwoFootedTuckedFlip};
+
+		const FRAMES: u32 = 400;
+		const CHARACTERS: u32 = 32;
+		const RUNS: u32 = 7;
+		let jump = TwoFootedJump::default();
+		let flip = TwoFootedTuckedFlip::default();
+		let mut rigs: Vec<HumanoidV0Rig> = (0..CHARACTERS)
+			.map(|index| {
+				let mut rig = HumanoidV0Rig::imported();
+				if index % 3 == 1 {
+					rig.segment_lengths =
+						character_rigs::humanoid::LegSegmentLengths { femur: 0.38, shin: 0.44 };
+				} else if index % 3 == 2 {
+					rig.segment_lengths =
+						character_rigs::humanoid::LegSegmentLengths { femur: 0.68, shin: 0.33 };
+				}
+				rig
+			})
+			.collect();
+		let mut mailboxes: Vec<AnimMailbox> = (0..CHARACTERS)
+			.map(|_| {
+				let mut mailbox = AnimMailbox::with_bones(Transform::IDENTITY, rigs[0].pose.len());
+				if crossfade {
+					mailbox.set_crossfade_for_test(
+						0.35,
+						ArmatureOffset::from_translation(Vec3::new(0.0, 0.12, 0.0)),
+					);
+				}
+				mailbox
+			})
+			.collect();
+
+		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
+		for _ in 0..RUNS {
+			let start = Instant::now();
+			for frame in 0..FRAMES {
+				let frame = black_box(frame);
+				for (index, rig) in rigs.iter_mut().enumerate() {
+					let elapsed = black_box(jump_cycle_progress(index, frame));
+					let use_flip = index % 2 == 1;
+					let effects = if use_flip {
+						if legacy {
+							sample_split_legacy(&flip, rig, elapsed, write_bones, write_effects)
+						} else {
+							sample_split(&flip, rig, elapsed, write_bones, write_effects)
+						}
+					} else if legacy {
+						sample_split_legacy(&jump, rig, elapsed, write_bones, write_effects)
+					} else {
+						sample_split(&jump, rig, elapsed, write_bones, write_effects)
+					};
+					if write_bones && crossfade {
+						let mailbox = &mut mailboxes[index];
+						publish_sampled_pose(mailbox, &rig.pose, clip_crossfade_weight(0.35), true);
+						black_box(&mailbox.output);
+					}
+					black_box(effects);
+					if write_bones {
+						black_box(&rig.pose);
+					}
+				}
+			}
+			let samples = FRAMES as u64 * CHARACTERS as u64;
+			run_ns.push(start.elapsed().as_nanos() / samples as u128);
+		}
+		run_ns.sort_unstable();
+		run_ns
+	}
+
+	/// `cargo test -p character-motion jump_flip_mailbox_microbench --release -- --ignored --nocapture`
+	#[test]
+	#[ignore]
+	fn jump_flip_mailbox_microbench() {
+		eprintln!(
+			"32 characters × 400 frames × 7 runs; jump+flip live samples; varied femur/shin; complete cycles"
+		);
+		for (label, bones, effects, crossfade) in [
+			("pose-only", true, false, false),
+			("effects-only", false, true, false),
+			("combined", true, true, false),
+			("combined interrupted crossfade", true, true, true),
+		] {
+			let legacy = bench_jump_flip_mailbox(true, bones, effects, crossfade);
+			let optimized = bench_jump_flip_mailbox(false, bones, effects, crossfade);
+			report_mailbox_apply_bench(&format!("{label} legacy split"), &legacy);
+			report_mailbox_apply_bench(&format!("{label} combined apply"), &optimized);
+		}
 	}
 }

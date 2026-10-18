@@ -5,8 +5,8 @@ use character_rigs::Side;
 use crate::animations::Fall;
 use crate::Animation;
 
-impl Animation<HumanoidV0Rig> for Fall {
-	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+impl Fall {
+	pub fn sample_pose(&self, progress: f32) -> HumanoidPose {
 		let mut pose = HumanoidPose::default();
 		pose.apply_leg(Side::Left, 0.0, 0.0);
 		pose.apply_leg(Side::Right, 0.0, 0.0);
@@ -21,6 +21,12 @@ impl Animation<HumanoidV0Rig> for Fall {
 				self.forearm_flex(progress),
 			);
 		}
-		rig.write_pose(&pose);
+		pose
+	}
+}
+
+impl Animation<HumanoidV0Rig> for Fall {
+	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+		rig.write_pose(&self.sample_pose(progress));
 	}
 }
