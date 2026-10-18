@@ -1,4 +1,5 @@
 pub mod dorsoventral_undulation;
+pub mod face_palm;
 pub mod fall;
 pub mod fixed;
 pub mod fixed_tuck;
@@ -31,6 +32,7 @@ pub mod upright_walk;
 pub mod walk;
 
 pub use dorsoventral_undulation::DorsoventralUndulation;
+pub use face_palm::FacePalm;
 pub use fall::Fall;
 pub use fixed::FixedPosition;
 pub use fixed_tuck::FixedTuck;

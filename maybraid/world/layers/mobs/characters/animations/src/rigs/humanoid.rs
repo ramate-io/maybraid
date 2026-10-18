@@ -1,3 +1,4 @@
+pub mod face_palm;
 pub mod fall;
 pub mod fixed_tuck;
 pub mod flapping;
