@@ -291,6 +291,9 @@ impl Plugin for WorldPlugin {
 					control::update_world_surface_ready.in_set(control::WorldSurfaceSet),
 					control::sync_world_scenery,
 					control::sync_combat_hud_visible,
+					control::sync_combat_hud_equipped_queue
+						.after(inventory_cycling::InventoryCyclingCategorySystems)
+						.after(cycle_target::sync_combat_hud_cycle_category),
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
 					control::apply_intents_to_movement
 						.after(CharacterControlSystems)

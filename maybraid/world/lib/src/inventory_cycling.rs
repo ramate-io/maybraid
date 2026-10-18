@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_items::{Inventory, InventorySlot};
 use game_commands::command::TextEntryFocus;
-use lubikans::{LubikanAccountId, LubikanLedger, LubikanOwner, LubikanSystems};
+use lubikans::{LubikanLedger, LubikanOwner, LubikanSystems};
 use maybraid_character_controller::{CharacterIntent, InventoryCyclingCategory};
 use world_player::Player as VegetationPlayer;
 
@@ -116,7 +116,7 @@ pub(crate) fn cycle_equipped_inventory_queues(
 	if category.0 == InventoryCyclingCategory::Lubikans {
 		for (player, _) in &players {
 			if let Ok(mut ledger) = ledgers.get_mut(player) {
-				cycle_ledger_selection(&mut ledger, dir);
+				ledger.cycle_selection(dir);
 			}
 		}
 		return;
@@ -147,34 +147,6 @@ pub(crate) fn cycle_equipped_inventory_queues(
 			loadout.retarget_inventory(snapshot.clone());
 			commands.entity(player).insert(crate::weapon::AppliedWorldPlayerLoadout(loadout.clone()));
 		}
-	}
-}
-
-/// Advance equipped selection across owned accounts. Selection only — never mutates charge.
-pub(crate) fn cycle_ledger_selection(ledger: &mut LubikanLedger, dir: i8) -> bool {
-	let order = owned_account_cycle_order(ledger);
-	if order.len() < 2 {
-		return false;
-	}
-	let current = ledger.selection().resolved();
-	let position = order.iter().position(|&id| id == current).unwrap_or(0);
-	let len = order.len() as i32;
-	let step = if dir < 0 { -1 } else { 1 };
-	let next = order[(position as i32 + step).rem_euclid(len) as usize];
-	select_owned_account(ledger, next)
-}
-
-fn owned_account_cycle_order(ledger: &LubikanLedger) -> Vec<LubikanAccountId> {
-	let mut order: Vec<_> = ledger.iter().map(|account| account.id()).collect();
-	order.sort();
-	order
-}
-
-fn select_owned_account(ledger: &mut LubikanLedger, account: LubikanAccountId) -> bool {
-	if account.is_self() {
-		ledger.select(None)
-	} else {
-		ledger.select(Some(account))
 	}
 }
 
@@ -307,7 +279,7 @@ mod tests {
 		let _ = ledger.apply_to_equipped(5.0);
 		assert!(ledger.select(Some(extra_id)));
 		let extra_charge = ledger.account(extra_id).ok_or_else(|| anyhow::anyhow!("extra"))?.charge().current();
-		assert!(cycle_ledger_selection(&mut ledger, 1));
+		assert!(ledger.cycle_selection(1));
 		assert_eq!(ledger.selection(), LubikanSelection::default());
 		let extra_after =
 			ledger.account(extra_id).ok_or_else(|| anyhow::anyhow!("extra"))?.charge().current();
@@ -318,7 +290,7 @@ mod tests {
 	#[test]
 	fn single_owned_lubikan_cycle_is_safe() -> anyhow::Result<()> {
 		let mut ledger = LubikanLedger::with_self(&LubikanSelfConfig::default());
-		assert!(!cycle_ledger_selection(&mut ledger, 1));
+		assert!(!ledger.cycle_selection(1));
 		assert!(ledger.selection().is_self());
 		Ok(())
 	}
