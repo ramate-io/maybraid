@@ -49,4 +49,4 @@ After `/`:
 - `/character joint femur.L` draws bone-local axes (bright RGB), parent-local axes (shorter, dimmer), and character-space axes on the rig. The opposite bone is drawn dimmer so the two sides can be compared. A yellow line is the effective-rest length direction. A white cross marks the posed segment end. `--hide-rest` drops the rest line.
 - `/character joint femur.L --flexion 40 --lateral 0 --axial 0` replaces that bone's clip rotation with the V0 flex / swing / twist channels. `--clear` returns the bone to the clip.
 
-To inspect a new one-shot (Think Again, salute, shrug), add the clip to `AnimationMode` and the `animate_limbs` match — `/character animate` and playback/joint then work without a respawn.
+To inspect a new one-shot (Think Again, salute, shrug, beckon), add the clip to `AnimationMode` and the mailbox sampler — `/character animate` and playback/joint then work without a respawn. One-shots read best with `/character playback --once`.

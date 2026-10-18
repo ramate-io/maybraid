@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use character_animations::animations::{DEFAULT_BACKSWING, DEFAULT_JAB_TARGET};
 use character_rigs::{articulation::compose_parent_rotation, authoring::humanoid_bone_axis, Side};
-use characters::{AnimBone, AnimClip, AnimRef, JabParams};
+use characters::{AnimBone, AnimClip, AnimRef, BeckonParams, JabParams};
 use clap::ValueEnum;
 
 use crate::character::CharacterConfig;
@@ -25,12 +25,13 @@ pub enum AnimationMode {
 	Soaring,
 	Flapping,
 	Jab,
+	Beckon,
 	Prone,
 }
 
 impl AnimationMode {
 	pub const fn uses_side(self) -> bool {
-		matches!(self, Self::Jab)
+		matches!(self, Self::Jab | Self::Beckon)
 	}
 
 	pub const fn label(self) -> &'static str {
@@ -49,6 +50,7 @@ impl AnimationMode {
 			Self::Soaring => "soaring",
 			Self::Flapping => "flapping",
 			Self::Jab => "jab",
+			Self::Beckon => "beckon",
 			Self::Prone => "prone",
 		}
 	}
@@ -72,6 +74,7 @@ impl AnimationMode {
 				backswing: DEFAULT_BACKSWING,
 				target: DEFAULT_JAB_TARGET,
 			}),
+			Self::Beckon => AnimClip::Beckon(BeckonParams { side }),
 			Self::Prone => AnimClip::prone(),
 		}
 	}
