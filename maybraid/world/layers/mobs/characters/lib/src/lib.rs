@@ -54,7 +54,7 @@ pub use character_motion::{
 	apply_terrain_pitch, clamp_intelligence, draw_terrain_pitch_probes, motion_policy,
 	sync_motion_markers, AnimateBones, AnimateEffects, ApplyTerrainPitch, CharacterHeading,
 	CharacterMotionPlugin, CharacterMotionSystems, DrawTerrainPitchProbes, MotionPolicy,
-	SuspendAnimation, SuspendTerrainPitch,
+	QuadrupedRunStartBlend, SuspendAnimation, SuspendTerrainPitch,
 };
 pub use character_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 pub use character_shaders::CharacterShadersPlugin;

@@ -4,7 +4,7 @@ use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
 use characters::{
 	AnimClip, AnimProgress, AnimRef, AnimRefRoot, CharacterHeading, CharacterMembers, CharacterRig,
-	CharacterRigRole, CharacterRoot, JumpParams, RigSkeletonKind,
+	CharacterRigRole, CharacterRoot, JumpParams, QuadrupedRunStartBlend, RigSkeletonKind,
 };
 
 use crate::body::{CharacterController, Jumping, MoveWish, LEAP_SPEED};
@@ -43,6 +43,7 @@ pub fn drive_player_locomotion(
 	>,
 	visuals: Query<(&CharacterMembers, &ChildOf), With<CharacterRoot>>,
 	rigs: Query<&CharacterRig>,
+	blends: Query<&QuadrupedRunStartBlend>,
 	anims: Query<&AnimRefRoot>,
 ) {
 	for (members, child_of) in &visuals {
@@ -58,7 +59,8 @@ pub fn drive_player_locomotion(
 			if rig.role != CharacterRigRole::Body {
 				continue;
 			}
-			let clip = locomotion_clip(rig.skeleton, jumping, &stance, speed);
+			let run_start = blends.get(member).map(|blend| *blend).unwrap_or_default();
+			let clip = locomotion_clip(rig.skeleton, jumping, &stance, &run_start, speed);
 			let desired = AnimRef::new(clip);
 			let needs = match anims.get(member) {
 				Ok(root) => root.0 != desired,
@@ -79,6 +81,8 @@ pub fn drive_player_locomotion(
 				commands.entity(member).insert(AnimProgress(stance.blend));
 			} else if matches!(stance.kind, StanceKind::Squat | StanceKind::Prone) {
 				commands.entity(member).insert(AnimProgress(stance.blend));
+			} else if matches!(clip, AnimClip::QuadrupedRunStart) {
+				commands.entity(member).insert(AnimProgress(run_start.progress));
 			} else {
 				commands.entity(member).remove::<AnimProgress>();
 			}
@@ -90,6 +94,7 @@ fn locomotion_clip(
 	skeleton: RigSkeletonKind,
 	jumping: Option<&Jumping>,
 	stance: &CharacterStance,
+	run_start: &QuadrupedRunStartBlend,
 	speed: f32,
 ) -> AnimClip {
 	match skeleton {
@@ -122,7 +127,11 @@ fn locomotion_clip(
 			} else if speed > LEAP_SPEED {
 				AnimClip::gallop()
 			} else if speed > WALK_SPEED {
-				AnimClip::quadruped_run()
+				if !run_start.settled() {
+					AnimClip::quadruped_run_start()
+				} else {
+					AnimClip::quadruped_run()
+				}
 			} else {
 				AnimClip::still()
 			}
@@ -143,7 +152,11 @@ fn locomotion_clip(
 mod tests {
 	use super::*;
 	use crate::body::{JumpPhase, JOG_SPEED, MOVE_SPEED};
-	use characters::AnimId;
+	use characters::{AnimId, QuadrupedRunStartBlend};
+
+	fn settled_trot() -> QuadrupedRunStartBlend {
+		QuadrupedRunStartBlend { progress: 1.0 }
+	}
 
 	#[test]
 	fn standing_hop_uses_jump_clip() {
@@ -151,7 +164,8 @@ mod tests {
 		let stance = CharacterStance::settled(StanceKind::Stand);
 		assert!(!jump.leaping);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), &stance, 0.0).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), &stance, &settled_trot(), 0.0)
+				.id(),
 			AnimClip::jump().id()
 		);
 	}
@@ -162,11 +176,19 @@ mod tests {
 		let stance = CharacterStance::settled(StanceKind::Stand);
 		assert!(jump.leaping);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), &stance, MOVE_SPEED).id(),
+			locomotion_clip(
+				RigSkeletonKind::Humanoid,
+				Some(&jump),
+				&stance,
+				&settled_trot(),
+				MOVE_SPEED,
+			)
+			.id(),
 			AnimClip::leap().id()
 		);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Quadruped, Some(&jump), &stance, 0.0).id(),
+			locomotion_clip(RigSkeletonKind::Quadruped, Some(&jump), &stance, &settled_trot(), 0.0)
+				.id(),
 			AnimClip::leap().id()
 		);
 	}
@@ -175,11 +197,13 @@ mod tests {
 	fn clip_follows_the_cap() {
 		let stance = CharacterStance::settled(StanceKind::Stand);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, JOG_SPEED).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, &settled_trot(), JOG_SPEED)
+				.id(),
 			AnimId::Walk
 		);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, MOVE_SPEED).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, &settled_trot(), MOVE_SPEED)
+				.id(),
 			AnimId::Run
 		);
 	}
@@ -190,7 +214,8 @@ mod tests {
 		jump.phase = JumpPhase::Land;
 		let stance = CharacterStance::settled(StanceKind::Squat);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), &stance, 0.0).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), &stance, &settled_trot(), 0.0)
+				.id(),
 			AnimClip::jump().id()
 		);
 	}
@@ -202,6 +227,7 @@ mod tests {
 				RigSkeletonKind::Humanoid,
 				None,
 				&CharacterStance::settled(StanceKind::Squat),
+				&settled_trot(),
 				0.0,
 			)
 			.id(),
@@ -212,6 +238,7 @@ mod tests {
 				RigSkeletonKind::Humanoid,
 				None,
 				&CharacterStance::settled(StanceKind::Prone),
+				&settled_trot(),
 				0.0,
 			)
 			.id(),
@@ -222,6 +249,7 @@ mod tests {
 				RigSkeletonKind::Humanoid,
 				None,
 				&CharacterStance::settled(StanceKind::Stand),
+				&settled_trot(),
 				0.0,
 			)
 			.id(),
@@ -233,6 +261,7 @@ mod tests {
 				RigSkeletonKind::Humanoid,
 				Some(&jump),
 				&CharacterStance::settled(StanceKind::Squat),
+				&settled_trot(),
 				0.0,
 			)
 			.id(),
@@ -244,7 +273,7 @@ mod tests {
 	fn entering_squat_uses_descent_clip() {
 		let stance = CharacterStance { kind: StanceKind::Squat, blend: 0.0 };
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, 0.0).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, &settled_trot(), 0.0).id(),
 			AnimId::SquatDescent
 		);
 	}
@@ -253,8 +282,35 @@ mod tests {
 	fn leaving_squat_uses_descent_until_blend_reaches_zero() {
 		let stance = CharacterStance { kind: StanceKind::Stand, blend: 0.5 };
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, 0.0).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, &settled_trot(), 0.0).id(),
 			AnimId::SquatDescent
+		);
+	}
+
+	#[test]
+	fn entering_quadruped_trot_uses_run_start() {
+		let stance = CharacterStance::settled(StanceKind::Stand);
+		let blend = QuadrupedRunStartBlend::default();
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Quadruped, None, &stance, &blend, WALK_SPEED + 0.5,)
+				.id(),
+			AnimId::QuadrupedRunStart
+		);
+	}
+
+	#[test]
+	fn settled_quadruped_trot_uses_run_cycle() {
+		let stance = CharacterStance::settled(StanceKind::Stand);
+		assert_eq!(
+			locomotion_clip(
+				RigSkeletonKind::Quadruped,
+				None,
+				&stance,
+				&settled_trot(),
+				WALK_SPEED + 0.5,
+			)
+			.id(),
+			AnimId::QuadrupedRun
 		);
 	}
 

@@ -826,6 +826,16 @@ mod tests {
 	}
 
 	#[test]
+	fn motor_path_does_not_read_quadruped_run_start_blend() {
+		let mut velocity = LinearVelocity(Vec3::ZERO);
+		control_ground_velocity(&mut velocity, Vec3::X, MOVE_ACCEL, 1.0, Vec3::Y, MOVE_SPEED);
+		let baseline = velocity.0;
+		let _animation_only = characters::QuadrupedRunStartBlend { progress: 0.5 };
+		control_ground_velocity(&mut velocity, Vec3::X, MOVE_ACCEL, 1.0, Vec3::Y, MOVE_SPEED);
+		assert_eq!(velocity.0, baseline);
+	}
+
+	#[test]
 	fn ground_speed_does_not_depend_on_frame_rate() {
 		let mut slow = LinearVelocity(Vec3::ZERO);
 		let mut fast = LinearVelocity(Vec3::ZERO);

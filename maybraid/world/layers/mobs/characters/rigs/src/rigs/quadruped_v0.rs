@@ -73,6 +73,29 @@ impl QuadrupedV0Rig {
 			.unwrap_or(Quat::IDENTITY)
 	}
 
+	/// Bone +Y in character space (parents included).
+	pub fn character_length(&self, name: &str) -> Vec3 {
+		self.binding
+			.definition
+			.id(name)
+			.map(|id| self.binding.definition.rotation_in_character(&self.pose, id) * Vec3::Y)
+			.unwrap_or(Vec3::Y)
+	}
+
+	/// Character-space origin of a bone (parents included).
+	pub fn character_point(&self, name: &str) -> Vec3 {
+		self.binding
+			.definition
+			.id(name)
+			.map(|id| self.binding.definition.translation_in_character(&self.pose, id))
+			.unwrap_or(Vec3::ZERO)
+	}
+
+	/// Distal end of a shin segment in character space.
+	pub fn foot_tip_character(&self, shin: &str) -> Vec3 {
+		self.character_point(shin) + self.character_length(shin) * self.segment_lengths.lower
+	}
+
 	pub fn animation_bone_names(&self) -> impl Iterator<Item = &'static str> {
 		QUADRUPED_V0_BONES.iter().copied()
 	}

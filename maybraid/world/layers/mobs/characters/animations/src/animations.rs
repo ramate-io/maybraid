@@ -15,6 +15,7 @@ pub mod quadruped_gallop;
 pub mod quadruped_idle;
 pub mod quadruped_leap;
 pub mod quadruped_run;
+pub mod quadruped_run_start;
 pub mod run;
 pub mod soaring;
 pub mod spring;
@@ -47,6 +48,9 @@ pub use quadruped_gallop::QuadrupedGallop;
 pub use quadruped_idle::QuadrupedIdle;
 pub use quadruped_leap::QuadrupedLeap;
 pub use quadruped_run::{QuadrupedRun, QuadrupedRunPose};
+pub use quadruped_run_start::{
+	QuadrupedRunStart, DEFAULT_QUADRUPED_RUN_START_SPEED, QUADRUPED_RUN_CYCLE_SPEED,
+};
 pub use run::Run;
 pub use soaring::Soaring;
 pub use spring::Spring;

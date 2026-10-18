@@ -50,6 +50,7 @@ pub enum AnimId {
 	Prone,
 	LateralUndulation,
 	DorsoventralUndulation,
+	QuadrupedRunStart,
 }
 
 impl AnimId {
@@ -73,6 +74,9 @@ impl AnimId {
 			Self::Prone => 1.0,
 			Self::LateralUndulation => 1.0,
 			Self::DorsoventralUndulation => 1.0,
+			Self::QuadrupedRunStart => {
+				character_animations::animations::DEFAULT_QUADRUPED_RUN_START_SPEED
+			}
 		}
 	}
 }
@@ -210,6 +214,7 @@ pub enum AnimClip {
 	Prone,
 	LateralUndulation(LateralUndulation),
 	DorsoventralUndulation(DorsoventralUndulation),
+	QuadrupedRunStart,
 }
 
 impl AnimClip {
@@ -233,6 +238,7 @@ impl AnimClip {
 			Self::Prone => AnimId::Prone,
 			Self::LateralUndulation(_) => AnimId::LateralUndulation,
 			Self::DorsoventralUndulation(_) => AnimId::DorsoventralUndulation,
+			Self::QuadrupedRunStart => AnimId::QuadrupedRunStart,
 		}
 	}
 
@@ -312,6 +318,10 @@ impl AnimClip {
 		Self::DorsoventralUndulation(DorsoventralUndulation::default())
 	}
 
+	pub fn quadruped_run_start() -> Self {
+		Self::QuadrupedRunStart
+	}
+
 	/// Content generation included in prepared-clip identity.
 	pub const fn revision(self) -> u64 {
 		0
@@ -341,6 +351,7 @@ impl AnimClip {
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
 			}
+			Self::QuadrupedRunStart => ClipTimePolicy::Clamp { duration: 1.0 },
 		}
 	}
 

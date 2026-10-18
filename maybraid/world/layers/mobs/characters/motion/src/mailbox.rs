@@ -12,8 +12,8 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, QuadrupedRunStart, Squat,
+		SquatDescent, Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -35,6 +35,7 @@ use crate::clip::{AnimClip, AnimId, AnimRefRoot};
 use crate::clip_cache::{apply_evaluated_sample, AnimClipCache, PreparedClip};
 use crate::markers::{AnimateBones, AnimateEffects, SuspendAnimation};
 use crate::plant::plant_lod_entity;
+use crate::quadruped_run_start::QuadrupedRunStartBlend;
 use crate::rig::{bone_map_ready, BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind};
 use rigs::PoseSkipRotation;
 use std::collections::HashSet;
@@ -207,7 +208,7 @@ pub fn prepare_anim_mailbox(
 				rig.binding.synced_rest_epoch = 0;
 				rig.segment_lengths = rig.binding.metrics.quadruped_leg;
 				rig.pose.copy_from(&rest);
-				commands.entity(entity).insert(rig);
+				commands.entity(entity).insert((rig, QuadrupedRunStartBlend::default()));
 			}
 			RigSkeletonKind::Forelimbed => {
 				let mut rig = ForelimbedV0Rig::imported();
@@ -362,13 +363,20 @@ pub fn tick_anim_mailbox(
 		let requested = root.0.clip;
 		let requested_id = requested.id();
 		if mailbox.last != Some(requested_id) {
+			let previous = mailbox.last;
 			if mailbox.posed {
 				let AnimMailbox { output, from_pose, .. } = &mut *mailbox;
 				from_pose.copy_from(output);
 			}
 			mailbox.from_offset = mailbox.displayed_offset;
 			mailbox.blend_progress = 0.0;
-			mailbox.clip_progress = 0.0;
+			mailbox.clip_progress = if previous == Some(AnimId::QuadrupedRunStart)
+				&& requested_id == AnimId::QuadrupedRun
+			{
+				QuadrupedRunStart::handoff_run_phase()
+			} else {
+				0.0
+			};
 			mailbox.last = Some(requested_id);
 		}
 
@@ -471,8 +479,14 @@ pub fn apply_anim_mailbox(
 					if write_bones {
 						sync_quadruped_rest(&mut rig, &bones);
 					}
-					let effects =
-						sample_quadruped(requested, &mut rig, progress, write_bones, write_effects);
+					let effects = sample_quadruped(
+						requested,
+						&mut rig,
+						progress,
+						write_bones,
+						write_effects,
+						Some(&mailbox.from_pose),
+					);
 					if write_bones {
 						publish_pose(&mut mailbox, &rig.pose, weight);
 					}
@@ -830,6 +844,7 @@ fn sample_humanoid(
 		}
 		AnimClip::Gallop(_)
 		| AnimClip::QuadrupedRun(_)
+		| AnimClip::QuadrupedRunStart
 		| AnimClip::LateralUndulation(_)
 		| AnimClip::DorsoventralUndulation(_) => Effects::default(),
 	}
@@ -841,6 +856,7 @@ fn sample_quadruped(
 	progress: f32,
 	write_bones: bool,
 	write_effects: bool,
+	entry_pose: Option<&PoseBuffer>,
 ) -> Effects {
 	match clip {
 		AnimClip::QuadrupedRun(run) => {
@@ -861,6 +877,19 @@ fn sample_quadruped(
 		),
 		AnimClip::Still => {
 			sample_split(&QuadrupedIdle::default(), rig, progress, write_bones, write_effects)
+		}
+		AnimClip::QuadrupedRunStart => {
+			let start = QuadrupedRunStart::default();
+			if write_bones {
+				let from =
+					entry_pose.cloned().unwrap_or_else(|| rig.binding.effective_rest.clone());
+				start.apply_for_with_entry(rig, progress.clamp(0.0, 1.0), &from);
+			}
+			if write_effects {
+				start.effects_for(rig, progress)
+			} else {
+				Effects::IDENTITY
+			}
 		}
 		_ => Effects::default(),
 	}
@@ -1011,6 +1040,26 @@ mod tests {
 	}
 
 	#[test]
+	fn quadruped_run_start_matches_run_at_full_progress() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		let mut start = QuadrupedV0Rig::for_clip_test();
+		let mut run = QuadrupedV0Rig::for_clip_test();
+		let handoff = QuadrupedRunStart::handoff_run_phase();
+		let rest = start.binding.effective_rest.clone();
+		sample_quadruped(AnimClip::quadruped_run_start(), &mut start, 1.0, true, true, Some(&rest));
+		sample_quadruped(AnimClip::quadruped_run(), &mut run, handoff, true, true, None);
+		for name in start.animation_bone_names() {
+			let a = start.rotation(name);
+			let b = run.rotation(name);
+			if a.dot(b).abs() < 1.0 - 1e-5 {
+				return Err(anyhow!("run start end must match run@0 on {name}"));
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn stance_squat_has_no_root_move() -> anyhow::Result<()> {
 		use anyhow::anyhow;
 
@@ -1047,8 +1096,14 @@ mod tests {
 	#[test]
 	fn still_samples_idle_on_quadruped() {
 		let mut rig = QuadrupedV0Rig::imported();
-		let effects =
-			sample_quadruped(AnimClip::Still, &mut rig, QuadrupedIdle::graze_peak(), true, true);
+		let effects = sample_quadruped(
+			AnimClip::Still,
+			&mut rig,
+			QuadrupedIdle::graze_peak(),
+			true,
+			true,
+			None,
+		);
 		assert!(effects.is_identity());
 		let neck = rig.rotation("neck") * Vec3::Y;
 		assert!((neck - Vec3::Y).length() > 0.2, "neck leaves rest, got {neck:?}");
