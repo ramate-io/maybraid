@@ -57,6 +57,10 @@ impl HcsgDemand {
 	/// Blocks until no subscription has outstanding work and no sweep is
 	/// pending, or `timeout` passes. `false` on timeout. Needs a running
 	/// [`super::HcsgWorker`].
+	///
+	/// Integration tests outside `lod` need the `test-support` feature (same as
+	/// blocking [`HcsgStorage`] reads).
+	#[cfg(any(test, feature = "test-support"))]
 	pub fn wait_idle(&self, timeout: Duration) -> bool {
 		let deadline = Instant::now() + timeout;
 		let mut state = self.lock();

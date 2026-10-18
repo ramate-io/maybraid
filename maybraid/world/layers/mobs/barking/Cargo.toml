@@ -28,6 +28,7 @@ vegetation-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+lod = { workspace = true, features = ["test-support"] }
 durham = { workspace = true }
 mob-intelligence = { workspace = true }
 
