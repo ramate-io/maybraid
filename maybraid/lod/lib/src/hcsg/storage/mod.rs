@@ -3,8 +3,11 @@
 mod diagnostics;
 mod eviction;
 mod reads;
-pub(in crate::hcsg) mod store;
+mod resolved;
+mod store;
 mod writes;
+
+pub(in crate::hcsg) use resolved::{ResolvedStore, ResolvedStoreCache};
 
 use std::sync::Arc;
 

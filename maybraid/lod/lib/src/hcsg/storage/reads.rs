@@ -7,20 +7,19 @@ use bevy::math::bounding::Aabb3d;
 use crate::gen::Id;
 
 use super::super::node_store::StoredEntry;
-use super::store::{read, try_read};
+use super::resolved::ResolvedStore;
+#[cfg(any(test, feature = "test-support"))]
+use super::store::read;
+use super::store::try_read;
 use super::{Busy, HcsgStorage, HcsgValue};
 
 impl HcsgStorage {
 	fn blocking_get<T: HcsgValue>(&self, id: Id) -> Option<Arc<T>> {
-		let store = self.store::<T>()?;
-		let nodes = read(&store.nodes);
-		nodes.value(id).cloned()
+		ResolvedStore::<T>::from_storage(self)?.get(id)
 	}
 
 	fn blocking_entry<T: HcsgValue>(&self, id: Id) -> Option<StoredEntry<Arc<T>>> {
-		let store = self.store::<T>()?;
-		let nodes = read(&store.nodes);
-		nodes.entry(id).cloned()
+		ResolvedStore::<T>::from_storage(self)?.entry(id)
 	}
 
 	/// Stored ids of `T` whose bounds intersect `region`, in id order.
@@ -52,7 +51,7 @@ impl HcsgStorage {
 	}
 
 	fn contains_impl<T: HcsgValue>(&self, id: Id) -> bool {
-		self.store::<T>().is_some_and(|store| read(&store.nodes).contains(id))
+		ResolvedStore::<T>::from_storage(self).is_some_and(|store| store.contains(id))
 	}
 
 	#[cfg(not(any(test, feature = "test-support")))]

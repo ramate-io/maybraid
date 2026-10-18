@@ -290,6 +290,24 @@ fn context_generates_dependencies_once() {
 }
 
 #[test]
+fn context_reads_published_values_through_resolved_store() {
+	let storage = seeded();
+	let id = Id::from_cell(cell(1.0));
+	let bounds = cell(1.0);
+	storage.publish(id, Arc::new(Ground { cell: bounds, seed: 7 }), bounds);
+	let missing = Id::from_cell(cell(99.0));
+
+	let mut cx = GenerationContext::new(&storage);
+	assert!(cx.has_stored::<Ground>(id));
+	assert_eq!(cx.stored_bounds::<Ground>(id), Some(bounds));
+	assert_eq!(cx.get::<Ground>(id).as_deref().map(|ground| ground.seed), Some(7));
+	assert!(!cx.has_stored::<Ground>(missing));
+	assert!(cx.get::<Ground>(missing).is_none());
+	assert!(cx.stored_bounds::<Ground>(missing).is_none());
+	assert!(cx.get_or_generate::<Ground>(id).is_some());
+}
+
+#[test]
 fn context_returns_none_without_roots() {
 	let storage = HcsgStorage::default();
 	let id = Id::from_cell(cell(1.0));
