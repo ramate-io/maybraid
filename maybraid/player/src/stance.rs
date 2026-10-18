@@ -35,11 +35,13 @@ pub struct CharacterStance {
 	pub kind: StanceKind,
 	/// 0 = previous pose, 1 = settled at `kind`.
 	pub blend: f32,
+	/// 0..1 progress through [`ProneAscent`] after leaving prone. `1` = finished.
+	pub prone_ascent: f32,
 }
 
 impl CharacterStance {
 	pub fn settled(kind: StanceKind) -> Self {
-		Self { kind, blend: kind.squat_target() }
+		Self { kind, blend: kind.squat_target(), prone_ascent: 1.0 }
 	}
 
 	pub fn speed_scale(self) -> f32 {
@@ -51,26 +53,44 @@ impl CharacterStance {
 	}
 
 	pub fn change_squat(&mut self) {
+		let from_prone = self.kind == StanceKind::Prone;
 		self.kind = match self.kind {
 			StanceKind::Stand => StanceKind::Squat,
 			StanceKind::Squat => StanceKind::Stand,
 			StanceKind::Prone => StanceKind::Squat,
 		};
 		self.blend = match self.kind {
-			StanceKind::Squat => 0.0,
+			StanceKind::Squat => {
+				if from_prone {
+					1.0
+				} else {
+					0.0
+				}
+			}
 			StanceKind::Stand => 1.0,
 			StanceKind::Prone => 1.0,
 		};
+		if from_prone {
+			self.prone_ascent = 0.0;
+		}
 	}
 
 	pub fn change_prone(&mut self) {
 		self.kind = StanceKind::Prone;
 		self.blend = 1.0;
+		self.prone_ascent = 1.0;
 	}
 
 	pub fn stand(&mut self) {
+		if self.kind == StanceKind::Prone {
+			self.prone_ascent = 0.0;
+		}
 		self.kind = StanceKind::Stand;
 		self.blend = 0.0;
+	}
+
+	pub fn prone_ascent_settled(self) -> bool {
+		self.prone_ascent >= 1.0
 	}
 
 	/// True once the squat depth matches the target stance.
@@ -123,6 +143,22 @@ pub(crate) fn advance_stance_blend(
 				- dt * character_animations::animations::DEFAULT_DESCENT_SPEED)
 				.max(target);
 		}
+	}
+}
+
+/// Ease [`ProneAscent`] progress after the player leaves prone.
+pub(crate) fn advance_prone_ascent(
+	time: Res<Time>,
+	mut stances: Query<&mut CharacterStance, With<CharacterController>>,
+) {
+	let dt = time.delta_secs();
+	for mut stance in &mut stances {
+		if stance.prone_ascent >= 1.0 {
+			continue;
+		}
+		stance.prone_ascent = (stance.prone_ascent
+			+ dt * character_animations::animations::DEFAULT_PRONE_ASCENT_SPEED)
+			.min(1.0);
 	}
 }
 
@@ -438,5 +474,82 @@ mod tests {
 			Squat::held().peak_vertical_drop(lengths)
 				> Squat::default().peak_vertical_drop(lengths)
 		);
+	}
+
+	/// Motor hull, speed, and pitch only read [`StanceKind`], not ascent progress.
+	#[test]
+	fn gameplay_ignores_prone_ascent_progress() -> Result<()> {
+		let rest = RestLocomotionCapsule(LocomotionCapsule::HUMANOID);
+		for progress in [0.0, 0.25, 0.5, 0.75, 1.0] {
+			for kind in [StanceKind::Stand, StanceKind::Squat, StanceKind::Prone] {
+				let stance =
+					CharacterStance { kind, blend: kind.squat_target(), prone_ascent: progress };
+				assert_eq!(rest.hull_for(stance.kind), rest.hull_for(kind));
+				assert_eq!(stance.speed_scale(), CharacterStance::settled(kind).speed_scale());
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn advance_prone_ascent_only_writes_progress() -> Result<()> {
+		let mut app = App::new();
+		app.init_resource::<Time>();
+		app.add_systems(Update, advance_prone_ascent);
+		let body = app
+			.world_mut()
+			.spawn((
+				CharacterController,
+				CharacterStance { kind: StanceKind::Squat, blend: 1.0, prone_ascent: 0.0 },
+			))
+			.id();
+		app.world_mut()
+			.resource_mut::<Time>()
+			.advance_by(std::time::Duration::from_secs_f32(0.1));
+		app.update();
+		let stance = app.world().get::<CharacterStance>(body).ok_or_else(|| anyhow!("stance"))?;
+		if stance.kind != StanceKind::Squat || (stance.blend - 1.0).abs() > 1e-5 {
+			return Err(anyhow!("ascent advance must not touch kind or squat blend"));
+		}
+		if stance.prone_ascent <= 0.0 {
+			return Err(anyhow!("ascent advance should increase progress"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn apply_stance_hull_unchanged_during_prone_ascent() -> Result<()> {
+		let mut app = App::new();
+		app.add_systems(Update, apply_stance_hulls);
+		let body = app.world_mut().spawn(Transform::IDENTITY).id();
+		app.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				apply_character_controller(&mut commands, body, LocomotionCapsule::HUMANOID);
+			})
+			.map_err(|err| anyhow!("{err}"))?;
+		app.world_mut().entity_mut(body).insert(CharacterStance {
+			kind: StanceKind::Squat,
+			blend: 1.0,
+			prone_ascent: 0.2,
+		});
+		app.update();
+		let hull_mid =
+			*app.world().get::<LocomotionCapsule>(body).ok_or_else(|| anyhow!("hull"))?;
+		app.world_mut()
+			.entity_mut(body)
+			.get_mut::<CharacterStance>()
+			.unwrap()
+			.prone_ascent = 0.8;
+		app.update();
+		let hull_late =
+			*app.world().get::<LocomotionCapsule>(body).ok_or_else(|| anyhow!("hull"))?;
+		if hull_mid != hull_late {
+			return Err(anyhow!("hull must depend on kind only, not ascent progress"));
+		}
+		let expected = LocomotionCapsule::HUMANOID.squat(squat_drop());
+		if (hull_late.length - expected.length).abs() > 1e-5 {
+			return Err(anyhow!("squat hull should match settled squat"));
+		}
+		Ok(())
 	}
 }

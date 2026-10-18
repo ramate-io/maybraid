@@ -240,8 +240,20 @@ mod tests {
 		assert_eq!(footstep_rate(false, None, None, 6.0), 0.0);
 		let jump = Jumping::start(0.0);
 		assert_eq!(footstep_rate(true, Some(&jump), None, 6.0), 0.0);
-		let squat = CharacterStance { kind: StanceKind::Squat, blend: 1.0 };
+		let squat = CharacterStance { kind: StanceKind::Squat, blend: 1.0, prone_ascent: 1.0 };
 		assert_eq!(footstep_rate(true, None, Some(&squat), 6.0), 0.0);
+	}
+
+	#[test]
+	fn footstep_rate_ignores_prone_ascent_progress() {
+		let settled = CharacterStance::settled(StanceKind::Squat);
+		let rising = CharacterStance { kind: StanceKind::Squat, blend: 1.0, prone_ascent: 0.35 };
+		for speed in [0.0, 3.0, 9.0] {
+			assert_eq!(
+				footstep_rate(true, None, Some(&settled), speed),
+				footstep_rate(true, None, Some(&rising), speed),
+			);
+		}
 	}
 
 	#[test]
