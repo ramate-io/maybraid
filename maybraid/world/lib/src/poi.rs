@@ -1,5 +1,6 @@
 //! Hierarchical world POIs over streamed Chico and Richmond scenes.
 
+mod families;
 mod hcsg;
 #[cfg(test)]
 mod scheme_timing;
@@ -15,7 +16,7 @@ use lod::LodScene;
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
 	DistantTilePoiLookup, GlobalPoi, LocalPoi, Poi, PoiId, PoiIntelligencePlugin, PoiKind,
-	PoiRegistry, PoiSystems,
+	PoiRegistry, PoiSystems, SchemePresentedPoi,
 };
 use richmond::{DiscoverablePlace, DiscoverablePlaceLabel};
 use urbanization_layer_model::UrbanSetting;
@@ -54,7 +55,10 @@ enum PendingPoiTarget {
 #[derive(Clone, Copy, Debug)]
 enum PendingPoiTier {
 	Local,
-	Global,
+	/// Authored whole-map pin (telepathic registry scan).
+	TelepathicGlobal,
+	/// Grove / urban pin indexed on [`PoiSet`] schemes.
+	SchemeGlobal,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -160,7 +164,7 @@ fn queue_global_groves(
 				name: "grove-global-poi",
 			},
 			poi: Poi::new(id, VEGETATION_POI).with_arrival_radius(radius).with_salience(1.25),
-			tier: PendingPoiTier::Global,
+			tier: PendingPoiTier::SchemeGlobal,
 		});
 	}
 }
@@ -175,7 +179,7 @@ fn queue_global_urban_settings(
 			poi: Poi::new(hashed_poi_id(URBAN_POI_SALT, setting.id), URBAN_POI)
 				.with_arrival_radius(setting.arrival_radius)
 				.with_salience(1.5),
-			tier: PendingPoiTier::Global,
+			tier: PendingPoiTier::SchemeGlobal,
 		});
 	}
 }
@@ -302,8 +306,11 @@ fn promote_pending_pois(
 				PendingPoiTier::Local => {
 					commands.entity(entity).insert((candidate.poi, LocalPoi));
 				}
-				PendingPoiTier::Global => {
+				PendingPoiTier::TelepathicGlobal => {
 					commands.entity(entity).insert((candidate.poi, GlobalPoi));
+				}
+				PendingPoiTier::SchemeGlobal => {
+					commands.entity(entity).insert((candidate.poi, SchemePresentedPoi));
 				}
 			},
 			PendingPoiTarget::Child { parent, translation, name } => match candidate.tier {
@@ -316,13 +323,22 @@ fn promote_pending_pois(
 						LocalPoi,
 					));
 				}
-				PendingPoiTier::Global => {
+				PendingPoiTier::TelepathicGlobal => {
 					commands.spawn((
 						Name::new(name),
 						ChildOf(parent),
 						Transform::from_translation(translation),
 						candidate.poi,
 						GlobalPoi,
+					));
+				}
+				PendingPoiTier::SchemeGlobal => {
+					commands.spawn((
+						Name::new(name),
+						ChildOf(parent),
+						Transform::from_translation(translation),
+						candidate.poi,
+						SchemePresentedPoi,
 					));
 				}
 			},
@@ -562,7 +578,7 @@ mod tests {
 			PendingPoi {
 				target: PendingPoiTarget::Entity(replacement),
 				poi,
-				tier: PendingPoiTier::Global,
+				tier: PendingPoiTier::TelepathicGlobal,
 			},
 		);
 
@@ -590,7 +606,7 @@ mod tests {
 			state.pending_pois.push_back(PendingPoi {
 				target: PendingPoiTarget::Entity(entity),
 				poi,
-				tier: PendingPoiTier::Global,
+				tier: PendingPoiTier::TelepathicGlobal,
 			});
 		}
 		app.update();

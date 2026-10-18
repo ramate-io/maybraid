@@ -106,6 +106,22 @@ impl PoiRegistry {
 		local: bool,
 		global: bool,
 	) -> Result<(), SpatialIndexError> {
+		self.upsert_indexed(entity, poi, position, local, global, global)
+	}
+
+	/// Like [`upsert`], but `telepathic` controls whole-map / nearby global scans.
+	///
+	/// Scheme-presented globals use `global = true` and `telepathic = false` so
+	/// spatial discovery stays on [`crate::PoiSet`].
+	pub fn upsert_indexed(
+		&mut self,
+		entity: Entity,
+		poi: Poi,
+		position: Vec3,
+		local: bool,
+		global: bool,
+		telepathic: bool,
+	) -> Result<(), SpatialIndexError> {
 		if self.records.get(&poi.id).is_some_and(|previous| previous.entity != entity)
 			|| !position.is_finite()
 			|| !poi.arrival_radius.is_finite()
@@ -138,7 +154,7 @@ impl PoiRegistry {
 		if local {
 			self.insert_spatial(record, position)?;
 		}
-		if global {
+		if telepathic {
 			self.globals.insert(poi.id);
 		}
 		self.bump_membership();

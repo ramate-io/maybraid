@@ -12,13 +12,16 @@ use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use bevy::math::IVec2;
+use bevy::prelude::Vec3;
 use chico::{ForestSelection, LayeringKind};
 use durham::Durham;
 use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
-	collect_matching_in_xz_tile, DistantTilePois, PoiEntry, PoiId, PoiInterests,
+	collect_matching_in_xz_tile, collect_matching_nearby, DistantTilePois, NearbyQuery, PoiEntry,
+	PoiId, PoiInterests,
 };
+use poi_intelligence::{collect_nearby_entries, DistantTilePoiLookup, GeneratedNearby};
 use richmond::Richmond;
 use terrain_layer_model::OnTerrain;
 use urbanization_layer_model::Urbanization;
@@ -306,4 +309,90 @@ fn xz_tile_world_timing() {
 	eprintln!("| --- | ---: | ---: | ---: | ---: | ---: |");
 	print_scheme_row("WorldPoiTiles", &world_cold, &world_warm);
 	print_scheme_row("PoiSet<GrovePois>", &grove_cold, &grove_warm);
+}
+
+fn collect_nearby_world(
+	storage: &HcsgStorage,
+	center: Vec3,
+	interests: &PoiInterests,
+	out: &mut Vec<PoiEntry>,
+) {
+	let lookup = DistantTilePoiLookup::new(WorldPoiTiles);
+	let generated = GeneratedNearby::new(storage, &lookup);
+	collect_nearby_entries(
+		None,
+		Some(generated),
+		center,
+		NearbyQuery::weighted(160.0),
+		interests,
+		&[],
+		out,
+	);
+}
+
+fn time_nearby_warm(
+	storage: &HcsgStorage,
+	center: Vec3,
+	interests: &PoiInterests,
+	iters: usize,
+) -> Stats {
+	let mut scratch = Vec::new();
+	for _ in 0..WARMUP {
+		collect_nearby_world(storage, center, interests, &mut scratch);
+		black_box(scratch.len());
+	}
+	let mut samples = Vec::with_capacity(iters);
+	for _ in 0..iters {
+		let started = Instant::now();
+		collect_nearby_world(storage, center, interests, &mut scratch);
+		samples.push(started.elapsed());
+		black_box(scratch.len());
+	}
+	stats(samples)
+}
+
+#[test]
+fn world_poi_family_skip_matches_grove_only_path() {
+	let storage = seed_forest();
+	let grove_only = PoiInterests::one(VEGETATION_POI);
+	let center = Vec3::new(128.0, 0.0, 128.0);
+	let query = NearbyQuery::weighted(160.0);
+	let mut world_out = Vec::new();
+	let mut grove_out = Vec::new();
+	let mut cx = GenerationContext::new(&storage);
+	collect_nearby_world(&storage, center, &grove_only, &mut world_out);
+	collect_matching_nearby::<GrovePois>(&mut cx, center, query, &grove_only, &[], &mut grove_out);
+	assert_eq!(ids_of(&world_out), ids_of(&grove_out));
+}
+
+#[test]
+#[ignore]
+fn nearby_world_timing() {
+	if cfg!(debug_assertions) {
+		eprintln!("warning: run with --release; debug timings are not comparable");
+	}
+	let storage = seed_forest();
+	let center = Vec3::new(128.0, 0.0, 128.0);
+	let profiles = [
+		("grove-only", PoiInterests::one(VEGETATION_POI)),
+		("urban-only", PoiInterests::one(URBAN_POI)),
+		("place-only", PoiInterests::one(LOCAL_POI).with_weight(SALOON_POI, 1.0)),
+		("mixed", world_interests()),
+	];
+	eprintln!("{RERUN}");
+	eprintln!(
+		"nearby_world_timing (accumulated warm totals — not per-frame costs): tile={TILE_SIZE}, warmup={WARMUP}, iters={WARM_ITERS}"
+	);
+	eprintln!();
+	eprintln!("| interests | warm med µs | warm p95 µs | warm total |");
+	eprintln!("| --- | ---: | ---: | ---: |");
+	for (label, interests) in profiles {
+		let warm = time_nearby_warm(&storage, center, &interests, WARM_ITERS);
+		eprintln!(
+			"| {label} | {} | {} | {} |",
+			fmt_us(warm.median),
+			fmt_us(warm.p95),
+			fmt_total(warm.total),
+		);
+	}
 }

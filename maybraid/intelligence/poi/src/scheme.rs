@@ -13,7 +13,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::{self, GenerationContext, HcsgStorage};
+use lod::hcsg::{self, universal_bounds, GenerationContext, HcsgStorage};
 
 use crate::hash::unit_f32;
 use crate::{
@@ -92,6 +92,17 @@ impl<S: PoiOrigin> hcsg::GenerationScheme for PoiSet<S> {
 		let (pois, bounds) = S::pois(cx, id)?;
 		Some((Self { pois, _source: PhantomData }, bounds))
 	}
+}
+
+/// Resolve whole-map global pins through [`PoiSet<S>`] (scheme-owned globals).
+pub fn collect_matching_global<S: PoiOrigin>(
+	cx: &mut GenerationContext,
+	interests: &PoiInterests,
+	out: &mut Vec<PoiEntry>,
+) {
+	let region = universal_bounds();
+	collect_matching_in::<S>(cx, region, interests, out);
+	out.retain(|poi| poi.global);
 }
 
 /// Resolve POIs originating in `region` through [`PoiSet<S>`].
@@ -285,6 +296,13 @@ pub trait DistantTilePois: Send + Sync + 'static {
 		excluded: &[PoiId],
 		out: &mut Vec<PoiEntry>,
 	);
+
+	fn collect_matching_global(
+		&self,
+		storage: &HcsgStorage,
+		interests: &PoiInterests,
+		out: &mut Vec<PoiEntry>,
+	);
 }
 
 impl DistantTilePois for Catalog {
@@ -312,6 +330,16 @@ impl DistantTilePois for Catalog {
 	) {
 		let mut cx = GenerationContext::new(storage);
 		collect_matching_nearby::<Catalog>(&mut cx, center, query, interests, excluded, out);
+	}
+
+	fn collect_matching_global(
+		&self,
+		storage: &HcsgStorage,
+		interests: &PoiInterests,
+		out: &mut Vec<PoiEntry>,
+	) {
+		let mut cx = GenerationContext::new(storage);
+		collect_matching_global::<Catalog>(&mut cx, interests, out);
 	}
 }
 
@@ -351,6 +379,21 @@ impl<'a> GeneratedNearby<'a> {
 			out,
 		);
 	}
+
+	pub fn collect_matching_global(self, interests: &PoiInterests, out: &mut Vec<PoiEntry>) {
+		self.lookup.0.collect_matching_global(self.storage, interests, out);
+	}
+}
+
+/// Scheme-owned global pins for whole-map discovery.
+pub fn collect_generated_globals(
+	generated: GeneratedNearby<'_>,
+	interests: &PoiInterests,
+	out: &mut Vec<PoiEntry>,
+) {
+	out.clear();
+	generated.collect_matching_global(interests, out);
+	out.sort_unstable_by_key(|poi| poi.id);
 }
 
 /// Frame access to published generated-world POIs without two extra system params.

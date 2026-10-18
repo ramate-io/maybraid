@@ -1008,3 +1008,73 @@ fn nearby_scheme_includes_arrival_disk_overlap() -> anyhow::Result<()> {
 	assert_eq!(found.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(31)]);
 	Ok(())
 }
+
+#[test]
+fn scheme_presented_globals_skip_telepathic_nearby_scan() -> anyhow::Result<()> {
+	use crate::NearbyQuery;
+	let mut registry = PoiRegistry::default();
+	let id = PoiId(42);
+	registry.upsert_indexed(
+		Entity::from_bits(1),
+		Poi::new(id, CAMP),
+		Vec3::X * 20.0,
+		false,
+		true,
+		false,
+	)?;
+	let interests = PoiInterests::one(CAMP);
+	let mut ids = Vec::new();
+	registry.collect_nearby_in(Vec3::ZERO, NearbyQuery::weighted(200.0), &interests, &[], &mut ids);
+	assert!(ids.is_empty(), "scheme globals are not telepathic registry nearby pins");
+	registry.collect_global_matching(&interests, &mut ids);
+	assert!(ids.is_empty(), "scheme globals are not telepathic whole-map pins");
+	Ok(())
+}
+
+#[test]
+fn collect_nearby_entries_dedupes_scheme_and_registry() -> anyhow::Result<()> {
+	use crate::{
+		collect_nearby_entries, DistantTilePoiLookup, GeneratedNearby, NearbyQuery, PoiCatalog,
+		PoiEntry,
+	};
+	use lod::hcsg::{universal_bounds, HcsgStorage};
+
+	let storage = HcsgStorage::default();
+	storage.seed(
+		PoiCatalog {
+			entries: vec![PoiEntry {
+				id: PoiId(7),
+				kind: CAMP,
+				position: Vec3::new(30.0, 0.0, 0.0),
+				arrival_radius: 4.0,
+				salience: 1.0,
+				local: true,
+				global: false,
+			}],
+		},
+		universal_bounds(),
+	);
+	let mut registry = PoiRegistry::default();
+	registry.upsert(
+		Entity::from_bits(1),
+		Poi::new(PoiId(7), CAMP),
+		Vec3::new(30.0, 0.0, 0.0),
+		true,
+		false,
+	)?;
+	let lookup = DistantTilePoiLookup::default();
+	let generated = GeneratedNearby::new(&storage, &lookup);
+	let interests = PoiInterests::one(CAMP);
+	let mut merged = Vec::new();
+	collect_nearby_entries(
+		Some(&registry),
+		Some(generated),
+		Vec3::ZERO,
+		NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),
+		&interests,
+		&[],
+		&mut merged,
+	);
+	assert_eq!(merged.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(7)]);
+	Ok(())
+}
