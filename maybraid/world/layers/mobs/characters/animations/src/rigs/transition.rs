@@ -1,5 +1,6 @@
 use character_rigs::authoring::PoseBuffer;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
 use crate::animations::Transition;
 use crate::rigs::mix::{capture_into, mix_effects};
@@ -18,6 +19,32 @@ where
 	pub fn apply(
 		&self,
 		rig: &mut HumanoidV0Rig,
+		animation_progress: f32,
+		transition_progress: f32,
+	) -> Effects {
+		let weight = self.weight(transition_progress);
+		if weight <= 0.0 {
+			rig.pose.copy_from(&self.from_pose);
+			return self.from_offset;
+		}
+		self.animation.apply_for(rig, animation_progress);
+		let effects = self.animation.effects_for(rig, animation_progress);
+		if weight >= 1.0 {
+			return mix_effects(self.from_offset, effects, 1.0);
+		}
+		rig.scratch.b.copy_from(&rig.pose);
+		PoseBuffer::blend_into(&self.from_pose, &rig.scratch.b, weight, &mut rig.pose);
+		mix_effects(self.from_offset, effects, weight)
+	}
+}
+
+impl<A> Transition<A>
+where
+	A: Animation<QuadrupedV0Rig>,
+{
+	pub fn apply_quadruped(
+		&self,
+		rig: &mut QuadrupedV0Rig,
 		animation_progress: f32,
 		transition_progress: f32,
 	) -> Effects {

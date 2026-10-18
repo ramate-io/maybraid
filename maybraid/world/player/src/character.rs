@@ -27,9 +27,11 @@ use crate::player::{
 	Grounded, Jumping, MoveWish, Player, PlayerCapsule, PlaygroundMode, VegetationPlayerMotor,
 	WalkableGround,
 };
+use crate::quadruped_run_stop::QuadrupedRunStopBlend;
 use avian3d::prelude::LinearVelocity;
+use characters::AnimProgress;
 
-const WALK_SPEED: f32 = 1.0;
+pub(crate) const WALK_SPEED: f32 = 1.0;
 const RUN_SPEED: f32 = 5.0;
 const RUN_EXIT_SPEED: f32 = 4.5;
 
@@ -203,7 +205,14 @@ pub(crate) fn drive_player_locomotion(
 	motor: Res<VegetationPlayerMotor>,
 	time: Res<Time>,
 	players: Query<
-		(&LinearVelocity, &MoveWish, Has<Jumping>, Has<Grounded>, Option<&WalkableGround>),
+		(
+			&LinearVelocity,
+			&MoveWish,
+			Has<Jumping>,
+			Has<Grounded>,
+			Option<&WalkableGround>,
+			Option<&QuadrupedRunStopBlend>,
+		),
 		With<Player>,
 	>,
 	mut visuals: Query<
@@ -216,9 +225,10 @@ pub(crate) fn drive_player_locomotion(
 	if !motor.0 {
 		return;
 	}
-	let Ok((velocity, wish, jumping, grounded, walkable)) = players.single() else {
+	let Ok((velocity, wish, jumping, grounded, walkable, run_stop)) = players.single() else {
 		return;
 	};
+	let run_stop = run_stop.copied().unwrap_or_default();
 	let Ok((members, mut visual, mut heading)) = visuals.single_mut() else {
 		return;
 	};
@@ -237,12 +247,20 @@ pub(crate) fn drive_player_locomotion(
 			continue;
 		}
 		let current = anims.get(member).ok();
-		let clip =
-			locomotion_clip(rig.skeleton, jumping, speed, current.map(|root| root.0.clip.id()));
+		let clip = locomotion_clip(
+			rig.skeleton,
+			jumping,
+			speed,
+			current.map(|root| root.0.clip.id()),
+			&run_stop,
+		);
 		let desired = AnimRef::new(clip);
 		let needs = current.is_none_or(|root| root.0 != desired);
 		if needs {
 			commands.entity(member).insert(AnimRefRoot(desired));
+		}
+		if matches!(clip, AnimClip::QuadrupedRunStop) {
+			commands.entity(member).insert(AnimProgress(run_stop.progress));
 		}
 	}
 }
@@ -261,6 +279,7 @@ fn locomotion_clip(
 	jumping: bool,
 	speed: f32,
 	current: Option<AnimId>,
+	run_stop: &QuadrupedRunStopBlend,
 ) -> AnimClip {
 	let was_running = current.is_some_and(|id| {
 		matches!(id, AnimId::Run | AnimId::Gallop | AnimId::DorsoventralUndulation)
@@ -287,6 +306,8 @@ fn locomotion_clip(
 				AnimClip::gallop()
 			} else if speed > WALK_SPEED {
 				AnimClip::quadruped_run()
+			} else if !run_stop.settled() {
+				AnimClip::quadruped_run_stop()
 			} else {
 				AnimClip::still()
 			}
@@ -385,20 +406,36 @@ mod tests {
 
 	#[test]
 	fn run_clip_has_exit_hysteresis() {
+		let settled = QuadrupedRunStopBlend::default();
 		let run = locomotion_clip(
 			RigSkeletonKind::Humanoid,
 			false,
 			RUN_EXIT_SPEED + 0.1,
 			Some(AnimId::Run),
+			&settled,
 		);
 		let walk = locomotion_clip(
 			RigSkeletonKind::Humanoid,
 			false,
 			RUN_EXIT_SPEED + 0.1,
 			Some(AnimId::Walk),
+			&settled,
 		);
 		assert_eq!(run.id(), AnimId::Run);
 		assert_eq!(walk.id(), AnimId::Walk);
+	}
+
+	#[test]
+	fn quadruped_trot_stop_plays_while_settling() {
+		let settling = QuadrupedRunStopBlend { progress: 0.4 };
+		let clip = locomotion_clip(
+			RigSkeletonKind::Quadruped,
+			false,
+			0.0,
+			Some(AnimId::QuadrupedRun),
+			&settling,
+		);
+		assert_eq!(clip.id(), AnimId::QuadrupedRunStop);
 	}
 
 	#[test]

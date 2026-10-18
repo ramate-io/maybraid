@@ -12,8 +12,8 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, QuadrupedRunStop, Squat,
+		SquatDescent, Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -830,6 +830,7 @@ fn sample_humanoid(
 		}
 		AnimClip::Gallop(_)
 		| AnimClip::QuadrupedRun(_)
+		| AnimClip::QuadrupedRunStop
 		| AnimClip::LateralUndulation(_)
 		| AnimClip::DorsoventralUndulation(_) => Effects::default(),
 	}
@@ -846,6 +847,13 @@ fn sample_quadruped(
 		AnimClip::QuadrupedRun(run) => {
 			sample_split(&run, rig, progress, write_bones, write_effects)
 		}
+		AnimClip::QuadrupedRunStop => sample_split(
+			&QuadrupedRunStop::default(),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
 		AnimClip::Run(_) => {
 			sample_split(&QuadrupedRun::default(), rig, progress, write_bones, write_effects)
 		}
@@ -1054,6 +1062,42 @@ mod tests {
 		assert!((neck - Vec3::Y).length() > 0.2, "neck leaves rest, got {neck:?}");
 		let lumbar = rig.rotation("lumbar") * Vec3::Y;
 		assert!((lumbar - Vec3::Y).length() > 0.05, "lumbar leaves rest, got {lumbar:?}");
+	}
+
+	#[test]
+	fn quadruped_run_stop_matches_idle_at_full_progress() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		let mut stop = QuadrupedV0Rig::for_clip_test();
+		let mut idle = QuadrupedV0Rig::for_clip_test();
+		sample_quadruped(AnimClip::quadruped_run_stop(), &mut stop, 1.0, true, true);
+		sample_quadruped(AnimClip::still(), &mut idle, 0.0, true, true);
+		for name in stop.animation_bone_names() {
+			let a = stop.rotation(name);
+			let b = idle.rotation(name);
+			if a.dot(b).abs() < 1.0 - 1e-5 {
+				return Err(anyhow!("run stop end must match idle on {name}"));
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn quadruped_run_stop_matches_run_at_start() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		let mut stop = QuadrupedV0Rig::for_clip_test();
+		let mut run = QuadrupedV0Rig::for_clip_test();
+		sample_quadruped(AnimClip::quadruped_run_stop(), &mut stop, 0.0, true, true);
+		sample_quadruped(AnimClip::quadruped_run(), &mut run, 0.0, true, true);
+		for name in stop.animation_bone_names() {
+			let a = stop.rotation(name);
+			let b = run.rotation(name);
+			if a.dot(b).abs() < 1.0 - 1e-5 {
+				return Err(anyhow!("run stop start must match run@0 on {name}"));
+			}
+		}
+		Ok(())
 	}
 
 	#[test]
