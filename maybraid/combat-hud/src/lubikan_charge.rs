@@ -10,7 +10,7 @@ use menu_components::{spawn_hud_text_card, HudFonts, HUD_TEXT_CARD_FACE_PX, TEXT
 use player::Player;
 
 use crate::continuous_health::{spawn_ui_meter_row, ContinuousHealthConfig};
-use crate::cycle_cue::CombatHudInventoryCycleCategory;
+use crate::cycle_cue::{idle_cycle_outline, CombatHudCyclePanel, CombatHudInventoryCycleCategory};
 use crate::cycle_slots::spawn_cycle_slot_row;
 use crate::plate::{spawn_hud_plate, HudPlateCorner, HudPlateLayout};
 use crate::vitals::VITALS_WIDTH;
@@ -124,6 +124,7 @@ pub(crate) struct LubikanHudRow {
 	pub charge: LubikanCharge,
 	pub readiness: LubikanReadiness,
 	pub activation: LubikanActivation,
+	pub max_stock: u32,
 }
 
 impl LubikanHudRow {
@@ -134,7 +135,16 @@ impl LubikanHudRow {
 			charge: equipped.charge(),
 			readiness: ledger.readiness(catalog),
 			activation: equipped.activation(),
+			max_stock: catalog.max_stock(equipped.id().definition()),
 		}
+	}
+
+	pub fn banked_activations(self) -> u32 {
+		let cost = self.readiness.activation_cost;
+		if cost <= 0.0 {
+			return 0;
+		}
+		((self.charge.current() / cost).floor() as u32).min(self.max_stock.max(1))
 	}
 }
 
@@ -146,7 +156,11 @@ pub(crate) fn spawn_lubikan_charge(
 	spawn_hud_plate(
 		parent,
 		"lubikan-charge",
-		LubikanChargeRoot,
+		(
+			LubikanChargeRoot,
+			CombatHudCyclePanel(CombatHudInventoryCycleCategory::Lubikans),
+			idle_cycle_outline(),
+		),
 		HudPlateLayout {
 			width: CHARGE_WIDTH,
 			row_gap: CHARGE_ROW_GAP,
@@ -320,9 +334,9 @@ pub(crate) fn sync_lubikan_charge(
 	let heal = self_heal_for_owner(owner, self_heal.as_deref(), heal_channels.get(owner).ok());
 	let finished = pulse.as_deref().and_then(|pulse| pulse.active_label(time.elapsed_secs()));
 	let amount = format_charge(row.charge.current());
-	let name = account_label(row.account);
+	let name = charge_name(&row);
 	let status = charge_status(&row, heal, finished);
-	let fraction = row.charge.fraction();
+	let fraction = charge_fill_fraction(&row);
 	let fill_color = charge_bar_color(&row);
 	let ready = row.readiness.can_activate;
 	for (mut visibility, mut border) in widgets.p0().iter_mut() {
@@ -379,8 +393,17 @@ pub(crate) fn charge_status(
 	}
 }
 
+pub(crate) fn charge_fill_fraction(row: &LubikanHudRow) -> f32 {
+	let stock_cap = row.max_stock.max(1) as f32 * row.readiness.activation_cost;
+	if stock_cap > 0.0 {
+		(row.charge.current() / stock_cap).clamp(0.0, 1.0)
+	} else {
+		row.charge.fraction()
+	}
+}
+
 pub(crate) fn charge_bar_color(row: &LubikanHudRow) -> Color {
-	let fraction = row.charge.fraction();
+	let fraction = charge_fill_fraction(row);
 	if fraction <= 0.0 {
 		BAR_LOW
 	} else if row.readiness.can_activate {
@@ -400,6 +423,16 @@ fn account_label(account: LubikanAccountId) -> String {
 		.well_known_label()
 		.map(str::to_string)
 		.unwrap_or_else(|| format!("Lubikan {}", account.definition().raw()))
+}
+
+/// Name plus banked-activation count when the definition can stock more than one.
+pub(crate) fn charge_name(row: &LubikanHudRow) -> String {
+	let name = account_label(row.account);
+	if row.max_stock > 1 {
+		format!("{name}  {}/{}", row.banked_activations(), row.max_stock)
+	} else {
+		name
+	}
 }
 
 fn format_charge(value: f32) -> String {
@@ -427,6 +460,7 @@ mod tests {
 				false,
 			),
 			activation: LubikanActivation::idle(LubikanAccountId::SELF),
+			max_stock: 1,
 		};
 		assert_eq!(charge_status(&ready, None, None), "");
 		let healing = LubikanHudSelfHeal { remaining: 55.0, rate: 5.0 };
@@ -454,5 +488,36 @@ mod tests {
 	#[test]
 	fn self_account_label_is_self() {
 		assert_eq!(account_label(LubikanAccountId::SELF), "Self");
+	}
+
+	#[test]
+	fn charge_name_shows_banked_count_only_when_stock_exceeds_one() {
+		let single = LubikanHudRow {
+			account: LubikanAccountId::SELF,
+			charge: LubikanCharge::new(25.0, 25.0),
+			readiness: LubikanReadiness::from_charge(
+				LubikanAccountId::SELF,
+				LubikanCharge::new(25.0, 25.0),
+				25.0,
+				false,
+			),
+			activation: LubikanActivation::idle(LubikanAccountId::SELF),
+			max_stock: 1,
+		};
+		assert_eq!(charge_name(&single), "Self");
+		let stacked = LubikanHudRow {
+			charge: LubikanCharge::new(50.0, 75.0),
+			readiness: LubikanReadiness::from_charge(
+				LubikanAccountId::SELF,
+				LubikanCharge::new(50.0, 75.0),
+				25.0,
+				false,
+			),
+			max_stock: 3,
+			..single
+		};
+		assert_eq!(stacked.banked_activations(), 2);
+		assert_eq!(charge_name(&stacked), "Self  2/3");
+		assert!((charge_fill_fraction(&stacked) - (50.0 / 75.0)).abs() < 1e-5);
 	}
 }
