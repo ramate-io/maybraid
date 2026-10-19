@@ -24,6 +24,7 @@ pub enum AnimationMode {
 	FixedTuck,
 	TuckedFlip,
 	TwoFootedTuckedFlip,
+	VictoryWave,
 	Soaring,
 	Flapping,
 	Jab,
@@ -51,6 +52,7 @@ impl AnimationMode {
 			Self::FixedTuck => "fixed-tuck",
 			Self::TuckedFlip => "tucked-flip",
 			Self::TwoFootedTuckedFlip => "two-footed-tucked-flip",
+			Self::VictoryWave => "victory-wave",
 			Self::Soaring => "soaring",
 			Self::Flapping => "flapping",
 			Self::Jab => "jab",
@@ -73,6 +75,7 @@ impl AnimationMode {
 			Self::Tuck | Self::FixedTuck => AnimClip::tuck(),
 			Self::TuckedFlip => AnimClip::tucked_flip(),
 			Self::TwoFootedTuckedFlip => AnimClip::two_footed_tucked_flip(),
+			Self::VictoryWave => AnimClip::victory_wave(),
 			Self::Soaring => AnimClip::soaring(),
 			Self::Flapping => AnimClip::flapping(),
 			Self::Jab => AnimClip::Jab(JabParams {

@@ -877,6 +877,13 @@ fn sample_humanoid(
 			write_bones,
 			write_effects,
 		),
+		AnimClip::VictoryWave(wave) => sample_split(
+			&wave,
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
 		AnimClip::ThinkAgain(params) => sample_split(
 			&ThinkAgain::new(params.side),
 			rig,

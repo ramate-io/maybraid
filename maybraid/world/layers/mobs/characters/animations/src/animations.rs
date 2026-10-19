@@ -32,6 +32,7 @@ pub mod upright_leap;
 pub mod upright_power_dash;
 pub mod upright_run;
 pub mod upright_walk;
+pub mod victory_wave;
 pub mod walk;
 
 pub use dorsoventral_undulation::DorsoventralUndulation;
@@ -74,4 +75,5 @@ pub use upright_leap::UprightLeap;
 pub use upright_power_dash::UprightPowerDash;
 pub use upright_run::UprightRun;
 pub use upright_walk::UprightWalk;
+pub use victory_wave::VictoryWave;
 pub use walk::Walk;
