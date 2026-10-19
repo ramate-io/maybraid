@@ -12,8 +12,9 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		Idle, Jab, PowerStrafe, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat,
+		SquatDescent, ThinkAgain, Tuck, TwoFootedTuckedFlip, UprightLeap, UprightPowerDash,
+		THINK_AGAIN_DURATION,
 	},
 	Animation, Effects,
 };
@@ -141,6 +142,15 @@ impl AnimMailbox {
 		}
 	}
 
+	pub fn clip_progress(&self) -> f32 {
+		self.clip_progress
+	}
+
+	/// True once a bone sample has been written and the clip crossfade finished.
+	pub fn settled(&self) -> bool {
+		self.posed && self.blend_progress >= 1.0
+	}
+
 	/// Authoritative base animation pose (crossfaded while transitioning).
 	///
 	/// **Readers (production):** firearm/grenade holds via [`Self::base_pose`]; bone writes in
@@ -153,6 +163,11 @@ impl AnimMailbox {
 
 	fn blending(&self) -> bool {
 		self.blend_progress < 1.0
+	}
+
+	/// Mailbox sample clock in clip seconds (before policy remap).
+	pub fn clip_time_secs(&self) -> f32 {
+		self.clip_progress
 	}
 
 	/// Capture the last published base pose as the crossfade source for a new clip.
@@ -782,6 +797,29 @@ where
 	}
 }
 
+/// Hash the resolved humanoid still at `progress`. Capture ids use this so a
+/// choreography edit at the same progress invalidates the icon cache.
+pub fn fingerprint_humanoid_clip(clip: AnimClip, progress: f32) -> u64 {
+	use std::hash::{Hash, Hasher};
+
+	let mut rig = HumanoidV0Rig::for_clip_test();
+	let effects = sample_humanoid(clip, &mut rig, progress, true, true);
+	let mut hasher = std::collections::hash_map::DefaultHasher::new();
+	for name in rig.animation_bone_names() {
+		name.hash(&mut hasher);
+		let rotation = rig.rotation(name);
+		rotation.x.to_bits().hash(&mut hasher);
+		rotation.y.to_bits().hash(&mut hasher);
+		rotation.z.to_bits().hash(&mut hasher);
+		rotation.w.to_bits().hash(&mut hasher);
+	}
+	let translation = effects.0.translation;
+	translation.x.to_bits().hash(&mut hasher);
+	translation.y.to_bits().hash(&mut hasher);
+	translation.z.to_bits().hash(&mut hasher);
+	hasher.finish()
+}
+
 fn sample_humanoid(
 	clip: AnimClip,
 	rig: &mut HumanoidV0Rig,
@@ -801,6 +839,13 @@ fn sample_humanoid(
 		AnimClip::Leap(leap) => {
 			sample_split(&UprightLeap::from_leap(&leap), rig, progress, write_bones, write_effects)
 		}
+		AnimClip::PowerDash(power_dash) => sample_split(
+			&UprightPowerDash::from_power_dash(&power_dash),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
 		AnimClip::Tuck(params) => sample_split(
 			&Tuck::new(params.tightness),
 			rig,
@@ -837,6 +882,20 @@ fn sample_humanoid(
 			write_bones,
 			write_effects,
 		),
+		AnimClip::ThinkAgain(params) => sample_split(
+			&ThinkAgain::new(params.side),
+			rig,
+			progress.clamp(0.0, THINK_AGAIN_DURATION),
+			write_bones,
+			write_effects,
+		),
+		AnimClip::PowerStrafe(params) => sample_split(
+			&PowerStrafe::new(params.side),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
 		AnimClip::Squat => sample_split(&Squat::held(), rig, progress, write_bones, write_effects),
 		AnimClip::SquatDescent => sample_split(
 			&SquatDescent::default(),
@@ -851,7 +910,11 @@ fn sample_humanoid(
 		AnimClip::Gallop(_)
 		| AnimClip::QuadrupedRun(_)
 		| AnimClip::LateralUndulation(_)
-		| AnimClip::DorsoventralUndulation(_) => Effects::default(),
+		| AnimClip::DorsoventralUndulation(_)
+		| AnimClip::EpiphantBray(_)
+		| AnimClip::EpiphantSleepEnter(_)
+		| AnimClip::EpiphantSleepHold(_)
+		| AnimClip::EpiphantWake(_) => Effects::default(),
 	}
 }
 
@@ -881,6 +944,18 @@ fn sample_quadruped(
 		),
 		AnimClip::Still => {
 			sample_split(&QuadrupedIdle::default(), rig, progress, write_bones, write_effects)
+		}
+		AnimClip::EpiphantBray(bray) => {
+			sample_split(&bray, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::EpiphantSleepEnter(enter) => {
+			sample_split(&enter, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::EpiphantSleepHold(hold) => {
+			sample_split(&hold, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::EpiphantWake(wake) => {
+			sample_split(&wake, rig, progress, write_bones, write_effects)
 		}
 		_ => Effects::default(),
 	}
@@ -1011,6 +1086,25 @@ mod tests {
 	}
 
 	#[test]
+	fn fingerprint_tracks_the_live_clip_pose() {
+		let dash = AnimClip::power_dash();
+		let left = AnimClip::power_strafe_left();
+		let right = AnimClip::power_strafe_right();
+		let dash_hold = fingerprint_humanoid_clip(dash, dash.representative_progress());
+		let dash_start = fingerprint_humanoid_clip(dash, 0.0);
+		let left_hold = fingerprint_humanoid_clip(left, left.representative_progress());
+		let right_hold = fingerprint_humanoid_clip(right, right.representative_progress());
+		assert_ne!(dash_hold, dash_start, "held dash must differ from rest");
+		assert_ne!(dash_hold, left_hold, "dash and strafe stills must differ");
+		assert_ne!(left_hold, right_hold, "mirrored strafes must differ");
+		assert_eq!(
+			dash_hold,
+			fingerprint_humanoid_clip(dash, dash.representative_progress()),
+			"same clip+progress must be stable"
+		);
+	}
+
+	#[test]
 	fn squat_descent_matches_held_squat_at_full_depth() -> anyhow::Result<()> {
 		use anyhow::anyhow;
 		let mut descent = HumanoidV0Rig::for_clip_test();
@@ -1082,6 +1176,37 @@ mod tests {
 		let b = Entity::from_bits(2);
 		assert_ne!(clip_progress(AnimClip::Still, 0.0, a), clip_progress(AnimClip::Still, 0.0, b));
 		assert_eq!(clip_progress(AnimClip::walk(), 0.3, a), 0.3);
+	}
+
+	#[test]
+	fn epiphant_bray_flicks_then_recovers_on_quadruped() {
+		let mut rig = QuadrupedV0Rig::for_clip_test();
+		sample_quadruped(AnimClip::epiphant_bray(), &mut rig, 0.34, true, true);
+		let peak = rig.rotation("neck") * Vec3::Y;
+		sample_quadruped(AnimClip::epiphant_bray(), &mut rig, 1.0, true, true);
+		let end = rig.rotation("neck") * Vec3::Y;
+		assert!(peak.x.abs() > 0.05);
+		assert!((end - Vec3::Y).length() < 0.15, "recovery near rest, got {end:?}");
+	}
+
+	#[test]
+	fn quadruped_run_still_samples_after_epiphant_clips() {
+		let mut rig = QuadrupedV0Rig::for_clip_test();
+		sample_quadruped(AnimClip::epiphant_sleep_hold(), &mut rig, 0.2, true, true);
+		sample_quadruped(AnimClip::quadruped_run(), &mut rig, 0.35, true, true);
+		assert!(rig.posed_angle("anterior_thigh.L").abs() > 0.05);
+	}
+
+	#[test]
+	fn sleep_hold_interrupt_blends_to_idle_pose() {
+		let mut rig = QuadrupedV0Rig::for_clip_test();
+		sample_quadruped(AnimClip::epiphant_sleep_hold(), &mut rig, 0.4, true, true);
+		let folded = rig.posed_angle("anterior_shin.L");
+		sample_quadruped(AnimClip::Still, &mut rig, 0.0, true, true);
+		assert!(
+			rig.posed_angle("anterior_shin.L") < folded,
+			"idle should unfold after sleep interrupt"
+		);
 	}
 
 	#[test]
@@ -2029,10 +2154,7 @@ mod tests {
 		world.entity_mut(host).remove::<SuspendAnimation>();
 		step_mailbox(&mut world, host, 1.0 / 60.0)?;
 		let progress_after = world.get::<AnimMailbox>(host).unwrap().clip_progress;
-		anyhow::ensure!(
-			progress_after > progress_before,
-			"resume must advance clip clock"
-		);
+		anyhow::ensure!(progress_after > progress_before, "resume must advance clip clock");
 		let base_after = world.get::<AnimMailbox>(host).unwrap().output.clone();
 		anyhow::ensure!(
 			base_after.local != base_before.local,
@@ -2144,9 +2266,7 @@ mod tests {
 		Ok(())
 	}
 
-	fn verify_crossfade_ignores_overlay_on_rig(
-		capture_from_rig: bool,
-	) -> anyhow::Result<()> {
+	fn verify_crossfade_ignores_overlay_on_rig(capture_from_rig: bool) -> anyhow::Result<()> {
 		use character_animations::animations::{Run, Walk};
 		use character_animations::Animation;
 
@@ -2242,7 +2362,11 @@ mod tests {
 	}
 
 	/// Steady-state path from PR #1321: skip publishing into [`AnimMailbox::output`].
-	fn publish_pose_pr1321_steady_skip(mailbox: &mut AnimMailbox, sampled: &PoseBuffer, weight: f32) {
+	fn publish_pose_pr1321_steady_skip(
+		mailbox: &mut AnimMailbox,
+		sampled: &PoseBuffer,
+		weight: f32,
+	) {
 		if weight < 1.0 {
 			publish_pose(mailbox, sampled, weight);
 		} else {
@@ -2250,7 +2374,10 @@ mod tests {
 		}
 	}
 
-	fn bench_mailbox_sample_publish_effects(pr1321_steady_skip: bool, blend_progress: f32) -> Vec<u128> {
+	fn bench_mailbox_sample_publish_effects(
+		pr1321_steady_skip: bool,
+		blend_progress: f32,
+	) -> Vec<u128> {
 		use crate::clip_cache::RigVariantId;
 
 		const FRAMES: u32 = 5_000;
@@ -2303,11 +2430,7 @@ mod tests {
 					} else {
 						publish_pose(mailbox, &rig.pose, weight);
 					}
-					black_box(blend_mailbox_effects(
-						mailbox.from_offset,
-						effects,
-						blend_progress,
-					));
+					black_box(blend_mailbox_effects(mailbox.from_offset, effects, blend_progress));
 					for bone in &mailbox.output.local {
 						black_box(bone);
 					}
@@ -2353,7 +2476,8 @@ mod tests {
 			for frame in 0..FRAMES {
 				let frame = black_box(frame);
 				for (index, rig) in rigs.iter_mut().enumerate() {
-					let progress = black_box((frame as f32 * 0.013 + index as f32 * 0.02).rem_euclid(1.0));
+					let progress =
+						black_box((frame as f32 * 0.013 + index as f32 * 0.02).rem_euclid(1.0));
 					sample_humanoid_prepared(
 						AnimClip::walk(),
 						rig,
