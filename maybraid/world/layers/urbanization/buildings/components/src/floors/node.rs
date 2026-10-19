@@ -27,7 +27,7 @@ use crate::partitions::geometry::LinearLod;
 use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::placed::Placement;
 use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
-use bevy_math::{Quat, Vec3};
+use bevy_math::{Quat, Vec2, Vec3};
 use material_ref::MaterialRef;
 
 /// Authoring IR for a floor slab feature.
@@ -65,6 +65,27 @@ impl FloorNode {
 	pub fn with_confines(mut self, confines: ParentConfines) -> Self {
 		self.confines = confines;
 		self
+	}
+
+	/// Point on the walk-on face of this slab, in building-local space.
+	///
+	/// Rectangle floors use the centered kit pose plus half thickness so the
+	/// stand sits on the top of the collider, not the slab midpoint.
+	pub fn walk_on_point(&self) -> Vec3 {
+		match self.geometry {
+			FloorGeometry::Rectangle(_) => {
+				let centered = to_centered_rect_placement(self.placement);
+				let half_y = (centered.scale.y.abs() * 0.2).max(0.04);
+				centered.translation + centered.rotation() * Vec3::Y * half_y
+			}
+			_ => self.placement.translation,
+		}
+	}
+
+	/// Coarse XZ coverage of this slab. Used to match a room pin to a floor.
+	pub fn covers_xz(&self, xz: Vec2) -> bool {
+		let bounds = placement_bounds(&self.placement);
+		xz.x >= bounds.min.x && xz.x <= bounds.max.x && xz.y >= bounds.min.z && xz.y <= bounds.max.z
 	}
 
 	/// Walk prisms for tessellated right-triangle floor kits (local hull + pose).
@@ -211,5 +232,17 @@ mod tests {
 			node.material.as_ref().map(|m| &m.name),
 			Some(&material_ref::MaterialId::named("stucco"))
 		);
+	}
+
+	#[test]
+	fn rectangle_walk_on_sits_on_the_slab_top() {
+		let node = FloorNode::wood(
+			FloorGeometry::rectangle(),
+			Placement::new(Vec3::new(2.0, 4.0, -1.0), 0.0).with_scale(Vec3::new(6.0, 1.0, 8.0)),
+		);
+		let stand = node.walk_on_point();
+		assert!(stand.y > 4.0, "walk-on must be above the authored kit origin, got {}", stand.y);
+		assert!(node.covers_xz(Vec2::new(stand.x, stand.z)));
+		assert!(!node.covers_xz(Vec2::new(80.0, 80.0)));
 	}
 }

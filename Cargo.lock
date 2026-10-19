@@ -7039,6 +7039,7 @@ dependencies = [
  "avian3d",
  "barking",
  "bevy",
+ "building-physics",
  "character-inventory-user",
  "character-items",
  "character-persist",

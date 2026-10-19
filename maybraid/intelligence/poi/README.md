@@ -4,8 +4,9 @@ Shared point-of-interest discovery and retained knowledge.
 
 - `Poi` carries a stable `PoiId`, semantic `PoiKind`, arrival radius, salience,
   and an explicit `PoiSupport` (`Terrain` / `Floor`). `PoiArrival` is the spawn
-  contract: outdoor pins sample composed (or hold) height, floor pins keep
-  authored Y. Collider readiness is a separate presentation/physics gate.
+  contract: outdoor pins stand on presented (padded) ground when published,
+  otherwise the generated pin Y; floor pins keep authored storey Y. Collider
+  readiness is a separate presentation/physics gate.
 - `LocalPoi` enters a Gimme-backed bounded index for nearby scans; `GlobalPoi`
   enters a sparse whole-map set for those scans.
 - Distant xz-tile lookups use a `PoiOrigin` `GenerationScheme` (`PoiSet<S>`)

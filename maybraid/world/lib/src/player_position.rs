@@ -11,8 +11,10 @@ use durham::{Durham, TerrainCellLayout, WorldBaseTerrain};
 use player_camera::FollowCamera;
 use serde::{Deserialize, Serialize};
 use terrain_layer_model::{terrain_streaming, TerrainStreaming};
-use world_player::player::{holding_elevation, player_spawn_point_at};
-use world_player::{AwaitingTerrainSurface, ModePlayerPolicies, Player};
+use world_player::player::{holding_elevation, player_spawn_point_at, player_surface_under};
+use world_player::{
+	AwaitingTerrainSurface, ModePlayerPolicies, OffTerrainAnchor, PendingPlacement, Player,
+};
 
 use layer_stack::ActiveGenerationMode;
 
@@ -308,9 +310,12 @@ fn apply_resume_pose(
 			velocity.0 = Vec3::ZERO;
 		}
 		// Leftover bodies and persisted underground samples need a first-drop
-		// snap. Same-character resume from the default spawn already has this
-		// marker from startup; a character switch does not.
-		commands.entity(player).insert(AwaitingTerrainSurface);
+		// snap. Clear interior void anchors so a previous Floor life cannot
+		// skip terrain protection after Home or a character switch.
+		commands.entity(player).remove::<OffTerrainAnchor>();
+		commands
+			.entity(player)
+			.insert((AwaitingTerrainSurface, PendingPlacement::terrain(player_surface_under(at))));
 	}
 	let player_at = player_tf.translation;
 	drop((player_tf, player_global, body, velocity));
@@ -853,6 +858,62 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("player transform"))?;
 		assert_eq!(transform.translation.xz(), saved.xz());
 		assert!(world.get::<GlobalTransform>(player).is_some());
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn character_switch_clears_a_stale_interior_anchor() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let root = SaveRoot::at(dir.path());
+		let previous = CharacterId(13);
+		let next = CharacterId(14);
+		let leftover = Vec3::new(80.0, 14.4, 5.0);
+		let saved = Vec3::new(695.6, 73.0, 959.5);
+		save_waypoints(&root, next, &[saved])?;
+
+		let mut world = World::new();
+		world.insert_resource(PlayerSpawnXz(None));
+		world.insert_resource(root);
+		world.insert_resource(TerrainCellLayout::default());
+		world.insert_resource(WorldBaseTerrain(durham::BaseTerrainNoise::from_config(
+			&durham::TerrainConfig::new(42),
+		)));
+		world.insert_resource(crate::WorldPlayerLoadout::new(
+			next.to_hex(),
+			characters::CharacterAppearance::default(),
+			character_items::Inventory::default(),
+		));
+		world.insert_resource(PlayerPositionWaypoints {
+			owner: Some(previous),
+			positions: vec![leftover],
+			just_loaded: false,
+			..default()
+		});
+		let player = world
+			.spawn((
+				world_player::Player,
+				Transform::from_translation(leftover),
+				GlobalTransform::from_translation(leftover),
+				OffTerrainAnchor { translation: leftover },
+				PendingPlacement::floor(player_surface_under(leftover)),
+			))
+			.id();
+		world.spawn((
+			Camera3d::default(),
+			FollowCamera::default(),
+			Transform::default(),
+			GlobalTransform::default(),
+		));
+		world
+			.run_system_once(resume_discovery_from_saved_waypoints)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert!(world.get::<OffTerrainAnchor>(player).is_none());
+		assert_eq!(
+			world.get::<PendingPlacement>(player),
+			Some(&PendingPlacement::terrain(player_surface_under(saved)))
+		);
 		assert!(world.get::<AwaitingTerrainSurface>(player).is_some());
 		Ok(())
 	}

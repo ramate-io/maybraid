@@ -35,9 +35,28 @@ pub enum AgentEventBody {
 		yaw: f32,
 		#[serde(rename = "move")]
 		r#move: [f32; 2],
-		/// Composed Durham height under the capsule, when that cell is published.
+		/// Presented outdoor ground under the capsule (padded when published,
+		/// otherwise Durham composed). Agent burial checks use this field.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		ground: Option<f32>,
+		/// Durham composed height, even when a pad sits above or below it.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		durham: Option<f32>,
+		/// Final padded terrain height, when that cell is published.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		padded: Option<f32>,
+		/// Intended interior floor / arrival Y while placement is pending.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		floor: Option<f32>,
+		/// Physics support is ready at the intended elevation.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		support_ready: Option<bool>,
+		/// Capsule-bottom minus support Y. Positive is standing above.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		clearance: Option<f32>,
+		/// Why first-drop is still held.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		pending: Option<String>,
 		/// Overhead map is visible (player-toggled or locked picker).
 		#[serde(default, skip_serializing_if = "std::ops::Not::not")]
 		map_open: bool,
@@ -166,6 +185,12 @@ mod tests {
 				yaw: 0.4,
 				r#move: [0.0, 1.0],
 				ground: Some(11.4),
+				durham: None,
+				padded: None,
+				floor: None,
+				support_ready: None,
+				clearance: None,
+				pending: None,
 				map_open: false,
 				picker: false,
 			},

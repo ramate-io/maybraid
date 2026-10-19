@@ -2,6 +2,7 @@
 
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
+use bevy::math::Vec2;
 use bevy::math::Vec3;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
@@ -120,6 +121,18 @@ impl TerrainWithPads {
 		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
 	}
 
+	/// Final presented ground height at `(x, z)`, including overlapping pads.
+	pub fn height_at(&self, x: f32, z: f32) -> f32 {
+		self.sdf.terrain().height_at_with_all_modulations(x, z)
+	}
+
+	pub fn covers_xz(&self, xz: Vec2) -> bool {
+		xz.x >= self.cell.min.x
+			&& xz.x <= self.cell.max.x
+			&& xz.y >= self.cell.min.z
+			&& xz.y <= self.cell.max.z
+	}
+
 	/// Visual fill. Pose is the cascade origin; [`Mesh3d`] fulfills onto this root.
 	pub fn mesh_scene(&self) -> impl Scene + 'static {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
@@ -192,6 +205,47 @@ impl<G: RichmondGround> LodScene for PaddedTerrain<G> {
 impl<G> PaddedTerrain<G> {
 	pub fn new(surface: TerrainWithPads) -> Self {
 		Self { surface, _ground: PhantomData }
+	}
+
+	pub fn height_at(&self, x: f32, z: f32) -> f32 {
+		self.surface.height_at(x, z)
+	}
+}
+
+impl<G: RichmondGround> PaddedTerrain<G> {
+	fn probe_region(xz: Vec2) -> Aabb3d {
+		Aabb3d::from_min_max(
+			Vec3::new(xz.x - 0.5, -1.0, xz.y - 0.5),
+			Vec3::new(xz.x + 0.5, 1.0, xz.y + 0.5),
+		)
+	}
+
+	/// Generate (or reuse) the padded cell covering `xz` and sample it.
+	///
+	/// Outdoor POI arrivals call this from a downstream scheme so building
+	/// generation does not depend on padded terrain.
+	pub fn sample_in(cx: &mut GenerationContext, xz: Vec2) -> Option<f32> {
+		let region = Self::probe_region(xz);
+		cx.get_or_generate_in_finest_first::<Self>(region, |padded| padded.surface.cell)
+			.into_iter()
+			.find(|padded| padded.surface.covers_xz(xz))
+			.map(|padded| padded.height_at(xz.x, xz.y))
+	}
+
+	/// Published padded height. `Ok(None)` while the cell is unpublished.
+	pub fn published_height_at(
+		storage: &lod::hcsg::HcsgStorage,
+		xz: Vec2,
+	) -> Result<Option<f32>, lod::hcsg::Busy> {
+		let region = Self::probe_region(xz);
+		for id in storage.try_overlapping::<Self>(region)? {
+			if let Some(entry) = storage.try_entry::<Self>(id)? {
+				if entry.value.surface.covers_xz(xz) {
+					return Ok(Some(entry.value.height_at(xz.x, xz.y)));
+				}
+			}
+		}
+		Ok(None)
 	}
 }
 
@@ -281,6 +335,17 @@ mod tests {
 		let chunk = cascade_chunk_for_cell(pad.cell, pad.res_2);
 		assert_eq!(pad.chunk_pose(), Transform::from_translation(chunk.origin));
 		assert_ne!(pad.chunk_pose(), Transform::IDENTITY);
+	}
+
+	#[test]
+	fn height_at_and_covers_xz_follow_the_cell() {
+		let pad = pad_at(Vec3::ZERO, far_ring());
+		assert!(pad.covers_xz(Vec2::ZERO));
+		assert!(!pad.covers_xz(Vec2::new(pad.cell.max.x + 1.0, 0.0)));
+		let height = pad.height_at(0.0, 0.0);
+		assert!(height.is_finite());
+		let wrapped = PaddedTerrain::<()>::new(pad);
+		assert_eq!(wrapped.height_at(0.0, 0.0), height);
 	}
 
 	mod scheme_perf_tests {
