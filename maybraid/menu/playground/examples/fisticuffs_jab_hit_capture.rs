@@ -13,17 +13,21 @@ use std::time::Duration;
 use avian3d::prelude::*;
 use bevy::audio::AudioPlugin;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
+use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use bevy::transform::TransformSystems;
 use combat_hud::CombatHudPlugin;
 use damage::{DamageApplied, DamagePlugin, DamageSystems, Health};
 use fisticuffs_user::{
-	AttackSpec, AttackTiming, FisticuffsHitSensor, FisticuffsSensorDebug, FisticuffsUser,
-	JAB_STARTUP_END, JabAim, PLACEHOLDER_JAB_DAMAGE, Side, draw_fist_sensors, resolve_fist_hits,
-	sync_fist_sensors,
+	draw_fist_sensors, resolve_fist_hits, sync_fist_sensors, AttackSpec, AttackTiming,
+	FisticuffsHitSensor, FisticuffsSensorDebug, FisticuffsUser, JabAim, PLACEHOLDER_FIST_RADIUS,
+	PLACEHOLDER_FOREARM_LENGTH, PLACEHOLDER_JAB_DAMAGE, Side, JAB_STARTUP_END,
 };
 use lod_avian::PhysicsInteractionLayer;
 use player::Player;
+
+fn assets_path() -> PathBuf {
+	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+}
 
 fn shot_dir() -> PathBuf {
 	std::env::var_os("FISTICUFFS_JAB_CAPTURE_DIR")
@@ -45,6 +49,7 @@ fn main() {
 					}),
 					..default()
 				})
+				.set(AssetPlugin { file_path: assets_path().to_string_lossy().into(), ..default() })
 				.disable::<AudioPlugin>(),
 		)
 		.add_plugins(PhysicsPlugins::default())
@@ -62,14 +67,14 @@ fn main() {
 		.insert_resource(CaptureDir(dir))
 		.init_resource::<CaptureShots>()
 		.add_systems(Startup, setup)
-		.add_systems(Update, (sync_fist_sensors, draw_fist_sensors))
+		.add_systems(Update, (sync_fist_sensors, paint_sensor_volume, draw_fist_sensors))
 		.add_systems(
 			PostUpdate,
 			resolve_fist_hits
 				.after(TransformSystems::Propagate)
 				.before(DamageSystems::Apply),
 		)
-		.add_systems(Update, (capture_scene, advance_after_shot).chain())
+		.add_systems(Update, (replay_hit_marker, capture_scene, advance_after_shot).chain())
 		.run();
 }
 
@@ -85,6 +90,9 @@ struct CaptureShots {
 
 #[derive(Component)]
 struct DummyTarget;
+
+#[derive(Component)]
+struct VisibleFistVolume;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum CaptureScene {
@@ -109,6 +117,14 @@ impl CaptureScene {
 			Self::Done => "done",
 		}
 	}
+
+	fn warmup(self) -> Duration {
+		match self {
+			Self::SensorVolume => Duration::from_millis(1800),
+			Self::HitMarker => Duration::from_millis(280),
+			Self::Done => Duration::ZERO,
+		}
+	}
 }
 
 fn setup(
@@ -118,10 +134,10 @@ fn setup(
 ) {
 	commands.spawn((
 		Camera3d::default(),
-		Transform::from_xyz(3.4, 1.7, 1.1).looking_at(Vec3::new(0.15, 0.7, -1.05), Vec3::Y),
+		Transform::from_xyz(2.6, 1.55, 0.15).looking_at(Vec3::new(0.12, 1.15, -0.95), Vec3::Y),
 	));
 	commands.spawn((
-		DirectionalLight { illuminance: 2_200.0, shadows_enabled: false, ..default() },
+		DirectionalLight { illuminance: 2_200.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_xyz(4.0, 8.0, 3.0).looking_at(Vec3::ZERO, Vec3::Y),
 	));
 	commands.spawn((
@@ -149,12 +165,66 @@ fn setup(
 		DummyTarget,
 		Health::from_max(100.0),
 		Transform::from_translation(Vec3::new(0.16, 0.9, -1.28)),
-		Mesh3d(meshes.add(Capsule3d::new(0.32, 1.0))),
-		MeshMaterial3d(materials.add(Color::srgb(0.35, 0.55, 0.78))),
+		Mesh3d(meshes.add(Capsule3d::new(0.22, 1.0))),
+		MeshMaterial3d(materials.add(StandardMaterial {
+			base_color: Color::srgba(0.35, 0.55, 0.78, 0.42),
+			alpha_mode: AlphaMode::Blend,
+			..default()
+		})),
 		RigidBody::Kinematic,
-		Collider::capsule(0.4, 1.0),
+		Collider::capsule(0.45, 1.1),
 		PhysicsInteractionLayer::animated_layers(),
 	));
+}
+
+fn paint_sensor_volume(
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<StandardMaterial>>,
+	sensors: Query<Entity, (With<FisticuffsHitSensor>, Without<VisibleFistVolume>)>,
+) {
+	for entity in &sensors {
+		commands.entity(entity).insert((
+			VisibleFistVolume,
+			Mesh3d(meshes.add(Capsule3d::new(
+				PLACEHOLDER_FIST_RADIUS + 0.04,
+				PLACEHOLDER_FOREARM_LENGTH,
+			))),
+			MeshMaterial3d(materials.add(StandardMaterial {
+				base_color: Color::srgb(1.0, 0.45, 0.12),
+				emissive: LinearRgba::rgb(4.0, 1.2, 0.2),
+				unlit: true,
+				..default()
+			})),
+		));
+	}
+}
+
+fn replay_hit_marker(
+	shots: Res<CaptureShots>,
+	player: Query<Entity, With<Player>>,
+	dummy: Query<(Entity, &Health, &Transform), With<DummyTarget>>,
+	mut applied: MessageWriter<DamageApplied>,
+	mut replayed: Local<bool>,
+) {
+	if shots.scene != CaptureScene::HitMarker || *replayed {
+		return;
+	}
+	let Ok(source) = player.single() else {
+		return;
+	};
+	let Ok((target, health, transform)) = dummy.single() else {
+		return;
+	};
+	applied.write(DamageApplied {
+		target,
+		source: Some(source),
+		amount: PLACEHOLDER_JAB_DAMAGE,
+		applied: PLACEHOLDER_JAB_DAMAGE,
+		remaining: health.current,
+		point: transform.translation + Vec3::Y * 0.35,
+	});
+	*replayed = true;
 }
 
 fn capture_scene(
@@ -164,7 +234,7 @@ fn capture_scene(
 	mut shots: ResMut<CaptureShots>,
 	sensors: Query<(), With<FisticuffsHitSensor>>,
 	dummy: Query<&Health, With<DummyTarget>>,
-	applied: MessageReader<DamageApplied>,
+	names: Query<&Name>,
 ) {
 	if shots.scene == CaptureScene::Done || shots.requested {
 		return;
@@ -175,12 +245,13 @@ fn capture_scene(
 	let Some(shown) = shots.shown_at else {
 		return;
 	};
-	let warmed = time.elapsed() > shown + Duration::from_millis(400);
+	let warmed = time.elapsed() > shown + shots.scene.warmup();
+	let marker_present = names.iter().any(|name| name.as_str() == "hit-marker");
 	let ready = match shots.scene {
 		CaptureScene::SensorVolume => warmed && !sensors.is_empty(),
 		CaptureScene::HitMarker => {
 			let hurt = dummy.iter().any(|health| health.current < 100.0 - 0.5);
-			warmed && (hurt || !applied.is_empty())
+			warmed && (hurt || marker_present)
 		}
 		CaptureScene::Done => return,
 	};
