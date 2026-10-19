@@ -19,7 +19,7 @@ use material_ref::{material_ref_plugin_installed, MaterialLib, MaterialRef, Mate
 use vegetation_bumpout::init_bump_out_material_caches;
 use vegetation_shaders::{init_vegetation_material_caches, VegetationShadersPlugin};
 
-/// World-model lib: furniture kits, character face / clothing, Richmond urban
+/// World-model lib: furniture kits, character face / clothing / skin tattoos, Richmond urban
 /// surfaces, the muzzle flame, energy looks, then vegetation and Standard.
 ///
 /// Furniture recipes (`furniture_wood`, …) must be claimed **before** urban
@@ -127,7 +127,9 @@ impl Plugin for WorldMaterialsPlugin {
 #[cfg(test)]
 mod tests {
 	use bevy::prelude::*;
-	use characters::material_lib::{ClothingShaderMaterialRefCache, FaceShaderMaterialRefCache};
+	use characters::material_lib::{
+		ClothingShaderMaterialRefCache, FaceShaderMaterialRefCache, SkinShaderMaterialRefCache,
+	};
 
 	use building_shaders::{ColumnSurfaceMaterialRefCache, UrbanSurfaceMaterialRefCache};
 	use firearms::{EnergyMaterialRefCache, MuzzleFlameMaterialRefCache};
@@ -143,6 +145,7 @@ mod tests {
 		app.add_plugins(WorldMaterialRefPlugin);
 		assert!(app.world().contains_resource::<ClothingShaderMaterialRefCache>());
 		assert!(app.world().contains_resource::<FaceShaderMaterialRefCache>());
+		assert!(app.world().contains_resource::<SkinShaderMaterialRefCache>());
 		assert!(app.world().contains_resource::<UrbanSurfaceMaterialRefCache>());
 		assert!(app.world().contains_resource::<ColumnSurfaceMaterialRefCache>());
 		assert!(app.world().contains_resource::<FurnitureSurfaceMaterialRefCache>());

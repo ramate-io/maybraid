@@ -83,6 +83,7 @@ impl PreviewArgs {
 				eye: self.eye,
 				colors: Default::default(),
 				sliders,
+				tattoo: Default::default(),
 			},
 			self.animation,
 		)

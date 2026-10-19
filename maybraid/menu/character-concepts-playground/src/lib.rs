@@ -6,6 +6,7 @@
 
 mod animation;
 mod camera_focus;
+mod capture;
 mod character_lod;
 pub mod commands;
 mod diagnostics;
@@ -62,6 +63,7 @@ impl Plugin for CharacterConceptsPlaygroundPlugin {
 		if diagnostics::fps_debug_enabled() {
 			app.add_plugins(diagnostics::FpsDiagnosticsPlugin);
 		}
+		capture::install(app);
 		app.init_resource::<ConceptPreviewConfig>()
 			.init_resource::<ConceptPreviewSyncState>()
 			.init_resource::<FocusReferenceSyncState>()
@@ -176,6 +178,9 @@ fn add_lod_viewer_to_camera(
 }
 
 fn setup_lighting(mut commands: Commands) {
+	if std::env::var_os("MAYBRAID_TATTOO_CAPTURE_DIR").is_some() {
+		return;
+	}
 	use std::f32::consts::PI;
 	commands.spawn((
 		DirectionalLight { illuminance: 10000.0, shadow_maps_enabled: true, ..default() },
