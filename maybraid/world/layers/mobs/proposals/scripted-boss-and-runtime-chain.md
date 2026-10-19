@@ -3,8 +3,9 @@
 Proposal-only note for human architectural review. It names **existing**
 repository APIs and a first slice; it does not implement them.
 
-**Grounded on** [`origin/main` @ `5724a7eec`](https://github.com/ramate-io/maybraid/commit/5724a7eecf71c3a30df9673b3ad12369dff74ad0)
-plus the open material contract in [PR #1145](https://github.com/ramate-io/maybraid/pull/1145)
+**Grounded on** [`origin/main` @ `7235124de`](https://github.com/ramate-io/maybraid/commit/7235124de)
+(merged into this branch) plus the open material contract in
+[PR #1145](https://github.com/ramate-io/maybraid/pull/1145)
 (`cursor/mythical-chain-material-f9d3`). Names below are illustrative; Liam
 owns implementation of [#1116](https://github.com/ramate-io/maybraid/issues/1116),
 [#1125](https://github.com/ramate-io/maybraid/issues/1125),
@@ -295,39 +296,63 @@ Contract:
 
 ### Damage events → link ids
 
+[`apply_hits`](../../../../damage/src/apply.rs) is the **only**
+`Health::take_damage` on this path. [`DamageApplied`](../../../../damage/src/lib.rs)
+is a report (`applied` = HP already lost, `remaining` = pool after that
+apply). A downstream router that calls `take_damage(applied)` would injure
+the chain twice.
+
+Overlapping capsules must be collapsed **before** `DamageSystems::Apply`,
+not after. `Flight::note_contact` keys on the collider entity, so one
+bolt that crosses two chain capsules already emits two
+[`ProjectileContact`](../../../../projectiles/src/lib.rs)s and two `Hit`s;
+`apply_hits` then remounts both onto the same chain-root `Health` and
+mutates twice. Deduping `DamageApplied` cannot undo that.
+
+Same-frame `(source, chain_root)` is the wrong key: two bolts or two
+[`AttackInstanceId`](../../../../attacks/src/instance.rs)s from one
+attacker are distinct interactions and must both apply.
+
 ```text
-ProjectileContact / melee (capsule entity)
-        │  contacts_to_hits (unchanged)
-        ▼
-Hit { target: capsule, point, amount, source }
-        │  apply_hits → Health::entity_or_parent
-        │  capsule has no Health → chain-root Health
-        ▼
-DamageApplied { target: chain_root, point, applied }
-        │  chain router (new, #1127)
-        │  ChainLinkId on the original capsule, else nearest joint to `point`
-        ▼
-apply_chain_hit(owned_material, link_id, amount, …)   // #1145
-        + chain Health.take_damage(applied)
+ProjectileContact / attack hazard / melee (capsule entity)
         │
-        ├─ durability > 0  → restamp MaterialRef intact/fade if global look
-        └─ durability == 0 → emit ChainBroken once
+        │  #1127 coalescer — DamageSystems::Collect, BEFORE Apply
+        │  Remount capsule → chain root via Health::entity_or_parent
+        │  Dedupe overlapping colliders by interaction identity:
+        │    projectile: ProjectileContact.projectile (the Flight entity)
+        │    attack:     AttackInstanceId (hazards already fold candidates
+        │                onto resolved_target() + the instance hit_clock)
+        │    other:      a producer-owned interaction id, never
+        │                (source, chain_root)
+        │  One interaction × one chain → one Hit
+        │  Distinct flights / instances in the same frame → distinct Hits
+        ▼
+Hit { target: remounted chain_root (or one chosen capsule), point, amount }
+        │  apply_hits → take_damage ONCE → DamageApplied + optional Died
+        ▼
+DamageApplied { target: chain_root, point, applied, remaining }
+        │  chain presentation router (new, #1127) — no Health mutation
+        │  ChainLinkId on the chosen capsule, else nearest joint to `point`
+        ▼
+apply_chain_hit(owned_material, link_id, …)   // #1145 visual only
+        │
+        ├─ remaining > 0  → restamp MaterialRef intact/fade if global look
+        └─ remaining == 0 / Died(chain) → emit ChainBroken once
                               detach sockets, retire capsules + joints
                               #1121 records Ward unlock
 ```
 
-Overlapping capsules (acceptance on #1127): one physical interaction must
-not multiply. `contacts_to_hits` emits one `Hit` per
-[`ProjectileContact`](../../../../projectiles). The chain router coalesces
-same-frame `(source, chain_root)` hits to **one** `apply_chain_hit` /
-one `take_damage`, using the first capsule’s `ChainLinkId`. Boss-body hits
-never enter this router.
+Boss-body hits never enter this coalescer. Attack hazards that already
+resolve through [`HitCandidate::resolved_target`](../../../../attacks/src/hazard.rs)
+keep that fold; the chain coalescer is required for the projectile
+`Collect` path, where `contacts_to_hits` still emits one `Hit` per
+collider.
 
 ### Open policy questions ([#1125](https://github.com/ramate-io/maybraid/issues/1125)–[#1127](https://github.com/ramate-io/maybraid/issues/1127))
 
 | # | Question | Recommendation |
 |---|---|---|
-| C1 | Linked-chain (rigid per-link weights) vs continuous rope blend? | **Rigid per-link weights** (one joint owns each link). Matches color-R link ids, capsules, and `link_damage[i]`. Blend only a 1-ring seam if a gap appears. Continuous-energy look is the *shader* (#1145 veins), not the skin. |
+| C1 | Linked-chain (rigid per-link weights) vs continuous rope blend? | **Working recommendation: rigid per-link weights** (one joint owns each link). Matches color-R link ids, capsules, and `link_damage[i]`. Blend only a 1-ring seam if a gap appears. Continuous-energy look is the *shader* (#1145 veins), not the skin. **Open question for Liam:** [#1125](https://github.com/ramate-io/maybraid/issues/1125) also requires smoothly deforming bent poses without seam breaks or stretching discontinuities. Confirm this rigid recommendation against that mesh requirement before A04 starts; do not treat it as signed. |
 | C2 | Restraint: gameplay kinematics, constraints, or physical joints? | **Prescribed kinematics** for the first slice: endpoints from column socket + character socket; in-between joints from a catenary / taut lerp; capsules follow joints. Runtime armature ≠ physics. Avian joints later if the prescribed pose fights terrain. |
 | C3 | Break look: dissolve, localized gap, or severed pieces? | **Whole-chain fade** via existing `fade` / `intact` restamp + retire colliders / joints. One-mesh skinning does not sever. Debris / two-body split is a later VFX issue. |
 | C4 | UV1.x metres vs keep #1145’s UV0.y `[0,1]`? | **Adopt UV1.x metres** as the stable flow coordinate. Ask the #1145 owner to migrate pulse/impact off UV0.y. UV0 stays around-link + link-local for the atlas. This is the one #1145 integration this proposal asks for. |
@@ -345,9 +370,11 @@ Playground-first; no encounter host required.
    `uv0.y * rest_length_m`).
 3. **#1126 (Liam):** prescribed pose from two anchors; capsules on joints;
    `ChainLinkId`; teardown removes restraint + colliders.
-4. **#1127:** remount hits → chain `Health`; coalesce overlaps; `ChainBroken`
-   once; fade + retire. Report unlock through #1121, do not implement
-   inventory here.
+4. **#1127:** coalesce overlapping chain-capsule contacts **before**
+   `apply_hits`, keyed on projectile / `AttackInstanceId` (not attacker);
+   `apply_hits` mutates chain `Health` once; `DamageApplied` / `Died` drive
+   `apply_chain_hit`, `ChainBroken`, and fade + retire. Report unlock
+   through #1121, do not implement inventory here.
 
 ---
 
@@ -363,7 +390,7 @@ work only.
 | **B3** encounters crate, no `lubikans` dep | Self stays shippable; #1121 is the first crate that may touch both. |
 | **B4** placeholder recipe | #1117 / #1121 gameplay can proceed before Liam’s #1133 GLBs. |
 | **B5** no flatten in #1116 | #1117 owns the spawn-anchor / pad question. |
-| **C1** rigid link weights | #1145 `link_damage[link_id]` and #1127 capsule → link id stay 1:1. |
+| **C1** rigid link weights (working rec.; Liam reviews vs #1125 smooth deform) | #1145 `link_damage[link_id]` and #1127 capsule → link id stay 1:1 **if** rigid weights stand. A blended rope still needs a stable link-id attribute. |
 | **C2** prescribed pose | #1126 playground + #1117 socket attach without waiting on Avian joints. |
 | **C3** whole-chain fade | #1145 `fade`/`intact` is the break visual; #1127 does not invent debris. |
 | **C4** UV1.x metres + halo `SkinnedMesh` | **#1145 integration**: pulse/impact survive A04 length changes; halo follows the armature. |
@@ -374,11 +401,16 @@ work only.
 ## Decisions that need human judgment
 
 Please confirm or replace the **Recommendation** column. Implementation
-should not start on #1116 / #1125 / #1126 until B1–B2 and C1–C4 are signed.
+should not start on #1116 / #1125 / #1126 until B1–B2 and C2–C4 are signed,
+and until Liam has reviewed **C1** against the #1125 smooth-deform mesh
+requirement.
 
 1. **B1** — stable `Id::Bytes` slug vs Richmond-style cell id.
 2. **B2** — dedicated encounter channel vs ride `MobNeighborhood`.
-3. **C1** — rigid link skin vs blended rope.
+3. **C1** — **open for Liam:** rigid per-link skin (this note’s working
+   recommendation) vs blended rope, judged against #1125’s smoothly
+   deforming bent-pose requirement. Do not change the recommendation here;
+   do not start A04 until Liam signs or replaces it.
 4. **C2** — prescribed kinematics vs physical joints for v0.1.4.
 5. **C3** — fade-to-release vs severed pieces.
 6. **C4** — commit UV1.x metres as the #1145 flow coordinate (material-owner
