@@ -210,19 +210,15 @@ impl Default for JabParams {
 	}
 }
 
-/// Untyped Think Again knobs ([`ThinkAgain`](character_animations::animations::ThinkAgain) is rig-generic).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ThinkAgainParams {
-	pub side: Side,
-}
-
-impl Default for ThinkAgainParams {
-	fn default() -> Self {
-		Self { side: Side::Right }
-	}
-}
-
 /// Clip identity: variant + sampler knobs. Mailbox transitions use [`Self::id`].
+///
+/// Side-only gesture clips carry a named payload (`ThinkAgain { side }`) instead
+/// of a one-field wrapper struct. Open gesture PRs ([#1000](https://github.com/ramate-io/maybraid/pull/1000),
+/// [#1082](https://github.com/ramate-io/maybraid/pull/1082), [#1201](https://github.com/ramate-io/maybraid/pull/1201),
+/// [#1310](https://github.com/ramate-io/maybraid/pull/1310), [#1332](https://github.com/ramate-io/maybraid/pull/1332))
+/// should follow this shape (`Salute { side }`, `FistPump { side }`, …) rather than
+/// adding `*Params` wrappers. [`PowerStrafeParams`] stays: it is locomotion, not
+/// that gesture family, and already has left/right constructors.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum AnimClip {
 	#[default]
@@ -240,7 +236,7 @@ pub enum AnimClip {
 	Soaring(Soaring),
 	Flapping(Flapping),
 	Jab(JabParams),
-	ThinkAgain(ThinkAgainParams),
+	ThinkAgain { side: Side },
 	PowerStrafe(PowerStrafeParams),
 	Squat,
 	SquatDescent,
@@ -266,7 +262,7 @@ impl AnimClip {
 			Self::Soaring(_) => AnimId::Soaring,
 			Self::Flapping(_) => AnimId::Flapping,
 			Self::Jab(_) => AnimId::Jab,
-			Self::ThinkAgain(_) => AnimId::ThinkAgain,
+			Self::ThinkAgain { .. } => AnimId::ThinkAgain,
 			Self::PowerStrafe(_) => AnimId::PowerStrafe,
 			Self::Squat => AnimId::Squat,
 			Self::SquatDescent => AnimId::SquatDescent,
@@ -337,7 +333,19 @@ impl AnimClip {
 	}
 
 	pub fn think_again() -> Self {
-		Self::ThinkAgain(ThinkAgainParams::default())
+		Self::think_again_side(Side::Right)
+	}
+
+	pub fn think_again_side(side: Side) -> Self {
+		Self::ThinkAgain { side }
+	}
+
+	pub fn think_again_left() -> Self {
+		Self::think_again_side(Side::Left)
+	}
+
+	pub fn think_again_right() -> Self {
+		Self::think_again_side(Side::Right)
 	}
 
 	pub fn power_strafe(side: Side) -> Self {
@@ -423,7 +431,7 @@ impl AnimClip {
 			| Self::Squat
 			| Self::SquatDescent
 			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
-			Self::ThinkAgain(_) => ClipTimePolicy::Clamp { duration: THINK_AGAIN_DURATION },
+			Self::ThinkAgain { .. } => ClipTimePolicy::Clamp { duration: THINK_AGAIN_DURATION },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
@@ -527,6 +535,20 @@ mod tests {
 		assert!(!AnimClip::power_dash().is_sample_cacheable());
 		assert_eq!(AnimClip::walk().revision(), 0);
 		assert_eq!(AnimClip::walk().sample_address(0.123, 10_000).canonical_time, 0.12);
+	}
+
+	#[test]
+	fn think_again_carries_side_and_keeps_identity() {
+		assert_eq!(AnimClip::think_again(), AnimClip::ThinkAgain { side: Side::Right });
+		assert_eq!(AnimClip::think_again_left(), AnimClip::ThinkAgain { side: Side::Left });
+		assert_eq!(AnimClip::think_again().id(), AnimId::ThinkAgain);
+		assert_eq!(AnimClip::think_again_left().id(), AnimId::ThinkAgain);
+		assert_eq!(AnimClip::think_again().default_speed(), THINK_AGAIN_CYCLE_SPEED);
+		assert_eq!(
+			AnimClip::think_again().time_policy(),
+			ClipTimePolicy::Clamp { duration: THINK_AGAIN_DURATION }
+		);
+		assert_ne!(AnimClip::think_again().id(), AnimClip::jab().id());
 	}
 
 	#[test]
