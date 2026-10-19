@@ -6993,6 +6993,8 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "bevy_hanabi",
+ "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -12538,6 +12540,7 @@ dependencies = [
  "clap",
  "game-commands",
  "maybraid-vfx",
+ "serde_json",
 ]
 
 [[package]]

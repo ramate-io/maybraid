@@ -1,11 +1,12 @@
 # Maybraid VFX Playground
 
-Isolated host for [`maybraid-vfx`](../lib). Spawn the composed fiery explosion or any single layer.
+Isolated host for [`maybraid-vfx`](../lib). Spawn the composed fiery explosion or any single layer. `matched_dust` is a separate example that consumes the crate dust playback APIs against the showcase data.
 
 ```text
 cargo run -p vfx-playground -- fiery-explosion
 cargo run -p vfx-playground -- show fireball
 cargo run -p vfx-playground -- fiery-explosion --scale 1.5 --intensity 1.2 --seed 4 --playback 0.5
+cargo run -p vfx-playground --example matched_dust -- C --view orbit --inspect-time 0.7
 ```
 
 In-game (press `/`):
