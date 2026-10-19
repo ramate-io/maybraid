@@ -14,29 +14,33 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use bevy::audio::AudioPlugin;
+use bevy::ecs::entity_disabling::Disabled;
+use bevy::ecs::query::Allow;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
+use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
 use character_creation_menus::{CharacterMenu, InventoryLayout, STARTER_KIT_LABEL};
 use character_items::{
-	self_lubikan_catalog_key, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory,
-	InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec, TanzId, BASE_STARTER_TANZES,
+	BASE_STARTER_TANZES, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem,
+	ItemColor, ItemRng, SkillMapKind, SkillMapSpec, TanzId, self_lubikan_catalog_key,
 };
 use character_ui_menu::MenuComponent;
+use characters::{HiddenUntilSceneReady, PendingCharacterAssembly};
 use item_icons::{
-	request_inventory_icons, CaptureCacheRoot, CaptureClient, CaptureCompleted, CaptureFailed,
-	CaptureHostReady, CaptureHostRealized, CaptureHostRoot, ItemCaptureSubjects, ItemIconCache,
-	ItemIconDiscovery, ItemIconPlugin,
+	CaptureCacheRoot, CaptureClient, CaptureCompleted, CaptureFailed, CaptureHostReady,
+	CaptureHostRealized, CaptureHostRoot, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery,
+	ItemIconPlugin, PoseCaptureSubjects, request_inventory_icons, request_self_lubikan_icon,
 };
 use maybraid_character_ui_menu_renderer::{
-	fill_inventory_layout, fill_inventory_loading, find_overlay_node, spawn_overlay_shell,
-	spawn_starter_kit_shell, MenuThumbnailContext,
+	InventoryItemKey, MenuThumbnailContext, fill_inventory_layout, fill_inventory_loading,
+	find_overlay_node, spawn_overlay_shell, spawn_starter_kit_shell,
 };
 use menu_components::theme::TEXT_YELLOW;
 use menu_components::{
-	spawn_header_line, spawn_hud_action, HudFonts, HudMenuItem, HudScrollViewport,
-	InputPromptDevice,
+	HudFonts, HudMenuItem, HudScrollViewport, InputPromptDevice, ReorderMark, spawn_header_line,
+	spawn_hud_action,
 };
 use menu_screens::SpinRevealScreen;
+use tanz_user::request_inventory_tanz_icons;
 
 fn assets_path() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -58,11 +62,12 @@ fn main() {
 				.disable::<AudioPlugin>(),
 		)
 		.add_plugins(ItemIconPlugin)
+		.add_systems(Update, menu_components::sync_hover_tiles)
 		.insert_resource(ClearColor(Color::srgb(0.07, 0.08, 0.10)))
 		.insert_resource(CaptureDir(shot_dir()))
 		.init_resource::<CaptureShots>()
 		.add_systems(Startup, (setup, allow_slow_braidman_icon, request_icon))
-		.add_systems(Update, (log_capture_outcome, log_host_progress))
+		.add_systems(Update, (log_capture_outcome, log_host_progress, apply_reorder_mark))
 		.add_systems(Update, (apply_capture_scroll, capture_scene, advance_after_shot).chain())
 		.run();
 }
@@ -86,6 +91,8 @@ enum CaptureScene {
 	OverflowFixtureTop,
 	OverflowFixtureScrolled,
 	ModalInventory,
+	ModalReorder,
+	OverflowTanzEquipped,
 	ModalLubikan,
 	IconCloseup,
 	Done,
@@ -99,7 +106,9 @@ impl CaptureScene {
 			Self::RealStarterKit => Self::OverflowFixtureTop,
 			Self::OverflowFixtureTop => Self::OverflowFixtureScrolled,
 			Self::OverflowFixtureScrolled => Self::ModalInventory,
-			Self::ModalInventory => Self::ModalLubikan,
+			Self::ModalInventory => Self::ModalReorder,
+			Self::ModalReorder => Self::OverflowTanzEquipped,
+			Self::OverflowTanzEquipped => Self::ModalLubikan,
 			Self::ModalLubikan => Self::IconCloseup,
 			Self::IconCloseup | Self::Done => Self::Done,
 		}
@@ -113,6 +122,8 @@ impl CaptureScene {
 			Self::OverflowFixtureTop => "overflow_fixture_top",
 			Self::OverflowFixtureScrolled => "overflow_fixture_scrolled",
 			Self::ModalInventory => "inventory_modal",
+			Self::ModalReorder => "inventory_modal_reorder",
+			Self::OverflowTanzEquipped => "inventory_overflow_tanzes",
 			Self::ModalLubikan => "inventory_modal_lubikan",
 			Self::IconCloseup => "self_lubikan_icon_closeup",
 			Self::Done => "done",
@@ -149,11 +160,7 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
-		if key == self_lubikan_catalog_key() {
-			TEXT_YELLOW
-		} else {
-			Color::WHITE
-		}
+		if key == self_lubikan_catalog_key() { TEXT_YELLOW } else { Color::WHITE }
 	}
 }
 
@@ -206,23 +213,30 @@ fn setup(mut commands: Commands, dir: Res<CaptureDir>) {
 }
 
 fn allow_slow_braidman_icon(mut cache: ResMut<CaptureCacheRoot>) {
-	cache.max_wait_frames = 3600;
+	cache.max_wait_frames = 1800;
 }
 
 fn request_icon(
 	mut discovery: ResMut<ItemIconDiscovery>,
 	mut subjects: ResMut<ItemCaptureSubjects>,
+	mut poses: ResMut<PoseCaptureSubjects>,
 	mut client: CaptureClient,
 ) {
+	// Screen-capture is one session at a time. Pose stills must enqueue
+	// before clothing / firearm hosts, which can sit unrealized for the
+	// full wait window and starve Tanz thumbnails.
+	request_self_lubikan_icon(&mut discovery, &mut client);
 	for inventory in capture_icon_inventories() {
-		request_inventory_icons(&inventory, &mut discovery, &mut subjects, &mut client);
+		request_inventory_tanz_icons(&inventory, &mut discovery, &mut poses, &mut client);
 	}
+	let starter = Inventory::with_starter_outfit(real_starter_items());
+	request_inventory_icons(&starter, &mut discovery, &mut subjects, &mut client);
 }
 
 fn capture_icon_inventories() -> [Inventory; 2] {
 	[
+		Inventory::with_starter_outfit(tanz_modal_items()),
 		Inventory::with_starter_outfit(real_starter_items()),
-		Inventory::with_starter_outfit(overflow_fixture_items()),
 	]
 }
 
@@ -248,7 +262,9 @@ fn log_host_progress(
 		Option<&CaptureHostReady>,
 	)>,
 	children: Query<&Children>,
-	meshes: Query<Entity, With<Mesh3d>>,
+	meshes: Query<Entity, (With<Mesh3d>, Allow<Disabled>)>,
+	pending: Query<(), With<PendingCharacterAssembly>>,
+	hidden: Query<(), With<HiddenUntilSceneReady>>,
 ) {
 	let secs = time.elapsed_secs() as u32;
 	if secs == *last || secs % 3 != 0 {
@@ -257,39 +273,67 @@ fn log_host_progress(
 	*last = secs;
 	for (entity, host, realized, ready) in &hosts {
 		let mut mesh_count = 0_u32;
+		let mut pending_count = 0_u32;
+		let mut hidden_count = 0_u32;
 		fn walk(
 			entity: Entity,
 			children: &Query<&Children>,
-			meshes: &Query<Entity, With<Mesh3d>>,
-			count: &mut u32,
+			meshes: &Query<Entity, (With<Mesh3d>, Allow<Disabled>)>,
+			pending: &Query<(), With<PendingCharacterAssembly>>,
+			hidden: &Query<(), With<HiddenUntilSceneReady>>,
+			mesh_count: &mut u32,
+			pending_count: &mut u32,
+			hidden_count: &mut u32,
 		) {
 			if meshes.get(entity).is_ok() {
-				*count += 1;
+				*mesh_count += 1;
+			}
+			if pending.get(entity).is_ok() {
+				*pending_count += 1;
+			}
+			if hidden.get(entity).is_ok() {
+				*hidden_count += 1;
 			}
 			if let Ok(kids) = children.get(entity) {
 				for child in kids.iter() {
-					walk(child, children, meshes, count);
+					walk(
+						child,
+						children,
+						meshes,
+						pending,
+						hidden,
+						mesh_count,
+						pending_count,
+						hidden_count,
+					);
 				}
 			}
 		}
-		walk(entity, &children, &meshes, &mut mesh_count);
+		walk(
+			entity,
+			&children,
+			&meshes,
+			&pending,
+			&hidden,
+			&mut mesh_count,
+			&mut pending_count,
+			&mut hidden_count,
+		);
 		info!(
+			id = %host.id.as_str(),
 			kind = %host.kind,
 			realized = realized.is_some(),
 			ready = ready.is_some(),
 			mesh_count,
+			pending_count,
+			hidden_count,
 			"capture host progress"
 		);
 	}
 }
 
 fn icon_ready(cache: &ItemIconCache) -> bool {
-	capture_icon_inventories().iter().all(|inventory| {
-		InventoryLayout::starter_kit(inventory.items.clone())
-			.captures
-			.iter()
-			.all(|need| cache.filled_or_failed(need.key, need.silhouette))
-	})
+	cache.filled_or_failed(self_lubikan_catalog_key(), true)
 }
 
 const SCENE_DEADLINE: Duration = Duration::from_secs(48);
@@ -364,22 +408,26 @@ fn spawn_modal_scene(
 	fonts: &HudFonts,
 	assets: &AssetServer,
 	icons: Option<&ItemIconCache>,
+	unequip_back_two: bool,
+	overlay_width: Option<f32>,
 ) {
 	let mut menu = sample_menu(tanz_modal_items());
-	// Leave Healing Salute and Left Strafe equipped so the modal shot shows
-	// both the Equipped Tanz row and the unequipped Tanz catalog.
-	if let Some(inventory) = menu.inventory.as_mut() {
-		let drop: Vec<usize> = inventory
-			.items
-			.iter()
-			.enumerate()
-			.filter_map(|(index, item)| match item.tanz_id() {
-				Some(TanzId::RightStrafe | TanzId::ForwardDash) => Some(index),
-				_ => None,
-			})
-			.collect();
-		for index in drop {
-			let _ = inventory.unequip(index);
+	// Leave Healing Salute and Left Strafe equipped so mixed shots show both
+	// the Equipped Tanz row and the unequipped Tanz catalog.
+	if unequip_back_two {
+		if let Some(inventory) = menu.inventory.as_mut() {
+			let drop: Vec<usize> = inventory
+				.items
+				.iter()
+				.enumerate()
+				.filter_map(|(index, item)| match item.tanz_id() {
+					Some(TanzId::RightStrafe | TanzId::ForwardDash) => Some(index),
+					_ => None,
+				})
+				.collect();
+			for index in drop {
+				let _ = inventory.unequip(index);
+			}
 		}
 	}
 	let nodes = menu.menu_nodes();
@@ -390,7 +438,11 @@ fn spawn_modal_scene(
 	commands
 		.spawn((
 			CaptureRoot,
-			Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+			Node {
+				width: overlay_width.map(Val::Px).unwrap_or(Val::Percent(100.0)),
+				height: Val::Percent(100.0),
+				..default()
+			},
 			BackgroundColor(Color::srgb(0.07, 0.08, 0.10)),
 		))
 		.with_children(|root| {
@@ -404,6 +456,23 @@ fn spawn_modal_scene(
 		});
 	let mut thumbs = CatalogThumbs { icons };
 	fill_inventory_layout(commands, viewport, fonts, &node, true, None, None, &mut thumbs);
+}
+
+fn apply_reorder_mark(
+	shots: Res<CaptureShots>,
+	mut commands: Commands,
+	tiles: Query<(Entity, &InventoryItemKey, Option<&ReorderMark>)>,
+) {
+	if shots.scene != CaptureScene::ModalReorder {
+		return;
+	}
+	if tiles.iter().any(|(_, _, mark)| mark.is_some()) {
+		return;
+	}
+	let Some((entity, _, _)) = tiles.iter().find(|(_, key, _)| key.equipped) else {
+		return;
+	};
+	commands.entity(entity).insert(ReorderMark);
 }
 
 fn spawn_icon_closeup(commands: &mut Commands, fonts: &HudFonts, image: Option<Handle<Image>>) {
@@ -454,8 +523,11 @@ fn spawn_scene(
 				icons,
 			);
 		}
-		CaptureScene::ModalInventory | CaptureScene::ModalLubikan => {
-			spawn_modal_scene(commands, fonts, assets, icons);
+		CaptureScene::ModalInventory | CaptureScene::ModalReorder | CaptureScene::ModalLubikan => {
+			spawn_modal_scene(commands, fonts, assets, icons, true, None);
+		}
+		CaptureScene::OverflowTanzEquipped => {
+			spawn_modal_scene(commands, fonts, assets, icons, false, Some(260.0));
 		}
 		CaptureScene::IconCloseup => {
 			let image =
@@ -597,33 +669,12 @@ mod tests {
 	use super::*;
 	use character_items::SELF_LUBIKAN_CAPTURE_LABEL;
 	use item_icons::CaptureId;
-	use screen_capture::CaptureSubject;
-	use tanz_user::TanzPose;
 
 	#[test]
-	fn gallery_waits_for_starter_and_overflow_captures() {
+	fn gallery_waits_for_the_self_lubikan_silhouette() {
 		let mut cache = ItemIconCache::default();
 		assert!(!icon_ready(&cache));
 		cache.insert_silhouette(CaptureId::new(SELF_LUBIKAN_CAPTURE_LABEL), Handle::default());
-		assert!(
-			!icon_ready(&cache),
-			"clothing / firearm / grenade / Tanz captures must enter the wait set"
-		);
-		for inventory in capture_icon_inventories() {
-			for item in &inventory.items {
-				if matches!(item, InventoryItem::SkillMap { .. }) {
-					continue;
-				}
-				if let Some(id) = item.tanz_id() {
-					cache.insert_silhouette(TanzPose(id).capture_id(), Handle::default());
-					continue;
-				}
-				let Some(label) = item.capture_id_label() else {
-					continue;
-				};
-				cache.insert_shaded(CaptureId::new(label), Handle::default());
-			}
-		}
 		assert!(icon_ready(&cache));
 	}
 
