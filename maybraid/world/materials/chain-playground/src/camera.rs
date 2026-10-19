@@ -13,8 +13,8 @@ pub struct CameraController {
 }
 
 pub fn setup_camera(mut commands: Commands) {
-	// Close encounter view of two ~3 m hanging chains so the material stays readable.
-	let camera_pos = Vec3::new(1.7, 1.55, 2.85);
+	// Gameplay third-person stand-in: FollowCamera distance 3.6 m, 45° FOV.
+	let camera_pos = Vec3::new(0.15, 1.85, 4.15);
 	let look_at = Vec3::new(0.0, 1.45, 0.0);
 	let transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
 	let rotation = transform.rotation;
@@ -28,7 +28,12 @@ pub fn setup_camera(mut commands: Commands) {
 	commands.spawn((
 		Camera3d::default(),
 		transform,
-		Projection::Perspective(PerspectiveProjection { near: 0.05, far: 400.0, ..default() }),
+		Projection::Perspective(PerspectiveProjection {
+			fov: 45.0_f32.to_radians(),
+			near: 0.05,
+			far: 400.0,
+			..default()
+		}),
 		CameraController { speed: 6.0, sensitivity: 0.005, yaw, pitch },
 	));
 }
