@@ -38,6 +38,15 @@ pub fn menu_region_wash() -> Color {
 	MENU_CLEAR.with_alpha(MENU_REGION_WASH_ALPHA)
 }
 
+/// Fill behind the inventory Equipped pane.
+///
+/// Same navy as inverted-tag text ([`TEXT_DEEP_BLUE`]) so the pane reads
+/// apart from [`menu_region_wash`] while yellow focus and reorder marks stay
+/// [`TEXT_YELLOW`].
+pub fn equipped_pane_fill() -> Color {
+	TEXT_DEEP_BLUE
+}
+
 /// Corner radius on in-game menu-item lists and modal cards.
 pub const MENU_LIST_RADIUS: f32 = 16.0;
 
@@ -358,9 +367,9 @@ mod tests {
 	use bevy::prelude::*;
 
 	use super::{
-		character_screen_grid_node, menu_list_panel_node, menu_region_wash, CHARACTER_OVERLAY_GAP,
-		CHARACTER_PANEL_WIDTH, MENU_CLEAR, MENU_LIST_RADIUS, MENU_REGION_WASH_ALPHA,
-		TEXT_DEEP_BLUE, TEXT_YELLOW,
+		CHARACTER_OVERLAY_GAP, CHARACTER_PANEL_WIDTH, MENU_CLEAR, MENU_LIST_RADIUS,
+		MENU_REGION_WASH_ALPHA, TEXT_DEEP_BLUE, TEXT_YELLOW, character_screen_grid_node,
+		equipped_pane_fill, menu_list_panel_node, menu_region_wash,
 	};
 
 	#[test]
@@ -393,5 +402,12 @@ mod tests {
 	fn inverted_tag_is_navy_on_yellow() {
 		assert_ne!(TEXT_DEEP_BLUE, TEXT_YELLOW);
 		assert!(TEXT_DEEP_BLUE.to_srgba().blue > TEXT_DEEP_BLUE.to_srgba().red);
+	}
+
+	#[test]
+	fn equipped_pane_reuses_inverted_tag_navy() {
+		assert_eq!(equipped_pane_fill(), TEXT_DEEP_BLUE);
+		assert_ne!(equipped_pane_fill(), menu_region_wash());
+		assert_ne!(equipped_pane_fill(), MENU_CLEAR);
 	}
 }

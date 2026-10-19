@@ -712,6 +712,7 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "character-ui-menu",
+ "menu-components",
 ]
 
 [[package]]
