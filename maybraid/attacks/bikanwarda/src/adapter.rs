@@ -13,12 +13,16 @@ use crate::cues::{
 	BrayAnimationCue, BrayAnimationPhase, EyeGlowCue, GodBeamVfxCue, ParadeExplosionCue,
 	SonicWaveVfxCue, SonicWaveVfxKind, SpatialRumbleCue,
 };
+use crate::lanes::{configure_presentation_sets, BikanwardaPresentationSystems};
 use crate::{BikanwardaAttackParams, BRAY, GOD_BEAM, PARADE_BLAST};
 
 pub fn presentation_adapter_plugin(app: &mut App) {
+	configure_presentation_sets(app);
 	app.add_systems(
 		Update,
-		adapt_attack_presentation.after(AttackSystems::Advance),
+		adapt_attack_presentation
+			.in_set(BikanwardaPresentationSystems::Adapt)
+			.after(AttackSystems::Advance),
 	);
 }
 

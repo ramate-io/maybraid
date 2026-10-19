@@ -68,6 +68,29 @@ impl SpatialRumbleCue {
 			preset: SpatialRumblePreset::HeavyLanding,
 		}
 	}
+
+	/// Map onto [`maybraid_spatial_rumble::SpatialRumble`] when the presentation-consumers
+	/// feature is enabled.
+	#[cfg(feature = "presentation-consumers")]
+	pub fn to_spatial_rumble(self) -> maybraid_spatial_rumble::SpatialRumble {
+		use maybraid_spatial_rumble::{RumbleFalloff, SpatialRumble};
+
+		let mut rumble = match self.preset {
+			SpatialRumblePreset::BrayWave => SpatialRumble::bray(self.origin),
+			SpatialRumblePreset::HeavyLanding => SpatialRumble::heavy_landing(self.origin),
+			SpatialRumblePreset::Authored => SpatialRumble {
+				origin: self.origin,
+				falloff: RumbleFalloff::new(1.0, self.radius.max(1.0)),
+				..SpatialRumble::default()
+			},
+		};
+		rumble.intensity = self.intensity.max(0.0);
+		rumble.duration = self.duration.max(0.0);
+		if self.preset == SpatialRumblePreset::BrayWave {
+			rumble.falloff = RumbleFalloff::new(2.0, self.radius.max(6.0));
+		}
+		rumble.with_seed(self.instance.0 ^ entity_seed(self.owner))
+	}
 }
 
 /// Separate landing / stomp cue. [#1119](https://github.com/ramate-io/maybraid/issues/1119)
@@ -221,6 +244,10 @@ fn impact_to_spatial_rumble(
 			impact.origin,
 		));
 	}
+}
+
+pub(crate) fn entity_seed(entity: Entity) -> u64 {
+	entity.to_bits()
 }
 
 pub fn is_bikanwarda_attack(id: AttackId) -> bool {

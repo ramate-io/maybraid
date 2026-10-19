@@ -18,12 +18,13 @@ use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use bikanwarda_attacks::{
 	BikanwardaAttackParams, BikanwardaAttacksPlugin, BikanwardaEyeSocket, BikanwardaHeadSocket,
-	BikanwardaMouthSocket, ParadeExplosionCue, BRAY, GOD_BEAM, PARADE,
+	BikanwardaMouthSocket, BikanwardaPresentationConsumersPlugin, BRAY, GOD_BEAM, PARADE,
 };
 use combat_targeting::{CombatContact, CombatTargeting};
 use damage::{apply_hits, DamageApplied, Died, Health};
 use lod_avian::PhysicsInteractionLayer;
-use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxPlugin, VfxSpawn};
+use maybraid_spatial_rumble::SpatialRumblePlugin;
+use maybraid_vfx::VfxPlugin;
 
 fn main() {
 	let capture = std::env::args().any(|arg| arg == "--capture");
@@ -46,22 +47,17 @@ fn main() {
 		.add_plugins(PhysicsPlugins::default())
 		.add_plugins(AttacksPlugin)
 		.add_plugins(BikanwardaAttacksPlugin { placeholders: true })
+		.add_plugins(BikanwardaPresentationConsumersPlugin::default())
 		.add_plugins(AttackPlaceholderPresentationPlugin)
 		.add_plugins(VfxPlugin)
+		.add_plugins(SpatialRumblePlugin)
 		.add_message::<DamageApplied>()
 		.add_message::<Died>()
 		.add_systems(PostUpdate, apply_hits)
 		.add_systems(Startup, setup)
 		.add_systems(
 			Update,
-			(
-				retrigger,
-				capture_sequence,
-				present_fiery_explosions,
-				tint_target,
-				update_hud,
-				track_hits,
-			),
+			(retrigger, capture_sequence, tint_target, update_hud, track_hits),
 		)
 		.run();
 }
@@ -329,28 +325,6 @@ fn retrigger(
 			_ => PARADE,
 		};
 		caster.wait = 1.4;
-	}
-}
-
-fn present_fiery_explosions(
-	mut cues: MessageReader<ParadeExplosionCue>,
-	library: Option<Res<VfxLibrary>>,
-	mut commands: Commands,
-) {
-	let Some(library) = library else {
-		return;
-	};
-	for cue in cues.read() {
-		commands.spawn_vfx(
-			&library.fiery_explosion,
-			VfxSpawn {
-				transform: Transform::from_translation(cue.position),
-				scale: (cue.radius / 1.2).clamp(1.0, 8.0),
-				intensity: 1.0,
-				playback: 1.0,
-				..default()
-			},
-		);
 	}
 }
 
