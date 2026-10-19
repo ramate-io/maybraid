@@ -2251,6 +2251,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "bikanwarda-lubikan"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "attacks",
+ "avian3d",
+ "bevy",
+ "bikanwarda-attacks",
+ "combat-targeting",
+ "damage",
+ "lod-avian",
+ "lubikans",
+ "threat-intelligence",
+]
+
+[[package]]
 name = "bincode"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
