@@ -1,11 +1,12 @@
-use character_rigs::Side;
 use character_rigs::authoring::HumanoidPose;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+use character_rigs::Side;
 
 use crate::animations::{UprightWalk, Walk};
+use crate::rigs::humanoid::gait_coordination::GaitCoordination;
 use crate::rigs::humanoid::gait_knee::lerp_swing_knee;
 use crate::rigs::humanoid::write_masks::{debug_assert_pose_within_mask, walk_write_mask};
-use crate::{Animation, Progress};
+use crate::Animation;
 
 impl Walk {
 	/// Authored semantic pose at `progress`. Rest is applied later by the rig.
@@ -40,41 +41,48 @@ impl Animation<HumanoidV0Rig> for UprightWalk {
 }
 
 fn sample_walk(walk: &UprightWalk, progress: f32, pose: &mut HumanoidPose) {
-	let phase = Progress(progress).cycle();
-	let gait = thigh_swing(phase);
-	let left_arm_swing = -arm_swing(phase);
-	let right_arm_swing = arm_swing(phase + 0.5);
+	let coord = GaitCoordination::from_progress(progress);
+	let phase = coord.phase();
+	let left_arm_swing = -GaitCoordination::arm_swing(phase);
+	let right_arm_swing = GaitCoordination::arm_swing(phase + 0.5);
 
-	pose.apply_root(walk.torso_lean);
 	// Same-sign pelvis yaw sends the left hip forward with the left femur.
 	// add_turn uses the same oscillator so the shoulder girdle counters it.
-	pose.spine.add_turn(gait * walk.torso_turn);
 	// Waist flex, not root, so forward lean stays a pure sagittal root twist.
-	pose.spine.side_bend[1] += gait * walk.side_lean * 0.6;
-	pose.spine.side_bend[2] += gait * walk.side_lean * 0.4;
-	apply_leg(pose, Side::Left, phase, -1.0, walk);
-	apply_leg(pose, Side::Right, phase, 1.0, walk);
+	coord.apply_spine_counter(pose, walk.torso_lean, walk.torso_turn, walk.side_lean);
+	apply_leg(pose, Side::Left, coord, -1.0, walk);
+	apply_leg(pose, Side::Right, coord, 1.0, walk);
 	// Both elbows share one flexion sign. The opposite arm_down values are a
 	// hang bias, not a mirror of the joint frame.
-	apply_walk_arm(pose, Side::Left, left_arm_swing, phase, -walk.arm_down, walk);
-	apply_walk_arm(pose, Side::Right, right_arm_swing, phase, walk.arm_down, walk);
-	apply_head(pose, gait, walk.torso_lean, walk.torso_turn, walk.side_lean, walk.head_stabilize);
+	apply_walk_arm(pose, Side::Left, left_arm_swing, coord, -walk.arm_down, walk);
+	apply_walk_arm(pose, Side::Right, right_arm_swing, coord, walk.arm_down, walk);
+	coord.apply_head(pose, walk.torso_lean, walk.torso_turn, walk.side_lean, walk.head_stabilize);
 }
 
-fn apply_leg(pose: &mut HumanoidPose, side: Side, cycle: f32, lift_sign: f32, walk: &UprightWalk) {
+fn apply_leg(
+	pose: &mut HumanoidPose,
+	side: Side,
+	coord: GaitCoordination,
+	lift_sign: f32,
+	walk: &UprightWalk,
+) {
+	let cycle = coord.phase();
 	let phase = if side == Side::Left { cycle } else { cycle + side.phase_offset() };
-	let swing = thigh_swing(phase);
-	let gait = thigh_swing(cycle);
-	let bob = body_bob(cycle);
-	let leg = pose.leg_mut(side);
+	let swing = GaitCoordination::thigh_swing(phase);
 	// Coordinated yaw: both pelvis bones share one parent-space turn so the
 	// hips get opposite character-Z (measured: same-sign turn is yaw).
-	leg.pelvis_turn = gait * walk.hip_swing;
 	// Same-sign lateral is a roll/hike. Opposite-sign lateral lifts both hips
 	// (measured: L+ R- raises the whole pelvis) and is the vertical bob.
-	let hike = hip_lift(swing, walk.hip_lift) * lift_sign;
-	let vertical = bob * walk.body_bob * side.sign();
-	leg.pelvis_lateral = hike + vertical;
+	coord.apply_pelvis_yaw_and_bob(
+		pose,
+		side,
+		swing,
+		lift_sign,
+		walk.hip_swing,
+		walk.hip_lift,
+		walk.body_bob,
+	);
+	let leg = pose.leg_mut(side);
 	leg.hip_flexion = swing * walk.stride;
 	leg.hip_abduction = -swing * walk.femur_medial_counter * lift_sign;
 	leg.knee_flexion = knee_flex(phase, walk);
@@ -86,62 +94,28 @@ fn apply_walk_arm(
 	pose: &mut HumanoidPose,
 	side: Side,
 	arm_swing_value: f32,
-	phase: f32,
+	coord: GaitCoordination,
 	humerus_flex: f32,
 	walk: &UprightWalk,
 ) {
-	let forward = (-side.sign() * arm_swing_value).max(0.0);
-	let across = -side.sign() * forward * walk.arm_across;
-	pose.apply_arm_twisted(
+	coord.apply_arm_across(
+		pose,
 		side,
-		arm_swing_value * walk.shoulder_swing,
-		-shoulder_lift(arm_swing_value, walk.shoulder_lift) + across,
-		across * 0.35,
-		arm_swing_value * walk.humerus_swing_scale,
-		humerus_flex + across * 0.45,
-		elbow_flex(arm_swing_value, phase, -1.0, walk),
+		arm_swing_value,
+		humerus_flex,
+		walk.shoulder_swing,
+		walk.shoulder_lift,
+		walk.humerus_swing_scale,
+		walk.arm_across,
+		GaitCoordination::elbow_flex(
+			arm_swing_value,
+			coord.phase(),
+			-1.0,
+			walk.elbow_bend,
+			walk.elbow_pump,
+			walk.elbow_cycle,
+		),
 	);
-}
-
-fn apply_head(
-	pose: &mut HumanoidPose,
-	gait: f32,
-	torso_lean: f32,
-	torso_turn: f32,
-	side_lean: f32,
-	stabilize: f32,
-) {
-	let nod = -torso_lean * 0.55 * stabilize;
-	let turn = -gait * torso_turn * 0.65 * stabilize;
-	let tilt = -gait * side_lean * 0.7 * stabilize;
-	pose.apply_neck_twisted(turn * 0.6, tilt * 0.5, nod * 0.4, turn * 0.4, tilt * 0.5, nod * 0.6);
-}
-
-fn body_bob(phase: f32) -> f32 {
-	(phase * std::f32::consts::TAU * 2.0).cos()
-}
-
-fn thigh_swing(phase: f32) -> f32 {
-	let p = phase.fract();
-	if p < 0.5 { 4.0 * p - 1.0 } else { 3.0 - 4.0 * p }
-}
-
-fn arm_swing(phase: f32) -> f32 {
-	thigh_swing(phase) * 0.75
-}
-
-fn elbow_flex(arm_swing: f32, phase: f32, flex_sign: f32, walk: &UprightWalk) -> f32 {
-	let pump = arm_swing.abs();
-	let cycle = ((phase + arm_swing.signum() * 0.125) * std::f32::consts::PI * 4.0).sin().abs();
-	flex_sign * (walk.elbow_bend + pump * walk.elbow_pump + cycle * walk.elbow_cycle)
-}
-
-fn shoulder_lift(arm_swing: f32, amplitude: f32) -> f32 {
-	arm_swing * amplitude
-}
-
-fn hip_lift(leg_swing: f32, amplitude: f32) -> f32 {
-	leg_swing * amplitude
 }
 
 /// Soft knee on stance; shared swing envelope peaks mid-stride for toe clearance.
