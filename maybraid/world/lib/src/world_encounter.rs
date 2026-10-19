@@ -6,8 +6,12 @@
 
 use bevy::prelude::*;
 use bikanwarda_encounter::BikanwardaEncounterPlugin;
+use characters::{AnimClip, AnimRef, AnimRefRoot};
 use damage::Died;
-use encounters::{EncounterSignal, EncounterSignalKind, EncounterSystems, EncounterTimeEnabled};
+use encounters::{
+	EncounterInstance, EncounterPhase, EncounterProgressStore, EncounterSignal,
+	EncounterSignalKind, EncounterSystems, EncounterTimeEnabled,
+};
 use lubikans::{LubikanOwnerLifetime, LubikanOwnerLifetimeKind};
 use world_player::Player;
 
@@ -34,6 +38,7 @@ pub fn configure(app: &mut App) {
 			forward_world_session_end.before(EncounterSystems::Resolve),
 			forward_owner_lifetime.before(EncounterSystems::Resolve),
 			forward_player_deaths.before(EncounterSystems::Resolve),
+			drive_sleep_clips.after(EncounterSystems::Phase),
 		),
 	);
 }
@@ -93,6 +98,39 @@ fn forward_player_deaths(
 	));
 }
 
+/// Map explicit sleep phase to [#1141](https://github.com/ramate-io/maybraid/pull/1141) clips.
+/// Missing `AnimRefRoot` is fine — fixtures have no presentation.
+pub(crate) fn sleep_clip(phase: EncounterPhase) -> Option<AnimClip> {
+	match phase {
+		EncounterPhase::Sleep(sleep) if sleep.elapsed_secs <= 0.0 => {
+			Some(AnimClip::epiphant_sleep_enter())
+		}
+		EncounterPhase::Sleep(_) => Some(AnimClip::epiphant_sleep_hold()),
+		EncounterPhase::Waking => Some(AnimClip::epiphant_wake()),
+		_ => None,
+	}
+}
+
+fn drive_sleep_clips(
+	store: Res<EncounterProgressStore>,
+	mut clips: Query<(Entity, &EncounterInstance, &mut AnimRefRoot)>,
+) {
+	for (entity, instance, mut root) in &mut clips {
+		if store.get(instance.id).is_none_or(|record| record.instance != Some(entity)) {
+			continue;
+		}
+		let Some(record) = store.get(instance.id) else {
+			continue;
+		};
+		let Some(clip) = sleep_clip(record.phase) else {
+			continue;
+		};
+		if root.0.clip.id() != clip.id() {
+			root.0 = AnimRef::new(clip);
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -147,5 +185,27 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("signal"))?;
 		assert_eq!(kind, EncounterSignalKind::BodyReplaced);
 		Ok(())
+	}
+
+	#[test]
+	fn sleep_phase_maps_to_epiphant_clips() {
+		use encounters::EncounterSleep;
+		assert_eq!(
+			sleep_clip(EncounterPhase::Sleep(EncounterSleep::new(20.0))).map(|clip| clip.id()),
+			Some(characters::AnimId::EpiphantSleepEnter)
+		);
+		assert_eq!(
+			sleep_clip(EncounterPhase::Sleep(EncounterSleep {
+				elapsed_secs: 1.0,
+				health_at_enter: 20.0,
+			}))
+			.map(|clip| clip.id()),
+			Some(characters::AnimId::EpiphantSleepHold)
+		);
+		assert_eq!(
+			sleep_clip(EncounterPhase::Waking).map(|clip| clip.id()),
+			Some(characters::AnimId::EpiphantWake)
+		);
+		assert_eq!(sleep_clip(EncounterPhase::Combat).map(|clip| clip.id()), None);
 	}
 }
