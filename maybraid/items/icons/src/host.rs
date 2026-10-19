@@ -518,7 +518,7 @@ fn spawn_item_host(
 			pin_capture_host(commands, entity, root);
 			true
 		}
-		InventoryItem::SkillMap { .. } => false,
+		InventoryItem::SkillMap { .. } | InventoryItem::Tanz { .. } => false,
 		InventoryItem::Fisticuffs => spawn_fisticuffs_arms_host(commands, root),
 	}
 }

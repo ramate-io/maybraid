@@ -744,6 +744,7 @@ mod tests {
 			clothing: Vec::new(),
 			weapons: vec![0, 1],
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		};
 		assert!(!drop_chip_should_show(
 			&inventory,
@@ -836,6 +837,7 @@ mod tests {
 			clothing: vec![0],
 			weapons: Vec::new(),
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		};
 		let mut menu = CharacterMenuState::for_create(mixed_editor_bag().items.clone()).0;
 		let mut baseline = CharacterEditBaseline::capture(&menu);

@@ -23,8 +23,11 @@
 //! 2. **Undroppable items.** Intrinsic bag tools ([`InventoryItem::is_droppable`])
 //!    refuse in [`Inventory::can_drop`] / [`Inventory::try_drop`]; caller policy
 //!    cannot override. Lubikans are not bag items (ledger + charge live
-//!    elsewhere). Default still allows equipped droppable items and an empty
-//!    leftover bag. Flip [`InventoryDropPolicy::allow_equipped`] or
+//!    elsewhere). Tanzes are ordinary bag items in the Tanzes slot and follow
+//!    this same placeholder policy (equipped drops are allowed; no extra
+//!    undroppable flag). Starter items have no durable flag. Default still
+//!    allows equipped droppable items and an empty leftover bag. Flip
+//!    [`InventoryDropPolicy::allow_equipped`] or
 //!    [`InventoryDropPolicy::allow_empty_bag`] when those rules exist.
 //! 3. **Confirm.** Default `require_confirm` is `true`. The domain does not
 //!    prompt; UI reads the flag. In-game pause edits skip the card because
@@ -243,6 +246,7 @@ mod tests {
 			clothing: vec![0],
 			weapons: vec![1, 2, 3],
 			skills: vec![4, 5],
+			tanzes: Vec::new(),
 		}
 	}
 
@@ -355,6 +359,7 @@ mod tests {
 			clothing: Vec::new(),
 			weapons: vec![0],
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		};
 		let keep_last =
 			InventoryDropPolicy { allow_empty_bag: false, ..InventoryDropPolicy::PLACEHOLDER };
@@ -384,6 +389,7 @@ mod tests {
 			clothing: Vec::new(),
 			weapons: vec![0, 1],
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		};
 		assert_eq!(
 			bag.can_drop(0, InventoryDropPolicy::PLACEHOLDER).err(),

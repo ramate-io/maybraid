@@ -81,7 +81,7 @@ variants, seeded pitch jitter, `Voices` bus).
 The sensor exists **only** while [`AttackPhase::Active`](src/attack.rs). Cancel,
 weapon swap (`FisticuffsUser` removed), death / `Downed`, and pause (world
 cancels the attack) tear it down. Hits are once-per-strike-per-target. There is
-no combo-step damage scale yet — `AttackState` has no combo index.
+no combo-step damage scale — `combo_step` is SFX-only.
 
 `PLACEHOLDER_JAB_DAMAGE` (12) and the capsule radius / length / reach are
 **not final balance**. `FisticuffsSensorDebug(true)` draws the live volume

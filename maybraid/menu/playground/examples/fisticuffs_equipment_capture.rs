@@ -141,7 +141,13 @@ fn shot_dir() -> PathBuf {
 fn switch_bag(fisticuffs_primary: bool) -> Inventory {
 	let items = vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)];
 	let weapons = if fisticuffs_primary { vec![0, 1] } else { vec![1, 0] };
-	Inventory { items, clothing: Vec::new(), weapons, skills: Vec::new() }
+	Inventory {
+		items,
+		clothing: Vec::new(),
+		weapons,
+		skills: Vec::new(),
+		tanzes: Vec::new(),
+	}
 }
 
 fn capture_icon_inventories() -> [Inventory; 2] {
