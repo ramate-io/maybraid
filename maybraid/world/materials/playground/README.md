@@ -8,6 +8,8 @@ cargo run -p world-materials-playground -- show pulse
 cargo run -p world-materials-playground -- show doric_column
 cargo run -p world-materials-playground -- mesh blast
 cargo run -p world-materials-playground -- mesh ring
+cargo run -p world-materials-playground -- show chain
+cargo run -p world-materials-playground -- chain capture
 MAYBRAID_CAPTURE_DIR=./column-pom cargo run -p world-materials-playground
 # writes rake-grazing-pom-on/off, rake-silhouette-cavities, rake-taper-*, day-head-on-close
 # capture hides the command drawer and uses a low raking key
@@ -28,3 +30,10 @@ In-game (press `/`):
 - `mesh blast` — core + shell + ring stacked
 - `shoot` — fire repeating copies of the **current** hull and recipe
 - `shoot stop` — cancel the launcher
+- `show chain` / `chain show pair` — mythical-chain scene (intact + damaged)
+- `chain lighting night|day` — moonlight vs key+fill
+- `chain hit <link>` — localized owned damage on the left chain
+- `chain style retro|sharp|antediluvian|native` — world visual style
+- `chain reverse` / `chain freeze` — traveling energy
+- `chain capture [dir]` — regenerate stills (default: `world-materials/evidence/chain`)
+- `chain video <dir>` — 30 Hz flow reel + extra stills

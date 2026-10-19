@@ -8,11 +8,12 @@ hits update an **owned** runtime uniform; they do not restamp the shared
 [`MaterialRefKey`](../../material-ref/src/key.rs) cache.
 
 ```text
-cargo test -p chain-shaders --all-targets
-cargo run -p chain-playground
-cargo run -p chain-playground -- show pair
-cargo run -p chain-playground -- lighting night
-cargo run -p chain-playground -- hit 6
+cargo test -p world-materials --all-targets
+cargo run -p world-materials-playground -- show chain
+cargo run -p world-materials-playground -- chain show pair
+cargo run -p world-materials-playground -- chain lighting night
+cargo run -p world-materials-playground -- chain hit 6
+cargo run -p world-materials-playground -- chain capture
 ```
 
 Runtime skinned rope/chain geometry is [A04 / #1125](https://github.com/ramate-io/maybraid/issues/1125)
@@ -254,8 +255,10 @@ runtime chain meshes.
 
 ## Playground
 
-`chain-playground` shows two independently parameterized chains (left is
-owned so `/hit` is in-place), a continuous bent tube, a posed skinned tube
-that proves halo skinning, a mundane wood cube, day/night lighting, and the
-real Native / Sharp / Retro / Antediluvian offscreen present path
-(`FollowCamera` + [`VisualStylePlugin`](../../../lib/src/render_scale.rs)).
+[`world-materials-playground`](../../playground) hosts the chain through
+`chain …` commands (or `show chain`). Two independently parameterized
+chains (left is owned so `chain hit` is in-place), a continuous bent tube,
+a posed skinned tube that proves halo skinning, a mundane wood cube,
+day/night lighting, and the real Native / Sharp / Retro / Antediluvian
+offscreen present path (`FollowCamera` +
+[`VisualStylePlugin`](../../../../lib/src/render_scale.rs)).

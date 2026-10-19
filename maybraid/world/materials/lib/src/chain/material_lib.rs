@@ -7,7 +7,7 @@ use material_ref::{
 	MaterialRefKey, MaterialRefPlugin, StandardMaterialLib, StandardMaterialRefCache,
 };
 
-use crate::chain_material::{claims_recipe, ChainMaterial};
+use crate::chain::chain_material::{claims_recipe, ChainMaterial};
 
 /// Cache of resolved [`ChainMaterial`] handles.
 pub type ChainMaterialRefCache = MaterialRefCache<ChainMaterial>;
@@ -104,7 +104,7 @@ mod tests {
 	use material_ref::{MaterialRefApplied, MaterialRefPlugin, MaterialRefRoot};
 
 	use super::*;
-	use crate::params::{
+	use crate::chain::params::{
 		mythical_chain_ref, mythical_chain_ref_for, MythicalChainState, RECIPE_MYTHICAL_CHAIN,
 	};
 
@@ -152,7 +152,7 @@ mod tests {
 
 	#[test]
 	fn owned_damage_does_not_accumulate_or_mutate_cached_handles() -> anyhow::Result<()> {
-		use crate::runtime::{
+		use crate::chain::runtime::{
 			apply_chain_hit, sync_owned_chain_materials, OwnedChainHandle, OwnedChainMaterial,
 		};
 
@@ -236,8 +236,8 @@ mod tests {
 		assert!((owned_mat.params.link_damage(7) - 0.5).abs() < 1e-5);
 		assert_eq!(shared_mat.params.link_damage(4), 0.0);
 		assert!((owned_mat.params.intact() - MythicalChainState::Damaged.intact()).abs() < 1e-5);
-		let look = crate::deteriorate::LinkLook::from_severity(
-			crate::deteriorate::severity(
+		let look = crate::chain::deteriorate::LinkLook::from_severity(
+			crate::chain::deteriorate::severity(
 				owned_mat.params.damage().max(1.0 - owned_mat.params.intact()),
 				0.6,
 				0.4,

@@ -1,11 +1,11 @@
 //! Composed [`MaterialLib`] for Maybraid World.
 
+use crate::chain::{init_chain_material_caches, ChainMaterialLib, ChainShadersPlugin};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use building_shaders::{
 	init_urban_material_caches, BuildingShadersPlugin, UrbanSurfaceMaterialLib,
 };
-use chain_shaders::{init_chain_material_caches, ChainMaterialLib, ChainShadersPlugin};
 use characters::material_lib::{init_character_material_caches, CharacterMaterialLib};
 use characters::CharacterShadersPlugin;
 use chico::VegetationOnTerrainMaterialLib;
@@ -137,8 +137,8 @@ mod tests {
 	use bevy::prelude::*;
 	use characters::material_lib::{ClothingShaderMaterialRefCache, FaceShaderMaterialRefCache};
 
+	use crate::chain::ChainMaterialRefCache;
 	use building_shaders::{ColumnSurfaceMaterialRefCache, UrbanSurfaceMaterialRefCache};
-	use chain_shaders::ChainMaterialRefCache;
 	use firearms::{EnergyMaterialRefCache, MuzzleFlameMaterialRefCache};
 	use furniture_shaders::FurnitureSurfaceMaterialRefCache;
 	use vegetation_bumpout::BumpOutMaterialRefCache;

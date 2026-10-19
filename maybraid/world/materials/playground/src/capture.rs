@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
+use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use building_shaders::{doric_column_flat_ref, doric_column_ref};
 use game_commands::ui::{DebugHudRoot, GameCommandDrawerVisible};
 
@@ -314,11 +314,9 @@ mod tests {
 		assert_eq!(off.look, CaptureLook::Flat);
 		assert_eq!(on.shape, PreviewShape::Cylinder);
 		assert!(COLUMN_CAPTURE_SHOTS.iter().any(|shot| shot.name.contains("silhouette")));
-		assert!(
-			COLUMN_CAPTURE_SHOTS
-				.iter()
-				.any(|shot| { shot.name.contains("taper") && shot.shape == PreviewShape::Taper })
-		);
+		assert!(COLUMN_CAPTURE_SHOTS
+			.iter()
+			.any(|shot| { shot.name.contains("taper") && shot.shape == PreviewShape::Taper }));
 		Ok(())
 	}
 }

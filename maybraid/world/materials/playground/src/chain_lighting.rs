@@ -2,7 +2,8 @@ use std::f32::consts::PI;
 
 use bevy::prelude::*;
 
-use crate::preview::LightingMode;
+use crate::capture::{FillSky, KeySun};
+use crate::chain_preview::LightingMode;
 
 #[derive(Component)]
 pub struct PlaygroundSun;
@@ -18,6 +19,7 @@ pub fn setup_lighting(mut commands: Commands) {
 	});
 	commands.spawn((
 		PlaygroundSun,
+		KeySun,
 		DirectionalLight {
 			illuminance: 9800.0,
 			color: Color::srgb(1.0, 0.92, 0.82),
@@ -28,6 +30,7 @@ pub fn setup_lighting(mut commands: Commands) {
 	));
 	commands.spawn((
 		PlaygroundFill,
+		FillSky,
 		DirectionalLight {
 			illuminance: 2400.0,
 			color: Color::srgb(0.55, 0.68, 1.0),

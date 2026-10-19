@@ -7,8 +7,8 @@ Vulkan) with:
 export CXX=g++-13 CC=gcc-13 LIBRARY_PATH=/usr/lib/gcc/x86_64-linux-gnu/13
 export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json
 export WGPU_BACKEND=vk
-xvfb-run -a cargo run -p chain-playground --release -- capture maybraid/world/materials/chain-playground/evidence
-xvfb-run -a cargo run -p chain-playground --release -- video /tmp/chain-video
+xvfb-run -a cargo run -p world-materials-playground --release -- chain capture
+xvfb-run -a cargo run -p world-materials-playground --release -- chain video /tmp/chain-video
 ffmpeg -y -framerate 30 -i /tmp/chain-video/frames/f%04d.png \
   -c:v libx264 -pix_fmt yuv420p mythical_chain_flow.mp4
 ```

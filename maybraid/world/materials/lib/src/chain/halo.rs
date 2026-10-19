@@ -15,8 +15,8 @@ use bevy::math::Vec3A;
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
 
-use crate::chain_material::{ChainMaterial, ChainMaterialUniform};
-use crate::flow::ChainFlowStyle;
+use crate::chain::chain_material::{ChainMaterial, ChainMaterialUniform};
+use crate::chain::flow::ChainFlowStyle;
 
 /// Request a halo child on a chain mesh entity.
 #[derive(Component, Clone, Copy, Debug, Default)]
@@ -210,7 +210,7 @@ pub fn halo_expansion_metres(energy: f32, base: f32) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::flow::{chain_flow, ChainFlowStyle};
+	use crate::chain::flow::{chain_flow, ChainFlowStyle};
 
 	#[test]
 	fn halo_expansion_stays_near_the_authored_width() -> anyhow::Result<()> {
@@ -227,9 +227,11 @@ mod tests {
 
 	#[test]
 	fn settled_chains_stop_modifying_halo_assets() -> anyhow::Result<()> {
-		use crate::params::mythical_chain_ref;
-		use crate::placeholder::{placeholder_chain_mesh, PlaceholderChainSpec};
-		use crate::runtime::{sync_owned_chain_materials, OwnedChainHandle, OwnedChainMaterial};
+		use crate::chain::params::mythical_chain_ref;
+		use crate::chain::placeholder::{placeholder_chain_mesh, PlaceholderChainSpec};
+		use crate::chain::runtime::{
+			sync_owned_chain_materials, OwnedChainHandle, OwnedChainMaterial,
+		};
 		use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 		use material_ref::{MaterialRefPlugin, MaterialRefRoot};
 
@@ -238,9 +240,9 @@ mod tests {
 			.init_asset::<Mesh>()
 			.init_asset::<ChainMaterial>()
 			.init_asset::<SkinnedMeshInverseBindposes>()
-			.init_resource::<crate::ChainMaterialRefCache>()
+			.init_resource::<crate::chain::ChainMaterialRefCache>()
 			.init_resource::<HaloMaterialIds>()
-			.add_plugins(MaterialRefPlugin::<crate::ChainMaterialLib<'_>>::default())
+			.add_plugins(MaterialRefPlugin::<crate::chain::ChainMaterialLib<'_>>::default())
 			.add_systems(Update, (sync_owned_chain_materials, sync_chain_halos).chain());
 
 		let mesh = app
@@ -271,7 +273,7 @@ mod tests {
 			let Some(mut material) = materials.get_mut(&owned) else {
 				return Err(anyhow::anyhow!("owned material"));
 			};
-			crate::runtime::apply_chain_hit(&mut material, 1, 0.4, 4.0, 0.5);
+			crate::chain::runtime::apply_chain_hit(&mut material, 1, 0.4, 4.0, 0.5);
 		}
 		app.update();
 		app.update();
@@ -307,8 +309,8 @@ mod tests {
 
 	#[test]
 	fn halo_copies_parent_skin_and_cleans_up() -> anyhow::Result<()> {
-		use crate::params::mythical_chain_ref;
-		use crate::string::{skinned_tube_mesh, ContinuousTubeSpec};
+		use crate::chain::params::mythical_chain_ref;
+		use crate::chain::string::{skinned_tube_mesh, ContinuousTubeSpec};
 		use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 		use material_ref::{MaterialRefPlugin, MaterialRefRoot};
 
@@ -317,9 +319,9 @@ mod tests {
 			.init_asset::<Mesh>()
 			.init_asset::<ChainMaterial>()
 			.init_asset::<SkinnedMeshInverseBindposes>()
-			.init_resource::<crate::ChainMaterialRefCache>()
+			.init_resource::<crate::chain::ChainMaterialRefCache>()
 			.init_resource::<HaloMaterialIds>()
-			.add_plugins(MaterialRefPlugin::<crate::ChainMaterialLib<'_>>::default())
+			.add_plugins(MaterialRefPlugin::<crate::chain::ChainMaterialLib<'_>>::default())
 			.add_systems(Update, (sync_chain_halos, cleanup_removed_halos).chain());
 
 		let (mesh, inverses) = skinned_tube_mesh(ContinuousTubeSpec::default());
@@ -368,7 +370,7 @@ pub(crate) fn register_halo_systems(app: &mut App) {
 	app.init_resource::<HaloMaterialIds>().add_systems(
 		Update,
 		(
-			sync_chain_halos.after(crate::runtime::sync_owned_chain_materials),
+			sync_chain_halos.after(crate::chain::runtime::sync_owned_chain_materials),
 			cleanup_removed_halos.after(sync_chain_halos),
 		),
 	);

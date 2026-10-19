@@ -10,10 +10,10 @@ use std::time::{Duration, Instant};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::time::TimeUpdateStrategy;
-use chain_shaders::MythicalChainState;
 use game_commands::ui::DebugHudRoot;
+use world_materials::chain::MythicalChainState;
 
-use crate::preview::{LightingMode, PendingChainHit, PreviewConfig, PreviewStyle};
+use crate::chain_preview::{ChainPreview, LightingMode, PendingChainHit, PreviewStyle};
 
 pub const CAPTURE_CADENCE_HZ: f32 = 30.0;
 pub const CAPTURE_DT: f32 = 1.0 / CAPTURE_CADENCE_HZ;
@@ -122,7 +122,7 @@ impl CaptureSet {
 	}
 }
 
-fn apply_still(shot: &StillShot, preview: &mut PreviewConfig, lighting: &mut LightingMode) {
+fn apply_still(shot: &StillShot, preview: &mut ChainPreview, lighting: &mut LightingMode) {
 	match shot.kind {
 		StillKind::Damage { amount, emit } => {
 			*lighting = LightingMode::Day;
@@ -160,7 +160,7 @@ fn apply_still(shot: &StillShot, preview: &mut PreviewConfig, lighting: &mut Lig
 pub fn tick_capture(
 	time: Res<Time>,
 	mut capture: ResMut<CaptureSet>,
-	mut preview: ResMut<PreviewConfig>,
+	mut preview: ResMut<ChainPreview>,
 	mut lighting: ResMut<LightingMode>,
 	mut commands: Commands,
 	mut exits: MessageWriter<AppExit>,
@@ -260,7 +260,7 @@ pub fn hide_hud_during_evidence(
 pub fn tick_video(
 	time: Res<Time>,
 	mut video: ResMut<VideoCapture>,
-	mut preview: ResMut<PreviewConfig>,
+	mut preview: ResMut<ChainPreview>,
 	mut lighting: ResMut<LightingMode>,
 	mut pending: ResMut<PendingChainHit>,
 	mut commands: Commands,

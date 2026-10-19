@@ -14,8 +14,8 @@
 //! damage reads as one larger wound; bites 2–3 open the opposite side and a
 //! late gap. Cost is four hashes plus four wrap-aware 1-D tests per fragment.
 
-use crate::hash::{hash13, link_weakness as hash_weakness};
-use crate::params::MythicalChainScalars;
+use crate::chain::hash::{hash13, link_weakness as hash_weakness};
+use crate::chain::params::MythicalChainScalars;
 
 /// Bites carved from each link. One reserved complement stays until fade.
 pub const BITES_PER_LINK: u32 = 4;
@@ -188,7 +188,7 @@ impl LinkLook {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::params::{MythicalChainScalars, MythicalChainState};
+	use crate::chain::params::{MythicalChainScalars, MythicalChainState};
 
 	#[test]
 	fn weakness_is_stable_and_in_unit_range() -> anyhow::Result<()> {
@@ -198,7 +198,7 @@ mod tests {
 		assert!((0.0..=1.0).contains(&a));
 		assert_ne!(link_weakness(3, 11), link_weakness(4, 11));
 		assert_ne!(link_weakness(3, 11), link_weakness(3, 29));
-		assert_eq!(a, crate::hash::link_weakness(3.0, 11.0));
+		assert_eq!(a, crate::chain::hash::link_weakness(3.0, 11.0));
 		Ok(())
 	}
 

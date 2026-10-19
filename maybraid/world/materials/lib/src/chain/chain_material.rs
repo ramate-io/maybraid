@@ -16,8 +16,10 @@ use material_ref::{
 	MATERIAL_RASTER_WIDTH, MATERIAL_SCALAR_FLOATS,
 };
 
-use crate::flow::ChainFlowStyle;
-use crate::params::{is_mythical_chain_recipe, mythical_chain_palette, RECIPE_MYTHICAL_CHAIN};
+use crate::chain::flow::ChainFlowStyle;
+use crate::chain::params::{
+	is_mythical_chain_recipe, mythical_chain_palette, RECIPE_MYTHICAL_CHAIN,
+};
 
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 
@@ -34,8 +36,8 @@ impl Plugin for ChainMaterialPlugin {
 		if !app.is_plugin_added::<MaterialPlugin<ChainMaterial>>() {
 			app.add_plugins(MaterialPlugin::<ChainMaterial>::default());
 		}
-		crate::runtime::register_runtime_systems(app);
-		crate::halo::register_halo_systems(app);
+		crate::chain::runtime::register_runtime_systems(app);
+		crate::chain::halo::register_halo_systems(app);
 	}
 }
 
@@ -285,7 +287,7 @@ impl Material for ChainMaterial {
 	}
 }
 
-/// Named recipes claimed by [`crate::ChainMaterialLib`].
+/// Named recipes claimed by [`crate::chain::ChainMaterialLib`].
 pub fn claims_recipe(name: &str) -> bool {
 	is_mythical_chain_recipe(name)
 }
@@ -303,11 +305,11 @@ mod tests {
 	use material_ref::{hash_material_ref, MaterialRefKey};
 
 	use super::*;
-	use crate::params::{
+	use crate::chain::params::{
 		mythical_chain_ref, mythical_chain_ref_for, mythical_chain_ref_with, MythicalChainScalars,
 		MythicalChainState,
 	};
-	use crate::runtime::{apply_chain_hit, ChainRuntimeDamage};
+	use crate::chain::runtime::{apply_chain_hit, ChainRuntimeDamage};
 
 	#[test]
 	fn packs_authored_intact_recipe() -> anyhow::Result<()> {
@@ -382,7 +384,7 @@ mod tests {
 
 	#[test]
 	fn packs_flow_style_from_the_recipe() -> anyhow::Result<()> {
-		use crate::flow::ChainFlowStyle;
+		use crate::chain::flow::ChainFlowStyle;
 		let scalars = MythicalChainScalars::default()
 			.with_flow(ChainFlowStyle::default().with_speed_mps(-0.8));
 		let material = ChainMaterial::from_material_ref(&mythical_chain_ref_with(scalars, 11));

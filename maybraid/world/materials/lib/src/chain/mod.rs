@@ -1,10 +1,17 @@
 //! Mythical chain surface: painterly metal, traveling energy, staged damage.
 //!
-//! See the crate README for the A04 geometry contract (along-chain UV,
+//! See `src/chain/README.md` for the A04 geometry contract (along-chain UV,
 //! `Mesh::ATTRIBUTE_UV_1` rest arc length, per-link vertex-color ids, owned
 //! runtime damage, and the halo skinning contract).
 
+use std::path::PathBuf;
+
 use bevy::prelude::*;
+
+/// Committed validation stills / reel live next to this crate.
+pub fn default_evidence_dir() -> PathBuf {
+	PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("evidence/chain")
+}
 
 mod chain_material;
 mod deteriorate;

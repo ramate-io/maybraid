@@ -77,11 +77,11 @@ pub use item_icons::{
 pub use lod::hcsg::{HcsgClass, HcsgDemand, Outstanding};
 pub use lod::LodJobCounter;
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
-pub use occupancy::{WorldOccupancyPlugin, WorldOccupancySystems};
 pub use maybraid_sky::{
 	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
 	SUN_COLOR, SUN_ILLUMINANCE,
 };
+pub use occupancy::{WorldOccupancyPlugin, WorldOccupancySystems};
 pub use player_camera::{CameraPov, CameraPovLocked};
 pub use player_lifecycle::{
 	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
@@ -101,8 +101,7 @@ pub use render_scale::{
 	RequestForceOffscreen, RequestRenderScale, RequestVisualStyle, VisualStyle,
 	VisualStyleAutoReason, VisualStyleIdentity, VisualStylePick, VisualStylePlugin,
 	VisualStyleSetting, VisualStyleSignals, DEVICE_TIER_ENV, FORCE_OFFSCREEN_ENV,
-	PRESENTATION_TREATMENT_ENV,
-	RENDER_SCALE_ENV, UNIFIED_MEMORY_NATIVE_BYTES, VISUAL_STYLE_ENV,
+	PRESENTATION_TREATMENT_ENV, RENDER_SCALE_ENV, UNIFIED_MEMORY_NATIVE_BYTES, VISUAL_STYLE_ENV,
 };
 pub use start::{
 	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
@@ -142,6 +141,7 @@ use player::{
 	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
+use world_materials::chain::ChainShadersPlugin;
 use world_player::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, MeshStatsPlugin,
 	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
@@ -217,6 +217,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(EnergyMaterialPlugin)
+			.add_plugins(ChainShadersPlugin)
 			.add_plugins(VfxPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,

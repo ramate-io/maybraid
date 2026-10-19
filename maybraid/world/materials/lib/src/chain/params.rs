@@ -4,9 +4,9 @@ use bevy::prelude::Color;
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 
-use crate::flow::ChainFlowStyle;
+use crate::chain::flow::ChainFlowStyle;
 
-/// Recipe claimed by [`crate::ChainMaterialLib`].
+/// Recipe claimed by [`crate::chain::ChainMaterialLib`].
 pub const RECIPE_MYTHICAL_CHAIN: &str = "mythical_chain";
 
 /// Palette slot: intact metal.
@@ -30,7 +30,7 @@ pub const SCALAR_DAMAGE: usize = 3;
 pub const SCALAR_LINK_COUNT: usize = 4;
 /// Scalar 5: decorative energy-conduit frequency (not structural damage).
 pub const SCALAR_CONDUIT_FREQUENCY: usize = 5;
-/// Scalar 6: blend toward vertex-color G. Prefer [`crate::OwnedChainMaterial`]
+/// Scalar 6: blend toward vertex-color G. Prefer [`crate::chain::OwnedChainMaterial`]
 /// + the per-link uniform array; this scalar is the legacy mesh-color path.
 pub const SCALAR_LOCALIZED_BLEND: usize = 6;
 /// Scalar 7: reserved. Older recipes stored a pulse rate here; it is ignored.

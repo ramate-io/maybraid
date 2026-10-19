@@ -36,8 +36,6 @@ members = [
   "maybraid/screen-capture",
   "maybraid/world/materials/lib",
   "maybraid/world/materials/playground",
-  "maybraid/world/materials/chain",
-  "maybraid/world/materials/chain-playground",
   "maybraid/vfx/lib",
   "maybraid/vfx/playground",
   "maybraid/spatial-rumble/lib",
@@ -369,8 +367,6 @@ maybraid-sky = { path = "maybraid/sky/lib" }
 maybraid-world = { path = "maybraid/world/lib" }
 world-materials = { path = "maybraid/world/materials/lib" }
 world-materials-playground = { path = "maybraid/world/materials/playground" }
-chain-shaders = { path = "maybraid/world/materials/chain" }
-chain-playground = { path = "maybraid/world/materials/chain-playground" }
 maybraid-vfx = { path = "maybraid/vfx/lib" }
 vfx-playground = { path = "maybraid/vfx/playground" }
 maybraid-spatial-rumble = { path = "maybraid/spatial-rumble/lib" }

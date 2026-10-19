@@ -11,6 +11,14 @@ use crate::shape::{PlaygroundMeshes, PreviewShape};
 #[derive(Component)]
 pub struct PreviewRoot;
 
+/// Which preview scene the playground is hosting.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PreviewHost {
+	#[default]
+	Catalog,
+	Chain,
+}
+
 #[derive(Resource, Clone, Debug, PartialEq)]
 pub struct PreviewConfig {
 	pub material: MaterialRef,
@@ -31,11 +39,19 @@ impl PreviewConfig {
 
 pub fn sync_preview(
 	mut commands: Commands,
+	host: Res<PreviewHost>,
 	config: Res<PreviewConfig>,
 	meshes: Option<Res<PlaygroundMeshes>>,
 	roots: Query<Entity, With<PreviewRoot>>,
 	mut last: Local<Option<PreviewConfig>>,
 ) {
+	if *host != PreviewHost::Catalog {
+		for entity in &roots {
+			commands.entity(entity).try_despawn();
+		}
+		*last = None;
+		return;
+	}
 	let Some(meshes) = meshes else {
 		return;
 	};

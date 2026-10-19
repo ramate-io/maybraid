@@ -3,12 +3,12 @@
 //! Authored look (palette, seed, intact / fade / glow / flow) stays on
 //! [`material_ref::MaterialRef`]. Independent damage lives on a unique
 //! [`Handle<ChainMaterial>`] updated in place so restamps do not fill the
-//! shared [`crate::ChainMaterialRefCache`].
+//! shared [`crate::chain::ChainMaterialRefCache`].
 
 use bevy::prelude::*;
 use material_ref::MaterialRefSystems;
 
-use crate::chain_material::{ChainMaterial, ChainMaterialUniform, MAX_CHAIN_LINKS};
+use crate::chain::chain_material::{ChainMaterial, ChainMaterialUniform, MAX_CHAIN_LINKS};
 
 /// Mark a chain that must own a unique, mutable [`ChainMaterial`].
 ///

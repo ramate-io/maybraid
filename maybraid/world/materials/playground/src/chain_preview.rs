@@ -3,15 +3,15 @@
 use bevy::light::NotShadowCaster;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
-use chain_shaders::{
+use material_ref::{MaterialRef, MaterialRefRoot};
+use maybraid_world::{RequestVisualStyle, VisualStyle};
+use world_materials::chain::{
 	apply_chain_hit, continuous_tube_mesh, mythical_chain_ref_for, mythical_chain_ref_with,
 	placeholder_chain_mesh, spawn_skinned_tube, ChainFlowStyle, ChainHalo, ChainMaterial,
 	ContinuousTubeSpec, MythicalChainScalars, MythicalChainState, OwnedChainHandle,
 	OwnedChainMaterial, PlaceholderChainSpec, DEFAULT_GLOW_INTENSITY, DEFAULT_LINK_COUNT,
 	DEFAULT_SEED,
 };
-use material_ref::{MaterialRef, MaterialRefRoot};
-use maybraid_world::{RequestVisualStyle, VisualStyle};
 
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LightingMode {
@@ -38,7 +38,7 @@ impl LightingMode {
 }
 
 #[derive(Component)]
-pub struct PreviewRoot;
+pub struct ChainPreviewRoot;
 
 #[derive(Component)]
 pub struct PreviewTube;
@@ -53,7 +53,7 @@ pub struct PreviewSkinnedJoint(pub u32);
 pub struct PreviewSide(pub bool);
 
 #[derive(Resource, Clone, Debug, PartialEq)]
-pub struct PreviewConfig {
+pub struct ChainPreview {
 	pub left: MaterialRef,
 	pub right: MaterialRef,
 	pub lighting: LightingMode,
@@ -106,7 +106,7 @@ impl PreviewStyle {
 	}
 }
 
-impl Default for PreviewConfig {
+impl Default for ChainPreview {
 	fn default() -> Self {
 		Self {
 			left: mythical_chain_ref_for(MythicalChainState::Intact),
@@ -127,7 +127,7 @@ impl Default for PreviewConfig {
 	}
 }
 
-impl PreviewConfig {
+impl ChainPreview {
 	pub fn status_label(&self) -> String {
 		format!(
 			"preview: left {} · right {} · {} · {} · deform {} · sweep {} · halo {} · emit {}",
@@ -254,15 +254,29 @@ pub fn apply_intact(
 #[allow(clippy::too_many_arguments)]
 pub fn sync_preview(
 	mut commands: Commands,
-	config: Res<PreviewConfig>,
+	host: Res<crate::preview::PreviewHost>,
+	config: Res<ChainPreview>,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut bindposes: ResMut<Assets<SkinnedMeshInverseBindposes>>,
 	mut standards: ResMut<Assets<StandardMaterial>>,
-	roots: Query<(Entity, &PreviewSide, &MaterialRefRoot), With<PreviewRoot>>,
+	roots: Query<(Entity, &PreviewSide, &MaterialRefRoot), With<ChainPreviewRoot>>,
 	tubes: Query<Entity, With<PreviewTube>>,
 	props: Query<Entity, With<PreviewProp>>,
 	mut last_deform: Local<Option<bool>>,
 ) {
+	if *host != crate::preview::PreviewHost::Chain {
+		for (entity, _, _) in &roots {
+			commands.entity(entity).try_despawn();
+		}
+		for entity in &tubes {
+			commands.entity(entity).try_despawn();
+		}
+		for entity in &props {
+			commands.entity(entity).try_despawn();
+		}
+		*last_deform = None;
+		return;
+	}
 	let deform_changed = last_deform.as_ref() != Some(&config.deform);
 	let missing = roots.iter().count() < 2 || tubes.iter().count() < 2 || props.iter().count() < 1;
 	if deform_changed || missing {
@@ -364,7 +378,7 @@ pub fn sync_preview(
 	}
 }
 
-pub fn tick_sweep(time: Res<Time>, mut config: ResMut<PreviewConfig>) {
+pub fn tick_sweep(time: Res<Time>, mut config: ResMut<ChainPreview>) {
 	if !config.sweep {
 		return;
 	}
@@ -400,7 +414,7 @@ fn spawn_chain(
 	halo: bool,
 ) {
 	let mut entity = commands.spawn((
-		PreviewRoot,
+		ChainPreviewRoot,
 		PreviewSide(left),
 		Name::new(format!("chain-{name}")),
 		Transform::from_translation(translation),
@@ -449,7 +463,7 @@ pub fn apply_pending_hit(
 	time: Res<Time>,
 	mut pending: ResMut<PendingChainHit>,
 	mut materials: ResMut<Assets<ChainMaterial>>,
-	owned: Query<&OwnedChainHandle, With<PreviewRoot>>,
+	owned: Query<&OwnedChainHandle, With<ChainPreviewRoot>>,
 ) {
 	let Some(link) = pending.link.take() else {
 		return;
@@ -463,7 +477,7 @@ pub fn apply_pending_hit(
 }
 
 pub fn sync_visual_style(
-	config: Res<PreviewConfig>,
+	config: Res<ChainPreview>,
 	mut requests: MessageWriter<RequestVisualStyle>,
 	mut last: Local<Option<PreviewStyle>>,
 ) {
