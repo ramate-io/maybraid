@@ -1,9 +1,10 @@
-//! One-shot victory wave: raise one arm overhead, oscillate side-to-side, recover.
+//! One-shot victory wave: raise one arm out and up, bend the elbow back
+//! toward the head, oscillate the forearm side-to-side, recover.
 //!
 //! Progress is clamped to `[0.0, 1.0]`. Sampling is repeatable from effective rest,
 //! clip parameters, and progress only.
 
-use std::f32::consts::{FRAC_PI_2, TAU};
+use std::f32::consts::{FRAC_PI_6, TAU};
 
 use bevy::prelude::Vec3;
 use character_rigs::Side;
@@ -15,15 +16,22 @@ const RAISE_END: f32 = 0.28;
 const WAVE_END: f32 = 0.82;
 const WAVE_CYCLES: f32 = 2.5;
 
-const AIM_UP: f32 = 0.92;
-const AIM_OUTBOARD: f32 = 0.28;
-const AIM_FORWARD: f32 = 0.08;
-const WAVE_LATERAL_AMP: f32 = 0.28;
-const WAVE_FORWARD_AMP: f32 = 0.06;
+/// Character-space humerus weights before normalize. Own-side lateral is
+/// [`Side::sign`]: right −X, left +X. Not a vertical overhead salute.
+const AIM_UP: f32 = 0.70;
+const AIM_OUTBOARD: f32 = 0.68;
+const AIM_FORWARD: f32 = 0.18;
+const WAVE_LATERAL_AMP: f32 = 0.22;
+const WAVE_FORWARD_AMP: f32 = 0.05;
 
-const RAISE_ELBOW: f32 = 0.48;
-const WAVE_ELBOW_AMP: f32 = 0.12;
+/// Elbow closes enough that the forearm comes back toward the midline.
+const RAISE_ELBOW: f32 = 1.2;
+const WAVE_ELBOW_AMP: f32 = 0.10;
 const SHOULDER_CARRY: f32 = 0.1;
+
+/// Long-axis roll after aim. Measured on `for_clip_test()` so both elbows
+/// fold the forearm medially and slightly fight-forward — not the jab π/2 punch plane.
+const WAVE_HUMERUS_ROLL: f32 = FRAC_PI_6;
 
 const TORSO_TURN: f32 = 0.14;
 const KNEE_BOUNCE: f32 = 0.09;
@@ -67,7 +75,7 @@ impl VictoryWave {
 	/// Side-to-side oscillation during the held wave. Zero outside the wave window.
 	pub fn wave_oscillation(&self, progress: f32) -> f32 {
 		let t = Progress(progress).clamp();
-		if t < RAISE_END || t > WAVE_END {
+		if !(RAISE_END..=WAVE_END).contains(&t) {
 			return 0.0;
 		}
 		let u = (t - RAISE_END) / (WAVE_END - RAISE_END);
@@ -85,20 +93,23 @@ impl VictoryWave {
 	/// Character-space humerus aim. The resolver aims with this vector and roll.
 	pub fn humerus_along(&self, side: Side, progress: f32) -> Vec3 {
 		let raise = self.raise_amount(progress);
+		let rest = Vec3::new(side.sign(), 0.0, 0.0);
 		if raise < 1e-4 {
-			return Vec3::Y;
+			return rest;
 		}
 		let wave = self.wave_oscillation(progress);
-		let outboard = -side.sign() * AIM_OUTBOARD;
-		let lateral = outboard * raise + WAVE_LATERAL_AMP * wave * side.sign();
-		let up = 0.12 + AIM_UP * raise;
-		let forward = AIM_FORWARD * raise + WAVE_FORWARD_AMP * wave.abs();
-		Vec3::new(lateral, up, forward).normalize()
+		let raised = Vec3::new(
+			side.sign() * (AIM_OUTBOARD + WAVE_LATERAL_AMP * wave),
+			AIM_UP,
+			AIM_FORWARD + WAVE_FORWARD_AMP * wave.abs(),
+		)
+		.normalize();
+		rest.lerp(raised, raise).normalize()
 	}
 
-	/// Roll about the humerus length so the elbow hinge opens toward the body front.
+	/// Roll about the humerus length so the bent elbow sends the forearm back medially.
 	pub fn humerus_roll(&self, side: Side, _progress: f32) -> f32 {
-		FRAC_PI_2 * side.sign()
+		WAVE_HUMERUS_ROLL * side.sign()
 	}
 
 	pub fn elbow_flex(&self, progress: f32) -> f32 {
@@ -154,7 +165,10 @@ mod tests {
 		let mid_raise = RAISE_END * 0.5;
 		assert!(wave.raise_amount(mid_raise) > 0.4);
 		assert!(wave.wave_oscillation(mid_raise).abs() < 1e-4);
-		assert!(wave.humerus_along(Side::Right, PEAK).y > 0.8);
+		let along = wave.humerus_along(Side::Right, PEAK);
+		assert!(along.y > 0.5, "humerus still lifts, {along:?}");
+		assert!(along.y < 0.88, "humerus must not stand near vertical, {along:?}");
+		assert!(along.x < -0.35, "right humerus aims out on its own side, {along:?}");
 		Ok(())
 	}
 
@@ -189,6 +203,17 @@ mod tests {
 			(right.torso_turn(PEAK) + left.torso_turn(PEAK)).abs() < 1e-4,
 			"torso turn mirrors across sides"
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn victory_wave_humerus_aim_mirrors_outboard() -> anyhow::Result<()> {
+		let right = VictoryWave::new(Side::Right).humerus_along(Side::Right, PEAK);
+		let left = VictoryWave::new(Side::Left).humerus_along(Side::Left, PEAK);
+		assert!(right.x < -0.35, "right aim is own-side outboard, {right:?}");
+		assert!(left.x > 0.35, "left aim is own-side outboard, {left:?}");
+		assert!((right.x + left.x).abs() < 1e-4, "aim X mirrors, {right:?} vs {left:?}");
+		assert!((right.y - left.y).abs() < 1e-4, "aim Y matches, {right:?} vs {left:?}");
 		Ok(())
 	}
 }

@@ -64,16 +64,23 @@ fn jab_cover_elbow_tucks_in_y_not_as_a_roll() {
 }
 
 #[test]
-fn victory_wave_sweeps_overhead_arm_in_character_x() {
+fn victory_wave_sweeps_raised_forearm_in_character_x() {
 	let wave = VictoryWave::default();
 	let mut a = HumanoidV0Rig::for_clip_test();
 	let mut b = HumanoidV0Rig::for_clip_test();
-	wave.apply(&mut a, 0.42);
-	wave.apply(&mut b, 0.58);
-	let tip_a = a.character_point("forearm.R");
-	let tip_b = b.character_point("forearm.R");
-	assert!(tip_a.y > 0.35 && tip_b.y > 0.35, "wave stays overhead, {tip_a:?} {tip_b:?}");
+	wave.apply(&mut a, 0.442);
+	wave.apply(&mut b, 0.55);
+	let elbow_a = a.character_point("forearm.R");
+	let elbow_b = b.character_point("forearm.R");
+	let tip_a = elbow_a + a.character_length("forearm.R") * 0.48;
+	let tip_b = elbow_b + b.character_length("forearm.R") * 0.48;
+	let shoulder = a.character_point("humerus.R");
+	let humerus = elbow_a - shoulder;
+	assert!(humerus.x < -0.18, "right humerus stays outboard, not overhead, {humerus:?}");
+	assert!(humerus.y / humerus.length() < 0.88, "right humerus is not near vertical, {humerus:?}");
+	assert!(tip_a.y > 1.0 && tip_b.y > 1.0, "forearm stays raised, {tip_a:?} {tip_b:?}");
 	assert!((tip_a.x - tip_b.x).abs() > 0.06, "oscillation is lateral, {tip_a:?} vs {tip_b:?}");
+	assert!(tip_a.x < -0.05 && tip_b.x < -0.05, "right tip stays on its side, {tip_a:?} {tip_b:?}");
 }
 
 #[test]
