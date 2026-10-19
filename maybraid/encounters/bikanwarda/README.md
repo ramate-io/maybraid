@@ -1,0 +1,22 @@
+# Bikanwarda encounter outcomes
+
+Maps the chained Bikanwarda identity onto Lubikan unlocks. Progress lives in
+[`encounters`](../README.md). This crate does not generate world placement
+([#1116](https://github.com/ramate-io/maybraid/issues/1116) /
+[#1117](https://github.com/ramate-io/maybraid/issues/1117)) and does not depend
+on combat-hud.
+
+| Outcome | Unlock |
+|---------|--------|
+| Kill | Enraged (`LubikanDefinitionId` 1) |
+| Chain break / free | Ward (`LubikanDefinitionId` 2) |
+
+One occurrence awards exactly one of them. Duplicate signals do not add a
+second ledger account. Separate occurrences can award the other, so the
+inventory can hold both.
+
+After a free, this crate emits [`BikanwardaDeparted`](src/outcomes.rs) with
+`Transcend` (glow and leave). Kill uses ordinary death. No VFX here.
+
+Unlocks go through [`LubikanLedger::ensure_owned`](../../lubikans/src/ledger.rs)
+on the signal source. They do **not** clone [`LubikanSessionStore`](../../lubikans/src/plugin.rs).
