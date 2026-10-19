@@ -5,6 +5,7 @@
 //! This crate does not know about Self. Encounter placement, HCSG, and final
 //! VFX stay in their own lanes.
 
+mod adapter;
 mod cues;
 mod ids;
 mod parade;
@@ -13,8 +14,11 @@ mod plugin;
 mod presentation;
 mod recipes;
 
+pub use adapter::presentation_adapter_plugin;
 pub use cues::{
-	cue_plugin, is_bikanwarda_attack, EyeGlowCue, ImpactCue, ParadeExplosionCue, SpatialRumbleCue,
+	cue_plugin, is_bikanwarda_attack, BrayAnimationCue, BrayAnimationPhase, EyeGlowCue,
+	GodBeamVfxCue, ImpactCue, ParadeExplosionCue, SonicWaveVfxCue, SonicWaveVfxKind,
+	SpatialRumbleCue, SpatialRumblePreset,
 };
 pub use ids::{BRAY, GOD_BEAM, PARADE, PARADE_BLAST};
 pub use parade::{parade_plugin, ParadeClock};

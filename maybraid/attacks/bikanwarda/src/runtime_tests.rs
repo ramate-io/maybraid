@@ -15,8 +15,10 @@ use damage::{apply_hits, DamageApplied, Died, Health, Hit};
 use lod_avian::PhysicsInteractionLayer;
 
 use crate::{
-	BikanwardaAttackParams, BikanwardaAttacksPlugin, BikanwardaMouthSocket, EyeGlowCue, ImpactCue,
-	ParadeExplosionCue, ParadeParams, SpatialRumbleCue, BRAY, GOD_BEAM, PARADE, PARADE_BLAST,
+	BikanwardaAttackParams, BikanwardaAttacksPlugin, BikanwardaMouthSocket, BrayAnimationCue,
+	BrayAnimationPhase, EyeGlowCue, GodBeamVfxCue, ImpactCue, ParadeExplosionCue, ParadeParams,
+	SonicWaveVfxCue, SonicWaveVfxKind, SpatialRumbleCue, SpatialRumblePreset, BRAY, GOD_BEAM,
+	PARADE, PARADE_BLAST,
 };
 
 fn test_params() -> BikanwardaAttackParams {
@@ -219,6 +221,33 @@ fn god_beam_execution_is_ten_seconds_in_the_catalog() -> Result<()> {
 }
 
 #[test]
+fn god_beam_adapter_emits_vfx_and_eye_glow_cues() -> Result<()> {
+	let mut app = attack_app();
+	let owner = spawn_owner(&mut app, Vec3::ZERO);
+	let target = spawn_target(&mut app, Vec3::new(0.0, 1.0, -4.0), 200.0);
+	cast(&mut app, owner, GOD_BEAM, target, Vec3::new(0.0, 0.0, -4.0));
+	step(&mut app, 0.05);
+	let glow: Vec<EyeGlowCue> =
+		app.world_mut().resource_mut::<Messages<EyeGlowCue>>().drain().collect();
+	if !glow.iter().any(|cue| cue.active) {
+		return Err(anyhow!("windup must emit EyeGlowCue"));
+	}
+	step(&mut app, 0.2);
+	let beams: Vec<GodBeamVfxCue> =
+		app.world_mut().resource_mut::<Messages<GodBeamVfxCue>>().drain().collect();
+	let beam = beams
+		.last()
+		.ok_or_else(|| anyhow!("execute must emit GodBeamVfxCue"))?;
+	if (beam.diameter - 7.0).abs() >= 1e-3 {
+		return Err(anyhow!("expected 7 m diameter, got {}", beam.diameter));
+	}
+	if (beam.active_secs - 10.0).abs() >= 1e-3 {
+		return Err(anyhow!("expected 10 s active_secs"));
+	}
+	Ok(())
+}
+
+#[test]
 fn parade_walks_blasts_along_the_line() -> Result<()> {
 	let mut app = attack_app();
 	let owner = spawn_owner(&mut app, Vec3::ZERO);
@@ -288,6 +317,25 @@ fn bray_emits_mouth_waves_and_separate_cues() -> Result<()> {
 		app.world_mut().resource_mut::<Messages<ImpactCue>>().drain().collect();
 	if rumbles.is_empty() {
 		return Err(anyhow!("bray waves must dispatch SpatialRumbleCue"));
+	}
+	if !rumbles.iter().any(|cue| cue.preset == SpatialRumblePreset::BrayWave) {
+		return Err(anyhow!("wave rumble must use BrayWave preset"));
+	}
+	if !rumbles.iter().any(|cue| cue.preset == SpatialRumblePreset::HeavyLanding) {
+		return Err(anyhow!("ImpactCue must map to HeavyLanding SpatialRumbleCue"));
+	}
+	let sonic: Vec<SonicWaveVfxCue> =
+		app.world_mut().resource_mut::<Messages<SonicWaveVfxCue>>().drain().collect();
+	if !sonic.iter().any(|cue| matches!(cue.kind, SonicWaveVfxKind::Spawn { .. })) {
+		return Err(anyhow!("bray must emit SonicWaveVfxCue::Spawn"));
+	}
+	if !sonic.iter().any(|cue| matches!(cue.kind, SonicWaveVfxKind::Follow(_))) {
+		return Err(anyhow!("bray must emit SonicWaveVfxCue::Follow"));
+	}
+	let anims: Vec<BrayAnimationCue> =
+		app.world_mut().resource_mut::<Messages<BrayAnimationCue>>().drain().collect();
+	if !anims.iter().any(|cue| cue.phase == BrayAnimationPhase::Execute) {
+		return Err(anyhow!("bray execute must emit BrayAnimationCue"));
 	}
 	if impacts.is_empty() {
 		return Err(anyhow!("bray execute must dispatch a separate ImpactCue"));

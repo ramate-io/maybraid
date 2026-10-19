@@ -45,7 +45,7 @@ fn main() {
 		.insert_resource(CaptureIo::from_env())
 		.add_plugins(PhysicsPlugins::default())
 		.add_plugins(AttacksPlugin)
-		.add_plugins(BikanwardaAttacksPlugin::default())
+		.add_plugins(BikanwardaAttacksPlugin { placeholders: true })
 		.add_plugins(AttackPlaceholderPresentationPlugin)
 		.add_plugins(VfxPlugin)
 		.add_message::<DamageApplied>()

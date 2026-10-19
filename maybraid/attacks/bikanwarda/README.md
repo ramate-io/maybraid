@@ -13,7 +13,8 @@ Encounter / summon
         ▼
 attacks runtime          this crate
  windup → execute ──► Parade sequencer (emission blasts)
-        │             EyeGlow / SpatialRumble / Impact / ParadeExplosion cues
+        │             presentation adapter → lane cues (always)
+        │             optional placeholder meshes (debug)
         ▼
    damage::Hit            VFX / animation / rumble subscribers
 ```
@@ -35,6 +36,21 @@ summon needs a different `FriendlyFire`.
 
 Everything else is [`BikanwardaAttackParams::PLACEHOLDER`](src/params.rs) and is
 listed as an open question on the PR.
+
+## Presentation adapter
+
+[`presentation_adapter_plugin`](src/adapter.rs) maps [`AttackPresentationEvent`](../src/presentation.rs)
+to stable cues. Sibling lanes wire these without this crate depending on them:
+
+| Cue | Consumer (not in this crate yet) |
+| --- | --- |
+| [`GodBeamVfxCue`](src/cues.rs) / [`SonicWaveVfxCue`](src/cues.rs) | `maybraid-vfx` [#1150](https://github.com/ramate-io/maybraid/pull/1150) |
+| [`EyeGlowCue`](src/cues.rs) | character `EyeGlowControl` [#1152](https://github.com/ramate-io/maybraid/pull/1152) |
+| [`BrayAnimationCue`](src/cues.rs) | `AnimClip::EpiphantBray` [#1141](https://github.com/ramate-io/maybraid/pull/1141) |
+| [`SpatialRumbleCue`](src/cues.rs) / [`ImpactCue`](src/cues.rs) | `SpatialRumble` [#1146](https://github.com/ramate-io/maybraid/pull/1146) |
+
+[`placeholder_presentation_plugin`](src/presentation.rs) (eye spheres, head flick) is
+**opt-in** via `BikanwardaAttacksPlugin { placeholders: true }`.
 
 ```shell
 cargo test -p bikanwarda-attacks --all-targets

@@ -2,8 +2,8 @@
 //! rumble, and animation; they do not apply damage.
 
 use attacks::{
-	AttackId, AttackInstance, AttackInstanceId, AttackPresentationEvent, AttackPresentationKind,
-	AttackStage, AttackSystems, PresentationPhase,
+	AttackId, AttackInstance, AttackInstanceId, AttackStage, AttackSystems, PresentationPhase,
+	WavefrontPresentation,
 };
 use bevy::prelude::*;
 
@@ -18,6 +18,15 @@ pub struct ParadeExplosionCue {
 	pub radius: f32,
 }
 
+/// Preset for [#1146](https://github.com/ramate-io/maybraid/pull/1146) `SpatialRumble`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpatialRumblePreset {
+	BrayWave,
+	HeavyLanding,
+	/// Placeholder-authored radius / intensity / duration.
+	Authored,
+}
+
 /// Distance-attenuated rumble / shake request. Not a pad pulse by itself.
 #[derive(Message, Clone, Copy, Debug, PartialEq)]
 pub struct SpatialRumbleCue {
@@ -27,6 +36,38 @@ pub struct SpatialRumbleCue {
 	pub radius: f32,
 	pub intensity: f32,
 	pub duration: f32,
+	pub preset: SpatialRumblePreset,
+}
+
+impl SpatialRumbleCue {
+	pub fn bray_wave(
+		instance: AttackInstanceId,
+		owner: Entity,
+		origin: Vec3,
+		bray: &crate::BrayParams,
+	) -> Self {
+		Self {
+			instance,
+			owner,
+			origin,
+			radius: bray.rumble_radius,
+			intensity: bray.rumble_intensity,
+			duration: bray.rumble_secs,
+			preset: SpatialRumblePreset::BrayWave,
+		}
+	}
+
+	pub fn heavy_landing(instance: AttackInstanceId, owner: Entity, origin: Vec3) -> Self {
+		Self {
+			instance,
+			owner,
+			origin,
+			radius: 14.0,
+			intensity: 0.9,
+			duration: 0.38,
+			preset: SpatialRumblePreset::HeavyLanding,
+		}
+	}
 }
 
 /// Separate landing / stomp cue. [#1119](https://github.com/ramate-io/maybraid/issues/1119)
@@ -38,12 +79,78 @@ pub struct ImpactCue {
 	pub origin: Vec3,
 }
 
-/// Eye-glow on/off for God Beam. Sleep / cancel / despawn send `active: false`.
+/// Eye-glow for God Beam windup ([#1152](https://github.com/ramate-io/maybraid/pull/1152)).
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EyeGlowCue {
 	pub instance: AttackInstanceId,
 	pub owner: Entity,
 	pub active: bool,
+}
+
+impl EyeGlowCue {
+	pub fn god_beam_warning(instance: AttackInstanceId, owner: Entity) -> Self {
+		Self { instance, owner, active: true }
+	}
+
+	pub fn off(instance: AttackInstanceId, owner: Entity) -> Self {
+		Self { instance, owner, active: false }
+	}
+}
+
+/// Contract mirror for [#1150](https://github.com/ramate-io/maybraid/pull/1150) `god_beam`.
+#[derive(Message, Clone, Copy, Debug, PartialEq)]
+pub struct GodBeamVfxCue {
+	pub instance: AttackInstanceId,
+	pub owner: Entity,
+	pub phase: PresentationPhase,
+	pub hazard_index: usize,
+	pub ground: Vec3,
+	/// Column **diameter** in meters (`2 *` gameplay cylinder radius).
+	pub diameter: f32,
+	pub gameplay_height: f32,
+	pub active_secs: f32,
+}
+
+/// Contract mirror for [#1150](https://github.com/ramate-io/maybraid/pull/1150) `sonic_wave`.
+#[derive(Message, Clone, Copy, Debug, PartialEq)]
+pub struct SonicWaveVfxCue {
+	pub instance: AttackInstanceId,
+	pub owner: Entity,
+	pub phase: PresentationPhase,
+	pub hazard_index: usize,
+	pub kind: SonicWaveVfxKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SonicWaveVfxKind {
+	Spawn {
+		origin: Vec3,
+		range: f32,
+		speed: f32,
+		radius: f32,
+		thickness: f32,
+		wave_count: u8,
+		interval: f32,
+		pitch: f32,
+	},
+	Follow(WavefrontPresentation),
+	Despawn,
+}
+
+/// Contract mirror for [#1141](https://github.com/ramate-io/maybraid/pull/1141) Epiphant Bray clip.
+#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BrayAnimationCue {
+	pub instance: AttackInstanceId,
+	pub owner: Entity,
+	pub phase: BrayAnimationPhase,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BrayAnimationPhase {
+	Windup,
+	Execute,
+	Recover,
+	Cancelled,
 }
 
 #[derive(Component, Clone, Copy, Debug)]
@@ -56,67 +163,15 @@ pub fn cue_plugin(app: &mut App) {
 		.add_message::<SpatialRumbleCue>()
 		.add_message::<ImpactCue>()
 		.add_message::<EyeGlowCue>()
+		.add_message::<GodBeamVfxCue>()
+		.add_message::<SonicWaveVfxCue>()
+		.add_message::<BrayAnimationCue>()
 		.add_systems(
 			Update,
-			(emit_presentation_cues, arm_bray_impact, fire_bray_impact)
+			(arm_bray_impact, fire_bray_impact, impact_to_spatial_rumble)
 				.chain()
 				.after(AttackSystems::Advance),
 		);
-}
-
-fn emit_presentation_cues(
-	params: Res<BikanwardaAttackParams>,
-	mut events: MessageReader<AttackPresentationEvent>,
-	mut explosions: MessageWriter<ParadeExplosionCue>,
-	mut rumbles: MessageWriter<SpatialRumbleCue>,
-	mut glow: MessageWriter<EyeGlowCue>,
-) {
-	for event in events.read() {
-		match event.kind {
-			AttackPresentationKind::Hazard { phase: PresentationPhase::Spawned, pose, .. }
-				if event.definition == PARADE_BLAST =>
-			{
-				explosions.write(ParadeExplosionCue {
-					instance: event.instance,
-					owner: event.owner,
-					position: pose.origin,
-					radius: params.parade.blast_radius,
-				});
-			}
-			AttackPresentationKind::Hazard {
-				phase: PresentationPhase::Spawned,
-				pose,
-				wave: Some(_),
-				..
-			} if event.definition == BRAY => {
-				rumbles.write(SpatialRumbleCue {
-					instance: event.instance,
-					owner: event.owner,
-					origin: pose.origin,
-					radius: params.bray.rumble_radius,
-					intensity: params.bray.rumble_intensity,
-					duration: params.bray.rumble_secs,
-				});
-			}
-			AttackPresentationKind::Stage { to: AttackStage::Windup, .. }
-				if event.definition == GOD_BEAM =>
-			{
-				glow.write(EyeGlowCue {
-					instance: event.instance,
-					owner: event.owner,
-					active: true,
-				});
-			}
-			AttackPresentationKind::Ended { .. } if event.definition == GOD_BEAM => {
-				glow.write(EyeGlowCue {
-					instance: event.instance,
-					owner: event.owner,
-					active: false,
-				});
-			}
-			_ => {}
-		}
-	}
 }
 
 fn arm_bray_impact(
@@ -135,7 +190,7 @@ fn arm_bray_impact(
 
 fn fire_bray_impact(
 	instances: Query<(&AttackInstance, &BrayImpactArmed)>,
-	mut fired: Local<Vec<attacks::AttackInstanceId>>,
+	mut fired: Local<Vec<AttackInstanceId>>,
 	mut cues: MessageWriter<ImpactCue>,
 ) {
 	fired.retain(|id| instances.iter().any(|(instance, _)| instance.id == *id));
@@ -152,6 +207,19 @@ fn fire_bray_impact(
 			origin: instance.snapshot.origin,
 		});
 		fired.push(instance.id);
+	}
+}
+
+fn impact_to_spatial_rumble(
+	mut impacts: MessageReader<ImpactCue>,
+	mut rumbles: MessageWriter<SpatialRumbleCue>,
+) {
+	for impact in impacts.read() {
+		rumbles.write(SpatialRumbleCue::heavy_landing(
+			impact.instance,
+			impact.owner,
+			impact.origin,
+		));
 	}
 }
 
