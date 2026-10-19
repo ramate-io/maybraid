@@ -70,10 +70,10 @@ impl Default for SamplingSettings {
 	}
 }
 
-/// Interned complete parameter set. Equality is by stored values, not hash alone.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ClipParametersId(pub u32);
-
+/// Finite, signed-zero-normalized parameter bits for a cacheable clip.
+///
+/// Equality is by these stored bits, not hash alone. The preparation key
+/// holds this value directly — there is no interned ID layer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ClipParametersKey {
 	Idle { arm_hang: u32, elbow_hang: u32, arm_sway: u32, neck_roll: u32, hip_shift: u32 },
@@ -113,7 +113,7 @@ impl ClipParametersKey {
 pub struct ClipVariantKey {
 	pub clip_id: crate::clip::AnimId,
 	pub clip_revision: u64,
-	pub parameters_id: ClipParametersId,
+	pub parameters: ClipParametersKey,
 	pub rig_variant: RigVariantId,
 	pub sample_interval_us: u32,
 }
@@ -257,48 +257,17 @@ pub struct AnimClipCacheStats {
 	pub misses: u64,
 	pub evaluations: u64,
 	pub variants: usize,
-	pub interned_parameters: usize,
 	pub samples: usize,
 }
 
-struct ParameterRegistry {
-	by_value: HashMap<ClipParametersKey, ClipParametersId>,
-	by_id: Vec<ClipParametersKey>,
-}
-
-impl ParameterRegistry {
-	fn intern(&mut self, key: ClipParametersKey) -> ClipParametersId {
-		if let Some(&id) = self.by_value.get(&key) {
-			return id;
-		}
-		let id = ClipParametersId(self.by_id.len() as u32);
-		self.by_value.insert(key, id);
-		self.by_id.push(key);
-		id
-	}
-
-	fn get(&self, key: &ClipParametersKey) -> Option<ClipParametersId> {
-		self.by_value.get(key).copied()
-	}
-
-	fn stored_eq(&self, id: ClipParametersId, key: &ClipParametersKey) -> bool {
-		self.by_id.get(id.0 as usize).is_some_and(|stored| stored == key)
-	}
-}
-
 struct CacheInner {
-	params: ParameterRegistry,
 	variants: HashMap<ClipVariantKey, Arc<CachedClip>>,
 	order: Vec<ClipVariantKey>,
 }
 
 impl CacheInner {
 	fn new() -> Self {
-		Self {
-			params: ParameterRegistry { by_value: HashMap::new(), by_id: Vec::new() },
-			variants: HashMap::new(),
-			order: Vec::new(),
-		}
+		Self { variants: HashMap::new(), order: Vec::new() }
 	}
 }
 
@@ -332,20 +301,6 @@ impl AnimClipCache {
 		self.inner.write().unwrap_or_else(|poisoned| poisoned.into_inner())
 	}
 
-	pub fn intern(&self, key: ClipParametersKey) -> ClipParametersId {
-		{
-			let inner = self.lock_read();
-			if let Some(id) = inner.params.get(&key) {
-				return id;
-			}
-		}
-		self.lock_write().params.intern(key)
-	}
-
-	pub fn parameters_eq(&self, id: ClipParametersId, key: &ClipParametersKey) -> bool {
-		self.lock_read().params.stored_eq(id, key)
-	}
-
 	/// Build or reuse a prepared table. Hashing and evaluation happen here, not on warm sample.
 	pub fn prepare(
 		&self,
@@ -360,11 +315,10 @@ impl AnimClipCache {
 			return None;
 		}
 		let parameters = parameters_key(clip)?;
-		let parameters_id = self.intern(parameters);
 		let variant = ClipVariantKey {
 			clip_id: clip.id(),
 			clip_revision: clip.revision(),
-			parameters_id,
+			parameters,
 			rig_variant,
 			sample_interval_us: sampling.sample_interval_us,
 		};
@@ -411,7 +365,6 @@ impl AnimClipCache {
 			misses: self.misses.load(Ordering::Relaxed),
 			evaluations: self.evaluations.load(Ordering::Relaxed),
 			variants: inner.variants.len(),
-			interned_parameters: inner.params.by_id.len(),
 			samples: inner.variants.values().map(|clip| clip.sample_count()).sum(),
 		}
 	}
@@ -563,8 +516,7 @@ mod tests {
 	}
 
 	#[test]
-	fn intern_compares_complete_values_and_signed_zero() -> anyhow::Result<()> {
-		let cache = AnimClipCache::default();
+	fn parameter_keys_compare_complete_values_and_signed_zero() -> anyhow::Result<()> {
 		let walk = Walk { stride: 0.0, bounce: 1.0, rotation: 1.0 };
 		let signed_zero = Walk { stride: -0.0, bounce: 1.0, rotation: 1.0 };
 		let other = Walk { stride: 0.8, bounce: 1.0, rotation: 1.0 };
@@ -572,15 +524,32 @@ mod tests {
 		let z =
 			ClipParametersKey::walk(&signed_zero).ok_or_else(|| anyhow::anyhow!("signed zero"))?;
 		let b = ClipParametersKey::walk(&other).ok_or_else(|| anyhow::anyhow!("other walk"))?;
-		let id_a = cache.intern(a);
-		if id_a != cache.intern(z) {
-			anyhow::bail!("signed zero must intern with +0");
+		if a != z {
+			anyhow::bail!("signed zero must compare equal after finite_parameter_bits");
 		}
-		if id_a == cache.intern(b) {
-			anyhow::bail!("different strides must not share a parameters id");
+		if a == b {
+			anyhow::bail!("different strides must not share a parameters key");
 		}
-		if !cache.parameters_eq(id_a, &a) || cache.parameters_eq(id_a, &b) {
-			anyhow::bail!("intern identity must compare stored values");
+
+		let cache = AnimClipCache::default();
+		let plus_zero = cache
+			.prepare(AnimClip::Walk(walk), RigVariantId::HUMANOID_V0, cache.settings.sampling)
+			.ok_or_else(|| anyhow::anyhow!("+0 walk"))?;
+		let minus_zero = cache
+			.prepare(
+				AnimClip::Walk(signed_zero),
+				RigVariantId::HUMANOID_V0,
+				cache.settings.sampling,
+			)
+			.ok_or_else(|| anyhow::anyhow!("-0 walk"))?;
+		let long = cache
+			.prepare(AnimClip::Walk(other), RigVariantId::HUMANOID_V0, cache.settings.sampling)
+			.ok_or_else(|| anyhow::anyhow!("other walk"))?;
+		if !plus_zero.ptr_eq(&minus_zero) {
+			anyhow::bail!("signed zero must share a prepared table via full key equality");
+		}
+		if plus_zero.ptr_eq(&long) {
+			anyhow::bail!("different strides must not share a prepared table");
 		}
 		Ok(())
 	}
