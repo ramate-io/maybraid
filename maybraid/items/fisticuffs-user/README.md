@@ -69,12 +69,14 @@ slot is the combo-graph hook.
 
 `AttackState` owns time, side, and the latched [`JabAim`](src/aim.rs). During
 the active window the crate emits [`FisticuffsStrike`](src/lib.rs)
-(`attacker`, `side`, `kind`, clip `progress`, quantized `target`) and spawns a
-short-lived fist / forearm [`Sensor`](src/sensor.rs) posed from the character
-and aim. Overlap is resolved with `SpatialQuery` (same class as grenade blasts
-and skill-map bursts) and written as
+(`attacker`, `side`, `kind`, `combo_step`, clip `progress`, quantized `target`)
+and spawns a short-lived fist / forearm [`Sensor`](src/sensor.rs) posed from the
+character and aim. Overlap is resolved with `SpatialQuery` (same class as grenade
+blasts and skill-map bursts) and written as
 `damage::Hit { source: Some(attacker), allow_self: false, amount: PLACEHOLDER_JAB_DAMAGE }`.
 [`HitCapsule`](../../player/src/hit.rs) stays receive-only.
+[`maybraid-audio`](../../audio/) plays a short effort grunt on that event (combo
+variants, seeded pitch jitter, `Voices` bus).
 
 The sensor exists **only** while [`AttackPhase::Active`](src/attack.rs). Cancel,
 weapon swap (`FisticuffsUser` removed), death / `Downed`, and pause (world

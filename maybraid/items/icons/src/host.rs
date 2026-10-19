@@ -296,115 +296,6 @@ pub fn pose_representative_hosts(
 	}
 }
 
-pub fn mark_capture_hosts_ready(
-	mut commands: Commands,
-	hosts: Query<
-		(Entity, &CaptureHostRoot),
-		(With<CaptureHostRealized>, Without<CaptureHostReady>),
-	>,
-	children: Query<&Children>,
-	pending: Query<
-		(),
-		Or<(
-			With<LodLevelSpawnRequest>,
-			With<LodLevelRootPending>,
-			With<PendingCharacterAssembly>,
-			With<HiddenUntilSceneReady>,
-		)>,
-	>,
-	meshes: Query<Entity, (With<Mesh3d>, Allow<Disabled>)>,
-	applied: Query<(), With<MaterialRefApplied>>,
-	standard: Query<(), With<MeshMaterial3d<StandardMaterial>>>,
-	clothing: Query<(), With<MeshMaterial3d<ClothingShaderMaterial>>>,
-	faces: Query<(), With<MeshMaterial3d<FaceShaderMaterial>>>,
-	grenades: Query<(), With<MeshMaterial3d<GrenadeMaterial>>>,
-	poses: Query<(), With<ActiveRigPose>>,
-	posed: Query<(), With<PoseApplied>>,
-	pose_specs: Query<(), With<CapturePoseSpec>>,
-	mailboxes: Query<&AnimMailbox>,
-	pending_scene: Query<(), (With<SceneRefRoot>, Without<WorldAssetRoot>)>,
-	bind_pose: Query<(), Or<(With<SelfLubikanBindPose>, With<FisticuffsArmsBindPose>)>>,
-) {
-	for (root, host) in &hosts {
-		if (host.kind == HOST_SELF_LUBIKAN || host.kind == HOST_FISTICUFFS_ARMS)
-			&& bind_pose.get(root).is_err()
-		{
-			continue;
-		}
-		if host_tree_ready(
-			root,
-			&children,
-			&pending,
-			&meshes,
-			&applied,
-			&standard,
-			&clothing,
-			&faces,
-			&grenades,
-			&poses,
-			&posed,
-			pose_specs.get(root).is_ok(),
-			&mailboxes,
-			&pending_scene,
-		) {
-			if pose_specs.get(root).is_ok() {
-				info!(root = ?root, "pose capture host ready");
-			}
-			commands.entity(root).try_insert(CaptureHostReady);
-		}
-	}
-}
-
-/// Strip clothing/face/grenade shaders and keep the tree extractable. Clothing
-/// and face shaders restamp in Update (`MaterialRefApplied` still counts as
-/// painted). Grenades do not, so they get a [`StandardMaterial`] stand-in;
-/// capture restamps unlit gray through settle/readback.
-pub fn prepare_silhouette_hosts(
-	mut commands: Commands,
-	mut standard_materials: Option<ResMut<Assets<StandardMaterial>>>,
-	roots: Query<Entity, With<CaptureSilhouetteRoot>>,
-	children: Query<&Children>,
-	clothing: Query<Entity, With<MeshMaterial3d<ClothingShaderMaterial>>>,
-	faces: Query<Entity, With<MeshMaterial3d<FaceShaderMaterial>>>,
-	grenades: Query<Entity, With<MeshMaterial3d<GrenadeMaterial>>>,
-) {
-	for root in &roots {
-		visit_descendants(root, &children, &mut |entity| {
-			if clothing.get(entity).is_ok() {
-				commands.entity(entity).try_remove::<MeshMaterial3d<ClothingShaderMaterial>>();
-			}
-			if faces.get(entity).is_ok() {
-				commands.entity(entity).try_remove::<MeshMaterial3d<FaceShaderMaterial>>();
-			}
-			if grenades.get(entity).is_ok() {
-				commands.entity(entity).try_remove::<MeshMaterial3d<GrenadeMaterial>>();
-				if let Some(materials) = standard_materials.as_mut() {
-					commands.entity(entity).try_insert(MeshMaterial3d(materials.add(
-						StandardMaterial { perceptual_roughness: 0.6, ..Default::default() },
-					)));
-				}
-			}
-		});
-	}
-}
-
-pub fn keep_capture_hosts_visible(
-	mut commands: Commands,
-	roots: Query<Entity, With<CaptureHostRoot>>,
-	children: Query<&Children>,
-	hidden: Query<(), Or<(With<Disabled>, With<Visibility>)>>,
-) {
-	for root in &roots {
-		visit_descendants(root, &children, &mut |entity| {
-			if hidden.get(entity).is_err() {
-				return;
-			}
-			commands.entity(entity).try_remove::<Disabled>();
-			commands.entity(entity).try_insert(Visibility::Inherited);
-		});
-	}
-}
-
 fn spawn_pose_host(commands: &mut Commands, root: Entity) -> bool {
 	let preview = BraidmanConfig::default_preview().clothed();
 	let entity = spawn_fixed_character_assembly(commands, &preview, Transform::IDENTITY);
@@ -471,6 +362,112 @@ fn drain_capture_pose_assemblies(world: &mut World) {
 		return;
 	}
 	drain_character_assembly_now(world, roots);
+}
+
+pub fn mark_capture_hosts_ready(
+	mut commands: Commands,
+	hosts: Query<
+		(Entity, &CaptureHostRoot),
+		(With<CaptureHostRealized>, Without<CaptureHostReady>),
+	>,
+	children: Query<&Children>,
+	pending: Query<
+		(),
+		Or<(
+			With<LodLevelSpawnRequest>,
+			With<LodLevelRootPending>,
+			With<PendingCharacterAssembly>,
+			With<HiddenUntilSceneReady>,
+		)>,
+	>,
+	meshes: Query<Entity, (With<Mesh3d>, Allow<Disabled>)>,
+	applied: Query<(), With<MaterialRefApplied>>,
+	standard: Query<(), With<MeshMaterial3d<StandardMaterial>>>,
+	clothing: Query<(), With<MeshMaterial3d<ClothingShaderMaterial>>>,
+	faces: Query<(), With<MeshMaterial3d<FaceShaderMaterial>>>,
+	grenades: Query<(), With<MeshMaterial3d<GrenadeMaterial>>>,
+	poses: Query<(), With<ActiveRigPose>>,
+	posed: Query<(), With<PoseApplied>>,
+	pose_specs: Query<(), With<CapturePoseSpec>>,
+	mailboxes: Query<&AnimMailbox>,
+	pending_scene: Query<(), (With<SceneRefRoot>, Without<WorldAssetRoot>)>,
+	bind_pose: Query<(), Or<(With<SelfLubikanBindPose>, With<FisticuffsArmsBindPose>)>>,
+) {
+	for (root, host) in &hosts {
+		if (host.kind == HOST_SELF_LUBIKAN || host.kind == HOST_FISTICUFFS_ARMS)
+			&& bind_pose.get(root).is_err()
+		{
+			continue;
+		}
+		if host_tree_ready(
+			root,
+			&children,
+			&pending,
+			&meshes,
+			&applied,
+			&standard,
+			&clothing,
+			&faces,
+			&grenades,
+			&poses,
+			&posed,
+			pose_specs.get(root).is_ok(),
+			&mailboxes,
+			&pending_scene,
+		) {
+			commands.entity(root).try_insert(CaptureHostReady);
+		}
+	}
+}
+
+/// Strip clothing/face/grenade shaders and keep the tree extractable. Clothing
+/// and face shaders restamp in Update (`MaterialRefApplied` still counts as
+/// painted). Grenades do not, so they get a [`StandardMaterial`] stand-in;
+/// capture restamps unlit gray through settle/readback.
+pub fn prepare_silhouette_hosts(
+	mut commands: Commands,
+	mut standard_materials: Option<ResMut<Assets<StandardMaterial>>>,
+	roots: Query<Entity, With<CaptureSilhouetteRoot>>,
+	children: Query<&Children>,
+	clothing: Query<Entity, With<MeshMaterial3d<ClothingShaderMaterial>>>,
+	faces: Query<Entity, With<MeshMaterial3d<FaceShaderMaterial>>>,
+	grenades: Query<Entity, With<MeshMaterial3d<GrenadeMaterial>>>,
+) {
+	for root in &roots {
+		visit_descendants(root, &children, &mut |entity| {
+			if clothing.get(entity).is_ok() {
+				commands.entity(entity).try_remove::<MeshMaterial3d<ClothingShaderMaterial>>();
+			}
+			if faces.get(entity).is_ok() {
+				commands.entity(entity).try_remove::<MeshMaterial3d<FaceShaderMaterial>>();
+			}
+			if grenades.get(entity).is_ok() {
+				commands.entity(entity).try_remove::<MeshMaterial3d<GrenadeMaterial>>();
+				if let Some(materials) = standard_materials.as_mut() {
+					commands.entity(entity).try_insert(MeshMaterial3d(materials.add(
+						StandardMaterial { perceptual_roughness: 0.6, ..Default::default() },
+					)));
+				}
+			}
+		});
+	}
+}
+
+pub fn keep_capture_hosts_visible(
+	mut commands: Commands,
+	roots: Query<Entity, With<CaptureHostRoot>>,
+	children: Query<&Children>,
+	hidden: Query<(), Or<(With<Disabled>, With<Visibility>)>>,
+) {
+	for root in &roots {
+		visit_descendants(root, &children, &mut |entity| {
+			if hidden.get(entity).is_err() {
+				return;
+			}
+			commands.entity(entity).try_remove::<Disabled>();
+			commands.entity(entity).try_insert(Visibility::Inherited);
+		});
+	}
 }
 
 fn spawn_item_host(
@@ -1028,11 +1025,6 @@ mod tests {
 		let domain = LodRefreshDomain::of::<CaptureHostRoot>();
 		assert_eq!(domain, LodRefreshDomain::of::<CaptureHostRoot>());
 		assert_ne!(domain, LodRefreshDomain::of::<GeneratedFirearm>());
-	}
-
-	#[test]
-	fn representative_pose_host_kind_is_stable() {
-		assert_eq!(HOST_REPRESENTATIVE_POSE, "representative-pose");
 	}
 
 	#[test]

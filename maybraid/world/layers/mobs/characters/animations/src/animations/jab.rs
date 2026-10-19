@@ -331,7 +331,7 @@ mod tests {
 	}
 
 	fn peak() -> f32 {
-		Jab::representative_progress()
+		(EXTEND_END + HOLD_END) * 0.5
 	}
 
 	fn forearm_hand_tip(rig: &HumanoidV0Rig, side: Side) -> Vec3 {

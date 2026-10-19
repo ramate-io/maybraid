@@ -70,6 +70,7 @@ pub(crate) fn tick_attack_state(
 					attacker,
 					side: spec.side,
 					kind: spec.kind,
+					combo_step: user.state.combo_step(),
 					progress,
 					target: user.state.aim().map(|aim| aim.target).unwrap_or(DEFAULT_JAB_TARGET),
 				});

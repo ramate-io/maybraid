@@ -109,7 +109,11 @@ pub fn fist_collider() -> Collider {
 
 fn xz_forward(heading: Vec3) -> Vec3 {
 	let planar = Vec3::new(heading.x, 0.0, heading.z);
-	if planar.length_squared() < 1e-8 { -Vec3::Z } else { planar.normalize() }
+	if planar.length_squared() < 1e-8 {
+		-Vec3::Z
+	} else {
+		planar.normalize()
+	}
 }
 
 fn heading_of(
@@ -367,10 +371,10 @@ pub fn draw_fist_sensors(
 mod tests {
 	use super::*;
 	use crate::{AttackSpec, AttackTiming, JAB_STARTUP_END};
-	use anyhow::{Result, anyhow};
+	use anyhow::{anyhow, Result};
 	use bevy::ecs::system::RunSystemOnce;
 	use character_animations::animations::DEFAULT_JAB_TARGET;
-	use damage::{DamageApplied, Died, apply_hits};
+	use damage::{apply_hits, DamageApplied, Died};
 	use player::Player;
 
 	fn jab_dt(progress: f32) -> f32 {

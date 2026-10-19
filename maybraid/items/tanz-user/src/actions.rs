@@ -183,7 +183,7 @@ mod tests {
 	fn dash_speed_windows_match_power_dash_clip() {
 		assert_eq!(DASH_COMPRESS_END, character_animations::animations::COMPRESS_END);
 		assert_eq!(DASH_PUSH_END, character_animations::animations::PUSH_END);
-		assert_eq!(DASH_HOLD_END, character_animations::animations::power_dash::HOLD_END);
+		assert_eq!(DASH_HOLD_END, character_animations::animations::POWER_DASH_HOLD_END);
 		assert_eq!(DASH_BRAKE_END, character_animations::animations::BRAKE_END);
 	}
 

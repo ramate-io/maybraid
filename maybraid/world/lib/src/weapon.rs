@@ -1,27 +1,27 @@
 //! Starter held kit for the vegetation player capsule.
 
 use bevy::prelude::*;
-use character_inventory_user::{InventoryUser, spawn_bag};
+use character_inventory_user::{spawn_bag, InventoryUser};
 use character_items::{CharacterSheet, Inventory, InventoryItem};
 use characters::{CharacterAppearance, CharacterRoot};
 use damage::Health;
 use firearm_user::{
-	FirearmUser, FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
-	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle,
+	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle, FirearmUser,
+	FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
 };
 use fisticuffs_user::FisticuffsUser;
-use grenade_user::{GrenadeThrow, GrenadeUser, GrenadeUserSettings, spawn_held_grenade};
+use grenade_user::{spawn_held_grenade, GrenadeThrow, GrenadeUser, GrenadeUserSettings};
 use grenades::GrenadeDetonated;
 use maybraid_character_controller::{
 	CharacterControlSystems, CharacterIntent, InventoryCyclingCategory,
 };
 
 use crate::inventory_cycling::ActiveInventoryCyclingCategory;
-use maybraid_skill_map::{SkillMapEquip, SkillMapSystems, spawn_skill_maps};
+use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
 use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
 use player::{
-	CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook, PlayerSystems, PlayerUse,
-	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner, apply_character_mobility,
+	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
+	PlayerOpticAds, PlayerSystems, PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
 };
 use tanz_user::{spawn_tanz_user, TanzUser};
 use world_player::{
@@ -230,9 +230,15 @@ pub(crate) fn teardown_held_weapon(
 	if let Some(grenade) = grenade {
 		commands.entity(grenade.held).try_despawn();
 	}
-	commands
-		.entity(player)
-		.remove::<(FirearmUser, GrenadeUser, GrenadeThrow, PlayerUse, FisticuffsUser)>();
+	commands.entity(player).remove::<(
+		FirearmUser,
+		GrenadeUser,
+		GrenadeThrow,
+		PlayerUse,
+		PlayerOpticAds,
+		FisticuffsUser,
+	)>();
+	commands.entity(player).insert(PlayerCameraAim::default());
 }
 
 /// Start the holster motion; the kit changes at the dip.
@@ -458,9 +464,9 @@ mod tests {
 		RequestSetCharacterAppearance,
 	};
 
-	use crate::WorldGameplayEnabled;
 	use crate::inventory_cycling::ActiveInventoryCyclingCategory;
-	use crate::weapon::{WorldPlayerAppearanceRequested, WorldPlayerLoadout, arm_world_player};
+	use crate::weapon::{arm_world_player, WorldPlayerAppearanceRequested, WorldPlayerLoadout};
+	use crate::WorldGameplayEnabled;
 
 	#[test]
 	fn world_loadout_keeps_primary_weapon_and_worn_clothing() {
@@ -576,7 +582,7 @@ mod tests {
 		use maybraid_character_controller::{CharacterIntent, InventoryCyclingCategory};
 
 		use crate::inventory_cycling::{
-			ActiveInventoryCyclingCategory, apply_inventory_category_selection,
+			apply_inventory_category_selection, ActiveInventoryCyclingCategory,
 		};
 		use crate::weapon::begin_weapon_swap;
 
@@ -696,7 +702,7 @@ mod tests {
 	#[test]
 	fn reverse_queue_commits_through_weapon_swap() -> anyhow::Result<()> {
 		use character_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WEAPON_SWAP_SECS, WeaponSwap};
+		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
 
 		use crate::weapon::commit_weapon_swap;
 
@@ -736,7 +742,7 @@ mod tests {
 	#[test]
 	fn y_swaps_the_queued_primary() -> anyhow::Result<()> {
 		use character_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WEAPON_SWAP_SECS, WeaponSwap};
+		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
 
 		use crate::weapon::commit_weapon_swap;
 
@@ -806,6 +812,43 @@ mod tests {
 	}
 
 	#[test]
+	fn teardown_clears_stale_sight_aim() -> anyhow::Result<()> {
+		use firearm_user::FirearmUser;
+		use player::{PlayerCameraAim, PlayerCameraPose};
+
+		let mut world = World::new();
+		let held = world.spawn_empty().id();
+		let player = world
+			.spawn((
+				FirearmUser::holding(held),
+				PlayerCameraAim {
+					focus: 1.0,
+					pose: Some(PlayerCameraPose {
+						translation: Vec3::ONE,
+						rotation: Quat::IDENTITY,
+					}),
+					sight_fov: Some(0.2),
+				},
+			))
+			.id();
+		world
+			.run_system_once(move |mut commands: Commands| {
+				crate::weapon::teardown_held_weapon(
+					&mut commands,
+					player,
+					Some(&FirearmUser::holding(held)),
+					None,
+				);
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let aim = world.get::<PlayerCameraAim>(player).expect("aim");
+		assert_eq!(aim.focus, 0.0);
+		assert!(aim.pose.is_none());
+		assert!(aim.sight_fov.is_none());
+		Ok(())
+	}
+
+	#[test]
 	fn fisticuffs_primary_inserts_the_driver_without_a_held_mesh() -> anyhow::Result<()> {
 		use fisticuffs_user::FisticuffsUser;
 
@@ -857,7 +900,7 @@ mod tests {
 	#[test]
 	fn fisticuffs_to_gun_swap_commits_without_a_firearm_user() -> anyhow::Result<()> {
 		use character_inventory_user::InventoryUser;
-		use firearm_user::{WEAPON_SWAP_SECS, WeaponSwap};
+		use firearm_user::{WeaponSwap, WEAPON_SWAP_SECS};
 		use fisticuffs_user::FisticuffsUser;
 
 		use crate::weapon::commit_weapon_swap;
@@ -906,7 +949,7 @@ mod tests {
 	#[test]
 	fn gun_to_fisticuffs_swap_commits_the_driver() -> anyhow::Result<()> {
 		use character_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WEAPON_SWAP_SECS, WeaponSwap};
+		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
 		use fisticuffs_user::FisticuffsUser;
 		use player::Player as MaybraidPlayer;
 
@@ -997,7 +1040,7 @@ mod tests {
 
 	#[test]
 	fn pause_cancels_an_active_jab_so_the_sensor_can_tear_down() -> anyhow::Result<()> {
-		use fisticuffs_user::{AttackSpec, FisticuffsHitSensor, FisticuffsUser, sync_fist_sensors};
+		use fisticuffs_user::{sync_fist_sensors, AttackSpec, FisticuffsHitSensor, FisticuffsUser};
 		use player::Player as MaybraidPlayer;
 
 		use crate::weapon::cancel_fisticuffs_when_paused;
@@ -1041,7 +1084,7 @@ mod tests {
 	#[test]
 	fn swap_off_fisticuffs_despawns_the_fist_sensor() -> anyhow::Result<()> {
 		use character_inventory_user::InventoryUser;
-		use fisticuffs_user::{AttackSpec, FisticuffsHitSensor, FisticuffsUser, sync_fist_sensors};
+		use fisticuffs_user::{sync_fist_sensors, AttackSpec, FisticuffsHitSensor, FisticuffsUser};
 		use player::Player as MaybraidPlayer;
 
 		use crate::weapon::sync_fisticuffs_driver;
@@ -1186,7 +1229,7 @@ mod tests {
 		use maybraid_skill_map::SkillMapEquip;
 
 		use crate::inventory_cycling::{
-			ActiveInventoryCyclingCategory, cycle_equipped_inventory_queues,
+			cycle_equipped_inventory_queues, ActiveInventoryCyclingCategory,
 		};
 		use crate::weapon::sync_skill_map_equip;
 
@@ -1245,8 +1288,8 @@ mod tests {
 		use character_items::GrenadeStats;
 		use grenades::{GrenadeDetonated, GrenadeEffect};
 		use maybraid_vfx::{
-			EffectDefinition, FIERY_EXPLOSION, FlipbookAsset, ScaleBounds, VfxFlipbooks,
-			VfxInstance, VfxLibrary,
+			EffectDefinition, FlipbookAsset, ScaleBounds, VfxFlipbooks, VfxInstance, VfxLibrary,
+			FIERY_EXPLOSION,
 		};
 
 		let mut world = World::new();

@@ -4627,6 +4627,7 @@ dependencies = [
  "characters",
  "damage",
  "lod-avian",
+ "maybraid-audio",
  "maybraid-character-controller",
  "maybraid-input",
  "player",
@@ -5236,7 +5237,7 @@ dependencies = [
 
 [[package]]
 name = "gimme-bench-support"
-version = "0.1.3"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
@@ -7151,7 +7152,7 @@ dependencies = [
 
 [[package]]
 name = "maybraid-world-controller"
-version = "0.1.3"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",

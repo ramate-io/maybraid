@@ -182,7 +182,7 @@ impl Plugin for ItemIconPlugin {
 			.add_systems(Update, prune::prune_icon_cache_on_request)
 			.add_systems(
 				Update,
-				(store_completed_icons, store_failed_icons, log_pose_icon_events)
+				(store_completed_icons, store_failed_icons)
 					.chain()
 					.in_set(ItemIconSystems::Store),
 			)
@@ -454,34 +454,6 @@ fn store_completed_icons(
 fn store_failed_icons(mut failed: MessageReader<CaptureFailed>, mut cache: ResMut<ItemIconCache>) {
 	for event in failed.read() {
 		cache.mark_failed(event.key.id.clone(), event.key.mode);
-	}
-}
-
-fn log_pose_icon_events(
-	mut completed: MessageReader<CaptureCompleted>,
-	mut failed: MessageReader<CaptureFailed>,
-) {
-	for event in completed.read() {
-		if !event.key.id.as_str().starts_with("pose:") {
-			continue;
-		}
-		info!(
-			id = %event.key.id.as_str(),
-			source = ?event.source,
-			file = %event.key.file_name(),
-			"pose icon ready"
-		);
-	}
-	for event in failed.read() {
-		if !event.key.id.as_str().starts_with("pose:") {
-			continue;
-		}
-		warn!(
-			id = %event.key.id.as_str(),
-			error = %event.error,
-			file = %event.key.file_name(),
-			"pose icon failed"
-		);
 	}
 }
 

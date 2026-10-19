@@ -14,8 +14,8 @@
 use bevy::prelude::Vec3;
 use character_rigs::Side;
 
+use crate::animations::{smoothstep, LinearBlend};
 use crate::Progress;
-use crate::animations::{LinearBlend, smoothstep};
 
 /// Compress / load the pushing leg. Matches Tanz startup ~0.105.
 pub const LOAD_END: f32 = 0.10;
@@ -285,7 +285,11 @@ impl StrafeKey {
 fn lerp_along(a: Vec3, b: Vec3, t: f32) -> Vec3 {
 	let mixed = a + (b - a) * t;
 	let len = mixed.length();
-	if len < 1e-5 { Vec3::NEG_Y } else { mixed / len }
+	if len < 1e-5 {
+		Vec3::NEG_Y
+	} else {
+		mixed / len
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

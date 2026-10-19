@@ -4,6 +4,7 @@ mod aim;
 mod attack;
 mod drive;
 mod sensor;
+mod sound;
 
 use bevy::prelude::*;
 use characters::CharacterMotionSystems;
@@ -11,15 +12,15 @@ use damage::DamageSystems;
 use player::PlayerSystems;
 
 pub use aim::{
-	AIM_STEP, JabAim, PITCH_MAX, PITCH_MIN, YAW_LIMIT, body_camera_yaw, quantize, quantize_clamped,
+	body_camera_yaw, quantize, quantize_clamped, JabAim, AIM_STEP, PITCH_MAX, PITCH_MIN, YAW_LIMIT,
 };
 pub use attack::{AttackKind, AttackPhase, AttackSpec, AttackState, AttackTiming, JAB_STARTUP_END};
 pub use character_rigs::Side;
 pub use sensor::{
-	FisticuffsHitSensor, FisticuffsHitSensorOf, FisticuffsSensorDebug, PLACEHOLDER_FIST_RADIUS,
-	PLACEHOLDER_FIST_REACH, PLACEHOLDER_FOREARM_LENGTH, PLACEHOLDER_JAB_DAMAGE, character_to_world,
-	collect_fist_hits, draw_fist_sensors, fist_collider, fist_local, fist_world_rotation,
-	resolve_fist_hits, sync_fist_sensors,
+	character_to_world, collect_fist_hits, draw_fist_sensors, fist_collider, fist_local,
+	fist_world_rotation, resolve_fist_hits, sync_fist_sensors, FisticuffsHitSensor,
+	FisticuffsHitSensorOf, FisticuffsSensorDebug, PLACEHOLDER_FIST_RADIUS, PLACEHOLDER_FIST_REACH,
+	PLACEHOLDER_FOREARM_LENGTH, PLACEHOLDER_JAB_DAMAGE,
 };
 
 /// Player-side fisticuffs machine. Inserted by equipment when Fisticuffs is the
@@ -40,6 +41,8 @@ pub struct FisticuffsStrike {
 	pub attacker: Entity,
 	pub side: Side,
 	pub kind: AttackKind,
+	/// Rotates while the player chains jabs (`0 .. COMBO_STEP_COUNT-1`).
+	pub combo_step: u8,
 	pub progress: f32,
 	/// Quantized character-space aim (`+X` character left, `+Y` up, `+Z` forward).
 	pub target: Vec3,
@@ -52,6 +55,7 @@ impl Plugin for FisticuffsUserPlugin {
 		if !app.is_plugin_added::<damage::DamagePlugin>() {
 			app.add_plugins(damage::DamagePlugin);
 		}
+		sound::configure_strike_audio(app);
 		app.init_resource::<FisticuffsSensorDebug>()
 			.add_message::<FisticuffsStrike>()
 			.add_systems(
@@ -87,18 +91,18 @@ impl Plugin for FisticuffsUserPlugin {
 #[cfg(test)]
 mod pose_tests {
 	use bevy::prelude::Vec3;
+	use character_animations::animations::{Jab, JAB_HOLD_END};
 	use character_animations::Animation;
-	use character_animations::animations::{HOLD_END, Jab};
-	use character_rigs::Side;
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
-	use maybraid_character_controller::CharacterIntent;
+	use character_rigs::Side;
 	use maybraid_character_controller::produce::collect;
+	use maybraid_character_controller::CharacterIntent;
 	use maybraid_input::VirtualPad;
 
 	use super::*;
 
 	const FOREARM_SEGMENT: f32 = 0.48;
-	const HOLD: f32 = (character_animations::animations::EXTEND_END + HOLD_END) * 0.5;
+	const HOLD: f32 = (character_animations::animations::EXTEND_END + JAB_HOLD_END) * 0.5;
 
 	fn finish(pad: &mut VirtualPad) {
 		pad.apply_trigger_digital(0.5);

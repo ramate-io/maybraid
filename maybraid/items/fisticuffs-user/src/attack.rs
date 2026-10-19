@@ -1,12 +1,15 @@
 //! Input-facing attack state. v1 is two jabs; a combo graph can replace the
 //! lookup from [`AttackSpec`] without changing consumers.
 
-use character_animations::animations::HOLD_END;
+use character_animations::animations::JAB_HOLD_END;
 use character_rigs::Side;
 use characters::JAB_DURATION_SECS;
 use maybraid_character_controller::CharacterIntent;
 
 use crate::aim::JabAim;
+
+/// Rotating combo index passed to strike events and effort SFX.
+pub const COMBO_STEP_COUNT: usize = 3;
 
 /// Gameplay startup ends during the authored snap (`EXTEND_END = 0.42`).
 ///
@@ -38,7 +41,7 @@ pub struct AttackTiming {
 impl AttackTiming {
 	pub const JAB: Self = Self {
 		startup_end: JAB_STARTUP_END,
-		active_end: HOLD_END,
+		active_end: JAB_HOLD_END,
 		duration_secs: JAB_DURATION_SECS,
 	};
 
@@ -128,6 +131,7 @@ impl ActiveAttack {
 pub struct AttackState {
 	current: Option<ActiveAttack>,
 	queued: Option<AttackSpec>,
+	combo_step: u8,
 	just_started: bool,
 	just_entered_active: bool,
 }
@@ -135,7 +139,8 @@ pub struct AttackState {
 impl AttackState {
 	pub fn request(&mut self, spec: AttackSpec) {
 		match self.phase() {
-			None | Some(AttackPhase::Recovery) => self.start(spec),
+			None => self.start(spec, false),
+			Some(AttackPhase::Recovery) => self.start(spec, true),
 			Some(AttackPhase::Startup | AttackPhase::Active) => self.queued = Some(spec),
 		}
 	}
@@ -145,7 +150,7 @@ impl AttackState {
 		self.just_entered_active = false;
 		let Some(current) = self.current.as_mut() else {
 			if let Some(queued) = self.queued.take() {
-				self.start(queued);
+				self.start(queued, true);
 			}
 			return;
 		};
@@ -158,13 +163,17 @@ impl AttackState {
 		if next.is_none() {
 			self.current = None;
 			if let Some(queued) = self.queued.take() {
-				self.start(queued);
+				self.start(queued, true);
 			}
 		}
 	}
 
 	pub fn cancel(&mut self) {
 		*self = Self::default();
+	}
+
+	pub fn combo_step(&self) -> u8 {
+		self.combo_step
 	}
 
 	pub fn is_busy(&self) -> bool {
@@ -216,7 +225,12 @@ impl AttackState {
 		}
 	}
 
-	fn start(&mut self, spec: AttackSpec) {
+	fn start(&mut self, spec: AttackSpec, chain: bool) {
+		if chain {
+			self.combo_step = (self.combo_step + 1) % COMBO_STEP_COUNT as u8;
+		} else {
+			self.combo_step = 0;
+		}
 		self.current = Some(ActiveAttack { spec, elapsed: 0.0, aim: JabAim::default() });
 		self.queued = None;
 		self.just_started = true;
@@ -278,10 +292,10 @@ mod tests {
 		assert_eq!(state.phase(), Some(AttackPhase::Active));
 		assert!(state.just_entered_active());
 
-		state.tick(jab_dt(HOLD_END - JAB_STARTUP_END));
+		state.tick(jab_dt(JAB_HOLD_END - JAB_STARTUP_END));
 		assert_eq!(state.phase(), Some(AttackPhase::Recovery));
 
-		state.tick(jab_dt(1.0 - HOLD_END) + 1e-3);
+		state.tick(jab_dt(1.0 - JAB_HOLD_END) + 1e-3);
 		assert!(!state.is_busy());
 	}
 
@@ -305,7 +319,7 @@ mod tests {
 	fn recovery_press_cancels_into_the_next_jab() {
 		let mut state = AttackState::default();
 		state.request(AttackSpec::jab(Side::Left));
-		state.tick(jab_dt(HOLD_END + 0.01));
+		state.tick(jab_dt(JAB_HOLD_END + 0.01));
 		assert_eq!(state.phase(), Some(AttackPhase::Recovery));
 		state.request(AttackSpec::jab(Side::Right));
 		assert!(state.just_started());
