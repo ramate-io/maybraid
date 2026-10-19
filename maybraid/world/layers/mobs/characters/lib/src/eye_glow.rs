@@ -13,6 +13,7 @@ use character_shaders::{
 use material_ref::{MaterialRefApplied, MaterialRefSystems};
 
 use crate::assembly::CharacterPartSlot;
+use crate::material_lib::FaceShaderMaterialRefCache;
 use crate::member::{CharacterMembers, CharacterRoot};
 use crate::nodes::PartNode;
 
@@ -27,6 +28,10 @@ pub struct EyeGlowControl {
 	pub target_intensity: f32,
 	pub emissive_gain: f32,
 	pub transition_secs: f32,
+	/// Last values pushed to eye mesh materials (skips idle mesh walks).
+	last_written_intensity: f32,
+	last_written_color: Color,
+	last_written_emissive_gain: f32,
 }
 
 impl Default for EyeGlowControl {
@@ -43,6 +48,9 @@ impl EyeGlowControl {
 			target_intensity: 0.0,
 			emissive_gain: GOD_BEAM_EYE_GLOW_EMISSIVE_GAIN,
 			transition_secs: DEFAULT_EYE_GLOW_TRANSITION_SECS,
+			last_written_intensity: 0.0,
+			last_written_color: GOD_BEAM_EYE_GLOW_COLOR,
+			last_written_emissive_gain: GOD_BEAM_EYE_GLOW_EMISSIVE_GAIN,
 		}
 	}
 
@@ -54,6 +62,9 @@ impl EyeGlowControl {
 			target_intensity: GOD_BEAM_EYE_GLOW_INTENSITY,
 			emissive_gain: GOD_BEAM_EYE_GLOW_EMISSIVE_GAIN,
 			transition_secs: DEFAULT_EYE_GLOW_TRANSITION_SECS,
+			last_written_intensity: 0.0,
+			last_written_color: GOD_BEAM_EYE_GLOW_COLOR,
+			last_written_emissive_gain: GOD_BEAM_EYE_GLOW_EMISSIVE_GAIN,
 		}
 	}
 
@@ -102,6 +113,7 @@ impl Plugin for EyeGlowPlugin {
 			(
 				sync_eye_glow_material_instances.before(MaterialRefSystems::Invalidate),
 				update_eye_glow.after(MaterialRefSystems::Fulfill),
+				prune_retired_eye_glow_face_materials.after(update_eye_glow),
 			),
 		);
 	}
@@ -168,6 +180,9 @@ fn update_eye_glow(
 	let dt = time.delta_secs();
 	for (mut control, members) in &mut roots {
 		tick_eye_glow_intensity(&mut control, dt);
+		if !needs_eye_glow_material_apply(&control) {
+			continue;
+		}
 		apply_eye_glow_to_members(
 			&control,
 			members,
@@ -176,7 +191,36 @@ fn update_eye_glow(
 			&meshes,
 			&mut face_materials,
 		);
+		record_eye_glow_material_apply(&mut control);
 	}
+}
+
+fn prune_retired_eye_glow_face_materials(
+	mut cache: ResMut<FaceShaderMaterialRefCache>,
+	mut face_materials: ResMut<Assets<FaceShaderMaterial>>,
+	alive: Query<Entity>,
+) {
+	cache.prune_instanced_owners(|owner| alive.contains(owner), &mut face_materials);
+}
+
+fn needs_eye_glow_material_apply(control: &EyeGlowControl) -> bool {
+	const EPS: f32 = 1e-4;
+	let inactive = control.intensity < EPS && control.target_intensity < EPS;
+	if inactive {
+		return control.last_written_intensity >= EPS;
+	}
+	if (control.intensity - control.target_intensity).abs() >= EPS {
+		return true;
+	}
+	control.last_written_intensity != control.intensity
+		|| control.last_written_color != control.color
+		|| control.last_written_emissive_gain != control.emissive_gain
+}
+
+fn record_eye_glow_material_apply(control: &mut EyeGlowControl) {
+	control.last_written_intensity = control.intensity;
+	control.last_written_color = control.color;
+	control.last_written_emissive_gain = control.emissive_gain;
 }
 
 fn tick_eye_glow_intensity(control: &mut EyeGlowControl, dt: f32) {
@@ -264,6 +308,15 @@ mod tests {
 	}
 
 	#[test]
+	fn inactive_stable_control_skips_material_apply() {
+		let mut control = EyeGlowControl::off();
+		record_eye_glow_material_apply(&mut control);
+		assert!(!needs_eye_glow_material_apply(&control));
+		control.start_god_beam_warning();
+		assert!(needs_eye_glow_material_apply(&control));
+	}
+
+	#[test]
 	fn tick_reaches_target_over_transition() {
 		let mut control = EyeGlowControl::god_beam_warning();
 		control.intensity = 0.0;
@@ -333,6 +386,134 @@ mod tests {
 			eye_glow_intensity(&materials.get(&handle_b).unwrap().params) < 1e-4,
 			"character B must stay off after A restamps"
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn two_characters_keep_independent_eye_glow() -> anyhow::Result<()> {
+		use crate::assembly::CharacterPartSlot;
+		use rigs::{AssemblyHost, AssemblyRoot, stamp_assembly_members};
+
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+			.init_asset::<Mesh>()
+			.init_asset::<FaceShaderMaterial>()
+			.add_plugins(FaceShaderMaterialPlugin)
+			.add_plugins(EyeGlowPlugin);
+		init_character_material_caches(&mut app);
+		app.add_plugins(MaterialRefPlugin::<FaceMaterialLib<'_, '_>>::default())
+			.add_systems(PreUpdate, stamp_assembly_members);
+
+		let mesh = app
+			.world_mut()
+			.resource_mut::<Assets<Mesh>>()
+			.add(Mesh::from(Cuboid::from_length(0.1)));
+		let base = base_face_ref();
+
+		let root_a = app
+			.world_mut()
+			.spawn((CharacterRoot, AssemblyRoot, EyeGlowControl::god_beam_warning()))
+			.id();
+		let eye_a = app
+			.world_mut()
+			.spawn((
+				PartNode {
+					slot: CharacterPartSlot::EyeLeft,
+					label: "eye",
+					material: base.clone(),
+					..Default::default()
+				},
+				AssemblyHost,
+				ChildOf(root_a),
+				MaterialRefRoot(base.clone()),
+				PropagateToDescendants,
+			))
+			.id();
+		let mesh_a = app.world_mut().spawn((Mesh3d(mesh.clone()), ChildOf(eye_a))).id();
+
+		let root_b = app
+			.world_mut()
+			.spawn((CharacterRoot, AssemblyRoot, EyeGlowControl::off()))
+			.id();
+		let eye_b = app
+			.world_mut()
+			.spawn((
+				PartNode {
+					slot: CharacterPartSlot::EyeLeft,
+					label: "eye",
+					material: base.clone(),
+					..Default::default()
+				},
+				AssemblyHost,
+				ChildOf(root_b),
+				MaterialRefRoot(base.clone()),
+				PropagateToDescendants,
+			))
+			.id();
+		let mesh_b = app.world_mut().spawn((Mesh3d(mesh), ChildOf(eye_b))).id();
+
+		for _ in 0..2 {
+			app.update();
+		}
+		{
+			let mut control = app.world_mut().get_mut::<EyeGlowControl>(root_a).unwrap();
+			control.intensity = GOD_BEAM_EYE_GLOW_INTENSITY;
+			control.target_intensity = GOD_BEAM_EYE_GLOW_INTENSITY;
+			control.last_written_intensity = 0.0;
+		}
+		for _ in 0..2 {
+			app.update();
+		}
+
+		let handle_a =
+			app.world().get::<MeshMaterial3d<FaceShaderMaterial>>(mesh_a).unwrap().0.clone();
+		let handle_b =
+			app.world().get::<MeshMaterial3d<FaceShaderMaterial>>(mesh_b).unwrap().0.clone();
+		assert_ne!(handle_a, handle_b);
+
+		let materials = app.world().resource::<Assets<FaceShaderMaterial>>();
+		assert!(eye_glow_intensity(&materials.get(&handle_a).unwrap().params) > 0.9);
+		assert!(eye_glow_intensity(&materials.get(&handle_b).unwrap().params) < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn retired_owner_prunes_instanced_face_cache() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+			.init_asset::<Mesh>()
+			.init_asset::<FaceShaderMaterial>()
+			.add_plugins(FaceShaderMaterialPlugin);
+		init_character_material_caches(&mut app);
+		app.add_plugins(MaterialRefPlugin::<FaceMaterialLib<'_, '_>>::default())
+			.add_plugins(EyeGlowPlugin);
+
+		let mesh = app
+			.world_mut()
+			.resource_mut::<Assets<Mesh>>()
+			.add(Mesh::from(Cuboid::from_length(0.1)));
+		let base = base_face_ref();
+		let owner = app.world_mut().spawn_empty().id();
+		let host = app
+			.world_mut()
+			.spawn((
+				MaterialRefRoot(base.clone()),
+				PropagateToDescendants,
+				EyeGlowMaterialInstance { owner },
+			))
+			.id();
+		let mesh_e = app.world_mut().spawn((Mesh3d(mesh), ChildOf(host))).id();
+		app.update();
+
+		let handle =
+			app.world().get::<MeshMaterial3d<FaceShaderMaterial>>(mesh_e).unwrap().0.clone();
+		assert_eq!(app.world().resource::<FaceShaderMaterialRefCache>().instanced_len(), 1);
+
+		app.world_mut().despawn(owner);
+		app.update();
+
+		assert_eq!(app.world().resource::<FaceShaderMaterialRefCache>().instanced_len(), 0);
+		assert!(app.world().resource::<Assets<FaceShaderMaterial>>().get(&handle).is_none());
 		Ok(())
 	}
 }

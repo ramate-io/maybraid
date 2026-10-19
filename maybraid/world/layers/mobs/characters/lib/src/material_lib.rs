@@ -29,6 +29,25 @@ impl FaceShaderMaterialRefCache {
 	pub fn len(&self) -> usize {
 		self.shared.len() + self.instanced.len()
 	}
+
+	pub fn instanced_len(&self) -> usize {
+		self.instanced.len()
+	}
+
+	/// Drops instanced handles whose [`EyeGlowMaterialInstance::owner`] no longer exists.
+	pub fn prune_instanced_owners(
+		&mut self,
+		owner_alive: impl Fn(Entity) -> bool,
+		materials: &mut Assets<FaceShaderMaterial>,
+	) {
+		self.instanced.retain(|(_key, owner), handle| {
+			if owner_alive(*owner) {
+				return true;
+			}
+			materials.remove(handle);
+			false
+		});
+	}
 }
 
 /// Cache of resolved [`ClothingShaderMaterial`] handles.

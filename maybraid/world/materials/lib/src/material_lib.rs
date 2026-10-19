@@ -29,16 +29,16 @@ use vegetation_shaders::{init_vegetation_material_caches, VegetationShadersPlugi
 ///
 /// Further domain libs (Durham recipes on [`MaterialRef`], sky) compose here.
 #[derive(SystemParam)]
-pub struct WorldMaterialLib<'w> {
+pub struct WorldMaterialLib<'w, 's> {
 	pub furniture: FurnitureMaterialLib<'w>,
-	pub character: CharacterMaterialLib<'w>,
+	pub character: CharacterMaterialLib<'w, 's>,
 	pub urban: UrbanSurfaceMaterialLib<'w>,
 	pub muzzle: MuzzleFlameMaterialLib<'w>,
 	pub energy: EnergyMaterialLib<'w>,
 	pub vegetation: VegetationOnTerrainMaterialLib<'w>,
 }
 
-impl MaterialLib for WorldMaterialLib<'_> {
+impl MaterialLib for WorldMaterialLib<'_, '_> {
 	fn try_fulfill(
 		&mut self,
 		entity: Entity,
@@ -83,7 +83,7 @@ impl Plugin for WorldMaterialRefPlugin {
 		if material_ref_plugin_installed(app) {
 			return;
 		}
-		app.add_plugins(MaterialRefPlugin::<WorldMaterialLib<'_>>::default());
+		app.add_plugins(MaterialRefPlugin::<WorldMaterialLib<'_, '_>>::default());
 	}
 }
 
