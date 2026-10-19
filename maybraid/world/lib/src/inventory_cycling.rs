@@ -56,14 +56,6 @@ pub(crate) fn configure(app: &mut App) {
 		);
 }
 
-fn gameplay_cycling_allowed(
-	gameplay: &WorldGameplayEnabled,
-	text_focus: &TextEntryFocus,
-	map: Option<&WorldMapView>,
-) -> bool {
-	gameplay.0 && !text_focus.0 && !map.is_some_and(|map| map.open)
-}
-
 pub(crate) fn apply_inventory_category_selection(
 	gameplay: Res<WorldGameplayEnabled>,
 	text_focus: Res<TextEntryFocus>,
@@ -71,7 +63,7 @@ pub(crate) fn apply_inventory_category_selection(
 	mut category: ResMut<ActiveInventoryCyclingCategory>,
 	mut intents: MessageReader<CharacterIntent>,
 ) {
-	if !gameplay_cycling_allowed(&gameplay, &text_focus, map.as_deref()) {
+	if !gameplay.accepts_character_input(text_focus.0, map.is_some_and(|map| map.open)) {
 		return;
 	}
 	for intent in intents.read() {
@@ -93,7 +85,7 @@ pub(crate) fn cycle_equipped_inventory_queues(
 	mut bags: Query<&mut Inventory>,
 	mut ledgers: Query<&mut LubikanLedger, With<LubikanOwner>>,
 ) {
-	if !gameplay_cycling_allowed(&gameplay, &text_focus, map.as_deref()) {
+	if !gameplay.accepts_character_input(text_focus.0, map.is_some_and(|map| map.open)) {
 		return;
 	}
 	let mut dir = None;
@@ -137,7 +129,7 @@ pub(crate) fn cycle_equipped_inventory_queues(
 		let changed = match slot {
 			InventorySlot::Weapons => false,
 			InventorySlot::Skills => bag.cycle_skills(dir),
-			InventorySlot::Clothing => false,
+			InventorySlot::Clothing | InventorySlot::Tanzes => false,
 		};
 		if !changed {
 			continue;
@@ -227,6 +219,7 @@ mod tests {
 			clothing: Vec::new(),
 			weapons: Vec::new(),
 			skills: vec![0, 1],
+			tanzes: Vec::new(),
 		};
 		let mut world = World::new();
 		world.init_resource::<Messages<CharacterIntent>>();
@@ -268,6 +261,7 @@ mod tests {
 			clothing: Vec::new(),
 			weapons: Vec::new(),
 			skills: vec![0, 1],
+			tanzes: Vec::new(),
 		};
 		let mut world = World::new();
 		world.init_resource::<Messages<CharacterIntent>>();
