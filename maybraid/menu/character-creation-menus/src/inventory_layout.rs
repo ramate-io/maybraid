@@ -667,7 +667,17 @@ mod tests {
 			.iter()
 			.position(|item| item.tanz_id() == Some(TanzId::HealingSalute))
 			.expect("salute");
-		assert!(inventory.equip_front(salute));
+		let left = inventory
+			.items
+			.iter()
+			.position(|item| item.tanz_id() == Some(TanzId::LeftStrafe))
+			.expect("left strafe");
+		assert_eq!(
+			inventory.tanzes,
+			vec![salute, left],
+			"create-mode outfits queue owned starter Tanzes"
+		);
+		assert!(inventory.unequip(left));
 		let layout = InventoryLayout::character_menu(&inventory);
 		let MenuNode::Section { children, .. } = &layout.node else {
 			panic!("inventory must be a section");

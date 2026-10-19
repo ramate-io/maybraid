@@ -988,6 +988,15 @@ fn equip_front_move_and_unequip_events() -> anyhow::Result<()> {
 		InventoryItem::tanz(TanzId::ForwardDash),
 	];
 	let mut menu = CharacterMenu::for_create(items);
+	assert_eq!(
+		menu.inventory.as_ref().expect("inventory").tanzes,
+		vec![0, 1, 2],
+		"create-mode outfits queue owned starter Tanzes"
+	);
+	assert!(menu.apply(MenuEvent::UnequipInventory(0)));
+	assert!(menu.apply(MenuEvent::UnequipInventory(1)));
+	assert!(menu.apply(MenuEvent::UnequipInventory(2)));
+	assert!(menu.inventory.as_ref().expect("inventory").tanzes.is_empty());
 	assert!(menu.apply(MenuEvent::EquipInventory(0)));
 	assert!(menu.apply(MenuEvent::EquipInventory(1)));
 	assert_eq!(
