@@ -14,11 +14,11 @@ impl Lay {
 		for side in [Side::Left, Side::Right] {
 			pose.apply_leg(side, self.hip_flex, self.knee_flex);
 			pose.leg_mut(side).hip_abduction = self.hip_spread * side.sign();
-			apply_lay_arm(&mut pose, side, self);
+			self.apply_arm(&mut pose, side);
 		}
 		pose.apply_spine_pitch(self.spine_pitch(progress));
-		if self.orientation == LayOrientation::Side {
-			let roll = -self.side.sign() * 0.12;
+		if let Some(side) = self.down_side() {
+			let roll = -side.sign() * 0.12;
 			pose.spine.side_bend[1] += roll * 0.45;
 			pose.spine.side_bend[2] += roll * 0.35;
 			pose.spine.side_bend[3] += roll * 0.20;
@@ -42,11 +42,18 @@ impl Lay {
 	pub fn lie_rotation(&self) -> Quat {
 		match self.orientation {
 			LayOrientation::Back => Quat::from_rotation_x(-FRAC_PI_2),
-			LayOrientation::Side => {
-				Quat::from_rotation_z(FRAC_PI_2 * self.side.sign())
-					* Quat::from_rotation_x(-FRAC_PI_2)
+			LayOrientation::Side(side) => {
+				Quat::from_rotation_z(FRAC_PI_2 * side.sign()) * Quat::from_rotation_x(-FRAC_PI_2)
 			}
 		}
+	}
+
+	fn apply_arm(&self, pose: &mut HumanoidPose, side: Side) {
+		let down = self.down_side() == Some(side);
+		let hang = -side.sign() * if down { self.arm_hang * 0.35 } else { self.arm_hang };
+		let elbow = if down { self.elbow_hang * 0.45 } else { self.elbow_hang };
+		let inward = -side.sign() * if down { 0.06 } else { 0.16 };
+		pose.apply_arm(side, 0.04, inward, 0.02, hang, -elbow);
 	}
 }
 
@@ -66,14 +73,6 @@ impl Animation<HumanoidV0Rig> for Lay {
 			scale: Vec3::ONE,
 		})
 	}
-}
-
-fn apply_lay_arm(pose: &mut HumanoidPose, side: Side, lay: &Lay) {
-	let down = lay.orientation == LayOrientation::Side && side == lay.side;
-	let hang = -side.sign() * if down { lay.arm_hang * 0.35 } else { lay.arm_hang };
-	let elbow = if down { lay.elbow_hang * 0.45 } else { lay.elbow_hang };
-	let inward = -side.sign() * if down { 0.06 } else { 0.16 };
-	pose.apply_arm(side, 0.04, inward, 0.02, hang, -elbow);
 }
 
 #[cfg(test)]
@@ -278,5 +277,121 @@ mod tests {
 			anyhow::bail!("re-sampling the same breath frame must not drift");
 		}
 		Ok(())
+	}
+
+	/// Pre-payload dual-field coefficients, reconstructed without `sample_pose`.
+	///
+	/// Locks back / side-left / side-right so folding `side` into
+	/// `LayOrientation::Side(Side)` cannot change the authored look.
+	fn expected_pose(lay: &Lay, progress: f32) -> HumanoidPose {
+		let mut pose = HumanoidPose::default();
+		for side in [Side::Left, Side::Right] {
+			pose.apply_leg(side, lay.hip_flex, lay.knee_flex);
+			pose.leg_mut(side).hip_abduction = lay.hip_spread * side.sign();
+			let down = matches!(lay.orientation, LayOrientation::Side(down) if down == side);
+			let hang = -side.sign() * if down { lay.arm_hang * 0.35 } else { lay.arm_hang };
+			let elbow = if down { lay.elbow_hang * 0.45 } else { lay.elbow_hang };
+			let inward = -side.sign() * if down { 0.06 } else { 0.16 };
+			pose.apply_arm(side, 0.04, inward, 0.02, hang, -elbow);
+		}
+		pose.apply_spine_pitch(lay.spine_pitch(progress));
+		if let LayOrientation::Side(side) = lay.orientation {
+			let roll = -side.sign() * 0.12;
+			pose.spine.side_bend[1] += roll * 0.45;
+			pose.spine.side_bend[2] += roll * 0.35;
+			pose.spine.side_bend[3] += roll * 0.20;
+		}
+		let breath = Lay::breath(progress) * lay.breath_amp;
+		pose.apply_neck_twisted(
+			lay.neck_turn * 0.55,
+			0.0,
+			lay.neck_peak * 0.4 + 0.3 * breath,
+			lay.neck_turn * 0.45,
+			0.0,
+			lay.neck_peak * 0.6 + 0.7 * breath,
+		);
+		pose
+	}
+
+	fn expected_lie_rotation(lay: &Lay) -> Quat {
+		match lay.orientation {
+			LayOrientation::Back => Quat::from_rotation_x(-FRAC_PI_2),
+			LayOrientation::Side(side) => {
+				Quat::from_rotation_z(FRAC_PI_2 * side.sign()) * Quat::from_rotation_x(-FRAC_PI_2)
+			}
+		}
+	}
+
+	#[test]
+	fn pose_equivalence_back_side_left_side_right() {
+		let cases = [Lay::back(), Lay::side(Side::Left), Lay::side(Side::Right)];
+		let progress = 0.25 / crate::animations::lay::LAY_BREATH_FREQ;
+		for lay in cases {
+			assert_eq!(lay.sample_pose(0.0), expected_pose(&lay, 0.0));
+			assert_eq!(lay.sample_pose(progress), expected_pose(&lay, progress));
+			assert_eq!(lay.lie_rotation(), expected_lie_rotation(&lay));
+		}
+
+		let back = Lay::back();
+		let left = Lay::side(Side::Left);
+		let right = Lay::side(Side::Right);
+		let back_pose = back.sample_pose(0.0);
+		let left_pose = left.sample_pose(0.0);
+		let right_pose = right.sample_pose(0.0);
+
+		assert_eq!(back.down_side(), None);
+		assert_eq!(back_pose.spine.side_bend, [0.0; 4]);
+		assert_eq!(back_pose.neck.lower.turn, 0.0);
+		assert_eq!(back_pose.neck.upper.turn, 0.0);
+
+		let left_roll = -Side::Left.sign() * 0.12;
+		let right_roll = -Side::Right.sign() * 0.12;
+		assert_eq!(left_pose.spine.side_bend[1], left_roll * 0.45);
+		assert_eq!(left_pose.spine.side_bend[2], left_roll * 0.35);
+		assert_eq!(left_pose.spine.side_bend[3], left_roll * 0.20);
+		assert_eq!(right_pose.spine.side_bend[1], right_roll * 0.45);
+		assert_eq!(right_pose.spine.side_bend[2], right_roll * 0.35);
+		assert_eq!(right_pose.spine.side_bend[3], right_roll * 0.20);
+
+		assert!(left.neck_turn < 0.0);
+		assert!(right.neck_turn > 0.0);
+		assert!(left_pose.neck.lower.turn < 0.0);
+		assert!(right_pose.neck.lower.turn > 0.0);
+		assert!((left_pose.neck.lower.turn + right_pose.neck.lower.turn).abs() < 1e-6);
+		assert!((left_pose.neck.upper.turn + right_pose.neck.upper.turn).abs() < 1e-6);
+		assert_eq!(left_pose.neck.lower.turn, left.neck_turn * 0.55);
+		assert_eq!(right_pose.neck.lower.turn, right.neck_turn * 0.55);
+		assert_eq!(left_pose.neck.upper.turn, left.neck_turn * 0.45);
+		assert_eq!(right_pose.neck.upper.turn, right.neck_turn * 0.45);
+
+		let right_shoulder = right.lie_rotation() * Vec3::X;
+		let left_shoulder = left.lie_rotation() * Vec3::NEG_X;
+		assert!(
+			right_shoulder.y < -0.8,
+			"right-side lie should put +X toward the ground, {right_shoulder:?}"
+		);
+		assert!(
+			left_shoulder.y < -0.8,
+			"left-side lie should put −X toward the ground, {left_shoulder:?}"
+		);
+		assert!((back.lie_rotation() * Vec3::Y).z.abs() > 0.8);
+
+		let left_down = left_pose.arms[Side::Left.index()];
+		let left_up = left_pose.arms[Side::Right.index()];
+		assert_eq!(left_down.lateral_elevation, -Side::Left.sign() * left.arm_hang * 0.35);
+		assert_eq!(left_down.elbow_flexion, -(left.elbow_hang * 0.45));
+		assert_eq!(left_down.shoulder_lift, -Side::Left.sign() * 0.06);
+		assert_eq!(left_up.lateral_elevation, -Side::Right.sign() * left.arm_hang);
+		assert_eq!(left_up.elbow_flexion, -left.elbow_hang);
+		assert_eq!(left_up.shoulder_lift, -Side::Right.sign() * 0.16);
+
+		let right_down = right_pose.arms[Side::Right.index()];
+		let right_up = right_pose.arms[Side::Left.index()];
+		assert_eq!(right_down.lateral_elevation, -Side::Right.sign() * right.arm_hang * 0.35);
+		assert_eq!(right_down.elbow_flexion, -(right.elbow_hang * 0.45));
+		assert_eq!(right_down.shoulder_lift, -Side::Right.sign() * 0.06);
+		assert_eq!(right_up.lateral_elevation, -Side::Left.sign() * right.arm_hang);
+		assert_eq!(right_up.elbow_flexion, -right.elbow_hang);
+		assert_eq!(right_up.shoulder_lift, -Side::Left.sign() * 0.16);
 	}
 }

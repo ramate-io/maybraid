@@ -14,18 +14,29 @@ use character_rigs::Side;
 pub const LAY_BREATH_FREQ: f32 = 0.24;
 
 /// Recumbent orientation. Clip knob, not a rig bind.
+///
+/// Side-lying carries the down-shoulder. The back has none, so
+/// [`Lay::back`] does not invent a dummy [`Side`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayOrientation {
 	Back,
-	Side,
+	Side(Side),
+}
+
+impl LayOrientation {
+	/// Shoulder toward the ground. `None` when supine.
+	pub const fn down_side(self) -> Option<Side> {
+		match self {
+			Self::Back => None,
+			Self::Side(side) => Some(side),
+		}
+	}
 }
 
 /// Looping lying idle. [`Self::back`] and [`Self::side`] are the authored looks.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Lay {
 	pub orientation: LayOrientation,
-	/// Down side when [`LayOrientation::Side`]. Ignored on the back.
-	pub side: Side,
 	/// Light hip fold so the legs are not a standing T (radians).
 	pub hip_flex: f32,
 	/// Residual knee bend (radians).
@@ -57,7 +68,6 @@ impl Lay {
 	pub fn back() -> Self {
 		Self {
 			orientation: LayOrientation::Back,
-			side: Side::Right,
 			hip_flex: -0.28,
 			knee_flex: 0.42,
 			hip_spread: 0.06,
@@ -76,8 +86,7 @@ impl Lay {
 	/// Recumbent on `side` (that shoulder toward the ground).
 	pub fn side(side: Side) -> Self {
 		Self {
-			orientation: LayOrientation::Side,
-			side,
+			orientation: LayOrientation::Side(side),
 			hip_flex: -0.45,
 			knee_flex: 0.72,
 			hip_spread: 0.18,
@@ -103,6 +112,11 @@ impl Lay {
 
 	pub fn visual_drop(&self, progress: f32) -> f32 {
 		self.ground_drop + Self::breath(progress) * self.breath_drop
+	}
+
+	/// Shoulder toward the ground. `None` when supine.
+	pub const fn down_side(&self) -> Option<Side> {
+		self.orientation.down_side()
 	}
 }
 
@@ -140,5 +154,15 @@ mod tests {
 		assert!(left.neck_turn < 0.0);
 		assert!(right.neck_turn > 0.0);
 		assert!((left.neck_turn + right.neck_turn).abs() < 1e-5);
+	}
+
+	#[test]
+	fn orientation_carries_side_only_when_lying_on_a_side() {
+		assert_eq!(Lay::back().orientation, LayOrientation::Back);
+		assert_eq!(Lay::back().down_side(), None);
+		assert_eq!(Lay::side(Side::Left).orientation, LayOrientation::Side(Side::Left));
+		assert_eq!(Lay::side(Side::Right).orientation, LayOrientation::Side(Side::Right));
+		assert_eq!(Lay::side(Side::Left).down_side(), Some(Side::Left));
+		assert_eq!(Lay::side(Side::Right).down_side(), Some(Side::Right));
 	}
 }
