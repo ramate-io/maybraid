@@ -696,11 +696,24 @@ impl MaybraidMenuSink {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
+		// Horizontal overflow:scroll on a flex child otherwise eats the
+		// leftover overlay height, so pin the pane to caption+detail tiles.
+		let strip_h = context.catalog_thumb_px + 152.0;
+		let pane_h = MENU_LIST_PAD * 2.0
+			+ PANEL_BLOCK_FONT_SIZE
+			+ PANEL_ROW_GAP
+			+ strip_h * rows.len().max(1) as f32
+			+ PANEL_ROW_GAP * rows.len().saturating_sub(1) as f32;
 		parent
 			.spawn((
 				Node {
 					width: Val::Percent(100.0),
 					flex_direction: FlexDirection::Column,
+					flex_grow: 0.0,
+					flex_shrink: 0.0,
+					height: Val::Px(pane_h),
+					min_height: Val::Px(pane_h),
+					max_height: Val::Px(pane_h),
 					row_gap: Val::Px(PANEL_ROW_GAP),
 					padding: UiRect::all(Val::Px(MENU_LIST_PAD)),
 					border_radius: BorderRadius::all(Val::Px(MENU_LIST_RADIUS)),
@@ -723,11 +736,15 @@ impl MaybraidMenuSink {
 						menu_components::HudScrollStrip,
 						Node {
 							width: Val::Percent(100.0),
+							height: Val::Px(strip_h),
+							min_height: Val::Px(strip_h),
+							max_height: Val::Px(strip_h),
 							flex_direction: FlexDirection::Row,
+							flex_grow: 0.0,
+							flex_shrink: 0.0,
+							align_items: AlignItems::FlexStart,
 							column_gap: Val::Px(PANEL_ROW_GAP),
 							overflow: Overflow::scroll_x(),
-							min_height: Val::Px(context.catalog_thumb_px + 36.0),
-							flex_shrink: 0.0,
 							..default()
 						},
 						ScrollPosition::default(),
@@ -776,6 +793,7 @@ impl MaybraidMenuSink {
 					min_width: Val::Px(thumb_px + 24.0),
 					flex_shrink: 0.0,
 					flex_grow: 0.0,
+					align_self: AlignSelf::FlexStart,
 					..default()
 				},
 				Pickable::IGNORE,
