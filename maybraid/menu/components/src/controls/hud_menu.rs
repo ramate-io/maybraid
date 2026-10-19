@@ -79,6 +79,10 @@ pub struct HudOverlayMenu;
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct HudMenuIgnoresLock;
 
+/// Inventory reorder owns left/right/up/down on this list until confirm/Back.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct HudMenuNavLocked;
+
 pub fn select_hud_item_on_over(
 	over: On<Pointer<Over>>,
 	stack: Res<crate::modal::MenuModalStack>,
@@ -106,10 +110,14 @@ pub fn apply_hud_menu_nav(
 	impulse: On<MenuNavImpulse>,
 	lock: Res<TextMenuInputLock>,
 	unlocked: Query<(), With<HudMenuIgnoresLock>>,
+	held: Query<(), With<HudMenuNavLocked>>,
 	items: Query<(&HudMenuItem, &UiGlobalTransform)>,
 	mut menus: Query<&mut HudMenu>,
 ) {
 	if lock.0 && unlocked.get(impulse.entity).is_err() {
+		return;
+	}
+	if held.get(impulse.entity).is_ok() {
 		return;
 	}
 	let Ok(mut menu) = menus.get_mut(impulse.entity) else {

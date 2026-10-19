@@ -202,6 +202,7 @@ fn inventory_catalog(menu: &ClothingMenu, owned: &[InventoryItem]) -> MenuNode<M
 					.iter()
 					.position(|worn| *worn == mesh)
 					.map(|position| (position + 1) as u8),
+				item_key: Some(index),
 				event: Some(MenuEvent::ToggleInventory(index)),
 			})
 		}),
@@ -253,6 +254,7 @@ pub(crate) fn inventory_overlay_key(key: &str) -> bool {
 			| "Weapons"
 			| "Tools" | "Skill Maps"
 			| "Tanzes"
+			| "Equipped"
 			| "Lubikan"
 			| "Loadout"
 	)

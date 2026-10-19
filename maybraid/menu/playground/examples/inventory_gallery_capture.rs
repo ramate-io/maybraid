@@ -140,7 +140,12 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn image_for_key(&mut self, key: u64) -> Option<Handle<Image>> {
-		self.icons?.catalog_for_key(key)
+		let icons = self.icons?;
+		if key == self_lubikan_catalog_key() {
+			icons.silhouette_for_key(key)
+		} else {
+			icons.catalog_for_key(key)
+		}
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
@@ -324,8 +329,16 @@ fn spawn_grant_scene(
 				.id();
 		});
 	let mut thumbs = CatalogThumbs { icons };
-	let count =
-		fill_inventory_layout(commands, viewport, fonts, &layout.node, false, None, &mut thumbs);
+	let count = fill_inventory_layout(
+		commands,
+		viewport,
+		fonts,
+		&layout.node,
+		false,
+		None,
+		None,
+		&mut thumbs,
+	);
 	if let Ok(mut footer) = commands.get_entity(footer) {
 		footer.with_children(|footer| {
 			spawn_hud_action(
@@ -367,7 +380,7 @@ fn spawn_modal_scene(
 			);
 		});
 	let mut thumbs = CatalogThumbs { icons };
-	fill_inventory_layout(commands, viewport, fonts, &node, true, None, &mut thumbs);
+	fill_inventory_layout(commands, viewport, fonts, &node, true, None, None, &mut thumbs);
 }
 
 fn spawn_icon_closeup(commands: &mut Commands, fonts: &HudFonts, image: Option<Handle<Image>>) {

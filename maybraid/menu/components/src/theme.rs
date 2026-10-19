@@ -322,6 +322,13 @@ pub const PROMPT_PAD_DROP: &str = "iconography/kenney/input-prompts/xbox_button_
 /// Kenney Double keyboard **E** — first of [`maybraid_input::INVENTORY_DROP_KEYS`].
 pub const PROMPT_KEY_DROP: &str = "iconography/kenney/input-prompts/keyboard_e_outline.png";
 
+/// Kenney Double Xbox **Y** — [`maybraid_input::INVENTORY_UNEQUIP_PAD`].
+pub const PROMPT_PAD_UNEQUIP: &str = "iconography/kenney/input-prompts/xbox_button_y_outline.png";
+
+/// Keyboard **Y** shares the pad Y glyph; the committed Kenney pack has no
+/// `keyboard_y` outline.
+pub const PROMPT_KEY_UNEQUIP: &str = PROMPT_PAD_UNEQUIP;
+
 /// Minimum asset-tile height when thumbnails are off.
 pub const PANEL_TILE_MIN_HEIGHT: f32 = 44.0;
 

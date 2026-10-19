@@ -245,7 +245,12 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn image_for_key(&mut self, key: u64) -> Option<Handle<Image>> {
-		self.icons?.catalog_for_key(key)
+		let icons = self.icons?;
+		if key == self_lubikan_catalog_key() {
+			icons.silhouette_for_key(key)
+		} else {
+			icons.catalog_for_key(key)
+		}
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
@@ -306,6 +311,7 @@ fn reveal_starter_kit_icons(
 		&fonts,
 		&layout.node,
 		false,
+		None,
 		None,
 		&mut thumbs,
 	);
@@ -539,7 +545,7 @@ mod tests {
 		assert!(!layout.allows(character_creation_menus::MenuEvent::DropInventory(0)));
 		assert_eq!(
 			layout.section_labels(),
-			["Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]
+			["Equipped", "Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]
 		);
 	}
 }

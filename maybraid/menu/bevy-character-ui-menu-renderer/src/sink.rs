@@ -6,8 +6,9 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{
-	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode, PreviewColor,
-	SectionOpen, SelectChoice, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
+	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode,
+	OrderedEquipmentRow, PreviewColor, SectionOpen, SelectChoice, StatCard, StatTone, SwatchChoice,
+	ThumbnailRequest,
 };
 
 use crate::widgets::{
@@ -159,6 +160,10 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
 				block_label(parent, label);
 				self.grid_catalog(choices, parent, context);
 			}
+			MenuNode::OrderedEquipment { rows } => {
+				block_label(parent, "Equipped");
+				self.ordered_equipment(rows, parent, context);
+			}
 			MenuNode::ShortText { label, value, .. } => {
 				inline_label_row(parent, label, |row| {
 					text(row, value, 11.0, VALUE_COLOR);
@@ -239,6 +244,50 @@ impl BevyMenuSink {
 					self.render_nodes(children, section, context);
 				}
 			});
+	}
+
+	fn ordered_equipment<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+		&self,
+		rows: &[OrderedEquipmentRow<E>],
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		for row in rows {
+			block_label(parent, row.label);
+			parent
+				.spawn((
+					Node {
+						width: Val::Percent(100.0),
+						flex_direction: FlexDirection::Row,
+						flex_wrap: FlexWrap::NoWrap,
+						column_gap: Val::Px(8.0),
+						overflow: Overflow::scroll_x(),
+						..default()
+					},
+					Pickable::IGNORE,
+				))
+				.with_children(|strip| {
+					for choice in &row.choices {
+						let thumbnail = grid_catalog_thumbnail(
+							&choice.tile,
+							bevy_color(choice.tile.preview),
+							context,
+						);
+						let label = if choice.tile.detail.is_empty() {
+							choice.tile.label.clone()
+						} else {
+							format!("{}\n{}", choice.tile.label, choice.tile.detail)
+						};
+						render_asset_button(
+							strip,
+							&label,
+							choice.tile.event,
+							choice.tile.selected,
+							thumbnail,
+						);
+					}
+				});
+		}
 	}
 
 	fn grid_catalog<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(

@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use character_ui_menu::{AssetThumbnailDisplay, MenuNode, SelectGroup};
 
 use crate::sink::{MaybraidMenuSink, MenuSink, MenuThumbnailContext, RenderContext};
-use crate::widgets::CloseOverlaySelect;
+use crate::widgets::{CloseOverlaySelect, InventoryItemKey};
 use crate::MenuJustify;
 use menu_components::{
 	menu_region_wash, spawn_header_line, spawn_inventory_action_prompts, spawn_text_button,
@@ -21,6 +21,7 @@ pub fn is_select_node<E>(node: &MenuNode<E>) -> bool {
 			| MenuNode::BlockAsset { .. }
 			| MenuNode::ItemMultiSelect { .. }
 			| MenuNode::GridCatalog { .. }
+			| MenuNode::OrderedEquipment { .. }
 	)
 }
 
@@ -101,7 +102,8 @@ fn find_in_node<'a, E>(node: &'a MenuNode<E>, key: &str) -> Option<&'a MenuNode<
 		| MenuNode::LabeledSwatch { .. }
 		| MenuNode::BlockAsset { .. }
 		| MenuNode::ItemMultiSelect { .. }
-		| MenuNode::GridCatalog { .. } => None,
+		| MenuNode::GridCatalog { .. }
+		| MenuNode::OrderedEquipment { .. } => None,
 	}
 }
 
@@ -127,11 +129,15 @@ pub fn overlay_summary_value<E>(node: &MenuNode<E>) -> String {
 		}
 		MenuNode::GridCatalog { label, choices, .. } => {
 			let count = choices.iter().filter(|choice| choice.selected).count();
-			if matches!(*label, "Weapons" | "Skill Maps" | "Tools" | "Tanzes") {
+			if matches!(*label, "Weapons" | "Skill Maps" | "Tools" | "Tanzes" | "Equipped") {
 				format!("{count} queued")
 			} else {
 				format!("{count} worn")
 			}
+		}
+		MenuNode::OrderedEquipment { rows } => {
+			let count: usize = rows.iter().map(|row| row.choices.len()).sum();
+			format!("{count} queued")
 		}
 		MenuNode::LabeledValue { value, .. } => value.clone(),
 		MenuNode::StatGrid { cards } => stat_grid_preview(cards),
@@ -311,6 +317,7 @@ pub fn fill_inventory_layout<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 	node: &MenuNode<E>,
 	interactive: bool,
 	previous: Option<HudMenu>,
+	retain: Option<InventoryItemKey>,
 	thumbnails: &mut C,
 ) -> usize {
 	let mut prewarm = Vec::new();
@@ -319,6 +326,7 @@ pub fn fill_inventory_layout<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 	};
 	entity.despawn_related::<Children>();
 	let mut item_count = 0;
+	let mut retained = None;
 	entity.with_children(|body| {
 		let mut context = RenderContext {
 			fonts,
@@ -331,13 +339,22 @@ pub fn fill_inventory_layout<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 			lock_appearance: !interactive,
 			catalog_columns: INVENTORY_TILE_COLUMNS,
 			catalog_thumb_px: INVENTORY_THUMB_PX,
+			retain_key: retain,
+			retained_index: None,
 		};
 		render_overlay_body(node, body, &mut context, MenuJustify::Left);
 		item_count = context.hud_item_count;
+		retained = context.retained_index;
 	});
 	drop(entity);
 	if let Ok(mut entity) = commands.get_entity(viewport) {
-		entity.insert(HudMenu::retain(item_count, previous));
+		let mut menu = HudMenu::retain(item_count, previous);
+		if let Some(index) = retained {
+			if item_count > 0 {
+				menu.selected = index.min(item_count - 1);
+			}
+		}
+		entity.insert(menu);
 	}
 	item_count
 }
@@ -419,13 +436,17 @@ fn inventory_section_preview<E>(children: &[MenuNode<E>]) -> String {
 		count += match node {
 			MenuNode::Section { children, .. } => flatten_nodes(children)
 				.into_iter()
-				.map(|inner| match inner {
-					MenuNode::GridCatalog { choices, .. } => choices.len(),
-					MenuNode::LabeledValue { .. } => 1,
-					_ => 0,
-				})
-				.sum(),
+					.map(|inner| match inner {
+						MenuNode::GridCatalog { choices, .. } => choices.len(),
+						MenuNode::OrderedEquipment { rows } => {
+							rows.iter().map(|row| row.choices.len()).sum()
+						}
+						MenuNode::LabeledValue { .. } => 1,
+						_ => 0,
+					})
+					.sum(),
 			MenuNode::GridCatalog { choices, .. } => choices.len(),
+			MenuNode::OrderedEquipment { rows } => rows.iter().map(|row| row.choices.len()).sum(),
 			MenuNode::LabeledValue { .. } => 1,
 			_ => 0,
 		};
@@ -516,6 +537,7 @@ mod tests {
 			image_key: None,
 			selected: false,
 			rank: None,
+			item_key: None,
 			event: Some(0u8),
 		};
 		let node = MenuNode::<u8>::Section {

@@ -567,6 +567,78 @@ impl Inventory {
 		true
 	}
 
+	fn can_queue(&self, index: usize) -> bool {
+		let Some(item) = self.items.get(index) else {
+			return false;
+		};
+		let slot = item.slot();
+		if self.selected(slot).contains(&index) {
+			return false;
+		}
+		if self.selected(slot).len() >= slot.capacity() {
+			return false;
+		}
+		if let Some(id) = item.tanz_id() {
+			if self.equipped_tanzes().contains(&id) {
+				return false;
+			}
+		}
+		true
+	}
+
+	/// Equip `index` at the front of its slot. Already-equipped items stay put
+	/// (reorder is a separate UI action). Capacity and unique Tanz kinds match
+	/// [`Self::toggle`].
+	pub fn equip_front(&mut self, index: usize) -> bool {
+		if !self.can_queue(index) {
+			return false;
+		}
+		let slot = self.items[index].slot();
+		self.selected_mut(slot).insert(0, index);
+		true
+	}
+
+	/// Remove `index` from its slot selection. The item stays in the bag.
+	pub fn unequip(&mut self, index: usize) -> bool {
+		let Some(item) = self.items.get(index) else {
+			return false;
+		};
+		let slot = item.slot();
+		let Some(position) = self.selected(slot).iter().position(|&selected| selected == index)
+		else {
+			return false;
+		};
+		self.selected_mut(slot).remove(position);
+		true
+	}
+
+	/// Move an equipped item one adjacent position. `delta < 0` is toward the
+	/// front (left). Clamps at the ends. Other slots are untouched.
+	pub fn move_equipped(&mut self, index: usize, delta: i8) -> bool {
+		if delta == 0 {
+			return false;
+		}
+		let Some(item) = self.items.get(index) else {
+			return false;
+		};
+		let slot = item.slot();
+		let selected = self.selected_mut(slot);
+		let Some(from) = selected.iter().position(|&selected| selected == index) else {
+			return false;
+		};
+		let to = if delta < 0 {
+			from.saturating_sub(1)
+		} else {
+			(from + 1).min(selected.len().saturating_sub(1))
+		};
+		if to == from {
+			return false;
+		}
+		selected.remove(from);
+		selected.insert(to, index);
+		true
+	}
+
 	/// Clothing-only name for [`Self::toggle`].
 	pub fn toggle_worn(&mut self, index: usize) -> bool {
 		self.toggle(index)
@@ -1438,6 +1510,51 @@ mod tests {
 		assert_eq!(dest.items.len(), 4);
 		assert!(dest.tanzes.is_empty());
 		assert_eq!(dest.items.iter().filter_map(InventoryItem::tanz_id).count(), 4);
+	}
+
+	#[test]
+	fn equip_front_unequip_and_move_equipped() {
+		let mut bag = tanz_bag(vec![1, 2]);
+		assert!(bag.equip_front(3));
+		assert_eq!(
+			bag.equipped_tanzes(),
+			vec![TanzId::ForwardDash, TanzId::LeftStrafe, TanzId::RightStrafe]
+		);
+		assert!(!bag.equip_front(3), "already equipped stays put");
+		assert!(!bag.equip_front(1));
+		assert!(bag.move_equipped(3, 1));
+		assert_eq!(
+			bag.equipped_tanzes(),
+			vec![TanzId::LeftStrafe, TanzId::ForwardDash, TanzId::RightStrafe]
+		);
+		assert!(!bag.move_equipped(1, -1), "clamp at the front");
+		assert!(bag.unequip(3));
+		assert_eq!(bag.equipped_tanzes(), vec![TanzId::LeftStrafe, TanzId::RightStrafe]);
+		assert!(bag.owns_tanz(TanzId::ForwardDash));
+		assert!(!bag.unequip(3));
+		assert!(!bag.move_equipped(3, 1));
+		assert!(bag.equip_front(0));
+		assert_eq!(
+			bag.equipped_tanzes(),
+			vec![TanzId::HealingSalute, TanzId::LeftStrafe, TanzId::RightStrafe]
+		);
+		let mut weapons = Inventory {
+			items: vec![
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::firearm(FirearmMesh::Reltor),
+				InventoryItem::firearm(FirearmMesh::Snailer),
+			],
+			clothing: Vec::new(),
+			weapons: vec![0, 1],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		assert!(weapons.equip_front(2));
+		assert_eq!(weapons.weapons, vec![2, 0, 1]);
+		assert!(weapons.move_equipped(2, 1));
+		assert_eq!(weapons.weapons, vec![0, 2, 1]);
+		assert!(weapons.unequip(2));
+		assert_eq!(weapons.weapons, vec![0, 1]);
 	}
 
 	#[test]

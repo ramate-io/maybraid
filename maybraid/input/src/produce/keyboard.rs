@@ -91,6 +91,9 @@ fn produce_menu_keys(keyboard: &ButtonInput<KeyCode>, pad: &mut VirtualPad) {
 	if keyboard.pressed(KeyCode::KeyE) || keyboard.pressed(KeyCode::KeyX) {
 		pad.hold_digital(PadButton::X);
 	}
+	if keyboard.pressed(KeyCode::KeyY) {
+		pad.hold_digital(PadButton::Y);
+	}
 }
 
 fn hold_arrows(keyboard: &ButtonInput<KeyCode>, pad: &mut VirtualPad) {
@@ -246,5 +249,12 @@ mod tests {
 			press(&mut app, key);
 			assert!(app.world().resource::<VirtualPad>().digital_held(PadButton::X));
 		}
+	}
+
+	#[test]
+	fn menu_map_y_holds_unequip() {
+		let mut app = produce_app(KeyboardPadMap::Menu);
+		press(&mut app, KeyCode::KeyY);
+		assert!(app.world().resource::<VirtualPad>().digital_held(PadButton::Y));
 	}
 }

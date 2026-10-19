@@ -312,6 +312,11 @@ pub struct HoverTile {
 	pub face: Color,
 }
 
+/// Persistent yellow fill on the inventory item being reordered. Distinct from
+/// ordinary focus, which still uses inversion plus this mark's outline.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct ReorderMark;
+
 /// Invert the focused or hovered tile so stick and mouse share the same cue.
 #[allow(clippy::type_complexity)]
 pub fn sync_hover_tiles(
@@ -321,6 +326,8 @@ pub fn sync_hover_tiles(
 		&HoverTile,
 		Option<&HudMenuItem>,
 		Option<&Interaction>,
+		Option<&ReorderMark>,
+		Option<&mut Outline>,
 		&mut Node,
 		&mut BorderColor,
 		&mut BackgroundColor,
@@ -328,11 +335,37 @@ pub fn sync_hover_tiles(
 	children: Query<&Children>,
 	mut captions: Query<&mut TextColor, With<TileWrap>>,
 ) {
-	for (entity, tile, item, interaction, mut node, mut border, mut background) in &mut tiles {
+	for (
+		entity,
+		tile,
+		item,
+		interaction,
+		reorder,
+		mut outline,
+		mut node,
+		mut border,
+		mut background,
+	) in &mut tiles
+	{
 		let focused = item
 			.is_some_and(|item| menus.get(item.menu).is_ok_and(|menu| menu.selected == item.index));
 		let hovered = matches!(interaction, Some(Interaction::Hovered | Interaction::Pressed));
 		let live = focused || hovered;
+		if reorder.is_some() {
+			node.border = UiRect::all(Val::Px(TILE_BORDER));
+			*border = BorderColor::all(TEXT_YELLOW);
+			if !tile.preserve_fill {
+				background.0 = TEXT_YELLOW;
+			}
+			recolor_tile_captions(entity, TEXT_DEEP_BLUE, &children, &mut captions);
+			if let Some(outline) = outline.as_mut() {
+				outline.color = if live { Color::WHITE } else { Color::NONE };
+			}
+			continue;
+		}
+		if let Some(outline) = outline.as_mut() {
+			outline.color = Color::NONE;
+		}
 		if live {
 			node.border = UiRect::all(Val::Px(TILE_BORDER));
 			*border = BorderColor::all(if tile.preserve_fill { TEXT_YELLOW } else { Color::NONE });

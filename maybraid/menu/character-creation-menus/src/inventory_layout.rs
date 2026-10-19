@@ -10,7 +10,10 @@ use character_items::{
 	icon_catalog_key_for_label, self_lubikan_catalog_key, Inventory, InventoryItem, InventorySlot,
 	SELF_LUBIKAN_CAPTURE_LABEL, WORN_CLOTHING_LIMIT,
 };
-use character_ui_menu::{AssetOption, GridCatalogChoice, MenuNode, PreviewColor, ThumbnailCamera};
+use character_ui_menu::{
+	AssetOption, EquipmentChoice, GridCatalogChoice, MenuNode, OrderedEquipmentRow, PreviewColor,
+	ThumbnailCamera,
+};
 use std::time::Duration;
 use tanz_user::TanzPose;
 
@@ -19,6 +22,7 @@ use crate::event::MenuEvent;
 pub const INVENTORY_LABEL: &str = "Inventory";
 pub const STARTER_KIT_LABEL: &str = "Starter Kit";
 pub const TOOLS_LABEL: &str = "Tools";
+pub const EQUIPPED_LABEL: &str = "Equipped";
 pub const LUBIKAN_LABEL: &str = "Lubikan";
 
 /// Equip / drop policy for one inventory layout instance.
@@ -41,7 +45,10 @@ impl InventoryLayoutMode {
 
 	pub const fn allows(self, event: MenuEvent) -> bool {
 		match event {
-			MenuEvent::ToggleInventory(_) => self.allows_equip(),
+			MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. } => self.allows_equip(),
 			MenuEvent::DropInventory(_) => self.allows_drop(),
 			_ => false,
 		}
@@ -119,7 +126,7 @@ impl InventoryLayout {
 		Self {
 			title,
 			mode,
-			node: inventory_node(title, inventory),
+			node: inventory_node(title, inventory, mode),
 			captures: required_captures_for(inventory),
 		}
 	}
@@ -128,7 +135,7 @@ impl InventoryLayout {
 		self.mode.allows(event)
 	}
 
-	/// Clothing / Tools / Skill Maps / Tanzes / Lubikan in that order.
+	/// Equipped / Clothing / Tools / Skill Maps / Tanzes / Lubikan in that order.
 	pub fn section_labels(&self) -> Vec<&'static str> {
 		section_labels(&self.node)
 	}
@@ -151,118 +158,251 @@ fn required_captures_for(inventory: &Inventory) -> Vec<InventoryIconNeed> {
 	needs
 }
 
-fn inventory_node(title: &'static str, inventory: &Inventory) -> MenuNode<MenuEvent> {
+fn inventory_node(
+	title: &'static str,
+	inventory: &Inventory,
+	mode: InventoryLayoutMode,
+) -> MenuNode<MenuEvent> {
 	MenuNode::section(
 		title,
 		MenuNode::fragment([
-			MenuNode::section("Clothing", clothing_catalog(inventory)),
-			MenuNode::section(TOOLS_LABEL, tools_catalog(inventory)),
-			MenuNode::section("Skill Maps", skills_catalog(inventory)),
-			MenuNode::section(InventorySlot::Tanzes.label(), tanz_catalog(inventory)),
+			MenuNode::section(EQUIPPED_LABEL, equipped_pane(inventory, mode)),
+			MenuNode::section("Clothing", clothing_catalog(inventory, mode, false)),
+			MenuNode::section(TOOLS_LABEL, tools_catalog(inventory, mode, false)),
+			MenuNode::section("Skill Maps", skills_catalog(inventory, mode, false)),
+			MenuNode::section(InventorySlot::Tanzes.label(), tanz_catalog(inventory, mode, false)),
 			lubikan_section(),
 		]),
 	)
 }
 
-fn catalog_event(index: usize) -> Option<MenuEvent> {
-	Some(MenuEvent::ToggleInventory(index))
+fn interactive_event(mode: InventoryLayoutMode, event: MenuEvent) -> Option<MenuEvent> {
+	mode.allows(event).then_some(event)
 }
 
-fn clothing_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
+fn clothing_tile(
+	inventory: &Inventory,
+	index: usize,
+	item: &InventoryItem,
+	mode: InventoryLayoutMode,
+) -> Option<GridCatalogChoice<MenuEvent>> {
+	let mesh = item.mesh()?;
+	let asset = mesh.asset();
+	let rank = inventory.rank(index);
+	Some(GridCatalogChoice {
+		label: item.name(),
+		detail: item.catalog_detail(),
+		path: asset.path,
+		thumbnail_camera: asset.thumbnail_camera,
+		preview: PreviewColor::of(item.material()?.color),
+		image_key: item.icon_catalog_key(),
+		selected: rank.is_some(),
+		rank,
+		item_key: Some(index),
+		event: interactive_event(mode, MenuEvent::EquipInventory(index)),
+	})
+}
+
+fn tools_tile(
+	inventory: &Inventory,
+	index: usize,
+	item: &InventoryItem,
+	mode: InventoryLayoutMode,
+) -> Option<GridCatalogChoice<MenuEvent>> {
+	if item.firearm_mesh().is_none() && item.grenade_spec().is_none() {
+		return None;
+	}
+	let rank = inventory.rank(index);
+	let (path, thumbnail_camera) = match item.firearm_mesh() {
+		Some(mesh) => {
+			let asset = mesh.asset();
+			(asset.path, asset.thumbnail_camera)
+		}
+		None => (item.path(), ThumbnailCamera::DEFAULT),
+	};
+	Some(GridCatalogChoice {
+		label: item.name(),
+		detail: item.catalog_detail(),
+		path,
+		thumbnail_camera,
+		preview: PreviewColor::WHITE,
+		image_key: item.icon_catalog_key(),
+		selected: rank.is_some(),
+		rank,
+		item_key: Some(index),
+		event: interactive_event(mode, MenuEvent::EquipInventory(index)),
+	})
+}
+
+fn skills_tile(
+	inventory: &Inventory,
+	index: usize,
+	item: &InventoryItem,
+	mode: InventoryLayoutMode,
+) -> Option<GridCatalogChoice<MenuEvent>> {
+	let spec = item.skill_map_spec()?;
+	let [red, green, blue] = spec.kind.preview_srgb();
+	let rank = inventory.rank(index);
+	Some(GridCatalogChoice {
+		label: item.name(),
+		detail: item.catalog_detail(),
+		path: item.path(),
+		thumbnail_camera: ThumbnailCamera::DEFAULT,
+		preview: PreviewColor::srgb(red, green, blue),
+		image_key: item.icon_catalog_key(),
+		selected: rank.is_some(),
+		rank,
+		item_key: Some(index),
+		event: interactive_event(mode, MenuEvent::EquipInventory(index)),
+	})
+}
+
+fn tanz_tile(
+	inventory: &Inventory,
+	index: usize,
+	item: &InventoryItem,
+	mode: InventoryLayoutMode,
+) -> Option<GridCatalogChoice<MenuEvent>> {
+	let id = item.tanz_id()?;
+	let rank = inventory.rank(index);
+	Some(GridCatalogChoice {
+		label: item.name(),
+		detail: item.catalog_detail(),
+		path: item.path(),
+		thumbnail_camera: ThumbnailCamera::DEFAULT,
+		preview: PreviewColor::WHITE,
+		image_key: Some(TanzPose(id).icon_catalog_key()),
+		selected: rank.is_some(),
+		rank,
+		item_key: Some(index),
+		event: interactive_event(mode, MenuEvent::EquipInventory(index)),
+	})
+}
+
+fn equipment_choice(
+	index: usize,
+	tile: GridCatalogChoice<MenuEvent>,
+	mode: InventoryLayoutMode,
+) -> EquipmentChoice<MenuEvent> {
+	EquipmentChoice {
+		item_key: index,
+		tile,
+		unequip: interactive_event(mode, MenuEvent::UnequipInventory(index)),
+		move_left: interactive_event(mode, MenuEvent::MoveEquippedInventory { index, delta: -1 }),
+		move_right: interactive_event(mode, MenuEvent::MoveEquippedInventory { index, delta: 1 }),
+	}
+}
+
+fn equipped_row<F>(
+	label: &'static str,
+	capacity: usize,
+	inventory: &Inventory,
+	mode: InventoryLayoutMode,
+	mut tile: F,
+) -> OrderedEquipmentRow<MenuEvent>
+where
+	F: FnMut(usize, &InventoryItem) -> Option<GridCatalogChoice<MenuEvent>>,
+{
+	let slot = match label {
+		"Clothing" => InventorySlot::Clothing,
+		"Tools" => InventorySlot::Weapons,
+		"Skill Maps" => InventorySlot::Skills,
+		"Tanzes" => InventorySlot::Tanzes,
+		_ => InventorySlot::Clothing,
+	};
+	let choices = inventory
+		.selected(slot)
+		.iter()
+		.copied()
+		.filter_map(|index| {
+			let item = inventory.items.get(index)?;
+			tile(index, item).map(|choice| equipment_choice(index, choice, mode))
+		})
+		.collect();
+	OrderedEquipmentRow { label, capacity, choices }
+}
+
+fn equipped_pane(inventory: &Inventory, mode: InventoryLayoutMode) -> MenuNode<MenuEvent> {
+	MenuNode::ordered_equipment([
+		equipped_row("Clothing", WORN_CLOTHING_LIMIT, inventory, mode, |index, item| {
+			clothing_tile(inventory, index, item, mode)
+		}),
+		equipped_row(TOOLS_LABEL, InventorySlot::Weapons.capacity(), inventory, mode, |index, item| {
+			tools_tile(inventory, index, item, mode)
+		}),
+		equipped_row(
+			InventorySlot::Skills.label(),
+			InventorySlot::Skills.capacity(),
+			inventory,
+			mode,
+			|index, item| skills_tile(inventory, index, item, mode),
+		),
+		equipped_row(
+			InventorySlot::Tanzes.label(),
+			InventorySlot::Tanzes.capacity(),
+			inventory,
+			mode,
+			|index, item| tanz_tile(inventory, index, item, mode),
+		),
+	])
+}
+
+fn clothing_catalog(
+	inventory: &Inventory,
+	mode: InventoryLayoutMode,
+	equipped: bool,
+) -> MenuNode<MenuEvent> {
 	MenuNode::grid_catalog(
 		"Clothing",
 		WORN_CLOTHING_LIMIT,
 		inventory.items.iter().enumerate().filter_map(|(index, item)| {
-			let mesh = item.mesh()?;
-			let asset = mesh.asset();
-			let rank = inventory.rank(index);
-			Some(GridCatalogChoice {
-				label: item.name(),
-				detail: item.catalog_detail(),
-				path: asset.path,
-				thumbnail_camera: asset.thumbnail_camera,
-				preview: PreviewColor::of(item.material()?.color),
-				image_key: item.icon_catalog_key(),
-				selected: rank.is_some(),
-				rank,
-				event: catalog_event(index),
-			})
+			let tile = clothing_tile(inventory, index, item, mode)?;
+			(tile.selected == equipped).then_some(tile)
 		}),
 	)
 }
 
-fn tools_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
+fn tools_catalog(
+	inventory: &Inventory,
+	mode: InventoryLayoutMode,
+	equipped: bool,
+) -> MenuNode<MenuEvent> {
 	MenuNode::grid_catalog(
 		TOOLS_LABEL,
 		InventorySlot::Weapons.capacity(),
 		inventory.items.iter().enumerate().filter_map(|(index, item)| {
-			if item.firearm_mesh().is_none() && item.grenade_spec().is_none() {
-				return None;
-			}
-			let rank = inventory.rank(index);
-			let (path, thumbnail_camera) = match item.firearm_mesh() {
-				Some(mesh) => {
-					let asset = mesh.asset();
-					(asset.path, asset.thumbnail_camera)
-				}
-				None => (item.path(), ThumbnailCamera::DEFAULT),
-			};
-			Some(GridCatalogChoice {
-				label: item.name(),
-				detail: item.catalog_detail(),
-				path,
-				thumbnail_camera,
-				preview: PreviewColor::WHITE,
-				image_key: item.icon_catalog_key(),
-				selected: rank.is_some(),
-				rank,
-				event: catalog_event(index),
-			})
+			let tile = tools_tile(inventory, index, item, mode)?;
+			(tile.selected == equipped).then_some(tile)
 		}),
 	)
 }
 
-fn skills_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
+fn skills_catalog(
+	inventory: &Inventory,
+	mode: InventoryLayoutMode,
+	equipped: bool,
+) -> MenuNode<MenuEvent> {
 	MenuNode::grid_catalog(
 		InventorySlot::Skills.label(),
 		InventorySlot::Skills.capacity(),
 		inventory.items.iter().enumerate().filter_map(|(index, item)| {
-			let spec = item.skill_map_spec()?;
-			let [red, green, blue] = spec.kind.preview_srgb();
-			let rank = inventory.rank(index);
-			Some(GridCatalogChoice {
-				label: item.name(),
-				detail: item.catalog_detail(),
-				path: item.path(),
-				thumbnail_camera: ThumbnailCamera::DEFAULT,
-				preview: PreviewColor::srgb(red, green, blue),
-				image_key: item.icon_catalog_key(),
-				selected: rank.is_some(),
-				rank,
-				event: catalog_event(index),
-			})
+			let tile = skills_tile(inventory, index, item, mode)?;
+			(tile.selected == equipped).then_some(tile)
 		}),
 	)
 }
 
-fn tanz_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
+fn tanz_catalog(
+	inventory: &Inventory,
+	mode: InventoryLayoutMode,
+	equipped: bool,
+) -> MenuNode<MenuEvent> {
 	MenuNode::grid_catalog(
 		InventorySlot::Tanzes.label(),
 		InventorySlot::Tanzes.capacity(),
 		inventory.items.iter().enumerate().filter_map(|(index, item)| {
-			let id = item.tanz_id()?;
-			let rank = inventory.rank(index);
-			Some(GridCatalogChoice {
-				label: item.name(),
-				detail: item.catalog_detail(),
-				path: item.path(),
-				thumbnail_camera: ThumbnailCamera::DEFAULT,
-				preview: PreviewColor::WHITE,
-				image_key: Some(TanzPose(id).icon_catalog_key()),
-				selected: rank.is_some(),
-				rank,
-				event: catalog_event(index),
-			})
+			let tile = tanz_tile(inventory, index, item, mode)?;
+			(tile.selected == equipped).then_some(tile)
 		}),
 	)
 }
@@ -282,6 +422,7 @@ fn lubikan_section() -> MenuNode<MenuEvent> {
 				image_key: Some(icon_catalog_key_for_label(SELF_LUBIKAN_CAPTURE_LABEL)),
 				selected: true,
 				rank: None,
+				item_key: None,
 				event: None,
 			}],
 		),
@@ -342,7 +483,7 @@ mod tests {
 		let menu = InventoryLayout::character_menu(&Inventory::with_starter_outfit(items));
 		assert_eq!(
 			starter.section_labels(),
-			["Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]
+			["Equipped", "Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]
 		);
 		assert_eq!(starter.section_labels(), menu.section_labels());
 		assert_eq!(starter.title, STARTER_KIT_LABEL);
@@ -355,6 +496,9 @@ mod tests {
 	fn read_only_mode_rejects_equip_and_drop() {
 		let layout = InventoryLayout::starter_kit(sample_items());
 		assert!(!layout.allows(MenuEvent::ToggleInventory(0)));
+		assert!(!layout.allows(MenuEvent::EquipInventory(0)));
+		assert!(!layout.allows(MenuEvent::UnequipInventory(0)));
+		assert!(!layout.allows(MenuEvent::MoveEquippedInventory { index: 0, delta: 1 }));
 		assert!(!layout.allows(MenuEvent::DropInventory(0)));
 		assert!(!layout.allows(MenuEvent::Save));
 		assert!(!InventoryLayoutMode::ReadOnly.allows_equip());
@@ -366,6 +510,9 @@ mod tests {
 		let inventory = Inventory::with_starter_outfit(sample_items());
 		let layout = InventoryLayout::character_menu(&inventory);
 		assert!(layout.allows(MenuEvent::ToggleInventory(0)));
+		assert!(layout.allows(MenuEvent::EquipInventory(0)));
+		assert!(layout.allows(MenuEvent::UnequipInventory(0)));
+		assert!(layout.allows(MenuEvent::MoveEquippedInventory { index: 0, delta: -1 }));
 		assert!(layout.allows(MenuEvent::DropInventory(0)));
 		assert!(InventoryLayoutMode::Interactive.allows_equip());
 		assert!(InventoryLayoutMode::Interactive.allows_drop());
@@ -385,6 +532,9 @@ mod tests {
 					.iter()
 					.map(|inner| match inner {
 						MenuNode::GridCatalog { choices, .. } => choices.len(),
+						MenuNode::OrderedEquipment { rows } => {
+							rows.iter().map(|row| row.choices.len()).sum()
+						}
 						_ => 0,
 					})
 					.sum(),
@@ -401,17 +551,31 @@ mod tests {
 		let MenuNode::Section { children, .. } = &layout.node else {
 			return 0;
 		};
+		let mut count = 0;
 		for child in children {
-			let MenuNode::Section { label: "Clothing", children } = child else {
-				continue;
-			};
-			for inner in children {
-				if let MenuNode::GridCatalog { choices, .. } = inner {
-					return choices.len();
+			match child {
+				MenuNode::Section { label: "Equipped", children } => {
+					for inner in children {
+						if let MenuNode::OrderedEquipment { rows } = inner {
+							count += rows
+								.iter()
+								.filter(|row| row.label == "Clothing")
+								.map(|row| row.choices.len())
+								.sum::<usize>();
+						}
+					}
 				}
+				MenuNode::Section { label: "Clothing", children } => {
+					for inner in children {
+						if let MenuNode::GridCatalog { choices, .. } = inner {
+							count += choices.len();
+						}
+					}
+				}
+				_ => {}
 			}
 		}
-		0
+		count
 	}
 
 	#[test]
@@ -438,17 +602,35 @@ mod tests {
 			InventoryItem::firearm(FirearmMesh::Bullpup),
 		];
 		let mut inventory = Inventory::with_starter_outfit(items);
-		assert!(inventory.toggle(
-			inventory
-				.items
-				.iter()
-				.position(|item| item.tanz_id() == Some(TanzId::HealingSalute))
-				.expect("salute")
-		));
+		let salute = inventory
+			.items
+			.iter()
+			.position(|item| item.tanz_id() == Some(TanzId::HealingSalute))
+			.expect("salute");
+		assert!(inventory.equip_front(salute));
 		let layout = InventoryLayout::character_menu(&inventory);
 		let MenuNode::Section { children, .. } = &layout.node else {
 			panic!("inventory must be a section");
 		};
+		let equipped = children.iter().find_map(|child| match child {
+			MenuNode::Section { label: "Equipped", children } => children.first(),
+			_ => None,
+		});
+		let Some(MenuNode::OrderedEquipment { rows }) = equipped else {
+			panic!("Equipped must be ordered rows");
+		};
+		let tanz_row = rows.iter().find(|row| row.label == "Tanzes").expect("Tanzes row");
+		assert_eq!(tanz_row.capacity, 4);
+		assert_eq!(tanz_row.choices.len(), 1);
+		assert_eq!(tanz_row.choices[0].item_key, salute);
+		assert_eq!(tanz_row.choices[0].tile.label, "Healing Salute");
+		assert_eq!(tanz_row.choices[0].tile.detail, "A · Forward");
+		assert_eq!(
+			tanz_row.choices[0].tile.image_key,
+			Some(TanzPose(TanzId::HealingSalute).icon_catalog_key())
+		);
+		assert_eq!(tanz_row.choices[0].tile.rank, Some(1));
+		assert_eq!(tanz_row.choices[0].unequip, Some(MenuEvent::UnequipInventory(salute)));
 		let tanzes = children.iter().find_map(|child| match child {
 			MenuNode::Section { label: "Tanzes", children } => children.first(),
 			_ => None,
@@ -457,15 +639,12 @@ mod tests {
 			panic!("Tanzes must be a catalog");
 		};
 		assert_eq!(*max_selected, 4);
-		assert_eq!(choices.len(), 2);
-		assert_eq!(choices[0].label, "Healing Salute");
-		assert_eq!(choices[0].detail, "A · Forward");
-		assert_eq!(choices[0].image_key, Some(TanzPose(TanzId::HealingSalute).icon_catalog_key()));
-		assert_eq!(choices[0].rank, Some(1));
-		assert!(choices[0].selected);
-		assert_eq!(choices[1].label, "Left Strafe");
-		assert!(!choices[1].selected);
-		assert_eq!(choices[1].rank, None);
+		assert_eq!(choices.len(), 1);
+		assert_eq!(choices[0].label, "Left Strafe");
+		assert!(!choices[0].selected);
+		assert_eq!(choices[0].rank, None);
+		assert_eq!(choices[0].item_key, Some(1));
+		assert_eq!(choices[0].event, Some(MenuEvent::EquipInventory(1)));
 		assert!(layout.captures.iter().any(|need| {
 			need.silhouette && need.key == TanzPose(TanzId::LeftStrafe).icon_catalog_key()
 		}));
