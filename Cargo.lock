@@ -7194,6 +7194,7 @@ dependencies = [
  "menu-components",
  "menu-screens",
  "player",
+ "screen-capture",
  "tanz-user",
 ]
 

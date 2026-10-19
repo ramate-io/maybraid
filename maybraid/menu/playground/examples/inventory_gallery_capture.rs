@@ -19,7 +19,7 @@ use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use character_creation_menus::{CharacterMenu, InventoryLayout, STARTER_KIT_LABEL};
 use character_items::{
 	self_lubikan_catalog_key, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory,
-	InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec,
+	InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec, TanzId, BASE_STARTER_TANZES,
 };
 use character_ui_menu::MenuComponent;
 use item_icons::{
@@ -49,7 +49,7 @@ fn main() {
 				.set(WindowPlugin {
 					primary_window: Some(Window {
 						title: "Inventory layout capture".into(),
-						resolution: (960, 720).into(),
+						resolution: (960, 1080).into(),
 						..default()
 					}),
 					..default()
@@ -189,6 +189,12 @@ fn sample_menu(items: Vec<InventoryItem>) -> CharacterMenu {
 	let mut menu = CharacterMenu::for_create(items);
 	menu.name = String::from("Misty");
 	menu
+}
+
+/// Modal fixture: four owned Tanzes so the Equipped Tanz row sits near the
+/// top. Two stay equipped; two appear in the unequipped Tanz catalog.
+fn tanz_modal_items() -> Vec<InventoryItem> {
+	BASE_STARTER_TANZES.into_iter().map(InventoryItem::tanz).collect()
 }
 
 #[derive(Component)]
@@ -359,7 +365,23 @@ fn spawn_modal_scene(
 	assets: &AssetServer,
 	icons: Option<&ItemIconCache>,
 ) {
-	let menu = sample_menu(real_starter_items());
+	let mut menu = sample_menu(tanz_modal_items());
+	// Leave Healing Salute and Left Strafe equipped so the modal shot shows
+	// both the Equipped Tanz row and the unequipped Tanz catalog.
+	if let Some(inventory) = menu.inventory.as_mut() {
+		let drop: Vec<usize> = inventory
+			.items
+			.iter()
+			.enumerate()
+			.filter_map(|(index, item)| match item.tanz_id() {
+				Some(TanzId::RightStrafe | TanzId::ForwardDash) => Some(index),
+				_ => None,
+			})
+			.collect();
+		for index in drop {
+			let _ = inventory.unequip(index);
+		}
+	}
 	let nodes = menu.menu_nodes();
 	let Some(node) = find_overlay_node(&nodes, "Inventory").cloned() else {
 		return;
@@ -575,6 +597,8 @@ mod tests {
 	use super::*;
 	use character_items::SELF_LUBIKAN_CAPTURE_LABEL;
 	use item_icons::CaptureId;
+	use screen_capture::CaptureSubject;
+	use tanz_user::TanzPose;
 
 	#[test]
 	fn gallery_waits_for_starter_and_overflow_captures() {
@@ -583,11 +607,15 @@ mod tests {
 		cache.insert_silhouette(CaptureId::new(SELF_LUBIKAN_CAPTURE_LABEL), Handle::default());
 		assert!(
 			!icon_ready(&cache),
-			"clothing / firearm / grenade captures must enter the wait set"
+			"clothing / firearm / grenade / Tanz captures must enter the wait set"
 		);
 		for inventory in capture_icon_inventories() {
 			for item in &inventory.items {
-				if matches!(item, InventoryItem::SkillMap { .. } | InventoryItem::Tanz { .. }) {
+				if matches!(item, InventoryItem::SkillMap { .. }) {
+					continue;
+				}
+				if let Some(id) = item.tanz_id() {
+					cache.insert_silhouette(TanzPose(id).capture_id(), Handle::default());
 					continue;
 				}
 				let Some(label) = item.capture_id_label() else {
