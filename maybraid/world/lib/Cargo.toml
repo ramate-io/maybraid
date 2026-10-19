@@ -25,6 +25,8 @@ clap = { workspace = true }
 combat-hud = { workspace = true }
 lubikans = { workspace = true }
 lubikans-damage = { workspace = true }
+encounters = { workspace = true }
+bikanwarda-encounter = { workspace = true }
 character-items = { workspace = true }
 character-ragdoll = { workspace = true }
 characters = { workspace = true }
@@ -98,6 +100,7 @@ vegetation-layer-model = { workspace = true }
 [dev-dependencies]
 anyhow = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
+encounters = { workspace = true, features = ["test-support"] }
 tempfile = { workspace = true }
 
 [lints]
