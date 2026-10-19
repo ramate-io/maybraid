@@ -232,7 +232,7 @@ fn conduit_mask(around: f32, along: f32, seed: f32, freq: f32) -> f32 {
     let warp = 0.07 * value_noise_3d(vec3<f32>(around * 2.0, along * 0.55, seed));
     let u = around * veins + warp;
     let ridge = 1.0 - abs(fract(u) * 2.0 - 1.0);
-    return pow(saturate(ridge * 1.08), 3.6);
+    return pow(saturate(ridge * 1.06), 2.2);
 }
 
 @vertex
@@ -398,13 +398,17 @@ fn fragment(
     )));
 
     if material.halo.x > 0.5 {
-        let fresnel = pow(1.0 - facing, 4.4);
-        let surge = saturate((lit - 0.34) / 0.66);
-        let opacity = fresnel * (0.10 + 0.90 * surge) * halo_gain * (1.0 - fade);
+        // Soft volume, not a hard rim. Presence is authored gain * one energy.
+        let fresnel = pow(1.0 - facing, 2.15);
+        var opacity = (0.22 + 0.78 * fresnel) * lit * halo_gain * (1.0 - fade);
+        if !is_front {
+            opacity *= 0.38;
+        }
         let glow = material.colors[1].xyz;
-        let pale = mix(glow, vec3<f32>(0.78, 0.94, 0.90), 0.18);
-        let rgb = (glow * 0.62 + pale * 0.10) * opacity;
-        return vec4<f32>(rgb, opacity);
+        var rgb = glow * opacity;
+        // Keep additive turquoise from stacking to white on interlocking links.
+        rgb = rgb / (vec3<f32>(1.0) + rgb * 0.55);
+        return vec4<f32>(rgb, saturate(opacity));
     }
 
     var pbr_input: PbrInput = pbr_input_new();
@@ -422,20 +426,22 @@ fn fragment(
     let exposed = saturate(1.0 - smoothstep(0.0, lip_w, bites.y));
 
     albedo = mix(albedo, ash * 0.82, exposed * 0.72);
-    albedo = mix(albedo, glow * 0.50 + metal * 0.40, conduit * 0.34 * (0.40 + 0.60 * lit));
-    albedo = mix(albedo, glow, conduit_core * 0.22 * lit);
-    albedo = mix(albedo, ember * 0.45, exposed * smoothstep(0.72, 1.0, severity) * 0.18);
+    albedo = mix(albedo, glow, conduit * (0.42 + 0.48 * lit));
+    albedo = mix(albedo, glow, conduit_core * (0.28 + 0.40 * lit));
+    albedo = mix(albedo, glow * 0.88, exposed * (0.46 + 0.42 * lit));
+    albedo = mix(albedo, ember * 0.45, exposed * smoothstep(0.72, 1.0, severity) * 0.14);
     if !is_front {
         albedo *= 0.74;
     }
 
-    let pale = mix(glow, vec3<f32>(0.82, 0.96, 0.93), 0.28);
-    let emit_gain = min(glow_gain, 2.4);
-    let body_emit = glow * conduit * lit * emit_gain * 0.55;
-    let core_emit = pale * conduit_core * lit * emit_gain * 0.32;
-    let edge_emit = glow * exposed * lit * emit_gain * 0.30;
-    let hit_emit = glow * flash * exposed * 0.40;
-    let emissive = (body_emit + core_emit + edge_emit + hit_emit) * (1.0 - fade);
+    let pale = mix(glow, vec3<f32>(0.55, 0.96, 0.90), 0.16);
+    let emit_gain = glow_gain / (1.0 + glow_gain * 0.10);
+    let body_emit = glow * conduit * lit * emit_gain * 0.92;
+    let core_emit = pale * conduit_core * lit * emit_gain * 0.22;
+    let edge_emit = glow * exposed * lit * emit_gain * 0.80;
+    let hit_emit = glow * flash * exposed * 0.35;
+    var emissive = (body_emit + core_emit + edge_emit + hit_emit) * (1.0 - fade);
+    emissive = emissive / (vec3<f32>(1.0) + emissive * 0.40);
 
     let height = 0.5 + conduit * 0.08 - exposed * 0.16;
     let prepared_normal = fns::prepare_world_normal(mesh.world_normal, true, is_front);

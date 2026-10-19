@@ -29,11 +29,12 @@ impl ChainFlowStyle {
 	pub const DEFAULT_SPEED_MPS: f32 = 1.25;
 	/// Broad crest: about a third of the playground length.
 	pub const DEFAULT_WAVELENGTH_M: f32 = 2.2;
-	pub const DEFAULT_BASELINE: f32 = 0.36;
+	/// Quiet between crests so the surge can lead the read.
+	pub const DEFAULT_BASELINE: f32 = 0.18;
 	pub const DEFAULT_PEAK: f32 = 1.0;
-	/// Tight aura, well under the 0.052 m placeholder tube radius.
-	pub const DEFAULT_HALO_WIDTH_M: f32 = 0.0065;
-	pub const DEFAULT_HALO_GAIN: f32 = 0.14;
+	/// Soft aura. Still well under the 0.052 m placeholder tube radius.
+	pub const DEFAULT_HALO_WIDTH_M: f32 = 0.016;
+	pub const DEFAULT_HALO_GAIN: f32 = 0.78;
 
 	pub fn clamped(self) -> Self {
 		Self {
@@ -138,6 +139,22 @@ mod tests {
 		assert!((a - b).abs() < 1e-5, "zero speed must not travel, {a} vs {b}");
 		let other = chain_flow(1.6, 0.0, flow);
 		assert!((a - other).abs() > 0.02, "standing wave still varies along s");
+		Ok(())
+	}
+
+	#[test]
+	fn peak_leads_baseline_by_a_clear_margin() -> anyhow::Result<()> {
+		let flow = ChainFlowStyle::default();
+		assert!(
+			flow.peak - flow.baseline >= 0.6,
+			"surge contrast must stay readable, peak={} baseline={}",
+			flow.peak,
+			flow.baseline
+		);
+		let crest = chain_flow(0.0, 0.0, flow);
+		let trough = chain_flow(flow.wavelength_m * 0.5, 0.0, flow);
+		assert!((crest - flow.peak).abs() < 0.05);
+		assert!((trough - flow.baseline).abs() < 0.05);
 		Ok(())
 	}
 

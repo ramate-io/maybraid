@@ -53,17 +53,17 @@ pub const MYTHICAL_CHAIN_SCALAR_COUNT: usize = 14;
 
 /// Default metal: blue-gray body, not scorched iron.
 pub const DEFAULT_METAL: Color = Color::srgb(0.34, 0.36, 0.40);
-/// Default energy: saturated turquoise.
-pub const DEFAULT_GLOW: Color = Color::srgb(0.04, 0.78, 0.68);
+/// Default energy: saturated turquoise that leads the read.
+pub const DEFAULT_GLOW: Color = Color::srgb(0.02, 0.90, 0.78);
 /// Default ash / broken-edge soil. Cool, not rust-orange.
 pub const DEFAULT_DAMAGE: Color = Color::srgb(0.26, 0.22, 0.20);
 /// Optional ember accent. Used sparingly on broken lips.
 pub const DEFAULT_EMBER: Color = Color::srgb(0.70, 0.30, 0.10);
 
-/// Authored glow gain. Kept modest so emission is a highlight, not a cage.
-pub const DEFAULT_GLOW_INTENSITY: f32 = 2.2;
-/// Authored decorative conduit frequency.
-pub const DEFAULT_CONDUIT_FREQUENCY: f32 = 2.2;
+/// Authored glow gain. Energy body should lead the metal.
+pub const DEFAULT_GLOW_INTENSITY: f32 = 3.6;
+/// Authored decorative conduit frequency. Lower = broader veins at play distance.
+pub const DEFAULT_CONDUIT_FREQUENCY: f32 = 1.6;
 /// Authored link-count hint (matches the placeholder mesh).
 pub const DEFAULT_LINK_COUNT: f32 = 14.0;
 /// Authored noise seed.

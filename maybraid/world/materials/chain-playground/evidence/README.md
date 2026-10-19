@@ -15,10 +15,16 @@ ffmpeg -y -framerate 30 -i /tmp/chain-video/frames/f%04d.png \
 
 Video cadence is **30 Hz**. After shader warmup the playground inserts
 `TimeUpdateStrategy::ManualDuration(1/30 s)` so simulation time and frame
-index stay locked. The 10.2 s reel is **fixed damage, no hits**. Hits are
-applied after that reel so they do not strobe the transit. Stills freeze
-virtual time after warmup so every damage plate shares one flow phase.
+index stay locked. The 10.13 s / 304-frame reel is **fixed damage, no hits**.
+Hits are applied after that reel so they do not strobe the transit. Stills
+freeze virtual time after warmup so every damage plate shares one flow phase.
 Do not infer smoothness from a sparser dump.
+
+Energy/halo rebalance (recipe, not shader hard-codes): glow
+`(0.02, 0.90, 0.78)`, `glow_intensity 3.6`, `conduit_frequency 1.6`,
+`flow.baseline 0.18`, `flow.peak 1.0`, `halo_width_m 0.016`,
+`halo_gain 0.78`. Halo presence is `authored gain × one energy`; additive
+RGB is compressed so overlapping links stay turquoise.
 
 ## Stills
 

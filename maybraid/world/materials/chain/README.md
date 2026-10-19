@@ -133,7 +133,7 @@ flow or enter severity.
 
 ## Halo / renderer
 
-Authored `halo_width_m` (default `0.0065 m`) is independent of incidental
+Authored `halo_width_m` (default `0.016 m`) is independent of incidental
 scene units. Expansion is nearly fixed (`width * (0.94 + 0.08 * energy)`).
 The halo fragment is an early branch: visibility, flow, Fresnel. Depth
 tested, no depth writes, additive, no full-screen bloom.
@@ -166,8 +166,8 @@ Palette (linear-authored sRGB):
 
 | Slot | Role | Default |
 |------|------|---------|
-| 0 | Intact metal | `(0.40, 0.36, 0.32)` |
-| 1 | Energy glow | `(0.06, 0.76, 0.70)` |
+| 0 | Intact metal | `(0.34, 0.36, 0.40)` |
+| 1 | Energy glow | `(0.02, 0.90, 0.78)` |
 | 2 | Ash / broken lip | `(0.26, 0.22, 0.20)` |
 | 3 | Ember accent | `(0.70, 0.30, 0.10)` |
 
@@ -177,19 +177,19 @@ keeps flow defaults when the slice is the old 8-float recipe):
 | Index | Name | Default |
 |-------|------|---------|
 | 0 | `intact` | `1.0` / `0.50` / `0.22` / `0.0` |
-| 1 | `glow_intensity` | `2.2` |
+| 1 | `glow_intensity` | `3.6` |
 | 2 | `fade` | `0` except released `1` |
 | 3 | `damage` | `0` → derive `1 - intact` |
 | 4 | `link_count` | `14` |
-| 5 | `conduit_frequency` | `2.2` |
+| 5 | `conduit_frequency` | `1.6` |
 | 6 | `localized_blend` | `0` |
 | 7 | reserved | `0` (old pulse rate is ignored) |
 | 8 | `flow.speed_mps` | `1.25` (signed) |
 | 9 | `flow.wavelength_m` | `2.2` |
-| 10 | `flow.baseline` | `0.28` |
+| 10 | `flow.baseline` | `0.18` |
 | 11 | `flow.peak` | `1.0` |
-| 12 | `flow.halo_width_m` | `0.0065` |
-| 13 | `flow.halo_gain` | `0.14` |
+| 12 | `flow.halo_width_m` | `0.016` |
+| 13 | `flow.halo_gain` | `0.78` |
 
 Hit timestamps and `link_damage` are runtime-only.
 
