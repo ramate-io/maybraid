@@ -6,6 +6,7 @@
 pub mod assets;
 pub mod recipe;
 pub use recipe::Epiphant;
+pub mod tattoo_mapping;
 pub mod palette;
 pub mod pose;
 pub mod presets;

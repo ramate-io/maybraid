@@ -1,9 +1,9 @@
-//! Skin [`Material`] — hide shading plus a UV0 tattoo emission mask.
+//! Skin [`Material`] — hide shading plus a tattoo emission mask sampled in UV space.
 //!
 //! Recipes [`RECIPE_SKIN_TATTOO_BODY`] / [`RECIPE_SKIN_TATTOO_HEAD`] are claimed
-//! by the character [`material_ref::MaterialLib`]. Color, intensity, and pulse
-//! live on [`SkinTattoo`] (open [#1128](https://github.com/ramate-io/maybraid/issues/1128)
-//! knobs). Masks are placeholder PNGs; see
+//! by the character [`material_ref::MaterialLib`]. Color, intensity, pulse, and
+//! [`SkinTattooUvSource`] live on the stamped [`MaterialRef`]. Mask PNG paths and
+//! species-specific unwrap contracts are documented in
 //! `maybraid/assets/characters/tattoos/README.md`.
 
 use bevy::{
@@ -24,13 +24,15 @@ use material_ref::{
 	MATERIAL_RASTER_WIDTH, MATERIAL_SCALAR_FLOATS,
 };
 
-/// Body hide + tattoo mask (provisional unwrap until `epiphant.glb` gains UV0).
+use crate::skin_tattoo_uv::{SkinTattooUvSource, SKIN_SCALAR_UV_SOURCE};
+
+/// Body hide + tattoo mask (`SkinTattooMask::Body` PNG).
 pub const RECIPE_SKIN_TATTOO_BODY: &str = "skin_tattoo_body";
-/// Head hide + tattoo mask on existing meerkat UV0.
+/// Head hide + tattoo mask (`SkinTattooMask::Head` PNG).
 pub const RECIPE_SKIN_TATTOO_HEAD: &str = "skin_tattoo_head";
-/// Ear hide + tattoo mask (planar XY unwrap; ear GLB has no UV0).
+/// Ear hide + tattoo mask (`SkinTattooMask::Ear` PNG).
 pub const RECIPE_SKIN_TATTOO_EAR: &str = "skin_tattoo_ear";
-/// Trunk hide + tattoo mask (cylindrical about Y; trunk GLB has no UV0).
+/// Trunk hide + tattoo mask (`SkinTattooMask::Trunk` PNG).
 pub const RECIPE_SKIN_TATTOO_TRUNK: &str = "skin_tattoo_trunk";
 
 pub const KIND_BODY: u32 = 0;
@@ -135,10 +137,20 @@ impl Default for SkinTattoo {
 }
 
 impl SkinTattoo {
-	pub fn material_ref(self, mask: SkinTattooMask, skin: Color) -> MaterialRef {
+	pub fn material_ref(
+		self,
+		mask: SkinTattooMask,
+		skin: Color,
+		uv_source: SkinTattooUvSource,
+	) -> MaterialRef {
 		MaterialRef::named(mask.recipe_name())
 			.with_palette([skin, self.glow])
-			.with_scalars([self.intensity, self.pulse_rate, self.pulse_amp])
+			.with_scalars([
+				self.intensity,
+				self.pulse_rate,
+				self.pulse_amp,
+				uv_source.as_scalar(),
+			])
 	}
 }
 
@@ -228,7 +240,8 @@ pub struct SkinMaterialUniform {
 	pub rasters: [[Vec4; MATERIAL_RASTER_WIDTH]; MATERIAL_RASTER_CHANNELS],
 	pub kind: u32,
 	pub flags: u32,
-	pub _pad: UVec2,
+	pub uv_source: u32,
+	pub _pad: u32,
 }
 
 impl SkinMaterialUniform {
@@ -265,6 +278,9 @@ impl SkinMaterialUniform {
 		if scalars[0][SKIN_SCALAR_INTENSITY] <= 1e-4 {
 			scalars[0][SKIN_SCALAR_INTENSITY] = DEFAULT_TATTOO_INTENSITY;
 		}
+		let uv_source = SkinTattooUvSource::from_u32(
+			scalars[0][SKIN_SCALAR_UV_SOURCE].round() as u32,
+		);
 
 		let mut rasters = [[Vec4::ZERO; MATERIAL_RASTER_WIDTH]; MATERIAL_RASTER_CHANNELS];
 		for (channel, raster) in rasters.iter_mut().enumerate() {
@@ -294,7 +310,8 @@ impl SkinMaterialUniform {
 			} else {
 				0
 			},
-			_pad: UVec2::ZERO,
+			uv_source: uv_source.as_u32(),
+			_pad: 0,
 		}
 	}
 }
@@ -357,48 +374,12 @@ impl Material for SkinShaderMaterial {
 	}
 }
 
-/// Bind-pose cylindrical UV used when `epiphant.glb` has no TEXCOORD_0.
-pub fn body_provisional_uv(local: Vec3) -> Vec2 {
-	const Z_MIN: f32 = -0.9804133;
-	const Z_SPAN: f32 = 2.0035005;
-	let u = local.x.atan2(local.y) * std::f32::consts::FRAC_1_PI * 0.5 + 0.5;
-	let v = ((local.z - Z_MIN) / Z_SPAN).clamp(0.0, 1.0);
-	Vec2::new(u, v)
-}
-
-/// Planar XY UV used when `epiphant_ear_left.glb` has no TEXCOORD_0.
-pub fn ear_provisional_uv(local: Vec3) -> Vec2 {
-	const X_MIN: f32 = -0.295_222_76;
-	const X_SPAN: f32 = 2.330_160_9;
-	const Y_MIN: f32 = -1.652_735_1;
-	const Y_SPAN: f32 = 2.981_944_3;
-	let u = ((local.x - X_MIN) / X_SPAN).clamp(0.0, 1.0);
-	let v = ((local.y - Y_MIN) / Y_SPAN).clamp(0.0, 1.0);
-	Vec2::new(u, v)
-}
-
-/// Cylindrical-about-Y UV used when `trunkish_nose.glb` has no TEXCOORD_0.
-pub fn trunk_provisional_uv(local: Vec3) -> Vec2 {
-	const Y_MIN: f32 = -1.932_509;
-	const Y_SPAN: f32 = 2.469_754_7;
-	let u = local.x.atan2(local.z) * std::f32::consts::FRAC_1_PI * 0.5 + 0.5;
-	let v = ((local.y - Y_MIN) / Y_SPAN).clamp(0.0, 1.0);
-	Vec2::new(u, v)
-}
-
-/// Cylindrical-about-Y UV for the meerkat head. Authored `TEXCOORD_0` collapses
-/// most verts to `(0, 1)`; this unwrap puts the face at `u = 0.5`.
-pub fn head_provisional_uv(local: Vec3) -> Vec2 {
-	const Y_MIN: f32 = -0.979_147_3;
-	const Y_SPAN: f32 = 2.041_864_7;
-	let u = local.x.atan2(local.z) * std::f32::consts::FRAC_1_PI * 0.5 + 0.5;
-	let v = ((local.y - Y_MIN) / Y_SPAN).clamp(0.0, 1.0);
-	Vec2::new(u, v)
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::skin_tattoo_uv::{
+		body_provisional_uv, ear_provisional_uv, head_provisional_uv, trunk_provisional_uv,
+	};
 
 	#[test]
 	fn from_material_ref_packs_palette_and_scalars() {
@@ -440,7 +421,11 @@ mod tests {
 	fn skin_tattoo_builds_part_host_ref() {
 		let tattoo =
 			SkinTattoo { glow: Color::srgb(0.1, 0.8, 1.0), intensity: 1.5, ..Default::default() };
-		let material = tattoo.material_ref(SkinTattooMask::Body, Color::srgb(0.3, 0.3, 0.3));
+		let material = tattoo.material_ref(
+			SkinTattooMask::Body,
+			Color::srgb(0.3, 0.3, 0.3),
+			SkinTattooUvSource::MeshUv0,
+		);
 		assert_eq!(material.name, MaterialId::named(RECIPE_SKIN_TATTOO_BODY));
 		assert_eq!(material.palette.len(), 2);
 		assert!((material.scalar_values()[SKIN_SCALAR_INTENSITY] - 1.5).abs() < 1e-5);
@@ -487,5 +472,16 @@ mod tests {
 			Handle::default(),
 		);
 		assert_eq!(material.params.flags & FLAG_UV_DEBUG, 0);
+	}
+
+	#[test]
+	fn material_ref_packs_uv_source_scalar() {
+		let material_ref = MaterialRef::named(RECIPE_SKIN_TATTOO_HEAD)
+			.with_scalars([4.0, 0.0, 0.0, SkinTattooUvSource::ProvisionalHeadCylindricalY.as_scalar()]);
+		let material = SkinShaderMaterial::from_material_ref(&material_ref, Handle::default());
+		assert_eq!(
+			material.params.uv_source,
+			SkinTattooUvSource::ProvisionalHeadCylindricalY.as_u32()
+		);
 	}
 }

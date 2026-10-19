@@ -159,6 +159,9 @@ fn add_lod_viewer_to_camera(
 }
 
 fn setup_lighting(mut commands: Commands) {
+	if std::env::var_os("MAYBRAID_TATTOO_CAPTURE_DIR").is_some() {
+		return;
+	}
 	use std::f32::consts::PI;
 	commands.spawn((
 		DirectionalLight { illuminance: 10000.0, shadow_maps_enabled: true, ..default() },

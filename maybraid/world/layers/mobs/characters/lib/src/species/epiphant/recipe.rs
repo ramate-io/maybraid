@@ -23,6 +23,8 @@ use crate::{
 	},
 };
 use character_shaders::SkinTattoo;
+
+use super::tattoo_mapping::epiphant_placeholder_uv_source;
 use lod::scene::LodSceneLevel;
 
 /// Semantic Epiphant data attached to the character root entity.
@@ -160,12 +162,15 @@ impl CharacterComponents for Epiphant {
 		out.map(|part| {
 			let color = self.colors.color_for_slot(part.slot);
 			let part = part.with_base_color(color);
-			match part.slot {
+			let slot = part.slot;
+			match slot {
 				CharacterPartSlot::BodyMesh
 				| CharacterPartSlot::HeadMesh
 				| CharacterPartSlot::EarLeft
 				| CharacterPartSlot::EarRight
-				| CharacterPartSlot::Nose => part.with_skin_tattoo(&self.tattoo),
+				| CharacterPartSlot::Nose => {
+					part.with_skin_tattoo(&self.tattoo, epiphant_placeholder_uv_source(slot))
+				}
 				_ => part,
 			}
 		})
@@ -181,7 +186,7 @@ const _: EpiphantNoseMesh = EpiphantNoseMesh::Trunkish;
 mod tests {
 	use character_shaders::{
 		RECIPE_SKIN_TATTOO_BODY, RECIPE_SKIN_TATTOO_EAR, RECIPE_SKIN_TATTOO_HEAD,
-		RECIPE_SKIN_TATTOO_TRUNK,
+		RECIPE_SKIN_TATTOO_TRUNK, SKIN_SCALAR_UV_SOURCE, SkinTattooUvSource,
 	};
 	use lod::scene::LodSceneLevel;
 	use material_ref::MaterialId;
@@ -202,18 +207,34 @@ mod tests {
 					saw_body = true;
 					assert_eq!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_BODY));
 					assert_eq!(part.material.palette.len(), 2);
+					assert_eq!(
+						part.material.scalar_values()[SKIN_SCALAR_UV_SOURCE],
+						SkinTattooUvSource::ProvisionalBodyCylindricalZ.as_scalar()
+					);
 				}
 				CharacterPartSlot::HeadMesh => {
 					saw_head = true;
 					assert_eq!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_HEAD));
+					assert_eq!(
+						part.material.scalar_values()[SKIN_SCALAR_UV_SOURCE],
+						SkinTattooUvSource::ProvisionalHeadCylindricalY.as_scalar()
+					);
 				}
 				CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
 					saw_ear = true;
 					assert_eq!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_EAR));
+					assert_eq!(
+						part.material.scalar_values()[SKIN_SCALAR_UV_SOURCE],
+						SkinTattooUvSource::ProvisionalEarPlanarXy.as_scalar()
+					);
 				}
 				CharacterPartSlot::Nose => {
 					saw_trunk = true;
 					assert_eq!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_TRUNK));
+					assert_eq!(
+						part.material.scalar_values()[SKIN_SCALAR_UV_SOURCE],
+						SkinTattooUvSource::ProvisionalTrunkCylindricalY.as_scalar()
+					);
 				}
 				CharacterPartSlot::Tail => {
 					assert_ne!(part.material.name, MaterialId::named(RECIPE_SKIN_TATTOO_BODY));

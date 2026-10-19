@@ -1,10 +1,9 @@
 //---------------------------------------------------------
-// Bikanwarda / Epiphant skin: palette[0] hide + UV0 tattoo emission.
+// Skin tattoo material: palette[0] hide + mask emission in UV space.
 //
-// Mapping 1 ([#1128](https://github.com/ramate-io/maybraid/issues/1128)):
-// sample the authored mask on mesh UV0 when present. Body / ear / trunk
-// GLBs have no TEXCOORD_0 yet; the head's UV0 is a collapsed pole. Those
-// kinds use the documented provisional unwraps (see tattoos README).
+// `material.uv_source` selects mesh TEXCOORD_0 vs documented bind-pose
+// provisional unwraps. Content recipes set uv_source explicitly — mask
+// kind alone does not pick an unwrap (see tattoos README).
 //---------------------------------------------------------
 
 #import bevy_pbr::{
@@ -27,7 +26,8 @@ struct SkinMaterialUniform {
     rasters: array<array<vec4<f32>, 3>, 8>,
     kind: u32,
     flags: u32,
-    _pad: vec2<u32>,
+    uv_source: u32,
+    _pad: u32,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
@@ -41,6 +41,12 @@ const KIND_BODY: u32 = 0u;
 const KIND_HEAD: u32 = 1u;
 const KIND_EAR: u32 = 2u;
 const KIND_TRUNK: u32 = 3u;
+
+const UV_MESH: u32 = 0u;
+const UV_PROV_BODY_Z: u32 = 1u;
+const UV_PROV_EAR_PLANAR: u32 = 2u;
+const UV_PROV_TRUNK_Y: u32 = 3u;
+const UV_PROV_HEAD_Y: u32 = 4u;
 
 // Bind-pose AABB of `characters/bodies/quadruped/epiphant.glb` (Z long axis).
 const BODY_UNWRAP_Z_MIN: f32 = -0.9804133;
@@ -168,18 +174,23 @@ fn vertex(vertex_no_morph: Vertex) -> SkinVertexOutput {
 }
 
 fn tattoo_uv(mesh: SkinVertexOutput) -> vec2<f32> {
-    if material.kind == KIND_HEAD {
+    let src = material.uv_source;
+    if src == UV_PROV_BODY_Z {
+        return body_provisional_uv(mesh.local_pos);
+    }
+    if src == UV_PROV_EAR_PLANAR {
+        return ear_provisional_uv(mesh.local_pos);
+    }
+    if src == UV_PROV_TRUNK_Y {
+        return trunk_provisional_uv(mesh.local_pos);
+    }
+    if src == UV_PROV_HEAD_Y {
         return head_provisional_uv(mesh.local_pos);
     }
 #ifdef VERTEX_UVS_A
     return mesh.uv;
 #else
-    if material.kind == KIND_EAR {
-        return ear_provisional_uv(mesh.local_pos);
-    } else if material.kind == KIND_TRUNK {
-        return trunk_provisional_uv(mesh.local_pos);
-    }
-    return body_provisional_uv(mesh.local_pos);
+    return vec2<f32>(0.0, 0.0);
 #endif
 }
 

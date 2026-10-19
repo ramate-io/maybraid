@@ -1,6 +1,6 @@
 # Epiphant / Bikanwarda tattoo masks
 
-Placeholder UV0 (or documented provisional unwrap) masks for [\#1128](https://github.com/ramate-io/maybraid/issues/1128). Liam chose **art A + mapping 1** on Oct 12, 2026: ritual linework on existing UV0 — no second UV channel. [#1231](https://github.com/ramate-io/maybraid/pull/1231) review asked for **denser** strokes so marks read from front, side, and three-quarter, including flanks, belly, back, legs, ears, trunk, and crown, then for the **whole head** to carry the same density — face, cheeks, around the eyes, brow, and the sides and back of the skull, not just the crown.
+Placeholder masks and UV contracts for [\#1128](https://github.com/ramate-io/maybraid/issues/1128). Liam chose **art A + mapping 1** on Oct 12, 2026: one mask per mesh on `TEXCOORD_0` when authored — no `TEXCOORD_1`. [#1231](https://github.com/ramate-io/maybraid/pull/1231) tracks engine support and placeholder art.
 
 These PNGs are **placeholders only**. Replace them in place for final art. Do not add `TEXCOORD_1`.
 
@@ -12,7 +12,23 @@ These PNGs are **placeholders only**. Replace them in place for final art. Do no
 | `epiphant_trunk_uv0_placeholder.png` | Trunk `characters/noses/trunkish_nose.glb` | `skin_tattoo_trunk` |
 | `*_layout.png` | Occupancy + placeholder strokes | documentation |
 
-Ears and trunk are separate meshes with **no `TEXCOORD_0`**. They stay on mapping 1 (one mask per mesh, no second UV channel) via the documented provisional unwraps below — same contract as the body until Liam authors UV0.
+## Shader material (landable without final art)
+
+Reusable pieces live in `character-shaders`:
+
+- Recipes `skin_tattoo_body` / `head` / `ear` / `trunk` — palette[0] hide, palette[1] glow, mask texture per recipe.
+- [`SkinTattoo`](../../world/layers/mobs/characters/shaders/src/skin_material.rs) knobs: glow, intensity, pulse.
+- [`SkinTattooUvSource`](../../world/layers/mobs/characters/shaders/src/skin_tattoo_uv.rs): how mask UV is computed. Default **`MeshUv0`** samples mesh `TEXCOORD_0`. Provisional bind-pose unwraps are **opt-in** on the stamped [`MaterialRef`](../../material-ref/src/material_ref.rs) (scalar index [`SKIN_SCALAR_UV_SOURCE`](../../world/layers/mobs/characters/shaders/src/skin_tattoo_uv.rs)); the shader does **not** infer unwrap from body part or mask kind.
+
+Stamp via [`PartNode::with_skin_tattoo`](../../world/layers/mobs/characters/lib/src/nodes/part.rs) with the correct `SkinTattooUvSource`. Ward / Enraged reuse the same recipes and recolor `glow`. Tail stays ordinary hide tint.
+
+Open knobs (config defaults, not approved):
+
+- Glow color: warm gold/amber `srgb(1.0, 0.72, 0.28)`
+- Intensity: `4.0`
+- Pulse: off (`pulse_rate = 0`)
+
+`MAYBRAID_TATTOO_UV_DEBUG=1` draws an 8×8 UV checker + mask overlay (investigation only).
 
 ## Texture spec
 
@@ -21,13 +37,15 @@ Ears and trunk are separate meshes with **no `TEXCOORD_0`**. They stay on mappin
 - **Filter:** linear. Author as a thin mask (no color); the shader tints with `MaterialRef` palette[1].
 - **Color space:** mask is treated as data (shader uses max(rgb)×alpha).
 
-## Mapping 1 — UV0 / provisional regions
+## Epiphant placeholder mapping (content recipe)
 
-### Head (authored UV0 is degenerate — provisional cylindrical about +Y)
+Until Liam authors UV0 on each GLB, the Epiphant recipe stamps provisional sources from [`epiphant_placeholder_uv_source`](../../world/layers/mobs/characters/lib/src/species/epiphant/tattoo_mapping.rs). Constants must match [`skin_material.wgsl`](../../world/layers/mobs/characters/shaders/src/skin_material.wgsl). When final `TEXCOORD_0` lands, switch each part to `SkinTattooUvSource::MeshUv0` only — no shader change.
+
+### Head (provisional cylindrical about +Y — not final UV)
 
 `meerkat_head_pronograde.glb` has `TEXCOORD_0`, but **875 / 956 verts collapse to `(0, 1)`**. The remaining 81 verts are a forehead island at **u 0.31–0.70, v 0.60–1.00**. That island cannot carry distinct linework on the face, cheeks, eyes, sides, or back of the skull.
 
-The placeholder therefore uses this **provisional cylindrical unwrap** of bind-pose local space (must match `skin_material.wgsl`). No `TEXCOORD_1`. Face at `u = 0.5`:
+The placeholder uses **provisional cylindrical about +Y** (Epiphant recipe sets `ProvisionalHeadCylindricalY`). Face at `u = 0.5`:
 
 ```
 u = atan2(x, z) / (2π) + 0.5
@@ -36,7 +54,7 @@ y_min  = -0.9791473
 y_span =  2.0418647
 ```
 
-Dense ritual regions in this unwrap:
+Dense ritual regions in this unwrap (placeholder mask only):
 
 | Region | Unwrap |
 |--------|--------|
@@ -48,9 +66,9 @@ Dense ritual regions in this unwrap:
 | Skull sides | u ≈ 0.14–0.26 and 0.74–0.86, v 0.38–0.82 |
 | Skull back | u ≈ 0.00–0.14 and 0.86–1.00, v 0.40–0.86 |
 
-### Body (GLB requirement)
+### Body (provisional cylindrical about +Z)
 
-`epiphant.glb` currently has **no `TEXCOORD_0`**. Placeholder body mask uses this **provisional cylindrical unwrap** of bind-pose local space (must match `skin_material.wgsl`):
+`epiphant.glb` currently has **no `TEXCOORD_0`**. Placeholder body mask uses **provisional cylindrical about +Z** (`ProvisionalBodyCylindricalZ`):
 
 ```
 u = atan2(x, y) / (2π) + 0.5     // spine at u = 0.5, seam on the belly
@@ -71,9 +89,11 @@ Z is the long axis (rear → front). Dense ritual regions in this unwrap:
 | Chest / trunk-root rings | v ≈ 0.74–0.90, around u 0.50 |
 | Hips / rump barrel | v ≈ 0.08–0.32, u 0.18–0.42 and 0.58–0.82 |
 
-**Hips vs forehead (why they looked empty):** measured on the current placeholders. Lighting / facing does **not** suppress marks (emission is added after PBR). Body hip stretch is the same as the flanks (median world/UV ≈ 8). The hip/rump UV island was a **mask gap** — flank strokes stop near v 0.18 and hind-leg strokes sit on the u-edges, so 40% of hip triangles had no stroke. The forehead dome is the **+Y pole of the cylindrical-about-Y unwrap**: U collapses toward 0.5, the crown cap becomes a thin high-v ring, and an in-engine UV checker shows horizontal stripes across the dome with no mask. Placeholder fix: hip lattice + denser meridians in the collapsed forehead column + full-U pole rings. **Liam's final UV0** should include a crown *cap* island (not a cylinder) so the top of the skull is not a pole.
+**Hips vs forehead (placeholder investigation):** lighting / facing does **not** suppress marks (emission is added after PBR). Body hip stretch matches the flanks (median world/UV ≈ 8). The hip/rump island was a **mask gap** in early placeholders. The forehead dome is the **+Y pole** of the cylindrical-about-Y provisional unwrap: U collapses toward 0.5 until a proper crown cap exists in authored UV0.
 
 ### Ear (provisional planar XY)
+
+`ProvisionalEarPlanarXy`:
 
 ```
 u = saturate((x - x_min) / x_span)
@@ -84,22 +104,25 @@ y_min = -1.6527351    y_span = 2.9819443
 
 ### Trunk (provisional cylindrical about +Y)
 
+`ProvisionalTrunkCylindricalY`:
+
 ```
 u = atan2(x, z) / (2π) + 0.5
 v = saturate((y - y_min) / y_span)
 y_min = -1.932509     y_span = 2.4697547
 ```
 
-**Final GLB work for Liam:** add a single `TEXCOORD_0` to `epiphant.glb`, `epiphant_ear_left.glb`, and `trunkish_nose.glb`, and **re-unwrap** `meerkat_head_pronograde.glb` so the whole head (not a collapsed pole) has usable UV0 (no `TEXCOORD_1`). Keep existing skinning and joint names. Re-export the same paths. Then replace the placeholder PNGs so strokes sit on the authored islands. Once UV0 exists, the shader samples mesh UV0 and the provisional unwrap for that mesh is unused.
+## Final UV requirements (Liam — human / Blender lane)
 
-Do **not** edit the `.blend` in this lane; this folder is the contract for the later art pass.
+Do **not** edit the `.blend` in this engine lane. Re-export the same GLB paths. **Keep existing skinning, joint names, and animation clip paths unchanged.**
 
-## Recolor / reuse
+| Mesh | Requirement |
+|------|-------------|
+| `epiphant.glb` | Single `TEXCOORD_0` covering body, legs, belly, flanks, spine, and **hips / rump** as intentional islands (not a cylindrical pole at the hindquarters). Hindquarter / rump should have **uniform texel density** comparable to the flanks so ritual linework reads at encounter distance. |
+| `meerkat_head_pronograde.glb` | Full-head `TEXCOORD_0` with a dedicated **crown cap island** (planar or dome patch) for forehead and top of skull — **not** a cylindrical pole at +Y. Face, cheeks, eye rings, brow, ears base, and skull sides/back need distinct UV area. |
+| `epiphant_ear_left.glb` (+ mirrored right) | `TEXCOORD_0` on the ear mesh. |
+| `trunkish_nose.glb` | `TEXCOORD_0` on the trunk mesh. |
 
-Stamp `SkinTattoo { glow, intensity, pulse_rate, pulse_amp }` onto the **body, head, ear, and trunk part hosts** (`PartNode::with_skin_tattoo` / `MaterialRefRoot`). Ward and Enraged reuse the same recipes and swap `glow` (and optionally intensity). Tail stays ordinary hide tint.
+After export: replace placeholder PNGs so strokes sit on the authored islands, and set every Epiphant tattoo part to `SkinTattooUvSource::MeshUv0` in [`tattoo_mapping.rs`](../../world/layers/mobs/characters/lib/src/species/epiphant/tattoo_mapping.rs).
 
-Open knobs (config defaults, not approved):
-
-- Glow color: warm gold/amber `srgb(1.0, 0.72, 0.28)`
-- Intensity: `4.0`
-- Pulse: off (`pulse_rate = 0`)
+No `TEXCOORD_1`.
