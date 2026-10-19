@@ -1,6 +1,7 @@
 //! Downed world-player retirement and POI-based replacement.
 
 use avian3d::prelude::LinearVelocity;
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_ragdoll::CharacterRagdollSystems;
@@ -113,6 +114,64 @@ pub fn reset_first_spawn_offer(mut state: ResMut<WorldPlayerRespawnState>) {
 	state.pending = None;
 }
 
+/// Death/respawn reassembly counters.
+///
+/// Always incremented so tests can assert without an env var. Log lines fire
+/// only when `MAYBRAID_PLAYER_RESPAWN_DIAG` is set. Do not infer success from
+/// preserved entity IDs: ordinary death already leaves the stripped capsule
+/// and [`finish_world_player_spawn`] always calls [`spawn_player_body`].
+#[derive(Resource, Debug, Default, Clone, PartialEq, Eq)]
+pub struct WorldPlayerRespawnTrace {
+	pub startup_bodies_despawned: u32,
+	pub downed_bodies_stripped: u32,
+	pub replacement_bodies_spawned: u32,
+	pub hcsg_session_restarts: u32,
+}
+
+const RESPAWN_DIAG_ENV: &str = "MAYBRAID_PLAYER_RESPAWN_DIAG";
+
+impl WorldPlayerRespawnTrace {
+	pub fn diag_enabled() -> bool {
+		std::env::var_os(RESPAWN_DIAG_ENV).is_some()
+	}
+
+	pub fn record_startup_despawn(&mut self, entity: Entity) {
+		self.startup_bodies_despawned += 1;
+		self.diag("startup_despawn", Some(entity));
+	}
+
+	pub fn record_downed_strip(&mut self, entity: Entity) {
+		self.downed_bodies_stripped += 1;
+		self.diag("downed_strip", Some(entity));
+	}
+
+	pub fn record_replacement_spawn(&mut self, entity: Entity) {
+		self.replacement_bodies_spawned += 1;
+		self.diag("replacement_spawn", Some(entity));
+	}
+
+	pub fn record_hcsg_session_restart(&mut self) {
+		self.hcsg_session_restarts += 1;
+		self.diag("hcsg_session_restart", None);
+	}
+
+	fn diag(&self, kind: &'static str, entity: Option<Entity>) {
+		if !Self::diag_enabled() {
+			return;
+		}
+		info!(
+			target: "player_respawn",
+			kind,
+			?entity,
+			startup_despawned = self.startup_bodies_despawned,
+			downed_stripped = self.downed_bodies_stripped,
+			replacement_spawned = self.replacement_bodies_spawned,
+			hcsg_restarts = self.hcsg_session_restarts,
+			"player respawn trace"
+		);
+	}
+}
+
 /// Discovery map picker confirmed a POI, or `None` for the fallback ring.
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PlayerChoseRespawnPoi {
@@ -137,6 +196,7 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<WorldPlayerRespawnConfig>()
 			.init_resource::<WorldPlayerRespawnState>()
+			.init_resource::<WorldPlayerRespawnTrace>()
 			.init_resource::<WorldMapView>()
 			.add_message::<PlayerLifeEnded>()
 			.add_message::<PlayerChoseRespawnPoi>()
@@ -231,6 +291,7 @@ fn queue_downed_world_player(
 	mut triggers: Query<&mut WeaponTrigger>,
 	bags: Query<&character_items::Inventory>,
 	body_of: Query<&LubikanBodyOf>,
+	mut trace: Option<ResMut<WorldPlayerRespawnTrace>>,
 ) {
 	for (player, transform, mut velocity, firearm, grenade, inventory) in &mut players {
 		let now = mode.as_deref().and_then(|mode| mode.get().mode_id());
@@ -272,6 +333,9 @@ fn queue_downed_world_player(
 			commands.entity(inventory.bag).try_despawn();
 		}
 		strip_world_player_motor(&mut commands, player);
+		if let Some(trace) = trace.as_deref_mut() {
+			trace.record_downed_strip(player);
+		}
 		commands.entity(player).remove::<(
 			VegetationPlayer,
 			MaybraidPlayer,
@@ -313,6 +377,7 @@ fn queue_first_spawn_picker(
 		With<VegetationPlayer>,
 	>,
 	mut triggers: Query<&mut WeaponTrigger>,
+	mut trace: Option<ResMut<WorldPlayerRespawnTrace>>,
 ) {
 	if !gameplay.0 || state.first_spawn_offered || state.pending.is_some() {
 		return;
@@ -354,7 +419,14 @@ fn queue_first_spawn_picker(
 		registry_revision: 0,
 		picker_nearby_scratch: Vec::new(),
 	});
-	retire_startup_player(&mut commands, player, firearm, inventory, &mut triggers);
+	retire_startup_player(
+		&mut commands,
+		player,
+		firearm,
+		inventory,
+		&mut triggers,
+		trace.as_deref_mut(),
+	);
 }
 
 fn character_has_resume_trail(
@@ -377,6 +449,7 @@ fn retire_startup_player(
 	firearm: Option<&FirearmUser>,
 	inventory: Option<&InventoryUser>,
 	triggers: &mut Query<&mut WeaponTrigger>,
+	trace: Option<&mut WorldPlayerRespawnTrace>,
 ) {
 	if let Some(firearm) = firearm {
 		if let Ok(mut trigger) = triggers.get_mut(firearm.held) {
@@ -388,6 +461,9 @@ fn retire_startup_player(
 		commands.entity(inventory.bag).try_despawn();
 	}
 	commands.entity(player).try_despawn();
+	if let Some(trace) = trace {
+		trace.record_startup_despawn(player);
+	}
 }
 
 fn drive_respawn_picker(
@@ -480,17 +556,47 @@ fn close_orphaned_locked_respawn_map(
 	}
 }
 
+#[derive(SystemParam)]
+struct WorldPlayerSpawnCtx<'w, 's> {
+	commands: Commands<'w, 's>,
+	meshes: ResMut<'w, Assets<Mesh>>,
+	materials: ResMut<'w, Assets<StandardMaterial>>,
+	locomotion: Res<'w, CharacterLocomotion>,
+	loadout: Option<Res<'w, WorldPlayerLoadout>>,
+	trace: Option<ResMut<'w, WorldPlayerRespawnTrace>>,
+}
+
+impl WorldPlayerSpawnCtx<'_, '_> {
+	fn finish(
+		&mut self,
+		origin: RespawnOrigin,
+		now: Option<std::any::TypeId>,
+		position: Vec3,
+		interior: bool,
+	) {
+		finish_world_player_spawn(
+			&mut self.commands,
+			&mut self.meshes,
+			&mut self.materials,
+			self.locomotion.as_ref(),
+			self.loadout.as_deref(),
+			origin,
+			now,
+			position,
+			interior,
+			self.trace.as_deref_mut(),
+		);
+	}
+}
+
 /// A mode that keeps the player respawns near a POI. A mode whose policy ends
 /// the life replaces the body where it fell and writes [`PlayerLifeEnded`].
 /// Leaving that mode mid-respawn replaces the body at once and ends nothing.
-#[allow(clippy::too_many_arguments)]
 fn respawn_world_player(
 	time: Res<Time>,
 	gameplay: Res<WorldGameplayEnabled>,
 	config: Res<WorldPlayerRespawnConfig>,
 	registry: Res<PoiRegistry>,
-	loadout: Option<Res<WorldPlayerLoadout>>,
-	locomotion: Res<CharacterLocomotion>,
 	surface: DurhamSurface,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	mut ended: MessageWriter<PlayerLifeEnded>,
@@ -498,9 +604,7 @@ fn respawn_world_player(
 	live_player: Query<(), With<VegetationPlayer>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut map: ResMut<WorldMapView>,
-	mut commands: Commands,
-	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
+	mut spawn: WorldPlayerSpawnCtx,
 ) {
 	let now = mode.as_deref().and_then(|mode| mode.get().mode_id());
 	let abandoned = state.pending.as_ref().is_some_and(|pending| pending.origin.abandoned(now));
@@ -535,17 +639,7 @@ fn respawn_world_player(
 		if origin.ends_life(now) {
 			ended.write(PlayerLifeEnded);
 		}
-		finish_world_player_spawn(
-			&mut commands,
-			&mut meshes,
-			&mut materials,
-			locomotion.as_ref(),
-			loadout.as_deref(),
-			origin,
-			now,
-			player_position_above_surface(death_at),
-			false,
-		);
+		spawn.finish(origin, now, player_position_above_surface(death_at), false);
 		return;
 	}
 
@@ -567,7 +661,7 @@ fn respawn_world_player(
 	let placed = choice.poi.and_then(|id| registry.get(id).copied());
 	close_respawn_map(&mut map);
 	state.pending = None;
-	let spawn = match placed {
+	let pose = match placed {
 		Some(record) => {
 			state.last_poi = Some(record.id);
 			spawn_pose_for_chosen_poi(&record, &surface)
@@ -580,17 +674,7 @@ fn respawn_world_player(
 			interior: false,
 		},
 	};
-	finish_world_player_spawn(
-		&mut commands,
-		&mut meshes,
-		&mut materials,
-		locomotion.as_ref(),
-		loadout.as_deref(),
-		origin,
-		now,
-		spawn.position,
-		spawn.interior,
-	);
+	spawn.finish(origin, now, pose.position, pose.interior);
 }
 
 fn open_respawn_picker(
@@ -794,8 +878,15 @@ fn finish_world_player_spawn(
 	now: Option<std::any::TypeId>,
 	position: Vec3,
 	interior: bool,
+	trace: Option<&mut WorldPlayerRespawnTrace>,
 ) {
+	// Ordinary same-character respawn currently always allocates a new capsule.
+	// That is the reassembly the next slice removes; HCSG session restart is
+	// Discovery enter, not this path.
 	let player = spawn_player_body(commands, meshes, materials, locomotion, position);
+	if let Some(trace) = trace {
+		trace.record_replacement_spawn(player);
+	}
 	// First-drop hold: snap teleports onto composed height and waits for a
 	// local trimesh. Without this marker, gravity can turn on while the body
 	// is still sitting on a base-noise or death-pose Y under the mesh.
@@ -2093,5 +2184,108 @@ mod tests {
 			],
 		);
 		assert_eq!(picked, Some(east_of_current));
+	}
+
+	#[test]
+	fn ordinary_death_strips_the_capsule_and_does_not_despawn_it() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldPlayerRespawnConfig>();
+		world.init_resource::<WorldPlayerRespawnState>();
+		world.init_resource::<WorldPlayerRespawnTrace>();
+		let player = world
+			.spawn((
+				VegetationPlayer,
+				MaybraidPlayer,
+				Transform::from_xyz(3.0, 4.0, 5.0),
+				LinearVelocity(Vec3::X),
+				Downed { source: None, point: Vec3::ZERO, at: 0.0 },
+			))
+			.id();
+		world
+			.run_system_once(queue_downed_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.entities().contains(player), "death leaves the stripped capsule");
+		assert!(world.get::<VegetationPlayer>(player).is_none());
+		let trace = world.resource::<WorldPlayerRespawnTrace>();
+		assert_eq!(trace.downed_bodies_stripped, 1);
+		assert_eq!(trace.startup_bodies_despawned, 0);
+		assert_eq!(trace.replacement_bodies_spawned, 0);
+		assert_eq!(trace.hcsg_session_restarts, 0);
+		Ok(())
+	}
+
+	#[test]
+	fn in_place_respawn_counts_a_new_body_not_an_hcsg_restart() -> anyhow::Result<()> {
+		let mut world = respawn_world(0.0, true, true);
+		world.init_resource::<WorldPlayerRespawnTrace>();
+		let corpse = world
+			.spawn((Transform::from_xyz(3.0, 4.0, 5.0), LinearVelocity(Vec3::ZERO)))
+			.id();
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let live: Vec<Entity> =
+			world.query_filtered::<Entity, With<VegetationPlayer>>().iter(&world).collect();
+		assert_eq!(live.len(), 1);
+		assert_ne!(live[0], corpse, "finish_world_player_spawn always allocates a new capsule");
+		assert!(world.entities().contains(corpse));
+		let trace = world.resource::<WorldPlayerRespawnTrace>();
+		assert_eq!(trace.replacement_bodies_spawned, 1);
+		assert_eq!(trace.hcsg_session_restarts, 0);
+		assert_eq!(trace.startup_bodies_despawned, 0);
+		Ok(())
+	}
+
+	#[test]
+	fn nearby_poi_and_fallback_respawn_both_count_replacement_spawns() -> anyhow::Result<()> {
+		let mut nearby = discovery_respawn_world(0.2);
+		nearby.init_resource::<WorldPlayerRespawnTrace>();
+		let poi = nearby.spawn_empty().id();
+		nearby.resource_mut::<PoiRegistry>().upsert(
+			poi,
+			poi_intelligence::Poi::new(PoiId(1), URBAN_POI).with_arrival_radius(8.0),
+			Vec3::new(80.0, 4.0, 5.0),
+			true,
+			false,
+		)?;
+		nearby
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		nearby.write_message(PlayerChoseRespawnPoi { poi: Some(PoiId(1)) });
+		nearby
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(nearby.resource::<WorldPlayerRespawnTrace>().replacement_bodies_spawned, 1);
+		assert_eq!(nearby.resource::<WorldPlayerRespawnTrace>().hcsg_session_restarts, 0);
+
+		let mut distant = discovery_respawn_world(0.2);
+		distant.init_resource::<WorldPlayerRespawnTrace>();
+		distant
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		distant.write_message(PlayerChoseRespawnPoi { poi: None });
+		distant
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(distant.resource::<WorldPlayerRespawnTrace>().replacement_bodies_spawned, 1);
+		assert_eq!(distant.resource::<WorldPlayerRespawnTrace>().hcsg_session_restarts, 0);
+		Ok(())
+	}
+
+	#[test]
+	fn first_life_retire_counts_a_startup_despawn() -> anyhow::Result<()> {
+		let mut world = first_spawn_world(true, None);
+		world.init_resource::<WorldPlayerRespawnTrace>();
+		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		world
+			.run_system_once(queue_first_spawn_picker)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.entities().contains(player));
+		let trace = world.resource::<WorldPlayerRespawnTrace>();
+		assert_eq!(trace.startup_bodies_despawned, 1);
+		assert_eq!(trace.downed_bodies_stripped, 0);
+		assert_eq!(trace.replacement_bodies_spawned, 0);
+		assert_eq!(trace.hcsg_session_restarts, 0);
+		Ok(())
 	}
 }

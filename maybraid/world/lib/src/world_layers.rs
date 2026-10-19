@@ -2,6 +2,7 @@
 //! furnishing and language, generated on the shared HCSG runtime and presented around the
 //! viewer while Discovery streams.
 
+use crate::player_lifecycle::WorldPlayerRespawnTrace;
 use barking::{BarkingPresentationPlugin, MobNeighborhood, MobScenePresentationPlugin};
 use bevy::prelude::*;
 use chico::{
@@ -93,7 +94,32 @@ impl Plugin for WorldLayersPlugin {
 		))
 		.add_systems(
 			OnEnter(ActiveGenerationMode::of::<Discovery>()),
-			request_hcsg_session_restart,
+			(count_discovery_hcsg_restart, request_hcsg_session_restart),
 		);
+	}
+}
+
+fn count_discovery_hcsg_restart(trace: Option<ResMut<WorldPlayerRespawnTrace>>) {
+	if let Some(mut trace) = trace {
+		trace.record_hcsg_session_restart();
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use bevy::ecs::system::RunSystemOnce;
+	use bevy::prelude::*;
+
+	use super::*;
+
+	#[test]
+	fn discovery_enter_counts_an_hcsg_session_restart() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldPlayerRespawnTrace>();
+		world
+			.run_system_once(count_discovery_hcsg_restart)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.resource::<WorldPlayerRespawnTrace>().hcsg_session_restarts, 1);
+		Ok(())
 	}
 }
