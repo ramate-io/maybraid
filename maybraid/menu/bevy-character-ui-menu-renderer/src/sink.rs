@@ -6,15 +6,16 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{
-	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode,
-	OrderedEquipmentRow, PreviewColor, SectionOpen, SelectChoice, StatCard, StatTone, SwatchChoice,
-	ThumbnailRequest,
+	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode, OrderedEquipmentRow,
+	PreviewColor, SectionOpen, SelectChoice, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
 };
 
+use menu_components::{MENU_LIST_PAD, MENU_LIST_RADIUS, equipped_pane_fill};
+
 use crate::widgets::{
-	color_from_hex, compact_control_row, inline_chip_row, labeled_row, render_asset_button,
-	render_button, select_tile_node, swatch_node, text, tile_text, ToggleSectionKey, ACTIVE,
-	INACTIVE, MENU_VERTICAL_GAP, MUTED,
+	ACTIVE, INACTIVE, MENU_VERTICAL_GAP, MUTED, ToggleSectionKey, color_from_hex,
+	compact_control_row, inline_chip_row, labeled_row, render_asset_button, render_button,
+	select_tile_node, swatch_node, text, tile_text,
 };
 
 /// Renderer-owned thumbnail bridge. The playground adapts this to its cache.
@@ -161,8 +162,23 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
 				self.grid_catalog(choices, parent, context);
 			}
 			MenuNode::OrderedEquipment { rows } => {
-				block_label(parent, "Equipped");
-				self.ordered_equipment(rows, parent, context);
+				parent
+					.spawn((
+						Node {
+							width: Val::Percent(100.0),
+							flex_direction: FlexDirection::Column,
+							row_gap: Val::Px(MENU_VERTICAL_GAP),
+							padding: UiRect::all(Val::Px(MENU_LIST_PAD)),
+							border_radius: BorderRadius::all(Val::Px(MENU_LIST_RADIUS)),
+							..default()
+						},
+						BackgroundColor(equipped_pane_fill()),
+						Pickable::IGNORE,
+					))
+					.with_children(|pane| {
+						block_label(pane, "Equipped");
+						self.ordered_equipment(rows, pane, context);
+					});
 			}
 			MenuNode::ShortText { label, value, .. } => {
 				inline_label_row(parent, label, |row| {

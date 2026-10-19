@@ -6,20 +6,18 @@ use character_ui_menu::{
 	OrderedEquipmentRow, PreviewColor, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
 };
 use menu_components::{
-	spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label, spawn_header_line,
-	spawn_hud_action, spawn_hud_plain, spawn_hud_text, spawn_labeled_row, spawn_section_header,
-	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid,
-	spawn_tile_grid_columns, CursorRow, HudFonts, HudMenu, HudMenuItem, ShortTextField,
-	ShortTextKey, PANEL_BLOCK_FONT_SIZE, PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE,
-	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_LIGHT_BLUE, TEXT_LIME, TEXT_SALMON, TEXT_YELLOW,
-	TEXT_YELLOW_FAINT,
+	CursorRow, HudFonts, HudMenu, HudMenuItem, MENU_LIST_PAD, MENU_LIST_RADIUS,
+	PANEL_BLOCK_FONT_SIZE, PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE,
+	PANEL_ROW_GAP, ShortTextField, ShortTextKey, TEXT_LIGHT_BLUE, TEXT_LIME, TEXT_SALMON,
+	TEXT_YELLOW, TEXT_YELLOW_FAINT, equipped_pane_fill, spawn_asset_tile, spawn_grid_catalog_tile,
+	spawn_group_label, spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text,
+	spawn_labeled_row, spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch,
+	spawn_swatch_row, spawn_tile_grid, spawn_tile_grid_columns,
 };
 
 use crate::justify::MenuJustify;
 use crate::overlay::{labeled_values_preview, overlay_summary_value, primary_select};
-use crate::widgets::{
-	EquippedOrderControls, InventoryItemKey, MenuButton, OpenSelectKey,
-};
+use crate::widgets::{EquippedOrderControls, InventoryItemKey, MenuButton, OpenSelectKey};
 
 /// Renderer-owned thumbnail bridge. The host adapts this to its cache.
 pub trait MenuThumbnailContext {
@@ -107,8 +105,8 @@ impl<T> RenderContext<'_, T> {
 					| "Starter Kit" | "Clothing"
 					| "Weapons" | "Tools"
 					| "Skill Maps" | "Tanzes"
-					| "Equipped"
-					| "Lubikan" | "Loadout"
+					| "Equipped" | "Lubikan"
+					| "Loadout"
 			) {
 			TEXT_YELLOW_FAINT
 		} else {
@@ -117,11 +115,7 @@ impl<T> RenderContext<'_, T> {
 	}
 
 	pub fn face_color(&self) -> Color {
-		if self.interactive {
-			TEXT_YELLOW
-		} else {
-			TEXT_YELLOW_FAINT
-		}
+		if self.interactive { TEXT_YELLOW } else { TEXT_YELLOW_FAINT }
 	}
 }
 
@@ -497,6 +491,26 @@ impl MaybraidMenuSink {
 		context: &mut RenderContext<'_, C>,
 	) {
 		if self.interior {
+			if children.iter().any(|child| matches!(child, MenuNode::OrderedEquipment { .. })) {
+				parent
+					.spawn((
+						Node {
+							width: Val::Percent(100.0),
+							flex_direction: FlexDirection::Column,
+							row_gap: Val::Px(PANEL_ROW_GAP),
+							padding: UiRect::all(Val::Px(MENU_LIST_PAD)),
+							border_radius: BorderRadius::all(Val::Px(MENU_LIST_RADIUS)),
+							..default()
+						},
+						BackgroundColor(equipped_pane_fill()),
+						Pickable::IGNORE,
+					))
+					.with_children(|pane| {
+						self.interior_section_header(pane, context, label);
+						self.render_nodes(children, pane, context);
+					});
+				return;
+			}
 			self.interior_section_header(parent, context, label);
 			self.render_nodes(children, parent, context);
 			return;
@@ -740,8 +754,10 @@ impl MaybraidMenuSink {
 		} else {
 			grid_catalog_thumbnail(tile, bevy_color(tile.preview), context)
 		};
-		let tint =
-			tile.image_key.map(|key| context.thumbnails.tint_for_key(key)).unwrap_or(Color::WHITE);
+		let tint = tile
+			.image_key
+			.map(|key| context.thumbnails.tint_for_key(key))
+			.unwrap_or(Color::WHITE);
 		let swatch = tile.path.is_empty().then_some(bevy_color(tile.preview));
 		let key = InventoryItemKey { index: choice.item_key, equipped: true };
 		let item = context.stamp_hud_item();
