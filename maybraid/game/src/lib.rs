@@ -1,5 +1,6 @@
 //! Maybraid game executable: home shell over the world playground.
 
+mod agent_observe;
 mod flow;
 mod load;
 mod panic_log;
@@ -38,9 +39,9 @@ use maybraid_input::{MenuNav, MenuNavPad, PadButton, VirtualPad};
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
 	host_memory_bytes, parse_device_tier_env, parse_visual_style_env, reset_first_spawn_offer,
-	resume_discovery_from_saved_waypoints, AdapterKind, Durham, InventoryEditCameraFollow,
-	PlayerPhysicsEnabled, PlayerSpawnXz, ShadowQuality, TerrainStreaming, VisualStyle,
-	VisualStyleAutoReason, VisualStyleSetting, VisualStyleSignals, WorldGameplayEnabled,
+	resume_discovery_from_saved_waypoints, AdapterKind, AgentDrive, Durham,
+	InventoryEditCameraFollow, PlayerPhysicsEnabled, PlayerSpawnXz, ShadowQuality,
+	TerrainStreaming, VisualStyle, VisualStyleSetting, VisualStyleSignals, WorldGameplayEnabled,
 	WorldMenuShell, WorldMobHudEnabled, WorldPlaySessionEnded, WorldPlayerLoadout, WorldPlugin,
 	WorldSceneryVisible, WorldSurfaceReady, WorldSurfaceSet, DEVICE_TIER_ENV, VISUAL_STYLE_ENV,
 };
@@ -53,12 +54,12 @@ use menu_playground::{
 	EditingCharacter, RequestEditCharacter,
 };
 use menu_screens::{
-	apply_unsaved_visual_style_default, cancel_pending_create, request_show_gallery,
-	request_show_home, request_show_in_game, request_show_in_game_settings, CreateCharacterPlugin,
-	GalleryScreen, GameMode, HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreen,
-	InGameScreenPlugin, InGameSettings, InGameSettingsScreen, InGameSettingsSystems,
-	InGameShadowQuality, InGameVisualStyle, LoadingScreenPlugin, LoadingScreenSystems, MenuScreen,
-	MenuScreens, RenderScaleReadout, SpinRevealScreen, VisualStyleAutoPick, VisualStyleSaved,
+	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
+	request_show_in_game_settings, CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice,
+	HomeScreenPlugin, InGameMenuChoice, InGameScreen, InGameScreenPlugin, InGameSettings,
+	InGameSettingsScreen, InGameSettingsSystems, InGameShadowQuality, InGameVisualStyle,
+	LoadingScreenPlugin, LoadingScreenSystems, MenuScreen, MenuScreens, RenderScaleReadout,
+	SpinRevealScreen, VisualStyleProvenance,
 };
 
 pub struct GamePlugin;
@@ -147,49 +148,59 @@ impl Plugin for GamePlugin {
 						.chain(),
 				),
 			)
-			.add_systems(PreUpdate, sync_inventory_edit_follow.run_if(in_state(WorldPause::Menu)))
-			.add_systems(
+			.add_systems(PreUpdate, sync_inventory_edit_follow.run_if(in_state(WorldPause::Menu)));
+		if app.world().contains_resource::<AgentDrive>() {
+			app.init_resource::<crate::agent_observe::AgentShowRequestMemory>().add_systems(
 				Update,
 				(
-					stamp_preview_render_layers,
-					crate::load::finish_world_loading
-						.run_if(in_state(GameFlow::LoadingWorld))
-						.after(WorldSurfaceSet)
-						.before(LoadingScreenSystems::Apply),
-					route_home_choice.run_if(in_state(GameFlow::Home)),
-					home_settings_back
-						.after(TextMenuSystems::Navigate)
-						.run_if(in_state(GameFlow::Home)),
-					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
-					apply_pause_character_look.run_if(in_state(WorldPause::Menu)),
-					// Discard restores the baseline from a Navigate observer; write it
-					// to the live player before the swap drops the editor return.
-					sync_world_loadout_from_editor
-						.after(TextMenuSystems::Navigate)
-						.run_if(in_state(WorldPause::Menu)),
-					persist_changed_player_inventory,
-					sync_world_mob_hud,
-					sync_world_shadows,
-					(
-						apply_unsaved_visual_style_from_host,
-						sync_world_render_scale,
-						sync_render_scale_readout,
-					)
-						.chain()
-						.after(InGameSettingsSystems::ApplyChoice)
-						.before(InGameSettingsSystems::Show),
-					pause_menu_back
-						.after(TextMenuSystems::Navigate)
-						.run_if(in_state(WorldPause::Menu)),
-					character_back
-						.after(TextMenuSystems::Navigate)
-						.run_if(in_state(GameFlow::Characters)),
-					toggle_world_pause
-						.after(CharacterControlSystems)
-						.before(TextMenuSystems::InputLock)
-						.run_if(in_state(GameFlow::World)),
-				),
+					crate::agent_observe::publish_agent_menu_shell,
+					crate::agent_observe::publish_agent_menu_focus,
+				)
+					.chain(),
 			);
+		}
+		app.add_systems(
+			Update,
+			(
+				stamp_preview_render_layers,
+				crate::load::finish_world_loading
+					.run_if(in_state(GameFlow::LoadingWorld))
+					.after(WorldSurfaceSet)
+					.before(LoadingScreenSystems::Apply),
+				route_home_choice.run_if(in_state(GameFlow::Home)),
+				home_settings_back
+					.after(TextMenuSystems::Navigate)
+					.run_if(in_state(GameFlow::Home)),
+				route_in_game_choice.run_if(in_state(WorldPause::Menu)),
+				apply_pause_character_look.run_if(in_state(WorldPause::Menu)),
+				// Discard restores the baseline from a Navigate observer; write it
+				// to the live player before the swap drops the editor return.
+				sync_world_loadout_from_editor
+					.after(TextMenuSystems::Navigate)
+					.run_if(in_state(WorldPause::Menu)),
+				persist_changed_player_inventory,
+				sync_world_mob_hud,
+				sync_world_shadows,
+				(
+					apply_unsaved_visual_style_from_host,
+					sync_world_render_scale,
+					sync_render_scale_readout,
+				)
+					.chain()
+					.after(InGameSettingsSystems::ApplyChoice)
+					.before(InGameSettingsSystems::Show),
+				pause_menu_back
+					.after(TextMenuSystems::Navigate)
+					.run_if(in_state(WorldPause::Menu)),
+				character_back
+					.after(TextMenuSystems::Navigate)
+					.run_if(in_state(GameFlow::Characters)),
+				toggle_world_pause
+					.after(CharacterControlSystems)
+					.before(TextMenuSystems::InputLock)
+					.run_if(in_state(GameFlow::World)),
+			),
+		);
 	}
 }
 
@@ -416,13 +427,12 @@ fn sync_world_shadows(settings: Res<InGameSettings>, mut quality: ResMut<ShadowQ
 }
 
 fn apply_unsaved_visual_style_from_host(
-	saved: Res<VisualStyleSaved>,
-	mut auto: ResMut<VisualStyleAutoPick>,
+	mut provenance: ResMut<VisualStyleProvenance>,
 	mut settings: ResMut<InGameSettings>,
 	adapter: Option<Res<RenderAdapterInfo>>,
 	windows: Query<&Window, With<PrimaryWindow>>,
 ) {
-	if saved.0 || auto.reason.is_some() {
+	if !provenance.is_pending() {
 		return;
 	}
 	let Some(adapter) = adapter else {
@@ -445,11 +455,10 @@ fn apply_unsaved_visual_style_from_host(
 		memory_bytes: host_memory_bytes(),
 		device_tier: parse_device_tier_env(std::env::var(DEVICE_TIER_ENV).ok().as_deref()),
 	};
-	let Some(pick) = apply_unsaved_visual_style_default(saved.0, &mut settings, &signals) else {
+	let Some(pick) = provenance.apply_unsaved_default(&mut settings, &signals) else {
 		return;
 	};
 	info!("visual style default {:?} ({})", pick.style, pick.reason.as_str());
-	auto.reason = Some(pick.reason);
 }
 
 fn sync_world_render_scale(
@@ -477,7 +486,7 @@ fn apply_settings_to_visual_style(
 fn sync_render_scale_readout(
 	style: Res<VisualStyleSetting>,
 	windows: Query<&Window, With<PrimaryWindow>>,
-	auto: Res<VisualStyleAutoPick>,
+	provenance: Res<VisualStyleProvenance>,
 	mut readout: ResMut<RenderScaleReadout>,
 ) {
 	let env = parse_visual_style_env(std::env::var(VISUAL_STYLE_ENV).ok().as_deref());
@@ -487,7 +496,7 @@ fn sync_render_scale_readout(
 		}
 		Err(_) => (UVec2::ZERO, 1.0),
 	};
-	let next = visual_style_readout(&style, physical, factor, env, auto.reason);
+	let next = visual_style_readout(&style, physical, factor, env, *provenance);
 	if *readout != next {
 		*readout = next;
 	}
@@ -498,7 +507,7 @@ fn visual_style_readout(
 	window_physical: UVec2,
 	window_scale_factor: f32,
 	env_override: Option<VisualStyle>,
-	auto_reason: Option<VisualStyleAutoReason>,
+	provenance: VisualStyleProvenance,
 ) -> RenderScaleReadout {
 	let plan = style.plan(window_physical, window_scale_factor);
 	let effective_scale = if window_physical.y == 0 {
@@ -512,7 +521,7 @@ fn visual_style_readout(
 		window_physical,
 		target_physical: plan.target_size,
 		env_override,
-		auto_reason,
+		auto_reason: provenance.auto_reason(),
 	}
 }
 
@@ -642,7 +651,7 @@ mod tests {
 	};
 	use menu_screens::{
 		GameMode, HomeMenuChoice, InGameSettings, InGameShadowQuality, InGameVisualStyle,
-		RenderScaleReadout,
+		RenderScaleReadout, VisualStyleProvenance,
 	};
 
 	#[test]
@@ -925,7 +934,7 @@ mod tests {
 			UVec2::new(1920, 1080),
 			1.0,
 			Some(VisualStyle::Impressionist),
-			None,
+			VisualStyleProvenance::PendingAuto,
 		);
 		assert_eq!(
 			readout,
@@ -938,13 +947,23 @@ mod tests {
 				auto_reason: None,
 			}
 		);
+
+		use maybraid_world::VisualStyleAutoReason;
+		let auto = visual_style_readout(
+			&style,
+			UVec2::new(1920, 1080),
+			1.0,
+			None,
+			VisualStyleProvenance::AutoPicked(VisualStyleAutoReason::UnifiedMemoryBelow24GiB),
+		);
+		assert_eq!(auto.auto_reason, Some(VisualStyleAutoReason::UnifiedMemoryBelow24GiB));
+		assert_eq!(auto.env_override, None);
 		Ok(())
 	}
 
 	#[test]
 	fn unsaved_host_picks_sharp_on_low_unified_memory() -> anyhow::Result<()> {
 		use maybraid_world::{AdapterKind, VisualStyleAutoReason, VisualStyleSignals};
-		use menu_screens::apply_unsaved_visual_style_default;
 
 		let mut settings = InGameSettings {
 			mob_hud: false,
@@ -959,15 +978,23 @@ mod tests {
 			memory_bytes: Some(16 * 1024 * 1024 * 1024),
 			..VisualStyleSignals::default()
 		};
-		let pick = apply_unsaved_visual_style_default(false, &mut settings, &signals)
-			.expect("unsaved pick");
+		let mut provenance = VisualStyleProvenance::PendingAuto;
+		let pick = provenance
+			.apply_unsaved_default(&mut settings, &signals)
+			.ok_or_else(|| anyhow::anyhow!("unsaved pick"))?;
 		assert_eq!(pick.style, VisualStyle::Sharp);
 		assert_eq!(pick.reason, VisualStyleAutoReason::UnifiedMemoryBelow24GiB);
 		assert_eq!(settings.visual_style, InGameVisualStyle::Sharp);
+		assert_eq!(
+			provenance,
+			VisualStyleProvenance::AutoPicked(VisualStyleAutoReason::UnifiedMemoryBelow24GiB)
+		);
 
 		settings.visual_style = InGameVisualStyle::Impressionist;
-		assert!(apply_unsaved_visual_style_default(true, &mut settings, &signals).is_none());
+		let mut explicit = VisualStyleProvenance::Explicit;
+		assert!(explicit.apply_unsaved_default(&mut settings, &signals).is_none());
 		assert_eq!(settings.visual_style, InGameVisualStyle::Impressionist);
+		assert!(provenance.apply_unsaved_default(&mut settings, &signals).is_none());
 		Ok(())
 	}
 
