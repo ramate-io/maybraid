@@ -7,8 +7,8 @@
 //! Tanz tiles reuse pose-capture catalog keys from `tanz-user`.
 
 use character_items::{
-	icon_catalog_key_for_label, self_lubikan_catalog_key, Inventory, InventoryItem, InventorySlot,
-	SELF_LUBIKAN_CAPTURE_LABEL, WORN_CLOTHING_LIMIT,
+	Inventory, InventoryItem, InventorySlot, SELF_LUBIKAN_CAPTURE_LABEL, WORN_CLOTHING_LIMIT,
+	icon_catalog_key_for_label, self_lubikan_catalog_key,
 };
 use character_ui_menu::{
 	AssetOption, EquipmentChoice, GridCatalogChoice, MenuNode, OrderedEquipmentRow, PreviewColor,
@@ -327,9 +327,13 @@ fn equipped_pane(inventory: &Inventory, mode: InventoryLayoutMode) -> MenuNode<M
 		equipped_row("Clothing", WORN_CLOTHING_LIMIT, inventory, mode, |index, item| {
 			clothing_tile(inventory, index, item, mode)
 		}),
-		equipped_row(TOOLS_LABEL, InventorySlot::Weapons.capacity(), inventory, mode, |index, item| {
-			tools_tile(inventory, index, item, mode)
-		}),
+		equipped_row(
+			TOOLS_LABEL,
+			InventorySlot::Weapons.capacity(),
+			inventory,
+			mode,
+			|index, item| tools_tile(inventory, index, item, mode),
+		),
 		equipped_row(
 			InventorySlot::Skills.label(),
 			InventorySlot::Skills.capacity(),
@@ -447,8 +451,8 @@ mod tests {
 	use super::{InventoryLayout, InventoryLayoutMode, STARTER_KIT_LABEL};
 	use crate::MenuEvent;
 	use character_items::{
-		self_lubikan_catalog_key, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory,
-		InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec, STARTER_CLOTHING_COUNT,
+		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor, ItemRng,
+		STARTER_CLOTHING_COUNT, SkillMapKind, SkillMapSpec, self_lubikan_catalog_key,
 	};
 	use character_ui_menu::MenuNode;
 
@@ -607,7 +611,17 @@ mod tests {
 			.iter()
 			.position(|item| item.tanz_id() == Some(TanzId::HealingSalute))
 			.expect("salute");
-		assert!(inventory.equip_front(salute));
+		let left = inventory
+			.items
+			.iter()
+			.position(|item| item.tanz_id() == Some(TanzId::LeftStrafe))
+			.expect("left strafe");
+		assert_eq!(
+			inventory.tanzes,
+			vec![salute, left],
+			"create-mode outfits queue owned starter Tanzes"
+		);
+		assert!(inventory.unequip(left));
 		let layout = InventoryLayout::character_menu(&inventory);
 		let MenuNode::Section { children, .. } = &layout.node else {
 			panic!("inventory must be a section");
@@ -676,7 +690,7 @@ mod tests {
 
 	#[test]
 	fn layout_stays_loading_until_every_capture_reports() {
-		use super::{inventory_paint_state, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT};
+		use super::{INVENTORY_CAPTURE_TIMEOUT, InventoryPaint, inventory_paint_state};
 		use std::time::Duration;
 
 		let layout = InventoryLayout::starter_kit(sample_items());
@@ -707,7 +721,7 @@ mod tests {
 
 	#[test]
 	fn timeout_reveals_without_every_report() {
-		use super::{inventory_paint_state, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT};
+		use super::{INVENTORY_CAPTURE_TIMEOUT, InventoryPaint, inventory_paint_state};
 
 		let layout = InventoryLayout::starter_kit(sample_items());
 		assert_eq!(

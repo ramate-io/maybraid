@@ -5,9 +5,9 @@ use characters::species::{
 };
 
 use crate::{
+	MenuEvent,
 	character::{CharacterMenu, ConceptSpecies},
 	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, tuberwaber::TuberwaberMenu},
-	MenuEvent,
 };
 
 fn inventory_section<'a>(
@@ -567,7 +567,7 @@ fn create_menu_weapons_is_ranked_grid_catalog() -> anyhow::Result<()> {
 
 #[test]
 fn create_menu_skill_maps_is_ranked_grid_catalog() -> anyhow::Result<()> {
-	use character_items::{InventoryItem, SkillMapKind, SkillMapSpec, SKILL_MAP_QUEUE_LIMIT};
+	use character_items::{InventoryItem, SKILL_MAP_QUEUE_LIMIT, SkillMapKind, SkillMapSpec};
 
 	let items = vec![
 		InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)),
@@ -627,15 +627,19 @@ fn create_menu_inventory_is_one_section_with_four_headers() -> anyhow::Result<()
 		})
 		.collect();
 	assert_eq!(labels, ["Equipped", "Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]);
-	assert!(nodes
-		.iter()
-		.all(|node| !matches!(node, MenuNode::Section { label: "Weapons" | "Skill Maps", .. })));
+	assert!(
+		nodes
+			.iter()
+			.all(|node| !matches!(node, MenuNode::Section { label: "Weapons" | "Skill Maps", .. }))
+	);
 	let MenuNode::SectionSelect { children: species, .. } = &nodes[1] else {
 		anyhow::bail!("expected species SectionSelect");
 	};
-	assert!(species
-		.iter()
-		.all(|node| !matches!(node, MenuNode::Section { label: "Clothing", .. })));
+	assert!(
+		species
+			.iter()
+			.all(|node| !matches!(node, MenuNode::Section { label: "Clothing", .. }))
+	);
 	let equipped = inventory_child(&nodes, "Equipped")?;
 	let MenuNode::OrderedEquipment { rows } = equipped else {
 		anyhow::bail!("Equipped must be OrderedEquipment");
@@ -660,15 +664,19 @@ fn appearance_only_menu_keeps_clothing_under_species() -> anyhow::Result<()> {
 	let menu = CharacterMenu::default();
 	assert!(menu.inventory.is_none());
 	let nodes = menu.menu_nodes();
-	assert!(nodes
-		.iter()
-		.all(|node| !matches!(node, MenuNode::Section { label: "Inventory", .. })));
+	assert!(
+		nodes
+			.iter()
+			.all(|node| !matches!(node, MenuNode::Section { label: "Inventory", .. }))
+	);
 	let MenuNode::SectionSelect { children, .. } = &nodes[1] else {
 		anyhow::bail!("expected species SectionSelect");
 	};
-	assert!(children
-		.iter()
-		.any(|node| matches!(node, MenuNode::Section { label: "Clothing", .. })));
+	assert!(
+		children
+			.iter()
+			.any(|node| matches!(node, MenuNode::Section { label: "Clothing", .. }))
+	);
 	Ok(())
 }
 
@@ -762,15 +770,21 @@ fn saved_menu_locks_body_and_keeps_inventory() -> anyhow::Result<()> {
 	let MenuNode::SectionSelect { children, .. } = &nodes[1] else {
 		anyhow::bail!("expected species SectionSelect so body attributes stay visible");
 	};
-	assert!(children
-		.iter()
-		.any(|node| matches!(node, MenuNode::Section { label: "Body", .. })));
-	assert!(children
-		.iter()
-		.all(|node| !matches!(node, MenuNode::Section { label: "Clothing", .. })));
-	assert!(nodes
-		.iter()
-		.any(|node| matches!(node, MenuNode::Section { label: "Inventory", .. })));
+	assert!(
+		children
+			.iter()
+			.any(|node| matches!(node, MenuNode::Section { label: "Body", .. }))
+	);
+	assert!(
+		children
+			.iter()
+			.all(|node| !matches!(node, MenuNode::Section { label: "Clothing", .. }))
+	);
+	assert!(
+		nodes
+			.iter()
+			.any(|node| matches!(node, MenuNode::Section { label: "Inventory", .. }))
+	);
 	assert!(nodes.iter().all(|node| !matches!(node, MenuNode::Action { .. })));
 	assert!(!menu.overlay_editable("Species"));
 	assert!(!menu.overlay_editable("Body"));
@@ -965,6 +979,15 @@ fn equip_front_move_and_unequip_events() -> anyhow::Result<()> {
 		InventoryItem::tanz(TanzId::ForwardDash),
 	];
 	let mut menu = CharacterMenu::for_create(items);
+	assert_eq!(
+		menu.inventory.as_ref().expect("inventory").tanzes,
+		vec![0, 1, 2],
+		"create-mode outfits queue owned starter Tanzes"
+	);
+	assert!(menu.apply(MenuEvent::UnequipInventory(0)));
+	assert!(menu.apply(MenuEvent::UnequipInventory(1)));
+	assert!(menu.apply(MenuEvent::UnequipInventory(2)));
+	assert!(menu.inventory.as_ref().expect("inventory").tanzes.is_empty());
 	assert!(menu.apply(MenuEvent::EquipInventory(0)));
 	assert!(menu.apply(MenuEvent::EquipInventory(1)));
 	assert_eq!(
@@ -977,7 +1000,10 @@ fn equip_front_move_and_unequip_events() -> anyhow::Result<()> {
 	assert!(!menu.apply(MenuEvent::EquipInventory(2)), "already equipped is a no-op");
 	assert!(menu.apply(MenuEvent::MoveEquippedInventory { index: 2, delta: 1 }));
 	assert_eq!(menu.inventory.as_ref().expect("inventory").tanzes, vec![1, 2, 0]);
-	assert!(!menu.apply(MenuEvent::MoveEquippedInventory { index: 1, delta: -1 }), "clamp at front");
+	assert!(
+		!menu.apply(MenuEvent::MoveEquippedInventory { index: 1, delta: -1 }),
+		"clamp at front"
+	);
 	assert!(menu.apply(MenuEvent::UnequipInventory(2)));
 	let inventory = menu.inventory.as_ref().expect("inventory");
 	assert_eq!(inventory.tanzes, vec![1, 0]);
