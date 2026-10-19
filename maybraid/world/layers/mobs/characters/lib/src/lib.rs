@@ -45,7 +45,7 @@ pub mod terrain_pitch;
 pub use anim::{
 	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId,
 	AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, JabParams, JumpParams, PowerStrafeParams,
-	ThinkAgainParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams,
+	TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams,
 };
 pub use appearance::CharacterAppearance;
 pub use assembly::CharacterPartSlot;

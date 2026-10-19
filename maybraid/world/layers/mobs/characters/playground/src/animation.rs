@@ -3,7 +3,7 @@ use character_animations::animations::{
 	DEFAULT_BACKSWING, DEFAULT_JAB_TARGET, THINK_AGAIN_DURATION, THINK_AGAIN_SPEED,
 };
 use character_rigs::{articulation::compose_parent_rotation, authoring::humanoid_bone_axis, Side};
-use characters::{AnimBone, AnimClip, AnimRef, JabParams, ThinkAgainParams};
+use characters::{AnimBone, AnimClip, AnimRef, JabParams};
 use clap::ValueEnum;
 
 use crate::character::CharacterConfig;
@@ -80,7 +80,7 @@ impl AnimationMode {
 				backswing: DEFAULT_BACKSWING,
 				target: DEFAULT_JAB_TARGET,
 			}),
-			Self::ThinkAgain => AnimClip::ThinkAgain(ThinkAgainParams { side }),
+			Self::ThinkAgain => AnimClip::think_again_side(side),
 			Self::PowerStrafe => AnimClip::power_strafe(side),
 			Self::PowerDash => AnimClip::power_dash(),
 			Self::Prone => AnimClip::prone(),
