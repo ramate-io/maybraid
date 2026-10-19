@@ -125,6 +125,27 @@ pub enum JumpSegment {
 	Land,
 }
 
+/// One resolved jump instant: segment, local progress, timings, height, optional flip pitch.
+///
+/// Pose and effects both read this so a mailbox that asks for both does not
+/// recompute segment/time independently.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct JumpSample {
+	pub segment: JumpSegment,
+	pub local: f32,
+	pub timings: JumpTiming,
+	pub height: f32,
+	/// Airborne tucked-flip pitch in radians. `None` on ground or a plain jump.
+	pub flip_pitch: Option<f32>,
+}
+
+impl JumpSample {
+	pub fn with_flip_pitch(mut self, flip_pitch: Option<f32>) -> Self {
+		self.flip_pitch = flip_pitch;
+		self
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct TwoFootedJump {
 	/// Downward acceleration for ballistic motion (units/s²).
@@ -247,7 +268,33 @@ impl TwoFootedJump {
 	}
 
 	pub fn segment(&self, lengths: LegSegmentLengths, elapsed: f32) -> (JumpSegment, f32) {
-		Self::segment_at_time(self.time_in_cycle(lengths, elapsed), &self.timings(lengths))
+		let sample = self.sample(lengths, elapsed);
+		(sample.segment, sample.local)
+	}
+
+	/// Resolve segment, local progress, timings, and height once.
+	pub fn sample(&self, lengths: LegSegmentLengths, elapsed: f32) -> JumpSample {
+		let timings = self.timings(lengths);
+		let cycle = timings.cycle_duration();
+		let time_in_cycle = if cycle <= f32::EPSILON { 0.0 } else { elapsed % cycle };
+		let (segment, local) = Self::segment_at_time(time_in_cycle, &timings);
+		let height = match segment {
+			JumpSegment::Squat => {
+				let squat = self.prejump_squat(lengths);
+				let p = local / timings.squat_duration().max(f32::EPSILON);
+				-squat.vertical_drop(p, lengths)
+			}
+			JumpSegment::Spring | JumpSegment::Fall => {
+				let since_launch = (time_in_cycle - timings.squat_end()).max(0.0);
+				self.ballistic_height(since_launch.min(self.touchdown_time_since_launch()))
+			}
+			JumpSegment::Land => {
+				let land = self.landing_squat(lengths);
+				let p = local / timings.land_duration().max(f32::EPSILON);
+				-land.vertical_drop(p, lengths)
+			}
+		};
+		JumpSample { segment, local, timings, height, flip_pitch: None }
 	}
 
 	pub fn time_since_launch(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
@@ -273,25 +320,7 @@ impl TwoFootedJump {
 	}
 
 	pub fn vertical_offset(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
-		let (segment, local) = self.segment(lengths, elapsed);
-		let timings = self.timings(lengths);
-
-		match segment {
-			JumpSegment::Squat => {
-				let squat = self.prejump_squat(lengths);
-				let p = local / timings.squat_duration().max(f32::EPSILON);
-				-squat.vertical_drop(p, lengths)
-			}
-			JumpSegment::Spring | JumpSegment::Fall => {
-				let since_launch = self.time_since_launch(lengths, elapsed);
-				self.ballistic_height(since_launch.min(self.touchdown_time_since_launch()))
-			}
-			JumpSegment::Land => {
-				let land = self.landing_squat(lengths);
-				let p = local / timings.land_duration().max(f32::EPSILON);
-				-land.vertical_drop(p, lengths)
-			}
-		}
+		self.sample(lengths, elapsed).height
 	}
 }
 
