@@ -697,6 +697,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
+name = "bench-support"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "bevy"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2737,6 +2744,7 @@ name = "character-animations"
 version = "0.1.3"
 dependencies = [
  "anyhow",
+ "bench-support",
  "bevy",
  "character-rigs",
  "clap",
@@ -2820,6 +2828,7 @@ name = "character-motion"
 version = "0.1.3"
 dependencies = [
  "anyhow",
+ "bench-support",
  "bevy",
  "character-animations",
  "character-rigs",
@@ -5194,6 +5203,7 @@ name = "gimme-bench-support"
 version = "0.1.3"
 dependencies = [
  "anyhow",
+ "bench-support",
  "bevy",
  "bevy_math",
  "bevy_platform",
@@ -7024,6 +7034,7 @@ dependencies = [
  "anyhow",
  "avian3d",
  "barking",
+ "bench-support",
  "bevy",
  "character-inventory-user",
  "character-items",
@@ -9064,6 +9075,7 @@ name = "poi-intelligence"
 version = "0.1.3"
 dependencies = [
  "anyhow",
+ "bench-support",
  "bevy",
  "gimme-core",
  "intelligence-lod",
@@ -9915,6 +9927,7 @@ version = "0.1.3"
 dependencies = [
  "anyhow",
  "avian3d",
+ "bench-support",
  "bevy",
  "building-components",
  "building-physics",

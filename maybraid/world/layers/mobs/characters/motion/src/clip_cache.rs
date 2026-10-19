@@ -537,6 +537,8 @@ mod tests {
 	use std::hint::black_box;
 	use std::time::Instant;
 
+	use bench_support::{Microbench, NanoSamples};
+
 	/// Pre-change path: full rest copy then masked rotation deltas.
 	fn apply_evaluated_sample_legacy(
 		rest: &PoseBuffer,
@@ -901,10 +903,10 @@ mod tests {
 		Ok(())
 	}
 
-	fn bench_prepared_sample_loop(use_legacy: bool) -> Vec<u128> {
+	fn bench_prepared_sample_loop(use_legacy: bool) -> anyhow::Result<NanoSamples> {
 		const FRAMES: u32 = 2_000;
 		const CHARACTERS: u32 = 32;
-		const RUNS: u32 = 5;
+		const RUNS: usize = 5;
 		let clips = [AnimClip::still(), AnimClip::walk(), AnimClip::run()];
 		let cache = AnimClipCache::default();
 		let prepared: Vec<PreparedClip> = clips
@@ -916,10 +918,8 @@ mod tests {
 
 		let mut rigs: Vec<HumanoidV0Rig> =
 			(0..CHARACTERS).map(|_| HumanoidV0Rig::imported()).collect();
-
-		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
-		for _ in 0..RUNS {
-			let start = Instant::now();
+		let operations = u128::from(FRAMES) * u128::from(CHARACTERS);
+		Microbench::repeats(RUNS).collect_per_op_nanos(operations, || {
 			for frame in 0..FRAMES {
 				let frame = black_box(frame);
 				for (index, rig) in rigs.iter_mut().enumerate() {
@@ -936,33 +936,29 @@ mod tests {
 					black_box(&rig.pose);
 				}
 			}
-			let samples = FRAMES as u64 * CHARACTERS as u64;
-			run_ns.push(start.elapsed().as_nanos() / samples as u128);
-		}
-
-		run_ns.sort_unstable();
-		run_ns
+		})
 	}
 
-	fn report_apply_bench(label: &str, run_ns: &[u128]) {
-		let min = *run_ns.first().expect("run");
-		let median = run_ns[run_ns.len() / 2];
-		let mean = run_ns.iter().sum::<u128>() / run_ns.len() as u128;
-		let spread = run_ns.last().expect("run") - min;
+	fn report_apply_bench(label: &str, run_ns: &NanoSamples) {
 		eprintln!(
 			"apply_evaluated_sample_microbench {label}: runs={runs:?} min={min} median={median} mean={mean} spread={spread} ns/sample",
-			runs = run_ns,
+			runs = run_ns.as_slice(),
+			min = run_ns.min(),
+			median = run_ns.median(),
+			mean = run_ns.mean(),
+			spread = run_ns.spread(),
 		);
 	}
 
 	/// `cargo test -p character-motion apply_evaluated_sample_microbench --release -- --ignored --nocapture`
 	#[test]
 	#[ignore]
-	fn apply_evaluated_sample_microbench() {
+	fn apply_evaluated_sample_microbench() -> anyhow::Result<()> {
 		eprintln!(
 			"32 humanoid characters, Still/Walk/Run prepared clips, real cache.sample + apply path"
 		);
-		report_apply_bench("legacy copy+delta", &bench_prepared_sample_loop(true));
-		report_apply_bench("fused mask pass", &bench_prepared_sample_loop(false));
+		report_apply_bench("legacy copy+delta", &bench_prepared_sample_loop(true)?);
+		report_apply_bench("fused mask pass", &bench_prepared_sample_loop(false)?);
+		Ok(())
 	}
 }

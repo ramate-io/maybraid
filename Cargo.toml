@@ -167,6 +167,7 @@ members = [
   "util/game-commands",
   "util/camera-controls",
   "util/render-item",
+  "util/bench-support",
 
 ]
 
@@ -412,6 +413,7 @@ les-halles-arena = { path = "maybraid/items/les-halles-arena" }
 gimme-core = { path = "maybraid/gimme/core" }
 gimme-bench-support = { path = "maybraid/gimme/bench-support" }
 gimme-gen = { path = "maybraid/gimme/gen" }
+bench-support = { path = "util/bench-support" }
 
 maybraid-language-core = { path = "maybraid/language/core" }
 maybraid-language-grammars = { path = "maybraid/language/grammars" }

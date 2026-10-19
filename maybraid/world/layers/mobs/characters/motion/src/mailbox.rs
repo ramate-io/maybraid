@@ -893,7 +893,8 @@ mod tests {
 	use intelligence_lod::IntelligenceBand;
 	use std::collections::HashMap;
 	use std::hint::black_box;
-	use std::time::Instant;
+
+	use bench_support::{Microbench, NanoSamples};
 
 	fn run_select(world: &mut World) {
 		world.init_resource::<MailboxApplySet>();
@@ -1463,10 +1464,10 @@ mod tests {
 		[AnimClip::Still, AnimClip::walk(), AnimClip::run()]
 	}
 
-	fn bench_write_loop(use_name_lookup: bool) -> (u128, u128, u128) {
+	fn bench_write_loop(use_name_lookup: bool) -> anyhow::Result<NanoSamples> {
 		const FRAMES: u32 = 2_000;
 		const CHARACTERS: u32 = 32;
-		const RUNS: u32 = 5;
+		const RUNS: usize = 5;
 		let clips = bench_clips();
 
 		let mut worlds: Vec<(World, Entity)> = (0..CHARACTERS)
@@ -1481,9 +1482,8 @@ mod tests {
 			})
 			.collect();
 
-		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
-		for _ in 0..RUNS {
-			let start = Instant::now();
+		let operations = u128::from(FRAMES) * u128::from(CHARACTERS);
+		Microbench::repeats(RUNS).collect_per_op_nanos(operations, || {
 			for frame in 0..FRAMES {
 				let frame = black_box(frame);
 				for (world, host) in &mut worlds {
@@ -1504,26 +1504,17 @@ mod tests {
 					apply_mailbox_write_loop(world, &[*host], use_name_lookup);
 				}
 			}
-			let samples = FRAMES as u64 * CHARACTERS as u64;
-			run_ns.push(start.elapsed().as_nanos() / samples as u128);
-		}
-
-		run_ns.sort_unstable();
-		let min = *run_ns.first().expect("run");
-		let median = run_ns[run_ns.len() / 2];
-		(min, median, run_ns.iter().sum::<u128>() / run_ns.len() as u128)
+		})
 	}
 
-	fn bench_inner_write(use_name_lookup: bool) -> (u128, u128, u128) {
+	fn bench_inner_write(use_name_lookup: bool) -> anyhow::Result<NanoSamples> {
 		const FRAMES: u32 = 10_000;
 		const CHARACTERS: u32 = 32;
-		const RUNS: u32 = 5;
+		const RUNS: usize = 5;
 
 		let mut fixtures: Vec<_> = (0..CHARACTERS).map(|_| humanoid_write_fixture()).collect();
-
-		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
-		for _ in 0..RUNS {
-			let start = Instant::now();
+		let operations = u128::from(FRAMES) * u128::from(CHARACTERS);
+		Microbench::repeats(RUNS).collect_per_op_nanos(operations, || {
 			for frame in 0..FRAMES {
 				let frame = black_box(frame);
 				for (world, pose, bone_map, entities) in fixtures.iter_mut() {
@@ -1540,35 +1531,29 @@ mod tests {
 					black_box(frame);
 				}
 			}
-			let samples = FRAMES as u64 * CHARACTERS as u64;
-			run_ns.push(start.elapsed().as_nanos() / samples as u128);
-		}
-
-		run_ns.sort_unstable();
-		let min = *run_ns.first().expect("run");
-		let median = run_ns[run_ns.len() / 2];
-		(min, median, run_ns.iter().sum::<u128>() / run_ns.len() as u128)
+		})
 	}
 
-	fn report_bench(label: &str, min: u128, median: u128, mean: u128) {
+	fn report_bench(label: &str, samples: &NanoSamples) {
 		eprintln!(
-			"mailbox_write_microbench {label}: min={min} ns/sample median={median} ns/sample mean={mean} ns/sample"
+			"mailbox_write_microbench {label}: min={} ns/sample median={} ns/sample mean={} ns/sample",
+			samples.min(),
+			samples.median(),
+			samples.mean()
 		);
 	}
 
-	fn bench_prepared_clip_handle(use_clone: bool) -> Vec<u128> {
+	fn bench_prepared_clip_handle(use_clone: bool) -> anyhow::Result<NanoSamples> {
 		use crate::clip_cache::RigVariantId;
 
 		const FRAMES: u32 = 50_000;
-		const RUNS: u32 = 5;
+		const RUNS: usize = 5;
 		let cache = AnimClipCache::default();
 		let prepared = cache
 			.prepare(AnimClip::walk(), RigVariantId::HUMANOID_V0, cache.settings.sampling)
-			.expect("walk");
+			.ok_or_else(|| anyhow::anyhow!("walk"))?;
 
-		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
-		for _ in 0..RUNS {
-			let start = Instant::now();
+		Microbench::repeats(RUNS).collect_per_op_nanos(u128::from(FRAMES), || {
 			for frame in 0..FRAMES {
 				let frame = black_box(frame);
 				if use_clone {
@@ -1579,24 +1564,19 @@ mod tests {
 				}
 				black_box(frame);
 			}
-			run_ns.push(start.elapsed().as_nanos() / FRAMES as u128);
-		}
-		run_ns.sort_unstable();
-		run_ns
+		})
 	}
 
-	fn bench_apply_set_lookup(use_clone: bool) -> Vec<u128> {
+	fn bench_apply_set_lookup(use_clone: bool) -> anyhow::Result<NanoSamples> {
 		const FRAMES: u32 = 50_000;
-		const RUNS: u32 = 5;
+		const RUNS: usize = 5;
 		let mut selected = HashSet::new();
 		for index in 1..=32 {
 			selected.insert(Entity::from_bits(index as u64));
 		}
 		let set = MailboxApplySet { only: Some(selected) };
 
-		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
-		for _ in 0..RUNS {
-			let start = Instant::now();
+		Microbench::repeats(RUNS).collect_per_op_nanos(u128::from(FRAMES), || {
 			for frame in 0..FRAMES {
 				let frame = black_box(frame);
 				let entity = Entity::from_bits(((frame % 32) + 1) as u64);
@@ -1607,10 +1587,7 @@ mod tests {
 					black_box(allows_only(set.only.as_ref(), entity));
 				}
 			}
-			run_ns.push(start.elapsed().as_nanos() / FRAMES as u128);
-		}
-		run_ns.sort_unstable();
-		run_ns
+		})
 	}
 
 	fn sync_binding_rest_legacy_query(
@@ -1694,10 +1671,10 @@ mod tests {
 		assert_eq!(epoch_after_first, legacy_rig.binding.rest_epoch);
 	}
 
-	fn bench_binding_rest_sync(use_epoch: bool) -> Vec<u128> {
+	fn bench_binding_rest_sync(use_epoch: bool) -> anyhow::Result<NanoSamples> {
 		const FRAMES: u32 = 5_000;
 		const CHARACTERS: u32 = 32;
-		const RUNS: u32 = 5;
+		const RUNS: usize = 5;
 
 		let mut fixtures: Vec<_> = (0..CHARACTERS).map(|_| humanoid_rest_sync_fixture()).collect();
 		for (world, rig) in &mut fixtures {
@@ -1706,9 +1683,8 @@ mod tests {
 			run_rest_sync_bench(&bones, rig, true);
 		}
 
-		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
-		for _ in 0..RUNS {
-			let start = Instant::now();
+		let operations = u128::from(FRAMES) * u128::from(CHARACTERS);
+		Microbench::repeats(RUNS).collect_per_op_nanos(operations, || {
 			for (world, rig) in &mut fixtures {
 				let mut bones = world.query_filtered::<&AnimBone, Without<AnimMailbox>>();
 				let bones = bones.query(world);
@@ -1718,45 +1694,41 @@ mod tests {
 					black_box(frame);
 				}
 			}
-			let samples = FRAMES as u64 * CHARACTERS as u64;
-			run_ns.push(start.elapsed().as_nanos() / samples as u128);
-		}
-		run_ns.sort_unstable();
-		run_ns
+		})
 	}
 
-	fn report_handle_bench(label: &str, run_ns: &[u128]) {
-		let min = *run_ns.first().expect("run");
-		let median = run_ns[run_ns.len() / 2];
-		let mean = run_ns.iter().sum::<u128>() / run_ns.len() as u128;
-		let spread = run_ns.last().expect("run") - min;
+	fn report_handle_bench(label: &str, run_ns: &NanoSamples) {
 		eprintln!(
 			"mailbox_handle_microbench {label}: runs={runs:?} min={min} median={median} mean={mean} spread={spread} ns/lookup",
-			runs = run_ns,
+			runs = run_ns.as_slice(),
+			min = run_ns.min(),
+			median = run_ns.median(),
+			mean = run_ns.mean(),
+			spread = run_ns.spread(),
 		);
 	}
 
 	/// `cargo test -p character-motion binding_rest_sync_microbench --release -- --ignored --nocapture`
 	#[test]
 	#[ignore]
-	fn binding_rest_sync_microbench() {
+	fn binding_rest_sync_microbench() -> anyhow::Result<()> {
 		eprintln!(
 			"32 humanoid rigs, stable rests, sync_binding_rest each frame (real mailbox apply path)"
 		);
-		let legacy = bench_binding_rest_sync(false);
-		let optimized = bench_binding_rest_sync(true);
-		report_handle_bench("legacy per-bone scan", &legacy);
-		report_handle_bench("rest_epoch fast path", &optimized);
+		report_handle_bench("legacy per-bone scan", &bench_binding_rest_sync(false)?);
+		report_handle_bench("rest_epoch fast path", &bench_binding_rest_sync(true)?);
+		Ok(())
 	}
 
 	/// `cargo test -p character-motion mailbox_handle_microbench --release -- --ignored --nocapture`
 	#[test]
 	#[ignore]
-	fn mailbox_handle_microbench() {
-		report_handle_bench("apply_set clone", &bench_apply_set_lookup(true));
-		report_handle_bench("apply_set borrow", &bench_apply_set_lookup(false));
-		report_handle_bench("prepared_clip clone", &bench_prepared_clip_handle(true));
-		report_handle_bench("prepared_clip borrow", &bench_prepared_clip_handle(false));
+	fn mailbox_handle_microbench() -> anyhow::Result<()> {
+		report_handle_bench("apply_set clone", &bench_apply_set_lookup(true)?);
+		report_handle_bench("apply_set borrow", &bench_apply_set_lookup(false)?);
+		report_handle_bench("prepared_clip clone", &bench_prepared_clip_handle(true)?);
+		report_handle_bench("prepared_clip borrow", &bench_prepared_clip_handle(false)?);
+		Ok(())
 	}
 
 	/// Micro-benchmark for mailbox pose writes on a humanoid rig.
@@ -1764,20 +1736,16 @@ mod tests {
 	/// `cargo test -p character-motion mailbox_write_microbench --release -- --ignored --nocapture`
 	#[test]
 	#[ignore]
-	fn mailbox_write_microbench() {
+	fn mailbox_write_microbench() -> anyhow::Result<()> {
 		eprintln!(
 			"32 humanoid characters, Still/Walk/Run clips, 18 bones each; inner=write fn only, loop=sample+serial write path"
 		);
 
-		let (legacy_min, legacy_median, legacy_mean) = bench_inner_write(true);
-		report_bench("inner legacy", legacy_min, legacy_median, legacy_mean);
-		let (min, median, mean) = bench_inner_write(false);
-		report_bench("inner indexed", min, median, mean);
-
-		let (legacy_min, legacy_median, legacy_mean) = bench_write_loop(true);
-		report_bench("apply_loop legacy", legacy_min, legacy_median, legacy_mean);
-		let (min, median, mean) = bench_write_loop(false);
-		report_bench("apply_loop indexed", min, median, mean);
+		report_bench("inner legacy", &bench_inner_write(true)?);
+		report_bench("inner indexed", &bench_inner_write(false)?);
+		report_bench("apply_loop legacy", &bench_write_loop(true)?);
+		report_bench("apply_loop indexed", &bench_write_loop(false)?);
+		Ok(())
 	}
 
 	fn blend_mailbox_effects_legacy(
@@ -1824,12 +1792,15 @@ mod tests {
 		assert_eq!(legacy_mailbox.output, optimized_mailbox.output);
 	}
 
-	fn bench_mailbox_sample_publish_effects(legacy: bool, blend_progress: f32) -> Vec<u128> {
+	fn bench_mailbox_sample_publish_effects(
+		legacy: bool,
+		blend_progress: f32,
+	) -> anyhow::Result<NanoSamples> {
 		use crate::clip_cache::RigVariantId;
 
 		const FRAMES: u32 = 5_000;
 		const CHARACTERS: u32 = 32;
-		const RUNS: u32 = 5;
+		const RUNS: usize = 5;
 		let clips = [AnimClip::still(), AnimClip::walk(), AnimClip::run(), AnimClip::jump()];
 		let cache = AnimClipCache::default();
 		let prepared: Vec<Option<PreparedClip>> = clips
@@ -1850,9 +1821,8 @@ mod tests {
 			})
 			.collect();
 
-		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
-		for _ in 0..RUNS {
-			let start = Instant::now();
+		let operations = u128::from(FRAMES) * u128::from(CHARACTERS);
+		Microbench::repeats(RUNS).collect_per_op_nanos(operations, || {
 			for frame in 0..FRAMES {
 				let frame = black_box(frame);
 				for (index, rig) in rigs.iter_mut().enumerate() {
@@ -1893,26 +1863,22 @@ mod tests {
 					}
 				}
 			}
-			let samples = FRAMES as u64 * CHARACTERS as u64;
-			run_ns.push(start.elapsed().as_nanos() / samples as u128);
-		}
-		run_ns.sort_unstable();
-		run_ns
+		})
 	}
 
-	fn report_mailbox_apply_bench(label: &str, run_ns: &[u128]) {
-		let min = *run_ns.first().expect("run");
-		let median = run_ns[run_ns.len() / 2];
+	fn report_mailbox_apply_bench(label: &str, run_ns: &NanoSamples) {
 		eprintln!(
 			"mailbox_apply_microbench {label}: runs={runs:?} min={min} median={median} ns/character-frame",
-			runs = run_ns,
+			runs = run_ns.as_slice(),
+			min = run_ns.min(),
+			median = run_ns.median(),
 		);
 	}
 
 	/// `cargo test -p character-motion mailbox_apply_microbench --release -- --ignored --nocapture`
 	#[test]
 	#[ignore]
-	fn mailbox_apply_microbench() {
+	fn mailbox_apply_microbench() -> anyhow::Result<()> {
 		eprintln!(
 			"32 characters × 5000 frames × 5 runs; Still/Walk/Run prepared + Jump live; sample + publish_pose + effects"
 		);
@@ -1920,13 +1886,14 @@ mod tests {
 			let label = if blend_progress >= 1.0 { "steady blend=1.0" } else { "mid crossfade" };
 			report_mailbox_apply_bench(
 				&format!("{label} legacy"),
-				&bench_mailbox_sample_publish_effects(true, blend_progress),
+				&bench_mailbox_sample_publish_effects(true, blend_progress)?,
 			);
 			report_mailbox_apply_bench(
 				&format!("{label} optimized"),
-				&bench_mailbox_sample_publish_effects(false, blend_progress),
+				&bench_mailbox_sample_publish_effects(false, blend_progress)?,
 			);
 		}
+		Ok(())
 	}
 
 	#[test]

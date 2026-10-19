@@ -389,7 +389,8 @@ mod tests {
 		use lod::hcsg::{universal_bounds, GenerationContext};
 		use procedural_common::NoiseParams;
 		use std::sync::Arc;
-		use std::time::Instant;
+
+		use bench_support::{DurationSamples, Stopwatch};
 		use urbanization_cells::{
 			UrbanizationKind, UrbanizationSelection, DEVELOPMENT_GENERATE_RADIUS_M,
 		};
@@ -503,14 +504,17 @@ mod tests {
 			Ok(())
 		}
 
-		fn percentile(sorted_ns: &[u128], p: f64) -> f64 {
-			let idx = ((sorted_ns.len() as f64 - 1.0) * p).round() as usize;
-			sorted_ns[idx] as f64 / 1_000_000.0
+		fn median_p95_ms(samples: Vec<std::time::Duration>) -> (f64, f64) {
+			let samples = DurationSamples::from_unsorted(samples);
+			(
+				samples.percentile(0.5).as_secs_f64() * 1_000.0,
+				samples.percentile(0.95).as_secs_f64() * 1_000.0,
+			)
 		}
 
 		fn bench_workload(radius_m: f32, runs: usize, warm: bool, build: bool) -> (f64, f64) {
 			let region = UrbanizationExtent::xz_radius_aabb(Vec3::ZERO, radius_m);
-			let mut samples_ns = Vec::with_capacity(runs);
+			let mut samples = Vec::with_capacity(runs);
 			for _ in 0..runs {
 				let storage = HcsgStorage::default();
 				seed_urbanization(&storage);
@@ -521,44 +525,38 @@ mod tests {
 						let _ = build_sites(&mut warm_cx, &ids);
 					}
 				}
-				let start = Instant::now();
-				let mut cx = GenerationContext::new(&storage);
-				let ids = site_ids(&mut cx, region);
-				if build {
-					let _ = build_sites(&mut cx, &ids);
-				}
-				samples_ns.push(start.elapsed().as_nanos());
+				samples.push(Stopwatch::time(|| {
+					let mut cx = GenerationContext::new(&storage);
+					let ids = site_ids(&mut cx, region);
+					if build {
+						let _ = build_sites(&mut cx, &ids);
+					}
+				}));
 			}
-			samples_ns.sort_unstable();
-			(percentile(&samples_ns, 0.5), percentile(&samples_ns, 0.95))
+			median_p95_ms(samples)
 		}
 
 		fn bench_overlap(radius_m: f32, shift_m: f32, runs: usize) -> (f64, f64, f64, f64) {
 			let first = UrbanizationExtent::xz_radius_aabb(Vec3::ZERO, radius_m);
 			let second = UrbanizationExtent::xz_radius_aabb(Vec3::new(shift_m, 0.0, 0.0), radius_m);
-			let mut first_ns = Vec::with_capacity(runs);
-			let mut second_ns = Vec::with_capacity(runs);
+			let mut first_samples = Vec::with_capacity(runs);
+			let mut second_samples = Vec::with_capacity(runs);
 			for _ in 0..runs {
 				let storage = HcsgStorage::default();
 				seed_urbanization(&storage);
 				let mut cx = GenerationContext::new(&storage);
-				let start = Instant::now();
-				let ids = site_ids(&mut cx, first);
-				let _ = build_sites(&mut cx, &ids);
-				first_ns.push(start.elapsed().as_nanos());
-				let start = Instant::now();
-				let ids = site_ids(&mut cx, second);
-				let _ = build_sites(&mut cx, &ids);
-				second_ns.push(start.elapsed().as_nanos());
+				first_samples.push(Stopwatch::time(|| {
+					let ids = site_ids(&mut cx, first);
+					let _ = build_sites(&mut cx, &ids);
+				}));
+				second_samples.push(Stopwatch::time(|| {
+					let ids = site_ids(&mut cx, second);
+					let _ = build_sites(&mut cx, &ids);
+				}));
 			}
-			first_ns.sort_unstable();
-			second_ns.sort_unstable();
-			(
-				percentile(&first_ns, 0.5),
-				percentile(&first_ns, 0.95),
-				percentile(&second_ns, 0.5),
-				percentile(&second_ns, 0.95),
-			)
+			let (ov1_med, ov1_p95) = median_p95_ms(first_samples);
+			let (ov2_med, ov2_p95) = median_p95_ms(second_samples);
+			(ov1_med, ov1_p95, ov2_med, ov2_p95)
 		}
 
 		/// `cargo test -p richmond site_discovery_perf --release -- --ignored --nocapture`
