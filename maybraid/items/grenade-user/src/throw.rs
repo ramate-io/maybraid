@@ -11,7 +11,7 @@ use grenades::{
 	spawn_thrown_grenade, DropLiveGrenade, GrenadeDetonated, GrenadeEffect, GrenadeMaterial,
 	GrenadeSounds,
 };
-use maybraid_audio::{Audio, AudioClip, Mixer};
+use maybraid_audio::{Audio, AudioClip, Mixer, SpatialListener};
 use maybraid_character_controller::CharacterIntent;
 use player::{look_forward, PlayerLook};
 

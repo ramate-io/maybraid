@@ -11,8 +11,29 @@ use crate::asset::AudioClip;
 use crate::backend::Audio;
 use crate::mixer::{AudioBus, Mixer};
 
-/// Virtual ear spacing for the Bevy [`SpatialListener`] marker.
+/// Virtual ear spacing for the oddio listener marker.
 pub const FIRE_LISTENER_GAP: f32 = 0.4;
+
+/// ECS marker for the active spatial listener (camera / player ears).
+///
+/// Maybraid mixes audio with oddio + CPAL, not Bevy's `bevy_audio` stack, but gameplay
+/// still tags listener entities the same way Bevy's `SpatialListener` would.
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+#[reflect(Component)]
+pub struct SpatialListener {
+	pub left_ear_offset: Vec3,
+	pub right_ear_offset: Vec3,
+}
+
+impl SpatialListener {
+	pub fn new(gap: f32) -> Self {
+		let half = gap / 2.0;
+		Self {
+			left_ear_offset: Vec3::new(-half, 0.0, 0.0),
+			right_ear_offset: Vec3::new(half, 0.0, 0.0),
+		}
+	}
+}
 
 /// Authoritative world velocity for a followed emitter (m/s).
 #[derive(Component, Clone, Copy, Debug, Default)]

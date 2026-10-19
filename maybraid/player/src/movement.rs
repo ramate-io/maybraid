@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use characters::AnimId;
 use maybraid_audio::{
 	Audio, AudioClip, AudioSystems, Mixer, MovementClip, MovementSounds, MovementState,
+	SpatialListener,
 };
 
 use crate::body::{CharacterController, Grounded, JumpPhase, Jumping, Sprinting, LEAP_SPEED};

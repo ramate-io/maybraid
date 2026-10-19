@@ -1,7 +1,7 @@
 //! Lower the held kit, then raise the next one, while a swap is in flight.
 
 use bevy::prelude::*;
-use maybraid_audio::{Audio, AudioClip, Mixer, MovementSounds};
+use maybraid_audio::{Audio, AudioClip, Mixer, MovementSounds, SpatialListener};
 
 use crate::pose::HeldFirearm;
 use crate::FirearmUser;

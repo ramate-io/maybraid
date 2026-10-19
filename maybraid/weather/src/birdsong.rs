@@ -3,7 +3,7 @@
 use std::f32::consts::TAU;
 
 use bevy::prelude::*;
-use maybraid_audio::{AmbientPick, AmbientSounds, Audio, AudioClip, Mixer};
+use maybraid_audio::{AmbientPick, AmbientSounds, Audio, AudioClip, Mixer, SpatialListener};
 
 use crate::wind;
 

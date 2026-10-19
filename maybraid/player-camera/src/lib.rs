@@ -5,6 +5,7 @@ mod look;
 
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
+use maybraid_audio::SpatialListener;
 use maybraid_character_controller::CharacterControlSystems;
 use maybraid_spatial_rumble::{SpatialRumbleListener, SpatialRumblePlugin, SpatialRumbleSystems};
 use player::{PlayerPlugin, PlayerPoseSystems, PlayerSystems};
