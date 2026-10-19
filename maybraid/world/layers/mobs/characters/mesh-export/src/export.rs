@@ -20,11 +20,11 @@ use characters::{
 	rig::{BoneMap, CharacterPart, CharacterRig, NeedsDuplicateScenePrune, NeedsSkinRemap},
 	CharacterRoot,
 };
+use cpu_posed_mesh::{PosePolicy, WindingPolicy};
 use material_ref::MaterialRefRoot;
 use rigs::{SocketRefApplied, SocketRefRoot};
 
 use crate::obj_text::validate_obj_text;
-use crate::skin::skin_mesh_world;
 use crate::uv::{islands_from_uvs, islands_overlap, pack_part_uvs};
 
 #[derive(Debug, Clone)]
@@ -247,15 +247,12 @@ fn extract_mesh_local(
 			.resource::<Assets<SkinnedMeshInverseBindposes>>()
 			.get(&skin.inverse_bindposes)
 			.expect("bindposes loaded");
-		let skinned = skin_mesh_world(mesh, skin, bind, globals, mesh_world).expect("skin mesh");
-		let positions: Vec<Vec3> =
-			skinned.positions.iter().map(|p| root_inverse.transform_point3(*p)).collect();
-		let normals: Vec<Vec3> = skinned
-			.normals
-			.iter()
-			.map(|n| root_inverse.transform_vector3(*n).normalize())
-			.collect();
-		(positions, normals)
+		let skinned = PosePolicy::mesh_bake(mesh_world, root_inverse)
+			.sample_skinned(mesh, skin, bind, |joint| {
+				globals.iter().find(|(e, _)| *e == joint).map(|(_, world)| **world)
+			})
+			.expect("skin mesh");
+		(skinned.positions, skinned.normals)
 	} else {
 		let world_tf = world.get::<GlobalTransform>(entity).expect("global");
 		let local = root_inverse * world_tf.affine();
@@ -269,34 +266,10 @@ fn extract_mesh_local(
 	};
 
 	let mut faces = faces;
-	align_winding(&positions, &normals, &mut faces);
+	WindingPolicy::AlignWithVertexNormals.apply(&positions, &normals, &mut faces);
 	let uvs = if uvs.len() == positions.len() { uvs } else { Vec::new() };
 	let normals = if normals.len() == positions.len() { normals } else { Vec::<Vec3>::new() };
 	(positions, normals, uvs, faces)
-}
-
-/// Flip triangle winding so geometric normal agrees with vertex normals (Blender culls CW).
-fn align_winding(positions: &[Vec3], normals: &[Vec3], faces: &mut [[u32; 3]]) {
-	if normals.len() != positions.len() {
-		return;
-	}
-	for face in faces.iter_mut() {
-		let [ia, ib, ic] = *face;
-		let (Some(&pa), Some(&pb), Some(&pc)) =
-			(positions.get(ia as usize), positions.get(ib as usize), positions.get(ic as usize))
-		else {
-			continue;
-		};
-		let (Some(&na), Some(&nb), Some(&nc)) =
-			(normals.get(ia as usize), normals.get(ib as usize), normals.get(ic as usize))
-		else {
-			continue;
-		};
-		let geo = (pb - pa).cross(pc - pa);
-		if geo.dot(na + nb + nc) < 0.0 {
-			*face = [ia, ic, ib];
-		}
-	}
 }
 
 fn mesh_positions(mesh: &Mesh) -> Vec<Vec3> {

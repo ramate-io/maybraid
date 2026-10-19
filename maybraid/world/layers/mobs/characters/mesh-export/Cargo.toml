@@ -17,6 +17,7 @@ path = "src/main.rs"
 bevy = { workspace = true }
 characters = { workspace = true }
 clap = { workspace = true }
+cpu-posed-mesh = { workspace = true }
 material-ref = { workspace = true }
 rigs = { workspace = true }
 

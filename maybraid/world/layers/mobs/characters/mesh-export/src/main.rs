@@ -2,7 +2,6 @@
 
 mod export;
 mod obj_text;
-mod skin;
 mod uv;
 
 use std::num::NonZeroU8;
