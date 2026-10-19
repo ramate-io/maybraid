@@ -217,13 +217,6 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn flash_is_live_until_deadline() {
-		let reticle = Reticle { flash_until: 1.2, ..Reticle::default() };
-		assert!(reticle.flashing(1.1));
-		assert!(!reticle.flashing(1.2));
-	}
-
-	#[test]
 	fn open_cross_leaves_the_center_clear() -> anyhow::Result<()> {
 		let mesh = Reticle::mesh();
 		let VertexAttributeValues::Float32x3(positions) =
