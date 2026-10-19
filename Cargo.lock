@@ -5462,6 +5462,7 @@ dependencies = [
  "maybraid-audio",
  "maybraid-character-controller",
  "maybraid-input",
+ "maybraid-spatial-rumble",
  "player",
  "player-camera",
 ]
@@ -7080,6 +7081,15 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
+]
+
+[[package]]
+name = "maybraid-spatial-rumble"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "maybraid-input",
 ]
 
 [[package]]
@@ -9100,6 +9110,7 @@ dependencies = [
  "characters",
  "lod",
  "maybraid-character-controller",
+ "maybraid-spatial-rumble",
  "player",
 ]
 
@@ -10995,6 +11006,15 @@ dependencies = [
  "num-traits",
  "packedvec",
  "vob",
+]
+
+[[package]]
+name = "spatial-rumble-playground"
+version = "0.1.5"
+dependencies = [
+ "bevy",
+ "maybraid-input",
+ "maybraid-spatial-rumble",
 ]
 
 [[package]]
