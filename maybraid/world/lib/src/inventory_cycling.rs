@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_items::{Inventory, InventorySlot};
 use game_commands::command::TextEntryFocus;
-use lubikans::{LubikanAccountId, LubikanLedger, LubikanOwner, LubikanSystems};
+use lubikans::{LubikanAccountId, LubikanBodyOf, LubikanLedger, LubikanOwner, LubikanSystems};
 use maybraid_character_controller::{CharacterIntent, InventoryCyclingCategory};
 use world_player::Player as VegetationPlayer;
 
@@ -91,7 +91,8 @@ pub(crate) fn cycle_equipped_inventory_queues(
 	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
 	players: Query<(Entity, &InventoryUser), With<VegetationPlayer>>,
 	mut bags: Query<&mut Inventory>,
-	mut ledgers: Query<&mut LubikanLedger, With<LubikanOwner>>,
+	mut ledgers: Query<&mut LubikanLedger>,
+	body_of: Query<&LubikanBodyOf, With<LubikanOwner>>,
 ) {
 	if !gameplay.accepts_character_input(text_focus.0, map.is_some_and(|map| map.open)) {
 		return;
@@ -115,7 +116,8 @@ pub(crate) fn cycle_equipped_inventory_queues(
 	};
 	if category.0 == InventoryCyclingCategory::Lubikans {
 		for (player, _) in &players {
-			if let Ok(mut ledger) = ledgers.get_mut(player) {
+			let holder = body_of.get(player).map(LubikanBodyOf::character).unwrap_or(player);
+			if let Ok(mut ledger) = ledgers.get_mut(holder) {
 				cycle_ledger_selection(&mut ledger, dir);
 			}
 		}

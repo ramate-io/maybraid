@@ -14,8 +14,9 @@ use combat_hud::{
 use damage::Health;
 use lubikans::{
 	fixtures::{install_gameplay, install_interface, spawn_self_owner},
-	LubikanActivationRequest, LubikanCatalog, LubikanChargeChanged, LubikanChargeReason,
-	LubikanHealingEnabled, LubikanInterfacePlugin, LubikanLedger, LubikanOwner, LubikanSelfHeal,
+	LubikanActivationRequest, LubikanBodyOf, LubikanCatalog, LubikanChargeChanged,
+	LubikanChargeReason, LubikanHealingEnabled, LubikanInterfacePlugin, LubikanLedger,
+	LubikanOwner, LubikanSelfHeal,
 };
 use player::Player;
 
@@ -317,7 +318,8 @@ fn apply_capture_state(
 	mut priming: ResMut<CaptureSelfHealPriming>,
 	mut healing_enabled: ResMut<LubikanHealingEnabled>,
 	mut category: ResMut<CombatHudInventoryCycleCategory>,
-	mut ledgers: Query<&mut LubikanLedger, With<LubikanOwner>>,
+	mut ledgers: Query<&mut LubikanLedger>,
+	body_of: Query<&LubikanBodyOf>,
 	mut healths: Query<&mut Health>,
 	mut commands: Commands,
 ) {
@@ -347,7 +349,8 @@ fn apply_capture_state(
 		*health = Health { current: 68.0, max: 100.0 };
 	}
 
-	if let Ok(mut ledger) = ledgers.get_mut(owner.0) {
+	let holder = body_of.get(owner.0).map(LubikanBodyOf::character).unwrap_or(owner.0);
+	if let Ok(mut ledger) = ledgers.get_mut(holder) {
 		let account = ledger.equipped().id();
 		ledger.reset_activation(account);
 		let capacity = ledger.equipped().charge().capacity();
@@ -403,7 +406,8 @@ fn drive_capture_states(
 	priming: Res<CaptureSelfHealPriming>,
 	heal: Res<LubikanSelfHeal>,
 	owner: Res<PreviewOwner>,
-	ledgers: Query<&LubikanLedger, With<LubikanOwner>>,
+	ledgers: Query<&LubikanLedger>,
+	body_of: Query<&LubikanBodyOf>,
 	mut exit: MessageWriter<AppExit>,
 ) {
 	if !cli.capture_states && !cli.capture_cycle {
@@ -440,8 +444,9 @@ fn drive_capture_states(
 	if let Err(err) = import_primary_window(step.label) {
 		warn!("capture failed for {}: {}", step.label, err);
 	} else if step.kind == StateKind::PausedHidden {
+		let holder = body_of.get(owner.0).map(LubikanBodyOf::character).unwrap_or(owner.0);
 		let ledger_charge = ledgers
-			.get(owner.0)
+			.get(holder)
 			.map(|ledger| ledger.equipped().charge().current())
 			.unwrap_or(-1.0);
 		let snapshot = plan.ledger_snapshot.unwrap_or(0.0);
