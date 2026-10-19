@@ -110,27 +110,17 @@ pub enum LubikanSummonInvalidPlacement {
 	KeepSpendAndCancel,
 }
 
-/// PLACEHOLDER targeting. Ward / Enraged policies are #1137.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LubikanSummonTargeting {
-	/// No combat AI or victim filter.
-	Passive,
-}
-
-/// PLACEHOLDER who may consume a summon session.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LubikanSummonAuthority {
-	/// Any [`LubikanOwner`] whose non-Self account just paid.
-	AnyOwner,
-}
-
 /// Configurable summon policies. Defaults are labeled placeholders.
+///
+/// Spawn health comes from [`LubikanSummonRecipe::health`], not this resource.
+/// Targeting and who-may-summon stay open in
+/// [#1135](https://github.com/ramate-io/maybraid/issues/1135) / [#1137](https://github.com/ramate-io/maybraid/issues/1137)
+/// and are not stored here until a second variant exists.
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct LubikanSummonConfig {
 	pub max_concurrent: u32,
 	pub lifetime_secs: f32,
 	pub forward_offset: f32,
-	pub health: f32,
 	/// PLACEHOLDER: refund spent charge when spawn is rejected.
 	pub invalid_placement: LubikanSummonInvalidPlacement,
 	/// PLACEHOLDER: keep the activation session Active while the instance lives.
@@ -143,8 +133,6 @@ pub struct LubikanSummonConfig {
 	pub retire_on_owner_lifetime: bool,
 	/// PLACEHOLDER: owner must be living (not dead / downed) to spawn.
 	pub require_living_owner: bool,
-	pub targeting: LubikanSummonTargeting,
-	pub authority: LubikanSummonAuthority,
 }
 
 impl Default for LubikanSummonConfig {
@@ -153,15 +141,12 @@ impl Default for LubikanSummonConfig {
 			max_concurrent: PLACEHOLDER_SUMMON_MAX_CONCURRENT,
 			lifetime_secs: PLACEHOLDER_SUMMON_LIFETIME_SECS,
 			forward_offset: PLACEHOLDER_SUMMON_FORWARD_OFFSET,
-			health: PLACEHOLDER_SUMMON_HEALTH,
 			invalid_placement: LubikanSummonInvalidPlacement::RefundAndCancel,
 			session_follows_instance: true,
 			dismiss_on_select_change: false,
 			block_while_self_active: false,
 			retire_on_owner_lifetime: true,
 			require_living_owner: true,
-			targeting: LubikanSummonTargeting::Passive,
-			authority: LubikanSummonAuthority::AnyOwner,
 		}
 	}
 }
@@ -185,14 +170,6 @@ impl LubikanSummonConfig {
 			self.forward_offset
 		} else {
 			PLACEHOLDER_SUMMON_FORWARD_OFFSET
-		}
-	}
-
-	pub fn health(self) -> f32 {
-		if self.health.is_finite() {
-			self.health.max(1.0)
-		} else {
-			PLACEHOLDER_SUMMON_HEALTH
 		}
 	}
 }
@@ -323,6 +300,87 @@ impl LubikanSummon {
 	pub fn timed_out(self) -> bool {
 		self.lifetime > 0.0 && self.elapsed >= self.lifetime
 	}
+
+	/// Why this instance should retire this frame, if it should.
+	///
+	/// Precedence: combat [`Died`] on the instance, owner lifetime, cancelled
+	/// session, selection dismiss. Owner-lifetime reason is world-reset when
+	/// any restart notice is in this batch, otherwise owner-retired.
+	fn retire_reason(
+		self,
+		entity: Entity,
+		config: LubikanSummonConfig,
+		batch: &SummonRetireBatch,
+		access: SummonRetireAccess,
+	) -> Option<LubikanSummonDepartureReason> {
+		if batch.deaths.iter().any(|death| death.entity == entity) {
+			return Some(LubikanSummonDepartureReason::Interrupted);
+		}
+		if config.retire_on_owner_lifetime && access.owner_gone {
+			return Some(self.owner_lifetime_reason(batch.notices));
+		}
+		if config.session_follows_instance && !access.session_active {
+			return Some(LubikanSummonDepartureReason::Cancelled);
+		}
+		if config.dismiss_on_select_change && access.selection_left {
+			return Some(LubikanSummonDepartureReason::Dismissed);
+		}
+		None
+	}
+
+	fn owner_lifetime_reason(
+		self,
+		notices: &[LubikanOwnerLifetime],
+	) -> LubikanSummonDepartureReason {
+		if notices
+			.iter()
+			.any(|notice| notice.kind == LubikanOwnerLifetimeKind::RestartSession)
+		{
+			LubikanSummonDepartureReason::WorldReset
+		} else {
+			LubikanSummonDepartureReason::OwnerRetired
+		}
+	}
+
+	fn owner_should_retire(
+		self,
+		owners: &Query<(), With<LubikanOwner>>,
+		healths: &Query<&Health>,
+		downed: &Query<(), With<Downed>>,
+		batch: &SummonRetireBatch,
+	) -> bool {
+		if owners.get(self.owner).is_err() {
+			return true;
+		}
+		if owner_unavailable(self.owner, healths, downed) {
+			return true;
+		}
+		if batch.deaths.iter().any(|death| death.entity == self.owner) {
+			return true;
+		}
+		batch.notices.iter().any(|notice| match notice.kind {
+			LubikanOwnerLifetimeKind::RestartSession => true,
+			LubikanOwnerLifetimeKind::ReplaceBody | LubikanOwnerLifetimeKind::Unequip => {
+				notice.previous == Some(self.owner)
+			}
+			LubikanOwnerLifetimeKind::Equip => false,
+		})
+	}
+}
+
+/// Death and owner-lifetime notices, kept for the whole retire pass because
+/// every live summon inspects the same batch.
+struct SummonRetireBatch<'a> {
+	deaths: &'a [Died],
+	notices: &'a [LubikanOwnerLifetime],
+}
+
+/// Per-summon ledger facts that do not belong on the shared batch.
+#[derive(Clone, Copy)]
+struct SummonRetireAccess {
+	session_active: bool,
+	selection_left: bool,
+	owner_gone: bool,
 }
 
 /// Typed departure. Distinct from [`Died`] — do not emit kill rewards here.
@@ -580,40 +638,17 @@ fn retire_summons(
 ) {
 	let deaths: Vec<Died> = deaths.read().copied().collect();
 	let notices: Vec<LubikanOwnerLifetime> = lives.read().copied().collect();
-	let mut retired = Vec::new();
+	let batch = SummonRetireBatch { deaths: &deaths, notices: &notices };
+	let config = *close.config;
 	for (entity, live) in &summons {
-		if deaths.iter().any(|death| death.entity == entity) {
-			retired.push((entity, *live, LubikanSummonDepartureReason::Interrupted));
-			continue;
+		let access = SummonRetireAccess {
+			session_active: session_is_active(close.ledgers.iter(), &close.store, live.session),
+			selection_left: selection_left_account(&mut close.ledgers, live.owner, live.account),
+			owner_gone: live.owner_should_retire(&owners, &healths, &downed, &batch),
+		};
+		if let Some(reason) = live.retire_reason(entity, config, &batch, access) {
+			close.retire(entity, *live, reason);
 		}
-		if close.config.retire_on_owner_lifetime
-			&& should_retire_for_owner(*live, &owners, &healths, &downed, &deaths, &notices)
-		{
-			let reason = if notices
-				.iter()
-				.any(|notice| notice.kind == LubikanOwnerLifetimeKind::RestartSession)
-			{
-				LubikanSummonDepartureReason::WorldReset
-			} else {
-				LubikanSummonDepartureReason::OwnerRetired
-			};
-			retired.push((entity, *live, reason));
-			continue;
-		}
-		if close.config.session_follows_instance
-			&& !session_is_active(close.ledgers.iter(), &close.store, live.session)
-		{
-			retired.push((entity, *live, LubikanSummonDepartureReason::Cancelled));
-			continue;
-		}
-		if close.config.dismiss_on_select_change
-			&& selection_left_account(&mut close.ledgers, live.owner, live.account)
-		{
-			retired.push((entity, *live, LubikanSummonDepartureReason::Dismissed));
-		}
-	}
-	for (entity, live, reason) in retired {
-		close.retire(entity, live, reason);
 	}
 }
 
@@ -627,15 +662,12 @@ fn tick_summons(
 		return;
 	}
 	let dt = time.delta_secs().max(0.0);
-	let mut expired = Vec::new();
 	for (entity, mut live) in &mut summons {
 		live.elapsed += dt;
 		if live.timed_out() {
-			expired.push((entity, *live));
+			let snapshot = *live;
+			close.retire(entity, snapshot, LubikanSummonDepartureReason::Timeout);
 		}
-	}
-	for (entity, live) in expired {
-		close.retire(entity, live, LubikanSummonDepartureReason::Timeout);
 	}
 }
 
@@ -668,32 +700,6 @@ fn selection_left_account(
 	account: LubikanAccountId,
 ) -> bool {
 	ledgers.get(owner).is_ok_and(|ledger| ledger.selection().resolved() != account)
-}
-
-fn should_retire_for_owner(
-	live: LubikanSummon,
-	owners: &Query<(), With<LubikanOwner>>,
-	healths: &Query<&Health>,
-	downed: &Query<(), With<Downed>>,
-	deaths: &[Died],
-	notices: &[LubikanOwnerLifetime],
-) -> bool {
-	if owners.get(live.owner).is_err() {
-		return true;
-	}
-	if owner_unavailable(live.owner, healths, downed) {
-		return true;
-	}
-	if deaths.iter().any(|death| death.entity == live.owner) {
-		return true;
-	}
-	notices.iter().any(|notice| match notice.kind {
-		LubikanOwnerLifetimeKind::RestartSession => true,
-		LubikanOwnerLifetimeKind::ReplaceBody | LubikanOwnerLifetimeKind::Unequip => {
-			notice.previous == Some(live.owner)
-		}
-		LubikanOwnerLifetimeKind::Equip => false,
-	})
 }
 
 fn placement_from(owner: &Transform, offset: f32) -> Option<Transform> {
