@@ -4,6 +4,8 @@ use bevy::prelude::Color;
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 
+use crate::flow::ChainFlowStyle;
+
 /// Recipe claimed by [`crate::ChainMaterialLib`].
 pub const RECIPE_MYTHICAL_CHAIN: &str = "mythical_chain";
 
@@ -26,46 +28,59 @@ pub const SCALAR_FADE: usize = 2;
 pub const SCALAR_DAMAGE: usize = 3;
 /// Scalar 4: link-count hint for the UV.y fallback.
 pub const SCALAR_LINK_COUNT: usize = 4;
-/// Scalar 5: UV-space crack frequency.
-pub const SCALAR_CRACK_FREQUENCY: usize = 5;
+/// Scalar 5: decorative energy-conduit frequency (not structural damage).
+pub const SCALAR_CONDUIT_FREQUENCY: usize = 5;
 /// Scalar 6: blend toward vertex-color G. Prefer [`crate::OwnedChainMaterial`]
 /// + the per-link uniform array; this scalar is the legacy mesh-color path.
 pub const SCALAR_LOCALIZED_BLEND: usize = 6;
-/// Scalar 7: glow / ember pulse rate.
-pub const SCALAR_PULSE_RATE: usize = 7;
+/// Scalar 7: reserved. Older recipes stored a pulse rate here; it is ignored.
+pub const SCALAR_RESERVED: usize = 7;
+/// Scalar 8: signed flow speed (metres / second).
+pub const SCALAR_FLOW_SPEED: usize = 8;
+/// Scalar 9: flow wavelength (metres, `> 0`).
+pub const SCALAR_FLOW_WAVELENGTH: usize = 9;
+/// Scalar 10: flow baseline energy.
+pub const SCALAR_FLOW_BASELINE: usize = 10;
+/// Scalar 11: flow peak energy.
+pub const SCALAR_FLOW_PEAK: usize = 11;
+/// Scalar 12: halo shell width (metres).
+pub const SCALAR_FLOW_HALO_WIDTH: usize = 12;
+/// Scalar 13: halo gain.
+pub const SCALAR_FLOW_HALO_GAIN: usize = 13;
 
-/// Default metal.
-pub const DEFAULT_METAL: Color = Color::srgb(0.22, 0.16, 0.12);
-/// Default energy glow.
-pub const DEFAULT_GLOW: Color = Color::srgb(0.62, 0.90, 1.0);
-/// Default rust / ash.
-pub const DEFAULT_DAMAGE: Color = Color::srgb(0.20, 0.08, 0.05);
-/// Default ember.
-pub const DEFAULT_EMBER: Color = Color::srgb(1.0, 0.42, 0.10);
+/// Packed float count written by [`MythicalChainScalars::to_array`].
+pub const MYTHICAL_CHAIN_SCALAR_COUNT: usize = 14;
 
-/// Authored glow gain.
-pub const DEFAULT_GLOW_INTENSITY: f32 = 5.2;
-/// Authored crack frequency.
-pub const DEFAULT_CRACK_FREQUENCY: f32 = 6.0;
-/// Authored pulse rate.
-pub const DEFAULT_PULSE_RATE: f32 = 1.4;
+/// Default metal: blue-gray bronze, not scorched iron.
+pub const DEFAULT_METAL: Color = Color::srgb(0.40, 0.36, 0.32);
+/// Default energy: saturated turquoise.
+pub const DEFAULT_GLOW: Color = Color::srgb(0.06, 0.76, 0.70);
+/// Default ash / broken-edge soil. Cool, not rust-orange.
+pub const DEFAULT_DAMAGE: Color = Color::srgb(0.26, 0.22, 0.20);
+/// Optional ember accent. Used sparingly on broken lips.
+pub const DEFAULT_EMBER: Color = Color::srgb(0.70, 0.30, 0.10);
+
+/// Authored glow gain. Kept modest so emission is a highlight, not a cage.
+pub const DEFAULT_GLOW_INTENSITY: f32 = 2.2;
+/// Authored decorative conduit frequency.
+pub const DEFAULT_CONDUIT_FREQUENCY: f32 = 2.2;
 /// Authored link-count hint (matches the placeholder mesh).
 pub const DEFAULT_LINK_COUNT: f32 = 14.0;
 /// Authored noise seed.
 pub const DEFAULT_SEED: i32 = 11;
-/// Authored noise frequency.
-pub const DEFAULT_NOISE_FREQUENCY: f32 = 2.4;
+/// Authored noise frequency (low, for painted islands).
+pub const DEFAULT_NOISE_FREQUENCY: f32 = 0.55;
 
 /// Preview / encounter states. Same mesh, different scalars.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MythicalChainState {
-	/// Full glow, clean metal.
+	/// Full metal, quiet conduits, no missing chunks.
 	Intact,
-	/// Cracks and dimmer veins. Global durability still above a break.
+	/// Mid structural loss: obvious bites, energy still travels.
 	Damaged,
-	/// Ember, flicker, weak-link holes.
+	/// Late structural loss: substantial gaps, reserved plates remain.
 	NearBreaking,
-	/// Dissolve / leftover sparks after release.
+	/// Gameplay-owned release. Fade removes body and halo.
 	Released,
 }
 
@@ -73,16 +88,15 @@ impl MythicalChainState {
 	pub const fn intact(self) -> f32 {
 		match self {
 			Self::Intact => 1.0,
-			Self::Damaged => 0.55,
-			Self::NearBreaking => 0.18,
+			Self::Damaged => 0.50,
+			Self::NearBreaking => 0.22,
 			Self::Released => 0.0,
 		}
 	}
 
 	pub const fn fade(self) -> f32 {
 		match self {
-			Self::Intact | Self::Damaged => 0.0,
-			Self::NearBreaking => 0.15,
+			Self::Intact | Self::Damaged | Self::NearBreaking => 0.0,
 			Self::Released => 1.0,
 		}
 	}
@@ -115,9 +129,9 @@ pub struct MythicalChainScalars {
 	pub fade: f32,
 	pub damage: f32,
 	pub link_count: f32,
-	pub crack_frequency: f32,
+	pub conduit_frequency: f32,
 	pub localized_blend: f32,
-	pub pulse_rate: f32,
+	pub flow: ChainFlowStyle,
 }
 
 impl Default for MythicalChainScalars {
@@ -134,9 +148,9 @@ impl MythicalChainScalars {
 			fade: state.fade(),
 			damage: 0.0,
 			link_count: DEFAULT_LINK_COUNT,
-			crack_frequency: DEFAULT_CRACK_FREQUENCY,
+			conduit_frequency: DEFAULT_CONDUIT_FREQUENCY,
 			localized_blend: 0.0,
-			pulse_rate: DEFAULT_PULSE_RATE,
+			flow: ChainFlowStyle::default(),
 		}
 	}
 
@@ -170,6 +184,11 @@ impl MythicalChainScalars {
 		self
 	}
 
+	pub fn with_flow(mut self, flow: ChainFlowStyle) -> Self {
+		self.flow = flow;
+		self
+	}
+
 	pub fn clamped(self) -> Self {
 		Self {
 			intact: self.intact.clamp(0.0, 1.0),
@@ -177,9 +196,9 @@ impl MythicalChainScalars {
 			fade: self.fade.clamp(0.0, 1.0),
 			damage: self.damage.clamp(0.0, 1.0),
 			link_count: self.link_count.clamp(1.0, 256.0),
-			crack_frequency: self.crack_frequency.clamp(0.5, 24.0),
+			conduit_frequency: self.conduit_frequency.clamp(0.5, 24.0),
 			localized_blend: self.localized_blend.clamp(0.0, 1.0),
-			pulse_rate: self.pulse_rate.clamp(0.0, 8.0),
+			flow: self.flow.clamped(),
 		}
 	}
 
@@ -193,7 +212,7 @@ impl MythicalChainScalars {
 		}
 	}
 
-	pub fn to_array(self) -> [f32; 8] {
+	pub fn to_array(self) -> [f32; MYTHICAL_CHAIN_SCALAR_COUNT] {
 		let clamped = self.clamped();
 		[
 			clamped.intact,
@@ -201,13 +220,49 @@ impl MythicalChainScalars {
 			clamped.fade,
 			clamped.damage,
 			clamped.link_count,
-			clamped.crack_frequency,
+			clamped.conduit_frequency,
 			clamped.localized_blend,
-			clamped.pulse_rate,
+			0.0,
+			clamped.flow.speed_mps,
+			clamped.flow.wavelength_m,
+			clamped.flow.baseline,
+			clamped.flow.peak,
+			clamped.flow.halo_width_m,
+			clamped.flow.halo_gain,
 		]
 	}
 
+	/// Read every authored slot that is present. Slices shorter than
+	/// [`MYTHICAL_CHAIN_SCALAR_COUNT`] keep [`ChainFlowStyle`] defaults so an
+	/// old 8-float recipe does not treat reserved slot 7 as a flow speed.
 	pub fn from_slice(values: &[f32]) -> Self {
+		let flow = if values.len() > SCALAR_FLOW_SPEED {
+			ChainFlowStyle {
+				speed_mps: values
+					.get(SCALAR_FLOW_SPEED)
+					.copied()
+					.unwrap_or(ChainFlowStyle::DEFAULT_SPEED_MPS),
+				wavelength_m: values
+					.get(SCALAR_FLOW_WAVELENGTH)
+					.copied()
+					.unwrap_or(ChainFlowStyle::DEFAULT_WAVELENGTH_M),
+				baseline: values
+					.get(SCALAR_FLOW_BASELINE)
+					.copied()
+					.unwrap_or(ChainFlowStyle::DEFAULT_BASELINE),
+				peak: values.get(SCALAR_FLOW_PEAK).copied().unwrap_or(ChainFlowStyle::DEFAULT_PEAK),
+				halo_width_m: values
+					.get(SCALAR_FLOW_HALO_WIDTH)
+					.copied()
+					.unwrap_or(ChainFlowStyle::DEFAULT_HALO_WIDTH_M),
+				halo_gain: values
+					.get(SCALAR_FLOW_HALO_GAIN)
+					.copied()
+					.unwrap_or(ChainFlowStyle::DEFAULT_HALO_GAIN),
+			}
+		} else {
+			ChainFlowStyle::default()
+		};
 		Self {
 			intact: values.get(SCALAR_INTACT).copied().unwrap_or(1.0),
 			glow_intensity: values
@@ -217,12 +272,12 @@ impl MythicalChainScalars {
 			fade: values.get(SCALAR_FADE).copied().unwrap_or(0.0),
 			damage: values.get(SCALAR_DAMAGE).copied().unwrap_or(0.0),
 			link_count: values.get(SCALAR_LINK_COUNT).copied().unwrap_or(DEFAULT_LINK_COUNT),
-			crack_frequency: values
-				.get(SCALAR_CRACK_FREQUENCY)
+			conduit_frequency: values
+				.get(SCALAR_CONDUIT_FREQUENCY)
 				.copied()
-				.unwrap_or(DEFAULT_CRACK_FREQUENCY),
+				.unwrap_or(DEFAULT_CONDUIT_FREQUENCY),
 			localized_blend: values.get(SCALAR_LOCALIZED_BLEND).copied().unwrap_or(0.0),
-			pulse_rate: values.get(SCALAR_PULSE_RATE).copied().unwrap_or(DEFAULT_PULSE_RATE),
+			flow,
 		}
 		.clamped()
 	}
@@ -259,4 +314,41 @@ pub fn mythical_chain_ref_with(scalars: MythicalChainScalars, seed: i32) -> Mate
 /// True when `name` is the mythical-chain recipe.
 pub fn is_mythical_chain_recipe(name: &str) -> bool {
 	name == RECIPE_MYTHICAL_CHAIN
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn to_array_round_trips_flow_fields() -> anyhow::Result<()> {
+		let scalars = MythicalChainScalars::default().with_flow(ChainFlowStyle {
+			speed_mps: -1.1,
+			wavelength_m: 2.4,
+			baseline: 0.2,
+			peak: 0.9,
+			halo_width_m: 0.013,
+			halo_gain: 0.4,
+		});
+		let packed = scalars.to_array();
+		assert_eq!(packed.len(), MYTHICAL_CHAIN_SCALAR_COUNT);
+		assert_eq!(packed[SCALAR_RESERVED], 0.0);
+		let back = MythicalChainScalars::from_slice(&packed);
+		assert!((back.flow.speed_mps - (-1.1)).abs() < 1e-5);
+		assert!((back.flow.wavelength_m - 2.4).abs() < 1e-5);
+		assert!((back.flow.baseline - 0.2).abs() < 1e-5);
+		assert!((back.flow.peak - 0.9).abs() < 1e-5);
+		assert!((back.flow.halo_width_m - 0.013).abs() < 1e-5);
+		assert!((back.flow.halo_gain - 0.4).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn short_legacy_slice_keeps_flow_defaults() -> anyhow::Result<()> {
+		let legacy = [1.0, 2.2, 0.0, 0.0, 14.0, 2.2, 0.0, 1.4];
+		let scalars = MythicalChainScalars::from_slice(&legacy);
+		assert!((scalars.flow.speed_mps - ChainFlowStyle::DEFAULT_SPEED_MPS).abs() < 1e-5);
+		assert!((scalars.flow.wavelength_m - ChainFlowStyle::DEFAULT_WAVELENGTH_M).abs() < 1e-5);
+		Ok(())
+	}
 }

@@ -19,6 +19,8 @@ chain-shaders = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
 material-ref = { workspace = true }
+maybraid-world = { workspace = true }
+player-camera = { workspace = true }
 world-materials = { workspace = true }
 
 [dev-dependencies]

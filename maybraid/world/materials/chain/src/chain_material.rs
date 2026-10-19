@@ -16,6 +16,7 @@ use material_ref::{
 	MATERIAL_RASTER_WIDTH, MATERIAL_SCALAR_FLOATS,
 };
 
+use crate::flow::ChainFlowStyle;
 use crate::params::{is_mythical_chain_recipe, mythical_chain_palette, RECIPE_MYTHICAL_CHAIN};
 
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
@@ -51,7 +52,7 @@ impl From<&ChainMaterial> for ChainMaterialKey {
 }
 
 /// Packed GPU representation of one mythical-chain [`MaterialRef`] plus runtime damage.
-#[derive(Clone, Copy, Debug, ShaderType)]
+#[derive(Clone, Copy, Debug, PartialEq, ShaderType)]
 pub struct ChainMaterialUniform {
 	pub colors: [Vec4; MATERIAL_PALETTE_SLOTS],
 	/// `x` frequency, `y` amplitude, `z` seed, `w` octaves.
@@ -117,7 +118,7 @@ impl ChainMaterialUniform {
 			scalars,
 			rasters,
 			impact: Vec4::ZERO,
-			halo: Vec4::new(0.0, crate::halo::HALO_EXPANSION, 0.0, 0.0),
+			halo: Vec4::new(0.0, ChainFlowStyle::DEFAULT_HALO_WIDTH_M, 0.0, 0.0),
 			link_damage: [Vec4::ZERO; LINK_DAMAGE_VEC4S],
 		}
 	}
@@ -140,6 +141,22 @@ impl ChainMaterialUniform {
 
 	pub fn link_count(&self) -> f32 {
 		self.scalars[1].x.max(1.0)
+	}
+
+	pub fn flow_speed_mps(&self) -> f32 {
+		self.scalars[2].x
+	}
+
+	pub fn flow_wavelength_m(&self) -> f32 {
+		self.scalars[2].y
+	}
+
+	pub fn flow_halo_width(&self) -> f32 {
+		self.scalars[3].x.max(0.0)
+	}
+
+	pub fn flow_halo_gain(&self) -> f32 {
+		self.scalars[3].y
 	}
 
 	pub fn is_halo(&self) -> bool {
@@ -203,7 +220,7 @@ impl ChainMaterialUniform {
 		self.noise = authored.noise;
 		self.scalars = authored.scalars;
 		self.rasters = authored.rasters;
-		self.halo.y = authored.halo.y;
+		self.halo.y = authored.flow_halo_width();
 	}
 }
 
@@ -212,22 +229,11 @@ impl ChainMaterialUniform {
 pub struct ChainMaterial {
 	#[uniform(0)]
 	pub params: ChainMaterialUniform,
-	#[texture(1)]
-	#[sampler(2)]
-	pub cracks: Handle<Image>,
 }
 
 impl ChainMaterial {
 	pub fn from_material_ref(material_ref: &MaterialRef) -> Self {
-		Self {
-			params: ChainMaterialUniform::from_material_ref(material_ref),
-			cracks: Handle::default(),
-		}
-	}
-
-	pub fn with_cracks(mut self, cracks: Handle<Image>) -> Self {
-		self.cracks = cracks;
-		self
+		Self { params: ChainMaterialUniform::from_material_ref(material_ref) }
 	}
 }
 
@@ -327,8 +333,8 @@ mod tests {
 			ChainMaterial::from_material_ref(&mythical_chain_ref_for(MythicalChainState::Released));
 		assert!(intact.params.intact() > damaged.params.intact());
 		assert!(damaged.params.intact() > near.params.intact());
-		assert!(near.params.fade() > damaged.params.fade());
 		assert!(released.params.fade() > near.params.fade());
+		assert!(released.params.fade() > damaged.params.fade());
 		Ok(())
 	}
 
@@ -371,6 +377,18 @@ mod tests {
 		assert!((owned.params.intact() - MythicalChainState::Damaged.intact()).abs() < 1e-5);
 		assert!((owned.params.link_damage(3) - 0.8).abs() < 1e-5);
 		assert!(!owned.params.is_halo());
+		Ok(())
+	}
+
+	#[test]
+	fn packs_flow_style_from_the_recipe() -> anyhow::Result<()> {
+		use crate::flow::ChainFlowStyle;
+		let scalars = MythicalChainScalars::default()
+			.with_flow(ChainFlowStyle::default().with_speed_mps(-0.8));
+		let material = ChainMaterial::from_material_ref(&mythical_chain_ref_with(scalars, 11));
+		assert!((material.params.flow_speed_mps() - (-0.8)).abs() < 1e-5);
+		assert!(material.params.flow_wavelength_m() > 0.0);
+		assert!(material.params.flow_halo_width() > 0.0);
 		Ok(())
 	}
 }

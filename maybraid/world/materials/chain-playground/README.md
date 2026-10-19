@@ -1,9 +1,11 @@
 # Mythical chain playground
 
 Preview host for [`chain-shaders`](../chain) / [#1124](https://github.com/ramate-io/maybraid/issues/1124).
-Two independently parameterized placeholder chains, durability sweep,
-CPU bend (stand-in for A04 skinning), day/night lighting, and Sharp / Retro /
-Antediluvian window sizes. The left chain is an [`OwnedChainMaterial`](../chain/src/runtime.rs)
+Two independently parameterized placeholder chains, a continuous bent tube, a
+posed skinned tube (halo skinning contract), a mundane wood cube, durability
+sweep, CPU bend, day/night lighting, and the **real** Native / Sharp / Retro /
+Antediluvian offscreen present path (`FollowCamera` + `VisualStylePlugin`).
+The left chain is an [`OwnedChainMaterial`](../chain/src/runtime.rs)
 so localized hits update a unique uniform instead of restamping the cache.
 
 ```text
@@ -19,7 +21,9 @@ cargo run -p chain-playground -- video /tmp/chain-video
 
 The default camera matches gameplay third-person (`FollowCamera` distance
 3.6 m, 45° FOV). Gameplay cameras have no bloom; the halo is an additive
-skinned shell.
+skinned shell. Video capture advances simulation time at **30 Hz**
+(`TimeUpdateStrategy::ManualDuration(1/30 s)`) after shader warmup; do not
+claim smoothness from a sparser frame dump.
 
 In-game (press `/`):
 
@@ -32,8 +36,9 @@ In-game (press `/`):
 - `seed <n>` — restamp both seeds (`right` uses `n + 18`)
 - `glow <gain>` — glow intensity on both
 - `hit <link>` — persistent per-link damage + hit flash on the left chain
-- `style sharp|retro|antediluvian` — window resolution stand-in for visual styles
-- `capture <dir>` — write pair day/night, near-breaking, released, and mixed-pair PNGs, then exit
-- `video <dir>` — gameplay-distance hit + pulse stills, then exit (host records ffmpeg)
+- `style native|sharp|retro|antediluvian` — real world visual style
+- `reverse` / `freeze` — signed / zero flow speed
+- `capture <dir>` — damage strip, emission-off, day/night, style stills, then exit
+- `video <dir>` — 30 Hz traveling-energy frames + stills, then exit
 
 Geometry and parameter ranges: [`chain-shaders` README](../chain/README.md).

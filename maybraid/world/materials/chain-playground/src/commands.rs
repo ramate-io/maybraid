@@ -65,14 +65,18 @@ pub enum PlaygroundCommand {
 	Hit {
 		link: u32,
 	},
-	/// Window resolution stand-in for gameplay visual styles.
+	/// Real world visual style (Native / Sharp / Retro / Antediluvian).
 	Style {
 		mode: String,
 	},
-	/// Gameplay-distance hit + pulse cycles; write stills and keep the window up for ffmpeg.
+	/// Gameplay-distance traveling energy; 30 Hz deterministic frames + stills.
 	Video {
 		dir: PathBuf,
 	},
+	/// Reverse energy travel.
+	Reverse,
+	/// Freeze the standing wave (`speed = 0`).
+	Freeze,
 }
 
 impl PlaygroundCommand {
@@ -195,6 +199,22 @@ impl PlaygroundCommand {
 				*console = format!("video {}", dir.display());
 				commands.queue(move |world: &mut World| {
 					*world.resource_mut::<VideoCapture>() = VideoCapture::start(dir);
+				});
+			}
+			Self::Reverse => {
+				*console = "reverse".into();
+				commands.queue(|world: &mut World| {
+					let mut preview = world.resource_mut::<PreviewConfig>();
+					preview.flow = preview.flow.reversed();
+					preview.restamp_glow_and_seed();
+				});
+			}
+			Self::Freeze => {
+				*console = "freeze".into();
+				commands.queue(|world: &mut World| {
+					let mut preview = world.resource_mut::<PreviewConfig>();
+					preview.flow.speed_mps = 0.0;
+					preview.restamp_glow_and_seed();
 				});
 			}
 		}

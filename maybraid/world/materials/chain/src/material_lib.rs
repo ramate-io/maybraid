@@ -12,10 +12,9 @@ use crate::chain_material::{claims_recipe, ChainMaterial};
 /// Cache of resolved [`ChainMaterial`] handles.
 pub type ChainMaterialRefCache = MaterialRefCache<ChainMaterial>;
 
-/// Inserts the chain-material cache and crack atlas. Idempotent.
+/// Inserts the chain-material cache. Idempotent.
 pub fn init_chain_material_caches(app: &mut App) {
 	app.init_resource::<ChainMaterialRefCache>();
-	app.init_resource::<crate::cracks::ChainCrackAtlas>();
 }
 
 pub(crate) fn resolve_chain(
@@ -160,10 +159,8 @@ mod tests {
 		let mut app = App::new();
 		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
 			.init_asset::<StandardMaterial>()
-			.init_asset::<Image>()
 			.init_asset::<ChainMaterial>()
 			.init_resource::<ChainMaterialRefCache>()
-			.init_resource::<crate::cracks::ChainCrackAtlas>()
 			.add_plugins(MaterialRefPlugin::<ChainMaterialLib<'_>>::default())
 			.add_systems(Update, sync_owned_chain_materials);
 
@@ -239,6 +236,17 @@ mod tests {
 		assert!((owned_mat.params.link_damage(7) - 0.5).abs() < 1e-5);
 		assert_eq!(shared_mat.params.link_damage(4), 0.0);
 		assert!((owned_mat.params.intact() - MythicalChainState::Damaged.intact()).abs() < 1e-5);
+		let look = crate::deteriorate::LinkLook::from_severity(
+			crate::deteriorate::severity(
+				owned_mat.params.damage().max(1.0 - owned_mat.params.intact()),
+				0.6,
+				0.4,
+			),
+			owned_mat.params.fade(),
+			4.0,
+			11.0,
+		);
+		assert!(look.removed_chunks >= 2, "restamped local damage must keep chunks missing");
 		Ok(())
 	}
 }

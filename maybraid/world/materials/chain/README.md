@@ -1,11 +1,11 @@
 # Mythical chain material
 
-Glowing iron-and-energy surface for Bikanwarda’s restraint chains
+Painterly iron-and-energy surface for Bikanwarda’s restraint chains
 ([#1124](https://github.com/ramate-io/maybraid/issues/1124)). Durability,
-glow, seed, and break/fade are [`MaterialRef`](../../material-ref) bags.
-Deterioration is shaded, not remeshed. Per-link hits update an **owned**
-runtime uniform; they do not restamp the shared [`MaterialRefKey`](../../material-ref/src/key.rs)
-cache.
+glow, seed, flow, and break/fade are [`MaterialRef`](../../material-ref) bags.
+Structural loss is **pre-partitioned chunk removal**, not remeshing. Per-link
+hits update an **owned** runtime uniform; they do not restamp the shared
+[`MaterialRefKey`](../../material-ref/src/key.rs) cache.
 
 ```text
 cargo test -p chain-shaders --all-targets
@@ -17,16 +17,17 @@ cargo run -p chain-playground -- hit 6
 
 Runtime skinned rope/chain geometry is [A04 / #1125](https://github.com/ramate-io/maybraid/issues/1125)
 and is not in this crate. Playground previews use
-[`placeholder::placeholder_chain_mesh`](src/placeholder.rs).
+[`placeholder::placeholder_chain_mesh`](src/placeholder.rs) and
+[`string::continuous_tube_mesh`](src/string.rs).
 
 ## Recipe
 
 | Name | Kind |
 |------|------|
-| `mythical_chain` | Stylized metal + energy veins + deterioration |
+| `mythical_chain` | Quiet metal + traveling turquoise energy + staged chunk loss |
 
 Helpers: `mythical_chain_ref`, `mythical_chain_ref_for`, `MythicalChainState`,
-`OwnedChainMaterial`, `apply_chain_hit`.
+`ChainFlowStyle`, `OwnedChainMaterial`, `apply_chain_hit`.
 
 Two chains with different scalars or seeds resolve to different
 [`MaterialRefKey`](../../material-ref/src/key.rs) handles. Independently
@@ -35,49 +36,113 @@ still caches the authored look, then clones a unique handle whose
 `link_damage[32]` / `impact` uniforms are mutated in place. Never write
 runtime damage into a cached handle shared by unrelated chains.
 
-## Fracture atlas
+## Visual language
 
-Cracks are a baked, tileable distance field — not FBm ridges.
+The look follows the storyboard’s painterly, Breath-of-the-Wild-inspired
+register ([`maybraid/storyboard/README.md`](../../../storyboard/README.md)):
+broad quiet masses, a few readable tone regions, rounded highlights. Starting
+PBR (tuned in scene lighting, not as acceptance numbers):
 
-- Source of truth: [`cracks::bake_atlas_rgba`](src/cracks.rs) (deterministic
-  [`hash13`](src/hash.rs) branching walk, four variants).
-- Runtime: [`cracks::atlas_image`](src/cracks.rs) uploaded once as
-  [`ChainCrackAtlas`](src/cracks.rs).
-- Placeholder asset (same bytes): [`assets/crack_atlas.png`](assets/crack_atlas.png).
+| Term | Authored |
+|------|----------|
+| Roughness | `0.68` (higher on broken lips) |
+| Metallic | `0.22` |
+| Reflectance | `0.16` |
+| Bump | `0.10 * amplitude`, applied **before** writing `N` / `world_normal` |
+| Metal | blue-gray bronze |
+| Energy | saturated turquoise body + a narrower pale highlight + a subdued halo |
 
-Regenerate the PNG:
+Shaping uses the scene’s PBR lights. There is no private sun and no unlit
+toon pass. Orange heat is an optional lip accent at late severity.
+
+## Structural damage
+
+Decorative energy conduits are **not** fractures.
+
+Each link is pre-partitioned into six irregular Voronoi regions in
+link-local rest UV (`3` around the tube × `2` along the link; U wraps).
+A region has a stable damage threshold from `hash13(chunk, seed, link)`:
+
+| Rank | Threshold | Stage |
+|------|-----------|-------|
+| 0–1 | `0.20` / `0.28` | Early chips |
+| 2–3 | `0.46` / `0.55` | Mid bites (obvious by 50%) |
+| 4 | `0.76` | Late gap / broken end |
+| 5 | `0` | Reserved until release |
+
+**Cost:** six site hashes plus a wrap-aware nearest / second-nearest search
+per fragment. No atlas, no per-hit mesh upload, no debris. Region ids are
+computed from UV so they never interpolate. Distance-to-edge is filtered
+only for broken-lip shading.
+
+Severity is a bounded union:
 
 ```text
-cargo test -p chain-shaders -- cracks::tests::writes_placeholder_png --exact
+severity = max(global_severity(effective_damage, weakness), local_persistent)
 ```
 
-Atlas packing (256×256, 2×2 of 128×128):
+Flash and transport energy never enter severity. Weakness may shift global
+onset, but a local `1.0` is terminal for every seed. Increasing damage never
+restores a removed region. Pattern is fixed in rest space while the mesh
+bends. Full `fade = 1` discards body and halo (discard creates no solid
+interior faces — backsides are double-sided and darkened).
 
-| Channel | Meaning |
-|---------|---------|
-| R | Distance to nearest fissure (`0` on the crack) |
-| G | Recessed height for surface-gradient bump |
-| B | Cell id for fracture-driven piece removal |
-| A | `255` |
+The superseded crack-distance atlas was deleted. It stored only nearest
+distance, fattened lines, and hashed Voronoi identities that interpolated.
 
-Link seed picks a variant. Energy veins occupy that network (not striped
-`vein_u`). Damage **widens** the same fissures: hairlines first, then
-connected cracks and secondary branches. Each fissure has a dark recessed
-center, a narrow bright inner edge, and a wider subdued shoulder. Hits
-flash and ember *inside* those cracks; they do not recolor the whole
-link. Final holes open along the fissures (and loose cells), not as
-hashed speckle.
+## Traveling energy
 
-Sampling uses **link-local** UVs (`around` the tube × `along` the ring,
-aspect ≈ 3.05) so chain length does not stretch the network. The
-placeholder mesh duplicates U=0/U=1 and ring-seam vertices so interpolation
-does not cross the wrap.
+`s` is rest-space arc length in **metres** along the meshed string, stored on
+[`Mesh::ATTRIBUTE_UV_1`](https://docs.rs/bevy/0.19.1/bevy/mesh/struct.Mesh.html#associatedconstant.ATTRIBUTE_UV_1)
+(`.x = flow_s_m`, `.y = total rest length`). Link-local `uv.y` is **not**
+distance (it is link index + angle). World Y is wrong for a bent string.
 
-Bump mapping uses a Mikkelsen surface-gradient from the height channel
-(world-position derivatives), not screen-space noise stuffed into world X/Z.
+```text
+phase     = TAU * (s - speed_mps * time) / wavelength_m
+broad     = 0.5 + 0.5 * cos(phase)
+envelope  = smoothstep(0.05, 0.95, broad)
+energy    = mix(baseline, max(peak, baseline), envelope)
+```
 
-Actual pieces separating and falling still need geometry / debris VFX
-(out of scope).
+The same `energy` lights conduits, broken lips, and the halo (once — no
+repeated envelope multiply). Missing material stays absent in the halo.
+
+| `speed_mps` | Behaviour |
+|-------------|-----------|
+| `> 0` | Travels toward `+s` |
+| `< 0` | Reverse |
+| `0` | Standing spatial wave; time does not move the crest |
+
+Defaults: `1.25 m/s`, `2.2 m` wavelength (~2.5 s per transit on the 3.1 m
+playground chain). Hit flash is a short smooth rise/decay; it does not reset
+flow or enter severity.
+
+### Chain vs tube `s`
+
+- **Continuous tube:** every vertex of a ring shares the ring’s cumulative
+  rest arc length. Flow is continuous.
+- **Placeholder chain:** `s` is the rest-space Y of the vertex (projection
+  onto the hanging centerline) *before* bend. Within a link this spans the
+  torus extent along Y — not a single value per link, and not a geodesic
+  around the torus tube.
+
+## Halo / renderer
+
+Authored `halo_width_m` (default `0.012 m`) is independent of incidental
+scene units. Expansion is nearly fixed (`width * (0.94 + 0.08 * energy)`).
+The halo fragment is an early branch: visibility, flow, Fresnel. Depth
+tested, no depth writes, additive, no full-screen bloom.
+
+Sync is driven by parent handle / mesh / skin changes and
+`AssetEvent::Modified` on the **parent** material (`apply_chain_hit` mutates
+the `Assets` entry in place, so `Changed<MeshMaterial3d>` is not enough).
+Writes to the halo asset are ignored. Settled chains stop modifying
+materials. The child copies the parent’s [`SkinnedMesh`](https://docs.rs/bevy/0.19.1/bevy/mesh/skinning/struct.SkinnedMesh.html)
+(joints + inverse bindposes). Removing `ChainHalo` despawns the child.
+Culling AABB is expanded by the authored width.
+
+The opaque pass does **not** call `tone_mapping` so HDR emission can share
+the camera’s atmosphere / a later bloom. Fog comes from the view’s PBR path.
 
 ## Localized damage
 
@@ -88,55 +153,40 @@ Actual pieces separating and falling still need geometry / debris VFX
 | Vertex color G + `localized_blend` | Legacy mesh-color blend. Not the supported A06 path. |
 
 On a hit, update the affected link and the hotspot on the **owned**
-material. The shader does a direct lookup. No vertex walk, no mesh upload,
-no per-fragment hit list.
-
-## Halo / pulse
-
-Gameplay cameras ([`maybraid-world` follow camera](../../../lib/src/camera.rs))
-have fog and a depth prepass, **not** bloom. A Fresnel rim on the opaque
-surface cannot draw outside the metal silhouette.
-
-- Chain-wide pulse (`chain_pulse`): deep trough, short crest, small
-  per-link variation. Drives vein emission, rim, and the halo.
-- Additive child shell ([`ChainHalo`](src/halo.rs)): same mesh / skinning,
-  expanded along the normal, soft Fresnel, depth-tested, no depth write.
-  Opacity and expansion pulse together.
-- The opaque pass does **not** call `tone_mapping`, so HDR emission can
-  survive if a later camera adds bloom.
+material. The shader does a direct lookup. No vertex walk, no mesh upload.
 
 ## Parameter ranges
 
 Palette (linear-authored sRGB):
 
-| Slot | Role | Default | Notes |
-|------|------|---------|-------|
-| 0 | Intact metal | `(0.22, 0.16, 0.12)` | Readability under key + fill |
-| 1 | Energy glow | `(0.62, 0.90, 1.0)` | Intensity is a scalar, not alpha |
-| 2 | Damage / ash | `(0.20, 0.08, 0.05)` | Crack shoulders and rust |
-| 3 | Ember / near-break | `(1.0, 0.42, 0.10)` | Hot only when damaged |
+| Slot | Role | Default |
+|------|------|---------|
+| 0 | Intact metal | `(0.40, 0.36, 0.32)` |
+| 1 | Energy glow | `(0.06, 0.76, 0.70)` |
+| 2 | Ash / broken lip | `(0.26, 0.22, 0.20)` |
+| 3 | Ember accent | `(0.70, 0.30, 0.10)` |
 
-Scalars (index meaning is this shader’s contract):
+Scalars (`MythicalChainScalars::to_array` writes 14 floats; `from_slice`
+keeps flow defaults when the slice is the old 8-float recipe):
 
-| Index | Name | Range | Default | Intact / damaged / near-break / released |
-|-------|------|-------|---------|------------------------------------------|
-| 0 | `intact` | `[0, 1]` | `1.0` | `1.0` / `0.55` / `0.18` / `0.0` |
-| 1 | `glow_intensity` | `[0, 8]` | `5.2` | authored gain |
-| 2 | `fade` (break/release) | `[0, 1]` | `0.0` | `0.0` / `0.0` / `0.15` / `1.0` |
-| 3 | `damage` | `[0, 1]` | `0.0` | `0` means derive `1 - intact` |
-| 4 | `link_count` hint | `[1, 256]` | `14` | UV.y → link fallback |
-| 5 | `crack_frequency` | `[0.5, 24]` | `6.0` | scales link-local crack UVs |
-| 6 | `localized_blend` | `[0, 1]` | `0.0` | legacy vertex-color G path |
-| 7 | `pulse_rate` | `[0, 8]` | `1.4` | shared pulse frequency |
+| Index | Name | Default |
+|-------|------|---------|
+| 0 | `intact` | `1.0` / `0.50` / `0.22` / `0.0` |
+| 1 | `glow_intensity` | `2.2` |
+| 2 | `fade` | `0` except released `1` |
+| 3 | `damage` | `0` → derive `1 - intact` |
+| 4 | `link_count` | `14` |
+| 5 | `conduit_frequency` | `2.2` |
+| 6 | `localized_blend` | `0` |
+| 7 | reserved | `0` (old pulse rate is ignored) |
+| 8 | `flow.speed_mps` | `1.25` (signed) |
+| 9 | `flow.wavelength_m` | `2.2` |
+| 10 | `flow.baseline` | `0.28` |
+| 11 | `flow.peak` | `1.0` |
+| 12 | `flow.halo_width_m` | `0.012` |
+| 13 | `flow.halo_gain` | `0.48` |
 
-[`NoiseParams`](../../../procedural/common/src/noise.rs):
-
-| Field | Role | Authored |
-|-------|------|----------|
-| `seed` | Per-chain identity, variant pick, which links weaken first | `11` |
-| `frequency` | Kept for authored identity | `2.4` |
-| `amplitude` | Fracture bump strength | `1.0` |
-| `octaves` | Unused by the atlas path (FBm rust only) | `2` |
+Hit timestamps and `link_damage` are runtime-only.
 
 ## Geometry contract (A04 / #1125)
 
@@ -145,74 +195,62 @@ lighting and the surface-gradient bump. A04’s skinned mesh must meet:
 
 ### UV 0
 
-- **U (`uv.x`)**: around the tube / link cross-section, `[0, 1]`. Duplicate
-  the seam (`U=0` and `U=1` on coincident vertices). Do not wrap indices
-  on a shared vertex.
-- **V (`uv.y`)**: **along the chain**, `[0, 1]`, monotonically increasing
-  from start anchor to end anchor. Within link `i` of `N` links, `uv.y`
-  occupies `[i/N, (i+1)/N]`. Duplicate the ring seam so the last ring
-  parameter is `1` inside the link, not a wrap back to `0`.
-- Link-local crack UVs are `vec2(u, v * N - link_id)` with aspect ~3.
-- Do not mirror V. Glow flow and fade still read V as a directed length.
+- **U (`uv.x`)**: around the tube, `[0, 1]`. Duplicate the seam.
+- **V (`uv.y`)**: along the chain, `[0, 1]`. Link `i` of `N` occupies
+  `[i/N, (i+1)/N]`. Duplicate the ring seam.
+
+### UV 1 (`Mesh::ATTRIBUTE_UV_1`)
+
+- **`.x`**: rest-space arc length in metres (`flow_s_m`).
+- **`.y`**: total rest length in metres.
+- Continuous strings: one `s` per ring, shared by every vertex of that ring.
+- Links: project onto the rest centerline (see above). Do not claim
+  continuous flow if only one value is written per link.
 
 ### Vertex color (`Mesh::ATTRIBUTE_COLOR`, float4)
 
-| Channel | Meaning | Encoding |
-|---------|---------|----------|
-| R | Per-link id | `link_index as f32` (0, 1, 2, …). All vertices of one link share the same value so interpolation stays flat. Shader uses `floor(color.r + 0.5)` and as the `link_damage` index. |
-| G | Localized damage (legacy) | `[0, 1]`, ignored while `localized_blend == 0`. |
-| B | Twist phase | `0` even / `1` odd (alternating link orientation). |
-| A | Reserved | `1` |
+| Channel | Meaning |
+|---------|---------|
+| R | Per-link id (`link_index as f32`). `floor(color.r + 0.5)` indexes `link_damage`. |
+| G | Localized damage (legacy). Ignored while `localized_blend == 0`. |
+| B | Twist phase. |
+| A | Reserved (`1`). |
 
-If color is missing, the shader falls back to
-`floor(uv.y * link_count)` using scalar 4.
+### Skinning contract (for A04)
 
-### Skinning
-
-The vertex stage uses Bevy `#ifdef SKINNED` (same path as clothing). The
-halo child uses the same mesh and therefore the same skinning.
+The vertex stage uses Bevy `#ifdef SKINNED`. A halo child **must** receive a
+copy of the parent’s `SkinnedMesh` (same `joints` and `inverse_bindposes`
+handle) or the shell will not follow the bind pose. Halo systems already
+copy and propagate `Mesh3d` / `SkinnedMesh` changes, expand the AABB, and
+despawn the child when `ChainHalo` is removed. This crate does not generate
+runtime chain meshes.
 
 ### Damage parameter input
 
-Authored look (A06 global durability) still restamps a per-chain
-[`MaterialRef`](../../material-ref):
-
-1. `intact` = remaining durability in `[0, 1]`.
-2. `fade` = release / dissolve progress.
-3. Optional `damage` override; leave `0` to derive `1 - intact`.
-4. Keep `seed` stable.
-5. Do not rebuild the mesh on hit.
-
-**Localized hits** (the supported path for a chain of tens of links):
-
-1. Insert [`OwnedChainMaterial`](src/runtime.rs) on the chain entity.
-2. After fulfill, write `apply_chain_hit` on that entity’s unique
-   [`Handle<ChainMaterial>`](src/chain_material.rs).
-3. Persistent damage is `link_damage[link_id]`. The temporary flash is
-   `impact` + `globals.time`.
-
-Weak links (higher `hash13(vec3(id * 17.13, seed * 0.013, 4.2))`)
-still deteriorate first under global durability.
+1. Insert [`OwnedChainMaterial`](src/runtime.rs).
+2. After fulfill, write `apply_chain_hit` on that entity’s unique handle.
+3. Authored restamps (`intact` / `fade` / `flow`) go through `MaterialRef`
+   and `apply_authored`; runtime `link_damage` / `impact` persist.
 
 ### Out of scope here
 
 - Armature, bind pose, capsule collision (A04 / A05).
 - Hit routing and the broken signal (A06).
-- Final Blender hero mesh. The PNG atlas is a baked placeholder; bots do
-  not produce final Blender assets.
-- Geometry debris when pieces separate.
+- Geometry debris, particles, detached-piece animation, runtime mesh cutting.
 
 ## Authored states
 
 | State | `intact` | `fade` | Look |
 |-------|----------|--------|------|
-| Intact | `1.00` | `0.00` | Clean metal, full veins, hairline-ready network |
-| Damaged | `0.55` | `0.00` | Widened fissures, rust near cracks, dimmer glow |
-| Near-breaking | `0.18` | `0.15` | Ember in recesses, pieces opening along fractures |
-| Released | `0.00` | `1.00` | Fracture-driven dissolve / leftover sparks |
+| Intact | `1.00` | `0.00` | Quiet metal, traveling energy, no missing chunks |
+| Damaged | `0.50` | `0.00` | Obvious bites, energy on remaining material |
+| Near-breaking | `0.22` | `0.00` | Substantial gaps; reserved plates remain |
+| Released | `0.00` | `1.00` | Body and halo discarded |
 
 ## Playground
 
 `chain-playground` shows two independently parameterized chains (left is
-owned so `/hit` is in-place), a durability sweep, CPU sine-bend, day/night
-lighting, and Sharp / Retro / Antediluvian window sizes.
+owned so `/hit` is in-place), a continuous bent tube, a posed skinned tube
+that proves halo skinning, a mundane wood cube, day/night lighting, and the
+real Native / Sharp / Retro / Antediluvian offscreen present path
+(`FollowCamera` + [`VisualStylePlugin`](../../../lib/src/render_scale.rs)).

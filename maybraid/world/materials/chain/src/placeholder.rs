@@ -1,8 +1,8 @@
 //! Temporary interlocking-torus chain. A04 / #1125 replaces this mesh.
 //!
-//! The generator writes the UV and vertex-color contract the material needs
-//! so playgrounds and tests can exercise the shader before runtime skinning
-//! exists.
+//! The generator writes the UV, UV_1, and vertex-color contract the material
+//! needs so playgrounds and tests can exercise the shader before runtime
+//! skinning exists.
 
 use std::f32::consts::TAU;
 
@@ -51,6 +51,12 @@ impl PlaceholderChainSpec {
 }
 
 /// One placeholder chain mesh with UV.y along the length and per-link color ids.
+///
+/// `Mesh::ATTRIBUTE_UV_1`: `.x` is rest-centerline metres (the rest-space Y of
+/// the vertex, before bend). `.y` is the total rest length. That is a
+/// projection onto the hanging axis, not a geodesic around each torus. Energy
+/// therefore travels along the string, with a small within-link range equal to
+/// the torus extent along Y.
 pub fn placeholder_chain_mesh(spec: PlaceholderChainSpec) -> Mesh {
 	let links = spec.link_count.max(2);
 	let ring = spec.segments_ring.max(6);
@@ -59,13 +65,13 @@ pub fn placeholder_chain_mesh(spec: PlaceholderChainSpec) -> Mesh {
 
 	let mut positions = Vec::new();
 	let mut uvs = Vec::new();
+	let mut flow_uvs = Vec::new();
 	let mut colors = Vec::new();
 	let mut indices = Vec::new();
 
 	// Inclusive rings so the U (around-tube) and V (around-ring / along-link)
 	// seams are duplicated. Wrapping indices on a shared vertex interpolates
-	// across the UV discontinuity and smears the crack atlas.
-	let ring_verts = ring + 1;
+	// across the UV discontinuity.
 	let tube_verts = tube + 1;
 	for link in 0..links {
 		let center_y = link as f32 * spacing;
@@ -76,9 +82,10 @@ pub fn placeholder_chain_mesh(spec: PlaceholderChainSpec) -> Mesh {
 			for j in 0..=tube {
 				let phi = TAU * (j as f32) / (tube as f32);
 				let (x, y, z) = torus_point(spec.ring_radius, spec.tube_radius, theta, phi, odd);
-				let mut p = Vec3::new(x, y + center_y, z);
+				let rest_y = y + center_y;
+				let mut p = Vec3::new(x, rest_y, z);
 				if spec.bend_amplitude.abs() > 1e-5 {
-					let t = (p.y / spec.length).clamp(0.0, 1.0);
+					let t = (rest_y / spec.length).clamp(0.0, 1.0);
 					p.x += spec.bend_amplitude * (t * spec.bend_waves * TAU).sin();
 					p.z += spec.bend_amplitude * 0.28 * (t * spec.bend_waves * TAU + 0.7).cos();
 				}
@@ -87,6 +94,7 @@ pub fn placeholder_chain_mesh(spec: PlaceholderChainSpec) -> Mesh {
 					j as f32 / tube as f32,
 					(link as f32 + i as f32 / ring as f32) / links as f32,
 				]);
+				flow_uvs.push([rest_y, spec.length]);
 				colors.push([link as f32, 0.0, if odd { 1.0 } else { 0.0 }, 1.0]);
 			}
 		}
@@ -103,7 +111,6 @@ pub fn placeholder_chain_mesh(spec: PlaceholderChainSpec) -> Mesh {
 				indices.extend_from_slice(&[a, b, c, a, c, d]);
 			}
 		}
-		let _ = ring_verts;
 	}
 
 	let mut mesh = Mesh::new(
@@ -112,6 +119,7 @@ pub fn placeholder_chain_mesh(spec: PlaceholderChainSpec) -> Mesh {
 	);
 	mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
 	mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+	mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, flow_uvs);
 	mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
 	mesh.insert_indices(Indices::U32(indices));
 	mesh.compute_normals();
@@ -162,6 +170,13 @@ mod tests {
 		}
 	}
 
+	fn flow_attr(mesh: &Mesh) -> anyhow::Result<&[[f32; 2]]> {
+		match mesh.attribute(Mesh::ATTRIBUTE_UV_1) {
+			Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) => Ok(uvs),
+			_ => Err(anyhow::anyhow!("missing float2 uv1")),
+		}
+	}
+
 	#[test]
 	fn writes_along_chain_uv_and_per_link_ids() -> anyhow::Result<()> {
 		let spec = PlaceholderChainSpec::default().with_link_count(8);
@@ -194,6 +209,35 @@ mod tests {
 		assert!(seen.iter().all(|flag| *flag), "every link needs verts");
 		assert!(min_v < 0.05);
 		assert!(max_v > 0.85);
+		Ok(())
+	}
+
+	#[test]
+	fn flow_s_is_rest_centerline_metres() -> anyhow::Result<()> {
+		let spec = PlaceholderChainSpec::default().with_link_count(8);
+		let mesh = placeholder_chain_mesh(spec);
+		let flow = flow_attr(&mesh)?;
+		let colors = color_attr(&mesh)?;
+		let mut min_s = f32::MAX;
+		let mut max_s = f32::MIN;
+		let mut per_link_span = [0.0_f32; 8];
+		let mut per_link_min = [f32::MAX; 8];
+		let mut per_link_max = [f32::MIN; 8];
+		for (color, uv1) in colors.iter().zip(flow.iter()) {
+			assert!((uv1[1] - spec.length).abs() < 1e-4);
+			min_s = min_s.min(uv1[0]);
+			max_s = max_s.max(uv1[0]);
+			let link = color[0].round() as usize;
+			per_link_min[link] = per_link_min[link].min(uv1[0]);
+			per_link_max[link] = per_link_max[link].max(uv1[0]);
+			per_link_span[link] = per_link_max[link] - per_link_min[link];
+		}
+		assert!(min_s < 0.25);
+		assert!(max_s > spec.length * 0.7);
+		assert!(
+			per_link_span.iter().any(|span| *span > 0.04),
+			"links must not collapse to a single s, spans={per_link_span:?}"
+		);
 		Ok(())
 	}
 

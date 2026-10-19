@@ -3,6 +3,7 @@ use std::f32::consts::PI;
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
 use game_commands::command::TextEntryFocus;
+use player_camera::FollowCamera;
 
 #[derive(Component)]
 pub struct CameraController {
@@ -34,6 +35,8 @@ pub fn setup_camera(mut commands: Commands) {
 			far: 400.0,
 			..default()
 		}),
+		// Marker for the real world offscreen present path.
+		FollowCamera::default(),
 		CameraController { speed: 6.0, sensitivity: 0.005, yaw, pitch },
 	));
 }

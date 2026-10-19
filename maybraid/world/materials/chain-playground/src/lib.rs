@@ -17,7 +17,11 @@ use capture::{tick_capture, tick_video, CaptureSet, VideoCapture};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
 use lighting::{setup_lighting, sync_lighting};
-use preview::{apply_pending_hit, sync_preview, sync_window_style, tick_sweep, PendingChainHit};
+use maybraid_world::VisualStylePlugin;
+use preview::{
+	apply_pending_hit, pose_skinned_tube, sync_preview, sync_visual_style, tick_sweep,
+	PendingChainHit,
+};
 use world_materials::WorldMaterialsPlugin;
 
 pub struct ChainPlaygroundPlugin;
@@ -30,6 +34,7 @@ impl Plugin for ChainPlaygroundPlugin {
 			.init_resource::<CaptureSet>()
 			.init_resource::<VideoCapture>()
 			.add_plugins(WorldMaterialsPlugin)
+			.add_plugins(VisualStylePlugin)
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()));
 		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
 			.add_systems(
@@ -38,9 +43,10 @@ impl Plugin for ChainPlaygroundPlugin {
 					camera::release_modifiers_on_focus_change.before(camera::camera_controller),
 					camera::camera_controller,
 					sync_lighting,
-					sync_window_style,
+					sync_visual_style,
 					apply_pending_hit,
 					tick_sweep,
+					pose_skinned_tube,
 					sync_preview.after(capture_command_line_input::<PlaygroundCommand>),
 					tick_capture.after(sync_preview),
 					tick_video.after(sync_preview),

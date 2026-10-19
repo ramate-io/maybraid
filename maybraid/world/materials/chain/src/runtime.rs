@@ -1,6 +1,6 @@
 //! Owned runtime [`ChainMaterial`] handles and per-link damage uniforms.
 //!
-//! Authored look (palette, seed, intact / fade / glow) stays on
+//! Authored look (palette, seed, intact / fade / glow / flow) stays on
 //! [`material_ref::MaterialRef`]. Independent damage lives on a unique
 //! [`Handle<ChainMaterial>`] updated in place so restamps do not fill the
 //! shared [`crate::ChainMaterialRefCache`].
@@ -9,7 +9,6 @@ use bevy::prelude::*;
 use material_ref::MaterialRefSystems;
 
 use crate::chain_material::{ChainMaterial, ChainMaterialUniform, MAX_CHAIN_LINKS};
-use crate::cracks::ChainCrackAtlas;
 
 /// Mark a chain that must own a unique, mutable [`ChainMaterial`].
 ///
@@ -117,9 +116,6 @@ pub fn owned_chain_material(
 /// Clone authored fields from `src` onto `dst`, keeping runtime damage / halo pass.
 pub fn copy_authored_onto(dst: &mut ChainMaterial, src: &ChainMaterial) {
 	dst.params.apply_authored(&src.params);
-	if dst.cracks == Handle::default() {
-		dst.cracks = src.cracks.clone();
-	}
 }
 
 type OwnedChainQuery<'w, 's> = Query<
@@ -132,11 +128,8 @@ type OwnedChainQuery<'w, 's> = Query<
 pub(crate) fn sync_owned_chain_materials(
 	mut commands: Commands,
 	mut materials: ResMut<Assets<ChainMaterial>>,
-	mut atlas: ResMut<ChainCrackAtlas>,
-	mut images: ResMut<Assets<Image>>,
 	query: OwnedChainQuery,
 ) {
-	let cracks = atlas.get_or_create(&mut images);
 	for (entity, current, owned) in &query {
 		if let Some(owned) = owned {
 			if current.0 != owned.0 {
@@ -144,9 +137,6 @@ pub(crate) fn sync_owned_chain_materials(
 					(materials.get(&current.0).cloned(), materials.get_mut(&owned.0))
 				{
 					copy_authored_onto(&mut dst, &src);
-					if dst.cracks == Handle::default() {
-						dst.cracks = cracks.clone();
-					}
 				}
 				commands.entity(entity).insert(MeshMaterial3d(owned.0.clone()));
 			}
@@ -155,11 +145,7 @@ pub(crate) fn sync_owned_chain_materials(
 		let Some(shared) = materials.get(&current.0).cloned() else {
 			continue;
 		};
-		let mut clone = shared;
-		if clone.cracks == Handle::default() {
-			clone.cracks = cracks.clone();
-		}
-		let unique = materials.add(clone);
+		let unique = materials.add(shared);
 		commands
 			.entity(entity)
 			.insert(MeshMaterial3d(unique.clone()))
@@ -167,28 +153,7 @@ pub(crate) fn sync_owned_chain_materials(
 	}
 }
 
-pub(crate) fn ensure_crack_atlas_on_materials(
-	mut materials: ResMut<Assets<ChainMaterial>>,
-	mut atlas: ResMut<ChainCrackAtlas>,
-	mut images: ResMut<Assets<Image>>,
-) {
-	let cracks = atlas.get_or_create(&mut images);
-	for (_, material) in materials.iter_mut() {
-		if material.cracks == Handle::default() {
-			material.cracks = cracks.clone();
-		}
-	}
-}
-
 /// Install owned-handle sync after MaterialRef fulfill.
 pub(crate) fn register_runtime_systems(app: &mut App) {
-	app.add_systems(
-		Update,
-		(
-			ensure_crack_atlas_on_materials,
-			sync_owned_chain_materials
-				.after(MaterialRefSystems::Fulfill)
-				.after(ensure_crack_atlas_on_materials),
-		),
-	);
+	app.add_systems(Update, sync_owned_chain_materials.after(MaterialRefSystems::Fulfill));
 }
