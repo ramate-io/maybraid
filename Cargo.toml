@@ -245,7 +245,13 @@ gloo-timers = { version = "0.2" }
 chrono = { version = "0.4.41" }
 reqwest = { version = "0.12", features = ["json"] }
 base64 = "0.22"
-bevy = { version = "0.19.1" }
+# Playback is `maybraid-audio` (oddio/CPAL). Keep `bevy_audio` for `SpatialListener` markers only.
+bevy = { version = "0.19.1", default-features = false, features = [
+  "2d",
+  "3d",
+  "ui",
+  "bevy_audio",
+] }
 bevy_hanabi = { version = "0.19", default-features = false, features = ["3d"] }
 js-sys = "0.3"
 log = "0.4"
