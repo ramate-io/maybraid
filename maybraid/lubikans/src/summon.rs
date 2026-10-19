@@ -4,12 +4,17 @@
 //! owner. Does not spend charge or call [`crate::LubikanLedger::try_activate`].
 //! Self sessions stay with [`crate::LubikanSystems::Heal`].
 //!
+//! Ownership, admission, session lifetime, and typed departure live here.
+//! Capsule meshes and fixture materials are registered by
+//! [`install_fixture_summon`], not by the consumer.
+//!
 //! # Open policies ([#1135](https://github.com/ramate-io/maybraid/issues/1135))
 //!
 //! Count limits, lifetime, despawn, targeting, who can summon, Self overlap,
 //! dismissal, placement, and refund-on-reject are **not agreed** in the issue
 //! or its comments. Every knob below is a labeled PLACEHOLDER default.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use bevy::ecs::system::SystemParam;
@@ -17,16 +22,19 @@ use bevy::prelude::*;
 use damage::{Died, Downed, Health, ResponsibleOwner};
 
 use crate::activation::{
-	LubikanActivationFinished, LubikanActivationOutcome, LubikanActivationReport,
-	LubikanActivationSession, LubikanActivationSessionId,
+	LubikanActivationFinished, LubikanActivationOutcome, LubikanActivationPhase,
+	LubikanActivationReport, LubikanActivationSession, LubikanActivationSessionId,
 };
-use crate::catalog::LubikanCatalog;
 use crate::change::{LubikanChargeReason, LubikanChargeRequest};
 use crate::identity::{LubikanAccountId, LubikanDefinition, LubikanDefinitionId};
 use crate::ledger::{LubikanAccountBinding, LubikanLedger, LubikanOwner};
 use crate::lifetime::{LubikanOwnerLifetime, LubikanOwnerLifetimeKind};
 use crate::plugin::LubikanSessionStore;
 use crate::LubikanSystems;
+
+mod fixture;
+
+pub use fixture::install_fixture_summon;
 
 /// PLACEHOLDER fixture catalog id. Not Bikanwarda; content crates pick their own.
 pub const FIXTURE_SUMMON_DEFINITION_ID: LubikanDefinitionId =
@@ -66,7 +74,7 @@ pub fn fixture_summon_definition() -> LubikanDefinition {
 	)
 }
 
-/// Pause / menu gate. World may copy `WorldGameplayEnabled` onto this; when
+/// Pause / menu gate. World copies `WorldGameplayEnabled` onto this; when
 /// `false`, lifetime freezes without dismissing the instance.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LubikanSummonEnabled(pub bool);
@@ -89,6 +97,8 @@ pub enum LubikanSummonDepartureReason {
 	LimitReached,
 	MissingRecipe,
 	BlockedBySelf,
+	/// Captured session closed without a combat death (external cancel).
+	Cancelled,
 }
 
 /// PLACEHOLDER invalid-spawn handling. Charge was already spent by Activate.
@@ -300,11 +310,14 @@ pub struct LubikanSummon {
 	pub instance: LubikanSummonInstanceId,
 	pub elapsed: f32,
 	pub lifetime: f32,
+	/// Applied activation spend captured on the session (negative).
+	pub spent: f32,
 }
 
 impl LubikanSummon {
 	pub fn session_ref(self) -> LubikanActivationSession {
 		LubikanActivationSession::new(self.owner, self.account, self.definition, self.session)
+			.with_spent(self.spent)
 	}
 
 	pub fn timed_out(self) -> bool {
@@ -373,7 +386,6 @@ struct SummonClose<'w, 's> {
 	finished: MessageWriter<'w, LubikanActivationFinished>,
 	departures: MessageWriter<'w, LubikanSummonDeparture>,
 	refunds: MessageWriter<'w, LubikanChargeRequest>,
-	catalog: Res<'w, LubikanCatalog>,
 	config: Res<'w, LubikanSummonConfig>,
 	commands: Commands<'w, 's>,
 }
@@ -382,12 +394,12 @@ impl SummonClose<'_, '_> {
 	fn reject(&mut self, session: LubikanActivationSession, reason: LubikanSummonDepartureReason) {
 		self.cancel_session(session);
 		if self.config.invalid_placement == LubikanSummonInvalidPlacement::RefundAndCancel {
-			let cost = self.catalog.activation_cost(session.definition);
-			if cost > 0.0 {
+			let refund = session.refund_amount();
+			if refund > 0.0 {
 				self.refunds.write(LubikanChargeRequest::new(
 					session.owner,
 					Some(session.account),
-					cost,
+					refund,
 					LubikanChargeReason::ACTIVATION_REFUND,
 					None,
 				));
@@ -411,6 +423,11 @@ impl SummonClose<'_, '_> {
 			}
 		}
 		self.departures.write(LubikanSummonDeparture::from_live(live, entity, reason));
+		if reason != LubikanSummonDepartureReason::Interrupted {
+			// Typed departure is not combat death: strip Health so
+			// `down_zero_health` cannot synthesize [`Died`].
+			self.commands.entity(entity).try_remove::<(Health, Downed)>();
+		}
 		self.commands.entity(entity).try_despawn();
 	}
 
@@ -476,15 +493,16 @@ struct SummonAccept<'w, 's> {
 	downed: Query<'w, 's, (), With<Downed>>,
 	summons: Query<'w, 's, &'static LubikanSummon>,
 	recipes: Res<'w, LubikanSummonCatalog>,
-	meshes: Option<ResMut<'w, Assets<Mesh>>>,
-	materials: Option<ResMut<'w, Assets<StandardMaterial>>>,
 }
 
 fn accept_summon_sessions(mut close: SummonClose, mut accept: SummonAccept) {
-	let mut meshes = accept.meshes;
-	let mut materials = accept.materials;
+	let mut reserved: HashMap<Entity, usize> = HashMap::new();
 	for session in accept.sessions.read() {
 		if session.definition.is_self() {
+			continue;
+		}
+		if !session_is_active(close.ledgers.iter(), &close.store, session.id) {
+			// Already closed (Heal / external cancel). Do not spawn or refund.
 			continue;
 		}
 		if close.config.block_while_self_active
@@ -508,7 +526,8 @@ fn accept_summon_sessions(mut close: SummonClose, mut accept: SummonAccept) {
 			continue;
 		};
 		let live = accept.summons.iter().filter(|summon| summon.owner == session.owner).count();
-		if live >= close.config.max_concurrent() as usize {
+		let pending = reserved.get(&session.owner).copied().unwrap_or(0);
+		if live + pending >= close.config.max_concurrent() as usize {
 			close.reject(*session, LubikanSummonDepartureReason::LimitReached);
 			continue;
 		}
@@ -532,18 +551,18 @@ fn accept_summon_sessions(mut close: SummonClose, mut accept: SummonAccept) {
 			instance,
 			elapsed: 0.0,
 			lifetime,
+			spent: session.spent,
 		};
-		let mut entity = close.commands.spawn((
+		close.commands.spawn((
 			live,
 			pose,
 			GlobalTransform::from(pose),
-			Visibility::default(),
 			LubikanAccountBinding::new(session.account, session.definition, session.owner),
 			ResponsibleOwner::new(session.owner),
 			Health::from_max(recipe.health()),
 			Name::new("lubikan-summon"),
 		));
-		attach_placeholder_mesh(&mut entity, &mut meshes, &mut materials, recipe.presentation);
+		*reserved.entry(session.owner).or_insert(0) += 1;
 		if !close.config.session_follows_instance {
 			close.complete_session(*session);
 		}
@@ -579,6 +598,12 @@ fn retire_summons(
 				LubikanSummonDepartureReason::OwnerRetired
 			};
 			retired.push((entity, *live, reason));
+			continue;
+		}
+		if close.config.session_follows_instance
+			&& !session_is_active(close.ledgers.iter(), &close.store, live.session)
+		{
+			retired.push((entity, *live, LubikanSummonDepartureReason::Cancelled));
 			continue;
 		}
 		if close.config.dismiss_on_select_change
@@ -682,24 +707,32 @@ fn placement_from(owner: &Transform, offset: f32) -> Option<Transform> {
 	Some(Transform::from_translation(origin).looking_to(*owner.forward(), Vec3::Y))
 }
 
-fn attach_placeholder_mesh(
-	entity: &mut EntityCommands,
-	meshes: &mut Option<ResMut<Assets<Mesh>>>,
-	materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
-	presentation: LubikanSummonPresentation,
-) {
-	let (Some(meshes), Some(materials)) = (meshes.as_mut(), materials.as_mut()) else {
-		return;
-	};
-	let LubikanSummonPresentation::PlaceholderCapsule = presentation;
-	let mesh =
-		meshes.add(Capsule3d::new(PLACEHOLDER_SUMMON_RADIUS, PLACEHOLDER_SUMMON_CAPSULE_LENGTH));
-	let material = materials.add(StandardMaterial {
-		base_color: Color::srgb(0.18, 0.78, 0.74),
-		unlit: true,
-		..default()
-	});
-	entity.insert((Mesh3d(mesh), MeshMaterial3d(material)));
+fn session_is_active<'a>(
+	ledgers: impl IntoIterator<Item = &'a LubikanLedger>,
+	store: &LubikanSessionStore,
+	id: LubikanActivationSessionId,
+) -> bool {
+	session_phase(ledgers, store, id) == Some(LubikanActivationPhase::Active)
+}
+
+fn session_phase<'a>(
+	ledgers: impl IntoIterator<Item = &'a LubikanLedger>,
+	store: &LubikanSessionStore,
+	id: LubikanActivationSessionId,
+) -> Option<LubikanActivationPhase> {
+	ledgers
+		.into_iter()
+		.find_map(|ledger| ledger_session_phase(ledger, id))
+		.or_else(|| store.cached_ledger().and_then(|ledger| ledger_session_phase(ledger, id)))
+}
+
+fn ledger_session_phase(
+	ledger: &LubikanLedger,
+	id: LubikanActivationSessionId,
+) -> Option<LubikanActivationPhase> {
+	ledger.iter().find_map(|account| {
+		(account.activation().session == Some(id)).then_some(account.activation().phase)
+	})
 }
 
 /// Close the captured account. A natural complete reports through
@@ -719,27 +752,20 @@ fn apply_close(
 	true
 }
 
-/// Register the fixture definition and recipe on an already-built app.
-pub fn install_fixture_summon(app: &mut App) {
-	app.world_mut()
-		.resource_mut::<LubikanCatalog>()
-		.register(fixture_summon_definition());
-	app.world_mut()
-		.resource_mut::<LubikanSummonCatalog>()
-		.register(LubikanSummonRecipe::fixture());
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use crate::activation::{LubikanActivationDenied, LubikanActivationPhase};
+	use crate::catalog::LubikanCatalog;
 	use crate::plugin::LubikansPlugin;
+	use crate::LubikanSystems;
 	use crate::{
-		LubikanActivationFinished, LubikanActivationRefused, LubikanActivationRequest,
-		LubikanChargeChanged,
+		LubikanActivationFinished, LubikanActivationRefused, LubikanActivationReport,
+		LubikanActivationRequest, LubikanChargeChanged,
 	};
 	use anyhow::{anyhow, Result};
 	use bevy::time::{TimeUpdateStrategy, Virtual};
+	use damage::DamagePlugin;
 	use std::time::Duration;
 
 	const DT: f32 = 1.0;
@@ -855,6 +881,7 @@ mod tests {
 	fn self_session_is_ignored_by_the_summon_consumer() -> Result<()> {
 		let mut app = summon_app();
 		let owner = spawn_owner(&mut app)?;
+		app.world_mut().entity_mut(owner).insert(Health { current: 40.0, max: 100.0 });
 		let cost = app.world().resource::<LubikanCatalog>().self_definition().activation_cost;
 		{
 			let mut ledger = app
@@ -867,7 +894,21 @@ mod tests {
 		app.update();
 		assert!(live_summons(&mut app).is_empty());
 		assert_eq!(phase(&app, owner, LubikanAccountId::SELF)?, LubikanActivationPhase::Active);
+		assert_eq!(charge(&app, owner, LubikanAccountId::SELF)?, 0.0);
 		assert!(departures(&mut app).is_empty());
+		let spends: Vec<_> = app
+			.world_mut()
+			.resource_mut::<Messages<LubikanChargeChanged>>()
+			.drain()
+			.filter(|change| {
+				change.reason == LubikanChargeReason::ACTIVATION
+					|| change.reason == LubikanChargeReason::ACTIVATION_REFUND
+			})
+			.collect();
+		assert_eq!(spends.len(), 1);
+		assert_eq!(spends[0].reason, LubikanChargeReason::ACTIVATION);
+		assert_eq!(spends[0].amount, -cost);
+		assert!(app.world().resource::<crate::LubikanSelfHeal>().active);
 		Ok(())
 	}
 
@@ -934,7 +975,43 @@ mod tests {
 		assert!(rejected[0].is_spawn_reject());
 		app.update();
 		assert_eq!(charge(&app, owner, account)?, PLACEHOLDER_SUMMON_ACTIVATION_COST);
+		assert!(died(&mut app).is_empty());
 		Ok(())
+	}
+
+	#[test]
+	fn refund_uses_spent_amount_not_later_catalog_cost() -> Result<()> {
+		let mut app = summon_app();
+		let owner = app.world_mut().spawn(LubikanOwner).id();
+		app.update();
+		let account = unlock_fixture(&mut app, owner)?;
+		app.add_systems(
+			Update,
+			inflate_fixture_cost
+				.after(LubikanSystems::Activate)
+				.before(LubikanSystems::Summon),
+		);
+		fund_and_activate(&mut app, owner, account)?;
+		assert!(live_summons(&mut app).is_empty());
+		assert_eq!(
+			departures(&mut app).last().map(|event| event.reason),
+			Some(LubikanSummonDepartureReason::InvalidPlacement)
+		);
+		app.update();
+		assert_eq!(charge(&app, owner, account)?, PLACEHOLDER_SUMMON_ACTIVATION_COST);
+		assert_ne!(
+			app.world().resource::<LubikanCatalog>().activation_cost(account.definition()),
+			PLACEHOLDER_SUMMON_ACTIVATION_COST
+		);
+		Ok(())
+	}
+
+	fn inflate_fixture_cost(mut catalog: ResMut<LubikanCatalog>) {
+		catalog.register(LubikanDefinition::new(
+			FIXTURE_SUMMON_DEFINITION_ID,
+			PLACEHOLDER_SUMMON_CAPACITY,
+			99.0,
+		));
 	}
 
 	#[test]
@@ -1012,6 +1089,81 @@ mod tests {
 	}
 
 	#[test]
+	fn same_batch_activations_respect_concurrent_limit() -> Result<()> {
+		let mut app = summon_app();
+		let extra = LubikanDefinition::new(LubikanDefinitionId::from_raw(0xFFFF_FF02), 100.0, 25.0);
+		app.world_mut().resource_mut::<LubikanCatalog>().register(extra);
+		app.world_mut()
+			.resource_mut::<LubikanSummonCatalog>()
+			.register(LubikanSummonRecipe {
+				definition: extra.id,
+				..LubikanSummonRecipe::fixture()
+			});
+		let owner = spawn_owner(&mut app)?;
+		let first = unlock_fixture(&mut app, owner)?;
+		let second = {
+			let mut ledger = app
+				.world_mut()
+				.get_mut::<LubikanLedger>(owner)
+				.ok_or_else(|| anyhow!("ledger"))?;
+			let second = ledger.ensure_owned(extra);
+			ledger
+				.apply_to(first, PLACEHOLDER_SUMMON_ACTIVATION_COST)
+				.ok_or_else(|| anyhow!("fund first"))?;
+			ledger
+				.apply_to(second, extra.activation_cost)
+				.ok_or_else(|| anyhow!("fund second"))?;
+			second
+		};
+		app.world_mut()
+			.write_message(LubikanActivationRequest::for_account(owner, first));
+		app.world_mut()
+			.write_message(LubikanActivationRequest::for_account(owner, second));
+		app.update();
+		assert_eq!(live_summons(&mut app).len(), 1);
+		let rejected = departures(&mut app);
+		assert_eq!(
+			rejected
+				.iter()
+				.filter(|event| event.reason == LubikanSummonDepartureReason::LimitReached)
+				.count(),
+			1
+		);
+		app.update();
+		let first_charge = charge(&app, owner, first)?;
+		let second_charge = charge(&app, owner, second)?;
+		assert_eq!(first_charge + second_charge, extra.activation_cost);
+		assert!(first_charge == 0.0 || second_charge == 0.0);
+		Ok(())
+	}
+
+	#[test]
+	fn core_spawn_does_not_attach_fixture_meshes() -> Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(DT)))
+			.add_plugins(LubikansPlugin);
+		app.world_mut()
+			.resource_mut::<Time<Virtual>>()
+			.set_max_delta(Duration::from_secs(30));
+		app.world_mut()
+			.resource_mut::<LubikanCatalog>()
+			.register(fixture_summon_definition());
+		app.world_mut()
+			.resource_mut::<LubikanSummonCatalog>()
+			.register(LubikanSummonRecipe::fixture());
+		let owner = spawn_owner(&mut app)?;
+		let account = unlock_fixture(&mut app, owner)?;
+		fund_and_activate(&mut app, owner, account)?;
+		let summon = live_summons(&mut app)
+			.first()
+			.map(|(entity, _)| *entity)
+			.ok_or_else(|| anyhow!("summon"))?;
+		assert!(app.world().get::<Mesh3d>(summon).is_none());
+		Ok(())
+	}
+
+	#[test]
 	fn selection_change_does_not_dismiss_or_retarget() -> Result<()> {
 		let mut app = summon_app();
 		let owner = spawn_owner(&mut app)?;
@@ -1039,6 +1191,7 @@ mod tests {
 	#[test]
 	fn timeout_departs_without_died_and_idles_the_captured_account() -> Result<()> {
 		let mut app = summon_app();
+		app.add_plugins(DamagePlugin);
 		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 2.0;
 		app.world_mut()
 			.resource_mut::<LubikanSummonCatalog>()
@@ -1061,6 +1214,26 @@ mod tests {
 			pulse.last().map(|event| event.outcome),
 			Some(LubikanActivationOutcome::Completed)
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn cancelled_session_departs_without_died() -> Result<()> {
+		let mut app = summon_app();
+		app.add_plugins(DamagePlugin);
+		let owner = spawn_owner(&mut app)?;
+		let account = unlock_fixture(&mut app, owner)?;
+		let session = fund_and_activate(&mut app, owner, account)?;
+		assert_eq!(live_summons(&mut app).len(), 1);
+		app.world_mut().write_message(LubikanActivationReport::cancelled(session.id));
+		app.update();
+		assert!(live_summons(&mut app).is_empty());
+		assert_eq!(
+			departures(&mut app).last().map(|event| event.reason),
+			Some(LubikanSummonDepartureReason::Cancelled)
+		);
+		assert!(died(&mut app).is_empty());
+		assert_eq!(phase(&app, owner, account)?, LubikanActivationPhase::Idle);
 		Ok(())
 	}
 

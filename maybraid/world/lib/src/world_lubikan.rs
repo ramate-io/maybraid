@@ -1,10 +1,10 @@
-//! World Lubikan adapter: owner binding, session lifecycle, activation/healing routing.
+//! World Lubikan adapter: owner binding, session lifecycle, activation/heal/summon routing.
 
 use bevy::prelude::*;
 use game_commands::command::TextEntryFocus;
 use lubikans::{
 	LubikanActivationRequest, LubikanHealingEnabled, LubikanOwner, LubikanOwnerLifetime,
-	LubikanOwnerLifetimeKind, LubikanSystems, LubikansPlugin,
+	LubikanOwnerLifetimeKind, LubikanSummonEnabled, LubikanSystems, LubikansPlugin,
 };
 use lubikans_damage::LubikanDamagePlugin;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
@@ -25,7 +25,7 @@ use crate::map_view::WorldMapView;
 /// - Owner binding: establishes player identity and LubikanOwner marker
 /// - Session forwarding: emits LubikanOwnerLifetime on session teardown
 /// - Activation routing: maps PowerUseItem intent to LubikanActivationRequest
-/// - Healing sync: gates healing with WorldGameplayEnabled
+/// - Gameplay sync: gates healing and summon lifetime with WorldGameplayEnabled
 ///
 /// Player identity (generic player::Player marker and LubikanOwner) is established
 /// in the motor setup lifecycle. The motor is applied when the world player spawns
@@ -40,7 +40,7 @@ use crate::map_view::WorldMapView;
 /// | Schedule   | Stage      | Systems |
 /// |------------|------------|---------|
 /// | PreUpdate  | Owner      | grant / session-end before `LubikanSystems::Owner` |
-/// | Update     | Gate+Act   | `sync_lubikan_healing_enabled` then activation request before `LubikanSystems::Activate` |
+/// | Update     | Gate+Act   | `sync_lubikan_gameplay_gates` then activation request before `LubikanSystems::Activate` |
 /// | PostUpdate | Heal       | `LubikanSystems::Heal` after damage history / awards; HUD after Heal |
 pub struct WorldLubikanPlugin;
 
@@ -61,10 +61,10 @@ impl Plugin for WorldLubikanPlugin {
 		app.add_systems(
 			Update,
 			(
-				sync_lubikan_healing_enabled.before(LubikanSystems::Activate),
+				sync_lubikan_gameplay_gates.before(LubikanSystems::Activate),
 				request_lubikan_activation
 					.after(CharacterControlSystems)
-					.after(sync_lubikan_healing_enabled)
+					.after(sync_lubikan_gameplay_gates)
 					.before(LubikanSystems::Activate),
 			),
 		);
@@ -130,28 +130,33 @@ fn forward_world_session_end(
 	lives.write(LubikanOwnerLifetime::new(None, None, LubikanOwnerLifetimeKind::RestartSession));
 }
 
-/// Sync Lubikan healing enabled state with world gameplay enabled (pause gates healing).
-fn sync_lubikan_healing_enabled(
+/// Copy world pause onto Lubikan heal and summon gates.
+fn sync_lubikan_gameplay_gates(
 	gameplay: Res<WorldGameplayEnabled>,
 	healing: Option<ResMut<LubikanHealingEnabled>>,
+	summon: Option<ResMut<LubikanSummonEnabled>>,
 ) {
-	let Some(mut healing) = healing else {
-		return;
-	};
-	if healing.0 != gameplay.0 {
-		healing.0 = gameplay.0;
+	if let Some(mut healing) = healing {
+		if healing.0 != gameplay.0 {
+			healing.0 = gameplay.0;
+		}
+	}
+	if let Some(mut summon) = summon {
+		if summon.0 != gameplay.0 {
+			summon.0 = gameplay.0;
+		}
 	}
 }
 
 /// Configure world lubikan routing systems for headless tests.
-/// Registers activation routing and healing sync, matching the old lubikan_activate.rs behavior.
+/// Registers activation routing and gameplay-gate sync, matching the old lubikan_activate.rs behavior.
 pub fn configure(app: &mut App) {
 	app.add_systems(
 		Update,
 		(
-			sync_lubikan_healing_enabled.before(LubikanSystems::Activate),
+			sync_lubikan_gameplay_gates.before(LubikanSystems::Activate),
 			request_lubikan_activation
-				.after(sync_lubikan_healing_enabled)
+				.after(sync_lubikan_gameplay_gates)
 				.before(LubikanSystems::Activate),
 		),
 	);
@@ -211,9 +216,21 @@ mod tests {
 		world.insert_resource(WorldGameplayEnabled(false));
 		world.insert_resource(LubikanHealingEnabled(true));
 		world
-			.run_system_once(sync_lubikan_healing_enabled)
+			.run_system_once(sync_lubikan_gameplay_gates)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(!world.resource::<LubikanHealingEnabled>().0);
+		Ok(())
+	}
+
+	#[test]
+	fn gameplay_off_freezes_summon_lifetime() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(WorldGameplayEnabled(false));
+		world.insert_resource(LubikanSummonEnabled(true));
+		world
+			.run_system_once(sync_lubikan_gameplay_gates)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.resource::<LubikanSummonEnabled>().0);
 		Ok(())
 	}
 

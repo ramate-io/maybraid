@@ -24,8 +24,9 @@ impl LubikanChargeReason {
 	pub const ACTIVATION: Self = Self(20);
 	/// Refund of an accepted spend when the summon consumer rejects spawn.
 	///
-	/// PLACEHOLDER (#1135): invalid placement / missing recipe / limit. Uses the
-	/// existing Award path — not a second spend owner.
+	/// PLACEHOLDER (#1135): invalid placement / limit. Amount is the applied
+	/// activation spend captured on the session, not a later catalog cost.
+	/// Uses the existing Award path — not a second spend owner.
 	pub const ACTIVATION_REFUND: Self = Self(21);
 	/// Manual, debug, or test adjustment.
 	pub const ADJUSTMENT: Self = Self(30);

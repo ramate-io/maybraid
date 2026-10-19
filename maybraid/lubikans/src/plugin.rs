@@ -568,6 +568,7 @@ mod tests {
 			.ok_or_else(|| anyhow!("accepted session"))?;
 		assert_eq!(session.owner, owner);
 		assert_eq!(session.account, LubikanAccountId::SELF);
+		assert_eq!(session.spent, -cost);
 		let spend = app
 			.world_mut()
 			.resource_mut::<Messages<LubikanChargeChanged>>()

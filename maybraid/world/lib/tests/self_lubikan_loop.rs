@@ -6,7 +6,7 @@
 //! - grant_world_player_lubikan_owner
 //! - sync_lubikan_session  
 //! - request_lubikan_activation (PowerUseItem → LubikanActivationRequest)
-//! - sync_lubikan_healing_enabled
+//! - sync_lubikan_gameplay_gates
 //!
 //! **Not tested headless:** Rendering (VFX, HUD), full WorldPlugin layers (terrain,
 //! vegetation, sky), combat intelligence, weapon systems.
@@ -245,14 +245,18 @@ fn pause_freezes_heal_via_gameplay_enabled() -> anyhow::Result<()> {
 		"LubikanHealingEnabled should start true"
 	);
 
-	// Pause via WorldGameplayEnabled (world system syncs to LubikanHealingEnabled)
+	// Pause via WorldGameplayEnabled (world system syncs heal + summon gates)
 	app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = false;
-	app.update(); // sync_lubikan_healing_enabled runs
+	app.update(); // sync_lubikan_gameplay_gates runs
 
 	// Verify sync worked
 	anyhow::ensure!(
 		!app.world().resource::<lubikans::LubikanHealingEnabled>().0,
 		"LubikanHealingEnabled should be false after gameplay disabled"
+	);
+	anyhow::ensure!(
+		!app.world().resource::<lubikans::LubikanSummonEnabled>().0,
+		"LubikanSummonEnabled should be false after gameplay disabled"
 	);
 
 	for _ in 0..5 {
@@ -273,6 +277,10 @@ fn pause_freezes_heal_via_gameplay_enabled() -> anyhow::Result<()> {
 	// Resume
 	app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = true;
 	app.update();
+	anyhow::ensure!(
+		app.world().resource::<lubikans::LubikanSummonEnabled>().0,
+		"LubikanSummonEnabled should be true after gameplay enabled"
+	);
 	for _ in 0..5 {
 		app.update();
 	}
@@ -366,11 +374,17 @@ fn activation_and_healing_from_low_hp() -> anyhow::Result<()> {
 	Ok(())
 }
 
-/// #1110: pause_freezes test already validates healing control.
+/// #1110 / #1135: pause copies WorldGameplayEnabled onto heal and summon gates.
 #[test]
 fn healing_responds_to_gameplay_state() -> anyhow::Result<()> {
-	// This validates that sync_lubikan_healing_enabled connects WorldGameplayEnabled
-	// to LubikanHealingEnabled. The detailed freeze test is pause_freezes_heal_via_gameplay_enabled.
+	let mut app = self_loop_app();
+	spawn_player(&mut app, 100.0, 100.0);
+	anyhow::ensure!(app.world().resource::<lubikans::LubikanHealingEnabled>().0);
+	anyhow::ensure!(app.world().resource::<lubikans::LubikanSummonEnabled>().0);
+	app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = false;
+	app.update();
+	anyhow::ensure!(!app.world().resource::<lubikans::LubikanHealingEnabled>().0);
+	anyhow::ensure!(!app.world().resource::<lubikans::LubikanSummonEnabled>().0);
 	Ok(())
 }
 
