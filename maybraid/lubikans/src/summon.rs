@@ -16,6 +16,7 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -156,10 +157,11 @@ impl LubikanSummonConfig {
 		self.max_concurrent.max(1)
 	}
 
-	/// `None` means the instance lives until dismissed or the owner retires.
-	pub fn lifetime_secs(self) -> Option<f32> {
+	/// Global timeout. `None` means spawned instances live until dismissed or
+	/// the owner retires, unless a recipe picks [`LubikanSummonLifetime::Duration`].
+	pub fn lifetime(self) -> Option<Duration> {
 		if self.lifetime_secs.is_finite() && self.lifetime_secs > 0.0 {
-			Some(self.lifetime_secs)
+			Some(Duration::from_secs_f32(self.lifetime_secs))
 		} else {
 			None
 		}
@@ -190,12 +192,53 @@ pub enum LubikanSummonPresentation {
 	PlaceholderCapsule,
 }
 
+/// How a recipe chooses the spawned instance's timeout.
+///
+/// Resolved once at spawn into `Option<Duration>` on [`LubikanSummon`].
+///
+/// **Current policy (preserved):**
+/// - Config `None` (non-positive / non-finite [`LubikanSummonConfig::lifetime_secs`])
+///   means no timeout.
+/// - [`Self::InheritDefault`] takes that global value. An "untimed" recipe
+///   (`0` / non-finite under the old `f32` field) does **not** override a
+///   finite default with unlimited — it inherits.
+/// - [`Self::Duration`] overrides the default, including an unlimited default.
+/// - [`Self::Forever`] is the explicit unlimited recipe. The old `f32` field
+///   could not say this: `0` sanitized to inherit, not forever.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LubikanSummonLifetime {
+	InheritDefault,
+	Forever,
+	Duration(Duration),
+}
+
+impl LubikanSummonLifetime {
+	/// Finite lifetime, or [`Self::InheritDefault`] when `secs` is non-positive
+	/// or non-finite — the previous recipe `f32` sanitizer.
+	pub fn from_secs_f32(secs: f32) -> Self {
+		if secs.is_finite() && secs > 0.0 {
+			Self::Duration(Duration::from_secs_f32(secs))
+		} else {
+			Self::InheritDefault
+		}
+	}
+
+	/// Runtime timeout stored on the live component. `None` means no timeout.
+	pub fn resolve(self, default: Option<Duration>) -> Option<Duration> {
+		match self {
+			Self::InheritDefault => default,
+			Self::Forever => None,
+			Self::Duration(duration) => Some(duration),
+		}
+	}
+}
+
 /// Lubikan-supplied spawn recipe. Missing recipes reject the session.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LubikanSummonRecipe {
 	pub definition: LubikanDefinitionId,
 	pub health: f32,
-	pub lifetime_secs: f32,
+	pub lifetime: LubikanSummonLifetime,
 	pub presentation: LubikanSummonPresentation,
 }
 
@@ -204,7 +247,7 @@ impl LubikanSummonRecipe {
 		Self {
 			definition: FIXTURE_SUMMON_DEFINITION_ID,
 			health: PLACEHOLDER_SUMMON_HEALTH,
-			lifetime_secs: PLACEHOLDER_SUMMON_LIFETIME_SECS,
+			lifetime: LubikanSummonLifetime::from_secs_f32(PLACEHOLDER_SUMMON_LIFETIME_SECS),
 			presentation: LubikanSummonPresentation::PlaceholderCapsule,
 		}
 	}
@@ -217,12 +260,8 @@ impl LubikanSummonRecipe {
 		}
 	}
 
-	pub fn lifetime_secs(self) -> Option<f32> {
-		if self.lifetime_secs.is_finite() && self.lifetime_secs > 0.0 {
-			Some(self.lifetime_secs)
-		} else {
-			None
-		}
+	pub fn resolve_lifetime(self, default: Option<Duration>) -> Option<Duration> {
+		self.lifetime.resolve(default)
 	}
 }
 
@@ -285,8 +324,9 @@ pub struct LubikanSummon {
 	pub definition: LubikanDefinitionId,
 	pub session: LubikanActivationSessionId,
 	pub instance: LubikanSummonInstanceId,
-	pub elapsed: f32,
-	pub lifetime: f32,
+	pub elapsed: Duration,
+	/// `None` means the instance lives until dismissed or the owner retires.
+	pub lifetime: Option<Duration>,
 	/// Applied activation spend captured on the session (negative).
 	pub spent: f32,
 }
@@ -298,7 +338,7 @@ impl LubikanSummon {
 	}
 
 	pub fn timed_out(self) -> bool {
-		self.lifetime > 0.0 && self.elapsed >= self.lifetime
+		self.lifetime.is_some_and(|limit| self.elapsed >= limit)
 	}
 
 	/// Why this instance should retire this frame, if it should.
@@ -597,9 +637,7 @@ fn accept_summon_sessions(mut close: SummonClose, mut accept: SummonAccept) {
 			close.reject(*session, LubikanSummonDepartureReason::InvalidPlacement);
 			continue;
 		};
-		let lifetime = recipe
-			.lifetime_secs()
-			.unwrap_or_else(|| close.config.lifetime_secs().unwrap_or(0.0));
+		let lifetime = recipe.resolve_lifetime(close.config.lifetime());
 		let instance = LubikanSummonInstanceId::mint();
 		let live = LubikanSummon {
 			owner: session.owner,
@@ -607,7 +645,7 @@ fn accept_summon_sessions(mut close: SummonClose, mut accept: SummonAccept) {
 			definition: session.definition,
 			session: session.id,
 			instance,
-			elapsed: 0.0,
+			elapsed: Duration::ZERO,
 			lifetime,
 			spent: session.spent,
 		};
@@ -661,9 +699,9 @@ fn tick_summons(
 	if !enabled.0 {
 		return;
 	}
-	let dt = time.delta_secs().max(0.0);
+	let dt = time.delta();
 	for (entity, mut live) in &mut summons {
-		live.elapsed += dt;
+		live.elapsed = live.elapsed.saturating_add(dt);
 		if live.timed_out() {
 			let snapshot = *live;
 			close.retire(entity, snapshot, LubikanSummonDepartureReason::Timeout);
@@ -772,7 +810,6 @@ mod tests {
 	use anyhow::{anyhow, Result};
 	use bevy::time::{TimeUpdateStrategy, Virtual};
 	use damage::DamagePlugin;
-	use std::time::Duration;
 
 	const DT: f32 = 1.0;
 
@@ -863,6 +900,12 @@ mod tests {
 		let world = app.world_mut();
 		let mut query = world.query::<(Entity, &LubikanSummon)>();
 		query.iter(world).map(|(entity, summon)| (entity, *summon)).collect()
+	}
+
+	fn register_lifetime(app: &mut App, lifetime: LubikanSummonLifetime) {
+		app.world_mut()
+			.resource_mut::<LubikanSummonCatalog>()
+			.register(LubikanSummonRecipe { lifetime, ..LubikanSummonRecipe::fixture() });
 	}
 
 	fn departures(app: &mut App) -> Vec<LubikanSummonDeparture> {
@@ -1199,9 +1242,7 @@ mod tests {
 		let mut app = summon_app();
 		app.add_plugins(DamagePlugin);
 		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 2.0;
-		app.world_mut()
-			.resource_mut::<LubikanSummonCatalog>()
-			.register(LubikanSummonRecipe { lifetime_secs: 2.0, ..LubikanSummonRecipe::fixture() });
+		register_lifetime(&mut app, LubikanSummonLifetime::from_secs_f32(2.0));
 		let owner = spawn_owner(&mut app)?;
 		let account = unlock_fixture(&mut app, owner)?;
 		let session = fund_and_activate(&mut app, owner, account)?;
@@ -1301,9 +1342,7 @@ mod tests {
 	fn pause_freezes_lifetime_without_dismissing() -> Result<()> {
 		let mut app = summon_app();
 		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 2.0;
-		app.world_mut()
-			.resource_mut::<LubikanSummonCatalog>()
-			.register(LubikanSummonRecipe { lifetime_secs: 2.0, ..LubikanSummonRecipe::fixture() });
+		register_lifetime(&mut app, LubikanSummonLifetime::from_secs_f32(2.0));
 		let owner = spawn_owner(&mut app)?;
 		let account = unlock_fixture(&mut app, owner)?;
 		fund_and_activate(&mut app, owner, account)?;
@@ -1316,6 +1355,124 @@ mod tests {
 		app.update();
 		app.update();
 		assert!(live_summons(&mut app).is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn recipe_lifetime_resolve_keeps_inherit_from_overriding_a_finite_default() {
+		let two = Duration::from_secs(2);
+		assert_eq!(
+			LubikanSummonLifetime::from_secs_f32(0.0),
+			LubikanSummonLifetime::InheritDefault
+		);
+		assert_eq!(
+			LubikanSummonLifetime::from_secs_f32(f32::NAN),
+			LubikanSummonLifetime::InheritDefault
+		);
+		assert_eq!(
+			LubikanSummonLifetime::from_secs_f32(f32::INFINITY),
+			LubikanSummonLifetime::InheritDefault
+		);
+		assert_eq!(LubikanSummonLifetime::InheritDefault.resolve(Some(two)), Some(two));
+		assert_eq!(LubikanSummonLifetime::InheritDefault.resolve(None), None);
+		assert_eq!(LubikanSummonLifetime::Forever.resolve(Some(two)), None);
+		assert_eq!(LubikanSummonLifetime::Duration(two).resolve(None), Some(two));
+	}
+
+	#[test]
+	fn inherited_lifetime_uses_the_config_timeout() -> Result<()> {
+		let mut app = summon_app();
+		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 2.0;
+		register_lifetime(&mut app, LubikanSummonLifetime::InheritDefault);
+		let owner = spawn_owner(&mut app)?;
+		let account = unlock_fixture(&mut app, owner)?;
+		fund_and_activate(&mut app, owner, account)?;
+		assert_eq!(
+			live_summons(&mut app)[0].1.lifetime,
+			Some(Duration::from_secs(2)),
+			"untimed recipe must inherit the finite default, not override it"
+		);
+		app.update();
+		assert!(live_summons(&mut app).is_empty());
+		assert_eq!(
+			departures(&mut app).last().map(|event| event.reason),
+			Some(LubikanSummonDepartureReason::Timeout)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn finite_recipe_lifetime_overrides_an_unlimited_default() -> Result<()> {
+		let mut app = summon_app();
+		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 0.0;
+		register_lifetime(&mut app, LubikanSummonLifetime::from_secs_f32(2.0));
+		let owner = spawn_owner(&mut app)?;
+		let account = unlock_fixture(&mut app, owner)?;
+		fund_and_activate(&mut app, owner, account)?;
+		assert_eq!(live_summons(&mut app)[0].1.lifetime, Some(Duration::from_secs_f32(2.0)));
+		app.update();
+		assert!(live_summons(&mut app).is_empty());
+		assert_eq!(
+			departures(&mut app).last().map(|event| event.reason),
+			Some(LubikanSummonDepartureReason::Timeout)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn unlimited_recipe_does_not_timeout_when_the_default_is_finite() -> Result<()> {
+		let mut app = summon_app();
+		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 2.0;
+		register_lifetime(&mut app, LubikanSummonLifetime::Forever);
+		let owner = spawn_owner(&mut app)?;
+		let account = unlock_fixture(&mut app, owner)?;
+		fund_and_activate(&mut app, owner, account)?;
+		assert_eq!(live_summons(&mut app)[0].1.lifetime, None);
+		app.update();
+		app.update();
+		app.update();
+		assert_eq!(live_summons(&mut app).len(), 1);
+		assert!(departures(&mut app).is_empty());
+		assert_eq!(phase(&app, owner, account)?, LubikanActivationPhase::Active);
+		Ok(())
+	}
+
+	#[test]
+	fn inherited_unlimited_default_does_not_timeout() -> Result<()> {
+		let mut app = summon_app();
+		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 0.0;
+		register_lifetime(&mut app, LubikanSummonLifetime::InheritDefault);
+		let owner = spawn_owner(&mut app)?;
+		let account = unlock_fixture(&mut app, owner)?;
+		fund_and_activate(&mut app, owner, account)?;
+		assert_eq!(live_summons(&mut app)[0].1.lifetime, None);
+		app.update();
+		app.update();
+		assert_eq!(live_summons(&mut app).len(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn pause_freezes_inherited_lifetime_then_resumes() -> Result<()> {
+		let mut app = summon_app();
+		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 2.0;
+		register_lifetime(&mut app, LubikanSummonLifetime::InheritDefault);
+		let owner = spawn_owner(&mut app)?;
+		let account = unlock_fixture(&mut app, owner)?;
+		fund_and_activate(&mut app, owner, account)?;
+		app.world_mut().resource_mut::<LubikanSummonEnabled>().0 = false;
+		app.update();
+		app.update();
+		assert_eq!(live_summons(&mut app).len(), 1);
+		assert_eq!(phase(&app, owner, account)?, LubikanActivationPhase::Active);
+		app.world_mut().resource_mut::<LubikanSummonEnabled>().0 = true;
+		app.update();
+		app.update();
+		assert!(live_summons(&mut app).is_empty());
+		assert_eq!(
+			departures(&mut app).last().map(|event| event.reason),
+			Some(LubikanSummonDepartureReason::Timeout)
+		);
 		Ok(())
 	}
 
