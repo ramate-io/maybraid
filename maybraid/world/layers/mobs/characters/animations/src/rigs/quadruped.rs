@@ -3,4 +3,7 @@ pub mod gait;
 pub mod gallop;
 pub mod idle;
 pub mod leap;
+pub mod lie_down;
 pub mod run;
+pub mod sit;
+pub mod transition;
