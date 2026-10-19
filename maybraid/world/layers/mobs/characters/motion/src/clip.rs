@@ -5,12 +5,11 @@
 
 use bevy::prelude::*;
 use character_animations::animations::{
-	air_duration, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop,
-	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
-	VictoryWave, Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY,
-	DEFAULT_JAB_TARGET,
-	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
-	DEFAULT_SPRING_DURATION, TAKEOFF_END,
+	BallisticJump, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop, Jab,
+	LateralUndulation, Leap, PowerDash, PowerStrafe, QuadrupedRun, Run, Soaring, TuckProfile,
+	TuckedFlip, TwoFootedJump, VictoryWave, Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED,
+	DEFAULT_GRAVITY, DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED,
+	DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
 };
 use character_animations::{ClipTimePolicy, SampleAddress};
 use character_rigs::Side;
@@ -29,6 +28,8 @@ const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
 /// One-shot leap lasts ~1.25 s so it covers the physics hang time.
 pub const LEAP_CYCLE_SPEED: f32 = 0.8;
+/// One-shot PowerDash matches Tanz forward-dash wall time when driven by [`AnimProgress`].
+pub const POWER_DASH_CYCLE_SPEED: f32 = 1.0;
 
 /// Clip discriminant. Mailbox transitions key on this, not knob values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
@@ -41,6 +42,7 @@ pub enum AnimId {
 	Gallop,
 	Jump,
 	Leap,
+	PowerDash,
 	Tuck,
 	TuckedFlip,
 	TwoFootedTuckedFlip,
@@ -48,6 +50,7 @@ pub enum AnimId {
 	Flapping,
 	Jab,
 	VictoryWave,
+	PowerStrafe,
 	Squat,
 	SquatDescent,
 	Prone,
@@ -65,6 +68,7 @@ impl AnimId {
 			Self::Gallop => GALLOP_CYCLE_SPEED,
 			Self::Jump => 1.0,
 			Self::Leap => LEAP_CYCLE_SPEED,
+			Self::PowerDash => POWER_DASH_CYCLE_SPEED,
 			Self::Tuck => TUCK_CYCLE_SPEED,
 			Self::TuckedFlip => FRONT_FLIP_CYCLE_SPEED,
 			Self::TwoFootedTuckedFlip => 1.0,
@@ -72,6 +76,7 @@ impl AnimId {
 			Self::Flapping => 1.0,
 			Self::Jab => JAB_CYCLE_SPEED,
 			Self::VictoryWave => VICTORY_WAVE_CYCLE_SPEED,
+			Self::PowerStrafe => 1.0,
 			Self::Squat => 1.0,
 			Self::SquatDescent => DEFAULT_DESCENT_SPEED,
 			Self::Prone => 1.0,
@@ -115,8 +120,9 @@ impl JumpParams {
 		let progress = progress.clamp(0.0, 1.0);
 		let squat = 1.0 / self.pre_squat_speed.max(1e-3);
 		let takeoff = squat + DEFAULT_SPRING_DURATION;
-		let air =
-			(air_duration(self.gravity, self.jump_height) - DEFAULT_SPRING_DURATION).max(0.05);
+		let air = (BallisticJump::new(self.gravity, self.jump_height).air_duration()
+			- DEFAULT_SPRING_DURATION)
+			.max(0.05);
 		let land = 2.0 / self.landing_squat_speed.max(1e-3);
 		if progress < TAKEOFF_END {
 			(progress / TAKEOFF_END) * takeoff
@@ -185,6 +191,18 @@ pub struct JabParams {
 	pub target: bevy::prelude::Vec3,
 }
 
+/// Untyped power-strafe knobs ([`PowerStrafe`](character_animations::animations::PowerStrafe) is rig-generic).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PowerStrafeParams {
+	pub side: Side,
+}
+
+impl Default for PowerStrafeParams {
+	fn default() -> Self {
+		Self { side: Side::Right }
+	}
+}
+
 impl Default for JabParams {
 	fn default() -> Self {
 		Self { side: Side::Right, backswing: DEFAULT_BACKSWING, target: DEFAULT_JAB_TARGET }
@@ -202,6 +220,7 @@ pub enum AnimClip {
 	Gallop(Gallop),
 	Jump(JumpParams),
 	Leap(Leap),
+	PowerDash(PowerDash),
 	Tuck(TuckParams),
 	TuckedFlip(TuckedFlipParams),
 	TwoFootedTuckedFlip(TwoFootedTuckedFlipParams),
@@ -209,6 +228,7 @@ pub enum AnimClip {
 	Flapping(Flapping),
 	Jab(JabParams),
 	VictoryWave(VictoryWave),
+	PowerStrafe(PowerStrafeParams),
 	Squat,
 	SquatDescent,
 	Prone,
@@ -226,6 +246,7 @@ impl AnimClip {
 			Self::Gallop(_) => AnimId::Gallop,
 			Self::Jump(_) => AnimId::Jump,
 			Self::Leap(_) => AnimId::Leap,
+			Self::PowerDash(_) => AnimId::PowerDash,
 			Self::Tuck(_) => AnimId::Tuck,
 			Self::TuckedFlip(_) => AnimId::TuckedFlip,
 			Self::TwoFootedTuckedFlip(_) => AnimId::TwoFootedTuckedFlip,
@@ -233,6 +254,7 @@ impl AnimClip {
 			Self::Flapping(_) => AnimId::Flapping,
 			Self::Jab(_) => AnimId::Jab,
 			Self::VictoryWave(_) => AnimId::VictoryWave,
+			Self::PowerStrafe(_) => AnimId::PowerStrafe,
 			Self::Squat => AnimId::Squat,
 			Self::SquatDescent => AnimId::SquatDescent,
 			Self::Prone => AnimId::Prone,
@@ -273,6 +295,10 @@ impl AnimClip {
 		Self::Leap(Leap::default())
 	}
 
+	pub fn power_dash() -> Self {
+		Self::PowerDash(PowerDash::default())
+	}
+
 	pub fn tuck() -> Self {
 		Self::Tuck(TuckParams::default())
 	}
@@ -299,6 +325,42 @@ impl AnimClip {
 
 	pub fn victory_wave() -> Self {
 		Self::VictoryWave(VictoryWave::default())
+	}
+
+	pub fn power_strafe(side: Side) -> Self {
+		Self::PowerStrafe(PowerStrafeParams { side })
+	}
+
+	pub fn power_strafe_left() -> Self {
+		Self::power_strafe(Side::Left)
+	}
+
+	pub fn power_strafe_right() -> Self {
+		Self::power_strafe(Side::Right)
+	}
+
+	/// Cache / capture identity, including laterality for mirrored clips.
+	pub fn capture_key(self) -> String {
+		match self {
+			Self::PowerDash(_) => String::from("power-dash"),
+			Self::PowerStrafe(params) => match params.side {
+				Side::Left => String::from("power-strafe-left"),
+				Side::Right => String::from("power-strafe-right"),
+			},
+			Self::Jab(_) => String::from("jab"),
+			other => format!("{:?}", other.id()).to_ascii_lowercase(),
+		}
+	}
+
+	/// Readable still on the live sampler. Tanz icons (and any other
+	/// representative capture) must use this instead of a guessed Euler pose.
+	pub fn representative_progress(self) -> f32 {
+		match self {
+			Self::PowerDash(_) => PowerDash::representative_progress(),
+			Self::PowerStrafe(_) => PowerStrafe::representative_progress(),
+			Self::Jab(_) => Jab::representative_progress(),
+			_ => 0.5,
+		}
 	}
 
 	pub fn squat() -> Self {
@@ -342,7 +404,9 @@ impl AnimClip {
 			}
 			Self::Jump(_)
 			| Self::Leap(_)
+			| Self::PowerDash(_)
 			| Self::TwoFootedTuckedFlip(_)
+			| Self::PowerStrafe(_)
 			| Self::Squat
 			| Self::SquatDescent
 			| Self::Prone
@@ -409,6 +473,30 @@ mod tests {
 	}
 
 	#[test]
+	fn representative_progress_reads_the_live_clip() {
+		assert_eq!(
+			AnimClip::power_dash().representative_progress(),
+			PowerDash::representative_progress()
+		);
+		assert_eq!(
+			AnimClip::power_strafe_left().representative_progress(),
+			PowerStrafe::representative_progress()
+		);
+		assert_eq!(AnimClip::jab().representative_progress(), Jab::representative_progress());
+		assert_eq!(AnimClip::power_strafe_left().capture_key(), "power-strafe-left");
+		assert_eq!(AnimClip::power_strafe_right().capture_key(), "power-strafe-right");
+		assert_eq!(AnimClip::power_dash().capture_key(), "power-dash");
+	}
+
+	#[test]
+	fn power_dash_is_a_distinct_clip() {
+		assert_eq!(AnimClip::power_dash().id(), AnimId::PowerDash);
+		assert_eq!(AnimClip::power_dash().default_speed(), POWER_DASH_CYCLE_SPEED);
+		assert_ne!(AnimClip::power_dash().id(), AnimClip::leap().id());
+		assert_ne!(AnimClip::power_dash().id(), AnimClip::jab().id());
+	}
+
+	#[test]
 	fn still_keeps_the_rest_identity() {
 		assert_eq!(AnimClip::still().id(), AnimId::Still);
 		assert_eq!(AnimClip::still().default_speed(), IDLE_CYCLE_SPEED);
@@ -423,6 +511,7 @@ mod tests {
 		assert!(AnimClip::run().is_sample_cacheable());
 		assert!(!AnimClip::jab().is_sample_cacheable());
 		assert!(!AnimClip::leap().is_sample_cacheable());
+		assert!(!AnimClip::power_dash().is_sample_cacheable());
 		assert_eq!(AnimClip::walk().revision(), 0);
 		assert_eq!(AnimClip::walk().sample_address(0.123, 10_000).canonical_time, 0.12);
 	}

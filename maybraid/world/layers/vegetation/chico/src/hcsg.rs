@@ -66,6 +66,39 @@ pub trait ForestGround: Send + Sync + 'static {
 	fn surface_ids_for(cx: &mut GenerationContext, cell: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<Self::Surface>(cell)
 	}
+
+	/// Every surface cell that may carry content in `cell`, generated when missing.
+	fn surfaces_at(cx: &mut GenerationContext, cell: Aabb3d) -> Vec<Arc<Self::Surface>> {
+		Self::surface_ids_for(cx, cell)
+			.into_iter()
+			.filter_map(|OriginalId(id)| cx.get_or_generate::<Self::Surface>(id))
+			.collect()
+	}
+
+	/// The surface cell overlapping `cell` most that passes `carried_by` on its width.
+	fn best_surface_at(
+		cx: &mut GenerationContext,
+		cell: Aabb3d,
+		carried_by: impl Fn(f32) -> bool,
+	) -> Option<Arc<Self::Surface>> {
+		Self::surfaces_at(cx, cell)
+			.into_iter()
+			.filter(|surface| {
+				let footprint = Self::footprint(surface);
+				carried_by(footprint.max.x - footprint.min.x)
+					&& surface_overlap_xz(cell, footprint) > 1e-3
+			})
+			.max_by(|a, b| {
+				surface_overlap_xz(cell, Self::footprint(a))
+					.total_cmp(&surface_overlap_xz(cell, Self::footprint(b)))
+			})
+	}
+}
+
+fn surface_overlap_xz(cell: Aabb3d, footprint: Aabb3d) -> f32 {
+	let x = (cell.max.x.min(footprint.max.x) - cell.min.x.max(footprint.min.x)).max(0.0);
+	let z = (cell.max.z.min(footprint.max.z) - cell.min.z.max(footprint.min.z)).max(0.0);
+	x * z
 }
 
 /// Padded terrain is the urbanized ground's whole surface.
@@ -209,12 +242,7 @@ pub struct GroundSurface<G: ForestGround> {
 
 impl<G: ForestGround> GroundSurface<G> {
 	pub fn generate(cx: &mut GenerationContext, region: Aabb3d) -> Self {
-		let mut cells: Vec<Arc<G::Surface>> = cx
-			.original_ids_for::<G::Surface>(region)
-			.into_iter()
-			.filter_map(|OriginalId(id)| cx.get_or_generate::<G::Surface>(id))
-			.collect();
-		cells.sort_by(|a, b| span_x(G::footprint(a)).total_cmp(&span_x(G::footprint(b))));
+		let cells = cx.get_or_generate_in_finest_first::<G::Surface>(region, G::footprint);
 		Self { cells }
 	}
 
@@ -237,10 +265,6 @@ impl<G: ForestGround> GroundSurface<G> {
 			})
 			.map(|cell| G::height_at(cell, x, z))
 	}
-}
-
-fn span_x(bounds: Aabb3d) -> f32 {
-	bounds.max.x - bounds.min.x
 }
 
 /// Steepness is a 1 m forward difference, as on the legacy ground sample; a
@@ -280,8 +304,7 @@ impl<G: ForestGround> hcsg::GenerationScheme for GrownGrove<G> {
 
 	/// `None` off the ground or where nothing grows.
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
-		let grove = cx.get_or_generate::<ChicoGrove>(id)?;
-		let extent = Aabb3d::from_min_max(grove.extent.min(), grove.extent.max());
+		let (grove, extent) = cx.get_or_generate_stored::<ChicoGrove>(id)?;
 		let surface = GroundSurface::<G>::generate(cx, extent);
 		if surface.is_empty() {
 			return None;
@@ -407,7 +430,8 @@ mod tests {
 	};
 	use lod::gen::Version;
 	use lod::hcsg::{
-		GenerationScheme, HcsgClass, HcsgDemand, HcsgNode, HcsgRestartRequest, ViewerHcsgBounds,
+		settle_presentation, GenerationScheme, HcsgClass, HcsgNode, HcsgRestartRequest,
+		RetiredHost, SettlePresentation, ViewerHcsgBounds,
 	};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
@@ -491,15 +515,7 @@ mod tests {
 	}
 
 	fn settle(app: &mut App) -> anyhow::Result<()> {
-		for _ in 0..2 {
-			app.update();
-			let demand = app.world().resource::<HcsgDemand>().clone();
-			anyhow::ensure!(demand.wait_idle(IDLE), "worker did not go idle");
-		}
-		for _ in 0..8 {
-			app.update();
-		}
-		Ok(())
+		settle_presentation(app, SettlePresentation::layer_integration(IDLE)).map_err(Into::into)
 	}
 
 	fn nested_hosts(app: &mut App) -> usize {
@@ -512,7 +528,7 @@ mod tests {
 	fn grown(app: &mut App) -> Vec<HcsgNode<GrownGrove<Urban>>> {
 		let mut hosts: Vec<_> = app
 			.world_mut()
-			.query::<&HcsgNode<GrownGrove<Urban>>>()
+			.query_filtered::<&HcsgNode<GrownGrove<Urban>>, Without<RetiredHost>>()
 			.iter(app.world())
 			.cloned()
 			.collect();
@@ -741,19 +757,12 @@ mod tests {
 		for node in &nodes {
 			let mut cx = GenerationContext::new(&storage);
 			let cell = node.value.cell;
-			let under: Vec<_> = cx
-				.original_ids_for::<PaddedTerrain<Ground>>(cell)
-				.into_iter()
-				.filter_map(|OriginalId(id)| cx.get_or_generate::<PaddedTerrain<Ground>>(id))
-				.filter(|surface| {
-					let footprint = Urban::footprint(surface);
-					footprint.min.xz() == cell.min.xz() && footprint.max.xz() == cell.max.xz()
-				})
-				.collect();
-			let [surface] = under.as_slice() else {
-				anyhow::bail!("{cell:?} lies on one fine surface cell");
-			};
-			assert_eq!(node.value.terrain.key(), Urban::chunk_ref(surface).key());
+			let surface = Urban::best_surface_at(&mut cx, cell, |_| true)
+				.ok_or_else(|| anyhow::anyhow!("{cell:?} lies on no surface cell"))?;
+			let footprint = Urban::footprint(&surface);
+			assert_eq!(footprint.min.xz(), cell.min.xz());
+			assert_eq!(footprint.max.xz(), cell.max.xz());
+			assert_eq!(node.value.terrain.key(), Urban::chunk_ref(&surface).key());
 		}
 
 		update_until(&mut app, |app| shown_bump_outs(app) >= 4);

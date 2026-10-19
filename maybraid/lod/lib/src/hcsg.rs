@@ -27,6 +27,7 @@ mod presentation;
 mod runtime;
 mod session;
 mod storage;
+mod test_support;
 mod worker;
 
 #[cfg(test)]
@@ -52,6 +53,10 @@ pub use session::{
 	HcsgSessionRestarted, HcsgSessionSeed,
 };
 pub use storage::{Busy, HcsgStorage, HcsgValue};
+pub use test_support::{
+	drain_retired_hosts, hcsg_hosts, hosts_replaced, leftover_retired_hosts, settle_presentation,
+	wait_replaced_hosts, SettlePresentation, SettleTimedOut,
+};
 
 /// Keeps a test [`worker::HcsgWorker`] alive until dropped.
 /// Allow unused since this a guard object.
