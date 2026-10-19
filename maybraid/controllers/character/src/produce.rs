@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use maybraid_input::{MenuOwnsBack, PadButton, PadGameplayEnabled, VirtualPad, VirtualPadConfig};
 
-use crate::intent::{CharacterIntent, InventoryCyclingCategory};
+use crate::intent::{CharacterIntent, InventoryCyclingCategory, UseAttackState};
 
 const ANALOG_EPS: f32 = 1e-6;
 const STANCE_HOLD_SECS: f32 = 0.35;
@@ -68,7 +68,7 @@ pub fn collect_with_mouse(
 	if pad.pressed(PadButton::BumperFocus) {
 		out.push(CharacterIntent::Ads(1.0));
 	}
-	if pad.pressed(PadButton::TriggerFire) || pad.trigger_fire >= trigger_threshold {
+	if pad.pressed(PadButton::TriggerFire) {
 		out.push(CharacterIntent::UseItem(pad.trigger_fire.max(trigger_threshold)));
 	}
 	if pad.just_pressed(PadButton::TriggerFocus) && !mouse_right {
@@ -102,7 +102,7 @@ pub fn collect_with_mouse(
 		}
 	}
 	if pad.just_pressed(PadButton::X) {
-		if pad.pressed(PadButton::TriggerFire) || pad.trigger_fire >= trigger_threshold {
+		if pad.pressed(PadButton::TriggerFire) {
 			out.push(CharacterIntent::PowerUseItem);
 		} else {
 			out.push(CharacterIntent::StartInteraction);
@@ -147,6 +147,33 @@ pub fn collect_with_mouse(
 		out.push(CharacterIntent::ToggleMap);
 	}
 	out
+}
+
+/// Fold this frame's [`CharacterIntent`] into [`UseAttackState`].
+///
+/// Pad produce, remaps, and scripted writes all land as intents first. A
+/// suppressed frame emits no [`CharacterIntent::UseItem`], so a previously
+/// held use becomes a release.
+pub fn resolve_use_attack_state(
+	mut intents: MessageReader<CharacterIntent>,
+	mut state: ResMut<UseAttackState>,
+) {
+	let mut use_held = false;
+	let mut use_amount: f32 = 0.0;
+	let mut attack_left = false;
+	let mut attack_right = false;
+	for intent in intents.read() {
+		match *intent {
+			CharacterIntent::UseItem(amount) => {
+				use_held = true;
+				use_amount = use_amount.max(amount);
+			}
+			CharacterIntent::AttackLeft => attack_left = true,
+			CharacterIntent::AttackRight => attack_right = true,
+			_ => {}
+		}
+	}
+	*state = state.advance(use_held, use_amount, attack_left, attack_right);
 }
 
 #[cfg(test)]
@@ -312,6 +339,20 @@ mod tests {
 		pad.apply_trigger_digital(0.5);
 		finish(&mut pad);
 		assert!(!intents(&pad).iter().any(|intent| matches!(intent, CharacterIntent::UseItem(_))));
+		Ok(())
+	}
+
+	#[test]
+	fn analog_without_digital_does_not_use_item() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.0, 0.9);
+		finish(&mut pad);
+		assert!(
+			!intents(&pad).iter().any(|intent| matches!(intent, CharacterIntent::UseItem(_))),
+			"threshold lives in apply_trigger_digital, not collect: {intents:?}",
+			intents = intents(&pad)
+		);
 		Ok(())
 	}
 
@@ -558,6 +599,61 @@ mod tests {
 		finish(&mut pad);
 		assert!(intents(&pad).contains(&CharacterIntent::Inventory));
 		assert!(!intents(&pad).contains(&CharacterIntent::ToggleMap));
+		Ok(())
+	}
+
+	#[test]
+	fn use_attack_state_releases_when_use_item_stops() -> anyhow::Result<()> {
+		let mut state = UseAttackState::default();
+		state = state.advance(true, 1.0, false, false);
+		assert!(state.use_item.held);
+		assert!(state.use_item.pressed);
+		assert!(!state.use_item.released);
+		state = state.advance(false, 0.0, false, false);
+		assert!(!state.use_item.held);
+		assert!(!state.use_item.pressed);
+		assert!(state.use_item.released);
+		Ok(())
+	}
+
+	#[test]
+	fn suppression_releases_a_held_trigger() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.0, 0.9);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		assert!(intents(&pad).iter().any(|intent| matches!(intent, CharacterIntent::UseItem(_))));
+
+		pad.begin_frame();
+		pad.max_triggers(0.0, 0.9);
+		pad.suppress_gameplay();
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		assert!(pad.just_released(maybraid_input::PadButton::TriggerFire));
+		assert!(!intents(&pad).iter().any(|intent| matches!(intent, CharacterIntent::UseItem(_))));
+		Ok(())
+	}
+
+	#[test]
+	fn resolve_folds_scripted_use_and_releases_on_the_next_empty_frame() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<UseAttackState>()
+			.add_message::<CharacterIntent>()
+			.add_systems(Update, resolve_use_attack_state);
+		app.world_mut().write_message(CharacterIntent::UseItem(0.8));
+		app.update();
+		{
+			let state = app.world().resource::<UseAttackState>();
+			assert!(state.use_item.pressed);
+			assert!(state.use_item.held);
+			assert_eq!(state.use_amount, 0.8);
+		}
+		app.update();
+		let state = app.world().resource::<UseAttackState>();
+		assert!(state.use_item.released);
+		assert!(!state.use_item.held);
 		Ok(())
 	}
 }

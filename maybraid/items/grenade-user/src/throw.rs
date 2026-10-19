@@ -12,7 +12,7 @@ use grenades::{
 	GrenadeSounds,
 };
 use maybraid_audio::{Audio, AudioClip, Mixer};
-use maybraid_character_controller::CharacterIntent;
+use maybraid_character_controller::UseAttackState;
 use player::{look_forward, PlayerLook};
 
 use crate::hold::HeldGrenade;
@@ -106,13 +106,13 @@ pub enum GrenadeUserSystems {
 pub(crate) struct ThrowJingleDue;
 
 pub fn apply_throw_intents(
-	mut intents: MessageReader<CharacterIntent>,
+	use_attack: Res<UseAttackState>,
 	bags: Query<&Inventory>,
 	carriers: Query<&InventoryUser>,
 	mut commands: Commands,
 	mut users: Query<(Entity, &mut GrenadeThrow, Has<WeaponSwap>), With<GrenadeUser>>,
 ) {
-	let use_held = intents.read().any(|intent| matches!(intent, CharacterIntent::UseItem(_)));
+	let use_held = use_attack.use_item.held;
 	for (entity, mut throw, swapping) in &mut users {
 		if !use_held {
 			throw.use_latched = false;
@@ -490,6 +490,9 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use character_items::{GrenadeRecharge, GrenadeSpec, GrenadeStats, InventoryItem};
+	use maybraid_character_controller::{
+		produce::resolve_use_attack_state, CharacterIntent, UseAttackState,
+	};
 
 	fn spawn_ready_user(world: &mut World) -> Entity {
 		let bag = world
@@ -538,7 +541,24 @@ mod tests {
 
 	fn apply_use_item(world: &mut World) -> anyhow::Result<()> {
 		world.init_resource::<Messages<CharacterIntent>>();
+		world.init_resource::<UseAttackState>();
 		world.write_message(CharacterIntent::UseItem(1.0));
+		world
+			.run_system_once(resolve_use_attack_state)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(apply_throw_intents)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		Ok(())
+	}
+
+	fn release_use_item(world: &mut World) -> anyhow::Result<()> {
+		world.init_resource::<Messages<CharacterIntent>>();
+		world.init_resource::<UseAttackState>();
+		let _ = world.resource_mut::<Messages<CharacterIntent>>().drain().count();
+		world
+			.run_system_once(resolve_use_attack_state)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		world
 			.run_system_once(apply_throw_intents)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -576,6 +596,9 @@ mod tests {
 		let user = spawn_ready_user(&mut world);
 		apply_use_item(&mut world)?;
 		world.write_message(CharacterIntent::UseItem(1.0));
+		world
+			.run_system_once(resolve_use_attack_state)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		world
 			.run_system_once(apply_throw_intents)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -775,10 +798,7 @@ mod tests {
 		let mut world = World::new();
 		let user = spawn_ready_user(&mut world);
 		apply_use_item(&mut world)?;
-		let _ = world.resource_mut::<Messages<CharacterIntent>>().drain().count();
-		world
-			.run_system_once(apply_throw_intents)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		release_use_item(&mut world)?;
 		let stats = GrenadeStats::standard();
 		advance_time(&mut world, stats.release_at);
 		run_advance(&mut world)?;
@@ -814,10 +834,7 @@ mod tests {
 		assert!(matches!(throw.phase, GrenadePhase::Cooking { .. }));
 		assert!((throw.fuse - (stats.fuse - cook)).abs() < 1e-3);
 		assert!(world.query::<&grenades::ThrownGrenade>().iter(&world).next().is_none());
-		let _ = world.resource_mut::<Messages<CharacterIntent>>().drain().count();
-		world
-			.run_system_once(apply_throw_intents)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		release_use_item(&mut world)?;
 		advance_time(&mut world, 1.0 / 60.0);
 		run_advance(&mut world)?;
 		let fuse = world

@@ -30,7 +30,8 @@ impl Plugin for GrenadeUserPlugin {
 		if !app.is_plugin_added::<grenades::GrenadesPlugin>() {
 			app.add_plugins(grenades::GrenadesPlugin);
 		}
-		app.add_systems(Update, throw::apply_throw_intents.in_set(PlayerSystems::Intent))
+		app.init_resource::<maybraid_character_controller::UseAttackState>()
+			.add_systems(Update, throw::apply_throw_intents.in_set(PlayerSystems::Intent))
 			.add_systems(Startup, cook_hud::spawn_cook_fuse_hud)
 			.add_systems(
 				Update,

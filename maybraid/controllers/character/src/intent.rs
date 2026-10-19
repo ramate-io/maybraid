@@ -2,6 +2,54 @@
 
 use bevy::prelude::*;
 
+/// Held / pressed / released for one digital channel.
+///
+/// [`Self::from_held`] is the only edge detector. Tools must not re-threshold analog.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DigitalIntent {
+	pub held: bool,
+	pub pressed: bool,
+	pub released: bool,
+}
+
+impl DigitalIntent {
+	pub fn from_held(previous_held: bool, held: bool) -> Self {
+		Self { held, pressed: held && !previous_held, released: !held && previous_held }
+	}
+}
+
+/// Canonical use / attack edges at the controller boundary.
+///
+/// [`crate::produce::resolve_use_attack_state`] folds this frame's
+/// [`CharacterIntent`] (pad, remaps, and scripted writes). Suppression is a
+/// release because produce emits no [`CharacterIntent::UseItem`] once the pad
+/// is gated. Tools read this resource instead of re-reading [`VirtualPad`] or
+/// raw mouse.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct UseAttackState {
+	pub use_item: DigitalIntent,
+	pub use_amount: f32,
+	pub attack_left: DigitalIntent,
+	pub attack_right: DigitalIntent,
+}
+
+impl UseAttackState {
+	pub fn advance(
+		self,
+		use_held: bool,
+		use_amount: f32,
+		attack_left: bool,
+		attack_right: bool,
+	) -> Self {
+		Self {
+			use_item: DigitalIntent::from_held(self.use_item.held, use_held),
+			use_amount: if use_held { use_amount } else { 0.0 },
+			attack_left: DigitalIntent::from_held(self.attack_left.held, attack_left),
+			attack_right: DigitalIntent::from_held(self.attack_right.held, attack_right),
+		}
+	}
+}
+
 /// One frame of character control. Analog variants may repeat while held.
 #[derive(Message, Clone, Copy, Debug, PartialEq)]
 pub enum CharacterIntent {
