@@ -46,7 +46,9 @@ pub use land::Land;
 pub use lateral_undulation::LateralUndulation;
 pub use leap::{Leap, LeapPhase, LeapTimeline, AIR_END, TAKEOFF_END};
 pub use mix::{burst_envelope, smoothstep, LinearBlend, Mix, Smooth, DEFAULT_BURST_EDGE};
-pub use power_dash::{PowerDash, BRAKE_END, COMPRESS_END, HOLD_END, PUSH_END};
+pub use power_dash::{
+	PowerDash, BRAKE_END, COMPRESS_END, HOLD_END as POWER_DASH_HOLD_END, PUSH_END,
+};
 pub use power_strafe::PowerStrafe;
 pub use prone::Prone;
 pub use quadruped_gallop::QuadrupedGallop;
