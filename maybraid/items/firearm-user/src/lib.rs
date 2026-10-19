@@ -112,6 +112,7 @@ impl Plugin for FirearmUserPlugin {
 		}
 		add_firearm_components_host::<kit::GeneratedFirearm>(app);
 		app.add_message::<maybraid_input::PadRumble>()
+			.init_resource::<maybraid_character_controller::UseAttackState>()
 			.add_systems(Update, fire::apply_fire_intents.in_set(PlayerSystems::Intent))
 			.add_systems(Update, swap::advance_weapon_swap.in_set(FirearmUserSystems::Swap))
 			.add_systems(

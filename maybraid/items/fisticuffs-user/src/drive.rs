@@ -6,22 +6,25 @@ use characters::{
 	AnimClip, AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, CharacterHeading, CharacterMembers,
 	CharacterRig, CharacterRigRole, CharacterRoot, JabParams,
 };
-use maybraid_character_controller::CharacterIntent;
+use maybraid_character_controller::UseAttackState;
 use player::{Player, PlayerLook, PlayerUse};
+
+use character_rigs::Side;
 
 use crate::aim::JabAim;
 use crate::attack::AttackSpec;
 use crate::{FisticuffsStrike, FisticuffsUser};
 
 pub(crate) fn apply_attack_intents(
-	mut intents: MessageReader<CharacterIntent>,
+	use_attack: Res<UseAttackState>,
 	mut users: Query<&mut FisticuffsUser, (With<Player>, Without<PlayerUse>)>,
 ) {
 	let mut requested = Vec::new();
-	for intent in intents.read() {
-		if let Some(spec) = AttackSpec::from_intent(*intent) {
-			requested.push(spec);
-		}
+	if use_attack.attack_left.pressed {
+		requested.push(AttackSpec::jab(Side::Left));
+	}
+	if use_attack.attack_right.pressed {
+		requested.push(AttackSpec::jab(Side::Right));
 	}
 	if requested.is_empty() {
 		return;
@@ -131,26 +134,33 @@ mod tests {
 	use super::*;
 	use crate::{AttackSpec, AttackTiming, FisticuffsStrike, JAB_STARTUP_END};
 	use character_rigs::Side;
-	use maybraid_character_controller::CharacterIntent;
+	use maybraid_character_controller::{
+		produce::resolve_use_attack_state, CharacterIntent, UseAttackState,
+	};
+
+	fn attack_app() -> App {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<UseAttackState>()
+			.add_message::<CharacterIntent>()
+			.add_systems(Update, (resolve_use_attack_state, apply_attack_intents).chain());
+		app
+	}
 
 	#[test]
 	fn intents_do_not_punch_without_the_driver() {
-		let mut app = App::new();
-		app.add_plugins(MinimalPlugins).add_message::<CharacterIntent>();
+		let mut app = attack_app();
 		let player = app.world_mut().spawn(Player).id();
 		app.world_mut().write_message(CharacterIntent::AttackLeft);
-		app.add_systems(Update, apply_attack_intents);
 		app.update();
 		assert!(app.world().get::<FisticuffsUser>(player).is_none());
 	}
 
 	#[test]
 	fn intents_queue_only_while_fisticuffs_is_equipped() {
-		let mut app = App::new();
-		app.add_plugins(MinimalPlugins).add_message::<CharacterIntent>();
+		let mut app = attack_app();
 		let player = app.world_mut().spawn((Player, FisticuffsUser::default())).id();
 		app.world_mut().write_message(CharacterIntent::AttackLeft);
-		app.add_systems(Update, apply_attack_intents);
 		app.update();
 		let user = app.world().get::<FisticuffsUser>(player).expect("driver");
 		assert!(user.state.is_busy());
@@ -159,15 +169,13 @@ mod tests {
 
 	#[test]
 	fn held_item_occupancy_blocks_jabs_even_with_the_driver() {
-		let mut app = App::new();
-		app.add_plugins(MinimalPlugins).add_message::<CharacterIntent>();
+		let mut app = attack_app();
 		let held = app.world_mut().spawn_empty().id();
 		let player = app
 			.world_mut()
 			.spawn((Player, PlayerUse { driver: held }, FisticuffsUser::default()))
 			.id();
 		app.world_mut().write_message(CharacterIntent::AttackRight);
-		app.add_systems(Update, apply_attack_intents);
 		app.update();
 		let user = app.world().get::<FisticuffsUser>(player).expect("driver");
 		assert!(!user.state.is_busy());

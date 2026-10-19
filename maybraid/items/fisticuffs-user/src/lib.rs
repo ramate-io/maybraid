@@ -44,6 +44,7 @@ pub struct FisticuffsUserPlugin;
 impl Plugin for FisticuffsUserPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_message::<FisticuffsStrike>()
+			.init_resource::<maybraid_character_controller::UseAttackState>()
 			.add_systems(
 				Update,
 				(drive::tick_attack_state, drive::apply_attack_intents, drive::latch_jab_aim)
