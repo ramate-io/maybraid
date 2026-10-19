@@ -8,6 +8,9 @@ use maybraid_character_controller::CharacterIntent;
 
 use crate::aim::JabAim;
 
+/// Rotating combo index passed to strike events and effort SFX.
+pub const COMBO_STEP_COUNT: usize = 3;
+
 /// Gameplay startup ends during the authored snap (`EXTEND_END = 0.42`).
 ///
 /// Active begins at ~0.13 s on a [`JAB_DURATION_SECS`] jab so the hit window
@@ -128,6 +131,7 @@ impl ActiveAttack {
 pub struct AttackState {
 	current: Option<ActiveAttack>,
 	queued: Option<AttackSpec>,
+	combo_step: u8,
 	just_started: bool,
 	just_entered_active: bool,
 }
@@ -135,7 +139,8 @@ pub struct AttackState {
 impl AttackState {
 	pub fn request(&mut self, spec: AttackSpec) {
 		match self.phase() {
-			None | Some(AttackPhase::Recovery) => self.start(spec),
+			None => self.start(spec, false),
+			Some(AttackPhase::Recovery) => self.start(spec, true),
 			Some(AttackPhase::Startup | AttackPhase::Active) => self.queued = Some(spec),
 		}
 	}
@@ -145,7 +150,7 @@ impl AttackState {
 		self.just_entered_active = false;
 		let Some(current) = self.current.as_mut() else {
 			if let Some(queued) = self.queued.take() {
-				self.start(queued);
+				self.start(queued, true);
 			}
 			return;
 		};
@@ -158,13 +163,17 @@ impl AttackState {
 		if next.is_none() {
 			self.current = None;
 			if let Some(queued) = self.queued.take() {
-				self.start(queued);
+				self.start(queued, true);
 			}
 		}
 	}
 
 	pub fn cancel(&mut self) {
 		*self = Self::default();
+	}
+
+	pub fn combo_step(&self) -> u8 {
+		self.combo_step
 	}
 
 	pub fn is_busy(&self) -> bool {
@@ -216,7 +225,12 @@ impl AttackState {
 		}
 	}
 
-	fn start(&mut self, spec: AttackSpec) {
+	fn start(&mut self, spec: AttackSpec, chain: bool) {
+		if chain {
+			self.combo_step = (self.combo_step + 1) % COMBO_STEP_COUNT as u8;
+		} else {
+			self.combo_step = 0;
+		}
 		self.current = Some(ActiveAttack { spec, elapsed: 0.0, aim: JabAim::default() });
 		self.queued = None;
 		self.just_started = true;

@@ -3,6 +3,7 @@
 mod aim;
 mod attack;
 mod drive;
+mod sound;
 
 use bevy::prelude::*;
 use characters::CharacterMotionSystems;
@@ -34,6 +35,8 @@ pub struct FisticuffsStrike {
 	pub attacker: Entity,
 	pub side: Side,
 	pub kind: AttackKind,
+	/// Rotates while the player chains jabs (`0 .. COMBO_STEP_COUNT-1`).
+	pub combo_step: u8,
 	pub progress: f32,
 	/// Quantized character-space aim (`+X` character left, `+Y` up, `+Z` forward).
 	pub target: Vec3,
@@ -43,8 +46,9 @@ pub struct FisticuffsUserPlugin;
 
 impl Plugin for FisticuffsUserPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_message::<FisticuffsStrike>()
-			.add_systems(
+		app.add_message::<FisticuffsStrike>();
+		sound::configure_strike_audio(app);
+		app.add_systems(
 				Update,
 				(drive::tick_attack_state, drive::apply_attack_intents, drive::latch_jab_aim)
 					.chain()

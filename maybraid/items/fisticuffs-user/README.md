@@ -69,7 +69,9 @@ slot is the combo-graph hook.
 
 `AttackState` owns time, side, and the latched [`JabAim`](src/aim.rs). During
 the active window the crate emits [`FisticuffsStrike`](src/lib.rs)
-(`attacker`, `side`, `kind`, clip `progress`, quantized `target`). Damage
+(`attacker`, `side`, `kind`, `combo_step`, clip `progress`, quantized `target`).
+[`maybraid-audio`](../../audio/) plays a short effort grunt on that event (combo
+variants, seeded pitch jitter, `Voices` bus). Damage
 resolution is a TODO: there is no fist sensor, and
 [`HitCapsule`](../../player/src/hit.rs) is receive-only. Do not drive `Hit`
 until a punch volume exists.
