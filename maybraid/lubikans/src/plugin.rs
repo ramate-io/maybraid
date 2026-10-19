@@ -1,16 +1,19 @@
 //! Gameplay plugin: register Self, attach ledgers, and honor owner lifetime.
 
 use bevy::ecs::lifecycle::HookContext;
+use bevy::ecs::system::SystemParam;
 use bevy::ecs::world::DeferredWorld;
 use bevy::prelude::*;
 use player::Player;
 
 use crate::activation::{
-	LubikanActivationDenied, LubikanActivationReport, LubikanActivationRequest,
-	LubikanActivationSession,
+	LubikanActivationDenied, LubikanActivationFinished, LubikanActivationOutcome,
+	LubikanActivationPhase, LubikanActivationReport, LubikanActivationRequest,
+	LubikanActivationSession, LubikanActivationSessionId,
 };
 use crate::catalog::{LubikanCatalog, LubikanSelfConfig};
 use crate::change::{LubikanChargeChanged, LubikanChargeReason};
+use crate::identity::LubikanAccountId;
 use crate::ledger::{LubikanAccountBinding, LubikanLedger, LubikanOwner};
 use crate::lifetime::{LubikanOwnerLifetime, LubikanOwnerLifetimeKind};
 use crate::{LubikanActivationRefused, LubikanInterfacePlugin, LubikanSystems};
@@ -46,6 +49,69 @@ impl LubikanSessionStore {
 	}
 }
 
+/// Live or cached ledger access for one activation session.
+///
+/// [`Self::close`] mutates the matching ledger at most once and returns the
+/// presentation pulse. Heal publishes that pulse; [`apply_activation_reports`]
+/// calls the same mutation so a synchronous Self close is not finished again.
+#[derive(SystemParam)]
+pub(crate) struct LubikanActivationAccess<'w, 's> {
+	ledgers: Query<'w, 's, &'static mut LubikanLedger>,
+	store: ResMut<'w, LubikanSessionStore>,
+}
+
+impl LubikanActivationAccess<'_, '_> {
+	pub fn session_phase(&self, id: LubikanActivationSessionId) -> Option<LubikanActivationPhase> {
+		self.ledgers
+			.iter()
+			.find_map(|ledger| ledger.activation_phase(id))
+			.or_else(|| self.store.cached_ledger().and_then(|ledger| ledger.activation_phase(id)))
+	}
+
+	pub fn account_phase(&self, account: LubikanAccountId) -> Option<LubikanActivationPhase> {
+		self.ledgers
+			.iter()
+			.find_map(|ledger| ledger.account(account).map(|owned| owned.activation().phase))
+			.or_else(|| {
+				self.store.cached_ledger().and_then(|ledger| {
+					ledger.account(account).map(|owned| owned.activation().phase)
+				})
+			})
+	}
+
+	/// Close the captured session. Mutates at most once; always returns the
+	/// [`LubikanActivationFinished`] pulse so the caller can publish it.
+	pub fn close(
+		&mut self,
+		session: LubikanActivationSession,
+		outcome: LubikanActivationOutcome,
+	) -> LubikanActivationFinished {
+		let _ = self.close_session(session.id, outcome);
+		LubikanActivationFinished::from_session(session, outcome)
+	}
+
+	/// Same mutation as [`Self::close`] when the consumer only has a report.
+	/// Already-closed sessions (including a same-frame Self idle reset) are
+	/// no-ops.
+	pub fn close_session(
+		&mut self,
+		id: LubikanActivationSessionId,
+		outcome: LubikanActivationOutcome,
+	) -> bool {
+		for mut ledger in self.ledgers.iter_mut() {
+			if ledger.account_id_for_session(id).is_some() {
+				return ledger.close_activation(id, outcome);
+			}
+		}
+		if let Some(cached) = self.store.cached_ledger_mut() {
+			if cached.account_id_for_session(id).is_some() {
+				return cached.close_activation(id, outcome);
+			}
+		}
+		false
+	}
+}
+
 /// Capture the authoritative ledger as the component leaves the world.
 pub(crate) fn capture_retiring_ledger(mut world: DeferredWorld, ctx: HookContext) {
 	let Some(ledger) = world.get::<LubikanLedger>(ctx.entity).cloned() else {
@@ -60,8 +126,10 @@ pub(crate) fn capture_retiring_ledger(mut world: DeferredWorld, ctx: HookContext
 ///
 /// This plugin is the only place that creates or restores a player's ledger,
 /// and the sole owner of [`LubikanActivationRequest`]s: it spends once, emits
-/// [`LubikanActivationSession`] or [`LubikanActivationRefused`], and applies
-/// [`LubikanActivationReport`]s to the captured account. Consumers order after
+/// [`LubikanActivationSession`] or [`LubikanActivationRefused`], and closes
+/// accepted sessions through one live-or-cached accessor. Heal mutates
+/// synchronously and returns the notification; report consumers use the same
+/// close so they do not finish an already-closed session. Consumers order after
 /// [`LubikanSystems::Owner`] (PreUpdate). Does not depend on Bikanwarda.
 pub struct LubikansPlugin;
 
@@ -253,14 +321,10 @@ fn handle_activation_requests(
 
 fn apply_activation_reports(
 	mut reports: MessageReader<LubikanActivationReport>,
-	mut ledgers: Query<&mut LubikanLedger>,
+	mut activations: LubikanActivationAccess,
 ) {
 	for report in reports.read() {
-		for mut ledger in &mut ledgers {
-			if ledger.finish_activation(report.id, report.outcome) {
-				break;
-			}
-		}
+		let _ = activations.close_session(report.id, report.outcome);
 	}
 }
 
@@ -586,16 +650,117 @@ mod tests {
 		}
 		app.world_mut().write_message(LubikanActivationReport::completed(session.id));
 		app.update();
-		let ledger = ledger(&app, owner)?;
+		{
+			let snapshot = ledger(&app, owner)?;
+			assert_eq!(
+				snapshot
+					.account(LubikanAccountId::SELF)
+					.map(|account| account.activation().phase),
+				Some(LubikanActivationPhase::Idle),
+				"Self complete idles in the same close as heal so a later activate can spend"
+			);
+			assert_eq!(
+				snapshot.account(other).map(|account| account.activation().phase),
+				Some(LubikanActivationPhase::Idle)
+			);
+			assert_eq!(
+				snapshot.account(other).map(|account| account.charge().current()),
+				Some(6.0)
+			);
+		}
+		app.world_mut().write_message(LubikanActivationReport::completed(session.id));
+		app.update();
 		assert_eq!(
-			ledger.account(LubikanAccountId::SELF).map(|account| account.activation().phase),
-			Some(LubikanActivationPhase::Completed)
-		);
-		assert_eq!(
-			ledger.account(other).map(|account| account.activation().phase),
+			ledger(&app, owner)?
+				.account(LubikanAccountId::SELF)
+				.map(|account| account.activation().phase),
 			Some(LubikanActivationPhase::Idle)
 		);
-		assert_eq!(ledger.account(other).map(|account| account.charge().current()), Some(6.0));
+		assert_eq!(
+			ledger(&app, owner)?
+				.account(LubikanAccountId::SELF)
+				.map(|account| account.charge().current()),
+			Some(0.0)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn non_self_report_completes_once_and_stays_completed() -> Result<()> {
+		let mut app = gameplay();
+		let owner = spawn_player(&mut app);
+		app.update();
+		let extra = LubikanDefinition::new(LubikanDefinitionId::from_raw(5), 40.0, 5.0);
+		app.world_mut().resource_mut::<LubikanCatalog>().register(extra);
+		let other = {
+			let mut ledger = app
+				.world_mut()
+				.get_mut::<LubikanLedger>(owner)
+				.ok_or_else(|| anyhow!("ledger"))?;
+			let other = ledger.ensure_owned(extra);
+			ledger.apply_to(other, extra.activation_cost);
+			other
+		};
+		app.world_mut()
+			.write_message(LubikanActivationRequest::for_account(owner, other));
+		app.update();
+		let session = app
+			.world_mut()
+			.resource_mut::<Messages<LubikanActivationSession>>()
+			.drain()
+			.next()
+			.ok_or_else(|| anyhow!("accepted session"))?;
+		assert_eq!(session.account, other);
+		app.world_mut().write_message(LubikanActivationReport::completed(session.id));
+		app.update();
+		assert_eq!(
+			ledger(&app, owner)?.account(other).map(|account| account.activation().phase),
+			Some(LubikanActivationPhase::Completed)
+		);
+		app.world_mut().write_message(LubikanActivationReport::completed(session.id));
+		app.update();
+		assert_eq!(
+			ledger(&app, owner)?.account(other).map(|account| account.activation().phase),
+			Some(LubikanActivationPhase::Completed),
+			"a repeated completed report must not reset a non-Self session"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn cancelled_report_idles_once() -> Result<()> {
+		let mut app = gameplay();
+		let owner = spawn_player(&mut app);
+		app.update();
+		let cost = app.world().resource::<LubikanCatalog>().self_definition().activation_cost;
+		{
+			let mut ledger = app
+				.world_mut()
+				.get_mut::<LubikanLedger>(owner)
+				.ok_or_else(|| anyhow!("ledger"))?;
+			ledger.apply_to_equipped(cost);
+		}
+		app.world_mut().write_message(LubikanActivationRequest::equipped(owner));
+		app.update();
+		let session = app
+			.world_mut()
+			.resource_mut::<Messages<LubikanActivationSession>>()
+			.drain()
+			.next()
+			.ok_or_else(|| anyhow!("accepted session"))?;
+		app.world_mut().write_message(LubikanActivationReport::cancelled(session.id));
+		app.update();
+		assert_eq!(
+			ledger(&app, owner)?.equipped().activation().phase,
+			LubikanActivationPhase::Idle
+		);
+		assert_eq!(ledger(&app, owner)?.equipped().charge().current(), 0.0);
+		app.world_mut().write_message(LubikanActivationReport::cancelled(session.id));
+		app.update();
+		assert_eq!(
+			ledger(&app, owner)?.equipped().activation().phase,
+			LubikanActivationPhase::Idle
+		);
 		Ok(())
 	}
 
