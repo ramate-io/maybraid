@@ -28,7 +28,8 @@ pub const SCALAR_DAMAGE: usize = 3;
 pub const SCALAR_LINK_COUNT: usize = 4;
 /// Scalar 5: UV-space crack frequency.
 pub const SCALAR_CRACK_FREQUENCY: usize = 5;
-/// Scalar 6: blend toward vertex-color localized damage. `0` = global only.
+/// Scalar 6: blend toward vertex-color G. Prefer [`crate::OwnedChainMaterial`]
+/// + the per-link uniform array; this scalar is the legacy mesh-color path.
 pub const SCALAR_LOCALIZED_BLEND: usize = 6;
 /// Scalar 7: glow / ember pulse rate.
 pub const SCALAR_PULSE_RATE: usize = 7;

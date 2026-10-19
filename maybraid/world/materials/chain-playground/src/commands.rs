@@ -7,8 +7,8 @@ use chain_shaders::MythicalChainState;
 use clap::Parser;
 use game_commands::command::{CommandScript, GameCommand};
 
-use crate::capture::CaptureSet;
-use crate::preview::{LightingMode, PreviewConfig};
+use crate::capture::{CaptureSet, VideoCapture};
+use crate::preview::{LightingMode, PendingChainHit, PreviewConfig, PreviewStyle};
 
 pub const PLAYGROUND_CLI_NAME: &str = "chain";
 pub type Script = CommandScript<PlaygroundCommand>;
@@ -59,6 +59,18 @@ pub enum PlaygroundCommand {
 	},
 	/// Write validation PNGs (pair day/night, near-breaking, released, mixed pair) and exit.
 	Capture {
+		dir: PathBuf,
+	},
+	/// Localized hit on the left (owned) chain. `link` is the vertex-color id.
+	Hit {
+		link: u32,
+	},
+	/// Window resolution stand-in for gameplay visual styles.
+	Style {
+		mode: String,
+	},
+	/// Gameplay-distance hit + pulse cycles; write stills and keep the window up for ffmpeg.
+	Video {
 		dir: PathBuf,
 	},
 }
@@ -161,6 +173,28 @@ impl PlaygroundCommand {
 				*console = format!("capture {}", dir.display());
 				commands.queue(move |world: &mut World| {
 					*world.resource_mut::<CaptureSet>() = CaptureSet::start(dir);
+				});
+			}
+			Self::Hit { link } => {
+				*console = format!("hit {link}");
+				commands.queue(move |world: &mut World| {
+					*world.resource_mut::<PendingChainHit>() =
+						PendingChainHit { link: Some(link), amount: 0.72 };
+				});
+			}
+			Self::Style { mode } => match PreviewStyle::from_label(&mode) {
+				Some(style) => {
+					*console = format!("style {}", style.label());
+					commands.queue(move |world: &mut World| {
+						world.resource_mut::<PreviewConfig>().style = style;
+					});
+				}
+				None => *console = format!("unknown style '{mode}'"),
+			},
+			Self::Video { dir } => {
+				*console = format!("video {}", dir.display());
+				commands.queue(move |world: &mut World| {
+					*world.resource_mut::<VideoCapture>() = VideoCapture::start(dir);
 				});
 			}
 		}

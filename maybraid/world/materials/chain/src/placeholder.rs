@@ -62,13 +62,18 @@ pub fn placeholder_chain_mesh(spec: PlaceholderChainSpec) -> Mesh {
 	let mut colors = Vec::new();
 	let mut indices = Vec::new();
 
+	// Inclusive rings so the U (around-tube) and V (around-ring / along-link)
+	// seams are duplicated. Wrapping indices on a shared vertex interpolates
+	// across the UV discontinuity and smears the crack atlas.
+	let ring_verts = ring + 1;
+	let tube_verts = tube + 1;
 	for link in 0..links {
 		let center_y = link as f32 * spacing;
 		let odd = link % 2 == 1;
 		let base = positions.len() as u32;
-		for i in 0..ring {
+		for i in 0..=ring {
 			let theta = TAU * (i as f32) / (ring as f32);
-			for j in 0..tube {
+			for j in 0..=tube {
 				let phi = TAU * (j as f32) / (tube as f32);
 				let (x, y, z) = torus_point(spec.ring_radius, spec.tube_radius, theta, phi, odd);
 				let mut p = Vec3::new(x, y + center_y, z);
@@ -87,17 +92,18 @@ pub fn placeholder_chain_mesh(spec: PlaceholderChainSpec) -> Mesh {
 		}
 		for i in 0..ring {
 			let i0 = i;
-			let i1 = (i + 1) % ring;
+			let i1 = i + 1;
 			for j in 0..tube {
 				let j0 = j;
-				let j1 = (j + 1) % tube;
-				let a = base + i0 * tube + j0;
-				let b = base + i1 * tube + j0;
-				let c = base + i1 * tube + j1;
-				let d = base + i0 * tube + j1;
+				let j1 = j + 1;
+				let a = base + i0 * tube_verts + j0;
+				let b = base + i1 * tube_verts + j0;
+				let c = base + i1 * tube_verts + j1;
+				let d = base + i0 * tube_verts + j1;
 				indices.extend_from_slice(&[a, b, c, a, c, d]);
 			}
 		}
+		let _ = ring_verts;
 	}
 
 	let mut mesh = Mesh::new(
@@ -188,6 +194,47 @@ mod tests {
 		assert!(seen.iter().all(|flag| *flag), "every link needs verts");
 		assert!(min_v < 0.05);
 		assert!(max_v > 0.85);
+		Ok(())
+	}
+
+	#[test]
+	fn uv_seams_duplicate_vertices() -> anyhow::Result<()> {
+		let spec = PlaceholderChainSpec::default().with_link_count(4);
+		let mesh = placeholder_chain_mesh(spec);
+		let uvs = uv_attr(&mesh)?;
+		let Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)) =
+			mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+		else {
+			return Err(anyhow::anyhow!("positions"));
+		};
+		let Some(bevy::mesh::Indices::U32(indices)) = mesh.indices() else {
+			return Err(anyhow::anyhow!("indices"));
+		};
+		for tri in indices.chunks(3) {
+			let u0 = uvs[tri[0] as usize][0];
+			let u1 = uvs[tri[1] as usize][0];
+			let u2 = uvs[tri[2] as usize][0];
+			let span = u0.max(u1).max(u2) - u0.min(u1).min(u2);
+			assert!(span < 0.55, "triangle interpolates across the U seam: {u0} {u1} {u2}");
+		}
+		let mut seam_pairs = 0u32;
+		for (i, uv) in uvs.iter().enumerate() {
+			if uv[0] > 0.02 {
+				continue;
+			}
+			for (j, other) in uvs.iter().enumerate() {
+				if j <= i || (other[0] - 1.0).abs() > 0.02 {
+					continue;
+				}
+				let a = positions[i];
+				let b = positions[j];
+				let dist = (a[0] - b[0]).hypot(a[1] - b[1]).hypot(a[2] - b[2]);
+				if dist < 1e-4 {
+					seam_pairs += 1;
+				}
+			}
+		}
+		assert!(seam_pairs > 0, "U=0 and U=1 should share positions");
 		Ok(())
 	}
 

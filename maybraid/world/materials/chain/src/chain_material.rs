@@ -20,6 +20,10 @@ use crate::params::{is_mythical_chain_recipe, mythical_chain_palette, RECIPE_MYT
 
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 
+/// Persistent per-link damage slots packed as eight `vec4`s.
+pub const MAX_CHAIN_LINKS: usize = 32;
+const LINK_DAMAGE_VEC4S: usize = MAX_CHAIN_LINKS / 4;
+
 /// Registers embedded **`chain_material.wgsl`** and [`MaterialPlugin`].
 pub struct ChainMaterialPlugin;
 
@@ -29,10 +33,24 @@ impl Plugin for ChainMaterialPlugin {
 		if !app.is_plugin_added::<MaterialPlugin<ChainMaterial>>() {
 			app.add_plugins(MaterialPlugin::<ChainMaterial>::default());
 		}
+		crate::runtime::register_runtime_systems(app);
+		crate::halo::register_halo_systems(app);
 	}
 }
 
-/// Packed GPU representation of one mythical-chain [`MaterialRef`].
+/// Pipeline key so the additive halo gets its own blend / depth-write state.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ChainMaterialKey {
+	pub halo: bool,
+}
+
+impl From<&ChainMaterial> for ChainMaterialKey {
+	fn from(material: &ChainMaterial) -> Self {
+		Self { halo: material.params.is_halo() }
+	}
+}
+
+/// Packed GPU representation of one mythical-chain [`MaterialRef`] plus runtime damage.
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct ChainMaterialUniform {
 	pub colors: [Vec4; MATERIAL_PALETTE_SLOTS],
@@ -40,6 +58,18 @@ pub struct ChainMaterialUniform {
 	pub noise: Vec4,
 	pub scalars: [Vec4; SCALAR_VEC4S],
 	pub rasters: [[Vec4; MATERIAL_RASTER_WIDTH]; MATERIAL_RASTER_CHANNELS],
+	/// `x` along-chain hit pos, `y` radius, `z` strength, `w` hit time (seconds).
+	pub impact: Vec4,
+	/// `x` halo pass (`0` opaque, `1` additive), `y` shell expansion metres.
+	pub halo: Vec4,
+	/// Packed per-link persistent damage. 8 × 4 = [`MAX_CHAIN_LINKS`].
+	pub link_damage: [Vec4; LINK_DAMAGE_VEC4S],
+}
+
+impl Default for ChainMaterialUniform {
+	fn default() -> Self {
+		Self::from_material_ref(&MaterialRef::named(RECIPE_MYTHICAL_CHAIN))
+	}
 }
 
 impl ChainMaterialUniform {
@@ -86,6 +116,9 @@ impl ChainMaterialUniform {
 			),
 			scalars,
 			rasters,
+			impact: Vec4::ZERO,
+			halo: Vec4::new(0.0, crate::halo::HALO_EXPANSION, 0.0, 0.0),
+			link_damage: [Vec4::ZERO; LINK_DAMAGE_VEC4S],
 		}
 	}
 
@@ -104,17 +137,97 @@ impl ChainMaterialUniform {
 	pub fn damage(&self) -> f32 {
 		self.scalars[0].w
 	}
+
+	pub fn link_count(&self) -> f32 {
+		self.scalars[1].x.max(1.0)
+	}
+
+	pub fn is_halo(&self) -> bool {
+		self.halo.x > 0.5
+	}
+
+	pub fn set_halo_pass(&mut self, halo: bool) {
+		self.halo.x = if halo { 1.0 } else { 0.0 };
+	}
+
+	pub fn set_halo_expansion(&mut self, metres: f32) {
+		self.halo.y = metres.max(0.0);
+	}
+
+	pub fn set_impact(&mut self, pos: f32, radius: f32, strength: f32, time: f32) {
+		self.impact = Vec4::new(pos.clamp(0.0, 1.0), radius.max(1e-4), strength.max(0.0), time);
+	}
+
+	pub fn link_damage(&self, link_id: u32) -> f32 {
+		if (link_id as usize) >= MAX_CHAIN_LINKS {
+			return 0.0;
+		}
+		let packed = self.link_damage[(link_id as usize) / 4];
+		match link_id % 4 {
+			0 => packed.x,
+			1 => packed.y,
+			2 => packed.z,
+			_ => packed.w,
+		}
+	}
+
+	pub fn set_link_damage(&mut self, link_id: u32, value: f32) {
+		if (link_id as usize) >= MAX_CHAIN_LINKS {
+			return;
+		}
+		let value = value.clamp(0.0, 1.0);
+		let slot = &mut self.link_damage[(link_id as usize) / 4];
+		match link_id % 4 {
+			0 => slot.x = value,
+			1 => slot.y = value,
+			2 => slot.z = value,
+			_ => slot.w = value,
+		}
+	}
+
+	pub fn set_link_damage_array(&mut self, values: &[f32; MAX_CHAIN_LINKS]) {
+		for (i, value) in values.iter().enumerate() {
+			self.set_link_damage(i as u32, *value);
+		}
+	}
+
+	pub fn copy_link_damage_array(&self, out: &mut [f32; MAX_CHAIN_LINKS]) {
+		for (i, slot) in out.iter_mut().enumerate() {
+			*slot = self.link_damage(i as u32);
+		}
+	}
+
+	/// Copy palette / noise / authored scalars. Runtime damage and halo pass stay.
+	pub fn apply_authored(&mut self, authored: &Self) {
+		self.colors = authored.colors;
+		self.noise = authored.noise;
+		self.scalars = authored.scalars;
+		self.rasters = authored.rasters;
+		self.halo.y = authored.halo.y;
+	}
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+#[bind_group_data(ChainMaterialKey)]
 pub struct ChainMaterial {
 	#[uniform(0)]
 	pub params: ChainMaterialUniform,
+	#[texture(1)]
+	#[sampler(2)]
+	pub cracks: Handle<Image>,
 }
 
 impl ChainMaterial {
 	pub fn from_material_ref(material_ref: &MaterialRef) -> Self {
-		Self { params: ChainMaterialUniform::from_material_ref(material_ref) }
+		Self {
+			params: ChainMaterialUniform::from_material_ref(material_ref),
+			cracks: Handle::default(),
+		}
+	}
+
+	pub fn with_cracks(mut self, cracks: Handle<Image>) -> Self {
+		self.cracks = cracks;
+		self
 	}
 }
 
@@ -134,8 +247,12 @@ impl Material for ChainMaterial {
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
-		// Dissolve uses `discard` so holes stay UV-locked while the mesh bends.
-		AlphaMode::Opaque
+		if self.params.is_halo() {
+			AlphaMode::Add
+		} else {
+			// Dissolve uses `discard` so holes stay UV-locked while the mesh bends.
+			AlphaMode::Opaque
+		}
 	}
 
 	fn reads_view_transmission_texture(&self) -> bool {
@@ -150,9 +267,14 @@ impl Material for ChainMaterial {
 		_pipeline: &MaterialPipeline,
 		descriptor: &mut RenderPipelineDescriptor,
 		_layout: &MeshVertexBufferLayoutRef,
-		_key: MaterialPipelineKey<Self>,
+		key: MaterialPipelineKey<Self>,
 	) -> Result<(), SpecializedMeshPipelineError> {
 		descriptor.primitive.cull_mode = None;
+		if key.bind_group_data.halo {
+			if let Some(depth) = descriptor.depth_stencil.as_mut() {
+				depth.depth_write_enabled = Some(false);
+			}
+		}
 		Ok(())
 	}
 }
@@ -179,6 +301,7 @@ mod tests {
 		mythical_chain_ref, mythical_chain_ref_for, mythical_chain_ref_with, MythicalChainScalars,
 		MythicalChainState,
 	};
+	use crate::runtime::{apply_chain_hit, ChainRuntimeDamage};
 
 	#[test]
 	fn packs_authored_intact_recipe() -> anyhow::Result<()> {
@@ -220,6 +343,34 @@ mod tests {
 			29,
 		);
 		assert_ne!(MaterialRefKey::from(&left), MaterialRefKey::from(&same_seed_other_chain));
+		Ok(())
+	}
+
+	#[test]
+	fn per_link_damage_array_updates_in_place() -> anyhow::Result<()> {
+		let mut material = ChainMaterial::from_material_ref(&mythical_chain_ref());
+		assert_eq!(material.params.link_damage(6), 0.0);
+		apply_chain_hit(&mut material, 6, 0.4, 14.0, 1.25);
+		apply_chain_hit(&mut material, 6, 0.3, 14.0, 2.0);
+		assert!((material.params.link_damage(6) - 0.7).abs() < 1e-5);
+		assert_eq!(material.params.link_damage(5), 0.0);
+		assert!((material.params.impact.w - 2.0).abs() < 1e-5);
+		assert!(material.params.impact.z > 0.5);
+		let runtime = ChainRuntimeDamage::from_uniform(&material.params);
+		assert!((runtime.link(6) - 0.7).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn apply_authored_keeps_runtime_damage() -> anyhow::Result<()> {
+		let mut owned = ChainMaterial::from_material_ref(&mythical_chain_ref());
+		apply_chain_hit(&mut owned, 3, 0.8, 14.0, 4.0);
+		let authored =
+			ChainMaterial::from_material_ref(&mythical_chain_ref_for(MythicalChainState::Damaged));
+		owned.params.apply_authored(&authored.params);
+		assert!((owned.params.intact() - MythicalChainState::Damaged.intact()).abs() < 1e-5);
+		assert!((owned.params.link_damage(3) - 0.8).abs() < 1e-5);
+		assert!(!owned.params.is_halo());
 		Ok(())
 	}
 }

@@ -3,8 +3,10 @@
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use chain_shaders::{
-	mythical_chain_ref_for, mythical_chain_ref_with, placeholder_chain_mesh, MythicalChainScalars,
-	MythicalChainState, PlaceholderChainSpec, DEFAULT_GLOW_INTENSITY, DEFAULT_SEED,
+	apply_chain_hit, mythical_chain_ref_for, mythical_chain_ref_with, placeholder_chain_mesh,
+	ChainHalo, ChainMaterial, MythicalChainScalars, MythicalChainState, OwnedChainHandle,
+	OwnedChainMaterial, PlaceholderChainSpec, DEFAULT_GLOW_INTENSITY, DEFAULT_LINK_COUNT,
+	DEFAULT_SEED,
 };
 use material_ref::{MaterialRef, MaterialRefRoot};
 
@@ -47,6 +49,42 @@ pub struct PreviewConfig {
 	pub sweep: bool,
 	pub glow_intensity: f32,
 	pub seed: i32,
+	pub style: PreviewStyle,
+}
+
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PreviewStyle {
+	#[default]
+	Sharp,
+	Retro,
+	Antediluvian,
+}
+
+impl PreviewStyle {
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::Sharp => "sharp",
+			Self::Retro => "retro",
+			Self::Antediluvian => "antediluvian",
+		}
+	}
+
+	pub fn from_label(label: &str) -> Option<Self> {
+		match label {
+			"sharp" => Some(Self::Sharp),
+			"retro" => Some(Self::Retro),
+			"antediluvian" => Some(Self::Antediluvian),
+			_ => None,
+		}
+	}
+
+	pub fn resolution(self) -> (f32, f32) {
+		match self {
+			Self::Sharp => (1280.0, 720.0),
+			Self::Retro => (540.0, 304.0),
+			Self::Antediluvian => (400.0, 225.0),
+		}
+	}
 }
 
 impl Default for PreviewConfig {
@@ -62,6 +100,7 @@ impl Default for PreviewConfig {
 			sweep: false,
 			glow_intensity: DEFAULT_GLOW_INTENSITY,
 			seed: DEFAULT_SEED,
+			style: PreviewStyle::Sharp,
 		}
 	}
 }
@@ -69,10 +108,11 @@ impl Default for PreviewConfig {
 impl PreviewConfig {
 	pub fn status_label(&self) -> String {
 		format!(
-			"preview: left {} · right {} · {} · deform {} · sweep {}",
+			"preview: left {} · right {} · {} · {} · deform {} · sweep {}",
 			recipe_label(&self.left),
 			recipe_label(&self.right),
 			self.lighting.label(),
+			self.style.label(),
 			if self.deform { "on" } else { "off" },
 			if self.sweep { "on" } else { "off" },
 		)
@@ -169,6 +209,7 @@ pub fn sync_preview(
 			Vec3::new(-0.55, 0.12, 0.0),
 			"left",
 			true,
+			true,
 		);
 		spawn_chain(
 			&mut commands,
@@ -176,6 +217,7 @@ pub fn sync_preview(
 			config.right.clone(),
 			Vec3::new(0.55, 0.12, 0.0),
 			"right",
+			false,
 			false,
 		);
 		*last_deform = Some(config.deform);
@@ -208,8 +250,9 @@ fn spawn_chain(
 	translation: Vec3,
 	name: &str,
 	left: bool,
+	owned: bool,
 ) {
-	commands.spawn((
+	let mut entity = commands.spawn((
 		PreviewRoot,
 		PreviewSide(left),
 		Name::new(format!("chain-{name}")),
@@ -218,5 +261,43 @@ fn spawn_chain(
 		MaterialRefRoot(material),
 		Mesh3d(mesh),
 		NotShadowCaster,
+		ChainHalo,
 	));
+	if owned {
+		entity.insert(OwnedChainMaterial);
+	}
+}
+
+#[derive(Resource, Default)]
+pub struct PendingChainHit {
+	pub link: Option<u32>,
+	pub amount: f32,
+}
+
+pub fn apply_pending_hit(
+	time: Res<Time>,
+	mut pending: ResMut<PendingChainHit>,
+	mut materials: ResMut<Assets<ChainMaterial>>,
+	owned: Query<&OwnedChainHandle, With<PreviewRoot>>,
+) {
+	let Some(link) = pending.link.take() else {
+		return;
+	};
+	let amount = if pending.amount > 1e-4 { pending.amount } else { 0.72 };
+	for handle in &owned {
+		if let Some(mut material) = materials.get_mut(&handle.0) {
+			apply_chain_hit(&mut material, link, amount, DEFAULT_LINK_COUNT, time.elapsed_secs());
+		}
+	}
+}
+
+pub fn sync_window_style(config: Res<PreviewConfig>, mut windows: Query<&mut Window>) {
+	if !config.is_changed() && !config.is_added() {
+		return;
+	}
+	let Ok(mut window) = windows.single_mut() else {
+		return;
+	};
+	let (w, h) = config.style.resolution();
+	window.resolution.set(w, h);
 }

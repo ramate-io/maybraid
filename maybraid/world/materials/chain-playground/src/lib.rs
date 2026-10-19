@@ -10,14 +10,14 @@ mod ui;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
-pub use preview::{LightingMode, PreviewConfig};
+pub use preview::{LightingMode, PreviewConfig, PreviewStyle};
 
 use bevy::prelude::*;
-use capture::{tick_capture, CaptureSet};
+use capture::{tick_capture, tick_video, CaptureSet, VideoCapture};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
 use lighting::{setup_lighting, sync_lighting};
-use preview::{sync_preview, tick_sweep};
+use preview::{apply_pending_hit, sync_preview, sync_window_style, tick_sweep, PendingChainHit};
 use world_materials::WorldMaterialsPlugin;
 
 pub struct ChainPlaygroundPlugin;
@@ -26,7 +26,9 @@ impl Plugin for ChainPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PreviewConfig>()
 			.init_resource::<LightingMode>()
+			.init_resource::<PendingChainHit>()
 			.init_resource::<CaptureSet>()
+			.init_resource::<VideoCapture>()
 			.add_plugins(WorldMaterialsPlugin)
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()));
 		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
@@ -36,9 +38,12 @@ impl Plugin for ChainPlaygroundPlugin {
 					camera::release_modifiers_on_focus_change.before(camera::camera_controller),
 					camera::camera_controller,
 					sync_lighting,
+					sync_window_style,
+					apply_pending_hit,
 					tick_sweep,
 					sync_preview.after(capture_command_line_input::<PlaygroundCommand>),
 					tick_capture.after(sync_preview),
+					tick_video.after(sync_preview),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
@@ -94,6 +99,20 @@ mod tests {
 		assert!(
 			matches!(command, PlaygroundCommand::Capture { dir } if dir.ends_with("chain-previews"))
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn parses_hit_style_and_video() -> anyhow::Result<()> {
+		let hit = <PlaygroundCommand as GameCommand>::parse_line("hit 6")
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+		assert!(matches!(hit, PlaygroundCommand::Hit { link: 6 }));
+		let style = <PlaygroundCommand as GameCommand>::parse_line("style retro")
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+		assert!(matches!(style, PlaygroundCommand::Style { mode } if mode == "retro"));
+		let video = <PlaygroundCommand as GameCommand>::parse_line("video /tmp/chain-video")
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+		assert!(matches!(video, PlaygroundCommand::Video { dir } if dir.ends_with("chain-video")));
 		Ok(())
 	}
 }
