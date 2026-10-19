@@ -1,8 +1,38 @@
-use character_rigs::authoring::{ArmatureOffset, PoseBuffer};
+use character_rigs::authoring::{ArmatureOffset, PoseBuffer, PoseScratch};
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
 use crate::animations::{Mix, Smooth};
 use crate::{Animation, Effects};
+
+/// Indexed V0 pose + scratch slots used by clip blend and transition.
+///
+/// Crate-private adapter so humanoid and quadruped share one blend path. Not an
+/// animation-graph trait and not part of the public API.
+pub(crate) trait IndexedPose {
+	fn pose(&self) -> &PoseBuffer;
+	fn pose_and_scratch_mut(&mut self) -> (&mut PoseBuffer, &mut PoseScratch);
+}
+
+impl IndexedPose for HumanoidV0Rig {
+	fn pose(&self) -> &PoseBuffer {
+		&self.pose
+	}
+
+	fn pose_and_scratch_mut(&mut self) -> (&mut PoseBuffer, &mut PoseScratch) {
+		(&mut self.pose, &mut self.scratch)
+	}
+}
+
+impl IndexedPose for QuadrupedV0Rig {
+	fn pose(&self) -> &PoseBuffer {
+		&self.pose
+	}
+
+	fn pose_and_scratch_mut(&mut self) -> (&mut PoseBuffer, &mut PoseScratch) {
+		(&mut self.pose, &mut self.scratch)
+	}
+}
 
 impl<A, B> Animation<HumanoidV0Rig> for Mix<A, B>
 where
@@ -122,30 +152,32 @@ where
 }
 
 /// Sample two clips into the rig scratch and blend transforms. Weight 0 keeps `from`.
-pub(crate) fn blend_clips<A, B>(
-	rig: &mut HumanoidV0Rig,
+pub(crate) fn blend_clips<R, A, B>(
+	rig: &mut R,
 	from: &A,
 	from_progress: f32,
 	to: &B,
 	to_progress: f32,
 	weight: f32,
 ) where
-	A: Animation<HumanoidV0Rig>,
-	B: Animation<HumanoidV0Rig>,
+	R: IndexedPose,
+	A: Animation<R>,
+	B: Animation<R>,
 {
 	blend_poses(rig, from, to, from_progress, to_progress, weight);
 }
 
-fn blend_poses<A, B>(
-	rig: &mut HumanoidV0Rig,
+fn blend_poses<R, A, B>(
+	rig: &mut R,
 	from: &A,
 	to: &B,
 	from_progress: f32,
 	to_progress: f32,
 	weight: f32,
 ) where
-	A: Animation<HumanoidV0Rig>,
-	B: Animation<HumanoidV0Rig>,
+	R: IndexedPose,
+	A: Animation<R>,
+	B: Animation<R>,
 {
 	let weight = weight.clamp(0.0, 1.0);
 	if weight <= 0.0 {
@@ -157,14 +189,24 @@ fn blend_poses<A, B>(
 		return;
 	}
 
-	let depth = rig.scratch.depth;
-	rig.scratch.depth = depth + 1;
+	let depth = {
+		let (_, scratch) = rig.pose_and_scratch_mut();
+		let depth = scratch.depth;
+		scratch.depth = depth + 1;
+		depth
+	};
 	from.apply_for(rig, from_progress);
-	rig.scratch.capture_from(depth, &rig.pose);
+	{
+		let (pose, scratch) = rig.pose_and_scratch_mut();
+		scratch.capture_from(depth, pose);
+	}
 	to.apply_for(rig, to_progress);
-	rig.scratch.capture_to(depth, &rig.pose);
-	rig.scratch.blend_saved(depth, weight, &mut rig.pose);
-	rig.scratch.depth = depth;
+	{
+		let (pose, scratch) = rig.pose_and_scratch_mut();
+		scratch.capture_to(depth, pose);
+		scratch.blend_saved(depth, weight, pose);
+		scratch.depth = depth;
+	}
 }
 
 pub(crate) fn mix_effects(from: Effects, to: Effects, weight: f32) -> Effects {
@@ -173,14 +215,13 @@ pub(crate) fn mix_effects(from: Effects, to: Effects, weight: f32) -> Effects {
 
 /// Samples an animation into a pose buffer. Copies into `dest` without growing it
 /// when the length already matches.
-pub(crate) fn capture_into<A: Animation<HumanoidV0Rig>>(
-	anim: &A,
-	rig: &mut HumanoidV0Rig,
-	progress: f32,
-	dest: &mut PoseBuffer,
-) {
+pub(crate) fn capture_into<R, A>(anim: &A, rig: &mut R, progress: f32, dest: &mut PoseBuffer)
+where
+	R: IndexedPose,
+	A: Animation<R>,
+{
 	anim.apply_for(rig, progress);
-	dest.copy_from(&rig.pose);
+	dest.copy_from(rig.pose());
 }
 
 #[cfg(test)]
