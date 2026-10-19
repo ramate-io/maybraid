@@ -78,3 +78,14 @@ background. A failed save leaves the in-memory image usable.
 
 Maybraid discovery (first encounter of an item → shaded + silhouette) lives in
 the application, not this crate.
+
+## Preview sequences
+
+Playgrounds that take several stills share [`CaptureSequence`](src/sequence.rs).
+The domain applies a shot and reports readiness; the runner owns settle,
+capture-once, and advance.
+
+- **Isolated subjects** (icons, posed kits) keep using [`ScreenCapturePlugin`].
+- **Complete scenes** (HUD, menus, encounters) use
+  [`SceneCapture`](src/scene.rs) for window screenshots or `import -window`.
+  Do not force those captures through the isolated-icon camera.

@@ -20,6 +20,7 @@ combat-hud = { workspace = true }
 damage = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
 player = { workspace = true }
+screen-capture = { workspace = true }
 
 [lints]
 workspace = true

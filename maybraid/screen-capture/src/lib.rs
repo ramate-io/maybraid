@@ -3,6 +3,10 @@
 //! Parallel to [`scene_ref`] and [`material_ref`]: a deferred identity
 //! ([`CaptureSubject`] / [`CaptureRequest`]), a plugin that fulfills work
 //! ([`ScreenCapturePlugin`]), and a disk-backed handle cache.
+//!
+//! Feature previews share [`sequence::CaptureSequence`] for shot lists.
+//! Isolated subjects still use this plugin; complete scenes use
+//! [`scene::SceneCapture`] instead of the icon readback path.
 
 mod cache;
 mod crop;
@@ -16,6 +20,8 @@ mod png;
 mod pose;
 mod queue;
 mod request;
+mod scene;
+mod sequence;
 mod session;
 mod subject;
 mod view;
@@ -42,7 +48,9 @@ pub use subject::{CaptureMesh, CaptureMeshKind, CaptureScene, CaptureSubject, Me
 pub use view::{CaptureFraming, CaptureProjection, CaptureView};
 
 pub use png::{bgra_to_rgba, encode_rgba_png, write_all_atomic};
+pub use scene::{window_capture_in_flight, SceneCapture};
 pub use scene_ref::{SceneRef, SceneRefPlugin};
+pub use sequence::{CaptureSequence, CaptureSequenceTick, CaptureShot};
 
 #[cfg(test)]
 mod tests {

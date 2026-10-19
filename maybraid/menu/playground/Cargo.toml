@@ -34,6 +34,7 @@ maybraid-menu-controller = { workspace = true }
 menu-components = { workspace = true }
 menu-screens = { workspace = true }
 player = { workspace = true }
+screen-capture = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

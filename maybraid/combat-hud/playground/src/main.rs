@@ -18,6 +18,7 @@ use lubikans::{
 	LubikanHealingEnabled, LubikanInterfacePlugin, LubikanLedger, LubikanOwner, LubikanSelfHeal,
 };
 use player::Player;
+use screen_capture::{CaptureSequence, CaptureSequenceTick, CaptureShot, SceneCapture};
 
 const CAPTURE_WIDTH: u32 = 800;
 const CAPTURE_HEIGHT: u32 = 450;
@@ -55,13 +56,16 @@ struct StateStep {
 	dwell_secs: f32,
 }
 
+impl CaptureShot for StateStep {
+	fn settle_secs(&self) -> f32 {
+		self.dwell_secs
+	}
+}
+
 #[derive(Resource)]
-struct StateCapturePlan {
-	steps: Vec<StateStep>,
-	index: usize,
-	dwell: f32,
-	last_applied: Option<usize>,
-	captured_this_step: bool,
+struct HudCapture {
+	sequence: CaptureSequence<StateStep>,
+	scene: SceneCapture,
 	ledger_snapshot: Option<f32>,
 }
 
@@ -79,55 +83,12 @@ fn artifacts_dir() -> PathBuf {
 		.unwrap_or_else(|_| PathBuf::from("/opt/cursor/artifacts"))
 }
 
-fn capture_png_path(label: &str) -> PathBuf {
+fn capture_file_name(label: &str) -> String {
 	if label.starts_with("cycle-") {
-		artifacts_dir().join(format!("{label}.png"))
+		format!("{label}.png")
 	} else {
-		artifacts_dir().join(format!("lubikan-hud-state-{label}.png"))
+		format!("lubikan-hud-state-{label}.png")
 	}
-}
-
-fn import_primary_window(label: &str) -> Result<(), String> {
-	let out = capture_png_path(label);
-	let wid_bytes = std::process::Command::new("xdotool")
-		.args(["search", "--name", WINDOW_TITLE])
-		.output()
-		.map_err(|e| e.to_string())?;
-	if !wid_bytes.status.success() {
-		return Err(format!(
-			"xdotool search failed: {}",
-			String::from_utf8_lossy(&wid_bytes.stderr)
-		));
-	}
-	let wid_text = String::from_utf8_lossy(&wid_bytes.stdout);
-	let wid = wid_text.lines().next().unwrap_or("").trim();
-	if wid.is_empty() {
-		return Err("no window id".into());
-	}
-	let geom = std::process::Command::new("xwininfo")
-		.args(["-id", wid])
-		.output()
-		.map_err(|e| e.to_string())?;
-	let geom_text = String::from_utf8_lossy(&geom.stdout);
-	let geometry = geom_text
-		.lines()
-		.find_map(|line| line.trim().strip_prefix("-geometry").map(|rest| rest.trim()))
-		.ok_or("missing -geometry")?;
-	let (w, h) = geometry
-		.split_once('x')
-		.and_then(|(w, rest)| rest.split_once('+').map(|(h, _)| (w, h)))
-		.ok_or("bad geometry")?;
-	let crop = format!("{w}x{h}+0+0");
-	let out_path = out.to_string_lossy();
-	let status = std::process::Command::new("import")
-		.args(["-window", wid, "-crop", &crop, out_path.as_ref()])
-		.status()
-		.map_err(|e| e.to_string())?;
-	if !status.success() {
-		return Err("import failed".into());
-	}
-	info!("captured {} ({crop})", out.display());
-	Ok(())
 }
 
 fn assets_root() -> PathBuf {
@@ -279,13 +240,15 @@ fn main() {
 		app.add_systems(Startup, spawn_cycle_standin_plates);
 	}
 	if capture_states || capture_cycle {
-		let _ = std::fs::create_dir_all(artifacts_dir());
-		app.insert_resource(StateCapturePlan {
-			steps: if capture_cycle { cycle_capture_steps() } else { capture_steps() },
-			index: 0,
-			dwell: 0.0,
-			last_applied: None,
-			captured_this_step: false,
+		let scene = SceneCapture::new(artifacts_dir());
+		let _ = scene.prepare();
+		app.insert_resource(HudCapture {
+			sequence: CaptureSequence::new(if capture_cycle {
+				cycle_capture_steps()
+			} else {
+				capture_steps()
+			}),
+			scene,
 			ledger_snapshot: None,
 		});
 	}
@@ -310,7 +273,7 @@ fn freeze_self_heal_capture(
 #[allow(clippy::too_many_arguments)]
 fn apply_capture_state(
 	cli: Res<Cli>,
-	plan: Option<ResMut<StateCapturePlan>>,
+	plan: Option<ResMut<HudCapture>>,
 	owner: Res<PreviewOwner>,
 	catalog: Res<LubikanCatalog>,
 	mut hud: ResMut<CombatHudVisible>,
@@ -325,15 +288,11 @@ fn apply_capture_state(
 		return;
 	}
 	let Some(mut plan) = plan else { return };
-	let index = plan.index;
-	if index >= plan.steps.len() {
+	if !plan.sequence.needs_apply() {
 		return;
 	}
-	if plan.last_applied == Some(index) {
-		return;
-	}
-	plan.last_applied = Some(index);
-	let step = plan.steps[index];
+	let Some(step) = plan.sequence.current().copied() else { return };
+	plan.sequence.mark_applied();
 	priming.armed = false;
 	healing_enabled.0 = true;
 	*category = match step.kind {
@@ -399,7 +358,7 @@ fn apply_capture_state(
 fn drive_capture_states(
 	time: Res<Time>,
 	cli: Res<Cli>,
-	plan: Option<ResMut<StateCapturePlan>>,
+	plan: Option<ResMut<HudCapture>>,
 	priming: Res<CaptureSelfHealPriming>,
 	heal: Res<LubikanSelfHeal>,
 	owner: Res<PreviewOwner>,
@@ -410,43 +369,52 @@ fn drive_capture_states(
 		return;
 	}
 	let Some(mut plan) = plan else { return };
-
-	if plan.index >= plan.steps.len() {
-		exit.write(AppExit::Success);
-		return;
-	}
-
-	plan.dwell += time.delta_secs();
-	let step = plan.steps[plan.index];
-
-	if plan.captured_this_step {
-		if plan.dwell < 0.08 {
-			return;
+	let step = plan.sequence.current().copied();
+	let ready = match step {
+		Some(step) if step.kind == StateKind::SelfHealing => !priming.armed && heal.active,
+		_ => true,
+	};
+	match plan.sequence.advance(time.delta_secs(), ready) {
+		CaptureSequenceTick::Wait => {}
+		CaptureSequenceTick::Finished => {
+			exit.write(AppExit::Success);
 		}
-		plan.index += 1;
-		plan.dwell = 0.0;
-		plan.captured_this_step = false;
-		plan.last_applied = None;
-		return;
+		CaptureSequenceTick::Capture => {
+			let Some(step) = step else { return };
+			let file_name = capture_file_name(step.label);
+			match plan.scene.import_named_window(WINDOW_TITLE, &file_name) {
+				Ok(path) => {
+					info!("captured {}", path.display());
+					if step.kind == StateKind::PausedHidden {
+						let ledger_charge = ledgers
+							.get(owner.0)
+							.map(|ledger| ledger.equipped().charge().current())
+							.unwrap_or(-1.0);
+						let snapshot = plan.ledger_snapshot.unwrap_or(0.0);
+						info!(
+							"paused snapshot ledger_charge={:.0} expected={:.0}",
+							ledger_charge, snapshot
+						);
+					}
+				}
+				Err(err) => warn!("capture failed for {}: {}", step.label, err),
+			}
+			plan.sequence.mark_captured();
+		}
 	}
+}
 
-	if plan.dwell < step.dwell_secs {
-		return;
-	}
-	if step.kind == StateKind::SelfHealing && (priming.armed || !heal.active) {
-		return;
-	}
+#[cfg(test)]
+mod tests {
+	use super::capture_file_name;
 
-	if let Err(err) = import_primary_window(step.label) {
-		warn!("capture failed for {}: {}", step.label, err);
-	} else if step.kind == StateKind::PausedHidden {
-		let ledger_charge = ledgers
-			.get(owner.0)
-			.map(|ledger| ledger.equipped().charge().current())
-			.unwrap_or(-1.0);
-		let snapshot = plan.ledger_snapshot.unwrap_or(0.0);
-		info!("paused snapshot ledger_charge={:.0} expected={:.0}", ledger_charge, snapshot);
+	#[test]
+	fn capture_file_names_stay_stable() -> Result<(), String> {
+		assert_eq!(
+			capture_file_name("01-partial-above-health"),
+			"lubikan-hud-state-01-partial-above-health.png"
+		);
+		assert_eq!(capture_file_name("cycle-01-weapons"), "cycle-01-weapons.png");
+		Ok(())
 	}
-	plan.captured_this_step = true;
-	plan.dwell = 0.0;
 }
