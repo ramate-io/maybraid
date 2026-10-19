@@ -112,6 +112,14 @@ impl Jab {
 		self.side.opposite()
 	}
 
+	/// Authored boxing guard: rest and recover of the jab clip (`progress = 0`).
+	///
+	/// Both arms sit in [`GUARD_ELBOW`] cover. Fisticuffs icons must sample this
+	/// still rather than folding bind-pose vertices.
+	pub fn guard_progress() -> f32 {
+		0.0
+	}
+
 	/// Reach scale from [`Self::target`].z vs [`DEFAULT_JAB_TARGET`].z.
 	pub fn reach_scale(&self) -> f32 {
 		let reference = DEFAULT_JAB_TARGET.z.max(f32::EPSILON);
@@ -304,6 +312,17 @@ mod tests {
 	const QUADRATIC_PUNCH_TIP_Z_AT_0312: f32 = 1.1004;
 	const HOLD_PUNCH_TIP_Z: f32 = 1.4668;
 	const HOLD_PUNCH_TIP_X: f32 = -0.0973;
+
+	#[test]
+	fn guard_progress_is_the_authored_rest() {
+		let jab = Jab::default();
+		let progress = Jab::guard_progress();
+		assert_eq!(progress, 0.0);
+		assert_eq!(jab.extension_amount(progress), 0.0);
+		assert_eq!(jab.chamber_amount(progress), 0.0);
+		assert!((jab.jab_elbow(progress) - GUARD_ELBOW).abs() < 1e-5);
+		assert!(jab.guard_elbow(progress) > 1.0);
+	}
 
 	fn peak() -> f32 {
 		(EXTEND_END + HOLD_END) * 0.5

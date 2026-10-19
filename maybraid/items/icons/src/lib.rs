@@ -1,5 +1,6 @@
 //! First-encounter item icons. Discovery stays in the host, capture in `screen-capture`.
 
+mod fisticuffs;
 mod host;
 mod prune;
 
@@ -20,8 +21,8 @@ use screen_capture::{
 };
 
 pub use host::{
-	CaptureHostRealized, ItemCaptureSubjects, HOST_FISTICUFFS_ARMS, HOST_GRENADE,
-	HOST_SELF_LUBIKAN, HOST_SKILL_MAP,
+	CaptureHostRealized, CapturePoseSpec, ItemCaptureSubjects, PoseCaptureSpec, PoseCaptureSubjects,
+	HOST_FISTICUFFS_ARMS, HOST_GRENADE, HOST_SELF_LUBIKAN, HOST_SKILL_MAP,
 };
 pub use prune::{
 	kept_icon_file_names, prune_icon_cache, prune_icon_cache_to_saved_inventories,
@@ -160,12 +161,16 @@ impl Plugin for ItemIconPlugin {
 		if !app.is_plugin_added::<ScreenCapturePlugin>() {
 			app.add_plugins(ScreenCapturePlugin::new(discover_icon_cache_dir()));
 		}
+		if let Some(mut root) = app.world_mut().get_resource_mut::<CaptureCacheRoot>() {
+			root.max_wait_frames = root.max_wait_frames.max(1800);
+		}
 		if app.get_sub_app(bevy::render::RenderApp).is_some() {
 			install_capture_hosts(app);
 		}
 		app.init_resource::<ItemIconCache>()
 			.init_resource::<ItemIconDiscovery>()
 			.init_resource::<ItemCaptureSubjects>()
+			.init_resource::<PoseCaptureSubjects>()
 			.configure_sets(Update, ItemIconSystems::Store.after(ItemIconSystems::Discover))
 			.add_systems(Update, realize_capture_hosts)
 			.add_systems(Update, prune::prune_icon_cache_on_request)

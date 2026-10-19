@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 use character_animations::animations::{
-	BallisticJump, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop,
+	BallisticJump, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop, Jab,
 	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
 	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
 	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
@@ -295,6 +295,16 @@ impl AnimClip {
 		Self::Jab(JabParams::default())
 	}
 
+	/// Fisticuffs icon clip: the live jab, sampled at the authored guard.
+	pub fn fisticuffs_guard() -> Self {
+		Self::jab()
+	}
+
+	/// [`Jab::guard_progress`]: rest and recover, both arms in cover.
+	pub fn fisticuffs_guard_progress() -> f32 {
+		Jab::guard_progress()
+	}
+
 	pub fn squat() -> Self {
 		Self::Squat
 	}
@@ -407,6 +417,13 @@ mod tests {
 		assert_eq!(AnimClip::still().default_speed(), IDLE_CYCLE_SPEED);
 		assert!(IDLE_CYCLE_SPEED < WALK_CYCLE_SPEED);
 		assert_ne!(AnimClip::still().id(), AnimClip::walk().id());
+	}
+
+	#[test]
+	fn fisticuffs_guard_is_the_jab_rest() {
+		assert_eq!(AnimClip::fisticuffs_guard(), AnimClip::jab());
+		assert_eq!(AnimClip::fisticuffs_guard_progress(), Jab::guard_progress());
+		assert_eq!(AnimClip::fisticuffs_guard_progress(), 0.0);
 	}
 
 	#[test]

@@ -143,6 +143,11 @@ impl AnimMailbox {
 		self.blend_progress < 1.0
 	}
 
+	/// True when a sample has been written and the 0.15s crossfade has finished.
+	pub fn settled(&self) -> bool {
+		self.posed && self.blend_progress >= 1.0
+	}
+
 	/// Capture the currently displayed pose as a blend source and restart clip time.
 	///
 	/// Use this when the next sample stays on the same [`AnimId`] (left jab →
@@ -988,6 +993,17 @@ mod tests {
 		mailbox.restart_from_visible();
 		assert!(mailbox.blending());
 		assert_eq!(mailbox.clip_progress, 0.0);
+	}
+
+	#[test]
+	fn settled_waits_for_pose_and_crossfade() {
+		let mut mailbox = AnimMailbox::new(Transform::default());
+		assert!(!mailbox.settled());
+		mailbox.posed = true;
+		mailbox.blend_progress = 0.0;
+		assert!(!mailbox.settled());
+		mailbox.blend_progress = 1.0;
+		assert!(mailbox.settled());
 	}
 
 	fn run_select(world: &mut World) {
@@ -1974,8 +1990,8 @@ mod tests {
 
 	#[test]
 	fn clip_change_crossfade_captures_rig_pose_for_from_pose() {
-		use character_animations::animations::{Run, Walk};
 		use character_animations::Animation;
+		use character_animations::animations::{Run, Walk};
 
 		let mut rig = HumanoidV0Rig::imported();
 		Walk::default().apply_for(&mut rig, 0.35);
