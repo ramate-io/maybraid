@@ -163,7 +163,8 @@ fn shot_dir() -> PathBuf {
 		.unwrap_or_else(|| PathBuf::from("/tmp/inventory-gallery"))
 }
 
-/// Generated Starter Kit: three clothing, two firearms, one grenade, one map.
+/// Generated Starter Kit: three clothing, two firearms, one grenade, one map,
+/// four base Tanzes.
 fn real_starter_items() -> Vec<InventoryItem> {
 	let mut rng = ItemRng::from_seed(42);
 	rng.random_starter_loadout()

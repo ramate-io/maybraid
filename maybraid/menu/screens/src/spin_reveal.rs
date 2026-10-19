@@ -412,6 +412,7 @@ mod tests {
 	use bevy::prelude::*;
 	use character_creation_menus::{InventoryLayoutMode, STARTER_KIT_LABEL};
 	use character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
+	use character_ui_menu::MenuNode;
 
 	fn pants() -> InventoryItem {
 		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Red)
@@ -538,6 +539,8 @@ mod tests {
 
 	#[test]
 	fn grant_uses_the_read_only_starter_kit_layout() {
+		use character_items::{ItemRng, BASE_STARTER_TANZES};
+
 		let layout = SpinRevealScreen::layout(&[pants()]);
 		assert_eq!(layout.title, STARTER_KIT_LABEL);
 		assert_eq!(layout.mode, InventoryLayoutMode::ReadOnly);
@@ -547,5 +550,25 @@ mod tests {
 			layout.section_labels(),
 			["Equipped", "Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]
 		);
+
+		let items = ItemRng::from_seed(42).random_starter_loadout();
+		let grant = SpinRevealScreen::layout(&items);
+		let MenuNode::Section { children, .. } = &grant.node else {
+			panic!("starter kit must be a section");
+		};
+		let equipped = children.iter().find_map(|child| match child {
+			MenuNode::Section { label: "Equipped", children } => children.first(),
+			_ => None,
+		});
+		let Some(MenuNode::OrderedEquipment { rows }) = equipped else {
+			panic!("Equipped must be ordered rows");
+		};
+		let tanz_row = rows.iter().find(|row| row.label == "Tanzes").expect("Tanzes row");
+		let equipped_ids: Vec<_> = tanz_row
+			.choices
+			.iter()
+			.filter_map(|choice| items.get(choice.item_key).and_then(InventoryItem::tanz_id))
+			.collect();
+		assert_eq!(equipped_ids, BASE_STARTER_TANZES);
 	}
 }

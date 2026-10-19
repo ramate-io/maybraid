@@ -11,7 +11,7 @@ use procedural_common::Fnv1a64;
 use crate::{
 	ClothingKind, ClothingMaterial, ClothingMesh, ClothingStats, FirearmMesh, FirearmSpec,
 	FirearmStats, GrenadeRecharge, GrenadeSpec, GrenadeStats, ItemColor, SkillMapKind,
-	SkillMapSpec, TanzId,
+	SkillMapSpec, TanzId, BASE_STARTER_TANZES,
 };
 
 /// How many garments character creation rolls before the body editor.
@@ -36,6 +36,9 @@ pub const WEAPON_QUEUE_LIMIT: usize = 3;
 
 /// How many skill maps character creation rolls into the bag.
 pub const STARTER_SKILL_MAP_COUNT: usize = 1;
+
+/// How many base Tanzes character creation grants.
+pub const STARTER_TANZ_COUNT: usize = crate::tanz::BASE_STARTER_TANZES.len();
 
 /// Hard cap on the equipped skill-map queue. Index 0 is the presented map.
 pub const SKILL_MAP_QUEUE_LIMIT: usize = 3;
@@ -438,7 +441,12 @@ impl Inventory {
 			.map(|(index, _)| index)
 			.take(InventorySlot::Skills.capacity())
 			.collect();
-		Self { items, clothing, weapons, skills, tanzes: Vec::new() }
+		let tanzes: Vec<usize> = BASE_STARTER_TANZES
+			.iter()
+			.filter_map(|id| items.iter().position(|item| item.tanz_id() == Some(*id)))
+			.take(InventorySlot::Tanzes.capacity())
+			.collect();
+		Self { items, clothing, weapons, skills, tanzes }
 	}
 
 	pub fn selected(&self, slot: InventorySlot) -> &[usize] {
@@ -938,12 +946,20 @@ impl ItemRng {
 		items
 	}
 
-	/// Clothing starter, two unique firearms, one grenade, and one rolled skill map.
+	/// Fixed base Tanzes. No random draw, so clothing / tool rolls stay stable.
+	pub fn base_starter_tanzes(&mut self) -> Vec<InventoryItem> {
+		let _ = self;
+		BASE_STARTER_TANZES.into_iter().map(InventoryItem::tanz).collect()
+	}
+
+	/// Clothing starter, two unique firearms, one grenade, one rolled skill map,
+	/// and the four base Tanzes.
 	pub fn random_starter_loadout(&mut self) -> Vec<InventoryItem> {
 		let mut items = self.random_starter_clothing(STARTER_CLOTHING_COUNT);
 		items.extend(self.random_starter_firearms(STARTER_WEAPON_COUNT));
 		items.push(InventoryItem::rolled_grenade(self));
 		items.extend(self.random_starter_skill_maps(STARTER_SKILL_MAP_COUNT));
+		items.extend(self.base_starter_tanzes());
 		items
 	}
 
@@ -1099,6 +1115,7 @@ mod tests {
 				+ STARTER_WEAPON_COUNT
 				+ STARTER_GRENADE_COUNT
 				+ STARTER_SKILL_MAP_COUNT
+				+ STARTER_TANZ_COUNT
 		);
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Clothing).count(), 3);
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Weapons).count(), 3);
@@ -1107,6 +1124,7 @@ mod tests {
 		assert!((crate::BLAST_RADIUS_MIN..=crate::BLAST_RADIUS_MAX).contains(&blast.blast_radius));
 		assert!((crate::LAUNCH_SPEED_MIN..=crate::LAUNCH_SPEED_MAX).contains(&blast.launch_speed));
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Skills).count(), 1);
+		assert_eq!(items.iter().filter_map(InventoryItem::tanz_id).count(), STARTER_TANZ_COUNT);
 		let mut guns: Vec<_> = items.iter().filter_map(InventoryItem::firearm_mesh).collect();
 		guns.sort_by_key(|mesh| mesh.label());
 		guns.dedup();
@@ -1114,7 +1132,34 @@ mod tests {
 		let outfit = Inventory::with_starter_outfit(items);
 		assert_eq!(outfit.weapons.len(), 3);
 		assert_eq!(outfit.skills.len(), 1);
+		assert_eq!(outfit.equipped_tanzes(), BASE_STARTER_TANZES.to_vec());
 		assert!(outfit.primary_skill_map().and_then(InventoryItem::skill_map_spec).is_some());
+	}
+
+	#[test]
+	fn starter_tanzes_are_deterministic_and_do_not_consume_rng() {
+		let mut a = ItemRng::from_seed(42);
+		let mut b = ItemRng::from_seed(42);
+		assert_eq!(a.base_starter_tanzes(), b.base_starter_tanzes());
+		assert_eq!(a.base_starter_tanzes(), BASE_STARTER_TANZES.map(InventoryItem::tanz).to_vec());
+		let mut with_tanzes = ItemRng::from_seed(7);
+		let mut without = ItemRng::from_seed(7);
+		let full = with_tanzes.random_starter_loadout();
+		let mut prefix = without.random_starter_clothing(STARTER_CLOTHING_COUNT);
+		prefix.extend(without.random_starter_firearms(STARTER_WEAPON_COUNT));
+		prefix.push(InventoryItem::rolled_grenade(&mut without));
+		prefix.extend(without.random_starter_skill_maps(STARTER_SKILL_MAP_COUNT));
+		assert_eq!(&full[..prefix.len()], prefix.as_slice());
+		assert_eq!(&full[prefix.len()..], BASE_STARTER_TANZES.map(InventoryItem::tanz).as_slice());
+	}
+
+	#[test]
+	fn starter_outfit_equips_base_tanzes_in_canonical_order() {
+		let items: Vec<_> =
+			BASE_STARTER_TANZES.into_iter().rev().map(InventoryItem::tanz).collect();
+		let outfit = Inventory::with_starter_outfit(items);
+		assert_eq!(outfit.equipped_tanzes(), BASE_STARTER_TANZES.to_vec());
+		assert!(Inventory::with_starter_outfit(Vec::new()).tanzes.is_empty());
 	}
 
 	#[test]
