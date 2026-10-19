@@ -29,11 +29,11 @@ impl ChainFlowStyle {
 	pub const DEFAULT_SPEED_MPS: f32 = 1.25;
 	/// Broad crest: about a third of the playground length.
 	pub const DEFAULT_WAVELENGTH_M: f32 = 2.2;
-	pub const DEFAULT_BASELINE: f32 = 0.28;
+	pub const DEFAULT_BASELINE: f32 = 0.36;
 	pub const DEFAULT_PEAK: f32 = 1.0;
-	/// Tight aura. The placeholder tube radius is 0.052 m.
-	pub const DEFAULT_HALO_WIDTH_M: f32 = 0.012;
-	pub const DEFAULT_HALO_GAIN: f32 = 0.48;
+	/// Tight aura, well under the 0.052 m placeholder tube radius.
+	pub const DEFAULT_HALO_WIDTH_M: f32 = 0.0065;
+	pub const DEFAULT_HALO_GAIN: f32 = 0.14;
 
 	pub fn clamped(self) -> Self {
 		Self {

@@ -59,21 +59,26 @@ toon pass. Orange heat is an optional lip accent at late severity.
 
 Decorative energy conduits are **not** fractures.
 
-Each link is pre-partitioned into six irregular Voronoi regions in
-link-local rest UV (`3` around the tube × `2` along the link; U wraps).
-A region has a stable damage threshold from `hash13(chunk, seed, link)`:
+Each link has **four through-cut sectors** along the hoop (`along_link`, V
+wraps). The cut ignores `around` so it opens the silhouette instead of
+nicking a hidden face. Centers are hashed once from `(seed, link)` and never
+reroll. Bite 0 is a chip; bite 1 sits next to it so mid damage reads as one
+larger wound; bites 2–3 open the opposite side and a late gap. Half-widths
+grow with severity and never shrink. Reserved metal is the **complement**
+of those sectors and stays until `fade = 1`.
 
-| Rank | Threshold | Stage |
+| Bite | Threshold | Stage |
 |------|-----------|-------|
-| 0–1 | `0.20` / `0.28` | Early chips |
-| 2–3 | `0.46` / `0.55` | Mid bites (obvious by 50%) |
-| 4 | `0.76` | Late gap / broken end |
-| 5 | `0` | Reserved until release |
+| 0 | `0.18` | Early chip |
+| 1 | `0.36` | Widens the chip into a bite (obvious by 50%) |
+| 2 | `0.58` | Opposite-side gap |
+| 3 | `0.80` | Late failure opening |
 
-**Cost:** six site hashes plus a wrap-aware nearest / second-nearest search
-per fragment. No atlas, no per-hit mesh upload, no debris. Region ids are
-computed from UV so they never interpolate. Distance-to-edge is filtered
-only for broken-lip shading.
+**Cost:** four hashes plus four wrap-aware 1-D tests per fragment. No atlas,
+no per-hit mesh upload, no debris. Centers and thresholds are computed from
+UV and integers, so they never interpolate. Distance-to-lip is filtered only
+for broken-edge shading. Derivative-aware discard (`d < r - 0.25 * fwidth`)
+keeps the openings stable at Retro / Antediluvian scale.
 
 Severity is a bounded union:
 
@@ -128,7 +133,7 @@ flow or enter severity.
 
 ## Halo / renderer
 
-Authored `halo_width_m` (default `0.012 m`) is independent of incidental
+Authored `halo_width_m` (default `0.0065 m`) is independent of incidental
 scene units. Expansion is nearly fixed (`width * (0.94 + 0.08 * energy)`).
 The halo fragment is an early branch: visibility, flow, Fresnel. Depth
 tested, no depth writes, additive, no full-screen bloom.
@@ -183,8 +188,8 @@ keeps flow defaults when the slice is the old 8-float recipe):
 | 9 | `flow.wavelength_m` | `2.2` |
 | 10 | `flow.baseline` | `0.28` |
 | 11 | `flow.peak` | `1.0` |
-| 12 | `flow.halo_width_m` | `0.012` |
-| 13 | `flow.halo_gain` | `0.48` |
+| 12 | `flow.halo_width_m` | `0.0065` |
+| 13 | `flow.halo_gain` | `0.14` |
 
 Hit timestamps and `link_damage` are runtime-only.
 

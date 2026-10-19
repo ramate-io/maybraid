@@ -22,8 +22,9 @@ pub use chain_material::{
 	ChainMaterialUniform, MAX_CHAIN_LINKS,
 };
 pub use deteriorate::{
-	chunk_threshold, global_severity, link_severity, link_weakness, region_removed, severity,
-	LinkLook, CHUNKS_PER_LINK, CHUNK_SITES_U, CHUNK_SITES_V,
+	bite_center, bite_radius, bite_threshold, chunk_threshold, global_severity, link_severity,
+	link_weakness, point_removed, region_removed, severity, LinkLook, BITES_PER_LINK,
+	CHUNKS_PER_LINK,
 };
 pub use flow::{chain_flow, hit_flash, ChainFlowStyle};
 pub use halo::{halo_expansion_metres, ChainHalo, ChainHaloMesh, HaloMaterialIds, HALO_EXPANSION};

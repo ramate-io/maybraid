@@ -349,6 +349,18 @@ pub fn sync_preview(
 		if current.0 != *wanted {
 			commands.entity(entity).insert(MaterialRefRoot(wanted.clone()));
 		}
+		if config.halo {
+			commands.entity(entity).insert(ChainHalo);
+		} else {
+			commands.entity(entity).remove::<ChainHalo>();
+		}
+	}
+	for entity in &tubes {
+		if config.halo {
+			commands.entity(entity).insert(ChainHalo);
+		} else {
+			commands.entity(entity).remove::<ChainHalo>();
+		}
 	}
 }
 

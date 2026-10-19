@@ -61,15 +61,15 @@ pub fn sync_lighting(
 			}
 		}
 		LightingMode::Night => {
-			ambient.brightness = 28.0;
-			ambient.color = Color::srgb(0.22, 0.28, 0.48);
+			ambient.brightness = 52.0;
+			ambient.color = Color::srgb(0.26, 0.32, 0.50);
 			if let Ok(mut light) = sun.single_mut() {
-				light.illuminance = 700.0;
+				light.illuminance = 1400.0;
 				light.color = Color::srgb(0.62, 0.72, 1.0);
 			}
 			if let Ok(mut light) = fill.single_mut() {
-				light.illuminance = 180.0;
-				light.color = Color::srgb(0.28, 0.36, 0.62);
+				light.illuminance = 420.0;
+				light.color = Color::srgb(0.30, 0.38, 0.64);
 			}
 		}
 	}

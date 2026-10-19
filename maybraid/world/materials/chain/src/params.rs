@@ -51,10 +51,10 @@ pub const SCALAR_FLOW_HALO_GAIN: usize = 13;
 /// Packed float count written by [`MythicalChainScalars::to_array`].
 pub const MYTHICAL_CHAIN_SCALAR_COUNT: usize = 14;
 
-/// Default metal: blue-gray bronze, not scorched iron.
-pub const DEFAULT_METAL: Color = Color::srgb(0.40, 0.36, 0.32);
+/// Default metal: blue-gray body, not scorched iron.
+pub const DEFAULT_METAL: Color = Color::srgb(0.34, 0.36, 0.40);
 /// Default energy: saturated turquoise.
-pub const DEFAULT_GLOW: Color = Color::srgb(0.06, 0.76, 0.70);
+pub const DEFAULT_GLOW: Color = Color::srgb(0.04, 0.78, 0.68);
 /// Default ash / broken-edge soil. Cool, not rust-orange.
 pub const DEFAULT_DAMAGE: Color = Color::srgb(0.26, 0.22, 0.20);
 /// Optional ember accent. Used sparingly on broken lips.

@@ -135,74 +135,76 @@ fn global_severity(damage: f32, weakness: f32) -> f32 {
     return art_curve(saturate(damage + shift));
 }
 
-fn chunk_threshold(link_id: f32, seed: f32, chunk_id: f32) -> f32 {
-    let h = hash13(vec3<f32>(chunk_id, seed * 0.017, link_id * 0.31));
-    let rank = floor(h * 6.0);
-    if rank < 0.5 {
-        return 0.20;
-    } else if rank < 1.5 {
-        return 0.28;
-    } else if rank < 2.5 {
-        return 0.46;
-    } else if rank < 3.5 {
-        return 0.55;
-    } else if rank < 4.5 {
-        return 0.76;
-    }
-    return 0.0;
-}
-
 fn wrap_delta_u(a: f32, b: f32) -> f32 {
     let d = a - b;
     return d - round(d);
 }
 
-fn site_center(iu: f32, iv: f32, seed: f32, id: f32) -> vec2<f32> {
-    let jx = hash13(vec3<f32>(iu + 0.5, iv + 3.1, seed * 0.017 + id));
-    let jy = hash13(vec3<f32>(iv + 1.7, iu + 8.2, seed * 0.031 + id * 0.5));
-    return vec2<f32>(
-        (iu + 0.22 + 0.56 * jx) / 3.0,
-        (iv + 0.22 + 0.56 * jy) / 2.0
-    );
+fn bite_threshold(bite: u32) -> f32 {
+    if bite == 0u {
+        return 0.18;
+    } else if bite == 1u {
+        return 0.36;
+    } else if bite == 2u {
+        return 0.58;
+    } else if bite == 3u {
+        return 0.80;
+    }
+    return 0.0;
 }
 
-// nearest / second-nearest of 6 jittered sites. xy = (chunk_id, edge_dist),
-// z = second chunk id, w = second distance.
-fn sample_chunk(local_uv: vec2<f32>, seed: f32, id: f32) -> vec4<f32> {
-    var best_d = 10.0;
-    var second_d = 10.0;
-    var best_id = 0.0;
-    var second_id = 0.0;
-    for (var iv = 0; iv < 2; iv++) {
-        for (var iu = 0; iu < 3; iu++) {
-            let center = site_center(f32(iu), f32(iv), seed, id);
-            let du = wrap_delta_u(local_uv.x, center.x);
-            let dv = local_uv.y - center.y;
-            let d = length(vec2<f32>(du, dv));
-            let cid = f32(iu) + f32(iv) * 3.0;
-            if d < best_d {
-                second_d = best_d;
-                second_id = best_id;
-                best_d = d;
-                best_id = cid;
-            } else if d < second_d {
-                second_d = d;
-                second_id = cid;
-            }
+fn bite_half_range(bite: u32) -> vec2<f32> {
+    if bite == 0u {
+        return vec2<f32>(0.045, 0.070);
+    } else if bite == 1u {
+        return vec2<f32>(0.075, 0.115);
+    } else if bite == 2u {
+        return vec2<f32>(0.085, 0.135);
+    } else if bite == 3u {
+        return vec2<f32>(0.110, 0.180);
+    }
+    return vec2<f32>(0.0, 0.0);
+}
+
+fn bite_radius(severity: f32, bite: u32) -> f32 {
+    let threshold = bite_threshold(bite);
+    if threshold <= 0.0 || severity + 1e-5 < threshold {
+        return 0.0;
+    }
+    let range = bite_half_range(bite);
+    let t = saturate((severity - threshold) / 0.22);
+    return range.x + (range.y - range.x) * t;
+}
+
+fn bite_center_v(link_id: f32, seed: f32, bite: u32) -> f32 {
+    let origin = hash13(vec3<f32>(0.5, seed * 0.017, link_id * 0.31));
+    if bite == 0u {
+        return origin;
+    } else if bite == 1u {
+        return fract(origin + 0.11);
+    } else if bite == 2u {
+        return fract(origin + 0.50);
+    }
+    return fract(origin + 0.68);
+}
+
+// x = inside (1 = discard), y = distance to nearest active cut face.
+fn sample_bites(local_uv: vec2<f32>, seed: f32, id: f32, severity: f32) -> vec2<f32> {
+    var inside = 0.0;
+    var lip = 10.0;
+    let fw = fwidth(local_uv.y);
+    for (var bite = 0u; bite < 4u; bite++) {
+        let half = bite_radius(severity, bite);
+        if half <= 0.0 {
+            continue;
         }
+        let d = abs(wrap_delta_u(local_uv.y, bite_center_v(id, seed, bite)));
+        if d < half - fw * 0.35 {
+            inside = 1.0;
+        }
+        lip = min(lip, abs(d - half));
     }
-    let edge = max(second_d - best_d, 0.0);
-    return vec4<f32>(best_id, edge, second_id, second_d);
-}
-
-fn region_removed(severity: f32, threshold: f32, fade: f32) -> bool {
-    if fade >= 0.995 {
-        return true;
-    }
-    if threshold <= 0.0 {
-        return fade > 0.82;
-    }
-    return severity >= threshold;
+    return vec2<f32>(inside, lip);
 }
 
 fn apply_height_bump(n: vec3<f32>, world_pos: vec3<f32>, height: f32, strength: f32) -> vec3<f32> {
@@ -221,7 +223,7 @@ fn painted_metal(p: vec3<f32>, base: vec3<f32>, accent: vec3<f32>, shade: vec3<f
     let stain = value_noise_3d(p * 0.72);
     let wash = value_noise_3d(p * 0.28 + vec3<f32>(3.1, 1.7, 8.2));
     var tint = mix(base, accent, smoothstep(0.34, 0.66, stain));
-    tint = mix(tint, shade, smoothstep(0.42, 0.78, wash) * 0.32);
+    tint = mix(tint, shade, smoothstep(0.42, 0.78, wash) * 0.42);
     return tint;
 }
 
@@ -230,7 +232,7 @@ fn conduit_mask(around: f32, along: f32, seed: f32, freq: f32) -> f32 {
     let warp = 0.07 * value_noise_3d(vec3<f32>(around * 2.0, along * 0.55, seed));
     let u = around * veins + warp;
     let ridge = 1.0 - abs(fract(u) * 2.0 - 1.0);
-    return pow(saturate(ridge * 1.12), 5.2);
+    return pow(saturate(ridge * 1.08), 3.6);
 }
 
 @vertex
@@ -373,18 +375,9 @@ fn fragment(
     let around = uv.x;
     let along_link = saturate(uv.y * link_count - id);
     let local_uv = vec2<f32>(around, along_link);
-    let chunk = sample_chunk(local_uv, seed, id);
-    let threshold = chunk_threshold(id, seed, chunk.x);
-    let neighbor_threshold = chunk_threshold(id, seed, chunk.z);
-    let gone = region_removed(severity, threshold, fade);
-    let neighbor_gone = region_removed(severity, neighbor_threshold, fade);
-    let edge_w = fwidth(chunk.y);
-    if gone {
-        if chunk.y < edge_w * 0.35 && !neighbor_gone {
-            // Ambiguous site boundary: keep the surviving neighbor.
-        } else {
-            discard;
-        }
+    let bites = sample_bites(local_uv, seed, id, severity);
+    if bites.x > 0.5 {
+        discard;
     }
 
     let flow_s = chain_flow_s(mesh, id, link_count);
@@ -405,11 +398,12 @@ fn fragment(
     )));
 
     if material.halo.x > 0.5 {
-        let fresnel = pow(1.0 - facing, 2.6);
-        let opacity = fresnel * lit * halo_gain * (1.0 - fade);
+        let fresnel = pow(1.0 - facing, 4.4);
+        let surge = saturate((lit - 0.34) / 0.66);
+        let opacity = fresnel * (0.10 + 0.90 * surge) * halo_gain * (1.0 - fade);
         let glow = material.colors[1].xyz;
-        let pale = mix(glow, vec3<f32>(0.85, 0.96, 0.94), 0.35);
-        let rgb = (glow * 0.55 + pale * 0.20) * opacity;
+        let pale = mix(glow, vec3<f32>(0.78, 0.94, 0.90), 0.18);
+        let rgb = (glow * 0.62 + pale * 0.10) * opacity;
         return vec4<f32>(rgb, opacity);
     }
 
@@ -418,30 +412,29 @@ fn fragment(
     let glow = material.colors[1].xyz;
     let ash = material.colors[2].xyz;
     let ember = material.colors[3].xyz;
-    let bronze = metal * vec3<f32>(1.08, 0.96, 0.82);
-    let shade = metal * vec3<f32>(0.72, 0.74, 0.78);
+    let bronze = metal * vec3<f32>(1.22, 0.90, 0.62);
+    let shade = metal * vec3<f32>(0.62, 0.64, 0.70);
     var albedo = painted_metal(vec3<f32>(around, along_link, seed * 0.05), metal, bronze, shade);
 
     let conduit = conduit_mask(around, along_link, seed, conduit_freq);
-    let conduit_core = pow(conduit, 2.4);
-    let broken = saturate(1.0 - smoothstep(0.0, 0.045 + fwidth(chunk.y), chunk.y));
-    let broken_lip = broken * select(1.0, 0.0, !neighbor_gone && !gone);
-    let exposed = max(broken_lip, select(0.0, 1.0, neighbor_gone) * broken);
+    let conduit_core = pow(conduit, 2.2);
+    let lip_w = 0.040 + fwidth(bites.y);
+    let exposed = saturate(1.0 - smoothstep(0.0, lip_w, bites.y));
 
     albedo = mix(albedo, ash * 0.82, exposed * 0.72);
-    albedo = mix(albedo, glow * 0.55 + metal * 0.30, conduit * 0.22 * (0.35 + 0.65 * lit));
-    albedo = mix(albedo, glow, conduit_core * 0.16 * lit);
-    albedo = mix(albedo, ember * 0.45, exposed * smoothstep(0.72, 1.0, severity) * 0.22);
+    albedo = mix(albedo, glow * 0.50 + metal * 0.40, conduit * 0.34 * (0.40 + 0.60 * lit));
+    albedo = mix(albedo, glow, conduit_core * 0.22 * lit);
+    albedo = mix(albedo, ember * 0.45, exposed * smoothstep(0.72, 1.0, severity) * 0.18);
     if !is_front {
         albedo *= 0.74;
     }
 
-    let pale = mix(glow, vec3<f32>(0.88, 0.97, 0.95), 0.42);
-    let emit_gain = min(glow_gain, 2.6);
-    let body_emit = glow * conduit * lit * emit_gain * 0.42;
-    let core_emit = pale * conduit_core * lit * emit_gain * 0.28;
-    let edge_emit = glow * exposed * lit * emit_gain * 0.38;
-    let hit_emit = glow * flash * exposed * 0.55;
+    let pale = mix(glow, vec3<f32>(0.82, 0.96, 0.93), 0.28);
+    let emit_gain = min(glow_gain, 2.4);
+    let body_emit = glow * conduit * lit * emit_gain * 0.55;
+    let core_emit = pale * conduit_core * lit * emit_gain * 0.32;
+    let edge_emit = glow * exposed * lit * emit_gain * 0.30;
+    let hit_emit = glow * flash * exposed * 0.40;
     let emissive = (body_emit + core_emit + edge_emit + hit_emit) * (1.0 - fade);
 
     let height = 0.5 + conduit * 0.08 - exposed * 0.16;
