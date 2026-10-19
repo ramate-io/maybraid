@@ -151,6 +151,30 @@ fn equipped_item_views(queue: &CombatHudEquippedQueue) -> Vec<CycleSlotView> {
 		.collect()
 }
 
+/// First index into the full cyclable list for the fixed UI pool so the selected
+/// entry stays visible when `item_count` exceeds `pool`.
+pub(crate) fn cycle_slot_window_start(
+	item_count: usize,
+	selected_index: Option<usize>,
+	pool: usize,
+) -> usize {
+	if item_count <= pool || pool == 0 {
+		return 0;
+	}
+	let selected = selected_index.unwrap_or(0).min(item_count - 1);
+	selected.saturating_sub(pool - 1).min(item_count - pool)
+}
+
+/// Slice the full view list down to at most [`CYCLE_SLOT_POOL`] chips.
+pub(crate) fn windowed_cycle_slot_views(views: &[CycleSlotView], pool: usize) -> Vec<CycleSlotView> {
+	if views.is_empty() || pool == 0 {
+		return Vec::new();
+	}
+	let selected_index = views.iter().position(|view| view.selected);
+	let start = cycle_slot_window_start(views.len(), selected_index, pool);
+	views[start..].iter().take(pool).cloned().collect()
+}
+
 fn slot_label(account: LubikanAccountId) -> String {
 	account
 		.definition()
@@ -232,11 +256,12 @@ pub(crate) fn sync_cycle_slots(
 	)>,
 ) {
 	let views = if hud.0 {
-		cycle_slot_views(
+		let full = cycle_slot_views(
 			category.as_deref().copied().unwrap_or_default(),
 			queue.as_deref(),
 			players.iter().next(),
-		)
+		);
+		windowed_cycle_slot_views(&full, CYCLE_SLOT_POOL)
 	} else {
 		Vec::new()
 	};
@@ -281,8 +306,8 @@ pub(crate) fn sync_cycle_slots(
 			);
 			continue;
 		};
+		let was_selected = slot.selected;
 		slot.key = view.key;
-		slot.selected = view.selected;
 		if text.0 != view.label {
 			text.0 = view.label.clone();
 		}
@@ -290,16 +315,19 @@ pub(crate) fn sync_cycle_slots(
 		node.min_width = Val::Px(CYCLE_SLOT_MIN_WIDTH_PX);
 		*visibility = Visibility::Visible;
 		let this_bump = if view.selected { bump_frac } else { 0.0 };
-		apply_slot_style(
-			view.selected,
-			elapsed,
-			this_bump,
-			&mut border,
-			&mut outline,
-			&mut fill,
-			&mut transform,
-			&mut text_color,
-		);
+		if view.selected || was_selected != view.selected {
+			apply_slot_style(
+				view.selected,
+				elapsed,
+				this_bump,
+				&mut border,
+				&mut outline,
+				&mut fill,
+				&mut transform,
+				&mut text_color,
+			);
+		}
+		slot.selected = view.selected;
 	}
 }
 
@@ -316,6 +344,31 @@ mod tests {
 				"{alpha}"
 			);
 		}
+	}
+
+	#[test]
+	fn window_start_keeps_tail_selection_in_pool() {
+		assert_eq!(cycle_slot_window_start(10, Some(9), 8), 2);
+		assert_eq!(cycle_slot_window_start(10, Some(8), 8), 1);
+		assert_eq!(cycle_slot_window_start(10, Some(7), 8), 0);
+		assert_eq!(cycle_slot_window_start(3, Some(1), 8), 0);
+	}
+
+	#[test]
+	fn windowed_views_cap_at_pool_and_keep_selected() {
+		let views: Vec<CycleSlotView> = (0..10)
+			.map(|key| CycleSlotView {
+				key,
+				label: format!("w{key}"),
+				selected: key == 9,
+			})
+			.collect();
+		let windowed = windowed_cycle_slot_views(&views, 8);
+		assert_eq!(windowed.len(), 8);
+		assert_eq!(windowed[0].key, 2);
+		assert_eq!(windowed[7].key, 9);
+		assert_eq!(windowed.iter().filter(|view| view.selected).count(), 1);
+		assert!(windowed[7].selected);
 	}
 
 	#[test]

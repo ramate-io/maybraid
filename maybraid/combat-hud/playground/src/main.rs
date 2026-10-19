@@ -8,8 +8,8 @@ use bevy::prelude::*;
 use bevy::winit::WinitSettings;
 use clap::Parser;
 use combat_hud::{
-	idle_cycle_outline, CombatHudCyclePanel, CombatHudInventoryCycleCategory, CombatHudPlugin,
-	CombatHudVisible,
+	idle_cycle_outline, CombatHudCyclePanel, CombatHudEquippedQueue, CombatHudEquippedSlot,
+	CombatHudInventoryCycleCategory, CombatHudPlugin, CombatHudVisible,
 };
 use damage::Health;
 use lubikans::{
@@ -53,6 +53,7 @@ enum StateKind {
 	CycleAfterDark,
 	CycleBeforeLight,
 	CycleAfterLight,
+	CycleOverflowWeapons,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -196,6 +197,11 @@ fn cycle_slot_capture_steps() -> Vec<StateStep> {
 			label: "04-after-cycle-light",
 			kind: StateKind::CycleAfterLight,
 			dwell_secs: 0.80,
+		},
+		StateStep {
+			label: "05-overflow-cycle-visible",
+			kind: StateKind::CycleOverflowWeapons,
+			dwell_secs: 2.0,
 		},
 	]
 }
@@ -360,6 +366,7 @@ fn apply_capture_state(
 	mut priming: ResMut<CaptureSelfHealPriming>,
 	mut healing_enabled: ResMut<LubikanHealingEnabled>,
 	mut category: ResMut<CombatHudInventoryCycleCategory>,
+	mut equipped_queue: ResMut<CombatHudEquippedQueue>,
 	mut clear: ResMut<ClearColor>,
 	mut ledgers: Query<&mut LubikanLedger, With<LubikanOwner>>,
 	mut healths: Query<&mut Health>,
@@ -387,6 +394,7 @@ fn apply_capture_state(
 		| StateKind::CycleAfterDark
 		| StateKind::CycleBeforeLight
 		| StateKind::CycleAfterLight => CombatHudInventoryCycleCategory::Lubikans,
+		StateKind::CycleOverflowWeapons => CombatHudInventoryCycleCategory::Weapons,
 		_ => CombatHudInventoryCycleCategory::Weapons,
 	};
 	*hud = CombatHudVisible(true);
@@ -443,7 +451,8 @@ fn apply_capture_state(
 			StateKind::CycleBeforeDark
 			| StateKind::CycleAfterDark
 			| StateKind::CycleBeforeLight
-			| StateKind::CycleAfterLight => {}
+			| StateKind::CycleAfterLight
+			| StateKind::CycleOverflowWeapons => {}
 		}
 	}
 
@@ -456,6 +465,17 @@ fn apply_capture_state(
 	) {
 		apply_cycle_capture_step(step.kind, owner.0, &mut category, &mut clear, &mut ledgers);
 	}
+	if step.kind == StateKind::CycleOverflowWeapons {
+		apply_overflow_weapons_capture(&mut equipped_queue, &mut clear);
+	}
+}
+
+fn apply_overflow_weapons_capture(queue: &mut CombatHudEquippedQueue, clear: &mut ClearColor) {
+	*clear = ClearColor(Color::srgb(0.05, 0.06, 0.08));
+	queue.slots = (0..10)
+		.map(|key| CombatHudEquippedSlot { key, label: format!("W{key}") })
+		.collect();
+	queue.selected = 9;
 }
 
 fn apply_cycle_capture_step(

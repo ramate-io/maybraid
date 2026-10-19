@@ -1123,6 +1123,40 @@ mod tests {
 	}
 
 	#[test]
+	fn cycle_highlight_keeps_overflow_selection_visible() -> anyhow::Result<()> {
+		let mut app = lubikan_app();
+		app.update();
+		let owner = lubikans::fixtures::spawn_self_owner(app.world_mut());
+		app.world_mut().entity_mut(owner).insert((Player, Health::default()));
+		let slots: Vec<CombatHudEquippedSlot> = (0..10)
+			.map(|key| CombatHudEquippedSlot { key, label: format!("gun-{key}") })
+			.collect();
+		app.world_mut().insert_resource(CombatHudInventoryCycleCategory::Weapons);
+		app.world_mut().insert_resource(CombatHudEquippedQueue { slots, selected: 9 });
+		app.world_mut().insert_resource(CombatHudVisible(true));
+		app.update();
+
+		let visible = visible_cycle_slots(app.world_mut());
+		assert_eq!(visible.len(), cycle_slots::CYCLE_SLOT_POOL, "{visible:?}");
+		let highlighted = visible
+			.iter()
+			.find(|(_, _, selected, highlighted)| *selected && *highlighted)
+			.ok_or_else(|| anyhow::anyhow!("missing highlighted overflow slot: {visible:?}"))?;
+		assert_eq!(highlighted.1, 9, "selected tail item should render in the window");
+
+		app.world_mut().resource_mut::<CombatHudEquippedQueue>().selected = 0;
+		app.update();
+		let visible = visible_cycle_slots(app.world_mut());
+		assert_eq!(visible.len(), cycle_slots::CYCLE_SLOT_POOL);
+		let head = visible
+			.iter()
+			.find(|(_, key, selected, _)| *selected && *key == 0)
+			.ok_or_else(|| anyhow::anyhow!("head selection should be visible: {visible:?}"))?;
+		assert_eq!(head.0, 0);
+		Ok(())
+	}
+
+	#[test]
 	fn lubikan_charge_reads_ledger_without_mutating_charge() -> anyhow::Result<()> {
 		let mut app = lubikan_app();
 		app.update();
