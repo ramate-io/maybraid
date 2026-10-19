@@ -41,12 +41,16 @@ pub use fixed_tuck::FixedTuck;
 pub use flapping::Flapping;
 pub use gallop::Gallop;
 pub use idle::Idle;
-pub use jab::{Jab, DEFAULT_BACKSWING, DEFAULT_JAB_TARGET};
+pub use jab::{
+	Jab, BACKSWING_END, DEFAULT_BACKSWING, DEFAULT_JAB_TARGET, EXTEND_END, HOLD_END as JAB_HOLD_END,
+};
 pub use land::Land;
 pub use lateral_undulation::LateralUndulation;
 pub use leap::{Leap, LeapPhase, LeapTimeline, AIR_END, TAKEOFF_END};
 pub use mix::{burst_envelope, smoothstep, LinearBlend, Mix, Smooth, DEFAULT_BURST_EDGE};
-pub use power_dash::{PowerDash, BRAKE_END, COMPRESS_END, HOLD_END, PUSH_END};
+pub use power_dash::{
+	PowerDash, BRAKE_END, COMPRESS_END, HOLD_END as POWER_DASH_HOLD_END, PUSH_END,
+};
 pub use power_strafe::PowerStrafe;
 pub use prone::Prone;
 pub use quadruped_gallop::QuadrupedGallop;

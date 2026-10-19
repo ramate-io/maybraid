@@ -27,13 +27,23 @@ pub struct SpatialOneShot {
 	pub bus: AudioBus,
 	/// Seconds of silence before the clip. Sample-accurate on the mixer clock.
 	pub delay: f32,
+	/// Playback rate (`1.0` = authored pitch). Values below 1 lengthen the clip.
+	pub playback_rate: f32,
 	/// When false, skip the [`AudioBus::PlayerWeapon`] transient duck.
 	pub duck: bool,
 }
 
 impl SpatialOneShot {
 	pub fn at(position: Vec3) -> Self {
-		Self { position, radius: 1.0, gain: 1.0, bus: AudioBus::Weapons, delay: 0.0, duck: true }
+		Self {
+			position,
+			radius: 1.0,
+			gain: 1.0,
+			bus: AudioBus::Weapons,
+			delay: 0.0,
+			playback_rate: 1.0,
+			duck: true,
+		}
 	}
 
 	pub fn radius(mut self, radius: f32) -> Self {
@@ -58,6 +68,11 @@ impl SpatialOneShot {
 
 	pub fn duck(mut self, duck: bool) -> Self {
 		self.duck = duck;
+		self
+	}
+
+	pub fn playback_rate(mut self, rate: f32) -> Self {
+		self.playback_rate = rate.clamp(0.5, 2.0);
 		self
 	}
 }
@@ -131,6 +146,29 @@ impl Drop for SpatialVoice {
 impl SpatialVoice {
 	pub fn follows(&self) -> bool {
 		self.follow.is_some()
+	}
+}
+
+struct PlaybackRate<S> {
+	inner: S,
+	rate: f32,
+}
+
+impl<S> PlaybackRate<S> {
+	fn new(inner: S, rate: f32) -> Self {
+		Self { inner, rate: rate.clamp(0.5, 2.0) }
+	}
+}
+
+impl<S: oddio::Signal<Frame = oddio::Sample>> oddio::Signal for PlaybackRate<S> {
+	type Frame = oddio::Sample;
+
+	fn sample(&mut self, interval: f32, out: &mut [oddio::Sample]) {
+		self.inner.sample(interval * self.rate, out);
+	}
+
+	fn is_finished(&self) -> bool {
+		self.inner.is_finished()
 	}
 }
 
@@ -216,6 +254,7 @@ impl Audio {
 		}
 		let stop = Arc::new(AtomicBool::new(false));
 		let (_, frames) = FramesSignal::new(clip.frames.clone(), -f64::from(spec.delay));
+		let frames = PlaybackRate::new(frames, spec.playback_rate);
 		let (mut gain, signal) = Gain::new(Stoppable::new(frames, stop.clone()));
 		let peak = spec.gain * mixer.gain(spec.bus);
 		gain.set_amplitude_ratio(peak);

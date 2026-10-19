@@ -11,7 +11,7 @@ use firearms::{
 	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmMembers,
 	FirearmRoot, ProjectileSource, WeaponTrigger,
 };
-use player::{wrap_pi, yaw_xz, PlayerLook, PlayerUse};
+use player::{wrap_pi, yaw_xz, PlayerLook, PlayerOpticAds, PlayerUse};
 
 use crate::hold::HoldingArms;
 use crate::weapon::{LiveWeapon, RecoilPattern};
@@ -79,9 +79,11 @@ where
 		));
 		root = entity;
 	}
-	commands
-		.entity(user)
-		.insert((FirearmUser { held: root, settings }, PlayerUse { driver: root }));
+	commands.entity(user).insert((
+		FirearmUser { held: root, settings },
+		PlayerUse { driver: root },
+		PlayerOpticAds,
+	));
 	root
 }
 

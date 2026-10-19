@@ -15,13 +15,22 @@ pub fn produce_character_intents(
 	time: Res<Time>,
 	gameplay: Res<PadGameplayEnabled>,
 	menu_owns: Option<Res<MenuOwnsBack>>,
+	mouse: Option<Res<ButtonInput<MouseButton>>>,
 	ordinary: Res<OrdinaryLocomotionEnabled>,
 	mut intents: MessageWriter<CharacterIntent>,
 ) {
 	let stance_enabled = gameplay.is_enabled() && !menu_owns.is_some_and(|owns| owns.0);
-	for intent in
-		collect(&pad, config.trigger_press_threshold, time.delta_secs(), stance_enabled, ordinary.0)
-	{
+	let mouse_left = mouse.as_ref().is_some_and(|mouse| mouse.pressed(MouseButton::Left));
+	let mouse_right = mouse.as_ref().is_some_and(|mouse| mouse.pressed(MouseButton::Right));
+	for intent in collect_with_mouse(
+		&pad,
+		config.trigger_press_threshold,
+		time.delta_secs(),
+		stance_enabled,
+		ordinary.0,
+		mouse_left,
+		mouse_right,
+	) {
 		intents.write(intent);
 	}
 }
@@ -32,6 +41,32 @@ pub fn collect(
 	dt: f32,
 	stance_enabled: bool,
 	ordinary_locomotion: bool,
+) -> Vec<CharacterIntent> {
+	collect_with_mouse(
+		pad,
+		trigger_threshold,
+		dt,
+		stance_enabled,
+		ordinary_locomotion,
+		false,
+		false,
+	)
+}
+
+/// [`collect`] plus mouse-button suppression for jab edges.
+///
+/// RMB is already focus / aim and LMB is UseItem. Those analog triggers still
+/// fire [`CharacterIntent::Focus`] / [`CharacterIntent::UseItem`], but they
+/// must not also emit [`CharacterIntent::AttackLeft`] / `AttackRight`.
+/// Keyboard **F** / **G** and gamepad LT / RT keep the jab edges.
+pub fn collect_with_mouse(
+	pad: &VirtualPad,
+	trigger_threshold: f32,
+	dt: f32,
+	stance_enabled: bool,
+	ordinary_locomotion: bool,
+	mouse_left: bool,
+	mouse_right: bool,
 ) -> Vec<CharacterIntent> {
 	let mut out = Vec::new();
 	if ordinary_locomotion && pad.move_stick.length_squared() > ANALOG_EPS {
@@ -48,6 +83,12 @@ pub fn collect(
 	}
 	if pad.pressed(PadButton::TriggerFire) || pad.trigger_fire >= trigger_threshold {
 		out.push(CharacterIntent::UseItem(pad.trigger_fire.max(trigger_threshold)));
+	}
+	if pad.just_pressed(PadButton::TriggerFocus) && !mouse_right {
+		out.push(CharacterIntent::AttackLeft);
+	}
+	if pad.just_pressed(PadButton::TriggerFire) && !mouse_left {
+		out.push(CharacterIntent::AttackRight);
 	}
 
 	if ordinary_locomotion && pad.pressed(PadButton::StickClickMove) {
@@ -294,7 +335,9 @@ mod tests {
 		pad.max_triggers(0.0, 0.9);
 		pad.apply_trigger_digital(0.5);
 		finish(&mut pad);
-		assert!(intents(&pad).contains(&CharacterIntent::UseItem(0.9)));
+		let collected = intents(&pad);
+		assert!(collected.contains(&CharacterIntent::UseItem(0.9)));
+		assert!(collected.contains(&CharacterIntent::AttackRight));
 		Ok(())
 	}
 
@@ -308,6 +351,7 @@ mod tests {
 		finish(&mut pad);
 		let intents = intents(&pad);
 		assert!(intents.contains(&CharacterIntent::UseItem(0.9)));
+		assert!(intents.contains(&CharacterIntent::AttackRight));
 		assert!(intents.contains(&CharacterIntent::PowerUseItem));
 		assert!(!intents.contains(&CharacterIntent::StartInteraction));
 		Ok(())
@@ -320,6 +364,82 @@ mod tests {
 		pad.max_triggers(0.4, 0.0);
 		finish(&mut pad);
 		assert_eq!(intents(&pad), vec![CharacterIntent::Focus(0.4)]);
+		Ok(())
+	}
+
+	#[test]
+	fn left_trigger_press_is_attack_left() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.0);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let collected = intents(&pad);
+		assert!(collected.contains(&CharacterIntent::AttackLeft));
+		assert!(!collected.contains(&CharacterIntent::AttackRight));
+		assert!(collected.contains(&CharacterIntent::Focus(0.9)));
+		Ok(())
+	}
+
+	#[test]
+	fn right_trigger_press_is_attack_right() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.0, 0.9);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let collected = intents(&pad);
+		assert!(collected.contains(&CharacterIntent::AttackRight));
+		assert!(!collected.contains(&CharacterIntent::AttackLeft));
+		Ok(())
+	}
+
+	#[test]
+	fn right_mouse_focus_does_not_emit_attack_left() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(1.0, 0.0);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let collected = collect_with_mouse(&pad, 0.5, 0.0, true, true, false, true);
+		assert!(collected.contains(&CharacterIntent::Focus(1.0)));
+		assert!(
+			!collected.contains(&CharacterIntent::AttackLeft),
+			"RMB is focus/aim, not a left jab: {collected:?}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn left_mouse_use_does_not_emit_attack_right() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.0, 1.0);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let collected = collect_with_mouse(&pad, 0.5, 0.0, true, true, true, false);
+		assert!(collected.iter().any(|intent| matches!(intent, CharacterIntent::UseItem(_))));
+		assert!(!collected.contains(&CharacterIntent::AttackRight));
+		Ok(())
+	}
+
+	#[test]
+	fn held_triggers_do_not_repeat_attack() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.9);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		assert!(intents(&pad).contains(&CharacterIntent::AttackLeft));
+		assert!(intents(&pad).contains(&CharacterIntent::AttackRight));
+
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.9);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let held = intents(&pad);
+		assert!(!held.contains(&CharacterIntent::AttackLeft));
+		assert!(!held.contains(&CharacterIntent::AttackRight));
 		Ok(())
 	}
 

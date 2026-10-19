@@ -8,6 +8,7 @@ use damage::{DamageSystems, DespawnAfter, Downed};
 use durham::{DurhamSurface, TerrainCellLayout, WorldBaseTerrain};
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
+use fisticuffs_user::FisticuffsUser;
 use grenade_user::{GrenadeUser, GrenadeUserSystems};
 use lubikans::LubikanOwner;
 use maybraid_character_controller::CharacterIntent;
@@ -273,6 +274,7 @@ fn queue_downed_world_player(
 			FirearmUser,
 			GrenadeUser,
 			grenade_user::GrenadeThrow,
+			FisticuffsUser,
 			InventoryUser,
 			MoveWish,
 			SpotSubject,

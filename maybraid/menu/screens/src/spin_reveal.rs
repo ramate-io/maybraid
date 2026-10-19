@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use character_creation_menus::{
 	inventory_paint_state, InventoryLayout, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT,
 };
-use character_items::{self_lubikan_catalog_key, Inventory, InventoryItem};
+use character_items::{catalog_key_uses_yellow_silhouette, Inventory, InventoryItem};
 use item_icons::{
 	request_inventory_icons, CaptureClient, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery,
 	ItemIconPlugin, PoseCaptureSubjects,
@@ -245,11 +245,16 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn image_for_key(&mut self, key: u64) -> Option<Handle<Image>> {
-		self.icons?.catalog_for_key(key)
+		let cache = self.icons?;
+		if catalog_key_uses_yellow_silhouette(key) {
+			cache.silhouette_for_key(key)
+		} else {
+			cache.shaded_for_key(key)
+		}
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
-		if key == self_lubikan_catalog_key() {
+		if catalog_key_uses_yellow_silhouette(key) {
 			TEXT_YELLOW
 		} else {
 			Color::WHITE

@@ -21,6 +21,10 @@ oddio graph → CPAL
 - **Flinch:** [`FlinchProfile`](src/flinch.rs) on a character names a
   [`GruntStyle`](src/flinch.rs). Damage picks a numbered variant noisily and
   plays a world-fixed `Voices` one-shot.
+- **Fisticuffs:** [`FisticuffsStrikeSounds`](src/fisticuffs.rs) plays a short
+  effort grunt on each [`FisticuffsStrike`](../../items/fisticuffs-user/src/lib.rs)
+  event (combo-step variants, seeded pitch jitter, same `Voices` spatial recipe
+  as flinch).
 - **Movement:** [`MovementSounds`](src/movement.rs) plays footstep and
   change-item one-shots on `Voices`. Gait cadence follows the walk/run clip
   rates (two plants per cycle). Jump and leap plant once on takeoff and once

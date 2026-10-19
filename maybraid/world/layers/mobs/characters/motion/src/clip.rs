@@ -23,7 +23,10 @@ const GALLOP_CYCLE_SPEED: f32 = 0.35;
 const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.5;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
-const JAB_CYCLE_SPEED: f32 = 0.9;
+/// Wall-clock length of one jab. Fast enough for a combo (~0.42 s).
+pub const JAB_DURATION_SECS: f32 = 0.42;
+/// One jab cycle lasts [`JAB_DURATION_SECS`] (`1 / JAB_CYCLE_SPEED`).
+pub const JAB_CYCLE_SPEED: f32 = 1.0 / JAB_DURATION_SECS;
 const THINK_AGAIN_CYCLE_SPEED: f32 = THINK_AGAIN_SPEED;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
@@ -336,6 +339,16 @@ impl AnimClip {
 		Self::Jab(JabParams::default())
 	}
 
+	/// Fisticuffs icon clip: the live jab, sampled at the authored guard.
+	pub fn fisticuffs_guard() -> Self {
+		Self::jab()
+	}
+
+	/// [`Jab::guard_progress`]: rest and recover, both arms in cover.
+	pub fn fisticuffs_guard_progress() -> f32 {
+		Jab::guard_progress()
+	}
+
 	pub fn think_again() -> Self {
 		Self::ThinkAgain(ThinkAgainParams::default())
 	}
@@ -507,6 +520,13 @@ mod tests {
 		assert_eq!(AnimClip::power_dash().default_speed(), POWER_DASH_CYCLE_SPEED);
 		assert_ne!(AnimClip::power_dash().id(), AnimClip::leap().id());
 		assert_ne!(AnimClip::power_dash().id(), AnimClip::jab().id());
+	}
+
+	#[test]
+	fn fisticuffs_guard_is_the_jab_rest() {
+		assert_eq!(AnimClip::fisticuffs_guard(), AnimClip::jab());
+		assert_eq!(AnimClip::fisticuffs_guard_progress(), Jab::guard_progress());
+		assert_eq!(AnimClip::fisticuffs_guard_progress(), 0.0);
 	}
 
 	#[test]
