@@ -21,6 +21,7 @@ bikanwarda-attacks = { workspace = true }
 combat-targeting = { workspace = true }
 damage = { workspace = true }
 lod-avian = { workspace = true }
+maybraid-spatial-rumble = { workspace = true }
 maybraid-vfx = { workspace = true }
 
 [lints]

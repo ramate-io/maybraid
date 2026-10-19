@@ -2231,9 +2231,13 @@ dependencies = [
  "attacks",
  "avian3d",
  "bevy",
+ "character-motion",
+ "characters",
  "combat-targeting",
  "damage",
  "lod-avian",
+ "maybraid-spatial-rumble",
+ "maybraid-vfx",
 ]
 
 [[package]]
@@ -2247,6 +2251,7 @@ dependencies = [
  "combat-targeting",
  "damage",
  "lod-avian",
+ "maybraid-spatial-rumble",
  "maybraid-vfx",
 ]
 
@@ -2480,6 +2485,7 @@ dependencies = [
 name = "building-shaders"
 version = "0.1.5"
 dependencies = [
+ "anyhow",
  "bevy",
  "material-ref",
 ]
@@ -2805,6 +2811,7 @@ dependencies = [
  "character-animations",
  "character-creation-menus",
  "character-items",
+ "character-motion",
  "character-rigs",
  "character-ui-menu",
  "characters",
@@ -4098,6 +4105,7 @@ dependencies = [
  "bevy",
  "building-components",
  "building-physics",
+ "building-shaders",
  "ground",
  "lod",
  "lod-avian",
@@ -4112,6 +4120,7 @@ version = "0.1.5"
 dependencies = [
  "avian3d",
  "bevy",
+ "building-shaders",
  "doric-column",
  "material-ref",
 ]
@@ -7169,6 +7178,7 @@ dependencies = [
  "movement-intelligence-avian",
  "movement-realization",
  "npc-intelligence",
+ "occupancy-rewards",
  "player",
  "player-camera",
  "poi-intelligence",
@@ -8662,6 +8672,16 @@ dependencies = [
  "log",
  "rdst",
  "static_assertions",
+]
+
+[[package]]
+name = "occupancy-rewards"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "gimme-core",
+ "lubikans",
 ]
 
 [[package]]
@@ -13871,6 +13891,7 @@ name = "world-materials-playground"
 version = "0.1.5"
 dependencies = [
  "bevy",
+ "building-shaders",
  "clap",
  "firearms",
  "game-commands",

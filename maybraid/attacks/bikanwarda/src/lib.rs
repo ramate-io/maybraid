@@ -6,8 +6,11 @@
 //! VFX stay in their own lanes.
 
 mod adapter;
+#[cfg(feature = "presentation-consumers")]
+mod consumers;
 mod cues;
 mod ids;
+mod lanes;
 mod parade;
 mod params;
 mod plugin;
@@ -23,6 +26,11 @@ pub use cues::{
 pub use ids::{BRAY, GOD_BEAM, PARADE, PARADE_BLAST};
 pub use parade::{parade_plugin, ParadeClock};
 pub use params::{BikanwardaAttackParams, BrayParams, GodBeamParams, ParadeParams};
+#[cfg(feature = "presentation-consumers")]
+pub use consumers::BikanwardaPresentationConsumersPlugin;
+#[cfg(feature = "presentation-consumers")]
+pub use consumers::PendingEyeGlow;
+pub use lanes::BikanwardaPresentationSystems;
 pub use plugin::BikanwardaAttacksPlugin;
 pub use presentation::{
 	placeholder_presentation_plugin, BikanwardaEyeSocket, BikanwardaHeadSocket,
@@ -35,6 +43,9 @@ pub use recipes::{
 
 /// Documented placeholder GLB sockets. See [`ASSETS.md`](../ASSETS.md).
 pub const ASSETS_README: &str = include_str!("../ASSETS.md");
+
+#[cfg(all(test, feature = "presentation-consumers"))]
+mod consumer_tests;
 
 #[cfg(test)]
 mod runtime_tests;
