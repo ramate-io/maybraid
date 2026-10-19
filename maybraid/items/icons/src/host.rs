@@ -1,9 +1,10 @@
 //! Realize posed, painted inventory subjects into isolated capture roots.
 
-use crate::fisticuffs::{FisticuffsArmMask, FisticuffsGuardPose, isolate_arm_joints};
+use crate::fisticuffs::{isolate_arm_joints, FisticuffsArmMask, FisticuffsGuardPose};
 use bevy::camera::primitives::MeshAabb;
 use bevy::camera::visibility::RenderLayers;
 use bevy::ecs::entity_disabling::Disabled;
+use bevy::ecs::query::Allow;
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
@@ -13,30 +14,30 @@ use character_shaders::{CharacterShadersPlugin, ClothingShaderMaterial, FaceShad
 use characters::material_lib::CharacterMaterialRefPlugin;
 use characters::species::braidman::{Braidman, BraidmanConfig};
 use characters::{
-	AnimClip, AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, AnimateBones, AnimateEffects,
-	AssetNormalization, BoneMap, CharacterComponents, CharacterComponentsPlugin,
-	CharacterHostsPlugin, CharacterMembers, CharacterMotionSystems, CharacterPartSlot,
-	CharacterRecipe, CharacterRig, CharacterRigRole, ClothingLayer, ComponentsOnly,
-	HiddenUntilSceneReady, Layers, PartNode, PendingCharacterAssembly, RigNode,
 	add_character_components_host, character_bounds, drain_character_assembly_now,
-	hide_socketed_parts, spawn_fixed_character_assembly,
+	hide_socketed_parts, spawn_fixed_character_assembly, AnimClip, AnimMailbox, AnimProgress,
+	AnimRef, AnimRefRoot, AnimateBones, AnimateEffects, AssetNormalization, BoneMap,
+	CharacterComponents, CharacterComponentsPlugin, CharacterHostsPlugin, CharacterMembers,
+	CharacterMotionSystems, CharacterPartSlot, CharacterRecipe, CharacterRig, CharacterRigRole,
+	ClothingLayer, ComponentsOnly, HiddenUntilSceneReady, Layers, PartNode,
+	PendingCharacterAssembly, RigNode,
 };
 use firearm_user::GeneratedFirearm;
 use firearms_components::{
-	ActiveRigPose, FirearmComponentsPlugin, PoseApplied, add_firearm_components_host,
-	firearm_bounds, spawn_firearm_components,
+	add_firearm_components_host, firearm_bounds, spawn_firearm_components, ActiveRigPose,
+	FirearmComponentsPlugin, PoseApplied,
 };
-use grenades::{GrenadeMaterial, GrenadeMaterialPlugin, grenade_material, grenade_mesh};
+use grenades::{grenade_material, grenade_mesh, GrenadeMaterial, GrenadeMaterialPlugin};
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneLevel};
 use lod::{
-	LodLevelRootPending, LodLevelSpawnRequest, LodRefreshCorePlugin, LodRefreshDomain,
-	LodRefreshMembership, add_lod_refresh_chunk_for,
+	add_lod_refresh_chunk_for, LodLevelRootPending, LodLevelSpawnRequest, LodRefreshCorePlugin,
+	LodRefreshDomain, LodRefreshMembership,
 };
 use material_ref::{MaterialRefApplied, StandardMaterialRefPlugin};
 use scene_ref::SceneRefRoot;
 use screen_capture::{
-	CAPTURE_RENDER_LAYER, CaptureHostReady, CaptureHostRoot, CaptureId, CaptureSilhouetteRoot,
+	CaptureHostReady, CaptureHostRoot, CaptureId, CaptureSilhouetteRoot, CAPTURE_RENDER_LAYER,
 	HOST_REPRESENTATIVE_POSE,
 };
 use std::collections::HashMap;
@@ -193,6 +194,7 @@ pub fn install_capture_hosts(app: &mut App) {
 		(
 			drain_capture_pose_assemblies,
 			pose_representative_hosts.before(CharacterMotionSystems::Anim),
+			log_pose_host_wait,
 		),
 	);
 }
@@ -294,25 +296,6 @@ pub fn pose_representative_hosts(
 	}
 }
 
-fn spawn_pose_host(commands: &mut Commands, root: Entity) -> bool {
-	let preview = BraidmanConfig::default_preview().clothed();
-	let entity = spawn_fixed_character_assembly(commands, &preview, Transform::IDENTITY);
-	commands.entity(entity).try_insert(CapturePoseAssembly);
-	pin_capture_host(commands, entity, root);
-	true
-}
-
-fn drain_capture_pose_assemblies(world: &mut World) {
-	let roots: Vec<Entity> = world
-		.query_filtered::<Entity, (With<PendingCharacterAssembly>, With<CapturePoseAssembly>)>()
-		.iter(world)
-		.collect();
-	if roots.is_empty() {
-		return;
-	}
-	drain_character_assembly_now(world, roots);
-}
-
 pub fn mark_capture_hosts_ready(
 	mut commands: Commands,
 	hosts: Query<
@@ -364,6 +347,9 @@ pub fn mark_capture_hosts_ready(
 			&mailboxes,
 			&pending_scene,
 		) {
+			if pose_specs.get(root).is_ok() {
+				info!(root = ?root, "pose capture host ready");
+			}
 			commands.entity(root).try_insert(CaptureHostReady);
 		}
 	}
@@ -417,6 +403,74 @@ pub fn keep_capture_hosts_visible(
 			commands.entity(entity).try_insert(Visibility::Inherited);
 		});
 	}
+}
+
+fn spawn_pose_host(commands: &mut Commands, root: Entity) -> bool {
+	let preview = BraidmanConfig::default_preview().clothed();
+	let entity = spawn_fixed_character_assembly(commands, &preview, Transform::IDENTITY);
+	commands.entity(entity).try_insert(CapturePoseAssembly);
+	pin_capture_host(commands, entity, root);
+	true
+}
+
+fn log_pose_host_wait(
+	hosts: Query<
+		(Entity, &CaptureHostRoot),
+		(With<CapturePoseSpec>, With<CaptureHostRealized>, Without<CaptureHostReady>),
+	>,
+	children: Query<&Children>,
+	pending_assembly: Query<(), With<PendingCharacterAssembly>>,
+	hidden_until: Query<(), With<HiddenUntilSceneReady>>,
+	meshes: Query<Entity, (With<Mesh3d>, Allow<Disabled>)>,
+	mailboxes: Query<&AnimMailbox>,
+	mut frames: Local<u32>,
+) {
+	if hosts.is_empty() {
+		return;
+	}
+	*frames += 1;
+	if *frames % 60 != 1 {
+		return;
+	}
+	for (root, host) in &hosts {
+		let mut pending = 0_u32;
+		let mut hidden = 0_u32;
+		let mut mesh_count = 0_u32;
+		let mut mailbox_settled = false;
+		visit_descendants(root, &children, &mut |entity| {
+			if pending_assembly.get(entity).is_ok() {
+				pending += 1;
+			}
+			if hidden_until.get(entity).is_ok() {
+				hidden += 1;
+			}
+			if meshes.get(entity).is_ok() {
+				mesh_count += 1;
+			}
+			if mailboxes.get(entity).is_ok_and(AnimMailbox::settled) {
+				mailbox_settled = true;
+			}
+		});
+		info!(
+			id = %host.id.as_str(),
+			pending,
+			hidden,
+			meshes = mesh_count,
+			mailbox_settled,
+			"pose capture host waiting"
+		);
+	}
+}
+
+fn drain_capture_pose_assemblies(world: &mut World) {
+	let roots: Vec<Entity> = world
+		.query_filtered::<Entity, (With<PendingCharacterAssembly>, With<CapturePoseAssembly>)>()
+		.iter(world)
+		.collect();
+	if roots.is_empty() {
+		return;
+	}
+	drain_character_assembly_now(world, roots);
 }
 
 fn spawn_item_host(
@@ -974,6 +1028,11 @@ mod tests {
 		let domain = LodRefreshDomain::of::<CaptureHostRoot>();
 		assert_eq!(domain, LodRefreshDomain::of::<CaptureHostRoot>());
 		assert_ne!(domain, LodRefreshDomain::of::<GeneratedFirearm>());
+	}
+
+	#[test]
+	fn representative_pose_host_kind_is_stable() {
+		assert_eq!(HOST_REPRESENTATIVE_POSE, "representative-pose");
 	}
 
 	#[test]

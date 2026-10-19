@@ -110,7 +110,7 @@ mod pose_tests {
 		pad.begin_frame();
 		pad.max_triggers(focus, fire);
 		finish(&mut pad);
-		collect(&pad, 0.5, 0.0, true)
+		collect(&pad, 0.5, 0.0, true, true)
 			.into_iter()
 			.find_map(|intent| match intent {
 				CharacterIntent::AttackLeft | CharacterIntent::AttackRight => Some(intent),

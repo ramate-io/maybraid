@@ -23,6 +23,7 @@ use player::{
 	CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook, PlayerSystems, PlayerUse,
 	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner, apply_character_mobility,
 };
+use tanz_user::{spawn_tanz_user, TanzUser};
 use world_player::{
 	CharacterSpecies, Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual,
 	PlaygroundMode, RequestSetCharacter, RequestSetCharacterAppearance,
@@ -77,6 +78,7 @@ type WorldPlayerEquipment<'a> = (
 	Option<&'a GrenadeUser>,
 	Option<&'a InventoryUser>,
 	Option<&'a maybraid_skill_map::SkillMapUser>,
+	Option<&'a TanzUser>,
 	Option<&'a AppliedWorldPlayerLoadout>,
 	Has<WorldPlayerAppearanceRequested>,
 );
@@ -106,6 +108,7 @@ pub(crate) fn arm_world_player(
 		grenade_user,
 		inventory_user,
 		skill_map_user,
+		tanz_user,
 		applied,
 		appearance_requested,
 	) in &players
@@ -120,6 +123,9 @@ pub(crate) fn arm_world_player(
 		}
 		if skill_map_user.is_none() {
 			spawn_skill_maps(&mut commands, player);
+		}
+		if tanz_user.is_none() {
+			spawn_tanz_user(&mut commands, player);
 		}
 		if loadout.is_none()
 			&& applied.is_none()
@@ -446,6 +452,7 @@ mod tests {
 		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor,
 	};
 	use characters::{CharacterAppearance, CharacterRoot};
+	use tanz_user::{ControlMode, TanzUser};
 	use world_player::{
 		Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual, PlaygroundMode,
 		RequestSetCharacterAppearance,
@@ -506,6 +513,11 @@ mod tests {
 		assert_eq!(world.query::<&RequestSetCharacterAppearance>().iter(&world).count(), 0);
 		assert!(world.get::<WorldPlayerAppearanceRequested>(player).is_none());
 		assert!(world.get::<maybraid_skill_map::SkillMapUser>(player).is_some());
+		assert!(world.get::<TanzUser>(player).is_some());
+		assert_eq!(
+			world.get::<TanzUser>(player).map(|user| user.mode),
+			Some(ControlMode::Standard)
+		);
 		assert_eq!(world.get::<Name>(player).map(Name::as_str), Some("Ada"));
 		Ok(())
 	}

@@ -44,17 +44,18 @@ pub mod terrain_pitch;
 
 pub use anim::{
 	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId,
-	AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, JabParams, JumpParams, TuckParams,
-	TuckedFlipParams, TwoFootedTuckedFlipParams, JAB_CYCLE_SPEED, JAB_DURATION_SECS,
+	AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, JabParams, JumpParams, PowerStrafeParams,
+	ThinkAgainParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams, JAB_CYCLE_SPEED,
+	JAB_DURATION_SECS,
 };
 pub use appearance::CharacterAppearance;
 pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use character_motion::{
-	apply_terrain_pitch, clamp_intelligence, draw_terrain_pitch_probes, motion_policy,
-	sync_motion_markers, AnimateBones, AnimateEffects, ApplyTerrainPitch, CharacterHeading,
-	CharacterMotionPlugin, CharacterMotionSystems, DrawTerrainPitchProbes, MotionPolicy,
-	SuspendAnimation, SuspendTerrainPitch,
+	apply_terrain_pitch, clamp_intelligence, draw_terrain_pitch_probes, fingerprint_humanoid_clip,
+	mailbox_apply_allows, motion_policy, sync_motion_markers, AnimateBones, AnimateEffects,
+	ApplyTerrainPitch, CharacterHeading, CharacterMotionPlugin, CharacterMotionSystems,
+	DrawTerrainPitchProbes, MailboxApplySet, MotionPolicy, SuspendAnimation, SuspendTerrainPitch,
 };
 pub use character_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 pub use character_shaders::CharacterShadersPlugin;
