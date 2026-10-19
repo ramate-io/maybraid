@@ -4,8 +4,9 @@
 
 pub use character_motion::{
 	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId,
-	AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, JabParams, JumpParams, TuckParams,
-	TuckedFlipParams, TwoFootedTuckedFlipParams, JAB_CYCLE_SPEED, JAB_DURATION_SECS,
+	AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, JabParams, JumpParams, PowerStrafeParams,
+	ThinkAgainParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams, JAB_CYCLE_SPEED,
+	JAB_DURATION_SECS,
 };
 
 use crate::concepts::ConceptAnimation;
@@ -31,6 +32,7 @@ impl From<ConceptAnimation> for AnimClip {
 			ConceptAnimation::Soaring => Self::soaring(),
 			ConceptAnimation::Flapping => Self::flapping(),
 			ConceptAnimation::Jab => Self::jab(),
+			ConceptAnimation::ThinkAgain => Self::think_again(),
 			ConceptAnimation::Squat => Self::squat(),
 			ConceptAnimation::Prone => Self::prone(),
 			ConceptAnimation::LateralUndulation => Self::lateral_undulation(),

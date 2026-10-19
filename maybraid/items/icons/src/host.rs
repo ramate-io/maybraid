@@ -4,6 +4,7 @@ use crate::fisticuffs::{FisticuffsArmMask, FisticuffsGuardPose, isolate_arm_join
 use bevy::camera::primitives::MeshAabb;
 use bevy::camera::visibility::RenderLayers;
 use bevy::ecs::entity_disabling::Disabled;
+use bevy::ecs::query::Allow;
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
@@ -193,6 +194,7 @@ pub fn install_capture_hosts(app: &mut App) {
 		(
 			drain_capture_pose_assemblies,
 			pose_representative_hosts.before(CharacterMotionSystems::Anim),
+			log_pose_host_wait,
 		),
 	);
 }
@@ -302,6 +304,55 @@ fn spawn_pose_host(commands: &mut Commands, root: Entity) -> bool {
 	true
 }
 
+fn log_pose_host_wait(
+	hosts: Query<
+		(Entity, &CaptureHostRoot),
+		(With<CapturePoseSpec>, With<CaptureHostRealized>, Without<CaptureHostReady>),
+	>,
+	children: Query<&Children>,
+	pending_assembly: Query<(), With<PendingCharacterAssembly>>,
+	hidden_until: Query<(), With<HiddenUntilSceneReady>>,
+	meshes: Query<Entity, (With<Mesh3d>, Allow<Disabled>)>,
+	mailboxes: Query<&AnimMailbox>,
+	mut frames: Local<u32>,
+) {
+	if hosts.is_empty() {
+		return;
+	}
+	*frames += 1;
+	if *frames % 60 != 1 {
+		return;
+	}
+	for (root, host) in &hosts {
+		let mut pending = 0_u32;
+		let mut hidden = 0_u32;
+		let mut mesh_count = 0_u32;
+		let mut mailbox_settled = false;
+		visit_descendants(root, &children, &mut |entity| {
+			if pending_assembly.get(entity).is_ok() {
+				pending += 1;
+			}
+			if hidden_until.get(entity).is_ok() {
+				hidden += 1;
+			}
+			if meshes.get(entity).is_ok() {
+				mesh_count += 1;
+			}
+			if mailboxes.get(entity).is_ok_and(AnimMailbox::settled) {
+				mailbox_settled = true;
+			}
+		});
+		info!(
+			id = %host.id.as_str(),
+			pending,
+			hidden,
+			meshes = mesh_count,
+			mailbox_settled,
+			"pose capture host waiting"
+		);
+	}
+}
+
 fn drain_capture_pose_assemblies(world: &mut World) {
 	let roots: Vec<Entity> = world
 		.query_filtered::<Entity, (With<PendingCharacterAssembly>, With<CapturePoseAssembly>)>()
@@ -364,6 +415,9 @@ pub fn mark_capture_hosts_ready(
 			&mailboxes,
 			&pending_scene,
 		) {
+			if pose_specs.get(root).is_ok() {
+				info!(root = ?root, "pose capture host ready");
+			}
 			commands.entity(root).try_insert(CaptureHostReady);
 		}
 	}
