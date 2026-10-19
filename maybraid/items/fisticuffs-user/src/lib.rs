@@ -66,7 +66,7 @@ impl Plugin for FisticuffsUserPlugin {
 #[cfg(test)]
 mod pose_tests {
 	use bevy::prelude::Vec3;
-	use character_animations::animations::{Jab, HOLD_END};
+	use character_animations::animations::{Jab, JAB_HOLD_END};
 	use character_animations::Animation;
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 	use character_rigs::Side;
@@ -77,7 +77,7 @@ mod pose_tests {
 	use super::*;
 
 	const FOREARM_SEGMENT: f32 = 0.48;
-	const HOLD: f32 = (character_animations::animations::EXTEND_END + HOLD_END) * 0.5;
+	const HOLD: f32 = (character_animations::animations::EXTEND_END + JAB_HOLD_END) * 0.5;
 
 	fn finish(pad: &mut VirtualPad) {
 		pad.apply_trigger_digital(0.5);

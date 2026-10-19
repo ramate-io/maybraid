@@ -4,7 +4,6 @@ use crate::fisticuffs::{FisticuffsArmMask, FisticuffsGuardPose, isolate_arm_join
 use bevy::camera::primitives::MeshAabb;
 use bevy::camera::visibility::RenderLayers;
 use bevy::ecs::entity_disabling::Disabled;
-use bevy::ecs::query::Allow;
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
@@ -415,9 +414,6 @@ pub fn mark_capture_hosts_ready(
 			&mailboxes,
 			&pending_scene,
 		) {
-			if pose_specs.get(root).is_ok() {
-				info!(root = ?root, "pose capture host ready");
-			}
 			commands.entity(root).try_insert(CaptureHostReady);
 		}
 	}

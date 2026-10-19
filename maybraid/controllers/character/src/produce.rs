@@ -15,8 +15,8 @@ pub fn produce_character_intents(
 	time: Res<Time>,
 	gameplay: Res<PadGameplayEnabled>,
 	menu_owns: Option<Res<MenuOwnsBack>>,
-	ordinary: Res<OrdinaryLocomotionEnabled>,
 	mouse: Option<Res<ButtonInput<MouseButton>>>,
+	ordinary: Res<OrdinaryLocomotionEnabled>,
 	mut intents: MessageWriter<CharacterIntent>,
 ) {
 	let stance_enabled = gameplay.is_enabled() && !menu_owns.is_some_and(|owns| owns.0);

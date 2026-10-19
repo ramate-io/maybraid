@@ -21,7 +21,7 @@ use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
 use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
 use player::{
 	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
-	PlayerSystems, PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
+	PlayerOpticAds, PlayerSystems, PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
 };
 use tanz_user::{spawn_tanz_user, TanzUser};
 use world_player::{
@@ -230,9 +230,15 @@ pub(crate) fn teardown_held_weapon(
 	if let Some(grenade) = grenade {
 		commands.entity(grenade.held).try_despawn();
 	}
-	commands
-		.entity(player)
-		.remove::<(FirearmUser, GrenadeUser, GrenadeThrow, PlayerUse, FisticuffsUser)>();
+	commands.entity(player).remove::<(
+		FirearmUser,
+		GrenadeUser,
+		GrenadeThrow,
+		PlayerUse,
+		PlayerOpticAds,
+		FisticuffsUser,
+	)>();
+	commands.entity(player).insert(PlayerCameraAim::default());
 }
 
 /// Start the holster motion; the kit changes at the dip.
@@ -786,6 +792,43 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(world.get::<GrenadeUser>(player).is_some());
 		assert!(world.get::<firearm_user::FirearmUser>(player).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn teardown_clears_stale_sight_aim() -> anyhow::Result<()> {
+		use firearm_user::FirearmUser;
+		use player::{PlayerCameraAim, PlayerCameraPose};
+
+		let mut world = World::new();
+		let held = world.spawn_empty().id();
+		let player = world
+			.spawn((
+				FirearmUser::holding(held),
+				PlayerCameraAim {
+					focus: 1.0,
+					pose: Some(PlayerCameraPose {
+						translation: Vec3::ONE,
+						rotation: Quat::IDENTITY,
+					}),
+					sight_fov: Some(0.2),
+				},
+			))
+			.id();
+		world
+			.run_system_once(move |mut commands: Commands| {
+				crate::weapon::teardown_held_weapon(
+					&mut commands,
+					player,
+					Some(&FirearmUser::holding(held)),
+					None,
+				);
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let aim = world.get::<PlayerCameraAim>(player).expect("aim");
+		assert_eq!(aim.focus, 0.0);
+		assert!(aim.pose.is_none());
+		assert!(aim.sight_fov.is_none());
 		Ok(())
 	}
 

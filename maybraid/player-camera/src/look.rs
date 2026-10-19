@@ -4,7 +4,10 @@ use crate::FollowCamera;
 use bevy::prelude::*;
 use characters::CharacterHeading;
 use maybraid_character_controller::CharacterIntent;
-use player::{clamp_aim_pitch, wrap_pi, CameraFollow, PlayerLook, PlayerVisual, PlayerYawOwner};
+use player::{
+	clamp_aim_pitch, wrap_pi, CameraFollow, PlayerLook, PlayerOpticAds, PlayerVisual,
+	PlayerYawOwner,
+};
 
 /// When `true`, [`CharacterIntent::SwapPov`] is ignored (in-game inventory edit).
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -114,6 +117,7 @@ pub(crate) fn apply_look_intents(
 	mouse: Res<ButtonInput<MouseButton>>,
 	locked: Option<Res<CameraPovLocked>>,
 	suppressed: Option<Res<CameraLookSuppressed>>,
+	followed_players: Query<(), (With<CameraFollow>, With<PlayerOpticAds>)>,
 	mut intents: MessageReader<CharacterIntent>,
 	mut cameras: Query<
 		(&mut CameraController, &FollowCamera, Option<&Projection>),
@@ -154,9 +158,16 @@ pub(crate) fn apply_look_intents(
 	if skill_map {
 		ads = 0.0;
 	}
+	let optic_ads = !followed_players.is_empty();
 	if let Ok((mut controller, _, _)) = cameras.single_mut() {
-		controller.focus = focus.clamp(0.0, 1.0);
-		controller.ads = ads.clamp(0.0, 1.0);
+		if optic_ads {
+			controller.focus = focus.clamp(0.0, 1.0);
+			controller.ads = ads.clamp(0.0, 1.0);
+		} else {
+			controller.focus = 0.0;
+			controller.ads = 0.0;
+			controller.focus_blend = 0.0;
+		}
 		if swap_pov && !locked.is_some_and(|locked| locked.0) {
 			controller.pov.toggle();
 		}
@@ -380,7 +391,30 @@ mod tests {
 	}
 
 	#[test]
-	fn focus_intent_still_writes_controller_focus() {
+	fn focus_intent_ignores_optic_ads_without_a_held_firearm() {
+		let mut app = App::new();
+		app.init_resource::<ButtonInput<MouseButton>>()
+			.add_message::<CharacterIntent>()
+			.add_systems(Update, apply_look_intents);
+		let camera = app
+			.world_mut()
+			.spawn((
+				Camera3d::default(),
+				CameraController { focus: 1.0, focus_blend: 1.0, ..default() },
+				FollowCamera::default(),
+			))
+			.id();
+		app.world_mut().spawn((player::CameraFollow, player::Player));
+		app.world_mut().write_message(CharacterIntent::Focus(1.0));
+		app.update();
+		let controller = app.world().get::<CameraController>(camera).expect("camera");
+		assert_eq!(controller.focus, 0.0);
+		assert_eq!(controller.ads, 0.0);
+		assert_eq!(controller.focus_blend, 0.0);
+	}
+
+	#[test]
+	fn focus_intent_writes_controller_focus_with_a_held_firearm() {
 		let mut app = App::new();
 		app.init_resource::<ButtonInput<MouseButton>>()
 			.add_message::<CharacterIntent>()
@@ -389,6 +423,7 @@ mod tests {
 			.world_mut()
 			.spawn((Camera3d::default(), CameraController::default(), FollowCamera::default()))
 			.id();
+		app.world_mut().spawn((player::CameraFollow, player::Player, PlayerOpticAds));
 		app.world_mut().write_message(CharacterIntent::Focus(1.0));
 		app.update();
 		let focus = app.world().get::<CameraController>(camera).map(|controller| controller.focus);

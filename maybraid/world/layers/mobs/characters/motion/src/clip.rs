@@ -523,18 +523,18 @@ mod tests {
 	}
 
 	#[test]
+	fn fisticuffs_guard_is_the_jab_rest() {
+		assert_eq!(AnimClip::fisticuffs_guard(), AnimClip::jab());
+		assert_eq!(AnimClip::fisticuffs_guard_progress(), Jab::guard_progress());
+		assert_eq!(AnimClip::fisticuffs_guard_progress(), 0.0);
+	}
+
+	#[test]
 	fn still_keeps_the_rest_identity() {
 		assert_eq!(AnimClip::still().id(), AnimId::Still);
 		assert_eq!(AnimClip::still().default_speed(), IDLE_CYCLE_SPEED);
 		assert!(IDLE_CYCLE_SPEED < WALK_CYCLE_SPEED);
 		assert_ne!(AnimClip::still().id(), AnimClip::walk().id());
-	}
-
-	#[test]
-	fn fisticuffs_guard_is_the_jab_rest() {
-		assert_eq!(AnimClip::fisticuffs_guard(), AnimClip::jab());
-		assert_eq!(AnimClip::fisticuffs_guard_progress(), Jab::guard_progress());
-		assert_eq!(AnimClip::fisticuffs_guard_progress(), 0.0);
 	}
 
 	#[test]

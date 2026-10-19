@@ -174,8 +174,7 @@ impl AnimMailbox {
 	/// offline equivalent; the mailbox already owns the runtime crossfade.
 	pub fn restart_from_visible(&mut self) {
 		if self.posed {
-			let AnimMailbox { output, from_pose, .. } = &mut *self;
-			from_pose.copy_from(output);
+			self.from_pose.copy_from(&self.output);
 		}
 		self.from_offset = self.displayed_offset;
 		self.blend_progress = 0.0;
