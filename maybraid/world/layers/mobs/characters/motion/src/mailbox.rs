@@ -13,7 +13,8 @@ use bevy::prelude::*;
 use character_animations::{
 	animations::{
 		Idle, Jab, PowerStrafe, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat,
-		SquatDescent, Tuck, TwoFootedTuckedFlip, UprightLeap, UprightPowerDash,
+		SquatDescent, ThinkAgain, Tuck, TwoFootedTuckedFlip, UprightLeap, UprightPowerDash,
+		THINK_AGAIN_DURATION,
 	},
 	Animation, Effects,
 };
@@ -880,6 +881,13 @@ fn sample_humanoid(
 			&wave,
 			rig,
 			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
+		AnimClip::ThinkAgain(params) => sample_split(
+			&ThinkAgain::new(params.side),
+			rig,
+			progress.clamp(0.0, THINK_AGAIN_DURATION),
 			write_bones,
 			write_effects,
 		),
@@ -2101,10 +2109,7 @@ mod tests {
 		world.entity_mut(host).remove::<SuspendAnimation>();
 		step_mailbox(&mut world, host, 1.0 / 60.0)?;
 		let progress_after = world.get::<AnimMailbox>(host).unwrap().clip_progress;
-		anyhow::ensure!(
-			progress_after > progress_before,
-			"resume must advance clip clock"
-		);
+		anyhow::ensure!(progress_after > progress_before, "resume must advance clip clock");
 		let base_after = world.get::<AnimMailbox>(host).unwrap().output.clone();
 		anyhow::ensure!(
 			base_after.local != base_before.local,
@@ -2216,9 +2221,7 @@ mod tests {
 		Ok(())
 	}
 
-	fn verify_crossfade_ignores_overlay_on_rig(
-		capture_from_rig: bool,
-	) -> anyhow::Result<()> {
+	fn verify_crossfade_ignores_overlay_on_rig(capture_from_rig: bool) -> anyhow::Result<()> {
 		use character_animations::animations::{Run, Walk};
 		use character_animations::Animation;
 
@@ -2314,7 +2317,11 @@ mod tests {
 	}
 
 	/// Steady-state path from PR #1321: skip publishing into [`AnimMailbox::output`].
-	fn publish_pose_pr1321_steady_skip(mailbox: &mut AnimMailbox, sampled: &PoseBuffer, weight: f32) {
+	fn publish_pose_pr1321_steady_skip(
+		mailbox: &mut AnimMailbox,
+		sampled: &PoseBuffer,
+		weight: f32,
+	) {
 		if weight < 1.0 {
 			publish_pose(mailbox, sampled, weight);
 		} else {
@@ -2322,7 +2329,10 @@ mod tests {
 		}
 	}
 
-	fn bench_mailbox_sample_publish_effects(pr1321_steady_skip: bool, blend_progress: f32) -> Vec<u128> {
+	fn bench_mailbox_sample_publish_effects(
+		pr1321_steady_skip: bool,
+		blend_progress: f32,
+	) -> Vec<u128> {
 		use crate::clip_cache::RigVariantId;
 
 		const FRAMES: u32 = 5_000;
@@ -2375,11 +2385,7 @@ mod tests {
 					} else {
 						publish_pose(mailbox, &rig.pose, weight);
 					}
-					black_box(blend_mailbox_effects(
-						mailbox.from_offset,
-						effects,
-						blend_progress,
-					));
+					black_box(blend_mailbox_effects(mailbox.from_offset, effects, blend_progress));
 					for bone in &mailbox.output.local {
 						black_box(bone);
 					}
@@ -2425,7 +2431,8 @@ mod tests {
 			for frame in 0..FRAMES {
 				let frame = black_box(frame);
 				for (index, rig) in rigs.iter_mut().enumerate() {
-					let progress = black_box((frame as f32 * 0.013 + index as f32 * 0.02).rem_euclid(1.0));
+					let progress =
+						black_box((frame as f32 * 0.013 + index as f32 * 0.02).rem_euclid(1.0));
 					sample_humanoid_prepared(
 						AnimClip::walk(),
 						rig,

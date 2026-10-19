@@ -4,7 +4,7 @@
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
-use crate::animations::{Flapping, Jab, QuadrupedRun, Squat, VictoryWave, Walk};
+use crate::animations::{Flapping, Jab, QuadrupedRun, Squat, ThinkAgain, VictoryWave, Walk};
 use crate::Animation;
 
 #[test]
@@ -81,6 +81,24 @@ fn victory_wave_sweeps_raised_forearm_in_character_x() {
 	assert!(tip_a.y > 1.0 && tip_b.y > 1.0, "forearm stays raised, {tip_a:?} {tip_b:?}");
 	assert!((tip_a.x - tip_b.x).abs() > 0.06, "oscillation is lateral, {tip_a:?} vs {tip_b:?}");
 	assert!(tip_a.x < -0.05 && tip_b.x < -0.05, "right tip stays on its side, {tip_a:?} {tip_b:?}");
+}
+
+#[test]
+fn think_again_sweeps_forearm_beside_the_head() {
+	let rest = HumanoidV0Rig::for_clip_test();
+	let mut think = HumanoidV0Rig::for_clip_test();
+	let mut again = HumanoidV0Rig::for_clip_test();
+	ThinkAgain::default().apply(&mut think, 1.50);
+	ThinkAgain::default().apply(&mut again, 3.40);
+	let rest_dir = rest.character_length("forearm.R");
+	let think_dir = think.character_length("forearm.R");
+	let again_dir = again.character_length("forearm.R");
+	assert!(think_dir.y > rest_dir.y + 0.3, "Think forearm rises, {think_dir:?}");
+	assert!(again_dir.y > rest_dir.y + 0.3, "Again forearm stays up, {again_dir:?}");
+	assert!(
+		again_dir.y > think_dir.y,
+		"Again is closer to vertical than Think, think {think_dir:?} again {again_dir:?}"
+	);
 }
 
 #[test]
