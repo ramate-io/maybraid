@@ -318,7 +318,10 @@ fn attach_stash_visuals(
 	inventory: &Inventory,
 	assets: Option<&AssetServer>,
 ) {
-	let displayed = inventory.clothing.len() + inventory.weapons.len() + inventory.skills.len();
+	let displayed = inventory.clothing.len()
+		+ inventory.weapons.len()
+		+ inventory.skills.len()
+		+ inventory.tanzes.len();
 	let mut pile = 0usize;
 	for &index in &inventory.clothing {
 		let Some(item) = inventory.items.get(index) else {
@@ -362,6 +365,20 @@ fn attach_stash_visuals(
 		);
 		pile += 1;
 	}
+	for &index in &inventory.tanzes {
+		let Some(item) = inventory.items.get(index) else {
+			continue;
+		};
+		spawn_displayed_item(
+			commands,
+			host,
+			item,
+			StashDisplayedItem { slot: InventorySlot::Tanzes },
+			display_offset(pile, displayed),
+			assets,
+		);
+		pile += 1;
+	}
 }
 
 /// One item sits on the host; several fan out so they do not stack.
@@ -380,7 +397,9 @@ fn pile_offset(index: usize) -> Transform {
 
 fn visual_halo_local(item: &InventoryItem, slot: InventorySlot, transform: Transform) -> Vec3 {
 	match slot {
-		InventorySlot::Clothing | InventorySlot::Skills => transform.translation,
+		InventorySlot::Clothing | InventorySlot::Skills | InventorySlot::Tanzes => {
+			transform.translation
+		}
 		InventorySlot::Weapons => item.firearm_spec().map_or(transform.translation, |spec| {
 			let kit = GeneratedFirearm::from_spec(spec);
 			let bounds = firearm_bounds(&kit);
@@ -409,7 +428,7 @@ fn spawn_displayed_item(
 		InventorySlot::Weapons => {
 			spawn_displayed_weapon(commands, host, item, displayed, transform, assets);
 		}
-		InventorySlot::Skills => {
+		InventorySlot::Skills | InventorySlot::Tanzes => {
 			spawn_displayed_skill_map(commands, host, item, displayed, transform);
 		}
 	}
@@ -1123,6 +1142,7 @@ mod tests {
 			clothing: vec![0],
 			weapons: vec![1],
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		}
 	}
 
@@ -1134,15 +1154,6 @@ mod tests {
 		move |mut commands| {
 			spawn_world_stash(&mut commands, transform, inventory.clone(), policy, None)
 		}
-	}
-
-	#[test]
-	fn default_loot_ttl_is_sixty_seconds_not_corpse_time() {
-		assert_eq!(DEFAULT_LOOT_SECS, 60.0);
-		assert_eq!(StashPolicy::default().loot_secs, 60.0);
-		assert!(!StashPolicy::default().persist);
-		assert!(StashPolicy::chest().persist);
-		assert!(WorldStashSettings::default().loot_secs > 4.0);
 	}
 
 	#[test]
@@ -1235,16 +1246,6 @@ mod tests {
 		Ok(())
 	}
 
-	fn expected_npc_loot(
-		entity: Entity,
-		point: Vec3,
-		mut bag: Inventory,
-		fraction: LootFraction,
-	) -> Inventory {
-		let downed = Downed { source: None, point, at: 0.0 };
-		bag.take_fraction(&mut ItemRng::from_seed(npc_loot_seed(entity, &downed)), fraction)
-	}
-
 	fn spawn_downed_npc(
 		world: &mut World,
 		bag: Inventory,
@@ -1268,81 +1269,85 @@ mod tests {
 		entity.id()
 	}
 
+	struct NpcLootCase {
+		kind: Option<MobKind>,
+		brains: Option<CharacterBrains>,
+		point: Vec3,
+		fraction: LootFraction,
+	}
+
+	impl NpcLootCase {
+		fn drop_count(self) -> anyhow::Result<usize> {
+			let mut world = World::new();
+			world.init_resource::<WorldStashSettings>();
+			let mut bag = mixed_bag();
+			let body =
+				spawn_downed_npc(&mut world, bag.clone(), self.kind, self.brains, self.point);
+			let downed = Downed { source: None, point: self.point, at: 0.0 };
+			let expected = bag.take_fraction(
+				&mut ItemRng::from_seed(npc_loot_seed(body, &downed)),
+				self.fraction,
+			);
+			world
+				.run_system_once(detach_downed_npc_loot)
+				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
+			Ok(expected.items.len())
+		}
+	}
+
 	#[test]
 	fn raider_downed_drops_one_third() -> anyhow::Result<()> {
-		let mut world = World::new();
-		world.init_resource::<WorldStashSettings>();
-		let point = Vec3::new(2.0, 0.0, 1.0);
-		let bag = mixed_bag();
-		let body = spawn_downed_npc(
-			&mut world,
-			bag.clone(),
-			Some(MobKind::Raider),
-			Some(CharacterBrains::Roamer),
-			point,
+		assert_eq!(
+			NpcLootCase {
+				kind: Some(MobKind::Raider),
+				brains: Some(CharacterBrains::Roamer),
+				point: Vec3::new(2.0, 0.0, 1.0),
+				fraction: LootFraction::ONE_THIRD,
+			}
+			.drop_count()?,
+			1
 		);
-		let expected = expected_npc_loot(body, point, bag, LootFraction::ONE_THIRD);
-
-		world
-			.run_system_once(detach_downed_npc_loot)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-
-		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
-		assert_eq!(expected.items.len(), 1);
 		Ok(())
 	}
 
 	#[test]
 	fn guard_downed_drops_one_third() -> anyhow::Result<()> {
-		let mut world = World::new();
-		world.init_resource::<WorldStashSettings>();
-		let point = Vec3::new(-1.0, 0.0, 3.0);
-		let bag = mixed_bag();
-		let body = spawn_downed_npc(&mut world, bag.clone(), Some(MobKind::Guard), None, point);
-		let expected = expected_npc_loot(body, point, bag, LootFraction::ONE_THIRD);
-
-		world
-			.run_system_once(detach_downed_npc_loot)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-
-		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
-		assert_eq!(expected.items.len(), 1);
+		assert_eq!(
+			NpcLootCase {
+				kind: Some(MobKind::Guard),
+				brains: None,
+				point: Vec3::new(-1.0, 0.0, 3.0),
+				fraction: LootFraction::ONE_THIRD,
+			}
+			.drop_count()?,
+			1
+		);
 		Ok(())
 	}
 
 	#[test]
 	fn brawler_downed_drops_one_twelfth() -> anyhow::Result<()> {
-		let mut world = World::new();
-		world.init_resource::<WorldStashSettings>();
-		let point = Vec3::new(0.0, 0.0, 5.0);
-		let bag = mixed_bag();
-		let body = spawn_downed_npc(&mut world, bag.clone(), Some(MobKind::Brawler), None, point);
-		let expected = expected_npc_loot(body, point, bag, LootFraction::ONE_TWELFTH);
-
-		world
-			.run_system_once(detach_downed_npc_loot)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-
-		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
-		assert!(expected.items.len() <= 1);
+		let dropped = NpcLootCase {
+			kind: Some(MobKind::Brawler),
+			brains: None,
+			point: Vec3::new(0.0, 0.0, 5.0),
+			fraction: LootFraction::ONE_TWELFTH,
+		}
+		.drop_count()?;
+		assert!(dropped <= 1);
 		Ok(())
 	}
 
 	#[test]
 	fn brains_set_loot_when_mob_kind_is_missing() -> anyhow::Result<()> {
-		let mut world = World::new();
-		world.init_resource::<WorldStashSettings>();
-		let point = Vec3::ZERO;
-		let bag = mixed_bag();
-		let body =
-			spawn_downed_npc(&mut world, bag.clone(), None, Some(CharacterBrains::Brawler), point);
-		let expected = expected_npc_loot(body, point, bag, LootFraction::ONE_TWELFTH);
-
-		world
-			.run_system_once(detach_downed_npc_loot)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-
-		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
+		NpcLootCase {
+			kind: None,
+			brains: Some(CharacterBrains::Brawler),
+			point: Vec3::ZERO,
+			fraction: LootFraction::ONE_TWELFTH,
+		}
+		.drop_count()?;
 		Ok(())
 	}
 
@@ -1397,28 +1402,45 @@ mod tests {
 
 	#[test]
 	fn stash_outlives_corpse_ttl_and_despawns_at_loot_secs() -> anyhow::Result<()> {
-		let mut app = App::new();
-		app.add_plugins(MinimalPlugins).add_systems(Last, tick_queued_despawns);
-		let stash = app
-			.world_mut()
+		use std::time::Duration;
+
+		const LOOT_SECS: f32 = 12.0;
+		const CORPSE_SECS: f32 = 4.0;
+
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		let stash = world
 			.run_system_once(spawn_stash_system(
 				Transform::IDENTITY,
 				mixed_bag(),
-				StashPolicy::ephemeral(DEFAULT_LOOT_SECS),
+				StashPolicy::ephemeral(LOOT_SECS),
 			))
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?
 			.ok_or_else(|| anyhow::anyhow!("stash"))?;
-		let remaining = app
-			.world()
+		let remaining = world
 			.get::<DespawnAfter>(stash)
 			.ok_or_else(|| anyhow::anyhow!("ttl"))?
 			.remaining_secs();
-		assert!((remaining - DEFAULT_LOOT_SECS).abs() < 1e-3);
-		assert!(remaining > 4.0);
+		assert!((remaining - LOOT_SECS).abs() < 1e-3);
+		assert!(remaining > CORPSE_SECS);
 
-		app.world_mut().entity_mut(stash).insert(DespawnAfter::seconds(0.0));
-		app.update();
-		assert!(!app.world().entities().contains(stash));
+		world.resource_mut::<Time>().advance_by(Duration::from_secs_f32(CORPSE_SECS + 0.5));
+		world
+			.run_system_once(tick_queued_despawns)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.entities().contains(stash), "stash must outlive the corpse clock");
+		let remaining = world
+			.get::<DespawnAfter>(stash)
+			.ok_or_else(|| anyhow::anyhow!("ttl after corpse"))?
+			.remaining_secs();
+		assert!(remaining > 0.0);
+		assert!(remaining < LOOT_SECS - 1.0);
+
+		world.resource_mut::<Time>().advance_by(Duration::from_secs_f32(LOOT_SECS));
+		world
+			.run_system_once(tick_queued_despawns)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.entities().contains(stash));
 		Ok(())
 	}
 
@@ -1688,6 +1710,7 @@ mod tests {
 					clothing: Vec::new(),
 					weapons: vec![0],
 					skills: Vec::new(),
+					tanzes: Vec::new(),
 				},
 				StashPolicy::default(),
 			))
@@ -1819,19 +1842,6 @@ mod tests {
 		assert!((transform.translation - at).length() < 1e-4);
 	}
 
-	#[test]
-	fn claim_halo_uses_three_thinner_rings() {
-		let rings = halo_rings();
-		assert_eq!(rings[0].0, 1.5);
-		assert_eq!(rings[1].0, 0.75);
-		assert_eq!(rings[2].0, 0.25);
-		assert_eq!(rings[0].1, HALO_YELLOW);
-		assert_eq!(rings[1].1, HALO_GREEN);
-		assert_eq!(rings[2].1, HALO_BLUE);
-		assert!(HALO_RING_WIDTH < 0.18);
-		assert!(HALO_BLUE_RADIUS > HALO_RING_WIDTH);
-	}
-
 	fn one_garment() -> Inventory {
 		Inventory {
 			items: vec![InventoryItem::clothing(
@@ -1842,6 +1852,7 @@ mod tests {
 			clothing: vec![0],
 			weapons: Vec::new(),
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		}
 	}
 

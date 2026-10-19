@@ -29,11 +29,11 @@ pub use execute::{
 	ActiveTanz, BufferedTanz, TanzExecution, TanzPhase,
 };
 pub use input::{
-	advance_mode_charge, mode_charge_hold_target, mode_charge_rest, mode_charge_step_toward,
 	CommittedGesture, ModeToggle, TanzButton, TanzInput, TanzRecognizer, TanzRecognizerConfig,
 	TANZ_B_HOLD_SECS, TANZ_TOGGLE_SECS,
 };
-pub use stack::{TanzDefinition, TanzId, TanzInputRange, TanzStack, TanzTiming};
+pub use pose::{request_inventory_tanz_icons, TanzPose};
+pub use stack::{TanzDefinition, TanzDefinitionExt, TanzId, TanzInputRange, TanzStack, TanzTiming};
 
 /// Standard locomotion versus Tanzer gesture play.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -176,11 +176,14 @@ pub enum TanzUserSystems {
 	Animate,
 }
 
-/// Stamp the starter Tanz stack on a live character.
+/// Stamp an empty Tanz runtime on a live character.
+///
+/// Equipped order comes from that character's inventory projection, not a
+/// hidden starter grant.
 pub fn spawn_tanz_user(commands: &mut Commands, user: Entity) {
 	commands.entity(user).insert((
 		TanzUser::default(),
-		TanzStack::starter(),
+		TanzStack::default(),
 		TanzExecution::default(),
 	));
 }

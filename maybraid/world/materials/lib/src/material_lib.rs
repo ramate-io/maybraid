@@ -137,7 +137,7 @@ mod tests {
 	use bevy::prelude::*;
 	use characters::material_lib::{ClothingShaderMaterialRefCache, FaceShaderMaterialRefCache};
 
-	use building_shaders::UrbanSurfaceMaterialRefCache;
+	use building_shaders::{ColumnSurfaceMaterialRefCache, UrbanSurfaceMaterialRefCache};
 	use chain_shaders::ChainMaterialRefCache;
 	use firearms::{EnergyMaterialRefCache, MuzzleFlameMaterialRefCache};
 	use furniture_shaders::FurnitureSurfaceMaterialRefCache;
@@ -153,6 +153,7 @@ mod tests {
 		assert!(app.world().contains_resource::<ClothingShaderMaterialRefCache>());
 		assert!(app.world().contains_resource::<FaceShaderMaterialRefCache>());
 		assert!(app.world().contains_resource::<UrbanSurfaceMaterialRefCache>());
+		assert!(app.world().contains_resource::<ColumnSurfaceMaterialRefCache>());
 		assert!(app.world().contains_resource::<FurnitureSurfaceMaterialRefCache>());
 		assert!(app.world().contains_resource::<MuzzleFlameMaterialRefCache>());
 		assert!(app.world().contains_resource::<EnergyMaterialRefCache>());
