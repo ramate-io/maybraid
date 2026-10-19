@@ -44,6 +44,7 @@ impl Plugin for ChainPlaygroundPlugin {
 					sync_preview.after(capture_command_line_input::<PlaygroundCommand>),
 					tick_capture.after(sync_preview),
 					tick_video.after(sync_preview),
+					capture::hide_hud_during_evidence,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);

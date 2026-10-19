@@ -148,7 +148,7 @@ fn vertex(vertex_no_morph: Vertex) -> ChainVertexOutput {
     let pulse = chain_pulse(globals.time, max(material.scalars[1].w, 0.05), 0.0);
 #endif
     if material.halo.x > 0.5 {
-        let expand = material.halo.y * (0.55 + 0.80 * pulse);
+        let expand = material.halo.y * (0.70 + 1.05 * pulse);
         vertex.position = vertex.position + vertex.normal * expand;
     }
 
@@ -265,24 +265,34 @@ fn fragment(
     let flash = material.impact.z
         * saturate(1.0 - hit_dist / max(material.impact.y, 1e-3))
         * exp(-hit_age * 3.2);
-    let damage = saturate(mixed * (0.55 + 0.75 * weakness) + flash * 0.35);
+    // Persistent damage widens the *same* network. The hit flash is extra
+    // width + emission inside those fissures, not a whole-link recolor.
+    let damage = saturate(mixed * (0.55 + 0.75 * weakness));
     let look = look_from_damage(damage, fade);
     let pulse = chain_pulse(globals.time, pulse_rate, id);
     let flicker = 0.94 + 0.06 * sin(globals.time * 18.0 + weakness * 9.0);
+    let widen = saturate(look.x + persistent * 0.42 + flash * 0.38);
 
     let around = uv.x;
     let along_link = saturate(uv.y * link_count - id);
-    let crack_uv = vec2<f32>(around * crack_freq * 0.22, along_link * 3.05);
+    // One atlas tile around the tube; V uses the ring aspect so length
+    // does not stretch the network. `crack_freq` of 6 ≈ one wrap.
+    let tiles_u = max(crack_freq / 6.0, 0.85);
+    let crack_uv = vec2<f32>(around * tiles_u, along_link * 3.05);
     let variant = crack_variant(seed, id);
     let crack_s = sample_cracks(crack_uv, variant);
     let dist = crack_s.x;
     let height = crack_s.y;
     let cell = crack_s.z;
 
-    let hair = mix(0.008, 0.026, look.x);
-    let fissure = mix(0.024, 0.095, look.x);
-    let shoulder = fissure * 1.95;
-    let crack_vis = saturate(look.x * 1.15 + persistent * 0.35 + flash * 0.25);
+    // Normalized atlas-R bands. Intact hairlines stay readable at play
+    // distance; damage only widens them. Keep in lockstep with
+    // `crack_band_widths` on the CPU.
+    let hair = mix(0.10, 0.20, widen);
+    let fissure = mix(0.20, 0.42, widen);
+    let shoulder = fissure * 1.70;
+    // Energy occupies the network even when the link is intact.
+    let crack_vis = saturate(0.55 + look.x * 0.45 + persistent * 0.22 + flash * 0.28);
     let center = (1.0 - smoothstep(0.0, hair * 0.85, dist)) * crack_vis;
     let inner_edge = smoothstep(hair * 0.35, hair, dist)
         * (1.0 - smoothstep(hair, fissure * 0.72, dist))
@@ -290,6 +300,7 @@ fn fragment(
     let shoulder_t = smoothstep(fissure * 0.45, fissure, dist)
         * (1.0 - smoothstep(fissure, shoulder, dist))
         * crack_vis;
+    let in_crack = 1.0 - smoothstep(0.0, fissure * 1.35, dist);
 
     let metal = material.colors[0].xyz;
     let glow = material.colors[1].xyz;
@@ -297,31 +308,32 @@ fn fragment(
     let ember = material.colors[3].xyz;
 
     var albedo = metal * (0.92 + 0.18 * value_noise_3d(vec3<f32>(uv * 18.0, seed)));
-    albedo = mix(albedo, ash * 0.12, center);
-    albedo = mix(albedo, glow * 0.55 + vec3<f32>(0.22, 0.18, 0.12), inner_edge);
-    albedo = mix(albedo, ash * 0.55, shoulder_t * 0.92);
+    albedo = mix(albedo, ash * 0.10, center);
+    albedo = mix(albedo, glow * 0.42 + metal * 0.35, inner_edge);
+    albedo = mix(albedo, ash * 0.62, shoulder_t * mix(0.22, 0.90, look.x));
     let rust = saturate((value_noise_3d(vec3<f32>(around * 7.0, along_link * 5.0, seed)) - 0.55) * 2.4)
         * look.x
-        * saturate(1.0 - dist * 1.6);
+        * in_crack;
     albedo = mix(albedo, ash, rust * 0.55);
+    albedo = mix(albedo, ember * 0.55, center * look.z * 0.65);
 
-    let vein_u = 1.0 - abs(fract(around * 2.0 + along_link * 0.15) * 2.0 - 1.0);
-    let vein = pow(saturate(vein_u * 0.92), 2.1) * (0.55 + 0.45 * (1.0 - look.x));
+    // Energy veins *are* the fracture network, not striped `vein_u`.
+    let vein = center * 0.55 + inner_edge * 0.95;
     let facing = saturate(abs(dot(
         normalize(mesh.world_normal),
         fns::calculate_view(mesh.world_position, view.clip_from_view[3].w == 1.0)
     )));
     let rim = pow(1.0 - facing, 2.2) * look.y * pulse;
-    let wash = mix(0.10, 0.0, saturate(look.x * 1.35)) * look.y;
-    let glow_amt = (vein * mix(0.55, 0.16, look.x) + wash + inner_edge * 0.85) * look.y * pulse * flicker;
-    let ember_amt = (center * 1.05 + look.z * 0.32) * look.z * flicker;
-    // Keep peaks HDR (no tone_mapping) but do not wash the metal to white at authored gain.
-    let emit_gain = min(glow_gain, 2.4) * 0.42;
-    let emissive = glow * (glow_amt + rim * 0.55) * emit_gain
-        + ember * ember_amt * (1.15 + emit_gain * 0.45)
-        + glow * flash * 0.85
-        + glow * 0.04 * look.y;
-    albedo = mix(albedo, glow, saturate(glow_amt * 0.16 + rim * 0.08));
+    let glow_amt = vein * mix(0.85, 0.32, look.x) * look.y * pulse * flicker;
+    let ember_amt = (center * 1.25 + inner_edge * 0.35) * (look.z + flash * 0.55) * flicker;
+    // HDR peaks stay un-tonemapped. Gain rides the pulse; keep it off the
+    // solid metal so daylight still reads as iron.
+    let emit_gain = min(glow_gain, 3.2) * mix(0.22, 0.78, pulse);
+    let emissive = glow * (glow_amt + rim * 0.45) * emit_gain
+        + ember * ember_amt * (1.15 + emit_gain * 0.35)
+        + glow * flash * 1.35 * in_crack
+        + glow * 0.035 * look.y * (0.40 + 0.60 * pulse);
+    albedo = mix(albedo, glow, saturate(glow_amt * 0.10 + inner_edge * 0.12));
 
     let open = look.w + look.x * 0.12;
     let piece = hash21(vec2<f32>(cell * 13.1 + id, seed * 0.05));
@@ -333,10 +345,13 @@ fn fragment(
     }
 
     if material.halo.x > 0.5 {
-        let fresnel = pow(1.0 - facing, 2.35);
-        let opacity = fresnel * mix(0.05, 0.38, pulse) * max(look.y, 0.16);
-        let halo_rgb = glow * (0.55 + pulse * 1.35) * min(glow_gain, 2.8) * opacity;
-        return vec4<f32>(halo_rgb, opacity);
+        // Rim only: a body term would additively wash the front faces that
+        // already cover the metal. Expansion puts this Fresnel outside the
+        // silhouette.
+        let fresnel = pow(1.0 - facing, 1.45);
+        let opacity = fresnel * mix(0.20, 0.82, pulse) * max(look.y, 0.45);
+        let halo_rgb = glow * (0.65 + pulse * 1.55) * min(glow_gain, 3.6);
+        return vec4<f32>(halo_rgb * opacity, opacity);
     }
 
     pbr_input.frag_coord = mesh.position;
@@ -346,7 +361,7 @@ fn fragment(
     let prepared_normal = fns::prepare_world_normal(mesh.world_normal, true, is_front);
     var n = normalize(prepared_normal);
     let bump_h = mix(height, 0.5, 1.0 - crack_vis);
-    n = apply_height_bump(n, mesh.world_position.xyz, bump_h, 0.55 * amp * crack_vis);
+    n = apply_height_bump(n, mesh.world_position.xyz, bump_h, 0.85 * amp * crack_vis);
 
     pbr_input.material.base_color = vec4<f32>(albedo, 1.0);
     pbr_input.material.perceptual_roughness = mix(0.38, 0.78, look.x);

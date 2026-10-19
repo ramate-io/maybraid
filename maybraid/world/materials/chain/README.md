@@ -60,10 +60,12 @@ Atlas packing (256×256, 2×2 of 128×128):
 | B | Cell id for fracture-driven piece removal |
 | A | `255` |
 
-Link seed picks a variant. Damage **widens** the same network: hairlines
-first, then connected fissures and secondary branches. Each fissure has a
-dark recessed center, a narrow bright inner edge, and a wider subdued
-shoulder. Final holes open along those fissures (and loose cells), not as
+Link seed picks a variant. Energy veins occupy that network (not striped
+`vein_u`). Damage **widens** the same fissures: hairlines first, then
+connected cracks and secondary branches. Each fissure has a dark recessed
+center, a narrow bright inner edge, and a wider subdued shoulder. Hits
+flash and ember *inside* those cracks; they do not recolor the whole
+link. Final holes open along the fissures (and loose cells), not as
 hashed speckle.
 
 Sampling uses **link-local** UVs (`around` the tube × `along` the ring,

@@ -33,6 +33,19 @@ pub struct LinkLook {
 	pub dissolve: f32,
 }
 
+/// Normalized atlas-R thresholds for the fissure cross-section.
+///
+/// Intact hairlines are already wide enough to read at play distance;
+/// damage only widens the same bands. Keep in lockstep with
+/// `chain_material.wgsl`.
+pub fn crack_band_widths(widen: f32) -> (f32, f32, f32) {
+	let w = widen.clamp(0.0, 1.0);
+	let hair = 0.10 + 0.10 * w;
+	let fissure = 0.20 + 0.22 * w;
+	let shoulder = fissure * 1.70;
+	(hair, fissure, shoulder)
+}
+
 impl LinkLook {
 	pub fn from_damage(damage: f32, fade: f32) -> Self {
 		let damage = damage.clamp(0.0, 1.0);
@@ -113,6 +126,21 @@ mod tests {
 		assert!(near.ember > damaged.ember);
 		assert!(released.dissolve > near.dissolve);
 		assert!(released.glow_scale < 0.2);
+		Ok(())
+	}
+
+	#[test]
+	fn damage_widens_existing_fissure_bands() -> anyhow::Result<()> {
+		let (hair_i, fissure_i, shoulder_i) = crack_band_widths(0.0);
+		let (hair_d, fissure_d, shoulder_d) = crack_band_widths(0.8);
+		assert!(hair_i < fissure_i && fissure_i < shoulder_i);
+		assert!(hair_d > hair_i, "hairlines should widen, {hair_i} → {hair_d}");
+		assert!(fissure_d > fissure_i);
+		assert!(shoulder_d > shoulder_i);
+		assert!(
+			hair_d < fissure_i || hair_d < fissure_d,
+			"the widened hairline must stay inside the fissure"
+		);
 		Ok(())
 	}
 

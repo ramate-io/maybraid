@@ -19,8 +19,8 @@ pub struct ChainHaloMesh {
 	pub material: Handle<ChainMaterial>,
 }
 
-/// Default shell expansion in metres at pulse crest.
-pub const HALO_EXPANSION: f32 = 0.034;
+/// Default shell expansion in metres at the authored base (pulse scales it).
+pub const HALO_EXPANSION: f32 = 0.058;
 
 type HaloParentQuery<'w, 's> = Query<
 	'w,
@@ -86,7 +86,36 @@ pub(crate) fn sync_chain_halos(
 /// Pulse-driven expansion used by tests and the vertex stage.
 pub fn halo_expansion_metres(time: f32, pulse_rate: f32, base: f32) -> f32 {
 	let pulse = chain_pulse(time, pulse_rate, 0.0);
-	base * (0.55 + 0.80 * pulse)
+	base * (0.70 + 1.05 * pulse)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::pulse::{chain_pulse, PULSE_CREST_CENTER, PULSE_CREST_HALF};
+
+	#[test]
+	fn halo_expansion_swings_with_the_shared_pulse() -> anyhow::Result<()> {
+		let rate = 1.4;
+		let period = 1.0 / rate;
+		let trough = halo_expansion_metres(0.0, rate, HALO_EXPANSION);
+		let crest = halo_expansion_metres((PULSE_CREST_CENTER) * period, rate, HALO_EXPANSION);
+		let after = halo_expansion_metres(
+			(PULSE_CREST_CENTER + PULSE_CREST_HALF * 3.0) * period,
+			rate,
+			HALO_EXPANSION,
+		);
+		assert!(
+			crest > trough * 1.35,
+			"crest should expand the shell, trough={trough} crest={crest}"
+		);
+		assert!(
+			after < crest * 0.85,
+			"shell should fall back after the crest, after={after} crest={crest}"
+		);
+		assert!((chain_pulse(PULSE_CREST_CENTER * period, rate, 0.0) - 1.0).abs() < 0.08);
+		Ok(())
+	}
 }
 
 pub(crate) fn register_halo_systems(app: &mut App) {

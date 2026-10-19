@@ -42,7 +42,7 @@ pub const VARIANT_COUNT: u32 = 4;
 /// Ring/tube aspect used when sampling in link-local UV.
 pub const CRACK_ASPECT: f32 = 3.05;
 /// Distance (in tile units) that maps to atlas red = 1.
-const DIST_RANGE: f32 = 0.11;
+const DIST_RANGE: f32 = 0.16;
 
 #[derive(Clone, Copy, Debug)]
 struct Segment {
@@ -139,12 +139,14 @@ fn bake_variant(variant: u32) -> Vec<u8> {
 
 fn grow_network(variant: u32) -> Vec<Segment> {
 	let mut segments = Vec::new();
-	let roots = 5u32;
+	// Two long primaries and a few secondary forks. Dense equal-weight
+	// walks fill the tile so every fragment is "in a crack".
+	let roots = 2u32;
 	for root in 0..roots {
 		let h0 = hash13([variant as f32 + 0.17, root as f32 * 1.9, 0.31]);
 		let h1 = hash13([variant as f32 * 0.7, root as f32 + 2.4, 1.11]);
 		let angle = hash13([h0, h1, 3.3]) * TAU;
-		grow_branch(&mut segments, Vec2::new(h0, h1), angle, 0, variant, root, 12);
+		grow_branch(&mut segments, Vec2::new(h0, h1), angle, 0, variant, root, 14);
 	}
 	segments
 }
@@ -158,16 +160,22 @@ fn grow_branch(
 	root: u32,
 	steps: u32,
 ) {
-	let steps = steps.saturating_sub(depth * 5).max(4);
+	let steps = if depth == 0 { steps } else { 6 };
+	let mut forks = 0u32;
 	for step in 0..steps {
 		let salt = hash13([variant as f32, root as f32 * 5.1 + step as f32, depth as f32 + 0.4]);
-		angle += (salt - 0.5) * 0.95;
-		let len = 0.038 + 0.034 * hash13([salt, 8.2, depth as f32]);
+		angle += (salt - 0.5) * if depth == 0 { 0.42 } else { 0.70 };
+		let len = if depth == 0 {
+			0.070 + 0.036 * hash13([salt, 8.2, depth as f32])
+		} else {
+			0.040 + 0.022 * hash13([salt, 8.2, depth as f32])
+		};
 		let next = p + Vec2::new(angle.cos(), angle.sin()) * len;
 		push_wrapped_segment(segments, p, next);
-		if salt < 0.28 && depth < 2 {
-			let fork = angle + (if salt < 0.14 { 1.05 } else { -1.12 });
-			grow_branch(segments, next, fork, depth + 1, variant, root * 17 + step + 3, 10);
+		if depth == 0 && forks < 2 && salt < 0.22 && step > 3 && step < steps - 2 {
+			let fork = angle + (if salt < 0.11 { 0.90 } else { -0.95 });
+			grow_branch(segments, next, fork, 1, variant, root * 17 + step + 3, 6);
+			forks += 1;
 		}
 		p = wrap01(next);
 	}
@@ -380,10 +388,14 @@ mod tests {
 					max_d = max_d.max(d);
 				}
 			}
-			assert!(on_crack > 4, "variant {variant} has no hairlines ({on_crack})");
+			assert!(on_crack > 2, "variant {variant} has no hairlines ({on_crack})");
 			assert!(
-				max_d > min_d.saturating_add(40),
+				max_d > min_d.saturating_add(80),
 				"variant {variant} should have solid metal away from cracks, min={min_d} max={max_d}"
+			);
+			assert!(
+				max_d > 180,
+				"variant {variant} needs open metal cells, max_d={max_d}"
 			);
 		}
 		let a = sample_atlas(rgba, Vec2::new(0.2, 0.3), 0);

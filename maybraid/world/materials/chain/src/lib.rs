@@ -24,7 +24,7 @@ pub use cracks::{
 	atlas_image, bake_atlas_rgba, baked_atlas_rgba, sample_atlas, write_placeholder_png,
 	ChainCrackAtlas, ATLAS_SIZE, CRACK_ASPECT, VARIANT_COUNT, VARIANT_SIZE,
 };
-pub use deteriorate::{link_damage, link_weakness, LinkLook};
+pub use deteriorate::{crack_band_widths, link_damage, link_weakness, LinkLook};
 pub use halo::{halo_expansion_metres, ChainHalo, ChainHaloMesh, HALO_EXPANSION};
 pub use hash::{
 	hash13, hash21, HASH13_OFFSET, HASH13_SCALE, HASH21_Z, WEAKNESS_ID_SCALE, WEAKNESS_SEED_SCALE,
