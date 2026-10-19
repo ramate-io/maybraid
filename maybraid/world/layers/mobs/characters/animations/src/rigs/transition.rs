@@ -1,9 +1,39 @@
 use character_rigs::authoring::PoseBuffer;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
 use crate::animations::Transition;
-use crate::rigs::mix::{capture_into, mix_effects};
+use crate::rigs::mix::{capture_into, mix_effects, IndexedPose};
 use crate::{Animation, Effects};
+
+impl<A> Transition<A> {
+	/// Latest-wins blend onto any indexed V0 rig. Weight 0 keeps the captured pose
+	/// and offset; weight 1 is the target clip.
+	pub(crate) fn apply_indexed<R: IndexedPose>(
+		&self,
+		rig: &mut R,
+		animation_progress: f32,
+		transition_progress: f32,
+	) -> Effects
+	where
+		A: Animation<R>,
+	{
+		let weight = self.weight(transition_progress);
+		if weight <= 0.0 {
+			rig.pose_and_scratch_mut().0.copy_from(&self.from_pose);
+			return self.from_offset;
+		}
+		self.animation.apply_for(rig, animation_progress);
+		let effects = self.animation.effects_for(rig, animation_progress);
+		if weight >= 1.0 {
+			return mix_effects(self.from_offset, effects, 1.0);
+		}
+		let (pose, scratch) = rig.pose_and_scratch_mut();
+		scratch.b.copy_from(pose);
+		PoseBuffer::blend_into(&self.from_pose, &scratch.b, weight, pose);
+		mix_effects(self.from_offset, effects, weight)
+	}
+}
 
 impl<A> Transition<A>
 where
@@ -21,19 +51,25 @@ where
 		animation_progress: f32,
 		transition_progress: f32,
 	) -> Effects {
-		let weight = self.weight(transition_progress);
-		if weight <= 0.0 {
-			rig.pose.copy_from(&self.from_pose);
-			return self.from_offset;
-		}
-		self.animation.apply_for(rig, animation_progress);
-		let effects = self.animation.effects_for(rig, animation_progress);
-		if weight >= 1.0 {
-			return mix_effects(self.from_offset, effects, 1.0);
-		}
-		rig.scratch.b.copy_from(&rig.pose);
-		PoseBuffer::blend_into(&self.from_pose, &rig.scratch.b, weight, &mut rig.pose);
-		mix_effects(self.from_offset, effects, weight)
+		self.apply_indexed(rig, animation_progress, transition_progress)
+	}
+}
+
+impl<A> Transition<A>
+where
+	A: Animation<QuadrupedV0Rig>,
+{
+	/// Same contract as [`Self::apply`] on a quadruped rig.
+	///
+	/// Named separately because inherent `apply` is already bound to
+	/// [`HumanoidV0Rig`](character_rigs::rigs::humanoid_v0::HumanoidV0Rig).
+	pub fn apply_quadruped(
+		&self,
+		rig: &mut QuadrupedV0Rig,
+		animation_progress: f32,
+		transition_progress: f32,
+	) -> Effects {
+		self.apply_indexed(rig, animation_progress, transition_progress)
 	}
 }
 
@@ -58,6 +94,7 @@ mod tests {
 	use crate::animations::{Fall, Land, Spring, Squat, Transition, TransitionCurve};
 	use character_rigs::authoring::ArmatureOffset;
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+	use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
 	fn apply_legacy<A>(
 		transition: &Transition<A>,
@@ -236,5 +273,84 @@ mod tests {
 		let effects = Transition::from_visible(Squat::for_loop(1.0, 1.0), from_pose, from_offset)
 			.apply(&mut rig, 0.0, 0.0);
 		assert!((effects.0.translation - from_offset.0.translation).length() < 1e-5);
+	}
+
+	/// Copy of the pre-shared `apply_quadruped` body from
+	/// [#1317](https://github.com/ramate-io/maybraid/pull/1317) /
+	/// [#1343](https://github.com/ramate-io/maybraid/pull/1343).
+	fn apply_quadruped_legacy<A>(
+		transition: &Transition<A>,
+		rig: &mut QuadrupedV0Rig,
+		animation_progress: f32,
+		transition_progress: f32,
+	) -> Effects
+	where
+		A: Animation<QuadrupedV0Rig>,
+	{
+		let weight = transition.weight(transition_progress);
+		if weight <= 0.0 {
+			rig.pose.copy_from(&transition.from_pose);
+			return transition.from_offset;
+		}
+		transition.animation.apply_for(rig, animation_progress);
+		let effects = transition.animation.effects_for(rig, animation_progress);
+		if weight >= 1.0 {
+			return mix_effects(transition.from_offset, effects, 1.0);
+		}
+		rig.scratch.b.copy_from(&rig.pose);
+		PoseBuffer::blend_into(&transition.from_pose, &rig.scratch.b, weight, &mut rig.pose);
+		mix_effects(transition.from_offset, effects, weight)
+	}
+
+	fn assert_quadruped_pose_near(a: &QuadrupedV0Rig, b: &QuadrupedV0Rig, label: &str) {
+		assert_eq!(a.pose.len(), b.pose.len(), "{label}: pose length");
+		for (index, (left, right)) in a.pose.local.iter().zip(b.pose.local.iter()).enumerate() {
+			assert!(
+				(left.translation - right.translation).length() < 1e-5,
+				"{label}: translation {index}"
+			);
+			assert!(
+				left.rotation.dot(right.rotation).abs() > 1.0 - 1e-5,
+				"{label}: rotation {index}"
+			);
+			assert!((left.scale - right.scale).length() < 1e-5, "{label}: scale {index}");
+		}
+	}
+
+	#[test]
+	fn quadruped_apply_matches_legacy_pose_and_effects() -> anyhow::Result<()> {
+		use crate::animations::{QuadrupedIdle, QuadrupedRun};
+
+		let mut source = QuadrupedV0Rig::for_clip_test();
+		QuadrupedRun::default().apply_for(&mut source, 0.0);
+		let from_pose = source.pose.clone();
+		let from_offset = ArmatureOffset::from_translation(Vec3::new(0.0, -0.1, 0.0));
+		let transition = Transition::from_visible(QuadrupedIdle::default(), from_pose, from_offset)
+			.with_curve(TransitionCurve::EaseInOut);
+
+		for transition_progress in [0.0, 0.5, 1.0] {
+			for animation_progress in [0.0, 0.35, 0.9] {
+				let mut legacy = QuadrupedV0Rig::for_clip_test();
+				let legacy_effects = apply_quadruped_legacy(
+					&transition,
+					&mut legacy,
+					animation_progress,
+					transition_progress,
+				);
+				let mut shared = QuadrupedV0Rig::for_clip_test();
+				let shared_effects = transition.apply_quadruped(
+					&mut shared,
+					animation_progress,
+					transition_progress,
+				);
+				assert_quadruped_pose_near(
+					&legacy,
+					&shared,
+					&format!("anim={animation_progress} trans={transition_progress}"),
+				);
+				assert_eq!(legacy_effects, shared_effects);
+			}
+		}
+		Ok(())
 	}
 }
