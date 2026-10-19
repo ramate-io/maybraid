@@ -3,7 +3,9 @@
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{CompiledParticleEffect, EffectSpawner, EffectSystems, SpawnerSettings};
 
-use crate::fields::{stamp_field_materials, tick_vfx_fields, tick_vfx_sustain_lights};
+use crate::fields::{
+	record_sonic_wave_history, stamp_field_materials, tick_vfx_fields, tick_vfx_sustain_lights,
+};
 use crate::lobe_material::LobeMaterial;
 use crate::lobes::{lobe_transform, stamp_lobe_materials, VfxLobe};
 use crate::membership::{VfxInstanceMembers, VfxMemberOf};
@@ -174,6 +176,7 @@ pub fn vfx_lifecycle_plugin(app: &mut App) {
 			stamp_lobe_materials,
 			stamp_field_materials,
 			tick_vfx_instances,
+			record_sonic_wave_history,
 			tick_vfx_flashes,
 			tick_vfx_lobes,
 			tick_vfx_fields,

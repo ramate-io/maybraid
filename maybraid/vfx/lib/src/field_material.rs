@@ -21,6 +21,7 @@ pub enum FieldKind {
 	ColumnSheath,
 	GroundContact,
 	ShockRing,
+	ShockTrail,
 }
 
 impl FieldKind {
@@ -30,6 +31,7 @@ impl FieldKind {
 			Self::ColumnSheath => 1.0,
 			Self::GroundContact => 2.0,
 			Self::ShockRing => 3.0,
+			Self::ShockTrail => 4.0,
 		}
 	}
 }
@@ -67,10 +69,11 @@ impl FieldMaterial {
 	) -> Self {
 		let tint = LinearRgba::from(tint);
 		let (gain, scroll, soft, bands) = match kind {
-			FieldKind::ColumnCore => (1.35 * intensity, 0.55, 0.16, 5.0),
-			FieldKind::ColumnSheath => (0.82 * intensity, 0.32, 0.34, 4.0),
-			FieldKind::GroundContact => (2.15 * intensity, 0.80, 0.22, 3.0),
-			FieldKind::ShockRing => (1.45 * intensity, 1.10, 0.18, 3.0),
+			FieldKind::ColumnCore => (1.22 * intensity, 0.55, 0.18, 5.0),
+			FieldKind::ColumnSheath => (0.72 * intensity, 0.32, 0.38, 4.0),
+			FieldKind::GroundContact => (1.85 * intensity, 0.80, 0.26, 3.0),
+			FieldKind::ShockRing => (0.95 * intensity, 1.25, 0.28, 5.0),
+			FieldKind::ShockTrail => (0.62 * intensity, 1.45, 0.32, 4.0),
 		};
 		Self {
 			params: Vec4::new(0.0, duration.max(1e-3), seed, kind.as_f32()),
@@ -93,10 +96,20 @@ impl FieldMaterial {
 		self.envelope.z = contact.clamp(0.0, 1.0);
 	}
 
+	pub fn scale_gain(&mut self, factor: f32) {
+		self.extras.x *= factor.max(0.0);
+	}
+
+	pub fn set_softness(&mut self, softness: f32) {
+		self.extras.z = softness.clamp(0.05, 0.95);
+	}
+
 	pub fn alpha_mode_for_kind(&self) -> AlphaMode {
 		if self.params.w < 0.5 {
 			AlphaMode::Add
 		} else if self.params.w < 1.5 {
+			AlphaMode::Blend
+		} else if self.params.w < 3.5 {
 			AlphaMode::Blend
 		} else {
 			AlphaMode::Add

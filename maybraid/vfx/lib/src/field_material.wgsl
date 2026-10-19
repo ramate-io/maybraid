@@ -172,13 +172,37 @@ fn contact_shade(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>) -> vec4<f3
 
 fn shock_shade(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>) -> vec4<f32> {
     let radial = saturate(length(local.xy) * 2.0);
-    let rim = 1.0 - smoothstep(0.72, 1.0, radial);
-    let inner = smoothstep(0.48, 0.82, radial);
-    let crest = fbm(vec3<f32>(local.xy * 6.0, params.z + params.x * extras.y));
+    let angle = atan2(local.y, local.x);
+    let scroll = params.x * extras.y + params.z * 4.1;
+    let breakup = fbm(vec3<f32>(angle * 2.4, scroll * 0.35, params.z * 2.7));
+    let gap = smoothstep(0.42, 0.58, sin(angle * 7.0 + breakup * 6.2 + params.z * 11.0));
+    let leading = 1.0 - smoothstep(0.78, 0.96, radial);
+    let rim = leading * (1.0 - smoothstep(0.86, 1.0, radial));
+    let inner_haze = smoothstep(0.18, 0.55, radial) * (1.0 - smoothstep(0.62, 0.88, radial));
+    let hazard_fill = smoothstep(0.0, 0.22, radial) * (1.0 - smoothstep(0.34, 0.52, radial));
+    let crest = fbm(vec3<f32>(local.xy * 7.5, scroll));
     let facing = saturate(abs(dot(n, view_dir)));
-    var rgb = mix(color_cool.xyz, mix(color_mid.xyz, color_hot.xyz, crest), rim);
+    var rgb = mix(color_cool.xyz, mix(color_mid.xyz, color_hot.xyz, crest), leading + inner_haze * 0.35);
     rgb *= tint.xyz * extras.x * envelope.x;
-    let alpha = envelope.x * rim * inner * mix(0.4, 1.0, crest) * (0.45 + 0.55 * facing);
+    let alpha = envelope.x
+        * (rim * 0.85 + inner_haze * 0.45 + hazard_fill * 0.28)
+        * gap
+        * mix(0.25, 0.95, crest)
+        * (0.35 + 0.65 * facing)
+        * (0.45 + extras.z);
+    return vec4<f32>(rgb, alpha);
+}
+
+fn shock_trail_shade(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>) -> vec4<f32> {
+    let along = saturate(local.z);
+    let across = saturate(abs(local.x) * 2.0);
+    let taper = (1.0 - along) * (1.0 - along);
+    let edge = 1.0 - smoothstep(0.55, 1.0, across);
+    let curl = fbm(vec3<f32>(local.xz * 5.5, params.z + along * 3.1));
+    let facing = saturate(abs(dot(n, view_dir)));
+    var rgb = mix(color_cool.xyz, mix(color_mid.xyz, color_hot.xyz, curl), taper);
+    rgb *= tint.xyz * extras.x * envelope.x;
+    let alpha = envelope.x * taper * edge * mix(0.2, 0.9, curl) * (0.3 + 0.7 * facing) * (0.5 + extras.z);
     return vec4<f32>(rgb, alpha);
 }
 
@@ -192,7 +216,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let local = vec3<f32>(0.0);
 #endif
     var shaded: vec4<f32>;
-    if params.w > 2.5 {
+    if params.w > 3.5 {
+        shaded = shock_trail_shade(local, n, view_dir);
+    } else if params.w > 2.5 {
         shaded = shock_shade(local, n, view_dir);
     } else if params.w > 1.5 {
         shaded = contact_shade(local, n, view_dir);

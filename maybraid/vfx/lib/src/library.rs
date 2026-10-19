@@ -75,6 +75,7 @@ pub fn setup_vfx_library(
 	let field_column = meshes.add(unit_column_mesh());
 	let field_disk = meshes.add(unit_disk_mesh());
 	let field_ring = meshes.add(unit_vortex_ring_mesh());
+	let speed_stroke = meshes.add(crate::fields::unit_speed_stroke_mesh());
 	let library = VfxLibrary {
 		flash: flash::definition(flash_mesh.clone()),
 		fireball: fireball::definition(fireball_mesh.clone(), fireball_wisps.clone()),
@@ -89,7 +90,7 @@ pub fn setup_vfx_library(
 			sparks_part.clone(),
 		),
 		god_beam: god_beam::definition(field_column, field_disk),
-		sonic_wave: sonic_wave::definition(field_ring),
+		sonic_wave: sonic_wave::definition(field_ring, speed_stroke),
 		flipbooks,
 	};
 	for part in [&fireball_wisps, &smoke_wisps, &sparks_part] {

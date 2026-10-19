@@ -34,6 +34,7 @@ impl Plugin for VfxPlaygroundPlugin {
 			.init_resource::<CameraOrbit>()
 			.init_resource::<SpreadOnce>()
 			.init_resource::<capture::CaptureCancel>()
+			.init_resource::<capture::NightCapture>()
 			.add_plugins(VfxPlugin)
 			.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -45,7 +46,13 @@ impl Plugin for VfxPlaygroundPlugin {
 			);
 		app.add_systems(
 			Startup,
-			(camera::setup_camera, setup_lighting, setup_ground, capture::apply_env),
+			(
+				camera::setup_camera,
+				setup_lighting,
+				setup_ground,
+				capture::apply_env,
+				capture::tune_night_lighting,
+			),
 		)
 		.add_systems(
 			Update,

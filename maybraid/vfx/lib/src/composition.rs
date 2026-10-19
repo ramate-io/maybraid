@@ -194,6 +194,50 @@ pub struct ScaleBounds {
 	pub max: f32,
 }
 
+/// Tweakable look knobs for [`EffectKind::SonicWave`]. Gameplay pose still comes from
+/// [`crate::drive::SonicWaveState`]; these only affect mesh materials and trail ribbons.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SonicWaveVisual {
+	pub ring_gain: f32,
+	pub ring_softness: f32,
+	pub trail_ribbons_per_ring: u32,
+	pub trail_history_samples: u32,
+	pub trail_max_length: f32,
+}
+
+impl Default for SonicWaveVisual {
+	fn default() -> Self {
+		Self {
+			ring_gain: 1.0,
+			ring_softness: 0.22,
+			trail_ribbons_per_ring: 4,
+			trail_history_samples: 14,
+			trail_max_length: 2.8,
+		}
+	}
+}
+
+/// Tweakable look knobs for [`EffectKind::GodBeam`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GodBeamVisual {
+	pub core_gain: f32,
+	pub sheath_gain: f32,
+	pub contact_gain: f32,
+}
+
+impl Default for GodBeamVisual {
+	fn default() -> Self {
+		Self { core_gain: 1.0, sheath_gain: 1.0, contact_gain: 1.0 }
+	}
+}
+
+/// Driven-effect presentation overrides stored on [`EffectDefinition`].
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct DrivenFieldVisual {
+	pub sonic: SonicWaveVisual,
+	pub god_beam: GodBeamVisual,
+}
+
 impl Default for ScaleBounds {
 	fn default() -> Self {
 		Self { min: DEFAULT_SCALE_MIN, max: DEFAULT_SCALE_MAX }
@@ -219,6 +263,7 @@ pub struct EffectDefinition {
 	pub authored_duration: Option<f32>,
 	/// Shared procedural meshes for driven effects. Burst definitions leave this empty.
 	pub meshes: Vec<Handle<Mesh>>,
+	pub field_visual: DrivenFieldVisual,
 }
 
 impl EffectDefinition {
@@ -230,6 +275,7 @@ impl EffectDefinition {
 			kind: EffectKind::Burst,
 			authored_duration: None,
 			meshes: Vec::new(),
+			field_visual: DrivenFieldVisual::default(),
 		}
 	}
 
@@ -250,6 +296,11 @@ impl EffectDefinition {
 
 	pub fn with_meshes(mut self, meshes: impl IntoIterator<Item = Handle<Mesh>>) -> Self {
 		self.meshes = meshes.into_iter().collect();
+		self
+	}
+
+	pub fn with_field_visual(mut self, field_visual: DrivenFieldVisual) -> Self {
+		self.field_visual = field_visual;
 		self
 	}
 

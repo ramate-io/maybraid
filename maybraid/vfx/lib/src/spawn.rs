@@ -5,8 +5,8 @@ use bevy::prelude::*;
 use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
 
 use crate::composition::{
-	EffectDefinition, EffectKind, EffectLayer, EffectPart, LobeKind, ScaleBounds,
-	DEFAULT_SCALE_MAX, DEFAULT_SCALE_MIN,
+	DrivenFieldVisual, EffectDefinition, EffectKind, EffectLayer, EffectPart, LobeKind,
+	ScaleBounds, DEFAULT_SCALE_MAX, DEFAULT_SCALE_MIN,
 };
 use crate::drive::VfxDrive;
 use crate::lobe_material::LobeMaterial;
@@ -38,6 +38,8 @@ pub struct VfxSpawn {
 	pub palette: Option<ExplosionPalette>,
 	/// Spatial / lifetime overrides for driven effects. Burst definitions ignore this.
 	pub drive: VfxDrive,
+	/// Presentation knobs copied from the definition at spawn.
+	pub field_visual: DrivenFieldVisual,
 }
 
 impl Default for VfxSpawn {
@@ -51,6 +53,7 @@ impl Default for VfxSpawn {
 			seed: None,
 			palette: None,
 			drive: VfxDrive::default(),
+			field_visual: DrivenFieldVisual::default(),
 		}
 	}
 }
@@ -95,6 +98,7 @@ impl VfxSpawn {
 			seed: Some(self.seed.unwrap_or_else(seed::generate)),
 			palette: self.palette,
 			drive: self.drive,
+			field_visual: self.field_visual,
 		}
 	}
 
@@ -109,6 +113,7 @@ impl VfxSpawn {
 			seed: Some(self.seed.unwrap_or_else(seed::generate)),
 			palette: self.palette,
 			drive: Self::resolve_drive(self.drive, definition.kind),
+			field_visual: definition.field_visual,
 		}
 	}
 

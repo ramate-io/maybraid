@@ -3,7 +3,9 @@
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
-use crate::composition::{EffectDefinition, EffectKind, ScaleBounds, DEFAULT_SCALE_MIN};
+use crate::composition::{
+	DrivenFieldVisual, EffectDefinition, EffectKind, GodBeamVisual, ScaleBounds, DEFAULT_SCALE_MIN,
+};
 use crate::drive::VfxDrive;
 use crate::field_material::{FieldKind, FieldMaterial};
 use crate::fields::{column_pose, FieldMaterialSlot, VfxField, VfxSustainLight};
@@ -16,11 +18,18 @@ use crate::spawn::{VfxInstance, VfxLayerLife, VfxPendingLayers, VfxSpawn};
 /// Spatial multiplier cap. World meters live on [`VfxDrive::size`] / [`VfxDrive::reach`].
 pub const MAX_SCALE: f32 = 8.0;
 
-const CORE_WIDTH: f32 = 0.42;
-const SHEATH_WIDTH: f32 = 1.0;
-const CONTACT_WIDTH: f32 = 1.35;
-const GROUND_LIGHT_PEAK: f32 = 90_000.0;
-const SHAFT_LIGHT_PEAK: f32 = 36_000.0;
+const CORE_WIDTH: f32 = 0.36;
+const SHEATH_WIDTH: f32 = 1.08;
+const CONTACT_WIDTH: f32 = 1.22;
+const GROUND_LIGHT_PEAK: f32 = 72_000.0;
+const SHAFT_LIGHT_PEAK: f32 = 30_000.0;
+
+fn god_beam_field_visual() -> DrivenFieldVisual {
+	DrivenFieldVisual {
+		god_beam: GodBeamVisual { core_gain: 1.08, sheath_gain: 0.88, contact_gain: 1.05 },
+		..DrivenFieldVisual::default()
+	}
+}
 
 /// Compiled definition. Meshes are `[column, disk]`.
 pub fn definition(column: Handle<Mesh>, disk: Handle<Mesh>) -> EffectDefinition {
@@ -29,10 +38,12 @@ pub fn definition(column: Handle<Mesh>, disk: Handle<Mesh>) -> EffectDefinition 
 		.with_duration(VfxDrive::god_beam().total_secs())
 		.with_scale_bounds(ScaleBounds { min: DEFAULT_SCALE_MIN, max: MAX_SCALE })
 		.with_meshes([column, disk])
+		.with_field_visual(god_beam_field_visual())
 }
 
 pub fn spawn(commands: &mut Commands, definition: &EffectDefinition, spawn: VfxSpawn) -> Entity {
 	let drive = spawn.drive.resolved_god_beam();
+	let beam_visual = spawn.field_visual.god_beam;
 	let duration = drive.total_secs();
 	let (root_transform, height) =
 		column_pose(spawn.transform.translation, spawn.transform.rotation, &drive);
@@ -79,6 +90,7 @@ pub fn spawn(commands: &mut Commands, definition: &EffectDefinition, spawn: VfxS
 			)),
 			layer: seed::LAYER_COLUMN,
 			index: 0,
+			gain: beam_visual.core_gain,
 		},
 		duration,
 		seed,
@@ -99,6 +111,7 @@ pub fn spawn(commands: &mut Commands, definition: &EffectDefinition, spawn: VfxS
 			)),
 			layer: seed::LAYER_COLUMN,
 			index: 1,
+			gain: beam_visual.sheath_gain,
 		},
 		duration,
 		seed,
@@ -119,6 +132,7 @@ pub fn spawn(commands: &mut Commands, definition: &EffectDefinition, spawn: VfxS
 			)),
 			layer: seed::LAYER_CONTACT,
 			index: 0,
+			gain: beam_visual.contact_gain,
 		},
 		duration,
 		seed,
@@ -181,6 +195,7 @@ struct FieldPart {
 	transform: Transform,
 	layer: u32,
 	index: u32,
+	gain: f32,
 }
 
 fn spawn_field(
@@ -192,7 +207,7 @@ fn spawn_field(
 	palette: &FieldPalette,
 	spawn: &VfxSpawn,
 ) {
-	let material = FieldMaterial::new(
+	let mut material = FieldMaterial::new(
 		part.kind,
 		duration,
 		seed::unit(seed::stream(seed, part.layer, part.index)),
@@ -200,6 +215,7 @@ fn spawn_field(
 		spawn.tint_or_white(),
 		spawn.clamped_intensity(),
 	);
+	material.scale_gain(part.gain);
 	commands.spawn((
 		Name::new(format!("vfx-god_beam-{}", part.name)),
 		ChildOf(parent),

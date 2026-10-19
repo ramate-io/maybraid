@@ -28,3 +28,15 @@ Checked-in stills (console hidden):
 - `sonic_ordinary_8m_side.png` / `sonic_ordinary_8m_three_quarter.png` — same burst at ordinary scale
 
 `VFX_CANCEL_AT` stills the God Beam fade-from-cancel path.
+
+## Motion clips
+
+Short headless videos (lavapipe + xvfb). Requires `mesa-vulkan-drivers`,
+`libxkbcommon-x11-0`, and `ffmpeg`:
+
+```bash
+./maybraid/vfx/playground/evidence/capture-motion.sh
+```
+
+Checked-in `.mp4` files cover boss/ordinary sonic (side and 3/4, day and night),
+sequential-wave cancel (`VFX_CANCEL_AT`), and God Beam 7 m column / scale reference.

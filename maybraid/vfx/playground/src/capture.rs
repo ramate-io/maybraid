@@ -23,11 +23,19 @@ pub fn frame() -> Option<String> {
 #[derive(Resource, Default)]
 pub struct CaptureCancel(pub Option<f32>);
 
+/// Dim scene lighting for night readability captures (`VFX_NIGHT=1`).
+#[derive(Resource, Default)]
+pub struct NightCapture(pub bool);
+
 pub fn apply_env(
 	mut looping: ResMut<LoopEnabled>,
 	mut freeze: ResMut<PreviewFreeze>,
 	mut cancel_at: ResMut<CaptureCancel>,
+	mut night: ResMut<NightCapture>,
 ) {
+	if std::env::var_os("VFX_NIGHT").is_some() {
+		night.0 = true;
+	}
 	if requested() || std::env::var_os("VFX_NOLOOP").is_some() {
 		looping.0 = false;
 	}
@@ -40,6 +48,22 @@ pub fn apply_env(
 		if let Ok(age) = age.parse::<f32>() {
 			cancel_at.0 = Some(age);
 		}
+	}
+}
+
+pub fn tune_night_lighting(
+	night: Res<NightCapture>,
+	mut ambient: ResMut<GlobalAmbientLight>,
+	mut sun: Query<&mut DirectionalLight>,
+) {
+	if !night.0 {
+		return;
+	}
+	ambient.brightness = 18.0;
+	ambient.color = Color::srgb(0.22, 0.28, 0.42);
+	for mut light in &mut sun {
+		light.illuminance = 420.0;
+		light.color = Color::srgb(0.55, 0.62, 0.82);
 	}
 }
 

@@ -32,8 +32,9 @@ pub mod spawn;
 
 pub use assets::{FlipbookAsset, VfxFlipbooks};
 pub use composition::{
-	EffectDefinition, EffectKind, EffectLayer, EffectPart, LightPulse, LobeKind, LobeSpec,
-	MeshPart, ParticlePart, ParticleShade, ScaleBounds, DEFAULT_SCALE_MAX, DEFAULT_SCALE_MIN,
+	DrivenFieldVisual, EffectDefinition, EffectKind, EffectLayer, EffectPart, GodBeamVisual,
+	LightPulse, LobeKind, LobeSpec, MeshPart, ParticlePart, ParticleShade, ScaleBounds,
+	SonicWaveVisual, DEFAULT_SCALE_MAX, DEFAULT_SCALE_MIN,
 };
 pub use drive::{
 	FieldEnvelope, SonicWaveState, VfxDrive, VfxWaveStates, GOD_BEAM_ACTIVE, GOD_BEAM_HEIGHT,
