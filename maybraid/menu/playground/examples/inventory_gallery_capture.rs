@@ -130,8 +130,14 @@ impl CaptureScene {
 		}
 	}
 
-	fn scrolled(self) -> bool {
-		matches!(self, Self::OverflowFixtureScrolled | Self::ModalLubikan)
+	fn scroll_factor(self) -> f32 {
+		match self {
+			Self::OverflowFixtureScrolled | Self::ModalLubikan => 1.0,
+			// Land on Tanzes so the narrow overlay still shows the overflowing
+			// equipped Tanz row instead of Clothing at the top.
+			Self::OverflowTanzEquipped => 0.72,
+			_ => 0.0,
+		}
 	}
 }
 
@@ -198,10 +204,17 @@ fn sample_menu(items: Vec<InventoryItem>) -> CharacterMenu {
 	menu
 }
 
-/// Modal fixture: four owned Tanzes so the Equipped Tanz row sits near the
-/// top. Two stay equipped; two appear in the unequipped Tanz catalog.
+/// Modal fixture: extra clothing stays unequipped, two tools, four Tanzes.
 fn tanz_modal_items() -> Vec<InventoryItem> {
-	BASE_STARTER_TANZES.into_iter().map(InventoryItem::tanz).collect()
+	let mut items = vec![
+		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Natural),
+		InventoryItem::clothing(ClothingMesh::TankTop, ClothingMaterial::Cloth, ItemColor::Red),
+		InventoryItem::clothing(ClothingMesh::Robe, ClothingMaterial::Cloth, ItemColor::Natural),
+		InventoryItem::firearm(FirearmMesh::Bullpup),
+		InventoryItem::firearm(FirearmMesh::Reltor),
+	];
+	items.extend(BASE_STARTER_TANZES.into_iter().map(InventoryItem::tanz));
+	items
 }
 
 #[derive(Component)]
@@ -412,8 +425,8 @@ fn spawn_modal_scene(
 	overlay_width: Option<f32>,
 ) {
 	let mut menu = sample_menu(tanz_modal_items());
-	// Leave Healing Salute and Left Strafe equipped so mixed shots show both
-	// the Equipped Tanz row and the unequipped Tanz catalog.
+	// Mixed shots: clothing and tools each keep one unequipped tile, and
+	// Healing Salute / Left Strafe stay equipped so Tanzes also stacks.
 	if unequip_back_two {
 		if let Some(inventory) = menu.inventory.as_mut() {
 			let drop: Vec<usize> = inventory
@@ -426,6 +439,9 @@ fn spawn_modal_scene(
 				})
 				.collect();
 			for index in drop {
+				let _ = inventory.unequip(index);
+			}
+			if let Some(index) = inventory.weapons.last().copied() {
 				let _ = inventory.unequip(index);
 			}
 		}
@@ -566,7 +582,7 @@ fn apply_capture_scroll(
 		let max = ((computed.content_size().y - computed.size().y)
 			* computed.inverse_scale_factor())
 		.max(0.0);
-		scroll.y = if shots.scene.scrolled() { max } else { 0.0 };
+		scroll.y = max * shots.scene.scroll_factor();
 	}
 }
 

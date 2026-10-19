@@ -536,7 +536,7 @@ mod tests {
 
 	#[test]
 	fn grant_uses_the_read_only_starter_kit_layout() {
-		use character_items::{ItemRng, BASE_STARTER_TANZES};
+		use character_items::{BASE_STARTER_TANZES, ItemRng};
 
 		let layout = SpinRevealScreen::layout(&[pants()]);
 		assert_eq!(layout.title, STARTER_KIT_LABEL);
@@ -553,12 +553,12 @@ mod tests {
 		let MenuNode::Section { children, .. } = &grant.node else {
 			panic!("starter kit must be a section");
 		};
-		let equipped = children.iter().find_map(|child| match child {
-			MenuNode::Section { label: "Equipped", children } => children.first(),
+		let tanzes = children.iter().find_map(|child| match child {
+			MenuNode::Section { label: "Tanzes", children } => children.first(),
 			_ => None,
 		});
-		let Some(MenuNode::OrderedEquipment { rows }) = equipped else {
-			panic!("Equipped must be ordered rows");
+		let Some(MenuNode::OrderedEquipment { rows }) = tanzes else {
+			panic!("Tanzes equipped pane must be ordered rows");
 		};
 		let tanz_row = rows.iter().find(|row| row.label == "Tanzes").expect("Tanzes row");
 		let equipped_ids: Vec<_> = tanz_row
