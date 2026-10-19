@@ -4,6 +4,7 @@ pub mod flapping;
 pub mod gait_knee;
 pub mod idle;
 pub mod jab;
+pub mod jump;
 pub mod land;
 pub mod leap;
 pub mod power_dash;
