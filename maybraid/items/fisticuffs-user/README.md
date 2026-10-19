@@ -69,10 +69,22 @@ slot is the combo-graph hook.
 
 `AttackState` owns time, side, and the latched [`JabAim`](src/aim.rs). During
 the active window the crate emits [`FisticuffsStrike`](src/lib.rs)
-(`attacker`, `side`, `kind`, clip `progress`, quantized `target`). Damage
-resolution is a TODO: there is no fist sensor, and
-[`HitCapsule`](../../player/src/hit.rs) is receive-only. Do not drive `Hit`
-until a punch volume exists.
+(`attacker`, `side`, `kind`, clip `progress`, quantized `target`) and spawns a
+short-lived fist / forearm [`Sensor`](src/sensor.rs) posed from the character
+and aim. Overlap is resolved with `SpatialQuery` (same class as grenade blasts
+and skill-map bursts) and written as
+`damage::Hit { source: Some(attacker), allow_self: false, amount: PLACEHOLDER_JAB_DAMAGE }`.
+[`HitCapsule`](../../player/src/hit.rs) stays receive-only.
+
+The sensor exists **only** while [`AttackPhase::Active`](src/attack.rs). Cancel,
+weapon swap (`FisticuffsUser` removed), death / `Downed`, and pause (world
+cancels the attack) tear it down. Hits are once-per-strike-per-target. There is
+no combo-step damage scale yet — `AttackState` has no combo index.
+
+`PLACEHOLDER_JAB_DAMAGE` (12) and the capsule radius / length / reach are
+**not final balance**. `FisticuffsSensorDebug(true)` draws the live volume
+(world playground chrome turns it on). Player-sourced `DamageApplied` already
+raises combat-hud `+1` / `+2` / `+5` hit markers.
 
 The visual layer writes `AnimClip::Jab` + `AnimProgress` on the body mailbox
 **after** locomotion and **before** anim apply. It does not touch the capsule
@@ -99,4 +111,13 @@ The authored clip can still be scrubbed in `characters-playground`:
 ```bash
 cargo run -p characters-playground -- character assemble --animation jab --side left
 cargo run -p characters-playground -- character playback --progress 0.47
+```
+
+Headless jab-hit stills (sensor volume + combat-hud marker on a dummy):
+
+```bash
+FISTICUFFS_JAB_CAPTURE_DIR=/tmp/fisticuffs-jab \
+  VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
+  WGPU_BACKEND=vk \
+  xvfb-run -a cargo run -p menu-playground --example fisticuffs_jab_hit_capture
 ```

@@ -4620,10 +4620,13 @@ name = "fisticuffs-user"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "character-animations",
  "character-rigs",
  "characters",
+ "damage",
+ "lod-avian",
  "maybraid-character-controller",
  "maybraid-input",
  "player",
@@ -7182,6 +7185,7 @@ name = "menu-playground"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "camera-controls",
  "character-creation-menus",
@@ -7193,12 +7197,16 @@ dependencies = [
  "characters",
  "characters-playground",
  "clap",
+ "combat-hud",
+ "damage",
  "firearm-user",
  "firearms-components",
+ "fisticuffs-user",
  "game-commands",
  "grenades",
  "item-icons",
  "lod",
+ "lod-avian",
  "maybraid-character-ui-menu-renderer",
  "maybraid-input",
  "maybraid-menu-controller",

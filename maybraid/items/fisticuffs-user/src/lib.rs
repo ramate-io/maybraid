@@ -3,16 +3,24 @@
 mod aim;
 mod attack;
 mod drive;
+mod sensor;
 
 use bevy::prelude::*;
 use characters::CharacterMotionSystems;
+use damage::DamageSystems;
 use player::PlayerSystems;
 
 pub use aim::{
-	body_camera_yaw, quantize, quantize_clamped, JabAim, AIM_STEP, PITCH_MAX, PITCH_MIN, YAW_LIMIT,
+	AIM_STEP, JabAim, PITCH_MAX, PITCH_MIN, YAW_LIMIT, body_camera_yaw, quantize, quantize_clamped,
 };
 pub use attack::{AttackKind, AttackPhase, AttackSpec, AttackState, AttackTiming, JAB_STARTUP_END};
 pub use character_rigs::Side;
+pub use sensor::{
+	FisticuffsHitSensor, FisticuffsHitSensorOf, FisticuffsSensorDebug, PLACEHOLDER_FIST_RADIUS,
+	PLACEHOLDER_FIST_REACH, PLACEHOLDER_FOREARM_LENGTH, PLACEHOLDER_JAB_DAMAGE, character_to_world,
+	collect_fist_hits, draw_fist_sensors, fist_collider, fist_local, fist_world_rotation,
+	resolve_fist_hits, sync_fist_sensors,
+};
 
 /// Player-side fisticuffs machine. Inserted by equipment when Fisticuffs is the
 /// active primary item; removed when another tool is selected.
@@ -24,11 +32,9 @@ pub struct FisticuffsUser {
 /// Gameplay event at the start of the active (hit) window.
 ///
 /// `target` is the same quantized character-space point written to
-/// `JabParams` (`+Z` fight-forward). Future punch volumes should use it.
-///
-/// TODO: resolve a punch volume against `damage::Health` and write
-/// `damage::Hit { target, source: Some(attacker), amount, point, allow_self: false }`.
-/// [`player::HitVolume`] / `HitCapsule` are receive-only; there is no fist sensor yet.
+/// `JabParams` (`+Z` fight-forward). The fist sensor is posed from the
+/// attacker, heading, and latched [`JabAim`]; it writes [`damage::Hit`]
+/// with [`PLACEHOLDER_JAB_DAMAGE`] (`allow_self: false`).
 #[derive(Message, Clone, Copy, Debug, PartialEq)]
 pub struct FisticuffsStrike {
 	pub attacker: Entity,
@@ -43,10 +49,19 @@ pub struct FisticuffsUserPlugin;
 
 impl Plugin for FisticuffsUserPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_message::<FisticuffsStrike>()
+		if !app.is_plugin_added::<damage::DamagePlugin>() {
+			app.add_plugins(damage::DamagePlugin);
+		}
+		app.init_resource::<FisticuffsSensorDebug>()
+			.add_message::<FisticuffsStrike>()
 			.add_systems(
 				Update,
-				(drive::tick_attack_state, drive::apply_attack_intents, drive::latch_jab_aim)
+				(
+					drive::tick_attack_state,
+					drive::apply_attack_intents,
+					drive::latch_jab_aim,
+					sensor::sync_fist_sensors,
+				)
 					.chain()
 					.in_set(PlayerSystems::Intent),
 			)
@@ -55,6 +70,16 @@ impl Plugin for FisticuffsUserPlugin {
 				drive::apply_fisticuffs_visual
 					.after(PlayerSystems::Locomotion)
 					.before(CharacterMotionSystems::Anim),
+			)
+			.add_systems(
+				PostUpdate,
+				sensor::resolve_fist_hits
+					.after(bevy::transform::TransformSystems::Propagate)
+					.before(DamageSystems::Apply),
+			)
+			.add_systems(
+				Update,
+				sensor::draw_fist_sensors.run_if(resource_equals(FisticuffsSensorDebug(true))),
 			);
 	}
 }
@@ -62,12 +87,12 @@ impl Plugin for FisticuffsUserPlugin {
 #[cfg(test)]
 mod pose_tests {
 	use bevy::prelude::Vec3;
-	use character_animations::animations::{Jab, HOLD_END};
 	use character_animations::Animation;
-	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+	use character_animations::animations::{HOLD_END, Jab};
 	use character_rigs::Side;
-	use maybraid_character_controller::produce::collect;
+	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 	use maybraid_character_controller::CharacterIntent;
+	use maybraid_character_controller::produce::collect;
 	use maybraid_input::VirtualPad;
 
 	use super::*;

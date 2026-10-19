@@ -1,27 +1,27 @@
 //! Starter held kit for the vegetation player capsule.
 
 use bevy::prelude::*;
-use character_inventory_user::{spawn_bag, InventoryUser};
+use character_inventory_user::{InventoryUser, spawn_bag};
 use character_items::{CharacterSheet, Inventory, InventoryItem};
 use characters::{CharacterAppearance, CharacterRoot};
 use damage::Health;
 use firearm_user::{
-	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle, FirearmUser,
-	FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
+	FirearmUser, FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
+	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle,
 };
 use fisticuffs_user::FisticuffsUser;
-use grenade_user::{spawn_held_grenade, GrenadeThrow, GrenadeUser, GrenadeUserSettings};
+use grenade_user::{GrenadeThrow, GrenadeUser, GrenadeUserSettings, spawn_held_grenade};
 use grenades::GrenadeDetonated;
 use maybraid_character_controller::{
 	CharacterControlSystems, CharacterIntent, InventoryCyclingCategory,
 };
 
 use crate::inventory_cycling::ActiveInventoryCyclingCategory;
-use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
+use maybraid_skill_map::{SkillMapEquip, SkillMapSystems, spawn_skill_maps};
 use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
 use player::{
-	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
-	PlayerSystems, PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
+	CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook, PlayerSystems, PlayerUse,
+	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner, apply_character_mobility,
 };
 use world_player::{
 	CharacterSpecies, Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual,
@@ -355,6 +355,19 @@ fn sync_fisticuffs_driver(
 	}
 }
 
+/// Pause / menu overlay: cancel the jab so the fist sensor tears down this frame.
+fn cancel_fisticuffs_when_paused(
+	gameplay: Res<WorldGameplayEnabled>,
+	mut users: Query<&mut FisticuffsUser>,
+) {
+	if gameplay.0 {
+		return;
+	}
+	for mut user in &mut users {
+		user.state.cancel();
+	}
+}
+
 fn spawn_world_reticle(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
@@ -412,6 +425,9 @@ pub(crate) fn configure(app: &mut App) {
 				.after(arm_world_player)
 				.after(commit_weapon_swap)
 				.before(PlayerSystems::Intent),
+			cancel_fisticuffs_when_paused
+				.after(sync_fisticuffs_driver)
+				.before(PlayerSystems::Intent),
 			sync_skill_map_equip
 				.after(crate::inventory_cycling::InventoryCyclingSystems)
 				.after(CharacterControlSystems)
@@ -435,9 +451,9 @@ mod tests {
 		RequestSetCharacterAppearance,
 	};
 
-	use crate::inventory_cycling::ActiveInventoryCyclingCategory;
-	use crate::weapon::{arm_world_player, WorldPlayerAppearanceRequested, WorldPlayerLoadout};
 	use crate::WorldGameplayEnabled;
+	use crate::inventory_cycling::ActiveInventoryCyclingCategory;
+	use crate::weapon::{WorldPlayerAppearanceRequested, WorldPlayerLoadout, arm_world_player};
 
 	#[test]
 	fn world_loadout_keeps_primary_weapon_and_worn_clothing() {
@@ -548,7 +564,7 @@ mod tests {
 		use maybraid_character_controller::{CharacterIntent, InventoryCyclingCategory};
 
 		use crate::inventory_cycling::{
-			apply_inventory_category_selection, ActiveInventoryCyclingCategory,
+			ActiveInventoryCyclingCategory, apply_inventory_category_selection,
 		};
 		use crate::weapon::begin_weapon_swap;
 
@@ -668,7 +684,7 @@ mod tests {
 	#[test]
 	fn reverse_queue_commits_through_weapon_swap() -> anyhow::Result<()> {
 		use character_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
+		use firearm_user::{FirearmUser, WEAPON_SWAP_SECS, WeaponSwap};
 
 		use crate::weapon::commit_weapon_swap;
 
@@ -708,7 +724,7 @@ mod tests {
 	#[test]
 	fn y_swaps_the_queued_primary() -> anyhow::Result<()> {
 		use character_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
+		use firearm_user::{FirearmUser, WEAPON_SWAP_SECS, WeaponSwap};
 
 		use crate::weapon::commit_weapon_swap;
 
@@ -829,7 +845,7 @@ mod tests {
 	#[test]
 	fn fisticuffs_to_gun_swap_commits_without_a_firearm_user() -> anyhow::Result<()> {
 		use character_inventory_user::InventoryUser;
-		use firearm_user::{WeaponSwap, WEAPON_SWAP_SECS};
+		use firearm_user::{WEAPON_SWAP_SECS, WeaponSwap};
 		use fisticuffs_user::FisticuffsUser;
 
 		use crate::weapon::commit_weapon_swap;
@@ -878,7 +894,7 @@ mod tests {
 	#[test]
 	fn gun_to_fisticuffs_swap_commits_the_driver() -> anyhow::Result<()> {
 		use character_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
+		use firearm_user::{FirearmUser, WEAPON_SWAP_SECS, WeaponSwap};
 		use fisticuffs_user::FisticuffsUser;
 		use player::Player as MaybraidPlayer;
 
@@ -963,6 +979,91 @@ mod tests {
 			assert!(!user.state.is_busy());
 			assert!(!user.state.just_entered_active());
 			assert!(user.state.queued().is_none());
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn pause_cancels_an_active_jab_so_the_sensor_can_tear_down() -> anyhow::Result<()> {
+		use fisticuffs_user::{AttackSpec, FisticuffsHitSensor, FisticuffsUser, sync_fist_sensors};
+		use player::Player as MaybraidPlayer;
+
+		use crate::weapon::cancel_fisticuffs_when_paused;
+
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, TransformPlugin));
+		app.insert_resource(WorldGameplayEnabled(true));
+		app.add_systems(Update, (cancel_fisticuffs_when_paused, sync_fist_sensors).chain());
+		let mut user = FisticuffsUser::default();
+		user.state.request(AttackSpec::jab(fisticuffs_user::Side::Left));
+		user.state.tick(fisticuffs_user::AttackTiming::JAB.duration_secs * 0.32);
+		let player = app
+			.world_mut()
+			.spawn((
+				MaybraidPlayer,
+				VegetationPlayer,
+				user,
+				Transform::default(),
+				GlobalTransform::default(),
+			))
+			.id();
+		app.update();
+		if app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count() != 1 {
+			return Err(anyhow::anyhow!("active jab should spawn a fist sensor"));
+		}
+		app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = false;
+		app.update();
+		let user = app
+			.world()
+			.get::<FisticuffsUser>(player)
+			.ok_or_else(|| anyhow::anyhow!("user"))?;
+		if user.state.is_busy() {
+			return Err(anyhow::anyhow!("pause must cancel the jab"));
+		}
+		if app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count() != 0 {
+			return Err(anyhow::anyhow!("pause must tear the fist sensor down"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn swap_off_fisticuffs_despawns_the_fist_sensor() -> anyhow::Result<()> {
+		use character_inventory_user::InventoryUser;
+		use fisticuffs_user::{AttackSpec, FisticuffsHitSensor, FisticuffsUser, sync_fist_sensors};
+		use player::Player as MaybraidPlayer;
+
+		use crate::weapon::sync_fisticuffs_driver;
+
+		let inventory = Inventory {
+			items: vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: vec![1],
+			skills: Vec::new(),
+		};
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, TransformPlugin));
+		app.add_systems(Update, (sync_fisticuffs_driver, sync_fist_sensors).chain());
+		let bag = app.world_mut().spawn(inventory).id();
+		let mut user = FisticuffsUser::default();
+		user.state.request(AttackSpec::jab(fisticuffs_user::Side::Left));
+		user.state.tick(fisticuffs_user::AttackTiming::JAB.duration_secs * 0.32);
+		let player = app
+			.world_mut()
+			.spawn((
+				MaybraidPlayer,
+				VegetationPlayer,
+				InventoryUser::carrying(bag),
+				user,
+				Transform::default(),
+				GlobalTransform::default(),
+			))
+			.id();
+		app.update();
+		if app.world().get::<FisticuffsUser>(player).is_some() {
+			return Err(anyhow::anyhow!("primary gun should drop FisticuffsUser"));
+		}
+		if app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count() != 0 {
+			return Err(anyhow::anyhow!("swap must despawn the fist sensor"));
 		}
 		Ok(())
 	}
@@ -1073,7 +1174,7 @@ mod tests {
 		use maybraid_skill_map::SkillMapEquip;
 
 		use crate::inventory_cycling::{
-			cycle_equipped_inventory_queues, ActiveInventoryCyclingCategory,
+			ActiveInventoryCyclingCategory, cycle_equipped_inventory_queues,
 		};
 		use crate::weapon::sync_skill_map_equip;
 
@@ -1132,8 +1233,8 @@ mod tests {
 		use character_items::GrenadeStats;
 		use grenades::{GrenadeDetonated, GrenadeEffect};
 		use maybraid_vfx::{
-			EffectDefinition, FlipbookAsset, ScaleBounds, VfxFlipbooks, VfxInstance, VfxLibrary,
-			FIERY_EXPLOSION,
+			EffectDefinition, FIERY_EXPLOSION, FlipbookAsset, ScaleBounds, VfxFlipbooks,
+			VfxInstance, VfxLibrary,
 		};
 
 		let mut world = World::new();
