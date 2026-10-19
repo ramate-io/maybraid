@@ -3142,6 +3142,7 @@ dependencies = [
  "damage",
  "lubikans",
  "player",
+ "screen-capture",
 ]
 
 [[package]]
@@ -7193,6 +7194,7 @@ dependencies = [
  "menu-components",
  "menu-screens",
  "player",
+ "screen-capture",
 ]
 
 [[package]]
