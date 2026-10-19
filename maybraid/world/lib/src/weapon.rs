@@ -21,8 +21,9 @@ use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
 use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
 use player::{
 	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
-	PlayerSystems, PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
+	PlayerOpticAds, PlayerSystems, PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
 };
+use tanz_user::{spawn_tanz_user, TanzUser};
 use world_player::{
 	CharacterSpecies, Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual,
 	PlaygroundMode, RequestSetCharacter, RequestSetCharacterAppearance,
@@ -77,6 +78,7 @@ type WorldPlayerEquipment<'a> = (
 	Option<&'a GrenadeUser>,
 	Option<&'a InventoryUser>,
 	Option<&'a maybraid_skill_map::SkillMapUser>,
+	Option<&'a TanzUser>,
 	Option<&'a AppliedWorldPlayerLoadout>,
 	Has<WorldPlayerAppearanceRequested>,
 );
@@ -106,6 +108,7 @@ pub(crate) fn arm_world_player(
 		grenade_user,
 		inventory_user,
 		skill_map_user,
+		tanz_user,
 		applied,
 		appearance_requested,
 	) in &players
@@ -120,6 +123,9 @@ pub(crate) fn arm_world_player(
 		}
 		if skill_map_user.is_none() {
 			spawn_skill_maps(&mut commands, player);
+		}
+		if tanz_user.is_none() {
+			spawn_tanz_user(&mut commands, player);
 		}
 		if loadout.is_none()
 			&& applied.is_none()
@@ -224,9 +230,15 @@ pub(crate) fn teardown_held_weapon(
 	if let Some(grenade) = grenade {
 		commands.entity(grenade.held).try_despawn();
 	}
-	commands
-		.entity(player)
-		.remove::<(FirearmUser, GrenadeUser, GrenadeThrow, PlayerUse, FisticuffsUser)>();
+	commands.entity(player).remove::<(
+		FirearmUser,
+		GrenadeUser,
+		GrenadeThrow,
+		PlayerUse,
+		PlayerOpticAds,
+		FisticuffsUser,
+	)>();
+	commands.entity(player).insert(PlayerCameraAim::default());
 }
 
 /// Start the holster motion; the kit changes at the dip.
@@ -430,6 +442,7 @@ mod tests {
 		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor,
 	};
 	use characters::{CharacterAppearance, CharacterRoot};
+	use tanz_user::{ControlMode, TanzUser};
 	use world_player::{
 		Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual, PlaygroundMode,
 		RequestSetCharacterAppearance,
@@ -490,6 +503,11 @@ mod tests {
 		assert_eq!(world.query::<&RequestSetCharacterAppearance>().iter(&world).count(), 0);
 		assert!(world.get::<WorldPlayerAppearanceRequested>(player).is_none());
 		assert!(world.get::<maybraid_skill_map::SkillMapUser>(player).is_some());
+		assert!(world.get::<TanzUser>(player).is_some());
+		assert_eq!(
+			world.get::<TanzUser>(player).map(|user| user.mode),
+			Some(ControlMode::Standard)
+		);
 		assert_eq!(world.get::<Name>(player).map(Name::as_str), Some("Ada"));
 		Ok(())
 	}
@@ -774,6 +792,43 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(world.get::<GrenadeUser>(player).is_some());
 		assert!(world.get::<firearm_user::FirearmUser>(player).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn teardown_clears_stale_sight_aim() -> anyhow::Result<()> {
+		use firearm_user::FirearmUser;
+		use player::{PlayerCameraAim, PlayerCameraPose};
+
+		let mut world = World::new();
+		let held = world.spawn_empty().id();
+		let player = world
+			.spawn((
+				FirearmUser::holding(held),
+				PlayerCameraAim {
+					focus: 1.0,
+					pose: Some(PlayerCameraPose {
+						translation: Vec3::ONE,
+						rotation: Quat::IDENTITY,
+					}),
+					sight_fov: Some(0.2),
+				},
+			))
+			.id();
+		world
+			.run_system_once(move |mut commands: Commands| {
+				crate::weapon::teardown_held_weapon(
+					&mut commands,
+					player,
+					Some(&FirearmUser::holding(held)),
+					None,
+				);
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let aim = world.get::<PlayerCameraAim>(player).expect("aim");
+		assert_eq!(aim.focus, 0.0);
+		assert!(aim.pose.is_none());
+		assert!(aim.sight_fov.is_none());
 		Ok(())
 	}
 

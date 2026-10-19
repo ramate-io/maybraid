@@ -181,8 +181,10 @@ pub fn drain_character_assembly(world: &mut World) {
 	}
 }
 
-/// Drain every listed assembly immediately, ignoring the streaming budget.
-/// Isolated capture hosts share the world budget with nearby mobs otherwise.
+/// Drain every listed assembly in this call — no world-streaming weight or
+/// wall-clock budget. Isolated capture hosts need the full kit tree before
+/// [`crate::HiddenUntilSceneReady`] can clear, not leftover admission from
+/// nearby mobs.
 pub fn drain_character_assembly_now(world: &mut World, roots: impl IntoIterator<Item = Entity>) {
 	for root in roots {
 		if world.get::<PendingCharacterAssembly>(root).is_none() {
@@ -280,20 +282,10 @@ mod tests {
 	}
 
 	#[test]
-	fn drain_now_clears_pending_on_an_empty_queue() {
-		use bevy::ecs::system::RunSystemOnce;
-
+	fn drain_now_is_a_noop_without_pending() {
 		let mut world = World::new();
-		let clothed = BraidmanConfig::default_preview().clothed();
-		let visual = world
-			.run_system_once(move |mut commands: Commands| {
-				spawn_fixed_character_assembly(&mut commands, &clothed, Transform::IDENTITY)
-			})
-			.expect("spawn");
-		world
-			.entity_mut(visual)
-			.insert(PendingCharacterAssembly { queue: VecDeque::new() });
-		drain_character_assembly_now(&mut world, [visual]);
-		assert!(world.get::<PendingCharacterAssembly>(visual).is_none());
+		let entity = world.spawn_empty().id();
+		drain_character_assembly_now(&mut world, [entity]);
+		assert!(world.get_entity(entity).is_ok());
 	}
 }

@@ -9,6 +9,7 @@ use character_items::{
 	icon_catalog_key_for_label, Inventory, InventoryItem, SELF_LUBIKAN_CAPTURE_LABEL,
 };
 use character_persist::SaveRoot;
+use characters::AnimClip;
 use firearms_components::firearm_preview_camera;
 use host::{
 	install_capture_hosts, keep_capture_hosts_visible, mark_capture_hosts_ready,
@@ -30,7 +31,7 @@ pub use prune::{
 };
 pub use screen_capture::{
 	CaptureCacheRoot, CaptureClient, CaptureCompleted, CaptureFailed, CaptureHostReady,
-	CaptureHostRoot, CaptureId, CaptureMode,
+	CaptureHostRoot, CaptureId, CaptureMode, RepresentativePose, HOST_REPRESENTATIVE_POSE,
 };
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -42,6 +43,11 @@ pub const ITEM_ICON_RESOLUTION: CaptureResolution = CaptureResolution::ICON;
 pub const FIREARM_SILHOUETTE_RESOLUTION: CaptureResolution = CaptureResolution::new(256, 112);
 /// Square HUD / catalog charge. The in-world grenade is a sphere.
 pub const GRENADE_SILHOUETTE_RESOLUTION: CaptureResolution = CaptureResolution::new(128, 128);
+/// Tanz / representative-pose HUD silhouette. Matches the retired 128px assets.
+pub const POSE_ICON_RESOLUTION: CaptureResolution = CaptureResolution::new(128, 128);
+/// Isolated pose hosts wait on GLB load + mailbox settle. World streaming and
+/// lavapipe both need more than the default 180-frame capture timeout.
+const POSE_CAPTURE_MAX_WAIT_FRAMES: u32 = 1800;
 
 /// Clothing inspect camera (catalog thumbnail).
 const CLOTHING_EYE: Vec3 = Vec3::new(0.0, 0.75, 2.5);
@@ -162,7 +168,7 @@ impl Plugin for ItemIconPlugin {
 			app.add_plugins(ScreenCapturePlugin::new(discover_icon_cache_dir()));
 		}
 		if let Some(mut root) = app.world_mut().get_resource_mut::<CaptureCacheRoot>() {
-			root.max_wait_frames = root.max_wait_frames.max(1800);
+			root.max_wait_frames = root.max_wait_frames.max(POSE_CAPTURE_MAX_WAIT_FRAMES);
 		}
 		if app.get_sub_app(bevy::render::RenderApp).is_some() {
 			install_capture_hosts(app);
@@ -371,6 +377,41 @@ impl CaptureSubject for SelfLubikanSubject {
 		CaptureView::look_at(SELF_LUBIKAN_EYE, SELF_LUBIKAN_LOOK)
 			.perspective(CaptureView::DEFAULT_FOV)
 	}
+}
+
+/// Silhouette request for a [`RepresentativePose`] still. Hosts spawn the
+/// default nude Braidman and scrub the live clip to `progress`.
+pub fn pose_icon_request(subject: &impl RepresentativePose) -> CaptureRequest {
+	CaptureRequest::from_subject(
+		subject,
+		CaptureMode::Silhouette,
+		POSE_ICON_RESOLUTION,
+		CaptureLighting::studio(),
+		CaptureRevision::CURRENT,
+	)
+	.with_file_stem(subject.pose_label().as_ref())
+	.with_framing(CaptureFraming::ICON)
+}
+
+pub fn request_pose_icon(
+	subject: &impl RepresentativePose,
+	clip: AnimClip,
+	progress: f32,
+	discovery: &mut ItemIconDiscovery,
+	poses: &mut PoseCaptureSubjects,
+	client: &mut CaptureClient,
+) {
+	let revision = CaptureRevision::CURRENT;
+	if discovery.revision != revision {
+		discovery.requested.clear();
+		discovery.revision = revision;
+	}
+	let id = subject.capture_id();
+	if !discovery.requested.insert(id.clone()) {
+		return;
+	}
+	poses.remember(id, PoseCaptureSpec { clip, progress });
+	client.request(pose_icon_request(subject));
 }
 
 pub fn pending_inventory_icons(

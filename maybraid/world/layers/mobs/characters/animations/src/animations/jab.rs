@@ -120,6 +120,12 @@ impl Jab {
 		0.0
 	}
 
+	/// Salute / hold still (mid-hold after full extend). Tanz Healing Salute
+	/// reads this so the icon beat stays on the live jab clip.
+	pub fn representative_progress() -> f32 {
+		(EXTEND_END + HOLD_END) * 0.5
+	}
+
 	/// Reach scale from [`Self::target`].z vs [`DEFAULT_JAB_TARGET`].z.
 	pub fn reach_scale(&self) -> f32 {
 		let reference = DEFAULT_JAB_TARGET.z.max(f32::EPSILON);

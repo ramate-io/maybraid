@@ -1,7 +1,7 @@
 //! Input-facing attack state. v1 is two jabs; a combo graph can replace the
 //! lookup from [`AttackSpec`] without changing consumers.
 
-use character_animations::animations::HOLD_END;
+use character_animations::animations::JAB_HOLD_END;
 use character_rigs::Side;
 use characters::JAB_DURATION_SECS;
 use maybraid_character_controller::CharacterIntent;
@@ -38,7 +38,7 @@ pub struct AttackTiming {
 impl AttackTiming {
 	pub const JAB: Self = Self {
 		startup_end: JAB_STARTUP_END,
-		active_end: HOLD_END,
+		active_end: JAB_HOLD_END,
 		duration_secs: JAB_DURATION_SECS,
 	};
 
@@ -278,10 +278,10 @@ mod tests {
 		assert_eq!(state.phase(), Some(AttackPhase::Active));
 		assert!(state.just_entered_active());
 
-		state.tick(jab_dt(HOLD_END - JAB_STARTUP_END));
+		state.tick(jab_dt(JAB_HOLD_END - JAB_STARTUP_END));
 		assert_eq!(state.phase(), Some(AttackPhase::Recovery));
 
-		state.tick(jab_dt(1.0 - HOLD_END) + 1e-3);
+		state.tick(jab_dt(1.0 - JAB_HOLD_END) + 1e-3);
 		assert!(!state.is_busy());
 	}
 
@@ -305,7 +305,7 @@ mod tests {
 	fn recovery_press_cancels_into_the_next_jab() {
 		let mut state = AttackState::default();
 		state.request(AttackSpec::jab(Side::Left));
-		state.tick(jab_dt(HOLD_END + 0.01));
+		state.tick(jab_dt(JAB_HOLD_END + 0.01));
 		assert_eq!(state.phase(), Some(AttackPhase::Recovery));
 		state.request(AttackSpec::jab(Side::Right));
 		assert!(state.just_started());

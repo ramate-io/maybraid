@@ -11,7 +11,7 @@ rust-version = { workspace = true }
 
 [features]
 # Test fixtures for crates that test against the world (e.g. `UnitXTile`).
-test-support = ["lod/test-support"]
+test-support = []
 # Debug commands for preview evidence capture (grant-points, take-damage, spawn-npc).
 debug-commands = []
 
@@ -37,6 +37,7 @@ firearm-intelligence = { workspace = true }
 firearm-user = { workspace = true }
 grenade-user = { workspace = true }
 fisticuffs-user = { workspace = true }
+tanz-user = { workspace = true }
 grenades = { workspace = true }
 furniture-assemblies = { workspace = true }
 furnishing-layer-model = { workspace = true }
@@ -56,6 +57,7 @@ maybraid-game-mode-discover = { workspace = true }
 material-ref = { workspace = true }
 world-materials = { workspace = true }
 maybraid-character-controller = { workspace = true }
+maybraid-world-controller = { workspace = true }
 maybraid-input = { workspace = true }
 maybraid-agent = { workspace = true }
 menu-components = { workspace = true }
@@ -78,6 +80,7 @@ npc-intelligence = { workspace = true }
 poi-intelligence = { workspace = true }
 world-player = { workspace = true }
 richmond = { workspace = true }
+screen-capture = { workspace = true }
 urbanization-cells = { workspace = true }
 routing-intelligence = { workspace = true }
 item-icons = { workspace = true }
