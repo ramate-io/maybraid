@@ -10,7 +10,7 @@ use world_player::Player as VegetationPlayer;
 
 use crate::control::WorldGameplayEnabled;
 use crate::map_view::WorldMapView;
-use crate::weapon::WorldPlayerLoadout;
+use crate::weapon::{commit_body_inventory, WorldPlayerLoadout};
 
 /// Readable active equipped-queue category for HUD lanes ([#1113](https://github.com/ramate-io/maybraid/issues/1113)).
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -146,7 +146,13 @@ pub(crate) fn cycle_equipped_inventory_queues(
 		}
 		let snapshot = bag.clone();
 		if let Some(loadout) = loadout.as_deref_mut() {
-			loadout.retarget_inventory(snapshot.clone());
+			commit_body_inventory(
+				&mut commands,
+				player,
+				loadout,
+				snapshot,
+				body_of.get(player).ok(),
+			);
 			commands
 				.entity(player)
 				.insert(crate::weapon::AppliedWorldPlayerLoadout(loadout.clone()));

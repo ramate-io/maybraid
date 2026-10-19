@@ -1,4 +1,27 @@
 //! Starter held kit for the vegetation player capsule.
+//!
+//! # Inventory ownership
+//!
+//! | Copy | Where | Role |
+//! | --- | --- | --- |
+//! | **Live** | [`LiveCharacterInventory`] on the session [`lubikans::LubikanCharacter`] | Authoritative runtime bag for the selected character. Survives body replacement. |
+//! | **Saved** | [`WorldPlayerLoadout`] resource | Persist/session snapshot. Disk writes read this resource on change. Loaded when entering the world. |
+//! | **Draft** | Character editor menu / edit baseline | Explicit editor snapshot. Commit copies into [`WorldPlayerLoadout`]; cancel must not. |
+//! | **Applied** | [`AppliedWorldPlayerLoadout`] on the body | Rearm-suppression mirror. Not live authority. Removed only after the held-kit projection is incremental. |
+//!
+//! Bag entities (`InventoryUser`) are a presentation of live inventory, not a
+//! third owner. Commit paths write the session resource and stamp the character
+//! together ([`commit_body_inventory`]). [`arm_world_player`] still compares
+//! the resource to the applied mirror and fully reconstructs held kit / bag /
+//! vitals; health reset on that path is a known limitation (lifecycle should
+//! own vitals, not inventory refresh).
+//!
+//! Related work: Tanz bag items already on this main
+//! ([#1359](https://github.com/ramate-io/maybraid/pull/1359)); ordered
+//! equip/unequip/reorder still open
+//! ([#1360](https://github.com/ramate-io/maybraid/pull/1360)); shared
+//! `Inventory::cycle_slot` is merged but not on this snapshot
+//! ([#1364](https://github.com/ramate-io/maybraid/pull/1364)).
 
 use bevy::prelude::*;
 use character_inventory_user::{spawn_bag, InventoryUser};
@@ -11,6 +34,7 @@ use firearm_user::{
 };
 use grenade_user::{spawn_held_grenade, GrenadeThrow, GrenadeUser, GrenadeUserSettings};
 use grenades::GrenadeDetonated;
+use lubikans::{LubikanBodyOf, LubikanCharacter, LubikanSystems};
 use maybraid_character_controller::{
 	CharacterControlSystems, CharacterIntent, InventoryCyclingCategory,
 };
@@ -31,6 +55,10 @@ use world_player::{
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
 
 /// Persisted character appearance, worn clothing, stats, and primary weapon for world entry.
+///
+/// This is the **saved / session snapshot**, not the live bag. Runtime mutation
+/// goes through [`Self::commit_live`] and [`commit_body_inventory`] so the
+/// session [`LiveCharacterInventory`] stays in lockstep.
 #[derive(Resource, Clone, Debug, PartialEq)]
 pub struct WorldPlayerLoadout {
 	pub key: String,
@@ -59,13 +87,100 @@ impl WorldPlayerLoadout {
 
 	/// Replace the bag and rebuild worn garments from the new wear list.
 	pub fn retarget_inventory(&mut self, inventory: Inventory) {
+		self.commit_live(inventory);
+	}
+
+	/// Write a live bag into this session snapshot and rebuild clothing.
+	///
+	/// Persist still reads this resource. Stamp the session character with
+	/// [`commit_body_inventory`] in the same call so live and saved match.
+	pub fn commit_live(&mut self, inventory: Inventory) {
 		let name = self.name.clone();
 		*self = Self::new(self.key.clone(), self.appearance.clone(), inventory).with_name(name);
 	}
+
+	/// True when the body already carries this snapshot (rearm suppression).
+	pub(crate) fn matches_applied(&self, applied: &AppliedWorldPlayerLoadout) -> bool {
+		applied.matches(self)
+	}
+
+	pub fn character_sheet(&self) -> CharacterSheet {
+		self.inventory.character_sheet()
+	}
 }
 
-#[derive(Component)]
+/// Live bag on the play-session [`LubikanCharacter`]. Survives ordinary death
+/// and body replacement; reset when choosing another character or ending the
+/// session (the saved resource is removed / replaced).
+#[derive(Component, Clone, Debug, PartialEq)]
+pub struct LiveCharacterInventory(pub Inventory);
+
+impl LiveCharacterInventory {
+	pub fn from_loadout(loadout: &WorldPlayerLoadout) -> Self {
+		Self(loadout.inventory.clone())
+	}
+
+	pub fn inventory(&self) -> &Inventory {
+		&self.0
+	}
+}
+
+/// Rearm-suppression snapshot on the **body**. Not the live owner.
+#[derive(Component, Clone, Debug, PartialEq)]
 pub(crate) struct AppliedWorldPlayerLoadout(pub WorldPlayerLoadout);
+
+impl AppliedWorldPlayerLoadout {
+	pub fn matches(&self, live: &WorldPlayerLoadout) -> bool {
+		&self.0 == live
+	}
+}
+
+/// Commit a bag snapshot to the saved resource and the session character.
+pub(crate) fn commit_body_inventory(
+	commands: &mut Commands,
+	body: Entity,
+	loadout: &mut WorldPlayerLoadout,
+	inventory: Inventory,
+	body_of: Option<&LubikanBodyOf>,
+) {
+	loadout.commit_live(inventory);
+	stamp_live_inventory(commands, body, loadout, body_of);
+}
+
+fn stamp_live_inventory(
+	commands: &mut Commands,
+	body: Entity,
+	loadout: &WorldPlayerLoadout,
+	body_of: Option<&LubikanBodyOf>,
+) {
+	let holder = body_of.map(LubikanBodyOf::character).unwrap_or(body);
+	commands.entity(holder).insert(LiveCharacterInventory::from_loadout(loadout));
+}
+
+/// Copy the session snapshot onto session characters.
+///
+/// Seeds a new [`LubikanCharacter`]. Reloads live inventory when the saved
+/// resource changes (world entry, editor commit, character switch).
+pub(crate) fn sync_live_character_inventory(
+	loadout: Option<Res<WorldPlayerLoadout>>,
+	mut characters: Query<(Entity, Option<&mut LiveCharacterInventory>), With<LubikanCharacter>>,
+	mut commands: Commands,
+) {
+	let Some(loadout) = loadout else {
+		return;
+	};
+	for (entity, live) in &mut characters {
+		match live {
+			Some(mut live) if loadout.is_changed() => {
+				*live = LiveCharacterInventory::from_loadout(&loadout);
+			}
+			None => {
+				commands.entity(entity).insert(LiveCharacterInventory::from_loadout(&loadout));
+			}
+			Some(_) => {}
+		}
+	}
+}
 
 /// The replacement lifecycle already queued this body's configured visual.
 #[derive(Component)]
@@ -135,7 +250,7 @@ pub(crate) fn arm_world_player(
 		if loadout
 			.as_ref()
 			.zip(applied)
-			.is_some_and(|(loadout, applied)| loadout.as_ref() == &applied.0)
+			.is_some_and(|(loadout, applied)| loadout.matches_applied(applied))
 		{
 			continue;
 		}
@@ -167,7 +282,10 @@ pub(crate) fn arm_world_player(
 			continue;
 		};
 
-		let sheet = loadout.inventory.character_sheet();
+		// Vitals currently follow every rearm, including inventory refresh.
+		// Lifecycle events (spawn / respawn / character switch) should own
+		// this; the next projection slice stops resetting health here.
+		let sheet = loadout.character_sheet();
 		commands.entity(player).insert((
 			Health::from_max(f32::from(sheet.health.max(1))),
 			AppliedWorldPlayerLoadout(loadout.as_ref().clone()),
@@ -289,6 +407,7 @@ fn commit_weapon_swap(
 		With<VegetationPlayer>,
 	>,
 	mut bags: Query<&mut Inventory>,
+	body_of: Query<&LubikanBodyOf>,
 ) {
 	for (player, user, firearm, grenade, mut swap) in &mut players {
 		if !swap.ready_to_swap() {
@@ -305,7 +424,13 @@ fn commit_weapon_swap(
 		let snapshot = bag.clone();
 		teardown_held_weapon(&mut commands, player, firearm, grenade);
 		if let Some(loadout) = loadout.as_deref_mut() {
-			loadout.retarget_inventory(snapshot.clone());
+			commit_body_inventory(
+				&mut commands,
+				player,
+				loadout,
+				snapshot.clone(),
+				body_of.get(player).ok(),
+			);
 			commands.entity(player).insert(AppliedWorldPlayerLoadout(loadout.clone()));
 		}
 		if assets.is_some() {
@@ -389,31 +514,33 @@ fn sync_tanz_stack_from_inventory(
 }
 
 pub(crate) fn configure(app: &mut App) {
-	app.add_systems(Startup, spawn_world_reticle).add_systems(
-		Update,
-		(
-			arm_world_player,
-			sync_tanz_stack_from_inventory
-				.after(arm_world_player)
-				.before(TanzUserSystems::Match)
-				.before(TanzUserSystems::Execute),
+	app.add_systems(PreUpdate, sync_live_character_inventory.after(LubikanSystems::Owner))
+		.add_systems(Startup, spawn_world_reticle)
+		.add_systems(
+			Update,
 			(
-				begin_weapon_swap
-					.after(crate::inventory_cycling::InventoryCyclingCategorySystems)
-					.before(crate::inventory_cycling::InventoryCyclingSystems),
-				commit_weapon_swap.after(FirearmUserSystems::Swap),
-			)
-				.chain()
-				.after(CharacterControlSystems)
-				.run_if(resource_equals(WorldGameplayEnabled(true))),
-			sync_skill_map_equip
-				.after(crate::inventory_cycling::InventoryCyclingSystems)
-				.after(CharacterControlSystems)
-				.before(SkillMapSystems::Spawn)
-				.run_if(resource_equals(WorldGameplayEnabled(true))),
-			spawn_detonation_vfx,
-		),
-	);
+				arm_world_player,
+				sync_tanz_stack_from_inventory
+					.after(arm_world_player)
+					.before(TanzUserSystems::Match)
+					.before(TanzUserSystems::Execute),
+				(
+					begin_weapon_swap
+						.after(crate::inventory_cycling::InventoryCyclingCategorySystems)
+						.before(crate::inventory_cycling::InventoryCyclingSystems),
+					commit_weapon_swap.after(FirearmUserSystems::Swap),
+				)
+					.chain()
+					.after(CharacterControlSystems)
+					.run_if(resource_equals(WorldGameplayEnabled(true))),
+				sync_skill_map_equip
+					.after(crate::inventory_cycling::InventoryCyclingSystems)
+					.after(CharacterControlSystems)
+					.before(SkillMapSystems::Spawn)
+					.run_if(resource_equals(WorldGameplayEnabled(true))),
+				spawn_detonation_vfx,
+			),
+		);
 }
 
 #[cfg(test)]
@@ -1057,6 +1184,161 @@ mod tests {
 		};
 		assert_eq!(instance.name, FIERY_EXPLOSION);
 		assert!((transform.scale.x - stats.effect_scale).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn live_inventory_stamps_onto_the_session_character() -> anyhow::Result<()> {
+		use crate::weapon::{sync_live_character_inventory, LiveCharacterInventory};
+		use lubikans::{
+			LubikanBodyOf, LubikanCharacter, LubikanOwner, LubikanSystems, LubikansPlugin,
+		};
+
+		let inventory = two_gun_bag();
+		let mut app = App::new();
+		app.add_plugins(LubikansPlugin);
+		app.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			inventory.clone(),
+		));
+		app.add_systems(PreUpdate, sync_live_character_inventory.after(LubikanSystems::Owner));
+		let body = app.world_mut().spawn(LubikanOwner).id();
+		app.update();
+		let character = LubikanBodyOf::holder(app.world(), body);
+		anyhow::ensure!(character != body, "ledger lives on the session character");
+		anyhow::ensure!(app.world().get::<LubikanCharacter>(character).is_some());
+		let live = app
+			.world()
+			.get::<LiveCharacterInventory>(character)
+			.ok_or_else(|| anyhow::anyhow!("live inventory"))?;
+		assert_eq!(
+			live.inventory().primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn live_inventory_survives_body_replacement() -> anyhow::Result<()> {
+		use crate::weapon::{sync_live_character_inventory, LiveCharacterInventory};
+		use lubikans::{LubikanBodyOf, LubikanOwner, LubikanSystems, LubikansPlugin};
+
+		let mut app = App::new();
+		app.add_plugins(LubikansPlugin);
+		app.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			two_gun_bag(),
+		));
+		app.add_systems(PreUpdate, sync_live_character_inventory.after(LubikanSystems::Owner));
+		let first = app.world_mut().spawn(LubikanOwner).id();
+		app.update();
+		let character = LubikanBodyOf::holder(app.world(), first);
+		app.world_mut().entity_mut(first).remove::<LubikanOwner>();
+		app.update();
+		let second = app.world_mut().spawn(LubikanOwner).id();
+		app.update();
+		assert_eq!(LubikanBodyOf::holder(app.world(), second), character);
+		anyhow::ensure!(app.world().get::<LiveCharacterInventory>(character).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn commit_live_writes_character_and_saved_snapshot() -> anyhow::Result<()> {
+		use crate::weapon::{commit_body_inventory, LiveCharacterInventory};
+
+		let mut world = World::new();
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			Inventory::default(),
+		));
+		let player = world.spawn_empty().id();
+		world
+			.run_system_once(
+				move |mut commands: Commands, mut loadout: ResMut<WorldPlayerLoadout>| {
+					commit_body_inventory(
+						&mut commands,
+						player,
+						loadout.as_mut(),
+						two_gun_bag(),
+						None,
+					);
+				},
+			)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let live = world
+			.get::<LiveCharacterInventory>(player)
+			.ok_or_else(|| anyhow::anyhow!("live"))?;
+		let loadout = world.resource::<WorldPlayerLoadout>();
+		assert_eq!(loadout.inventory, live.0);
+		assert_eq!(
+			loadout.inventory.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn matching_applied_snapshot_does_not_rearm_or_reset_health() -> anyhow::Result<()> {
+		use crate::weapon::AppliedWorldPlayerLoadout;
+		use damage::Health;
+
+		let mut world = World::new();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			Inventory::default(),
+		));
+		let player = world.spawn(VegetationPlayer).id();
+		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
+		world
+			.run_system_once(arm_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.get_mut::<Health>(player)
+			.ok_or_else(|| anyhow::anyhow!("health"))?
+			.current = 1.0;
+		world
+			.run_system_once(arm_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let health = world.get::<Health>(player).ok_or_else(|| anyhow::anyhow!("health"))?;
+		assert_eq!(health.current, 1.0);
+		anyhow::ensure!(world.get::<AppliedWorldPlayerLoadout>(player).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn differing_applied_snapshot_still_resets_health_on_rearm() -> anyhow::Result<()> {
+		use damage::Health;
+
+		let mut world = World::new();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			Inventory::default(),
+		));
+		let player = world.spawn(VegetationPlayer).id();
+		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
+		world
+			.run_system_once(arm_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.get_mut::<Health>(player)
+			.ok_or_else(|| anyhow::anyhow!("health"))?
+			.current = 1.0;
+		world.resource_mut::<WorldPlayerLoadout>().name = String::from("Ada");
+		world
+			.run_system_once(arm_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let health = world.get::<Health>(player).ok_or_else(|| anyhow::anyhow!("health"))?;
+		assert_eq!(health.current, health.max);
+		assert_ne!(health.current, 1.0);
 		Ok(())
 	}
 }

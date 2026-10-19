@@ -77,11 +77,11 @@ pub use item_icons::{
 pub use lod::hcsg::{HcsgClass, HcsgDemand, Outstanding};
 pub use lod::LodJobCounter;
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
-pub use occupancy::{WorldOccupancyPlugin, WorldOccupancySystems};
 pub use maybraid_sky::{
 	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
 	SUN_COLOR, SUN_ILLUMINANCE,
 };
+pub use occupancy::{WorldOccupancyPlugin, WorldOccupancySystems};
 pub use player_camera::{CameraPov, CameraPovLocked};
 pub use player_lifecycle::{
 	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
@@ -114,7 +114,7 @@ pub use stash::{
 pub use terrain_layer_model::{terrain_streaming, TerrainStreaming};
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
-pub use weapon::WorldPlayerLoadout;
+pub use weapon::{LiveCharacterInventory, WorldPlayerLoadout};
 pub use world_layers::WorldLayersPlugin;
 pub use world_materials::{WorldMaterialLib, WorldMaterialRefPlugin};
 pub use world_player::{PlayerPhysicsEnabled, PlayerSpawnXz};
