@@ -17,7 +17,8 @@ not plugin install order:
 
 `OrdinaryLocomotionEnabled` is the pad-level gate (one local stick). Tanzer
 mode still suppresses move / jump / stance at Bind so the stick can drive
-recognition. Per-actor interpretation of a shared pad is a later slice.
+recognition. [`OrdinaryLocomotion`](src/lib.rs) is the per-actor gate at
+`apply_move_intents` so one Tanzer does not disable walking for everyone.
 
 `RightTrigger` + `X` is `PowerUseItem` and suppresses `StartInteraction`.
 L3 hold is sprint (`StartSprint` every hold frame, `StopSprint` on release).

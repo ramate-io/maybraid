@@ -32,6 +32,30 @@ impl OrdinaryLocomotionEnabled {
 	}
 }
 
+/// Per-actor ordinary locomotion. Missing means "use the pad-level
+/// [`OrdinaryLocomotionEnabled`] resource."
+///
+/// Tanz-user writes this from `TanzUser.mode` so one Tanzer does not disable
+/// walking for every other actor.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OrdinaryLocomotion(pub bool);
+
+impl Default for OrdinaryLocomotion {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
+impl OrdinaryLocomotion {
+	pub fn is_enabled(self) -> bool {
+		self.0
+	}
+
+	pub fn from_tanzer(tanzer: bool) -> Self {
+		Self(!tanzer)
+	}
+}
+
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CharacterControlSystems;
 

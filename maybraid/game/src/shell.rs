@@ -189,14 +189,91 @@ impl ShellRoute<'_> {
 	}
 }
 
-fn world_session_playing(
-	flow: GameFlow,
-	session: PlaySession,
-	pause: Option<&State<WorldPause>>,
-) -> bool {
+fn world_session_playing(flow: GameFlow, session: PlaySession, pause: Option<WorldPause>) -> bool {
 	flow == GameFlow::World
 		&& session == PlaySession::Discovery
-		&& pause.is_some_and(|pause| *pause.get() == WorldPause::Playing)
+		&& pause == Some(WorldPause::Playing)
+}
+
+/// Independent session capabilities. Not a game-mode enum: streaming, scenery,
+/// gameplay, and physics can diverge (loading streams with gameplay off;
+/// pause keeps scenery and streaming).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SessionActivity {
+	pub gameplay: bool,
+	pub physics: bool,
+	pub streaming: bool,
+	pub scenery: bool,
+	pub menu_shell: bool,
+}
+
+impl SessionActivity {
+	/// Single derivation for shell-owned session flags.
+	pub(crate) fn from_shell(
+		flow: GameFlow,
+		session: PlaySession,
+		pause: Option<WorldPause>,
+	) -> Self {
+		let playing = world_session_playing(flow, session, pause);
+		Self {
+			gameplay: playing,
+			physics: playing,
+			streaming: streams_terrain(
+				session == PlaySession::Discovery,
+				terrain_streaming_for_shell(flow),
+			),
+			scenery: flow == GameFlow::World,
+			menu_shell: matches!(flow, GameFlow::Home | GameFlow::Characters),
+		}
+	}
+
+	fn apply(
+		self,
+		gameplay: &mut WorldGameplayEnabled,
+		physics: &mut PlayerPhysicsEnabled,
+		streaming: &mut TerrainStreaming<Durham>,
+		scenery: &mut WorldSceneryVisible,
+		menu_shell: &mut WorldMenuShell,
+	) {
+		gameplay.0 = self.gameplay;
+		physics.0 = self.physics;
+		streaming.enabled = self.streaming;
+		scenery.0 = self.scenery;
+		menu_shell.0 = self.menu_shell;
+	}
+}
+
+fn pending_or_current_pause(
+	pause: Option<&State<WorldPause>>,
+	next: Option<&NextState<WorldPause>>,
+) -> Option<WorldPause> {
+	match next {
+		Some(NextState::Pending(value)) => Some(*value),
+		_ => pause.map(|state| *state.get()),
+	}
+}
+
+/// Owner of gameplay / physics / streaming / scenery / menu-shell in Update.
+/// `apply_shell_look` applies the same table on flow enter.
+pub(crate) fn resolve_session_activity(
+	flow: Res<State<GameFlow>>,
+	pause: Option<Res<State<WorldPause>>>,
+	next_pause: Option<Res<NextState<WorldPause>>>,
+	session: Res<PlaySession>,
+	mut gameplay: ResMut<WorldGameplayEnabled>,
+	mut physics: ResMut<PlayerPhysicsEnabled>,
+	mut streaming: ResMut<TerrainStreaming<Durham>>,
+	mut scenery: ResMut<WorldSceneryVisible>,
+	mut menu_shell: ResMut<WorldMenuShell>,
+) {
+	let pause = pending_or_current_pause(pause.as_deref(), next_pause.as_deref());
+	SessionActivity::from_shell(*flow.get(), *session, pause).apply(
+		&mut gameplay,
+		&mut physics,
+		&mut streaming,
+		&mut scenery,
+		&mut menu_shell,
+	);
 }
 
 pub(crate) fn apply_shell_look(
@@ -234,14 +311,15 @@ pub(crate) fn apply_shell_look(
 		camera.is_active = loading;
 	}
 	// Menus keep Durham off. Discovery streams the playable rings. Gameplay and
-	// the world motor stay on while the session is playing.
-	let in_world_shell = terrain_streaming_for_shell(flow);
-	streaming.enabled = streams_terrain(*session == PlaySession::Discovery, in_world_shell);
-	scenery.0 = flow == GameFlow::World;
-	let playing = world_session_playing(flow, *session, pause.as_deref());
-	gameplay.0 = playing;
-	physics.0 = playing;
-	menu_shell.0 = matches!(flow, GameFlow::Home | GameFlow::Characters);
+	// the world motor stay on while the session is playing. Same table as
+	// [`resolve_session_activity`]; camera / clear stay here.
+	SessionActivity::from_shell(flow, *session, pause.as_deref().map(|pause| *pause.get())).apply(
+		&mut gameplay,
+		&mut physics,
+		&mut streaming,
+		&mut scenery,
+		&mut menu_shell,
+	);
 }
 
 fn camera_render_layers(flow: GameFlow) -> RenderLayers {
@@ -300,8 +378,9 @@ mod tests {
 	use bevy::prelude::*;
 
 	use super::{
-		apply_shell_look, camera_render_layers, terrain_streaming_for_shell, ShellRoute,
-		PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER,
+		apply_shell_look, camera_render_layers, resolve_session_activity,
+		terrain_streaming_for_shell, SessionActivity, ShellRoute, PREVIEW_RENDER_LAYER,
+		WORLD_RENDER_LAYER,
 	};
 	use crate::flow::{GameFlow, PlaySession, WorldPause};
 	use bevy::ecs::system::RunSystemOnce;
@@ -342,6 +421,61 @@ mod tests {
 		if !flow_ok || !mode_ok {
 			return Err(anyhow::anyhow!("route requested flow {flow:?} mode {mode:?}"));
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn session_activity_truth_table_keeps_capabilities_independent() {
+		let home = SessionActivity::from_shell(GameFlow::Home, PlaySession::None, None);
+		assert!(
+			!home.streaming && !home.gameplay && !home.physics && !home.scenery && home.menu_shell
+		);
+
+		let characters =
+			SessionActivity::from_shell(GameFlow::Characters, PlaySession::None, None);
+		assert_eq!(characters, home);
+
+		let loading =
+			SessionActivity::from_shell(GameFlow::LoadingWorld, PlaySession::Discovery, None);
+		assert!(loading.streaming);
+		assert!(!loading.gameplay && !loading.physics && !loading.scenery && !loading.menu_shell);
+
+		let playing = SessionActivity::from_shell(
+			GameFlow::World,
+			PlaySession::Discovery,
+			Some(WorldPause::Playing),
+		);
+		assert!(playing.streaming && playing.gameplay && playing.physics && playing.scenery);
+		assert!(!playing.menu_shell);
+
+		let paused = SessionActivity::from_shell(
+			GameFlow::World,
+			PlaySession::Discovery,
+			Some(WorldPause::Menu),
+		);
+		assert!(paused.streaming && paused.scenery);
+		assert!(!paused.gameplay && !paused.physics && !paused.menu_shell);
+	}
+
+	#[test]
+	fn pending_pause_turns_gameplay_and_physics_off_together() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(State::new(GameFlow::World));
+		world.insert_resource(State::new(WorldPause::Playing));
+		world.insert_resource(NextState::<WorldPause>::Pending(WorldPause::Menu));
+		world.insert_resource(PlaySession::Discovery);
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(PlayerPhysicsEnabled(true));
+		world.insert_resource(TerrainStreaming::<Durham>::new(true));
+		world.insert_resource(WorldSceneryVisible(true));
+		world.insert_resource(WorldMenuShell(false));
+		world
+			.run_system_once(resolve_session_activity)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.resource::<WorldGameplayEnabled>().0);
+		assert!(!world.resource::<PlayerPhysicsEnabled>().0);
+		anyhow::ensure!(world.resource::<TerrainStreaming<Durham>>().enabled);
+		assert!(world.resource::<WorldSceneryVisible>().0);
 		Ok(())
 	}
 

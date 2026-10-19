@@ -1,7 +1,9 @@
 //! Move / jump / sprint / stance from [`CharacterIntent`]. Look and use-item belong to other crates.
 
 use bevy::prelude::*;
-use maybraid_character_controller::{CharacterIntent, OrdinaryLocomotionEnabled};
+use maybraid_character_controller::{
+	CharacterIntent, OrdinaryLocomotion, OrdinaryLocomotionEnabled,
+};
 
 use crate::body::{CharacterController, JumpWish, Jumping, MoveWish, Sprinting};
 use crate::identity::{Player, PlayerLook};
@@ -15,11 +17,18 @@ pub(crate) fn apply_move_intents(
 	mut commands: Commands,
 	mut intents: MessageReader<CharacterIntent>,
 	mut wishes: Query<
-		(Entity, &mut MoveWish, &PlayerLook, Option<&mut CharacterStance>, Option<&Jumping>),
+		(
+			Entity,
+			&mut MoveWish,
+			&PlayerLook,
+			Option<&mut CharacterStance>,
+			Option<&Jumping>,
+			Option<&OrdinaryLocomotion>,
+		),
 		(With<CharacterController>, With<Player>),
 	>,
 ) {
-	let ordinary = ordinary.is_none_or(|enabled| enabled.is_enabled());
+	let pad_ordinary = ordinary.is_none_or(|enabled| enabled.is_enabled());
 	let mut move_stick = Vec2::ZERO;
 	let mut jump = false;
 	let mut focusing = mouse.pressed(MouseButton::Right);
@@ -29,18 +38,26 @@ pub(crate) fn apply_move_intents(
 	let mut change_prone = false;
 	for intent in intents.read() {
 		match *intent {
-			CharacterIntent::Move(value) if ordinary => move_stick = value,
-			CharacterIntent::Jump if ordinary => jump = true,
+			CharacterIntent::Move(value) => move_stick = value,
+			CharacterIntent::Jump => jump = true,
 			CharacterIntent::Focus(value) if value > FOCUS_EPS => focusing = true,
-			CharacterIntent::StartSprint if ordinary => start_sprint = true,
-			CharacterIntent::StopSprint if ordinary => stop_sprint = true,
-			CharacterIntent::ChangeSquat if ordinary => change_squat = true,
-			CharacterIntent::ChangeProne if ordinary => change_prone = true,
+			CharacterIntent::StartSprint => start_sprint = true,
+			CharacterIntent::StopSprint => stop_sprint = true,
+			CharacterIntent::ChangeSquat => change_squat = true,
+			CharacterIntent::ChangeProne => change_prone = true,
 			_ => {}
 		}
 	}
 
-	for (entity, mut wish, look, mut stance, jumping) in &mut wishes {
+	for (entity, mut wish, look, mut stance, jumping, locomotion) in &mut wishes {
+		let ordinary =
+			locomotion.copied().map(OrdinaryLocomotion::is_enabled).unwrap_or(pad_ordinary);
+		let move_stick = if ordinary { move_stick } else { Vec2::ZERO };
+		let jump = ordinary && jump;
+		let start_sprint = ordinary && start_sprint;
+		let stop_sprint = ordinary && stop_sprint;
+		let change_squat = ordinary && change_squat;
+		let change_prone = ordinary && change_prone;
 		wish.0 = look.wish_from_stick(move_stick);
 		let airborne = jumping.is_some_and(Jumping::airborne);
 		if jump {
@@ -243,6 +260,35 @@ mod tests {
 		let stance = app.world().get::<CharacterStance>(player).ok_or_else(|| anyhow!("stance"))?;
 		if stance.kind != StanceKind::Stand {
 			return Err(anyhow!("StopSprint must not re-crouch"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn per_actor_ordinary_locomotion_ignores_pad_move() -> Result<()> {
+		let (mut app, walker) = sprint_app();
+		let tanzer = app
+			.world_mut()
+			.spawn((
+				CharacterController,
+				Player,
+				MoveWish::default(),
+				PlayerLook::default(),
+				OrdinaryLocomotion(false),
+			))
+			.id();
+		write_intents(&mut app, &[CharacterIntent::Move(Vec2::Y), CharacterIntent::Jump]);
+		app.update();
+		let walk = app.world().get::<MoveWish>(walker).map(|wish| wish.0).unwrap_or(Vec3::NAN);
+		if (walk.z + 1.0).abs() >= 1e-4 {
+			return Err(anyhow!("Standard actor should still take the pad wish: {walk}"));
+		}
+		let hold = app.world().get::<MoveWish>(tanzer).map(|wish| wish.0).unwrap_or(Vec3::NAN);
+		if hold != Vec3::ZERO {
+			return Err(anyhow!("Tanzer OrdinaryLocomotion(false) must ignore pad move: {hold}"));
+		}
+		if app.world().get::<JumpWish>(tanzer).is_some() {
+			return Err(anyhow!("Tanzer OrdinaryLocomotion(false) must ignore Jump"));
 		}
 		Ok(())
 	}
