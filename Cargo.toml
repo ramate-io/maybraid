@@ -33,6 +33,7 @@ members = [
   "maybraid/scene-ref",
   "maybraid/material-ref",
   "maybraid/screen-capture",
+  "maybraid/cpu-posed-mesh",
   "maybraid/world/materials/lib",
   "maybraid/world/materials/playground",
   "maybraid/vfx/lib",
@@ -305,6 +306,7 @@ scene-ref = { path = "maybraid/scene-ref" }
 visual-geometry-core = { path = "maybraid/visual-geometry-core" }
 material-ref = { path = "maybraid/material-ref" }
 screen-capture = { path = "maybraid/screen-capture" }
+cpu-posed-mesh = { path = "maybraid/cpu-posed-mesh" }
 terrain-chunk-ref = { path = "maybraid/terrain-chunk-ref" }
 avian3d = "0.7"
 
