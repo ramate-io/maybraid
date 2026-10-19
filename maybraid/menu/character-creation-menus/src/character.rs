@@ -1654,6 +1654,36 @@ impl CharacterMenu {
 				self.sync_inventory_clothing();
 				return true;
 			}
+			MenuEvent::EquipInventory(index) => {
+				let Some(inventory) = self.inventory.as_mut() else {
+					return false;
+				};
+				if !inventory.equip_front(index) {
+					return false;
+				}
+				self.sync_inventory_clothing();
+				return true;
+			}
+			MenuEvent::UnequipInventory(index) => {
+				let Some(inventory) = self.inventory.as_mut() else {
+					return false;
+				};
+				if !inventory.unequip(index) {
+					return false;
+				}
+				self.sync_inventory_clothing();
+				return true;
+			}
+			MenuEvent::MoveEquippedInventory { index, delta } => {
+				let Some(inventory) = self.inventory.as_mut() else {
+					return false;
+				};
+				if !inventory.move_equipped(index, delta) {
+					return false;
+				}
+				self.sync_inventory_clothing();
+				return true;
+			}
 			MenuEvent::DropInventory(index) => {
 				return self.apply_drop(index, InventoryDropPolicy::PLACEHOLDER);
 			}
@@ -1741,7 +1771,12 @@ impl CharacterMenu {
 	pub fn camera_focus_for_event(&self, event: MenuEvent) -> Option<CameraFocus> {
 		if matches!(
 			event,
-			MenuEvent::ToggleInventory(_) | MenuEvent::DropInventory(_) | MenuEvent::SetSpecies(_)
+			MenuEvent::ToggleInventory(_)
+				| MenuEvent::EquipInventory(_)
+				| MenuEvent::UnequipInventory(_)
+				| MenuEvent::MoveEquippedInventory { .. }
+				| MenuEvent::DropInventory(_)
+				| MenuEvent::SetSpecies(_)
 		) {
 			return Some(self.body_preview_focus());
 		}
@@ -1869,6 +1904,9 @@ impl CharacterMenu {
 			MenuEvent::SetSwatch(_, _)
 			| MenuEvent::Cycle(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1943,6 +1981,9 @@ impl CharacterMenu {
 			| MenuEvent::Cycle(_, _)
 			| MenuEvent::ToggleClothing(_)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2004,6 +2045,9 @@ impl CharacterMenu {
 			| MenuEvent::Cycle(_, _)
 			| MenuEvent::ToggleClothing(_)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2069,6 +2113,9 @@ impl CharacterMenu {
 			| MenuEvent::Cycle(_, _)
 			| MenuEvent::ToggleClothing(_)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2130,6 +2177,9 @@ impl CharacterMenu {
 			| MenuEvent::Cycle(_, _)
 			| MenuEvent::ToggleClothing(_)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2187,6 +2237,9 @@ impl CharacterMenu {
 			| MenuEvent::Cycle(_, _)
 			| MenuEvent::ToggleClothing(_)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2248,6 +2301,9 @@ impl CharacterMenu {
 			| MenuEvent::Cycle(_, _)
 			| MenuEvent::ToggleClothing(_)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2322,6 +2378,9 @@ impl CharacterMenu {
 			| MenuEvent::Cycle(_, _)
 			| MenuEvent::ToggleClothing(_)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2396,6 +2455,9 @@ impl CharacterMenu {
 			| MenuEvent::Cycle(_, _)
 			| MenuEvent::ToggleClothing(_)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2478,6 +2540,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2542,6 +2607,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2607,6 +2675,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2671,6 +2742,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2735,6 +2809,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2795,6 +2872,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2859,6 +2939,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2923,6 +3006,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2987,6 +3073,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -3051,6 +3140,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -3115,6 +3207,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -3179,6 +3274,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -3259,6 +3357,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -3327,6 +3428,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -3403,6 +3507,9 @@ impl CharacterMenu {
 			MenuEvent::Cycle(_, _)
 			| MenuEvent::SliderDelta(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -3420,6 +3527,9 @@ impl CharacterMenu {
 			},
 			MenuEvent::ToggleClothing(_)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 			MenuEvent::SetSwatch(field, value) => match (field, value) {
 				(CharacterField::GrenerBodyColor, SwatchValue::GrenerBody(color)) => {
@@ -3445,6 +3555,9 @@ impl CharacterMenu {
 			},
 			MenuEvent::ToggleClothing(_)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 			MenuEvent::SetSwatch(field, value) => match (field, value) {
 				(CharacterField::ThumplusBodyColor, SwatchValue::ThumplusBody(color)) => {
@@ -3470,6 +3583,9 @@ impl CharacterMenu {
 			},
 			MenuEvent::ToggleClothing(_)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 			MenuEvent::SetSwatch(field, value) => match (field, value) {
 				(CharacterField::MistlerBodyColor, SwatchValue::MistlerBody(color)) => {
@@ -3568,6 +3684,9 @@ impl CharacterMenu {
 			MenuEvent::SetSwatch(_, _)
 			| MenuEvent::Cycle(_, _)
 			| MenuEvent::ToggleInventory(_)
+			| MenuEvent::EquipInventory(_)
+			| MenuEvent::UnequipInventory(_)
+			| MenuEvent::MoveEquippedInventory { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}

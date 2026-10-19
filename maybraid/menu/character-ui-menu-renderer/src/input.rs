@@ -1,19 +1,28 @@
 //! Pointer and keyboard → [`MenuFocus`] / [`MenuActivate`] / overlay events.
 
 use bevy::prelude::*;
-use maybraid_input::{MenuNav, MenuNavImpulse};
+use maybraid_input::{
+	MenuNav, MenuNavImpulse, MenuNavPad, VirtualPad, INVENTORY_UNEQUIP_PAD,
+};
 use menu_components::{
-	HudMenu, HudMenuItem, HudOverlayMenu, KeyboardMenuNav, MenuActivate, MenuFocus,
-	MenuModalDismiss, MenuModalId, TextMenuInputLock,
+	HudMenu, HudMenuItem, HudMenuNavLocked, HudOverlayMenu, KeyboardMenuNav, MenuActivate,
+	MenuFocus, MenuModalBackHold, MenuModalDismiss, MenuModalId, ReorderMark, TextMenuInputLock,
 };
 
 use crate::event::{OverlayClose, OverlayOpen};
-use crate::widgets::{CloseOverlaySelect, MenuButton, OpenSelectKey, OverlaySelectRoot};
+use crate::widgets::{
+	CloseOverlaySelect, EquippedOrderControls, InventoryFocusHint, InventoryInteraction,
+	InventoryItemKey, MenuButton, OpenSelectKey, OverlaySelectRoot,
+};
 
 pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
 	click: On<Pointer<Click>>,
 	lock: Res<TextMenuInputLock>,
 	buttons: Query<&MenuButton<E>>,
+	keys: Query<&InventoryItemKey>,
+	items: Query<&HudMenuItem>,
+	mut interaction: ResMut<InventoryInteraction>,
+	mut focus: ResMut<InventoryFocusHint>,
 	mut commands: Commands,
 ) {
 	if lock.0 {
@@ -22,6 +31,17 @@ pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
 	let Ok(button) = buttons.get(click.entity) else {
 		return;
 	};
+	let menu = items.get(click.entity).ok().map(|item| item.menu);
+	if intercept_equipped_activate(
+		click.entity,
+		menu,
+		&keys,
+		&mut interaction,
+		&mut focus,
+		&mut commands,
+	) {
+		return;
+	}
 	commands.trigger(MenuActivate { entity: click.entity, choice: button.0 });
 }
 
@@ -80,6 +100,9 @@ pub fn emit_hud_activate_on_enter<E: Copy + Send + Sync + 'static>(
 		Option<&OpenSelectKey>,
 		Option<&CloseOverlaySelect>,
 	)>,
+	keys: Query<&InventoryItemKey>,
+	mut interaction: ResMut<InventoryInteraction>,
+	mut focus: ResMut<InventoryFocusHint>,
 	mut commands: Commands,
 ) {
 	if !keyboard_nav.is_enabled() || lock.0 || !keyboard.just_pressed(KeyCode::Enter) {
@@ -90,7 +113,15 @@ pub fn emit_hud_activate_on_enter<E: Copy + Send + Sync + 'static>(
 	else {
 		return;
 	};
-	activate_selected_hud_item(menu_entity, menu, &items, &mut commands);
+	activate_selected_hud_item(
+		menu_entity,
+		menu,
+		&items,
+		&keys,
+		&mut interaction,
+		&mut focus,
+		&mut commands,
+	);
 }
 
 pub fn emit_hud_activate_on_nav<E: Copy + Send + Sync + 'static>(
@@ -104,6 +135,9 @@ pub fn emit_hud_activate_on_nav<E: Copy + Send + Sync + 'static>(
 		Option<&OpenSelectKey>,
 		Option<&CloseOverlaySelect>,
 	)>,
+	keys: Query<&InventoryItemKey>,
+	mut interaction: ResMut<InventoryInteraction>,
+	mut focus: ResMut<InventoryFocusHint>,
 	mut commands: Commands,
 ) {
 	if lock.0 || impulse.event().nav != MenuNav::Select {
@@ -112,7 +146,15 @@ pub fn emit_hud_activate_on_nav<E: Copy + Send + Sync + 'static>(
 	let Ok(menu) = menus.get(impulse.entity) else {
 		return;
 	};
-	activate_selected_hud_item(impulse.entity, menu, &items, &mut commands);
+	activate_selected_hud_item(
+		impulse.entity,
+		menu,
+		&items,
+		&keys,
+		&mut interaction,
+		&mut focus,
+		&mut commands,
+	);
 }
 
 fn activate_selected_hud_item<E: Copy + Send + Sync + 'static>(
@@ -125,11 +167,24 @@ fn activate_selected_hud_item<E: Copy + Send + Sync + 'static>(
 		Option<&OpenSelectKey>,
 		Option<&CloseOverlaySelect>,
 	)>,
+	keys: &Query<&InventoryItemKey>,
+	interaction: &mut InventoryInteraction,
+	focus: &mut InventoryFocusHint,
 	commands: &mut Commands,
 ) {
 	for (entity, item, button, open, close) in items.iter() {
 		if item.menu != menu_entity || item.index != menu.selected {
 			continue;
+		}
+		if intercept_equipped_activate(
+			entity,
+			Some(menu_entity),
+			keys,
+			interaction,
+			focus,
+			commands,
+		) {
+			break;
 		}
 		if let Some(button) = button {
 			commands.trigger(MenuActivate { entity, choice: button.0 });
@@ -141,6 +196,154 @@ fn activate_selected_hud_item<E: Copy + Send + Sync + 'static>(
 			commands.trigger(OverlayClose { entity });
 		}
 		break;
+	}
+}
+
+fn intercept_equipped_activate(
+	entity: Entity,
+	menu: Option<Entity>,
+	keys: &Query<&InventoryItemKey>,
+	interaction: &mut InventoryInteraction,
+	focus: &mut InventoryFocusHint,
+	commands: &mut Commands,
+) -> bool {
+	let Ok(key) = keys.get(entity) else {
+		exit_reorder(interaction, menu, commands);
+		return false;
+	};
+	if !key.equipped {
+		exit_reorder(interaction, menu, commands);
+		return false;
+	}
+	focus.0 = Some(*key);
+	let same =
+		matches!(*interaction, InventoryInteraction::Reorder { item_index } if item_index == key.index);
+	if same {
+		exit_reorder(interaction, menu, commands);
+		return true;
+	}
+	*interaction = InventoryInteraction::Reorder { item_index: key.index };
+	if let Some(menu) = menu {
+		commands.entity(menu).try_insert(HudMenuNavLocked);
+	}
+	true
+}
+
+fn exit_reorder(
+	interaction: &mut InventoryInteraction,
+	menu: Option<Entity>,
+	commands: &mut Commands,
+) {
+	if interaction.reordering().is_none() {
+		return;
+	}
+	*interaction = InventoryInteraction::Browse;
+	if let Some(menu) = menu {
+		commands.entity(menu).try_remove::<HudMenuNavLocked>();
+	}
+}
+
+pub fn emit_inventory_reorder_nav<E: Copy + Send + Sync + 'static>(
+	impulse: On<MenuNavImpulse>,
+	lock: Res<TextMenuInputLock>,
+	interaction: Res<InventoryInteraction>,
+	menus: Query<&HudMenu>,
+	items: Query<(Entity, &HudMenuItem, Option<&EquippedOrderControls<E>>)>,
+	mut commands: Commands,
+) {
+	if lock.0 || interaction.reordering().is_none() {
+		return;
+	}
+	let nav = impulse.event().nav;
+	if !matches!(nav, MenuNav::Left | MenuNav::Right) {
+		return;
+	}
+	let Ok(menu) = menus.get(impulse.entity) else {
+		return;
+	};
+	let Some((entity, _, Some(controls))) = items.iter().find(|(_, item, _)| {
+		item.menu == impulse.entity && item.index == menu.selected
+	}) else {
+		return;
+	};
+	let event = match nav {
+		MenuNav::Left => controls.move_left,
+		MenuNav::Right => controls.move_right,
+		_ => None,
+	};
+	if let Some(event) = event {
+		commands.trigger(MenuActivate { entity, choice: event });
+	}
+}
+
+pub fn consume_inventory_reorder_back(
+	mut interaction: ResMut<InventoryInteraction>,
+	mut hold: ResMut<MenuModalBackHold>,
+	mut nav: ResMut<MenuNavPad>,
+	keyboard: Res<ButtonInput<KeyCode>>,
+	menus: Query<Entity, (With<HudMenu>, With<HudOverlayMenu>)>,
+	mut commands: Commands,
+) {
+	if interaction.reordering().is_none() {
+		return;
+	}
+	let back = nav.just_pressed(MenuNav::Back) || keyboard.just_pressed(KeyCode::Escape);
+	if !back {
+		return;
+	}
+	*interaction = InventoryInteraction::Browse;
+	hold.0 = true;
+	nav.events.retain(|event| *event != MenuNav::Back);
+	for entity in &menus {
+		commands.entity(entity).try_remove::<HudMenuNavLocked>();
+	}
+}
+
+pub fn emit_inventory_unequip_on_edge<E: Copy + Send + Sync + 'static>(
+	lock: Res<TextMenuInputLock>,
+	pad: Option<Res<VirtualPad>>,
+	overlay_menus: Query<(Entity, &HudMenu), With<HudOverlayMenu>>,
+	items: Query<(Entity, &HudMenuItem, Option<&EquippedOrderControls<E>>)>,
+	mut interaction: ResMut<InventoryInteraction>,
+	mut commands: Commands,
+) {
+	if lock.0 || !pad.is_some_and(|pad| pad.just_pressed(INVENTORY_UNEQUIP_PAD)) {
+		return;
+	}
+	let Some((menu_entity, menu)) = overlay_menus.iter().next() else {
+		return;
+	};
+	let Some((entity, _, Some(controls))) = items
+		.iter()
+		.find(|(_, item, _)| item.menu == menu_entity && item.index == menu.selected)
+	else {
+		return;
+	};
+	let Some(event) = controls.unequip else {
+		return;
+	};
+	*interaction = InventoryInteraction::Browse;
+	commands.entity(menu_entity).try_remove::<HudMenuNavLocked>();
+	commands.trigger(MenuActivate { entity, choice: event });
+}
+
+pub fn mark_reorder_tiles(
+	interaction: Res<InventoryInteraction>,
+	tiles: Query<(Entity, &InventoryItemKey, Option<&ReorderMark>)>,
+	mut commands: Commands,
+) {
+	let selected = interaction.reordering();
+	for (entity, key, mark) in &tiles {
+		let want = selected == Some(key.index) && key.equipped;
+		match (want, mark.is_some()) {
+			(true, false) => {
+				commands.entity(entity).insert(ReorderMark);
+			}
+			(false, true) => {
+				commands.entity(entity).remove::<ReorderMark>();
+			}
+			_ => {}
+		}
 	}
 }
 
@@ -235,5 +438,34 @@ mod tests {
 		world.run_system_once(close_overlay_on_modal_dismiss).expect("close");
 		world.flush();
 		assert_eq!(world.resource::<OverlayCloseHits>().0, 1);
+	}
+
+	#[test]
+	fn reorder_back_keeps_the_overlay_open() {
+		use super::consume_inventory_reorder_back;
+		use crate::widgets::InventoryInteraction;
+		use menu_components::MenuModalBackHold;
+
+		let mut world = World::new();
+		world.init_resource::<MenuModalStack>();
+		world.init_resource::<MenuNavPad>();
+		world.init_resource::<ButtonInput<KeyCode>>();
+		world.init_resource::<MenuModalBackHold>();
+		world.init_resource::<InventoryInteraction>();
+		world.init_resource::<Messages<MenuModalDismiss>>();
+		*world.resource_mut::<InventoryInteraction>() =
+			InventoryInteraction::Reorder { item_index: 3 };
+		world.resource_mut::<MenuModalStack>().open(MenuModalLayer::OVERLAY_SELECT);
+		world.resource_mut::<MenuNavPad>().events.push(MenuNav::Back);
+		world.run_system_once(consume_inventory_reorder_back).expect("hold");
+		world.run_system_once(consume_menu_modal_back).expect("consume");
+		assert_eq!(*world.resource::<InventoryInteraction>(), InventoryInteraction::Browse);
+		assert!(world.resource::<MenuModalBackHold>().0);
+		let dismissed = world
+			.run_system_once(|mut dismiss: MessageReader<MenuModalDismiss>| {
+				dismiss.read().next().is_some()
+			})
+			.expect("dismiss");
+		assert!(!dismissed);
 	}
 }

@@ -6,9 +6,10 @@ use std::marker::PhantomData;
 
 use crate::event::CharacterMenuEvent;
 use crate::input::{
-	close_overlay_on_modal_dismiss, emit_hud_activate_on_click, emit_hud_activate_on_enter,
-	emit_hud_activate_on_nav, emit_hud_focus, emit_overlay_close_on_click,
-	emit_overlay_open_on_click,
+	close_overlay_on_modal_dismiss, consume_inventory_reorder_back, emit_hud_activate_on_click,
+	emit_hud_activate_on_enter, emit_hud_activate_on_nav, emit_hud_focus,
+	emit_inventory_reorder_nav, emit_inventory_unequip_on_edge, emit_overlay_close_on_click,
+	emit_overlay_open_on_click, mark_reorder_tiles,
 };
 
 /// Keyboard / observer input, then host UI rebuild.
@@ -47,15 +48,29 @@ where
 				CharacterHudSystems::Sync.after(CharacterHudSystems::Input),
 			),
 		)
+		.init_resource::<crate::InventoryInteraction>()
+		.init_resource::<crate::InventoryFocusHint>()
 		.add_message::<CharacterMenuEvent<E>>()
 		.add_observer(emit_hud_activate_on_click::<E>)
 		.add_observer(emit_hud_activate_on_nav::<E>)
+		.add_observer(emit_inventory_reorder_nav::<E>)
 		.add_observer(emit_overlay_open_on_click)
 		.add_observer(emit_overlay_close_on_click)
 		.add_systems(Update, close_overlay_on_modal_dismiss.in_set(MenuModalSystems::Apply))
 		.add_systems(
 			Update,
-			(emit_hud_focus::<E>, emit_hud_activate_on_enter::<E>)
+			consume_inventory_reorder_back
+				.in_set(MenuModalSystems::Consume)
+				.before(menu_components::consume_menu_modal_back),
+		)
+		.add_systems(
+			Update,
+			(
+				emit_hud_focus::<E>,
+				emit_hud_activate_on_enter::<E>,
+				emit_inventory_unequip_on_edge::<E>,
+				mark_reorder_tiles,
+			)
 				.in_set(CharacterHudSystems::Input),
 		)
 		.add_systems(Update, restore_short_text_editing.after(CharacterHudSystems::Sync));
