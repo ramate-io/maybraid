@@ -32,6 +32,7 @@ mod player_lifecycle;
 mod player_position;
 mod poi;
 pub mod render_scale;
+mod screenshot;
 mod spawn_surface;
 mod start;
 mod stash;
@@ -131,6 +132,7 @@ use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
 use maybraid_sky::SkyDomePlugin;
 use maybraid_vfx::VfxPlugin;
 use maybraid_weather::WeatherPlugin;
+use maybraid_world_controller::WorldControllerPlugin;
 use player::{
 	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
 };
@@ -216,6 +218,7 @@ impl Plugin for WorldPlugin {
 				..default()
 			}))
 			.add_plugins(CharacterControllerPlugin)
+			.add_plugins(WorldControllerPlugin)
 			.add_plugins(PlayerPresentationPlugin)
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(WORLD_COMBAT_HUD)
@@ -241,7 +244,6 @@ impl Plugin for WorldPlugin {
 			.insert_resource(VegetationPlayerMotor(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.add_message::<control::WorldPlaySessionEnded>()
-			.init_resource::<WorldGameplayEnabled>()
 			.init_resource::<InventoryEditCameraFollow>()
 			.init_resource::<WorldSurfaceReady>()
 			.init_resource::<crate::WorldMenuShell>()
@@ -279,6 +281,7 @@ impl Plugin for WorldPlugin {
 			),
 		);
 		render_scale::configure(app);
+		screenshot::configure(app);
 		app.add_systems(PostStartup, spawn_default_braidman)
 			.add_systems(
 				PreUpdate,

@@ -2799,6 +2799,7 @@ dependencies = [
  "bevy_math",
  "character-ui-menu",
  "clap",
+ "procedural-common",
  "serde",
 ]
 
@@ -4038,7 +4039,7 @@ dependencies = [
 
 [[package]]
 name = "doric-column"
-version = "0.1.3"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "avian3d",
@@ -4055,7 +4056,7 @@ dependencies = [
 
 [[package]]
 name = "doric-column-playground"
-version = "0.1.3"
+version = "0.1.5"
 dependencies = [
  "avian3d",
  "bevy",
@@ -5217,11 +5218,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "gimme-bench-support"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "bevy_platform",
+ "gimme-core",
+]
+
+[[package]]
 name = "gimme-core"
 version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy_math",
+ "bevy_platform",
+ "gimme-bench-support",
  "thiserror 1.0.69",
 ]
 
@@ -6609,7 +6623,9 @@ dependencies = [
 name = "lod-gimme"
 version = "0.1.5"
 dependencies = [
+ "anyhow",
  "bevy",
+ "gimme-bench-support",
  "gimme-core",
  "lod",
 ]
@@ -7080,6 +7096,7 @@ dependencies = [
  "maybraid-sky",
  "maybraid-vfx",
  "maybraid-weather",
+ "maybraid-world-controller",
  "meandering-intelligence",
  "menu-components",
  "mob-characters",
@@ -7095,9 +7112,11 @@ dependencies = [
  "poi-intelligence",
  "richmond",
  "routing-intelligence",
+ "screen-capture",
  "serde",
  "serde_json",
  "spotting-intelligence",
+ "tanz-user",
  "tempfile",
  "terrain-layer-model",
  "tether-intelligence",
@@ -7110,6 +7129,14 @@ dependencies = [
  "vegetation-layer-model",
  "world-materials",
  "world-player",
+]
+
+[[package]]
+name = "maybraid-world-controller"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "bevy",
 ]
 
 [[package]]
@@ -9262,6 +9289,7 @@ dependencies = [
 name = "projectiles"
 version = "0.1.5"
 dependencies = [
+ "anyhow",
  "avian3d",
  "bevy",
  "lod-avian",
@@ -10383,6 +10411,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "png 0.17.16",
+ "procedural-common",
  "scene-ref",
  "tempfile",
  "thiserror 1.0.69",
@@ -11387,6 +11416,24 @@ dependencies = [
  "grid",
  "serde",
  "slotmap",
+]
+
+[[package]]
+name = "tanz-user"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "character-animations",
+ "characters",
+ "damage",
+ "item-icons",
+ "maybraid-character-controller",
+ "maybraid-input",
+ "maybraid-skill-map",
+ "menu-components",
+ "player",
+ "screen-capture",
 ]
 
 [[package]]
