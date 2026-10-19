@@ -19,21 +19,30 @@ fn inventory_section<'a>(
 		.ok_or_else(|| anyhow::anyhow!("expected a top-level Inventory section"))
 }
 
-fn inventory_child<'a>(
+fn inventory_body<'a>(
 	nodes: &'a [MenuNode<MenuEvent>],
 	label: &str,
-) -> anyhow::Result<&'a MenuNode<MenuEvent>> {
+) -> anyhow::Result<&'a [MenuNode<MenuEvent>]> {
 	let MenuNode::Section { children, .. } = inventory_section(nodes)? else {
 		anyhow::bail!("Inventory must be a Section");
 	};
 	for child in children {
 		if let MenuNode::Section { label: child_label, children } = child {
 			if *child_label == label {
-				return children.first().ok_or_else(|| anyhow::anyhow!("{label} section is empty"));
+				return Ok(children);
 			}
 		}
 	}
 	anyhow::bail!("expected Inventory child {label}")
+}
+
+fn inventory_child<'a>(
+	nodes: &'a [MenuNode<MenuEvent>],
+	label: &str,
+) -> anyhow::Result<&'a MenuNode<MenuEvent>> {
+	inventory_body(nodes, label)?
+		.first()
+		.ok_or_else(|| anyhow::anyhow!("{label} section is empty"))
 }
 
 #[test]
@@ -541,9 +550,9 @@ fn create_menu_weapons_is_ranked_grid_catalog() -> anyhow::Result<()> {
 	let expected_key = items[3].icon_catalog_key();
 	let mut menu = CharacterMenu::for_create(items);
 	let nodes = menu.menu_nodes();
-	let equipped = inventory_child(&nodes, "Equipped")?;
+	let equipped = inventory_child(&nodes, "Tools")?;
 	let MenuNode::OrderedEquipment { rows } = equipped else {
-		anyhow::bail!("expected Equipped to lower to OrderedEquipment");
+		anyhow::bail!("expected Tools equipped pane to lower to OrderedEquipment");
 	};
 	let tools = rows.iter().find(|row| row.label == "Tools").expect("Tools row");
 	assert_eq!(tools.capacity, WEAPON_QUEUE_LIMIT);
@@ -577,9 +586,9 @@ fn create_menu_skill_maps_is_ranked_grid_catalog() -> anyhow::Result<()> {
 	let expected_key = items[0].icon_catalog_key();
 	let mut menu = CharacterMenu::for_create(items);
 	let nodes = menu.menu_nodes();
-	let equipped = inventory_child(&nodes, "Equipped")?;
+	let equipped = inventory_child(&nodes, "Skill Maps")?;
 	let MenuNode::OrderedEquipment { rows } = equipped else {
-		anyhow::bail!("expected Equipped to lower to OrderedEquipment");
+		anyhow::bail!("expected Skill Maps equipped pane to lower to OrderedEquipment");
 	};
 	let skills = rows.iter().find(|row| row.label == "Skill Maps").expect("Skill Maps row");
 	assert_eq!(skills.capacity, SKILL_MAP_QUEUE_LIMIT);
@@ -626,7 +635,7 @@ fn create_menu_inventory_is_one_section_with_four_headers() -> anyhow::Result<()
 			_ => None,
 		})
 		.collect();
-	assert_eq!(labels, ["Equipped", "Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]);
+	assert_eq!(labels, ["Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]);
 	assert!(
 		nodes
 			.iter()
@@ -640,9 +649,9 @@ fn create_menu_inventory_is_one_section_with_four_headers() -> anyhow::Result<()
 			.iter()
 			.all(|node| !matches!(node, MenuNode::Section { label: "Clothing", .. }))
 	);
-	let equipped = inventory_child(&nodes, "Equipped")?;
+	let equipped = inventory_child(&nodes, "Tools")?;
 	let MenuNode::OrderedEquipment { rows } = equipped else {
-		anyhow::bail!("Equipped must be OrderedEquipment");
+		anyhow::bail!("Tools equipped pane must be OrderedEquipment");
 	};
 	let tools = rows.iter().find(|row| row.label == "Tools").expect("Tools row");
 	assert_eq!(tools.choices.len(), 2);

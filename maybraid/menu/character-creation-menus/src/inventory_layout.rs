@@ -3,8 +3,10 @@
 //! Character generation and the character-menu Inventory modal lower to the
 //! same [`MenuNode`] tree. Generation is [`InventoryLayoutMode::ReadOnly`]
 //! (view + Continue). The modal is [`InventoryLayoutMode::Interactive`]
-//! (equip + drop). Tools is a UI grouping; the domain slot stays Weapons.
-//! Tanz tiles reuse pose-capture catalog keys from `tanz-user`.
+//! (equip + drop). Each equippable section stacks an equipped pane over that
+//! section's unequipped catalog. Lubikan stays a single always-equipped
+//! catalog. Tools is a UI grouping; the domain slot stays Weapons. Tanz tiles
+//! reuse pose-capture catalog keys from `tanz-user`.
 
 use character_items::{
 	Inventory, InventoryItem, InventorySlot, SELF_LUBIKAN_CAPTURE_LABEL, WORN_CLOTHING_LIMIT,
@@ -135,7 +137,7 @@ impl InventoryLayout {
 		self.mode.allows(event)
 	}
 
-	/// Equipped / Clothing / Tools / Skill Maps / Tanzes / Lubikan in that order.
+	/// Clothing / Tools / Skill Maps / Tanzes / Lubikan in that order.
 	pub fn section_labels(&self) -> Vec<&'static str> {
 		section_labels(&self.node)
 	}
@@ -166,13 +168,60 @@ fn inventory_node(
 	MenuNode::section(
 		title,
 		MenuNode::fragment([
-			MenuNode::section(EQUIPPED_LABEL, equipped_pane(inventory, mode)),
-			MenuNode::section("Clothing", clothing_catalog(inventory, mode, false)),
-			MenuNode::section(TOOLS_LABEL, tools_catalog(inventory, mode, false)),
-			MenuNode::section("Skill Maps", skills_catalog(inventory, mode, false)),
-			MenuNode::section(InventorySlot::Tanzes.label(), tanz_catalog(inventory, mode, false)),
+			typed_section(
+				"Clothing",
+				equipped_row("Clothing", WORN_CLOTHING_LIMIT, inventory, mode, |index, item| {
+					clothing_tile(inventory, index, item, mode)
+				}),
+				clothing_catalog(inventory, mode, false),
+			),
+			typed_section(
+				TOOLS_LABEL,
+				equipped_row(
+					TOOLS_LABEL,
+					InventorySlot::Weapons.capacity(),
+					inventory,
+					mode,
+					|index, item| tools_tile(inventory, index, item, mode),
+				),
+				tools_catalog(inventory, mode, false),
+			),
+			typed_section(
+				InventorySlot::Skills.label(),
+				equipped_row(
+					InventorySlot::Skills.label(),
+					InventorySlot::Skills.capacity(),
+					inventory,
+					mode,
+					|index, item| skills_tile(inventory, index, item, mode),
+				),
+				skills_catalog(inventory, mode, false),
+			),
+			typed_section(
+				InventorySlot::Tanzes.label(),
+				equipped_row(
+					InventorySlot::Tanzes.label(),
+					InventorySlot::Tanzes.capacity(),
+					inventory,
+					mode,
+					|index, item| tanz_tile(inventory, index, item, mode),
+				),
+				tanz_catalog(inventory, mode, false),
+			),
 			lubikan_section(),
 		]),
+	)
+}
+
+/// One typed slot: navy equipped pane stacked over the unequipped catalog.
+fn typed_section(
+	label: &'static str,
+	equipped: OrderedEquipmentRow<MenuEvent>,
+	unequipped: MenuNode<MenuEvent>,
+) -> MenuNode<MenuEvent> {
+	MenuNode::section(
+		label,
+		MenuNode::fragment([MenuNode::ordered_equipment([equipped]), unequipped]),
 	)
 }
 
@@ -322,35 +371,6 @@ where
 	OrderedEquipmentRow { label, capacity, choices }
 }
 
-fn equipped_pane(inventory: &Inventory, mode: InventoryLayoutMode) -> MenuNode<MenuEvent> {
-	MenuNode::ordered_equipment([
-		equipped_row("Clothing", WORN_CLOTHING_LIMIT, inventory, mode, |index, item| {
-			clothing_tile(inventory, index, item, mode)
-		}),
-		equipped_row(
-			TOOLS_LABEL,
-			InventorySlot::Weapons.capacity(),
-			inventory,
-			mode,
-			|index, item| tools_tile(inventory, index, item, mode),
-		),
-		equipped_row(
-			InventorySlot::Skills.label(),
-			InventorySlot::Skills.capacity(),
-			inventory,
-			mode,
-			|index, item| skills_tile(inventory, index, item, mode),
-		),
-		equipped_row(
-			InventorySlot::Tanzes.label(),
-			InventorySlot::Tanzes.capacity(),
-			inventory,
-			mode,
-			|index, item| tanz_tile(inventory, index, item, mode),
-		),
-	])
-}
-
 fn clothing_catalog(
 	inventory: &Inventory,
 	mode: InventoryLayoutMode,
@@ -487,7 +507,7 @@ mod tests {
 		let menu = InventoryLayout::character_menu(&Inventory::with_starter_outfit(items));
 		assert_eq!(
 			starter.section_labels(),
-			["Equipped", "Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]
+			["Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]
 		);
 		assert_eq!(starter.section_labels(), menu.section_labels());
 		assert_eq!(starter.title, STARTER_KIT_LABEL);
@@ -557,29 +577,65 @@ mod tests {
 		};
 		let mut count = 0;
 		for child in children {
-			match child {
-				MenuNode::Section { label: "Equipped", children } => {
-					for inner in children {
-						if let MenuNode::OrderedEquipment { rows } = inner {
-							count += rows
-								.iter()
-								.filter(|row| row.label == "Clothing")
-								.map(|row| row.choices.len())
-								.sum::<usize>();
-						}
+			let MenuNode::Section { label: "Clothing", children } = child else {
+				continue;
+			};
+			for inner in children {
+				match inner {
+					MenuNode::OrderedEquipment { rows } => {
+						count += rows
+							.iter()
+							.filter(|row| row.label == "Clothing")
+							.map(|row| row.choices.len())
+							.sum::<usize>();
 					}
+					MenuNode::GridCatalog { choices, .. } => count += choices.len(),
+					_ => {}
 				}
-				MenuNode::Section { label: "Clothing", children } => {
-					for inner in children {
-						if let MenuNode::GridCatalog { choices, .. } = inner {
-							count += choices.len();
-						}
-					}
-				}
-				_ => {}
 			}
 		}
 		count
+	}
+
+	fn section_body<'a>(
+		layout: &'a InventoryLayout,
+		label: &'static str,
+	) -> &'a [MenuNode<MenuEvent>] {
+		let MenuNode::Section { children, .. } = &layout.node else {
+			panic!("inventory must be a section");
+		};
+		children
+			.iter()
+			.find_map(|child| match child {
+				MenuNode::Section { label: section, children } if *section == label => {
+					Some(children.as_slice())
+				}
+				_ => None,
+			})
+			.unwrap_or_else(|| panic!("{label} section"))
+	}
+
+	#[test]
+	fn each_equippable_section_stacks_equipped_over_unequipped() {
+		let layout =
+			InventoryLayout::character_menu(&Inventory::with_starter_outfit(sample_items()));
+		for label in ["Clothing", "Tools", "Skill Maps", "Tanzes"] {
+			let body = section_body(&layout, label);
+			assert!(
+				matches!(body, [MenuNode::OrderedEquipment { .. }, MenuNode::GridCatalog { .. }]),
+				"{label} must stack equipped over unequipped, got {body:?}"
+			);
+			let MenuNode::OrderedEquipment { rows } = &body[0] else {
+				unreachable!();
+			};
+			assert_eq!(rows.len(), 1);
+			assert_eq!(rows[0].label, label);
+		}
+		let lubikan = section_body(&layout, "Lubikan");
+		assert!(
+			matches!(lubikan, [MenuNode::GridCatalog { .. }]),
+			"Lubikan stays a single always-equipped catalog"
+		);
 	}
 
 	#[test]
@@ -626,12 +682,13 @@ mod tests {
 		let MenuNode::Section { children, .. } = &layout.node else {
 			panic!("inventory must be a section");
 		};
-		let equipped = children.iter().find_map(|child| match child {
-			MenuNode::Section { label: "Equipped", children } => children.first(),
+		let tanzes_body = children.iter().find_map(|child| match child {
+			MenuNode::Section { label: "Tanzes", children } => Some(children.as_slice()),
 			_ => None,
 		});
-		let Some(MenuNode::OrderedEquipment { rows }) = equipped else {
-			panic!("Equipped must be ordered rows");
+		let Some([MenuNode::OrderedEquipment { rows }, MenuNode::GridCatalog { .. }]) = tanzes_body
+		else {
+			panic!("Tanzes must stack equipped over unequipped");
 		};
 		let tanz_row = rows.iter().find(|row| row.label == "Tanzes").expect("Tanzes row");
 		assert_eq!(tanz_row.capacity, 4);
@@ -646,11 +703,11 @@ mod tests {
 		assert_eq!(tanz_row.choices[0].tile.rank, Some(1));
 		assert_eq!(tanz_row.choices[0].unequip, Some(MenuEvent::UnequipInventory(salute)));
 		let tanzes = children.iter().find_map(|child| match child {
-			MenuNode::Section { label: "Tanzes", children } => children.first(),
+			MenuNode::Section { label: "Tanzes", children } => children.get(1),
 			_ => None,
 		});
 		let Some(MenuNode::GridCatalog { choices, max_selected, .. }) = tanzes else {
-			panic!("Tanzes must be a catalog");
+			panic!("Tanzes unequipped must be a catalog");
 		};
 		assert_eq!(*max_selected, 4);
 		assert_eq!(choices.len(), 1);

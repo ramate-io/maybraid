@@ -269,7 +269,6 @@ impl BevyMenuSink {
 		context: &mut RenderContext<'_, C>,
 	) {
 		for row in rows {
-			block_label(parent, row.label);
 			parent
 				.spawn((
 					Node {

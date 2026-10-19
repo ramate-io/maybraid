@@ -491,26 +491,6 @@ impl MaybraidMenuSink {
 		context: &mut RenderContext<'_, C>,
 	) {
 		if self.interior {
-			if children.iter().any(|child| matches!(child, MenuNode::OrderedEquipment { .. })) {
-				parent
-					.spawn((
-						Node {
-							width: Val::Percent(100.0),
-							flex_direction: FlexDirection::Column,
-							row_gap: Val::Px(PANEL_ROW_GAP),
-							padding: UiRect::all(Val::Px(MENU_LIST_PAD)),
-							border_radius: BorderRadius::all(Val::Px(MENU_LIST_RADIUS)),
-							..default()
-						},
-						BackgroundColor(equipped_pane_fill()),
-						Pickable::IGNORE,
-					))
-					.with_children(|pane| {
-						self.interior_section_header(pane, context, label);
-						self.render_nodes(children, pane, context);
-					});
-				return;
-			}
 			self.interior_section_header(parent, context, label);
 			self.render_nodes(children, parent, context);
 			return;
@@ -716,29 +696,50 @@ impl MaybraidMenuSink {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		for row in rows {
-			spawn_group_label(parent, context.fonts, row.label);
-			parent
-				.spawn((
-					menu_components::HudScrollStrip,
-					Node {
-						width: Val::Percent(100.0),
-						flex_direction: FlexDirection::Row,
-						column_gap: Val::Px(PANEL_ROW_GAP),
-						overflow: Overflow::scroll_x(),
-						min_height: Val::Px(context.catalog_thumb_px + 36.0),
-						flex_shrink: 0.0,
-						..default()
-					},
-					ScrollPosition::default(),
-					Pickable::default(),
-				))
-				.with_children(|strip| {
-					for choice in &row.choices {
-						self.equipment_tile(strip, context, choice);
-					}
-				});
-		}
+		parent
+			.spawn((
+				Node {
+					width: Val::Percent(100.0),
+					flex_direction: FlexDirection::Column,
+					row_gap: Val::Px(PANEL_ROW_GAP),
+					padding: UiRect::all(Val::Px(MENU_LIST_PAD)),
+					border_radius: BorderRadius::all(Val::Px(MENU_LIST_RADIUS)),
+					..default()
+				},
+				BackgroundColor(equipped_pane_fill()),
+				Pickable::IGNORE,
+			))
+			.with_children(|pane| {
+				spawn_header_line(
+					pane,
+					context.fonts,
+					"Equipped",
+					None,
+					PANEL_BLOCK_FONT_SIZE,
+					TEXT_YELLOW,
+				);
+				for row in rows {
+					pane.spawn((
+						menu_components::HudScrollStrip,
+						Node {
+							width: Val::Percent(100.0),
+							flex_direction: FlexDirection::Row,
+							column_gap: Val::Px(PANEL_ROW_GAP),
+							overflow: Overflow::scroll_x(),
+							min_height: Val::Px(context.catalog_thumb_px + 36.0),
+							flex_shrink: 0.0,
+							..default()
+						},
+						ScrollPosition::default(),
+						Pickable::default(),
+					))
+					.with_children(|strip| {
+						for choice in &row.choices {
+							self.equipment_tile(strip, context, choice);
+						}
+					});
+				}
+			});
 	}
 
 	fn equipment_tile<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(

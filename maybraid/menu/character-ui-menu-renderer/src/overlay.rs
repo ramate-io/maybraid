@@ -4,13 +4,13 @@
 use bevy::prelude::*;
 use character_ui_menu::{AssetThumbnailDisplay, MenuNode, SelectGroup};
 
+use crate::MenuJustify;
 use crate::sink::{MaybraidMenuSink, MenuSink, MenuThumbnailContext, RenderContext};
 use crate::widgets::{CloseOverlaySelect, InventoryItemKey};
-use crate::MenuJustify;
 use menu_components::{
+	HudFonts, HudMenu, INVENTORY_THUMB_PX, INVENTORY_TILE_COLUMNS, InputPromptDevice,
+	MENU_LIST_PAD, MENU_LIST_RADIUS, MenuModal, PANEL_HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
 	menu_region_wash, spawn_header_line, spawn_inventory_action_prompts, spawn_text_button,
-	HudFonts, HudMenu, InputPromptDevice, MenuModal, INVENTORY_THUMB_PX, INVENTORY_TILE_COLUMNS,
-	MENU_LIST_PAD, MENU_LIST_RADIUS, PANEL_HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
 };
 
 /// Catalog nodes that can show a selected name on a header.
@@ -114,6 +114,7 @@ pub fn overlay_summary_value<E>(node: &MenuNode<E>) -> String {
 		}
 		MenuNode::Section { children, .. } => primary_select(children)
 			.map(overlay_summary_value)
+			.or_else(|| equipped_section_preview(children))
 			.unwrap_or_else(|| labeled_values_preview(children)),
 		MenuNode::SectionSelect { groups, .. } => {
 			selected_select_label(groups).unwrap_or("—").to_string()
@@ -292,7 +293,8 @@ pub fn spawn_overlay_shell(
 ///
 /// A root [`MenuNode::Section`] unwraps so the overlay chrome can own the
 /// title; nested sections paint their own headers (Inventory / Starter Kit →
-/// Clothing / Tools / Skill Maps / Tanzes / Lubikan).
+/// Clothing / Tools / Skill Maps / Tanzes / Lubikan), each stacking an
+/// equipped pane over that section's unequipped catalog.
 pub fn render_overlay_body<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 	node: &MenuNode<E>,
 	parent: &mut ChildSpawnerCommands,
@@ -430,32 +432,44 @@ pub fn spawn_starter_kit_shell(
 	viewport
 }
 
+/// Equipped pane count when a typed section stacks OrderedEquipment over a catalog.
+fn equipped_section_preview<E>(children: &[MenuNode<E>]) -> Option<String> {
+	let flat = flatten_nodes(children);
+	let has_catalog = flat.iter().any(|node| matches!(node, MenuNode::GridCatalog { .. }));
+	if !has_catalog {
+		return None;
+	}
+	let rows = flat.iter().find_map(|node| match node {
+		MenuNode::OrderedEquipment { rows } => Some(rows.as_slice()),
+		_ => None,
+	})?;
+	let count: usize = rows.iter().map(|row| row.choices.len()).sum();
+	let worn = rows.iter().any(|row| row.label == "Clothing");
+	Some(if worn { format!("{count} worn") } else { format!("{count} queued") })
+}
+
 fn inventory_section_preview<E>(children: &[MenuNode<E>]) -> String {
 	let mut count = 0usize;
 	for node in flatten_nodes(children) {
 		count += match node {
 			MenuNode::Section { children, .. } => flatten_nodes(children)
 				.into_iter()
-					.map(|inner| match inner {
-						MenuNode::GridCatalog { choices, .. } => choices.len(),
-						MenuNode::OrderedEquipment { rows } => {
-							rows.iter().map(|row| row.choices.len()).sum()
-						}
-						MenuNode::LabeledValue { .. } => 1,
-						_ => 0,
-					})
-					.sum(),
+				.map(|inner| match inner {
+					MenuNode::GridCatalog { choices, .. } => choices.len(),
+					MenuNode::OrderedEquipment { rows } => {
+						rows.iter().map(|row| row.choices.len()).sum()
+					}
+					MenuNode::LabeledValue { .. } => 1,
+					_ => 0,
+				})
+				.sum(),
 			MenuNode::GridCatalog { choices, .. } => choices.len(),
 			MenuNode::OrderedEquipment { rows } => rows.iter().map(|row| row.choices.len()).sum(),
 			MenuNode::LabeledValue { .. } => 1,
 			_ => 0,
 		};
 	}
-	if count == 0 {
-		String::from("empty")
-	} else {
-		format!("{count} items")
-	}
+	if count == 0 { String::from("empty") } else { format!("{count} items") }
 }
 
 #[cfg(test)]
@@ -488,11 +502,13 @@ mod tests {
 		};
 		assert!(!is_picker_only(&section));
 		assert!(!overlay_closes_on_pick(&section));
-		assert!(primary_select(match &section {
-			MenuNode::Section { children, .. } => children,
-			_ => unreachable!(),
-		})
-		.is_some());
+		assert!(
+			primary_select(match &section {
+				MenuNode::Section { children, .. } => children,
+				_ => unreachable!(),
+			})
+			.is_some()
+		);
 	}
 
 	#[test]
@@ -526,7 +542,7 @@ mod tests {
 
 	#[test]
 	fn inventory_header_counts_nested_catalogs() {
-		use character_ui_menu::GridCatalogChoice;
+		use character_ui_menu::{EquipmentChoice, GridCatalogChoice, OrderedEquipmentRow};
 
 		let choice = |label: &str| GridCatalogChoice {
 			label: label.to_string(),
@@ -540,21 +556,45 @@ mod tests {
 			item_key: None,
 			event: Some(0u8),
 		};
+		let equipped = |label: &'static str, tile: &str| {
+			MenuNode::ordered_equipment([OrderedEquipmentRow {
+				label,
+				capacity: 4,
+				choices: vec![EquipmentChoice {
+					item_key: 0,
+					tile: {
+						let mut tile = choice(tile);
+						tile.selected = true;
+						tile
+					},
+					unequip: None,
+					move_left: None,
+					move_right: None,
+				}],
+			}])
+		};
+		let clothing = MenuNode::<u8>::Section {
+			label: "Clothing",
+			children: vec![
+				equipped("Clothing", "coat"),
+				MenuNode::grid_catalog("Clothing", 6, [] as [GridCatalogChoice<u8>; 0]),
+			],
+		};
+		let tools = MenuNode::<u8>::Section {
+			label: "Tools",
+			children: vec![
+				equipped("Tools", "gun"),
+				MenuNode::grid_catalog("Tools", 3, [choice("nade")]),
+			],
+		};
+		assert_eq!(overlay_summary_value(&clothing), "1 worn");
+		assert_eq!(overlay_summary_value(&tools), "1 queued");
+		assert!(!is_picker_only(&clothing));
 		let node = MenuNode::<u8>::Section {
 			label: "Inventory",
 			children: vec![
-				MenuNode::Section {
-					label: "Clothing",
-					children: vec![MenuNode::grid_catalog("Clothing", 6, [choice("coat")])],
-				},
-				MenuNode::Section {
-					label: "Tools",
-					children: vec![MenuNode::grid_catalog(
-						"Tools",
-						3,
-						[choice("gun"), choice("nade")],
-					)],
-				},
+				clothing,
+				tools,
 				MenuNode::Section {
 					label: "Lubikan",
 					children: vec![MenuNode::grid_catalog("Lubikan", 1, [choice("Self")])],
