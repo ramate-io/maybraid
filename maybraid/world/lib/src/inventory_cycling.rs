@@ -136,7 +136,7 @@ pub(crate) fn cycle_equipped_inventory_queues(
 		};
 		let changed = match slot {
 			InventorySlot::Weapons => false,
-			InventorySlot::Skills => bag.cycle_skills(dir),
+			InventorySlot::Skills => bag.cycle_slot(slot, dir),
 			InventorySlot::Clothing => false,
 		};
 		if !changed {

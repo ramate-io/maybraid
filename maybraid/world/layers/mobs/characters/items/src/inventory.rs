@@ -430,18 +430,27 @@ impl Inventory {
 		self.skills.first().and_then(|&index| self.items.get(index))
 	}
 
-	/// Rotate the equipped skill-map queue. `dir >= 0` advances (D-Pad right);
-	/// `dir < 0` goes back. No-op when fewer than two maps are equipped.
-	pub fn cycle_skills(&mut self, dir: i8) -> bool {
-		if self.skills.len() < 2 {
+	/// Rotate the equipped queue for `slot`. `dir >= 0` advances (D-Pad right);
+	/// `dir < 0` goes back. Wraps. No-op when fewer than two entries are
+	/// selected. Shared queue mechanic over [`Self::selected`]; slot identity
+	/// and capacity stay with each ordered selection.
+	pub fn cycle_slot(&mut self, slot: InventorySlot, dir: i8) -> bool {
+		let selected = self.selected_mut(slot);
+		if selected.len() < 2 {
 			return false;
 		}
 		if dir < 0 {
-			self.skills.rotate_right(1);
+			selected.rotate_right(1);
 		} else {
-			self.skills.rotate_left(1);
+			selected.rotate_left(1);
 		}
 		true
+	}
+
+	/// Rotate the equipped skill-map queue. `dir >= 0` advances (D-Pad right);
+	/// `dir < 0` goes back. No-op when fewer than two maps are equipped.
+	pub fn cycle_skills(&mut self, dir: i8) -> bool {
+		self.cycle_slot(InventorySlot::Skills, dir)
 	}
 
 	/// Rotate the switch queue so the next gun becomes primary.
@@ -454,15 +463,7 @@ impl Inventory {
 
 	/// Rotate the equipped weapon queue. `dir >= 0` advances; `dir < 0` goes back.
 	pub fn cycle_weapons(&mut self, dir: i8) -> bool {
-		if self.weapons.len() < 2 {
-			return false;
-		}
-		if dir < 0 {
-			self.weapons.rotate_right(1);
-		} else {
-			self.weapons.rotate_left(1);
-		}
-		true
+		self.cycle_slot(InventorySlot::Weapons, dir)
 	}
 
 	/// Wear / queue or remove `index` in its slot. At capacity, selecting a
@@ -938,6 +939,64 @@ mod tests {
 			})
 			.collect();
 		assert!(kinds.len() > 1, "starter kind should not be the same for every seed");
+	}
+
+	fn inventory_with_selected(slot: InventorySlot, count: usize) -> Inventory {
+		let items: Vec<_> = (0..count)
+			.map(|index| match slot {
+				InventorySlot::Clothing => InventoryItem::clothing(
+					ClothingMesh::VALUES[index],
+					ClothingMaterial::Cloth,
+					ItemColor::Natural,
+				),
+				InventorySlot::Weapons => InventoryItem::firearm(FirearmMesh::VALUES[index]),
+				InventorySlot::Skills => InventoryItem::skill_map(SkillMapSpec::new(
+					SkillMapKind::VALUES[index],
+					index as u32,
+				)),
+			})
+			.collect();
+		let selected: Vec<_> = (0..count).collect();
+		match slot {
+			InventorySlot::Clothing => {
+				Inventory { items, clothing: selected, weapons: Vec::new(), skills: Vec::new() }
+			}
+			InventorySlot::Weapons => {
+				Inventory { items, clothing: Vec::new(), weapons: selected, skills: Vec::new() }
+			}
+			InventorySlot::Skills => {
+				Inventory { items, clothing: Vec::new(), weapons: Vec::new(), skills: selected }
+			}
+		}
+	}
+
+	#[test]
+	fn cycle_slot_wraps_each_ordered_selection() {
+		for slot in [InventorySlot::Clothing, InventorySlot::Weapons, InventorySlot::Skills] {
+			let mut inventory = inventory_with_selected(slot, 3);
+			assert_eq!(inventory.selected(slot), &[0, 1, 2]);
+			assert!(inventory.cycle_slot(slot, 1));
+			assert_eq!(inventory.selected(slot), &[1, 2, 0]);
+			assert!(inventory.cycle_slot(slot, 1));
+			assert_eq!(inventory.selected(slot), &[2, 0, 1]);
+			assert!(inventory.cycle_slot(slot, -1));
+			assert_eq!(inventory.selected(slot), &[1, 2, 0]);
+			assert!(inventory.cycle_slot(slot, 0));
+			assert_eq!(inventory.selected(slot), &[2, 0, 1]);
+		}
+	}
+
+	#[test]
+	fn cycle_slot_is_noop_when_fewer_than_two_are_selected() {
+		for slot in [InventorySlot::Clothing, InventorySlot::Weapons, InventorySlot::Skills] {
+			assert!(!Inventory::default().cycle_slot(slot, 1));
+			assert!(!Inventory::default().cycle_slot(slot, -1));
+			let mut one = inventory_with_selected(slot, 1);
+			assert!(!one.cycle_slot(slot, 1));
+			assert_eq!(one.selected(slot), &[0]);
+			assert!(!one.cycle_slot(slot, -1));
+			assert_eq!(one.selected(slot), &[0]);
+		}
 	}
 
 	#[test]
