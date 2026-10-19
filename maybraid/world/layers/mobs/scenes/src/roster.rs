@@ -64,7 +64,7 @@ impl MobRosterRecipe {
 			let preferred = disk_offset(slot, count, radius, height);
 			let occupied: Vec<Vec3> =
 				members.iter().map(|member: &MobMemberRecipe| member.offset).collect();
-			let offset = NearbyPlace { position: preferred, poi: None }
+			let offset = NearbyPlace::outdoor(preferred)
 				.clear_of(Vec3::ZERO, &occupied, AGENT_SEPARATION, (slot as u64).wrapping_add(1))
 				.position;
 			members.push(MobMemberRecipe {

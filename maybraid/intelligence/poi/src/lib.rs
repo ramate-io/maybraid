@@ -5,6 +5,7 @@
 //! scans. Distant xz-tile lookups resolve through a [`PoiOrigin`]
 //! [`lod::hcsg::GenerationScheme`] (`get_or_generate_in`), not a global list.
 
+mod arrival;
 mod discovery;
 mod goal;
 mod hash;
@@ -20,6 +21,7 @@ mod scheme;
 mod source;
 mod visit;
 
+pub use arrival::{PoiArrival, PoiSupport};
 pub use discovery::{discover_pois, ingest_poi_observations, sync_poi_registry};
 pub use goal::{
 	begin_poi_goal, complete_poi_goals, drive_poi_goals, refresh_poi_goals, PoiGoal,

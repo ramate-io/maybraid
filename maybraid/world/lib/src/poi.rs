@@ -15,7 +15,7 @@ use lod::LodScene;
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
 	DistantTilePoiLookup, GlobalPoi, LocalPoi, Poi, PoiId, PoiIntelligencePlugin, PoiKind,
-	PoiRegistry, PoiSystems,
+	PoiRegistry, PoiSupport, PoiSystems,
 };
 use richmond::{DiscoverablePlace, DiscoverablePlaceLabel};
 use urbanization_layer_model::UrbanSetting;
@@ -160,7 +160,10 @@ fn queue_global_groves(
 				translation: anchor,
 				name: "grove-global-poi",
 			},
-			poi: Poi::new(id, VEGETATION_POI).with_arrival_radius(radius).with_salience(1.25),
+			poi: Poi::new(id, VEGETATION_POI)
+				.with_arrival_radius(radius)
+				.with_salience(1.25)
+				.with_support(support_for_pin(VEGETATION_POI, false)),
 			tier: PendingPoiTier::Global,
 		});
 	}
@@ -175,7 +178,8 @@ fn queue_global_urban_settings(
 			target: PendingPoiTarget::Entity(entity),
 			poi: Poi::new(hashed_poi_id(URBAN_POI_SALT, setting.id), URBAN_POI)
 				.with_arrival_radius(setting.arrival_radius)
-				.with_salience(1.5),
+				.with_salience(1.5)
+				.with_support(support_for_pin(URBAN_POI, false)),
 			tier: PendingPoiTier::Global,
 		});
 	}
@@ -221,7 +225,8 @@ fn queue_place(
 			kind,
 		)
 		.with_arrival_radius(place.arrival_radius)
-		.with_salience(salience),
+		.with_salience(salience)
+		.with_support(support_for_pin(kind, true)),
 		tier: PendingPoiTier::Local,
 	});
 }
@@ -232,6 +237,15 @@ pub(super) fn place_kind(label: DiscoverablePlaceLabel) -> PoiKind {
 		| DiscoverablePlaceLabel::Lounge
 		| DiscoverablePlaceLabel::Market => SALOON_POI,
 		_ => LOCAL_POI,
+	}
+}
+
+/// Generation-site mapping. Arrival consumers read the stored [`PoiSupport`].
+pub(super) fn support_for_pin(kind: PoiKind, local: bool) -> PoiSupport {
+	if local && (kind == LOCAL_POI || kind == SALOON_POI) {
+		PoiSupport::Floor
+	} else {
+		PoiSupport::Terrain
 	}
 }
 
@@ -371,7 +385,8 @@ fn discover_local_vegetation(
 			Transform::from_translation(instance.anchor),
 			Poi::new(spatial_poi_id(VEGETATION_POI_SALT, world), VEGETATION_POI)
 				.with_arrival_radius(instance.radius.clamp(0.5, 8.0))
-				.with_salience(0.55),
+				.with_salience(0.55)
+				.with_support(support_for_pin(VEGETATION_POI, true)),
 			LocalPoi,
 		));
 	}
@@ -449,6 +464,16 @@ mod tests {
 	}
 
 	#[test]
+	fn local_rooms_record_floor_support_and_outdoor_pins_record_terrain() {
+		assert_eq!(support_for_pin(LOCAL_POI, true), PoiSupport::Floor);
+		assert_eq!(support_for_pin(SALOON_POI, true), PoiSupport::Floor);
+		assert_eq!(support_for_pin(URBAN_POI, true), PoiSupport::Terrain);
+		assert_eq!(support_for_pin(LOCAL_POI, false), PoiSupport::Terrain);
+		assert_eq!(support_for_pin(VEGETATION_POI, true), PoiSupport::Terrain);
+		assert_eq!(support_for_pin(VEGETATION_POI, false), PoiSupport::Terrain);
+	}
+
+	#[test]
 	fn high_rooms_are_capped_per_building_host() {
 		let mut app = App::new();
 		app.init_resource::<WorldPoiDiscoveryBudget>()
@@ -512,6 +537,7 @@ mod tests {
 
 		let poi = app.world().get::<Poi>(market).copied();
 		assert_eq!(poi.map(|poi| poi.kind), Some(SALOON_POI));
+		assert_eq!(poi.map(|poi| poi.support), Some(PoiSupport::Floor));
 		assert!(app.world().get::<LocalPoi>(market).is_some());
 	}
 

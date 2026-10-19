@@ -194,7 +194,12 @@ fn spawn_needed_members(
 			continue;
 		};
 		let body = member.character.spawn(&mut commands, Transform::from_translation(request.pose));
-		commands.entity(body).insert((MobSlot(request.slot), request.id, mob.mob.kind));
+		commands.entity(body).insert((
+			MobSlot(request.slot),
+			request.id,
+			mob.mob.kind,
+			request.support,
+		));
 	}
 }
 
@@ -330,6 +335,7 @@ mod tests {
 			id: MobId(7),
 			slot: 0,
 			pose: Vec3::Y,
+			support: poi_intelligence::PoiSupport::Terrain,
 		});
 
 		world
@@ -363,6 +369,7 @@ mod tests {
 			id: MobId(7),
 			slot: 0,
 			pose: Vec3::Y,
+			support: poi_intelligence::PoiSupport::Terrain,
 		});
 
 		world

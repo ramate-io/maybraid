@@ -60,7 +60,7 @@ fn fulfill_roster_refs(
 			.map(|(_, transform)| transform.translation)
 			.chain(placed.iter().filter(|(placed_host, _)| *placed_host == host).map(|(_, at)| *at))
 			.collect();
-		let cleared = NearbyPlace { position: preferred, poi: None }
+		let cleared = NearbyPlace::outdoor(preferred)
 			.clear_of(
 				transform.translation,
 				&occupied,

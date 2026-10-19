@@ -15,11 +15,11 @@ use lod::hcsg::{GenerationContext, HcsgStorage};
 use mob_characters::{URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
 	collect_matching_in_xz_tile, hashed_poi_id, DistantTilePois, PoiEntry, PoiInterests, PoiOrigin,
-	PoiSet,
+	PoiSet, PoiSupport,
 };
 use richmond::{Built, RichmondGround};
 
-use super::place_kind;
+use super::{place_kind, support_for_pin};
 
 const GROVE_POI_SALT: u64 = 0x6772_6f76_652d_706f;
 const URBAN_POI_SALT: u64 = 0x7572_6261_6e2d_706f;
@@ -49,6 +49,7 @@ impl PoiOrigin for GrovePois {
 				salience: 1.25,
 				local: false,
 				global: true,
+				support: PoiSupport::Terrain,
 			}],
 			bounds,
 		))
@@ -76,6 +77,7 @@ impl<G: RichmondGround> PoiOrigin for UrbanPois<G> {
 				salience: 1.5,
 				local: false,
 				global: true,
+				support: PoiSupport::Terrain,
 			}],
 			bounds,
 		))
@@ -94,21 +96,24 @@ impl<W: LanguageGround> PoiOrigin for PlacePois<W> {
 
 	fn pois(cx: &mut GenerationContext, id: Id) -> Option<(Vec<PoiEntry>, Aabb3d)> {
 		let (places, bounds) = cx.get_or_generate_stored::<DevelopmentPlaces<W>>(id)?;
-		let height = (bounds.min.y + bounds.max.y) * 0.5;
 		let pois = places
 			.places
 			.iter()
-			.map(|place| PoiEntry {
-				id: hashed_poi_id(
-					INTERIOR_POI_SALT ^ place.place.label.salt(),
-					(place.place.host, place.place.local),
-				),
-				kind: place_kind(place.place.label),
-				position: Vec3::new(place.xz.x, height, place.xz.y),
-				arrival_radius: place.place.arrival_radius,
-				salience: place.place.salience.unwrap_or(place.place.label.default_salience()),
-				local: true,
-				global: false,
+			.map(|place| {
+				let kind = place_kind(place.place.label);
+				PoiEntry {
+					id: hashed_poi_id(
+						INTERIOR_POI_SALT ^ place.place.label.salt(),
+						(place.place.host, place.place.local),
+					),
+					kind,
+					position: Vec3::new(place.xz.x, place.y, place.xz.y),
+					arrival_radius: place.place.arrival_radius,
+					salience: place.place.salience.unwrap_or(place.place.label.default_salience()),
+					local: true,
+					global: false,
+					support: support_for_pin(kind, true),
+				}
 			})
 			.collect();
 		Some((pois, bounds))

@@ -1953,6 +1953,7 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use game_commands::command::TextEntryFocus;
 	use player::CameraFollow;
+	use poi_intelligence::PoiSupport;
 
 	fn write_toggle(world: &mut World) {
 		world.write_message(CharacterIntent::ToggleMap);
@@ -2079,6 +2080,7 @@ mod tests {
 			salience: 1.0,
 			local: true,
 			global: false,
+			support: PoiSupport::Terrain,
 		}
 	}
 
@@ -2112,6 +2114,7 @@ mod tests {
 			salience: 1.0,
 			local: true,
 			global: false,
+			support: PoiSupport::Floor,
 		};
 		let overlay = LanguageOverlay {
 			names: vec![
