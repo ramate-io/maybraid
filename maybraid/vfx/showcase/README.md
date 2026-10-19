@@ -52,41 +52,36 @@ Click the window to focus it. **Space** pauses/resumes, **R** restarts, and **Le
 
 ## Build from source
 
-`source/changed-files/` contains the four demo implementation files. `source/milestone21.patch` adds those files and their dependency to the Maybraid repository; unrelated prototype code is excluded. This is an example within Maybraid, not a standalone crate. Repository access is required.
+The canonical implementation lives in the workspace: [`maybraid-vfx`](../lib/src/dust.rs) exposes asset loading, playback, disturbance, and bounds; [`matched_dust`](../playground/examples/matched_dust.rs) is a consumer. `source/changed-files/` and `runtime/shaders/shader.wgsl` are generated from that source by [`generate-delivery.sh`](generate-delivery.sh) so the review copies cannot drift. `source/milestone21.patch` is a generated snapshot of those files. It is not the supported build path: the runtime now depends on compiled crate APIs in this workspace, so the patch cannot be applied to the historically pinned detached commit.
 
-Prerequisites: Git, Rust/Cargo **1.95.0**, and the platform build tools. Windows requires the Visual Studio C++ build tools and Windows SDK. The first build needs internet access for dependencies.
+Prerequisites: this Maybraid checkout, Rust/Cargo **1.95.0** (or `nix develop`), and the platform build tools. Windows requires the Visual Studio C++ build tools and Windows SDK. The first build needs internet access for dependencies.
 
-On macOS or Linux, start in this review folder:
+From the repository root:
 
 ```sh
-REVIEW_DIR="$PWD"
-git clone https://github.com/mosb2bls/maybraid.git ../maybraid-m21-build
-cd ../maybraid-m21-build
-git checkout --detach fde58b164868e6264224745f8db1278c00bf2d5c
-git apply --check "$REVIEW_DIR/source/milestone21.patch"
-git apply "$REVIEW_DIR/source/milestone21.patch"
-cargo build --locked --release -p vfx-playground --example matched_dust
-./target/release/examples/matched_dust 'B+' --data-root "$REVIEW_DIR/data" --view orbit --inspect-time 0.7
-./target/release/examples/matched_dust C --data-root "$REVIEW_DIR/data" --view entry --inspect-time 0.7
+nix develop --command cargo build --locked --release -p vfx-playground --example matched_dust
+./target/release/examples/matched_dust 'B+' --data-root maybraid/vfx/showcase/data --view orbit --inspect-time 0.7
+./target/release/examples/matched_dust C --data-root maybraid/vfx/showcase/data --view entry --inspect-time 0.7
 ```
 
-Run one demo at a time. The source build reads the supplied assets directly; no Houdini installation or asset export is needed.
+Without Nix, the same `cargo` commands work if the workspace toolchain is available. The example defaults `--data-root` to `maybraid/vfx/showcase/data`, so the flag is optional from this checkout. Regenerate review copies after editing the crate sources:
 
-On Windows, use PowerShell from this review folder:
+```sh
+maybraid/vfx/showcase/generate-delivery.sh
+maybraid/vfx/showcase/generate-delivery.sh --check
+```
+
+Run one demo at a time. The source build reads the supplied assets directly; no Houdini installation or asset export is needed. The workspace example uses the crate-embedded shader. The prebuilt Mac executable still loads `runtime/shaders/shader.wgsl` via `--shader-root`; that file is generated from the same canonical shader.
+
+On Windows, use PowerShell from the repository root:
 
 ```powershell
-$ReviewDir = (Get-Location).Path
-git clone https://github.com/mosb2bls/maybraid.git ..\maybraid-m21-build
-Set-Location ..\maybraid-m21-build
-git checkout --detach fde58b164868e6264224745f8db1278c00bf2d5c
-git apply --check "$ReviewDir\source\milestone21.patch"
-git apply "$ReviewDir\source\milestone21.patch"
 cargo build --locked --release -p vfx-playground --example matched_dust
-.\target\release\examples\matched_dust.exe 'B+' --data-root "$ReviewDir\data" --view orbit --inspect-time 0.7
-.\target\release\examples\matched_dust.exe C --data-root "$ReviewDir\data" --view entry --inspect-time 0.7
+.\target\release\examples\matched_dust.exe 'B+' --data-root maybraid\vfx\showcase\data --view orbit --inspect-time 0.7
+.\target\release\examples\matched_dust.exe C --data-root maybraid\vfx\showcase\data --view entry --inspect-time 0.7
 ```
 
-Windows and Linux execution remain unverified; the bundled executable is for Apple Silicon Mac only.
+Windows and Linux execution remain unverified; the bundled executable is for Apple Silicon Mac only. This environment cannot rebuild that Apple Silicon binary.
 
 ## Results and scope
 
@@ -101,4 +96,4 @@ These are preliminary desktop measurements, not final game-performance budgets. 
 
 Both samples use simplified unlit shading and approximate local disturbance. Obstacle masks remove coverage/density; they do not simulate flow or sliding. Windows validation and agreement on boundary behavior remain open. Wind images are static studies; a runtime wind effect is not included.
 
-This package contains the Mac executable, runtime assets, selected previews, and the Bevy demo source. Houdini projects, authoring tools, and simulation caches are not included.
+This package contains the Mac executable, runtime assets, selected previews, and generated copies of the Bevy demo source. Gallery clips stay as review evidence. Houdini projects, authoring tools, and simulation caches are not included.

@@ -1,691 +1,149 @@
-diff --git a/Cargo.lock b/Cargo.lock
-index 1f0abe689..4d27b8d85 100644
---- a/Cargo.lock
-+++ b/Cargo.lock
-@@ -12533,6 +12533,7 @@ dependencies = [
-  "clap",
-  "game-commands",
-  "maybraid-vfx",
-+ "serde_json",
- ]
- 
- [[package]]
-diff --git a/maybraid/vfx/playground/Cargo.toml b/maybraid/vfx/playground/Cargo.toml
-index 16e981059..fde2c5042 100644
---- a/maybraid/vfx/playground/Cargo.toml
-+++ b/maybraid/vfx/playground/Cargo.toml
-@@ -18,6 +18,7 @@ bevy = { workspace = true }
- clap = { workspace = true }
- game-commands = { workspace = true }
- maybraid-vfx = { workspace = true }
-+serde_json = { workspace = true }
- 
- [lints]
- workspace = true
-diff --git a/maybraid/vfx/playground/examples/matched_dust.rs b/maybraid/vfx/playground/examples/matched_dust.rs
+# Generated from the workspace dust runtime and matched_dust example.
+# This is a review snapshot, not the supported build path.
+# Build from the repository root with:
+#   cargo build --locked --release -p vfx-playground --example matched_dust
+
+diff --git a/maybraid/vfx/lib/src/dust.rs b/maybraid/vfx/lib/src/dust.rs
 new file mode 100644
-index 000000000..09d2866b9
+index 000000000..337681096
 --- /dev/null
-+++ b/maybraid/vfx/playground/examples/matched_dust.rs
-@@ -0,0 +1,625 @@
-+//! Independent B/B+/C Houdini playback comparison; intentionally separate from the mesh-lobe sample.
-+#[path = "matched_dust/assets.rs"]
-+mod assets;
-+#[path = "matched_dust/material.rs"]
-+mod material;
-+use assets::{Bundle, MultiView};
-+use bevy::{
-+	asset::{RenderAssetUsages, io::AssetSourceBuilder},
-+	camera::visibility::NoFrustumCulling,
-+	core_pipeline::{prepass::DepthPrepass, tonemapping::Tonemapping},
-+	prelude::*,
-+	render::view::screenshot::{Screenshot, save_to_disk},
-+	window::{PresentMode, WindowResolution},
-+};
-+use clap::Parser;
-+use material::{DustPlaybackMaterial, Playback};
-+use std::{path::PathBuf, time::Instant};
++++ b/maybraid/vfx/lib/src/dust.rs
+@@ -0,0 +1,72 @@
++//! Baked dust playback: asset loading, timeline, local disturbance, and authored bounds.
++//!
++//! This is the compiled runtime for the milestone 2.1 Houdini samples. The
++//! playground example is a consumer; review copies under `vfx/showcase` are
++//! generated from these sources so they cannot drift.
 +
-+#[derive(Parser, Resource, Debug)]
-+struct Args {
-+	/// B = original fixed plane; B+ = eight-view baked ring; C = animated density.
-+	#[arg(default_value="C",value_parser=["B","B+","C"])]
-+	representation: String,
-+	/// Parent directory of wind_dust_demos and wind_dust_multiview.
-+	#[arg(long)]
-+	data_root: Option<PathBuf>,
-+	/// Directory containing shader.wgsl (portable review package override).
-+	#[arg(long)]
-+	shader_root: Option<PathBuf>,
-+	/// Start paused at an exact simulation timestamp (interactive inspection).
-+	#[arg(long)]
-+	at: Option<f32>,
-+	/// Save a single engine-rendered inspection image, then exit.
-+	#[arg(long)]
-+	still: Option<PathBuf>,
-+	#[arg(long,default_value="medium",value_parser=["medium","distant","orbit","grazing","entry","inside","moving","stop","elevated"])]
-+	view: String,
-+	#[arg(long,default_value_t=1,value_parser=clap::value_parser!(u32).range(0..=10))]
-+	groups: u32,
-+	#[arg(long)]
-+	obstacles: bool,
-+	/// Diagnostic: keep obstacle masks active while hiding opaque wall/box geometry.
-+	#[arg(long, requires = "obstacles")]
-+	hide_obstacle_geometry: bool,
-+	#[arg(long)]
-+	interaction: bool,
-+	#[arg(long)]
-+	markers: bool,
-+	/// Fixed 60Hz simulation, 49 screenshots at the source's 15Hz; *not* real-time video.
-+	#[arg(long)]
-+	sequence: Option<PathBuf>,
-+	/// Real-time benchmark length; no fixed steps, screenshot work or visual warmup included.
-+	#[arg(long, default_value_t = 0.)]
-+	benchmark: f32,
-+	/// Bounded sampling budget: C 96/48 ray steps, B+ adjacent blend/nearest.
-+	#[arg(long, default_value="default",value_parser=["default","lower"])]
-+	profile: String,
-+	#[arg(long,value_parser=clap::value_parser!(u32).range(24..=192))]
-+	steps: Option<u32>,
-+	#[arg(long,value_parser=["blended","nearest"])]
-+	angular: Option<String>,
-+	/// Freeze source density, while camera, influence and cleanup use advancing timeline.
-+	#[arg(long)]
-+	inspect_time: Option<f32>,
-+	#[arg(long,default_value="default",value_parser=["default","sparse","denser"])]
-+	density: String,
-+	#[arg(long,default_value="dense",value_parser=["dense","spread"])]
-+	arrangement: String,
-+	/// Diagnostic: obstacle geometry still occludes, but density/plane exclusion is disabled.
-+	#[arg(long)]
-+	no_boundary_exclusion: bool,
-+	#[arg(long, default_value_t = 1)]
-+	repeats: u32,
-+	#[arg(long)]
-+	result: Option<PathBuf>,
-+}
-+#[derive(Component)]
-+struct DemoCamera;
-+#[derive(Component)]
-+struct DemoGroup;
-+#[derive(Component)]
-+struct Hud;
-+#[derive(Component)]
-+struct Influence;
-+#[derive(Resource)]
-+struct State {
-+	material: Handle<DustPlaybackMaterial>,
-+	started: Instant,
-+	ready: bool,
-+	snapshot: bool,
-+	tick: u32,
-+	elapsed: f32,
-+	age: f32,
-+	paused: bool,
-+	strength: f32,
-+	previous: Vec3,
-+	frames: Vec<f64>,
-+	focused_samples: usize,
-+	captures: Vec<serde_json::Value>,
-+	cycle: u32,
-+	resource_samples: Vec<serde_json::Value>,
-+	groups: Vec<Entity>,
-+	mesh: Handle<Mesh>,
-+}
-+fn main() -> Result<(), Box<dyn std::error::Error>> {
-+	let args = Args::parse();
-+	if args.inspect_time.is_some_and(|t| !t.is_finite() || !(0.0..=3.2).contains(&t))
-+		|| args.at.is_some_and(|t| !t.is_finite() || !(0.0..=3.2).contains(&t))
-+		|| (args.at.is_some() && (args.sequence.is_some() || args.benchmark > 0.))
-+		|| !args.benchmark.is_finite()
-+		|| args.benchmark < 0.
-+		|| args.benchmark > 120.
-+		|| args.repeats == 0
-+		|| args.repeats > 10
-+		|| (args.sequence.is_some() && args.benchmark > 0.)
-+	{
-+		return Err("Invalid capture/benchmark/repeat settings".into());
++pub mod assets;
++pub mod bounds;
++pub mod disturbance;
++pub mod material;
++pub mod playback;
++
++pub use assets::{DustAssetError, DustBundle, DustMultiView};
++pub use bounds::{DustBounds, DustObstacle, DustPlaybackFrames};
++pub use disturbance::DustDisturbance;
++pub use material::{DustPlaybackMaterial, DustPlaybackPlugin};
++pub use playback::{DustCaptureBasis, DustExperiment, DustPlayback, DustRepresentation};
++
++#[cfg(test)]
++mod delivery_tests {
++	use std::fs;
++	use std::path::PathBuf;
++
++	fn lib_root() -> PathBuf {
++		PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 +	}
-+	if let Some(dir) = &args.sequence {
-+		std::fs::create_dir_all(dir)?;
++
++	fn assert_copy(canonical: &str, delivered: &str) {
++		let left = lib_root().join(canonical);
++		let right = lib_root().join(delivered);
++		let left_bytes = fs::read(&left)
++			.unwrap_or_else(|error| panic!("missing canonical {}: {error}", left.display()));
++		let right_bytes = fs::read(&right)
++			.unwrap_or_else(|error| panic!("missing generated copy {}: {error}", right.display()));
++		assert_eq!(left_bytes, right_bytes, "{} diverged from {}", right.display(), left.display());
 +	}
-+	let data_root = args
-+		.data_root
-+		.clone()
-+		.unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.."));
-+	let shader_root = args
-+		.shader_root
-+		.clone()
-+		.unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/matched_dust"));
-+	let bundle = Bundle::read(data_root.join("wind_dust_demos"))?;
-+	let atlas = if args.representation == "B" { bundle.atlas()? } else { Image::default() };
-+	// B binds a tiny unused 3D texture; C binds a tiny unused 2D texture. Neither pays for the other's animation.
-+	let density =
-+		if args.representation == "C" { bundle.density(args.markers)? } else { Image::default() };
-+	let multiview = if args.representation == "B+" {
-+		MultiView::read(&bundle.root.with_file_name("wind_dust_multiview"), &bundle)?
-+	} else {
-+		MultiView::fallback()
-+	};
-+	let playback = Playback {
-+		time: Vec4::new(
-+			0.,
-+			1.,
-+			0.,
-+			if args.representation == "C" {
-+				1.
-+			} else if args.representation == "B+" {
-+				2.
-+			} else {
-+				0.
-+			},
-+		),
-+		settings: Vec4::new(args.groups as f32, args.steps() as f32, 2.2, 0.),
-+		influence: Vec4::ZERO,
-+		velocity: Vec4::new(0., 0., 0., 0.85),
-+		origins: [Vec4::ZERO; 10],
-+		right: bundle.basis("image_right")?.extend(0.),
-+		up: bundle.basis("image_up")?.extend(0.),
-+		centre: bundle.basis("quad_centre_m")?.extend(0.),
-+		experiment: Vec4::new(
-+			if args.nearest() { 1. } else { 0. },
-+			args.density_multiplier(),
-+			if args.obstacles && !args.no_boundary_exclusion { 1. } else { 0. },
-+			0.,
-+		),
-+	};
-+	let mut app = App::new();
-+	app.register_asset_source(
-+		"demo_shaders",
-+		AssetSourceBuilder::platform_default(
-+			shader_root.to_str().ok_or("non-UTF8 shader path")?,
-+			None,
-+		),
-+	);
-+	app.add_plugins(DefaultPlugins.set(WindowPlugin {
-+		primary_window: Some(Window {
-+			title: format!("Maybraid Dust {} — matched Houdini playback", args.representation),
-+			resolution: WindowResolution::new(2560, 1440).with_scale_factor_override(2.),
-+			present_mode: PresentMode::AutoNoVsync,
-+			..default()
-+		}),
-+		..default()
-+	}));
-+	app.add_plugins(MaterialPlugin::<DustPlaybackMaterial>::default());
-+	let atlas = if args.representation == "B" { atlas } else { Image::default() };
-+	let atlas = app.world_mut().resource_mut::<Assets<Image>>().add(atlas);
-+	let density = if args.representation == "C" {
-+		density
-+	} else {
-+		Image::new(
-+			bevy::render::render_resource::Extent3d {
-+				width: 1,
-+				height: 1,
-+				depth_or_array_layers: 1,
-+			},
-+			bevy::render::render_resource::TextureDimension::D3,
-+			vec![0, 0],
-+			bevy::render::render_resource::TextureFormat::R16Float,
-+			RenderAssetUsages::RENDER_WORLD,
-+		)
-+	};
-+	let density = app.world_mut().resource_mut::<Assets<Image>>().add(density);
-+	let multiview = app.world_mut().resource_mut::<Assets<Image>>().add(multiview);
-+	let material = app
-+		.world_mut()
-+		.resource_mut::<Assets<DustPlaybackMaterial>>()
-+		.add(DustPlaybackMaterial { playback, atlas, density, multiview });
-+	let mesh = app.world_mut().resource_mut::<Assets<Mesh>>().add(Rectangle::new(2., 2.));
-+	app.insert_resource(State {
-+		material,
-+		mesh,
-+		started: Instant::now(),
-+		ready: false,
-+		snapshot: false,
-+		tick: 0,
-+		elapsed: 0.,
-+		age: 0.,
-+		paused: false,
-+		strength: 0.,
-+		previous: Vec3::new(-2., 0.4, 0.1),
-+		frames: Vec::with_capacity(8000),
-+		focused_samples: 0,
-+		captures: Vec::new(),
-+		cycle: 0,
-+		resource_samples: Vec::new(),
-+		groups: Vec::new(),
-+	})
-+	.insert_resource(args)
-+	.insert_resource(ClearColor(Color::srgb(0.13, 0.16, 0.19)))
-+	.add_systems(Startup, setup)
-+	.add_systems(Update, update)
-+	.run();
-+	Ok(())
-+}
-+fn setup(
-+	mut commands: Commands,
-+	state: Res<State>,
-+	args: Res<Args>,
-+	mut meshes: ResMut<Assets<Mesh>>,
-+	mut materials: ResMut<Assets<StandardMaterial>>,
-+) {
-+	commands.insert_resource(GlobalAmbientLight { brightness: 180., ..default() });
-+	commands.spawn((
-+		DirectionalLight { illuminance: 4000., shadow_maps_enabled: true, ..default() },
-+		Transform::from_xyz(5., 8., 4.).looking_at(Vec3::ZERO, Vec3::Y),
-+	));
-+	// Reference floor: geometry/lighting outside the animation, identical for B and C.
-+	let tile = meshes.add(Cuboid::new(1., 0.04, 1.));
-+	let shades = [
-+		materials.add(Color::srgb(0.21, 0.23, 0.24)),
-+		materials.add(Color::srgb(0.28, 0.30, 0.31)),
-+	];
-+	let floor_half = if args.arrangement == "spread" { 12i32 } else { 8i32 };
-+	for z in -floor_half..floor_half {
-+		for x in -floor_half..floor_half {
-+			commands.spawn((
-+				Mesh3d(tile.clone()),
-+				MeshMaterial3d(shades[((x + z).rem_euclid(2)) as usize].clone()),
-+				Transform::from_xyz(x as f32 + 0.5, -0.025, z as f32 + 0.5),
-+			));
-+		}
-+	}
-+	for (size, pos, color) in [
-+		(Vec3::new(3.2, 0.015, 0.025), Vec3::new(1.6, 0.005, 0.), Color::srgb(0.65, 0.1, 0.08)),
-+		(Vec3::new(0.025, 0.015, 3.2), Vec3::new(0., 0.005, 1.6), Color::srgb(0.07, 0.17, 0.7)),
-+	] {
-+		commands.spawn((
-+			Mesh3d(meshes.add(Cuboid::from_size(size))),
-+			MeshMaterial3d(materials.add(StandardMaterial {
-+				base_color: color,
-+				unlit: true,
-+				..default()
-+			})),
-+			Transform::from_translation(pos),
-+		));
-+	}
-+	if args.obstacles && !args.hide_obstacle_geometry {
-+		for (size, pos) in [
-+			(Vec3::new(0.3, 1.4, 2.5), Vec3::new(0.65, 0.7, -0.3)),
-+			(Vec3::new(0.8, 0.8, 0.8), Vec3::new(-1., 0.4, -0.7)),
-+		] {
-+			commands.spawn((
-+				Mesh3d(meshes.add(Cuboid::from_size(size))),
-+				MeshMaterial3d(materials.add(Color::srgb(0.16, 0.28, 0.34))),
-+				Transform::from_translation(pos),
-+			));
-+		}
-+	}
-+	commands.spawn((
-+		Mesh3d(meshes.add(Sphere::new(0.16))),
-+		MeshMaterial3d(materials.add(StandardMaterial {
-+			base_color: Color::srgb(0.15, 0.7, 0.7),
-+			unlit: true,
-+			..default()
-+		})),
-+		Transform::from_xyz(-2., 0.4, 0.),
-+		Influence,
-+		if args.obstacles { Visibility::Visible } else { Visibility::Hidden },
-+	));
-+	commands.spawn((
-+		Camera3d::default(),
-+		Msaa::Off,
-+		DepthPrepass,
-+		Tonemapping::None,
-+		Transform::from_xyz(6., 3.8, 7.2).looking_at(Vec3::new(0., 0.55, 0.), Vec3::Y),
-+		DemoCamera,
-+	));
-+	commands.spawn((
-+		Mesh3d(state.mesh.clone()),
-+		MeshMaterial3d(state.material.clone()),
-+		NoFrustumCulling,
-+		Transform::default(),
-+	));
-+	commands.spawn((
-+		Text::new("Preparing matched dust playback…"),
-+		TextFont { font_size: 16.0.into(), ..default() },
-+		TextColor(Color::srgb(0.92, 0.90, 0.8)),
-+		Node {
-+			position_type: PositionType::Absolute,
-+			top: Val::Px(12.),
-+			left: Val::Px(16.),
-+			..default()
-+		},
-+		Hud,
-+	));
-+}
-+impl State {
-+	fn restart(&mut self, commands: &mut Commands, args: &Args) {
-+		for entity in self.groups.drain(..) {
-+			commands.entity(entity).try_despawn();
-+		}
-+		self.age = args.at.unwrap_or(0.);
-+		self.paused = args.at.is_some();
-+		self.strength = 0.;
-+		self.previous = Vec3::new(-2., 0.4, 0.1);
-+		for _ in 0..args.groups {
-+			self.groups.push(commands.spawn(DemoGroup).id());
-+		}
-+	}
-+	fn camera(&self, args: &Args) -> Transform {
-+		args.camera(self.age)
-+	}
-+}
-+impl Args {
-+	fn camera(&self, t: f32) -> Transform {
-+		let args = self;
-+		let view = args.view.as_str();
-+		let target = Vec3::new(0., 0.55, 0.);
-+		let mut pos = match view {
-+			"distant" => Vec3::new(12., 6.5, 14.4),
-+			"grazing" => Vec3::new(6., 0.22, 7.2),
-+			"elevated" => Vec3::new(3.5, 7., 4.2),
-+			"orbit" => {
-+				// The fixed-step clock can finish a few microseconds short of 3.2s.
-+				// Use the literal start pose at the endpoint, avoiding floor-edge raster differences.
-+				let phase = (t / 3.2).clamp(0., 1.);
-+				let a = if phase >= 1. - 0.00001 { 0. } else { std::f32::consts::TAU * phase };
-+				Vec3::new(a.sin() * 3., 0.55 + 3. * 20f32.to_radians().tan(), a.cos() * 3.)
-+			}
-+			"inside" => Vec3::new(0.05, 0.45, 0.08),
-+			"entry" => {
-+				let r = (1. - t / 2.4).max(1. / 150.);
-+				Vec3::new(6. * r, 0.45, 7.2 * r)
-+			}
-+			_ => Vec3::new(6., 3.8, 7.2),
-+		};
-+		if args.arrangement == "spread" && args.groups > 1 {
-+			// A separate readable arrangement, not the dense-overlap stress budget.
-+			pos *= if view == "orbit" { 4.5 } else { 2.0 };
-+		}
-+		Transform::from_translation(pos).looking_at(
-+			if view == "inside" || view == "entry" { Vec3::new(-1., 0.45, -1.2) } else { target },
-+			Vec3::Y,
-+		)
-+	}
-+}
-+// Avoid per-frame disk I/O or asset construction. Only the uniform and HUD change during playback.
-+fn update(
-+	mut commands: Commands,
-+	args: Res<Args>,
-+	mut state: ResMut<State>,
-+	time: Res<Time<Real>>,
-+	keys: Res<ButtonInput<KeyCode>>,
-+	mut materials: ResMut<Assets<DustPlaybackMaterial>>,
-+	mut camera: Query<&mut Transform, (With<DemoCamera>, Without<Influence>)>,
-+	mut influence: Query<&mut Transform, (With<Influence>, Without<DemoCamera>)>,
-+	mut hud: Query<&mut Text, With<Hud>>,
-+	groups: Query<Entity, With<DemoGroup>>,
-+	windows: Query<&Window>,
-+	images: Res<Assets<Image>>,
-+	mut exit: MessageWriter<AppExit>,
-+) {
-+	if !state.ready {
-+		if state.started.elapsed().as_secs_f32() < 3. {
-+			return;
-+		}
-+		state.ready = true;
-+		state.started = Instant::now();
-+		state.restart(&mut commands, &args);
-+	}
-+	if keys.just_pressed(KeyCode::Space) {
-+		state.paused = !state.paused;
-+	}
-+	if keys.just_pressed(KeyCode::KeyR) {
-+		state.restart(&mut commands, &args);
-+	}
-+	if state.paused {
-+		if keys.just_pressed(KeyCode::ArrowRight) {
-+			state.age = (state.age + 1. / 15.).min(3.2);
-+		}
-+		if keys.just_pressed(KeyCode::ArrowLeft) {
-+			state.age = (state.age - 1. / 15.).max(0.);
-+		}
-+	}
-+	let dt = if args.sequence.is_some() { 1. / 60. } else { time.delta_secs().min(0.1) };
-+	let capture_age = state.age;
-+	let source_age = args.inspect_time.unwrap_or(capture_age);
-+	if let Some(mut cam) = camera.iter_mut().next() {
-+		*cam = state.camera(&args);
-+	}
-+	let mut pos = Vec3::new(-2. + (capture_age * 4.).min(4.), 0.4, 0.1);
-+	if args.view == "stop" && capture_age > 0.65 {
-+		pos.x = 0.6;
-+	}
-+	let velocity = (pos - state.previous) / dt.max(0.0001);
-+	state.previous = pos;
-+	let speed = velocity.length().min(4.);
-+	let target = if args.interaction { speed / 4. } else { 0. };
-+	if !state.paused {
-+		state.strength += (target - state.strength) * (1. - (-dt / 0.18).exp());
-+	}
-+	if let Some(mut t) = influence.iter_mut().next() {
-+		t.translation = pos;
-+	}
-+	if let Some(mut mat) = materials.get_mut(&state.material) {
-+		let (i, j, blend) = Bundle::frames(source_age);
-+		mat.playback.time.x = i as f32;
-+		mat.playback.time.y = j as f32;
-+		mat.playback.time.z = blend;
-+		mat.playback.settings.w = if capture_age <= 3.2 { 1. } else { 0. };
-+		if !state.paused {
-+			mat.playback.influence = pos.extend(state.strength);
-+			mat.playback.velocity = velocity.clamp_length_max(3.).extend(0.85);
-+		}
-+		for g in 0..args.groups as usize {
-+			let offset = args.origin(g as u32);
-+			mat.playback.origins[g] = offset.extend(0.);
-+		}
-+	}
-+	if let Some(mut text) = hud.iter_mut().next() {
-+		**text = format!(
-+			"{} | {} | {} groups ({}) | timeline {:.3}s | source {:.3}s | {}\nSpace pause · R restart · arrows step when paused | {} / {} | C {} steps | density {} | boundary exclusion {}",
-+			args.representation,
-+			args.view,
-+			args.groups,
-+			args.arrangement,
-+			capture_age,
-+			source_age,
-+			if state.paused { "PAUSED" } else { "PLAYING" },
-+			args.profile,
-+			if args.nearest() { "nearest" } else { "adjacent blend" },
-+			args.steps(),
-+			args.density,
-+			args.obstacles && !args.no_boundary_exclusion
++
++	#[test]
++	fn generated_shaders_match_canonical() {
++		assert_copy("src/dust/shader.wgsl", "../showcase/runtime/shaders/shader.wgsl");
++		assert_copy(
++			"src/dust/shader.wgsl",
++			"../showcase/source/changed-files/maybraid/vfx/lib/src/dust/shader.wgsl",
 +		);
 +	}
-+	if let Some(path) = &args.still {
-+		if !state.snapshot && state.started.elapsed().as_secs_f32() > 0.5 {
-+			commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path.clone()));
-+			state.snapshot = true;
-+		}
-+		if state.started.elapsed().as_secs_f32() > 1.5 {
-+			exit.write(AppExit::Success);
-+		}
-+	}
-+	// Sample the active *timeline* interval on every cycle, even if source time is frozen.
-+	// This is real renderer wall-clock delta; captures cannot run alongside benchmark mode.
-+	if args.benchmark > 0. && capture_age > 0.1 && capture_age < 1.8 {
-+		state.frames.push(time.delta_secs_f64() * 1000.);
-+		if windows.iter().any(|window| window.focused) {
-+			state.focused_samples += 1;
-+		}
-+	}
-+	if let Some(dir) = &args.sequence {
-+		if state.tick % 4 == 0 && state.tick <= 192 {
-+			let frame = state.tick / 4;
-+			commands
-+				.spawn(Screenshot::primary_window())
-+				.observe(save_to_disk(dir.join(format!("frame-{frame:04}.png"))));
-+			let camera_position = state.camera(&args).translation.to_array();
-+			let angular_views = args.angular_views(Vec3::from_array(camera_position));
-+			state.captures.push(serde_json::json!({"frame":frame,"timestamp":capture_age,"source_timestamp":source_age,"source_frames":Bundle::frames(source_age),"camera":camera_position,"angular_views":angular_views}));
-+		}
-+	}
-+	if !state.paused {
-+		state.age += dt;
-+		state.elapsed += dt;
-+		state.tick += 1;
-+	}
-+	if state.age > 3.2 && !state.groups.is_empty() {
-+		for entity in state.groups.drain(..) {
-+			commands.entity(entity).try_despawn();
-+		}
-+	}
-+	let timed = args.benchmark > 0. || args.sequence.is_some();
-+	if state.age > 4.2
-+		&& (!timed
-+			|| args.benchmark > 0.
-+			|| (args.sequence.is_some() && state.cycle + 1 < args.repeats))
-+	{
-+		state.resource_samples.push(serde_json::json!({"groups_after_tail":groups.iter().count(),"materials":materials.len(),"images":images.len()}));
-+		state.cycle += 1;
-+		state.restart(&mut commands, &args);
-+	}
-+	let finished = if args.benchmark > 0. {
-+		state.elapsed >= args.benchmark
-+	} else {
-+		args.sequence.is_some() && state.age > 4.1 && state.cycle + 1 >= args.repeats
-+	};
-+	if finished {
-+		let mut sorted = state.frames.clone();
-+		sorted.sort_by(f64::total_cmp);
-+		let n = sorted.len();
-+		let window = windows.iter().next();
-+		let result = serde_json::json!({"representation":args.representation,"view":args.view,"groups":args.groups,"interaction":args.interaction,"obstacles":args.obstacles,"hide_obstacle_geometry":args.hide_obstacle_geometry,"steps":args.steps(),"profile":args.profile,"angular":if args.nearest(){"nearest"}else{"blended"},"density":args.density,"density_multiplier":args.density_multiplier(),"arrangement":args.arrangement,"inspect_time":args.inspect_time,"boundary_exclusion":args.obstacles && !args.no_boundary_exclusion,"mode":if args.sequence.is_some(){"fixed-step encoded render sequence"}else{"real-time no captures"},"mean_ms":if n>0 {sorted.iter().sum::<f64>()/n as f64}else{0.},"p95_ms":if n>0 {sorted[(n*95/100).min(n-1)]}else{0.},"samples":n,"focused_samples":state.focused_samples,"end_groups":groups.iter().count(),"angular_views_at_end":args.angular_views(state.camera(&args).translation),"shared_materials":materials.len(),"shared_images":images.len(),"sequence":state.captures,"resource_samples":state.resource_samples,"resolution":window.map(|w|(w.physical_width(),w.physical_height())),"completed_cycles":state.cycle+1,"animation_GPU_bytes":if args.representation=="C" {12845056}else if args.representation=="B+" {MultiView::GPU_BYTES}else{13660416},"playback_upload_bytes":0});
-+		println!("MATCHED_DUST_RESULT {result}");
-+		if let Some(path) = &args.result {
-+			if let Err(error) =
-+				std::fs::write(path, serde_json::to_vec_pretty(&result).unwrap_or_default())
-+			{
-+				eprintln!("result write failed: {error}");
-+			}
-+		}
-+		exit.write(AppExit::Success);
-+	}
-+}
 +
-+impl Args {
-+	fn angular_views(&self, camera: Vec3) -> Vec<serde_json::Value> {
-+		if self.representation != "B+" {
-+			return Vec::new();
++	#[test]
++	fn generated_runtime_sources_match_canonical() {
++		for name in [
++			"dust.rs",
++			"dust/assets.rs",
++			"dust/bounds.rs",
++			"dust/disturbance.rs",
++			"dust/material.rs",
++			"dust/playback.rs",
++		] {
++			assert_copy(
++				&format!("src/{name}"),
++				&format!("../showcase/source/changed-files/maybraid/vfx/lib/src/{name}"),
++			);
 +		}
-+		(0..self.groups).map(|g| {
-+            let delta=camera-self.origin(g)-Vec3::new(0.,0.55,0.);
-+            let theta=delta.x.atan2(delta.z);
-+            let (i,j,w)=MultiView::views(theta,self.nearest());
-+            serde_json::json!({"group":g,"azimuth_degrees":theta.to_degrees(),"elevation_degrees":delta.y.atan2(Vec2::new(delta.x,delta.z).length()).to_degrees(),"views":[i,j],"blend":w*w*(3.-2.*w)})
-+        }).collect()
-+	}
-+	fn steps(&self) -> u32 {
-+		self.steps.unwrap_or(if self.profile == "lower" { 48 } else { 96 })
-+	}
-+	fn nearest(&self) -> bool {
-+		self.angular.as_deref().map_or(self.profile == "lower", |a| a == "nearest")
-+	}
-+	fn density_multiplier(&self) -> f32 {
-+		match self.density.as_str() {
-+			"sparse" => 0.65,
-+			"denser" => 1.35,
-+			_ => 1.,
-+		}
-+	}
-+	fn origin(&self, g: u32) -> Vec3 {
-+		if self.groups <= 1 {
-+			Vec3::ZERO
-+		} else if self.arrangement == "spread" {
-+			let columns = self.groups.min(4);
-+			let rows = self.groups.div_ceil(columns);
-+			let x = g % columns;
-+			let z = g / columns;
-+			Vec3::new(
-+				(x as f32 - (columns - 1) as f32 * 0.5) * 4.5,
-+				0.,
-+				(z as f32 - (rows - 1) as f32 * 0.5) * 4.5,
-+			)
-+		} else {
-+			let a = g as f32 * 2.399963;
-+			Vec3::new(a.cos(), 0., a.sin()) * (0.28 * (g as f32).sqrt())
-+		}
++		let example = lib_root().join("../playground/examples/matched_dust.rs");
++		let delivered = lib_root().join(
++			"../showcase/source/changed-files/maybraid/vfx/playground/examples/matched_dust.rs",
++		);
++		assert_eq!(
++			fs::read(&example).expect("example"),
++			fs::read(&delivered).expect("generated example"),
++			"generated example diverged from playground/examples/matched_dust.rs"
++		);
 +	}
 +}
-+#[cfg(test)]
-+mod gallery_tests {
-+	use super::*;
-+	#[test]
-+	fn profiles_and_optical_intent_are_bounded() -> Result<(), Box<dyn std::error::Error>> {
-+		let default = Args::try_parse_from(["demo", "C"])?;
-+		assert_eq!(default.steps(), 96);
-+		assert!(!default.nearest());
-+		let lower =
-+			Args::try_parse_from(["demo", "B+", "--profile", "lower", "--density", "sparse"])?;
-+		assert!(lower.nearest());
-+		assert_eq!(lower.steps(), 48);
-+		assert_eq!(lower.density_multiplier(), 0.65);
-+		let override_args = Args::try_parse_from([
-+			"demo",
-+			"C",
-+			"--profile",
-+			"lower",
-+			"--steps",
-+			"72",
-+			"--angular",
-+			"blended",
-+		])?;
-+		assert_eq!(override_args.steps(), 72);
-+		assert!(!override_args.nearest());
-+		Ok(())
-+	}
-+	#[test]
-+	fn spread_offsets_are_separate_and_orbit_closes() -> Result<(), Box<dyn std::error::Error>> {
-+		let args =
-+			Args::try_parse_from(["demo", "C", "--groups", "10", "--arrangement", "spread"])?;
-+		let origins: Vec<_> = (0..10).map(|g| args.origin(g)).collect();
-+		let orbit = Args::try_parse_from(["demo", "B+", "--view", "orbit"])?;
-+		assert_eq!(orbit.camera(0.), orbit.camera(3.2));
-+		assert_eq!(orbit.camera(0.), orbit.camera(3.1999977));
-+		assert!(orbit.camera(0.).translation.distance(orbit.camera(1.6).translation) > 5.9);
-+		for i in 0..10 {
-+			for j in 0..i {
-+				assert!(origins[i].distance(origins[j]) >= 4.5 - 0.0001);
-+			}
-+		}
-+		Ok(())
-+	}
-+}
-diff --git a/maybraid/vfx/playground/examples/matched_dust/assets.rs b/maybraid/vfx/playground/examples/matched_dust/assets.rs
+diff --git a/maybraid/vfx/lib/src/dust/assets.rs b/maybraid/vfx/lib/src/dust/assets.rs
 new file mode 100644
-index 000000000..e8f64a1a3
+index 000000000..919b4daf3
 --- /dev/null
-+++ b/maybraid/vfx/playground/examples/matched_dust/assets.rs
-@@ -0,0 +1,314 @@
++++ b/maybraid/vfx/lib/src/dust/assets.rs
+@@ -0,0 +1,411 @@
 +//! Read-only, deliberately versioned Houdini contract and bounded animation storage.
-+use bevy::{
-+	asset::RenderAssetUsages,
-+	image::{CompressedImageFormats, ImageSampler, ImageType},
-+	prelude::*,
-+	render::render_resource::{
-+		Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
-+	},
-+};
-+use serde_json::Value;
-+use std::{
-+	fs,
-+	path::{Path, PathBuf},
++
++use std::fs;
++use std::path::{Path, PathBuf};
++
++use bevy::asset::RenderAssetUsages;
++use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
++use bevy::prelude::*;
++use bevy::render::render_resource::{
++	Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
 +};
 +
-+pub struct Bundle {
-+	pub root: PathBuf,
-+	pub manifest: Value,
++use crate::dust::bounds::DustBounds;
++use crate::dust::playback::DustCaptureBasis;
++
++#[derive(Debug, thiserror::Error)]
++pub enum DustAssetError {
++	#[error(transparent)]
++	Io(#[from] std::io::Error),
++	#[error(transparent)]
++	Json(#[from] serde_json::Error),
++	#[error("{0}")]
++	Contract(String),
++	#[error("{0}")]
++	Image(String),
 +}
-+impl Bundle {
-+	pub fn read(root: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
-+		let manifest: Value = serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
++
++impl DustAssetError {
++	fn contract(message: impl Into<String>) -> Self {
++		Self::Contract(message.into())
++	}
++}
++
++/// On-disk v1 density/atlas bundle (`wind_dust_demos`).
++pub struct DustBundle {
++	pub root: PathBuf,
++	pub manifest: serde_json::Value,
++}
++
++impl DustBundle {
++	pub fn showcase_data_root() -> PathBuf {
++		PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../showcase/data")
++	}
++
++	pub fn read(root: PathBuf) -> Result<Self, DustAssetError> {
++		let manifest: serde_json::Value =
++			serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
 +		let bundle = Self { root, manifest };
 +		bundle.validate()?;
 +		Ok(bundle)
 +	}
-+	pub fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
++
++	pub fn multiview_root(&self) -> PathBuf {
++		self.root.with_file_name("wind_dust_multiview")
++	}
++
++	pub fn validate(&self) -> Result<(), DustAssetError> {
 +		let m = &self.manifest;
 +		for (actual, expected) in [
 +			(&m["C"]["resolution_xyz"], serde_json::json!([64, 32, 64])),
@@ -697,27 +155,45 @@ index 000000000..e8f64a1a3
 +			(&m["C"]["consistent_scale"], serde_json::json!(1.0)),
 +		] {
 +			if actual != &expected {
-+				return Err(format!("Unsupported v1 contract: {actual} != {expected}").into());
++				return Err(DustAssetError::contract(format!(
++					"Unsupported v1 contract: {actual} != {expected}"
++				)));
 +			}
 +		}
-+		let timestamps =
-+			m["shared_source"]["timestamps_s"].as_array().ok_or("missing timestamps")?;
-+		if timestamps.len() != 49
++		let timestamps = m["shared_source"]["timestamps_s"]
++			.as_array()
++			.ok_or_else(|| DustAssetError::contract("missing timestamps"))?;
++		if timestamps.len() != DustBounds::FRAME_COUNT as usize
 +			|| m["B"]["timestamps_s"] != m["C"]["timestamps_s"]
 +			|| m["B"]["timestamps_s"].as_array() != Some(timestamps)
 +		{
-+			return Err("B/C/source timestamps differ".into());
++			return Err(DustAssetError::contract("B/C/source timestamps differ"));
 +		}
 +		for (i, t) in timestamps.iter().enumerate() {
-+			if (t.as_f64().ok_or("invalid timestamp")? - i as f64 / 15.0).abs() > 1e-8 {
-+				return Err("unsupported nonuniform timestamps".into());
++			let value = t.as_f64().ok_or_else(|| DustAssetError::contract("invalid timestamp"))?;
++			if (value - i as f64 / DustBounds::FRAME_RATE as f64).abs() > 1e-8 {
++				return Err(DustAssetError::contract("unsupported nonuniform timestamps"));
 +			}
 +		}
 +		Ok(())
 +	}
-+	pub fn atlas(&self) -> Result<Image, Box<dyn std::error::Error>> {
-+		let bytes =
-+			fs::read(self.root.join(self.manifest["B"]["file"].as_str().ok_or("atlas path")?))?;
++
++	pub fn capture_basis(&self) -> Result<DustCaptureBasis, DustAssetError> {
++		Ok(DustCaptureBasis {
++			right: self.basis("image_right")?,
++			up: self.basis("image_up")?,
++			centre: self.basis("quad_centre_m")?,
++		})
++	}
++
++	pub fn atlas(&self) -> Result<Image, DustAssetError> {
++		let bytes = fs::read(
++			self.root.join(
++				self.manifest["B"]["file"]
++					.as_str()
++					.ok_or_else(|| DustAssetError::contract("atlas path"))?,
++			),
++		)?;
 +		let image = Image::from_buffer(
 +			&bytes,
 +			ImageType::Extension("png"),
@@ -725,29 +201,31 @@ index 000000000..e8f64a1a3
 +			true,
 +			ImageSampler::linear(),
 +			RenderAssetUsages::RENDER_WORLD,
-+		)?;
++		)
++		.map_err(|error| DustAssetError::Image(error.to_string()))?;
 +		if image.texture_descriptor.size.width != 1848
 +			|| image.texture_descriptor.size.height != 1848
 +			|| image.texture_descriptor.format != TextureFormat::Rgba8UnormSrgb
 +		{
-+			return Err("unexpected atlas dimensions/format".into());
++			return Err(DustAssetError::contract("unexpected atlas dimensions/format"));
 +		}
 +		Ok(image)
 +	}
++
 +	/// Pack the *bounded* 49-frame sequence into 7x7 spatial cells of one 3D R16F texture.
 +	/// Each cell remains a true 64x32x64 volume. The shader clamps to cell voxel centres.
 +	/// This trades 12.25 MiB GPU residency for zero playback uploads/decodes/allocations.
-+	pub fn density(&self, markers: bool) -> Result<Image, Box<dyn std::error::Error>> {
++	pub fn density(&self, markers: bool) -> Result<Image, DustAssetError> {
 +		let mut packed = vec![0u8; 448 * 224 * 64 * 2];
-+		for i in 0..49 {
++		for i in 0..DustBounds::FRAME_COUNT as usize {
 +			let path = if markers {
 +				self.root.join("diagnostics/axis_markers.f16")
 +			} else {
 +				self.root.join(format!("C_density/frames/density_{i:03}.f16"))
 +			};
 +			let bytes = Self::read_frame(&path)?;
-+			for z in 0..64 {
-+				for y in 0..32 {
++			for z in 0..64usize {
++				for y in 0..32usize {
 +					let from = (z * 32 + y) * 64 * 2;
 +					let to = ((z * 224 + (i / 7) * 32 + y) * 448 + (i % 7) * 64) * 2;
 +					packed[to..to + 128].copy_from_slice(&bytes[from..from + 128]);
@@ -764,65 +242,56 @@ index 000000000..e8f64a1a3
 +		image.sampler = ImageSampler::linear();
 +		Ok(image)
 +	}
-+	pub fn read_frame(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
++
++	pub fn unused_atlas() -> Image {
++		Image::default()
++	}
++
++	pub fn unused_density() -> Image {
++		Image::new(
++			Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
++			TextureDimension::D3,
++			vec![0, 0],
++			TextureFormat::R16Float,
++			RenderAssetUsages::RENDER_WORLD,
++		)
++	}
++
++	pub fn read_frame(path: &Path) -> Result<Vec<u8>, DustAssetError> {
 +		let data = fs::read(path)?;
 +		if data.len() != 262144 {
-+			return Err(format!("wrong frame size: {}", path.display()).into());
++			return Err(DustAssetError::contract(format!("wrong frame size: {}", path.display())));
 +		}
 +		for pair in data.chunks_exact(2) {
 +			let bits = u16::from_le_bytes([pair[0], pair[1]]);
 +			if bits & 0x8000 != 0 || bits & 0x7c00 == 0x7c00 {
-+				return Err("negative/nonfinite density".into());
++				return Err(DustAssetError::contract("negative/nonfinite density"));
 +			}
 +		}
 +		Ok(data)
 +	}
-+	pub fn basis(&self, key: &str) -> Result<Vec3, Box<dyn std::error::Error>> {
++
++	pub fn basis(&self, key: &str) -> Result<Vec3, DustAssetError> {
 +		let a = &self.manifest["B"]["capture"][key];
 +		Ok(Vec3::new(
-+			a[0].as_f64().ok_or("basis x")? as f32,
-+			a[1].as_f64().ok_or("basis y")? as f32,
-+			a[2].as_f64().ok_or("basis z")? as f32,
++			a[0].as_f64().ok_or_else(|| DustAssetError::contract("basis x"))? as f32,
++			a[1].as_f64().ok_or_else(|| DustAssetError::contract("basis y"))? as f32,
++			a[2].as_f64().ok_or_else(|| DustAssetError::contract("basis z"))? as f32,
 +		))
-+	}
-+	pub fn frames(t: f32) -> (u32, u32, f32) {
-+		let f = t.clamp(0., 3.2) * 15.;
-+		let i = (f.floor() as u32).min(48);
-+		(i, (i + 1).min(48), f - i as f32)
-+	}
-+}
-+#[cfg(test)]
-+mod tests {
-+	use super::*;
-+	#[test]
-+	fn matched_contract_and_axis_layout() -> Result<(), Box<dyn std::error::Error>> {
-+		let bundle =
-+			Bundle::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../wind_dust_demos"))?;
-+		let data = Bundle::read_frame(&bundle.root.join("diagnostics/axis_markers.f16"))?;
-+		for ((x, y, z), expected) in
-+			[((50, 6, 9), 0x3400u16), ((10, 24, 20), 0x3800), ((25, 12, 50), 0x3a00)]
-+		{
-+			let n = 2 * ((z * 32 + y) * 64 + x);
-+			assert_eq!(u16::from_le_bytes([data[n], data[n + 1]]), expected);
-+		}
-+		let image = bundle.density(false)?;
-+		assert_eq!(image.data.as_ref().ok_or("missing data")?.len(), 12845056);
-+		Ok(())
-+	}
-+	#[test]
-+	fn time_clamps_and_interpolates() {
-+		assert_eq!(Bundle::frames(-1.), (0, 1, 0.));
-+		assert_eq!(Bundle::frames(0.1), (1, 2, 0.5));
-+		assert_eq!(Bundle::frames(9.), (48, 48, 0.));
 +	}
 +}
 +
 +/// The bounded eight-view v1 experiment: one 952px atlas per layer, never rewritten during playback.
-+pub struct MultiView;
-+impl MultiView {
++pub struct DustMultiView;
++
++impl DustMultiView {
 +	pub const GPU_BYTES: usize = 952 * 952 * 8 * 4;
-+	pub fn read(root: &Path, source: &Bundle) -> Result<Image, Box<dyn std::error::Error>> {
-+		let manifest: Value = serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
++	pub const VIEW_COUNT: u32 = 8;
++	pub const ELEVATION_DEGREES: f32 = 20.0;
++
++	pub fn read(root: &Path, source: &DustBundle) -> Result<Image, DustAssetError> {
++		let manifest: serde_json::Value =
++			serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
 +		if manifest["contract"] != "Maybraid B+ eight-view baked dust v1"
 +			|| manifest["shared_source"]["timestamps_s"]
 +				!= source.manifest["shared_source"]["timestamps_s"]
@@ -830,7 +299,9 @@ index 000000000..e8f64a1a3
 +				!= source.manifest["shared_source"]["timestamps_s"]
 +			|| manifest["space"] != source.manifest["space"]
 +		{
-+			return Err("B+ source time/space contract differs from matched C".into());
++			return Err(DustAssetError::contract(
++				"B+ source time/space contract differs from matched C",
++			));
 +		}
 +		for (key, expected) in [
 +			("view_count", serde_json::json!(8)),
@@ -845,39 +316,45 @@ index 000000000..e8f64a1a3
 +			("pivot_m", serde_json::json!([0, 0, 0])),
 +		] {
 +			if manifest["B_plus"][key] != expected {
-+				return Err(format!("Unsupported B+ v1 {key}").into());
++				return Err(DustAssetError::contract(format!("Unsupported B+ v1 {key}")));
 +			}
 +		}
-+		let views = manifest["B_plus"]["views"].as_array().ok_or("Missing B+ camera views")?;
-+		if views.len() != 8 {
-+			return Err("Wrong view count".into());
++		let views = manifest["B_plus"]["views"]
++			.as_array()
++			.ok_or_else(|| DustAssetError::contract("Missing B+ camera views"))?;
++		if views.len() != Self::VIEW_COUNT as usize {
++			return Err(DustAssetError::contract("Wrong view count"));
 +		}
 +		for (i, view) in views.iter().enumerate() {
 +			if view["index"] != i
 +				|| view["azimuth_degrees"] != i * 45
 +				|| view["elevation_degrees"] != 20
 +			{
-+				return Err("Unsupported B+ azimuth ring".into());
++				return Err(DustAssetError::contract("Unsupported B+ azimuth ring"));
 +			}
 +			let theta = i as f32 * std::f32::consts::FRAC_PI_4;
-+			let e = 20f32.to_radians();
++			let e = Self::ELEVATION_DEGREES.to_radians();
 +			for (key, expected) in [
 +				("image_right", Vec3::new(theta.cos(), 0., -theta.sin())),
 +				("image_up", Vec3::new(-e.sin() * theta.sin(), e.cos(), -e.sin() * theta.cos())),
-+				("camera_target_m", Vec3::new(0., 0.55, 0.)),
++				("camera_target_m", DustBounds::QUAD_CENTRE),
 +			] {
 +				for axis in 0..3 {
-+					if (view[key][axis].as_f64().ok_or("Invalid B+ camera basis")? as f32
-+						- expected[axis])
++					if (view[key][axis]
++						.as_f64()
++						.ok_or_else(|| DustAssetError::contract("Invalid B+ camera basis"))?
++						as f32 - expected[axis])
 +						.abs() > 0.000001
 +					{
-+						return Err("B+ camera basis does not match shader".into());
++						return Err(DustAssetError::contract(
++							"B+ camera basis does not match shader",
++						));
 +					}
 +				}
 +			}
 +		}
 +		let mut packed = Vec::with_capacity(Self::GPU_BYTES);
-+		for view in 0..8 {
++		for view in 0..Self::VIEW_COUNT {
 +			let bytes = fs::read(root.join(format!("atlases/view_{view:02}.png")))?;
 +			let image = Image::from_buffer(
 +				&bytes,
@@ -886,23 +363,30 @@ index 000000000..e8f64a1a3
 +				true,
 +				ImageSampler::linear(),
 +				RenderAssetUsages::RENDER_WORLD,
-+			)?;
++			)
++			.map_err(|error| DustAssetError::Image(error.to_string()))?;
 +			if image.texture_descriptor.size.width != 952
 +				|| image.texture_descriptor.size.height != 952
 +				|| image.texture_descriptor.format != TextureFormat::Rgba8UnormSrgb
 +			{
-+				return Err("Unsupported B+ v1 atlas format/dimensions".into());
++				return Err(DustAssetError::contract("Unsupported B+ v1 atlas format/dimensions"));
 +			}
-+			packed.extend(image.data.ok_or("missing multiview image data")?);
++			packed.extend(
++				image
++					.data
++					.ok_or_else(|| DustAssetError::contract("missing multiview image data"))?,
++			);
 +		}
 +		if packed.len() != Self::GPU_BYTES {
-+			return Err("B+ image byte count mismatch".into());
++			return Err(DustAssetError::contract("B+ image byte count mismatch"));
 +		}
-+		Ok(Self::array_image(952, 952, 8, packed))
++		Ok(Self::array_image(952, 952, Self::VIEW_COUNT, packed))
 +	}
++
 +	pub fn fallback() -> Image {
 +		Self::array_image(1, 1, 1, vec![0, 0, 0, 0])
 +	}
++
 +	fn array_image(width: u32, height: u32, layers: u32, data: Vec<u8>) -> Image {
 +		let mut image = Image::new(
 +			Extent3d { width, height, depth_or_array_layers: layers },
@@ -918,31 +402,71 @@ index 000000000..e8f64a1a3
 +		image.sampler = ImageSampler::linear();
 +		image
 +	}
++
 +	/// Azimuth is atan2(camera.x,camera.z), with a cyclic seam at +Z.
 +	pub fn views(azimuth: f32, nearest: bool) -> (u32, u32, f32) {
 +		let x = azimuth.rem_euclid(std::f32::consts::TAU) / std::f32::consts::FRAC_PI_4;
 +		if nearest {
-+			let i = (x.round() as u32) % 8;
++			let i = (x.round() as u32) % Self::VIEW_COUNT;
 +			(i, i, 0.)
 +		} else {
-+			let i = x.floor() as u32 % 8;
-+			(i, (i + 1) % 8, x - x.floor())
++			let i = x.floor() as u32 % Self::VIEW_COUNT;
++			(i, (i + 1) % Self::VIEW_COUNT, x - x.floor())
 +		}
 +	}
 +}
++
++#[cfg(test)]
++mod tests {
++	use super::*;
++
++	#[test]
++	fn matched_contract_and_axis_layout() -> Result<(), DustAssetError> {
++		let bundle = DustBundle::read(DustBundle::showcase_data_root().join("wind_dust_demos"))?;
++		let data = DustBundle::read_frame(&bundle.root.join("diagnostics/axis_markers.f16"))?;
++		for ((x, y, z), expected) in
++			[((50, 6, 9), 0x3400u16), ((10, 24, 20), 0x3800), ((25, 12, 50), 0x3a00)]
++		{
++			let n = 2 * ((z * 32 + y) * 64 + x);
++			assert_eq!(u16::from_le_bytes([data[n], data[n + 1]]), expected);
++		}
++		let image = bundle.density(false)?;
++		assert_eq!(
++			image
++				.data
++				.as_ref()
++				.ok_or_else(|| DustAssetError::contract("missing data"))?
++				.len(),
++			12_845_056
++		);
++		Ok(())
++	}
++}
++
 +#[cfg(test)]
 +mod multiview_tests {
 +	use super::*;
++
 +	#[test]
-+	fn actual_eight_atlases_match_source_and_pack_layers() -> Result<(), Box<dyn std::error::Error>>
-+	{
-+		let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-+		let source = Bundle::read(root.join("wind_dust_demos"))?;
-+		let image = MultiView::read(&root.join("wind_dust_multiview"), &source)?;
++	fn actual_eight_atlases_match_source_and_pack_layers() -> Result<(), DustAssetError> {
++		let root = DustBundle::showcase_data_root();
++		let source = DustBundle::read(root.join("wind_dust_demos"))?;
++		let image = DustMultiView::read(&root.join("wind_dust_multiview"), &source)?;
 +		assert_eq!(image.texture_descriptor.size.depth_or_array_layers, 8);
-+		assert_eq!(image.data.as_ref().ok_or("missing data")?.len(), MultiView::GPU_BYTES);
 +		assert_eq!(
-+			image.texture_view_descriptor.as_ref().ok_or("missing view")?.dimension,
++			image
++				.data
++				.as_ref()
++				.ok_or_else(|| DustAssetError::contract("missing data"))?
++				.len(),
++			DustMultiView::GPU_BYTES
++		);
++		assert_eq!(
++			image
++				.texture_view_descriptor
++				.as_ref()
++				.ok_or_else(|| DustAssetError::contract("missing view"))?
++				.dimension,
 +			Some(TextureViewDimension::D2Array)
 +		);
 +		Ok(())
@@ -950,16 +474,17 @@ index 000000000..e8f64a1a3
 +
 +	#[test]
 +	fn cyclic_selection_preserves_seam_and_nearest() {
-+		let (a, b, w) = MultiView::views(-std::f32::consts::FRAC_PI_4 * 0.25, false);
++		let (a, b, w) = DustMultiView::views(-std::f32::consts::FRAC_PI_4 * 0.25, false);
 +		assert_eq!((a, b), (7, 0));
 +		assert!((w - 0.75).abs() < 0.00001);
-+		assert_eq!(MultiView::views(std::f32::consts::TAU, false), (0, 1, 0.));
-+		assert_eq!(MultiView::views(std::f32::consts::FRAC_PI_4 * 0.6, true), (1, 1, 0.));
++		assert_eq!(DustMultiView::views(std::f32::consts::TAU, false), (0, 1, 0.));
++		assert_eq!(DustMultiView::views(std::f32::consts::FRAC_PI_4 * 0.6, true), (1, 1, 0.));
 +	}
++
 +	#[test]
 +	fn capture_bases_have_fixed_pivot_scale_and_orthonormal_ring() {
-+		let elevation = 20f32.to_radians();
-+		for i in 0..8 {
++		let elevation = DustMultiView::ELEVATION_DEGREES.to_radians();
++		for i in 0..DustMultiView::VIEW_COUNT {
 +			let theta = i as f32 * std::f32::consts::FRAC_PI_4;
 +			let right = Vec3::new(theta.cos(), 0., -theta.sin());
 +			let up = Vec3::new(
@@ -970,38 +495,236 @@ index 000000000..e8f64a1a3
 +			assert!(right.dot(up).abs() < 0.000001);
 +			assert!((right.cross(up).length() - 1.).abs() < 0.000001);
 +		}
-+		assert_eq!(MultiView::GPU_BYTES, 29001728);
++		assert_eq!(DustMultiView::GPU_BYTES, 29_001_728);
 +	}
 +}
-diff --git a/maybraid/vfx/playground/examples/matched_dust/material.rs b/maybraid/vfx/playground/examples/matched_dust/material.rs
+diff --git a/maybraid/vfx/lib/src/dust/bounds.rs b/maybraid/vfx/lib/src/dust/bounds.rs
 new file mode 100644
-index 000000000..9985c8024
+index 000000000..9e29b75d6
 --- /dev/null
-+++ b/maybraid/vfx/playground/examples/matched_dust/material.rs
-@@ -0,0 +1,63 @@
-+use bevy::{
-+	mesh::MeshVertexBufferLayoutRef,
-+	pbr::{MaterialPipeline, MaterialPipelineKey},
-+	prelude::*,
-+	render::render_resource::*,
-+	shader::ShaderRef,
-+};
-+#[derive(Clone, Copy, Debug, ShaderType)]
-+pub struct Playback {
-+	pub time: Vec4,      // i,j,blend,mode(0=B,1=C,2=B+)
-+	pub settings: Vec4,  // group count, ray steps, sigmaT, active
-+	pub influence: Vec4, // world xyz, smoothed movement strength
-+	pub velocity: Vec4,  // xyz, radius
-+	pub origins: [Vec4; 10],
-+	pub right: Vec4,
-+	pub up: Vec4,
-+	pub centre: Vec4,
-+	pub experiment: Vec4, // nearest-view flag, optical density multiplier, boundary exclusion, reserved
++++ b/maybraid/vfx/lib/src/dust/bounds.rs
+@@ -0,0 +1,109 @@
++//! Authored volume, obstacle, and timeline contract for v1 dust samples.
++
++use bevy::prelude::*;
++
++/// Packed 49-frame, 15 Hz playback window covering `[0, DURATION]`.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct DustPlaybackFrames {
++	pub current: u32,
++	pub next: u32,
++	pub blend: f32,
 +}
++
++impl DustPlaybackFrames {
++	pub fn as_tuple(self) -> (u32, u32, f32) {
++		(self.current, self.next, self.blend)
++	}
++}
++
++/// One authored exclusion box. Half-extents match the playback shader.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct DustObstacle {
++	pub centre: Vec3,
++	pub half_extent: Vec3,
++}
++
++impl DustObstacle {
++	pub fn size(self) -> Vec3 {
++		self.half_extent * 2.0
++	}
++}
++
++/// Spatial box, frame count, and the two diagnostic obstacle volumes.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct DustBounds {
++	pub min: Vec3,
++	pub max: Vec3,
++}
++
++impl DustBounds {
++	pub const DURATION: f32 = 3.2;
++	pub const FRAME_RATE: f32 = 15.0;
++	pub const FRAME_COUNT: u32 = 49;
++	pub const LAST_FRAME: u32 = 48;
++	pub const GROUND_FALLOFF: f32 = 0.025;
++	pub const CAPTURE_WIDTH_M: f32 = 7.8;
++	pub const QUAD_CENTRE: Vec3 = Vec3::new(0.0, 0.55, 0.0);
++
++	pub const V1: Self = Self { min: Vec3::new(-3.2, 0.0, -3.2), max: Vec3::new(3.2, 3.2, 3.2) };
++
++	pub const WALL: DustObstacle = DustObstacle {
++		centre: Vec3::new(0.65, 0.7, -0.3),
++		half_extent: Vec3::new(0.15, 0.7, 1.25),
++	};
++
++	pub const BOX: DustObstacle =
++		DustObstacle { centre: Vec3::new(-1.0, 0.4, -0.7), half_extent: Vec3::new(0.4, 0.4, 0.4) };
++
++	pub const OBSTACLES: [DustObstacle; 2] = [Self::WALL, Self::BOX];
++
++	pub fn size(self) -> Vec3 {
++		self.max - self.min
++	}
++
++	pub fn contains_time(t: f32) -> bool {
++		t.is_finite() && (0.0..=Self::DURATION).contains(&t)
++	}
++
++	pub fn clamp_time(t: f32) -> f32 {
++		t.clamp(0.0, Self::DURATION)
++	}
++
++	/// Source-frame pair and blend for a simulation timestamp.
++	pub fn frames(t: f32) -> DustPlaybackFrames {
++		let f = Self::clamp_time(t) * Self::FRAME_RATE;
++		let current = (f.floor() as u32).min(Self::LAST_FRAME);
++		DustPlaybackFrames {
++			current,
++			next: (current + 1).min(Self::LAST_FRAME),
++			blend: f - current as f32,
++		}
++	}
++}
++
++impl Default for DustBounds {
++	fn default() -> Self {
++		Self::V1
++	}
++}
++
++#[cfg(test)]
++mod tests {
++	use super::*;
++
++	#[test]
++	fn time_clamps_and_interpolates() {
++		assert_eq!(DustBounds::frames(-1.0).as_tuple(), (0, 1, 0.0));
++		assert_eq!(DustBounds::frames(0.1).as_tuple(), (1, 2, 0.5));
++		assert_eq!(DustBounds::frames(9.0).as_tuple(), (48, 48, 0.0));
++		assert!(DustBounds::contains_time(0.7));
++		assert!(!DustBounds::contains_time(3.21));
++	}
++
++	#[test]
++	fn obstacle_sizes_match_authored_geometry() {
++		assert_eq!(DustBounds::WALL.size(), Vec3::new(0.3, 1.4, 2.5));
++		assert_eq!(DustBounds::BOX.size(), Vec3::new(0.8, 0.8, 0.8));
++		assert_eq!(DustBounds::V1.size(), Vec3::new(6.4, 3.2, 6.4));
++	}
++}
+diff --git a/maybraid/vfx/lib/src/dust/disturbance.rs b/maybraid/vfx/lib/src/dust/disturbance.rs
+new file mode 100644
+index 000000000..3c53237e1
+--- /dev/null
++++ b/maybraid/vfx/lib/src/dust/disturbance.rs
+@@ -0,0 +1,80 @@
++//! Local, stateless influence used by the dust playback shader.
++
++use bevy::prelude::*;
++
++/// Smoothed mover used to clear and shift nearby coverage/density.
++///
++/// The GPU path stays stateless: a radial weight, a ≤ 0.16 m coordinate shift,
++/// and no pileup or wake. These fields pack into the playback uniform.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct DustDisturbance {
++	pub position: Vec3,
++	pub velocity: Vec3,
++	pub strength: f32,
++	pub radius: f32,
++}
++
++impl DustDisturbance {
++	pub const RADIUS: f32 = 0.85;
++	pub const MAX_SPEED: f32 = 4.0;
++	pub const MAX_VELOCITY: f32 = 3.0;
++	pub const SMOOTHING: f32 = 0.18;
++	pub const SHIFT_SCALE: f32 = 0.055;
++	pub const CLEAR_SCALE: f32 = 0.58;
++
++	pub fn idle_at(position: Vec3) -> Self {
++		Self { position, velocity: Vec3::ZERO, strength: 0.0, radius: Self::RADIUS }
++	}
++
++	pub fn target_strength(speed: f32, interact: bool) -> f32 {
++		if interact {
++			speed.min(Self::MAX_SPEED) / Self::MAX_SPEED
++		} else {
++			0.0
++		}
++	}
++
++	pub fn smooth_strength(current: f32, target: f32, dt: f32) -> f32 {
++		current + (target - current) * (1.0 - (-dt / Self::SMOOTHING).exp())
++	}
++
++	pub fn packed_influence(self) -> Vec4 {
++		self.position.extend(self.strength)
++	}
++
++	pub fn packed_velocity(self) -> Vec4 {
++		self.velocity.clamp_length_max(Self::MAX_VELOCITY).extend(self.radius)
++	}
++}
++
++impl Default for DustDisturbance {
++	fn default() -> Self {
++		Self::idle_at(Vec3::ZERO)
++	}
++}
++
++#[cfg(test)]
++mod tests {
++	use super::*;
++
++	#[test]
++	fn interaction_scales_and_clamps_speed() {
++		assert_eq!(DustDisturbance::target_strength(2.0, false), 0.0);
++		assert!((DustDisturbance::target_strength(2.0, true) - 0.5).abs() < 1e-6);
++		assert_eq!(DustDisturbance::target_strength(8.0, true), 1.0);
++	}
++
++	#[test]
++	fn packing_clamps_velocity_and_keeps_radius() {
++		let field = DustDisturbance {
++			position: Vec3::new(1.0, 0.4, 0.1),
++			velocity: Vec3::X * 9.0,
++			strength: 0.25,
++			radius: DustDisturbance::RADIUS,
++		};
++		assert_eq!(field.packed_influence(), Vec4::new(1.0, 0.4, 0.1, 0.25));
++		let packed = field.packed_velocity();
++		assert!((packed.truncate().length() - DustDisturbance::MAX_VELOCITY).abs() < 1e-5);
++		assert!((packed.w - DustDisturbance::RADIUS).abs() < 1e-6);
++	}
++}
+diff --git a/maybraid/vfx/lib/src/dust/material.rs b/maybraid/vfx/lib/src/dust/material.rs
+new file mode 100644
+index 000000000..f957abdfb
+--- /dev/null
++++ b/maybraid/vfx/lib/src/dust/material.rs
+@@ -0,0 +1,112 @@
++//! Embedded dust playback material.
++
++use bevy::asset::embedded_asset;
++use bevy::mesh::MeshVertexBufferLayoutRef;
++use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
++use bevy::prelude::*;
++use bevy::render::render_resource::{
++	AsBindGroup, CompareFunction, RenderPipelineDescriptor, SpecializedMeshPipelineError,
++};
++use bevy::shader::ShaderRef;
++
++use crate::dust::playback::DustPlayback;
++
++pub const DUST_SHADER_ASSET: &str =
++	concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "dust/shader.wgsl");
++
 +#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 +pub struct DustPlaybackMaterial {
 +	#[uniform(0)]
-+	pub playback: Playback,
++	pub playback: DustPlayback,
 +	#[texture(1)]
 +	#[sampler(2)]
 +	pub atlas: Handle<Image>,
@@ -1012,22 +735,39 @@ index 000000000..9985c8024
 +	#[sampler(6)]
 +	pub multiview: Handle<Image>,
 +}
++
++impl DustPlaybackMaterial {
++	pub fn new(
++		playback: DustPlayback,
++		atlas: Handle<Image>,
++		density: Handle<Image>,
++		multiview: Handle<Image>,
++	) -> Self {
++		Self { playback, atlas, density, multiview }
++	}
++}
++
 +impl Material for DustPlaybackMaterial {
 +	fn vertex_shader() -> ShaderRef {
-+		"demo_shaders://shader.wgsl".into()
++		DUST_SHADER_ASSET.into()
 +	}
++
 +	fn fragment_shader() -> ShaderRef {
-+		"demo_shaders://shader.wgsl".into()
++		DUST_SHADER_ASSET.into()
 +	}
++
 +	fn alpha_mode(&self) -> AlphaMode {
 +		AlphaMode::Blend
 +	}
++
 +	fn enable_prepass() -> bool {
 +		false
 +	}
++
 +	fn enable_shadows() -> bool {
 +		false
 +	}
++
 +	fn specialize(
 +		_pipeline: &MaterialPipeline,
 +		descriptor: &mut RenderPipelineDescriptor,
@@ -1042,11 +782,237 @@ index 000000000..9985c8024
 +		Ok(())
 +	}
 +}
-diff --git a/maybraid/vfx/playground/examples/matched_dust/shader.wgsl b/maybraid/vfx/playground/examples/matched_dust/shader.wgsl
++
++/// Embedded dust shader plus [`MaterialPlugin`].
++pub struct DustPlaybackPlugin;
++
++impl Plugin for DustPlaybackPlugin {
++	fn build(&self, app: &mut App) {
++		embedded_asset!(app, "shader.wgsl");
++		if !app.is_plugin_added::<MaterialPlugin<DustPlaybackMaterial>>() {
++			app.add_plugins(MaterialPlugin::<DustPlaybackMaterial>::default());
++		}
++	}
++}
++
++#[cfg(test)]
++mod tests {
++	use super::*;
++
++	#[test]
++	fn fragment_shader_ref_matches_embedded_asset_path() {
++		match <DustPlaybackMaterial as Material>::fragment_shader() {
++			ShaderRef::Path(path) => assert_eq!(path.to_string(), DUST_SHADER_ASSET),
++			ShaderRef::Default => panic!("unexpected Default shader ref"),
++			ShaderRef::Handle(_) => panic!("unexpected Handle shader ref"),
++		}
++	}
++
++	#[test]
++	fn embedded_wgsl_registers_with_asset_plugin() {
++		let mut app = App::new();
++		app.add_plugins(MinimalPlugins);
++		app.add_plugins(AssetPlugin::default());
++		embedded_asset!(app, "shader.wgsl");
++		app.update();
++	}
++}
+diff --git a/maybraid/vfx/lib/src/dust/playback.rs b/maybraid/vfx/lib/src/dust/playback.rs
+new file mode 100644
+index 000000000..e0135ba7f
+--- /dev/null
++++ b/maybraid/vfx/lib/src/dust/playback.rs
+@@ -0,0 +1,185 @@
++//! CPU-side playback uniform and representation mode.
++
++use bevy::prelude::*;
++use bevy::render::render_resource::ShaderType;
++
++use crate::dust::bounds::DustBounds;
++use crate::dust::disturbance::DustDisturbance;
++
++/// Authored capture plane basis for representation B.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct DustCaptureBasis {
++	pub right: Vec3,
++	pub up: Vec3,
++	pub centre: Vec3,
++}
++
++impl DustCaptureBasis {
++	pub fn packed_right(self) -> Vec4 {
++		self.right.extend(0.0)
++	}
++
++	pub fn packed_up(self) -> Vec4 {
++		self.up.extend(0.0)
++	}
++
++	pub fn packed_centre(self) -> Vec4 {
++		self.centre.extend(0.0)
++	}
++}
++
++/// Optical and sampling overrides packed into `experiment`.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct DustExperiment {
++	pub nearest: bool,
++	pub density_multiplier: f32,
++	pub boundary_exclusion: bool,
++}
++
++impl DustExperiment {
++	pub fn packed(self) -> Vec4 {
++		Vec4::new(
++			if self.nearest { 1.0 } else { 0.0 },
++			self.density_multiplier,
++			if self.boundary_exclusion { 1.0 } else { 0.0 },
++			0.0,
++		)
++	}
++}
++
++/// B = fixed plane, B+ = eight-view ring, C = animated density.
++#[derive(Clone, Copy, Debug, Eq, PartialEq)]
++pub enum DustRepresentation {
++	Plane,
++	MultiView,
++	Density,
++}
++
++impl DustRepresentation {
++	pub fn from_label(label: &str) -> Option<Self> {
++		match label {
++			"B" => Some(Self::Plane),
++			"B+" => Some(Self::MultiView),
++			"C" => Some(Self::Density),
++			_ => None,
++		}
++	}
++
++	pub fn label(self) -> &'static str {
++		match self {
++			Self::Plane => "B",
++			Self::MultiView => "B+",
++			Self::Density => "C",
++		}
++	}
++
++	/// Uniform `time.w`: 0 = B, 1 = C, 2 = B+.
++	pub fn mode(self) -> f32 {
++		match self {
++			Self::Plane => 0.0,
++			Self::Density => 1.0,
++			Self::MultiView => 2.0,
++		}
++	}
++
++	pub fn animation_gpu_bytes(self) -> usize {
++		match self {
++			Self::Density => 12_845_056,
++			Self::MultiView => crate::dust::DustMultiView::GPU_BYTES,
++			Self::Plane => 13_660_416,
++		}
++	}
++}
++
++/// GPU uniform. Layout must stay aligned with `shader.wgsl`.
++#[derive(Clone, Copy, Debug, ShaderType)]
++pub struct DustPlayback {
++	pub time: Vec4,      // i, j, blend, mode(0=B,1=C,2=B+)
++	pub settings: Vec4,  // group count, ray steps, sigmaT, active
++	pub influence: Vec4, // world xyz, smoothed movement strength
++	pub velocity: Vec4,  // xyz, radius
++	pub origins: [Vec4; 10],
++	pub right: Vec4,
++	pub up: Vec4,
++	pub centre: Vec4,
++	pub experiment: Vec4, // nearest-view, optical density, boundary exclusion, reserved
++}
++
++impl DustPlayback {
++	pub const SIGMA_T: f32 = 2.2;
++	pub const MAX_GROUPS: usize = 10;
++
++	pub fn new(
++		representation: DustRepresentation,
++		groups: u32,
++		steps: u32,
++		capture: DustCaptureBasis,
++		experiment: DustExperiment,
++	) -> Self {
++		Self {
++			time: Vec4::new(0.0, 1.0, 0.0, representation.mode()),
++			settings: Vec4::new(groups as f32, steps as f32, Self::SIGMA_T, 0.0),
++			influence: Vec4::ZERO,
++			velocity: Vec4::new(0.0, 0.0, 0.0, DustDisturbance::RADIUS),
++			origins: [Vec4::ZERO; Self::MAX_GROUPS],
++			right: capture.packed_right(),
++			up: capture.packed_up(),
++			centre: capture.packed_centre(),
++			experiment: experiment.packed(),
++		}
++	}
++
++	pub fn set_source_time(&mut self, t: f32) {
++		let frames = DustBounds::frames(t);
++		self.time.x = frames.current as f32;
++		self.time.y = frames.next as f32;
++		self.time.z = frames.blend;
++	}
++
++	pub fn set_active(&mut self, active: bool) {
++		self.settings.w = if active { 1.0 } else { 0.0 };
++	}
++
++	pub fn set_disturbance(&mut self, field: DustDisturbance) {
++		self.influence = field.packed_influence();
++		self.velocity = field.packed_velocity();
++	}
++
++	pub fn set_group_origin(&mut self, index: usize, origin: Vec3) {
++		if index < Self::MAX_GROUPS {
++			self.origins[index] = origin.extend(0.0);
++		}
++	}
++}
++
++#[cfg(test)]
++mod tests {
++	use super::*;
++
++	#[test]
++	fn labels_map_to_shader_modes() {
++		assert_eq!(DustRepresentation::from_label("B").unwrap().mode(), 0.0);
++		assert_eq!(DustRepresentation::from_label("C").unwrap().mode(), 1.0);
++		assert_eq!(DustRepresentation::from_label("B+").unwrap().mode(), 2.0);
++		assert_eq!(DustRepresentation::from_label("nope"), None);
++	}
++
++	#[test]
++	fn set_source_time_writes_interpolated_frames() {
++		let capture =
++			DustCaptureBasis { right: Vec3::X, up: Vec3::Y, centre: DustBounds::QUAD_CENTRE };
++		let mut playback = DustPlayback::new(
++			DustRepresentation::Density,
++			1,
++			96,
++			capture,
++			DustExperiment { nearest: false, density_multiplier: 1.0, boundary_exclusion: false },
++		);
++		playback.set_source_time(0.1);
++		assert_eq!(playback.time.x, 1.0);
++		assert_eq!(playback.time.y, 2.0);
++		assert!((playback.time.z - 0.5).abs() < 1e-6);
++		playback.set_active(true);
++		assert_eq!(playback.settings.w, 1.0);
++	}
++}
+diff --git a/maybraid/vfx/lib/src/dust/shader.wgsl b/maybraid/vfx/lib/src/dust/shader.wgsl
 new file mode 100644
 index 000000000..390c7d5b9
 --- /dev/null
-+++ b/maybraid/vfx/playground/examples/matched_dust/shader.wgsl
++++ b/maybraid/vfx/lib/src/dust/shader.wgsl
 @@ -0,0 +1,165 @@
 +#import bevy_pbr::{mesh_view_bindings::view, view_transformations::{position_ndc_to_world,frag_coord_to_ndc}, prepass_utils::prepass_depth}
 +#import bevy_core_pipeline::tonemapping::tone_mapping
@@ -1212,4 +1178,667 @@ index 000000000..390c7d5b9
 + let alpha=1.0-trans;
 + let mapped=tone_mapping(vec4(rgb/max(alpha,0.000001),1.0),view.color_grading);
 + return vec4(mapped.rgb,alpha);
++}
+diff --git a/maybraid/vfx/playground/examples/matched_dust.rs b/maybraid/vfx/playground/examples/matched_dust.rs
+new file mode 100644
+index 000000000..4dee48a3c
+--- /dev/null
++++ b/maybraid/vfx/playground/examples/matched_dust.rs
+@@ -0,0 +1,657 @@
++//! Independent B/B+/C Houdini playback comparison; consumes `maybraid-vfx` dust APIs.
++use bevy::{
++	camera::visibility::NoFrustumCulling,
++	core_pipeline::{prepass::DepthPrepass, tonemapping::Tonemapping},
++	prelude::*,
++	render::view::screenshot::{save_to_disk, Screenshot},
++	window::{PresentMode, WindowResolution},
++};
++use clap::Parser;
++use maybraid_vfx::dust::{
++	DustBounds, DustBundle, DustDisturbance, DustExperiment, DustMultiView, DustPlayback,
++	DustPlaybackMaterial, DustPlaybackPlugin, DustRepresentation,
++};
++use std::{path::PathBuf, time::Instant};
++
++#[derive(Parser, Resource, Debug)]
++struct Args {
++	/// B = original fixed plane; B+ = eight-view baked ring; C = animated density.
++	#[arg(default_value = "C", value_parser = ["B", "B+", "C"])]
++	representation: String,
++	/// Parent directory of wind_dust_demos and wind_dust_multiview.
++	#[arg(long)]
++	data_root: Option<PathBuf>,
++	/// Accepted for the prebuilt Mac binary; the workspace example uses the embedded shader.
++	#[arg(long, hide = true)]
++	#[allow(dead_code)]
++	shader_root: Option<PathBuf>,
++	/// Start paused at an exact simulation timestamp (interactive inspection).
++	#[arg(long)]
++	at: Option<f32>,
++	/// Save a single engine-rendered inspection image, then exit.
++	#[arg(long)]
++	still: Option<PathBuf>,
++	#[arg(
++		long,
++		default_value = "medium",
++		value_parser = ["medium", "distant", "orbit", "grazing", "entry", "inside", "moving", "stop", "elevated"]
++	)]
++	view: String,
++	#[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(0..=10))]
++	groups: u32,
++	#[arg(long)]
++	obstacles: bool,
++	/// Diagnostic: keep obstacle masks active while hiding opaque wall/box geometry.
++	#[arg(long, requires = "obstacles")]
++	hide_obstacle_geometry: bool,
++	#[arg(long)]
++	interaction: bool,
++	#[arg(long)]
++	markers: bool,
++	/// Fixed 60Hz simulation, 49 screenshots at the source's 15Hz; *not* real-time video.
++	#[arg(long)]
++	sequence: Option<PathBuf>,
++	/// Real-time benchmark length; no fixed steps, screenshot work or visual warmup included.
++	#[arg(long, default_value_t = 0.)]
++	benchmark: f32,
++	/// Bounded sampling budget: C 96/48 ray steps, B+ adjacent blend/nearest.
++	#[arg(long, default_value = "default", value_parser = ["default", "lower"])]
++	profile: String,
++	#[arg(long, value_parser = clap::value_parser!(u32).range(24..=192))]
++	steps: Option<u32>,
++	#[arg(long, value_parser = ["blended", "nearest"])]
++	angular: Option<String>,
++	/// Freeze source density, while camera, influence and cleanup use advancing timeline.
++	#[arg(long)]
++	inspect_time: Option<f32>,
++	#[arg(long, default_value = "default", value_parser = ["default", "sparse", "denser"])]
++	density: String,
++	#[arg(long, default_value = "dense", value_parser = ["dense", "spread"])]
++	arrangement: String,
++	/// Diagnostic: obstacle geometry still occludes, but density/plane exclusion is disabled.
++	#[arg(long)]
++	no_boundary_exclusion: bool,
++	#[arg(long, default_value_t = 1)]
++	repeats: u32,
++	#[arg(long)]
++	result: Option<PathBuf>,
++}
++
++#[derive(Component)]
++struct DemoCamera;
++#[derive(Component)]
++struct DemoGroup;
++#[derive(Component)]
++struct Hud;
++#[derive(Component)]
++struct Influence;
++#[derive(Resource)]
++struct State {
++	material: Handle<DustPlaybackMaterial>,
++	started: Instant,
++	ready: bool,
++	snapshot: bool,
++	tick: u32,
++	elapsed: f32,
++	age: f32,
++	paused: bool,
++	strength: f32,
++	previous: Vec3,
++	frames: Vec<f64>,
++	focused_samples: usize,
++	captures: Vec<serde_json::Value>,
++	cycle: u32,
++	resource_samples: Vec<serde_json::Value>,
++	groups: Vec<Entity>,
++	mesh: Handle<Mesh>,
++}
++
++fn main() -> Result<(), Box<dyn std::error::Error>> {
++	let args = Args::parse();
++	if args.inspect_time.is_some_and(|t| !DustBounds::contains_time(t))
++		|| args.at.is_some_and(|t| !DustBounds::contains_time(t))
++		|| (args.at.is_some() && (args.sequence.is_some() || args.benchmark > 0.))
++		|| !args.benchmark.is_finite()
++		|| args.benchmark < 0.
++		|| args.benchmark > 120.
++		|| args.repeats == 0
++		|| args.repeats > 10
++		|| (args.sequence.is_some() && args.benchmark > 0.)
++	{
++		return Err("Invalid capture/benchmark/repeat settings".into());
++	}
++	if let Some(dir) = &args.sequence {
++		std::fs::create_dir_all(dir)?;
++	}
++	let representation =
++		DustRepresentation::from_label(&args.representation).ok_or("unsupported representation")?;
++	let data_root = args.data_root.clone().unwrap_or_else(DustBundle::showcase_data_root);
++	let bundle = DustBundle::read(data_root.join("wind_dust_demos"))?;
++	let atlas = if representation == DustRepresentation::Plane {
++		bundle.atlas()?
++	} else {
++		DustBundle::unused_atlas()
++	};
++	// B binds a tiny unused 3D texture; C binds a tiny unused 2D texture. Neither pays for the other's animation.
++	let density = if representation == DustRepresentation::Density {
++		bundle.density(args.markers)?
++	} else {
++		DustBundle::unused_density()
++	};
++	let multiview = if representation == DustRepresentation::MultiView {
++		DustMultiView::read(&bundle.multiview_root(), &bundle)?
++	} else {
++		DustMultiView::fallback()
++	};
++	let playback = DustPlayback::new(
++		representation,
++		args.groups,
++		args.steps(),
++		bundle.capture_basis()?,
++		DustExperiment {
++			nearest: args.nearest(),
++			density_multiplier: args.density_multiplier(),
++			boundary_exclusion: args.obstacles && !args.no_boundary_exclusion,
++		},
++	);
++	let mut app = App::new();
++	app.add_plugins(DefaultPlugins.set(WindowPlugin {
++		primary_window: Some(Window {
++			title: format!("Maybraid Dust {} — matched Houdini playback", args.representation),
++			resolution: WindowResolution::new(2560, 1440).with_scale_factor_override(2.),
++			present_mode: PresentMode::AutoNoVsync,
++			..default()
++		}),
++		..default()
++	}));
++	app.add_plugins(DustPlaybackPlugin);
++	let atlas = app.world_mut().resource_mut::<Assets<Image>>().add(atlas);
++	let density = app.world_mut().resource_mut::<Assets<Image>>().add(density);
++	let multiview = app.world_mut().resource_mut::<Assets<Image>>().add(multiview);
++	let material = app
++		.world_mut()
++		.resource_mut::<Assets<DustPlaybackMaterial>>()
++		.add(DustPlaybackMaterial::new(playback, atlas, density, multiview));
++	let mesh = app.world_mut().resource_mut::<Assets<Mesh>>().add(Rectangle::new(2., 2.));
++	app.insert_resource(State {
++		material,
++		mesh,
++		started: Instant::now(),
++		ready: false,
++		snapshot: false,
++		tick: 0,
++		elapsed: 0.,
++		age: 0.,
++		paused: false,
++		strength: 0.,
++		previous: Vec3::new(-2., 0.4, 0.1),
++		frames: Vec::with_capacity(8000),
++		focused_samples: 0,
++		captures: Vec::new(),
++		cycle: 0,
++		resource_samples: Vec::new(),
++		groups: Vec::new(),
++	})
++	.insert_resource(args)
++	.insert_resource(ClearColor(Color::srgb(0.13, 0.16, 0.19)))
++	.add_systems(Startup, setup)
++	.add_systems(Update, update)
++	.run();
++	Ok(())
++}
++
++fn setup(
++	mut commands: Commands,
++	state: Res<State>,
++	args: Res<Args>,
++	mut meshes: ResMut<Assets<Mesh>>,
++	mut materials: ResMut<Assets<StandardMaterial>>,
++) {
++	commands.insert_resource(GlobalAmbientLight { brightness: 180., ..default() });
++	commands.spawn((
++		DirectionalLight { illuminance: 4000., shadow_maps_enabled: true, ..default() },
++		Transform::from_xyz(5., 8., 4.).looking_at(Vec3::ZERO, Vec3::Y),
++	));
++	// Reference floor: geometry/lighting outside the animation, identical for B and C.
++	let tile = meshes.add(Cuboid::new(1., 0.04, 1.));
++	let shades = [
++		materials.add(Color::srgb(0.21, 0.23, 0.24)),
++		materials.add(Color::srgb(0.28, 0.30, 0.31)),
++	];
++	let floor_half = if args.arrangement == "spread" { 12i32 } else { 8i32 };
++	for z in -floor_half..floor_half {
++		for x in -floor_half..floor_half {
++			commands.spawn((
++				Mesh3d(tile.clone()),
++				MeshMaterial3d(shades[((x + z).rem_euclid(2)) as usize].clone()),
++				Transform::from_xyz(x as f32 + 0.5, -0.025, z as f32 + 0.5),
++			));
++		}
++	}
++	for (size, pos, color) in [
++		(Vec3::new(3.2, 0.015, 0.025), Vec3::new(1.6, 0.005, 0.), Color::srgb(0.65, 0.1, 0.08)),
++		(Vec3::new(0.025, 0.015, 3.2), Vec3::new(0., 0.005, 1.6), Color::srgb(0.07, 0.17, 0.7)),
++	] {
++		commands.spawn((
++			Mesh3d(meshes.add(Cuboid::from_size(size))),
++			MeshMaterial3d(materials.add(StandardMaterial {
++				base_color: color,
++				unlit: true,
++				..default()
++			})),
++			Transform::from_translation(pos),
++		));
++	}
++	if args.obstacles && !args.hide_obstacle_geometry {
++		for obstacle in DustBounds::OBSTACLES {
++			commands.spawn((
++				Mesh3d(meshes.add(Cuboid::from_size(obstacle.size()))),
++				MeshMaterial3d(materials.add(Color::srgb(0.16, 0.28, 0.34))),
++				Transform::from_translation(obstacle.centre),
++			));
++		}
++	}
++	commands.spawn((
++		Mesh3d(meshes.add(Sphere::new(0.16))),
++		MeshMaterial3d(materials.add(StandardMaterial {
++			base_color: Color::srgb(0.15, 0.7, 0.7),
++			unlit: true,
++			..default()
++		})),
++		Transform::from_xyz(-2., 0.4, 0.),
++		Influence,
++		if args.obstacles { Visibility::Visible } else { Visibility::Hidden },
++	));
++	commands.spawn((
++		Camera3d::default(),
++		Msaa::Off,
++		DepthPrepass,
++		Tonemapping::None,
++		Transform::from_xyz(6., 3.8, 7.2).looking_at(Vec3::new(0., 0.55, 0.), Vec3::Y),
++		DemoCamera,
++	));
++	commands.spawn((
++		Mesh3d(state.mesh.clone()),
++		MeshMaterial3d(state.material.clone()),
++		NoFrustumCulling,
++		Transform::default(),
++	));
++	commands.spawn((
++		Text::new("Preparing matched dust playback…"),
++		TextFont { font_size: 16.0.into(), ..default() },
++		TextColor(Color::srgb(0.92, 0.90, 0.8)),
++		Node {
++			position_type: PositionType::Absolute,
++			top: Val::Px(12.),
++			left: Val::Px(16.),
++			..default()
++		},
++		Hud,
++	));
++}
++
++impl State {
++	fn restart(&mut self, commands: &mut Commands, args: &Args) {
++		for entity in self.groups.drain(..) {
++			commands.entity(entity).try_despawn();
++		}
++		self.age = args.at.unwrap_or(0.);
++		self.paused = args.at.is_some();
++		self.strength = 0.;
++		self.previous = Vec3::new(-2., 0.4, 0.1);
++		for _ in 0..args.groups {
++			self.groups.push(commands.spawn(DemoGroup).id());
++		}
++	}
++
++	fn camera(&self, args: &Args) -> Transform {
++		args.camera(self.age)
++	}
++}
++
++impl Args {
++	fn camera(&self, t: f32) -> Transform {
++		let args = self;
++		let view = args.view.as_str();
++		let target = DustBounds::QUAD_CENTRE;
++		let mut pos = match view {
++			"distant" => Vec3::new(12., 6.5, 14.4),
++			"grazing" => Vec3::new(6., 0.22, 7.2),
++			"elevated" => Vec3::new(3.5, 7., 4.2),
++			"orbit" => {
++				// The fixed-step clock can finish a few microseconds short of 3.2s.
++				// Use the literal start pose at the endpoint, avoiding floor-edge raster differences.
++				let phase = (t / DustBounds::DURATION).clamp(0., 1.);
++				let a = if phase >= 1. - 0.00001 { 0. } else { std::f32::consts::TAU * phase };
++				Vec3::new(
++					a.sin() * 3.,
++					0.55 + 3. * DustMultiView::ELEVATION_DEGREES.to_radians().tan(),
++					a.cos() * 3.,
++				)
++			}
++			"inside" => Vec3::new(0.05, 0.45, 0.08),
++			"entry" => {
++				let r = (1. - t / 2.4).max(1. / 150.);
++				Vec3::new(6. * r, 0.45, 7.2 * r)
++			}
++			_ => Vec3::new(6., 3.8, 7.2),
++		};
++		if args.arrangement == "spread" && args.groups > 1 {
++			// A separate readable arrangement, not the dense-overlap stress budget.
++			pos *= if view == "orbit" { 4.5 } else { 2.0 };
++		}
++		Transform::from_translation(pos).looking_at(
++			if view == "inside" || view == "entry" { Vec3::new(-1., 0.45, -1.2) } else { target },
++			Vec3::Y,
++		)
++	}
++}
++
++// Avoid per-frame disk I/O or asset construction. Only the uniform and HUD change during playback.
++#[allow(clippy::too_many_arguments)]
++fn update(
++	mut commands: Commands,
++	args: Res<Args>,
++	mut state: ResMut<State>,
++	time: Res<Time<Real>>,
++	keys: Res<ButtonInput<KeyCode>>,
++	mut materials: ResMut<Assets<DustPlaybackMaterial>>,
++	mut camera: Query<&mut Transform, (With<DemoCamera>, Without<Influence>)>,
++	mut influence: Query<&mut Transform, (With<Influence>, Without<DemoCamera>)>,
++	mut hud: Query<&mut Text, With<Hud>>,
++	groups: Query<Entity, With<DemoGroup>>,
++	windows: Query<&Window>,
++	images: Res<Assets<Image>>,
++	mut exit: MessageWriter<AppExit>,
++) {
++	if !state.ready {
++		if state.started.elapsed().as_secs_f32() < 3. {
++			return;
++		}
++		state.ready = true;
++		state.started = Instant::now();
++		state.restart(&mut commands, &args);
++	}
++	if keys.just_pressed(KeyCode::Space) {
++		state.paused = !state.paused;
++	}
++	if keys.just_pressed(KeyCode::KeyR) {
++		state.restart(&mut commands, &args);
++	}
++	if state.paused {
++		if keys.just_pressed(KeyCode::ArrowRight) {
++			state.age = (state.age + 1. / DustBounds::FRAME_RATE).min(DustBounds::DURATION);
++		}
++		if keys.just_pressed(KeyCode::ArrowLeft) {
++			state.age = (state.age - 1. / DustBounds::FRAME_RATE).max(0.);
++		}
++	}
++	let dt = if args.sequence.is_some() { 1. / 60. } else { time.delta_secs().min(0.1) };
++	let capture_age = state.age;
++	let source_age = args.inspect_time.unwrap_or(capture_age);
++	if let Some(mut cam) = camera.iter_mut().next() {
++		*cam = state.camera(&args);
++	}
++	let mut pos = Vec3::new(-2. + (capture_age * 4.).min(4.), 0.4, 0.1);
++	if args.view == "stop" && capture_age > 0.65 {
++		pos.x = 0.6;
++	}
++	let velocity = (pos - state.previous) / dt.max(0.0001);
++	state.previous = pos;
++	let speed = velocity.length().min(DustDisturbance::MAX_SPEED);
++	let target = DustDisturbance::target_strength(speed, args.interaction);
++	if !state.paused {
++		state.strength = DustDisturbance::smooth_strength(state.strength, target, dt);
++	}
++	if let Some(mut t) = influence.iter_mut().next() {
++		t.translation = pos;
++	}
++	if let Some(mut mat) = materials.get_mut(&state.material) {
++		mat.playback.set_source_time(source_age);
++		mat.playback.set_active(capture_age <= DustBounds::DURATION);
++		if !state.paused {
++			mat.playback.set_disturbance(DustDisturbance {
++				position: pos,
++				velocity,
++				strength: state.strength,
++				radius: DustDisturbance::RADIUS,
++			});
++		}
++		for g in 0..args.groups as usize {
++			mat.playback.set_group_origin(g, args.origin(g as u32));
++		}
++	}
++	if let Some(mut text) = hud.iter_mut().next() {
++		**text = format!(
++			"{} | {} | {} groups ({}) | timeline {:.3}s | source {:.3}s | {}\nSpace pause · R restart · arrows step when paused | {} / {} | C {} steps | density {} | boundary exclusion {}",
++			args.representation,
++			args.view,
++			args.groups,
++			args.arrangement,
++			capture_age,
++			source_age,
++			if state.paused { "PAUSED" } else { "PLAYING" },
++			args.profile,
++			if args.nearest() { "nearest" } else { "adjacent blend" },
++			args.steps(),
++			args.density,
++			args.obstacles && !args.no_boundary_exclusion
++		);
++	}
++	if let Some(path) = &args.still {
++		if !state.snapshot && state.started.elapsed().as_secs_f32() > 0.5 {
++			commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path.clone()));
++			state.snapshot = true;
++		}
++		if state.started.elapsed().as_secs_f32() > 1.5 {
++			exit.write(AppExit::Success);
++		}
++	}
++	// Sample the active *timeline* interval on every cycle, even if source time is frozen.
++	// This is real renderer wall-clock delta; captures cannot run alongside benchmark mode.
++	if args.benchmark > 0. && capture_age > 0.1 && capture_age < 1.8 {
++		state.frames.push(time.delta_secs_f64() * 1000.);
++		if windows.iter().any(|window| window.focused) {
++			state.focused_samples += 1;
++		}
++	}
++	if let Some(dir) = &args.sequence {
++		if state.tick.is_multiple_of(4) && state.tick <= 192 {
++			let frame = state.tick / 4;
++			commands
++				.spawn(Screenshot::primary_window())
++				.observe(save_to_disk(dir.join(format!("frame-{frame:04}.png"))));
++			let camera_position = state.camera(&args).translation.to_array();
++			let angular_views = args.angular_views(Vec3::from_array(camera_position));
++			state.captures.push(serde_json::json!({
++				"frame": frame,
++				"timestamp": capture_age,
++				"source_timestamp": source_age,
++				"source_frames": DustBounds::frames(source_age).as_tuple(),
++				"camera": camera_position,
++				"angular_views": angular_views
++			}));
++		}
++	}
++	if !state.paused {
++		state.age += dt;
++		state.elapsed += dt;
++		state.tick += 1;
++	}
++	if state.age > DustBounds::DURATION && !state.groups.is_empty() {
++		for entity in state.groups.drain(..) {
++			commands.entity(entity).try_despawn();
++		}
++	}
++	let timed = args.benchmark > 0. || args.sequence.is_some();
++	if state.age > 4.2
++		&& (!timed
++			|| args.benchmark > 0.
++			|| (args.sequence.is_some() && state.cycle + 1 < args.repeats))
++	{
++		state.resource_samples.push(serde_json::json!({
++			"groups_after_tail": groups.iter().count(),
++			"materials": materials.len(),
++			"images": images.len()
++		}));
++		state.cycle += 1;
++		state.restart(&mut commands, &args);
++	}
++	let finished = if args.benchmark > 0. {
++		state.elapsed >= args.benchmark
++	} else {
++		args.sequence.is_some() && state.age > 4.1 && state.cycle + 1 >= args.repeats
++	};
++	if finished {
++		let mut sorted = state.frames.clone();
++		sorted.sort_by(f64::total_cmp);
++		let n = sorted.len();
++		let window = windows.iter().next();
++		let representation = DustRepresentation::from_label(&args.representation)
++			.unwrap_or(DustRepresentation::Density);
++		let result = serde_json::json!({
++			"representation": args.representation,
++			"view": args.view,
++			"groups": args.groups,
++			"interaction": args.interaction,
++			"obstacles": args.obstacles,
++			"hide_obstacle_geometry": args.hide_obstacle_geometry,
++			"steps": args.steps(),
++			"profile": args.profile,
++			"angular": if args.nearest() { "nearest" } else { "blended" },
++			"density": args.density,
++			"density_multiplier": args.density_multiplier(),
++			"arrangement": args.arrangement,
++			"inspect_time": args.inspect_time,
++			"boundary_exclusion": args.obstacles && !args.no_boundary_exclusion,
++			"mode": if args.sequence.is_some() { "fixed-step encoded render sequence" } else { "real-time no captures" },
++			"mean_ms": if n > 0 { sorted.iter().sum::<f64>() / n as f64 } else { 0. },
++			"p95_ms": if n > 0 { sorted[(n * 95 / 100).min(n - 1)] } else { 0. },
++			"samples": n,
++			"focused_samples": state.focused_samples,
++			"end_groups": groups.iter().count(),
++			"angular_views_at_end": args.angular_views(state.camera(&args).translation),
++			"shared_materials": materials.len(),
++			"shared_images": images.len(),
++			"sequence": state.captures,
++			"resource_samples": state.resource_samples,
++			"resolution": window.map(|w| (w.physical_width(), w.physical_height())),
++			"completed_cycles": state.cycle + 1,
++			"animation_GPU_bytes": representation.animation_gpu_bytes(),
++			"playback_upload_bytes": 0
++		});
++		println!("MATCHED_DUST_RESULT {result}");
++		if let Some(path) = &args.result {
++			if let Err(error) =
++				std::fs::write(path, serde_json::to_vec_pretty(&result).unwrap_or_default())
++			{
++				eprintln!("result write failed: {error}");
++			}
++		}
++		exit.write(AppExit::Success);
++	}
++}
++
++impl Args {
++	fn angular_views(&self, camera: Vec3) -> Vec<serde_json::Value> {
++		if self.representation != "B+" {
++			return Vec::new();
++		}
++		(0..self.groups)
++			.map(|g| {
++				let delta = camera - self.origin(g) - DustBounds::QUAD_CENTRE;
++				let theta = delta.x.atan2(delta.z);
++				let (i, j, w) = DustMultiView::views(theta, self.nearest());
++				serde_json::json!({
++					"group": g,
++					"azimuth_degrees": theta.to_degrees(),
++					"elevation_degrees": delta.y.atan2(Vec2::new(delta.x, delta.z).length()).to_degrees(),
++					"views": [i, j],
++					"blend": w * w * (3. - 2. * w)
++				})
++			})
++			.collect()
++	}
++
++	fn steps(&self) -> u32 {
++		self.steps.unwrap_or(if self.profile == "lower" { 48 } else { 96 })
++	}
++
++	fn nearest(&self) -> bool {
++		self.angular.as_deref().map_or(self.profile == "lower", |a| a == "nearest")
++	}
++
++	fn density_multiplier(&self) -> f32 {
++		match self.density.as_str() {
++			"sparse" => 0.65,
++			"denser" => 1.35,
++			_ => 1.,
++		}
++	}
++
++	fn origin(&self, g: u32) -> Vec3 {
++		if self.groups <= 1 {
++			Vec3::ZERO
++		} else if self.arrangement == "spread" {
++			let columns = self.groups.min(4);
++			let rows = self.groups.div_ceil(columns);
++			let x = g % columns;
++			let z = g / columns;
++			Vec3::new(
++				(x as f32 - (columns - 1) as f32 * 0.5) * 4.5,
++				0.,
++				(z as f32 - (rows - 1) as f32 * 0.5) * 4.5,
++			)
++		} else {
++			let a = g as f32 * 2.399963;
++			Vec3::new(a.cos(), 0., a.sin()) * (0.28 * (g as f32).sqrt())
++		}
++	}
++}
++
++#[cfg(test)]
++mod gallery_tests {
++	use super::*;
++
++	#[test]
++	fn profiles_and_optical_intent_are_bounded() -> Result<(), Box<dyn std::error::Error>> {
++		let default = Args::try_parse_from(["demo", "C"])?;
++		assert_eq!(default.steps(), 96);
++		assert!(!default.nearest());
++		let lower =
++			Args::try_parse_from(["demo", "B+", "--profile", "lower", "--density", "sparse"])?;
++		assert!(lower.nearest());
++		assert_eq!(lower.steps(), 48);
++		assert_eq!(lower.density_multiplier(), 0.65);
++		let override_args = Args::try_parse_from([
++			"demo",
++			"C",
++			"--profile",
++			"lower",
++			"--steps",
++			"72",
++			"--angular",
++			"blended",
++		])?;
++		assert_eq!(override_args.steps(), 72);
++		assert!(!override_args.nearest());
++		Ok(())
++	}
++
++	#[test]
++	fn spread_offsets_are_separate_and_orbit_closes() -> Result<(), Box<dyn std::error::Error>> {
++		let args =
++			Args::try_parse_from(["demo", "C", "--groups", "10", "--arrangement", "spread"])?;
++		let origins: Vec<_> = (0..10).map(|g| args.origin(g)).collect();
++		let orbit = Args::try_parse_from(["demo", "B+", "--view", "orbit"])?;
++		assert_eq!(orbit.camera(0.), orbit.camera(DustBounds::DURATION));
++		assert_eq!(orbit.camera(0.), orbit.camera(3.1999977));
++		assert!(orbit.camera(0.).translation.distance(orbit.camera(1.6).translation) > 5.9);
++		for i in 0..10 {
++			for j in 0..i {
++				assert!(origins[i].distance(origins[j]) >= 4.5 - 0.0001);
++			}
++		}
++		Ok(())
++	}
 +}

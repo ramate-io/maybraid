@@ -5,11 +5,12 @@
 //!
 //! First delivery ([#945](https://github.com/ramate-io/maybraid/issues/945)):
 //! reusable flash / fireball / smoke / sparks layers and the composed
-//! `fiery_explosion`.
+//! `fiery_explosion`. Milestone 2.1 dust playback lives in [`dust`].
 
 pub mod assets;
 pub mod atlas;
 pub mod composition;
+pub mod dust;
 pub mod effects;
 pub mod flipbook;
 pub mod layers;
@@ -28,6 +29,10 @@ pub use assets::{FlipbookAsset, VfxFlipbooks};
 pub use composition::{
 	EffectDefinition, EffectLayer, EffectPart, LightPulse, LobeKind, LobeSpec, MeshPart,
 	ParticlePart, ParticleShade, ScaleBounds, DEFAULT_SCALE_MAX, DEFAULT_SCALE_MIN,
+};
+pub use dust::{
+	DustAssetError, DustBounds, DustBundle, DustDisturbance, DustMultiView, DustPlayback,
+	DustPlaybackMaterial, DustPlaybackPlugin, DustRepresentation,
 };
 pub use library::{canonicalize_effect_name, VfxLibrary};
 pub use lobe_material::{LobeMaterial, LobeMaterialPlugin};
