@@ -19,7 +19,7 @@ pub(crate) fn apply_move_intents(
 		(With<CharacterController>, With<Player>),
 	>,
 ) {
-	let ordinary = ordinary.is_none_or(|enabled| enabled.0);
+	let ordinary = ordinary.is_none_or(|enabled| enabled.is_enabled());
 	let mut move_stick = Vec2::ZERO;
 	let mut jump = false;
 	let mut focusing = mouse.pressed(MouseButton::Right);
@@ -41,7 +41,7 @@ pub(crate) fn apply_move_intents(
 	}
 
 	for (entity, mut wish, look, mut stance, jumping) in &mut wishes {
-		wish.0 = look_wish(look.yaw, move_stick);
+		wish.0 = look.wish_from_stick(move_stick);
 		let airborne = jumping.is_some_and(Jumping::airborne);
 		if jump {
 			commands.entity(entity).insert(JumpWish);
@@ -92,16 +92,6 @@ fn apply_stance_change(
 	commands.entity(entity).insert(CharacterStance::settled(kind));
 }
 
-fn look_wish(yaw: f32, stick: Vec2) -> Vec3 {
-	if stick == Vec2::ZERO {
-		return Vec3::ZERO;
-	}
-	let yaw = Quat::from_axis_angle(Vec3::Y, yaw);
-	let forward = yaw * -Vec3::Z;
-	let right = yaw * Vec3::X;
-	(right * stick.x + forward * stick.y).clamp_length_max(1.0)
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -132,14 +122,24 @@ mod tests {
 	}
 
 	#[test]
+	fn move_intent_writes_camera_relative_wish() {
+		let (mut app, player) = sprint_app();
+		write_intents(&mut app, &[CharacterIntent::Move(Vec2::Y)]);
+		app.update();
+		let wish = app.world().get::<MoveWish>(player).map(|wish| wish.0).unwrap_or(Vec3::NAN);
+		assert!((wish.z + 1.0).abs() < 1e-4, "{wish}");
+		assert!(wish.y.abs() < 1e-6);
+	}
+
+	#[test]
 	fn look_wish_is_camera_relative_xz() {
-		let forward = look_wish(0.0, Vec2::Y);
+		let forward = PlayerLook::wish_from_yaw(0.0, Vec2::Y);
 		assert!((forward.z + 1.0).abs() < 1e-4, "{forward}");
 		assert!(forward.y.abs() < 1e-6);
-		let right = look_wish(0.0, Vec2::X);
+		let right = PlayerLook::wish_from_yaw(0.0, Vec2::X);
 		assert!((right.x - 1.0).abs() < 1e-4, "{right}");
 		assert!(right.y.abs() < 1e-6);
-		let half = look_wish(0.0, Vec2::Y * 0.5);
+		let half = PlayerLook::wish_from_yaw(0.0, Vec2::Y * 0.5);
 		assert!((half.length() - 0.5).abs() < 1e-4, "stick magnitude is the throttle: {half}");
 	}
 

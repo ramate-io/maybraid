@@ -11,11 +11,13 @@ mod stack;
 
 use bevy::prelude::*;
 use characters::CharacterMotionSystems;
-use menu_components::sync_loading_bar_fill;
 use damage::Downed;
-use maybraid_character_controller::{CharacterControlSystems, OrdinaryLocomotionEnabled};
+use maybraid_character_controller::{
+	CharacterControlSystems, ControllerPipeline, MotorRequestStage, OrdinaryLocomotionEnabled,
+};
 use maybraid_input::VirtualPad;
 use maybraid_skill_map::{SkillMapFlick, SkillMapSteerPolicy, SkillMapSystems};
+use menu_components::sync_loading_bar_fill;
 use player::{MoveWish, PlayerLook, PlayerSystems};
 
 pub use actions::{
@@ -193,6 +195,7 @@ pub struct TanzUserPlugin;
 
 impl Plugin for TanzUserPlugin {
 	fn build(&self, app: &mut App) {
+		ControllerPipeline::configure(app);
 		app.add_message::<TanzInput>()
 			.init_resource::<OrdinaryLocomotionEnabled>()
 			.init_resource::<SkillMapSteerPolicy>()
@@ -208,6 +211,7 @@ impl Plugin for TanzUserPlugin {
 						.before(SkillMapSystems::Steer),
 					TanzUserSystems::Match.after(TanzUserSystems::Recognize),
 					TanzUserSystems::Execute
+						.in_set(MotorRequestStage::Tanz)
 						.after(TanzUserSystems::Match)
 						.after(PlayerSystems::Intent)
 						.before(PlayerSystems::Body),

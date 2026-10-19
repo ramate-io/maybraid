@@ -5,7 +5,7 @@ mod look;
 
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
-use maybraid_character_controller::CharacterControlSystems;
+use maybraid_character_controller::{CharacterControlSystems, ControllerPipeline};
 use maybraid_spatial_rumble::{SpatialRumbleListener, SpatialRumblePlugin, SpatialRumbleSystems};
 use player::{PlayerPlugin, PlayerPoseSystems, PlayerSystems};
 use std::f32::consts::FRAC_PI_2;
@@ -101,7 +101,9 @@ impl Plugin for PlayerCameraPlugin {
 				(
 					PlayerCameraSystems::Look
 						.after(CharacterControlSystems)
-						.before(PlayerSystems::Intent),
+						.after(ControllerPipeline::Bind)
+						.before(PlayerSystems::Intent)
+						.before(ControllerPipeline::MotorRequest),
 					PlayerCameraSystems::Body
 						.after(PlayerCameraSystems::Look)
 						.before(PlayerPoseSystems::Item),
