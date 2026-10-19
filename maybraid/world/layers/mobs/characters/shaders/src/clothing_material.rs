@@ -145,10 +145,9 @@ impl ClothingMaterialUniform {
 		}
 
 		let mut rasters = [[Vec4::ZERO; MATERIAL_RASTER_WIDTH]; MATERIAL_RASTER_CHANNELS];
-		for channel in 0..MATERIAL_RASTER_CHANNELS {
+		for (channel, slot) in rasters.iter_mut().enumerate().take(MATERIAL_RASTER_CHANNELS) {
 			let samples = material_ref.rasters.get_or(channel, 0.0);
-			let rows = MaterialRasters::packed_rows(samples);
-			rasters[channel] = rows.map(Vec4::from_array);
+			*slot = MaterialRasters::packed_rows(samples).map(Vec4::from_array);
 		}
 
 		Self {

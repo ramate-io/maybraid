@@ -4,6 +4,7 @@ mod animation;
 pub mod camera;
 pub mod character;
 pub mod commands;
+mod capture;
 mod skinning;
 mod ui;
 
@@ -17,6 +18,7 @@ use camera_controls::look::CameraLookPlugin;
 use character::CharacterConfig;
 use characters::{CharacterHostSystems, CharacterHostsPlugin, CharacterMotionSystems};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
+use game_commands::GameCommandDrawerConfig;
 use skinning::{dump_bones_to_console, DumpBonesRequest};
 
 pub struct CharactersPlaygroundPlugin;
@@ -27,10 +29,20 @@ impl Plugin for CharactersPlaygroundPlugin {
 			.init_resource::<character::CharacterSyncState>()
 			.init_resource::<AnimationPlayback>()
 			.init_resource::<DumpBonesRequest>()
+			.init_resource::<capture::PendingFaceCapture>()
 			.add_plugins(CameraLookPlugin::default())
 			.add_plugins(CharacterHostsPlugin)
-			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
-			.add_systems(Startup, (camera::setup_camera, setup_lighting))
+			.add_plugins(game_command_plugin())
+			.add_systems(
+				Startup,
+				(
+					camera::setup_camera,
+					setup_lighting,
+					capture::apply_capture_lighting,
+					capture::queue_face_capture_from_env,
+				)
+					.chain(),
+			)
 			.add_systems(
 				Update,
 				(
@@ -47,10 +59,23 @@ impl Plugin for CharactersPlaygroundPlugin {
 					apply_joint_preview.after(CharacterMotionSystems::Anim),
 					draw_authoring_gizmos.after(apply_joint_preview),
 					dump_bones_to_console,
+					capture::ensure_capture_ui_hidden,
+					capture::apply_pending_face_capture.after(character::sync_character),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
 	}
+}
+
+fn game_command_plugin() -> GameCommandPlugin<PlaygroundCommand> {
+	let mut plugin = GameCommandPlugin::with_config(ui::ui_config());
+	if capture::capture_mode() {
+		plugin = plugin.with_drawer_config(GameCommandDrawerConfig {
+			open_at_start: false,
+			..GameCommandDrawerConfig::default()
+		});
+	}
+	plugin
 }
 
 fn setup_lighting(mut commands: Commands) {

@@ -1,6 +1,7 @@
 //! In-game clap command hierarchy.
 
 pub mod character;
+pub mod eye_glow;
 
 use bevy::prelude::*;
 pub use character::Character;

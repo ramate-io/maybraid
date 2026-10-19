@@ -10,6 +10,7 @@ use crate::skin::{
 	fulfill_skin_ref_roots, invalidate_changed_skin_ref_roots, prune_duplicate_part_scenes,
 	remap_part_skin_to_rig,
 };
+use crate::eye_glow::EyeGlowPlugin;
 use crate::terrain_pitch::prepare_character_terrain_pitch;
 
 /// Register chunk fulfill for a structural [`ComponentsOnly<C>`] host.
@@ -40,6 +41,9 @@ impl Plugin for CharacterComponentsPlugin {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<RigPlugin>() {
 			app.add_plugins(RigPlugin);
+		}
+		if !app.is_plugin_added::<EyeGlowPlugin>() {
+			app.add_plugins(EyeGlowPlugin);
 		}
 		app.configure_sets(
 			Update,

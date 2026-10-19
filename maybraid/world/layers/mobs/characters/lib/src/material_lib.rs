@@ -6,19 +6,52 @@
 //! and falls through to vegetation.
 
 use bevy::ecs::system::SystemParam;
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use character_items::{ClothingMaterial, FirearmMaterial};
 use character_shaders::{ClothingShaderMaterial, FaceShaderKind, FaceShaderMaterial};
 use material_ref::{
 	material_ref_plugin_installed, MaterialId, MaterialLib, MaterialRef, MaterialRefCache,
-	MaterialRefKey, MaterialRefPlugin, StandardMaterialLib, StandardMaterialRefCache,
+	MaterialRefKey, MaterialRefPlugin, MaterialRefRoot, PropagateToDescendants,
+	StandardMaterialLib, StandardMaterialRefCache,
 };
+
+use crate::eye_glow::EyeGlowMaterialInstance;
+
+/// Cache of resolved [`FaceShaderMaterial`] handles (shared + per-character instance).
+#[derive(Resource, Debug, Default)]
+pub struct FaceShaderMaterialRefCache {
+	shared: HashMap<MaterialRefKey, Handle<FaceShaderMaterial>>,
+	instanced: HashMap<(MaterialRefKey, Entity), Handle<FaceShaderMaterial>>,
+}
+
+impl FaceShaderMaterialRefCache {
+	pub fn len(&self) -> usize {
+		self.shared.len() + self.instanced.len()
+	}
+
+	pub fn instanced_len(&self) -> usize {
+		self.instanced.len()
+	}
+
+	/// Drops instanced handles whose [`EyeGlowMaterialInstance::owner`] no longer exists.
+	pub fn prune_instanced_owners(
+		&mut self,
+		owner_alive: impl Fn(Entity) -> bool,
+		materials: &mut Assets<FaceShaderMaterial>,
+	) {
+		self.instanced.retain(|(_key, owner), handle| {
+			if owner_alive(*owner) {
+				return true;
+			}
+			materials.remove(handle);
+			false
+		});
+	}
+}
 
 /// Cache of resolved [`ClothingShaderMaterial`] handles.
 pub type ClothingShaderMaterialRefCache = MaterialRefCache<ClothingShaderMaterial>;
-
-/// Cache of resolved [`FaceShaderMaterial`] handles.
-pub type FaceShaderMaterialRefCache = MaterialRefCache<FaceShaderMaterial>;
 
 /// Inserts clothing and face material caches. Idempotent.
 pub fn init_character_material_caches(app: &mut App) {
@@ -29,24 +62,63 @@ pub fn init_character_material_caches(app: &mut App) {
 
 /// Claims face recipe names only. Does not fall through to [`StandardMaterial`].
 #[derive(SystemParam)]
-pub struct FaceMaterialLib<'w> {
+pub struct FaceMaterialLib<'w, 's> {
 	pub face_materials: ResMut<'w, Assets<FaceShaderMaterial>>,
 	pub face_cache: ResMut<'w, FaceShaderMaterialRefCache>,
+	parents: Query<'w, 's, &'static ChildOf>,
+	propagating_roots: Query<'w, 's, &'static MaterialRefRoot, With<PropagateToDescendants>>,
+	instances: Query<'w, 's, &'static EyeGlowMaterialInstance>,
 }
 
-impl FaceMaterialLib<'_> {
-	fn resolve_face(&mut self, material_ref: &MaterialRef) -> Handle<FaceShaderMaterial> {
+impl FaceMaterialLib<'_, '_> {
+	fn resolve_face(
+		&mut self,
+		material_ref: &MaterialRef,
+		mesh_entity: Entity,
+	) -> Handle<FaceShaderMaterial> {
 		let key = MaterialRefKey::from(material_ref);
-		if let Some(handle) = self.face_cache.get(&key) {
+		let owner = face_material_owner(
+			mesh_entity,
+			&self.parents,
+			&self.propagating_roots,
+			&self.instances,
+		);
+		if let Some(owner) = owner {
+			if let Some(handle) = self.face_cache.instanced.get(&(key.clone(), owner)) {
+				return handle.clone();
+			}
+			let handle = self
+				.face_materials
+				.add(FaceShaderMaterial::from_material_ref(material_ref));
+			self.face_cache.instanced.insert((key, owner), handle.clone());
 			return handle;
 		}
+		if let Some(handle) = self.face_cache.shared.get(&key) {
+			return handle.clone();
+		}
 		let handle = self.face_materials.add(FaceShaderMaterial::from_material_ref(material_ref));
-		self.face_cache.insert(key, handle.clone());
+		self.face_cache.shared.insert(key, handle.clone());
 		handle
 	}
 }
 
-impl MaterialLib for FaceMaterialLib<'_> {
+fn face_material_owner(
+	mesh_entity: Entity,
+	parents: &Query<&ChildOf>,
+	propagating_roots: &Query<&MaterialRefRoot, With<PropagateToDescendants>>,
+	instances: &Query<&EyeGlowMaterialInstance>,
+) -> Option<Entity> {
+	let mut entity = mesh_entity;
+	for _ in 0..64 {
+		if propagating_roots.get(entity).is_ok() {
+			return instances.get(entity).ok().map(|instance| instance.owner);
+		}
+		entity = parents.get(entity).ok()?.parent();
+	}
+	None
+}
+
+impl MaterialLib for FaceMaterialLib<'_, '_> {
 	fn try_fulfill(
 		&mut self,
 		entity: Entity,
@@ -55,7 +127,7 @@ impl MaterialLib for FaceMaterialLib<'_> {
 	) -> bool {
 		match &material_ref.name {
 			MaterialId::Name(name) if FaceShaderKind::is_face_recipe(name) => {
-				let handle = self.resolve_face(material_ref);
+				let handle = self.resolve_face(material_ref, entity);
 				commands
 					.entity(entity)
 					.try_remove::<MeshMaterial3d<StandardMaterial>>()
@@ -117,12 +189,12 @@ impl MaterialLib for ClothingMaterialLib<'_> {
 /// Standalone apps use [`StandaloneCharacterMaterialLib`]. Composed apps (Maybraid
 /// World) nest this and supply their own fallback.
 #[derive(SystemParam)]
-pub struct CharacterMaterialLib<'w> {
-	pub face: FaceMaterialLib<'w>,
+pub struct CharacterMaterialLib<'w, 's> {
+	pub face: FaceMaterialLib<'w, 's>,
 	pub clothing: ClothingMaterialLib<'w>,
 }
 
-impl MaterialLib for CharacterMaterialLib<'_> {
+impl MaterialLib for CharacterMaterialLib<'_, '_> {
 	fn try_fulfill(
 		&mut self,
 		entity: Entity,
@@ -140,12 +212,12 @@ impl MaterialLib for CharacterMaterialLib<'_> {
 
 /// Menu / playground fulfill: character, then green [`StandardMaterial`].
 #[derive(SystemParam)]
-pub struct StandaloneCharacterMaterialLib<'w> {
-	pub character: CharacterMaterialLib<'w>,
+pub struct StandaloneCharacterMaterialLib<'w, 's> {
+	pub character: CharacterMaterialLib<'w, 's>,
 	pub standard: StandardMaterialLib<'w>,
 }
 
-impl MaterialLib for StandaloneCharacterMaterialLib<'_> {
+impl MaterialLib for StandaloneCharacterMaterialLib<'_, '_> {
 	fn try_fulfill(
 		&mut self,
 		entity: Entity,
@@ -174,6 +246,6 @@ impl Plugin for CharacterMaterialRefPlugin {
 		if material_ref_plugin_installed(app) {
 			return;
 		}
-		app.add_plugins(MaterialRefPlugin::<StandaloneCharacterMaterialLib<'_>>::default());
+		app.add_plugins(MaterialRefPlugin::<StandaloneCharacterMaterialLib<'_, '_>>::default());
 	}
 }

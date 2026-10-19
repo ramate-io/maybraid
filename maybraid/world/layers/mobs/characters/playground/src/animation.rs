@@ -221,7 +221,7 @@ pub fn draw_authoring_gizmos(
 	bones: Query<(&GlobalTransform, &Transform, &AnimBone)>,
 	config: Res<CharacterConfig>,
 ) {
-	if playback.joint.is_empty() {
+	if crate::capture::capture_mode() || playback.joint.is_empty() {
 		return;
 	}
 	let origin = config.transform.translation;
