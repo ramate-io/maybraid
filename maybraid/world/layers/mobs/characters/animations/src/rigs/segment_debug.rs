@@ -17,7 +17,8 @@ fn segment_debug_enabled_from_env() -> bool {
 #[cfg(test)]
 mod tests {
 	use std::hint::black_box;
-	use std::time::Instant;
+
+	use bench_support::{DurationSamples, Microbench};
 
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 
@@ -105,28 +106,11 @@ mod tests {
 			}
 		}
 
-		fn median_ns(times: &[u128]) -> u128 {
-			let mut sorted = times.to_vec();
-			sorted.sort_unstable();
-			sorted[sorted.len() / 2]
-		}
-
-		let mut legacy_times = Vec::with_capacity(RUNS);
-		let mut cached_times = Vec::with_capacity(RUNS);
-
-		for _ in 0..RUNS {
-			let start = Instant::now();
-			sample_legacy();
-			legacy_times.push(start.elapsed().as_nanos());
-		}
-		for _ in 0..RUNS {
-			let start = Instant::now();
-			sample_cached();
-			cached_times.push(start.elapsed().as_nanos());
-		}
-
-		let legacy_median = median_ns(&legacy_times);
-		let cached_median = median_ns(&cached_times);
+		let bench = Microbench::repeats(RUNS);
+		let legacy_times = DurationSamples::from_unsorted(bench.collect_ok(sample_legacy));
+		let cached_times = DurationSamples::from_unsorted(bench.collect_ok(sample_cached));
+		let legacy_median = legacy_times.median().as_nanos();
+		let cached_median = cached_times.median().as_nanos();
 		let samples = CHARACTERS * FRAMES;
 		eprintln!(
 			"segment_debug_gate_microbench: characters={} frames={} runs={}",

@@ -186,7 +186,8 @@ pub(crate) fn capture_into<A: Animation<HumanoidV0Rig>>(
 #[cfg(test)]
 mod tests {
 	use std::hint::black_box;
-	use std::time::Instant;
+
+	use bench_support::{Microbench, NanoSamples};
 
 	use bevy::prelude::*;
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
@@ -271,17 +272,15 @@ mod tests {
 		Ok(())
 	}
 
-	fn bench_mix_pose_blend(legacy: bool, weight: f32) -> Vec<u128> {
+	fn bench_mix_pose_blend(legacy: bool, weight: f32) -> anyhow::Result<NanoSamples> {
 		const FRAMES: u32 = 5_000;
 		const CHARACTERS: u32 = 32;
-		const RUNS: u32 = 5;
+		const RUNS: usize = 5;
 		let mix = Mix::new(Squat::for_loop(1.0, 1.0), Spring::default(), weight);
 		let mut rigs: Vec<HumanoidV0Rig> =
 			(0..CHARACTERS).map(|_| HumanoidV0Rig::imported()).collect();
-
-		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
-		for _ in 0..RUNS {
-			let start = Instant::now();
+		let operations = u128::from(FRAMES) * u128::from(CHARACTERS);
+		Microbench::repeats(RUNS).collect_per_op_nanos(operations, || {
 			for frame in 0..FRAMES {
 				let frame = black_box(frame);
 				for (index, rig) in rigs.iter_mut().enumerate() {
@@ -297,17 +296,13 @@ mod tests {
 					black_box(&rig.pose);
 				}
 			}
-			let samples = FRAMES as u64 * CHARACTERS as u64;
-			run_ns.push(start.elapsed().as_nanos() / samples as u128);
-		}
-		run_ns.sort_unstable();
-		run_ns
+		})
 	}
 
-	fn bench_jump_apply_for(legacy: bool) -> Vec<u128> {
+	fn bench_jump_apply_for(legacy: bool) -> anyhow::Result<NanoSamples> {
 		const FRAMES: u32 = 500;
 		const CHARACTERS: u32 = 32;
-		const RUNS: u32 = 5;
+		const RUNS: usize = 5;
 		let jump = TwoFootedJump::default();
 		let cycle = {
 			let rig = HumanoidV0Rig::imported();
@@ -319,10 +314,8 @@ mod tests {
 		};
 		let mut rigs: Vec<(HumanoidV0Rig, f32)> =
 			(0..CHARACTERS).map(|_| (HumanoidV0Rig::imported(), squat_start)).collect();
-
-		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
-		for _ in 0..RUNS {
-			let start = Instant::now();
+		let operations = u128::from(FRAMES) * u128::from(CHARACTERS);
+		Microbench::repeats(RUNS).collect_per_op_nanos(operations, || {
 			for frame in 0..FRAMES {
 				let _frame = black_box(frame);
 				for (rig, elapsed) in &mut rigs {
@@ -339,11 +332,7 @@ mod tests {
 					black_box(&rig.pose);
 				}
 			}
-			let samples = FRAMES as u64 * CHARACTERS as u64;
-			run_ns.push(start.elapsed().as_nanos() / samples as u128);
-		}
-		run_ns.sort_unstable();
-		run_ns
+		})
 	}
 
 	fn blend_clips_legacy(rig: &mut HumanoidV0Rig, jump: &TwoFootedJump, elapsed: f32) {
@@ -420,15 +409,14 @@ mod tests {
 		)
 	}
 
-	fn bench_mix_effects_for(legacy: bool, weight: f32) -> Vec<u128> {
+	fn bench_mix_effects_for(legacy: bool, weight: f32) -> anyhow::Result<NanoSamples> {
 		const FRAMES: u32 = 5_000;
 		const CHARACTERS: u32 = 32;
-		const RUNS: u32 = 5;
+		const RUNS: usize = 5;
 		let mix = Mix::new(Squat::for_loop(1.0, 1.0), TwoFootedJump::default(), weight);
 		let rigs: Vec<HumanoidV0Rig> = (0..CHARACTERS).map(|_| HumanoidV0Rig::imported()).collect();
-		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
-		for _ in 0..RUNS {
-			let start = Instant::now();
+		let operations = u128::from(FRAMES) * u128::from(CHARACTERS);
+		Microbench::repeats(RUNS).collect_per_op_nanos(operations, || {
 			for frame in 0..FRAMES {
 				let frame = black_box(frame);
 				for (index, rig) in rigs.iter().enumerate() {
@@ -441,11 +429,7 @@ mod tests {
 					}
 				}
 			}
-			let samples = FRAMES as u64 * CHARACTERS as u64;
-			run_ns.push(start.elapsed().as_nanos() / samples as u128);
-		}
-		run_ns.sort_unstable();
-		run_ns
+		})
 	}
 
 	#[test]
@@ -464,45 +448,47 @@ mod tests {
 		Ok(())
 	}
 
-	fn report_bench(label: &str, run_ns: &[u128]) {
-		let min = *run_ns.first().expect("run");
-		let median = run_ns[run_ns.len() / 2];
-		let mean = run_ns.iter().sum::<u128>() / run_ns.len() as u128;
+	fn report_bench(label: &str, run_ns: &NanoSamples) {
 		eprintln!(
 			"mix_blend_microbench {label}: runs={runs:?} min={min} median={median} mean={mean} ns/sample",
-			runs = run_ns,
+			runs = run_ns.as_slice(),
+			min = run_ns.min(),
+			median = run_ns.median(),
+			mean = run_ns.mean(),
 		);
 	}
 
 	/// `cargo test -p character-animations mix_effects_microbench --release -- --ignored --nocapture`
 	#[test]
 	#[ignore]
-	fn mix_effects_microbench() {
+	fn mix_effects_microbench() -> anyhow::Result<()> {
 		eprintln!(
 			"32 characters × 5000 frames × 5 runs, Mix<Squat,TwoFootedJump> effects_for only"
 		);
-		report_bench("weight 0.0 legacy", &bench_mix_effects_for(true, 0.0));
-		report_bench("weight 0.0 optimized", &bench_mix_effects_for(false, 0.0));
-		report_bench("weight 1.0 legacy", &bench_mix_effects_for(true, 1.0));
-		report_bench("weight 1.0 optimized", &bench_mix_effects_for(false, 1.0));
-		report_bench("weight 0.5 legacy", &bench_mix_effects_for(true, 0.5));
-		report_bench("weight 0.5 optimized", &bench_mix_effects_for(false, 0.5));
+		report_bench("weight 0.0 legacy", &bench_mix_effects_for(true, 0.0)?);
+		report_bench("weight 0.0 optimized", &bench_mix_effects_for(false, 0.0)?);
+		report_bench("weight 1.0 legacy", &bench_mix_effects_for(true, 1.0)?);
+		report_bench("weight 1.0 optimized", &bench_mix_effects_for(false, 1.0)?);
+		report_bench("weight 0.5 legacy", &bench_mix_effects_for(true, 0.5)?);
+		report_bench("weight 0.5 optimized", &bench_mix_effects_for(false, 0.5)?);
+		Ok(())
 	}
 
 	/// `cargo test -p character-animations mix_blend_microbench --release -- --ignored --nocapture`
 	#[test]
 	#[ignore]
-	fn mix_blend_microbench() {
+	fn mix_blend_microbench() -> anyhow::Result<()> {
 		eprintln!("32 characters × 5000 frames × 5 runs, Mix<Squat,Spring> pose blend");
-		report_bench("weight 0.0 legacy", &bench_mix_pose_blend(true, 0.0));
-		report_bench("weight 0.0 optimized", &bench_mix_pose_blend(false, 0.0));
-		report_bench("weight 1.0 legacy", &bench_mix_pose_blend(true, 1.0));
-		report_bench("weight 1.0 optimized", &bench_mix_pose_blend(false, 1.0));
-		report_bench("weight 0.5 legacy", &bench_mix_pose_blend(true, 0.5));
-		report_bench("weight 0.5 optimized", &bench_mix_pose_blend(false, 0.5));
+		report_bench("weight 0.0 legacy", &bench_mix_pose_blend(true, 0.0)?);
+		report_bench("weight 0.0 optimized", &bench_mix_pose_blend(false, 0.0)?);
+		report_bench("weight 1.0 legacy", &bench_mix_pose_blend(true, 1.0)?);
+		report_bench("weight 1.0 optimized", &bench_mix_pose_blend(false, 1.0)?);
+		report_bench("weight 0.5 legacy", &bench_mix_pose_blend(true, 0.5)?);
+		report_bench("weight 0.5 optimized", &bench_mix_pose_blend(false, 0.5)?);
 		eprintln!("32 characters advancing TwoFootedJump through spring/fall/land blends");
-		report_bench("jump apply_for legacy blend", &bench_jump_apply_for(true));
-		report_bench("jump apply_for optimized blend", &bench_jump_apply_for(false));
+		report_bench("jump apply_for legacy blend", &bench_jump_apply_for(true)?);
+		report_bench("jump apply_for optimized blend", &bench_jump_apply_for(false)?);
+		Ok(())
 	}
 
 	#[test]

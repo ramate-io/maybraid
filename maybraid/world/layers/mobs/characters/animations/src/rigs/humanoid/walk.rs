@@ -121,7 +121,8 @@ mod tests {
 	use bevy::prelude::*;
 	use character_rigs::authoring::resolve_humanoid;
 	use std::hint::black_box;
-	use std::time::Instant;
+
+	use bench_support::{Microbench, NanoSamples};
 
 	use super::*;
 	use crate::animations::{Idle, Run};
@@ -348,18 +349,16 @@ mod tests {
 		}
 	}
 
-	fn bench_locomotion_apply(use_masked: bool) -> Vec<u128> {
+	fn bench_locomotion_apply(use_masked: bool) -> anyhow::Result<NanoSamples> {
 		const FRAMES: u32 = 2_000;
 		const CHARACTERS: u32 = 32;
-		const RUNS: u32 = 5;
+		const RUNS: usize = 5;
 		let clips: [(&str, f32); 3] = [("idle", 0.0), ("walk", 0.25), ("run", 0.5)];
 
 		let mut rigs: Vec<HumanoidV0Rig> =
 			(0..CHARACTERS).map(|_| HumanoidV0Rig::imported()).collect();
-
-		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
-		for _ in 0..RUNS {
-			let start = Instant::now();
+		let operations = u128::from(FRAMES) * u128::from(CHARACTERS);
+		Microbench::repeats(RUNS).collect_per_op_nanos(operations, || {
 			for frame in 0..FRAMES {
 				let frame = black_box(frame);
 				for (index, rig) in rigs.iter_mut().enumerate() {
@@ -396,33 +395,29 @@ mod tests {
 					black_box(&rig.pose);
 				}
 			}
-			let samples = FRAMES as u64 * CHARACTERS as u64;
-			run_ns.push(start.elapsed().as_nanos() / samples as u128);
-		}
-
-		run_ns.sort_unstable();
-		run_ns
+		})
 	}
 
-	fn report_locomotion_bench(label: &str, run_ns: &[u128]) {
-		let min = *run_ns.first().expect("run");
-		let median = run_ns[run_ns.len() / 2];
-		let mean = run_ns.iter().sum::<u128>() / run_ns.len() as u128;
-		let spread = run_ns.last().expect("run") - min;
+	fn report_locomotion_bench(label: &str, run_ns: &NanoSamples) {
 		eprintln!(
 			"locomotion_resolve_microbench {label}: runs={runs:?} min={min} median={median} mean={mean} spread={spread} ns/sample",
-			runs = run_ns,
+			runs = run_ns.as_slice(),
+			min = run_ns.min(),
+			median = run_ns.median(),
+			mean = run_ns.mean(),
+			spread = run_ns.spread(),
 		);
 	}
 
 	/// `cargo test -p character-animations locomotion_resolve_microbench --release -- --ignored --nocapture`
 	#[test]
 	#[ignore]
-	fn locomotion_resolve_microbench() {
+	fn locomotion_resolve_microbench() -> anyhow::Result<()> {
 		eprintln!(
 			"32 humanoid characters, idle/walk/run sample_pose + resolve, real Animation apply path"
 		);
-		report_locomotion_bench("legacy write_pose", &bench_locomotion_apply(false));
-		report_locomotion_bench("masked partial resolve", &bench_locomotion_apply(true));
+		report_locomotion_bench("legacy write_pose", &bench_locomotion_apply(false)?);
+		report_locomotion_bench("masked partial resolve", &bench_locomotion_apply(true)?);
+		Ok(())
 	}
 }

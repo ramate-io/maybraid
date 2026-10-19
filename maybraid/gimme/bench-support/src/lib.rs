@@ -1,17 +1,18 @@
 //! Small development-only helpers for Gimme / LOD fill microbenches.
 //!
-//! This is not a harness framework. Scenario setup, destination lifetimes, and
-//! correctness checks stay in the calling bench so hidden state cannot inflate
-//! results.
+//! Timing, stats, and A/B reporting live in Bevy-free [`bench_support`]. This
+//! crate adds the Gimme fill/index harness (host lattice, historical adapters,
+//! optional persistent Bevy systems). Scenario setup, destination lifetimes,
+//! and correctness checks stay in the calling bench.
 
 mod history;
-mod microbench;
 mod spatial;
 
-pub use history::{ExtendIntersectingFill, PairWalkFill};
-pub use microbench::{
-	AbReport, DurationStats, Microbench, PassLifetime, DEFAULT_REPEATS, DEFAULT_WARMUP,
+pub use bench_support::{
+	AbReport, DurationSamples, DurationStats, Microbench, NanoSamples, PassLifetime, Percentile,
+	PublishedDuration, Stopwatch, DEFAULT_REPEATS, DEFAULT_WARMUP,
 };
+pub use history::{ExtendIntersectingFill, PairWalkFill};
 pub use spatial::HostGrid;
 
 #[cfg(feature = "bevy")]

@@ -50,7 +50,8 @@ where
 #[cfg(test)]
 mod tests {
 	use std::hint::black_box;
-	use std::time::Instant;
+
+	use bench_support::{Microbench, NanoSamples};
 
 	use super::*;
 	use bevy::prelude::*;
@@ -104,10 +105,13 @@ mod tests {
 		Ok(())
 	}
 
-	fn bench_transition_apply(legacy: bool, transition_progress: f32) -> Vec<u128> {
+	fn bench_transition_apply(
+		legacy: bool,
+		transition_progress: f32,
+	) -> anyhow::Result<NanoSamples> {
 		const FRAMES: u32 = 5_000;
 		const CHARACTERS: u32 = 32;
-		const RUNS: u32 = 5;
+		const RUNS: usize = 5;
 		let mut source = HumanoidV0Rig::imported();
 		Fall::default().apply(&mut source, 1.0);
 		let from_pose = source.pose.clone();
@@ -115,10 +119,8 @@ mod tests {
 
 		let mut rigs: Vec<HumanoidV0Rig> =
 			(0..CHARACTERS).map(|_| HumanoidV0Rig::imported()).collect();
-
-		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
-		for _ in 0..RUNS {
-			let start = Instant::now();
+		let operations = u128::from(FRAMES) * u128::from(CHARACTERS);
+		Microbench::repeats(RUNS).collect_per_op_nanos(operations, || {
 			for frame in 0..FRAMES {
 				let frame = black_box(frame);
 				for (index, rig) in rigs.iter_mut().enumerate() {
@@ -140,34 +142,31 @@ mod tests {
 					}
 				}
 			}
-			let samples = FRAMES as u64 * CHARACTERS as u64;
-			run_ns.push(start.elapsed().as_nanos() / samples as u128);
-		}
-		run_ns.sort_unstable();
-		run_ns
+		})
 	}
 
 	/// `cargo test -p character-animations transition_apply_endpoints_microbench --release -- --ignored --nocapture`
 	#[test]
 	#[ignore]
-	fn transition_apply_endpoints_microbench() {
+	fn transition_apply_endpoints_microbench() -> anyhow::Result<()> {
 		eprintln!(
 			"32 characters × 5000 frames, Transition Spring→Squat, real Transition::apply path"
 		);
 		for (label, progress) in [("weight 0.0", 0.0), ("weight 1.0", 1.0), ("weight 0.5", 0.5)] {
-			let legacy = bench_transition_apply(true, progress);
-			let optimized = bench_transition_apply(false, progress);
+			let legacy = bench_transition_apply(true, progress)?;
+			let optimized = bench_transition_apply(false, progress)?;
 			eprintln!(
 				"transition_apply_endpoints_microbench {label} legacy: min={} median={} ns/sample",
-				legacy.first().expect("run"),
-				legacy[legacy.len() / 2]
+				legacy.min(),
+				legacy.median()
 			);
 			eprintln!(
 				"transition_apply_endpoints_microbench {label} optimized: min={} median={} ns/sample",
-				optimized.first().expect("run"),
-				optimized[optimized.len() / 2]
+				optimized.min(),
+				optimized.median()
 			);
 		}
+		Ok(())
 	}
 
 	#[test]

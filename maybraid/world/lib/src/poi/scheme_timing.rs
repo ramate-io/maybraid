@@ -9,8 +9,8 @@
 //! ```
 
 use std::hint::black_box;
-use std::time::{Duration, Instant};
 
+use bench_support::{DurationSamples, DurationStats, PublishedDuration, Stopwatch};
 use bevy::math::IVec2;
 use chico::{ForestSelection, LayeringKind};
 use durham::Durham;
@@ -37,40 +37,8 @@ const RERUN: &str =
 type Ground = OnTerrain<Durham>;
 type Urban = Urbanization<Richmond<Ground>>;
 
-struct Stats {
-	median: Duration,
-	p95: Duration,
-	total: Duration,
-}
-
-fn percentile(sorted: &[Duration], p: f64) -> Duration {
-	if sorted.is_empty() {
-		return Duration::ZERO;
-	}
-	let idx = ((sorted.len() as f64 - 1.0) * p).round() as usize;
-	sorted[idx.min(sorted.len() - 1)]
-}
-
-fn stats(mut samples: Vec<Duration>) -> Stats {
-	samples.sort_unstable();
-	Stats {
-		median: percentile(&samples, 0.50),
-		p95: percentile(&samples, 0.95),
-		total: samples.iter().copied().sum(),
-	}
-}
-
-fn fmt_us(d: Duration) -> String {
-	format!("{:.2}", d.as_secs_f64() * 1_000_000.0)
-}
-
-fn fmt_total(d: Duration) -> String {
-	let ms = d.as_secs_f64() * 1_000.0;
-	if ms >= 1_000.0 {
-		format!("{:.2} s", d.as_secs_f64())
-	} else {
-		format!("{:.2} ms", ms)
-	}
+fn stats(samples: Vec<std::time::Duration>) -> DurationStats {
+	DurationSamples::from_unsorted(samples).stats_or_zero()
 }
 
 fn world_interests() -> PoiInterests {
@@ -176,22 +144,22 @@ fn assert_world_paths_agree(tiles: &[IVec2], interests: &PoiInterests) {
 	assert!(hits > 0, "seeded LushJungle region produced no tile POIs");
 }
 
-fn time_world_cold(tiles: &[IVec2], interests: &PoiInterests) -> Stats {
+fn time_world_cold(tiles: &[IVec2], interests: &PoiInterests) -> DurationStats {
 	let mut samples = Vec::with_capacity(COLD_ITERS * tiles.len());
 	let mut scratch = Vec::new();
 	for _ in 0..COLD_ITERS {
 		let storage = seed_forest();
 		for &tile in tiles {
-			let started = Instant::now();
-			collect_world(&storage, tile, interests, &mut scratch);
-			samples.push(started.elapsed());
+			samples.push(Stopwatch::time(|| {
+				collect_world(&storage, tile, interests, &mut scratch);
+			}));
 			black_box(scratch.len());
 		}
 	}
 	stats(samples)
 }
 
-fn time_world_warm(tiles: &[IVec2], interests: &PoiInterests) -> Stats {
+fn time_world_warm(tiles: &[IVec2], interests: &PoiInterests) -> DurationStats {
 	let storage = seed_forest();
 	let mut scratch = Vec::new();
 	for &tile in tiles {
@@ -206,32 +174,32 @@ fn time_world_warm(tiles: &[IVec2], interests: &PoiInterests) -> Stats {
 	let mut samples = Vec::with_capacity(WARM_ITERS * tiles.len());
 	for _ in 0..WARM_ITERS {
 		for &tile in tiles {
-			let started = Instant::now();
-			collect_world(&storage, tile, interests, &mut scratch);
-			samples.push(started.elapsed());
+			samples.push(Stopwatch::time(|| {
+				collect_world(&storage, tile, interests, &mut scratch);
+			}));
 			black_box(scratch.len());
 		}
 	}
 	stats(samples)
 }
 
-fn time_grove_cold(tiles: &[IVec2], interests: &PoiInterests) -> Stats {
+fn time_grove_cold(tiles: &[IVec2], interests: &PoiInterests) -> DurationStats {
 	let mut samples = Vec::with_capacity(COLD_ITERS * tiles.len());
 	let mut scratch = Vec::new();
 	for _ in 0..COLD_ITERS {
 		let storage = seed_forest();
 		let mut cx = GenerationContext::new(&storage);
 		for &tile in tiles {
-			let started = Instant::now();
-			collect_grove(&mut cx, tile, interests, &mut scratch);
-			samples.push(started.elapsed());
+			samples.push(Stopwatch::time(|| {
+				collect_grove(&mut cx, tile, interests, &mut scratch);
+			}));
 			black_box(scratch.len());
 		}
 	}
 	stats(samples)
 }
 
-fn time_grove_warm(tiles: &[IVec2], interests: &PoiInterests) -> Stats {
+fn time_grove_warm(tiles: &[IVec2], interests: &PoiInterests) -> DurationStats {
 	let storage = seed_forest();
 	let mut cx = GenerationContext::new(&storage);
 	let mut scratch = Vec::new();
@@ -247,23 +215,23 @@ fn time_grove_warm(tiles: &[IVec2], interests: &PoiInterests) -> Stats {
 	let mut samples = Vec::with_capacity(WARM_ITERS * tiles.len());
 	for _ in 0..WARM_ITERS {
 		for &tile in tiles {
-			let started = Instant::now();
-			collect_grove(&mut cx, tile, interests, &mut scratch);
-			samples.push(started.elapsed());
+			samples.push(Stopwatch::time(|| {
+				collect_grove(&mut cx, tile, interests, &mut scratch);
+			}));
 			black_box(scratch.len());
 		}
 	}
 	stats(samples)
 }
 
-fn print_scheme_row(path: &str, cold: &Stats, warm: &Stats) {
+fn print_scheme_row(path: &str, cold: &DurationStats, warm: &DurationStats) {
 	eprintln!(
 		"| {path} | {} | {} | {} | {} | {} |",
-		fmt_us(cold.median),
-		fmt_us(cold.p95),
-		fmt_us(warm.median),
-		fmt_us(warm.p95),
-		fmt_total(warm.total),
+		PublishedDuration(cold.median).micros_2(),
+		PublishedDuration(cold.p95).micros_2(),
+		PublishedDuration(warm.median).micros_2(),
+		PublishedDuration(warm.p95).micros_2(),
+		PublishedDuration(warm.total).compact(),
 	);
 }
 

@@ -12,8 +12,8 @@
 
 use std::collections::HashSet;
 use std::hint::black_box;
-use std::time::{Duration, Instant};
 
+use bench_support::{DurationSamples, DurationStats, PublishedDuration, Stopwatch};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
@@ -47,44 +47,8 @@ impl Query {
 	}
 }
 
-struct Stats {
-	median: Duration,
-	p95: Duration,
-	total: Duration,
-}
-
-fn percentile(sorted: &[Duration], p: f64) -> Duration {
-	if sorted.is_empty() {
-		return Duration::ZERO;
-	}
-	let idx = ((sorted.len() as f64 - 1.0) * p).round() as usize;
-	sorted[idx.min(sorted.len() - 1)]
-}
-
-fn stats(mut samples: Vec<Duration>) -> Stats {
-	samples.sort_unstable();
-	Stats {
-		median: percentile(&samples, 0.50),
-		p95: percentile(&samples, 0.95),
-		total: samples.iter().copied().sum(),
-	}
-}
-
-fn us(d: Duration) -> f64 {
-	d.as_secs_f64() * 1_000_000.0
-}
-
-fn fmt_us(d: Duration) -> String {
-	format!("{:.2}", us(d))
-}
-
-fn fmt_total(d: Duration) -> String {
-	let ms = d.as_secs_f64() * 1_000.0;
-	if ms >= 1_000.0 {
-		format!("{:.2} s", d.as_secs_f64())
-	} else {
-		format!("{:.2} ms", ms)
-	}
+fn stats(samples: Vec<std::time::Duration>) -> DurationStats {
+	DurationSamples::from_unsorted(samples).stats_or_zero()
 }
 
 fn tile_grid(count: usize) -> Vec<IVec2> {
@@ -224,7 +188,7 @@ fn assert_paths_agree(entries: &[PoiEntry], queries: &[Query], interests: &PoiIn
 	}
 }
 
-fn time_scan(entries: &[PoiEntry], queries: &[Query], interests: &PoiInterests) -> Stats {
+fn time_scan(entries: &[PoiEntry], queries: &[Query], interests: &PoiInterests) -> DurationStats {
 	for _ in 0..WARMUP {
 		for &query in queries {
 			black_box(scan_query(entries, query, interests).len());
@@ -233,9 +197,10 @@ fn time_scan(entries: &[PoiEntry], queries: &[Query], interests: &PoiInterests) 
 	let mut samples = Vec::with_capacity(WARM_ITERS * queries.len());
 	for _ in 0..WARM_ITERS {
 		for &query in queries {
-			let started = Instant::now();
-			let hits = scan_query(entries, query, interests);
-			samples.push(started.elapsed());
+			let mut hits = Vec::new();
+			samples.push(Stopwatch::time(|| {
+				hits = scan_query(entries, query, interests);
+			}));
 			black_box(hits.len());
 		}
 	}
@@ -246,16 +211,16 @@ fn time_scheme_cold<S: PoiOrigin>(
 	seed: impl Fn() -> HcsgStorage,
 	queries: &[Query],
 	interests: &PoiInterests,
-) -> Stats {
+) -> DurationStats {
 	let mut samples = Vec::with_capacity(COLD_ITERS * queries.len());
 	let mut scratch = Vec::new();
 	for _ in 0..COLD_ITERS {
 		let storage = seed();
 		let mut cx = GenerationContext::new(&storage);
 		for &query in queries {
-			let started = Instant::now();
-			collect_query::<S>(&mut cx, query, interests, &mut scratch);
-			samples.push(started.elapsed());
+			samples.push(Stopwatch::time(|| {
+				collect_query::<S>(&mut cx, query, interests, &mut scratch);
+			}));
 			black_box(scratch.len());
 		}
 	}
@@ -266,7 +231,7 @@ fn time_scheme_warm<S: PoiOrigin>(
 	storage: &HcsgStorage,
 	queries: &[Query],
 	interests: &PoiInterests,
-) -> Stats {
+) -> DurationStats {
 	let mut cx = GenerationContext::new(storage);
 	let mut scratch = Vec::new();
 	for &query in queries {
@@ -281,32 +246,32 @@ fn time_scheme_warm<S: PoiOrigin>(
 	let mut samples = Vec::with_capacity(WARM_ITERS * queries.len());
 	for _ in 0..WARM_ITERS {
 		for &query in queries {
-			let started = Instant::now();
-			collect_query::<S>(&mut cx, query, interests, &mut scratch);
-			samples.push(started.elapsed());
+			samples.push(Stopwatch::time(|| {
+				collect_query::<S>(&mut cx, query, interests, &mut scratch);
+			}));
 			black_box(scratch.len());
 		}
 	}
 	stats(samples)
 }
 
-fn print_scan_row(n: usize, tiles: i32, measured: &Stats) {
+fn print_scan_row(n: usize, tiles: i32, measured: &DurationStats) {
 	eprintln!(
 		"| {n} | {tiles} | scan | — | — | {} | {} | {} |",
-		fmt_us(measured.median),
-		fmt_us(measured.p95),
-		fmt_total(measured.total),
+		PublishedDuration(measured.median).micros_2(),
+		PublishedDuration(measured.p95).micros_2(),
+		PublishedDuration(measured.total).compact(),
 	);
 }
 
-fn print_scheme_row(n: usize, tiles: i32, path: &str, cold: &Stats, warm: &Stats) {
+fn print_scheme_row(n: usize, tiles: i32, path: &str, cold: &DurationStats, warm: &DurationStats) {
 	eprintln!(
 		"| {n} | {tiles} | {path} | {} | {} | {} | {} | {} |",
-		fmt_us(cold.median),
-		fmt_us(cold.p95),
-		fmt_us(warm.median),
-		fmt_us(warm.p95),
-		fmt_total(warm.total),
+		PublishedDuration(cold.median).micros_2(),
+		PublishedDuration(cold.p95).micros_2(),
+		PublishedDuration(warm.median).micros_2(),
+		PublishedDuration(warm.p95).micros_2(),
+		PublishedDuration(warm.total).compact(),
 	);
 }
 

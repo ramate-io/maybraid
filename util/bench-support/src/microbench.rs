@@ -1,11 +1,24 @@
-//! Shared timing, stats, and A/B reporting.
+//! Warmup + timed repeats, A/B order, and destination-lifetime labels.
 
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
 
+use crate::stats::DurationStats;
+
 pub const DEFAULT_WARMUP: usize = 1;
 pub const DEFAULT_REPEATS: usize = 7;
+
+/// Times a caller-supplied closure. Workload setup stays outside.
+pub struct Stopwatch;
+
+impl Stopwatch {
+	pub fn time<F: FnOnce()>(run: F) -> Duration {
+		let started = Instant::now();
+		run();
+		started.elapsed()
+	}
+}
 
 /// How a destination lives across measured passes.
 ///
@@ -45,6 +58,10 @@ impl Default for Microbench {
 }
 
 impl Microbench {
+	pub fn repeats(repeats: usize) -> Self {
+		Self { warmup: 0, repeats }
+	}
+
 	pub fn collect<F>(&self, mut run: F) -> Result<Vec<Duration>>
 	where
 		F: FnMut() -> Result<()>,
@@ -57,6 +74,31 @@ impl Microbench {
 			samples.push(Self::time(&mut run)?);
 		}
 		Ok(samples)
+	}
+
+	pub fn collect_ok<F>(&self, mut run: F) -> Vec<Duration>
+	where
+		F: FnMut(),
+	{
+		for _ in 0..self.warmup {
+			run();
+		}
+		let mut samples = Vec::with_capacity(self.repeats);
+		for _ in 0..self.repeats {
+			samples.push(Stopwatch::time(&mut run));
+		}
+		samples
+	}
+
+	pub fn collect_per_op_nanos<F>(
+		&self,
+		operations: u128,
+		run: F,
+	) -> Result<crate::stats::NanoSamples>
+	where
+		F: FnMut(),
+	{
+		crate::stats::NanoSamples::from_durations_per_op(&self.collect_ok(run), operations)
 	}
 
 	/// Time A and B in alternating order so sample `i` does not always run A first.
@@ -91,47 +133,6 @@ impl Microbench {
 		let started = Instant::now();
 		run()?;
 		Ok(started.elapsed())
-	}
-}
-
-/// min / median / mean / max over timed samples.
-#[derive(Clone, Copy, Debug)]
-pub struct DurationStats {
-	pub min: Duration,
-	pub median: Duration,
-	pub mean: Duration,
-	pub max: Duration,
-}
-
-impl DurationStats {
-	pub fn from_samples(samples: &[Duration]) -> Result<Self> {
-		if samples.is_empty() {
-			return Err(anyhow::anyhow!("microbench produced no samples"));
-		}
-		let mut sorted = samples.to_vec();
-		sorted.sort();
-		Ok(Self {
-			min: sorted[0],
-			median: sorted[sorted.len() / 2],
-			mean: samples.iter().copied().sum::<Duration>() / u32::try_from(samples.len())?,
-			max: sorted[sorted.len() - 1],
-		})
-	}
-
-	pub fn per_op(self, operations: u32) -> Result<Self> {
-		if operations == 0 {
-			return Err(anyhow::anyhow!("cannot normalize by zero operations"));
-		}
-		Ok(Self {
-			min: self.min / operations,
-			median: self.median / operations,
-			mean: self.mean / operations,
-			max: self.max / operations,
-		})
-	}
-
-	pub fn format(self) -> String {
-		format!("{:?} / {:?} / {:?} / {:?}", self.min, self.median, self.mean, self.max)
 	}
 }
 
@@ -186,19 +187,6 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn stats_from_samples() -> Result<()> {
-		let samples =
-			[Duration::from_millis(4), Duration::from_millis(2), Duration::from_millis(6)];
-		let stats = DurationStats::from_samples(&samples)?;
-		assert_eq!(stats.min, Duration::from_millis(2));
-		assert_eq!(stats.median, Duration::from_millis(4));
-		assert_eq!(stats.max, Duration::from_millis(6));
-		assert_eq!(stats.mean, Duration::from_millis(4));
-		assert_eq!(stats.per_op(2)?.mean, Duration::from_millis(2));
-		Ok(())
-	}
-
-	#[test]
 	fn alternating_order_runs_both_sides() -> Result<()> {
 		let mut original_n = 0usize;
 		let mut revised_n = 0usize;
@@ -217,5 +205,13 @@ mod tests {
 		assert_eq!(original_n, 5);
 		assert_eq!(revised_n, 5);
 		Ok(())
+	}
+
+	#[test]
+	fn collect_ok_skips_warmup_samples() {
+		let mut n = 0usize;
+		let samples = Microbench { warmup: 2, repeats: 3 }.collect_ok(|| n += 1);
+		assert_eq!(n, 5);
+		assert_eq!(samples.len(), 3);
 	}
 }
