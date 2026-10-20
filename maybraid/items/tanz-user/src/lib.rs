@@ -13,12 +13,13 @@ use bevy::prelude::*;
 use characters::CharacterMotionSystems;
 use damage::Downed;
 use maybraid_character_controller::{
-	CharacterControlSystems, ControllerPipeline, MotorRequestStage, OrdinaryLocomotionEnabled,
+	CharacterControlSystems, ControllerPipeline, MotorRequestStage, OrdinaryLocomotion,
+	OrdinaryLocomotionEnabled,
 };
 use maybraid_input::VirtualPad;
 use maybraid_skill_map::{SkillMapFlick, SkillMapSteerPolicy, SkillMapSystems};
 use menu_components::sync_loading_bar_fill;
-use player::{MoveWish, PlayerLook, PlayerSystems};
+use player::{MoveWish, Player, PlayerLook, PlayerSystems};
 
 pub use actions::{
 	dash_ground_speed, forward_dash, healing_salute, left_strafe, right_strafe, starter_stack,
@@ -267,11 +268,26 @@ fn toggle_control_mode(
 }
 
 fn sync_tanz_policies(
-	users: Query<&TanzUser>,
+	mut commands: Commands,
+	users: Query<(Entity, &TanzUser, Has<Player>)>,
 	mut ordinary: ResMut<OrdinaryLocomotionEnabled>,
 	mut policy: ResMut<SkillMapSteerPolicy>,
 ) {
-	let tanzer = users.iter().any(|user| user.mode.is_tanzer());
+	let mut saw_player = false;
+	let mut player_tanzer = false;
+	let mut any_tanzer = false;
+	for (entity, user, is_player) in &users {
+		let tanzer = user.mode.is_tanzer();
+		any_tanzer |= tanzer;
+		commands.entity(entity).insert(OrdinaryLocomotion::from_tanzer(tanzer));
+		if is_player {
+			saw_player = true;
+			player_tanzer |= tanzer;
+		}
+	}
+	// Pad-level resources follow the local player when one exists. Playgrounds
+	// that only spawn a TanzUser keep the previous any-Tanzer derivation.
+	let tanzer = if saw_player { player_tanzer } else { any_tanzer };
 	ordinary.0 = !tanzer;
 	*policy = if tanzer { SkillMapSteerPolicy::Tanz } else { SkillMapSteerPolicy::Standard };
 }
@@ -425,6 +441,52 @@ mod tests {
 			.add_systems(Update, sync_tanz_policies);
 		app.world_mut()
 			.spawn(TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() });
+		app.update();
+		assert_eq!(*app.world().resource::<SkillMapSteerPolicy>(), SkillMapSteerPolicy::Tanz);
+		assert!(!app.world().resource::<OrdinaryLocomotionEnabled>().0);
+		Ok(())
+	}
+
+	#[test]
+	fn npc_tanzer_does_not_steal_the_player_pad() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<OrdinaryLocomotionEnabled>()
+			.init_resource::<SkillMapSteerPolicy>()
+			.add_systems(Update, sync_tanz_policies);
+		let player = app
+			.world_mut()
+			.spawn((Player, TanzUser { mode: ControlMode::Standard, ..TanzUser::default() }))
+			.id();
+		let npc = app
+			.world_mut()
+			.spawn(TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() })
+			.id();
+		app.update();
+		assert_eq!(*app.world().resource::<SkillMapSteerPolicy>(), SkillMapSteerPolicy::Standard);
+		assert!(app.world().resource::<OrdinaryLocomotionEnabled>().0);
+		assert_eq!(
+			app.world().get::<OrdinaryLocomotion>(player).copied(),
+			Some(OrdinaryLocomotion(true))
+		);
+		assert_eq!(
+			app.world().get::<OrdinaryLocomotion>(npc).copied(),
+			Some(OrdinaryLocomotion(false))
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn player_tanzer_owns_pad_ordinary_and_skill_map_steer() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<OrdinaryLocomotionEnabled>()
+			.init_resource::<SkillMapSteerPolicy>()
+			.add_systems(Update, sync_tanz_policies);
+		app.world_mut()
+			.spawn((Player, TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() }));
+		app.world_mut()
+			.spawn(TanzUser { mode: ControlMode::Standard, ..TanzUser::default() });
 		app.update();
 		assert_eq!(*app.world().resource::<SkillMapSteerPolicy>(), SkillMapSteerPolicy::Tanz);
 		assert!(!app.world().resource::<OrdinaryLocomotionEnabled>().0);

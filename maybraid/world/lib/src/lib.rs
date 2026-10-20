@@ -59,8 +59,8 @@ pub use commands::{
 };
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
-	InventoryEditCameraFollow, WorldGameplayEnabled, WorldMenuShell, WorldPlaySessionEnded,
-	WorldSceneryVisible, WorldSurfaceReady, WorldSurfaceSet,
+	ActivityPolicySystems, InventoryEditCameraFollow, WorldGameplayEnabled, WorldMenuShell,
+	WorldPlaySessionEnded, WorldSceneryVisible, WorldSurfaceReady, WorldSurfaceSet,
 };
 pub use cycle_target::InventoryCycleTarget;
 pub use durham::Durham;

@@ -22,7 +22,7 @@ use world_player::{
 
 use crate::map_view::WorldMapView;
 
-pub use maybraid_world_controller::WorldGameplayEnabled;
+pub use maybraid_world_controller::{ActivityPolicySystems, WorldGameplayEnabled};
 
 /// Explicit play-session teardown. The game shell writes this when leaving
 /// to Home. Pause must not write it.

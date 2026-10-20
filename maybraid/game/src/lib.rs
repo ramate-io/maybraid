@@ -28,18 +28,18 @@ use crate::recovery::remember_world_session;
 use crate::shell::{
 	apply_pause_character_look, apply_shell_look, attach_preview_camera, despawn_loading_backdrop,
 	detach_preview_camera, enter_characters, enter_home, enter_loading_world, enter_world,
-	enter_world_menu, exit_world_menu, restore_stashed_world_camera, spawn_loading_backdrop,
-	stamp_preview_render_layers, ShellRoute,
+	enter_world_menu, exit_world_menu, resolve_session_activity, restore_stashed_world_camera,
+	spawn_loading_backdrop, stamp_preview_render_layers, ShellRoute,
 };
 use bevy::prelude::*;
 use bevy::render::renderer::RenderAdapterInfo;
 use bevy::window::PrimaryWindow;
-use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use maybraid_character_controller::{CharacterControlSystems, CharacterIntent, MotorRequestStage};
 use maybraid_input::{MenuNav, MenuNavPad, PadButton, VirtualPad};
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
 	host_memory_bytes, parse_device_tier_env, parse_visual_style_env, reset_first_spawn_offer,
-	resume_discovery_from_saved_waypoints, AdapterKind, AgentDrive, Durham,
+	resume_discovery_from_saved_waypoints, ActivityPolicySystems, AdapterKind, AgentDrive, Durham,
 	InventoryEditCameraFollow, PlayerPhysicsEnabled, PlayerSpawnXz, ShadowQuality,
 	TerrainStreaming, VisualStyle, VisualStyleSetting, VisualStyleSignals, WorldGameplayEnabled,
 	WorldMenuShell, WorldMobHudEnabled, WorldPlaySessionEnded, WorldPlayerLoadout, WorldPlugin,
@@ -76,7 +76,13 @@ impl Plugin for GamePlugin {
 			.insert_resource(ClearColor(MENU_CLEAR))
 			.init_resource::<PlaySession>()
 			.init_state::<GameFlow>()
-			.add_sub_state::<WorldPause>();
+			.add_sub_state::<WorldPause>()
+			.configure_sets(
+				Update,
+				ActivityPolicySystems
+					.after(CharacterControlSystems)
+					.before(MotorRequestStage::WorldFilter),
+			);
 		if !app.world().contains_resource::<RecoveryMode>() {
 			app.insert_resource(RecoveryMode::from_runtime(false));
 		}
@@ -197,8 +203,10 @@ impl Plugin for GamePlugin {
 					.run_if(in_state(GameFlow::Characters)),
 				toggle_world_pause
 					.after(CharacterControlSystems)
+					.before(ActivityPolicySystems)
 					.before(TextMenuSystems::InputLock)
 					.run_if(in_state(GameFlow::World)),
+				resolve_session_activity.in_set(ActivityPolicySystems),
 			),
 		);
 	}
@@ -579,7 +587,6 @@ fn start_pause_target(pause: WorldPause, sub_screen: bool) -> Option<WorldPause>
 fn toggle_world_pause(
 	pause: Res<State<WorldPause>>,
 	mut next: ResMut<NextState<WorldPause>>,
-	mut gameplay: ResMut<WorldGameplayEnabled>,
 	mut intents: MessageReader<CharacterIntent>,
 	mut nav: ResMut<MenuNavPad>,
 	pad: Option<Res<VirtualPad>>,
@@ -593,9 +600,6 @@ fn toggle_world_pause(
 	};
 	if !pad.is_some_and(|pad| pad.just_pressed(PadButton::A)) {
 		nav.events.retain(|event| *event != MenuNav::Select);
-	}
-	if target == WorldPause::Menu {
-		gameplay.0 = false;
 	}
 	next.set(target);
 }
@@ -1023,6 +1027,26 @@ mod tests {
 		nav.events.push(MenuNav::Select);
 		world.insert_resource(nav);
 		world
+	}
+
+	#[test]
+	fn start_does_not_write_gameplay_itself() -> anyhow::Result<()> {
+		use crate::{toggle_world_pause, WorldPause};
+		use maybraid_world::WorldGameplayEnabled;
+
+		let mut world = start_pressed_world(WorldPause::Playing);
+		world
+			.run_system_once(toggle_world_pause)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		anyhow::ensure!(
+			world.resource::<WorldGameplayEnabled>().0,
+			"toggle only sets NextState; ActivityPolicySystems owns the flag"
+		);
+		anyhow::ensure!(matches!(
+			world.resource::<NextState<WorldPause>>(),
+			NextState::Pending(WorldPause::Menu)
+		));
+		Ok(())
 	}
 
 	#[test]

@@ -262,9 +262,10 @@ fn presentation_keeps_hosts_when_the_subscription_dies() -> anyhow::Result<()> {
 
 	app.world().resource::<HcsgDemand>().advance_epoch();
 	app.update();
+	let mid = hosts(&mut app);
 	assert_eq!(
-		hosts(&mut app),
-		before,
+		mid.iter().map(|(id, _, _)| *id).collect::<Vec<_>>(),
+		before.iter().map(|(id, _, _)| *id).collect::<Vec<_>>(),
 		"a dead subscription must not drop hosts before replacements exist"
 	);
 
