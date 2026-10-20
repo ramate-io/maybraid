@@ -2224,6 +2224,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "bikanwarda-character"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "character-animations",
+ "character-motion",
+ "character-rigs",
+ "characters",
+ "lod",
+ "lod-avian",
+ "rigs",
+]
+
+[[package]]
 name = "bincode"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2775,10 +2791,12 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "bevy-character-ui-menu-renderer",
+ "bikanwarda-character",
  "camera-controls",
  "character-animations",
  "character-creation-menus",
  "character-items",
+ "character-motion",
  "character-rigs",
  "character-ui-menu",
  "characters",
@@ -13844,6 +13862,7 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "building-shaders",
+ "character-shaders",
  "characters",
  "chico",
  "firearms",
