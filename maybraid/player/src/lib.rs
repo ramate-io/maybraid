@@ -16,7 +16,9 @@ mod stance;
 
 use bevy::prelude::*;
 use characters::{CharacterMotionSystems, CharacterPoseSystems};
-use maybraid_character_controller::CharacterControlSystems;
+use maybraid_character_controller::{
+	CharacterControlSystems, ControllerPipeline, MotorRequestStage,
+};
 
 pub use body::{
 	apply_character_controller, apply_character_mobility, apply_locomotion_capsule,
@@ -88,12 +90,18 @@ impl Plugin for PlayerPlugin {
 		if !app.is_plugin_added::<PlayerPresentationPlugin>() {
 			app.add_plugins(PlayerPresentationPlugin);
 		}
+		ControllerPipeline::configure(app);
 		app.init_resource::<CharacterLocomotion>()
 			.configure_sets(
 				Update,
 				(
-					PlayerSystems::Intent.after(CharacterControlSystems),
-					PlayerSystems::Body.after(PlayerSystems::Intent).in_set(PlayerControlSystems),
+					PlayerSystems::Intent
+						.in_set(MotorRequestStage::Standard)
+						.after(CharacterControlSystems),
+					PlayerSystems::Body
+						.after(PlayerSystems::Intent)
+						.in_set(PlayerControlSystems)
+						.in_set(ControllerPipeline::Motor),
 					PlayerSystems::Locomotion
 						.after(PlayerSystems::Body)
 						.before(CharacterMotionSystems::Anim),

@@ -152,6 +152,12 @@ pub(crate) fn sync_skill_map_enabled(
 	}
 }
 
+/// World gameplay filter + vegetation host mirror.
+///
+/// While live this does not write `player::MoveWish` or `JumpWish`. Those are
+/// owned by `apply_move_intents` (`MotorRequestStage::Standard`); Tanzer
+/// overwrites on `MotorRequestStage::Tanz`. Pause / text / map still zero
+/// every capsule wish here so the filter wins.
 pub(crate) fn apply_intents_to_movement(
 	mode: Res<PlaygroundMode>,
 	text_focus: Res<TextEntryFocus>,
@@ -162,7 +168,7 @@ pub(crate) fn apply_intents_to_movement(
 	mut intents: MessageReader<CharacterIntent>,
 	cameras: Query<&CameraController, With<Camera3d>>,
 	mut wishes: Query<&mut MoveWish, With<Player>>,
-	mut player_wishes: Query<(Entity, &mut PlayerMoveWish, Has<Player>), With<CharacterController>>,
+	mut player_wishes: Query<(Entity, &mut PlayerMoveWish), With<CharacterController>>,
 	mut movement: MessageWriter<MovementAction>,
 ) {
 	if *mode != PlaygroundMode::Character
@@ -172,14 +178,14 @@ pub(crate) fn apply_intents_to_movement(
 		for mut wish in &mut wishes {
 			wish.0 = Vec3::ZERO;
 		}
-		for (entity, mut wish, _) in &mut player_wishes {
+		for (entity, mut wish) in &mut player_wishes {
 			wish.0 = Vec3::ZERO;
 			commands.entity(entity).remove::<(JumpWish, Sprinting)>();
 		}
 		return;
 	}
 
-	if ordinary.is_some_and(|enabled| !enabled.0) {
+	if ordinary.is_some_and(|enabled| !enabled.is_enabled()) {
 		for _ in intents.read() {}
 		return;
 	}
@@ -194,31 +200,14 @@ pub(crate) fn apply_intents_to_movement(
 		}
 	}
 
-	let wish_dir = if move_stick != Vec2::ZERO {
-		if let Ok(camera) = cameras.single() {
-			let yaw = Quat::from_axis_angle(Vec3::Y, camera.yaw);
-			let forward = yaw * -Vec3::Z;
-			let right_dir = yaw * Vec3::X;
-			(right_dir * move_stick.x + forward * move_stick.y).clamp_length_max(1.0)
-		} else {
-			Vec3::ZERO
-		}
-	} else {
-		Vec3::ZERO
-	};
+	// Vegetation host only. Shared motor wish stays with Standard / Tanz stages.
+	let wish_dir = cameras
+		.single()
+		.ok()
+		.map(|camera| PlayerLook::wish_from_yaw(camera.yaw, move_stick))
+		.unwrap_or(Vec3::ZERO);
 	for mut wish in &mut wishes {
 		wish.0 = wish_dir;
-	}
-	// Only the streamed vegetation body. A foreign [`CharacterController`] is
-	// one that [`player`] already drove.
-	for (entity, mut wish, world_body) in &mut player_wishes {
-		if !world_body {
-			continue;
-		}
-		wish.0 = wish_dir;
-		if jump {
-			commands.entity(entity).insert(JumpWish);
-		}
 	}
 
 	if move_stick != Vec2::ZERO {
@@ -399,6 +388,33 @@ mod tests {
 		assert!(world.get::<LocomotionCapsule>(player).is_some());
 		assert!(world.get::<MaybraidPlayer>(player).is_some());
 		assert!(world.get::<PlayerMoveWish>(player).is_some());
+	}
+
+	#[test]
+	fn live_adapter_does_not_write_the_shared_motor_wish() -> anyhow::Result<()> {
+		use player_camera::CameraController;
+
+		let mut world = World::new();
+		world.init_resource::<Messages<CharacterIntent>>();
+		world.init_resource::<Messages<MovementAction>>();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(TextEntryFocus(false));
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.spawn((Camera3d::default(), CameraController::default()));
+		let leftover = Vec3::X;
+		let body = world
+			.spawn((Player, MoveWish(Vec3::ZERO), CharacterController, PlayerMoveWish(leftover)))
+			.id();
+		world.write_message(CharacterIntent::Move(Vec2::Y));
+		world
+			.run_system_once(apply_intents_to_movement)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.get::<PlayerMoveWish>(body).map(|wish| wish.0), Some(leftover));
+		assert_eq!(
+			world.get::<MoveWish>(body).map(|wish| wish.0),
+			Some(PlayerLook::wish_from_yaw(0.0, Vec2::Y))
+		);
+		Ok(())
 	}
 
 	#[test]

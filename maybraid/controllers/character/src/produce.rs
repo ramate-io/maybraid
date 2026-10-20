@@ -19,9 +19,13 @@ pub fn produce_character_intents(
 	mut intents: MessageWriter<CharacterIntent>,
 ) {
 	let stance_enabled = gameplay.is_enabled() && !menu_owns.is_some_and(|owns| owns.0);
-	for intent in
-		collect(&pad, config.trigger_press_threshold, time.delta_secs(), stance_enabled, ordinary.0)
-	{
+	for intent in collect(
+		&pad,
+		config.trigger_press_threshold,
+		time.delta_secs(),
+		stance_enabled,
+		ordinary.is_enabled(),
+	) {
 		intents.write(intent);
 	}
 }
