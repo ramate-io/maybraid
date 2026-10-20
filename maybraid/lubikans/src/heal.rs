@@ -472,7 +472,7 @@ mod tests {
 	use super::*;
 	use crate::activation::{LubikanActivationDenied, LubikanActivationPhase};
 	use crate::identity::{LubikanAccountId, LubikanDefinition, LubikanDefinitionId};
-	use crate::ledger::LubikanLedger;
+	use crate::ledger::LubikanBodyOf;
 	use crate::plugin::LubikansPlugin;
 	use crate::{
 		LubikanActivationFinished, LubikanActivationRefused, LubikanActivationRequest,
@@ -509,9 +509,7 @@ mod tests {
 			.self_definition()
 			.activation_cost;
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			ledger.apply_to_equipped(cost);
 		}
@@ -533,16 +531,14 @@ mod tests {
 		owner: Entity,
 		account: LubikanAccountId,
 	) -> Result<LubikanActivationPhase> {
-		app.world()
-			.get::<LubikanLedger>(owner)
+		LubikanBodyOf::ledger(app.world(), owner)
 			.and_then(|ledger| ledger.account(account))
 			.map(|account| account.activation().phase)
 			.ok_or_else(|| anyhow!("activation phase"))
 	}
 
 	fn charge(app: &App, owner: Entity, account: LubikanAccountId) -> Result<f32> {
-		app.world()
-			.get::<LubikanLedger>(owner)
+		LubikanBodyOf::ledger(app.world(), owner)
 			.and_then(|ledger| ledger.account(account))
 			.map(|account| account.charge().current())
 			.ok_or_else(|| anyhow!("charge"))
@@ -698,9 +694,7 @@ mod tests {
 		let extra = LubikanDefinition::new(LubikanDefinitionId::from_raw(3), 40.0, 5.0);
 		app.world_mut().resource_mut::<crate::LubikanCatalog>().register(extra);
 		let other = {
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			let other = ledger.ensure_owned(extra);
 			ledger.apply_to(other, 9.0);
@@ -708,9 +702,7 @@ mod tests {
 		};
 		fund_and_activate(&mut app, owner)?;
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			if !ledger.select(Some(other)) {
 				return Err(anyhow!("switch"));
@@ -917,9 +909,7 @@ mod tests {
 			health.take_damage(40.0);
 		}
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			ledger.apply_to_equipped(cost);
 		}

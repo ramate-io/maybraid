@@ -4,13 +4,13 @@ use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_items::{Inventory, InventorySlot};
 use game_commands::command::TextEntryFocus;
-use lubikans::{LubikanAccountId, LubikanLedger, LubikanOwner, LubikanSystems};
+use lubikans::{LubikanAccountId, LubikanBodyOf, LubikanLedger, LubikanOwner, LubikanSystems};
 use maybraid_character_controller::{CharacterIntent, InventoryCyclingCategory};
 use world_player::Player as VegetationPlayer;
 
 use crate::control::WorldGameplayEnabled;
 use crate::map_view::WorldMapView;
-use crate::weapon::WorldPlayerLoadout;
+use crate::weapon::{commit_body_inventory, WorldPlayerLoadout};
 
 /// Readable active equipped-queue category for HUD lanes ([#1113](https://github.com/ramate-io/maybraid/issues/1113)).
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,7 +91,8 @@ pub(crate) fn cycle_equipped_inventory_queues(
 	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
 	players: Query<(Entity, &InventoryUser), With<VegetationPlayer>>,
 	mut bags: Query<&mut Inventory>,
-	mut ledgers: Query<&mut LubikanLedger, With<LubikanOwner>>,
+	mut ledgers: Query<&mut LubikanLedger>,
+	body_of: Query<&LubikanBodyOf, With<LubikanOwner>>,
 ) {
 	if !gameplay.accepts_character_input(text_focus.0, map.is_some_and(|map| map.open)) {
 		return;
@@ -115,7 +116,8 @@ pub(crate) fn cycle_equipped_inventory_queues(
 	};
 	if category.0 == InventoryCyclingCategory::Lubikans {
 		for (player, _) in &players {
-			if let Ok(mut ledger) = ledgers.get_mut(player) {
+			let holder = body_of.get(player).map(LubikanBodyOf::character).unwrap_or(player);
+			if let Ok(mut ledger) = ledgers.get_mut(holder) {
 				cycle_ledger_selection(&mut ledger, dir);
 			}
 		}
@@ -144,7 +146,13 @@ pub(crate) fn cycle_equipped_inventory_queues(
 		}
 		let snapshot = bag.clone();
 		if let Some(loadout) = loadout.as_deref_mut() {
-			loadout.retarget_inventory(snapshot.clone());
+			commit_body_inventory(
+				&mut commands,
+				player,
+				loadout,
+				snapshot,
+				body_of.get(player).ok(),
+			);
 			commands
 				.entity(player)
 				.insert(crate::weapon::AppliedWorldPlayerLoadout(loadout.clone()));

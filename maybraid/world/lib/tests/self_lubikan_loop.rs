@@ -16,7 +16,7 @@ use bevy::time::{TimeUpdateStrategy, Virtual};
 use damage::{Health, Hit};
 use game_commands::command::TextEntryFocus;
 use lubikans::{
-	LubikanActivationFinished, LubikanActivationOutcome, LubikanActivationPhase, LubikanLedger,
+	LubikanActivationFinished, LubikanActivationOutcome, LubikanActivationPhase, LubikanBodyOf,
 	LubikanOwner, LubikanSelfHeal, LubikanSystems, LubikansPlugin,
 };
 use lubikans_damage::LubikanDamagePlugin;
@@ -113,16 +113,14 @@ fn take_damage(app: &mut App, target: Entity, amount: f32) {
 }
 
 fn charge(app: &App, player: Entity) -> f32 {
-	app.world()
-		.get::<LubikanLedger>(player)
+	LubikanBodyOf::ledger(app.world(), player)
 		.and_then(|ledger| ledger.account(lubikans::LubikanAccountId::SELF))
 		.map(|account| account.charge().current())
 		.unwrap_or(0.0)
 }
 
 fn phase(app: &App, player: Entity) -> LubikanActivationPhase {
-	app.world()
-		.get::<LubikanLedger>(player)
+	LubikanBodyOf::ledger(app.world(), player)
 		.and_then(|ledger| ledger.account(lubikans::LubikanAccountId::SELF))
 		.map(|account| account.activation().phase)
 		.unwrap_or(LubikanActivationPhase::Idle)
@@ -156,7 +154,7 @@ fn earn_charge_from_hits_activate_via_intent_heal() -> anyhow::Result<()> {
 		"grant_world_player_lubikan_owner should have granted LubikanOwner"
 	);
 	anyhow::ensure!(
-		app.world().get::<LubikanLedger>(player).is_some(),
+		LubikanBodyOf::ledger(app.world(), player).is_some(),
 		"should have LubikanLedger from LubikansPlugin"
 	);
 
@@ -320,7 +318,7 @@ fn owner_attach_no_duplicate_player() -> anyhow::Result<()> {
 
 	// Verify no panic and components are attached
 	anyhow::ensure!(app.world().get::<LubikanOwner>(player).is_some());
-	anyhow::ensure!(app.world().get::<LubikanLedger>(player).is_some());
+	anyhow::ensure!(LubikanBodyOf::ledger(app.world(), player).is_some());
 
 	// Respawn scenario: remove and re-add world Player marker
 	app.world_mut().entity_mut(player).remove::<Player>();

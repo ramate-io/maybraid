@@ -50,7 +50,9 @@ Damage history stays generic. [`lubikans-damage`](damage/) copies
 a player's ledger, and the sole owner of [`LubikanActivationRequest`](src/activation.rs):
 it spends once, emits [`LubikanActivationSession`](src/activation.rs) or
 [`LubikanActivationRefused`](src/activation.rs), and closes accepted sessions
-through one live-or-cached accessor ([`LubikanActivationAccess`](src/plugin.rs)).
+through one accessor on the session [`LubikanCharacter`](src/ledger.rs). The
+live body points at that character with [`LubikanBodyOf`](src/ledger.rs); body
+replacement does not clone the ledger through a retiring cache.
 Heal mutates in the same frame and publishes [`LubikanActivationFinished`](src/activation.rs);
 [`LubikanActivationReport`](src/activation.rs) consumers call the same close and
 do not finish an already-closed session. Consumers order after

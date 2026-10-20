@@ -9,7 +9,7 @@ use durham::{DurhamSurface, TerrainCellLayout, WorldBaseTerrain};
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use grenade_user::{GrenadeUser, GrenadeUserSystems};
-use lubikans::LubikanOwner;
+use lubikans::{LubikanBodyOf, LubikanOwner};
 use maybraid_character_controller::CharacterIntent;
 use maybraid_input::{PadButton, VirtualPad};
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
@@ -33,7 +33,7 @@ use layer_stack::ActiveGenerationMode;
 
 use crate::control::strip_world_player_motor;
 use crate::map_view::WorldMapView;
-use crate::weapon::WorldPlayerAppearanceRequested;
+use crate::weapon::{commit_body_inventory, WorldPlayerAppearanceRequested};
 use crate::{
 	FirstWave, HcsgDemand, LodJobCounter, PlayerPositionWaypoints, WorldGameplayEnabled,
 	WorldPlayerLoadout,
@@ -230,6 +230,7 @@ fn queue_downed_world_player(
 	mut players: Query<DownedWorldPlayer<'_>, (With<VegetationPlayer>, Added<Downed>)>,
 	mut triggers: Query<&mut WeaponTrigger>,
 	bags: Query<&character_items::Inventory>,
+	body_of: Query<&LubikanBodyOf>,
 ) {
 	for (player, transform, mut velocity, firearm, grenade, inventory) in &mut players {
 		let now = mode.as_deref().and_then(|mode| mode.get().mode_id());
@@ -260,7 +261,13 @@ fn queue_downed_world_player(
 		}
 		if let Some(inventory) = inventory {
 			if let (Some(loadout), Ok(bag)) = (loadout.as_deref_mut(), bags.get(inventory.bag)) {
-				loadout.retarget_inventory(bag.clone());
+				commit_body_inventory(
+					&mut commands,
+					player,
+					loadout,
+					bag.clone(),
+					body_of.get(player).ok(),
+				);
 			}
 			commands.entity(inventory.bag).try_despawn();
 		}

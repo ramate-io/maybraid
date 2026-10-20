@@ -49,7 +49,8 @@ use mob_characters::CharacterBrains;
 use mob_scenes::MobKind;
 
 use crate::control::WorldGameplayEnabled;
-use crate::weapon::{AppliedWorldPlayerLoadout, WorldPlayerLoadout};
+use crate::weapon::{commit_body_inventory, AppliedWorldPlayerLoadout, WorldPlayerLoadout};
+use lubikans::LubikanBodyOf;
 
 /// Default unclaimed-loot lifetime. Independent of the 4 s corpse clock.
 pub const DEFAULT_LOOT_SECS: f32 = 60.0;
@@ -303,13 +304,20 @@ fn apply_claimed_loadout(
 	player: Entity,
 	inventory: &Inventory,
 	loadout: &mut WorldPlayerLoadout,
+	body_of: Option<&LubikanBodyOf>,
 ) {
-	loadout.retarget_inventory(inventory.clone());
+	commit_body_inventory(commands, player, loadout, inventory.clone(), body_of);
 	commands.entity(player).insert(AppliedWorldPlayerLoadout(loadout.clone()));
 }
 
-fn apply_dropped_loadout(loadout: &mut WorldPlayerLoadout, inventory: &Inventory) {
-	loadout.retarget_inventory(inventory.clone());
+fn apply_dropped_loadout(
+	commands: &mut Commands,
+	player: Entity,
+	loadout: &mut WorldPlayerLoadout,
+	inventory: &Inventory,
+	body_of: Option<&LubikanBodyOf>,
+) {
+	commit_body_inventory(commands, player, loadout, inventory.clone(), body_of);
 }
 
 fn attach_stash_visuals(
@@ -620,6 +628,7 @@ pub(crate) fn claim_nearby_stashes(
 	time: Option<Res<Time>>,
 	mut crates: Option<ResMut<crate::crate_loot::CrateLoot>>,
 	players: Query<(Entity, &Transform, &InventoryUser), With<VegetationPlayer>>,
+	body_of: Query<&LubikanBodyOf>,
 	stashes: Query<(Entity, &Transform, &InventoryUser, &StashPolicy), With<WorldStash>>,
 	displayed: Query<(Entity, &ChildOf), With<StashDisplayedItem>>,
 	mut bags: Query<&mut Inventory>,
@@ -668,7 +677,13 @@ pub(crate) fn claim_nearby_stashes(
 			.collect();
 		despawn_displayed_items(&mut commands, &visual);
 		if let Some(loadout) = loadout.as_deref_mut() {
-			apply_claimed_loadout(&mut commands, player, &snapshot, loadout);
+			apply_claimed_loadout(
+				&mut commands,
+				player,
+				&snapshot,
+				loadout,
+				body_of.get(player).ok(),
+			);
 		}
 		if policy.persist {
 			continue;
@@ -717,6 +732,7 @@ fn drop_player_inventory(
 	assets: Option<Res<AssetServer>>,
 	players: Query<DroppingPlayer<'_>, With<VegetationPlayer>>,
 	mut bags: Query<&mut Inventory>,
+	body_of: Query<&LubikanBodyOf>,
 ) {
 	if !intents.read().any(|intent| matches!(intent, CharacterIntent::Inventory)) {
 		return;
@@ -755,7 +771,13 @@ fn drop_player_inventory(
 				.remove::<(GrenadeUser, grenade_user::GrenadeThrow, PlayerUse)>();
 		}
 		if let Some(loadout) = loadout.as_deref_mut() {
-			apply_dropped_loadout(loadout, &snapshot);
+			apply_dropped_loadout(
+				&mut commands,
+				player,
+				loadout,
+				&snapshot,
+				body_of.get(player).ok(),
+			);
 		}
 		spawn_exploded_stashes(
 			&mut commands,
@@ -1608,6 +1630,10 @@ mod tests {
 			.get::<crate::weapon::AppliedWorldPlayerLoadout>(player)
 			.ok_or_else(|| anyhow::anyhow!("applied"))?;
 		assert_eq!(applied.0.inventory.items.len(), 3);
+		let live = world
+			.get::<crate::weapon::LiveCharacterInventory>(player)
+			.ok_or_else(|| anyhow::anyhow!("live"))?;
+		assert_eq!(live.inventory().items.len(), 3);
 		Ok(())
 	}
 

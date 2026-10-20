@@ -115,7 +115,10 @@ struct ActorCellId {
 
 impl ActorCellId {
 	fn from_position(position: Vec3) -> Self {
-		Self { forest: ForestCellId::containing(position), grove: GroveTileId::containing(position) }
+		Self {
+			forest: ForestCellId::containing(position),
+			grove: GroveTileId::containing(position),
+		}
 	}
 
 	fn forest_id(self) -> Id {
@@ -277,7 +280,10 @@ where
 }
 
 fn occupancy_actor_cells(actors: &OccupancyActors) -> BTreeSet<ActorCellId> {
-	actors.iter().map(|transform| ActorCellId::from_position(transform.translation())).collect()
+	actors
+		.iter()
+		.map(|transform| ActorCellId::from_position(transform.translation()))
+		.collect()
 }
 
 struct OccupancyForest<'a>(&'a ChicoForest);
@@ -461,8 +467,8 @@ mod tests {
 	use chico::{ForestExtent, ForestSelection, LayeringKind};
 	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
 	use lubikans::{
-		LubikanAccountId, LubikanChargeChanged, LubikanChargeReason, LubikanChargeRequest,
-		LubikanLedger, LubikanSelfConfig, LubikansPlugin,
+		LubikanAccountId, LubikanBodyOf, LubikanChargeChanged, LubikanChargeReason,
+		LubikanChargeRequest, LubikanLedger, LubikanSelfConfig, LubikansPlugin,
 	};
 	use occupancy_rewards::{
 		evaluate_occupancy_rewards, OccupancyIdentity, OccupancyRewardsPaused, RewardRule,
@@ -656,15 +662,15 @@ mod tests {
 		anyhow::ensure!(view.constructions_grove.contains(&ConstructionTag::SOPES_BANYAN));
 		let entity = app.world().entity(player);
 		anyhow::ensure!(entity.contains::<OccupancyRewardsUser>());
-		let ledger = entity
-			.get::<LubikanLedger>()
+		let ledger = LubikanBodyOf::ledger(app.world(), player)
 			.ok_or_else(|| anyhow::anyhow!("#1149 runtime should attach Self"))?;
 		anyhow::ensure!(ledger.selection().resolved() == LubikanAccountId::SELF);
 		Ok(())
 	}
 
 	#[test]
-	fn player_in_qualifying_grove_accrues_self_charge_at_configured_interval() -> anyhow::Result<()> {
+	fn player_in_qualifying_grove_accrues_self_charge_at_configured_interval() -> anyhow::Result<()>
+	{
 		let storage = publish_lush_origin_cells()?;
 		let mut app = occupancy_app(storage);
 		let player = spawn_player(&mut app, STAND);
@@ -678,9 +684,7 @@ mod tests {
 		let _ = drain_requests(app.world_mut());
 		let _ = drain_changes(app.world_mut());
 		let expected = RewardRule::self_demonstration().amount;
-		let charge_before = app
-			.world()
-			.get::<LubikanLedger>(player)
+		let charge_before = LubikanBodyOf::ledger(app.world(), player)
 			.ok_or_else(|| anyhow::anyhow!("#1149 runtime should attach Self"))?
 			.equipped()
 			.charge()
@@ -693,9 +697,7 @@ mod tests {
 			drain_changes(app.world_mut()).is_empty(),
 			"Self demonstration is 5 s; 4 s must not emit LubikanChargeChanged"
 		);
-		let charge_at_four = app
-			.world()
-			.get::<LubikanLedger>(player)
+		let charge_at_four = LubikanBodyOf::ledger(app.world(), player)
 			.ok_or_else(|| anyhow::anyhow!("ledger"))?
 			.equipped()
 			.charge()
@@ -714,9 +716,7 @@ mod tests {
 		assert_eq!(change.reason, LubikanChargeReason::OCCUPANCY);
 		assert_eq!(change.origin, Some(STAND));
 		assert!(!change.discarded_at_stock_cap());
-		let charge_after = app
-			.world()
-			.get::<LubikanLedger>(player)
+		let charge_after = LubikanBodyOf::ledger(app.world(), player)
 			.ok_or_else(|| anyhow::anyhow!("ledger"))?
 			.equipped()
 			.charge()
@@ -764,9 +764,7 @@ mod tests {
 		assert_eq!(overflow[0].amount, 0.0);
 		assert_eq!(overflow[0].points_earned, requested);
 		assert!(overflow[0].discarded_at_stock_cap());
-		let charge = app
-			.world()
-			.get::<LubikanLedger>(player)
+		let charge = LubikanBodyOf::ledger(app.world(), player)
 			.ok_or_else(|| anyhow::anyhow!("ledger"))?
 			.equipped()
 			.charge()
@@ -988,11 +986,10 @@ mod tests {
 		gate_before_evaluate(&mut app, Duration::from_secs(5))?;
 		anyhow::ensure!(app.world().resource::<WorldOccupancySessionClosed>().0);
 		anyhow::ensure!(app.world().resource::<OccupancyRewardsPaused>().0);
-		anyhow::ensure!(
-			app.world()
-				.get::<OccupancyRewardsUser>(player)
-				.is_some_and(|user| user.session.is_closed())
-		);
+		anyhow::ensure!(app
+			.world()
+			.get::<OccupancyRewardsUser>(player)
+			.is_some_and(|user| user.session.is_closed()));
 		flush_award(&mut app);
 		anyhow::ensure!(drain_changes(app.world_mut()).is_empty());
 		Ok(())

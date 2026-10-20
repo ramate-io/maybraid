@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_items::{Inventory, InventoryItem};
-use lubikans::{LubikanLedger, LubikanOwner};
+use lubikans::{LubikanBodyOf, LubikanLedger};
 use maybraid_agent::{AgentButton, InventoryObservation, PadIntent};
 use maybraid_character_controller::InventoryCyclingCategory;
 use world_player::Player as VegetationPlayer;
@@ -30,9 +30,10 @@ pub(crate) fn publish_agent_inventory(
 	text_focus: Res<TextEntryFocus>,
 	map: Option<Res<WorldMapView>>,
 	category: Option<Res<ActiveInventoryCyclingCategory>>,
-	players: Query<(&InventoryUser, Option<&LubikanLedger>), With<VegetationPlayer>>,
+	players: Query<(Entity, &InventoryUser), With<VegetationPlayer>>,
 	bags: Query<&Inventory>,
-	ledgers: Query<&LubikanLedger, With<LubikanOwner>>,
+	body_of: Query<&LubikanBodyOf>,
+	ledgers: Query<&LubikanLedger>,
 	intent: Option<Res<AgentLastPadIntent>>,
 ) {
 	let mut observation = InventoryObservation {
@@ -42,14 +43,15 @@ pub(crate) fn publish_agent_inventory(
 			.unwrap_or_default(),
 		..InventoryObservation::default()
 	};
-	if let Some((user, player_ledger)) = players.iter().next() {
+	if let Some((player, user)) = players.iter().next() {
 		if let Ok(bag) = bags.get(user.bag) {
 			observation.weapons = queue_ids(bag, bag.weapons.iter().copied());
 			observation.skill_maps = queue_ids(bag, bag.skills.iter().copied());
 			observation.weapon = observation.weapons.first().cloned();
 			observation.skill_map = observation.skill_maps.first().cloned();
 		}
-		let ledger = player_ledger.or_else(|| ledgers.iter().next());
+		let holder = body_of.get(player).map(LubikanBodyOf::character).unwrap_or(player);
+		let ledger = ledgers.get(holder).ok();
 		if let Some(ledger) = ledger {
 			observation.lubikans = ledger
 				.iter()
