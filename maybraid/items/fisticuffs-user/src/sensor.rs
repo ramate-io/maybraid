@@ -3,8 +3,8 @@
 //! The volume is an Avian [`Sensor`] (query-only, [`projectile_layers`]) spawned
 //! only while [`AttackPhase::Active`]. Hits are collected with `SpatialQuery`
 //! the same way grenade blasts and skill-map bursts resolve, then written as
-//! [`damage::Hit`]. [`AttackState::combo_step`] rotates for effort SFX only;
-//! there is no combo-step damage scale.
+//! [`damage::Hit`]. [`AttackState::combo_step`] is unused for damage or
+//! vocals; there is no combo-step damage scale.
 
 use std::collections::{HashMap, HashSet};
 

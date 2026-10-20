@@ -75,13 +75,13 @@ character and aim. Overlap is resolved with `SpatialQuery` (same class as grenad
 blasts and skill-map bursts) and written as
 `damage::Hit { source: Some(attacker), allow_self: false, amount: PLACEHOLDER_JAB_DAMAGE }`.
 [`HitCapsule`](../../player/src/hit.rs) stays receive-only.
-[`maybraid-audio`](../../audio/) plays a short effort grunt on that event (combo
-variants, seeded pitch jitter, `Voices` bus).
+[`maybraid-audio`](../../audio/) plays the same authored damage flinch grunt
+the hurt character already uses (`FlinchSounds::play`, `Voices` bus).
 
 The sensor exists **only** while [`AttackPhase::Active`](src/attack.rs). Cancel,
 weapon swap (`FisticuffsUser` removed), death / `Downed`, and pause (world
 cancels the attack) tear it down. Hits are once-per-strike-per-target. There is
-no combo-step damage scale — `combo_step` is SFX-only.
+no combo-step damage scale — `combo_step` is reserved for a later combo graph.
 
 `PLACEHOLDER_JAB_DAMAGE` (12) and the capsule radius / length / reach are
 **not final balance**. `FisticuffsSensorDebug(true)` draws the live volume
