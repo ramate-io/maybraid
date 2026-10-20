@@ -1,5 +1,7 @@
 //! [`DevelopmentSite`]: which development a cell gets, before any ground is read.
 
+use std::sync::Arc;
+
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Resource;
 use lod::gen::{Id, OriginalId};
@@ -194,6 +196,16 @@ impl DevelopmentSite {
 			None => vec![self.kind],
 		}
 	}
+
+	/// Session roots every [`DevelopmentSite`] fill reads.
+	fn session(cx: &mut GenerationContext) -> Option<(Arc<DevelopmentConfig>, AuthoredDevelopments)> {
+		Some((
+			cx.get::<DevelopmentConfig>(Id::Universal)?,
+			cx.get::<AuthoredDevelopments>(Id::Universal)
+				.map(|authored| (*authored).clone())
+				.unwrap_or_default(),
+		))
+	}
 }
 
 impl hcsg::GenerationScheme for DevelopmentSite {
@@ -201,10 +213,9 @@ impl hcsg::GenerationScheme for DevelopmentSite {
 
 	/// Authored sites, then the procedural sites of the configured mode.
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		let Some(config) = cx.get::<DevelopmentConfig>(Id::Universal) else {
+		let Some((config, authored)) = DevelopmentSite::session(cx) else {
 			return Vec::new();
 		};
-		let authored = cx.get::<AuthoredDevelopments>(Id::Universal).unwrap_or_default();
 		let mut ids: Vec<OriginalId> =
 			authored.overlapping(region).map(|authored| OriginalId(authored.id())).collect();
 		match config.sites {
@@ -224,8 +235,7 @@ impl hcsg::GenerationScheme for DevelopmentSite {
 	/// An authored site as authored; a procedural one picks its kind, and
 	/// stays empty under an authored site.
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
-		let config = cx.get::<DevelopmentConfig>(Id::Universal)?;
-		let authored = cx.get::<AuthoredDevelopments>(Id::Universal).unwrap_or_default();
+		let (config, authored) = DevelopmentSite::session(cx)?;
 		if let Some(entry) = authored.get(id) {
 			let kind = entry.kinds.first().copied().unwrap_or(DevelopmentKind::Empty);
 			let site = Self { cell: entry.cell, kind, authored: Some(entry.clone()) };
