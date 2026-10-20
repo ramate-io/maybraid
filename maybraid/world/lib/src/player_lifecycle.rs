@@ -1,14 +1,17 @@
 //! Downed world-player retirement and POI-based replacement.
 
-use avian3d::prelude::LinearVelocity;
+use avian3d::prelude::{Collider, LinearVelocity, Position, SimpleCollider};
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use building_physics::BuildingWalkCollider;
 use character_inventory_user::InventoryUser;
 use character_ragdoll::CharacterRagdollSystems;
 use damage::{DamageSystems, DespawnAfter, Downed};
-use durham::{DurhamSurface, TerrainCellLayout, WorldBaseTerrain};
+use durham::{Durham, DurhamSurface, TerrainCellLayout, WorldBaseTerrain};
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use grenade_user::{GrenadeUser, GrenadeUserSystems};
+use lod::hcsg::HcsgStorage;
 use lubikans::LubikanOwner;
 use maybraid_character_controller::CharacterIntent;
 use maybraid_input::{PadButton, VirtualPad};
@@ -19,14 +22,16 @@ use poi_intelligence::{
 	place_nearby, NearbyFallback, NearbyQuery, PoiArrival, PoiId, PoiInterest, PoiInterests,
 	PoiKind, PoiRecord, PoiRegistry, PoiSystems,
 };
+use richmond::PaddedTerrain;
 use spotting_intelligence::SpotSubject;
+use terrain_layer_model::OnTerrain;
 use threat_intelligence::{Affiliations, ThreatSubject};
 use world_player::{
 	holding_elevation, player_position_above_surface, player_spawn_point_at, spawn_player_body,
 	surface_or_hold_at, AwaitingTerrainSurface, CharacterLocomotion, CharacterSpecies,
-	ModePlayerPolicies, MoveWish, OffTerrainAnchor, Player as VegetationPlayer, PlayerLifeEnded,
-	PlayerLifeSet, PlayerSpawnXz, RequestSetCharacter, RequestSetCharacterAppearance,
-	RespawnOrigin,
+	ModePlayerPolicies, MoveWish, OffTerrainAnchor, PendingPlacement, PlacementSupportVolume,
+	Player as VegetationPlayer, PlayerLifeEnded, PlayerLifeSet, PlayerSpawnXz,
+	PresentedOutdoorHeight, RequestSetCharacter, RequestSetCharacterAppearance, RespawnOrigin,
 };
 
 use layer_stack::ActiveGenerationMode;
@@ -138,6 +143,11 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 		app.init_resource::<WorldPlayerRespawnConfig>()
 			.init_resource::<WorldPlayerRespawnState>()
 			.init_resource::<WorldMapView>()
+			.init_resource::<PresentedOutdoorHeight>()
+			.add_systems(
+				PreUpdate,
+				(sample_presented_outdoor_height, stamp_pending_floor_support).chain(),
+			)
 			.add_message::<PlayerLifeEnded>()
 			.add_message::<PlayerChoseRespawnPoi>()
 			.add_message::<CharacterIntent>()
@@ -538,6 +548,7 @@ fn respawn_world_player(
 			now,
 			player_position_above_surface(death_at),
 			false,
+			death_at,
 		);
 		return;
 	}
@@ -563,11 +574,15 @@ fn respawn_world_player(
 	let spawn = match placed {
 		Some(record) => {
 			state.last_poi = Some(record.id);
-			ChosenPoiSpawn::for_poi(&record, &surface)
+			ChosenPoiSpawn::for_poi(
+				&record,
+				presented_outdoor_height(surface.storage(), record.position.xz()),
+			)
 		}
 		None => ChosenPoiSpawn::for_arrival(
 			PoiArrival::terrain(fallback_at, 0.0),
-			surface_or_hold_at(&surface, fallback_at.xz()),
+			presented_outdoor_height(surface.storage(), fallback_at.xz())
+				.unwrap_or_else(|| surface_or_hold_at(&surface, fallback_at.xz())),
 		),
 	};
 	finish_world_player_spawn(
@@ -580,6 +595,7 @@ fn respawn_world_player(
 		now,
 		spawn.position,
 		spawn.interior,
+		spawn.surface,
 	);
 }
 
@@ -784,18 +800,26 @@ fn finish_world_player_spawn(
 	now: Option<std::any::TypeId>,
 	position: Vec3,
 	interior: bool,
+	surface: Vec3,
 ) {
 	let player = spawn_player_body(commands, meshes, materials, locomotion, position);
-	// First-drop hold: snap teleports onto composed height and waits for a
-	// local trimesh. Without this marker, gravity can turn on while the body
-	// is still sitting on a base-noise or death-pose Y under the mesh.
-	// Interior rooms keep their authored floor Y; terrain snap would pull the
-	// capsule under the storey into the building volume.
-	commands.entity(player).insert(AwaitingTerrainSurface);
+	// First-drop hold until support exists at `surface`. Interior rooms keep
+	// authored floor Y; outdoor pins wait on the presented (padded) collider.
+	commands.entity(player).insert((
+		AwaitingTerrainSurface,
+		if interior {
+			PendingPlacement::floor(surface)
+		} else {
+			PendingPlacement::terrain(surface)
+		},
+	));
 	if interior {
 		commands.entity(player).insert(OffTerrainAnchor { translation: position });
+	} else {
+		commands.entity(player).remove::<OffTerrainAnchor>();
 	}
 	crate::control::apply_world_player_motor(commands, player);
+	commands.entity(player).insert(avian3d::prelude::GravityScale(0.0));
 	if let Some(loadout) = loadout {
 		if !origin.ends_life(now) {
 			commands.entity(player).insert(WorldPlayerAppearanceRequested);
@@ -837,18 +861,71 @@ fn is_building_poi(kind: PoiKind) -> bool {
 struct ChosenPoiSpawn {
 	position: Vec3,
 	interior: bool,
+	surface: Vec3,
 }
 
 impl ChosenPoiSpawn {
-	/// Local interiors keep the POI floor. Outdoor pins snap to composed terrain.
-	fn for_poi(record: &PoiRecord, surface: &DurhamSurface) -> Self {
-		Self::for_arrival(record.arrival(), surface_or_hold_at(surface, record.position.xz()))
+	/// Local interiors keep the POI floor. Outdoor pins use presented padded
+	/// height when published, otherwise the generated pin Y.
+	fn for_poi(record: &PoiRecord, presented_y: Option<f32>) -> Self {
+		Self::from_arrival(record.arrival(), presented_y)
 	}
 
 	fn for_arrival(arrival: PoiArrival, terrain_y: f32) -> Self {
+		Self::from_arrival(arrival, Some(terrain_y))
+	}
+
+	fn from_arrival(arrival: PoiArrival, presented_y: Option<f32>) -> Self {
+		let surface = arrival.destination(presented_y);
 		Self {
-			position: player_position_above_surface(arrival.surface_y(terrain_y)),
+			position: player_position_above_surface(surface),
 			interior: arrival.stands_on_floor(),
+			surface,
+		}
+	}
+}
+
+fn presented_outdoor_height(storage: &HcsgStorage, xz: Vec2) -> Option<f32> {
+	PaddedTerrain::<OnTerrain<Durham>>::published_height_at(storage, xz)
+		.ok()
+		.flatten()
+}
+
+fn sample_presented_outdoor_height(
+	storage: Res<HcsgStorage>,
+	awaiting: Query<&Transform, (With<VegetationPlayer>, With<AwaitingTerrainSurface>)>,
+	mut presented: ResMut<PresentedOutdoorHeight>,
+) {
+	let Ok(transform) = awaiting.single() else {
+		presented.0 = None;
+		return;
+	};
+	presented.0 = presented_outdoor_height(storage.as_ref(), transform.translation.xz());
+}
+
+/// While floor placement is pending, copy overlapping building walk colliders
+/// onto [`PlacementSupportVolume`]. Snap then releases. This does not run as a
+/// global scan after first-drop completes.
+fn stamp_pending_floor_support(
+	awaiting: Query<&PendingPlacement, (With<VegetationPlayer>, With<AwaitingTerrainSurface>)>,
+	colliders: Query<
+		(Entity, &Transform, Option<&GlobalTransform>, &Collider),
+		With<BuildingWalkCollider>,
+	>,
+	mut commands: Commands,
+) {
+	let Some(pending) = awaiting.iter().copied().find(|pending| pending.stands_on_floor()) else {
+		return;
+	};
+	for (entity, transform, global, collider) in &colliders {
+		let (at, rotation) = match global {
+			Some(global) => (global.translation(), global.rotation()),
+			None => (transform.translation, transform.rotation),
+		};
+		let aabb = collider.aabb(at, rotation);
+		let volume = Aabb3d::from_min_max(aabb.min, aabb.max);
+		if pending.overlaps_volume(volume) {
+			commands.entity(entity).insert(PlacementSupportVolume(volume));
 		}
 	}
 }
@@ -888,13 +965,16 @@ fn prefer_building_poi_ids(ids: &[PoiId], registry: &PoiRegistry, death_at: Vec3
 mod tests {
 	use super::*;
 	use crate::{FirstWave, UnitXTile};
+	use avian3d::prelude::GravityScale;
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::math::bounding::Aabb3d;
-	use durham::TerrainCellLayout;
+	use durham::{CascadeChunk, TerrainCellLayout, TerrainTrimeshCollider};
 	use layer_stack::GenerationMode;
 	use lod::hcsg::{spawn_worker, HcsgStorage};
 	use poi_intelligence::PoiSupport;
-	use world_player::WorldBaseTerrain;
+	use world_player::{
+		snap_player_to_composed_surface, PendingPlacement, PlayerPhysicsEnabled, WorldBaseTerrain,
+	};
 
 	#[test]
 	fn fallback_respawn_moves_away_from_the_death_point() {
@@ -1404,14 +1484,12 @@ mod tests {
 		let mut bodies = world
 			.query_filtered::<(&Transform, Has<AwaitingTerrainSurface>), With<VegetationPlayer>>();
 		let (body, awaiting) = bodies.single(&world)?;
-		let base = &world.resource::<WorldBaseTerrain>().0;
-		let expected = player_spawn_point_at(
-			Vec2::new(80.0, 5.0),
-			world_player::holding_elevation(base, 80.0, 5.0),
-		);
-		assert_eq!(body.translation, expected);
-		assert!(body.translation.y > base.height_at(80.0, 5.0) + 50.0);
-		assert!(awaiting);
+		let translation = body.translation;
+		assert!(awaiting, "unpublished padded collider keeps first-drop hold");
+		drop(bodies);
+		assert_eq!(translation, player_position_above_surface(Vec3::new(80.0, 4.0, 5.0)));
+		let player = world.query_filtered::<Entity, With<VegetationPlayer>>().single(&world)?;
+		assert_eq!(world.get::<GravityScale>(player).map(|gravity| gravity.0), Some(0.0));
 		Ok(())
 	}
 
@@ -1442,9 +1520,140 @@ mod tests {
 			With<VegetationPlayer>,
 		>();
 		let (body, awaiting, anchored) = bodies.single(&world)?;
-		assert_eq!(body.translation, player_position_above_surface(floor));
+		let translation = body.translation;
 		assert!(awaiting);
 		assert!(anchored);
+		drop(bodies);
+		assert_eq!(translation, player_position_above_surface(floor));
+		let player = world.query_filtered::<Entity, With<VegetationPlayer>>().single(&world)?;
+		assert_eq!(world.get::<PendingPlacement>(player), Some(&PendingPlacement::floor(floor)));
+		assert_eq!(world.get::<GravityScale>(player).map(|gravity| gravity.0), Some(0.0));
+		Ok(())
+	}
+
+	#[test]
+	fn delayed_floor_collider_stamps_support_then_releases() -> anyhow::Result<()> {
+		use world_player::{placement_pending_reason, PlacementPendingReason};
+
+		let mut world = discovery_respawn_world(0.2);
+		world.insert_resource(PlayerPhysicsEnabled(true));
+		let poi = world.spawn_empty().id();
+		let floor = Vec3::new(80.0, 12.0, 5.0);
+		world.resource_mut::<PoiRegistry>().upsert(
+			poi,
+			poi_intelligence::Poi::new(PoiId(1), LOCAL_POI)
+				.with_arrival_radius(4.0)
+				.with_support(PoiSupport::Floor),
+			floor,
+			true,
+			false,
+		)?;
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.write_message(PlayerChoseRespawnPoi { poi: Some(PoiId(1)) });
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(stamp_pending_floor_support)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let player = world.query_filtered::<Entity, With<VegetationPlayer>>().single(&world)?;
+		assert_eq!(
+			placement_pending_reason(
+				true,
+				world.get::<PendingPlacement>(player).copied(),
+				None,
+				false,
+				false
+			),
+			Some(PlacementPendingReason::ColliderMissing)
+		);
+		world.entity_mut(player).insert(LinearVelocity::default());
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_some());
+		assert_eq!(world.get::<GravityScale>(player).map(|gravity| gravity.0), Some(0.0));
+
+		world.spawn((
+			BuildingWalkCollider,
+			Transform::from_translation(floor),
+			GlobalTransform::from_translation(floor),
+			Collider::cuboid(2.0, 0.2, 2.0),
+		));
+		world
+			.run_system_once(stamp_pending_floor_support)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.query::<&PlacementSupportVolume>().iter(&world).next().is_some());
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
+		assert!(world.get::<PendingPlacement>(player).is_none());
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(player_position_above_surface(floor))
+		);
+		assert!(
+			world.get::<GravityScale>(player).is_some_and(|gravity| gravity.0 > 0.0),
+			"gravity releases once the floor collider can support the capsule"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn discovery_respawn_uses_presented_padded_height_not_registry_y() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2);
+		world.insert_resource(PlayerPhysicsEnabled(true));
+		let poi = world.spawn_empty().id();
+		world.resource_mut::<PoiRegistry>().upsert(
+			poi,
+			poi_intelligence::Poi::new(PoiId(1), URBAN_POI).with_arrival_radius(8.0),
+			Vec3::new(80.0, 4.0, 5.0),
+			true,
+			false,
+		)?;
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.write_message(PlayerChoseRespawnPoi { poi: Some(PoiId(1)) });
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let player = world.query_filtered::<Entity, With<VegetationPlayer>>().single(&world)?;
+		assert_eq!(
+			world.get::<PendingPlacement>(player),
+			Some(&PendingPlacement::terrain(Vec3::new(80.0, 4.0, 5.0)))
+		);
+		let padded = Vec3::new(80.0, 40.0, 5.0);
+		world.insert_resource(PresentedOutdoorHeight(Some(padded.y)));
+		world.entity_mut(player).insert((
+			LinearVelocity::default(),
+			Position(player_position_above_surface(Vec3::new(80.0, 4.0, 5.0))),
+		));
+		world.spawn((
+			TerrainTrimeshCollider,
+			CascadeChunk {
+				origin: padded - Vec3::splat(1.0),
+				size: 3.0,
+				extent: Some(Vec3::splat(2.0)),
+				..CascadeChunk::unit_chunk()
+			},
+		));
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let expected = player_position_above_surface(padded);
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(expected)
+		);
+		assert_eq!(world.get::<Position>(player).map(|position| position.0), Some(expected));
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
+		assert!(world.get::<OffTerrainAnchor>(player).is_none());
 		Ok(())
 	}
 
@@ -1482,8 +1691,15 @@ mod tests {
 		let mut bodies =
 			world.query_filtered::<(&Transform, Has<OffTerrainAnchor>), With<VegetationPlayer>>();
 		let (body, anchored) = bodies.single(&world)?;
+		let translation = body.translation;
 		assert!(!anchored, "kind no longer implies a floor");
-		assert_ne!(body.translation.y, player_position_above_surface(Vec3::new(80.0, 12.0, 5.0)).y);
+		drop(bodies);
+		let player = world.query_filtered::<Entity, With<VegetationPlayer>>().single(&world)?;
+		assert_eq!(
+			world.get::<PendingPlacement>(player),
+			Some(&PendingPlacement::terrain(Vec3::new(80.0, 12.0, 5.0)))
+		);
+		assert_eq!(translation, player_position_above_surface(Vec3::new(80.0, 12.0, 5.0)));
 		Ok(())
 	}
 

@@ -2,7 +2,7 @@
 //!
 //! World composition assigns POI kinds. This crate stays free of `Poi` / mob taxonomy.
 
-use bevy::prelude::Component;
+use bevy::prelude::{Component, Vec3};
 use building_components::LabelNode;
 use lod::gen::Id;
 
@@ -40,6 +40,9 @@ pub struct DiscoverablePlace {
 	pub persistent: bool,
 	pub host: Option<Id>,
 	pub local: u32,
+	/// Capsule stand in this entity's local space. `None` means the pin is not
+	/// a safe interior arrival; spawn uses outdoor padded terrain instead.
+	pub arrival_local: Option<Vec3>,
 }
 
 /// Compatibility name for the original Les Halles storey marker.
@@ -60,6 +63,7 @@ impl DiscoverablePlace {
 			persistent: true,
 			host: None,
 			local: 0,
+			arrival_local: None,
 		}
 	}
 
@@ -71,6 +75,7 @@ impl DiscoverablePlace {
 			persistent: false,
 			host: None,
 			local: 0,
+			arrival_local: None,
 		}
 	}
 
@@ -80,11 +85,22 @@ impl DiscoverablePlace {
 		self
 	}
 
+	pub const fn with_arrival_local(mut self, local: Vec3) -> Self {
+		self.arrival_local = Some(local);
+		self
+	}
+
 	pub fn from_label_node(node: &LabelNode) -> Option<Self> {
 		let label = DiscoverablePlaceLabel::from_label_text(&node.text)?;
 		let extents = node.geometry.extents();
 		let radius = (extents.x.min(extents.z) * 0.35).clamp(1.5, 12.0);
-		Some(Self::high(label, radius, label.default_salience()))
+		// Usage volume centre is discovery, not a capsule stand. Drop to the
+		// bottom of the authored prism so storey elevation is preserved.
+		Some(Self::high(label, radius, label.default_salience()).with_arrival_local(Vec3::new(
+			0.0,
+			-extents.y * 0.5,
+			0.0,
+		)))
 	}
 }
 
@@ -185,5 +201,6 @@ mod tests {
 		assert_eq!(place.label, DiscoverablePlaceLabel::Lounge);
 		assert!(!place.persistent);
 		assert!((1.5..=12.0).contains(&place.arrival_radius));
+		assert_eq!(place.arrival_local, Some(bevy::math::Vec3::new(0.0, -1.5, 0.0)));
 	}
 }

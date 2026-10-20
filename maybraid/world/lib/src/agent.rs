@@ -1,10 +1,11 @@
 //! Opt-in agent drive / observe. Registered only when [`AgentDrive`] is present.
 
-use avian3d::prelude::{LinearVelocity, Position};
+use avian3d::prelude::{GravityScale, LinearVelocity, Position};
 use bevy::app::AppExit;
 use bevy::prelude::*;
 use damage::{Health, Hit};
-use durham::{CascadeChunk, Durham, DurhamSurface, WorldBaseTerrain};
+use durham::{CascadeChunk, Durham, DurhamSurface, TerrainTrimeshCollider, WorldBaseTerrain};
+use lod::hcsg::HcsgStorage;
 use maybraid_agent::{
 	read_script_commands, take_leading_start, AgentArgs, AgentButton, AgentCommand, AgentEvent,
 	AgentEventBody, CommandStatus, EventSink, InventoryObservation, LineInbox, MenuObservation,
@@ -15,11 +16,16 @@ use mob_characters::CharacterSceneRecipe;
 use mob_scenes::MobScene;
 use player::{MoveWish, Player as MotorPlayer};
 use player_camera::CameraController;
+use richmond::PaddedTerrain;
 use tanz_user::{ControlMode, TanzExecution, TanzId, TanzUser};
+use terrain_layer_model::OnTerrain;
 use terrain_layer_model::TerrainStreaming;
 use threat_management_intelligence::ThreatManagementIntelligence;
 use world_player::player::{holding_elevation, player_spawn_point_at, AwaitingTerrainSurface};
-use world_player::Player as VegetationPlayer;
+use world_player::{
+	placement_pending_reason, OffTerrainAnchor, PendingPlacement, PlacementSupportVolume,
+	Player as VegetationPlayer,
+};
 
 use crate::agent_inventory::{publish_agent_inventory, AgentInventoryState, AgentLastPadIntent};
 use crate::commands::PlaygroundCommand;
@@ -605,10 +611,17 @@ fn agent_apply_world_ops(
 				let target = Vec2::new(xz[0], xz[1]);
 				let elevation = match y {
 					Some(y) => y,
-					None => match surface.height_at(target) {
-						Ok(Some(elevation)) => elevation,
-						Ok(None) | Err(_) => holding_elevation(&base.0, target.x, target.y),
-					},
+					None => PaddedTerrain::<OnTerrain<Durham>>::published_height_at(
+						surface.storage(),
+						target,
+					)
+					.ok()
+					.flatten()
+					.or_else(|| match surface.height_at(target) {
+						Ok(Some(elevation)) => Some(elevation),
+						Ok(None) | Err(_) => None,
+					})
+					.unwrap_or_else(|| holding_elevation(&base.0, target.x, target.y)),
 				};
 				let at = player_spawn_point_at(target, elevation);
 				if let Ok((entity, mut transform, mut global, mut body, mut velocity, _)) =
@@ -622,7 +635,12 @@ fn agent_apply_world_ops(
 					if let Some(velocity) = velocity.as_deref_mut() {
 						velocity.0 = Vec3::ZERO;
 					}
-					commands.entity(entity).insert(AwaitingTerrainSurface);
+					commands.entity(entity).remove::<OffTerrainAnchor>();
+					commands.entity(entity).insert((
+						AwaitingTerrainSurface,
+						PendingPlacement::terrain(Vec3::new(target.x, elevation, target.y)),
+						GravityScale(0.0),
+					));
 				}
 			}
 			AgentCommand::Console { line } if line.trim() == "player down" => {
@@ -745,10 +763,20 @@ fn agent_sample_player(
 	mut runtime: ResMut<AgentRuntime>,
 	time: Res<Time>,
 	surface: DurhamSurface,
+	storage: Res<HcsgStorage>,
+	physics: Res<world_player::PlayerPhysicsEnabled>,
 	map: Option<Res<WorldMapView>>,
-	motors: Query<&Transform, With<MotorPlayer>>,
-	vegetation: Query<&Transform, (With<VegetationPlayer>, Without<MotorPlayer>)>,
+	motors: Query<
+		(&Transform, Option<&PendingPlacement>, Has<AwaitingTerrainSurface>),
+		With<MotorPlayer>,
+	>,
+	vegetation: Query<
+		(&Transform, Option<&PendingPlacement>, Has<AwaitingTerrainSurface>),
+		(With<VegetationPlayer>, Without<MotorPlayer>),
+	>,
 	cameras: Query<&CameraController, With<Camera3d>>,
+	volumes: Query<&PlacementSupportVolume>,
+	terrain_chunks: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
 ) {
 	if !runtime.ready {
 		return;
@@ -758,13 +786,42 @@ fn agent_sample_player(
 		return;
 	}
 	runtime.last_sample = now;
-	let Some(transform) = motors.single().ok().or_else(|| vegetation.single().ok()) else {
+	let motor = motors
+		.single()
+		.ok()
+		.map(|(transform, pending, awaiting)| (transform, pending.copied(), awaiting));
+	let vegetation = vegetation
+		.single()
+		.ok()
+		.map(|(transform, pending, awaiting)| (transform, pending.copied(), awaiting));
+	let Some((transform, pending, awaiting)) = motor.or(vegetation) else {
 		return;
 	};
 	let p = transform.translation;
 	let yaw = cameras.single().ok().map(|camera| camera.yaw).unwrap_or(0.0);
 	let r#move = runtime.last_intent.move_stick;
-	let ground = surface.composed_height_at(p.xz());
+	let durham = surface.composed_height_at(p.xz());
+	let padded = PaddedTerrain::<OnTerrain<Durham>>::published_height_at(storage.as_ref(), p.xz())
+		.ok()
+		.flatten();
+	let floor = pending
+		.filter(|pending| pending.stands_on_floor())
+		.map(|pending| pending.surface.y);
+	let support_y = floor.or(padded).or(durham);
+	let capsule_bottom = p.y - 0.9;
+	let clearance = support_y.map(|support| capsule_bottom - support);
+	let support_ready = pending.is_some_and(|pending| {
+		volumes.iter().any(|volume| volume.supports(pending))
+			|| (!pending.stands_on_floor()
+				&& terrain_chunks.iter().any(|chunk| chunk.contains_point(pending.surface)))
+	});
+	let pending_reason = awaiting
+		.then(|| {
+			placement_pending_reason(physics.0, pending, padded, durham.is_some(), support_ready)
+				.map(|reason| reason.as_str().to_owned())
+		})
+		.flatten();
+	let ground = padded.or(durham);
 	let map_open = map.as_deref().is_some_and(|map| map.open);
 	let picker = map.as_deref().is_some_and(|map| map.open && map.close_locked);
 	emit(
@@ -779,6 +836,12 @@ fn agent_sample_player(
 				yaw,
 				r#move,
 				ground,
+				durham,
+				padded,
+				floor,
+				support_ready: awaiting.then_some(support_ready),
+				clearance,
+				pending: pending_reason,
 				map_open,
 				picker,
 			},

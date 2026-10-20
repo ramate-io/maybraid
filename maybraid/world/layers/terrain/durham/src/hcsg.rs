@@ -305,6 +305,10 @@ impl DurhamSurface<'_> {
 	pub fn base(&self) -> &BaseTerrainNoise {
 		&self.base.0
 	}
+
+	pub fn storage(&self) -> &HcsgStorage {
+		self.storage.as_ref()
+	}
 }
 
 mod stream;

@@ -4,12 +4,13 @@ use std::sync::Arc;
 
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
+use bevy::math::Vec3Swizzles;
 use bevy::prelude::{
-	bsn, template_value, Commands, CommandsSceneExt, Entity, Transform, Visibility,
+	bsn, template_value, Commands, CommandsSceneExt, Entity, Transform, Vec3, Visibility,
 };
 use bevy::scene::Scene;
 use building_components::{
-	building_bounds, building_components_host_for, BuildingComponents, FurnitureNode,
+	building_bounds, building_components_host_for, BuildingComponents, FloorNode, FurnitureNode,
 	FurnitureUsageNode,
 };
 use building_physics::{BuildingWalkShapes, BUILDING_FRICTION};
@@ -204,6 +205,87 @@ impl DevelopmentHost {
 		}
 	}
 
+	/// High-LOD floor slabs on this host, building-local.
+	pub fn high_floors(&self) -> Vec<FloorNode> {
+		fn of(building: &impl BuildingComponents) -> Vec<FloorNode> {
+			building.floor_nodes_for_level(LodSceneLevel::High).flatten()
+		}
+		match self {
+			Self::LesHallesStorey(building, _) => of(building.as_ref()),
+			Self::LesHallesStairwell(building, _) => of(building.as_ref()),
+			Self::LesHallesRoof(building, _) => of(building.as_ref()),
+			Self::ShepherdsHouse(building, _) => of(building.as_ref()),
+			Self::ShepherdsHut(building, _) => of(building.as_ref()),
+			Self::OldCityMarketTerrace(building, _) => of(building.as_ref()),
+			Self::RingFortCircularTower(building, _) => of(building.as_ref()),
+			Self::RingFortTrazaloidTower(building, _) => of(building.as_ref()),
+			Self::RingFortGalleryTerrace(building, _) => of(building.as_ref()),
+			Self::RingFortGalleryColonnade(building, _) => of(building.as_ref()),
+			Self::RingFortGalleryRoof(building, _) => of(building.as_ref()),
+			Self::SingleHighrise(building, _) => of(building.as_ref()),
+			Self::TempleSanctum(building, _) => of(building.as_ref()),
+			Self::WizardsTower(building, _) => of(building.as_ref()),
+			Self::SkybridgeHall(building, _) => of(building.as_ref()),
+		}
+	}
+
+	/// Capsule-safe interior stand in building-local space.
+	///
+	/// Host pins (`prefer` is `None`) take the lowest walkable floor. Room pins
+	/// keep their XZ when that XZ sits on a floor at the same storey. Bounds
+	/// centres are not used. `None` means spawn should use outdoor padded
+	/// terrain instead of this host.
+	pub fn interior_stand_local(&self, prefer: Option<Vec3>) -> Option<Vec3> {
+		const MIN_SPAN: f32 = 1.0;
+		let mut floors = Vec::new();
+		for floor in self.high_floors() {
+			let stand = floor.walk_on_point();
+			let bounds = building_components::placement_bounds(&floor.placement);
+			let span = (bounds.max.x - bounds.min.x).min(bounds.max.z - bounds.min.z);
+			if span < MIN_SPAN {
+				continue;
+			}
+			floors.push((stand, floor));
+		}
+		if floors.is_empty() {
+			return self.authored_floor_stand(prefer);
+		}
+		match prefer {
+			None => floors
+				.into_iter()
+				.min_by(|a, b| a.0.y.total_cmp(&b.0.y).then_with(|| a.0.x.total_cmp(&b.0.x)))
+				.map(|(stand, _)| stand),
+			Some(at) => floors
+				.into_iter()
+				.filter(|(stand, floor)| floor.covers_xz(at.xz()) && stand.y <= at.y + 0.75)
+				.min_by(|a, b| {
+					(at.y - a.0.y)
+						.abs()
+						.total_cmp(&(at.y - b.0.y).abs())
+						.then_with(|| a.0.y.total_cmp(&b.0.y))
+				})
+				.map(|(stand, _)| Vec3::new(at.x, stand.y, at.z)),
+		}
+	}
+
+	/// Les Halles storeys author the slab as a floor-plan ring, not FloorNode
+	/// kits. Stand on the gallery, not the courtyard hole.
+	fn authored_floor_stand(&self, prefer: Option<Vec3>) -> Option<Vec3> {
+		let Self::LesHallesStorey(building, _) = self else {
+			return None;
+		};
+		let plan = building.floor_plan();
+		let mid = (plan.outer.x + plan.courtyard.x) * 0.25;
+		let stand = Vec3::new(plan.center_xz.x + mid, plan.center_xz.y, plan.center_xz.z);
+		match prefer {
+			None => Some(stand),
+			Some(at) if (at.y - stand.y).abs() <= plan.storey_height.max(0.75) => {
+				Some(Vec3::new(at.x, stand.y, at.z))
+			}
+			Some(_) => None,
+		}
+	}
+
 	pub fn place_local_id(&self) -> u32 {
 		match self {
 			Self::LesHallesStorey(_, _) => 1,
@@ -275,6 +357,9 @@ impl DevelopmentHost {
 		};
 		if let Some(id) = host_id {
 			place = place.with_identity(id, self.place_local_id());
+		}
+		if let Some(local) = self.interior_stand_local(None) {
+			place = place.with_arrival_local(local);
 		}
 		Box::new((host, bsn! { template_value(place) }))
 	}
@@ -677,6 +762,43 @@ mod tests {
 			.map(|spec| spec.shapes.len())
 			.unwrap_or(0);
 		assert!(n > 0, "Les Halles storey should queue Fixed walk shapes, got {n}");
+		Ok(())
+	}
+
+	#[test]
+	fn les_halles_storeys_keep_distinct_walk_on_heights() -> anyhow::Result<()> {
+		use bevy::prelude::Transform;
+		use urbanization_developments::MixedUseLesHallesDevelopment;
+
+		let bounds =
+			Aabb3d::from_min_max(Vec3::new(-18.0, 0.0, -18.0), Vec3::new(18.0, 10.0, 18.0));
+		let confines = Confines::from_bounds(bounds);
+		let (dev, _) = MixedUseLesHallesDevelopment::fit_to_confines(
+			&confines,
+			NoiseParams { seed: 1337, ..NoiseParams::default() },
+		)?;
+		anyhow::ensure!(
+			dev.tower.floors.len() >= 2,
+			"expected stacked Les Halles storeys, got {}",
+			dev.tower.floors.len()
+		);
+		let mut heights = Vec::new();
+		for storey in &dev.tower.floors {
+			let host = DevelopmentHost::LesHallesStorey(
+				std::sync::Arc::new(storey.clone()),
+				Transform::IDENTITY,
+			);
+			let stand = host.interior_stand_local(None).ok_or_else(|| {
+				anyhow::anyhow!("Les Halles storey should author a gallery walk-on")
+			})?;
+			heights.push(stand.y);
+		}
+		heights.sort_by(|a, b| a.total_cmp(b));
+		heights.dedup_by(|a, b| (*a - *b).abs() < 0.25);
+		assert!(
+			heights.len() >= 2,
+			"Les Halles should author more than one storey walk-on, got {heights:?}"
+		);
 		Ok(())
 	}
 }

@@ -8,6 +8,7 @@ pub mod camera;
 pub mod character;
 pub mod commands;
 pub mod diagnostics;
+pub mod placement;
 pub mod player;
 pub mod policy;
 pub mod seat;
@@ -21,12 +22,17 @@ pub use commands::{RequestMeshStats, RequestModeCharacter, RequestModeFree};
 pub use diagnostics::{MeshStatsPlugin, PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use durham::{TerrainCoverage, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS};
 pub use game_commands::command::PendingStartupCommand;
+pub use placement::{
+	PendingPlacement, PlacementPendingReason, PlacementSupportVolume, PresentedOutdoorHeight,
+	SpawnSupport,
+};
 pub use player::{
-	holding_elevation, player_position_above_surface, player_spawn_point_at, spawn_player_body,
-	surface_or_hold_at, AwaitingTerrainSurface, CharacterCameraFollowEnabled, CharacterLocomotion,
-	Jumping, MoveWish, MovementAction, OffTerrainAnchor, PadMovementEnabled, Player, PlayerCapsule,
-	PlayerControlSystems, PlayerPhysicsEnabled, PlayerPlugin, PlayerSpawnXz, PlaygroundMode,
-	VegetationPlayerMotor,
+	holding_elevation, placement_pending_reason, player_position_above_surface,
+	player_spawn_point_at, player_surface_under, snap_player_to_composed_surface,
+	spawn_player_body, surface_or_hold_at, AwaitingTerrainSurface, CharacterCameraFollowEnabled,
+	CharacterLocomotion, Jumping, MoveWish, MovementAction, OffTerrainAnchor, PadMovementEnabled,
+	Player, PlayerCapsule, PlayerControlSystems, PlayerPhysicsEnabled, PlayerPlugin, PlayerSpawnXz,
+	PlaygroundMode, VegetationPlayerMotor,
 };
 pub use policy::{
 	ModePlayerPolicies, ModePlayerPolicy, PlayerLifeEnded, PlayerLifeSet, RespawnOrigin,
@@ -45,7 +51,7 @@ use durham::DurhamSurface;
 use game_commands::command::TextEntryFocus;
 use game_commands::ui::GameCommandStatusText;
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
-use player::{respawn_player_on_layout, snap_player_to_composed_surface};
+use player::respawn_player_on_layout;
 
 /// Character, camera, snap, and locomotion without owning Durham fill.
 pub struct VegetationHostPlugin {

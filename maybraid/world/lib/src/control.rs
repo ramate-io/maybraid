@@ -1,10 +1,7 @@
 //! Apply [`CharacterIntent`] to the vegetation capsule / camera-relative wish.
 
 use bevy::prelude::*;
-use durham::{
-	terrain_collider_covers_xz, CascadeChunk, DurhamSurface, TerrainCellLayout,
-	TerrainTrimeshCollider,
-};
+use durham::{CascadeChunk, Durham, DurhamSurface, TerrainCellLayout, TerrainTrimeshCollider};
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
 use maybraid_character_controller::{CharacterIntent, OrdinaryLocomotionEnabled};
 use maybraid_skill_map::SkillMapEnabled;
@@ -16,8 +13,11 @@ use player::{
 	Wading,
 };
 use player_camera::CameraController;
+use richmond::PaddedTerrain;
+use terrain_layer_model::OnTerrain;
 use world_player::{
-	MoveWish, MovementAction, Player, PlayerPhysicsEnabled, PlayerSpawnXz, PlaygroundMode,
+	AwaitingTerrainSurface, MoveWish, MovementAction, Player, PlayerPhysicsEnabled, PlayerSpawnXz,
+	PlaygroundMode,
 };
 
 use crate::map_view::WorldMapView;
@@ -69,9 +69,19 @@ pub(crate) fn update_world_surface_ready(
 		return;
 	}
 	let xz = discovery_xz(&spawn, &players, surface.layout());
-	let at = Vec3::new(xz.x, 0.0, xz.y);
-	let height_ready = matches!(surface.height_at(xz), Ok(Some(_)));
-	ready.0 = terrain_collider_covers_xz(at, colliders.iter()) && height_ready;
+	let padded = PaddedTerrain::<OnTerrain<Durham>>::published_height_at(surface.storage(), xz)
+		.ok()
+		.flatten();
+	let height = padded.or_else(|| match surface.height_at(xz) {
+		Ok(Some(elevation)) => Some(elevation),
+		_ => None,
+	});
+	let Some(elevation) = height else {
+		ready.0 = false;
+		return;
+	};
+	let at = Vec3::new(xz.x, elevation, xz.y);
+	ready.0 = colliders.iter().any(|chunk| chunk.contains_point(at));
 }
 
 fn discovery_xz(
@@ -292,8 +302,12 @@ pub(crate) fn stamp_vegetation_motor_traction(
 	}
 }
 
-type PlayerMotorMissingQuery<'w, 's> =
-	Query<'w, 's, Entity, (With<Player>, Without<CharacterController>)>;
+type PlayerMotorMissingQuery<'w, 's> = Query<
+	'w,
+	's,
+	(Entity, bevy::ecs::query::Has<AwaitingTerrainSurface>),
+	(With<Player>, Without<CharacterController>),
+>;
 type PlayerMotorPresentQuery<'w, 's> = Query<
 	'w,
 	's,
@@ -314,8 +328,11 @@ pub(crate) fn stamp_world_player_motor(
 	present: PlayerMotorPresentQuery,
 ) {
 	if physics.0 {
-		for entity in &missing {
+		for (entity, awaiting) in &missing {
 			apply_world_player_motor(&mut commands, entity);
+			if awaiting {
+				commands.entity(entity).insert(avian3d::prelude::GravityScale(0.0));
+			}
 		}
 		for (entity, stance, rest, live) in &present {
 			if stance.is_none() {
@@ -376,6 +393,8 @@ mod tests {
 		};
 		assert!(!terrain_collider_covers_xz(spawn, [&distant]));
 		assert!(terrain_collider_covers_xz(spawn, [&local]));
+		assert!(local.contains_point(spawn));
+		assert!(!local.contains_point(Vec3::new(0.5, 40.0, 0.5)));
 	}
 
 	#[test]
@@ -399,6 +418,22 @@ mod tests {
 		assert!(world.get::<LocomotionCapsule>(player).is_some());
 		assert!(world.get::<MaybraidPlayer>(player).is_some());
 		assert!(world.get::<PlayerMoveWish>(player).is_some());
+	}
+
+	#[test]
+	fn stamping_the_motor_does_not_enable_gravity_while_placement_is_pending() {
+		use avian3d::prelude::GravityScale;
+		use bevy::ecs::system::RunSystemOnce;
+		use world_player::AwaitingTerrainSurface;
+
+		let mut world = World::new();
+		world.insert_resource(PlayerPhysicsEnabled(true));
+		let player = world.spawn((Player, AwaitingTerrainSurface, GravityScale(0.0))).id();
+		world
+			.run_system_once(stamp_world_player_motor)
+			.expect("stamp world player motor");
+		assert!(world.get::<CharacterController>(player).is_some());
+		assert_eq!(world.get::<GravityScale>(player).map(|gravity| gravity.0), Some(0.0));
 	}
 
 	#[test]

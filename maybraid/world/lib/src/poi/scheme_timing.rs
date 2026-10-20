@@ -33,6 +33,8 @@ const COLD_ITERS: usize = 3;
 
 const RERUN: &str =
 	"CXX=g++ cargo test -p maybraid-world xz_tile_world_timing --release -- --ignored --nocapture";
+const ARRIVAL_RERUN: &str =
+	"CXX=g++ cargo test -p maybraid-world poi_arrival_resolution_timing --release -- --ignored --nocapture";
 
 type Ground = OnTerrain<Durham>;
 type Urban = Urbanization<Richmond<Ground>>;
@@ -306,4 +308,118 @@ fn xz_tile_world_timing() {
 	eprintln!("| --- | ---: | ---: | ---: | ---: | ---: |");
 	print_scheme_row("WorldPoiTiles", &world_cold, &world_warm);
 	print_scheme_row("PoiSet<GrovePois>", &grove_cold, &grove_warm);
+}
+
+fn seed_urban_arrival() -> HcsgStorage {
+	use durham::{
+		fine_patch_cell_layout, mesh_assets, TerrainConfig, TerrainCoverage, TerrainStampConfigs,
+		WatershedConfigs,
+	};
+	use richmond::{DevelopmentConfig, DevelopmentSites};
+	use urbanization_cells::{UrbanizationKind, UrbanizationSelection};
+
+	let storage = HcsgStorage::default();
+	let layout = fine_patch_cell_layout(1, bevy::math::IVec2::new(-1, -1));
+	storage.seed(layout, universal_bounds());
+	storage.seed(TerrainStampConfigs::from_world_seed(42), universal_bounds());
+	storage.seed(WatershedConfigs::default().with_seed(42), universal_bounds());
+	storage.seed(
+		mesh_assets(
+			TerrainConfig::new(42),
+			bevy::prelude::Handle::default(),
+			TerrainCoverage::FinePatch,
+			1,
+		),
+		universal_bounds(),
+	);
+	storage.seed(
+		DevelopmentConfig {
+			sites: DevelopmentSites::Lattice,
+			seed: 42,
+			likelihood: 1.0,
+			les_halles_weight: 0.0,
+			shepherds_village_weight: 0.0,
+			shepherds_commune_weight: 0.0,
+			ring_fort_weight: 0.0,
+			temple_complex_weight: 0.0,
+			single_highrise_weight: 1.0,
+			suburban_homes_weight: 0.0,
+			wizards_tower_weight: 0.0,
+			skybridge_bazaar_weight: 0.0,
+			old_city_market_weight: 0.0,
+			..DevelopmentConfig::default()
+		},
+		universal_bounds(),
+	);
+	storage.seed(
+		UrbanizationSelection {
+			kind: Some(UrbanizationKind::Frontier),
+			..UrbanizationSelection::default()
+		},
+		universal_bounds(),
+	);
+	storage
+}
+
+fn collect_urban_arrivals(storage: &HcsgStorage, out: &mut Vec<PoiEntry>) {
+	use bevy::math::bounding::Aabb3d;
+	use bevy::math::Vec3;
+	use poi_intelligence::PoiOrigin;
+
+	let mut cx = GenerationContext::new(storage);
+	let region =
+		Aabb3d::from_min_max(Vec3::new(-512.0, -80.0, -512.0), Vec3::new(512.0, 120.0, 512.0));
+	out.clear();
+	for lod::gen::OriginalId(id) in UrbanPois::<Ground>::original_ids_for(&mut cx, region) {
+		if let Some((pois, _)) = UrbanPois::<Ground>::pois(&mut cx, id) {
+			out.extend(pois);
+		}
+	}
+	for lod::gen::OriginalId(id) in PlacePois::<Urban>::original_ids_for(&mut cx, region) {
+		if let Some((pois, _)) = PlacePois::<Urban>::pois(&mut cx, id) {
+			out.extend(pois);
+		}
+	}
+}
+
+#[test]
+#[ignore]
+fn poi_arrival_resolution_timing() {
+	if cfg!(debug_assertions) {
+		eprintln!("warning: run with --release; debug timings are not comparable");
+	}
+	let mut scratch = Vec::new();
+	let mut cold_samples = Vec::with_capacity(COLD_ITERS);
+	for _ in 0..COLD_ITERS {
+		let storage = seed_urban_arrival();
+		let started = Instant::now();
+		collect_urban_arrivals(&storage, &mut scratch);
+		cold_samples.push(started.elapsed());
+		black_box(scratch.len());
+	}
+	let storage = seed_urban_arrival();
+	collect_urban_arrivals(&storage, &mut scratch);
+	for _ in 0..WARMUP {
+		collect_urban_arrivals(&storage, &mut scratch);
+		black_box(scratch.len());
+	}
+	let mut warm_samples = Vec::with_capacity(WARM_ITERS);
+	for _ in 0..WARM_ITERS {
+		let started = Instant::now();
+		collect_urban_arrivals(&storage, &mut scratch);
+		warm_samples.push(started.elapsed());
+		black_box(scratch.len());
+	}
+	let cold = stats(cold_samples);
+	let warm = stats(warm_samples);
+	eprintln!("{ARRIVAL_RERUN}");
+	eprintln!(
+		"seed=42 origin=(-1,-1) lattice Frontier highrise occupancy=1, hits={}, warmup={WARMUP}, warm iters={WARM_ITERS}, cold iters={COLD_ITERS}",
+		scratch.len(),
+	);
+	eprintln!("generation cost only — presentation/physics wait is not included");
+	eprintln!();
+	eprintln!("| path | cold med µs | cold p95 µs | warm med µs | warm p95 µs | warm total |");
+	eprintln!("| --- | ---: | ---: | ---: | ---: | ---: |");
+	print_scheme_row("UrbanPois+PlacePois arrival", &cold, &warm);
 }

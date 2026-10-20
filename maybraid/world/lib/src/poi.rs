@@ -197,7 +197,7 @@ fn queue_local_places(
 	for (entity, place, transform) in &areas {
 		if !place.persistent {
 			let Some(host) = persistent_host(entity, &parents, &places) else {
-				queue_place(&mut state, entity, place, transform.translation());
+				queue_place(&mut state, entity, place, transform);
 				continue;
 			};
 			let admitted = state.high_places_by_host.entry(host).or_default();
@@ -206,7 +206,7 @@ fn queue_local_places(
 			}
 			admitted.insert(entity);
 		}
-		queue_place(&mut state, entity, place, transform.translation());
+		queue_place(&mut state, entity, place, transform);
 	}
 }
 
@@ -214,19 +214,25 @@ fn queue_place(
 	state: &mut WorldPoiDiscoveryState,
 	entity: Entity,
 	place: &DiscoverablePlace,
-	translation: Vec3,
+	transform: &GlobalTransform,
 ) {
+	let translation = transform.translation();
 	let kind = place_kind(place.label);
 	let salience = place.salience.unwrap_or(place.label.default_salience());
+	let id = spatial_poi_id(INTERIOR_POI_SALT ^ place.label.salt() ^ entity.to_bits(), translation);
+	let (target, support) = match place.arrival_local {
+		Some(local) => (
+			PendingPoiTarget::Child { parent: entity, translation: local, name: "place-arrival" },
+			support_for_pin(kind, true),
+		),
+		None => (PendingPoiTarget::Entity(entity), PoiSupport::Terrain),
+	};
 	state.pending_pois.push_back(PendingPoi {
-		target: PendingPoiTarget::Entity(entity),
-		poi: Poi::new(
-			spatial_poi_id(INTERIOR_POI_SALT ^ place.label.salt() ^ entity.to_bits(), translation),
-			kind,
-		)
-		.with_arrival_radius(place.arrival_radius)
-		.with_salience(salience)
-		.with_support(support_for_pin(kind, true)),
+		target,
+		poi: Poi::new(id, kind)
+			.with_arrival_radius(place.arrival_radius)
+			.with_salience(salience)
+			.with_support(support),
 		tier: PendingPoiTier::Local,
 	});
 }
@@ -512,9 +518,45 @@ mod tests {
 
 		assert!(app.world().get::<Poi>(host).is_some());
 		assert_eq!(app.world().get::<Poi>(host).map(|poi| poi.kind), Some(LOCAL_POI));
+		assert_eq!(
+			app.world().get::<Poi>(host).map(|poi| poi.support),
+			Some(PoiSupport::Terrain),
+			"a host without arrival_local is an outdoor pin"
+		);
 		let promoted_rooms =
 			rooms.iter().filter(|entity| app.world().get::<Poi>(**entity).is_some()).count();
 		assert_eq!(promoted_rooms, 2);
+	}
+
+	#[test]
+	fn arrival_local_promotes_a_floor_child() {
+		let mut app = App::new();
+		app.init_resource::<WorldPoiDiscoveryBudget>()
+			.init_resource::<WorldPoiDiscoveryState>()
+			.init_resource::<PoiRegistry>()
+			.add_systems(Update, (queue_local_places, promote_pending_pois).chain());
+		let stand = Vec3::new(0.0, -1.2, 0.0);
+		let room = app
+			.world_mut()
+			.spawn((
+				DiscoverablePlace::high(DiscoverablePlaceLabel::Bedroom, 3.0, 1.0)
+					.with_arrival_local(stand),
+				Transform::from_xyz(4.0, 12.0, -2.0),
+				GlobalTransform::from_xyz(4.0, 12.0, -2.0),
+			))
+			.id();
+
+		app.update();
+
+		let poi = app.world().get::<Poi>(room);
+		assert!(poi.is_none(), "floor arrivals spawn a child stand, not the room entity");
+		let mut children = app.world_mut().query::<(&ChildOf, &Poi, &Transform)>();
+		let (_, poi, transform) = children
+			.iter(app.world())
+			.find(|(child_of, _, _)| child_of.parent() == room)
+			.expect("place-arrival child");
+		assert_eq!(poi.support, PoiSupport::Floor);
+		assert_eq!(transform.translation, stand);
 	}
 
 	#[test]
@@ -537,7 +579,7 @@ mod tests {
 
 		let poi = app.world().get::<Poi>(market).copied();
 		assert_eq!(poi.map(|poi| poi.kind), Some(SALOON_POI));
-		assert_eq!(poi.map(|poi| poi.support), Some(PoiSupport::Floor));
+		assert_eq!(poi.map(|poi| poi.support), Some(PoiSupport::Terrain));
 		assert!(app.world().get::<LocalPoi>(market).is_some());
 	}
 

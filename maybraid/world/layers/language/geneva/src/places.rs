@@ -4,7 +4,7 @@
 use std::marker::PhantomData;
 
 use bevy::math::bounding::{Aabb3d, BoundingVolume};
-use bevy::math::{Vec2, Vec3Swizzles};
+use bevy::math::{Vec2, Vec3, Vec3Swizzles};
 use building_components::{BuildingComponents, LabelNode};
 use chico::ForestGround;
 use lod::gen::{Id, OriginalId};
@@ -40,6 +40,9 @@ pub struct DevelopmentPlace {
 	/// Authored floor / host height at the pin. Arrival uses this Y, not the
 	/// development AABB midpoint, so stacked storeys keep their floor.
 	pub y: f32,
+	/// Capsule-safe interior stand in world space. `None` means PlacePois
+	/// should resolve an outdoor padded arrival instead of this geometry.
+	pub interior_arrival: Option<Vec3>,
 	/// For a room, the index of its building's place.
 	pub building: Option<usize>,
 }
@@ -75,11 +78,14 @@ impl<W> DevelopmentPlaces<W> {
 			let building = host.discoverable_place().map(|place| {
 				let local = host.place_local_id();
 				let world = transform.transform_point(host.local_bounds().center().into());
+				let interior_arrival =
+					host.interior_stand_local(None).map(|stand| transform.transform_point(stand));
 				push(DevelopmentPlace {
 					key: NameKey::Place { host: development, local },
 					place: place.with_identity(development, local),
 					xz: world.xz(),
 					y: world.y,
+					interior_arrival,
 					building: None,
 				})
 			});
@@ -89,11 +95,15 @@ impl<W> DevelopmentPlaces<W> {
 				};
 				let local = local_place_id(&node);
 				let world = transform.transform_point(node.placement.translation);
+				let interior_arrival = host
+					.interior_stand_local(Some(node.placement.translation))
+					.map(|stand| transform.transform_point(stand));
 				push(DevelopmentPlace {
 					key: NameKey::Place { host: development, local },
 					place: place.with_identity(development, local),
 					xz: world.xz(),
 					y: world.y,
+					interior_arrival,
 					building,
 				});
 			}

@@ -1,11 +1,14 @@
 //! Ground newly spawned agents on composed Durham height.
 
+use bevy::math::Vec3Swizzles;
 use bevy::prelude::*;
 use characters::LocomotionCapsule;
-use durham::DurhamSurface;
+use durham::{Durham, DurhamSurface};
 use mob_intelligence::MobSlot;
 use mob_scenes::MobSceneSystems;
 use poi_intelligence::PoiSupport;
+use richmond::PaddedTerrain;
+use terrain_layer_model::OnTerrain;
 
 pub(crate) struct SpawnSurfacePlugin;
 
@@ -26,11 +29,21 @@ impl Plugin for SpawnSurfacePlugin {
 /// so composed terrain does not pull them out of the storey.
 fn lift_new_mob_members_above_composed(
 	surface: DurhamSurface,
+	storage: Res<lod::hcsg::HcsgStorage>,
 	mut members: Query<(&mut Transform, Option<&PoiSupport>), Added<MobSlot>>,
 ) {
 	let clearance = LocomotionCapsule::HUMANOID.spawn_height();
 	for (mut transform, support) in &mut members {
 		if support.is_some_and(|support| support.stands_on_floor()) {
+			continue;
+		}
+		let xz = transform.translation.xz();
+		if let Ok(Some(padded)) =
+			PaddedTerrain::<OnTerrain<Durham>>::published_height_at(storage.as_ref(), xz)
+		{
+			if transform.translation.y < padded + clearance {
+				transform.translation.y = padded + clearance;
+			}
 			continue;
 		}
 		transform.translation =
