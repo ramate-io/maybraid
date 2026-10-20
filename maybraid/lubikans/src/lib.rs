@@ -50,12 +50,11 @@ pub use lifetime::{
 pub use plugin::{LubikanSessionStore, LubikansPlugin};
 pub use selection::LubikanSelection;
 pub use summon::{
-	fixture_summon_definition, install_fixture_summon, LubikanSummon, LubikanSummonAuthority,
-	LubikanSummonCatalog, LubikanSummonConfig, LubikanSummonDeparture,
-	LubikanSummonDepartureReason, LubikanSummonEnabled, LubikanSummonInstanceId,
-	LubikanSummonInvalidPlacement, LubikanSummonPresentation, LubikanSummonRecipe,
-	LubikanSummonTargeting, LubikanSummons, FIXTURE_SUMMON_DEFINITION_ID,
-	PLACEHOLDER_SUMMON_ACTIVATION_COST, PLACEHOLDER_SUMMON_CAPACITY,
+	fixture_summon_definition, install_fixture_summon, LubikanSummon, LubikanSummonCatalog,
+	LubikanSummonConfig, LubikanSummonDeparture, LubikanSummonDepartureReason,
+	LubikanSummonEnabled, LubikanSummonInstanceId, LubikanSummonInvalidPlacement,
+	LubikanSummonLifetime, LubikanSummonPresentation, LubikanSummonRecipe, LubikanSummons,
+	FIXTURE_SUMMON_DEFINITION_ID, PLACEHOLDER_SUMMON_ACTIVATION_COST, PLACEHOLDER_SUMMON_CAPACITY,
 	PLACEHOLDER_SUMMON_FORWARD_OFFSET, PLACEHOLDER_SUMMON_HEALTH, PLACEHOLDER_SUMMON_LIFETIME_SECS,
 	PLACEHOLDER_SUMMON_MAX_CONCURRENT,
 };
