@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use damage::{DespawnAfter, Downed, Health};
 use poi_intelligence::{
-	mix_seed, place_nearby_among, PoiId, PoiInterests, PoiRegistry, AGENT_SEPARATION,
+	mix_seed, place_nearby_among, PoiId, PoiInterests, PoiRegistry, PoiSupport, AGENT_SEPARATION,
 };
 
 use crate::host::{Mob, MobId};
@@ -170,7 +170,7 @@ pub(crate) fn respawn_mob_members(
 			let excluded = member.excluded_pois().to_vec();
 			let last = member.pose;
 			let used = member.replacements_used;
-			let (pose, poi) = policy.placement(
+			let (pose, poi, support) = policy.placement(
 				transform.translation,
 				last,
 				*id,
@@ -184,7 +184,7 @@ pub(crate) fn respawn_mob_members(
 			member.remember_respawn_poi(poi);
 			member.pose = pose;
 			occupied.push(pose);
-			needed.write(MobMemberNeeded { mob: host, id: *id, slot, pose });
+			needed.write(MobMemberNeeded { mob: host, id: *id, slot, pose, support });
 		}
 	}
 }
@@ -212,9 +212,9 @@ impl MobRespawn {
 		occupied: &[Vec3],
 		registry: Option<&PoiRegistry>,
 		interests: Option<&PoiInterests>,
-	) -> (Vec3, Option<PoiId>) {
+	) -> (Vec3, Option<PoiId>, PoiSupport) {
 		if self.at != MobRespawnAt::Poi {
-			return (spawn_pose(self.at, host, last), None);
+			return (spawn_pose(self.at, host, last), None, PoiSupport::Terrain);
 		}
 		let seed = respawn_seed(mob, slot, generation);
 		let placed = place_nearby_among(
@@ -228,7 +228,11 @@ impl MobRespawn {
 			occupied,
 			AGENT_SEPARATION,
 		);
-		(with_member_height(placed.position, host, last, placed.poi.is_some()), placed.poi)
+		(
+			with_member_height(placed.position, host, last, placed.poi.is_some()),
+			placed.poi,
+			placed.support,
+		)
 	}
 
 	pub fn delay_for_slot(self, slot: u16) -> f32 {
@@ -262,7 +266,9 @@ fn schedule_respawn(member: &mut RosterMember, slot: u16, policy: MobRespawn, no
 #[cfg(test)]
 mod tests {
 	use anyhow::Result;
-	use poi_intelligence::{NearbyFallback, Poi, PoiInterest, PoiKind, DEFAULT_NEARBY_RADIUS};
+	use poi_intelligence::{
+		NearbyFallback, Poi, PoiInterest, PoiKind, PoiSupport, DEFAULT_NEARBY_RADIUS,
+	};
 
 	use super::*;
 
@@ -285,6 +291,37 @@ mod tests {
 			false,
 		)?;
 		Ok(registry)
+	}
+
+	#[test]
+	fn poi_respawn_carries_floor_support() -> Result<()> {
+		let mut registry = PoiRegistry::default();
+		registry.upsert(
+			Entity::from_bits(11),
+			Poi::new(PoiId(11), CAMP)
+				.with_arrival_radius(8.0)
+				.with_support(PoiSupport::Floor),
+			Vec3::new(20.0, 12.0, 0.0),
+			true,
+			false,
+		)?;
+		let interests = PoiInterests::new([PoiInterest::new(CAMP, 1.0)]);
+		let policy = MobRespawn { at: MobRespawnAt::Poi, ..MobRespawn::default() };
+		let placed = policy.placement(
+			Vec3::ZERO,
+			Vec3::Y,
+			MobId(3),
+			0,
+			1,
+			&[],
+			&[],
+			Some(&registry),
+			Some(&interests),
+		);
+		assert_eq!(placed.1, Some(PoiId(11)));
+		assert_eq!(placed.2, PoiSupport::Floor);
+		assert_eq!(placed.0.y, 13.0);
+		Ok(())
 	}
 
 	#[test]

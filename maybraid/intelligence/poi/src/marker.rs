@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{PoiId, PoiKind};
+use crate::{PoiArrival, PoiId, PoiKind, PoiSupport};
 
 pub const MAX_POI_ARRIVAL_RADIUS: f32 = 256.0;
 
@@ -11,11 +11,12 @@ pub struct Poi {
 	pub kind: PoiKind,
 	pub arrival_radius: f32,
 	pub salience: f32,
+	pub support: PoiSupport,
 }
 
 impl Poi {
 	pub fn new(id: PoiId, kind: PoiKind) -> Self {
-		Self { id, kind, arrival_radius: 1.0, salience: 1.0 }
+		Self { id, kind, arrival_radius: 1.0, salience: 1.0, support: PoiSupport::Terrain }
 	}
 
 	pub fn with_arrival_radius(mut self, radius: f32) -> Self {
@@ -30,6 +31,15 @@ impl Poi {
 			self.salience = salience.max(0.0);
 		}
 		self
+	}
+
+	pub fn with_support(mut self, support: PoiSupport) -> Self {
+		self.support = support;
+		self
+	}
+
+	pub fn arrival(self, position: Vec3) -> PoiArrival {
+		PoiArrival { position, radius: self.arrival_radius, support: self.support }
 	}
 }
 
