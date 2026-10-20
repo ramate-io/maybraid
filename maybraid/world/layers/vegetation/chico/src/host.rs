@@ -7,6 +7,7 @@ use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
+use lod::gen::Id;
 use lod::lod_ref::LodRef;
 use lod::scene::LodScene;
 use lod::{lod_host_scene_pending, LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk};
@@ -18,11 +19,13 @@ use crate::{ForestGroveTile, ForestLayer, LayerDropOut};
 pub struct ChicoGroveHost {
 	pub tile: ForestGroveTile,
 	pub layer: ForestLayer,
+	/// Generation id of the [`crate::ChicoGrove`] this tile was grown from.
+	pub grove_id: Id,
 }
 
 impl ChicoGroveHost {
-	pub fn new(tile: ForestGroveTile, layer: ForestLayer) -> Self {
-		Self { tile, layer }
+	pub fn new(tile: ForestGroveTile, layer: ForestLayer, grove_id: Id) -> Self {
+		Self { tile, layer, grove_id }
 	}
 
 	pub fn drop_out(&self) -> LayerDropOut {
@@ -169,7 +172,7 @@ mod tests {
 			vec![ForestGroveRecipe::uniform(ForestGroveKind::CommonTufts, extent)],
 		);
 		let tile = grove.grow(&forest_world_sample()).remove(0);
-		let host = ChicoGroveHost::new(tile, ForestLayer::Tufts);
+		let host = ChicoGroveHost::new(tile, ForestLayer::Tufts, grove.id());
 		with_lod(Vec3::new(0.0, 20.0, 40.0), |lod_ref| {
 			assert_eq!(
 				host.scene_chunks_with_level(lod_ref, LodSceneLevel::Medium).total_primitives(),

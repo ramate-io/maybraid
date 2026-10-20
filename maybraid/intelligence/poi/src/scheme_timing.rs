@@ -310,6 +310,34 @@ fn print_scheme_row(n: usize, tiles: i32, path: &str, cold: &Stats, warm: &Stats
 	);
 }
 
+#[test]
+fn nearby_scheme_paths_agree() {
+	let interests = PoiInterests::one(GRID_KIND);
+	let tiles = tile_grid(16);
+	let entries = grid_catalog(&tiles);
+	let centers = nearby_centers(&tiles);
+	let catalog = seed_catalog(&entries);
+	let mut catalog_cx = GenerationContext::new(&catalog);
+	let query = crate::NearbyQuery::weighted(TILE_SIZE);
+	let mut catalog_out = Vec::new();
+	for center in centers {
+		let scan = scan_nearby(&entries, center, &interests);
+		crate::collect_matching_nearby::<Catalog>(
+			&mut catalog_cx,
+			center,
+			query,
+			&interests,
+			&[],
+			&mut catalog_out,
+		);
+		assert_eq!(
+			scan.iter().map(|poi| poi.id).collect::<Vec<_>>(),
+			catalog_out.iter().map(|poi| poi.id).collect::<Vec<_>>(),
+			"scan vs Catalog nearby at {center}"
+		);
+	}
+}
+
 /// Fast identity check so CI catches a path split without running the bench.
 #[test]
 fn xz_tile_scheme_paths_agree() {
@@ -392,4 +420,161 @@ fn xz_tile_scheme_timing() {
 		print_scheme_row(SPAN_SWEEP_N, span * span, "Catalog", &catalog_cold, &catalog_warm);
 		print_scheme_row(SPAN_SWEEP_N, span * span, "GridTiles", &grid_cold, &grid_warm);
 	}
+
+	eprintln!();
+	eprintln!("### Nearby lookup vs catalog size");
+	eprintln!();
+	eprintln!("| n | path | cold med µs | cold p95 µs | warm med µs | warm p95 µs | warm total |");
+	eprintln!("| ---: | --- | ---: | ---: | ---: | ---: | ---: |");
+	for n in POI_COUNTS {
+		let tiles = tile_grid(n);
+		let entries = grid_catalog(&tiles);
+		let centers = nearby_centers(&tiles);
+		let scan = time_nearby_scan(&entries, &centers, &interests);
+		let catalog_cold =
+			time_nearby_cold::<Catalog>(|| seed_catalog(&entries), &centers, &interests);
+		let catalog_store = seed_catalog(&entries);
+		let catalog_warm = time_nearby_warm::<Catalog>(&catalog_store, &centers, &interests);
+		let grid_cold = time_nearby_cold::<GridTiles>(HcsgStorage::default, &centers, &interests);
+		let grid_store = HcsgStorage::default();
+		let grid_warm = time_nearby_warm::<GridTiles>(&grid_store, &centers, &interests);
+		print_nearby_scan_row(n, &scan);
+		print_nearby_scheme_row(n, "Catalog", &catalog_cold, &catalog_warm);
+		print_nearby_scheme_row(n, "GridTiles", &grid_cold, &grid_warm);
+	}
+}
+
+fn nearby_centers(tiles: &[IVec2]) -> Vec<Vec3> {
+	tiles
+		.iter()
+		.take(PROBES)
+		.map(|tile| {
+			let min = tile.as_vec2() * TILE_SIZE;
+			Vec3::new(min.x + TILE_SIZE * 0.5, 0.0, min.y + TILE_SIZE * 0.5)
+		})
+		.collect()
+}
+
+fn scan_nearby(entries: &[PoiEntry], center: Vec3, interests: &PoiInterests) -> Vec<PoiEntry> {
+	let query = crate::NearbyQuery::weighted(TILE_SIZE);
+	let radius = query.radius;
+	let mut out: Vec<PoiEntry> = entries
+		.iter()
+		.copied()
+		.filter(|entry| {
+			interests.contains(entry.kind)
+				&& center.distance(entry.position) <= radius + entry.arrival_radius
+		})
+		.collect();
+	out.sort_unstable_by_key(|entry| entry.id);
+	out
+}
+
+fn time_nearby_scan(entries: &[PoiEntry], centers: &[Vec3], interests: &PoiInterests) -> Stats {
+	for _ in 0..WARMUP {
+		for center in centers {
+			black_box(scan_nearby(entries, *center, interests).len());
+		}
+	}
+	let mut samples = Vec::with_capacity(WARM_ITERS * centers.len());
+	for _ in 0..WARM_ITERS {
+		for center in centers {
+			let started = Instant::now();
+			let hits = scan_nearby(entries, *center, interests);
+			samples.push(started.elapsed());
+			black_box(hits.len());
+		}
+	}
+	stats(samples)
+}
+
+fn time_nearby_cold<S: PoiOrigin>(
+	seed: impl Fn() -> HcsgStorage,
+	centers: &[Vec3],
+	interests: &PoiInterests,
+) -> Stats {
+	let query = crate::NearbyQuery::weighted(TILE_SIZE);
+	let mut samples = Vec::with_capacity(COLD_ITERS * centers.len());
+	let mut scratch = Vec::new();
+	for _ in 0..COLD_ITERS {
+		let storage = seed();
+		let mut cx = GenerationContext::new(&storage);
+		for center in centers {
+			let started = Instant::now();
+			crate::collect_matching_nearby::<S>(
+				&mut cx,
+				*center,
+				query,
+				interests,
+				&[],
+				&mut scratch,
+			);
+			samples.push(started.elapsed());
+			black_box(scratch.len());
+		}
+	}
+	stats(samples)
+}
+
+fn time_nearby_warm<S: PoiOrigin>(
+	storage: &HcsgStorage,
+	centers: &[Vec3],
+	interests: &PoiInterests,
+) -> Stats {
+	let query = crate::NearbyQuery::weighted(TILE_SIZE);
+	let mut cx = GenerationContext::new(storage);
+	let mut scratch = Vec::new();
+	for center in centers {
+		crate::collect_matching_nearby::<S>(&mut cx, *center, query, interests, &[], &mut scratch);
+	}
+	for _ in 0..WARMUP {
+		for center in centers {
+			crate::collect_matching_nearby::<S>(
+				&mut cx,
+				*center,
+				query,
+				interests,
+				&[],
+				&mut scratch,
+			);
+			black_box(scratch.len());
+		}
+	}
+	let mut samples = Vec::with_capacity(WARM_ITERS * centers.len());
+	for _ in 0..WARM_ITERS {
+		for center in centers {
+			let started = Instant::now();
+			crate::collect_matching_nearby::<S>(
+				&mut cx,
+				*center,
+				query,
+				interests,
+				&[],
+				&mut scratch,
+			);
+			samples.push(started.elapsed());
+			black_box(scratch.len());
+		}
+	}
+	stats(samples)
+}
+
+fn print_nearby_scan_row(n: usize, measured: &Stats) {
+	eprintln!(
+		"| {n} | scan | — | — | {} | {} | {} |",
+		fmt_us(measured.median),
+		fmt_us(measured.p95),
+		fmt_total(measured.total),
+	);
+}
+
+fn print_nearby_scheme_row(n: usize, path: &str, cold: &Stats, warm: &Stats) {
+	eprintln!(
+		"| {n} | {path} | {} | {} | {} | {} | {} |",
+		fmt_us(cold.median),
+		fmt_us(cold.p95),
+		fmt_us(warm.median),
+		fmt_us(warm.p95),
+		fmt_total(warm.total),
+	);
 }

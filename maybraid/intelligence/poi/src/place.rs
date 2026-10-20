@@ -6,7 +6,10 @@ use bevy::prelude::*;
 use movement_intelligence::MovementLocation;
 
 use crate::hash::{mix, unit_f32};
-use crate::{NearbyFallback, NearbyQuery, PoiId, PoiInterests, PoiRegistry};
+use crate::{
+	choose_nearby_among, GeneratedNearby, NearbyFallback, NearbyQuery, PoiId, PoiInterests,
+	PoiRegistry,
+};
 
 const DISK_DISTANCE_SALT: u64 = 0x736f_6d65_706c_6179;
 const DISK_ANGLE_SALT: u64 = 0x6572_5f72_6573_7061;
@@ -77,12 +80,14 @@ pub fn place_nearby(
 	fallback: NearbyFallback,
 ) -> NearbyPlace {
 	let excluded = previous.as_ref().map(core::slice::from_ref).unwrap_or(&[]);
-	place_nearby_among(registry, center, query, interests, excluded, seed, fallback, &[], 0.0)
+	place_nearby_among(registry, None, center, query, interests, excluded, seed, fallback, &[], 0.0)
 }
 
-/// [`place_nearby`] plus last-N exclusion and sibling occupancy.
+/// [`place_nearby`] plus last-N exclusion, sibling occupancy, and optional
+/// generated-world scheme pins.
 pub fn place_nearby_among(
 	registry: Option<&PoiRegistry>,
+	generated: Option<GeneratedNearby<'_>>,
 	center: Vec3,
 	query: NearbyQuery,
 	interests: Option<&PoiInterests>,
@@ -92,8 +97,14 @@ pub fn place_nearby_among(
 	occupied: &[Vec3],
 	min_separation: f32,
 ) -> NearbyPlace {
-	let poi = registry.zip(interests).and_then(|(registry, interests)| {
-		registry.choose_in(center, query, interests, excluded, seed)
+	let poi = interests.and_then(|interests| {
+		if generated.is_some() {
+			choose_nearby_among(registry, generated, center, query, interests, excluded, seed)
+		} else {
+			registry
+				.and_then(|registry| registry.choose_in(center, query, interests, excluded, seed))
+				.map(|record| record.as_entry())
+		}
 	});
 	let placed = match poi {
 		Some(poi) => NearbyPlace {
@@ -185,6 +196,7 @@ impl PoiRegistry {
 	) -> NearbyPlace {
 		place_nearby_among(
 			Some(self),
+			None,
 			center,
 			query,
 			Some(interests),
@@ -376,6 +388,7 @@ mod tests {
 			NearbyFallback::new(4.0, 4.0),
 		);
 		let second = place_nearby_among(
+			None,
 			None,
 			Vec3::ZERO,
 			NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),

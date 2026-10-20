@@ -1,8 +1,8 @@
 //! World POIs as [`PoiOrigin`] schemes over existing HCSG grids.
 //!
-//! Distant-tile journeying calls [`DistantTilePois::collect_matching_in_xz_tile`],
-//! which resolves each family through `get_or_generate_in` — O(tile), not a
-//! walk of every global POI.
+//! Distant-tile journeying and nearby placement call [`DistantTilePois`],
+//! which resolves each family through `get_or_generate_in` — O(cells in the
+//! query), not a walk of every global POI.
 
 use std::marker::PhantomData;
 
@@ -14,11 +14,12 @@ use lod::gen::{Id, OriginalId};
 use lod::hcsg::{GenerationContext, HcsgStorage};
 use mob_characters::{URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
-	collect_matching_in_xz_tile, hashed_poi_id, DistantTilePois, PoiEntry, PoiInterests, PoiOrigin,
-	PoiSet,
+	collect_matching_global, collect_matching_in_xz_tile, collect_matching_nearby, hashed_poi_id,
+	DistantTilePois, NearbyQuery, PoiEntry, PoiId, PoiInterests, PoiOrigin, PoiSet,
 };
 use richmond::{Built, RichmondGround};
 
+use super::families::{interests_need_grove, interests_need_places, interests_need_urban};
 use super::place_kind;
 
 const GROVE_POI_SALT: u64 = 0x6772_6f76_652d_706f;
@@ -132,35 +133,125 @@ impl DistantTilePois for WorldPoiTiles {
 		type Urban = urbanization_layer_model::Urbanization<richmond::Richmond<Ground>>;
 
 		out.clear();
+		if interests.is_empty() {
+			return;
+		}
 		let mut cx = GenerationContext::new(storage);
 		let mut scratch = Vec::new();
-		collect_matching_in_xz_tile::<GrovePois>(
-			&mut cx,
-			tile,
-			tile_size,
-			center_y,
-			interests,
-			&mut scratch,
-		);
-		out.extend(scratch.iter().copied());
-		collect_matching_in_xz_tile::<UrbanPois<Ground>>(
-			&mut cx,
-			tile,
-			tile_size,
-			center_y,
-			interests,
-			&mut scratch,
-		);
-		out.extend(scratch.iter().copied());
-		collect_matching_in_xz_tile::<PlacePois<Urban>>(
-			&mut cx,
-			tile,
-			tile_size,
-			center_y,
-			interests,
-			&mut scratch,
-		);
-		out.extend(scratch.iter().copied());
+		if interests_need_grove(interests) {
+			collect_matching_in_xz_tile::<GrovePois>(
+				&mut cx,
+				tile,
+				tile_size,
+				center_y,
+				interests,
+				&mut scratch,
+			);
+			out.extend(scratch.iter().copied());
+		}
+		if interests_need_urban(interests) {
+			collect_matching_in_xz_tile::<UrbanPois<Ground>>(
+				&mut cx,
+				tile,
+				tile_size,
+				center_y,
+				interests,
+				&mut scratch,
+			);
+			out.extend(scratch.iter().copied());
+		}
+		if interests_need_places(interests) {
+			collect_matching_in_xz_tile::<PlacePois<Urban>>(
+				&mut cx,
+				tile,
+				tile_size,
+				center_y,
+				interests,
+				&mut scratch,
+			);
+			out.extend(scratch.iter().copied());
+		}
+		out.sort_unstable_by_key(|poi| poi.id);
+		out.dedup_by_key(|poi| poi.id);
+	}
+
+	fn collect_matching_nearby(
+		&self,
+		storage: &HcsgStorage,
+		center: Vec3,
+		query: NearbyQuery,
+		interests: &PoiInterests,
+		excluded: &[PoiId],
+		out: &mut Vec<PoiEntry>,
+	) {
+		type Ground = terrain_layer_model::OnTerrain<durham::Durham>;
+		type Urban = urbanization_layer_model::Urbanization<richmond::Richmond<Ground>>;
+
+		out.clear();
+		if interests.is_empty() {
+			return;
+		}
+		let mut cx = GenerationContext::new(storage);
+		let mut scratch = Vec::new();
+		if interests_need_grove(interests) {
+			collect_matching_nearby::<GrovePois>(
+				&mut cx,
+				center,
+				query,
+				interests,
+				excluded,
+				&mut scratch,
+			);
+			out.extend(scratch.iter().copied());
+		}
+		if interests_need_urban(interests) {
+			collect_matching_nearby::<UrbanPois<Ground>>(
+				&mut cx,
+				center,
+				query,
+				interests,
+				excluded,
+				&mut scratch,
+			);
+			out.extend(scratch.iter().copied());
+		}
+		if interests_need_places(interests) {
+			collect_matching_nearby::<PlacePois<Urban>>(
+				&mut cx,
+				center,
+				query,
+				interests,
+				excluded,
+				&mut scratch,
+			);
+			out.extend(scratch.iter().copied());
+		}
+		out.sort_unstable_by_key(|poi| poi.id);
+		out.dedup_by_key(|poi| poi.id);
+	}
+
+	fn collect_matching_global(
+		&self,
+		storage: &HcsgStorage,
+		interests: &PoiInterests,
+		out: &mut Vec<PoiEntry>,
+	) {
+		type Ground = terrain_layer_model::OnTerrain<durham::Durham>;
+
+		out.clear();
+		if interests.is_empty() {
+			return;
+		}
+		let mut cx = GenerationContext::new(storage);
+		let mut scratch = Vec::new();
+		if interests_need_grove(interests) {
+			collect_matching_global::<GrovePois>(&mut cx, interests, &mut scratch);
+			out.extend(scratch.iter().copied());
+		}
+		if interests_need_urban(interests) {
+			collect_matching_global::<UrbanPois<Ground>>(&mut cx, interests, &mut scratch);
+			out.extend(scratch.iter().copied());
+		}
 		out.sort_unstable_by_key(|poi| poi.id);
 		out.dedup_by_key(|poi| poi.id);
 	}

@@ -405,6 +405,38 @@ fn region_pulls_skip_what_does_not_exist() {
 	assert!(cx.get_or_generate_in::<Cycle>(span(0.0, 2.0)).is_empty());
 }
 
+#[test]
+fn discovery_id_cache_reuses_original_ids_for_overlapping_queries() {
+	use std::sync::atomic::{AtomicUsize, Ordering};
+
+	static CALLS: AtomicUsize = AtomicUsize::new(0);
+
+	struct Tracked;
+
+	impl GenerationScheme for Tracked {
+		const INDEX_SCALE: DVec3 = DVec3::ONE;
+
+		fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+			CALLS.fetch_add(1, Ordering::Relaxed);
+			cells_in(region)
+		}
+
+		fn build_with_id(_: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+			let cell = id.origin_cell_bounds()?;
+			Some((Self, cell))
+		}
+	}
+
+	let storage = HcsgStorage::default();
+	storage.configure::<Tracked>(DVec3::ONE);
+	let region = span(0.0, 3.0);
+	let mut cx = GenerationContext::new(&storage);
+	CALLS.store(0, Ordering::Relaxed);
+	cx.get_or_generate_in::<Tracked>(region);
+	cx.get_or_generate_in::<Tracked>(region);
+	assert_eq!(CALLS.load(Ordering::Relaxed), 1);
+}
+
 fn cover_seeds(storage: &HcsgStorage) -> std::collections::BTreeMap<Id, u32> {
 	storage
 		.overlapping::<Cover>(span(-1.0, 20.0))

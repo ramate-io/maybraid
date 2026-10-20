@@ -1,11 +1,11 @@
 //! [`GenerationScheme`]s and the [`GenerationContext`] they generate through.
 
 use std::any::TypeId;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use bevy::math::bounding::Aabb3d;
-use bevy::math::DVec3;
+use bevy::math::{DVec3, Vec3};
 
 use crate::gen::{Id, OriginalId};
 
@@ -47,6 +47,55 @@ pub struct GenerationContext<'a> {
 	/// How many `build_with_id` frames sit above the current generate.
 	nested_depth: usize,
 	stale: &'a (dyn Fn() -> bool + 'a),
+	/// Bounded reuse of `original_ids_for` within one context (quantized regions).
+	discovery_ids: DiscoveryIdCache,
+}
+
+const MAX_DISCOVERY_CACHE_ENTRIES: usize = 64;
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct RegionCellKey {
+	min: [i32; 3],
+	max: [i32; 3],
+}
+
+struct DiscoveryIdCache {
+	entries: HashMap<(TypeId, RegionCellKey), Vec<Id>>,
+	order: VecDeque<(TypeId, RegionCellKey)>,
+}
+
+impl DiscoveryIdCache {
+	fn new() -> Self {
+		Self { entries: HashMap::new(), order: VecDeque::new() }
+	}
+
+	fn get(&self, type_id: TypeId, key: RegionCellKey) -> Option<&Vec<Id>> {
+		self.entries.get(&(type_id, key))
+	}
+
+	fn insert(&mut self, type_id: TypeId, key: RegionCellKey, ids: Vec<Id>) {
+		let slot = (type_id, key);
+		if self.entries.contains_key(&slot) {
+			return;
+		}
+		while self.entries.len() >= MAX_DISCOVERY_CACHE_ENTRIES {
+			let Some(evict) = self.order.pop_front() else {
+				break;
+			};
+			self.entries.remove(&evict);
+		}
+		self.order.push_back(slot);
+		self.entries.insert(slot, ids);
+	}
+}
+
+fn region_cell_key(region: Aabb3d, scale: DVec3) -> RegionCellKey {
+	let min = DVec3::from(Vec3::from(region.min)) / scale;
+	let max = DVec3::from(Vec3::from(region.max)) / scale;
+	RegionCellKey {
+		min: [min.x.floor() as i32, min.y.floor() as i32, min.z.floor() as i32],
+		max: [max.x.floor() as i32, max.y.floor() as i32, max.z.floor() as i32],
+	}
 }
 
 impl<'a> GenerationContext<'a> {
@@ -63,6 +112,7 @@ impl<'a> GenerationContext<'a> {
 			reached: HashSet::new(),
 			nested_depth: 0,
 			stale,
+			discovery_ids: DiscoveryIdCache::new(),
 		}
 	}
 
@@ -197,6 +247,11 @@ impl<'a> GenerationContext<'a> {
 	}
 
 	fn sorted_ids_for<T: GenerationScheme>(&mut self, region: Aabb3d) -> Vec<Id> {
+		let type_id = TypeId::of::<T>();
+		let key = region_cell_key(region, T::INDEX_SCALE);
+		if let Some(cached) = self.discovery_ids.get(type_id, key) {
+			return cached.clone();
+		}
 		let mut ids: Vec<Id> = self
 			.original_ids_for::<T>(region)
 			.into_iter()
@@ -204,6 +259,7 @@ impl<'a> GenerationContext<'a> {
 			.collect();
 		ids.sort();
 		ids.dedup();
+		self.discovery_ids.insert(type_id, key, ids.clone());
 		ids
 	}
 }

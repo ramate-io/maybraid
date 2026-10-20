@@ -40,3 +40,10 @@ pub struct LocalPoi;
 /// Include this sparse [`Poi`] in inexpensive whole-map scans.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct GlobalPoi;
+
+/// Presented pin whose spatial discovery is owned by a [`crate::PoiSet`] scheme.
+///
+/// Kept in [`crate::PoiRegistry`] for entity association, but excluded from the
+/// telepathic whole-map set and from registry nearby global scans.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SchemePresentedPoi;
