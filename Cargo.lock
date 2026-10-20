@@ -2848,6 +2848,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "character-mesh-export"
+version = "0.1.5"
+dependencies = [
+ "bevy",
+ "characters",
+ "clap",
+ "cpu-posed-mesh",
+ "material-ref",
+ "rigs",
+]
+
+[[package]]
 name = "character-model-user"
 version = "0.1.5"
 dependencies = [
@@ -3470,6 +3482,14 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "windows 0.62.1",
+]
+
+[[package]]
+name = "cpu-posed-mesh"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
 ]
 
 [[package]]
@@ -10479,6 +10499,7 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
+ "cpu-posed-mesh",
  "png 0.17.16",
  "procedural-common",
  "scene-ref",

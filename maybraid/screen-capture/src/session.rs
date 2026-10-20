@@ -5,12 +5,12 @@ use bevy::camera::primitives::MeshAabb;
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{ClearColorConfig, RenderTarget};
 use bevy::math::bounding::Aabb3d;
-use bevy::mesh::skinning::{InfluenceIterator, SkinnedMesh, SkinnedMeshInverseBindposes};
-use bevy::mesh::VertexAttributeValues;
+use bevy::mesh::skinning::{SkinnedMesh, SkinnedMeshInverseBindposes};
 use bevy::prelude::*;
 use bevy::render::gpu_readback::{Readback, ReadbackComplete};
 use bevy::render::render_resource::TextureFormat;
 use bevy::world_serialization::WorldAssetRoot;
+use cpu_posed_mesh::PosePolicy;
 use scene_ref::SceneRefRoot;
 
 use crate::crop::crop_to_alpha;
@@ -396,56 +396,14 @@ fn subject_local_aabb(root: Entity, sources: &ExtentSources) -> Option<Aabb3d> {
 
 /// Linear-blend skin every vertex on the CPU, matching `skinning.wgsl`
 /// (the mesh entity's own transform is ignored for skinned draws).
+///
+/// Uses [`PosePolicy::capture_aabb`]: missing influences are skipped, collapsed
+/// joints are dead, dead vertices are omitted, world space, no normals.
 fn skinned_world_aabb(entity: Entity, mesh: &Mesh, sources: &ExtentSources) -> Option<Aabb3d> {
 	let skin = sources.skins.get(entity).ok()?;
 	let bindposes = sources.bindposes?.get(&skin.inverse_bindposes)?;
-	let Some(VertexAttributeValues::Float32x3(positions)) =
-		mesh.attribute(Mesh::ATTRIBUTE_POSITION)
-	else {
-		return None;
-	};
-	let influences = InfluenceIterator::new(mesh).ok()?;
-	// (skin matrix, joint collapsed to ~zero scale)
-	let joints: Vec<Option<(Mat4, bool)>> = skin
-		.joints
-		.iter()
-		.zip(bindposes.iter())
-		.map(|(&joint, bindpose)| {
-			sources.globals.get(joint).ok().map(|world| {
-				let collapsed = world.to_scale_rotation_translation().0.max_element() < 1e-3;
-				(world.to_matrix() * *bindpose, collapsed)
-			})
-		})
-		.collect();
-	let mut skinned = vec![Vec3::ZERO; positions.len()];
-	let mut weights = vec![0.0_f32; positions.len()];
-	let mut live = vec![0.0_f32; positions.len()];
-	for influence in influences {
-		let Some(Some((joint, collapsed))) = joints.get(influence.joint_index.0 as usize) else {
-			continue;
-		};
-		let Some(&position) = positions.get(influence.vertex_index) else {
-			continue;
-		};
-		skinned[influence.vertex_index] +=
-			joint.transform_point3(Vec3::from_array(position)) * influence.joint_weight;
-		weights[influence.vertex_index] += influence.joint_weight;
-		if !collapsed {
-			live[influence.vertex_index] += influence.joint_weight;
-		}
-	}
-	let mut min = Vec3::splat(f32::MAX);
-	let mut max = Vec3::splat(f32::MIN);
-	for ((point, weight), live) in skinned.iter().zip(&weights).zip(&live) {
-		// Fully collapsed vertices are degenerate triangles: nothing renders.
-		if *live <= 1e-4 {
-			continue;
-		}
-		let point = *point / *weight;
-		min = min.min(point);
-		max = max.max(point);
-	}
-	(min.cmple(max).all()).then(|| Aabb3d { min: min.into(), max: max.into() })
+	PosePolicy::capture_aabb()
+		.aabb_skinned(mesh, skin, bindposes, |joint| sources.globals.get(joint).ok().copied())
 }
 
 fn transform_aabb(aabb: Aabb3d, transform: &GlobalTransform) -> Aabb3d {
@@ -725,6 +683,7 @@ pub(crate) fn despawn_session(commands: &mut Commands, session: &CaptureSession)
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::mesh::VertexAttributeValues;
 
 	#[test]
 	fn silhouette_keeps_mask_alpha() -> anyhow::Result<()> {

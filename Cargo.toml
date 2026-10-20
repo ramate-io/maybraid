@@ -34,6 +34,7 @@ members = [
   "maybraid/scene-ref",
   "maybraid/material-ref",
   "maybraid/screen-capture",
+  "maybraid/cpu-posed-mesh",
   "maybraid/world/materials/lib",
   "maybraid/world/materials/playground",
   "maybraid/vfx/lib",
@@ -86,6 +87,7 @@ members = [
   "maybraid/world/layers/mobs/characters/lib",
   "maybraid/world/layers/mobs/characters/rigs",
   "maybraid/world/layers/mobs/characters/playground",
+  "maybraid/world/layers/mobs/characters/mesh-export",
   "maybraid/world/layers/mobs/architectural/doric-column",
   "maybraid/world/layers/mobs/architectural/doric-column/playground",
   "maybraid/world/layers/mobs/characters/bikanwarda",
@@ -315,6 +317,7 @@ scene-ref = { path = "maybraid/scene-ref" }
 visual-geometry-core = { path = "maybraid/visual-geometry-core" }
 material-ref = { path = "maybraid/material-ref" }
 screen-capture = { path = "maybraid/screen-capture" }
+cpu-posed-mesh = { path = "maybraid/cpu-posed-mesh" }
 terrain-chunk-ref = { path = "maybraid/terrain-chunk-ref" }
 avian3d = "0.7"
 
@@ -340,6 +343,7 @@ sdf-common = { path = "maybraid/sdf/common" }
 sdf-common-playground = { path = "maybraid/sdf/common-playground" }
 character-concepts-playground = { path = "maybraid/menu/character-concepts-playground" }
 characters-playground = { path = "maybraid/world/layers/mobs/characters/playground" }
+character-mesh-export = { path = "maybraid/world/layers/mobs/characters/mesh-export" }
 doric-column = { path = "maybraid/world/layers/mobs/architectural/doric-column" }
 doric-column-playground = { path = "maybraid/world/layers/mobs/architectural/doric-column/playground" }
 bikanwarda-character = { path = "maybraid/world/layers/mobs/characters/bikanwarda" }
