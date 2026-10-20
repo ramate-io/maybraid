@@ -15,7 +15,8 @@ use player::{look_forward, PlayerLook};
 use world_player::Player as VegetationPlayer;
 
 use crate::stash::{spawn_world_stash, WorldStashSettings};
-use crate::weapon::WorldPlayerLoadout;
+use crate::weapon::{commit_body_inventory, WorldPlayerLoadout};
+use lubikans::LubikanBodyOf;
 
 /// Spawn just outside the capsule, into the third-person gap beside the overlay.
 const TOSS_START_FORWARD: f32 = 0.55;
@@ -67,12 +68,14 @@ pub(crate) fn configure(app: &mut App) {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn apply_inventory_drop_requests(
+	mut commands: Commands,
 	mut requests: MessageReader<InventoryDropRequest>,
 	mut dropped: MessageWriter<InventoryDropped>,
 	mut refused: MessageWriter<InventoryDropRefused>,
 	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
 	users: Query<(&InventoryUser, Has<VegetationPlayer>)>,
 	mut bags: Query<&mut Inventory>,
+	body_of: Query<&LubikanBodyOf>,
 ) {
 	for request in requests.read() {
 		let Ok((user, is_player)) = users.get(request.owner) else {
@@ -99,7 +102,13 @@ pub(crate) fn apply_inventory_drop_requests(
 					if let Some(loadout) = loadout.as_deref_mut() {
 						// Leave AppliedWorldPlayerLoadout stale so arm_world_player
 						// re-holds the promoted primary and refreshes clothing/stats.
-						loadout.retarget_inventory(snapshot.clone());
+						commit_body_inventory(
+							&mut commands,
+							owner,
+							loadout,
+							snapshot.clone(),
+							body_of.get(owner).ok(),
+						);
 					}
 				}
 				dropped.write(InventoryDropped { owner, bag: user.bag, outcome });
