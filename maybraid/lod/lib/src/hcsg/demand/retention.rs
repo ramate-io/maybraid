@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::PoisonError;
 
+use bevy::math::bounding::Aabb3d;
+
 use super::schedule::{pick_job, Job};
 use super::state::{lock_mutex, DemandState};
 use super::HcsgDemand;
@@ -29,7 +31,49 @@ pub(super) fn retention_plan(
 				.extend(subscription.regions.iter().copied());
 		}
 	}
+	for regions in regions_by_type.values_mut() {
+		dedupe_regions(regions);
+	}
 	regions_by_type
+}
+
+/// Collapses identical boxes from the union of live subscriptions. The
+/// retention set is unchanged; sweeps and margin expansion do less work.
+fn dedupe_regions(regions: &mut Vec<Aabb3d>) {
+	if regions.len() <= 1 {
+		return;
+	}
+	regions.sort_by(|a, b| {
+		a.min
+			.x
+			.total_cmp(&b.min.x)
+			.then_with(|| a.min.y.total_cmp(&b.min.y))
+			.then_with(|| a.min.z.total_cmp(&b.min.z))
+			.then_with(|| a.max.x.total_cmp(&b.max.x))
+			.then_with(|| a.max.y.total_cmp(&b.max.y))
+			.then_with(|| a.max.z.total_cmp(&b.max.z))
+	});
+	regions.dedup_by(|a, b| a.min == b.min && a.max == b.max);
+}
+
+#[cfg(test)]
+mod dedupe_tests {
+	use bevy::math::Vec3;
+
+	use super::*;
+
+	fn box_at(x: f32) -> Aabb3d {
+		Aabb3d::from_min_max(Vec3::new(x, 0.0, 0.0), Vec3::new(x + 1.0, 1.0, 1.0))
+	}
+
+	#[test]
+	fn dedupe_regions_collapses_identical_boxes() {
+		let a = box_at(0.0);
+		let b = box_at(1.0);
+		let mut regions = vec![a, b, a, b, a];
+		dedupe_regions(&mut regions);
+		assert_eq!(regions, vec![a, b]);
+	}
 }
 
 impl HcsgDemand {

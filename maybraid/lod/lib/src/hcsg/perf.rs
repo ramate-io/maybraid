@@ -249,6 +249,58 @@ fn perf_worker_generate_cache_hits() {
 	);
 }
 
+/// [`NodeStore::evict_outside`] when the retention set lists the same boxes many
+/// times (several live subscriptions sharing one dependency type's reach).
+#[test]
+#[ignore]
+fn perf_eviction_sweep_duplicate_regions() {
+	const ENTRIES: usize = 20_000;
+	const ROUNDS: usize = 120;
+	let unique = vec![
+		span(0.0, 64.0 * 32.0),
+		span(64.0 * 800.0, 64.0 * 32.0),
+		span(64.0 * 400.0, 64.0 * 8.0),
+		span(64.0 * 500.0, 64.0 * 8.0),
+	];
+	const COPIES: usize = 12;
+	let duplicated: Vec<Aabb3d> = unique.iter().cycle().take(unique.len() * COPIES).copied().collect();
+
+	let mut dup_total = std::time::Duration::ZERO;
+	for round in 0..ROUNDS {
+		let mut store = fill_store(ENTRIES);
+		let started = Instant::now();
+		let removed = store.evict_outside(&duplicated, round as u64 + 1);
+		dup_total += started.elapsed();
+		assert!(removed.len() > ENTRIES * 8 / 10);
+	}
+
+	let mut unique_total = std::time::Duration::ZERO;
+	for round in 0..ROUNDS {
+		let mut store = fill_store(ENTRIES);
+		let started = Instant::now();
+		let removed = store.evict_outside(&unique, round as u64 + 1);
+		unique_total += started.elapsed();
+		assert!(removed.len() > ENTRIES * 8 / 10);
+	}
+
+	eprintln!(
+		"perf_eviction_sweep_duplicate_regions: {} rounds × {} entries × {} region list",
+		ROUNDS,
+		ENTRIES,
+		duplicated.len(),
+	);
+	eprintln!(
+		"  duplicated list: {:?} ({:.2?} per evict)",
+		dup_total,
+		dup_total / ROUNDS as u32
+	);
+	eprintln!(
+		"  unique list (post dedupe): {:?} ({:.2?} per evict)",
+		unique_total,
+		unique_total / ROUNDS as u32
+	);
+}
+
 /// Presentation spawns one host per published id; each [`HcsgStorage::try_entry`]
 /// re-resolves the typed store through the registry lock.
 #[test]
