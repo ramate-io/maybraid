@@ -115,14 +115,16 @@ pub(crate) fn apply_fisticuffs_visual(
 					mailbox.restart_from_visible();
 				}
 			}
-			commands.entity(member).insert((
-				AnimRefRoot(AnimRef::new(AnimClip::Jab(JabParams {
-					side,
-					backswing: DEFAULT_BACKSWING,
-					target,
-				}))),
-				AnimProgress(progress),
-			));
+			if let Ok(mut entity) = commands.get_entity(member) {
+				entity.try_insert((
+					AnimRefRoot(AnimRef::new(AnimClip::Jab(JabParams {
+						side,
+						backswing: DEFAULT_BACKSWING,
+						target,
+					}))),
+					AnimProgress(progress),
+				));
+			}
 		}
 	}
 }

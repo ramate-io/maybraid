@@ -1,5 +1,6 @@
 //! Character flinch vocals. A [`FlinchProfile`] picks a [`GruntStyle`]; damage
-//! play selects a numbered variant without repeating the last one.
+//! play selects a numbered variant without repeating the last one. Fisticuffs
+//! jabs reuse [`FlinchSounds::play`] for the attacker's effort vocal.
 
 use bevy::prelude::*;
 
@@ -82,6 +83,11 @@ pub struct FlinchSounds {
 }
 
 impl FlinchSounds {
+	/// Test / harness helper when every slot should share one loaded clip.
+	pub fn with_uniform_clip(handle: Handle<AudioClip>) -> Self {
+		Self { man: std::array::from_fn(|_| handle.clone()) }
+	}
+
 	pub fn load(assets: &AssetServer) -> Self {
 		Self {
 			man: [
