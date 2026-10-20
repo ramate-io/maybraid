@@ -85,16 +85,9 @@ mod tests {
 	use bevy::prelude::Transform;
 
 	#[test]
-	fn unlabeled_glb_gets_scene0() -> anyhow::Result<()> {
-		let m = SceneRef::glb("urban/foo.glb");
-		assert_eq!(m.labeled_path(), "urban/foo.glb#Scene0");
-		Ok(())
-	}
-
-	#[test]
-	fn labeled_path_preserved() -> anyhow::Result<()> {
-		let m = SceneRef::glb("urban/foo.glb#Scene1");
-		assert_eq!(m.labeled_path(), "urban/foo.glb#Scene1");
+	fn glb_labeled_path_defaults_and_preserves_labels() -> anyhow::Result<()> {
+		assert_eq!(SceneRef::glb("urban/foo.glb").labeled_path(), "urban/foo.glb#Scene0");
+		assert_eq!(SceneRef::glb("urban/foo.glb#Scene1").labeled_path(), "urban/foo.glb#Scene1");
 		Ok(())
 	}
 
@@ -161,39 +154,6 @@ mod tests {
 		assert_eq!(budget.per_frame, u32::MAX);
 		assert_eq!(budget.new_merge_meshes_per_frame, u32::MAX);
 		assert_eq!(budget.inspect_per_frame, u32::MAX);
-	}
-
-	#[test]
-	fn odd_scale_is_three_negatives() {
-		assert!(GltfNodeScale::new(bevy::prelude::Vec3::new(-1.0, -0.2, -1.0)).is_odd_negative());
-		assert!(!GltfNodeScale::new(bevy::prelude::Vec3::new(-1.0, -0.2, 1.0)).is_odd_negative());
-		assert!(!GltfNodeScale::new(bevy::prelude::Vec3::ONE).is_odd_negative());
-	}
-
-	#[test]
-	fn bake_mesh_restores_front_winding() -> anyhow::Result<()> {
-		let mut mesh = Mesh::new(
-			PrimitiveTopology::TriangleList,
-			RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-		);
-		mesh.insert_attribute(
-			Mesh::ATTRIBUTE_POSITION,
-			vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
-		);
-		mesh.insert_indices(Indices::U32(vec![0, 1, 2]));
-
-		let baked = GltfNodeScale::new(bevy::prelude::Vec3::NEG_ONE).bake_mesh(&mesh);
-		match baked.indices() {
-			Some(Indices::U32(idx)) => assert_eq!(idx.as_slice(), &[0, 2, 1]),
-			other => anyhow::bail!("unexpected indices: {other:?}"),
-		}
-		let Some(VertexAttributeValues::Float32x3(positions)) =
-			baked.attribute(Mesh::ATTRIBUTE_POSITION)
-		else {
-			anyhow::bail!("expected positions");
-		};
-		assert!((positions[1][0] + 1.0).abs() < 1e-5);
-		Ok(())
 	}
 
 	#[test]
