@@ -8,20 +8,10 @@ use crate::theme::{
 
 /// Parse `#RRGGBB`; malformed input falls back to faint yellow.
 pub fn color_from_hex(hex: &str) -> Color {
-	let hex = hex.strip_prefix('#').unwrap_or(hex);
-	if hex.len() != 6 {
-		return TEXT_YELLOW_FAINT;
+	match character_ui_menu::parse_rrggbb_srgb(hex) {
+		Some([red, green, blue]) => Color::srgb(red, green, blue),
+		None => TEXT_YELLOW_FAINT,
 	}
-	let Ok(red) = u8::from_str_radix(&hex[0..2], 16) else {
-		return TEXT_YELLOW_FAINT;
-	};
-	let Ok(green) = u8::from_str_radix(&hex[2..4], 16) else {
-		return TEXT_YELLOW_FAINT;
-	};
-	let Ok(blue) = u8::from_str_radix(&hex[4..6], 16) else {
-		return TEXT_YELLOW_FAINT;
-	};
-	Color::srgb(red as f32 / 255.0, green as f32 / 255.0, blue as f32 / 255.0)
 }
 
 /// One pickable color chip. `extra` is typically `MenuButton<E>`.

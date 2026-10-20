@@ -176,18 +176,8 @@ pub fn compact_control_row() -> Node {
 }
 
 pub fn color_from_hex(hex: &str) -> Color {
-	let hex = hex.strip_prefix('#').unwrap_or(hex);
-	if hex.len() != 6 {
-		return INACTIVE;
+	match character_ui_menu::parse_rrggbb_srgb(hex) {
+		Some([red, green, blue]) => Color::srgb(red, green, blue),
+		None => INACTIVE,
 	}
-	let Ok(red) = u8::from_str_radix(&hex[0..2], 16) else {
-		return INACTIVE;
-	};
-	let Ok(green) = u8::from_str_radix(&hex[2..4], 16) else {
-		return INACTIVE;
-	};
-	let Ok(blue) = u8::from_str_radix(&hex[4..6], 16) else {
-		return INACTIVE;
-	};
-	Color::srgb(red as f32 / 255.0, green as f32 / 255.0, blue as f32 / 255.0)
 }
