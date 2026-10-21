@@ -11,7 +11,7 @@ use crate::request::SpawnProjectile;
 impl SpawnProjectile {
 	/// Build the simulation body. Does not emit a spawn-success message.
 	pub fn realize(&self, commands: &mut Commands) -> Entity {
-		let (length, radius, speed, max_range, penetration, max_age, _color, gravity) =
+		let (length, radius, speed, max_range, penetration, max_age, color, gravity) =
 			self.spec.ballistic();
 		let projectile = spawn_flight_sim(
 			commands,
@@ -26,7 +26,10 @@ impl SpawnProjectile {
 			gravity,
 			self.age,
 		);
-		commands.entity(projectile).insert(self.projectile_source());
+		commands.entity(projectile).insert((
+			self.projectile_source(),
+			crate::request::ProjectileVisual::new(length, radius, color),
+		));
 		if let Some(payload) = self.payload {
 			commands.entity(projectile).insert(payload);
 		}

@@ -8,6 +8,21 @@ use bevy::prelude::*;
 use damage::HitPayload;
 use projectiles::ProjectileSource;
 
+/// Compact visual load carried on the spawned flight. Presentation reads this
+/// instead of rediscovering the equipped item.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct ProjectileVisual {
+	pub length: f32,
+	pub radius: f32,
+	pub color: Color,
+}
+
+impl ProjectileVisual {
+	pub const fn new(length: f32, radius: f32, color: Color) -> Self {
+		Self { length, radius, color }
+	}
+}
+
 /// Ballistic load carried on the request. Lasers stay presentation-owned.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ProjectileSpec {

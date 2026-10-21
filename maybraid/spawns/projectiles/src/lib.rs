@@ -2,11 +2,13 @@
 //!
 //! No per-shot bookkeeping entity and no mandatory spawn-success event.
 
+pub mod presentation;
 pub mod realize;
 pub mod request;
 
+pub use presentation::{attach_projectile_visuals, register_projectile_presentation};
 pub use realize::realize_projectiles;
-pub use request::{ProjectileSpec, SpawnProjectile};
+pub use request::{ProjectileSpec, ProjectileVisual, SpawnProjectile};
 
 use bevy::prelude::*;
 

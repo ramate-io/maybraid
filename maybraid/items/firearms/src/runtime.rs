@@ -7,7 +7,7 @@ use bevy::prelude::*;
 
 use crate::cadence::{WeaponFired, WeaponShotRequest};
 use crate::projectiles::{
-	FirearmWeaponSystems, WeaponsArmed, decide_weapon_fire, sample_weapon_launch_poses,
+	decide_weapon_fire, sample_weapon_launch_poses, FirearmWeaponSystems, WeaponsArmed,
 };
 
 #[derive(Resource, Default)]
@@ -39,9 +39,9 @@ pub fn register_firearm_runtime(app: &mut App) {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::WeaponRecoil;
 	use crate::cadence::{FireControl, WeaponShotRequest};
 	use crate::projectiles::{FireOnTrigger, Weapon, WeaponTrigger};
+	use crate::WeaponRecoil;
 	use bevy::ecs::system::RunSystemOnce;
 
 	fn tick_fire(app: &mut App) {
@@ -125,6 +125,40 @@ mod tests {
 			.run_system_once(|flights: Query<&Flight>| flights.iter().count())
 			.expect("count flights");
 		assert_eq!(flights, 1);
+	}
+
+	#[test]
+	fn production_registration_attaches_visuals_after_sim() {
+		use bevy::prelude::Mesh3d;
+		use projectiles::Flight;
+
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		register_firearm_runtime(&mut app);
+		maybraid_spawns_projectiles::register_projectile_presentation(&mut app);
+		app.init_resource::<Assets<Mesh>>();
+		app.init_resource::<Assets<StandardMaterial>>();
+		app.world_mut().spawn((
+			Weapon::bolt(),
+			WeaponTrigger(true),
+			FireOnTrigger,
+			FireControl::auto(),
+			crate::projectiles::WeaponLaunchPose::ready_at(Vec3::ZERO, Vec3::Y),
+		));
+		app.world_mut()
+			.resource_mut::<Time>()
+			.advance_by(std::time::Duration::from_secs_f32(1.0 / 30.0));
+		app.update();
+		let (flights, meshes) = app
+			.world_mut()
+			.run_system_once(|flights: Query<(Entity, Option<&Mesh3d>), With<Flight>>| {
+				let count = flights.iter().count();
+				let meshed = flights.iter().filter(|(_, mesh)| mesh.is_some()).count();
+				(count, meshed)
+			})
+			.expect("count flights");
+		assert_eq!(flights, 1);
+		assert_eq!(meshes, 1);
 	}
 
 	#[test]

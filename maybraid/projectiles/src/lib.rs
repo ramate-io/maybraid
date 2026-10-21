@@ -179,6 +179,17 @@ pub struct ProjectileVisualCache(
 );
 
 impl ProjectileVisualCache {
+	pub fn mesh_and_material(
+		&mut self,
+		length: f32,
+		radius: f32,
+		color: Color,
+		meshes: &mut Assets<Mesh>,
+		materials: &mut Assets<StandardMaterial>,
+	) -> (Handle<Mesh>, Handle<StandardMaterial>) {
+		self.get_or_insert(length, radius, color, meshes, materials)
+	}
+
 	fn get_or_insert(
 		&mut self,
 		length: f32,
