@@ -6,8 +6,8 @@ the visual world:
 
 - **Player arrival** — a life must be offered, a destination chosen, and
   the picker closed without assigning input too early.
-- **Placement / support** — the chosen floor is not ready until the
-  supporting terrain or building collider exists at *that* destination.
+- **Placement / support** — a downward `SpatialQuery` shape cast must
+  hit a supporting surface at *that* destination; AABBs are not occupancy.
 - **Actor construction** — a body can be built without choosing a local
   player; activation is a later handoff.
 - **Projectiles / grenades** — simulation is realized first (flight,
@@ -28,12 +28,12 @@ Session start / player retirement
   → Spawn-picker controller            (UI-owned MenuNav, no actor)
        DestinationSelected
   → Placement interpreter              (ResolvePlacement → pending work)
-       per-destination support / clearance
+       SpatialQuery support + capsule clearance
        PlacementReady | PlacementFailed
   → Arrival stays pending on failure   (retry / other dest / explicit fallback)
-  → Actor interpreter                  (SpawnActor → ActorSpawned)
-  → Player handoff controller          (consumes ActorSpawned)
-       → motor / camera / picker close
+  → Actor interpreter                  (SpawnActor → ArrivalActorReady)
+  → Player handoff controller          (emits ActivatePlayerArrival)
+       → world motor / camera / picker close
 
 Firearm trigger + cadence → WeaponShotRequest → SpawnProjectile
 Grenade cook / release / drop → SpawnThrownGrenade
@@ -49,29 +49,28 @@ emit per-shot success events.
 
 | Directory | Package | Owns |
 |---|---|---|
-| `spawns/player` | `maybraid-spawns-player` | Arrival identity, picker, destination, cancellation, handoff contracts |
-| `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / per-destination support |
-| `spawns/actors` | `maybraid-spawns-actors` | Thin `spawn_player_body` interpreter; consumes `ActorSpawned` for handoff |
-| `spawns/projectiles` | `maybraid-spawns-projectiles` | Batched flight construction + visual spec |
+| `spawns/player` | `maybraid-spawns-player` | Arrival identity, picker, destination, cancellation, `ArrivalActorReady` → `ActivatePlayerArrival` |
+| `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / per-destination `SpatialQuery` support |
+| `spawns/actors` | `maybraid-spawns-actors` | Thin `spawn_player_body` interpreter; emits `ArrivalActorReady` |
+| `spawns/projectiles` | `maybraid-spawns-projectiles` | Batched flight construction + same-pass visual attach |
 | `spawns/grenades` | `maybraid-spawns-grenades` | Thrown-body construction |
 
 `world/lib` keeps first-wave HCSG gates, the locked map sheet, and
-destination-specific support probes (terrain trimesh / building walk
-colliders). It does not invent a second spatial index. `gameplay/lib`
-assembles spawn runtimes. Item presentation plugins attach meshes and
-audio.
+activation interpreters (motor, camera, picker close). Placement physics
+lives in `spawns/placement`. `gameplay/lib` assembles spawn runtimes.
 
 ## Scheduling
 
 | Work | When | Notes |
 |---|---|---|
 | Picker capture / confirm | `CaptureResolveSystems` | UI-owned `MenuNav`. No actor required. |
-| Placement observe | `PlacementSystems::Observe` | One readiness per pending pose. |
+| Placement observe | `PlacementSystems::Observe` | Downward support cast + capsule intersection. |
 | Placement poll | `PlacementSystems::Poll` | Emits `PlacementReady` / `PlacementFailed`. |
-| Arrival + construct | `PlayerLifeSet::Resolve` after poll | Construction waits for a matching ready. |
-| Actor handoff | `Update` on actor runtime | Consumes `ActorSpawned` exactly once. |
-| Projectile realize | `FirearmWeaponSystems::Fire` | Same-frame input → fire → flight. |
-| Projectile presentation | after realize | Cached mesh + flight fizz. Headless sim skips this. |
+| Arrival + construct | `PlayerLifeSet::Resolve` after poll | World writes `SpawnActor` on a matching ready. |
+| Actor realize | `ActorSpawnSystems::Realize` | Emits `ArrivalActorReady`. |
+| Player handoff | `PlayerHandoffSystems::Activate` | Exactly-once `ActivatePlayerArrival`. |
+| Projectile realize | `FirearmWeaponSystems::Fire` | Same-frame input → fire → flight (+ mesh when cache is present). |
+| Projectile presentation | after realize | Fallback attach + flight fizz. Headless sim skips this. |
 | Grenade presentation | after thrown-body realize | Mesh / bounce audio. |
 | NPC members | existing cell batch | `character.spawn`; no per-member spawn events. |
 
@@ -104,13 +103,15 @@ actors.
 2. Picker confirm is UI-owned `MenuNav`. No actor required.
 3. Closing the picker releases only its capture token.
 4. Placement requests persist across generation that outlives messages.
-5. Support is evaluated at the selected destination's collider, not a
-   global ready bit. An interior floor coordinate does not prove its
-   building collider is ready.
+5. Support is a downward shape cast onto an upward-facing collider at
+   the selected destination. An interior AABB or missing collider is
+   not a floor. Clearance tests the standing capsule against world
+   geometry and excludes only the supporting surface.
 6. Placement failure preserves the arrival. The controller retries,
    picks another destination, or falls back explicitly.
-7. Construction and activation are separate. Handoff consumes
-   `ActorSpawned`.
+7. Construction and activation are separate. Actors emit
+   `ArrivalActorReady`; the player controller emits
+   `ActivatePlayerArrival`.
 8. Projectile / grenade interpreters do not rediscover the current
    player. Sim can run without presentation.
 9. Production and headless paths share the same decision systems.
