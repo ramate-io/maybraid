@@ -234,6 +234,7 @@ pub struct WorldPlayerRespawnState {
 	pub last_poi: Option<PoiId>,
 	/// This world load already queued or skipped the first-life picker.
 	pub first_spawn_offered: bool,
+	activated: Option<SpawnIdentity>,
 	session: SpawnSessionId,
 	next_request: SpawnRequestId,
 }
@@ -244,6 +245,7 @@ impl Default for WorldPlayerRespawnState {
 			pending: None,
 			last_poi: None,
 			first_spawn_offered: false,
+			activated: None,
 			session: SpawnSessionId::new(1),
 			next_request: SpawnRequestId::new(1),
 		}
@@ -296,6 +298,24 @@ impl WorldPlayerRespawnState {
 			&& identity.owner.owns(self.session)
 	}
 
+	pub fn last_activated(&self) -> Option<SpawnIdentity> {
+		self.activated
+	}
+
+	/// Finish a matching arrival exactly once. Returns false for a stale or
+	/// already-activated identity so a late `ActorSpawned` cannot take over.
+	pub fn complete_arrival(&mut self, identity: SpawnIdentity) -> bool {
+		if !self.accepts_identity(identity) {
+			return false;
+		}
+		if self.activated.is_some_and(|activated| activated.matches(identity)) {
+			return false;
+		}
+		self.activated = Some(identity);
+		self.pending = None;
+		true
+	}
+
 	pub fn accept_destination(
 		&mut self,
 		selected: DestinationSelected,
@@ -321,6 +341,7 @@ impl WorldPlayerRespawnState {
 		self.first_spawn_offered = false;
 		self.last_poi = None;
 		self.pending = None;
+		self.activated = None;
 	}
 }
 

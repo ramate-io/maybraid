@@ -16,7 +16,9 @@ pub use arrival::{
 	WorldPlayerRespawnConfig, WorldPlayerRespawnState,
 };
 pub use controller::{begin_player_arrivals, PlayerArrivalPolicy};
-pub use handoff::{ActivatePlayerArrival, PlayerArrivalCompleted, PlayerArrivalFailed};
+pub use handoff::{
+	handoff_player_arrivals, ActivatePlayerArrival, PlayerArrivalCompleted, PlayerArrivalFailed,
+};
 pub use maybraid_spawns_core::{
 	SpawnCancelReason, SpawnFailureReason, SpawnIdentity, SpawnOutcome, SpawnOwner, SpawnRequestId,
 	SpawnSessionId,
@@ -55,10 +57,11 @@ pub fn register_player_spawn_runtime(app: &mut App) {
 		.add_message::<BeginPlayerArrival>()
 		.add_message::<DestinationSelected>()
 		.add_message::<PlayerChoseRespawnPoi>()
+		.add_message::<maybraid_spawns_actors::ActorSpawned>()
 		.add_message::<ActivatePlayerArrival>()
 		.add_message::<PlayerArrivalCompleted>()
 		.add_message::<PlayerArrivalFailed>()
-		.add_systems(Update, begin_player_arrivals);
+		.add_systems(Update, (begin_player_arrivals, handoff_player_arrivals).chain());
 }
 
 /// Arrival controller + UI-owned picker. World keeps map and construction

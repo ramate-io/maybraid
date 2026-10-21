@@ -10,7 +10,7 @@ use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use grenade_user::GrenadeUserSystems;
 use maybraid_character_controller::CharacterIntent;
-use maybraid_spawns_player::{ArrivalReason, PlayerArrivalPolicy};
+use maybraid_spawns_player::{ActivatePlayerArrival, ArrivalReason, PlayerArrivalPolicy};
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use player_camera::{CameraController, FollowCamera};
@@ -18,11 +18,9 @@ use poi_intelligence::{place_nearby, PoiId, PoiKind, PoiRecord, PoiRegistry, Poi
 use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
 use world_player::{
-	holding_elevation, player_position_above_surface, player_spawn_point_at, spawn_player_body,
-	AwaitingTerrainSurface, CharacterLocomotion, CharacterSpecies,
-	ModePlayerPolicies, MoveWish, OffTerrainAnchor, Player as VegetationPlayer, PlayerLifeEnded,
-	PlayerLifeSet, PlayerSpawnXz, RequestSetCharacter, RequestSetCharacterAppearance,
-	RespawnOrigin,
+	holding_elevation, player_position_above_surface, player_spawn_point_at,
+	AwaitingTerrainSurface, CharacterLocomotion, ModePlayerPolicies, MoveWish, OffTerrainAnchor,
+	Player as VegetationPlayer, PlayerLifeEnded, PlayerLifeSet, PlayerSpawnXz, RespawnOrigin,
 };
 
 use layer_stack::ActiveGenerationMode;
@@ -54,6 +52,7 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 	fn build(&self, app: &mut App) {
 		maybraid_spawns_player::register_player_spawn_runtime(app);
 		maybraid_spawns_placement::register_placement_runtime(app);
+		maybraid_spawns_actors::register_actor_spawn_runtime(app);
 		app.init_resource::<WorldMapView>()
 			.add_message::<PlayerLifeEnded>()
 			.add_message::<CharacterIntent>()
@@ -352,8 +351,7 @@ fn respawn_world_player(
 		}
 		let death_at = pending.death_at;
 		let origin = pending.origin;
-		close_respawn_map(&mut map);
-		state.pending = None;
+		let identity = pending.identity();
 		if origin.ends_life(now) {
 			ended.write(PlayerLifeEnded);
 		}
@@ -365,8 +363,11 @@ fn respawn_world_player(
 			loadout.as_deref(),
 			origin,
 			now,
+			identity,
 			player_position_above_surface(death_at),
 			false,
+			&mut state,
+			&mut map,
 		);
 		return;
 	}
@@ -389,6 +390,7 @@ fn respawn_world_player(
 	}
 	let origin = pending.origin;
 	let fallback_at = pending.fallback_at;
+	let identity = pending.identity();
 	let destination = choice.destination();
 	if let Some(id) = destination.poi() {
 		state.last_poi = Some(id);
@@ -399,8 +401,8 @@ fn respawn_world_player(
 		maybraid_spawns_placement::ActorClearance::HUMANOID,
 		fallback_at,
 	);
-	let pending = request.realize(&registry, &surface);
-	let spawn = pending.as_ref().ok().and_then(|pending| pending.pose).unwrap_or_else(|| {
+	let placement = request.realize(&registry, &surface);
+	let spawn = placement.as_ref().ok().and_then(|pending| pending.pose).unwrap_or_else(|| {
 		maybraid_spawns_placement::PlacementPose::outdoor_at(
 			&surface,
 			fallback_at.xz(),
@@ -415,7 +417,7 @@ fn respawn_world_player(
 		}
 		world
 			.resource_mut::<maybraid_spawns_placement::PlacementWork>()
-			.insert(match pending {
+			.insert(match placement {
 				Ok(pending) => pending,
 				Err(_) => maybraid_spawns_placement::PendingPlacement::new(
 					choice.identity,
@@ -424,8 +426,6 @@ fn respawn_world_player(
 				),
 			});
 	});
-	close_respawn_map(&mut map);
-	state.pending = None;
 	finish_world_player_spawn(
 		&mut commands,
 		&mut meshes,
@@ -434,8 +434,11 @@ fn respawn_world_player(
 		loadout.as_deref(),
 		origin,
 		now,
+		identity,
 		spawn.position,
 		spawn.interior(),
+		&mut state,
+		&mut map,
 	);
 }
 
@@ -541,27 +544,40 @@ fn finish_world_player_spawn(
 	loadout: Option<&WorldPlayerLoadout>,
 	origin: RespawnOrigin,
 	now: Option<std::any::TypeId>,
+	identity: maybraid_spawns_player::SpawnIdentity,
 	position: Vec3,
 	interior: bool,
+	state: &mut WorldPlayerRespawnState,
+	map: &mut WorldMapView,
 ) {
-	let player = spawn_player_body(commands, meshes, materials, locomotion, position);
-	// First-drop hold: snap teleports onto composed height and waits for a
-	// local trimesh. Without this marker, gravity can turn on while the body
-	// is still sitting on a base-noise or death-pose Y under the mesh.
-	// Interior rooms keep their authored floor Y; terrain snap would pull the
-	// capsule under the storey into the building volume.
-	commands.entity(player).insert(AwaitingTerrainSurface);
-	if interior {
-		commands.entity(player).insert(OffTerrainAnchor { translation: position });
+	let recipe = match loadout {
+		Some(loadout) => maybraid_spawns_actors::ActorRecipe::appearance(
+			loadout.appearance.clone(),
+			!origin.ends_life(now),
+		),
+		None => maybraid_spawns_actors::ActorRecipe::species_default(),
+	};
+	let spawned = maybraid_spawns_actors::SpawnActor::new(identity, position, interior, recipe)
+		.realize(commands, meshes, materials, locomotion);
+	if spawned.dress {
+		commands.entity(spawned.actor).insert(WorldPlayerAppearanceRequested);
 	}
-	crate::control::apply_world_player_motor(commands, player);
-	if let Some(loadout) = loadout {
-		if !origin.ends_life(now) {
-			commands.entity(player).insert(WorldPlayerAppearanceRequested);
-		}
-		commands.spawn(RequestSetCharacterAppearance { appearance: loadout.appearance.clone() });
+	if let Some(activation) = ActivatePlayerArrival::from_spawned(spawned, state) {
+		crate::control::apply_world_player_motor(commands, activation.actor);
+		close_respawn_map(map);
+		commands.queue(move |world: &mut World| {
+			if let Some(mut messages) =
+				world.get_resource_mut::<Messages<maybraid_spawns_actors::ActorSpawned>>()
+			{
+				messages.write(spawned);
+			}
+			if let Some(mut messages) = world.get_resource_mut::<Messages<ActivatePlayerArrival>>()
+			{
+				messages.write(activation);
+			}
+		});
 	} else {
-		commands.spawn(RequestSetCharacter { species: CharacterSpecies::Braidman });
+		commands.entity(spawned.actor).despawn();
 	}
 }
 
@@ -936,6 +952,7 @@ mod tests {
 		world.init_resource::<SpawnPickerSheet>();
 		world.init_resource::<maybraid_spawns_placement::PlacementWork>();
 		world.init_resource::<maybraid_spawns_placement::PlacementSupport>();
+		world.init_resource::<maybraid_spawns_actors::ActorSpawnWork>();
 		world.init_resource::<Messages<PlayerChoseRespawnPoi>>();
 		world.init_resource::<PoiRegistry>();
 		world.init_resource::<CharacterLocomotion>();
@@ -1489,6 +1506,77 @@ mod tests {
 			"placement must survive the confirm frame, not a one-shot message"
 		);
 		assert_eq!(live_player_count(&mut world), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn first_spawn_activates_exactly_once() -> anyhow::Result<()> {
+		let mut world = respawn_world(0.0, true, true);
+		{
+			let mut state = world.resource_mut::<WorldPlayerRespawnState>();
+			let pending = state.pending.as_mut().unwrap();
+			pending.origin = RespawnOrigin::began(Some(std::any::TypeId::of::<EndsLife>()), false);
+			pending.first_life = true;
+			pending.timer = Timer::from_seconds(0.0, TimerMode::Once);
+		}
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let identity = world
+			.resource::<WorldPlayerRespawnState>()
+			.pending_identity()
+			.ok_or_else(|| anyhow::anyhow!("pending identity"))?;
+		arm_locked_picker_input(&mut world);
+		confirm_picker_from_a(&mut world)?;
+		assert_eq!(live_player_count(&mut world), 1);
+		assert_eq!(world.resource::<WorldPlayerRespawnState>().last_activated(), Some(identity));
+		world.init_resource::<Messages<maybraid_spawns_actors::ActorSpawned>>();
+		world.init_resource::<Messages<ActivatePlayerArrival>>();
+		world.init_resource::<Messages<maybraid_spawns_player::PlayerArrivalCompleted>>();
+		world.write_message(maybraid_spawns_actors::ActorSpawned::new(
+			identity,
+			Entity::from_bits(99),
+			false,
+		));
+		world
+			.run_system_once(maybraid_spawns_player::handoff_player_arrivals)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(live_player_count(&mut world), 1);
+		assert_eq!(world.resource::<WorldPlayerRespawnState>().last_activated(), Some(identity));
+		Ok(())
+	}
+
+	#[test]
+	fn a_stale_actor_spawned_does_not_activate() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2);
+		world.init_resource::<Messages<maybraid_spawns_actors::ActorSpawned>>();
+		world.init_resource::<Messages<ActivatePlayerArrival>>();
+		world.init_resource::<Messages<maybraid_spawns_player::PlayerArrivalCompleted>>();
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let stale = world
+			.resource::<WorldPlayerRespawnState>()
+			.pending_identity()
+			.ok_or_else(|| anyhow::anyhow!("pending identity"))?;
+		world
+			.run_system_once(reset_first_spawn_offer)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.resource_mut::<WorldPlayerRespawnState>().begin_arrival(
+			ArrivalReason::Death { at: Vec3::new(3.0, 4.0, 5.0) },
+			RespawnOrigin::began(None, false),
+			0.0,
+		);
+		world.write_message(maybraid_spawns_actors::ActorSpawned::new(
+			stale,
+			Entity::from_bits(9),
+			false,
+		));
+		world
+			.run_system_once(maybraid_spawns_player::handoff_player_arrivals)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(live_player_count(&mut world), 0);
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
 		Ok(())
 	}
 

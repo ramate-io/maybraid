@@ -122,6 +122,7 @@ Package names stay; only directories moved. See [#1450](https://github.com/ramat
 | `spawns/core` | `maybraid-spawns-core` | Spawn request / session identity and shared outcomes |
 | `spawns/player` | `maybraid-spawns-player` | Player arrival controller, picker, destination selection |
 | `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / support. Collider readiness is not `GenerationScheme`. |
+| `spawns/actors` | `maybraid-spawns-actors` | `SpawnActor` / `ActorSpawned`. No camera or input assignment. |
 | `game/src` | `maybraid` | Assembles World + Gameplay + shell / flow |
 
 `controllers/world` is a compatibility re-export of `gameplay/session`.
