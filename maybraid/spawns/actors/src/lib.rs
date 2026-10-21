@@ -10,6 +10,7 @@ pub mod request;
 pub use request::{ActorSpawnFailed, ActorSpawned, SpawnActor};
 
 use bevy::prelude::*;
+use maybraid_spawns_player::{ActivatePlayerArrival, WorldPlayerRespawnState};
 
 #[derive(Resource, Default)]
 struct ActorSpawnRuntime;
@@ -22,7 +23,32 @@ pub fn register_actor_spawn_runtime(app: &mut App) {
 	app.init_resource::<ActorSpawnRuntime>()
 		.add_message::<SpawnActor>()
 		.add_message::<ActorSpawned>()
-		.add_message::<ActorSpawnFailed>();
+		.add_message::<ActorSpawnFailed>()
+		.add_message::<ActivatePlayerArrival>()
+		.add_systems(Update, complete_player_handoffs);
+}
+
+/// Handoff consumes a matching [`ActorSpawned`]. Construction does not choose
+/// a local player; activation is exactly-once on the arrival identity.
+pub fn complete_player_handoffs(
+	mut spawned: MessageReader<ActorSpawned>,
+	mut failed: MessageReader<ActorSpawnFailed>,
+	mut state: ResMut<WorldPlayerRespawnState>,
+	mut activate: MessageWriter<ActivatePlayerArrival>,
+	mut arrivals_failed: MessageWriter<maybraid_spawns_player::PlayerArrivalFailed>,
+) {
+	for failed in failed.read() {
+		if let Some(outcome) = state.note_placement_failed(failed.identity) {
+			arrivals_failed.write(outcome);
+		}
+	}
+	for spawned in spawned.read() {
+		if let Some(activation) =
+			ActivatePlayerArrival::from_constructed(spawned.identity, spawned.actor, &mut state)
+		{
+			activate.write(activation);
+		}
+	}
 }
 
 pub struct ActorSpawnPlugin;
@@ -88,6 +114,39 @@ mod tests {
 		assert!(world.get::<AwaitingTerrainSurface>(spawned.actor).is_some());
 		assert!(world.get::<OffTerrainAnchor>(spawned.actor).is_none());
 		assert!(world.get::<Player>(spawned.actor).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn handoff_consumes_a_matching_actor_spawned() -> anyhow::Result<()> {
+		use maybraid_spawns_player::{ArrivalReason, WorldPlayerRespawnState};
+		use world_player::RespawnOrigin;
+
+		let mut world = World::new();
+		world.init_resource::<WorldPlayerRespawnState>();
+		world.init_resource::<Messages<ActorSpawned>>();
+		world.init_resource::<Messages<ActorSpawnFailed>>();
+		world.init_resource::<Messages<ActivatePlayerArrival>>();
+		world.init_resource::<Messages<maybraid_spawns_player::PlayerArrivalFailed>>();
+		let identity = world.resource_mut::<WorldPlayerRespawnState>().begin_arrival(
+			ArrivalReason::FirstSpawn { at: Vec3::ZERO },
+			RespawnOrigin::began(None, false),
+			0.0,
+		);
+		world.write_message(ActorSpawned::new(identity, Entity::from_bits(7), false));
+		world
+			.run_system_once(complete_player_handoffs)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let activations: Vec<_> =
+			world.resource_mut::<Messages<ActivatePlayerArrival>>().drain().collect();
+		assert_eq!(activations.len(), 1);
+		assert_eq!(activations[0].actor, Entity::from_bits(7));
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+		world.write_message(ActorSpawned::new(identity, Entity::from_bits(8), false));
+		world
+			.run_system_once(complete_player_handoffs)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource_mut::<Messages<ActivatePlayerArrival>>().drain().next().is_none());
 		Ok(())
 	}
 
