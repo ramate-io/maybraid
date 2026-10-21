@@ -5,12 +5,13 @@
 
 use bevy::prelude::*;
 use characters::CharacterAppearance;
-use maybraid_spawns_player::{SpawnFailureReason, SpawnIdentity};
+use maybraid_spawns_player::{PlacementAttempt, SpawnFailureReason, SpawnIdentity};
 
 /// Construct a player body at a resolved pose. Activation is a later handoff.
 #[derive(Message, Clone, Debug, PartialEq)]
 pub struct SpawnActor {
 	pub identity: SpawnIdentity,
+	pub attempt: PlacementAttempt,
 	pub position: Vec3,
 	pub interior: bool,
 	pub appearance: Option<CharacterAppearance>,
@@ -18,8 +19,13 @@ pub struct SpawnActor {
 }
 
 impl SpawnActor {
-	pub const fn player_body(identity: SpawnIdentity, position: Vec3, interior: bool) -> Self {
-		Self { identity, position, interior, appearance: None, dress: false }
+	pub const fn player_body(
+		identity: SpawnIdentity,
+		attempt: PlacementAttempt,
+		position: Vec3,
+		interior: bool,
+	) -> Self {
+		Self { identity, attempt, position, interior, appearance: None, dress: false }
 	}
 
 	pub fn with_appearance(mut self, appearance: CharacterAppearance, dress: bool) -> Self {
@@ -31,20 +37,29 @@ impl SpawnActor {
 	pub fn belongs_to(&self, identity: SpawnIdentity) -> bool {
 		self.identity.matches(identity)
 	}
+
+	pub fn matches_attempt(&self, identity: SpawnIdentity, attempt: PlacementAttempt) -> bool {
+		self.belongs_to(identity) && self.attempt == attempt
+	}
 }
 
-/// Construction produced an actor entity. Returned from realize; emit a
-/// message only when an independent consumer needs it.
+/// Construction produced an actor entity. Dress is world-owned presentation.
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ActorSpawned {
 	pub identity: SpawnIdentity,
+	pub attempt: PlacementAttempt,
 	pub actor: Entity,
 	pub dress: bool,
 }
 
 impl ActorSpawned {
-	pub const fn new(identity: SpawnIdentity, actor: Entity, dress: bool) -> Self {
-		Self { identity, actor, dress }
+	pub const fn new(
+		identity: SpawnIdentity,
+		attempt: PlacementAttempt,
+		actor: Entity,
+		dress: bool,
+	) -> Self {
+		Self { identity, attempt, actor, dress }
 	}
 
 	pub fn belongs_to(self, identity: SpawnIdentity) -> bool {
@@ -56,12 +71,17 @@ impl ActorSpawned {
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ActorSpawnFailed {
 	pub identity: SpawnIdentity,
+	pub attempt: PlacementAttempt,
 	pub reason: SpawnFailureReason,
 }
 
 impl ActorSpawnFailed {
-	pub const fn new(identity: SpawnIdentity, reason: SpawnFailureReason) -> Self {
-		Self { identity, reason }
+	pub const fn new(
+		identity: SpawnIdentity,
+		attempt: PlacementAttempt,
+		reason: SpawnFailureReason,
+	) -> Self {
+		Self { identity, attempt, reason }
 	}
 
 	pub fn belongs_to(self, identity: SpawnIdentity) -> bool {
