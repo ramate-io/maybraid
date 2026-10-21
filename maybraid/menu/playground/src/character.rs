@@ -5,7 +5,7 @@ use character_creation_menus::{
 	inventory_paint_state, CharacterMenu, InventoryLayout, InventoryPaint, MenuEvent,
 	INVENTORY_CAPTURE_TIMEOUT, INVENTORY_LABEL,
 };
-use character_items::{self_lubikan_catalog_key, Inventory};
+use character_items::{catalog_key_uses_yellow_silhouette, Inventory};
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
 use item_icons::{
 	request_inventory_icons, request_self_lubikan_icon, CaptureClient, IconCatalogProgress,
@@ -164,7 +164,7 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 
 	fn image_for_key(&mut self, key: u64) -> Option<Handle<Image>> {
 		let icons = self.icons?;
-		if key == self_lubikan_catalog_key() {
+		if catalog_key_uses_yellow_silhouette(key) {
 			icons.catalog_entry(key, true).and_then(|entry| entry.ready_image())
 		} else {
 			icons.catalog_for_key(key)
@@ -172,7 +172,7 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
-		if key == self_lubikan_catalog_key() {
+		if catalog_key_uses_yellow_silhouette(key) {
 			TEXT_YELLOW
 		} else {
 			Color::WHITE
@@ -929,6 +929,39 @@ mod tests {
 		let mut wrong = CatalogThumbs { icons: Some(&shaded_only) };
 		if wrong.image_for_key(key).is_some() {
 			anyhow::bail!("Self Lubikan tile must not use the shaded handle");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn catalog_thumbs_use_the_fisticuffs_silhouette() -> anyhow::Result<()> {
+		use super::CatalogThumbs;
+		use character_items::{fisticuffs_catalog_key, FISTICUFFS_CAPTURE_LABEL};
+		use item_icons::{CaptureId, ItemIconCache};
+		use maybraid_character_ui_menu_renderer::MenuThumbnailContext;
+		use menu_components::theme::TEXT_YELLOW;
+
+		let key = fisticuffs_catalog_key();
+		let mut cache = ItemIconCache::default();
+		cache.insert_silhouette(
+			CaptureId::new(FISTICUFFS_CAPTURE_LABEL),
+			bevy::prelude::Handle::default(),
+		);
+		let mut ready = CatalogThumbs { icons: Some(&cache) };
+		if ready.image_for_key(key).is_none() {
+			anyhow::bail!("Fisticuffs tile should show the silhouette");
+		}
+		if ready.tint_for_key(key) != TEXT_YELLOW {
+			anyhow::bail!("Fisticuffs silhouette should tint yellow in the inventory");
+		}
+		let mut shaded_only = ItemIconCache::default();
+		shaded_only.insert_shaded(
+			CaptureId::new(FISTICUFFS_CAPTURE_LABEL),
+			bevy::prelude::Handle::default(),
+		);
+		let mut wrong = CatalogThumbs { icons: Some(&shaded_only) };
+		if wrong.image_for_key(key).is_some() {
+			anyhow::bail!("Fisticuffs tile must not use the shaded handle");
 		}
 		Ok(())
 	}

@@ -9,6 +9,7 @@ use firearm_user::{
 	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle,
 	teardown_held_firearm, FirearmUser, FirearmUserSettings, GeneratedFirearm,
 };
+use fisticuffs_user::FisticuffsUser;
 use grenade_user::{spawn_held_grenade, teardown_held_grenade, GrenadeUser, GrenadeUserSettings};
 use grenades::GrenadeDetonated;
 use maybraid_character_controller::CharacterControlSystems;
@@ -20,7 +21,7 @@ use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
 use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
 use player::{
 	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
-	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
+	PlayerSystems, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
 };
 use tanz_user::{spawn_tanz_user, TanzExecution, TanzStack, TanzUser, TanzUserSystems};
 use world_player::{
@@ -211,6 +212,10 @@ pub(crate) fn hold_primary_weapon(commands: &mut Commands, player: Entity, inven
 		Some(InventoryItem::Grenade { .. }) => {
 			spawn_held_grenade(commands, player, GrenadeUserSettings::default());
 		}
+		Some(InventoryItem::Fisticuffs) => {
+			commands.entity(player).insert(FisticuffsUser::default());
+			EquippedItemHandler::Fisticuffs.install(&mut commands.entity(player));
+		}
 		_ => EquippedItemHandler::None.install(&mut commands.entity(player)),
 	}
 }
@@ -230,6 +235,7 @@ pub(crate) fn teardown_held_weapon(
 	if firearm.is_some() || grenade.is_some() {
 		EquippedItemHandler::clear(&mut commands.entity(player));
 	}
+	commands.entity(player).remove::<FisticuffsUser>();
 }
 
 fn apply_equipment_inventory_to_loadout(
@@ -260,6 +266,50 @@ fn sync_skill_map_equip(
 		if *equip != next {
 			*equip = next;
 		}
+	}
+}
+
+/// Keep the fisticuffs driver aligned with the bag. Inventory decisions live
+/// here; attack timing stays in `fisticuffs-user`. Cancel is immediate so a
+/// strike that `tick_attack_state` would emit later this frame cannot fire.
+fn sync_fisticuffs_driver(
+	mut commands: Commands,
+	mut players: Query<
+		(Entity, Option<&InventoryUser>, Option<&mut FisticuffsUser>),
+		With<MaybraidPlayer>,
+	>,
+	bags: Query<&Inventory>,
+) {
+	for (player, user, fisticuffs) in &mut players {
+		let armed = user
+			.and_then(|user| bags.get(user.bag).ok())
+			.and_then(Inventory::primary_weapon)
+			.is_some_and(InventoryItem::is_fisticuffs);
+		match (armed, fisticuffs) {
+			(true, None) => {
+				let mut entity = commands.entity(player);
+				entity.insert(FisticuffsUser::default());
+				EquippedItemHandler::Fisticuffs.install(&mut entity);
+			}
+			(false, Some(mut user)) => {
+				user.state.cancel();
+				commands.entity(player).remove::<FisticuffsUser>();
+			}
+			(true, Some(_)) | (false, None) => {}
+		}
+	}
+}
+
+/// Pause / menu overlay: cancel the jab so the fist sensor tears down this frame.
+fn cancel_fisticuffs_when_paused(
+	gameplay: Res<WorldGameplayEnabled>,
+	mut users: Query<&mut FisticuffsUser>,
+) {
+	if gameplay.0 {
+		return;
+	}
+	for mut user in &mut users {
+		user.state.cancel();
 	}
 }
 
@@ -325,7 +375,7 @@ pub(crate) fn configure(app: &mut App) {
 	app.add_systems(Startup, spawn_world_reticle).add_systems(
 		Update,
 		(
-			arm_world_player,
+			arm_world_player.before(PlayerSystems::Intent),
 			sync_tanz_stack_from_inventory
 				.after(arm_world_player)
 				.before(TanzUserSystems::Match)
@@ -335,7 +385,15 @@ pub(crate) fn configure(app: &mut App) {
 				.after(EquipmentSystems::CommitHolster)
 				.after(CharacterControlSystems)
 				.after(maybraid_session::SessionCapabilitySystems)
+				.before(PlayerSystems::Intent)
 				.run_if(resource_equals(WorldGameplayEnabled(true))),
+			sync_fisticuffs_driver
+				.after(arm_world_player)
+				.after(EquipmentSystems::Hold)
+				.before(PlayerSystems::Intent),
+			cancel_fisticuffs_when_paused
+				.after(sync_fisticuffs_driver)
+				.before(PlayerSystems::Intent),
 			sync_skill_map_equip
 				.after(EquipmentSystems::CycleQueue)
 				.after(CharacterControlSystems)
@@ -560,6 +618,183 @@ mod tests {
 			world.get::<EquippedItemHandler>(player).copied(),
 			Some(EquippedItemHandler::Grenade)
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn fisticuffs_primary_inserts_the_driver_without_a_held_mesh() -> anyhow::Result<()> {
+		use fisticuffs_user::FisticuffsUser;
+
+		use crate::weapon::hold_primary_weapon;
+
+		let inventory = Inventory {
+			items: vec![InventoryItem::Fisticuffs],
+			clothing: Vec::new(),
+			weapons: vec![0],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		let mut world = World::new();
+		let player = world.spawn(VegetationPlayer).id();
+		world
+			.run_system_once(move |mut commands: Commands| {
+				hold_primary_weapon(&mut commands, player, &inventory);
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<FisticuffsUser>(player).is_some());
+		assert!(world.get::<firearm_user::FirearmUser>(player).is_none());
+		assert!(world.get::<grenade_user::GrenadeUser>(player).is_none());
+		assert!(world.get::<player::PlayerUse>(player).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn empty_weapon_queue_does_not_arm_fisticuffs() -> anyhow::Result<()> {
+		use fisticuffs_user::FisticuffsUser;
+
+		use crate::weapon::hold_primary_weapon;
+
+		let inventory = Inventory {
+			items: vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: Vec::new(),
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		let mut world = World::new();
+		let player = world.spawn(VegetationPlayer).id();
+		world
+			.run_system_once(move |mut commands: Commands| {
+				hold_primary_weapon(&mut commands, player, &inventory);
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<FisticuffsUser>(player).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn losing_fisticuffs_cancels_a_pending_strike_before_tick() -> anyhow::Result<()> {
+		use character_inventory_user::InventoryUser;
+		use fisticuffs_user::{AttackSpec, FisticuffsUser};
+		use player::Player as MaybraidPlayer;
+
+		use crate::weapon::sync_fisticuffs_driver;
+
+		let inventory = Inventory {
+			items: vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: vec![1],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		let mut world = World::new();
+		let bag = world.spawn(inventory).id();
+		let mut user = FisticuffsUser::default();
+		user.state.request(AttackSpec::jab(fisticuffs_user::Side::Left));
+		user.state.tick(fisticuffs_user::AttackTiming::JAB.duration_secs * 0.32);
+		assert!(
+			user.state.just_entered_active()
+				|| user.state.phase() == Some(fisticuffs_user::AttackPhase::Active)
+				|| user.state.is_busy()
+		);
+		let player = world
+			.spawn((MaybraidPlayer, VegetationPlayer, InventoryUser::carrying(bag), user))
+			.id();
+		world
+			.run_system_once(sync_fisticuffs_driver)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let remaining = world.get::<FisticuffsUser>(player);
+		if let Some(user) = remaining {
+			assert!(!user.state.is_busy());
+			assert!(!user.state.just_entered_active());
+			assert!(user.state.queued().is_none());
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn pause_cancels_an_active_jab_so_the_sensor_can_tear_down() -> anyhow::Result<()> {
+		use fisticuffs_user::{sync_fist_sensors, AttackSpec, FisticuffsHitSensor, FisticuffsUser};
+		use player::Player as MaybraidPlayer;
+
+		use crate::weapon::cancel_fisticuffs_when_paused;
+
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, TransformPlugin));
+		app.insert_resource(WorldGameplayEnabled(true));
+		app.add_systems(Update, (cancel_fisticuffs_when_paused, sync_fist_sensors).chain());
+		let mut user = FisticuffsUser::default();
+		user.state.request(AttackSpec::jab(fisticuffs_user::Side::Left));
+		user.state.tick(fisticuffs_user::AttackTiming::JAB.duration_secs * 0.32);
+		let player = app
+			.world_mut()
+			.spawn((
+				MaybraidPlayer,
+				VegetationPlayer,
+				user,
+				Transform::default(),
+				GlobalTransform::default(),
+			))
+			.id();
+		app.update();
+		if app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count() != 1 {
+			return Err(anyhow::anyhow!("active jab should spawn a fist sensor"));
+		}
+		app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = false;
+		app.update();
+		let user = app
+			.world()
+			.get::<FisticuffsUser>(player)
+			.ok_or_else(|| anyhow::anyhow!("user"))?;
+		if user.state.is_busy() {
+			return Err(anyhow::anyhow!("pause must cancel the jab"));
+		}
+		if app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count() != 0 {
+			return Err(anyhow::anyhow!("pause must tear the fist sensor down"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn swap_off_fisticuffs_despawns_the_fist_sensor() -> anyhow::Result<()> {
+		use character_inventory_user::InventoryUser;
+		use fisticuffs_user::{sync_fist_sensors, AttackSpec, FisticuffsHitSensor, FisticuffsUser};
+		use player::Player as MaybraidPlayer;
+
+		use crate::weapon::sync_fisticuffs_driver;
+
+		let inventory = Inventory {
+			items: vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: vec![1],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, TransformPlugin));
+		app.add_systems(Update, (sync_fisticuffs_driver, sync_fist_sensors).chain());
+		let bag = app.world_mut().spawn(inventory).id();
+		let mut user = FisticuffsUser::default();
+		user.state.request(AttackSpec::jab(fisticuffs_user::Side::Left));
+		user.state.tick(fisticuffs_user::AttackTiming::JAB.duration_secs * 0.32);
+		let player = app
+			.world_mut()
+			.spawn((
+				MaybraidPlayer,
+				VegetationPlayer,
+				InventoryUser::carrying(bag),
+				user,
+				Transform::default(),
+				GlobalTransform::default(),
+			))
+			.id();
+		app.update();
+		if app.world().get::<FisticuffsUser>(player).is_some() {
+			return Err(anyhow::anyhow!("primary gun should drop FisticuffsUser"));
+		}
+		if app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count() != 0 {
+			return Err(anyhow::anyhow!("swap must despawn the fist sensor"));
+		}
 		Ok(())
 	}
 

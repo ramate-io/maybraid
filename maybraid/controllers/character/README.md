@@ -25,7 +25,11 @@ fallback is resolved once in `player`, not here. See
 `RightTrigger` + `X` is `PowerUseItem` and suppresses `StartInteraction`.
 L3 hold is sprint (`StartSprint` every hold frame, `StopSprint` on release).
 Shift maps to L3. R3 click swaps first / third person.
-LT is optic `Focus`; left bumper is iron `Ads`. **B** tap is `ChangeSquat`,
-**B** hold (~0.35 s) is `ChangeProne`. Capture owns **B** as `MenuNav::Back`;
-character collect skips stance when the local pad is captured.
+LT is optic `Focus`; left bumper is iron `Ads`. Trigger *edges* are
+`AttackLeft` / `AttackRight` (fisticuffs jabs when that handler is equipped).
+Keyboard **F** and gamepad LT share the left trigger; **G** / RT share the
+right trigger. RMB stays analog focus and LMB stays UseItem — they do not
+emit Attack. **B** tap is `ChangeSquat`, **B** hold (~0.35 s) is
+`ChangeProne`. Capture owns **B** as `MenuNav::Back`; character collect skips
+stance when the local pad is captured.
 Discover maps read stick flicks in `maybraid-skill-map`, not a bumper chord.

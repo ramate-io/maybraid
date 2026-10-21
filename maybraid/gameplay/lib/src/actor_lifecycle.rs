@@ -114,6 +114,7 @@ impl ActorDomainTeardown {
 			FirearmUser,
 			GrenadeUser,
 			grenade_user::GrenadeThrow,
+			fisticuffs_user::FisticuffsUser,
 			InventoryUser,
 			lubikans::LubikanOwner,
 		)>();

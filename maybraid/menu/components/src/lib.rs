@@ -29,8 +29,8 @@ pub use controls::{
 	sync_inventory_prompt_glyphs, sync_tile_wrap, ActiveOverlayKey, ActiveShortText, CursorRow,
 	FocusTag, HoverTile, HudFonts, HudMenu, HudMenuIgnoresLock, HudMenuItem, HudOverlayMenu,
 	HudScroll, HudScrollThumb, HudScrollTrack, HudScrollViewport, InputPromptDevice,
-	InventoryActionPrompts, InventoryPromptGlyph, InventoryPromptKind, OverlayHeader,
-	OverlayHeaderKey, ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal,
+	InventoryActionPrompts, InventoryDropPromptChip, InventoryPromptGlyph, InventoryPromptKind,
+	OverlayHeader, OverlayHeaderKey, ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal,
 	ShortTextModalRoot, ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank,
 };
 pub use icons::{spin_icons, Icon, SpinningIcon};

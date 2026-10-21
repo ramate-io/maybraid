@@ -8,6 +8,7 @@ pub mod schedule;
 
 use bevy::prelude::*;
 use firearm_user::FirearmUserPlugin;
+use fisticuffs_user::FisticuffsUserPlugin;
 use grenade_user::GrenadeUserPlugin;
 use maybraid_character_controller::CharacterControllerPlugin;
 use maybraid_skill_map::SkillMapPlugin;
@@ -15,9 +16,9 @@ use maybraid_skill_map::SkillMapPlugin;
 pub use actor_lifecycle::ActorDomainTeardown;
 pub use equipment::ItemRuntimes;
 pub use maybraid_session::{
-	ActorRetired, InputRouter, InputRouting, Participation, RoutingEvent, SessionBit,
-	SessionCapabilities, SessionCapabilitySystems, SessionLifecycleSystems, SessionPlugin,
-	WorldGameplayEnabled, WorldPlaySessionEnded, apply_in_game_menu_pause,
+	apply_in_game_menu_pause, ActorRetired, InputRouter, InputRouting, Participation, RoutingEvent,
+	SessionBit, SessionCapabilities, SessionCapabilitySystems, SessionLifecycleSystems,
+	SessionPlugin, WorldGameplayEnabled, WorldPlaySessionEnded,
 };
 
 #[derive(Resource, Default)]
@@ -71,6 +72,9 @@ impl Plugin for GameplayPlugin {
 		}
 		if !app.is_plugin_added::<GrenadeUserPlugin>() {
 			app.add_plugins(GrenadeUserPlugin);
+		}
+		if !app.is_plugin_added::<FisticuffsUserPlugin>() {
+			app.add_plugins(FisticuffsUserPlugin);
 		}
 	}
 }

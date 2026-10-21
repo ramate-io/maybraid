@@ -19,7 +19,7 @@ event. Chords are queries. Text / IME stays on Bevy `KeyboardInput`.
 |---|---|
 | `move_stick` | Left stick, WASD / arrows (gameplay map) |
 | `look_stick` | Right stick (camera-space) + mouse delta |
-| `trigger_focus` / `trigger_fire` | LT / RT, digital after threshold |
+| `trigger_focus` / `trigger_fire` | LT / RT, RMB / LMB, **F** / **G**, digital after threshold. Attack edges ignore mouse. |
 | `dpad` | Hat + arrow keys |
 | `buttons` | Xbox-letter face (`South` → A) |
 | `keys` | Full physical `KeyCode` overlay |
@@ -28,7 +28,9 @@ Default keyboard faces (gameplay map): Space → A, Shift → L3 (sprint), Escap
 (menu Back; character tap squat / hold prone when no menu is focused). **B** is
 not a Back key — it types. Enter → Start, Tab → Select, C → left bumper
 (iron ADS), E / X → X (interact). WASD walks; arrows walk and also feed the
-D-Pad.
+D-Pad. F → left trigger, G → right trigger. LMB is analog UseItem (right trigger);
+RMB is analog focus (left trigger). Mouse buttons do not emit jab Attack intents —
+those stay on **F** / **G** and the gamepad triggers.
 
 While a menu is focused or a text modal is open, capture derives a menu
 [`PadInputPolicy`]: only arrows (D-Pad), Escape (Back), and Enter (Start) so
