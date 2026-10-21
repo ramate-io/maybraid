@@ -70,6 +70,31 @@ impl SpawnOwner {
 	}
 }
 
+/// One destination / probe attempt for a still-pending arrival.
+///
+/// Destination replacement increments this so a stale `PlacementReady` or
+/// constructed body cannot activate the newer selection.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct PlacementAttempt(u64);
+
+impl PlacementAttempt {
+	pub const fn new(raw: u64) -> Self {
+		Self(raw)
+	}
+
+	pub const fn raw(self) -> u64 {
+		self.0
+	}
+
+	pub const fn next(self) -> Self {
+		Self(self.0.wrapping_add(1))
+	}
+
+	pub const fn is_unset(self) -> bool {
+		self.0 == 0
+	}
+}
+
 /// Identity stamped on player-arrival requests and outcomes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct SpawnIdentity {
@@ -100,5 +125,13 @@ mod tests {
 			!SpawnIdentity::new(SpawnRequestId::new(3), first)
 				.matches(SpawnIdentity::new(SpawnRequestId::new(3), second))
 		);
+	}
+
+	#[test]
+	fn placement_attempts_increment_independently_of_identity() {
+		let first = PlacementAttempt::default();
+		assert!(first.is_unset());
+		assert_eq!(first.next(), PlacementAttempt::new(1));
+		assert_ne!(first.next(), first.next().next());
 	}
 }

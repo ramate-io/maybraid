@@ -3,7 +3,7 @@
 //! A controller decides what should happen and emits a request. World
 //! adapters interpret first-wave gates and map presentation. Construction
 //! waits for a matching placement-ready outcome; handoff consumes
-//! [`ArrivalActorReady`] without this crate depending on placement or actors.
+//! [`ActorSpawned`] without this crate depending on placement or actors.
 
 pub mod arrival;
 pub mod controller;
@@ -20,10 +20,10 @@ pub use arrival::{
 };
 pub use controller::{PlayerArrivalPolicy, begin_player_arrivals};
 pub use handoff::{
-	ActivatePlayerArrival, ArrivalActorFailed, ArrivalActorReady, PlayerArrivalCompleted,
-	PlayerArrivalFailed, complete_player_handoffs,
+	ActivatePlayerArrival, ActorSpawned, ArrivalActorFailed, ArrivalActorReady,
+	PlayerArrivalCompleted, PlayerArrivalFailed, complete_player_handoffs,
 };
-pub use identity::{SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
+pub use identity::{PlacementAttempt, SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
 pub use outcome::{SpawnCancelReason, SpawnFailureReason, SpawnOutcome};
 pub use picker::{
 	SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet, dispatch_spawn_picker,
@@ -64,7 +64,7 @@ pub fn register_player_spawn_runtime(app: &mut App) {
 		.add_message::<BeginPlayerArrival>()
 		.add_message::<DestinationSelected>()
 		.add_message::<PlayerChoseRespawnPoi>()
-		.add_message::<ArrivalActorReady>()
+		.add_message::<ActorSpawned>()
 		.add_message::<ArrivalActorFailed>()
 		.add_message::<ActivatePlayerArrival>()
 		.add_message::<PlayerArrivalCompleted>()

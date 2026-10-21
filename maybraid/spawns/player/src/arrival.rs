@@ -1,7 +1,9 @@
 //! Persistent player-arrival state. Messages announce transitions; this
 //! resource survives generation that outlives message retention.
 
-use crate::identity::{SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
+use crate::identity::{
+	PlacementAttempt, SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId,
+};
 use crate::outcome::{SpawnCancelReason, SpawnOutcome};
 use bevy::prelude::*;
 use maybraid_input::MenuNav;
@@ -101,6 +103,9 @@ pub struct PendingPlayerRespawn {
 	pub registry_revision: u64,
 	/// Reused by candidate refresh while the respawn map is open.
 	pub picker_nearby_scratch: Vec<PoiId>,
+	/// Increments on each destination / retry so a superseded probe cannot
+	/// construct or activate this life.
+	pub placement_attempt: PlacementAttempt,
 }
 
 impl PendingPlayerRespawn {
@@ -132,6 +137,7 @@ impl PendingPlayerRespawn {
 			fallback_at: at,
 			registry_revision: 0,
 			picker_nearby_scratch: Vec::new(),
+			placement_attempt: PlacementAttempt::default(),
 		}
 	}
 
@@ -276,6 +282,10 @@ impl WorldPlayerRespawnState {
 		self.pending.as_ref().map(PendingPlayerRespawn::identity)
 	}
 
+	pub fn pending_attempt(&self) -> Option<PlacementAttempt> {
+		self.pending.as_ref().map(|pending| pending.placement_attempt)
+	}
+
 	/// Begin a new arrival. A previous pending request is superseded.
 	pub fn begin_arrival(
 		&mut self,
@@ -311,8 +321,8 @@ impl WorldPlayerRespawnState {
 
 	/// Finish a matching arrival exactly once. Returns false for a stale or
 	/// already-activated identity so a late construction cannot take over.
-	pub fn complete_arrival(&mut self, identity: SpawnIdentity) -> bool {
-		if !self.accepts_identity(identity) {
+	pub fn complete_arrival(&mut self, identity: SpawnIdentity, attempt: PlacementAttempt) -> bool {
+		if !self.accepts_constructed(identity, attempt) {
 			return false;
 		}
 		if self.activated.is_some_and(|activated| activated.matches(identity)) {
@@ -326,38 +336,52 @@ impl WorldPlayerRespawnState {
 	pub fn accept_destination(
 		&mut self,
 		selected: DestinationSelected,
-	) -> Option<ArrivalDestination> {
-		if !self.accepts_identity(selected.identity) {
+	) -> Option<(ArrivalDestination, PlacementAttempt)> {
+		let attempt = self.begin_placement(selected.identity)?;
+		Some((selected.destination, attempt))
+	}
+
+	/// Destination is known. Increments the placement attempt so a superseded
+	/// probe cannot construct this life. Construction waits for a matching
+	/// ready; a later stale result must not spawn.
+	pub fn begin_placement(&mut self, identity: SpawnIdentity) -> Option<PlacementAttempt> {
+		if !self.accepts_identity(identity) {
 			return None;
 		}
-		if let Some(pending) = self.pending.as_mut() {
-			pending.advance(ArrivalPhase::ResolvingPlacement);
-		}
-		Some(selected.destination)
+		let pending = self.pending.as_mut()?;
+		pending.placement_attempt = pending.placement_attempt.next();
+		pending.advance(ArrivalPhase::AwaitingSupport);
+		Some(pending.placement_attempt)
 	}
 
 	/// Destination is known. Construction waits for a matching placement
 	/// outcome; a later stale ready must not spawn this life.
 	pub fn await_support(&mut self, identity: SpawnIdentity) -> bool {
-		if !self.accepts_identity(identity) {
-			return false;
-		}
-		if let Some(pending) = self.pending.as_mut() {
-			pending.advance(ArrivalPhase::AwaitingSupport);
-		}
-		true
+		self.begin_placement(identity).is_some()
+	}
+
+	pub fn accepts_placement(&self, identity: SpawnIdentity, attempt: PlacementAttempt) -> bool {
+		self.accepts_identity(identity)
+			&& self.pending.as_ref().is_some_and(|pending| {
+				pending.phase.awaiting_support() && pending.placement_attempt == attempt
+			})
 	}
 
 	/// A matching placement-ready outcome may construct. The arrival stays
 	/// pending until handoff completes it.
-	pub fn accept_placement(&mut self, identity: SpawnIdentity) -> bool {
-		if !self.accepts_identity(identity) {
+	pub fn accept_placement(&mut self, identity: SpawnIdentity, attempt: PlacementAttempt) -> bool {
+		if !self.accepts_placement(identity, attempt) {
 			return false;
 		}
 		if let Some(pending) = self.pending.as_mut() {
 			pending.advance(ArrivalPhase::SpawningActor);
 		}
 		true
+	}
+
+	pub fn accepts_constructed(&self, identity: SpawnIdentity, attempt: PlacementAttempt) -> bool {
+		self.accepts_identity(identity)
+			&& self.pending.as_ref().is_some_and(|pending| pending.placement_attempt == attempt)
 	}
 
 	/// Placement failed. Keep the arrival so the controller can retry,
@@ -512,19 +536,29 @@ mod tests {
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		assert!(
-			state
-				.accept_destination(DestinationSelected::new(
-					identity,
-					ArrivalDestination::Fallback
-				))
-				.is_some()
-		);
-		assert!(state.await_support(identity));
+		let (_destination, attempt) = state
+			.accept_destination(DestinationSelected::new(identity, ArrivalDestination::Fallback))
+			.expect("destination");
 		assert!(state.pending.as_ref().is_some_and(|pending| pending.phase.awaiting_support()));
-		assert!(state.accept_placement(identity));
+		assert_eq!(state.pending_attempt(), Some(attempt));
+		assert!(state.accept_placement(identity, attempt));
 		assert!(state.pending.as_ref().is_some_and(|pending| pending.phase.spawning_actor()));
 		assert!(state.pending.is_some(), "construction does not complete the arrival");
+	}
+
+	#[test]
+	fn destination_replacement_discards_a_stale_placement_attempt() {
+		let mut state = WorldPlayerRespawnState::default();
+		let identity = state.begin_arrival(
+			ArrivalReason::FirstSpawn { at: Vec3::ZERO },
+			RespawnOrigin::began(None, false),
+			0.0,
+		);
+		let first = state.begin_placement(identity).expect("first attempt");
+		let second = state.begin_placement(identity).expect("replacement");
+		assert_ne!(first, second);
+		assert!(!state.accept_placement(identity, first));
+		assert!(state.accept_placement(identity, second));
 	}
 
 	#[test]
@@ -557,7 +591,7 @@ mod tests {
 			0.0,
 		);
 		assert!(!state.await_support(first));
-		assert!(!state.accept_placement(first));
+		assert!(!state.accept_placement(first, PlacementAttempt::new(1)));
 		assert!(state.note_placement_failed(first).is_none());
 		assert!(state.pending.as_ref().is_some_and(|pending| pending.phase.is_choosing()));
 		assert_eq!(state.pending_identity(), Some(next));
