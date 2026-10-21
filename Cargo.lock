@@ -7179,6 +7179,7 @@ name = "maybraid-spawns-actors"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "characters",
  "maybraid-spawns-player",
@@ -7203,6 +7204,7 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
+ "characters",
  "durham",
  "lod",
  "lod-avian",

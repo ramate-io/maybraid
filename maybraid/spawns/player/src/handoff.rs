@@ -1,7 +1,7 @@
 //! Player handoff after a matching actor is constructed.
 //!
 //! Construction does not choose a local player or change cameras. The actor
-//! interpreter emits the player-owned [`ArrivalActorReady`] so this crate
+//! interpreter emits the player-owned [`ActorSpawned`] so this crate
 //! does not depend on `spawns/actors`. The arrival controller consumes that
 //! outcome exactly once and emits [`ActivatePlayerArrival`]. World adapters
 //! interpret activation (motor, camera, picker).
@@ -9,25 +9,34 @@
 use bevy::prelude::*;
 
 use crate::arrival::{ArrivalPhase, WorldPlayerRespawnState};
-use crate::identity::SpawnIdentity;
+use crate::identity::{PlacementAttempt, SpawnIdentity};
 
 /// Construction finished for this arrival. The player controller owns the
 /// next step: emit [`ActivatePlayerArrival`] or drop a stale body.
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ArrivalActorReady {
+pub struct ActorSpawned {
 	pub identity: SpawnIdentity,
+	pub attempt: PlacementAttempt,
 	pub actor: Entity,
 }
 
-impl ArrivalActorReady {
-	pub const fn new(identity: SpawnIdentity, actor: Entity) -> Self {
-		Self { identity, actor }
+impl ActorSpawned {
+	pub const fn new(identity: SpawnIdentity, attempt: PlacementAttempt, actor: Entity) -> Self {
+		Self { identity, attempt, actor }
 	}
 
 	pub fn matches(self, identity: SpawnIdentity) -> bool {
 		self.identity.matches(identity)
 	}
+
+	pub fn matches_attempt(self, identity: SpawnIdentity, attempt: PlacementAttempt) -> bool {
+		self.matches(identity) && self.attempt == attempt
+	}
 }
+
+/// Previous name for [`ActorSpawned`]. Kept so in-flight adapters compile
+/// while the stack merges upward.
+pub type ArrivalActorReady = ActorSpawned;
 
 /// Construction failed. The arrival controller keeps picker state.
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
@@ -65,10 +74,11 @@ impl ActivatePlayerArrival {
 	/// construction produces nothing.
 	pub fn from_constructed(
 		identity: SpawnIdentity,
+		attempt: PlacementAttempt,
 		actor: Entity,
 		state: &mut WorldPlayerRespawnState,
 	) -> Option<Self> {
-		if !state.complete_arrival(identity) {
+		if !state.complete_arrival(identity, attempt) {
 			return None;
 		}
 		Some(Self::new(identity, actor))
@@ -98,7 +108,7 @@ impl PlayerArrivalCompleted {
 
 /// Consume a matching constructed actor exactly once. Stale bodies despawn.
 pub fn complete_player_handoffs(
-	mut ready: MessageReader<ArrivalActorReady>,
+	mut ready: MessageReader<ActorSpawned>,
 	mut failed: MessageReader<ArrivalActorFailed>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut activate: MessageWriter<ActivatePlayerArrival>,
@@ -111,9 +121,12 @@ pub fn complete_player_handoffs(
 		}
 	}
 	for ready in ready.read() {
-		if let Some(activation) =
-			ActivatePlayerArrival::from_constructed(ready.identity, ready.actor, &mut state)
-		{
+		if let Some(activation) = ActivatePlayerArrival::from_constructed(
+			ready.identity,
+			ready.attempt,
+			ready.actor,
+			&mut state,
+		) {
 			activate.write(activation);
 		} else {
 			commands.entity(ready.actor).despawn();
@@ -153,56 +166,70 @@ mod tests {
 	use bevy::prelude::Vec3;
 	use world_player::RespawnOrigin;
 
-	use crate::identity::{SpawnOwner, SpawnRequestId, SpawnSessionId};
 	use crate::request::ArrivalReason;
 
-	fn identity() -> SpawnIdentity {
-		SpawnIdentity::new(SpawnRequestId::new(1), SpawnOwner::new(SpawnSessionId::new(1)))
-	}
-
-	fn pending_state() -> WorldPlayerRespawnState {
+	fn pending_state() -> (WorldPlayerRespawnState, SpawnIdentity, PlacementAttempt) {
 		let mut state = WorldPlayerRespawnState::default();
-		state.begin_arrival(
+		let identity = state.begin_arrival(
 			ArrivalReason::FirstSpawn { at: Vec3::ZERO },
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		state
+		let attempt = state.begin_placement(identity).expect("attempt");
+		(state, identity, attempt)
 	}
 
 	#[test]
 	fn a_matching_actor_completes_the_arrival_once() {
-		let mut state = pending_state();
-		let identity = state.pending_identity().expect("pending");
+		let (mut state, identity, attempt) = pending_state();
 		let actor = Entity::from_bits(7);
-		let first =
-			ActivatePlayerArrival::from_constructed(identity, actor, &mut state).expect("activate");
+		let first = ActivatePlayerArrival::from_constructed(identity, attempt, actor, &mut state)
+			.expect("activate");
 		assert_eq!(first.actor, actor);
 		assert!(state.pending.is_none());
 		assert_eq!(state.last_activated(), Some(identity));
-		assert!(ActivatePlayerArrival::from_constructed(identity, actor, &mut state).is_none());
+		assert!(
+			ActivatePlayerArrival::from_constructed(identity, attempt, actor, &mut state).is_none()
+		);
 	}
 
 	#[test]
 	fn a_stale_construction_does_not_activate() {
-		let mut state = pending_state();
+		let (mut state, identity, attempt) = pending_state();
 		state.end_session();
 		state.begin_arrival(
 			ArrivalReason::Death { at: Vec3::Y },
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		assert!(
-			ActivatePlayerArrival::from_constructed(identity(), Entity::from_bits(3), &mut state)
-				.is_none()
-		);
+		assert!(ActivatePlayerArrival::from_constructed(
+			identity,
+			attempt,
+			Entity::from_bits(3),
+			&mut state
+		)
+		.is_none());
 		assert!(state.pending.is_some());
 	}
 
 	#[test]
+	fn a_superseded_attempt_does_not_activate() {
+		let (mut state, identity, first) = pending_state();
+		let second = state.begin_placement(identity).expect("replacement");
+		assert!(ActivatePlayerArrival::from_constructed(
+			identity,
+			first,
+			Entity::from_bits(3),
+			&mut state
+		)
+		.is_none());
+		assert!(state.pending.is_some());
+		assert_eq!(state.pending_attempt(), Some(second));
+	}
+
+	#[test]
 	fn construction_failure_keeps_the_arrival() {
-		let mut state = pending_state();
-		let identity = state.pending_identity().expect("pending");
+		let (mut state, identity, _) = pending_state();
 		let failed = PlayerArrivalFailed::preserve_arrival(identity, &mut state).expect("retry");
 		assert!(failed.retryable);
 		assert!(state.pending.is_some());
@@ -214,17 +241,22 @@ mod tests {
 
 		let mut world = World::new();
 		world.init_resource::<WorldPlayerRespawnState>();
-		world.init_resource::<Messages<ArrivalActorReady>>();
+		world.init_resource::<Messages<ActorSpawned>>();
 		world.init_resource::<Messages<ArrivalActorFailed>>();
 		world.init_resource::<Messages<ActivatePlayerArrival>>();
 		world.init_resource::<Messages<PlayerArrivalFailed>>();
-		let identity = world.resource_mut::<WorldPlayerRespawnState>().begin_arrival(
-			ArrivalReason::FirstSpawn { at: Vec3::ZERO },
-			RespawnOrigin::began(None, false),
-			0.0,
-		);
+		let (identity, attempt) = {
+			let mut state = world.resource_mut::<WorldPlayerRespawnState>();
+			let identity = state.begin_arrival(
+				ArrivalReason::FirstSpawn { at: Vec3::ZERO },
+				RespawnOrigin::began(None, false),
+				0.0,
+			);
+			let attempt = state.begin_placement(identity).expect("attempt");
+			(identity, attempt)
+		};
 		let actor = world.spawn_empty().id();
-		world.write_message(ArrivalActorReady::new(identity, actor));
+		world.write_message(ActorSpawned::new(identity, attempt, actor));
 		world.run_system_once(complete_player_handoffs).expect("handoff");
 		let activations: Vec<_> =
 			world.resource_mut::<Messages<ActivatePlayerArrival>>().drain().collect();
@@ -232,8 +264,9 @@ mod tests {
 		assert_eq!(activations[0].actor, actor);
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
 		let stale = world.spawn_empty().id();
-		world.write_message(ArrivalActorReady::new(identity, stale));
+		world.write_message(ActorSpawned::new(identity, attempt, stale));
 		world.run_system_once(complete_player_handoffs).expect("stale");
 		assert!(world.resource_mut::<Messages<ActivatePlayerArrival>>().drain().next().is_none());
+		assert!(world.get_entity(stale).is_err(), "unclaimed construction is cleaned up");
 	}
 }

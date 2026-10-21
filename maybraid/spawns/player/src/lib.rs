@@ -3,7 +3,7 @@
 //! A controller decides what should happen and emits a request. World
 //! adapters interpret first-wave gates and map presentation. Construction
 //! waits for a matching placement-ready outcome; handoff consumes
-//! [`ArrivalActorReady`] without this crate depending on placement or actors.
+//! [`ActorSpawned`] without this crate depending on placement or actors.
 
 pub mod arrival;
 pub mod controller;
@@ -14,20 +14,20 @@ pub mod picker;
 pub mod request;
 
 pub use arrival::{
-	ArrivalPhase, PendingPlayerRespawn, WorldPlayerRespawnConfig, WorldPlayerRespawnState,
 	map_flick_dir, menu_nav_dir, nearest_candidate, nearest_in_direction,
-	next_candidate_in_direction, reset_first_spawn_offer,
+	next_candidate_in_direction, reset_first_spawn_offer, ArrivalPhase, PendingPlayerRespawn,
+	WorldPlayerRespawnConfig, WorldPlayerRespawnState,
 };
-pub use controller::{PlayerArrivalPolicy, begin_player_arrivals};
+pub use controller::{begin_player_arrivals, PlayerArrivalPolicy};
 pub use handoff::{
-	ActivatePlayerArrival, ArrivalActorFailed, ArrivalActorReady, PlayerArrivalCompleted,
-	PlayerArrivalFailed, complete_player_handoffs,
+	complete_player_handoffs, ActivatePlayerArrival, ActorSpawned, ArrivalActorFailed,
+	ArrivalActorReady, PlayerArrivalCompleted, PlayerArrivalFailed,
 };
-pub use identity::{SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
+pub use identity::{PlacementAttempt, SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
 pub use outcome::{SpawnCancelReason, SpawnFailureReason, SpawnOutcome};
 pub use picker::{
-	SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet, dispatch_spawn_picker,
-	refresh_spawn_picker_focus, release_spawn_picker,
+	dispatch_spawn_picker, refresh_spawn_picker_focus, release_spawn_picker, SpawnPickerCapture,
+	SpawnPickerController, SpawnPickerSheet,
 };
 pub use request::{
 	ArrivalDestination, ArrivalReason, BeginPlayerArrival, DestinationSelected,
@@ -64,7 +64,7 @@ pub fn register_player_spawn_runtime(app: &mut App) {
 		.add_message::<BeginPlayerArrival>()
 		.add_message::<DestinationSelected>()
 		.add_message::<PlayerChoseRespawnPoi>()
-		.add_message::<ArrivalActorReady>()
+		.add_message::<ActorSpawned>()
 		.add_message::<ArrivalActorFailed>()
 		.add_message::<ActivatePlayerArrival>()
 		.add_message::<PlayerArrivalCompleted>()

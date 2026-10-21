@@ -3,7 +3,7 @@
 //! [`SpawnActor::realize`] calls existing player-body APIs. NPC population
 //! keeps calling `character.spawn` directly. Construction is synchronous;
 //! there is no pending-work tracker and no generic recipe framework.
-//! The player arrival controller consumes [`ArrivalActorReady`].
+//! The player arrival controller consumes [`maybraid_spawns_player::ActorSpawned`].
 
 pub mod realize;
 pub mod request;
@@ -11,7 +11,7 @@ pub mod request;
 pub use request::{ActorSpawnFailed, ActorSpawned, SpawnActor};
 
 use bevy::prelude::*;
-use maybraid_spawns_player::{ArrivalActorFailed, ArrivalActorReady};
+use maybraid_spawns_player::{ActorSpawned as ArrivalActorReady, ArrivalActorFailed};
 use world_player::CharacterLocomotion;
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -52,7 +52,7 @@ pub fn realize_actors(
 	for request in requests.read() {
 		let spawned =
 			request.realize(&mut commands, &mut meshes, &mut materials, locomotion.as_ref());
-		ready.write(ArrivalActorReady::new(spawned.identity, spawned.actor));
+		ready.write(ArrivalActorReady::new(spawned.identity, spawned.attempt, spawned.actor));
 		constructed.write(spawned);
 	}
 }
@@ -68,15 +68,20 @@ impl Plugin for ActorSpawnPlugin {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use avian3d::prelude::{GravityScale, LinearVelocity};
 	use bevy::ecs::system::RunSystemOnce;
 	use maybraid_spawns_player::{
-		ActivatePlayerArrival, ArrivalReason, SpawnIdentity, SpawnOwner, SpawnRequestId,
-		SpawnSessionId, WorldPlayerRespawnState,
+		ActivatePlayerArrival, ArrivalReason, PlacementAttempt, SpawnIdentity, SpawnOwner,
+		SpawnRequestId, SpawnSessionId, WorldPlayerRespawnState,
 	};
 	use world_player::{AwaitingTerrainSurface, OffTerrainAnchor, Player, RespawnOrigin};
 
 	fn identity() -> SpawnIdentity {
 		SpawnIdentity::new(SpawnRequestId::new(1), SpawnOwner::new(SpawnSessionId::new(1)))
+	}
+
+	fn attempt() -> PlacementAttempt {
+		PlacementAttempt::new(1)
 	}
 
 	fn construct_world() -> World {
@@ -105,12 +110,8 @@ mod tests {
 				 mut meshes: ResMut<Assets<Mesh>>,
 				 mut materials: ResMut<Assets<StandardMaterial>>,
 				 locomotion: Res<CharacterLocomotion>| {
-					SpawnActor::player_body(identity(), Vec3::new(8.0, 4.0, 5.0), false).realize(
-						&mut commands,
-						&mut meshes,
-						&mut materials,
-						locomotion.as_ref(),
-					)
+					SpawnActor::player_body(identity(), attempt(), Vec3::new(8.0, 4.0, 5.0), false)
+						.realize(&mut commands, &mut meshes, &mut materials, locomotion.as_ref())
 				},
 			)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -120,8 +121,13 @@ mod tests {
 			world.get::<Transform>(spawned.actor).map(|transform| transform.translation),
 			Some(Vec3::new(8.0, 4.0, 5.0))
 		);
-		assert!(world.get::<AwaitingTerrainSurface>(spawned.actor).is_some());
+		assert!(world.get::<AwaitingTerrainSurface>(spawned.actor).is_none());
 		assert!(world.get::<OffTerrainAnchor>(spawned.actor).is_none());
+		assert_eq!(world.get::<GravityScale>(spawned.actor).map(|scale| scale.0), Some(1.25));
+		assert_eq!(
+			world.get::<LinearVelocity>(spawned.actor).map(|velocity| **velocity),
+			Some(Vec3::ZERO)
+		);
 		assert!(world.get::<Player>(spawned.actor).is_some());
 		Ok(())
 	}
@@ -141,20 +147,20 @@ mod tests {
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		world.write_message(SpawnActor::player_body(identity, Vec3::Y, false));
+		world.write_message(SpawnActor::player_body(identity, attempt(), Vec3::Y, false));
 		world
 			.run_system_once(realize_actors)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let ready: Vec<_> = world.resource_mut::<Messages<ArrivalActorReady>>().drain().collect();
 		assert_eq!(ready.len(), 1);
-		assert!(ready[0].matches(identity));
+		assert!(ready[0].matches_attempt(identity, attempt()));
 		assert!(world.resource_mut::<Messages<ActivatePlayerArrival>>().drain().next().is_none());
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
 		Ok(())
 	}
 
 	#[test]
-	fn an_interior_pose_anchors_off_terrain() -> anyhow::Result<()> {
+	fn an_interior_pose_is_not_held_by_an_off_terrain_anchor() -> anyhow::Result<()> {
 		let mut world = construct_world();
 		let spawned = world
 			.run_system_once(
@@ -162,19 +168,13 @@ mod tests {
 				 mut meshes: ResMut<Assets<Mesh>>,
 				 mut materials: ResMut<Assets<StandardMaterial>>,
 				 locomotion: Res<CharacterLocomotion>| {
-					SpawnActor::player_body(identity(), Vec3::new(8.0, 12.0, 5.0), true).realize(
-						&mut commands,
-						&mut meshes,
-						&mut materials,
-						locomotion.as_ref(),
-					)
+					SpawnActor::player_body(identity(), attempt(), Vec3::new(8.0, 12.0, 5.0), true)
+						.realize(&mut commands, &mut meshes, &mut materials, locomotion.as_ref())
 				},
 			)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert_eq!(
-			world.get::<OffTerrainAnchor>(spawned.actor).map(|anchor| anchor.translation),
-			Some(Vec3::new(8.0, 12.0, 5.0))
-		);
+		assert!(world.get::<OffTerrainAnchor>(spawned.actor).is_none());
+		assert!(world.get::<AwaitingTerrainSurface>(spawned.actor).is_none());
 		Ok(())
 	}
 }
