@@ -43,8 +43,17 @@ impl ActorClearance {
 		self.height * 0.5 + 0.5
 	}
 
+	/// Capsule radius used by support / clearance probes.
+	pub const RADIUS: f32 = 0.4;
+
 	pub fn capsule_half_extents(self) -> Vec3 {
-		Vec3::new(0.4, self.height.max(0.1) * 0.5, 0.4)
+		Vec3::new(Self::RADIUS, self.height.max(0.1) * 0.5, Self::RADIUS)
+	}
+
+	/// Distance from a supporting surface to the standing capsule center.
+	/// Matches [`world_player::player_position_above_surface`].
+	pub fn surface_lift(self) -> f32 {
+		Self::RADIUS + self.height.max(0.1) * 0.5 + 0.5
 	}
 
 	/// True when the standing capsule at `at` overlaps `[min, max]`.

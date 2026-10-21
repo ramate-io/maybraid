@@ -6,7 +6,9 @@ pub mod presentation;
 pub mod realize;
 pub mod request;
 
-pub use presentation::{attach_projectile_visuals, register_projectile_presentation};
+pub use presentation::{
+	attach_projectile_visual, attach_projectile_visuals, register_projectile_presentation,
+};
 pub use realize::realize_projectiles;
 pub use request::{ProjectileSpec, ProjectileVisual, SpawnProjectile};
 
