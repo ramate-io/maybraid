@@ -2,8 +2,7 @@
 //! [`lod::hcsg::GenerationScheme`] concern.
 
 use bevy::prelude::*;
-use maybraid_spawns_core::{SpawnFailureReason, SpawnIdentity};
-use maybraid_spawns_player::ArrivalDestination;
+use maybraid_spawns_player::{ArrivalDestination, SpawnFailureReason, SpawnIdentity};
 
 /// How the actor should meet the world. Interior floors stay authored.
 /// Outdoor ground waits for composed support. Airborne is deliberate.

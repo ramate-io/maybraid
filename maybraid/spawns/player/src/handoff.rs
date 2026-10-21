@@ -4,10 +4,9 @@
 //! requests are correlated to the same arrival identity.
 
 use bevy::prelude::*;
-use maybraid_spawns_actors::ActorSpawned;
-use maybraid_spawns_core::SpawnIdentity;
 
 use crate::arrival::{ArrivalPhase, WorldPlayerRespawnState};
+use crate::identity::SpawnIdentity;
 
 /// Assign input, follow camera, and close arrival UI for this arrival.
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
@@ -26,15 +25,16 @@ impl ActivatePlayerArrival {
 	}
 
 	/// Complete a matching arrival exactly once. A stale or already-activated
-	/// `ActorSpawned` produces nothing.
-	pub fn from_spawned(
-		spawned: ActorSpawned,
+	/// construction produces nothing.
+	pub fn from_constructed(
+		identity: SpawnIdentity,
+		actor: Entity,
 		state: &mut WorldPlayerRespawnState,
 	) -> Option<Self> {
-		if !state.complete_arrival(spawned.identity) {
+		if !state.complete_arrival(identity) {
 			return None;
 		}
-		Some(Self::new(spawned.identity, spawned.actor))
+		Some(Self::new(identity, actor))
 	}
 }
 
@@ -85,27 +85,13 @@ impl PlayerArrivalFailed {
 	}
 }
 
-/// Match constructed actors to the live arrival. Stale sessions are ignored.
-pub fn handoff_player_arrivals(
-	mut spawned: MessageReader<ActorSpawned>,
-	mut state: ResMut<WorldPlayerRespawnState>,
-	mut activate: MessageWriter<ActivatePlayerArrival>,
-	mut completed: MessageWriter<PlayerArrivalCompleted>,
-) {
-	for spawned in spawned.read().copied() {
-		if let Some(activation) = ActivatePlayerArrival::from_spawned(spawned, &mut state) {
-			completed.write(PlayerArrivalCompleted::from_activation(activation));
-			activate.write(activation);
-		}
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use maybraid_spawns_core::{SpawnOwner, SpawnRequestId, SpawnSessionId};
+	use bevy::prelude::Vec3;
 	use world_player::RespawnOrigin;
 
+	use crate::identity::{SpawnOwner, SpawnRequestId, SpawnSessionId};
 	use crate::request::ArrivalReason;
 
 	fn identity() -> SpawnIdentity {
@@ -127,16 +113,16 @@ mod tests {
 		let mut state = pending_state();
 		let identity = state.pending_identity().expect("pending");
 		let actor = Entity::from_bits(7);
-		let spawned = ActorSpawned::new(identity, actor, true);
-		let first = ActivatePlayerArrival::from_spawned(spawned, &mut state).expect("activate");
+		let first =
+			ActivatePlayerArrival::from_constructed(identity, actor, &mut state).expect("activate");
 		assert_eq!(first.actor, actor);
 		assert!(state.pending.is_none());
 		assert_eq!(state.last_activated(), Some(identity));
-		assert!(ActivatePlayerArrival::from_spawned(spawned, &mut state).is_none());
+		assert!(ActivatePlayerArrival::from_constructed(identity, actor, &mut state).is_none());
 	}
 
 	#[test]
-	fn a_stale_actor_spawned_does_not_activate() {
+	fn a_stale_construction_does_not_activate() {
 		let mut state = pending_state();
 		state.end_session();
 		state.begin_arrival(
@@ -144,12 +130,10 @@ mod tests {
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		let stale = identity();
-		assert!(ActivatePlayerArrival::from_spawned(
-			ActorSpawned::new(stale, Entity::from_bits(3), false),
-			&mut state
-		)
-		.is_none());
+		assert!(
+			ActivatePlayerArrival::from_constructed(identity(), Entity::from_bits(3), &mut state)
+				.is_none()
+		);
 		assert!(state.pending.is_some());
 	}
 

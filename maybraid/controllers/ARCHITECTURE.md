@@ -119,13 +119,11 @@ Package names stay; only directories moved. See [#1450](https://github.com/ramat
 | `gameplay/session` | `maybraid-session` | Capabilities, pause, play-session end |
 | `gameplay/lib` | `maybraid-gameplay` | Cross-domain schedule, item-runtime owner, adapters |
 | `world/lib` | `maybraid-world` | Terrain, POIs, population, presentation, `spawn_surface` |
-| `spawns/core` | `maybraid-spawns-core` | Spawn request / session identity and shared outcomes |
-| `spawns/player` | `maybraid-spawns-player` | Player arrival controller, picker, destination selection |
+| `spawns/player` | `maybraid-spawns-player` | Player arrival identity, picker, destination selection, handoff |
 | `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / support. Collider readiness is not `GenerationScheme`. |
-| `spawns/actors` | `maybraid-spawns-actors` | `SpawnActor` / `ActorSpawned`. No camera or input assignment. |
-| `spawns/projectiles` | `maybraid-spawns-projectiles` | Simulation `SpawnProjectile` (no mesh) |
+| `spawns/actors` | `maybraid-spawns-actors` | Thin `SpawnActor` interpreter over existing player-body APIs. No recipe framework, camera, or input assignment. |
+| `spawns/projectiles` | `maybraid-spawns-projectiles` | Batched simulation `SpawnProjectile` (no mesh, no per-shot event) |
 | `spawns/grenades` | `maybraid-spawns-grenades` | Simulation thrown-grenade body / fuse |
-| `spawns/population` | `maybraid-spawns-population` | Cell / encounter demand, ownership, retirement |
 | `game/src` | `maybraid` | Assembles World + Gameplay + shell / flow |
 
 `controllers/world` is a compatibility re-export of `gameplay/session`.

@@ -7035,7 +7035,6 @@ dependencies = [
  "maybraid-spawns-grenades",
  "maybraid-spawns-placement",
  "maybraid-spawns-player",
- "maybraid-spawns-population",
  "maybraid-spawns-projectiles",
  "player",
  "player-camera",
@@ -7182,16 +7181,8 @@ dependencies = [
  "anyhow",
  "bevy",
  "characters",
- "maybraid-spawns-core",
+ "maybraid-spawns-player",
  "world-player",
-]
-
-[[package]]
-name = "maybraid-spawns-core"
-version = "0.1.5"
-dependencies = [
- "anyhow",
- "bevy",
 ]
 
 [[package]]
@@ -7203,7 +7194,6 @@ dependencies = [
  "bevy",
  "character-items",
  "grenades",
- "maybraid-spawns-core",
 ]
 
 [[package]]
@@ -7214,7 +7204,6 @@ dependencies = [
  "bevy",
  "durham",
  "lod",
- "maybraid-spawns-core",
  "maybraid-spawns-player",
  "poi-intelligence",
  "world-player",
@@ -7228,22 +7217,8 @@ dependencies = [
  "bevy",
  "maybraid-controllers-core",
  "maybraid-input",
- "maybraid-spawns-actors",
- "maybraid-spawns-core",
  "poi-intelligence",
  "world-player",
-]
-
-[[package]]
-name = "maybraid-spawns-population"
-version = "0.1.5"
-dependencies = [
- "anyhow",
- "bevy",
- "maybraid-spawns-actors",
- "maybraid-spawns-core",
- "maybraid-spawns-placement",
- "maybraid-spawns-player",
 ]
 
 [[package]]
@@ -7253,7 +7228,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "damage",
- "maybraid-spawns-core",
+ "gimme-bench-support",
  "projectiles",
 ]
 
@@ -7330,7 +7305,6 @@ dependencies = [
  "maybraid-spawns-actors",
  "maybraid-spawns-placement",
  "maybraid-spawns-player",
- "maybraid-spawns-population",
  "maybraid-vfx",
  "maybraid-weather",
  "meandering-intelligence",
@@ -7943,6 +7917,7 @@ dependencies = [
  "character-items",
  "damage",
  "fleeing-intelligence",
+ "gimme-bench-support",
  "journeying-intelligence",
  "lod",
  "maybraid-audio",

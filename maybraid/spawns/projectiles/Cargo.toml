@@ -12,11 +12,11 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 damage = { workspace = true }
-maybraid-spawns-core = { workspace = true }
 projectiles = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+gimme-bench-support = { workspace = true }
 
 [lints]
 workspace = true

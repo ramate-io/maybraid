@@ -1,10 +1,12 @@
-//! Simulation-first projectile spawn. Visual assets attach afterward.
+//! Batched simulation projectile spawn. Visual assets attach afterward.
+//!
+//! No per-shot bookkeeping entity and no mandatory spawn-success event.
 
 pub mod realize;
 pub mod request;
 
 pub use realize::realize_projectiles;
-pub use request::{ProjectileSpawned, ProjectileSpec, SpawnProjectile};
+pub use request::{ProjectileSpec, SpawnProjectile};
 
 use bevy::prelude::*;
 
@@ -15,9 +17,7 @@ pub fn register_projectile_spawn_runtime(app: &mut App) {
 	if app.world().contains_resource::<ProjectileSpawnRuntime>() {
 		return;
 	}
-	app.init_resource::<ProjectileSpawnRuntime>()
-		.add_message::<SpawnProjectile>()
-		.add_message::<ProjectileSpawned>();
+	app.init_resource::<ProjectileSpawnRuntime>().add_message::<SpawnProjectile>();
 }
 
 pub struct ProjectileSpawnPlugin;
@@ -32,21 +32,15 @@ impl Plugin for ProjectileSpawnPlugin {
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use maybraid_spawns_core::{SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
 	use projectiles::{BoltSpec, Flight};
-
-	fn identity() -> SpawnIdentity {
-		SpawnIdentity::new(SpawnRequestId::new(1), SpawnOwner::new(SpawnSessionId::new(1)))
-	}
 
 	#[test]
 	fn realize_creates_flight_without_a_mesh() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.init_resource::<Assets<bevy::prelude::Mesh>>();
-		let spawned = world
+		let projectile = world
 			.run_system_once(|mut commands: Commands| {
-				SpawnProjectile::new(
-					identity(),
+				SpawnProjectile::launch(
 					Entity::from_bits(2),
 					Vec3::ZERO,
 					Vec3::Z,
@@ -57,8 +51,8 @@ mod tests {
 				.realize(&mut commands)
 			})
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(world.get::<Flight>(spawned.projectile).is_some());
-		assert!(world.get::<Mesh3d>(spawned.projectile).is_none());
+		assert!(world.get::<Flight>(projectile).is_some());
+		assert!(world.get::<Mesh3d>(projectile).is_none());
 		Ok(())
 	}
 
