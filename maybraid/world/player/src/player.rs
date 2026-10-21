@@ -18,7 +18,6 @@ use maybraid_input::{PadButton, VirtualPad};
 
 use crate::placement::{
 	PendingPlacement, PlacementPendingReason, PlacementSupportVolume, PresentedOutdoorHeight,
-	SpawnSupport,
 };
 use crate::{camera::CameraController, WorldBaseTerrain};
 
@@ -353,14 +352,23 @@ pub fn snap_player_to_composed_surface(
 			&mut LinearVelocity,
 			&mut GravityScale,
 			Option<&PendingPlacement>,
+			Option<&OffTerrainAnchor>,
 		),
 		With<Player>,
 	>,
 	terrain_chunks: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
 	support_volumes: Query<&PlacementSupportVolume>,
 ) {
-	let Ok((entity, mut transform, mut global, mut body, mut velocity, mut gravity, pending)) =
-		players.single_mut()
+	let Ok((
+		entity,
+		mut transform,
+		mut global,
+		mut body,
+		mut velocity,
+		mut gravity,
+		pending,
+		anchor,
+	)) = players.single_mut()
 	else {
 		return;
 	};
@@ -371,88 +379,64 @@ pub fn snap_player_to_composed_surface(
 		return;
 	}
 
-	let xz = transform.translation.xz();
 	let pending = pending.copied();
-	let support = pending.map(|pending| pending.support).unwrap_or(SpawnSupport::Terrain);
-	let presented = presented.map(|height| height.0);
-
-	if support.stands_on_floor() {
-		let Some(pending) = pending else {
-			gravity.0 = 0.0;
-			**velocity = Vec3::ZERO;
+	if awaiting.single().ok().is_none() {
+		// Already placed: do not require [`PresentedOutdoorHeight`] or
+		// [`PendingPlacement`]. Interior release keeps [`OffTerrainAnchor`]
+		// for void recovery; that marker must not fall through to terrain
+		// hold once the pending destination is gone.
+		if anchor.is_some() {
+			gravity.0 = PLAY_GRAVITY_SCALE;
 			return;
-		};
-		if pending_support_ready(pending, &support_volumes) {
-			release_player(
-				&mut commands,
-				entity,
-				&mut gravity,
-				&mut velocity,
-				awaiting.single().ok(),
-				false,
-			);
+		}
+		// XZ-only column coverage is leftover lost-column protection.
+		if terrain_collider_covers_xz(transform.translation, terrain_chunks.iter()) {
+			gravity.0 = PLAY_GRAVITY_SCALE;
 		} else {
 			hold_player(&mut gravity, &mut velocity);
 		}
 		return;
 	}
 
+	if let Some(pending) = pending.filter(|pending| pending.stands_on_floor()) {
+		if pending.supported_by_any(support_volumes.iter()) {
+			release_player(&mut commands, entity, &mut gravity, &mut velocity, false);
+		} else {
+			hold_player(&mut gravity, &mut velocity);
+		}
+		return;
+	}
+
+	let xz = transform.translation.xz();
 	let live_durham = match surface.height_at(xz) {
 		Ok(Some(elevation)) => Some(elevation),
 		_ => None,
 	};
 	// Discovery inserts [`PresentedOutdoorHeight`]: prefer padded, never
 	// Durham-only. Playgrounds omit the resource and still snap to Durham.
-	let elevation = match presented {
-		Some(Some(elevation)) => elevation,
-		Some(None) => match pending.map(|pending| pending.surface.y) {
-			Some(elevation) => elevation,
-			None => {
-				hold_player(&mut gravity, &mut velocity);
-				return;
-			}
-		},
-		None => match live_durham.or_else(|| pending.map(|pending| pending.surface.y)) {
-			Some(elevation) => elevation,
-			None => {
-				hold_player(&mut gravity, &mut velocity);
-				return;
-			}
-		},
+	let Some(elevation) = (match presented.map(|height| *height) {
+		Some(presented) => presented.or_pending_surface_y(pending),
+		None => live_durham.or_else(|| pending.map(|pending| pending.surface.y)),
+	}) else {
+		hold_player(&mut gravity, &mut velocity);
+		return;
 	};
 
 	let surface_at = Vec3::new(xz.x, elevation, xz.y);
 	let target = player_position_above_surface(surface_at);
-	let awaiting_entity = awaiting.single().ok();
-	if awaiting_entity.is_some() {
-		teleport_player(
-			&mut transform,
-			global.as_deref_mut(),
-			body.as_deref_mut(),
-			&mut velocity,
-			target,
-		);
-	}
+	teleport_player(
+		&mut transform,
+		global.as_deref_mut(),
+		body.as_deref_mut(),
+		&mut velocity,
+		target,
+	);
 
-	let chunk_ready = terrain_chunks.iter().any(|chunk| chunk.contains_point(surface_at));
-	let column = terrain_collider_covers_xz(target, terrain_chunks.iter());
 	// First-drop must see the collider at the intended elevation. Floor
-	// volumes are interior-only and must not gate outdoor terrain. XZ-only
-	// column coverage is leftover lost-column protection after release.
-	let elevation_ready =
-		if awaiting_entity.is_some() { chunk_ready } else { chunk_ready || column };
-	if elevation_ready {
-		release_player(
-			&mut commands,
-			entity,
-			&mut gravity,
-			&mut velocity,
-			awaiting.single().ok(),
-			true,
-		);
+	// volumes are interior-only and must not gate outdoor terrain.
+	if terrain_chunks.iter().any(|chunk| chunk.contains_point(surface_at)) {
+		release_player(&mut commands, entity, &mut gravity, &mut velocity, true);
 	} else {
-		// Lost or not-yet-streamed column: freeze in place. Do not re-insert
-		// [`AwaitingTerrainSurface`] — that marker is first-drop only.
 		hold_player(&mut gravity, &mut velocity);
 	}
 }
@@ -462,19 +446,19 @@ fn hold_player(gravity: &mut GravityScale, velocity: &mut LinearVelocity) {
 	**velocity = Vec3::ZERO;
 }
 
+/// Placement-transition only: enable gravity and clear first-drop markers.
+///
+/// Zeroes velocity once. Already-placed support must not call this.
 fn release_player(
 	commands: &mut Commands,
 	entity: Entity,
 	gravity: &mut GravityScale,
 	velocity: &mut LinearVelocity,
-	awaiting: Option<Entity>,
 	clear_interior_anchor: bool,
 ) {
 	gravity.0 = PLAY_GRAVITY_SCALE;
 	**velocity = Vec3::ZERO;
-	if let Some(entity) = awaiting {
-		commands.entity(entity).remove::<(AwaitingTerrainSurface, PendingPlacement)>();
-	}
+	commands.entity(entity).remove::<(AwaitingTerrainSurface, PendingPlacement)>();
 	if clear_interior_anchor {
 		commands.entity(entity).remove::<OffTerrainAnchor>();
 	}
@@ -495,13 +479,6 @@ fn teleport_player(
 		body.0 = at;
 	}
 	**velocity = Vec3::ZERO;
-}
-
-fn pending_support_ready(
-	pending: PendingPlacement,
-	volumes: &Query<&PlacementSupportVolume>,
-) -> bool {
-	volumes.iter().any(|volume| volume.supports(pending))
 }
 
 /// Agent / debug: why first-drop is still held, if it is.
@@ -1272,6 +1249,117 @@ mod tests {
 		assert_eq!(
 			world.get::<GravityScale>(player).map(|gravity| gravity.0),
 			Some(PLAY_GRAVITY_SCALE)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn after_release_outdoor_preserves_velocity_when_presented_height_clears() -> anyhow::Result<()>
+	{
+		let surface = Vec3::new(0.5, 12.0, 0.5);
+		let pose = player_position_above_surface(surface);
+		let motion = Vec3::new(1.5, 2.25, -0.75);
+		let (mut world, player) = void_world(pose);
+		world.insert_resource(PresentedOutdoorHeight(Some(surface.y)));
+		world.entity_mut(player).insert((
+			AwaitingTerrainSurface,
+			PendingPlacement::terrain(surface),
+			GravityScale(0.0),
+		));
+		world.spawn((TerrainTrimeshCollider, chunk_covering(surface)));
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
+		assert!(world.get::<PendingPlacement>(player).is_none());
+
+		// PreUpdate sampler writes None once no player is awaiting.
+		world.insert_resource(PresentedOutdoorHeight(None));
+		world.entity_mut(player).insert(LinearVelocity(motion));
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.get::<LinearVelocity>(player).map(|velocity| velocity.0), Some(motion));
+		assert_eq!(
+			world.get::<GravityScale>(player).map(|gravity| gravity.0),
+			Some(PLAY_GRAVITY_SCALE)
+		);
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn after_release_interior_preserves_velocity_and_off_terrain_anchor() -> anyhow::Result<()> {
+		let surface = Vec3::new(4.0, 12.0, -2.0);
+		let pose = player_position_above_surface(surface);
+		let motion = Vec3::new(-0.8, 1.75, 2.0);
+		let (mut world, player) = void_world(pose);
+		world.insert_resource(PresentedOutdoorHeight(Some(40.0)));
+		world.entity_mut(player).insert((
+			AwaitingTerrainSurface,
+			PendingPlacement::floor(surface),
+			OffTerrainAnchor { translation: pose },
+			GravityScale(0.0),
+		));
+		world.spawn(PlacementSupportVolume::around(surface, 2.0, 0.2));
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
+		assert!(world.get::<PendingPlacement>(player).is_none());
+		assert!(world.get::<OffTerrainAnchor>(player).is_some());
+
+		world.insert_resource(PresentedOutdoorHeight(None));
+		world.entity_mut(player).insert(LinearVelocity(motion));
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.get::<LinearVelocity>(player).map(|velocity| velocity.0), Some(motion));
+		assert_eq!(
+			world.get::<GravityScale>(player).map(|gravity| gravity.0),
+			Some(PLAY_GRAVITY_SCALE)
+		);
+		assert!(world.get::<OffTerrainAnchor>(player).is_some());
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn after_release_without_presented_height_preserves_velocity() -> anyhow::Result<()> {
+		let surface = Vec3::new(0.5, 12.0, 0.5);
+		let pose = player_position_above_surface(surface);
+		let motion = Vec3::new(0.4, -3.0, 1.1);
+		let (mut world, player) = void_world(pose);
+		world.entity_mut(player).insert((
+			AwaitingTerrainSurface,
+			PendingPlacement::terrain(surface),
+			GravityScale(0.0),
+		));
+		world.spawn((TerrainTrimeshCollider, chunk_covering(surface)));
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
+		assert!(world.get_resource::<PresentedOutdoorHeight>().is_none());
+
+		world.entity_mut(player).insert(LinearVelocity(motion));
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.get::<LinearVelocity>(player).map(|velocity| velocity.0), Some(motion));
+		assert_eq!(
+			world.get::<GravityScale>(player).map(|gravity| gravity.0),
+			Some(PLAY_GRAVITY_SCALE)
+		);
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
 		);
 		Ok(())
 	}
