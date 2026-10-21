@@ -44,8 +44,9 @@ pub use bounds::LodHostBounds;
 pub use cull_regions::{
 	fill_lod_cull_produce_cache, produce_lod_cull_for_region, produce_lod_cull_for_region_erased,
 	produce_lod_cull_regions, sync_cullable_roots_marker, sync_nested_refresh_allowed,
-	LodCullMarkerPlugin, LodCullProduceCache, LodCullProduceCadence, LodCullRegionCursor,
-	LodCullRegions, LodCullRegionsStatus, LodHostHasCullableRoots, LodNestedRefreshAllowed,
+	tick_lod_cull_produce_clock, LodCullAabbThisTick, LodCullMarkerPlugin, LodCullProduceCache,
+	LodCullProduceCadence, LodCullProduceClock, LodCullRegionCursor, LodCullRegions,
+	LodCullRegionsStatus, LodHostHasCullableRoots, LodNestedRefreshAllowed,
 	LodNestedRefreshBlocked, LodNestedRefreshSyncBudget, LodSceneCullAabb,
 	LodSceneCullProduceFillPlugin, LodSceneCullRegion, LodSceneCullRegionPlugin,
 	LodSceneRegionCullPlugin, OpenLattice,
@@ -109,6 +110,15 @@ pub enum LodLevelProduceSystems {
 	Emit,
 }
 
+/// Order inside [`LodRefreshSystems::ProduceRegions`] for cull lattice producers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
+pub enum LodCullProduceSystems {
+	/// Shared cadence tick + clear this-frame AABB batch.
+	Tick,
+	/// Channel producers: first computes the lattice cell, later channels reuse it.
+	Emit,
+}
+
 pub(crate) fn configure_refresh_sets(app: &mut App) {
 	app.configure_sets(
 		Update,
@@ -130,6 +140,12 @@ pub(crate) fn configure_refresh_sets(app: &mut App) {
 			.chain()
 			.in_set(LodRefreshSystems::ProduceLevels),
 	);
+	app.configure_sets(
+		Update,
+		(LodCullProduceSystems::Tick, LodCullProduceSystems::Emit)
+			.chain()
+			.in_set(LodRefreshSystems::ProduceRegions),
+	);
 }
 
 pub(crate) fn ensure_refresh_core(app: &mut App) {
@@ -150,6 +166,9 @@ impl Plugin for LodRefreshCorePlugin {
 		crate::jobs::ensure_lod_job_counter(app);
 		app.init_resource::<LodProduceCache>()
 			.init_resource::<LodCullProduceCache>()
+			.init_resource::<LodCullProduceCadence>()
+			.init_resource::<LodCullProduceClock>()
+			.init_resource::<LodCullAabbThisTick>()
 			.init_resource::<LodTreeVisBudget>()
 			.init_resource::<LodTreeVisQueue>()
 			.add_message::<LodSceneRefreshAabb>()
@@ -158,6 +177,7 @@ impl Plugin for LodRefreshCorePlugin {
 			.add_systems(
 				Update,
 				(
+					tick_lod_cull_produce_clock.in_set(LodCullProduceSystems::Tick),
 					refresh_lod_host_levels.in_set(LodRefreshSystems::UpdateLevels),
 					produce_lod_refresh_levels_erased.in_set(LodLevelProduceSystems::Emit),
 					settle_lod_level_root_visibility

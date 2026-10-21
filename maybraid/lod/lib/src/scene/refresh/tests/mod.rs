@@ -13,16 +13,17 @@ use crate::scene::level::LodSceneLevel;
 use crate::scene::refresh::{
 	LodChunkFulfillBudget, LodCullProduceCache, LodCullProduceCadence, LodCullRegionCursor,
 	LodHostBounds, LodHostHasCullableRoots, LodLevelRootPending, LodProduceCache, LodRefreshDomain,
-	LodRefreshMembership, LodSceneCullAabb, LodSceneCullProduceFillPlugin, LodSceneRefreshAabb,
-	LodSceneRefreshChunkPlugin, LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin,
-	LodSceneRefreshPlugin, LodSceneRegionCullPlugin, LodViewer,
+	LodRefreshMembership, LodRefreshSystems, LodSceneCullAabb, LodSceneCullProduceFillPlugin,
+	LodSceneCullRegionPlugin, LodSceneRefreshAabb, LodSceneRefreshChunkPlugin,
+	LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin, LodSceneRefreshPlugin,
+	LodSceneRegionCullPlugin, LodViewer, OpenLattice,
 };
 
 use test_utils::{
 	app_bullseye_regions, app_core, app_cull_enqueue, app_dual_channel_levels, app_entities_only,
-	app_open_lattice, app_spotlight_levels, app_spotlight_regions, host_level, move_viewer, pose,
-	spawn_host, spawn_host_with_roots, spawn_nested_pair, spawn_viewer, BullChan, CullChan,
-	NewCullRegions, NewRegions, Probe, ScanHostIndex, SpotChan,
+	app_open_lattice, app_spotlight_levels, app_spotlight_regions, capture_cull_regions,
+	host_level, move_viewer, pose, spawn_host, spawn_host_with_roots, spawn_nested_pair,
+	spawn_viewer, BullChan, CullChan, NewCullRegions, NewRegions, Probe, ScanHostIndex, SpotChan,
 };
 
 #[test]
@@ -307,6 +308,29 @@ fn open_lattice_emits_while_camera_still() -> anyhow::Result<()> {
 	assert_eq!(app.world().resource::<NewCullRegions<CullChan>>().regions.len(), 1);
 	assert_eq!(app.world().resource::<LodCullRegionCursor>().next, 2);
 	assert_eq!(app.world().resource::<LodCullRegionCursor>().anchor_cell, Some(IVec3::ZERO));
+	Ok(())
+}
+
+#[test]
+fn two_cull_channels_share_one_lattice_cell() -> anyhow::Result<()> {
+	let mut app = app_open_lattice();
+	app.add_plugins(LodSceneCullRegionPlugin::<OpenLattice, With<LodViewer>, SpotChan>::default())
+		.init_resource::<NewCullRegions<SpotChan>>()
+		.add_systems(
+			Update,
+			capture_cull_regions::<SpotChan>.after(LodRefreshSystems::ProduceRegions),
+		);
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	app.update();
+	let veg = app.world().resource::<NewCullRegions<CullChan>>().regions.clone();
+	let bld = app.world().resource::<NewCullRegions<SpotChan>>().regions.clone();
+	assert_eq!(veg.len(), 1);
+	assert_eq!(veg, bld, "both channels must reuse the same OpenLattice cell");
+	assert_eq!(
+		app.world().resource::<LodCullRegionCursor>().next,
+		1,
+		"two producers must not steal a second cursor cell"
+	);
 	Ok(())
 }
 
