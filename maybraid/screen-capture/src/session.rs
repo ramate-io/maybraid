@@ -5,12 +5,14 @@ use bevy::camera::primitives::MeshAabb;
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{ClearColorConfig, RenderTarget};
 use bevy::math::bounding::Aabb3d;
+use bevy::math::Affine3A;
 use bevy::mesh::skinning::{InfluenceIterator, SkinnedMesh, SkinnedMeshInverseBindposes};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use bevy::render::gpu_readback::{Readback, ReadbackComplete};
 use bevy::render::render_resource::TextureFormat;
 use bevy::world_serialization::WorldAssetRoot;
+use procedural_common::union_aabb3;
 use scene_ref::SceneRefRoot;
 
 use crate::crop::crop_to_alpha;
@@ -82,10 +84,18 @@ pub(crate) struct CaptureReadback {
 #[derive(Component)]
 pub(crate) struct CapturePixels(pub Vec<u8>);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CapturePhase {
-	Load { frames: u32 },
+	Load { frames: u32, framed: bool },
 	Settle { remaining: u32 },
-	Readback { frames: u32 },
+	Readback { frames: u32, entity: Entity },
+}
+
+/// Isolated subject for a session. Image captures have no camera, root, or lights.
+#[derive(Debug)]
+pub(crate) enum CaptureSessionSource {
+	Image,
+	RenderedScene { root: Entity, camera: Entity, extras: Vec<Entity> },
 }
 
 pub(crate) struct CaptureSession {
@@ -93,20 +103,51 @@ pub(crate) struct CaptureSession {
 	pub request: CaptureRequest,
 	pub ticket: Handle<Image>,
 	pub target: Handle<Image>,
-	pub root: Entity,
-	pub camera: Entity,
-	pub extras: Vec<Entity>,
-	pub readback: Option<Entity>,
+	pub source: CaptureSessionSource,
 	pub phase: CapturePhase,
-	pub framed: bool,
 }
 
 impl CaptureSession {
+	pub fn scene_root(&self) -> Option<Entity> {
+		match self.source {
+			CaptureSessionSource::RenderedScene { root, .. } => Some(root),
+			CaptureSessionSource::Image => None,
+		}
+	}
+
+	pub fn scene_camera(&self) -> Option<Entity> {
+		match self.source {
+			CaptureSessionSource::RenderedScene { camera, .. } => Some(camera),
+			CaptureSessionSource::Image => None,
+		}
+	}
+
+	pub fn readback_entity(&self) -> Option<Entity> {
+		match self.phase {
+			CapturePhase::Readback { entity, .. } => Some(entity),
+			_ => None,
+		}
+	}
+
 	pub fn entities(&self) -> impl Iterator<Item = Entity> + '_ {
-		std::iter::once(self.root)
-			.chain(std::iter::once(self.camera))
-			.chain(self.extras.iter().copied())
-			.chain(self.readback)
+		self.collect_entities().into_iter()
+	}
+
+	fn collect_entities(&self) -> Vec<Entity> {
+		let mut entities = match &self.source {
+			CaptureSessionSource::Image => Vec::new(),
+			CaptureSessionSource::RenderedScene { root, camera, extras } => {
+				let mut scene = Vec::with_capacity(2 + extras.len());
+				scene.push(*root);
+				scene.push(*camera);
+				scene.extend(extras.iter().copied());
+				scene
+			}
+		};
+		if let Some(entity) = self.readback_entity() {
+			entities.push(entity);
+		}
+		entities
 	}
 }
 
@@ -125,20 +166,13 @@ pub(crate) fn spawn_session(
 		_ => None,
 	};
 	if let Some(target) = image_target {
-		let root = commands
-			.spawn((Name::new("capture_image"), CaptureRoot, Visibility::Hidden))
-			.id();
 		return CaptureSession {
 			key: CaptureCacheKey::from_request(&request),
 			request,
 			ticket: queued.image,
 			target,
-			root,
-			camera: root,
-			extras: Vec::new(),
-			readback: None,
-			phase: CapturePhase::Load { frames: 0 },
-			framed: true,
+			source: CaptureSessionSource::Image,
+			phase: CapturePhase::Load { frames: 0, framed: true },
 		};
 	}
 	let framed = matches!(request.framing, CaptureFraming::Authored);
@@ -169,12 +203,8 @@ pub(crate) fn spawn_session(
 		request,
 		ticket: queued.image,
 		target,
-		root,
-		camera,
-		extras,
-		readback: None,
-		phase: CapturePhase::Load { frames: 0 },
-		framed,
+		source: CaptureSessionSource::RenderedScene { root, camera, extras },
+		phase: CapturePhase::Load { frames: 0, framed },
 	}
 }
 
@@ -248,9 +278,9 @@ fn spawn_subject(
 				Name::new("capture_host"),
 			))
 			.id(),
-		CaptureScene::Image(_) => commands
-			.spawn((Name::new("capture_image"), transform, Visibility::Hidden, layers, CaptureRoot))
-			.id(),
+		CaptureScene::Image(_) => {
+			unreachable!("image captures return before spawn_subject")
+		}
 	};
 	if silhouette {
 		commands.entity(root).try_insert(CaptureSilhouetteRoot);
@@ -335,9 +365,15 @@ pub(crate) fn apply_fit_framing(
 		return true;
 	};
 	let globals = sources.globals;
-	let aabb = match sources.authored.get(session.root) {
+	let Some(root) = session.scene_root() else {
+		return true;
+	};
+	let Some(camera) = session.scene_camera() else {
+		return true;
+	};
+	let aabb = match sources.authored.get(root) {
 		Ok(extents) => extents.0,
-		Err(_) => match subject_local_aabb(session.root, sources) {
+		Err(_) => match subject_local_aabb(root, sources) {
 			Some(aabb) => aabb,
 			None => return false,
 		},
@@ -345,12 +381,9 @@ pub(crate) fn apply_fit_framing(
 	let aspect =
 		session.request.resolution.width as f32 / session.request.resolution.height.max(1) as f32;
 	let fitted = session.request.view.fit_extents(aabb, aspect, padding.max(FIT_SCENE_PADDING));
-	let origin = globals
-		.get(session.root)
-		.map(|transform| transform.translation())
-		.unwrap_or(Vec3::ZERO);
+	let origin = globals.get(root).map(|transform| transform.translation()).unwrap_or(Vec3::ZERO);
 	let (transform, projection) = camera_pose(origin, fitted);
-	commands.entity(session.camera).try_insert((transform, projection));
+	commands.entity(camera).try_insert((transform, projection));
 	session.request.view = fitted;
 	true
 }
@@ -387,7 +420,7 @@ fn subject_local_aabb(root: Entity, sources: &ExtentSources) -> Option<Aabb3d> {
 		};
 		let local_aabb = transform_aabb_affine(world_aabb, inverse);
 		union = Some(match union {
-			Some(existing) => union_aabb(existing, local_aabb),
+			Some(existing) => union_aabb3(existing, local_aabb),
 			None => local_aabb,
 		});
 	});
@@ -449,40 +482,22 @@ fn skinned_world_aabb(entity: Entity, mesh: &Mesh, sources: &ExtentSources) -> O
 }
 
 fn transform_aabb(aabb: Aabb3d, transform: &GlobalTransform) -> Aabb3d {
+	transform_aabb_affine(aabb, transform.affine())
+}
+
+fn transform_aabb_affine(aabb: Aabb3d, transform: Affine3A) -> Aabb3d {
 	let mut min = Vec3::splat(f32::MAX);
 	let mut max = Vec3::splat(f32::MIN);
 	for x in [aabb.min.x, aabb.max.x] {
 		for y in [aabb.min.y, aabb.max.y] {
 			for z in [aabb.min.z, aabb.max.z] {
-				let point = transform.transform_point(Vec3::new(x, y, z));
+				let point = transform.transform_point3(Vec3::new(x, y, z));
 				min = min.min(point);
 				max = max.max(point);
 			}
 		}
 	}
 	Aabb3d { min: min.into(), max: max.into() }
-}
-
-fn transform_aabb_affine(aabb: Aabb3d, inverse: bevy::math::Affine3A) -> Aabb3d {
-	let mut min = Vec3::splat(f32::MAX);
-	let mut max = Vec3::splat(f32::MIN);
-	for x in [aabb.min.x, aabb.max.x] {
-		for y in [aabb.min.y, aabb.max.y] {
-			for z in [aabb.min.z, aabb.max.z] {
-				let point = inverse.transform_point3(Vec3::new(x, y, z));
-				min = min.min(point);
-				max = max.max(point);
-			}
-		}
-	}
-	Aabb3d { min: min.into(), max: max.into() }
-}
-
-fn union_aabb(a: Aabb3d, b: Aabb3d) -> Aabb3d {
-	Aabb3d {
-		min: Vec3::from(a.min).min(Vec3::from(b.min)).into(),
-		max: Vec3::from(a.max).max(Vec3::from(b.max)).into(),
-	}
 }
 
 pub(crate) fn stamp_layers_on_descendants(
@@ -508,21 +523,24 @@ pub(crate) fn scene_ready(
 	hosts: &Query<(), With<CaptureHostReady>>,
 	images: &Assets<Image>,
 ) -> bool {
-	match &session.request.scene {
-		CaptureScene::Mesh(_) => mesh_entities.get(session.root).is_ok(),
-		CaptureScene::SceneRef(_) => {
-			if world_roots.get(session.root).is_err() {
-				return false;
+	match &session.source {
+		CaptureSessionSource::Image => match &session.request.scene {
+			CaptureScene::Image(handle) => {
+				images.get(handle).is_some_and(|image| image.width() > 0 && image.height() > 0)
 			}
-			descendant_has_mesh(session.root, children, mesh_entities)
-		}
-		CaptureScene::Host { .. } => {
-			hosts.get(session.root).is_ok()
-				&& descendant_has_mesh(session.root, children, mesh_entities)
-		}
-		CaptureScene::Image(handle) => {
-			images.get(handle).is_some_and(|image| image.width() > 0 && image.height() > 0)
-		}
+			_ => false,
+		},
+		CaptureSessionSource::RenderedScene { root, .. } => match &session.request.scene {
+			CaptureScene::Mesh(_) => mesh_entities.get(*root).is_ok(),
+			CaptureScene::SceneRef(_) => {
+				world_roots.get(*root).is_ok()
+					&& descendant_has_mesh(*root, children, mesh_entities)
+			}
+			CaptureScene::Host { .. } => {
+				hosts.get(*root).is_ok() && descendant_has_mesh(*root, children, mesh_entities)
+			}
+			CaptureScene::Image(_) => false,
+		},
 	}
 }
 
@@ -551,13 +569,13 @@ pub(crate) fn apply_silhouette(
 	if session.request.mode != CaptureMode::Silhouette {
 		return Ok(None);
 	}
-	if matches!(session.request.scene, CaptureScene::Image(_)) {
+	let Some(root) = session.scene_root() else {
 		return Ok(None);
-	}
+	};
 	let mut warning = None;
 	let mut converted = 0_u32;
 	let mut custom = 0_u32;
-	visit_descendants(session.root, children, &mut |entity| {
+	visit_descendants(root, children, &mut |entity| {
 		if meshes.get(entity).is_err() {
 			return;
 		}
@@ -633,9 +651,9 @@ fn visit_descendants(root: Entity, children: &Query<&Children>, visit: &mut impl
 	}
 }
 
-pub(crate) fn spawn_readback(commands: &mut Commands, session: &mut CaptureSession) {
+pub(crate) fn spawn_readback(commands: &mut Commands, session: &CaptureSession) -> Entity {
 	let render = render_resolution(&session.request);
-	let entity = commands
+	commands
 		.spawn((
 			Readback::texture(session.target.clone()),
 			CaptureReadback {
@@ -647,14 +665,13 @@ pub(crate) fn spawn_readback(commands: &mut Commands, session: &mut CaptureSessi
 				render_height: render.height,
 				crop: crop_padding(session.request.framing),
 				mode: session.request.mode,
-				from_image: matches!(session.request.scene, CaptureScene::Image(_)),
+				from_image: matches!(session.source, CaptureSessionSource::Image),
 			},
 			CaptureRoot,
 			Name::new("capture_readback"),
 		))
 		.observe(on_readback_complete)
-		.id();
-	session.readback = Some(entity);
+		.id()
 }
 
 fn on_readback_complete(
@@ -824,5 +841,140 @@ mod tests {
 			..Default::default()
 		};
 		assert!(!is_silhouette_material(&cross));
+	}
+
+	fn unit_box() -> Aabb3d {
+		Aabb3d { min: Vec3::ZERO.into(), max: Vec3::new(1.0, 2.0, 3.0).into() }
+	}
+
+	fn corner_aabb(aabb: Aabb3d, map: impl Fn(Vec3) -> Vec3) -> Aabb3d {
+		let mut min = Vec3::splat(f32::MAX);
+		let mut max = Vec3::splat(f32::MIN);
+		for x in [aabb.min.x, aabb.max.x] {
+			for y in [aabb.min.y, aabb.max.y] {
+				for z in [aabb.min.z, aabb.max.z] {
+					let point = map(Vec3::new(x, y, z));
+					min = min.min(point);
+					max = max.max(point);
+				}
+			}
+		}
+		Aabb3d { min: min.into(), max: max.into() }
+	}
+
+	fn endpoint_only_aabb(aabb: Aabb3d, map: impl Fn(Vec3) -> Vec3) -> Aabb3d {
+		let a = map(Vec3::from(aabb.min));
+		let b = map(Vec3::from(aabb.max));
+		Aabb3d { min: a.min(b).into(), max: a.max(b).into() }
+	}
+
+	fn assert_aabb_close(got: Aabb3d, expected: Aabb3d) {
+		assert!(
+			(Vec3::from(got.min) - Vec3::from(expected.min)).abs().max_element() < 1e-5,
+			"min got {:?} expected {:?}",
+			got.min,
+			expected.min
+		);
+		assert!(
+			(Vec3::from(got.max) - Vec3::from(expected.max)).abs().max_element() < 1e-5,
+			"max got {:?} expected {:?}",
+			got.max,
+			expected.max
+		);
+	}
+
+	#[test]
+	fn transform_aabb_delegates_to_affine_and_visits_all_corners() -> anyhow::Result<()> {
+		let aabb = unit_box();
+		let transform = GlobalTransform::from(
+			Transform::from_translation(Vec3::new(1.0, -2.0, 0.5))
+				.with_rotation(Quat::from_euler(
+					EulerRot::YXZ,
+					std::f32::consts::FRAC_PI_3,
+					0.4,
+					-0.25,
+				))
+				.with_scale(Vec3::new(-2.0, 0.5, 1.5)),
+		);
+		let via_global = transform_aabb(aabb, &transform);
+		let via_affine = transform_aabb_affine(aabb, transform.affine());
+		let via_corners = corner_aabb(aabb, |point| transform.transform_point(point));
+		let via_endpoints = endpoint_only_aabb(aabb, |point| transform.transform_point(point));
+		assert_aabb_close(via_global, via_affine);
+		assert_aabb_close(via_global, via_corners);
+		let endpoint_error = (Vec3::from(via_endpoints.min) - Vec3::from(via_corners.min))
+			.abs()
+			.max_element()
+			.max(
+				(Vec3::from(via_endpoints.max) - Vec3::from(via_corners.max))
+					.abs()
+					.max_element(),
+			);
+		assert!(
+			endpoint_error > 1e-3,
+			"this fixture must prove min/max endpoints are insufficient"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn image_session_has_no_scene_entities() -> anyhow::Result<()> {
+		use crate::png::placeholder_image;
+		use crate::queue::QueuedCapture;
+		use crate::{CaptureId, CaptureResolution, CaptureRevision};
+
+		let mut app = App::new();
+		let mut images = Assets::<Image>::default();
+		let mut meshes = Assets::<Mesh>::default();
+		let mut materials = Assets::<StandardMaterial>::default();
+		let handle = images.add(placeholder_image(CaptureResolution::ICON));
+		let request = CaptureRequest::from_image_handle(
+			CaptureId::new("image-session"),
+			handle,
+			CaptureMode::Shaded,
+			CaptureResolution::ICON,
+			CaptureRevision::CURRENT,
+		);
+		let queued = QueuedCapture {
+			request,
+			image: images.add(placeholder_image(CaptureResolution::ICON)),
+		};
+		let session = spawn_session(
+			&mut app.world_mut().commands(),
+			&mut images,
+			&mut meshes,
+			&mut materials,
+			queued,
+			0,
+			CAPTURE_RENDER_LAYER,
+		);
+		app.world_mut().flush();
+		assert!(matches!(session.source, CaptureSessionSource::Image));
+		assert_eq!(session.phase, CapturePhase::Load { frames: 0, framed: true });
+		assert!(session.scene_root().is_none());
+		assert!(session.scene_camera().is_none());
+		assert!(session.entities().next().is_none());
+		assert_eq!(
+			app.world()
+				.iter_entities()
+				.filter(|entity| entity.contains::<CaptureRoot>())
+				.count(),
+			0
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn shared_union_matches_previous_local_min_max() -> anyhow::Result<()> {
+		let a =
+			Aabb3d { min: Vec3::new(0.0, 1.0, -2.0).into(), max: Vec3::new(2.0, 3.0, 0.0).into() };
+		let b =
+			Aabb3d { min: Vec3::new(-1.0, 0.0, 1.0).into(), max: Vec3::new(1.0, 4.0, 5.0).into() };
+		let previous = Aabb3d {
+			min: Vec3::from(a.min).min(Vec3::from(b.min)).into(),
+			max: Vec3::from(a.max).max(Vec3::from(b.max)).into(),
+		};
+		assert_aabb_close(union_aabb3(a, b), previous);
+		Ok(())
 	}
 }

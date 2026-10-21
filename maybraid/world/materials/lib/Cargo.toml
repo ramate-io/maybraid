@@ -23,6 +23,7 @@ vegetation-shaders = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+character-shaders = { workspace = true }
 
 [lints]
 workspace = true

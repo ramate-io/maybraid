@@ -28,7 +28,7 @@ use building_physics::BuildingWalkColliderPlugin;
 use buildings_lod::FiringRangeBuildingsLodPlugin;
 use character_items::ItemRng;
 use character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollSettings};
-use characters::CharacterHostsPlugin;
+use characters::{CharacterHostsPlugin, StandaloneCharacterMaterialRefPlugin};
 use combat_hud::CombatHudPlugin;
 use diagnostics::FiringRangeDiagnosticsPlugin;
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
@@ -43,7 +43,11 @@ use hiding_intelligence::{HidingPlugin, HidingSystems};
 use les_halles::LesHallesSpawn;
 use lod::LodRefreshSystems;
 use maybraid_character_controller::CharacterControllerPlugin;
-use maybraid_input::{PadGameplayEnabled, VirtualPadSystems};
+use maybraid_controllers_core::{
+	CaptureKind, CaptureToken, InputRouter, InputRouting, InputSource, ScopeOwner,
+};
+use maybraid_input::{PadInputPolicy, VirtualPadSystems};
+use maybraid_locomotion_controller::LocomotionControllerPlugin;
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
@@ -78,8 +82,10 @@ impl Plugin for FiringRangePlugin {
 		.add_plugins(FirearmHostsPlugin);
 		add_firearm_components_host::<firearm_user::GeneratedFirearm>(app);
 		app.add_plugins(FirearmWeaponsPlugin)
+			.add_plugins(StandaloneCharacterMaterialRefPlugin)
 			.add_plugins(CharacterHostsPlugin)
 			.add_plugins(CharacterControllerPlugin)
+			.add_plugins(LocomotionControllerPlugin)
 			.add_plugins(PlayerPlugin)
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(FirearmUserPlugin)
@@ -147,6 +153,8 @@ impl Plugin for FiringRangePlugin {
 			.init_resource::<engagement::NpcEngagement>()
 			.init_resource::<RangeSession>()
 			.init_resource::<AppliedSession>()
+			.init_resource::<PadInputPolicy>()
+			.init_resource::<RangeConsoleCapture>()
 			.insert_resource(LoadoutRng(ItemRng::from_entropy()))
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_systems(
@@ -558,8 +566,24 @@ fn spawn_reticle_system(
 	spawn_reticle(&mut commands, &mut meshes, &mut materials);
 }
 
-fn gate_pad(focus: Res<TextEntryFocus>, mut enabled: ResMut<PadGameplayEnabled>) {
-	enabled.set_text(!focus.0);
+#[derive(Resource, Default)]
+struct RangeConsoleCapture {
+	token: Option<CaptureToken>,
+}
+
+fn gate_pad(
+	focus: Res<TextEntryFocus>,
+	mut router: InputRouting,
+	mut capture: ResMut<RangeConsoleCapture>,
+	mut policy: ResMut<PadInputPolicy>,
+) {
+	router.replace_owned_capture(
+		&mut capture.token,
+		InputSource::local_pad(),
+		focus.0.then_some(ScopeOwner::console()),
+		CaptureKind::TextEntry,
+	);
+	*policy = router.pad_policy();
 }
 
 fn setup_lighting(mut commands: Commands) {
