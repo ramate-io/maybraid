@@ -88,8 +88,8 @@ Rules:
 | `spawns/player` | `maybraid-spawns-player` | Arrival controller, picker, destination selection, handoff requests | 1 |
 | `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / support | **2** |
 | `spawns/actors` | `maybraid-spawns-actors` | `SpawnActor` / `ActorSpawned` | **3** |
-| `spawns/projectiles` | `maybraid-spawns-projectiles` | Simulation projectile spawn | 4 |
-| `spawns/grenades` | `maybraid-spawns-grenades` | Thrown-grenade body / fuse / source | 4 |
+| `spawns/projectiles` | `maybraid-spawns-projectiles` | Simulation projectile spawn | **4** |
+| `spawns/grenades` | `maybraid-spawns-grenades` | Thrown-grenade body / fuse / source | **4** |
 | `spawns/population` | `maybraid-spawns-population` | Cell / encounter demand and retirement | 5 |
 
 `world/lib` keeps terrain generation, POI indexing, streamed presentation,
@@ -111,8 +111,8 @@ with its persistence owner. Application / session transitions stay in
 | Placement interpreter | `ResolvePlacement`, `PlacementWork`, `PlacementSupport` | `spawns/placement` | **2** |
 | Actor interpreter | `SpawnActor`, `ActorSpawned` | `spawns/actors` | **3** |
 | Player handoff | `ActivatePlayerArrival` | `spawns/player`; world applies motor / camera | **3** |
-| Projectile interpreter | `SpawnProjectile` | `fire_weapons` presentation | 4 |
-| Grenade interpreter | `SpawnThrownGrenade` | `grenades` presentation | 4 |
+| Projectile interpreter | `SpawnProjectile` | `spawns/projectiles` | **4** |
+| Grenade interpreter | `SpawnThrownGrenade` | `spawns/grenades` | **4** |
 | Population controller | cell demand | `barking` / `mob-scenes` | 5 |
 
 ## Player arrival

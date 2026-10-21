@@ -6,7 +6,9 @@
 use bevy::prelude::*;
 
 use crate::cadence::{WeaponFired, WeaponShotRequest};
-use crate::projectiles::{FirearmWeaponSystems, WeaponsArmed, decide_weapon_fire};
+use crate::projectiles::{
+	decide_weapon_fire, sample_weapon_launch_poses, FirearmWeaponSystems, WeaponsArmed,
+};
 
 #[derive(Resource, Default)]
 struct FirearmRuntime;
@@ -17,19 +19,29 @@ pub fn register_firearm_runtime(app: &mut App) {
 	if app.world().contains_resource::<FirearmRuntime>() {
 		return;
 	}
+	maybraid_spawns_projectiles::register_projectile_spawn_runtime(app);
 	app.init_resource::<FirearmRuntime>()
 		.init_resource::<WeaponsArmed>()
 		.add_message::<WeaponFired>()
 		.add_message::<WeaponShotRequest>()
-		.add_systems(PostUpdate, decide_weapon_fire.in_set(FirearmWeaponSystems::Fire));
+		.add_systems(
+			PostUpdate,
+			(
+				sample_weapon_launch_poses,
+				decide_weapon_fire,
+				maybraid_spawns_projectiles::realize_projectiles,
+			)
+				.chain()
+				.in_set(FirearmWeaponSystems::Fire),
+		);
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::WeaponRecoil;
 	use crate::cadence::{FireControl, WeaponShotRequest};
 	use crate::projectiles::{FireOnTrigger, Weapon, WeaponTrigger};
+	use crate::WeaponRecoil;
 	use bevy::ecs::system::RunSystemOnce;
 
 	fn tick_fire(app: &mut App) {
@@ -52,6 +64,7 @@ mod tests {
 				FireOnTrigger,
 				FireControl::auto(),
 				WeaponRecoil(0.08),
+				crate::projectiles::WeaponLaunchPose::ready_at(Vec3::ZERO, Vec3::Y),
 			))
 			.id();
 		tick_fire(&mut app);
@@ -67,12 +80,40 @@ mod tests {
 	}
 
 	#[test]
+	fn a_missing_launch_pose_does_not_consume_a_shot() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		register_firearm_runtime(&mut app);
+		app.world_mut().spawn((
+			Weapon::bolt(),
+			WeaponTrigger(true),
+			FireOnTrigger,
+			FireControl::auto(),
+			WeaponRecoil(0.08),
+		));
+		tick_fire(&mut app);
+		assert!(app.world_mut().resource_mut::<Messages<WeaponShotRequest>>().drain().count() == 0);
+		assert!(app.world_mut().resource_mut::<Messages<WeaponFired>>().drain().count() == 0);
+		assert!(
+			app.world_mut()
+				.resource_mut::<Messages<maybraid_spawns_projectiles::SpawnProjectile>>()
+				.drain()
+				.count() == 0
+		);
+	}
+
+	#[test]
 	fn register_firearm_runtime_is_idempotent() {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins);
 		register_firearm_runtime(&mut app);
 		register_firearm_runtime(&mut app);
-		app.world_mut().spawn((Weapon::bolt(), WeaponTrigger(true), FireOnTrigger));
+		app.world_mut().spawn((
+			Weapon::bolt(),
+			WeaponTrigger(true),
+			FireOnTrigger,
+			crate::projectiles::WeaponLaunchPose::ready_at(Vec3::ZERO, Vec3::Y),
+		));
 		tick_fire(&mut app);
 		assert_eq!(
 			app.world_mut().resource_mut::<Messages<WeaponShotRequest>>().drain().count(),

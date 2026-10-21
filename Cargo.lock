@@ -4601,6 +4601,7 @@ dependencies = [
  "lod-avian",
  "material-ref",
  "maybraid-audio",
+ "maybraid-spawns-projectiles",
  "procedural-common",
  "projectiles",
  "scene-ref",
@@ -5463,6 +5464,7 @@ dependencies = [
  "maybraid-equipment",
  "maybraid-input",
  "maybraid-spatial-rumble",
+ "maybraid-spawns-grenades",
  "player",
  "player-camera",
 ]
@@ -7030,8 +7032,10 @@ dependencies = [
  "maybraid-session",
  "maybraid-skill-map",
  "maybraid-spawns-actors",
+ "maybraid-spawns-grenades",
  "maybraid-spawns-placement",
  "maybraid-spawns-player",
+ "maybraid-spawns-projectiles",
  "player",
  "player-camera",
  "tanz-user",
@@ -7190,6 +7194,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-spawns-grenades"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "character-items",
+ "grenades",
+ "maybraid-spawns-core",
+]
+
+[[package]]
 name = "maybraid-spawns-placement"
 version = "0.1.5"
 dependencies = [
@@ -7215,6 +7231,17 @@ dependencies = [
  "maybraid-spawns-core",
  "poi-intelligence",
  "world-player",
+]
+
+[[package]]
+name = "maybraid-spawns-projectiles"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "damage",
+ "maybraid-spawns-core",
+ "projectiles",
 ]
 
 [[package]]
