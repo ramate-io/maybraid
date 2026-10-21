@@ -28,6 +28,7 @@ pub fn register_firearm_presentation(app: &mut App) {
 		return;
 	}
 	register_firearm_runtime(app);
+	maybraid_spawns_projectiles::register_projectile_presentation(app);
 	if !app.is_plugin_added::<ProjectilesPlugin>() {
 		app.add_plugins(ProjectilesPlugin);
 	}
@@ -59,6 +60,7 @@ pub fn register_firearm_presentation(app: &mut App) {
 					.after(bevy_hanabi::EffectSystems::TickSpawners),
 				tick_lasers.after(FirearmWeaponSystems::Fire),
 				tick_laser_hits.in_set(DamageSystems::Collect).after(FirearmWeaponSystems::Fire),
+				crate::sound::attach_projectile_flight_audio.after(FirearmWeaponSystems::Fire),
 				copy_flight_audio_velocity.after(FirearmWeaponSystems::Fire),
 				spawn_impacts_from_contacts,
 				tick_impact_bursts.after(bevy_hanabi::EffectSystems::TickSpawners),
