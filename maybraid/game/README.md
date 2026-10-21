@@ -54,7 +54,7 @@ Bevy 0.19 routes failed commands, `Result` systems, observers, run conditions, a
 | `GameFlow::Home` / `GameFlow::Characters` | Home (same-state `set` re-runs `OnExit` / `OnEnter` in 0.19) |
 | `GameFlow::LoadingWorld` | Home, after the loading shell tears down |
 
-A short toast names the log file. More than three recoveries in ten seconds, or an error while a recovery is already applying, escalates from the world to Home and then exits (code `2`) if Home keeps failing. Render-world errors are logged and count toward that guard but do not change game state on their own.
+A short toast names the log file. More than three recoveries in ten seconds, or an error while a recovery is already applying, escalates from the world to Home and then exits (code `2`) if Home keeps failing. The in-progress flag clears once that step's commands have flushed and recovery did not itself enqueue another error, so a later isolated command error recovers at the same level again. Render-world errors are logged and count toward that guard but do not change game state on their own.
 
 `MAYBRAID_STRICT_ERRORS=1` keeps today's panic-on-ECS-error behavior. Development builds and `--agent-*` runs default to strict. Release builds default to recover. A playtest that opts out of strict still treats any recovery as a failure (the process exits `2`).
 
