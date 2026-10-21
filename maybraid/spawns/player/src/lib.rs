@@ -2,8 +2,8 @@
 //!
 //! A controller decides what should happen and emits a request. World
 //! adapters interpret first-wave gates and map presentation. Construction
-//! waits for a matching placement-ready outcome; handoff consumes a
-//! constructed actor without this crate depending on placement or actors.
+//! waits for a matching placement-ready outcome; handoff consumes
+//! [`ArrivalActorReady`] without this crate depending on placement or actors.
 
 pub mod arrival;
 pub mod controller;
@@ -19,7 +19,10 @@ pub use arrival::{
 	next_candidate_in_direction, reset_first_spawn_offer,
 };
 pub use controller::{PlayerArrivalPolicy, begin_player_arrivals};
-pub use handoff::{ActivatePlayerArrival, PlayerArrivalCompleted, PlayerArrivalFailed};
+pub use handoff::{
+	ActivatePlayerArrival, ArrivalActorFailed, ArrivalActorReady, PlayerArrivalCompleted,
+	PlayerArrivalFailed, complete_player_handoffs,
+};
 pub use identity::{SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
 pub use outcome::{SpawnCancelReason, SpawnFailureReason, SpawnOutcome};
 pub use picker::{
@@ -35,6 +38,11 @@ pub use world_player::PlayerLifeSet;
 use bevy::prelude::*;
 use maybraid_controllers_core::CaptureResolveSystems;
 use maybraid_input::MenuNavPad;
+
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PlayerHandoffSystems {
+	Activate,
+}
 
 #[derive(Resource, Default)]
 struct PlayerSpawnRuntime;
@@ -56,10 +64,13 @@ pub fn register_player_spawn_runtime(app: &mut App) {
 		.add_message::<BeginPlayerArrival>()
 		.add_message::<DestinationSelected>()
 		.add_message::<PlayerChoseRespawnPoi>()
+		.add_message::<ArrivalActorReady>()
+		.add_message::<ArrivalActorFailed>()
 		.add_message::<ActivatePlayerArrival>()
 		.add_message::<PlayerArrivalCompleted>()
 		.add_message::<PlayerArrivalFailed>()
-		.add_systems(Update, begin_player_arrivals);
+		.add_systems(Update, begin_player_arrivals)
+		.add_systems(Update, complete_player_handoffs.in_set(PlayerHandoffSystems::Activate));
 }
 
 /// Arrival controller + UI-owned picker. World keeps map and construction
