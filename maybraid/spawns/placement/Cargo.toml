@@ -12,7 +12,6 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 durham = { workspace = true }
-maybraid-spawns-core = { workspace = true }
 maybraid-spawns-player = { workspace = true }
 poi-intelligence = { workspace = true }
 world-player = { workspace = true }

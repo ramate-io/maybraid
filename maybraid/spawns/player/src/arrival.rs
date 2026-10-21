@@ -1,11 +1,10 @@
 //! Persistent player-arrival state. Messages announce transitions; this
 //! resource survives generation that outlives message retention.
 
+use crate::identity::{SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
+use crate::outcome::{SpawnCancelReason, SpawnOutcome};
 use bevy::prelude::*;
 use maybraid_input::MenuNav;
-use maybraid_spawns_core::{
-	SpawnCancelReason, SpawnIdentity, SpawnOutcome, SpawnOwner, SpawnRequestId, SpawnSessionId,
-};
 use poi_intelligence::{
 	NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiKind, PoiRegistry,
 };
@@ -478,9 +477,11 @@ mod tests {
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		assert!(state
-			.accept_destination(DestinationSelected::new(first, ArrivalDestination::Fallback))
-			.is_none());
+		assert!(
+			state
+				.accept_destination(DestinationSelected::new(first, ArrivalDestination::Fallback))
+				.is_none()
+		);
 		assert!(state.pending.as_ref().is_some_and(|pending| pending.phase.is_choosing()));
 	}
 }

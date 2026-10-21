@@ -550,27 +550,20 @@ fn finish_world_player_spawn(
 	state: &mut WorldPlayerRespawnState,
 	map: &mut WorldMapView,
 ) {
-	let recipe = match loadout {
-		Some(loadout) => maybraid_spawns_actors::ActorRecipe::appearance(
-			loadout.appearance.clone(),
-			!origin.ends_life(now),
-		),
-		None => maybraid_spawns_actors::ActorRecipe::species_default(),
-	};
-	let spawned = maybraid_spawns_actors::SpawnActor::new(identity, position, interior, recipe)
-		.realize(commands, meshes, materials, locomotion);
+	let mut request = maybraid_spawns_actors::SpawnActor::player_body(identity, position, interior);
+	if let Some(loadout) = loadout {
+		request = request.with_appearance(loadout.appearance.clone(), !origin.ends_life(now));
+	}
+	let spawned = request.realize(commands, meshes, materials, locomotion);
 	if spawned.dress {
 		commands.entity(spawned.actor).insert(WorldPlayerAppearanceRequested);
 	}
-	if let Some(activation) = ActivatePlayerArrival::from_spawned(spawned, state) {
+	if let Some(activation) =
+		ActivatePlayerArrival::from_constructed(spawned.identity, spawned.actor, state)
+	{
 		crate::control::apply_world_player_motor(commands, activation.actor);
 		close_respawn_map(map);
 		commands.queue(move |world: &mut World| {
-			if let Some(mut messages) =
-				world.get_resource_mut::<Messages<maybraid_spawns_actors::ActorSpawned>>()
-			{
-				messages.write(spawned);
-			}
 			if let Some(mut messages) = world.get_resource_mut::<Messages<ActivatePlayerArrival>>()
 			{
 				messages.write(activation);
@@ -952,7 +945,6 @@ mod tests {
 		world.init_resource::<SpawnPickerSheet>();
 		world.init_resource::<maybraid_spawns_placement::PlacementWork>();
 		world.init_resource::<maybraid_spawns_placement::PlacementSupport>();
-		world.init_resource::<maybraid_spawns_actors::ActorSpawnWork>();
 		world.init_resource::<Messages<PlayerChoseRespawnPoi>>();
 		world.init_resource::<PoiRegistry>();
 		world.init_resource::<CharacterLocomotion>();
@@ -1530,17 +1522,12 @@ mod tests {
 		confirm_picker_from_a(&mut world)?;
 		assert_eq!(live_player_count(&mut world), 1);
 		assert_eq!(world.resource::<WorldPlayerRespawnState>().last_activated(), Some(identity));
-		world.init_resource::<Messages<maybraid_spawns_actors::ActorSpawned>>();
-		world.init_resource::<Messages<ActivatePlayerArrival>>();
-		world.init_resource::<Messages<maybraid_spawns_player::PlayerArrivalCompleted>>();
-		world.write_message(maybraid_spawns_actors::ActorSpawned::new(
+		assert!(ActivatePlayerArrival::from_constructed(
 			identity,
 			Entity::from_bits(99),
-			false,
-		));
-		world
-			.run_system_once(maybraid_spawns_player::handoff_player_arrivals)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			&mut world.resource_mut::<WorldPlayerRespawnState>(),
+		)
+		.is_none());
 		assert_eq!(live_player_count(&mut world), 1);
 		assert_eq!(world.resource::<WorldPlayerRespawnState>().last_activated(), Some(identity));
 		Ok(())
@@ -1549,9 +1536,6 @@ mod tests {
 	#[test]
 	fn a_stale_actor_spawned_does_not_activate() -> anyhow::Result<()> {
 		let mut world = discovery_respawn_world(0.2);
-		world.init_resource::<Messages<maybraid_spawns_actors::ActorSpawned>>();
-		world.init_resource::<Messages<ActivatePlayerArrival>>();
-		world.init_resource::<Messages<maybraid_spawns_player::PlayerArrivalCompleted>>();
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -1567,14 +1551,12 @@ mod tests {
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		world.write_message(maybraid_spawns_actors::ActorSpawned::new(
+		assert!(ActivatePlayerArrival::from_constructed(
 			stale,
 			Entity::from_bits(9),
-			false,
-		));
-		world
-			.run_system_once(maybraid_spawns_player::handoff_player_arrivals)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			&mut world.resource_mut::<WorldPlayerRespawnState>(),
+		)
+		.is_none());
 		assert_eq!(live_player_count(&mut world), 0);
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
 		Ok(())

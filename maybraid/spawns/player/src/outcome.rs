@@ -1,7 +1,9 @@
-//! Shared cancellation and failure reasons. Domain outcomes carry these
-//! plus their own request identity.
+//! Cancellation and failure reasons for player-arrival outcomes.
+//!
+//! Placement and later interpreters can reuse these types from this crate
+//! until real duplication justifies a shared vocabulary crate.
 
-use crate::request::SpawnIdentity;
+use crate::identity::SpawnIdentity;
 
 /// Why pending spawn work stopped without realizing an entity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,8 +31,8 @@ pub enum SpawnFailureReason {
 	DestinationUnresolved,
 }
 
-/// Shared outcome envelope. Domain messages embed this; they do not become a
-/// universal spawn enum.
+/// Outcome envelope for player-arrival work. Other domains embed their own
+/// identity; they do not become a universal spawn enum.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SpawnOutcome {
 	Cancelled { identity: SpawnIdentity, reason: SpawnCancelReason },
@@ -69,7 +71,7 @@ impl SpawnOutcome {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::request::{SpawnOwner, SpawnRequestId, SpawnSessionId};
+	use crate::identity::{SpawnOwner, SpawnRequestId, SpawnSessionId};
 
 	#[test]
 	fn construction_failure_is_retryable_and_session_cancel_is_not() {

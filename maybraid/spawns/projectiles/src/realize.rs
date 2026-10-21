@@ -1,12 +1,16 @@
 //! Create flight / collision / damage entities. Presentation attaches visuals.
+//!
+//! One shared interpreter pass consumes the batch. Construction is
+//! synchronous; there is no pending-request tracker.
 
 use bevy::prelude::*;
 use projectiles::spawn_flight_sim;
 
-use crate::request::{ProjectileSpawned, SpawnProjectile};
+use crate::request::SpawnProjectile;
 
 impl SpawnProjectile {
-	pub fn realize(&self, commands: &mut Commands) -> ProjectileSpawned {
+	/// Build the simulation body. Does not emit a spawn-success message.
+	pub fn realize(&self, commands: &mut Commands) -> Entity {
 		let (length, radius, speed, max_range, penetration, max_age, _color, gravity) =
 			self.spec.ballistic();
 		let projectile = spawn_flight_sim(
@@ -26,16 +30,12 @@ impl SpawnProjectile {
 		if let Some(payload) = self.payload {
 			commands.entity(projectile).insert(payload);
 		}
-		ProjectileSpawned::new(self.identity, projectile, self.source)
+		projectile
 	}
 }
 
-pub fn realize_projectiles(
-	mut commands: Commands,
-	mut requests: MessageReader<SpawnProjectile>,
-	mut spawned: MessageWriter<ProjectileSpawned>,
-) {
+pub fn realize_projectiles(mut commands: Commands, mut requests: MessageReader<SpawnProjectile>) {
 	for request in requests.read() {
-		spawned.write(request.realize(&mut commands));
+		request.realize(&mut commands);
 	}
 }

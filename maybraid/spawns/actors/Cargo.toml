@@ -12,7 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 characters = { workspace = true }
-maybraid-spawns-core = { workspace = true }
+maybraid-spawns-player = { workspace = true }
 world-player = { workspace = true }
 
 [dev-dependencies]
