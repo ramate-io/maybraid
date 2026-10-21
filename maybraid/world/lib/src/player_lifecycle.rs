@@ -1,11 +1,14 @@
 //! Downed world-player retirement and POI-based replacement.
 
-use avian3d::prelude::LinearVelocity;
+use avian3d::prelude::{LinearVelocity, SimpleCollider};
 use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_ragdoll::CharacterRagdollSystems;
 use damage::{DamageSystems, DespawnAfter, Downed};
-use durham::{DurhamSurface, TerrainCellLayout, WorldBaseTerrain};
+use durham::{
+	terrain_collider_covers_xz, CascadeChunk, DurhamSurface, TerrainCellLayout,
+	TerrainTrimeshCollider, WorldBaseTerrain,
+};
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use grenade_user::GrenadeUserSystems;
@@ -83,13 +86,20 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 				Update,
 				(
 					crate::first_wave::refresh_first_wave,
-					observe_placement_support.after(crate::first_wave::refresh_first_wave),
+					observe_placement_support
+						.after(crate::first_wave::refresh_first_wave)
+						.in_set(maybraid_spawns_placement::PlacementSystems::Observe),
 					queue_first_spawn_picker.after(crate::first_wave::refresh_first_wave),
 					crate::spawn_picker::dispatch_spawn_picker,
 					respawn_world_player
 						.after(queue_first_spawn_picker)
 						.after(crate::spawn_picker::dispatch_spawn_picker)
+						.after(maybraid_spawns_placement::PlacementSystems::Poll)
 						.run_if(world_player_respawn_pending),
+					apply_placement_outcomes
+						.after(respawn_world_player)
+						.after(maybraid_spawns_placement::PlacementSystems::Poll),
+					cancel_orphaned_placement.after(apply_placement_outcomes),
 					close_orphaned_locked_respawn_map
 						.after(respawn_world_player)
 						.run_if(orphaned_locked_respawn_map),
@@ -388,7 +398,6 @@ fn respawn_world_player(
 	if !choice.matches(pending.identity()) {
 		return;
 	}
-	let origin = pending.origin;
 	let fallback_at = pending.fallback_at;
 	let identity = pending.identity();
 	let destination = choice.destination();
@@ -401,64 +410,190 @@ fn respawn_world_player(
 		maybraid_spawns_placement::ActorClearance::HUMANOID,
 		fallback_at,
 	);
-	let placement = request.realize(&registry, &surface);
-	let spawn = placement.as_ref().ok().and_then(|pending| pending.pose).unwrap_or_else(|| {
-		maybraid_spawns_placement::PlacementPose::outdoor_at(
-			&surface,
-			fallback_at.xz(),
-			maybraid_spawns_placement::ActorClearance::HUMANOID,
-		)
-	});
-	commands.queue(move |world: &mut World| {
-		if let Some(mut messages) =
-			world.get_resource_mut::<Messages<maybraid_spawns_placement::ResolvePlacement>>()
-		{
-			messages.write(request);
-		}
-		world
-			.resource_mut::<maybraid_spawns_placement::PlacementWork>()
-			.insert(match placement {
-				Ok(pending) => pending,
-				Err(_) => maybraid_spawns_placement::PendingPlacement::new(
-					choice.identity,
-					destination,
-					spawn,
-				),
+	match request.realize(&registry, &surface) {
+		Ok(placement) => {
+			if !state.await_support(identity) {
+				return;
+			}
+			commands.queue(move |world: &mut World| {
+				if let Some(mut messages) = world
+					.get_resource_mut::<Messages<maybraid_spawns_placement::ResolvePlacement>>()
+				{
+					messages.write(request);
+				}
+				world
+					.resource_mut::<maybraid_spawns_placement::PlacementWork>()
+					.insert(placement);
 			});
-	});
-	finish_world_player_spawn(
-		&mut commands,
-		&mut meshes,
-		&mut materials,
-		locomotion.as_ref(),
-		loadout.as_deref(),
-		origin,
-		now,
-		identity,
-		spawn.position,
-		spawn.interior(),
-		&mut state,
-		&mut map,
-	);
+		}
+		Err(failed) => {
+			let _ = state.note_placement_failed(identity);
+			commands.queue(move |world: &mut World| {
+				if let Some(mut messages) =
+					world.get_resource_mut::<Messages<maybraid_spawns_placement::PlacementFailed>>()
+				{
+					messages.write(failed);
+				}
+			});
+		}
+	}
 }
 
 /// Collision-support readiness is presentation / physics, not GenerationScheme.
+/// Each pending pose is scored at its own location; a global ready bit is not
+/// reused for a different destination.
 fn observe_placement_support(
 	surface: DurhamSurface,
-	work: Res<maybraid_spawns_placement::PlacementWork>,
-	world_ready: Option<Res<crate::control::WorldSurfaceReady>>,
-	mut support: ResMut<maybraid_spawns_placement::PlacementSupport>,
+	mut work: ResMut<maybraid_spawns_placement::PlacementWork>,
+	terrain: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
+	buildings: Query<
+		(Option<&GlobalTransform>, Option<&Transform>, Option<&avian3d::prelude::Collider>),
+		With<building_physics::BuildingWalkCollider>,
+	>,
 ) {
-	let collider_ready = world_ready.is_some_and(|ready| ready.0);
-	let height_ready = if work.is_empty() {
-		collider_ready
-	} else {
-		work.pending().iter().filter_map(|pending| pending.pose).any(|pose| {
-			!pose.policy.waits_for_support()
-				|| surface.composed_height_at(pose.position.xz()).is_some()
-		})
-	};
-	support.observe(maybraid_spawns_placement::SupportReadiness::new(height_ready, collider_ready));
+	let chunks: Vec<&CascadeChunk> = terrain.iter().collect();
+	let buildings: Vec<_> = buildings.iter().collect();
+	for pending in work.pending_mut() {
+		let Some(pose) = pending.pose else {
+			continue;
+		};
+		if let Err(reason) = pose.reject_blocked(outdoor_clearance_blocked(pose, &buildings)) {
+			pending.fail(reason);
+			continue;
+		}
+		pending.observe(support_for_pose(pose, &surface, &chunks, &buildings));
+	}
+}
+
+fn support_for_pose(
+	pose: maybraid_spawns_placement::PlacementPose,
+	surface: &DurhamSurface,
+	chunks: &[&CascadeChunk],
+	buildings: &[(
+		Option<&GlobalTransform>,
+		Option<&Transform>,
+		Option<&avian3d::prelude::Collider>,
+	)],
+) -> maybraid_spawns_placement::SupportReadiness {
+	use maybraid_spawns_placement::{PlacementPolicy, SupportReadiness};
+	match pose.policy {
+		PlacementPolicy::OutdoorGround => SupportReadiness::new(
+			surface.composed_height_at(pose.position.xz()).is_some(),
+			terrain_collider_covers_xz(pose.position, chunks.iter().copied()),
+		),
+		PlacementPolicy::InteriorFloor => {
+			let ready = building_floor_ready(pose.position, buildings);
+			SupportReadiness::new(ready, ready)
+		}
+		PlacementPolicy::Airborne => SupportReadiness::new(true, true),
+	}
+}
+
+fn building_origin(tf: Option<&GlobalTransform>, local: Option<&Transform>) -> Option<Vec3> {
+	tf.map(GlobalTransform::translation)
+		.or_else(|| local.map(|transform| transform.translation))
+}
+
+fn building_floor_ready(
+	point: Vec3,
+	buildings: &[(
+		Option<&GlobalTransform>,
+		Option<&Transform>,
+		Option<&avian3d::prelude::Collider>,
+	)],
+) -> bool {
+	buildings.iter().any(|(tf, local, collider)| {
+		let Some(origin) = building_origin(*tf, *local) else {
+			return false;
+		};
+		if let Some((min, max)) = collider.and_then(|collider| collider_aabb(origin, collider)) {
+			return point.x >= min.x
+				&& point.x <= max.x
+				&& point.z >= min.z
+				&& point.z <= max.z
+				&& point.y >= min.y - 1.0
+				&& point.y <= max.y + 4.0;
+		}
+		(point.xz() - origin.xz()).length() < 8.0 && (point.y - origin.y).abs() < 4.0
+	})
+}
+
+fn outdoor_clearance_blocked(
+	pose: maybraid_spawns_placement::PlacementPose,
+	buildings: &[(
+		Option<&GlobalTransform>,
+		Option<&Transform>,
+		Option<&avian3d::prelude::Collider>,
+	)],
+) -> bool {
+	if !matches!(pose.policy, maybraid_spawns_placement::PlacementPolicy::OutdoorGround) {
+		return false;
+	}
+	buildings.iter().any(|(tf, local, collider)| {
+		let Some(origin) = building_origin(*tf, *local) else {
+			return false;
+		};
+		if let Some((min, max)) = collider.and_then(|collider| collider_aabb(origin, collider)) {
+			return pose.clearance.overlaps_aabb(pose.position, min, max);
+		}
+		false
+	})
+}
+
+fn collider_aabb(origin: Vec3, collider: &avian3d::prelude::Collider) -> Option<(Vec3, Vec3)> {
+	let aabb = collider.aabb(origin, Quat::IDENTITY);
+	Some((aabb.min.into(), aabb.max.into()))
+}
+
+fn apply_placement_outcomes(
+	loadout: Option<Res<WorldPlayerLoadout>>,
+	locomotion: Res<CharacterLocomotion>,
+	mode: Option<Res<State<ActiveGenerationMode>>>,
+	mut ready: MessageReader<maybraid_spawns_placement::PlacementReady>,
+	mut failed: MessageReader<maybraid_spawns_placement::PlacementFailed>,
+	mut state: ResMut<WorldPlayerRespawnState>,
+	mut map: ResMut<WorldMapView>,
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+	let now = mode.as_deref().and_then(|mode| mode.get().mode_id());
+	for failed in failed.read() {
+		let _ = state.note_placement_failed(failed.identity);
+	}
+	for ready in ready.read() {
+		if !ready.support_ready || !state.accepts_identity(ready.identity) {
+			continue;
+		}
+		if !state.accept_placement(ready.identity) {
+			continue;
+		}
+		let Some(pending) = state.pending.as_ref() else {
+			continue;
+		};
+		let origin = pending.origin;
+		finish_world_player_spawn(
+			&mut commands,
+			&mut meshes,
+			&mut materials,
+			locomotion.as_ref(),
+			loadout.as_deref(),
+			origin,
+			now,
+			ready.identity,
+			ready.position,
+			ready.policy.interior(),
+			&mut state,
+			&mut map,
+		);
+	}
+}
+
+fn cancel_orphaned_placement(
+	state: Res<WorldPlayerRespawnState>,
+	mut work: ResMut<maybraid_spawns_placement::PlacementWork>,
+) {
+	work.retain_identity(state.pending_identity());
 }
 
 fn open_respawn_picker(
@@ -558,6 +693,13 @@ fn finish_world_player_spawn(
 	if spawned.dress {
 		commands.entity(spawned.actor).insert(WorldPlayerAppearanceRequested);
 	}
+	commands.queue(move |world: &mut World| {
+		if let Some(mut messages) =
+			world.get_resource_mut::<Messages<maybraid_spawns_actors::ActorSpawned>>()
+		{
+			messages.write(spawned);
+		}
+	});
 	if let Some(activation) =
 		ActivatePlayerArrival::from_constructed(spawned.identity, spawned.actor, state)
 	{
@@ -945,6 +1087,12 @@ mod tests {
 		world.init_resource::<SpawnPickerSheet>();
 		world.init_resource::<maybraid_spawns_placement::PlacementWork>();
 		world.init_resource::<maybraid_spawns_placement::PlacementSupport>();
+		world.init_resource::<Messages<maybraid_spawns_placement::ResolvePlacement>>();
+		world.init_resource::<Messages<maybraid_spawns_placement::PlacementReady>>();
+		world.init_resource::<Messages<maybraid_spawns_placement::PlacementFailed>>();
+		world.init_resource::<Messages<maybraid_spawns_placement::CancelPlacement>>();
+		world.init_resource::<Messages<maybraid_spawns_player::ActivatePlayerArrival>>();
+		world.init_resource::<Messages<maybraid_spawns_actors::ActorSpawned>>();
 		world.init_resource::<Messages<PlayerChoseRespawnPoi>>();
 		world.init_resource::<PoiRegistry>();
 		world.init_resource::<CharacterLocomotion>();
@@ -1108,6 +1256,8 @@ mod tests {
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(live_player_count(&mut world), 0);
+		release_pending_placement(&mut world)?;
 
 		let mut bodies =
 			world.query_filtered::<(&Transform, Has<OffTerrainAnchor>), With<VegetationPlayer>>();
@@ -1121,7 +1271,7 @@ mod tests {
 	}
 
 	#[test]
-	fn discovery_respawn_holds_above_unpublished_terrain() -> anyhow::Result<()> {
+	fn delayed_terrain_support_keeps_the_arrival_pending() -> anyhow::Result<()> {
 		let mut world = discovery_respawn_world(0.2);
 		let poi = world.spawn_empty().id();
 		world.resource_mut::<PoiRegistry>().upsert(
@@ -1138,18 +1288,21 @@ mod tests {
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-
-		let mut bodies = world
-			.query_filtered::<(&Transform, Has<AwaitingTerrainSurface>), With<VegetationPlayer>>();
-		let (body, awaiting) = bodies.single(&world)?;
-		let base = &world.resource::<WorldBaseTerrain>().0;
-		let expected = player_spawn_point_at(
-			Vec2::new(80.0, 5.0),
-			world_player::holding_elevation(base, 80.0, 5.0),
-		);
-		assert_eq!(body.translation, expected);
-		assert!(body.translation.y > base.height_at(80.0, 5.0) + 50.0);
-		assert!(awaiting);
+		world
+			.run_system_once(observe_placement_support)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(live_player_count(&mut world), 0);
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
+		let identity = world
+			.resource::<WorldPlayerRespawnState>()
+			.pending_identity()
+			.ok_or_else(|| anyhow::anyhow!("pending identity"))?;
+		assert!(world
+			.resource::<maybraid_spawns_placement::PlacementWork>()
+			.get(identity)
+			.is_some_and(|pending| !pending.readiness.ready()));
+		release_pending_placement(&mut world)?;
+		assert_eq!(live_player_count(&mut world), 1);
 		Ok(())
 	}
 
@@ -1172,6 +1325,12 @@ mod tests {
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(observe_placement_support)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(live_player_count(&mut world), 0, "interior waits for its floor collider");
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
+		release_pending_placement(&mut world)?;
 
 		let mut bodies = world.query_filtered::<
 			(&Transform, Has<AwaitingTerrainSurface>, Has<OffTerrainAnchor>),
@@ -1359,6 +1518,36 @@ mod tests {
 		Ok(())
 	}
 
+	fn release_pending_placement(world: &mut World) -> anyhow::Result<()> {
+		world
+			.resource_mut::<Messages<maybraid_spawns_placement::PlacementFailed>>()
+			.clear();
+		let identity = world
+			.resource::<WorldPlayerRespawnState>()
+			.pending_identity()
+			.ok_or_else(|| anyhow::anyhow!("pending identity"))?;
+		let (position, policy) = world
+			.resource::<maybraid_spawns_placement::PlacementWork>()
+			.get(identity)
+			.and_then(|pending| pending.pose.map(|pose| (pose.position, pose.policy)))
+			.ok_or_else(|| anyhow::anyhow!("pending pose"))?;
+		world.write_message(maybraid_spawns_placement::PlacementReady::new(
+			identity, position, policy, true,
+		));
+		world
+			.run_system_once(apply_placement_outcomes)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(cancel_orphaned_placement)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		Ok(())
+	}
+
+	fn confirm_and_place(world: &mut World) -> anyhow::Result<()> {
+		confirm_picker_from_a(world)?;
+		release_pending_placement(world)
+	}
+
 	fn live_player_count(world: &mut World) -> usize {
 		world.query_filtered::<(), With<VegetationPlayer>>().iter(world).count()
 	}
@@ -1451,6 +1640,9 @@ mod tests {
 		assert!(world.resource::<WorldMapView>().close_locked);
 		arm_locked_picker_input(&mut world);
 		confirm_picker_from_a(&mut world)?;
+		assert_eq!(live_player_count(&mut world), 0);
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
+		release_pending_placement(&mut world)?;
 		assert_eq!(live_player_count(&mut world), 1);
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
 		assert!(world.resource::<WorldMapView>().begin_life);
@@ -1466,7 +1658,7 @@ mod tests {
 		assert_eq!(live_player_count(&mut world), 0);
 		assert!(world.resource::<WorldMapView>().close_locked);
 		arm_locked_picker_input(&mut world);
-		confirm_picker_from_a(&mut world)?;
+		confirm_and_place(&mut world)?;
 		assert_eq!(live_player_count(&mut world), 1);
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
 		assert!(world.resource::<WorldMapView>().begin_life);
@@ -1497,7 +1689,10 @@ mod tests {
 			work.get(identity).is_some(),
 			"placement must survive the confirm frame, not a one-shot message"
 		);
+		assert_eq!(live_player_count(&mut world), 0);
+		release_pending_placement(&mut world)?;
 		assert_eq!(live_player_count(&mut world), 1);
+		assert!(world.resource::<maybraid_spawns_placement::PlacementWork>().is_empty());
 		Ok(())
 	}
 
@@ -1519,17 +1714,157 @@ mod tests {
 			.pending_identity()
 			.ok_or_else(|| anyhow::anyhow!("pending identity"))?;
 		arm_locked_picker_input(&mut world);
-		confirm_picker_from_a(&mut world)?;
+		confirm_and_place(&mut world)?;
 		assert_eq!(live_player_count(&mut world), 1);
 		assert_eq!(world.resource::<WorldPlayerRespawnState>().last_activated(), Some(identity));
-		assert!(ActivatePlayerArrival::from_constructed(
+		world.write_message(maybraid_spawns_placement::PlacementReady::new(
 			identity,
-			Entity::from_bits(99),
-			&mut world.resource_mut::<WorldPlayerRespawnState>(),
-		)
-		.is_none());
+			Vec3::ZERO,
+			maybraid_spawns_placement::PlacementPolicy::OutdoorGround,
+			true,
+		));
+		world
+			.run_system_once(apply_placement_outcomes)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(live_player_count(&mut world), 1);
 		assert_eq!(world.resource::<WorldPlayerRespawnState>().last_activated(), Some(identity));
+		Ok(())
+	}
+
+	#[test]
+	fn placement_failure_preserves_the_arrival_and_is_retryable() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		write_choice(&mut world, None)?;
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let identity = world
+			.resource::<WorldPlayerRespawnState>()
+			.pending_identity()
+			.ok_or_else(|| anyhow::anyhow!("pending identity"))?;
+		world.write_message(maybraid_spawns_placement::PlacementFailed::new(
+			identity,
+			maybraid_spawns_player::SpawnFailureReason::Clearance,
+		));
+		world
+			.run_system_once(apply_placement_outcomes)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(live_player_count(&mut world), 0);
+		assert!(world
+			.resource::<WorldPlayerRespawnState>()
+			.pending
+			.as_ref()
+			.is_some_and(|pending| pending.phase.is_choosing()));
+		world
+			.resource_mut::<Messages<maybraid_spawns_placement::PlacementFailed>>()
+			.clear();
+		assert!(world.resource_mut::<WorldPlayerRespawnState>().await_support(identity));
+		release_pending_placement(&mut world)?;
+		assert_eq!(live_player_count(&mut world), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn cancel_during_loading_drops_a_later_ready() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		write_choice(&mut world, None)?;
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let identity = world
+			.resource::<WorldPlayerRespawnState>()
+			.pending_identity()
+			.ok_or_else(|| anyhow::anyhow!("pending identity"))?;
+		assert!(world
+			.resource_mut::<maybraid_spawns_placement::PlacementWork>()
+			.cancel(identity)
+			.is_some());
+		if let Some(pending) = world.resource_mut::<WorldPlayerRespawnState>().pending.as_mut() {
+			pending.advance(maybraid_spawns_player::ArrivalPhase::ChoosingDestination);
+		}
+		world.write_message(maybraid_spawns_placement::PlacementReady::new(
+			identity,
+			Vec3::Y,
+			maybraid_spawns_placement::PlacementPolicy::OutdoorGround,
+			true,
+		));
+		world
+			.run_system_once(apply_placement_outcomes)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(live_player_count(&mut world), 0);
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn session_exit_cancels_pending_placement() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		write_choice(&mut world, None)?;
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let stale = world
+			.resource::<WorldPlayerRespawnState>()
+			.pending_identity()
+			.ok_or_else(|| anyhow::anyhow!("pending identity"))?;
+		world
+			.run_system_once(reset_first_spawn_offer)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(cancel_orphaned_placement)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<maybraid_spawns_placement::PlacementWork>().is_empty());
+		world.write_message(maybraid_spawns_placement::PlacementReady::new(
+			stale,
+			Vec3::Y,
+			maybraid_spawns_placement::PlacementPolicy::OutdoorGround,
+			true,
+		));
+		world
+			.run_system_once(apply_placement_outcomes)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(live_player_count(&mut world), 0);
+		Ok(())
+	}
+
+	#[test]
+	fn a_stale_placement_ready_does_not_activate() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let stale = world
+			.resource::<WorldPlayerRespawnState>()
+			.pending_identity()
+			.ok_or_else(|| anyhow::anyhow!("pending identity"))?;
+		world
+			.run_system_once(reset_first_spawn_offer)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.resource_mut::<WorldPlayerRespawnState>().begin_arrival(
+			ArrivalReason::Death { at: Vec3::new(3.0, 4.0, 5.0) },
+			RespawnOrigin::began(None, false),
+			0.0,
+		);
+		world.write_message(maybraid_spawns_placement::PlacementReady::new(
+			stale,
+			Vec3::Y,
+			maybraid_spawns_placement::PlacementPolicy::OutdoorGround,
+			true,
+		));
+		world
+			.run_system_once(apply_placement_outcomes)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(live_player_count(&mut world), 0);
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
 		Ok(())
 	}
 
@@ -1933,6 +2268,8 @@ mod tests {
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(live_player_count(&mut world), 0);
+		release_pending_placement(&mut world)?;
 		let mut bodies = world.query_filtered::<&Transform, With<VegetationPlayer>>();
 		let body = bodies.single(&world)?;
 		assert_eq!(body.translation.xz(), fallback_at.xz());

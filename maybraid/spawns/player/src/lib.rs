@@ -1,8 +1,9 @@
 //! Player arrival controller and UI-owned spawn picker.
 //!
 //! A controller decides what should happen and emits a request. World
-//! adapters interpret first-wave gates, map presentation, and actor
-//! construction until later spawn crates own those steps.
+//! adapters interpret first-wave gates and map presentation. Construction
+//! waits for a matching placement-ready outcome; handoff consumes a
+//! constructed actor without this crate depending on placement or actors.
 
 pub mod arrival;
 pub mod controller;

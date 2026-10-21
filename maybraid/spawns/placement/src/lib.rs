@@ -7,7 +7,7 @@ pub mod request;
 pub mod support;
 pub mod terrain;
 
-pub use pending::{PendingPlacement, PlacementWork};
+pub use pending::{PendingPlacement, PlacementTick, PlacementWork};
 pub use poi::interior_building_poi;
 pub use request::{
 	ActorClearance, CancelPlacement, PlacementFailed, PlacementPolicy, PlacementReady,
@@ -20,7 +20,12 @@ use bevy::prelude::*;
 use durham::DurhamSurface;
 use maybraid_spawns_player::ArrivalDestination;
 use poi_intelligence::{PoiId, PoiRegistry};
-use world_player::player_position_above_surface;
+
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PlacementSystems {
+	Observe,
+	Poll,
+}
 
 #[derive(Resource, Default)]
 struct PlacementRuntime;
@@ -37,7 +42,13 @@ pub fn register_placement_runtime(app: &mut App) {
 		.add_message::<PlacementReady>()
 		.add_message::<PlacementFailed>()
 		.add_message::<CancelPlacement>()
-		.add_systems(Update, (cancel_placements, poll_placement_support).chain());
+		.configure_sets(Update, PlacementSystems::Observe.before(PlacementSystems::Poll))
+		.add_systems(
+			Update,
+			(cancel_placements, poll_placement_support)
+				.chain()
+				.in_set(PlacementSystems::Poll),
+		);
 }
 
 pub struct PlacementPlugin;
@@ -56,8 +67,17 @@ impl ResolvePlacement {
 		registry: &PoiRegistry,
 		surface: &DurhamSurface,
 	) -> Result<PendingPlacement, PlacementFailed> {
-		match PlacementPose::resolve(self.destination, registry, surface, self.fallback_at) {
-			Ok(pose) => Ok(PendingPlacement::new(self.identity, self.destination, pose)),
+		match PlacementPose::resolve(
+			self.destination,
+			registry,
+			surface,
+			self.fallback_at,
+			self.clearance,
+		) {
+			Ok(pose) => match pose.reject_blocked(false) {
+				Ok(pose) => Ok(PendingPlacement::new(self.identity, self.destination, pose)),
+				Err(reason) => Err(PlacementFailed::new(self.identity, reason)),
+			},
 			Err(reason) => Err(PlacementFailed::new(self.identity, reason)),
 		}
 	}
@@ -72,16 +92,15 @@ impl PlacementPose {
 		registry: &PoiRegistry,
 		surface: &DurhamSurface,
 		fallback_at: Vec3,
+		clearance: ActorClearance,
 	) -> Result<Self, maybraid_spawns_player::SpawnFailureReason> {
 		match destination {
-			ArrivalDestination::Poi(id) => Self::resolve_poi(id, registry, surface),
-			ArrivalDestination::Fallback => Ok(Self::outdoor_at(
-				surface,
-				fallback_at.xz(),
-				crate::request::ActorClearance::HUMANOID,
-			)),
+			ArrivalDestination::Poi(id) => Self::resolve_poi(id, registry, surface, clearance),
+			ArrivalDestination::Fallback => {
+				Ok(Self::outdoor_at(surface, fallback_at.xz(), clearance))
+			}
 			ArrivalDestination::Resume(at) | ArrivalDestination::DeathInPlace(at) => {
-				Ok(Self::outdoor_at(surface, at.xz(), crate::request::ActorClearance::HUMANOID))
+				Ok(Self::outdoor_at(surface, at.xz(), clearance))
 			}
 		}
 	}
@@ -90,20 +109,20 @@ impl PlacementPose {
 		id: PoiId,
 		registry: &PoiRegistry,
 		surface: &DurhamSurface,
+		clearance: ActorClearance,
 	) -> Result<Self, maybraid_spawns_player::SpawnFailureReason> {
 		let Some(record) = registry.get(id) else {
 			return Err(maybraid_spawns_player::SpawnFailureReason::DestinationUnresolved);
 		};
 		Ok(match PlacementPolicy::for_poi(record) {
-			PlacementPolicy::InteriorFloor => Self::interior_at(record.position),
-			PlacementPolicy::OutdoorGround => Self::outdoor_at(
-				surface,
-				record.position.xz(),
-				crate::request::ActorClearance::HUMANOID,
-			),
-			PlacementPolicy::Airborne => {
-				Self::airborne_at(player_position_above_surface(record.position))
+			PlacementPolicy::InteriorFloor => Self::interior_at(record.position, clearance),
+			PlacementPolicy::OutdoorGround => {
+				Self::outdoor_at(surface, record.position.xz(), clearance)
 			}
+			PlacementPolicy::Airborne => Self::airborne_at(
+				world_player::player_position_above_surface(record.position),
+				clearance,
+			),
 		})
 	}
 }
@@ -116,11 +135,18 @@ fn cancel_placements(mut work: ResMut<PlacementWork>, mut cancels: MessageReader
 
 fn poll_placement_support(
 	mut work: ResMut<PlacementWork>,
-	support: Res<PlacementSupport>,
 	mut ready: MessageWriter<PlacementReady>,
+	mut failed: MessageWriter<PlacementFailed>,
 ) {
-	for outcome in work.poll(*support) {
-		ready.write(outcome);
+	for tick in work.poll_observed() {
+		match tick {
+			PlacementTick::Ready(outcome) => {
+				ready.write(outcome);
+			}
+			PlacementTick::Failed(outcome) => {
+				failed.write(outcome);
+			}
+		}
 	}
 }
 
@@ -179,5 +205,37 @@ mod tests {
 			)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))??;
 		Ok(())
+	}
+
+	#[test]
+	fn resolve_uses_the_request_clearance() -> anyhow::Result<()> {
+		let mut world = surface_world();
+		world
+			.run_system_once(
+				|registry: Res<PoiRegistry>, surface: DurhamSurface| -> anyhow::Result<()> {
+					let clearance = ActorClearance::new(2.4);
+					let request = ResolvePlacement::new(
+						identity(),
+						ArrivalDestination::Fallback,
+						clearance,
+						Vec3::new(3.0, 4.0, 5.0),
+					);
+					let pending = request.realize(&registry, &surface).expect("fallback");
+					assert_eq!(pending.clearance, clearance);
+					assert_eq!(pending.pose.expect("pose").clearance, clearance);
+					Ok(())
+				},
+			)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))??;
+		Ok(())
+	}
+
+	#[test]
+	fn blocked_clearance_is_an_explicit_failure() {
+		let pose = PlacementPose::airborne_at(Vec3::Y, ActorClearance::HUMANOID);
+		assert_eq!(
+			pose.reject_blocked(true),
+			Err(maybraid_spawns_player::SpawnFailureReason::Clearance)
+		);
 	}
 }
