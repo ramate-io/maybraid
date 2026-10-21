@@ -7,7 +7,7 @@
 
 use std::sync::OnceLock;
 
-use character_rigs::authoring::{humanoid_pose_write_mask, humanoid_write_mask, HumanoidPose};
+use character_rigs::authoring::{HumanoidPose, humanoid_pose_write_mask, humanoid_write_mask};
 
 pub const IDLE_WRITE_BONES: &[&str] = &[
 	"lower_neck",
@@ -24,6 +24,11 @@ pub const IDLE_WRITE_BONES: &[&str] = &[
 
 pub const WALK_WRITE_BONES: &[&str] = &[
 	"root",
+	"lumbar",
+	"midback",
+	"upper_back",
+	"lower_neck",
+	"upper_neck",
 	"pelvis.L",
 	"pelvis.R",
 	"femur.L",
@@ -39,6 +44,12 @@ pub const WALK_WRITE_BONES: &[&str] = &[
 ];
 
 pub const RUN_WRITE_BONES: &[&str] = &[
+	"root",
+	"lumbar",
+	"midback",
+	"upper_back",
+	"lower_neck",
+	"upper_neck",
 	"pelvis.L",
 	"pelvis.R",
 	"femur.L",
@@ -83,8 +94,8 @@ mod tests {
 	use character_rigs::authoring::resolve_humanoid;
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 
-	use crate::animations::{Idle, Run, Walk};
 	use crate::Animation;
+	use crate::animations::{Idle, Run, Walk};
 
 	use super::*;
 
