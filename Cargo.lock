@@ -7188,6 +7188,7 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
+ "characters",
  "durham",
  "lod",
  "lod-avian",

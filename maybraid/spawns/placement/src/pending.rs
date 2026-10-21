@@ -4,21 +4,26 @@
 use bevy::prelude::*;
 use maybraid_spawns_player::ArrivalDestination;
 use maybraid_spawns_player::{
-	SpawnCancelReason, SpawnFailureReason, SpawnIdentity, SpawnOutcome, SpawnSessionId,
+	PlacementAttempt, SpawnCancelReason, SpawnFailureReason, SpawnIdentity, SpawnOutcome,
+	SpawnSessionId,
 };
 
-use crate::request::{ActorClearance, PlacementFailed, PlacementPolicy, PlacementReady};
+use crate::request::{PlacementFailed, PlacementPolicy, PlacementReady, PlacementSupportHit};
 use crate::support::{PlacementSupport, SupportReadiness};
-use crate::terrain::PlacementPose;
+use crate::terrain::{PlacementPose, PlacementSearch};
+use characters::LocomotionCapsule;
 
 /// One in-flight placement. Lives in a resource, not a one-frame message.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PendingPlacement {
 	pub identity: SpawnIdentity,
+	pub attempt: PlacementAttempt,
 	pub destination: ArrivalDestination,
-	pub pose: Option<PlacementPose>,
+	pub search: PlacementSearch,
+	pub accepted: Option<PlacementPose>,
+	pub support: Option<PlacementSupportHit>,
 	pub policy: PlacementPolicy,
-	pub clearance: ActorClearance,
+	pub hull: LocomotionCapsule,
 	pub readiness: SupportReadiness,
 	pub failed: Option<SpawnFailureReason>,
 }
@@ -26,15 +31,19 @@ pub struct PendingPlacement {
 impl PendingPlacement {
 	pub fn new(
 		identity: SpawnIdentity,
+		attempt: PlacementAttempt,
 		destination: ArrivalDestination,
-		pose: PlacementPose,
+		search: PlacementSearch,
 	) -> Self {
 		Self {
 			identity,
+			attempt,
 			destination,
-			pose: Some(pose),
-			policy: pose.policy,
-			clearance: pose.clearance,
+			policy: search.policy,
+			hull: search.hull,
+			search,
+			accepted: None,
+			support: None,
 			readiness: SupportReadiness::default(),
 			failed: None,
 		}
@@ -46,6 +55,12 @@ impl PendingPlacement {
 
 	pub fn observe(&mut self, readiness: SupportReadiness) {
 		self.readiness = readiness;
+	}
+
+	pub fn accept(&mut self, pose: PlacementPose, support: Option<PlacementSupportHit>) {
+		self.accepted = Some(pose);
+		self.support = support;
+		self.readiness = SupportReadiness::presented();
 	}
 
 	pub fn fail(&mut self, reason: SpawnFailureReason) {
@@ -60,27 +75,33 @@ impl PendingPlacement {
 		if self.failed.is_some() {
 			return None;
 		}
-		let pose = self.pose?;
+		let pose = self.accepted?;
 		if pose.policy.waits_for_support() && !readiness.ready() {
 			return None;
 		}
-		Some(PlacementReady::new(
-			self.identity,
-			pose.position,
-			pose.policy,
-			!pose.policy.waits_for_support() || readiness.ready(),
-		))
+		Some(PlacementReady {
+			identity: self.identity,
+			attempt: self.attempt,
+			position: pose.position,
+			policy: pose.policy,
+			support_ready: !pose.policy.waits_for_support() || readiness.ready(),
+			support: self.support,
+		})
 	}
 
 	pub fn tick(&self) -> Option<PlacementTick> {
 		if let Some(reason) = self.failed {
-			return Some(PlacementTick::Failed(PlacementFailed::new(self.identity, reason)));
+			return Some(PlacementTick::Failed(PlacementFailed::new(
+				self.identity,
+				self.attempt,
+				reason,
+			)));
 		}
 		self.ready_with(self.readiness).map(PlacementTick::Ready)
 	}
 
 	pub fn fail_unresolved(&self) -> PlacementFailed {
-		PlacementFailed::new(self.identity, SpawnFailureReason::DestinationUnresolved)
+		PlacementFailed::new(self.identity, self.attempt, SpawnFailureReason::DestinationUnresolved)
 	}
 }
 
@@ -99,8 +120,11 @@ pub struct PlacementWork {
 
 impl PlacementWork {
 	pub fn insert(&mut self, placement: PendingPlacement) {
-		self.pending
-			.retain(|pending| pending.identity.request != placement.identity.request);
+		self.pending.retain(|pending| {
+			pending.identity.request != placement.identity.request
+				|| pending.attempt != placement.attempt
+		});
+		self.pending.retain(|pending| !pending.identity.matches(placement.identity));
 		self.pending.push(placement);
 	}
 
@@ -126,14 +150,25 @@ impl PlacementWork {
 		self.pending.retain(|pending| pending.identity.owner.session != session);
 	}
 
-	/// Drop work that no longer matches the live arrival.
+	/// Drop work that no longer matches the live arrival and attempt.
 	pub fn retain_identity(&mut self, identity: Option<SpawnIdentity>) {
 		self.pending
 			.retain(|pending| identity.is_some_and(|id| pending.identity.matches(id)));
 	}
 
+	pub fn retain_attempt(
+		&mut self,
+		identity: Option<SpawnIdentity>,
+		attempt: Option<PlacementAttempt>,
+	) {
+		self.pending.retain(|pending| {
+			identity.is_some_and(|id| pending.identity.matches(id))
+				&& attempt.is_some_and(|attempt| pending.attempt == attempt)
+		});
+	}
+
 	/// Apply one support snapshot to every request. Tests use this; production
-	/// observes each pose, then [`Self::poll_observed`].
+	/// observes each column, then [`Self::poll_observed`].
 	pub fn poll(&mut self, support: PlacementSupport) -> Vec<PlacementReady> {
 		for pending in &mut self.pending {
 			pending.observe(support.readiness);
@@ -195,8 +230,6 @@ mod tests {
 	use bevy::prelude::Vec3;
 	use maybraid_spawns_player::{SpawnOwner, SpawnRequestId, SpawnSessionId};
 
-	use crate::support::PlacementSupport;
-
 	fn identity_n(n: u64) -> SpawnIdentity {
 		SpawnIdentity::new(SpawnRequestId::new(n), SpawnOwner::new(SpawnSessionId::new(1)))
 	}
@@ -205,16 +238,22 @@ mod tests {
 		identity_n(1)
 	}
 
+	fn attempt() -> PlacementAttempt {
+		PlacementAttempt::new(1)
+	}
+
 	fn outdoor_for(id: SpawnIdentity, at: Vec3) -> PendingPlacement {
-		PendingPlacement::new(
+		let mut pending = PendingPlacement::new(
 			id,
+			attempt(),
 			ArrivalDestination::Fallback,
-			PlacementPose {
-				position: at,
-				policy: PlacementPolicy::OutdoorGround,
-				clearance: ActorClearance::HUMANOID,
-			},
-		)
+			PlacementSearch::outdoor_hint(at.xz(), at.y, LocomotionCapsule::HUMANOID),
+		);
+		pending.accept(
+			PlacementPose::new(at, PlacementPolicy::OutdoorGround, LocomotionCapsule::HUMANOID),
+			None,
+		);
+		pending
 	}
 
 	fn outdoor(at: Vec3) -> PendingPlacement {
@@ -224,13 +263,24 @@ mod tests {
 	#[test]
 	fn delayed_support_keeps_the_request() {
 		let mut work = PlacementWork::default();
-		work.insert(outdoor(Vec3::Y));
+		let mut pending = outdoor(Vec3::Y);
+		pending.accepted = None;
+		work.insert(pending);
 		assert!(work.poll(PlacementSupport::waiting()).is_empty());
 		assert_eq!(work.len(), 1);
+		work.get_mut(identity()).expect("pending").accept(
+			PlacementPose::new(
+				Vec3::Y,
+				PlacementPolicy::OutdoorGround,
+				LocomotionCapsule::HUMANOID,
+			),
+			None,
+		);
 		let ready = work.poll(PlacementSupport::ready());
 		assert_eq!(ready.len(), 1);
 		assert!(work.is_empty());
 		assert!(ready[0].support_ready);
+		assert!(ready[0].matches_attempt(identity(), attempt()));
 	}
 
 	#[test]
@@ -240,12 +290,8 @@ mod tests {
 		let mut work = PlacementWork::default();
 		work.insert(outdoor_for(first, Vec3::new(0.0, 1.0, 0.0)));
 		work.insert(outdoor_for(second, Vec3::new(100.0, 1.0, 0.0)));
-		let ready = work.poll_each(|pending| {
-			SupportReadiness::new(
-				true,
-				pending.pose.is_some_and(|pose| pose.position.xz() == Vec2::ZERO),
-			)
-		});
+		let ready =
+			work.poll_each(|pending| SupportReadiness::new(true, pending.search.xz == Vec2::ZERO));
 		assert_eq!(ready.len(), 1);
 		assert!(ready[0].belongs_to(first));
 		assert_eq!(work.len(), 1);
@@ -273,17 +319,12 @@ mod tests {
 	fn an_interior_floor_waits_for_its_building_collider() {
 		let pending = PendingPlacement::new(
 			identity(),
+			attempt(),
 			ArrivalDestination::Poi(poi_intelligence::PoiId(1)),
-			PlacementPose {
-				position: Vec3::new(0.0, 12.0, 0.0),
-				policy: PlacementPolicy::InteriorFloor,
-				clearance: ActorClearance::HUMANOID,
-			},
+			PlacementSearch::interior_at(Vec3::new(0.0, 12.0, 0.0), LocomotionCapsule::HUMANOID),
 		);
 		assert!(pending.ready(PlacementSupport::waiting()).is_none());
-		let ready = pending.ready(PlacementSupport::ready()).expect("building ready");
-		assert_eq!(ready.position.y, 12.0);
-		assert!(ready.policy.waits_for_support());
+		assert!(pending.ready(PlacementSupport::ready()).is_none());
 	}
 
 	#[test]
@@ -297,10 +338,24 @@ mod tests {
 		match ticks[0] {
 			PlacementTick::Failed(failed) => {
 				assert_eq!(failed.reason, SpawnFailureReason::Clearance);
-				assert!(failed.belongs_to(identity()));
+				assert!(failed.matches_attempt(identity(), attempt()));
 			}
 			PlacementTick::Ready(_) => panic!("blocked clearance must not become ready"),
 		}
 		assert!(work.is_empty());
+	}
+
+	#[test]
+	fn replacing_an_attempt_drops_the_previous_request() {
+		let mut work = PlacementWork::default();
+		work.insert(outdoor(Vec3::Y));
+		let mut next = outdoor(Vec3::Y);
+		next.attempt = PlacementAttempt::new(2);
+		work.insert(next);
+		assert_eq!(work.len(), 1);
+		assert_eq!(
+			work.get(identity()).map(|pending| pending.attempt),
+			Some(PlacementAttempt::new(2))
+		);
 	}
 }

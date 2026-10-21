@@ -10,13 +10,19 @@ pub mod terrain;
 
 pub use pending::{PendingPlacement, PlacementTick, PlacementWork};
 pub use poi::interior_building_poi;
-pub use probe::{observe_placement_physics, register_placement_physics, INTERIOR_FLOOR_TOLERANCE};
+pub use probe::{observe_placement_physics, register_placement_physics};
 pub use request::{
 	ActorClearance, CancelPlacement, PlacementFailed, PlacementPolicy, PlacementReady,
-	ResolvePlacement,
+	PlacementSupportHit, ResolvePlacement, SupportPolicy,
 };
-pub use support::{PlacementSupport, SupportReadiness};
-pub use terrain::PlacementPose;
+pub use support::{column_presentation_ready, column_volume, PlacementSupport, SupportReadiness};
+pub use terrain::{
+	PlacementPose, PlacementSearch, INTERIOR_LOWER_MARGIN, INTERIOR_UPPER_MARGIN,
+	OUTDOOR_LOWER_MARGIN, OUTDOOR_UPPER_MARGIN,
+};
+
+/// Previous interior tolerance; the unified probe uses [`INTERIOR_UPPER_MARGIN`].
+pub const INTERIOR_FLOOR_TOLERANCE: f32 = INTERIOR_UPPER_MARGIN;
 
 use bevy::prelude::*;
 use durham::DurhamSurface;
@@ -62,47 +68,50 @@ impl Plugin for PlacementPlugin {
 }
 
 impl ResolvePlacement {
-	/// Destination + policy → pending work, or an explicit failure.
+	/// Destination + policy → pending search column, or an explicit failure.
 	/// Unresolved POIs do not become a silent floor at a stale coordinate.
 	pub fn realize(
 		self,
 		registry: &PoiRegistry,
 		surface: &DurhamSurface,
 	) -> Result<PendingPlacement, PlacementFailed> {
-		match PlacementPose::resolve(
+		match PlacementSearch::resolve(
 			self.destination,
 			registry,
 			surface,
 			self.fallback_at,
-			self.clearance,
+			self.hull,
 		) {
-			Ok(pose) => match pose.reject_blocked(false) {
-				Ok(pose) => Ok(PendingPlacement::new(self.identity, self.destination, pose)),
-				Err(reason) => Err(PlacementFailed::new(self.identity, reason)),
-			},
-			Err(reason) => Err(PlacementFailed::new(self.identity, reason)),
+			Ok(search) => {
+				if !search.bounds_valid() {
+					return Err(PlacementFailed::new(
+						self.identity,
+						self.attempt,
+						maybraid_spawns_player::SpawnFailureReason::InvalidBounds,
+					));
+				}
+				Ok(PendingPlacement::new(self.identity, self.attempt, self.destination, search))
+			}
+			Err(reason) => Err(PlacementFailed::new(self.identity, self.attempt, reason)),
 		}
 	}
 }
 
-impl PlacementPose {
-	/// Resolve a picker / resume destination against the current registry and
-	/// terrain. Unresolved POIs fail rather than treating a stale coordinate
-	/// as a floor.
+impl PlacementSearch {
+	/// Resolve a picker / resume destination into a bounded column.
+	/// Generated heights define the interval; the probe reads colliders.
 	pub fn resolve(
 		destination: ArrivalDestination,
 		registry: &PoiRegistry,
 		surface: &DurhamSurface,
 		fallback_at: Vec3,
-		clearance: ActorClearance,
+		hull: characters::LocomotionCapsule,
 	) -> Result<Self, maybraid_spawns_player::SpawnFailureReason> {
 		match destination {
-			ArrivalDestination::Poi(id) => Self::resolve_poi(id, registry, surface, clearance),
-			ArrivalDestination::Fallback => {
-				Ok(Self::outdoor_at(surface, fallback_at.xz(), clearance))
-			}
+			ArrivalDestination::Poi(id) => Self::resolve_poi(id, registry, surface, hull),
+			ArrivalDestination::Fallback => Ok(Self::outdoor_at(surface, fallback_at.xz(), hull)),
 			ArrivalDestination::Resume(at) | ArrivalDestination::DeathInPlace(at) => {
-				Ok(Self::outdoor_at(surface, at.xz(), clearance))
+				Ok(Self::outdoor_at(surface, at.xz(), hull))
 			}
 		}
 	}
@@ -111,20 +120,17 @@ impl PlacementPose {
 		id: PoiId,
 		registry: &PoiRegistry,
 		surface: &DurhamSurface,
-		clearance: ActorClearance,
+		hull: characters::LocomotionCapsule,
 	) -> Result<Self, maybraid_spawns_player::SpawnFailureReason> {
 		let Some(record) = registry.get(id) else {
 			return Err(maybraid_spawns_player::SpawnFailureReason::DestinationUnresolved);
 		};
 		Ok(match PlacementPolicy::for_poi(record) {
-			PlacementPolicy::InteriorFloor => Self::interior_at(record.position, clearance),
-			PlacementPolicy::OutdoorGround => {
-				Self::outdoor_at(surface, record.position.xz(), clearance)
+			PlacementPolicy::InteriorFloor => Self::interior_at(record.position, hull),
+			PlacementPolicy::OutdoorGround => Self::outdoor_at(surface, record.position.xz(), hull),
+			PlacementPolicy::Airborne => {
+				Self::airborne_at(record.position + Vec3::Y * hull.spawn_height(), hull)
 			}
-			PlacementPolicy::Airborne => Self::airborne_at(
-				world_player::player_position_above_surface(record.position),
-				clearance,
-			),
 		})
 	}
 }
@@ -156,15 +162,21 @@ fn poll_placement_support(
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
+	use characters::LocomotionCapsule;
 	use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainConfig, WorldBaseTerrain};
 	use lod::hcsg::HcsgStorage;
 	use maybraid_spawns_player::{
-		SpawnFailureReason, SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId,
+		PlacementAttempt, SpawnFailureReason, SpawnIdentity, SpawnOwner, SpawnRequestId,
+		SpawnSessionId,
 	};
 	use poi_intelligence::PoiId;
 
 	fn identity() -> SpawnIdentity {
 		SpawnIdentity::new(SpawnRequestId::new(1), SpawnOwner::new(SpawnSessionId::new(1)))
+	}
+
+	fn attempt() -> PlacementAttempt {
+		PlacementAttempt::new(1)
 	}
 
 	fn surface_world() -> World {
@@ -193,10 +205,10 @@ mod tests {
 		world
 			.run_system_once(
 				|registry: Res<PoiRegistry>, surface: DurhamSurface| -> anyhow::Result<()> {
-					let request = ResolvePlacement::new(
+					let request = ResolvePlacement::humanoid(
 						identity(),
+						attempt(),
 						ArrivalDestination::Poi(PoiId(99)),
-						ActorClearance::HUMANOID,
 						Vec3::new(3.0, 4.0, 5.0),
 					);
 					let failed = request.realize(&registry, &surface).expect_err("unresolved");
@@ -210,21 +222,24 @@ mod tests {
 	}
 
 	#[test]
-	fn resolve_uses_the_request_clearance() -> anyhow::Result<()> {
+	fn resolve_uses_the_request_hull() -> anyhow::Result<()> {
 		let mut world = surface_world();
 		world
 			.run_system_once(
 				|registry: Res<PoiRegistry>, surface: DurhamSurface| -> anyhow::Result<()> {
-					let clearance = ActorClearance::new(2.4);
+					let hull = LocomotionCapsule::HUMANOID.with_half_height(1.6);
 					let request = ResolvePlacement::new(
 						identity(),
+						attempt(),
 						ArrivalDestination::Fallback,
-						clearance,
+						hull,
 						Vec3::new(3.0, 4.0, 5.0),
 					);
 					let pending = request.realize(&registry, &surface).expect("fallback");
-					assert_eq!(pending.clearance, clearance);
-					assert_eq!(pending.pose.expect("pose").clearance, clearance);
+					assert_eq!(pending.hull, hull);
+					assert_eq!(pending.search.hull, hull);
+					assert!(pending.search.bounds_valid());
+					assert!(pending.accepted.is_none(), "collider geometry accepts the pose");
 					Ok(())
 				},
 			)
@@ -233,11 +248,14 @@ mod tests {
 	}
 
 	#[test]
-	fn blocked_clearance_is_an_explicit_failure() {
-		let pose = PlacementPose::airborne_at(Vec3::Y, ActorClearance::HUMANOID);
-		assert_eq!(
-			pose.reject_blocked(true),
-			Err(maybraid_spawns_player::SpawnFailureReason::Clearance)
+	fn inverted_bounds_are_an_explicit_failure() {
+		let search = PlacementSearch::new(
+			Vec2::ZERO,
+			4.0,
+			1.0,
+			LocomotionCapsule::HUMANOID,
+			PlacementPolicy::OutdoorGround,
 		);
+		assert!(!search.bounds_valid());
 	}
 }
