@@ -1,14 +1,11 @@
 //! Downed world-player retirement and POI-based replacement.
 
-use avian3d::prelude::{LinearVelocity, SimpleCollider};
+use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_ragdoll::CharacterRagdollSystems;
 use damage::{DamageSystems, DespawnAfter, Downed};
-use durham::{
-	terrain_collider_covers_xz, CascadeChunk, DurhamSurface, TerrainCellLayout,
-	TerrainTrimeshCollider, WorldBaseTerrain,
-};
+use durham::{DurhamSurface, TerrainCellLayout, WorldBaseTerrain};
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use grenade_user::GrenadeUserSystems;
@@ -56,6 +53,7 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 	fn build(&self, app: &mut App) {
 		maybraid_spawns_player::register_player_spawn_runtime(app);
 		maybraid_spawns_placement::register_placement_runtime(app);
+		maybraid_spawns_placement::register_placement_physics(app);
 		app.init_resource::<WorldMapView>()
 			.add_message::<PlayerLifeEnded>()
 			.add_message::<CharacterIntent>()
@@ -86,9 +84,6 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 				Update,
 				(
 					crate::first_wave::refresh_first_wave,
-					observe_placement_support
-						.after(crate::first_wave::refresh_first_wave)
-						.in_set(maybraid_spawns_placement::PlacementSystems::Observe),
 					queue_first_spawn_picker.after(crate::first_wave::refresh_first_wave),
 					crate::spawn_picker::dispatch_spawn_picker,
 					respawn_world_player
@@ -435,112 +430,6 @@ fn respawn_world_player(
 			});
 		}
 	}
-}
-
-/// Collision-support readiness is presentation / physics, not GenerationScheme.
-/// Each pending pose is scored at its own location; a global ready bit is not
-/// reused for a different destination.
-fn observe_placement_support(
-	surface: DurhamSurface,
-	mut work: ResMut<maybraid_spawns_placement::PlacementWork>,
-	terrain: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
-	buildings: Query<
-		(Option<&GlobalTransform>, Option<&Transform>, Option<&avian3d::prelude::Collider>),
-		With<building_physics::BuildingWalkCollider>,
-	>,
-) {
-	let chunks: Vec<&CascadeChunk> = terrain.iter().collect();
-	let buildings: Vec<_> = buildings.iter().collect();
-	for pending in work.pending_mut() {
-		let Some(pose) = pending.pose else {
-			continue;
-		};
-		if let Err(reason) = pose.reject_blocked(outdoor_clearance_blocked(pose, &buildings)) {
-			pending.fail(reason);
-			continue;
-		}
-		pending.observe(support_for_pose(pose, &surface, &chunks, &buildings));
-	}
-}
-
-fn support_for_pose(
-	pose: maybraid_spawns_placement::PlacementPose,
-	surface: &DurhamSurface,
-	chunks: &[&CascadeChunk],
-	buildings: &[(
-		Option<&GlobalTransform>,
-		Option<&Transform>,
-		Option<&avian3d::prelude::Collider>,
-	)],
-) -> maybraid_spawns_placement::SupportReadiness {
-	use maybraid_spawns_placement::{PlacementPolicy, SupportReadiness};
-	match pose.policy {
-		PlacementPolicy::OutdoorGround => SupportReadiness::new(
-			surface.composed_height_at(pose.position.xz()).is_some(),
-			terrain_collider_covers_xz(pose.position, chunks.iter().copied()),
-		),
-		PlacementPolicy::InteriorFloor => {
-			let ready = building_floor_ready(pose.position, buildings);
-			SupportReadiness::new(ready, ready)
-		}
-		PlacementPolicy::Airborne => SupportReadiness::new(true, true),
-	}
-}
-
-fn building_origin(tf: Option<&GlobalTransform>, local: Option<&Transform>) -> Option<Vec3> {
-	tf.map(GlobalTransform::translation)
-		.or_else(|| local.map(|transform| transform.translation))
-}
-
-fn building_floor_ready(
-	point: Vec3,
-	buildings: &[(
-		Option<&GlobalTransform>,
-		Option<&Transform>,
-		Option<&avian3d::prelude::Collider>,
-	)],
-) -> bool {
-	buildings.iter().any(|(tf, local, collider)| {
-		let Some(origin) = building_origin(*tf, *local) else {
-			return false;
-		};
-		if let Some((min, max)) = collider.and_then(|collider| collider_aabb(origin, collider)) {
-			return point.x >= min.x
-				&& point.x <= max.x
-				&& point.z >= min.z
-				&& point.z <= max.z
-				&& point.y >= min.y - 1.0
-				&& point.y <= max.y + 4.0;
-		}
-		(point.xz() - origin.xz()).length() < 8.0 && (point.y - origin.y).abs() < 4.0
-	})
-}
-
-fn outdoor_clearance_blocked(
-	pose: maybraid_spawns_placement::PlacementPose,
-	buildings: &[(
-		Option<&GlobalTransform>,
-		Option<&Transform>,
-		Option<&avian3d::prelude::Collider>,
-	)],
-) -> bool {
-	if !matches!(pose.policy, maybraid_spawns_placement::PlacementPolicy::OutdoorGround) {
-		return false;
-	}
-	buildings.iter().any(|(tf, local, collider)| {
-		let Some(origin) = building_origin(*tf, *local) else {
-			return false;
-		};
-		if let Some((min, max)) = collider.and_then(|collider| collider_aabb(origin, collider)) {
-			return pose.clearance.overlaps_aabb(pose.position, min, max);
-		}
-		false
-	})
-}
-
-fn collider_aabb(origin: Vec3, collider: &avian3d::prelude::Collider) -> Option<(Vec3, Vec3)> {
-	let aabb = collider.aabb(origin, Quat::IDENTITY);
-	Some((aabb.min.into(), aabb.max.into()))
 }
 
 fn apply_placement_outcomes(
@@ -1281,9 +1170,6 @@ mod tests {
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(observe_placement_support)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(live_player_count(&mut world), 0);
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
 		let identity = world
@@ -1317,9 +1203,6 @@ mod tests {
 		write_choice(&mut world, Some(PoiId(1)))?;
 		world
 			.run_system_once(respawn_world_player)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(observe_placement_support)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(live_player_count(&mut world), 0, "interior waits for its floor collider");
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
@@ -1512,7 +1395,9 @@ mod tests {
 	}
 
 	fn release_pending_placement(world: &mut World) -> anyhow::Result<()> {
-		world.resource_mut::<Messages<maybraid_spawns_placement::PlacementFailed>>().clear();
+		world
+			.resource_mut::<Messages<maybraid_spawns_placement::PlacementFailed>>()
+			.clear();
 		let identity = world
 			.resource::<WorldPlayerRespawnState>()
 			.pending_identity()
@@ -1749,7 +1634,9 @@ mod tests {
 			.pending
 			.as_ref()
 			.is_some_and(|pending| pending.phase.is_choosing()));
-		world.resource_mut::<Messages<maybraid_spawns_placement::PlacementFailed>>().clear();
+		world
+			.resource_mut::<Messages<maybraid_spawns_placement::PlacementFailed>>()
+			.clear();
 		assert!(world.resource_mut::<WorldPlayerRespawnState>().await_support(identity));
 		release_pending_placement(&mut world)?;
 		assert_eq!(live_player_count(&mut world), 1);

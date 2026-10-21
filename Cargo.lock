@@ -7174,9 +7174,11 @@ name = "maybraid-spawns-placement"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "durham",
  "lod",
+ "lod-avian",
  "maybraid-spawns-player",
  "poi-intelligence",
  "world-player",
