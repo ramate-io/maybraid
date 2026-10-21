@@ -15,9 +15,9 @@ use maybraid_skill_map::SkillMapPlugin;
 pub use actor_lifecycle::ActorDomainTeardown;
 pub use equipment::ItemRuntimes;
 pub use maybraid_session::{
-	ActorRetired, InputRouter, InputRouting, Participation, RoutingEvent, SessionBit,
-	SessionCapabilities, SessionCapabilitySystems, SessionLifecycleSystems, SessionPlugin,
-	WorldGameplayEnabled, WorldPlaySessionEnded, apply_in_game_menu_pause,
+	apply_in_game_menu_pause, ActorRetired, InputRouter, InputRouting, Participation, RoutingEvent,
+	SessionBit, SessionCapabilities, SessionCapabilitySystems, SessionLifecycleSystems,
+	SessionPlugin, WorldGameplayEnabled, WorldPlaySessionEnded,
 };
 
 #[derive(Resource, Default)]
@@ -50,6 +50,7 @@ pub fn register_gameplay_runtime(app: &mut App) {
 	equipment::configure(app);
 	powers::configure(app);
 	actor_lifecycle::configure(app);
+	maybraid_spawns_player::register_player_spawn_runtime(app);
 }
 
 /// Assembles session, equipment, and item-domain runtimes. World keeps terrain,

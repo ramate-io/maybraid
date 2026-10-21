@@ -91,7 +91,7 @@ pub use player_camera::{CameraPov, CameraPovLocked};
 pub use player_lifecycle::{
 	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
 };
-pub use spawn_picker::{SpawnPickerCapture, SpawnPickerController};
+pub use spawn_picker::{SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet};
 pub use player_position::{
 	resume_discovery_from_saved_waypoints, PlayerPositionPlugin, PlayerPositionWaypoints,
 };
