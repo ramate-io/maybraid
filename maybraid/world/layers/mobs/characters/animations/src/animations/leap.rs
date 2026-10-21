@@ -12,6 +12,8 @@
 pub const TAKEOFF_END: f32 = 0.18;
 /// Air occupies the middle slice; land is the remainder.
 pub const AIR_END: f32 = 0.72;
+/// Fraction of the **land** segment at the tail used to blend into the [`Run`](super::Run) cycle.
+pub const LEAP_RUN_RECOVERY_BLEND_FRACTION: f32 = 0.2;
 
 /// Takeoff, air, or land slice of a [`Leap`] shot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
