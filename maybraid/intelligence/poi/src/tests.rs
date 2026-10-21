@@ -5,7 +5,7 @@ use crate::{
 	choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi, KnownPoi, LocalPoi, Poi,
 	PoiDiscoverLimits, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId, PoiIntelligencePlugin,
 	PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
-	PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState,
+	PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiSupport, PoiVisitPolicy, PoiVisitState,
 	AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
 };
 use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};
@@ -85,6 +85,22 @@ fn nearby_in_lists_local_and_global_outside_the_hole() -> anyhow::Result<()> {
 		&[PoiId(2)],
 	);
 	assert_eq!(listed.iter().map(|record| record.id).collect::<Vec<_>>(), [PoiId(3)]);
+	Ok(())
+}
+
+#[test]
+fn registry_stores_arrival_support() -> anyhow::Result<()> {
+	let mut registry = PoiRegistry::default();
+	registry.upsert(
+		Entity::from_bits(1),
+		Poi::new(PoiId(1), CAMP).with_support(PoiSupport::Floor),
+		Vec3::new(8.0, 12.0, 3.0),
+		true,
+		false,
+	)?;
+	let record = registry.get(PoiId(1)).copied().ok_or_else(|| anyhow::anyhow!("missing poi"))?;
+	assert!(record.arrival().stands_on_floor());
+	assert_eq!(record.arrival().surface_y(40.0), Vec3::new(8.0, 12.0, 3.0));
 	Ok(())
 }
 
@@ -637,6 +653,7 @@ fn catalog_scheme_resolves_only_the_queried_tile() -> anyhow::Result<()> {
 					salience: 1.0,
 					local: true,
 					global: false,
+					support: crate::PoiSupport::Terrain,
 				},
 				PoiEntry {
 					id: PoiId(2),
@@ -646,6 +663,7 @@ fn catalog_scheme_resolves_only_the_queried_tile() -> anyhow::Result<()> {
 					salience: 1.0,
 					local: false,
 					global: true,
+					support: crate::PoiSupport::Terrain,
 				},
 			],
 		},

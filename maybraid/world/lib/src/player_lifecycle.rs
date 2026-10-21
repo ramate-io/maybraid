@@ -15,8 +15,8 @@ use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use player_camera::{CameraController, FollowCamera};
 use poi_intelligence::{
-	place_nearby, NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiKind,
-	PoiRecord, PoiRegistry, PoiSystems,
+	place_nearby, NearbyFallback, NearbyQuery, PoiArrival, PoiId, PoiInterest, PoiInterests,
+	PoiKind, PoiRecord, PoiRegistry, PoiSystems,
 };
 use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
@@ -553,15 +553,12 @@ fn respawn_world_player(
 	let spawn = match placed {
 		Some(record) => {
 			state.last_poi = Some(record.id);
-			spawn_pose_for_chosen_poi(&record, &surface)
+			ChosenPoiSpawn::for_poi(&record, &surface)
 		}
-		None => ChosenPoiSpawn {
-			position: player_spawn_point_at(
-				fallback_at.xz(),
-				surface_or_hold_at(&surface, fallback_at.xz()),
-			),
-			interior: false,
-		},
+		None => ChosenPoiSpawn::for_arrival(
+			PoiArrival::terrain(fallback_at, 0.0),
+			surface_or_hold_at(&surface, fallback_at.xz()),
+		),
 	};
 	finish_world_player_spawn(
 		&mut commands,
@@ -812,29 +809,22 @@ fn is_building_poi(kind: PoiKind) -> bool {
 	kind == LOCAL_POI || kind == URBAN_POI || kind == SALOON_POI
 }
 
-/// House / storey / lounge pins live inside a building. Urban settlement pins
-/// stay outdoor even when the registry marks them local.
-fn is_interior_building_poi(record: &PoiRecord) -> bool {
-	record.local && (record.kind == LOCAL_POI || record.kind == SALOON_POI)
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct ChosenPoiSpawn {
 	position: Vec3,
 	interior: bool,
 }
 
-/// Local interiors keep the POI floor. Outdoor pins snap to composed terrain.
-fn spawn_pose_for_chosen_poi(record: &PoiRecord, surface: &DurhamSurface) -> ChosenPoiSpawn {
-	if is_interior_building_poi(record) {
-		ChosenPoiSpawn { position: player_position_above_surface(record.position), interior: true }
-	} else {
-		ChosenPoiSpawn {
-			position: player_spawn_point_at(
-				record.position.xz(),
-				surface_or_hold_at(surface, record.position.xz()),
-			),
-			interior: false,
+impl ChosenPoiSpawn {
+	/// Local interiors keep the POI floor. Outdoor pins snap to composed terrain.
+	fn for_poi(record: &PoiRecord, surface: &DurhamSurface) -> Self {
+		Self::for_arrival(record.arrival(), surface_or_hold_at(surface, record.position.xz()))
+	}
+
+	fn for_arrival(arrival: PoiArrival, terrain_y: f32) -> Self {
+		Self {
+			position: player_position_above_surface(arrival.surface_y(terrain_y)),
+			interior: arrival.stands_on_floor(),
 		}
 	}
 }
@@ -879,6 +869,7 @@ mod tests {
 	use durham::TerrainCellLayout;
 	use layer_stack::GenerationMode;
 	use lod::hcsg::{spawn_worker, HcsgStorage};
+	use poi_intelligence::PoiSupport;
 	use world_player::WorldBaseTerrain;
 
 	#[test]
@@ -914,7 +905,8 @@ mod tests {
 		for record in records {
 			let poi = poi_intelligence::Poi::new(record.id, record.kind)
 				.with_arrival_radius(record.arrival_radius)
-				.with_salience(record.salience);
+				.with_salience(record.salience)
+				.with_support(record.support);
 			registry
 				.upsert(record.entity, poi, record.position, record.local, record.global)
 				.expect("test poi");
@@ -934,6 +926,7 @@ mod tests {
 			salience: 1.0,
 			local: true,
 			global: false,
+			support: PoiSupport::Floor,
 		}];
 		for index in 0..6u64 {
 			records.push(poi_intelligence::PoiRecord {
@@ -945,6 +938,7 @@ mod tests {
 				salience: 1.0,
 				local: true,
 				global: false,
+				support: PoiSupport::Terrain,
 			});
 		}
 		let registry = registry_from_records(&records);
@@ -977,6 +971,7 @@ mod tests {
 				salience: 0.55,
 				local: true,
 				global: false,
+				support: PoiSupport::Terrain,
 			});
 		}
 		records.push(poi_intelligence::PoiRecord {
@@ -988,6 +983,7 @@ mod tests {
 			salience: 1.25,
 			local: false,
 			global: true,
+			support: PoiSupport::Terrain,
 		});
 		let registry = registry_from_records(&records);
 		let ids = records.iter().map(|record| record.id).collect::<Vec<_>>();
@@ -1407,7 +1403,9 @@ mod tests {
 		let floor = Vec3::new(80.0, 12.0, 5.0);
 		world.resource_mut::<PoiRegistry>().upsert(
 			poi,
-			poi_intelligence::Poi::new(PoiId(1), LOCAL_POI).with_arrival_radius(4.0),
+			poi_intelligence::Poi::new(PoiId(1), LOCAL_POI)
+				.with_arrival_radius(4.0)
+				.with_support(PoiSupport::Floor),
 			floor,
 			true,
 			false,
@@ -1432,24 +1430,42 @@ mod tests {
 	}
 
 	#[test]
-	fn local_rooms_are_interior_and_urban_pins_are_not() {
-		let room = PoiRecord {
-			id: PoiId(1),
-			entity: Entity::from_bits(1),
-			kind: LOCAL_POI,
-			position: Vec3::new(8.0, 12.0, 3.0),
-			arrival_radius: 4.0,
-			salience: 1.0,
-			local: true,
-			global: false,
-		};
-		let lounge = PoiRecord { kind: SALOON_POI, ..room };
-		let urban = PoiRecord { kind: URBAN_POI, ..room };
-		let grove = PoiRecord { kind: VEGETATION_POI, local: false, global: true, ..room };
-		assert!(is_interior_building_poi(&room));
-		assert!(is_interior_building_poi(&lounge));
-		assert!(!is_interior_building_poi(&urban));
-		assert!(!is_interior_building_poi(&grove));
+	fn arrival_support_not_kind_decides_the_spawn_floor() {
+		let pin = Vec3::new(8.0, 12.0, 3.0);
+		let terrain_y = 40.0;
+		let floor = ChosenPoiSpawn::for_arrival(PoiArrival::floor(pin, 4.0), terrain_y);
+		assert_eq!(floor.position, player_position_above_surface(pin));
+		assert!(floor.interior);
+		let outdoor = ChosenPoiSpawn::for_arrival(PoiArrival::terrain(pin, 4.0), terrain_y);
+		assert_eq!(outdoor.position, player_position_above_surface(Vec3::new(8.0, 40.0, 3.0)));
+		assert!(!outdoor.interior);
+	}
+
+	#[test]
+	fn local_kind_without_floor_support_stays_outdoor() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2);
+		let poi = world.spawn_empty().id();
+		world.resource_mut::<PoiRegistry>().upsert(
+			poi,
+			poi_intelligence::Poi::new(PoiId(1), LOCAL_POI).with_arrival_radius(4.0),
+			Vec3::new(80.0, 12.0, 5.0),
+			true,
+			false,
+		)?;
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.write_message(PlayerChoseRespawnPoi { poi: Some(PoiId(1)) });
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let mut bodies =
+			world.query_filtered::<(&Transform, Has<OffTerrainAnchor>), With<VegetationPlayer>>();
+		let (body, anchored) = bodies.single(&world)?;
+		assert!(!anchored, "kind no longer implies a floor");
+		assert_ne!(body.translation.y, player_position_above_surface(Vec3::new(80.0, 12.0, 5.0)).y);
+		Ok(())
 	}
 
 	#[test]

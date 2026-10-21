@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use movement_intelligence::MovementLocation;
 
 use crate::hash::{mix, unit_f32};
-use crate::{NearbyFallback, NearbyQuery, PoiId, PoiInterests, PoiRegistry};
+use crate::{NearbyFallback, NearbyQuery, PoiId, PoiInterests, PoiRegistry, PoiSupport};
 
 const DISK_DISTANCE_SALT: u64 = 0x736f_6d65_706c_6179;
 const DISK_ANGLE_SALT: u64 = 0x6572_5f72_6573_7061;
@@ -60,6 +60,14 @@ impl ArrivalDisk {
 pub struct NearbyPlace {
 	pub position: Vec3,
 	pub poi: Option<PoiId>,
+	pub support: PoiSupport,
+}
+
+impl NearbyPlace {
+	/// Outdoor fallback ring or plant offset with no pin.
+	pub fn outdoor(position: Vec3) -> Self {
+		Self { position, poi: None, support: PoiSupport::Terrain }
+	}
 }
 
 /// Choose a nearby POI disk, or a fallback ring around `center`.
@@ -99,10 +107,9 @@ pub fn place_nearby_among(
 		Some(poi) => NearbyPlace {
 			position: ArrivalDisk::new(poi.position, poi.arrival_radius).offset(seed),
 			poi: Some(poi.id),
+			support: poi.support,
 		},
-		None => {
-			NearbyPlace { position: offset_in_fallback_ring(center, seed, fallback), poi: None }
-		}
+		None => NearbyPlace::outdoor(offset_in_fallback_ring(center, seed, fallback)),
 	};
 	placed.clear_of(center, occupied, min_separation, seed)
 }
@@ -120,7 +127,7 @@ impl NearbyPlace {
 				+ polar_xz(radius, mix(seed ^ DISK_ANGLE_SALT.wrapping_add(attempt as u64 + 1)));
 			let candidate = Vec3::new(candidate.x, self.position.y, candidate.z);
 			if Self::separated(candidate, occupied, min_separation) {
-				return Self { position: candidate, poi: self.poi };
+				return Self { position: candidate, ..self };
 			}
 		}
 		self.push_off_nearest(occupied, min_separation, seed)
@@ -152,7 +159,7 @@ impl NearbyPlace {
 				self.position.y,
 				other.z + dir.y * min_separation,
 			),
-			poi: self.poi,
+			..self
 		}
 	}
 }
@@ -212,7 +219,7 @@ fn polar_xz(distance: f32, angle_seed: u64) -> Vec3 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::{Poi, PoiInterest, PoiKind, DEFAULT_NEARBY_RADIUS};
+	use crate::{Poi, PoiInterest, PoiKind, PoiSupport, DEFAULT_NEARBY_RADIUS};
 
 	const CAMP: PoiKind = PoiKind::new("test/place-camp");
 
@@ -232,6 +239,7 @@ mod tests {
 		assert!((8.0 - 1e-4..=16.0 + 1e-4).contains(&distance));
 		assert_eq!(placed.position.y, center.y);
 		assert!(placed.poi.is_none());
+		assert_eq!(placed.support, PoiSupport::Terrain);
 	}
 
 	#[test]
@@ -270,6 +278,34 @@ mod tests {
 		assert_eq!(placed.poi, Some(PoiId(11)));
 		assert!((placed.position.xz() - Vec2::X * 20.0).length() <= ArrivalDisk::PLANT_MIN + 1e-4);
 		assert_eq!(placed.position.y, 0.0);
+		assert_eq!(placed.support, PoiSupport::Terrain);
+		Ok(())
+	}
+
+	#[test]
+	fn nearby_poi_keeps_floor_support() -> anyhow::Result<()> {
+		let mut registry = PoiRegistry::default();
+		registry.upsert(
+			Entity::from_bits(11),
+			Poi::new(PoiId(11), CAMP)
+				.with_arrival_radius(8.0)
+				.with_support(PoiSupport::Floor),
+			Vec3::new(20.0, 12.0, 0.0),
+			true,
+			false,
+		)?;
+		let interests = PoiInterests::new([PoiInterest::new(CAMP, 1.0)]);
+		let placed = registry.place_nearby(
+			Vec3::ZERO,
+			NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),
+			&interests,
+			None,
+			42,
+			NearbyFallback::new(8.0, 16.0),
+		);
+		assert_eq!(placed.poi, Some(PoiId(11)));
+		assert_eq!(placed.support, PoiSupport::Floor);
+		assert_eq!(placed.position.y, 12.0);
 		Ok(())
 	}
 

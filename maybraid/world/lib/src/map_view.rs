@@ -1916,6 +1916,7 @@ mod tests {
 	use game_commands::command::TextEntryFocus;
 	use maybraid_controllers_core::InputRouter;
 	use player::CameraFollow;
+	use poi_intelligence::PoiSupport;
 
 	fn write_toggle(world: &mut World) {
 		world.write_message(CharacterIntent::ToggleMap);
@@ -2092,6 +2093,7 @@ mod tests {
 			salience: 1.0,
 			local: true,
 			global: false,
+			support: PoiSupport::Terrain,
 		}
 	}
 
@@ -2125,6 +2127,7 @@ mod tests {
 			salience: 1.0,
 			local: true,
 			global: false,
+			support: PoiSupport::Floor,
 		};
 		let overlay = LanguageOverlay {
 			names: vec![

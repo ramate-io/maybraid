@@ -37,6 +37,9 @@ pub struct DevelopmentPlace {
 	pub key: NameKey,
 	pub place: DiscoverablePlace,
 	pub xz: Vec2,
+	/// Authored floor / host height at the pin. Arrival uses this Y, not the
+	/// development AABB midpoint, so stacked storeys keep their floor.
+	pub y: f32,
 	/// For a room, the index of its building's place.
 	pub building: Option<usize>,
 }
@@ -71,10 +74,12 @@ impl<W> DevelopmentPlaces<W> {
 			let transform = host.transform();
 			let building = host.discoverable_place().map(|place| {
 				let local = host.place_local_id();
+				let world = transform.transform_point(host.local_bounds().center().into());
 				push(DevelopmentPlace {
 					key: NameKey::Place { host: development, local },
 					place: place.with_identity(development, local),
-					xz: transform.transform_point(host.local_bounds().center().into()).xz(),
+					xz: world.xz(),
+					y: world.y,
 					building: None,
 				})
 			});
@@ -83,10 +88,12 @@ impl<W> DevelopmentPlaces<W> {
 					continue;
 				};
 				let local = local_place_id(&node);
+				let world = transform.transform_point(node.placement.translation);
 				push(DevelopmentPlace {
 					key: NameKey::Place { host: development, local },
 					place: place.with_identity(development, local),
-					xz: transform.transform_point(node.placement.translation).xz(),
+					xz: world.xz(),
+					y: world.y,
 					building,
 				});
 			}

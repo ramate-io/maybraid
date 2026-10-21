@@ -5,6 +5,7 @@ use characters::LocomotionCapsule;
 use durham::DurhamSurface;
 use mob_intelligence::MobSlot;
 use mob_scenes::MobSceneSystems;
+use poi_intelligence::PoiSupport;
 
 pub(crate) struct SpawnSurfacePlugin;
 
@@ -21,13 +22,17 @@ impl Plugin for SpawnSurfacePlugin {
 
 /// POI respawn copies registry Y and a small capsule bump. When that Y is
 /// stale or zero, the body sits under composed ground. Lift only — already
-/// standing members keep their pose.
+/// standing members keep their pose. Floor-supported interiors skip the lift
+/// so composed terrain does not pull them out of the storey.
 fn lift_new_mob_members_above_composed(
 	surface: DurhamSurface,
-	mut members: Query<&mut Transform, Added<MobSlot>>,
+	mut members: Query<(&mut Transform, Option<&PoiSupport>), Added<MobSlot>>,
 ) {
 	let clearance = LocomotionCapsule::HUMANOID.spawn_height();
-	for mut transform in &mut members {
+	for (mut transform, support) in &mut members {
+		if support.is_some_and(|support| support.stands_on_floor()) {
+			continue;
+		}
 		transform.translation =
 			surface.lift_origin_above_composed(transform.translation, clearance);
 	}
@@ -75,6 +80,23 @@ mod tests {
 		assert_eq!(raised.xz(), Vec2::new(8.0, 8.0));
 		assert!((raised.y - (ground + LocomotionCapsule::HUMANOID.spawn_height())).abs() < 1e-4);
 		assert!(raised.y > 4.0);
+		Ok(())
+	}
+
+	#[test]
+	fn floor_supported_members_keep_the_authored_pose() -> anyhow::Result<()> {
+		let mut world = surface_world(true);
+		let pose = Vec3::new(8.0, 4.0, 8.0);
+		let member = world
+			.spawn((Transform::from_translation(pose), MobSlot(0), PoiSupport::Floor))
+			.id();
+		world
+			.run_system_once(lift_new_mob_members_above_composed)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(
+			world.get::<Transform>(member).map(|transform| transform.translation),
+			Some(pose)
+		);
 		Ok(())
 	}
 
