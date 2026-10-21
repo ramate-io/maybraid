@@ -16,7 +16,9 @@ pub use cache::{
 	fill_lod_cull_produce_cache, LodCullProduceCache, LodSceneCullAabb,
 	LodSceneCullProduceFillPlugin,
 };
-pub use cursor::{LodCullProduceCadence, LodCullRegionCursor};
+pub use cursor::{
+	LodCullAabbThisTick, LodCullProduceCadence, LodCullProduceClock, LodCullRegionCursor,
+};
 pub use enqueue::{
 	produce_lod_cull_for_region, produce_lod_cull_for_region_erased, LodSceneRegionCullPlugin,
 };
@@ -27,6 +29,6 @@ pub use markers::{
 };
 pub use open_lattice::OpenLattice;
 pub use produce::{
-	produce_lod_cull_regions, LodCullRegions, LodCullRegionsStatus, LodSceneCullRegion,
-	LodSceneCullRegionPlugin,
+	produce_lod_cull_regions, tick_lod_cull_produce_clock, LodCullRegions, LodCullRegionsStatus,
+	LodSceneCullRegion, LodSceneCullRegionPlugin,
 };
