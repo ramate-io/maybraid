@@ -1,29 +1,29 @@
-//! Support and clearance against actual collider geometry.
+//! Bounded downward shape cast + standing-capsule clearance.
 //!
-//! AABBs are not used as occupancy. A downward shape cast proves a floor;
-//! a capsule intersection at the standing pose proves clearance. The
-//! supporting surface is excluded from the obstruction set.
+//! Interior and outdoor share this probe. Generated heights define the
+//! search column; collider geometry determines the accepted pose. The
+//! first ineligible hit fails — the cast does not punch through a wall
+//! or roof just because it is unsuitable for standing.
 
 use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
+use characters::LocomotionCapsule;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_spawns_player::SpawnFailureReason;
-use world_player::player_position_above_surface;
 
 use crate::pending::PlacementWork;
-use crate::request::{ActorClearance, PlacementPolicy};
-use crate::support::SupportReadiness;
-use crate::terrain::PlacementPose;
+use crate::request::{PlacementPolicy, PlacementSupportHit};
+use crate::support::{column_presentation_ready, SupportReadiness};
+use crate::terrain::{PlacementPose, PlacementSearch};
 
-/// Interior authored floors must be hit within this vertical window.
-pub const INTERIOR_FLOOR_TOLERANCE: f32 = 1.25;
-const OUTDOOR_CAST_DISTANCE: f32 = 64.0;
-const SUPPORT_PROBE_RADIUS: f32 = 0.25;
+const MAX_HITS: u32 = 8;
+const PROBE_HALF_HEIGHT: f32 = 0.02;
+const START_LIFT: f32 = 0.05;
 
 #[derive(Resource, Default)]
 struct PlacementPhysics;
 
-/// Observe each pending pose with [`SpatialQuery`]. Idempotent. Requires
+/// Observe each pending column with [`SpatialQuery`]. Idempotent. Requires
 /// `PhysicsPlugins` so the collider tree exists.
 pub fn register_placement_physics(app: &mut App) {
 	if app.world().contains_resource::<PlacementPhysics>() {
@@ -37,122 +37,117 @@ pub fn register_placement_physics(app: &mut App) {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum ProbeOutcome {
 	Waiting,
-	Ready(PlacementPose),
-	Blocked,
+	Ready { pose: PlacementPose, support: Option<PlacementSupportHit> },
+	Failed(SpawnFailureReason),
 }
 
-/// Downward support + standing-capsule clearance for every pending pose.
+/// Downward support + standing-capsule clearance for every pending column.
 pub fn observe_placement_physics(spatial: SpatialQuery, mut work: ResMut<PlacementWork>) {
 	let filter = PhysicsInteractionLayer::Fixed.query_filter();
 	for pending in work.pending_mut() {
-		let Some(pose) = pending.pose else {
-			continue;
+		match probe_search(&spatial, &filter, pending.search) {
+			ProbeOutcome::Waiting => pending.observe(SupportReadiness::waiting()),
+			ProbeOutcome::Ready { pose, support } => pending.accept(pose, support),
+			ProbeOutcome::Failed(reason) => pending.fail(reason),
+		}
+	}
+}
+
+fn probe_search(
+	spatial: &SpatialQuery,
+	filter: &SpatialQueryFilter,
+	search: PlacementSearch,
+) -> ProbeOutcome {
+	if !search.bounds_valid() {
+		return ProbeOutcome::Failed(SpawnFailureReason::InvalidBounds);
+	}
+	if search.policy == PlacementPolicy::Airborne {
+		let pose = PlacementPose::new(
+			Vec3::new(search.xz.x, search.max_surface_y, search.xz.y),
+			search.policy,
+			search.hull,
+		);
+		return if clearance_blocked(spatial, filter, pose.position, search.hull, None) {
+			ProbeOutcome::Failed(SpawnFailureReason::Clearance)
+		} else {
+			ProbeOutcome::Ready { pose, support: None }
 		};
-		match probe_pose(&spatial, &filter, pose) {
-			ProbeOutcome::Waiting => pending.observe(SupportReadiness::new(false, false)),
-			ProbeOutcome::Ready(next) => {
-				pending.pose = Some(next);
-				pending.observe(SupportReadiness::new(true, true));
-			}
-			ProbeOutcome::Blocked => pending.fail(SpawnFailureReason::Clearance),
-		}
 	}
+	if !column_presentation_ready(spatial, filter, search) {
+		return ProbeOutcome::Waiting;
+	}
+	cast_column(spatial, filter, search)
 }
 
-fn probe_pose(
+fn cast_column(
 	spatial: &SpatialQuery,
 	filter: &SpatialQueryFilter,
-	pose: PlacementPose,
+	search: PlacementSearch,
 ) -> ProbeOutcome {
-	match pose.policy {
-		PlacementPolicy::Airborne => {
-			if clearance_blocked(spatial, filter, pose.position, pose.clearance, None) {
-				ProbeOutcome::Blocked
-			} else {
-				ProbeOutcome::Ready(pose)
-			}
-		}
-		PlacementPolicy::OutdoorGround => {
-			match find_support(spatial, filter, pose.position, OUTDOOR_CAST_DISTANCE) {
-				None => occupancy_or_wait(spatial, filter, pose),
-				Some(support) => finalize_standing(spatial, filter, pose, support),
-			}
-		}
-		PlacementPolicy::InteriorFloor => {
-			let authored = pose.position - Vec3::Y * pose.clearance.surface_lift();
-			let origin = authored + Vec3::Y * 0.45;
-			match find_support(spatial, filter, origin, INTERIOR_FLOOR_TOLERANCE + 0.5) {
-				None => occupancy_or_wait(spatial, filter, pose),
-				Some(support) => {
-					if (authored.y - support.point.y).abs() > INTERIOR_FLOOR_TOLERANCE {
-						occupancy_or_wait(spatial, filter, pose)
-					} else {
-						finalize_standing(spatial, filter, pose, support)
-					}
-				}
-			}
-		}
+	let origin = support_origin(search);
+	if start_overlaps(spatial, filter, origin, search.hull) {
+		return ProbeOutcome::Failed(SpawnFailureReason::Clearance);
 	}
-}
-
-fn occupancy_or_wait(
-	spatial: &SpatialQuery,
-	filter: &SpatialQueryFilter,
-	pose: PlacementPose,
-) -> ProbeOutcome {
-	if clearance_blocked(spatial, filter, pose.position, pose.clearance, None) {
-		ProbeOutcome::Blocked
-	} else {
-		ProbeOutcome::Waiting
-	}
-}
-
-fn finalize_standing(
-	spatial: &SpatialQuery,
-	filter: &SpatialQueryFilter,
-	mut pose: PlacementPose,
-	support: SupportHit,
-) -> ProbeOutcome {
-	pose.position = player_position_above_surface(support.point);
-	if clearance_blocked(spatial, filter, pose.position, pose.clearance, Some(support.entity)) {
-		ProbeOutcome::Blocked
-	} else {
-		ProbeOutcome::Ready(pose)
-	}
-}
-
-#[derive(Clone, Copy, Debug)]
-struct SupportHit {
-	entity: Entity,
-	point: Vec3,
-}
-
-fn find_support(
-	spatial: &SpatialQuery,
-	filter: &SpatialQueryFilter,
-	standing: Vec3,
-	max_distance: f32,
-) -> Option<SupportHit> {
-	let probe = Collider::cylinder(SUPPORT_PROBE_RADIUS, 0.04);
-	let config = ShapeCastConfig::from_max_distance(max_distance);
+	let probe = support_probe(search.hull);
+	let config = ShapeCastConfig::from_max_distance(search.cast_distance().max(0.1));
 	let mut hits =
-		spatial.shape_hits(&probe, standing, Quat::IDENTITY, Dir3::NEG_Y, 8, &config, filter);
+		spatial.shape_hits(&probe, origin, Quat::IDENTITY, Dir3::NEG_Y, MAX_HITS, &config, filter);
 	hits.sort_by(|left, right| left.distance.total_cmp(&right.distance));
-	hits.into_iter()
-		.find(|hit| hit.normal1.y > 0.55)
-		.map(|hit| SupportHit { entity: hit.entity, point: hit.point1 })
+	let Some(hit) = hits.into_iter().next() else {
+		return ProbeOutcome::Failed(SpawnFailureReason::NoEligibleSupport);
+	};
+	if !search.support.accepts_normal(hit.normal1) || !search.contains_surface(hit.point1.y) {
+		return ProbeOutcome::Failed(if search.support.accepts_normal(hit.normal1) {
+			SpawnFailureReason::NoEligibleSupport
+		} else {
+			SpawnFailureReason::Clearance
+		});
+	}
+	let standing = search.standing_at(hit.point1.y);
+	if (standing.xz() - search.xz).length() > 1e-3 {
+		return ProbeOutcome::Failed(SpawnFailureReason::Placement);
+	}
+	if clearance_blocked(spatial, filter, standing, search.hull, Some(hit.entity)) {
+		return ProbeOutcome::Failed(SpawnFailureReason::Clearance);
+	}
+	ProbeOutcome::Ready {
+		pose: PlacementPose::new(standing, search.policy, search.hull),
+		support: Some(PlacementSupportHit::new(hit.entity, hit.point1, hit.normal1)),
+	}
+}
+
+fn support_origin(search: PlacementSearch) -> Vec3 {
+	Vec3::new(search.xz.x, search.max_surface_y + START_LIFT, search.xz.y)
+}
+
+fn start_overlaps(
+	spatial: &SpatialQuery,
+	filter: &SpatialQueryFilter,
+	origin: Vec3,
+	hull: LocomotionCapsule,
+) -> bool {
+	!spatial
+		.shape_intersections(&support_probe(hull), origin, Quat::IDENTITY, filter)
+		.is_empty()
+}
+
+fn support_probe(hull: LocomotionCapsule) -> Collider {
+	Collider::cylinder((hull.radius * 0.5).max(0.08), PROBE_HALF_HEIGHT * 2.0)
+}
+
+fn hull_collider(hull: LocomotionCapsule) -> Collider {
+	Collider::capsule(hull.radius.max(0.01), hull.length.max(0.01))
 }
 
 fn clearance_blocked(
 	spatial: &SpatialQuery,
 	filter: &SpatialQueryFilter,
 	standing: Vec3,
-	clearance: ActorClearance,
+	hull: LocomotionCapsule,
 	support: Option<Entity>,
 ) -> bool {
-	let capsule = Collider::capsule(ActorClearance::RADIUS, clearance.height.max(0.05));
 	spatial
-		.shape_intersections(&capsule, standing, Quat::IDENTITY, filter)
+		.shape_intersections(&hull_collider(hull), standing, Quat::IDENTITY, filter)
 		.into_iter()
 		.any(|entity| support != Some(entity))
 }
@@ -162,15 +157,20 @@ mod tests {
 	use super::*;
 	use avian3d::prelude::{Collider, PhysicsPlugins, RigidBody};
 	use maybraid_spawns_player::{
-		ArrivalDestination, SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId,
+		ArrivalDestination, PlacementAttempt, SpawnIdentity, SpawnOwner, SpawnRequestId,
+		SpawnSessionId,
 	};
 
 	use crate::pending::PendingPlacement;
-	use crate::request::{PlacementFailed, PlacementReady};
-	use crate::{register_placement_physics, PlacementPolicy, PlacementWork};
+	use crate::request::{PlacementFailed, PlacementReady, SupportPolicy};
+	use crate::{register_placement_physics, PlacementWork};
 
 	fn identity() -> SpawnIdentity {
 		SpawnIdentity::new(SpawnRequestId::new(1), SpawnOwner::new(SpawnSessionId::new(1)))
+	}
+
+	fn attempt() -> PlacementAttempt {
+		PlacementAttempt::new(1)
 	}
 
 	fn physics_app() -> App {
@@ -198,11 +198,12 @@ mod tests {
 			.id()
 	}
 
-	fn insert_pose(app: &mut App, pose: PlacementPose) {
+	fn insert_search(app: &mut App, search: PlacementSearch) {
 		app.world_mut().resource_mut::<PlacementWork>().insert(PendingPlacement::new(
 			identity(),
+			attempt(),
 			ArrivalDestination::Fallback,
-			pose,
+			search,
 		));
 	}
 
@@ -214,16 +215,12 @@ mod tests {
 		(ready, failed)
 	}
 
-	fn standing_above(floor: Vec3) -> Vec3 {
-		player_position_above_surface(floor)
-	}
-
 	#[test]
-	fn missing_collider_never_becomes_ready() {
+	fn missing_collision_presentation_keeps_the_request() {
 		let mut app = physics_app();
-		insert_pose(
+		insert_search(
 			&mut app,
-			PlacementPose::interior_at(Vec3::new(0.0, 4.0, 0.0), ActorClearance::HUMANOID),
+			PlacementSearch::interior_at(Vec3::new(0.0, 4.0, 0.0), LocomotionCapsule::HUMANOID),
 		);
 		let (ready, failed) = drain_outcomes(&mut app);
 		assert!(ready.is_empty());
@@ -232,14 +229,71 @@ mod tests {
 	}
 
 	#[test]
+	fn lower_terrain_is_not_accepted_while_the_floor_is_pending() {
+		let mut app = physics_app();
+		spawn_fixed(
+			&mut app,
+			Transform::from_xyz(0.0, 0.0, 0.0),
+			Collider::cuboid(20.0, 0.2, 20.0),
+		);
+		insert_search(
+			&mut app,
+			PlacementSearch::interior_at(Vec3::new(0.0, 12.0, 0.0), LocomotionCapsule::HUMANOID),
+		);
+		let (ready, failed) = drain_outcomes(&mut app);
+		assert!(ready.is_empty(), "terrain under the storey is not the interior floor: {ready:?}");
+		assert!(failed.is_empty());
+		assert_eq!(app.world().resource::<PlacementWork>().len(), 1);
+	}
+
+	#[test]
+	fn outdoor_lands_on_the_collider_when_generated_height_differs() {
+		let mut app = physics_app();
+		spawn_fixed(&mut app, Transform::from_xyz(0.0, 4.0, 0.0), Collider::cuboid(8.0, 0.2, 8.0));
+		insert_search(
+			&mut app,
+			PlacementSearch::outdoor_hint(Vec2::ZERO, 0.0, LocomotionCapsule::HUMANOID),
+		);
+		let (ready, failed) = drain_outcomes(&mut app);
+		assert!(failed.is_empty(), "{failed:?}");
+		assert_eq!(ready.len(), 1);
+		let expected = LocomotionCapsule::HUMANOID.spawn_height() + 4.2;
+		assert!(
+			(ready[0].position.y - expected).abs() < 0.35,
+			"accepted {} want ~{expected}",
+			ready[0].position.y
+		);
+		assert_eq!(ready[0].position.xz(), Vec2::ZERO);
+		assert!(ready[0].matches_attempt(identity(), attempt()));
+	}
+
+	#[test]
+	fn interior_uses_the_same_probe_and_respects_the_upper_bound() {
+		let mut app = physics_app();
+		spawn_fixed(&mut app, Transform::from_xyz(0.0, 12.0, 0.0), Collider::cuboid(6.0, 0.2, 6.0));
+		spawn_fixed(&mut app, Transform::from_xyz(0.0, 16.0, 0.0), Collider::cuboid(6.0, 0.2, 6.0));
+		insert_search(
+			&mut app,
+			PlacementSearch::interior_at(Vec3::new(0.0, 12.0, 0.0), LocomotionCapsule::HUMANOID),
+		);
+		let (ready, failed) = drain_outcomes(&mut app);
+		assert!(failed.is_empty(), "{failed:?}");
+		assert_eq!(ready.len(), 1);
+		assert!(
+			(ready[0].position.y - (12.2 + LocomotionCapsule::HUMANOID.spawn_height())).abs()
+				< 0.35
+		);
+		assert!(ready[0].position.y < 15.0, "must not stand on the storey above");
+	}
+
+	#[test]
 	fn interior_void_is_not_ready() {
 		let mut app = physics_app();
-		// Ring floor: the authored point sits in the stairwell hole.
 		spawn_fixed(&mut app, Transform::from_xyz(-3.0, 4.0, 0.0), Collider::cuboid(2.0, 0.2, 6.0));
 		spawn_fixed(&mut app, Transform::from_xyz(3.0, 4.0, 0.0), Collider::cuboid(2.0, 0.2, 6.0));
-		insert_pose(
+		insert_search(
 			&mut app,
-			PlacementPose::interior_at(Vec3::new(0.0, 4.0, 0.0), ActorClearance::HUMANOID),
+			PlacementSearch::interior_at(Vec3::new(0.0, 4.0, 0.0), LocomotionCapsule::HUMANOID),
 		);
 		let (ready, failed) = drain_outcomes(&mut app);
 		assert!(ready.is_empty(), "a hole inside the building envelope is not a floor");
@@ -251,9 +305,28 @@ mod tests {
 		let mut app = physics_app();
 		spawn_fixed(&mut app, Transform::from_xyz(0.0, 0.0, 0.0), Collider::cuboid(8.0, 0.2, 8.0));
 		spawn_fixed(&mut app, Transform::from_xyz(0.0, 1.6, 0.0), Collider::cuboid(8.0, 0.15, 8.0));
-		insert_pose(&mut app, PlacementPose::interior_at(Vec3::ZERO, ActorClearance::HUMANOID));
+		insert_search(
+			&mut app,
+			PlacementSearch::interior_at(Vec3::ZERO, LocomotionCapsule::HUMANOID),
+		);
 		let (ready, failed) = drain_outcomes(&mut app);
 		assert!(ready.is_empty());
+		assert_eq!(failed.len(), 1);
+		assert_eq!(failed[0].reason, SpawnFailureReason::Clearance);
+	}
+
+	#[test]
+	fn a_wall_in_the_column_fails_instead_of_punching_through() {
+		let mut app = physics_app();
+		spawn_fixed(&mut app, Transform::from_xyz(0.0, 0.0, 0.0), Collider::cuboid(8.0, 0.2, 8.0));
+		// Offset so the support disk hits the floor and the standing hull does not.
+		spawn_fixed(&mut app, Transform::from_xyz(0.5, 1.2, 0.0), Collider::cuboid(0.2, 1.2, 2.0));
+		insert_search(
+			&mut app,
+			PlacementSearch::outdoor_hint(Vec2::ZERO, 0.0, LocomotionCapsule::HUMANOID),
+		);
+		let (ready, failed) = drain_outcomes(&mut app);
+		assert!(ready.is_empty(), "must not release a capsule inside the wall: {ready:?}");
 		assert_eq!(failed.len(), 1);
 		assert_eq!(failed[0].reason, SpawnFailureReason::Clearance);
 	}
@@ -266,79 +339,85 @@ mod tests {
 			Transform::from_xyz(0.0, 0.0, 0.0),
 			Collider::cuboid(20.0, 0.2, 20.0),
 		);
-		// Thin wall rotated 45°. Its unrotated AABB covers the origin; the
-		// actual slab does not.
 		spawn_fixed(
 			&mut app,
 			Transform {
-				translation: Vec3::new(4.0, 2.0, 4.0),
+				translation: Vec3::new(4.0, 10.0, 4.0),
 				rotation: Quat::from_rotation_y(std::f32::consts::FRAC_PI_4),
 				scale: Vec3::ONE,
 			},
-			Collider::cuboid(0.3, 4.0, 8.0),
+			Collider::cuboid(0.3, 12.0, 8.0),
 		);
-		insert_pose(
+		insert_search(
 			&mut app,
-			PlacementPose {
-				position: standing_above(Vec3::ZERO),
-				policy: PlacementPolicy::OutdoorGround,
-				clearance: ActorClearance::HUMANOID,
-			},
+			PlacementSearch::outdoor_hint(Vec2::ZERO, 0.0, LocomotionCapsule::HUMANOID),
 		);
 		let (ready, failed) = drain_outcomes(&mut app);
 		assert!(failed.is_empty(), "AABB overlap is not occupancy: {failed:?}");
 		assert_eq!(ready.len(), 1, "{ready:?}");
+	}
 
-		insert_pose(
+	#[test]
+	fn a_narrow_opening_fails_the_configured_capsule() {
+		let mut app = physics_app();
+		spawn_fixed(&mut app, Transform::from_xyz(0.0, 0.0, 0.0), Collider::cuboid(8.0, 0.2, 8.0));
+		spawn_fixed(&mut app, Transform::from_xyz(-0.7, 1.2, 0.0), Collider::cuboid(0.2, 1.2, 2.0));
+		spawn_fixed(&mut app, Transform::from_xyz(0.7, 1.2, 0.0), Collider::cuboid(0.2, 1.2, 2.0));
+		insert_search(
 			&mut app,
-			PlacementPose {
-				position: standing_above(Vec3::new(4.0, 0.0, 4.0)),
-				policy: PlacementPolicy::OutdoorGround,
-				clearance: ActorClearance::HUMANOID,
-			},
+			PlacementSearch::outdoor_hint(Vec2::ZERO, 0.0, LocomotionCapsule::HUMANOID),
 		);
 		let (ready, failed) = drain_outcomes(&mut app);
-		assert!(ready.is_empty(), "standing in the rotated wall must fail");
+		assert!(failed.is_empty(), "stock humanoid fits the 1.0 m gap: {failed:?}");
+		assert_eq!(ready.len(), 1);
+
+		let wide = LocomotionCapsule::HUMANOID.scaled(2.0);
+		insert_search(&mut app, PlacementSearch::outdoor_hint(Vec2::ZERO, 0.0, wide));
+		let (ready, failed) = drain_outcomes(&mut app);
+		assert!(ready.is_empty(), "the configured hull does not fit: {ready:?}");
 		assert_eq!(failed.len(), 1);
 		assert_eq!(failed[0].reason, SpawnFailureReason::Clearance);
 	}
 
 	#[test]
-	fn outdoor_spot_inside_a_building_aabb_is_accepted() {
+	fn actual_capsule_dims_determine_clearance() {
 		let mut app = physics_app();
-		spawn_fixed(
+		spawn_fixed(&mut app, Transform::from_xyz(0.0, 0.0, 0.0), Collider::cuboid(8.0, 0.2, 8.0));
+		spawn_fixed(&mut app, Transform::from_xyz(0.0, 3.2, 0.0), Collider::cuboid(8.0, 0.15, 8.0));
+		insert_search(
 			&mut app,
-			Transform::from_xyz(0.0, 0.0, 0.0),
-			Collider::cuboid(20.0, 0.2, 20.0),
-		);
-		// Tall building volume whose AABB covers the origin, offset so the
-		// standing capsule does not intersect the collider.
-		spawn_fixed(&mut app, Transform::from_xyz(12.0, 8.0, 0.0), Collider::cuboid(8.0, 8.0, 8.0));
-		insert_pose(
-			&mut app,
-			PlacementPose {
-				position: standing_above(Vec3::ZERO),
-				policy: PlacementPolicy::OutdoorGround,
-				clearance: ActorClearance::HUMANOID,
-			},
+			PlacementSearch::interior_at(Vec3::ZERO, LocomotionCapsule::HUMANOID),
 		);
 		let (ready, failed) = drain_outcomes(&mut app);
-		assert!(failed.is_empty());
+		assert!(failed.is_empty(), "stock humanoid fits under a 3.2 m slab: {failed:?}");
 		assert_eq!(ready.len(), 1);
-		assert!(ready[0].support_ready);
+
+		let tall = LocomotionCapsule::HUMANOID.with_half_height(2.4);
+		insert_search(&mut app, PlacementSearch::interior_at(Vec3::ZERO, tall));
+		let (ready, failed) = drain_outcomes(&mut app);
+		assert!(ready.is_empty(), "a taller hull must fail the same opening");
+		assert_eq!(failed.len(), 1);
+		assert_eq!(failed[0].reason, SpawnFailureReason::Clearance);
 	}
 
 	#[test]
 	fn interior_floor_releases_when_the_surface_exists() {
 		let mut app = physics_app();
 		spawn_fixed(&mut app, Transform::from_xyz(0.0, 12.0, 0.0), Collider::cuboid(6.0, 0.2, 6.0));
-		insert_pose(
+		insert_search(
 			&mut app,
-			PlacementPose::interior_at(Vec3::new(0.0, 12.0, 0.0), ActorClearance::HUMANOID),
+			PlacementSearch::interior_at(Vec3::new(0.0, 12.0, 0.0), LocomotionCapsule::HUMANOID),
 		);
 		let (ready, failed) = drain_outcomes(&mut app);
 		assert!(failed.is_empty());
 		assert_eq!(ready.len(), 1);
-		assert!((ready[0].position.y - standing_above(Vec3::new(0.0, 12.0, 0.0)).y).abs() < 0.35);
+		assert!(ready[0].support_ready);
+		assert!(ready[0].support.is_some());
+	}
+
+	#[test]
+	fn unused_support_policy_is_recorded() {
+		assert_eq!(SupportPolicy::FixedUpward.accepts_normal(Vec3::Y), true);
+		assert!(!SupportPolicy::BuildingWalk.accepts_normal(Vec3::X));
 	}
 }

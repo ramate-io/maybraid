@@ -385,7 +385,10 @@ impl WorldPlayerRespawnState {
 
 	pub fn accepts_constructed(&self, identity: SpawnIdentity, attempt: PlacementAttempt) -> bool {
 		self.accepts_identity(identity)
-			&& self.pending.as_ref().is_some_and(|pending| pending.placement_attempt == attempt)
+			&& self
+				.pending
+				.as_ref()
+				.is_some_and(|pending| pending.placement_attempt == attempt)
 	}
 
 	/// Placement failed. Keep the arrival so the controller can retry,

@@ -202,15 +202,13 @@ mod tests {
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		assert!(
-			ActivatePlayerArrival::from_constructed(
-				identity,
-				attempt,
-				Entity::from_bits(3),
-				&mut state
-			)
-			.is_none()
-		);
+		assert!(ActivatePlayerArrival::from_constructed(
+			identity,
+			attempt,
+			Entity::from_bits(3),
+			&mut state
+		)
+		.is_none());
 		assert!(state.pending.is_some());
 	}
 
@@ -218,15 +216,13 @@ mod tests {
 	fn a_superseded_attempt_does_not_activate() {
 		let (mut state, identity, first) = pending_state();
 		let second = state.begin_placement(identity).expect("replacement");
-		assert!(
-			ActivatePlayerArrival::from_constructed(
-				identity,
-				first,
-				Entity::from_bits(3),
-				&mut state
-			)
-			.is_none()
-		);
+		assert!(ActivatePlayerArrival::from_constructed(
+			identity,
+			first,
+			Entity::from_bits(3),
+			&mut state
+		)
+		.is_none());
 		assert!(state.pending.is_some());
 		assert_eq!(state.pending_attempt(), Some(second));
 	}
