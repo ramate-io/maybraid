@@ -31,6 +31,10 @@ pub enum SpawnFailureReason {
 	DestinationUnresolved,
 	/// The capsule does not fit at the resolved pose.
 	Clearance,
+	/// The bounded column had no eligible supporting surface.
+	NoEligibleSupport,
+	/// Search bounds were inverted or otherwise unusable.
+	InvalidBounds,
 }
 
 /// Outcome envelope for player-arrival work. Other domains embed their own
@@ -64,7 +68,9 @@ impl SpawnOutcome {
 					| SpawnFailureReason::Construction
 					| SpawnFailureReason::SupportUnavailable
 					| SpawnFailureReason::DestinationUnresolved
-					| SpawnFailureReason::Clearance,
+					| SpawnFailureReason::Clearance
+					| SpawnFailureReason::NoEligibleSupport
+					| SpawnFailureReason::InvalidBounds,
 				..
 			}
 		)
