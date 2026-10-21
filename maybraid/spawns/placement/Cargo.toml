@@ -10,8 +10,10 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+avian3d = { workspace = true }
 bevy = { workspace = true }
 durham = { workspace = true }
+lod-avian = { workspace = true }
 maybraid-spawns-player = { workspace = true }
 poi-intelligence = { workspace = true }
 world-player = { workspace = true }

@@ -3,12 +3,14 @@
 
 pub mod pending;
 pub mod poi;
+pub mod probe;
 pub mod request;
 pub mod support;
 pub mod terrain;
 
 pub use pending::{PendingPlacement, PlacementTick, PlacementWork};
 pub use poi::interior_building_poi;
+pub use probe::{observe_placement_physics, register_placement_physics, INTERIOR_FLOOR_TOLERANCE};
 pub use request::{
 	ActorClearance, CancelPlacement, PlacementFailed, PlacementPolicy, PlacementReady,
 	ResolvePlacement,

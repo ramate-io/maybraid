@@ -3,6 +3,7 @@
 //! [`SpawnActor::realize`] calls existing player-body APIs. NPC population
 //! keeps calling `character.spawn` directly. Construction is synchronous;
 //! there is no pending-work tracker and no generic recipe framework.
+//! The player arrival controller consumes [`ArrivalActorReady`].
 
 pub mod realize;
 pub mod request;
@@ -10,7 +11,13 @@ pub mod request;
 pub use request::{ActorSpawnFailed, ActorSpawned, SpawnActor};
 
 use bevy::prelude::*;
-use maybraid_spawns_player::{ActivatePlayerArrival, WorldPlayerRespawnState};
+use maybraid_spawns_player::{ArrivalActorFailed, ArrivalActorReady};
+use world_player::CharacterLocomotion;
+
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ActorSpawnSystems {
+	Realize,
+}
 
 #[derive(Resource, Default)]
 struct ActorSpawnRuntime;
@@ -24,30 +31,29 @@ pub fn register_actor_spawn_runtime(app: &mut App) {
 		.add_message::<SpawnActor>()
 		.add_message::<ActorSpawned>()
 		.add_message::<ActorSpawnFailed>()
-		.add_message::<ActivatePlayerArrival>()
-		.add_systems(Update, complete_player_handoffs);
+		.add_systems(Update, realize_actors.in_set(ActorSpawnSystems::Realize));
 }
 
-/// Handoff consumes a matching [`ActorSpawned`]. Construction does not choose
-/// a local player; activation is exactly-once on the arrival identity.
-pub fn complete_player_handoffs(
-	mut spawned: MessageReader<ActorSpawned>,
+/// Construct requested bodies and emit the player-owned ready outcome.
+pub fn realize_actors(
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<StandardMaterial>>,
+	locomotion: Res<CharacterLocomotion>,
+	mut requests: MessageReader<SpawnActor>,
 	mut failed: MessageReader<ActorSpawnFailed>,
-	mut state: ResMut<WorldPlayerRespawnState>,
-	mut activate: MessageWriter<ActivatePlayerArrival>,
-	mut arrivals_failed: MessageWriter<maybraid_spawns_player::PlayerArrivalFailed>,
+	mut constructed: MessageWriter<ActorSpawned>,
+	mut ready: MessageWriter<ArrivalActorReady>,
+	mut arrivals_failed: MessageWriter<ArrivalActorFailed>,
 ) {
 	for failed in failed.read() {
-		if let Some(outcome) = state.note_placement_failed(failed.identity) {
-			arrivals_failed.write(outcome);
-		}
+		arrivals_failed.write(ArrivalActorFailed::new(failed.identity));
 	}
-	for spawned in spawned.read() {
-		if let Some(activation) =
-			ActivatePlayerArrival::from_constructed(spawned.identity, spawned.actor, &mut state)
-		{
-			activate.write(activation);
-		}
+	for request in requests.read() {
+		let spawned =
+			request.realize(&mut commands, &mut meshes, &mut materials, locomotion.as_ref());
+		ready.write(ArrivalActorReady::new(spawned.identity, spawned.actor));
+		constructed.write(spawned);
 	}
 }
 
@@ -63,8 +69,11 @@ impl Plugin for ActorSpawnPlugin {
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use maybraid_spawns_player::{SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
-	use world_player::{AwaitingTerrainSurface, CharacterLocomotion, OffTerrainAnchor, Player};
+	use maybraid_spawns_player::{
+		ActivatePlayerArrival, ArrivalReason, SpawnIdentity, SpawnOwner, SpawnRequestId,
+		SpawnSessionId, WorldPlayerRespawnState,
+	};
+	use world_player::{AwaitingTerrainSurface, OffTerrainAnchor, Player, RespawnOrigin};
 
 	fn identity() -> SpawnIdentity {
 		SpawnIdentity::new(SpawnRequestId::new(1), SpawnOwner::new(SpawnSessionId::new(1)))
@@ -118,35 +127,29 @@ mod tests {
 	}
 
 	#[test]
-	fn handoff_consumes_a_matching_actor_spawned() -> anyhow::Result<()> {
-		use maybraid_spawns_player::{ArrivalReason, WorldPlayerRespawnState};
-		use world_player::RespawnOrigin;
-
-		let mut world = World::new();
+	fn realize_emits_arrival_ready_without_activating() -> anyhow::Result<()> {
+		let mut world = construct_world();
 		world.init_resource::<WorldPlayerRespawnState>();
+		world.init_resource::<Messages<SpawnActor>>();
 		world.init_resource::<Messages<ActorSpawned>>();
 		world.init_resource::<Messages<ActorSpawnFailed>>();
+		world.init_resource::<Messages<ArrivalActorReady>>();
+		world.init_resource::<Messages<ArrivalActorFailed>>();
 		world.init_resource::<Messages<ActivatePlayerArrival>>();
-		world.init_resource::<Messages<maybraid_spawns_player::PlayerArrivalFailed>>();
 		let identity = world.resource_mut::<WorldPlayerRespawnState>().begin_arrival(
 			ArrivalReason::FirstSpawn { at: Vec3::ZERO },
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		world.write_message(ActorSpawned::new(identity, Entity::from_bits(7), false));
+		world.write_message(SpawnActor::player_body(identity, Vec3::Y, false));
 		world
-			.run_system_once(complete_player_handoffs)
+			.run_system_once(realize_actors)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let activations: Vec<_> =
-			world.resource_mut::<Messages<ActivatePlayerArrival>>().drain().collect();
-		assert_eq!(activations.len(), 1);
-		assert_eq!(activations[0].actor, Entity::from_bits(7));
-		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
-		world.write_message(ActorSpawned::new(identity, Entity::from_bits(8), false));
-		world
-			.run_system_once(complete_player_handoffs)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let ready: Vec<_> = world.resource_mut::<Messages<ArrivalActorReady>>().drain().collect();
+		assert_eq!(ready.len(), 1);
+		assert!(ready[0].matches(identity));
 		assert!(world.resource_mut::<Messages<ActivatePlayerArrival>>().drain().next().is_none());
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
 		Ok(())
 	}
 
