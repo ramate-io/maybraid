@@ -19,6 +19,7 @@ debug-commands = []
 layer-stack = { workspace = true }
 avian3d = { workspace = true }
 bevy = { workspace = true }
+building-physics = { workspace = true }
 chico = { workspace = true }
 vegetation-components = { workspace = true }
 clap = { workspace = true }

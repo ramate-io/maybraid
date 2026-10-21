@@ -354,9 +354,13 @@ impl WorldPlayerRespawnState {
 		if !self.accepts_identity(identity) {
 			return false;
 		}
-		if let Some(pending) = self.pending.as_mut() {
-			pending.advance(ArrivalPhase::SpawningActor);
+		let Some(pending) = self.pending.as_mut() else {
+			return false;
+		};
+		if !pending.phase.awaiting_support() {
+			return false;
 		}
+		pending.advance(ArrivalPhase::SpawningActor);
 		true
 	}
 
@@ -512,14 +516,9 @@ mod tests {
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		assert!(
-			state
-				.accept_destination(DestinationSelected::new(
-					identity,
-					ArrivalDestination::Fallback
-				))
-				.is_some()
-		);
+		assert!(state
+			.accept_destination(DestinationSelected::new(identity, ArrivalDestination::Fallback))
+			.is_some());
 		assert!(state.await_support(identity));
 		assert!(state.pending.as_ref().is_some_and(|pending| pending.phase.awaiting_support()));
 		assert!(state.accept_placement(identity));
@@ -577,11 +576,9 @@ mod tests {
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		assert!(
-			state
-				.accept_destination(DestinationSelected::new(first, ArrivalDestination::Fallback))
-				.is_none()
-		);
+		assert!(state
+			.accept_destination(DestinationSelected::new(first, ArrivalDestination::Fallback))
+			.is_none());
 		assert!(state.pending.as_ref().is_some_and(|pending| pending.phase.is_choosing()));
 	}
 }
