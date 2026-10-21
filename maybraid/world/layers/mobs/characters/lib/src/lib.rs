@@ -24,6 +24,7 @@ pub mod appearance;
 pub mod assembly;
 pub mod assets;
 pub mod components;
+pub mod concept_species;
 pub mod concepts;
 pub mod fixed;
 pub mod hosts;
@@ -43,18 +44,19 @@ pub mod species;
 pub mod terrain_pitch;
 
 pub use anim::{
-	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId,
-	AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, JabParams, JumpParams, PowerStrafeParams,
-	ThinkAgainParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams, JAB_CYCLE_SPEED,
-	JAB_DURATION_SECS,
+	apply_anim_mailbox, cue_sheet, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip,
+	AnimClipCues, AnimCueKind, AnimCueSheet, AnimId, AnimMailbox, AnimProgress, AnimRef,
+	AnimRefRoot, JabParams, JumpParams, PowerStrafeParams, ThinkAgainParams, TuckParams,
+	TuckedFlipParams, TwoFootedTuckedFlipParams, JAB_CYCLE_SPEED, JAB_DURATION_SECS,
 };
 pub use appearance::CharacterAppearance;
 pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use character_motion::{
 	apply_terrain_pitch, clamp_intelligence, draw_terrain_pitch_probes, fingerprint_humanoid_clip,
-	mailbox_apply_allows, motion_policy, sync_motion_markers, AnimateBones, AnimateEffects,
-	ApplyTerrainPitch, CharacterHeading, CharacterMotionPlugin, CharacterMotionSystems,
+	init_working_pose, mailbox_apply_allows, motion_policy, publish_anim_mailbox,
+	sync_motion_markers, AnimateBones, AnimateEffects, ApplyTerrainPitch, CharacterHeading,
+	CharacterMotionPlugin, CharacterMotionSystems, CharacterPoseOverlay, CharacterPoseSystems,
 	DrawTerrainPitchProbes, MailboxApplySet, MotionPolicy, SuspendAnimation, SuspendTerrainPitch,
 };
 pub use character_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
@@ -62,6 +64,9 @@ pub use character_shaders::CharacterShadersPlugin;
 pub use components::{
 	character_bounds, clothing_layers, CharacterComponents, CharacterRecipe, Clothed,
 	ClothingLayer, ComponentsOnly, HeadCapsule, HitCapsule, LocomotionCapsule,
+};
+pub use concept_species::{
+	ConceptSpecies, ConceptSpeciesConfig, ConceptSpeciesFamily, QUADRUPED_CONCEPT_ANIMATIONS,
 };
 pub use concepts::ConceptAnimation;
 pub use fixed::{
@@ -72,6 +77,10 @@ pub use fixed::{
 };
 pub use hosts::CharacterHostsPlugin;
 pub use layer::{Layer, Layers};
+pub use material_lib::{
+	init_character_material_caches, CharacterMaterialLib, CharacterMaterialRefPlugin,
+	StandaloneCharacterMaterialLib, StandaloneCharacterMaterialRefPlugin,
+};
 pub use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 pub use member::{
 	attach_part_node, find_member_rig, find_part_member, hide_socketed_parts,

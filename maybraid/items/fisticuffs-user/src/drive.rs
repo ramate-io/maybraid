@@ -7,6 +7,8 @@ use characters::{
 	CharacterRig, CharacterRigRole, CharacterRoot, JabParams,
 };
 use maybraid_character_controller::CharacterIntent;
+use maybraid_controllers_core::{InputRouter, InputSource};
+use maybraid_equipment::EquippedItemHandler;
 use player::{Player, PlayerLook, PlayerUse};
 
 use crate::aim::JabAim;
@@ -14,8 +16,12 @@ use crate::attack::AttackSpec;
 use crate::{FisticuffsStrike, FisticuffsUser};
 
 pub(crate) fn apply_attack_intents(
+	router: Option<Res<InputRouter>>,
 	mut intents: MessageReader<CharacterIntent>,
-	mut users: Query<&mut FisticuffsUser, (With<Player>, Without<PlayerUse>)>,
+	mut users: Query<
+		(Entity, &mut FisticuffsUser, Option<&EquippedItemHandler>),
+		(With<Player>, Without<PlayerUse>),
+	>,
 ) {
 	let mut requested = Vec::new();
 	for intent in intents.read() {
@@ -26,7 +32,16 @@ pub(crate) fn apply_attack_intents(
 	if requested.is_empty() {
 		return;
 	}
-	for mut user in &mut users {
+	let delivered = router
+		.as_ref()
+		.and_then(|router| router.delivered_actor(InputSource::local_pad()));
+	for (entity, mut user, handler) in &mut users {
+		if !handler.is_some_and(|handler| handler.is_fisticuffs()) {
+			continue;
+		}
+		if router.is_some() && !delivered.is_some_and(|actor| actor.matches(entity)) {
+			continue;
+		}
 		for spec in &requested {
 			user.state.request(*spec);
 		}
@@ -151,7 +166,10 @@ mod tests {
 	fn intents_queue_only_while_fisticuffs_is_equipped() {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins).add_message::<CharacterIntent>();
-		let player = app.world_mut().spawn((Player, FisticuffsUser::default())).id();
+		let player = app
+			.world_mut()
+			.spawn((Player, FisticuffsUser::default(), EquippedItemHandler::Fisticuffs))
+			.id();
 		app.world_mut().write_message(CharacterIntent::AttackLeft);
 		app.add_systems(Update, apply_attack_intents);
 		app.update();

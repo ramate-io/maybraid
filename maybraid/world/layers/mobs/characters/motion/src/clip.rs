@@ -5,12 +5,12 @@
 
 use bevy::prelude::*;
 use character_animations::animations::{
-	BallisticJump, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop, Jab,
-	LateralUndulation, Leap, PowerDash, PowerStrafe, QuadrupedRun, Run, Soaring, TuckProfile,
-	TuckedFlip, TwoFootedJump, Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED,
-	DEFAULT_GRAVITY, DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED,
-	DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END, THINK_AGAIN_DURATION,
-	THINK_AGAIN_SPEED,
+	BallisticJump, DorsoventralUndulation, EpiphantBray, EpiphantSleepEnter, EpiphantSleepHold,
+	EpiphantWake, FixedTuck, Flapping, FlipDirection, Gallop, Jab, LateralUndulation, Leap,
+	PowerDash, PowerStrafe, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
+	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
+	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
+	DEFAULT_SPRING_DURATION, TAKEOFF_END, THINK_AGAIN_DURATION, THINK_AGAIN_SPEED,
 };
 use character_animations::{ClipTimePolicy, SampleAddress};
 use character_rigs::Side;
@@ -28,6 +28,10 @@ pub const JAB_DURATION_SECS: f32 = 0.42;
 /// One jab cycle lasts [`JAB_DURATION_SECS`] (`1 / JAB_CYCLE_SPEED`).
 pub const JAB_CYCLE_SPEED: f32 = 1.0 / JAB_DURATION_SECS;
 const THINK_AGAIN_CYCLE_SPEED: f32 = THINK_AGAIN_SPEED;
+const EPIPHANT_BRAY_CYCLE_SPEED: f32 = 0.85;
+const EPIPHANT_SLEEP_ENTER_SPEED: f32 = 0.7;
+const EPIPHANT_SLEEP_HOLD_SPEED: f32 = 0.18;
+const EPIPHANT_WAKE_SPEED: f32 = 0.75;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
 /// One-shot leap lasts ~1.25 s so it covers the physics hang time.
@@ -60,6 +64,10 @@ pub enum AnimId {
 	Prone,
 	LateralUndulation,
 	DorsoventralUndulation,
+	EpiphantBray,
+	EpiphantSleepEnter,
+	EpiphantSleepHold,
+	EpiphantWake,
 }
 
 impl AnimId {
@@ -86,6 +94,10 @@ impl AnimId {
 			Self::Prone => 1.0,
 			Self::LateralUndulation => 1.0,
 			Self::DorsoventralUndulation => 1.0,
+			Self::EpiphantBray => EPIPHANT_BRAY_CYCLE_SPEED,
+			Self::EpiphantSleepEnter => EPIPHANT_SLEEP_ENTER_SPEED,
+			Self::EpiphantSleepHold => EPIPHANT_SLEEP_HOLD_SPEED,
+			Self::EpiphantWake => EPIPHANT_WAKE_SPEED,
 		}
 	}
 }
@@ -250,6 +262,10 @@ pub enum AnimClip {
 	Prone,
 	LateralUndulation(LateralUndulation),
 	DorsoventralUndulation(DorsoventralUndulation),
+	EpiphantBray(EpiphantBray),
+	EpiphantSleepEnter(EpiphantSleepEnter),
+	EpiphantSleepHold(EpiphantSleepHold),
+	EpiphantWake(EpiphantWake),
 }
 
 impl AnimClip {
@@ -276,6 +292,10 @@ impl AnimClip {
 			Self::Prone => AnimId::Prone,
 			Self::LateralUndulation(_) => AnimId::LateralUndulation,
 			Self::DorsoventralUndulation(_) => AnimId::DorsoventralUndulation,
+			Self::EpiphantBray(_) => AnimId::EpiphantBray,
+			Self::EpiphantSleepEnter(_) => AnimId::EpiphantSleepEnter,
+			Self::EpiphantSleepHold(_) => AnimId::EpiphantSleepHold,
+			Self::EpiphantWake(_) => AnimId::EpiphantWake,
 		}
 	}
 
@@ -409,6 +429,22 @@ impl AnimClip {
 		Self::DorsoventralUndulation(DorsoventralUndulation::default())
 	}
 
+	pub fn epiphant_bray() -> Self {
+		Self::EpiphantBray(EpiphantBray::default())
+	}
+
+	pub fn epiphant_sleep_enter() -> Self {
+		Self::EpiphantSleepEnter(EpiphantSleepEnter::default())
+	}
+
+	pub fn epiphant_sleep_hold() -> Self {
+		Self::EpiphantSleepHold(EpiphantSleepHold::default())
+	}
+
+	pub fn epiphant_wake() -> Self {
+		Self::EpiphantWake(EpiphantWake::default())
+	}
+
 	/// Content generation included in prepared-clip identity.
 	pub const fn revision(self) -> u64 {
 		0
@@ -441,6 +477,10 @@ impl AnimClip {
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
 			}
+			Self::EpiphantBray(_) | Self::EpiphantSleepEnter(_) | Self::EpiphantWake(_) => {
+				ClipTimePolicy::Clamp { duration: 1.0 }
+			}
+			Self::EpiphantSleepHold(_) => ClipTimePolicy::Cycle { duration: 1.0 },
 		}
 	}
 

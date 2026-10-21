@@ -32,14 +32,14 @@ D-Pad. F → left trigger, G → right trigger. LMB is analog UseItem (right tri
 RMB is analog focus (left trigger). Mouse buttons do not emit jab Attack intents —
 those stay on **F** / **G** and the gamepad triggers.
 
-While a menu is focused or a text modal is open, [`KeyboardPadMap::Menu`] maps
-only arrows (D-Pad), Escape (Back), and Enter (Start) so letter keys can type.
-Gamepad left stick still navigates menus.
+While a menu is focused or a text modal is open, capture derives a menu
+[`PadInputPolicy`]: only arrows (D-Pad), Escape (Back), and Enter (Start) so
+letter keys can type. Gamepad left stick still navigates menus. Console text
+capture also suppresses analog / face buttons. The key overlay remains.
 
 Gameplay systems should read sticks / buttons. `keys` is the escape hatch
-(`/`, F1, chords). [`PadGameplayEnabled`] has separate text and menu lanes;
-hosts write one lane each. The pad is off only when a lane suppresses it. The
-key overlay remains.
+(`/`, F1, chords). Hosts push or pop a capture layer; they do not write pad
+lanes. The capture resolver writes [`PadInputPolicy`].
 
 ## Schedule
 

@@ -79,11 +79,7 @@ pub fn spawn_tanz_mode_hud(mut commands: Commands) {
 					track.spawn((
 						TanzModeHudBarFill,
 						LoadingBarFill::new(0.0),
-						Node {
-							width: Val::Percent(0.0),
-							height: Val::Percent(100.0),
-							..default()
-						},
+						Node { width: Val::Percent(0.0), height: Val::Percent(100.0), ..default() },
 						BackgroundColor(TEXT_YELLOW),
 						Pickable::IGNORE,
 					));
@@ -168,7 +164,7 @@ pub fn sync_tanz_mode_hud(
 		}
 	}
 	for mut fill in &mut fills {
-		fill.progress = user.toggle.progress;
+		fill.progress = user.toggle.bar(user.mode);
 	}
 }
 

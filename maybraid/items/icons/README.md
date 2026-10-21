@@ -21,16 +21,18 @@ centered and fills the PNG. Hosts that know better can insert
 [`screen_capture::CaptureExtents`] on the capture root. Firearm silhouettes
 capture landscape so the HUD slot can match the gun's aspect.
 
-Inventory catalogs look up **shaded** handles by
+[`ItemIconCache`] stores one [`IconEntry`] per full capture key (subject, mode,
+view/framing, revision). Menu tiles and the all-icons barrier read
+Pending / Ready / Failed from those entries. Catalog and HUD helpers still
+resolve the **current** revision only, so a stale completion cannot fill a
+newer still. Inventory catalogs look up **shaded** handles by
 [`character_items::InventoryItem::icon_catalog_key`]. The skill-map HUD looks
-up **silhouette** handles from [`ItemIconCache`]. Fisticuffs and Self Lubikan
-are grayscale scene captures of the real Braidman GLB; the inventory multiplies
-those silhouettes by yellow. Fisticuffs realizes a fixed character assembly,
-stamps the live jab clip at the authored guard through
-[`pose_representative_hosts`], then keeps body triangles skinned to arm joints
-(and hides other part slots). [`CaptureFraming::FitExtents`] crops the posed
-AABB; there is no geometric fold of bind-pose vertices. Pending and failed
-captures leave those lookups empty so callers can keep a placeholder.
+up **silhouette** Ready handles. Fisticuffs and Self Lubikan are grayscale
+scene captures of the real Braidman GLB; the inventory multiplies those
+silhouettes by yellow. Fisticuffs realizes a fixed character assembly, stamps
+the live jab clip at the authored guard, then keeps body triangles skinned to
+arm joints. Pending and failed captures leave those lookups empty so callers
+can keep a placeholder. The shared capture queue still owns rendering and dedup.
 
 Home-menu load spawns [`RequestPruneItemIconCache`], which deletes PNG files
 whose names are not in any saved character inventory. Self Lubikan and
@@ -40,7 +42,7 @@ Fisticuffs cache identities are always retained.
 use item_icons::{request_inventory_icons, ItemIconPlugin};
 
 app.add_plugins(ItemIconPlugin);
-request_inventory_icons(&inventory, &mut discovery, &mut client);
+request_inventory_icons(&inventory, &mut discovery, &mut subjects, &mut client, &mut cache);
 let shaded = cache.shaded_for_key(item.icon_catalog_key()?);
 let silhouette = cache.silhouette_for_item(&item);
 ```

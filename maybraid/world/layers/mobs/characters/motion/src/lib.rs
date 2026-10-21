@@ -11,6 +11,8 @@
 
 pub mod clip;
 pub mod clip_cache;
+pub mod cue;
+pub mod mouth_emit;
 pub mod elevation;
 pub mod mailbox;
 pub mod markers;
@@ -27,6 +29,13 @@ pub use clip::{
 	ThinkAgainParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams, JAB_CYCLE_SPEED,
 	JAB_DURATION_SECS,
 };
+pub use cue::{
+	advance_anim_clip_cues, AnimClipCues, AnimCueKind, AnimCueMarker, AnimCueSheet, cue_sheet,
+	prepare_anim_clip_cues, tick_anim_clip_cues,
+};
+pub use mouth_emit::{
+	horizontal_fight_forward, sample_bray_mouth_emit, BrayMouthEmit,
+};
 pub use clip_cache::{
 	apply_evaluated_sample, clip_bone_mask, parameters_key, AnimClipCache, AnimClipCacheSettings,
 	AnimClipCacheStats, CachedClipSample, ClipParametersId, ClipParametersKey, ClipVariantKey,
@@ -38,15 +47,17 @@ pub use elevation::{
 	DrawTerrainPitchProbes,
 };
 pub use mailbox::{
-	apply_anim_mailbox, fingerprint_humanoid_clip, mailbox_apply_allows, prepare_anim_mailbox,
-	select_mailbox_applies, tick_anim_mailbox, AnimBone, AnimMailbox, AnimProgress,
-	MailboxApplyLimits, MailboxApplySet,
+	apply_anim_mailbox, fingerprint_humanoid_clip, init_working_pose, mailbox_apply_allows,
+	prepare_anim_mailbox, publish_anim_mailbox, select_mailbox_applies, tick_anim_mailbox, AnimBone,
+	AnimMailbox, AnimProgress, MailboxApplyLimits, MailboxApplySet,
 };
 pub use markers::{
 	AnimateBones, AnimateEffects, ApplyTerrainPitch, SuspendAnimation, SuspendTerrainPitch,
 };
 pub use pitch::{CharacterHeading, TerrainPitch};
-pub use plugin::{CharacterMotionPlugin, CharacterMotionSystems};
+pub use plugin::{
+	CharacterMotionPlugin, CharacterMotionSystems, CharacterPoseOverlay, CharacterPoseSystems,
+};
 pub use policy::{clamp_intelligence, motion_policy, MotionPolicy};
 pub use rig::{
 	bone_map_ready, missing_landmark_bones, BoneMap, CharacterRig, CharacterRigRole,

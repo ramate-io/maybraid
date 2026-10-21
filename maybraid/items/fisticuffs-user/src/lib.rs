@@ -3,6 +3,7 @@
 mod aim;
 mod attack;
 mod drive;
+mod runtime;
 mod sensor;
 mod sound;
 
@@ -16,6 +17,7 @@ pub use aim::{
 };
 pub use attack::{AttackKind, AttackPhase, AttackSpec, AttackState, AttackTiming, JAB_STARTUP_END};
 pub use character_rigs::Side;
+pub use runtime::{register_fisticuffs_user_runtime, teardown_fisticuffs};
 pub use sensor::{
 	character_to_world, collect_fist_hits, draw_fist_sensors, fist_collider, fist_local,
 	fist_world_rotation, resolve_fist_hits, sync_fist_sensors, FisticuffsHitSensor,
@@ -56,6 +58,7 @@ impl Plugin for FisticuffsUserPlugin {
 		if !app.is_plugin_added::<damage::DamagePlugin>() {
 			app.add_plugins(damage::DamagePlugin);
 		}
+		register_fisticuffs_user_runtime(app);
 		sound::configure_strike_audio(app);
 		app.init_resource::<FisticuffsSensorDebug>()
 			.add_message::<FisticuffsStrike>()
@@ -90,6 +93,9 @@ impl Plugin for FisticuffsUserPlugin {
 }
 
 #[cfg(test)]
+mod lifetime;
+
+#[cfg(test)]
 mod pose_tests {
 	use bevy::prelude::Vec3;
 	use character_animations::animations::{Jab, JAB_HOLD_END};
@@ -115,7 +121,7 @@ mod pose_tests {
 		pad.begin_frame();
 		pad.max_triggers(focus, fire);
 		finish(&mut pad);
-		collect(&pad, 0.5, 0.0, true, true)
+		collect(&pad, 0.5, 0.0, true, true, false)
 			.into_iter()
 			.find_map(|intent| match intent {
 				CharacterIntent::AttackLeft | CharacterIntent::AttackRight => Some(intent),
