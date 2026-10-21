@@ -6,8 +6,9 @@ the visual world:
 
 - **Player arrival** — a life must be offered, a destination chosen, and
   the picker closed without assigning input too early.
-- **Placement / support** — a downward `SpatialQuery` shape cast must
-  hit a supporting surface at *that* destination; AABBs are not occupancy.
+- **Placement / support** — one bounded vertical search column per
+  destination. Generated heights define the interval; collider geometry
+  decides the pose. Interior uses the same probe with a tighter range.
 - **Actor construction** — a body can be built without choosing a local
   player; activation is a later handoff.
 - **Projectiles / grenades** — simulation is realized first (flight,
@@ -27,11 +28,12 @@ Session start / player retirement
   → Player arrival controller          (BeginPlayerArrival)
   → Spawn-picker controller            (UI-owned MenuNav, no actor)
        DestinationSelected
-  → Placement interpreter              (ResolvePlacement → pending work)
-       SpatialQuery support + capsule clearance
+  → Placement interpreter              (ResolvePlacement → pending column)
+       wait for relevant collision presentation
+       bounded support cast + standing-capsule clearance
        PlacementReady | PlacementFailed
   → Arrival stays pending on failure   (retry / other dest / explicit fallback)
-  → Actor interpreter                  (SpawnActor → ArrivalActorReady)
+  → Actor interpreter                  (SpawnActor → ActorSpawned)
   → Player handoff controller          (emits ActivatePlayerArrival)
        → world motor / camera / picker close
 
@@ -49,9 +51,9 @@ emit per-shot success events.
 
 | Directory | Package | Owns |
 |---|---|---|
-| `spawns/player` | `maybraid-spawns-player` | Arrival identity, picker, destination, cancellation, `ArrivalActorReady` → `ActivatePlayerArrival` |
-| `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / per-destination `SpatialQuery` support |
-| `spawns/actors` | `maybraid-spawns-actors` | Thin `spawn_player_body` interpreter; emits `ArrivalActorReady` |
+| `spawns/player` | `maybraid-spawns-player` | Arrival identity, `PlacementAttempt`, picker, destination, cancellation, `ActorSpawned` → `ActivatePlayerArrival` |
+| `spawns/placement` | `maybraid-spawns-placement` | Bounded column probe + presentation wait + standing clearance |
+| `spawns/actors` | `maybraid-spawns-actors` | Thin `spawn_player_body` interpreter at the accepted pose; emits `ActorSpawned` |
 | `spawns/projectiles` | `maybraid-spawns-projectiles` | Batched flight construction + same-pass visual attach |
 | `spawns/grenades` | `maybraid-spawns-grenades` | Thrown-body construction |
 
@@ -64,10 +66,10 @@ lives in `spawns/placement`. `gameplay/lib` assembles spawn runtimes.
 | Work | When | Notes |
 |---|---|---|
 | Picker capture / confirm | `CaptureResolveSystems` | UI-owned `MenuNav`. No actor required. |
-| Placement observe | `PlacementSystems::Observe` | Downward support cast + capsule intersection. |
+| Placement observe | `PlacementSystems::Observe` | Column presentation + bounded support cast + capsule clearance. |
 | Placement poll | `PlacementSystems::Poll` | Emits `PlacementReady` / `PlacementFailed`. |
-| Arrival + construct | `PlayerLifeSet::Resolve` after poll | World writes `SpawnActor` on a matching ready. |
-| Actor realize | `ActorSpawnSystems::Realize` | Emits `ArrivalActorReady`. |
+| Arrival + construct | `PlayerLifeSet::Resolve` after poll | World writes `SpawnActor` on a matching ready + attempt. |
+| Actor realize | `ActorSpawnSystems::Realize` | Emits `ActorSpawned`. |
 | Player handoff | `PlayerHandoffSystems::Activate` | Exactly-once `ActivatePlayerArrival`. |
 | Projectile realize | `FirearmWeaponSystems::Fire` | Same-frame input → fire → flight (+ mesh when cache is present). |
 | Projectile presentation | after realize | Fallback attach + flight fizz. Headless sim skips this. |
@@ -99,19 +101,20 @@ actors.
 
 ## Invariants
 
-1. Explicit request / session identity. Stale outcomes are ignored.
+1. Explicit request / session / placement-attempt identity. Stale outcomes are ignored.
 2. Picker confirm is UI-owned `MenuNav`. No actor required.
 3. Closing the picker releases only its capture token.
 4. Placement requests persist across generation that outlives messages.
-5. Support is a downward shape cast onto an upward-facing collider at
-   the selected destination. An interior AABB or missing collider is
-   not a floor. Clearance tests the standing capsule against world
-   geometry and excludes only the supporting surface.
+5. Support is a bounded downward cast onto an upward-facing collider
+   inside the destination column. Missing presentation keeps the
+   arrival pending with no body. Clearance tests the standing
+   `LocomotionCapsule` and excludes only the supporting surface.
 6. Placement failure preserves the arrival. The controller retries,
    picks another destination, or falls back explicitly.
 7. Construction and activation are separate. Actors emit
-   `ArrivalActorReady`; the player controller emits
-   `ActivatePlayerArrival`.
+   `ActorSpawned`; the player controller emits
+   `ActivatePlayerArrival`. No live dynamic player while placement
+   is pending.
 8. Projectile / grenade interpreters do not rediscover the current
    player. Sim can run without presentation.
 9. Production and headless paths share the same decision systems.
