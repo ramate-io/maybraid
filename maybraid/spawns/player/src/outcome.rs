@@ -29,6 +29,8 @@ pub enum SpawnFailureReason {
 	SupportUnavailable,
 	/// The chosen destination is gone or no longer valid.
 	DestinationUnresolved,
+	/// The capsule does not fit at the resolved pose.
+	Clearance,
 }
 
 /// Outcome envelope for player-arrival work. Other domains embed their own
@@ -61,7 +63,8 @@ impl SpawnOutcome {
 				reason: SpawnFailureReason::Placement
 					| SpawnFailureReason::Construction
 					| SpawnFailureReason::SupportUnavailable
-					| SpawnFailureReason::DestinationUnresolved,
+					| SpawnFailureReason::DestinationUnresolved
+					| SpawnFailureReason::Clearance,
 				..
 			}
 		)
@@ -78,6 +81,7 @@ mod tests {
 		let identity =
 			SpawnIdentity::new(SpawnRequestId::new(1), SpawnOwner::new(SpawnSessionId::new(1)));
 		assert!(SpawnOutcome::failed(identity, SpawnFailureReason::Construction).retryable());
+		assert!(SpawnOutcome::failed(identity, SpawnFailureReason::Clearance).retryable());
 		assert!(!SpawnOutcome::cancelled(identity, SpawnCancelReason::SessionEnded).retryable());
 	}
 }

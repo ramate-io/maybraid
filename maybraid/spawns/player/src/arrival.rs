@@ -33,6 +33,14 @@ impl ArrivalPhase {
 	pub const fn awaiting_support(self) -> bool {
 		matches!(self, Self::AwaitingSupport)
 	}
+
+	pub const fn resolving_placement(self) -> bool {
+		matches!(self, Self::ResolvingPlacement)
+	}
+
+	pub const fn spawning_actor(self) -> bool {
+		matches!(self, Self::SpawningActor)
+	}
 }
 
 /// World-player downed duration, nearby POI scan, and replacement interests.
@@ -328,6 +336,43 @@ impl WorldPlayerRespawnState {
 		Some(selected.destination)
 	}
 
+	/// Destination is known. Construction waits for a matching placement
+	/// outcome; a later stale ready must not spawn this life.
+	pub fn await_support(&mut self, identity: SpawnIdentity) -> bool {
+		if !self.accepts_identity(identity) {
+			return false;
+		}
+		if let Some(pending) = self.pending.as_mut() {
+			pending.advance(ArrivalPhase::AwaitingSupport);
+		}
+		true
+	}
+
+	/// A matching placement-ready outcome may construct. The arrival stays
+	/// pending until handoff completes it.
+	pub fn accept_placement(&mut self, identity: SpawnIdentity) -> bool {
+		if !self.accepts_identity(identity) {
+			return false;
+		}
+		let Some(pending) = self.pending.as_mut() else {
+			return false;
+		};
+		if !pending.phase.awaiting_support() {
+			return false;
+		}
+		pending.advance(ArrivalPhase::SpawningActor);
+		true
+	}
+
+	/// Placement failed. Keep the arrival so the controller can retry,
+	/// pick another destination, or fall back explicitly.
+	pub fn note_placement_failed(
+		&mut self,
+		identity: SpawnIdentity,
+	) -> Option<crate::handoff::PlayerArrivalFailed> {
+		crate::handoff::PlayerArrivalFailed::preserve_arrival(identity, self)
+	}
+
 	pub fn cancel_pending(&mut self, reason: SpawnCancelReason) -> Option<SpawnOutcome> {
 		let pending = self.pending.take()?;
 		Some(SpawnOutcome::cancelled(pending.identity(), reason))
@@ -464,6 +509,60 @@ mod tests {
 	}
 
 	#[test]
+	fn destination_selection_keeps_the_arrival_pending() {
+		let mut state = WorldPlayerRespawnState::default();
+		let identity = state.begin_arrival(
+			ArrivalReason::FirstSpawn { at: Vec3::ZERO },
+			RespawnOrigin::began(None, false),
+			0.0,
+		);
+		assert!(state
+			.accept_destination(DestinationSelected::new(identity, ArrivalDestination::Fallback))
+			.is_some());
+		assert!(state.await_support(identity));
+		assert!(state.pending.as_ref().is_some_and(|pending| pending.phase.awaiting_support()));
+		assert!(state.accept_placement(identity));
+		assert!(state.pending.as_ref().is_some_and(|pending| pending.phase.spawning_actor()));
+		assert!(state.pending.is_some(), "construction does not complete the arrival");
+	}
+
+	#[test]
+	fn placement_failure_returns_the_arrival_to_the_picker() {
+		let mut state = WorldPlayerRespawnState::default();
+		let identity = state.begin_arrival(
+			ArrivalReason::Death { at: Vec3::ZERO },
+			RespawnOrigin::began(None, false),
+			0.0,
+		);
+		assert!(state.await_support(identity));
+		let failed = state.note_placement_failed(identity).expect("retryable");
+		assert!(failed.retryable);
+		assert!(state.pending.as_ref().is_some_and(|pending| pending.phase.is_choosing()));
+		assert!(state.accepts_identity(identity));
+	}
+
+	#[test]
+	fn a_stale_placement_ready_does_not_advance_a_new_arrival() {
+		let mut state = WorldPlayerRespawnState::default();
+		let first = state.begin_arrival(
+			ArrivalReason::FirstSpawn { at: Vec3::ZERO },
+			RespawnOrigin::began(None, false),
+			0.0,
+		);
+		state.end_session();
+		let next = state.begin_arrival(
+			ArrivalReason::Death { at: Vec3::X },
+			RespawnOrigin::began(None, false),
+			0.0,
+		);
+		assert!(!state.await_support(first));
+		assert!(!state.accept_placement(first));
+		assert!(state.note_placement_failed(first).is_none());
+		assert!(state.pending.as_ref().is_some_and(|pending| pending.phase.is_choosing()));
+		assert_eq!(state.pending_identity(), Some(next));
+	}
+
+	#[test]
 	fn a_stale_destination_does_not_advance_a_new_arrival() {
 		let mut state = WorldPlayerRespawnState::default();
 		let first = state.begin_arrival(
@@ -477,11 +576,9 @@ mod tests {
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		assert!(
-			state
-				.accept_destination(DestinationSelected::new(first, ArrivalDestination::Fallback))
-				.is_none()
-		);
+		assert!(state
+			.accept_destination(DestinationSelected::new(first, ArrivalDestination::Fallback))
+			.is_none());
 		assert!(state.pending.as_ref().is_some_and(|pending| pending.phase.is_choosing()));
 	}
 }

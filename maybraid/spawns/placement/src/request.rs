@@ -14,8 +14,10 @@ pub enum PlacementPolicy {
 }
 
 impl PlacementPolicy {
+	/// Outdoor ground and interior floors both wait for their supporting
+	/// collider. An interior coordinate does not prove the floor is ready.
 	pub const fn waits_for_support(self) -> bool {
-		matches!(self, Self::OutdoorGround)
+		matches!(self, Self::OutdoorGround | Self::InteriorFloor)
 	}
 
 	pub const fn interior(self) -> bool {
@@ -34,6 +36,28 @@ impl ActorClearance {
 
 	pub const fn new(height: f32) -> Self {
 		Self { height }
+	}
+
+	/// Lift from a floor / composed surface to the capsule center.
+	pub const fn lift(self) -> f32 {
+		self.height * 0.5 + 0.5
+	}
+
+	pub fn capsule_half_extents(self) -> Vec3 {
+		Vec3::new(0.4, self.height.max(0.1) * 0.5, 0.4)
+	}
+
+	/// True when the standing capsule at `at` overlaps `[min, max]`.
+	pub fn overlaps_aabb(self, at: Vec3, min: Vec3, max: Vec3) -> bool {
+		let half = self.capsule_half_extents();
+		let cmin = at - half;
+		let cmax = at + half;
+		cmin.x <= max.x
+			&& cmax.x >= min.x
+			&& cmin.y <= max.y
+			&& cmax.y >= min.y
+			&& cmin.z <= max.z
+			&& cmax.z >= min.z
 	}
 }
 

@@ -1,7 +1,8 @@
 //! Player handoff after a matching actor is constructed.
 //!
 //! Construction does not choose a local player or change cameras. Handoff
-//! requests are correlated to the same arrival identity.
+//! requests are correlated to the same arrival identity. This crate does not
+//! depend on the actor interpreter; adapters pass the constructed entity.
 
 use bevy::prelude::*;
 

@@ -3,6 +3,9 @@
 
 use bevy::prelude::*;
 
+use crate::request::PlacementPolicy;
+use crate::terrain::PlacementPose;
+
 /// Whether the spawn column has usable collision and composed height.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SupportReadiness {
@@ -22,9 +25,31 @@ impl SupportReadiness {
 	pub const fn pending(self) -> bool {
 		!self.ready()
 	}
+
+	/// Interior / outdoor wait for both bits. Airborne is already placed.
+	pub fn for_pose(pose: PlacementPose, height_ready: bool, collider_ready: bool) -> Self {
+		if pose.policy.waits_for_support() {
+			Self::new(height_ready, collider_ready)
+		} else {
+			Self::new(true, true)
+		}
+	}
+
+	pub const fn for_policy(
+		policy: PlacementPolicy,
+		height_ready: bool,
+		collider_ready: bool,
+	) -> Self {
+		if policy.waits_for_support() {
+			Self::new(height_ready, collider_ready)
+		} else {
+			Self::new(true, true)
+		}
+	}
 }
 
-/// World adapters write this for the column under the current placement.
+/// Snapshot written by world adapters while they observe each pending pose.
+/// Production polling uses per-request readiness on [`crate::PendingPlacement`].
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PlacementSupport {
 	pub readiness: SupportReadiness,
