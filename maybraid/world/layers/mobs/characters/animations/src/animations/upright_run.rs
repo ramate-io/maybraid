@@ -19,6 +19,8 @@ pub struct UprightRun {
 	pub hip_lift: f32,
 	pub stride: f32,
 	pub humerus_swing_scale: f32,
+	/// Constant forward root lean while running (radians).
+	pub torso_lean: f32,
 	pub knee_neutral: f32,
 	pub knee_contracted: f32,
 	pub knee_extended: f32,
@@ -37,6 +39,7 @@ impl Default for UprightRun {
 			hip_lift: 0.06,
 			stride: 1.05,
 			humerus_swing_scale: 0.75,
+			torso_lean: 0.12,
 			knee_neutral: PI * 0.5,
 			knee_contracted: 2.15,
 			knee_extended: 0.35,
@@ -60,6 +63,7 @@ impl UprightRun {
 			shoulder_lift: template.shoulder_lift * run.bounce,
 			hip_swing: template.hip_swing * run.rotation,
 			shoulder_swing: template.shoulder_swing * run.rotation,
+			torso_lean: template.torso_lean * run.rotation,
 			knee_extended: template.knee_extended,
 			knee_neutral: template.knee_extended + knee_neutral_delta * stride_scale,
 			knee_contracted: template.knee_extended
@@ -104,5 +108,6 @@ mod tests {
 		assert!((upright.hip_lift - template.hip_lift * 2.0).abs() < 1e-5);
 		assert!((upright.hip_swing - template.hip_swing * 0.5).abs() < 1e-5);
 		assert!((upright.shoulder_swing - template.shoulder_swing * 0.5).abs() < 1e-5);
+		assert!((upright.torso_lean - template.torso_lean * 0.5).abs() < 1e-5);
 	}
 }
