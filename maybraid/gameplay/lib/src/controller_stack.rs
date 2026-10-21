@@ -7,7 +7,9 @@ use bevy::time::TimeUpdateStrategy;
 use character_inventory_user::InventoryUser;
 use character_items::{FirearmMesh, Inventory, InventoryItem};
 use firearm_user::{FirearmUser, RecoilPattern, register_firearm_user_runtime};
-use firearms::{FireControl, FireOnTrigger, Weapon, WeaponFired, WeaponRecoil, WeaponTrigger};
+use firearms::{
+	FireControl, FireOnTrigger, Weapon, WeaponFired, WeaponLaunchPose, WeaponRecoil, WeaponTrigger,
+};
 use grenade_user::{GrenadePhase, GrenadeThrow, GrenadeUser, register_grenade_user_runtime};
 use grenades::DropLiveGrenade;
 use lubikans::{
@@ -21,8 +23,8 @@ use maybraid_controllers_core::{
 	UiTarget,
 };
 use maybraid_equipment::{
-	ActiveInventoryCyclingCategory, EquipmentHolster, EquippedItemHandler, EquippedItemUse,
-	EquippedPowerUse, InventoryCycling, RoutedItemActor, EQUIPMENT_HOLSTER_SECS,
+	ActiveInventoryCyclingCategory, EQUIPMENT_HOLSTER_SECS, EquipmentHolster, EquippedItemHandler,
+	EquippedItemUse, EquippedPowerUse, InventoryCycling, RoutedItemActor,
 };
 use maybraid_input::{PadButton, VirtualPad, VirtualPadSystems};
 use maybraid_session::{
@@ -95,6 +97,7 @@ fn spawn_live_gun(app: &mut App, cooldown: f32) -> Entity {
 			FireControl::auto(),
 			WeaponRecoil(0.08),
 			RecoilPattern::from_seed(7),
+			WeaponLaunchPose::ready_at(Vec3::ZERO, Vec3::Y),
 		))
 		.id()
 }
