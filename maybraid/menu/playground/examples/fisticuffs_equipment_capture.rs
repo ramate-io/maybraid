@@ -141,13 +141,7 @@ fn shot_dir() -> PathBuf {
 fn switch_bag(fisticuffs_primary: bool) -> Inventory {
 	let items = vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)];
 	let weapons = if fisticuffs_primary { vec![0, 1] } else { vec![1, 0] };
-	Inventory {
-		items,
-		clothing: Vec::new(),
-		weapons,
-		skills: Vec::new(),
-		tanzes: Vec::new(),
-	}
+	Inventory { items, clothing: Vec::new(), weapons, skills: Vec::new(), tanzes: Vec::new() }
 }
 
 fn capture_icon_inventories() -> [Inventory; 2] {
@@ -170,10 +164,11 @@ fn allow_slow_braidman_icon(mut cache: ResMut<CaptureCacheRoot>) {
 fn request_icon(
 	mut discovery: ResMut<ItemIconDiscovery>,
 	mut subjects: ResMut<ItemCaptureSubjects>,
+	mut cache: ResMut<ItemIconCache>,
 	mut client: CaptureClient,
 ) {
 	for inventory in capture_icon_inventories() {
-		request_inventory_icons(&inventory, &mut discovery, &mut subjects, &mut client);
+		request_inventory_icons(&inventory, &mut discovery, &mut subjects, &mut client, &mut cache);
 	}
 }
 
