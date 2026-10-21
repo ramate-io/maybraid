@@ -88,6 +88,7 @@ members = [
   "maybraid/world/layers/mobs/characters/playground",
   "maybraid/world/layers/mobs/architectural/doric-column",
   "maybraid/world/layers/mobs/architectural/doric-column/playground",
+  "maybraid/world/layers/mobs/characters/bikanwarda",
 
   "maybraid/procedural/common",
   "maybraid/procedural/comproc",
@@ -118,6 +119,7 @@ members = [
   "maybraid/movement-realization",
   "maybraid/projectiles",
   "maybraid/damage",
+  "maybraid/occupancy-rewards",
   "maybraid/attacks",
   "maybraid/attacks/playground",
   "maybraid/items/firearms-components",
@@ -340,6 +342,7 @@ character-concepts-playground = { path = "maybraid/menu/character-concepts-playg
 characters-playground = { path = "maybraid/world/layers/mobs/characters/playground" }
 doric-column = { path = "maybraid/world/layers/mobs/architectural/doric-column" }
 doric-column-playground = { path = "maybraid/world/layers/mobs/architectural/doric-column/playground" }
+bikanwarda-character = { path = "maybraid/world/layers/mobs/characters/bikanwarda" }
 character-items = { path = "maybraid/world/layers/mobs/characters/items" }
 character-persist = { path = "maybraid/world/layers/mobs/characters/persist" }
 character-inventory-user = { path = "maybraid/world/layers/mobs/characters/inventory-user" }
@@ -383,6 +386,7 @@ player-camera = { path = "maybraid/player-camera" }
 movement-realization = { path = "maybraid/movement-realization" }
 projectiles = { path = "maybraid/projectiles" }
 damage = { path = "maybraid/damage" }
+occupancy-rewards = { path = "maybraid/occupancy-rewards" }
 attacks = { path = "maybraid/attacks" }
 attacks-playground = { path = "maybraid/attacks/playground" }
 firearms-components = { path = "maybraid/items/firearms-components" }
