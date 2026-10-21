@@ -5,8 +5,8 @@
 
 use bevy::prelude::*;
 use world_player::{
-	AwaitingTerrainSurface, CharacterLocomotion, CharacterSpecies, OffTerrainAnchor,
-	RequestSetCharacter, RequestSetCharacterAppearance, spawn_player_body,
+	spawn_player_body, AwaitingTerrainSurface, CharacterLocomotion, CharacterSpecies,
+	OffTerrainAnchor, RequestSetCharacter, RequestSetCharacterAppearance,
 };
 
 use crate::request::{ActorSpawned, SpawnActor};

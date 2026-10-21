@@ -10,7 +10,10 @@ use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use grenade_user::GrenadeUserSystems;
 use maybraid_character_controller::CharacterIntent;
-use maybraid_spawns_player::{ActivatePlayerArrival, ArrivalReason, PlayerArrivalPolicy};
+use maybraid_spawns_player::{
+	ActivatePlayerArrival, ArrivalReason, PlayerArrivalCompleted, PlayerArrivalPolicy,
+	PlayerHandoffSystems,
+};
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use player_camera::{CameraController, FollowCamera};
@@ -62,6 +65,15 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 				Update,
 				PlayerLifeSet::Resolve.before(player_camera::PlayerCameraSystems::Look),
 			)
+			.configure_sets(
+				Update,
+				(
+					maybraid_spawns_placement::PlacementSystems::Poll,
+					maybraid_spawns_actors::ActorSpawnSystems::Realize,
+					PlayerHandoffSystems::Activate,
+				)
+					.chain(),
+			)
 			.add_systems(Startup, spawn_player_death_glaze)
 			.add_systems(
 				PostUpdate,
@@ -93,13 +105,17 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 						.run_if(world_player_respawn_pending),
 					apply_placement_outcomes
 						.after(respawn_world_player)
-						.after(maybraid_spawns_placement::PlacementSystems::Poll),
+						.after(maybraid_spawns_placement::PlacementSystems::Poll)
+						.before(maybraid_spawns_actors::ActorSpawnSystems::Realize),
+					request_world_appearance
+						.after(maybraid_spawns_actors::ActorSpawnSystems::Realize),
+					apply_player_activation.after(PlayerHandoffSystems::Activate),
 					cancel_orphaned_placement.after(apply_placement_outcomes),
 					close_orphaned_locked_respawn_map
 						.after(respawn_world_player)
 						.run_if(orphaned_locked_respawn_map),
 					apply_camera_begin_life
-						.after(respawn_world_player)
+						.after(apply_player_activation)
 						.after(close_orphaned_locked_respawn_map),
 				)
 					.after(PoiSystems::Index)
@@ -316,17 +332,15 @@ fn respawn_world_player(
 	config: Res<WorldPlayerRespawnConfig>,
 	registry: Res<PoiRegistry>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
-	locomotion: Res<CharacterLocomotion>,
 	surface: DurhamSurface,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	mut ended: MessageWriter<PlayerLifeEnded>,
 	mut chosen: MessageReader<PlayerChoseRespawnPoi>,
+	mut spawn: MessageWriter<maybraid_spawns_actors::SpawnActor>,
 	live_player: Query<(), With<VegetationPlayer>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut map: ResMut<WorldMapView>,
 	mut commands: Commands,
-	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
 	let now = mode.as_deref().and_then(|mode| mode.get().mode_id());
 	let abandoned = state.pending.as_ref().is_some_and(|pending| pending.origin.abandoned(now));
@@ -360,20 +374,14 @@ fn respawn_world_player(
 		if origin.ends_life(now) {
 			ended.write(PlayerLifeEnded);
 		}
-		finish_world_player_spawn(
-			&mut commands,
-			&mut meshes,
-			&mut materials,
-			locomotion.as_ref(),
+		spawn.write(request_world_actor(
 			loadout.as_deref(),
 			origin,
 			now,
 			identity,
 			player_position_above_surface(death_at),
 			false,
-			&mut state,
-			&mut map,
-		);
+		));
 		return;
 	}
 
@@ -436,15 +444,11 @@ fn respawn_world_player(
 
 fn apply_placement_outcomes(
 	loadout: Option<Res<WorldPlayerLoadout>>,
-	locomotion: Res<CharacterLocomotion>,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	mut ready: MessageReader<maybraid_spawns_placement::PlacementReady>,
 	mut failed: MessageReader<maybraid_spawns_placement::PlacementFailed>,
 	mut state: ResMut<WorldPlayerRespawnState>,
-	mut map: ResMut<WorldMapView>,
-	mut commands: Commands,
-	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
+	mut spawn: MessageWriter<maybraid_spawns_actors::SpawnActor>,
 ) {
 	let now = mode.as_deref().and_then(|mode| mode.get().mode_id());
 	for failed in failed.read() {
@@ -460,21 +464,38 @@ fn apply_placement_outcomes(
 		let Some(pending) = state.pending.as_ref() else {
 			continue;
 		};
-		let origin = pending.origin;
-		finish_world_player_spawn(
-			&mut commands,
-			&mut meshes,
-			&mut materials,
-			locomotion.as_ref(),
+		spawn.write(request_world_actor(
 			loadout.as_deref(),
-			origin,
+			pending.origin,
 			now,
 			ready.identity,
 			ready.position,
 			ready.policy.interior(),
-			&mut state,
-			&mut map,
-		);
+		));
+	}
+}
+
+fn request_world_appearance(
+	mut spawned: MessageReader<maybraid_spawns_actors::ActorSpawned>,
+	mut commands: Commands,
+) {
+	for spawned in spawned.read() {
+		if spawned.dress {
+			commands.entity(spawned.actor).insert(WorldPlayerAppearanceRequested);
+		}
+	}
+}
+
+fn apply_player_activation(
+	mut activations: MessageReader<ActivatePlayerArrival>,
+	mut completed: MessageWriter<PlayerArrivalCompleted>,
+	mut map: ResMut<WorldMapView>,
+	mut commands: Commands,
+) {
+	for activation in activations.read() {
+		crate::control::apply_world_player_motor(&mut commands, activation.actor);
+		close_respawn_map(&mut map);
+		completed.write(PlayerArrivalCompleted::from_activation(*activation));
 	}
 }
 
@@ -559,50 +580,19 @@ fn xz_distance(a: Vec3, b: Vec3) -> f32 {
 	(a.xz() - b.xz()).length()
 }
 
-#[allow(clippy::too_many_arguments)]
-fn finish_world_player_spawn(
-	commands: &mut Commands,
-	meshes: &mut Assets<Mesh>,
-	materials: &mut Assets<StandardMaterial>,
-	locomotion: &CharacterLocomotion,
+fn request_world_actor(
 	loadout: Option<&WorldPlayerLoadout>,
 	origin: RespawnOrigin,
 	now: Option<std::any::TypeId>,
 	identity: maybraid_spawns_player::SpawnIdentity,
 	position: Vec3,
 	interior: bool,
-	state: &mut WorldPlayerRespawnState,
-	map: &mut WorldMapView,
-) {
+) -> maybraid_spawns_actors::SpawnActor {
 	let mut request = maybraid_spawns_actors::SpawnActor::player_body(identity, position, interior);
 	if let Some(loadout) = loadout {
 		request = request.with_appearance(loadout.appearance.clone(), !origin.ends_life(now));
 	}
-	let spawned = request.realize(commands, meshes, materials, locomotion);
-	if spawned.dress {
-		commands.entity(spawned.actor).insert(WorldPlayerAppearanceRequested);
-	}
-	commands.queue(move |world: &mut World| {
-		if let Some(mut messages) =
-			world.get_resource_mut::<Messages<maybraid_spawns_actors::ActorSpawned>>()
-		{
-			messages.write(spawned);
-		}
-	});
-	if let Some(activation) =
-		ActivatePlayerArrival::from_constructed(spawned.identity, spawned.actor, state)
-	{
-		crate::control::apply_world_player_motor(commands, activation.actor);
-		close_respawn_map(map);
-		commands.queue(move |world: &mut World| {
-			if let Some(mut messages) = world.get_resource_mut::<Messages<ActivatePlayerArrival>>()
-			{
-				messages.write(activation);
-			}
-		});
-	} else {
-		commands.entity(spawned.actor).despawn();
-	}
+	request
 }
 
 fn death_glaze_alpha(timer: &Timer, map_open: bool) -> f32 {
@@ -981,7 +971,13 @@ mod tests {
 		world.init_resource::<Messages<maybraid_spawns_placement::PlacementFailed>>();
 		world.init_resource::<Messages<maybraid_spawns_placement::CancelPlacement>>();
 		world.init_resource::<Messages<maybraid_spawns_player::ActivatePlayerArrival>>();
+		world.init_resource::<Messages<maybraid_spawns_player::ArrivalActorReady>>();
+		world.init_resource::<Messages<maybraid_spawns_player::ArrivalActorFailed>>();
+		world.init_resource::<Messages<maybraid_spawns_player::PlayerArrivalCompleted>>();
+		world.init_resource::<Messages<maybraid_spawns_player::PlayerArrivalFailed>>();
+		world.init_resource::<Messages<maybraid_spawns_actors::SpawnActor>>();
 		world.init_resource::<Messages<maybraid_spawns_actors::ActorSpawned>>();
+		world.init_resource::<Messages<maybraid_spawns_actors::ActorSpawnFailed>>();
 		world.init_resource::<Messages<PlayerChoseRespawnPoi>>();
 		world.init_resource::<PoiRegistry>();
 		world.init_resource::<CharacterLocomotion>();
@@ -1063,6 +1059,7 @@ mod tests {
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		complete_constructed_arrival(&mut world)?;
 
 		let ended: Vec<_> = world.resource_mut::<Messages<PlayerLifeEnded>>().drain().collect();
 		assert_eq!(ended, vec![PlayerLifeEnded]);
@@ -1093,6 +1090,7 @@ mod tests {
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		complete_constructed_arrival(&mut world)?;
 		let ended: Vec<_> = world.resource_mut::<Messages<PlayerLifeEnded>>().drain().collect();
 		assert!(ended.is_empty(), "leaving ends no life");
 		let mut bodies = world.query_filtered::<(), With<VegetationPlayer>>();
@@ -1401,6 +1399,22 @@ mod tests {
 		Ok(())
 	}
 
+	fn complete_constructed_arrival(world: &mut World) -> anyhow::Result<()> {
+		world
+			.run_system_once(maybraid_spawns_actors::realize_actors)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(request_world_appearance)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(maybraid_spawns_player::complete_player_handoffs)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(apply_player_activation)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		Ok(())
+	}
+
 	fn release_pending_placement(world: &mut World) -> anyhow::Result<()> {
 		world
 			.resource_mut::<Messages<maybraid_spawns_placement::PlacementFailed>>()
@@ -1420,6 +1434,7 @@ mod tests {
 		world
 			.run_system_once(apply_placement_outcomes)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		complete_constructed_arrival(world)?;
 		world
 			.run_system_once(cancel_orphaned_placement)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -1611,6 +1626,130 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(live_player_count(&mut world), 1);
 		assert_eq!(world.resource::<WorldPlayerRespawnState>().last_activated(), Some(identity));
+		Ok(())
+	}
+
+	#[test]
+	fn registered_handoff_applies_motor_camera_and_picker_once() -> anyhow::Result<()> {
+		use avian3d::prelude::{Collider, PhysicsPlugins, RigidBody};
+		use lod_avian::PhysicsInteractionLayer;
+		use maybraid_spawns_placement::{
+			ActorClearance, PendingPlacement, PlacementPose, PlacementWork,
+		};
+		use maybraid_spawns_player::{ArrivalDestination, ArrivalPhase};
+		use player::{Player as MotorPlayer, PlayerLook};
+		use player_camera::CameraPov;
+
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			PhysicsPlugins::default(),
+			bevy::asset::AssetPlugin::default(),
+			bevy::mesh::MeshPlugin,
+		));
+		maybraid_spawns_player::register_player_spawn_runtime(&mut app);
+		maybraid_spawns_placement::register_placement_runtime(&mut app);
+		maybraid_spawns_placement::register_placement_physics(&mut app);
+		maybraid_spawns_actors::register_actor_spawn_runtime(&mut app);
+		app.insert_resource(WorldGameplayEnabled(true));
+		app.init_resource::<WorldMapView>();
+		app.init_resource::<CharacterLocomotion>();
+		app.init_resource::<Assets<StandardMaterial>>();
+		app.init_resource::<PoiRegistry>();
+		app.init_resource::<HcsgStorage>();
+		app.init_resource::<TerrainCellLayout>();
+		app.insert_resource(WorldBaseTerrain(durham::BaseTerrainNoise::from_config(
+			&durham::TerrainConfig::new(42),
+		)));
+		app.init_resource::<Messages<PlayerChoseRespawnPoi>>();
+		app.init_resource::<Messages<PlayerLifeEnded>>();
+		app.insert_resource(State::new(ActiveGenerationMode::of::<EndsLife>()));
+		app.configure_sets(
+			Update,
+			(
+				maybraid_spawns_placement::PlacementSystems::Poll,
+				maybraid_spawns_actors::ActorSpawnSystems::Realize,
+				PlayerHandoffSystems::Activate,
+			)
+				.chain(),
+		);
+		app.add_systems(
+			Update,
+			(
+				apply_placement_outcomes
+					.after(maybraid_spawns_placement::PlacementSystems::Poll)
+					.before(maybraid_spawns_actors::ActorSpawnSystems::Realize),
+				request_world_appearance.after(maybraid_spawns_actors::ActorSpawnSystems::Realize),
+				apply_player_activation.after(PlayerHandoffSystems::Activate),
+				apply_camera_begin_life.after(apply_player_activation),
+			),
+		);
+		app.finish();
+
+		app.world_mut().spawn((
+			Transform::from_xyz(0.0, 0.0, 0.0),
+			RigidBody::Static,
+			Collider::cuboid(20.0, 0.2, 20.0),
+			PhysicsInteractionLayer::fixed_layers(),
+		));
+		app.world_mut().spawn((
+			FollowCamera::default(),
+			CameraController { pov: CameraPov::Map, ..default() },
+		));
+		app.world_mut().insert_resource(WorldMapView {
+			open: true,
+			close_locked: true,
+			begin_life: false,
+			..default()
+		});
+		let identity = app.world_mut().resource_mut::<WorldPlayerRespawnState>().begin_arrival(
+			ArrivalReason::FirstSpawn { at: Vec3::ZERO },
+			RespawnOrigin::began(Some(std::any::TypeId::of::<EndsLife>()), false),
+			0.0,
+		);
+		{
+			let mut state = app.world_mut().resource_mut::<WorldPlayerRespawnState>();
+			let pending = state.pending.as_mut().expect("pending");
+			pending.first_life = true;
+			pending.advance(ArrivalPhase::AwaitingSupport);
+		}
+		app.world_mut().resource_mut::<PlacementWork>().insert(PendingPlacement::new(
+			identity,
+			ArrivalDestination::Fallback,
+			PlacementPose {
+				position: player_position_above_surface(Vec3::ZERO),
+				policy: maybraid_spawns_placement::PlacementPolicy::OutdoorGround,
+				clearance: ActorClearance::HUMANOID,
+			},
+		));
+		app.update();
+		app.update();
+		app.update();
+
+		{
+			let world = app.world_mut();
+			assert_eq!(live_player_count(world), 1);
+			assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+			assert_eq!(
+				world.resource::<WorldPlayerRespawnState>().last_activated(),
+				Some(identity)
+			);
+			assert!(!world.resource::<WorldMapView>().open);
+			let actor = world.query_filtered::<Entity, With<VegetationPlayer>>().single(&*world)?;
+			assert!(world.get::<MotorPlayer>(actor).is_some());
+			assert!(world.get::<PlayerLook>(actor).is_some());
+			let controller = world.query::<&CameraController>().single(&*world)?;
+			assert_eq!(controller.pov, CameraPov::ThirdPerson);
+		}
+		app.world_mut().write_message(maybraid_spawns_placement::PlacementReady::new(
+			identity,
+			Vec3::ZERO,
+			maybraid_spawns_placement::PlacementPolicy::OutdoorGround,
+			true,
+		));
+		app.update();
+		assert_eq!(live_player_count(app.world_mut()), 1);
 		Ok(())
 	}
 
