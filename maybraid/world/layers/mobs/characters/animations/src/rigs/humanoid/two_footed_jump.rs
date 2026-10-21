@@ -206,6 +206,24 @@ mod tests {
 	}
 
 	#[test]
+	fn early_fall_keeps_arms_below_full_spread() -> anyhow::Result<()> {
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		let jump = default_jump();
+		let lengths = rig.segment_lengths;
+		let timings = jump.timings(lengths);
+		let fall_local = 0.25;
+		jump.apply(&mut rig, timings.spring_end() + fall_local * timings.air_duration);
+
+		let mut full_fall = HumanoidV0Rig::for_clip_test();
+		Fall::default().apply(&mut full_fall, 1.0);
+		assert!(
+			rig.posed_angle("shoulder.L") < full_fall.posed_angle("shoulder.L") - 0.04,
+			"early air should stay short of full fall spread"
+		);
+		Ok(())
+	}
+
+	#[test]
 	fn land_transition_blends_arms_from_fall() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		let jump = default_jump();
