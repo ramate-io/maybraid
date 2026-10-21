@@ -661,8 +661,10 @@ mod tests {
 			flash: blank.clone(),
 			fireball: blank.clone(),
 			smoke: blank.clone(),
-			sparks: blank,
+			sparks: blank.clone(),
 			fiery_explosion: fiery,
+			god_beam: blank.clone(),
+			sonic_wave: blank,
 		});
 		let stats = GrenadeStats::standard();
 		world.resource_mut::<Messages<GrenadeDetonated>>().write(GrenadeDetonated {

@@ -1,9 +1,11 @@
 //! Isolated host for real-time VFX concepts.
 
 mod camera;
+mod capture;
 pub mod commands;
 mod ground;
 mod show;
+mod sonic;
 mod ui;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
@@ -11,6 +13,7 @@ pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
 use game_commands::command::GameCommandPlugin;
+use game_commands::GameCommandDrawerConfig;
 use ground::setup_ground;
 use maybraid_vfx::VfxPlugin;
 use show::{
@@ -30,21 +33,44 @@ impl Plugin for VfxPlaygroundPlugin {
 			.init_resource::<LoopEnabled>()
 			.init_resource::<CameraOrbit>()
 			.init_resource::<SpreadOnce>()
+			.init_resource::<capture::CaptureCancel>()
+			.init_resource::<capture::NightCapture>()
 			.add_plugins(VfxPlugin)
-			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()));
-		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
-			.add_systems(
-				Update,
-				(
-					camera::release_modifiers_on_focus_change.before(camera::camera_controller),
-					camera::camera_controller,
-					camera::orbit_camera.after(camera::camera_controller),
-					apply_pending_shows,
-					repeat_shown_effect.after(apply_pending_shows),
-					pause_at_frozen_age.after(repeat_shown_effect),
-					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-				),
+			.add_plugins(
+				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
+					.with_drawer_config(GameCommandDrawerConfig {
+						open_at_start: !capture::requested(),
+						toggle_keys: vec![KeyCode::F1],
+						..default()
+					}),
 			);
+		app.add_systems(
+			Startup,
+			(
+				camera::setup_camera,
+				setup_lighting,
+				setup_ground,
+				capture::apply_env,
+				capture::tune_night_lighting,
+			),
+		)
+		.add_systems(
+			Update,
+			(
+				camera::release_modifiers_on_focus_change.before(camera::camera_controller),
+				camera::camera_controller,
+				camera::orbit_camera.after(camera::camera_controller),
+				apply_pending_shows,
+				ground::sync_mouth_emitter.after(apply_pending_shows),
+				repeat_shown_effect.after(apply_pending_shows),
+				sonic::drive_sonic_waves
+					.after(maybraid_vfx::lifecycle::tick_vfx_instances)
+					.before(maybraid_vfx::fields::tick_vfx_fields),
+				capture::cancel_at_age.after(repeat_shown_effect),
+				pause_at_frozen_age.after(capture::cancel_at_age),
+				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
+			),
+		);
 	}
 }
 
@@ -70,7 +96,7 @@ fn setup_lighting(mut commands: Commands) {
 mod tests {
 	use super::*;
 	use game_commands::command::GameCommand;
-	use maybraid_vfx::{FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
+	use maybraid_vfx::{FIERY_EXPLOSION, FIREBALL, FLASH, GOD_BEAM, SMOKE, SONIC_WAVE, SPARKS};
 
 	#[test]
 	fn parses_help() -> Result<(), String> {
@@ -132,6 +158,8 @@ mod tests {
 			("show smoke", SMOKE),
 			("show sparks", SPARKS),
 			("show fiery-explosion", FIERY_EXPLOSION),
+			("show god-beam", GOD_BEAM),
+			("show sonic-wave", SONIC_WAVE),
 		] {
 			let command = <PlaygroundCommand as GameCommand>::parse_line(line)?;
 			let PlaygroundCommand::Show { effect, .. } = command else {
@@ -148,6 +176,79 @@ mod tests {
 		assert_eq!(effect, "sparks");
 		assert!((scale - 2.0).abs() < 1e-4);
 		assert!((intensity - 1.5).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn parses_god_beam_width_as_diameter() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line(
+			"god-beam --width 7 --height 96 --lifetime 10 --seed 2",
+		)?;
+		let PlaygroundCommand::GodBeam { width, height, lifetime, seed, .. } = command else {
+			return Err("expected god-beam".into());
+		};
+		assert!((width - 7.0).abs() < 1e-4);
+		assert!((height - 96.0).abs() < 1e-4);
+		assert!((lifetime - 10.0).abs() < 1e-4);
+		assert_eq!(seed, Some(2));
+		Ok(())
+	}
+
+	#[test]
+	fn parses_sonic_wave_defaults_and_ring_pose() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line("sonic-wave")?;
+		let PlaygroundCommand::SonicWave {
+			range, spread, radius, thickness, interval, count, ..
+		} = command
+		else {
+			return Err("expected sonic-wave".into());
+		};
+		if (range - 20.0).abs() >= 1e-4 {
+			return Err(format!("default range {range}"));
+		}
+		if spread.abs() >= 1e-4 {
+			return Err(format!("default spread {spread}"));
+		}
+		if (radius - 0.55).abs() >= 1e-4 || (thickness - 0.14).abs() >= 1e-4 {
+			return Err(format!("ring {radius} {thickness}"));
+		}
+		if (interval - 0.28).abs() >= 1e-4 || count != 3 {
+			return Err(format!("burst {interval} {count}"));
+		}
+		let command = <PlaygroundCommand as GameCommand>::parse_line(
+			"sonic-wave --range 8 --speed 16 --radius 0.4 --thickness 0.1 --interval 0.18 --count 3",
+		)?;
+		let PlaygroundCommand::SonicWave { range, speed, radius, interval, .. } = command else {
+			return Err("expected sonic-wave override".into());
+		};
+		if (range - 8.0).abs() >= 1e-4 || (speed - 16.0).abs() >= 1e-4 {
+			return Err(format!("ordinary {range} {speed}"));
+		}
+		if (radius - 0.4).abs() >= 1e-4 || (interval - 0.18).abs() >= 1e-4 {
+			return Err(format!("ordinary ring {radius} {interval}"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn mouth_height_tracks_boss_and_ordinary_scale() -> Result<(), String> {
+		let boss = maybraid_vfx::VfxDrive::sonic_wave().with_size(20.0).with_radius(0.85);
+		let ordinary = maybraid_vfx::VfxDrive::sonic_wave().with_size(8.0).with_radius(0.4);
+		if (show::mouth_height(&boss) - 3.2).abs() >= 1e-4 {
+			return Err("boss mouth".into());
+		}
+		if (show::mouth_height(&ordinary) - 1.55).abs() >= 1e-4 {
+			return Err("ordinary mouth".into());
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn parses_hud_toggle() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line("hud")?;
+		if !matches!(command, PlaygroundCommand::Hud) {
+			return Err("expected hud".into());
+		}
 		Ok(())
 	}
 }
