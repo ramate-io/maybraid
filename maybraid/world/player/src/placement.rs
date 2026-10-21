@@ -74,6 +74,14 @@ impl PendingPlacement {
 	pub fn overlaps_volume(self, volume: Aabb3d) -> bool {
 		aabb_intersects(self.support_probe(), volume)
 	}
+
+	/// True when any stamped volume overlaps this destination's elevation probe.
+	pub fn supported_by_any<'a>(
+		self,
+		volumes: impl IntoIterator<Item = &'a PlacementSupportVolume>,
+	) -> bool {
+		volumes.into_iter().any(|volume| volume.supports(self))
+	}
 }
 
 /// Test / presentation AABB that can support a pending capsule.
@@ -97,9 +105,22 @@ impl PlacementSupportVolume {
 ///
 /// Discovery writes padded height. Playgrounds leave this unset so snap uses
 /// Durham composed height. Cleared once placement completes — not sampled
-/// every frame after release.
+/// every frame after release. Already-placed snap must not treat that clear
+/// as a hold.
 #[derive(Resource, Clone, Copy, Debug, Default)]
 pub struct PresentedOutdoorHeight(pub Option<f32>);
+
+impl PresentedOutdoorHeight {
+	/// First-drop outdoor Y while placement is still awaiting.
+	///
+	/// Published padded height wins. When the resource is present but empty
+	/// (unpublished pad, or cleared after release), use the pending
+	/// destination. Playgrounds omit this resource and resolve Durham
+	/// themselves.
+	pub fn or_pending_surface_y(self, pending: Option<PendingPlacement>) -> Option<f32> {
+		self.0.or_else(|| pending.map(|pending| pending.surface.y))
+	}
+}
 
 pub fn aabb_intersects(a: Aabb3d, b: Aabb3d) -> bool {
 	a.min.x <= b.max.x
@@ -131,5 +152,16 @@ mod tests {
 		assert!(
 			PlacementSupportVolume::around(Vec3::new(0.0, 40.0, 0.0), 20.0, 1.0).supports(pending)
 		);
+	}
+
+	#[test]
+	fn presented_height_falls_back_to_pending_destination() {
+		let pending = PendingPlacement::terrain(Vec3::new(8.0, 40.0, 3.0));
+		assert_eq!(
+			PresentedOutdoorHeight(Some(12.0)).or_pending_surface_y(Some(pending)),
+			Some(12.0)
+		);
+		assert_eq!(PresentedOutdoorHeight(None).or_pending_surface_y(Some(pending)), Some(40.0));
+		assert_eq!(PresentedOutdoorHeight(None).or_pending_surface_y(None), None);
 	}
 }

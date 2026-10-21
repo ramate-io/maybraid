@@ -1603,6 +1603,97 @@ mod tests {
 	}
 
 	#[test]
+	fn after_release_outdoor_sampler_preserves_velocity() -> anyhow::Result<()> {
+		let surface = Vec3::new(0.5, 12.0, 0.5);
+		let pose = player_position_above_surface(surface);
+		let motion = Vec3::new(1.5, 2.25, -0.75);
+		let (mut world, player) = after_release_snap_world(pose);
+		world.insert_resource(PresentedOutdoorHeight(Some(surface.y)));
+		world
+			.entity_mut(player)
+			.insert((AwaitingTerrainSurface, PendingPlacement::terrain(surface)));
+		world.spawn((
+			TerrainTrimeshCollider,
+			CascadeChunk {
+				origin: surface - Vec3::splat(1.0),
+				size: 3.0,
+				extent: Some(Vec3::splat(2.0)),
+				..CascadeChunk::unit_chunk()
+			},
+		));
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
+
+		world.entity_mut(player).insert(LinearVelocity(motion));
+		world
+			.run_system_once(sample_presented_outdoor_height)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.resource::<PresentedOutdoorHeight>().0, None);
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.get::<LinearVelocity>(player).map(|velocity| velocity.0), Some(motion));
+		assert!(world.get::<GravityScale>(player).is_some_and(|gravity| gravity.0 > 0.0));
+		Ok(())
+	}
+
+	#[test]
+	fn after_release_interior_sampler_preserves_velocity() -> anyhow::Result<()> {
+		let surface = Vec3::new(80.0, 12.0, 5.0);
+		let pose = player_position_above_surface(surface);
+		let motion = Vec3::new(-0.8, 1.75, 2.0);
+		let (mut world, player) = after_release_snap_world(pose);
+		world.insert_resource(PresentedOutdoorHeight(Some(40.0)));
+		world.entity_mut(player).insert((
+			AwaitingTerrainSurface,
+			PendingPlacement::floor(surface),
+			OffTerrainAnchor { translation: pose },
+		));
+		world.spawn(PlacementSupportVolume::around(surface, 2.0, 0.2));
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
+		assert!(world.get::<PendingPlacement>(player).is_none());
+		assert!(world.get::<OffTerrainAnchor>(player).is_some());
+
+		world.entity_mut(player).insert(LinearVelocity(motion));
+		world
+			.run_system_once(sample_presented_outdoor_height)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.resource::<PresentedOutdoorHeight>().0, None);
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.get::<LinearVelocity>(player).map(|velocity| velocity.0), Some(motion));
+		assert!(world.get::<GravityScale>(player).is_some_and(|gravity| gravity.0 > 0.0));
+		assert!(world.get::<OffTerrainAnchor>(player).is_some());
+		Ok(())
+	}
+
+	fn after_release_snap_world(translation: Vec3) -> (World, Entity) {
+		let mut world = World::new();
+		world.insert_resource(PlayerPhysicsEnabled(true));
+		world.init_resource::<HcsgStorage>();
+		world.init_resource::<TerrainCellLayout>();
+		world.insert_resource(WorldBaseTerrain(durham::BaseTerrainNoise::from_config(
+			&durham::TerrainConfig::new(42),
+		)));
+		world.insert_resource(PresentedOutdoorHeight(None));
+		let player = world
+			.spawn((
+				VegetationPlayer,
+				Transform::from_translation(translation),
+				LinearVelocity::default(),
+				GravityScale(0.0),
+			))
+			.id();
+		(world, player)
+	}
+
+	#[test]
 	fn discovery_respawn_uses_presented_padded_height_not_registry_y() -> anyhow::Result<()> {
 		let mut world = discovery_respawn_world(0.2);
 		world.insert_resource(PlayerPhysicsEnabled(true));
