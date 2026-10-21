@@ -121,6 +121,7 @@ Package names stay; only directories moved. See [#1450](https://github.com/ramat
 | `world/lib` | `maybraid-world` | Terrain, POIs, population, presentation, `spawn_surface` |
 | `spawns/core` | `maybraid-spawns-core` | Spawn request / session identity and shared outcomes |
 | `spawns/player` | `maybraid-spawns-player` | Player arrival controller, picker, destination selection |
+| `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / support. Collider readiness is not `GenerationScheme`. |
 | `game/src` | `maybraid` | Assembles World + Gameplay + shell / flow |
 
 `controllers/world` is a compatibility re-export of `gameplay/session`.
@@ -257,7 +258,7 @@ the current owner. Later phases change the owner column, not the role id.
 | E2 | Inventory sheet | `stash.rs` Inventory reader | B9 | inventory editor | world | Broadcast. |
 | E3 | World map | `map_view.rs` ToggleMap reader | B10 | `WorldMapView` | world | Broadcast. Two camera-lock writers remain. |
 | E4 | Session gameplay gate | `SessionCapabilities`, `WorldGameplayEnabled` | E1, `game/src/flow.rs` enter, pause | B11 world filter, HUD, cycling | `gameplay/session` | Live. Capabilities already replace the old `SessionActivity` / `WorldGameplayEnabled` gates. Session projects live-play; world keeps scenery / menu-shell bits. |
-| E5 | Spawn / respawn picker | `SpawnPickerController`, `refresh_spawn_picker_focus`, `dispatch_spawn_picker` | A2 `MenuNavPad` | `PlayerChoseRespawnPoi` / `DestinationSelected` → `respawn_world_player` | `spawns/player` | **Spawn rewrite phase 1.** UI-owned MenuNav capture. No actor. Higher overlay / text / other menu blocks confirm. World mirrors the locked map sheet. |
+| E5 | Spawn / respawn picker | `SpawnPickerController`, `refresh_spawn_picker_focus`, `dispatch_spawn_picker` | A2 `MenuNavPad` | `PlayerChoseRespawnPoi` / `DestinationSelected` → `ResolvePlacement` / `respawn_world_player` | `spawns/player` | **Spawn rewrite phase 1–2.** UI-owned MenuNav capture. No actor. Placement work lives in `PlacementWork` so generation that outlives messages cannot drop the request. |
 
 ### U — routing, capture, lifecycle
 

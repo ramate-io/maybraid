@@ -86,7 +86,7 @@ Rules:
 |---|---|---|---|
 | `spawns/core` | `maybraid-spawns-core` | `SpawnRequestId`, `SpawnSessionId`, `SpawnOwner`, cancel / failure reasons | 1 |
 | `spawns/player` | `maybraid-spawns-player` | Arrival controller, picker, destination selection, handoff requests | 1 |
-| `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / support | 2 |
+| `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / support | **2** |
 | `spawns/actors` | `maybraid-spawns-actors` | `SpawnActor` / `ActorSpawned` | 3 |
 | `spawns/projectiles` | `maybraid-spawns-projectiles` | Simulation projectile spawn | 4 |
 | `spawns/grenades` | `maybraid-spawns-grenades` | Thrown-grenade body / fuse / source | 4 |
@@ -108,7 +108,7 @@ with its persistence owner. Application / session transitions stay in
 | Destination selected | `DestinationSelected`, `PlayerChoseRespawnPoi` | `spawns/player` | 1 |
 | First-wave / resume gates | `FirstWave`, `PlayerPositionWaypoints` | `world/lib` adapters | 1 |
 | Map presentation | `WorldMapView` | `world/lib` | 1 |
-| Placement interpreter | `ResolvePlacement` | still inline in `respawn_world_player` | 2 |
+| Placement interpreter | `ResolvePlacement`, `PlacementWork`, `PlacementSupport` | `spawns/placement` | **2** |
 | Actor interpreter | `SpawnActor` | still `finish_world_player_spawn` | 3 |
 | Player handoff | `ActivatePlayerArrival` | camera `begin_life` still in world | 3 |
 | Projectile interpreter | `SpawnProjectile` | `fire_weapons` presentation | 4 |

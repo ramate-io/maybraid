@@ -19,7 +19,7 @@ use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
 use world_player::{
 	holding_elevation, player_position_above_surface, player_spawn_point_at, spawn_player_body,
-	surface_or_hold_at, AwaitingTerrainSurface, CharacterLocomotion, CharacterSpecies,
+	AwaitingTerrainSurface, CharacterLocomotion, CharacterSpecies,
 	ModePlayerPolicies, MoveWish, OffTerrainAnchor, Player as VegetationPlayer, PlayerLifeEnded,
 	PlayerLifeSet, PlayerSpawnXz, RequestSetCharacter, RequestSetCharacterAppearance,
 	RespawnOrigin,
@@ -53,6 +53,7 @@ pub struct WorldPlayerLifecyclePlugin;
 impl Plugin for WorldPlayerLifecyclePlugin {
 	fn build(&self, app: &mut App) {
 		maybraid_spawns_player::register_player_spawn_runtime(app);
+		maybraid_spawns_placement::register_placement_runtime(app);
 		app.init_resource::<WorldMapView>()
 			.add_message::<PlayerLifeEnded>()
 			.add_message::<CharacterIntent>()
@@ -83,6 +84,7 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 				Update,
 				(
 					crate::first_wave::refresh_first_wave,
+					observe_placement_support.after(crate::first_wave::refresh_first_wave),
 					queue_first_spawn_picker.after(crate::first_wave::refresh_first_wave),
 					crate::spawn_picker::dispatch_spawn_picker,
 					respawn_world_player
@@ -387,22 +389,43 @@ fn respawn_world_player(
 	}
 	let origin = pending.origin;
 	let fallback_at = pending.fallback_at;
-	let placed = choice.poi.and_then(|id| registry.get(id).copied());
+	let destination = choice.destination();
+	if let Some(id) = destination.poi() {
+		state.last_poi = Some(id);
+	}
+	let request = maybraid_spawns_placement::ResolvePlacement::new(
+		choice.identity,
+		destination,
+		maybraid_spawns_placement::ActorClearance::HUMANOID,
+		fallback_at,
+	);
+	let pending = request.realize(&registry, &surface);
+	let spawn = pending.as_ref().ok().and_then(|pending| pending.pose).unwrap_or_else(|| {
+		maybraid_spawns_placement::PlacementPose::outdoor_at(
+			&surface,
+			fallback_at.xz(),
+			maybraid_spawns_placement::ActorClearance::HUMANOID,
+		)
+	});
+	commands.queue(move |world: &mut World| {
+		if let Some(mut messages) =
+			world.get_resource_mut::<Messages<maybraid_spawns_placement::ResolvePlacement>>()
+		{
+			messages.write(request);
+		}
+		world
+			.resource_mut::<maybraid_spawns_placement::PlacementWork>()
+			.insert(match pending {
+				Ok(pending) => pending,
+				Err(_) => maybraid_spawns_placement::PendingPlacement::new(
+					choice.identity,
+					destination,
+					spawn,
+				),
+			});
+	});
 	close_respawn_map(&mut map);
 	state.pending = None;
-	let spawn = match placed {
-		Some(record) => {
-			state.last_poi = Some(record.id);
-			spawn_pose_for_chosen_poi(&record, &surface)
-		}
-		None => ChosenPoiSpawn {
-			position: player_spawn_point_at(
-				fallback_at.xz(),
-				surface_or_hold_at(&surface, fallback_at.xz()),
-			),
-			interior: false,
-		},
-	};
 	finish_world_player_spawn(
 		&mut commands,
 		&mut meshes,
@@ -412,8 +435,27 @@ fn respawn_world_player(
 		origin,
 		now,
 		spawn.position,
-		spawn.interior,
+		spawn.interior(),
 	);
+}
+
+/// Collision-support readiness is presentation / physics, not GenerationScheme.
+fn observe_placement_support(
+	surface: DurhamSurface,
+	work: Res<maybraid_spawns_placement::PlacementWork>,
+	world_ready: Option<Res<crate::control::WorldSurfaceReady>>,
+	mut support: ResMut<maybraid_spawns_placement::PlacementSupport>,
+) {
+	let collider_ready = world_ready.is_some_and(|ready| ready.0);
+	let height_ready = if work.is_empty() {
+		collider_ready
+	} else {
+		work.pending().iter().filter_map(|pending| pending.pose).any(|pose| {
+			!pose.policy.waits_for_support()
+				|| surface.composed_height_at(pose.position.xz()).is_some()
+		})
+	};
+	support.observe(maybraid_spawns_placement::SupportReadiness::new(height_ready, collider_ready));
 }
 
 fn open_respawn_picker(
@@ -541,31 +583,8 @@ fn is_building_poi(kind: PoiKind) -> bool {
 	kind == LOCAL_POI || kind == URBAN_POI || kind == SALOON_POI
 }
 
-/// House / storey / lounge pins live inside a building. Urban settlement pins
-/// stay outdoor even when the registry marks them local.
 fn is_interior_building_poi(record: &PoiRecord) -> bool {
-	record.local && (record.kind == LOCAL_POI || record.kind == SALOON_POI)
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct ChosenPoiSpawn {
-	position: Vec3,
-	interior: bool,
-}
-
-/// Local interiors keep the POI floor. Outdoor pins snap to composed terrain.
-fn spawn_pose_for_chosen_poi(record: &PoiRecord, surface: &DurhamSurface) -> ChosenPoiSpawn {
-	if is_interior_building_poi(record) {
-		ChosenPoiSpawn { position: player_position_above_surface(record.position), interior: true }
-	} else {
-		ChosenPoiSpawn {
-			position: player_spawn_point_at(
-				record.position.xz(),
-				surface_or_hold_at(surface, record.position.xz()),
-			),
-			interior: false,
-		}
-	}
+	maybraid_spawns_placement::interior_building_poi(record)
 }
 
 fn prefer_building_poi_ids(ids: &[PoiId], registry: &PoiRegistry, death_at: Vec3) -> Vec<PoiId> {
@@ -915,6 +934,8 @@ mod tests {
 		world.insert_resource(WorldGameplayEnabled(gameplay));
 		world.init_resource::<WorldMapView>();
 		world.init_resource::<SpawnPickerSheet>();
+		world.init_resource::<maybraid_spawns_placement::PlacementWork>();
+		world.init_resource::<maybraid_spawns_placement::PlacementSupport>();
 		world.init_resource::<Messages<PlayerChoseRespawnPoi>>();
 		world.init_resource::<PoiRegistry>();
 		world.init_resource::<CharacterLocomotion>();
@@ -1440,6 +1461,34 @@ mod tests {
 		assert_eq!(live_player_count(&mut world), 1);
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
 		assert!(world.resource::<WorldMapView>().begin_life);
+		Ok(())
+	}
+
+	#[test]
+	fn first_spawn_a_records_persistent_placement_work() -> anyhow::Result<()> {
+		let mut world = respawn_world(0.0, true, true);
+		{
+			let mut state = world.resource_mut::<WorldPlayerRespawnState>();
+			let pending = state.pending.as_mut().unwrap();
+			pending.origin = RespawnOrigin::began(Some(std::any::TypeId::of::<EndsLife>()), false);
+			pending.first_life = true;
+			pending.timer = Timer::from_seconds(0.0, TimerMode::Once);
+		}
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let identity = world
+			.resource::<WorldPlayerRespawnState>()
+			.pending_identity()
+			.ok_or_else(|| anyhow::anyhow!("pending identity"))?;
+		arm_locked_picker_input(&mut world);
+		confirm_picker_from_a(&mut world)?;
+		let work = world.resource::<maybraid_spawns_placement::PlacementWork>();
+		assert!(
+			work.get(identity).is_some(),
+			"placement must survive the confirm frame, not a one-shot message"
+		);
+		assert_eq!(live_player_count(&mut world), 1);
 		Ok(())
 	}
 

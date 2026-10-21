@@ -7029,6 +7029,7 @@ dependencies = [
  "maybraid-input",
  "maybraid-session",
  "maybraid-skill-map",
+ "maybraid-spawns-placement",
  "maybraid-spawns-player",
  "player",
  "player-camera",
@@ -7177,6 +7178,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-spawns-placement"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "durham",
+ "lod",
+ "maybraid-spawns-core",
+ "maybraid-spawns-player",
+ "poi-intelligence",
+ "world-player",
+]
+
+[[package]]
 name = "maybraid-spawns-player"
 version = "0.1.5"
 dependencies = [
@@ -7259,6 +7274,7 @@ dependencies = [
  "maybraid-session",
  "maybraid-skill-map",
  "maybraid-sky",
+ "maybraid-spawns-placement",
  "maybraid-spawns-player",
  "maybraid-vfx",
  "maybraid-weather",

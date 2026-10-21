@@ -51,6 +51,7 @@ pub fn register_gameplay_runtime(app: &mut App) {
 	powers::configure(app);
 	actor_lifecycle::configure(app);
 	maybraid_spawns_player::register_player_spawn_runtime(app);
+	maybraid_spawns_placement::register_placement_runtime(app);
 }
 
 /// Assembles session, equipment, and item-domain runtimes. World keeps terrain,
