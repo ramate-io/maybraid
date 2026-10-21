@@ -26,11 +26,7 @@ pub fn urban_poi() -> PoiKind {
 
 impl PlacementPolicy {
 	pub fn for_poi(record: &PoiRecord) -> Self {
-		if interior_building_poi(record) {
-			Self::InteriorFloor
-		} else {
-			Self::OutdoorGround
-		}
+		if interior_building_poi(record) { Self::InteriorFloor } else { Self::OutdoorGround }
 	}
 
 	pub fn preferred_position(self, record: &PoiRecord) -> Vec3 {

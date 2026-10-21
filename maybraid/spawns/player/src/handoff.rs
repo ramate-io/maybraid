@@ -3,8 +3,8 @@
 //! Construction does not choose a local player or change cameras. Handoff
 //! requests are correlated to the same arrival identity.
 
+use crate::identity::SpawnIdentity;
 use bevy::prelude::*;
-use maybraid_spawns_core::SpawnIdentity;
 
 /// Assign input, follow camera, and close arrival UI for this arrival.
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]

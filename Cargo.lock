@@ -7170,14 +7170,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "maybraid-spawns-core"
-version = "0.1.5"
-dependencies = [
- "anyhow",
- "bevy",
-]
-
-[[package]]
 name = "maybraid-spawns-placement"
 version = "0.1.5"
 dependencies = [
@@ -7185,7 +7177,6 @@ dependencies = [
  "bevy",
  "durham",
  "lod",
- "maybraid-spawns-core",
  "maybraid-spawns-player",
  "poi-intelligence",
  "world-player",
@@ -7199,7 +7190,6 @@ dependencies = [
  "bevy",
  "maybraid-controllers-core",
  "maybraid-input",
- "maybraid-spawns-core",
  "poi-intelligence",
  "world-player",
 ]

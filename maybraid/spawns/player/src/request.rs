@@ -1,8 +1,8 @@
 //! Player-arrival requests. Destination selection stays here; placement and
 //! actor construction are later interpreters.
 
+use crate::identity::{SpawnIdentity, SpawnOwner};
 use bevy::prelude::*;
-use maybraid_spawns_core::{SpawnIdentity, SpawnOwner};
 use poi_intelligence::PoiId;
 use world_player::RespawnOrigin;
 
@@ -111,7 +111,7 @@ impl PlayerChoseRespawnPoi {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use maybraid_spawns_core::{SpawnRequestId, SpawnSessionId};
+	use crate::identity::{SpawnRequestId, SpawnSessionId};
 
 	#[test]
 	fn a_stale_destination_does_not_match_a_new_request() {

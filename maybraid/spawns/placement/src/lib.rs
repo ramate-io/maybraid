@@ -72,7 +72,7 @@ impl PlacementPose {
 		registry: &PoiRegistry,
 		surface: &DurhamSurface,
 		fallback_at: Vec3,
-	) -> Result<Self, maybraid_spawns_core::SpawnFailureReason> {
+	) -> Result<Self, maybraid_spawns_player::SpawnFailureReason> {
 		match destination {
 			ArrivalDestination::Poi(id) => Self::resolve_poi(id, registry, surface),
 			ArrivalDestination::Fallback => Ok(Self::outdoor_at(
@@ -90,9 +90,9 @@ impl PlacementPose {
 		id: PoiId,
 		registry: &PoiRegistry,
 		surface: &DurhamSurface,
-	) -> Result<Self, maybraid_spawns_core::SpawnFailureReason> {
+	) -> Result<Self, maybraid_spawns_player::SpawnFailureReason> {
 		let Some(record) = registry.get(id) else {
-			return Err(maybraid_spawns_core::SpawnFailureReason::DestinationUnresolved);
+			return Err(maybraid_spawns_player::SpawnFailureReason::DestinationUnresolved);
 		};
 		Ok(match PlacementPolicy::for_poi(record) {
 			PlacementPolicy::InteriorFloor => Self::interior_at(record.position),
@@ -130,7 +130,7 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainConfig, WorldBaseTerrain};
 	use lod::hcsg::HcsgStorage;
-	use maybraid_spawns_core::{
+	use maybraid_spawns_player::{
 		SpawnFailureReason, SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId,
 	};
 	use poi_intelligence::PoiId;
