@@ -7,25 +7,23 @@
 pub mod arrival;
 pub mod controller;
 pub mod handoff;
+pub mod identity;
+pub mod outcome;
 pub mod picker;
 pub mod request;
 
 pub use arrival::{
+	ArrivalPhase, PendingPlayerRespawn, WorldPlayerRespawnConfig, WorldPlayerRespawnState,
 	map_flick_dir, menu_nav_dir, nearest_candidate, nearest_in_direction,
-	next_candidate_in_direction, reset_first_spawn_offer, ArrivalPhase, PendingPlayerRespawn,
-	WorldPlayerRespawnConfig, WorldPlayerRespawnState,
+	next_candidate_in_direction, reset_first_spawn_offer,
 };
-pub use controller::{begin_player_arrivals, PlayerArrivalPolicy};
-pub use handoff::{
-	handoff_player_arrivals, ActivatePlayerArrival, PlayerArrivalCompleted, PlayerArrivalFailed,
-};
-pub use maybraid_spawns_core::{
-	SpawnCancelReason, SpawnFailureReason, SpawnIdentity, SpawnOutcome, SpawnOwner, SpawnRequestId,
-	SpawnSessionId,
-};
+pub use controller::{PlayerArrivalPolicy, begin_player_arrivals};
+pub use handoff::{ActivatePlayerArrival, PlayerArrivalCompleted, PlayerArrivalFailed};
+pub use identity::{SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
+pub use outcome::{SpawnCancelReason, SpawnFailureReason, SpawnOutcome};
 pub use picker::{
-	dispatch_spawn_picker, refresh_spawn_picker_focus, release_spawn_picker, SpawnPickerCapture,
-	SpawnPickerController, SpawnPickerSheet,
+	SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet, dispatch_spawn_picker,
+	refresh_spawn_picker_focus, release_spawn_picker,
 };
 pub use request::{
 	ArrivalDestination, ArrivalReason, BeginPlayerArrival, DestinationSelected,
@@ -57,11 +55,10 @@ pub fn register_player_spawn_runtime(app: &mut App) {
 		.add_message::<BeginPlayerArrival>()
 		.add_message::<DestinationSelected>()
 		.add_message::<PlayerChoseRespawnPoi>()
-		.add_message::<maybraid_spawns_actors::ActorSpawned>()
 		.add_message::<ActivatePlayerArrival>()
 		.add_message::<PlayerArrivalCompleted>()
 		.add_message::<PlayerArrivalFailed>()
-		.add_systems(Update, (begin_player_arrivals, handoff_player_arrivals).chain());
+		.add_systems(Update, begin_player_arrivals);
 }
 
 /// Arrival controller + UI-owned picker. World keeps map and construction

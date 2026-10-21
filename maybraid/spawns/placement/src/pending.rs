@@ -2,8 +2,10 @@
 //! generation outlives message retention.
 
 use bevy::prelude::*;
-use maybraid_spawns_core::{SpawnCancelReason, SpawnFailureReason, SpawnIdentity, SpawnOutcome};
 use maybraid_spawns_player::ArrivalDestination;
+use maybraid_spawns_player::{
+	SpawnCancelReason, SpawnFailureReason, SpawnIdentity, SpawnOutcome, SpawnSessionId,
+};
 
 use crate::request::{PlacementFailed, PlacementPolicy, PlacementReady};
 use crate::support::PlacementSupport;
@@ -72,7 +74,7 @@ impl PlacementWork {
 		Some(SpawnOutcome::cancelled(pending.identity, SpawnCancelReason::Requested))
 	}
 
-	pub fn cancel_session(&mut self, session: maybraid_spawns_core::SpawnSessionId) {
+	pub fn cancel_session(&mut self, session: SpawnSessionId) {
 		self.pending.retain(|pending| pending.identity.owner.session != session);
 	}
 
@@ -105,8 +107,8 @@ impl PlacementWork {
 mod tests {
 	use super::*;
 	use bevy::prelude::Vec3;
-	use maybraid_spawns_core::{SpawnOwner, SpawnRequestId, SpawnSessionId};
 	use maybraid_spawns_player::ArrivalDestination;
+	use maybraid_spawns_player::{SpawnOwner, SpawnRequestId, SpawnSessionId};
 
 	use crate::support::PlacementSupport;
 
@@ -162,7 +164,9 @@ mod tests {
 			},
 		);
 		let ready = pending.ready(PlacementSupport::waiting());
-		assert!(ready
-			.is_some_and(|ready| ready.position.y == 12.0 && !ready.policy.waits_for_support()));
+		assert!(
+			ready
+				.is_some_and(|ready| ready.position.y == 12.0 && !ready.policy.waits_for_support())
+		);
 	}
 }

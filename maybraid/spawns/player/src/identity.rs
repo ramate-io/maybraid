@@ -1,4 +1,8 @@
 //! Request identity and the session owner that issued it.
+//!
+//! These stay domain-owned on the player crate until a second consumer
+//! needs the same vocabulary. Later crates should copy or re-export from
+//! here rather than introducing a shared `spawns/core` crate first.
 
 /// Monotonic identity for one spawn or arrival request.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -66,7 +70,7 @@ impl SpawnOwner {
 	}
 }
 
-/// Identity stamped on every domain request and outcome.
+/// Identity stamped on player-arrival requests and outcomes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct SpawnIdentity {
 	pub request: SpawnRequestId,
@@ -92,7 +96,9 @@ mod tests {
 		let first = SpawnOwner::new(SpawnSessionId::new(1));
 		let second = SpawnOwner::new(first.session.next());
 		assert!(!first.matches(second));
-		assert!(!SpawnIdentity::new(SpawnRequestId::new(3), first)
-			.matches(SpawnIdentity::new(SpawnRequestId::new(3), second)));
+		assert!(
+			!SpawnIdentity::new(SpawnRequestId::new(3), first)
+				.matches(SpawnIdentity::new(SpawnRequestId::new(3), second))
+		);
 	}
 }

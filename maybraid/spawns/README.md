@@ -1,23 +1,24 @@
 # Spawn orchestration
 
 Tracking: [#1468](https://github.com/ramate-io/maybraid/issues/1468).
-This document is the stacked phase 1–5 contract
+This document is the stacked phase 1–4 contract
 ([#1469](https://github.com/ramate-io/maybraid/issues/1469),
 [#1470](https://github.com/ramate-io/maybraid/issues/1470),
 [#1471](https://github.com/ramate-io/maybraid/issues/1471),
-[#1472](https://github.com/ramate-io/maybraid/issues/1472),
-[#1473](https://github.com/ramate-io/maybraid/issues/1473)).
-Later phases stack on it; they should update symbol mappings when they move
-a writer, not invent a second inventory.
+[#1472](https://github.com/ramate-io/maybraid/issues/1472))
+plus a light population wiring change
+([#1473](https://github.com/ramate-io/maybraid/issues/1473)).
+There is no `spawns/core` crate: request IDs stay domain-owned.
+Later phases stack on this; they should update symbol mappings when they
+move a writer, not invent a second inventory.
 
 A **controller** decides what should happen and emits a request. An
 **interpreter** realizes it. A controller can consume an intermediate
 outcome and issue the next request.
 
 There is no universal `SpawnIntent` enum and no registry of every spawnable
-type. [`spawns/core`](core/) is optional for simple consumers: shared
-identity and outcome vocabulary only. Domain requests stay in their spawn
-crates.
+type. Request IDs and outcomes stay domain-owned until real duplication
+emerges. Player-arrival identity lives in [`spawns/player`](player/).
 
 ## Flow
 
@@ -47,12 +48,9 @@ Grenade cook / release / drop → SpawnThrownGrenade
   → presentation interpreter (mesh / audio / VFX)
 ```
 
-Population (phase 5):
-
-```text
-Cell / encounter demand → placement + actor requests
-Retirement → cancellation / despawn
-```
+Population stays with existing generation / barking / mob-scenes owners.
+Those layers issue placement and actor-spawn requests directly; there is
+no `spawns/population` crate.
 
 ## Dependency direction
 
@@ -60,14 +58,15 @@ Retirement → cancellation / despawn
 bevy / maybraid-input / controllers/core
         ▲
         │
-spawns/core          (identity + outcomes — no game deps)
+spawns/player        (arrival identity + picker + handoff)
         ▲
         │
-spawns/player        spawns/placement        spawns/actors
-spawns/projectiles   spawns/grenades         spawns/population
+spawns/placement     spawns/actors
+spawns/projectiles   spawns/grenades
         ▲
         │
 gameplay/lib adapters + world/lib presentation / first-wave / map
+population / barking / mob-scenes issue actor + placement requests
 ```
 
 Rules:
@@ -84,13 +83,11 @@ Rules:
 
 | Directory | Package | Owns | Phase |
 |---|---|---|---|
-| `spawns/core` | `maybraid-spawns-core` | `SpawnRequestId`, `SpawnSessionId`, `SpawnOwner`, cancel / failure reasons | 1 |
-| `spawns/player` | `maybraid-spawns-player` | Arrival controller, picker, destination selection, handoff requests | 1 |
-| `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / support | **2** |
-| `spawns/actors` | `maybraid-spawns-actors` | `SpawnActor` / `ActorSpawned` | **3** |
-| `spawns/projectiles` | `maybraid-spawns-projectiles` | Simulation projectile spawn | 4 |
-| `spawns/grenades` | `maybraid-spawns-grenades` | Thrown-grenade body / fuse / source | 4 |
-| `spawns/population` | `maybraid-spawns-population` | Cell / encounter demand and retirement | 5 |
+| `spawns/player` | `maybraid-spawns-player` | Arrival identity, picker, destination selection, cancellation, handoff | 1 |
+| `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / support readiness | 2 |
+| `spawns/actors` | `maybraid-spawns-actors` | Thin actor construction interpreter | **3** |
+| `spawns/projectiles` | `maybraid-spawns-projectiles` | Batched projectile construction | 4 |
+| `spawns/grenades` | `maybraid-spawns-grenades` | Thrown-body construction | 4 |
 
 `world/lib` keeps terrain generation, POI indexing, streamed presentation,
 first-wave HCSG gates, and the locked map sheet. Loadout persistence stays
@@ -101,7 +98,7 @@ with its persistence owner. Application / session transitions stay in
 
 | Role | Symbol | Now | Phase |
 |---|---|---|---|
-| Request identity | `SpawnIdentity` | `spawns/core` | 1 |
+| Request identity | `SpawnIdentity` | `spawns/player` | 1 |
 | Player arrival controller | `begin_player_arrivals`, `WorldPlayerRespawnState` | `spawns/player` | 1 |
 | Spawn-picker controller | `SpawnPickerController` | `spawns/player` | 1 |
 | Arrival phases | `ArrivalPhase` | `spawns/player` | 1 |
@@ -109,11 +106,11 @@ with its persistence owner. Application / session transitions stay in
 | First-wave / resume gates | `FirstWave`, `PlayerPositionWaypoints` | `world/lib` adapters | 1 |
 | Map presentation | `WorldMapView` | `world/lib` | 1 |
 | Placement interpreter | `ResolvePlacement`, `PlacementWork`, `PlacementSupport` | `spawns/placement` | **2** |
-| Actor interpreter | `SpawnActor`, `ActorSpawned` | `spawns/actors` | **3** |
+| Actor interpreter | `SpawnActor` over `spawn_player_body` | `spawns/actors` | **3** |
 | Player handoff | `ActivatePlayerArrival` | `spawns/player`; world applies motor / camera | **3** |
 | Projectile interpreter | `SpawnProjectile` | `fire_weapons` presentation | 4 |
 | Grenade interpreter | `SpawnThrownGrenade` | `grenades` presentation | 4 |
-| Population controller | cell demand | `barking` / `mob-scenes` | 5 |
+| Population demand | cell lifecycle | `barking` / `mob-scenes` (issues actor / placement requests) | 3 |
 
 ## Player arrival
 

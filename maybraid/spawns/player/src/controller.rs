@@ -1,8 +1,8 @@
 //! First spawn / death / resume policy. World adapters emit
 //! [`BeginPlayerArrival`]; this controller records the arrival.
 
+use crate::identity::SpawnIdentity;
 use bevy::prelude::*;
-use maybraid_spawns_core::SpawnIdentity;
 
 use crate::arrival::{WorldPlayerRespawnConfig, WorldPlayerRespawnState};
 use crate::request::BeginPlayerArrival;
@@ -53,8 +53,8 @@ impl PlayerArrivalPolicy {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::identity::{SpawnOwner, SpawnSessionId};
 	use bevy::prelude::Vec3;
-	use maybraid_spawns_core::{SpawnOwner, SpawnSessionId};
 	use world_player::RespawnOrigin;
 
 	use crate::request::ArrivalReason;

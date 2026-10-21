@@ -1,30 +1,28 @@
-//! Actor construction interpreter. SpawnActor creates the body; handoff
-//! activates it.
+//! Thin actor construction interpreter.
+//!
+//! [`SpawnActor::realize`] calls existing player-body APIs. NPC population
+//! keeps calling `character.spawn` directly. Construction is synchronous;
+//! there is no pending-work tracker and no generic recipe framework.
 
-pub mod lifecycle;
 pub mod realize;
 pub mod request;
 
-pub use lifecycle::ActorSpawnWork;
-pub use request::{ActorRecipe, ActorSpawnFailed, ActorSpawned, CancelActorSpawn, SpawnActor};
+pub use request::{ActorSpawnFailed, ActorSpawned, SpawnActor};
 
 use bevy::prelude::*;
 
 #[derive(Resource, Default)]
 struct ActorSpawnRuntime;
 
-/// Headless-safe actor construction messages and pending work.
+/// Headless-safe actor construction messages. Idempotent.
 pub fn register_actor_spawn_runtime(app: &mut App) {
 	if app.world().contains_resource::<ActorSpawnRuntime>() {
 		return;
 	}
 	app.init_resource::<ActorSpawnRuntime>()
-		.init_resource::<ActorSpawnWork>()
 		.add_message::<SpawnActor>()
 		.add_message::<ActorSpawned>()
-		.add_message::<ActorSpawnFailed>()
-		.add_message::<CancelActorSpawn>()
-		.add_systems(Update, cancel_actor_spawns);
+		.add_message::<ActorSpawnFailed>();
 }
 
 pub struct ActorSpawnPlugin;
@@ -35,20 +33,11 @@ impl Plugin for ActorSpawnPlugin {
 	}
 }
 
-fn cancel_actor_spawns(
-	mut work: ResMut<ActorSpawnWork>,
-	mut cancels: MessageReader<CancelActorSpawn>,
-) {
-	for cancel in cancels.read() {
-		let _ = work.cancel(cancel.identity);
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use maybraid_spawns_core::{SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
+	use maybraid_spawns_player::{SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
 	use world_player::{AwaitingTerrainSurface, CharacterLocomotion, OffTerrainAnchor, Player};
 
 	fn identity() -> SpawnIdentity {
@@ -60,7 +49,6 @@ mod tests {
 		world.init_resource::<Assets<Mesh>>();
 		world.init_resource::<Assets<StandardMaterial>>();
 		world.init_resource::<CharacterLocomotion>();
-		world.init_resource::<ActorSpawnWork>();
 		world
 	}
 
@@ -70,7 +58,7 @@ mod tests {
 		app.add_plugins(MinimalPlugins);
 		register_actor_spawn_runtime(&mut app);
 		register_actor_spawn_runtime(&mut app);
-		assert!(app.world().contains_resource::<ActorSpawnWork>());
+		assert!(app.world().contains_resource::<ActorSpawnRuntime>());
 	}
 
 	#[test]
@@ -82,13 +70,12 @@ mod tests {
 				 mut meshes: ResMut<Assets<Mesh>>,
 				 mut materials: ResMut<Assets<StandardMaterial>>,
 				 locomotion: Res<CharacterLocomotion>| {
-					SpawnActor::new(
-						identity(),
-						Vec3::new(8.0, 4.0, 5.0),
-						false,
-						ActorRecipe::species_default(),
+					SpawnActor::player_body(identity(), Vec3::new(8.0, 4.0, 5.0), false).realize(
+						&mut commands,
+						&mut meshes,
+						&mut materials,
+						locomotion.as_ref(),
 					)
-					.realize(&mut commands, &mut meshes, &mut materials, locomotion.as_ref())
 				},
 			)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -113,13 +100,12 @@ mod tests {
 				 mut meshes: ResMut<Assets<Mesh>>,
 				 mut materials: ResMut<Assets<StandardMaterial>>,
 				 locomotion: Res<CharacterLocomotion>| {
-					SpawnActor::new(
-						identity(),
-						Vec3::new(8.0, 12.0, 5.0),
-						true,
-						ActorRecipe::species_default(),
+					SpawnActor::player_body(identity(), Vec3::new(8.0, 12.0, 5.0), true).realize(
+						&mut commands,
+						&mut meshes,
+						&mut materials,
+						locomotion.as_ref(),
 					)
-					.realize(&mut commands, &mut meshes, &mut materials, locomotion.as_ref())
 				},
 			)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

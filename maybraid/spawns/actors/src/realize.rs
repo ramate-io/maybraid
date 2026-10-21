@@ -5,8 +5,8 @@
 
 use bevy::prelude::*;
 use world_player::{
-	spawn_player_body, AwaitingTerrainSurface, CharacterLocomotion, CharacterSpecies,
-	OffTerrainAnchor, RequestSetCharacter, RequestSetCharacterAppearance,
+	AwaitingTerrainSurface, CharacterLocomotion, CharacterSpecies, OffTerrainAnchor,
+	RequestSetCharacter, RequestSetCharacterAppearance, spawn_player_body,
 };
 
 use crate::request::{ActorSpawned, SpawnActor};
@@ -25,11 +25,11 @@ impl SpawnActor {
 		if self.interior {
 			commands.entity(actor).insert(OffTerrainAnchor { translation: self.position });
 		}
-		if let Some(appearance) = self.recipe.appearance.clone() {
+		if let Some(appearance) = self.appearance.clone() {
 			commands.spawn(RequestSetCharacterAppearance { appearance });
 		} else {
 			commands.spawn(RequestSetCharacter { species: CharacterSpecies::Braidman });
 		}
-		ActorSpawned::new(self.identity, actor, self.recipe.dress)
+		ActorSpawned::new(self.identity, actor, self.dress)
 	}
 }

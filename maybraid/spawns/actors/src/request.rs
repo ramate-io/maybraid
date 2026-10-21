@@ -1,45 +1,31 @@
 //! Actor construction requests. Realization does not choose a local player
-//! or change cameras.
+//! or change cameras. There is no generic recipe framework: callers pass
+//! existing appearance types into [`spawn_player_body`](world_player::spawn_player_body)
+//! or call `character.spawn` themselves.
 
 use bevy::prelude::*;
 use characters::CharacterAppearance;
-use maybraid_spawns_core::{SpawnFailureReason, SpawnIdentity};
+use maybraid_spawns_player::{SpawnFailureReason, SpawnIdentity};
 
-/// How to dress the constructed body. Persistence owns the saved loadout;
-/// this is only the recipe handed to construction.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ActorRecipe {
-	pub appearance: Option<CharacterAppearance>,
-	pub dress: bool,
-}
-
-impl ActorRecipe {
-	pub fn appearance(appearance: CharacterAppearance, dress: bool) -> Self {
-		Self { appearance: Some(appearance), dress }
-	}
-
-	pub const fn species_default() -> Self {
-		Self { appearance: None, dress: false }
-	}
-}
-
-/// Construct an actor at a resolved pose. Activation is a later handoff.
+/// Construct a player body at a resolved pose. Activation is a later handoff.
 #[derive(Message, Clone, Debug, PartialEq)]
 pub struct SpawnActor {
 	pub identity: SpawnIdentity,
 	pub position: Vec3,
 	pub interior: bool,
-	pub recipe: ActorRecipe,
+	pub appearance: Option<CharacterAppearance>,
+	pub dress: bool,
 }
 
 impl SpawnActor {
-	pub const fn new(
-		identity: SpawnIdentity,
-		position: Vec3,
-		interior: bool,
-		recipe: ActorRecipe,
-	) -> Self {
-		Self { identity, position, interior, recipe }
+	pub const fn player_body(identity: SpawnIdentity, position: Vec3, interior: bool) -> Self {
+		Self { identity, position, interior, appearance: None, dress: false }
+	}
+
+	pub fn with_appearance(mut self, appearance: CharacterAppearance, dress: bool) -> Self {
+		self.appearance = Some(appearance);
+		self.dress = dress;
+		self
 	}
 
 	pub fn belongs_to(&self, identity: SpawnIdentity) -> bool {
@@ -47,7 +33,8 @@ impl SpawnActor {
 	}
 }
 
-/// Construction produced an actor entity. Handoff matches this identity.
+/// Construction produced an actor entity. Returned from realize; emit a
+/// message only when an independent consumer needs it.
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ActorSpawned {
 	pub identity: SpawnIdentity,
@@ -83,17 +70,5 @@ impl ActorSpawnFailed {
 
 	pub const fn retryable(self) -> bool {
 		true
-	}
-}
-
-/// Cancel in-flight construction for this identity.
-#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CancelActorSpawn {
-	pub identity: SpawnIdentity,
-}
-
-impl CancelActorSpawn {
-	pub const fn new(identity: SpawnIdentity) -> Self {
-		Self { identity }
 	}
 }

@@ -32,7 +32,6 @@ members = [
   "maybraid/controllers/world",
   "maybraid/gameplay/session",
   "maybraid/gameplay/lib",
-  "maybraid/spawns/core",
   "maybraid/spawns/player",
   "maybraid/spawns/placement",
   "maybraid/spawns/actors",
@@ -321,7 +320,6 @@ maybraid-locomotion-controller = { path = "maybraid/controllers/locomotion" }
 maybraid-world-controller = { path = "maybraid/controllers/world" }
 maybraid-session = { path = "maybraid/gameplay/session" }
 maybraid-gameplay = { path = "maybraid/gameplay/lib" }
-maybraid-spawns-core = { path = "maybraid/spawns/core" }
 maybraid-spawns-player = { path = "maybraid/spawns/player" }
 maybraid-spawns-placement = { path = "maybraid/spawns/placement" }
 maybraid-spawns-actors = { path = "maybraid/spawns/actors" }
