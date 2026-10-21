@@ -38,6 +38,7 @@ members = [
   "maybraid/spawns/actors",
   "maybraid/spawns/projectiles",
   "maybraid/spawns/grenades",
+  "maybraid/spawns/population",
 
   "maybraid/audio",
   "maybraid/weather",
@@ -329,6 +330,7 @@ maybraid-spawns-placement = { path = "maybraid/spawns/placement" }
 maybraid-spawns-actors = { path = "maybraid/spawns/actors" }
 maybraid-spawns-projectiles = { path = "maybraid/spawns/projectiles" }
 maybraid-spawns-grenades = { path = "maybraid/spawns/grenades" }
+maybraid-spawns-population = { path = "maybraid/spawns/population" }
 
 maybraid-audio = { path = "maybraid/audio" }
 maybraid-weather = { path = "maybraid/weather" }

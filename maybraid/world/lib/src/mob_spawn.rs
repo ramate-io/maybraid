@@ -102,12 +102,39 @@ pub(crate) fn apply_spawn_mob_requests(
 		if let Some(console) = console.as_mut() {
 			console.0 = line;
 		}
+		let seed = u64::from(request.seed);
+		let demands: Vec<_> = mobs
+			.iter()
+			.enumerate()
+			.map(|(index, placed)| {
+				maybraid_spawns_population::PopulationDemand::new(
+					maybraid_spawns_population::PopulationOwner::new(
+						Entity::PLACEHOLDER,
+						seed.wrapping_add(index as u64),
+					),
+					maybraid_spawns_player::ArrivalDestination::Resume(
+						placed.transform.translation,
+					),
+					placed.transform.translation,
+					0,
+				)
+			})
+			.collect();
 		pending.push(MobGroup {
 			kind: GroupKind::Placed,
-			seed: u64::from(request.seed),
+			seed,
 			origin: center,
 			extent: request.spacing * (request.count as f32).sqrt().ceil(),
 			mobs,
+		});
+		commands.queue(move |world: &mut World| {
+			if let Some(mut messages) =
+				world.get_resource_mut::<Messages<maybraid_spawns_population::PopulationDemand>>()
+			{
+				for demand in demands {
+					messages.write(demand);
+				}
+			}
 		});
 	}
 }

@@ -63,6 +63,7 @@ maybraid-session = { workspace = true }
 maybraid-spawns-actors = { workspace = true }
 maybraid-spawns-player = { workspace = true }
 maybraid-spawns-placement = { workspace = true }
+maybraid-spawns-population = { workspace = true }
 maybraid-input = { workspace = true }
 maybraid-agent = { workspace = true }
 menu-components = { workspace = true }

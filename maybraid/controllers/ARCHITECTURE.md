@@ -125,6 +125,7 @@ Package names stay; only directories moved. See [#1450](https://github.com/ramat
 | `spawns/actors` | `maybraid-spawns-actors` | `SpawnActor` / `ActorSpawned`. No camera or input assignment. |
 | `spawns/projectiles` | `maybraid-spawns-projectiles` | Simulation `SpawnProjectile` (no mesh) |
 | `spawns/grenades` | `maybraid-spawns-grenades` | Simulation thrown-grenade body / fuse |
+| `spawns/population` | `maybraid-spawns-population` | Cell / encounter demand, ownership, retirement |
 | `game/src` | `maybraid` | Assembles World + Gameplay + shell / flow |
 
 `controllers/world` is a compatibility re-export of `gameplay/session`.

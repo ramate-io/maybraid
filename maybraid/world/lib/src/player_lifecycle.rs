@@ -53,6 +53,7 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 		maybraid_spawns_player::register_player_spawn_runtime(app);
 		maybraid_spawns_placement::register_placement_runtime(app);
 		maybraid_spawns_actors::register_actor_spawn_runtime(app);
+		maybraid_spawns_population::register_population_spawn_runtime(app);
 		app.init_resource::<WorldMapView>()
 			.add_message::<PlayerLifeEnded>()
 			.add_message::<CharacterIntent>()

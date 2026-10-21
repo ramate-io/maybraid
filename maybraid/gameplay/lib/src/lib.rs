@@ -55,6 +55,7 @@ pub fn register_gameplay_runtime(app: &mut App) {
 	maybraid_spawns_actors::register_actor_spawn_runtime(app);
 	maybraid_spawns_projectiles::register_projectile_spawn_runtime(app);
 	maybraid_spawns_grenades::register_grenade_spawn_runtime(app);
+	maybraid_spawns_population::register_population_spawn_runtime(app);
 }
 
 /// Assembles session, equipment, and item-domain runtimes. World keeps terrain,

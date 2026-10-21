@@ -7035,6 +7035,7 @@ dependencies = [
  "maybraid-spawns-grenades",
  "maybraid-spawns-placement",
  "maybraid-spawns-player",
+ "maybraid-spawns-population",
  "maybraid-spawns-projectiles",
  "player",
  "player-camera",
@@ -7234,6 +7235,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-spawns-population"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "maybraid-spawns-actors",
+ "maybraid-spawns-core",
+ "maybraid-spawns-placement",
+ "maybraid-spawns-player",
+]
+
+[[package]]
 name = "maybraid-spawns-projectiles"
 version = "0.1.5"
 dependencies = [
@@ -7317,6 +7330,7 @@ dependencies = [
  "maybraid-spawns-actors",
  "maybraid-spawns-placement",
  "maybraid-spawns-player",
+ "maybraid-spawns-population",
  "maybraid-vfx",
  "maybraid-weather",
  "meandering-intelligence",

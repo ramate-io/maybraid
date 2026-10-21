@@ -90,7 +90,7 @@ Rules:
 | `spawns/actors` | `maybraid-spawns-actors` | `SpawnActor` / `ActorSpawned` | **3** |
 | `spawns/projectiles` | `maybraid-spawns-projectiles` | Simulation projectile spawn | **4** |
 | `spawns/grenades` | `maybraid-spawns-grenades` | Thrown-grenade body / fuse / source | **4** |
-| `spawns/population` | `maybraid-spawns-population` | Cell / encounter demand and retirement | 5 |
+| `spawns/population` | `maybraid-spawns-population` | Cell / encounter demand and retirement | **5** |
 
 `world/lib` keeps terrain generation, POI indexing, streamed presentation,
 first-wave HCSG gates, and the locked map sheet. Loadout persistence stays
@@ -113,7 +113,7 @@ with its persistence owner. Application / session transitions stay in
 | Player handoff | `ActivatePlayerArrival` | `spawns/player`; world applies motor / camera | **3** |
 | Projectile interpreter | `SpawnProjectile` | `spawns/projectiles` | **4** |
 | Grenade interpreter | `SpawnThrownGrenade` | `spawns/grenades` | **4** |
-| Population controller | cell demand | `barking` / `mob-scenes` | 5 |
+| Population controller | `PopulationDemand`, `PopulationOwnership` | `spawns/population` | **5** |
 
 ## Player arrival
 
