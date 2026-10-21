@@ -32,6 +32,7 @@ members = [
   "maybraid/controllers/world",
   "maybraid/gameplay/session",
   "maybraid/gameplay/lib",
+  "maybraid/spawns/player",
 
   "maybraid/audio",
   "maybraid/weather",
@@ -317,6 +318,7 @@ maybraid-locomotion-controller = { path = "maybraid/controllers/locomotion" }
 maybraid-world-controller = { path = "maybraid/controllers/world" }
 maybraid-session = { path = "maybraid/gameplay/session" }
 maybraid-gameplay = { path = "maybraid/gameplay/lib" }
+maybraid-spawns-player = { path = "maybraid/spawns/player" }
 
 maybraid-audio = { path = "maybraid/audio" }
 maybraid-weather = { path = "maybraid/weather" }
