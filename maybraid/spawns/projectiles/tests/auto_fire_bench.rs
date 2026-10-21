@@ -22,9 +22,7 @@ use anyhow::Result;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use gimme_bench_support::{AbReport, Microbench, PassLifetime};
-use maybraid_spawns_projectiles::{
-	attach_projectile_visuals, realize_projectiles, ProjectileSpec, SpawnProjectile,
-};
+use maybraid_spawns_projectiles::{realize_projectiles, ProjectileSpec, SpawnProjectile};
 use projectiles::{spawn_flight_aged, BoltSpec, Flight, ProjectileVisualCache};
 
 const SHOTS: u32 = 240;
@@ -125,9 +123,6 @@ fn spawn_presented_burst(world: &mut World) -> Result<(usize, std::time::Duratio
 	world
 		.run_system_once(realize_projectiles)
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	world
-		.run_system_once(attach_projectile_visuals)
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	let latency = started.elapsed();
 	Ok((world.query::<&Flight>().iter(world).count(), latency))
 }
@@ -216,13 +211,13 @@ fn auto_fire_equivalent_output_bench() -> Result<()> {
 	AbReport {
 		label: "equivalent output (sim+visuals vs sim+visuals)",
 		original_name: "main spawn_flight_aged (sim+mesh)",
-		revised_name: "batched SpawnProjectile + attach_projectile_visuals",
+		revised_name: "batched SpawnProjectile realize (same-pass attach)",
 		original: &original,
 		revised: &revised,
 		operations: SHOTS,
 		operation_name: "shot",
 		lifetime: PassLifetime::FreshPerPass,
-		notes: "same visible output; latency is realize+attach after enqueue",
+		notes: "same visible output; latency is one realize pass after enqueue",
 	}
 	.write_to_stderr()?;
 	let mean_latency = latencies.iter().copied().sum::<std::time::Duration>()
@@ -230,7 +225,7 @@ fn auto_fire_equivalent_output_bench() -> Result<()> {
 	eprintln!(
 		"auto_fire_equivalent_output_bench entity+asset counts \
 		 (mesh+material+entities): {original_units} / {revised_units}; \
-		 batch-interpreter+attach duration after enqueue mean {mean_latency:?} \
+		 same-pass realize duration after enqueue mean {mean_latency:?} \
 		 for {SHOTS} shots"
 	);
 	Ok(())

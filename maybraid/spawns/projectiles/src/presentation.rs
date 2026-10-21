@@ -5,6 +5,20 @@ use projectiles::{Flight, ProjectileVisualCache};
 
 use crate::request::ProjectileVisual;
 
+/// Attach one cached mesh / material pair.
+pub fn attach_projectile_visual(
+	commands: &mut Commands,
+	entity: Entity,
+	spec: &ProjectileVisual,
+	visuals: &mut ProjectileVisualCache,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+) {
+	let (mesh, material) =
+		visuals.mesh_and_material(spec.length, spec.radius, spec.color, meshes, materials);
+	commands.entity(entity).insert((Mesh3d(mesh), MeshMaterial3d(material)));
+}
+
 /// Attach cached visuals to flights that carry a compact visual spec.
 pub fn attach_projectile_visuals(
 	mut commands: Commands,
@@ -14,14 +28,14 @@ pub fn attach_projectile_visuals(
 	added: Query<(Entity, &ProjectileVisual), (With<Flight>, Without<Mesh3d>)>,
 ) {
 	for (entity, spec) in &added {
-		let (mesh, material) = visuals.mesh_and_material(
-			spec.length,
-			spec.radius,
-			spec.color,
+		attach_projectile_visual(
+			&mut commands,
+			entity,
+			spec,
+			&mut visuals,
 			&mut meshes,
 			&mut materials,
 		);
-		commands.entity(entity).insert((Mesh3d(mesh), MeshMaterial3d(material)));
 	}
 }
 
@@ -74,6 +88,29 @@ mod tests {
 		assert!(world.get::<Mesh3d>(projectile).is_some());
 		assert!(world.get::<MeshMaterial3d<StandardMaterial>>(projectile).is_some());
 		assert!(world.get::<ProjectileVisual>(projectile).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn realize_attaches_in_the_same_pass_when_cache_is_present() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Messages<SpawnProjectile>>();
+		world.init_resource::<Assets<Mesh>>();
+		world.init_resource::<Assets<StandardMaterial>>();
+		world.init_resource::<ProjectileVisualCache>();
+		world.write_message(SpawnProjectile::launch(
+			Entity::from_bits(2),
+			Vec3::ZERO,
+			Vec3::Z,
+			ProjectileSpec::Bolt(BoltSpec::default()),
+			0.0,
+			None,
+		));
+		world
+			.run_system_once(crate::realize_projectiles)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let projectile = world.query_filtered::<Entity, With<Flight>>().single(&world)?;
+		assert!(world.get::<Mesh3d>(projectile).is_some());
 		Ok(())
 	}
 
