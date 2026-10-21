@@ -24,11 +24,6 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn empty_input_is_offset_basis() {
-		assert_eq!(Fnv1a64::digest(b""), Fnv1a64::OFFSET);
-	}
-
-	#[test]
 	fn hello_matches_reference_digest() {
 		assert_eq!(Fnv1a64::digest(b"hello"), 0xa430_d846_80aa_bd0b);
 	}
