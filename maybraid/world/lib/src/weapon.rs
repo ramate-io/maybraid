@@ -372,14 +372,7 @@ fn sync_tanz_stack_from_inventory(
 }
 
 pub(crate) fn configure(app: &mut App) {
-	app.configure_sets(
-		Update,
-		FirearmUserSystems::Swap
-			.after(CharacterControlSystems)
-			.before(PlayerSystems::Intent),
-	)
-	.add_systems(Startup, spawn_world_reticle)
-	.add_systems(
+	app.add_systems(Startup, spawn_world_reticle).add_systems(
 		Update,
 		(
 			arm_world_player.before(PlayerSystems::Intent),
