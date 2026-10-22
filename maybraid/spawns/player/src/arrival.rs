@@ -320,7 +320,7 @@ impl WorldPlayerRespawnState {
 	}
 
 	/// Finish a matching arrival exactly once. Returns false for a stale or
-	/// already-activated identity so a late construction cannot take over.
+	/// already-activated identity so a late `ActorSpawned` cannot take over.
 	pub fn complete_arrival(&mut self, identity: SpawnIdentity, attempt: PlacementAttempt) -> bool {
 		if !self.accepts_constructed(identity, attempt) {
 			return false;

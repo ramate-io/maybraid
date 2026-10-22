@@ -121,6 +121,7 @@ Package names stay; only directories moved. See [#1450](https://github.com/ramat
 | `world/lib` | `maybraid-world` | Terrain, POIs, population, presentation, `spawn_surface` |
 | `spawns/player` | `maybraid-spawns-player` | Player arrival identity, picker, destination selection, handoff |
 | `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / support. Collider readiness is not `GenerationScheme`. |
+| `spawns/actors` | `maybraid-spawns-actors` | Thin `SpawnActor` interpreter over existing player-body APIs. No recipe framework, camera, or input assignment. |
 | `game/src` | `maybraid` | Assembles World + Gameplay + shell / flow |
 
 `controllers/world` is a compatibility re-export of `gameplay/session`.

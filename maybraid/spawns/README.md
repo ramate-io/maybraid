@@ -84,8 +84,8 @@ Rules:
 | Directory | Package | Owns | Phase |
 |---|---|---|---|
 | `spawns/player` | `maybraid-spawns-player` | Arrival identity, picker, destination selection, cancellation, handoff | 1 |
-| `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / support readiness | **2** |
-| `spawns/actors` | `maybraid-spawns-actors` | Thin actor construction interpreter | 3 |
+| `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / support readiness | 2 |
+| `spawns/actors` | `maybraid-spawns-actors` | Thin actor construction interpreter | **3** |
 | `spawns/projectiles` | `maybraid-spawns-projectiles` | Batched projectile construction | 4 |
 | `spawns/grenades` | `maybraid-spawns-grenades` | Thrown-body construction | 4 |
 
@@ -106,8 +106,8 @@ with its persistence owner. Application / session transitions stay in
 | First-wave / resume gates | `FirstWave`, `PlayerPositionWaypoints` | `world/lib` adapters | 1 |
 | Map presentation | `WorldMapView` | `world/lib` | 1 |
 | Placement interpreter | `ResolvePlacement`, `PlacementWork`, `PlacementSupport` | `spawns/placement` | **2** |
-| Actor interpreter | `SpawnActor` | still `finish_world_player_spawn` | 3 |
-| Player handoff | `ActivatePlayerArrival` | camera `begin_life` still in world | 3 |
+| Actor interpreter | `SpawnActor` over `spawn_player_body` | `spawns/actors` | **3** |
+| Player handoff | `ActivatePlayerArrival` | `spawns/player`; world applies motor / camera | **3** |
 | Projectile interpreter | `SpawnProjectile` | `fire_weapons` presentation | 4 |
 | Grenade interpreter | `SpawnThrownGrenade` | `grenades` presentation | 4 |
 | Population demand | cell lifecycle | `barking` / `mob-scenes` (issues actor / placement requests) | 3 |

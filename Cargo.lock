@@ -7029,6 +7029,7 @@ dependencies = [
  "maybraid-input",
  "maybraid-session",
  "maybraid-skill-map",
+ "maybraid-spawns-actors",
  "maybraid-spawns-placement",
  "maybraid-spawns-player",
  "player",
@@ -7170,6 +7171,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-spawns-actors"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "characters",
+ "maybraid-spawns-player",
+ "world-player",
+]
+
+[[package]]
 name = "maybraid-spawns-placement"
 version = "0.1.5"
 dependencies = [
@@ -7268,6 +7281,7 @@ dependencies = [
  "maybraid-session",
  "maybraid-skill-map",
  "maybraid-sky",
+ "maybraid-spawns-actors",
  "maybraid-spawns-placement",
  "maybraid-spawns-player",
  "maybraid-vfx",
