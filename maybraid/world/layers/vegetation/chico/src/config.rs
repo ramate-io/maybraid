@@ -97,7 +97,19 @@ impl Default for ChicoConfig {
 impl ChicoConfig {
 	/// Forest on at radius 1 (1 km present / 3 km generate).
 	pub fn world_defaults() -> Self {
-		Self { forest: Some(ForestStreamSpec { stream_radius: 1, ..ForestStreamSpec::default() }) }
+		let mut forest = ForestStreamSpec { stream_radius: 1, ..ForestStreamSpec::default() };
+		if let Some(layering) = crate::packed::PackMode::emphasis_from_env() {
+			forest.layering = Some(layering);
+		}
+		Self { forest: Some(forest), ..Self::default() }
+	}
+
+	/// Forest on at radius 0 (one grove extent), generate budgets 16.
+	pub fn grove() -> Self {
+		Self {
+			forest: Some(ForestStreamSpec { stream_radius: 0, ..ForestStreamSpec::default() }),
+			..Self::world_defaults()
+		}
 	}
 }
 

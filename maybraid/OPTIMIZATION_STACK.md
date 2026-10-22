@@ -216,6 +216,17 @@ Do **not** unique-merge city walls further.
   `ChicoGrove::ensure_grown` (cap 4 tasks) plus one host spawn per present
   quantum — present hitch when tiles finish growing, not the 7.4 ms Update.
 
+## Packed grove experiment ([#956](https://github.com/ramate-io/maybraid/issues/956))
+
+Opt-in: `MAYBRAID_PACKED_GROVES=orchard`. Optional
+`MAYBRAID_PACKED_GROVE_EMPHASIS=ag-town` pins Discovery upper canopy to orchard.
+Orchard tiles skip per-`Mesh3d` extract and draw cached shared-kit batches
+after `main_opaque_pass_3d`. Compare the same seed and camera route with the
+switch off, then on. A lower `write_binned_instance_buffers<Opaque3d>` only
+counts if `packed_grove_select` / `packed_grove_upload` did not absorb the
+same work. Resident camera motion must not rebuild geometry, repack instances,
+or upload full payloads.
+
 ## How to re-measure
 
 Prefer Tracy over hitch loggers.
