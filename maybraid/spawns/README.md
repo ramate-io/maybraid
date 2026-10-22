@@ -85,9 +85,9 @@ Rules:
 |---|---|---|---|
 | `spawns/player` | `maybraid-spawns-player` | Arrival identity, picker, destination selection, cancellation, handoff | 1 |
 | `spawns/placement` | `maybraid-spawns-placement` | Floor / clearance / support readiness | 2 |
-| `spawns/actors` | `maybraid-spawns-actors` | Thin actor construction interpreter | **3** |
-| `spawns/projectiles` | `maybraid-spawns-projectiles` | Batched projectile construction | 4 |
-| `spawns/grenades` | `maybraid-spawns-grenades` | Thrown-body construction | 4 |
+| `spawns/actors` | `maybraid-spawns-actors` | Thin actor construction interpreter | 3 |
+| `spawns/projectiles` | `maybraid-spawns-projectiles` | Batched projectile construction | **4** |
+| `spawns/grenades` | `maybraid-spawns-grenades` | Thrown-body construction | **4** |
 
 `world/lib` keeps terrain generation, POI indexing, streamed presentation,
 first-wave HCSG gates, and the locked map sheet. Loadout persistence stays
@@ -108,8 +108,8 @@ with its persistence owner. Application / session transitions stay in
 | Placement interpreter | `ResolvePlacement`, `PlacementWork`, `PlacementSupport` | `spawns/placement` | **2** |
 | Actor interpreter | `SpawnActor` over `spawn_player_body` | `spawns/actors` | **3** |
 | Player handoff | `ActivatePlayerArrival` | `spawns/player`; world applies motor / camera | **3** |
-| Projectile interpreter | `SpawnProjectile` | `fire_weapons` presentation | 4 |
-| Grenade interpreter | `SpawnThrownGrenade` | `grenades` presentation | 4 |
+| Projectile interpreter | `SpawnProjectile` batched, no per-shot event | `spawns/projectiles` | **4** |
+| Grenade interpreter | `SpawnThrownGrenade` launch payload once | `spawns/grenades` | **4** |
 | Population demand | cell lifecycle | `barking` / `mob-scenes` (issues actor / placement requests) | 3 |
 
 ## Player arrival
