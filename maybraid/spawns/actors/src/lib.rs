@@ -31,15 +31,19 @@ pub fn register_actor_spawn_runtime(app: &mut App) {
 		.add_message::<SpawnActor>()
 		.add_message::<ActorSpawned>()
 		.add_message::<ActorSpawnFailed>()
+		.add_message::<ArrivalActorReady>()
+		.add_message::<ArrivalActorFailed>()
 		.add_systems(Update, realize_actors.in_set(ActorSpawnSystems::Realize));
 }
 
 /// Construct requested bodies and emit the player-owned ready outcome.
+/// Headless stacks may register this without mesh assets or locomotion;
+/// construction waits until those resources exist.
 pub fn realize_actors(
 	mut commands: Commands,
-	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
-	locomotion: Res<CharacterLocomotion>,
+	meshes: Option<ResMut<Assets<Mesh>>>,
+	materials: Option<ResMut<Assets<StandardMaterial>>>,
+	locomotion: Option<Res<CharacterLocomotion>>,
 	mut requests: MessageReader<SpawnActor>,
 	mut failed: MessageReader<ActorSpawnFailed>,
 	mut constructed: MessageWriter<ActorSpawned>,
@@ -49,6 +53,10 @@ pub fn realize_actors(
 	for failed in failed.read() {
 		arrivals_failed.write(ArrivalActorFailed::new(failed.identity));
 	}
+	let (Some(mut meshes), Some(mut materials), Some(locomotion)) = (meshes, materials, locomotion)
+	else {
+		return;
+	};
 	for request in requests.read() {
 		let spawned =
 			request.realize(&mut commands, &mut meshes, &mut materials, locomotion.as_ref());
@@ -99,6 +107,14 @@ mod tests {
 		register_actor_spawn_runtime(&mut app);
 		register_actor_spawn_runtime(&mut app);
 		assert!(app.world().contains_resource::<ActorSpawnRuntime>());
+	}
+
+	#[test]
+	fn register_actor_spawn_runtime_survives_update_without_assets() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		register_actor_spawn_runtime(&mut app);
+		app.update();
 	}
 
 	#[test]
