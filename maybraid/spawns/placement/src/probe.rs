@@ -23,8 +23,9 @@ const START_LIFT: f32 = 0.05;
 #[derive(Resource, Default)]
 struct PlacementPhysics;
 
-/// Observe each pending column with [`SpatialQuery`]. Idempotent. Requires
-/// `PhysicsPlugins` so the collider tree exists.
+/// Observe each pending column with [`SpatialQuery`]. Idempotent. A missing
+/// collider tree is presentation-not-ready: retain the request, construct
+/// nothing. Headless stacks can register this without `PhysicsPlugins`.
 pub fn register_placement_physics(app: &mut App) {
 	if app.world().contains_resource::<PlacementPhysics>() {
 		return;
@@ -42,7 +43,14 @@ enum ProbeOutcome {
 }
 
 /// Downward support + standing-capsule clearance for every pending column.
-pub fn observe_placement_physics(spatial: SpatialQuery, mut work: ResMut<PlacementWork>) {
+/// Without [`SpatialQuery`], every request stays waiting.
+pub fn observe_placement_physics(spatial: Option<SpatialQuery>, mut work: ResMut<PlacementWork>) {
+	let Some(spatial) = spatial else {
+		for pending in work.pending_mut() {
+			pending.observe(SupportReadiness::waiting());
+		}
+		return;
+	};
 	let filter = PhysicsInteractionLayer::Fixed.query_filter();
 	for pending in work.pending_mut() {
 		match probe_search(&spatial, &filter, pending.search) {
@@ -213,6 +221,22 @@ mod tests {
 		let ready = app.world_mut().resource_mut::<Messages<PlacementReady>>().drain().collect();
 		let failed = app.world_mut().resource_mut::<Messages<PlacementFailed>>().drain().collect();
 		(ready, failed)
+	}
+
+	#[test]
+	fn missing_spatial_query_keeps_the_request() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		register_placement_physics(&mut app);
+		app.finish();
+		insert_search(
+			&mut app,
+			PlacementSearch::outdoor_hint(Vec2::ZERO, 0.0, LocomotionCapsule::HUMANOID),
+		);
+		let (ready, failed) = drain_outcomes(&mut app);
+		assert!(ready.is_empty());
+		assert!(failed.is_empty());
+		assert_eq!(app.world().resource::<PlacementWork>().len(), 1);
 	}
 
 	#[test]
