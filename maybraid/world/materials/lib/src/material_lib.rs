@@ -1,5 +1,6 @@
 //! Composed [`MaterialLib`] for Maybraid World.
 
+use crate::chain::{init_chain_material_caches, ChainMaterialLib, ChainShadersPlugin};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use building_shaders::{
@@ -20,12 +21,13 @@ use vegetation_bumpout::init_bump_out_material_caches;
 use vegetation_shaders::{init_vegetation_material_caches, VegetationShadersPlugin};
 
 /// World-model lib: furniture kits, character face / clothing, Richmond urban
-/// surfaces, the muzzle flame, energy looks, then vegetation and Standard.
+/// surfaces, the muzzle flame, energy looks, mythical chain, then vegetation
+/// and Standard.
 ///
 /// Furniture recipes (`furniture_wood`, …) must be claimed **before** urban
 /// `wood`. Urban recipes (`stucco`, `wood`, …), `muzzle_flame`, and the
-/// `laser_*` energy recipes must be claimed **before** vegetation's
-/// [`StandardMaterial`] fallback.
+/// `laser_*` energy recipes and `mythical_chain` must be claimed **before**
+/// vegetation's [`StandardMaterial`] fallback.
 ///
 /// Further domain libs (Durham recipes on [`MaterialRef`], sky) compose here.
 #[derive(SystemParam)]
@@ -35,6 +37,7 @@ pub struct WorldMaterialLib<'w> {
 	pub urban: UrbanSurfaceMaterialLib<'w>,
 	pub muzzle: MuzzleFlameMaterialLib<'w>,
 	pub energy: EnergyMaterialLib<'w>,
+	pub chain: ChainMaterialLib<'w>,
 	pub vegetation: VegetationOnTerrainMaterialLib<'w>,
 }
 
@@ -50,6 +53,7 @@ impl MaterialLib for WorldMaterialLib<'_> {
 			|| self.urban.try_fulfill(entity, material_ref, commands)
 			|| self.muzzle.try_fulfill(entity, material_ref, commands)
 			|| self.energy.try_fulfill(entity, material_ref, commands)
+			|| self.chain.try_fulfill(entity, material_ref, commands)
 			|| self.vegetation.try_fulfill(entity, material_ref, commands)
 	}
 
@@ -74,6 +78,7 @@ impl Plugin for WorldMaterialRefPlugin {
 		init_urban_material_caches(app);
 		init_muzzle_flame_caches(app);
 		init_energy_material_caches(app);
+		init_chain_material_caches(app);
 		init_vegetation_material_caches(app);
 		init_bump_out_material_caches(app);
 		app.add_plugins(MaterialRefPlugin::<WorldMaterialLib<'_>>::default());
@@ -101,6 +106,9 @@ impl Plugin for WorldMaterialsShadersPlugin {
 		}
 		if !app.is_plugin_added::<EnergyMaterialPlugin>() {
 			app.add_plugins(EnergyMaterialPlugin);
+		}
+		if !app.is_plugin_added::<ChainShadersPlugin>() {
+			app.add_plugins(ChainShadersPlugin);
 		}
 		if !app.is_plugin_added::<VegetationShadersPlugin>() {
 			app.add_plugins(VegetationShadersPlugin);
@@ -146,6 +154,8 @@ mod tests {
 		StickMaterialRefCache, VegetationMaterialRefPlugin,
 	};
 
+	use crate::chain::{ChainMaterial, ChainMaterialRefCache, RECIPE_MYTHICAL_CHAIN};
+
 	use crate::material_lib::WorldMaterialRefPlugin;
 
 	fn world_fulfill_app() -> App {
@@ -159,6 +169,7 @@ mod tests {
 			.init_asset::<ColumnSurfaceMaterial>()
 			.init_asset::<MuzzleFlameMaterial>()
 			.init_asset::<EnergyMaterial>()
+			.init_asset::<ChainMaterial>()
 			.init_asset::<BumpOutMaterial>()
 			.init_asset::<LeafMaterial>()
 			.init_asset::<StickMaterial>()
@@ -183,6 +194,7 @@ mod tests {
 		assert!(app.world().contains_resource::<FurnitureSurfaceMaterialRefCache>());
 		assert!(app.world().contains_resource::<MuzzleFlameMaterialRefCache>());
 		assert!(app.world().contains_resource::<EnergyMaterialRefCache>());
+		assert!(app.world().contains_resource::<ChainMaterialRefCache>());
 		assert!(app.world().contains_resource::<LeafMaterialRefCache>());
 		assert!(app.world().contains_resource::<StickMaterialRefCache>());
 		assert!(app.world().contains_resource::<FrondMaterialRefCache>());
@@ -210,6 +222,7 @@ mod tests {
 		let column = spawn_named(&mut app, RECIPE_DORIC_COLUMN);
 		let flame = spawn_named(&mut app, MUZZLE_FLAME_RECIPE);
 		let energy = spawn_named(&mut app, LASER_HEX_RECIPE);
+		let chain = spawn_named(&mut app, RECIPE_MYTHICAL_CHAIN);
 		let bump = spawn_named(&mut app, BUMP_OUT_MATERIAL);
 		let leaf = spawn_named(&mut app, "CHICO_LEAF_MATERIAL");
 		let fallback = spawn_named(&mut app, "tuft");
@@ -222,11 +235,13 @@ mod tests {
 		assert!(app.world().get::<MeshMaterial3d<ColumnSurfaceMaterial>>(column).is_some());
 		assert!(app.world().get::<MeshMaterial3d<MuzzleFlameMaterial>>(flame).is_some());
 		assert!(app.world().get::<MeshMaterial3d<EnergyMaterial>>(energy).is_some());
+		assert!(app.world().get::<MeshMaterial3d<ChainMaterial>>(chain).is_some());
 		assert!(app.world().get::<MeshMaterial3d<BumpOutMaterial>>(bump).is_some());
 		assert!(app.world().get::<MeshMaterial3d<LeafMaterial>>(leaf).is_some());
 		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(fallback).is_some());
 		assert!(app.world().get::<MeshMaterial3d<UrbanSurfaceMaterial>>(furniture).is_none());
 		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(urban).is_none());
 		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(column).is_none());
+		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(chain).is_none());
 	}
 }

@@ -17,10 +17,12 @@ chico = { workspace = true }
 firearms = { workspace = true }
 furniture-shaders = { workspace = true }
 material-ref = { workspace = true }
+procedural-common = { workspace = true }
 vegetation-bumpout = { workspace = true }
 vegetation-shaders = { workspace = true }
 
 [dev-dependencies]
+anyhow = { workspace = true }
 character-shaders = { workspace = true }
 
 [lints]

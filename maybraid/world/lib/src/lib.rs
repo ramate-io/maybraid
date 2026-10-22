@@ -31,11 +31,11 @@ pub mod world_debug;
 mod mob_spawn;
 mod pitch;
 mod player_lifecycle;
-mod spawn_picker;
 mod player_position;
 mod poi;
 pub mod render_scale;
 mod screenshot;
+mod spawn_picker;
 mod spawn_surface;
 mod start;
 mod stash;
@@ -91,7 +91,6 @@ pub use player_camera::{CameraPov, CameraPovLocked};
 pub use player_lifecycle::{
 	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
 };
-pub use spawn_picker::{SpawnPickerCapture, SpawnPickerController};
 pub use player_position::{
 	resume_discovery_from_saved_waypoints, PlayerPositionPlugin, PlayerPositionWaypoints,
 };
@@ -105,10 +104,11 @@ pub use render_scale::{
 	parse_render_scale_env, parse_visual_style_env, pick_default_visual_style,
 	target_physical_size, window_above_1080p, AdapterKind, DeviceTier, RenderScale,
 	RequestForceOffscreen, RequestRenderScale, RequestVisualStyle, VisualStyle,
-	VisualStyleAutoReason, VisualStyleIdentity, VisualStylePick, VisualStyleSetting,
-	VisualStyleSignals, DEVICE_TIER_ENV, FORCE_OFFSCREEN_ENV, PRESENTATION_TREATMENT_ENV,
-	RENDER_SCALE_ENV, UNIFIED_MEMORY_NATIVE_BYTES, VISUAL_STYLE_ENV,
+	VisualStyleAutoReason, VisualStyleIdentity, VisualStylePick, VisualStylePlugin,
+	VisualStyleSetting, VisualStyleSignals, DEVICE_TIER_ENV, FORCE_OFFSCREEN_ENV,
+	PRESENTATION_TREATMENT_ENV, RENDER_SCALE_ENV, UNIFIED_MEMORY_NATIVE_BYTES, VISUAL_STYLE_ENV,
 };
+pub use spawn_picker::{SpawnPickerCapture, SpawnPickerController};
 pub use start::{
 	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
 	START_AT_ENV,
@@ -148,6 +148,7 @@ use player::{
 	register_motor_traction_physics, MotorRequestStage, PlayerPlugin, PlayerPresentationPlugin,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
+use world_materials::chain::ChainShadersPlugin;
 use world_player::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, MeshStatsPlugin,
 	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
@@ -227,6 +228,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(EnergyMaterialPlugin)
+			.add_plugins(ChainShadersPlugin)
 			.add_plugins(VfxPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,

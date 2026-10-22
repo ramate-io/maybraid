@@ -344,7 +344,23 @@ pub fn parse_render_scale_env(raw: Option<&str>) -> Option<f32> {
 	}
 }
 
+/// Offscreen visual-style present path. Isolated playgrounds can add this
+/// without the rest of the world stack. The 3D camera must carry
+/// [`player_camera::FollowCamera`] — `sync_render_scale_target` selects that
+/// camera. Do not add this plugin twice; [`crate::WorldPlugin`] already
+/// installs it.
+pub struct VisualStylePlugin;
+
+impl Plugin for VisualStylePlugin {
+	fn build(&self, app: &mut App) {
+		configure(app);
+	}
+}
+
 pub(crate) fn configure(app: &mut App) {
+	if app.is_plugin_added::<presentation::PresentationMaterialsPlugin>() {
+		return;
+	}
 	app.add_plugins(presentation::PresentationMaterialsPlugin)
 		.add_message::<RequestVisualStyle>()
 		.add_message::<PresentationChurn>()
