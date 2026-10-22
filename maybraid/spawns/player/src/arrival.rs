@@ -373,15 +373,22 @@ impl WorldPlayerRespawnState {
 		if !self.accepts_placement(identity, attempt) {
 			return false;
 		}
-		if let Some(pending) = self.pending.as_mut() {
-			pending.advance(ArrivalPhase::SpawningActor);
+		let Some(pending) = self.pending.as_mut() else {
+			return false;
+		};
+		if !pending.phase.awaiting_support() {
+			return false;
 		}
+		pending.advance(ArrivalPhase::SpawningActor);
 		true
 	}
 
 	pub fn accepts_constructed(&self, identity: SpawnIdentity, attempt: PlacementAttempt) -> bool {
 		self.accepts_identity(identity)
-			&& self.pending.as_ref().is_some_and(|pending| pending.placement_attempt == attempt)
+			&& self
+				.pending
+				.as_ref()
+				.is_some_and(|pending| pending.placement_attempt == attempt)
 	}
 
 	/// Placement failed. Keep the arrival so the controller can retry,
@@ -611,11 +618,9 @@ mod tests {
 			RespawnOrigin::began(None, false),
 			0.0,
 		);
-		assert!(
-			state
-				.accept_destination(DestinationSelected::new(first, ArrivalDestination::Fallback))
-				.is_none()
-		);
+		assert!(state
+			.accept_destination(DestinationSelected::new(first, ArrivalDestination::Fallback))
+			.is_none());
 		assert!(state.pending.as_ref().is_some_and(|pending| pending.phase.is_choosing()));
 	}
 }

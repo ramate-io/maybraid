@@ -14,20 +14,20 @@ pub mod picker;
 pub mod request;
 
 pub use arrival::{
-	ArrivalPhase, PendingPlayerRespawn, WorldPlayerRespawnConfig, WorldPlayerRespawnState,
 	map_flick_dir, menu_nav_dir, nearest_candidate, nearest_in_direction,
-	next_candidate_in_direction, reset_first_spawn_offer,
+	next_candidate_in_direction, reset_first_spawn_offer, ArrivalPhase, PendingPlayerRespawn,
+	WorldPlayerRespawnConfig, WorldPlayerRespawnState,
 };
-pub use controller::{PlayerArrivalPolicy, begin_player_arrivals};
+pub use controller::{begin_player_arrivals, PlayerArrivalPolicy};
 pub use handoff::{
-	ActivatePlayerArrival, ActorSpawned, ArrivalActorFailed, ArrivalActorReady,
-	PlayerArrivalCompleted, PlayerArrivalFailed, complete_player_handoffs,
+	complete_player_handoffs, ActivatePlayerArrival, ActorSpawned, ArrivalActorFailed,
+	ArrivalActorReady, PlayerArrivalCompleted, PlayerArrivalFailed,
 };
 pub use identity::{PlacementAttempt, SpawnIdentity, SpawnOwner, SpawnRequestId, SpawnSessionId};
 pub use outcome::{SpawnCancelReason, SpawnFailureReason, SpawnOutcome};
 pub use picker::{
-	SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet, dispatch_spawn_picker,
-	refresh_spawn_picker_focus, release_spawn_picker,
+	dispatch_spawn_picker, refresh_spawn_picker_focus, release_spawn_picker, SpawnPickerCapture,
+	SpawnPickerController, SpawnPickerSheet,
 };
 pub use request::{
 	ArrivalDestination, ArrivalReason, BeginPlayerArrival, DestinationSelected,

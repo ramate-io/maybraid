@@ -121,10 +121,8 @@ mod tests {
 		let first = SpawnOwner::new(SpawnSessionId::new(1));
 		let second = SpawnOwner::new(first.session.next());
 		assert!(!first.matches(second));
-		assert!(
-			!SpawnIdentity::new(SpawnRequestId::new(3), first)
-				.matches(SpawnIdentity::new(SpawnRequestId::new(3), second))
-		);
+		assert!(!SpawnIdentity::new(SpawnRequestId::new(3), first)
+			.matches(SpawnIdentity::new(SpawnRequestId::new(3), second)));
 	}
 
 	#[test]

@@ -23,6 +23,7 @@ maybraid-controllers-core = { workspace = true }
 maybraid-equipment = { workspace = true }
 maybraid-session = { workspace = true }
 maybraid-spawns-player = { workspace = true }
+maybraid-spawns-placement = { workspace = true }
 maybraid-skill-map = { workspace = true }
 player = { workspace = true }
 tanz-user = { workspace = true }
