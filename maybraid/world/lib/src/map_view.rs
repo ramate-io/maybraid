@@ -8,6 +8,8 @@ use durham::DurhamSurface;
 use game_commands::command::TextEntryFocus;
 use geneva::{LanguageOverlay, NameKey, NamedOverlay};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use maybraid_controllers_core::{CaptureKind, CaptureToken, InputRouting, InputSource, ScopeOwner};
+use maybraid_session::SessionCapabilitySystems;
 use menu_components::{
 	BARLOW_BLACK, BONES_ICON, ITEM_FONT_SIZE, MAP_ARROW_ICON, MAP_GROVE_ICON, MAP_HOUSE_ICON,
 	MAP_MOUNTAIN_ICON, MAP_TOWN_ICON, MAP_TREE_ICON, MAP_WATER_ICON, NOTO_SANS_REGULAR,
@@ -15,14 +17,12 @@ use menu_components::{
 };
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::CameraFollow;
-use player_camera::{
-	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
-};
+use player_camera::{CameraController, FollowCamera, PlayerCameraSystems};
 use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiRegistry};
 use richmond::DiscoverablePlace;
 use world_player::{Player as VegetationPlayer, PlayerLifeSet, PlaygroundMode};
 
-use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
+use crate::control::WorldGameplayEnabled;
 use crate::player_lifecycle::WorldPlayerRespawnState;
 use combat_hud::ScreenPin;
 
@@ -137,6 +137,56 @@ struct MapPlayerMarker;
 #[derive(Component)]
 struct MapDeathBones;
 
+/// Centered HUD marker. Styles and z-order stay at spawn; this only places and shows.
+#[derive(Clone, Copy)]
+struct MapHudMarker {
+	size: f32,
+}
+
+impl MapHudMarker {
+	const PLAYER: Self = Self { size: PLAYER_MARKER_PX };
+	const DEATH_BONES: Self = Self { size: DEATH_BONES_PX };
+
+	fn node(self) -> Node {
+		Node {
+			position_type: PositionType::Absolute,
+			width: Val::Px(self.size),
+			height: Val::Px(self.size),
+			..default()
+		}
+	}
+
+	fn player_node() -> Node {
+		Node {
+			border: UiRect::all(Val::Px(2.0)),
+			border_radius: BorderRadius::all(Val::Px(Self::PLAYER.size * 0.5)),
+			..Self::PLAYER.node()
+		}
+	}
+
+	fn place(self, node: &mut Node, screen: Vec2) {
+		node.left = Val::Px(screen.x - self.size * 0.5);
+		node.top = Val::Px(screen.y - self.size * 0.5);
+	}
+
+	fn apply(self, node: &mut Node, visibility: &mut Visibility, screen: Option<Vec2>) {
+		if let Some(screen) = screen {
+			self.place(node, screen);
+			*visibility = Visibility::Visible;
+		} else {
+			*visibility = Visibility::Hidden;
+		}
+	}
+
+	fn project(surface: &DurhamSurface, camera: &MapCameraQuery, xz: Vec2) -> Option<Vec2> {
+		let (camera, camera_transform) = camera.single().ok()?;
+		pin_world(surface, xz)
+			.ok()
+			.and_then(|world| ScreenPin::project(camera, camera_transform, world, HUD_MARGIN))
+			.map(|(screen, _)| screen)
+	}
+}
+
 #[derive(Component)]
 struct MapTypeMark {
 	target: MapPinTarget,
@@ -146,9 +196,6 @@ struct MapTypeMark {
 struct MapEdgeArrow {
 	target: MapPinTarget,
 }
-
-#[derive(Resource, Clone)]
-struct MapBonesIcon(Handle<Image>);
 
 #[derive(Resource, Clone)]
 struct MapMarkIcons {
@@ -198,16 +245,18 @@ impl Plugin for WorldMapViewPlugin {
 		app.init_resource::<WorldMapView>()
 			.init_resource::<LanguageOverlay>()
 			.init_resource::<MapPresentation>()
+			.init_resource::<MapOverlayCapture>()
 			.configure_sets(
 				Update,
 				WorldMapSet::Toggle
 					.after(CharacterControlSystems)
+					.after(SessionCapabilitySystems)
 					.before(PlayerCameraSystems::Look),
 			)
 			.add_systems(Startup, spawn_map_name_hud)
 			.add_systems(
 				Update,
-				(toggle_map_view, sync_map_camera_locks, pan_map_view)
+				(toggle_map_view, sync_map_capture, pan_map_view)
 					.chain()
 					.in_set(WorldMapSet::Toggle),
 			)
@@ -241,7 +290,7 @@ impl Plugin for WorldMapViewPlugin {
 
 fn spawn_map_name_hud(mut commands: Commands, assets: Res<AssetServer>) {
 	commands.insert_resource(MapLabelFont(assets.load(NOTO_SANS_REGULAR)));
-	commands.insert_resource(MapBonesIcon(assets.load(BONES_ICON)));
+	let bones = assets.load(BONES_ICON);
 	commands.insert_resource(MapMarkIcons {
 		tree: assets.load(MAP_TREE_ICON),
 		grove: assets.load(MAP_GROVE_ICON),
@@ -251,18 +300,40 @@ fn spawn_map_name_hud(mut commands: Commands, assets: Res<AssetServer>) {
 		water: assets.load(MAP_WATER_ICON),
 		arrow: assets.load(MAP_ARROW_ICON),
 	});
-	commands.spawn((
-		Name::new("map-name-hud"),
-		MapNameHud,
-		Node {
-			position_type: PositionType::Absolute,
-			width: Val::Percent(100.0),
-			height: Val::Percent(100.0),
-			..default()
-		},
-		Pickable::IGNORE,
-		Visibility::Hidden,
-	));
+	commands
+		.spawn((
+			Name::new("map-name-hud"),
+			MapNameHud,
+			Node {
+				position_type: PositionType::Absolute,
+				width: Val::Percent(100.0),
+				height: Val::Percent(100.0),
+				..default()
+			},
+			Pickable::IGNORE,
+			Visibility::Hidden,
+		))
+		.with_children(|root| {
+			root.spawn((
+				Name::new("map-player-marker"),
+				MapPlayerMarker,
+				MapHudMarker::player_node(),
+				BackgroundColor(TEXT_YELLOW),
+				BorderColor::all(Color::srgba(0.08, 0.10, 0.14, 0.92)),
+				Pickable::IGNORE,
+				Visibility::Hidden,
+				GlobalZIndex(i32::MAX - 10),
+			));
+			root.spawn((
+				Name::new("map-death-bones"),
+				MapDeathBones,
+				MapHudMarker::DEATH_BONES.node(),
+				ImageNode { image: bones, color: TEXT_SALMON, ..default() },
+				Pickable::IGNORE,
+				Visibility::Hidden,
+				GlobalZIndex(i32::MAX - 7),
+			));
+		});
 	commands.spawn((
 		Name::new("respawn-picker-title"),
 		RespawnPickerTitle,
@@ -335,21 +406,22 @@ pub(crate) fn toggle_map_view(
 	map.open_at(xz, false);
 }
 
-fn sync_map_camera_locks(
+#[derive(Resource, Default)]
+struct MapOverlayCapture {
+	token: Option<CaptureToken>,
+}
+
+fn sync_map_capture(
 	map: Res<WorldMapView>,
-	gameplay: Res<WorldGameplayEnabled>,
-	edit: Option<Res<InventoryEditCameraFollow>>,
-	mut locked: Option<ResMut<CameraPovLocked>>,
-	mut suppressed: Option<ResMut<CameraLookSuppressed>>,
+	mut router: InputRouting,
+	mut capture: ResMut<MapOverlayCapture>,
 ) {
-	let presenting = map.open && gameplay.0;
-	let hold = presenting || edit.is_some_and(|edit| edit.0);
-	if let Some(locked) = locked.as_deref_mut() {
-		locked.0 = hold;
-	}
-	if let Some(suppressed) = suppressed.as_deref_mut() {
-		suppressed.0 = presenting;
-	}
+	router.replace_owned_capture(
+		&mut capture.token,
+		InputSource::local_pad(),
+		map.open.then_some(ScopeOwner::map_overlay()),
+		CaptureKind::Overlay,
+	);
 }
 
 fn pan_map_view(
@@ -1434,54 +1506,19 @@ fn sync_map_player_marker(
 	players: Query<&Transform, With<VegetationPlayer>>,
 	camera: MapCameraQuery,
 	surface: DurhamSurface,
-	hud: Query<Entity, With<MapNameHud>>,
 	mut markers: Query<(&mut Node, &mut Visibility), With<MapPlayerMarker>>,
-	mut commands: Commands,
 ) {
-	if !map.open || !gameplay.0 || picker_prompt_visible(&map, gameplay.0) {
-		hide_player_markers(&mut markers);
-		return;
-	}
-	let Some(xz) = players.iter().next().map(|transform| transform.translation.xz()) else {
-		hide_player_markers(&mut markers);
-		return;
+	let screen = if !map.open || !gameplay.0 || picker_prompt_visible(&map, gameplay.0) {
+		None
+	} else {
+		players
+			.iter()
+			.next()
+			.map(|transform| transform.translation.xz())
+			.and_then(|xz| MapHudMarker::project(&surface, &camera, xz))
 	};
-	let Ok((camera, camera_transform)) = camera.single() else {
-		hide_player_markers(&mut markers);
-		return;
-	};
-	let Some((screen, _)) = pin_world(&surface, xz)
-		.ok()
-		.and_then(|world| ScreenPin::project(camera, camera_transform, world, HUD_MARGIN))
-	else {
-		hide_player_markers(&mut markers);
-		return;
-	};
-	if let Some((mut node, mut visibility)) = markers.iter_mut().next() {
-		place_player_marker(&mut node, screen);
-		*visibility = Visibility::Visible;
-		return;
-	}
-	let Ok(hud) = hud.single() else {
-		return;
-	};
-	commands.entity(hud).with_children(|root| {
-		root.spawn((
-			Name::new("map-player-marker"),
-			MapPlayerMarker,
-			player_marker_node(screen),
-			BackgroundColor(TEXT_YELLOW),
-			BorderColor::all(Color::srgba(0.08, 0.10, 0.14, 0.92)),
-			Pickable::IGNORE,
-			Visibility::Visible,
-			GlobalZIndex(i32::MAX - 10),
-		));
-	});
-}
-
-fn hide_player_markers(markers: &mut Query<(&mut Node, &mut Visibility), With<MapPlayerMarker>>) {
-	for (_, mut visibility) in markers.iter_mut() {
-		*visibility = Visibility::Hidden;
+	for (mut node, mut visibility) in &mut markers {
+		MapHudMarker::PLAYER.apply(&mut node, &mut visibility, screen);
 	}
 }
 
@@ -1496,98 +1533,23 @@ fn player_map_xz(live: Option<&Transform>, death: Option<Vec2>) -> Option<Vec2> 
 	live.map(|transform| transform.translation.xz()).or(death)
 }
 
-fn player_marker_node(screen: Vec2) -> Node {
-	Node {
-		position_type: PositionType::Absolute,
-		left: Val::Px(screen.x - PLAYER_MARKER_PX * 0.5),
-		top: Val::Px(screen.y - PLAYER_MARKER_PX * 0.5),
-		width: Val::Px(PLAYER_MARKER_PX),
-		height: Val::Px(PLAYER_MARKER_PX),
-		border: UiRect::all(Val::Px(2.0)),
-		border_radius: BorderRadius::all(Val::Px(PLAYER_MARKER_PX * 0.5)),
-		..default()
-	}
-}
-
-fn place_player_marker(node: &mut Node, screen: Vec2) {
-	node.left = Val::Px(screen.x - PLAYER_MARKER_PX * 0.5);
-	node.top = Val::Px(screen.y - PLAYER_MARKER_PX * 0.5);
-}
-
 fn sync_map_death_bones(
 	map: Res<WorldMapView>,
 	gameplay: Res<WorldGameplayEnabled>,
 	pending: Option<Res<WorldPlayerRespawnState>>,
-	icon: Option<Res<MapBonesIcon>>,
-	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
+	camera: MapCameraQuery,
 	surface: DurhamSurface,
-	hud: Query<Entity, With<MapNameHud>>,
 	mut markers: Query<(&mut Node, &mut Visibility), With<MapDeathBones>>,
-	mut commands: Commands,
 ) {
-	if !picker_prompt_visible(&map, gameplay.0) || pending_is_first_life(pending.as_deref()) {
-		hide_death_bones(&mut markers);
-		return;
+	let screen =
+		if !picker_prompt_visible(&map, gameplay.0) || pending_is_first_life(pending.as_deref()) {
+			None
+		} else {
+			death_xz(pending.as_deref()).and_then(|xz| MapHudMarker::project(&surface, &camera, xz))
+		};
+	for (mut node, mut visibility) in &mut markers {
+		MapHudMarker::DEATH_BONES.apply(&mut node, &mut visibility, screen);
 	}
-	let Some(xz) = death_xz(pending.as_deref()) else {
-		hide_death_bones(&mut markers);
-		return;
-	};
-	let Ok((camera, camera_transform)) = camera.single() else {
-		hide_death_bones(&mut markers);
-		return;
-	};
-	let Some((screen, _)) = pin_world(&surface, xz)
-		.ok()
-		.and_then(|world| ScreenPin::project(camera, camera_transform, world, HUD_MARGIN))
-	else {
-		hide_death_bones(&mut markers);
-		return;
-	};
-	if let Some((mut node, mut visibility)) = markers.iter_mut().next() {
-		place_death_bones(&mut node, screen);
-		*visibility = Visibility::Visible;
-		return;
-	}
-	let Some(icon) = icon else {
-		return;
-	};
-	let Ok(hud) = hud.single() else {
-		return;
-	};
-	commands.entity(hud).with_children(|root| {
-		root.spawn((
-			Name::new("map-death-bones"),
-			MapDeathBones,
-			death_bones_node(screen),
-			ImageNode { image: icon.0.clone(), color: TEXT_SALMON, ..default() },
-			Pickable::IGNORE,
-			Visibility::Visible,
-			GlobalZIndex(i32::MAX - 7),
-		));
-	});
-}
-
-fn hide_death_bones(markers: &mut Query<(&mut Node, &mut Visibility), With<MapDeathBones>>) {
-	for (_, mut visibility) in markers.iter_mut() {
-		*visibility = Visibility::Hidden;
-	}
-}
-
-fn death_bones_node(screen: Vec2) -> Node {
-	Node {
-		position_type: PositionType::Absolute,
-		left: Val::Px(screen.x - DEATH_BONES_PX * 0.5),
-		top: Val::Px(screen.y - DEATH_BONES_PX * 0.5),
-		width: Val::Px(DEATH_BONES_PX),
-		height: Val::Px(DEATH_BONES_PX),
-		..default()
-	}
-}
-
-fn place_death_bones(node: &mut Node, screen: Vec2) {
-	node.left = Val::Px(screen.x - DEATH_BONES_PX * 0.5);
-	node.top = Val::Px(screen.y - DEATH_BONES_PX * 0.5);
 }
 
 fn picker_prompt_visible(map: &WorldMapView, gameplay: bool) -> bool {
@@ -1952,6 +1914,7 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use game_commands::command::TextEntryFocus;
+	use maybraid_controllers_core::InputRouter;
 	use player::CameraFollow;
 
 	fn write_toggle(world: &mut World) {
@@ -1970,12 +1933,18 @@ mod tests {
 			.spawn((VegetationPlayer, CameraFollow, Transform::from_xyz(12.0, 3.0, -8.0)))
 			.id();
 
+		world.init_resource::<InputRouter>();
+		world.init_resource::<Messages<maybraid_controllers_core::RoutingEvent>>();
+		world.init_resource::<MapOverlayCapture>();
 		write_toggle(&mut world);
 		world
 			.run_system_once(toggle_map_view)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		world
-			.run_system_once(crate::camera::sync_camera_mode)
+			.run_system_once(sync_map_capture)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(crate::camera::sync_camera_session_state)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
 		let map = world.resource::<WorldMapView>();
@@ -1983,6 +1952,50 @@ mod tests {
 		assert_eq!(map.focus, Vec2::new(12.0, -8.0));
 		assert!(!map.close_locked);
 		assert!(world.get::<CameraFollow>(player).is_some());
+		assert!(world.resource::<InputRouter>().blocks_actor(InputSource::local_pad()));
+		Ok(())
+	}
+
+	#[test]
+	fn map_and_menu_captures_release_independently() -> anyhow::Result<()> {
+		use maybraid_controllers_core::{CaptureKind, ScopeOwner, UiTarget};
+
+		let mut world = World::new();
+		world.insert_resource(WorldMapView {
+			open: true,
+			focus: Vec2::ZERO,
+			height: DEFAULT_MAP_HEIGHT,
+			close_locked: false,
+			begin_life: false,
+		});
+		world.init_resource::<InputRouter>();
+		world.init_resource::<Messages<maybraid_controllers_core::RoutingEvent>>();
+		world.init_resource::<MapOverlayCapture>();
+		world
+			.run_system_once(sync_map_capture)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let menu = world.resource_mut::<InputRouter>().acquire_capture(
+			InputSource::local_pad(),
+			ScopeOwner::ui(UiTarget::new(Entity::from_bits(7))),
+			CaptureKind::MenuNav,
+		);
+		assert_eq!(world.resource::<InputRouter>().captures().len(), 2);
+
+		world.resource_mut::<InputRouter>().release_capture(menu);
+		world
+			.run_system_once(sync_map_capture)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<InputRouter>().blocks_actor(InputSource::local_pad()));
+		assert_eq!(
+			world.resource::<InputRouter>().top_capture().map(|layer| layer.kind()),
+			Some(CaptureKind::Overlay)
+		);
+
+		world.resource_mut::<WorldMapView>().close();
+		world
+			.run_system_once(sync_map_capture)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<InputRouter>().captures().is_empty());
 		Ok(())
 	}
 
@@ -2243,16 +2256,6 @@ mod tests {
 	}
 
 	#[test]
-	fn selected_respawn_labels_are_larger_than_idle_pois() {
-		assert!(SELECTED_POI_LABEL_PX > map_label_size(MapLabelKind::Poi));
-	}
-
-	#[test]
-	fn picker_title_keeps_menu_gutters() {
-		assert_eq!(PICKER_TITLE_GUTTER, 48.0);
-	}
-
-	#[test]
 	fn picker_title_only_shows_on_a_locked_map() {
 		let locked = WorldMapView { open: true, close_locked: true, ..default() };
 		assert!(picker_prompt_visible(&locked, true));
@@ -2429,5 +2432,19 @@ mod tests {
 		);
 		assert_eq!(player_map_xz(None, Some(Vec2::new(90.0, 80.0))), Some(Vec2::new(90.0, 80.0)));
 		assert_eq!(player_map_xz(None, None), None);
+	}
+
+	#[test]
+	fn map_hud_marker_apply_places_or_hides() {
+		let mut node = Node::default();
+		let mut visibility = Visibility::Hidden;
+		MapHudMarker::PLAYER.apply(&mut node, &mut visibility, Some(Vec2::new(20.0, 10.0)));
+		assert_eq!(visibility, Visibility::Visible);
+		assert_eq!(node.left, Val::Px(20.0 - PLAYER_MARKER_PX * 0.5));
+		assert_eq!(node.top, Val::Px(10.0 - PLAYER_MARKER_PX * 0.5));
+		MapHudMarker::DEATH_BONES.apply(&mut node, &mut visibility, Some(Vec2::new(8.0, 4.0)));
+		assert_eq!(node.left, Val::Px(8.0 - DEATH_BONES_PX * 0.5));
+		MapHudMarker::PLAYER.apply(&mut node, &mut visibility, None);
+		assert_eq!(visibility, Visibility::Hidden);
 	}
 }

@@ -25,8 +25,13 @@ members = [
   "maybraid/menu/character-ui-menu-renderer",
   "maybraid/menu/screens",
   "maybraid/menu/playground",
+  "maybraid/controllers/core",
   "maybraid/controllers/menu",
   "maybraid/controllers/character",
+  "maybraid/controllers/locomotion",
+  "maybraid/controllers/world",
+  "maybraid/gameplay/session",
+  "maybraid/gameplay/lib",
 
   "maybraid/audio",
   "maybraid/weather",
@@ -37,6 +42,8 @@ members = [
   "maybraid/world/materials/playground",
   "maybraid/vfx/lib",
   "maybraid/vfx/playground",
+  "maybraid/spatial-rumble/lib",
+  "maybraid/spatial-rumble/playground",
   "maybraid/terrain-chunk-ref",
   "maybraid/visual-geometry-core",
 
@@ -85,6 +92,7 @@ members = [
   "maybraid/world/layers/mobs/characters/playground",
   "maybraid/world/layers/mobs/architectural/doric-column",
   "maybraid/world/layers/mobs/architectural/doric-column/playground",
+  "maybraid/world/layers/mobs/characters/bikanwarda",
 
   "maybraid/procedural/common",
   "maybraid/procedural/comproc",
@@ -97,7 +105,8 @@ members = [
   "maybraid/sky/lib",
   "maybraid/world/lib",
   "maybraid/world/playground",
-  "maybraid/skill-map",
+  "maybraid/items/skill-map",
+  "maybraid/items/equipment",
   "maybraid/game",
   "maybraid/world/modes/discover",
   "maybraid/world/modes/reliquary",
@@ -107,14 +116,17 @@ members = [
   "maybraid/combat-hud/playground",
   "maybraid/lubikans",
   "maybraid/lubikans/damage",
-  "maybraid/player",
-  "maybraid/player-camera",
+  "maybraid/player/lib",
+  "maybraid/player/camera",
   "maybraid/world/layers/mobs/characters/generated",
   "maybraid/world/layers/mobs/scenes",
   "maybraid/world/layers/mobs/barking",
-  "maybraid/movement-realization",
+  "maybraid/movement/realization",
   "maybraid/projectiles",
   "maybraid/damage",
+  "maybraid/occupancy-rewards",
+  "maybraid/attacks",
+  "maybraid/attacks/playground",
   "maybraid/items/firearms-components",
   "maybraid/items/icons",
   "maybraid/items/firearms",
@@ -155,6 +167,7 @@ members = [
   "maybraid/world/layers/vegetation/groves",
   "maybraid/world/layers/vegetation/chico",
   "maybraid/gimme/core",
+  "maybraid/gimme/bench-support",
   "maybraid/gimme/gen",
 
   "maybraid/language/core",
@@ -252,6 +265,7 @@ fastnoise-lite = "1.1.1"
 lz4_flex = "0.11"
 bincode = "1.3.3"
 bevy_math = "0.19.0"
+bevy_platform = { version = "0.19.1", default-features = false, features = ["std"] }
 cpal = "0.15"
 hound = "3.5"
 mint = "0.5"
@@ -296,8 +310,13 @@ menu-components = { path = "maybraid/menu/components" }
 maybraid-character-ui-menu-renderer = { path = "maybraid/menu/character-ui-menu-renderer" }
 menu-screens = { path = "maybraid/menu/screens" }
 menu-playground = { path = "maybraid/menu/playground" }
+maybraid-controllers-core = { path = "maybraid/controllers/core" }
 maybraid-menu-controller = { path = "maybraid/controllers/menu" }
 maybraid-character-controller = { path = "maybraid/controllers/character" }
+maybraid-locomotion-controller = { path = "maybraid/controllers/locomotion" }
+maybraid-world-controller = { path = "maybraid/controllers/world" }
+maybraid-session = { path = "maybraid/gameplay/session" }
+maybraid-gameplay = { path = "maybraid/gameplay/lib" }
 
 maybraid-audio = { path = "maybraid/audio" }
 maybraid-weather = { path = "maybraid/weather" }
@@ -332,6 +351,7 @@ character-concepts-playground = { path = "maybraid/menu/character-concepts-playg
 characters-playground = { path = "maybraid/world/layers/mobs/characters/playground" }
 doric-column = { path = "maybraid/world/layers/mobs/architectural/doric-column" }
 doric-column-playground = { path = "maybraid/world/layers/mobs/architectural/doric-column/playground" }
+bikanwarda-character = { path = "maybraid/world/layers/mobs/characters/bikanwarda" }
 character-items = { path = "maybraid/world/layers/mobs/characters/items" }
 character-persist = { path = "maybraid/world/layers/mobs/characters/persist" }
 character-inventory-user = { path = "maybraid/world/layers/mobs/characters/inventory-user" }
@@ -360,7 +380,10 @@ world-materials = { path = "maybraid/world/materials/lib" }
 world-materials-playground = { path = "maybraid/world/materials/playground" }
 maybraid-vfx = { path = "maybraid/vfx/lib" }
 vfx-playground = { path = "maybraid/vfx/playground" }
-maybraid-skill-map = { path = "maybraid/skill-map" }
+maybraid-spatial-rumble = { path = "maybraid/spatial-rumble/lib" }
+spatial-rumble-playground = { path = "maybraid/spatial-rumble/playground" }
+maybraid-skill-map = { path = "maybraid/items/skill-map" }
+maybraid-equipment = { path = "maybraid/items/equipment" }
 maybraid = { path = "maybraid/game" }
 maybraid-input = { path = "maybraid/input" }
 maybraid-agent = { path = "maybraid/agent" }
@@ -368,11 +391,14 @@ combat-hud = { path = "maybraid/combat-hud" }
 combat-hud-playground = { path = "maybraid/combat-hud/playground" }
 lubikans = { path = "maybraid/lubikans" }
 lubikans-damage = { path = "maybraid/lubikans/damage" }
-player = { path = "maybraid/player" }
-player-camera = { path = "maybraid/player-camera" }
-movement-realization = { path = "maybraid/movement-realization" }
+player = { path = "maybraid/player/lib" }
+player-camera = { path = "maybraid/player/camera" }
+movement-realization = { path = "maybraid/movement/realization" }
 projectiles = { path = "maybraid/projectiles" }
 damage = { path = "maybraid/damage" }
+occupancy-rewards = { path = "maybraid/occupancy-rewards" }
+attacks = { path = "maybraid/attacks" }
+attacks-playground = { path = "maybraid/attacks/playground" }
 firearms-components = { path = "maybraid/items/firearms-components" }
 item-icons = { path = "maybraid/items/icons" }
 firearms = { path = "maybraid/items/firearms" }
@@ -414,6 +440,7 @@ maybraid-game-mode-reliquary = { path = "maybraid/world/modes/reliquary" }
 les-halles-arena = { path = "maybraid/items/les-halles-arena" }
 
 gimme-core = { path = "maybraid/gimme/core" }
+gimme-bench-support = { path = "maybraid/gimme/bench-support" }
 gimme-gen = { path = "maybraid/gimme/gen" }
 
 maybraid-language-core = { path = "maybraid/language/core" }

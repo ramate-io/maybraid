@@ -17,30 +17,30 @@ use bevy::audio::AudioPlugin;
 use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::query::Allow;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
+use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use character_creation_menus::{CharacterMenu, InventoryLayout, STARTER_KIT_LABEL};
 use character_items::{
-	BASE_STARTER_TANZES, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem,
-	ItemColor, ItemRng, SkillMapKind, SkillMapSpec, TanzId, self_lubikan_catalog_key,
+	self_lubikan_catalog_key, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory,
+	InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec, TanzId, BASE_STARTER_TANZES,
 };
 use character_ui_menu::MenuComponent;
+use characters::StandaloneCharacterMaterialRefPlugin;
 use characters::{HiddenUntilSceneReady, PendingCharacterAssembly};
 use item_icons::{
-	CaptureCacheRoot, CaptureClient, CaptureCompleted, CaptureFailed, CaptureHostReady,
-	CaptureHostRealized, CaptureHostRoot, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery,
-	ItemIconPlugin, PoseCaptureSubjects, request_inventory_icons, request_self_lubikan_icon,
+	request_inventory_icons, request_self_lubikan_icon, CaptureCacheRoot, CaptureClient,
+	CaptureCompleted, CaptureFailed, CaptureHostReady, CaptureHostRealized, CaptureHostRoot,
+	ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery, ItemIconPlugin, PoseCaptureSubjects,
 };
 use maybraid_character_ui_menu_renderer::{
-	InventoryItemKey, MenuThumbnailContext, fill_inventory_layout, fill_inventory_loading,
-	find_overlay_node, spawn_overlay_shell, spawn_starter_kit_shell,
+	fill_inventory_layout, fill_inventory_loading, find_overlay_node, spawn_overlay_shell,
+	spawn_starter_kit_shell, InventoryItemKey, MenuThumbnailContext,
 };
 use menu_components::theme::TEXT_YELLOW;
 use menu_components::{
-	HudFonts, HudMenuItem, HudScrollViewport, InputPromptDevice, ReorderMark, spawn_header_line,
-	spawn_hud_action,
+	spawn_header_line, spawn_hud_action, HudFonts, HudMenuItem, HudScrollViewport,
+	InputPromptDevice, ReorderMark,
 };
 use menu_screens::SpinRevealScreen;
-use tanz_user::request_inventory_tanz_icons;
 
 fn assets_path() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -61,6 +61,7 @@ fn main() {
 				.set(AssetPlugin { file_path: assets_path().to_string_lossy().into(), ..default() })
 				.disable::<AudioPlugin>(),
 		)
+		.add_plugins(StandaloneCharacterMaterialRefPlugin)
 		.add_plugins(ItemIconPlugin)
 		.add_systems(Update, menu_components::sync_hover_tiles)
 		.insert_resource(ClearColor(Color::srgb(0.07, 0.08, 0.10)))
@@ -166,7 +167,11 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
-		if key == self_lubikan_catalog_key() { TEXT_YELLOW } else { Color::WHITE }
+		if key == self_lubikan_catalog_key() {
+			TEXT_YELLOW
+		} else {
+			Color::WHITE
+		}
 	}
 }
 
@@ -233,17 +238,18 @@ fn request_icon(
 	mut discovery: ResMut<ItemIconDiscovery>,
 	mut subjects: ResMut<ItemCaptureSubjects>,
 	mut poses: ResMut<PoseCaptureSubjects>,
+	mut cache: ResMut<ItemIconCache>,
 	mut client: CaptureClient,
 ) {
 	// Screen-capture is one session at a time. Pose stills must enqueue
 	// before clothing / firearm hosts, which can sit unrealized for the
 	// full wait window and starve Tanz thumbnails.
-	request_self_lubikan_icon(&mut discovery, &mut client);
+	request_self_lubikan_icon(&mut discovery, &mut client, &mut cache);
 	for inventory in capture_icon_inventories() {
-		request_inventory_tanz_icons(&inventory, &mut discovery, &mut poses, &mut client);
+		request_inventory_icons(&inventory, &mut discovery, &mut subjects, &mut client, &mut cache);
 	}
 	let starter = Inventory::with_starter_outfit(real_starter_items());
-	request_inventory_icons(&starter, &mut discovery, &mut subjects, &mut client);
+	request_inventory_icons(&starter, &mut discovery, &mut subjects, &mut client, &mut cache);
 }
 
 fn capture_icon_inventories() -> [Inventory; 2] {
@@ -346,7 +352,12 @@ fn log_host_progress(
 }
 
 fn icon_ready(cache: &ItemIconCache) -> bool {
-	cache.filled_or_failed(self_lubikan_catalog_key(), true)
+	capture_icon_inventories().iter().all(|inventory| {
+		InventoryLayout::starter_kit(inventory.items.clone())
+			.captures
+			.iter()
+			.all(|need| cache.catalog_need_is_terminal(need.key, need.silhouette))
+	})
 }
 
 const SCENE_DEADLINE: Duration = Duration::from_secs(48);
