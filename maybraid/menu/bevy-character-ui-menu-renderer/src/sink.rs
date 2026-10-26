@@ -10,12 +10,12 @@ use character_ui_menu::{
 	PreviewColor, SectionOpen, SelectChoice, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
 };
 
-use menu_components::{MENU_LIST_PAD, MENU_LIST_RADIUS, equipped_pane_fill};
+use menu_components::{equipped_pane_fill, MENU_LIST_PAD, MENU_LIST_RADIUS};
 
 use crate::widgets::{
-	ACTIVE, INACTIVE, MENU_VERTICAL_GAP, MUTED, ToggleSectionKey, color_from_hex,
-	compact_control_row, inline_chip_row, labeled_row, render_asset_button, render_button,
-	select_tile_node, swatch_node, text, tile_text,
+	color_from_hex, compact_control_row, inline_chip_row, labeled_row, render_asset_button,
+	render_button, select_tile_node, swatch_node, text, tile_text, ToggleSectionKey, ACTIVE,
+	INACTIVE, MENU_VERTICAL_GAP, MUTED,
 };
 
 /// Renderer-owned thumbnail bridge. The playground adapts this to its cache.
@@ -167,6 +167,7 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
 						Node {
 							width: Val::Percent(100.0),
 							flex_direction: FlexDirection::Column,
+							flex_shrink: 0.0,
 							row_gap: Val::Px(MENU_VERTICAL_GAP),
 							padding: UiRect::all(Val::Px(MENU_LIST_PAD)),
 							border_radius: BorderRadius::all(Val::Px(MENU_LIST_RADIUS)),
@@ -273,10 +274,14 @@ impl BevyMenuSink {
 				.spawn((
 					Node {
 						width: Val::Percent(100.0),
-						flex_direction: FlexDirection::Row,
-						flex_wrap: FlexWrap::NoWrap,
+						display: Display::Grid,
+						grid_template_columns: RepeatedGridTrack::flex(
+							menu_components::INVENTORY_TILE_COLUMNS,
+							1.0,
+						),
+						flex_shrink: 0.0,
+						row_gap: Val::Px(MENU_VERTICAL_GAP),
 						column_gap: Val::Px(8.0),
-						overflow: Overflow::scroll_x(),
 						..default()
 					},
 					Pickable::IGNORE,
@@ -315,8 +320,12 @@ impl BevyMenuSink {
 			.spawn((
 				Node {
 					width: Val::Percent(100.0),
-					flex_direction: FlexDirection::Row,
-					flex_wrap: FlexWrap::Wrap,
+					display: Display::Grid,
+					grid_template_columns: RepeatedGridTrack::flex(
+						menu_components::INVENTORY_TILE_COLUMNS,
+						1.0,
+					),
+					flex_shrink: 0.0,
 					column_gap: Val::Px(8.0),
 					row_gap: Val::Px(MENU_VERTICAL_GAP),
 					..default()

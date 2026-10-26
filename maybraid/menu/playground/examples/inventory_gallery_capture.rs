@@ -29,7 +29,7 @@ use characters::{HiddenUntilSceneReady, PendingCharacterAssembly};
 use item_icons::{
 	request_inventory_icons, request_self_lubikan_icon, CaptureCacheRoot, CaptureClient,
 	CaptureCompleted, CaptureFailed, CaptureHostReady, CaptureHostRealized, CaptureHostRoot,
-	ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery, ItemIconPlugin, PoseCaptureSubjects,
+	ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery, ItemIconPlugin,
 };
 use maybraid_character_ui_menu_renderer::{
 	fill_inventory_layout, fill_inventory_loading, find_overlay_node, spawn_overlay_shell,
@@ -237,7 +237,6 @@ fn allow_slow_braidman_icon(mut cache: ResMut<CaptureCacheRoot>) {
 fn request_icon(
 	mut discovery: ResMut<ItemIconDiscovery>,
 	mut subjects: ResMut<ItemCaptureSubjects>,
-	mut poses: ResMut<PoseCaptureSubjects>,
 	mut cache: ResMut<ItemIconCache>,
 	mut client: CaptureClient,
 ) {

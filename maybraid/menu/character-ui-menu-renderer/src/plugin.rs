@@ -8,8 +8,8 @@ use crate::event::CharacterMenuEvent;
 use crate::input::{
 	close_overlay_on_modal_dismiss, consume_inventory_reorder_back, emit_hud_activate_on_click,
 	emit_hud_activate_on_enter, emit_hud_activate_on_nav, emit_hud_focus,
-	emit_inventory_reorder_nav, emit_inventory_unequip_on_edge, emit_overlay_close_on_click,
-	emit_overlay_open_on_click, mark_reorder_tiles,
+	emit_inventory_reorder_keyboard, emit_inventory_reorder_nav, emit_inventory_unequip_on_edge,
+	emit_overlay_close_on_click, emit_overlay_open_on_click, mark_reorder_tiles,
 };
 
 /// Keyboard / observer input, then host UI rebuild.
@@ -66,6 +66,7 @@ where
 		.add_systems(
 			Update,
 			(
+				emit_inventory_reorder_keyboard,
 				emit_hud_focus::<E>,
 				emit_hud_activate_on_enter::<E>,
 				emit_inventory_unequip_on_edge::<E>,

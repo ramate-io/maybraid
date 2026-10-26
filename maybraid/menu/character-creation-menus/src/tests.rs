@@ -139,10 +139,6 @@ fn section_labels(nodes: &[MenuNode<MenuEvent>]) -> Vec<&'static str> {
 		.collect()
 }
 
-fn catalog_labels(choices: &[character_ui_menu::GridCatalogChoice<MenuEvent>]) -> Vec<&str> {
-	choices.iter().map(|choice| choice.label.as_str()).collect()
-}
-
 /// Config → species menu → config. Conversion is lossless for fields the menu owns;
 /// callers must leave deliberately normalized fields (skin-synced head/ears) matching
 /// the restore rule, or this equality fails.
@@ -851,7 +847,7 @@ fn create_menu_weapons_is_ranked_grid_catalog() -> anyhow::Result<()> {
 	let mut menu = CharacterMenu::for_create(items);
 	let nodes = menu.menu_nodes();
 	let equipped = inventory_body(&nodes, "Tools")?;
-	let MenuNode::OrderedEquipment { rows } = equipped else {
+	let [MenuNode::OrderedEquipment { rows }, MenuNode::GridCatalog { .. }] = equipped else {
 		anyhow::bail!("expected Tools equipped pane to lower to OrderedEquipment");
 	};
 	let tools = rows.iter().find(|row| row.label == "Tools").expect("Tools row");
@@ -887,7 +883,7 @@ fn create_menu_skill_maps_is_ranked_grid_catalog() -> anyhow::Result<()> {
 	let mut menu = CharacterMenu::for_create(items);
 	let nodes = menu.menu_nodes();
 	let equipped = inventory_body(&nodes, "Skill Maps")?;
-	let MenuNode::OrderedEquipment { rows } = equipped else {
+	let [MenuNode::OrderedEquipment { rows }, MenuNode::GridCatalog { .. }] = equipped else {
 		anyhow::bail!("expected Skill Maps equipped pane to lower to OrderedEquipment");
 	};
 	let skills = rows.iter().find(|row| row.label == "Skill Maps").expect("Skill Maps row");
@@ -938,12 +934,17 @@ fn create_menu_inventory_is_one_section_with_four_headers() -> anyhow::Result<()
 		.iter()
 		.all(|node| !matches!(node, MenuNode::Section { label: "Clothing", .. })));
 	let tools = inventory_body(&nodes, "Tools")?;
-	let MenuNode::GridCatalog { choices, .. } = tools else {
-		anyhow::bail!("Tools must be a GridCatalog");
+	let [MenuNode::OrderedEquipment { rows }, MenuNode::GridCatalog { .. }] = tools else {
+		anyhow::bail!("Tools must have equipped and unequipped panes");
 	};
-	assert_eq!(catalog_labels(choices), [firearm_name.as_str(), grenade_name.as_str()]);
+	let labels: Vec<_> = rows
+		.iter()
+		.flat_map(|row| &row.choices)
+		.map(|choice| choice.tile.label.as_str())
+		.collect();
+	assert_eq!(labels, [firearm_name.as_str(), grenade_name.as_str()]);
 	let lubikan = inventory_body(&nodes, "Lubikan")?;
-	let MenuNode::GridCatalog { choices, .. } = lubikan else {
+	let [MenuNode::GridCatalog { choices, .. }] = lubikan else {
 		anyhow::bail!("Lubikan must be a catalog tile");
 	};
 	let self_tile = choices

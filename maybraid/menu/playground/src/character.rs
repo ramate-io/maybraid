@@ -14,10 +14,10 @@ use item_icons::{
 };
 use maybraid_character_ui_menu_renderer::{
 	fill_inventory_layout, fill_inventory_loading, find_overlay_node, overlay_closes_on_pick,
-	spawn_overlay_shell, CharacterHudSystems, CharacterMenuEvent,
-	InventoryFocusHint, InventoryInteraction, InventoryItemKey, MaybraidCharacterMenuRendererPlugin,
-	MaybraidMenuSink, MenuButton, MenuJustify, MenuSink, MenuThumbnailContext, OverlayClose,
-	OverlayOpen, OverlaySelectRoot, OverlaySelectViewport, RenderContext,
+	spawn_overlay_shell, CharacterHudSystems, CharacterMenuEvent, InventoryFocusHint,
+	InventoryInteraction, InventoryItemKey, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
+	MenuButton, MenuJustify, MenuSink, MenuThumbnailContext, OverlayClose, OverlayOpen,
+	OverlaySelectRoot, OverlaySelectViewport, RenderContext,
 };
 use maybraid_menu_controller::MenuController;
 use maybraid_skill_map::{SkillMapSpinRevealHud, SkillMapTileMaterialPlugin};
@@ -794,7 +794,7 @@ fn on_overlay_close(
 }
 
 fn on_menu_activate(
-	activate: On<MenuActivate<MenuEvent>>,
+	mut activate: On<MenuActivate<MenuEvent>>,
 	mut menu_state: ResMut<CharacterMenuState>,
 	mut menu_events: MessageWriter<CharacterMenuEvent<MenuEvent>>,
 	mut ui_sync: ResMut<CharacterUiSyncState>,
@@ -808,6 +808,9 @@ fn on_menu_activate(
 	if screens.is_empty() {
 		return;
 	}
+	// This is a global observer: bubbling would apply the same domain edit
+	// again at each tile/grid/pane ancestor (one move could reach the end).
+	activate.propagate(false);
 	let event = activate.event().choice;
 	if !menu_state.0.apply(event) {
 		return;
@@ -1060,3 +1063,6 @@ mod tests {
 		Ok(())
 	}
 }
+
+#[cfg(test)]
+mod ordered_inventory_tests;

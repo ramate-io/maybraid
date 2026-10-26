@@ -639,7 +639,6 @@ mod tests {
 		route_home_choice, sync_world_loadout_from_editor, sync_world_shadows,
 		visual_style_readout, GameFlow, PlaySession,
 	};
-	use maybraid_world::RoutingEvent;
 	use maybraid_world::{
 		InputRouter, SessionCapabilities, ShadowQuality, VisualStyle, VisualStyleSetting,
 		WorldPlaySessionEnded, WorldPlayerLoadout, WorldSurfaceReady,

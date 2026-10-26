@@ -1,9 +1,7 @@
 //! Pointer and keyboard → [`MenuFocus`] / [`MenuActivate`] / overlay events.
 
 use bevy::prelude::*;
-use maybraid_input::{
-	MenuNav, MenuNavImpulse, MenuNavPad, VirtualPad, INVENTORY_UNEQUIP_PAD,
-};
+use maybraid_input::{MenuNav, MenuNavImpulse, MenuNavPad, VirtualPad, INVENTORY_UNEQUIP_PAD};
 use menu_components::{
 	HudMenu, HudMenuItem, HudMenuNavLocked, HudOverlayMenu, KeyboardMenuNav, MenuActivate,
 	MenuFocus, MenuModalBackHold, MenuModalDismiss, MenuModalId, ReorderMark, TextMenuInputLock,
@@ -21,6 +19,7 @@ pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
 	buttons: Query<&MenuButton<E>>,
 	keys: Query<&InventoryItemKey>,
 	items: Query<&HudMenuItem>,
+	mut menus: Query<&mut HudMenu>,
 	mut interaction: ResMut<InventoryInteraction>,
 	mut focus: ResMut<InventoryFocusHint>,
 	mut commands: Commands,
@@ -31,7 +30,12 @@ pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
 	let Ok(button) = buttons.get(click.entity) else {
 		return;
 	};
-	let menu = items.get(click.entity).ok().map(|item| item.menu);
+	let menu = items.get(click.entity).ok().map(|item| {
+		if let Ok(mut menu) = menus.get_mut(item.menu) {
+			menu.selected = item.index;
+		}
+		item.menu
+	});
 	if intercept_equipped_activate(
 		click.entity,
 		menu,
@@ -216,8 +220,7 @@ fn intercept_equipped_activate(
 		return false;
 	}
 	focus.0 = Some(*key);
-	let same =
-		matches!(*interaction, InventoryInteraction::Reorder { item_index } if item_index == key.index);
+	let same = matches!(*interaction, InventoryInteraction::Reorder { item_index } if item_index == key.index);
 	if same {
 		exit_reorder(interaction, menu, commands);
 		return true;
@@ -247,32 +250,60 @@ pub fn emit_inventory_reorder_nav<E: Copy + Send + Sync + 'static>(
 	impulse: On<MenuNavImpulse>,
 	lock: Res<TextMenuInputLock>,
 	interaction: Res<InventoryInteraction>,
-	menus: Query<&HudMenu>,
-	items: Query<(Entity, &HudMenuItem, Option<&EquippedOrderControls<E>>)>,
+	menus: Query<(), With<HudMenuNavLocked>>,
+	items: Query<(Entity, &HudMenuItem, &InventoryItemKey, &EquippedOrderControls<E>)>,
 	mut commands: Commands,
 ) {
-	if lock.0 || interaction.reordering().is_none() {
+	if lock.0 || !menus.contains(impulse.entity) {
 		return;
 	}
-	let nav = impulse.event().nav;
-	if !matches!(nav, MenuNav::Left | MenuNav::Right) {
-		return;
-	}
-	let Ok(menu) = menus.get(impulse.entity) else {
+	let Some(item_index) = interaction.reordering() else {
 		return;
 	};
-	let Some((entity, _, Some(controls))) = items.iter().find(|(_, item, _)| {
-		item.menu == impulse.entity && item.index == menu.selected
+	// Hover/focus is positional and can change while the host rebuilds the
+	// tiles. Reorder always belongs to the bag item that entered this mode.
+	let Some((entity, _, _, controls)) = items.iter().find(|(_, item, key, _)| {
+		item.menu == impulse.entity && key.equipped && key.index == item_index
 	}) else {
 		return;
 	};
-	let event = match nav {
+	let event = match impulse.event().nav {
 		MenuNav::Left => controls.move_left,
 		MenuNav::Right => controls.move_right,
 		_ => None,
 	};
 	if let Some(event) = event {
 		commands.trigger(MenuActivate { entity, choice: event });
+	}
+}
+
+/// Standalone renderers use keyboard edges; controller hosts disable this path
+/// and supply the same impulses through their repeat/deadzone controller.
+pub fn emit_inventory_reorder_keyboard(
+	keyboard: Res<ButtonInput<KeyCode>>,
+	keyboard_nav: Res<KeyboardMenuNav>,
+	lock: Res<TextMenuInputLock>,
+	stack: Res<menu_components::MenuModalStack>,
+	roots: Query<(Entity, &menu_components::MenuModal)>,
+	children: Query<&ChildOf>,
+	menus: Query<Entity, (With<HudMenu>, With<HudMenuNavLocked>)>,
+	mut commands: Commands,
+) {
+	if !keyboard_nav.is_enabled() || lock.0 {
+		return;
+	}
+	let nav = if keyboard.just_pressed(KeyCode::ArrowLeft) {
+		MenuNav::Left
+	} else if keyboard.just_pressed(KeyCode::ArrowRight) {
+		MenuNav::Right
+	} else {
+		return;
+	};
+	for entity in &menus {
+		if !menu_components::entity_under_nav_owner(entity, &stack, &roots, &children) {
+			continue;
+		}
+		commands.trigger(MenuNavImpulse { entity, nav });
 	}
 }
 

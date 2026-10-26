@@ -439,6 +439,7 @@ pub fn spawn_tile_grid_columns(
 				display: Display::Grid,
 				width: Val::Percent(100.0),
 				grid_template_columns: tile_grid_columns(columns),
+				flex_shrink: 0.0,
 				column_gap: Val::Px(PANEL_CHIP_GAP),
 				row_gap: Val::Px(PANEL_CHIP_GAP),
 				align_items: AlignItems::Stretch,

@@ -195,7 +195,7 @@ pub struct EquipmentChoice<E> {
 	pub move_right: Option<E>,
 }
 
-/// Horizontal equipped row for one typed inventory slot.
+/// Ordered equipped choices for one typed inventory slot. Renderers may wrap them.
 #[derive(Clone, Debug, PartialEq)]
 pub struct OrderedEquipmentRow<E> {
 	pub label: &'static str,
@@ -295,7 +295,7 @@ pub enum MenuNode<E> {
 	ItemMultiSelect { label: &'static str, rows: Vec<ItemRow<E>> },
 	/// Wrapping grid of owned items with a selection cap (`max_selected`).
 	GridCatalog { label: &'static str, max_selected: usize, choices: Vec<GridCatalogChoice<E>> },
-	/// Equipped pane: one horizontal row per typed slot, already in order.
+	/// Equipped pane: one group per typed slot, already in order.
 	OrderedEquipment { rows: Vec<OrderedEquipmentRow<E>> },
 	/// One-line text field. Toggle and typed changes are renderer events;
 	/// the IR only carries the current value.

@@ -6,13 +6,13 @@ use character_ui_menu::{
 	OrderedEquipmentRow, PreviewColor, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
 };
 use menu_components::{
-	CursorRow, HudFonts, HudMenu, HudMenuItem, MENU_LIST_PAD, MENU_LIST_RADIUS,
-	PANEL_BLOCK_FONT_SIZE, PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE,
-	PANEL_ROW_GAP, ShortTextField, ShortTextKey, TEXT_LIGHT_BLUE, TEXT_LIME, TEXT_SALMON,
-	TEXT_YELLOW, TEXT_YELLOW_FAINT, equipped_pane_fill, spawn_asset_tile, spawn_grid_catalog_tile,
-	spawn_group_label, spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text,
-	spawn_labeled_row, spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch,
-	spawn_swatch_row, spawn_tile_grid, spawn_tile_grid_columns,
+	equipped_pane_fill, spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label,
+	spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text, spawn_labeled_row,
+	spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row,
+	spawn_tile_grid, spawn_tile_grid_columns, CursorRow, HudFonts, HudMenu, HudMenuItem,
+	ShortTextField, ShortTextKey, MENU_LIST_PAD, MENU_LIST_RADIUS, PANEL_BLOCK_FONT_SIZE,
+	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP,
+	TEXT_LIGHT_BLUE, TEXT_LIME, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
 use crate::justify::MenuJustify;
@@ -115,7 +115,11 @@ impl<T> RenderContext<'_, T> {
 	}
 
 	pub fn face_color(&self) -> Color {
-		if self.interactive { TEXT_YELLOW } else { TEXT_YELLOW_FAINT }
+		if self.interactive {
+			TEXT_YELLOW
+		} else {
+			TEXT_YELLOW_FAINT
+		}
 	}
 }
 
@@ -696,14 +700,6 @@ impl MaybraidMenuSink {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		// Horizontal overflow:scroll on a flex child otherwise eats the
-		// leftover overlay height, so pin the pane to caption+detail tiles.
-		let strip_h = context.catalog_thumb_px + 152.0;
-		let pane_h = MENU_LIST_PAD * 2.0
-			+ PANEL_BLOCK_FONT_SIZE
-			+ PANEL_ROW_GAP
-			+ strip_h * rows.len().max(1) as f32
-			+ PANEL_ROW_GAP * rows.len().saturating_sub(1) as f32;
 		parent
 			.spawn((
 				Node {
@@ -711,9 +707,6 @@ impl MaybraidMenuSink {
 					flex_direction: FlexDirection::Column,
 					flex_grow: 0.0,
 					flex_shrink: 0.0,
-					height: Val::Px(pane_h),
-					min_height: Val::Px(pane_h),
-					max_height: Val::Px(pane_h),
 					row_gap: Val::Px(PANEL_ROW_GAP),
 					padding: UiRect::all(Val::Px(MENU_LIST_PAD)),
 					border_radius: BorderRadius::all(Val::Px(MENU_LIST_RADIUS)),
@@ -732,29 +725,16 @@ impl MaybraidMenuSink {
 					TEXT_YELLOW,
 				);
 				for row in rows {
-					pane.spawn((
-						menu_components::HudScrollStrip,
-						Node {
-							width: Val::Percent(100.0),
-							height: Val::Px(strip_h),
-							min_height: Val::Px(strip_h),
-							max_height: Val::Px(strip_h),
-							flex_direction: FlexDirection::Row,
-							flex_grow: 0.0,
-							flex_shrink: 0.0,
-							align_items: AlignItems::FlexStart,
-							column_gap: Val::Px(PANEL_ROW_GAP),
-							overflow: Overflow::scroll_x(),
-							..default()
+					spawn_tile_grid_columns(
+						pane,
+						self.justify.content(),
+						context.catalog_columns,
+						|grid| {
+							for choice in &row.choices {
+								self.equipment_tile(grid, context, choice);
+							}
 						},
-						ScrollPosition::default(),
-						Pickable::default(),
-					))
-					.with_children(|strip| {
-						for choice in &row.choices {
-							self.equipment_tile(strip, context, choice);
-						}
-					});
+					);
 				}
 			});
 	}
@@ -786,41 +766,10 @@ impl MaybraidMenuSink {
 			move_left: choice.move_left,
 			move_right: choice.move_right,
 		};
-		parent
-			.spawn((
-				Node {
-					width: Val::Px(thumb_px + 24.0),
-					min_width: Val::Px(thumb_px + 24.0),
-					flex_shrink: 0.0,
-					flex_grow: 0.0,
-					align_self: AlignSelf::FlexStart,
-					..default()
-				},
-				Pickable::IGNORE,
-			))
-			.with_children(|cell| {
-				if context.interactive {
-					if let Some(event) = tile.event {
-						spawn_grid_catalog_tile(
-							cell,
-							context.fonts,
-							&tile.label,
-							&tile.detail,
-							tile.selected,
-							tile.rank,
-							thumbnail,
-							tint,
-							viewport,
-							swatch,
-							false,
-							thumb_px,
-							(MenuButton(event), item, key, controls),
-						);
-						return;
-					}
-				}
+		if context.interactive {
+			if let Some(event) = tile.event {
 				spawn_grid_catalog_tile(
-					cell,
+					parent,
 					context.fonts,
 					&tile.label,
 					&tile.detail,
@@ -832,9 +781,26 @@ impl MaybraidMenuSink {
 					swatch,
 					false,
 					thumb_px,
-					(item, key, controls),
+					(MenuButton(event), item, key, controls),
 				);
-			});
+				return;
+			}
+		}
+		spawn_grid_catalog_tile(
+			parent,
+			context.fonts,
+			&tile.label,
+			&tile.detail,
+			tile.selected,
+			tile.rank,
+			thumbnail,
+			tint,
+			viewport,
+			swatch,
+			false,
+			thumb_px,
+			(item, key, controls),
+		);
 	}
 
 	fn item_row<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(

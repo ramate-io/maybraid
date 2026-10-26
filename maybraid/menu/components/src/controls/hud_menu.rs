@@ -89,7 +89,7 @@ pub fn select_hud_item_on_over(
 	roots: Query<(Entity, &crate::modal::MenuModal)>,
 	child_of: Query<&ChildOf>,
 	items: Query<&HudMenuItem>,
-	mut menus: Query<&mut HudMenu>,
+	mut menus: Query<&mut HudMenu, Without<HudMenuNavLocked>>,
 ) {
 	if !crate::modal::entity_under_nav_owner(over.entity, &stack, &roots, &child_of) {
 		return;
@@ -186,7 +186,7 @@ pub fn navigate_hud_menus(
 	roots: Query<(Entity, &crate::modal::MenuModal)>,
 	child_of: Query<&ChildOf>,
 	overlay_menus: Query<Entity, With<HudOverlayMenu>>,
-	mut menus: Query<(Entity, &mut HudMenu)>,
+	mut menus: Query<(Entity, &mut HudMenu), Without<HudMenuNavLocked>>,
 ) {
 	if !keyboard_nav.is_enabled() || lock.0 {
 		return;
