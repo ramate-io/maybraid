@@ -120,14 +120,13 @@ use firearms::EnergyMaterialPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
-use maybraid_character_controller::CharacterControlSystems;
 use maybraid_controllers_core::CaptureResolveSystems;
 use maybraid_game_mode_discover::DiscoveryPlayerPlugin;
-use maybraid_virtual_pad_controller::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_locomotion_controller::LocomotionControllerPlugin;
 use maybraid_skill_map::SkillMapSystems;
 use maybraid_sky::SkyDomePlugin;
 use maybraid_vfx::VfxPlugin;
+use maybraid_virtual_pad_controller::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_weather::WeatherPlugin;
 use player::{
 	register_motor_traction_physics, MotorRequestStage, PlayerPlugin, PlayerPresentationPlugin,
@@ -341,15 +340,12 @@ impl Plugin for WorldPlugin {
 		#[cfg(feature = "debug-commands")]
 		app.add_plugins(world_debug::WorldDebugPlugin);
 		if self.debug_chrome {
-			app.add_systems(Startup, ui::spawn_mob_debug_hud).add_systems(
-				Update,
-				(
-					control::echo_character_intents
-						.after(CharacterControlSystems)
-						.before(game_commands::ui::update_debug_ui),
+			app.add_observer(control::echo_character_intents)
+				.add_systems(Startup, ui::spawn_mob_debug_hud)
+				.add_systems(
+					Update,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-				),
-			);
+				);
 		}
 	}
 }

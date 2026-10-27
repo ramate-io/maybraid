@@ -10,6 +10,17 @@ pub struct ActorIntentEvent {
 	pub input: Routed<CharacterIntent>,
 }
 
+impl ActorIntentEvent {
+	/// Deliver a semantic control only while its original actor binding remains valid.
+	pub fn queue(input: Routed<CharacterIntent>, commands: &mut Commands) {
+		input.queue(commands, |world, input| {
+			if let Some(entity) = input.target().actor_entity() {
+				world.trigger(Self { entity, input });
+			}
+		});
+	}
+}
+
 /// This tick's addressed semantic frame, including an empty neutral frame.
 #[derive(Component, Clone, Debug, Default)]
 pub struct CharacterIntentFrame(pub(crate) Option<Routed<Vec<CharacterIntent>>>);
@@ -30,7 +41,7 @@ impl CharacterIntentFrame {
 }
 
 /// One frame of character control. Analog variants may repeat while held.
-#[derive(Message, Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CharacterIntent {
 	Move(Vec2),
 	Look(Vec2),
@@ -86,6 +97,11 @@ impl InventoryCyclingCategory {
 }
 
 impl CharacterIntent {
+	/// Shell actions resolve before gameplay children from the same physical frame.
+	pub const fn is_shell(self) -> bool {
+		matches!(self, Self::InGameMenu | Self::Inventory | Self::ToggleMap)
+	}
+
 	pub fn label(self) -> &'static str {
 		match self {
 			Self::Move(_) => "move",

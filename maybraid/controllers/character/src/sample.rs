@@ -42,19 +42,6 @@ pub struct FaceButtonSample {
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct RoutedActorControl(pub(crate) Option<Routed<ActorControlSample>>);
 
-/// Temporary primary-source resource for consumers migrating to actor components.
-#[derive(Resource, Deref, DerefMut, Clone, Copy, Debug, Default)]
-pub struct LegacyRoutedActorControl(RoutedActorControl);
-
-impl LegacyRoutedActorControl {
-	pub fn from_local_pad(target: ActorTarget, pad: &VirtualPad) -> Self {
-		Self(RoutedActorControl::from_local_pad(target, pad))
-	}
-	pub fn from_sample(target: ActorTarget, sample: ActorControlSample) -> Self {
-		Self(RoutedActorControl::from_sample(target, sample))
-	}
-}
-
 /// One unblocked delivered tick, including explicit neutral/release state.
 #[derive(EntityEvent, Clone, Copy, Debug)]
 pub struct ActorControlEvent {
@@ -256,6 +243,10 @@ impl ActorControlSample {
 }
 
 impl RoutedActorControl {
+	pub fn new(input: Routed<ActorControlSample>) -> Self {
+		Self(Some(input))
+	}
+
 	pub fn clear(&mut self) {
 		self.0 = None;
 	}
@@ -281,18 +272,6 @@ impl RoutedActorControl {
 
 	pub fn addresses(&self, entity: Entity) -> bool {
 		self.actor().is_some_and(|target| target.matches(entity))
-	}
-
-	pub fn from_local_pad(target: ActorTarget, pad: &VirtualPad) -> Self {
-		Self(Some(Routed::to_actor(
-			InputSource::local_pad(),
-			target,
-			ActorControlSample::from_pad(pad),
-		)))
-	}
-
-	pub fn from_sample(target: ActorTarget, sample: ActorControlSample) -> Self {
-		Self(Some(Routed::to_actor(InputSource::local_pad(), target, sample)))
 	}
 
 	pub fn source(&self) -> Option<InputSource> {
@@ -344,7 +323,11 @@ mod tests {
 	fn routed_control_addresses_one_actor() {
 		let actor = ActorTarget::new(Entity::from_bits(4));
 		let other = Entity::from_bits(5);
-		let routed = RoutedActorControl::from_sample(actor, ActorControlSample::default());
+		let routed = RoutedActorControl::new(Routed::to_actor(
+			InputSource::virtual_pad(Entity::from_bits(8)),
+			actor,
+			ActorControlSample::default(),
+		));
 		assert!(routed.addresses(actor.entity()));
 		assert!(!routed.addresses(other));
 	}
