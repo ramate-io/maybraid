@@ -1,43 +1,35 @@
-//! UI-owned first-spawn / death-respawn picker controller.
-//!
-//! Confirm and highlight nav read [`MenuNavPad`], not character intents. The
-//! picker claims [`CaptureKind::MenuNav`] while the locked map is open and
-//! yields to a higher overlay, text entry, or another menu. The input target
-//! is the picker UI / session: no actor, Jump, or locomotion.
-
+//! Addressed spawn-picker input. The host selects a primary picker explicitly;
+//! each picker entity owns its capture and navigation repeat state.
 use crate::arrival::WorldPlayerRespawnState;
 use crate::request::{DestinationSelected, PlayerChoseRespawnPoi};
 use bevy::prelude::*;
 use maybraid_controllers_core::{
-	CaptureKind, CaptureLayer, CaptureToken, InputRouter, InputRouting, InputSource, ScopeOwner,
+	CaptureKind, CaptureToken, InputRouting, InputSource, RouteBinding, ScopeOwner, UiPadEvent,
+	UiTarget,
 };
-use maybraid_virtual_pad_controller::MenuNavPad;
+use maybraid_menu_controller::repeat::MenuRepeat;
+use maybraid_virtual_pad_controller::{PrimaryVirtualPad, VirtualPadController};
 
-/// Locked picker sheet as the picker sees it. World map presentation writes
-/// this; the picker does not depend on `world/lib`.
+/// Projection of the host's single discovery map, not controller input state.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SpawnPickerSheet {
 	pub open: bool,
 	pub locked: bool,
+	pub map_capture_owner: Option<UiTarget>,
 }
-
 impl SpawnPickerSheet {
 	pub const fn from_map(open: bool, close_locked: bool) -> Self {
-		Self { open, locked: close_locked }
+		Self { open, locked: close_locked, map_capture_owner: None }
 	}
-
 	pub const fn owns_pending(self, pending: bool) -> bool {
 		self.open && self.locked && pending
 	}
 }
 
-/// Token this picker holds on [`InputRouter`]. Releasing it cannot release
-/// another owner's capture.
-#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SpawnPickerCapture {
 	pub token: Option<CaptureToken>,
 }
-
 impl SpawnPickerCapture {
 	pub fn release(&mut self, router: &mut InputRouting) {
 		if let Some(token) = self.token.take() {
@@ -46,277 +38,240 @@ impl SpawnPickerCapture {
 	}
 }
 
-/// Locked discovery-map picker. Focus does not require an assigned actor.
-#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Component, Clone, Debug)]
+#[require(SpawnPickerCapture)]
 pub struct SpawnPickerController {
+	pub source: InputSource,
 	pub focus: bool,
+	binding: Option<RouteBinding>,
+	sequence: Option<u64>,
+	repeat: MenuRepeat,
+	await_release: bool,
 }
-
 impl SpawnPickerController {
-	pub fn owner() -> ScopeOwner {
-		ScopeOwner::spawn_picker()
-	}
-
-	/// Locked picker sheet is on screen and a life is waiting to be placed.
-	pub fn should_own(sheet: SpawnPickerSheet, pending: bool) -> bool {
-		sheet.owns_pending(pending)
-	}
-
-	/// A higher overlay, text lock, or another menu owns the source.
-	pub fn higher_claim_blocks(layer: CaptureLayer) -> bool {
-		match layer.kind() {
-			CaptureKind::TextEntry => true,
-			CaptureKind::Overlay => {
-				layer.owner() != ScopeOwner::map_overlay() && layer.owner() != Self::owner()
-			}
-			CaptureKind::MenuNav => layer.owner() != Self::owner(),
+	pub fn new(source: InputSource) -> Self {
+		Self {
+			source,
+			focus: false,
+			binding: None,
+			sequence: None,
+			repeat: Default::default(),
+			await_release: false,
 		}
 	}
-
-	pub fn accepts(router: &InputRouter) -> bool {
-		router.top_capture().is_some_and(|layer| !Self::higher_claim_blocks(layer))
+	pub fn owner(entity: Entity) -> ScopeOwner {
+		ScopeOwner::ui(UiTarget::new(entity))
 	}
-
 	pub fn confirm(pending: &crate::arrival::PendingPlayerRespawn) -> PlayerChoseRespawnPoi {
 		PlayerChoseRespawnPoi::new(pending.identity(), pending.highlighted)
 	}
-
-	pub fn apply_focus(
-		&mut self,
-		sheet: SpawnPickerSheet,
-		pending: bool,
-		blocked: bool,
-	) -> Option<ScopeOwner> {
-		let owner = (Self::should_own(sheet, pending) && !blocked).then_some(Self::owner());
-		self.focus = owner.is_some();
-		owner
-	}
 }
 
+/// The discovery host presently exposes one spawn sheet. Its input source is
+/// explicit and remains separate from controller-owned repeat/capture state.
 pub fn refresh_spawn_picker_focus(
 	sheet: Res<SpawnPickerSheet>,
 	state: Res<WorldPlayerRespawnState>,
-	mut controller: ResMut<SpawnPickerController>,
-	mut capture: ResMut<SpawnPickerCapture>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+	mut pickers: Query<(Entity, &mut SpawnPickerController, &mut SpawnPickerCapture)>,
+	mut commands: Commands,
 	mut router: InputRouting,
 ) {
-	let blocked = router.top_capture().is_some_and(|layer| {
-		SpawnPickerController::higher_claim_blocks(layer)
-			&& layer.owner() != SpawnPickerController::owner()
-	});
-	let owner = controller.apply_focus(*sheet, state.pending.is_some(), blocked);
-	router.replace_owned_capture(
-		&mut capture.token,
-		InputSource::local_pad(),
-		owner,
-		CaptureKind::MenuNav,
-	);
+	let Some(primary) = primary else {
+		return;
+	};
+	let source = InputSource::virtual_pad(primary.0);
+	let wanted = sheet.owns_pending(state.pending.is_some());
+	if pickers.is_empty() {
+		commands.spawn(SpawnPickerController::new(source));
+		return;
+	}
+	for (entity, mut picker, mut capture) in &mut pickers {
+		if picker.source != source {
+			continue;
+		}
+		let blocked = router.top_capture_for(source).is_some_and(|layer| {
+			layer.owner() != SpawnPickerController::owner(entity)
+				&& Some(layer.owner()) != sheet.map_capture_owner.map(ScopeOwner::ui)
+		});
+		picker.focus = wanted && !blocked;
+		router.replace_owned_capture(
+			&mut capture.token,
+			source,
+			(wanted && !blocked).then(|| SpawnPickerController::owner(entity)),
+			CaptureKind::MenuNav,
+		);
+	}
 }
 
 pub fn dispatch_spawn_picker(
-	nav: Res<MenuNavPad>,
-	router: Res<InputRouter>,
-	registry: Res<poi_intelligence::PoiRegistry>,
-	mut controller: ResMut<SpawnPickerController>,
-	mut state: ResMut<WorldPlayerRespawnState>,
-	mut chosen: MessageWriter<PlayerChoseRespawnPoi>,
-	mut selected: MessageWriter<DestinationSelected>,
+	event: On<UiPadEvent>,
+	mut pickers: Query<&mut SpawnPickerController>,
+	pads: Query<&VirtualPadController>,
+	mut commands: Commands,
 ) {
-	let Some(pending) = state.pending.as_mut() else {
-		controller.focus = false;
+	let Ok(mut picker) = pickers.get_mut(event.entity) else {
 		return;
 	};
-	if !controller.focus || !SpawnPickerController::accepts(&router) {
+	if !picker.focus || picker.source != event.input.source() {
 		return;
 	}
-	if pending.apply_menu_nav(&registry, &nav.events) {
-		let choice = SpawnPickerController::confirm(pending);
-		chosen.write(choice);
-		selected.write(DestinationSelected::new(choice.identity, choice.destination()));
+	let frame = event.input.payload();
+	let binding = event.input.binding();
+	if picker.binding == binding
+		&& picker.sequence.is_some_and(|sequence| frame.sequence <= sequence)
+	{
+		return;
 	}
+	if picker.binding != binding {
+		picker.await_release = picker.sequence.is_some();
+		picker.repeat = Default::default();
+		picker.binding = binding;
+	}
+	picker.sequence = Some(frame.sequence);
+	if picker.await_release {
+		use maybraid_virtual_pad_controller::PadButton;
+		if frame.pad.pressed(PadButton::A)
+			|| frame.pad.pressed(PadButton::Start)
+			|| frame.pad.move_stick.length_squared() > 0.01
+			|| frame.pad.dpad.length_squared() > 0.01
+		{
+			return;
+		}
+		picker.await_release = false;
+	}
+	let Ok(pad) = pads.get(frame.source) else {
+		return;
+	};
+	picker.repeat.derive(&frame.pad, &pad.config, frame.delta.as_secs_f32());
+	let nav = picker.repeat.events.clone();
+	if nav.is_empty() {
+		return;
+	}
+	event.input.consume_frame(&mut commands);
+	event.input.clone().map(|_| nav).queue(&mut commands, |world, input| {
+		world.resource_scope(|world, registry: Mut<poi_intelligence::PoiRegistry>| {
+			let mut state = world.resource_mut::<WorldPlayerRespawnState>();
+			let Some(pending) = state.pending.as_mut() else {
+				return;
+			};
+			if pending.apply_menu_nav(&registry, input.payload()) {
+				let choice = SpawnPickerController::confirm(pending);
+				world.write_message(choice);
+				world
+					.write_message(DestinationSelected::new(choice.identity, choice.destination()));
+			}
+		});
+	});
 }
 
-/// Close the picker and release its own capture token. The confirming press
-/// must not remain captured onto a newly assigned actor.
 pub fn release_spawn_picker(
-	mut controller: ResMut<SpawnPickerController>,
-	mut capture: ResMut<SpawnPickerCapture>,
+	mut pickers: Query<(&mut SpawnPickerController, &mut SpawnPickerCapture)>,
 	mut router: InputRouting,
 ) {
-	controller.focus = false;
-	capture.release(&mut router);
+	for (mut picker, mut capture) in &mut pickers {
+		picker.focus = false;
+		capture.release(&mut router);
+	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy::ecs::system::RunSystemOnce;
-	use maybraid_controllers_core::{InputSource, UiTarget};
-	use maybraid_virtual_pad_controller::{MenuNav, PadButton, VirtualPad, VirtualPadConfig};
+	use maybraid_controllers_core::InputRouter;
+	use maybraid_virtual_pad_controller::{PadButton, PadDevices, VirtualPad, VirtualPadEvent};
 
-	use crate::arrival::PendingPlayerRespawn;
-
-	fn router_world() -> World {
+	fn picker_world() -> (World, Entity, Entity) {
 		let mut world = World::new();
-		world.init_resource::<SpawnPickerSheet>();
-		world.init_resource::<WorldPlayerRespawnState>();
-		world.init_resource::<SpawnPickerController>();
-		world.init_resource::<SpawnPickerCapture>();
 		world.init_resource::<InputRouter>();
-		world.init_resource::<Messages<maybraid_controllers_core::RoutingEvent>>();
 		world.init_resource::<poi_intelligence::PoiRegistry>();
+		world.init_resource::<WorldPlayerRespawnState>();
 		world.init_resource::<Messages<PlayerChoseRespawnPoi>>();
 		world.init_resource::<Messages<DestinationSelected>>();
-		world.init_resource::<MenuNavPad>();
-		world
-	}
-
-	fn lock_picker(world: &mut World) {
-		world.insert_resource(SpawnPickerSheet::from_map(true, true));
+		world.add_observer(dispatch_spawn_picker);
 		world.resource_mut::<WorldPlayerRespawnState>().pending =
-			Some(PendingPlayerRespawn::test(Vec3::new(3.0, 4.0, 5.0), false));
-	}
-
-	fn press_a(world: &mut World) {
-		let mut pad = VirtualPad::default();
-		pad.begin_frame();
-		pad.hold_digital(PadButton::A);
-		pad.finish_digital();
-		let mut nav = MenuNavPad::default();
-		nav.derive(&pad, &VirtualPadConfig::default(), 0.0);
-		assert!(
-			nav.just_pressed(MenuNav::Select),
-			"A must become MenuNav::Select, got {:?}",
-			nav.events
-		);
-		world.insert_resource(pad);
-		world.insert_resource(nav);
-	}
-
-	fn map_capture(world: &mut World) {
+			Some(crate::arrival::PendingPlayerRespawn::test(Vec3::ZERO, false));
+		let source = world.spawn(VirtualPadController::new(PadDevices::keyboard_mouse())).id();
+		let mut controller = SpawnPickerController::new(InputSource::virtual_pad(source));
+		controller.focus = true;
+		let picker = world.spawn(controller).id();
 		world.resource_mut::<InputRouter>().acquire_capture(
-			InputSource::local_pad(),
-			ScopeOwner::map_overlay(),
-			CaptureKind::Overlay,
-		);
-		assert!(world.resource::<InputRouter>().actor(InputSource::local_pad()).is_none());
-		assert!(world.resource::<InputRouter>().blocks_actor(InputSource::local_pad()));
-	}
-
-	fn refresh_and_dispatch(world: &mut World) -> anyhow::Result<()> {
-		world
-			.run_system_once(refresh_spawn_picker_focus)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(dispatch_spawn_picker)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		Ok(())
-	}
-
-	fn chosen(world: &mut World) -> Vec<PlayerChoseRespawnPoi> {
-		world.resource_mut::<Messages<PlayerChoseRespawnPoi>>().drain().collect()
-	}
-
-	#[test]
-	fn a_confirms_without_an_actor_while_map_capture_is_active() -> anyhow::Result<()> {
-		let mut world = router_world();
-		lock_picker(&mut world);
-		map_capture(&mut world);
-		press_a(&mut world);
-		refresh_and_dispatch(&mut world)?;
-		let identity = world
-			.resource::<WorldPlayerRespawnState>()
-			.pending
-			.as_ref()
-			.ok_or_else(|| anyhow::anyhow!("pending"))?
-			.identity();
-		assert_eq!(chosen(&mut world), vec![PlayerChoseRespawnPoi::new(identity, None)]);
-		assert!(world.resource::<InputRouter>().actor(InputSource::local_pad()).is_none());
-		assert!(world.resource::<InputRouter>().blocks_actor(InputSource::local_pad()));
-		Ok(())
-	}
-
-	#[test]
-	fn a_higher_overlay_blocks_picker_confirm() -> anyhow::Result<()> {
-		let mut world = router_world();
-		lock_picker(&mut world);
-		map_capture(&mut world);
-		world
-			.run_system_once(refresh_spawn_picker_focus)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world.resource_mut::<InputRouter>().acquire_capture(
-			InputSource::local_pad(),
-			ScopeOwner::ui(UiTarget::new(Entity::from_bits(11))),
-			CaptureKind::Overlay,
-		);
-		press_a(&mut world);
-		world
-			.run_system_once(dispatch_spawn_picker)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(chosen(&mut world).is_empty(), "a modal overlay above the picker must not confirm");
-		Ok(())
-	}
-
-	#[test]
-	fn text_capture_blocks_picker_confirm() -> anyhow::Result<()> {
-		let mut world = router_world();
-		lock_picker(&mut world);
-		map_capture(&mut world);
-		world
-			.run_system_once(refresh_spawn_picker_focus)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world.resource_mut::<InputRouter>().acquire_capture(
-			InputSource::local_pad(),
-			ScopeOwner::console(),
-			CaptureKind::TextEntry,
-		);
-		press_a(&mut world);
-		world
-			.run_system_once(dispatch_spawn_picker)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(chosen(&mut world).is_empty(), "text capture must not confirm");
-		Ok(())
-	}
-
-	#[test]
-	fn another_menu_on_top_blocks_picker_confirm() -> anyhow::Result<()> {
-		let mut world = router_world();
-		lock_picker(&mut world);
-		map_capture(&mut world);
-		world
-			.run_system_once(refresh_spawn_picker_focus)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world.resource_mut::<InputRouter>().acquire_capture(
-			InputSource::local_pad(),
-			ScopeOwner::ui(UiTarget::new(Entity::from_bits(3))),
+			InputSource::virtual_pad(source),
+			SpawnPickerController::owner(picker),
 			CaptureKind::MenuNav,
 		);
-		press_a(&mut world);
-		world
-			.run_system_once(refresh_spawn_picker_focus)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(dispatch_spawn_picker)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(chosen(&mut world).is_empty(), "a higher menu must keep Select");
+		(world, source, picker)
+	}
+
+	fn frame(
+		world: &mut World,
+		source: Entity,
+		picker: Entity,
+		sequence: u64,
+		pressed: bool,
+	) -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		if pressed {
+			pad.hold_digital(PadButton::A);
+		}
+		pad.finish_digital();
+		let input = world
+			.resource::<InputRouter>()
+			.route_ui(
+				InputSource::virtual_pad(source),
+				VirtualPadEvent {
+					source,
+					sequence,
+					delta: std::time::Duration::from_millis(16),
+					pad,
+				},
+			)
+			.ok_or_else(|| anyhow::anyhow!("picker capture"))?;
+		world.trigger(UiPadEvent { entity: picker, input });
+		world.flush();
 		Ok(())
 	}
 
 	#[test]
-	fn closing_the_picker_releases_only_its_capture() -> anyhow::Result<()> {
-		let mut world = router_world();
-		lock_picker(&mut world);
-		map_capture(&mut world);
-		world
-			.run_system_once(refresh_spawn_picker_focus)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(world.resource::<SpawnPickerCapture>().token.is_some());
-		world
-			.run_system_once(release_spawn_picker)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(world.resource::<SpawnPickerCapture>().token.is_none());
-		assert!(!world.resource::<SpawnPickerController>().focus);
-		assert!(world.resource::<InputRouter>().blocks_actor(InputSource::local_pad()));
+	fn confirm_is_addressed_and_duplicate_frames_are_ignored() -> anyhow::Result<()> {
+		let (mut world, source, picker) = picker_world();
+		frame(&mut world, source, picker, 1, true)?;
+		frame(&mut world, source, picker, 1, true)?;
+		assert_eq!(world.resource_mut::<Messages<PlayerChoseRespawnPoi>>().drain().count(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn unrelated_source_cannot_confirm_primary_picker() -> anyhow::Result<()> {
+		let (mut world, _, picker) = picker_world();
+		let other = world.spawn(VirtualPadController::new(PadDevices::default())).id();
+		world.resource_mut::<InputRouter>().acquire_capture(
+			InputSource::virtual_pad(other),
+			SpawnPickerController::owner(picker),
+			CaptureKind::MenuNav,
+		);
+		frame(&mut world, other, picker, 1, true)?;
+		assert_eq!(world.resource_mut::<Messages<PlayerChoseRespawnPoi>>().drain().count(), 0);
+		Ok(())
+	}
+
+	#[test]
+	fn retired_capture_requires_release_before_confirm() -> anyhow::Result<()> {
+		let (mut world, source, picker) = picker_world();
+		frame(&mut world, source, picker, 1, false)?;
+		let owner = world.spawn_empty().id();
+		let token = world.resource_mut::<InputRouter>().acquire_capture(
+			InputSource::virtual_pad(source),
+			ScopeOwner::ui(UiTarget::new(owner)),
+			CaptureKind::Overlay,
+		);
+		world.resource_mut::<InputRouter>().release_capture(token);
+		frame(&mut world, source, picker, 2, true)?;
+		assert_eq!(world.resource_mut::<Messages<PlayerChoseRespawnPoi>>().drain().count(), 0);
+		frame(&mut world, source, picker, 3, false)?;
+		frame(&mut world, source, picker, 4, true)?;
+		assert_eq!(world.resource_mut::<Messages<PlayerChoseRespawnPoi>>().drain().count(), 1);
 		Ok(())
 	}
 }
