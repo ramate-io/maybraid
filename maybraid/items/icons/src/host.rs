@@ -4,7 +4,7 @@ use crate::fisticuffs::{isolate_arm_joints, FisticuffsArmMask, FisticuffsGuardPo
 use bevy::camera::primitives::MeshAabb;
 use bevy::camera::visibility::RenderLayers;
 use bevy::ecs::entity_disabling::Disabled;
-use bevy::ecs::query::Allow;
+use bevy::ecs::query::{Allow, QueryFilter};
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
@@ -452,22 +452,22 @@ pub fn prepare_silhouette_hosts(
 
 pub fn keep_capture_hosts_visible(
 	mut commands: Commands,
-	roots: Query<Entity, With<CaptureHostRoot>>,
-	children: Query<&Children>,
+	roots: Query<Entity, (With<CaptureHostRoot>, Allow<Disabled>)>,
+	children: Query<&Children, Allow<Disabled>>,
 	hidden: Query<Option<&Visibility>, Or<(With<Disabled>, With<Visibility>)>>,
-	arm_hidden: Query<(), With<FisticuffsArmsHidden>>,
+	arm_hidden: Query<(), (With<FisticuffsArmsHidden>, Allow<Disabled>)>,
 ) {
 	for root in &roots {
 		visit_descendants(root, &children, &mut |entity| {
 			let Ok(visibility) = hidden.get(entity) else {
 				return;
 			};
+			commands.entity(entity).try_remove::<Disabled>();
 			// Only nodes explicitly hidden by arm isolation retain Hidden.
 			// Other scene parts still receive generic visibility repair.
 			if arm_hidden.contains(entity) && visibility == Some(&Visibility::Hidden) {
 				return;
 			}
-			commands.entity(entity).try_remove::<Disabled>();
 			commands.entity(entity).try_insert(Visibility::Inherited);
 		});
 	}
@@ -955,7 +955,11 @@ fn host_tree_ready(
 	found_mesh && !is_pending && !unpainted && (!needs_pose || pose_ready) && mailbox_ready
 }
 
-fn visit_descendants(root: Entity, children: &Query<&Children>, visit: &mut impl FnMut(Entity)) {
+fn visit_descendants<F: QueryFilter>(
+	root: Entity,
+	children: &Query<&Children, F>,
+	visit: &mut impl FnMut(Entity),
+) {
 	visit(root);
 	let Ok(kids) = children.get(root) else {
 		return;
@@ -1240,6 +1244,51 @@ mod tests {
 			assert_eq!(app.world().get::<Visibility>(late_part), Some(&Visibility::Inherited));
 		}
 		assert_eq!(app.world().get::<Visibility>(arm), Some(&Visibility::Inherited));
+	}
+
+	#[test]
+	fn visibility_repair_traverses_disabled_hierarchies_and_preserves_arm_masks() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_systems(Update, keep_capture_hosts_visible);
+		let root = app
+			.world_mut()
+			.spawn((
+				CaptureHostRoot {
+					kind: HOST_FISTICUFFS_ARMS.to_string(),
+					id: CaptureId::new("fisticuffs:disabled-arms"),
+				},
+				Disabled,
+				Visibility::Hidden,
+			))
+			.id();
+		// The intermediate entity has no Visibility; it must still be traversed
+		// and enabled so its visible arm descendants can render.
+		let branch = app.world_mut().spawn((Disabled, ChildOf(root))).id();
+		let arm = app.world_mut().spawn((Disabled, Visibility::Hidden, ChildOf(branch))).id();
+		let masked = app
+			.world_mut()
+			.spawn((Disabled, Visibility::Hidden, FisticuffsArmsHidden, ChildOf(branch)))
+			.id();
+		let masked_child = app
+			.world_mut()
+			.spawn((Disabled, Visibility::Hidden, FisticuffsArmsHidden, ChildOf(masked)))
+			.id();
+		let ordinary_child =
+			app.world_mut().spawn((Disabled, Visibility::Hidden, ChildOf(masked))).id();
+		for _ in 0..3 {
+			app.update();
+			for entity in [root, branch, arm, masked, masked_child, ordinary_child] {
+				assert!(
+					app.world().get::<Disabled>(entity).is_none(),
+					"capture descendants must be enabled"
+				);
+			}
+			assert_eq!(app.world().get::<Visibility>(root), Some(&Visibility::Inherited));
+			assert_eq!(app.world().get::<Visibility>(arm), Some(&Visibility::Inherited));
+			assert_eq!(app.world().get::<Visibility>(ordinary_child), Some(&Visibility::Inherited));
+			assert_eq!(app.world().get::<Visibility>(masked), Some(&Visibility::Hidden));
+			assert_eq!(app.world().get::<Visibility>(masked_child), Some(&Visibility::Hidden));
+		}
 	}
 
 	#[test]
