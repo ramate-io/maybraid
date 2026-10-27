@@ -14,8 +14,10 @@ Semantic [`ActorIntentEvent`](src/intent.rs) values address the same actor and
 source. [`CharacterIntentFrame`](src/intent.rs) stores the complete current tick,
 including an empty neutral frame, for ordinary locomotion. Derived effects use
 `Routed::map(...).queue(...)` or `.trigger(...)` to validate the original binding
-when deferred work is actually delivered. Captured frames emit only explicit
-shell commands; they cannot create gameplay physical samples.
+when deferred work is actually delivered. Shell actions resolve before physical
+and gameplay children, so a same-frame pause cancels pending fire before it can
+start a hold. Captured frames emit only explicit shell commands; they cannot
+create gameplay physical samples.
 
 [`ActorControlStatus`](src/status.rs) records each actor's source ownership and
 connected/captured/suspended state from targeted lifecycle events. Missing status
@@ -24,10 +26,8 @@ capture, disconnect and reassignment cancel its delivery. Consumers can read
 this owned component without querying the global router. Ephemeral input frames
 clear before each Bind delivery, so absent frames never replay edges.
 
-Temporary primary-source adapters maintain the legacy `CharacterIntent` broadcast
-and `LegacyRoutedActorControl` resource while shell/item/camera/gesture consumers migrate.
-They are fed by addressed events and never mirror other sources. The default
-actor assignment belongs to the host, not this crate. See
+The default actor assignment belongs to the host. Semantic controls and physical
+state have no process-wide broadcast or singleton mirror. See
 [ARCHITECTURE.md](../ARCHITECTURE.md).
 
 `RightTrigger` + `X` is `PowerUseItem` and suppresses `StartInteraction`.

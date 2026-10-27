@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use bevy::prelude::*;
 use maybraid_character_controller::{
 	register_character_controller, ActorControlEvent, ActorControlSample, ActorControlStatus,
-	ActorIntentEvent, CharacterIntent, LegacyRoutedActorControl, RoutedActorControl,
+	ActorIntentEvent, CharacterIntent, RoutedActorControl,
 };
 use maybraid_controllers_core::{
 	ActorTarget, CaptureKind, InputRouter, InputSource, ScopeOwner, UiTarget,
@@ -65,7 +65,7 @@ fn pad(stick: Vec2, buttons: &[PadButton]) -> VirtualPad {
 }
 
 #[test]
-fn two_sources_keep_actor_state_and_primary_compatibility_separate() -> Result<()> {
+fn two_sources_keep_actor_state_and_delivery_separate() -> Result<()> {
 	let mut app = app();
 	let first = app.world_mut().spawn_empty().id();
 	let second = app.world_mut().spawn_empty().id();
@@ -95,14 +95,6 @@ fn two_sources_keep_actor_state_and_primary_compatibility_separate() -> Result<(
 	assert!(!first_control.fire_held());
 	assert!(second_control.fire_held());
 	assert_eq!(second_control.fire_squeeze(), 0.5);
-	let compatibility = app.world().resource::<LegacyRoutedActorControl>();
-	assert_eq!(compatibility.source(), Some(InputSource::virtual_pad(first_source)));
-	assert!(compatibility.addresses(first));
-	let legacy: Vec<_> =
-		app.world_mut().resource_mut::<Messages<CharacterIntent>>().drain().collect();
-	assert!(legacy.contains(&CharacterIntent::Move(Vec2::X)));
-	assert!(!legacy.contains(&CharacterIntent::Move(Vec2::NEG_Y)));
-	assert!(!legacy.iter().any(|intent| matches!(intent, CharacterIntent::UseItem(_))));
 	let delivered = app.world().resource::<Delivered>();
 	assert!(delivered.intents.contains(&(
 		first,
@@ -122,7 +114,6 @@ fn two_sources_keep_actor_state_and_primary_compatibility_separate() -> Result<(
 		.get::<RoutedActorControl>(first)
 		.and_then(RoutedActorControl::payload)
 		.is_none());
-	assert!(app.world().resource::<LegacyRoutedActorControl>().payload().is_none());
 	Ok(())
 }
 
@@ -271,5 +262,104 @@ fn trigger_threshold_belongs_to_the_source_snapshot() -> Result<()> {
 	assert!(!delivered.intents.iter().any(
 		|(actor, _, intent)| *actor == second && matches!(intent, CharacterIntent::UseItem(_))
 	));
+	Ok(())
+}
+
+#[derive(Resource)]
+struct CaptureOnControl {
+	source: InputSource,
+	owner: UiTarget,
+}
+
+fn capture_on_control(
+	event: On<ActorControlEvent>,
+	capture: Res<CaptureOnControl>,
+	mut routing: maybraid_controllers_core::InputRouting,
+) {
+	if event.input.source() == capture.source {
+		routing.acquire_capture(
+			capture.source,
+			ScopeOwner::ui(capture.owner),
+			CaptureKind::MenuNav,
+		);
+	}
+}
+
+#[test]
+fn capture_during_control_delivery_retires_queued_semantics_and_cached_state() -> Result<()> {
+	let mut app = app();
+	let first = app.world_mut().spawn_empty().id();
+	let second = app.world_mut().spawn_empty().id();
+	let first_source = source(&mut app, first);
+	let second_source = source(&mut app, second);
+	let menu = app.world_mut().spawn_empty().id();
+	app.insert_resource(CaptureOnControl {
+		source: InputSource::virtual_pad(first_source),
+		owner: UiTarget::new(menu),
+	})
+	.add_observer(capture_on_control);
+	frame(&mut app, first_source, 1, pad(Vec2::X, &[PadButton::A, PadButton::TriggerFire]));
+	frame(&mut app, second_source, 1, pad(Vec2::Y, &[PadButton::A]));
+	app.update();
+	let delivered = app.world().resource::<Delivered>();
+	assert!(!delivered.intents.iter().any(|(actor, _, _)| *actor == first));
+	assert!(delivered
+		.intents
+		.iter()
+		.any(|(actor, _, intent)| *actor == second && *intent == CharacterIntent::Jump));
+	assert!(app
+		.world()
+		.get::<ActorControlStatus>(first)
+		.is_some_and(|status| status.is_captured()));
+	assert!(app
+		.world()
+		.get::<RoutedActorControl>(first)
+		.and_then(RoutedActorControl::get)
+		.is_none());
+	assert!(app
+		.world()
+		.get::<maybraid_character_controller::CharacterIntentFrame>(first)
+		.and_then(maybraid_character_controller::CharacterIntentFrame::get)
+		.is_none());
+	Ok(())
+}
+
+fn suspend_on_menu(
+	event: On<ActorIntentEvent>,
+	mut routing: maybraid_controllers_core::InputRouting,
+) {
+	if matches!(event.input.payload(), CharacterIntent::InGameMenu) {
+		routing.suspend(event.input.source(), ScopeOwner::pause());
+	}
+}
+
+#[test]
+fn shell_pause_retires_same_frame_fire_before_control_delivery() -> Result<()> {
+	let mut app = app();
+	let first = app.world_mut().spawn_empty().id();
+	let second = app.world_mut().spawn_empty().id();
+	let first_source = source(&mut app, first);
+	let second_source = source(&mut app, second);
+	app.add_observer(suspend_on_menu);
+	frame(&mut app, first_source, 1, pad(Vec2::X, &[PadButton::Start, PadButton::TriggerFire]));
+	frame(&mut app, second_source, 1, pad(Vec2::Y, &[PadButton::TriggerFire]));
+	app.update();
+	let delivered = app.world().resource::<Delivered>();
+	let first_intents: Vec<_> = delivered
+		.intents
+		.iter()
+		.filter(|(actor, _, _)| *actor == first)
+		.map(|(_, _, intent)| *intent)
+		.collect();
+	assert_eq!(first_intents, [CharacterIntent::InGameMenu]);
+	assert!(!delivered.controls.iter().any(|(actor, _, _)| *actor == first));
+	assert!(delivered
+		.controls
+		.iter()
+		.any(|(actor, _, sample)| *actor == second && sample.fire_held()));
+	assert!(app
+		.world()
+		.get::<ActorControlStatus>(first)
+		.is_some_and(|status| status.is_frozen()));
 	Ok(())
 }
