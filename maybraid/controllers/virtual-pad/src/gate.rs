@@ -1,6 +1,5 @@
 //! Derived pad policy. Written only by the capture resolver (U5).
 
-use bevy::prelude::*;
 
 /// Keyboard layout and analog suppress derived from [`InputRouter`] capture.
 ///
