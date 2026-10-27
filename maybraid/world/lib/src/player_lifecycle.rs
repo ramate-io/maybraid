@@ -1474,7 +1474,7 @@ mod tests {
 	#[derive(Resource, Default)]
 	struct PickerTestSequence(u64);
 
-	fn arm_locked_picker_input(world: &mut World) {
+	fn arm_locked_picker_input(world: &mut World) -> anyhow::Result<()> {
 		use maybraid_controllers_core::{
 			CaptureKind, InputRouter, InputSource, ScopeOwner, UiTarget,
 		};
@@ -1503,15 +1503,16 @@ mod tests {
 		world.add_observer(maybraid_spawns_player::dispatch_spawn_picker);
 		world
 			.run_system_once(crate::spawn_picker::sync_spawn_picker_sheet)
-			.expect("sync picker sheet");
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		world
 			.run_system_once(crate::spawn_picker::refresh_spawn_picker_focus)
-			.expect("spawn picker controller");
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		world.flush();
 		world
 			.run_system_once(crate::spawn_picker::refresh_spawn_picker_focus)
-			.expect("capture picker input");
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(world.resource::<InputRouter>().blocks_actor(InputSource::virtual_pad(source)));
+		Ok(())
 	}
 
 	fn send_picker_pad(world: &mut World, pad: VirtualPad) -> anyhow::Result<()> {
@@ -1677,7 +1678,7 @@ mod tests {
 			begin_life: false,
 			owner: None,
 		});
-		arm_locked_picker_input(&mut world);
+		arm_locked_picker_input(&mut world)?;
 		let mut pad = VirtualPad::default();
 		pad.begin_frame();
 		pad.add_move(Vec2::NEG_X);
@@ -1710,7 +1711,7 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(live_player_count(&mut world), 0);
 		assert!(world.resource::<WorldMapView>().close_locked);
-		arm_locked_picker_input(&mut world);
+		arm_locked_picker_input(&mut world)?;
 		confirm_picker_from_a(&mut world)?;
 		assert_eq!(live_player_count(&mut world), 0);
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
@@ -1729,7 +1730,7 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(live_player_count(&mut world), 0);
 		assert!(world.resource::<WorldMapView>().close_locked);
-		arm_locked_picker_input(&mut world);
+		arm_locked_picker_input(&mut world)?;
 		confirm_and_place(&mut world)?;
 		assert_eq!(live_player_count(&mut world), 1);
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
@@ -1754,7 +1755,7 @@ mod tests {
 			.resource::<WorldPlayerRespawnState>()
 			.pending_identity()
 			.ok_or_else(|| anyhow::anyhow!("pending identity"))?;
-		arm_locked_picker_input(&mut world);
+		arm_locked_picker_input(&mut world)?;
 		confirm_picker_from_a(&mut world)?;
 		let work = world.resource::<maybraid_spawns_placement::PlacementWork>();
 		assert!(
@@ -1785,7 +1786,7 @@ mod tests {
 			.resource::<WorldPlayerRespawnState>()
 			.pending_identity()
 			.ok_or_else(|| anyhow::anyhow!("pending identity"))?;
-		arm_locked_picker_input(&mut world);
+		arm_locked_picker_input(&mut world)?;
 		confirm_and_place(&mut world)?;
 		assert_eq!(live_player_count(&mut world), 1);
 		assert_eq!(world.resource::<WorldPlayerRespawnState>().last_activated(), Some(identity));
@@ -2187,7 +2188,7 @@ mod tests {
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		arm_locked_picker_input(&mut world);
+		arm_locked_picker_input(&mut world)?;
 		world
 			.run_system_once(crate::spawn_picker::refresh_spawn_picker_focus)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

@@ -158,7 +158,7 @@ mod tests {
 	const STRENGTH: f32 = 0.08;
 
 	#[test]
-	fn item_use_and_release_touch_only_the_addressed_trigger() {
+	fn item_use_and_release_touch_only_the_addressed_trigger() -> anyhow::Result<()> {
 		let mut app = App::new();
 		app.add_observer(apply_fire_intents);
 		let first_gun = app.world_mut().spawn(WeaponTrigger(false)).id();
@@ -171,27 +171,43 @@ mod tests {
 			1.0,
 			true,
 		));
-		assert_eq!(app.world().get::<WeaponTrigger>(first_gun).unwrap().0, true);
-		assert_eq!(app.world().get::<WeaponTrigger>(second_gun).unwrap().0, true);
+		assert_eq!(
+			app.world().get::<WeaponTrigger>(first_gun).map(|trigger| trigger.0),
+			Some(true)
+		);
+		assert_eq!(
+			app.world().get::<WeaponTrigger>(second_gun).map(|trigger| trigger.0),
+			Some(true)
+		);
 		app.world_mut().trigger(EquippedItemUse::new(
 			ActorTarget::new(first),
 			EquippedItemHandler::Firearm,
 			0.0,
 			false,
 		));
-		assert_eq!(app.world().get::<WeaponTrigger>(first_gun).unwrap().0, false);
-		assert_eq!(app.world().get::<WeaponTrigger>(second_gun).unwrap().0, true);
+		assert_eq!(
+			app.world().get::<WeaponTrigger>(first_gun).map(|trigger| trigger.0),
+			Some(false)
+		);
+		assert_eq!(
+			app.world().get::<WeaponTrigger>(second_gun).map(|trigger| trigger.0),
+			Some(true)
+		);
 		app.world_mut().trigger(EquippedItemUse::new(
 			ActorTarget::new(second),
 			EquippedItemHandler::Grenade,
 			1.0,
 			true,
 		));
-		assert_eq!(app.world().get::<WeaponTrigger>(second_gun).unwrap().0, true);
+		assert_eq!(
+			app.world().get::<WeaponTrigger>(second_gun).map(|trigger| trigger.0),
+			Some(true)
+		);
+		Ok(())
 	}
 
 	#[test]
-	fn captured_actor_clears_held_trigger() {
+	fn captured_actor_clears_held_trigger() -> anyhow::Result<()> {
 		let mut app = App::new();
 		app.add_observer(apply_fire_routing);
 		let gun = app.world_mut().spawn(WeaponTrigger(true)).id();
@@ -207,7 +223,7 @@ mod tests {
 			.take_events()
 			.into_iter()
 			.find(|event| event.kind() == RoutingKind::Captured)
-			.unwrap();
+			.ok_or_else(|| anyhow::anyhow!("captured routing event"))?;
 		app.world_mut().trigger(ActorRoutingEvent {
 			entity: shooter,
 			event,
@@ -219,7 +235,8 @@ mod tests {
 				assigned: true,
 			},
 		});
-		assert_eq!(app.world().get::<WeaponTrigger>(gun).unwrap().0, false);
+		assert_eq!(app.world().get::<WeaponTrigger>(gun).map(|trigger| trigger.0), Some(false));
+		Ok(())
 	}
 
 	#[test]

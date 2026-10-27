@@ -1595,7 +1595,7 @@ mod tests {
 				StashPolicy::default(),
 			))
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?
-			.expect("stash");
+			.ok_or_else(|| anyhow::anyhow!("spawned stash"))?;
 		world.add_observer(claim_nearby_stashes);
 		world.trigger(ActorIntentEvent {
 			entity: secondary,
@@ -1607,8 +1607,19 @@ mod tests {
 		});
 		world.flush();
 		assert!(!world.entities().contains(stash));
-		assert!(world.get::<Inventory>(primary_bag).expect("primary bag").items.is_empty());
-		assert_eq!(world.get::<Inventory>(secondary_bag).expect("secondary bag").items.len(), 3);
+		assert!(world
+			.get::<Inventory>(primary_bag)
+			.ok_or_else(|| anyhow::anyhow!("primary bag"))?
+			.items
+			.is_empty());
+		assert_eq!(
+			world
+				.get::<Inventory>(secondary_bag)
+				.ok_or_else(|| anyhow::anyhow!("secondary bag"))?
+				.items
+				.len(),
+			3
+		);
 		assert!(world.resource::<WorldPlayerLoadout>().inventory.items.is_empty());
 		assert!(world.get::<AppliedWorldPlayerLoadout>(primary).is_none());
 		Ok(())

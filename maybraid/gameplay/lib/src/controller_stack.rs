@@ -32,7 +32,8 @@ use maybraid_virtual_pad_controller::{
 };
 use player::{CameraFollow, Player, PlayerLook, PlayerPlugin, PlayerUse};
 use player_camera::{
-	register_player_camera_runtime, CameraController, CameraRecoilHandoff, FollowCamera,
+	register_player_camera_runtime, CameraController, CameraRecoilHandoff, CameraTarget,
+	FollowCamera,
 };
 use std::time::Duration;
 use world_player::Player as VegetationPlayer;
@@ -76,6 +77,19 @@ fn assign(app: &mut App, actor: Entity) -> anyhow::Result<()> {
 fn no_thrown_grenade(app: &mut App) -> bool {
 	let world = app.world_mut();
 	world.query::<&grenades::ThrownGrenade>().iter(world).next().is_none()
+}
+
+fn dropped_grenade_bodies(app: &mut App, source: Entity) -> Vec<Entity> {
+	let world = app.world_mut();
+	world
+		.query::<(Entity, &grenades::ThrownGrenade)>()
+		.iter(world)
+		.filter_map(|(entity, grenade)| (grenade.source == source).then_some(entity))
+		.collect()
+}
+
+fn no_intentional_throw(app: &App) -> bool {
+	app.world().resource::<Messages<grenades::SpawnThrownGrenade>>().is_empty()
 }
 
 fn spawn_grenade_bag(app: &mut App) -> Entity {
@@ -381,13 +395,12 @@ fn reassignment_mid_cook_cancels_the_old_actor() -> anyhow::Result<()> {
 		Some(GrenadePhase::Ready),
 		"reassignment is ReleaseNeutral, not a missing-message freeze"
 	);
-	assert!(app
-		.world_mut()
-		.resource_mut::<Messages<DropLiveGrenade>>()
-		.drain()
-		.next()
-		.is_some());
-	assert!(no_thrown_grenade(&mut app));
+	let drops: Vec<_> =
+		app.world_mut().resource_mut::<Messages<DropLiveGrenade>>().drain().collect();
+	assert_eq!(drops.len(), 1, "reassignment must drop exactly once");
+	assert_eq!(drops[0].source, cook);
+	assert_eq!(dropped_grenade_bodies(&mut app, cook).len(), 1);
+	assert!(no_intentional_throw(&app), "cancellation must not become an aimed throw");
 	Ok(())
 }
 
@@ -659,15 +672,11 @@ fn disconnect_while_holding_cancels_the_cook() -> anyhow::Result<()> {
 	routing_apply(&mut app, |router| {
 		router.disconnect(InputSource::local_pad());
 	})?;
-	let mut dropped = false;
+	let mut drops = Vec::new();
 	for _ in 0..4 {
 		app.update();
-		dropped |= app
-			.world_mut()
-			.resource_mut::<Messages<DropLiveGrenade>>()
-			.drain()
-			.next()
-			.is_some();
+		drops.extend(app.world_mut().resource_mut::<Messages<DropLiveGrenade>>().drain());
+		assert!(no_intentional_throw(&app), "disconnect must not enqueue an aimed throw");
 		let router = app.world().resource::<InputRouter>();
 		assert_eq!(
 			router.connection(InputSource::local_pad()),
@@ -681,8 +690,10 @@ fn disconnect_while_holding_cancels_the_cook() -> anyhow::Result<()> {
 		Some(GrenadePhase::Ready),
 		"disconnect must drop the live cook"
 	);
-	assert!(dropped, "disconnect must emit DropLiveGrenade");
-	assert!(no_thrown_grenade(&mut app));
+	assert_eq!(drops.len(), 1, "disconnect must drop exactly once");
+	assert_eq!(drops[0].source, actor);
+	assert_eq!(dropped_grenade_bodies(&mut app, actor).len(), 1);
+	assert!(no_intentional_throw(&app), "disconnect must not become an aimed throw");
 	Ok(())
 }
 
