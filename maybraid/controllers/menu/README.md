@@ -17,3 +17,9 @@ hold prone) but only when [`CaptureStack`](../core/src/capture.rs) does not
 own the local pad. Nested captures release independently; dispatch reads
 [`InputRouter::top_capture`](../core/src/router.rs) and does not re-resolve
 exclusive nav.
+
+Inventory context actions use `MenuActionImpulse` from `action.rs`. The controller
+maps Y to `MenuAction::Unequip` and delivers it only to the current MenuNav capture
+owner, retaining the input source. Text locks, consumed Back, and higher captures
+block delivery. This impulse does not propagate to parent catalogs; the renderer
+translates it into the selected tile's domain event.

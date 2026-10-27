@@ -1,8 +1,10 @@
 //! Menu controller: pad nav → one focused menu in a screen subtree.
 
+pub mod action;
 pub mod controller;
 pub mod dispatch;
 
+pub use action::{MenuAction, MenuActionImpulse};
 pub use controller::MenuController;
 pub use dispatch::{exclusive_nav_menu, ExclusiveNav, MenuNavCapture};
 pub use maybraid_controllers_core::{
@@ -45,7 +47,11 @@ impl Plugin for MenuControllerPlugin {
 				.in_set(CaptureResolveSystems)
 				.before(TextMenuSystems::Navigate),
 		);
-		app.add_systems(Update, dispatch::dispatch_menu_nav.in_set(TextMenuSystems::Navigate));
+		app.add_systems(
+			Update,
+			(dispatch::dispatch_menu_nav, action::dispatch_menu_actions)
+				.in_set(TextMenuSystems::Navigate),
+		);
 	}
 }
 

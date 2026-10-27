@@ -6962,9 +6962,11 @@ dependencies = [
 name = "maybraid-character-ui-menu-renderer"
 version = "0.1.5"
 dependencies = [
+ "anyhow",
  "bevy",
  "character-ui-menu",
  "maybraid-input",
+ "maybraid-menu-controller",
  "menu-components",
 ]
 

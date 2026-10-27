@@ -1,7 +1,8 @@
 //! Pointer and keyboard → [`MenuFocus`] / [`MenuActivate`] / overlay events.
 
 use bevy::prelude::*;
-use maybraid_input::{MenuNav, MenuNavImpulse, MenuNavPad, VirtualPad, INVENTORY_UNEQUIP_PAD};
+use maybraid_input::{MenuNav, MenuNavImpulse, MenuNavPad};
+use maybraid_menu_controller::{MenuAction, MenuActionImpulse};
 use menu_components::{
 	HudMenu, HudMenuItem, HudMenuNavLocked, HudOverlayMenu, KeyboardMenuNav, MenuActivate,
 	MenuFocus, MenuModalBackHold, MenuModalDismiss, MenuModalId, ReorderMark, TextMenuInputLock,
@@ -330,18 +331,18 @@ pub fn consume_inventory_reorder_back(
 	}
 }
 
-pub fn emit_inventory_unequip_on_edge<E: Copy + Send + Sync + 'static>(
+pub fn emit_inventory_unequip_on_action<E: Copy + Send + Sync + 'static>(
+	impulse: On<MenuActionImpulse>,
 	lock: Res<TextMenuInputLock>,
-	pad: Option<Res<VirtualPad>>,
 	overlay_menus: Query<(Entity, &HudMenu), With<HudOverlayMenu>>,
 	items: Query<(Entity, &HudMenuItem, Option<&EquippedOrderControls<E>>)>,
 	mut interaction: ResMut<InventoryInteraction>,
 	mut commands: Commands,
 ) {
-	if lock.0 || !pad.is_some_and(|pad| pad.just_pressed(INVENTORY_UNEQUIP_PAD)) {
+	if lock.0 || impulse.action != MenuAction::Unequip {
 		return;
 	}
-	let Some((menu_entity, menu)) = overlay_menus.iter().next() else {
+	let Ok((menu_entity, menu)) = overlay_menus.get(impulse.entity) else {
 		return;
 	};
 	let Some((entity, _, Some(controls))) = items
@@ -498,5 +499,69 @@ mod tests {
 			})
 			.expect("dismiss");
 		assert!(!dismissed);
+	}
+
+	#[derive(Resource, Default)]
+	struct Unequipped(Vec<(Entity, u8)>);
+
+	fn record_unequip(event: On<menu_components::MenuActivate<u8>>, mut hits: ResMut<Unequipped>) {
+		hits.0.push((event.entity, event.choice));
+	}
+
+	#[test]
+	fn unequip_only_uses_the_addressed_menus_selected_tile() -> anyhow::Result<()> {
+		use crate::input::emit_inventory_unequip_on_action;
+		use crate::widgets::{EquippedOrderControls, InventoryInteraction};
+		use maybraid_menu_controller::{MenuAction, MenuActionImpulse};
+		use menu_components::{
+			HudMenu, HudMenuItem, HudMenuNavLocked, HudOverlayMenu, TextMenuInputLock,
+		};
+
+		let mut world = World::new();
+		world.init_resource::<TextMenuInputLock>();
+		world.init_resource::<InventoryInteraction>();
+		world.init_resource::<Unequipped>();
+		world.add_observer(emit_inventory_unequip_on_action::<u8>);
+		world.add_observer(record_unequip);
+		let first = world.spawn((HudMenu::new(1), HudOverlayMenu, HudMenuNavLocked)).id();
+		let selected = world.spawn((HudMenu::new(2), HudOverlayMenu, HudMenuNavLocked)).id();
+		world
+			.get_mut::<HudMenu>(selected)
+			.ok_or_else(|| anyhow::anyhow!("selected menu"))?
+			.selected = 1;
+		let controls = |value| EquippedOrderControls {
+			unequip: Some(value),
+			move_left: None,
+			move_right: None,
+		};
+		world.spawn((HudMenuItem { menu: first, index: 0 }, controls(1u8)));
+		world.spawn((HudMenuItem { menu: selected, index: 0 }, controls(2u8)));
+		let tile = world.spawn((HudMenuItem { menu: selected, index: 1 }, controls(3u8))).id();
+		*world.resource_mut::<InventoryInteraction>() =
+			InventoryInteraction::Reorder { item_index: 7 };
+		world.trigger(MenuActionImpulse {
+			entity: selected,
+			source: default(),
+			action: MenuAction::Unequip,
+		});
+		world.flush();
+		assert_eq!(world.resource::<Unequipped>().0, vec![(tile, 3)]);
+		assert_eq!(*world.resource::<InventoryInteraction>(), InventoryInteraction::Browse);
+		assert!(world.get::<HudMenuNavLocked>(selected).is_none());
+		assert!(world.get::<HudMenuNavLocked>(first).is_some());
+
+		// A modal target, or a target removed during a screen swap, must not
+		// fall back to the first inventory overlay.
+		let modal = world.spawn(HudMenu::new(1)).id();
+		for entity in [modal, Entity::PLACEHOLDER] {
+			world.trigger(MenuActionImpulse {
+				entity,
+				source: default(),
+				action: MenuAction::Unequip,
+			});
+		}
+		world.flush();
+		assert_eq!(world.resource::<Unequipped>().0.len(), 1);
+		Ok(())
 	}
 }
