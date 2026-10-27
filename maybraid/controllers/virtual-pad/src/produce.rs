@@ -36,15 +36,7 @@ pub fn finish_produce(
 pub fn configure_produce(app: &mut App) {
 	app.add_systems(
 		PreUpdate,
-		(
-			begin_produce,
-			gamepad::produce_gamepad,
-			keyboard::produce_keyboard,
-			mouse::produce_mouse,
-			crate::overlay::apply_pad_overlay,
-			finish_produce,
-		)
-			.chain()
+		crate::controller::produce_controllers
 			.in_set(crate::VirtualPadSystems::Produce)
 			.after(InputSystems),
 	);

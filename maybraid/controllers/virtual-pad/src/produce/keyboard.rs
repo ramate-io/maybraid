@@ -31,7 +31,7 @@ pub fn produce_keyboard(
 
 /// WASD walks. Arrows also walk and feed the D-Pad. Escape is the only
 /// keyboard Back / stance face — **B** types a letter.
-fn produce_gameplay_keys(keyboard: &ButtonInput<KeyCode>, pad: &mut VirtualPad) {
+pub(crate) fn produce_gameplay_keys(keyboard: &ButtonInput<KeyCode>, pad: &mut VirtualPad) {
 	let mut move_stick = Vec2::ZERO;
 	if keyboard.any_pressed([KeyCode::KeyW, KeyCode::ArrowUp]) {
 		move_stick.y += 1.0;
@@ -81,7 +81,7 @@ fn produce_gameplay_keys(keyboard: &ButtonInput<KeyCode>, pad: &mut VirtualPad) 
 
 /// Letter keys type. Arrows move the focused menu / keypad; Escape backs out;
 /// Enter confirms. Gamepad faces still arrive through the HID producer.
-fn produce_menu_keys(keyboard: &ButtonInput<KeyCode>, pad: &mut VirtualPad) {
+pub(crate) fn produce_menu_keys(keyboard: &ButtonInput<KeyCode>, pad: &mut VirtualPad) {
 	hold_arrows(keyboard, pad);
 	if keyboard.pressed(KeyCode::Escape) {
 		pad.hold_digital(PadButton::B);

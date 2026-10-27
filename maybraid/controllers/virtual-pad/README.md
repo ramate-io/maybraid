@@ -68,3 +68,21 @@ live `Gamepad` as Bevy `GamepadRumbleRequest`. There is no mouse / keyboard
 path. Linux and Windows play those requests through gilrs. On Apple,
 `hid/gamecontroller.rs` drives `GCDevice.haptics` / Core Haptics so the same
 pulse reaches a connected Xbox or DualShock.
+
+## Source-owned runtime
+
+`VirtualPadController` is a component owning one rich `VirtualPad`, its explicit
+`PadDevices` assignment, policy, history, cursor and sequence. `VirtualPadEvent`
+publishes the controller entity, sequence, update duration and an immutable rich
+snapshot; receivers interpret their own menu, character or shell meaning.
+
+The default host explicitly combines keyboard, mouse and the first gamepad into
+`PrimaryVirtualPad`, preserving single-player controls. Additional gamepads get
+separate controller entities and await actor assignment. Disable
+`VirtualPadPlugin::auto_assign_devices` for explicit multiplayer/device setup.
+A device change cancels held gameplay input until release. A missing assigned
+gamepad produces release/neutral state independently of other sources.
+
+During the consumer migration, resources mirror only `PrimaryVirtualPad` and
+legacy menu interpretation remains an adapter. New consumers use source snapshots;
+they must not interpret another controller's state through those resource mirrors.

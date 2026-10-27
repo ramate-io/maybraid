@@ -4,6 +4,7 @@
 pub mod analog;
 pub mod button;
 pub mod config;
+pub mod controller;
 pub mod debug;
 pub mod gate;
 pub mod hid;
@@ -17,6 +18,9 @@ pub mod surface;
 pub use analog::{Cardinal, Deadzone};
 pub use button::{ButtonPhase, ButtonStroke, PadButton, PAD_BUTTON_COUNT};
 pub use config::VirtualPadConfig;
+pub use controller::{
+	PadDevices, PrimaryVirtualPad, VirtualPadController, VirtualPadEvent, VirtualPadLifecycle,
+};
 pub use gate::PadInputPolicy;
 pub use hid::{with_pad_hid, PadHidPlugins};
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};
@@ -38,14 +42,21 @@ pub enum VirtualPadSystems {
 	Derive,
 }
 
-#[derive(Default)]
 pub struct VirtualPadPlugin {
 	pub config: VirtualPadConfig,
+	/// Enable the default single-player device assignment host.
+	pub auto_assign_devices: bool,
+}
+
+impl Default for VirtualPadPlugin {
+	fn default() -> Self {
+		Self { config: VirtualPadConfig::default(), auto_assign_devices: true }
+	}
 }
 
 impl VirtualPadPlugin {
 	pub fn new(config: VirtualPadConfig) -> Self {
-		Self { config }
+		Self { config, ..Self::default() }
 	}
 }
 
@@ -76,17 +87,27 @@ impl Plugin for VirtualPadPlugin {
 				VirtualPadSystems::Produce.after(InputSystems).before(VirtualPadSystems::Derive),
 			)
 			.configure_sets(PreUpdate, VirtualPadSystems::Derive.after(VirtualPadSystems::Produce));
+		let primary = app
+			.world_mut()
+			.spawn(VirtualPadController::new(PadDevices::keyboard_mouse()))
+			.id();
+		app.insert_resource(PrimaryVirtualPad(primary))
+			.init_resource::<controller::DefaultDeviceAssignments>()
+			.add_message::<VirtualPadEvent>()
+			.add_message::<VirtualPadLifecycle>();
+		if self.auto_assign_devices {
+			app.add_systems(
+				PreUpdate,
+				controller::discover_devices
+					.in_set(VirtualPadSystems::Produce)
+					.before(controller::produce_controllers),
+			);
+		}
 		produce::configure_produce(app);
 		debug::configure_debug(app);
 		app.add_systems(
 			PreUpdate,
-			(
-				history::push_history,
-				surface::menu::derive_menu_nav,
-				surface::cursor::integrate_cursor,
-			)
-				.chain()
-				.in_set(VirtualPadSystems::Derive),
+			controller::publish_controllers.in_set(VirtualPadSystems::Derive),
 		);
 		app.add_systems(
 			PostUpdate,
