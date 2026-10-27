@@ -27,6 +27,6 @@ pub use plugin::{CharacterHudSystems, MaybraidCharacterMenuRendererPlugin};
 pub use sink::{MaybraidMenuSink, MenuSink, MenuThumbnailContext, NoThumbnails, RenderContext};
 pub use widgets::{
 	CloseOverlaySelect, EquippedOrderControls, InventoryFocusHint, InventoryInteraction,
-	InventoryItemKey, MenuButton, OpenSelectKey,
-	OverlaySelectRoot, OverlaySelectViewport,
+	InventoryItemKey, InventoryMenuSession, MenuButton, OpenSelectKey, OverlaySelectRoot,
+	OverlaySelectViewport,
 };

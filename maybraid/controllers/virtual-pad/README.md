@@ -2,10 +2,10 @@
 
 Common virtual pad for Maybraid. Bevy’s `bevy_input` stays the HID layer.
 This crate maps keyboard, mouse, and gamepad onto one per-player snapshot,
-then derives menu navigation, a bounded cursor, and a short history window.
+then integrates a bounded cursor and a short history window. Menu controllers interpret navigation from authorized rich frames.
 
 ```text
-Bevy HID  →  VirtualPad (analog + digital + keys)  →  MenuNav / Cursor / gameplay
+Bevy HID  →  VirtualPad (analog + digital + keys)  →  routed menu / gameplay consumers
                  └─ PadHistory (snapshots + edges)
 ```
 

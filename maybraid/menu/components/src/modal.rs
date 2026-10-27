@@ -6,8 +6,9 @@
 //! [`MenuModalStack::open`]; [`consume_menu_modal_back`] takes Back for the
 //! top layer before any screen leave system runs.
 
+use crate::{MenuNav, MenuNavPad};
 use bevy::prelude::*;
-use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad, PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::PadButton;
 
 use crate::controls::section::ActiveOverlayKey;
 use crate::controls::short_text::ShortTextModal;
@@ -271,10 +272,11 @@ pub fn consume_menu_modal_back(
 
 pub fn tick_menu_modal_holds(
 	mut stack: ResMut<MenuModalStack>,
-	pad: Option<Res<VirtualPad>>,
+	primary: Option<Res<crate::PrimaryMenuInput>>,
 	keyboard: Res<ButtonInput<KeyCode>>,
 	nav: Res<MenuNavPad>,
 ) {
+    let pad = primary.as_ref().and_then(|host| host.frame.as_ref()).map(|frame| &frame.pad);
 	let back_down = pad.as_deref().is_some_and(|pad| pad.pressed(PadButton::B))
 		|| keyboard.pressed(KeyCode::Escape)
 		|| nav.just_pressed(MenuNav::Back);
@@ -340,13 +342,13 @@ pub fn consume_screen_back(
 #[cfg(test)]
 mod tests {
 	use super::{
-		consume_menu_modal_back, consume_screen_back, tick_menu_modal_holds, MenuModalDismiss,
-		MenuModalId, MenuModalLayer, MenuModalStack,
+		MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack, consume_menu_modal_back,
+		consume_screen_back, tick_menu_modal_holds,
 	};
 	use crate::single_select::text_cursor::ScreenBackPressed;
+	use crate::{MenuNav, MenuNavPad};
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
-	use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad};
 
 	#[test]
 	fn top_layer_is_highest_order() {
@@ -362,7 +364,7 @@ mod tests {
 
 	#[test]
 	fn entity_under_nav_owner_hides_the_parent_catalog() {
-		use super::{entity_under_nav_owner, MenuModal};
+		use super::{MenuModal, entity_under_nav_owner};
 		use crate::HudMenu;
 		use bevy::ecs::system::RunSystemOnce;
 
@@ -561,4 +563,21 @@ mod tests {
 			)
 			.expect("consume_screen_back")
 	}
+}
+
+/// Resolve pointer eligibility within the entity's own session, if it has one.
+pub fn entity_under_scoped_nav_owner(
+    entity: Entity,
+    sessions: &Query<&crate::MenuSession>,
+    roots: &Query<(Entity, &MenuModal)>,
+    child_of: &Query<&ChildOf>,
+) -> Option<bool> {
+    let mut current = Some(entity);
+    while let Some(here) = current {
+        if let Ok(session) = sessions.get(here) {
+            return Some(!session.text_locked && entity_under_nav_owner(entity, &session.modals, roots, child_of));
+        }
+        current = child_of.get(here).ok().map(ChildOf::parent);
+    }
+    None
 }

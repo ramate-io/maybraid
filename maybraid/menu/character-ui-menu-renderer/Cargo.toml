@@ -15,5 +15,8 @@ character-ui-menu = { workspace = true }
 maybraid-virtual-pad-controller = { workspace = true }
 menu-components = { workspace = true }
 
+[dev-dependencies]
+anyhow = { workspace = true }
+
 [lints]
 workspace = true

@@ -1,20 +1,20 @@
 //! Character gallery: pick a saved character or start a new one.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, Scene};
-use character_model_user::{list_summaries, CharacterSummary};
-use character_persist::{load_active, CharacterId, SaveRoot};
+use bevy::scene::prelude::{Scene, bsn};
+use character_model_user::{CharacterSummary, list_summaries};
+use character_persist::{CharacterId, SaveRoot, load_active};
 use maybraid_menu_controller::MenuController;
 use menu_components::info::description::TextMenuDescription;
 use menu_components::single_select::republish_menu_activate;
 use menu_components::{
-	screen_back_scene, screen_edit_scene, MenuObjectiveKind, TextCursorColumn, TextCursorRow,
-	TextMenuPlugin,
+	MenuObjectiveKind, TextCursorColumn, TextCursorRow, TextMenuPlugin, screen_back_scene,
+	screen_edit_scene,
 };
 
-use crate::input::add_menu_input;
-use crate::show::{add_menu_show_systems, MenuScreens, MenuShowRequest};
 use crate::MenuScreen;
+use crate::input::add_menu_input;
+use crate::show::{MenuScreens, MenuShowRequest, add_menu_show_systems};
 
 /// Queue a gallery spawn (despawns any existing menu screen first).
 #[derive(Component, Debug, Clone, Copy)]
@@ -72,11 +72,7 @@ fn gallery_selected_index(summaries: &[CharacterSummary], active: Option<Charact
 impl GalleryChoice {
 	pub fn create_row(empty_roster: bool) -> TextCursorRow<Self> {
 		let row = TextCursorRow::new("Create a Character", Self::New);
-		if empty_roster {
-			row.with_objective(MenuObjectiveKind::StartHere)
-		} else {
-			row
-		}
+		if empty_roster { row.with_objective(MenuObjectiveKind::StartHere) } else { row }
 	}
 }
 
@@ -117,7 +113,7 @@ fn gallery_scene(
 	bsn! {
 		GalleryScreen
 		MenuScreen
-		MenuController
+		MenuController::default()
 		BackgroundColor(Color::NONE)
 		Node {
 			width: percent(100),
@@ -131,7 +127,7 @@ fn gallery_scene(
 
 #[cfg(test)]
 mod tests {
-	use super::{gallery_rows, gallery_selected_index, GalleryChoice};
+	use super::{GalleryChoice, gallery_rows, gallery_selected_index};
 	use character_model_user::CharacterSummary;
 	use character_persist::CharacterId;
 	use menu_components::MenuObjectiveKind;

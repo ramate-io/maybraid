@@ -9,7 +9,7 @@ use bevy::ui::UiGlobalTransform;
 
 use crate::single_select::{KeyboardMenuNav, TextMenuInputLock};
 use crate::theme::TEXT_YELLOW;
-use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse};
+use crate::{MenuNav, MenuNavImpulse};
 
 /// Focus index for a HUD list (panel headers or overlay leaves).
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,9 +89,11 @@ pub fn select_hud_item_on_over(
 	roots: Query<(Entity, &crate::modal::MenuModal)>,
 	child_of: Query<&ChildOf>,
 	items: Query<&HudMenuItem>,
+	sessions: Query<&crate::MenuSession>,
 	mut menus: Query<&mut HudMenu, Without<HudMenuNavLocked>>,
 ) {
-	if !crate::modal::entity_under_nav_owner(over.entity, &stack, &roots, &child_of) {
+	if !crate::modal::entity_under_scoped_nav_owner(over.entity, &sessions, &roots, &child_of)
+        .unwrap_or_else(|| crate::modal::entity_under_nav_owner(over.entity, &stack, &roots, &child_of)) {
 		return;
 	}
 	let Ok(item) = items.get(over.entity) else {
@@ -108,15 +110,10 @@ pub fn select_hud_item_on_over(
 
 pub fn apply_hud_menu_nav(
 	impulse: On<MenuNavImpulse>,
-	lock: Res<TextMenuInputLock>,
-	unlocked: Query<(), With<HudMenuIgnoresLock>>,
 	held: Query<(), With<HudMenuNavLocked>>,
 	items: Query<(&HudMenuItem, &UiGlobalTransform)>,
 	mut menus: Query<&mut HudMenu>,
 ) {
-	if lock.0 && unlocked.get(impulse.entity).is_err() {
-		return;
-	}
 	if held.get(impulse.entity).is_ok() {
 		return;
 	}
@@ -252,8 +249,8 @@ mod tests {
 	#[test]
 	fn spatial_nav_stays_on_the_row_then_steps_vertically() {
 		use super::spatial_neighbor;
+		use crate::MenuNav;
 		use bevy::prelude::Vec2;
-		use maybraid_virtual_pad_controller::MenuNav;
 		let items = [
 			(0, Vec2::new(0.0, 0.0)),
 			(1, Vec2::new(40.0, 0.0)),
@@ -270,7 +267,7 @@ mod tests {
 
 	#[test]
 	fn keyboard_nav_skips_the_catalog_while_item_drop_owns_nav() {
-		use super::{navigate_hud_menus, HudMenu, HudOverlayMenu};
+		use super::{HudMenu, HudOverlayMenu, navigate_hud_menus};
 		use crate::modal::{MenuModal, MenuModalId, MenuModalLayer, MenuModalStack};
 		use crate::single_select::{KeyboardMenuNav, TextMenuInputLock};
 		use bevy::ecs::system::RunSystemOnce;
