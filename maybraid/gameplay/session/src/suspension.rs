@@ -1,8 +1,8 @@
 //! Pause / live-play projection. Pause must not uninstall play.
 
 use bevy::prelude::*;
-use maybraid_character_controller::CharacterIntent;
-use maybraid_controllers_core::{InputRouter, InputRouting};
+use maybraid_character_controller::{ActorIntentEvent, CharacterIntent};
+use maybraid_controllers_core::{InputRouter, InputRouting, ScopeOwner};
 
 use crate::SessionCapabilities;
 
@@ -41,15 +41,17 @@ impl WorldGameplayEnabled {
 /// Production uses the game-shell pause state; stack tests register this in
 /// [`crate::SessionCapabilitySystems`].
 pub fn apply_in_game_menu_pause(
+	event: On<ActorIntentEvent>,
 	mut router: InputRouting,
 	mut gameplay: ResMut<WorldGameplayEnabled>,
 	session: Res<SessionCapabilities>,
-	mut intents: MessageReader<CharacterIntent>,
 ) {
-	if intents.read().any(|intent| matches!(intent, CharacterIntent::InGameMenu)) {
-		router.set_paused(true);
+	if matches!(event.input.payload(), CharacterIntent::InGameMenu) {
+		router.suspend(event.input.source(), ScopeOwner::pause());
+		// This resource is the explicit primary host projection; source-specific
+		// actor status handles every other participant's suspension.
+		*gameplay = WorldGameplayEnabled::from_session(*session, &router);
 	}
-	*gameplay = WorldGameplayEnabled::from_session(*session, &router);
 }
 
 #[cfg(test)]
