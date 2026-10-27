@@ -20,7 +20,9 @@ pub use router::{
 	publish_routing_events, GestureEffect, HoldEffect, InputRouter, InputRouting, RoutingEvent,
 	RoutingKind, SourceAssignment, SourceConnection, Suspension, SuspensionToken,
 };
-pub use schedule::{CaptureResolveSystems, ControllerPipeline, PadDeliverySystems};
+pub use schedule::{
+	CaptureResolveSystems, ControllerPipeline, PadDeliverySystems, PadPolicySystems,
+};
 pub use source::InputSource;
 pub use ui::UiTarget;
 
@@ -63,6 +65,7 @@ pub fn register_controllers_core(app: &mut App) {
 		.add_systems(
 			PreUpdate,
 			delivery::sync_source_policies
+				.in_set(PadPolicySystems)
 				.before(maybraid_virtual_pad_controller::VirtualPadSystems::Produce),
 		)
 		.add_systems(
