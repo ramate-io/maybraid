@@ -250,7 +250,7 @@ mod tests {
 	use maybraid_character_controller::ActorTarget;
 
 	#[test]
-	fn each_camera_follows_its_configured_source() {
+	fn each_camera_follows_its_configured_source() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.init_resource::<InputRouter>();
 		let first = world.spawn_empty().id();
@@ -264,9 +264,12 @@ mod tests {
 			router.assign_actor(a, ActorTarget::new(first));
 			router.assign_actor(b, ActorTarget::new(second));
 		}
-		world.run_system_once(sync_camera_targets).expect("targets");
-		assert_eq!(world.get::<CameraTarget>(camera_a).unwrap().0, Some(first));
-		assert_eq!(world.get::<CameraTarget>(camera_b).unwrap().0, Some(second));
+		world
+			.run_system_once(sync_camera_targets)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.get::<CameraTarget>(camera_a).map(|target| target.0), Some(Some(first)));
+		assert_eq!(world.get::<CameraTarget>(camera_b).map(|target| target.0), Some(Some(second)));
+		Ok(())
 	}
 
 	#[test]

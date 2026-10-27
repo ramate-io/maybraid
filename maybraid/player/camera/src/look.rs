@@ -367,7 +367,7 @@ mod tests {
 	}
 
 	#[test]
-	fn look_and_recoil_touch_only_the_target_camera() {
+	fn look_and_recoil_touch_only_the_target_camera() -> anyhow::Result<()> {
 		let mut app = App::new();
 		app.add_observer(apply_look_intent).add_message::<CameraRecoilHandoff>();
 		let a = app.world_mut().spawn(PlayerLook::default()).id();
@@ -381,18 +381,44 @@ mod tests {
 			.spawn((FollowCamera::default(), CameraTarget(Some(b)), CameraController::default()))
 			.id();
 		send(&mut app, a, CharacterIntent::Look(Vec2::X));
-		assert!(app.world().get::<CameraController>(camera_a).unwrap().yaw < 0.0);
-		assert_eq!(app.world().get::<CameraController>(camera_b).unwrap().yaw, 0.0);
+		assert!(
+			app.world()
+				.get::<CameraController>(camera_a)
+				.ok_or_else(|| anyhow::anyhow!("first camera"))?
+				.yaw < 0.0
+		);
+		assert_eq!(
+			app.world()
+				.get::<CameraController>(camera_b)
+				.ok_or_else(|| anyhow::anyhow!("second camera"))?
+				.yaw,
+			0.0
+		);
 		app.world_mut()
 			.write_message(CameraRecoilHandoff::new(b, Vec2::new(0.1, 0.2), true));
 		use bevy::ecs::system::RunSystemOnce;
-		app.world_mut().run_system_once(apply_recoil_handoff).unwrap();
-		assert_eq!(app.world().get::<CameraController>(camera_a).unwrap().pitch, 0.0);
-		assert_eq!(app.world().get::<CameraController>(camera_b).unwrap().pitch, 0.2);
+		app.world_mut()
+			.run_system_once(apply_recoil_handoff)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(
+			app.world()
+				.get::<CameraController>(camera_a)
+				.ok_or_else(|| anyhow::anyhow!("first camera"))?
+				.pitch,
+			0.0
+		);
+		assert_eq!(
+			app.world()
+				.get::<CameraController>(camera_b)
+				.ok_or_else(|| anyhow::anyhow!("second camera"))?
+				.pitch,
+			0.2
+		);
+		Ok(())
 	}
 
 	#[test]
-	fn locked_pov_ignores_swap() {
+	fn locked_pov_ignores_swap() -> anyhow::Result<()> {
 		let mut app = App::new();
 		app.add_observer(apply_look_intent).insert_resource(CameraPovLocked(true));
 		let actor = app.world_mut().spawn_empty().id();
@@ -406,9 +432,13 @@ mod tests {
 			.id();
 		send(&mut app, actor, CharacterIntent::SwapPov);
 		assert_eq!(
-			app.world().get::<CameraController>(camera).unwrap().pov,
+			app.world()
+				.get::<CameraController>(camera)
+				.ok_or_else(|| anyhow::anyhow!("camera"))?
+				.pov,
 			CameraPov::ThirdPerson
 		);
+		Ok(())
 	}
 
 	#[test]
@@ -429,7 +459,7 @@ mod tests {
 		assert!((clamp_look_yaw(look, target, max) - look).abs() < 1e-4);
 	}
 
-	fn yaw_after_look(pov: CameraPov, fov: f32) -> f32 {
+	fn yaw_after_look(pov: CameraPov, fov: f32) -> anyhow::Result<f32> {
 		let mut app = App::new();
 		app.add_observer(apply_look_intent);
 		let actor = app.world_mut().spawn_empty().id();
@@ -443,16 +473,21 @@ mod tests {
 			))
 			.id();
 		send(&mut app, actor, CharacterIntent::Look(Vec2::X));
-		-app.world().get::<CameraController>(camera).unwrap().yaw
+		Ok(-app
+			.world()
+			.get::<CameraController>(camera)
+			.ok_or_else(|| anyhow::anyhow!("camera"))?
+			.yaw)
 	}
 
 	#[test]
-	fn aiming_down_sights_scales_look_by_zoom() {
+	fn aiming_down_sights_scales_look_by_zoom() -> anyhow::Result<()> {
 		let follow = FollowCamera::default();
-		let hip = yaw_after_look(CameraPov::FirstPerson, follow.first_person_fov);
-		let sight = yaw_after_look(CameraPov::FirstPerson, follow.sight_fov);
+		let hip = yaw_after_look(CameraPov::FirstPerson, follow.first_person_fov)?;
+		let sight = yaw_after_look(CameraPov::FirstPerson, follow.sight_fov)?;
 		let zoom = (0.5 * follow.sight_fov).tan() / (0.5 * follow.first_person_fov).tan();
 		assert!((hip - follow.sensitivity).abs() < 1e-6);
 		assert!((sight - follow.sensitivity * zoom).abs() < 1e-6);
+		Ok(())
 	}
 }
