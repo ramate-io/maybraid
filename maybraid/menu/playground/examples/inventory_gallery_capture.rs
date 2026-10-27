@@ -20,7 +20,7 @@ use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use character_creation_menus::{CharacterMenu, InventoryLayout, STARTER_KIT_LABEL};
 use character_items::{
-	self_lubikan_catalog_key, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory,
+	catalog_key_uses_yellow_silhouette, self_lubikan_catalog_key, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory,
 	InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec, TanzId, BASE_STARTER_TANZES,
 };
 use character_ui_menu::MenuComponent;
@@ -159,7 +159,7 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 
 	fn image_for_key(&mut self, key: u64) -> Option<Handle<Image>> {
 		let icons = self.icons?;
-		if key == self_lubikan_catalog_key() {
+		if catalog_key_uses_yellow_silhouette(key) {
 			icons.silhouette_for_key(key)
 		} else {
 			icons.catalog_for_key(key)
@@ -167,7 +167,7 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
-		if key == self_lubikan_catalog_key() {
+		if catalog_key_uses_yellow_silhouette(key) {
 			TEXT_YELLOW
 		} else {
 			Color::WHITE
@@ -182,7 +182,7 @@ fn shot_dir() -> PathBuf {
 }
 
 /// Generated Starter Kit: three clothing, two firearms, one grenade, one map,
-/// four base Tanzes.
+/// Fisticuffs, and four base Tanzes.
 fn real_starter_items() -> Vec<InventoryItem> {
 	let mut rng = ItemRng::from_seed(42);
 	rng.random_starter_loadout()
@@ -198,6 +198,7 @@ fn overflow_fixture_items() -> Vec<InventoryItem> {
 		.collect();
 	items.extend(FirearmMesh::VALUES.iter().copied().map(InventoryItem::firearm));
 	items.push(InventoryItem::standard_grenade());
+	items.push(InventoryItem::Fisticuffs);
 	items.push(InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)));
 	items.push(InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Dumbwave, 2)));
 	items
@@ -701,6 +702,21 @@ mod tests {
 		let mut cache = ItemIconCache::default();
 		assert!(!icon_ready(&cache));
 		cache.insert_silhouette(CaptureId::new(SELF_LUBIKAN_CAPTURE_LABEL), Handle::default());
+		assert!(!icon_ready(&cache));
+		for inventory in capture_icon_inventories() {
+			for item in inventory.items {
+				if let Some(id) = item.tanz_id() {
+					use screen_capture::RepresentativePose;
+					cache.insert_silhouette(tanz_user::TanzPose(id).capture_id(), Handle::default());
+				} else if let Some(label) = item.capture_id_label() {
+					let id = CaptureId::new(label);
+					if item.catalog_thumb_is_silhouette() {
+						cache.insert_silhouette(id.clone(), Handle::default());
+					}
+					cache.insert_shaded(id, Handle::default());
+				}
+			}
+		}
 		assert!(icon_ready(&cache));
 	}
 

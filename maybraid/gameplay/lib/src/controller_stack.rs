@@ -28,11 +28,11 @@ use maybraid_equipment::{
 };
 use maybraid_input::{PadButton, VirtualPad, VirtualPadSystems};
 use maybraid_session::{
-	SessionCapabilities, SessionCapabilitySystems, WorldGameplayEnabled, apply_in_game_menu_pause,
+	apply_in_game_menu_pause, SessionCapabilities, SessionCapabilitySystems, WorldGameplayEnabled,
 };
 use player::{CameraFollow, Player, PlayerLook, PlayerPlugin, PlayerUse};
 use player_camera::{
-	CameraController, CameraRecoilHandoff, FollowCamera, register_player_camera_runtime,
+	register_player_camera_runtime, CameraController, CameraRecoilHandoff, FollowCamera,
 };
 use std::time::Duration;
 use world_player::Player as VegetationPlayer;
@@ -257,13 +257,12 @@ fn denied_shot_produces_no_recoil() {
 	assert_eq!(app.world().get::<WeaponTrigger>(gun).map(|t| t.0), Some(true));
 	assert!(app.world_mut().resource_mut::<Messages<WeaponFired>>().drain().next().is_none());
 	app.update();
-	assert!(
-		app.world_mut()
-			.resource_mut::<Messages<CameraRecoilHandoff>>()
-			.drain()
-			.next()
-			.is_none()
-	);
+	assert!(app
+		.world_mut()
+		.resource_mut::<Messages<CameraRecoilHandoff>>()
+		.drain()
+		.next()
+		.is_none());
 	let denied = app.world().entity(camera).get::<CameraController>().unwrap();
 	assert_eq!(denied.yaw, 0.0);
 	assert_eq!(denied.pitch, 0.0);
@@ -359,13 +358,12 @@ fn reassignment_mid_cook_cancels_the_old_actor() {
 		Some(GrenadePhase::Ready),
 		"reassignment is ReleaseNeutral, not a missing-message freeze"
 	);
-	assert!(
-		app.world_mut()
-			.resource_mut::<Messages<DropLiveGrenade>>()
-			.drain()
-			.next()
-			.is_some()
-	);
+	assert!(app
+		.world_mut()
+		.resource_mut::<Messages<DropLiveGrenade>>()
+		.drain()
+		.next()
+		.is_some());
 	assert!(no_thrown_grenade(&mut app));
 }
 
@@ -468,13 +466,12 @@ fn reassignment_then_capture_in_one_frame_cleans_the_old_actor() {
 		Some(GrenadePhase::Ready),
 		"the reassignment event must still drop the old cook when capture follows in the same frame"
 	);
-	assert!(
-		app.world_mut()
-			.resource_mut::<Messages<DropLiveGrenade>>()
-			.drain()
-			.next()
-			.is_some()
-	);
+	assert!(app
+		.world_mut()
+		.resource_mut::<Messages<DropLiveGrenade>>()
+		.drain()
+		.next()
+		.is_some());
 }
 
 #[test]
@@ -806,11 +803,10 @@ fn loading_play_inventory_resume_home_on_plugin_session() {
 		session.install_loading(true);
 	}
 	app.update();
-	assert!(
-		!app.world()
-			.resource::<SessionCapabilities>()
-			.gameplay_enabled(app.world().resource::<InputRouter>())
-	);
+	assert!(!app
+		.world()
+		.resource::<SessionCapabilities>()
+		.gameplay_enabled(app.world().resource::<InputRouter>()));
 	assert!(app.world().resource::<SessionCapabilities>().streaming_enabled());
 
 	{
@@ -818,30 +814,27 @@ fn loading_play_inventory_resume_home_on_plugin_session() {
 		session.install_play(true);
 	}
 	app.update();
-	assert!(
-		app.world()
-			.resource::<SessionCapabilities>()
-			.gameplay_enabled(app.world().resource::<InputRouter>())
-	);
+	assert!(app
+		.world()
+		.resource::<SessionCapabilities>()
+		.gameplay_enabled(app.world().resource::<InputRouter>()));
 	assert!(app.world().resource::<SessionCapabilities>().physics_installed());
 
 	app.world_mut().resource_mut::<InputRouter>().set_paused(true);
 	app.update();
-	assert!(
-		!app.world()
-			.resource::<SessionCapabilities>()
-			.gameplay_enabled(app.world().resource::<InputRouter>())
-	);
+	assert!(!app
+		.world()
+		.resource::<SessionCapabilities>()
+		.gameplay_enabled(app.world().resource::<InputRouter>()));
 	assert!(app.world().resource::<SessionCapabilities>().physics_installed());
 	assert!(app.world().resource::<SessionCapabilities>().simulation_active());
 
 	app.world_mut().resource_mut::<InputRouter>().set_paused(false);
 	app.update();
-	assert!(
-		app.world()
-			.resource::<SessionCapabilities>()
-			.gameplay_enabled(app.world().resource::<InputRouter>())
-	);
+	assert!(app
+		.world()
+		.resource::<SessionCapabilities>()
+		.gameplay_enabled(app.world().resource::<InputRouter>()));
 
 	{
 		let mut session = app.world_mut().resource_mut::<SessionCapabilities>();
@@ -849,11 +842,10 @@ fn loading_play_inventory_resume_home_on_plugin_session() {
 	}
 	app.world_mut().resource_mut::<InputRouter>().set_paused(false);
 	app.update();
-	assert!(
-		!app.world()
-			.resource::<SessionCapabilities>()
-			.gameplay_enabled(app.world().resource::<InputRouter>())
-	);
+	assert!(!app
+		.world()
+		.resource::<SessionCapabilities>()
+		.gameplay_enabled(app.world().resource::<InputRouter>()));
 	assert!(!app.world().resource::<SessionCapabilities>().physics_installed());
 	assert!(app.world().resource::<SessionCapabilities>().menu_shell_active());
 }
@@ -922,6 +914,9 @@ fn spawn_mixed_weapon_actor(
 		}
 		EquippedItemHandler::Grenade => {
 			entity.insert((GrenadeUser::holding(held), GrenadeThrow::default()));
+		}
+		EquippedItemHandler::Fisticuffs => {
+			entity.remove::<PlayerUse>();
 		}
 		EquippedItemHandler::None => {}
 	}

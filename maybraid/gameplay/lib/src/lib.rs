@@ -8,6 +8,7 @@ pub mod schedule;
 
 use bevy::prelude::*;
 use firearm_user::FirearmUserPlugin;
+use fisticuffs_user::FisticuffsUserPlugin;
 use grenade_user::GrenadeUserPlugin;
 use maybraid_character_controller::CharacterControllerPlugin;
 use maybraid_skill_map::SkillMapPlugin;
@@ -77,6 +78,9 @@ impl Plugin for GameplayPlugin {
 		}
 		if !app.is_plugin_added::<GrenadeUserPlugin>() {
 			app.add_plugins(GrenadeUserPlugin);
+		}
+		if !app.is_plugin_added::<FisticuffsUserPlugin>() {
+			app.add_plugins(FisticuffsUserPlugin);
 		}
 	}
 }

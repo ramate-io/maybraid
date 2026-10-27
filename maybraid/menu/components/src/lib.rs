@@ -31,7 +31,7 @@ pub use controls::{
 	FocusTag, HoverTile, HudFonts, HudMenu, HudMenuIgnoresLock, HudMenuItem, HudMenuNavLocked,
 	HudOverlayMenu, ReorderMark,
 	HudScroll, HudScrollStrip, HudScrollThumb, HudScrollTrack, HudScrollViewport, InputPromptDevice,
-	InventoryActionPrompts, InventoryPromptGlyph, InventoryPromptKind, OverlayHeader,
+	InventoryActionPrompts, InventoryDropPromptChip, InventoryPromptGlyph, InventoryPromptKind, OverlayHeader,
 	OverlayHeaderKey, ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal,
 	ShortTextModalRoot, ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank,
 };

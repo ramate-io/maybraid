@@ -76,6 +76,10 @@ const INVENTORY_PROMPT_KINDS: [InventoryPromptKind; 3] = [
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryPromptGlyph(pub InventoryPromptKind);
 
+/// Drop chip row. Hosts hide this when the focused bag item is undroppable.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InventoryDropPromptChip;
+
 /// Footer row under the interactive inventory scroll pane.
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct InventoryActionPrompts;
@@ -116,30 +120,32 @@ fn spawn_prompt_chip(
 	device: InputPromptDevice,
 	kind: InventoryPromptKind,
 ) {
-	parent
-		.spawn((
-			Node {
-				flex_direction: FlexDirection::Row,
-				align_items: AlignItems::Center,
-				column_gap: Val::Px(8.0),
-				..default()
-			},
+	let mut chip = parent.spawn((
+		Node {
+			flex_direction: FlexDirection::Row,
+			align_items: AlignItems::Center,
+			column_gap: Val::Px(8.0),
+			..default()
+		},
+		Pickable::IGNORE,
+	));
+	if kind == InventoryPromptKind::Drop {
+		chip.insert(InventoryDropPromptChip);
+	}
+	chip.with_children(|chip| {
+		chip.spawn((
+			InventoryPromptGlyph(kind),
+			ImageNode::new(assets.load(kind.icon(device))),
+			Node { width: Val::Px(28.0), height: Val::Px(28.0), flex_shrink: 0.0, ..default() },
 			Pickable::IGNORE,
-		))
-		.with_children(|chip| {
-			chip.spawn((
-				InventoryPromptGlyph(kind),
-				ImageNode::new(assets.load(kind.icon(device))),
-				Node { width: Val::Px(28.0), height: Val::Px(28.0), flex_shrink: 0.0, ..default() },
-				Pickable::IGNORE,
-			));
-			chip.spawn((
-				Text::new(kind.label()),
-				fonts.item(PANEL_GROUP_FONT_SIZE),
-				TextColor(TEXT_YELLOW),
-				Pickable::IGNORE,
-			));
-		});
+		));
+		chip.spawn((
+			Text::new(kind.label()),
+			fonts.item(PANEL_GROUP_FONT_SIZE),
+			TextColor(TEXT_YELLOW),
+			Pickable::IGNORE,
+		));
+	});
 }
 
 pub fn sync_input_prompt_device(

@@ -25,12 +25,18 @@ capture landscape so the HUD slot can match the gun's aspect.
 view/framing, revision). Menu tiles and the all-icons barrier read
 Pending / Ready / Failed from those entries. Catalog and HUD helpers still
 resolve the **current** revision only, so a stale completion cannot fill a
-newer still. The skill-map HUD looks up **silhouette** Ready handles. Pending
-and failed captures leave those lookups empty so callers can keep a
-placeholder. The shared capture queue still owns rendering and dedup.
+newer still. Inventory catalogs look up **shaded** handles by
+[`character_items::InventoryItem::icon_catalog_key`]. The skill-map HUD looks
+up **silhouette** Ready handles. Fisticuffs and Self Lubikan are grayscale
+scene captures of the real Braidman GLB; the inventory multiplies those
+silhouettes by yellow. Fisticuffs realizes a fixed character assembly, stamps
+the live jab clip at the authored guard, then keeps body triangles skinned to
+arm joints. Pending and failed captures leave those lookups empty so callers
+can keep a placeholder. The shared capture queue still owns rendering and dedup.
 
 Home-menu load spawns [`RequestPruneItemIconCache`], which deletes PNG files
-whose names are not in any saved character inventory.
+whose names are not in any saved character inventory. Self Lubikan and
+Fisticuffs cache identities are always retained.
 
 ```rust
 use item_icons::{request_inventory_icons, ItemIconPlugin};

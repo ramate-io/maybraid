@@ -19,8 +19,8 @@ use maybraid_input::{MenuNav, MenuNavImpulse, PadButton, VirtualPad};
 use menu_components::theme::{HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW};
 use menu_components::{
 	spawn_hud_action, spawn_hud_text, ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem,
-	HudOverlayMenu, MenuModal, MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack,
-	MenuModalSystems, TextMenuInputLock, TextMenuSystems,
+	HudOverlayMenu, InventoryDropPromptChip, MenuModal, MenuModalDismiss, MenuModalId,
+	MenuModalLayer, MenuModalStack, MenuModalSystems, TextMenuInputLock, TextMenuSystems,
 };
 use player::Player;
 
@@ -92,6 +92,7 @@ impl Plugin for CharacterDropPromptPlugin {
 					apply_accepted_world_drops,
 					close_drop_prompt_without_character,
 					sync_character_drop_prompt,
+					sync_inventory_drop_prompt_chip,
 				)
 					.chain()
 					.after(TextMenuSystems::Navigate),
@@ -118,6 +119,15 @@ pub fn drop_index_from_event(event: MenuEvent) -> Option<usize> {
 /// In-game world drops can be picked up again, so the confirm card stays closed.
 pub fn drop_needs_confirm(require_confirm: bool, recoverable: bool) -> bool {
 	require_confirm && !recoverable
+}
+
+/// Drop chip / X binding only when the focused bag item can actually leave.
+pub fn drop_chip_should_show(
+	inventory: &Inventory,
+	index: usize,
+	policy: InventoryDropPolicy,
+) -> bool {
+	inventory.can_drop(index, policy).is_ok()
 }
 
 #[derive(SystemParam)]
@@ -198,7 +208,7 @@ fn intercept_catalog_drop_edges(
 	let Some(inventory) = menu_state.0.inventory.as_ref() else {
 		return;
 	};
-	if inventory.can_drop(index, policy.0).is_err() {
+	if !drop_chip_should_show(inventory, index, policy.0) {
 		return;
 	}
 	let recoverable = live.is_live();
@@ -220,6 +230,45 @@ fn intercept_catalog_drop_edges(
 		&mut menu_events,
 		&mut live,
 	);
+}
+
+fn sync_inventory_drop_prompt_chip(
+	overlay: Res<ActiveOverlayKey>,
+	policy: Res<ActiveInventoryDropPolicy>,
+	menu_state: Res<CharacterMenuState>,
+	viewports: Query<(Entity, &HudMenu), With<OverlaySelectViewport>>,
+	items: Query<(&HudMenuItem, &MenuButton<MenuEvent>)>,
+	mut chips: Query<&mut Node, With<InventoryDropPromptChip>>,
+) {
+	if chips.is_empty() {
+		return;
+	}
+	let show = overlay.0.as_deref() == Some("Inventory")
+		&& viewports.iter().next().is_some_and(|(viewport, menu)| {
+			items
+				.iter()
+				.find_map(|(item, button)| {
+					if item.menu == viewport && item.index == menu.selected {
+						drop_index_from_event(button.0)
+					} else {
+						None
+					}
+				})
+				.and_then(|index| {
+					menu_state
+						.0
+						.inventory
+						.as_ref()
+						.map(|inventory| drop_chip_should_show(inventory, index, policy.0))
+				})
+				.unwrap_or(false)
+		});
+	let display = if show { Display::Flex } else { Display::None };
+	for mut node in &mut chips {
+		if node.display != display {
+			node.display = display;
+		}
+	}
 }
 
 fn close_drop_prompt_without_character(
@@ -688,6 +737,29 @@ mod tests {
 		assert_eq!(drop_index_from_event(MenuEvent::ToggleInventory(3)), Some(3));
 		assert_eq!(drop_index_from_event(MenuEvent::DropInventory(1)), Some(1));
 		assert_eq!(drop_index_from_event(MenuEvent::Save), None);
+	}
+
+	#[test]
+	fn drop_chip_hides_for_intrinsic_fisticuffs() {
+		use super::drop_chip_should_show;
+
+		let inventory = Inventory {
+			items: vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: vec![0, 1],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		assert!(!drop_chip_should_show(
+			&inventory,
+			0,
+			character_items::InventoryDropPolicy::PLACEHOLDER
+		));
+		assert!(drop_chip_should_show(
+			&inventory,
+			1,
+			character_items::InventoryDropPolicy::PLACEHOLDER
+		));
 	}
 
 	#[test]

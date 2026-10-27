@@ -63,7 +63,9 @@ fn stamp_projectile_sources(
 /// Despawn the held kit and drop the user relationship.
 pub fn teardown_held_firearm(commands: &mut Commands, user: Entity, firearm: &FirearmUser) {
 	commands.entity(firearm.held).try_despawn();
-	commands.entity(user).remove::<(FirearmUser, PlayerUse)>();
+	commands
+		.entity(user)
+		.remove::<(FirearmUser, PlayerUse, player::PlayerOpticAds)>();
 }
 
 fn realize_equipment_teardown(

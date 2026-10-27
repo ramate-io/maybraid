@@ -26,7 +26,8 @@ pub mod sync;
 
 pub use clip::{
 	AnimClip, AnimId, AnimRef, AnimRefRoot, JabParams, JumpParams, PowerStrafeParams,
-	ThinkAgainParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams,
+	ThinkAgainParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams, JAB_CYCLE_SPEED,
+	JAB_DURATION_SECS,
 };
 pub use cue::{
 	advance_anim_clip_cues, AnimClipCues, AnimCueKind, AnimCueMarker, AnimCueSheet, cue_sheet,

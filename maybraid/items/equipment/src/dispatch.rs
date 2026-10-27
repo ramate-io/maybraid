@@ -15,6 +15,7 @@ pub enum EquippedItemHandler {
 	None,
 	Firearm,
 	Grenade,
+	Fisticuffs,
 }
 
 impl EquippedItemHandler {
@@ -28,6 +29,10 @@ impl EquippedItemHandler {
 
 	pub const fn is_grenade(self) -> bool {
 		matches!(self, Self::Grenade)
+	}
+
+	pub const fn is_fisticuffs(self) -> bool {
+		matches!(self, Self::Fisticuffs)
 	}
 
 	/// Stamp this handler at an equipment boundary. Spawn helpers and inventory
@@ -45,6 +50,7 @@ impl EquippedItemHandler {
 		match inventory.primary_weapon() {
 			Some(InventoryItem::Firearm { .. }) => Self::Firearm,
 			Some(InventoryItem::Grenade { .. }) => Self::Grenade,
+			Some(InventoryItem::Fisticuffs) => Self::Fisticuffs,
 			_ => Self::None,
 		}
 	}
@@ -337,6 +343,14 @@ mod tests {
 			tanzes: Vec::new(),
 		};
 		assert_eq!(EquippedItemHandler::from_inventory(&grenade), EquippedItemHandler::Grenade);
+		let fists = Inventory {
+			items: vec![InventoryItem::Fisticuffs],
+			clothing: Vec::new(),
+			weapons: vec![0],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		assert_eq!(EquippedItemHandler::from_inventory(&fists), EquippedItemHandler::Fisticuffs);
 		assert_eq!(
 			EquippedItemHandler::from_inventory(&Inventory::default()),
 			EquippedItemHandler::None

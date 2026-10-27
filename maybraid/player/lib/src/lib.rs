@@ -34,7 +34,7 @@ pub use contact::{
 pub use hit::HitVolume;
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,
-	PlayerUse, PlayerVisual, PlayerYawOwner,
+	PlayerOpticAds, PlayerUse, PlayerVisual, PlayerYawOwner,
 };
 pub use locomotion::drive_player_locomotion;
 pub use look::{clamp_aim_pitch, look_delta, look_forward, wrap_pi, yaw_xz, AIM_PITCH_MARGIN};

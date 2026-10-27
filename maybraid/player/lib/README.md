@@ -54,7 +54,8 @@ stays on the body.
 ```text
 CharacterIntent ─► MotorIntent (locomotion) ─► compose ─► apply_motor ─► wish / jump
                ─► look / POV            (player/camera)
-               ─► UseItem               (firearm-user, melee-user)
+               ─► UseItem               (firearm-user, grenade-user)
+               ─► AttackLeft/Right      (fisticuffs-user, via EquippedItemHandler)
 
 PlayerLook          camera → item users read this, not Camera3d
 PlayerCameraAim     item users → camera follow blends toward pose

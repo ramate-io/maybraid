@@ -282,6 +282,24 @@ mod tests {
 	}
 
 	#[test]
+	fn drain_now_clears_pending_on_an_empty_queue() {
+		use bevy::ecs::system::RunSystemOnce;
+
+		let mut world = World::new();
+		let clothed = BraidmanConfig::default_preview().clothed();
+		let visual = world
+			.run_system_once(move |mut commands: Commands| {
+				spawn_fixed_character_assembly(&mut commands, &clothed, Transform::IDENTITY)
+			})
+			.expect("spawn");
+		world
+			.entity_mut(visual)
+			.insert(PendingCharacterAssembly { queue: VecDeque::new() });
+		drain_character_assembly_now(&mut world, [visual]);
+		assert!(world.get::<PendingCharacterAssembly>(visual).is_none());
+	}
+
+	#[test]
 	fn drain_now_is_a_noop_without_pending() {
 		let mut world = World::new();
 		let entity = world.spawn_empty().id();

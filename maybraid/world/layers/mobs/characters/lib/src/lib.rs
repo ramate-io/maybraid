@@ -47,7 +47,7 @@ pub use anim::{
 	apply_anim_mailbox, cue_sheet, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip,
 	AnimClipCues, AnimCueKind, AnimCueSheet, AnimId, AnimMailbox, AnimProgress, AnimRef,
 	AnimRefRoot, JabParams, JumpParams, PowerStrafeParams, ThinkAgainParams, TuckParams,
-	TuckedFlipParams, TwoFootedTuckedFlipParams,
+	TuckedFlipParams, TwoFootedTuckedFlipParams, JAB_CYCLE_SPEED, JAB_DURATION_SECS,
 };
 pub use appearance::CharacterAppearance;
 pub use assembly::CharacterPartSlot;
