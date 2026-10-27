@@ -10,7 +10,7 @@ use player::{
 };
 
 use crate::look::{CameraController, CameraPov};
-use crate::FollowCamera;
+use crate::{CameraTarget, FollowCamera};
 
 pub(crate) fn follow_character_camera(
 	time: Res<Time>,
@@ -24,71 +24,83 @@ pub(crate) fn follow_character_camera(
 		),
 		(With<CameraFollow>, Without<Camera3d>),
 	>,
-	visuals: Query<&CharacterMembers, With<PlayerVisual>>,
+	visuals: Query<(&ChildOf, &CharacterMembers), With<PlayerVisual>>,
 	maps: Query<&BoneMap>,
 	mut transforms: ParamSet<(
 		TransformHelper,
-		Query<(&mut Transform, &mut CameraController, &FollowCamera), With<Camera3d>>,
+		Query<
+			(Entity, &CameraTarget, &mut Transform, &mut CameraController, &FollowCamera),
+			With<Camera3d>,
+		>,
 	)>,
 ) {
-	{
-		let mut cameras = transforms.p1();
-		let Ok((mut camera_transform, controller, _)) = cameras.single_mut() else {
-			return;
+	let cameras: Vec<_> = transforms
+		.p1()
+		.iter_mut()
+		.map(|(entity, target, _, _, _)| (entity, target.0))
+		.collect();
+	for (camera_entity, target) in cameras {
+		{
+			let mut cameras = transforms.p1();
+			let Ok((_, _, mut camera_transform, controller, _)) = cameras.get_mut(camera_entity)
+			else {
+				continue;
+			};
+			if controller.pov.is_map() {
+				*camera_transform =
+					map_pose(controller.map_focus, controller.map_ground_y, controller.map_height)
+						.transform();
+				continue;
+			}
+		}
+		let Some(actor) = target else { continue };
+		let Ok((_, aim, look, live_hull, rest_hull)) = players.get(actor) else { continue };
+		let height_scale = stance_height_scale(rest_hull, live_hull);
+		let current = transforms.p0();
+		let Ok(player) = current.compute_global_transform(actor) else { continue };
+		let head = head_camera_translation(actor, &visuals, &maps, &current);
+		drop(current);
+		let mut camera = transforms.p1();
+		let Ok((_, _, mut camera_transform, mut controller, follow)) =
+			camera.get_mut(camera_entity)
+		else {
+			continue;
 		};
-		if controller.pov.is_map() {
-			*camera_transform =
+
+		let yaw = Quat::from_axis_angle(Vec3::Y, controller.yaw);
+		let pitch = Quat::from_axis_angle(Vec3::X, controller.pitch);
+		let look_rotation = yaw * pitch;
+
+		let focus_target = if look.first_person {
+			aim.focus.max(controller.focus).max(controller.ads)
+		} else {
+			0.0
+		};
+		controller.focus_blend = focus_blend_toward(
+			controller.focus_blend,
+			focus_target,
+			follow.focus_blend_speed,
+			time.delta_secs(),
+		);
+
+		let mut pose = match controller.pov {
+			CameraPov::ThirdPerson => {
+				third_person_pose(player.translation(), yaw, look_rotation, follow, height_scale)
+			}
+			CameraPov::FirstPerson => {
+				first_person_pose(player.translation(), head, look_rotation, follow, height_scale)
+			}
+			CameraPov::Map => {
 				map_pose(controller.map_focus, controller.map_ground_y, controller.map_height)
-					.transform();
-			return;
+			}
+		};
+		if controller.pov.is_first_person() {
+			if let Some(sight) = aim.pose {
+				pose = pose.interpolate(sight, controller.focus_blend);
+			}
 		}
+		*camera_transform = pose.transform();
 	}
-
-	let Ok((player, aim, look, live_hull, rest_hull)) = players.single() else {
-		return;
-	};
-	let height_scale = stance_height_scale(rest_hull, live_hull);
-	let current = transforms.p0();
-	let Ok(player) = current.compute_global_transform(player) else {
-		return;
-	};
-	let head = head_camera_translation(&visuals, &maps, &current);
-	drop(current);
-	let mut cameras = transforms.p1();
-	let Ok((mut camera_transform, mut controller, follow)) = cameras.single_mut() else {
-		return;
-	};
-
-	let yaw = Quat::from_axis_angle(Vec3::Y, controller.yaw);
-	let pitch = Quat::from_axis_angle(Vec3::X, controller.pitch);
-	let look_rotation = yaw * pitch;
-
-	let focus_target =
-		if look.first_person { aim.focus.max(controller.focus).max(controller.ads) } else { 0.0 };
-	controller.focus_blend = focus_blend_toward(
-		controller.focus_blend,
-		focus_target,
-		follow.focus_blend_speed,
-		time.delta_secs(),
-	);
-
-	let mut pose = match controller.pov {
-		CameraPov::ThirdPerson => {
-			third_person_pose(player.translation(), yaw, look_rotation, follow, height_scale)
-		}
-		CameraPov::FirstPerson => {
-			first_person_pose(player.translation(), head, look_rotation, follow, height_scale)
-		}
-		CameraPov::Map => {
-			map_pose(controller.map_focus, controller.map_ground_y, controller.map_height)
-		}
-	};
-	if controller.pov.is_first_person() {
-		if let Some(sight) = aim.pose {
-			pose = pose.interpolate(sight, controller.focus_blend);
-		}
-	}
-	*camera_transform = pose.transform();
 }
 
 fn stance_height_scale(
@@ -146,21 +158,22 @@ fn first_person_pose(
 
 pub fn sync_camera_fov(
 	followers: Query<&PlayerCameraAim, With<CameraFollow>>,
-	mut cameras: Query<(&CameraController, &FollowCamera, &mut Projection), With<FollowCamera>>,
+	mut cameras: Query<
+		(&CameraTarget, &CameraController, &FollowCamera, &mut Projection),
+		With<FollowCamera>,
+	>,
 ) {
-	let Ok((controller, follow, mut projection)) = cameras.single_mut() else {
-		return;
-	};
-	if followers.is_empty() && !controller.pov.is_map() {
-		return;
+	for (target, controller, follow, mut projection) in &mut cameras {
+		let aim = target.0.and_then(|actor| followers.get(actor).ok());
+		if aim.is_none() && !controller.pov.is_map() {
+			continue;
+		}
+		let Projection::Perspective(perspective) = projection.as_mut() else { continue };
+		let sight_fov = aim.and_then(|aim| aim.sight_fov);
+		let optic_zoom = controller.focus > 1e-4;
+		perspective.fov =
+			vertical_fov(controller.pov, controller.focus_blend, follow, sight_fov, optic_zoom);
 	}
-	let Projection::Perspective(perspective) = projection.as_mut() else {
-		return;
-	};
-	let sight_fov = followers.single().ok().and_then(|aim| aim.sight_fov);
-	let optic_zoom = controller.focus > 1e-4;
-	perspective.fov =
-		vertical_fov(controller.pov, controller.focus_blend, follow, sight_fov, optic_zoom);
 }
 
 fn vertical_fov(
@@ -185,16 +198,17 @@ fn focus_blend_toward(current: f32, target: f32, speed: f32, dt: f32) -> f32 {
 
 pub fn sync_first_person_head_visibility(
 	followers: Query<(), With<CameraFollow>>,
-	cameras: Query<&CameraController, With<FollowCamera>>,
-	visuals: Query<&CharacterMembers, With<PlayerVisual>>,
+	cameras: Query<(&CameraTarget, &CameraController), With<FollowCamera>>,
+	visuals: Query<(&ChildOf, &CharacterMembers), With<PlayerVisual>>,
 	parts: Query<&PartNode>,
 	mut visibilities: Query<&mut Visibility>,
 ) {
-	let Ok(controller) = cameras.single() else {
-		return;
-	};
-	let hidden = !followers.is_empty() && controller.pov.is_first_person();
-	for members in &visuals {
+	for (parent, members) in &visuals {
+		let hidden = cameras.iter().any(|(target, controller)| {
+			target.0 == Some(parent.parent())
+				&& followers.contains(parent.parent())
+				&& controller.pov.is_first_person()
+		});
 		hide_socketed_parts(
 			members,
 			&parts,
@@ -206,11 +220,12 @@ pub fn sync_first_person_head_visibility(
 }
 
 fn head_camera_translation(
-	visuals: &Query<&CharacterMembers, With<PlayerVisual>>,
+	actor: Entity,
+	visuals: &Query<(&ChildOf, &CharacterMembers), With<PlayerVisual>>,
 	maps: &Query<&BoneMap>,
 	transforms: &TransformHelper,
 ) -> Option<Vec3> {
-	let members = visuals.single().ok()?;
+	let (_, members) = visuals.iter().find(|(parent, _)| parent.parent() == actor)?;
 	let left = member_landmark_translation(members.iter(), maps, transforms, "eye_socket.L")?;
 	let right = member_landmark_translation(members.iter(), maps, transforms, "eye_socket.R")?;
 	Some((left + right) * 0.5)
@@ -321,6 +336,7 @@ mod tests {
 		world.spawn((
 			Camera3d::default(),
 			FollowCamera::default(),
+			CameraTarget::default(),
 			CameraController {
 				pov: CameraPov::Map,
 				map_focus: Vec2::new(4.0, 8.0),

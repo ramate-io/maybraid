@@ -2,10 +2,9 @@
 
 use bevy::prelude::*;
 use firearms::{WeaponFired, WeaponTrigger};
-use maybraid_controllers_core::{InputRouter, RoutingEvent, RoutingKind};
-use maybraid_equipment::{delivered_item_use, EquippedItemUse};
-use player::{CameraFollow, Player};
-use player_camera::CameraRecoilHandoff;
+use maybraid_controllers_core::{ActorRoutingEvent, RoutingKind};
+use maybraid_equipment::EquippedItemUse;
+use player_camera::{CameraRecoilHandoff, CameraTarget, FollowCamera};
 
 use crate::weapon::RecoilPattern;
 use crate::{FirearmUser, WeaponSwap};
@@ -15,52 +14,46 @@ use crate::{FirearmUser, WeaponSwap};
 pub(crate) const RECOIL_LERP_SECS: f32 = 0.08;
 
 pub fn apply_fire_intents(
-	router: Option<Res<InputRouter>>,
-	mut uses: MessageReader<EquippedItemUse>,
-	users: Query<(Entity, &FirearmUser, Has<WeaponSwap>), With<Player>>,
+	use_item: On<EquippedItemUse>,
+	users: Query<(&FirearmUser, Has<WeaponSwap>)>,
 	mut triggers: Query<&mut WeaponTrigger>,
 ) {
-	let router = router.as_deref();
-	let uses: Vec<_> = uses
-		.read()
-		.copied()
-		.filter(|use_item| delivered_item_use(router, *use_item))
-		.collect();
-	for (entity, user, swapping) in &users {
-		let fire = uses.iter().any(|use_item| {
-			use_item.addresses(entity) && use_item.handler().is_firearm() && use_item.held()
-		});
-		if let Ok(mut trigger) = triggers.get_mut(user.held) {
-			trigger.0 = fire && !swapping;
-		}
+	if !use_item.handler().is_firearm() {
+		return;
+	}
+	let Ok((user, swapping)) = users.get(use_item.entity) else {
+		return;
+	};
+	if let Ok(mut trigger) = triggers.get_mut(user.held) {
+		trigger.0 = use_item.held() && !swapping;
 	}
 }
 
-/// Clear a held trigger when routing cancels the pad. Each event is applied
-/// to [`RoutingEvent::lost_actor`]. Capture must not keep squeezing;
-/// disconnect / reassignment / removal drop that actor's hold.
+/// Clear an actor's held trigger when delivery is blocked or ownership ends.
+/// Suspension keeps the pad's held state for resume, while the trigger stays
+/// neutral during the frozen interval.
 pub fn apply_fire_routing(
-	mut events: MessageReader<RoutingEvent>,
-	users: Query<&FirearmUser, With<Player>>,
+	event: On<ActorRoutingEvent>,
+	users: Query<&FirearmUser>,
 	mut triggers: Query<&mut WeaponTrigger>,
 ) {
-	for event in events.read() {
-		let Some(actor) = event.lost_actor() else {
-			continue;
-		};
-		match event.kind() {
-			RoutingKind::Disconnected
-			| RoutingKind::Removed
-			| RoutingKind::Reassigned
-			| RoutingKind::Captured => {}
-			_ => continue,
-		}
-		let Ok(user) = users.get(actor.entity()) else {
-			continue;
-		};
-		if let Ok(mut trigger) = triggers.get_mut(user.held) {
-			trigger.0 = false;
-		}
+	if !event.event.applies_to(event.entity) {
+		return;
+	}
+	match event.event.kind() {
+		RoutingKind::Suspended
+		| RoutingKind::Disconnected
+		| RoutingKind::Removed
+		| RoutingKind::Reassigned
+		| RoutingKind::SourceChanged
+		| RoutingKind::Captured => {}
+		_ => return,
+	}
+	let Ok(user) = users.get(event.entity) else {
+		return;
+	};
+	if let Ok(mut trigger) = triggers.get_mut(user.held) {
+		trigger.0 = false;
 	}
 }
 
@@ -90,7 +83,7 @@ pub(crate) fn advance_weapon_recoil(
 	time: Res<Time>,
 	users: Query<(Entity, &FirearmUser)>,
 	mut patterns: Query<&mut RecoilPattern>,
-	followed: Query<(), With<CameraFollow>>,
+	followed: Query<&CameraTarget, With<FollowCamera>>,
 	mut handoffs: MessageWriter<CameraRecoilHandoff>,
 ) {
 	let dt = time.delta_secs();
@@ -104,7 +97,11 @@ pub(crate) fn advance_weapon_recoil(
 		if step.length_squared() < 1e-12 {
 			continue;
 		}
-		handoffs.write(CameraRecoilHandoff::new(shooter, step, followed.contains(shooter)));
+		handoffs.write(CameraRecoilHandoff::new(
+			shooter,
+			step,
+			followed.iter().any(|target| target.0 == Some(shooter)),
+		));
 	}
 }
 
@@ -150,111 +147,79 @@ fn mix(seed: u64, value: u64) -> u64 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy::ecs::system::RunSystemOnce;
 	use bevy::time::TimeUpdateStrategy;
 	use maybraid_controllers_core::{
-		ActorTarget, CaptureKind, InputRouter, InputRouting, InputSource, RoutingEvent, ScopeOwner,
-		UiTarget,
+		ActorTarget, CaptureKind, InputRouter, InputSource, RoutingKind, ScopeOwner, UiTarget,
 	};
 	use maybraid_equipment::{EquippedItemHandler, EquippedItemUse};
-	use player::PlayerLook;
-	use player_camera::{CameraController, CameraPov, FollowCamera};
+	use player::{CameraFollow, PlayerLook};
+	use player_camera::{CameraController, CameraPov};
 
 	const STRENGTH: f32 = 0.08;
 
 	#[test]
-	fn grenade_handler_does_not_squeeze_a_firearm() {
+	fn item_use_and_release_touch_only_the_addressed_trigger() {
 		let mut app = App::new();
-		app.add_plugins(MinimalPlugins)
-			.add_message::<EquippedItemUse>()
-			.add_systems(Update, apply_fire_intents);
-		let gun = app.world_mut().spawn(WeaponTrigger(true)).id();
-		let shooter = app.world_mut().spawn((Player, FirearmUser::holding(gun))).id();
-		app.world_mut().write_message(EquippedItemUse::new(
-			ActorTarget::new(shooter),
+		app.add_observer(apply_fire_intents);
+		let first_gun = app.world_mut().spawn(WeaponTrigger(false)).id();
+		let second_gun = app.world_mut().spawn(WeaponTrigger(true)).id();
+		let first = app.world_mut().spawn(FirearmUser::holding(first_gun)).id();
+		let second = app.world_mut().spawn(FirearmUser::holding(second_gun)).id();
+		app.world_mut().trigger(EquippedItemUse::new(
+			ActorTarget::new(first),
+			EquippedItemHandler::Firearm,
+			1.0,
+			true,
+		));
+		assert_eq!(app.world().get::<WeaponTrigger>(first_gun).unwrap().0, true);
+		assert_eq!(app.world().get::<WeaponTrigger>(second_gun).unwrap().0, true);
+		app.world_mut().trigger(EquippedItemUse::new(
+			ActorTarget::new(first),
+			EquippedItemHandler::Firearm,
+			0.0,
+			false,
+		));
+		assert_eq!(app.world().get::<WeaponTrigger>(first_gun).unwrap().0, false);
+		assert_eq!(app.world().get::<WeaponTrigger>(second_gun).unwrap().0, true);
+		app.world_mut().trigger(EquippedItemUse::new(
+			ActorTarget::new(second),
 			EquippedItemHandler::Grenade,
 			1.0,
 			true,
 		));
-		app.update();
-		assert_eq!(app.world().get::<WeaponTrigger>(gun).map(|trigger| trigger.0), Some(false));
+		assert_eq!(app.world().get::<WeaponTrigger>(second_gun).unwrap().0, true);
 	}
 
 	#[test]
-	fn releasing_the_squeeze_clears_the_weapon_trigger() {
+	fn captured_actor_clears_held_trigger() {
 		let mut app = App::new();
-		app.add_plugins(MinimalPlugins)
-			.add_message::<EquippedItemUse>()
-			.add_systems(Update, apply_fire_intents);
+		app.add_observer(apply_fire_routing);
 		let gun = app.world_mut().spawn(WeaponTrigger(true)).id();
-		app.world_mut().spawn((Player, FirearmUser::holding(gun)));
-		app.update();
-		assert_eq!(app.world().get::<WeaponTrigger>(gun).map(|trigger| trigger.0), Some(false));
-	}
-
-	#[test]
-	fn paused_delivery_does_not_squeeze_a_published_use() {
-		let mut app = App::new();
-		app.add_plugins(MinimalPlugins)
-			.init_resource::<InputRouter>()
-			.add_message::<EquippedItemUse>()
-			.add_systems(Update, apply_fire_intents);
-		let gun = app.world_mut().spawn(WeaponTrigger(false)).id();
-		let shooter = app.world_mut().spawn((Player, FirearmUser::holding(gun))).id();
-		{
-			let mut router = app.world_mut().resource_mut::<InputRouter>();
-			router.assign_actor(InputSource::local_pad(), ActorTarget::new(shooter));
-			router.set_paused(true);
-		}
-		app.world_mut().write_message(EquippedItemUse::new(
-			ActorTarget::new(shooter),
-			EquippedItemHandler::Firearm,
-			1.0,
-			true,
-		));
-		app.update();
-		assert_eq!(app.world().get::<WeaponTrigger>(gun).map(|trigger| trigger.0), Some(false));
-	}
-
-	#[test]
-	fn capture_clears_a_held_weapon_trigger() {
-		let mut app = App::new();
-		app.add_plugins(MinimalPlugins)
-			.init_resource::<InputRouter>()
-			.add_message::<RoutingEvent>()
-			.add_systems(Update, apply_fire_routing);
-		let gun = app.world_mut().spawn(WeaponTrigger(true)).id();
-		let shooter = app.world_mut().spawn((Player, FirearmUser::holding(gun))).id();
-		app.world_mut()
-			.run_system_once(move |mut routing: InputRouting| {
-				routing.assign_actor(InputSource::local_pad(), ActorTarget::new(shooter));
-				routing.acquire_capture(
-					InputSource::local_pad(),
-					ScopeOwner::ui(UiTarget::new(Entity::from_bits(3))),
-					CaptureKind::Overlay,
-				);
-			})
-			.expect("capture");
-		app.update();
-		assert_eq!(app.world().get::<WeaponTrigger>(gun).map(|trigger| trigger.0), Some(false));
-	}
-
-	#[test]
-	fn firearm_use_sets_the_weapon_trigger() {
-		let mut app = App::new();
-		app.add_plugins(MinimalPlugins)
-			.add_message::<EquippedItemUse>()
-			.add_systems(Update, apply_fire_intents);
-		let gun = app.world_mut().spawn(WeaponTrigger(false)).id();
-		let shooter = app.world_mut().spawn((Player, FirearmUser::holding(gun))).id();
-		app.world_mut().write_message(EquippedItemUse::new(
-			ActorTarget::new(shooter),
-			EquippedItemHandler::Firearm,
-			1.0,
-			true,
-		));
-		app.update();
-		assert_eq!(app.world().get::<WeaponTrigger>(gun).map(|trigger| trigger.0), Some(true));
+		let shooter = app.world_mut().spawn(FirearmUser::holding(gun)).id();
+		let mut router = InputRouter::default();
+		router.assign_actor(InputSource::local_pad(), ActorTarget::new(shooter));
+		router.acquire_capture(
+			InputSource::local_pad(),
+			ScopeOwner::ui(UiTarget::new(Entity::from_bits(3))),
+			CaptureKind::Overlay,
+		);
+		let event = router
+			.take_events()
+			.into_iter()
+			.find(|event| event.kind() == RoutingKind::Captured)
+			.unwrap();
+		app.world_mut().trigger(ActorRoutingEvent {
+			entity: shooter,
+			event,
+			status: maybraid_controllers_core::ActorRouteStatus {
+				source: InputSource::local_pad(),
+				connected: true,
+				captured: true,
+				suspended: false,
+				assigned: true,
+			},
+		});
+		assert_eq!(app.world().get::<WeaponTrigger>(gun).unwrap().0, false);
 	}
 
 	#[test]
@@ -328,18 +293,19 @@ mod tests {
 				(queue_weapon_recoil, advance_weapon_recoil, player_camera::apply_recoil_handoff)
 					.chain(),
 			);
+		let gun = app.world_mut().spawn(RecoilPattern::from_seed(seed)).id();
+		let shooter = app
+			.world_mut()
+			.spawn((CameraFollow, FirearmUser::holding(gun), PlayerLook::default()))
+			.id();
 		let camera = app
 			.world_mut()
 			.spawn((
 				Camera3d::default(),
 				FollowCamera::default(),
+				CameraTarget(Some(shooter)),
 				CameraController { pov: CameraPov::ThirdPerson, ..default() },
 			))
-			.id();
-		let gun = app.world_mut().spawn(RecoilPattern::from_seed(seed)).id();
-		let shooter = app
-			.world_mut()
-			.spawn((CameraFollow, FirearmUser::holding(gun), PlayerLook::default()))
 			.id();
 		app.update();
 		(app, shooter, camera)

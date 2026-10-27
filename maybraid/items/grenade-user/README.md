@@ -6,8 +6,7 @@ Throw realization reads addressed
 [`EquippedItemUse`](../equipment/src/dispatch.rs) for the
 grenade [`EquippedItemHandler`](../equipment/src/dispatch.rs).
 A missing use is not a release. [`apply_throw_routing`](src/throw/lifecycle.rs)
-reads [`RoutingEvent`](../../controllers/core/src/router.rs) via `MessageReader`
-and applies each event to [`RoutingEvent::lost_actor`]. Capture keeps a live
+observes actor-addressed routing events. Capture keeps a live
 fuse ticking and only cancels a leftover use latch; suspension freezes both
 fuse and windup in [`advance_throw`](src/throw/execute.rs). Disconnect /
 reassign / removal drop through

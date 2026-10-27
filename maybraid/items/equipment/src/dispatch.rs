@@ -4,8 +4,10 @@
 
 use bevy::prelude::*;
 use character_items::{Inventory, InventoryItem};
-use maybraid_character_controller::CharacterIntent;
-use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource};
+use maybraid_character_controller::{
+	ActorControlEvent, ActorControlStatus, ActorIntentEvent, CharacterIntent,
+};
+use maybraid_controllers_core::ActorTarget;
 
 /// Which UseItem interpreter owns this actor. Written by inventory / swap
 /// commit, not by the pad.
@@ -50,39 +52,17 @@ impl EquippedItemHandler {
 	}
 }
 
-/// Marker on the actor that currently owns the local pad assignment.
-/// Routing cleanup reads [`RoutingEvent`] actor identity, not this stamp.
-#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct RoutedItemActor;
-
-impl RoutedItemActor {
-	/// Keep [`RoutedItemActor`] on [`InputRouter::actor`]. Runs after routing
-	/// consumers so a same-frame disconnect still sees last frame's owner.
-	pub fn stamp(
-		router: Res<InputRouter>,
-		mut commands: Commands,
-		owners: Query<Entity, With<RoutedItemActor>>,
-	) {
-		let current = router.actor(InputSource::local_pad()).map(ActorTarget::entity);
-		for entity in &owners {
-			if Some(entity) != current {
-				commands.entity(entity).remove::<RoutedItemActor>();
-			}
-		}
-		if let Some(entity) = current {
-			commands.entity(entity).try_insert(RoutedItemActor);
-		}
-	}
-}
+/// Compatibility name for actor-owned routing availability.
+pub type RoutedItemActor = ActorControlStatus;
 
 /// Addressed UseItem for the delivered actor's active handler.
 ///
 /// Written every delivered frame so interpreters can tell **held**, **released**,
 /// and **not delivered** (capture / suspend) apart. Absence of this message is
 /// not a release.
-#[derive(Message, Clone, Copy, Debug, PartialEq)]
+#[derive(EntityEvent, Clone, Copy, Debug, PartialEq)]
 pub struct EquippedItemUse {
-	actor: ActorTarget,
+	pub entity: Entity,
 	handler: EquippedItemHandler,
 	squeeze: f32,
 	held: bool,
@@ -95,11 +75,11 @@ impl EquippedItemUse {
 		squeeze: f32,
 		held: bool,
 	) -> Self {
-		Self { actor, handler, squeeze, held }
+		Self { entity: actor.entity(), handler, squeeze, held }
 	}
 
 	pub const fn actor(self) -> ActorTarget {
-		self.actor
+		ActorTarget::new(self.entity)
 	}
 
 	pub const fn handler(self) -> EquippedItemHandler {
@@ -115,231 +95,112 @@ impl EquippedItemUse {
 	}
 
 	pub fn addresses(self, entity: Entity) -> bool {
-		self.actor.matches(entity)
+		self.entity == entity
 	}
-
-	/// True when this use is still delivered after session / capture projection.
-	///
-	/// Bind may publish [`EquippedItemUse`] before session pause lands. Realizers
-	/// call this so a same-frame Start does not fire or cook.
-	pub fn still_delivered(self, router: Option<&InputRouter>) -> bool {
-		match router {
-			None => true,
-			Some(router) => router
-				.delivered_actor(InputSource::local_pad())
-				.is_some_and(|actor| self.actor() == actor),
-		}
-	}
-}
-
-/// True when this use is still delivered after session / capture projection.
-pub fn delivered_item_use(router: Option<&InputRouter>, use_item: EquippedItemUse) -> bool {
-	use_item.still_delivered(router)
 }
 
 /// Addressed PowerUseItem. Lubikan activation consumes this, not the
 /// broadcast intent.
-#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(EntityEvent, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EquippedPowerUse {
-	actor: ActorTarget,
+	pub entity: Entity,
 }
 
 impl EquippedPowerUse {
 	pub const fn new(actor: ActorTarget) -> Self {
-		Self { actor }
+		Self { entity: actor.entity() }
 	}
 
 	pub const fn actor(self) -> ActorTarget {
-		self.actor
+		ActorTarget::new(self.entity)
 	}
 
 	pub fn addresses(self, entity: Entity) -> bool {
-		self.actor.matches(entity)
+		self.entity == entity
 	}
 }
 
-/// Stamp [`EquippedItemUse`] / [`EquippedPowerUse`] for
-/// [`InputRouter::delivered_actor`] only.
+/// Interpret every delivered control frame, including explicit neutral release.
 pub fn dispatch_equipped_item(
-	router: Res<InputRouter>,
-	mut intents: MessageReader<CharacterIntent>,
+	event: On<ActorControlEvent>,
 	handlers: Query<&EquippedItemHandler>,
-	mut uses: MessageWriter<EquippedItemUse>,
-	mut powers: MessageWriter<EquippedPowerUse>,
+	mut commands: Commands,
 ) {
-	let mut squeeze = None;
-	let mut power = false;
-	for intent in intents.read() {
-		match *intent {
-			CharacterIntent::UseItem(value) => squeeze = Some(value.max(squeeze.unwrap_or(0.0))),
-			CharacterIntent::PowerUseItem => power = true,
-			_ => {}
-		}
-	}
-	let Some(actor) = router.delivered_actor(InputSource::local_pad()) else {
-		return;
-	};
-	let handler = handlers.get(actor.entity()).ok().copied().unwrap_or_default();
+	let actor = ActorTarget::new(event.entity);
+	let handler = handlers.get(event.entity).ok().copied().unwrap_or_default();
 	if handler.accepts_use() {
-		let held = squeeze.is_some();
-		uses.write(EquippedItemUse::new(actor, handler, squeeze.unwrap_or(0.0), held));
+		let sample = *event.input.payload();
+		event
+			.input
+			.map(|_| {
+				EquippedItemUse::new(actor, handler, sample.fire_squeeze(), sample.fire_held())
+			})
+			.trigger(&mut commands, |input| *input.payload());
 	}
-	if power {
-		powers.write(EquippedPowerUse::new(actor));
+}
+
+/// Power input is a one-shot semantic intent on the same actor binding.
+pub fn dispatch_equipped_power(event: On<ActorIntentEvent>, mut commands: Commands) {
+	if !matches!(event.input.payload(), CharacterIntent::PowerUseItem) {
+		return;
 	}
+	let actor = ActorTarget::new(event.entity);
+	event
+		.input
+		.map(|_| EquippedPowerUse::new(actor))
+		.trigger(&mut commands, |input| *input.payload());
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy::ecs::system::RunSystemOnce;
+	use maybraid_character_controller::ActorControlSample;
+	use maybraid_controllers_core::{InputRouter, InputSource};
 
-	fn actor(bits: u64) -> ActorTarget {
-		ActorTarget::new(Entity::from_bits(bits))
-	}
+	#[derive(Resource, Default)]
+	struct Seen(Vec<EquippedItemUse>);
 
-	fn write_intents(world: &mut World, intents: &[CharacterIntent]) {
-		world
-			.run_system_once({
-				let intents = intents.to_vec();
-				move |mut writer: MessageWriter<CharacterIntent>| {
-					for intent in &intents {
-						writer.write(*intent);
-					}
-				}
-			})
-			.expect("write");
+	fn record(use_item: On<EquippedItemUse>, mut seen: ResMut<Seen>) {
+		seen.0.push(*use_item);
 	}
 
 	#[test]
-	fn dispatch_requires_delivery_and_a_handler() {
-		let mut world = World::new();
-		world.init_resource::<InputRouter>();
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.init_resource::<Messages<EquippedItemUse>>();
-		world.init_resource::<Messages<EquippedPowerUse>>();
-		let entity = world.spawn(EquippedItemHandler::Firearm).id();
-		write_intents(&mut world, &[CharacterIntent::UseItem(0.9)]);
-		world.run_system_once(dispatch_equipped_item).expect("undelivered");
-		assert!(world.resource_mut::<Messages<EquippedItemUse>>().drain().next().is_none());
-
-		world
-			.resource_mut::<InputRouter>()
-			.assign_actor(InputSource::local_pad(), ActorTarget::new(entity));
-		write_intents(&mut world, &[CharacterIntent::UseItem(0.9)]);
-		world.run_system_once(dispatch_equipped_item).expect("delivered");
-		let use_item =
-			world.resource_mut::<Messages<EquippedItemUse>>().drain().next().expect("use");
-		assert!(use_item.addresses(entity));
-		assert!(use_item.handler().is_firearm());
-		assert!(use_item.held());
-		assert!((use_item.squeeze() - 0.9).abs() < 1e-5);
-	}
-
-	#[test]
-	fn delivered_release_is_an_explicit_not_held() {
-		let mut world = World::new();
-		world.init_resource::<InputRouter>();
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.init_resource::<Messages<EquippedItemUse>>();
-		world.init_resource::<Messages<EquippedPowerUse>>();
-		let entity = world.spawn(EquippedItemHandler::Grenade).id();
-		world
-			.resource_mut::<InputRouter>()
-			.assign_actor(InputSource::local_pad(), ActorTarget::new(entity));
-		world.run_system_once(dispatch_equipped_item).expect("release");
-		let use_item =
-			world.resource_mut::<Messages<EquippedItemUse>>().drain().next().expect("use");
-		assert!(use_item.handler().is_grenade());
-		assert!(!use_item.held());
-	}
-
-	#[test]
-	fn capture_writes_no_use() {
-		use maybraid_controllers_core::{CaptureKind, ScopeOwner, UiTarget};
-
-		let mut world = World::new();
-		world.init_resource::<InputRouter>();
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.init_resource::<Messages<EquippedItemUse>>();
-		world.init_resource::<Messages<EquippedPowerUse>>();
-		let entity = world.spawn(EquippedItemHandler::Firearm).id();
+	fn two_actors_receive_only_their_own_fire_and_release() {
+		let mut app = App::new();
+		app.init_resource::<InputRouter>()
+			.init_resource::<Seen>()
+			.add_observer(dispatch_equipped_item)
+			.add_observer(record);
+		let first = app.world_mut().spawn(EquippedItemHandler::Firearm).id();
+		let second = app.world_mut().spawn(EquippedItemHandler::Grenade).id();
+		let a = InputSource::virtual_pad(app.world_mut().spawn_empty().id());
+		let b = InputSource::virtual_pad(app.world_mut().spawn_empty().id());
 		{
-			let mut router = world.resource_mut::<InputRouter>();
-			router.assign_actor(InputSource::local_pad(), ActorTarget::new(entity));
-			router.acquire_capture(
-				InputSource::local_pad(),
-				ScopeOwner::ui(UiTarget::new(Entity::from_bits(9))),
-				CaptureKind::Overlay,
-			);
+			let mut router = app.world_mut().resource_mut::<InputRouter>();
+			router.assign_actor(a, ActorTarget::new(first));
+			router.assign_actor(b, ActorTarget::new(second));
 		}
-		write_intents(&mut world, &[CharacterIntent::UseItem(1.0)]);
-		world.run_system_once(dispatch_equipped_item).expect("captured");
-		assert!(world.resource_mut::<Messages<EquippedItemUse>>().drain().next().is_none());
-	}
-
-	#[test]
-	fn paused_delivery_rejects_a_published_use() {
-		let mut world = World::new();
-		world.init_resource::<InputRouter>();
-		let entity = world.spawn(EquippedItemHandler::Firearm).id();
-		let use_item =
-			EquippedItemUse::new(ActorTarget::new(entity), EquippedItemHandler::Firearm, 1.0, true);
-		{
-			let mut router = world.resource_mut::<InputRouter>();
-			router.assign_actor(InputSource::local_pad(), ActorTarget::new(entity));
-			assert!(delivered_item_use(Some(&router), use_item));
-			router.set_paused(true);
-			assert!(!delivered_item_use(Some(&router), use_item));
-		}
-	}
-
-	#[test]
-	fn none_handler_drops_use_but_keeps_power() {
-		let mut world = World::new();
-		world.init_resource::<InputRouter>();
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.init_resource::<Messages<EquippedItemUse>>();
-		world.init_resource::<Messages<EquippedPowerUse>>();
-		let entity = world.spawn(EquippedItemHandler::None).id();
-		world
-			.resource_mut::<InputRouter>()
-			.assign_actor(InputSource::local_pad(), ActorTarget::new(entity));
-		write_intents(&mut world, &[CharacterIntent::UseItem(1.0), CharacterIntent::PowerUseItem]);
-		world.run_system_once(dispatch_equipped_item).expect("power");
-		assert!(world.resource_mut::<Messages<EquippedItemUse>>().drain().next().is_none());
-		let power = world
-			.resource_mut::<Messages<EquippedPowerUse>>()
-			.drain()
-			.next()
-			.expect("power");
-		assert!(power.addresses(entity));
-		assert_eq!(power.actor(), actor(entity.to_bits()));
-	}
-
-	#[test]
-	fn handler_follows_the_primary_weapon() {
-		use character_items::FirearmMesh;
-
-		let firearm = Inventory {
-			items: vec![InventoryItem::firearm(FirearmMesh::Bullpup)],
-			clothing: Vec::new(),
-			weapons: vec![0],
-			skills: Vec::new(),
-			tanzes: Vec::new(),
-		};
-		assert_eq!(EquippedItemHandler::from_inventory(&firearm), EquippedItemHandler::Firearm);
-		let grenade = Inventory {
-			items: vec![InventoryItem::standard_grenade()],
-			clothing: Vec::new(),
-			weapons: vec![0],
-			skills: Vec::new(),
-			tanzes: Vec::new(),
-		};
-		assert_eq!(EquippedItemHandler::from_inventory(&grenade), EquippedItemHandler::Grenade);
-		assert_eq!(
-			EquippedItemHandler::from_inventory(&Inventory::default()),
-			EquippedItemHandler::None
-		);
+		let first_input = app
+			.world()
+			.resource::<InputRouter>()
+			.route_actor(a, ActorControlSample::default().with_fire(true, 0.8))
+			.unwrap();
+		let second_input = app
+			.world()
+			.resource::<InputRouter>()
+			.route_actor(b, ActorControlSample::default())
+			.unwrap();
+		app.world_mut().trigger(ActorControlEvent { entity: first, input: first_input });
+		app.world_mut()
+			.trigger(ActorControlEvent { entity: second, input: second_input });
+		app.world_mut().flush();
+		let seen = &app.world().resource::<Seen>().0;
+		assert_eq!(seen.len(), 2);
+		assert!(seen.iter().any(|use_item| use_item.addresses(first)
+			&& use_item.held()
+			&& use_item.handler().is_firearm()));
+		assert!(seen.iter().any(|use_item| use_item.addresses(second)
+			&& !use_item.held()
+			&& use_item.handler().is_grenade()));
 	}
 }

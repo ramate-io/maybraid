@@ -7,7 +7,7 @@ use character_items::{Inventory, InventoryItem};
 use damage::Downed;
 use firearm_user::WeaponSwap;
 use grenades::{DropLiveGrenade, GrenadeEffect};
-use maybraid_controllers_core::{InputSource, RoutingEvent, RoutingKind};
+use maybraid_controllers_core::{ActorRoutingEvent, RoutingKind};
 
 use super::{GrenadeThrow, GrenadeUser};
 use crate::hold::HeldGrenade;
@@ -19,7 +19,7 @@ use crate::hold::HeldGrenade;
 /// cancels a leftover latch on that same owner; a pin-pulled charge keeps
 /// cooking. Cleanup does not read [`maybraid_equipment::RoutedItemActor`].
 pub fn apply_throw_routing(
-	mut events: MessageReader<RoutingEvent>,
+	event: On<ActorRoutingEvent>,
 	mut drops: MessageWriter<DropLiveGrenade>,
 	velocities: Query<&LinearVelocity>,
 	carriers: Query<&InventoryUser>,
@@ -33,41 +33,37 @@ pub fn apply_throw_routing(
 		Option<&GlobalTransform>,
 	)>,
 ) {
-	let source = InputSource::local_pad();
-	for event in events.read() {
-		if event.source() != source {
-			continue;
+	if !event.event.applies_to(event.entity) {
+		return;
+	}
+	let Ok((user_entity, user, mut throw, local, global)) = users.get_mut(event.entity) else {
+		return;
+	};
+	match event.event.kind() {
+		RoutingKind::Captured => {
+			throw.apply_routing(event.event);
 		}
-		let Some(actor) = event.lost_actor() else {
-			continue;
-		};
-		let Ok((user_entity, user, mut throw, local, global)) = users.get_mut(actor.entity())
-		else {
-			continue;
-		};
-		match event.kind() {
-			RoutingKind::Captured => {
-				throw.apply_routing(*event);
-			}
-			RoutingKind::Disconnected | RoutingKind::Removed | RoutingKind::Reassigned => {
-				let Some(fuse) = throw.apply_routing(*event) else {
-					continue;
-				};
-				drop_live_cook(
-					&mut drops,
-					&velocities,
-					&carriers,
-					&mut bags,
-					&held,
-					user_entity,
-					user,
-					local,
-					global,
-					fuse,
-				);
-			}
-			_ => {}
+		RoutingKind::Disconnected
+		| RoutingKind::Removed
+		| RoutingKind::Reassigned
+		| RoutingKind::SourceChanged => {
+			let Some(fuse) = throw.apply_routing(event.event) else {
+				return;
+			};
+			drop_live_cook(
+				&mut drops,
+				&velocities,
+				&carriers,
+				&mut bags,
+				&held,
+				user_entity,
+				user,
+				local,
+				global,
+				fuse,
+			);
 		}
+		_ => {}
 	}
 }
 

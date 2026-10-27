@@ -7,7 +7,7 @@ use character_items::{GrenadeStats, Inventory, InventoryItem};
 use characters::{CharacterHeading, CharacterRoot};
 use grenades::{GrenadeDetonated, GrenadeEffect, GrenadeSounds, SpawnThrownGrenade};
 use maybraid_audio::{Audio, AudioClip, Mixer};
-use maybraid_controllers_core::{InputRouter, InputSource};
+use maybraid_character_controller::ActorControlStatus;
 use player::PlayerLook;
 
 use super::lifecycle::start_primary_recharge;
@@ -15,12 +15,8 @@ use super::spawn::{launch_velocity, throw_aim};
 use super::{GrenadePhase, GrenadeThrow, GrenadeUser, ThrowJingleDue};
 use crate::hold::HeldGrenade;
 
-fn clocks_frozen(router: Option<&InputRouter>, entity: Entity) -> bool {
-	let Some(router) = router else {
-		return false;
-	};
-	let source = InputSource::local_pad();
-	router.is_suspended(source) && router.actor(source).is_some_and(|actor| actor.matches(entity))
+fn clocks_frozen(status: &Query<&ActorControlStatus>, entity: Entity) -> bool {
+	status.get(entity).is_ok_and(|status| status.is_frozen())
 }
 
 /// Jingle at the held charge when the throw windup starts, before release.
@@ -53,7 +49,7 @@ pub fn play_throw_jingles(
 
 pub fn advance_throw(
 	time: Res<Time>,
-	router: Option<Res<InputRouter>>,
+	status: Query<&ActorControlStatus>,
 	mut throws: MessageWriter<SpawnThrownGrenade>,
 	mut detonations: MessageWriter<GrenadeDetonated>,
 	looks: Query<&PlayerLook>,
@@ -65,9 +61,8 @@ pub fn advance_throw(
 	mut held: Query<(&Transform, &mut Visibility), With<HeldGrenade>>,
 ) {
 	let dt = time.delta_secs();
-	let router = router.as_deref();
 	for (user_entity, user, mut throw) in &mut users {
-		if clocks_frozen(router, user_entity) {
+		if clocks_frozen(&status, user_entity) {
 			continue;
 		}
 		let stats = carriers
