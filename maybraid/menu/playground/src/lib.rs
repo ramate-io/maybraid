@@ -247,8 +247,8 @@ mod tests {
 		RoutingEvent, ScopeOwner, dispatch,
 	};
 	use maybraid_virtual_pad_controller::{
-		PadButton, PrimaryVirtualPad, VirtualPadConfig, VirtualPadController, VirtualPadEvent,
-		VirtualPadSystems, produce::keyboard::KeyboardPad,
+		PadButton, PrimaryVirtualPad, VirtualPadController, VirtualPadEvent, VirtualPadSystems,
+		produce::keyboard::KeyboardPad,
 	};
 	use menu_components::MenuNavPad;
 	use menu_components::{
