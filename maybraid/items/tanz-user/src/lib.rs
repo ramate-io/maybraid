@@ -1264,7 +1264,7 @@ mod tests {
 	fn plugin_menu_nav_while_in_tanz_mode_does_not_commit_gestures() -> anyhow::Result<()> {
 		use maybraid_character_controller::RoutedActorControl;
 		use maybraid_menu_controller::MenuController;
-		use maybraid_virtual_pad_controller::{PrimaryVirtualPad, VirtualPad, VirtualPadEvent};
+		use maybraid_virtual_pad_controller::{PadOverlay, PadOverlayRequest, PrimaryVirtualPad};
 		use menu_components::{HudMenu, HudOverlayMenu};
 
 		let mut app = lifecycle_plugins();
@@ -1284,21 +1284,25 @@ mod tests {
 		app.world_mut().entity_mut(root).add_child(catalog);
 
 		let source = app.world().resource::<PrimaryVirtualPad>().0;
-		for sequence in 1..=22 {
-			let mut pad = VirtualPad::default();
-			pad.begin_frame();
-			if sequence > 2 {
-				pad.add_move(Vec2::NEG_X);
-			}
-			pad.finish_digital();
-			app.world_mut().write_message(VirtualPadEvent {
+		for frame in 1..=22 {
+			app.world_mut().write_message(PadOverlayRequest {
 				source,
-				sequence,
-				delta: std::time::Duration::from_secs_f32(1.0 / 60.0),
-				pad,
+				overlay: Some(PadOverlay {
+					move_stick: if frame > 2 { Vec2::NEG_X } else { Vec2::ZERO },
+					..default()
+				}),
 			});
-			step_lifecycle(&mut app);
+			// Run primary ownership, pad production, capture, and delivery in their
+			// real schedules instead of bypassing PreUpdate with fabricated frames.
+			app.update();
 		}
+		assert_eq!(
+			app.world()
+				.get::<menu_components::PrimaryMenuInput>(root)
+				.map(|input| input.source),
+			Some(source),
+			"the primary menu must own the source receiving the injected pad"
+		);
 		assert!(
 			app.world()
 				.get::<RoutedActorControl>(player)
