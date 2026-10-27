@@ -24,9 +24,11 @@ pub fn register_fisticuffs_user_runtime(app: &mut App) {
 	app.init_resource::<FisticuffsUserRuntime>()
 		.add_message::<maybraid_character_controller::CharacterIntent>()
 		.add_message::<FisticuffsStrike>()
+		.add_message::<maybraid_controllers_core::RoutingEvent>()
 		.add_systems(
 			Update,
 			(
+				drive::apply_attack_routing,
 				drive::tick_attack_state,
 				drive::apply_attack_intents,
 				drive::latch_jab_aim,
@@ -89,6 +91,7 @@ mod tests {
 	use crate::{AttackPhase, FisticuffsHitSensor};
 	use bevy::time::TimeUpdateStrategy;
 	use maybraid_character_controller::CharacterIntent;
+	use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource};
 	use std::time::Duration;
 
 	#[derive(Resource, Default)]
@@ -116,6 +119,14 @@ mod tests {
 				Transform::IDENTITY,
 			))
 			.id();
+		let other = app
+			.world_mut()
+			.spawn((player::Player, FisticuffsUser::default(), EquippedItemHandler::Fisticuffs))
+			.id();
+		app.init_resource::<InputRouter>();
+		app.world_mut()
+			.resource_mut::<InputRouter>()
+			.assign_actor(InputSource::local_pad(), ActorTarget::new(actor));
 		app.world_mut().write_message(CharacterIntent::AttackRight);
 		app.update();
 		for _ in 0..3 {
@@ -126,6 +137,11 @@ mod tests {
 			.get::<FisticuffsUser>(actor)
 			.ok_or_else(|| anyhow::anyhow!("driver"))?;
 		assert_eq!(user.state.phase(), Some(AttackPhase::Active));
+		let other_user = app
+			.world()
+			.get::<FisticuffsUser>(other)
+			.ok_or_else(|| anyhow::anyhow!("other driver"))?;
+		assert!(!other_user.state.is_busy());
 		assert_eq!(app.world().resource::<Strikes>().0, 1);
 		assert_eq!(app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count(), 1);
 		assert!(!app.is_plugin_added::<crate::FisticuffsUserPlugin>());

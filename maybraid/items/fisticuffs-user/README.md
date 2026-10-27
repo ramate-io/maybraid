@@ -70,17 +70,19 @@ slot is the combo-graph hook.
 `AttackState` owns time, side, and the latched [`JabAim`](src/aim.rs). During
 the active window the crate emits [`FisticuffsStrike`](src/lib.rs)
 (`attacker`, `side`, `kind`, `combo_step`, clip `progress`, quantized `target`)
-and spawns a short-lived fist / forearm [`Sensor`](src/sensor.rs) posed from the
-character and aim. Overlap is resolved with `SpatialQuery` (same class as grenade
+and spawns a short-lived fist / forearm [pose marker](src/sensor.rs) from the
+character and aim. The marker carries no Avian collider. Overlap is resolved with `SpatialQuery` (same class as grenade
 blasts and skill-map bursts) and written as
 `damage::Hit { source: Some(attacker), allow_self: false, amount: PLACEHOLDER_JAB_DAMAGE }`.
-[`HitCapsule`](../../player/src/hit.rs) stays receive-only.
+[`HitCapsule`](../../player/lib/src/hit.rs) stays receive-only.
 [`maybraid-audio`](../../audio/) plays the same authored damage flinch grunt
 the hurt character already uses (`FlinchSounds::play`, `Voices` bus).
 
 The sensor exists **only** while [`AttackPhase::Active`](src/attack.rs). Cancel,
-weapon swap (`FisticuffsUser` removed), death / `Downed`, and pause (world
-cancels the attack) tear it down. Hits are once-per-strike-per-target. There is
+weapon swap (`FisticuffsUser` removed), death / `Downed`, and routing capture,
+disconnect, or reassignment tear it down. Source suspension freezes the assigned
+actor’s clock and hit resolution; other actors continue. Resume continues the
+same attack, retaining its hit deduplication. Hits are once-per-strike-per-target. There is
 no combo-step damage scale — `combo_step` is reserved for a later combo graph.
 
 `PLACEHOLDER_JAB_DAMAGE` (12) and the capsule radius / length / reach are
@@ -128,9 +130,13 @@ FISTICUFFS_JAB_CAPTURE_DIR=/tmp/fisticuffs-jab \
 
 `register_fisticuffs_user_runtime` installs the attack machine, equipment
 hold/teardown, strike messages, and hit resolution once. Headless gameplay uses
-this same runtime without audio or mesh assets. Hit resolution waits for a host
-with physics; attack timing and sensor lifetime still run without it.
+this same runtime without audio or mesh assets. Hit resolution runs when the host
+has physics; attack timing and sensor lifetime still run without it.
 
 `FisticuffsUserPlugin` adds clip presentation, debug drawing, and strike vocals
 on top of that runtime. Installing it after gameplay does not register a second
 attack machine.
+
+Jab input requires a delivered actor in `InputRouter`; missing routing never
+broadcasts an attack to all equipped actors. `RoutingEvent` cancellation applies
+only to the actor that lost delivery. World assembly no longer owns pause cancellation.

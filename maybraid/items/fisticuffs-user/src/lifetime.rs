@@ -26,6 +26,17 @@ use crate::{
 	JAB_STARTUP_END, PLACEHOLDER_JAB_DAMAGE,
 };
 
+// The Bevy fallback handler is a function pointer, so command errors use a
+// process-wide collector. Hold this separate lock for each complete test to
+// prevent another app from clearing or consuming its errors mid-frame.
+fn lock_lifetime_test() -> std::sync::MutexGuard<'static, ()> {
+	static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+	TEST_LOCK
+		.get_or_init(|| Mutex::new(()))
+		.lock()
+		.unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 fn command_errors() -> &'static Mutex<Vec<String>> {
 	static ERRORS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 	ERRORS.get_or_init(|| Mutex::new(Vec::new()))
@@ -152,6 +163,7 @@ fn advance_to_active(app: &mut App) {
 
 #[test]
 fn routed_jab_hits_then_teardown_paths_do_not_queue_despawned_inserts() -> anyhow::Result<()> {
+	let _test_guard = lock_lifetime_test();
 	let mut app = lifetime_app();
 	app.world_mut().insert_resource(VirtualPadConfig::default());
 	let player = spawn_attacker(&mut app);
@@ -251,6 +263,7 @@ fn routed_jab_hits_then_teardown_paths_do_not_queue_despawned_inserts() -> anyho
 
 #[test]
 fn captured_pad_does_not_chamber_a_jab() -> anyhow::Result<()> {
+	let _test_guard = lock_lifetime_test();
 	use maybraid_controllers_core::{CaptureKind, ScopeOwner, UiTarget};
 
 	let mut app = lifetime_app();
@@ -280,6 +293,7 @@ fn captured_pad_does_not_chamber_a_jab() -> anyhow::Result<()> {
 
 #[test]
 fn runtime_only_jab_reaches_damage_without_the_presentation_plugin() -> anyhow::Result<()> {
+	let _test_guard = lock_lifetime_test();
 	let mut app = lifetime_app_with_presentation(false);
 	let player = spawn_attacker(&mut app);
 	let dummy = spawn_dummy(&mut app);
@@ -296,6 +310,126 @@ fn runtime_only_jab_reaches_damage_without_the_presentation_plugin() -> anyhow::
 	assert_eq!(health.current, health.max - PLACEHOLDER_JAB_DAMAGE);
 	assert!(!app.is_plugin_added::<FisticuffsUserPlugin>());
 	assert!(!app.is_plugin_added::<maybraid_audio::AudioPlugin>());
+	assert_no_command_errors()?;
+	Ok(())
+}
+
+#[test]
+fn routing_loss_cancels_only_the_previous_actor_before_damage() -> anyhow::Result<()> {
+	let _test_guard = lock_lifetime_test();
+	use maybraid_controllers_core::{CaptureKind, InputRouting, ScopeOwner, UiTarget};
+
+	for transition in ["capture", "disconnect", "reassign"] {
+		let mut app = lifetime_app_with_presentation(false);
+		let actor = spawn_attacker(&mut app);
+		let dummy = spawn_dummy(&mut app);
+		app.world_mut().entity_mut(dummy).remove::<Health>();
+		assign(&mut app, actor);
+		squeeze_right_trigger(&mut app);
+		app.update();
+		release_triggers(&mut app);
+		advance_to_active(&mut app);
+		app.world_mut().entity_mut(dummy).insert(Health::from_max(100.0));
+		let mut other_user = FisticuffsUser::default();
+		other_user.state.request(crate::AttackSpec::jab(crate::Side::Left));
+		let other = app.world_mut().spawn((other_user, Transform::from_xyz(100.0, 0.0, 0.0))).id();
+		app.world_mut()
+			.run_system_once(move |mut routing: InputRouting| match transition {
+				"capture" => {
+					routing.acquire_capture(
+						InputSource::local_pad(),
+						ScopeOwner::ui(UiTarget::new(dummy)),
+						CaptureKind::Overlay,
+					);
+				}
+				"disconnect" => {
+					routing.disconnect(InputSource::local_pad());
+				}
+				_ => {
+					routing.assign_actor(InputSource::local_pad(), ActorTarget::new(other));
+				}
+			})
+			.map_err(|error| anyhow::anyhow!("{error}"))?;
+		app.update();
+		let user = app
+			.world()
+			.get::<FisticuffsUser>(actor)
+			.ok_or_else(|| anyhow::anyhow!("actor"))?;
+		assert!(!user.state.is_busy(), "{transition} must cancel old actor");
+		let other_user = app
+			.world()
+			.get::<FisticuffsUser>(other)
+			.ok_or_else(|| anyhow::anyhow!("other"))?;
+		assert!(other_user.state.is_busy(), "{transition} must leave other actors alone");
+		let health = app.world().get::<Health>(dummy).ok_or_else(|| anyhow::anyhow!("dummy"))?;
+		assert_eq!(health.current, health.max, "{transition} must precede hit resolution");
+		assert_eq!(sensor_count(app.world_mut()), 0);
+		assert_no_command_errors()?;
+	}
+	Ok(())
+}
+
+#[test]
+fn suspension_freezes_local_attack_and_damage_while_other_actors_continue() -> anyhow::Result<()> {
+	let _test_guard = lock_lifetime_test();
+	use maybraid_controllers_core::{InputRouting, ScopeOwner};
+
+	let mut app = lifetime_app_with_presentation(false);
+	let actor = spawn_attacker(&mut app);
+	let dummy = spawn_dummy(&mut app);
+	app.world_mut().entity_mut(dummy).remove::<Health>();
+	assign(&mut app, actor);
+	squeeze_right_trigger(&mut app);
+	app.update();
+	release_triggers(&mut app);
+	advance_to_active(&mut app);
+	let progress = app
+		.world()
+		.get::<FisticuffsUser>(actor)
+		.ok_or_else(|| anyhow::anyhow!("actor"))?
+		.state
+		.clip_progress();
+	assert_eq!(
+		app.world().get::<FisticuffsUser>(actor).map(|user| user.state.phase()),
+		Some(Some(AttackPhase::Active))
+	);
+	app.world_mut().entity_mut(dummy).insert(Health::from_max(100.0));
+	let mut other_user = FisticuffsUser::default();
+	other_user.state.request(crate::AttackSpec::jab(crate::Side::Left));
+	let other = app.world_mut().spawn((other_user, Transform::from_xyz(100.0, 0.0, 0.0))).id();
+	app.world_mut()
+		.run_system_once(|mut routing: InputRouting| {
+			routing.suspend(InputSource::local_pad(), ScopeOwner::pause());
+		})
+		.map_err(|error| anyhow::anyhow!("{error}"))?;
+	for _ in 0..6 {
+		app.update();
+	}
+	let user = app
+		.world()
+		.get::<FisticuffsUser>(actor)
+		.ok_or_else(|| anyhow::anyhow!("actor"))?;
+	assert_eq!(user.state.clip_progress(), progress);
+	let other_user = app
+		.world()
+		.get::<FisticuffsUser>(other)
+		.ok_or_else(|| anyhow::anyhow!("other"))?;
+	assert!(other_user.state.clip_progress().is_some_and(|progress| progress > 0.0));
+	let health = app.world().get::<Health>(dummy).ok_or_else(|| anyhow::anyhow!("dummy"))?;
+	assert_eq!(health.current, health.max, "a frozen active sensor cannot deal damage");
+	app.world_mut()
+		.run_system_once(|mut routing: InputRouting| {
+			routing.resume_owner(ScopeOwner::pause());
+		})
+		.map_err(|error| anyhow::anyhow!("{error}"))?;
+	app.update();
+	app.update();
+	let health = app.world().get::<Health>(dummy).ok_or_else(|| anyhow::anyhow!("dummy"))?;
+	assert_eq!(
+		health.current,
+		health.max - PLACEHOLDER_JAB_DAMAGE,
+		"resume deals one hit, without replaying the active window"
+	);
 	assert_no_command_errors()?;
 	Ok(())
 }

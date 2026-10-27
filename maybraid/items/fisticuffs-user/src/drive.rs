@@ -7,7 +7,7 @@ use characters::{
 	CharacterRig, CharacterRigRole, CharacterRoot, JabParams,
 };
 use maybraid_character_controller::CharacterIntent;
-use maybraid_controllers_core::{InputRouter, InputSource};
+use maybraid_controllers_core::{GestureEffect, InputRouter, InputSource, RoutingEvent};
 use maybraid_equipment::EquippedItemHandler;
 use player::{Player, PlayerLook, PlayerUse};
 
@@ -32,14 +32,17 @@ pub(crate) fn apply_attack_intents(
 	if requested.is_empty() {
 		return;
 	}
-	let delivered = router
+	let Some(delivered) = router
 		.as_ref()
-		.and_then(|router| router.delivered_actor(InputSource::local_pad()));
+		.and_then(|router| router.delivered_actor(InputSource::local_pad()))
+	else {
+		return;
+	};
 	for (entity, mut user, handler) in &mut users {
 		if !handler.is_some_and(|handler| handler.is_fisticuffs()) {
 			continue;
 		}
-		if router.is_some() && !delivered.is_some_and(|actor| actor.matches(entity)) {
+		if !delivered.matches(entity) {
 			continue;
 		}
 		for spec in &requested {
@@ -71,13 +74,43 @@ pub(crate) fn latch_jab_aim(
 	}
 }
 
+/// Cancel only the actor that lost delivery. A newly assigned actor and NPC
+/// attacks must not inherit the previous source owner's cancellation.
+pub(crate) fn apply_attack_routing(
+	mut events: MessageReader<RoutingEvent>,
+	mut users: Query<&mut FisticuffsUser>,
+) {
+	for event in events.read() {
+		if event.gesture() != GestureEffect::Cancel {
+			continue;
+		}
+		let Some(actor) = event.lost_actor() else {
+			continue;
+		};
+		if let Ok(mut user) = users.get_mut(actor.entity()) {
+			user.state.cancel();
+		}
+	}
+}
+
+pub(crate) fn execution_suspended(router: Option<&InputRouter>, actor: Entity) -> bool {
+	router.is_some_and(|router| {
+		router.is_suspended(InputSource::local_pad())
+			&& router.local_actor().is_some_and(|target| target.matches(actor))
+	})
+}
+
 pub(crate) fn tick_attack_state(
 	time: Res<Time>,
+	router: Option<Res<InputRouter>>,
 	mut users: Query<(Entity, &mut FisticuffsUser)>,
 	mut strikes: MessageWriter<FisticuffsStrike>,
 ) {
 	let dt = time.delta_secs();
 	for (attacker, mut user) in &mut users {
+		if execution_suspended(router.as_deref(), attacker) {
+			continue;
+		}
 		user.state.tick(dt);
 		if user.state.just_entered_active() {
 			if let (Some(spec), Some(progress)) = (user.state.spec(), user.state.clip_progress()) {
@@ -150,12 +183,21 @@ mod tests {
 	use crate::{AttackSpec, AttackTiming, FisticuffsStrike, JAB_STARTUP_END};
 	use character_rigs::Side;
 	use maybraid_character_controller::CharacterIntent;
+	use maybraid_controllers_core::ActorTarget;
+
+	fn assign_actor(app: &mut App, actor: Entity) {
+		app.init_resource::<InputRouter>();
+		app.world_mut()
+			.resource_mut::<InputRouter>()
+			.assign_actor(InputSource::local_pad(), ActorTarget::new(actor));
+	}
 
 	#[test]
 	fn intents_do_not_punch_without_the_driver() {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins).add_message::<CharacterIntent>();
 		let player = app.world_mut().spawn(Player).id();
+		assign_actor(&mut app, player);
 		app.world_mut().write_message(CharacterIntent::AttackLeft);
 		app.add_systems(Update, apply_attack_intents);
 		app.update();
@@ -170,6 +212,7 @@ mod tests {
 			.world_mut()
 			.spawn((Player, FisticuffsUser::default(), EquippedItemHandler::Fisticuffs))
 			.id();
+		assign_actor(&mut app, player);
 		app.world_mut().write_message(CharacterIntent::AttackLeft);
 		app.add_systems(Update, apply_attack_intents);
 		app.update();
@@ -187,11 +230,36 @@ mod tests {
 			.world_mut()
 			.spawn((Player, PlayerUse { driver: held }, FisticuffsUser::default()))
 			.id();
+		assign_actor(&mut app, player);
 		app.world_mut().write_message(CharacterIntent::AttackRight);
 		app.add_systems(Update, apply_attack_intents);
 		app.update();
 		let user = app.world().get::<FisticuffsUser>(player).expect("driver");
 		assert!(!user.state.is_busy());
+	}
+
+	#[test]
+	fn attack_intents_need_an_assigned_router() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_message::<CharacterIntent>();
+		let actor = app
+			.world_mut()
+			.spawn((Player, FisticuffsUser::default(), EquippedItemHandler::Fisticuffs))
+			.id();
+		app.add_systems(Update, apply_attack_intents);
+		for install_router in [false, true] {
+			if install_router {
+				app.init_resource::<InputRouter>();
+			}
+			app.world_mut().write_message(CharacterIntent::AttackRight);
+			app.update();
+			let user = app
+				.world()
+				.get::<FisticuffsUser>(actor)
+				.ok_or_else(|| anyhow::anyhow!("driver"))?;
+			assert!(!user.state.is_busy());
+		}
+		Ok(())
 	}
 
 	#[test]

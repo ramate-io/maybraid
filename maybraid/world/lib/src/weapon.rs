@@ -300,19 +300,6 @@ fn sync_fisticuffs_driver(
 	}
 }
 
-/// Pause / menu overlay: cancel the jab so the fist sensor tears down this frame.
-fn cancel_fisticuffs_when_paused(
-	gameplay: Res<WorldGameplayEnabled>,
-	mut users: Query<&mut FisticuffsUser>,
-) {
-	if gameplay.0 {
-		return;
-	}
-	for mut user in &mut users {
-		user.state.cancel();
-	}
-}
-
 fn spawn_world_reticle(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
@@ -390,9 +377,6 @@ pub(crate) fn configure(app: &mut App) {
 			sync_fisticuffs_driver
 				.after(arm_world_player)
 				.after(EquipmentSystems::Hold)
-				.before(PlayerSystems::Intent),
-			cancel_fisticuffs_when_paused
-				.after(sync_fisticuffs_driver)
 				.before(PlayerSystems::Intent),
 			sync_skill_map_equip
 				.after(EquipmentSystems::CycleQueue)
@@ -708,49 +692,6 @@ mod tests {
 			assert!(!user.state.is_busy());
 			assert!(!user.state.just_entered_active());
 			assert!(user.state.queued().is_none());
-		}
-		Ok(())
-	}
-
-	#[test]
-	fn pause_cancels_an_active_jab_so_the_sensor_can_tear_down() -> anyhow::Result<()> {
-		use fisticuffs_user::{sync_fist_sensors, AttackSpec, FisticuffsHitSensor, FisticuffsUser};
-		use player::Player as MaybraidPlayer;
-
-		use crate::weapon::cancel_fisticuffs_when_paused;
-
-		let mut app = App::new();
-		app.add_plugins((MinimalPlugins, TransformPlugin));
-		app.insert_resource(WorldGameplayEnabled(true));
-		app.add_systems(Update, (cancel_fisticuffs_when_paused, sync_fist_sensors).chain());
-		let mut user = FisticuffsUser::default();
-		user.state.request(AttackSpec::jab(fisticuffs_user::Side::Left));
-		user.state.tick(fisticuffs_user::AttackTiming::JAB.duration_secs * 0.32);
-		let player = app
-			.world_mut()
-			.spawn((
-				MaybraidPlayer,
-				VegetationPlayer,
-				user,
-				Transform::default(),
-				GlobalTransform::default(),
-			))
-			.id();
-		app.update();
-		if app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count() != 1 {
-			return Err(anyhow::anyhow!("active jab should spawn a fist sensor"));
-		}
-		app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = false;
-		app.update();
-		let user = app
-			.world()
-			.get::<FisticuffsUser>(player)
-			.ok_or_else(|| anyhow::anyhow!("user"))?;
-		if user.state.is_busy() {
-			return Err(anyhow::anyhow!("pause must cancel the jab"));
-		}
-		if app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count() != 0 {
-			return Err(anyhow::anyhow!("pause must tear the fist sensor down"));
 		}
 		Ok(())
 	}
