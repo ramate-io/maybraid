@@ -93,6 +93,19 @@ impl ScopeOwner {
 		Self::ui(UiTarget::new(Entity::from_bits(u64::MAX - 5)))
 	}
 
+	/// Transitional process-wide scopes do not have backing ECS entities yet.
+	pub fn is_placeholder(self) -> bool {
+		[
+			Self::pause(),
+			Self::map_overlay(),
+			Self::console(),
+			Self::text_lock(),
+			Self::awaiting_nav(),
+			Self::spawn_picker(),
+		]
+		.contains(&self)
+	}
+
 	pub const fn actor_entity(self) -> Option<Entity> {
 		match self {
 			Self::Actor(target) => Some(target.entity()),
@@ -174,6 +187,10 @@ pub struct CaptureStack {
 impl CaptureStack {
 	pub fn is_empty(&self) -> bool {
 		self.layers.is_empty()
+	}
+
+	pub fn layers(&self) -> impl Iterator<Item = CaptureLayer> + '_ {
+		self.layers.iter().copied()
 	}
 
 	pub fn len(&self) -> usize {
