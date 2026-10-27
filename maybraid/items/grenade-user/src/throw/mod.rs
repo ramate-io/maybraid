@@ -90,7 +90,10 @@ impl GrenadeThrow {
 	/// leftover latch; an already-live cook keeps its fuse.
 	pub fn apply_routing(&mut self, event: RoutingEvent) -> Option<f32> {
 		match event.kind() {
-			RoutingKind::Reassigned | RoutingKind::Disconnected | RoutingKind::Removed => {
+			RoutingKind::Reassigned
+			| RoutingKind::Disconnected
+			| RoutingKind::Removed
+			| RoutingKind::SourceChanged => {
 				self.use_latched = false;
 				self.take_live_cook()
 			}
