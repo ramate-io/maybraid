@@ -148,6 +148,58 @@ impl ThrownGrenadeSpawn {
 	) -> Self {
 		Self { origin, velocity, spec, stats, effect, source, fuse }
 	}
+
+	/// Physics body, fuse, effect, and source. Presentation attaches the mesh.
+	pub fn realize_body(self, commands: &mut Commands) -> Entity {
+		let radius = self.stats.radius.max(0.08);
+		let collider = Collider::sphere(radius);
+		let volume = (4.0 / 3.0) * std::f32::consts::PI * radius * radius * radius;
+		let density = (self.stats.mass / volume.max(1e-6)).max(0.05);
+		let tumble = self.velocity.cross(Vec3::Y).normalize_or(Vec3::X) * 10.0;
+		commands
+			.spawn((
+				(
+					Name::new("thrown-grenade"),
+					Transform {
+						translation: self.origin,
+						rotation: Quat::from_rotation_arc(
+							Vec3::Y,
+							self.velocity.normalize_or(Vec3::Y),
+						),
+						scale: Vec3::splat(radius * 2.0),
+					},
+					Visibility::default(),
+					RigidBody::Dynamic,
+					MassPropertiesBundle::from_shape(&collider, density),
+					collider,
+					grenade_layers(),
+				),
+				(
+					LinearVelocity(self.velocity),
+					AngularVelocity(tumble),
+					GravityScale(1.0),
+					Restitution {
+						coefficient: self.stats.restitution,
+						combine_rule: CoefficientCombine::Average,
+					},
+					Friction {
+						dynamic_coefficient: self.stats.friction,
+						static_coefficient: self.stats.friction,
+						combine_rule: CoefficientCombine::Average,
+					},
+					ThrownGrenade {
+						spec: self.spec,
+						stats: self.stats,
+						effect: self.effect,
+						source: self.source,
+						detonated: false,
+					},
+					GrenadeFuse { remaining: self.fuse.max(0.0) },
+					CollidingEntities::default(),
+				),
+			))
+			.id()
+	}
 }
 
 /// Animated membership, contacts Fixed and other Animated (terrain and capsules).

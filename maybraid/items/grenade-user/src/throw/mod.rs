@@ -218,10 +218,15 @@ mod tests {
 	fn run_advance(world: &mut World) -> anyhow::Result<()> {
 		world.init_resource::<Messages<GrenadeDetonated>>();
 		world.init_resource::<Messages<SpawnThrownGrenade>>();
+		world.init_resource::<Messages<grenades::DropLiveGrenade>>();
+		world.init_resource::<Messages<maybraid_spawns_grenades::GrenadeSpawned>>();
 		world.init_resource::<Assets<Mesh>>();
 		world.init_resource::<Assets<grenades::GrenadeMaterial>>();
 		world
 			.run_system_once(advance_throw)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(maybraid_spawns_grenades::realize_thrown_grenades)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		world
 			.run_system_once(grenades::spawn_thrown_grenades)

@@ -92,6 +92,29 @@ impl ProjectileLoad {
 	}
 }
 
+/// World-space muzzle ready to launch. Cadence must not accept a shot until
+/// this is ready, so recoil cannot fire without a projectile payload.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct WeaponLaunchPose {
+	pub origin: Vec3,
+	pub direction: Vec3,
+	pub ready: bool,
+}
+
+impl WeaponLaunchPose {
+	pub fn ready_at(origin: Vec3, direction: Vec3) -> Self {
+		Self { origin, direction: direction.normalize_or(Vec3::Y), ready: true }
+	}
+
+	pub const fn pending() -> Self {
+		Self { origin: Vec3::ZERO, direction: Vec3::Y, ready: false }
+	}
+
+	pub const fn is_ready(self) -> bool {
+		self.ready
+	}
+}
+
 /// Auto-fire on a [`FirearmRoot`]. Interval is unused for lasers (they grow in place).
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct Weapon {
@@ -165,6 +188,26 @@ pub fn muzzle_world(global: &GlobalTransform) -> (Vec3, Vec3) {
 	let origin = global.translation();
 	let dir = (muzzle - origin).normalize_or(Vec3::Y);
 	(muzzle, dir)
+}
+
+pub fn sample_weapon_launch_poses(
+	mut commands: Commands,
+	missing: Query<Entity, (With<Weapon>, Without<WeaponLaunchPose>)>,
+	mut poses: Query<(&FirearmMembers, &mut WeaponLaunchPose)>,
+	maps: Query<&BoneMap, With<RigRoot>>,
+	globals: Query<&GlobalTransform>,
+) {
+	for entity in &missing {
+		commands.entity(entity).insert(WeaponLaunchPose::pending());
+	}
+	for (members, mut pose) in &mut poses {
+		let Some((_, global)) = barrel_global(members, &maps, &globals) else {
+			pose.ready = false;
+			continue;
+		};
+		let (origin, direction) = muzzle_world(global);
+		*pose = WeaponLaunchPose::ready_at(origin, direction);
+	}
 }
 
 fn barrel_global<'a>(
@@ -293,6 +336,7 @@ impl WeaponFx<'_, '_> {
 		);
 	}
 
+	#[allow(dead_code)]
 	fn loop_fizz(
 		&mut self,
 		commands: &mut Commands,
@@ -640,7 +684,7 @@ fn laser_bore_hit(
 }
 
 /// Authoritative fire decision and clock. Emits [`WeaponShotRequest`] /
-/// [`WeaponFired`] for ballistic loads. Presentation realizes projectiles.
+/// [`SpawnProjectile`] / [`WeaponFired`] only when launch pose is ready.
 pub fn decide_weapon_fire(
 	time: Res<Time>,
 	armed: Res<WeaponsArmed>,
@@ -652,25 +696,41 @@ pub fn decide_weapon_fire(
 		Option<&mut FireControl>,
 		Option<&WeaponRecoil>,
 		Option<&ProjectileSource>,
+		Option<&WeaponLaunchPose>,
+		Option<&HitPayload>,
 	)>,
 	mut shots: MessageWriter<WeaponShotRequest>,
+	mut launches: MessageWriter<maybraid_spawns_projectiles::SpawnProjectile>,
 	mut fired: MessageWriter<WeaponFired>,
 ) {
 	let dt = time.delta_secs();
-	for (weapon_entity, mut weapon, manual, trigger, mut control, recoil, source) in &mut weapons {
+	for (weapon_entity, mut weapon, manual, trigger, mut control, recoil, source, pose, payload) in
+		&mut weapons
+	{
 		if matches!(weapon.load, ProjectileLoad::Laser(_)) {
 			continue;
 		}
 		let held = trigger.is_some_and(|trigger| trigger.0);
-		if !armed.0 || !trigger_allows_fire(control.as_deref_mut(), manual, held) {
+		let launch = pose.filter(|pose| pose.is_ready());
+		if !armed.0
+			|| launch.is_none()
+			|| !trigger_allows_fire(control.as_deref_mut(), manual, held)
+		{
 			idle_shot_clock(&mut weapon.cooldown, dt);
 			continue;
 		}
+		let pose = launch.expect("ready launch");
 		let limit = catch_up_limit(control.as_deref());
 		let interval = weapon.interval;
 		let tick = advance_shot_clock(&mut weapon.cooldown, interval, dt, limit);
 		let strength = recoil.map(|recoil| recoil.0).unwrap_or(0.0);
 		let shooter = source.map(|source| source.0).unwrap_or(weapon_entity);
+		let last = weapon.last_muzzle;
+		let now = (pose.origin, pose.direction);
+		weapon.last_muzzle = Some(now);
+		let Some(spec) = projectile_spec(weapon.load) else {
+			continue;
+		};
 		for age in tick.ages() {
 			if control
 				.as_ref()
@@ -681,10 +741,29 @@ pub fn decide_weapon_fire(
 			if let Some(control) = control.as_mut() {
 				control.note_shot();
 			}
+			let (origin, direction) = emit_muzzle(last, now, age, dt);
 			let request = WeaponShotRequest::new(weapon_entity, shooter, strength, age);
 			shots.write(request);
+			launches.write(maybraid_spawns_projectiles::SpawnProjectile::launch(
+				shooter,
+				origin,
+				direction,
+				spec,
+				age,
+				payload.copied(),
+			));
 			fired.write(request.fired());
 		}
+	}
+}
+
+fn projectile_spec(load: ProjectileLoad) -> Option<maybraid_spawns_projectiles::ProjectileSpec> {
+	match load {
+		ProjectileLoad::Bolt(spec) => Some(maybraid_spawns_projectiles::ProjectileSpec::Bolt(spec)),
+		ProjectileLoad::Bullet(spec) => {
+			Some(maybraid_spawns_projectiles::ProjectileSpec::Bullet(spec))
+		}
+		ProjectileLoad::Laser(_) => None,
 	}
 }
 
@@ -696,7 +775,7 @@ pub(crate) fn fire_weapons(
 	mut shots: MessageReader<WeaponShotRequest>,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
-	mut projectile_visuals: ResMut<ProjectileVisualCache>,
+	_projectile_visuals: ResMut<ProjectileVisualCache>,
 	mut weapons: ArmedWeaponQuery,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
@@ -715,7 +794,7 @@ pub(crate) fn fire_weapons(
 	for request in shots.read() {
 		pending.entry(request.weapon).or_default().push(*request);
 	}
-	for (root, members, mut weapon, manual, trigger, source, _control, payload, _recoil) in
+	for (root, members, mut weapon, manual, trigger, source, _control, _payload, _recoil) in
 		&mut weapons
 	{
 		let Some((barrel, global)) = barrel_global(members, &maps, &globals) else {
@@ -723,7 +802,6 @@ pub(crate) fn fire_weapons(
 		};
 		let held = trigger.is_some_and(|trigger| trigger.0);
 		let now = muzzle_world(global);
-		let last = weapon.last_muzzle;
 		weapon.last_muzzle = Some(now);
 		match weapon.load {
 			ProjectileLoad::Laser(spec) => {
@@ -761,78 +839,20 @@ pub(crate) fn fire_weapons(
 					weapon.laser = live;
 				}
 			}
-			ProjectileLoad::Bolt(spec) => {
+			ProjectileLoad::Bolt(_) | ProjectileLoad::Bullet(_) => {
 				let Some(requests) = pending.remove(&root) else {
 					continue;
 				};
-				let rounds = realize_ballistic_requests(
-					&mut commands,
-					&mut meshes,
-					&mut materials,
-					&mut projectile_visuals,
-					&requests,
-					last,
-					now,
-					spec,
-					0.0,
-					dt,
-					source,
-					payload,
-				);
-				if rounds.is_empty() {
-					continue;
-				}
-				for (index, round) in rounds.iter().enumerate() {
+				// Flights come from `SpawnProjectile`. A missing barrel must not
+				// consume the shot — we only skip muzzle VFX.
+				for (index, request) in requests.iter().enumerate() {
 					fx.play_shot(
 						&mut commands,
-						round.origin,
+						now.0,
 						manual,
-						(dt - round.age).max(0.0),
+						(dt - request.age).max(0.0),
 						index == 0,
 					);
-					fx.loop_fizz(&mut commands, round.entity, round.position, round.velocity);
-				}
-				ignite_muzzle_flash(
-					&mut commands,
-					&fx.flashes,
-					&mounts,
-					&mut flashes,
-					&mut cones,
-					&mut spawners,
-					barrel,
-					None,
-				);
-			}
-			ProjectileLoad::Bullet(spec) => {
-				let Some(requests) = pending.remove(&root) else {
-					continue;
-				};
-				let rounds = realize_ballistic_requests(
-					&mut commands,
-					&mut meshes,
-					&mut materials,
-					&mut projectile_visuals,
-					&requests,
-					last,
-					now,
-					spec,
-					1.0,
-					dt,
-					source,
-					payload,
-				);
-				if rounds.is_empty() {
-					continue;
-				}
-				for (index, round) in rounds.iter().enumerate() {
-					fx.play_shot(
-						&mut commands,
-						round.origin,
-						manual,
-						(dt - round.age).max(0.0),
-						index == 0,
-					);
-					fx.loop_fizz(&mut commands, round.entity, round.position, round.velocity);
 				}
 				ignite_muzzle_flash(
 					&mut commands,
@@ -849,6 +869,7 @@ pub(crate) fn fire_weapons(
 	}
 }
 
+#[allow(dead_code)]
 struct SpawnedRound {
 	entity: Entity,
 	origin: Vec3,
@@ -871,6 +892,7 @@ fn emit_muzzle(last: Option<(Vec3, Vec3)>, now: (Vec3, Vec3), age: f32, dt: f32)
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 fn realize_ballistic_requests(
 	commands: &mut Commands,
 	meshes: &mut Assets<Mesh>,
@@ -924,6 +946,7 @@ fn realize_ballistic_requests(
 	spawned
 }
 
+#[allow(dead_code)]
 trait IntoBallistic {
 	fn ballistic(self) -> (f32, f32, f32, f32, f32, f32, Color);
 }

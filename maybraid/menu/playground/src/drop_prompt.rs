@@ -106,7 +106,11 @@ pub fn catalog_drop_edge(overlay: Option<&str>, prompt_open: bool, x: bool) -> b
 
 pub fn drop_index_from_event(event: MenuEvent) -> Option<usize> {
 	match event {
-		MenuEvent::ToggleInventory(index) | MenuEvent::DropInventory(index) => Some(index),
+		MenuEvent::ToggleInventory(index)
+		| MenuEvent::EquipInventory(index)
+		| MenuEvent::UnequipInventory(index)
+		| MenuEvent::MoveEquippedInventory { index, .. }
+		| MenuEvent::DropInventory(index) => Some(index),
 		_ => None,
 	}
 }

@@ -383,6 +383,12 @@ pub enum MenuEvent {
 	SliderDelta(CharacterField, f32),
 	ToggleClothing(ClothingMesh),
 	ToggleInventory(usize),
+	/// Equip bag index at the front of its ordered slot.
+	EquipInventory(usize),
+	/// Remove bag index from its ordered slot; the item stays owned.
+	UnequipInventory(usize),
+	/// Move an equipped bag index one adjacent position (`delta < 0` is left).
+	MoveEquippedInventory { index: usize, delta: i8 },
 	/// Remove bag index after the host confirms (or skips confirm).
 	DropInventory(usize),
 	SetSwatch(CharacterField, SwatchValue),
@@ -395,6 +401,9 @@ impl MenuEvent {
 		matches!(
 			self,
 			Self::ToggleInventory(_)
+				| Self::EquipInventory(_)
+				| Self::UnequipInventory(_)
+				| Self::MoveEquippedInventory { .. }
 				| Self::DropInventory(_)
 				| Self::SetSwatch(CharacterField::Clothing(_), _)
 				| Self::SetAsset(CharacterField::ClothingMaterial(_), _)
