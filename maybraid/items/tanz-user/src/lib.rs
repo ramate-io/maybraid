@@ -12,7 +12,9 @@ mod stack;
 use bevy::prelude::*;
 use characters::CharacterMotionSystems;
 use damage::Downed;
-use maybraid_character_controller::{CharacterBindSystems, OrdinaryLocomotion, RoutedActorControl};
+use maybraid_character_controller::{
+	CharacterBindSystems, LegacyRoutedActorControl as RoutedActorControl, OrdinaryLocomotion,
+};
 use maybraid_controllers_core::{
 	ActorTarget, ControllerPipeline, ControllersCorePlugin, InputRouter, RoutingEvent,
 };
@@ -1091,7 +1093,10 @@ mod tests {
 	#[derive(Resource, Default)]
 	struct NavHits(Vec<maybraid_virtual_pad_controller::MenuNav>);
 
-	fn record_menu_nav(impulse: On<maybraid_virtual_pad_controller::MenuNavImpulse>, mut hits: ResMut<NavHits>) {
+	fn record_menu_nav(
+		impulse: On<maybraid_virtual_pad_controller::MenuNavImpulse>,
+		mut hits: ResMut<NavHits>,
+	) {
 		hits.0.push(impulse.event().nav);
 	}
 
@@ -1146,9 +1151,9 @@ mod tests {
 
 	#[test]
 	fn plugin_menu_nav_while_in_tanz_mode_does_not_commit_gestures() -> anyhow::Result<()> {
-		use maybraid_character_controller::RoutedActorControl;
-		use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad, PadButton, VirtualPad};
+		use maybraid_character_controller::LegacyRoutedActorControl as RoutedActorControl;
 		use maybraid_menu_controller::MenuController;
+		use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad, PadButton, VirtualPad};
 		use menu_components::{HudMenu, HudOverlayMenu};
 
 		let mut app = lifecycle_plugins();

@@ -1,24 +1,25 @@
-//! Character controller: pad analog + edges → [`CharacterIntent`].
-//!
-//! Equipped-item meaning lives in `maybraid-equipment`. This crate keeps the
-//! broadcast [`CharacterIntent::UseItem`] / [`CharacterIntent::PowerUseItem`]
-//! samples.
+//! Rich addressed pad frames → actor-owned physical state and semantic controls.
 
 pub mod intent;
 pub mod produce;
 pub mod sample;
+pub mod status;
 
-pub use intent::{CharacterIntent, InventoryCyclingCategory};
+pub use intent::{
+	ActorIntentEvent, CharacterIntent, CharacterIntentFrame, InventoryCyclingCategory,
+};
 pub use maybraid_controllers_core::{
 	ActorTarget, CaptureKind, ControllerPipeline, HoldEffect, InputRouter, InputRouting,
 	InputSource, Routed, RoutingEvent, RoutingKind, ScopeOwner, SourceConnection, UiTarget,
 };
 pub use sample::{
-	produce_actor_control_samples, ActorControlSample, FaceButtonSample, RoutedActorControl,
+	ActorControlEvent, ActorControlSample, FaceButtonSample, LegacyRoutedActorControl,
+	RoutedActorControl,
 };
+pub use status::ActorControlStatus;
 
 use bevy::prelude::*;
-use maybraid_controllers_core::{CaptureResolveSystems, ControllersCorePlugin};
+use maybraid_controllers_core::{CaptureResolveSystems, ControllersCorePlugin, PadDeliverySystems};
 use maybraid_virtual_pad_controller::VirtualPadPlugin;
 
 use crate::produce::produce_character_intents;
@@ -43,9 +44,9 @@ pub struct CharacterControlSystems;
 /// Ordered Bind work inside [`CharacterControlSystems`].
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CharacterBindSystems {
-	/// Stamp [`RoutedActorControl`] from the local pad.
+	/// Clear ephemeral actor samples before addressed pad delivery.
 	Route,
-	/// Broadcast [`CharacterIntent`] (session / shell still read this).
+	/// Addressed physical / semantic production has completed.
 	Produce,
 	/// Address UseItem / PowerUseItem to the delivered actor's handler.
 	Dispatch,
@@ -61,26 +62,58 @@ impl Plugin for CharacterControllerPlugin {
 		if !app.is_plugin_added::<VirtualPadPlugin>() {
 			app.add_plugins(VirtualPadPlugin::default());
 		}
-		app.add_message::<CharacterIntent>()
-			.init_resource::<RoutedActorControl>()
-			.configure_sets(Update, CharacterControlSystems.in_set(ControllerPipeline::Bind))
-			.configure_sets(
-				Update,
-				(
-					CharacterBindSystems::Route
-						.in_set(CharacterControlSystems)
-						.after(CaptureResolveSystems),
-					CharacterBindSystems::Produce
-						.in_set(CharacterControlSystems)
-						.after(CharacterBindSystems::Route),
-					CharacterBindSystems::Dispatch
-						.in_set(CharacterControlSystems)
-						.after(CharacterBindSystems::Produce),
-				),
-			)
-			.add_systems(Update, produce_actor_control_samples.in_set(CharacterBindSystems::Route))
-			.add_systems(Update, produce_character_intents.in_set(CharacterBindSystems::Produce));
+		register_character_controller(app);
 	}
+}
+
+#[derive(Resource)]
+struct CharacterControllerRegistration;
+
+/// Install addressed interpretation without installing hardware producers.
+pub fn register_character_controller(app: &mut App) {
+	if app.world().contains_resource::<CharacterControllerRegistration>() {
+		return;
+	}
+	app.world_mut().insert_resource(CharacterControllerRegistration);
+	maybraid_controllers_core::register_controllers_core(app);
+	app.add_message::<CharacterIntent>()
+		.init_resource::<LegacyRoutedActorControl>()
+		.configure_sets(Update, CharacterControlSystems.in_set(ControllerPipeline::Bind))
+		.configure_sets(Update, PadDeliverySystems.in_set(CharacterControlSystems))
+		.configure_sets(
+			Update,
+			(
+				CharacterBindSystems::Route
+					.in_set(CharacterControlSystems)
+					.after(CaptureResolveSystems)
+					.before(PadDeliverySystems),
+				CharacterBindSystems::Produce
+					.in_set(CharacterControlSystems)
+					.after(CharacterBindSystems::Route)
+					.after(PadDeliverySystems),
+				CharacterBindSystems::Dispatch
+					.in_set(CharacterControlSystems)
+					.after(CharacterBindSystems::Produce),
+			),
+		)
+		.add_systems(Update, clear_actor_control_samples.in_set(CharacterBindSystems::Route))
+		.add_observer(produce_character_intents)
+		.add_observer(status::apply_actor_control_status);
+}
+
+/// Samples are valid only for the current Bind tick; silence cannot replay edges.
+fn clear_actor_control_samples(
+	mut controls: Query<&mut RoutedActorControl>,
+	mut frames: Query<&mut CharacterIntentFrame>,
+	mut primary_compatibility: ResMut<LegacyRoutedActorControl>,
+) {
+	for mut control in &mut controls {
+		control.clear();
+	}
+	for mut frame in &mut frames {
+		frame.clear();
+	}
+	primary_compatibility.clear();
 }
 
 #[cfg(test)]

@@ -2,7 +2,9 @@
 //! Emits actor/session-addressed [`SkillMapFlick`].
 
 use bevy::prelude::*;
-use maybraid_character_controller::{ActorControlSample, OrdinaryLocomotion, RoutedActorControl};
+use maybraid_character_controller::{
+	ActorControlSample, LegacyRoutedActorControl as RoutedActorControl, OrdinaryLocomotion,
+};
 use maybraid_controllers_core::{
 	ActorTarget, GestureEffect, InputSource, RoutingEvent, RoutingKind,
 };

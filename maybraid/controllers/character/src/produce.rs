@@ -1,42 +1,73 @@
 //! [`VirtualPad`] → [`CharacterIntent`].
 
 use bevy::prelude::*;
-use maybraid_controllers_core::{InputRouter, InputSource};
-use maybraid_virtual_pad_controller::{PadButton, VirtualPad, VirtualPadConfig};
+use maybraid_controllers_core::ActorPadEvent;
+use maybraid_virtual_pad_controller::{PadButton, PrimaryVirtualPad, VirtualPad};
 
 use crate::intent::{CharacterIntent, InventoryCyclingCategory};
-use crate::OrdinaryLocomotion;
+use crate::{
+	ActorControlEvent, ActorControlSample, ActorIntentEvent, CharacterIntentFrame,
+	LegacyRoutedActorControl, OrdinaryLocomotion, RoutedActorControl,
+};
 
 const ANALOG_EPS: f32 = 1e-6;
 const STANCE_HOLD_SECS: f32 = 0.35;
 
+/// Interpret one already-addressed rich pad frame. All descendants retain its binding.
 pub fn produce_character_intents(
-	pad: Res<VirtualPad>,
-	config: Res<VirtualPadConfig>,
-	time: Res<Time>,
-	router: Res<InputRouter>,
+	event: On<ActorPadEvent>,
+	primary: Option<Res<PrimaryVirtualPad>>,
 	actors: Query<&OrdinaryLocomotion>,
-	mut intents: MessageWriter<CharacterIntent>,
+	mut commands: Commands,
 ) {
-	let source = InputSource::local_pad();
-	if router.actor(source).is_none() {
-		return;
-	}
-	let captured = router.blocks_actor(source);
-	let stance_enabled = !router.captures().owns_back(source);
-	let ordinary = router
-		.actor(source)
-		.and_then(|actor| actors.get(actor.entity()).ok())
-		.is_none_or(|flag| flag.0);
-	for intent in collect(
-		&pad,
-		config.trigger_press_threshold,
-		time.delta_secs(),
-		stance_enabled,
+	let snapshot = event.input.payload();
+	let ordinary = actors.get(event.entity).ok().is_none_or(|flag| flag.0);
+	let intents = collect(
+		&snapshot.frame.pad,
+		snapshot.trigger_press_threshold,
+		snapshot.frame.delta.as_secs_f32(),
+		!snapshot.owns_back,
 		ordinary,
-		captured,
-	) {
-		intents.write(intent);
+		snapshot.captured,
+	);
+	let legacy_primary =
+		primary.is_some_and(|primary| event.input.source().entity() == Some(primary.0));
+	if !snapshot.captured {
+		let control =
+			ActorControlSample::from_frame(&snapshot.frame, snapshot.trigger_press_threshold);
+		event.input.clone().map(|_| control).queue(&mut commands, move |world, input| {
+			let Some(entity) = input.target().actor_entity() else {
+				return;
+			};
+			if let Ok(mut actor) = world.get_entity_mut(entity) {
+				actor.insert(RoutedActorControl(Some(input)));
+			}
+			// Temporary primary-only compatibility mirror. Retire with gesture consumers.
+			if legacy_primary {
+				world.resource_mut::<LegacyRoutedActorControl>().set(input);
+			}
+			world.trigger(ActorControlEvent { entity, input });
+		});
+		let frame = intents.clone();
+		event.input.clone().map(|_| frame).queue(&mut commands, |world, input| {
+			if let Some(entity) = input.target().actor_entity() {
+				if let Ok(mut actor) = world.get_entity_mut(entity) {
+					actor.insert(CharacterIntentFrame(Some(input)));
+				}
+			}
+		});
+	}
+	for intent in intents {
+		event.input.clone().map(|_| intent).queue(&mut commands, move |world, input| {
+			let Some(entity) = input.target().actor_entity() else {
+				return;
+			};
+			// Temporary primary-only broadcast for shell/item/camera consumers still migrating.
+			if legacy_primary {
+				world.write_message(*input.payload());
+			}
+			world.trigger(ActorIntentEvent { entity, input });
+		});
 	}
 }
 
@@ -525,45 +556,5 @@ mod tests {
 		assert!(collected.contains(&CharacterIntent::InGameMenu));
 		assert!(collected.contains(&CharacterIntent::ToggleMap));
 		Ok(())
-	}
-
-	#[test]
-	fn produce_requires_host_assignment() {
-		use bevy::ecs::system::RunSystemOnce;
-		use maybraid_controllers_core::{ActorTarget, InputRouter};
-		use maybraid_virtual_pad_controller::VirtualPadConfig;
-
-		fn write(
-			pad: Res<VirtualPad>,
-			config: Res<VirtualPadConfig>,
-			time: Res<Time>,
-			router: Res<InputRouter>,
-			actors: Query<&OrdinaryLocomotion>,
-			intents: MessageWriter<CharacterIntent>,
-		) {
-			super::produce_character_intents(pad, config, time, router, actors, intents);
-		}
-
-		let mut world = World::new();
-		world.init_resource::<VirtualPad>();
-		world.init_resource::<VirtualPadConfig>();
-		world.init_resource::<Time>();
-		world.init_resource::<InputRouter>();
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.resource_mut::<VirtualPad>().begin_frame();
-		world.resource_mut::<VirtualPad>().add_move(Vec2::X);
-		world.resource_mut::<VirtualPad>().finish_digital();
-
-		world.run_system_once(write).expect("unassigned");
-		assert!(world.resource_mut::<Messages<CharacterIntent>>().drain().next().is_none());
-
-		world
-			.resource_mut::<InputRouter>()
-			.assign_actor(InputSource::local_pad(), ActorTarget::new(Entity::from_bits(1)));
-		world.run_system_once(write).expect("assigned");
-		assert!(world
-			.resource_mut::<Messages<CharacterIntent>>()
-			.drain()
-			.any(|intent| matches!(intent, CharacterIntent::Move(_))));
 	}
 }

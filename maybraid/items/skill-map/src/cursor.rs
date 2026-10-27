@@ -8,7 +8,9 @@ use crate::tile_material::SkillMapTileAssets;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSteerLock, SkillMapUser};
 use crate::viewport::{map_view_extent, SkillMapViewportCamera};
 use crate::SkillMapEnabled;
-use maybraid_character_controller::{OrdinaryLocomotion, RoutedActorControl};
+use maybraid_character_controller::{
+	LegacyRoutedActorControl as RoutedActorControl, OrdinaryLocomotion,
+};
 
 pub const CURSOR_SPEED: f32 = 64.0;
 pub const WATER_LOCK_SECS: f32 = 2.0;
@@ -229,7 +231,9 @@ mod tests {
 	#[test]
 	fn held_is_rb_while_the_map_is_on() {
 		use bevy::ecs::system::RunSystemOnce;
-		use maybraid_character_controller::{ActorControlSample, RoutedActorControl};
+		use maybraid_character_controller::{
+			ActorControlSample, LegacyRoutedActorControl as RoutedActorControl,
+		};
 		use maybraid_controllers_core::ActorTarget;
 
 		use crate::user::spawn_skill_maps;
@@ -256,7 +260,9 @@ mod tests {
 	#[test]
 	fn tanz_policy_holds_without_rb() {
 		use bevy::ecs::system::RunSystemOnce;
-		use maybraid_character_controller::{OrdinaryLocomotion, RoutedActorControl};
+		use maybraid_character_controller::{
+			LegacyRoutedActorControl as RoutedActorControl, OrdinaryLocomotion,
+		};
 
 		use crate::user::spawn_skill_maps;
 
