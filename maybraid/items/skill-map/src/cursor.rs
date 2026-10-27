@@ -294,7 +294,7 @@ mod tests {
 	#[test]
 	fn tanz_policy_holds_without_rb() {
 		use bevy::ecs::system::RunSystemOnce;
-		use maybraid_character_controller::{OrdinaryLocomotion, RoutedActorControl};
+		use maybraid_character_controller::OrdinaryLocomotion;
 
 		use crate::user::spawn_skill_maps;
 
