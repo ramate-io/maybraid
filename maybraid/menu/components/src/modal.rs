@@ -24,6 +24,11 @@ pub enum MenuModalSystems {
 	Apply,
 }
 
+/// When true, [`consume_menu_modal_back`] skips this frame (inventory reorder
+/// owns Back until it returns to browse).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MenuModalBackHold(pub bool);
+
 /// Stable identity for a layer on [`MenuModalStack`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct MenuModalId(pub &'static str);
@@ -228,8 +233,14 @@ impl MenuModalStack {
 	}
 }
 
-pub fn begin_menu_modal_frame(mut stack: ResMut<MenuModalStack>) {
+pub fn begin_menu_modal_frame(
+	mut stack: ResMut<MenuModalStack>,
+	hold: Option<ResMut<MenuModalBackHold>>,
+) {
 	stack.begin_frame();
+	if let Some(mut hold) = hold {
+		hold.0 = false;
+	}
 }
 
 pub fn sync_menu_modal_stack(
@@ -244,8 +255,12 @@ pub fn consume_menu_modal_back(
 	mut stack: ResMut<MenuModalStack>,
 	mut nav: ResMut<MenuNavPad>,
 	keyboard: Res<ButtonInput<KeyCode>>,
+	hold: Option<Res<MenuModalBackHold>>,
 	mut dismiss: MessageWriter<MenuModalDismiss>,
 ) {
+	if hold.is_some_and(|hold| hold.0) {
+		return;
+	}
 	let back = nav.just_pressed(MenuNav::Back) || keyboard.just_pressed(KeyCode::Escape);
 	let Some(id) = stack.take_back(back) else {
 		return;

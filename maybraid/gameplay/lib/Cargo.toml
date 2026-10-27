@@ -22,6 +22,9 @@ maybraid-character-controller = { workspace = true }
 maybraid-controllers-core = { workspace = true }
 maybraid-equipment = { workspace = true }
 maybraid-session = { workspace = true }
+maybraid-spawns-actors = { workspace = true }
+maybraid-spawns-projectiles = { workspace = true }
+maybraid-spawns-grenades = { workspace = true }
 maybraid-spawns-player = { workspace = true }
 maybraid-spawns-placement = { workspace = true }
 maybraid-skill-map = { workspace = true }
