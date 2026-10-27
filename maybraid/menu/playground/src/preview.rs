@@ -633,7 +633,7 @@ fn queue_preview_camera_focus(
 
 fn steer_preview_orbit(
 	return_to: Option<Res<CharacterEditorReturn>>,
-	input: Option<Res<menu_components::PrimaryMenuInput>>,
+	input: Query<&menu_components::PrimaryMenuInput>,
 	mut pending: ResMut<PendingCameraFocus>,
 ) {
 	if pending.focus.is_none()
@@ -641,7 +641,7 @@ fn steer_preview_orbit(
 	{
 		return;
 	}
-	let Some(frame) = input.as_ref().and_then(|input| input.frame.as_ref()) else {
+	let Some(frame) = input.single().ok().and_then(menu_components::PrimaryMenuInput::current_frame) else {
 		return;
 	};
 	let stick = frame.pad.look_throw;

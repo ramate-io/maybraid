@@ -34,7 +34,6 @@ impl Plugin for MenuControllerPlugin {
 			app.add_plugins(MenuComponentsPlugin);
 		}
 		app.init_resource::<MenuNavCapture>()
-			.init_resource::<primary::PrimaryMenuRepeat>()
 			.add_observer(dispatch::interpret_menu_pad)
 			.add_systems(
 				PreUpdate,
@@ -53,7 +52,7 @@ impl Plugin for MenuControllerPlugin {
 			.insert_resource(KeyboardMenuNav(false))
 			.add_systems(
 				PreUpdate,
-				primary::sync_text_menu_capture
+				(primary::sync_primary_menu_host, primary::sync_text_menu_capture).chain()
 					.before(maybraid_controllers_core::PadPolicySystems)
 					.before(VirtualPadSystems::Produce),
 			);

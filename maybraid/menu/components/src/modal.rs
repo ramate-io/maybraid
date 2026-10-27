@@ -272,11 +272,11 @@ pub fn consume_menu_modal_back(
 
 pub fn tick_menu_modal_holds(
 	mut stack: ResMut<MenuModalStack>,
-	primary: Option<Res<crate::PrimaryMenuInput>>,
+	primary: Query<&crate::PrimaryMenuInput>,
 	keyboard: Res<ButtonInput<KeyCode>>,
 	nav: Res<MenuNavPad>,
 ) {
-    let pad = primary.as_ref().and_then(|host| host.frame.as_ref()).map(|frame| &frame.pad);
+    let pad = primary.single().ok().and_then(crate::PrimaryMenuInput::current_frame).map(|frame| &frame.pad);
 	let back_down = pad.as_deref().is_some_and(|pad| pad.pressed(PadButton::B))
 		|| keyboard.pressed(KeyCode::Escape)
 		|| nav.just_pressed(MenuNav::Back);

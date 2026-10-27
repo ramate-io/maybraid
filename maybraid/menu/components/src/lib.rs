@@ -100,7 +100,6 @@ impl Plugin for MenuComponentsPlugin {
 		app.init_resource::<TextMenuInputLock>()
 			.init_resource::<KeyboardMenuNav>()
 			.init_resource::<MenuNavPad>()
-            .init_resource::<PrimaryMenuInput>()
 			.init_resource::<ActiveOverlayKey>()
 			.init_resource::<ActiveShortText>()
 			.init_resource::<ShortTextModal>()

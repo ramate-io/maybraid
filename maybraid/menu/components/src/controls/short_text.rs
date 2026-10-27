@@ -285,7 +285,8 @@ fn despawn_short_text_roots(
 /// Enter / Start commit while the modal is open, before HUD nav can reuse the edge.
 pub fn emit_short_text_submit_on_confirm(
 	keyboard: Res<ButtonInput<KeyCode>>,
-	primary: Option<Res<crate::PrimaryMenuInput>>,
+	primary: Query<&crate::PrimaryMenuInput>,
+    parents: Query<&ChildOf>,
 	roots: Query<Entity, (With<ShortTextModalRoot>, Without<ScopedMenuSession>)>,
 	mut fields: Query<&mut ShortTextField, Without<ScopedMenuSession>>,
 	mut active: ResMut<ActiveShortText>,
@@ -293,7 +294,7 @@ pub fn emit_short_text_submit_on_confirm(
 	mut stack: ResMut<MenuModalStack>,
 	mut commands: Commands,
 ) {
-    let pad = primary.as_ref().and_then(|host| host.frame.as_ref()).map(|frame| &frame.pad);
+    let pad = modal.session.as_ref().map(|session| session.source).and_then(|entity| crate::PrimaryMenuInput::under(entity, &primary, &parents)).and_then(crate::PrimaryMenuInput::current_frame).map(|frame| &frame.pad);
 	if !modal.is_open() {
 		return;
 	}
@@ -540,7 +541,8 @@ pub fn emit_short_text_pad_on_click(
 
 pub fn emit_short_text_pad_on_nav(
 	mut impulse: On<MenuNavImpulse>,
-	primary: Option<Res<crate::PrimaryMenuInput>>,
+	primary: Query<&crate::PrimaryMenuInput>,
+    parents: Query<&ChildOf>,
 	pads: Query<(Entity, &HudMenu), (With<ShortTextPad>, Without<ScopedMenuSession>)>,
 	keys: Query<(Entity, &HudMenuItem, Option<&ShortTextPadKey>, Option<&ShortTextSubmit>)>,
 	roots: Query<Entity, (With<ShortTextModalRoot>, Without<ScopedMenuSession>)>,
@@ -551,7 +553,7 @@ pub fn emit_short_text_pad_on_nav(
 	scoped: Query<(), With<ScopedMenuSession>>,
 	mut commands: Commands,
 ) {
-    let pad_state = primary.as_ref().and_then(|host| host.frame.as_ref()).map(|frame| &frame.pad);
+    let pad_state = Some(impulse.entity).and_then(|entity| crate::PrimaryMenuInput::under(entity, &primary, &parents)).and_then(crate::PrimaryMenuInput::current_frame).map(|frame| &frame.pad);
 	if scoped.contains(impulse.entity) {
 		return;
 	}
@@ -588,10 +590,11 @@ pub fn emit_short_text_pad_on_nav(
 
 /// Left-stick click toggles caps while the in-game keypad is open.
 pub fn emit_short_text_pad_shortcuts(
-	primary: Option<Res<crate::PrimaryMenuInput>>,
+	primary: Query<&crate::PrimaryMenuInput>,
+    parents: Query<&ChildOf>,
 	mut modal: ResMut<ShortTextModal>,
 ) {
-    let pad = primary.as_ref().and_then(|host| host.frame.as_ref()).map(|frame| &frame.pad);
+    let pad = modal.session.as_ref().map(|session| session.source).and_then(|entity| crate::PrimaryMenuInput::under(entity, &primary, &parents)).and_then(crate::PrimaryMenuInput::current_frame).map(|frame| &frame.pad);
 	let Some(pad) = pad else {
 		return;
 	};
