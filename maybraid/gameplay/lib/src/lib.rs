@@ -15,9 +15,9 @@ use maybraid_skill_map::SkillMapPlugin;
 pub use actor_lifecycle::ActorDomainTeardown;
 pub use equipment::ItemRuntimes;
 pub use maybraid_session::{
-	apply_in_game_menu_pause, ActorRetired, InputRouter, InputRouting, Participation,
-	SessionBit, SessionCapabilities, SessionCapabilitySystems, SessionLifecycleSystems,
-	SessionPlugin, WorldGameplayEnabled, WorldPlaySessionEnded,
+	apply_in_game_menu_pause, ActorRetired, Participation, SessionBit, SessionCapabilities,
+	SessionCapabilitySystems, SessionLifecycleSystems, SessionPlugin, WorldGameplayEnabled,
+	WorldPlaySessionEnded,
 };
 
 #[derive(Resource, Default)]

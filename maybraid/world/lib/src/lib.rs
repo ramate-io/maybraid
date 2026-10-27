@@ -71,21 +71,10 @@ pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use item_icons::{
-	discover_icon_cache_dir, item_icon_requests, InventoryItemSubject, ItemIconCache,
-	ItemIconPlugin, ITEM_ICON_RESOLUTION,
+	ItemIconPlugin,
 };
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
-pub use maybraid_equipment::ActiveInventoryCyclingCategory;
-pub use maybraid_session::{
-	ActorRetired, InputRouter, InputRouting, SessionBit, SessionCapabilities,
-	SessionCapabilitySystems, SessionLifecycleSystems, SessionPlugin,
-};
-pub use maybraid_sky::{
-	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
-	SUN_COLOR, SUN_ILLUMINANCE,
-};
 pub use occupancy::{WorldOccupancyPlugin, WorldOccupancySystems};
-pub use player_camera::{CameraPov, CameraPovLocked};
 pub use player_lifecycle::{
 	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
 };

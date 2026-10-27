@@ -35,15 +35,16 @@ use bevy::prelude::*;
 use bevy::render::renderer::RenderAdapterInfo;
 use bevy::window::PrimaryWindow;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
-use maybraid_gameplay::GameplayPlugin;
+use maybraid_gameplay::{GameplayPlugin, SessionCapabilities, SessionCapabilitySystems};
 use maybraid_input::{MenuNav, MenuNavPad, PadButton, VirtualPad};
 use maybraid_menu_controller::MenuControllerPlugin;
+use maybraid_controllers_core::InputRouting;
 use maybraid_sky::ShadowQuality;
 use maybraid_world::{
 	host_memory_bytes, parse_device_tier_env, parse_visual_style_env, reset_first_spawn_offer,
-	resume_discovery_from_saved_waypoints, AdapterKind, AgentDrive, Durham, InputRouting,
-	InventoryEditCameraFollow, PlayerPhysicsEnabled, PlayerSpawnXz, SessionCapabilities,
-	SessionCapabilitySystems, TerrainStreaming, VisualStyle, VisualStyleSetting,
+	resume_discovery_from_saved_waypoints, AdapterKind, AgentDrive, Durham,
+	InventoryEditCameraFollow, PlayerPhysicsEnabled, PlayerSpawnXz, TerrainStreaming,
+	VisualStyle, VisualStyleSetting,
 	VisualStyleSignals, WorldGameplayEnabled, WorldMenuShell, WorldMobHudEnabled,
 	WorldPlaySessionEnded, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible, WorldSurfaceReady,
 	WorldSurfaceSet, DEVICE_TIER_ENV, VISUAL_STYLE_ENV,
@@ -641,11 +642,11 @@ mod tests {
 		visual_style_readout, GameFlow, PlaySession,
 	};
 	use maybraid_world::{
-		InputRouter, SessionCapabilities, VisualStyle, VisualStyleSetting,
+		VisualStyle, VisualStyleSetting,
 		WorldPlaySessionEnded, WorldPlayerLoadout, WorldSurfaceReady,
 	};
 	use maybraid_sky::ShadowQuality;
-	use maybraid_controllers_core::RoutingEvent;
+	use maybraid_controllers_core::{InputRouter, RoutingEvent};
 	use menu_playground::{
 		CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState, EditingCharacter,
 	};
