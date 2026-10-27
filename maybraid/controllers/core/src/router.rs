@@ -211,6 +211,7 @@ impl Suspension {
 #[derive(Clone, Debug)]
 struct SourceBinding {
 	generation: u64,
+	rearm_generation: u64,
 	assignment: SourceAssignment,
 	connection: SourceConnection,
 	suspensions: Vec<Suspension>,
@@ -220,6 +221,7 @@ impl Default for SourceBinding {
 	fn default() -> Self {
 		Self {
 			generation: 0,
+			rearm_generation: 0,
 			assignment: SourceAssignment::empty(),
 			connection: SourceConnection::Connected,
 			suspensions: Vec::new(),
@@ -313,10 +315,24 @@ impl InputRouter {
 
 	/// Session pause of local-pad delivery. Other owners stay frozen.
 	pub fn set_paused(&mut self, paused: bool) {
+		self.set_source_paused(InputSource::local_pad(), paused);
+	}
+
+	/// Pause one source without resuming another source's pause owner.
+	pub fn set_source_paused(&mut self, source: InputSource, paused: bool) {
 		if paused {
-			self.suspend(InputSource::local_pad(), ScopeOwner::pause());
+			self.suspend(source, ScopeOwner::pause());
 		} else {
-			self.resume_owner(ScopeOwner::pause());
+			let tokens: Vec<_> = self
+				.binding(source)
+				.suspensions
+				.iter()
+				.filter(|layer| layer.owner() == ScopeOwner::pause())
+				.map(|layer| layer.token())
+				.collect();
+			for token in tokens {
+				self.resume(token);
+			}
 		}
 	}
 
@@ -660,6 +676,14 @@ impl InputRouter {
 		let source = self.canonical(source);
 		self.retire(source);
 		let (hold, gesture) = kind.effects();
+		if (hold == HoldEffect::ReleaseNeutral
+			&& (previous != next
+				|| matches!(kind, RoutingKind::Disconnected | RoutingKind::SourceChanged)))
+			|| kind == RoutingKind::Uncaptured
+		{
+			let generation = self.generation(source);
+			self.binding_mut(source).rearm_generation = generation;
+		}
 		self.events.push(RoutingEvent {
 			source,
 			kind,
@@ -737,6 +761,10 @@ impl InputRouter {
 		self.emit(source, RoutingKind::SourceChanged, actor, None);
 	}
 
+	pub(crate) fn rearm_generation(&self, source: InputSource) -> u64 {
+		self.binding(source).rearm_generation
+	}
+
 	pub(crate) fn generation(&self, source: InputSource) -> u64 {
 		self.binding(source).generation
 	}
@@ -749,6 +777,7 @@ impl InputRouter {
 	fn binding(&self, source: InputSource) -> &SourceBinding {
 		static EMPTY: SourceBinding = SourceBinding {
 			generation: 0,
+			rearm_generation: 0,
 			assignment: SourceAssignment::empty(),
 			connection: SourceConnection::Connected,
 			suspensions: Vec::new(),
@@ -1069,6 +1098,19 @@ mod tests {
 		router.set_paused(false);
 		assert!(!router.is_suspended(source));
 		assert_eq!(router.delivered_actor(source), Some(actor(5)));
+	}
+
+	#[test]
+	fn resuming_primary_pause_does_not_resume_a_secondary_source() {
+		let mut router = InputRouter::default();
+		let secondary = InputSource::virtual_pad(Entity::from_bits(2));
+		router.set_paused(true);
+		router.set_source_paused(secondary, true);
+		router.set_paused(false);
+		assert!(!router.has_suspension(InputSource::local_pad(), ScopeOwner::pause()));
+		assert!(router.has_suspension(secondary, ScopeOwner::pause()));
+		router.set_source_paused(secondary, false);
+		assert!(!router.is_suspended(secondary));
 	}
 
 	#[test]

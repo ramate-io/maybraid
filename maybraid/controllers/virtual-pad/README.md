@@ -91,3 +91,8 @@ Each controller also owns its `VirtualPadConfig`; `with_config` customizes an
 individual controller without changing another source. Default-host reconnection
 reuses vacant source entities, replaces missing physical-device references, and
 requires a release before a device that reconnects while held can press again.
+
+`pad::PadRearm` filters a rich snapshot clone after gameplay ownership is canceled,
+retaining per-control release/neutral requirements while leaving the source's raw
+state intact. Suppressed physical analog values remain available privately to
+rearm even when text-entry policy clears the public gameplay axes.
