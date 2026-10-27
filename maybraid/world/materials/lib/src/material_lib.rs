@@ -119,6 +119,7 @@ impl Plugin for WorldMaterialsPlugin {
 
 #[cfg(test)]
 mod tests {
+	use bevy::ecs::system::System;
 	use bevy::prelude::*;
 	use building_shaders::{
 		ColumnSurfaceMaterial, ColumnSurfaceMaterialRefCache, UrbanMaterialRefPlugin,
@@ -228,5 +229,106 @@ mod tests {
 		assert!(app.world().get::<MeshMaterial3d<UrbanSurfaceMaterial>>(furniture).is_none());
 		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(urban).is_none());
 		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(column).is_none());
+	}
+
+	fn deferred_material_completion<M: Material>(recipe: &str, retire: bool) -> Result<(), String> {
+		let mut app = world_fulfill_app();
+		app.set_error_handler(bevy::ecs::error::panic);
+		let world = app.world_mut();
+		let mut descendants = Vec::new();
+		for _ in 0..2 {
+			let root = world
+				.spawn((
+					MaterialRefRoot(MaterialRef::named(recipe)),
+					material_ref::PropagateToDescendants,
+				))
+				.id();
+			let mesh = world
+				.spawn((
+					ChildOf(root),
+					Mesh3d(Handle::default()),
+					MeshMaterial3d::<StandardMaterial>(Handle::default()),
+				))
+				.id();
+			descendants.push((root, mesh));
+		}
+		let mut fulfill = IntoSystem::into_system(
+			material_ref::fulfill_material_ref_descendants::<super::WorldMaterialLib<'_>>,
+		);
+		fulfill.initialize(world);
+		fulfill
+			.run_without_applying_deferred((), world)
+			.map_err(|error| error.to_string())?;
+		assert!(world.get::<MeshMaterial3d<M>>(descendants[0].1).is_none());
+		if retire {
+			// A streamed root can disappear after a new mesh is discovered but
+			// before the material library's deferred commands are applied.
+			assert!(world.despawn(descendants[0].0));
+		}
+		fulfill.apply_deferred(world);
+		for (index, (root, mesh)) in descendants.into_iter().enumerate() {
+			if retire && index == 0 {
+				assert!(world.get_entity(root).is_err());
+				assert!(world.get_entity(mesh).is_err());
+			} else {
+				let material =
+					world.get::<MeshMaterial3d<M>>(mesh).ok_or("live material missing")?;
+				assert!(world.resource::<Assets<M>>().contains(material.id()));
+				assert!(world.get::<MeshMaterial3d<StandardMaterial>>(mesh).is_none());
+				assert!(world.get::<MaterialRefApplied>(mesh).is_some());
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn material_completion_preserves_live_custom_materials() -> Result<(), String> {
+		deferred_material_completion::<FurnitureSurfaceMaterial>(RECIPE_FURNITURE_WOOD, false)?;
+		deferred_material_completion::<UrbanSurfaceMaterial>(RECIPE_WOOD, false)?;
+		deferred_material_completion::<ColumnSurfaceMaterial>(RECIPE_DORIC_COLUMN, false)?;
+		deferred_material_completion::<LeafMaterial>("CHICO_LEAF_MATERIAL", false)?;
+		deferred_material_completion::<StickMaterial>("CHICO_STICK_MATERIAL", false)?;
+		deferred_material_completion::<FrondMaterial>("CHICO_FROND_MATERIAL", false)?;
+		deferred_material_completion::<BumpOutMaterial>(BUMP_OUT_MATERIAL, false)?;
+		deferred_material_completion::<MuzzleFlameMaterial>(MUZZLE_FLAME_RECIPE, false)?;
+		deferred_material_completion::<EnergyMaterial>(LASER_HEX_RECIPE, false)?;
+		Ok(())
+	}
+
+	#[test]
+	fn material_completion_tolerates_retired_furniture_mesh() -> Result<(), String> {
+		deferred_material_completion::<FurnitureSurfaceMaterial>(RECIPE_FURNITURE_WOOD, true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_urban_mesh() -> Result<(), String> {
+		deferred_material_completion::<UrbanSurfaceMaterial>(RECIPE_WOOD, true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_column_mesh() -> Result<(), String> {
+		deferred_material_completion::<ColumnSurfaceMaterial>(RECIPE_DORIC_COLUMN, true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_leaf_mesh() -> Result<(), String> {
+		deferred_material_completion::<LeafMaterial>("CHICO_LEAF_MATERIAL", true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_stick_mesh() -> Result<(), String> {
+		deferred_material_completion::<StickMaterial>("CHICO_STICK_MATERIAL", true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_frond_mesh() -> Result<(), String> {
+		deferred_material_completion::<FrondMaterial>("CHICO_FROND_MATERIAL", true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_bump_out_mesh() -> Result<(), String> {
+		deferred_material_completion::<BumpOutMaterial>(BUMP_OUT_MATERIAL, true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_muzzle_mesh() -> Result<(), String> {
+		deferred_material_completion::<MuzzleFlameMaterial>(MUZZLE_FLAME_RECIPE, true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_energy_mesh() -> Result<(), String> {
+		deferred_material_completion::<EnergyMaterial>(LASER_HEX_RECIPE, true)
 	}
 }

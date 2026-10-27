@@ -48,8 +48,8 @@ impl MaterialLib for BumpOutMaterialLib<'_> {
 				let handle = self.resolve(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert((MeshMaterial3d(handle), NotShadowCaster));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert((MeshMaterial3d(handle), NotShadowCaster));
 				true
 			}
 			_ => false,

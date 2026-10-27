@@ -51,8 +51,8 @@ impl MaterialLib for FurnitureMaterialLib<'_> {
 				let handle = self.resolve(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle));
 				true
 			}
 			_ => false,

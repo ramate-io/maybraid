@@ -64,8 +64,8 @@ impl MaterialLib for ColumnSurfaceMaterialLib<'_> {
 				let handle = self.resolve(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle));
 				true
 			}
 			_ => false,
@@ -98,8 +98,8 @@ impl MaterialLib for UrbanSurfaceMaterialLib<'_> {
 				let handle = self.resolve(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle));
 				true
 			}
 			_ => self.column.try_fulfill(entity, material_ref, commands),
