@@ -6,11 +6,12 @@ use durham::{
 	TerrainTrimeshCollider,
 };
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
-use maybraid_character_controller::CharacterIntent;
-use maybraid_controllers_core::{CaptureKind, InputRouter, InputRouting, InputSource, ScopeOwner};
+use maybraid_character_controller::{ActorControlStatus, ActorIntentEvent, CharacterIntent};
+use maybraid_controllers_core::{CaptureKind, InputRouting, InputSource, ScopeOwner};
 use maybraid_session::{SessionCapabilities, WorldGameplayEnabled, WorldPlaySessionEnded};
 use maybraid_skill_map::SkillMapEnabled;
 use maybraid_sky::{SkyDome, SKY_HORIZON};
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 use player::{
 	apply_character_controller, Buoyant, CharacterController, CharacterStance, JumpWish, Jumping,
 	LocomotionCapsule, MotorIntent, MotorTraction, MoveWish as PlayerMoveWish,
@@ -154,12 +155,18 @@ pub(crate) fn sync_skill_map_enabled(
 	gameplay: Res<WorldGameplayEnabled>,
 	text_focus: Res<TextEntryFocus>,
 	map: Option<Res<WorldMapView>>,
-	router: Option<Res<InputRouter>>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+	players: Query<&ActorControlStatus, With<Player>>,
 	mut enabled: ResMut<SkillMapEnabled>,
 ) {
-	let blocked = router.is_some_and(|router| router.blocks_actor(InputSource::local_pad()));
-	let next =
-		gameplay.accepts_character_input(text_focus.0 || blocked, map.is_some_and(|map| map.open));
+	let delivered = primary.as_deref().is_some_and(|primary| {
+		players.iter().any(|control| {
+			control.source().and_then(InputSource::entity) == Some(primary.0)
+				&& control.is_delivered()
+		})
+	});
+	let next = delivered
+		&& gameplay.accepts_character_input(text_focus.0, map.is_some_and(|map| map.open));
 	if enabled.0 != next {
 		enabled.0 = next;
 	}
@@ -173,28 +180,21 @@ pub(crate) fn apply_world_motor_filter(
 	text_focus: Res<TextEntryFocus>,
 	gameplay: Res<WorldGameplayEnabled>,
 	session: Option<Res<SessionCapabilities>>,
-	router: Option<Res<InputRouter>>,
 	map: Option<Res<WorldMapView>>,
-	mut vegetation: Query<&mut MoveWish, With<Player>>,
-	mut motors: Query<&mut MotorIntent, (With<CharacterController>, With<MaybraidPlayer>)>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+	mut vegetation: Query<(Entity, &mut MoveWish, Option<&ActorControlStatus>), With<Player>>,
+	mut motors: Query<
+		(Entity, &mut MotorIntent, Option<&ActorControlStatus>),
+		(With<CharacterController>, With<MaybraidPlayer>),
+	>,
 	mut world_motors: Query<&mut MotorIntent, (With<CharacterController>, Without<MaybraidPlayer>)>,
 ) {
-	let capture_blocks = router
-		.as_deref()
-		.is_some_and(|router| router.blocks_actor(InputSource::local_pad()));
-	let map_open = map.is_some_and(|map| map.open);
 	let simulation_frozen = session.as_deref().is_some_and(|session| !session.simulation_active());
-	let allowed = match (session.as_deref(), router.as_deref()) {
-		(Some(session), Some(router)) => {
-			session.player_realization_allowed(router, capture_blocks || text_focus.0, map_open)
-		}
-		_ => gameplay.accepts_character_input(text_focus.0 || capture_blocks, map_open),
-	};
 	if simulation_frozen {
-		for mut wish in &mut vegetation {
+		for (_, mut wish, _) in &mut vegetation {
 			wish.0 = Vec3::ZERO;
 		}
-		for mut intent in &mut motors {
+		for (_, mut intent, _) in &mut motors {
 			intent.suppress(player::MotorSuppressionToken::SIMULATION);
 		}
 		for mut intent in &mut world_motors {
@@ -202,36 +202,46 @@ pub(crate) fn apply_world_motor_filter(
 		}
 		return;
 	}
-	if *mode == PlaygroundMode::Character && allowed {
-		return;
+	let blocked = |entity: Entity, control: &ActorControlStatus| {
+		let primary_text_focus = text_focus.0
+			&& primary.as_deref().is_some_and(|primary| {
+				control.source().and_then(InputSource::entity) == Some(primary.0)
+			});
+		let owns_map = map
+			.as_deref()
+			.is_some_and(|map| map.open && map.owner.is_some_and(|(_, owner)| owner == entity));
+		control.is_controlled()
+			&& (*mode != PlaygroundMode::Character
+				|| !gameplay.0
+				|| primary_text_focus
+				|| owns_map || !control.is_delivered())
+	};
+	for (entity, mut wish, control) in &mut vegetation {
+		if control.is_some_and(|control| blocked(entity, control)) {
+			wish.0 = Vec3::ZERO;
+		}
 	}
-	for mut wish in &mut vegetation {
-		wish.0 = Vec3::ZERO;
-	}
-	for mut intent in &mut motors {
-		intent.suppress(player::MotorSuppressionToken::WORLD_GAMEPLAY);
+	for (entity, mut intent, control) in &mut motors {
+		if control.is_some_and(|control| blocked(entity, control)) {
+			intent.suppress(player::MotorSuppressionToken::WORLD_GAMEPLAY);
+		}
 	}
 }
 
 pub(crate) fn echo_character_intents(
-	mut intents: MessageReader<CharacterIntent>,
+	event: On<ActorIntentEvent>,
 	mut console: ResMut<CommandConsoleOutput>,
 ) {
-	let mut parts = Vec::new();
-	for intent in intents.read() {
-		parts.push(match *intent {
-			CharacterIntent::Move(value) => format!("move=({:.2},{:.2})", value.x, value.y),
-			CharacterIntent::Look(value) => format!("look=({:.2},{:.2})", value.x, value.y),
-			CharacterIntent::Focus(value) => format!("focus={value:.2}"),
-			CharacterIntent::Ads(value) => format!("ads={value:.2}"),
-			CharacterIntent::SkillMap => "skill-map".into(),
-			CharacterIntent::UseItem(value) => format!("use={value:.2}"),
-			other => other.label().to_string(),
-		});
-	}
-	if !parts.is_empty() {
-		console.0 = parts.join(" ");
-	}
+	let part = match *event.input.payload() {
+		CharacterIntent::Move(value) => format!("move=({:.2},{:.2})", value.x, value.y),
+		CharacterIntent::Look(value) => format!("look=({:.2},{:.2})", value.x, value.y),
+		CharacterIntent::Focus(value) => format!("focus={value:.2}"),
+		CharacterIntent::Ads(value) => format!("ads={value:.2}"),
+		CharacterIntent::SkillMap => "skill-map".into(),
+		CharacterIntent::UseItem(value) => format!("use={value:.2}"),
+		other => other.label().to_string(),
+	};
+	console.0 = part;
 }
 
 fn world_distance_fog() -> DistanceFog {
@@ -351,6 +361,7 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use durham::{terrain_collider_covers_xz, CascadeChunk};
+	use maybraid_controllers_core::InputRouter;
 
 	#[test]
 	fn surface_ready_requires_local_column() {
@@ -394,7 +405,13 @@ mod tests {
 		world.insert_resource(PlaygroundMode::Character);
 		world.insert_resource(TextEntryFocus(false));
 		world.insert_resource(WorldGameplayEnabled(true));
-		let vegetation = world.spawn((Player, MoveWish(Vec3::X))).id();
+		let vegetation = world
+			.spawn((
+				Player,
+				MoveWish(Vec3::X),
+				ActorControlStatus::assigned(InputSource::local_pad()),
+			))
+			.id();
 		let mut intent = MotorIntent::default();
 		intent.set_standard(player::MotorSample::translation(Vec3::Z));
 		let body = world
@@ -419,7 +436,13 @@ mod tests {
 		world.insert_resource(PlaygroundMode::Character);
 		world.insert_resource(TextEntryFocus(false));
 		world.insert_resource(WorldGameplayEnabled(false));
-		let vegetation = world.spawn((Player, MoveWish(Vec3::X))).id();
+		let vegetation = world
+			.spawn((
+				Player,
+				MoveWish(Vec3::X),
+				ActorControlStatus::assigned(InputSource::local_pad()),
+			))
+			.id();
 		let mut player_intent = MotorIntent::default();
 		player_intent.set_standard(MotorSample::translation(Vec3::X));
 		let player = world
@@ -428,6 +451,7 @@ mod tests {
 				MaybraidPlayer,
 				PlayerMoveWish(Vec3::X),
 				player_intent,
+				ActorControlStatus::assigned(InputSource::local_pad()),
 				MotorSelection::default(),
 				ResolvedMotorRequest::default(),
 			))
@@ -458,6 +482,32 @@ mod tests {
 		assert!(world.get::<MotorIntent>(player).is_some_and(MotorIntent::suppressed));
 		assert_eq!(world.get::<PlayerMoveWish>(npc).map(|wish| wish.0), Some(Vec3::Z));
 		assert!(!world.get::<MotorIntent>(npc).is_some_and(MotorIntent::suppressed));
+		Ok(())
+	}
+
+	#[test]
+	fn map_capture_suppresses_only_its_owner() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(TextEntryFocus(false));
+		world.insert_resource(WorldGameplayEnabled(true));
+		let source = InputSource::local_pad();
+		let owner = world
+			.spawn((Player, MoveWish(Vec3::X), ActorControlStatus::assigned(source)))
+			.id();
+		let other = world
+			.spawn((Player, MoveWish(Vec3::Z), ActorControlStatus::assigned(source)))
+			.id();
+		world.insert_resource(WorldMapView {
+			open: true,
+			owner: Some((source, owner)),
+			..default()
+		});
+		world
+			.run_system_once(apply_world_motor_filter)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.get::<MoveWish>(owner).map(|wish| wish.0), Some(Vec3::ZERO));
+		assert_eq!(world.get::<MoveWish>(other).map(|wish| wish.0), Some(Vec3::Z));
 		Ok(())
 	}
 
@@ -587,6 +637,7 @@ mod tests {
 				MaybraidPlayer,
 				PlayerMoveWish(Vec3::X),
 				player_intent,
+				ActorControlStatus::assigned(InputSource::local_pad()),
 				MotorSelection::default(),
 				ResolvedMotorRequest::default(),
 			))

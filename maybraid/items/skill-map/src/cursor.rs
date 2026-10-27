@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::controller::{skill_map_steer_held, SkillMapFlick};
+use crate::controller::{skill_map_steer_held, RoutedSkillMapFlickEvent, SkillMapFlick};
 use crate::map::{render_layer, SkillMapId};
 use crate::tile_material::SkillMapTileAssets;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSteerLock, SkillMapUser};
@@ -31,14 +31,16 @@ pub(crate) struct FlickBead {
 
 pub fn sync_skill_map_held(
 	enabled: Res<SkillMapEnabled>,
-	routed: Option<Res<RoutedActorControl>>,
-	mut users: Query<(Entity, &mut SkillMapHeld, Option<&OrdinaryLocomotion>), With<SkillMapUser>>,
+	mut users: Query<
+		(Entity, &mut SkillMapHeld, Option<&OrdinaryLocomotion>, Option<&RoutedActorControl>),
+		With<SkillMapUser>,
+	>,
 ) {
-	for (entity, mut slot, ordinary) in &mut users {
+	for (entity, mut slot, ordinary, routed) in &mut users {
 		let ordinary = ordinary.is_none_or(|flag| flag.0);
 		slot.0 = enabled.0
 			&& if ordinary {
-				routed.as_deref().is_some_and(|routed| {
+				routed.is_some_and(|routed| {
 					routed.addresses(entity) && routed.payload().is_some_and(skill_map_steer_held)
 				})
 			} else {
@@ -75,36 +77,70 @@ pub fn apply_flicks(
 		return;
 	}
 	for flick in flicks.read() {
-		if flick.throw() == Vec2::ZERO {
+		apply_one_flick(*flick, &mut commands, assets.as_deref(), &users, &mut cameras);
+	}
+}
+
+/// The route gate dispatches this event immediately before map mutation.
+pub fn apply_routed_flick(
+	event: On<RoutedSkillMapFlickEvent>,
+	mut commands: Commands,
+	assets: Option<Res<SkillMapTileAssets>>,
+	enabled: Res<SkillMapEnabled>,
+	users: Query<(&SkillMapUser, &SkillMapSteerLock)>,
+	mut cameras: Query<
+		(&SkillMapId, &SkillMapMember, &mut Transform, &Projection),
+		(With<SkillMapViewportCamera>, Without<SkillMapCursor>),
+	>,
+) {
+	if enabled.0 {
+		apply_one_flick(
+			*event.input.payload(),
+			&mut commands,
+			assets.as_deref(),
+			&users,
+			&mut cameras,
+		);
+	}
+}
+
+fn apply_one_flick(
+	flick: SkillMapFlick,
+	commands: &mut Commands,
+	assets: Option<&SkillMapTileAssets>,
+	users: &Query<(&SkillMapUser, &SkillMapSteerLock)>,
+	cameras: &mut Query<
+		(&SkillMapId, &SkillMapMember, &mut Transform, &Projection),
+		(With<SkillMapViewportCamera>, Without<SkillMapCursor>),
+	>,
+) {
+	if flick.throw() == Vec2::ZERO {
+		return;
+	}
+	for (map, member, mut transform, projection) in cameras.iter_mut() {
+		if !flick.addresses(member.user, member.session) {
 			continue;
 		}
-		for (map, member, mut transform, projection) in &mut cameras {
-			if !flick.addresses(member.user, member.session) {
-				continue;
-			}
-			let Some((user, lock)) = users.iter().find(|(user, _)| user.maps == member.session)
-			else {
-				continue;
-			};
-			if lock.locked() {
-				continue;
-			}
-			let start = transform.translation.xy();
-			let delta =
-				flick_delta(flick.throw(), view_region(projection), user.settings.flick_scale);
-			transform.translation.x += delta.x;
-			transform.translation.y += delta.y;
-			if let Some(assets) = assets.as_deref() {
-				bead_flick(
-					&mut commands,
-					assets,
-					*map,
-					*member,
-					start,
-					start + delta,
-					transform.translation.z,
-				);
-			}
+		let Some((user, lock)) = users.iter().find(|(user, _)| user.maps == member.session) else {
+			continue;
+		};
+		if lock.locked() {
+			continue;
+		}
+		let start = transform.translation.xy();
+		let delta = flick_delta(flick.throw(), view_region(projection), user.settings.flick_scale);
+		transform.translation.x += delta.x;
+		transform.translation.y += delta.y;
+		if let Some(assets) = assets {
+			bead_flick(
+				commands,
+				assets,
+				*map,
+				*member,
+				start,
+				start + delta,
+				transform.translation.z,
+			);
 		}
 	}
 }
@@ -230,13 +266,12 @@ mod tests {
 	fn held_is_rb_while_the_map_is_on() {
 		use bevy::ecs::system::RunSystemOnce;
 		use maybraid_character_controller::{ActorControlSample, RoutedActorControl};
-		use maybraid_controllers_core::ActorTarget;
+		use maybraid_controllers_core::{ActorTarget, InputSource, Routed};
 
 		use crate::user::spawn_skill_maps;
 
 		let mut world = World::new();
 		world.init_resource::<SkillMapEnabled>();
-		world.init_resource::<RoutedActorControl>();
 		let user = world.spawn_empty().id();
 		world
 			.run_system_once(move |mut commands: Commands| spawn_skill_maps(&mut commands, user))
@@ -245,10 +280,13 @@ mod tests {
 		world.run_system_once(sync_skill_map_held).expect("held without pad");
 		assert!(!world.get::<SkillMapHeld>(user).expect("slot").0);
 
-		world.insert_resource(RoutedActorControl::from_sample(
+		let mut control = RoutedActorControl::default();
+		control.set(Routed::to_actor(
+			InputSource::local_pad(),
 			ActorTarget::new(user),
 			ActorControlSample::default().with_bumpers(false, true),
 		));
+		world.entity_mut(user).insert(control);
 		world.run_system_once(sync_skill_map_held).expect("held with rb");
 		assert!(world.get::<SkillMapHeld>(user).expect("slot").0);
 	}
@@ -256,13 +294,12 @@ mod tests {
 	#[test]
 	fn tanz_policy_holds_without_rb() {
 		use bevy::ecs::system::RunSystemOnce;
-		use maybraid_character_controller::{OrdinaryLocomotion, RoutedActorControl};
+		use maybraid_character_controller::OrdinaryLocomotion;
 
 		use crate::user::spawn_skill_maps;
 
 		let mut world = World::new();
 		world.init_resource::<SkillMapEnabled>();
-		world.init_resource::<RoutedActorControl>();
 		let user = world.spawn_empty().id();
 		world
 			.run_system_once(move |mut commands: Commands| spawn_skill_maps(&mut commands, user))

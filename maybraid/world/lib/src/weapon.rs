@@ -11,11 +11,12 @@ use firearm_user::{
 };
 use grenade_user::{spawn_held_grenade, teardown_held_grenade, GrenadeUser, GrenadeUserSettings};
 use grenades::GrenadeDetonated;
-use maybraid_character_controller::CharacterControlSystems;
+use maybraid_character_controller::{ActorControlStatus, CharacterControlSystems};
 use maybraid_equipment::{
 	EquipmentInventoryChanged, EquipmentSystems, EquippedItemHandler, InventoryCycling,
 };
 use maybraid_session::WorldGameplayEnabled;
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 
 use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
 use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
@@ -95,7 +96,9 @@ pub(crate) fn arm_world_player(
 	gameplay: Res<WorldGameplayEnabled>,
 	inventory_edit: Option<Res<InventoryEditCameraFollow>>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
+	primary: Option<Res<PrimaryVirtualPad>>,
 	players: Query<WorldPlayerEquipment<'_>, With<VegetationPlayer>>,
+	controls: Query<&ActorControlStatus, With<VegetationPlayer>>,
 	visuals: Query<WorldPlayerVisual<'_>, (With<VegetationPlayerVisual>, With<CharacterRoot>)>,
 ) {
 	if !gameplay.0 && !inventory_edit.is_some_and(|edit| edit.0) {
@@ -112,6 +115,16 @@ pub(crate) fn arm_world_player(
 		appearance_requested,
 	) in &players
 	{
+		if !primary.as_deref().is_some_and(|primary| {
+			controls
+				.get(player)
+				.ok()
+				.and_then(|status| status.source())
+				.and_then(|source| source.entity())
+				== Some(primary.0)
+		}) {
+			continue;
+		}
 		let Some((visual, _, presented)) =
 			visuals.iter().find(|(_, child, _)| child.parent() == player)
 		else {
@@ -232,12 +245,24 @@ pub(crate) fn teardown_held_weapon(
 fn apply_equipment_inventory_to_loadout(
 	mut changes: MessageReader<EquipmentInventoryChanged>,
 	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+	controls: Query<&ActorControlStatus, With<VegetationPlayer>>,
 	mut commands: Commands,
 ) {
 	let Some(loadout) = loadout.as_deref_mut() else {
 		return;
 	};
 	for change in changes.read() {
+		if !primary.as_deref().is_some_and(|primary| {
+			controls
+				.get(change.actor())
+				.ok()
+				.and_then(|status| status.source())
+				.and_then(|source| source.entity())
+				== Some(primary.0)
+		}) {
+			continue;
+		}
 		loadout.retarget_inventory(change.inventory().clone());
 		commands
 			.entity(change.actor())
@@ -358,19 +383,29 @@ mod tests {
 		RequestSetCharacterAppearance,
 	};
 
-	use crate::weapon::{arm_world_player, WorldPlayerAppearanceRequested, WorldPlayerLoadout};
+	use crate::weapon::{
+		apply_equipment_inventory_to_loadout, arm_world_player, AppliedWorldPlayerLoadout,
+		WorldPlayerAppearanceRequested, WorldPlayerLoadout,
+	};
+	use maybraid_character_controller::ActorControlStatus;
 	use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource};
-	use maybraid_equipment::{EquippedItemHandler, InventoryCycling};
+	use maybraid_equipment::{EquipmentInventoryChanged, EquippedItemHandler, InventoryCycling};
 	use maybraid_session::WorldGameplayEnabled;
+	use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 
 	fn assign_player(world: &mut World, player: Entity) {
+		let source_entity = world.spawn_empty().id();
+		let source = InputSource::virtual_pad(source_entity);
+		world.insert_resource(PrimaryVirtualPad(source_entity));
+		world.entity_mut(player).insert(ActorControlStatus::assigned(source));
 		world.init_resource::<InputRouter>();
+		world.resource_mut::<InputRouter>().set_local_source(source_entity);
 		if world.get::<InventoryCycling>(player).is_none() {
 			world.entity_mut(player).insert(InventoryCycling::default());
 		}
 		world
 			.resource_mut::<InputRouter>()
-			.assign_actor(InputSource::local_pad(), ActorTarget::new(player));
+			.assign_actor(source, ActorTarget::new(player));
 	}
 
 	#[test]
@@ -415,6 +450,7 @@ mod tests {
 				.with_name("Ada"),
 		);
 		let player = world.spawn((VegetationPlayer, WorldPlayerAppearanceRequested)).id();
+		assign_player(&mut world, player);
 		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
 
 		world
@@ -508,6 +544,7 @@ mod tests {
 				.with_name("Ada"),
 		);
 		let player = world.spawn(VegetationPlayer).id();
+		assign_player(&mut world, player);
 		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
 		world
 			.run_system_once(arm_world_player)
@@ -529,6 +566,34 @@ mod tests {
 			skills: vec![0, 1],
 			tanzes: Vec::new(),
 		}
+	}
+
+	#[test]
+	fn secondary_equipment_change_does_not_replace_primary_loadout() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let primary_source = world.spawn_empty().id();
+		let secondary_source = world.spawn_empty().id();
+		world.insert_resource(PrimaryVirtualPad(primary_source));
+		let initial = two_map_bag();
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			initial.clone(),
+		));
+		let secondary = world
+			.spawn((
+				VegetationPlayer,
+				ActorControlStatus::assigned(InputSource::virtual_pad(secondary_source)),
+			))
+			.id();
+		world.init_resource::<Messages<EquipmentInventoryChanged>>();
+		world.write_message(EquipmentInventoryChanged::new(secondary, Inventory::default()));
+		world
+			.run_system_once(apply_equipment_inventory_to_loadout)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.resource::<WorldPlayerLoadout>().inventory, initial);
+		assert!(world.get::<AppliedWorldPlayerLoadout>(secondary).is_none());
+		Ok(())
 	}
 
 	#[test]
@@ -564,7 +629,9 @@ mod tests {
 	fn y_cycles_the_presented_skill_map_in_the_selected_category() -> anyhow::Result<()> {
 		use character_inventory_user::InventoryUser;
 		use character_items::{SkillMapKind, SkillMapSpec};
-		use maybraid_character_controller::{CharacterIntent, InventoryCyclingCategory};
+		use maybraid_character_controller::{
+			CharacterIntent, CharacterIntentFrame, InventoryCyclingCategory,
+		};
 		use maybraid_equipment::{cycle_equipped_inventory_queues, EquipmentInventoryChanged};
 		use maybraid_skill_map::SkillMapEquip;
 
@@ -572,7 +639,6 @@ mod tests {
 
 		let inventory = two_map_bag();
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
 		world.init_resource::<Messages<EquipmentInventoryChanged>>();
 		world.insert_resource(WorldPlayerLoadout::new(
 			"active",
@@ -591,11 +657,12 @@ mod tests {
 		if let Some(mut cycling) = world.get_mut::<InventoryCycling>(player) {
 			cycling.select(InventoryCyclingCategory::SkillMaps);
 		}
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SwapActive);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let source = InputSource::virtual_pad(world.resource::<PrimaryVirtualPad>().0);
+		let input = world
+			.resource::<InputRouter>()
+			.route_actor(source, vec![CharacterIntent::SwapActive])
+			.ok_or_else(|| anyhow::anyhow!("player route"))?;
+		world.entity_mut(player).insert(CharacterIntentFrame::new(input));
 		world
 			.run_system_once(cycle_equipped_inventory_queues)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

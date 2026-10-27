@@ -11,15 +11,24 @@ pub mod icons;
 pub mod info;
 pub mod loading;
 pub mod modal;
+pub mod navigation;
+pub use navigation::*;
+pub mod session;
 pub mod single_select;
+pub use session::MenuSession;
 pub mod spin_reveal;
 pub mod theme;
 
 pub use controls::{
-	apply_hud_menu_nav, clear_short_text_dismissed, color_from_hex,
-	emit_short_text_submit_on_confirm, menu_display_name, navigate_hud_menus, on_hud_scroll,
-	restore_short_text_editing, scroll_hud_selection_into_strip, scroll_hud_selection_into_view,
-	scroll_hud_viewport_on_nav,
+	ActiveOverlayKey, ActiveShortText, CursorRow, FocusTag, HoverTile, HudFonts, HudMenu,
+	HudMenuIgnoresLock, HudMenuItem, HudMenuNavLocked, HudOverlayMenu, HudScroll, HudScrollStrip,
+	HudScrollThumb, HudScrollTrack, HudScrollViewport, InputPromptDevice, InventoryActionPrompts,
+	InventoryPromptGlyph, InventoryPromptKind, OverlayHeader, OverlayHeaderKey, ReorderMark,
+	ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal, ShortTextModalRoot,
+	ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank, apply_hud_menu_nav,
+	clear_short_text_dismissed, color_from_hex, emit_short_text_submit_on_confirm,
+	menu_display_name, navigate_hud_menus, on_hud_scroll, restore_short_text_editing,
+	scroll_hud_selection_into_strip, scroll_hud_selection_into_view, scroll_hud_viewport_on_nav,
 	select_hud_item_on_over, send_hud_scroll_events, spawn_asset_tile, spawn_block_label,
 	spawn_corner_action, spawn_focus_tag, spawn_grid_catalog_tile, spawn_group_label,
 	spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text,
@@ -27,57 +36,52 @@ pub use controls::{
 	spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row,
 	spawn_text_button, spawn_tile_grid, spawn_tile_grid_columns, sync_hover_tiles,
 	sync_hud_focus_tags, sync_hud_item_focus, sync_hud_scrollbars, sync_input_prompt_device,
-	sync_inventory_prompt_glyphs, sync_tile_wrap, ActiveOverlayKey, ActiveShortText, CursorRow,
-	FocusTag, HoverTile, HudFonts, HudMenu, HudMenuIgnoresLock, HudMenuItem, HudMenuNavLocked,
-	HudOverlayMenu, ReorderMark,
-	HudScroll, HudScrollStrip, HudScrollThumb, HudScrollTrack, HudScrollViewport, InputPromptDevice,
-	InventoryActionPrompts, InventoryPromptGlyph, InventoryPromptKind, OverlayHeader,
-	OverlayHeaderKey, ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal,
-	ShortTextModalRoot, ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank,
+	sync_inventory_prompt_glyphs, sync_tile_wrap,
 };
-pub use icons::{spin_icons, Icon, SpinningIcon};
+pub use icons::{Icon, SpinningIcon, spin_icons};
 pub use info::{
-	set_brand_mode_title, set_description_for_menu, set_hint_for_menu, set_info_box_for_menu,
-	spawn_hud_text_card, spawn_hud_text_card_label, spawn_menu_objective, BrandModeCorner,
-	BrandModeLine, BrandModeTitle, HudTextCard, MenuInfoBox, MenuInfoBoxLabel, MenuObjective,
-	TextMenuDescription, TextMenuHint, TextMenuHintLabel, BRAND_NAME, HUD_TEXT_CARD_FACE_PX,
+	BRAND_NAME, BrandModeCorner, BrandModeLine, BrandModeTitle, HUD_TEXT_CARD_FACE_PX, HudTextCard,
+	MenuInfoBox, MenuInfoBoxLabel, MenuObjective, TextMenuDescription, TextMenuHint,
+	TextMenuHintLabel, set_brand_mode_title, set_description_for_menu, set_hint_for_menu,
+	set_info_box_for_menu, spawn_hud_text_card, spawn_hud_text_card_label, spawn_menu_objective,
 };
 pub use loading::{
-	set_loading_explainer, set_loading_progress, sync_loading_bar_fill, LoadingBarFill,
-	LoadingExplainer, LoadingPanel, LoadingStack,
+	LoadingBarFill, LoadingExplainer, LoadingPanel, LoadingStack, set_loading_explainer,
+	set_loading_progress, sync_loading_bar_fill,
 };
 pub use modal::{
-	begin_menu_modal_frame, consume_menu_modal_back, consume_screen_back, entity_under_nav_owner,
-	hud_menu_under_modal, sync_menu_modal_stack, tick_menu_modal_holds, MenuModal,
-	MenuModalBackHold, MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack,
-	MenuModalSystems,
+	MenuModal, MenuModalBackHold, MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack,
+	MenuModalSystems, begin_menu_modal_frame, consume_menu_modal_back, consume_screen_back,
+	entity_under_nav_owner, hud_menu_under_modal, sync_menu_modal_stack, tick_menu_modal_holds,
 };
 pub use single_select::{
-	apply_text_menu_nav, emit_menu_activate_on_click, emit_menu_activate_on_enter,
-	emit_menu_activate_on_nav, emit_menu_focus, emit_menu_step, emit_screen_back_on_click,
-	emit_screen_edit_on_click, navigate_text_menus, republish_menu_activate, screen_back_scene,
-	screen_edit_scene, scroll_text_cursor_selection_into_view, select_text_menu_item_on_over,
-	sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav, MenuActivate, MenuFocus,
-	MenuItemLocked, MenuObjectiveKind, MenuObjectiveMarker, MenuStep, MenuStepRow, MenuStepper,
-	ScreenBack, ScreenBackPressed, ScreenEdit, ScreenEditPressed, TextColumnAlign,
-	TextColumnAnchor, TextCursorColumn, TextCursorMenu, TextCursorRow, TextCursorScroll, TextMenu,
-	TextMenuColumn, TextMenuHeader, TextMenuInputLock, TextMenuItem, TextMenuItemLabel,
+	ButtonWithSubtext, KeyboardMenuNav, MenuActivate, MenuFocus, MenuItemLocked, MenuObjectiveKind,
+	MenuObjectiveMarker, MenuStep, MenuStepRow, MenuStepper, ScreenBack, ScreenBackPressed,
+	ScreenEdit, ScreenEditPressed, TextColumnAlign, TextColumnAnchor, TextCursorColumn,
+	TextCursorMenu, TextCursorRow, TextCursorScroll, TextMenu, TextMenuColumn, TextMenuHeader,
+	TextMenuInputLock, TextMenuItem, TextMenuItemLabel, apply_text_menu_nav,
+	emit_menu_activate_on_click, emit_menu_activate_on_enter, emit_menu_activate_on_nav,
+	emit_menu_focus, emit_menu_step, emit_screen_back_on_click, emit_screen_edit_on_click,
+	navigate_text_menus, republish_menu_activate, screen_back_scene, screen_edit_scene,
+	scroll_text_cursor_selection_into_view, select_text_menu_item_on_over,
+	sync_text_menu_item_colors,
 };
 pub use spin_reveal::{
-	SpinRevealCover, SpinRevealFace, SpinRevealPayload, SpinRevealSlot, SpinRevealViewport,
 	SPIN_REVEAL_SECS, SPIN_REVEAL_SLOT_SIZE, SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH,
+	SpinRevealCover, SpinRevealFace, SpinRevealPayload, SpinRevealSlot, SpinRevealViewport,
 };
 pub use theme::{
-	character_screen_grid_node, equipped_pane_fill, menu_list_panel_node, menu_region_wash,
-	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, BONES_ICON, CATALOG_THUMB_PX, CHARACTER_OVERLAY_GAP,
-	CHARACTER_PANEL_INSET, CHARACTER_PANEL_WIDTH, DESCRIPTION_PANE_LEFT_PERCENT, HEADER_FONT_SIZE,
-	INVENTORY_THUMB_PX, INVENTORY_TILE_COLUMNS, ITEM_FONT_SIZE, LOADING_ICON_SIZE, MAP_ARROW_ICON,
-	MAP_GROVE_ICON, MAP_HOUSE_ICON, MAP_MOUNTAIN_ICON, MAP_TOWN_ICON, MAP_TREE_ICON,
-	MAP_WATER_ICON, MENU_CLEAR, MENU_LIST_PAD, MENU_LIST_RADIUS, MENU_REGION_WASH_ALPHA,
-	NOTO_SANS_REGULAR, OBJECTIVE_MARKER_FONT_SIZE, PANEL_BLOCK_FONT_SIZE, PANEL_GROUP_FONT_SIZE,
-	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP,
-	PANEL_TILE_COLUMNS, TEXT_DEEP_BLUE, TEXT_LIGHT_BLUE, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON,
-	TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS, TEXT_YELLOW_HOVER,
+	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, BONES_ICON, CATALOG_THUMB_PX,
+	CHARACTER_OVERLAY_GAP, CHARACTER_PANEL_INSET, CHARACTER_PANEL_WIDTH,
+	DESCRIPTION_PANE_LEFT_PERCENT, HEADER_FONT_SIZE, INVENTORY_THUMB_PX, INVENTORY_TILE_COLUMNS,
+	ITEM_FONT_SIZE, LOADING_ICON_SIZE, MAP_ARROW_ICON, MAP_GROVE_ICON, MAP_HOUSE_ICON,
+	MAP_MOUNTAIN_ICON, MAP_TOWN_ICON, MAP_TREE_ICON, MAP_WATER_ICON, MENU_CLEAR, MENU_LIST_PAD,
+	MENU_LIST_RADIUS, MENU_REGION_WASH_ALPHA, NOTO_SANS_REGULAR, OBJECTIVE_MARKER_FONT_SIZE,
+	PANEL_BLOCK_FONT_SIZE, PANEL_GROUP_FONT_SIZE, PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE,
+	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, PANEL_TILE_COLUMNS, TEXT_DEEP_BLUE, TEXT_LIGHT_BLUE,
+	TEXT_LIME, TEXT_PURPLE, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS,
+	TEXT_YELLOW_HOVER, character_screen_grid_node, equipped_pane_fill, menu_list_panel_node,
+	menu_region_wash,
 };
 
 use bevy::prelude::*;
@@ -89,12 +93,18 @@ pub enum TextMenuSystems {
 	Navigate,
 }
 
+/// Primary host input consumers. Controller wiring orders these after authorized delivery;
+/// standalone keyboard menus retain their normal local ordering.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PrimaryMenuFrameSystems;
+
 pub struct MenuComponentsPlugin;
 
 impl Plugin for MenuComponentsPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<TextMenuInputLock>()
 			.init_resource::<KeyboardMenuNav>()
+			.init_resource::<MenuNavPad>()
 			.init_resource::<ActiveOverlayKey>()
 			.init_resource::<ActiveShortText>()
 			.init_resource::<ShortTextModal>()
@@ -112,6 +122,7 @@ impl Plugin for MenuComponentsPlugin {
 						.in_set(TextMenuSystems::InputLock)
 						.before(MenuModalSystems::Consume),
 					MenuModalSystems::Consume
+						.after(PrimaryMenuFrameSystems)
 						.in_set(TextMenuSystems::InputLock)
 						.before(MenuModalSystems::Apply),
 					MenuModalSystems::Apply.in_set(TextMenuSystems::InputLock),
@@ -136,6 +147,7 @@ impl Plugin for MenuComponentsPlugin {
 			.add_systems(
 				Update,
 				controls::emit_short_text_submit_on_confirm
+					.in_set(PrimaryMenuFrameSystems)
 					.after(MenuModalSystems::Sync)
 					.before(MenuModalSystems::Consume)
 					.in_set(TextMenuSystems::InputLock),

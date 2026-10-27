@@ -115,7 +115,7 @@ members = [
   "maybraid/game",
   "maybraid/world/modes/discover",
   "maybraid/world/modes/reliquary",
-  "maybraid/input",
+  "maybraid/controllers/virtual-pad",
   "maybraid/agent",
   "maybraid/combat-hud",
   "maybraid/combat-hud/playground",
@@ -395,7 +395,7 @@ spatial-rumble-playground = { path = "maybraid/spatial-rumble/playground" }
 maybraid-skill-map = { path = "maybraid/items/skill-map" }
 maybraid-equipment = { path = "maybraid/items/equipment" }
 maybraid = { path = "maybraid/game" }
-maybraid-input = { path = "maybraid/input" }
+maybraid-virtual-pad-controller = { path = "maybraid/controllers/virtual-pad" }
 maybraid-agent = { path = "maybraid/agent" }
 combat-hud = { path = "maybraid/combat-hud" }
 combat-hud-playground = { path = "maybraid/combat-hud/playground" }

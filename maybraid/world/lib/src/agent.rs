@@ -11,8 +11,10 @@ use maybraid_agent::{
 	PadIntent, Playback, TickEffect, TickView, SCRIPT_API_VERSION,
 };
 use maybraid_character_controller::OrdinaryLocomotion;
-use maybraid_input::{PadButton, PadOverlay, VirtualPadSystems};
 use maybraid_session::WorldGameplayEnabled;
+use maybraid_virtual_pad_controller::{
+	PadButton, PadOverlay, PadOverlayRequest, PrimaryVirtualPad, VirtualPadSystems,
+};
 use mob_characters::CharacterSceneRecipe;
 use mob_scenes::MobScene;
 use player::Player as MotorPlayer;
@@ -124,8 +126,7 @@ impl Plugin for WorldAgentPlugin {
 				}
 			});
 
-		app.insert_resource(PadOverlay::default())
-			.init_resource::<AgentMenuState>()
+		app.init_resource::<AgentMenuState>()
 			.init_resource::<AgentInventoryState>()
 			.init_resource::<AgentLastPadIntent>()
 			.insert_resource(AgentRuntime {
@@ -293,7 +294,8 @@ fn agent_sync_ready(
 #[allow(clippy::too_many_arguments)]
 fn agent_tick_playback(
 	mut runtime: ResMut<AgentRuntime>,
-	mut overlay: ResMut<PadOverlay>,
+	mut overlays: MessageWriter<PadOverlayRequest>,
+	primary: Option<Res<PrimaryVirtualPad>>,
 	mut last_pad: ResMut<AgentLastPadIntent>,
 	menu: Res<AgentMenuState>,
 	inventory: Res<AgentInventoryState>,
@@ -304,7 +306,9 @@ fn agent_tick_playback(
 ) {
 	runtime.frame = runtime.frame.saturating_add(1);
 	if !runtime.ready {
-		overlay.clear();
+		if let Some(primary) = primary {
+			overlays.write(PadOverlayRequest { source: primary.0, overlay: None });
+		}
 		return;
 	}
 	let pose = motors.single().ok().or_else(|| vegetation.single().ok());
@@ -320,7 +324,11 @@ fn agent_tick_playback(
 	let tick = runtime.playback.tick(time.delta_secs(), &view);
 	runtime.last_intent = tick.intent.clone();
 	last_pad.0 = tick.intent.clone();
+	let mut overlay = PadOverlay::default();
 	apply_intent(&mut overlay, &tick.intent);
+	if let Some(primary) = primary {
+		overlays.write(PadOverlayRequest { source: primary.0, overlay: Some(overlay) });
+	}
 	let t = time.elapsed_secs();
 	let frame = runtime.frame;
 	for effect in tick.effects {

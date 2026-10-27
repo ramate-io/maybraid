@@ -2,6 +2,7 @@
 
 pub mod actor;
 pub mod capture;
+pub mod delivery;
 pub mod route;
 pub mod router;
 pub mod schedule;
@@ -10,17 +11,23 @@ pub mod ui;
 
 pub use actor::ActorTarget;
 pub use capture::{CaptureKind, CaptureLayer, CaptureStack, CaptureToken, ScopeOwner};
-pub use route::{RouteTarget, Routed};
+pub use delivery::{
+	ActorPadEvent, ActorPadSnapshot, ActorRouteStatus, ActorRoutingEvent, RoutingLifecycle,
+	UiPadEvent,
+};
+pub use route::{RouteBinding, RouteTarget, Routed};
 pub use router::{
 	publish_routing_events, GestureEffect, HoldEffect, InputRouter, InputRouting, RoutingEvent,
 	RoutingKind, SourceAssignment, SourceConnection, Suspension, SuspensionToken,
 };
-pub use schedule::{CaptureResolveSystems, ControllerPipeline};
+pub use schedule::{
+	CaptureResolveSystems, ControllerPipeline, PadDeliverySystems, PadPolicySystems,
+};
 pub use source::InputSource;
 pub use ui::UiTarget;
 
 use bevy::prelude::*;
-use maybraid_input::VirtualPadPlugin;
+use maybraid_virtual_pad_controller::VirtualPadPlugin;
 
 #[derive(Resource)]
 struct ControllersCoreRegistration;
@@ -37,7 +44,43 @@ pub fn register_controllers_core(app: &mut App) {
 	ControllerPipeline::configure(app);
 	app.add_message::<RoutingEvent>()
 		.init_resource::<InputRouter>()
+		.init_resource::<delivery::PendingPadDelivery>()
+		.init_resource::<delivery::ProducedBindings>()
+		.add_message::<maybraid_virtual_pad_controller::VirtualPadEvent>()
+		.add_message::<maybraid_virtual_pad_controller::VirtualPadLifecycle>()
+		.add_systems(
+			Update,
+			(
+				delivery::reconcile_sources,
+				publish_routing_events,
+				delivery::publish_actor_lifecycle,
+				delivery::prepare_pad_frames,
+				delivery::deliver_ui_frames,
+				bevy::ecs::schedule::ApplyDeferred,
+				delivery::deliver_actor_frames,
+			)
+				.chain()
+				.in_set(PadDeliverySystems),
+		)
+		.add_systems(
+			PreUpdate,
+			delivery::sync_source_policies
+				.in_set(PadPolicySystems)
+				.before(maybraid_virtual_pad_controller::VirtualPadSystems::Produce),
+		)
+		.add_systems(
+			PreUpdate,
+			delivery::record_produced_bindings
+				.after(maybraid_virtual_pad_controller::VirtualPadSystems::Derive),
+		)
 		.add_systems(Last, publish_routing_events);
+	if let Some(primary) = app
+		.world()
+		.get_resource::<maybraid_virtual_pad_controller::PrimaryVirtualPad>()
+		.copied()
+	{
+		app.world_mut().resource_mut::<InputRouter>().set_local_source(primary.0);
+	}
 }
 
 /// Installs the pipeline graph and an empty [`InputRouter`].

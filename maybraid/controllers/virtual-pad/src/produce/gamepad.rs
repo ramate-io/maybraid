@@ -48,17 +48,13 @@ impl GamepadAxes {
 		}
 		parts.join(" ")
 	}
-}
-
-pub fn produce_gamepad(
-	gamepads: Query<&Gamepad>,
-	config: Res<VirtualPadConfig>,
-	time: Res<Time>,
-	mut pad: ResMut<VirtualPad>,
-) {
-	let dt = time.delta_secs();
-	let press = config.trigger_press_threshold;
-	for gamepad in &gamepads {
+	pub(crate) fn apply(
+		gamepad: &Gamepad,
+		config: &VirtualPadConfig,
+		dt: f32,
+		pad: &mut VirtualPad,
+	) {
+		let press = config.trigger_press_threshold;
 		pad.add_move(GamepadAxes::move_stick(gamepad, config.stick_deadzone));
 
 		let look = GamepadAxes::look_stick(gamepad, config.stick_deadzone);

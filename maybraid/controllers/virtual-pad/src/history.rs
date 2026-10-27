@@ -6,8 +6,6 @@ use std::time::Duration;
 use bevy::prelude::*;
 
 use crate::button::{ButtonStroke, PadButton};
-use crate::config::VirtualPadConfig;
-use crate::pad::VirtualPad;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PadSnapshot {
@@ -37,7 +35,7 @@ pub struct Timed<T> {
 	pub value: T,
 }
 
-#[derive(Resource, Clone, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct PadHistory {
 	pub frames: VecDeque<Timed<PadSnapshot>>,
 	pub edges: VecDeque<Timed<PadEdge>>,
@@ -73,23 +71,6 @@ impl PadHistory {
 			)
 		})
 	}
-}
-
-pub fn push_history(
-	pad: Res<VirtualPad>,
-	config: Res<VirtualPadConfig>,
-	time: Res<Time>,
-	mut history: ResMut<PadHistory>,
-) {
-	let now = time.elapsed_secs();
-	history.push_frame(now, pad.snapshot());
-	for stroke in &pad.button_events {
-		history.push_edge(now, PadEdge::Button(*stroke));
-	}
-	for stroke in &pad.key_events {
-		history.push_edge(now, PadEdge::Key(*stroke));
-	}
-	history.evict(now, config.history_window, config.history_max_frames);
 }
 
 #[cfg(test)]

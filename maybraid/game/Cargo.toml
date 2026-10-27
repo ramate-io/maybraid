@@ -23,7 +23,7 @@ character-inventory-user = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-game-mode-discover = { workspace = true }
 maybraid-game-mode-reliquary = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 maybraid-agent = { workspace = true }
 maybraid-menu-controller = { workspace = true }
 maybraid-gameplay = { workspace = true }
