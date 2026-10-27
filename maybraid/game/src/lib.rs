@@ -54,7 +54,7 @@ use maybraid_world::{
 use menu_components::{MenuBackRequested, TextMenuSystems, MENU_CLEAR};
 use menu_playground::{
 	ActiveCharacter, CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState,
-	CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin, CharacterSessionPlugin,
+	CharacterPreviewPlugin, CharacterScreenPlugin, CharacterSessionPlugin,
 	EditingCharacter, RequestEditCharacter,
 };
 use menu_screens::{

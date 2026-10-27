@@ -489,7 +489,7 @@ mod tests {
 			{
 				input
 					.clone()
-					.trigger(&mut commands, |input| ActorControlEvent { entity, input });
+					.trigger(&mut commands, move |input| ActorControlEvent { entity, input });
 			}
 		}
 	}
@@ -807,10 +807,12 @@ mod tests {
 		let right = spawn_tanzer(&mut app, ControlMode::Tanzer);
 		let second_pad = app.world_mut().spawn_empty().id();
 		let second_source = InputSource::virtual_pad(second_pad);
-		app.world_mut().run_system_once(move |mut routing: InputRouting| {
-			routing.assign_actor(InputSource::local_pad(), ActorTarget::new(left));
-			routing.assign_actor(second_source, ActorTarget::new(right));
-		})?;
+		app.world_mut()
+			.run_system_once(move |mut routing: InputRouting| {
+				routing.assign_actor(InputSource::local_pad(), ActorTarget::new(left));
+				routing.assign_actor(second_source, ActorTarget::new(right));
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		set_local_sample(
 			&mut app,
 			left,

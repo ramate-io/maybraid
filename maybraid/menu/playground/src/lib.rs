@@ -243,17 +243,16 @@ mod tests {
 	use bevy::input::{ButtonState, InputPlugin, InputSystems};
 	use bevy::prelude::*;
 	use maybraid_menu_controller::{
-		CaptureKind, InputRouter, InputRouting, InputSource, MenuController, MenuNavCapture,
-		RoutingEvent, ScopeOwner, dispatch,
+		InputRouter, MenuController, MenuNavCapture, RoutingEvent, dispatch,
 	};
 	use maybraid_virtual_pad_controller::{
-		PadButton, PadInputPolicy, VirtualPad, VirtualPadConfig,
-		produce::keyboard::produce_keyboard,
+		PadButton, PrimaryVirtualPad, VirtualPadController, VirtualPadEvent, VirtualPadSystems,
+		produce::keyboard::KeyboardPad,
 	};
 	use menu_components::MenuNavPad;
 	use menu_components::{
 		HudMenu, HudMenuItem, MenuComponentsPlugin, ShortTextField, ShortTextKey, ShortTextModal,
-		TextMenuInputLock, TextMenuSystems,
+		TextMenuSystems,
 	};
 	use menu_screens::RequestShowGallery;
 
@@ -261,57 +260,38 @@ mod tests {
 	#[derive(Resource, Default)]
 	struct HeldPad(Vec<PadButton>);
 
-	/// Mirrors the menu controller's gate: the GameController backend cannot run
-	/// off the main thread, so tests skip `MenuControllerPlugin`.
-	fn gate_pad(
-		lock: Res<TextMenuInputLock>,
-		modal: Res<ShortTextModal>,
-		mut router: InputRouting,
-		mut menu_capture: ResMut<MenuNavCapture>,
-		mut policy: ResMut<PadInputPolicy>,
-	) {
-		router.replace_owned_capture(
-			&mut menu_capture.text,
-			InputSource::local_pad(),
-			(lock.0 && !modal.is_open()).then_some(ScopeOwner::text_lock()),
-			CaptureKind::TextEntry,
-		);
-		*policy = router.pad_policy();
-	}
-
-	fn begin_held_pad(held: Res<HeldPad>, mut pad: ResMut<VirtualPad>) {
-		pad.begin_frame();
-		for button in &held.0 {
-			pad.hold_digital(*button);
-		}
-	}
-
-	fn finish_held_pad(
-		config: Res<VirtualPadConfig>,
-		policy: Res<PadInputPolicy>,
-		mut pad: ResMut<VirtualPad>,
-		mut nav: ResMut<MenuNavPad>,
-		mut repeat: ResMut<maybraid_menu_controller::primary::PrimaryMenuRepeat>,
-		primary: Res<maybraid_virtual_pad_controller::PrimaryVirtualPad>,
+	/// Exercise the real value mapping and source-owned held state without installing HID.
+	fn produce_fixture_frame(
+		held: Res<HeldPad>,
+		keyboard: Res<ButtonInput<KeyCode>>,
+		primary: Res<PrimaryVirtualPad>,
+		mut sources: Query<&mut VirtualPadController>,
 		mut sequence: Local<u64>,
-		mut events: MessageWriter<maybraid_virtual_pad_controller::VirtualPadEvent>,
-		mut host: ResMut<menu_components::PrimaryMenuInput>,
+		mut events: MessageWriter<VirtualPadEvent>,
 	) {
-		if policy.suppress_gameplay() {
-			pad.suppress_gameplay();
+		let Ok(mut source) = sources.get_mut(primary.0) else {
+			return;
+		};
+		let policy = source.policy;
+		let config = source.config.clone();
+		source.pad.begin_frame();
+		for button in &held.0 {
+			source.pad.hold_digital(*button);
 		}
-		pad.finish_digital();
-		repeat.0.derive(&pad, &config, 1.0 / 60.0);
-		nav.events.clone_from(&repeat.0.events);
+		KeyboardPad::apply(&keyboard, policy, &mut source.pad);
+		if policy.suppress_gameplay() {
+			source.pad.suppress_gameplay();
+		}
+		source.pad.apply_trigger_digital(config.trigger_press_threshold);
+		source.pad.finish_digital();
+		source.pad.tick_holds(1.0 / 60.0);
 		*sequence += 1;
-		let frame = maybraid_virtual_pad_controller::VirtualPadEvent {
+		events.write(VirtualPadEvent {
 			source: primary.0,
 			sequence: *sequence,
 			delta: std::time::Duration::from_secs_f32(1.0 / 60.0),
-			pad: pad.clone(),
-		};
-		host.frame = Some(frame.clone());
-		events.write(frame);
+			pad: source.pad.clone(),
+		});
 	}
 
 	fn editor_app() -> App {
@@ -333,13 +313,10 @@ mod tests {
 		.init_asset::<Font>()
 		.init_asset::<Image>()
 		.init_resource::<HeldPad>()
-		.init_resource::<VirtualPad>()
-		.init_resource::<VirtualPadConfig>()
 		.init_resource::<MenuNavPad>()
 		.init_resource::<InputRouter>()
 		.init_resource::<Messages<RoutingEvent>>()
 		.init_resource::<MenuNavCapture>()
-		.init_resource::<PadInputPolicy>()
 		.init_resource::<bevy::picking::hover::HoverMap>()
 		.init_resource::<crate::CharacterMenuState>()
 		.insert_resource(character_persist::SaveRoot::at(
@@ -347,11 +324,26 @@ mod tests {
 		))
 		.add_plugins((MenuComponentsPlugin, CharacterLeavePromptPlugin))
 		.add_plugins(menu_screens::MenuInputPlugin)
+		.configure_sets(
+			PreUpdate,
+			(
+				VirtualPadSystems::Produce,
+				VirtualPadSystems::Derive.after(VirtualPadSystems::Produce),
+			),
+		)
 		.add_systems(
 			PreUpdate,
-			(gate_pad, begin_held_pad, produce_keyboard, finish_held_pad)
-				.chain()
-				.after(InputSystems),
+			maybraid_menu_controller::primary::sync_text_menu_capture
+				.before(maybraid_controllers_core::PadPolicySystems),
+		)
+		.add_systems(
+			PreUpdate,
+			produce_fixture_frame.in_set(VirtualPadSystems::Produce).after(InputSystems),
+		)
+		.add_systems(
+			PreUpdate,
+			maybraid_menu_controller::primary::derive_primary_menu_nav
+				.after(VirtualPadSystems::Derive),
 		)
 		.add_systems(
 			Update,
@@ -495,18 +487,24 @@ mod tests {
 	}
 
 	#[test]
-	fn wasd_on_the_name_keyboard_does_not_steer_the_pad() {
+	fn wasd_on_the_name_keyboard_does_not_steer_the_pad() -> anyhow::Result<()> {
 		let mut app = editor_app();
 		open_keyboard(&mut app);
 		for key_code in [KeyCode::KeyW, KeyCode::KeyA, KeyCode::KeyS, KeyCode::KeyD] {
 			key(&mut app, key_code, ButtonState::Pressed);
 		}
 		app.update();
-		let pad = app.world().resource::<VirtualPad>();
+		let primary = app.world().resource::<PrimaryVirtualPad>();
+		let source = app
+			.world()
+			.get::<VirtualPadController>(primary.0)
+			.ok_or_else(|| anyhow::anyhow!("primary source"))?;
+		let pad = &source.pad;
 		assert_eq!(pad.move_stick, Vec2::ZERO);
 		assert_eq!(pad.dpad, Vec2::ZERO);
 		assert!(app.world().resource::<ShortTextModal>().is_open());
 		assert!(!left_editor(&mut app));
+		Ok(())
 	}
 
 	#[test]

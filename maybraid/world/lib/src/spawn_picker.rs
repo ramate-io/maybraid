@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use crate::map_view::WorldMapView;
 
 pub use maybraid_spawns_player::{
-	dispatch_spawn_picker, SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet,
+	SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet,
 };
 
 /// Copy the locked map sheet so the picker can run without depending on

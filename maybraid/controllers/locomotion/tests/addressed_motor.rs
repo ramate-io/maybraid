@@ -201,6 +201,18 @@ fn reassignment_after_bind_cannot_apply_the_old_frame_to_either_actor() -> Resul
 	frame(&mut app, source, 2, Vec2::X, &[]);
 	app.update();
 	assert_eq!(wish(&app, first)?, Vec3::ZERO);
+	assert_eq!(
+		wish(&app, second)?,
+		Vec3::ZERO,
+		"changing direction without centering must not transfer a held stick"
+	);
+	frame(&mut app, source, 3, Vec2::ZERO, &[]);
+	app.update();
+	assert_eq!(wish(&app, first)?, Vec3::ZERO);
+	assert_eq!(wish(&app, second)?, Vec3::ZERO);
+	frame(&mut app, source, 4, Vec2::X, &[]);
+	app.update();
+	assert_eq!(wish(&app, first)?, Vec3::ZERO);
 	assert_eq!(wish(&app, second)?, Vec3::X);
 	Ok(())
 }

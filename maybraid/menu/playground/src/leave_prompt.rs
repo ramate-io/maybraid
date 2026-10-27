@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy::text::Justify;
 use character_persist::SaveRoot;
-use maybraid_virtual_pad_controller::{PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::PadButton;
 use menu_components::theme::{
 	HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW, menu_list_panel_node, menu_region_wash,
 };
@@ -160,7 +160,7 @@ fn intercept_character_leave_edges(
 	mut backs: MessageReader<ScreenBackPressed>,
 	mut commands: Commands,
 ) {
-    let pad = primary.as_ref().and_then(|host| host.frame.as_ref()).map(|frame| &frame.pad);
+	let pad = primary.as_ref().and_then(|host| host.frame.as_ref()).map(|frame| &frame.pad);
 	prompt.opened_this_frame = false;
 	let back_click = backs.read().next().is_some();
 	let start = pad.is_some_and(|pad| pad.just_pressed(PadButton::Start));
