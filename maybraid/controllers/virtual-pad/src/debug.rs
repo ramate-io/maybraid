@@ -6,7 +6,6 @@ use crate::config::VirtualPadConfig;
 use crate::gate::PadInputPolicy;
 use crate::pad::VirtualPad;
 use crate::produce::gamepad::GamepadAxes;
-use crate::surface::menu::MenuNavPad;
 
 #[derive(Component)]
 struct VirtualPadDebugText;
@@ -41,7 +40,6 @@ fn update_debug_overlay(
 	config: Res<VirtualPadConfig>,
 	policy: Res<PadInputPolicy>,
 	pad: Res<VirtualPad>,
-	nav: Res<MenuNavPad>,
 	gamepads: Query<(Entity, &Gamepad)>,
 	mut lines: Query<&mut Text, With<VirtualPadDebugText>>,
 ) {
@@ -53,9 +51,8 @@ fn update_debug_overlay(
 	};
 	let mut out = String::new();
 	out.push_str(&format!(
-		"enabled={} nav={:?} move=({:.2},{:.2}) dpad=({:.2},{:.2}) A={} B={} Start={} Select={}\n",
+		"enabled={} move=({:.2},{:.2}) dpad=({:.2},{:.2}) A={} B={} Start={} Select={}\n",
 		!policy.suppress_gameplay(),
-		nav.events,
 		pad.move_stick.x,
 		pad.move_stick.y,
 		pad.dpad.x,

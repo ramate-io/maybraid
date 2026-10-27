@@ -18,7 +18,7 @@ pub struct VirtualPadConfig {
 	pub history_window: Duration,
 	pub history_max_frames: usize,
 	pub cursor_speed: f32,
-	/// On-screen dump of raw `Gamepad` + [`crate::VirtualPad`] + [`crate::MenuNavPad`].
+	/// On-screen dump of raw `Gamepad` + [`crate::VirtualPad`].
 	pub debug_overlay: bool,
 }
 

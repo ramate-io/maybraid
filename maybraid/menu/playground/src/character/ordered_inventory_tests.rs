@@ -5,21 +5,21 @@ use character_creation_menus::{CharacterMenu, MenuEvent};
 use character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
 use character_ui_menu::MenuComponent;
 use maybraid_character_ui_menu_renderer::{
+	InventoryFocusHint, InventoryInteraction, InventoryItemKey, NoThumbnails,
 	fill_inventory_layout, find_overlay_node,
 	input::{
 		emit_hud_activate_on_nav, emit_inventory_reorder_keyboard, emit_inventory_reorder_nav,
 	},
-	InventoryFocusHint, InventoryInteraction, InventoryItemKey, NoThumbnails,
 };
-use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse};
 use menu_components::{
-	apply_hud_menu_nav, navigate_hud_menus, HudFonts, HudMenu, HudMenuItem, HudMenuNavLocked,
-	HudOverlayMenu, KeyboardMenuNav, MenuModalStack, TextMenuInputLock,
+	HudFonts, HudMenu, HudMenuItem, HudMenuNavLocked, HudOverlayMenu, KeyboardMenuNav,
+	MenuModalStack, TextMenuInputLock, apply_hud_menu_nav, navigate_hud_menus,
 };
+use menu_components::{MenuNav, MenuNavImpulse};
 
 use crate::character::{
-	on_menu_activate, CharacterMenuState, CharacterScreen, CharacterUiSyncState,
-	OverlaySelectState, OverlayUiSyncState,
+	CharacterMenuState, CharacterScreen, CharacterUiSyncState, OverlaySelectState,
+	OverlayUiSyncState, on_menu_activate,
 };
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
 use menu_components::ActiveOverlayKey;
@@ -129,7 +129,7 @@ fn reorder_from_both_ends_visits_every_slot_and_retains_identity() -> Result<()>
 		let start = if from_end { before.len() - 1 } else { 0 };
 		let identity = before[start];
 		let original_ordinal = select_item(&mut world, viewport, identity)?;
-		world.trigger(MenuNavImpulse { entity: viewport, nav: MenuNav::Select });
+		world.trigger(MenuNavImpulse::new(viewport, MenuNav::Select));
 		world.flush();
 		assert_eq!(world.resource::<InventoryInteraction>().reordering(), Some(identity));
 		assert!(world.get::<HudMenuNavLocked>(viewport).is_some());
@@ -137,7 +137,7 @@ fn reorder_from_both_ends_visits_every_slot_and_retains_identity() -> Result<()>
 		for step in 1..before.len() {
 			// A stale/hovered ordinal must never select a different bag item's controls.
 			world.get_mut::<HudMenu>(viewport).context("menu")?.selected = original_ordinal;
-			world.trigger(MenuNavImpulse { entity: viewport, nav });
+			world.trigger(MenuNavImpulse::new(viewport, nav));
 			world.flush();
 			rebuild(&mut world, viewport)?;
 			let after = order(&world)?;
@@ -150,12 +150,12 @@ fn reorder_from_both_ends_visits_every_slot_and_retains_identity() -> Result<()>
 			);
 		}
 		let at_end = order(&world)?;
-		world.trigger(MenuNavImpulse { entity: viewport, nav });
+		world.trigger(MenuNavImpulse::new(viewport, nav));
 		world.flush();
-		world.trigger(MenuNavImpulse { entity: viewport, nav: MenuNav::Down });
+		world.trigger(MenuNavImpulse::new(viewport, MenuNav::Down));
 		world.flush();
 		assert_eq!(order(&world)?, at_end);
-		world.trigger(MenuNavImpulse { entity: viewport, nav: MenuNav::Select });
+		world.trigger(MenuNavImpulse::new(viewport, MenuNav::Select));
 		world.flush();
 		assert_eq!(*world.resource::<InventoryInteraction>(), InventoryInteraction::Browse);
 		assert!(world.get::<HudMenuNavLocked>(viewport).is_none());
@@ -169,7 +169,7 @@ fn standalone_keyboard_moves_the_item_once_without_moving_browse_focus() -> Resu
 	rebuild(&mut world, viewport)?;
 	let before = order(&world)?;
 	let original_ordinal = select_item(&mut world, viewport, before[0])?;
-	world.trigger(MenuNavImpulse { entity: viewport, nav: MenuNav::Select });
+	world.trigger(MenuNavImpulse::new(viewport, MenuNav::Select));
 	world.flush();
 	world.resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::ArrowRight);
 	world
@@ -210,7 +210,7 @@ fn hover_cannot_steal_reorder_focus_but_click_can_retarget_it() -> Result<()> {
 	rebuild(&mut world, viewport)?;
 	let before = order(&world)?;
 	select_item(&mut world, viewport, before[0])?;
-	world.trigger(MenuNavImpulse { entity: viewport, nav: MenuNav::Select });
+	world.trigger(MenuNavImpulse::new(viewport, MenuNav::Select));
 	world.flush();
 	let target = world
 		.query::<(Entity, &InventoryItemKey)>()
@@ -245,7 +245,7 @@ fn hover_cannot_steal_reorder_focus_but_click_can_retarget_it() -> Result<()> {
 	world.flush();
 	assert_eq!(selected_key(&mut world, viewport)?, before[1]);
 	assert_eq!(world.resource::<InventoryInteraction>().reordering(), Some(before[1]));
-	world.trigger(MenuNavImpulse { entity: viewport, nav: MenuNav::Select });
+	world.trigger(MenuNavImpulse::new(viewport, MenuNav::Select));
 	world.flush();
 	assert_eq!(*world.resource::<InventoryInteraction>(), InventoryInteraction::Browse);
 	Ok(())

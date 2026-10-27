@@ -6966,6 +6966,7 @@ dependencies = [
 name = "maybraid-character-ui-menu-renderer"
 version = "0.1.5"
 dependencies = [
+ "anyhow",
  "bevy",
  "character-ui-menu",
  "maybraid-virtual-pad-controller",
@@ -7214,7 +7215,9 @@ dependencies = [
  "anyhow",
  "bevy",
  "maybraid-controllers-core",
+ "maybraid-menu-controller",
  "maybraid-virtual-pad-controller",
+ "menu-components",
  "poi-intelligence",
  "world-player",
 ]
@@ -7407,6 +7410,7 @@ name = "menu-components"
 version = "0.1.5"
 dependencies = [
  "bevy",
+ "maybraid-controllers-core",
  "maybraid-virtual-pad-controller",
 ]
 
@@ -7433,6 +7437,7 @@ dependencies = [
  "item-icons",
  "lod",
  "maybraid-character-ui-menu-renderer",
+ "maybraid-controllers-core",
  "maybraid-menu-controller",
  "maybraid-skill-map",
  "maybraid-virtual-pad-controller",
@@ -14075,6 +14080,8 @@ dependencies = [
  "game-commands",
  "lod",
  "lod-avian",
+ "maybraid-character-controller",
+ "maybraid-controllers-core",
  "maybraid-virtual-pad-controller",
  "player-camera",
  "vegetation-components",

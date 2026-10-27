@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use crate::controls::hud_menu::{HudMenu, HudMenuItem};
 use crate::modal::MenuModalStack;
 use crate::theme::{SCROLLBAR_THUMB, SCROLLBAR_TRACK, SCROLLBAR_WIDTH, TILE_FOCUS_PAD};
-use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse};
+use crate::{MenuNav, MenuNavImpulse};
 
 const SCROLL_LINE_PX: f32 = 14.0;
 const MIN_THUMB_PX: f32 = 24.0;
@@ -156,12 +156,9 @@ pub fn send_hud_scroll_events(
 	stack: Res<MenuModalStack>,
 	mut mouse_wheel_reader: MessageReader<MouseWheel>,
 	hover_map: Res<HoverMap>,
+	scoped: Query<(), With<crate::ScopedMenuSession>>,
 	mut commands: Commands,
 ) {
-	if stack.owns_nav() {
-		for _ in mouse_wheel_reader.read() {}
-		return;
-	}
 	for mouse_wheel in mouse_wheel_reader.read() {
 		let mut delta = -Vec2::new(mouse_wheel.x, mouse_wheel.y);
 		if mouse_wheel.unit == MouseScrollUnit::Line {
@@ -169,6 +166,9 @@ pub fn send_hud_scroll_events(
 		}
 		for pointer_map in hover_map.values() {
 			for entity in pointer_map.keys().copied() {
+				if stack.owns_nav() && !scoped.contains(entity) {
+					continue;
+				}
 				commands.trigger(HudScroll { entity, delta });
 			}
 		}
@@ -395,8 +395,8 @@ pub(crate) fn entity_is_under(
 
 #[cfg(test)]
 mod tests {
-	use super::{hud_nav_scroll_delta, scroll_delta_to_reveal, HUD_NAV_SCROLL_LINE};
-	use maybraid_virtual_pad_controller::MenuNav;
+	use super::{HUD_NAV_SCROLL_LINE, hud_nav_scroll_delta, scroll_delta_to_reveal};
+	use crate::MenuNav;
 
 	#[test]
 	fn item_already_visible_does_not_scroll() {
@@ -453,7 +453,7 @@ mod tests {
 
 	#[test]
 	fn wheel_does_not_scroll_while_a_confirm_modal_owns_nav() {
-		use super::{send_hud_scroll_events, HudScroll};
+		use super::{HudScroll, send_hud_scroll_events};
 		use crate::modal::{MenuModalId, MenuModalLayer, MenuModalStack};
 		use bevy::ecs::entity::EntityHashMap;
 		use bevy::ecs::system::RunSystemOnce;

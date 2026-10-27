@@ -37,6 +37,7 @@ menu-screens = { workspace = true }
 player = { workspace = true }
 
 [dev-dependencies]
+maybraid-controllers-core = { workspace = true }
 anyhow = { workspace = true }
 screen-capture = { workspace = true }
 

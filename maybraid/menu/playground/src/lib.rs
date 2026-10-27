@@ -11,20 +11,20 @@ mod ui;
 mod weapon_gallery;
 
 pub use character::{
-	request_show_character, CharacterEditBaseline, CharacterMenuState, CharacterScreen,
-	CharacterScreenPlugin, RequestShowCharacter,
+	CharacterEditBaseline, CharacterMenuState, CharacterScreen, CharacterScreenPlugin,
+	RequestShowCharacter, request_show_character,
 };
-pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
+pub use commands::{PLAYGROUND_CLI_NAME, PlaygroundCommand};
 pub use drop_prompt::CharacterDropPrompt;
 pub use game_commands::command::PendingStartupCommand;
 pub use leave_prompt::CharacterLeavePrompt;
 pub use preview::{CharacterPreviewLight, CharacterPreviewPlugin, CharacterPreviewRoot};
 pub use session::{
-	end_character_editor, leave_character_editor, save_editing_character, ActiveCharacter,
-	CharacterEditorReturn, CharacterSession, CharacterSessionPlugin, EditingCharacter,
-	RequestEditCharacter,
+	ActiveCharacter, CharacterEditorReturn, CharacterSession, CharacterSessionPlugin,
+	EditingCharacter, RequestEditCharacter, end_character_editor, leave_character_editor,
+	save_editing_character,
 };
-pub use weapon_gallery::{request_show_weapons, WeaponGalleryPlugin, WeaponGalleryScreen};
+pub use weapon_gallery::{WeaponGalleryPlugin, WeaponGalleryScreen, request_show_weapons};
 
 use bevy::prelude::*;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
@@ -35,15 +35,16 @@ use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use maybraid_virtual_pad_controller::{MenuNavPad, VirtualPadPlugin};
 use maybraid_menu_controller::MenuControllerPlugin;
-use menu_components::{consume_screen_back, MenuModalStack, ScreenBackPressed, TextMenuSystems};
+use maybraid_virtual_pad_controller::VirtualPadPlugin;
+use menu_components::MenuNavPad;
+use menu_components::{MenuModalStack, ScreenBackPressed, TextMenuSystems, consume_screen_back};
 use menu_screens::{
+	CreateCharacterPlugin, GalleryChoice, GalleryScreen, HomeMenuChoice, HomeScreen,
+	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettingsChoice,
+	InGameSettingsScreen, LoadingScreenPlugin, LoadingScreenSystems, SpinRevealScreen,
 	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
-	request_show_in_game_settings, CreateCharacterPlugin, GalleryChoice, GalleryScreen,
-	HomeMenuChoice, HomeScreen, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin,
-	InGameSettingsChoice, InGameSettingsScreen, LoadingScreenPlugin, LoadingScreenSystems,
-	SpinRevealScreen,
+	request_show_in_game_settings,
 };
 
 pub struct MenuPlaygroundPlugin;
@@ -90,7 +91,9 @@ impl Plugin for MenuPlaygroundPlugin {
 				echo_in_game_settings_choice,
 				echo_character_menu,
 				echo_gallery_choice,
-				editor_back.after(TextMenuSystems::Navigate),
+				editor_back
+					.after(TextMenuSystems::Navigate)
+					.after(maybraid_controllers_core::PadDeliverySystems),
 				loading_demo::run_loading_demo.before(LoadingScreenSystems::Apply),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 			),
@@ -239,14 +242,15 @@ mod tests {
 	use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
 	use bevy::input::{ButtonState, InputPlugin, InputSystems};
 	use bevy::prelude::*;
-	use maybraid_virtual_pad_controller::{
-		produce::keyboard::produce_keyboard, MenuNavPad, PadButton, PadInputPolicy, VirtualPad,
-		VirtualPadConfig,
-	};
 	use maybraid_menu_controller::{
-		dispatch, CaptureKind, InputRouter, InputRouting, InputSource, MenuController,
-		MenuNavCapture, RoutingEvent, ScopeOwner,
+		CaptureKind, InputRouter, InputRouting, InputSource, MenuController, MenuNavCapture,
+		RoutingEvent, ScopeOwner, dispatch,
 	};
+	use maybraid_virtual_pad_controller::{
+		PadButton, PadInputPolicy, VirtualPad, VirtualPadConfig,
+		produce::keyboard::produce_keyboard,
+	};
+	use menu_components::MenuNavPad;
 	use menu_components::{
 		HudMenu, HudMenuItem, MenuComponentsPlugin, ShortTextField, ShortTextKey, ShortTextModal,
 		TextMenuInputLock, TextMenuSystems,
@@ -287,16 +291,39 @@ mod tests {
 		policy: Res<PadInputPolicy>,
 		mut pad: ResMut<VirtualPad>,
 		mut nav: ResMut<MenuNavPad>,
+		mut repeat: ResMut<maybraid_menu_controller::primary::PrimaryMenuRepeat>,
+		primary: Res<maybraid_virtual_pad_controller::PrimaryVirtualPad>,
+		mut sequence: Local<u64>,
+		mut events: MessageWriter<maybraid_virtual_pad_controller::VirtualPadEvent>,
+		mut host: ResMut<menu_components::PrimaryMenuInput>,
 	) {
 		if policy.suppress_gameplay() {
 			pad.suppress_gameplay();
 		}
 		pad.finish_digital();
-		nav.derive(&pad, &config, 1.0 / 60.0);
+		repeat.0.derive(&pad, &config, 1.0 / 60.0);
+		nav.events.clone_from(&repeat.0.events);
+		*sequence += 1;
+		let frame = maybraid_virtual_pad_controller::VirtualPadEvent {
+			source: primary.0,
+			sequence: *sequence,
+			delta: std::time::Duration::from_secs_f32(1.0 / 60.0),
+			pad: pad.clone(),
+		};
+		host.frame = Some(frame.clone());
+		events.write(frame);
 	}
 
 	fn editor_app() -> App {
 		let mut app = App::new();
+		maybraid_controllers_core::register_controllers_core(&mut app);
+		let source = app
+			.world_mut()
+			.spawn(maybraid_virtual_pad_controller::VirtualPadController::new(Default::default()))
+			.id();
+		app.insert_resource(maybraid_virtual_pad_controller::PrimaryVirtualPad(source));
+		app.init_resource::<maybraid_menu_controller::primary::PrimaryMenuRepeat>();
+		app.add_observer(dispatch::interpret_menu_pad);
 		app.add_plugins((
 			MinimalPlugins,
 			AssetPlugin::default(),
@@ -329,10 +356,12 @@ mod tests {
 		.add_systems(
 			Update,
 			(
-				(dispatch::refresh_menu_focus, dispatch::dispatch_menu_nav)
-					.chain()
-					.in_set(TextMenuSystems::Navigate),
-				editor_back.after(TextMenuSystems::Navigate),
+				dispatch::refresh_menu_focus
+					.in_set(maybraid_controllers_core::CaptureResolveSystems)
+					.after(TextMenuSystems::InputLock),
+				editor_back
+					.after(TextMenuSystems::Navigate)
+					.after(maybraid_controllers_core::PadDeliverySystems),
 			),
 		);
 		let screen = app.world_mut().spawn((CharacterScreen, MenuController::default())).id();
