@@ -17,11 +17,11 @@ use characters_playground::CameraController as PreviewCameraController;
 use layer_stack::ActiveGenerationMode;
 use maybraid_controllers_core::{InputRouter, InputRouting};
 use maybraid_game_mode_discover::{streams_terrain, Discovery};
-use maybraid_gameplay::SessionCapabilities;
+use maybraid_session::{SessionCapabilities, WorldGameplayEnabled};
 use maybraid_sky::SKY_CLEAR;
 use maybraid_world::{
-	Durham, InventoryEditCameraFollow, PlayerPhysicsEnabled,
-	TerrainStreaming, WorldGameplayEnabled, WorldMenuShell, WorldSceneryVisible,
+	Durham, InventoryEditCameraFollow, PlayerPhysicsEnabled, TerrainStreaming, WorldMenuShell,
+	WorldSceneryVisible,
 };
 use menu_components::MENU_CLEAR;
 use menu_playground::{
@@ -411,12 +411,12 @@ mod tests {
 	use crate::flow::{GameFlow, PlaySession, WorldPause};
 	use bevy::ecs::system::RunSystemOnce;
 	use layer_stack::ActiveGenerationMode;
+	use maybraid_controllers_core::{InputRouter, RoutingEvent};
 	use maybraid_game_mode_discover::Discovery;
 	use maybraid_world::{
-		Durham, InventoryEditCameraFollow, PlayerPhysicsEnabled,
-		TerrainStreaming, WorldGameplayEnabled, WorldMenuShell, WorldSceneryVisible,
+		Durham, InventoryEditCameraFollow, PlayerPhysicsEnabled, TerrainStreaming, WorldMenuShell,
+		WorldSceneryVisible,
 	};
-	use maybraid_controllers_core::{InputRouter, RoutingEvent};
 	use menu_components::MENU_CLEAR;
 
 	#[test]

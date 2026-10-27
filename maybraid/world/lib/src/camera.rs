@@ -7,6 +7,7 @@ use durham::WorldBaseTerrain;
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
+use maybraid_session::WorldGameplayEnabled;
 use player::{CameraFollow, Player};
 use player_camera::{
 	spawn_follow_camera, CameraController, CameraLookSuppressed, CameraPov, CameraPovLocked,
@@ -16,7 +17,7 @@ use world_player::{
 	player::holding_elevation, Player as VegetationPlayer, PlayerSpawnXz, PlaygroundMode,
 };
 
-use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
+use crate::control::InventoryEditCameraFollow;
 use crate::map_view::{WorldMapSet, WorldMapView};
 
 const CAMERA_COLLISION_RADIUS: f32 = 0.18;

@@ -15,6 +15,7 @@ use maybraid_character_controller::CharacterControlSystems;
 use maybraid_equipment::{
 	EquipmentInventoryChanged, EquipmentSystems, EquippedItemHandler, InventoryCycling,
 };
+use maybraid_session::WorldGameplayEnabled;
 
 use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
 use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
@@ -28,7 +29,7 @@ use world_player::{
 	PlaygroundMode, RequestSetCharacter, RequestSetCharacterAppearance,
 };
 
-use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
+use crate::control::InventoryEditCameraFollow;
 
 /// Persisted character appearance, worn clothing, stats, and primary weapon for world entry.
 #[derive(Resource, Clone, Debug, PartialEq)]
@@ -362,9 +363,9 @@ mod tests {
 	};
 
 	use crate::weapon::{arm_world_player, WorldPlayerAppearanceRequested, WorldPlayerLoadout};
-	use crate::WorldGameplayEnabled;
 	use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource};
 	use maybraid_equipment::{EquippedItemHandler, InventoryCycling};
+	use maybraid_session::WorldGameplayEnabled;
 
 	fn assign_player(world: &mut World, player: Entity) {
 		world.init_resource::<InputRouter>();

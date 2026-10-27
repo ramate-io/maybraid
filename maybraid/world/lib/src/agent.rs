@@ -12,6 +12,7 @@ use maybraid_agent::{
 };
 use maybraid_character_controller::OrdinaryLocomotion;
 use maybraid_input::{PadButton, PadOverlay, VirtualPadSystems};
+use maybraid_session::WorldGameplayEnabled;
 use mob_characters::CharacterSceneRecipe;
 use mob_scenes::MobScene;
 use player::Player as MotorPlayer;
@@ -24,7 +25,7 @@ use world_player::Player as VegetationPlayer;
 
 use crate::agent_inventory::{publish_agent_inventory, AgentInventoryState, AgentLastPadIntent};
 use crate::commands::PlaygroundCommand;
-use crate::control::{WorldGameplayEnabled, WorldMenuShell, WorldSurfaceReady};
+use crate::control::{WorldMenuShell, WorldSurfaceReady};
 use crate::map_view::WorldMapView;
 use crate::render_scale::{PresentationChurn, RequestVisualStyle, VisualStyle};
 use crate::screenshot::{GameplayScreenshotFinished, RequestGameplayScreenshot};

@@ -27,14 +27,12 @@ use world_player::{
 };
 
 use layer_stack::ActiveGenerationMode;
+use maybraid_session::{ActorRetired, SessionLifecycleSystems, WorldGameplayEnabled};
 
 use crate::control::strip_world_player_motor;
 use crate::map_view::WorldMapView;
 use crate::weapon::WorldPlayerAppearanceRequested;
-use crate::{
-	ActorRetired, FirstWave, HcsgDemand, LodJobCounter, PlayerPositionWaypoints,
-	SessionLifecycleSystems, WorldGameplayEnabled, WorldPlayerLoadout,
-};
+use crate::{FirstWave, HcsgDemand, LodJobCounter, PlayerPositionWaypoints, WorldPlayerLoadout};
 
 const MAP_OPEN_SECS: f32 = 0.18;
 

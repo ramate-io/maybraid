@@ -84,6 +84,15 @@ Rules:
 
 - `controllers/core` depends only on `maybraid-input` and Bevy.
 - `controllers/character` depends on `core` + `input`.
+- `gameplay/session` owns session capabilities and lifecycle events; it uses
+  routing primitives from `controllers/core` privately. `gameplay/lib` and
+  `world` may depend on session for adapters, but do not forward session or
+  routing APIs from their crate roots. The executable imports session APIs
+  directly from `maybraid-session`.
+- Consumers import `InputRouter`, `InputRouting`, and `RoutingEvent` directly
+  from `maybraid-controllers-core`. Composition crates must not re-export
+  those types. `bin/check-controller-boundaries.sh` enforces this rule in
+  Cargo Check.
 - The player motor contract (`MotorIntent` / `ResolvedMotorRequest`) must not
   depend on locomotion or Tanz.
 - Locomotion and Tanz write the motor contract; they do not own apply.

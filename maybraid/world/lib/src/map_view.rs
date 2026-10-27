@@ -9,7 +9,7 @@ use game_commands::command::TextEntryFocus;
 use geneva::{LanguageOverlay, NameKey, NamedOverlay};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_controllers_core::{CaptureKind, CaptureToken, InputRouting, InputSource, ScopeOwner};
-use maybraid_session::SessionCapabilitySystems;
+use maybraid_session::{SessionCapabilitySystems, WorldGameplayEnabled};
 use menu_components::{
 	BARLOW_BLACK, BONES_ICON, ITEM_FONT_SIZE, MAP_ARROW_ICON, MAP_GROVE_ICON, MAP_HOUSE_ICON,
 	MAP_MOUNTAIN_ICON, MAP_TOWN_ICON, MAP_TREE_ICON, MAP_WATER_ICON, NOTO_SANS_REGULAR,
@@ -22,7 +22,6 @@ use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiRegistry};
 use richmond::DiscoverablePlace;
 use world_player::{Player as VegetationPlayer, PlayerLifeSet, PlaygroundMode};
 
-use crate::control::WorldGameplayEnabled;
 use crate::player_lifecycle::WorldPlayerRespawnState;
 use combat_hud::ScreenPin;
 

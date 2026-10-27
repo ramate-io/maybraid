@@ -22,7 +22,8 @@ use lubikans::{
 use lubikans_damage::LubikanDamagePlugin;
 use maybraid_character_controller::ActorTarget;
 use maybraid_equipment::EquippedPowerUse;
-use maybraid_world::{control, WorldGameplayEnabled, WorldPlaySessionEnded};
+use maybraid_session::{WorldGameplayEnabled, WorldPlaySessionEnded};
+use maybraid_world::control;
 use std::time::Duration;
 use world_player::Player;
 
@@ -305,7 +306,7 @@ fn session_restart_via_world_event_resets_charge() -> anyhow::Result<()> {
 	anyhow::ensure!(earned > 0.0, "should have earned charge from hits");
 
 	// Send session restart (world control system processes this)
-	app.world_mut().write_message(maybraid_world::WorldPlaySessionEnded);
+	app.world_mut().write_message(WorldPlaySessionEnded);
 	app.update(); // sync_lubikan_session runs
 
 	// Verify charge is reset

@@ -31,11 +31,11 @@ pub mod world_debug;
 mod mob_spawn;
 mod pitch;
 mod player_lifecycle;
-mod spawn_picker;
 mod player_position;
 mod poi;
 pub mod render_scale;
 mod screenshot;
+mod spawn_picker;
 mod spawn_surface;
 mod start;
 mod stash;
@@ -60,8 +60,8 @@ pub use commands::{
 };
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
-	InventoryEditCameraFollow, WorldGameplayEnabled, WorldMenuShell, WorldPlaySessionEnded,
-	WorldSceneryVisible, WorldSurfaceReady, WorldSurfaceSet,
+	InventoryEditCameraFollow, WorldMenuShell, WorldSceneryVisible, WorldSurfaceReady,
+	WorldSurfaceSet,
 };
 pub use cycle_target::InventoryCycleTarget;
 pub use durham::Durham;
@@ -70,15 +70,12 @@ pub use first_wave::UnitXTile;
 pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
-pub use item_icons::{
-	ItemIconPlugin,
-};
+pub use item_icons::ItemIconPlugin;
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
 pub use occupancy::{WorldOccupancyPlugin, WorldOccupancySystems};
 pub use player_lifecycle::{
 	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
 };
-pub use spawn_picker::{SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet};
 pub use player_position::{
 	resume_discovery_from_saved_waypoints, PlayerPositionPlugin, PlayerPositionWaypoints,
 };
@@ -96,6 +93,7 @@ pub use render_scale::{
 	VisualStyleSignals, DEVICE_TIER_ENV, FORCE_OFFSCREEN_ENV, PRESENTATION_TREATMENT_ENV,
 	RENDER_SCALE_ENV, UNIFIED_MEMORY_NATIVE_BYTES, VISUAL_STYLE_ENV,
 };
+pub use spawn_picker::{SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet};
 pub use start::{
 	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
 	START_AT_ENV,

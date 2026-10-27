@@ -8,7 +8,7 @@ use durham::{
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
 use maybraid_character_controller::CharacterIntent;
 use maybraid_controllers_core::{CaptureKind, InputRouter, InputRouting, InputSource, ScopeOwner};
-use maybraid_session::SessionCapabilities;
+use maybraid_session::{SessionCapabilities, WorldGameplayEnabled, WorldPlaySessionEnded};
 use maybraid_skill_map::SkillMapEnabled;
 use maybraid_sky::{SkyDome, SKY_HORIZON};
 use player::{
@@ -20,8 +20,6 @@ use player::{
 use world_player::{MoveWish, Player, PlayerPhysicsEnabled, PlayerSpawnXz, PlaygroundMode};
 
 use crate::map_view::WorldMapView;
-
-pub use maybraid_session::{WorldGameplayEnabled, WorldPlaySessionEnded};
 
 /// Keep third-person follow while the in-game inventory editor is open.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
