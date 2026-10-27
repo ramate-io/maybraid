@@ -24,7 +24,7 @@ pub use controller::{
 pub use gate::PadInputPolicy;
 pub use hid::{with_pad_hid, PadHidPlugins};
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};
-pub use overlay::PadOverlay;
+pub use overlay::{PadOverlay, PadOverlayRequest};
 pub use pad::VirtualPad;
 pub use rumble::{PadRumble, PadRumbleSystems};
 pub use surface::cursor::PadCursor;
@@ -97,6 +97,7 @@ impl Plugin for VirtualPadPlugin {
 		app.insert_resource(PrimaryVirtualPad(primary))
 			.init_resource::<controller::DefaultDeviceAssignments>()
 			.add_message::<VirtualPadEvent>()
+			.add_message::<PadOverlayRequest>()
 			.add_message::<VirtualPadLifecycle>();
 		if self.auto_assign_devices {
 			app.add_systems(

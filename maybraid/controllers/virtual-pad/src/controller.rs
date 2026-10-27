@@ -195,7 +195,11 @@ pub(crate) fn produce_controllers(
 	primary: Res<PrimaryVirtualPad>,
 	legacy_policy: Res<PadInputPolicy>,
 	legacy_overlay: Option<Res<PadOverlay>>,
-	mut controllers: Query<(Entity, &mut VirtualPadController, Option<&PadOverlay>)>,
+	mut controllers: Query<(
+		Entity,
+		&mut VirtualPadController,
+		Option<&crate::overlay::PadOverlayState>,
+	)>,
 	mut lifecycle: MessageWriter<VirtualPadLifecycle>,
 ) {
 	let keys: Vec<_> = key_events
@@ -262,7 +266,7 @@ pub(crate) fn produce_controllers(
 			}
 		}
 		if let Some(overlay) = overlay {
-			overlay.apply(&mut controller.pad);
+			overlay.0.apply(&mut controller.pad);
 		}
 		if entity == primary.0 {
 			if let Some(overlay) = &legacy_overlay {
