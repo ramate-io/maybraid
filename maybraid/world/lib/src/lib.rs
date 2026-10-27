@@ -74,12 +74,10 @@ pub use item_icons::{
 	discover_icon_cache_dir, item_icon_requests, InventoryItemSubject, ItemIconCache,
 	ItemIconPlugin, ITEM_ICON_RESOLUTION,
 };
-pub use lod::hcsg::{HcsgClass, HcsgDemand, Outstanding};
-pub use lod::LodJobCounter;
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
 pub use maybraid_equipment::ActiveInventoryCyclingCategory;
 pub use maybraid_session::{
-	ActorRetired, InputRouter, InputRouting, RoutingEvent, SessionBit, SessionCapabilities,
+	ActorRetired, InputRouter, InputRouting, SessionBit, SessionCapabilities,
 	SessionCapabilitySystems, SessionLifecycleSystems, SessionPlugin,
 };
 pub use maybraid_sky::{

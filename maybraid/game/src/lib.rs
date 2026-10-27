@@ -38,11 +38,12 @@ use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_gameplay::GameplayPlugin;
 use maybraid_input::{MenuNav, MenuNavPad, PadButton, VirtualPad};
 use maybraid_menu_controller::MenuControllerPlugin;
+use maybraid_sky::ShadowQuality;
 use maybraid_world::{
 	host_memory_bytes, parse_device_tier_env, parse_visual_style_env, reset_first_spawn_offer,
 	resume_discovery_from_saved_waypoints, AdapterKind, AgentDrive, Durham, InputRouting,
 	InventoryEditCameraFollow, PlayerPhysicsEnabled, PlayerSpawnXz, SessionCapabilities,
-	SessionCapabilitySystems, ShadowQuality, TerrainStreaming, VisualStyle, VisualStyleSetting,
+	SessionCapabilitySystems, TerrainStreaming, VisualStyle, VisualStyleSetting,
 	VisualStyleSignals, WorldGameplayEnabled, WorldMenuShell, WorldMobHudEnabled,
 	WorldPlaySessionEnded, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible, WorldSurfaceReady,
 	WorldSurfaceSet, DEVICE_TIER_ENV, VISUAL_STYLE_ENV,
@@ -640,9 +641,11 @@ mod tests {
 		visual_style_readout, GameFlow, PlaySession,
 	};
 	use maybraid_world::{
-		InputRouter, SessionCapabilities, ShadowQuality, VisualStyle, VisualStyleSetting,
+		InputRouter, SessionCapabilities, VisualStyle, VisualStyleSetting,
 		WorldPlaySessionEnded, WorldPlayerLoadout, WorldSurfaceReady,
 	};
+	use maybraid_sky::ShadowQuality;
+	use maybraid_controllers_core::RoutingEvent;
 	use menu_playground::{
 		CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState, EditingCharacter,
 	};
@@ -756,7 +759,7 @@ mod tests {
 		world.insert_resource(WorldSurfaceReady(true));
 		world.insert_resource(SessionCapabilities::default());
 		world.init_resource::<InputRouter>();
-		world.init_resource::<Messages<maybraid_world::RoutingEvent>>();
+		world.init_resource::<Messages<RoutingEvent>>();
 		world
 			.run_system_once(clear_play_session)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -773,7 +776,7 @@ mod tests {
 		world.insert_resource(WorldSurfaceReady(true));
 		world.insert_resource(SessionCapabilities::default());
 		world.init_resource::<InputRouter>();
-		world.init_resource::<Messages<maybraid_world::RoutingEvent>>();
+		world.init_resource::<Messages<RoutingEvent>>();
 		world
 			.run_system_once(clear_play_session)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

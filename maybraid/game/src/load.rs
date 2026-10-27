@@ -4,7 +4,8 @@
 use crate::flow::GameFlow;
 use crate::shell::ShellRoute;
 use bevy::prelude::*;
-use maybraid_world::{FirstWave, LodJobCounter, WorldSurfaceReady, FIRST_WAVE_JOB_THRESHOLD};
+use lod::{hcsg::HcsgDemand, LodJobCounter};
+use maybraid_world::{FirstWave, WorldSurfaceReady, FIRST_WAVE_JOB_THRESHOLD};
 use menu_screens::{request_loading_explainer, request_loading_progress};
 
 /// Remaining Near HCSG ids plus pending-root tickets that still count as
@@ -113,7 +114,7 @@ pub(crate) fn finish_world_loading(
 	mut commands: Commands,
 	ready: Res<WorldSurfaceReady>,
 	jobs: Option<Res<LodJobCounter>>,
-	demand: Option<Res<maybraid_world::HcsgDemand>>,
+	demand: Option<Res<HcsgDemand>>,
 	mut wave: Option<ResMut<FirstWave>>,
 	mut gate: Option<ResMut<FirstLoadGate>>,
 	time: Res<Time>,
@@ -232,7 +233,7 @@ mod tests {
 		assert!(!gate.should_unveil(true, 0, true, UNVEIL_ARM_GRACE_SECS + 1.0));
 	}
 
-	fn gated_world(demand: maybraid_world::HcsgDemand) -> World {
+	fn gated_world(demand: HcsgDemand) -> World {
 		let mut world = World::new();
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
 		world.insert_resource(NextState::<layer_stack::ActiveGenerationMode>::Unchanged);
@@ -252,12 +253,12 @@ mod tests {
 
 	#[test]
 	fn finish_world_loading_does_not_unveil_while_near_is_outstanding() -> anyhow::Result<()> {
-		let demand = maybraid_world::HcsgDemand::default();
+		let demand = HcsgDemand::default();
 		demand.subscribe::<UnitXTile>(
 			None,
 			vec![near_region()],
 			None,
-			maybraid_world::HcsgClass::Near,
+			lod::hcsg::HcsgClass::Near,
 		);
 		let mut world = gated_world(demand);
 		world
@@ -271,12 +272,12 @@ mod tests {
 
 	#[test]
 	fn finish_world_loading_unveils_while_only_ambient_is_outstanding() -> anyhow::Result<()> {
-		let demand = maybraid_world::HcsgDemand::default();
+		let demand = HcsgDemand::default();
 		demand.subscribe::<UnitXTile>(
 			None,
 			vec![near_region()],
 			None,
-			maybraid_world::HcsgClass::Ambient,
+			lod::hcsg::HcsgClass::Ambient,
 		);
 		let mut world = gated_world(demand);
 		world

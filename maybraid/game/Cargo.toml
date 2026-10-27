@@ -27,6 +27,9 @@ maybraid-input = { workspace = true }
 maybraid-agent = { workspace = true }
 maybraid-menu-controller = { workspace = true }
 maybraid-gameplay = { workspace = true }
+maybraid-controllers-core = { workspace = true }
+maybraid-sky = { workspace = true }
+lod = { workspace = true }
 maybraid-world = { workspace = true }
 menu-components = { workspace = true }
 menu-playground = { workspace = true }

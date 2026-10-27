@@ -19,7 +19,6 @@ grenade-user = { workspace = true }
 lubikans = { workspace = true }
 lubikans-damage = { workspace = true }
 maybraid-character-controller = { workspace = true }
-maybraid-controllers-core = { workspace = true }
 maybraid-equipment = { workspace = true }
 maybraid-session = { workspace = true }
 maybraid-spawns-actors = { workspace = true }
