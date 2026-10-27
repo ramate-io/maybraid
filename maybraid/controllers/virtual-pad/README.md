@@ -86,3 +86,8 @@ gamepad produces release/neutral state independently of other sources.
 During the consumer migration, resources mirror only `PrimaryVirtualPad` and
 legacy menu interpretation remains an adapter. New consumers use source snapshots;
 they must not interpret another controller's state through those resource mirrors.
+
+Each controller also owns its `VirtualPadConfig`; `with_config` customizes an
+individual controller without changing another source. Default-host reconnection
+reuses vacant source entities, replaces missing physical-device references, and
+requires a release before a device that reconnects while held can press again.

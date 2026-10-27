@@ -42,6 +42,7 @@ impl PadDevices {
 #[derive(Component, Clone, Debug)]
 pub struct VirtualPadController {
 	pub devices: PadDevices,
+	pub config: VirtualPadConfig,
 	pub pad: VirtualPad,
 	pub policy: PadInputPolicy,
 	pub history: PadHistory,
@@ -57,6 +58,7 @@ impl VirtualPadController {
 	pub fn new(devices: PadDevices) -> Self {
 		Self {
 			devices,
+			config: VirtualPadConfig::default(),
 			pad: VirtualPad::default(),
 			policy: PadInputPolicy::default(),
 			history: PadHistory::default(),
@@ -66,6 +68,11 @@ impl VirtualPadController {
 			previous_devices: None,
 			connected: true,
 		}
+	}
+
+	pub fn with_config(mut self, config: VirtualPadConfig) -> Self {
+		self.config = config;
+		self
 	}
 
 	pub fn connected(&self) -> bool {
@@ -147,17 +154,38 @@ pub(crate) fn discover_devices(
 			continue;
 		}
 		if let Ok(mut controller) = controllers.get_mut(primary.0) {
-			if controller.devices.gamepads.is_empty() {
+			if controller.devices.gamepads.iter().all(|device| !gamepads.contains(*device)) {
+				controller.devices.gamepads.clear();
 				controller.devices.gamepads.push(entity);
 				continue;
 			}
 		}
-		commands.spawn(VirtualPadController::new(PadDevices::gamepad(entity)));
+		let mut vacant: Vec<_> = controllers
+			.iter()
+			.enumerate()
+			.filter_map(|(index, controller)| {
+				(!controller.devices.keyboard
+					&& !controller.devices.mouse
+					&& !controller.connected
+					&& controller.devices.gamepads.iter().all(|device| !gamepads.contains(*device)))
+				.then_some(index)
+			})
+			.collect();
+		if let Some(index) = vacant.pop() {
+			if let Some(mut controller) = controllers.iter_mut().nth(index) {
+				controller.devices = PadDevices::gamepad(entity);
+				continue;
+			}
+		}
+		let config = controllers
+			.get(primary.0)
+			.map(|controller| controller.config.clone())
+			.unwrap_or_default();
+		commands.spawn(VirtualPadController::new(PadDevices::gamepad(entity)).with_config(config));
 	}
 }
 
 pub(crate) fn produce_controllers(
-	config: Res<VirtualPadConfig>,
 	time: Res<Time>,
 	keyboard: Res<ButtonInput<KeyCode>>,
 	mouse: Res<ButtonInput<MouseButton>>,
@@ -182,6 +210,7 @@ pub(crate) fn produce_controllers(
 	let command_held = keyboard.any_pressed([KeyCode::SuperLeft, KeyCode::SuperRight]);
 	for (entity, mut controller, overlay) in &mut controllers {
 		let devices = controller.devices.clone();
+		let config = controller.config.clone();
 		let changed = controller
 			.previous_devices
 			.as_ref()
@@ -362,6 +391,75 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("isolated controller"))?;
 		assert_eq!(isolated.pad.move_stick, Vec2::ZERO);
 		assert!(!isolated.pad.pressed(PadButton::TriggerFire));
+		Ok(())
+	}
+
+	#[test]
+	fn each_controller_uses_its_own_trigger_threshold() -> anyhow::Result<()> {
+		let mut app = app();
+		let mut gamepad = Gamepad::default();
+		gamepad.analog_mut().set(GamepadButton::RightTrigger2, 0.4);
+		let device = app.world_mut().spawn(gamepad).id();
+		let config = VirtualPadConfig { trigger_press_threshold: 0.3, ..default() };
+		let source = app
+			.world_mut()
+			.spawn(VirtualPadController::new(PadDevices::gamepad(device)).with_config(config))
+			.id();
+		app.update();
+		let controller = app
+			.world()
+			.get::<VirtualPadController>(source)
+			.ok_or_else(|| anyhow::anyhow!("configured controller"))?;
+		assert!(controller.pad.pressed(PadButton::TriggerFire));
+		assert_eq!(controller.config.trigger_press_threshold, 0.3);
+		Ok(())
+	}
+
+	#[test]
+	fn default_host_reuses_primary_and_secondary_sources_without_fresh_held_edges(
+	) -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			bevy::input::InputPlugin,
+			crate::VirtualPadPlugin::default(),
+		));
+		let first_device = app.world_mut().spawn(Gamepad::default()).id();
+		let second_device = app.world_mut().spawn(Gamepad::default()).id();
+		app.update();
+		let primary = app.world().resource::<PrimaryVirtualPad>().0;
+		let secondary = app
+			.world_mut()
+			.query::<(Entity, &VirtualPadController)>()
+			.iter(app.world())
+			.find_map(|(entity, controller)| {
+				controller.devices.gamepads.contains(&second_device).then_some(entity)
+			})
+			.ok_or_else(|| anyhow::anyhow!("secondary source"))?;
+		app.world_mut().despawn(first_device);
+		app.world_mut().despawn(second_device);
+		app.update();
+		let mut held = Gamepad::default();
+		held.digital_mut().press(GamepadButton::South);
+		let first_replacement = app.world_mut().spawn(held).id();
+		let mut held = Gamepad::default();
+		held.digital_mut().press(GamepadButton::South);
+		let second_replacement = app.world_mut().spawn(held).id();
+		app.update();
+		for source in [primary, secondary] {
+			let controller = app
+				.world()
+				.get::<VirtualPadController>(source)
+				.ok_or_else(|| anyhow::anyhow!("reused source"))?;
+			assert!(controller.devices.gamepads.iter().any(|device| [
+				first_replacement,
+				second_replacement
+			]
+			.contains(device)));
+			assert!(controller.connected());
+			assert!(!controller.pad.just_pressed(PadButton::A));
+			assert!(!controller.pad.pressed(PadButton::A));
+		}
 		Ok(())
 	}
 }

@@ -89,7 +89,10 @@ impl Plugin for VirtualPadPlugin {
 			.configure_sets(PreUpdate, VirtualPadSystems::Derive.after(VirtualPadSystems::Produce));
 		let primary = app
 			.world_mut()
-			.spawn(VirtualPadController::new(PadDevices::keyboard_mouse()))
+			.spawn(
+				VirtualPadController::new(PadDevices::keyboard_mouse())
+					.with_config(self.config.clone()),
+			)
 			.id();
 		app.insert_resource(PrimaryVirtualPad(primary))
 			.init_resource::<controller::DefaultDeviceAssignments>()
