@@ -9,11 +9,12 @@ use durham::{DurhamSurface, TerrainCellLayout, WorldBaseTerrain};
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use grenade_user::GrenadeUserSystems;
-use maybraid_character_controller::CharacterIntent;
+use maybraid_character_controller::ActorControlStatus;
 use maybraid_spawns_player::{
 	ActivatePlayerArrival, ArrivalReason, PlayerArrivalCompleted, PlayerArrivalPolicy,
 	PlayerHandoffSystems,
 };
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use player_camera::{CameraController, FollowCamera};
@@ -44,8 +45,13 @@ pub use maybraid_spawns_player::{
 #[derive(Component)]
 struct PlayerDeathGlaze;
 
-type DownedWorldPlayer<'a> =
-	(Entity, &'a Transform, &'a mut LinearVelocity, Option<&'a InventoryUser>);
+type DownedWorldPlayer<'a> = (
+	Entity,
+	&'a Transform,
+	&'a mut LinearVelocity,
+	Option<&'a InventoryUser>,
+	Option<&'a ActorControlStatus>,
+);
 
 pub struct WorldPlayerLifecyclePlugin;
 
@@ -57,7 +63,6 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 		maybraid_spawns_actors::register_actor_spawn_runtime(app);
 		app.init_resource::<WorldMapView>()
 			.add_message::<PlayerLifeEnded>()
-			.add_message::<CharacterIntent>()
 			.add_message::<ActorRetired>()
 			.configure_sets(
 				Update,
@@ -95,10 +100,9 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 				(
 					crate::first_wave::refresh_first_wave,
 					queue_first_spawn_picker.after(crate::first_wave::refresh_first_wave),
-					crate::spawn_picker::dispatch_spawn_picker,
 					respawn_world_player
 						.after(queue_first_spawn_picker)
-						.after(crate::spawn_picker::dispatch_spawn_picker)
+						.after(maybraid_controllers_core::PadDeliverySystems)
 						.after(maybraid_spawns_placement::PlacementSystems::Poll)
 						.run_if(world_player_respawn_pending),
 					apply_placement_outcomes
@@ -173,11 +177,18 @@ fn queue_downed_world_player(
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut commands: Commands,
 	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
+	primary: Option<Res<PrimaryVirtualPad>>,
 	mut players: Query<DownedWorldPlayer<'_>, (With<VegetationPlayer>, Added<Downed>)>,
 	mut retired: MessageWriter<ActorRetired>,
 	bags: Query<&character_items::Inventory>,
 ) {
-	for (player, transform, mut velocity, inventory) in &mut players {
+	for (player, transform, mut velocity, inventory, control) in &mut players {
+		if !primary.as_deref().is_some_and(|primary| {
+			control.and_then(|control| control.source()).and_then(|source| source.entity())
+				== Some(primary.0)
+		}) {
+			continue;
+		}
 		let now = mode.as_deref().and_then(|mode| mode.get().mode_id());
 		let ends_life = policies.as_deref().is_some_and(|policies| policies.respawn_ends_life(now));
 		let origin = RespawnOrigin::began(now, ends_life);
@@ -217,8 +228,15 @@ fn queue_first_spawn_picker(
 	base: Option<Res<WorldBaseTerrain>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut commands: Commands,
+	primary: Option<Res<PrimaryVirtualPad>>,
 	players: Query<
-		(Entity, &Transform, Option<&FirearmUser>, Option<&InventoryUser>),
+		(
+			Entity,
+			&Transform,
+			Option<&FirearmUser>,
+			Option<&InventoryUser>,
+			Option<&ActorControlStatus>,
+		),
 		With<VegetationPlayer>,
 	>,
 	mut triggers: Query<&mut WeaponTrigger>,
@@ -249,7 +267,15 @@ fn queue_first_spawn_picker(
 	) {
 		return;
 	}
-	let Ok((player, transform, firearm, inventory)) = players.single() else {
+	let Some(primary) = primary.as_deref() else {
+		return;
+	};
+	let Some((player, transform, firearm, inventory, _)) =
+		players.iter().find(|(_, _, _, _, control)| {
+			control.and_then(|control| control.source()).and_then(|source| source.entity())
+				== Some(primary.0)
+		})
+	else {
 		return;
 	};
 	state.first_spawn_offered = true;
@@ -309,10 +335,15 @@ fn orphaned_locked_respawn_map(
 }
 
 fn close_orphaned_locked_respawn_map(
-	live_player: Query<(), With<VegetationPlayer>>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+	live_player: Query<&ActorControlStatus, With<VegetationPlayer>>,
 	mut map: ResMut<WorldMapView>,
 ) {
-	if live_player.is_empty() {
+	if !primary.as_deref().is_some_and(|primary| {
+		live_player
+			.iter()
+			.any(|status| status.source().and_then(|source| source.entity()) == Some(primary.0))
+	}) {
 		return;
 	}
 	if map.close_locked {
@@ -333,7 +364,8 @@ fn respawn_world_player(
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	mut ended: MessageWriter<PlayerLifeEnded>,
 	mut chosen: MessageReader<PlayerChoseRespawnPoi>,
-	live_player: Query<(), With<VegetationPlayer>>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+	live_player: Query<&ActorControlStatus, With<VegetationPlayer>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut map: ResMut<WorldMapView>,
 	mut commands: Commands,
@@ -343,7 +375,12 @@ fn respawn_world_player(
 	if !gameplay.0 && !abandoned {
 		return;
 	}
-	if !live_player.is_empty() {
+	let primary_alive = primary.as_deref().is_some_and(|primary| {
+		live_player
+			.iter()
+			.any(|status| status.source().and_then(|source| source.entity()) == Some(primary.0))
+	});
+	if primary_alive {
 		// First-life despawn is still in flight this frame.
 		if !state.pending.as_ref().is_some_and(|pending| pending.first_life) {
 			// Only the death picker is locked. A player-toggled map must stay open.
@@ -671,14 +708,29 @@ fn prefer_building_poi_ids(ids: &[PoiId], registry: &PoiRegistry, death_at: Vec3
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	fn mark_primary(world: &mut World, player: Entity) {
+		let source = if let Some(primary) = world.get_resource::<PrimaryVirtualPad>() {
+			primary.0
+		} else {
+			let source = world.spawn_empty().id();
+			world.insert_resource(PrimaryVirtualPad(source));
+			source
+		};
+		world.entity_mut(player).insert(ActorControlStatus::assigned(
+			maybraid_controllers_core::InputSource::virtual_pad(source),
+		));
+	}
 	use crate::{FirstWave, UnitXTile};
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::math::bounding::Aabb3d;
 	use durham::TerrainCellLayout;
 	use layer_stack::GenerationMode;
 	use lod::hcsg::{spawn_worker, HcsgClass, HcsgStorage};
-	use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad};
 	use maybraid_spawns_player::{map_flick_dir, nearest_in_direction, SpawnPickerSheet};
+	use maybraid_virtual_pad_controller::{
+		PadButton, PadDevices, PrimaryVirtualPad, VirtualPad, VirtualPadController, VirtualPadEvent,
+	};
 	use poi_intelligence::NearbyFallback;
 	use poi_intelligence::PoiRecord;
 	use world_player::{
@@ -931,6 +983,8 @@ mod tests {
 		world.init_resource::<Messages<ActorRetired>>();
 		let held = world.spawn(WeaponTrigger(true)).id();
 		let bag = world.spawn_empty().id();
+		let source_entity = world.spawn_empty().id();
+		world.insert_resource(PrimaryVirtualPad(source_entity));
 		let player = world
 			.spawn((
 				VegetationPlayer,
@@ -940,6 +994,9 @@ mod tests {
 				LinearVelocity(Vec3::X),
 				FirearmUser::holding(held),
 				InventoryUser::carrying(bag),
+				ActorControlStatus::assigned(maybraid_controllers_core::InputSource::virtual_pad(
+					source_entity,
+				)),
 				Downed { source: None, point: Vec3::ZERO, at: 0.0 },
 			))
 			.id();
@@ -963,6 +1020,39 @@ mod tests {
 		assert!(pending.is_some());
 		let notices: Vec<_> = world.resource_mut::<Messages<ActorRetired>>().drain().collect();
 		assert_eq!(notices, vec![ActorRetired::new(player)]);
+		Ok(())
+	}
+
+	#[test]
+	fn secondary_downed_actor_does_not_start_primary_respawn() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldPlayerRespawnConfig>();
+		world.init_resource::<WorldPlayerRespawnState>();
+		world.init_resource::<Messages<ActorRetired>>();
+		let primary_source = world.spawn_empty().id();
+		let secondary_source = world.spawn_empty().id();
+		world.insert_resource(PrimaryVirtualPad(primary_source));
+		let secondary = world
+			.spawn((
+				VegetationPlayer,
+				Transform::IDENTITY,
+				LinearVelocity(Vec3::X),
+				ActorControlStatus::assigned(maybraid_controllers_core::InputSource::virtual_pad(
+					secondary_source,
+				)),
+				Downed { source: None, point: Vec3::ZERO, at: 0.0 },
+			))
+			.id();
+		world
+			.run_system_once(queue_downed_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<VegetationPlayer>(secondary).is_some());
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+		assert_eq!(
+			world.get::<LinearVelocity>(secondary).map(|velocity| velocity.0),
+			Some(Vec3::X)
+		);
+		assert_eq!(world.resource_mut::<Messages<ActorRetired>>().drain().count(), 0);
 		Ok(())
 	}
 
@@ -1045,7 +1135,8 @@ mod tests {
 			.run_system_once(orphaned_locked_respawn_map)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(orphaned);
-		world.spawn(VegetationPlayer);
+		let player = world.spawn(VegetationPlayer).id();
+		mark_primary(&mut world, player);
 		world
 			.run_system_once(close_orphaned_locked_respawn_map)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -1058,13 +1149,15 @@ mod tests {
 	#[test]
 	fn a_live_player_does_not_close_an_unlocked_map() -> anyhow::Result<()> {
 		let mut world = respawn_world(0.0, true, true);
-		world.spawn(VegetationPlayer);
+		let player = world.spawn(VegetationPlayer).id();
+		mark_primary(&mut world, player);
 		world.insert_resource(WorldMapView {
 			open: true,
 			focus: Vec2::new(3.0, 5.0),
 			height: crate::map_view::DEFAULT_MAP_HEIGHT,
 			close_locked: false,
 			begin_life: false,
+			owner: None,
 		});
 		world
 			.run_system_once(respawn_world_player)
@@ -1378,47 +1471,85 @@ mod tests {
 		Ok(())
 	}
 
-	fn arm_locked_picker_input(world: &mut World) {
-		use maybraid_controllers_core::{CaptureKind, InputRouter, InputSource, ScopeOwner};
+	#[derive(Resource, Default)]
+	struct PickerTestSequence(u64);
 
+	fn arm_locked_picker_input(world: &mut World) {
+		use maybraid_controllers_core::{
+			CaptureKind, InputRouter, InputSource, ScopeOwner, UiTarget,
+		};
 		world.init_resource::<InputRouter>();
 		world.init_resource::<Messages<maybraid_controllers_core::RoutingEvent>>();
-		world.init_resource::<crate::spawn_picker::SpawnPickerController>();
-		world.init_resource::<crate::spawn_picker::SpawnPickerCapture>();
 		world.init_resource::<SpawnPickerSheet>();
 		world.init_resource::<Messages<maybraid_spawns_player::DestinationSelected>>();
-		world.init_resource::<MenuNavPad>();
+		world.init_resource::<PickerTestSequence>();
+		let source = if let Some(primary) = world.get_resource::<PrimaryVirtualPad>() {
+			primary.0
+		} else {
+			let source = world.spawn_empty().id();
+			world.insert_resource(PrimaryVirtualPad(source));
+			source
+		};
+		world
+			.entity_mut(source)
+			.insert(VirtualPadController::new(PadDevices::keyboard_mouse()));
+		world.resource_mut::<InputRouter>().set_local_source(source);
+		let map_root = world.spawn(crate::map_view::MapNameHud).id();
 		world.resource_mut::<InputRouter>().acquire_capture(
-			InputSource::local_pad(),
-			ScopeOwner::map_overlay(),
+			InputSource::virtual_pad(source),
+			ScopeOwner::ui(UiTarget::new(map_root)),
 			CaptureKind::Overlay,
 		);
-		assert!(world.resource::<InputRouter>().actor(InputSource::local_pad()).is_none());
-		assert!(world.resource::<InputRouter>().blocks_actor(InputSource::local_pad()));
+		world.add_observer(maybraid_spawns_player::dispatch_spawn_picker);
+		world
+			.run_system_once(crate::spawn_picker::sync_spawn_picker_sheet)
+			.expect("sync picker sheet");
+		world
+			.run_system_once(crate::spawn_picker::refresh_spawn_picker_focus)
+			.expect("spawn picker controller");
+		world.flush();
+		world
+			.run_system_once(crate::spawn_picker::refresh_spawn_picker_focus)
+			.expect("capture picker input");
+		assert!(world.resource::<InputRouter>().blocks_actor(InputSource::virtual_pad(source)));
 	}
 
-	fn press_a_on_pad(world: &mut World) {
-		use maybraid_virtual_pad_controller::{PadButton, VirtualPad, VirtualPadConfig};
+	fn send_picker_pad(world: &mut World, pad: VirtualPad) -> anyhow::Result<()> {
+		use maybraid_controllers_core::{InputRouter, InputSource, UiPadEvent};
+		let source = world.resource::<PrimaryVirtualPad>().0;
+		let sequence = {
+			let mut sequence = world.resource_mut::<PickerTestSequence>();
+			sequence.0 += 1;
+			sequence.0
+		};
+		let input = world
+			.resource::<InputRouter>()
+			.route_ui(
+				InputSource::virtual_pad(source),
+				VirtualPadEvent {
+					source,
+					sequence,
+					delta: std::time::Duration::from_millis(16),
+					pad,
+				},
+			)
+			.ok_or_else(|| anyhow::anyhow!("picker UI route"))?;
+		let entity = input.target().ui_entity().ok_or_else(|| anyhow::anyhow!("UI target"))?;
+		world.trigger(UiPadEvent { entity, input });
+		world.flush();
+		Ok(())
+	}
 
+	fn press_a_on_pad(world: &mut World) -> anyhow::Result<()> {
 		let mut pad = VirtualPad::default();
 		pad.begin_frame();
 		pad.hold_digital(PadButton::A);
 		pad.finish_digital();
-		let mut nav = MenuNavPad::default();
-		nav.derive(&pad, &VirtualPadConfig::default(), 0.0);
-		assert!(nav.just_pressed(MenuNav::Select), "A must become Select, got {:?}", nav.events);
-		world.insert_resource(pad);
-		world.insert_resource(nav);
+		send_picker_pad(world, pad)
 	}
 
 	fn confirm_picker_from_a(world: &mut World) -> anyhow::Result<()> {
-		press_a_on_pad(world);
-		world
-			.run_system_once(crate::spawn_picker::refresh_spawn_picker_focus)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(crate::spawn_picker::dispatch_spawn_picker)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		press_a_on_pad(world)?;
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -1510,8 +1641,6 @@ mod tests {
 
 	#[test]
 	fn a_stick_flick_moves_the_picker_highlight() -> anyhow::Result<()> {
-		use maybraid_virtual_pad_controller::{PadButton, VirtualPad, VirtualPadConfig};
-
 		let mut world = discovery_respawn_world(0.2);
 		let west = world.spawn_empty().id();
 		let east = world.spawn_empty().id();
@@ -1546,28 +1675,15 @@ mod tests {
 			height: crate::map_view::DEFAULT_MAP_HEIGHT,
 			close_locked: true,
 			begin_life: false,
+			owner: None,
 		});
 		arm_locked_picker_input(&mut world);
 		let mut pad = VirtualPad::default();
 		pad.begin_frame();
 		pad.add_move(Vec2::NEG_X);
 		pad.finish_digital();
-		let mut nav = MenuNavPad::default();
-		nav.derive(&pad, &VirtualPadConfig::default(), 0.0);
-		assert!(
-			nav.just_pressed(MenuNav::Left),
-			"stick left must become MenuNav::Left, got {:?}",
-			nav.events
-		);
 		assert!(!pad.just_pressed(PadButton::DpadLeft));
-		world.insert_resource(pad);
-		world.insert_resource(nav);
-		world
-			.run_system_once(crate::spawn_picker::refresh_spawn_picker_focus)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(crate::spawn_picker::dispatch_spawn_picker)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		send_picker_pad(&mut world, pad)?;
 		let pending = world.resource::<WorldPlayerRespawnState>().pending.as_ref().unwrap();
 		assert_eq!(pending.highlighted, Some(PoiId(2)));
 		assert_eq!(pending.highlighted_at, Some(Vec2::new(40.0, 5.0)));
@@ -2080,10 +2196,7 @@ mod tests {
 			ScopeOwner::ui(UiTarget::new(Entity::from_bits(11))),
 			CaptureKind::Overlay,
 		);
-		press_a_on_pad(&mut world);
-		world
-			.run_system_once(crate::spawn_picker::dispatch_spawn_picker)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		press_a_on_pad(&mut world)?;
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -2144,6 +2257,7 @@ mod tests {
 	fn first_spawn_picker_retires_the_startup_body() -> anyhow::Result<()> {
 		let mut world = first_spawn_world(true, None);
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		mark_primary(&mut world, player);
 		world
 			.run_system_once(queue_first_spawn_picker)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -2160,6 +2274,7 @@ mod tests {
 	fn first_spawn_picker_skips_an_explicit_start_at() -> anyhow::Result<()> {
 		let mut world = first_spawn_world(true, Some(Vec2::new(-1500.0, -600.0)));
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		mark_primary(&mut world, player);
 		world
 			.run_system_once(queue_first_spawn_picker)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -2185,6 +2300,7 @@ mod tests {
 		});
 		let player =
 			world.spawn((VegetationPlayer, Transform::from_xyz(2178.3, 36.6, 1383.6))).id();
+		mark_primary(&mut world, player);
 		world
 			.run_system_once(queue_first_spawn_picker)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -2207,6 +2323,7 @@ mod tests {
 			..default()
 		});
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(-49.7, 78.3, 50.0))).id();
+		mark_primary(&mut world, player);
 		world
 			.run_system_once(queue_first_spawn_picker)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -2220,6 +2337,7 @@ mod tests {
 	fn first_spawn_picker_skips_a_mode_that_does_not_pick() -> anyhow::Result<()> {
 		let mut world = first_spawn_world(false, None);
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		mark_primary(&mut world, player);
 		world
 			.run_system_once(queue_first_spawn_picker)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -2236,6 +2354,7 @@ mod tests {
 		let demand = HcsgDemand::default();
 		world.insert_resource(demand.clone());
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		mark_primary(&mut world, player);
 		let region = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 1.0, 1.0));
 		demand.subscribe::<UnitXTile>(None, vec![region], None, HcsgClass::Near);
 
@@ -2267,6 +2386,7 @@ mod tests {
 		demand.subscribe::<UnitXTile>(None, vec![region], None, HcsgClass::Near);
 		world.insert_resource(FirstWave { undiscovered: 1, remaining: 40, passed: true });
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		mark_primary(&mut world, player);
 		world
 			.run_system_once(queue_first_spawn_picker)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -2303,7 +2423,8 @@ mod tests {
 			pending.origin = RespawnOrigin::began(Some(std::any::TypeId::of::<EndsLife>()), false);
 			pending.first_life = true;
 		}
-		world.spawn(VegetationPlayer);
+		let player = world.spawn(VegetationPlayer).id();
+		mark_primary(&mut world, player);
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

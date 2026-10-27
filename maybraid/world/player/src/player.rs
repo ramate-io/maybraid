@@ -14,7 +14,8 @@ use durham::{
 };
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
-use maybraid_virtual_pad_controller::{PadButton, VirtualPad};
+use maybraid_character_controller::{ActorControlStatus, RoutedActorControl};
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 
 use crate::{camera::CameraController, WorldBaseTerrain};
 
@@ -154,12 +155,6 @@ struct JumpImpulse(f32);
 #[derive(Component)]
 struct MaxSlopeAngle(f32);
 
-#[derive(Message, Clone, Copy, Debug)]
-pub enum MovementAction {
-	Move(Vec2),
-	Jump,
-}
-
 /// When false, this crate skips grounded / wish / jump on the capsule so a
 /// downstream motor (world player buoyancy) can own velocity. Snap and
 /// fall-respawn still run.
@@ -172,7 +167,7 @@ impl Default for VegetationPlayerMotor {
 	}
 }
 
-/// When false, a downstream controller writes [`MovementAction`] / [`MoveWish`].
+/// When false, a downstream controller writes [`MoveWish`].
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct PadMovementEnabled(pub bool);
 
@@ -204,12 +199,12 @@ impl Plugin for PlayerPlugin {
 			.init_resource::<PlayerRespawn>()
 			.init_resource::<PlayerPhysicsEnabled>()
 			.init_resource::<PlayerSpawnXz>()
-			.add_message::<MovementAction>()
 			.add_systems(Startup, spawn_player)
 			.add_systems(
 				Update,
 				(
 					keyboard_movement_input,
+					bevy::ecs::schedule::ApplyDeferred,
 					update_grounded,
 					apply_character_movement,
 					follow_character_camera,
@@ -463,44 +458,58 @@ fn keyboard_movement_input(
 	mode: Res<PlaygroundMode>,
 	text_focus: Res<TextEntryFocus>,
 	pad_movement: Res<PadMovementEnabled>,
-	pad: Res<VirtualPad>,
+	primary: Option<Res<PrimaryVirtualPad>>,
 	cameras: Query<&CameraController, With<Camera3d>>,
-	mut wishes: Query<&mut MoveWish, With<Player>>,
-	mut writer: MessageWriter<MovementAction>,
+	mut wishes: Query<
+		(Entity, &mut MoveWish, Option<&RoutedActorControl>, Option<&ActorControlStatus>),
+		With<Player>,
+	>,
+	mut commands: Commands,
 ) {
 	if !pad_movement.0 {
 		return;
 	}
 	if *mode != PlaygroundMode::Character || text_focus.0 {
-		for mut wish in &mut wishes {
+		for (_, mut wish, _, _) in &mut wishes {
 			wish.0 = Vec3::ZERO;
 		}
 		return;
 	}
-
-	let direction = pad.move_stick.clamp_length_max(1.0);
-
-	let wish_dir = if direction != Vec2::ZERO {
-		if let Ok(camera) = cameras.single() {
-			let yaw = Quat::from_axis_angle(Vec3::Y, camera.yaw);
-			let forward = yaw * -Vec3::Z;
-			let right_dir = yaw * Vec3::X;
-			(right_dir * direction.x + forward * direction.y).normalize_or_zero()
+	let Some(primary) = primary.as_deref() else {
+		return;
+	};
+	for (entity, mut wish, control, status) in &mut wishes {
+		if status.and_then(|status| status.source()).and_then(|source| source.entity())
+			!= Some(primary.0)
+		{
+			continue;
+		}
+		// Neutral is immediate; positive motion must keep the source's delivery grant.
+		wish.0 = Vec3::ZERO;
+		let Some(input) = control.and_then(RoutedActorControl::get).copied() else {
+			continue;
+		};
+		let direction = input.payload().move_stick().clamp_length_max(1.0);
+		let wish_dir = if direction != Vec2::ZERO {
+			if let Ok(camera) = cameras.single() {
+				let yaw = Quat::from_axis_angle(Vec3::Y, camera.yaw);
+				let forward = yaw * -Vec3::Z;
+				let right_dir = yaw * Vec3::X;
+				(right_dir * direction.x + forward * direction.y).normalize_or_zero()
+			} else {
+				Vec3::ZERO
+			}
 		} else {
 			Vec3::ZERO
+		};
+		if wish_dir != Vec3::ZERO {
+			input.map(|_| (entity, wish_dir)).queue(&mut commands, |world, input| {
+				let (entity, direction) = input.into_payload();
+				if let Some(mut wish) = world.get_mut::<MoveWish>(entity) {
+					wish.0 = direction;
+				}
+			});
 		}
-	} else {
-		Vec3::ZERO
-	};
-	for mut wish in &mut wishes {
-		wish.0 = wish_dir;
-	}
-
-	if direction != Vec2::ZERO {
-		writer.write(MovementAction::Move(direction));
-	}
-	if pad.just_pressed(PadButton::A) {
-		writer.write(MovementAction::Jump);
 	}
 }
 
@@ -631,7 +640,6 @@ fn apply_character_movement(
 	mode: Res<PlaygroundMode>,
 	motor: Res<VegetationPlayerMotor>,
 	time: Res<Time>,
-	mut reader: MessageReader<MovementAction>,
 	mut controllers: Query<
 		(
 			Entity,
@@ -645,20 +653,16 @@ fn apply_character_movement(
 			Has<Grounded>,
 			Option<&Jumping>,
 			Has<Player>,
+			Option<&RoutedActorControl>,
 		),
 		With<CharacterController>,
 	>,
 ) {
 	if !motor.0 || *mode != PlaygroundMode::Character {
-		for _ in reader.read() {}
 		return;
 	}
 
 	let dt = time.delta_secs();
-	let mut jump_requested = false;
-	for action in reader.read() {
-		jump_requested |= matches!(action, MovementAction::Jump);
-	}
 
 	for (
 		entity,
@@ -672,8 +676,13 @@ fn apply_character_movement(
 		grounded,
 		jumping,
 		is_player,
+		control,
 	) in &mut controllers
 	{
+		let jump_input = control
+			.and_then(RoutedActorControl::get)
+			.copied()
+			.filter(|input| input.payload().a().just_pressed());
 		if let Some(normal) = grounded_plane(hits, walkable, grounded) {
 			if jumping.is_none() {
 				control_ground_velocity(&mut velocity, wish.0, normal, max_slope.0, accel.0, dt);
@@ -683,9 +692,26 @@ fn apply_character_movement(
 		} else {
 			control_air_velocity(&mut velocity, wish.0, accel.0, dt);
 		}
-		if jump_requested && grounded && is_player {
-			velocity.y = jump.0;
-			commands.entity(entity).insert(Jumping { left_ground: false });
+		if grounded && is_player {
+			if let Some(input) = jump_input {
+				let impulse = jump.0;
+				input.map(|_| (entity, impulse)).queue(&mut commands, |world, input| {
+					let (entity, impulse) = input.into_payload();
+					if world.get::<Grounded>(entity).is_none() {
+						return;
+					}
+					let jumped = if let Some(mut velocity) = world.get_mut::<LinearVelocity>(entity)
+					{
+						velocity.y = impulse;
+						true
+					} else {
+						false
+					};
+					if jumped {
+						world.entity_mut(entity).insert(Jumping { left_ground: false });
+					}
+				});
+			}
 		}
 	}
 }
