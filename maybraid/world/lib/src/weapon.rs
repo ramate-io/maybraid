@@ -15,20 +15,21 @@ use maybraid_character_controller::CharacterControlSystems;
 use maybraid_equipment::{
 	EquipmentInventoryChanged, EquipmentSystems, EquippedItemHandler, InventoryCycling,
 };
+use maybraid_session::WorldGameplayEnabled;
 
 use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
 use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
 use player::{
-	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
+	apply_character_mobility, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
 	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
 };
 use tanz_user::{spawn_tanz_user, TanzExecution, TanzStack, TanzUser, TanzUserSystems};
 use world_player::{
 	CharacterSpecies, Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual,
-	PlaygroundMode, RequestSetCharacter, RequestSetCharacterAppearance,
+	RequestSetCharacter, RequestSetCharacterAppearance,
 };
 
-use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
+use crate::control::InventoryEditCameraFollow;
 
 /// Persisted character appearance, worn clothing, stats, and primary weapon for world entry.
 #[derive(Resource, Clone, Debug, PartialEq)]
@@ -91,7 +92,6 @@ type WorldPlayerVisual<'a> = (Entity, &'a ChildOf, Has<MaybraidPlayerVisual>);
 /// column buoyancy runs; this only arms kit / identity once the visual exists.
 pub(crate) fn arm_world_player(
 	mut commands: Commands,
-	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
 	inventory_edit: Option<Res<InventoryEditCameraFollow>>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
@@ -146,9 +146,6 @@ pub(crate) fn arm_world_player(
 			PlayerYawOwner::Wish,
 		));
 		commands.entity(player).try_insert(InventoryCycling::default());
-		if *mode == PlaygroundMode::Character && gameplay.0 {
-			commands.entity(player).insert(CameraFollow);
-		}
 
 		teardown_held_weapon(&mut commands, player, firearm_user, grenade_user);
 		if let Some(user) = inventory_user {
@@ -362,9 +359,9 @@ mod tests {
 	};
 
 	use crate::weapon::{arm_world_player, WorldPlayerAppearanceRequested, WorldPlayerLoadout};
-	use crate::WorldGameplayEnabled;
 	use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource};
 	use maybraid_equipment::{EquippedItemHandler, InventoryCycling};
+	use maybraid_session::WorldGameplayEnabled;
 
 	fn assign_player(world: &mut World, player: Entity) {
 		world.init_resource::<InputRouter>();

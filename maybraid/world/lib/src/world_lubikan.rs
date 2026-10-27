@@ -39,9 +39,9 @@ impl Plugin for WorldLubikanPlugin {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::control::WorldPlaySessionEnded;
 	use bevy::ecs::system::RunSystemOnce;
 	use lubikans::LubikanOwnerLifetime;
+	use maybraid_session::WorldPlaySessionEnded;
 
 	#[test]
 	fn session_end_emits_lifetime() -> anyhow::Result<()> {

@@ -17,24 +17,22 @@ use maybraid_spawns_player::{
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use player_camera::{CameraController, FollowCamera};
-use poi_intelligence::{place_nearby, PoiId, PoiKind, PoiRecord, PoiRegistry, PoiSystems};
+use poi_intelligence::{place_nearby, PoiId, PoiKind, PoiRegistry, PoiSystems};
 use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
 use world_player::{
-	holding_elevation, player_spawn_point_at, AwaitingTerrainSurface, CharacterLocomotion,
-	ModePlayerPolicies, MoveWish, OffTerrainAnchor, Player as VegetationPlayer, PlayerLifeEnded,
-	PlayerLifeSet, PlayerSpawnXz, RespawnOrigin,
+	holding_elevation, player_spawn_point_at, ModePlayerPolicies, MoveWish,
+	Player as VegetationPlayer, PlayerLifeEnded, PlayerLifeSet, PlayerSpawnXz, RespawnOrigin,
 };
 
 use layer_stack::ActiveGenerationMode;
+use lod::{hcsg::HcsgDemand, LodJobCounter};
+use maybraid_session::{ActorRetired, SessionLifecycleSystems, WorldGameplayEnabled};
 
 use crate::control::strip_world_player_motor;
 use crate::map_view::WorldMapView;
 use crate::weapon::WorldPlayerAppearanceRequested;
-use crate::{
-	ActorRetired, FirstWave, HcsgDemand, LodJobCounter, PlayerPositionWaypoints,
-	SessionLifecycleSystems, WorldGameplayEnabled, WorldPlayerLoadout,
-};
+use crate::{FirstWave, PlayerPositionWaypoints, WorldPlayerLoadout};
 
 const MAP_OPEN_SECS: f32 = 0.18;
 
@@ -639,10 +637,6 @@ fn is_building_poi(kind: PoiKind) -> bool {
 	kind == LOCAL_POI || kind == URBAN_POI || kind == SALOON_POI
 }
 
-fn is_interior_building_poi(record: &PoiRecord) -> bool {
-	maybraid_spawns_placement::interior_building_poi(record)
-}
-
 fn prefer_building_poi_ids(ids: &[PoiId], registry: &PoiRegistry, death_at: Vec3) -> Vec<PoiId> {
 	let nearer =
 		|a: &(PoiId, f32), b: &(PoiId, f32)| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(&b.0));
@@ -682,11 +676,14 @@ mod tests {
 	use bevy::math::bounding::Aabb3d;
 	use durham::TerrainCellLayout;
 	use layer_stack::GenerationMode;
-	use lod::hcsg::{spawn_worker, HcsgStorage};
+	use lod::hcsg::{spawn_worker, HcsgClass, HcsgStorage};
 	use maybraid_input::{MenuNav, MenuNavPad};
 	use maybraid_spawns_player::{map_flick_dir, nearest_in_direction, SpawnPickerSheet};
 	use poi_intelligence::NearbyFallback;
-	use world_player::WorldBaseTerrain;
+	use poi_intelligence::PoiRecord;
+	use world_player::{
+		AwaitingTerrainSurface, CharacterLocomotion, OffTerrainAnchor, WorldBaseTerrain,
+	};
 
 	#[test]
 	fn fallback_respawn_moves_away_from_the_death_point() {
@@ -1268,10 +1265,10 @@ mod tests {
 		let lounge = PoiRecord { kind: SALOON_POI, ..room };
 		let urban = PoiRecord { kind: URBAN_POI, ..room };
 		let grove = PoiRecord { kind: VEGETATION_POI, local: false, global: true, ..room };
-		assert!(is_interior_building_poi(&room));
-		assert!(is_interior_building_poi(&lounge));
-		assert!(!is_interior_building_poi(&urban));
-		assert!(!is_interior_building_poi(&grove));
+		assert!(maybraid_spawns_placement::interior_building_poi(&room));
+		assert!(maybraid_spawns_placement::interior_building_poi(&lounge));
+		assert!(!maybraid_spawns_placement::interior_building_poi(&urban));
+		assert!(!maybraid_spawns_placement::interior_building_poi(&grove));
 	}
 
 	#[test]
@@ -2240,7 +2237,7 @@ mod tests {
 		world.insert_resource(demand.clone());
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
 		let region = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 1.0, 1.0));
-		demand.subscribe::<UnitXTile>(None, vec![region], None, crate::HcsgClass::Near);
+		demand.subscribe::<UnitXTile>(None, vec![region], None, HcsgClass::Near);
 
 		world
 			.run_system_once(queue_first_spawn_picker)
@@ -2267,7 +2264,7 @@ mod tests {
 		let demand = HcsgDemand::default();
 		world.insert_resource(demand.clone());
 		let region = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 1.0, 1.0));
-		demand.subscribe::<UnitXTile>(None, vec![region], None, crate::HcsgClass::Near);
+		demand.subscribe::<UnitXTile>(None, vec![region], None, HcsgClass::Near);
 		world.insert_resource(FirstWave { undiscovered: 1, remaining: 40, passed: true });
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
 		world

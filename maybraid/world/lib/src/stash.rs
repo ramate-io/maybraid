@@ -42,13 +42,13 @@ use lod::scene::LodSceneLevel;
 use lod::LodScene;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use maybraid_session::WorldGameplayEnabled;
 use player::PlayerUse;
 use world_player::Player as VegetationPlayer;
 
 use mob_characters::CharacterBrains;
 use mob_scenes::MobKind;
 
-use crate::control::WorldGameplayEnabled;
 use crate::weapon::{AppliedWorldPlayerLoadout, WorldPlayerLoadout};
 
 /// Default unclaimed-loot lifetime. Independent of the 4 s corpse clock.

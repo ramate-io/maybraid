@@ -84,6 +84,15 @@ Rules:
 
 - `controllers/core` depends only on `maybraid-input` and Bevy.
 - `controllers/character` depends on `core` + `input`.
+- `gameplay/session` owns session capabilities and lifecycle events; it uses
+  routing primitives from `controllers/core` privately. `gameplay/lib` and
+  `world` may depend on session for adapters, but do not forward session or
+  routing APIs from their crate roots. The executable imports session APIs
+  directly from `maybraid-session`.
+- Consumers import `InputRouter`, `InputRouting`, and `RoutingEvent` directly
+  from `maybraid-controllers-core`. Composition crates must not re-export
+  those types. `bin/check-controller-boundaries.sh` enforces this rule in
+  Cargo Check.
 - The player motor contract (`MotorIntent` / `ResolvedMotorRequest`) must not
   depend on locomotion or Tanz.
 - Locomotion and Tanz write the motor contract; they do not own apply.
@@ -258,7 +267,7 @@ the current owner. Later phases change the owner column, not the role id.
 |---|---|---|---|---|---|---|
 | E1 | In-game menu / pause | `game::toggle_world_pause` | B8 + `VirtualPad` (A vs Start) | `WorldPause`, `SessionCapabilities` pause token, `WorldGameplayEnabled` | `GamePlugin` + `gameplay/session` | Pause writes the session token; session projects live-play. |
 | E2 | Inventory sheet | `stash.rs` Inventory reader | B9 | inventory editor | world | Broadcast. |
-| E3 | World map | `map_view.rs` ToggleMap reader | B10 | `WorldMapView` | world | Broadcast. Two camera-lock writers remain. |
+| E3 | World map | `map_view.rs` ToggleMap reader | B10 | `WorldMapView` | world | Broadcast. `sync_camera_session_state` owns follow, POV lock, and look suppression. |
 | E4 | Session gameplay gate | `SessionCapabilities`, `WorldGameplayEnabled` | E1, `game/src/flow.rs` enter, pause | B11 world filter, HUD, cycling | `gameplay/session` | Live. Capabilities already replace the old `SessionActivity` / `WorldGameplayEnabled` gates. Session projects live-play; world keeps scenery / menu-shell bits. |
 | E5 | Spawn / respawn picker | `SpawnPickerController`, `refresh_spawn_picker_focus`, `dispatch_spawn_picker` | A2 `MenuNavPad` | `PlayerChoseRespawnPoi` / `DestinationSelected` → `ResolvePlacement` / `respawn_world_player` | `spawns/player` | **Spawn rewrite phase 1–2.** UI-owned MenuNav capture. No actor. Placement work lives in `PlacementWork` so generation that outlives messages cannot drop the request. |
 
