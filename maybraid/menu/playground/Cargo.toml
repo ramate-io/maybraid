@@ -32,12 +32,12 @@ maybraid-character-ui-menu-renderer = { workspace = true }
 maybraid-virtual-pad-controller = { workspace = true }
 maybraid-skill-map = { workspace = true }
 maybraid-menu-controller = { workspace = true }
+maybraid-controllers-core = { workspace = true }
 menu-components = { workspace = true }
 menu-screens = { workspace = true }
 player = { workspace = true }
 
 [dev-dependencies]
-maybraid-controllers-core = { workspace = true }
 anyhow = { workspace = true }
 screen-capture = { workspace = true }
 
