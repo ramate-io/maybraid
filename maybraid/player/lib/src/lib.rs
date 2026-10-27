@@ -163,6 +163,7 @@ impl Plugin for PlayerPlugin {
 				)
 					.chain(),
 			)
+			.add_systems(Last, hit::despawn_retired_hit_volumes)
 			.add_systems(
 				Update,
 				(locomotion::face_wish_yaw, drive_player_locomotion, hit::align_hit_volumes)

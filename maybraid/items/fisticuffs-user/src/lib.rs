@@ -92,6 +92,8 @@ impl Plugin for FisticuffsUserPlugin {
 	}
 }
 
+#[cfg(test)]
+mod lifetime;
 
 #[cfg(test)]
 mod pose_tests {
