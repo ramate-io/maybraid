@@ -72,8 +72,6 @@ pub fn interpret_menu_pad(
 	mut sessions: Query<&mut crate::MenuSession>,
 	mut text: crate::text::ScopedTextInput,
 	reorder: Query<(), With<menu_components::HudMenuNavLocked>>,
-	config: Res<maybraid_virtual_pad_controller::VirtualPadConfig>,
-	sources: Query<&maybraid_virtual_pad_controller::VirtualPadController>,
 	mut commands: Commands,
 ) {
 	let input = &event.input;
@@ -92,7 +90,7 @@ pub fn interpret_menu_pad(
 			}
 			let source = input.source();
 			let frame = input.payload();
-			let config = sources.get(frame.source).map(|source| &source.config).unwrap_or(&config);
+			let config = controller.repeat_config;
 			let binding = input.binding();
 			let index = controller.streams.iter().position(|stream| stream.source == source);
 			let index = index.unwrap_or_else(|| {
@@ -128,8 +126,7 @@ pub fn interpret_menu_pad(
 				]
 				.into_iter()
 				.any(|button| frame.pad.just_pressed(button));
-				let direction =
-					MenuNav::direction_from_pad(&frame.pad, config.menu_stick_threshold);
+				let direction = MenuNav::direction_from_pad(&frame.pad, config.stick_threshold);
 				if direction.is_none() || edge {
 					stream.await_release = false;
 				} else {
@@ -137,7 +134,7 @@ pub fn interpret_menu_pad(
 					interpreted_pad.dpad = Vec2::ZERO;
 				}
 			}
-			stream.repeat.derive(&interpreted_pad, config, frame.delta.as_secs_f32());
+			stream.repeat.derive(&interpreted_pad, &config, frame.delta.as_secs_f32());
 			let mut events = stream.repeat.events.clone();
 			if !start_select
 				&& !frame.pad.just_pressed(maybraid_virtual_pad_controller::PadButton::A)
