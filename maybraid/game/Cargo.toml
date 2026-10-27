@@ -14,7 +14,6 @@ name = "maybraid"
 path = "src/main.rs"
 
 [dependencies]
-maybraid-controllers-core = { workspace = true }
 lubikans = { workspace = true }
 layer-stack = { workspace = true }
 bevy = { workspace = true }
@@ -29,6 +28,7 @@ maybraid-input = { workspace = true }
 maybraid-agent = { workspace = true }
 maybraid-menu-controller = { workspace = true }
 maybraid-gameplay = { workspace = true }
+maybraid-controllers-core = { workspace = true }
 maybraid-world = { workspace = true }
 menu-components = { workspace = true }
 menu-playground = { workspace = true }
