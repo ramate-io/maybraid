@@ -36,7 +36,8 @@ pub fn finish_produce(
 pub fn configure_produce(app: &mut App) {
 	app.add_systems(
 		PreUpdate,
-		crate::controller::produce_controllers
+		(crate::overlay::apply_overlay_requests, crate::controller::produce_controllers)
+			.chain()
 			.in_set(crate::VirtualPadSystems::Produce)
 			.after(InputSystems),
 	);
