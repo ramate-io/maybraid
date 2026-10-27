@@ -361,6 +361,7 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use durham::{terrain_collider_covers_xz, CascadeChunk};
+	use maybraid_controllers_core::InputRouter;
 
 	#[test]
 	fn surface_ready_requires_local_column() {
