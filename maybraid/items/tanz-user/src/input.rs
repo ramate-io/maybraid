@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use bevy::prelude::*;
 use maybraid_character_controller::{ActorControlSample, FaceButtonSample};
 use maybraid_controllers_core::{
-	GestureEffect, HoldEffect, InputSource, RoutingEvent, RoutingKind,
+	GestureEffect, HoldEffect, InputSource, RouteBinding, Routed, RoutingEvent, RoutingKind,
 };
 
 use crate::ControlMode;
@@ -49,6 +49,14 @@ impl TanzInput {
 	pub fn stick(self) -> Vec2 {
 		self.direction * self.magnitude
 	}
+}
+
+/// Pad-derived gesture, delivered only while its original source binding is valid.
+/// Direct `TanzInput` messages remain available for scripted actor actions.
+#[derive(EntityEvent, Clone, Debug)]
+pub struct RoutedTanzInput {
+	pub entity: Entity,
+	pub input: Routed<TanzInput>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -98,11 +106,14 @@ struct StickSample {
 #[derive(Clone, Debug)]
 pub struct TanzRecognizer {
 	source: Option<InputSource>,
+	binding: Option<RouteBinding>,
+	accept_resume_binding: bool,
 	frozen: bool,
 	samples: VecDeque<StickSample>,
 	candidate: Option<Vec2>,
 	committed: Option<Vec2>,
 	sustain_secs: f32,
+	b_held_secs: f32,
 	b_hold_emitted: bool,
 }
 
@@ -110,11 +121,14 @@ impl Default for TanzRecognizer {
 	fn default() -> Self {
 		Self {
 			source: None,
+			binding: None,
+			accept_resume_binding: false,
 			frozen: false,
 			samples: VecDeque::new(),
 			candidate: None,
 			committed: None,
 			sustain_secs: 0.0,
+			b_held_secs: 0.0,
 			b_hold_emitted: false,
 		}
 	}
@@ -123,11 +137,14 @@ impl Default for TanzRecognizer {
 impl TanzRecognizer {
 	pub fn reset(&mut self) {
 		self.source = None;
+		self.binding = None;
+		self.accept_resume_binding = false;
 		self.frozen = false;
 		self.samples.clear();
 		self.candidate = None;
 		self.committed = None;
 		self.sustain_secs = 0.0;
+		self.b_held_secs = 0.0;
 		self.b_hold_emitted = false;
 	}
 
@@ -140,15 +157,29 @@ impl TanzRecognizer {
 	}
 
 	pub fn has_partial(&self) -> bool {
-		!self.samples.is_empty() || self.candidate.is_some() || self.committed.is_some()
+		!self.samples.is_empty()
+			|| self.candidate.is_some()
+			|| self.committed.is_some()
+			|| self.b_held_secs > 0.0
 	}
 
 	/// Bind this recognizer to the source that is accumulating history.
 	pub fn bind_source(&mut self, source: InputSource) {
-		if self.source != Some(source) {
+		self.bind_delivery(source, None);
+	}
+
+	/// Returns true when a new binding retired prior gesture and hold history.
+	/// A resumed suspension may replace its epoch while preserving frozen state.
+	pub fn bind_delivery(&mut self, source: InputSource, binding: Option<RouteBinding>) -> bool {
+		if self.source != Some(source) || (self.binding != binding && !self.accept_resume_binding) {
 			self.reset();
 			self.source = Some(source);
+			self.binding = binding;
+			return true;
 		}
+		self.binding = binding;
+		self.accept_resume_binding = false;
+		false
 	}
 
 	/// Apply a router hold / gesture contract for this source.
@@ -168,6 +199,9 @@ impl TanzRecognizer {
 					RoutingKind::Assigned | RoutingKind::Resumed | RoutingKind::Uncaptured
 				) {
 					self.frozen = false;
+					if event.kind() == RoutingKind::Resumed {
+						self.accept_resume_binding = true;
+					}
 				}
 			}
 		}
@@ -190,7 +224,10 @@ impl TanzRecognizer {
 			return None;
 		}
 		let dt = dt.max(0.0);
-		if !face.b().pressed() {
+		if face.b().pressed() {
+			self.b_held_secs += dt;
+		} else {
+			self.b_held_secs = 0.0;
 			self.b_hold_emitted = false;
 		}
 
@@ -267,7 +304,7 @@ impl TanzRecognizer {
 		if face.b().just_pressed() {
 			return Some(TanzButton::BPress);
 		}
-		if face.b().pressed() && face.b().hold_secs() >= cfg.b_hold && !self.b_hold_emitted {
+		if face.b().pressed() && self.b_held_secs >= cfg.b_hold && !self.b_hold_emitted {
 			self.b_hold_emitted = true;
 			return Some(TanzButton::BHold);
 		}
@@ -944,5 +981,71 @@ mod tests {
 		assert!(!toggle.is_partial());
 		assert!(!toggle.sample(1.0 / 60.0, true, TANZ_TOGGLE_SECS, ControlMode::Standard));
 		assert!(toggle.bar(ControlMode::Standard) < 0.05);
+	}
+
+	#[test]
+	fn suspended_b_hold_counts_only_delivered_time() {
+		let mut recognizer = TanzRecognizer::default();
+		let cfg = TanzRecognizerConfig::default();
+		let held = TanzFaceSample::default().with_b_hold(0.15);
+		assert!(recognizer.sample(0.15, Vec2::ZERO, held, &cfg).is_none());
+		recognizer.frozen = true;
+		assert!(recognizer
+			.sample(2.0, Vec2::ZERO, TanzFaceSample::default().with_b_hold(2.15), &cfg)
+			.is_none());
+		recognizer.frozen = false;
+		assert!(recognizer
+			.sample(0.14, Vec2::ZERO, TanzFaceSample::default().with_b_hold(2.29), &cfg)
+			.is_none());
+		assert_eq!(
+			recognizer
+				.sample(0.02, Vec2::ZERO, TanzFaceSample::default().with_b_hold(2.31), &cfg)
+				.map(|gesture| gesture.button),
+			Some(TanzButton::BHold)
+		);
+	}
+
+	#[test]
+	fn suspension_rebind_keeps_history_but_unannounced_rebind_cancels_it() -> anyhow::Result<()> {
+		use maybraid_controllers_core::{ActorTarget, InputRouter, ScopeOwner};
+
+		let mut router = InputRouter::default();
+		let source = InputSource::local_pad();
+		let actor = ActorTarget::new(Entity::from_bits(7));
+		router.assign_actor(source, actor);
+		router.take_events();
+		let initial = router
+			.route_actor(source, ())
+			.ok_or_else(|| anyhow::anyhow!("initial route"))?
+			.binding();
+		let mut recognizer = TanzRecognizer::default();
+		assert!(recognizer.bind_delivery(source, initial));
+		let cfg = TanzRecognizerConfig::default();
+		assert!(recognizer.sample(0.06, Vec2::X, TanzFaceSample::default(), &cfg).is_none());
+		assert!(recognizer.has_partial());
+		let token = router.suspend(source, ScopeOwner::pause());
+		let freeze =
+			router.take_events().last().copied().ok_or_else(|| anyhow::anyhow!("freeze"))?;
+		recognizer.apply_routing(freeze);
+		assert!(recognizer.is_frozen());
+		router.resume(token);
+		let resume =
+			router.take_events().last().copied().ok_or_else(|| anyhow::anyhow!("resume"))?;
+		recognizer.apply_routing(resume);
+		let resumed = router
+			.route_actor(source, ())
+			.ok_or_else(|| anyhow::anyhow!("resumed route"))?
+			.binding();
+		assert_ne!(initial, resumed);
+		assert!(!recognizer.bind_delivery(source, resumed));
+		assert!(recognizer.has_partial());
+		router.cancel_source(source);
+		let changed = router
+			.route_actor(source, ())
+			.ok_or_else(|| anyhow::anyhow!("changed route"))?
+			.binding();
+		assert!(recognizer.bind_delivery(source, changed));
+		assert!(!recognizer.has_partial());
+		Ok(())
 	}
 }
