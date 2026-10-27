@@ -454,11 +454,17 @@ pub fn keep_capture_hosts_visible(
 	mut commands: Commands,
 	roots: Query<Entity, With<CaptureHostRoot>>,
 	children: Query<&Children>,
-	hidden: Query<(), Or<(With<Disabled>, With<Visibility>)>>,
+	hidden: Query<Option<&Visibility>, Or<(With<Disabled>, With<Visibility>)>>,
+	arm_hidden: Query<(), With<FisticuffsArmsHidden>>,
 ) {
 	for root in &roots {
 		visit_descendants(root, &children, &mut |entity| {
-			if hidden.get(entity).is_err() {
+			let Ok(visibility) = hidden.get(entity) else {
+				return;
+			};
+			// Only nodes explicitly hidden by arm isolation retain Hidden.
+			// Other scene parts still receive generic visibility repair.
+			if arm_hidden.contains(entity) && visibility == Some(&Visibility::Hidden) {
 				return;
 			}
 			commands.entity(entity).try_remove::<Disabled>();
@@ -549,6 +555,10 @@ pub(crate) struct SelfLubikanBindPose;
 /// Finished destemming, posing, and isolating the Fisticuffs arms mesh.
 #[derive(Component)]
 pub(crate) struct FisticuffsArmsBindPose;
+
+/// Visibility owned by the Fisticuffs arm mask, not scene readiness.
+#[derive(Component)]
+struct FisticuffsArmsHidden;
 
 /// Isolated captures have no posed body rig. The GLB still instantiates
 /// `SkinnedMesh` plus JOINTS/WEIGHTS; Bevy's PBR path skips those meshes
@@ -690,6 +700,11 @@ pub fn rest_pose_fisticuffs_arms_skins(
 					FisticuffsArmMask::hides_part,
 					true,
 				);
+				for member in list.iter() {
+					if parts.get(member).is_ok_and(|part| FisticuffsArmMask::hides_part(part.slot)) {
+						commands.entity(member).try_insert(FisticuffsArmsHidden);
+					}
+				}
 			}
 		});
 		let mut isolated_any = false;
@@ -709,7 +724,7 @@ pub fn rest_pose_fisticuffs_arms_skins(
 			};
 			saw_loaded_body = true;
 			let Ok(skin) = skins.get(entity) else {
-				commands.entity(entity).try_insert(Visibility::Hidden);
+				commands.entity(entity).try_insert((Visibility::Hidden, FisticuffsArmsHidden));
 				return;
 			};
 			let joint_is_arm: Vec<bool> = skin
@@ -722,7 +737,7 @@ pub fn rest_pose_fisticuffs_arms_skins(
 				})
 				.collect();
 			let Some(isolated) = isolate_arm_joints(mesh, &joint_is_arm) else {
-				commands.entity(entity).try_insert(Visibility::Hidden);
+				commands.entity(entity).try_insert((Visibility::Hidden, FisticuffsArmsHidden));
 				return;
 			};
 			commands.entity(entity).try_insert(Mesh3d(meshes.add(isolated)));
@@ -1192,6 +1207,39 @@ mod tests {
 			app.world().get::<FisticuffsArmsBindPose>(root).is_none(),
 			"Mesh3d without an asset must not ready the host"
 		);
+	}
+
+	#[test]
+	fn fisticuffs_arm_mask_survives_visibility_repair_after_asset_readiness() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_systems(Update, keep_capture_hosts_visible);
+		let root = app
+			.world_mut()
+			.spawn(CaptureHostRoot {
+				kind: HOST_FISTICUFFS_ARMS.to_string(),
+				id: CaptureId::new("fisticuffs:braidman-arms"),
+			})
+			.id();
+		let arm = app.world_mut().spawn((Visibility::Hidden, ChildOf(root))).id();
+		let face = app.world_mut().spawn((Visibility::Hidden, ChildOf(root))).id();
+		let hidden_child = app.world_mut().spawn((Visibility::Hidden, ChildOf(face))).id();
+		app.update();
+		assert_eq!(app.world().get::<Visibility>(arm), Some(&Visibility::Inherited));
+		assert_eq!(app.world().get::<Visibility>(face), Some(&Visibility::Inherited));
+
+		// Once the asset and arm isolation are ready, the masked face stays
+		// hidden; unrelated Hidden nodes are still repaired.
+		app.world_mut().entity_mut(root).insert(FisticuffsArmsBindPose);
+		app.world_mut().entity_mut(face).insert((Visibility::Hidden, FisticuffsArmsHidden));
+		app.world_mut().entity_mut(hidden_child).insert(Visibility::Hidden);
+		let late_part = app.world_mut().spawn((Visibility::Hidden, ChildOf(root))).id();
+		for _ in 0..3 {
+			app.update();
+			assert_eq!(app.world().get::<Visibility>(face), Some(&Visibility::Hidden));
+			assert_eq!(app.world().get::<Visibility>(hidden_child), Some(&Visibility::Inherited));
+			assert_eq!(app.world().get::<Visibility>(late_part), Some(&Visibility::Inherited));
+		}
+		assert_eq!(app.world().get::<Visibility>(arm), Some(&Visibility::Inherited));
 	}
 
 	#[test]
