@@ -21,9 +21,8 @@ use poi_intelligence::{place_nearby, PoiId, PoiKind, PoiRecord, PoiRegistry, Poi
 use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
 use world_player::{
-	holding_elevation, player_spawn_point_at, AwaitingTerrainSurface, CharacterLocomotion,
-	ModePlayerPolicies, MoveWish, OffTerrainAnchor, Player as VegetationPlayer, PlayerLifeEnded,
-	PlayerLifeSet, PlayerSpawnXz, RespawnOrigin,
+	holding_elevation, player_spawn_point_at, ModePlayerPolicies, MoveWish,
+	Player as VegetationPlayer, PlayerLifeEnded, PlayerLifeSet, PlayerSpawnXz, RespawnOrigin,
 };
 
 use layer_stack::ActiveGenerationMode;
@@ -637,10 +636,6 @@ fn is_building_poi(kind: PoiKind) -> bool {
 	kind == LOCAL_POI || kind == URBAN_POI || kind == SALOON_POI
 }
 
-fn is_interior_building_poi(record: &PoiRecord) -> bool {
-	maybraid_spawns_placement::interior_building_poi(record)
-}
-
 fn prefer_building_poi_ids(ids: &[PoiId], registry: &PoiRegistry, death_at: Vec3) -> Vec<PoiId> {
 	let nearer =
 		|a: &(PoiId, f32), b: &(PoiId, f32)| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(&b.0));
@@ -684,7 +679,9 @@ mod tests {
 	use maybraid_input::{MenuNav, MenuNavPad};
 	use maybraid_spawns_player::{map_flick_dir, nearest_in_direction, SpawnPickerSheet};
 	use poi_intelligence::NearbyFallback;
-	use world_player::WorldBaseTerrain;
+	use world_player::{
+		AwaitingTerrainSurface, CharacterLocomotion, OffTerrainAnchor, WorldBaseTerrain,
+	};
 
 	#[test]
 	fn fallback_respawn_moves_away_from_the_death_point() {
@@ -1266,10 +1263,10 @@ mod tests {
 		let lounge = PoiRecord { kind: SALOON_POI, ..room };
 		let urban = PoiRecord { kind: URBAN_POI, ..room };
 		let grove = PoiRecord { kind: VEGETATION_POI, local: false, global: true, ..room };
-		assert!(is_interior_building_poi(&room));
-		assert!(is_interior_building_poi(&lounge));
-		assert!(!is_interior_building_poi(&urban));
-		assert!(!is_interior_building_poi(&grove));
+		assert!(maybraid_spawns_placement::interior_building_poi(&room));
+		assert!(maybraid_spawns_placement::interior_building_poi(&lounge));
+		assert!(!maybraid_spawns_placement::interior_building_poi(&urban));
+		assert!(!maybraid_spawns_placement::interior_building_poi(&grove));
 	}
 
 	#[test]
