@@ -1,5 +1,8 @@
 //! Skin-remap fulfill for [`crate::socket::SkinRef`] and GLTF duplicate-armature prune.
 
+#[cfg(test)]
+mod tests;
+
 use std::collections::HashSet;
 
 use bevy::{
@@ -46,9 +49,10 @@ pub fn fulfill_skin_ref_roots(
 		if map.by_name.is_empty() {
 			continue;
 		}
+		// The part may retire after this lookup but before deferred completion.
 		commands
 			.entity(entity)
-			.insert((PartRigRef { rig_root }, NeedsSkinRemap, SkinRefApplied));
+			.try_insert((PartRigRef { rig_root }, NeedsSkinRemap, SkinRefApplied));
 	}
 }
 
