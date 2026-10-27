@@ -736,6 +736,7 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "character-ui-menu",
+ "menu-components",
 ]
 
 [[package]]
@@ -4601,6 +4602,7 @@ dependencies = [
  "lod-avian",
  "material-ref",
  "maybraid-audio",
+ "maybraid-spawns-projectiles",
  "procedural-common",
  "projectiles",
  "scene-ref",
@@ -5463,6 +5465,7 @@ dependencies = [
  "maybraid-equipment",
  "maybraid-input",
  "maybraid-spatial-rumble",
+ "maybraid-spawns-grenades",
  "player",
  "player-camera",
 ]
@@ -7029,7 +7032,11 @@ dependencies = [
  "maybraid-input",
  "maybraid-session",
  "maybraid-skill-map",
+ "maybraid-spawns-actors",
+ "maybraid-spawns-grenades",
+ "maybraid-spawns-placement",
  "maybraid-spawns-player",
+ "maybraid-spawns-projectiles",
  "player",
  "player-camera",
  "tanz-user",
@@ -7169,6 +7176,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-spawns-actors"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "characters",
+ "maybraid-spawns-player",
+ "world-player",
+]
+
+[[package]]
+name = "maybraid-spawns-grenades"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "character-items",
+ "grenades",
+]
+
+[[package]]
+name = "maybraid-spawns-placement"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "characters",
+ "durham",
+ "lod",
+ "lod-avian",
+ "maybraid-spawns-player",
+ "poi-intelligence",
+ "world-player",
+]
+
+[[package]]
 name = "maybraid-spawns-player"
 version = "0.1.5"
 dependencies = [
@@ -7178,6 +7224,17 @@ dependencies = [
  "maybraid-input",
  "poi-intelligence",
  "world-player",
+]
+
+[[package]]
+name = "maybraid-spawns-projectiles"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "damage",
+ "gimme-bench-support",
+ "projectiles",
 ]
 
 [[package]]
@@ -7204,6 +7261,7 @@ dependencies = [
  "avian3d",
  "barking",
  "bevy",
+ "building-physics",
  "character-inventory-user",
  "character-items",
  "character-persist",
@@ -7250,6 +7308,8 @@ dependencies = [
  "maybraid-session",
  "maybraid-skill-map",
  "maybraid-sky",
+ "maybraid-spawns-actors",
+ "maybraid-spawns-placement",
  "maybraid-spawns-player",
  "maybraid-vfx",
  "maybraid-weather",
@@ -7374,6 +7434,7 @@ dependencies = [
  "menu-components",
  "menu-screens",
  "player",
+ "screen-capture",
  "tanz-user",
 ]
 
@@ -7863,6 +7924,7 @@ dependencies = [
  "character-items",
  "damage",
  "fleeing-intelligence",
+ "gimme-bench-support",
  "journeying-intelligence",
  "lod",
  "maybraid-audio",

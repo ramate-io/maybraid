@@ -49,8 +49,9 @@ pub use plugin::FirearmHostsPlugin;
 pub use pose::{aim_plus_x, BoneFit, FirearmPose};
 pub use presentation::register_firearm_presentation;
 pub use projectiles::{
-	decide_weapon_fire, muzzle_world, FireOnTrigger, FirearmWeaponSystems, FirearmWeaponsPlugin,
-	LaserBeam, LaserSpec, ProjectileLoad, Weapon, WeaponTrigger, WeaponsArmed, BARREL_REST_LENGTH,
+	decide_weapon_fire, muzzle_world, sample_weapon_launch_poses, FireOnTrigger,
+	FirearmWeaponSystems, FirearmWeaponsPlugin, LaserBeam, LaserSpec, ProjectileLoad, Weapon,
+	WeaponLaunchPose, WeaponTrigger, WeaponsArmed, BARREL_REST_LENGTH,
 };
 pub use runtime::register_firearm_runtime;
 pub use sound::{

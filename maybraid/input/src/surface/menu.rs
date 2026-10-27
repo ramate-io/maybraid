@@ -43,6 +43,12 @@ pub const INVENTORY_DROP_PAD: PadButton = PadButton::X;
 /// Keys that hold [`PadButton::X`] so drop matches world interact (E / X).
 pub const INVENTORY_DROP_KEYS: [KeyCode; 2] = [KeyCode::KeyE, KeyCode::KeyX];
 
+/// Pad face that unequips the focused inventory tile (`#1356`).
+pub const INVENTORY_UNEQUIP_PAD: PadButton = PadButton::Y;
+
+/// Keys that hold [`PadButton::Y`] so unequip matches world swap (Y).
+pub const INVENTORY_UNEQUIP_KEYS: [KeyCode; 1] = [KeyCode::KeyY];
+
 impl MenuNav {
 	pub fn from_cardinal(cardinal: Cardinal) -> Self {
 		match cardinal {

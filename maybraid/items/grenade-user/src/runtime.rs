@@ -26,6 +26,7 @@ pub fn register_grenade_user_runtime(app: &mut App) {
 	if app.world().contains_resource::<GrenadeUserRuntime>() {
 		return;
 	}
+	maybraid_spawns_grenades::register_grenade_spawn_runtime(app);
 	app.init_resource::<GrenadeUserRuntime>()
 		.add_message::<maybraid_equipment::EquippedItemUse>()
 		.add_message::<grenades::DropLiveGrenade>()

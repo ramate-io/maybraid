@@ -18,7 +18,8 @@ pub mod theme;
 pub use controls::{
 	apply_hud_menu_nav, clear_short_text_dismissed, color_from_hex,
 	emit_short_text_submit_on_confirm, menu_display_name, navigate_hud_menus, on_hud_scroll,
-	restore_short_text_editing, scroll_hud_selection_into_view, scroll_hud_viewport_on_nav,
+	restore_short_text_editing, scroll_hud_selection_into_strip, scroll_hud_selection_into_view,
+	scroll_hud_viewport_on_nav,
 	select_hud_item_on_over, send_hud_scroll_events, spawn_asset_tile, spawn_block_label,
 	spawn_corner_action, spawn_focus_tag, spawn_grid_catalog_tile, spawn_group_label,
 	spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text,
@@ -27,8 +28,9 @@ pub use controls::{
 	spawn_text_button, spawn_tile_grid, spawn_tile_grid_columns, sync_hover_tiles,
 	sync_hud_focus_tags, sync_hud_item_focus, sync_hud_scrollbars, sync_input_prompt_device,
 	sync_inventory_prompt_glyphs, sync_tile_wrap, ActiveOverlayKey, ActiveShortText, CursorRow,
-	FocusTag, HoverTile, HudFonts, HudMenu, HudMenuIgnoresLock, HudMenuItem, HudOverlayMenu,
-	HudScroll, HudScrollThumb, HudScrollTrack, HudScrollViewport, InputPromptDevice,
+	FocusTag, HoverTile, HudFonts, HudMenu, HudMenuIgnoresLock, HudMenuItem, HudMenuNavLocked,
+	HudOverlayMenu, ReorderMark,
+	HudScroll, HudScrollStrip, HudScrollThumb, HudScrollTrack, HudScrollViewport, InputPromptDevice,
 	InventoryActionPrompts, InventoryPromptGlyph, InventoryPromptKind, OverlayHeader,
 	OverlayHeaderKey, ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal,
 	ShortTextModalRoot, ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank,
@@ -47,7 +49,8 @@ pub use loading::{
 pub use modal::{
 	begin_menu_modal_frame, consume_menu_modal_back, consume_screen_back, entity_under_nav_owner,
 	hud_menu_under_modal, sync_menu_modal_stack, tick_menu_modal_holds, MenuModal,
-	MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack, MenuModalSystems,
+	MenuModalBackHold, MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack,
+	MenuModalSystems,
 };
 pub use single_select::{
 	apply_text_menu_nav, emit_menu_activate_on_click, emit_menu_activate_on_enter,
@@ -65,8 +68,8 @@ pub use spin_reveal::{
 	SPIN_REVEAL_SECS, SPIN_REVEAL_SLOT_SIZE, SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH,
 };
 pub use theme::{
-	character_screen_grid_node, menu_list_panel_node, menu_region_wash, BARLOW_BLACK,
-	BARLOW_REGULAR, BARLOW_SEMIBOLD, BONES_ICON, CATALOG_THUMB_PX, CHARACTER_OVERLAY_GAP,
+	character_screen_grid_node, equipped_pane_fill, menu_list_panel_node, menu_region_wash,
+	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, BONES_ICON, CATALOG_THUMB_PX, CHARACTER_OVERLAY_GAP,
 	CHARACTER_PANEL_INSET, CHARACTER_PANEL_WIDTH, DESCRIPTION_PANE_LEFT_PERCENT, HEADER_FONT_SIZE,
 	INVENTORY_THUMB_PX, INVENTORY_TILE_COLUMNS, ITEM_FONT_SIZE, LOADING_ICON_SIZE, MAP_ARROW_ICON,
 	MAP_GROVE_ICON, MAP_HOUSE_ICON, MAP_MOUNTAIN_ICON, MAP_TOWN_ICON, MAP_TREE_ICON,
@@ -96,6 +99,7 @@ impl Plugin for MenuComponentsPlugin {
 			.init_resource::<ActiveShortText>()
 			.init_resource::<ShortTextModal>()
 			.init_resource::<MenuModalStack>()
+			.init_resource::<crate::modal::MenuModalBackHold>()
 			.init_resource::<InputPromptDevice>()
 			.add_message::<ScreenBackPressed>()
 			.add_message::<ScreenEditPressed>()
@@ -159,7 +163,11 @@ impl Plugin for MenuComponentsPlugin {
 					sync_loading_bar_fill,
 					send_hud_scroll_events,
 					sync_hud_scrollbars,
-					(scroll_hud_selection_into_view, scroll_text_cursor_selection_into_view)
+					(
+						scroll_hud_selection_into_view,
+						scroll_hud_selection_into_strip,
+						scroll_text_cursor_selection_into_view,
+					)
 						.after(TextMenuSystems::Navigate),
 					sync_hud_focus_tags,
 					sync_hud_item_focus,
