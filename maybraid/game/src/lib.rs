@@ -644,6 +644,7 @@ mod tests {
 		visual_style_readout, GameFlow, PlaySession,
 	};
 	use maybraid_controllers_core::{InputRouter, RoutingEvent};
+	use maybraid_session::{SessionCapabilities, WorldPlaySessionEnded};
 	use maybraid_sky::ShadowQuality;
 	use maybraid_world::{VisualStyle, VisualStyleSetting, WorldPlayerLoadout, WorldSurfaceReady};
 	use menu_playground::{

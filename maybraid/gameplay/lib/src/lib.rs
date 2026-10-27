@@ -10,6 +10,7 @@ use bevy::prelude::*;
 use firearm_user::FirearmUserPlugin;
 use grenade_user::GrenadeUserPlugin;
 use maybraid_character_controller::CharacterControllerPlugin;
+use maybraid_session::SessionPlugin;
 use maybraid_skill_map::SkillMapPlugin;
 
 pub use actor_lifecycle::ActorDomainTeardown;

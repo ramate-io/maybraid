@@ -17,7 +17,7 @@ use maybraid_spawns_player::{
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use player_camera::{CameraController, FollowCamera};
-use poi_intelligence::{place_nearby, PoiId, PoiKind, PoiRecord, PoiRegistry, PoiSystems};
+use poi_intelligence::{place_nearby, PoiId, PoiKind, PoiRegistry, PoiSystems};
 use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
 use world_player::{
@@ -26,12 +26,13 @@ use world_player::{
 };
 
 use layer_stack::ActiveGenerationMode;
+use lod::{hcsg::HcsgDemand, LodJobCounter};
 use maybraid_session::{ActorRetired, SessionLifecycleSystems, WorldGameplayEnabled};
 
 use crate::control::strip_world_player_motor;
 use crate::map_view::WorldMapView;
 use crate::weapon::WorldPlayerAppearanceRequested;
-use crate::{FirstWave, HcsgDemand, LodJobCounter, PlayerPositionWaypoints, WorldPlayerLoadout};
+use crate::{FirstWave, PlayerPositionWaypoints, WorldPlayerLoadout};
 
 const MAP_OPEN_SECS: f32 = 0.18;
 
@@ -675,10 +676,11 @@ mod tests {
 	use bevy::math::bounding::Aabb3d;
 	use durham::TerrainCellLayout;
 	use layer_stack::GenerationMode;
-	use lod::hcsg::{spawn_worker, HcsgStorage};
+	use lod::hcsg::{spawn_worker, HcsgClass, HcsgStorage};
 	use maybraid_input::{MenuNav, MenuNavPad};
 	use maybraid_spawns_player::{map_flick_dir, nearest_in_direction, SpawnPickerSheet};
 	use poi_intelligence::NearbyFallback;
+	use poi_intelligence::PoiRecord;
 	use world_player::{
 		AwaitingTerrainSurface, CharacterLocomotion, OffTerrainAnchor, WorldBaseTerrain,
 	};
@@ -2235,7 +2237,7 @@ mod tests {
 		world.insert_resource(demand.clone());
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
 		let region = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 1.0, 1.0));
-		demand.subscribe::<UnitXTile>(None, vec![region], None, crate::HcsgClass::Near);
+		demand.subscribe::<UnitXTile>(None, vec![region], None, HcsgClass::Near);
 
 		world
 			.run_system_once(queue_first_spawn_picker)
@@ -2262,7 +2264,7 @@ mod tests {
 		let demand = HcsgDemand::default();
 		world.insert_resource(demand.clone());
 		let region = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 1.0, 1.0));
-		demand.subscribe::<UnitXTile>(None, vec![region], None, crate::HcsgClass::Near);
+		demand.subscribe::<UnitXTile>(None, vec![region], None, HcsgClass::Near);
 		world.insert_resource(FirstWave { undiscovered: 1, remaining: 40, passed: true });
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
 		world

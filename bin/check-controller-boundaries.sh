@@ -16,8 +16,18 @@ facades=(
 )
 
 for facade in "${facades[@]}"; do
+	if [[ ! -r "$facade" ]]; then
+		printf 'controller boundary facade is missing or unreadable: %s\n' "$facade" >&2
+		exit 1
+	fi
 	if grep -En '^[[:space:]]*pub use[[:space:]]+maybraid_(controllers_core|session)::' "$facade"; then
 		printf 'composition facade must not reexport routing or session-owned APIs: %s\n' "$facade" >&2
 		exit 1
+	else
+		status=$?
+		if (( status != 1 )); then
+			printf 'failed to inspect controller boundary facade: %s\n' "$facade" >&2
+			exit 1
+		fi
 	fi
 done
