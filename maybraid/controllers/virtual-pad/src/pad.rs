@@ -1,10 +1,19 @@
 //! Per-player virtual pad snapshot.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 
 use crate::button::{ButtonPhase, ButtonStroke, PadButton, PAD_BUTTON_COUNT};
+
+#[derive(Clone, Copy, Debug, Default)]
+struct PhysicalAnalog {
+	movement: Vec2,
+	look_throw: Vec2,
+	dpad: Vec2,
+	focus: f32,
+	fire: f32,
+}
 
 /// Device-agnostic pad for one player. Analog is current value; digital is
 /// [`ButtonInput`] (pressed / just_pressed / just_released) plus this-frame edges.
@@ -33,6 +42,7 @@ pub struct VirtualPad {
 	/// released until the device lets go, so lifting the gate is not a press.
 	swallowed: u16,
 	suppressed: bool,
+	suppressed_analog: Option<PhysicalAnalog>,
 }
 
 impl Default for VirtualPad {
@@ -53,6 +63,7 @@ impl Default for VirtualPad {
 			digital_mask: 0,
 			swallowed: 0,
 			suppressed: false,
+			suppressed_analog: None,
 		}
 	}
 }
@@ -98,6 +109,7 @@ impl VirtualPad {
 		self.key_events.clear();
 		self.digital_mask = 0;
 		self.suppressed = false;
+		self.suppressed_analog = None;
 	}
 
 	pub fn add_move(&mut self, value: Vec2) {
@@ -132,6 +144,8 @@ impl VirtualPad {
 	/// Zero analog and drop this frame's digital union (keys stay). Buttons
 	/// still down when the gate lifts need a fresh press.
 	pub fn suppress_gameplay(&mut self) {
+		let physical = self.physical_analog();
+		self.suppressed_analog = Some(physical);
 		self.move_stick = Vec2::ZERO;
 		self.look_stick = Vec2::ZERO;
 		self.look_throw = Vec2::ZERO;
@@ -141,6 +155,16 @@ impl VirtualPad {
 		self.swallowed = self.digital_mask;
 		self.digital_mask = 0;
 		self.suppressed = true;
+	}
+
+	fn physical_analog(&self) -> PhysicalAnalog {
+		self.suppressed_analog.unwrap_or(PhysicalAnalog {
+			movement: self.move_stick,
+			look_throw: self.look_throw,
+			dpad: self.dpad,
+			focus: self.trigger_focus,
+			fire: self.trigger_fire,
+		})
 	}
 
 	/// Apply the digital union to [`Self::buttons`] and collect edges.
@@ -218,6 +242,117 @@ impl VirtualPad {
 			trigger_fire: self.trigger_fire,
 			dpad: self.dpad,
 			buttons_down,
+		}
+	}
+}
+
+/// Release-until-neutral state for a receiver that lost gameplay ownership.
+///
+/// This filters a clone of the rich snapshot; physical/UI state stays intact.
+/// Unlike a suspension, rearming cancels held controls and their release edges.
+#[derive(Clone, Debug, Default)]
+pub struct PadRearm {
+	buttons: u16,
+	keys: HashSet<KeyCode>,
+	move_stick: bool,
+	look_throw: bool,
+	dpad: bool,
+	trigger_focus: bool,
+	trigger_fire: bool,
+}
+
+impl PadRearm {
+	pub fn capture(&mut self, pad: &VirtualPad) {
+		self.buttons |= pad.digital_mask | pad.swallowed;
+		for button in pad.buttons.get_pressed() {
+			self.buttons |= 1 << button.index();
+		}
+		self.keys.extend(pad.keys.get_pressed().copied());
+		let analog = pad.physical_analog();
+		self.move_stick |= analog.movement.length_squared() > 1e-6
+			|| pad.keys.any_pressed([
+				KeyCode::KeyW,
+				KeyCode::KeyA,
+				KeyCode::KeyS,
+				KeyCode::KeyD,
+				KeyCode::ArrowUp,
+				KeyCode::ArrowDown,
+				KeyCode::ArrowLeft,
+				KeyCode::ArrowRight,
+			]);
+		self.look_throw |= analog.look_throw.length_squared() > 1e-6;
+		self.dpad |= analog.dpad.length_squared() > 1e-6;
+		self.trigger_focus |=
+			analog.focus > 1e-6 || self.buttons & (1 << PadButton::TriggerFocus.index()) != 0;
+		self.trigger_fire |=
+			analog.fire > 1e-6 || self.buttons & (1 << PadButton::TriggerFire.index()) != 0;
+	}
+
+	/// Preserve a capability owned by another receiver (for example a shell).
+	pub fn allow_button(&mut self, button: PadButton) {
+		self.buttons &= !(1 << button.index());
+	}
+
+	pub fn allow_key(&mut self, key: KeyCode) {
+		self.keys.remove(&key);
+	}
+
+	pub fn apply(&mut self, pad: &mut VirtualPad) {
+		let analog = pad.physical_analog();
+		let mut physical = pad.digital_mask | pad.swallowed;
+		for button in pad.buttons.get_pressed() {
+			physical |= 1 << button.index();
+		}
+		// Suppress the release frame too: releasing a canceled B hold is not a tap.
+		let blocked = self.buttons;
+		self.buttons &= physical;
+		for button in PadButton::ALL {
+			if blocked & (1 << button.index()) != 0 {
+				pad.buttons.reset(button);
+				pad.button_hold_secs[button.index()] = 0.0;
+			}
+		}
+		pad.digital_mask &= !blocked;
+		pad.button_events.retain(|stroke| blocked & (1 << stroke.button.index()) == 0);
+		let blocked_keys = self.keys.clone();
+		self.keys.retain(|key| pad.keys.pressed(*key));
+		for key in &blocked_keys {
+			pad.keys.reset(*key);
+			pad.key_hold_secs.remove(key);
+		}
+		pad.key_events.retain(|stroke| !blocked_keys.contains(&stroke.button));
+		if self.move_stick {
+			self.move_stick = analog.movement.length_squared() > 1e-6
+				|| self.keys.iter().any(|key| {
+					matches!(
+						key,
+						KeyCode::KeyW
+							| KeyCode::KeyA | KeyCode::KeyS
+							| KeyCode::KeyD | KeyCode::ArrowUp
+							| KeyCode::ArrowDown | KeyCode::ArrowLeft
+							| KeyCode::ArrowRight
+					)
+				});
+			pad.move_stick = Vec2::ZERO;
+		}
+		if self.look_throw {
+			self.look_throw = analog.look_throw.length_squared() > 1e-6;
+			pad.look_throw = Vec2::ZERO;
+			pad.look_stick = Vec2::ZERO;
+		}
+		if self.dpad {
+			self.dpad = analog.dpad.length_squared() > 1e-6;
+			pad.dpad = Vec2::ZERO;
+		}
+		if self.trigger_focus {
+			self.trigger_focus =
+				analog.focus > 1e-6 || physical & (1 << PadButton::TriggerFocus.index()) != 0;
+			pad.trigger_focus = 0.0;
+		}
+		if self.trigger_fire {
+			self.trigger_fire =
+				analog.fire > 1e-6 || physical & (1 << PadButton::TriggerFire.index()) != 0;
+			pad.trigger_fire = 0.0;
 		}
 	}
 }
