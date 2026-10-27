@@ -5,16 +5,12 @@ use character_inventory_user::InventoryUser;
 use character_items::Inventory;
 use item_icons::{
 	request_inventory_icons, request_self_lubikan_icon, CaptureClient, ItemCaptureSubjects,
-	ItemIconDiscovery, ItemIconSystems, PoseCaptureSubjects,
+	ItemIconCache, ItemIconDiscovery, ItemIconPlugin as ItemIconsCorePlugin, ItemIconSystems,
+	PoseCaptureSubjects,
 };
 use tanz_user::request_inventory_tanz_icons;
 
 use crate::weapon::WorldPlayerLoadout;
-
-pub use item_icons::{
-	discover_icon_cache_dir, item_icon_requests, InventoryItemSubject, ItemIconCache,
-	ItemIconPlugin as ItemIconsCorePlugin, ITEM_ICON_RESOLUTION,
-};
 
 /// World wrapper: core icon plugin plus loadout discovery.
 pub struct ItemIconPlugin;

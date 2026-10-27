@@ -413,6 +413,7 @@ mod tests {
 	use layer_stack::ActiveGenerationMode;
 	use maybraid_controllers_core::{InputRouter, RoutingEvent};
 	use maybraid_game_mode_discover::Discovery;
+	use maybraid_session::{SessionCapabilities, WorldGameplayEnabled};
 	use maybraid_world::{
 		Durham, InventoryEditCameraFollow, PlayerPhysicsEnabled, TerrainStreaming, WorldMenuShell,
 		WorldSceneryVisible,
