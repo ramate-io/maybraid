@@ -632,7 +632,6 @@ mod tests {
 		use maybraid_character_controller::{
 			CharacterIntent, CharacterIntentFrame, InventoryCyclingCategory,
 		};
-		use maybraid_controllers_core::Routed;
 		use maybraid_equipment::{cycle_equipped_inventory_queues, EquipmentInventoryChanged};
 		use maybraid_skill_map::SkillMapEquip;
 
@@ -659,11 +658,11 @@ mod tests {
 			cycling.select(InventoryCyclingCategory::SkillMaps);
 		}
 		let source = InputSource::virtual_pad(world.resource::<PrimaryVirtualPad>().0);
-		world.entity_mut(player).insert(CharacterIntentFrame::new(Routed::to_actor(
-			source,
-			ActorTarget::new(player),
-			vec![CharacterIntent::SwapActive],
-		)));
+		let input = world
+			.resource::<InputRouter>()
+			.route_actor(source, vec![CharacterIntent::SwapActive])
+			.ok_or_else(|| anyhow::anyhow!("player route"))?;
+		world.entity_mut(player).insert(CharacterIntentFrame::new(input));
 		world
 			.run_system_once(cycle_equipped_inventory_queues)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
