@@ -12,13 +12,13 @@ use item_icons::{
 use maybraid_character_ui_menu_renderer::{
 	MenuThumbnailContext, fill_inventory_layout, fill_inventory_loading, spawn_starter_kit_shell,
 };
-use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse};
 use maybraid_menu_controller::MenuController;
 use menu_components::{
 	HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, KeyboardMenuNav, MENU_CLEAR,
 	MenuComponentsPlugin, ScreenBack, TEXT_YELLOW, TextMenuInputLock, spawn_hud_action,
 	spawn_hud_text,
 };
+use menu_components::{MenuNav, MenuNavImpulse};
 use std::time::Duration;
 use tanz_user::request_inventory_tanz_icons;
 

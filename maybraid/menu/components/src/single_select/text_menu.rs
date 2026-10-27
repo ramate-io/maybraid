@@ -6,17 +6,17 @@
 //! copies activate onto [`Message<E>`] for listeners outside the screen.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 use bevy::text::{FontSourceTemplate, Justify};
 
-use crate::controls::focus::{first_focus_tag, paint_focus_tag, FocusTag};
+use crate::controls::focus::{FocusTag, first_focus_tag, paint_focus_tag};
 use crate::theme::{
 	BARLOW_BLACK, BARLOW_SEMIBOLD, COLUMN_BOTTOM, COLUMN_INSET, CORNER_BOTTOM, CORNER_INSET,
 	FOCUS_TAG_PAD_X, FOCUS_TAG_PAD_Y, FOCUS_TAG_RADIUS, HEADER_FONT_SIZE, HEADER_MARGIN_BOTTOM,
 	ITEM_FONT_SIZE, ITEM_ROW_GAP, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS,
 	TEXT_YELLOW_HOVER,
 };
-use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse};
+use crate::{MenuNav, MenuNavImpulse};
 
 /// When `true`, arrow keys, Enter, and pick activations stay with the command line.
 #[derive(Resource, Default, Clone, Copy, Debug)]
@@ -524,14 +524,13 @@ pub fn emit_menu_activate_on_enter<E: Component + Copy + Send + Sync + 'static>(
 /// Activate the focused row when a controller fires [`MenuNav::Select`].
 pub fn emit_menu_activate_on_nav<E: Component + Copy + Send + Sync + 'static>(
 	impulse: On<MenuNavImpulse>,
-	lock: Res<TextMenuInputLock>,
 	menus: Query<&TextMenu>,
 	items: Query<(Entity, &TextMenuItem, &E, &ChildOf)>,
 	locked: Query<(), With<MenuItemLocked>>,
 	child_of: Query<&ChildOf>,
 	mut commands: Commands,
 ) {
-	if lock.0 || impulse.event().nav != MenuNav::Select {
+	if impulse.event().nav != MenuNav::Select {
 		return;
 	}
 	let menu_entity = impulse.entity;
@@ -542,7 +541,7 @@ pub fn emit_menu_activate_on_nav<E: Component + Copy + Send + Sync + 'static>(
 		if locked.contains(item) {
 			return;
 		}
-		commands.trigger(MenuActivate { entity: menu_entity, choice });
+		impulse.deliver(&mut commands, MenuActivate { entity: menu_entity, choice });
 	}
 }
 
@@ -552,15 +551,11 @@ pub fn emit_menu_activate_on_nav<E: Component + Copy + Send + Sync + 'static>(
 /// that moves onto a stepper does not also step it.
 pub fn apply_text_menu_nav(
 	impulse: On<MenuNavImpulse>,
-	lock: Res<TextMenuInputLock>,
 	mut menus: Query<&mut TextMenu>,
 	steppers: Query<(Entity, &TextMenuItem, &ChildOf), With<MenuStepper>>,
 	child_of: Query<&ChildOf>,
 	mut commands: Commands,
 ) {
-	if lock.0 {
-		return;
-	}
 	let menu_entity = impulse.entity;
 	let Ok(mut menu) = menus.get_mut(menu_entity) else {
 		return;
@@ -836,8 +831,10 @@ mod tests {
 			.add_observer(count_activate)
 			.add_observer(super::emit_menu_activate_on_nav::<TestChoice>);
 		let menu = spawn_row(&mut app, true);
-		app.world_mut()
-			.trigger(maybraid_virtual_pad_controller::MenuNavImpulse::new(menu, maybraid_virtual_pad_controller::MenuNav::Select));
+		app.world_mut().trigger(crate::MenuNavImpulse::new(
+			menu,
+			crate::MenuNav::Select,
+		));
 		assert_eq!(app.world().resource::<ActivateHits>().0, 0);
 	}
 
@@ -869,8 +866,9 @@ mod tests {
 		(app, menu)
 	}
 
-	fn nav(app: &mut App, menu: Entity, nav: maybraid_virtual_pad_controller::MenuNav) {
-		app.world_mut().trigger(maybraid_virtual_pad_controller::MenuNavImpulse::new(menu, nav));
+	fn nav(app: &mut App, menu: Entity, nav: crate::MenuNav) {
+		app.world_mut()
+			.trigger(crate::MenuNavImpulse::new(menu, nav));
 		app.world_mut().flush();
 	}
 
@@ -881,8 +879,8 @@ mod tests {
 	#[test]
 	fn stepper_row_steps_once_and_keeps_selection() {
 		let (mut app, menu) = stepper_app(0);
-		nav(&mut app, menu, maybraid_virtual_pad_controller::MenuNav::Left);
-		nav(&mut app, menu, maybraid_virtual_pad_controller::MenuNav::Right);
+		nav(&mut app, menu, crate::MenuNav::Left);
+		nav(&mut app, menu, crate::MenuNav::Right);
 		assert_eq!(selected(&app, menu), 0);
 		assert_eq!(app.world().resource::<StepDeltas>().0, vec![-1, 1]);
 	}
@@ -890,10 +888,10 @@ mod tests {
 	#[test]
 	fn moving_onto_a_stepper_does_not_step_it() {
 		let (mut app, menu) = stepper_app(1);
-		nav(&mut app, menu, maybraid_virtual_pad_controller::MenuNav::Right);
+		nav(&mut app, menu, crate::MenuNav::Right);
 		assert_eq!(selected(&app, menu), 1);
 		app.world_mut().entity_mut(menu).get_mut::<super::TextMenu>().unwrap().selected = 2;
-		nav(&mut app, menu, maybraid_virtual_pad_controller::MenuNav::Left);
+		nav(&mut app, menu, crate::MenuNav::Left);
 		assert_eq!(selected(&app, menu), 1);
 		assert!(app.world().resource::<StepDeltas>().0.is_empty());
 	}
