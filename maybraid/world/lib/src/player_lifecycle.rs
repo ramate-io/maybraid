@@ -95,10 +95,9 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 				(
 					crate::first_wave::refresh_first_wave,
 					queue_first_spawn_picker.after(crate::first_wave::refresh_first_wave),
-					crate::spawn_picker::dispatch_spawn_picker,
 					respawn_world_player
 						.after(queue_first_spawn_picker)
-						.after(crate::spawn_picker::dispatch_spawn_picker)
+						.after(maybraid_controllers_core::PadDeliverySystems)
 						.after(maybraid_spawns_placement::PlacementSystems::Poll)
 						.run_if(world_player_respawn_pending),
 					apply_placement_outcomes

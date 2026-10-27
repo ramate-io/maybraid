@@ -112,7 +112,7 @@ pub(crate) enum WorldMapSet {
 struct MapLabelFont(Handle<Font>);
 
 #[derive(Component)]
-struct MapNameHud;
+pub(crate) struct MapNameHud;
 
 #[derive(Component)]
 struct RespawnPickerTitle;
