@@ -2,29 +2,28 @@
 
 use bevy::prelude::*;
 use character_creation_menus::{
-	INVENTORY_CAPTURE_TIMEOUT, InventoryLayout, InventoryPaint, inventory_paint_state,
+	inventory_paint_state, InventoryLayout, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT,
 };
-use character_items::{Inventory, InventoryItem, catalog_key_uses_yellow_silhouette};
+use character_items::{catalog_key_uses_yellow_silhouette, Inventory, InventoryItem};
 use item_icons::{
-	CaptureClient, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery, ItemIconPlugin,
-	PoseCaptureSubjects, request_inventory_icons,
+	request_inventory_icons, CaptureClient, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery,
+	ItemIconPlugin, PoseCaptureSubjects,
 };
 use maybraid_character_ui_menu_renderer::{
-	MenuThumbnailContext, fill_inventory_layout, fill_inventory_loading, spawn_starter_kit_shell,
+	fill_inventory_layout, fill_inventory_loading, spawn_starter_kit_shell, MenuThumbnailContext,
 };
 use maybraid_input::{MenuNav, MenuNavImpulse};
 use maybraid_menu_controller::MenuController;
 use menu_components::{
-	HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, KeyboardMenuNav, MENU_CLEAR,
-	MenuComponentsPlugin, ScreenBack, TEXT_YELLOW, TextMenuInputLock, spawn_hud_action,
-	spawn_hud_text,
+	spawn_hud_action, spawn_hud_text, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu,
+	KeyboardMenuNav, MenuComponentsPlugin, ScreenBack, TextMenuInputLock, MENU_CLEAR, TEXT_YELLOW,
 };
 use std::time::Duration;
 use tanz_user::request_inventory_tanz_icons;
 
-use crate::MenuScreen;
 use crate::input::add_menu_input;
-use crate::show::{MenuScreens, MenuShowRequest, add_menu_show_systems};
+use crate::show::{add_menu_show_systems, MenuScreens, MenuShowRequest};
+use crate::MenuScreen;
 
 /// Queue a Starter Kit spawn. Pair with [`SpinRevealItems`].
 #[derive(Component, Debug, Clone, Copy)]
@@ -263,7 +262,11 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
-		if catalog_key_uses_yellow_silhouette(key) { TEXT_YELLOW } else { Color::WHITE }
+		if catalog_key_uses_yellow_silhouette(key) {
+			TEXT_YELLOW
+		} else {
+			Color::WHITE
+		}
 	}
 }
 
@@ -408,9 +411,9 @@ impl SpinRevealScreen {
 #[cfg(test)]
 mod tests {
 	use super::{
-		SpinRevealChoice, SpinRevealCurrent, SpinRevealFinished, SpinRevealItems, SpinRevealScreen,
-		StarterKitContinue, StarterKitViewport, drop_stale_gallery, enter_starter_kit_continue,
-		finish_spin_reveal,
+		drop_stale_gallery, enter_starter_kit_continue, finish_spin_reveal, SpinRevealChoice,
+		SpinRevealCurrent, SpinRevealFinished, SpinRevealItems, SpinRevealScreen,
+		StarterKitContinue, StarterKitViewport,
 	};
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
@@ -543,7 +546,7 @@ mod tests {
 
 	#[test]
 	fn grant_uses_the_read_only_starter_kit_layout() {
-		use character_items::{BASE_STARTER_TANZES, ItemRng};
+		use character_items::{ItemRng, BASE_STARTER_TANZES};
 
 		let layout = SpinRevealScreen::layout(&[pants()]);
 		assert_eq!(layout.title, STARTER_KIT_LABEL);

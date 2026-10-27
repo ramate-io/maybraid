@@ -293,7 +293,7 @@ fn spawn_inventory_scene(
 			);
 		});
 	let mut thumbs = CatalogThumbs { icons };
-	fill_inventory_layout(commands, viewport, fonts, &layout.node, true, None, &mut thumbs);
+	fill_inventory_layout(commands, viewport, fonts, &layout.node, true, None, None, &mut thumbs);
 }
 
 fn spawn_scene(

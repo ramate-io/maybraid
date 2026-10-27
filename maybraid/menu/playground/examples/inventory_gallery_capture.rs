@@ -20,8 +20,9 @@ use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use character_creation_menus::{CharacterMenu, InventoryLayout, STARTER_KIT_LABEL};
 use character_items::{
-	catalog_key_uses_yellow_silhouette, self_lubikan_catalog_key, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory,
-	InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec, TanzId, BASE_STARTER_TANZES,
+	catalog_key_uses_yellow_silhouette, self_lubikan_catalog_key, ClothingMaterial, ClothingMesh,
+	FirearmMesh, Inventory, InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec, TanzId,
+	BASE_STARTER_TANZES,
 };
 use character_ui_menu::MenuComponent;
 use characters::StandaloneCharacterMaterialRefPlugin;
@@ -707,7 +708,8 @@ mod tests {
 			for item in inventory.items {
 				if let Some(id) = item.tanz_id() {
 					use screen_capture::RepresentativePose;
-					cache.insert_silhouette(tanz_user::TanzPose(id).capture_id(), Handle::default());
+					cache
+						.insert_silhouette(tanz_user::TanzPose(id).capture_id(), Handle::default());
 				} else if let Some(label) = item.capture_id_label() {
 					let id = CaptureId::new(label);
 					if item.catalog_thumb_is_silhouette() {
