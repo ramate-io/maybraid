@@ -22,6 +22,24 @@ pub use ui::UiTarget;
 use bevy::prelude::*;
 use maybraid_input::VirtualPadPlugin;
 
+#[derive(Resource)]
+struct ControllersCoreRegistration;
+
+/// Installs the headless controller pipeline and routing lifecycle publisher.
+///
+/// Call this from controller and session plugins that need routing. Repeated
+/// calls are safe, so app behavior does not depend on plugin installation order.
+pub fn register_controllers_core(app: &mut App) {
+	if app.world().contains_resource::<ControllersCoreRegistration>() {
+		return;
+	}
+	app.world_mut().insert_resource(ControllersCoreRegistration);
+	ControllerPipeline::configure(app);
+	app.add_message::<RoutingEvent>()
+		.init_resource::<InputRouter>()
+		.add_systems(Last, publish_routing_events);
+}
+
 /// Installs the pipeline graph and an empty [`InputRouter`].
 pub struct ControllersCorePlugin;
 
@@ -30,16 +48,14 @@ impl Plugin for ControllersCorePlugin {
 		if !app.is_plugin_added::<VirtualPadPlugin>() {
 			app.add_plugins(VirtualPadPlugin::default());
 		}
-		ControllerPipeline::configure(app);
-		app.add_message::<RoutingEvent>()
-			.init_resource::<InputRouter>()
-			.add_systems(Last, publish_routing_events);
+		register_controllers_core(app);
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::ecs::system::IntoSystem;
 
 	#[test]
 	fn plugin_installs_router_and_pipeline() {
@@ -47,6 +63,26 @@ mod tests {
 		app.add_plugins(ControllersCorePlugin);
 		assert!(app.world().get_resource::<InputRouter>().is_some());
 		assert!(app.world().get_resource::<Messages<RoutingEvent>>().is_some());
+	}
+
+	#[test]
+	fn headless_registration_is_idempotent_and_does_not_install_hardware() {
+		let mut app = App::new();
+		register_controllers_core(&mut app);
+		register_controllers_core(&mut app);
+
+		assert!(!app.is_plugin_added::<VirtualPadPlugin>());
+		assert!(app.world().get_resource::<InputRouter>().is_some());
+		assert!(app.world().get_resource::<Messages<RoutingEvent>>().is_some());
+		app.update();
+		let publisher_type_id = publish_routing_events.system_type_id();
+		let publisher_count = app
+			.get_schedule(Last)
+			.and_then(|schedule| schedule.systems().ok())
+			.map(|systems| {
+				systems.filter(|(_, system)| system.system_type() == publisher_type_id).count()
+			});
+		assert_eq!(publisher_count, Some(1));
 	}
 
 	#[derive(Resource, Default)]
