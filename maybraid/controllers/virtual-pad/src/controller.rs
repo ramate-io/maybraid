@@ -101,6 +101,8 @@ impl VirtualPadController {
 }
 
 /// Rich, immutable source snapshot. Menu interpretation belongs to its receiver.
+/// Injected snapshots must complete trigger conversion with the source controller's
+/// threshold via [`VirtualPad::apply_trigger_digital`] before [`VirtualPad::finish_digital`].
 #[derive(Message, Clone, Debug)]
 pub struct VirtualPadEvent {
 	pub source: Entity,

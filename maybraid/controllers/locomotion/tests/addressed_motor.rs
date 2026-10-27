@@ -236,6 +236,13 @@ fn tanzer_mode_and_focus_are_actor_local() -> Result<()> {
 	pad.begin_frame();
 	pad.max_triggers(1.0, 0.0);
 	pad.hold_digital(PadButton::StickClickMove);
+	pad.apply_trigger_digital(
+		app.world()
+			.get::<VirtualPadController>(second_source)
+			.ok_or_else(|| anyhow!("second controller"))?
+			.config
+			.trigger_press_threshold,
+	);
 	pad.finish_digital();
 	app.world_mut().write_message(VirtualPadEvent {
 		source: second_source,
