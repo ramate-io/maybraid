@@ -21,7 +21,6 @@ use menu_components::{
 	TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
-use player::CameraFollow;
 use player_camera::{CameraController, FollowCamera, PlayerCameraSystems};
 use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiRegistry};
 use richmond::DiscoverablePlace;
