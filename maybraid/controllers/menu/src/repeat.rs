@@ -1,7 +1,20 @@
 //! Receiver-owned directional repeat.
 use bevy::prelude::*;
-use maybraid_virtual_pad_controller::{Cardinal, PadButton, VirtualPad, VirtualPadConfig};
+use maybraid_virtual_pad_controller::{Cardinal, PadButton, VirtualPad};
 use menu_components::MenuNav;
+/// Menu-owned interpretation settings. Physical pad production does not interpret repeat.
+#[derive(Clone, Copy, Debug)]
+pub struct MenuRepeatConfig {
+	pub stick_threshold: f32,
+	pub repeat_delay_secs: f32,
+	pub repeat_rate_secs: f32,
+}
+impl Default for MenuRepeatConfig {
+	fn default() -> Self {
+		Self { stick_threshold: 0.2, repeat_delay_secs: 0.35, repeat_rate_secs: 0.08 }
+	}
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct MenuRepeat {
 	pub events: Vec<MenuNav>,
@@ -15,7 +28,7 @@ impl MenuRepeat {
 		self.events.contains(&nav)
 	}
 
-	pub fn derive(&mut self, pad: &VirtualPad, config: &VirtualPadConfig, dt: f32) {
+	pub fn derive(&mut self, pad: &VirtualPad, config: &MenuRepeatConfig, dt: f32) {
 		self.events.clear();
 		if pad.just_pressed(PadButton::A) || pad.just_pressed(PadButton::Start) {
 			self.events.push(MenuNav::Select);
@@ -36,8 +49,8 @@ impl MenuRepeat {
 			None
 		};
 
-		let held = Cardinal::from_stick(pad.dpad, config.menu_stick_threshold)
-			.or_else(|| Cardinal::from_stick(pad.move_stick, config.menu_stick_threshold))
+		let held = Cardinal::from_stick(pad.dpad, config.stick_threshold)
+			.or_else(|| Cardinal::from_stick(pad.move_stick, config.stick_threshold))
 			.map(MenuNav::from_cardinal);
 
 		if let Some(dir) = edge_dir {
@@ -51,11 +64,8 @@ impl MenuRepeat {
 		match (held, self.held_dir) {
 			(Some(dir), Some(prev)) if dir == prev => {
 				self.repeat_clock += dt;
-				let interval = if self.repeating {
-					config.menu_repeat_rate_secs
-				} else {
-					config.menu_repeat_delay_secs
-				};
+				let interval =
+					if self.repeating { config.repeat_rate_secs } else { config.repeat_delay_secs };
 				if self.repeat_clock >= interval {
 					self.events.push(dir);
 					self.repeat_clock = 0.0;
