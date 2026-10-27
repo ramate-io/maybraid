@@ -2,12 +2,12 @@
 
 use bevy::prelude::*;
 use maybraid_controllers_core::ActorPadEvent;
-use maybraid_virtual_pad_controller::{PadButton, PrimaryVirtualPad, VirtualPad};
+use maybraid_virtual_pad_controller::{PadButton, VirtualPad};
 
 use crate::intent::{CharacterIntent, InventoryCyclingCategory};
 use crate::{
 	ActorControlEvent, ActorControlSample, ActorIntentEvent, CharacterIntentFrame,
-	LegacyRoutedActorControl, OrdinaryLocomotion, RoutedActorControl,
+	OrdinaryLocomotion, RoutedActorControl,
 };
 
 const ANALOG_EPS: f32 = 1e-6;
@@ -16,7 +16,6 @@ const STANCE_HOLD_SECS: f32 = 0.35;
 /// Interpret one already-addressed rich pad frame. All descendants retain its binding.
 pub fn produce_character_intents(
 	event: On<ActorPadEvent>,
-	primary: Option<Res<PrimaryVirtualPad>>,
 	actors: Query<&OrdinaryLocomotion>,
 	mut commands: Commands,
 ) {
@@ -30,21 +29,19 @@ pub fn produce_character_intents(
 		ordinary,
 		snapshot.captured,
 	);
-	let legacy_primary =
-		primary.is_some_and(|primary| event.input.source().entity() == Some(primary.0));
+	// Shell capture/suspension retires gameplay descendants before they can start holds.
+	for intent in intents.iter().copied().filter(|intent| intent.is_shell()) {
+		ActorIntentEvent::queue(event.input.clone().map(|_| intent), &mut commands);
+	}
 	if !snapshot.captured {
 		let control =
 			ActorControlSample::from_frame(&snapshot.frame, snapshot.trigger_press_threshold);
-		event.input.clone().map(|_| control).queue(&mut commands, move |world, input| {
+		event.input.clone().map(|_| control).queue(&mut commands, |world, input| {
 			let Some(entity) = input.target().actor_entity() else {
 				return;
 			};
 			if let Ok(mut actor) = world.get_entity_mut(entity) {
 				actor.insert(RoutedActorControl(Some(input)));
-			}
-			// Temporary primary-only compatibility mirror. Retire with gesture consumers.
-			if legacy_primary {
-				world.resource_mut::<LegacyRoutedActorControl>().set(input);
 			}
 			world.trigger(ActorControlEvent { entity, input });
 		});
@@ -57,17 +54,8 @@ pub fn produce_character_intents(
 			}
 		});
 	}
-	for intent in intents {
-		event.input.clone().map(|_| intent).queue(&mut commands, move |world, input| {
-			let Some(entity) = input.target().actor_entity() else {
-				return;
-			};
-			// Temporary primary-only broadcast for shell/item/camera consumers still migrating.
-			if legacy_primary {
-				world.write_message(*input.payload());
-			}
-			world.trigger(ActorIntentEvent { entity, input });
-		});
+	for intent in intents.into_iter().filter(|intent| !intent.is_shell()) {
+		ActorIntentEvent::queue(event.input.clone().map(|_| intent), &mut commands);
 	}
 }
 

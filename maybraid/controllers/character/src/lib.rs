@@ -12,10 +12,7 @@ pub use maybraid_controllers_core::{
 	ActorTarget, CaptureKind, ControllerPipeline, HoldEffect, InputRouter, InputRouting,
 	InputSource, Routed, RoutingEvent, RoutingKind, ScopeOwner, SourceConnection, UiTarget,
 };
-pub use sample::{
-	ActorControlEvent, ActorControlSample, FaceButtonSample, LegacyRoutedActorControl,
-	RoutedActorControl,
-};
+pub use sample::{ActorControlEvent, ActorControlSample, FaceButtonSample, RoutedActorControl};
 pub use status::ActorControlStatus;
 
 use bevy::prelude::*;
@@ -76,9 +73,7 @@ pub fn register_character_controller(app: &mut App) {
 	}
 	app.world_mut().insert_resource(CharacterControllerRegistration);
 	maybraid_controllers_core::register_controllers_core(app);
-	app.add_message::<CharacterIntent>()
-		.init_resource::<LegacyRoutedActorControl>()
-		.configure_sets(Update, CharacterControlSystems.in_set(ControllerPipeline::Bind))
+	app.configure_sets(Update, CharacterControlSystems.in_set(ControllerPipeline::Bind))
 		.configure_sets(Update, PadDeliverySystems.in_set(CharacterControlSystems))
 		.configure_sets(
 			Update,
@@ -105,7 +100,6 @@ pub fn register_character_controller(app: &mut App) {
 fn clear_actor_control_samples(
 	mut controls: Query<&mut RoutedActorControl>,
 	mut frames: Query<&mut CharacterIntentFrame>,
-	mut primary_compatibility: ResMut<LegacyRoutedActorControl>,
 ) {
 	for mut control in &mut controls {
 		control.clear();
@@ -113,7 +107,6 @@ fn clear_actor_control_samples(
 	for mut frame in &mut frames {
 		frame.clear();
 	}
-	primary_compatibility.clear();
 }
 
 #[cfg(test)]
