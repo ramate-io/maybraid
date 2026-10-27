@@ -7,7 +7,7 @@
 //! top layer before any screen leave system runs.
 
 use bevy::prelude::*;
-use maybraid_input::{MenuNav, MenuNavPad, PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad, PadButton, VirtualPad};
 
 use crate::controls::section::ActiveOverlayKey;
 use crate::controls::short_text::ShortTextModal;
@@ -346,7 +346,7 @@ mod tests {
 	use crate::single_select::text_cursor::ScreenBackPressed;
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
-	use maybraid_input::{MenuNav, MenuNavPad};
+	use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad};
 
 	#[test]
 	fn top_layer_is_highest_order() {

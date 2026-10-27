@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use crate::controls::hud_menu::{HudMenu, HudMenuItem};
 use crate::modal::MenuModalStack;
 use crate::theme::{SCROLLBAR_THUMB, SCROLLBAR_TRACK, SCROLLBAR_WIDTH, TILE_FOCUS_PAD};
-use maybraid_input::{MenuNav, MenuNavImpulse};
+use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse};
 
 const SCROLL_LINE_PX: f32 = 14.0;
 const MIN_THUMB_PX: f32 = 24.0;
@@ -396,7 +396,7 @@ pub(crate) fn entity_is_under(
 #[cfg(test)]
 mod tests {
 	use super::{hud_nav_scroll_delta, scroll_delta_to_reveal, HUD_NAV_SCROLL_LINE};
-	use maybraid_input::MenuNav;
+	use maybraid_virtual_pad_controller::MenuNav;
 
 	#[test]
 	fn item_already_visible_does_not_scroll() {

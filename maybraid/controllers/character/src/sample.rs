@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource, Routed};
-use maybraid_input::{PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::{PadButton, VirtualPad};
 
 /// One frame of analog sticks and physical face / bumper state for one actor.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -213,7 +213,7 @@ mod tests {
 	use super::*;
 	use crate::produce::collect;
 	use crate::CharacterIntent;
-	use maybraid_input::VirtualPad;
+	use maybraid_virtual_pad_controller::VirtualPad;
 
 	#[test]
 	fn physical_a_is_not_jump() {

@@ -11,7 +11,7 @@ use maybraid_agent::{
 	PadIntent, Playback, TickEffect, TickView, SCRIPT_API_VERSION,
 };
 use maybraid_character_controller::OrdinaryLocomotion;
-use maybraid_input::{PadButton, PadOverlay, VirtualPadSystems};
+use maybraid_virtual_pad_controller::{PadButton, PadOverlay, VirtualPadSystems};
 use maybraid_session::WorldGameplayEnabled;
 use mob_characters::CharacterSceneRecipe;
 use mob_scenes::MobScene;

@@ -15,7 +15,7 @@ use character_items::{
 	InventoryDropped, InventoryItem,
 };
 use maybraid_character_ui_menu_renderer::{CharacterMenuEvent, MenuButton, OverlaySelectViewport};
-use maybraid_input::{MenuNav, MenuNavImpulse, PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse, PadButton, VirtualPad};
 use menu_components::theme::{HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW};
 use menu_components::{
 	spawn_hud_action, spawn_hud_text, ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem,

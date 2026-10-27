@@ -14,7 +14,7 @@ use durham::{
 };
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
-use maybraid_input::{PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::{PadButton, VirtualPad};
 
 use crate::{camera::CameraController, WorldBaseTerrain};
 

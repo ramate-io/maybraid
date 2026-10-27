@@ -1,6 +1,6 @@
 # Menu controller
 
-Routes [`MenuNavPad`](../../input/README.md) impulses onto one focused menu
+Routes [`MenuNavPad`](../virtual-pad/README.md) impulses onto one focused menu
 inside a scope entity. Put [`MenuController`] on a screen root; descendants
 that are `TextMenu` / `HudMenu` are eligible. Overlay menus win over panels.
 

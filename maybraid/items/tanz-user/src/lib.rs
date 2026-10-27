@@ -1089,9 +1089,9 @@ mod tests {
 	}
 
 	#[derive(Resource, Default)]
-	struct NavHits(Vec<maybraid_input::MenuNav>);
+	struct NavHits(Vec<maybraid_virtual_pad_controller::MenuNav>);
 
-	fn record_menu_nav(impulse: On<maybraid_input::MenuNavImpulse>, mut hits: ResMut<NavHits>) {
+	fn record_menu_nav(impulse: On<maybraid_virtual_pad_controller::MenuNavImpulse>, mut hits: ResMut<NavHits>) {
 		hits.0.push(impulse.event().nav);
 	}
 
@@ -1147,7 +1147,7 @@ mod tests {
 	#[test]
 	fn plugin_menu_nav_while_in_tanz_mode_does_not_commit_gestures() -> anyhow::Result<()> {
 		use maybraid_character_controller::RoutedActorControl;
-		use maybraid_input::{MenuNav, MenuNavPad, PadButton, VirtualPad};
+		use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad, PadButton, VirtualPad};
 		use maybraid_menu_controller::MenuController;
 		use menu_components::{HudMenu, HudOverlayMenu};
 
@@ -1265,7 +1265,7 @@ mod tests {
 	#[test]
 	fn plugin_ordinary_sampling_does_not_restamp_without_a_transition() -> anyhow::Result<()> {
 		use maybraid_character_controller::OrdinaryLocomotion;
-		use maybraid_input::{PadButton, VirtualPad};
+		use maybraid_virtual_pad_controller::{PadButton, VirtualPad};
 
 		let mut app = lifecycle_plugins();
 		let player = app

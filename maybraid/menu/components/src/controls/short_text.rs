@@ -18,7 +18,7 @@ use crate::theme::{
 	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_ROW_GAP, PANEL_VALUE_FONT_SIZE,
 	TEXT_DEEP_BLUE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
-use maybraid_input::{MenuNav, MenuNavImpulse, PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse, PadButton, VirtualPad};
 
 use super::button::spawn_text_button;
 use super::display::menu_display_name;
@@ -1208,7 +1208,7 @@ mod tests {
 	use crate::single_select::text_cursor::ScreenBackPressed;
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
-	use maybraid_input::{MenuNav, MenuNavPad};
+	use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad};
 
 	#[test]
 	fn pad_letters_follow_shift() {

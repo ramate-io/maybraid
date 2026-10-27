@@ -27,7 +27,7 @@ pub fn register_firearm_user_runtime(app: &mut App) {
 	}
 	firearms::register_firearm_runtime(app);
 	app.init_resource::<FirearmUserRuntime>()
-		.add_message::<maybraid_input::PadRumble>()
+		.add_message::<maybraid_virtual_pad_controller::PadRumble>()
 		.add_message::<maybraid_equipment::EquippedItemUse>()
 		.add_message::<player_camera::CameraRecoilHandoff>()
 		.add_systems(

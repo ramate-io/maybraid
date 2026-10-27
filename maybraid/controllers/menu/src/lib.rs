@@ -12,7 +12,7 @@ pub use maybraid_controllers_core::{
 
 use bevy::prelude::*;
 use maybraid_controllers_core::{CaptureResolveSystems, ControllersCorePlugin};
-use maybraid_input::{PadInputPolicy, VirtualPadPlugin, VirtualPadSystems};
+use maybraid_virtual_pad_controller::{PadInputPolicy, VirtualPadPlugin, VirtualPadSystems};
 use menu_components::{
 	KeyboardMenuNav, MenuComponentsPlugin, ShortTextModal, TextMenuInputLock, TextMenuSystems,
 };
@@ -76,7 +76,7 @@ mod tests {
 	use maybraid_controllers_core::{
 		CaptureKind, InputRouter, InputSource, RoutingEvent, ScopeOwner,
 	};
-	use maybraid_input::PadInputPolicy;
+	use maybraid_virtual_pad_controller::PadInputPolicy;
 	use menu_components::controls::short_text::ShortTextSession;
 	use menu_components::{ShortTextModal, TextMenuInputLock};
 

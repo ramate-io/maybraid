@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use maybraid_controllers_core::{InputSource, Routed, UiTarget};
-use maybraid_input::{MenuNav, MenuNavImpulse};
+use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse};
 use menu_components::{HudMenu, HudOverlayMenu, TextMenu};
 
 /// Input scope. Nav from [`crate::dispatch::dispatch_menu_nav`] is delivered to

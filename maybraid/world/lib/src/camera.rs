@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use durham::WorldBaseTerrain;
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
-use maybraid_input::{PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::{PadButton, VirtualPad};
 use maybraid_session::WorldGameplayEnabled;
 use player::{CameraFollow, Player};
 use player_camera::{

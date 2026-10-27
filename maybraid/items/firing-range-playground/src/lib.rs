@@ -46,7 +46,7 @@ use maybraid_character_controller::CharacterControllerPlugin;
 use maybraid_controllers_core::{
 	CaptureKind, CaptureToken, InputRouting, InputSource, ScopeOwner,
 };
-use maybraid_input::{PadInputPolicy, VirtualPadSystems};
+use maybraid_virtual_pad_controller::{PadInputPolicy, VirtualPadSystems};
 use maybraid_locomotion_controller::LocomotionControllerPlugin;
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,

@@ -194,7 +194,7 @@ mod tests {
 		PROMPT_PAD_UNEQUIP,
 	};
 	use bevy::prelude::KeyCode;
-	use maybraid_input::{
+	use maybraid_virtual_pad_controller::{
 		PadButton, INVENTORY_DROP_KEYS, INVENTORY_DROP_PAD, INVENTORY_UNEQUIP_KEYS,
 		INVENTORY_UNEQUIP_PAD, MENU_SELECT_KEYS, MENU_SELECT_PAD,
 	};

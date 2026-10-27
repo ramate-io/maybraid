@@ -1,4 +1,4 @@
-//! Gameplay intents derived from [`maybraid_input::VirtualPad`].
+//! Gameplay intents derived from [`maybraid_virtual_pad_controller::VirtualPad`].
 
 use bevy::prelude::*;
 

@@ -29,7 +29,7 @@ grenades = { workspace = true }
 game-commands = { workspace = true }
 lod = { workspace = true }
 maybraid-character-ui-menu-renderer = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 maybraid-skill-map = { workspace = true }
 maybraid-menu-controller = { workspace = true }
 menu-components = { workspace = true }

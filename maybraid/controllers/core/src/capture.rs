@@ -1,7 +1,7 @@
 //! Token-scoped, composable capture. Releasing one owner cannot release another.
 
 use bevy::prelude::*;
-use maybraid_input::PadInputPolicy;
+use maybraid_virtual_pad_controller::PadInputPolicy;
 
 use crate::actor::ActorTarget;
 use crate::source::InputSource;

@@ -19,7 +19,7 @@ avian3d = { workspace = true }
 characters = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 player-camera = { workspace = true }
 
 [dev-dependencies]

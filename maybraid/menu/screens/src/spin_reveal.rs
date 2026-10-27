@@ -12,7 +12,7 @@ use item_icons::{
 use maybraid_character_ui_menu_renderer::{
 	MenuThumbnailContext, fill_inventory_layout, fill_inventory_loading, spawn_starter_kit_shell,
 };
-use maybraid_input::{MenuNav, MenuNavImpulse};
+use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse};
 use maybraid_menu_controller::MenuController;
 use menu_components::{
 	HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, KeyboardMenuNav, MENU_CLEAR,

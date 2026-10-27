@@ -37,7 +37,7 @@ pub use world_player::PlayerLifeSet;
 
 use bevy::prelude::*;
 use maybraid_controllers_core::CaptureResolveSystems;
-use maybraid_input::MenuNavPad;
+use maybraid_virtual_pad_controller::MenuNavPad;
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PlayerHandoffSystems {

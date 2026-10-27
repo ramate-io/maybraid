@@ -30,8 +30,8 @@ use lod::lod_ref::LodRef;
 use lod::scene::LodScene;
 use lod::scene::LodSceneLevel;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use maybraid_input::produce::gamepad::GamepadAxes;
-use maybraid_input::{Deadzone, VirtualPadConfig};
+use maybraid_virtual_pad_controller::produce::gamepad::GamepadAxes;
+use maybraid_virtual_pad_controller::{Deadzone, VirtualPadConfig};
 use menu_components::{CHARACTER_PANEL_WIDTH, DESCRIPTION_PANE_LEFT_PERCENT};
 use menu_screens::{
 	GalleryScreen, HomeScreen, SpinRevealCurrent, SpinRevealScreen, SpinRevealSystems,

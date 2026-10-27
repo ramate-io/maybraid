@@ -1,7 +1,7 @@
 //! Pointer and keyboard → [`MenuFocus`] / [`MenuActivate`] / overlay events.
 
 use bevy::prelude::*;
-use maybraid_input::{MenuNav, MenuNavImpulse, MenuNavPad, VirtualPad, INVENTORY_UNEQUIP_PAD};
+use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse, MenuNavPad, VirtualPad, INVENTORY_UNEQUIP_PAD};
 use menu_components::{
 	HudMenu, HudMenuItem, HudMenuNavLocked, HudOverlayMenu, KeyboardMenuNav, MenuActivate,
 	MenuFocus, MenuModalBackHold, MenuModalDismiss, MenuModalId, ReorderMark, TextMenuInputLock,
@@ -398,7 +398,7 @@ mod tests {
 	use crate::event::OverlayClose as OverlayCloseEvent;
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
-	use maybraid_input::{MenuNav, MenuNavPad};
+	use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad};
 	use menu_components::{
 		consume_menu_modal_back, consume_screen_back, MenuModalDismiss, MenuModalId,
 		MenuModalLayer, MenuModalStack, ScreenBackPressed,

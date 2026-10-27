@@ -296,7 +296,7 @@ impl InputRouter {
 	}
 
 	/// Derived pad policy from the capture stack. One writer.
-	pub fn pad_policy(&self) -> maybraid_input::PadInputPolicy {
+	pub fn pad_policy(&self) -> maybraid_virtual_pad_controller::PadInputPolicy {
 		self.captures.pad_policy()
 	}
 

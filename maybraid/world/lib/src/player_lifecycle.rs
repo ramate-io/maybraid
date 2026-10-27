@@ -677,7 +677,7 @@ mod tests {
 	use durham::TerrainCellLayout;
 	use layer_stack::GenerationMode;
 	use lod::hcsg::{spawn_worker, HcsgClass, HcsgStorage};
-	use maybraid_input::{MenuNav, MenuNavPad};
+	use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad};
 	use maybraid_spawns_player::{map_flick_dir, nearest_in_direction, SpawnPickerSheet};
 	use poi_intelligence::NearbyFallback;
 	use poi_intelligence::PoiRecord;
@@ -1398,7 +1398,7 @@ mod tests {
 	}
 
 	fn press_a_on_pad(world: &mut World) {
-		use maybraid_input::{PadButton, VirtualPad, VirtualPadConfig};
+		use maybraid_virtual_pad_controller::{PadButton, VirtualPad, VirtualPadConfig};
 
 		let mut pad = VirtualPad::default();
 		pad.begin_frame();
@@ -1510,7 +1510,7 @@ mod tests {
 
 	#[test]
 	fn a_stick_flick_moves_the_picker_highlight() -> anyhow::Result<()> {
-		use maybraid_input::{PadButton, VirtualPad, VirtualPadConfig};
+		use maybraid_virtual_pad_controller::{PadButton, VirtualPad, VirtualPadConfig};
 
 		let mut world = discovery_respawn_world(0.2);
 		let west = world.spawn_empty().id();

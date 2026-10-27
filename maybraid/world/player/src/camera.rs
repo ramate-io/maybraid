@@ -4,7 +4,7 @@ use bevy::window::WindowFocused;
 use durham::{BaseTerrainNoise, DurhamSurface, TerrainCellLayout};
 use game_commands::command::TextEntryFocus;
 use lod::LodViewer;
-use maybraid_input::{PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::{PadButton, VirtualPad};
 use std::f32::consts::PI;
 
 use crate::player::PlaygroundMode;

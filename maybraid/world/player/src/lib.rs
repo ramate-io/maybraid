@@ -43,7 +43,7 @@ use character::{apply_set_character, drive_player_locomotion};
 use characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham::DurhamSurface;
 use game_commands::ui::GameCommandStatusText;
-use maybraid_input::VirtualPadPlugin;
+use maybraid_virtual_pad_controller::VirtualPadPlugin;
 use player::{respawn_player_on_layout, snap_player_to_composed_surface};
 
 /// Character, camera, snap, and locomotion without owning Durham fill.

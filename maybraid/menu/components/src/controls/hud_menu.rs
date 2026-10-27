@@ -9,7 +9,7 @@ use bevy::ui::UiGlobalTransform;
 
 use crate::single_select::{KeyboardMenuNav, TextMenuInputLock};
 use crate::theme::TEXT_YELLOW;
-use maybraid_input::{MenuNav, MenuNavImpulse};
+use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse};
 
 /// Focus index for a HUD list (panel headers or overlay leaves).
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -253,7 +253,7 @@ mod tests {
 	fn spatial_nav_stays_on_the_row_then_steps_vertically() {
 		use super::spatial_neighbor;
 		use bevy::prelude::Vec2;
-		use maybraid_input::MenuNav;
+		use maybraid_virtual_pad_controller::MenuNav;
 		let items = [
 			(0, Vec2::new(0.0, 0.0)),
 			(1, Vec2::new(40.0, 0.0)),

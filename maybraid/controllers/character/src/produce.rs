@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use maybraid_controllers_core::{InputRouter, InputSource};
-use maybraid_input::{PadButton, VirtualPad, VirtualPadConfig};
+use maybraid_virtual_pad_controller::{PadButton, VirtualPad, VirtualPadConfig};
 
 use crate::intent::{CharacterIntent, InventoryCyclingCategory};
 use crate::OrdinaryLocomotion;
@@ -152,7 +152,7 @@ pub fn collect(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use maybraid_input::VirtualPad;
+	use maybraid_virtual_pad_controller::VirtualPad;
 
 	fn finish(pad: &mut VirtualPad) {
 		pad.finish_digital();
@@ -531,7 +531,7 @@ mod tests {
 	fn produce_requires_host_assignment() {
 		use bevy::ecs::system::RunSystemOnce;
 		use maybraid_controllers_core::{ActorTarget, InputRouter};
-		use maybraid_input::VirtualPadConfig;
+		use maybraid_virtual_pad_controller::VirtualPadConfig;
 
 		fn write(
 			pad: Res<VirtualPad>,

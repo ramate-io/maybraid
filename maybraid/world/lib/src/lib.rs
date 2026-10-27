@@ -123,7 +123,7 @@ use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::CharacterControlSystems;
 use maybraid_controllers_core::CaptureResolveSystems;
 use maybraid_game_mode_discover::DiscoveryPlayerPlugin;
-use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
+use maybraid_virtual_pad_controller::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_locomotion_controller::LocomotionControllerPlugin;
 use maybraid_skill_map::SkillMapSystems;
 use maybraid_sky::SkyDomePlugin;

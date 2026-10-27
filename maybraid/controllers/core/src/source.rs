@@ -1,6 +1,6 @@
 //! One normalized hardware source. Today that is the local [`VirtualPad`].
 
-use maybraid_input::VirtualPad;
+use maybraid_virtual_pad_controller::VirtualPad;
 
 /// Who produced a sample. Phase 1 has a single local pad resource.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

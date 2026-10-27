@@ -11,7 +11,7 @@ use bevy::prelude::*;
 use maybraid_controllers_core::{
 	CaptureKind, CaptureLayer, CaptureToken, InputRouter, InputRouting, InputSource, ScopeOwner,
 };
-use maybraid_input::MenuNavPad;
+use maybraid_virtual_pad_controller::MenuNavPad;
 
 /// Locked picker sheet as the picker sees it. World map presentation writes
 /// this; the picker does not depend on `world/lib`.
@@ -152,7 +152,7 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use maybraid_controllers_core::{InputSource, UiTarget};
-	use maybraid_input::{MenuNav, PadButton, VirtualPad, VirtualPadConfig};
+	use maybraid_virtual_pad_controller::{MenuNav, PadButton, VirtualPad, VirtualPadConfig};
 
 	use crate::arrival::PendingPlayerRespawn;
 

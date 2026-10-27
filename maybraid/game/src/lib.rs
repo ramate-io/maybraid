@@ -37,7 +37,7 @@ use bevy::window::PrimaryWindow;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_controllers_core::InputRouting;
 use maybraid_gameplay::GameplayPlugin;
-use maybraid_input::{MenuNav, MenuNavPad, PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad, PadButton, VirtualPad};
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_session::{
 	SessionCapabilities, SessionCapabilitySystems, WorldGameplayEnabled, WorldPlaySessionEnded,
@@ -1017,7 +1017,7 @@ mod tests {
 
 	fn start_pressed_world(pause: crate::WorldPause) -> World {
 		use maybraid_character_controller::CharacterIntent;
-		use maybraid_input::{MenuNav, MenuNavPad};
+		use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad};
 		use maybraid_session::WorldGameplayEnabled;
 
 		let mut world = World::new();
@@ -1035,7 +1035,7 @@ mod tests {
 	#[test]
 	fn start_on_the_pause_root_unpauses_without_selecting_a_row() -> anyhow::Result<()> {
 		use crate::{toggle_world_pause, WorldPause};
-		use maybraid_input::{MenuNav, MenuNavPad};
+		use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad};
 		use menu_screens::{InGameScreen, MenuScreen};
 
 		let mut world = start_pressed_world(WorldPause::Menu);
@@ -1057,7 +1057,7 @@ mod tests {
 	#[test]
 	fn start_in_the_character_editor_stays_with_the_editor() -> anyhow::Result<()> {
 		use crate::{toggle_world_pause, WorldPause};
-		use maybraid_input::{MenuNav, MenuNavPad};
+		use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad};
 		use menu_playground::CharacterScreen;
 		use menu_screens::MenuScreen;
 
@@ -1080,7 +1080,7 @@ mod tests {
 	#[test]
 	fn pause_back_leaves_the_editor_to_its_leave_prompt() -> anyhow::Result<()> {
 		use crate::pause_menu_back;
-		use maybraid_input::{MenuNav, MenuNavPad};
+		use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad};
 		use menu_components::{MenuModalStack, ScreenBackPressed};
 		use menu_playground::CharacterScreen;
 		use menu_screens::{MenuScreen, MenuShowRequest};

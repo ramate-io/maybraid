@@ -19,7 +19,7 @@ pub use sample::{
 
 use bevy::prelude::*;
 use maybraid_controllers_core::{CaptureResolveSystems, ControllersCorePlugin};
-use maybraid_input::VirtualPadPlugin;
+use maybraid_virtual_pad_controller::VirtualPadPlugin;
 
 use crate::produce::produce_character_intents;
 

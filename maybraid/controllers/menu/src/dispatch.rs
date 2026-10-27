@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use maybraid_controllers_core::{
 	CaptureKind, CaptureToken, InputRouter, InputRouting, InputSource, Routed, ScopeOwner, UiTarget,
 };
-use maybraid_input::{MenuNav, MenuNavPad};
+use maybraid_virtual_pad_controller::{MenuNav, MenuNavPad};
 use menu_components::{
 	hud_menu_under_modal, HudMenu, HudOverlayMenu, MenuModal, MenuModalId, MenuModalStack,
 	ShortTextModal, ShortTextPad, TextMenu, TextMenuInputLock,
@@ -180,7 +180,7 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
 	use maybraid_controllers_core::{CaptureKind, InputRouter, InputSource, ScopeOwner, UiTarget};
-	use maybraid_input::{MenuNav, MenuNavImpulse, MenuNavPad};
+	use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse, MenuNavPad};
 	use menu_components::{
 		HudMenu, HudOverlayMenu, MenuModal, MenuModalLayer, MenuModalStack, ShortTextModal,
 		ShortTextPad, TextMenuInputLock,
@@ -283,7 +283,7 @@ mod tests {
 
 	#[test]
 	fn stick_cardinal_is_the_same_exclusive_path() -> anyhow::Result<()> {
-		use maybraid_input::{MenuNav as Nav, PadButton, VirtualPad};
+		use maybraid_virtual_pad_controller::{MenuNav as Nav, PadButton, VirtualPad};
 		let mut pad = VirtualPad::default();
 		pad.begin_frame();
 		pad.add_move(Vec2::new(0.0, -0.9));

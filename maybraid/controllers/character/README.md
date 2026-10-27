@@ -1,6 +1,6 @@
 # Character controller
 
-Maps [`VirtualPad`](../../input/README.md) onto gameplay intents. Analog is
+Maps [`VirtualPad`](../virtual-pad/README.md) onto gameplay intents. Analog is
 the current stick / trigger. Digital is a press or release edge. Chords are
 resolved here so consumers do not re-read the pad.
 

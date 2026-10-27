@@ -11,7 +11,7 @@ use maybraid_character_ui_menu_renderer::{
 	},
 	InventoryFocusHint, InventoryInteraction, InventoryItemKey, NoThumbnails,
 };
-use maybraid_input::{MenuNav, MenuNavImpulse};
+use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse};
 use menu_components::{
 	apply_hud_menu_nav, navigate_hud_menus, HudFonts, HudMenu, HudMenuItem, HudMenuNavLocked,
 	HudOverlayMenu, KeyboardMenuNav, MenuModalStack, TextMenuInputLock,

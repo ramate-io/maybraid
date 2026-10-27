@@ -6,7 +6,7 @@ use crate::identity::{
 };
 use crate::outcome::{SpawnCancelReason, SpawnOutcome};
 use bevy::prelude::*;
-use maybraid_input::MenuNav;
+use maybraid_virtual_pad_controller::MenuNav;
 use poi_intelligence::{
 	NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiKind, PoiRegistry,
 };

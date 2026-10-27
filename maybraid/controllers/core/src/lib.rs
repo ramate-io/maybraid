@@ -20,7 +20,7 @@ pub use source::InputSource;
 pub use ui::UiTarget;
 
 use bevy::prelude::*;
-use maybraid_input::VirtualPadPlugin;
+use maybraid_virtual_pad_controller::VirtualPadPlugin;
 
 #[derive(Resource)]
 struct ControllersCoreRegistration;

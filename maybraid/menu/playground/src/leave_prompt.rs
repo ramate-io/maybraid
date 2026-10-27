@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy::text::Justify;
 use character_persist::SaveRoot;
-use maybraid_input::{MenuNav, MenuNavImpulse, MenuNavPad, PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse, MenuNavPad, PadButton, VirtualPad};
 use menu_components::theme::{
 	menu_list_panel_node, menu_region_wash, HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
 };
@@ -544,7 +544,7 @@ mod tests {
 	use bevy::prelude::*;
 	use character_items::Inventory;
 	use character_persist::{CharacterId, SaveRoot};
-	use maybraid_input::{MenuNav, MenuNavImpulse, MenuNavPad};
+	use maybraid_virtual_pad_controller::{MenuNav, MenuNavImpulse, MenuNavPad};
 	use menu_components::{
 		consume_menu_modal_back, consume_screen_back, HudMenu, MenuModalDismiss, MenuModalId,
 		MenuModalLayer, MenuModalStack, ScreenBackPressed,

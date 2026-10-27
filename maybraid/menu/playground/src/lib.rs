@@ -35,7 +35,7 @@ use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use maybraid_input::{MenuNavPad, VirtualPadPlugin};
+use maybraid_virtual_pad_controller::{MenuNavPad, VirtualPadPlugin};
 use maybraid_menu_controller::MenuControllerPlugin;
 use menu_components::{consume_screen_back, MenuModalStack, ScreenBackPressed, TextMenuSystems};
 use menu_screens::{
@@ -239,7 +239,7 @@ mod tests {
 	use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
 	use bevy::input::{ButtonState, InputPlugin, InputSystems};
 	use bevy::prelude::*;
-	use maybraid_input::{
+	use maybraid_virtual_pad_controller::{
 		produce::keyboard::produce_keyboard, MenuNavPad, PadButton, PadInputPolicy, VirtualPad,
 		VirtualPadConfig,
 	};

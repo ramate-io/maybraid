@@ -2,7 +2,7 @@
 
 Sole [`InputRouter`](src/router.rs) for source → actor / UI assignment, plus
 token-scoped capture and suspension. This crate depends only on
-[`maybraid-input`](../../input/README.md) and Bevy.
+[`maybraid-virtual-pad-controller`](../virtual-pad/README.md) and Bevy.
 
 ```text
 InputSource ──► InputRouter assignment

@@ -26,7 +26,7 @@ use maybraid_equipment::{
 	ActiveInventoryCyclingCategory, EQUIPMENT_HOLSTER_SECS, EquipmentHolster, EquippedItemHandler,
 	EquippedItemUse, EquippedPowerUse, InventoryCycling, RoutedItemActor,
 };
-use maybraid_input::{PadButton, VirtualPad, VirtualPadSystems};
+use maybraid_virtual_pad_controller::{PadButton, VirtualPad, VirtualPadSystems};
 use maybraid_session::{
 	SessionCapabilities, SessionCapabilitySystems, WorldGameplayEnabled, apply_in_game_menu_pause,
 };

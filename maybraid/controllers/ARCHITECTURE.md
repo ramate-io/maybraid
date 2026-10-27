@@ -63,7 +63,7 @@ intents; item interpreters consume D1, not the pad.
 ## Dependency direction
 
 ```text
-bevy / maybraid-input
+bevy / maybraid-virtual-pad-controller
         ▲
         │
 controllers/core          (router, capture, generic schedule — no game deps)
@@ -82,8 +82,8 @@ movement/realization
 
 Rules:
 
-- `controllers/core` depends only on `maybraid-input` and Bevy.
-- `controllers/character` depends on `core` + `input`.
+- `controllers/core` depends only on `maybraid-virtual-pad-controller` and Bevy.
+- `controllers/character` depends on `core` + `virtual-pad`.
 - `gameplay/session` owns session capabilities and lifecycle events; it uses
   routing primitives from `controllers/core` privately. `gameplay/lib` and
   `world` may depend on session for adapters, but do not forward session or
@@ -571,7 +571,7 @@ full plugins (`GameplayPlugin` adds those after the runtime):
 - `apply_look_intents` is still query-wide `FollowCamera` (delivery-gated).
 - Shell HID leftovers: `stash` `Gamepad` presence,
   `game::toggle_world_pause` Start / A. The locked spawn picker now
-  confirms from UI-owned [`MenuNavPad`](../input/src/surface/menu.rs)
+  confirms from UI-owned [`MenuNavPad`](../virtual-pad/src/surface/menu.rs)
   (`SpawnPickerController`); it does not restore actor-less character
   intents or exempt Jump from map capture.
 - Full `WorldPlugin` is not headless-safe; stack tests use the extracted

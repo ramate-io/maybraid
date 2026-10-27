@@ -37,7 +37,7 @@ character-items = { workspace = true }
 grenades = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
 maybraid-audio = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 player-camera = { workspace = true }
 world-player = { workspace = true }
 
