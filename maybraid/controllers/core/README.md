@@ -72,3 +72,16 @@ its frame in `PreUpdate`. If capture resolution or actor reassignment retires th
 generation before `Update` delivery, that physical frame is discarded; its edges
 cannot be replayed on the new owner. The actor snapshot also freezes that source's
 `trigger_press_threshold` for character interpretation.
+
+Actor delivery owns a `PadRearm` per source. Reassignment, disconnect, capture and
+capture release cancel held controls until each button/key releases and each
+stick/trigger returns to neutral. The release edge of a canceled B hold is also
+removed, so it cannot become a stance tap on another actor. Raw UI snapshots stay
+unchanged. Shell Start/Select and their keyboard capabilities remain available;
+suspension/resumption freezes ownership without adding a release requirement.
+`set_source_paused` resumes only that source's pause token.
+
+Host capture systems in `PreUpdate` order before `PadPolicySystems`; policy then
+runs before virtual-pad production. Core also releases all capture layers whose
+actual owner entities have despawned, including layers below the current top.
+Legacy process-wide placeholder owners remain compatibility exceptions.

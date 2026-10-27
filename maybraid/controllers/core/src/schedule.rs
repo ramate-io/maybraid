@@ -10,6 +10,10 @@ pub struct CaptureResolveSystems;
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PadDeliverySystems;
 
+/// Per-source device policy, after host capture claims and before HID production.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PadPolicySystems;
+
 /// Update-schedule stages of the controller lane.
 ///
 /// Target order:
