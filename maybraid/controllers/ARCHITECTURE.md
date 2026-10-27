@@ -39,7 +39,8 @@ semantic frames on the addressed actor. Individual `CharacterIntent` values are
 delivered as actor-targeted `ActorIntentEvent` entity events. Controllers do not
 poll a process-wide pad or rediscover a current actor. `PrimaryVirtualPad` and
 `InputSource::local_pad()` remain explicit single-player host compatibility
-projections; other virtual-pad entities have independent routing state.
+projections. `InputSource::VirtualPad(Entity)` routes each virtual-pad source
+independently; `local_pad()` does not describe the only available source.
 
 ## Flow
 
@@ -200,15 +201,16 @@ delivery changes. Suspension emits `HoldEffect::Freeze` +
 `GestureEffect::Freeze`. Captures and suspensions are token- and
 owner-scoped: releasing one owner cannot release another.
 
-Lifecycle events are a Bevy `Message` (`RoutingEvent`). Each event carries
-`previous` / `next` actor identity; consumers apply
-[`RoutingEvent::lost_actor`](core/src/router.rs) /
-[`RoutingEvent::gained_actor`](core/src/router.rs) /
-[`RoutingEvent::applies_to`](core/src/router.rs) instead of reconstructing
-ownership from the router's later state. Each consumer uses a
-`MessageReader` cursor and sees every event exactly once, regardless of
-stage. Mutating systems should use `InputRouting` so the message is
-published in the same system. `take_events` is only the unpublished buffer.
+`InputRouter` publishes lifecycle changes as `RoutingEvent` messages. Core
+converts actor-affecting changes into entity-targeted `ActorRoutingEvent`s
+(`RoutingLifecycle` is its alias), carrying the actor, source, and resulting
+route status. Character, Tanz, skill-map, firearm, and grenade consumers observe
+that event on the affected actor and apply the embedded `RoutingEvent` there;
+they do not rediscover ownership from the router's later state. The motor apply
+path remains an exception: `player/lib/src/motor/apply.rs` reads
+`MessageReader<RoutingEvent>` and applies hold effects to `lost_actor()`.
+Mutating systems should use `InputRouting` so the low-level message is published
+in the same system. `take_events` is only the unpublished buffer.
 
 Controllers read `InputRouter::actor` / `delivered_actor` / `local_actor`.
 They never rediscover a "current player". The lowest-ID `Player` fallback is
@@ -285,29 +287,29 @@ the current owner. Later phases change the owner column, not the role id.
 
 | Id | Role | Symbol | Producers | Consumers | Lifecycle owner | Now |
 |---|---|---|---|---|---|---|
-| E1 | In-game menu / pause | `game::toggle_world_pause` | B8 + `VirtualPad` (A vs Start) | `WorldPause`, `SessionCapabilities` pause token, `WorldGameplayEnabled` | `GamePlugin` + `gameplay/session` | Pause writes the session token; session projects live-play. |
-| E2 | Inventory sheet | `stash.rs` Inventory reader | B9 | inventory editor | world | Broadcast. |
-| E3 | World map | `map_view.rs` ToggleMap reader | B10 | `WorldMapView` | world | Broadcast. `sync_camera_session_state` owns follow, POV lock, and look suppression. |
+| E1 | In-game menu / pause | `game::toggle_world_pause` | B8 `ActorIntentEvent` | `WorldPause`, `SessionCapabilities` pause token, `WorldGameplayEnabled` | `GamePlugin` + `gameplay/session` | Consumes the addressed actor event and accepts pause input only from the primary host source; no direct `VirtualPad` read. |
+| E2 | Inventory sheet | `stash.rs` inventory handlers | B9 `ActorIntentEvent` | addressed actor's inventory editor / drop path | world | Actor-targeted event; stash and loadout operations use `event.entity`. |
+| E3 | World map | `map_view.rs` `toggle_map_view` / `handle_map_pad` | B10 `ActorIntentEvent`; map controls arrive as `UiPadEvent` on the map HUD | `WorldMapView` | world | Toggle is actor-addressed; map state records its source and actor, and its UI controls are source-filtered. `sync_camera_session_state` owns follow, POV lock, and look suppression. |
 | E4 | Session gameplay gate | `SessionCapabilities`, `WorldGameplayEnabled` | E1, `game/src/flow.rs` enter, pause | B11 world filter, HUD, cycling | `gameplay/session` | Live. Capabilities already replace the old `SessionActivity` / `WorldGameplayEnabled` gates. Session projects live-play; world keeps scenery / menu-shell bits. |
-| E5 | Spawn / respawn picker | `SpawnPickerController`, `refresh_spawn_picker_focus`, `dispatch_spawn_picker` | A2 `MenuNavPad` | `PlayerChoseRespawnPoi` / `DestinationSelected` → `ResolvePlacement` / `respawn_world_player` | `spawns/player` | **Spawn rewrite phase 1–2.** UI-owned MenuNav capture. No actor. Placement work lives in `PlacementWork` so generation that outlives messages cannot drop the request. |
+| E5 | Spawn / respawn picker | `SpawnPickerController`, `refresh_spawn_picker_focus`, `dispatch_spawn_picker` | source-bound `UiPadEvent` addressed to the picker entity | `PlayerChoseRespawnPoi` / `DestinationSelected` → `ResolvePlacement` / `respawn_world_player` | `spawns/player` | Picker owns its source, focus, repeat, and UI capture; it consumes the rich addressed pad frame rather than polling `MenuNavPad`. No actor is targeted. Placement work lives in `PlacementWork` so generation that outlives messages cannot drop the request. |
 
 ### U — routing, capture, lifecycle
 
 | Id | Role | Symbol | Producers | Consumers | Lifecycle owner | Now |
 |---|---|---|---|---|---|---|
-| U1 | Source routing | `InputSource` | A3 | `Routed`, `CaptureLayer`, `InputRouter` | `controllers/core` | Local pad only. |
+| U1 | Source routing | `InputSource::VirtualPad(Entity)` / `InputSource::local_pad()` | A3 | `Routed`, `CaptureLayer`, `InputRouter` | `controllers/core` | Independent state per virtual-pad entity; `local_pad()` is the host compatibility source. |
 | U2 | Actor routing | `ActorTarget`, `InputRouter::actor`, `RoutedActorControl` | host `assign_local_player` | A5; B11 / B12 / B13 | `InputRouter` (sole owner) | Lowest-ID `Player` assigned **once** at the host boundary. Controllers do not rediscover. |
 | U3 | UI routing | `UiTarget`, `RouteTarget::Ui`, `InputRouter::ui` | A4 capture; host `assign_ui` | M1 / M2 | `InputRouter` | Menu path uses token-scoped capture; UI assignment is available for hosts. |
 | U4 | Focus pick | `MenuController::pick_focus` / `resolve` | screen subtree | A4 | `MenuController` | Overlay > HUD > text. |
 | U5 | Scoped capture | `CaptureToken`, `ScopeOwner`, `CaptureStack` via `InputRouter` | A4 `refresh_menu_focus` (`MenuNavCapture`); console / map / text | A4 dispatch; A5 `delivered_actor`; pad policy | `InputRouter` | Token- and owner-scoped. Nested menu / text / overlay. First/last blocking capture emits `RoutingKind::{Captured,Uncaptured}`. Updating a claim keeps stack order. |
-| U6 | Suspension | `SuspensionToken`, `InputRouter::suspend` / `set_paused` | E1 pause; hosts | A5 delivery; Tanz execute (session-local); E4 projection | `InputRouter` | Delivery freeze. Motor freeze is `MotorSuppressionToken`. Pause is not session end. Session writes go through `InputRouting` so later stages see the messages. |
-| U7 | Lifecycle cleanup | `RoutingEvent` hold / gesture effects; Tanz `reset_input` / `apply_toggle`; item latch / trigger; death despawn | A3 events; mode flip; death | wishes, execution, items | `InputRouter` + per-domain | Consumers read `MessageReader<RoutingEvent>` (`InputRouting` publishes). `ReleaseNeutral` / `Cancel` drop Standard holds, partial Tanz / flick history, and leftover item holds (disconnect / capture / reassignment / removal). A live grenade cook is kept on `Captured`. |
+| U6 | Suspension | `SuspensionToken`, `InputRouter::suspend` / `set_paused` | E1 pause; hosts | A5 delivery; Tanz execute (session-local); E4 projection | `InputRouter` | Delivery freeze. Motor freeze is `MotorSuppressionToken`. Pause is not session end. Session writes go through `InputRouting` so later stages see the lifecycle message and addressed actor event. |
+| U7 | Lifecycle cleanup | `RoutingEvent` → `ActorRoutingEvent` (`RoutingLifecycle`); Tanz mode / gesture state; item latch / trigger; death despawn | A3 events; mode flip; death | actor control status, motor wishes, execution, items | `InputRouter` + per-domain | Character, Tanz, skill-map, firearm, and grenade handlers observe actor-targeted lifecycle events. `ReleaseNeutral` / `Cancel` release Standard holds and partial gesture state; disconnect / reassignment / removal also drop a live grenade cook, while capture cancels a leftover latch and keeps an active cook. `player/lib` motor hold effects remain a `MessageReader<RoutingEvent>` consumer. |
 
 ### M — menu
 
 | Id | Role | Symbol | Producers | Consumers | Lifecycle owner | Now |
 |---|---|---|---|---|---|---|
-| M1 | Menu controller | `MenuController`, `ExclusiveNav`, `dispatch_menu_nav` | A2 `MenuNavPad` | M2 | `MenuControllerPlugin` | **Phase 1 migrated path.** `Routed<MenuNav>` → `MenuNavImpulse` on one `UiTarget`. Exclusive modal nav acquires a `CaptureToken` on `InputRouter`. |
+| M1 | Menu controller | `MenuController`, `interpret_menu_pad` | source-bound `UiPadEvent` addressed to the focused `UiTarget` | M2 via `MenuNavImpulse` / `MenuActionImpulse` | `MenuControllerPlugin` | Interprets the authorized rich pad frame and emits routed menu impulses. Exclusive modal nav acquires a `CaptureToken` on `InputRouter`; the primary `MenuNavPad` adapter remains a host compatibility projection. |
 | M2 | Menu consumer | `On<MenuNavImpulse>` in `TextMenu`, `HudMenu`, scroll, short-text, screens, playground prompts | M1 | widget state, `MenuActivate` | each widget | Already entity-addressed. Keep. |
 
 ### P — pipeline / motor
@@ -397,7 +399,7 @@ the current runtime summary above before treating a row as live.
 
 | Adapter | Why it exists | Removal |
 |---|---|---|
-| Broadcast `CharacterIntent` | Look / shell / queue consumers still read the process-wide message. UseItem / PowerUseItem now go through D1. | Remaining look / shell / queue consumers. |
+| Broadcast `CharacterIntent` | Historical adapter plan for look / shell / queue consumers. UseItem / PowerUseItem now go through D1. | Superseded: semantic intents are actor-targeted `ActorIntentEvent`s; continuous state is stored in actor-owned frames. |
 | `CharacterControlSystems` ⊂ `Bind` | Leftover `.after(CharacterControlSystems)` item / camera / shell hosts. Motor hosts joined the pipeline. | Remaining hosts; Bind alias only. |
 | Domain `MotorRequestStage` lives in player | Generic core must not name Tanz / Standard / WorldFilter. | Keep beside domain systems. |
 | `PlayerSystems::Body` outside P4 | **Removed.** Body is in `ControllerPipeline::Motor`. Intent stays for item users (D*). | — |
@@ -526,7 +528,7 @@ WeaponFired → queue_weapon_recoil → CameraRecoilHandoff → apply_recoil_han
 | `EquippedItemUse` grenade | cook / latch / explicit release | D3 |
 | throw release | `SpawnThrownGrenade` | D3 → grenades interpreter |
 | `RoutingEvent` disconnect / reassign / removal | `lost_actor` + `take_live_cook` + `DropLiveGrenade` | D3 |
-| `RoutingEvent` `Captured` | cancel leftover item latch / trigger; keep a live cook | D3 / D2 |
+| `RoutingEvent` `Captured` | cancel leftover item latch / trigger; keep an active cook | D3 / D2 |
 | `InputRouter` suspension | freeze `advance_throw` clocks; freeze the local actor's holster clock | D3 / D6 |
 | `WeaponFired` | `CameraRecoilHandoff` | D4 → C5 |
 | `EquippedPowerUse` | `LubikanActivationRequest::equipped` | D7 |
@@ -593,11 +595,11 @@ full plugins (`GameplayPlugin` adds those after the runtime):
 - `CharacterControlSystems` remains a Bind alias for leftover
   `.after(CharacterControlSystems)` hosts.
 - `apply_look_intents` is still query-wide `FollowCamera` (delivery-gated).
-- Shell HID leftovers: `stash` `Gamepad` presence,
-  `game::toggle_world_pause` Start / A. The locked spawn picker now
-  confirms from UI-owned [`MenuNavPad`](../virtual-pad/src/surface/menu.rs)
-  (`SpawnPickerController`); it does not restore actor-less character
-  intents or exempt Jump from map capture.
+- Shell adapters are host-scoped: `game::toggle_world_pause` filters the
+  addressed `ActorIntentEvent` to the primary source, and the locked spawn
+  picker consumes a source-bound `UiPadEvent` on its controller entity. The
+  primary `MenuNavPad` remains a compatibility projection; the picker does not
+  poll it or restore actor-less character intents.
 - Full `WorldPlugin` is not headless-safe; stack tests use the extracted
   headless runtime registration, not terrain / vegetation assemble.
 
