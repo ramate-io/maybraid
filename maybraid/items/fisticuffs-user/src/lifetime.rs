@@ -418,3 +418,58 @@ fn suspension_freezes_local_attack_and_damage_while_other_actors_continue() -> a
 	assert_no_command_errors()?;
 	Ok(())
 }
+
+#[derive(Resource, Default)]
+struct HitchStrikes(usize);
+
+fn count_hitch_strikes(
+	mut strikes: MessageReader<crate::FisticuffsStrike>,
+	mut count: ResMut<HitchStrikes>,
+) {
+	count.0 += strikes.read().count();
+}
+
+#[test]
+fn a_hitch_across_the_hit_window_still_emits_one_strike_and_deals_one_hit() -> anyhow::Result<()> {
+	let _test_guard = lock_lifetime_test();
+	let mut app = lifetime_app_with_presentation(false);
+	app.init_resource::<HitchStrikes>().add_systems(PostUpdate, count_hitch_strikes);
+	let actor = spawn_attacker(&mut app);
+	let dummy = spawn_dummy(&mut app);
+	assign(&mut app, actor);
+	app.update();
+	squeeze_right_trigger(&mut app);
+	app.update();
+	release_triggers(&mut app);
+	app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(130)));
+	app.update();
+	assert_eq!(
+		app.world().get::<FisticuffsUser>(actor).and_then(|user| user.state.phase()),
+		Some(AttackPhase::Startup)
+	);
+	app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(100)));
+	app.update();
+	assert_eq!(
+		app.world().get::<FisticuffsUser>(actor).and_then(|user| user.state.phase()),
+		Some(AttackPhase::Active)
+	);
+	assert_eq!(app.world().resource::<HitchStrikes>().0, 1);
+	assert_eq!(sensor_count(app.world_mut()), 1);
+	let health = app
+		.world()
+		.get::<Health>(dummy)
+		.ok_or_else(|| anyhow::anyhow!("dummy health"))?;
+	assert_eq!(health.current, health.max - PLACEHOLDER_JAB_DAMAGE);
+	for _ in 0..5 {
+		app.update();
+	}
+	assert_eq!(sensor_count(app.world_mut()), 0);
+	assert_eq!(app.world().resource::<HitchStrikes>().0, 1);
+	let health = app
+		.world()
+		.get::<Health>(dummy)
+		.ok_or_else(|| anyhow::anyhow!("dummy health"))?;
+	assert_eq!(health.current, health.max - PLACEHOLDER_JAB_DAMAGE);
+	assert_no_command_errors()?;
+	Ok(())
+}

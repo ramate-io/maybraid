@@ -316,9 +316,9 @@ mod tests {
 		assert_eq!(state.phase(), Some(AttackPhase::Active));
 		assert_eq!(state.spec(), Some(AttackSpec::jab(Side::Left)));
 		assert!(state.just_entered_active());
-		assert!(state.clip_progress().is_some_and(|progress| {
-			(progress - JAB_STARTUP_END).abs() < 1e-5
-		}));
+		assert!(state
+			.clip_progress()
+			.is_some_and(|progress| { (progress - JAB_STARTUP_END).abs() < 1e-5 }));
 
 		state.tick(jab_dt(JAB_HOLD_END - JAB_STARTUP_END + 0.1));
 		assert_eq!(state.phase(), Some(AttackPhase::Recovery));
@@ -369,7 +369,8 @@ mod tests {
 	fn recovery_press_cancels_into_the_next_jab() {
 		let mut state = AttackState::default();
 		state.request(AttackSpec::jab(Side::Left));
-		state.tick(jab_dt(JAB_HOLD_END + 0.01));
+		state.tick(jab_dt(JAB_STARTUP_END));
+		state.tick(jab_dt(JAB_HOLD_END - JAB_STARTUP_END + 0.01));
 		assert_eq!(state.phase(), Some(AttackPhase::Recovery));
 		state.request(AttackSpec::jab(Side::Right));
 		assert!(state.just_started());
@@ -384,6 +385,8 @@ mod tests {
 		state.request(AttackSpec::jab(Side::Left));
 		state.tick(jab_dt(0.2));
 		state.request(AttackSpec::jab(Side::Right));
+		state.tick(jab_dt(0.9));
+		assert_eq!(state.phase(), Some(AttackPhase::Active));
 		state.tick(jab_dt(0.9));
 		assert!(state.just_started());
 		assert_eq!(state.side(), Some(Side::Right));
@@ -430,6 +433,8 @@ mod tests {
 		state.latch_aim(JabAim::from_camera_angles(PITCH_MAX, 0.0));
 		state.tick(jab_dt(0.1));
 		state.request(AttackSpec::jab(Side::Right));
+		state.tick(jab_dt(0.95));
+		assert_eq!(state.phase(), Some(AttackPhase::Active));
 		state.tick(jab_dt(0.95));
 		assert!(state.just_started());
 		let yawed = JabAim::from_camera_angles(0.0, YAW_LIMIT);

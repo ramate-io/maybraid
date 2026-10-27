@@ -64,7 +64,9 @@ authored snap so Active sits on the incoming fist:
 
 A press during startup or active **queues one** follow-up (latest wins). A press
 during recovery **cancels into** the next jab immediately. That queue/cancel
-slot is the combo-graph hook.
+slot is the combo-graph hook. A tick that would skip the entire active window
+stops at its entry for one observable frame, allowing one strike and hit sensor
+before recovery continues on the next tick.
 
 ## Gameplay / visuals
 

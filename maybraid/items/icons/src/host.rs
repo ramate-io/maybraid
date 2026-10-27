@@ -558,7 +558,7 @@ pub(crate) struct FisticuffsArmsBindPose;
 
 /// Visibility owned by the Fisticuffs arm mask, not scene readiness.
 #[derive(Component)]
-struct FisticuffsArmsHidden;
+pub(crate) struct FisticuffsArmsHidden;
 
 /// Isolated captures have no posed body rig. The GLB still instantiates
 /// `SkinnedMesh` plus JOINTS/WEIGHTS; Bevy's PBR path skips those meshes

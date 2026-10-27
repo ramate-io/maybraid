@@ -222,7 +222,8 @@ mod tests {
 				.ok_or_else(|| anyhow::anyhow!("driver"))?;
 			user.state.cancel();
 			user.state.request(AttackSpec::jab(Side::Left));
-			user.state.tick(0.25);
+			user.state.tick(0.15);
+			user.state.tick(0.10);
 		}
 		Ok(())
 	}
