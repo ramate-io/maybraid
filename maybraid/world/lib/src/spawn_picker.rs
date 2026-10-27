@@ -20,7 +20,7 @@ pub fn sync_spawn_picker_sheet(
 	roots: Query<Entity, With<crate::map_view::MapNameHud>>,
 ) {
 	*sheet = SpawnPickerSheet::from_map(map.open, map.close_locked);
-	sheet.map_capture_owner = roots.iter().next().map(maybraid_controllers_core::UiTarget::new);
+	sheet.map_capture_owner = roots.single().ok().map(maybraid_controllers_core::UiTarget::new);
 }
 
 pub use maybraid_spawns_player::refresh_spawn_picker_focus;

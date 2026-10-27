@@ -583,9 +583,17 @@ fn shell_menu_back(
 	});
 }
 
-fn configure_pause_menu(mut menus: Query<&mut MenuController, With<InGameScreen>>) {
+fn configure_pause_menu(
+	primary: Option<Res<PrimaryVirtualPad>>,
+	mut menus: Query<&mut MenuController, With<InGameScreen>>,
+) {
 	for mut controller in &mut menus {
-		controller.start = MenuStartPolicy::Shell;
+		if controller.source.is_none()
+			|| controller.source.and_then(|source| source.entity())
+				== primary.as_ref().map(|pad| pad.0)
+		{
+			controller.start = MenuStartPolicy::Shell;
+		}
 	}
 }
 
@@ -605,36 +613,28 @@ fn start_pause_target(pause: WorldPause, sub_screen: bool) -> Option<WorldPause>
 fn toggle_world_pause(
 	event: On<ActorIntentEvent>,
 	primary: Option<Res<PrimaryVirtualPad>>,
-	mut commands: Commands,
+	flow: Option<Res<State<GameFlow>>>,
+	pause: Option<Res<State<WorldPause>>>,
+	next: Option<ResMut<NextState<WorldPause>>>,
+	sub_screens: Query<(), (With<MenuScreen>, Without<InGameScreen>)>,
+	mut routing: InputRouting,
 ) {
 	if !matches!(event.input.payload(), CharacterIntent::InGameMenu)
 		|| event.input.source().entity() != primary.as_ref().map(|pad| pad.0)
 		|| primary.is_none()
+		|| !flow.is_some_and(|flow| *flow.get() == GameFlow::World)
 	{
 		return;
 	}
-	event.input.queue(&mut commands, |world, _| {
-		if !world
-			.get_resource::<State<GameFlow>>()
-			.is_some_and(|flow| *flow.get() == GameFlow::World)
-		{
-			return;
-		}
-		let Some(pause) = world.get_resource::<State<WorldPause>>().map(|pause| *pause.get())
-		else {
-			return;
-		};
-		let sub_screen = world
-			.query_filtered::<Entity, (With<MenuScreen>, Without<InGameScreen>)>()
-			.iter(world)
-			.next()
-			.is_some();
-		if let Some(target) = start_pause_target(pause, sub_screen) {
-			if let Some(mut next) = world.get_resource_mut::<NextState<WorldPause>>() {
-				next.set(target);
-			}
-		}
-	});
+	let (Some(pause), Some(mut next)) = (pause, next) else {
+		return;
+	};
+	if let Some(target) = start_pause_target(*pause.get(), !sub_screens.is_empty()) {
+		// Retire pending gameplay commands immediately, before any later input
+		// from this same physical frame can start firing or cooking a grenade.
+		routing.set_source_paused(event.input.source(), target == WorldPause::Menu);
+		next.set(target);
+	}
 }
 
 #[cfg(test)]
@@ -1041,6 +1041,7 @@ mod tests {
 			maybraid_controllers_core::ActorTarget::new(actor),
 		);
 		world.insert_resource(router);
+		world.init_resource::<Messages<RoutingEvent>>();
 		world.add_observer(crate::toggle_world_pause);
 		(world, source, actor)
 	}

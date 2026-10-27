@@ -36,7 +36,6 @@ fn self_loop_app() -> App {
 		.add_plugins(LubikansPlugin)
 		.add_plugins(LubikanDamagePlugin)
 		.init_resource::<WorldGameplayEnabled>()
-		.add_message::<EquippedPowerUse>()
 		.init_resource::<Messages<WorldPlaySessionEnded>>()
 		.init_resource::<Messages<lubikans::LubikanOwnerLifetime>>()
 		.insert_resource(TextEntryFocus(false));
@@ -141,7 +140,7 @@ fn activate_self(app: &mut App) {
 		.iter(app.world())
 		.next()
 		.expect("owner");
-	app.world_mut().write_message(EquippedPowerUse::new(ActorTarget::new(owner)));
+	app.world_mut().trigger(EquippedPowerUse::new(ActorTarget::new(owner)));
 	app.update();
 }
 
@@ -416,7 +415,7 @@ fn activate_and_award_same_frame_as_death_keep_charge() -> anyhow::Result<()> {
 		.self_definition()
 		.activation_cost;
 	let npc = spawn_npc(&mut app);
-	app.world_mut().write_message(EquippedPowerUse::new(ActorTarget::new(player)));
+	app.world_mut().trigger(EquippedPowerUse::new(ActorTarget::new(player)));
 	app.world_mut().write_message(Hit {
 		target: npc,
 		source: Some(player),
