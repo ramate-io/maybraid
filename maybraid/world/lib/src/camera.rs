@@ -290,22 +290,84 @@ mod tests {
 	}
 
 	#[test]
-	fn inventory_edit_keeps_follow_while_paused() -> anyhow::Result<()> {
-		use bevy::ecs::system::RunSystemOnce;
+	fn camera_follow_tracks_session_state_before_look() -> anyhow::Result<()> {
 		use player::{CameraFollow, Player};
+		use player_camera::{CameraLookSuppressed, CameraPovLocked};
 		use world_player::Player as VegetationPlayer;
 
 		use crate::InventoryEditCameraFollow;
 
-		let mut world = World::new();
-		world.insert_resource(PlaygroundMode::Character);
-		world.insert_resource(WorldGameplayEnabled(false));
-		world.insert_resource(InventoryEditCameraFollow(true));
-		let player = world.spawn((VegetationPlayer, Player)).id();
-		world
-			.run_system_once(sync_camera_session_state)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(world.get::<CameraFollow>(player).is_some());
+		#[derive(Resource, Default)]
+		struct FollowAtLook(Vec<Vec<Entity>>);
+
+		fn record_follow_at_look(
+			players: Query<(Entity, Has<CameraFollow>), With<VegetationPlayer>>,
+			mut frames: ResMut<FollowAtLook>,
+		) {
+			frames.0.push(
+				players
+					.iter()
+					.filter_map(|(entity, follows)| follows.then_some(entity))
+					.collect(),
+			);
+		}
+
+		let mut app = App::new();
+		app.insert_resource(PlaygroundMode::Character)
+			.insert_resource(WorldGameplayEnabled(true))
+			.insert_resource(InventoryEditCameraFollow(false))
+			.init_resource::<CameraPovLocked>()
+			.init_resource::<CameraLookSuppressed>()
+			.init_resource::<FollowAtLook>()
+			.add_systems(Update, sync_camera_session_state.before(PlayerCameraSystems::Look))
+			.add_systems(Update, record_follow_at_look.in_set(PlayerCameraSystems::Look));
+
+		let player = app.world_mut().spawn((VegetationPlayer, Player)).id();
+		app.update();
+		assert!(app
+			.world()
+			.resource::<FollowAtLook>()
+			.0
+			.last()
+			.is_some_and(|following| following.len() == 1 && following[0] == player));
+		assert!(!app.world().resource::<CameraPovLocked>().0);
+
+		app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = false;
+		app.world_mut().resource_mut::<InventoryEditCameraFollow>().0 = true;
+		app.update();
+		assert!(app
+			.world()
+			.resource::<FollowAtLook>()
+			.0
+			.last()
+			.is_some_and(|following| following.len() == 1 && following[0] == player));
+		assert!(app.world().resource::<CameraPovLocked>().0);
+
+		app.world_mut().despawn(player);
+		let replacement = app.world_mut().spawn((VegetationPlayer, Player)).id();
+		app.update();
+		assert!(app
+			.world()
+			.resource::<FollowAtLook>()
+			.0
+			.last()
+			.is_some_and(|following| following.len() == 1 && following[0] == replacement));
+		assert!(app.world().resource::<CameraPovLocked>().0);
+
+		app.world_mut().resource_mut::<InventoryEditCameraFollow>().0 = false;
+		app.update();
+		assert!(app.world().resource::<FollowAtLook>().0.last().is_some_and(Vec::is_empty));
+		assert!(!app.world().resource::<CameraPovLocked>().0);
+
+		app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = true;
+		app.update();
+		assert!(app
+			.world()
+			.resource::<FollowAtLook>()
+			.0
+			.last()
+			.is_some_and(|following| following.len() == 1 && following[0] == replacement));
+		assert!(!app.world().resource::<CameraPovLocked>().0);
 		Ok(())
 	}
 }

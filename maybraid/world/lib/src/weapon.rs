@@ -20,7 +20,7 @@ use maybraid_session::WorldGameplayEnabled;
 use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
 use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
 use player::{
-	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
+	apply_character_mobility, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
 	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
 };
 use tanz_user::{spawn_tanz_user, TanzExecution, TanzStack, TanzUser, TanzUserSystems};
@@ -147,9 +147,6 @@ pub(crate) fn arm_world_player(
 			PlayerYawOwner::Wish,
 		));
 		commands.entity(player).try_insert(InventoryCycling::default());
-		if *mode == PlaygroundMode::Character && gameplay.0 {
-			commands.entity(player).insert(CameraFollow);
-		}
 
 		teardown_held_weapon(&mut commands, player, firearm_user, grenade_user);
 		if let Some(user) = inventory_user {
