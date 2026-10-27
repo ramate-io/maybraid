@@ -6,11 +6,11 @@ use bevy::scene::ScenePlugin;
 use bevy::time::TimeUpdateStrategy;
 use character_inventory_user::InventoryUser;
 use character_items::{FirearmMesh, Inventory, InventoryItem};
-use firearm_user::{FirearmUser, RecoilPattern, register_firearm_user_runtime};
+use firearm_user::{register_firearm_user_runtime, FirearmUser, RecoilPattern};
 use firearms::{
 	FireControl, FireOnTrigger, Weapon, WeaponFired, WeaponLaunchPose, WeaponRecoil, WeaponTrigger,
 };
-use grenade_user::{GrenadePhase, GrenadeThrow, GrenadeUser, register_grenade_user_runtime};
+use grenade_user::{register_grenade_user_runtime, GrenadePhase, GrenadeThrow, GrenadeUser};
 use grenades::DropLiveGrenade;
 use lubikans::{
 	LubikanActivationDenied, LubikanActivationRefused, LubikanLedger, LubikanOwner,
@@ -23,8 +23,8 @@ use maybraid_controllers_core::{
 	UiTarget,
 };
 use maybraid_equipment::{
-	ActiveInventoryCyclingCategory, EQUIPMENT_HOLSTER_SECS, EquipmentHolster, EquippedItemHandler,
-	EquippedItemUse, EquippedPowerUse, InventoryCycling, RoutedItemActor,
+	ActiveInventoryCyclingCategory, EquipmentHolster, EquippedItemHandler, EquippedItemUse,
+	EquippedPowerUse, InventoryCycling, RoutedItemActor, EQUIPMENT_HOLSTER_SECS,
 };
 use maybraid_input::{PadButton, VirtualPad, VirtualPadSystems};
 use maybraid_session::{
