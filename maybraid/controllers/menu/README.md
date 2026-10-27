@@ -19,7 +19,9 @@ own the local pad. Nested captures release independently; dispatch reads
 exclusive nav.
 
 Inventory context actions use `MenuActionImpulse` from `action.rs`. The controller
-maps Y to `MenuAction::Unequip` and delivers it only to the current MenuNav capture
-owner, retaining the input source. Text locks, consumed Back, and higher captures
-block delivery. This impulse does not propagate to parent catalogs; the renderer
-translates it into the selected tile's domain event.
+maps Y to `MenuAction::Unequip` and X to `MenuAction::Drop`, delivering one action
+only to the current MenuNav capture owner while retaining the input source. A
+simultaneous nav event wins over either action; if X and Y arrive together, Y wins.
+Text locks, consumed Back, and higher captures block delivery. The impulse does not
+propagate to parent catalogs; the owning inventory UI resolves it against that
+menu's selected tile.

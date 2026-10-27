@@ -2,13 +2,14 @@
 
 use bevy::prelude::*;
 use maybraid_controllers_core::{CaptureKind, InputRouter, InputSource, Routed};
-use maybraid_input::{VirtualPad, INVENTORY_UNEQUIP_PAD};
+use maybraid_input::{MenuNavPad, VirtualPad, INVENTORY_DROP_PAD, INVENTORY_UNEQUIP_PAD};
 use menu_components::{MenuModalStack, ShortTextModal, TextMenuInputLock};
 
 /// Semantic menu actions. Renderers interpret these without reading hardware.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MenuAction {
 	Unequip,
+	Drop,
 }
 
 /// Delivered only to the owning menu; it must not bubble into a parent catalog.
@@ -31,6 +32,7 @@ impl MenuActionImpulse {
 
 pub fn dispatch_menu_actions(
 	pad: Res<VirtualPad>,
+	nav: Res<MenuNavPad>,
 	router: Res<InputRouter>,
 	lock: Res<TextMenuInputLock>,
 	modal: Res<ShortTextModal>,
@@ -38,13 +40,28 @@ pub fn dispatch_menu_actions(
 	mut commands: Commands,
 ) {
 	// Back/text consumption wins even if focus has not refreshed after dismissal.
-	if lock.0 || modal.is_open() || modal.dismissed || stack.consumed() {
+	if lock.0 || modal.is_open() || modal.dismissed || stack.consumed() || stack.owns_nav() {
 		return;
 	}
 	let source = InputSource::local_pad();
-	if !router.connected(source) || !pad.just_pressed(INVENTORY_UNEQUIP_PAD) {
+	if !router.connected(source) {
 		return;
 	}
+	// Navigation owns a frame with a simultaneous context action. Y wins over
+	// X if both context buttons are pressed together.
+	if !nav.events.is_empty() {
+		return;
+	}
+	let action = if pad.just_pressed(INVENTORY_UNEQUIP_PAD) {
+		Some(MenuAction::Unequip)
+	} else if pad.just_pressed(INVENTORY_DROP_PAD) {
+		Some(MenuAction::Drop)
+	} else {
+		None
+	};
+	let Some(action) = action else {
+		return;
+	};
 	let Some(layer) = router.top_capture() else {
 		return;
 	};
@@ -54,7 +71,7 @@ pub fn dispatch_menu_actions(
 	let Some(target) = layer.ui_owner() else {
 		return;
 	};
-	let routed = Routed::to_ui(source, target, MenuAction::Unequip);
+	let routed = Routed::to_ui(source, target, action);
 	if let Some(impulse) = MenuActionImpulse::from_routed(routed) {
 		commands.trigger(impulse);
 	}
@@ -66,8 +83,8 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
 	use maybraid_controllers_core::{CaptureKind, InputRouter, InputSource, ScopeOwner, UiTarget};
-	use maybraid_input::{PadButton, VirtualPad};
-	use menu_components::{MenuModalStack, ShortTextModal, TextMenuInputLock};
+	use maybraid_input::{MenuNav, MenuNavPad, PadButton, VirtualPad};
+	use menu_components::{MenuModalLayer, MenuModalStack, ShortTextModal, TextMenuInputLock};
 
 	#[derive(Resource, Default)]
 	struct Hits(Vec<MenuActionImpulse>);
@@ -77,15 +94,26 @@ mod tests {
 	}
 
 	fn world() -> (World, Entity) {
+		world_with_button(PadButton::Y)
+	}
+
+	fn world_with_button(button: PadButton) -> (World, Entity) {
+		world_with_buttons(&[button])
+	}
+
+	fn world_with_buttons(buttons: &[PadButton]) -> (World, Entity) {
 		let mut world = World::new();
 		world.init_resource::<InputRouter>();
+		world.init_resource::<MenuNavPad>();
 		world.init_resource::<TextMenuInputLock>();
 		world.init_resource::<ShortTextModal>();
 		world.init_resource::<MenuModalStack>();
 		world.init_resource::<Hits>();
 		let mut pad = VirtualPad::default();
 		pad.begin_frame();
-		pad.hold_digital(PadButton::Y);
+		for button in buttons {
+			pad.hold_digital(*button);
+		}
 		pad.finish_digital();
 		world.insert_resource(pad);
 		world.add_observer(record);
@@ -146,20 +174,95 @@ mod tests {
 	}
 
 	#[test]
+	fn x_delivers_drop_to_the_captured_menu_and_nav_takes_priority() -> anyhow::Result<()> {
+		let (mut world, menu) = world_with_button(PadButton::X);
+		dispatch(&mut world)?;
+		assert_eq!(
+			world.resource::<Hits>().0,
+			vec![MenuActionImpulse {
+				entity: menu,
+				source: InputSource::local_pad(),
+				action: MenuAction::Drop,
+			}]
+		);
+
+		for nav in [MenuNav::Select, MenuNav::Right] {
+			let (mut world, _) = world_with_button(PadButton::X);
+			world.resource_mut::<MenuNavPad>().events.push(nav);
+			dispatch(&mut world)?;
+			assert!(
+				world.resource::<Hits>().0.is_empty(),
+				"navigation must win over simultaneous Drop"
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn navigation_wins_over_unequip_and_y_has_priority_over_x() -> anyhow::Result<()> {
+		let (mut world, _) = world_with_button(PadButton::Y);
+		world.resource_mut::<MenuNavPad>().events.push(MenuNav::Select);
+		dispatch(&mut world)?;
+		assert!(world.resource::<Hits>().0.is_empty(), "Select must win over Unequip");
+
+		let (mut world, menu) = world_with_buttons(&[PadButton::X, PadButton::Y]);
+		dispatch(&mut world)?;
+		assert_eq!(
+			world.resource::<Hits>().0,
+			vec![MenuActionImpulse {
+				entity: menu,
+				source: InputSource::local_pad(),
+				action: MenuAction::Unequip,
+			}]
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn holding_x_does_not_repeat_drop() -> anyhow::Result<()> {
+		let (mut world, _) = world_with_button(PadButton::X);
+		dispatch(&mut world)?;
+		let mut pad = world.resource_mut::<VirtualPad>();
+		pad.begin_frame();
+		pad.hold_digital(PadButton::X);
+		pad.finish_digital();
+		drop(pad);
+		dispatch(&mut world)?;
+		assert_eq!(world.resource::<Hits>().0.len(), 1, "held X must not repeat Drop");
+		Ok(())
+	}
+
+	#[test]
 	fn overlay_text_and_awaiting_capture_block_inventory_actions() -> anyhow::Result<()> {
 		for (kind, owner) in [
 			(CaptureKind::Overlay, ScopeOwner::map_overlay()),
 			(CaptureKind::Overlay, ScopeOwner::awaiting_nav()),
 			(CaptureKind::TextEntry, ScopeOwner::console()),
 		] {
-			let (mut world, _) = world();
-			world.resource_mut::<InputRouter>().acquire_capture(
-				InputSource::local_pad(),
-				owner,
-				kind,
-			);
+			for button in [PadButton::X, PadButton::Y] {
+				let (mut world, _) = world_with_button(button);
+				world.resource_mut::<InputRouter>().acquire_capture(
+					InputSource::local_pad(),
+					owner,
+					kind,
+				);
+				dispatch(&mut world)?;
+				assert!(
+					world.resource::<Hits>().0.is_empty(),
+					"capture {kind:?} must block {button:?}"
+				);
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn nav_owning_modal_blocks_unequip_and_drop() -> anyhow::Result<()> {
+		for button in [PadButton::X, PadButton::Y] {
+			let (mut world, _) = world_with_button(button);
+			world.resource_mut::<MenuModalStack>().open(MenuModalLayer::ITEM_DROP);
 			dispatch(&mut world)?;
-			assert!(world.resource::<Hits>().0.is_empty(), "capture {kind:?} must block Unequip");
+			assert!(world.resource::<Hits>().0.is_empty(), "item-drop modal must block {button:?}");
 		}
 		Ok(())
 	}
