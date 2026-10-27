@@ -14080,8 +14080,6 @@ dependencies = [
  "game-commands",
  "lod",
  "lod-avian",
- "maybraid-character-controller",
- "maybraid-controllers-core",
  "maybraid-virtual-pad-controller",
  "player-camera",
  "vegetation-components",
