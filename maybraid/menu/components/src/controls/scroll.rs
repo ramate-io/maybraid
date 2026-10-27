@@ -19,6 +19,10 @@ const HUD_NAV_SCROLL_LINE: f32 = 56.0;
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct HudScrollViewport;
 
+/// Horizontal equipped-row strip. Focus follows the item across overflow.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct HudScrollStrip;
+
 /// Vertical track; hidden when content fits.
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct HudScrollTrack;
@@ -281,6 +285,64 @@ pub(crate) fn reveal_item_in_viewport(
 		return;
 	}
 	add_scroll_y(scroll, view, delta * scale);
+}
+
+/// Keep the focused HUD item visible inside a horizontal equipped strip.
+pub fn scroll_hud_selection_into_strip(
+	menus: Query<&HudMenu>,
+	items: Query<(Entity, &HudMenuItem, &ComputedNode, &bevy::ui::UiGlobalTransform)>,
+	mut strips: Query<
+		(Entity, &ComputedNode, &mut ScrollPosition, &bevy::ui::UiGlobalTransform),
+		With<HudScrollStrip>,
+	>,
+	child_of: Query<&ChildOf>,
+) {
+	for (strip, computed, mut scroll, strip_tf) in &mut strips {
+		let Some((_, _, item_node, item_tf)) = items.iter().find(|(entity, item, _, _)| {
+			menus.get(item.menu).is_ok_and(|menu| menu.selected == item.index)
+				&& entity_is_under(*entity, strip, &child_of)
+		}) else {
+			continue;
+		};
+		reveal_item_in_strip(computed, strip_tf, item_node, item_tf, TILE_FOCUS_PAD, &mut scroll);
+	}
+}
+
+fn reveal_item_in_strip(
+	view: &ComputedNode,
+	view_tf: &bevy::ui::UiGlobalTransform,
+	item: &ComputedNode,
+	item_tf: &bevy::ui::UiGlobalTransform,
+	slack_px: f32,
+	scroll: &mut ScrollPosition,
+) {
+	let scale = view.inverse_scale_factor();
+	let view_w = view.size().x;
+	let item_w = item.size().x;
+	if view_w <= 0.0 || item_w <= 0.0 {
+		return;
+	}
+	let slack = slack_px / scale.max(f32::EPSILON);
+	let delta = scroll_delta_to_reveal(
+		view_tf.affine().translation.x,
+		view_w,
+		item_tf.affine().translation.x,
+		item_w,
+		slack,
+	);
+	if delta == 0.0 {
+		return;
+	}
+	add_scroll_x(scroll, view, delta * scale);
+}
+
+fn add_scroll_x(scroll: &mut ScrollPosition, computed: &ComputedNode, delta: f32) {
+	let scale = computed.inverse_scale_factor();
+	let max_scroll = ((computed.content_size().x - computed.size().x) * scale).max(0.0);
+	if max_scroll <= 0.0 {
+		return;
+	}
+	scroll.x = (scroll.x + delta).clamp(0.0, max_scroll);
 }
 
 fn add_scroll_y(scroll: &mut ScrollPosition, computed: &ComputedNode, delta: f32) {

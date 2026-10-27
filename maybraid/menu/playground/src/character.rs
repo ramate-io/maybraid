@@ -14,10 +14,10 @@ use item_icons::{
 };
 use maybraid_character_ui_menu_renderer::{
 	fill_inventory_layout, fill_inventory_loading, find_overlay_node, overlay_closes_on_pick,
-	spawn_overlay_shell, CharacterHudSystems, CharacterMenuEvent,
-	MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink, MenuButton, MenuJustify, MenuSink,
-	MenuThumbnailContext, OverlayClose, OverlayOpen, OverlaySelectRoot, OverlaySelectViewport,
-	RenderContext,
+	spawn_overlay_shell, CharacterHudSystems, CharacterMenuEvent, InventoryFocusHint,
+	InventoryInteraction, InventoryItemKey, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
+	MenuButton, MenuJustify, MenuSink, MenuThumbnailContext, OverlayClose, OverlayOpen,
+	OverlaySelectRoot, OverlaySelectViewport, RenderContext,
 };
 use maybraid_menu_controller::MenuController;
 use maybraid_skill_map::{SkillMapSpinRevealHud, SkillMapTileMaterialPlugin};
@@ -473,6 +473,8 @@ fn populate_character_ui_panel(
 		lock_appearance: menu_state.0.appearance_locked(),
 		catalog_columns: PANEL_TILE_COLUMNS,
 		catalog_thumb_px: CATALOG_THUMB_PX,
+		retain_key: None,
+		retained_index: None,
 	};
 	MaybraidMenuSink::new(MenuJustify::Right).render_nodes(
 		&menu_state.0.menu_nodes(),
@@ -494,6 +496,7 @@ fn sync_overlay_select(
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	icons: Option<Res<ItemIconCache>>,
 	prompt_device: Res<InputPromptDevice>,
+	focus: Res<InventoryFocusHint>,
 ) {
 	let Ok(slot) = slots.single() else {
 		for entity in &overlays {
@@ -581,6 +584,7 @@ fn sync_overlay_select(
 			&fonts,
 			node,
 			None,
+			focus.0,
 			menu_state.0.overlay_editable(key),
 			icons.as_deref(),
 			inventory_ready,
@@ -596,6 +600,7 @@ fn sync_overlay_select(
 			&fonts,
 			node,
 			menu.copied(),
+			focus.0,
 			menu_state.0.overlay_editable(key),
 			icons.as_deref(),
 			inventory_ready,
@@ -694,6 +699,7 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 	fonts: &HudFonts,
 	node: &character_ui_menu::MenuNode<E>,
 	previous: Option<HudMenu>,
+	retain: Option<InventoryItemKey>,
 	interactive: bool,
 	icons: Option<&ItemIconCache>,
 	ready: bool,
@@ -707,6 +713,7 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 			node,
 			interactive,
 			previous,
+			retain,
 			&mut thumbnails,
 		);
 	} else {
@@ -772,6 +779,8 @@ fn on_overlay_close(
 	mut overlay: ResMut<OverlaySelectState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
 	mut stack: ResMut<MenuModalStack>,
+	mut interaction: ResMut<InventoryInteraction>,
+	mut focus: ResMut<InventoryFocusHint>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() {
@@ -779,11 +788,13 @@ fn on_overlay_close(
 	}
 	overlay.open = None;
 	active_overlay.0 = None;
+	*interaction = InventoryInteraction::Browse;
+	focus.0 = None;
 	stack.close(MenuModalId::OVERLAY_SELECT);
 }
 
 fn on_menu_activate(
-	activate: On<MenuActivate<MenuEvent>>,
+	mut activate: On<MenuActivate<MenuEvent>>,
 	mut menu_state: ResMut<CharacterMenuState>,
 	mut menu_events: MessageWriter<CharacterMenuEvent<MenuEvent>>,
 	mut ui_sync: ResMut<CharacterUiSyncState>,
@@ -791,14 +802,27 @@ fn on_menu_activate(
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
 	mut stack: ResMut<MenuModalStack>,
+	mut focus: ResMut<InventoryFocusHint>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() {
 		return;
 	}
+	// This is a global observer: bubbling would apply the same domain edit
+	// again at each tile/grid/pane ancestor (one move could reach the end).
+	activate.propagate(false);
 	let event = activate.event().choice;
 	if !menu_state.0.apply(event) {
 		return;
+	}
+	match event {
+		MenuEvent::EquipInventory(index) | MenuEvent::MoveEquippedInventory { index, .. } => {
+			focus.0 = Some(InventoryItemKey { index, equipped: true });
+		}
+		MenuEvent::UnequipInventory(index) => {
+			focus.0 = Some(InventoryItemKey { index, equipped: false });
+		}
+		_ => {}
 	}
 	ui_sync.menu_dirty = true;
 	overlay_sync.menu_dirty = true;
@@ -1039,3 +1063,6 @@ mod tests {
 		Ok(())
 	}
 }
+
+#[cfg(test)]
+mod ordered_inventory_tests;

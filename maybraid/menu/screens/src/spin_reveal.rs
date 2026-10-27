@@ -2,28 +2,29 @@
 
 use bevy::prelude::*;
 use character_creation_menus::{
-	inventory_paint_state, InventoryLayout, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT,
+	INVENTORY_CAPTURE_TIMEOUT, InventoryLayout, InventoryPaint, inventory_paint_state,
 };
-use character_items::{self_lubikan_catalog_key, Inventory, InventoryItem};
+use character_items::{Inventory, InventoryItem, self_lubikan_catalog_key};
 use item_icons::{
-	request_inventory_icons, CaptureClient, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery,
-	ItemIconPlugin, PoseCaptureSubjects,
+	CaptureClient, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery, ItemIconPlugin,
+	PoseCaptureSubjects, request_inventory_icons,
 };
 use maybraid_character_ui_menu_renderer::{
-	fill_inventory_layout, fill_inventory_loading, spawn_starter_kit_shell, MenuThumbnailContext,
+	MenuThumbnailContext, fill_inventory_layout, fill_inventory_loading, spawn_starter_kit_shell,
 };
 use maybraid_input::{MenuNav, MenuNavImpulse};
 use maybraid_menu_controller::MenuController;
 use menu_components::{
-	spawn_hud_action, spawn_hud_text, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu,
-	KeyboardMenuNav, MenuComponentsPlugin, ScreenBack, TextMenuInputLock, MENU_CLEAR, TEXT_YELLOW,
+	HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, KeyboardMenuNav, MENU_CLEAR,
+	MenuComponentsPlugin, ScreenBack, TEXT_YELLOW, TextMenuInputLock, spawn_hud_action,
+	spawn_hud_text,
 };
 use std::time::Duration;
 use tanz_user::request_inventory_tanz_icons;
 
-use crate::input::add_menu_input;
-use crate::show::{add_menu_show_systems, MenuScreens, MenuShowRequest};
 use crate::MenuScreen;
+use crate::input::add_menu_input;
+use crate::show::{MenuScreens, MenuShowRequest, add_menu_show_systems};
 
 /// Queue a Starter Kit spawn. Pair with [`SpinRevealItems`].
 #[derive(Component, Debug, Clone, Copy)]
@@ -253,15 +254,16 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn image_for_key(&mut self, key: u64) -> Option<Handle<Image>> {
-		self.icons?.catalog_for_key(key)
+		let icons = self.icons?;
+		if key == self_lubikan_catalog_key() {
+			icons.silhouette_for_key(key)
+		} else {
+			icons.catalog_for_key(key)
+		}
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
-		if key == self_lubikan_catalog_key() {
-			TEXT_YELLOW
-		} else {
-			Color::WHITE
-		}
+		if key == self_lubikan_catalog_key() { TEXT_YELLOW } else { Color::WHITE }
 	}
 }
 
@@ -313,6 +315,7 @@ fn reveal_starter_kit_icons(
 		&fonts,
 		&layout.node,
 		false,
+		None,
 		None,
 		&mut thumbs,
 	);
@@ -405,14 +408,15 @@ impl SpinRevealScreen {
 #[cfg(test)]
 mod tests {
 	use super::{
-		drop_stale_gallery, enter_starter_kit_continue, finish_spin_reveal, SpinRevealChoice,
-		SpinRevealCurrent, SpinRevealFinished, SpinRevealItems, SpinRevealScreen,
-		StarterKitContinue, StarterKitViewport,
+		SpinRevealChoice, SpinRevealCurrent, SpinRevealFinished, SpinRevealItems, SpinRevealScreen,
+		StarterKitContinue, StarterKitViewport, drop_stale_gallery, enter_starter_kit_continue,
+		finish_spin_reveal,
 	};
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
 	use character_creation_menus::{InventoryLayoutMode, STARTER_KIT_LABEL};
 	use character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
+	use character_ui_menu::MenuNode;
 
 	fn pants() -> InventoryItem {
 		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Red)
@@ -539,6 +543,8 @@ mod tests {
 
 	#[test]
 	fn grant_uses_the_read_only_starter_kit_layout() {
+		use character_items::{BASE_STARTER_TANZES, ItemRng};
+
 		let layout = SpinRevealScreen::layout(&[pants()]);
 		assert_eq!(layout.title, STARTER_KIT_LABEL);
 		assert_eq!(layout.mode, InventoryLayoutMode::ReadOnly);
@@ -548,5 +554,25 @@ mod tests {
 			layout.section_labels(),
 			["Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]
 		);
+
+		let items = ItemRng::from_seed(42).random_starter_loadout();
+		let grant = SpinRevealScreen::layout(&items);
+		let MenuNode::Section { children, .. } = &grant.node else {
+			panic!("starter kit must be a section");
+		};
+		let tanzes = children.iter().find_map(|child| match child {
+			MenuNode::Section { label: "Tanzes", children } => children.first(),
+			_ => None,
+		});
+		let Some(MenuNode::OrderedEquipment { rows }) = tanzes else {
+			panic!("Tanzes equipped pane must be ordered rows");
+		};
+		let tanz_row = rows.iter().find(|row| row.label == "Tanzes").expect("Tanzes row");
+		let equipped_ids: Vec<_> = tanz_row
+			.choices
+			.iter()
+			.filter_map(|choice| items.get(choice.item_key).and_then(InventoryItem::tanz_id))
+			.collect();
+		assert_eq!(equipped_ids, BASE_STARTER_TANZES);
 	}
 }
