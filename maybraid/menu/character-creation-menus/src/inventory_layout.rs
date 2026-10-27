@@ -9,8 +9,8 @@
 //! reuse pose-capture catalog keys from `tanz-user`.
 
 use character_items::{
-	Inventory, InventoryItem, InventorySlot, SELF_LUBIKAN_CAPTURE_LABEL, WORN_CLOTHING_LIMIT,
-	icon_catalog_key_for_label, self_lubikan_catalog_key,
+	icon_catalog_key_for_label, self_lubikan_catalog_key, Inventory, InventoryItem, InventorySlot,
+	SELF_LUBIKAN_CAPTURE_LABEL, WORN_CLOTHING_LIMIT,
 };
 use character_ui_menu::{
 	AssetOption, EquipmentChoice, GridCatalogChoice, MenuNode, OrderedEquipmentRow, PreviewColor,
@@ -474,8 +474,8 @@ mod tests {
 	use super::{InventoryLayout, InventoryLayoutMode, STARTER_KIT_LABEL};
 	use crate::MenuEvent;
 	use character_items::{
-		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor, ItemRng,
-		STARTER_CLOTHING_COUNT, SkillMapKind, SkillMapSpec, self_lubikan_catalog_key,
+		self_lubikan_catalog_key, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory,
+		InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec, STARTER_CLOTHING_COUNT,
 	};
 	use character_ui_menu::MenuNode;
 
@@ -785,7 +785,7 @@ mod tests {
 
 	#[test]
 	fn layout_stays_loading_until_every_capture_reports() {
-		use super::{INVENTORY_CAPTURE_TIMEOUT, InventoryPaint, inventory_paint_state};
+		use super::{inventory_paint_state, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT};
 		use std::time::Duration;
 
 		let layout = InventoryLayout::starter_kit(sample_items());
@@ -816,7 +816,7 @@ mod tests {
 
 	#[test]
 	fn timeout_reveals_without_every_report() {
-		use super::{INVENTORY_CAPTURE_TIMEOUT, InventoryPaint, inventory_paint_state};
+		use super::{inventory_paint_state, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT};
 
 		let layout = InventoryLayout::starter_kit(sample_items());
 		assert_eq!(

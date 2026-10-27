@@ -66,11 +66,8 @@ impl InventoryPromptKind {
 	}
 }
 
-const INVENTORY_PROMPT_KINDS: [InventoryPromptKind; 3] = [
-	InventoryPromptKind::Equip,
-	InventoryPromptKind::Unequip,
-	InventoryPromptKind::Drop,
-];
+const INVENTORY_PROMPT_KINDS: [InventoryPromptKind; 3] =
+	[InventoryPromptKind::Equip, InventoryPromptKind::Unequip, InventoryPromptKind::Drop];
 
 /// Image on an inventory action chip so a device change can swap the glyph.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
