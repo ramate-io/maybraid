@@ -1,7 +1,7 @@
 //! Muzzle flash, laser grow, impacts, and fire audio.
 //!
-//! [`crate::projectiles::fire_weapons`] realizes [`crate::WeaponShotRequest`]
-//! from the runtime fire clock. Laser beams stay presentation-owned.
+//! [`crate::projectiles::fire_weapons`] plays muzzle VFX after the fire clock
+//! and `SpawnProjectile` realization. Laser beams stay presentation-owned.
 
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::prelude::*;
@@ -11,10 +11,10 @@ use maybraid_audio::{AudioPlugin, AudioSystems};
 use projectiles::{ProjectileSystems, ProjectilesPlugin};
 
 use crate::impact::{setup_impact_effects, tick_impact_bursts};
-use crate::muzzle_flame::{MuzzleFlameMaterialPlugin, init_muzzle_flame_caches};
+use crate::muzzle_flame::{init_muzzle_flame_caches, MuzzleFlameMaterialPlugin};
 use crate::projectiles::{
-	FirearmWeaponSystems, fire_weapons, setup_muzzle_flash, spawn_impacts_from_contacts,
-	tick_laser_hits, tick_lasers, tick_muzzle_flashes,
+	fire_weapons, setup_muzzle_flash, spawn_impacts_from_contacts, tick_laser_hits, tick_lasers,
+	tick_muzzle_flashes, FirearmWeaponSystems,
 };
 use crate::runtime::register_firearm_runtime;
 use crate::sound::{copy_flight_audio_velocity, ensure_camera_spatial_listener, setup_fire_sounds};
@@ -28,6 +28,7 @@ pub fn register_firearm_presentation(app: &mut App) {
 		return;
 	}
 	register_firearm_runtime(app);
+	maybraid_spawns_projectiles::register_projectile_presentation(app);
 	if !app.is_plugin_added::<ProjectilesPlugin>() {
 		app.add_plugins(ProjectilesPlugin);
 	}
@@ -59,6 +60,7 @@ pub fn register_firearm_presentation(app: &mut App) {
 					.after(bevy_hanabi::EffectSystems::TickSpawners),
 				tick_lasers.after(FirearmWeaponSystems::Fire),
 				tick_laser_hits.in_set(DamageSystems::Collect).after(FirearmWeaponSystems::Fire),
+				crate::sound::attach_projectile_flight_audio.after(FirearmWeaponSystems::Fire),
 				copy_flight_audio_velocity.after(FirearmWeaponSystems::Fire),
 				spawn_impacts_from_contacts,
 				tick_impact_bursts.after(bevy_hanabi::EffectSystems::TickSpawners),

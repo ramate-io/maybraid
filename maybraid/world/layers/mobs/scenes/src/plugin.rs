@@ -172,6 +172,8 @@ fn install_mob_scenes(
 	}
 }
 
+/// High-band roster fulfill. Cell demand stays here; members call
+/// `character.spawn` directly instead of a population crate.
 fn spawn_needed_members(
 	time: Res<Time>,
 	mut commands: Commands,

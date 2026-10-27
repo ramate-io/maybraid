@@ -15,9 +15,9 @@ use maybraid_skill_map::SkillMapPlugin;
 pub use actor_lifecycle::ActorDomainTeardown;
 pub use equipment::ItemRuntimes;
 pub use maybraid_session::{
-	ActorRetired, InputRouter, InputRouting, Participation, RoutingEvent, SessionBit,
-	SessionCapabilities, SessionCapabilitySystems, SessionLifecycleSystems, SessionPlugin,
-	WorldGameplayEnabled, WorldPlaySessionEnded, apply_in_game_menu_pause,
+	apply_in_game_menu_pause, ActorRetired, InputRouter, InputRouting, Participation, RoutingEvent,
+	SessionBit, SessionCapabilities, SessionCapabilitySystems, SessionLifecycleSystems,
+	SessionPlugin, WorldGameplayEnabled, WorldPlaySessionEnded,
 };
 
 #[derive(Resource, Default)]
@@ -50,10 +50,16 @@ pub fn register_gameplay_runtime(app: &mut App) {
 	equipment::configure(app);
 	powers::configure(app);
 	actor_lifecycle::configure(app);
+	maybraid_spawns_player::register_player_spawn_runtime(app);
+	maybraid_spawns_placement::register_placement_runtime(app);
+	maybraid_spawns_placement::register_placement_physics(app);
+	maybraid_spawns_actors::register_actor_spawn_runtime(app);
+	maybraid_spawns_projectiles::register_projectile_spawn_runtime(app);
+	maybraid_spawns_grenades::register_grenade_spawn_runtime(app);
 }
 
-/// Assembles session, equipment, and item-domain runtimes. World keeps terrain,
-/// POI, and collision-support readiness. Game adds this beside World and the shell.
+/// Assembles session, equipment, and item-domain runtimes. Placement owns
+/// support / clearance. World keeps first-wave, map, and activation adapters.
 ///
 /// Item *runtimes* are registered here (and only here in the assembled game).
 /// Item *presentation* plugins are added after the runtime so either install

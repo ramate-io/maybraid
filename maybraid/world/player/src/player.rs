@@ -340,6 +340,10 @@ pub(crate) fn snap_player_to_composed_surface(
 		return;
 	};
 
+	if awaiting.single().is_err() {
+		return;
+	}
+
 	if !physics.0 {
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
@@ -363,16 +367,12 @@ pub(crate) fn snap_player_to_composed_surface(
 	};
 
 	let target = player_spawn_point_at(xz, elevation);
-	if awaiting.single().is_ok() {
-		transform.translation = target;
-		**velocity = Vec3::ZERO;
-	}
+	transform.translation = target;
+	**velocity = Vec3::ZERO;
 
 	if terrain_collider_covers_xz(target, terrain_colliders.iter()) {
 		gravity.0 = PLAY_GRAVITY_SCALE;
-		if let Ok(entity) = awaiting.single() {
-			commands.entity(entity).remove::<AwaitingTerrainSurface>();
-		}
+		commands.entity(entity).remove::<AwaitingTerrainSurface>();
 	} else {
 		// Lost or not-yet-streamed column: freeze in place. Do not re-insert
 		// [`AwaitingTerrainSurface`] — that marker is first-drop only, and snap
@@ -796,7 +796,7 @@ mod tests {
 	}
 
 	#[test]
-	fn snap_freezes_released_player_without_teleport() -> anyhow::Result<()> {
+	fn snap_ignores_a_placed_body_without_awaiting() -> anyhow::Result<()> {
 		let pose = Vec3::new(4.0, 12.0, -3.0);
 		let (mut world, player) = void_world(pose);
 		world
@@ -808,7 +808,11 @@ mod tests {
 			Some(pose)
 		);
 		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
-		assert_eq!(world.get::<GravityScale>(player).map(|gravity| gravity.0), Some(0.0));
+		assert_eq!(
+			world.get::<GravityScale>(player).map(|gravity| gravity.0),
+			Some(PLAY_GRAVITY_SCALE),
+			"a placed body is not held by snap"
+		);
 		Ok(())
 	}
 

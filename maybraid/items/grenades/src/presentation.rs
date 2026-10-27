@@ -1,15 +1,10 @@
 //! Thrown-body mesh, material, and drop fulfillment.
 
-use avian3d::prelude::*;
 use bevy::prelude::*;
 use character_items::{GrenadeSpec, GrenadeStats};
-use std::f32::consts::PI;
 
 use crate::material::{grenade_material, GrenadeMaterial, GrenadeMaterialPlugin};
-use crate::runtime::{
-	tick_grenade_fuses, DropLiveGrenade, GrenadeEffect, GrenadeFuse, SpawnThrownGrenade,
-	ThrownGrenade, ThrownGrenadeSpawn,
-};
+use crate::runtime::{tick_grenade_fuses, GrenadeEffect, ThrownGrenade, ThrownGrenadeSpawn};
 use crate::sound;
 
 pub fn grenade_mesh() -> Mesh {
@@ -17,67 +12,34 @@ pub fn grenade_mesh() -> Mesh {
 }
 
 impl ThrownGrenadeSpawn {
-	/// Realize the physics body and mesh from a throw / drop request.
+	/// Simulation body plus mesh. Production throw / drop go through
+	/// `maybraid-spawns-grenades`; this keeps unit tests self-contained.
 	pub fn realize(
 		self,
 		commands: &mut Commands,
 		meshes: &mut Assets<Mesh>,
 		materials: &mut Assets<GrenadeMaterial>,
 	) -> Entity {
-		let radius = self.stats.radius.max(0.08);
-		let collider = Collider::sphere(radius);
-		let volume = (4.0 / 3.0) * PI * radius * radius * radius;
-		let density = (self.stats.mass / volume.max(1e-6)).max(0.05);
-		let tumble = self.velocity.cross(Vec3::Y).normalize_or(Vec3::X) * 10.0;
+		let entity = self.realize_body(commands);
+		attach_grenade_visual(commands, meshes, materials, entity);
 		commands
-			.spawn((
-				(
-					Name::new("thrown-grenade"),
-					Transform {
-						translation: self.origin,
-						rotation: Quat::from_rotation_arc(
-							Vec3::Y,
-							self.velocity.normalize_or(Vec3::Y),
-						),
-						scale: Vec3::splat(radius * 2.0),
-					},
-					Visibility::default(),
-					Mesh3d(meshes.add(grenade_mesh())),
-					MeshMaterial3d(materials.add(grenade_material())),
-					RigidBody::Dynamic,
-					MassPropertiesBundle::from_shape(&collider, density),
-					collider,
-					crate::runtime::grenade_layers(),
-				),
-				(
-					LinearVelocity(self.velocity),
-					AngularVelocity(tumble),
-					// Unit gravity, no linear damping / max-speed cap: catalog launch_speed
-					// is the live throw. A 22 m/s median lob lands around 30 m.
-					GravityScale(1.0),
-					Restitution {
-						coefficient: self.stats.restitution,
-						combine_rule: CoefficientCombine::Average,
-					},
-					Friction {
-						dynamic_coefficient: self.stats.friction,
-						static_coefficient: self.stats.friction,
-						combine_rule: CoefficientCombine::Average,
-					},
-					ThrownGrenade {
-						spec: self.spec,
-						stats: self.stats,
-						effect: self.effect,
-						source: self.source,
-						detonated: false,
-					},
-					GrenadeFuse { remaining: self.fuse.max(0.0) },
-					CollidingEntities::default(),
-					sound::GrenadeBounceClock { next_at: 0.0, touching: Vec::new() },
-				),
-			))
-			.id()
+			.entity(entity)
+			.insert(sound::GrenadeBounceClock { next_at: 0.0, touching: Vec::new() });
+		entity
 	}
+}
+
+fn attach_grenade_visual(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<GrenadeMaterial>,
+	entity: Entity,
+) {
+	commands.entity(entity).insert((
+		Mesh3d(meshes.add(grenade_mesh())),
+		MeshMaterial3d(materials.add(grenade_material())),
+		sound::GrenadeBounceClock { next_at: 0.0, touching: Vec::new() },
+	));
 }
 
 pub fn spawn_thrown_grenade(
@@ -96,26 +58,25 @@ pub fn spawn_thrown_grenade(
 		.realize(commands, meshes, materials)
 }
 
-pub fn spawn_dropped_live_grenades(
-	mut commands: Commands,
-	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<GrenadeMaterial>>,
-	mut drops: MessageReader<DropLiveGrenade>,
-) {
-	for drop in drops.read() {
-		drop.spawn().realize(&mut commands, &mut meshes, &mut materials);
-	}
-}
-
+/// Attach mesh / bounce audio after the simulation interpreter creates the body.
 pub fn spawn_thrown_grenades(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<GrenadeMaterial>>,
-	mut throws: MessageReader<SpawnThrownGrenade>,
+	added: Query<Entity, (Added<ThrownGrenade>, Without<Mesh3d>)>,
 ) {
-	for throw in throws.read() {
-		throw.spawn().realize(&mut commands, &mut meshes, &mut materials);
+	for entity in &added {
+		attach_grenade_visual(&mut commands, &mut meshes, &mut materials, entity);
 	}
+}
+
+pub fn spawn_dropped_live_grenades(
+	commands: Commands,
+	meshes: ResMut<Assets<Mesh>>,
+	materials: ResMut<Assets<GrenadeMaterial>>,
+	added: Query<Entity, (Added<ThrownGrenade>, Without<Mesh3d>)>,
+) {
+	spawn_thrown_grenades(commands, meshes, materials, added);
 }
 
 #[derive(Resource, Default)]
