@@ -34,7 +34,6 @@ impl Plugin for MenuControllerPlugin {
 			app.add_plugins(MenuComponentsPlugin);
 		}
 		app.init_resource::<MenuNavCapture>()
-			.init_resource::<primary::PrimaryMenuRepeat>()
 			.add_observer(dispatch::interpret_menu_pad)
 			.add_systems(
 				PreUpdate,
@@ -47,26 +46,32 @@ impl Plugin for MenuControllerPlugin {
 			)
 			.add_systems(PostUpdate, text::sync_scoped_text_ui)
 			.add_systems(
-				PreUpdate,
-				primary::derive_primary_menu_nav.after(VirtualPadSystems::Derive),
+				Update,
+				primary::clear_primary_menu_frame
+					.before(maybraid_controllers_core::PadDeliverySystems),
 			)
 			.insert_resource(KeyboardMenuNav(false))
 			.add_systems(
 				PreUpdate,
-				primary::sync_text_menu_capture
+				(primary::sync_primary_menu_host, primary::sync_text_menu_capture)
+					.chain()
 					.before(maybraid_controllers_core::PadPolicySystems)
 					.before(VirtualPadSystems::Produce),
 			);
 		app.configure_sets(
 			Update,
-			TextMenuSystems::Navigate.after(maybraid_controllers_core::PadDeliverySystems),
+			(
+				TextMenuSystems::Navigate.after(maybraid_controllers_core::PadDeliverySystems),
+				menu_components::PrimaryMenuFrameSystems
+					.after(maybraid_controllers_core::PadDeliverySystems),
+			),
 		);
 		app.add_systems(
 			Update,
 			(primary::refresh_primary_menu_focus, dispatch::refresh_scoped_menu_focus)
 				.chain()
 				.in_set(CaptureResolveSystems)
-				.after(TextMenuSystems::InputLock)
+				.after(menu_components::MenuModalSystems::Sync)
 				.before(TextMenuSystems::Navigate),
 		);
 	}

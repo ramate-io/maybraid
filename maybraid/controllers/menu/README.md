@@ -3,7 +3,8 @@
 The central routing boundary delivers a rich `UiPadEvent` to one focused UI entity.
 The menu interpreter reads only that authorized frame. It keeps independent repeat
 clocks, sequence checks, and binding provenance on the owning `MenuController`.
-It does not poll hardware, the global pad, the router, or primary modal resources.
+Scoped interpretation does not poll hardware, the global pad, the router, or
+primary modal resources.
 
 Attach `MenuController::for_source(source)` to a UI root. The plugin adds a
 `MenuSession` when absent; hosts may supply one with their own modal stack and
@@ -29,9 +30,19 @@ Scoped text sessions own their own values, keypad UI, submit, and dismissal.
 Scoped inventory viewports use `InventoryMenuSession` in the renderer, preserving
 stable bag identity through reorder and cleaning up only the addressed menu.
 
-`primary` is the explicit compatibility adapter for `MenuController::default()`.
-It bridges the existing primary shell's `MenuNavPad`, text lock, modal stack, and
-keyboard/IME host. Those singleton resources do not gate scoped input. The virtual
-pad crate owns rich source state and has no menu navigation or repeat surface.
+`primary` is the explicit host adapter for `MenuController::default()`. It selects
+the sole eligible default root, or keeps an explicitly chosen `PrimaryMenuInput`
+root when several default controllers exist. Ambiguous roots fail closed, and
+source-specific controllers never receive that component. The source-tagged
+component holds only the current frame authorized by `UiPadEvent` for that root
+or its subtree; it clears before the next delivery. Repeat and configuration
+belong to the root's `MenuController`. Keyboard/IME helpers resolve this component
+through the addressed widget's ancestors.
+
+The existing primary shell retains singleton `MenuNavPad`, text-lock, and modal
+state as host compatibility adapters. They consume primary input after authorized
+delivery and do not gate scoped sessions. Standalone keyboard/pointer widgets
+keep their local fallback. The virtual pad crate owns rich source state and has
+no menu navigation or repeat surface.
 
 This implements [issue 1503](https://github.com/ramate-io/maybraid/issues/1503).

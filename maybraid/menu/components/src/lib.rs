@@ -13,8 +13,8 @@ pub mod loading;
 pub mod modal;
 pub mod navigation;
 pub use navigation::*;
-pub mod single_select;
 pub mod session;
+pub mod single_select;
 pub use session::MenuSession;
 pub mod spin_reveal;
 pub mod theme;
@@ -93,6 +93,11 @@ pub enum TextMenuSystems {
 	Navigate,
 }
 
+/// Primary host input consumers. Controller wiring orders these after authorized delivery;
+/// standalone keyboard menus retain their normal local ordering.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PrimaryMenuFrameSystems;
+
 pub struct MenuComponentsPlugin;
 
 impl Plugin for MenuComponentsPlugin {
@@ -100,7 +105,6 @@ impl Plugin for MenuComponentsPlugin {
 		app.init_resource::<TextMenuInputLock>()
 			.init_resource::<KeyboardMenuNav>()
 			.init_resource::<MenuNavPad>()
-            .init_resource::<PrimaryMenuInput>()
 			.init_resource::<ActiveOverlayKey>()
 			.init_resource::<ActiveShortText>()
 			.init_resource::<ShortTextModal>()
@@ -118,6 +122,7 @@ impl Plugin for MenuComponentsPlugin {
 						.in_set(TextMenuSystems::InputLock)
 						.before(MenuModalSystems::Consume),
 					MenuModalSystems::Consume
+						.after(PrimaryMenuFrameSystems)
 						.in_set(TextMenuSystems::InputLock)
 						.before(MenuModalSystems::Apply),
 					MenuModalSystems::Apply.in_set(TextMenuSystems::InputLock),
@@ -142,6 +147,7 @@ impl Plugin for MenuComponentsPlugin {
 			.add_systems(
 				Update,
 				controls::emit_short_text_submit_on_confirm
+					.in_set(PrimaryMenuFrameSystems)
 					.after(MenuModalSystems::Sync)
 					.before(MenuModalSystems::Consume)
 					.in_set(TextMenuSystems::InputLock),

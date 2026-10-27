@@ -311,7 +311,9 @@ impl Plugin for CharacterPreviewPlugin {
 						.after(CharacterHostSystems::Membership)
 						.before(characters::CharacterMotionSystems::Anim),
 					queue_preview_camera_focus,
-					steer_preview_orbit.after(queue_preview_camera_focus),
+					steer_preview_orbit
+						.after(queue_preview_camera_focus)
+						.after(maybraid_controllers_core::PadDeliverySystems),
 				),
 			)
 			.add_systems(PostUpdate, apply_preview_camera_focus.after(TransformSystems::Propagate));
@@ -633,7 +635,7 @@ fn queue_preview_camera_focus(
 
 fn steer_preview_orbit(
 	return_to: Option<Res<CharacterEditorReturn>>,
-	input: Option<Res<menu_components::PrimaryMenuInput>>,
+	input: Query<&menu_components::PrimaryMenuInput>,
 	mut pending: ResMut<PendingCameraFocus>,
 ) {
 	if pending.focus.is_none()
@@ -641,7 +643,9 @@ fn steer_preview_orbit(
 	{
 		return;
 	}
-	let Some(frame) = input.as_ref().and_then(|input| input.frame.as_ref()) else {
+	let Some(frame) =
+		input.single().ok().and_then(menu_components::PrimaryMenuInput::current_frame)
+	else {
 		return;
 	};
 	let stick = frame.pad.look_throw;
@@ -801,20 +805,26 @@ mod tests {
 		let mut pending = PendingCameraFocus::default();
 		pending.set_focus(BODY_FOCUS);
 		world.insert_resource(pending);
-		world.insert_resource(menu_components::PrimaryMenuInput {
-			frame: Some(VirtualPadEvent {
+		let root = world
+			.spawn(menu_components::PrimaryMenuInput {
 				source,
-				sequence: 1,
-				delta: std::time::Duration::from_secs_f32(0.5),
-				pad: VirtualPad::default(),
-			}),
-		});
+				frame: Some(VirtualPadEvent {
+					source,
+					sequence: 1,
+					delta: std::time::Duration::from_secs_f32(0.5),
+					pad: VirtualPad::default(),
+				}),
+			})
+			.id();
 		world
 			.run_system_once(steer_preview_orbit)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(world.resource::<PendingCameraFocus>().orbit, PreviewOrbit::default());
-		if let Some(frame) =
-			world.resource_mut::<menu_components::PrimaryMenuInput>().frame.as_mut()
+		if let Some(frame) = world
+			.get_mut::<menu_components::PrimaryMenuInput>(root)
+			.ok_or_else(|| anyhow::anyhow!("primary root"))?
+			.frame
+			.as_mut()
 		{
 			frame.pad.look_throw = Vec2::X;
 		}

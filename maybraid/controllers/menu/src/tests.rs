@@ -307,3 +307,114 @@ fn held_direction_waits_for_neutral_after_capture_retirement_without_blocking_an
 	assert_eq!(world.resource::<Hits>().nav.len(), 3);
 	Ok(())
 }
+
+#[test]
+fn primary_root_only_mirrors_its_addressed_source_and_clears_each_frame() -> anyhow::Result<()> {
+	use bevy::ecs::system::RunSystemOnce;
+	use menu_components::{MenuNavPad, PrimaryMenuInput};
+	let mut world = world();
+	world.init_resource::<MenuNavPad>();
+	let (source, target, _) = menu(&mut world);
+	let root = world
+		.get::<ChildOf>(target)
+		.ok_or_else(|| anyhow::anyhow!("primary parent"))?
+		.parent();
+	world.entity_mut(root).insert((
+		MenuController { focus: Some(UiTarget::new(target)), ..default() },
+		PrimaryMenuInput::new(source.entity().ok_or_else(|| anyhow::anyhow!("source"))?),
+	));
+	let (other_source, other_target, _) = menu(&mut world);
+	let other_root = world
+		.get::<ChildOf>(other_target)
+		.ok_or_else(|| anyhow::anyhow!("secondary parent"))?
+		.parent();
+	send(&mut world, source, target, 1, &buttons(&[PadButton::DpadDown]), 0.0)?;
+	assert!(
+		world
+			.get::<PrimaryMenuInput>(root)
+			.and_then(PrimaryMenuInput::current_frame)
+			.is_some_and(|frame| frame.source == source.entity().unwrap_or(Entity::PLACEHOLDER))
+	);
+	assert_eq!(world.resource::<MenuNavPad>().events, [MenuNav::Down]);
+	world
+		.run_system_once(crate::primary::clear_primary_menu_frame)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	assert!(
+		world
+			.get::<PrimaryMenuInput>(root)
+			.and_then(PrimaryMenuInput::current_frame)
+			.is_none()
+	);
+	assert!(world.resource::<MenuNavPad>().events.is_empty());
+	send(&mut world, other_source, other_target, 1, &buttons(&[PadButton::DpadUp]), 0.0)?;
+	assert!(
+		world
+			.get::<PrimaryMenuInput>(root)
+			.and_then(PrimaryMenuInput::current_frame)
+			.is_none()
+	);
+	assert!(world.get::<PrimaryMenuInput>(other_root).is_none());
+	assert!(world.resource::<MenuNavPad>().events.is_empty());
+	// A valid route to another subtree cannot update the chosen root, even when
+	// the event carries the primary source.
+	world.resource_mut::<InputRouter>().acquire_capture(
+		source,
+		ScopeOwner::ui(UiTarget::new(other_target)),
+		CaptureKind::MenuNav,
+	);
+	send(&mut world, source, other_target, 2, &buttons(&[PadButton::A]), 0.0)?;
+	assert!(
+		world
+			.get::<PrimaryMenuInput>(root)
+			.and_then(PrimaryMenuInput::current_frame)
+			.is_none()
+	);
+	assert!(world.resource::<MenuNavPad>().events.is_empty());
+	assert_eq!(
+		world.resource::<Hits>().nav,
+		[(target, MenuNav::Down), (other_target, MenuNav::Up)]
+	);
+	Ok(())
+}
+
+#[test]
+fn primary_host_selection_fails_closed_and_keeps_an_explicit_choice() -> anyhow::Result<()> {
+	use bevy::ecs::system::RunSystemOnce;
+	use menu_components::{MenuNavPad, PrimaryMenuInput};
+	let mut world = World::new();
+	world.init_resource::<MenuNavPad>();
+	let source = world.spawn_empty().id();
+	world.insert_resource(maybraid_virtual_pad_controller::PrimaryVirtualPad(source));
+	let first = world.spawn(MenuController::default()).id();
+	let second = world.spawn(MenuController::default()).id();
+	let scoped = world
+		.spawn((
+			MenuController::for_source(InputSource::virtual_pad(source)),
+			PrimaryMenuInput::new(source),
+		))
+		.id();
+	world
+		.run_system_once(crate::primary::sync_primary_menu_host)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	assert!(world.get::<PrimaryMenuInput>(first).is_none());
+	assert!(world.get::<PrimaryMenuInput>(second).is_none());
+	assert!(world.get::<PrimaryMenuInput>(scoped).is_none());
+	world.entity_mut(first).insert(PrimaryMenuInput::new(source));
+	world
+		.run_system_once(crate::primary::sync_primary_menu_host)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	assert!(world.get::<PrimaryMenuInput>(first).is_some());
+	assert!(world.get::<PrimaryMenuInput>(second).is_none());
+	// A primary-source change retains the chosen root while clearing its frame.
+	let replacement = world.spawn_empty().id();
+	world.insert_resource(maybraid_virtual_pad_controller::PrimaryVirtualPad(replacement));
+	world
+		.run_system_once(crate::primary::sync_primary_menu_host)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	assert!(
+		world
+			.get::<PrimaryMenuInput>(first)
+			.is_some_and(|input| input.source == replacement && input.current_frame().is_none())
+	);
+	Ok(())
+}

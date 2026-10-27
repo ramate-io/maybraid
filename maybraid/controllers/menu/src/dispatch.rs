@@ -68,7 +68,9 @@ pub fn refresh_scoped_menu_focus(
 pub fn interpret_menu_pad(
 	event: On<maybraid_controllers_core::UiPadEvent>,
 	parents: Query<&ChildOf>,
-	mut controllers: Query<&mut MenuController>,
+	mut controllers: Query<(&mut MenuController, Option<&mut menu_components::PrimaryMenuInput>)>,
+	mut primary_nav: Option<ResMut<menu_components::MenuNavPad>>,
+	primary_stack: Option<Res<menu_components::MenuModalStack>>,
 	mut sessions: Query<&mut crate::MenuSession>,
 	mut text: crate::text::ScopedTextInput,
 	reorder: Query<(), With<menu_components::HudMenuNavLocked>>,
@@ -78,8 +80,22 @@ pub fn interpret_menu_pad(
 	let target = event.entity;
 	let mut ancestor = Some(target);
 	while let Some(entity) = ancestor {
-		if let Ok(mut controller) = controllers.get_mut(entity) {
-			if controller.blocked || controller.focused_entity() != Some(target) {
+		if let Ok((mut controller, mut host)) = controllers.get_mut(entity) {
+			let primary = controller.source.is_none();
+			if primary {
+				let Some(host) = host.as_ref() else {
+					return;
+				};
+				if input.source()
+					!= maybraid_controllers_core::InputSource::virtual_pad(host.source)
+					|| input.payload().source != host.source
+				{
+					return;
+				}
+			} else if controller.source != Some(input.source()) {
+				return;
+			}
+			if !primary && (controller.blocked || controller.focused_entity() != Some(target)) {
 				return;
 			}
 			if sessions
@@ -136,6 +152,26 @@ pub fn interpret_menu_pad(
 			}
 			stream.repeat.derive(&interpreted_pad, &config, frame.delta.as_secs_f32());
 			let mut events = stream.repeat.events.clone();
+			if primary {
+				if let Some(host) = host.as_mut() {
+					host.frame = Some(frame.clone());
+				}
+				if let Some(nav) = primary_nav.as_mut() {
+					nav.events.clone_from(&events);
+				}
+				// Existing modal consumers run after delivery. Keep their Back edge
+				// out of the addressed menu and actor command paths.
+				if events.contains(&MenuNav::Back)
+					&& primary_stack.as_ref().is_some_and(|stack| stack.blocks_screen_back())
+					&& !reorder.contains(target)
+				{
+					input.consume_frame(&mut commands);
+					return;
+				}
+				if controller.blocked || controller.focused_entity() != Some(target) {
+					return;
+				}
+			}
 			if !start_select
 				&& !frame.pad.just_pressed(maybraid_virtual_pad_controller::PadButton::A)
 			{
