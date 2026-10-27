@@ -4,18 +4,19 @@
 //! same [`MenuNode`] tree. Generation is [`InventoryLayoutMode::ReadOnly`]
 //! (view + Continue). The modal is [`InventoryLayoutMode::Interactive`]
 //! (equip + drop). Each equippable section stacks an equipped pane over that
-//! section's unequipped catalog. Lubikan stays a single always-equipped
-//! catalog. Tools is a UI grouping; the domain slot stays Weapons. Tanz tiles
+//! section's unequipped catalog. Lubikans use their ledger-owned ordered
+//! queue, including the always-equipped Self. Tools is a UI grouping; the domain slot stays Weapons. Tanz tiles
 //! reuse pose-capture catalog keys from `tanz-user`.
 
 use character_items::{
-	Inventory, InventoryItem, InventorySlot, SELF_LUBIKAN_CAPTURE_LABEL, WORN_CLOTHING_LIMIT,
-	icon_catalog_key_for_label, self_lubikan_catalog_key,
+	self_lubikan_catalog_key, Inventory, InventoryItem, InventorySlot, SELF_LUBIKAN_CAPTURE_LABEL,
+	WORN_CLOTHING_LIMIT,
 };
 use character_ui_menu::{
 	AssetOption, EquipmentChoice, GridCatalogChoice, MenuNode, OrderedEquipmentRow, PreviewColor,
 	ThumbnailCamera,
 };
+use lubikans::{LubikanAccountId, LubikanOrder};
 use std::time::Duration;
 use tanz_user::TanzPose;
 
@@ -50,7 +51,8 @@ impl InventoryLayoutMode {
 			MenuEvent::ToggleInventory(_)
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
-			| MenuEvent::MoveEquippedInventory { .. } => self.allows_equip(),
+			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. } => self.allows_equip(),
 			MenuEvent::DropInventory(_) => self.allows_drop(),
 			_ => false,
 		}
@@ -125,12 +127,34 @@ impl InventoryLayout {
 		mode: InventoryLayoutMode,
 		inventory: &Inventory,
 	) -> Self {
+		Self::with_lubikans(title, mode, inventory, &LubikanOrder::default())
+	}
+
+	pub fn character_menu_with_lubikans(inventory: &Inventory, lubikans: &LubikanOrder) -> Self {
+		Self::with_lubikans(INVENTORY_LABEL, InventoryLayoutMode::Interactive, inventory, lubikans)
+	}
+
+	fn with_lubikans(
+		title: &'static str,
+		mode: InventoryLayoutMode,
+		inventory: &Inventory,
+		lubikans: &LubikanOrder,
+	) -> Self {
 		Self {
 			title,
 			mode,
-			node: inventory_node(title, inventory, mode),
+			node: inventory_node(title, inventory, lubikans, mode),
 			captures: required_captures_for(inventory),
 		}
+	}
+
+	/// Keep ledger accounts distinct from bag indices while sharing the ordered UI.
+	pub fn lubikan_item_key(
+		inventory: &Inventory,
+		order: &LubikanOrder,
+		account: LubikanAccountId,
+	) -> Option<usize> {
+		order.catalog_index(account).map(|index| inventory.items.len() + index)
 	}
 
 	pub fn allows(&self, event: MenuEvent) -> bool {
@@ -163,6 +187,7 @@ fn required_captures_for(inventory: &Inventory) -> Vec<InventoryIconNeed> {
 fn inventory_node(
 	title: &'static str,
 	inventory: &Inventory,
+	lubikans: &LubikanOrder,
 	mode: InventoryLayoutMode,
 ) -> MenuNode<MenuEvent> {
 	MenuNode::section(
@@ -208,7 +233,7 @@ fn inventory_node(
 				),
 				tanz_catalog(inventory, mode, false),
 			),
-			lubikan_section(),
+			lubikan_section(inventory, lubikans, mode),
 		]),
 	)
 }
@@ -431,25 +456,51 @@ fn tanz_catalog(
 	)
 }
 
-fn lubikan_section() -> MenuNode<MenuEvent> {
+fn lubikan_section(
+	inventory: &Inventory,
+	order: &LubikanOrder,
+	mode: InventoryLayoutMode,
+) -> MenuNode<MenuEvent> {
+	let choices = order
+		.accounts()
+		.iter()
+		.copied()
+		.enumerate()
+		.filter_map(|(position, account)| {
+			let item_key = InventoryLayout::lubikan_item_key(inventory, order, account)?;
+			let is_self = account.is_self();
+			Some(EquipmentChoice {
+				item_key,
+				tile: GridCatalogChoice {
+					label: account
+						.definition()
+						.well_known_label()
+						.map(String::from)
+						.unwrap_or_else(|| format!("Lubikan {}", account.definition().raw())),
+					detail: String::from(if is_self { "Always equipped" } else { "Equipped" }),
+					path: if is_self { SELF_LUBIKAN_CAPTURE_LABEL } else { "" },
+					thumbnail_camera: ThumbnailCamera::DEFAULT,
+					preview: PreviewColor::WHITE,
+					image_key: is_self.then(self_lubikan_catalog_key),
+					selected: true,
+					rank: u8::try_from(position + 1).ok(),
+					item_key: Some(item_key),
+					event: interactive_event(mode, MenuEvent::MoveLubikan { account, delta: 0 }),
+				},
+				// Owned accounts remain in the queue. Self cannot be removed or dropped.
+				unequip: None,
+				move_left: interactive_event(mode, MenuEvent::MoveLubikan { account, delta: -1 }),
+				move_right: interactive_event(mode, MenuEvent::MoveLubikan { account, delta: 1 }),
+			})
+		})
+		.collect();
 	MenuNode::section(
 		LUBIKAN_LABEL,
-		MenuNode::grid_catalog(
-			LUBIKAN_LABEL,
-			1,
-			[GridCatalogChoice {
-				label: String::from("Self"),
-				detail: String::from("Always equipped"),
-				path: SELF_LUBIKAN_CAPTURE_LABEL,
-				thumbnail_camera: ThumbnailCamera::DEFAULT,
-				preview: PreviewColor::WHITE,
-				image_key: Some(icon_catalog_key_for_label(SELF_LUBIKAN_CAPTURE_LABEL)),
-				selected: true,
-				rank: None,
-				item_key: None,
-				event: None,
-			}],
-		),
+		MenuNode::ordered_equipment([OrderedEquipmentRow {
+			label: LUBIKAN_LABEL,
+			capacity: order.accounts().len().max(1),
+			choices,
+		}]),
 	)
 }
 
@@ -471,8 +522,8 @@ mod tests {
 	use super::{InventoryLayout, InventoryLayoutMode, STARTER_KIT_LABEL};
 	use crate::MenuEvent;
 	use character_items::{
-		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor, ItemRng,
-		STARTER_CLOTHING_COUNT, SkillMapKind, SkillMapSpec, self_lubikan_catalog_key,
+		self_lubikan_catalog_key, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory,
+		InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec, STARTER_CLOTHING_COUNT,
 	};
 	use character_ui_menu::MenuNode;
 
@@ -633,8 +684,8 @@ mod tests {
 		}
 		let lubikan = section_body(&layout, "Lubikan");
 		assert!(
-			matches!(lubikan, [MenuNode::GridCatalog { .. }]),
-			"Lubikan stays a single always-equipped catalog"
+			matches!(lubikan, [MenuNode::OrderedEquipment { .. }]),
+			"Lubikans use the same ordered equipped pane"
 		);
 	}
 
@@ -722,32 +773,31 @@ mod tests {
 	}
 
 	#[test]
-	fn both_layouts_use_the_self_lubikan_catalog_tile() {
+	fn both_layouts_use_the_self_lubikan_ordered_tile() -> anyhow::Result<()> {
 		let starter = InventoryLayout::starter_kit(sample_items());
 		let menu = InventoryLayout::character_menu(&Inventory::with_starter_outfit(sample_items()));
 		for layout in [&starter, &menu] {
-			let MenuNode::Section { children, .. } = &layout.node else {
-				panic!("inventory must be a section");
+			let [MenuNode::OrderedEquipment { rows }] = section_body(layout, "Lubikan") else {
+				anyhow::bail!("Lubikan must be ordered equipment");
 			};
-			let lubikan = children.iter().find_map(|child| match child {
-				MenuNode::Section { label: "Lubikan", children } => children.first(),
-				_ => None,
-			});
-			let Some(MenuNode::GridCatalog { choices, .. }) = lubikan else {
-				panic!("Lubikan must be a catalog tile");
-			};
-			assert_eq!(choices.len(), 1);
-			assert_eq!(choices[0].label, "Self");
-			assert_eq!(choices[0].detail, "Always equipped");
-			assert_eq!(choices[0].image_key, Some(self_lubikan_catalog_key()));
-			assert!(choices[0].selected);
-			assert_eq!(choices[0].event, None);
+			let row = rows.first().ok_or_else(|| anyhow::anyhow!("Lubikan row"))?;
+			assert_eq!(row.choices.len(), 1);
+			let choice = &row.choices[0];
+			assert_eq!(choice.tile.label, "Self");
+			assert_eq!(choice.tile.detail, "Always equipped");
+			assert_eq!(choice.tile.image_key, Some(self_lubikan_catalog_key()));
+			assert_eq!(choice.tile.rank, Some(1));
+			assert!(choice.tile.selected);
+			assert_eq!(choice.unequip, None);
+			assert_eq!(choice.tile.event.is_some(), layout.mode.allows_equip());
+			assert_eq!(choice.move_left.is_some(), layout.mode.allows_equip());
 		}
+		Ok(())
 	}
 
 	#[test]
 	fn layout_stays_loading_until_every_capture_reports() {
-		use super::{INVENTORY_CAPTURE_TIMEOUT, InventoryPaint, inventory_paint_state};
+		use super::{inventory_paint_state, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT};
 		use std::time::Duration;
 
 		let layout = InventoryLayout::starter_kit(sample_items());
@@ -778,7 +828,7 @@ mod tests {
 
 	#[test]
 	fn timeout_reveals_without_every_report() {
-		use super::{INVENTORY_CAPTURE_TIMEOUT, InventoryPaint, inventory_paint_state};
+		use super::{inventory_paint_state, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT};
 
 		let layout = InventoryLayout::starter_kit(sample_items());
 		assert_eq!(

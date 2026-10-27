@@ -69,15 +69,20 @@ impl CharacterMenuState {
 pub struct CharacterEditBaseline {
 	pub name: String,
 	pub inventory: Inventory,
+	pub lubikans: lubikans::LubikanOrder,
 }
 
 impl CharacterEditBaseline {
 	pub fn capture(menu: &CharacterMenu) -> Self {
-		Self { name: menu.saved_name(), inventory: menu.inventory.clone().unwrap_or_default() }
+		Self {
+			name: menu.saved_name(),
+			inventory: menu.inventory.clone().unwrap_or_default(),
+			lubikans: menu.lubikans.clone(),
+		}
 	}
 
 	pub fn is_dirty(&self, menu: &CharacterMenu) -> bool {
-		if menu.saved_name() != self.name {
+		if menu.saved_name() != self.name || menu.lubikans != self.lubikans {
 			return true;
 		}
 		match menu.inventory.as_ref() {
@@ -90,6 +95,7 @@ impl CharacterEditBaseline {
 	pub fn restore_into(&self, menu: &mut CharacterMenu) {
 		menu.name.clone_from(&self.name);
 		menu.set_inventory(self.inventory.clone());
+		menu.lubikans.clone_from(&self.lubikans);
 	}
 
 	/// Remove an already-accepted bag index without adopting the live
@@ -818,6 +824,20 @@ fn on_menu_activate(
 	match event {
 		MenuEvent::EquipInventory(index) | MenuEvent::MoveEquippedInventory { index, .. } => {
 			focus.0 = Some(InventoryItemKey { index, equipped: true });
+		}
+		MenuEvent::MoveLubikan { account, .. } => {
+			focus.0 = menu_state
+				.0
+				.inventory
+				.as_ref()
+				.and_then(|inventory| {
+					character_creation_menus::InventoryLayout::lubikan_item_key(
+						inventory,
+						&menu_state.0.lubikans,
+						account,
+					)
+				})
+				.map(|index| InventoryItemKey { index, equipped: true });
 		}
 		MenuEvent::UnequipInventory(index) => {
 			focus.0 = Some(InventoryItemKey { index, equipped: false });

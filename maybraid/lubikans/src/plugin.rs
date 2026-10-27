@@ -392,23 +392,33 @@ mod tests {
 	}
 
 	#[test]
-	fn body_replace_retains_charge_by_default() -> Result<()> {
+	fn body_replace_retains_charge_and_edited_order_by_default() -> Result<()> {
 		let mut app = gameplay();
 		let first = spawn_player(&mut app);
 		app.update();
-		{
+		let extra = LubikanDefinition::new(LubikanDefinitionId::from_raw(8), 40.0, 2.0);
+		let extra_id = {
 			let mut ledger = app
 				.world_mut()
 				.get_mut::<LubikanLedger>(first)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			ledger.apply_to_equipped(18.0);
-		}
+			let extra_id = ledger.ensure_owned(extra);
+			let mut order = crate::LubikanOrder::from_ledger(&ledger);
+			assert!(order.move_account(extra_id, -1));
+			assert!(ledger.apply_order(&order));
+			extra_id
+		};
 		app.update();
 		app.world_mut().entity_mut(first).remove::<Player>();
 		app.update();
 		let second = spawn_player(&mut app);
 		app.update();
 		assert_eq!(ledger(&app, second)?.equipped().charge().current(), 18.0);
+		assert_eq!(
+			ledger(&app, second)?.iter().map(|account| account.id()).collect::<Vec<_>>(),
+			vec![extra_id, LubikanAccountId::SELF]
+		);
 		assert!(app.world().get::<LubikanLedger>(first).is_none());
 		Ok(())
 	}

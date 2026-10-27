@@ -15,6 +15,7 @@ mod heal;
 mod identity;
 mod ledger;
 mod lifetime;
+mod order;
 mod plugin;
 mod selection;
 
@@ -46,6 +47,7 @@ pub use ledger::{LubikanAccount, LubikanAccountBinding, LubikanLedger, LubikanOw
 pub use lifetime::{
 	LubikanLifetimePolicy, LubikanOwnerLifetime, LubikanOwnerLifetimeKind, LubikanPersistence,
 };
+pub use order::LubikanOrder;
 pub use plugin::{LubikanSessionStore, LubikansPlugin};
 pub use selection::LubikanSelection;
 

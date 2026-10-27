@@ -64,6 +64,8 @@ pub struct RequestEditCharacter {
 	pub id: CharacterId,
 	pub return_to: CharacterEditorReturn,
 	pub inventory: Option<Inventory>,
+	/// Live account order only; the editor never owns charge or activation.
+	pub lubikans: Option<lubikans::LubikanOrder>,
 }
 
 pub struct CharacterSessionPlugin;
@@ -312,6 +314,7 @@ fn open_gallery_edit(
 		&save_root,
 		active.id,
 		None,
+		None,
 		CharacterEditorReturn::Gallery,
 	);
 }
@@ -333,6 +336,7 @@ fn open_requested_character_editor(
 		&save_root,
 		request.id,
 		request.inventory,
+		request.lubikans,
 		request.return_to,
 	);
 }
@@ -344,6 +348,7 @@ fn open_saved_editor(
 	save_root: &SaveRoot,
 	id: CharacterId,
 	inventory: Option<Inventory>,
+	lubikans: Option<lubikans::LubikanOrder>,
 	return_to: CharacterEditorReturn,
 ) {
 	let model = match character_model_user::load(save_root, id) {
@@ -375,6 +380,7 @@ fn open_saved_editor(
 		inventory.clone(),
 	);
 	menu_state.0 = CharacterMenu::for_saved(model.name, &model.appearance, inventory);
+	menu_state.0.lubikans = lubikans.unwrap_or_default();
 	commands.insert_resource(CharacterEditBaseline::capture(&menu_state.0));
 	request_show_character(commands);
 }
@@ -567,6 +573,7 @@ mod tests {
 		world.insert_resource(CharacterEditBaseline {
 			name: String::from("Roamer"),
 			inventory: Inventory::default(),
+			lubikans: lubikans::LubikanOrder::default(),
 		});
 		world
 			.run_system_once(finish_character_editor_exit)

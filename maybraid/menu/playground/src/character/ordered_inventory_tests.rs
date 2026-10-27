@@ -250,3 +250,46 @@ fn hover_cannot_steal_reorder_focus_but_click_can_retarget_it() -> Result<()> {
 	assert_eq!(*world.resource::<InventoryInteraction>(), InventoryInteraction::Browse);
 	Ok(())
 }
+
+#[test]
+fn lubikan_reorder_uses_stable_identity_and_discard_restores_order() -> Result<()> {
+	use crate::character::CharacterEditBaseline;
+	use lubikans::{LubikanDefinition, LubikanDefinitionId, LubikanLedger, LubikanOrder};
+	let (mut world, viewport) = fixture();
+	let mut ledger = LubikanLedger::default();
+	let first =
+		ledger.ensure_owned(LubikanDefinition::new(LubikanDefinitionId::from_raw(9), 20.0, 5.0));
+	let last =
+		ledger.ensure_owned(LubikanDefinition::new(LubikanDefinitionId::from_raw(2), 20.0, 5.0));
+	world.resource_mut::<CharacterMenuState>().0.lubikans = LubikanOrder::from_ledger(&ledger);
+	let menu = &world.resource::<CharacterMenuState>().0;
+	let baseline = CharacterEditBaseline::capture(menu);
+	let identity = character_creation_menus::InventoryLayout::lubikan_item_key(
+		menu.inventory.as_ref().context("bag")?,
+		&menu.lubikans,
+		last,
+	)
+	.context("account key")?;
+	rebuild(&mut world, viewport)?;
+	select_item(&mut world, viewport, identity)?;
+	world.trigger(MenuNavImpulse { entity: viewport, nav: MenuNav::Select });
+	world.flush();
+	for expected in [
+		vec![lubikans::LubikanAccountId::SELF, last, first],
+		vec![last, lubikans::LubikanAccountId::SELF, first],
+	] {
+		world.trigger(MenuNavImpulse { entity: viewport, nav: MenuNav::Left });
+		world.flush();
+		rebuild(&mut world, viewport)?;
+		assert_eq!(world.resource::<CharacterMenuState>().0.lubikans.accounts(), expected);
+		assert_eq!(selected_key(&mut world, viewport)?, identity);
+	}
+	assert!(baseline.is_dirty(&world.resource::<CharacterMenuState>().0));
+	baseline.restore_into(&mut world.resource_mut::<CharacterMenuState>().0);
+	assert_eq!(
+		world.resource::<CharacterMenuState>().0.lubikans.accounts(),
+		LubikanOrder::from_ledger(&ledger).accounts()
+	);
+	assert!(!baseline.is_dirty(&world.resource::<CharacterMenuState>().0));
+	Ok(())
+}

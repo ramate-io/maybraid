@@ -944,9 +944,14 @@ fn create_menu_inventory_is_one_section_with_four_headers() -> anyhow::Result<()
 		.collect();
 	assert_eq!(labels, [firearm_name.as_str(), grenade_name.as_str()]);
 	let lubikan = inventory_body(&nodes, "Lubikan")?;
-	let [MenuNode::GridCatalog { choices, .. }] = lubikan else {
-		anyhow::bail!("Lubikan must be a catalog tile");
+	let [MenuNode::OrderedEquipment { rows }] = lubikan else {
+		anyhow::bail!("Lubikan must be ordered equipment");
 	};
+	let choices: Vec<_> = rows
+		.iter()
+		.flat_map(|row| row.choices.iter())
+		.map(|choice| &choice.tile)
+		.collect();
 	let self_tile = choices
 		.iter()
 		.find(|choice| choice.label == "Self")

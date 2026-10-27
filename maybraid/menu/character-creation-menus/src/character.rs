@@ -59,6 +59,8 @@ pub const CHARACTER_NAME_MAX_LEN: usize = 16;
 pub struct CharacterMenu {
 	pub name: String,
 	pub inventory: Option<character_items::Inventory>,
+	/// Editable ledger order only; live charge and activation stay with the owner.
+	pub lubikans: lubikans::LubikanOrder,
 	/// Saved characters keep appearance; only inventory (and name) stay editable.
 	pub appearance_locked: bool,
 	pub species: SingleSelect<ConceptSpecies>,
@@ -190,6 +192,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			lubikans: lubikans::LubikanOrder::default(),
 			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Braidman),
 			braidman: BraidmanMenu::default(),
@@ -758,6 +761,9 @@ impl CharacterMenu {
 				self.sync_inventory_clothing();
 				return true;
 			}
+			MenuEvent::MoveLubikan { account, delta } => {
+				return self.lubikans.move_account(account, delta);
+			}
 			MenuEvent::DropInventory(index) => {
 				return self.apply_drop(index, InventoryDropPolicy::PLACEHOLDER);
 			}
@@ -819,6 +825,7 @@ impl CharacterMenu {
 				| MenuEvent::EquipInventory(_)
 				| MenuEvent::UnequipInventory(_)
 				| MenuEvent::MoveEquippedInventory { .. }
+				| MenuEvent::MoveLubikan { .. }
 				| MenuEvent::DropInventory(_)
 				| MenuEvent::SetSpecies(_)
 		) {
@@ -951,6 +958,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1028,6 +1036,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1092,6 +1101,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1160,6 +1170,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1224,6 +1235,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1284,6 +1296,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1348,6 +1361,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1425,6 +1439,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1502,6 +1517,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1587,6 +1603,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1654,6 +1671,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1722,6 +1740,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1789,6 +1808,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1856,6 +1876,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1919,6 +1940,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -1986,6 +2008,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2053,6 +2076,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2120,6 +2144,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2187,6 +2212,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2254,6 +2280,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2321,6 +2348,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2404,6 +2432,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2475,6 +2504,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2554,6 +2584,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2574,6 +2605,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 			MenuEvent::SetSwatch(field, value) => match (field, value) {
 				(CharacterField::GrenerBodyColor, SwatchValue::GrenerBody(color)) => {
@@ -2602,6 +2634,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 			MenuEvent::SetSwatch(field, value) => match (field, value) {
 				(CharacterField::ThumplusBodyColor, SwatchValue::ThumplusBody(color)) => {
@@ -2630,6 +2663,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 			MenuEvent::SetSwatch(field, value) => match (field, value) {
 				(CharacterField::MistlerBodyColor, SwatchValue::MistlerBody(color)) => {
@@ -2731,6 +2765,7 @@ impl CharacterMenu {
 			| MenuEvent::EquipInventory(_)
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
+			| MenuEvent::MoveLubikan { .. }
 			| MenuEvent::DropInventory(_) => false,
 		}
 	}
@@ -2799,7 +2834,10 @@ impl MenuComponent<MenuEvent> for CharacterMenu {
 			),
 		];
 		if let Some(inventory) = &self.inventory {
-			nodes.push(crate::InventoryLayout::character_menu(inventory).node);
+			nodes.push(
+				crate::InventoryLayout::character_menu_with_lubikans(inventory, &self.lubikans)
+					.node,
+			);
 			nodes.push(loadout_section(inventory));
 		}
 		MenuNode::fragment(nodes)
