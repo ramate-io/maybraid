@@ -26,7 +26,7 @@ use player::{
 use tanz_user::{spawn_tanz_user, TanzExecution, TanzStack, TanzUser, TanzUserSystems};
 use world_player::{
 	CharacterSpecies, Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual,
-	PlaygroundMode, RequestSetCharacter, RequestSetCharacterAppearance,
+	RequestSetCharacter, RequestSetCharacterAppearance,
 };
 
 use crate::control::InventoryEditCameraFollow;
@@ -92,7 +92,6 @@ type WorldPlayerVisual<'a> = (Entity, &'a ChildOf, Has<MaybraidPlayerVisual>);
 /// column buoyancy runs; this only arms kit / identity once the visual exists.
 pub(crate) fn arm_world_player(
 	mut commands: Commands,
-	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
 	inventory_edit: Option<Res<InventoryEditCameraFollow>>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
