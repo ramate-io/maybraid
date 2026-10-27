@@ -5,6 +5,7 @@ pub mod dispatch;
 pub mod primary;
 pub mod repeat;
 pub mod text;
+pub use repeat::MenuRepeatConfig;
 
 pub use controller::{MenuController, MenuStartPolicy};
 pub use dispatch::{ExclusiveNav, MenuNavCapture, exclusive_nav_menu};

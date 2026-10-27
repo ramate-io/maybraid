@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use maybraid_controllers_core::{
 	CaptureKind, CaptureToken, InputRouter, InputSource, ScopeOwner, UiPadEvent, UiTarget,
 };
-use maybraid_virtual_pad_controller::{PadButton, VirtualPad, VirtualPadConfig, VirtualPadEvent};
+use maybraid_virtual_pad_controller::{PadButton, VirtualPad, VirtualPadEvent};
 use menu_components::{
 	HudMenu, MenuAction, MenuActionImpulse, MenuNav, MenuNavImpulse, ShortTextModal,
 	TextMenuInputLock,
@@ -25,7 +25,6 @@ fn action(event: On<MenuActionImpulse>, mut hits: ResMut<Hits>) {
 fn world() -> World {
 	let mut world = World::new();
 	world.init_resource::<InputRouter>();
-	world.init_resource::<VirtualPadConfig>();
 	world.init_resource::<Hits>();
 	world.add_observer(crate::dispatch::interpret_menu_pad);
 	world.add_observer(nav);
@@ -33,7 +32,11 @@ fn world() -> World {
 	world
 }
 fn menu(world: &mut World) -> (InputSource, Entity, CaptureToken) {
-	let source = InputSource::virtual_pad(world.spawn_empty().id());
+	let source = InputSource::virtual_pad(
+		world
+			.spawn(maybraid_virtual_pad_controller::VirtualPadController::new(Default::default()))
+			.id(),
+	);
 	let target = world.spawn(HudMenu::new(3)).id();
 	let mut controller = MenuController::for_source(source);
 	controller.set_focus(Some(target));

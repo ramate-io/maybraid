@@ -7,8 +7,8 @@ use maybraid_controllers_core::{
 	CaptureKind, CaptureToken, InputRouting, InputSource, RouteBinding, ScopeOwner, UiPadEvent,
 	UiTarget,
 };
-use maybraid_menu_controller::repeat::MenuRepeat;
-use maybraid_virtual_pad_controller::{PrimaryVirtualPad, VirtualPadController};
+use maybraid_menu_controller::repeat::{MenuRepeat, MenuRepeatConfig};
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 
 /// Projection of the host's single discovery map, not controller input state.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -43,6 +43,7 @@ impl SpawnPickerCapture {
 pub struct SpawnPickerController {
 	pub source: InputSource,
 	pub focus: bool,
+	pub repeat_config: MenuRepeatConfig,
 	binding: Option<RouteBinding>,
 	sequence: Option<u64>,
 	repeat: MenuRepeat,
@@ -53,6 +54,7 @@ impl SpawnPickerController {
 		Self {
 			source,
 			focus: false,
+			repeat_config: Default::default(),
 			binding: None,
 			sequence: None,
 			repeat: Default::default(),
@@ -107,7 +109,6 @@ pub fn refresh_spawn_picker_focus(
 pub fn dispatch_spawn_picker(
 	event: On<UiPadEvent>,
 	mut pickers: Query<&mut SpawnPickerController>,
-	pads: Query<&VirtualPadController>,
 	mut commands: Commands,
 ) {
 	let Ok(mut picker) = pickers.get_mut(event.entity) else {
@@ -140,10 +141,8 @@ pub fn dispatch_spawn_picker(
 		}
 		picker.await_release = false;
 	}
-	let Ok(pad) = pads.get(frame.source) else {
-		return;
-	};
-	picker.repeat.derive(&frame.pad, &pad.config, frame.delta.as_secs_f32());
+	let config = picker.repeat_config;
+	picker.repeat.derive(&frame.pad, &config, frame.delta.as_secs_f32());
 	let nav = picker.repeat.events.clone();
 	if nav.is_empty() {
 		return;
@@ -179,6 +178,7 @@ pub fn release_spawn_picker(
 mod tests {
 	use super::*;
 	use maybraid_controllers_core::InputRouter;
+	use maybraid_virtual_pad_controller::VirtualPadController;
 	use maybraid_virtual_pad_controller::{PadButton, PadDevices, VirtualPad, VirtualPadEvent};
 
 	fn picker_world() -> (World, Entity, Entity) {
