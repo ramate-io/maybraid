@@ -6,6 +6,10 @@ use bevy::prelude::*;
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CaptureResolveSystems;
 
+/// Central targeted dispatch after this frame's capture and lifecycle resolution.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PadDeliverySystems;
+
 /// Update-schedule stages of the controller lane.
 ///
 /// Target order:
@@ -49,7 +53,8 @@ impl ControllerPipeline {
 			)
 				.chain(),
 		)
-		.configure_sets(Update, CaptureResolveSystems.in_set(Self::Bind));
+		.configure_sets(Update, CaptureResolveSystems.in_set(Self::Bind))
+		.configure_sets(Update, PadDeliverySystems.in_set(Self::Bind).after(CaptureResolveSystems));
 	}
 }
 
@@ -78,10 +83,7 @@ mod tests {
 			),
 		);
 		app.update();
-		assert_eq!(
-			app.world().resource::<StageOrder>().0,
-			["bind", "reset", "request", "motor"]
-		);
+		assert_eq!(app.world().resource::<StageOrder>().0, ["bind", "reset", "request", "motor"]);
 	}
 
 	#[test]

@@ -184,6 +184,18 @@ impl CaptureStack {
 		self.layers.last().copied()
 	}
 
+	pub fn top_for(&self, source: InputSource) -> Option<CaptureLayer> {
+		self.layers.iter().rev().copied().find(|layer| layer.source() == source)
+	}
+
+	pub fn top_of_kind_for(&self, source: InputSource, kind: CaptureKind) -> Option<CaptureLayer> {
+		self.layers
+			.iter()
+			.rev()
+			.copied()
+			.find(|layer| layer.source() == source && layer.kind() == kind)
+	}
+
 	pub fn top_of_kind(&self, kind: CaptureKind) -> Option<CaptureLayer> {
 		self.layers.iter().rev().copied().find(|layer| layer.kind() == kind)
 	}
@@ -219,7 +231,19 @@ impl CaptureStack {
 
 	/// Single derived pad policy. Hosts must not write lanes of their own.
 	pub fn pad_policy(&self) -> PadInputPolicy {
-		PadInputPolicy::new(!self.layers.is_empty(), self.suppresses_pad(InputSource::local_pad()))
+		self.pad_policy_for(InputSource::local_pad())
+	}
+
+	pub fn pad_policy_for(&self, source: InputSource) -> PadInputPolicy {
+		PadInputPolicy::new(self.top_for(source).is_some(), self.suppresses_pad(source))
+	}
+
+	pub(crate) fn replace_source(&mut self, previous: InputSource, next: InputSource) {
+		for layer in &mut self.layers {
+			if layer.source == previous {
+				layer.source = next;
+			}
+		}
 	}
 
 	pub(crate) fn push(&mut self, layer: CaptureLayer) {
