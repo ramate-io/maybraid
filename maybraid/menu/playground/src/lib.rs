@@ -243,8 +243,7 @@ mod tests {
 	use bevy::input::{ButtonState, InputPlugin, InputSystems};
 	use bevy::prelude::*;
 	use maybraid_menu_controller::{
-		CaptureKind, InputRouter, InputRouting, InputSource, MenuController, MenuNavCapture,
-		RoutingEvent, ScopeOwner, dispatch,
+		InputRouter, MenuController, MenuNavCapture, RoutingEvent, dispatch,
 	};
 	use maybraid_virtual_pad_controller::{
 		PadButton, PrimaryVirtualPad, VirtualPadController, VirtualPadEvent, VirtualPadSystems,
@@ -253,7 +252,7 @@ mod tests {
 	use menu_components::MenuNavPad;
 	use menu_components::{
 		HudMenu, HudMenuItem, MenuComponentsPlugin, ShortTextField, ShortTextKey, ShortTextModal,
-		TextMenuInputLock, TextMenuSystems,
+		TextMenuSystems,
 	};
 	use menu_screens::RequestShowGallery;
 
@@ -365,9 +364,7 @@ mod tests {
 			ShortTextField { value: String::new(), max_len: 16, editing: false },
 			ChildOf(menu),
 		));
-		for _ in 0..3 {
-			app.update();
-		}
+		app.update();
 		app
 	}
 
