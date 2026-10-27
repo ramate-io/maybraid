@@ -216,15 +216,23 @@ pub struct ScopedMenuSession;
 /// The source identity remains attached to this receiver across host-widget queries.
 #[derive(Component, Clone, Debug)]
 pub struct PrimaryMenuInput {
-    pub source: Entity,
-    pub frame: Option<maybraid_virtual_pad_controller::VirtualPadEvent>,
+	pub source: Entity,
+	pub frame: Option<maybraid_virtual_pad_controller::VirtualPadEvent>,
 }
 impl PrimaryMenuInput {
-    pub fn new(source: Entity) -> Self { Self { source, frame: None } }
-    pub fn current_frame(&self) -> Option<&maybraid_virtual_pad_controller::VirtualPadEvent> {
-        self.frame.as_ref().filter(|frame| frame.source == self.source)
-    }
-    pub fn under<'a>(entity: Entity, hosts: &'a Query<&Self>, parents: &Query<&ChildOf>) -> Option<&'a Self> {
-        std::iter::once(entity).chain(parents.iter_ancestors(entity)).find_map(|entity| hosts.get(entity).ok())
-    }
+	pub fn new(source: Entity) -> Self {
+		Self { source, frame: None }
+	}
+	pub fn current_frame(&self) -> Option<&maybraid_virtual_pad_controller::VirtualPadEvent> {
+		self.frame.as_ref().filter(|frame| frame.source == self.source)
+	}
+	pub fn under<'a>(
+		entity: Entity,
+		hosts: &'a Query<&Self>,
+		parents: &Query<&ChildOf>,
+	) -> Option<&'a Self> {
+		std::iter::once(entity)
+			.chain(parents.iter_ancestors(entity))
+			.find_map(|entity| hosts.get(entity).ok())
+	}
 }

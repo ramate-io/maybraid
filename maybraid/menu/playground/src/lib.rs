@@ -302,7 +302,6 @@ mod tests {
 			.spawn(maybraid_virtual_pad_controller::VirtualPadController::new(Default::default()))
 			.id();
 		app.insert_resource(maybraid_virtual_pad_controller::PrimaryVirtualPad(source));
-		app.init_resource::<maybraid_menu_controller::primary::PrimaryMenuRepeat>();
 		app.add_observer(dispatch::interpret_menu_pad);
 		app.add_plugins((
 			MinimalPlugins,
@@ -333,7 +332,11 @@ mod tests {
 		)
 		.add_systems(
 			PreUpdate,
-			maybraid_menu_controller::primary::sync_text_menu_capture
+			(
+				maybraid_menu_controller::primary::sync_primary_menu_host,
+				maybraid_menu_controller::primary::sync_text_menu_capture,
+			)
+				.chain()
 				.before(maybraid_controllers_core::PadPolicySystems),
 		)
 		.add_systems(
@@ -341,16 +344,21 @@ mod tests {
 			produce_fixture_frame.in_set(VirtualPadSystems::Produce).after(InputSystems),
 		)
 		.add_systems(
-			PreUpdate,
-			maybraid_menu_controller::primary::derive_primary_menu_nav
-				.after(VirtualPadSystems::Derive),
+			Update,
+			maybraid_menu_controller::primary::clear_primary_menu_frame
+				.before(maybraid_controllers_core::PadDeliverySystems),
+		)
+		.configure_sets(
+			Update,
+			menu_components::PrimaryMenuFrameSystems
+				.after(maybraid_controllers_core::PadDeliverySystems),
 		)
 		.add_systems(
 			Update,
 			(
 				dispatch::refresh_menu_focus
 					.in_set(maybraid_controllers_core::CaptureResolveSystems)
-					.after(TextMenuSystems::InputLock),
+					.after(menu_components::MenuModalSystems::Sync),
 				editor_back
 					.after(TextMenuSystems::Navigate)
 					.after(maybraid_controllers_core::PadDeliverySystems),
@@ -427,6 +435,43 @@ mod tests {
 		tap(&mut app, PadButton::Start, None);
 		assert!(!app.world().resource::<ShortTextModal>().is_open());
 		assert!(!left_editor(&mut app));
+	}
+
+	#[derive(Resource, Default)]
+	struct ActorModalEdges(Vec<PadButton>);
+
+	fn record_actor_modal_edges(
+		event: On<maybraid_controllers_core::ActorPadEvent>,
+		mut edges: ResMut<ActorModalEdges>,
+	) {
+		for button in [PadButton::B, PadButton::Start] {
+			if event.input.payload().frame.pad.just_pressed(button) {
+				edges.0.push(button);
+			}
+		}
+	}
+
+	#[test]
+	fn primary_modal_back_and_start_finish_in_the_delivery_frame_without_actor_edges() {
+		for button in [PadButton::B, PadButton::Start] {
+			let mut app = editor_app();
+			open_keyboard(&mut app);
+			app.init_resource::<ActorModalEdges>().add_observer(record_actor_modal_edges);
+			let source = maybraid_controllers_core::InputSource::virtual_pad(
+				app.world().resource::<PrimaryVirtualPad>().0,
+			);
+			let actor =
+				maybraid_controllers_core::ActorTarget::new(app.world_mut().spawn_empty().id());
+			app.world_mut().resource_mut::<InputRouter>().assign_actor(source, actor);
+			app.world_mut().resource_mut::<HeldPad>().0 = vec![button];
+			app.update();
+			assert!(
+				!app.world().resource::<ShortTextModal>().is_open(),
+				"{button:?} must finish in the delivery frame"
+			);
+			assert!(app.world().resource::<ActorModalEdges>().0.is_empty());
+			assert!(!left_editor(&mut app));
+		}
 	}
 
 	#[test]

@@ -109,19 +109,20 @@ pub fn refresh_primary_menu_focus(
 	>,
 	roots: Query<(Entity, &MenuModal), Without<menu_components::ScopedMenuSession>>,
 	mut controllers: Query<(Entity, &mut MenuController)>,
-    hosts: Query<(), With<menu_components::PrimaryMenuInput>>,
+	hosts: Query<(), With<menu_components::PrimaryMenuInput>>,
 	mut router: InputRouting,
 	mut menu_capture: ResMut<MenuNavCapture>,
 	mut commands: Commands,
 ) {
 	let exclusive = ExclusiveNav::resolve(&modal, &stack, &pads, &roots, &all_menus, &children);
-	let mut owner = exclusive.capture_owner();
+	let mut owner = None;
 	let mut awaiting_owner = None;
 	for (root, mut controller) in &mut controllers {
 		if controller.source.is_some() || !hosts.contains(root) {
 			continue;
 		}
 		awaiting_owner.get_or_insert(ScopeOwner::ui(UiTarget::new(root)));
+		owner = exclusive.capture_owner();
 		controller.blocked = modal.dismissed || stack.consumed();
 		controller.context_blocked = modal.is_open() || stack.owns_nav();
 		controller.focus = match exclusive {
@@ -162,44 +163,59 @@ pub fn refresh_primary_menu_focus(
 }
 
 // Explicit primary host adapter: the root owns its frame and repeat state.
-use maybraid_virtual_pad_controller::{PrimaryVirtualPad, VirtualPadEvent};
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 
-/// Select one eligible primary root. Other controllers never receive a raw frame copy.
+/// Keep a previously selected default root, or select the sole eligible root.
+/// Ambiguous default controllers do not receive primary input.
 pub fn sync_primary_menu_host(
-    primary: Res<PrimaryVirtualPad>,
-    mut controllers: Query<(Entity, &mut MenuController, Option<&menu_components::PrimaryMenuInput>)>,
-    mut commands: Commands,
+	primary: Res<PrimaryVirtualPad>,
+	mut controllers: Query<(
+		Entity,
+		&mut MenuController,
+		Option<&menu_components::PrimaryMenuInput>,
+	)>,
+	mut nav: ResMut<MenuNavPad>,
+	mut commands: Commands,
 ) {
-    let selected = controllers.iter().find(|(_, controller, input)| controller.source.is_none() && input.is_some_and(|input| input.source == primary.0))
-        .map(|(entity, ..)| entity)
-        .or_else(|| controllers.iter().filter(|(_, controller, _)| controller.source.is_none()).map(|(entity, ..)| entity).min_by_key(|entity| entity.to_bits()));
-    for (entity, mut controller, input) in &mut controllers {
-        if Some(entity) == selected {
-            if input.is_none_or(|input| input.source != primary.0) {
-                controller.primary_repeat = Default::default();
-                commands.entity(entity).try_insert(menu_components::PrimaryMenuInput::new(primary.0));
-            }
-        } else if input.is_some() {
-            controller.primary_repeat = Default::default();
-            commands.entity(entity).try_remove::<menu_components::PrimaryMenuInput>();
-        }
-    }
+	let mut selected_hosts = controllers
+		.iter()
+		.filter(|(_, controller, input)| controller.source.is_none() && input.is_some())
+		.map(|(entity, ..)| entity);
+	let existing = selected_hosts.next().filter(|_| selected_hosts.next().is_none());
+	let selected = existing.or_else(|| {
+		let mut eligible = controllers
+			.iter()
+			.filter(|(_, controller, _)| controller.source.is_none())
+			.map(|(entity, ..)| entity);
+		eligible.next().filter(|_| eligible.next().is_none())
+	});
+	nav.events.clear();
+	for (entity, mut controller, input) in &mut controllers {
+		if Some(entity) == selected {
+			if input.is_none_or(|input| input.source != primary.0) {
+				controller.streams.clear();
+				commands
+					.entity(entity)
+					.try_insert(menu_components::PrimaryMenuInput::new(primary.0));
+			}
+		} else if input.is_some() {
+			controller.streams.clear();
+			commands.entity(entity).try_remove::<menu_components::PrimaryMenuInput>();
+		}
+	}
 }
 
-pub fn derive_primary_menu_nav(
-    primary: Res<PrimaryVirtualPad>,
-    mut hosts: Query<(&mut MenuController, &mut menu_components::PrimaryMenuInput)>,
-    mut frames: MessageReader<VirtualPadEvent>,
-    mut nav: ResMut<MenuNavPad>,
+/// No frame survives into the next delivery pass without fresh authorization.
+pub fn clear_primary_menu_frame(
+	mut hosts: Query<&mut menu_components::PrimaryMenuInput>,
+	mut nav: ResMut<MenuNavPad>,
 ) {
-    let frame = frames.read().filter(|frame| frame.source == primary.0).last().cloned();
-    let Ok((mut controller, mut host)) = hosts.single_mut() else { nav.events.clear(); return; };
-    host.frame = frame.filter(|frame| frame.source == host.source);
-    let Some(frame) = host.current_frame() else { nav.events.clear(); return; };
-    let config = controller.repeat_config;
-    controller.primary_repeat.derive(&frame.pad, &config, frame.delta.as_secs_f32());
-    nav.events.clone_from(&controller.primary_repeat.events);
+	nav.events.clear();
+	for mut host in &mut hosts {
+		host.frame = None;
+	}
 }
+
 pub fn sync_text_menu_capture(
 	primary: Res<maybraid_virtual_pad_controller::PrimaryVirtualPad>,
 	hosts: Query<(Entity, &menu_components::PrimaryMenuInput)>,
@@ -208,7 +224,11 @@ pub fn sync_text_menu_capture(
 	mut router: InputRouting,
 	mut menu_capture: ResMut<MenuNavCapture>,
 ) {
-	let owner = hosts.single().ok().filter(|(_, host)| host.source == primary.0).map(|(entity, _)| ScopeOwner::ui(UiTarget::new(entity)));
+	let owner = hosts
+		.single()
+		.ok()
+		.filter(|(_, host)| host.source == primary.0)
+		.map(|(entity, _)| ScopeOwner::ui(UiTarget::new(entity)));
 	router.replace_owned_capture(
 		&mut menu_capture.text,
 		InputSource::virtual_pad(primary.0),

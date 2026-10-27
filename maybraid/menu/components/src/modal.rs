@@ -276,7 +276,11 @@ pub fn tick_menu_modal_holds(
 	keyboard: Res<ButtonInput<KeyCode>>,
 	nav: Res<MenuNavPad>,
 ) {
-    let pad = primary.single().ok().and_then(crate::PrimaryMenuInput::current_frame).map(|frame| &frame.pad);
+	let pad = primary
+		.single()
+		.ok()
+		.and_then(crate::PrimaryMenuInput::current_frame)
+		.map(|frame| &frame.pad);
 	let back_down = pad.as_deref().is_some_and(|pad| pad.pressed(PadButton::B))
 		|| keyboard.pressed(KeyCode::Escape)
 		|| nav.just_pressed(MenuNav::Back);
@@ -567,17 +571,20 @@ mod tests {
 
 /// Resolve pointer eligibility within the entity's own session, if it has one.
 pub fn entity_under_scoped_nav_owner(
-    entity: Entity,
-    sessions: &Query<&crate::MenuSession>,
-    roots: &Query<(Entity, &MenuModal)>,
-    child_of: &Query<&ChildOf>,
+	entity: Entity,
+	sessions: &Query<&crate::MenuSession>,
+	roots: &Query<(Entity, &MenuModal)>,
+	child_of: &Query<&ChildOf>,
 ) -> Option<bool> {
-    let mut current = Some(entity);
-    while let Some(here) = current {
-        if let Ok(session) = sessions.get(here) {
-            return Some(!session.text_locked && entity_under_nav_owner(entity, &session.modals, roots, child_of));
-        }
-        current = child_of.get(here).ok().map(ChildOf::parent);
-    }
-    None
+	let mut current = Some(entity);
+	while let Some(here) = current {
+		if let Ok(session) = sessions.get(here) {
+			return Some(
+				!session.text_locked
+					&& entity_under_nav_owner(entity, &session.modals, roots, child_of),
+			);
+		}
+		current = child_of.get(here).ok().map(ChildOf::parent);
+	}
+	None
 }

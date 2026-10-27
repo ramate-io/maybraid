@@ -153,7 +153,7 @@ fn intercept_character_leave_edges(
 	mut stack: ResMut<MenuModalStack>,
 	mut nav: ResMut<MenuNavPad>,
 	primary: Query<&menu_components::PrimaryMenuInput>,
-    parents: Query<&ChildOf>,
+	parents: Query<&ChildOf>,
 	menu_state: Option<Res<CharacterMenuState>>,
 	baseline: Option<Res<CharacterEditBaseline>>,
 	return_to: Option<Res<CharacterEditorReturn>>,
@@ -161,7 +161,12 @@ fn intercept_character_leave_edges(
 	mut backs: MessageReader<ScreenBackPressed>,
 	mut commands: Commands,
 ) {
-	let pad = screens.single().ok().and_then(|entity| menu_components::PrimaryMenuInput::under(entity, &primary, &parents)).and_then(menu_components::PrimaryMenuInput::current_frame).map(|frame| &frame.pad);
+	let pad = screens
+		.single()
+		.ok()
+		.and_then(|entity| menu_components::PrimaryMenuInput::under(entity, &primary, &parents))
+		.and_then(menu_components::PrimaryMenuInput::current_frame)
+		.map(|frame| &frame.pad);
 	prompt.opened_this_frame = false;
 	let back_click = backs.read().next().is_some();
 	let start = pad.is_some_and(|pad| pad.just_pressed(PadButton::Start));

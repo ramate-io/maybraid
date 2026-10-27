@@ -16,7 +16,6 @@ pub struct MenuController {
 	pub(crate) context_blocked: bool,
 	pub start: MenuStartPolicy,
 	pub repeat_config: crate::repeat::MenuRepeatConfig,
-    pub(crate) primary_repeat: crate::repeat::MenuRepeat,
 	pub(crate) streams: Vec<MenuStream>,
 }
 
