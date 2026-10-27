@@ -96,9 +96,7 @@ pub fn collect_with_mouse(
 	if !actor_captured && pad.pressed(PadButton::BumperFocus) && !pad.bumper_chord_held() {
 		out.push(CharacterIntent::Ads(1.0));
 	}
-	if !actor_captured
-		&& (pad.pressed(PadButton::TriggerFire) || pad.trigger_fire >= trigger_threshold)
-	{
+	if !actor_captured && pad.pressed(PadButton::TriggerFire) {
 		out.push(CharacterIntent::UseItem(pad.trigger_fire.max(trigger_threshold)));
 	}
 	if !actor_captured && pad.just_pressed(PadButton::TriggerFocus) && !mouse_right {
@@ -132,7 +130,7 @@ pub fn collect_with_mouse(
 		}
 	}
 	if !actor_captured && pad.just_pressed(PadButton::X) {
-		if pad.pressed(PadButton::TriggerFire) || pad.trigger_fire >= trigger_threshold {
+		if pad.pressed(PadButton::TriggerFire) {
 			out.push(CharacterIntent::PowerUseItem);
 		} else {
 			out.push(CharacterIntent::StartInteraction);
@@ -354,6 +352,37 @@ mod tests {
 		finish(&mut pad);
 		assert!(!intents(&pad).iter().any(|intent| matches!(intent, CharacterIntent::UseItem(_))));
 		Ok(())
+	}
+
+	#[test]
+	fn analog_without_digital_conversion_does_not_use_or_attack() {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.9);
+		pad.hold_digital(PadButton::X);
+		finish(&mut pad);
+		let events = intents(&pad);
+		assert!(!events.iter().any(|event| matches!(
+			event,
+			CharacterIntent::UseItem(_)
+				| CharacterIntent::PowerUseItem
+				| CharacterIntent::AttackLeft
+				| CharacterIntent::AttackRight
+		)));
+		assert!(events.contains(&CharacterIntent::StartInteraction));
+	}
+
+	#[test]
+	fn controller_respects_the_pad_trigger_threshold() {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.0, 0.7);
+		pad.apply_trigger_digital(0.8);
+		finish(&mut pad);
+		// The controller helper uses 0.5, but the pad has already decided
+		// whether this frame is a press using the configured hardware threshold.
+		assert!(!intents(&pad).iter().any(|event| matches!(event, CharacterIntent::UseItem(_))));
+		assert!(!intents(&pad).contains(&CharacterIntent::AttackRight));
 	}
 
 	#[test]
