@@ -1,5 +1,5 @@
 //! Shared virtual pad for Maybraid: device producers, current-frame snapshot,
-//! optional history, and derived surfaces (menu nav, cursor).
+//! optional history, and cursor integration.
 
 pub mod analog;
 pub mod button;
@@ -16,22 +16,18 @@ pub mod rumble;
 pub mod surface;
 
 pub use analog::{Cardinal, Deadzone};
-pub use button::{ButtonPhase, ButtonStroke, PadButton, PAD_BUTTON_COUNT};
+pub use button::{ButtonPhase, ButtonStroke, PAD_BUTTON_COUNT, PadButton};
 pub use config::VirtualPadConfig;
 pub use controller::{
 	PadDevices, PrimaryVirtualPad, VirtualPadController, VirtualPadEvent, VirtualPadLifecycle,
 };
 pub use gate::PadInputPolicy;
-pub use hid::{with_pad_hid, PadHidPlugins};
+pub use hid::{PadHidPlugins, with_pad_hid};
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};
 pub use overlay::PadOverlay;
 pub use pad::VirtualPad;
 pub use rumble::{PadRumble, PadRumbleSystems};
 pub use surface::cursor::PadCursor;
-pub use surface::menu::{
-	MenuNav, MenuNavImpulse, MenuNavPad, INVENTORY_DROP_KEYS, INVENTORY_DROP_PAD,
-	INVENTORY_UNEQUIP_KEYS, INVENTORY_UNEQUIP_PAD, MENU_SELECT_KEYS, MENU_SELECT_PAD,
-};
 
 use bevy::input::InputSystems;
 use bevy::prelude::*;
@@ -78,7 +74,6 @@ impl Plugin for VirtualPadPlugin {
 			.init_resource::<VirtualPad>()
 			.init_resource::<PadHistory>()
 			.init_resource::<PadInputPolicy>()
-			.init_resource::<MenuNavPad>()
 			.init_resource::<PadCursor>()
 			.add_message::<rumble::PadRumble>()
 			.init_resource::<rumble::DelayedPadRumble>()

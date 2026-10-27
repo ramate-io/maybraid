@@ -7,8 +7,7 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 
 use crate::{
-	MenuNavPad, PadCursor, PadEdge, PadHistory, PadInputPolicy, PadOverlay, VirtualPad,
-	VirtualPadConfig,
+	PadCursor, PadEdge, PadHistory, PadInputPolicy, PadOverlay, VirtualPad, VirtualPadConfig,
 };
 
 /// Physical devices intentionally combined into one controller.
@@ -47,8 +46,6 @@ pub struct VirtualPadController {
 	pub policy: PadInputPolicy,
 	pub history: PadHistory,
 	pub cursor: PadCursor,
-	/// Temporary compatibility surface; routed consumers interpret the rich pad.
-	pub legacy_menu_nav: MenuNavPad,
 	sequence: u64,
 	previous_devices: Option<PadDevices>,
 	connected: bool,
@@ -63,7 +60,6 @@ impl VirtualPadController {
 			policy: PadInputPolicy::default(),
 			history: PadHistory::default(),
 			cursor: PadCursor::default(),
-			legacy_menu_nav: MenuNavPad::default(),
 			sequence: 0,
 			previous_devices: None,
 			connected: true,
@@ -102,7 +98,6 @@ impl VirtualPadController {
 		}
 		self.history.evict(now, config.history_window, config.history_max_frames);
 		self.cursor.integrate(&self.pad, config.cursor_speed, delta.as_secs_f32());
-		self.legacy_menu_nav.derive(&self.pad, config, delta.as_secs_f32());
 		self.sequence = self.sequence.wrapping_add(1);
 	}
 }
@@ -223,7 +218,6 @@ pub(crate) fn produce_controllers(
 		if changed || connected != controller.connected {
 			lifecycle.write(VirtualPadLifecycle { source: entity, connected });
 			controller.history = PadHistory::default();
-			controller.legacy_menu_nav = MenuNavPad::default();
 		}
 		controller.connected = connected;
 		controller.previous_devices = Some(devices.clone());
@@ -286,7 +280,6 @@ pub(crate) fn publish_controllers(
 	mut legacy_pad: ResMut<VirtualPad>,
 	mut legacy_history: ResMut<PadHistory>,
 	mut legacy_cursor: ResMut<PadCursor>,
-	mut legacy_nav: ResMut<MenuNavPad>,
 ) {
 	for (entity, controller) in &controllers {
 		events.write(VirtualPadEvent {
@@ -299,7 +292,6 @@ pub(crate) fn publish_controllers(
 			*legacy_pad = controller.pad.clone();
 			*legacy_history = controller.history.clone();
 			*legacy_cursor = controller.cursor.clone();
-			*legacy_nav = controller.legacy_menu_nav.clone();
 		}
 	}
 }
@@ -348,12 +340,13 @@ mod tests {
 		assert_eq!(left_pad.history.edges.len(), 1);
 		assert!(right_pad.history.edges.is_empty());
 		app.update();
-		assert!(!app
-			.world()
-			.get::<VirtualPadController>(left)
-			.ok_or_else(|| anyhow::anyhow!("left controller"))?
-			.pad
-			.just_pressed(PadButton::A));
+		assert!(
+			!app.world()
+				.get::<VirtualPadController>(left)
+				.ok_or_else(|| anyhow::anyhow!("left controller"))?
+				.pad
+				.just_pressed(PadButton::A)
+		);
 		app.world_mut().despawn(left_device);
 		app.update();
 		let left_pad = app
@@ -362,10 +355,11 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("left controller"))?;
 		assert!(!left_pad.connected());
 		assert!(left_pad.pad.just_released(PadButton::A));
-		assert!(app
-			.world()
-			.get::<VirtualPadController>(right)
-			.is_some_and(VirtualPadController::connected));
+		assert!(
+			app.world()
+				.get::<VirtualPadController>(right)
+				.is_some_and(VirtualPadController::connected)
+		);
 		Ok(())
 	}
 
@@ -416,8 +410,8 @@ mod tests {
 	}
 
 	#[test]
-	fn default_host_reuses_primary_and_secondary_sources_without_fresh_held_edges(
-	) -> anyhow::Result<()> {
+	fn default_host_reuses_primary_and_secondary_sources_without_fresh_held_edges()
+	-> anyhow::Result<()> {
 		let mut app = App::new();
 		app.add_plugins((
 			MinimalPlugins,
@@ -451,11 +445,13 @@ mod tests {
 				.world()
 				.get::<VirtualPadController>(source)
 				.ok_or_else(|| anyhow::anyhow!("reused source"))?;
-			assert!(controller.devices.gamepads.iter().any(|device| [
-				first_replacement,
-				second_replacement
-			]
-			.contains(device)));
+			assert!(
+				controller.devices.gamepads.iter().any(|device| [
+					first_replacement,
+					second_replacement
+				]
+				.contains(device))
+			);
 			assert!(controller.connected());
 			assert!(!controller.pad.just_pressed(PadButton::A));
 			assert!(!controller.pad.pressed(PadButton::A));
