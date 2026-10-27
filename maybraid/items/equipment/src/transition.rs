@@ -241,12 +241,17 @@ mod tests {
 			.assign_actor(InputSource::local_pad(), ActorTarget::new(actor));
 	}
 
-	fn set_frame(world: &mut World, actor: Entity, intents: Vec<CharacterIntent>) {
+	fn set_frame(
+		world: &mut World,
+		actor: Entity,
+		intents: Vec<CharacterIntent>,
+	) -> anyhow::Result<()> {
 		let input = world
 			.resource::<InputRouter>()
 			.route_actor(InputSource::local_pad(), intents)
-			.expect("route");
+			.ok_or_else(|| anyhow::anyhow!("actor route"))?;
 		world.entity_mut(actor).insert(CharacterIntentFrame::new(input));
+		Ok(())
 	}
 
 	#[test]
@@ -308,7 +313,7 @@ mod tests {
 				CharacterIntent::SelectInventoryCyclingCategory(InventoryCyclingCategory::Weapons),
 				CharacterIntent::SwapActive,
 			],
-		);
+		)?;
 		world
 			.run_system_once(apply_inventory_category_selection)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -333,7 +338,7 @@ mod tests {
 		let held = world.spawn_empty().id();
 		let actor = world.spawn(InventoryUser::carrying(bag)).id();
 		assign_actor(&mut world, actor);
-		set_frame(&mut world, actor, vec![CharacterIntent::SwapActive]);
+		set_frame(&mut world, actor, vec![CharacterIntent::SwapActive])?;
 		world
 			.run_system_once(begin_equipment_holster)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -355,7 +360,7 @@ mod tests {
 		let bag = world.spawn(inventory).id();
 		let actor = world.spawn(InventoryUser::carrying(bag)).id();
 		assign_actor(&mut world, actor);
-		set_frame(&mut world, actor, vec![CharacterIntent::CycleEquippedQueue(-1)]);
+		set_frame(&mut world, actor, vec![CharacterIntent::CycleEquippedQueue(-1)])?;
 		world
 			.run_system_once(begin_equipment_holster)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -461,7 +466,7 @@ mod tests {
 		let bag = world.spawn(inventory).id();
 		let actor = world.spawn((InventoryUser::carrying(bag), BlocksEquipmentSwap)).id();
 		assign_actor(&mut world, actor);
-		set_frame(&mut world, actor, vec![CharacterIntent::SwapActive]);
+		set_frame(&mut world, actor, vec![CharacterIntent::SwapActive])?;
 		world
 			.run_system_once(begin_equipment_holster)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -485,7 +490,7 @@ mod tests {
 		let bag = world.spawn(inventory).id();
 		let actor = world.spawn(InventoryUser::carrying(bag)).id();
 		assign_actor(&mut world, actor);
-		set_frame(&mut world, actor, vec![CharacterIntent::SwapActive]);
+		set_frame(&mut world, actor, vec![CharacterIntent::SwapActive])?;
 		world
 			.run_system_once(begin_equipment_holster)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

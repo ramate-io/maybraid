@@ -212,16 +212,21 @@ mod tests {
 		actor
 	}
 
-	fn set_frame(world: &mut World, actor: Entity, intents: Vec<CharacterIntent>) {
+	fn set_frame(
+		world: &mut World,
+		actor: Entity,
+		intents: Vec<CharacterIntent>,
+	) -> anyhow::Result<()> {
 		let input = world
 			.resource::<InputRouter>()
 			.route_actor(InputSource::local_pad(), intents)
-			.expect("route");
+			.ok_or_else(|| anyhow::anyhow!("actor route"))?;
 		world.entity_mut(actor).insert(CharacterIntentFrame::new(input));
+		Ok(())
 	}
 
 	#[test]
-	fn reassigned_source_cannot_apply_a_cached_category() {
+	fn reassigned_source_cannot_apply_a_cached_category() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.init_resource::<ActiveInventoryCyclingCategory>();
 		let first = assign_actor(&mut world, ());
@@ -232,15 +237,21 @@ mod tests {
 			vec![CharacterIntent::SelectInventoryCyclingCategory(
 				InventoryCyclingCategory::SkillMaps,
 			)],
-		);
+		)?;
 		world
 			.resource_mut::<InputRouter>()
 			.assign_actor(InputSource::local_pad(), ActorTarget::new(second));
-		world.run_system_once(apply_inventory_category_selection).expect("selection");
+		world
+			.run_system_once(apply_inventory_category_selection)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(
-			world.get::<InventoryCycling>(first).unwrap().category(),
+			world
+				.get::<InventoryCycling>(first)
+				.ok_or_else(|| anyhow::anyhow!("first actor cycling"))?
+				.category(),
 			InventoryCyclingCategory::Weapons
 		);
+		Ok(())
 	}
 
 	#[test]
@@ -258,7 +269,7 @@ mod tests {
 			vec![CharacterIntent::SelectInventoryCyclingCategory(
 				InventoryCyclingCategory::SkillMaps,
 			)],
-		);
+		)?;
 		world
 			.run_system_once(apply_inventory_category_selection)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -301,7 +312,7 @@ mod tests {
 			vec![CharacterIntent::SelectInventoryCyclingCategory(
 				InventoryCyclingCategory::Weapons,
 			)],
-		);
+		)?;
 		world
 			.run_system_once(apply_inventory_category_selection)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -344,7 +355,7 @@ mod tests {
 				),
 				CharacterIntent::SwapActive,
 			],
-		);
+		)?;
 		world
 			.run_system_once(apply_inventory_category_selection)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

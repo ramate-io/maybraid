@@ -165,7 +165,7 @@ mod tests {
 	}
 
 	#[test]
-	fn two_actors_receive_only_their_own_fire_and_release() {
+	fn two_actors_receive_only_their_own_fire_and_release() -> anyhow::Result<()> {
 		let mut app = App::new();
 		app.init_resource::<InputRouter>()
 			.init_resource::<Seen>()
@@ -184,12 +184,12 @@ mod tests {
 			.world()
 			.resource::<InputRouter>()
 			.route_actor(a, ActorControlSample::default().with_fire(true, 0.8))
-			.unwrap();
+			.ok_or_else(|| anyhow::anyhow!("first actor route"))?;
 		let second_input = app
 			.world()
 			.resource::<InputRouter>()
 			.route_actor(b, ActorControlSample::default())
-			.unwrap();
+			.ok_or_else(|| anyhow::anyhow!("second actor route"))?;
 		app.world_mut().trigger(ActorControlEvent { entity: first, input: first_input });
 		app.world_mut()
 			.trigger(ActorControlEvent { entity: second, input: second_input });
@@ -202,5 +202,6 @@ mod tests {
 		assert!(seen.iter().any(|use_item| use_item.addresses(second)
 			&& !use_item.held()
 			&& use_item.handler().is_grenade()));
+		Ok(())
 	}
 }
