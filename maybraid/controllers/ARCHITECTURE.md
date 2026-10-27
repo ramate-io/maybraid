@@ -21,7 +21,25 @@ per-actor motor slots. Reusable systems are registered once; actor- or
 session-scoped participation is installed, removed, or suspended. Domain
 interpreters own realization; upstream controllers must not compete by
 writing the same motor components. Continuous input carries neutral / release
-semantics; analog samples are not heap messages.
+semantics; analog input travels together in a rich source frame.
+
+## Current runtime ownership
+
+The phase tables below preserve the original migration plan and some historical
+status notes; the runtime contract is the current implementation summarized here.
+`controllers/virtual-pad` owns one `VirtualPadController` component per source.
+Its HID producers write the controller's rich pad state and publish an immutable
+`VirtualPadEvent` carrying source entity, sequence, delta, and pad snapshot.
+`controllers/core` reconciles those source entities with `InputRouter`, validates
+bindings, and dispatches `UiPadEvent` or `ActorPadEvent` to the explicitly assigned
+UI or actor. Those events retain source, target, and binding provenance through
+deferred work. Menu interpreters consume UI events on their owning menu entity;
+character interpretation consumes actor events and stores current physical and
+semantic frames on the addressed actor. Individual `CharacterIntent` values are
+delivered as actor-targeted `ActorIntentEvent` entity events. Controllers do not
+poll a process-wide pad or rediscover a current actor. `PrimaryVirtualPad` and
+`InputSource::local_pad()` remain explicit single-player host compatibility
+projections; other virtual-pad entities have independent routing state.
 
 ## Flow
 
@@ -57,8 +75,10 @@ and pause tokens. Phase 5 addresses UseItem / PowerUseItem through
 [`dispatch_equipped_item`](../items/equipment/src/dispatch.rs) (D1), stamps
 [`EquippedItemHandler`](../items/equipment/src/dispatch.rs) at inventory / holster
 commit, and hands recoil through [`CameraRecoilHandoff`](../player/camera/src/look.rs).
-Character produce is still a broadcast adapter for look / shell / queue
-intents; item interpreters consume D1, not the pad.
+Historical phase-5 status: character produce was still a broadcast adapter for
+look / shell / queue intents; the current runtime delivers those semantics as
+actor-targeted `ActorIntentEvent`s and keeps continuous frames on the actor.
+Item interpreters consume D1, not the pad.
 
 ## Dependency direction
 
@@ -145,8 +165,8 @@ translate or coordinate.
 ```text
 PreUpdate
   InputSystems
-    → VirtualPadSystems::Produce     (A1 → A2)
-    → VirtualPadSystems::Derive      (MenuNavPad, PadCursor)
+    → VirtualPadSystems::Produce: per-entity VirtualPadController production (A1 → A2)
+    → VirtualPadSystems::Derive: VirtualPadEvent(source, sequence, delta, pad)
 
 Update
   ControllerPipeline::Bind           (P1)  character produce, menu focus+dispatch
@@ -212,28 +232,28 @@ the current owner. Later phases change the owner column, not the role id.
 
 | Id | Role | Symbol | Producers | Consumers | Lifecycle owner | Now |
 |---|---|---|---|---|---|---|
-| A1 | Device HID | `bevy_input` `Gamepad` / `ButtonInput` / mouse; Apple `hid/gamecontroller.rs` | OS / gilrs / GameController | `input::produce::{keyboard,mouse,gamepad}` | `VirtualPadPlugin` | Hardware only. Stays in `input`. |
-| A2 | Virtual-pad controller | `VirtualPad`, `VirtualPadSystems` | A1 producers + `PadOverlay` | A3–A5, plus leftover hardware readers below | `VirtualPadPlugin` | Canonical analog + edges. |
-| A3 | Input-routing controller | `InputRouter`, `InputSource`, `Routed<T>`, `RouteTarget` | A2 (`InputSource::LocalPad`) | A4 / A5 / U5 / U6 | `ControllersCorePlugin` | Sole owner of assignment, capture, and suspension. One local pad. |
-| A4 | Menu controller | `MenuControllerPlugin`, `refresh_menu_focus`, `dispatch_menu_nav` | A2 `MenuNavPad` | M2 via `MenuNavImpulse` | `MenuControllerPlugin` | Targeted path (see M1). |
-| A5 | Character controller | `produce_character_intents` → `CharacterIntent`; `RoutedActorControl` | A2 `VirtualPad` + `InputRouter::delivered_actor` | B* intents (broadcast) + B12 / B13 routed sample | `CharacterControllerPlugin` | Bind. Intents still untargeted; analog / A / B are actor-addressed. |
+| A1 | Device HID | `bevy_input` `Gamepad` / `ButtonInput` / mouse; Apple `hid/gamecontroller.rs` | OS / gilrs / GameController | `controllers/virtual-pad/src/produce/*` and `controller.rs` | `VirtualPadPlugin` | Hardware production is source-assigned per `VirtualPadController`. |
+| A2 | Virtual-pad controller | `VirtualPadController`, `VirtualPadEvent` | A1 producers + addressed `PadOverlay` | A3 and routed UI / actor consumers | `VirtualPadPlugin` | Per-source rich state and immutable source-tagged frames. |
+| A3 | Input-routing controller | `InputRouter`, `InputSource`, `Routed<T>`, `RouteTarget` | A2 (`InputSource::VirtualPad(Entity)`) | targeted `UiPadEvent` / `ActorPadEvent`, U5 / U6 | `ControllersCorePlugin` | Sole owner of assignment, capture, and suspension, independently per source. |
+| A4 | Menu controller | `MenuController`, `interpret_menu_pad` | A3 `UiPadEvent` | M2 via `MenuNavImpulse` / `MenuActionImpulse` | Menu controller entity | Owns focus, repeat and scoped session state; deferred actions retain routing authorization. |
+| A5 | Character controller | `produce_character_intents` → `CharacterIntent`; `RoutedActorControl` | A3 `ActorPadEvent` | actor-owned `CharacterIntentFrame`, `RoutedActorControl`, and `ActorIntentEvent` | `CharacterControllerPlugin` | Bind. Semantic events and physical samples retain the addressed actor and source binding. |
 | A6 | NPC movement controller | `intelligence::movement::drive_movement` | planner / `MovementIntelligence` | `MotorIntent` NPC slot | movement-intelligence plugin | **Phase 2.** Declares; does not write `MoveWish`. |
 
 ### B — character / actor samples
 
 | Id | Role | Symbol | Producers | Consumers | Lifecycle owner | Now |
 |---|---|---|---|---|---|---|
-| B1 | Look | `CharacterIntent::Look` | A5 | C1 `apply_look_intents` | character crate | Broadcast. |
-| B2 | Focus | `CharacterIntent::Focus` | A5 | C2; also drops sprint in `interpret_standard_locomotion` | character crate | Broadcast. |
-| B3 | Ads | `CharacterIntent::Ads` | A5 | C3 | character crate | Broadcast. |
-| B4 | Swap POV | `CharacterIntent::SwapPov` | A5 | C4 | character crate | Broadcast. |
-| B5 | Use item | `CharacterIntent::UseItem` | A5 | D1 `dispatch_equipped_item` | character crate (sample); `items/equipment` (D1) | **Phase 5.** Broadcast Bind sample. D1 is the only interpreter. |
-| B6 | Power-use item | `CharacterIntent::PowerUseItem` | A5 | D1 → `EquippedPowerUse` | character crate | **Phase 5.** Broadcast Bind sample. D7 reads the addressed message. |
-| B7 | Equipped queue | `SwapActive`, `CycleEquippedQueue`, `SelectInventoryCyclingCategory` | A5 | D5 / D6 | character crate | Broadcast. |
-| B8 | In-game menu | `CharacterIntent::InGameMenu` | A5 | E1 `toggle_world_pause` | character crate | Broadcast. |
-| B9 | Inventory | `CharacterIntent::Inventory` | A5 | E2 `stash.rs` | character crate | Broadcast. |
-| B10 | Toggle map | `CharacterIntent::ToggleMap` | A5 | E3 `map_view.rs` | character crate | Broadcast. |
-| B11 | Ordinary locomotion | `controllers/locomotion` `interpret_standard_locomotion` | A5 + `InputRouter::delivered_local_actor` | `MotorIntent` Standard contribution | `LocomotionControllerPlugin` | **Phase 2.** One delivered actor. Capture / disconnect / suspend do not write Standard. No lowest-ID lookup. |
+| B1 | Look | `ActorIntentEvent(CharacterIntent::Look)` | A5 | C1 `apply_look_intents` | addressed actor | Actor-targeted entity event. |
+| B2 | Focus | `ActorIntentEvent(CharacterIntent::Focus)` | A5 | C2; also drops sprint in `interpret_standard_locomotion` | addressed actor | Actor-targeted event; continuous sample is in `CharacterIntentFrame`. |
+| B3 | Ads | `ActorIntentEvent(CharacterIntent::Ads)` | A5 | C3 | addressed actor | Actor-targeted entity event. |
+| B4 | Swap POV | `ActorIntentEvent(CharacterIntent::SwapPov)` | A5 | C4 | addressed actor | Actor-targeted entity event. |
+| B5 | Use item | `ActorControlEvent` / `ActorControlSample` | A5 | D1 `dispatch_equipped_item` | addressed actor | D1 is the only interpreter; analog state remains in the actor frame. |
+| B6 | Power-use item | `ActorIntentEvent(CharacterIntent::PowerUseItem)` | A5 | D1 → `EquippedPowerUse` | addressed actor | Actor-targeted entity event, handed off as addressed `EquippedPowerUse`. |
+| B7 | Equipped queue | `ActorIntentEvent(SwapActive / CycleEquippedQueue / SelectInventoryCyclingCategory)` | A5 | D5 / D6 | addressed actor | Actor-targeted entity events. |
+| B8 | In-game menu | `ActorIntentEvent(CharacterIntent::InGameMenu)` | A5 | E1 `toggle_world_pause` | addressed actor | Actor-targeted entity event. |
+| B9 | Inventory | `ActorIntentEvent(CharacterIntent::Inventory)` | A5 | E2 `stash.rs` | addressed actor | Actor-targeted entity event. |
+| B10 | Toggle map | `ActorIntentEvent(CharacterIntent::ToggleMap)` | A5 | E3 `map_view.rs` | addressed actor | Actor-targeted entity event. |
+| B11 | Ordinary locomotion | `controllers/locomotion` `interpret_standard_locomotion` | actor-owned `CharacterIntentFrame` + `ActorControlStatus` | `MotorIntent` Standard contribution | `LocomotionControllerPlugin` | Reads and writes only the addressed actor; queued writes validate the original source/actor binding. |
 | B12 | Tanz gesture | `TanzInput` (`user: Entity`) | `tanz_user::recognize_tanz_inputs` from `RoutedActorControl` | Tanz match → `ExecuteTanz`; skill-map fan-out | `TanzUser` component | **Phase 3.** Source/actor-owned history; physical A/B, not Jump. `RoutingEvent` messages cancel partial gestures. |
 | B13 | Standard flick | `SkillMapFlick` | `SkillMapController::detect_skill_map_flicks` from `RoutedActorControl` | skill-map interpreter | `SkillMapController` resource | **Phase 3.** Actor/session-addressed; `look_throw`. History scoped to owner; session change cannot complete against the new session. |
 
@@ -258,7 +278,7 @@ the current owner. Later phases change the owner column, not the role id.
 | D5 | Inventory category | `apply_inventory_category_selection` | B7 `SelectInventoryCyclingCategory` | per-actor `InventoryCycling`; HUD `ActiveInventoryCyclingCategory` | `items/equipment` `selection.rs` | **Phase 5.** Actor component is the owner; resource is a mirror. |
 | D6 | Queue cycle / swap | `cycle_equipped_inventory_queues` / `begin_equipment_holster` + `commit_equipment_holster` | B7 + `InventoryCycling` | skill-map / Lubikan cycle, or `EquipmentHolster` commit | `items/equipment` | **Phase 5.** Weapons commit the handler at the holster midpoint. Shared stages are Commit → Teardown → `ApplyDeferred` → Hold → Cleanup so every outgoing kit is gone before any incoming kit is built. |
 | D7 | Lubikan activation | `gameplay/lib/src/powers.rs` `request_lubikan_activation` | D1 `EquippedPowerUse` | `LubikanActivationRequest::equipped(owner)` | `gameplay/lib` | **Phase 5.** Spends once; refusal keeps charge. |
-| D8 | Interaction / stash | `stash.rs` `StartInteraction` | `CharacterIntent::StartInteraction` | stash / crate loot | world | Broadcast. |
+| D8 | Interaction / stash | `stash.rs` `StartInteraction` | `ActorIntentEvent(CharacterIntent::StartInteraction)` | addressed actor’s stash / crate loot | world host | Actor-targeted event; primary persistence is an explicit host projection. |
 | D9 | Item presentation | `PlayerPoseSystems::Item` / `WeaponSwap` | D6, Tanz pose | held meshes | player presentation | Not a controller. Listed so D6 does not own pose. |
 
 ### E — shell interpreter
@@ -305,10 +325,10 @@ Who currently writes the live motor / pose bits that interpreters should own.
 
 | State | Writer | File | Policy | Role after the stack |
 |---|---|---|---|---|
-| `CharacterIntent` | `produce_character_intents` | `controllers/character/src/produce.rs` | `InputRouter::actor`, capture blocks, per-actor `OrdinaryLocomotion` | A5 Bind. Single producer. Becomes `Routed` per actor. |
-| `RoutedActorControl` | `produce_actor_control_samples` | `controllers/character/src/sample.rs` | `InputRouter::delivered_actor` | Bind. Analog + physical A/B for one actor. Sole pad sample for B12 / B13. |
+| `CharacterIntent` | `produce_character_intents` | `controllers/character/src/produce.rs` | addressed `ActorPadEvent` binding and per-actor `OrdinaryLocomotion` | A5 Bind. Produces actor-owned `CharacterIntentFrame` and `ActorIntentEvent`. |
+| `RoutedActorControl` | `produce_character_intents` | `controllers/character/src/produce.rs` | addressed `ActorPadEvent` binding | Bind. Analog + physical A/B on one actor. Sole pad sample for B12 / B13. |
 | `ExecuteTanz` | `match_tanz_inputs` | `items/tanz-user/src/execute.rs` | ordered `TanzStack` + cooldown | Selection only. Independent of `SkillMapFlick`. |
-| `MotorIntent` Standard | `interpret_standard_locomotion` | `controllers/locomotion/src/standard.rs` | `InputRouter::delivered_local_actor`; per-actor `OrdinaryLocomotion` | P3 Standard. One delivered actor. |
+| `MotorIntent` Standard | `interpret_standard_locomotion` | `controllers/locomotion/src/standard.rs` | actor-owned `CharacterIntentFrame`; per-actor `OrdinaryLocomotion` | P3 Standard. Reads each addressed actor's current frame. |
 | `MotorIntent` Tanz | `apply_tanz_movement` | `items/tanz-user/src/execute.rs` | `TanzUser.mode.is_tanzer()` | P3 Tanz. Declares sprint/cap in the sample. Compose selects; apply does not inspect Tanz. |
 | `SkillMapFlick` | Tanz `publish_tanz_map_inputs` / Standard `detect_skill_map_flicks` | `tanz-user` / `skill-map` | actor + optional session | Independent of Tanz match / execution success. |
 | `MotorIntent` suppress | `apply_world_motor_filter` | `world/lib/src/control.rs` | `WORLD_GAMEPLAY` on Player; `SIMULATION` on every `CharacterController` when the Simulation bit is absent | P3 WorldFilter. Token-owned; zeros leftover vegetation `MoveWish`. |
@@ -328,10 +348,11 @@ Who currently writes the live motor / pose bits that interpreters should own.
 | `WeaponTrigger` (NPC) | `intelligence::combat::firearm` | `intelligence/combat/firearm/src/combat.rs` | planner cadence | A6 item path. Keep. |
 | `WorldGameplayEnabled` | `toggle_world_pause`, flow enter | `game/src/lib.rs`, world control | pause / shell | E1 / E4. Phase 4. |
 
-## Direct hardware reads (outside `input`)
+## Historical phase-1 hardware-read inventory
 
-Invariant 3: one normalized input source. These reads stay until the listed
-phase. Phase 1 inventories them and migrates menu dispatch only.
+Invariant 3: one normalized input source. This table records the phase-1
+migration snapshot, when only menu dispatch had moved; it is not a current
+ownership inventory. See the current runtime summary above.
 
 | Location | Reads | Should consume | Phase |
 |---|---|---|---|
@@ -350,15 +371,16 @@ phase. Phase 1 inventories them and migrates menu dispatch only.
 | `menu/playground` drop / leave / preview | `VirtualPad` / `Gamepad` | M1 | playground hosts |
 | `util/camera-controls`, `util/game-commands` | `Gamepad` | debug overlays | keep (util) |
 
-## Query-wide dispatch
+## Historical query-wide dispatch plan
 
-Invariant 1: explicit targeting. Broadcast `Messages<T>` plus `Query` that
-applies the last sample to **every** matching entity.
+Invariant 1: explicit targeting. The rows below preserve the original migration
+plan and status at that phase; they do not describe current dispatch. Character
+semantic intents now target their actor as `ActorIntentEvent`s.
 
 | Path | Mechanism | Phase 1 | Removal |
 |---|---|---|---|
 | **Menu nav (M1)** | `Routed<MenuNav>` → `MenuNavImpulse` on one `UiTarget`; exclusive modal acquires a `CaptureToken` | **Migrated** | — |
-| `CharacterIntent` (B1–B11) | `MessageWriter` / `MessageReader`, no actor | adapter | 3–5 per consumer. B11 consumes via `InputRouter::delivered_local_actor`. |
+| `CharacterIntent` (B1–B11) | Original plan: `MessageWriter` / `MessageReader`, no actor | historical adapter plan | Superseded by addressed actor events and actor-owned frames. |
 | `apply_move_intents` | removed | **Phase 2** | locomotion + compose / apply |
 | `apply_intents_to_movement` | removed live writes | **Phase 2** | `apply_world_motor_filter` suppress |
 | `apply_look_intents` | broadcast B1–B4; gated on `delivered_actor` | **Phase 5 gated** | remaining: addressed look sample |
@@ -368,9 +390,10 @@ applies the last sample to **every** matching entity.
 | `TanzInput` | produced from `RoutedActorControl` for one actor | **Phase 3 migrated** | — |
 | `drive_movement` | each NPC declares its own `MotorIntent` (OK) from a planner | **Phase 2** | keep |
 
-## Temporary adapters
+## Historical temporary-adapter plan
 
-Do not add a second copy of these. Remove in the named phase.
+This table records adapters expected during the original phase migration. Check
+the current runtime summary above before treating a row as live.
 
 | Adapter | Why it exists | Removal |
 |---|---|---|
@@ -449,11 +472,11 @@ later PRs do not drift.
 Tracking: [#1441](https://github.com/ramate-io/maybraid/issues/1441). Stack tip of
 [#1436](https://github.com/ramate-io/maybraid/issues/1436).
 
-### Item / camera flow
+### Item / camera flow (historical phase-5 plan)
 
 ```text
-VirtualPad → produce_character_intents → CharacterIntent (Bind broadcast)
-InputRouter::delivered_actor + EquippedItemHandler
+ActorPadEvent → produce_character_intents → addressed CharacterIntent / actor frame
+EquippedItemHandler
        → dispatch_equipped_item
             → EquippedItemUse(actor, handler, squeeze, held)
                  → apply_fire_intents      (firearm + held → WeaponTrigger;
@@ -562,10 +585,11 @@ full plugins (`GameplayPlugin` adds those after the runtime):
 - loading → play → inventory pause → resume → Home
 - NPC `FirearmUser` does not consume player D1
 
-### Remaining limitations
+### Phase-5 status notes
 
-- `CharacterIntent` is still a Bind broadcast for look, shell, and queue
-  intents (B1–B4, B7–B10).
+- Character semantic intents are now actor-targeted `ActorIntentEvent`s, and
+  current physical / semantic frames live on the addressed actor. The earlier
+  Bind-broadcast limitation has been resolved.
 - `CharacterControlSystems` remains a Bind alias for leftover
   `.after(CharacterControlSystems)` hosts.
 - `apply_look_intents` is still query-wide `FollowCamera` (delivery-gated).
