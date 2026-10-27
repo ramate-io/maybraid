@@ -50,9 +50,11 @@ pub fn fulfill_skin_ref_roots(
 			continue;
 		}
 		// The part may retire after this lookup but before deferred completion.
-		commands
-			.entity(entity)
-			.try_insert((PartRigRef { rig_root }, NeedsSkinRemap, SkinRefApplied));
+		commands.entity(entity).try_insert((
+			PartRigRef { rig_root },
+			NeedsSkinRemap,
+			SkinRefApplied,
+		));
 	}
 }
 
