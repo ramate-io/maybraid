@@ -6,18 +6,41 @@ use maybraid_equipment::{
 	EquipmentSystems, EquippedItemHandler, PendingEquipmentHold, PendingEquipmentTeardown,
 };
 
-use crate::FisticuffsUser;
+use crate::{drive, sensor, FisticuffsStrike, FisticuffsUser};
 
 #[derive(Resource, Default)]
 struct FisticuffsUserRuntime;
 
 /// Attack machine + equipment realize. Gameplay assembly is the owner that
-/// calls this; a second call is a no-op.
+/// calls this; a second call is a no-op. No rendering or audio resources are
+/// required. A host that installs physics also resolves the jab overlap.
 pub fn register_fisticuffs_user_runtime(app: &mut App) {
 	if app.world().contains_resource::<FisticuffsUserRuntime>() {
 		return;
 	}
+	if !app.is_plugin_added::<damage::DamagePlugin>() {
+		app.add_plugins(damage::DamagePlugin);
+	}
 	app.init_resource::<FisticuffsUserRuntime>()
+		.add_message::<maybraid_character_controller::CharacterIntent>()
+		.add_message::<FisticuffsStrike>()
+		.add_systems(
+			Update,
+			(
+				drive::tick_attack_state,
+				drive::apply_attack_intents,
+				drive::latch_jab_aim,
+				sensor::sync_fist_sensors,
+			)
+				.chain()
+				.in_set(player::PlayerSystems::Intent),
+		)
+		.add_systems(
+			PostUpdate,
+			sensor::resolve_fist_hits
+				.after(bevy::transform::TransformSystems::Propagate)
+				.before(damage::DamageSystems::Apply),
+		)
 		.add_message::<maybraid_equipment::EquippedItemUse>()
 		.add_systems(
 			Update,
@@ -62,14 +85,57 @@ fn realize_equipment_hold(mut commands: Commands, pending: Query<(Entity, &Pendi
 
 #[cfg(test)]
 mod tests {
-	use super::register_fisticuffs_user_runtime;
-	use bevy::prelude::*;
+	use super::*;
+	use crate::{AttackPhase, FisticuffsHitSensor};
+	use bevy::time::TimeUpdateStrategy;
+	use maybraid_character_controller::CharacterIntent;
+	use std::time::Duration;
+
+	#[derive(Resource, Default)]
+	struct Strikes(usize);
+
+	fn record_strikes(mut events: MessageReader<FisticuffsStrike>, mut strikes: ResMut<Strikes>) {
+		strikes.0 += events.read().count();
+	}
 
 	#[test]
-	fn runtime_register_is_idempotent() {
+	fn runtime_advances_one_jab_without_presentation_and_registers_once() -> anyhow::Result<()> {
 		let mut app = App::new();
-		app.add_plugins(MinimalPlugins);
+		app.add_plugins(MinimalPlugins)
+			.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(50)))
+			.init_resource::<Strikes>();
 		register_fisticuffs_user_runtime(&mut app);
 		register_fisticuffs_user_runtime(&mut app);
+		app.add_systems(PostUpdate, record_strikes);
+		let actor = app
+			.world_mut()
+			.spawn((
+				player::Player,
+				FisticuffsUser::default(),
+				EquippedItemHandler::Fisticuffs,
+				Transform::IDENTITY,
+			))
+			.id();
+		app.world_mut().write_message(CharacterIntent::AttackRight);
+		app.update();
+		for _ in 0..3 {
+			app.update();
+		}
+		let user = app
+			.world()
+			.get::<FisticuffsUser>(actor)
+			.ok_or_else(|| anyhow::anyhow!("driver"))?;
+		assert_eq!(user.state.phase(), Some(AttackPhase::Active));
+		assert_eq!(app.world().resource::<Strikes>().0, 1);
+		assert_eq!(app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count(), 1);
+		assert!(!app.is_plugin_added::<crate::FisticuffsUserPlugin>());
+		assert!(!app.is_plugin_added::<maybraid_audio::AudioPlugin>());
+		assert!(!app.world().contains_resource::<Assets<Mesh>>());
+		for _ in 0..7 {
+			app.update();
+		}
+		assert_eq!(app.world().resource::<Strikes>().0, 1);
+		assert_eq!(app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count(), 0);
+		Ok(())
 	}
 }

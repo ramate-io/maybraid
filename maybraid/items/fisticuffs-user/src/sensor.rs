@@ -265,7 +265,7 @@ pub fn sync_fist_sensors(
 /// here and again in [`damage::apply_hits`] (`allow_self: false`). There is no
 /// separate team filter on the damage seam — same rule as firearms / grenades.
 pub fn resolve_fist_hits(
-	spatial: SpatialQuery,
+	spatial: Option<SpatialQuery>,
 	users: Query<(Entity, &FisticuffsUser, Option<&GlobalTransform>, Option<&Transform>)>,
 	visuals: Query<(&CharacterHeading, &ChildOf), With<CharacterRoot>>,
 	transforms: Query<(Entity, &Transform, Option<&GlobalTransform>)>,
@@ -274,6 +274,9 @@ pub fn resolve_fist_hits(
 	mut sensors: Query<(Entity, &mut FisticuffsHitSensor)>,
 	mut hits: MessageWriter<Hit>,
 ) {
+	let Some(spatial) = spatial else {
+		return;
+	};
 	for (sensor, mut volume) in &mut sensors {
 		let Ok((attacker, user, global, local)) = users.get(volume.attacker) else {
 			continue;

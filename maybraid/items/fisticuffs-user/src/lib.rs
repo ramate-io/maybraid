@@ -9,7 +9,6 @@ mod sound;
 
 use bevy::prelude::*;
 use characters::CharacterMotionSystems;
-use damage::DamageSystems;
 use player::PlayerSystems;
 
 pub use aim::{
@@ -55,35 +54,14 @@ pub struct FisticuffsUserPlugin;
 
 impl Plugin for FisticuffsUserPlugin {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<damage::DamagePlugin>() {
-			app.add_plugins(damage::DamagePlugin);
-		}
 		register_fisticuffs_user_runtime(app);
 		sound::configure_strike_audio(app);
 		app.init_resource::<FisticuffsSensorDebug>()
-			.add_message::<FisticuffsStrike>()
-			.add_systems(
-				Update,
-				(
-					drive::tick_attack_state,
-					drive::apply_attack_intents,
-					drive::latch_jab_aim,
-					sensor::sync_fist_sensors,
-				)
-					.chain()
-					.in_set(PlayerSystems::Intent),
-			)
 			.add_systems(
 				Update,
 				drive::apply_fisticuffs_visual
 					.after(PlayerSystems::Locomotion)
 					.before(CharacterMotionSystems::Anim),
-			)
-			.add_systems(
-				PostUpdate,
-				sensor::resolve_fist_hits
-					.after(bevy::transform::TransformSystems::Propagate)
-					.before(DamageSystems::Apply),
 			)
 			.add_systems(
 				Update,

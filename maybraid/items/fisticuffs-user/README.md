@@ -123,3 +123,14 @@ FISTICUFFS_JAB_CAPTURE_DIR=/tmp/fisticuffs-jab \
   WGPU_BACKEND=vk \
   xvfb-run -a cargo run -p menu-playground --example fisticuffs_jab_hit_capture
 ```
+
+## Runtime and presentation
+
+`register_fisticuffs_user_runtime` installs the attack machine, equipment
+hold/teardown, strike messages, and hit resolution once. Headless gameplay uses
+this same runtime without audio or mesh assets. Hit resolution waits for a host
+with physics; attack timing and sensor lifetime still run without it.
+
+`FisticuffsUserPlugin` adds clip presentation, debug drawing, and strike vocals
+on top of that runtime. Installing it after gameplay does not register a second
+attack machine.

@@ -57,6 +57,10 @@ fn assert_no_command_errors() -> anyhow::Result<()> {
 }
 
 fn lifetime_app() -> App {
+	lifetime_app_with_presentation(true)
+}
+
+fn lifetime_app_with_presentation(presentation: bool) -> App {
 	clear_command_errors();
 	let mut app = App::new();
 	app.add_plugins((
@@ -68,8 +72,12 @@ fn lifetime_app() -> App {
 		bevy::mesh::MeshPlugin,
 		CharacterControllerPlugin,
 		EquipmentPlugin,
-		FisticuffsUserPlugin,
 	));
+	if presentation {
+		app.add_plugins(FisticuffsUserPlugin);
+	} else {
+		crate::register_fisticuffs_user_runtime(&mut app);
+	}
 	app.finish();
 	app.set_error_handler(record_command_error);
 	app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(1.0 / 60.0)));
@@ -267,5 +275,27 @@ fn captured_pad_does_not_chamber_a_jab() -> anyhow::Result<()> {
 	if user.state.phase() == Some(AttackPhase::Active) {
 		anyhow::bail!("captured pad must not enter Active");
 	}
+	Ok(())
+}
+
+#[test]
+fn runtime_only_jab_reaches_damage_without_the_presentation_plugin() -> anyhow::Result<()> {
+	let mut app = lifetime_app_with_presentation(false);
+	let player = spawn_attacker(&mut app);
+	let dummy = spawn_dummy(&mut app);
+	assign(&mut app, player);
+	squeeze_right_trigger(&mut app);
+	app.update();
+	release_triggers(&mut app);
+	advance_to_active(&mut app);
+	app.update();
+	let health = app
+		.world()
+		.get::<Health>(dummy)
+		.ok_or_else(|| anyhow::anyhow!("dummy health"))?;
+	assert_eq!(health.current, health.max - PLACEHOLDER_JAB_DAMAGE);
+	assert!(!app.is_plugin_added::<FisticuffsUserPlugin>());
+	assert!(!app.is_plugin_added::<maybraid_audio::AudioPlugin>());
+	assert_no_command_errors()?;
 	Ok(())
 }
