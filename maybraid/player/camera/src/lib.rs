@@ -6,7 +6,8 @@ mod look;
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
 use characters::CharacterPoseSystems;
-use maybraid_character_controller::CharacterControlSystems;
+use maybraid_character_controller::InputSource;
+use maybraid_character_controller::{CharacterControlSystems, InputRouter};
 use maybraid_spatial_rumble::{SpatialRumbleListener, SpatialRumblePlugin, SpatialRumbleSystems};
 use player::{PlayerPlugin, PlayerPoseSystems, PlayerSystems};
 use std::f32::consts::FRAC_PI_2;
@@ -26,6 +27,14 @@ pub enum PlayerCameraSystems {
 	Follow,
 	Apply,
 }
+
+/// The actor whose look, pose, and recoil this camera displays.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CameraTarget(pub Option<Entity>);
+
+/// Host-owned binding for a camera that follows an input source.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CameraInputSource(pub InputSource);
 
 /// Per-camera follow / FOV / look-cone knobs. Runtime look state lives on [`CameraController`].
 #[derive(Component, Clone, Copy, Debug)]
@@ -93,12 +102,41 @@ impl Default for FollowCamera {
 
 pub struct PlayerCameraPlugin;
 
+#[derive(Resource)]
+struct CameraRuntimeRegistration;
+
+/// Resolve configured camera sources at the camera host boundary.
+/// Look, follow, and recoil systems consume only the resulting actor target.
+pub fn sync_camera_targets(
+	router: Option<Res<InputRouter>>,
+	mut cameras: Query<(&CameraInputSource, &mut CameraTarget)>,
+) {
+	let Some(router) = router else {
+		return;
+	};
+	for (source, mut target) in &mut cameras {
+		target.0 = router.actor(source.0).map(|actor| actor.entity());
+	}
+}
+
 /// Look / body clocks and recoil apply sets. Follow pose, FOV, and rumble
 /// stay on [`PlayerCameraPlugin`].
 pub fn register_player_camera_runtime(app: &mut App) {
+	if app.world().contains_resource::<CameraRuntimeRegistration>() {
+		return;
+	}
+	app.world_mut().insert_resource(CameraRuntimeRegistration);
 	app.init_resource::<CameraPovLocked>()
 		.init_resource::<look::CameraLookSuppressed>()
 		.add_message::<CameraRecoilHandoff>()
+		.add_observer(look::reset_look_frame)
+		.add_observer(look::apply_look_intent)
+		.add_systems(
+			Update,
+			sync_camera_targets
+				.after(CharacterControlSystems)
+				.before(PlayerCameraSystems::Look),
+		)
 		.configure_sets(
 			Update,
 			(
@@ -115,12 +153,7 @@ pub fn register_player_camera_runtime(app: &mut App) {
 				PlayerCameraSystems::Apply.after(PlayerCameraSystems::Follow),
 			),
 		)
-		.add_systems(
-			Update,
-			(look::apply_look_intents, look::sync_player_look)
-				.chain()
-				.in_set(PlayerCameraSystems::Look),
-		)
+		.add_systems(Update, look::sync_player_look.in_set(PlayerCameraSystems::Look))
 		.add_systems(
 			Update,
 			(look::sync_yaw_owner, look::turn_body_with_look)
@@ -141,10 +174,7 @@ impl Plugin for PlayerCameraPlugin {
 				.after(PlayerCameraSystems::Follow)
 				.before(PlayerCameraSystems::Apply),
 		)
-		.add_systems(
-			Update,
-			follow::follow_character_camera.in_set(PlayerCameraSystems::Follow),
-		)
+		.add_systems(Update, follow::follow_character_camera.in_set(PlayerCameraSystems::Follow))
 		.add_systems(
 			Update,
 			(follow::sync_camera_fov, follow::sync_first_person_head_visibility)
@@ -171,6 +201,8 @@ pub fn spawn_follow_camera(commands: &mut Commands) -> Entity {
 			lod::LodViewer,
 			SpatialListener::new(SPATIAL_LISTENER_GAP),
 			follow,
+			CameraInputSource(InputSource::local_pad()),
+			CameraTarget::default(),
 			Transform::from_translation(Vec3::new(
 				-follow.distance,
 				follow.height + follow.look_height,
@@ -213,8 +245,29 @@ fn release_modifiers_on_focus_change(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::ecs::system::RunSystemOnce;
 	use characters::CharacterMotionSystems;
-	use maybraid_character_controller::CharacterIntent;
+	use maybraid_character_controller::ActorTarget;
+
+	#[test]
+	fn each_camera_follows_its_configured_source() {
+		let mut world = World::new();
+		world.init_resource::<InputRouter>();
+		let first = world.spawn_empty().id();
+		let second = world.spawn_empty().id();
+		let a = InputSource::virtual_pad(world.spawn_empty().id());
+		let b = InputSource::virtual_pad(world.spawn_empty().id());
+		let camera_a = world.spawn((CameraInputSource(a), CameraTarget::default())).id();
+		let camera_b = world.spawn((CameraInputSource(b), CameraTarget::default())).id();
+		{
+			let mut router = world.resource_mut::<InputRouter>();
+			router.assign_actor(a, ActorTarget::new(first));
+			router.assign_actor(b, ActorTarget::new(second));
+		}
+		world.run_system_once(sync_camera_targets).expect("targets");
+		assert_eq!(world.get::<CameraTarget>(camera_a).unwrap().0, Some(first));
+		assert_eq!(world.get::<CameraTarget>(camera_b).unwrap().0, Some(second));
+	}
 
 	#[test]
 	fn follow_camera_carries_a_spatial_listener() -> anyhow::Result<()> {
@@ -293,7 +346,6 @@ mod tests {
 		app.add_plugins(MinimalPlugins)
 			.init_resource::<ButtonInput<KeyCode>>()
 			.init_resource::<ButtonInput<MouseButton>>()
-			.add_message::<CharacterIntent>()
 			.add_message::<WindowFocused>()
 			.add_plugins(player::PlayerPresentationPlugin)
 			.add_plugins(PlayerCameraPlugin)

@@ -6992,6 +6992,7 @@ dependencies = [
  "lubikans",
  "maybraid-character-controller",
  "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
 ]
 
 [[package]]
@@ -9287,6 +9288,7 @@ dependencies = [
  "lod",
  "maybraid-character-controller",
  "maybraid-spatial-rumble",
+ "maybraid-virtual-pad-controller",
  "player",
 ]
 
