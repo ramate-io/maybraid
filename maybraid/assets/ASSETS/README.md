@@ -1,11 +1,6 @@
 # Asset provenance notes
 
-## Fisticuffs strike effort grunts (`sound-effects/character/fisticuffs/`)
-
-**Status:** PLACEHOLDER — synthesized in-repo for development (Python + sine harmonics, CC0 / project-owned).
-
-| File pattern | Role |
-|---|---|
-| `effort_man_{combo}_{variant}.wav` | Short effort grunt on jab active window; `combo` rotates on chained jabs (`1..3`), `variant` is picked noisily per attacker |
-
-**Open item for Liam:** Replace placeholders with final authored male effort grunts (three combo buckets × three variants), mono WAV, same naming scheme.
+Fisticuffs jab vocals reuse the authored damage flinch clips in
+`sound-effects/character/damage/` (`man_001`–`man_003`) through
+[`FlinchSounds`](../../audio/src/flinch.rs). There is no separate
+`sound-effects/character/fisticuffs/` bank.

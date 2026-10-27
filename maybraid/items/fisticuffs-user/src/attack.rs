@@ -8,7 +8,8 @@ use maybraid_character_controller::CharacterIntent;
 
 use crate::aim::JabAim;
 
-/// Rotating combo index passed to strike events and effort SFX.
+/// Rotating combo index passed to strike events. Jab vocals use the shared
+/// flinch bank, not this step.
 pub const COMBO_STEP_COUNT: usize = 3;
 
 /// Gameplay startup ends during the authored snap (`EXTEND_END = 0.42`).
