@@ -726,14 +726,16 @@ type DroppingPlayer<'a> = (
 );
 
 fn drop_player_inventory(
-	settings: Res<WorldStashSettings>,
 	event: On<ActorIntentEvent>,
+	settings: Res<WorldStashSettings>,
 	mut commands: Commands,
 	mut drops: MessageWriter<DropLiveGrenade>,
 	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
-	primary: Option<Res<PrimaryVirtualPad>>,
-	gameplay: Option<Res<WorldGameplayEnabled>>,
-	assets: Option<Res<AssetServer>>,
+	(primary, gameplay, assets): (
+		Option<Res<PrimaryVirtualPad>>,
+		Option<Res<WorldGameplayEnabled>>,
+		Option<Res<AssetServer>>,
+	),
 	players: Query<(DroppingPlayer<'_>, Option<&ActorControlStatus>), With<VegetationPlayer>>,
 	mut bags: Query<&mut Inventory>,
 ) {
