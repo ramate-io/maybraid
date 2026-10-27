@@ -17,6 +17,7 @@ use maybraid_character_controller::RoutedActorControl;
 use maybraid_character_controller::{ActorControlEvent, CharacterBindSystems, OrdinaryLocomotion};
 use maybraid_controllers_core::{
 	ActorRoutingEvent, ActorTarget, ControllerPipeline, ControllersCorePlugin, PadDeliverySystems,
+	RoutingEvent,
 };
 use maybraid_skill_map::{RoutedSkillMapFlick, SkillMapFlick, SkillMapSystems, SkillMapUser};
 use menu_components::sync_loading_bar_fill;
@@ -300,7 +301,8 @@ fn consume_tanz_control(
 	let sample = *input.payload();
 	let entity = event.entity;
 	if user.recognizer.bind_delivery(input.source(), input.binding()) {
-		user.toggle.reset_for_mode(user.mode);
+		let mode = user.mode;
+		user.toggle.reset_for_mode(mode);
 	}
 	if !user.toggle.is_frozen() {
 		let mut fallback = TanzExecution::default();
@@ -330,7 +332,7 @@ fn consume_tanz_control(
 			coherence: gesture.coherence,
 			button: gesture.button,
 		})
-		.trigger(&mut commands, |input| RoutedTanzInput { entity, input });
+		.trigger(&mut commands, move |input| RoutedTanzInput { entity, input });
 }
 
 /// Install participation on spawn. Mode flips write from [`consume_tanz_control`]
