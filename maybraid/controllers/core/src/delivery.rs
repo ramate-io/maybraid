@@ -271,17 +271,13 @@ pub(crate) fn deliver_actor_frames(
 	}
 }
 
-/// Capture owns policy for each source; the primary resource is a temporary mirror.
+/// Capture owns policy for each controller source.
 pub(crate) fn sync_source_policies(
 	router: Res<InputRouter>,
 	mut controllers: Query<(Entity, &mut VirtualPadController)>,
-	mut legacy: Option<ResMut<maybraid_virtual_pad_controller::PadInputPolicy>>,
 ) {
 	for (entity, mut controller) in &mut controllers {
 		controller.policy = router.pad_policy_for(InputSource::virtual_pad(entity));
-	}
-	if let Some(legacy) = legacy.as_mut() {
-		**legacy = router.pad_policy();
 	}
 }
 

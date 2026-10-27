@@ -85,18 +85,6 @@ impl GamepadAxes {
 	}
 }
 
-pub fn produce_gamepad(
-	gamepads: Query<&Gamepad>,
-	config: Res<VirtualPadConfig>,
-	time: Res<Time>,
-	mut pad: ResMut<VirtualPad>,
-) {
-	let dt = time.delta_secs();
-	for gamepad in &gamepads {
-		GamepadAxes::apply(gamepad, &config, dt, &mut pad);
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;

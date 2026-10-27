@@ -6,9 +6,7 @@ use bevy::input::keyboard::KeyboardInput;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 
-use crate::{
-	PadCursor, PadEdge, PadHistory, PadInputPolicy, PadOverlay, VirtualPad, VirtualPadConfig,
-};
+use crate::{PadCursor, PadEdge, PadHistory, PadInputPolicy, VirtualPad, VirtualPadConfig};
 
 /// Physical devices intentionally combined into one controller.
 ///
@@ -118,7 +116,7 @@ pub struct VirtualPadLifecycle {
 	pub connected: bool,
 }
 
-/// Explicit single-player compatibility controller, also used by agent injection.
+/// Explicit single-player host controller identity, also used by addressed injection.
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct PrimaryVirtualPad(pub Entity);
 
@@ -187,9 +185,6 @@ pub(crate) fn produce_controllers(
 	mut key_events: MessageReader<KeyboardInput>,
 	mut mouse_events: MessageReader<MouseMotion>,
 	gamepads: Query<&Gamepad>,
-	primary: Res<PrimaryVirtualPad>,
-	legacy_policy: Res<PadInputPolicy>,
-	legacy_overlay: Option<Res<PadOverlay>>,
 	mut controllers: Query<(
 		Entity,
 		&mut VirtualPadController,
@@ -206,7 +201,6 @@ pub(crate) fn produce_controllers(
 		})
 		.collect();
 	let mouse_delta: Vec2 = mouse_events.read().map(|event| event.delta).sum();
-	let command_held = keyboard.any_pressed([KeyCode::SuperLeft, KeyCode::SuperRight]);
 	for (entity, mut controller, overlay) in &mut controllers {
 		let devices = controller.devices.clone();
 		let config = controller.config.clone();
@@ -225,29 +219,21 @@ pub(crate) fn produce_controllers(
 		}
 		controller.connected = connected;
 		controller.previous_devices = Some(devices.clone());
-		if entity == primary.0 {
-			controller.policy = *legacy_policy;
-		}
 		controller.pad.begin_frame();
 		if devices.keyboard {
-			if controller.policy.keyboard_menu() {
-				crate::produce::keyboard::produce_menu_keys(&keyboard, &mut controller.pad);
-			} else {
-				crate::produce::keyboard::produce_gameplay_keys(&keyboard, &mut controller.pad);
-			}
-			controller.pad.keys = keyboard.clone();
+			let policy = controller.policy;
+			crate::produce::keyboard::KeyboardPad::apply(&keyboard, policy, &mut controller.pad);
 			controller.pad.key_events = keys.clone();
 		} else {
 			controller.pad.keys = ButtonInput::default();
 		}
-		if devices.mouse && !command_held {
-			controller.pad.add_look(mouse_delta);
-			if mouse.pressed(MouseButton::Right) {
-				controller.pad.max_triggers(1.0, 0.0);
-			}
-			if mouse.pressed(MouseButton::Left) {
-				controller.pad.max_triggers(0.0, 1.0);
-			}
+		if devices.mouse {
+			crate::produce::mouse::MousePad::apply(
+				&keyboard,
+				&mouse,
+				mouse_delta,
+				&mut controller.pad,
+			);
 		}
 		for gamepad in &devices.gamepads {
 			if let Ok(gamepad) = gamepads.get(*gamepad) {
@@ -262,11 +248,6 @@ pub(crate) fn produce_controllers(
 		if let Some(overlay) = overlay {
 			overlay.0.apply(&mut controller.pad);
 		}
-		if entity == primary.0 {
-			if let Some(overlay) = &legacy_overlay {
-				overlay.apply(&mut controller.pad);
-			}
-		}
 		if changed || (connected && !was_connected) {
 			// Device transfer cancels holds; a still-held device must release first.
 			controller.pad.suppress_gameplay();
@@ -275,15 +256,11 @@ pub(crate) fn produce_controllers(
 	}
 }
 
-/// Publish entity-owned snapshots and mirror only the explicitly designated pad.
+/// Publish immutable rich snapshots from every controller entity.
 pub(crate) fn publish_controllers(
-	primary: Res<PrimaryVirtualPad>,
 	time: Res<Time>,
 	controllers: Query<(Entity, &VirtualPadController)>,
 	mut events: MessageWriter<VirtualPadEvent>,
-	mut legacy_pad: ResMut<VirtualPad>,
-	mut legacy_history: ResMut<PadHistory>,
-	mut legacy_cursor: ResMut<PadCursor>,
 ) {
 	for (entity, controller) in &controllers {
 		events.write(VirtualPadEvent {
@@ -292,11 +269,6 @@ pub(crate) fn publish_controllers(
 			delta: time.delta(),
 			pad: controller.pad.clone(),
 		});
-		if entity == primary.0 {
-			*legacy_pad = controller.pad.clone();
-			*legacy_history = controller.history.clone();
-			*legacy_cursor = controller.cursor.clone();
-		}
 	}
 }
 
@@ -344,13 +316,12 @@ mod tests {
 		assert_eq!(left_pad.history.edges.len(), 1);
 		assert!(right_pad.history.edges.is_empty());
 		app.update();
-		assert!(
-			!app.world()
-				.get::<VirtualPadController>(left)
-				.ok_or_else(|| anyhow::anyhow!("left controller"))?
-				.pad
-				.just_pressed(PadButton::A)
-		);
+		assert!(!app
+			.world()
+			.get::<VirtualPadController>(left)
+			.ok_or_else(|| anyhow::anyhow!("left controller"))?
+			.pad
+			.just_pressed(PadButton::A));
 		app.world_mut().despawn(left_device);
 		app.update();
 		let left_pad = app
@@ -359,11 +330,10 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("left controller"))?;
 		assert!(!left_pad.connected());
 		assert!(left_pad.pad.just_released(PadButton::A));
-		assert!(
-			app.world()
-				.get::<VirtualPadController>(right)
-				.is_some_and(VirtualPadController::connected)
-		);
+		assert!(app
+			.world()
+			.get::<VirtualPadController>(right)
+			.is_some_and(VirtualPadController::connected));
 		Ok(())
 	}
 
@@ -414,8 +384,8 @@ mod tests {
 	}
 
 	#[test]
-	fn default_host_reuses_primary_and_secondary_sources_without_fresh_held_edges()
-	-> anyhow::Result<()> {
+	fn default_host_reuses_primary_and_secondary_sources_without_fresh_held_edges(
+	) -> anyhow::Result<()> {
 		let mut app = App::new();
 		app.add_plugins((
 			MinimalPlugins,
@@ -449,13 +419,11 @@ mod tests {
 				.world()
 				.get::<VirtualPadController>(source)
 				.ok_or_else(|| anyhow::anyhow!("reused source"))?;
-			assert!(
-				controller.devices.gamepads.iter().any(|device| [
-					first_replacement,
-					second_replacement
-				]
-				.contains(device))
-			);
+			assert!(controller.devices.gamepads.iter().any(|device| [
+				first_replacement,
+				second_replacement
+			]
+			.contains(device)));
 			assert!(controller.connected());
 			assert!(!controller.pad.just_pressed(PadButton::A));
 			assert!(!controller.pad.pressed(PadButton::A));

@@ -2,10 +2,8 @@
 
 use bevy::prelude::*;
 
-use crate::config::VirtualPadConfig;
-use crate::gate::PadInputPolicy;
-use crate::pad::VirtualPad;
 use crate::produce::gamepad::GamepadAxes;
+use crate::VirtualPadController;
 
 #[derive(Component)]
 struct VirtualPadDebugText;
@@ -15,8 +13,8 @@ pub fn configure_debug(app: &mut App) {
 		.add_systems(Update, update_debug_overlay);
 }
 
-fn spawn_debug_overlay(config: Res<VirtualPadConfig>, mut commands: Commands) {
-	if !config.debug_overlay {
+fn spawn_debug_overlay(controllers: Query<&VirtualPadController>, mut commands: Commands) {
+	if !controllers.iter().any(|controller| controller.config.debug_overlay) {
 		return;
 	}
 	commands.spawn((
@@ -37,31 +35,26 @@ fn spawn_debug_overlay(config: Res<VirtualPadConfig>, mut commands: Commands) {
 }
 
 fn update_debug_overlay(
-	config: Res<VirtualPadConfig>,
-	policy: Res<PadInputPolicy>,
-	pad: Res<VirtualPad>,
+	controllers: Query<(Entity, &VirtualPadController)>,
 	gamepads: Query<(Entity, &Gamepad)>,
 	mut lines: Query<&mut Text, With<VirtualPadDebugText>>,
 ) {
-	if !config.debug_overlay {
-		return;
-	}
 	let Ok(mut text) = lines.single_mut() else {
 		return;
 	};
 	let mut out = String::new();
-	out.push_str(&format!(
-		"enabled={} move=({:.2},{:.2}) dpad=({:.2},{:.2}) A={} B={} Start={} Select={}\n",
-		!policy.suppress_gameplay(),
-		pad.move_stick.x,
-		pad.move_stick.y,
-		pad.dpad.x,
-		pad.dpad.y,
-		pad.pressed(crate::PadButton::A),
-		pad.pressed(crate::PadButton::B),
-		pad.pressed(crate::PadButton::Start),
-		pad.pressed(crate::PadButton::Select),
-	));
+	for (entity, controller) in &controllers {
+		if !controller.config.debug_overlay {
+			continue;
+		}
+		let pad = &controller.pad;
+		out.push_str(&format!(
+			"{entity} enabled={} move=({:.2},{:.2}) dpad=({:.2},{:.2}) A={} B={} Start={} Select={}\n",
+			!controller.policy.suppress_gameplay(), pad.move_stick.x, pad.move_stick.y, pad.dpad.x, pad.dpad.y,
+			pad.pressed(crate::PadButton::A), pad.pressed(crate::PadButton::B), pad.pressed(crate::PadButton::Start), pad.pressed(crate::PadButton::Select),
+		));
+	}
+
 	if gamepads.is_empty() {
 		out.push_str("no Gamepad components\n");
 	}

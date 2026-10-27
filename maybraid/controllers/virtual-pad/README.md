@@ -1,8 +1,10 @@
-# Input
+# Virtual-pad controller
 
 Common virtual pad for Maybraid. Bevy’s `bevy_input` stays the HID layer.
-This crate maps keyboard, mouse, and gamepad onto one per-player snapshot,
-then integrates a bounded cursor and a short history window. Menu controllers interpret navigation from authorized rich frames.
+Each `VirtualPadController` entity owns its rich pad, device assignment, configuration,
+policy, bounded cursor and history. The crate publishes immutable `VirtualPadEvent`
+snapshots identified by that controller entity, update sequence and duration.
+Menu, character and shell receivers interpret authorized frames in their own domains.
 
 ```text
 Bevy HID  →  VirtualPad (analog + digital + keys)  →  routed menu / gameplay consumers
@@ -35,21 +37,21 @@ While a menu is focused or a text modal is open, capture derives a menu
 letter keys can type. Gamepad left stick still navigates menus. Console text
 capture also suppresses analog / face buttons. The key overlay remains.
 
-Gameplay systems should read sticks / buttons. `keys` is the escape hatch
+Addressed receivers read snapshot sticks / buttons. `keys` is the escape hatch
 (`/`, F1, chords). Hosts push or pop a capture layer; they do not write pad
 lanes. The capture resolver writes [`PadInputPolicy`].
 
 ## Schedule
 
 `VirtualPadSystems::Produce` (after Bevy `InputSystems`) then `Derive`, both
-in `PreUpdate`. Consumers run in `Update`. An optional [`PadOverlay`] resource
-is applied after HID producers and before `finish_produce`. Insert it only when
-an injector (the agent plugin) is active; missing overlay is a no-op.
+in `PreUpdate`. Consumers receive addressed input in `Update`. Injectors send
+`PadOverlayRequest { source, overlay: Some(pad_overlay) }` for an explicit controller
+entity; `None` removes that source's injection. Requests are applied inside `Produce`
+before physical sampling, so hosts write them before `VirtualPadSystems::Produce`.
+Overlay storage belongs to the named controller.
 
 Set [`VirtualPadConfig::debug_overlay`] to dump raw `Gamepad` sticks/buttons
-and the virtual pad onto the screen (menu playground enables this). Menu
-stick threshold is `0.2` so a light tilt still navigates. Unmapped gilrs
-axes (`Other(0)` / `Other(1)`) fill in when `LeftStick` is idle.
+and each enabled controller onto the screen. Unmapped gilrs axes (`Other(0)` / `Other(1)`) fill in when `LeftStick` is idle.
 
 On macOS / iOS, chain `.with_pad_hid()` on `DefaultPlugins` so gilrs is not
 started. `VirtualPadPlugin` then polls Apple’s GameController framework into
@@ -71,8 +73,8 @@ pulse reaches a connected Xbox or DualShock.
 
 ## Source-owned runtime
 
-`VirtualPadController` is a component owning one rich `VirtualPad`, its explicit
-`PadDevices` assignment, policy, history, cursor and sequence. `VirtualPadEvent`
+`VirtualPadController` owns one rich `VirtualPad`, its explicit
+`PadDevices` assignment, configuration, policy, history, cursor and sequence. `VirtualPadEvent`
 publishes the controller entity, sequence, update duration and an immutable rich
 snapshot; receivers interpret their own menu, character or shell meaning.
 
@@ -83,10 +85,6 @@ separate controller entities and await actor assignment. Disable
 A device change cancels held gameplay input until release. A missing assigned
 gamepad produces release/neutral state independently of other sources.
 
-During the consumer migration, resources mirror only `PrimaryVirtualPad` and
-legacy menu interpretation remains an adapter. New consumers use source snapshots;
-they must not interpret another controller's state through those resource mirrors.
-
 Each controller also owns its `VirtualPadConfig`; `with_config` customizes an
 individual controller without changing another source. Default-host reconnection
 reuses vacant source entities, replaces missing physical-device references, and
@@ -96,3 +94,8 @@ requires a release before a device that reconnects while held can press again.
 retaining per-control release/neutral requirements while leaving the source's raw
 state intact. Suppressed physical analog values remain available privately to
 rearm even when text-entry policy clears the public gameplay axes.
+
+The pad, policy, history, cursor and overlay values are not global resources.
+`PrimaryVirtualPad` is the explicit host-selected controller identity; it does not
+mirror controller state. Pure `KeyboardPad::apply`, `MousePad::apply` and
+`GamepadAxes` mapping helpers share device interpretation with headless fixtures.

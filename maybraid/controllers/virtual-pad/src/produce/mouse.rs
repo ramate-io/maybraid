@@ -1,51 +1,49 @@
-//! Mouse motion → [`VirtualPad::look_stick`]; LMB → [`VirtualPad::trigger_fire`].
-
-use bevy::input::mouse::MouseMotion;
+//! Pure mouse mapping for an explicitly assigned controller.
+use crate::VirtualPad;
 use bevy::prelude::*;
 
-use crate::pad::VirtualPad;
-
-fn command_held(keys: &ButtonInput<KeyCode>) -> bool {
-	keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)
-}
-
-pub fn produce_mouse(
-	keyboard: Res<ButtonInput<KeyCode>>,
-	mouse: Res<ButtonInput<MouseButton>>,
-	mut mouse_motion: MessageReader<MouseMotion>,
-	mut pad: ResMut<VirtualPad>,
-) {
-	if command_held(&keyboard) {
-		mouse_motion.clear();
-		return;
-	}
-	let mut delta = Vec2::ZERO;
-	for event in mouse_motion.read() {
-		delta += event.delta;
-	}
-	pad.add_look(delta);
-	if mouse.pressed(MouseButton::Left) {
-		pad.max_triggers(0.0, 1.0);
+pub struct MousePad;
+impl MousePad {
+	pub fn apply(
+		keyboard: &ButtonInput<KeyCode>,
+		mouse: &ButtonInput<MouseButton>,
+		delta: Vec2,
+		pad: &mut VirtualPad,
+	) {
+		if keyboard.any_pressed([KeyCode::SuperLeft, KeyCode::SuperRight]) {
+			return;
+		}
+		pad.add_look(delta);
+		pad.max_triggers(
+			if mouse.pressed(MouseButton::Right) { 1.0 } else { 0.0 },
+			if mouse.pressed(MouseButton::Left) { 1.0 } else { 0.0 },
+		);
 	}
 }
-
 #[cfg(test)]
 mod tests {
 	use super::*;
-
 	#[test]
-	fn left_click_sets_trigger_fire() -> anyhow::Result<()> {
-		let mut app = App::new();
-		app.init_resource::<ButtonInput<KeyCode>>()
-			.init_resource::<ButtonInput<MouseButton>>()
-			.init_resource::<VirtualPad>()
-			.add_message::<MouseMotion>()
-			.add_systems(Update, produce_mouse);
-		app.world_mut()
-			.resource_mut::<ButtonInput<MouseButton>>()
-			.press(MouseButton::Left);
-		app.update();
-		assert_eq!(app.world().resource::<VirtualPad>().trigger_fire, 1.0);
-		Ok(())
+	fn left_click_sets_trigger_fire() {
+		let mut mouse = ButtonInput::default();
+		mouse.press(MouseButton::Left);
+		let mut pad = VirtualPad::default();
+		MousePad::apply(&ButtonInput::default(), &mouse, Vec2::ZERO, &mut pad);
+		assert_eq!(pad.trigger_fire, 1.0);
+	}
+	#[test]
+	fn right_click_sets_focus_and_command_chord_suppresses_mouse() {
+		let mut mouse = ButtonInput::default();
+		mouse.press(MouseButton::Right);
+		let mut pad = VirtualPad::default();
+		MousePad::apply(&ButtonInput::default(), &mouse, Vec2::X, &mut pad);
+		assert_eq!(pad.trigger_focus, 1.0);
+		assert_eq!(pad.look_stick, Vec2::X);
+		pad.begin_frame();
+		let mut keys = ButtonInput::default();
+		keys.press(KeyCode::SuperLeft);
+		MousePad::apply(&keys, &mouse, Vec2::X, &mut pad);
+		assert_eq!(pad.trigger_focus, 0.0);
+		assert_eq!(pad.look_stick, Vec2::ZERO);
 	}
 }

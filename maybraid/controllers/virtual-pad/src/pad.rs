@@ -20,7 +20,7 @@ struct PhysicalAnalog {
 ///
 /// Keyboard-attached devices also fill [`Self::keys`]. Text / IME is not stored
 /// here — keep reading Bevy [`KeyboardInput`](bevy::input::keyboard::KeyboardInput).
-#[derive(Resource, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct VirtualPad {
 	pub move_stick: Vec2,
 	pub look_stick: Vec2,

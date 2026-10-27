@@ -12,23 +12,19 @@ Capture / suspension tokens are owner-scoped. Releasing one owner cannot
 release another. Assignment loss clears delivery.
 ```
 
-Controllers read the router; they never rediscover a "current player". The
-lowest-ID Player fallback is resolved once at the host assignment boundary
-([`InputRouter::assign_lowest_id_actor`](src/router.rs)) while the source is
-connected. Reconnect is [`InputRouter::connect`](src/router.rs). Lifecycle
-events are [`RoutingEvent`](src/router.rs) messages; use `MessageReader`, not
-`take_events`.
+Hosts mutate assignments and capture through `InputRouting`. Controller consumers
+receive target-addressed events and keep their own actor/UI state. The lowest-ID
+Player fallback is resolved once at the primary host assignment boundary while
+that source is connected; additional sources await explicit actor assignment.
 
-Schedule contract: generic [`ControllerPipeline`](src/schedule.rs) stages.
-Domain ordering lives beside domain systems. Plugin install order is not the
-contract. See [ARCHITECTURE.md](../ARCHITECTURE.md) for the role inventory
-and temporary adapters.
+The generic `ControllerPipeline` owns stage ordering. Domain ordering lives beside
+its systems. See [ARCHITECTURE.md](../ARCHITECTURE.md) for the controller roles.
 
 ## Scoped delivery
 
 `InputSource::VirtualPad(Entity)` identifies an entity-owned source.
-`InputSource::local_pad()` is a transitional host alias for `PrimaryVirtualPad`;
-new routed envelopes always preserve the canonical entity identity. The router
+`InputSource::local_pad()` is a host convenience alias for `PrimaryVirtualPad`;
+routed envelopes always preserve the canonical entity identity. The router
 keeps assignment, captures, suspension and binding generations per source. Assigning
 an already-controlled actor transfers ownership and cancels the previous source.
 Combine intentional keyboard/mouse/gamepad input inside one virtual controller.
@@ -61,11 +57,12 @@ do not poll the router or re-resolve an actor.
 
 `ActorRoutingEvent` addresses lifecycle effects and an `ActorRouteStatus` snapshot
 to the affected actor. `InputRouting` publishes this targeted status when mutation
-finishes, including mutations later in the update, alongside compatibility
-`RoutingEvent` messages. Production routing mutations use `InputRouting`; direct
-`ResMut<InputRouter>` remains a transitional host/test API with scheduled publishing.
-Legacy pad resources and unscoped message APIs are compatibility adapters for later
-consumer commits in the migration series ([#1502](https://github.com/ramate-io/maybraid/issues/1502)).
+finishes, including mutations later in the update. The central routing boundary
+also publishes `RoutingEvent` lifecycle notifications; actor consumers use the
+addressed `ActorRoutingEvent` status and effects. Production routing mutations use
+`InputRouting`; direct `ResMut<InputRouter>` is a host/test API with scheduled
+publishing. Input state remains on controller/actor entities; core installs no
+global pad, policy, cursor or history mirrors.
 
 Core records each source's routing generation immediately after hardware produces
 its frame in `PreUpdate`. If capture resolution or actor reassignment retires that

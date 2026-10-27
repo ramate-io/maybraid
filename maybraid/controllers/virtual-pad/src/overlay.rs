@@ -1,7 +1,6 @@
 //! Optional analog / digital overlay applied after HID producers.
 //!
-//! Insert [`PadOverlay`] only when an injector is active. [`apply_pad_overlay`]
-//! is a no-op when the resource is missing.
+//! [`PadOverlayRequest`] installs or removes injection on one controller entity.
 
 use bevy::prelude::*;
 
@@ -36,7 +35,7 @@ pub(crate) fn apply_overlay_requests(
 }
 
 /// Extra stick / trigger / button contribution for this frame.
-#[derive(Resource, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PadOverlay {
 	pub move_stick: Vec2,
 	pub look_stick: Vec2,
@@ -78,13 +77,6 @@ impl PadOverlay {
 	}
 }
 
-pub fn apply_pad_overlay(mut pad: ResMut<VirtualPad>, overlay: Option<Res<PadOverlay>>) {
-	let Some(overlay) = overlay else {
-		return;
-	};
-	overlay.apply(&mut pad);
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -106,12 +98,18 @@ mod tests {
 
 	#[test]
 	fn missing_overlay_is_a_noop() -> anyhow::Result<()> {
+		use crate::{PrimaryVirtualPad, VirtualPadController, VirtualPadPlugin};
 		let mut app = App::new();
-		app.init_resource::<VirtualPad>().add_systems(Update, apply_pad_overlay);
-		app.world_mut().resource_mut::<VirtualPad>().begin_frame();
-		app.world_mut().resource_mut::<VirtualPad>().add_move(Vec2::Y);
+		app.add_plugins((MinimalPlugins, bevy::input::InputPlugin, VirtualPadPlugin::default()));
+		let primary = app.world().resource::<PrimaryVirtualPad>().0;
 		app.update();
-		assert_eq!(app.world().resource::<VirtualPad>().move_stick, Vec2::Y);
+		assert!(app.world().get::<PadOverlayState>(primary).is_none());
+		let controller = app
+			.world()
+			.get::<VirtualPadController>(primary)
+			.ok_or_else(|| anyhow::anyhow!("primary controller"))?;
+		assert_eq!(controller.pad.trigger_fire, 0.0);
+		assert!(controller.pad.button_events.is_empty());
 		Ok(())
 	}
 

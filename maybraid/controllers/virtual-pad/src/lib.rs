@@ -16,13 +16,13 @@ pub mod rumble;
 pub mod surface;
 
 pub use analog::{Cardinal, Deadzone};
-pub use button::{ButtonPhase, ButtonStroke, PAD_BUTTON_COUNT, PadButton};
+pub use button::{ButtonPhase, ButtonStroke, PadButton, PAD_BUTTON_COUNT};
 pub use config::VirtualPadConfig;
 pub use controller::{
 	PadDevices, PrimaryVirtualPad, VirtualPadController, VirtualPadEvent, VirtualPadLifecycle,
 };
 pub use gate::PadInputPolicy;
-pub use hid::{PadHidPlugins, with_pad_hid};
+pub use hid::{with_pad_hid, PadHidPlugins};
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};
 pub use overlay::{PadOverlay, PadOverlayRequest};
 pub use pad::VirtualPad;
@@ -70,12 +70,7 @@ impl Plugin for VirtualPadPlugin {
 			);
 		}
 		hid::configure_backend(app);
-		app.insert_resource(self.config.clone())
-			.init_resource::<VirtualPad>()
-			.init_resource::<PadHistory>()
-			.init_resource::<PadInputPolicy>()
-			.init_resource::<PadCursor>()
-			.add_message::<rumble::PadRumble>()
+		app.add_message::<rumble::PadRumble>()
 			.init_resource::<rumble::DelayedPadRumble>()
 			.configure_sets(
 				PreUpdate,
