@@ -7,19 +7,27 @@ use crate::button::{ButtonPhase, ButtonStroke, PadButton};
 use crate::gate::PadInputPolicy;
 use crate::pad::VirtualPad;
 
+/// Pure keyboard mapping shared by source production and headless fixtures.
+pub struct KeyboardPad;
+
+impl KeyboardPad {
+	pub fn apply(keyboard: &ButtonInput<KeyCode>, policy: PadInputPolicy, pad: &mut VirtualPad) {
+		if policy.keyboard_menu() {
+			produce_menu_keys(keyboard, pad);
+		} else {
+			produce_gameplay_keys(keyboard, pad);
+		}
+		pad.keys = keyboard.clone();
+	}
+}
+
 pub fn produce_keyboard(
 	keyboard: Res<ButtonInput<KeyCode>>,
 	policy: Res<PadInputPolicy>,
 	mut key_reader: MessageReader<KeyboardInput>,
 	mut pad: ResMut<VirtualPad>,
 ) {
-	if policy.keyboard_menu() {
-		produce_menu_keys(&keyboard, &mut pad);
-	} else {
-		produce_gameplay_keys(&keyboard, &mut pad);
-	}
-
-	pad.keys = keyboard.clone();
+	KeyboardPad::apply(&keyboard, *policy, &mut pad);
 	for event in key_reader.read() {
 		pad.key_events.push(ButtonStroke {
 			button: event.key_code,
