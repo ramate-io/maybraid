@@ -24,7 +24,7 @@ maybraid-audio = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-controllers-core = { workspace = true }
 maybraid-equipment = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 maybraid-spatial-rumble = { workspace = true }
 player = { workspace = true }
 player-camera = { workspace = true }

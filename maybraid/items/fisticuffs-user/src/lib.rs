@@ -29,6 +29,7 @@ pub use sensor::{
 #[derive(Component, Clone, Debug, Default)]
 pub struct FisticuffsUser {
 	pub state: AttackState,
+	pending_attacks: Vec<maybraid_controllers_core::Routed<AttackSpec>>,
 }
 
 /// Gameplay event at the start of the active (hit) window.
@@ -82,7 +83,7 @@ mod pose_tests {
 	use character_rigs::Side;
 	use maybraid_character_controller::produce::collect;
 	use maybraid_character_controller::CharacterIntent;
-	use maybraid_input::VirtualPad;
+	use maybraid_virtual_pad_controller::VirtualPad;
 
 	use super::*;
 

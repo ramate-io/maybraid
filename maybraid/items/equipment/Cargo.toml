@@ -16,6 +16,7 @@ character-items = { workspace = true }
 lubikans = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-controllers-core = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

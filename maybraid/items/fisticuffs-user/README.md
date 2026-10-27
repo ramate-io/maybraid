@@ -16,7 +16,8 @@ later without rewriting the mailbox path.
 
 Mouse **RMB** is analog focus / aim and **LMB** is UseItem. They share the
 trigger axes but **do not** emit `AttackLeft` / `AttackRight` — starting to aim
-must not throw a jab.
+must not throw a jab. Non-mouse trigger edges remain independent while a mouse
+button is held, including after a capture ends.
 
 Jabs only start while **Fisticuffs** is the equipped primary tool. The world
 equipment adapter inserts [`FisticuffsUser`](src/lib.rs) for that selection and
@@ -26,7 +27,7 @@ focus/fire.
 
 ## Aim
 
-[`PlayerLook`](../../player/src/identity.rs) is camera **−Z** forward. The posed
+[`PlayerLook`](../../player/lib/src/identity.rs) is camera **−Z** forward. The posed
 humanoid is character space (**+Z** fight-forward, **+X = character left**).
 **Look left** is camera **+yaw** (player view). Camera-to-character is a
 **180° yaw** (negate X and Z). [`JabAim`](src/aim.rs) converts look into that
@@ -137,6 +138,9 @@ has physics; attack timing and sensor lifetime still run without it.
 on top of that runtime. Installing it after gameplay does not register a second
 attack machine.
 
-Jab input requires a delivered actor in `InputRouter`; missing routing never
-broadcasts an attack to all equipped actors. `RoutingEvent` cancellation applies
-only to the actor that lost delivery. World assembly no longer owns pause cancellation.
+Jab input consumes addressed `ActorIntentEvent` values. Pending requests retain
+`Routed` provenance and are validated immediately before starting after the
+attack tick, so retired input cannot start a punch and chamber-time aim remains
+observable. `ActorRoutingEvent` cancellation applies only to the actor that lost
+delivery. Per-actor `ActorControlStatus` freezes attack time and damage during
+suspension; autonomous actors continue independently.

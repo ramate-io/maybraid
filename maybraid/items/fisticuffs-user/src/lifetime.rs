@@ -9,15 +9,12 @@ use bevy::prelude::*;
 use bevy::time::TimeUpdateStrategy;
 use damage::{DamageApplied, Health, Hit};
 use lod_avian::PhysicsInteractionLayer;
-use maybraid_character_controller::produce::produce_character_intents;
-use maybraid_character_controller::{
-	CharacterControllerPlugin, CharacterIntent, OrdinaryLocomotion,
-};
+use maybraid_character_controller::{CharacterControllerPlugin, OrdinaryLocomotion};
 use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource};
 use maybraid_equipment::{
 	EquipmentPlugin, EquippedItemHandler, PendingEquipmentHold, PendingEquipmentTeardown,
 };
-use maybraid_input::{VirtualPad, VirtualPadConfig};
+use maybraid_virtual_pad_controller::{PadOverlay, PadOverlayRequest, PrimaryVirtualPad};
 use player::{Player, PlayerLook};
 use std::time::Duration;
 
@@ -103,22 +100,17 @@ fn assign(app: &mut App, actor: Entity) {
 }
 
 fn squeeze_right_trigger(app: &mut App) {
-	{
-		let mut pad = app.world_mut().resource_mut::<VirtualPad>();
-		pad.begin_frame();
-		pad.max_triggers(0.0, 0.9);
-		pad.apply_trigger_digital(0.5);
-		pad.finish_digital();
-	}
-	app.world_mut().run_system_once(produce_character_intents).expect("produce jab");
+	let source = app.world().resource::<PrimaryVirtualPad>().0;
+	app.world_mut().write_message(PadOverlayRequest {
+		source,
+		overlay: Some(PadOverlay { trigger_fire: 0.9, ..default() }),
+	});
 }
 
 fn release_triggers(app: &mut App) {
-	{
-		let mut pad = app.world_mut().resource_mut::<VirtualPad>();
-		pad.begin_frame();
-		pad.finish_digital();
-	}
+	let source = app.world().resource::<PrimaryVirtualPad>().0;
+	app.world_mut()
+		.write_message(PadOverlayRequest { source, overlay: Some(PadOverlay::default()) });
 }
 
 fn sensor_count(world: &mut World) -> usize {
@@ -165,7 +157,6 @@ fn advance_to_active(app: &mut App) {
 fn routed_jab_hits_then_teardown_paths_do_not_queue_despawned_inserts() -> anyhow::Result<()> {
 	let _test_guard = lock_lifetime_test();
 	let mut app = lifetime_app();
-	app.world_mut().insert_resource(VirtualPadConfig::default());
 	let player = spawn_attacker(&mut app);
 	let dummy = spawn_dummy(&mut app);
 	assign(&mut app, player);
@@ -177,12 +168,7 @@ fn routed_jab_hits_then_teardown_paths_do_not_queue_despawned_inserts() -> anyho
 	{
 		let user = app.world().get::<FisticuffsUser>(player).ok_or(anyhow::anyhow!("user"))?;
 		if !user.state.is_busy() {
-			anyhow::bail!("routed AttackRight must chamber a jab, intents={:?}", {
-				app.world_mut()
-					.resource_mut::<Messages<CharacterIntent>>()
-					.drain()
-					.collect::<Vec<_>>()
-			});
+			anyhow::bail!("routed AttackRight must chamber a jab");
 		}
 	}
 
@@ -267,7 +253,6 @@ fn captured_pad_does_not_chamber_a_jab() -> anyhow::Result<()> {
 	use maybraid_controllers_core::{CaptureKind, ScopeOwner, UiTarget};
 
 	let mut app = lifetime_app();
-	app.world_mut().insert_resource(VirtualPadConfig::default());
 	let player = spawn_attacker(&mut app);
 	assign(&mut app, player);
 	{

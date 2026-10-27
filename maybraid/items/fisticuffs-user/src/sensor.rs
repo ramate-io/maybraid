@@ -266,8 +266,13 @@ pub fn sync_fist_sensors(
 /// separate team filter on the damage seam — same rule as firearms / grenades.
 pub fn resolve_fist_hits(
 	spatial: Option<SpatialQuery>,
-	router: Option<Res<maybraid_controllers_core::InputRouter>>,
-	users: Query<(Entity, &FisticuffsUser, Option<&GlobalTransform>, Option<&Transform>)>,
+	users: Query<(
+		Entity,
+		&FisticuffsUser,
+		Option<&GlobalTransform>,
+		Option<&Transform>,
+		Option<&maybraid_character_controller::ActorControlStatus>,
+	)>,
 	visuals: Query<(&CharacterHeading, &ChildOf), With<CharacterRoot>>,
 	transforms: Query<(Entity, &Transform, Option<&GlobalTransform>)>,
 	health: Query<(), With<Health>>,
@@ -279,10 +284,10 @@ pub fn resolve_fist_hits(
 		return;
 	};
 	for (sensor, mut volume) in &mut sensors {
-		let Ok((attacker, user, global, local)) = users.get(volume.attacker) else {
+		let Ok((attacker, user, global, local, control)) = users.get(volume.attacker) else {
 			continue;
 		};
-		if crate::drive::execution_suspended(router.as_deref(), attacker) {
+		if control.is_some_and(|control| control.is_frozen()) {
 			continue;
 		}
 		let heading = heading_of(attacker, &visuals);

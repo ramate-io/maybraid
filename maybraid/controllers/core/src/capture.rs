@@ -1,7 +1,7 @@
 //! Token-scoped, composable capture. Releasing one owner cannot release another.
 
 use bevy::prelude::*;
-use maybraid_input::PadInputPolicy;
+use maybraid_virtual_pad_controller::PadInputPolicy;
 
 use crate::actor::ActorTarget;
 use crate::source::InputSource;
@@ -93,6 +93,19 @@ impl ScopeOwner {
 		Self::ui(UiTarget::new(Entity::from_bits(u64::MAX - 5)))
 	}
 
+	/// Transitional process-wide scopes do not have backing ECS entities yet.
+	pub fn is_placeholder(self) -> bool {
+		[
+			Self::pause(),
+			Self::map_overlay(),
+			Self::console(),
+			Self::text_lock(),
+			Self::awaiting_nav(),
+			Self::spawn_picker(),
+		]
+		.contains(&self)
+	}
+
 	pub const fn actor_entity(self) -> Option<Entity> {
 		match self {
 			Self::Actor(target) => Some(target.entity()),
@@ -176,12 +189,28 @@ impl CaptureStack {
 		self.layers.is_empty()
 	}
 
+	pub fn layers(&self) -> impl Iterator<Item = CaptureLayer> + '_ {
+		self.layers.iter().copied()
+	}
+
 	pub fn len(&self) -> usize {
 		self.layers.len()
 	}
 
 	pub fn top(&self) -> Option<CaptureLayer> {
 		self.layers.last().copied()
+	}
+
+	pub fn top_for(&self, source: InputSource) -> Option<CaptureLayer> {
+		self.layers.iter().rev().copied().find(|layer| layer.source() == source)
+	}
+
+	pub fn top_of_kind_for(&self, source: InputSource, kind: CaptureKind) -> Option<CaptureLayer> {
+		self.layers
+			.iter()
+			.rev()
+			.copied()
+			.find(|layer| layer.source() == source && layer.kind() == kind)
 	}
 
 	pub fn top_of_kind(&self, kind: CaptureKind) -> Option<CaptureLayer> {
@@ -219,7 +248,19 @@ impl CaptureStack {
 
 	/// Single derived pad policy. Hosts must not write lanes of their own.
 	pub fn pad_policy(&self) -> PadInputPolicy {
-		PadInputPolicy::new(!self.layers.is_empty(), self.suppresses_pad(InputSource::local_pad()))
+		self.pad_policy_for(InputSource::local_pad())
+	}
+
+	pub fn pad_policy_for(&self, source: InputSource) -> PadInputPolicy {
+		PadInputPolicy::new(self.top_for(source).is_some(), self.suppresses_pad(source))
+	}
+
+	pub(crate) fn replace_source(&mut self, previous: InputSource, next: InputSource) {
+		for layer in &mut self.layers {
+			if layer.source == previous {
+				layer.source = next;
+			}
+		}
 	}
 
 	pub(crate) fn push(&mut self, layer: CaptureLayer) {

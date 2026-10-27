@@ -24,6 +24,7 @@ impl SkillMapEquip {
 /// queries can go either way.
 #[derive(Component, Debug, Clone, Copy)]
 #[relationship(relationship_target = MappedBy)]
+#[require(crate::SkillMapController)]
 pub struct SkillMapUser {
 	#[relationship]
 	pub maps: Entity,

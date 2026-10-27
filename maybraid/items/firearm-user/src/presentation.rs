@@ -5,7 +5,7 @@ use characters::{CharacterMotionSystems, CharacterPoseOverlay};
 use damage::DamageSystems;
 use firearms::FirearmWeaponSystems;
 use maybraid_audio::AudioSystems;
-use maybraid_input::PadRumbleSystems;
+use maybraid_virtual_pad_controller::PadRumbleSystems;
 use player::PlayerPoseSystems;
 use player_camera::PlayerCameraSystems;
 

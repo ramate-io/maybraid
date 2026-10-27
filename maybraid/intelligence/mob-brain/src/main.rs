@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use maybraid_input::PadHidPlugins;
+use maybraid_virtual_pad_controller::PadHidPlugins;
 use mob_brain_playground::MobBrainPlaygroundPlugin;
 
 fn main() {

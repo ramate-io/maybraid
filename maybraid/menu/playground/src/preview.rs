@@ -14,24 +14,22 @@ use character_items::{ClothingHost, ClothingMesh, FirearmSpec, ItemColor};
 use character_persist::SaveRoot;
 use character_ui_menu::{CameraFocus, FocusRig};
 use characters::{
-	add_character_components_host, character_bounds, ActiveRigPose, AnimRef, AnimRefRoot,
-	ApplyTerrainPitch, BoneMap, CharacterComponents, CharacterHostSystems, CharacterMembers,
-	CharacterRig, CharacterRigRole, ClothingLayer, ComponentsOnly, Layers, PartNode,
-	ResolvedPoseApplied, RigBindScales, SocketRefApplied, SocketRefRoot,
+	ActiveRigPose, AnimRef, AnimRefRoot, ApplyTerrainPitch, BoneMap, CharacterComponents,
+	CharacterHostSystems, CharacterMembers, CharacterRig, CharacterRigRole, ClothingLayer,
+	ComponentsOnly, Layers, PartNode, ResolvedPoseApplied, RigBindScales, SocketRefApplied,
+	SocketRefRoot, add_character_components_host, character_bounds,
 };
 use characters_playground::CameraController;
 use firearm_user::GeneratedFirearm;
 use firearms_components::{
-	add_firearm_components_host, firearm_bounds, firearm_preview_camera, spawn_firearm_components,
-	FirearmComponentsPlugin, FirearmRoot,
+	FirearmComponentsPlugin, FirearmRoot, add_firearm_components_host, firearm_bounds,
+	firearm_preview_camera, spawn_firearm_components,
 };
-use grenades::{grenade_material, grenade_mesh, GrenadeMaterial, GrenadeMaterialPlugin};
+use grenades::{GrenadeMaterial, GrenadeMaterialPlugin, grenade_material, grenade_mesh};
 use lod::lod_ref::LodRef;
 use lod::scene::LodScene;
 use lod::scene::LodSceneLevel;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use maybraid_input::produce::gamepad::GamepadAxes;
-use maybraid_input::{Deadzone, VirtualPadConfig};
 use menu_components::{CHARACTER_PANEL_WIDTH, DESCRIPTION_PANE_LEFT_PERCENT};
 use menu_screens::{
 	GalleryScreen, HomeScreen, SpinRevealCurrent, SpinRevealScreen, SpinRevealSystems,
@@ -313,7 +311,9 @@ impl Plugin for CharacterPreviewPlugin {
 						.after(CharacterHostSystems::Membership)
 						.before(characters::CharacterMotionSystems::Anim),
 					queue_preview_camera_focus,
-					steer_preview_orbit.after(queue_preview_camera_focus),
+					steer_preview_orbit
+						.after(queue_preview_camera_focus)
+						.after(maybraid_controllers_core::PadDeliverySystems),
 				),
 			)
 			.add_systems(PostUpdate, apply_preview_camera_focus.after(TransformSystems::Propagate));
@@ -634,10 +634,8 @@ fn queue_preview_camera_focus(
 }
 
 fn steer_preview_orbit(
-	time: Res<Time>,
 	return_to: Option<Res<CharacterEditorReturn>>,
-	config: Option<Res<VirtualPadConfig>>,
-	gamepads: Query<&Gamepad>,
+	input: Query<&menu_components::PrimaryMenuInput>,
 	mut pending: ResMut<PendingCameraFocus>,
 ) {
 	if pending.focus.is_none()
@@ -645,14 +643,14 @@ fn steer_preview_orbit(
 	{
 		return;
 	}
-	let deadzone = config.map_or(Deadzone(0.15), |config| config.stick_deadzone);
-	let stick = gamepads
-		.iter()
-		.map(|gamepad| GamepadAxes::look_stick(gamepad, deadzone))
-		.sum::<Vec2>()
-		.clamp_length_max(1.0);
+	let Some(frame) =
+		input.single().ok().and_then(menu_components::PrimaryMenuInput::current_frame)
+	else {
+		return;
+	};
+	let stick = frame.pad.look_throw;
 	if stick != Vec2::ZERO {
-		pending.orbit.steer(stick, time.delta_secs());
+		pending.orbit.steer(stick, frame.delta.as_secs_f32());
 	}
 }
 
@@ -787,12 +785,55 @@ mod tests {
 	use super::*;
 	use std::f32::consts::FRAC_PI_4;
 
-	use character_creation_menus::focus::{
-		spin_reveal_firearm_focus, spin_reveal_grenade_focus, EYE_FOCUS, HEAD_ROOT_FOCUS,
-	};
 	use character_creation_menus::BODY_FOCUS;
+	use character_creation_menus::focus::{
+		EYE_FOCUS, HEAD_ROOT_FOCUS, spin_reveal_firearm_focus, spin_reveal_grenade_focus,
+	};
 
 	const EPS: f32 = 1e-4;
+
+	#[test]
+	fn primary_preview_orbit_ignores_other_gamepads_and_uses_its_rich_frame() -> anyhow::Result<()>
+	{
+		use bevy::ecs::system::RunSystemOnce;
+		use maybraid_virtual_pad_controller::{VirtualPad, VirtualPadEvent};
+		let mut world = World::new();
+		let source = world.spawn_empty().id();
+		let mut secondary = Gamepad::default();
+		secondary.analog_mut().set(GamepadAxis::RightStickX, 1.0);
+		world.spawn(secondary);
+		let mut pending = PendingCameraFocus::default();
+		pending.set_focus(BODY_FOCUS);
+		world.insert_resource(pending);
+		let root = world
+			.spawn(menu_components::PrimaryMenuInput {
+				source,
+				frame: Some(VirtualPadEvent {
+					source,
+					sequence: 1,
+					delta: std::time::Duration::from_secs_f32(0.5),
+					pad: VirtualPad::default(),
+				}),
+			})
+			.id();
+		world
+			.run_system_once(steer_preview_orbit)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.resource::<PendingCameraFocus>().orbit, PreviewOrbit::default());
+		if let Some(frame) = world
+			.get_mut::<menu_components::PrimaryMenuInput>(root)
+			.ok_or_else(|| anyhow::anyhow!("primary root"))?
+			.frame
+			.as_mut()
+		{
+			frame.pad.look_throw = Vec2::X;
+		}
+		world
+			.run_system_once(steer_preview_orbit)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_ne!(world.resource::<PendingCameraFocus>().orbit, PreviewOrbit::default());
+		Ok(())
+	}
 
 	#[test]
 	fn a_resting_orbit_keeps_the_framed_offset() {
@@ -898,8 +939,8 @@ mod tests {
 	}
 
 	#[test]
-	fn head_focus_waits_for_the_socket_and_ignores_the_clip(
-	) -> Result<(), Box<dyn std::error::Error>> {
+	fn head_focus_waits_for_the_socket_and_ignores_the_clip()
+	-> Result<(), Box<dyn std::error::Error>> {
 		let mut fixture = Fixture::new();
 		fixture.world.entity_mut(fixture.body).insert(ResolvedPoseApplied);
 		assert_eq!(fixture.resolve()?, Err(FocusWait::Attach(fixture.head)));

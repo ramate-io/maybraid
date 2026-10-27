@@ -22,15 +22,14 @@ pub fn register_fisticuffs_user_runtime(app: &mut App) {
 		app.add_plugins(damage::DamagePlugin);
 	}
 	app.init_resource::<FisticuffsUserRuntime>()
-		.add_message::<maybraid_character_controller::CharacterIntent>()
 		.add_message::<FisticuffsStrike>()
-		.add_message::<maybraid_controllers_core::RoutingEvent>()
+		.add_observer(drive::apply_attack_routing)
+		.add_observer(drive::apply_attack_intents)
 		.add_systems(
 			Update,
 			(
-				drive::apply_attack_routing,
 				drive::tick_attack_state,
-				drive::apply_attack_intents,
+				drive::start_pending_attacks,
 				drive::latch_jab_aim,
 				sensor::sync_fist_sensors,
 			)
@@ -43,7 +42,6 @@ pub fn register_fisticuffs_user_runtime(app: &mut App) {
 				.after(bevy::transform::TransformSystems::Propagate)
 				.before(damage::DamageSystems::Apply),
 		)
-		.add_message::<maybraid_equipment::EquippedItemUse>()
 		.add_systems(
 			Update,
 			realize_equipment_teardown
@@ -90,7 +88,7 @@ mod tests {
 	use super::*;
 	use crate::{AttackPhase, FisticuffsHitSensor};
 	use bevy::time::TimeUpdateStrategy;
-	use maybraid_character_controller::CharacterIntent;
+	use maybraid_character_controller::{ActorIntentEvent, CharacterIntent};
 	use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource};
 	use std::time::Duration;
 
@@ -127,7 +125,12 @@ mod tests {
 		app.world_mut()
 			.resource_mut::<InputRouter>()
 			.assign_actor(InputSource::local_pad(), ActorTarget::new(actor));
-		app.world_mut().write_message(CharacterIntent::AttackRight);
+		let input = app
+			.world()
+			.resource::<InputRouter>()
+			.route_actor(InputSource::local_pad(), CharacterIntent::AttackRight)
+			.ok_or_else(|| anyhow::anyhow!("actor route"))?;
+		app.world_mut().trigger(ActorIntentEvent { entity: actor, input });
 		app.update();
 		for _ in 0..3 {
 			app.update();
@@ -152,6 +155,75 @@ mod tests {
 		}
 		assert_eq!(app.world().resource::<Strikes>().0, 1);
 		assert_eq!(app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count(), 0);
+		Ok(())
+	}
+	#[test]
+	fn addressed_jab_latches_chamber_aim_and_restarts_the_same_animation() -> anyhow::Result<()> {
+		use crate::{AttackSpec, JabAim, Side};
+		use characters::{AnimMailbox, CharacterHeading, CharacterRig, CharacterRoot, MemberOf};
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).init_resource::<InputRouter>();
+		register_fisticuffs_user_runtime(&mut app);
+		app.add_systems(
+			Update,
+			drive::apply_fisticuffs_visual.after(player::PlayerSystems::Intent),
+		);
+		let heading = Vec3::X;
+		let look = player::PlayerLook {
+			yaw: crate::body_camera_yaw(heading) + crate::AIM_STEP,
+			pitch: crate::AIM_STEP,
+			..default()
+		};
+		let actor = app
+			.world_mut()
+			.spawn((
+				player::Player,
+				look,
+				FisticuffsUser::default(),
+				EquippedItemHandler::Fisticuffs,
+			))
+			.id();
+		let visual = app
+			.world_mut()
+			.spawn((CharacterRoot, CharacterHeading(heading), ChildOf(actor)))
+			.id();
+		let mut mailbox = AnimMailbox::new(Transform::IDENTITY);
+		mailbox.posed = true;
+		assert!(mailbox.settled());
+		let body = app.world_mut().spawn((CharacterRig::default(), MemberOf(visual), mailbox)).id();
+		let source = InputSource::virtual_pad(app.world_mut().spawn_empty().id());
+		app.world_mut()
+			.resource_mut::<InputRouter>()
+			.assign_actor(source, ActorTarget::new(actor));
+		for intent in [CharacterIntent::AttackLeft, CharacterIntent::AttackRight] {
+			let input = app
+				.world()
+				.resource::<InputRouter>()
+				.route_actor(source, intent)
+				.ok_or_else(|| anyhow::anyhow!("actor route"))?;
+			app.world_mut().trigger(ActorIntentEvent { entity: actor, input });
+			app.update();
+			let user = app
+				.world()
+				.get::<FisticuffsUser>(actor)
+				.ok_or_else(|| anyhow::anyhow!("driver"))?;
+			assert!(user.state.just_started());
+			assert_eq!(user.state.aim(), Some(JabAim::from_look(&look, heading)));
+			assert!(!app.world().get::<AnimMailbox>(body).is_some_and(AnimMailbox::settled));
+			assert!(app.world().get::<characters::AnimRefRoot>(body).is_some());
+			// Same Jab animation identity is retained for the next side, while the
+			// state has reached recovery and the visible mailbox has settled.
+			let mut mailbox = AnimMailbox::new(Transform::IDENTITY);
+			mailbox.posed = true;
+			app.world_mut().entity_mut(body).insert(mailbox);
+			let mut user = app
+				.world_mut()
+				.get_mut::<FisticuffsUser>(actor)
+				.ok_or_else(|| anyhow::anyhow!("driver"))?;
+			user.state.cancel();
+			user.state.request(AttackSpec::jab(Side::Left));
+			user.state.tick(0.25);
+		}
 		Ok(())
 	}
 }

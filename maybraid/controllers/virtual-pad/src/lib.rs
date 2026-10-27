@@ -1,9 +1,10 @@
 //! Shared virtual pad for Maybraid: device producers, current-frame snapshot,
-//! optional history, and derived surfaces (menu nav, cursor).
+//! optional history, and cursor integration.
 
 pub mod analog;
 pub mod button;
 pub mod config;
+pub mod controller;
 pub mod debug;
 pub mod gate;
 pub mod hid;
@@ -17,17 +18,16 @@ pub mod surface;
 pub use analog::{Cardinal, Deadzone};
 pub use button::{ButtonPhase, ButtonStroke, PadButton, PAD_BUTTON_COUNT};
 pub use config::VirtualPadConfig;
+pub use controller::{
+	PadDevices, PrimaryVirtualPad, VirtualPadController, VirtualPadEvent, VirtualPadLifecycle,
+};
 pub use gate::PadInputPolicy;
 pub use hid::{with_pad_hid, PadHidPlugins};
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};
-pub use overlay::PadOverlay;
+pub use overlay::{PadOverlay, PadOverlayRequest};
 pub use pad::VirtualPad;
 pub use rumble::{PadRumble, PadRumbleSystems};
 pub use surface::cursor::PadCursor;
-pub use surface::menu::{
-	MenuNav, MenuNavImpulse, MenuNavPad, INVENTORY_DROP_KEYS, INVENTORY_DROP_PAD,
-	INVENTORY_UNEQUIP_KEYS, INVENTORY_UNEQUIP_PAD, MENU_SELECT_KEYS, MENU_SELECT_PAD,
-};
 
 use bevy::input::InputSystems;
 use bevy::prelude::*;
@@ -38,14 +38,21 @@ pub enum VirtualPadSystems {
 	Derive,
 }
 
-#[derive(Default)]
 pub struct VirtualPadPlugin {
 	pub config: VirtualPadConfig,
+	/// Enable the default single-player device assignment host.
+	pub auto_assign_devices: bool,
+}
+
+impl Default for VirtualPadPlugin {
+	fn default() -> Self {
+		Self { config: VirtualPadConfig::default(), auto_assign_devices: true }
+	}
 }
 
 impl VirtualPadPlugin {
 	pub fn new(config: VirtualPadConfig) -> Self {
-		Self { config }
+		Self { config, ..Self::default() }
 	}
 }
 
@@ -63,30 +70,38 @@ impl Plugin for VirtualPadPlugin {
 			);
 		}
 		hid::configure_backend(app);
-		app.insert_resource(self.config.clone())
-			.init_resource::<VirtualPad>()
-			.init_resource::<PadHistory>()
-			.init_resource::<PadInputPolicy>()
-			.init_resource::<MenuNavPad>()
-			.init_resource::<PadCursor>()
-			.add_message::<rumble::PadRumble>()
+		app.add_message::<rumble::PadRumble>()
 			.init_resource::<rumble::DelayedPadRumble>()
 			.configure_sets(
 				PreUpdate,
 				VirtualPadSystems::Produce.after(InputSystems).before(VirtualPadSystems::Derive),
 			)
 			.configure_sets(PreUpdate, VirtualPadSystems::Derive.after(VirtualPadSystems::Produce));
+		let primary = app
+			.world_mut()
+			.spawn(
+				VirtualPadController::new(PadDevices::keyboard_mouse())
+					.with_config(self.config.clone()),
+			)
+			.id();
+		app.insert_resource(PrimaryVirtualPad(primary))
+			.init_resource::<controller::DefaultDeviceAssignments>()
+			.add_message::<VirtualPadEvent>()
+			.add_message::<PadOverlayRequest>()
+			.add_message::<VirtualPadLifecycle>();
+		if self.auto_assign_devices {
+			app.add_systems(
+				PreUpdate,
+				controller::discover_devices
+					.in_set(VirtualPadSystems::Produce)
+					.before(controller::produce_controllers),
+			);
+		}
 		produce::configure_produce(app);
 		debug::configure_debug(app);
 		app.add_systems(
 			PreUpdate,
-			(
-				history::push_history,
-				surface::menu::derive_menu_nav,
-				surface::cursor::integrate_cursor,
-			)
-				.chain()
-				.in_set(VirtualPadSystems::Derive),
+			controller::publish_controllers.in_set(VirtualPadSystems::Derive),
 		);
 		app.add_systems(
 			PostUpdate,

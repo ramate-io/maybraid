@@ -7,11 +7,10 @@ index on the gun. Hold / aim knobs live on [`FirearmUserSettings`](src/lib.rs)
 
 Pose and arm IK key off the user's [`CharacterRoot`](../../world/layers/mobs/characters/lib/src/member.rs)
 child, so an [`Npc`](../../player/lib/src/identity.rs) holds the same way as the
-player. Player fire consumes addressed
+player. Controlled fire consumes actor-addressed
 [`EquippedItemUse`](../equipment/src/dispatch.rs) (D1) and
-cancels a held trigger from [`RoutingEvent`](../../controllers/core/src/router.rs)
-(`MessageReader`; each event applies to [`RoutingEvent::lost_actor`]; capture /
-disconnect / reassignment / removal). The fire clock lives in
+cancels a held trigger from actor-addressed routing events on capture,
+disconnect, reassignment, or removal. The fire clock lives in
 [`firearms::register_firearm_runtime`](../firearms/src/runtime.rs). NPCs keep
 the intelligence [`WeaponTrigger`](../firearms/src/projectiles.rs) writer. The
 world reticle stays on the followed [`Player`](../../player/lib/src/identity.rs).

@@ -1,6 +1,6 @@
 //! Actor equipment ownership: category, holster commit, and equipped dispatch.
 //!
-//! Character produces [`maybraid_character_controller::CharacterIntent::UseItem`].
+//! Character produces actor-addressed control frames and semantic intents.
 //! This crate resolves the installed [`EquippedItemHandler`] and requests kit
 //! changes. Firearm / grenade crates realize construction and teardown.
 
@@ -11,12 +11,10 @@ mod transition;
 
 use bevy::ecs::schedule::ApplyDeferred;
 use bevy::prelude::*;
-use maybraid_character_controller::{
-	CharacterBindSystems, CharacterControlSystems, CharacterControllerPlugin,
-};
+use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 
 pub use dispatch::{
-	delivered_item_use, dispatch_equipped_item, EquippedItemHandler, EquippedItemUse,
+	dispatch_equipped_item, dispatch_equipped_power, EquippedItemHandler, EquippedItemUse,
 	EquippedPowerUse, RoutedItemActor,
 };
 pub use lifecycle::{
@@ -62,9 +60,7 @@ impl Plugin for EquipmentPlugin {
 		if !app.is_plugin_added::<CharacterControllerPlugin>() {
 			app.add_plugins(CharacterControllerPlugin);
 		}
-		app.add_message::<EquippedItemUse>()
-			.add_message::<EquippedPowerUse>()
-			.add_message::<EquipmentInventoryChanged>()
+		app.add_message::<EquipmentInventoryChanged>()
 			.init_resource::<ActiveInventoryCyclingCategory>()
 			.configure_sets(
 				Update,
@@ -88,8 +84,8 @@ impl Plugin for EquipmentPlugin {
 				Update,
 				ApplyDeferred.after(EquipmentSystems::Teardown).before(EquipmentSystems::Hold),
 			)
-			.add_systems(Update, dispatch_equipped_item.in_set(CharacterBindSystems::Dispatch))
-			.add_systems(Last, RoutedItemActor::stamp)
+			.add_observer(dispatch_equipped_item)
+			.add_observer(dispatch_equipped_power)
 			.add_systems(
 				Update,
 				apply_inventory_category_selection.in_set(EquipmentSystems::SelectCategory),
