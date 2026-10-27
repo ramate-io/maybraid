@@ -124,11 +124,26 @@ impl MaterialRefParams {
 /// One owned instance in a character inventory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InventoryItem {
-	Clothing { mesh: ClothingMesh, material: MaterialRefParams, stats: ClothingStats },
-	Firearm { spec: FirearmSpec, stats: FirearmStats },
-	Grenade { spec: GrenadeSpec, stats: GrenadeStats, recharge: GrenadeRecharge },
-	SkillMap { spec: SkillMapSpec },
-	Tanz { id: TanzId },
+	Clothing {
+		mesh: ClothingMesh,
+		material: MaterialRefParams,
+		stats: ClothingStats,
+	},
+	Firearm {
+		spec: FirearmSpec,
+		stats: FirearmStats,
+	},
+	Grenade {
+		spec: GrenadeSpec,
+		stats: GrenadeStats,
+		recharge: GrenadeRecharge,
+	},
+	SkillMap {
+		spec: SkillMapSpec,
+	},
+	Tanz {
+		id: TanzId,
+	},
 	/// Intrinsic bare-handed tool. Every playable character owns exactly one.
 	Fisticuffs,
 }
