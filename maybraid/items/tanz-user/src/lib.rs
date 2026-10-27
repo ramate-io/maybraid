@@ -1378,7 +1378,9 @@ mod tests {
 	#[test]
 	fn plugin_ordinary_sampling_does_not_restamp_without_a_transition() -> anyhow::Result<()> {
 		use maybraid_character_controller::OrdinaryLocomotion;
-		use maybraid_virtual_pad_controller::{PadButton, VirtualPad};
+		use maybraid_virtual_pad_controller::{
+			PadButton, PrimaryVirtualPad, VirtualPad, VirtualPadEvent,
+		};
 
 		let mut app = lifecycle_plugins();
 		let player = app
@@ -1389,14 +1391,19 @@ mod tests {
 		step_lifecycle(&mut app);
 		assert_eq!(app.world().get::<OrdinaryLocomotion>(player).map(|flag| flag.0), Some(true));
 		app.world_mut().entity_mut(player).insert(OrdinaryLocomotion(false));
-		for _ in 0..12 {
-			{
-				let mut pad = app.world_mut().resource_mut::<VirtualPad>();
-				pad.begin_frame();
-				pad.add_move(Vec2::Y);
-				pad.hold_digital(PadButton::A);
-				pad.finish_digital();
-			}
+		let source = app.world().resource::<PrimaryVirtualPad>().0;
+		for sequence in 1..=12 {
+			let mut pad = VirtualPad::default();
+			pad.begin_frame();
+			pad.add_move(Vec2::Y);
+			pad.hold_digital(PadButton::A);
+			pad.finish_digital();
+			app.world_mut().write_message(VirtualPadEvent {
+				source,
+				sequence,
+				delta: std::time::Duration::from_secs_f32(1.0 / 60.0),
+				pad,
+			});
 			step_lifecycle(&mut app);
 		}
 		assert_eq!(
