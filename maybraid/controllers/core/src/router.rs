@@ -548,24 +548,25 @@ impl InputRouter {
 					}
 				}
 			}
-			let before = self.delivered_actor(source);
+			if let Some(existing) = self.captures.find(source, owner, kind) {
+				if let Some(current) = token.take() {
+					self.release_capture(current);
+				}
+				*token = Some(existing.token());
+				return *token;
+			}
 			if let Some(current) = token.take() {
 				self.release_capture(current);
 			}
-			let next = if let Some(layer) = self.captures.find(source, owner, kind) {
-				layer.token()
-			} else {
-				self.push_capture(source, owner, kind)
-			};
+			let before = self.delivered_actor(source);
+			let next = self.push_capture(source, owner, kind);
 			*token = Some(next);
 			self.emit_capture_transition(source, before);
 			Some(next)
 		} else {
-			let before = self.delivered_actor(source);
 			if let Some(current) = token.take() {
 				self.release_capture(current);
 			}
-			self.emit_capture_transition(source, before);
 			None
 		}
 	}
@@ -654,9 +655,9 @@ impl InputRouter {
 	}
 
 	fn emit_capture_transition(&mut self, source: InputSource, before: Option<ActorTarget>) {
-		self.retire(source);
 		let after = self.delivered_actor(source);
 		if before == after {
+			self.retire(source);
 			return;
 		}
 		if before.is_some() && after.is_none() {
@@ -1082,6 +1083,60 @@ mod tests {
 			Some(ui(3))
 		);
 		assert_eq!(router.capture(overlay).map(CaptureLayer::kind), Some(CaptureKind::Overlay));
+	}
+
+	#[test]
+	fn clearing_empty_or_missing_capture_preserves_the_produced_frame() -> anyhow::Result<()> {
+		let mut router = InputRouter::default();
+		let source = InputSource::virtual_pad(Entity::from_bits(1));
+		router.assign_ui(source, ui(2));
+		let frame = router
+			.route_ui(source, "queued UI frame")
+			.ok_or_else(|| anyhow::anyhow!("UI assignment"))?
+			.for_frame(7);
+		let generation = router.generation(source);
+		let mut empty = None;
+		for _ in 0..3 {
+			assert_eq!(
+				router.replace_owned_capture(&mut empty, source, None, CaptureKind::Overlay),
+				None
+			);
+			assert_eq!(router.generation(source), generation);
+			assert!(router.accepts(&frame));
+		}
+		let mut missing = Some(CaptureToken::from_raw(u64::MAX));
+		router.replace_owned_capture(&mut missing, source, None, CaptureKind::Overlay);
+		assert_eq!(missing, None);
+		assert_eq!(router.generation(source), generation);
+		assert!(router.accepts(&frame));
+		Ok(())
+	}
+
+	#[test]
+	fn adopting_an_existing_capture_keeps_its_binding_but_release_retires_it() -> anyhow::Result<()>
+	{
+		let mut router = InputRouter::default();
+		let source = InputSource::virtual_pad(Entity::from_bits(1));
+		let owner = ScopeOwner::ui(ui(2));
+		let capture = router.acquire_capture(source, owner, CaptureKind::MenuNav);
+		let frame = router
+			.route_ui(source, "queued menu action")
+			.ok_or_else(|| anyhow::anyhow!("captured UI route"))?
+			.for_frame(8);
+		let generation = router.generation(source);
+		let mut token = None;
+		assert_eq!(
+			router.replace_owned_capture(&mut token, source, Some(owner), CaptureKind::MenuNav),
+			Some(capture)
+		);
+		assert_eq!(router.generation(source), generation);
+		assert!(router.accepts(&frame));
+		router.replace_owned_capture(&mut token, source, None, CaptureKind::MenuNav);
+		assert_eq!(token, None);
+		assert!(router.capture(capture).is_none());
+		assert_ne!(router.generation(source), generation);
+		assert!(!router.accepts(&frame));
+		Ok(())
 	}
 
 	#[test]
