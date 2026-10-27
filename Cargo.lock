@@ -736,6 +736,7 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "character-ui-menu",
+ "menu-components",
 ]
 
 [[package]]
@@ -7360,6 +7361,7 @@ dependencies = [
  "menu-components",
  "menu-screens",
  "player",
+ "screen-capture",
  "tanz-user",
 ]
 

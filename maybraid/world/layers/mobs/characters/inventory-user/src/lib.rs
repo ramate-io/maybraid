@@ -355,6 +355,7 @@ mod tests {
 		let loaded = load(&root, id).expect("load");
 		assert_eq!(loaded, inventory);
 		assert_eq!(loaded.weapons.len(), 3);
+		assert_eq!(loaded.equipped_tanzes(), character_items::BASE_STARTER_TANZES.to_vec());
 		assert!(loaded.items.iter().any(|item| item.grenade_spec().is_some()));
 		assert!(loaded.items[0].clothing_stats().is_some_and(|stats| stats.weight > 0));
 		assert!(loaded
