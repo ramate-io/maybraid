@@ -75,6 +75,7 @@ jobs:
           - smoke-origin-walk
           - smoke-player-down
           - smoke-menu-home
+          - smoke-pause-menu
           - smoke-mobs-guard
     steps:
       - uses: actions/checkout@v5

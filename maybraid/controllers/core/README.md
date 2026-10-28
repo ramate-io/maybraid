@@ -37,6 +37,11 @@ captured or frozen; strict gameplay routes cannot. Any capture kind can deliver
 UI input to its explicit `ScopeOwner::Ui(UiTarget)` entity. Core does not interpret
 map, picker, menu, console or character behavior.
 
+Suspension freezes actor gameplay delivery, but does not revoke an otherwise
+authorized UI route. A connected source can continue routing to its captured UI
+owner or assigned UI target while paused, so pause controls remain responsive.
+Disconnect and binding-generation changes still reject stale queued UI actions.
+
 Both destinations are bound before dispatch. `PadDeliverySystems` runs inside
 `ControllerPipeline::Bind` after `CaptureResolveSystems`: source/lifecycle
 resolution, immutable destination binding, UI dispatch, an explicit deferred flush,

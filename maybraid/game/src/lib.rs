@@ -5,6 +5,8 @@ mod flow;
 mod load;
 mod panic_log;
 mod paths;
+#[cfg(test)]
+mod pause_input_tests;
 mod recovery;
 mod shell;
 mod supervisor;
@@ -54,8 +56,8 @@ use maybraid_world::{
 use menu_components::{MenuBackRequested, TextMenuSystems, MENU_CLEAR};
 use menu_playground::{
 	ActiveCharacter, CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState,
-	CharacterPreviewPlugin, CharacterScreenPlugin, CharacterSessionPlugin,
-	EditingCharacter, RequestEditCharacter,
+	CharacterPreviewPlugin, CharacterScreenPlugin, CharacterSessionPlugin, EditingCharacter,
+	RequestEditCharacter,
 };
 use menu_screens::{
 	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
