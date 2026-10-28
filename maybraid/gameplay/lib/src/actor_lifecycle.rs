@@ -112,8 +112,10 @@ impl ActorDomainTeardown {
 		EquippedItemHandler::clear(&mut entity);
 		entity.remove::<(
 			FirearmUser,
+			player::PlayerOpticAds,
 			GrenadeUser,
 			grenade_user::GrenadeThrow,
+			fisticuffs_user::FisticuffsUser,
 			InventoryUser,
 			lubikans::LubikanOwner,
 		)>();
@@ -135,6 +137,7 @@ mod tests {
 		let actor = world
 			.spawn((
 				FirearmUser::holding(held),
+				player::PlayerOpticAds,
 				InventoryUser::carrying(bag),
 				EquippedItemHandler::Firearm,
 				lubikans::LubikanOwner,
@@ -153,6 +156,7 @@ mod tests {
 		assert!(world.get::<DespawnAfter>(held).is_some());
 		assert!(!world.entities().contains(bag));
 		assert!(world.get::<FirearmUser>(actor).is_none());
+		assert!(world.get::<player::PlayerOpticAds>(actor).is_none());
 		assert!(world.get::<InventoryUser>(actor).is_none());
 		assert!(world.get::<EquippedItemHandler>(actor).is_none());
 		assert!(world.get::<lubikans::LubikanOwner>(actor).is_none());

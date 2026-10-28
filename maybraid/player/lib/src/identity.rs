@@ -88,3 +88,8 @@ pub enum PlayerYawOwner {
 pub struct PlayerUse {
 	pub driver: Entity,
 }
+
+/// LT / RMB may drive optic ADS on the follow camera. Present only while a firearm
+/// is the active primary; fisticuffs and grenades omit this marker.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PlayerOpticAds;

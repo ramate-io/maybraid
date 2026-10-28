@@ -239,12 +239,21 @@ fn trigger_threshold_belongs_to_the_source_snapshot() -> Result<()> {
 		.ok_or_else(|| anyhow!("second controller"))?
 		.config
 		.trigger_press_threshold = 0.8;
-	let mut analog = VirtualPad::default();
-	analog.begin_frame();
-	analog.max_triggers(0.0, 0.6);
-	analog.finish_digital();
-	frame(&mut app, first_source, 1, analog.clone());
-	frame(&mut app, second_source, 1, analog);
+	for source in [first_source, second_source] {
+		let threshold = app
+			.world()
+			.get::<VirtualPadController>(source)
+			.ok_or_else(|| anyhow!("source controller"))?
+			.config
+			.trigger_press_threshold;
+		let mut analog = VirtualPad::default();
+		analog.begin_frame();
+		analog.max_triggers(0.0, 0.6);
+		// Inject the completed source snapshot, including its trigger conversion.
+		analog.apply_trigger_digital(threshold);
+		analog.finish_digital();
+		frame(&mut app, source, 1, analog);
+	}
 	app.update();
 	let delivered = app.world().resource::<Delivered>();
 	assert!(delivered
@@ -259,9 +268,12 @@ fn trigger_threshold_belongs_to_the_source_snapshot() -> Result<()> {
 		.intents
 		.iter()
 		.any(|(actor, _, intent)| *actor == first && *intent == CharacterIntent::UseItem(0.6)));
-	assert!(!delivered.intents.iter().any(
-		|(actor, _, intent)| *actor == second && matches!(intent, CharacterIntent::UseItem(_))
-	));
+	assert!(delivered
+		.intents
+		.iter()
+		.any(|(actor, _, intent)| *actor == first && *intent == CharacterIntent::AttackRight));
+	assert!(!delivered.intents.iter().any(|(actor, _, intent)| *actor == second
+		&& matches!(intent, CharacterIntent::UseItem(_) | CharacterIntent::AttackRight)));
 	Ok(())
 }
 

@@ -33,6 +33,12 @@ pub struct VirtualPad {
 	pub buttons: ButtonInput<PadButton>,
 	pub button_events: Vec<ButtonStroke<PadButton>>,
 	pub button_hold_secs: [f32; PAD_BUTTON_COUNT],
+	/// Trigger edges contributed by keyboard / gamepad / scripted input, independently
+	/// of mouse focus and use. They travel with this source's routed snapshot.
+	pub attack_buttons: ButtonInput<PadButton>,
+	attack_focus: f32,
+	attack_fire: f32,
+	attack_swallowed: u16,
 	pub keys: ButtonInput<KeyCode>,
 	pub key_events: Vec<ButtonStroke<KeyCode>>,
 	pub key_hold_secs: HashMap<KeyCode, f32>,
@@ -57,6 +63,10 @@ impl Default for VirtualPad {
 			buttons: ButtonInput::default(),
 			button_events: Vec::new(),
 			button_hold_secs: [0.0; PAD_BUTTON_COUNT],
+			attack_buttons: ButtonInput::default(),
+			attack_focus: 0.0,
+			attack_fire: 0.0,
+			attack_swallowed: 0,
 			keys: ButtonInput::default(),
 			key_events: Vec::new(),
 			key_hold_secs: HashMap::new(),
@@ -107,6 +117,9 @@ impl VirtualPad {
 		self.buttons.clear();
 		self.button_events.clear();
 		self.key_events.clear();
+		self.attack_buttons.clear();
+		self.attack_focus = 0.0;
+		self.attack_fire = 0.0;
 		self.digital_mask = 0;
 		self.suppressed = false;
 		self.suppressed_analog = None;
@@ -129,6 +142,13 @@ impl VirtualPad {
 	}
 
 	pub fn max_triggers(&mut self, focus: f32, fire: f32) {
+		self.attack_focus = self.attack_focus.max(focus);
+		self.attack_fire = self.attack_fire.max(fire);
+		self.max_mouse_triggers(focus, fire);
+	}
+
+	/// Analog focus/use contributed by a mouse, without generating jab edges.
+	pub fn max_mouse_triggers(&mut self, focus: f32, fire: f32) {
 		self.trigger_focus = self.trigger_focus.max(focus);
 		self.trigger_fire = self.trigger_fire.max(fire);
 	}
@@ -191,6 +211,22 @@ impl VirtualPad {
 	}
 
 	pub fn apply_trigger_digital(&mut self, threshold: f32) {
+		for (button, value) in [
+			(PadButton::TriggerFocus, self.attack_focus),
+			(PadButton::TriggerFire, self.attack_fire),
+		] {
+			let mask = 1 << button.index();
+			if value < threshold {
+				self.attack_swallowed &= !mask;
+			} else if self.suppressed {
+				self.attack_swallowed |= mask;
+			}
+			if value >= threshold && !self.suppressed && self.attack_swallowed & mask == 0 {
+				self.attack_buttons.press(button);
+			} else {
+				self.attack_buttons.release(button);
+			}
+		}
 		if self.trigger_focus >= threshold {
 			self.hold_digital(PadButton::TriggerFocus);
 		}
@@ -253,6 +289,7 @@ impl VirtualPad {
 #[derive(Clone, Debug, Default)]
 pub struct PadRearm {
 	buttons: u16,
+	attack_buttons: u16,
 	keys: HashSet<KeyCode>,
 	move_stick: bool,
 	look_throw: bool,
@@ -264,6 +301,10 @@ pub struct PadRearm {
 impl PadRearm {
 	pub fn capture(&mut self, pad: &VirtualPad) {
 		self.buttons |= pad.digital_mask | pad.swallowed;
+		self.attack_buttons |= pad.attack_swallowed;
+		for button in pad.attack_buttons.get_pressed() {
+			self.attack_buttons |= 1 << button.index();
+		}
 		for button in pad.buttons.get_pressed() {
 			self.buttons |= 1 << button.index();
 		}
@@ -312,6 +353,20 @@ impl PadRearm {
 				pad.button_hold_secs[button.index()] = 0.0;
 			}
 		}
+		// Mouse focus/use and jab triggers have independent retirement. A held
+		// mouse cannot swallow a fresh F/G or gamepad jab after capture.
+		let mut physical_attacks = pad.attack_swallowed;
+		for button in pad.attack_buttons.get_pressed() {
+			physical_attacks |= 1 << button.index();
+		}
+		let blocked_attacks = self.attack_buttons;
+		self.attack_buttons &= physical_attacks;
+		for button in [PadButton::TriggerFocus, PadButton::TriggerFire] {
+			if blocked_attacks & (1 << button.index()) != 0 {
+				pad.attack_buttons.reset(button);
+			}
+		}
+
 		pad.digital_mask &= !blocked;
 		pad.button_events.retain(|stroke| blocked & (1 << stroke.button.index()) == 0);
 		let blocked_keys = self.keys.clone();
@@ -478,6 +533,57 @@ mod tests {
 		pad.tick_holds(0.16);
 		assert!((pad.hold_secs(PadButton::A) - 0.16).abs() < 1e-5);
 		Ok(())
+	}
+
+	#[test]
+	fn captured_mouse_hold_does_not_retire_a_fresh_jab_trigger() {
+		let mut pad = VirtualPad::default();
+		let mut rearm = PadRearm::default();
+		pad.begin_frame();
+		pad.max_mouse_triggers(1.0, 1.0);
+		pad.apply_trigger_digital(0.5);
+		pad.finish_digital();
+		rearm.capture(&pad);
+		pad.begin_frame();
+		pad.max_mouse_triggers(1.0, 1.0);
+		pad.max_triggers(0.9, 0.9);
+		pad.apply_trigger_digital(0.5);
+		pad.finish_digital();
+		rearm.apply(&mut pad);
+		assert!(pad.attack_buttons.just_pressed(PadButton::TriggerFocus));
+		assert!(pad.attack_buttons.just_pressed(PadButton::TriggerFire));
+		assert!(!pad.pressed(PadButton::TriggerFocus));
+		assert!(!pad.pressed(PadButton::TriggerFire));
+	}
+
+	#[test]
+	fn retired_trigger_binding_rearms_jab_edges_before_delivery() {
+		let mut pad = VirtualPad::default();
+		let mut rearm = PadRearm::default();
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.9);
+		pad.apply_trigger_digital(0.5);
+		pad.finish_digital();
+		rearm.capture(&pad);
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.9);
+		pad.apply_trigger_digital(0.5);
+		pad.finish_digital();
+		let mut delivered = pad.clone();
+		rearm.apply(&mut delivered);
+		assert!(!delivered.attack_buttons.pressed(PadButton::TriggerFocus));
+		assert!(!delivered.attack_buttons.pressed(PadButton::TriggerFire));
+		pad.begin_frame();
+		pad.apply_trigger_digital(0.5);
+		pad.finish_digital();
+		rearm.apply(&mut pad.clone());
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.9);
+		pad.apply_trigger_digital(0.5);
+		pad.finish_digital();
+		rearm.apply(&mut pad);
+		assert!(pad.attack_buttons.just_pressed(PadButton::TriggerFocus));
+		assert!(pad.attack_buttons.just_pressed(PadButton::TriggerFire));
 	}
 
 	#[test]

@@ -3,11 +3,11 @@
 //! One host type ([`WorldStash`]) holds a bag via [`InventoryUser`]. Claim is
 //! take-all on [`CharacterIntent::StartInteraction`] (pad **X**) inside
 //! [`StashPolicy::claim_radius`]. Death samples a mob-kind fraction of the
-//! bag ([`Inventory::take_fraction`]) then [`Inventory::explode`]s the kept
-//! pieces so each is claimable on its own. Raiders and Guards leave about one
+//! droppable bag ([`Inventory::take_droppable_fraction`]) then [`Inventory::explode`]s
+//! the kept pieces so each is claimable on its own. Raiders and Guards leave about one
 //! third, Brawlers about one twelfth, and other families drop nothing.
-//! Unmarked NPCs still drop the full bag. Player drops still explode
-//! everything. A closed loot crate swings its lid open on X and ejects one
+//! Unmarked NPCs still drop the droppable bag. Player Tab drops extract only
+//! droppable items so intrinsic Fisticuffs stay on the body. A closed loot crate swings its lid open on X and ejects one
 //! ephemeral stash ([`crate::crate_loot`]); the crate restocks on its own clock.
 //!
 //! Loot TTL is [`StashPolicy::loot_secs`] (default 60 s), independent of
@@ -585,7 +585,10 @@ fn detach_downed_npc_loot(
 		let loot = user.and_then(|user| bags.get_mut(user.bag).ok()).map_or_else(
 			Inventory::default,
 			|mut bag| {
-				bag.take_fraction(&mut ItemRng::from_seed(npc_loot_seed(body, downed)), fraction)
+				bag.take_droppable_fraction(
+					&mut ItemRng::from_seed(npc_loot_seed(body, downed)),
+					fraction,
+				)
 			},
 		);
 		if let Some(user) = user {
@@ -594,7 +597,9 @@ fn detach_downed_npc_loot(
 		}
 		if let Some(firearm) = firearm {
 			commands.entity(firearm.held).try_despawn();
-			commands.entity(body).remove::<(FirearmUser, PlayerUse)>();
+			commands
+				.entity(body)
+				.remove::<(FirearmUser, PlayerUse, player::PlayerOpticAds)>();
 		}
 		if let Some(grenade) = grenade {
 			commands.entity(grenade.held).try_despawn();
@@ -769,11 +774,13 @@ fn drop_player_inventory(
 			source: player,
 		});
 	}
-	let loot = bag.take_all();
+	let loot = bag.take_droppable();
 	let snapshot = bag.clone();
 	if let Some(firearm) = firearm {
 		commands.entity(firearm.held).try_despawn();
-		commands.entity(player).remove::<(FirearmUser, PlayerUse)>();
+		commands
+			.entity(player)
+			.remove::<(FirearmUser, PlayerUse, player::PlayerOpticAds)>();
 	}
 	if let Some(grenade) = grenade {
 		commands.entity(grenade.held).try_despawn();
@@ -1741,6 +1748,75 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("loadout"))?;
 		assert!(loadout.inventory.items.is_empty());
 		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), 3);
+		Ok(())
+	}
+
+	#[test]
+	fn tab_drop_clears_the_held_firearms_optic_marker() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		world.init_resource::<Messages<DropLiveGrenade>>();
+		let bag = world.spawn(mixed_bag()).id();
+		let held = world.spawn_empty().id();
+		let actor = world
+			.spawn((
+				VegetationPlayer,
+				Transform::IDENTITY,
+				InventoryUser::carrying(bag),
+				FirearmUser::holding(held),
+				PlayerUse { driver: held },
+				player::PlayerOpticAds,
+			))
+			.id();
+		write_intent(&mut world, CharacterIntent::Inventory)?;
+		assert!(world.get::<FirearmUser>(actor).is_none());
+		assert!(world.get::<PlayerUse>(actor).is_none());
+		assert!(world.get::<player::PlayerOpticAds>(actor).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn tab_drop_keeps_fisticuffs_and_does_not_spawn_them() -> anyhow::Result<()> {
+		use crate::weapon::WorldPlayerLoadout;
+		use characters::CharacterAppearance;
+
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		world.init_resource::<Messages<DropLiveGrenade>>();
+		let bag = Inventory {
+			items: vec![
+				InventoryItem::Fisticuffs,
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::clothing(
+					ClothingMesh::Pants,
+					ClothingMaterial::Cloth,
+					ItemColor::Natural,
+				),
+			],
+			clothing: vec![2],
+			weapons: vec![0, 1],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			bag.clone(),
+		));
+		let player_bag = world.spawn(bag).id();
+		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
+
+		write_intent(&mut world, CharacterIntent::Inventory)?;
+
+		let leftover = world.get::<Inventory>(player_bag).ok_or_else(|| anyhow::anyhow!("bag"))?;
+		assert_eq!(leftover.items, vec![InventoryItem::Fisticuffs]);
+		assert_eq!(leftover.weapons, vec![0]);
+		let loadout = world
+			.get_resource::<WorldPlayerLoadout>()
+			.ok_or_else(|| anyhow::anyhow!("loadout"))?;
+		assert_eq!(loadout.inventory.items, vec![InventoryItem::Fisticuffs]);
+		assert_eq!(loadout.inventory.weapons, vec![0]);
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), 2);
 		Ok(())
 	}
 

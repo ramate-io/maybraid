@@ -17,9 +17,9 @@ use character_items::{
 use maybraid_character_ui_menu_renderer::{CharacterMenuEvent, MenuButton, OverlaySelectViewport};
 use menu_components::theme::{HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW};
 use menu_components::{
-	ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, MenuModal, MenuModalDismiss,
-	MenuModalId, MenuModalLayer, MenuModalStack, MenuModalSystems, TextMenuInputLock,
-	TextMenuSystems, spawn_hud_action, spawn_hud_text,
+	spawn_hud_action, spawn_hud_text, ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem,
+	HudOverlayMenu, InventoryDropPromptChip, MenuModal, MenuModalDismiss, MenuModalId,
+	MenuModalLayer, MenuModalStack, MenuModalSystems, TextMenuInputLock, TextMenuSystems,
 };
 use menu_components::{MenuAction, MenuActionImpulse};
 use menu_components::{MenuNav, MenuNavImpulse};
@@ -94,6 +94,7 @@ impl Plugin for CharacterDropPromptPlugin {
 					apply_accepted_world_drops,
 					close_drop_prompt_without_character,
 					sync_character_drop_prompt,
+					sync_inventory_drop_prompt_chip,
 				)
 					.chain()
 					.after(TextMenuSystems::Navigate),
@@ -120,6 +121,15 @@ pub fn drop_index_from_event(event: MenuEvent) -> Option<usize> {
 /// In-game world drops can be picked up again, so the confirm card stays closed.
 pub fn drop_needs_confirm(require_confirm: bool, recoverable: bool) -> bool {
 	require_confirm && !recoverable
+}
+
+/// Drop chip / X binding only when the focused bag item can actually leave.
+pub fn drop_chip_should_show(
+	inventory: &Inventory,
+	index: usize,
+	policy: InventoryDropPolicy,
+) -> bool {
+	inventory.can_drop(index, policy).is_ok()
 }
 
 #[derive(SystemParam)]
@@ -207,7 +217,7 @@ fn on_catalog_drop_action(
 	let Some(inventory) = menu_state.0.inventory.as_ref() else {
 		return;
 	};
-	if inventory.can_drop(index, policy.0).is_err() {
+	if !drop_chip_should_show(inventory, index, policy.0) {
 		return;
 	}
 	let recoverable = live.is_live();
@@ -230,6 +240,45 @@ fn on_catalog_drop_action(
 		&mut menu_events,
 		&mut live,
 	);
+}
+
+fn sync_inventory_drop_prompt_chip(
+	overlay: Res<ActiveOverlayKey>,
+	policy: Res<ActiveInventoryDropPolicy>,
+	menu_state: Res<CharacterMenuState>,
+	viewports: Query<(Entity, &HudMenu), With<OverlaySelectViewport>>,
+	items: Query<(&HudMenuItem, &MenuButton<MenuEvent>)>,
+	mut chips: Query<&mut Node, With<InventoryDropPromptChip>>,
+) {
+	if chips.is_empty() {
+		return;
+	}
+	let show = overlay.0.as_deref() == Some("Inventory")
+		&& viewports.iter().next().is_some_and(|(viewport, menu)| {
+			items
+				.iter()
+				.find_map(|(item, button)| {
+					if item.menu == viewport && item.index == menu.selected {
+						drop_index_from_event(button.0)
+					} else {
+						None
+					}
+				})
+				.and_then(|index| {
+					menu_state
+						.0
+						.inventory
+						.as_ref()
+						.map(|inventory| drop_chip_should_show(inventory, index, policy.0))
+				})
+				.unwrap_or(false)
+		});
+	let display = if show { Display::Flex } else { Display::None };
+	for mut node in &mut chips {
+		if node.display != display {
+			node.display = display;
+		}
+	}
 }
 
 fn close_drop_prompt_without_character(
@@ -661,9 +710,9 @@ fn pointer_target(
 #[cfg(test)]
 mod tests {
 	use super::{
-		CharacterDropPrompt, LiveWorldDrop, apply_accepted_drop_to_editor, apply_drop_inventory,
-		catalog_drop_action, commit_catalog_drop, drop_index_from_event, drop_needs_confirm,
-		on_catalog_drop_action,
+		apply_accepted_drop_to_editor, apply_drop_inventory, catalog_drop_action,
+		commit_catalog_drop, drop_index_from_event, drop_needs_confirm, on_catalog_drop_action,
+		CharacterDropPrompt, LiveWorldDrop,
 	};
 	use crate::character::{
 		CharacterEditBaseline, CharacterMenuState, CharacterScreen, CharacterUiSyncState,
@@ -768,6 +817,29 @@ mod tests {
 		assert_eq!(drop_index_from_event(MenuEvent::ToggleInventory(3)), Some(3));
 		assert_eq!(drop_index_from_event(MenuEvent::DropInventory(1)), Some(1));
 		assert_eq!(drop_index_from_event(MenuEvent::Save), None);
+	}
+
+	#[test]
+	fn drop_chip_hides_for_intrinsic_fisticuffs() {
+		use super::drop_chip_should_show;
+
+		let inventory = Inventory {
+			items: vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: vec![0, 1],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		assert!(!drop_chip_should_show(
+			&inventory,
+			0,
+			character_items::InventoryDropPolicy::PLACEHOLDER
+		));
+		assert!(drop_chip_should_show(
+			&inventory,
+			1,
+			character_items::InventoryDropPolicy::PLACEHOLDER
+		));
 	}
 
 	#[test]
@@ -902,17 +974,15 @@ mod tests {
 				      mut ui_sync: ResMut<CharacterUiSyncState>,
 				      mut overlay_sync: ResMut<OverlayUiSyncState>,
 				      mut menu_events: MessageWriter<CharacterMenuEvent<MenuEvent>>| {
-					assert!(
-						apply_drop_inventory(
-							0,
-							refuse,
-							&mut menu_state,
-							&mut ui_sync,
-							&mut overlay_sync,
-							&mut menu_events,
-						)
-						.is_none()
-					);
+					assert!(apply_drop_inventory(
+						0,
+						refuse,
+						&mut menu_state,
+						&mut ui_sync,
+						&mut overlay_sync,
+						&mut menu_events,
+					)
+					.is_none());
 				},
 			)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -954,14 +1024,12 @@ mod tests {
 				},
 			)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(
-			world
-				.resource::<CharacterMenuState>()
-				.0
-				.inventory
-				.as_ref()
-				.is_some_and(|bag| bag.items.is_empty())
-		);
+		assert!(world
+			.resource::<CharacterMenuState>()
+			.0
+			.inventory
+			.as_ref()
+			.is_some_and(|bag| bag.items.is_empty()));
 		Ok(())
 	}
 
@@ -1010,14 +1078,12 @@ mod tests {
 	fn catalog_commit_on_the_local_editor_mutates_the_bag() -> anyhow::Result<()> {
 		let mut world = commit_drop_world(false, false);
 		run_commit_catalog_drop(&mut world)?;
-		assert!(
-			world
-				.resource::<CharacterMenuState>()
-				.0
-				.inventory
-				.as_ref()
-				.is_some_and(|bag| bag.items.is_empty())
-		);
+		assert!(world
+			.resource::<CharacterMenuState>()
+			.0
+			.inventory
+			.as_ref()
+			.is_some_and(|bag| bag.items.is_empty()));
 		assert_eq!(world.resource_mut::<Messages<InventoryDropRequest>>().drain().count(), 0);
 		Ok(())
 	}

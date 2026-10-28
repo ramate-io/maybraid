@@ -9,8 +9,8 @@
 //! reuse pose-capture catalog keys from `tanz-user`.
 
 use character_items::{
-	Inventory, InventoryItem, InventorySlot, SELF_LUBIKAN_CAPTURE_LABEL, WORN_CLOTHING_LIMIT,
-	icon_catalog_key_for_label, self_lubikan_catalog_key,
+	icon_catalog_key_for_label, self_lubikan_catalog_key, Inventory, InventoryItem, InventorySlot,
+	SELF_LUBIKAN_CAPTURE_LABEL, WORN_CLOTHING_LIMIT,
 };
 use character_ui_menu::{
 	AssetOption, EquipmentChoice, GridCatalogChoice, MenuNode, OrderedEquipmentRow, PreviewColor,
@@ -154,6 +154,9 @@ fn required_captures_for(inventory: &Inventory) -> Vec<InventoryIconNeed> {
 			continue;
 		}
 		if let Some(key) = item.icon_catalog_key() {
+			if item.catalog_thumb_is_silhouette() {
+				needs.push(InventoryIconNeed::silhouette(key));
+			}
 			needs.push(InventoryIconNeed::shaded(key));
 		}
 	}
@@ -258,7 +261,7 @@ fn tools_tile(
 	item: &InventoryItem,
 	mode: InventoryLayoutMode,
 ) -> Option<GridCatalogChoice<MenuEvent>> {
-	if item.firearm_mesh().is_none() && item.grenade_spec().is_none() {
+	if item.firearm_mesh().is_none() && item.grenade_spec().is_none() && !item.is_fisticuffs() {
 		return None;
 	}
 	let rank = inventory.rank(index);
@@ -471,8 +474,8 @@ mod tests {
 	use super::{InventoryLayout, InventoryLayoutMode, STARTER_KIT_LABEL};
 	use crate::MenuEvent;
 	use character_items::{
-		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor, ItemRng,
-		STARTER_CLOTHING_COUNT, SkillMapKind, SkillMapSpec, self_lubikan_catalog_key,
+		self_lubikan_catalog_key, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory,
+		InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec, STARTER_CLOTHING_COUNT,
 	};
 	use character_ui_menu::MenuNode;
 
@@ -487,6 +490,7 @@ mod tests {
 			.collect();
 		items.extend(FirearmMesh::VALUES.iter().copied().map(InventoryItem::firearm));
 		items.push(InventoryItem::standard_grenade());
+		items.push(InventoryItem::Fisticuffs);
 		items.push(InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)));
 		items.push(InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Dumbwave, 2)));
 		items
@@ -639,6 +643,21 @@ mod tests {
 	}
 
 	#[test]
+	fn fisticuffs_capture_is_required_before_the_layout_paints() {
+		use super::InventoryIconNeed;
+		use character_items::fisticuffs_catalog_key;
+
+		let items = vec![
+			InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Red),
+			InventoryItem::Fisticuffs,
+		];
+		let layout = InventoryLayout::character_menu(&Inventory::with_starter_outfit(items));
+		let key = fisticuffs_catalog_key();
+		assert!(layout.captures.contains(&InventoryIconNeed::silhouette(key)));
+		assert!(layout.captures.contains(&InventoryIconNeed::shaded(key)));
+	}
+
+	#[test]
 	fn generated_starter_kit_has_exactly_three_clothing_tiles() {
 		let mut rng = ItemRng::from_seed(42);
 		let items = rng.random_starter_loadout();
@@ -646,9 +665,28 @@ mod tests {
 			items.iter().filter(|item| item.mesh().is_some()).count(),
 			STARTER_CLOTHING_COUNT
 		);
+		assert!(items.iter().any(InventoryItem::is_fisticuffs));
 		let layout = InventoryLayout::starter_kit(items);
 		assert_eq!(clothing_tile_count(&layout), STARTER_CLOTHING_COUNT);
 		assert_eq!(STARTER_CLOTHING_COUNT, 3);
+		assert!(tools_tile_labels(&layout).iter().any(|label| label == "Fisticuffs"));
+	}
+
+	fn tools_tile_labels(layout: &InventoryLayout) -> Vec<String> {
+		let MenuNode::Section { children, .. } = &layout.node else {
+			return Vec::new();
+		};
+		for child in children {
+			let MenuNode::Section { label: "Tools", children } = child else {
+				continue;
+			};
+			for inner in children {
+				if let MenuNode::GridCatalog { choices, .. } = inner {
+					return choices.iter().map(|choice| choice.label.clone()).collect();
+				}
+			}
+		}
+		Vec::new()
 	}
 
 	#[test]
@@ -747,7 +785,7 @@ mod tests {
 
 	#[test]
 	fn layout_stays_loading_until_every_capture_reports() {
-		use super::{INVENTORY_CAPTURE_TIMEOUT, InventoryPaint, inventory_paint_state};
+		use super::{inventory_paint_state, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT};
 		use std::time::Duration;
 
 		let layout = InventoryLayout::starter_kit(sample_items());
@@ -778,7 +816,7 @@ mod tests {
 
 	#[test]
 	fn timeout_reveals_without_every_report() {
-		use super::{INVENTORY_CAPTURE_TIMEOUT, InventoryPaint, inventory_paint_state};
+		use super::{inventory_paint_state, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT};
 
 		let layout = InventoryLayout::starter_kit(sample_items());
 		assert_eq!(

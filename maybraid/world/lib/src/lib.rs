@@ -117,6 +117,7 @@ use characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use combat_hud::CombatHudPlugin;
 use durham::TerrainFrictionConfig;
 use firearms::EnergyMaterialPlugin;
+use fisticuffs_user::{FisticuffsSensorDebug, FisticuffsUserPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
@@ -248,6 +249,7 @@ impl Plugin for WorldPlugin {
 			.init_resource::<WorldSceneryVisible>()
 			.init_resource::<control::ConsoleCapture>()
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
+			.insert_resource(FisticuffsSensorDebug::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
 				exclude_extent: WORLD_LATTICE_EXCLUDE_M,
@@ -315,6 +317,9 @@ impl Plugin for WorldPlugin {
 		// Locomotion → Anim → Camera Body.
 		if !app.is_plugin_added::<PlayerPlugin>() {
 			app.add_plugins(PlayerPlugin);
+		}
+		if !app.is_plugin_added::<FisticuffsUserPlugin>() {
+			app.add_plugins(FisticuffsUserPlugin);
 		}
 		app.add_systems(
 			Update,
@@ -402,6 +407,16 @@ mod tests {
 	fn game_world_starts_with_mob_hud_off() {
 		assert!(!WorldMobHudEnabled::from_debug_chrome(WorldPlugin::game().debug_chrome).0);
 		assert!(WorldMobHudEnabled::from_debug_chrome(WorldPlugin::default().debug_chrome).0);
+		assert!(!fisticuffs_user::FisticuffsSensorDebug::from_debug_chrome(
+			WorldPlugin::game().debug_chrome
+		)
+		.0);
+		assert!(
+			fisticuffs_user::FisticuffsSensorDebug::from_debug_chrome(
+				WorldPlugin::default().debug_chrome
+			)
+			.0
+		);
 	}
 
 	#[test]

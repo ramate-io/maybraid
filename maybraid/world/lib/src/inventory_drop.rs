@@ -447,13 +447,19 @@ mod tests {
 		let id = CharacterId(7);
 		character_inventory_user::save(&root, id, &leftover)?;
 		let loaded = character_inventory_user::load(&root, id)?;
-		assert_eq!(loaded.items.len(), leftover.items.len());
+		assert_eq!(loaded.items.len(), leftover.items.len() + 1);
+		assert_eq!(loaded.items.iter().filter(|item| item.is_fisticuffs()).count(), 1);
 		assert_eq!(loaded.weapons, leftover.weapons);
 		assert_eq!(loaded.skills, leftover.skills);
 		assert_eq!(
 			loaded.primary_weapon().and_then(InventoryItem::firearm_mesh),
 			Some(FirearmMesh::Reltor)
 		);
+		assert!(loaded
+			.items
+			.iter()
+			.enumerate()
+			.any(|(index, item)| { item.is_fisticuffs() && loaded.rank(index).is_none() }));
 		Ok(())
 	}
 

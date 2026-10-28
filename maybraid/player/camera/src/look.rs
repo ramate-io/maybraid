@@ -5,7 +5,10 @@ use bevy::prelude::*;
 use characters::CharacterHeading;
 use maybraid_character_controller::{ActorControlEvent, ActorIntentEvent, CharacterIntent};
 use maybraid_virtual_pad_controller::PrimaryVirtualPad;
-use player::{clamp_aim_pitch, wrap_pi, CameraFollow, PlayerLook, PlayerVisual, PlayerYawOwner};
+use player::{
+	clamp_aim_pitch, wrap_pi, CameraFollow, PlayerLook, PlayerOpticAds, PlayerVisual,
+	PlayerYawOwner,
+};
 
 /// When `true`, [`CharacterIntent::SwapPov`] is ignored (in-game inventory edit).
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -187,6 +190,7 @@ pub(crate) fn apply_look_intent(
 	primary: Option<Res<PrimaryVirtualPad>>,
 	locked: Option<Res<CameraPovLocked>>,
 	suppressed: Option<Res<CameraLookSuppressed>>,
+	optic_users: Query<(), With<PlayerOpticAds>>,
 	mut cameras: Query<
 		(
 			&mut CameraTarget,
@@ -221,6 +225,13 @@ pub(crate) fn apply_look_intent(
 				let sensitivity = follow.look_sensitivity(controller.pov, fov);
 				controller.yaw -= value.x * sensitivity;
 				controller.pitch = clamp_aim_pitch(controller.pitch - value.y * sensitivity);
+			}
+			CharacterIntent::Focus(_) | CharacterIntent::Ads(_)
+				if !optic_users.contains(event.entity) =>
+			{
+				controller.focus = 0.0;
+				controller.ads = 0.0;
+				controller.focus_blend = 0.0;
 			}
 			CharacterIntent::Focus(value) => {
 				controller.focus = controller.focus.max(value).clamp(0.0, 1.0)
@@ -364,6 +375,56 @@ mod tests {
 			entity: actor,
 			input: Routed::to_actor(InputSource::local_pad(), ActorTarget::new(actor), intent),
 		});
+	}
+
+	#[test]
+	fn focus_and_ads_require_the_addressed_actors_held_firearm() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_observer(apply_look_intent);
+		let armed = app.world_mut().spawn(PlayerOpticAds).id();
+		let unarmed = app.world_mut().spawn_empty().id();
+		let first = app
+			.world_mut()
+			.spawn((
+				FollowCamera::default(),
+				CameraTarget(Some(armed)),
+				CameraController::default(),
+			))
+			.id();
+		let second = app
+			.world_mut()
+			.spawn((
+				FollowCamera::default(),
+				CameraTarget(Some(unarmed)),
+				CameraController::default(),
+			))
+			.id();
+		for intent in [CharacterIntent::Focus(1.0), CharacterIntent::Ads(1.0)] {
+			send(&mut app, armed, intent);
+			send(&mut app, unarmed, intent);
+		}
+		let first_controller = app
+			.world()
+			.get::<CameraController>(first)
+			.ok_or_else(|| anyhow::anyhow!("armed camera"))?;
+		assert_eq!(first_controller.focus, 1.0);
+		assert_eq!(first_controller.ads, 1.0);
+		let second_controller = app
+			.world()
+			.get::<CameraController>(second)
+			.ok_or_else(|| anyhow::anyhow!("unarmed camera"))?;
+		assert_eq!(second_controller.focus, 0.0);
+		assert_eq!(second_controller.ads, 0.0);
+		app.world_mut().entity_mut(armed).remove::<PlayerOpticAds>();
+		send(&mut app, armed, CharacterIntent::Focus(1.0));
+		let first_controller = app
+			.world()
+			.get::<CameraController>(first)
+			.ok_or_else(|| anyhow::anyhow!("camera after drop"))?;
+		assert_eq!(first_controller.focus, 0.0);
+		assert_eq!(first_controller.ads, 0.0);
+		assert_eq!(first_controller.focus_blend, 0.0);
+		Ok(())
 	}
 
 	#[test]

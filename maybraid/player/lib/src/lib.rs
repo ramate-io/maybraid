@@ -34,7 +34,7 @@ pub use contact::{
 pub use hit::HitVolume;
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,
-	PlayerUse, PlayerVisual, PlayerYawOwner,
+	PlayerOpticAds, PlayerUse, PlayerVisual, PlayerYawOwner,
 };
 pub use locomotion::drive_player_locomotion;
 pub use look::{clamp_aim_pitch, look_delta, look_forward, wrap_pi, yaw_xz, AIM_PITCH_MARGIN};
@@ -163,6 +163,7 @@ impl Plugin for PlayerPlugin {
 				)
 					.chain(),
 			)
+			.add_systems(Last, hit::despawn_retired_hit_volumes)
 			.add_systems(
 				Update,
 				(locomotion::face_wish_yaw, drive_player_locomotion, hit::align_hit_volumes)

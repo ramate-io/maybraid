@@ -14,7 +14,7 @@ impl MousePad {
 			return;
 		}
 		pad.add_look(delta);
-		pad.max_triggers(
+		pad.max_mouse_triggers(
 			if mouse.pressed(MouseButton::Right) { 1.0 } else { 0.0 },
 			if mouse.pressed(MouseButton::Left) { 1.0 } else { 0.0 },
 		);

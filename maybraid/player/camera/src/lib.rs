@@ -12,7 +12,9 @@ use maybraid_spatial_rumble::{SpatialRumbleListener, SpatialRumblePlugin, Spatia
 use player::{PlayerPlugin, PlayerPoseSystems, PlayerSystems};
 use std::f32::consts::FRAC_PI_2;
 
-pub use follow::{map_pose, sync_camera_fov, sync_first_person_head_visibility};
+pub use follow::{
+	map_pose, sync_camera_fov, sync_first_person_head_visibility, CameraPresentationImpulse,
+};
 pub use look::{
 	apply_recoil_handoff, CameraController, CameraLookSuppressed, CameraPov, CameraPovLocked,
 	CameraRecoilHandoff,
@@ -129,6 +131,7 @@ pub fn register_player_camera_runtime(app: &mut App) {
 	app.init_resource::<CameraPovLocked>()
 		.init_resource::<look::CameraLookSuppressed>()
 		.add_message::<CameraRecoilHandoff>()
+		.add_message::<CameraPresentationImpulse>()
 		.add_observer(look::reset_look_frame)
 		.add_observer(look::apply_look_intent)
 		.add_systems(

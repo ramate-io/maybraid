@@ -15,6 +15,7 @@ character-inventory-user = { workspace = true }
 damage = { workspace = true }
 firearm-user = { workspace = true }
 firearms = { workspace = true }
+fisticuffs-user = { workspace = true }
 grenade-user = { workspace = true }
 lubikans = { workspace = true }
 lubikans-damage = { workspace = true }
@@ -33,7 +34,9 @@ tanz-user = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+character-animations = { workspace = true }
 character-items = { workspace = true }
+characters = { workspace = true }
 grenades = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
 maybraid-audio = { workspace = true }

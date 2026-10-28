@@ -4669,6 +4669,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "fisticuffs-user"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "character-animations",
+ "character-items",
+ "character-rigs",
+ "characters",
+ "damage",
+ "lod-avian",
+ "maybraid-audio",
+ "maybraid-character-controller",
+ "maybraid-controllers-core",
+ "maybraid-equipment",
+ "maybraid-virtual-pad-controller",
+ "player",
+]
+
+[[package]]
 name = "fixedbitset"
 version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7023,11 +7044,14 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
+ "character-animations",
  "character-inventory-user",
  "character-items",
+ "characters",
  "damage",
  "firearm-user",
  "firearms",
+ "fisticuffs-user",
  "grenade-user",
  "grenades",
  "lubikans",
@@ -7285,6 +7309,7 @@ dependencies = [
  "firearm-intelligence",
  "firearm-user",
  "firearms",
+ "fisticuffs-user",
  "fleeing-intelligence",
  "furnishing-layer-model",
  "furniture-assemblies",
@@ -7420,6 +7445,7 @@ name = "menu-playground"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "camera-controls",
  "character-creation-menus",
@@ -7431,12 +7457,16 @@ dependencies = [
  "characters",
  "characters-playground",
  "clap",
+ "combat-hud",
+ "damage",
  "firearm-user",
  "firearms-components",
+ "fisticuffs-user",
  "game-commands",
  "grenades",
  "item-icons",
  "lod",
+ "lod-avian",
  "maybraid-character-ui-menu-renderer",
  "maybraid-controllers-core",
  "maybraid-menu-controller",

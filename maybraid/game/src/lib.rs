@@ -740,7 +740,8 @@ mod tests {
 			.get_resource::<WorldPlayerLoadout>()
 			.ok_or_else(|| anyhow::anyhow!("world enter did not insert a loadout"))?;
 		assert_eq!(loadout.key, id.to_hex());
-		assert_eq!(loadout.inventory, inventory);
+		assert_eq!(loadout.inventory.items, vec![InventoryItem::Fisticuffs]);
+		assert!(loadout.inventory.weapons.is_empty());
 		Ok(())
 	}
 
@@ -824,7 +825,10 @@ mod tests {
 			.run_system_once(persist_changed_player_inventory)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		assert_eq!(character_inventory_user::load(&root, id)?, Inventory::default());
+		let loaded = character_inventory_user::load(&root, id)?;
+		assert_eq!(loaded.items, vec![InventoryItem::Fisticuffs]);
+		assert!(loaded.weapons.is_empty());
+		assert!(loaded.items.iter().all(|item| item.firearm_mesh().is_none()));
 		Ok(())
 	}
 
@@ -841,7 +845,8 @@ mod tests {
 		let loadout = read_player_loadout(&root, id)?;
 		assert_eq!(loadout.key, id.to_hex());
 		assert_eq!(loadout.name, "Active");
-		assert_eq!(loadout.inventory, inventory);
+		assert_eq!(loadout.inventory.items, vec![InventoryItem::Fisticuffs]);
+		assert!(loadout.inventory.weapons.is_empty());
 		assert_eq!(loadout.appearance.species_id(), model.appearance.species_id());
 		Ok(())
 	}
@@ -862,6 +867,7 @@ mod tests {
 				ItemColor::Natural,
 			),
 			InventoryItem::firearm(FirearmMesh::Bullpup),
+			InventoryItem::Fisticuffs,
 		]);
 		let mut world = World::new();
 		world.insert_resource(root.clone());
@@ -876,10 +882,12 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
 		let loaded = character_inventory_user::load(&root, id)?;
-		assert_eq!(loaded.items.len(), bag.items.len());
-		assert_eq!(loaded.clothing, bag.clothing);
-		assert_eq!(loaded.weapons, bag.weapons);
-		assert_eq!(loaded.skills, bag.skills);
+		assert_eq!(loaded, bag);
+		assert_eq!(
+			loaded.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
+		assert_eq!(loaded.items.iter().filter(|item| item.is_fisticuffs()).count(), 1);
 		Ok(())
 	}
 

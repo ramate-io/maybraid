@@ -9,11 +9,34 @@ use player::{
 	RestLocomotionCapsule,
 };
 
-use crate::look::{CameraController, CameraPov};
+use crate::look::{CameraController, CameraLookSuppressed, CameraPov};
 use crate::{CameraTarget, FollowCamera};
+use std::collections::HashMap;
+
+/// A short-lived, camera-only rotation applied to a follow pose.
+///
+/// Values are local yaw/pitch in radians. This message never changes look or aim state.
+#[derive(Message, Clone, Copy, Debug, PartialEq)]
+pub struct CameraPresentationImpulse {
+	pub target: Entity,
+	pub rotation: Vec2,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct PresentationState {
+	target: Option<Entity>,
+	rotation: Vec2,
+}
+
+const PRESENTATION_ROTATION_CAP: f32 = 1.5_f32.to_radians();
+const PRESENTATION_DECAY_SECS: f32 = 0.15;
 
 pub(crate) fn follow_character_camera(
 	time: Res<Time>,
+	real_time: Res<Time<Real>>,
+	look_suppressed: Option<Res<CameraLookSuppressed>>,
+	mut impulses: MessageReader<CameraPresentationImpulse>,
+	mut presentation: Local<HashMap<Entity, PresentationState>>,
 	players: Query<
 		(
 			Entity,
@@ -34,12 +57,19 @@ pub(crate) fn follow_character_camera(
 		>,
 	)>,
 ) {
+	let pending: Vec<_> = impulses.read().copied().collect();
 	let cameras: Vec<_> = transforms
 		.p1()
 		.iter_mut()
 		.map(|(entity, target, _, _, _)| (entity, target.0))
 		.collect();
-	for (camera_entity, target) in cameras {
+	for &(camera_entity, target) in &cameras {
+		let state = presentation.entry(camera_entity).or_default();
+		if state.target != target {
+			state.target = target;
+			state.rotation = Vec2::ZERO;
+		}
+		state.decay(real_time.delta_secs());
 		{
 			let mut cameras = transforms.p1();
 			let Ok((_, _, mut camera_transform, controller, _)) = cameras.get_mut(camera_entity)
@@ -47,6 +77,7 @@ pub(crate) fn follow_character_camera(
 				continue;
 			};
 			if controller.pov.is_map() {
+				state.rotation = Vec2::ZERO;
 				*camera_transform =
 					map_pose(controller.map_focus, controller.map_ground_y, controller.map_height)
 						.transform();
@@ -66,6 +97,11 @@ pub(crate) fn follow_character_camera(
 		else {
 			continue;
 		};
+		let look_suppressed = look_suppressed.as_deref().is_some_and(|suppressed| suppressed.0);
+		if look_suppressed {
+			state.rotation = Vec2::ZERO;
+		}
+		accumulate_presentation(state, actor, controller.pov, look_suppressed, &pending);
 
 		let yaw = Quat::from_axis_angle(Vec3::Y, controller.yaw);
 		let pitch = Quat::from_axis_angle(Vec3::X, controller.pitch);
@@ -99,7 +135,41 @@ pub(crate) fn follow_character_camera(
 				pose = pose.interpolate(sight, controller.focus_blend);
 			}
 		}
+		if !controller.pov.is_map() && !look_suppressed {
+			pose.rotation *=
+				Quat::from_rotation_y(state.rotation.x) * Quat::from_rotation_x(state.rotation.y);
+		}
 		*camera_transform = pose.transform();
+	}
+	presentation.retain(|entity, _| cameras.iter().any(|(camera, _)| camera == entity));
+}
+
+impl PresentationState {
+	fn add(&mut self, rotation: Vec2) {
+		self.rotation = (self.rotation + rotation)
+			.clamp(Vec2::splat(-PRESENTATION_ROTATION_CAP), Vec2::splat(PRESENTATION_ROTATION_CAP));
+	}
+
+	fn decay(&mut self, delta_secs: f32) {
+		self.rotation *= (-delta_secs.max(0.0) / PRESENTATION_DECAY_SECS).exp();
+		if self.rotation.length_squared() < 1e-8 {
+			self.rotation = Vec2::ZERO;
+		}
+	}
+}
+
+fn accumulate_presentation(
+	state: &mut PresentationState,
+	actor: Entity,
+	pov: CameraPov,
+	look_suppressed: bool,
+	pending: &[CameraPresentationImpulse],
+) {
+	if pov.is_map() || look_suppressed {
+		return;
+	}
+	for impulse in pending.iter().filter(|impulse| impulse.target == actor) {
+		state.add(impulse.rotation);
 	}
 }
 
@@ -254,6 +324,185 @@ fn member_landmark_translation(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use std::time::Duration;
+
+	#[test]
+	fn follow_impulse_moves_only_its_actor_and_neutralizes_without_changing_aim(
+	) -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_message::<CameraPresentationImpulse>()
+			.init_resource::<Time>()
+			.init_resource::<Time<Real>>()
+			.init_resource::<CameraLookSuppressed>()
+			.add_systems(Update, follow_character_camera);
+
+		let actor_a = app
+			.world_mut()
+			.spawn((
+				CameraFollow,
+				Transform::from_xyz(0.0, 0.0, 0.0),
+				GlobalTransform::default(),
+				PlayerCameraAim::default(),
+				PlayerLook::default(),
+			))
+			.id();
+		let actor_b = app
+			.world_mut()
+			.spawn((
+				CameraFollow,
+				Transform::from_xyz(0.0, 0.0, 0.0),
+				GlobalTransform::default(),
+				PlayerCameraAim::default(),
+				PlayerLook::default(),
+			))
+			.id();
+		let controller_a_yaw = 0.4;
+		let controller_a_pitch = -0.2;
+		let camera_a = app
+			.world_mut()
+			.spawn((
+				Camera3d::default(),
+				FollowCamera::default(),
+				CameraTarget(Some(actor_a)),
+				CameraController { yaw: controller_a_yaw, pitch: controller_a_pitch, ..default() },
+				Transform::default(),
+			))
+			.id();
+		let controller_b_yaw = -0.3;
+		let controller_b_pitch = 0.1;
+		let camera_b = app
+			.world_mut()
+			.spawn((
+				Camera3d::default(),
+				FollowCamera::default(),
+				CameraTarget(Some(actor_b)),
+				CameraController { yaw: controller_b_yaw, pitch: controller_b_pitch, ..default() },
+				Transform::default(),
+			))
+			.id();
+
+		app.world_mut()
+			.resource_mut::<Time<Real>>()
+			.advance_by(Duration::from_millis(16));
+		app.update();
+		let neutral_a = *app
+			.world()
+			.get::<Transform>(camera_a)
+			.ok_or_else(|| anyhow::anyhow!("missing camera A transform"))?;
+		let neutral_b = *app
+			.world()
+			.get::<Transform>(camera_b)
+			.ok_or_else(|| anyhow::anyhow!("missing camera B transform"))?;
+
+		app.world_mut().write_message(CameraPresentationImpulse {
+			target: actor_a,
+			rotation: Vec2::new(0.02, -0.01),
+		});
+		app.world_mut()
+			.resource_mut::<Time<Real>>()
+			.advance_by(Duration::from_millis(16));
+		app.update();
+		let kicked_a = *app
+			.world()
+			.get::<Transform>(camera_a)
+			.ok_or_else(|| anyhow::anyhow!("missing camera A transform"))?;
+		let untouched_b = *app
+			.world()
+			.get::<Transform>(camera_b)
+			.ok_or_else(|| anyhow::anyhow!("missing camera B transform"))?;
+		assert!(kicked_a.rotation.angle_between(neutral_a.rotation) > 0.01);
+		assert_eq!(untouched_b.rotation, neutral_b.rotation);
+		assert!(app.world().get::<CameraController>(camera_a).is_some_and(|controller| {
+			controller.yaw == controller_a_yaw && controller.pitch == controller_a_pitch
+		}));
+		assert!(app.world().get::<CameraController>(camera_b).is_some_and(|controller| {
+			controller.yaw == controller_b_yaw && controller.pitch == controller_b_pitch
+		}));
+		assert!(app.world().get::<PlayerLook>(actor_a).is_some_and(|look| {
+			look.yaw == 0.0 && look.pitch == 0.0 && !look.first_person && look.focus == 0.0
+		}));
+		assert!(app.world().get::<PlayerCameraAim>(actor_a).is_some_and(|aim| {
+			aim.focus == 0.0 && aim.pose.is_none() && aim.sight_fov.is_none()
+		}));
+
+		app.world_mut().entity_mut(camera_a).insert(CameraTarget(Some(actor_b)));
+		app.world_mut()
+			.resource_mut::<Time<Real>>()
+			.advance_by(Duration::from_millis(16));
+		app.update();
+		let retargeted_a = app
+			.world()
+			.get::<Transform>(camera_a)
+			.ok_or_else(|| anyhow::anyhow!("missing camera A transform"))?;
+		let current_b = app
+			.world()
+			.get::<Transform>(camera_b)
+			.ok_or_else(|| anyhow::anyhow!("missing camera B transform"))?;
+		assert_eq!(retargeted_a.rotation, neutral_a.rotation);
+		assert_eq!(current_b.rotation, neutral_b.rotation);
+
+		app.world_mut().resource_mut::<Time<Real>>().advance_by(Duration::from_secs(10));
+		app.update();
+		let neutral_after = app
+			.world()
+			.get::<Transform>(camera_b)
+			.ok_or_else(|| anyhow::anyhow!("missing camera B transform"))?;
+		assert_eq!(neutral_after.rotation, neutral_b.rotation);
+		Ok(())
+	}
+
+	#[test]
+	fn presentation_is_actor_addressed_bounded_and_decays_to_neutral() {
+		let actor = Entity::from_bits(1);
+		let other = Entity::from_bits(2);
+		let events = [
+			CameraPresentationImpulse { target: other, rotation: Vec2::splat(0.02) },
+			CameraPresentationImpulse { target: actor, rotation: Vec2::splat(0.02) },
+		];
+		let mut state = PresentationState::default();
+		accumulate_presentation(&mut state, actor, CameraPov::ThirdPerson, false, &events);
+		assert_eq!(state.rotation, Vec2::splat(0.02));
+		for _ in 0..20 {
+			accumulate_presentation(
+				&mut state,
+				actor,
+				CameraPov::ThirdPerson,
+				false,
+				&[CameraPresentationImpulse { target: actor, rotation: Vec2::splat(0.02) }],
+			);
+		}
+		assert_eq!(state.rotation, Vec2::splat(PRESENTATION_ROTATION_CAP));
+		state.decay(10.0);
+		assert_eq!(state.rotation, Vec2::ZERO);
+	}
+
+	#[test]
+	fn map_pov_ignores_presentation_impulses() {
+		let actor = Entity::from_bits(1);
+		let mut state = PresentationState::default();
+		accumulate_presentation(
+			&mut state,
+			actor,
+			CameraPov::Map,
+			false,
+			&[CameraPresentationImpulse { target: actor, rotation: Vec2::ONE }],
+		);
+		assert_eq!(state.rotation, Vec2::ZERO);
+	}
+
+	#[test]
+	fn look_suppression_ignores_new_impulses() {
+		let actor = Entity::from_bits(1);
+		let mut state = PresentationState::default();
+		accumulate_presentation(
+			&mut state,
+			actor,
+			CameraPov::FirstPerson,
+			true,
+			&[CameraPresentationImpulse { target: actor, rotation: Vec2::ONE }],
+		);
+		assert_eq!(state.rotation, Vec2::ZERO);
+	}
 
 	#[test]
 	fn first_person_hides_face_not_body() {
@@ -333,6 +582,8 @@ mod tests {
 
 		let mut world = World::new();
 		world.init_resource::<Time>();
+		world.init_resource::<Time<Real>>();
+		world.init_resource::<Messages<CameraPresentationImpulse>>();
 		world.spawn((
 			Camera3d::default(),
 			FollowCamera::default(),

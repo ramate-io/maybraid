@@ -977,6 +977,9 @@ fn spawn_mixed_weapon_actor(
 		EquippedItemHandler::Grenade => {
 			entity.insert((GrenadeUser::holding(held), GrenadeThrow::default()));
 		}
+		EquippedItemHandler::Fisticuffs => {
+			entity.remove::<PlayerUse>();
+		}
 		EquippedItemHandler::None => {}
 	}
 	(entity.id(), bag, held)

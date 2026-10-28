@@ -1,12 +1,13 @@
 //! Equipment ↔ concrete item crates. Equipment owns category / holster state;
-//! firearm-user and grenade-user realize teardown then hold.
+//! firearm-user, grenade-user, and fisticuffs-user realize teardown then hold.
 
 use bevy::prelude::*;
 use firearm_user::register_firearm_user_runtime;
+use fisticuffs_user::register_fisticuffs_user_runtime;
 use grenade_user::register_grenade_user_runtime;
 use maybraid_equipment::EquipmentPlugin;
 
-/// Sole gameplay owner of firearm / grenade *runtime* registration.
+/// Sole gameplay owner of firearm / grenade / fisticuffs *runtime* registration.
 ///
 /// Item plugins may call the same `register_*_runtime` functions; those are
 /// idempotent. Presentation stays on the item plugins.
@@ -17,6 +18,7 @@ impl ItemRuntimes {
 	pub fn register(app: &mut App) {
 		register_firearm_user_runtime(app);
 		register_grenade_user_runtime(app);
+		register_fisticuffs_user_runtime(app);
 	}
 }
 

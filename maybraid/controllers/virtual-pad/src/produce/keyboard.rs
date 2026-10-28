@@ -57,6 +57,10 @@ impl KeyboardPad {
 		if keyboard.pressed(KeyCode::KeyY) {
 			pad.hold_digital(PadButton::Y);
 		}
+		pad.max_triggers(
+			if keyboard.pressed(KeyCode::KeyF) { 1.0 } else { 0.0 },
+			if keyboard.pressed(KeyCode::KeyG) { 1.0 } else { 0.0 },
+		);
 		// Brackets cycle the active equipped queue in character intent production.
 	}
 	fn menu(keyboard: &ButtonInput<KeyCode>, pad: &mut VirtualPad) {
