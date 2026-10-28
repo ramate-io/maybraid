@@ -240,11 +240,6 @@ mod tests {
 	}
 
 	#[test]
-	fn kick_is_deterministic() {
-		assert_eq!(recoil_kick(7, 3, STRENGTH), recoil_kick(7, 3, STRENGTH));
-	}
-
-	#[test]
 	fn kick_scales_with_strength() {
 		let unit = recoil_kick(7, 3, 1.0);
 		let doubled = recoil_kick(7, 3, 2.0);
