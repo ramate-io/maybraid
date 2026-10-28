@@ -321,7 +321,6 @@ impl Plugin for WorldPlugin {
 		if !app.is_plugin_added::<FisticuffsUserPlugin>() {
 			app.add_plugins(FisticuffsUserPlugin);
 		}
-		maybraid_gameplay::configure_user_animation_order(app);
 		app.add_systems(
 			Update,
 			(
