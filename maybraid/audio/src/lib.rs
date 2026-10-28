@@ -3,7 +3,6 @@
 pub mod ambient;
 pub mod asset;
 pub mod backend;
-pub mod fisticuffs;
 pub mod flinch;
 pub mod mixer;
 pub mod movement;
@@ -18,10 +17,6 @@ pub use ambient::{
 };
 pub use asset::{decode_wav_mono, AudioClip, AudioClipError};
 pub use backend::{preferred_sample_format, Audio};
-pub use fisticuffs::{
-	EffortStyle, FisticuffsStrikeAudioState, FisticuffsStrikeSounds, COMBO_STEP_COUNT,
-	EFFORT_PITCH_MAX, EFFORT_PITCH_MIN, EFFORT_VARIANT_COUNT,
-};
 pub use flinch::{
 	pick_variant, FlinchProfile, FlinchSounds, FlinchState, GruntStyle, GRUNT_SPATIAL_RADIUS,
 	GRUNT_SPATIAL_SCALE, GRUNT_VOLUME,
@@ -63,7 +58,6 @@ impl Plugin for AudioPlugin {
 				(
 					setup_audio,
 					flinch::setup_flinch_sounds,
-					fisticuffs::setup_fisticuffs_strike_sounds,
 					movement::setup_movement_sounds,
 					ambient::setup_ambient_sounds,
 				),

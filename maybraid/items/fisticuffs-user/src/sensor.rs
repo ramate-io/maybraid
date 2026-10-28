@@ -1,10 +1,12 @@
 //! Short-lived fist / forearm hit sensor for an active jab.
 //!
-//! The volume is an Avian [`Sensor`] (query-only, [`projectile_layers`]) spawned
-//! only while [`AttackPhase::Active`]. Hits are collected with `SpatialQuery`
-//! the same way grenade blasts and skill-map bursts resolve, then written as
-//! [`damage::Hit`]. [`AttackState::combo_step`] rotates for effort SFX only;
-//! there is no combo-step damage scale.
+//! The volume is a pose-only marker spawned only while [`AttackPhase::Active`].
+//! Hits are collected with `SpatialQuery` using a constructed capsule — the
+//! same class as grenade blasts and skill-map bursts — then written as
+//! [`damage::Hit`]. The entity does **not** carry an Avian [`Collider`] /
+//! [`Sensor`]: those observers queue inserts after the Active window can
+//! already have despawned the marker. [`AttackState::combo_step`] is unused
+//! for damage or vocals; there is no combo-step damage scale.
 
 use std::collections::{HashMap, HashSet};
 
@@ -180,15 +182,15 @@ fn despawn_group(
 }
 
 fn spawn_sensor(commands: &mut Commands, attacker: Entity, side: Side, transform: Transform) {
+	// Pose + ownership only. Overlap uses [`fist_collider`] as a query shape,
+	// not a live Avian collider, so physics cannot queue inserts onto a
+	// sensor that teardown already despawned.
 	commands.spawn((
 		Name::new(SENSOR_NAME),
 		FisticuffsHitSensor { attacker, side, contacted: Vec::new() },
 		FisticuffsHitSensorOf(attacker),
 		ChildOf(attacker),
 		transform,
-		fist_collider(),
-		Sensor,
-		PhysicsInteractionLayer::projectile_layers(),
 	));
 }
 

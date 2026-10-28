@@ -44,6 +44,7 @@ pub struct FisticuffsStrike {
 	pub side: Side,
 	pub kind: AttackKind,
 	/// Rotates while the player chains jabs (`0 .. COMBO_STEP_COUNT-1`).
+	/// Clip choice uses the shared flinch bank, not this step.
 	pub combo_step: u8,
 	pub progress: f32,
 	/// Quantized character-space aim (`+X` character left, `+Y` up, `+Z` forward).
@@ -91,6 +92,8 @@ impl Plugin for FisticuffsUserPlugin {
 	}
 }
 
+#[cfg(test)]
+mod lifetime;
 
 #[cfg(test)]
 mod pose_tests {
