@@ -313,12 +313,12 @@ impl InputRouter {
 		self.pad_policy_for(InputSource::local_pad())
 	}
 
-	/// Session pause of local-pad delivery. Other owners stay frozen.
+	/// Session pause of local-pad gameplay delivery. UI remains available.
 	pub fn set_paused(&mut self, paused: bool) {
 		self.set_source_paused(InputSource::local_pad(), paused);
 	}
 
-	/// Pause one source without resuming another source's pause owner.
+	/// Pause one source's gameplay without resuming another source's pause owner.
 	pub fn set_source_paused(&mut self, source: InputSource, paused: bool) {
 		if paused {
 			self.suspend(source, ScopeOwner::pause());
@@ -345,8 +345,9 @@ impl InputRouter {
 	}
 
 	/// UI delivery: capture owner if present, otherwise the assigned UI.
+	/// Gameplay suspension does not block authorized UI input, including pause menus.
 	pub fn delivered_ui(&self, source: InputSource) -> Option<UiTarget> {
-		if !self.connected(source) || self.is_suspended(source) {
+		if !self.connected(source) {
 			return None;
 		}
 		if let Some(owner) =

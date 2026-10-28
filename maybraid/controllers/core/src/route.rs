@@ -351,6 +351,98 @@ mod tests {
 	}
 
 	#[test]
+	fn pause_freezes_actor_routes_but_keeps_authorized_ui_live() -> anyhow::Result<()> {
+		use crate::{CaptureKind, ScopeOwner, UiTarget};
+		let mut world = World::new();
+		world.init_resource::<crate::InputRouter>();
+		world.init_resource::<Hits>();
+		let paused_source = InputSource::virtual_pad(world.spawn_empty().id());
+		let other_source = InputSource::virtual_pad(world.spawn_empty().id());
+		let actor = ActorTarget::new(world.spawn_empty().id());
+		let other_actor = ActorTarget::new(world.spawn_empty().id());
+		let first_menu = UiTarget::new(world.spawn_empty().id());
+		let replacement_menu = UiTarget::new(world.spawn_empty().id());
+		let mut capture = None;
+		{
+			let mut router = world.resource_mut::<crate::InputRouter>();
+			router.assign_actor(paused_source, actor);
+			router.assign_ui(paused_source, first_menu);
+			router.assign_actor(other_source, other_actor);
+			router.set_source_paused(paused_source, true);
+			router.suspend(paused_source, ScopeOwner::actor(actor));
+		}
+		let assigned_ui = world
+			.resource::<crate::InputRouter>()
+			.route_ui(paused_source, 0u8)
+			.ok_or_else(|| anyhow::anyhow!("assigned pause menu route"))?;
+		assert_eq!(assigned_ui.target().ui_entity(), Some(first_menu.entity()));
+		assert!(world.resource::<crate::InputRouter>().accepts(&assigned_ui));
+		{
+			let mut router = world.resource_mut::<crate::InputRouter>();
+			router.replace_owned_capture(
+				&mut capture,
+				paused_source,
+				Some(ScopeOwner::ui(first_menu)),
+				CaptureKind::MenuNav,
+			);
+		}
+
+		assert!(world.resource::<crate::InputRouter>().is_suspended(paused_source));
+		assert!(world.resource::<crate::InputRouter>().route_actor(paused_source, ()).is_none());
+		let shell = world
+			.resource::<crate::InputRouter>()
+			.route_shell(paused_source, ())
+			.ok_or_else(|| anyhow::anyhow!("paused shell route"))?;
+		assert!(world.resource::<crate::InputRouter>().accepts(&shell));
+		let other = world
+			.resource::<crate::InputRouter>()
+			.route_actor(other_source, ())
+			.ok_or_else(|| anyhow::anyhow!("unpaused source route"))?;
+		assert!(world.resource::<crate::InputRouter>().accepts(&other));
+
+		let old_ui = world
+			.resource::<crate::InputRouter>()
+			.route_ui(paused_source, 1u8)
+			.ok_or_else(|| anyhow::anyhow!("captured pause menu route"))?;
+		assert!(world.resource::<crate::InputRouter>().accepts(&old_ui));
+		old_ui.queue(&mut world.commands(), |world, input| {
+			if let Some(target) = input.target().ui_entity() {
+				world.resource_mut::<Hits>().0.push((target, input.into_payload()));
+			}
+		});
+
+		{
+			let mut router = world.resource_mut::<crate::InputRouter>();
+			router.replace_owned_capture(
+				&mut capture,
+				paused_source,
+				Some(ScopeOwner::ui(replacement_menu)),
+				CaptureKind::MenuNav,
+			);
+			router.set_source_paused(paused_source, false);
+		}
+		world.flush();
+		assert!(world.resource::<Hits>().0.is_empty(), "old UI generations cannot dispatch");
+		assert!(world.resource::<crate::InputRouter>().is_suspended(paused_source));
+		let current_ui = world
+			.resource::<crate::InputRouter>()
+			.route_ui(paused_source, 2u8)
+			.ok_or_else(|| anyhow::anyhow!("replacement pause menu route"))?;
+		assert_eq!(current_ui.target().ui_entity(), Some(replacement_menu.entity()));
+		assert!(world.resource::<crate::InputRouter>().accepts(&current_ui));
+		current_ui.queue(&mut world.commands(), |world, input| {
+			if let Some(target) = input.target().ui_entity() {
+				world.resource_mut::<Hits>().0.push((target, input.into_payload()));
+			}
+		});
+		world.resource_mut::<crate::InputRouter>().disconnect(paused_source);
+		world.flush();
+		assert!(world.resource::<Hits>().0.is_empty(), "disconnect rejects queued UI input");
+		assert!(!world.resource::<crate::InputRouter>().accepts(&current_ui));
+		Ok(())
+	}
+
+	#[test]
 	fn assigning_an_owned_actor_transfers_ownership_and_retires_old_delivery() -> anyhow::Result<()>
 	{
 		let mut router = crate::InputRouter::default();
