@@ -5,7 +5,7 @@ use maybraid::{
 	assets_root, install_panic_log_hook, maybe_supervise, GamePlugin, RecoverBoot, RecoveryMode,
 };
 use maybraid_agent::AgentArgs;
-use maybraid_input::PadHidPlugins;
+use maybraid_virtual_pad_controller::PadHidPlugins;
 use maybraid_world::{
 	default_window_present_mode, parse_xz_metres, player_spawn_xz, start_at_from_env, AgentDrive,
 };

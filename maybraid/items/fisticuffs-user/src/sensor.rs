@@ -1,8 +1,8 @@
 //! Short-lived fist / forearm hit sensor for an active jab.
 //!
 //! The volume is a pose-only marker spawned only while [`AttackPhase::Active`].
-//! Hits are collected with `SpatialQuery` using a constructed capsule — the
-//! same class as grenade blasts and skill-map bursts — then written as
+//! The first Fixed or Animated solid reached by a chamber-to-endpoint capsule
+//! sweep emits [`FisticuffsImpact`]. A Health owner also receives a
 //! [`damage::Hit`]. The entity does **not** carry an Avian [`Collider`] /
 //! [`Sensor`]: those observers queue inserts after the Active window can
 //! already have despawned the marker. [`AttackState::combo_step`] is unused
@@ -18,7 +18,7 @@ use lod_avian::PhysicsInteractionLayer;
 
 use crate::aim::JabAim;
 use crate::attack::AttackPhase;
-use crate::{FisticuffsUser, Side};
+use crate::{FisticuffsImpact, FisticuffsUser, Side};
 
 /// Placeholder jab damage. **Not final balance** — retune after playtest.
 pub const PLACEHOLDER_JAB_DAMAGE: f32 = 12.0;
@@ -74,8 +74,16 @@ impl FisticuffsSensorDebug {
 pub struct FisticuffsHitSensor {
 	pub attacker: Entity,
 	pub side: Side,
-	/// Health entities already injured by this strike (once-per-target).
-	pub contacted: Vec<Entity>,
+	/// One physical landing consumes the rest of this jab, including walls.
+	pub impact_consumed: bool,
+}
+
+#[derive(Clone, Copy)]
+struct FistContact {
+	entity: Entity,
+	distance: f32,
+	point: Vec3,
+	normal: Vec3,
 }
 
 #[derive(Component, Clone, Copy, Debug)]
@@ -169,6 +177,19 @@ fn try_despawn(commands: &mut Commands, entity: Entity) {
 	}
 }
 
+fn is_descendant_of(entity: Entity, ancestor: Entity, parents: &Query<&ChildOf>) -> bool {
+	let mut current = entity;
+	loop {
+		let Ok(child_of) = parents.get(current) else {
+			return false;
+		};
+		current = child_of.parent();
+		if current == ancestor {
+			return true;
+		}
+	}
+}
+
 fn despawn_group(
 	by_attacker: &mut HashMap<Entity, Vec<Entity>>,
 	attacker: Entity,
@@ -187,7 +208,7 @@ fn spawn_sensor(commands: &mut Commands, attacker: Entity, side: Side, transform
 	// sensor that teardown already despawned.
 	commands.spawn((
 		Name::new(SENSOR_NAME),
-		FisticuffsHitSensor { attacker, side, contacted: Vec::new() },
+		FisticuffsHitSensor { attacker, side, impact_consumed: false },
 		FisticuffsHitSensorOf(attacker),
 		ChildOf(attacker),
 		transform,
@@ -261,93 +282,140 @@ pub fn sync_fist_sensors(
 	}
 }
 
-/// Resolve overlap against [`Health`] and write [`Hit`]. Self-hits are dropped
-/// here and again in [`damage::apply_hits`] (`allow_self: false`). There is no
-/// separate team filter on the damage seam — same rule as firearms / grenades.
+/// Sweep to the first Fixed or Animated solid and emit [`FisticuffsImpact`].
+/// Write [`Hit`] only when the collider resolves to a Health owner. Self-hits
+/// are dropped here and again in [`damage::apply_hits`] (`allow_self: false`).
 pub fn resolve_fist_hits(
-	spatial: SpatialQuery,
-	users: Query<(Entity, &FisticuffsUser, Option<&GlobalTransform>, Option<&Transform>)>,
+	spatial: Option<SpatialQuery>,
+	users: Query<(
+		Entity,
+		&FisticuffsUser,
+		Option<&GlobalTransform>,
+		Option<&Transform>,
+		Option<&maybraid_character_controller::ActorControlStatus>,
+	)>,
 	visuals: Query<(&CharacterHeading, &ChildOf), With<CharacterRoot>>,
-	transforms: Query<(Entity, &Transform, Option<&GlobalTransform>)>,
-	health: Query<(), With<Health>>,
+	health: Query<&Health>,
 	parents: Query<&ChildOf>,
+	downed: Query<(), With<Downed>>,
 	mut sensors: Query<(Entity, &mut FisticuffsHitSensor)>,
 	mut hits: MessageWriter<Hit>,
+	mut impacts: MessageWriter<FisticuffsImpact>,
 ) {
+	let Some(spatial) = spatial else {
+		return;
+	};
 	for (sensor, mut volume) in &mut sensors {
-		let Ok((attacker, user, global, local)) = users.get(volume.attacker) else {
+		if volume.impact_consumed {
+			continue;
+		}
+		let Ok((attacker, user, global, local, control)) = users.get(volume.attacker) else {
 			continue;
 		};
+		if user.state.phase() != Some(AttackPhase::Active)
+			|| downed.contains(attacker)
+			|| health.get(attacker).is_ok_and(|pool| pool.is_dead())
+			|| control.is_some_and(|control| control.is_frozen())
+		{
+			continue;
+		}
 		let heading = heading_of(attacker, &visuals);
 		let aim = user.state.aim().unwrap_or_default();
 		let origin = attacker_origin(global, local);
 		let point = character_to_world(origin, heading, fist_local(volume.side, aim));
+		let anchor = character_to_world(
+			origin,
+			heading,
+			Vec3::new(
+				match volume.side {
+					Side::Left => PLACEHOLDER_FIST_SIDE_LEFT,
+					Side::Right => -PLACEHOLDER_FIST_SIDE_RIGHT,
+				},
+				PLACEHOLDER_FIST_HEIGHT,
+				0.18,
+			),
+		);
 		let rotation = fist_world_rotation(heading, aim.direction());
-		let filter = SpatialQueryFilter::from_mask([
+		let mut filter = SpatialQueryFilter::from_mask([
 			PhysicsInteractionLayer::Fixed,
 			PhysicsInteractionLayer::Animated,
-		])
-		.with_excluded_entities([sensor, volume.attacker]);
-		let candidates = spatial.shape_intersections(&fist_collider(), point, rotation, &filter);
-		for hit in collect_fist_hits(
-			volume.attacker,
-			PLACEHOLDER_JAB_DAMAGE,
-			point,
-			&candidates,
-			&mut volume.contacted,
-			&transforms,
-			&health,
-			&parents,
-		) {
-			hits.write(hit);
-		}
-	}
-}
-
-/// Remount, dedupe, and skip the attacker. Unit-tested without Avian overlap.
-pub fn collect_fist_hits(
-	attacker: Entity,
-	amount: f32,
-	fallback_point: Vec3,
-	candidates: &[Entity],
-	contacted: &mut Vec<Entity>,
-	transforms: &Query<(Entity, &Transform, Option<&GlobalTransform>)>,
-	health: &Query<(), With<Health>>,
-	parents: &Query<&ChildOf>,
-) -> Vec<Hit> {
-	let mut out = Vec::new();
-	for &collider in candidates {
-		if collider == attacker {
+		]);
+		filter.excluded_entities.insert(sensor);
+		filter.excluded_entities.insert(volume.attacker);
+		// Rig descendants are skipped in the all-hit callback, walking only the
+		// candidates returned by physics rather than scanning the entity tree.
+		let delta = point - anchor;
+		let distance = delta.length();
+		let direction_vec = if distance > 1e-5 {
+			delta / distance
+		} else {
+			(character_to_world(Vec3::ZERO, heading, aim.direction())).normalize_or(-Vec3::Z)
+		};
+		let Ok(direction) = Dir3::new(direction_vec) else {
 			continue;
-		}
+		};
+		let mut config = ShapeCastConfig::from_max_distance(distance);
+		// Avian reports initial penetration at distance zero and computes the
+		// real target-surface point/normal. Keep this explicit for overlaps.
+		config.compute_contact_on_penetration = true;
+		config.ignore_origin_penetration = false;
+		let mut candidates = Vec::new();
+		spatial.shape_hits_callback(
+			&fist_collider(),
+			anchor,
+			rotation,
+			direction,
+			&config,
+			&filter,
+			|hit| {
+				if is_descendant_of(hit.entity, volume.attacker, &parents) {
+					return true;
+				}
+				candidates.push(FistContact {
+					entity: hit.entity,
+					distance: hit.distance,
+					point: hit.point1,
+					normal: hit.normal1,
+				});
+				true
+			},
+		);
+		candidates.sort_by(|a, b| a.distance.total_cmp(&b.distance));
+		let Some(collision) = candidates.first() else {
+			continue;
+		};
+		let collider = collision.entity;
 		let parent = parents.get(collider).ok().map(|child| child.parent());
-		let target = Health::entity_or_parent(
+		let owner = Health::entity_or_parent(
 			collider,
 			parent,
 			health.contains(collider),
 			parent.is_some_and(|parent| health.contains(parent)),
 		);
-		if target == attacker || !health.contains(target) || contacted.contains(&target) {
-			continue;
+		let target = (owner != volume.attacker && health.contains(owner)).then_some(owner);
+		let mut normal = collision.normal.normalize_or(-direction_vec);
+		if normal.dot(direction_vec) > 0.0 {
+			normal = -normal;
 		}
-		let point = hit_point(target, collider, transforms).unwrap_or(fallback_point);
-		contacted.push(target);
-		out.push(Hit { target, source: Some(attacker), amount, point, allow_self: false });
-	}
-	out
-}
-
-fn hit_point(
-	target: Entity,
-	collider: Entity,
-	transforms: &Query<(Entity, &Transform, Option<&GlobalTransform>)>,
-) -> Option<Vec3> {
-	for entity in [target, collider] {
-		if let Ok((_, transform, global)) = transforms.get(entity) {
-			return Some(global.map(GlobalTransform::translation).unwrap_or(transform.translation));
+		volume.impact_consumed = true;
+		impacts.write(FisticuffsImpact {
+			attacker: volume.attacker,
+			side: volume.side,
+			collider,
+			target,
+			point: collision.point,
+			normal,
+		});
+		if let Some(target) = target {
+			hits.write(Hit {
+				target,
+				source: Some(volume.attacker),
+				amount: PLACEHOLDER_JAB_DAMAGE,
+				point: collision.point,
+				allow_self: false,
+			});
 		}
 	}
-	None
 }
 
 pub fn draw_fist_sensors(
@@ -374,7 +442,6 @@ mod tests {
 	use super::*;
 	use crate::{AttackSpec, AttackTiming, JAB_STARTUP_END};
 	use anyhow::{anyhow, Result};
-	use bevy::ecs::system::RunSystemOnce;
 	use character_animations::animations::DEFAULT_JAB_TARGET;
 	use damage::{apply_hits, DamageApplied, Died};
 	use player::Player;
@@ -545,58 +612,6 @@ mod tests {
 		Ok(())
 	}
 
-	#[test]
-	fn collect_hits_once_per_target_and_skips_the_attacker() -> Result<()> {
-		let mut world = World::new();
-		let attacker = world.spawn(Health::from_max(100.0)).id();
-		let dummy = world.spawn(Health::from_max(100.0)).id();
-		let hull = world.spawn(ChildOf(dummy)).id();
-		world
-			.run_system_once(
-				move |transforms: Query<(Entity, &Transform, Option<&GlobalTransform>)>,
-				      health: Query<(), With<Health>>,
-				      parents: Query<&ChildOf>| {
-					let mut contacted = Vec::new();
-					let first = collect_fist_hits(
-						attacker,
-						PLACEHOLDER_JAB_DAMAGE,
-						Vec3::ZERO,
-						&[attacker, hull, dummy],
-						&mut contacted,
-						&transforms,
-						&health,
-						&parents,
-					);
-					let second = collect_fist_hits(
-						attacker,
-						PLACEHOLDER_JAB_DAMAGE,
-						Vec3::ZERO,
-						&[hull, dummy],
-						&mut contacted,
-						&transforms,
-						&health,
-						&parents,
-					);
-					if first.len() != 1 || first[0].target != dummy {
-						return Err(anyhow!(
-							"first pass should injure the dummy once, got {first:?}"
-						));
-					}
-					if first[0].source != Some(attacker) || first[0].allow_self {
-						return Err(anyhow!("hit must name the attacker and forbid self"));
-					}
-					if (first[0].amount - PLACEHOLDER_JAB_DAMAGE).abs() > 1e-5 {
-						return Err(anyhow!("placeholder amount, got {}", first[0].amount));
-					}
-					if !second.is_empty() {
-						return Err(anyhow!("second pass must dedupe, got {second:?}"));
-					}
-					Ok(())
-				},
-			)
-			.map_err(|error| anyhow!("{error:?}"))?
-	}
-
 	fn physics_hit_app() -> App {
 		let mut app = App::new();
 		app.add_plugins((
@@ -607,7 +622,10 @@ mod tests {
 			bevy::mesh::MeshPlugin,
 		));
 		app.finish();
-		app.add_message::<Hit>().add_message::<DamageApplied>().add_message::<Died>();
+		app.add_message::<Hit>()
+			.add_message::<DamageApplied>()
+			.add_message::<Died>()
+			.add_message::<FisticuffsImpact>();
 		app.add_systems(Update, (sync_fist_sensors, resolve_fist_hits, apply_hits).chain());
 		app.update();
 		app
@@ -629,8 +647,12 @@ mod tests {
 			.id();
 		let dummy = app
 			.world_mut()
+			.spawn((Health::from_max(100.0), Transform::IDENTITY, GlobalTransform::IDENTITY))
+			.id();
+		let hull = app
+			.world_mut()
 			.spawn((
-				Health::from_max(100.0),
+				ChildOf(dummy),
 				Transform::from_translation(Vec3::new(0.16, 0.62, -1.28)),
 				GlobalTransform::from_translation(Vec3::new(0.16, 0.62, -1.28)),
 				RigidBody::Kinematic,
@@ -650,11 +672,255 @@ mod tests {
 		if applied.len() != 1 || applied[0].target != dummy || applied[0].source != Some(player) {
 			return Err(anyhow!("expected one player-sourced DamageApplied, got {applied:?}"));
 		}
+		let impacts: Vec<FisticuffsImpact> =
+			app.world_mut().resource_mut::<Messages<FisticuffsImpact>>().drain().collect();
+		if impacts.len() != 1 || impacts[0].target != Some(dummy) || impacts[0].collider != hull {
+			return Err(anyhow!("child hull should resolve to its Health owner, got {impacts:?}"));
+		}
+		if !impacts[0].point.is_finite() || impacts[0].normal.dot(-Vec3::Z) > 1e-4 {
+			return Err(anyhow!(
+				"impact should have finite surface data facing the incoming fist: {impacts:?}"
+			));
+		}
 		if (applied[0].applied - PLACEHOLDER_JAB_DAMAGE).abs() > 1e-4 {
 			return Err(anyhow!(
 				"applied amount {}, want {PLACEHOLDER_JAB_DAMAGE}",
 				applied[0].applied
 			));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn initial_overlap_reports_surface_contact_instead_of_the_sweep_origin() -> Result<()> {
+		let mut app = physics_hit_app();
+		let mut user = FisticuffsUser::default();
+		drive_to_active(&mut user);
+		app.world_mut().spawn((user, Transform::IDENTITY, GlobalTransform::IDENTITY));
+		let center = Vec3::new(0.0, 0.62, -0.2);
+		let body = app
+			.world_mut()
+			.spawn((
+				Health::from_max(100.0),
+				Transform::from_translation(center),
+				GlobalTransform::from_translation(center),
+				RigidBody::Kinematic,
+				Collider::sphere(0.2),
+				PhysicsInteractionLayer::animated_layers(),
+			))
+			.id();
+		app.update();
+		app.update();
+
+		let impacts: Vec<FisticuffsImpact> =
+			app.world_mut().resource_mut::<Messages<FisticuffsImpact>>().drain().collect();
+		if impacts.len() != 1 || impacts[0].collider != body || impacts[0].target != Some(body) {
+			return Err(anyhow!("initial overlap should produce one body impact, got {impacts:?}"));
+		}
+		let offset = impacts[0].point - center;
+		if !impacts[0].point.is_finite()
+			|| !impacts[0].normal.is_finite()
+			|| (offset.length() - 0.2).abs() > 0.04
+		{
+			return Err(anyhow!(
+				"overlap impact should retain Avian surface geometry: {impacts:?}"
+			));
+		}
+		Ok(())
+	}
+
+	fn fixed_environment_impact(collider: Collider) -> Result<FisticuffsImpact> {
+		let mut app = physics_hit_app();
+		let mut user = FisticuffsUser::default();
+		drive_to_active(&mut user);
+		app.world_mut().spawn((user, Transform::IDENTITY, GlobalTransform::IDENTITY));
+		app.world_mut().spawn((
+			Transform::IDENTITY,
+			GlobalTransform::IDENTITY,
+			RigidBody::Static,
+			collider,
+			PhysicsInteractionLayer::fixed_layers(),
+		));
+		app.update();
+		app.update();
+		let impacts: Vec<FisticuffsImpact> =
+			app.world_mut().resource_mut::<Messages<FisticuffsImpact>>().drain().collect();
+		if impacts.len() != 1 || impacts[0].target.is_some() {
+			return Err(anyhow!(
+				"fixed environmental solid should emit one non-damage impact: {impacts:?}"
+			));
+		}
+		if !impacts[0].point.is_finite() || !impacts[0].normal.is_finite() {
+			return Err(anyhow!("environment impact surface geometry must be finite: {impacts:?}"));
+		}
+		Ok(impacts[0])
+	}
+
+	#[test]
+	fn terrain_trimesh_and_tree_building_compounds_emit_environment_impacts() -> Result<()> {
+		let terrain = Collider::trimesh(
+			vec![
+				Vec3::new(-1.0, 0.0, -0.7),
+				Vec3::new(1.0, 0.0, -0.7),
+				Vec3::new(1.0, 1.5, -0.7),
+				Vec3::new(-1.0, 1.5, -0.7),
+			],
+			vec![[0, 1, 2], [0, 2, 3]],
+		);
+		fixed_environment_impact(terrain)?;
+
+		let tree = Collider::compound(vec![(
+			Vec3::new(0.0, 0.7, -0.7),
+			Quat::IDENTITY,
+			Collider::capsule(0.16, 1.1),
+		)]);
+		fixed_environment_impact(tree)?;
+
+		let building = Collider::compound(vec![
+			(Vec3::new(0.0, 0.6, -0.7), Quat::IDENTITY, Collider::cuboid(1.0, 1.2, 0.2)),
+			(Vec3::new(0.0, 1.3, -0.7), Quat::IDENTITY, Collider::cuboid(1.2, 0.2, 0.2)),
+		]);
+		fixed_environment_impact(building)?;
+		Ok(())
+	}
+
+	#[test]
+	fn fixed_wall_stops_damage_to_body_behind_it() -> Result<()> {
+		let mut app = physics_hit_app();
+		let mut user = FisticuffsUser::default();
+		drive_to_active(&mut user);
+		let player = app
+			.world_mut()
+			.spawn((user, Transform::IDENTITY, GlobalTransform::IDENTITY))
+			.id();
+		let wall = app
+			.world_mut()
+			.spawn((
+				Transform::from_translation(Vec3::new(0.0, 0.62, -0.72)),
+				GlobalTransform::from_translation(Vec3::new(0.0, 0.62, -0.72)),
+				RigidBody::Static,
+				Collider::cuboid(1.0, 1.0, 0.2),
+				PhysicsInteractionLayer::fixed_layers(),
+			))
+			.id();
+		let dummy = app
+			.world_mut()
+			.spawn((
+				Health::from_max(100.0),
+				Transform::from_translation(Vec3::new(0.0, 0.62, -1.35)),
+				GlobalTransform::from_translation(Vec3::new(0.0, 0.62, -1.35)),
+				RigidBody::Kinematic,
+				Collider::capsule(0.4, 1.0),
+				PhysicsInteractionLayer::animated_layers(),
+			))
+			.id();
+		app.update();
+		app.update();
+
+		let remaining = app.world().get::<Health>(dummy).map(|health| health.current);
+		if remaining != Some(100.0) {
+			return Err(anyhow!("wall must protect the body behind it, health={remaining:?}"));
+		}
+		let impacts: Vec<FisticuffsImpact> =
+			app.world_mut().resource_mut::<Messages<FisticuffsImpact>>().drain().collect();
+		if impacts.len() != 1 || impacts[0].collider != wall || impacts[0].target.is_some() {
+			return Err(anyhow!("wall should be the only contact, got {impacts:?}"));
+		}
+		if app.world().get::<FisticuffsUser>(player).is_none() {
+			return Err(anyhow!("attacker should remain equipped"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn nearer_body_wins_when_wall_is_behind_it() -> Result<()> {
+		let mut app = physics_hit_app();
+		let mut user = FisticuffsUser::default();
+		drive_to_active(&mut user);
+		app.world_mut().spawn((user, Transform::IDENTITY, GlobalTransform::IDENTITY));
+		let wall = app
+			.world_mut()
+			.spawn((
+				Transform::from_translation(Vec3::new(0.0, 0.62, -0.92)),
+				GlobalTransform::from_translation(Vec3::new(0.0, 0.62, -0.92)),
+				RigidBody::Static,
+				Collider::cuboid(1.0, 1.0, 0.2),
+				PhysicsInteractionLayer::fixed_layers(),
+			))
+			.id();
+		let dummy = app
+			.world_mut()
+			.spawn((
+				Health::from_max(100.0),
+				Transform::from_translation(Vec3::new(0.0, 0.62, -0.56)),
+				GlobalTransform::from_translation(Vec3::new(0.0, 0.62, -0.56)),
+				RigidBody::Kinematic,
+				Collider::capsule(0.25, 0.5),
+				PhysicsInteractionLayer::animated_layers(),
+			))
+			.id();
+		app.update();
+		app.update();
+
+		let remaining = app.world().get::<Health>(dummy).map(|health| health.current);
+		if remaining != Some(100.0 - PLACEHOLDER_JAB_DAMAGE) {
+			return Err(anyhow!("nearer body should receive the jab, health={remaining:?}"));
+		}
+		let impacts: Vec<FisticuffsImpact> =
+			app.world_mut().resource_mut::<Messages<FisticuffsImpact>>().drain().collect();
+		if impacts.len() != 1 || impacts[0].collider != dummy || impacts[0].target != Some(dummy) {
+			return Err(anyhow!(
+				"body before the wall should be the first contact, got {impacts:?}"
+			));
+		}
+		if impacts[0].collider == wall {
+			return Err(anyhow!("wall behind body must not win"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn own_descendant_hull_is_skipped_for_the_first_external_body() -> Result<()> {
+		let mut app = physics_hit_app();
+		let mut user = FisticuffsUser::default();
+		drive_to_active(&mut user);
+		let player = app
+			.world_mut()
+			.spawn((user, Transform::IDENTITY, GlobalTransform::IDENTITY))
+			.id();
+		let own_hull = app
+			.world_mut()
+			.spawn((
+				ChildOf(player),
+				Transform::from_translation(Vec3::new(0.0, 0.62, -0.48)),
+				GlobalTransform::from_translation(Vec3::new(0.0, 0.62, -0.48)),
+				RigidBody::Static,
+				Collider::cuboid(0.8, 0.8, 0.1),
+				PhysicsInteractionLayer::fixed_layers(),
+			))
+			.id();
+		let dummy = app
+			.world_mut()
+			.spawn((
+				Health::from_max(100.0),
+				Transform::from_translation(Vec3::new(0.0, 0.62, -1.32)),
+				GlobalTransform::from_translation(Vec3::new(0.0, 0.62, -1.32)),
+				RigidBody::Kinematic,
+				Collider::capsule(0.35, 0.8),
+				PhysicsInteractionLayer::animated_layers(),
+			))
+			.id();
+		app.update();
+		app.update();
+
+		let remaining = app.world().get::<Health>(dummy).map(|health| health.current);
+		if remaining != Some(100.0 - PLACEHOLDER_JAB_DAMAGE) {
+			return Err(anyhow!("external body should receive the jab, health={remaining:?}"));
+		}
+		let impacts: Vec<FisticuffsImpact> =
+			app.world_mut().resource_mut::<Messages<FisticuffsImpact>>().drain().collect();
+		if impacts.len() != 1 || impacts[0].collider != dummy || impacts[0].collider == own_hull {
+			return Err(anyhow!("own descendant must not block the sweep, got {impacts:?}"));
 		}
 		Ok(())
 	}

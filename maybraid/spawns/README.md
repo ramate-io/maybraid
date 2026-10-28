@@ -83,7 +83,7 @@ grenade construction is synchronous and untracked.
 ## Dependency direction
 
 ```text
-bevy / maybraid-input / controllers/core
+bevy / maybraid-virtual-pad-controller / controllers/core
         ▲
 spawns/player
         ▲

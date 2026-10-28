@@ -12,7 +12,7 @@ jobs:
   cargo-check:
     uses: ./.github/workflows/nix-command.yml
     with:
-      command: cargo check --locked
+      command: bin/check-controller-boundaries.sh && cargo check --locked
       nix_flake_path: '.'
       runner: 'ubuntu-24.04'
       rust_cache_key: cargo-release-test

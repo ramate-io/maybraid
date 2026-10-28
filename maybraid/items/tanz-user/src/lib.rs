@@ -12,11 +12,14 @@ mod stack;
 use bevy::prelude::*;
 use characters::CharacterMotionSystems;
 use damage::Downed;
-use maybraid_character_controller::{CharacterBindSystems, OrdinaryLocomotion, RoutedActorControl};
+#[cfg(test)]
+use maybraid_character_controller::RoutedActorControl;
+use maybraid_character_controller::{ActorControlEvent, CharacterBindSystems, OrdinaryLocomotion};
 use maybraid_controllers_core::{
-	ActorTarget, ControllerPipeline, ControllersCorePlugin, InputRouter, RoutingEvent,
+	ActorRoutingEvent, ActorTarget, ControllerPipeline, ControllersCorePlugin, PadDeliverySystems,
+	RoutingEvent,
 };
-use maybraid_skill_map::{SkillMapFlick, SkillMapSystems, SkillMapUser};
+use maybraid_skill_map::{RoutedSkillMapFlick, SkillMapFlick, SkillMapSystems, SkillMapUser};
 use menu_components::sync_loading_bar_fill;
 #[cfg(test)]
 use player::Player;
@@ -29,12 +32,13 @@ pub use actions::{
 };
 pub use callout::{TanzCallout, TanzCalloutView, TANZ_CALLOUT_SECS};
 pub use execute::{
-	advance_tanz_execution, apply_tanz_movement, drive_tanz_animation, match_tanz_inputs,
-	submit_tanz_executions, ActiveTanz, BufferedTanz, ExecuteTanz, TanzExecution, TanzPhase,
+	advance_tanz_execution, apply_tanz_movement, dispatch_routed_executions, drive_tanz_animation,
+	match_tanz_inputs, submit_tanz_executions, ActiveTanz, BufferedTanz, ExecuteTanz,
+	RoutedExecuteTanz, RoutedExecuteTanzEvent, TanzExecution, TanzPhase,
 };
 pub use input::{
-	CommittedGesture, ModeToggle, TanzButton, TanzFaceSample, TanzInput, TanzRecognizer,
-	TanzRecognizerConfig, TANZ_B_HOLD_SECS, TANZ_TOGGLE_SECS,
+	CommittedGesture, ModeToggle, RoutedTanzInput, TanzButton, TanzFaceSample, TanzInput,
+	TanzRecognizer, TanzRecognizerConfig, TANZ_B_HOLD_SECS, TANZ_TOGGLE_SECS,
 };
 pub use pose::{request_inventory_tanz_icons, TanzPose};
 pub use stack::{TanzDefinition, TanzDefinitionExt, TanzId, TanzInputRange, TanzStack, TanzTiming};
@@ -173,9 +177,9 @@ impl Default for TanzUserSettings {
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TanzUserSystems {
-	/// LB+RB chord and locomotion/map policy. Runs before pad dispatch.
+	/// Locomotion participation installed after addressed pad delivery.
 	Toggle,
-	/// Temporal recognition → [`TanzInput`].
+	/// Legacy stage marker; pad recognition now runs in [`ActorControlEvent`].
 	Recognize,
 	/// Committed inputs → [`SkillMapFlick`]. Independent of Tanz matching.
 	PublishMap,
@@ -210,23 +214,28 @@ impl Plugin for TanzUserPlugin {
 		MotorRequestStage::configure(app);
 		app.add_message::<TanzInput>()
 			.add_message::<ExecuteTanz>()
-			.init_resource::<InputRouter>()
-			.init_resource::<RoutedActorControl>()
+			.add_message::<RoutedExecuteTanz>()
+			.add_message::<SkillMapFlick>()
+			.add_message::<RoutedSkillMapFlick>()
+			.add_observer(apply_tanz_routing_event)
+			.add_observer(consume_tanz_control)
+			.add_observer(dispatch_routed_tanz_input)
+			.add_observer(execute::submit_routed_tanz)
 			.configure_sets(
 				Update,
 				(
 					TanzUserSystems::Toggle
 						.in_set(ControllerPipeline::Bind)
-						.after(CharacterBindSystems::Route)
+						.after(PadDeliverySystems)
 						.before(CharacterBindSystems::Produce),
 					TanzUserSystems::Recognize
 						.in_set(ControllerPipeline::Bind)
 						.after(TanzUserSystems::Toggle)
 						.before(SkillMapSystems::Steer),
 					TanzUserSystems::PublishMap
-						.after(TanzUserSystems::Recognize)
+						.after(TanzUserSystems::Toggle)
 						.before(SkillMapSystems::Steer),
-					TanzUserSystems::Match.after(TanzUserSystems::Recognize),
+					TanzUserSystems::Match.after(TanzUserSystems::Toggle),
 					TanzUserSystems::Execute
 						.after(TanzUserSystems::Match)
 						.in_set(MotorRequestStage::Tanz),
@@ -237,21 +246,16 @@ impl Plugin for TanzUserPlugin {
 			)
 			.add_systems(
 				Update,
-				(
-					apply_tanz_routing_events,
-					toggle_control_mode,
-					install_tanz_participation,
-					release_tanz_participation,
-				)
+				(install_tanz_participation, release_tanz_participation)
 					.chain()
 					.in_set(TanzUserSystems::Toggle),
 			)
-			.add_systems(Update, recognize_tanz_inputs.in_set(TanzUserSystems::Recognize))
 			.add_systems(Update, publish_tanz_map_inputs.in_set(TanzUserSystems::PublishMap))
 			.add_systems(Update, match_tanz_inputs.in_set(TanzUserSystems::Match))
 			.add_systems(
 				Update,
 				(
+					dispatch_routed_executions,
 					submit_tanz_executions,
 					advance_tanz_execution,
 					apply_tanz_movement,
@@ -277,49 +281,61 @@ impl Plugin for TanzUserPlugin {
 	}
 }
 
-fn apply_tanz_routing_events(
-	mut events: MessageReader<RoutingEvent>,
-	mut users: Query<(Entity, &mut TanzUser)>,
+fn apply_tanz_routing_event(event: On<ActorRoutingEvent>, mut users: Query<&mut TanzUser>) {
+	if let Ok(mut user) = users.get_mut(event.entity) {
+		user.apply_routing(event.event);
+	}
+}
+
+/// Actor pad delivery has already passed the source/target/epoch gate here.
+/// Mode and gesture history therefore cannot advance from a retired snapshot.
+fn consume_tanz_control(
+	event: On<ActorControlEvent>,
+	mut commands: Commands,
+	mut users: Query<(&mut TanzUser, Option<&mut TanzExecution>)>,
 ) {
-	for event in events.read() {
-		for (entity, mut user) in &mut users {
-			if event.applies_to(entity) {
-				user.apply_routing(*event);
-			}
+	let Ok((mut user, mut execution)) = users.get_mut(event.entity) else {
+		return;
+	};
+	let input = &event.input;
+	let sample = *input.payload();
+	let entity = event.entity;
+	if user.recognizer.bind_delivery(input.source(), input.binding()) {
+		let mode = user.mode;
+		user.toggle.reset_for_mode(mode);
+	}
+	if !user.toggle.is_frozen() {
+		let mut fallback = TanzExecution::default();
+		let execution = execution.as_deref_mut().unwrap_or(&mut fallback);
+		if user.apply_toggle(sample.delta().as_secs_f32(), sample.bumper_chord(), execution) {
+			commands.entity(entity).insert(OrdinaryLocomotion(user.ordinary_locomotion()));
 		}
 	}
-}
-
-fn toggle_control_mode(
-	time: Res<Time>,
-	routed: Res<RoutedActorControl>,
-	mut commands: Commands,
-	mut users: Query<(&mut TanzUser, &mut TanzExecution)>,
-) {
-	let Some(target) = routed.actor() else {
-		return;
-	};
-	let Some(source) = routed.source() else {
-		return;
-	};
-	let Some(sample) = routed.payload() else {
-		return;
-	};
-	let Ok((mut user, mut execution)) = users.get_mut(target.entity()) else {
-		return;
-	};
-	if user.toggle.is_frozen() {
+	if !user.mode.is_tanzer() || user.recognizer.is_frozen() {
 		return;
 	}
-	user.recognizer.bind_source(source);
-	if user.apply_toggle(time.delta_secs(), sample.bumper_chord(), &mut execution) {
-		commands
-			.entity(target.entity())
-			.insert(OrdinaryLocomotion(user.ordinary_locomotion()));
-	}
+	let config = user.settings.recognizer;
+	let Some(gesture) = user.recognizer.sample(
+		sample.delta().as_secs_f32(),
+		sample.move_stick(),
+		TanzFaceSample::from_control(sample),
+		&config,
+	) else {
+		return;
+	};
+	input
+		.clone()
+		.map(|_| TanzInput {
+			user: entity,
+			direction: gesture.direction,
+			magnitude: gesture.magnitude,
+			coherence: gesture.coherence,
+			button: gesture.button,
+		})
+		.trigger(&mut commands, move |input| RoutedTanzInput { entity, input });
 }
 
-/// Install participation on spawn. Mode flips write from [`toggle_control_mode`]
+/// Install participation on spawn. Mode flips write from [`consume_tanz_control`]
 /// or agent `set_mode`; temporal recognizer/toggle mutation must not restamp.
 fn install_tanz_participation(
 	mut commands: Commands,
@@ -338,47 +354,35 @@ fn release_tanz_participation(mut commands: Commands, mut removed: RemovedCompon
 	}
 }
 
-fn recognize_tanz_inputs(
-	time: Res<Time>,
-	routed: Res<RoutedActorControl>,
-	mut users: Query<&mut TanzUser>,
-	mut inputs: MessageWriter<TanzInput>,
+/// One authorized gesture fans out to map steering and Tanz matching. Keeping
+/// both consumers here prevents a route change between recognition and use.
+fn dispatch_routed_tanz_input(
+	event: On<RoutedTanzInput>,
+	users: Query<(&TanzUser, Option<&SkillMapUser>)>,
+	matchers: Query<(&TanzStack, &TanzExecution)>,
+	mut flicks: MessageWriter<RoutedSkillMapFlick>,
+	mut execute: MessageWriter<RoutedExecuteTanz>,
 ) {
-	let Some(target) = routed.actor() else {
-		return;
-	};
-	let Some(source) = routed.source() else {
-		return;
-	};
-	let Some(sample) = routed.payload() else {
-		return;
-	};
-	let Ok(mut user) = users.get_mut(target.entity()) else {
+	let Ok((user, maps)) = users.get(event.entity) else {
 		return;
 	};
 	if !user.mode.is_tanzer() {
 		return;
 	}
-	if user.recognizer.is_frozen() {
-		return;
+	let input = *event.input.payload();
+	let throw = input.stick();
+	if throw != Vec2::ZERO {
+		let flick =
+			SkillMapFlick::new(ActorTarget::new(event.entity), maps.map(|maps| maps.maps), throw);
+		flicks.write(RoutedSkillMapFlick(event.input.clone().map(|_| flick)));
 	}
-	user.recognizer.bind_source(source);
-	let config = user.settings.recognizer;
-	let Some(gesture) = user.recognizer.sample(
-		time.delta_secs(),
-		sample.move_stick(),
-		TanzFaceSample::from_control(sample),
-		&config,
-	) else {
-		return;
-	};
-	inputs.write(TanzInput {
-		user: target.entity(),
-		direction: gesture.direction,
-		magnitude: gesture.magnitude,
-		coherence: gesture.coherence,
-		button: gesture.button,
-	});
+	if let Ok((stack, execution)) = matchers.get(event.entity) {
+		if let Some(id) = stack.match_input(&input, |id| execution.cooling(id)) {
+			execute.write(RoutedExecuteTanz(
+				event.input.clone().map(|_| ExecuteTanz::new(event.entity, id)),
+			));
+		}
+	}
 }
 
 fn publish_tanz_map_inputs(
@@ -424,7 +428,71 @@ pub fn look_yaw(look: Option<&PlayerLook>) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use maybraid_character_controller::ActorControlSample;
+	use maybraid_controllers_core::{InputRouter, InputSource, RoutingEvent};
 	use maybraid_skill_map::SkillMapFlick;
+
+	#[derive(Resource, Default)]
+	struct RoutedFlickHits(Vec<SkillMapFlick>);
+
+	fn record_routed_flick(
+		event: On<maybraid_skill_map::RoutedSkillMapFlickEvent>,
+		mut hits: ResMut<RoutedFlickHits>,
+	) {
+		hits.0.push(*event.input.payload());
+	}
+
+	fn set_sample(app: &mut App, source: InputSource, entity: Entity, sample: ActorControlSample) {
+		let routed = app
+			.world()
+			.resource::<InputRouter>()
+			.route_actor(source, sample.with_delta(std::time::Duration::from_secs_f32(1.0 / 60.0)));
+		assert!(routed
+			.as_ref()
+			.is_some_and(|input| input.target().actor_entity() == Some(entity)));
+		if let Some(routed) = routed {
+			let mut control = RoutedActorControl::default();
+			control.set(routed);
+			app.world_mut().entity_mut(entity).insert(control);
+		}
+	}
+
+	fn set_local_sample(app: &mut App, entity: Entity, sample: ActorControlSample) {
+		set_sample(app, InputSource::local_pad(), entity, sample);
+	}
+
+	fn apply_test_routing_events(
+		mut events: MessageReader<RoutingEvent>,
+		mut users: Query<(Entity, &mut TanzUser, Option<&mut RoutedActorControl>)>,
+	) {
+		for event in events.read().copied() {
+			for (entity, mut user, control) in &mut users {
+				if event.applies_to(entity) {
+					user.apply_routing(event);
+					if event.lost_actor().is_some_and(|lost| lost.matches(entity)) {
+						if let Some(mut control) = control {
+							control.clear();
+						}
+					}
+				}
+			}
+		}
+	}
+
+	fn emit_test_control_events(
+		mut commands: Commands,
+		controls: Query<(Entity, &RoutedActorControl)>,
+	) {
+		for (entity, control) in &controls {
+			if let Some(input) =
+				control.get().filter(|input| input.target().actor_entity() == Some(entity))
+			{
+				input
+					.clone()
+					.trigger(&mut commands, move |input| ActorControlEvent { entity, input });
+			}
+		}
+	}
 
 	#[test]
 	fn script_ids_roundtrip() {
@@ -572,7 +640,9 @@ mod tests {
 		app.add_plugins(MinimalPlugins)
 			.add_message::<TanzInput>()
 			.add_message::<ExecuteTanz>()
+			.add_message::<RoutedExecuteTanz>()
 			.add_message::<SkillMapFlick>()
+			.add_message::<RoutedSkillMapFlick>()
 			.add_systems(
 				Update,
 				(publish_tanz_map_inputs, match_tanz_inputs, submit_tanz_executions).chain(),
@@ -631,7 +701,6 @@ mod tests {
 
 	fn pipeline_app() -> App {
 		use bevy::time::TimeUpdateStrategy;
-		use maybraid_controllers_core::InputRouter;
 		use player::{apply_motor, compose_motor};
 
 		let mut app = App::new();
@@ -642,24 +711,27 @@ mod tests {
 			))
 			.init_resource::<InputRouter>()
 			.add_message::<RoutingEvent>()
-			.init_resource::<RoutedActorControl>()
 			.init_resource::<ButtonInput<MouseButton>>()
 			.add_message::<TanzInput>()
 			.add_message::<ExecuteTanz>()
 			.add_message::<SkillMapFlick>()
-			.add_message::<maybraid_character_controller::CharacterIntent>()
+			.add_message::<RoutedExecuteTanz>()
+			.add_message::<RoutedSkillMapFlick>()
+			.add_observer(consume_tanz_control)
+			.add_observer(dispatch_routed_tanz_input)
+			.add_observer(execute::submit_routed_tanz)
 			.add_systems(
 				Update,
 				(
 					reset_motor_intents,
-					apply_tanz_routing_events,
-					toggle_control_mode,
+					apply_test_routing_events,
+					emit_test_control_events,
 					install_tanz_participation,
 					release_tanz_participation,
-					recognize_tanz_inputs,
 					publish_tanz_map_inputs,
 					match_tanz_inputs,
 					maybraid_locomotion_controller::interpret_standard_locomotion,
+					dispatch_routed_executions,
 					submit_tanz_executions,
 					advance_tanz_execution,
 					apply_tanz_movement,
@@ -703,10 +775,11 @@ mod tests {
 			))
 			.id();
 		assign_pad(&mut app, local);
-		app.world_mut().insert_resource(RoutedActorControl::from_sample(
-			ActorTarget::new(local),
+		set_local_sample(
+			&mut app,
+			local,
 			ActorControlSample::default().with_move_stick(Vec2::NEG_X),
-		));
+		);
 		for _ in 0..20 {
 			app.update();
 		}
@@ -720,6 +793,51 @@ mod tests {
 		assert!(
 			app.world().get::<TanzExecution>(other).is_some_and(|ex| ex.active.is_none()),
 			"unrelated tanzer must not consume the local pad"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn two_sources_commit_only_their_own_tanz() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+		use maybraid_controllers_core::InputRouting;
+
+		let mut app = pipeline_app();
+		let left = spawn_tanzer(&mut app, ControlMode::Tanzer);
+		let right = spawn_tanzer(&mut app, ControlMode::Tanzer);
+		let second_pad = app.world_mut().spawn_empty().id();
+		let second_source = InputSource::virtual_pad(second_pad);
+		app.world_mut()
+			.run_system_once(move |mut routing: InputRouting| {
+				routing.assign_actor(InputSource::local_pad(), ActorTarget::new(left));
+				routing.assign_actor(second_source, ActorTarget::new(right));
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		set_local_sample(
+			&mut app,
+			left,
+			ActorControlSample::default().with_move_stick(Vec2::NEG_X),
+		);
+		set_sample(
+			&mut app,
+			second_source,
+			right,
+			ActorControlSample::default().with_move_stick(Vec2::X),
+		);
+		for _ in 0..20 {
+			app.update();
+		}
+		assert_eq!(
+			app.world()
+				.get::<TanzExecution>(left)
+				.and_then(|ex| ex.active.map(|active| active.id)),
+			Some(TanzId::LeftStrafe)
+		);
+		assert_eq!(
+			app.world()
+				.get::<TanzExecution>(right)
+				.and_then(|ex| ex.active.map(|active| active.id)),
+			Some(TanzId::RightStrafe)
 		);
 		Ok(())
 	}
@@ -793,7 +911,9 @@ mod tests {
 
 	#[test]
 	fn switching_standard_and_tanzer_leaves_no_stale_motion() -> anyhow::Result<()> {
-		use maybraid_character_controller::{ActorControlSample, CharacterIntent};
+		use maybraid_character_controller::{
+			ActorControlSample, CharacterIntent, CharacterIntentFrame,
+		};
 		use player::{MoveSpeedCap, MoveWish, Sprinting};
 
 		let mut app = pipeline_app();
@@ -815,16 +935,21 @@ mod tests {
 			.id();
 		assign_pad(&mut app, player);
 		app.update();
-		app.world_mut().write_message(CharacterIntent::Move(Vec2::Y));
-		app.world_mut().write_message(CharacterIntent::StartSprint);
+		let intents = app
+			.world()
+			.resource::<InputRouter>()
+			.route_actor(
+				InputSource::local_pad(),
+				vec![CharacterIntent::Move(Vec2::Y), CharacterIntent::StartSprint],
+			)
+			.ok_or_else(|| anyhow::anyhow!("missing local actor route"))?;
+		app.world_mut().entity_mut(player).insert(CharacterIntentFrame::new(intents));
 		app.update();
+		app.world_mut().entity_mut(player).remove::<CharacterIntentFrame>();
 		assert_eq!(app.world().get::<MoveWish>(player).map(|wish| wish.0), Some(-Vec3::Z));
 		assert!(app.world().get::<Sprinting>(player).is_some());
 
-		app.world_mut().insert_resource(RoutedActorControl::from_sample(
-			ActorTarget::new(player),
-			ActorControlSample::default().with_bumpers(true, true),
-		));
+		set_local_sample(&mut app, player, ActorControlSample::default().with_bumpers(true, true));
 		for _ in 0..70 {
 			app.update();
 		}
@@ -849,10 +974,7 @@ mod tests {
 		assert_eq!(resolved.sprint, player::SprintRequest::Release);
 		assert_eq!(resolved.speed_cap, player::SpeedCapRequest::Release);
 
-		app.world_mut().insert_resource(RoutedActorControl::from_sample(
-			ActorTarget::new(player),
-			ActorControlSample::default().with_bumpers(true, true),
-		));
+		set_local_sample(&mut app, player, ActorControlSample::default().with_bumpers(true, true));
 		for _ in 0..70 {
 			app.update();
 		}
@@ -905,10 +1027,11 @@ mod tests {
 		let first = spawn_tanzer(&mut app, ControlMode::Tanzer);
 		let second = spawn_tanzer(&mut app, ControlMode::Tanzer);
 		assign_pad(&mut app, first);
-		app.world_mut().insert_resource(RoutedActorControl::from_sample(
-			ActorTarget::new(first),
+		set_local_sample(
+			&mut app,
+			first,
 			ActorControlSample::default().with_move_stick(Vec2::NEG_X),
-		));
+		);
 		for _ in 0..6 {
 			app.update();
 		}
@@ -921,10 +1044,11 @@ mod tests {
 		assert!(app.world().get::<TanzExecution>(first).is_some_and(|ex| ex.active.is_none()));
 
 		assign_pad(&mut app, second);
-		app.world_mut().insert_resource(RoutedActorControl::from_sample(
-			ActorTarget::new(second),
+		set_local_sample(
+			&mut app,
+			second,
 			ActorControlSample::default().with_move_stick(Vec2::NEG_X),
-		));
+		);
 		app.update();
 		assert!(
 			app.world()
@@ -936,10 +1060,11 @@ mod tests {
 		assert!(app.world().get::<TanzExecution>(second).is_some_and(|ex| ex.active.is_none()));
 
 		assign_pad(&mut app, first);
-		app.world_mut().insert_resource(RoutedActorControl::from_sample(
-			ActorTarget::new(first),
+		set_local_sample(
+			&mut app,
+			first,
 			ActorControlSample::default().with_move_stick(Vec2::NEG_X),
-		));
+		);
 		for _ in 0..2 {
 			app.update();
 		}
@@ -969,10 +1094,7 @@ mod tests {
 		let mut app = pipeline_app();
 		let player = spawn_tanzer(&mut app, ControlMode::Standard);
 		assign_pad(&mut app, player);
-		app.world_mut().insert_resource(RoutedActorControl::from_sample(
-			ActorTarget::new(player),
-			ActorControlSample::default().with_bumpers(true, true),
-		));
+		set_local_sample(&mut app, player, ActorControlSample::default().with_bumpers(true, true));
 		for _ in 0..30 {
 			app.update();
 		}
@@ -987,7 +1109,7 @@ mod tests {
 				routing.disconnect(InputSource::local_pad());
 			})
 			.expect("disconnect");
-		app.world_mut().insert_resource(RoutedActorControl::default());
+		app.world_mut().entity_mut(player).insert(RoutedActorControl::default());
 		app.update();
 		assert!(
 			app.world()
@@ -1001,10 +1123,7 @@ mod tests {
 		);
 
 		assign_pad(&mut app, player);
-		app.world_mut().insert_resource(RoutedActorControl::from_sample(
-			ActorTarget::new(player),
-			ActorControlSample::default().with_bumpers(true, true),
-		));
+		set_local_sample(&mut app, player, ActorControlSample::default().with_bumpers(true, true));
 		for _ in 0..30 {
 			app.update();
 		}
@@ -1022,8 +1141,8 @@ mod tests {
 		use maybraid_character_controller::ActorControlSample;
 		use maybraid_controllers_core::InputRouter;
 		use maybraid_skill_map::{
-			detect_skill_map_flicks, SkillMapController, SkillMapEnabled, SkillMapFlick,
-			SkillMapUser,
+			detect_skill_map_flicks, dispatch_routed_flicks, RoutedSkillMapFlick,
+			SkillMapController, SkillMapEnabled, SkillMapFlick, SkillMapUser,
 		};
 
 		let mut app = App::new();
@@ -1033,11 +1152,12 @@ mod tests {
 			))
 			.init_resource::<InputRouter>()
 			.add_message::<RoutingEvent>()
-			.init_resource::<RoutedActorControl>()
 			.init_resource::<SkillMapEnabled>()
-			.init_resource::<SkillMapController>()
+			.init_resource::<RoutedFlickHits>()
 			.add_message::<SkillMapFlick>()
-			.add_systems(Update, detect_skill_map_flicks);
+			.add_message::<RoutedSkillMapFlick>()
+			.add_observer(record_routed_flick)
+			.add_systems(Update, (detect_skill_map_flicks, dispatch_routed_flicks).chain());
 		let session_a = app.world_mut().spawn_empty().id();
 		let session_b = app.world_mut().spawn_empty().id();
 		let user = app
@@ -1049,23 +1169,19 @@ mod tests {
 			ActorControlSample::default().with_bumpers(false, true).with_move_stick(stick)
 		};
 		for stick in [Vec2::ZERO, Vec2::X * 0.75, Vec2::X] {
-			app.world_mut().insert_resource(RoutedActorControl::from_sample(
-				ActorTarget::new(user),
-				sample(stick),
-			));
+			set_local_sample(&mut app, user, sample(stick));
 			app.update();
 		}
-		assert!(app.world().resource::<SkillMapController>().has_partial());
+		assert!(app
+			.world()
+			.get::<SkillMapController>(user)
+			.is_some_and(SkillMapController::has_partial));
 		app.world_mut().entity_mut(user).insert(SkillMapUser::mapping(session_b));
 		for stick in [Vec2::X * 0.4, Vec2::ZERO] {
-			app.world_mut().insert_resource(RoutedActorControl::from_sample(
-				ActorTarget::new(user),
-				sample(stick),
-			));
+			set_local_sample(&mut app, user, sample(stick));
 			app.update();
 		}
-		let flicks: Vec<SkillMapFlick> =
-			app.world_mut().resource_mut::<Messages<SkillMapFlick>>().drain().collect();
+		let flicks = &app.world().resource::<RoutedFlickHits>().0;
 		assert!(
 			flicks.iter().all(|flick| flick.session() != Some(session_b)),
 			"a session change must not complete a flick against the new session: {flicks:?}"
@@ -1089,9 +1205,9 @@ mod tests {
 	}
 
 	#[derive(Resource, Default)]
-	struct NavHits(Vec<maybraid_input::MenuNav>);
+	struct NavHits(Vec<menu_components::MenuNav>);
 
-	fn record_menu_nav(impulse: On<maybraid_input::MenuNavImpulse>, mut hits: ResMut<NavHits>) {
+	fn record_menu_nav(impulse: On<menu_components::MenuNavImpulse>, mut hits: ResMut<NavHits>) {
 		hits.0.push(impulse.event().nav);
 	}
 
@@ -1147,14 +1263,12 @@ mod tests {
 	#[test]
 	fn plugin_menu_nav_while_in_tanz_mode_does_not_commit_gestures() -> anyhow::Result<()> {
 		use maybraid_character_controller::RoutedActorControl;
-		use maybraid_input::{MenuNav, MenuNavPad, PadButton, VirtualPad};
 		use maybraid_menu_controller::MenuController;
+		use maybraid_virtual_pad_controller::{PadOverlay, PadOverlayRequest, PrimaryVirtualPad};
 		use menu_components::{HudMenu, HudOverlayMenu};
 
 		let mut app = lifecycle_plugins();
-		app.init_resource::<NavHits>()
-			.init_resource::<MenuNavPad>()
-			.add_observer(record_menu_nav);
+		app.init_resource::<NavHits>().add_observer(record_menu_nav);
 		let player = app
 			.world_mut()
 			.spawn((
@@ -1169,25 +1283,30 @@ mod tests {
 		let root = app.world_mut().spawn(MenuController::default()).id();
 		app.world_mut().entity_mut(root).add_child(catalog);
 
-		{
-			let mut pad = app.world_mut().resource_mut::<VirtualPad>();
-			pad.begin_frame();
-			pad.add_move(Vec2::NEG_X);
-			pad.hold_digital(PadButton::A);
-			pad.finish_digital();
+		let source = app.world().resource::<PrimaryVirtualPad>().0;
+		for frame in 1..=22 {
+			app.world_mut().write_message(PadOverlayRequest {
+				source,
+				overlay: Some(PadOverlay {
+					move_stick: if frame > 2 { Vec2::NEG_X } else { Vec2::ZERO },
+					..default()
+				}),
+			});
+			// Run primary ownership, pad production, capture, and delivery in their
+			// real schedules instead of bypassing PreUpdate with fabricated frames.
+			app.update();
 		}
-		app.world_mut().resource_mut::<MenuNavPad>().events = vec![MenuNav::Down];
-		for _ in 0..20 {
-			step_lifecycle(&mut app);
-			app.world_mut().resource_mut::<MenuNavPad>().events = vec![MenuNav::Down];
-			let mut pad = app.world_mut().resource_mut::<VirtualPad>();
-			pad.begin_frame();
-			pad.add_move(Vec2::NEG_X);
-			pad.hold_digital(PadButton::A);
-			pad.finish_digital();
-		}
+		assert_eq!(
+			app.world()
+				.get::<menu_components::PrimaryMenuInput>(root)
+				.map(|input| input.source),
+			Some(source),
+			"the primary menu must own the source receiving the injected pad"
+		);
 		assert!(
-			app.world().resource::<RoutedActorControl>().actor().is_none(),
+			app.world()
+				.get::<RoutedActorControl>(player)
+				.is_none_or(|control| control.actor().is_none()),
 			"menu capture must revoke actor delivery"
 		);
 		assert!(
@@ -1265,7 +1384,9 @@ mod tests {
 	#[test]
 	fn plugin_ordinary_sampling_does_not_restamp_without_a_transition() -> anyhow::Result<()> {
 		use maybraid_character_controller::OrdinaryLocomotion;
-		use maybraid_input::{PadButton, VirtualPad};
+		use maybraid_virtual_pad_controller::{
+			PadButton, PrimaryVirtualPad, VirtualPad, VirtualPadEvent,
+		};
 
 		let mut app = lifecycle_plugins();
 		let player = app
@@ -1276,14 +1397,19 @@ mod tests {
 		step_lifecycle(&mut app);
 		assert_eq!(app.world().get::<OrdinaryLocomotion>(player).map(|flag| flag.0), Some(true));
 		app.world_mut().entity_mut(player).insert(OrdinaryLocomotion(false));
-		for _ in 0..12 {
-			{
-				let mut pad = app.world_mut().resource_mut::<VirtualPad>();
-				pad.begin_frame();
-				pad.add_move(Vec2::Y);
-				pad.hold_digital(PadButton::A);
-				pad.finish_digital();
-			}
+		let source = app.world().resource::<PrimaryVirtualPad>().0;
+		for sequence in 1..=12 {
+			let mut pad = VirtualPad::default();
+			pad.begin_frame();
+			pad.add_move(Vec2::Y);
+			pad.hold_digital(PadButton::A);
+			pad.finish_digital();
+			app.world_mut().write_message(VirtualPadEvent {
+				source,
+				sequence,
+				delta: std::time::Duration::from_secs_f32(1.0 / 60.0),
+				pad,
+			});
 			step_lifecycle(&mut app);
 		}
 		assert_eq!(

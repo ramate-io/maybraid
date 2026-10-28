@@ -1,12 +1,11 @@
 //! Derived pad policy. Written only by the capture resolver (U5).
 
-use bevy::prelude::*;
 
 /// Keyboard layout and analog suppress derived from [`InputRouter`] capture.
 ///
 /// One writer. Hosts must not poke independent lanes — push or pop a capture
 /// layer instead.
-#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PadInputPolicy {
 	keyboard_menu: bool,
 	suppress_gameplay: bool,

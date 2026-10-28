@@ -1,21 +1,32 @@
-//! Actor-addressed pad sample. Analog stays on this value, not a Message.
+//! Actor-addressed physical state, delivered every tick including neutral frames.
 //!
 //! Physical face buttons live here so Tanz can read A / B without consuming
 //! semantic [`crate::CharacterIntent::Jump`].
 
+use std::time::Duration;
+
 use bevy::prelude::*;
-use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource, Routed};
-use maybraid_input::{PadButton, VirtualPad};
+use maybraid_controllers_core::{ActorTarget, InputSource, Routed};
+use maybraid_virtual_pad_controller::{PadButton, VirtualPad, VirtualPadEvent};
 
 /// One frame of analog sticks and physical face / bumper state for one actor.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ActorControlSample {
 	move_stick: Vec2,
 	look_throw: Vec2,
+	look_stick: Vec2,
 	a: FaceButtonSample,
 	b: FaceButtonSample,
 	bumper_focus: bool,
 	bumper_fire: bool,
+	trigger_focus: f32,
+	trigger_fire: f32,
+	fire_held: bool,
+	fire_squeeze: f32,
+	delta: Duration,
+	sequence: u64,
+	shift_held: bool,
+	command_held: bool,
 }
 
 /// Rising / hold state for one physical face button.
@@ -27,9 +38,16 @@ pub struct FaceButtonSample {
 	hold_secs: f32,
 }
 
-/// Bind-stage snapshot: the local pad routed to one [`ActorTarget`].
-#[derive(Resource, Clone, Copy, Debug, Default)]
-pub struct RoutedActorControl(Option<Routed<ActorControlSample>>);
+/// Actor-owned ephemeral physical sample. Reset before every Bind delivery.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct RoutedActorControl(pub(crate) Option<Routed<ActorControlSample>>);
+
+/// One unblocked delivered tick, including explicit neutral/release state.
+#[derive(EntityEvent, Clone, Copy, Debug)]
+pub struct ActorControlEvent {
+	pub entity: Entity,
+	pub input: Routed<ActorControlSample>,
+}
 
 impl FaceButtonSample {
 	pub fn from_pad(pad: &VirtualPad, button: PadButton) -> Self {
@@ -72,15 +90,100 @@ impl ActorControlSample {
 		Self {
 			move_stick: pad.move_stick,
 			look_throw: pad.look_throw,
+			look_stick: pad.look_stick,
 			a: FaceButtonSample::from_pad(pad, PadButton::A),
 			b: FaceButtonSample::from_pad(pad, PadButton::B),
 			bumper_focus: pad.pressed(PadButton::BumperFocus),
 			bumper_fire: pad.pressed(PadButton::BumperFire),
+			trigger_focus: pad.trigger_focus,
+			trigger_fire: pad.trigger_fire,
+			fire_held: pad.pressed(PadButton::TriggerFire) || pad.trigger_fire >= 0.5,
+			fire_squeeze: if pad.pressed(PadButton::TriggerFire) || pad.trigger_fire >= 0.5 {
+				pad.trigger_fire.max(0.5)
+			} else {
+				0.0
+			},
+			delta: Duration::ZERO,
+			sequence: 0,
+			shift_held: pad.keys.pressed(KeyCode::ShiftLeft)
+				|| pad.keys.pressed(KeyCode::ShiftRight),
+			command_held: pad.keys.pressed(KeyCode::SuperLeft)
+				|| pad.keys.pressed(KeyCode::SuperRight),
 		}
+	}
+
+	pub fn from_frame(frame: &VirtualPadEvent, trigger_threshold: f32) -> Self {
+		let mut sample = Self::from_pad(&frame.pad);
+		sample.delta = frame.delta;
+		sample.sequence = frame.sequence;
+		sample.fire_held = frame.pad.pressed(PadButton::TriggerFire)
+			|| frame.pad.trigger_fire >= trigger_threshold;
+		sample.fire_squeeze =
+			if sample.fire_held { frame.pad.trigger_fire.max(trigger_threshold) } else { 0.0 };
+		sample
+	}
+
+	pub const fn shift_held(self) -> bool {
+		self.shift_held
+	}
+	pub const fn command_held(self) -> bool {
+		self.command_held
+	}
+
+	pub fn with_modifiers(mut self, shift: bool, command: bool) -> Self {
+		self.shift_held = shift;
+		self.command_held = command;
+		self
+	}
+
+	pub const fn delta(self) -> Duration {
+		self.delta
+	}
+	pub const fn sequence(self) -> u64 {
+		self.sequence
+	}
+	pub const fn trigger_focus(self) -> f32 {
+		self.trigger_focus
+	}
+	pub const fn trigger_fire(self) -> f32 {
+		self.trigger_fire
+	}
+	pub const fn fire_held(self) -> bool {
+		self.fire_held
+	}
+	pub const fn fire_squeeze(self) -> f32 {
+		self.fire_squeeze
+	}
+
+	pub fn with_delta(mut self, delta: Duration) -> Self {
+		self.delta = delta;
+		self
+	}
+
+	pub fn with_timing(mut self, delta: Duration, sequence: u64) -> Self {
+		self.delta = delta;
+		self.sequence = sequence;
+		self
+	}
+
+	pub fn with_fire(mut self, held: bool, squeeze: f32) -> Self {
+		self.fire_held = held;
+		self.trigger_fire = squeeze;
+		self.fire_squeeze = if held { squeeze } else { 0.0 };
+		self
 	}
 
 	pub const fn move_stick(self) -> Vec2 {
 		self.move_stick
+	}
+
+	pub const fn look_stick(self) -> Vec2 {
+		self.look_stick
+	}
+
+	pub fn with_look_stick(mut self, stick: Vec2) -> Self {
+		self.look_stick = stick;
+		self
 	}
 
 	pub const fn look_throw(self) -> Vec2 {
@@ -140,6 +243,10 @@ impl ActorControlSample {
 }
 
 impl RoutedActorControl {
+	pub fn new(input: Routed<ActorControlSample>) -> Self {
+		Self(Some(input))
+	}
+
 	pub fn clear(&mut self) {
 		self.0 = None;
 	}
@@ -167,45 +274,9 @@ impl RoutedActorControl {
 		self.actor().is_some_and(|target| target.matches(entity))
 	}
 
-	pub fn from_local_pad(target: ActorTarget, pad: &VirtualPad) -> Self {
-		Self(Some(Routed::to_actor(
-			InputSource::local_pad(),
-			target,
-			ActorControlSample::from_pad(pad),
-		)))
-	}
-
-	pub fn from_sample(target: ActorTarget, sample: ActorControlSample) -> Self {
-		Self(Some(Routed::to_actor(InputSource::local_pad(), target, sample)))
-	}
-
 	pub fn source(&self) -> Option<InputSource> {
 		self.0.as_ref().map(Routed::source)
 	}
-}
-
-/// Copy the local pad onto [`RoutedActorControl`] for [`InputRouter::delivered_actor`].
-///
-/// This is the sole Bind-stage pad sample for Tanz and skill-map. Capture,
-/// suspension, and disconnect clear delivery so those consumers see no sample.
-pub fn produce_actor_control_samples(
-	pad: Option<Res<VirtualPad>>,
-	router: Res<InputRouter>,
-	mut routed: ResMut<RoutedActorControl>,
-) {
-	let Some(target) = router.delivered_actor(InputSource::local_pad()) else {
-		routed.clear();
-		return;
-	};
-	let Some(pad) = pad else {
-		routed.clear();
-		return;
-	};
-	routed.set(Routed::to_actor(
-		InputSource::local_pad(),
-		target,
-		ActorControlSample::from_pad(&pad),
-	));
 }
 
 #[cfg(test)]
@@ -213,7 +284,7 @@ mod tests {
 	use super::*;
 	use crate::produce::collect;
 	use crate::CharacterIntent;
-	use maybraid_input::VirtualPad;
+	use maybraid_virtual_pad_controller::VirtualPad;
 
 	#[test]
 	fn physical_a_is_not_jump() {
@@ -252,42 +323,12 @@ mod tests {
 	fn routed_control_addresses_one_actor() {
 		let actor = ActorTarget::new(Entity::from_bits(4));
 		let other = Entity::from_bits(5);
-		let routed = RoutedActorControl::from_sample(actor, ActorControlSample::default());
+		let routed = RoutedActorControl::new(Routed::to_actor(
+			InputSource::virtual_pad(Entity::from_bits(8)),
+			actor,
+			ActorControlSample::default(),
+		));
 		assert!(routed.addresses(actor.entity()));
 		assert!(!routed.addresses(other));
-	}
-
-	#[test]
-	fn produce_addresses_the_delivered_actor_only() {
-		use bevy::ecs::system::RunSystemOnce;
-
-		fn write(
-			pad: Option<Res<VirtualPad>>,
-			router: Res<InputRouter>,
-			routed: ResMut<RoutedActorControl>,
-		) {
-			super::produce_actor_control_samples(pad, router, routed);
-		}
-
-		let mut world = World::new();
-		world.init_resource::<VirtualPad>();
-		world.init_resource::<InputRouter>();
-		world.init_resource::<RoutedActorControl>();
-		world.resource_mut::<VirtualPad>().begin_frame();
-		world.resource_mut::<VirtualPad>().add_move(Vec2::NEG_X);
-		world.resource_mut::<VirtualPad>().finish_digital();
-
-		world.run_system_once(write).expect("unassigned");
-		assert!(world.resource::<RoutedActorControl>().payload().is_none());
-
-		let actor = Entity::from_bits(3);
-		world
-			.resource_mut::<InputRouter>()
-			.assign_actor(InputSource::local_pad(), ActorTarget::new(actor));
-		world.run_system_once(write).expect("assigned");
-		let routed = world.resource::<RoutedActorControl>();
-		assert!(routed.addresses(actor));
-		assert_eq!(routed.payload().map(ActorControlSample::move_stick), Some(Vec2::NEG_X));
-		assert_eq!(routed.source(), Some(InputSource::local_pad()));
 	}
 }

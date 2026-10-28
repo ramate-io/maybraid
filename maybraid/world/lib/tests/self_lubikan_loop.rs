@@ -22,7 +22,8 @@ use lubikans::{
 use lubikans_damage::LubikanDamagePlugin;
 use maybraid_character_controller::ActorTarget;
 use maybraid_equipment::EquippedPowerUse;
-use maybraid_world::{control, WorldGameplayEnabled, WorldPlaySessionEnded};
+use maybraid_session::{WorldGameplayEnabled, WorldPlaySessionEnded};
+use maybraid_world::control;
 use std::time::Duration;
 use world_player::Player;
 
@@ -35,7 +36,6 @@ fn self_loop_app() -> App {
 		.add_plugins(LubikansPlugin)
 		.add_plugins(LubikanDamagePlugin)
 		.init_resource::<WorldGameplayEnabled>()
-		.add_message::<EquippedPowerUse>()
 		.init_resource::<Messages<WorldPlaySessionEnded>>()
 		.init_resource::<Messages<lubikans::LubikanOwnerLifetime>>()
 		.insert_resource(TextEntryFocus(false));
@@ -140,7 +140,7 @@ fn activate_self(app: &mut App) {
 		.iter(app.world())
 		.next()
 		.expect("owner");
-	app.world_mut().write_message(EquippedPowerUse::new(ActorTarget::new(owner)));
+	app.world_mut().trigger(EquippedPowerUse::new(ActorTarget::new(owner)));
 	app.update();
 }
 
@@ -305,7 +305,7 @@ fn session_restart_via_world_event_resets_charge() -> anyhow::Result<()> {
 	anyhow::ensure!(earned > 0.0, "should have earned charge from hits");
 
 	// Send session restart (world control system processes this)
-	app.world_mut().write_message(maybraid_world::WorldPlaySessionEnded);
+	app.world_mut().write_message(WorldPlaySessionEnded);
 	app.update(); // sync_lubikan_session runs
 
 	// Verify charge is reset
@@ -415,7 +415,7 @@ fn activate_and_award_same_frame_as_death_keep_charge() -> anyhow::Result<()> {
 		.self_definition()
 		.activation_cost;
 	let npc = spawn_npc(&mut app);
-	app.world_mut().write_message(EquippedPowerUse::new(ActorTarget::new(player)));
+	app.world_mut().trigger(EquippedPowerUse::new(ActorTarget::new(player)));
 	app.world_mut().write_message(Hit {
 		target: npc,
 		source: Some(player),

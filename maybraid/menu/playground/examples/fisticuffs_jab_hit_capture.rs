@@ -19,8 +19,8 @@ use combat_hud::CombatHudPlugin;
 use damage::{DamageApplied, DamagePlugin, DamageSystems, Health};
 use fisticuffs_user::{
 	draw_fist_sensors, resolve_fist_hits, sync_fist_sensors, AttackSpec, AttackTiming,
-	FisticuffsHitSensor, FisticuffsSensorDebug, FisticuffsUser, JabAim, PLACEHOLDER_FIST_RADIUS,
-	PLACEHOLDER_FOREARM_LENGTH, PLACEHOLDER_JAB_DAMAGE, Side, JAB_STARTUP_END,
+	FisticuffsHitSensor, FisticuffsSensorDebug, FisticuffsUser, JabAim, Side, JAB_STARTUP_END,
+	PLACEHOLDER_FIST_RADIUS, PLACEHOLDER_FOREARM_LENGTH, PLACEHOLDER_JAB_DAMAGE,
 };
 use lod_avian::PhysicsInteractionLayer;
 use player::Player;
@@ -54,6 +54,7 @@ fn main() {
 		)
 		.add_plugins(PhysicsPlugins::default())
 		.add_plugins(DamagePlugin)
+		.add_message::<fisticuffs_user::FisticuffsImpact>()
 		.add_plugins(CombatHudPlugin {
 			hit_markers: true,
 			directional_damage: false,
@@ -186,10 +187,12 @@ fn paint_sensor_volume(
 	for entity in &sensors {
 		commands.entity(entity).insert((
 			VisibleFistVolume,
-			Mesh3d(meshes.add(Capsule3d::new(
-				PLACEHOLDER_FIST_RADIUS + 0.04,
-				PLACEHOLDER_FOREARM_LENGTH,
-			))),
+			Mesh3d(
+				meshes.add(Capsule3d::new(
+					PLACEHOLDER_FIST_RADIUS + 0.04,
+					PLACEHOLDER_FOREARM_LENGTH,
+				)),
+			),
 			MeshMaterial3d(materials.add(StandardMaterial {
 				base_color: Color::srgb(1.0, 0.45, 0.12),
 				emissive: LinearRgba::rgb(4.0, 1.2, 0.2),

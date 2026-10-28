@@ -293,7 +293,6 @@ mod tests {
 	}
 
 	#[test]
-	#[test]
 	fn spawn_registration_stamps_flight_fizz() {
 		use bevy::ecs::system::RunSystemOnce;
 		use maybraid_spawns_projectiles::{ProjectileSpec, SpawnProjectile};

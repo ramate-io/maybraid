@@ -1,7 +1,7 @@
 //! Text menu whose active row inverts to a navy-on-yellow tag.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 use bevy::text::{FontSourceTemplate, Justify};
 
 use super::text_menu::{
@@ -367,9 +367,11 @@ pub fn emit_screen_back_on_click(
 	click: On<Pointer<Click>>,
 	backs: Query<(), With<ScreenBack>>,
 	mut pressed: MessageWriter<ScreenBackPressed>,
+	mut commands: Commands,
 ) {
 	if backs.contains(click.entity) {
 		pressed.write(ScreenBackPressed);
+		commands.trigger(crate::MenuBackRequested::new(click.entity, None));
 	}
 }
 
@@ -661,9 +663,9 @@ pub fn scroll_text_cursor_selection_into_view(
 #[cfg(test)]
 mod tests {
 	use super::{MenuObjectiveKind, TextCursorColumn, TextCursorRow};
+	use crate::ITEM_FONT_SIZE;
 	use crate::single_select::{TextColumnAlign, TextColumnAnchor};
 	use crate::theme::{OBJECTIVE_MARKER_FONT_SIZE, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON};
-	use crate::ITEM_FONT_SIZE;
 
 	#[derive(Clone, Copy)]
 	enum RowAction {

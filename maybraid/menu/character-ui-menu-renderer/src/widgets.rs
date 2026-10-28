@@ -32,7 +32,9 @@ pub struct InventoryItemKey {
 pub enum InventoryInteraction {
 	#[default]
 	Browse,
-	Reorder { item_index: usize },
+	Reorder {
+		item_index: usize,
+	},
 }
 
 impl InventoryInteraction {
@@ -56,3 +58,10 @@ pub struct EquippedOrderControls<E: Copy + Send + Sync + 'static> {
 /// Hint for the next inventory overlay rebuild: follow this bag item.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct InventoryFocusHint(pub Option<InventoryItemKey>);
+
+/// State for one inventory viewport. Primary editor hosts may mirror their legacy resources.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InventoryMenuSession {
+	pub interaction: InventoryInteraction,
+	pub focus: InventoryFocusHint,
+}

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 use grenades::GrenadeDetonated;
-use maybraid_input::PadRumble;
+use maybraid_virtual_pad_controller::PadRumble;
 use maybraid_spatial_rumble::{
 	CameraRumbleShape, GroundRumbleShape, PadRumbleShape, RumbleChannels, RumbleEnvelope,
 	RumbleFalloff, SpatialRumble,

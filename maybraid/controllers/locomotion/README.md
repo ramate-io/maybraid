@@ -1,15 +1,19 @@
 # Locomotion controller
 
-Ordinary locomotion: pad [`CharacterIntent`](../character/src/intent.rs) move /
-jump / sprint / stance become a [`MotorIntent`](../../player/lib/src/motor.rs)
-sample on [`InputRouter::delivered_local_actor`](../core/src/router.rs).
-Disconnect and the first blocking capture emit `RoutingEvent` with
-`HoldEffect::ReleaseNeutral`; the motor reads those via `MessageReader` and
-drops the Standard contribution.
+Ordinary locomotion consumes each actor's current addressed
+[`CharacterIntentFrame`](../character/src/intent.rs). Move, jump, sprint and stance
+become the actor's Standard `MotorIntent` contribution. Every delivered neutral
+frame clears translation; absent frames contribute nothing. Final queued writes
+validate the original source/actor binding, so reassignment after Bind cannot
+apply an old frame to either actor.
 
-This crate does not apply the motor and does not rediscover a player. The
-player crate composes declared contributions and writes `MoveWish` once.
-Tanz and skill-map consume the same Bind-stage [`RoutedActorControl`](../character/src/sample.rs)
-from the character controller; locomotion does not re-route the pad.
+This crate reads no global pad, mouse buttons or routing assignment. Focus comes
+from the same addressed pad interpretation as movement. Per-actor
+[`ActorControlStatus`](../character/src/status.rs) preserves sprint holds during
+suspension while suppressing new motion; capture/disconnect release them through
+the motor lifecycle contract. `OrdinaryLocomotion(false)` suppresses the Standard
+movement/jump/stance path for Tanzer mode.
 
-See [ARCHITECTURE.md](../ARCHITECTURE.md).
+This crate declares motor requests. The player crate composes contributions and
+applies `MoveWish` once. Tanz and skill-map consume the same actor-owned physical
+control samples. See [ARCHITECTURE.md](../ARCHITECTURE.md).
