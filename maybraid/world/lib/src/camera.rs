@@ -4,15 +4,16 @@ use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilt
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use durham::WorldBaseTerrain;
+use fisticuffs_user::{FisticuffsImpact, FisticuffsStrike};
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_character_controller::{ActorControlStatus, RoutedActorControl};
 use maybraid_session::WorldGameplayEnabled;
 use maybraid_virtual_pad_controller::PrimaryVirtualPad;
-use player::{CameraFollow, Player};
+use player::{CameraFollow, Player, PlayerSystems};
 use player_camera::{
 	spawn_follow_camera, CameraController, CameraLookSuppressed, CameraPov, CameraPovLocked,
-	FollowCamera, PlayerCameraSystems,
+	CameraPresentationImpulse, FollowCamera, PlayerCameraSystems,
 };
 use world_player::{
 	player::holding_elevation, Player as VegetationPlayer, PlayerSpawnXz, PlaygroundMode,
@@ -265,8 +266,42 @@ fn camera_cast_travel(
 	}
 }
 
+/// Keep impact presentation in the world layer, which owns both combat and camera domains.
+fn present_fisticuffs_impact(
+	mode: Res<PlaygroundMode>,
+	mut strikes: MessageReader<FisticuffsStrike>,
+	mut impacts: MessageReader<FisticuffsImpact>,
+	mut impulses: MessageWriter<CameraPresentationImpulse>,
+) {
+	if *mode != PlaygroundMode::Character {
+		strikes.clear();
+		impacts.clear();
+		return;
+	}
+	for strike in strikes.read() {
+		impulses.write(CameraPresentationImpulse {
+			target: strike.attacker,
+			rotation: Vec2::new(strike.side.sign() * 0.4_f32.to_radians(), -0.25_f32.to_radians()),
+		});
+	}
+	for impact in impacts.read() {
+		let yaw = impact.side.sign() * 0.8_f32.to_radians();
+		let pitch = -0.3_f32.to_radians();
+		impulses.write(CameraPresentationImpulse {
+			target: impact.attacker,
+			rotation: Vec2::new(yaw, pitch),
+		});
+	}
+}
+
 pub(crate) fn configure(app: &mut App) {
 	app.add_systems(Startup, spawn_world_camera)
+		.add_systems(
+			Update,
+			present_fisticuffs_impact
+				.after(PlayerSystems::Intent)
+				.before(PlayerCameraSystems::Follow),
+		)
 		.add_systems(
 			Update,
 			sync_camera_session_state
