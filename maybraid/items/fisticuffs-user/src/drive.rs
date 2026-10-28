@@ -129,7 +129,7 @@ pub(crate) fn tick_attack_state(
 /// Replace the locomotion clip while a jab is playing. Full-body on purpose:
 /// `Jab` already includes lead-leg stance and trunk. The capsule motor is
 /// untouched. Same-`AnimId` restarts blend from the visible mailbox pose.
-pub(crate) fn apply_fisticuffs_visual(
+pub fn apply_fisticuffs_visual(
 	mut commands: Commands,
 	users: Query<&FisticuffsUser, (With<Player>, Without<PlayerUse>)>,
 	visuals: Query<(&CharacterMembers, &ChildOf), With<CharacterRoot>>,

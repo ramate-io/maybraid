@@ -16,6 +16,7 @@ pub use aim::{
 };
 pub use attack::{AttackKind, AttackPhase, AttackSpec, AttackState, AttackTiming, JAB_STARTUP_END};
 pub use character_rigs::Side;
+pub use drive::apply_fisticuffs_visual;
 pub use runtime::{register_fisticuffs_user_runtime, teardown_fisticuffs};
 pub use sensor::{
 	character_to_world, draw_fist_sensors, fist_collider, fist_local, fist_world_rotation,
@@ -67,16 +68,27 @@ pub struct FisticuffsImpact {
 
 pub struct FisticuffsUserPlugin;
 
+/// Fisticuffs presentation timing, so a composing application can set its
+/// priority against other full-body action overrides.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FisticuffsUserSystems {
+	Animate,
+}
+
 impl Plugin for FisticuffsUserPlugin {
 	fn build(&self, app: &mut App) {
 		register_fisticuffs_user_runtime(app);
 		sound::configure_strike_audio(app);
 		app.init_resource::<FisticuffsSensorDebug>()
-			.add_systems(
+			.configure_sets(
 				Update,
-				drive::apply_fisticuffs_visual
+				FisticuffsUserSystems::Animate
 					.after(PlayerSystems::Locomotion)
 					.before(CharacterMotionSystems::Anim),
+			)
+			.add_systems(
+				Update,
+				drive::apply_fisticuffs_visual.in_set(FisticuffsUserSystems::Animate),
 			)
 			.add_systems(
 				Update,

@@ -34,7 +34,9 @@ tanz-user = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+character-animations = { workspace = true }
 character-items = { workspace = true }
+characters = { workspace = true }
 grenades = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
 maybraid-audio = { workspace = true }

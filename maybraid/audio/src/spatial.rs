@@ -239,6 +239,16 @@ fn options(
 	}
 }
 
+fn delayed_playback(
+	frames: Arc<oddio::Frames<oddio::Sample>>,
+	delay: f32,
+	playback_rate: f32,
+) -> PlaybackRate<FramesSignal<oddio::Sample>> {
+	let rate = playback_rate.clamp(0.5, 2.0);
+	let (_, frames) = FramesSignal::new(frames, -f64::from(delay * rate));
+	PlaybackRate::new(frames, rate)
+}
+
 impl Audio {
 	pub fn play(
 		&self,
@@ -253,8 +263,8 @@ impl Audio {
 			mixer.duck_player_shot();
 		}
 		let stop = Arc::new(AtomicBool::new(false));
-		let (_, frames) = FramesSignal::new(clip.frames.clone(), -f64::from(spec.delay));
-		let frames = PlaybackRate::new(frames, spec.playback_rate);
+		let rate = spec.playback_rate.clamp(0.5, 2.0);
+		let frames = delayed_playback(clip.frames.clone(), spec.delay, rate);
 		let (mut gain, signal) = Gain::new(Stoppable::new(frames, stop.clone()));
 		let peak = spec.gain * mixer.gain(spec.bus);
 		gain.set_amplitude_ratio(peak);
@@ -499,6 +509,34 @@ mod tests {
 		assert!(matches!(spec.bus, AudioBus::PlayerWeapon));
 		assert!((spec.delay - 0.016).abs() < 1e-5);
 		assert!(!spec.duck);
+	}
+
+	#[test]
+	fn playback_rate_preserves_mixer_clock_delay() {
+		use oddio::Signal;
+
+		const SAMPLE_RATE: u32 = 48_000;
+		let source = oddio::Frames::from_slice(SAMPLE_RATE, &[1.0_f32; 144_000]);
+		for rate in [0.5_f32, 1.0, 2.0, 0.1, 3.0] {
+			let effective_rate = rate.clamp(0.5, 2.0);
+			let mut signal = delayed_playback(source.clone(), 1.0, rate);
+			let mut frame = [0.0];
+			let first_audible = (0..96_000).find(|_| {
+				signal.sample(1.0 / SAMPLE_RATE as f32, &mut frame);
+				frame[0].abs() > 0.1
+			});
+			assert!(first_audible.is_some(), "rate {rate} signal never started");
+			let Some(first_audible) = first_audible else { continue };
+			let onset = first_audible as f32 / SAMPLE_RATE as f32;
+			// FramesSignal interpolates the first sample across the negative-to-zero
+			// boundary. At the slowest rate that spans two mixer samples; allow two
+			// more samples for the accumulated f32 phase.
+			let boundary_tolerance = 4.0 / SAMPLE_RATE as f32;
+			assert!(
+				(onset - 1.0).abs() <= boundary_tolerance,
+				"rate {rate} (effective {effective_rate}) began at {onset:.8}s"
+			);
+		}
 	}
 
 	#[test]

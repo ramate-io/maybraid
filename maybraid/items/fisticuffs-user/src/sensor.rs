@@ -101,8 +101,10 @@ pub fn fist_local(side: Side, aim: JabAim) -> Vec3 {
 /// World point of a character-space offset. `heading` is fight-forward (+Z).
 pub fn character_to_world(origin: Vec3, heading: Vec3, local: Vec3) -> Vec3 {
 	let forward = xz_forward(heading);
-	// Facing −Z: character +X (left) is world +X = forward × Y.
-	let left = forward.cross(Vec3::Y).normalize_or(Vec3::X);
+	// Match the posed character's yaw convention: facing −Z, character +X
+	// (left) points to world −X. This keeps a positive camera yaw on the
+	// same side as the jab pose.
+	let left = Vec3::Y.cross(forward).normalize_or(Vec3::X);
 	origin + left * local.x + Vec3::Y * local.y + forward * local.z
 }
 
@@ -489,9 +491,41 @@ mod tests {
 	fn character_to_world_maps_plus_z_onto_heading() {
 		let origin = Vec3::new(2.0, 0.0, 4.0);
 		let world = character_to_world(origin, -Vec3::Z, Vec3::new(0.16, 0.62, 1.28));
-		assert!((world - Vec3::new(2.16, 0.62, 2.72)).length() < 1e-4);
+		assert!((world - Vec3::new(1.84, 0.62, 2.72)).length() < 1e-4);
 		let left = character_to_world(origin, -Vec3::Z, Vec3::X);
-		assert!((left - (origin + Vec3::X)).length() < 1e-4);
+		assert!((left - (origin - Vec3::X)).length() < 1e-4);
+	}
+
+	#[test]
+	fn camera_yaw_aim_round_trips_through_the_world_basis() {
+		use player::{look_forward, PlayerLook};
+
+		let headings = [
+			-Vec3::Z,
+			Vec3::X,
+			Vec3::new(1.0, 0.0, -1.0).normalize(),
+			Vec3::new(-0.3, 0.0, 1.0).normalize(),
+		];
+		for heading in headings {
+			for pitch in [-12.0_f32, 0.0, 12.0] {
+				for relative_yaw in [-24.0_f32, 24.0] {
+					let look = PlayerLook {
+						yaw: crate::body_camera_yaw(heading) + relative_yaw.to_radians(),
+						pitch: pitch.to_radians(),
+						first_person: true,
+						focus: 0.0,
+					};
+					let aim = JabAim::from_look(&look, heading);
+					let world =
+						character_to_world(Vec3::ZERO, heading, aim.direction()).normalize();
+					let expected = look_forward(&look);
+					assert!(
+						(world - expected).length() < 1e-4,
+						"heading {heading:?}, pitch {pitch}, yaw {relative_yaw}: {world:?} != {expected:?}"
+					);
+				}
+			}
+		}
 	}
 
 	#[test]

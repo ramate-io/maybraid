@@ -7044,8 +7044,10 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
+ "character-animations",
  "character-inventory-user",
  "character-items",
+ "characters",
  "damage",
  "firearm-user",
  "firearms",
