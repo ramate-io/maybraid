@@ -13,8 +13,8 @@ use building_components::partitions::PartitionStyle;
 use building_components::scene_children;
 use building_components::stairs::{SpiralStair, StairNode};
 use building_components::{
-	append_flattened_component_scenes, confined_scene, BuildingComponents, Layers, ParentConfines,
-	PartitionNode,
+	append_flattened_component_scenes, append_flattened_component_scenes_at_levels, confined_scene,
+	BuildingComponents, Layers, ParentConfines, PartitionNode,
 };
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneLevel};
@@ -132,6 +132,21 @@ impl WizardsTowerFloor {
 		lod_ref: &LodRef,
 	) {
 		append_flattened_component_scenes(self, lod_ref, LodSceneLevel::Medium, children);
+	}
+
+	pub(crate) fn emit_external_features_at_mesh_level(
+		&self,
+		children: &mut Vec<Box<dyn Scene>>,
+		lod_ref: &LodRef,
+		mesh_level: LodSceneLevel,
+	) {
+		append_flattened_component_scenes_at_levels(
+			self,
+			lod_ref,
+			LodSceneLevel::Medium,
+			mesh_level,
+			children,
+		);
 	}
 
 	pub(crate) fn emit_internal_features(

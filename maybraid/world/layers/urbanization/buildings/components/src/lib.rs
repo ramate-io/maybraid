@@ -496,8 +496,22 @@ pub fn append_flattened_component_scenes(
 	level: LodSceneLevel,
 	children: &mut Vec<Box<dyn Scene>>,
 ) {
-	for kit in flattened_kits(building, level) {
-		children.push(kit.scene(lod_ref, level));
+	append_flattened_component_scenes_at_levels(building, lod_ref, level, level, children);
+}
+
+/// Append posed kit content selected from `selection_level` and emitted at `mesh_level`.
+///
+/// This separates structural IR selection from mesh resolution for custom scenes that
+/// combine exterior kits with separately emitted interior details.
+pub fn append_flattened_component_scenes_at_levels(
+	building: &impl BuildingComponents,
+	lod_ref: &LodRef,
+	selection_level: LodSceneLevel,
+	mesh_level: LodSceneLevel,
+	children: &mut Vec<Box<dyn Scene>>,
+) {
+	for kit in flattened_kits(building, selection_level) {
+		children.push(kit.scene(lod_ref, mesh_level));
 	}
 }
 
