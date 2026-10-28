@@ -156,6 +156,7 @@ mod tests {
 	fn test_app_with_audio() -> Option<App> {
 		let mut app = App::new();
 		app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+		app.add_message::<FisticuffsImpact>();
 		app.add_plugins(AudioPlugin);
 		app.update();
 		if app.world().get_resource::<Audio>().is_none() {

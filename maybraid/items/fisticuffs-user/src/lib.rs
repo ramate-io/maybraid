@@ -91,12 +91,12 @@ mod lifetime;
 #[cfg(test)]
 mod pose_tests {
 	use bevy::prelude::Vec3;
-	use character_animations::Animation;
 	use character_animations::animations::{Jab, JAB_HOLD_END};
-	use character_rigs::Side;
+	use character_animations::Animation;
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
-	use maybraid_character_controller::CharacterIntent;
+	use character_rigs::Side;
 	use maybraid_character_controller::produce::collect;
+	use maybraid_character_controller::CharacterIntent;
 	use maybraid_virtual_pad_controller::VirtualPad;
 
 	use super::*;
