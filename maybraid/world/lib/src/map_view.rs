@@ -465,6 +465,7 @@ fn sync_map_capture(
 
 fn handle_map_pad(
 	event: On<UiPadEvent>,
+	mut commands: Commands,
 	mut map: ResMut<WorldMapView>,
 	hud: Query<Entity, With<MapNameHud>>,
 	primary: Option<Res<PrimaryVirtualPad>>,
@@ -482,6 +483,7 @@ fn handle_map_pad(
 		&& (pad.keys.just_pressed(KeyCode::KeyM)
 			|| (pad.just_pressed(PadButton::Select) && !pad.keys.just_pressed(KeyCode::Tab)))
 	{
+		event.input.consume_frame(&mut commands);
 		map.close();
 		return;
 	}
@@ -2146,6 +2148,103 @@ mod tests {
 			input: Routed::to_ui(source, UiTarget::new(hud), frame),
 		});
 		assert!(!world.resource::<WorldMapView>().open);
+	}
+
+	#[derive(Resource, Default)]
+	struct MapToggleIntents(usize);
+
+	#[derive(Resource, Default)]
+	struct MapUiFrames(Vec<Entity>);
+
+	fn record_map_toggle(event: On<ActorIntentEvent>, mut intents: ResMut<MapToggleIntents>) {
+		if matches!(event.input.payload(), CharacterIntent::ToggleMap) {
+			intents.0 += 1;
+		}
+	}
+
+	fn record_map_ui(event: On<UiPadEvent>, mut frames: ResMut<MapUiFrames>) {
+		frames.0.push(event.entity);
+	}
+
+	#[test]
+	fn select_closes_captured_map_without_reopening_through_actor_shell() -> anyhow::Result<()> {
+		use maybraid_character_controller::produce::produce_character_intents;
+		use maybraid_controllers_core::{
+			register_controllers_core, ActorTarget, CaptureKind, InputRouter, PadDeliverySystems,
+		};
+		use maybraid_virtual_pad_controller::{
+			PadButton, PadDevices, PrimaryVirtualPad, VirtualPad, VirtualPadController,
+			VirtualPadEvent,
+		};
+		use std::time::Duration;
+
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		register_controllers_core(&mut app);
+		app.insert_resource(PlaygroundMode::Character)
+			.insert_resource(WorldGameplayEnabled(true))
+			.insert_resource(TextEntryFocus(false))
+			.init_resource::<WorldMapView>()
+			.init_resource::<MapOverlayCapture>()
+			.init_resource::<MapToggleIntents>()
+			.init_resource::<MapUiFrames>()
+			.add_observer(produce_character_intents)
+			.add_observer(toggle_map_view)
+			.add_observer(handle_map_pad)
+			.add_observer(record_map_toggle)
+			.add_observer(record_map_ui)
+			.add_systems(
+				Update,
+				(bevy::ecs::schedule::ApplyDeferred, sync_map_capture)
+					.chain()
+					.after(PadDeliverySystems),
+			);
+
+		let source_entity = app
+			.world_mut()
+			.spawn(VirtualPadController::new(PadDevices::keyboard_mouse()))
+			.id();
+		let source = InputSource::virtual_pad(source_entity);
+		app.insert_resource(PrimaryVirtualPad(source_entity));
+		app.world_mut().resource_mut::<InputRouter>().set_local_source(source_entity);
+		let actor = app
+			.world_mut()
+			.spawn((VegetationPlayer, Transform::IDENTITY, ActorControlStatus::assigned(source)))
+			.id();
+		app.world_mut()
+			.resource_mut::<InputRouter>()
+			.assign_actor(source, ActorTarget::new(actor));
+		let hud = app.world_mut().spawn(MapNameHud).id();
+
+		for sequence in [1, 2] {
+			let mut pad = VirtualPad::default();
+			pad.begin_frame();
+			pad.hold_digital(PadButton::Select);
+			pad.finish_digital();
+			app.world_mut().write_message(VirtualPadEvent {
+				source: source_entity,
+				sequence,
+				delta: Duration::from_millis(16),
+				pad,
+			});
+			app.update();
+			if sequence == 1 {
+				assert!(app.world().resource::<WorldMapView>().open, "first Select opens map");
+				assert_eq!(
+					app.world().resource::<InputRouter>().top_capture().map(|layer| layer.kind()),
+					Some(CaptureKind::Overlay)
+				);
+			}
+		}
+
+		assert_eq!(app.world().resource::<MapUiFrames>().0, [hud]);
+		assert_eq!(app.world().resource::<MapToggleIntents>().0, 1);
+		assert!(
+			!app.world().resource::<WorldMapView>().open,
+			"closing Select must not reopen the map"
+		);
+		assert!(app.world().resource::<InputRouter>().captures().is_empty());
+		Ok(())
 	}
 
 	#[test]
