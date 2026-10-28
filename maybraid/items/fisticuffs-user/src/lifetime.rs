@@ -362,7 +362,9 @@ fn suspension_freezes_local_attack_and_damage_while_other_actors_continue() -> a
 	let mut app = lifetime_app_with_presentation(false);
 	let actor = spawn_attacker(&mut app);
 	let dummy = spawn_dummy(&mut app);
-	app.world_mut().entity_mut(dummy).remove::<Health>();
+	// Keep the target out of physics until the actor is suspended. A solid
+	// without Health still consumes a jab as an environmental contact.
+	app.world_mut().entity_mut(dummy).remove::<(Health, Collider)>();
 	assign(&mut app, actor);
 	squeeze_right_trigger(&mut app);
 	app.update();
@@ -378,7 +380,9 @@ fn suspension_freezes_local_attack_and_damage_while_other_actors_continue() -> a
 		app.world().get::<FisticuffsUser>(actor).map(|user| user.state.phase()),
 		Some(Some(AttackPhase::Active))
 	);
-	app.world_mut().entity_mut(dummy).insert(Health::from_max(100.0));
+	app.world_mut()
+		.entity_mut(dummy)
+		.insert((Health::from_max(100.0), Collider::capsule(0.4, 1.0)));
 	let mut other_user = FisticuffsUser::default();
 	other_user.state.request(crate::AttackSpec::jab(crate::Side::Left));
 	let other = app.world_mut().spawn((other_user, Transform::from_xyz(100.0, 0.0, 0.0))).id();

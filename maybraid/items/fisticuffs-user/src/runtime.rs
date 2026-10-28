@@ -6,7 +6,7 @@ use maybraid_equipment::{
 	EquipmentSystems, EquippedItemHandler, PendingEquipmentHold, PendingEquipmentTeardown,
 };
 
-use crate::{drive, sensor, FisticuffsStrike, FisticuffsUser};
+use crate::{drive, sensor, FisticuffsImpact, FisticuffsStrike, FisticuffsUser};
 
 #[derive(Resource, Default)]
 struct FisticuffsUserRuntime;
@@ -23,6 +23,7 @@ pub fn register_fisticuffs_user_runtime(app: &mut App) {
 	}
 	app.init_resource::<FisticuffsUserRuntime>()
 		.add_message::<FisticuffsStrike>()
+		.add_message::<FisticuffsImpact>()
 		.add_observer(drive::apply_attack_routing)
 		.add_observer(drive::apply_attack_intents)
 		.add_systems(

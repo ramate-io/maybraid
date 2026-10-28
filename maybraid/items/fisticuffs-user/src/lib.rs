@@ -1,4 +1,4 @@
-//! Bare-handed combat: trigger edges → [`AttackState`] → `Jab` clip + strike event.
+//! Bare-handed combat: trigger edges → [`AttackState`] → `Jab` clip + strike / impact events.
 
 mod aim;
 mod attack;
@@ -18,9 +18,9 @@ pub use attack::{AttackKind, AttackPhase, AttackSpec, AttackState, AttackTiming,
 pub use character_rigs::Side;
 pub use runtime::{register_fisticuffs_user_runtime, teardown_fisticuffs};
 pub use sensor::{
-	character_to_world, collect_fist_hits, draw_fist_sensors, fist_collider, fist_local,
-	fist_world_rotation, resolve_fist_hits, sync_fist_sensors, FisticuffsHitSensor,
-	FisticuffsHitSensorOf, FisticuffsSensorDebug, PLACEHOLDER_FIST_RADIUS, PLACEHOLDER_FIST_REACH,
+	character_to_world, draw_fist_sensors, fist_collider, fist_local, fist_world_rotation,
+	resolve_fist_hits, sync_fist_sensors, FisticuffsHitSensor, FisticuffsHitSensorOf,
+	FisticuffsSensorDebug, PLACEHOLDER_FIST_RADIUS, PLACEHOLDER_FIST_REACH,
 	PLACEHOLDER_FOREARM_LENGTH, PLACEHOLDER_JAB_DAMAGE,
 };
 
@@ -51,6 +51,20 @@ pub struct FisticuffsStrike {
 	pub target: Vec3,
 }
 
+/// The first solid surface reached by a jab's fist-volume sweep.
+///
+/// `collider` is the physical collider that stopped the jab. `target` is the
+/// collider itself or its health-owning parent when damage can be applied.
+#[derive(Message, Clone, Copy, Debug, PartialEq)]
+pub struct FisticuffsImpact {
+	pub attacker: Entity,
+	pub side: Side,
+	pub collider: Entity,
+	pub target: Option<Entity>,
+	pub point: Vec3,
+	pub normal: Vec3,
+}
+
 pub struct FisticuffsUserPlugin;
 
 impl Plugin for FisticuffsUserPlugin {
@@ -77,12 +91,12 @@ mod lifetime;
 #[cfg(test)]
 mod pose_tests {
 	use bevy::prelude::Vec3;
-	use character_animations::animations::{Jab, JAB_HOLD_END};
 	use character_animations::Animation;
-	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+	use character_animations::animations::{Jab, JAB_HOLD_END};
 	use character_rigs::Side;
-	use maybraid_character_controller::produce::collect;
+	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 	use maybraid_character_controller::CharacterIntent;
+	use maybraid_character_controller::produce::collect;
 	use maybraid_virtual_pad_controller::VirtualPad;
 
 	use super::*;
