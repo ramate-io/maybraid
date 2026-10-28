@@ -8,6 +8,7 @@ use bevy::ecs::query::{QueryData, QueryFilter};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::world_serialization::WorldInstanceReady;
 
 use crate::scene::cull::closest_available_lod_level;
 use crate::scene::level::LodSceneLevel;
@@ -105,6 +106,42 @@ fn has_active_hide_ancestor(world: &World, entity: Entity) -> bool {
 	false
 }
 
+/// Keep a just-completed instance inside an already-hidden LOD tree disabled.
+///
+/// World assets can finish spawning after the owning level was hidden. Disabled
+/// does not cascade, so stamp only this new instance subtree before visibility
+/// propagation runs. The existing hide owner remains responsible for reveal.
+pub(crate) fn hide_ready_world_instance_if_under_hidden_lod(
+	event: On<WorldInstanceReady>,
+	mut commands: Commands,
+) {
+	let instance_root = event.event().entity;
+	commands.queue(move |world: &mut World| {
+		hide_ready_world_instance_now(world, instance_root);
+	});
+}
+
+fn hide_ready_world_instance_now(world: &mut World, instance_root: Entity) {
+	if nearest_active_hide_owner(world, instance_root).is_none() {
+		return;
+	}
+	let Ok(mut instance) = world.get_entity_mut(instance_root) else {
+		return;
+	};
+	instance.insert_recursive::<Children>(Disabled);
+}
+
+fn nearest_active_hide_owner(world: &World, entity: Entity) -> Option<Entity> {
+	let mut current = Some(entity);
+	while let Some(entity) = current {
+		if world.get::<LodTreeHideActive>(entity).is_some() {
+			return Some(entity);
+		}
+		current = world.get::<ChildOf>(entity).map(|child| child.parent());
+	}
+	None
+}
+
 fn show_lod_tree_now(world: &mut World, root: Entity) {
 	let Ok(mut root_entity) = world.get_entity_mut(root) else {
 		return;
@@ -120,7 +157,11 @@ fn show_lod_tree_now(world: &mut World, root: Entity) {
 		return;
 	}
 
-	world.entity_mut(root).remove::<(LodTreeHideActive, Disabled)>();
+	{
+		let mut root_entity = world.entity_mut(root);
+		root_entity.remove::<(LodTreeHideActive, Disabled)>();
+		mark_propagated_components_changed(&mut root_entity);
+	}
 	let children = world
 		.get::<Children>(root)
 		.map(|c| c.iter().collect::<Vec<_>>())
@@ -148,7 +189,20 @@ fn show_lod_tree_descendants_now(world: &mut World, root: Entity, mut stack: Vec
 			.map(|c| c.iter().collect::<Vec<_>>())
 			.unwrap_or_default();
 		entity_mut.remove::<Disabled>();
+		mark_propagated_components_changed(&mut entity_mut);
 		stack.extend(children);
+	}
+}
+
+/// Revisit propagation inputs that were ignored while their tree was disabled.
+///
+/// Bumping change ticks leaves authored Transform and Visibility values intact.
+fn mark_propagated_components_changed(entity: &mut EntityWorldMut) {
+	if let Some(mut transform) = entity.get_mut::<Transform>() {
+		transform.set_changed();
+	}
+	if let Some(mut visibility) = entity.get_mut::<Visibility>() {
+		visibility.set_changed();
 	}
 }
 
@@ -327,6 +381,7 @@ fn show_lod_tree_visit(world: &mut World, root: Entity, entity: Entity) -> Vec<E
 		.map(|c| c.iter().collect::<Vec<_>>())
 		.unwrap_or_default();
 	entity_mut.remove::<Disabled>();
+	mark_propagated_components_changed(&mut entity_mut);
 	children
 }
 
@@ -869,6 +924,43 @@ impl Plugin for LodSceneHostPlugin {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn late_instance_hide_rechecks_ownership_when_deferred_work_runs() {
+		let mut world = World::new();
+		let owner = world.spawn((Visibility::Inherited, Transform::default())).id();
+		hide_lod_tree_now(&mut world, owner);
+		let instance =
+			world.spawn((Visibility::Inherited, Transform::default(), ChildOf(owner))).id();
+		let mesh = world.spawn((Visibility::Visible, Transform::default(), ChildOf(instance))).id();
+		world.commands().queue(move |world: &mut World| {
+			hide_ready_world_instance_now(world, instance);
+		});
+
+		show_lod_tree_now(&mut world, owner);
+		world.flush();
+
+		assert!(world.get::<Disabled>(instance).is_none());
+		assert!(world.get::<Disabled>(mesh).is_none());
+		assert_eq!(world.get::<Visibility>(mesh), Some(&Visibility::Visible));
+	}
+
+	#[test]
+	fn late_instance_hide_is_a_noop_if_its_entity_was_despawned() {
+		let mut world = World::new();
+		let owner = world.spawn((Visibility::Inherited, Transform::default())).id();
+		hide_lod_tree_now(&mut world, owner);
+		let instance =
+			world.spawn((Visibility::Inherited, Transform::default(), ChildOf(owner))).id();
+		world.commands().queue(move |world: &mut World| {
+			hide_ready_world_instance_now(world, instance);
+		});
+		let _ = world.despawn(instance);
+
+		world.flush();
+
+		assert!(world.get_entity(instance).is_err());
+	}
 
 	#[test]
 	fn ready_desired_always_shown() {
