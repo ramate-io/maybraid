@@ -23,21 +23,31 @@ pub(crate) enum HitVolumeKind {
 #[derive(Component, Clone, Copy, Debug)]
 pub(crate) struct HitVolumeOf(pub Entity);
 
+/// Retired query hull. Collider is gone so Avian can finish its flush; [`Last`]
+/// despawns the leftover entity after physics consumers.
+#[derive(Component, Clone, Copy, Debug)]
+pub(crate) struct PendingHitVolumeDespawn;
+
 pub(crate) fn apply_hit_capsule(commands: &mut Commands, body: Entity, hull: LocomotionCapsule) {
+	// Stance / spawn can re-apply hulls in the same flush that retires the body.
+	// A missing entity is a stale writer, not a hull-authoring bug.
+	let Ok(mut entity) = commands.get_entity(body) else {
+		return;
+	};
 	match hull.hit_capsule() {
 		Some(hit) => {
-			commands.entity(body).insert(hit);
+			entity.try_insert(hit);
 		}
 		None => {
-			commands.entity(body).remove::<HitCapsule>();
+			entity.remove::<HitCapsule>();
 		}
 	}
 	match hull.head_capsule() {
 		Some(head) => {
-			commands.entity(body).insert(head);
+			entity.try_insert(head);
 		}
 		None => {
-			commands.entity(body).remove::<HeadCapsule>();
+			entity.remove::<HeadCapsule>();
 		}
 	}
 }
@@ -100,9 +110,7 @@ pub(crate) fn maintain_hit_volumes(
 
 	for extras in by_key.into_values() {
 		for volume in extras {
-			if let Ok(mut entity) = commands.get_entity(volume) {
-				entity.try_despawn();
-			}
+			retire_volume(&mut commands, volume);
 		}
 	}
 }
@@ -119,9 +127,7 @@ fn despawn_kind(
 ) {
 	if let Some(existing) = by_key.remove(&(body, kind)) {
 		for volume in existing {
-			if let Ok(mut entity) = commands.get_entity(volume) {
-				entity.try_despawn();
-			}
+			retire_volume(commands, volume);
 		}
 	}
 }
@@ -140,9 +146,7 @@ fn maintain_one(
 	match existing.split_first() {
 		Some((&volume, extras)) => {
 			for extra in extras {
-				if let Ok(mut entity) = commands.get_entity(*extra) {
-					entity.try_despawn();
-				}
+				retire_volume(commands, *extra);
 			}
 			if changed {
 				if let Ok(mut entity) = commands.get_entity(volume) {
@@ -162,6 +166,27 @@ fn maintain_one(
 				Sensor,
 				PhysicsInteractionLayer::animated_layers(),
 			));
+		}
+	}
+}
+
+fn retire_volume(commands: &mut Commands, volume: Entity) {
+	let Ok(mut entity) = commands.get_entity(volume) else {
+		return;
+	};
+	// Drop the Avian collider this frame so physics observers write to a live
+	// entity. Gameplay queries key off [`HitVolume`], which is also removed.
+	entity.remove::<(Collider, Sensor, CollisionLayers, HitVolume, HitVolumeKind, HitVolumeOf)>();
+	entity.try_insert(PendingHitVolumeDespawn);
+}
+
+pub(crate) fn despawn_retired_hit_volumes(
+	mut commands: Commands,
+	retired: Query<Entity, With<PendingHitVolumeDespawn>>,
+) {
+	for entity in &retired {
+		if let Ok(mut entity) = commands.get_entity(entity) {
+			entity.try_despawn();
 		}
 	}
 }
@@ -368,6 +393,42 @@ mod tests {
 		world.flush();
 		if world.get_entity(body).is_err() {
 			return Err(anyhow!("body should survive a stale volume despawn"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn retired_hit_volumes_despawn_after_physics_consumers() -> Result<()> {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			PhysicsPlugins::default(),
+			bevy::asset::AssetPlugin::default(),
+			bevy::mesh::MeshPlugin,
+		));
+		app.finish();
+		app.add_systems(Update, maintain_hit_volumes)
+			.add_systems(Last, despawn_retired_hit_volumes);
+		let body = app
+			.world_mut()
+			.spawn((
+				HitCapsule { radius: 0.4, length: 0.8, along: 0.0 },
+				Transform::IDENTITY,
+				GlobalTransform::IDENTITY,
+			))
+			.id();
+		app.update();
+		if kind_count(app.world_mut(), body, HitVolumeKind::Body) != 1 {
+			return Err(anyhow!("expected a live hit volume before retire"));
+		}
+		app.world_mut().entity_mut(body).remove::<HitCapsule>();
+		app.update();
+		if app.world_mut().query::<&PendingHitVolumeDespawn>().iter(app.world()).count() != 0 {
+			return Err(anyhow!("Last should have flushed the retired volume"));
+		}
+		if kind_count(app.world_mut(), body, HitVolumeKind::Body) != 0 {
+			return Err(anyhow!("retired volume must not stay queryable"));
 		}
 		Ok(())
 	}
