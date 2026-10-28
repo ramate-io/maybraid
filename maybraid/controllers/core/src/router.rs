@@ -1,5 +1,7 @@
 //! Sole routing owner. Controllers read assignments; they do not rediscover actors.
 
+use std::collections::HashMap;
+
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
@@ -70,6 +72,8 @@ pub enum RoutingKind {
 	Uncaptured,
 	Suspended,
 	Resumed,
+	/// Physical device assignment changed, canceling its previous held state.
+	SourceChanged,
 }
 
 impl RoutingKind {
@@ -79,9 +83,11 @@ impl RoutingKind {
 			Self::Assigned | Self::Resumed | Self::Uncaptured => {
 				(HoldEffect::None, GestureEffect::None)
 			}
-			Self::Reassigned | Self::Disconnected | Self::Removed | Self::Captured => {
-				(HoldEffect::ReleaseNeutral, GestureEffect::Cancel)
-			}
+			Self::Reassigned
+			| Self::Disconnected
+			| Self::Removed
+			| Self::Captured
+			| Self::SourceChanged => (HoldEffect::ReleaseNeutral, GestureEffect::Cancel),
 			Self::Suspended => (HoldEffect::Freeze, GestureEffect::Freeze),
 		}
 	}
@@ -119,6 +125,7 @@ pub struct RoutingEvent {
 	kind: RoutingKind,
 	hold: HoldEffect,
 	gesture: GestureEffect,
+	pub(crate) targeted: bool,
 	previous: Option<ActorTarget>,
 	next: Option<ActorTarget>,
 }
@@ -203,6 +210,8 @@ impl Suspension {
 
 #[derive(Clone, Debug)]
 struct SourceBinding {
+	generation: u64,
+	rearm_generation: u64,
 	assignment: SourceAssignment,
 	connection: SourceConnection,
 	suspensions: Vec<Suspension>,
@@ -211,6 +220,8 @@ struct SourceBinding {
 impl Default for SourceBinding {
 	fn default() -> Self {
 		Self {
+			generation: 0,
+			rearm_generation: 0,
 			assignment: SourceAssignment::empty(),
 			connection: SourceConnection::Connected,
 			suspensions: Vec::new(),
@@ -226,7 +237,9 @@ impl Default for SourceBinding {
 #[derive(Resource, Clone, Debug, Default)]
 pub struct InputRouter {
 	next_token: u64,
-	local: SourceBinding,
+	bindings: HashMap<InputSource, SourceBinding>,
+	local_source: InputSource,
+	pub(crate) consumed_frames: HashMap<InputSource, u64>,
 	captures: CaptureStack,
 	events: Vec<RoutingEvent>,
 }
@@ -283,7 +296,7 @@ impl InputRouter {
 	}
 
 	pub fn blocks_actor(&self, source: InputSource) -> bool {
-		self.captures.blocks_actor(source)
+		self.captures.blocks_actor(self.canonical(source))
 	}
 
 	pub fn is_suspended(&self, source: InputSource) -> bool {
@@ -296,16 +309,30 @@ impl InputRouter {
 	}
 
 	/// Derived pad policy from the capture stack. One writer.
-	pub fn pad_policy(&self) -> maybraid_input::PadInputPolicy {
-		self.captures.pad_policy()
+	pub fn pad_policy(&self) -> maybraid_virtual_pad_controller::PadInputPolicy {
+		self.pad_policy_for(InputSource::local_pad())
 	}
 
 	/// Session pause of local-pad delivery. Other owners stay frozen.
 	pub fn set_paused(&mut self, paused: bool) {
+		self.set_source_paused(InputSource::local_pad(), paused);
+	}
+
+	/// Pause one source without resuming another source's pause owner.
+	pub fn set_source_paused(&mut self, source: InputSource, paused: bool) {
 		if paused {
-			self.suspend(InputSource::local_pad(), ScopeOwner::pause());
+			self.suspend(source, ScopeOwner::pause());
 		} else {
-			self.resume_owner(ScopeOwner::pause());
+			let tokens: Vec<_> = self
+				.binding(source)
+				.suspensions
+				.iter()
+				.filter(|layer| layer.owner() == ScopeOwner::pause())
+				.map(|layer| layer.token())
+				.collect();
+			for token in tokens {
+				self.resume(token);
+			}
 		}
 	}
 
@@ -322,7 +349,9 @@ impl InputRouter {
 		if !self.connected(source) || self.is_suspended(source) {
 			return None;
 		}
-		if let Some(owner) = self.captures.top().and_then(CaptureLayer::ui_owner) {
+		if let Some(owner) =
+			self.captures.top_for(self.canonical(source)).and_then(CaptureLayer::ui_owner)
+		{
 			return Some(owner);
 		}
 		self.ui(source)
@@ -335,6 +364,14 @@ impl InputRouter {
 		let previous = self.actor(source);
 		if previous == Some(actor) {
 			return previous;
+		}
+		let canonical = self.canonical(source);
+		let previous_owners: Vec<_> = self
+			.sources()
+			.filter(|other| *other != canonical && self.actor(*other) == Some(actor))
+			.collect();
+		for owner in previous_owners {
+			self.clear_actor(owner);
 		}
 		self.binding_mut(source).assignment.actor = Some(actor);
 		self.emit(
@@ -447,6 +484,7 @@ impl InputRouter {
 			return false;
 		}
 		binding.connection = SourceConnection::Connected;
+		self.retire(source);
 		true
 	}
 
@@ -456,6 +494,7 @@ impl InputRouter {
 		owner: ScopeOwner,
 		kind: CaptureKind,
 	) -> CaptureToken {
+		let source = self.canonical(source);
 		if let Some(layer) = self.captures.find(source, owner, kind) {
 			return layer.token();
 		}
@@ -474,10 +513,14 @@ impl InputRouter {
 	}
 
 	pub fn release_owner(&mut self, owner: ScopeOwner) -> Vec<CaptureLayer> {
-		let source = InputSource::local_pad();
-		let before = self.delivered_actor(source);
+		let before: Vec<_> =
+			self.sources().map(|source| (source, self.delivered_actor(source))).collect();
 		let released = self.captures.release_owner(owner);
-		self.emit_capture_transition(source, before);
+		for (source, actor) in before {
+			if released.iter().any(|layer| layer.source() == source) {
+				self.emit_capture_transition(source, actor);
+			}
+		}
 		released
 	}
 
@@ -492,40 +535,44 @@ impl InputRouter {
 		owner: Option<ScopeOwner>,
 		kind: CaptureKind,
 	) -> Option<CaptureToken> {
+		let source = self.canonical(source);
 		if let Some(owner) = owner {
 			if let Some(current) = *token {
 				if let Some(layer) = self.capture(current) {
 					if layer.source() == source && layer.kind() == kind {
 						if layer.owner() != owner {
 							self.captures.update_owner(current, owner);
+							self.retire(source);
 						}
 						return Some(current);
 					}
 				}
 			}
-			let before = self.delivered_actor(source);
-			if let Some(current) = token.take() {
-				self.captures.release(current);
+			if let Some(existing) = self.captures.find(source, owner, kind) {
+				if let Some(current) = token.take() {
+					self.release_capture(current);
+				}
+				*token = Some(existing.token());
+				return *token;
 			}
-			let next = if let Some(layer) = self.captures.find(source, owner, kind) {
-				layer.token()
-			} else {
-				self.push_capture(source, owner, kind)
-			};
+			if let Some(current) = token.take() {
+				self.release_capture(current);
+			}
+			let before = self.delivered_actor(source);
+			let next = self.push_capture(source, owner, kind);
 			*token = Some(next);
 			self.emit_capture_transition(source, before);
 			Some(next)
 		} else {
-			let before = self.delivered_actor(source);
 			if let Some(current) = token.take() {
-				self.captures.release(current);
+				self.release_capture(current);
 			}
-			self.emit_capture_transition(source, before);
 			None
 		}
 	}
 
 	pub fn suspend(&mut self, source: InputSource, owner: ScopeOwner) -> SuspensionToken {
+		let source = self.canonical(source);
 		if let Some(existing) = self
 			.binding(source)
 			.suspensions
@@ -543,7 +590,7 @@ impl InputRouter {
 	}
 
 	pub fn resume(&mut self, token: SuspensionToken) -> Option<Suspension> {
-		for source in [InputSource::local_pad()] {
+		for source in self.sources().collect::<Vec<_>>() {
 			let layer = {
 				let binding = self.binding_mut(source);
 				let Some(index) =
@@ -563,7 +610,7 @@ impl InputRouter {
 	/// Resume only this owner's suspensions. Other owners stay frozen.
 	pub fn resume_owner(&mut self, owner: ScopeOwner) -> Vec<Suspension> {
 		let mut resumed = Vec::new();
-		for source in [InputSource::local_pad()] {
+		for source in self.sources().collect::<Vec<_>>() {
 			{
 				let binding = self.binding_mut(source);
 				let mut keep = Vec::new();
@@ -576,7 +623,7 @@ impl InputRouter {
 				}
 				binding.suspensions = keep;
 			}
-			if !resumed.is_empty() {
+			if resumed.iter().any(|layer| layer.source() == source) {
 				let next = self.delivered_actor(source);
 				self.emit(source, RoutingKind::Resumed, None, next);
 			}
@@ -602,6 +649,7 @@ impl InputRouter {
 		kind: CaptureKind,
 	) -> CaptureToken {
 		let token = CaptureToken::from_raw(self.mint());
+		self.binding_mut(source);
 		self.captures.push(CaptureStack::new_layer(token, source, owner, kind));
 		token
 	}
@@ -609,6 +657,7 @@ impl InputRouter {
 	fn emit_capture_transition(&mut self, source: InputSource, before: Option<ActorTarget>) {
 		let after = self.delivered_actor(source);
 		if before == after {
+			self.retire(source);
 			return;
 		}
 		if before.is_some() && after.is_none() {
@@ -625,8 +674,26 @@ impl InputRouter {
 		previous: Option<ActorTarget>,
 		next: Option<ActorTarget>,
 	) {
+		let source = self.canonical(source);
+		self.retire(source);
 		let (hold, gesture) = kind.effects();
-		self.events.push(RoutingEvent { source, kind, hold, gesture, previous, next });
+		if (hold == HoldEffect::ReleaseNeutral
+			&& (previous != next
+				|| matches!(kind, RoutingKind::Disconnected | RoutingKind::SourceChanged)))
+			|| kind == RoutingKind::Uncaptured
+		{
+			let generation = self.generation(source);
+			self.binding_mut(source).rearm_generation = generation;
+		}
+		self.events.push(RoutingEvent {
+			source,
+			kind,
+			hold,
+			gesture,
+			previous,
+			next,
+			targeted: false,
+		});
 	}
 
 	fn mint(&mut self) -> u64 {
@@ -634,16 +701,94 @@ impl InputRouter {
 		self.next_token
 	}
 
-	fn binding(&self, source: InputSource) -> &SourceBinding {
-		match source {
-			InputSource::LocalPad => &self.local,
+	pub fn register_source(&mut self, source: InputSource) {
+		self.binding_mut(source);
+	}
+
+	pub fn canonical(&self, source: InputSource) -> InputSource {
+		if source == InputSource::LocalPad {
+			self.local_source
+		} else {
+			source
 		}
 	}
 
-	fn binding_mut(&mut self, source: InputSource) -> &mut SourceBinding {
-		match source {
-			InputSource::LocalPad => &mut self.local,
+	pub fn sources(&self) -> impl Iterator<Item = InputSource> + '_ {
+		self.bindings
+			.keys()
+			.copied()
+			.chain((!self.bindings.contains_key(&self.local_source)).then_some(self.local_source))
+	}
+
+	/// Migrate the compatibility alias once the host's primary entity is known.
+	pub fn set_local_source(&mut self, entity: Entity) {
+		let source = InputSource::virtual_pad(entity);
+		if self.local_source == source {
+			return;
 		}
+		if let Some(binding) = self.bindings.remove(&self.local_source) {
+			self.bindings.insert(source, binding);
+		}
+		self.captures.replace_source(self.local_source, source);
+		if let Some(binding) = self.bindings.get_mut(&source) {
+			for suspension in &mut binding.suspensions {
+				suspension.source = source;
+			}
+		}
+		self.local_source = source;
+		self.binding_mut(source);
+		self.retire(source);
+	}
+
+	pub fn top_capture_for(&self, source: InputSource) -> Option<CaptureLayer> {
+		self.captures.top_for(self.canonical(source))
+	}
+	pub fn top_capture_of_kind_for(
+		&self,
+		source: InputSource,
+		kind: CaptureKind,
+	) -> Option<CaptureLayer> {
+		self.captures.top_of_kind_for(self.canonical(source), kind)
+	}
+	pub fn pad_policy_for(
+		&self,
+		source: InputSource,
+	) -> maybraid_virtual_pad_controller::PadInputPolicy {
+		self.captures.pad_policy_for(self.canonical(source))
+	}
+
+	pub fn cancel_source(&mut self, source: InputSource) {
+		let actor = self.actor(source);
+		self.emit(source, RoutingKind::SourceChanged, actor, None);
+	}
+
+	pub(crate) fn rearm_generation(&self, source: InputSource) -> u64 {
+		self.binding(source).rearm_generation
+	}
+
+	pub(crate) fn generation(&self, source: InputSource) -> u64 {
+		self.binding(source).generation
+	}
+
+	fn retire(&mut self, source: InputSource) {
+		let generation = self.mint();
+		self.binding_mut(source).generation = generation;
+	}
+
+	fn binding(&self, source: InputSource) -> &SourceBinding {
+		static EMPTY: SourceBinding = SourceBinding {
+			generation: 0,
+			rearm_generation: 0,
+			assignment: SourceAssignment::empty(),
+			connection: SourceConnection::Connected,
+			suspensions: Vec::new(),
+		};
+		self.bindings.get(&self.canonical(source)).unwrap_or(&EMPTY)
+	}
+
+	fn binding_mut(&mut self, source: InputSource) -> &mut SourceBinding {
+		let source = self.canonical(source);
+		self.bindings.entry(source).or_default()
 	}
 }
 
@@ -651,18 +796,23 @@ impl InputRouter {
 ///
 /// Drop flushes so later stages in the same frame see this system's events.
 #[derive(SystemParam)]
-pub struct InputRouting<'w> {
+pub struct InputRouting<'w, 's> {
 	router: ResMut<'w, InputRouter>,
 	events: MessageWriter<'w, RoutingEvent>,
+	commands: Commands<'w, 's>,
 }
 
-impl InputRouting<'_> {
+impl InputRouting<'_, '_> {
 	pub fn publish(&mut self) {
-		self.router.publish_events(&mut self.events);
+		for mut event in self.router.take_events() {
+			crate::delivery::queue_actor_lifecycle(&self.router, event, &mut self.commands);
+			event.targeted = true;
+			self.events.write(event);
+		}
 	}
 }
 
-impl std::ops::Deref for InputRouting<'_> {
+impl std::ops::Deref for InputRouting<'_, '_> {
 	type Target = InputRouter;
 
 	fn deref(&self) -> &InputRouter {
@@ -670,13 +820,13 @@ impl std::ops::Deref for InputRouting<'_> {
 	}
 }
 
-impl std::ops::DerefMut for InputRouting<'_> {
+impl std::ops::DerefMut for InputRouting<'_, '_> {
 	fn deref_mut(&mut self) -> &mut InputRouter {
 		&mut self.router
 	}
 }
 
-impl Drop for InputRouting<'_> {
+impl Drop for InputRouting<'_, '_> {
 	fn drop(&mut self) {
 		self.publish();
 	}
@@ -936,6 +1086,60 @@ mod tests {
 	}
 
 	#[test]
+	fn clearing_empty_or_missing_capture_preserves_the_produced_frame() -> anyhow::Result<()> {
+		let mut router = InputRouter::default();
+		let source = InputSource::virtual_pad(Entity::from_bits(1));
+		router.assign_ui(source, ui(2));
+		let frame = router
+			.route_ui(source, "queued UI frame")
+			.ok_or_else(|| anyhow::anyhow!("UI assignment"))?
+			.for_frame(7);
+		let generation = router.generation(source);
+		let mut empty = None;
+		for _ in 0..3 {
+			assert_eq!(
+				router.replace_owned_capture(&mut empty, source, None, CaptureKind::Overlay),
+				None
+			);
+			assert_eq!(router.generation(source), generation);
+			assert!(router.accepts(&frame));
+		}
+		let mut missing = Some(CaptureToken::from_raw(u64::MAX));
+		router.replace_owned_capture(&mut missing, source, None, CaptureKind::Overlay);
+		assert_eq!(missing, None);
+		assert_eq!(router.generation(source), generation);
+		assert!(router.accepts(&frame));
+		Ok(())
+	}
+
+	#[test]
+	fn adopting_an_existing_capture_keeps_its_binding_but_release_retires_it() -> anyhow::Result<()>
+	{
+		let mut router = InputRouter::default();
+		let source = InputSource::virtual_pad(Entity::from_bits(1));
+		let owner = ScopeOwner::ui(ui(2));
+		let capture = router.acquire_capture(source, owner, CaptureKind::MenuNav);
+		let frame = router
+			.route_ui(source, "queued menu action")
+			.ok_or_else(|| anyhow::anyhow!("captured UI route"))?
+			.for_frame(8);
+		let generation = router.generation(source);
+		let mut token = None;
+		assert_eq!(
+			router.replace_owned_capture(&mut token, source, Some(owner), CaptureKind::MenuNav),
+			Some(capture)
+		);
+		assert_eq!(router.generation(source), generation);
+		assert!(router.accepts(&frame));
+		router.replace_owned_capture(&mut token, source, None, CaptureKind::MenuNav);
+		assert_eq!(token, None);
+		assert!(router.capture(capture).is_none());
+		assert_ne!(router.generation(source), generation);
+		assert!(!router.accepts(&frame));
+		Ok(())
+	}
+
+	#[test]
 	fn pause_suspends_delivery_without_clearing_assignment() {
 		let mut router = InputRouter::default();
 		let source = InputSource::local_pad();
@@ -949,6 +1153,19 @@ mod tests {
 		router.set_paused(false);
 		assert!(!router.is_suspended(source));
 		assert_eq!(router.delivered_actor(source), Some(actor(5)));
+	}
+
+	#[test]
+	fn resuming_primary_pause_does_not_resume_a_secondary_source() {
+		let mut router = InputRouter::default();
+		let secondary = InputSource::virtual_pad(Entity::from_bits(2));
+		router.set_paused(true);
+		router.set_source_paused(secondary, true);
+		router.set_paused(false);
+		assert!(!router.has_suspension(InputSource::local_pad(), ScopeOwner::pause()));
+		assert!(router.has_suspension(secondary, ScopeOwner::pause()));
+		router.set_source_paused(secondary, false);
+		assert!(!router.is_suspended(secondary));
 	}
 
 	#[test]

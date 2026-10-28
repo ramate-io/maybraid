@@ -4583,7 +4583,7 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-controllers-core",
  "maybraid-equipment",
- "maybraid-input",
+ "maybraid-virtual-pad-controller",
  "player",
  "player-camera",
 ]
@@ -4648,8 +4648,8 @@ dependencies = [
  "material-ref",
  "maybraid-character-controller",
  "maybraid-controllers-core",
- "maybraid-input",
  "maybraid-locomotion-controller",
+ "maybraid-virtual-pad-controller",
  "meandering-intelligence",
  "movement-intelligence",
  "movement-intelligence-avian",
@@ -4684,7 +4684,7 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-controllers-core",
  "maybraid-equipment",
- "maybraid-input",
+ "maybraid-virtual-pad-controller",
  "player",
 ]
 
@@ -5484,9 +5484,9 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-controllers-core",
  "maybraid-equipment",
- "maybraid-input",
  "maybraid-spatial-rumble",
  "maybraid-spawns-grenades",
+ "maybraid-virtual-pad-controller",
  "player",
  "player-camera",
 ]
@@ -6931,13 +6931,17 @@ dependencies = [
  "characters-playground",
  "clap",
  "layer-stack",
+ "lod",
  "maybraid-agent",
  "maybraid-character-controller",
+ "maybraid-controllers-core",
  "maybraid-game-mode-discover",
  "maybraid-game-mode-reliquary",
  "maybraid-gameplay",
- "maybraid-input",
  "maybraid-menu-controller",
+ "maybraid-session",
+ "maybraid-sky",
+ "maybraid-virtual-pad-controller",
  "maybraid-world",
  "menu-components",
  "menu-playground",
@@ -6976,16 +6980,17 @@ dependencies = [
  "anyhow",
  "bevy",
  "maybraid-controllers-core",
- "maybraid-input",
+ "maybraid-virtual-pad-controller",
 ]
 
 [[package]]
 name = "maybraid-character-ui-menu-renderer"
 version = "0.1.5"
 dependencies = [
+ "anyhow",
  "bevy",
  "character-ui-menu",
- "maybraid-input",
+ "maybraid-virtual-pad-controller",
  "menu-components",
 ]
 
@@ -6995,7 +7000,7 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
- "maybraid-input",
+ "maybraid-virtual-pad-controller",
 ]
 
 [[package]]
@@ -7009,6 +7014,7 @@ dependencies = [
  "lubikans",
  "maybraid-character-controller",
  "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
 ]
 
 [[package]]
@@ -7051,7 +7057,6 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-controllers-core",
  "maybraid-equipment",
- "maybraid-input",
  "maybraid-session",
  "maybraid-skill-map",
  "maybraid-spawns-actors",
@@ -7059,22 +7064,11 @@ dependencies = [
  "maybraid-spawns-placement",
  "maybraid-spawns-player",
  "maybraid-spawns-projectiles",
+ "maybraid-virtual-pad-controller",
  "player",
  "player-camera",
  "tanz-user",
  "world-player",
-]
-
-[[package]]
-name = "maybraid-input"
-version = "0.1.5"
-dependencies = [
- "anyhow",
- "bevy",
- "objc2 0.6.4",
- "objc2-core-haptics",
- "objc2-foundation 0.3.2",
- "objc2-game-controller",
 ]
 
 [[package]]
@@ -7130,7 +7124,7 @@ dependencies = [
  "bevy",
  "maybraid-character-controller",
  "maybraid-controllers-core",
- "maybraid-input",
+ "maybraid-virtual-pad-controller",
  "player",
 ]
 
@@ -7141,7 +7135,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "maybraid-controllers-core",
- "maybraid-input",
+ "maybraid-virtual-pad-controller",
  "menu-components",
 ]
 
@@ -7194,7 +7188,7 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
- "maybraid-input",
+ "maybraid-virtual-pad-controller",
 ]
 
 [[package]]
@@ -7243,7 +7237,9 @@ dependencies = [
  "anyhow",
  "bevy",
  "maybraid-controllers-core",
- "maybraid-input",
+ "maybraid-menu-controller",
+ "maybraid-virtual-pad-controller",
+ "menu-components",
  "poi-intelligence",
  "world-player",
 ]
@@ -7265,6 +7261,18 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "bevy_hanabi",
+]
+
+[[package]]
+name = "maybraid-virtual-pad-controller"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "objc2 0.6.4",
+ "objc2-core-haptics",
+ "objc2-foundation 0.3.2",
+ "objc2-game-controller",
 ]
 
 [[package]]
@@ -7326,7 +7334,6 @@ dependencies = [
  "maybraid-equipment",
  "maybraid-game-mode-discover",
  "maybraid-gameplay",
- "maybraid-input",
  "maybraid-locomotion-controller",
  "maybraid-session",
  "maybraid-skill-map",
@@ -7335,6 +7342,7 @@ dependencies = [
  "maybraid-spawns-placement",
  "maybraid-spawns-player",
  "maybraid-vfx",
+ "maybraid-virtual-pad-controller",
  "maybraid-weather",
  "meandering-intelligence",
  "menu-components",
@@ -7385,7 +7393,7 @@ dependencies = [
  "bevy",
  "maybraid-agent",
  "maybraid-gameplay",
- "maybraid-input",
+ "maybraid-virtual-pad-controller",
  "maybraid-world",
 ]
 
@@ -7425,7 +7433,8 @@ name = "menu-components"
 version = "0.1.5"
 dependencies = [
  "bevy",
- "maybraid-input",
+ "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
 ]
 
 [[package]]
@@ -7456,9 +7465,10 @@ dependencies = [
  "lod",
  "lod-avian",
  "maybraid-character-ui-menu-renderer",
- "maybraid-input",
+ "maybraid-controllers-core",
  "maybraid-menu-controller",
  "maybraid-skill-map",
+ "maybraid-virtual-pad-controller",
  "menu-components",
  "menu-screens",
  "player",
@@ -7480,8 +7490,8 @@ dependencies = [
  "game-commands",
  "item-icons",
  "maybraid-character-ui-menu-renderer",
- "maybraid-input",
  "maybraid-menu-controller",
+ "maybraid-virtual-pad-controller",
  "maybraid-world",
  "menu-components",
  "serde",
@@ -7871,8 +7881,8 @@ dependencies = [
  "journeying-intelligence",
  "lod-avian",
  "maybraid-character-controller",
- "maybraid-input",
  "maybraid-locomotion-controller",
+ "maybraid-virtual-pad-controller",
  "meandering-intelligence",
  "mob-intelligence",
  "movement-intelligence",
@@ -9152,8 +9162,8 @@ dependencies = [
  "hiding-intelligence",
  "lod-avian",
  "maybraid-character-controller",
- "maybraid-input",
  "maybraid-locomotion-controller",
+ "maybraid-virtual-pad-controller",
  "meandering-intelligence",
  "mob-intelligence",
  "movement-intelligence",
@@ -9311,6 +9321,7 @@ dependencies = [
  "lod",
  "maybraid-character-controller",
  "maybraid-spatial-rumble",
+ "maybraid-virtual-pad-controller",
  "player",
 ]
 
@@ -11213,8 +11224,8 @@ name = "spatial-rumble-playground"
 version = "0.1.5"
 dependencies = [
  "bevy",
- "maybraid-input",
  "maybraid-spatial-rumble",
+ "maybraid-virtual-pad-controller",
 ]
 
 [[package]]
@@ -11704,11 +11715,11 @@ dependencies = [
  "item-icons",
  "maybraid-character-controller",
  "maybraid-controllers-core",
- "maybraid-input",
  "maybraid-locomotion-controller",
  "maybraid-menu-controller",
  "maybraid-session",
  "maybraid-skill-map",
+ "maybraid-virtual-pad-controller",
  "menu-components",
  "player",
  "screen-capture",
@@ -14097,7 +14108,9 @@ dependencies = [
  "game-commands",
  "lod",
  "lod-avian",
- "maybraid-input",
+ "maybraid-character-controller",
+ "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
  "player-camera",
  "vegetation-components",
 ]

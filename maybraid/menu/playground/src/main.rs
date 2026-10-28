@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
-use maybraid_input::PadHidPlugins;
+use maybraid_virtual_pad_controller::PadHidPlugins;
 use menu_playground::commands::Show;
 use menu_playground::{MenuPlaygroundPlugin, PendingStartupCommand, PlaygroundCommand};
 

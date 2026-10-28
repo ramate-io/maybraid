@@ -1,18 +1,46 @@
 //! Scope component and exclusive focus pick.
 
 use bevy::prelude::*;
-use maybraid_controllers_core::{InputSource, Routed, UiTarget};
-use maybraid_input::{MenuNav, MenuNavImpulse};
+use maybraid_controllers_core::{CaptureToken, InputSource, RouteBinding, UiTarget};
 use menu_components::{HudMenu, HudOverlayMenu, TextMenu};
 
-/// Input scope. Nav from [`crate::dispatch::dispatch_menu_nav`] is delivered to
+/// Input scope. Authorized rich input is delivered to
 /// one focused descendant, not every child.
-#[derive(Component, Debug, Default, Clone, Copy)]
+#[derive(Component, Debug, Default, Clone)]
 pub struct MenuController {
 	pub focus: Option<UiTarget>,
+	/// None opts into the explicitly primary-session host adapter.
+	pub source: Option<InputSource>,
+	pub(crate) capture: Option<CaptureToken>,
+	pub(crate) blocked: bool,
+	pub(crate) context_blocked: bool,
+	pub start: MenuStartPolicy,
+	pub repeat_config: crate::repeat::MenuRepeatConfig,
+	pub(crate) streams: Vec<MenuStream>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MenuStream {
+	pub source: InputSource,
+	pub binding: Option<RouteBinding>,
+	pub sequence: u64,
+	pub await_release: bool,
+	pub repeat: crate::repeat::MenuRepeat,
+}
+
+/// Whether Start selects a row or remains available to the shell pause host.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum MenuStartPolicy {
+	#[default]
+	Select,
+	Shell,
 }
 
 impl MenuController {
+	pub fn for_source(source: InputSource) -> Self {
+		Self { source: Some(source), ..Self::default() }
+	}
+
 	pub fn focused_entity(&self) -> Option<Entity> {
 		self.focus.map(UiTarget::entity)
 	}
@@ -50,21 +78,6 @@ impl MenuController {
 			}
 		}
 		Self::pick_focus(overlay, hud, text)
-	}
-
-	/// Deliver one nav event to this controller's focused [`UiTarget`].
-	pub fn trigger_nav(&self, commands: &mut Commands, source: InputSource, nav: MenuNav) {
-		let Some(focus) = self.focus else {
-			return;
-		};
-		Self::trigger_routed(commands, Routed::to_ui(source, focus, nav));
-	}
-
-	pub fn trigger_routed(commands: &mut Commands, routed: Routed<MenuNav>) {
-		let Some(entity) = routed.target().ui_entity() else {
-			return;
-		};
-		commands.trigger(MenuNavImpulse::new(entity, routed.into_payload()));
 	}
 }
 

@@ -10,7 +10,8 @@ use characters::{
 use damage::Health;
 use player::{MotorIntent, MotorSample, PlayerLook, SpeedCapRequest, SprintRequest};
 
-use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource};
+use maybraid_character_controller::ActorControlStatus;
+use maybraid_controllers_core::{ActorTarget, Routed};
 
 use crate::actions::{dash_ground_speed, TanzAction};
 use crate::input::TanzInput;
@@ -22,6 +23,34 @@ use crate::{look_wish, look_yaw, ControlMode, TanzDefinitionExt, TanzUser};
 pub struct ExecuteTanz {
 	actor: ActorTarget,
 	id: TanzId,
+}
+
+/// Pad-derived Tanz selection retaining its route until execution submission.
+#[derive(Message, Clone, Debug)]
+pub struct RoutedExecuteTanz(pub Routed<ExecuteTanz>);
+
+#[derive(EntityEvent, Clone, Debug)]
+pub struct RoutedExecuteTanzEvent {
+	pub entity: Entity,
+	pub input: Routed<ExecuteTanz>,
+}
+
+pub fn dispatch_routed_executions(
+	mut commands: Commands,
+	mut inputs: MessageReader<RoutedExecuteTanz>,
+) {
+	for input in inputs.read() {
+		input.0.clone().trigger(&mut commands, |input| RoutedExecuteTanzEvent {
+			entity: input.target().actor_entity().unwrap_or(Entity::PLACEHOLDER),
+			input,
+		});
+	}
+}
+
+pub fn submit_routed_tanz(event: On<RoutedExecuteTanzEvent>, mut users: Query<&mut TanzExecution>) {
+	if let Ok(mut execution) = users.get_mut(event.entity) {
+		execution.submit(event.input.payload().id());
+	}
 }
 
 impl ExecuteTanz {
@@ -206,37 +235,33 @@ pub fn match_tanz_inputs(
 	}
 }
 
-fn tanz_execution_frozen(router: Option<&InputRouter>, actor: ActorTarget) -> bool {
-	let Some(router) = router else {
-		return false;
-	};
-	router.is_suspended(InputSource::local_pad()) && router.local_actor() == Some(actor)
-}
-
 pub fn submit_tanz_executions(
-	router: Option<Res<InputRouter>>,
-	mut users: Query<&mut TanzExecution>,
+	mut users: Query<(&mut TanzExecution, Option<&ActorControlStatus>)>,
 	mut execute: MessageReader<ExecuteTanz>,
 ) {
 	for request in execute.read() {
-		if tanz_execution_frozen(router.as_deref(), request.actor()) {
-			continue;
-		}
-		let Ok(mut execution) = users.get_mut(request.actor().entity()) else {
+		let Ok((mut execution, status)) = users.get_mut(request.actor().entity()) else {
 			continue;
 		};
+		if status.is_some_and(|status| status.is_frozen()) {
+			continue;
+		}
 		execution.submit(request.id());
 	}
 }
 
 pub fn advance_tanz_execution(
 	time: Res<Time>,
-	router: Option<Res<InputRouter>>,
-	mut users: Query<(Entity, &TanzUser, &mut TanzExecution, Option<&mut Health>)>,
+	mut users: Query<(
+		&TanzUser,
+		&mut TanzExecution,
+		Option<&mut Health>,
+		Option<&ActorControlStatus>,
+	)>,
 ) {
 	let dt = time.delta_secs();
-	for (entity, user, mut execution, health) in &mut users {
-		if tanz_execution_frozen(router.as_deref(), ActorTarget::new(entity)) {
+	for (user, mut execution, health, status) in &mut users {
+		if status.is_some_and(|status| status.is_frozen()) {
 			continue;
 		}
 		if user.mode != ControlMode::Tanzer
@@ -261,11 +286,16 @@ pub fn advance_tanz_execution(
 /// Declare the Tanz motor contribution. Compose selects it; apply realizes
 /// sprint/cap without inspecting this producer.
 pub fn apply_tanz_movement(
-	router: Option<Res<InputRouter>>,
-	mut users: Query<(Entity, &TanzUser, &TanzExecution, Option<&PlayerLook>, &mut MotorIntent)>,
+	mut users: Query<(
+		&TanzUser,
+		&TanzExecution,
+		Option<&PlayerLook>,
+		&mut MotorIntent,
+		Option<&ActorControlStatus>,
+	)>,
 ) {
-	for (entity, user, execution, look, mut intent) in &mut users {
-		if tanz_execution_frozen(router.as_deref(), ActorTarget::new(entity)) {
+	for (user, execution, look, mut intent, status) in &mut users {
+		if status.is_some_and(|status| status.is_frozen()) {
 			continue;
 		}
 		if !user.mode.is_tanzer() {
@@ -341,6 +371,55 @@ mod tests {
 	use crate::actions::TanzAction;
 	use crate::input::TanzButton;
 	use crate::TanzUser;
+
+	#[test]
+	fn retired_route_does_not_submit_a_tanz() -> anyhow::Result<()> {
+		use maybraid_controllers_core::{InputRouter, InputSource};
+
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<InputRouter>()
+			.add_message::<RoutedExecuteTanz>()
+			.add_message::<ExecuteTanz>()
+			.add_observer(submit_routed_tanz)
+			.add_systems(Update, (dispatch_routed_executions, submit_tanz_executions).chain());
+		let old = app.world_mut().spawn(TanzExecution::default()).id();
+		let replacement = app.world_mut().spawn(TanzExecution::default()).id();
+		let source = InputSource::local_pad();
+		let input = {
+			let mut router = app.world_mut().resource_mut::<InputRouter>();
+			router.assign_actor(source, ActorTarget::new(old));
+			let input = router
+				.route_actor(source, ExecuteTanz::new(old, TanzId::LeftStrafe))
+				.ok_or_else(|| anyhow::anyhow!("missing old route"))?;
+			router.assign_actor(source, ActorTarget::new(replacement));
+			input
+		};
+		app.world_mut().write_message(RoutedExecuteTanz(input));
+		app.update();
+		assert!(app
+			.world()
+			.get::<TanzExecution>(old)
+			.is_some_and(|execution| execution.active.is_none()));
+		assert!(app
+			.world()
+			.get::<TanzExecution>(replacement)
+			.is_some_and(|execution| execution.active.is_none()));
+		let valid = app
+			.world()
+			.resource::<InputRouter>()
+			.route_actor(source, ExecuteTanz::new(replacement, TanzId::RightStrafe))
+			.ok_or_else(|| anyhow::anyhow!("missing replacement route"))?;
+		app.world_mut().write_message(RoutedExecuteTanz(valid));
+		app.update();
+		assert_eq!(
+			app.world()
+				.get::<TanzExecution>(replacement)
+				.and_then(|execution| execution.active.map(|active| active.id)),
+			Some(TanzId::RightStrafe)
+		);
+		Ok(())
+	}
 
 	fn input(user: Entity, direction: Vec2, button: TanzButton) -> TanzInput {
 		TanzInput { user, direction, magnitude: 0.9, coherence: 1.0, button }

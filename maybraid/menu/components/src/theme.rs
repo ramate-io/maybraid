@@ -319,19 +319,19 @@ pub const INVENTORY_THUMB_PX: f32 = 52.0;
 /// Appearance / picker catalog thumbnail.
 pub const CATALOG_THUMB_PX: f32 = 72.0;
 
-/// Kenney Double Xbox **A** — [`maybraid_input::MENU_SELECT_PAD`].
+/// Kenney Double Xbox **A** — [`maybraid_virtual_pad_controller::MENU_SELECT_PAD`].
 pub const PROMPT_PAD_SELECT: &str = "iconography/kenney/input-prompts/xbox_button_a_outline.png";
 
-/// Kenney Double keyboard **Enter** — [`maybraid_input::MENU_SELECT_KEYS`].
+/// Kenney Double keyboard **Enter** — [`maybraid_virtual_pad_controller::MENU_SELECT_KEYS`].
 pub const PROMPT_KEY_SELECT: &str = "iconography/kenney/input-prompts/keyboard_enter_outline.png";
 
-/// Kenney Double Xbox **X** — [`maybraid_input::INVENTORY_DROP_PAD`].
+/// Kenney Double Xbox **X** — [`maybraid_virtual_pad_controller::INVENTORY_DROP_PAD`].
 pub const PROMPT_PAD_DROP: &str = "iconography/kenney/input-prompts/xbox_button_x_outline.png";
 
-/// Kenney Double keyboard **E** — first of [`maybraid_input::INVENTORY_DROP_KEYS`].
+/// Kenney Double keyboard **E** — first of [`maybraid_virtual_pad_controller::INVENTORY_DROP_KEYS`].
 pub const PROMPT_KEY_DROP: &str = "iconography/kenney/input-prompts/keyboard_e_outline.png";
 
-/// Kenney Double Xbox **Y** — [`maybraid_input::INVENTORY_UNEQUIP_PAD`].
+/// Kenney Double Xbox **Y** — [`maybraid_virtual_pad_controller::INVENTORY_UNEQUIP_PAD`].
 pub const PROMPT_PAD_UNEQUIP: &str = "iconography/kenney/input-prompts/xbox_button_y_outline.png";
 
 /// Keyboard **Y** shares the pad Y glyph; the committed Kenney pack has no

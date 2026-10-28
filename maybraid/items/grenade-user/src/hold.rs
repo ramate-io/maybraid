@@ -474,7 +474,7 @@ mod tests {
 
 		let mut world = World::new();
 		world.init_resource::<MailboxApplySet>();
-		let mut rig = HumanoidV0Rig::imported();
+		let rig = HumanoidV0Rig::imported();
 		let mut mailbox = AnimMailbox::new(Transform::IDENTITY);
 		mailbox.posed = true;
 		mailbox.output = rig.pose.clone();

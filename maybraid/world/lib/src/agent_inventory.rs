@@ -6,9 +6,9 @@ use character_items::{Inventory, InventoryItem};
 use lubikans::{LubikanLedger, LubikanOwner};
 use maybraid_agent::{AgentButton, InventoryObservation, PadIntent};
 use maybraid_character_controller::InventoryCyclingCategory;
+use maybraid_session::WorldGameplayEnabled;
 use world_player::Player as VegetationPlayer;
 
-use crate::control::WorldGameplayEnabled;
 use crate::inventory_cycling::{gameplay_cycling_allowed, ActiveInventoryCyclingCategory};
 use crate::map_view::WorldMapView;
 use game_commands::command::TextEntryFocus;

@@ -16,7 +16,8 @@ later without rewriting the mailbox path.
 
 Mouse **RMB** is analog focus / aim and **LMB** is UseItem. They share the
 trigger axes but **do not** emit `AttackLeft` / `AttackRight` — starting to aim
-must not throw a jab.
+must not throw a jab. Non-mouse trigger edges remain independent while a mouse
+button is held, including after a capture ends.
 
 Jabs only start while **Fisticuffs** is the equipped primary tool. The world
 equipment adapter inserts [`FisticuffsUser`](src/lib.rs) for that selection and
@@ -26,7 +27,7 @@ focus/fire.
 
 ## Aim
 
-[`PlayerLook`](../../player/src/identity.rs) is camera **−Z** forward. The posed
+[`PlayerLook`](../../player/lib/src/identity.rs) is camera **−Z** forward. The posed
 humanoid is character space (**+Z** fight-forward, **+X = character left**).
 **Look left** is camera **+yaw** (player view). Camera-to-character is a
 **180° yaw** (negate X and Z). [`JabAim`](src/aim.rs) converts look into that
@@ -63,24 +64,34 @@ authored snap so Active sits on the incoming fist:
 
 A press during startup or active **queues one** follow-up (latest wins). A press
 during recovery **cancels into** the next jab immediately. That queue/cancel
-slot is the combo-graph hook.
+slot is the combo-graph hook. A tick that would skip the entire active window
+stops at its entry for one observable frame, allowing one strike and hit sensor
+before recovery continues on the next tick.
 
 ## Gameplay / visuals
 
 `AttackState` owns time, side, and the latched [`JabAim`](src/aim.rs). During
 the active window the crate emits [`FisticuffsStrike`](src/lib.rs)
 (`attacker`, `side`, `kind`, `combo_step`, clip `progress`, quantized `target`)
-and spawns a short-lived fist / forearm [`Sensor`](src/sensor.rs) posed from the
-character and aim. Overlap is resolved with `SpatialQuery` (same class as grenade
-blasts and skill-map bursts) and written as
+and spawns a short-lived fist / forearm [pose marker](src/sensor.rs) from the
+character and aim. The marker carries no Avian collider. A swept capsule runs
+from the chamber area to the intended fist endpoint, querying Fixed and
+Animated solids. Its first contact emits [`FisticuffsImpact`](src/lib.rs) with
+the struck collider and world surface point/normal. A jab can land once; a
+solid without Health still stops damage reaching anything behind it. A Health
+owner receives
 `damage::Hit { source: Some(attacker), allow_self: false, amount: PLACEHOLDER_JAB_DAMAGE }`.
-[`HitCapsule`](../../player/src/hit.rs) stays receive-only.
+[`HitCapsule`](../../player/lib/src/hit.rs) stays receive-only.
 [`maybraid-audio`](../../audio/) plays the same authored damage flinch grunt
-the hurt character already uses (`FlinchSounds::play`, `Voices` bus).
+the hurt character already uses (`FlinchSounds::play`, `Voices` bus) and plays
+a spatial landing thump from the impact event on the `Impacts` bus.
 
 The sensor exists **only** while [`AttackPhase::Active`](src/attack.rs). Cancel,
-weapon swap (`FisticuffsUser` removed), death / `Downed`, and pause (world
-cancels the attack) tear it down. Hits are once-per-strike-per-target. There is
+weapon swap (`FisticuffsUser` removed), death / `Downed`, and routing capture,
+disconnect, or reassignment tear it down. Source suspension freezes the assigned
+actor’s clock and hit resolution; other actors continue. Resume continues the
+same attack, retaining its consumed-contact latch. Impacts and damage are once
+per strike. There is
 no combo-step damage scale — `combo_step` is reserved for a later combo graph.
 
 `PLACEHOLDER_JAB_DAMAGE` (12) and the capsule radius / length / reach are
@@ -123,3 +134,21 @@ FISTICUFFS_JAB_CAPTURE_DIR=/tmp/fisticuffs-jab \
   WGPU_BACKEND=vk \
   xvfb-run -a cargo run -p menu-playground --example fisticuffs_jab_hit_capture
 ```
+
+## Runtime and presentation
+
+`register_fisticuffs_user_runtime` installs the attack machine, equipment
+hold/teardown, strike and impact messages, and hit resolution once. Headless gameplay uses
+this same runtime without audio or mesh assets. Hit resolution runs when the host
+has physics; attack timing and sensor lifetime still run without it.
+
+`FisticuffsUserPlugin` adds clip presentation, debug drawing, and strike vocals
+on top of that runtime. Installing it after gameplay does not register a second
+attack machine.
+
+Jab input consumes addressed `ActorIntentEvent` values. Pending requests retain
+`Routed` provenance and are validated immediately before starting after the
+attack tick, so retired input cannot start a punch and chamber-time aim remains
+observable. `ActorRoutingEvent` cancellation applies only to the actor that lost
+delivery. Per-actor `ActorControlStatus` freezes attack time and damage during
+suspension; autonomous actors continue independently.
