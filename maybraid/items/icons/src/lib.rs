@@ -111,7 +111,9 @@ impl Plugin for ItemIconPlugin {
 			)
 			.add_systems(
 				PostUpdate,
-				rest_pose_fisticuffs_arms_skins.before(prepare_silhouette_hosts),
+				rest_pose_fisticuffs_arms_skins
+					.after(keep_capture_hosts_visible)
+					.before(prepare_silhouette_hosts),
 			)
 			.add_systems(
 				PostUpdate,

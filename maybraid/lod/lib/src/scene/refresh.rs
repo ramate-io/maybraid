@@ -34,8 +34,8 @@ use bevy::prelude::*;
 
 use crate::lod_ref::{LodNodePlugin, LodNodeSystems};
 use crate::scene::host::{
-	drain_lod_tree_vis, settle_lod_level_root_visibility, sync_lod_level_roots, LodTreeVisBudget,
-	LodTreeVisQueue,
+	drain_lod_tree_vis, hide_ready_world_instance_if_under_hidden_lod,
+	settle_lod_level_root_visibility, sync_lod_level_roots, LodTreeVisBudget, LodTreeVisQueue,
 };
 use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::SemanticLodScene;
@@ -155,6 +155,7 @@ impl Plugin for LodRefreshCorePlugin {
 			.add_message::<LodSceneRefreshAabb>()
 			.add_message::<LodSceneCullAabb>()
 			.add_message::<LodSceneRefreshLevel>()
+			.add_observer(hide_ready_world_instance_if_under_hidden_lod)
 			.add_systems(
 				Update,
 				(

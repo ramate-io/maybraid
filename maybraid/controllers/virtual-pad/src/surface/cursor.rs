@@ -2,10 +2,9 @@
 
 use bevy::prelude::*;
 
-use crate::config::VirtualPadConfig;
 use crate::pad::VirtualPad;
 
-#[derive(Resource, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct PadCursor {
 	pub position: Vec2,
 	pub bounds: Option<Rect>,
@@ -38,15 +37,6 @@ impl PadCursor {
 		self.position += stick * speed * dt;
 		self.clamp_in_bounds();
 	}
-}
-
-pub fn integrate_cursor(
-	pad: Res<VirtualPad>,
-	config: Res<VirtualPadConfig>,
-	time: Res<Time>,
-	mut cursor: ResMut<PadCursor>,
-) {
-	cursor.integrate(&pad, config.cursor_speed, time.delta_secs());
 }
 
 #[cfg(test)]

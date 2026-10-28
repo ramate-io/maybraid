@@ -14,7 +14,7 @@ pub use execute::{advance_throw, play_throw_jingles};
 pub use input::apply_throw_intents;
 pub use lifecycle::{apply_throw_routing, interrupt_live_cooks};
 pub use spawn::{
-	STANDING_RELEASE_HEIGHT, THROW_GRAVITY, landing_range, landing_time, launch_velocity, throw_aim,
+	landing_range, landing_time, launch_velocity, throw_aim, STANDING_RELEASE_HEIGHT, THROW_GRAVITY,
 };
 
 /// 1:1 user → held visual. Relationship rows are immutable; throw clocks live on [`GrenadeThrow`].
@@ -90,7 +90,10 @@ impl GrenadeThrow {
 	/// leftover latch; an already-live cook keeps its fuse.
 	pub fn apply_routing(&mut self, event: RoutingEvent) -> Option<f32> {
 		match event.kind() {
-			RoutingKind::Reassigned | RoutingKind::Disconnected | RoutingKind::Removed => {
+			RoutingKind::Reassigned
+			| RoutingKind::Disconnected
+			| RoutingKind::Removed
+			| RoutingKind::SourceChanged => {
 				self.use_latched = false;
 				self.take_live_cook()
 			}
@@ -238,22 +241,19 @@ mod tests {
 		use maybraid_controllers_core::ActorTarget;
 		use maybraid_equipment::{EquippedItemHandler, EquippedItemUse};
 
-		world.init_resource::<Messages<EquippedItemUse>>();
-		world.resource_mut::<Messages<EquippedItemUse>>().drain().for_each(drop);
+		world.add_observer(apply_throw_intents);
 		let user = world
 			.query_filtered::<Entity, With<GrenadeUser>>()
 			.iter(world)
 			.next()
 			.ok_or_else(|| anyhow::anyhow!("user"))?;
-		world.write_message(EquippedItemUse::new(
+		world.trigger(EquippedItemUse::new(
 			ActorTarget::new(user),
 			EquippedItemHandler::Grenade,
 			1.0,
 			true,
 		));
-		world
-			.run_system_once(apply_throw_intents)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.flush();
 		Ok(())
 	}
 
@@ -261,22 +261,18 @@ mod tests {
 		use maybraid_controllers_core::ActorTarget;
 		use maybraid_equipment::{EquippedItemHandler, EquippedItemUse};
 
-		world.init_resource::<Messages<EquippedItemUse>>();
-		world.resource_mut::<Messages<EquippedItemUse>>().drain().for_each(drop);
 		let user = world
 			.query_filtered::<Entity, With<GrenadeUser>>()
 			.iter(world)
 			.next()
 			.ok_or_else(|| anyhow::anyhow!("user"))?;
-		world.write_message(EquippedItemUse::new(
+		world.trigger(EquippedItemUse::new(
 			ActorTarget::new(user),
 			EquippedItemHandler::Grenade,
 			0.0,
 			false,
 		));
-		world
-			.run_system_once(apply_throw_intents)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.flush();
 		Ok(())
 	}
 
@@ -619,9 +615,7 @@ mod tests {
 		let mut world = World::new();
 		let user = spawn_ready_user(&mut world);
 		apply_use_item(&mut world)?;
-		world
-			.run_system_once(apply_throw_intents)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		// No delivered event: a live cook remains latched.
 		let throw = world.get::<GrenadeThrow>(user).expect("throw");
 		assert!(matches!(throw.phase, GrenadePhase::Cooking { .. }));
 		assert!(throw.use_latched);
@@ -687,7 +681,7 @@ mod tests {
 
 	#[test]
 	fn suspension_freezes_fuse_and_windup() -> anyhow::Result<()> {
-		use maybraid_character_controller::{ActorTarget, InputRouter, InputSource, ScopeOwner};
+		use maybraid_character_controller::InputSource;
 
 		let mut world = World::new();
 		let user = spawn_ready_user(&mut world);
@@ -695,10 +689,17 @@ mod tests {
 		advance_time(&mut world, 0.25);
 		run_advance(&mut world)?;
 		let fuse = world.get::<GrenadeThrow>(user).expect("throw").fuse;
-		let mut router = InputRouter::default();
-		router.assign_actor(InputSource::local_pad(), ActorTarget::new(user));
-		router.suspend(InputSource::local_pad(), ScopeOwner::pause());
-		world.insert_resource(router);
+		world
+			.entity_mut(user)
+			.insert(maybraid_character_controller::ActorControlStatus::from(
+				maybraid_controllers_core::ActorRouteStatus {
+					source: InputSource::local_pad(),
+					connected: true,
+					captured: false,
+					suspended: true,
+					assigned: true,
+				},
+			));
 		advance_time(&mut world, 1.0);
 		run_advance(&mut world)?;
 		let throw = world.get::<GrenadeThrow>(user).expect("throw");
@@ -719,21 +720,22 @@ mod tests {
 
 	#[test]
 	fn capture_keeps_ticking_the_fuse() -> anyhow::Result<()> {
-		use maybraid_character_controller::{
-			ActorTarget, CaptureKind, InputRouter, InputSource, ScopeOwner, UiTarget,
-		};
+		use maybraid_character_controller::InputSource;
 
 		let mut world = World::new();
 		let user = spawn_ready_user(&mut world);
 		apply_use_item(&mut world)?;
-		let mut router = InputRouter::default();
-		router.assign_actor(InputSource::local_pad(), ActorTarget::new(user));
-		router.acquire_capture(
-			InputSource::local_pad(),
-			ScopeOwner::ui(UiTarget::new(Entity::from_bits(7))),
-			CaptureKind::Overlay,
-		);
-		world.insert_resource(router);
+		world
+			.entity_mut(user)
+			.insert(maybraid_character_controller::ActorControlStatus::from(
+				maybraid_controllers_core::ActorRouteStatus {
+					source: InputSource::local_pad(),
+					connected: true,
+					captured: true,
+					suspended: false,
+					assigned: true,
+				},
+			));
 		advance_time(&mut world, 0.5);
 		run_advance(&mut world)?;
 		let throw = world.get::<GrenadeThrow>(user).expect("throw");
@@ -751,6 +753,7 @@ mod tests {
 		world.init_resource::<InputRouter>();
 		world.init_resource::<Messages<RoutingEvent>>();
 		world.init_resource::<Messages<DropLiveGrenade>>();
+		world.add_observer(apply_throw_routing);
 		let mut apply = Some(apply);
 		world
 			.run_system_once(move |mut routing: InputRouting| {
@@ -759,21 +762,33 @@ mod tests {
 				}
 			})
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let events: Vec<_> = world.resource_mut::<Messages<RoutingEvent>>().drain().collect();
+		for event in events {
+			let Some(actor) = event.lost_actor() else { continue };
+			world.trigger(maybraid_controllers_core::ActorRoutingEvent {
+				entity: actor.entity(),
+				event,
+				status: maybraid_controllers_core::ActorRouteStatus {
+					source: event.source(),
+					connected: true,
+					captured: false,
+					suspended: false,
+					assigned: false,
+				},
+			});
+		}
 		Ok(())
 	}
 
 	fn apply_use_to(world: &mut World, user: Entity) -> anyhow::Result<()> {
-		world.init_resource::<Messages<EquippedItemUse>>();
-		world.resource_mut::<Messages<EquippedItemUse>>().drain().for_each(drop);
-		world.write_message(EquippedItemUse::new(
+		world.add_observer(apply_throw_intents);
+		world.trigger(EquippedItemUse::new(
 			ActorTarget::new(user),
 			EquippedItemHandler::Grenade,
 			1.0,
 			true,
 		));
-		world
-			.run_system_once(apply_throw_intents)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.flush();
 		Ok(())
 	}
 
@@ -795,9 +810,6 @@ mod tests {
 		publish_routing(&mut world, |router| {
 			router.disconnect(InputSource::local_pad());
 		})?;
-		world
-			.run_system_once(apply_throw_routing)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(
 			world.get::<GrenadeThrow>(first).map(|throw| throw.phase),
 			Some(GrenadePhase::Ready)
@@ -832,9 +844,6 @@ mod tests {
 				CaptureKind::Overlay,
 			);
 		})?;
-		world
-			.run_system_once(apply_throw_routing)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(
 			world.get::<GrenadeThrow>(cook).map(|throw| throw.phase),
 			Some(GrenadePhase::Ready)

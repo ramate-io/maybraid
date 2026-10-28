@@ -1,4 +1,4 @@
-//! Bare-handed combat: trigger edges → [`AttackState`] → `Jab` clip + strike event.
+//! Bare-handed combat: trigger edges → [`AttackState`] → `Jab` clip + strike / impact events.
 
 mod aim;
 mod attack;
@@ -9,7 +9,6 @@ mod sound;
 
 use bevy::prelude::*;
 use characters::CharacterMotionSystems;
-use damage::DamageSystems;
 use player::PlayerSystems;
 
 pub use aim::{
@@ -19,9 +18,9 @@ pub use attack::{AttackKind, AttackPhase, AttackSpec, AttackState, AttackTiming,
 pub use character_rigs::Side;
 pub use runtime::{register_fisticuffs_user_runtime, teardown_fisticuffs};
 pub use sensor::{
-	character_to_world, collect_fist_hits, draw_fist_sensors, fist_collider, fist_local,
-	fist_world_rotation, resolve_fist_hits, sync_fist_sensors, FisticuffsHitSensor,
-	FisticuffsHitSensorOf, FisticuffsSensorDebug, PLACEHOLDER_FIST_RADIUS, PLACEHOLDER_FIST_REACH,
+	character_to_world, draw_fist_sensors, fist_collider, fist_local, fist_world_rotation,
+	resolve_fist_hits, sync_fist_sensors, FisticuffsHitSensor, FisticuffsHitSensorOf,
+	FisticuffsSensorDebug, PLACEHOLDER_FIST_RADIUS, PLACEHOLDER_FIST_REACH,
 	PLACEHOLDER_FOREARM_LENGTH, PLACEHOLDER_JAB_DAMAGE,
 };
 
@@ -30,6 +29,7 @@ pub use sensor::{
 #[derive(Component, Clone, Debug, Default)]
 pub struct FisticuffsUser {
 	pub state: AttackState,
+	pending_attacks: Vec<maybraid_controllers_core::Routed<AttackSpec>>,
 }
 
 /// Gameplay event at the start of the active (hit) window.
@@ -51,39 +51,32 @@ pub struct FisticuffsStrike {
 	pub target: Vec3,
 }
 
+/// The first solid surface reached by a jab's fist-volume sweep.
+///
+/// `collider` is the physical collider that stopped the jab. `target` is the
+/// collider itself or its health-owning parent when damage can be applied.
+#[derive(Message, Clone, Copy, Debug, PartialEq)]
+pub struct FisticuffsImpact {
+	pub attacker: Entity,
+	pub side: Side,
+	pub collider: Entity,
+	pub target: Option<Entity>,
+	pub point: Vec3,
+	pub normal: Vec3,
+}
+
 pub struct FisticuffsUserPlugin;
 
 impl Plugin for FisticuffsUserPlugin {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<damage::DamagePlugin>() {
-			app.add_plugins(damage::DamagePlugin);
-		}
 		register_fisticuffs_user_runtime(app);
 		sound::configure_strike_audio(app);
 		app.init_resource::<FisticuffsSensorDebug>()
-			.add_message::<FisticuffsStrike>()
-			.add_systems(
-				Update,
-				(
-					drive::tick_attack_state,
-					drive::apply_attack_intents,
-					drive::latch_jab_aim,
-					sensor::sync_fist_sensors,
-				)
-					.chain()
-					.in_set(PlayerSystems::Intent),
-			)
 			.add_systems(
 				Update,
 				drive::apply_fisticuffs_visual
 					.after(PlayerSystems::Locomotion)
 					.before(CharacterMotionSystems::Anim),
-			)
-			.add_systems(
-				PostUpdate,
-				sensor::resolve_fist_hits
-					.after(bevy::transform::TransformSystems::Propagate)
-					.before(DamageSystems::Apply),
 			)
 			.add_systems(
 				Update,
@@ -104,7 +97,7 @@ mod pose_tests {
 	use character_rigs::Side;
 	use maybraid_character_controller::produce::collect;
 	use maybraid_character_controller::CharacterIntent;
-	use maybraid_input::VirtualPad;
+	use maybraid_virtual_pad_controller::VirtualPad;
 
 	use super::*;
 

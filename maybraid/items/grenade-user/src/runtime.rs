@@ -28,15 +28,11 @@ pub fn register_grenade_user_runtime(app: &mut App) {
 	}
 	maybraid_spawns_grenades::register_grenade_spawn_runtime(app);
 	app.init_resource::<GrenadeUserRuntime>()
-		.add_message::<maybraid_equipment::EquippedItemUse>()
+		.add_observer(apply_throw_intents)
+		.add_observer(apply_throw_routing)
 		.add_message::<grenades::DropLiveGrenade>()
 		.add_message::<grenades::SpawnThrownGrenade>()
 		.add_message::<grenades::GrenadeDetonated>()
-		.add_systems(Update, apply_throw_intents.in_set(PlayerSystems::Intent))
-		.add_systems(
-			Update,
-			apply_throw_routing.after(apply_throw_intents).in_set(PlayerSystems::Intent),
-		)
 		.add_systems(Update, advance_throw.after(PlayerSystems::Intent))
 		.add_systems(Update, sync_equipment_swap_block.before(EquipmentSystems::BeginHolster))
 		.add_systems(Update, realize_equipment_teardown.in_set(EquipmentSystems::Teardown))

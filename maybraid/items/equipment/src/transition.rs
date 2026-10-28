@@ -3,8 +3,9 @@
 use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_items::Inventory;
-use maybraid_character_controller::{CharacterIntent, InventoryCyclingCategory};
-use maybraid_controllers_core::{InputRouter, InputSource};
+use maybraid_character_controller::{
+	ActorControlStatus, CharacterIntent, CharacterIntentFrame, InventoryCyclingCategory,
+};
 
 use crate::lifecycle::{EquipmentInventoryChanged, PendingEquipmentHold, PendingEquipmentTeardown};
 use crate::selection::InventoryCycling;
@@ -73,20 +74,9 @@ impl EquipmentHolster {
 		self.elapsed += dt;
 	}
 
-	/// Local-pad pause freezes this actor; unrelated holsters keep moving.
-	pub fn owner_suspended(router: &InputRouter, owner: Entity) -> bool {
-		let source = InputSource::local_pad();
-		router.is_suspended(source)
-			&& router.actor(source).is_some_and(|actor| actor.matches(owner))
-	}
-
-	fn clocks_frozen(router: Option<&InputRouter>, owner: Entity) -> bool {
-		router.is_some_and(|router| Self::owner_suspended(router, owner))
-	}
-
-	/// Advance unless the owning actor's local pad is suspended.
-	pub fn advance_if_active(&mut self, dt: f32, router: Option<&InputRouter>, owner: Entity) {
-		if Self::clocks_frozen(router, owner) {
+	/// Advance unless this actor's assigned source is suspended.
+	pub fn advance_if_active(&mut self, dt: f32, status: Option<&ActorControlStatus>) {
+		if status.is_some_and(|status| status.is_frozen()) {
 			return;
 		}
 		self.advance(dt);
@@ -131,24 +121,22 @@ pub struct BlocksEquipmentSwap;
 
 pub fn advance_equipment_holster(
 	time: Res<Time>,
-	router: Option<Res<InputRouter>>,
+	status: Query<&ActorControlStatus>,
 	mut holsters: Query<(Entity, &mut EquipmentHolster)>,
 ) {
 	let dt = time.delta_secs();
-	let router = router.as_deref();
 	for (entity, mut holster) in &mut holsters {
-		holster.advance_if_active(dt, router, entity);
+		holster.advance_if_active(dt, status.get(entity).ok());
 	}
 }
 
 pub fn clear_finished_equipment_holsters(
 	mut commands: Commands,
-	router: Option<Res<InputRouter>>,
+	status: Query<&ActorControlStatus>,
 	holsters: Query<(Entity, &EquipmentHolster)>,
 ) {
-	let router = router.as_deref();
 	for (entity, holster) in &holsters {
-		if EquipmentHolster::clocks_frozen(router, entity) {
+		if status.get(entity).is_ok_and(|status| status.is_frozen()) {
 			continue;
 		}
 		if holster.finished() {
@@ -158,44 +146,31 @@ pub fn clear_finished_equipment_holsters(
 }
 
 /// Start the holster motion; the kit changes at the dip.
-pub fn begin_equipment_holster(
-	mut intents: MessageReader<CharacterIntent>,
-	router: Res<InputRouter>,
-	cycling: Query<&InventoryCycling>,
-	mut commands: Commands,
-	actors: Query<(Has<EquipmentHolster>, Has<BlocksEquipmentSwap>, Option<&InventoryUser>)>,
-	bags: Query<&Inventory>,
-) {
-	let Some(dir) = weapon_queue_step(&mut intents) else {
-		return;
-	};
-	let Some(actor) = router.actor(InputSource::local_pad()) else {
-		return;
-	};
-	let category = cycling
-		.get(actor.entity())
-		.ok()
-		.map(InventoryCycling::category)
-		.unwrap_or_default();
-	if category != InventoryCyclingCategory::Weapons {
-		return;
+pub fn begin_equipment_holster(mut commands: Commands, frames: Query<&CharacterIntentFrame>) {
+	for frame in &frames {
+		let Some(input) = frame.get() else { continue };
+		input.clone().queue(&mut commands, |world, input| {
+			let Some(actor) = input.target().actor_entity() else { return };
+			let Some(dir) = weapon_queue_step(input.payload()) else { return };
+			let category = world
+				.get::<InventoryCycling>(actor)
+				.map(InventoryCycling::category)
+				.unwrap_or_default();
+			if category != InventoryCyclingCategory::Weapons
+				|| world.get::<EquipmentHolster>(actor).is_some()
+				|| world.get::<BlocksEquipmentSwap>(actor).is_some()
+			{
+				return;
+			}
+			let Some(bag_entity) = world.get::<InventoryUser>(actor).map(|user| user.bag) else {
+				return;
+			};
+			if !world.get::<Inventory>(bag_entity).is_some_and(|bag| bag.weapons.len() >= 2) {
+				return;
+			}
+			world.entity_mut(actor).insert(EquipmentHolster::with_direction(dir < 0));
+		});
 	}
-	let Ok((holstering, blocked, user)) = actors.get(actor.entity()) else {
-		return;
-	};
-	if holstering || blocked {
-		return;
-	}
-	let Some(user) = user else {
-		return;
-	};
-	let Ok(bag) = bags.get(user.bag) else {
-		return;
-	};
-	if bag.weapons.len() < 2 {
-		return;
-	}
-	EquipmentHolster::begin(&mut commands.entity(actor.entity()), dir < 0);
 }
 
 /// Replace the held kit once the old gun has dipped out of the way.
@@ -216,8 +191,8 @@ pub fn commit_equipment_holster(
 	}
 }
 
-fn weapon_queue_step(intents: &mut MessageReader<CharacterIntent>) -> Option<i8> {
-	for intent in intents.read() {
+fn weapon_queue_step(intents: &[CharacterIntent]) -> Option<i8> {
+	for intent in intents {
 		match *intent {
 			CharacterIntent::SwapActive => return Some(1),
 			CharacterIntent::CycleEquippedQueue(dir) if dir != 0 => return Some(dir),
@@ -264,6 +239,19 @@ mod tests {
 		world
 			.resource_mut::<InputRouter>()
 			.assign_actor(InputSource::local_pad(), ActorTarget::new(actor));
+	}
+
+	fn set_frame(
+		world: &mut World,
+		actor: Entity,
+		intents: Vec<CharacterIntent>,
+	) -> anyhow::Result<()> {
+		let input = world
+			.resource::<InputRouter>()
+			.route_actor(InputSource::local_pad(), intents)
+			.ok_or_else(|| anyhow::anyhow!("actor route"))?;
+		world.entity_mut(actor).insert(CharacterIntentFrame::new(input));
+		Ok(())
 	}
 
 	#[test]
@@ -314,19 +302,18 @@ mod tests {
 	fn same_frame_category_then_y_starts_weapon_swap() -> anyhow::Result<()> {
 		let inventory = two_gun_bag();
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
 		world.init_resource::<ActiveInventoryCyclingCategory>();
 		let bag = world.spawn(inventory).id();
 		let actor = world.spawn(InventoryUser::carrying(bag)).id();
 		assign_actor(&mut world, actor);
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SelectInventoryCyclingCategory(
-					InventoryCyclingCategory::Weapons,
-				));
-				writer.write(CharacterIntent::SwapActive);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		set_frame(
+			&mut world,
+			actor,
+			vec![
+				CharacterIntent::SelectInventoryCyclingCategory(InventoryCyclingCategory::Weapons),
+				CharacterIntent::SwapActive,
+			],
+		)?;
 		world
 			.run_system_once(apply_inventory_category_selection)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -347,16 +334,11 @@ mod tests {
 	fn y_starts_a_swap_without_changing_the_kit() -> anyhow::Result<()> {
 		let inventory = two_gun_bag();
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
 		let bag = world.spawn(inventory).id();
 		let held = world.spawn_empty().id();
 		let actor = world.spawn(InventoryUser::carrying(bag)).id();
 		assign_actor(&mut world, actor);
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SwapActive);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		set_frame(&mut world, actor, vec![CharacterIntent::SwapActive])?;
 		world
 			.run_system_once(begin_equipment_holster)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -375,15 +357,10 @@ mod tests {
 	fn reverse_queue_step_starts_a_swap_without_rotating_early() -> anyhow::Result<()> {
 		let inventory = two_gun_bag();
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
 		let bag = world.spawn(inventory).id();
 		let actor = world.spawn(InventoryUser::carrying(bag)).id();
 		assign_actor(&mut world, actor);
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::CycleEquippedQueue(-1));
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		set_frame(&mut world, actor, vec![CharacterIntent::CycleEquippedQueue(-1)])?;
 		world
 			.run_system_once(begin_equipment_holster)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -486,15 +463,10 @@ mod tests {
 			tanzes: Vec::new(),
 		};
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
 		let bag = world.spawn(inventory).id();
 		let actor = world.spawn((InventoryUser::carrying(bag), BlocksEquipmentSwap)).id();
 		assign_actor(&mut world, actor);
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SwapActive);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		set_frame(&mut world, actor, vec![CharacterIntent::SwapActive])?;
 		world
 			.run_system_once(begin_equipment_holster)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -515,15 +487,10 @@ mod tests {
 			tanzes: Vec::new(),
 		};
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
 		let bag = world.spawn(inventory).id();
 		let actor = world.spawn(InventoryUser::carrying(bag)).id();
 		assign_actor(&mut world, actor);
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SwapActive);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		set_frame(&mut world, actor, vec![CharacterIntent::SwapActive])?;
 		world
 			.run_system_once(begin_equipment_holster)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -584,10 +551,15 @@ mod tests {
 		seed_time(&mut world, Duration::from_millis(200));
 		let actor = world.spawn(holster_at(EQUIPMENT_HOLSTER_SECS * 0.5 - 0.01, false)).id();
 		let npc = world.spawn(holster_at(EQUIPMENT_HOLSTER_SECS * 0.5 - 0.01, false)).id();
-		let mut router = InputRouter::default();
-		router.assign_actor(InputSource::local_pad(), ActorTarget::new(actor));
-		router.set_paused(true);
-		world.insert_resource(router);
+		world.entity_mut(actor).insert(ActorControlStatus::from(
+			maybraid_controllers_core::ActorRouteStatus {
+				source: InputSource::local_pad(),
+				connected: true,
+				captured: false,
+				suspended: true,
+				assigned: true,
+			},
+		));
 		world
 			.run_system_once(advance_equipment_holster)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -611,10 +583,15 @@ mod tests {
 		seed_time(&mut world, Duration::from_millis(400));
 		let actor = world.spawn(holster_at(EQUIPMENT_HOLSTER_SECS * 0.5 + 0.01, true)).id();
 		let npc = world.spawn(holster_at(EQUIPMENT_HOLSTER_SECS * 0.5 + 0.01, true)).id();
-		let mut router = InputRouter::default();
-		router.assign_actor(InputSource::local_pad(), ActorTarget::new(actor));
-		router.set_paused(true);
-		world.insert_resource(router);
+		world.entity_mut(actor).insert(ActorControlStatus::from(
+			maybraid_controllers_core::ActorRouteStatus {
+				source: InputSource::local_pad(),
+				connected: true,
+				captured: false,
+				suspended: true,
+				assigned: true,
+			},
+		));
 		world
 			.run_system_once(advance_equipment_holster)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

@@ -4,8 +4,10 @@ use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_items::Inventory;
 use lubikans::{LubikanAccountId, LubikanLedger, LubikanOwner};
-use maybraid_character_controller::{CharacterIntent, InventoryCyclingCategory};
-use maybraid_controllers_core::{InputRouter, InputSource};
+use maybraid_character_controller::{
+	CharacterIntent, CharacterIntentFrame, InventoryCyclingCategory,
+};
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 
 use crate::lifecycle::EquipmentInventoryChanged;
 
@@ -97,78 +99,91 @@ impl EquippedLubikanQueue {
 
 /// D-pad category pick runs before holster begin and queue cycling on the same frame.
 pub fn apply_inventory_category_selection(
-	router: Res<InputRouter>,
 	mut commands: Commands,
-	mut cycling: Query<&mut InventoryCycling>,
-	mut projected: ResMut<ActiveInventoryCyclingCategory>,
-	mut intents: MessageReader<CharacterIntent>,
+	frames: Query<&CharacterIntentFrame>,
 ) {
-	let Some(actor) = router.actor(InputSource::local_pad()) else {
-		return;
-	};
-	let mut selected = None;
-	for intent in intents.read() {
-		if let CharacterIntent::SelectInventoryCyclingCategory(next) = *intent {
-			selected = Some(next);
-		}
-	}
-	if let Some(next) = selected {
-		if let Ok(mut owner) = cycling.get_mut(actor.entity()) {
-			owner.select(next);
-		} else {
-			commands.entity(actor.entity()).insert(InventoryCycling::new(next));
-		}
-		projected.project(next);
-	} else if let Ok(owner) = cycling.get(actor.entity()) {
-		projected.project(owner.category());
+	for frame in &frames {
+		let Some(input) = frame.get() else { continue };
+		input.clone().queue(&mut commands, |world, input| {
+			let Some(actor) = input.target().actor_entity() else { return };
+			let selected = input
+				.payload()
+				.iter()
+				.filter_map(|intent| match *intent {
+					CharacterIntent::SelectInventoryCyclingCategory(category) => Some(category),
+					_ => None,
+				})
+				.last();
+			if let Some(category) = selected {
+				if let Some(mut cycling) = world.get_mut::<InventoryCycling>(actor) {
+					cycling.select(category);
+				} else {
+					world.entity_mut(actor).insert(InventoryCycling::new(category));
+				}
+			}
+			let primary = world
+				.get_resource::<PrimaryVirtualPad>()
+				.is_none_or(|primary| input.source().entity() == Some(primary.0));
+			if primary {
+				let category = world
+					.get::<InventoryCycling>(actor)
+					.map(InventoryCycling::category)
+					.unwrap_or_default();
+				if let Some(mut projected) =
+					world.get_resource_mut::<ActiveInventoryCyclingCategory>()
+				{
+					projected.project(category);
+				}
+			}
+		});
 	}
 }
 
+/// Cycle only the inventory owned by the actor on the validated delivery.
 pub fn cycle_equipped_inventory_queues(
-	router: Res<InputRouter>,
-	cycling: Query<&InventoryCycling>,
-	mut intents: MessageReader<CharacterIntent>,
-	mut changes: MessageWriter<EquipmentInventoryChanged>,
-	users: Query<&InventoryUser>,
-	mut bags: Query<&mut Inventory>,
-	mut ledgers: Query<&mut LubikanLedger, With<LubikanOwner>>,
+	mut commands: Commands,
+	frames: Query<&CharacterIntentFrame>,
 ) {
-	let Some(actor) = router.actor(InputSource::local_pad()) else {
-		return;
-	};
-	let Some(dir) = queue_step(&mut intents) else {
-		return;
-	};
-	let category = cycling
-		.get(actor.entity())
-		.ok()
-		.map(InventoryCycling::category)
-		.unwrap_or_default();
-	if category == InventoryCyclingCategory::Lubikans {
-		if let Ok(mut ledger) = ledgers.get_mut(actor.entity()) {
-			EquippedLubikanQueue::cycle(&mut ledger, dir);
-		}
-		return;
+	for frame in &frames {
+		let Some(input) = frame.get() else { continue };
+		input.clone().queue(&mut commands, |world, input| {
+			let Some(actor) = input.target().actor_entity() else { return };
+			let Some(dir) = queue_step(input.payload()) else { return };
+			let category = world
+				.get::<InventoryCycling>(actor)
+				.map(InventoryCycling::category)
+				.unwrap_or_default();
+			match category {
+				InventoryCyclingCategory::Lubikans => {
+					if world.get::<LubikanOwner>(actor).is_none() {
+						return;
+					}
+					if let Some(mut ledger) = world.get_mut::<LubikanLedger>(actor) {
+						EquippedLubikanQueue::cycle(&mut ledger, dir);
+					}
+				}
+				InventoryCyclingCategory::Weapons => {
+					// Weapon queues are committed by EquipmentHolster.
+				}
+				InventoryCyclingCategory::SkillMaps => {
+					let Some(bag_entity) = world.get::<InventoryUser>(actor).map(|user| user.bag)
+					else {
+						return;
+					};
+					let Some(mut bag) = world.get_mut::<Inventory>(bag_entity) else { return };
+					if !InventoryCycling::new(category).cycle_bag(&mut bag, dir) {
+						return;
+					}
+					let snapshot = bag.clone();
+					world.write_message(EquipmentInventoryChanged::new(actor, snapshot));
+				}
+			}
+		});
 	}
-	if category == InventoryCyclingCategory::Weapons {
-		// Weapon queue steps use [`crate::transition::begin_equipment_holster`].
-		return;
-	}
-	let Ok(user) = users.get(actor.entity()) else {
-		return;
-	};
-	let Ok(mut bag) = bags.get_mut(user.bag) else {
-		return;
-	};
-	let owner = InventoryCycling::new(category);
-	if !owner.cycle_bag(&mut bag, dir) {
-		return;
-	}
-	changes.write(EquipmentInventoryChanged::new(actor.entity(), bag.clone()));
 }
 
-fn queue_step(intents: &mut MessageReader<CharacterIntent>) -> Option<i8> {
-	for intent in intents.read() {
+fn queue_step(intents: &[CharacterIntent]) -> Option<i8> {
+	for intent in intents {
 		match *intent {
 			CharacterIntent::SwapActive => return Some(1),
 			CharacterIntent::CycleEquippedQueue(step) => return Some(step),
@@ -184,7 +199,7 @@ mod tests {
 
 	use character_items::InventoryItem;
 	use lubikans::{LubikanDefinition, LubikanDefinitionId, LubikanLedger, LubikanSelection};
-	use maybraid_controllers_core::ActorTarget;
+	use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource};
 
 	use super::*;
 
@@ -197,23 +212,64 @@ mod tests {
 		actor
 	}
 
+	fn set_frame(
+		world: &mut World,
+		actor: Entity,
+		intents: Vec<CharacterIntent>,
+	) -> anyhow::Result<()> {
+		let input = world
+			.resource::<InputRouter>()
+			.route_actor(InputSource::local_pad(), intents)
+			.ok_or_else(|| anyhow::anyhow!("actor route"))?;
+		world.entity_mut(actor).insert(CharacterIntentFrame::new(input));
+		Ok(())
+	}
+
+	#[test]
+	fn reassigned_source_cannot_apply_a_cached_category() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<ActiveInventoryCyclingCategory>();
+		let first = assign_actor(&mut world, ());
+		let second = world.spawn(InventoryCycling::default()).id();
+		set_frame(
+			&mut world,
+			first,
+			vec![CharacterIntent::SelectInventoryCyclingCategory(
+				InventoryCyclingCategory::SkillMaps,
+			)],
+		)?;
+		world
+			.resource_mut::<InputRouter>()
+			.assign_actor(InputSource::local_pad(), ActorTarget::new(second));
+		world
+			.run_system_once(apply_inventory_category_selection)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(
+			world
+				.get::<InventoryCycling>(first)
+				.ok_or_else(|| anyhow::anyhow!("first actor cycling"))?
+				.category(),
+			InventoryCyclingCategory::Weapons
+		);
+		Ok(())
+	}
+
 	#[test]
 	fn category_selection_updates_the_owner() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
 		world.init_resource::<ActiveInventoryCyclingCategory>();
 		world.init_resource::<InputRouter>();
 		let actor = world.spawn(InventoryCycling::default()).id();
 		world
 			.resource_mut::<InputRouter>()
 			.assign_actor(InputSource::local_pad(), ActorTarget::new(actor));
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SelectInventoryCyclingCategory(
-					InventoryCyclingCategory::SkillMaps,
-				));
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		set_frame(
+			&mut world,
+			actor,
+			vec![CharacterIntent::SelectInventoryCyclingCategory(
+				InventoryCyclingCategory::SkillMaps,
+			)],
+		)?;
 		world
 			.run_system_once(apply_inventory_category_selection)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -243,7 +299,6 @@ mod tests {
 			tanzes: Vec::new(),
 		};
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
 		world.init_resource::<Messages<EquipmentInventoryChanged>>();
 		world.insert_resource(ActiveInventoryCyclingCategory(InventoryCyclingCategory::SkillMaps));
 		let bag = world.spawn(inventory).id();
@@ -251,13 +306,13 @@ mod tests {
 		if let Some(mut cycling) = world.get_mut::<InventoryCycling>(actor) {
 			cycling.select(InventoryCyclingCategory::SkillMaps);
 		}
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SelectInventoryCyclingCategory(
-					InventoryCyclingCategory::Weapons,
-				));
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		set_frame(
+			&mut world,
+			actor,
+			vec![CharacterIntent::SelectInventoryCyclingCategory(
+				InventoryCyclingCategory::Weapons,
+			)],
+		)?;
 		world
 			.run_system_once(apply_inventory_category_selection)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -287,19 +342,20 @@ mod tests {
 			tanzes: Vec::new(),
 		};
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
 		world.init_resource::<Messages<EquipmentInventoryChanged>>();
 		world.insert_resource(ActiveInventoryCyclingCategory(InventoryCyclingCategory::Weapons));
 		let bag = world.spawn(inventory).id();
-		assign_actor(&mut world, InventoryUser::carrying(bag));
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SelectInventoryCyclingCategory(
+		let actor = assign_actor(&mut world, InventoryUser::carrying(bag));
+		set_frame(
+			&mut world,
+			actor,
+			vec![
+				CharacterIntent::SelectInventoryCyclingCategory(
 					InventoryCyclingCategory::SkillMaps,
-				));
-				writer.write(CharacterIntent::SwapActive);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+				),
+				CharacterIntent::SwapActive,
+			],
+		)?;
 		world
 			.run_system_once(apply_inventory_category_selection)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

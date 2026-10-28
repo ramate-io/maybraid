@@ -31,11 +31,11 @@ pub mod world_debug;
 mod mob_spawn;
 mod pitch;
 mod player_lifecycle;
-mod spawn_picker;
 mod player_position;
 mod poi;
 pub mod render_scale;
 mod screenshot;
+mod spawn_picker;
 mod spawn_surface;
 mod start;
 mod stash;
@@ -60,8 +60,8 @@ pub use commands::{
 };
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
-	InventoryEditCameraFollow, WorldGameplayEnabled, WorldMenuShell, WorldPlaySessionEnded,
-	WorldSceneryVisible, WorldSurfaceReady, WorldSurfaceSet,
+	InventoryEditCameraFollow, WorldMenuShell, WorldSceneryVisible, WorldSurfaceReady,
+	WorldSurfaceSet,
 };
 pub use cycle_target::InventoryCycleTarget;
 pub use durham::Durham;
@@ -70,28 +70,12 @@ pub use first_wave::UnitXTile;
 pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
-pub use item_icons::{
-	discover_icon_cache_dir, item_icon_requests, InventoryItemSubject, ItemIconCache,
-	ItemIconPlugin, ITEM_ICON_RESOLUTION,
-};
-pub use lod::hcsg::{HcsgClass, HcsgDemand, Outstanding};
-pub use lod::LodJobCounter;
+pub use item_icons::ItemIconPlugin;
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
-pub use maybraid_equipment::ActiveInventoryCyclingCategory;
-pub use maybraid_session::{
-	ActorRetired, InputRouter, InputRouting, RoutingEvent, SessionBit, SessionCapabilities,
-	SessionCapabilitySystems, SessionLifecycleSystems, SessionPlugin,
-};
-pub use maybraid_sky::{
-	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
-	SUN_COLOR, SUN_ILLUMINANCE,
-};
 pub use occupancy::{WorldOccupancyPlugin, WorldOccupancySystems};
-pub use player_camera::{CameraPov, CameraPovLocked};
 pub use player_lifecycle::{
 	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
 };
-pub use spawn_picker::{SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet};
 pub use player_position::{
 	resume_discovery_from_saved_waypoints, PlayerPositionPlugin, PlayerPositionWaypoints,
 };
@@ -109,6 +93,7 @@ pub use render_scale::{
 	VisualStyleSignals, DEVICE_TIER_ENV, FORCE_OFFSCREEN_ENV, PRESENTATION_TREATMENT_ENV,
 	RENDER_SCALE_ENV, UNIFIED_MEMORY_NATIVE_BYTES, VISUAL_STYLE_ENV,
 };
+pub use spawn_picker::{SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet};
 pub use start::{
 	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
 	START_AT_ENV,
@@ -136,14 +121,13 @@ use fisticuffs_user::{FisticuffsSensorDebug, FisticuffsUserPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
-use maybraid_character_controller::CharacterControlSystems;
 use maybraid_controllers_core::CaptureResolveSystems;
 use maybraid_game_mode_discover::DiscoveryPlayerPlugin;
-use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_locomotion_controller::LocomotionControllerPlugin;
 use maybraid_skill_map::SkillMapSystems;
 use maybraid_sky::SkyDomePlugin;
 use maybraid_vfx::VfxPlugin;
+use maybraid_virtual_pad_controller::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_weather::WeatherPlugin;
 use player::{
 	register_motor_traction_physics, MotorRequestStage, PlayerPlugin, PlayerPresentationPlugin,
@@ -361,15 +345,12 @@ impl Plugin for WorldPlugin {
 		#[cfg(feature = "debug-commands")]
 		app.add_plugins(world_debug::WorldDebugPlugin);
 		if self.debug_chrome {
-			app.add_systems(Startup, ui::spawn_mob_debug_hud).add_systems(
-				Update,
-				(
-					control::echo_character_intents
-						.after(CharacterControlSystems)
-						.before(game_commands::ui::update_debug_ui),
+			app.add_observer(control::echo_character_intents)
+				.add_systems(Startup, ui::spawn_mob_debug_hud)
+				.add_systems(
+					Update,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-				),
-			);
+				);
 		}
 	}
 }

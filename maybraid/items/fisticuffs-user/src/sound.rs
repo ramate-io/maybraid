@@ -5,10 +5,34 @@
 
 use bevy::prelude::*;
 use maybraid_audio::{
-	Audio, AudioClip, AudioPlugin, AudioSystems, FlinchProfile, FlinchSounds, FlinchState, Mixer,
+	Audio, AudioBus, AudioClip, AudioPlugin, AudioSystems, FlinchProfile, FlinchSounds,
+	FlinchState, Mixer, SpatialOneShot,
 };
 
-use crate::{FisticuffsStrike, FisticuffsUser};
+use crate::{FisticuffsImpact, FisticuffsStrike, FisticuffsUser};
+
+pub const FISTICUFFS_IMPACT_SOUND: &str = "sound-effects/weapons/fisticuffs/impact_001.wav";
+
+#[derive(Resource)]
+pub(crate) struct FisticuffsImpactSounds {
+	impact: Handle<AudioClip>,
+}
+
+impl FromWorld for FisticuffsImpactSounds {
+	fn from_world(world: &mut World) -> Self {
+		Self { impact: world.resource::<AssetServer>().load(FISTICUFFS_IMPACT_SOUND) }
+	}
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ImpactAudioRequest {
+	point: Vec3,
+	bus: AudioBus,
+}
+
+fn impact_audio_request(impact: &FisticuffsImpact) -> ImpactAudioRequest {
+	ImpactAudioRequest { point: impact.point, bus: AudioBus::Impacts }
+}
 
 pub(crate) fn ensure_strike_audio_state(
 	mut commands: Commands,
@@ -59,16 +83,51 @@ pub(crate) fn play_strike_grunts(
 	}
 }
 
+pub(crate) fn play_impact_sounds(
+	mut commands: Commands,
+	mut impacts: MessageReader<FisticuffsImpact>,
+	sounds: Option<Res<FisticuffsImpactSounds>>,
+	clips: Res<Assets<AudioClip>>,
+	audio: Option<Res<Audio>>,
+	mixer: Option<ResMut<Mixer>>,
+	listeners: Query<&GlobalTransform, With<SpatialListener>>,
+) {
+	let (Some(sounds), Some(audio), Some(mut mixer), Some(listener)) =
+		(sounds, audio, mixer, listeners.iter().next())
+	else {
+		return;
+	};
+	for impact in impacts.read() {
+		let request = impact_audio_request(impact);
+		audio.play_or_queue(
+			&mut commands,
+			&sounds.impact,
+			&clips,
+			SpatialOneShot::at(request.point).bus(request.bus),
+			&mut mixer,
+			listener,
+			"fisticuffs-impact",
+		);
+	}
+}
+
 pub(crate) fn configure_strike_audio(app: &mut App) {
 	if !app.is_plugin_added::<AudioPlugin>() {
 		app.add_plugins(AudioPlugin);
 	}
-	app.add_systems(
-		PostUpdate,
-		(ensure_strike_audio_state, play_strike_grunts)
-			.chain()
-			.before(AudioSystems::Sync),
-	);
+	app.init_resource::<FisticuffsImpactSounds>()
+		.add_systems(
+			PostUpdate,
+			(ensure_strike_audio_state, play_strike_grunts)
+				.chain()
+				.before(AudioSystems::Sync),
+		)
+		.add_systems(
+			PostUpdate,
+			play_impact_sounds
+				.after(crate::sensor::resolve_fist_hits)
+				.before(AudioSystems::Sync),
+		);
 }
 
 #[cfg(test)]
@@ -97,6 +156,7 @@ mod tests {
 	fn test_app_with_audio() -> Option<App> {
 		let mut app = App::new();
 		app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+		app.add_message::<FisticuffsImpact>();
 		app.add_plugins(AudioPlugin);
 		app.update();
 		if app.world().get_resource::<Audio>().is_none() {
@@ -150,5 +210,28 @@ mod tests {
 		});
 		app.update();
 		assert_eq!(strike_grunt_count(app.world_mut()), 0);
+	}
+
+	#[test]
+	fn landing_audio_request_uses_impact_point_and_punch_clip() -> anyhow::Result<()> {
+		let impact = FisticuffsImpact {
+			attacker: Entity::from_bits(1),
+			side: character_rigs::Side::Left,
+			collider: Entity::from_bits(2),
+			target: None,
+			point: Vec3::new(1.0, 2.0, 3.0),
+			normal: Vec3::Y,
+		};
+		let request = impact_audio_request(&impact);
+		assert_eq!(request.point, impact.point);
+		assert_eq!(request.bus, AudioBus::Impacts);
+		assert_eq!(FISTICUFFS_IMPACT_SOUND, "sound-effects/weapons/fisticuffs/impact_001.wav");
+		let wav_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+			.join("../../assets/")
+			.join(FISTICUFFS_IMPACT_SOUND);
+		let bytes = std::fs::read(wav_path)?;
+		let frames = decode_wav_mono(&bytes)?;
+		assert!(!frames.is_empty());
+		Ok(())
 	}
 }

@@ -37,7 +37,6 @@ pub use world_player::PlayerLifeSet;
 
 use bevy::prelude::*;
 use maybraid_controllers_core::CaptureResolveSystems;
-use maybraid_input::MenuNavPad;
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PlayerHandoffSystems {
@@ -58,9 +57,7 @@ pub fn register_player_spawn_runtime(app: &mut App) {
 		.init_resource::<WorldPlayerRespawnConfig>()
 		.init_resource::<WorldPlayerRespawnState>()
 		.init_resource::<SpawnPickerSheet>()
-		.init_resource::<SpawnPickerController>()
-		.init_resource::<SpawnPickerCapture>()
-		.init_resource::<MenuNavPad>()
+		.add_observer(dispatch_spawn_picker)
 		.add_message::<BeginPlayerArrival>()
 		.add_message::<DestinationSelected>()
 		.add_message::<PlayerChoseRespawnPoi>()
@@ -80,8 +77,7 @@ pub struct PlayerSpawnPlugin;
 impl Plugin for PlayerSpawnPlugin {
 	fn build(&self, app: &mut App) {
 		register_player_spawn_runtime(app);
-		app.add_systems(Update, refresh_spawn_picker_focus.in_set(CaptureResolveSystems))
-			.add_systems(Update, dispatch_spawn_picker.after(begin_player_arrivals));
+		app.add_systems(Update, refresh_spawn_picker_focus.in_set(CaptureResolveSystems));
 	}
 }
 
