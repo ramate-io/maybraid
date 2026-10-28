@@ -151,12 +151,16 @@ impl WizardsTower {
 	fn high_primitives(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		for floor in &self.column.floors {
-			floor.emit_external_features(&mut children, lod_ref);
+			floor.emit_external_features_at_mesh_level(&mut children, lod_ref, LodSceneLevel::High);
 			// Rooms and lantern. The deck comes from the Medium exterior flatten.
 			// Spire stairs come from that flatten too, not a second High-only bake.
 			floor.emit_internal_features(&mut children, lod_ref);
 		}
-		self.column.perch.emit_external_features(&mut children, lod_ref);
+		self.column.perch.emit_external_features_at_mesh_level(
+			&mut children,
+			lod_ref,
+			LodSceneLevel::High,
+		);
 		scene_children(children)
 	}
 }
@@ -228,12 +232,20 @@ impl LodScene for WizardsTower {
 				let mut chunks = Vec::new();
 				for floor in &self.column.floors {
 					let mut children: Vec<Box<dyn Scene>> = Vec::new();
-					floor.emit_external_features(&mut children, lod_ref);
+					floor.emit_external_features_at_mesh_level(
+						&mut children,
+						lod_ref,
+						LodSceneLevel::High,
+					);
 					floor.emit_internal_features(&mut children, lod_ref);
 					chunks.push(SceneChunk::weighted(4, scene_children(children)));
 				}
 				let mut perch_children: Vec<Box<dyn Scene>> = Vec::new();
-				self.column.perch.emit_external_features(&mut perch_children, lod_ref);
+				self.column.perch.emit_external_features_at_mesh_level(
+					&mut perch_children,
+					lod_ref,
+					LodSceneLevel::High,
+				);
 				chunks.push(SceneChunk::weighted(3, scene_children(perch_children)));
 				SceneChunk::chunks(chunks)
 			}
@@ -253,8 +265,12 @@ impl LodScene for WizardsTower {
 
 #[cfg(test)]
 mod tests {
+	use bevy::prelude::{App, AssetPlugin, Children, Entity, TaskPoolPlugin, Transform};
+	use bevy::scene::{ScenePlugin, WorldSceneExt};
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use material_ref::MaterialRefRoot;
+	use scene_ref::SceneRefRoot;
 
 	use super::*;
 
@@ -264,6 +280,144 @@ mod tests {
 			Vec3::new(10.0, 80.0, 10.0),
 		));
 		WizardsTower::new(&constraints, 0.0)
+	}
+
+	fn scene_refs_for_material(app: &App, material: &material_ref::MaterialRef) -> Vec<String> {
+		let world = app.world();
+		let roots: Vec<Entity> = world
+			.iter_entities()
+			.filter_map(|entity| {
+				entity
+					.get::<MaterialRefRoot>()
+					.filter(|root| &root.0 == material)
+					.map(|_| entity.id())
+			})
+			.collect();
+		let mut paths = Vec::new();
+		for root in roots {
+			let mut pending = vec![root];
+			while let Some(entity) = pending.pop() {
+				if let Some(scene_ref) = world.get::<SceneRefRoot>(entity) {
+					paths.push(scene_ref.0.path.clone());
+				}
+				if let Some(children) = world.get::<Children>(entity) {
+					pending.extend(children.iter());
+				}
+			}
+		}
+		paths
+	}
+
+	fn scene_app() -> App {
+		let mut app = App::new();
+		app.add_plugins((
+			TaskPoolPlugin::default(),
+			AssetPlugin::default(),
+			ScenePlugin::default(),
+		));
+		app
+	}
+
+	fn spawn_scene(app: &mut App, scene: impl bevy::scene::Scene + 'static) {
+		assert!(app.world_mut().spawn_scene(scene).is_ok());
+	}
+
+	fn expected_room_scene_ref_count(tower: &WizardsTower, lod_ref: &LodRef) -> usize {
+		let mut app = scene_app();
+		for floor in &tower.column.floors {
+			for room in &floor.rooms {
+				for node in room.partition_nodes_for_level(LodSceneLevel::High).flatten() {
+					spawn_scene(&mut app, node.scene_with_level(lod_ref, LodSceneLevel::High));
+				}
+			}
+		}
+		match &tower.room_material {
+			Some(material) => scene_refs_for_material(&app, material).len(),
+			None => 0,
+		}
+	}
+
+	fn expected_shell_scene_ref_count(tower: &WizardsTower, lod_ref: &LodRef) -> usize {
+		let mut app = scene_app();
+		for floor in &tower.column.floors {
+			for node in floor.partition_nodes_for_level(LodSceneLevel::Medium).flatten() {
+				spawn_scene(&mut app, node.scene_with_level(lod_ref, LodSceneLevel::High));
+			}
+		}
+		for node in tower.column.perch.partition_nodes_for_level(LodSceneLevel::Medium).flatten() {
+			spawn_scene(&mut app, node.scene_with_level(lod_ref, LodSceneLevel::High));
+		}
+		match &tower.wall_material {
+			Some(material) => scene_refs_for_material(&app, material).len(),
+			None => 0,
+		}
+	}
+
+	fn assert_tier(paths: &[String], suffix: &str) {
+		assert!(!paths.is_empty());
+		assert!(paths.iter().all(|path| path.contains(suffix)));
+	}
+
+	#[test]
+	fn high_exterior_uses_high_meshes_without_duplicating_rooms() {
+		let wall = MaterialRef::named("wizard-shell");
+		let room = MaterialRef::named("wizard-room");
+		let tower = tower().with_finish(wall.clone(), room.clone());
+		let transform = Transform::IDENTITY;
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &transform,
+			current_transform: &transform,
+			bounds: &bounds,
+		};
+		let expected_rooms = expected_room_scene_ref_count(&tower, &lod_ref);
+		let expected_shell = expected_shell_scene_ref_count(&tower, &lod_ref);
+		assert!(expected_rooms > 0);
+		assert!(expected_shell > 0);
+
+		let mut high_app = scene_app();
+		spawn_scene(&mut high_app, tower.scene_with_level(&lod_ref, LodSceneLevel::High));
+		let high_shell = scene_refs_for_material(&high_app, &wall);
+		assert_tier(&high_shell, "_high_res.");
+		assert_eq!(high_shell.len(), expected_shell);
+		assert_eq!(scene_refs_for_material(&high_app, &room).len(), expected_rooms);
+
+		let mut medium_app = scene_app();
+		spawn_scene(&mut medium_app, tower.scene_with_level(&lod_ref, LodSceneLevel::Medium));
+		let medium_shell = scene_refs_for_material(&medium_app, &wall);
+		assert_tier(&medium_shell, "_mid_res.");
+		assert_eq!(medium_shell.len(), expected_shell);
+		assert!(scene_refs_for_material(&medium_app, &room).is_empty());
+	}
+
+	#[test]
+	fn high_chunks_use_high_exterior_meshes_without_duplicating_rooms() {
+		let wall = MaterialRef::named("wizard-shell");
+		let room = MaterialRef::named("wizard-room");
+		let tower = tower().with_finish(wall.clone(), room.clone());
+		let transform = Transform::IDENTITY;
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &transform,
+			current_transform: &transform,
+			bounds: &bounds,
+		};
+		let expected_rooms = expected_room_scene_ref_count(&tower, &lod_ref);
+		let expected_shell = expected_shell_scene_ref_count(&tower, &lod_ref);
+		assert!(expected_rooms > 0);
+		assert!(expected_shell > 0);
+		let mut app = scene_app();
+		for (_, scene) in
+			tower.scene_chunks_with_level(&lod_ref, LodSceneLevel::High).into_primitives()
+		{
+			spawn_scene(&mut app, scene);
+		}
+		let shell = scene_refs_for_material(&app, &wall);
+		assert_tier(&shell, "_high_res.");
+		assert_eq!(shell.len(), expected_shell);
+		assert_eq!(scene_refs_for_material(&app, &room).len(), expected_rooms);
 	}
 
 	#[test]
