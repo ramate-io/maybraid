@@ -18,6 +18,7 @@ occupancy-rewards = { workspace = true }
 player = { workspace = true }
 threat-intelligence = { workspace = true }
 
+[dev-dependencies]
 chico = { workspace = true }
 lod = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
