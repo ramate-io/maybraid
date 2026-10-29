@@ -736,6 +736,7 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "character-ui-menu",
+ "menu-components",
 ]
 
 [[package]]
@@ -2224,6 +2225,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "bikanwarda-character"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "character-animations",
+ "character-motion",
+ "character-rigs",
+ "characters",
+ "lod",
+ "lod-avian",
+ "rigs",
+]
+
+[[package]]
 name = "bikanwarda-lubikans"
 version = "0.1.5"
 dependencies = [
@@ -2484,6 +2501,7 @@ dependencies = [
  "lod",
  "material-ref",
  "procedural-common",
+ "scene-ref",
 ]
 
 [[package]]
@@ -2790,6 +2808,7 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "bevy-character-ui-menu-renderer",
+ "bikanwarda-character",
  "camera-controls",
  "character-animations",
  "character-creation-menus",
@@ -2817,6 +2836,7 @@ dependencies = [
  "character-items",
  "character-ui-menu",
  "characters",
+ "lubikans",
  "tanz-user",
 ]
 
@@ -2944,6 +2964,7 @@ dependencies = [
  "rigs",
  "scene-ref",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -4578,7 +4599,9 @@ dependencies = [
  "material-ref",
  "maybraid-audio",
  "maybraid-character-controller",
- "maybraid-input",
+ "maybraid-controllers-core",
+ "maybraid-equipment",
+ "maybraid-virtual-pad-controller",
  "player",
  "player-camera",
 ]
@@ -4597,6 +4620,7 @@ dependencies = [
  "lod-avian",
  "material-ref",
  "maybraid-audio",
+ "maybraid-spawns-projectiles",
  "procedural-common",
  "projectiles",
  "scene-ref",
@@ -4641,7 +4665,9 @@ dependencies = [
  "lod-gimme",
  "material-ref",
  "maybraid-character-controller",
- "maybraid-input",
+ "maybraid-controllers-core",
+ "maybraid-locomotion-controller",
+ "maybraid-virtual-pad-controller",
  "meandering-intelligence",
  "movement-intelligence",
  "movement-intelligence-avian",
@@ -4657,6 +4683,27 @@ dependencies = [
  "threat-intelligence",
  "threat-intelligence-damage",
  "threat-management-intelligence",
+]
+
+[[package]]
+name = "fisticuffs-user"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "character-animations",
+ "character-items",
+ "character-rigs",
+ "characters",
+ "damage",
+ "lod-avian",
+ "maybraid-audio",
+ "maybraid-character-controller",
+ "maybraid-controllers-core",
+ "maybraid-equipment",
+ "maybraid-virtual-pad-controller",
+ "player",
 ]
 
 [[package]]
@@ -5453,8 +5500,11 @@ dependencies = [
  "grenades",
  "maybraid-audio",
  "maybraid-character-controller",
- "maybraid-input",
+ "maybraid-controllers-core",
+ "maybraid-equipment",
  "maybraid-spatial-rumble",
+ "maybraid-spawns-grenades",
+ "maybraid-virtual-pad-controller",
  "player",
  "player-camera",
 ]
@@ -6899,12 +6949,18 @@ dependencies = [
  "characters-playground",
  "clap",
  "layer-stack",
+ "lod",
+ "lubikans",
  "maybraid-agent",
  "maybraid-character-controller",
+ "maybraid-controllers-core",
  "maybraid-game-mode-discover",
  "maybraid-game-mode-reliquary",
- "maybraid-input",
+ "maybraid-gameplay",
  "maybraid-menu-controller",
+ "maybraid-session",
+ "maybraid-sky",
+ "maybraid-virtual-pad-controller",
  "maybraid-world",
  "menu-components",
  "menu-playground",
@@ -6942,17 +6998,42 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
- "maybraid-input",
+ "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
 ]
 
 [[package]]
 name = "maybraid-character-ui-menu-renderer"
 version = "0.1.5"
 dependencies = [
+ "anyhow",
  "bevy",
  "character-ui-menu",
- "maybraid-input",
+ "maybraid-virtual-pad-controller",
  "menu-components",
+]
+
+[[package]]
+name = "maybraid-controllers-core"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "maybraid-virtual-pad-controller",
+]
+
+[[package]]
+name = "maybraid-equipment"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "character-inventory-user",
+ "character-items",
+ "lubikans",
+ "maybraid-character-controller",
+ "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
 ]
 
 [[package]]
@@ -6976,15 +7057,39 @@ dependencies = [
 ]
 
 [[package]]
-name = "maybraid-input"
+name = "maybraid-gameplay"
 version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
- "objc2 0.6.4",
- "objc2-core-haptics",
- "objc2-foundation 0.3.2",
- "objc2-game-controller",
+ "character-animations",
+ "character-inventory-user",
+ "character-items",
+ "characters",
+ "damage",
+ "firearm-user",
+ "firearms",
+ "fisticuffs-user",
+ "grenade-user",
+ "grenades",
+ "lubikans",
+ "lubikans-damage",
+ "maybraid-audio",
+ "maybraid-character-controller",
+ "maybraid-controllers-core",
+ "maybraid-equipment",
+ "maybraid-session",
+ "maybraid-skill-map",
+ "maybraid-spawns-actors",
+ "maybraid-spawns-grenades",
+ "maybraid-spawns-placement",
+ "maybraid-spawns-player",
+ "maybraid-spawns-projectiles",
+ "maybraid-virtual-pad-controller",
+ "player",
+ "player-camera",
+ "tanz-user",
+ "world-player",
 ]
 
 [[package]]
@@ -7033,13 +7138,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-locomotion-controller"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "maybraid-character-controller",
+ "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
+ "player",
+]
+
+[[package]]
 name = "maybraid-menu-controller"
 version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
- "maybraid-input",
+ "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
  "menu-components",
+]
+
+[[package]]
+name = "maybraid-session"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "maybraid-character-controller",
+ "maybraid-controllers-core",
 ]
 
 [[package]]
@@ -7058,7 +7186,7 @@ dependencies = [
  "item-icons",
  "lod-avian",
  "maybraid-character-controller",
- "maybraid-input",
+ "maybraid-controllers-core",
  "menu-components",
  "noise",
  "player",
@@ -7081,7 +7209,71 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
- "maybraid-input",
+ "maybraid-virtual-pad-controller",
+]
+
+[[package]]
+name = "maybraid-spawns-actors"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "characters",
+ "maybraid-spawns-player",
+ "world-player",
+]
+
+[[package]]
+name = "maybraid-spawns-grenades"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "character-items",
+ "grenades",
+]
+
+[[package]]
+name = "maybraid-spawns-placement"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "characters",
+ "durham",
+ "lod",
+ "lod-avian",
+ "maybraid-spawns-player",
+ "poi-intelligence",
+ "world-player",
+]
+
+[[package]]
+name = "maybraid-spawns-player"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "maybraid-controllers-core",
+ "maybraid-menu-controller",
+ "maybraid-virtual-pad-controller",
+ "menu-components",
+ "poi-intelligence",
+ "world-player",
+]
+
+[[package]]
+name = "maybraid-spawns-projectiles"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "damage",
+ "gimme-bench-support",
+ "projectiles",
 ]
 
 [[package]]
@@ -7090,6 +7282,18 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "bevy_hanabi",
+]
+
+[[package]]
+name = "maybraid-virtual-pad-controller"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "objc2 0.6.4",
+ "objc2-core-haptics",
+ "objc2-foundation 0.3.2",
+ "objc2-game-controller",
 ]
 
 [[package]]
@@ -7108,6 +7312,7 @@ dependencies = [
  "avian3d",
  "barking",
  "bevy",
+ "building-physics",
  "character-inventory-user",
  "character-items",
  "character-persist",
@@ -7122,6 +7327,7 @@ dependencies = [
  "firearm-intelligence",
  "firearm-user",
  "firearms",
+ "fisticuffs-user",
  "fleeing-intelligence",
  "furnishing-layer-model",
  "furniture-assemblies",
@@ -7143,14 +7349,22 @@ dependencies = [
  "maputo",
  "material-ref",
  "maybraid-agent",
+ "maybraid-audio",
  "maybraid-character-controller",
+ "maybraid-controllers-core",
+ "maybraid-equipment",
  "maybraid-game-mode-discover",
- "maybraid-input",
+ "maybraid-gameplay",
+ "maybraid-locomotion-controller",
+ "maybraid-session",
  "maybraid-skill-map",
  "maybraid-sky",
+ "maybraid-spawns-actors",
+ "maybraid-spawns-placement",
+ "maybraid-spawns-player",
  "maybraid-vfx",
+ "maybraid-virtual-pad-controller",
  "maybraid-weather",
- "maybraid-world-controller",
  "meandering-intelligence",
  "menu-components",
  "mob-characters",
@@ -7190,8 +7404,7 @@ dependencies = [
 name = "maybraid-world-controller"
 version = "0.1.5"
 dependencies = [
- "anyhow",
- "bevy",
+ "maybraid-session",
 ]
 
 [[package]]
@@ -7200,7 +7413,8 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "maybraid-agent",
- "maybraid-input",
+ "maybraid-gameplay",
+ "maybraid-virtual-pad-controller",
  "maybraid-world",
 ]
 
@@ -7240,7 +7454,8 @@ name = "menu-components"
 version = "0.1.5"
 dependencies = [
  "bevy",
- "maybraid-input",
+ "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
 ]
 
 [[package]]
@@ -7248,6 +7463,7 @@ name = "menu-playground"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "camera-controls",
  "character-creation-menus",
@@ -7259,19 +7475,26 @@ dependencies = [
  "characters",
  "characters-playground",
  "clap",
+ "combat-hud",
+ "damage",
  "firearm-user",
  "firearms-components",
+ "fisticuffs-user",
  "game-commands",
  "grenades",
  "item-icons",
  "lod",
+ "lod-avian",
+ "lubikans",
  "maybraid-character-ui-menu-renderer",
- "maybraid-input",
+ "maybraid-controllers-core",
  "maybraid-menu-controller",
  "maybraid-skill-map",
+ "maybraid-virtual-pad-controller",
  "menu-components",
  "menu-screens",
  "player",
+ "screen-capture",
  "tanz-user",
 ]
 
@@ -7289,8 +7512,8 @@ dependencies = [
  "game-commands",
  "item-icons",
  "maybraid-character-ui-menu-renderer",
- "maybraid-input",
  "maybraid-menu-controller",
+ "maybraid-virtual-pad-controller",
  "maybraid-world",
  "menu-components",
  "serde",
@@ -7680,7 +7903,8 @@ dependencies = [
  "journeying-intelligence",
  "lod-avian",
  "maybraid-character-controller",
- "maybraid-input",
+ "maybraid-locomotion-controller",
+ "maybraid-virtual-pad-controller",
  "meandering-intelligence",
  "mob-intelligence",
  "movement-intelligence",
@@ -7760,6 +7984,7 @@ dependencies = [
  "character-items",
  "damage",
  "fleeing-intelligence",
+ "gimme-bench-support",
  "journeying-intelligence",
  "lod",
  "maybraid-audio",
@@ -7801,6 +8026,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "intelligence-lod",
+ "maybraid-controllers-core",
  "player",
 ]
 
@@ -7835,6 +8061,7 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
+ "maybraid-controllers-core",
  "movement-intelligence",
  "player",
 ]
@@ -8957,7 +9184,8 @@ dependencies = [
  "hiding-intelligence",
  "lod-avian",
  "maybraid-character-controller",
- "maybraid-input",
+ "maybraid-locomotion-controller",
+ "maybraid-virtual-pad-controller",
  "meandering-intelligence",
  "mob-intelligence",
  "movement-intelligence",
@@ -9102,6 +9330,7 @@ dependencies = [
  "lod-avian",
  "maybraid-audio",
  "maybraid-character-controller",
+ "maybraid-controllers-core",
 ]
 
 [[package]]
@@ -9114,6 +9343,7 @@ dependencies = [
  "lod",
  "maybraid-character-controller",
  "maybraid-spatial-rumble",
+ "maybraid-virtual-pad-controller",
  "player",
 ]
 
@@ -11016,8 +11246,8 @@ name = "spatial-rumble-playground"
 version = "0.1.5"
 dependencies = [
  "bevy",
- "maybraid-input",
  "maybraid-spatial-rumble",
+ "maybraid-virtual-pad-controller",
 ]
 
 [[package]]
@@ -11506,8 +11736,12 @@ dependencies = [
  "damage",
  "item-icons",
  "maybraid-character-controller",
- "maybraid-input",
+ "maybraid-controllers-core",
+ "maybraid-locomotion-controller",
+ "maybraid-menu-controller",
+ "maybraid-session",
  "maybraid-skill-map",
+ "maybraid-virtual-pad-controller",
  "menu-components",
  "player",
  "screen-capture",
@@ -13860,6 +14094,7 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "building-shaders",
+ "character-shaders",
  "characters",
  "chico",
  "firearms",
@@ -13895,7 +14130,9 @@ dependencies = [
  "game-commands",
  "lod",
  "lod-avian",
- "maybraid-input",
+ "maybraid-character-controller",
+ "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
  "player-camera",
  "vegetation-components",
 ]

@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 bevy = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 maybraid-spatial-rumble = { workspace = true }
 
 [lints]

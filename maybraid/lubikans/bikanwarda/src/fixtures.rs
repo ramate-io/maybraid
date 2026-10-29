@@ -1,12 +1,12 @@
 //! Test helpers: register Bikanwarda definitions and equip Ward / Enraged.
 
 use bevy::prelude::*;
-use lubikans::{LubikanCatalog, LubikanLedger, LubikanOwner, LubikansPlugin};
+use lubikans::{LubikanBodyOf, LubikanCatalog, LubikanOwner, LubikansPlugin};
 use player::Player;
 
 use crate::identity::{
-	enraged_definition, is_bikanwarda_account, ward_definition, BIKANWARDA_ENRAGED_ACCOUNT,
-	BIKANWARDA_WARD_ACCOUNT,
+	BIKANWARDA_ENRAGED_ACCOUNT, BIKANWARDA_WARD_ACCOUNT, enraged_definition, is_bikanwarda_account,
+	ward_definition,
 };
 
 /// Register Ward and Enraged in the catalog and unlock both on `owner`.
@@ -17,8 +17,7 @@ pub fn unlock_bikanwarda_accounts(world: &mut World, owner: Entity) -> anyhow::R
 		catalog.register(ward);
 		catalog.register(enraged);
 	}
-	let mut ledger = world
-		.get_mut::<LubikanLedger>(owner)
+	let mut ledger = LubikanBodyOf::ledger_mut(world, owner)
 		.ok_or_else(|| anyhow::anyhow!("owner needs a LubikanLedger"))?;
 	ledger.ensure_owned(ward);
 	ledger.ensure_owned(enraged);
@@ -28,8 +27,7 @@ pub fn unlock_bikanwarda_accounts(world: &mut World, owner: Entity) -> anyhow::R
 /// Select Ward on `owner`.
 pub fn equip_ward(world: &mut World, owner: Entity) -> anyhow::Result<()> {
 	unlock_bikanwarda_accounts(world, owner)?;
-	world
-		.get_mut::<LubikanLedger>(owner)
+	LubikanBodyOf::ledger_mut(world, owner)
 		.ok_or_else(|| anyhow::anyhow!("ledger"))?
 		.select(Some(BIKANWARDA_WARD_ACCOUNT));
 	Ok(())
@@ -38,8 +36,7 @@ pub fn equip_ward(world: &mut World, owner: Entity) -> anyhow::Result<()> {
 /// Select Enraged on `owner`.
 pub fn equip_enraged(world: &mut World, owner: Entity) -> anyhow::Result<()> {
 	unlock_bikanwarda_accounts(world, owner)?;
-	world
-		.get_mut::<LubikanLedger>(owner)
+	LubikanBodyOf::ledger_mut(world, owner)
 		.ok_or_else(|| anyhow::anyhow!("ledger"))?
 		.select(Some(BIKANWARDA_ENRAGED_ACCOUNT));
 	Ok(())
@@ -50,19 +47,14 @@ pub fn spawn_ward_owner(app: &mut App) -> anyhow::Result<Entity> {
 	if !app.is_plugin_added::<LubikansPlugin>() {
 		app.add_plugins(LubikansPlugin);
 	}
-	let owner = app
-		.world_mut()
-		.spawn((Player, LubikanOwner))
-		.id();
+	let owner = app.world_mut().spawn((Player, LubikanOwner)).id();
 	app.update();
 	equip_ward(app.world_mut(), owner)?;
 	Ok(owner)
 }
 
 pub fn assert_bikanwarda_equipped(world: &World, owner: Entity) -> anyhow::Result<()> {
-	let ledger = world
-		.get::<LubikanLedger>(owner)
-		.ok_or_else(|| anyhow::anyhow!("ledger"))?;
+	let ledger = LubikanBodyOf::ledger(world, owner).ok_or_else(|| anyhow::anyhow!("ledger"))?;
 	anyhow::ensure!(
 		is_bikanwarda_account(ledger.selection().resolved()),
 		"expected Bikanwarda equipped"

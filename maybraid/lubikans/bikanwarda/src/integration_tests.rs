@@ -4,13 +4,15 @@ use std::time::Duration;
 
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
-use chico::{ChicoForest, ChicoGrove, ForestExtent, ForestGroveKind, ForestSelection, LayeringKind};
+use chico::{
+	ChicoForest, ChicoGrove, ForestExtent, ForestGroveKind, ForestSelection, LayeringKind,
+};
 use damage::{DamageApplied, Health};
-use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
-use lubikans::{LubikanChargeChanged, LubikanChargeReason, LubikanLedger, LubikansPlugin};
+use lod::hcsg::{GenerationContext, HcsgStorage, universal_bounds};
+use lubikans::{LubikanBodyOf, LubikanChargeChanged, LubikanChargeReason, LubikansPlugin};
 use occupancy_rewards::{
-	evaluate_occupancy_rewards, CellMetadata, CellMetadataStore, ConstructionTag, ForestCellId,
-	OccupancyRewardsPlugin, OccupancyRewardsUser, RewardRuleSet, SemanticCellKey,
+	CellMetadata, CellMetadataStore, ConstructionTag, ForestCellId, OccupancyRewardsPlugin,
+	OccupancyRewardsUser, RewardRuleSet, SemanticCellKey, evaluate_occupancy_rewards,
 };
 use threat_intelligence::{AffiliationStrength, Affiliations};
 
@@ -63,10 +65,8 @@ fn forest_cell_with_banyan(at: Vec3) -> CellMetadataStore {
 
 fn publish_lush_origin_forest() -> anyhow::Result<HcsgStorage> {
 	let storage = HcsgStorage::default();
-	let selection = ForestSelection {
-		layering: Some(LayeringKind::LushJungle),
-		..ForestSelection::default()
-	};
+	let selection =
+		ForestSelection { layering: Some(LayeringKind::LushJungle), ..ForestSelection::default() };
 	storage.seed(selection, universal_bounds());
 	let mut cx = GenerationContext::new(&storage);
 	let forest = cx
@@ -85,10 +85,7 @@ fn publish_lush_origin_forest() -> anyhow::Result<HcsgStorage> {
 fn raider_lethal_hit_awards_fixed_positive_charge() -> anyhow::Result<()> {
 	let mut app = gameplay_app(RewardRuleSet::new([]));
 	let owner = spawn_ward_owner(&mut app)?;
-	let victim = app
-		.world_mut()
-		.spawn((Health::from_max(20.0), raider_affiliations()))
-		.id();
+	let victim = app.world_mut().spawn((Health::from_max(20.0), raider_affiliations())).id();
 	flush_award(&mut app);
 	app.world_mut().write_message(DamageApplied {
 		target: victim,
@@ -112,9 +109,7 @@ fn raider_lethal_hit_awards_fixed_positive_charge() -> anyhow::Result<()> {
 	assert_eq!(hit.lubikan, BIKANWARDA_WARD_ACCOUNT);
 	assert_eq!(hit.amount, 5.0);
 	assert_eq!(kill.amount, 25.0);
-	let charge = app
-		.world()
-		.get::<LubikanLedger>(owner)
+	let charge = LubikanBodyOf::ledger(app.world(), owner)
 		.ok_or_else(|| anyhow::anyhow!("ledger"))?
 		.account(BIKANWARDA_WARD_ACCOUNT)
 		.ok_or_else(|| anyhow::anyhow!("ward"))?
@@ -128,17 +123,13 @@ fn raider_lethal_hit_awards_fixed_positive_charge() -> anyhow::Result<()> {
 fn animal_damage_awards_negative_charge() -> anyhow::Result<()> {
 	let mut app = gameplay_app(RewardRuleSet::new([]));
 	let owner = spawn_ward_owner(&mut app)?;
-	app.world_mut()
-		.get_mut::<LubikanLedger>(owner)
+	LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 		.ok_or_else(|| anyhow::anyhow!("ledger"))?
 		.account_mut(BIKANWARDA_WARD_ACCOUNT)
 		.ok_or_else(|| anyhow::anyhow!("ward"))?
 		.charge_mut()
 		.apply(40.0);
-	let victim = app
-		.world_mut()
-		.spawn((Health::from_max(50.0), herd_affiliations()))
-		.id();
+	let victim = app.world_mut().spawn((Health::from_max(50.0), herd_affiliations())).id();
 	flush_award(&mut app);
 	app.world_mut().write_message(DamageApplied {
 		target: victim,
@@ -155,9 +146,7 @@ fn animal_damage_awards_negative_charge() -> anyhow::Result<()> {
 		.ok_or_else(|| anyhow::anyhow!("animal hit"))?;
 	assert_eq!(change.amount, -5.0);
 	assert_eq!(change.points_earned, -5.0);
-	let charge = app
-		.world()
-		.get::<LubikanLedger>(owner)
+	let charge = LubikanBodyOf::ledger(app.world(), owner)
 		.ok_or_else(|| anyhow::anyhow!("ledger"))?
 		.account(BIKANWARDA_WARD_ACCOUNT)
 		.ok_or_else(|| anyhow::anyhow!("ward"))?
@@ -171,8 +160,7 @@ fn animal_damage_awards_negative_charge() -> anyhow::Result<()> {
 fn retired_victim_class_uses_snapshot_without_live_affiliations() -> anyhow::Result<()> {
 	let mut app = gameplay_app(RewardRuleSet::new([]));
 	let owner = spawn_ward_owner(&mut app)?;
-	app.world_mut()
-		.get_mut::<LubikanLedger>(owner)
+	LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 		.ok_or_else(|| anyhow::anyhow!("ledger"))?
 		.account_mut(BIKANWARDA_WARD_ACCOUNT)
 		.ok_or_else(|| anyhow::anyhow!("ward"))?
@@ -197,14 +185,9 @@ fn retired_victim_class_uses_snapshot_without_live_affiliations() -> anyhow::Res
 		point: Vec3::ZERO,
 	});
 	flush_award(&mut app);
-	let total = drain_changes(app.world_mut())
-		.iter()
-		.map(|c| c.points_earned)
-		.sum::<f32>();
+	let total = drain_changes(app.world_mut()).iter().map(|c| c.points_earned).sum::<f32>();
 	assert_eq!(total, -15.0);
-	let charge = app
-		.world()
-		.get::<LubikanLedger>(owner)
+	let charge = LubikanBodyOf::ledger(app.world(), owner)
 		.ok_or_else(|| anyhow::anyhow!("ledger"))?
 		.account(BIKANWARDA_WARD_ACCOUNT)
 		.ok_or_else(|| anyhow::anyhow!("ward"))?

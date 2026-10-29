@@ -3,7 +3,8 @@
 use bevy::prelude::*;
 use damage::{DamageApplied, DamageSystems};
 use lubikans::{
-	LubikanAwardPhase, LubikanChargeReason, LubikanChargeRequest, LubikanLedger, LubikanOwner,
+	LubikanAwardPhase, LubikanBodyOf, LubikanChargeReason, LubikanChargeRequest, LubikanLedger,
+	LubikanOwner,
 };
 use player::Player;
 use threat_intelligence::Affiliations;
@@ -42,11 +43,7 @@ struct CombatCredits {
 }
 
 impl BikanwardaCombatWeights {
-	pub fn credits_for(
-		self,
-		class: BikanwardaVictimClass,
-		hit: DamageApplied,
-	) -> CombatCredits {
+	pub fn credits_for(self, class: BikanwardaVictimClass, hit: DamageApplied) -> CombatCredits {
 		if hit.is_zero_effect() || class == BikanwardaVictimClass::Neutral {
 			return CombatCredits::default();
 		}
@@ -61,8 +58,7 @@ impl BikanwardaCombatWeights {
 		} else {
 			None
 		};
-		let kill_credit =
-			if lethal { Some(kill_w).filter(|value| *value != 0.0) } else { None };
+		let kill_credit = if lethal { Some(kill_w).filter(|value| *value != 0.0) } else { None };
 		CombatCredits { hit: hit_credit, kill: kill_credit }
 	}
 }
@@ -105,7 +101,8 @@ fn award_bikanwarda_combat(
 	mut requests: MessageWriter<LubikanChargeRequest>,
 	weights: Res<BikanwardaCombatWeights>,
 	owners: Query<Entity, LiveOwner>,
-	ledgers: Query<&LubikanLedger, LiveOwner>,
+	ledgers: Query<&LubikanLedger>,
+	body_of: Query<&LubikanBodyOf>,
 	affiliations: Query<&Affiliations>,
 	snapshots: Query<&BikanwardaVictimSnapshot>,
 	mut commands: Commands,
@@ -120,7 +117,8 @@ fn award_bikanwarda_combat(
 		if owners.get(hit.target).is_ok() {
 			continue;
 		}
-		let Ok(ledger) = ledgers.get(source) else {
+		let holder = body_of.get(source).map(LubikanBodyOf::character).unwrap_or(source);
+		let Ok(ledger) = ledgers.get(holder) else {
 			continue;
 		};
 		let equipped = ledger.selection().resolved();

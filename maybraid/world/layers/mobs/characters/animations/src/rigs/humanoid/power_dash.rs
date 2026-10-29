@@ -5,13 +5,12 @@
 //! is authored first; other keys blend toward and away from it.
 
 use bevy::prelude::Vec3;
-use character_rigs::Side;
 use character_rigs::authoring::{ArmAim, ArmatureOffset, HumanoidPose};
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+use character_rigs::Side;
 
-use crate::animations::{
-	BRAKE_END, COMPRESS_END, HOLD_END, PUSH_END, UprightPowerDash, smoothstep,
-};
+use crate::animations::power_dash::{BRAKE_END, COMPRESS_END, HOLD_END, PUSH_END};
+use crate::animations::{smoothstep, UprightPowerDash};
 use crate::rigs::mix::blend_clips;
 use crate::{Animation, Effects, Progress};
 

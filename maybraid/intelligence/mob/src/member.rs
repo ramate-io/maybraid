@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use npc_intelligence::NpcBody;
+use poi_intelligence::PoiSupport;
 
 use crate::MobId;
 
@@ -11,6 +12,10 @@ use crate::MobId;
 /// fulfill path). Slot-only wishes bind by walking to an ancestor [`crate::Mob`].
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct MobSlot(pub u16);
+
+/// Support contract carried from a POI-selected respawn onto the spawned body.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MobRespawnSupport(pub PoiSupport);
 
 /// Resolved membership. Written by bind; cleared when the plant despawns.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]

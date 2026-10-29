@@ -2,21 +2,21 @@
 
 use bevy::prelude::*;
 use character_creation_menus::{CharacterMenu, MenuEvent};
-use character_inventory_user::{spawn_bag, InventoryUser, InventoryUserPlugin};
+use character_inventory_user::{InventoryUser, InventoryUserPlugin, spawn_bag};
 use character_items::Inventory;
 use character_model_user::{
-	spawn_model, CharacterModel, CharacterModelUser, CharacterModelUserPlugin,
+	CharacterModel, CharacterModelUser, CharacterModelUserPlugin, spawn_model,
 };
 use character_persist::{CharacterId, PersistError, SaveRoot};
-use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
+use menu_components::info::description::{TextMenuDescription, set_description_for_menu};
 use menu_components::{MenuActivate, MenuObjectiveMarker, ScreenEditPressed};
 use menu_screens::{
-	request_show_create_character_id, request_show_gallery, request_show_in_game,
 	CreateCharacterReady, GalleryChoice, GalleryScreen, GalleryScreenPlugin, MenuScreenSystems,
+	request_show_create_character_id, request_show_gallery, request_show_in_game,
 };
 
 use crate::character::{
-	request_show_character, CharacterEditBaseline, CharacterMenuState, CharacterScreen,
+	CharacterEditBaseline, CharacterMenuState, CharacterScreen, request_show_character,
 };
 
 /// Host entity for the character currently being created or edited.
@@ -64,6 +64,8 @@ pub struct RequestEditCharacter {
 	pub id: CharacterId,
 	pub return_to: CharacterEditorReturn,
 	pub inventory: Option<Inventory>,
+	/// Live account order only; the editor never owns charge or activation.
+	pub lubikans: Option<lubikans::LubikanOrder>,
 }
 
 pub struct CharacterSessionPlugin;
@@ -312,6 +314,7 @@ fn open_gallery_edit(
 		&save_root,
 		active.id,
 		None,
+		None,
 		CharacterEditorReturn::Gallery,
 	);
 }
@@ -333,6 +336,7 @@ fn open_requested_character_editor(
 		&save_root,
 		request.id,
 		request.inventory,
+		request.lubikans,
 		request.return_to,
 	);
 }
@@ -344,6 +348,7 @@ fn open_saved_editor(
 	save_root: &SaveRoot,
 	id: CharacterId,
 	inventory: Option<Inventory>,
+	lubikans: Option<lubikans::LubikanOrder>,
 	return_to: CharacterEditorReturn,
 ) {
 	let model = match character_model_user::load(save_root, id) {
@@ -375,6 +380,7 @@ fn open_saved_editor(
 		inventory.clone(),
 	);
 	menu_state.0 = CharacterMenu::for_saved(model.name, &model.appearance, inventory);
+	menu_state.0.lubikans = lubikans.unwrap_or_default();
 	commands.insert_resource(CharacterEditBaseline::capture(&menu_state.0));
 	request_show_character(commands);
 }
@@ -444,9 +450,9 @@ fn gallery_select_opens_edit(active: Option<CharacterId>, picked: CharacterId) -
 #[cfg(test)]
 mod tests {
 	use super::{
-		finish_character_editor_exit, gallery_select_opens_edit, leave_character_editor,
-		save_editing_character, CharacterEditorExit, CharacterEditorReturn, CharacterSession,
-		CharacterSessionPlugin, SessionQuery,
+		CharacterEditorExit, CharacterEditorReturn, CharacterSession, CharacterSessionPlugin,
+		SessionQuery, finish_character_editor_exit, gallery_select_opens_edit,
+		leave_character_editor, save_editing_character,
 	};
 	use crate::character::{CharacterEditBaseline, CharacterMenuState, CharacterScreen};
 	use bevy::ecs::system::RunSystemOnce;
@@ -567,6 +573,7 @@ mod tests {
 		world.insert_resource(CharacterEditBaseline {
 			name: String::from("Roamer"),
 			inventory: Inventory::default(),
+			lubikans: lubikans::LubikanOrder::default(),
 		});
 		world
 			.run_system_once(finish_character_editor_exit)

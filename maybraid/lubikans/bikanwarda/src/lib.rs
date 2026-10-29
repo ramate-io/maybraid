@@ -18,9 +18,10 @@ pub use fixtures::{
 	unlock_bikanwarda_accounts,
 };
 pub use identity::{
-	enraged_definition, is_bikanwarda_account, is_bikanwarda_definition, ward_definition,
 	BIKANWARDA_ENRAGED_ACCOUNT, BIKANWARDA_ENRAGED_DEFINITION, BIKANWARDA_WARD_ACCOUNT,
-	BIKANWARDA_WARD_DEFINITION,
+	BIKANWARDA_WARD_DEFINITION, PLACEHOLDER_BIKANWARDA_ACTIVATION_COST,
+	PLACEHOLDER_BIKANWARDA_CAPACITY, PLACEHOLDER_BIKANWARDA_MAX_STOCK, enraged_definition,
+	is_bikanwarda_account, is_bikanwarda_definition, ward_definition,
 };
 pub use occupancy::{BIKANWARDA_FOREST_BANYAN_RULE, extend_occupancy_rules, forest_banyan_rule};
 pub use plugin::BikanwardaLubikansPlugin;

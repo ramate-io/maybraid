@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use character_creation_menus::{
 	inventory_paint_state, InventoryLayout, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT,
 };
-use character_items::{self_lubikan_catalog_key, Inventory, InventoryItem};
+use character_items::{catalog_key_uses_yellow_silhouette, Inventory, InventoryItem};
 use item_icons::{
 	request_inventory_icons, CaptureClient, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery,
 	ItemIconPlugin, PoseCaptureSubjects,
@@ -12,12 +12,12 @@ use item_icons::{
 use maybraid_character_ui_menu_renderer::{
 	fill_inventory_layout, fill_inventory_loading, spawn_starter_kit_shell, MenuThumbnailContext,
 };
-use maybraid_input::{MenuNav, MenuNavImpulse};
 use maybraid_menu_controller::MenuController;
 use menu_components::{
 	spawn_hud_action, spawn_hud_text, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu,
 	KeyboardMenuNav, MenuComponentsPlugin, ScreenBack, TextMenuInputLock, MENU_CLEAR, TEXT_YELLOW,
 };
+use menu_components::{MenuNav, MenuNavImpulse};
 use std::time::Duration;
 use tanz_user::request_inventory_tanz_icons;
 
@@ -124,6 +124,7 @@ fn apply_show_spin_reveal(
 	mut discovery: ResMut<ItemIconDiscovery>,
 	mut subjects: ResMut<ItemCaptureSubjects>,
 	mut poses: ResMut<PoseCaptureSubjects>,
+	mut cache: ResMut<ItemIconCache>,
 	mut client: CaptureClient,
 ) {
 	if screens.take(&mut commands, &requests).is_none() {
@@ -133,8 +134,8 @@ fn apply_show_spin_reveal(
 		return;
 	};
 	let bag = Inventory { items: items.0.clone(), ..Inventory::default() };
-	request_inventory_icons(&bag, &mut discovery, &mut subjects, &mut client);
-	request_inventory_tanz_icons(&bag, &mut discovery, &mut poses, &mut client);
+	request_inventory_icons(&bag, &mut discovery, &mut subjects, &mut client, &mut cache);
+	request_inventory_tanz_icons(&bag, &mut discovery, &mut poses, &mut client, &mut cache);
 	spawn_starter_kit(&mut commands, &items, &HudFonts::load(assets.as_ref()), time.elapsed());
 }
 
@@ -252,11 +253,16 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn image_for_key(&mut self, key: u64) -> Option<Handle<Image>> {
-		self.icons?.catalog_for_key(key)
+		let icons = self.icons?;
+		if catalog_key_uses_yellow_silhouette(key) {
+			icons.silhouette_for_key(key)
+		} else {
+			icons.catalog_for_key(key)
+		}
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
-		if key == self_lubikan_catalog_key() {
+		if catalog_key_uses_yellow_silhouette(key) {
 			TEXT_YELLOW
 		} else {
 			Color::WHITE
@@ -288,17 +294,16 @@ fn reveal_starter_kit_icons(
 	};
 	let layout = InventoryLayout::starter_kit(current.items.clone());
 	let icons = cache.as_deref();
-	let reports = layout
-		.captures
-		.iter()
-		.map(|need| icons.is_some_and(|cache| cache.filled_or_failed(need.key, need.silhouette)));
+	let reports = layout.captures.iter().map(|need| {
+		icons.is_some_and(|cache| cache.catalog_need_is_terminal(need.key, need.silhouette))
+	});
 	let waited = time.elapsed().saturating_sub(wait.started);
 	if inventory_paint_state(reports, waited, INVENTORY_CAPTURE_TIMEOUT) != InventoryPaint::Ready {
 		return;
 	}
 	if waited >= INVENTORY_CAPTURE_TIMEOUT
 		&& !layout.captures.iter().all(|need| {
-			icons.is_some_and(|cache| cache.filled_or_failed(need.key, need.silhouette))
+			icons.is_some_and(|cache| cache.catalog_need_is_terminal(need.key, need.silhouette))
 		}) {
 		warn!(
 			waited_secs = waited.as_secs_f32(),
@@ -313,6 +318,7 @@ fn reveal_starter_kit_icons(
 		&fonts,
 		&layout.node,
 		false,
+		None,
 		None,
 		&mut thumbs,
 	);
@@ -413,6 +419,7 @@ mod tests {
 	use bevy::prelude::*;
 	use character_creation_menus::{InventoryLayoutMode, STARTER_KIT_LABEL};
 	use character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
+	use character_ui_menu::MenuNode;
 
 	fn pants() -> InventoryItem {
 		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Red)
@@ -539,6 +546,8 @@ mod tests {
 
 	#[test]
 	fn grant_uses_the_read_only_starter_kit_layout() {
+		use character_items::{ItemRng, BASE_STARTER_TANZES};
+
 		let layout = SpinRevealScreen::layout(&[pants()]);
 		assert_eq!(layout.title, STARTER_KIT_LABEL);
 		assert_eq!(layout.mode, InventoryLayoutMode::ReadOnly);
@@ -548,5 +557,25 @@ mod tests {
 			layout.section_labels(),
 			["Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]
 		);
+
+		let items = ItemRng::from_seed(42).random_starter_loadout();
+		let grant = SpinRevealScreen::layout(&items);
+		let MenuNode::Section { children, .. } = &grant.node else {
+			panic!("starter kit must be a section");
+		};
+		let tanzes = children.iter().find_map(|child| match child {
+			MenuNode::Section { label: "Tanzes", children } => children.first(),
+			_ => None,
+		});
+		let Some(MenuNode::OrderedEquipment { rows }) = tanzes else {
+			panic!("Tanzes equipped pane must be ordered rows");
+		};
+		let tanz_row = rows.iter().find(|row| row.label == "Tanzes").expect("Tanzes row");
+		let equipped_ids: Vec<_> = tanz_row
+			.choices
+			.iter()
+			.filter_map(|choice| items.get(choice.item_key).and_then(InventoryItem::tanz_id))
+			.collect();
+		assert_eq!(equipped_ids, BASE_STARTER_TANZES);
 	}
 }

@@ -4,11 +4,11 @@ use bevy::prelude::*;
 use damage::{DamageApplied, DamageSystems, Health};
 use player::Player;
 
+use crate::LubikanSystems;
 use crate::catalog::LubikanCatalog;
 use crate::change::{LubikanChargeChanged, LubikanChargeReason, LubikanChargeRequest};
 use crate::identity::LubikanDefinition;
-use crate::ledger::{LubikanLedger, LubikanOwner};
-use crate::LubikanSystems;
+use crate::ledger::{LubikanBodyOf, LubikanLedger, LubikanOwner};
 
 type LiveLubikanOwner = Or<(With<Player>, With<LubikanOwner>)>;
 
@@ -75,16 +75,15 @@ pub(crate) fn configure(app: &mut App) {
 	if app.world().get_resource::<Messages<DamageApplied>>().is_none() {
 		app.add_message::<DamageApplied>();
 	}
-	app.init_resource::<LubikanCombatAward>()
-		.configure_sets(
-			PostUpdate,
-			(
-				LubikanSystems::Award.after(DamageSystems::Apply),
-				(LubikanAwardPhase::Credit, LubikanAwardPhase::Apply)
-					.chain()
-					.in_set(LubikanSystems::Award),
-			),
-		);
+	app.init_resource::<LubikanCombatAward>().configure_sets(
+		PostUpdate,
+		(
+			LubikanSystems::Award.after(DamageSystems::Apply),
+			(LubikanAwardPhase::Credit, LubikanAwardPhase::Apply)
+				.chain()
+				.in_set(LubikanSystems::Award),
+		),
+	);
 	app.add_systems(
 		PostUpdate,
 		(
@@ -99,7 +98,8 @@ fn award_combat_hits(
 	mut requests: MessageWriter<LubikanChargeRequest>,
 	policy: Res<LubikanCombatAward>,
 	owners: Query<Entity, LiveLubikanOwner>,
-	ledgers: Query<&LubikanLedger, LiveLubikanOwner>,
+	ledgers: Query<&LubikanLedger>,
+	body_of: Query<&LubikanBodyOf>,
 	healths: Query<&Health>,
 ) {
 	for hit in hits.read() {
@@ -109,7 +109,8 @@ fn award_combat_hits(
 		if owners.get(source).is_err() {
 			continue;
 		}
-		if ledgers.get(source).is_ok_and(|ledger| !ledger.selection().resolved().is_self()) {
+		let holder = body_of.get(source).map(LubikanBodyOf::character).unwrap_or(source);
+		if ledgers.get(holder).is_ok_and(|ledger| !ledger.selection().resolved().is_self()) {
 			continue;
 		}
 		if owners.get(hit.target).is_ok() {
@@ -142,11 +143,16 @@ fn award_combat_hits(
 fn apply_charge_requests(
 	mut requests: MessageReader<LubikanChargeRequest>,
 	mut ledgers: Query<&mut LubikanLedger>,
+	body_of: Query<&LubikanBodyOf>,
 	catalog: Res<LubikanCatalog>,
 	mut changed: MessageWriter<LubikanChargeChanged>,
 ) {
 	for request in requests.read() {
-		let Ok(mut ledger) = ledgers.get_mut(request.recipient) else {
+		let holder = body_of
+			.get(request.recipient)
+			.map(LubikanBodyOf::character)
+			.unwrap_or(request.recipient);
+		let Ok(mut ledger) = ledgers.get_mut(holder) else {
 			continue;
 		};
 		let account = request.lubikan.unwrap_or_else(|| ledger.selection().resolved());
@@ -194,8 +200,8 @@ mod tests {
 	use super::*;
 	use crate::identity::{LubikanAccountId, LubikanDefinitionId};
 	use crate::plugin::LubikansPlugin;
-	use crate::{LubikanActivationRequest, LubikanOwner};
-	use anyhow::{anyhow, Result};
+	use crate::{LubikanActivationRequest, LubikanBodyOf, LubikanOwner};
+	use anyhow::{Result, anyhow};
 
 	fn gameplay() -> App {
 		let mut app = App::new();
@@ -254,7 +260,7 @@ mod tests {
 		assert_eq!(change.lubikan, LubikanAccountId::SELF);
 		assert_eq!(change.amount, 4.0);
 		assert_eq!(change.origin, Some(Vec3::X));
-		let ledger = app.world().get::<LubikanLedger>(owner).ok_or_else(|| anyhow!("ledger"))?;
+		let ledger = LubikanBodyOf::ledger(app.world(), owner).ok_or_else(|| anyhow!("ledger"))?;
 		assert_eq!(ledger.equipped().charge().current(), 4.0);
 		Ok(())
 	}
@@ -267,9 +273,7 @@ mod tests {
 		let definition = stocked(24, 10.0, 2);
 		let account = unlock(&mut app, owner, definition)?;
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			if !ledger.select(Some(account)) {
 				return Err(anyhow!("select stocked account"));
@@ -289,9 +293,7 @@ mod tests {
 			point: Vec3::ZERO,
 		});
 		app.update();
-		let charge = app
-			.world()
-			.get::<LubikanLedger>(owner)
+		let charge = LubikanBodyOf::ledger(app.world(), owner)
 			.ok_or_else(|| anyhow!("ledger"))?
 			.account(account)
 			.ok_or_else(|| anyhow!("account"))?
@@ -319,9 +321,7 @@ mod tests {
 			point: Vec3::ZERO,
 		});
 		app.update();
-		let empty = app
-			.world()
-			.get::<LubikanLedger>(owner)
+		let empty = LubikanBodyOf::ledger(app.world(), owner)
 			.ok_or_else(|| anyhow!("ledger"))?
 			.equipped()
 			.charge()
@@ -336,7 +336,7 @@ mod tests {
 			point: Vec3::ZERO,
 		});
 		app.update();
-		let ledger = app.world().get::<LubikanLedger>(owner).ok_or_else(|| anyhow!("ledger"))?;
+		let ledger = LubikanBodyOf::ledger(app.world(), owner).ok_or_else(|| anyhow!("ledger"))?;
 		assert_eq!(ledger.equipped().charge().current(), 10.0);
 		Ok(())
 	}
@@ -352,8 +352,7 @@ mod tests {
 		definition: LubikanDefinition,
 	) -> Result<LubikanAccountId> {
 		app.world_mut().resource_mut::<LubikanCatalog>().register(definition);
-		app.world_mut()
-			.get_mut::<LubikanLedger>(owner)
+		LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 			.ok_or_else(|| anyhow!("ledger"))
 			.map(|mut ledger| ledger.ensure_owned(definition))
 	}
@@ -380,8 +379,7 @@ mod tests {
 	}
 
 	fn current_charge(app: &App, owner: Entity, account: LubikanAccountId) -> Result<f32> {
-		app.world()
-			.get::<LubikanLedger>(owner)
+		LubikanBodyOf::ledger(app.world(), owner)
 			.and_then(|ledger| ledger.account(account))
 			.map(|owned| owned.charge().current())
 			.ok_or_else(|| anyhow!("account charge"))
@@ -443,9 +441,7 @@ mod tests {
 		award(&mut app, owner, account, 40.0)?;
 		assert_eq!(current_charge(&app, owner, account)?, 20.0);
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			if !ledger.select(Some(account)) {
 				return Err(anyhow!("select stocked account"));
