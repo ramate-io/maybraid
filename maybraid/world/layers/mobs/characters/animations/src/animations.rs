@@ -106,8 +106,8 @@ pub use transition::{BlendCurve, Transition, TransitionCurve};
 pub use tuck::{Tuck, TuckProfile};
 pub use tucked_flip::{FlipDirection, TuckedFlip};
 pub use two_footed_jump::{
-	BallisticJump, JumpSample, JumpSegment, JumpTiming, TwoFootedJump, DEFAULT_GRAVITY,
-	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
+	BallisticJump, JumpSample, JumpSamplingCache, JumpSegment, JumpTiming, TwoFootedJump,
+	DEFAULT_GRAVITY, DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	DEFAULT_SPRING_DURATION, FALL_BLEND_FRACTION, LAND_BLEND_FRACTION, LAND_POSE_BLEND_MAX_SECS,
 };
 pub use two_footed_tucked_flip::TwoFootedTuckedFlip;

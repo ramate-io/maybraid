@@ -2,6 +2,7 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use log::info;
 
 use crate::animations::{Fall, JumpSample, JumpSegment, TwoFootedJump};
+use crate::rigs::jump_transition_cache::JumpTransitionCache;
 use crate::rigs::segment_debug::segment_debug_enabled;
 use crate::{Animation, Effects};
 
@@ -23,6 +24,41 @@ impl Animation<HumanoidV0Rig> for TwoFootedJump {
 }
 
 impl TwoFootedJump {
+	/// Apply a resolved instant while retaining static endpoints in the mailbox.
+	pub fn apply_sample_with_cache(
+		&self,
+		rig: &mut HumanoidV0Rig,
+		elapsed: f32,
+		sample: JumpSample,
+		cache: &mut JumpTransitionCache,
+	) {
+		cache.prepare(rig, elapsed);
+		if segment_debug_enabled() {
+			self.log_apply_debug(rig, elapsed, sample);
+		}
+		let fall = Fall::default();
+		sample.apply_humanoid_pose_with_cache(
+			rig,
+			self,
+			&fall,
+			sample.local,
+			&fall,
+			1.0,
+			Some(cache),
+		);
+	}
+
+	/// Compatibility path for callers that do not retain a resolved sample.
+	pub fn apply_for_with_cache(
+		&self,
+		rig: &mut HumanoidV0Rig,
+		elapsed: f32,
+		cache: &mut JumpTransitionCache,
+	) {
+		let sample = self.resolve_sample(rig, elapsed);
+		self.apply_sample_with_cache(rig, elapsed, sample, cache);
+	}
+
 	fn resolve_sample(&self, rig: &HumanoidV0Rig, elapsed: f32) -> JumpSample {
 		let sample = self.sample(rig.segment_lengths, elapsed);
 		if segment_debug_enabled() {
@@ -367,6 +403,33 @@ mod tests {
 			rig.posed_angle("shoulder.L") < fall_rig.posed_angle("shoulder.L"),
 			"blend is short of the full fall spread"
 		);
+		Ok(())
+	}
+	#[test]
+	fn cached_jump_matches_live_across_cycles_and_rest_changes() -> anyhow::Result<()> {
+		use bevy::prelude::{Quat, Transform};
+
+		let jump = TwoFootedJump::default().with_jump_height(2.2).with_pre_squat_speed(2.1);
+		let mut live = HumanoidV0Rig::for_clip_test();
+		let mut cached = live.clone();
+		let mut cache = JumpTransitionCache::default();
+		for cycle in 0..3 {
+			if cycle == 1 {
+				let rest = Transform::from_rotation(Quat::from_rotation_z(0.2));
+				live.seed_rest("root", rest);
+				cached.seed_rest("root", rest);
+			}
+			let timings = jump.timings(live.segment_lengths);
+			let mut samples: Vec<f32> =
+				(0..=96).map(|step| timings.cycle_duration() * step as f32 / 96.0).collect();
+			samples.extend([timings.squat_end(), timings.spring_end(), timings.air_end()]);
+			for elapsed in samples {
+				jump.apply_for(&mut live, elapsed);
+				jump.apply_for_with_cache(&mut cached, elapsed, &mut cache);
+				assert_eq!(live.pose, cached.pose, "cycle {cycle}, elapsed {elapsed}");
+				assert_eq!(jump.effects_for(&live, elapsed), jump.effects_for(&cached, elapsed));
+			}
+		}
 		Ok(())
 	}
 }

@@ -7,6 +7,7 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use crate::animations::{
 	smoothstep, JumpSample, JumpSegment, Spring, Squat, TwoFootedJump, FALL_BLEND_FRACTION,
 };
+use crate::rigs::jump_transition_cache::{JumpTransitionCache, JumpTransitionKey};
 use crate::rigs::mix::blend_clips;
 use crate::{Animation, Effects};
 
@@ -41,6 +42,30 @@ impl JumpSample {
 		Air: Animation<HumanoidV0Rig>,
 		LandFrom: Animation<HumanoidV0Rig>,
 	{
+		self.apply_humanoid_pose_with_cache(
+			rig,
+			jump,
+			air,
+			air_progress,
+			land_from,
+			land_from_progress,
+			None,
+		);
+	}
+
+	pub(crate) fn apply_humanoid_pose_with_cache<Air, LandFrom>(
+		self,
+		rig: &mut HumanoidV0Rig,
+		jump: &TwoFootedJump,
+		air: &Air,
+		air_progress: f32,
+		land_from: &LandFrom,
+		land_from_progress: f32,
+		mut cache: Option<&mut JumpTransitionCache>,
+	) where
+		Air: Animation<HumanoidV0Rig>,
+		LandFrom: Animation<HumanoidV0Rig>,
+	{
 		let lengths = rig.segment_lengths;
 		let local = self.local;
 		let timings = &self.timings;
@@ -51,7 +76,9 @@ impl JumpSample {
 				squat.apply_for(rig, progress);
 			}
 			JumpSegment::Spring => {
-				blend_clips(
+				blend_jump_clips(
+					cache.as_deref_mut(),
+					JumpTransitionKey::SpringFromSquat,
 					rig,
 					&Squat::for_loop(1.0, 1.0),
 					0.0,
@@ -64,7 +91,9 @@ impl JumpSample {
 				let blend_end = FALL_BLEND_FRACTION;
 				if local < blend_end {
 					let transition_progress = (local / blend_end).clamp(0.0, 1.0);
-					blend_clips(
+					blend_jump_clips(
+						cache.as_deref_mut(),
+						JumpTransitionKey::FallFromSpring,
 						rig,
 						&Spring::default(),
 						1.0,
@@ -87,7 +116,9 @@ impl JumpSample {
 					1.0
 				};
 				if transition_progress < 1.0 {
-					blend_clips(
+					blend_jump_clips(
+						cache.as_deref_mut(),
+						JumpTransitionKey::LandFromFall,
 						rig,
 						land_from,
 						land_from_progress,
@@ -100,5 +131,25 @@ impl JumpSample {
 				}
 			}
 		}
+	}
+}
+
+fn blend_jump_clips<A, B>(
+	cache: Option<&mut JumpTransitionCache>,
+	key: JumpTransitionKey,
+	rig: &mut HumanoidV0Rig,
+	from: &A,
+	from_progress: f32,
+	to: &B,
+	to_progress: f32,
+	weight: f32,
+) where
+	A: Animation<HumanoidV0Rig>,
+	B: Animation<HumanoidV0Rig>,
+{
+	if let Some(cache) = cache {
+		cache.blend(rig, key, from, from_progress, to, to_progress, weight);
+	} else {
+		blend_clips(rig, from, from_progress, to, to_progress, weight);
 	}
 }
