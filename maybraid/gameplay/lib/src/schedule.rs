@@ -48,6 +48,11 @@ pub fn configure(app: &mut App) {
 				.after(CharacterControlSystems)
 				.after(SessionCapabilitySystems)
 				.run_if(resource_equals(WorldGameplayEnabled(true))),
+			EquipmentSystems::Reconcile
+				.after(EquipmentSystems::CommitHolster)
+				.before(EquipmentSystems::Teardown),
+			EquipmentSystems::Hold.before(PlayerSystems::Intent),
+			EquipmentSystems::Cleanup.before(PlayerSystems::Intent),
 		),
 	);
 }

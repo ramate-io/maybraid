@@ -26,6 +26,10 @@ Pose / reticle / rumble live in [`presentation`](src/presentation.rs) via
 [`register_firearm_user_presentation`](src/presentation.rs). [`FirearmUserPlugin`](src/lib.rs)
 registers both. Headless gameplay uses the runtime path only.
 
+Inventory-backed equipment requests are realized here after the outgoing kit
+tears down. The world also requests its bagless fallback through this runtime;
+that request preserves the legacy Bullpup kit with `LiveWeapon::default()`.
+
 Writes player handoff slots ([`PlayerUse`](../../player/lib/src/identity.rs),
 [`PlayerCameraAim`](../../player/lib/src/identity.rs),
 [`WeaponTrigger`](../firearms/src/projectiles.rs)) and poses the kit + arm IK.

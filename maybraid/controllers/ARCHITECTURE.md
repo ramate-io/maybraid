@@ -97,7 +97,7 @@ player/lib (motor)         menu widgets          gameplay/lib + world + game
         ▲
         │
 controllers/locomotion / items/tanz-user / intelligence
-player/camera / items/skill-map / items/{equipment,firearm-user,grenade-user}
+player/camera / items/skill-map / items/{equipment,firearm-user,grenade-user,fisticuffs-user}
 movement/realization
 ```
 
@@ -140,10 +140,11 @@ Package names stay; only directories moved. See [#1450](https://github.com/ramat
 | `player/camera` | `player-camera` | Follow camera, look, recoil apply |
 | `movement/realization` | `movement-realization` | Recovery modifier |
 | `items/skill-map` | `maybraid-skill-map` | Map session + flick |
-| `items/equipment` | `maybraid-equipment` | Category, holster, equipped dispatch |
+| `items/equipment` | `maybraid-equipment` | Category, holster, equipped dispatch, opt-in inventory reconciliation and hold/teardown requests |
 | `items/firearm-user` | `firearm-user` | Trigger / routing / recoil (`runtime` / `presentation`) |
 | `items/firearms` | `firearms` | Cadence clock + `WeaponShotRequest` (`runtime` / `presentation`) |
 | `items/grenade-user` | `grenade-user` | Cook / throw request (`runtime` / `presentation`) |
+| `items/fisticuffs-user` | `fisticuffs-user` | Jab state, sensor, and equipment driver (`runtime` / `presentation`) |
 | `items/grenades` | `grenades` | Fuse / blast + `SpawnThrownGrenade` realize |
 | `items/tanz-user` | `tanz-user` | Tanz recognize / execute |
 | `gameplay/session` | `maybraid-session` | Capabilities, pause, play-session end |
@@ -160,6 +161,13 @@ Package names stay; only directories moved. See [#1450](https://github.com/ramat
 Persistent equipment state lives in `items/equipment`, grenade cooking in
 `grenade-user`, firing cadence in `firearms`. `gameplay/lib` adapters only
 translate or coordinate.
+
+Hosts enroll only the actors whose bag selection should govern their held kit
+with `ReconcileEquipmentFromInventory`. Equipment compares the selected item
+with the installed handler and queues the common teardown/hold requests; item
+crates realize them. The world enrolls its bag-backed player, chooses and
+persists the loadout, and uses an explicit default-firearm request for its
+bagless fallback. NPC bags and standalone item users are not enrolled.
 
 ## Scheduling boundaries
 
@@ -278,7 +286,7 @@ the current owner. Later phases change the owner column, not the role id.
 | D3 | Grenade throw | `grenade_user::throw::apply_throw_intents` | D1 grenade | cook / latch | grenade-user | **Phase 5.** Missing delivery freezes; `take_live_cook` owns swap / death drop. |
 | D4 | Recoil handoff | `queue_weapon_recoil` → `advance_weapon_recoil` | `WeaponFired` | C5 `CameraRecoilHandoff` | firearm-user | **Phase 5.** Camera applies; firearm-user does not write look / camera. |
 | D5 | Inventory category | `apply_inventory_category_selection` | B7 `SelectInventoryCyclingCategory` | per-actor `InventoryCycling`; HUD `ActiveInventoryCyclingCategory` | `items/equipment` `selection.rs` | **Phase 5.** Actor component is the owner; resource is a mirror. |
-| D6 | Queue cycle / swap | `cycle_equipped_inventory_queues` / `begin_equipment_holster` + `commit_equipment_holster` | B7 + `InventoryCycling` | skill-map / Lubikan cycle, or `EquipmentHolster` commit | `items/equipment` | **Phase 5.** Weapons commit the handler at the holster midpoint. Shared stages are Commit → Teardown → `ApplyDeferred` → Hold → Cleanup so every outgoing kit is gone before any incoming kit is built. |
+| D6 | Queue cycle / swap | `cycle_equipped_inventory_queues` / `begin_equipment_holster` + `commit_equipment_holster` | B7 + `InventoryCycling` | skill-map / Lubikan cycle, or `EquipmentHolster` commit | `items/equipment` | Weapons commit the bag at the holster midpoint. Reconcile skips existing requests; stages are Reconcile → PrepareTeardown → Teardown → `ApplyDeferred` → Hold → Cleanup so outgoing kits are gone before incoming kits are built. |
 | D7 | Lubikan activation | `gameplay/lib/src/powers.rs` `request_lubikan_activation` | D1 `EquippedPowerUse` | `LubikanActivationRequest::equipped(owner)` | `gameplay/lib` | **Phase 5.** Spends once; refusal keeps charge. |
 | D8 | Interaction / stash | `stash.rs` `StartInteraction` | `ActorIntentEvent(CharacterIntent::StartInteraction)` | addressed actor’s stash / crate loot | world host | Actor-targeted event; primary persistence is an explicit host projection. |
 | D9 | Item presentation | `PlayerPoseSystems::Item` / `WeaponSwap` | D6, Tanz pose | held meshes | player presentation | Not a controller. Listed so D6 does not own pose. |
@@ -344,7 +352,7 @@ Who currently writes the live motor / pose bits that interpreters should own.
 | velocity | `apply_character_movement` | `world/player/src/player.rs` | `VegetationPlayerMotor` (false in Discovery) | Playground host motor. |
 | `CameraController` look / POV | `apply_look_intents` | `player/camera/src/look.rs` | `CameraLookSuppressed`, `CameraPovLocked`, `delivered_actor` | C1–C4. **Phase 5.** |
 | Follow camera recoil yaw / pitch | `apply_recoil_handoff` | `player/camera/src/look.rs` | `CameraRecoilHandoff` from `WeaponFired` | C5. **Phase 5.** Sole follow-yaw recoil writer. |
-| `EquippedItemHandler` | `PendingEquipmentHold::request` / item `spawn_held_*` | `items/equipment` + item crates | holster commit requests; items stamp at realize | D1 stamp. **Phase 5.** World `hold_primary_weapon` still arms the first loadout. |
+| `EquippedItemHandler` | `PendingEquipmentHold::request` / item realization | `items/equipment` + item crates | holster, host arm, or opt-in reconciliation request | D1 stamp. World chooses and persists the player loadout; item crates own construction and teardown. |
 | `EquippedItemUse` / `EquippedPowerUse` | `dispatch_equipped_item` | `items/equipment/src/dispatch.rs` | `delivered_actor` + handler | D1. **Phase 5.** Sole Bind writer. |
 | `WeaponTrigger` (player) | `apply_fire_intents` | `items/firearm-user/src/fire.rs` | `Player` + addressed firearm use | D2. **Phase 5.** |
 | `WeaponTrigger` (NPC) | `intelligence::combat::firearm` | `intelligence/combat/firearm/src/combat.rs` | planner cadence | A6 item path. Keep. |
@@ -513,9 +521,10 @@ WeaponFired → queue_weapon_recoil → CameraRecoilHandoff → apply_recoil_han
 | `items/firearm-user` | `apply_fire_intents` reads D1; `apply_fire_routing` clears a held trigger on `lost_actor`; recoil writes the handoff only; `register_firearm_user_runtime` / `register_firearm_user_presentation`; realizes hold / teardown |
 | `items/grenade-user` | `GrenadeThrow::{apply_use,try_start_cook,apply_hold,apply_routing,cancel_partial_hold,take_live_cook}`; `register_grenade_user_runtime` / `register_grenade_user_presentation`; throw writes `SpawnThrownGrenade` |
 | `items/firearms` | `decide_weapon_fire` clock + `WeaponShotRequest` / `WeaponFired`; `register_firearm_runtime` / `register_firearm_presentation`. Presentation `fire_weapons` realizes shot requests. |
-| `gameplay/lib` | `register_gameplay_runtime` / `ItemRuntimes` (sole item-runtime owner); `request_lubikan_activation`; actor teardown coordinate |
+| `items/fisticuffs-user` | jab state, sensor lifetime, fisticuffs hold / teardown realization |
+| `gameplay/lib` | `register_gameplay_runtime` / `ItemRuntimes` (sole item-runtime owner); `request_lubikan_activation`; actor teardown coordination |
 | `gameplay/session` | capabilities, pause token, play-session end |
-| `world` | loadout / arm / VFX adapters; world-dependent Lubikan owner grant |
+| `world` | loadout choice / persistence and equipment requests, VFX; world-dependent Lubikan owner grant |
 | `intelligence/combat/firearm` | unchanged NPC `WeaponTrigger` writer |
 
 ### Controller I/O

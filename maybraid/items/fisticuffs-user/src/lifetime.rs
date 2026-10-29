@@ -154,6 +154,47 @@ fn advance_to_active(app: &mut App) {
 }
 
 #[test]
+fn equipment_teardown_just_before_active_prevents_this_frames_strike() -> anyhow::Result<()> {
+	let _test_guard = lock_lifetime_test();
+	let mut app = lifetime_app_with_presentation(false);
+	// The first Time update has zero delta. Warm the clock before placing
+	// both attacks just before the startup boundary.
+	app.update();
+	let player = spawn_attacker(&mut app);
+	let control = spawn_attacker(&mut app);
+	for actor in [player, control] {
+		let mut user = app
+			.world_mut()
+			.get_mut::<FisticuffsUser>(actor)
+			.ok_or_else(|| anyhow::anyhow!("fisticuffs user"))?;
+		user.state.request(crate::AttackSpec::jab(crate::Side::Left));
+		user.state.tick(AttackTiming::JAB.duration_secs * (JAB_STARTUP_END - 0.002));
+		assert_eq!(user.state.phase(), Some(AttackPhase::Startup));
+	}
+	app.world_mut().entity_mut(player).insert(PendingEquipmentTeardown);
+	app.update();
+	assert_no_command_errors()?;
+	if app.world().get::<FisticuffsUser>(player).is_some() {
+		anyhow::bail!("equipment teardown must remove the outgoing driver");
+	}
+	assert!(app.world().resource::<Time>().delta_secs() > 0.0);
+	let strikes = app.world().resource::<Messages<crate::FisticuffsStrike>>();
+	assert_eq!(strikes.len(), 1, "only the uncancelled control crosses into Active");
+	assert!(strikes.iter_current_update_messages().all(|strike| strike.attacker == control));
+	assert_eq!(
+		app.world().get::<FisticuffsUser>(control).map(|user| user.state.phase()),
+		Some(Some(AttackPhase::Active))
+	);
+	assert!(app.world().get::<EquippedItemHandler>(player).is_none());
+	assert!(!app
+		.world_mut()
+		.query::<&FisticuffsHitSensor>()
+		.iter(app.world())
+		.any(|sensor| sensor.attacker == player));
+	Ok(())
+}
+
+#[test]
 fn routed_jab_hits_then_teardown_paths_do_not_queue_despawned_inserts() -> anyhow::Result<()> {
 	let _test_guard = lock_lifetime_test();
 	let mut app = lifetime_app();

@@ -3,21 +3,21 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use building_shaders::{
-	init_urban_material_caches, BuildingShadersPlugin, UrbanSurfaceMaterialLib,
+	BuildingShadersPlugin, UrbanSurfaceMaterialLib, init_urban_material_caches,
 };
-use characters::material_lib::{init_character_material_caches, CharacterMaterialLib};
 use characters::CharacterShadersPlugin;
+use characters::material_lib::{CharacterMaterialLib, init_character_material_caches};
 use chico::VegetationOnTerrainMaterialLib;
 use firearms::{
-	init_energy_material_caches, init_muzzle_flame_caches, EnergyMaterialLib, EnergyMaterialPlugin,
-	MuzzleFlameMaterialLib, MuzzleFlameMaterialPlugin,
+	EnergyMaterialLib, EnergyMaterialPlugin, MuzzleFlameMaterialLib, MuzzleFlameMaterialPlugin,
+	init_energy_material_caches, init_muzzle_flame_caches,
 };
 use furniture_shaders::{
-	init_furniture_material_caches, FurnitureMaterialLib, FurnitureShadersPlugin,
+	FurnitureMaterialLib, FurnitureShadersPlugin, init_furniture_material_caches,
 };
 use material_ref::{MaterialLib, MaterialRef, MaterialRefPlugin};
 use vegetation_bumpout::init_bump_out_material_caches;
-use vegetation_shaders::{init_vegetation_material_caches, VegetationShadersPlugin};
+use vegetation_shaders::{VegetationShadersPlugin, init_vegetation_material_caches};
 
 /// World-model lib: furniture kits, character face / clothing, Richmond urban
 /// surfaces, the muzzle flame, energy looks, then vegetation and Standard.
@@ -119,10 +119,11 @@ impl Plugin for WorldMaterialsPlugin {
 
 #[cfg(test)]
 mod tests {
+	use bevy::ecs::system::System;
 	use bevy::prelude::*;
 	use building_shaders::{
-		ColumnSurfaceMaterial, ColumnSurfaceMaterialRefCache, UrbanMaterialRefPlugin,
-		UrbanSurfaceMaterial, UrbanSurfaceMaterialRefCache, RECIPE_DORIC_COLUMN, RECIPE_WOOD,
+		ColumnSurfaceMaterial, ColumnSurfaceMaterialRefCache, RECIPE_DORIC_COLUMN, RECIPE_WOOD,
+		UrbanMaterialRefPlugin, UrbanSurfaceMaterial, UrbanSurfaceMaterialRefCache,
 	};
 	use character_shaders::{ClothingShaderMaterial, FaceShaderMaterial, RECIPE_FACE_EYE};
 	use characters::material_lib::{
@@ -130,17 +131,17 @@ mod tests {
 	};
 	use chico::VegetationOnTerrainMaterialRefPlugin;
 	use firearms::{
-		EnergyMaterial, EnergyMaterialRefCache, MuzzleFlameMaterial, MuzzleFlameMaterialRefCache,
-		LASER_HEX_RECIPE, MUZZLE_FLAME_RECIPE,
+		EnergyMaterial, EnergyMaterialRefCache, LASER_HEX_RECIPE, MUZZLE_FLAME_RECIPE,
+		MuzzleFlameMaterial, MuzzleFlameMaterialRefCache,
 	};
 	use furniture_shaders::{
 		FurnitureMaterialRefPlugin, FurnitureSurfaceMaterial, FurnitureSurfaceMaterialRefCache,
 		RECIPE_FURNITURE_WOOD,
 	};
 	use material_ref::{
-		material_ref_plugin_installed, MaterialRef, MaterialRefApplied, MaterialRefRoot,
+		MaterialRef, MaterialRefApplied, MaterialRefRoot, material_ref_plugin_installed,
 	};
-	use vegetation_bumpout::{BumpOutMaterial, BumpOutMaterialRefCache, BUMP_OUT_MATERIAL};
+	use vegetation_bumpout::{BUMP_OUT_MATERIAL, BumpOutMaterial, BumpOutMaterialRefCache};
 	use vegetation_shaders::{
 		FrondMaterial, FrondMaterialRefCache, LeafMaterial, LeafMaterialRefCache, StickMaterial,
 		StickMaterialRefCache, VegetationMaterialRefPlugin,
@@ -228,5 +229,106 @@ mod tests {
 		assert!(app.world().get::<MeshMaterial3d<UrbanSurfaceMaterial>>(furniture).is_none());
 		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(urban).is_none());
 		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(column).is_none());
+	}
+
+	fn deferred_material_completion<M: Material>(recipe: &str, retire: bool) -> Result<(), String> {
+		let mut app = world_fulfill_app();
+		app.set_error_handler(bevy::ecs::error::panic);
+		let world = app.world_mut();
+		let mut descendants = Vec::new();
+		for _ in 0..2 {
+			let root = world
+				.spawn((
+					MaterialRefRoot(MaterialRef::named(recipe)),
+					material_ref::PropagateToDescendants,
+				))
+				.id();
+			let mesh = world
+				.spawn((
+					ChildOf(root),
+					Mesh3d(Handle::default()),
+					MeshMaterial3d::<StandardMaterial>(Handle::default()),
+				))
+				.id();
+			descendants.push((root, mesh));
+		}
+		let mut fulfill = IntoSystem::into_system(
+			material_ref::fulfill_material_ref_descendants::<super::WorldMaterialLib<'_>>,
+		);
+		fulfill.initialize(world);
+		fulfill
+			.run_without_applying_deferred((), world)
+			.map_err(|error| error.to_string())?;
+		assert!(world.get::<MeshMaterial3d<M>>(descendants[0].1).is_none());
+		if retire {
+			// A streamed root can disappear after a new mesh is discovered but
+			// before the material library's deferred commands are applied.
+			assert!(world.despawn(descendants[0].0));
+		}
+		fulfill.apply_deferred(world);
+		for (index, (root, mesh)) in descendants.into_iter().enumerate() {
+			if retire && index == 0 {
+				assert!(world.get_entity(root).is_err());
+				assert!(world.get_entity(mesh).is_err());
+			} else {
+				let material =
+					world.get::<MeshMaterial3d<M>>(mesh).ok_or("live material missing")?;
+				assert!(world.resource::<Assets<M>>().contains(material.id()));
+				assert!(world.get::<MeshMaterial3d<StandardMaterial>>(mesh).is_none());
+				assert!(world.get::<MaterialRefApplied>(mesh).is_some());
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn material_completion_preserves_live_custom_materials() -> Result<(), String> {
+		deferred_material_completion::<FurnitureSurfaceMaterial>(RECIPE_FURNITURE_WOOD, false)?;
+		deferred_material_completion::<UrbanSurfaceMaterial>(RECIPE_WOOD, false)?;
+		deferred_material_completion::<ColumnSurfaceMaterial>(RECIPE_DORIC_COLUMN, false)?;
+		deferred_material_completion::<LeafMaterial>("CHICO_LEAF_MATERIAL", false)?;
+		deferred_material_completion::<StickMaterial>("CHICO_STICK_MATERIAL", false)?;
+		deferred_material_completion::<FrondMaterial>("CHICO_FROND_MATERIAL", false)?;
+		deferred_material_completion::<BumpOutMaterial>(BUMP_OUT_MATERIAL, false)?;
+		deferred_material_completion::<MuzzleFlameMaterial>(MUZZLE_FLAME_RECIPE, false)?;
+		deferred_material_completion::<EnergyMaterial>(LASER_HEX_RECIPE, false)?;
+		Ok(())
+	}
+
+	#[test]
+	fn material_completion_tolerates_retired_furniture_mesh() -> Result<(), String> {
+		deferred_material_completion::<FurnitureSurfaceMaterial>(RECIPE_FURNITURE_WOOD, true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_urban_mesh() -> Result<(), String> {
+		deferred_material_completion::<UrbanSurfaceMaterial>(RECIPE_WOOD, true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_column_mesh() -> Result<(), String> {
+		deferred_material_completion::<ColumnSurfaceMaterial>(RECIPE_DORIC_COLUMN, true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_leaf_mesh() -> Result<(), String> {
+		deferred_material_completion::<LeafMaterial>("CHICO_LEAF_MATERIAL", true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_stick_mesh() -> Result<(), String> {
+		deferred_material_completion::<StickMaterial>("CHICO_STICK_MATERIAL", true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_frond_mesh() -> Result<(), String> {
+		deferred_material_completion::<FrondMaterial>("CHICO_FROND_MATERIAL", true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_bump_out_mesh() -> Result<(), String> {
+		deferred_material_completion::<BumpOutMaterial>(BUMP_OUT_MATERIAL, true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_muzzle_mesh() -> Result<(), String> {
+		deferred_material_completion::<MuzzleFlameMaterial>(MUZZLE_FLAME_RECIPE, true)
+	}
+	#[test]
+	fn material_completion_tolerates_retired_energy_mesh() -> Result<(), String> {
+		deferred_material_completion::<EnergyMaterial>(LASER_HEX_RECIPE, true)
 	}
 }

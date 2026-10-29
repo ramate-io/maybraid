@@ -18,8 +18,9 @@ pub use dispatch::{
 	EquippedPowerUse, RoutedItemActor,
 };
 pub use lifecycle::{
-	clear_equipment_requests, EquipmentInventoryChanged, PendingEquipmentHold,
-	PendingEquipmentTeardown,
+	clear_equipment_requests, clear_handler_for_teardown_only, reconcile_equipment_from_inventory,
+	EquipmentInventoryChanged, PendingEquipmentHold, PendingEquipmentTeardown,
+	ReconcileEquipmentFromInventory,
 };
 pub use maybraid_character_controller::InventoryCyclingCategory;
 pub use selection::{
@@ -44,6 +45,10 @@ pub enum EquipmentSystems {
 	AdvanceHolster,
 	/// Commit the bag and request kit replace at the holster midpoint.
 	CommitHolster,
+	/// Reconcile explicitly enrolled actors with their current bag selection.
+	Reconcile,
+	/// Clear stale dispatch for teardown-only requests before item teardown.
+	PrepareTeardown,
 	/// Item crates tear down the outgoing kit.
 	Teardown,
 	/// Item crates construct the incoming kit after teardown commands flush.
@@ -75,7 +80,9 @@ impl Plugin for EquipmentPlugin {
 						.after(CharacterControlSystems),
 					EquipmentSystems::AdvanceHolster,
 					EquipmentSystems::CommitHolster.after(EquipmentSystems::AdvanceHolster),
-					EquipmentSystems::Teardown.after(EquipmentSystems::CommitHolster),
+					EquipmentSystems::Reconcile.after(EquipmentSystems::CommitHolster),
+					EquipmentSystems::PrepareTeardown.after(EquipmentSystems::Reconcile),
+					EquipmentSystems::Teardown.after(EquipmentSystems::PrepareTeardown),
 					EquipmentSystems::Hold.after(EquipmentSystems::Teardown),
 					EquipmentSystems::Cleanup.after(EquipmentSystems::Hold),
 				),
@@ -104,6 +111,14 @@ impl Plugin for EquipmentPlugin {
 					.in_set(EquipmentSystems::AdvanceHolster),
 			)
 			.add_systems(Update, commit_equipment_holster.in_set(EquipmentSystems::CommitHolster))
+			.add_systems(
+				Update,
+				reconcile_equipment_from_inventory.in_set(EquipmentSystems::Reconcile),
+			)
+			.add_systems(
+				Update,
+				clear_handler_for_teardown_only.in_set(EquipmentSystems::PrepareTeardown),
+			)
 			.add_systems(Update, clear_equipment_requests.in_set(EquipmentSystems::Cleanup));
 	}
 }

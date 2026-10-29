@@ -55,7 +55,8 @@ jobs:
       # Native Ubuntu link, not `nix develop`: a Nix-built ELF has a
       # /nix/store interpreter and exits 127 on the lavapipe runners.
       - name: Build release maybraid
-        run: cargo build -p maybraid --release --locked
+        # Retain ECS command/system names when a deferred command fails.
+        run: cargo build -p maybraid --release --locked --features bevy/debug
 
       - uses: actions/upload-artifact@v4
         with:
@@ -97,6 +98,7 @@ jobs:
         env:
           MAYBRAID_BIN: ${{ github.workspace }}/target/release/maybraid
           MAYBRAID_SMOKE_COPY_LOGS: ${{ github.workspace }}/smoke-logs
+          RUST_BACKTRACE: '1'
         run: |
           chmod +x "$MAYBRAID_BIN" bin/script-smoke.sh
           file "$MAYBRAID_BIN"

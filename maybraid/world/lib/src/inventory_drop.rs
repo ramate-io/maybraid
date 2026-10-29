@@ -250,15 +250,15 @@ mod tests {
 	use character_persist::{CharacterId, SaveRoot};
 	use characters::CharacterAppearance;
 	use firearm_user::FirearmUser;
-	use grenade_user::GrenadeUser;
-	use maybraid_equipment::InventoryCyclingCategory;
+	use maybraid_equipment::{
+		reconcile_equipment_from_inventory, EquippedItemHandler, InventoryCyclingCategory,
+		PendingEquipmentHold, PendingEquipmentTeardown, ReconcileEquipmentFromInventory,
+	};
 
 	use super::*;
 	use crate::inventory_cycling::ActiveInventoryCyclingCategory;
 	use crate::stash::WorldStash;
-	use crate::weapon::{
-		hold_primary_weapon, teardown_held_weapon, AppliedWorldPlayerLoadout, WorldPlayerLoadout,
-	};
+	use crate::weapon::{AppliedWorldPlayerLoadout, WorldPlayerLoadout};
 
 	fn queued_loadout() -> Inventory {
 		Inventory {
@@ -384,9 +384,12 @@ mod tests {
 		let (mut world, owner, _) = drop_world(gun_then_grenade());
 		let held = world.spawn_empty().id();
 		let armed = world.resource::<WorldPlayerLoadout>().clone();
-		world
-			.entity_mut(owner)
-			.insert((FirearmUser::holding(held), AppliedWorldPlayerLoadout(armed)));
+		world.entity_mut(owner).insert((
+			FirearmUser::holding(held),
+			EquippedItemHandler::Firearm,
+			ReconcileEquipmentFromInventory,
+			AppliedWorldPlayerLoadout(armed),
+		));
 		run_drop(&mut world, owner, 0, InventoryDropPolicy::PLACEHOLDER)?;
 
 		let applied = world
@@ -411,29 +414,20 @@ mod tests {
 			"live hold stays stale until reconciliation"
 		);
 
-		let leftover = loadout.inventory.clone();
 		world
-			.run_system_once(
-				move |mut commands: Commands,
-				      users: Query<(Entity, Option<&FirearmUser>, Option<&GrenadeUser>)>| {
-					let Ok((player, firearm, grenade)) = users.get(owner) else {
-						return;
-					};
-					teardown_held_weapon(&mut commands, player, firearm, grenade);
-					hold_primary_weapon(&mut commands, player, &leftover);
-				},
-			)
+			.run_system_once(reconcile_equipment_from_inventory)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-
-		assert!(
-			!world.entities().contains(held),
-			"dropping the equipped primary must despawn the held gun"
-		);
-		assert!(world.get::<FirearmUser>(owner).is_none());
-		assert!(
-			world.get::<GrenadeUser>(owner).is_some(),
-			"live weapon must change to the leftover primary"
-		);
+		world.flush();
+		assert!(world.entities().contains(held), "lower teardown owns the held kit");
+		assert!(world.get::<FirearmUser>(owner).is_some());
+		assert!(world.get::<PendingEquipmentTeardown>(owner).is_some());
+		assert!(world
+			.get::<PendingEquipmentHold>(owner)
+			.and_then(PendingEquipmentHold::inventory)
+			.is_some_and(|inventory| matches!(
+				inventory.primary_weapon(),
+				Some(InventoryItem::Grenade { .. })
+			)));
 		Ok(())
 	}
 

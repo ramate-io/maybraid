@@ -11,9 +11,9 @@ use characters::{
 };
 
 use crate::{
+	MenuEvent,
 	character::{CharacterMenu, ConceptSpecies},
 	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, tuberwaber::TuberwaberMenu},
-	MenuEvent,
 };
 
 /// In-range, off-default slider sample. Preview defaults are 1.0; menus clamp to 0.8..=1.2.
@@ -58,7 +58,7 @@ fn inventory_body<'a>(
 trait MenuNodesExt {
 	fn labeled(&self, label: &str) -> anyhow::Result<&MenuNode<MenuEvent>>;
 	fn species_select(&self)
-		-> anyhow::Result<(&[SelectGroup<MenuEvent>], &[MenuNode<MenuEvent>])>;
+	-> anyhow::Result<(&[SelectGroup<MenuEvent>], &[MenuNode<MenuEvent>])>;
 }
 
 impl MenuNodesExt for [MenuNode<MenuEvent>] {
@@ -872,7 +872,7 @@ fn create_menu_weapons_is_ranked_grid_catalog() -> anyhow::Result<()> {
 
 #[test]
 fn create_menu_skill_maps_is_ranked_grid_catalog() -> anyhow::Result<()> {
-	use character_items::{InventoryItem, SkillMapKind, SkillMapSpec, SKILL_MAP_QUEUE_LIMIT};
+	use character_items::{InventoryItem, SKILL_MAP_QUEUE_LIMIT, SkillMapKind, SkillMapSpec};
 
 	let items = vec![
 		InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)),
@@ -926,13 +926,17 @@ fn create_menu_inventory_is_one_section_with_four_headers() -> anyhow::Result<()
 		anyhow::bail!("Inventory must be a Section");
 	};
 	assert_eq!(section_labels(children), ["Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]);
-	assert!(nodes
-		.iter()
-		.all(|node| !matches!(node, MenuNode::Section { label: "Weapons" | "Skill Maps", .. })));
+	assert!(
+		nodes
+			.iter()
+			.all(|node| !matches!(node, MenuNode::Section { label: "Weapons" | "Skill Maps", .. }))
+	);
 	let (_, species) = nodes.species_select()?;
-	assert!(species
-		.iter()
-		.all(|node| !matches!(node, MenuNode::Section { label: "Clothing", .. })));
+	assert!(
+		species
+			.iter()
+			.all(|node| !matches!(node, MenuNode::Section { label: "Clothing", .. }))
+	);
 	let tools = inventory_body(&nodes, "Tools")?;
 	let [MenuNode::OrderedEquipment { rows }, MenuNode::GridCatalog { .. }] = tools else {
 		anyhow::bail!("Tools must have equipped and unequipped panes");
@@ -944,9 +948,14 @@ fn create_menu_inventory_is_one_section_with_four_headers() -> anyhow::Result<()
 		.collect();
 	assert_eq!(labels, [firearm_name.as_str(), grenade_name.as_str()]);
 	let lubikan = inventory_body(&nodes, "Lubikan")?;
-	let [MenuNode::GridCatalog { choices, .. }] = lubikan else {
-		anyhow::bail!("Lubikan must be a catalog tile");
+	let [MenuNode::OrderedEquipment { rows }] = lubikan else {
+		anyhow::bail!("Lubikan must be ordered equipment");
 	};
+	let choices: Vec<_> = rows
+		.iter()
+		.flat_map(|row| row.choices.iter())
+		.map(|choice| &choice.tile)
+		.collect();
 	let self_tile = choices
 		.iter()
 		.find(|choice| choice.label == "Self")
@@ -1284,13 +1293,13 @@ fn default_character_menu_uses_braidman_preview_without_recursing() {
 #[test]
 fn from_species_constructors_set_selected_and_keep_inactive_defaults() {
 	use characters::{
+		ConceptAnimation,
 		presets::GenderPreset,
 		species::{
 			brenal::{BrenalConfig, BrenalHornMesh},
 			grener::{GrenerBodyColor, GrenerConfig},
 			tuberwaber::TuberwaberConfig,
 		},
-		ConceptAnimation,
 	};
 
 	use crate::characters::brenal::BrenalMenu;

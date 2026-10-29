@@ -748,8 +748,11 @@ mod tests {
 	fn editor_leave_app(dirty_name: &str) -> App {
 		let mut menu = CharacterMenuState::default();
 		menu.0.name = String::from(dirty_name);
-		let baseline =
-			CharacterEditBaseline { name: String::from("Roamer"), inventory: Inventory::default() };
+		let baseline = CharacterEditBaseline {
+			name: String::from("Roamer"),
+			inventory: Inventory::default(),
+			lubikans: lubikans::LubikanOrder::default(),
+		};
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins)
 			.insert_resource(scratch_root())

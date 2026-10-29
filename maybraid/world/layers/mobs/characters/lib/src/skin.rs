@@ -1,5 +1,8 @@
 //! Skin-remap fulfill for [`crate::socket::SkinRef`] and GLTF duplicate-armature prune.
 
+#[cfg(test)]
+mod tests;
+
 use std::collections::HashSet;
 
 use bevy::{
@@ -8,7 +11,7 @@ use bevy::{
 	world_serialization::{WorldInstance, WorldInstanceSpawner},
 };
 
-use crate::member::{find_member_rig, CharacterMembers, MemberOf};
+use crate::member::{CharacterMembers, MemberOf, find_member_rig};
 use crate::rig::{
 	BoneMap, CharacterPart, CharacterRig, NeedsDuplicateScenePrune, NeedsSkinRemap,
 	NoMatchingArmature, PartRigRef,
@@ -46,9 +49,12 @@ pub fn fulfill_skin_ref_roots(
 		if map.by_name.is_empty() {
 			continue;
 		}
-		commands
-			.entity(entity)
-			.insert((PartRigRef { rig_root }, NeedsSkinRemap, SkinRefApplied));
+		// The part may retire after this lookup but before deferred completion.
+		commands.entity(entity).try_insert((
+			PartRigRef { rig_root },
+			NeedsSkinRemap,
+			SkinRefApplied,
+		));
 	}
 }
 

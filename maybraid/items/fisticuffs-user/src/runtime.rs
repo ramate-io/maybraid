@@ -54,7 +54,8 @@ pub fn register_fisticuffs_user_runtime(app: &mut App) {
 
 /// Cancel the in-flight jab and drop the driver. Sensors follow
 /// [`RemovedComponents<FisticuffsUser>`] in [`crate::sync_fist_sensors`].
-pub fn teardown_fisticuffs(commands: &mut Commands, user: Entity) {
+pub fn teardown_fisticuffs(commands: &mut Commands, user: Entity, fisticuffs: &mut FisticuffsUser) {
+	fisticuffs.state.cancel();
 	if let Ok(mut entity) = commands.get_entity(user) {
 		entity.remove::<FisticuffsUser>();
 	}
@@ -62,19 +63,18 @@ pub fn teardown_fisticuffs(commands: &mut Commands, user: Entity) {
 
 fn realize_equipment_teardown(
 	mut commands: Commands,
-	mut pending: Query<(Entity, Option<&mut FisticuffsUser>), With<PendingEquipmentTeardown>>,
+	mut pending: Query<(Entity, &mut FisticuffsUser), With<PendingEquipmentTeardown>>,
 ) {
-	for (entity, user) in &mut pending {
-		if let Some(mut user) = user {
-			user.state.cancel();
-		}
-		teardown_fisticuffs(&mut commands, entity);
+	for (entity, mut user) in &mut pending {
+		teardown_fisticuffs(&mut commands, entity, &mut user);
 	}
 }
 
 fn realize_equipment_hold(mut commands: Commands, pending: Query<(Entity, &PendingEquipmentHold)>) {
 	for (entity, hold) in &pending {
-		if !matches!(hold.inventory().primary_weapon(), Some(InventoryItem::Fisticuffs)) {
+		if !hold.inventory().is_some_and(|inventory| {
+			matches!(inventory.primary_weapon(), Some(InventoryItem::Fisticuffs))
+		}) {
 			continue;
 		}
 		if let Ok(mut entity) = commands.get_entity(entity) {
@@ -109,6 +109,7 @@ mod tests {
 		register_fisticuffs_user_runtime(&mut app);
 		register_fisticuffs_user_runtime(&mut app);
 		app.add_systems(PostUpdate, record_strikes);
+		app.finish();
 		let actor = app
 			.world_mut()
 			.spawn((
@@ -158,6 +159,7 @@ mod tests {
 		assert_eq!(app.world_mut().query::<&FisticuffsHitSensor>().iter(app.world()).count(), 0);
 		Ok(())
 	}
+
 	#[test]
 	fn addressed_jab_latches_chamber_aim_and_restarts_the_same_animation() -> anyhow::Result<()> {
 		use crate::{AttackSpec, JabAim, Side};
