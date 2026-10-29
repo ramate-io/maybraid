@@ -26,7 +26,10 @@ impl QuadrupedSit {
 			self.neck_alert * settle + sway * 0.25,
 		);
 		apply_spine(&mut pose, sway * 0.35, self.spine_gather * settle + sway * 0.4);
-		pose.spine_sagittal = self.spine_upright * settle;
+		// Quadruped V0's imported sagittal axis is the inverse of the animation
+		// author's intuitive "upright" direction: positive bend lifts the lumbar
+		// and hind joints. A sit settles the rump, so this channel is negative.
+		pose.spine_sagittal = -self.spine_upright * settle;
 		for side in [Side::Left, Side::Right] {
 			apply_front_leg(
 				&mut pose,
@@ -41,7 +44,7 @@ impl QuadrupedSit {
 				side,
 				0.0,
 				self.hip_splay * settle * side.sign(),
-				self.hind_stride * settle,
+				-self.hind_stride * settle,
 				self.hind_hinge * settle,
 			);
 		}
@@ -62,20 +65,44 @@ impl Animation<QuadrupedV0Rig> for QuadrupedSit {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::rigs::quadruped::production_fixture::{point, rig as epiphant_rig};
+	use bevy::prelude::Vec3;
+
+	fn hind_tip(rig: &QuadrupedV0Rig, side: &str) -> anyhow::Result<Vec3> {
+		point(rig, &format!("posterior_shin.{side}"), Vec3::Y * 0.5)
+	}
 
 	#[test]
-	fn held_sit_tucks_haunches_and_preserves_a_planted_front() -> anyhow::Result<()> {
+	fn held_sit_lowers_the_rump_and_keeps_hind_support_near_the_stand_plane() -> anyhow::Result<()>
+	{
 		let sit = QuadrupedSit::held();
-		let mut rig = QuadrupedV0Rig::for_clip_test();
+		let mut rest = epiphant_rig()?;
+		let mut rig = epiphant_rig()?;
+		sit.apply(&mut rest, 0.0);
 		let effects = sit.apply(&mut rig, 1.0);
-		if rig.posed_angle("posterior_thigh.L") <= rig.posed_angle("anterior_thigh.L") + 0.35 {
-			anyhow::bail!("sit must tuck the hind thigh more than the front");
-		}
-		if rig.posed_angle("posterior_shin.L") <= rig.posed_angle("anterior_shin.L") + 0.45 {
-			anyhow::bail!("sit must fold the hind shin more than the front");
-		}
-		if self::QuadrupedSit::sample_pose(&sit, 1.0).spine_sagittal <= 0.15 {
-			anyhow::bail!("seated chest should stay lifted");
+		for side in ["L", "R"] {
+			let resting = hind_tip(&rest, side)?;
+			let seated = hind_tip(&rig, side)?;
+			assert!(
+				(seated.y - resting.y).abs() < 0.12,
+				"rear foot stays near support plane: {side} {seated:?}/{resting:?}"
+			);
+			let hip = format!("hip.{side}");
+			assert!(
+				point(&rig, &hip, Vec3::ZERO)?.y < point(&rest, &hip, Vec3::ZERO)?.y - 0.10,
+				"rump lowers: {side}"
+			);
+			assert!(
+				seated.z > resting.z + 0.15,
+				"hind foot tucks forward beneath the rump: {side}"
+			);
+			let front = format!("anterior_shin.{side}");
+			let front_before = point(&rest, &front, Vec3::Y * 0.5)?;
+			let front_after = point(&rig, &front, Vec3::Y * 0.5)?;
+			assert!(
+				(front_after.y - front_before.y).abs() < 0.08,
+				"front support height remains coherent: {side}"
+			);
 		}
 		if !effects.is_identity() {
 			anyhow::bail!("quadruped sit articulation should not offset the root");

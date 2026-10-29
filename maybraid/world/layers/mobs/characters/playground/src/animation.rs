@@ -226,7 +226,9 @@ impl AnimationMode {
 
 	pub fn clip_duration(self) -> f32 {
 		match self {
-			Self::Jump => characters::JumpParams::default().elapsed_from_phase(1.0),
+			Self::Jump => preview_jump_sampler()
+				.timings(character_rigs::humanoid::LegSegmentLengths::default())
+				.cycle_duration(),
 			Self::ThinkAgain => THINK_AGAIN_DURATION,
 			_ => 1.0,
 		}
@@ -271,6 +273,16 @@ impl AnimationMode {
 				| Self::GlideFromFlap
 		)
 	}
+}
+
+/// Use the same public jump knobs as the mailbox sampler, including both windup halves.
+fn preview_jump_sampler() -> character_animations::animations::TwoFootedJump {
+	let params = characters::JumpParams::default();
+	character_animations::animations::TwoFootedJump::default()
+		.with_gravity(params.gravity)
+		.with_jump_height(params.jump_height)
+		.with_pre_squat_speed(params.pre_squat_speed)
+		.with_landing_squat_speed(params.landing_squat_speed)
 }
 
 #[derive(Resource, Debug, Clone)]
@@ -430,7 +442,28 @@ mod catalog_tests {
 	#[test]
 	fn jump_once_reaches_the_full_landing_timeline() {
 		let duration = AnimationMode::Jump.clip_duration();
-		assert_eq!(duration, characters::JumpParams::default().elapsed_from_phase(1.0));
+		use character_animations::Animation;
+		use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+		let sampler = preview_jump_sampler();
+		let mut initial = HumanoidV0Rig::for_clip_test();
+		let initial_effect = sampler.apply(&mut initial, 0.0);
+		for elapsed in [duration, duration + 10.0] {
+			let mut sampled = HumanoidV0Rig::for_clip_test();
+			let sample_time = AnimationMode::Jump.mailbox_progress(elapsed, false);
+			let effect = sampler.apply(&mut sampled, sample_time);
+			assert!(
+				effect.0.translation.distance(initial_effect.0.translation) < 1e-4,
+				"jump fully recovers its offset"
+			);
+			for (actual, expected) in sampled.pose.local.iter().zip(&initial.pose.local) {
+				assert!(actual.translation.distance(expected.translation) < 1e-4);
+				assert!(
+					actual.rotation.normalize().dot(expected.rotation.normalize()).abs()
+						> 1.0 - 1e-5,
+					"jump fully recovers its pose"
+				);
+			}
+		}
 		assert!(duration > 1.0, "jump timeline includes windup, flight, and landing");
 		let mut playback = AnimationPlayback { looping: false, ..Default::default() };
 		playback.advance(100.0, duration, AnimationMode::Jump.clip_speed());

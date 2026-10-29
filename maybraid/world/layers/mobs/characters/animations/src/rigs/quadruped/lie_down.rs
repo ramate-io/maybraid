@@ -29,7 +29,10 @@ impl QuadrupedLieDown {
 			-self.neck_rest * settle + breath * 0.35,
 		);
 		apply_spine(&mut pose, curl * 0.12, self.spine_settle * 0.18 * settle + curl * 0.55);
-		pose.spine_sagittal = self.spine_settle * settle + breath;
+		// Positive quadruped sagittal bend raises the lumbar/rear half of the
+		// production Epiphant bind. Resting lowers the trunk toward the support
+		// plane, and breathing moves around that settled pose.
+		pose.spine_sagittal = -self.spine_settle * settle - breath;
 
 		for side in [Side::Left, Side::Right] {
 			let curl_side = match side {
@@ -49,7 +52,7 @@ impl QuadrupedLieDown {
 				side,
 				0.0,
 				self.hip_splay * settle * side.sign() * curl_side,
-				self.hind_tuck * settle * curl_side,
+				-self.hind_tuck * settle * curl_side,
 				self.hind_hinge * settle,
 			);
 		}
@@ -70,13 +73,35 @@ impl Animation<QuadrupedV0Rig> for QuadrupedLieDown {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::rigs::quadruped::production_fixture::{point, rig as epiphant_rig};
+	use bevy::prelude::Vec3;
+
+	fn hind_tip(rig: &QuadrupedV0Rig, side: &str) -> anyhow::Result<Vec3> {
+		point(rig, &format!("posterior_shin.{side}"), Vec3::Y * 0.5)
+	}
 
 	#[test]
-	fn sphinx_lies_on_forelegs_and_curl_changes_the_rest_pose() -> anyhow::Result<()> {
-		let mut sphinx = QuadrupedV0Rig::for_clip_test();
-		let mut curled = QuadrupedV0Rig::for_clip_test();
+	fn sphinx_lowers_the_hindquarters_and_keeps_rear_support_near_standing_plane(
+	) -> anyhow::Result<()> {
+		let standing = epiphant_rig()?;
+		let mut sphinx = epiphant_rig()?;
+		let mut curled = epiphant_rig()?;
 		let sphinx_fx = QuadrupedLieDown::held().apply(&mut sphinx, 1.0);
 		QuadrupedLieDown::curled().apply(&mut curled, 1.0);
+		for side in ["L", "R"] {
+			let before = hind_tip(&standing, side)?;
+			let after = hind_tip(&sphinx, side)?;
+			assert!(
+				(after.y - before.y).abs() < 0.18,
+				"rear support stays near plane: {side} {after:?}/{before:?}"
+			);
+			assert!(after.z > before.z + 0.15, "rear foot tucks under belly: {side}");
+			let hip = format!("hip.{side}");
+			assert!(
+				point(&sphinx, &hip, Vec3::ZERO)?.y < point(&standing, &hip, Vec3::ZERO)?.y - 0.1,
+				"rump settles: {side}"
+			);
+		}
 		if sphinx.posed_angle("anterior_shin.L") <= 0.6 {
 			anyhow::bail!("sphinx should visibly fold the front shin");
 		}

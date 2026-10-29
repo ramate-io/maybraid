@@ -13,3 +13,6 @@ pub mod sleep;
 
 pub mod lie_down;
 pub mod sit;
+
+#[cfg(test)]
+pub(super) mod production_fixture;
