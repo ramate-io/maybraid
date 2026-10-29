@@ -12,7 +12,7 @@ use mob_intelligence::{
 	install_mob, MobIdAlloc, MobInstall, MobIntelligencePlugin, MobMemberNeeded, MobRespawnSupport,
 	MobSlot, MobSystems, MobTetherLock, RosterMember,
 };
-use poi_intelligence::{PoiGoal, PoiId, PoiIntelligencePlugin, PoiKind, PoiSupport};
+use poi_intelligence::{PoiGoal, PoiId, PoiIntelligencePlugin, PoiKind};
 use routing_intelligence::RoutingPlugin;
 use tether_intelligence::TetherPlugin;
 
@@ -298,6 +298,7 @@ mod tests {
 	use super::*;
 	use mob_characters::CharacterSceneRecipe;
 	use mob_intelligence::{MobId, MobMemberNeeded, MobRoster};
+	use poi_intelligence::PoiSupport;
 
 	#[test]
 	fn plugin_update_schedule_is_acyclic() -> Result<()> {

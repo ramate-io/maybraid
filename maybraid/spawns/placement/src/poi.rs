@@ -1,14 +1,13 @@
 //! POI destination → floor / clearance policy. An unresolved interior floor
 //! is pending or failed, never a silent coordinate.
 
-use bevy::prelude::*;
 use poi_intelligence::PoiRecord;
 
 use crate::request::PlacementPolicy;
 
 impl PlacementPolicy {
 	pub fn for_poi(record: &PoiRecord) -> Self {
-		if record.support.stands_on_floor() {
+		if record.arrival().stands_on_floor() {
 			Self::InteriorFloor
 		} else {
 			Self::OutdoorGround
@@ -19,6 +18,7 @@ impl PlacementPolicy {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::prelude::*;
 	use bevy::prelude::Entity;
 	use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiSupport};
 

@@ -5,7 +5,8 @@ use crate::{
 	choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi, KnownPoi, LocalPoi, Poi,
 	PoiDiscoverLimits, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId, PoiIntelligencePlugin,
 	PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
-	PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiSupport, PoiVisitPolicy, PoiVisitState,
+	NearbyFallback, NearbyQuery, PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiSupport,
+	PoiVisitPolicy, PoiVisitState,
 	AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
 };
 use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};

@@ -1317,7 +1317,9 @@ mod tests {
 		let floor = Vec3::new(80.0, 12.0, 5.0);
 		world.resource_mut::<PoiRegistry>().upsert(
 			poi,
-			poi_intelligence::Poi::new(PoiId(1), LOCAL_POI).with_arrival_radius(4.0),
+			poi_intelligence::Poi::new(PoiId(1), LOCAL_POI)
+				.with_floor_support()
+				.with_arrival_radius(4.0),
 			floor,
 			true,
 			false,

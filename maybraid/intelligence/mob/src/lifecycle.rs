@@ -323,7 +323,7 @@ mod tests {
 		);
 		assert_eq!(poi, Some(PoiId(21)));
 		assert_eq!(support, PoiSupport::Floor);
-		assert_eq!(pose.y, 32.75);
+		assert_eq!(pose.y, 33.0);
 		Ok(())
 	}
 

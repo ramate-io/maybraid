@@ -279,13 +279,15 @@ mod tests {
 						&registry,
 						&surface,
 						LocomotionCapsule::HUMANOID,
-					)?;
+					)
+					.map_err(|reason| anyhow::anyhow!("floor placement failed: {reason:?}"))?;
 					let terrain = PlacementSearch::resolve_poi(
 						PoiId(2),
 						&registry,
 						&surface,
 						LocomotionCapsule::HUMANOID,
-					)?;
+					)
+					.map_err(|reason| anyhow::anyhow!("terrain placement failed: {reason:?}"))?;
 					assert_eq!(floor.policy, PlacementPolicy::InteriorFloor);
 					assert_eq!(floor.min_surface_y, 24.0 - INTERIOR_LOWER_MARGIN);
 					assert_eq!(terrain.policy, PlacementPolicy::OutdoorGround);
