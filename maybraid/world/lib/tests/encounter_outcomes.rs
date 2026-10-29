@@ -9,7 +9,8 @@ use damage::Died;
 use encounters::fixtures::spawn_instance;
 use encounters::{EncounterOutcome, EncounterProgressStore};
 use lubikans::{LubikanAccountId, LubikanBodyOf, LubikanOwner, LubikansPlugin};
-use maybraid_world::{WorldGameplayEnabled, WorldPlaySessionEnded, world_encounter};
+use maybraid_world::world_encounter;
+use maybraid_session::{WorldGameplayEnabled, WorldPlaySessionEnded};
 use std::time::Duration;
 
 const DT: f32 = 0.1;
