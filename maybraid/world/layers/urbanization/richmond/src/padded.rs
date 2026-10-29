@@ -12,7 +12,7 @@ use durham::{
 	TerrainSdf,
 };
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::{self, GenerationContext};
+use lod::hcsg::{self, Busy, GenerationContext, HcsgStorage};
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 use render_item::mesh::handle::Cached;
@@ -195,6 +195,58 @@ impl<G> PaddedTerrain<G> {
 	}
 }
 
+impl<G: RichmondGround> PaddedTerrain<G> {
+	/// Sample the surface the world presents, including development pads.
+	///
+	/// The query crosses the terrain cells' shared zero-height plane; their Y
+	/// bounds span the heightfield, while their origin grid is XZ. Narrowest
+	/// overlapping padded cell wins at mixed terrain resolutions.
+	pub fn sample_height_in(cx: &mut GenerationContext, x: f32, z: f32) -> Option<f32> {
+		const XZ_EPSILON: f32 = 0.001;
+		const Y_EPSILON: f32 = 0.001;
+		let query = Aabb3d::from_min_max(
+			Vec3::new(x - XZ_EPSILON, -Y_EPSILON, z - XZ_EPSILON),
+			Vec3::new(x + XZ_EPSILON, Y_EPSILON, z + XZ_EPSILON),
+		);
+		cx.get_or_generate_in_finest_first::<Self>(query, |padded| padded.surface.cell)
+			.into_iter()
+			.find(|padded| {
+				let bounds = padded.surface.cell;
+				x >= bounds.min.x && x <= bounds.max.x && z >= bounds.min.z && z <= bounds.max.z
+			})
+			.map(|padded| padded.surface.sdf.terrain().height_at_with_all_modulations(x, z))
+	}
+
+	/// Non-blocking sample from already published presentation cells.
+	/// `None` means this XZ column has not been published yet; `Busy` means the
+	/// HCSG index or typed store is being written and the caller should retry.
+	pub fn published_height_at(storage: &HcsgStorage, x: f32, z: f32) -> Result<Option<f32>, Busy> {
+		const XZ_EPSILON: f32 = 0.001;
+		const Y_EPSILON: f32 = 0.001;
+		let query = Aabb3d::from_min_max(
+			Vec3::new(x - XZ_EPSILON, -Y_EPSILON, z - XZ_EPSILON),
+			Vec3::new(x + XZ_EPSILON, Y_EPSILON, z + XZ_EPSILON),
+		);
+		let ids = storage.try_overlapping::<Self>(query)?;
+		let entries = storage.try_entries::<Self>(&ids)?;
+		Ok(entries
+			.into_iter()
+			.flatten()
+			.filter(|entry| {
+				x >= entry.bounds.min.x
+					&& x <= entry.bounds.max.x
+					&& z >= entry.bounds.min.z
+					&& z <= entry.bounds.max.z
+			})
+			.min_by(|a, b| {
+				let a_area = (a.bounds.max.x - a.bounds.min.x) * (a.bounds.max.z - a.bounds.min.z);
+				let b_area = (b.bounds.max.x - b.bounds.min.x) * (b.bounds.max.z - b.bounds.min.z);
+				a_area.total_cmp(&b_area)
+			})
+			.map(|entry| entry.value.surface.sdf.terrain().height_at_with_all_modulations(x, z)))
+	}
+}
+
 /// Total over the ground: every cell of `G` is presented padded, wrapped as
 /// is where no pad reaches it, so the raw cell is never presented beneath.
 impl<G: RichmondGround> hcsg::GenerationScheme for PaddedTerrain<G> {
@@ -281,6 +333,26 @@ mod tests {
 		let chunk = cascade_chunk_for_cell(pad.cell, pad.res_2);
 		assert_eq!(pad.chunk_pose(), Transform::from_translation(chunk.origin));
 		assert_ne!(pad.chunk_pose(), Transform::IDENTITY);
+	}
+
+	#[test]
+	fn published_height_sample_never_generates_missing_cells() {
+		type Ground = terrain_layer_model::OnTerrain<durham::Durham>;
+		let storage = HcsgStorage::default();
+		let surface = pad_at(Vec3::new(160.0, 0.0, -320.0), far_ring());
+		let center = (Vec3::from(surface.cell.min) + Vec3::from(surface.cell.max)) * 0.5;
+		let id = Id::from_cell(surface.cell);
+		let expected = surface.sdf.terrain().height_at_with_all_modulations(center.x, center.z);
+		assert_eq!(
+			PaddedTerrain::<Ground>::published_height_at(&storage, center.x, center.z),
+			Ok(None)
+		);
+
+		storage.publish(id, Arc::new(PaddedTerrain::new(surface)), surface.cell);
+		assert_eq!(
+			PaddedTerrain::<Ground>::published_height_at(&storage, center.x, center.z),
+			Ok(Some(expected))
+		);
 	}
 
 	mod scheme_perf_tests {

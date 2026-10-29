@@ -162,6 +162,43 @@ impl DevelopmentHost {
 		}
 	}
 
+	/// An authored floor point in host-local space, optionally chosen near an
+	/// authored room label. The building collider remains responsible for
+	/// validating capsule clearance at placement time.
+	pub fn interior_stand_local(&self, near: Option<bevy::math::Vec3>) -> Option<bevy::math::Vec3> {
+		fn nearest_floor(
+			building: &impl BuildingComponents,
+			near: Option<bevy::math::Vec3>,
+		) -> Option<bevy::math::Vec3> {
+			nearest_floor_point(
+				building
+					.floor_nodes_for_level(LodSceneLevel::High)
+					.flatten()
+					.filter_map(|floor| floor.walk_on_point())
+					.filter(|point| point.is_finite()),
+				near,
+			)
+		}
+		match self {
+			Self::LesHallesStorey(building, _) => nearest_floor(building.as_ref(), near)
+				.or_else(|| les_halles_gallery_stand(building.floor_plan(), near)),
+			Self::LesHallesStairwell(building, _) => nearest_floor(building.as_ref(), near),
+			Self::LesHallesRoof(building, _) => nearest_floor(building.as_ref(), near),
+			Self::ShepherdsHouse(building, _) => nearest_floor(building.as_ref(), near),
+			Self::ShepherdsHut(building, _) => nearest_floor(building.as_ref(), near),
+			Self::OldCityMarketTerrace(building, _) => nearest_floor(building.as_ref(), near),
+			Self::RingFortCircularTower(building, _) => nearest_floor(building.as_ref(), near),
+			Self::RingFortTrazaloidTower(building, _) => nearest_floor(building.as_ref(), near),
+			Self::RingFortGalleryTerrace(building, _) => nearest_floor(building.as_ref(), near),
+			Self::RingFortGalleryColonnade(building, _) => nearest_floor(building.as_ref(), near),
+			Self::RingFortGalleryRoof(building, _) => nearest_floor(building.as_ref(), near),
+			Self::SingleHighrise(building, _) => nearest_floor(building.as_ref(), near),
+			Self::TempleSanctum(building, _) => nearest_floor(building.as_ref(), near),
+			Self::WizardsTower(building, _) => nearest_floor(building.as_ref(), near),
+			Self::SkybridgeHall(building, _) => nearest_floor(building.as_ref(), near),
+		}
+	}
+
 	/// High-LOD furniture slots on this host (Richmond packer IR).
 	pub fn furniture_nodes(&self) -> Vec<FurnitureNode> {
 		match self {
@@ -278,6 +315,68 @@ impl DevelopmentHost {
 		}
 		Box::new((host, bsn! { template_value(place) }))
 	}
+}
+
+fn nearest_floor_point(
+	points: impl IntoIterator<Item = bevy::math::Vec3>,
+	near: Option<bevy::math::Vec3>,
+) -> Option<bevy::math::Vec3> {
+	points
+		.into_iter()
+		.min_by(|a, b| {
+			let score = |point: bevy::math::Vec3| match near {
+				Some(anchor) if point.y <= anchor.y + 0.75 => {
+					((point.y - anchor.y).abs(), (point.x - anchor.x).hypot(point.z - anchor.z))
+				}
+				Some(_) => (f32::INFINITY, f32::INFINITY),
+				None => (point.y, 0.0),
+			};
+			let a_score = score(*a);
+			let b_score = score(*b);
+			a_score.0.total_cmp(&b_score.0).then_with(|| a_score.1.total_cmp(&b_score.1))
+		})
+		.filter(|point| near.is_none_or(|anchor| point.y <= anchor.y + 0.75))
+}
+
+fn les_halles_gallery_stand(
+	plan: &buildings::storeys::les_halles::LesHallesFloorPlan,
+	near: Option<bevy::math::Vec3>,
+) -> Option<bevy::math::Vec3> {
+	let y = plan.center_xz.y;
+	if near.is_some_and(|anchor| y > anchor.y + 0.75) || !plan.gallery.has_floor() {
+		return None;
+	}
+	let center = plan.center_xz;
+	let gap_x = ((plan.outer.x - plan.courtyard.x) * 0.25).max(0.5);
+	let gap_z = ((plan.outer.y - plan.courtyard.y) * 0.25).max(0.5);
+	let mut candidates = vec![
+		bevy::math::Vec3::new(center.x, y, center.z - gap_z),
+		bevy::math::Vec3::new(center.x, y, center.z + gap_z),
+		bevy::math::Vec3::new(center.x - gap_x, y, center.z),
+		bevy::math::Vec3::new(center.x + gap_x, y, center.z),
+	];
+	if let Some(anchor) = near {
+		candidates.push(bevy::math::Vec3::new(anchor.x, y, anchor.z));
+	}
+	candidates
+		.into_iter()
+		.filter(|point| {
+			plan.gallery.floor_covers_xz(point.x, point.z)
+				&& !plan.shaft_bounds.iter().any(|shaft| {
+					point.x >= shaft.min.x
+						&& point.x <= shaft.max.x
+						&& point.z >= shaft.min.z
+						&& point.z <= shaft.max.z
+				})
+		})
+		.min_by(|a, b| match near {
+			Some(anchor) => {
+				let da = (a.x - anchor.x).hypot(a.z - anchor.z);
+				let db = (b.x - anchor.x).hypot(b.z - anchor.z);
+				da.total_cmp(&db)
+			}
+			None => a.x.total_cmp(&b.x).then_with(|| a.z.total_cmp(&b.z)),
+		})
 }
 
 fn furniture_of(building: &impl BuildingComponents) -> Vec<FurnitureNode> {
@@ -496,12 +595,22 @@ mod tests {
 		SuburbanHomes,
 	};
 
-	use super::{DevelopmentHost, DevelopmentHosts};
+	use super::{nearest_floor_point, DevelopmentHost, DevelopmentHosts};
 	use crate::cell::DevelopmentExtent;
 	use crate::place::DiscoverablePlaceLabel;
 	use crate::BuiltDevelopment;
 
 	struct DryFlat;
+
+	#[test]
+	fn room_stand_selection_uses_the_label_storey_before_xz_distance() {
+		let lower = Vec3::new(4.0, 4.0, 0.0);
+		let upper = Vec3::new(0.0, 12.0, 0.0);
+		assert_eq!(
+			nearest_floor_point([lower, upper], Some(Vec3::new(0.0, 12.0, 0.0))),
+			Some(upper)
+		);
+	}
 
 	impl SiteGround for DryFlat {
 		fn height_at(&mut self, _x: f32, _z: f32) -> Option<f32> {
