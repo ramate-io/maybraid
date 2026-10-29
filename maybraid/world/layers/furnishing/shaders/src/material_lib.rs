@@ -7,7 +7,7 @@ use material_ref::{
 	StandardMaterialRefCache,
 };
 
-use crate::{is_furniture_surface_recipe, FurnitureSurfaceMaterial};
+use crate::{FurnitureSurfaceMaterial, is_furniture_surface_recipe};
 
 /// Cache of resolved [`FurnitureSurfaceMaterial`] handles.
 pub type FurnitureSurfaceMaterialRefCache = MaterialRefCache<FurnitureSurfaceMaterial>;

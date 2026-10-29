@@ -190,6 +190,20 @@ impl AnimMailbox {
 		}
 	}
 
+	/// Capture the currently displayed pose as a blend source and restart clip time.
+	///
+	/// Use this when the next sample stays on the same [`AnimId`] (left jab →
+	/// right jab) so the mailbox still crossfades from the visible pose, the same
+	/// way [`tick_anim_mailbox`] does when [`AnimId`] changes. Authoring
+	/// [`character_animations::animations::Transition::from_visible`] is the
+	/// offline equivalent; the mailbox already owns the runtime crossfade.
+	pub fn restart_from_visible(&mut self) {
+		self.capture_base_for_crossfade();
+		self.from_offset = self.displayed_offset;
+		self.blend_progress = 0.0;
+		self.clip_progress = 0.0;
+	}
+
 	#[cfg(test)]
 	fn set_crossfade_for_test(&mut self, blend_progress: f32, from_offset: ArmatureOffset) {
 		self.blend_progress = blend_progress;
@@ -1073,6 +1087,28 @@ mod tests {
 	use std::collections::HashMap;
 	use std::hint::black_box;
 	use std::time::Instant;
+
+	#[test]
+	fn restart_from_visible_starts_a_mailbox_blend() {
+		let mut mailbox = AnimMailbox::new(Transform::default());
+		mailbox.posed = true;
+		mailbox.blend_progress = 1.0;
+		mailbox.clip_progress = 0.4;
+		mailbox.restart_from_visible();
+		assert!(mailbox.blending());
+		assert_eq!(mailbox.clip_progress, 0.0);
+	}
+
+	#[test]
+	fn settled_waits_for_pose_and_crossfade() {
+		let mut mailbox = AnimMailbox::new(Transform::default());
+		assert!(!mailbox.settled());
+		mailbox.posed = true;
+		mailbox.blend_progress = 0.0;
+		assert!(!mailbox.settled());
+		mailbox.blend_progress = 1.0;
+		assert!(mailbox.settled());
+	}
 
 	fn run_select(world: &mut World) {
 		world.init_resource::<MailboxApplySet>();

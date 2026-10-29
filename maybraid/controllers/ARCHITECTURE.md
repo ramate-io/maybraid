@@ -21,7 +21,26 @@ per-actor motor slots. Reusable systems are registered once; actor- or
 session-scoped participation is installed, removed, or suspended. Domain
 interpreters own realization; upstream controllers must not compete by
 writing the same motor components. Continuous input carries neutral / release
-semantics; analog samples are not heap messages.
+semantics; analog input travels together in a rich source frame.
+
+## Current runtime ownership
+
+The phase tables below preserve the original migration plan and some historical
+status notes; the runtime contract is the current implementation summarized here.
+`controllers/virtual-pad` owns one `VirtualPadController` component per source.
+Its HID producers write the controller's rich pad state and publish an immutable
+`VirtualPadEvent` carrying source entity, sequence, delta, and pad snapshot.
+`controllers/core` reconciles those source entities with `InputRouter`, validates
+bindings, and dispatches `UiPadEvent` or `ActorPadEvent` to the explicitly assigned
+UI or actor. Those events retain source, target, and binding provenance through
+deferred work. Menu interpreters consume UI events on their owning menu entity;
+character interpretation consumes actor events and stores current physical and
+semantic frames on the addressed actor. Individual `CharacterIntent` values are
+delivered as actor-targeted `ActorIntentEvent` entity events. Controllers do not
+poll a process-wide pad or rediscover a current actor. `PrimaryVirtualPad` and
+`InputSource::local_pad()` remain explicit single-player host compatibility
+projections. `InputSource::VirtualPad(Entity)` routes each virtual-pad source
+independently; `local_pad()` does not describe the only available source.
 
 ## Flow
 
@@ -57,13 +76,15 @@ and pause tokens. Phase 5 addresses UseItem / PowerUseItem through
 [`dispatch_equipped_item`](../items/equipment/src/dispatch.rs) (D1), stamps
 [`EquippedItemHandler`](../items/equipment/src/dispatch.rs) at inventory / holster
 commit, and hands recoil through [`CameraRecoilHandoff`](../player/camera/src/look.rs).
-Character produce is still a broadcast adapter for look / shell / queue
-intents; item interpreters consume D1, not the pad.
+Historical phase-5 status: character produce was still a broadcast adapter for
+look / shell / queue intents; the current runtime delivers those semantics as
+actor-targeted `ActorIntentEvent`s and keeps continuous frames on the actor.
+Item interpreters consume D1, not the pad.
 
 ## Dependency direction
 
 ```text
-bevy / maybraid-input
+bevy / maybraid-virtual-pad-controller
         ▲
         │
 controllers/core          (router, capture, generic schedule — no game deps)
@@ -76,14 +97,23 @@ player/lib (motor)         menu widgets          gameplay/lib + world + game
         ▲
         │
 controllers/locomotion / items/tanz-user / intelligence
-player/camera / items/skill-map / items/{equipment,firearm-user,grenade-user}
+player/camera / items/skill-map / items/{equipment,firearm-user,grenade-user,fisticuffs-user}
 movement/realization
 ```
 
 Rules:
 
-- `controllers/core` depends only on `maybraid-input` and Bevy.
-- `controllers/character` depends on `core` + `input`.
+- `controllers/core` depends only on `maybraid-virtual-pad-controller` and Bevy.
+- `controllers/character` depends on `core` + `virtual-pad`.
+- `gameplay/session` owns session capabilities and lifecycle events; it uses
+  routing primitives from `controllers/core` privately. `gameplay/lib` and
+  `world` may depend on session for adapters, but do not forward session or
+  routing APIs from their crate roots. The executable imports session APIs
+  directly from `maybraid-session`.
+- Consumers import `InputRouter`, `InputRouting`, and `RoutingEvent` directly
+  from `maybraid-controllers-core`. Composition crates must not re-export
+  those types. `bin/check-controller-boundaries.sh` enforces this rule in
+  Cargo Check.
 - The player motor contract (`MotorIntent` / `ResolvedMotorRequest`) must not
   depend on locomotion or Tanz.
 - Locomotion and Tanz write the motor contract; they do not own apply.
@@ -110,10 +140,11 @@ Package names stay; only directories moved. See [#1450](https://github.com/ramat
 | `player/camera` | `player-camera` | Follow camera, look, recoil apply |
 | `movement/realization` | `movement-realization` | Recovery modifier |
 | `items/skill-map` | `maybraid-skill-map` | Map session + flick |
-| `items/equipment` | `maybraid-equipment` | Category, holster, equipped dispatch |
+| `items/equipment` | `maybraid-equipment` | Category, holster, equipped dispatch, opt-in inventory reconciliation and hold/teardown requests |
 | `items/firearm-user` | `firearm-user` | Trigger / routing / recoil (`runtime` / `presentation`) |
 | `items/firearms` | `firearms` | Cadence clock + `WeaponShotRequest` (`runtime` / `presentation`) |
 | `items/grenade-user` | `grenade-user` | Cook / throw request (`runtime` / `presentation`) |
+| `items/fisticuffs-user` | `fisticuffs-user` | Jab state, sensor, and equipment driver (`runtime` / `presentation`) |
 | `items/grenades` | `grenades` | Fuse / blast + `SpawnThrownGrenade` realize |
 | `items/tanz-user` | `tanz-user` | Tanz recognize / execute |
 | `gameplay/session` | `maybraid-session` | Capabilities, pause, play-session end |
@@ -131,13 +162,20 @@ Persistent equipment state lives in `items/equipment`, grenade cooking in
 `grenade-user`, firing cadence in `firearms`. `gameplay/lib` adapters only
 translate or coordinate.
 
+Hosts enroll only the actors whose bag selection should govern their held kit
+with `ReconcileEquipmentFromInventory`. Equipment compares the selected item
+with the installed handler and queues the common teardown/hold requests; item
+crates realize them. The world enrolls its bag-backed player, chooses and
+persists the loadout, and uses an explicit default-firearm request for its
+bagless fallback. NPC bags and standalone item users are not enrolled.
+
 ## Scheduling boundaries
 
 ```text
 PreUpdate
   InputSystems
-    → VirtualPadSystems::Produce     (A1 → A2)
-    → VirtualPadSystems::Derive      (MenuNavPad, PadCursor)
+    → VirtualPadSystems::Produce: per-entity VirtualPadController production (A1 → A2)
+    → VirtualPadSystems::Derive: VirtualPadEvent(source, sequence, delta, pad)
 
 Update
   ControllerPipeline::Bind           (P1)  character produce, menu focus+dispatch
@@ -171,15 +209,16 @@ delivery changes. Suspension emits `HoldEffect::Freeze` +
 `GestureEffect::Freeze`. Captures and suspensions are token- and
 owner-scoped: releasing one owner cannot release another.
 
-Lifecycle events are a Bevy `Message` (`RoutingEvent`). Each event carries
-`previous` / `next` actor identity; consumers apply
-[`RoutingEvent::lost_actor`](core/src/router.rs) /
-[`RoutingEvent::gained_actor`](core/src/router.rs) /
-[`RoutingEvent::applies_to`](core/src/router.rs) instead of reconstructing
-ownership from the router's later state. Each consumer uses a
-`MessageReader` cursor and sees every event exactly once, regardless of
-stage. Mutating systems should use `InputRouting` so the message is
-published in the same system. `take_events` is only the unpublished buffer.
+`InputRouter` publishes lifecycle changes as `RoutingEvent` messages. Core
+converts actor-affecting changes into entity-targeted `ActorRoutingEvent`s
+(`RoutingLifecycle` is its alias), carrying the actor, source, and resulting
+route status. Character, Tanz, skill-map, firearm, and grenade consumers observe
+that event on the affected actor and apply the embedded `RoutingEvent` there;
+they do not rediscover ownership from the router's later state. The motor apply
+path remains an exception: `player/lib/src/motor/apply.rs` reads
+`MessageReader<RoutingEvent>` and applies hold effects to `lost_actor()`.
+Mutating systems should use `InputRouting` so the low-level message is published
+in the same system. `take_events` is only the unpublished buffer.
 
 Controllers read `InputRouter::actor` / `delivered_actor` / `local_actor`.
 They never rediscover a "current player". The lowest-ID `Player` fallback is
@@ -203,28 +242,28 @@ the current owner. Later phases change the owner column, not the role id.
 
 | Id | Role | Symbol | Producers | Consumers | Lifecycle owner | Now |
 |---|---|---|---|---|---|---|
-| A1 | Device HID | `bevy_input` `Gamepad` / `ButtonInput` / mouse; Apple `hid/gamecontroller.rs` | OS / gilrs / GameController | `input::produce::{keyboard,mouse,gamepad}` | `VirtualPadPlugin` | Hardware only. Stays in `input`. |
-| A2 | Virtual-pad controller | `VirtualPad`, `VirtualPadSystems` | A1 producers + `PadOverlay` | A3–A5, plus leftover hardware readers below | `VirtualPadPlugin` | Canonical analog + edges. |
-| A3 | Input-routing controller | `InputRouter`, `InputSource`, `Routed<T>`, `RouteTarget` | A2 (`InputSource::LocalPad`) | A4 / A5 / U5 / U6 | `ControllersCorePlugin` | Sole owner of assignment, capture, and suspension. One local pad. |
-| A4 | Menu controller | `MenuControllerPlugin`, `refresh_menu_focus`, `dispatch_menu_nav` | A2 `MenuNavPad` | M2 via `MenuNavImpulse` | `MenuControllerPlugin` | Targeted path (see M1). |
-| A5 | Character controller | `produce_character_intents` → `CharacterIntent`; `RoutedActorControl` | A2 `VirtualPad` + `InputRouter::delivered_actor` | B* intents (broadcast) + B12 / B13 routed sample | `CharacterControllerPlugin` | Bind. Intents still untargeted; analog / A / B are actor-addressed. |
+| A1 | Device HID | `bevy_input` `Gamepad` / `ButtonInput` / mouse; Apple `hid/gamecontroller.rs` | OS / gilrs / GameController | `controllers/virtual-pad/src/produce/*` and `controller.rs` | `VirtualPadPlugin` | Hardware production is source-assigned per `VirtualPadController`. |
+| A2 | Virtual-pad controller | `VirtualPadController`, `VirtualPadEvent` | A1 producers + addressed `PadOverlay` | A3 and routed UI / actor consumers | `VirtualPadPlugin` | Per-source rich state and immutable source-tagged frames. |
+| A3 | Input-routing controller | `InputRouter`, `InputSource`, `Routed<T>`, `RouteTarget` | A2 (`InputSource::VirtualPad(Entity)`) | targeted `UiPadEvent` / `ActorPadEvent`, U5 / U6 | `ControllersCorePlugin` | Sole owner of assignment, capture, and suspension, independently per source. |
+| A4 | Menu controller | `MenuController`, `interpret_menu_pad` | A3 `UiPadEvent` | M2 via `MenuNavImpulse` / `MenuActionImpulse` | Menu controller entity | Owns focus, repeat and scoped session state; deferred actions retain routing authorization. |
+| A5 | Character controller | `produce_character_intents` → `CharacterIntent`; `RoutedActorControl` | A3 `ActorPadEvent` | actor-owned `CharacterIntentFrame`, `RoutedActorControl`, and `ActorIntentEvent` | `CharacterControllerPlugin` | Bind. Semantic events and physical samples retain the addressed actor and source binding. |
 | A6 | NPC movement controller | `intelligence::movement::drive_movement` | planner / `MovementIntelligence` | `MotorIntent` NPC slot | movement-intelligence plugin | **Phase 2.** Declares; does not write `MoveWish`. |
 
 ### B — character / actor samples
 
 | Id | Role | Symbol | Producers | Consumers | Lifecycle owner | Now |
 |---|---|---|---|---|---|---|
-| B1 | Look | `CharacterIntent::Look` | A5 | C1 `apply_look_intents` | character crate | Broadcast. |
-| B2 | Focus | `CharacterIntent::Focus` | A5 | C2; also drops sprint in `interpret_standard_locomotion` | character crate | Broadcast. |
-| B3 | Ads | `CharacterIntent::Ads` | A5 | C3 | character crate | Broadcast. |
-| B4 | Swap POV | `CharacterIntent::SwapPov` | A5 | C4 | character crate | Broadcast. |
-| B5 | Use item | `CharacterIntent::UseItem` | A5 | D1 `dispatch_equipped_item` | character crate (sample); `items/equipment` (D1) | **Phase 5.** Broadcast Bind sample. D1 is the only interpreter. |
-| B6 | Power-use item | `CharacterIntent::PowerUseItem` | A5 | D1 → `EquippedPowerUse` | character crate | **Phase 5.** Broadcast Bind sample. D7 reads the addressed message. |
-| B7 | Equipped queue | `SwapActive`, `CycleEquippedQueue`, `SelectInventoryCyclingCategory` | A5 | D5 / D6 | character crate | Broadcast. |
-| B8 | In-game menu | `CharacterIntent::InGameMenu` | A5 | E1 `toggle_world_pause` | character crate | Broadcast. |
-| B9 | Inventory | `CharacterIntent::Inventory` | A5 | E2 `stash.rs` | character crate | Broadcast. |
-| B10 | Toggle map | `CharacterIntent::ToggleMap` | A5 | E3 `map_view.rs` | character crate | Broadcast. |
-| B11 | Ordinary locomotion | `controllers/locomotion` `interpret_standard_locomotion` | A5 + `InputRouter::delivered_local_actor` | `MotorIntent` Standard contribution | `LocomotionControllerPlugin` | **Phase 2.** One delivered actor. Capture / disconnect / suspend do not write Standard. No lowest-ID lookup. |
+| B1 | Look | `ActorIntentEvent(CharacterIntent::Look)` | A5 | C1 `apply_look_intents` | addressed actor | Actor-targeted entity event. |
+| B2 | Focus | `ActorIntentEvent(CharacterIntent::Focus)` | A5 | C2; also drops sprint in `interpret_standard_locomotion` | addressed actor | Actor-targeted event; continuous sample is in `CharacterIntentFrame`. |
+| B3 | Ads | `ActorIntentEvent(CharacterIntent::Ads)` | A5 | C3 | addressed actor | Actor-targeted entity event. |
+| B4 | Swap POV | `ActorIntentEvent(CharacterIntent::SwapPov)` | A5 | C4 | addressed actor | Actor-targeted entity event. |
+| B5 | Use item | `ActorControlEvent` / `ActorControlSample` | A5 | D1 `dispatch_equipped_item` | addressed actor | D1 is the only interpreter; analog state remains in the actor frame. |
+| B6 | Power-use item | `ActorIntentEvent(CharacterIntent::PowerUseItem)` | A5 | D1 → `EquippedPowerUse` | addressed actor | Actor-targeted entity event, handed off as addressed `EquippedPowerUse`. |
+| B7 | Equipped queue | `ActorIntentEvent(SwapActive / CycleEquippedQueue / SelectInventoryCyclingCategory)` | A5 | D5 / D6 | addressed actor | Actor-targeted entity events. |
+| B8 | In-game menu | `ActorIntentEvent(CharacterIntent::InGameMenu)` | A5 | E1 `toggle_world_pause` | addressed actor | Actor-targeted entity event. |
+| B9 | Inventory | `ActorIntentEvent(CharacterIntent::Inventory)` | A5 | E2 `stash.rs` | addressed actor | Actor-targeted entity event. |
+| B10 | Toggle map | `ActorIntentEvent(CharacterIntent::ToggleMap)` | A5 | E3 `map_view.rs` | addressed actor | Actor-targeted entity event. |
+| B11 | Ordinary locomotion | `controllers/locomotion` `interpret_standard_locomotion` | actor-owned `CharacterIntentFrame` + `ActorControlStatus` | `MotorIntent` Standard contribution | `LocomotionControllerPlugin` | Reads and writes only the addressed actor; queued writes validate the original source/actor binding. |
 | B12 | Tanz gesture | `TanzInput` (`user: Entity`) | `tanz_user::recognize_tanz_inputs` from `RoutedActorControl` | Tanz match → `ExecuteTanz`; skill-map fan-out | `TanzUser` component | **Phase 3.** Source/actor-owned history; physical A/B, not Jump. `RoutingEvent` messages cancel partial gestures. |
 | B13 | Standard flick | `SkillMapFlick` | `SkillMapController::detect_skill_map_flicks` from `RoutedActorControl` | skill-map interpreter | `SkillMapController` resource | **Phase 3.** Actor/session-addressed; `look_throw`. History scoped to owner; session change cannot complete against the new session. |
 
@@ -247,38 +286,38 @@ the current owner. Later phases change the owner column, not the role id.
 | D3 | Grenade throw | `grenade_user::throw::apply_throw_intents` | D1 grenade | cook / latch | grenade-user | **Phase 5.** Missing delivery freezes; `take_live_cook` owns swap / death drop. |
 | D4 | Recoil handoff | `queue_weapon_recoil` → `advance_weapon_recoil` | `WeaponFired` | C5 `CameraRecoilHandoff` | firearm-user | **Phase 5.** Camera applies; firearm-user does not write look / camera. |
 | D5 | Inventory category | `apply_inventory_category_selection` | B7 `SelectInventoryCyclingCategory` | per-actor `InventoryCycling`; HUD `ActiveInventoryCyclingCategory` | `items/equipment` `selection.rs` | **Phase 5.** Actor component is the owner; resource is a mirror. |
-| D6 | Queue cycle / swap | `cycle_equipped_inventory_queues` / `begin_equipment_holster` + `commit_equipment_holster` | B7 + `InventoryCycling` | skill-map / Lubikan cycle, or `EquipmentHolster` commit | `items/equipment` | **Phase 5.** Weapons commit the handler at the holster midpoint. Shared stages are Commit → Teardown → `ApplyDeferred` → Hold → Cleanup so every outgoing kit is gone before any incoming kit is built. |
+| D6 | Queue cycle / swap | `cycle_equipped_inventory_queues` / `begin_equipment_holster` + `commit_equipment_holster` | B7 + `InventoryCycling` | skill-map / Lubikan cycle, or `EquipmentHolster` commit | `items/equipment` | Weapons commit the bag at the holster midpoint. Reconcile skips existing requests; stages are Reconcile → PrepareTeardown → Teardown → `ApplyDeferred` → Hold → Cleanup so outgoing kits are gone before incoming kits are built. |
 | D7 | Lubikan activation | `gameplay/lib/src/powers.rs` `request_lubikan_activation` | D1 `EquippedPowerUse` | `LubikanActivationRequest::equipped(owner)` | `gameplay/lib` | **Phase 5.** Spends once; refusal keeps charge. |
-| D8 | Interaction / stash | `stash.rs` `StartInteraction` | `CharacterIntent::StartInteraction` | stash / crate loot | world | Broadcast. |
+| D8 | Interaction / stash | `stash.rs` `StartInteraction` | `ActorIntentEvent(CharacterIntent::StartInteraction)` | addressed actor’s stash / crate loot | world host | Actor-targeted event; primary persistence is an explicit host projection. |
 | D9 | Item presentation | `PlayerPoseSystems::Item` / `WeaponSwap` | D6, Tanz pose | held meshes | player presentation | Not a controller. Listed so D6 does not own pose. |
 
 ### E — shell interpreter
 
 | Id | Role | Symbol | Producers | Consumers | Lifecycle owner | Now |
 |---|---|---|---|---|---|---|
-| E1 | In-game menu / pause | `game::toggle_world_pause` | B8 + `VirtualPad` (A vs Start) | `WorldPause`, `SessionCapabilities` pause token, `WorldGameplayEnabled` | `GamePlugin` + `gameplay/session` | Pause writes the session token; session projects live-play. |
-| E2 | Inventory sheet | `stash.rs` Inventory reader | B9 | inventory editor | world | Broadcast. |
-| E3 | World map | `map_view.rs` ToggleMap reader | B10 | `WorldMapView` | world | Broadcast. Two camera-lock writers remain. |
+| E1 | In-game menu / pause | `game::toggle_world_pause` | B8 `ActorIntentEvent` | `WorldPause`, `SessionCapabilities` pause token, `WorldGameplayEnabled` | `GamePlugin` + `gameplay/session` | Consumes the addressed actor event and accepts pause input only from the primary host source; no direct `VirtualPad` read. |
+| E2 | Inventory sheet | `stash.rs` inventory handlers | B9 `ActorIntentEvent` | addressed actor's inventory editor / drop path | world | Actor-targeted event; stash and loadout operations use `event.entity`. |
+| E3 | World map | `map_view.rs` `toggle_map_view` / `handle_map_pad` | B10 `ActorIntentEvent`; map controls arrive as `UiPadEvent` on the map HUD | `WorldMapView` | world | Toggle is actor-addressed; map state records its source and actor, and its UI controls are source-filtered. `sync_camera_session_state` owns follow, POV lock, and look suppression. |
 | E4 | Session gameplay gate | `SessionCapabilities`, `WorldGameplayEnabled` | E1, `game/src/flow.rs` enter, pause | B11 world filter, HUD, cycling | `gameplay/session` | Live. Capabilities already replace the old `SessionActivity` / `WorldGameplayEnabled` gates. Session projects live-play; world keeps scenery / menu-shell bits. |
-| E5 | Spawn / respawn picker | `SpawnPickerController`, `refresh_spawn_picker_focus`, `dispatch_spawn_picker` | A2 `MenuNavPad` | `PlayerChoseRespawnPoi` / `DestinationSelected` → `ResolvePlacement` / `respawn_world_player` | `spawns/player` | **Spawn rewrite phase 1–2.** UI-owned MenuNav capture. No actor. Placement work lives in `PlacementWork` so generation that outlives messages cannot drop the request. |
+| E5 | Spawn / respawn picker | `SpawnPickerController`, `refresh_spawn_picker_focus`, `dispatch_spawn_picker` | source-bound `UiPadEvent` addressed to the picker entity | `PlayerChoseRespawnPoi` / `DestinationSelected` → `ResolvePlacement` / `respawn_world_player` | `spawns/player` | Picker owns its source, focus, repeat, and UI capture; it consumes the rich addressed pad frame rather than polling `MenuNavPad`. No actor is targeted. Placement work lives in `PlacementWork` so generation that outlives messages cannot drop the request. |
 
 ### U — routing, capture, lifecycle
 
 | Id | Role | Symbol | Producers | Consumers | Lifecycle owner | Now |
 |---|---|---|---|---|---|---|
-| U1 | Source routing | `InputSource` | A3 | `Routed`, `CaptureLayer`, `InputRouter` | `controllers/core` | Local pad only. |
+| U1 | Source routing | `InputSource::VirtualPad(Entity)` / `InputSource::local_pad()` | A3 | `Routed`, `CaptureLayer`, `InputRouter` | `controllers/core` | Independent state per virtual-pad entity; `local_pad()` is the host compatibility source. |
 | U2 | Actor routing | `ActorTarget`, `InputRouter::actor`, `RoutedActorControl` | host `assign_local_player` | A5; B11 / B12 / B13 | `InputRouter` (sole owner) | Lowest-ID `Player` assigned **once** at the host boundary. Controllers do not rediscover. |
 | U3 | UI routing | `UiTarget`, `RouteTarget::Ui`, `InputRouter::ui` | A4 capture; host `assign_ui` | M1 / M2 | `InputRouter` | Menu path uses token-scoped capture; UI assignment is available for hosts. |
 | U4 | Focus pick | `MenuController::pick_focus` / `resolve` | screen subtree | A4 | `MenuController` | Overlay > HUD > text. |
 | U5 | Scoped capture | `CaptureToken`, `ScopeOwner`, `CaptureStack` via `InputRouter` | A4 `refresh_menu_focus` (`MenuNavCapture`); console / map / text | A4 dispatch; A5 `delivered_actor`; pad policy | `InputRouter` | Token- and owner-scoped. Nested menu / text / overlay. First/last blocking capture emits `RoutingKind::{Captured,Uncaptured}`. Updating a claim keeps stack order. |
-| U6 | Suspension | `SuspensionToken`, `InputRouter::suspend` / `set_paused` | E1 pause; hosts | A5 delivery; Tanz execute (session-local); E4 projection | `InputRouter` | Delivery freeze. Motor freeze is `MotorSuppressionToken`. Pause is not session end. Session writes go through `InputRouting` so later stages see the messages. |
-| U7 | Lifecycle cleanup | `RoutingEvent` hold / gesture effects; Tanz `reset_input` / `apply_toggle`; item latch / trigger; death despawn | A3 events; mode flip; death | wishes, execution, items | `InputRouter` + per-domain | Consumers read `MessageReader<RoutingEvent>` (`InputRouting` publishes). `ReleaseNeutral` / `Cancel` drop Standard holds, partial Tanz / flick history, and leftover item holds (disconnect / capture / reassignment / removal). A live grenade cook is kept on `Captured`. |
+| U6 | Suspension | `SuspensionToken`, `InputRouter::suspend` / `set_paused` | E1 pause; hosts | A5 delivery; Tanz execute (session-local); E4 projection | `InputRouter` | Gameplay delivery freeze; authorized UI and shell input remain available. Motor freeze is `MotorSuppressionToken`. Pause is not session end. Session writes go through `InputRouting` so later stages see the lifecycle message and addressed actor event. |
+| U7 | Lifecycle cleanup | `RoutingEvent` → `ActorRoutingEvent` (`RoutingLifecycle`); Tanz mode / gesture state; item latch / trigger; death despawn | A3 events; mode flip; death | actor control status, motor wishes, execution, items | `InputRouter` + per-domain | Character, Tanz, skill-map, firearm, and grenade handlers observe actor-targeted lifecycle events. `ReleaseNeutral` / `Cancel` release Standard holds and partial gesture state; disconnect / reassignment / removal also drop a live grenade cook, while capture cancels a leftover latch and keeps an active cook. `player/lib` motor hold effects remain a `MessageReader<RoutingEvent>` consumer. |
 
 ### M — menu
 
 | Id | Role | Symbol | Producers | Consumers | Lifecycle owner | Now |
 |---|---|---|---|---|---|---|
-| M1 | Menu controller | `MenuController`, `ExclusiveNav`, `dispatch_menu_nav` | A2 `MenuNavPad` | M2 | `MenuControllerPlugin` | **Phase 1 migrated path.** `Routed<MenuNav>` → `MenuNavImpulse` on one `UiTarget`. Exclusive modal nav acquires a `CaptureToken` on `InputRouter`. |
+| M1 | Menu controller | `MenuController`, `interpret_menu_pad` | source-bound `UiPadEvent` addressed to the focused `UiTarget` | M2 via `MenuNavImpulse` / `MenuActionImpulse` | `MenuControllerPlugin` | Interprets the authorized rich pad frame and emits routed menu impulses. Exclusive modal nav acquires a `CaptureToken` on `InputRouter`; the primary `MenuNavPad` adapter remains a host compatibility projection. |
 | M2 | Menu consumer | `On<MenuNavImpulse>` in `TextMenu`, `HudMenu`, scroll, short-text, screens, playground prompts | M1 | widget state, `MenuActivate` | each widget | Already entity-addressed. Keep. |
 
 ### P — pipeline / motor
@@ -296,10 +335,10 @@ Who currently writes the live motor / pose bits that interpreters should own.
 
 | State | Writer | File | Policy | Role after the stack |
 |---|---|---|---|---|
-| `CharacterIntent` | `produce_character_intents` | `controllers/character/src/produce.rs` | `InputRouter::actor`, capture blocks, per-actor `OrdinaryLocomotion` | A5 Bind. Single producer. Becomes `Routed` per actor. |
-| `RoutedActorControl` | `produce_actor_control_samples` | `controllers/character/src/sample.rs` | `InputRouter::delivered_actor` | Bind. Analog + physical A/B for one actor. Sole pad sample for B12 / B13. |
+| `CharacterIntent` | `produce_character_intents` | `controllers/character/src/produce.rs` | addressed `ActorPadEvent` binding and per-actor `OrdinaryLocomotion` | A5 Bind. Produces actor-owned `CharacterIntentFrame` and `ActorIntentEvent`. |
+| `RoutedActorControl` | `produce_character_intents` | `controllers/character/src/produce.rs` | addressed `ActorPadEvent` binding | Bind. Analog + physical A/B on one actor. Sole pad sample for B12 / B13. |
 | `ExecuteTanz` | `match_tanz_inputs` | `items/tanz-user/src/execute.rs` | ordered `TanzStack` + cooldown | Selection only. Independent of `SkillMapFlick`. |
-| `MotorIntent` Standard | `interpret_standard_locomotion` | `controllers/locomotion/src/standard.rs` | `InputRouter::delivered_local_actor`; per-actor `OrdinaryLocomotion` | P3 Standard. One delivered actor. |
+| `MotorIntent` Standard | `interpret_standard_locomotion` | `controllers/locomotion/src/standard.rs` | actor-owned `CharacterIntentFrame`; per-actor `OrdinaryLocomotion` | P3 Standard. Reads each addressed actor's current frame. |
 | `MotorIntent` Tanz | `apply_tanz_movement` | `items/tanz-user/src/execute.rs` | `TanzUser.mode.is_tanzer()` | P3 Tanz. Declares sprint/cap in the sample. Compose selects; apply does not inspect Tanz. |
 | `SkillMapFlick` | Tanz `publish_tanz_map_inputs` / Standard `detect_skill_map_flicks` | `tanz-user` / `skill-map` | actor + optional session | Independent of Tanz match / execution success. |
 | `MotorIntent` suppress | `apply_world_motor_filter` | `world/lib/src/control.rs` | `WORLD_GAMEPLAY` on Player; `SIMULATION` on every `CharacterController` when the Simulation bit is absent | P3 WorldFilter. Token-owned; zeros leftover vegetation `MoveWish`. |
@@ -313,16 +352,17 @@ Who currently writes the live motor / pose bits that interpreters should own.
 | velocity | `apply_character_movement` | `world/player/src/player.rs` | `VegetationPlayerMotor` (false in Discovery) | Playground host motor. |
 | `CameraController` look / POV | `apply_look_intents` | `player/camera/src/look.rs` | `CameraLookSuppressed`, `CameraPovLocked`, `delivered_actor` | C1–C4. **Phase 5.** |
 | Follow camera recoil yaw / pitch | `apply_recoil_handoff` | `player/camera/src/look.rs` | `CameraRecoilHandoff` from `WeaponFired` | C5. **Phase 5.** Sole follow-yaw recoil writer. |
-| `EquippedItemHandler` | `PendingEquipmentHold::request` / item `spawn_held_*` | `items/equipment` + item crates | holster commit requests; items stamp at realize | D1 stamp. **Phase 5.** World `hold_primary_weapon` still arms the first loadout. |
+| `EquippedItemHandler` | `PendingEquipmentHold::request` / item realization | `items/equipment` + item crates | holster, host arm, or opt-in reconciliation request | D1 stamp. World chooses and persists the player loadout; item crates own construction and teardown. |
 | `EquippedItemUse` / `EquippedPowerUse` | `dispatch_equipped_item` | `items/equipment/src/dispatch.rs` | `delivered_actor` + handler | D1. **Phase 5.** Sole Bind writer. |
 | `WeaponTrigger` (player) | `apply_fire_intents` | `items/firearm-user/src/fire.rs` | `Player` + addressed firearm use | D2. **Phase 5.** |
 | `WeaponTrigger` (NPC) | `intelligence::combat::firearm` | `intelligence/combat/firearm/src/combat.rs` | planner cadence | A6 item path. Keep. |
 | `WorldGameplayEnabled` | `toggle_world_pause`, flow enter | `game/src/lib.rs`, world control | pause / shell | E1 / E4. Phase 4. |
 
-## Direct hardware reads (outside `input`)
+## Historical phase-1 hardware-read inventory
 
-Invariant 3: one normalized input source. These reads stay until the listed
-phase. Phase 1 inventories them and migrates menu dispatch only.
+Invariant 3: one normalized input source. This table records the phase-1
+migration snapshot, when only menu dispatch had moved; it is not a current
+ownership inventory. See the current runtime summary above.
 
 | Location | Reads | Should consume | Phase |
 |---|---|---|---|
@@ -341,15 +381,16 @@ phase. Phase 1 inventories them and migrates menu dispatch only.
 | `menu/playground` drop / leave / preview | `VirtualPad` / `Gamepad` | M1 | playground hosts |
 | `util/camera-controls`, `util/game-commands` | `Gamepad` | debug overlays | keep (util) |
 
-## Query-wide dispatch
+## Historical query-wide dispatch plan
 
-Invariant 1: explicit targeting. Broadcast `Messages<T>` plus `Query` that
-applies the last sample to **every** matching entity.
+Invariant 1: explicit targeting. The rows below preserve the original migration
+plan and status at that phase; they do not describe current dispatch. Character
+semantic intents now target their actor as `ActorIntentEvent`s.
 
 | Path | Mechanism | Phase 1 | Removal |
 |---|---|---|---|
 | **Menu nav (M1)** | `Routed<MenuNav>` → `MenuNavImpulse` on one `UiTarget`; exclusive modal acquires a `CaptureToken` | **Migrated** | — |
-| `CharacterIntent` (B1–B11) | `MessageWriter` / `MessageReader`, no actor | adapter | 3–5 per consumer. B11 consumes via `InputRouter::delivered_local_actor`. |
+| `CharacterIntent` (B1–B11) | Original plan: `MessageWriter` / `MessageReader`, no actor | historical adapter plan | Superseded by addressed actor events and actor-owned frames. |
 | `apply_move_intents` | removed | **Phase 2** | locomotion + compose / apply |
 | `apply_intents_to_movement` | removed live writes | **Phase 2** | `apply_world_motor_filter` suppress |
 | `apply_look_intents` | broadcast B1–B4; gated on `delivered_actor` | **Phase 5 gated** | remaining: addressed look sample |
@@ -359,13 +400,14 @@ applies the last sample to **every** matching entity.
 | `TanzInput` | produced from `RoutedActorControl` for one actor | **Phase 3 migrated** | — |
 | `drive_movement` | each NPC declares its own `MotorIntent` (OK) from a planner | **Phase 2** | keep |
 
-## Temporary adapters
+## Historical temporary-adapter plan
 
-Do not add a second copy of these. Remove in the named phase.
+This table records adapters expected during the original phase migration. Check
+the current runtime summary above before treating a row as live.
 
 | Adapter | Why it exists | Removal |
 |---|---|---|
-| Broadcast `CharacterIntent` | Look / shell / queue consumers still read the process-wide message. UseItem / PowerUseItem now go through D1. | Remaining look / shell / queue consumers. |
+| Broadcast `CharacterIntent` | Historical adapter plan for look / shell / queue consumers. UseItem / PowerUseItem now go through D1. | Superseded: semantic intents are actor-targeted `ActorIntentEvent`s; continuous state is stored in actor-owned frames. |
 | `CharacterControlSystems` ⊂ `Bind` | Leftover `.after(CharacterControlSystems)` item / camera / shell hosts. Motor hosts joined the pipeline. | Remaining hosts; Bind alias only. |
 | Domain `MotorRequestStage` lives in player | Generic core must not name Tanz / Standard / WorldFilter. | Keep beside domain systems. |
 | `PlayerSystems::Body` outside P4 | **Removed.** Body is in `ControllerPipeline::Motor`. Intent stays for item users (D*). | — |
@@ -440,11 +482,11 @@ later PRs do not drift.
 Tracking: [#1441](https://github.com/ramate-io/maybraid/issues/1441). Stack tip of
 [#1436](https://github.com/ramate-io/maybraid/issues/1436).
 
-### Item / camera flow
+### Item / camera flow (historical phase-5 plan)
 
 ```text
-VirtualPad → produce_character_intents → CharacterIntent (Bind broadcast)
-InputRouter::delivered_actor + EquippedItemHandler
+ActorPadEvent → produce_character_intents → addressed CharacterIntent / actor frame
+EquippedItemHandler
        → dispatch_equipped_item
             → EquippedItemUse(actor, handler, squeeze, held)
                  → apply_fire_intents      (firearm + held → WeaponTrigger;
@@ -479,9 +521,10 @@ WeaponFired → queue_weapon_recoil → CameraRecoilHandoff → apply_recoil_han
 | `items/firearm-user` | `apply_fire_intents` reads D1; `apply_fire_routing` clears a held trigger on `lost_actor`; recoil writes the handoff only; `register_firearm_user_runtime` / `register_firearm_user_presentation`; realizes hold / teardown |
 | `items/grenade-user` | `GrenadeThrow::{apply_use,try_start_cook,apply_hold,apply_routing,cancel_partial_hold,take_live_cook}`; `register_grenade_user_runtime` / `register_grenade_user_presentation`; throw writes `SpawnThrownGrenade` |
 | `items/firearms` | `decide_weapon_fire` clock + `WeaponShotRequest` / `WeaponFired`; `register_firearm_runtime` / `register_firearm_presentation`. Presentation `fire_weapons` realizes shot requests. |
-| `gameplay/lib` | `register_gameplay_runtime` / `ItemRuntimes` (sole item-runtime owner); `request_lubikan_activation`; actor teardown coordinate |
+| `items/fisticuffs-user` | jab state, sensor lifetime, fisticuffs hold / teardown realization |
+| `gameplay/lib` | `register_gameplay_runtime` / `ItemRuntimes` (sole item-runtime owner); `request_lubikan_activation`; actor teardown coordination |
 | `gameplay/session` | capabilities, pause token, play-session end |
-| `world` | loadout / arm / VFX adapters; world-dependent Lubikan owner grant |
+| `world` | loadout choice / persistence and equipment requests, VFX; world-dependent Lubikan owner grant |
 | `intelligence/combat/firearm` | unchanged NPC `WeaponTrigger` writer |
 
 ### Controller I/O
@@ -494,7 +537,7 @@ WeaponFired → queue_weapon_recoil → CameraRecoilHandoff → apply_recoil_han
 | `EquippedItemUse` grenade | cook / latch / explicit release | D3 |
 | throw release | `SpawnThrownGrenade` | D3 → grenades interpreter |
 | `RoutingEvent` disconnect / reassign / removal | `lost_actor` + `take_live_cook` + `DropLiveGrenade` | D3 |
-| `RoutingEvent` `Captured` | cancel leftover item latch / trigger; keep a live cook | D3 / D2 |
+| `RoutingEvent` `Captured` | cancel leftover item latch / trigger; keep an active cook | D3 / D2 |
 | `InputRouter` suspension | freeze `advance_throw` clocks; freeze the local actor's holster clock | D3 / D6 |
 | `WeaponFired` | `CameraRecoilHandoff` | D4 → C5 |
 | `EquippedPowerUse` | `LubikanActivationRequest::equipped` | D7 |
@@ -553,18 +596,19 @@ full plugins (`GameplayPlugin` adds those after the runtime):
 - loading → play → inventory pause → resume → Home
 - NPC `FirearmUser` does not consume player D1
 
-### Remaining limitations
+### Phase-5 status notes
 
-- `CharacterIntent` is still a Bind broadcast for look, shell, and queue
-  intents (B1–B4, B7–B10).
+- Character semantic intents are now actor-targeted `ActorIntentEvent`s, and
+  current physical / semantic frames live on the addressed actor. The earlier
+  Bind-broadcast limitation has been resolved.
 - `CharacterControlSystems` remains a Bind alias for leftover
   `.after(CharacterControlSystems)` hosts.
 - `apply_look_intents` is still query-wide `FollowCamera` (delivery-gated).
-- Shell HID leftovers: `stash` `Gamepad` presence,
-  `game::toggle_world_pause` Start / A. The locked spawn picker now
-  confirms from UI-owned [`MenuNavPad`](../input/src/surface/menu.rs)
-  (`SpawnPickerController`); it does not restore actor-less character
-  intents or exempt Jump from map capture.
+- Shell adapters are host-scoped: `game::toggle_world_pause` filters the
+  addressed `ActorIntentEvent` to the primary source, and the locked spawn
+  picker consumes a source-bound `UiPadEvent` on its controller entity. The
+  primary `MenuNavPad` remains a compatibility projection; the picker does not
+  poll it or restore actor-less character intents.
 - Full `WorldPlugin` is not headless-safe; stack tests use the extracted
   headless runtime registration, not terrain / vegetation assemble.
 

@@ -8,7 +8,7 @@ use material_ref::{
 };
 
 use crate::{
-	is_column_surface_recipe, is_urban_surface_recipe, ColumnSurfaceMaterial, UrbanSurfaceMaterial,
+	ColumnSurfaceMaterial, UrbanSurfaceMaterial, is_column_surface_recipe, is_urban_surface_recipe,
 };
 
 /// Cache of resolved [`UrbanSurfaceMaterial`] handles.
@@ -151,8 +151,8 @@ mod tests {
 
 	use super::*;
 	use crate::{
-		ColumnSurfaceMaterial, UrbanSurfaceMaterial, RECIPE_DORIC_COLUMN,
-		RECIPE_DORIC_COLUMN_SHAFT_KIT, RECIPE_WOOD,
+		ColumnSurfaceMaterial, RECIPE_DORIC_COLUMN, RECIPE_DORIC_COLUMN_SHAFT_KIT, RECIPE_WOOD,
+		UrbanSurfaceMaterial,
 	};
 
 	#[test]

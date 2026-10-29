@@ -20,6 +20,12 @@ pub fn configure(app: &mut App) {
 	);
 	app.configure_sets(
 		Update,
+		LubikanSystems::Activate
+			.after(CharacterControlSystems)
+			.after(SessionCapabilitySystems),
+	);
+	app.configure_sets(
+		Update,
 		(
 			EquipmentSystems::SelectCategory
 				.after(CharacterControlSystems)
@@ -35,10 +41,18 @@ pub fn configure(app: &mut App) {
 				.after(SessionCapabilitySystems)
 				.after(LubikanSystems::Owner)
 				.run_if(resource_equals(WorldGameplayEnabled(true))),
+			EquipmentSystems::AdvanceHolster
+				.after(CharacterControlSystems)
+				.after(SessionCapabilitySystems),
 			EquipmentSystems::CommitHolster
 				.after(CharacterControlSystems)
 				.after(SessionCapabilitySystems)
 				.run_if(resource_equals(WorldGameplayEnabled(true))),
+			EquipmentSystems::Reconcile
+				.after(EquipmentSystems::CommitHolster)
+				.before(EquipmentSystems::Teardown),
+			EquipmentSystems::Hold.before(PlayerSystems::Intent),
+			EquipmentSystems::Cleanup.before(PlayerSystems::Intent),
 		),
 	);
 }

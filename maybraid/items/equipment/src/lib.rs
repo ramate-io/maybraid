@@ -1,6 +1,6 @@
 //! Actor equipment ownership: category, holster commit, and equipped dispatch.
 //!
-//! Character produces [`maybraid_character_controller::CharacterIntent::UseItem`].
+//! Character produces actor-addressed control frames and semantic intents.
 //! This crate resolves the installed [`EquippedItemHandler`] and requests kit
 //! changes. Firearm / grenade crates realize construction and teardown.
 
@@ -11,17 +11,16 @@ mod transition;
 
 use bevy::ecs::schedule::ApplyDeferred;
 use bevy::prelude::*;
-use maybraid_character_controller::{
-	CharacterBindSystems, CharacterControlSystems, CharacterControllerPlugin,
-};
+use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 
 pub use dispatch::{
-	delivered_item_use, dispatch_equipped_item, EquippedItemHandler, EquippedItemUse,
+	dispatch_equipped_item, dispatch_equipped_power, EquippedItemHandler, EquippedItemUse,
 	EquippedPowerUse, RoutedItemActor,
 };
 pub use lifecycle::{
-	clear_equipment_requests, EquipmentInventoryChanged, PendingEquipmentHold,
-	PendingEquipmentTeardown,
+	clear_equipment_requests, clear_handler_for_teardown_only, reconcile_equipment_from_inventory,
+	EquipmentInventoryChanged, PendingEquipmentHold, PendingEquipmentTeardown,
+	ReconcileEquipmentFromInventory,
 };
 pub use maybraid_character_controller::InventoryCyclingCategory;
 pub use selection::{
@@ -46,6 +45,10 @@ pub enum EquipmentSystems {
 	AdvanceHolster,
 	/// Commit the bag and request kit replace at the holster midpoint.
 	CommitHolster,
+	/// Reconcile explicitly enrolled actors with their current bag selection.
+	Reconcile,
+	/// Clear stale dispatch for teardown-only requests before item teardown.
+	PrepareTeardown,
 	/// Item crates tear down the outgoing kit.
 	Teardown,
 	/// Item crates construct the incoming kit after teardown commands flush.
@@ -62,9 +65,7 @@ impl Plugin for EquipmentPlugin {
 		if !app.is_plugin_added::<CharacterControllerPlugin>() {
 			app.add_plugins(CharacterControllerPlugin);
 		}
-		app.add_message::<EquippedItemUse>()
-			.add_message::<EquippedPowerUse>()
-			.add_message::<EquipmentInventoryChanged>()
+		app.add_message::<EquipmentInventoryChanged>()
 			.init_resource::<ActiveInventoryCyclingCategory>()
 			.configure_sets(
 				Update,
@@ -79,7 +80,9 @@ impl Plugin for EquipmentPlugin {
 						.after(CharacterControlSystems),
 					EquipmentSystems::AdvanceHolster,
 					EquipmentSystems::CommitHolster.after(EquipmentSystems::AdvanceHolster),
-					EquipmentSystems::Teardown.after(EquipmentSystems::CommitHolster),
+					EquipmentSystems::Reconcile.after(EquipmentSystems::CommitHolster),
+					EquipmentSystems::PrepareTeardown.after(EquipmentSystems::Reconcile),
+					EquipmentSystems::Teardown.after(EquipmentSystems::PrepareTeardown),
 					EquipmentSystems::Hold.after(EquipmentSystems::Teardown),
 					EquipmentSystems::Cleanup.after(EquipmentSystems::Hold),
 				),
@@ -88,8 +91,8 @@ impl Plugin for EquipmentPlugin {
 				Update,
 				ApplyDeferred.after(EquipmentSystems::Teardown).before(EquipmentSystems::Hold),
 			)
-			.add_systems(Update, dispatch_equipped_item.in_set(CharacterBindSystems::Dispatch))
-			.add_systems(Last, RoutedItemActor::stamp)
+			.add_observer(dispatch_equipped_item)
+			.add_observer(dispatch_equipped_power)
 			.add_systems(
 				Update,
 				apply_inventory_category_selection.in_set(EquipmentSystems::SelectCategory),
@@ -108,6 +111,14 @@ impl Plugin for EquipmentPlugin {
 					.in_set(EquipmentSystems::AdvanceHolster),
 			)
 			.add_systems(Update, commit_equipment_holster.in_set(EquipmentSystems::CommitHolster))
+			.add_systems(
+				Update,
+				reconcile_equipment_from_inventory.in_set(EquipmentSystems::Reconcile),
+			)
+			.add_systems(
+				Update,
+				clear_handler_for_teardown_only.in_set(EquipmentSystems::PrepareTeardown),
+			)
 			.add_systems(Update, clear_equipment_requests.in_set(EquipmentSystems::Cleanup));
 	}
 }

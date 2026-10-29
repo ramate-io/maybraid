@@ -7,7 +7,7 @@ use material_ref::{
 	MaterialId, MaterialLib, MaterialRef, MaterialRefCache, MaterialRefKey, MaterialRefPlugin,
 	StandardMaterialLib, StandardMaterialRefCache,
 };
-use vegetation_shaders::{BumpOutMaterial, BUMP_OUT_MATERIAL};
+use vegetation_shaders::{BUMP_OUT_MATERIAL, BumpOutMaterial};
 
 pub type BumpOutMaterialRefCache = MaterialRefCache<BumpOutMaterial>;
 

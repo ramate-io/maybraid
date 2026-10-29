@@ -3,8 +3,8 @@
 //! `maybraid-gameplay`.
 
 use game_commands::command::TextEntryFocus;
+use maybraid_session::WorldGameplayEnabled;
 
-use crate::control::WorldGameplayEnabled;
 use crate::map_view::WorldMapView;
 
 pub use maybraid_equipment::ActiveInventoryCyclingCategory;

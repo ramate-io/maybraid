@@ -28,7 +28,8 @@ pub use hud_menu::{
 };
 pub use prompt::{
 	spawn_inventory_action_prompts, sync_input_prompt_device, sync_inventory_prompt_glyphs,
-	InputPromptDevice, InventoryActionPrompts, InventoryPromptGlyph, InventoryPromptKind,
+	InputPromptDevice, InventoryActionPrompts, InventoryDropPromptChip, InventoryPromptGlyph,
+	InventoryPromptKind,
 };
 pub use row::spawn_labeled_row;
 pub use scroll::{

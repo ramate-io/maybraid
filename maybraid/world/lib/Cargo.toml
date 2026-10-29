@@ -37,6 +37,7 @@ evasion-intelligence = { workspace = true }
 firearm-intelligence = { workspace = true }
 firearm-user = { workspace = true }
 grenade-user = { workspace = true }
+fisticuffs-user = { workspace = true }
 tanz-user = { workspace = true }
 grenades = { workspace = true }
 furniture-assemblies = { workspace = true }
@@ -64,7 +65,7 @@ maybraid-session = { workspace = true }
 maybraid-spawns-actors = { workspace = true }
 maybraid-spawns-player = { workspace = true }
 maybraid-spawns-placement = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 maybraid-agent = { workspace = true }
 menu-components = { workspace = true }
 maybraid-skill-map = { workspace = true }

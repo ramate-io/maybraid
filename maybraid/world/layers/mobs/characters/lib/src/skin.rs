@@ -11,7 +11,7 @@ use bevy::{
 	world_serialization::{WorldInstance, WorldInstanceSpawner},
 };
 
-use crate::member::{find_member_rig, CharacterMembers, MemberOf};
+use crate::member::{CharacterMembers, MemberOf, find_member_rig};
 use crate::rig::{
 	BoneMap, CharacterPart, CharacterRig, NeedsDuplicateScenePrune, NeedsSkinRemap,
 	NoMatchingArmature, PartRigRef,

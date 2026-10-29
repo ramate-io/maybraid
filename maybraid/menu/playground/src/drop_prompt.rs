@@ -15,13 +15,14 @@ use character_items::{
 	InventoryDropped, InventoryItem,
 };
 use maybraid_character_ui_menu_renderer::{CharacterMenuEvent, MenuButton, OverlaySelectViewport};
-use maybraid_input::{MenuNav, MenuNavImpulse, PadButton, VirtualPad};
 use menu_components::theme::{HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW};
 use menu_components::{
 	spawn_hud_action, spawn_hud_text, ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem,
-	HudOverlayMenu, MenuModal, MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack,
-	MenuModalSystems, TextMenuInputLock, TextMenuSystems,
+	HudOverlayMenu, InventoryDropPromptChip, MenuModal, MenuModalDismiss, MenuModalId,
+	MenuModalLayer, MenuModalStack, MenuModalSystems, TextMenuInputLock, TextMenuSystems,
 };
+use menu_components::{MenuAction, MenuActionImpulse};
+use menu_components::{MenuNav, MenuNavImpulse};
 use player::Player;
 
 use crate::character::{
@@ -79,10 +80,11 @@ impl Plugin for CharacterDropPromptPlugin {
 			.add_message::<InventoryDropped>()
 			.add_observer(on_drop_prompt_click)
 			.add_observer(on_drop_prompt_nav)
+			.add_observer(on_catalog_drop_action)
 			.add_systems(Update, close_drop_on_modal_dismiss.in_set(MenuModalSystems::Apply))
 			.add_systems(
 				Update,
-				intercept_catalog_drop_edges
+				reset_drop_prompt_open_edge
 					.in_set(TextMenuSystems::InputLock)
 					.after(MenuModalSystems::Apply),
 			)
@@ -92,6 +94,7 @@ impl Plugin for CharacterDropPromptPlugin {
 					apply_accepted_world_drops,
 					close_drop_prompt_without_character,
 					sync_character_drop_prompt,
+					sync_inventory_drop_prompt_chip,
 				)
 					.chain()
 					.after(TextMenuSystems::Navigate),
@@ -99,9 +102,9 @@ impl Plugin for CharacterDropPromptPlugin {
 	}
 }
 
-/// Inventory overlay + X, and no prompt already open.
-pub fn catalog_drop_edge(overlay: Option<&str>, prompt_open: bool, x: bool) -> bool {
-	x && !prompt_open && matches!(overlay, Some("Inventory"))
+/// Inventory overlay, and no prompt already open.
+pub fn catalog_drop_action(overlay: Option<&str>, prompt_open: bool) -> bool {
+	!prompt_open && matches!(overlay, Some("Inventory"))
 }
 
 pub fn drop_index_from_event(event: MenuEvent) -> Option<usize> {
@@ -118,6 +121,15 @@ pub fn drop_index_from_event(event: MenuEvent) -> Option<usize> {
 /// In-game world drops can be picked up again, so the confirm card stays closed.
 pub fn drop_needs_confirm(require_confirm: bool, recoverable: bool) -> bool {
 	require_confirm && !recoverable
+}
+
+/// Drop chip / X binding only when the focused bag item can actually leave.
+pub fn drop_chip_should_show(
+	inventory: &Inventory,
+	index: usize,
+	policy: InventoryDropPolicy,
+) -> bool {
+	inventory.can_drop(index, policy).is_ok()
 }
 
 #[derive(SystemParam)]
@@ -149,7 +161,7 @@ impl LiveWorldDrop<'_, '_> {
 		if !self.is_live() {
 			return LiveDropCommit::LocalEditor;
 		}
-		let Some(owner) = self.owners.iter().next() else {
+		let Ok(owner) = self.owners.single() else {
 			return LiveDropCommit::OwnerUnavailable;
 		};
 		self.requests.write(InventoryDropRequest::new(owner, index).with_policy(policy));
@@ -157,37 +169,44 @@ impl LiveWorldDrop<'_, '_> {
 	}
 }
 
+fn reset_drop_prompt_open_edge(mut prompt: ResMut<CharacterDropPrompt>) {
+	prompt.opened_this_frame = false;
+}
+
 #[allow(clippy::too_many_arguments)]
-fn intercept_catalog_drop_edges(
+fn on_catalog_drop_action(
+	impulse: On<MenuActionImpulse>,
 	mut prompt: ResMut<CharacterDropPrompt>,
 	mut stack: ResMut<MenuModalStack>,
 	policy: Res<ActiveInventoryDropPolicy>,
 	lock: Res<TextMenuInputLock>,
 	leave: Option<Res<CharacterLeavePrompt>>,
 	overlay: Res<ActiveOverlayKey>,
-	pad: Option<Res<VirtualPad>>,
 	mut menu_state: ResMut<CharacterMenuState>,
 	mut ui_sync: ResMut<CharacterUiSyncState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	mut menu_events: MessageWriter<CharacterMenuEvent<MenuEvent>>,
 	mut live: LiveWorldDrop,
 	screens: Query<(), With<CharacterScreen>>,
-	viewports: Query<(Entity, &HudMenu), With<OverlaySelectViewport>>,
+	viewports: Query<&HudMenu, With<OverlaySelectViewport>>,
 	items: Query<(&HudMenuItem, &MenuButton<MenuEvent>)>,
 ) {
-	prompt.opened_this_frame = false;
-	if screens.is_empty() || lock.0 || leave.is_some_and(|leave| leave.is_open()) {
+	if impulse.action != MenuAction::Drop
+		|| screens.is_empty()
+		|| lock.0
+		|| leave.is_some_and(|leave| leave.is_open())
+		|| stack.consumed()
+	{
 		return;
 	}
-	let x = pad.is_some_and(|pad| pad.just_pressed(PadButton::X));
-	if !catalog_drop_edge(overlay.0, prompt.is_open(), x) {
+	if !catalog_drop_action(overlay.0, prompt.is_open()) {
 		return;
 	}
-	let Some((viewport, menu)) = viewports.iter().next() else {
+	let Ok(menu) = viewports.get(impulse.entity) else {
 		return;
 	};
 	let Some(index) = items.iter().find_map(|(item, button)| {
-		if item.menu == viewport && item.index == menu.selected {
+		if item.menu == impulse.entity && item.index == menu.selected {
 			drop_index_from_event(button.0)
 		} else {
 			None
@@ -198,7 +217,7 @@ fn intercept_catalog_drop_edges(
 	let Some(inventory) = menu_state.0.inventory.as_ref() else {
 		return;
 	};
-	if inventory.can_drop(index, policy.0).is_err() {
+	if !drop_chip_should_show(inventory, index, policy.0) {
 		return;
 	}
 	let recoverable = live.is_live();
@@ -211,6 +230,7 @@ fn intercept_catalog_drop_edges(
 		prompt.open(index, label, &mut stack);
 		return;
 	}
+	stack.mark_consumed();
 	commit_catalog_drop(
 		index,
 		policy.0,
@@ -220,6 +240,45 @@ fn intercept_catalog_drop_edges(
 		&mut menu_events,
 		&mut live,
 	);
+}
+
+fn sync_inventory_drop_prompt_chip(
+	overlay: Res<ActiveOverlayKey>,
+	policy: Res<ActiveInventoryDropPolicy>,
+	menu_state: Res<CharacterMenuState>,
+	viewports: Query<(Entity, &HudMenu), With<OverlaySelectViewport>>,
+	items: Query<(&HudMenuItem, &MenuButton<MenuEvent>)>,
+	mut chips: Query<&mut Node, With<InventoryDropPromptChip>>,
+) {
+	if chips.is_empty() {
+		return;
+	}
+	let show = overlay.0.as_deref() == Some("Inventory")
+		&& viewports.iter().next().is_some_and(|(viewport, menu)| {
+			items
+				.iter()
+				.find_map(|(item, button)| {
+					if item.menu == viewport && item.index == menu.selected {
+						drop_index_from_event(button.0)
+					} else {
+						None
+					}
+				})
+				.and_then(|index| {
+					menu_state
+						.0
+						.inventory
+						.as_ref()
+						.map(|inventory| drop_chip_should_show(inventory, index, policy.0))
+				})
+				.unwrap_or(false)
+		});
+	let display = if show { Display::Flex } else { Display::None };
+	for mut node in &mut chips {
+		if node.display != display {
+			node.display = display;
+		}
+	}
 }
 
 fn close_drop_prompt_without_character(
@@ -651,12 +710,13 @@ fn pointer_target(
 #[cfg(test)]
 mod tests {
 	use super::{
-		apply_accepted_drop_to_editor, apply_drop_inventory, catalog_drop_edge,
-		commit_catalog_drop, drop_index_from_event, drop_needs_confirm, CharacterDropPrompt,
-		LiveWorldDrop,
+		apply_accepted_drop_to_editor, apply_drop_inventory, catalog_drop_action,
+		commit_catalog_drop, drop_index_from_event, drop_needs_confirm, on_catalog_drop_action,
+		CharacterDropPrompt, LiveWorldDrop,
 	};
 	use crate::character::{
-		CharacterEditBaseline, CharacterMenuState, CharacterUiSyncState, OverlayUiSyncState,
+		CharacterEditBaseline, CharacterMenuState, CharacterScreen, CharacterUiSyncState,
+		OverlayUiSyncState,
 	};
 	use crate::session::CharacterEditorReturn;
 	use bevy::ecs::system::RunSystemOnce;
@@ -665,22 +725,91 @@ mod tests {
 	use character_inventory_user::InventoryUser;
 	use character_items::InventoryDropRequest;
 	use character_items::{
-		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryDropPolicy, InventoryItem,
-		ItemColor,
+		ActiveInventoryDropPolicy, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory,
+		InventoryDropPolicy, InventoryItem, ItemColor,
 	};
-	use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-	use menu_components::{MenuModalId, MenuModalLayer, MenuModalStack};
+	use maybraid_character_ui_menu_renderer::{
+		CharacterMenuEvent, MenuButton, OverlaySelectViewport,
+	};
+	use menu_components::{
+		ActiveOverlayKey, HudMenu, HudMenuItem, MenuModalId, MenuModalLayer, MenuModalStack,
+		TextMenuInputLock,
+	};
+	use menu_components::{MenuAction, MenuActionImpulse};
 	use player::Player;
 
 	#[test]
 	fn only_inventory_catalogs_offer_drop() {
-		assert!(catalog_drop_edge(Some("Inventory"), false, true));
-		assert!(!catalog_drop_edge(Some("Clothing"), false, true));
-		assert!(!catalog_drop_edge(Some("Weapons"), false, true));
-		assert!(!catalog_drop_edge(Some("Loadout"), false, true));
-		assert!(!catalog_drop_edge(Some("Inventory"), true, true));
-		assert!(!catalog_drop_edge(Some("Inventory"), false, false));
-		assert!(!catalog_drop_edge(None, false, true));
+		assert!(catalog_drop_action(Some("Inventory"), false));
+		assert!(!catalog_drop_action(Some("Clothing"), false));
+		assert!(!catalog_drop_action(Some("Weapons"), false));
+		assert!(!catalog_drop_action(Some("Loadout"), false));
+		assert!(!catalog_drop_action(Some("Inventory"), true));
+		assert!(!catalog_drop_action(None, false));
+	}
+
+	fn drop_action_world() -> (World, Entity, Entity) {
+		let mut world = World::new();
+		world.init_resource::<CharacterDropPrompt>();
+		world.init_resource::<MenuModalStack>();
+		world.init_resource::<TextMenuInputLock>();
+		world.insert_resource(ActiveInventoryDropPolicy(InventoryDropPolicy::PLACEHOLDER));
+		world.insert_resource(ActiveOverlayKey(Some("Inventory")));
+		world.insert_resource(CharacterMenuState::for_create(vec![
+			InventoryItem::firearm(FirearmMesh::Bullpup),
+			InventoryItem::firearm(FirearmMesh::Reltor),
+		]));
+		world.init_resource::<CharacterUiSyncState>();
+		world.init_resource::<OverlayUiSyncState>();
+		world.init_resource::<Messages<InventoryDropRequest>>();
+		world.init_resource::<Messages<CharacterMenuEvent<MenuEvent>>>();
+		world.spawn(CharacterScreen);
+		let first = world.spawn((HudMenu::new(1), OverlaySelectViewport)).id();
+		let second = world.spawn((HudMenu::new(2), OverlaySelectViewport)).id();
+		if let Some(mut menu) = world.entity_mut(second).get_mut::<HudMenu>() {
+			menu.selected = 1;
+		}
+		world.spawn((
+			HudMenuItem { menu: first, index: 0 },
+			MenuButton(MenuEvent::ToggleInventory(0)),
+		));
+		world.spawn((
+			HudMenuItem { menu: second, index: 0 },
+			MenuButton(MenuEvent::ToggleInventory(0)),
+		));
+		world.spawn((
+			HudMenuItem { menu: second, index: 1 },
+			MenuButton(MenuEvent::ToggleInventory(1)),
+		));
+		world.add_observer(on_catalog_drop_action);
+		(world, first, second)
+	}
+
+	fn send_drop_action(world: &mut World, target: Entity) {
+		world.trigger(MenuActionImpulse::new(target, MenuAction::Drop));
+	}
+
+	#[test]
+	fn drop_action_uses_the_captured_inventory_viewport() {
+		let (mut world, _first, second) = drop_action_world();
+		send_drop_action(&mut world, second);
+		assert_eq!(world.resource::<CharacterDropPrompt>().index, Some(1));
+	}
+
+	#[test]
+	fn drop_action_to_another_modal_does_not_target_inventory() {
+		let (mut world, _first, _second) = drop_action_world();
+		let modal = world.spawn(HudMenu::new(1)).id();
+		send_drop_action(&mut world, modal);
+		assert!(!world.resource::<CharacterDropPrompt>().is_open());
+	}
+
+	#[test]
+	fn a_consumed_modal_action_does_not_open_the_drop_prompt() {
+		let (mut world, _first, second) = drop_action_world();
+		world.resource_mut::<MenuModalStack>().mark_consumed();
+		send_drop_action(&mut world, second);
+		assert!(!world.resource::<CharacterDropPrompt>().is_open());
 	}
 
 	#[test]
@@ -688,6 +817,29 @@ mod tests {
 		assert_eq!(drop_index_from_event(MenuEvent::ToggleInventory(3)), Some(3));
 		assert_eq!(drop_index_from_event(MenuEvent::DropInventory(1)), Some(1));
 		assert_eq!(drop_index_from_event(MenuEvent::Save), None);
+	}
+
+	#[test]
+	fn drop_chip_hides_for_intrinsic_fisticuffs() {
+		use super::drop_chip_should_show;
+
+		let inventory = Inventory {
+			items: vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: vec![0, 1],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		assert!(!drop_chip_should_show(
+			&inventory,
+			0,
+			character_items::InventoryDropPolicy::PLACEHOLDER
+		));
+		assert!(drop_chip_should_show(
+			&inventory,
+			1,
+			character_items::InventoryDropPolicy::PLACEHOLDER
+		));
 	}
 
 	#[test]
@@ -967,6 +1119,26 @@ mod tests {
 				.map(|bag| bag.items.len()),
 			Some(1),
 			"missing live owner must not fall back to the editor bag"
+		);
+		assert_eq!(world.resource_mut::<Messages<InventoryDropRequest>>().drain().count(), 0);
+		Ok(())
+	}
+
+	#[test]
+	fn live_catalog_commit_with_ambiguous_owners_fails_closed() -> anyhow::Result<()> {
+		let mut world = commit_drop_world(true, true);
+		let bag = world.spawn_empty().id();
+		world.spawn((Player, InventoryUser::carrying(bag)));
+		run_commit_catalog_drop(&mut world)?;
+		assert_eq!(
+			world
+				.resource::<CharacterMenuState>()
+				.0
+				.inventory
+				.as_ref()
+				.map(|bag| bag.items.len()),
+			Some(1),
+			"ambiguous live owners must not fall back to the editor bag"
 		);
 		assert_eq!(world.resource_mut::<Messages<InventoryDropRequest>>().drain().count(), 0);
 		Ok(())

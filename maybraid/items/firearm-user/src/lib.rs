@@ -29,7 +29,7 @@ pub use pose::{
 };
 pub use presentation::register_firearm_user_presentation;
 pub use reticle::{spawn_reticle, Reticle};
-pub use runtime::{register_firearm_user_runtime, teardown_held_firearm};
+pub use runtime::{register_firearm_user_runtime, retire_held_firearm, teardown_held_firearm};
 pub use swap::{WeaponSwap, WEAPON_SWAP_SECS};
 pub use weapon::{
 	live_weapon_from_stats, LiveWeapon, RecoilPattern, RECOIL_PITCH_PER_UNIT, SEMI_INTERVAL_FLOOR,

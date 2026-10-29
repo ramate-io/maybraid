@@ -2,37 +2,37 @@
 
 use bevy::prelude::*;
 use character_creation_menus::{
-	inventory_paint_state, CharacterMenu, InventoryLayout, InventoryPaint, MenuEvent,
-	INVENTORY_CAPTURE_TIMEOUT, INVENTORY_LABEL,
+	CharacterMenu, INVENTORY_CAPTURE_TIMEOUT, INVENTORY_LABEL, InventoryLayout, InventoryPaint,
+	MenuEvent, inventory_paint_state,
 };
-use character_items::{self_lubikan_catalog_key, Inventory};
+use character_items::{Inventory, catalog_key_uses_yellow_silhouette};
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
 use item_icons::{
-	request_inventory_icons, request_self_lubikan_icon, CaptureClient, IconCatalogProgress,
-	ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery, ItemIconPlugin, ItemIconSystems,
-	PoseCaptureSubjects,
+	CaptureClient, IconCatalogProgress, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery,
+	ItemIconPlugin, ItemIconSystems, PoseCaptureSubjects, request_inventory_icons,
+	request_self_lubikan_icon,
 };
 use maybraid_character_ui_menu_renderer::{
-	fill_inventory_layout, fill_inventory_loading, find_overlay_node, overlay_closes_on_pick,
-	spawn_overlay_shell, CharacterHudSystems, CharacterMenuEvent, InventoryFocusHint,
-	InventoryInteraction, InventoryItemKey, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
-	MenuButton, MenuJustify, MenuSink, MenuThumbnailContext, OverlayClose, OverlayOpen,
-	OverlaySelectRoot, OverlaySelectViewport, RenderContext,
+	CharacterHudSystems, CharacterMenuEvent, InventoryFocusHint, InventoryInteraction,
+	InventoryItemKey, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink, MenuButton,
+	MenuJustify, MenuSink, MenuThumbnailContext, OverlayClose, OverlayOpen, OverlaySelectRoot,
+	OverlaySelectViewport, RenderContext, fill_inventory_layout, fill_inventory_loading,
+	find_overlay_node, overlay_closes_on_pick, spawn_overlay_shell,
 };
 use maybraid_menu_controller::MenuController;
 use maybraid_skill_map::{SkillMapSpinRevealHud, SkillMapTileMaterialPlugin};
 use menu_components::theme::{
-	character_screen_grid_node, menu_region_wash, CORNER_BOTTOM, CORNER_INSET, MENU_LIST_PAD,
-	MENU_LIST_RADIUS,
+	CORNER_BOTTOM, CORNER_INSET, MENU_LIST_PAD, MENU_LIST_RADIUS, character_screen_grid_node,
+	menu_region_wash,
 };
 use menu_components::{
-	spawn_corner_action, spawn_scroll_pane, ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem,
-	HudOverlayMenu, InputPromptDevice, MenuActivate, MenuFocus, MenuModalId, MenuModalLayer,
-	MenuModalStack, ScreenBack, ShortTextChange, CATALOG_THUMB_PX, PANEL_ROW_GAP,
-	PANEL_TILE_COLUMNS, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	ActiveOverlayKey, CATALOG_THUMB_PX, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu,
+	InputPromptDevice, MenuActivate, MenuFocus, MenuModalId, MenuModalLayer, MenuModalStack,
+	PANEL_ROW_GAP, PANEL_TILE_COLUMNS, ScreenBack, ShortTextChange, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	spawn_corner_action, spawn_scroll_pane,
 };
 use menu_screens::{
-	add_menu_show_systems, MenuScreen, MenuScreens, MenuShowRequest, SpinRevealItems,
+	MenuScreen, MenuScreens, MenuShowRequest, SpinRevealItems, add_menu_show_systems,
 };
 use std::time::Duration;
 use tanz_user::request_inventory_tanz_icons;
@@ -170,7 +170,7 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 
 	fn image_for_key(&mut self, key: u64) -> Option<Handle<Image>> {
 		let icons = self.icons?;
-		if key == self_lubikan_catalog_key() {
+		if catalog_key_uses_yellow_silhouette(key) {
 			icons.catalog_entry(key, true).and_then(|entry| entry.ready_image())
 		} else {
 			icons.catalog_for_key(key)
@@ -178,11 +178,7 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
-		if key == self_lubikan_catalog_key() {
-			TEXT_YELLOW
-		} else {
-			Color::WHITE
-		}
+		if catalog_key_uses_yellow_silhouette(key) { TEXT_YELLOW } else { Color::WHITE }
 	}
 
 	fn viewport_for_key(&mut self, _key: u64) -> Option<Entity> {
@@ -893,7 +889,7 @@ fn on_short_text_change(
 
 #[cfg(test)]
 mod tests {
-	use super::{save_chrome, CharacterEditBaseline};
+	use super::{CharacterEditBaseline, save_chrome};
 	use character_creation_menus::CharacterMenu;
 	use character_items::Inventory;
 
@@ -947,7 +943,7 @@ mod tests {
 	#[test]
 	fn catalog_thumbs_use_the_self_lubikan_silhouette() -> anyhow::Result<()> {
 		use super::CatalogThumbs;
-		use character_items::{self_lubikan_catalog_key, SELF_LUBIKAN_CAPTURE_LABEL};
+		use character_items::{SELF_LUBIKAN_CAPTURE_LABEL, self_lubikan_catalog_key};
 		use item_icons::{CaptureId, ItemIconCache};
 		use maybraid_character_ui_menu_renderer::MenuThumbnailContext;
 		use menu_components::theme::TEXT_YELLOW;
@@ -973,6 +969,39 @@ mod tests {
 		let mut wrong = CatalogThumbs { icons: Some(&shaded_only) };
 		if wrong.image_for_key(key).is_some() {
 			anyhow::bail!("Self Lubikan tile must not use the shaded handle");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn catalog_thumbs_use_the_fisticuffs_silhouette() -> anyhow::Result<()> {
+		use super::CatalogThumbs;
+		use character_items::{FISTICUFFS_CAPTURE_LABEL, fisticuffs_catalog_key};
+		use item_icons::{CaptureId, ItemIconCache};
+		use maybraid_character_ui_menu_renderer::MenuThumbnailContext;
+		use menu_components::theme::TEXT_YELLOW;
+
+		let key = fisticuffs_catalog_key();
+		let mut cache = ItemIconCache::default();
+		cache.insert_silhouette(
+			CaptureId::new(FISTICUFFS_CAPTURE_LABEL),
+			bevy::prelude::Handle::default(),
+		);
+		let mut ready = CatalogThumbs { icons: Some(&cache) };
+		if ready.image_for_key(key).is_none() {
+			anyhow::bail!("Fisticuffs tile should show the silhouette");
+		}
+		if ready.tint_for_key(key) != TEXT_YELLOW {
+			anyhow::bail!("Fisticuffs silhouette should tint yellow in the inventory");
+		}
+		let mut shaded_only = ItemIconCache::default();
+		shaded_only.insert_shaded(
+			CaptureId::new(FISTICUFFS_CAPTURE_LABEL),
+			bevy::prelude::Handle::default(),
+		);
+		let mut wrong = CatalogThumbs { icons: Some(&shaded_only) };
+		if wrong.image_for_key(key).is_some() {
+			anyhow::bail!("Fisticuffs tile must not use the shaded handle");
 		}
 		Ok(())
 	}

@@ -7,11 +7,10 @@ index on the gun. Hold / aim knobs live on [`FirearmUserSettings`](src/lib.rs)
 
 Pose and arm IK key off the user's [`CharacterRoot`](../../world/layers/mobs/characters/lib/src/member.rs)
 child, so an [`Npc`](../../player/lib/src/identity.rs) holds the same way as the
-player. Player fire consumes addressed
+player. Controlled fire consumes actor-addressed
 [`EquippedItemUse`](../equipment/src/dispatch.rs) (D1) and
-cancels a held trigger from [`RoutingEvent`](../../controllers/core/src/router.rs)
-(`MessageReader`; each event applies to [`RoutingEvent::lost_actor`]; capture /
-disconnect / reassignment / removal). The fire clock lives in
+cancels a held trigger from actor-addressed routing events on capture,
+disconnect, reassignment, or removal. The fire clock lives in
 [`firearms::register_firearm_runtime`](../firearms/src/runtime.rs). NPCs keep
 the intelligence [`WeaponTrigger`](../firearms/src/projectiles.rs) writer. The
 world reticle stays on the followed [`Player`](../../player/lib/src/identity.rs).
@@ -26,6 +25,10 @@ at the equipment boundary. Execution (`fire`, recoil, equipment realize) lives i
 Pose / reticle / rumble live in [`presentation`](src/presentation.rs) via
 [`register_firearm_user_presentation`](src/presentation.rs). [`FirearmUserPlugin`](src/lib.rs)
 registers both. Headless gameplay uses the runtime path only.
+
+Inventory-backed equipment requests are realized here after the outgoing kit
+tears down. The world also requests its bagless fallback through this runtime;
+that request preserves the legacy Bullpup kit with `LiveWeapon::default()`.
 
 Writes player handoff slots ([`PlayerUse`](../../player/lib/src/identity.rs),
 [`PlayerCameraAim`](../../player/lib/src/identity.rs),

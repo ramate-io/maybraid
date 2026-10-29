@@ -1,42 +1,61 @@
 //! [`VirtualPad`] → [`CharacterIntent`].
 
 use bevy::prelude::*;
-use maybraid_controllers_core::{InputRouter, InputSource};
-use maybraid_input::{PadButton, VirtualPad, VirtualPadConfig};
+use maybraid_controllers_core::ActorPadEvent;
+use maybraid_virtual_pad_controller::{PadButton, VirtualPad};
 
 use crate::intent::{CharacterIntent, InventoryCyclingCategory};
-use crate::OrdinaryLocomotion;
+use crate::{
+	ActorControlEvent, ActorControlSample, ActorIntentEvent, CharacterIntentFrame,
+	OrdinaryLocomotion, RoutedActorControl,
+};
 
 const ANALOG_EPS: f32 = 1e-6;
 const STANCE_HOLD_SECS: f32 = 0.35;
 
+/// Interpret one already-addressed rich pad frame. All descendants retain its binding.
 pub fn produce_character_intents(
-	pad: Res<VirtualPad>,
-	config: Res<VirtualPadConfig>,
-	time: Res<Time>,
-	router: Res<InputRouter>,
+	event: On<ActorPadEvent>,
 	actors: Query<&OrdinaryLocomotion>,
-	mut intents: MessageWriter<CharacterIntent>,
+	mut commands: Commands,
 ) {
-	let source = InputSource::local_pad();
-	if router.actor(source).is_none() {
-		return;
-	}
-	let captured = router.blocks_actor(source);
-	let stance_enabled = !router.captures().owns_back(source);
-	let ordinary = router
-		.actor(source)
-		.and_then(|actor| actors.get(actor.entity()).ok())
-		.is_none_or(|flag| flag.0);
-	for intent in collect(
-		&pad,
-		config.trigger_press_threshold,
-		time.delta_secs(),
-		stance_enabled,
+	let snapshot = event.input.payload();
+	let ordinary = actors.get(event.entity).ok().is_none_or(|flag| flag.0);
+	let intents = collect(
+		&snapshot.frame.pad,
+		snapshot.trigger_press_threshold,
+		snapshot.frame.delta.as_secs_f32(),
+		!snapshot.owns_back,
 		ordinary,
-		captured,
-	) {
-		intents.write(intent);
+		snapshot.captured,
+	);
+	// Shell capture/suspension retires gameplay descendants before they can start holds.
+	for intent in intents.iter().copied().filter(|intent| intent.is_shell()) {
+		ActorIntentEvent::queue(event.input.clone().map(|_| intent), &mut commands);
+	}
+	if !snapshot.captured {
+		let control =
+			ActorControlSample::from_frame(&snapshot.frame, snapshot.trigger_press_threshold);
+		event.input.clone().map(|_| control).queue(&mut commands, |world, input| {
+			let Some(entity) = input.target().actor_entity() else {
+				return;
+			};
+			if let Ok(mut actor) = world.get_entity_mut(entity) {
+				actor.insert(RoutedActorControl(Some(input)));
+			}
+			world.trigger(ActorControlEvent { entity, input });
+		});
+		let frame = intents.clone();
+		event.input.clone().map(|_| frame).queue(&mut commands, |world, input| {
+			if let Some(entity) = input.target().actor_entity() {
+				if let Ok(mut actor) = world.get_entity_mut(entity) {
+					actor.insert(CharacterIntentFrame(Some(input)));
+				}
+			}
+		});
+	}
+	for intent in intents.into_iter().filter(|intent| !intent.is_shell()) {
+		ActorIntentEvent::queue(event.input.clone().map(|_| intent), &mut commands);
 	}
 }
 
@@ -63,10 +82,14 @@ pub fn collect(
 	if !actor_captured && pad.pressed(PadButton::BumperFocus) && !pad.bumper_chord_held() {
 		out.push(CharacterIntent::Ads(1.0));
 	}
-	if !actor_captured
-		&& (pad.pressed(PadButton::TriggerFire) || pad.trigger_fire >= trigger_threshold)
-	{
+	if !actor_captured && pad.pressed(PadButton::TriggerFire) {
 		out.push(CharacterIntent::UseItem(pad.trigger_fire.max(trigger_threshold)));
+	}
+	if !actor_captured && pad.attack_buttons.just_pressed(PadButton::TriggerFocus) {
+		out.push(CharacterIntent::AttackLeft);
+	}
+	if !actor_captured && pad.attack_buttons.just_pressed(PadButton::TriggerFire) {
+		out.push(CharacterIntent::AttackRight);
 	}
 
 	if ordinary_locomotion && pad.pressed(PadButton::StickClickMove) {
@@ -93,7 +116,7 @@ pub fn collect(
 		}
 	}
 	if !actor_captured && pad.just_pressed(PadButton::X) {
-		if pad.pressed(PadButton::TriggerFire) || pad.trigger_fire >= trigger_threshold {
+		if pad.pressed(PadButton::TriggerFire) {
 			out.push(CharacterIntent::PowerUseItem);
 		} else {
 			out.push(CharacterIntent::StartInteraction);
@@ -152,7 +175,7 @@ pub fn collect(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use maybraid_input::VirtualPad;
+	use maybraid_virtual_pad_controller::VirtualPad;
 
 	fn finish(pad: &mut VirtualPad) {
 		pad.finish_digital();
@@ -318,13 +341,46 @@ mod tests {
 	}
 
 	#[test]
+	fn analog_without_digital_conversion_does_not_use_or_attack() {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.9);
+		pad.hold_digital(PadButton::X);
+		finish(&mut pad);
+		let events = intents(&pad);
+		assert!(!events.iter().any(|event| matches!(
+			event,
+			CharacterIntent::UseItem(_)
+				| CharacterIntent::PowerUseItem
+				| CharacterIntent::AttackLeft
+				| CharacterIntent::AttackRight
+		)));
+		assert!(events.contains(&CharacterIntent::StartInteraction));
+	}
+
+	#[test]
+	fn controller_respects_the_pad_trigger_threshold() {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.0, 0.7);
+		pad.apply_trigger_digital(0.8);
+		finish(&mut pad);
+		// The controller helper uses 0.5, but the pad has already decided
+		// whether this frame is a press using the configured hardware threshold.
+		assert!(!intents(&pad).iter().any(|event| matches!(event, CharacterIntent::UseItem(_))));
+		assert!(!intents(&pad).contains(&CharacterIntent::AttackRight));
+	}
+
+	#[test]
 	fn squeezed_trigger_uses_item() -> anyhow::Result<()> {
 		let mut pad = VirtualPad::default();
 		pad.begin_frame();
 		pad.max_triggers(0.0, 0.9);
 		pad.apply_trigger_digital(0.5);
 		finish(&mut pad);
-		assert!(intents(&pad).contains(&CharacterIntent::UseItem(0.9)));
+		let collected = intents(&pad);
+		assert!(collected.contains(&CharacterIntent::UseItem(0.9)));
+		assert!(collected.contains(&CharacterIntent::AttackRight));
 		Ok(())
 	}
 
@@ -338,6 +394,7 @@ mod tests {
 		finish(&mut pad);
 		let intents = intents(&pad);
 		assert!(intents.contains(&CharacterIntent::UseItem(0.9)));
+		assert!(intents.contains(&CharacterIntent::AttackRight));
 		assert!(intents.contains(&CharacterIntent::PowerUseItem));
 		assert!(!intents.contains(&CharacterIntent::StartInteraction));
 		Ok(())
@@ -350,6 +407,131 @@ mod tests {
 		pad.max_triggers(0.4, 0.0);
 		finish(&mut pad);
 		assert_eq!(intents(&pad), vec![CharacterIntent::Focus(0.4)]);
+		Ok(())
+	}
+
+	#[test]
+	fn left_trigger_press_is_attack_left() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.0);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let collected = intents(&pad);
+		assert!(collected.contains(&CharacterIntent::AttackLeft));
+		assert!(!collected.contains(&CharacterIntent::AttackRight));
+		assert!(collected.contains(&CharacterIntent::Focus(0.9)));
+		Ok(())
+	}
+
+	#[test]
+	fn right_trigger_press_is_attack_right() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.0, 0.9);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let collected = intents(&pad);
+		assert!(collected.contains(&CharacterIntent::AttackRight));
+		assert!(!collected.contains(&CharacterIntent::AttackLeft));
+		Ok(())
+	}
+
+	#[test]
+	fn right_mouse_focus_does_not_emit_attack_left() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_mouse_triggers(1.0, 0.0);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let collected = collect(&pad, 0.5, 0.0, true, true, false);
+		assert!(collected.contains(&CharacterIntent::Focus(1.0)));
+		assert!(
+			!collected.contains(&CharacterIntent::AttackLeft),
+			"RMB is focus/aim, not a left jab: {collected:?}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn left_mouse_use_does_not_emit_attack_right() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_mouse_triggers(0.0, 1.0);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let collected = collect(&pad, 0.5, 0.0, true, true, false);
+		assert!(collected.iter().any(|intent| matches!(intent, CharacterIntent::UseItem(_))));
+		assert!(!collected.contains(&CharacterIntent::AttackRight));
+		Ok(())
+	}
+
+	#[test]
+	fn held_mouse_preserves_independent_keyboard_and_gamepad_jab_edges() {
+		use maybraid_virtual_pad_controller::produce::{keyboard::KeyboardPad, mouse::MousePad};
+		use maybraid_virtual_pad_controller::PadInputPolicy;
+		for (mouse_button, key, focus, fire, attack) in [
+			(MouseButton::Right, KeyCode::KeyF, 0.9, 0.0, CharacterIntent::AttackLeft),
+			(MouseButton::Left, KeyCode::KeyG, 0.0, 0.9, CharacterIntent::AttackRight),
+		] {
+			let mut pad = VirtualPad::default();
+			let mut mouse = ButtonInput::default();
+			mouse.press(mouse_button);
+			let mut keys = ButtonInput::default();
+			pad.begin_frame();
+			MousePad::apply(&keys, &mouse, Vec2::ZERO, &mut pad);
+			pad.apply_trigger_digital(0.5);
+			finish(&mut pad);
+			assert!(!intents(&pad).contains(&attack));
+			for keyboard in [true, false] {
+				pad.begin_frame();
+				if keyboard {
+					keys.press(key);
+					KeyboardPad::apply(&keys, PadInputPolicy::gameplay(), &mut pad);
+				} else {
+					pad.max_triggers(focus, fire);
+				}
+				MousePad::apply(&keys, &mouse, Vec2::ZERO, &mut pad);
+				pad.apply_trigger_digital(0.5);
+				finish(&mut pad);
+				assert!(intents(&pad).contains(&attack), "new non-mouse press while mouse held");
+				pad.begin_frame();
+				if keyboard {
+					KeyboardPad::apply(&keys, PadInputPolicy::gameplay(), &mut pad);
+				} else {
+					pad.max_triggers(focus, fire);
+				}
+				MousePad::apply(&keys, &mouse, Vec2::ZERO, &mut pad);
+				pad.apply_trigger_digital(0.5);
+				finish(&mut pad);
+				assert!(!intents(&pad).contains(&attack), "held trigger must not repeat");
+				keys.release(key);
+				pad.begin_frame();
+				MousePad::apply(&keys, &mouse, Vec2::ZERO, &mut pad);
+				pad.apply_trigger_digital(0.5);
+				finish(&mut pad);
+				assert!(!intents(&pad).contains(&attack), "release must not punch");
+			}
+		}
+	}
+
+	#[test]
+	fn held_triggers_do_not_repeat_attack() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.9);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		assert!(intents(&pad).contains(&CharacterIntent::AttackLeft));
+		assert!(intents(&pad).contains(&CharacterIntent::AttackRight));
+
+		pad.begin_frame();
+		pad.max_triggers(0.9, 0.9);
+		pad.apply_trigger_digital(0.5);
+		finish(&mut pad);
+		let held = intents(&pad);
+		assert!(!held.contains(&CharacterIntent::AttackLeft));
+		assert!(!held.contains(&CharacterIntent::AttackRight));
 		Ok(())
 	}
 
@@ -522,48 +704,9 @@ mod tests {
 		assert!(!collected.iter().any(|intent| matches!(intent, CharacterIntent::Look(_))));
 		assert!(!collected.iter().any(|intent| matches!(intent, CharacterIntent::UseItem(_))));
 		assert!(!collected.contains(&CharacterIntent::Jump));
+		assert!(!collected.contains(&CharacterIntent::AttackRight));
 		assert!(collected.contains(&CharacterIntent::InGameMenu));
 		assert!(collected.contains(&CharacterIntent::ToggleMap));
 		Ok(())
-	}
-
-	#[test]
-	fn produce_requires_host_assignment() {
-		use bevy::ecs::system::RunSystemOnce;
-		use maybraid_controllers_core::{ActorTarget, InputRouter};
-		use maybraid_input::VirtualPadConfig;
-
-		fn write(
-			pad: Res<VirtualPad>,
-			config: Res<VirtualPadConfig>,
-			time: Res<Time>,
-			router: Res<InputRouter>,
-			actors: Query<&OrdinaryLocomotion>,
-			intents: MessageWriter<CharacterIntent>,
-		) {
-			super::produce_character_intents(pad, config, time, router, actors, intents);
-		}
-
-		let mut world = World::new();
-		world.init_resource::<VirtualPad>();
-		world.init_resource::<VirtualPadConfig>();
-		world.init_resource::<Time>();
-		world.init_resource::<InputRouter>();
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.resource_mut::<VirtualPad>().begin_frame();
-		world.resource_mut::<VirtualPad>().add_move(Vec2::X);
-		world.resource_mut::<VirtualPad>().finish_digital();
-
-		world.run_system_once(write).expect("unassigned");
-		assert!(world.resource_mut::<Messages<CharacterIntent>>().drain().next().is_none());
-
-		world
-			.resource_mut::<InputRouter>()
-			.assign_actor(InputSource::local_pad(), ActorTarget::new(Entity::from_bits(1)));
-		world.run_system_once(write).expect("assigned");
-		assert!(world
-			.resource_mut::<Messages<CharacterIntent>>()
-			.drain()
-			.any(|intent| matches!(intent, CharacterIntent::Move(_))));
 	}
 }

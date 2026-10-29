@@ -2,21 +2,21 @@
 
 use bevy::prelude::*;
 use character_creation_menus::{CharacterMenu, MenuEvent};
-use character_inventory_user::{spawn_bag, InventoryUser, InventoryUserPlugin};
+use character_inventory_user::{InventoryUser, InventoryUserPlugin, spawn_bag};
 use character_items::Inventory;
 use character_model_user::{
-	spawn_model, CharacterModel, CharacterModelUser, CharacterModelUserPlugin,
+	CharacterModel, CharacterModelUser, CharacterModelUserPlugin, spawn_model,
 };
 use character_persist::{CharacterId, PersistError, SaveRoot};
-use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
+use menu_components::info::description::{TextMenuDescription, set_description_for_menu};
 use menu_components::{MenuActivate, MenuObjectiveMarker, ScreenEditPressed};
 use menu_screens::{
-	request_show_create_character_id, request_show_gallery, request_show_in_game,
 	CreateCharacterReady, GalleryChoice, GalleryScreen, GalleryScreenPlugin, MenuScreenSystems,
+	request_show_create_character_id, request_show_gallery, request_show_in_game,
 };
 
 use crate::character::{
-	request_show_character, CharacterEditBaseline, CharacterMenuState, CharacterScreen,
+	CharacterEditBaseline, CharacterMenuState, CharacterScreen, request_show_character,
 };
 
 /// Host entity for the character currently being created or edited.
@@ -450,9 +450,9 @@ fn gallery_select_opens_edit(active: Option<CharacterId>, picked: CharacterId) -
 #[cfg(test)]
 mod tests {
 	use super::{
-		finish_character_editor_exit, gallery_select_opens_edit, leave_character_editor,
-		save_editing_character, CharacterEditorExit, CharacterEditorReturn, CharacterSession,
-		CharacterSessionPlugin, SessionQuery,
+		CharacterEditorExit, CharacterEditorReturn, CharacterSession, CharacterSessionPlugin,
+		SessionQuery, finish_character_editor_exit, gallery_select_opens_edit,
+		leave_character_editor, save_editing_character,
 	};
 	use crate::character::{CharacterEditBaseline, CharacterMenuState, CharacterScreen};
 	use bevy::ecs::system::RunSystemOnce;

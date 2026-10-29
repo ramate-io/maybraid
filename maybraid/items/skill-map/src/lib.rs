@@ -25,7 +25,6 @@ use bevy::prelude::*;
 use fireball_material::FireballMaterialPlugin;
 
 use maybraid_character_controller::CharacterControlSystems;
-use maybraid_controllers_core::RoutingEvent;
 use projectiles::ProjectilesPlugin;
 use threat_management_intelligence::ThreatManagementSystems;
 
@@ -34,7 +33,8 @@ pub use burst::{
 	ROCKADDER_RADIUS,
 };
 pub use controller::{
-	detect_skill_map_flicks, skill_map_steer_held, SkillMapController, SkillMapFlick,
+	detect_skill_map_flicks, dispatch_routed_flicks, skill_map_steer_held, RoutedSkillMapFlick,
+	RoutedSkillMapFlickEvent, SkillMapController, SkillMapFlick,
 };
 pub use cursor::apply_flicks;
 pub use effects::{
@@ -109,12 +109,13 @@ impl Plugin for SkillMapPlugin {
 			.add_systems(Startup, fireball_embers::setup_fireball_effects)
 			.add_systems(Startup, burst::setup_burst_assets)
 			.init_resource::<SkillMapEnabled>()
-			.init_resource::<controller::SkillMapController>()
 			.init_resource::<icon::SkillMapPaintSlots>()
 			.init_resource::<icon::SkillMapIconSubmitted>()
 			.add_message::<SkillMapEvent>()
-			.add_message::<RoutingEvent>()
 			.add_message::<controller::SkillMapFlick>()
+			.add_message::<controller::RoutedSkillMapFlick>()
+			.add_observer(controller::apply_skill_map_routing)
+			.add_observer(cursor::apply_routed_flick)
 			.configure_sets(
 				Update,
 				(
@@ -134,6 +135,7 @@ impl Plugin for SkillMapPlugin {
 					controller::detect_skill_map_flicks,
 					cursor::sync_skill_map_held,
 					cursor::tick_steer_lock,
+					controller::dispatch_routed_flicks,
 					cursor::apply_flicks,
 					cursor::tick_flick_beads,
 					viewport::sync_viewport_chrome,

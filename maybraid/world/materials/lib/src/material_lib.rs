@@ -3,21 +3,21 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use building_shaders::{
-	init_urban_material_caches, BuildingShadersPlugin, UrbanSurfaceMaterialLib,
+	BuildingShadersPlugin, UrbanSurfaceMaterialLib, init_urban_material_caches,
 };
-use characters::material_lib::{init_character_material_caches, CharacterMaterialLib};
 use characters::CharacterShadersPlugin;
+use characters::material_lib::{CharacterMaterialLib, init_character_material_caches};
 use chico::VegetationOnTerrainMaterialLib;
 use firearms::{
-	init_energy_material_caches, init_muzzle_flame_caches, EnergyMaterialLib, EnergyMaterialPlugin,
-	MuzzleFlameMaterialLib, MuzzleFlameMaterialPlugin,
+	EnergyMaterialLib, EnergyMaterialPlugin, MuzzleFlameMaterialLib, MuzzleFlameMaterialPlugin,
+	init_energy_material_caches, init_muzzle_flame_caches,
 };
 use furniture_shaders::{
-	init_furniture_material_caches, FurnitureMaterialLib, FurnitureShadersPlugin,
+	FurnitureMaterialLib, FurnitureShadersPlugin, init_furniture_material_caches,
 };
 use material_ref::{MaterialLib, MaterialRef, MaterialRefPlugin};
 use vegetation_bumpout::init_bump_out_material_caches;
-use vegetation_shaders::{init_vegetation_material_caches, VegetationShadersPlugin};
+use vegetation_shaders::{VegetationShadersPlugin, init_vegetation_material_caches};
 
 /// World-model lib: furniture kits, character face / clothing, Richmond urban
 /// surfaces, the muzzle flame, energy looks, then vegetation and Standard.
@@ -122,8 +122,8 @@ mod tests {
 	use bevy::ecs::system::System;
 	use bevy::prelude::*;
 	use building_shaders::{
-		ColumnSurfaceMaterial, ColumnSurfaceMaterialRefCache, UrbanMaterialRefPlugin,
-		UrbanSurfaceMaterial, UrbanSurfaceMaterialRefCache, RECIPE_DORIC_COLUMN, RECIPE_WOOD,
+		ColumnSurfaceMaterial, ColumnSurfaceMaterialRefCache, RECIPE_DORIC_COLUMN, RECIPE_WOOD,
+		UrbanMaterialRefPlugin, UrbanSurfaceMaterial, UrbanSurfaceMaterialRefCache,
 	};
 	use character_shaders::{ClothingShaderMaterial, FaceShaderMaterial, RECIPE_FACE_EYE};
 	use characters::material_lib::{
@@ -131,17 +131,17 @@ mod tests {
 	};
 	use chico::VegetationOnTerrainMaterialRefPlugin;
 	use firearms::{
-		EnergyMaterial, EnergyMaterialRefCache, MuzzleFlameMaterial, MuzzleFlameMaterialRefCache,
-		LASER_HEX_RECIPE, MUZZLE_FLAME_RECIPE,
+		EnergyMaterial, EnergyMaterialRefCache, LASER_HEX_RECIPE, MUZZLE_FLAME_RECIPE,
+		MuzzleFlameMaterial, MuzzleFlameMaterialRefCache,
 	};
 	use furniture_shaders::{
 		FurnitureMaterialRefPlugin, FurnitureSurfaceMaterial, FurnitureSurfaceMaterialRefCache,
 		RECIPE_FURNITURE_WOOD,
 	};
 	use material_ref::{
-		material_ref_plugin_installed, MaterialRef, MaterialRefApplied, MaterialRefRoot,
+		MaterialRef, MaterialRefApplied, MaterialRefRoot, material_ref_plugin_installed,
 	};
-	use vegetation_bumpout::{BumpOutMaterial, BumpOutMaterialRefCache, BUMP_OUT_MATERIAL};
+	use vegetation_bumpout::{BUMP_OUT_MATERIAL, BumpOutMaterial, BumpOutMaterialRefCache};
 	use vegetation_shaders::{
 		FrondMaterial, FrondMaterialRefCache, LeafMaterial, LeafMaterialRefCache, StickMaterial,
 		StickMaterialRefCache, VegetationMaterialRefPlugin,

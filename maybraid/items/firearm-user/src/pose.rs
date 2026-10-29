@@ -12,7 +12,7 @@ use firearms::{
 	FirearmRoot, ProjectileSource, WeaponTrigger,
 };
 use maybraid_equipment::EquippedItemHandler;
-use player::{wrap_pi, yaw_xz, PlayerLook, PlayerUse};
+use player::{wrap_pi, yaw_xz, PlayerLook, PlayerOpticAds, PlayerUse};
 
 use crate::hold::HoldingArms;
 use crate::weapon::{LiveWeapon, RecoilPattern};
@@ -81,7 +81,11 @@ where
 		root = entity;
 	}
 	let mut entity = commands.entity(user);
-	entity.insert((FirearmUser { held: root, settings }, PlayerUse { driver: root }));
+	entity.insert((
+		FirearmUser { held: root, settings },
+		PlayerUse { driver: root },
+		PlayerOpticAds,
+	));
 	EquippedItemHandler::Firearm.install(&mut entity);
 	root
 }

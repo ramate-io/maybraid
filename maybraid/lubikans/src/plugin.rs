@@ -274,7 +274,7 @@ mod tests {
 		LubikanActivationReport, LubikanActivationRequest, LubikanChargeChanged,
 		LubikanChargeReason,
 	};
-	use anyhow::{anyhow, Result};
+	use anyhow::{Result, anyhow};
 	use damage::{DamagePlugin, Health, Hit};
 
 	fn gameplay() -> App {
@@ -307,10 +307,11 @@ mod tests {
 		assert_eq!(ledger.equipped().id(), LubikanAccountId::SELF);
 		assert_eq!(ledger.equipped().charge().current(), 0.0);
 		assert!(app.world().get::<LubikanOwner>(owner).is_some());
-		assert!(app
-			.world()
-			.get::<LubikanAccountBinding>(owner)
-			.is_some_and(|binding| binding.is_self()));
+		assert!(
+			app.world()
+				.get::<LubikanAccountBinding>(owner)
+				.is_some_and(|binding| binding.is_self())
+		);
 		Ok(())
 	}
 
@@ -384,10 +385,11 @@ mod tests {
 			Some(11.0)
 		);
 		assert_eq!(ledger.account(other).map(|account| account.charge().current()), Some(7.0));
-		assert!(app
-			.world()
-			.get::<LubikanAccountBinding>(owner)
-			.is_some_and(|binding| binding.account == other));
+		assert!(
+			app.world()
+				.get::<LubikanAccountBinding>(owner)
+				.is_some_and(|binding| binding.account == other)
+		);
 		Ok(())
 	}
 

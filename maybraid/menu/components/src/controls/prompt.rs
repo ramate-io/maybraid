@@ -3,11 +3,11 @@
 
 use bevy::prelude::*;
 
+use crate::HudFonts;
 use crate::theme::{
 	PANEL_GROUP_FONT_SIZE, PANEL_ROW_GAP, PROMPT_KEY_DROP, PROMPT_KEY_SELECT, PROMPT_KEY_UNEQUIP,
 	PROMPT_PAD_DROP, PROMPT_PAD_SELECT, PROMPT_PAD_UNEQUIP, TEXT_YELLOW,
 };
-use crate::HudFonts;
 
 /// Last device that produced a press. Starts on keyboard so headless shots
 /// show key chips until a pad speaks.
@@ -66,15 +66,16 @@ impl InventoryPromptKind {
 	}
 }
 
-const INVENTORY_PROMPT_KINDS: [InventoryPromptKind; 3] = [
-	InventoryPromptKind::Equip,
-	InventoryPromptKind::Unequip,
-	InventoryPromptKind::Drop,
-];
+const INVENTORY_PROMPT_KINDS: [InventoryPromptKind; 3] =
+	[InventoryPromptKind::Equip, InventoryPromptKind::Unequip, InventoryPromptKind::Drop];
 
 /// Image on an inventory action chip so a device change can swap the glyph.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryPromptGlyph(pub InventoryPromptKind);
+
+/// Drop chip row. Hosts hide this when the focused bag item is undroppable.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InventoryDropPromptChip;
 
 /// Footer row under the interactive inventory scroll pane.
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -116,30 +117,32 @@ fn spawn_prompt_chip(
 	device: InputPromptDevice,
 	kind: InventoryPromptKind,
 ) {
-	parent
-		.spawn((
-			Node {
-				flex_direction: FlexDirection::Row,
-				align_items: AlignItems::Center,
-				column_gap: Val::Px(8.0),
-				..default()
-			},
+	let mut chip = parent.spawn((
+		Node {
+			flex_direction: FlexDirection::Row,
+			align_items: AlignItems::Center,
+			column_gap: Val::Px(8.0),
+			..default()
+		},
+		Pickable::IGNORE,
+	));
+	if kind == InventoryPromptKind::Drop {
+		chip.insert(InventoryDropPromptChip);
+	}
+	chip.with_children(|chip| {
+		chip.spawn((
+			InventoryPromptGlyph(kind),
+			ImageNode::new(assets.load(kind.icon(device))),
+			Node { width: Val::Px(28.0), height: Val::Px(28.0), flex_shrink: 0.0, ..default() },
 			Pickable::IGNORE,
-		))
-		.with_children(|chip| {
-			chip.spawn((
-				InventoryPromptGlyph(kind),
-				ImageNode::new(assets.load(kind.icon(device))),
-				Node { width: Val::Px(28.0), height: Val::Px(28.0), flex_shrink: 0.0, ..default() },
-				Pickable::IGNORE,
-			));
-			chip.spawn((
-				Text::new(kind.label()),
-				fonts.item(PANEL_GROUP_FONT_SIZE),
-				TextColor(TEXT_YELLOW),
-				Pickable::IGNORE,
-			));
-		});
+		));
+		chip.spawn((
+			Text::new(kind.label()),
+			fonts.item(PANEL_GROUP_FONT_SIZE),
+			TextColor(TEXT_YELLOW),
+			Pickable::IGNORE,
+		));
+	});
 }
 
 pub fn sync_input_prompt_device(
@@ -188,16 +191,17 @@ pub fn sync_inventory_prompt_glyphs(
 
 #[cfg(test)]
 mod tests {
-	use super::{InputPromptDevice, InventoryPromptKind, INVENTORY_PROMPT_KINDS};
+	use super::{INVENTORY_PROMPT_KINDS, InputPromptDevice, InventoryPromptKind};
 	use crate::theme::{
 		PROMPT_KEY_DROP, PROMPT_KEY_SELECT, PROMPT_KEY_UNEQUIP, PROMPT_PAD_DROP, PROMPT_PAD_SELECT,
 		PROMPT_PAD_UNEQUIP,
 	};
-	use bevy::prelude::KeyCode;
-	use maybraid_input::{
-		PadButton, INVENTORY_DROP_KEYS, INVENTORY_DROP_PAD, INVENTORY_UNEQUIP_KEYS,
-		INVENTORY_UNEQUIP_PAD, MENU_SELECT_KEYS, MENU_SELECT_PAD,
+	use crate::{
+		INVENTORY_DROP_KEYS, INVENTORY_DROP_PAD, INVENTORY_UNEQUIP_KEYS, INVENTORY_UNEQUIP_PAD,
+		MENU_SELECT_KEYS, MENU_SELECT_PAD,
 	};
+	use bevy::prelude::KeyCode;
+	use maybraid_virtual_pad_controller::PadButton;
 
 	#[test]
 	fn select_glyphs_follow_the_menu_select_binding() {

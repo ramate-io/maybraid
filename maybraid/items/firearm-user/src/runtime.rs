@@ -27,15 +27,11 @@ pub fn register_firearm_user_runtime(app: &mut App) {
 	}
 	firearms::register_firearm_runtime(app);
 	app.init_resource::<FirearmUserRuntime>()
-		.add_message::<maybraid_input::PadRumble>()
-		.add_message::<maybraid_equipment::EquippedItemUse>()
+		.add_message::<maybraid_virtual_pad_controller::PadRumble>()
 		.add_message::<player_camera::CameraRecoilHandoff>()
-		.add_systems(
-			Update,
-			(apply_fire_intents, apply_fire_routing, stamp_projectile_sources)
-				.chain()
-				.in_set(PlayerSystems::Intent),
-		)
+		.add_observer(apply_fire_intents)
+		.add_observer(apply_fire_routing)
+		.add_systems(Update, stamp_projectile_sources.in_set(PlayerSystems::Intent))
 		.add_systems(Update, realize_equipment_teardown.in_set(EquipmentSystems::Teardown))
 		.add_systems(Update, realize_equipment_hold.in_set(EquipmentSystems::Hold))
 		.add_systems(PostUpdate, queue_weapon_recoil.after(FirearmWeaponSystems::Fire))
@@ -63,7 +59,20 @@ fn stamp_projectile_sources(
 /// Despawn the held kit and drop the user relationship.
 pub fn teardown_held_firearm(commands: &mut Commands, user: Entity, firearm: &FirearmUser) {
 	commands.entity(firearm.held).try_despawn();
-	commands.entity(user).remove::<(FirearmUser, PlayerUse)>();
+	commands
+		.entity(user)
+		.remove::<(FirearmUser, PlayerUse, player::PlayerOpticAds)>();
+}
+
+/// Retire a firearm user while allowing the held kit's zero-delay cleanup
+/// system to finish its normal trigger-off and despawn lifecycle.
+pub fn retire_held_firearm(commands: &mut Commands, user: Entity, firearm: &FirearmUser) {
+	commands
+		.entity(firearm.held)
+		.insert((firearms::WeaponTrigger(false), damage::DespawnAfter::seconds(0.0)));
+	commands
+		.entity(user)
+		.remove::<(FirearmUser, PlayerUse, player::PlayerOpticAds)>();
 }
 
 fn realize_equipment_teardown(
@@ -80,10 +89,14 @@ fn realize_equipment_hold(mut commands: Commands, pending: Query<(Entity, &Pendi
 	use character_items::InventoryItem;
 
 	for (entity, hold) in &pending {
-		let Some(InventoryItem::Firearm { spec, stats }) = hold.inventory().primary_weapon() else {
+		let Some(inventory) = hold.inventory() else {
+			crate::pose::spawn_held_firearm(&mut commands, entity);
 			continue;
 		};
-		let sheet = hold.inventory().character_sheet();
+		let Some(InventoryItem::Firearm { spec, stats }) = inventory.primary_weapon() else {
+			continue;
+		};
+		let sheet = inventory.character_sheet();
 		let live = live_weapon_from_stats(*stats, sheet.damage).with_weapon_identity(spec);
 		spawn_held_kit(
 			&mut commands,

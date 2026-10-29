@@ -389,7 +389,7 @@ impl Default for LubikanLedger {
 mod tests {
 	use super::*;
 	use crate::activation::LubikanActivationPhase;
-	use anyhow::{anyhow, Result};
+	use anyhow::{Result, anyhow};
 
 	fn extra(capacity: f32) -> LubikanDefinition {
 		LubikanDefinition::new(LubikanDefinitionId::from_raw(7), capacity, 4.0)
