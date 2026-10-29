@@ -16,6 +16,8 @@ test-support = []
 debug-commands = []
 
 [dependencies]
+encounters = { workspace = true }
+bikanwarda-encounter = { workspace = true }
 layer-stack = { workspace = true }
 avian3d = { workspace = true }
 bevy = { workspace = true }
@@ -104,6 +106,7 @@ urbanization-layer-model = { workspace = true }
 vegetation-layer-model = { workspace = true }
 
 [dev-dependencies]
+encounters = { workspace = true, features = ["test-support"] }
 anyhow = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
 maybraid-audio = { workspace = true }

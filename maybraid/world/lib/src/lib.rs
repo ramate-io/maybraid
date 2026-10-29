@@ -24,6 +24,7 @@ mod item_icons;
 mod map_view;
 mod occupancy;
 pub mod world_lubikan;
+pub mod world_encounter;
 
 #[cfg(feature = "debug-commands")]
 pub mod world_debug;
@@ -231,6 +232,7 @@ impl Plugin for WorldPlugin {
 			.add_plugins(crate::spawn_surface::SpawnSurfacePlugin)
 			.add_plugins(WeatherPlugin)
 			.add_plugins(world_lubikan::WorldLubikanPlugin)
+			.add_plugins(world_encounter::WorldEncounterPlugin)
 			.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
 			.add_plugins(WorldPoiPlugin)
 			.add_plugins(WorldOccupancyPlugin)
