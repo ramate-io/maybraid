@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use movement_intelligence::MovementLocation;
 
 use crate::hash::{mix, unit_f32};
-use crate::{NearbyFallback, NearbyQuery, PoiId, PoiInterests, PoiRegistry};
+use crate::{NearbyFallback, NearbyQuery, PoiId, PoiInterests, PoiRegistry, PoiSupport};
 
 const DISK_DISTANCE_SALT: u64 = 0x736f_6d65_706c_6179;
 const DISK_ANGLE_SALT: u64 = 0x6572_5f72_6573_7061;
@@ -60,6 +60,7 @@ impl ArrivalDisk {
 pub struct NearbyPlace {
 	pub position: Vec3,
 	pub poi: Option<PoiId>,
+	pub support: PoiSupport,
 }
 
 /// Choose a nearby POI disk, or a fallback ring around `center`.
@@ -99,10 +100,13 @@ pub fn place_nearby_among(
 		Some(poi) => NearbyPlace {
 			position: ArrivalDisk::new(poi.position, poi.arrival_radius).offset(seed),
 			poi: Some(poi.id),
+			support: poi.support,
 		},
-		None => {
-			NearbyPlace { position: offset_in_fallback_ring(center, seed, fallback), poi: None }
-		}
+		None => NearbyPlace {
+			position: offset_in_fallback_ring(center, seed, fallback),
+			poi: None,
+			support: PoiSupport::Terrain,
+		},
 	};
 	placed.clear_of(center, occupied, min_separation, seed)
 }
@@ -120,7 +124,7 @@ impl NearbyPlace {
 				+ polar_xz(radius, mix(seed ^ DISK_ANGLE_SALT.wrapping_add(attempt as u64 + 1)));
 			let candidate = Vec3::new(candidate.x, self.position.y, candidate.z);
 			if Self::separated(candidate, occupied, min_separation) {
-				return Self { position: candidate, poi: self.poi };
+				return Self { position: candidate, poi: self.poi, support: self.support };
 			}
 		}
 		self.push_off_nearest(occupied, min_separation, seed)
@@ -153,6 +157,7 @@ impl NearbyPlace {
 				other.z + dir.y * min_separation,
 			),
 			poi: self.poi,
+			support: self.support,
 		}
 	}
 }

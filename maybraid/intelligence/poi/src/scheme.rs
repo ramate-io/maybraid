@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext, HcsgStorage};
 
-use crate::{PoiId, PoiInterests, PoiKind, PoiObservation, PoiSource};
+use crate::{PoiId, PoiInterests, PoiKind, PoiObservation, PoiSource, PoiSupport};
 
 const MAX_TILE_QUERY: f32 = 1_000.0;
 
@@ -25,6 +25,7 @@ pub struct PoiEntry {
 	pub kind: PoiKind,
 	pub position: Vec3,
 	pub arrival_radius: f32,
+	pub support: PoiSupport,
 	pub salience: f32,
 	pub local: bool,
 	pub global: bool,
@@ -175,6 +176,7 @@ impl PoiOrigin for GridTiles {
 				kind: GRID_KIND,
 				position: center,
 				arrival_radius: 1.0,
+				support: PoiSupport::Terrain,
 				salience: 1.0,
 				local: true,
 				global: true,

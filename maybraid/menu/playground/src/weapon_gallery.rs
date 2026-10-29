@@ -3,21 +3,21 @@
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::{Scene, bsn};
 use camera_controls::look::CameraLookEnabled;
 use character_items::{FirearmSpec, ItemRng};
 use characters::species::braidman::BraidmanConfig;
-use characters::{character_bounds, CharacterMotionSystems, CharacterRecipe, ComponentsOnly};
+use characters::{CharacterMotionSystems, CharacterRecipe, ComponentsOnly, character_bounds};
 use characters_playground::CameraController;
 use firearm_user::{
-	pose_held_firearm, stamp_holding_arms, sync_hands_to_firearm, FirearmUser, HeldFirearm,
+	FirearmUser, HeldFirearm, pose_held_firearm, stamp_holding_arms, sync_hands_to_firearm,
 };
 use lod::lod_ref::LodRef;
 use lod::scene::LodScene;
 use maybraid_menu_controller::MenuController;
-use menu_components::{screen_back_scene, BrandModeLine};
+use menu_components::{BrandModeLine, screen_back_scene};
 use menu_screens::{
-	add_menu_input, add_menu_show_systems, MenuScreen, MenuScreens, MenuShowRequest,
+	MenuScreen, MenuScreens, MenuShowRequest, add_menu_input, add_menu_show_systems,
 };
 use player::PlayerLook;
 
@@ -184,7 +184,7 @@ fn weapon_gallery_scene() -> impl Scene + 'static {
 	bsn! {
 		WeaponGalleryScreen
 		MenuScreen
-		MenuController
+		MenuController::default()
 		BackgroundColor(Color::NONE)
 		Node {
 			width: percent(100),
@@ -197,7 +197,7 @@ fn weapon_gallery_scene() -> impl Scene + 'static {
 
 #[cfg(test)]
 mod tests {
-	use super::{cell_translation, GALLERY_COLS, GALLERY_COUNT};
+	use super::{GALLERY_COLS, GALLERY_COUNT, cell_translation};
 
 	#[test]
 	fn grid_is_centered_on_the_origin() {
@@ -210,7 +210,7 @@ mod tests {
 
 	#[test]
 	fn teardown_ignores_items_that_are_already_gone() -> Result<(), Box<dyn std::error::Error>> {
-		use super::{despawn_weapon_gallery_items, WeaponGalleryItem};
+		use super::{WeaponGalleryItem, despawn_weapon_gallery_items};
 		use bevy::ecs::system::RunSystemOnce;
 		use bevy::prelude::*;
 

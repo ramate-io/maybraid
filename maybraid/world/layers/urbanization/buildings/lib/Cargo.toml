@@ -19,6 +19,7 @@ material-ref = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+scene-ref = { workspace = true }
 
 [lints]
 workspace = true

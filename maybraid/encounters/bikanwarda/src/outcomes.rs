@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use encounters::{EncounterOutcome, EncounterResolved, EncounterSystems};
-use lubikans::{LubikanAccountId, LubikanCatalog, LubikanLedger};
+use lubikans::{LubikanAccountId, LubikanBodyOf, LubikanCatalog, LubikanLedger};
 
 use crate::unlocks::BikanwardaUnlockConfig;
 
@@ -40,6 +40,7 @@ pub(crate) fn configure(app: &mut App) {
 fn award_unlocks(
 	mut resolved: MessageReader<EncounterResolved>,
 	mut ledgers: Query<&mut LubikanLedger>,
+	body_of: Query<&LubikanBodyOf>,
 	config: Res<BikanwardaUnlockConfig>,
 	mut catalog: ResMut<LubikanCatalog>,
 	mut awarded: MessageWriter<EncounterUnlockAwarded>,
@@ -53,7 +54,8 @@ fn award_unlocks(
 		let Some(recipient) = event.source else {
 			continue;
 		};
-		let Ok(mut ledger) = ledgers.get_mut(recipient) else {
+		let holder = body_of.get(recipient).map(LubikanBodyOf::character).unwrap_or(recipient);
+		let Ok(mut ledger) = ledgers.get_mut(holder) else {
 			continue;
 		};
 		let already = ledger.contains(LubikanAccountId::unique(definition.id));
@@ -86,7 +88,7 @@ mod tests {
 
 	#[test]
 	fn kill_maps_to_enraged_and_free_to_ward() {
-		assert_eq!(ENRAGED_DEFINITION_ID.raw(), 1);
-		assert_eq!(WARD_DEFINITION_ID.raw(), 2);
+		assert_eq!(ENRAGED_DEFINITION_ID, bikanwarda_lubikans::BIKANWARDA_ENRAGED_DEFINITION);
+		assert_eq!(WARD_DEFINITION_ID, bikanwarda_lubikans::BIKANWARDA_WARD_DEFINITION);
 	}
 }

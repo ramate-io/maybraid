@@ -97,7 +97,7 @@ pub struct TanzStack {
 
 impl TanzStack {
 	pub fn starter() -> Self {
-		Self { equipped: TanzId::STARTER.to_vec() }
+		Self { equipped: character_items::BASE_STARTER_TANZES.to_vec() }
 	}
 
 	pub fn contains(&self, id: TanzId) -> bool {
