@@ -54,7 +54,13 @@ fn test_params() -> BikanwardaAttackParams {
 	params
 }
 
-fn attack_app() -> App {
+pub(crate) fn attack_app() -> App {
+	attack_app_with_extra_plugins(|_| {})
+}
+
+pub(crate) fn attack_app_with_extra_plugins(
+	extra: impl FnOnce(&mut App),
+) -> App {
 	let mut app = App::new();
 	app.insert_resource(test_params());
 	app.add_plugins((
@@ -66,6 +72,7 @@ fn attack_app() -> App {
 		AttacksPlugin,
 		BikanwardaAttacksPlugin { placeholders: false },
 	));
+	extra(&mut app);
 	app.finish();
 	app.add_message::<DamageApplied>()
 		.add_message::<Died>()
@@ -78,12 +85,12 @@ fn attack_app() -> App {
 	app
 }
 
-fn step(app: &mut App, dt: f32) {
+pub(crate) fn step(app: &mut App, dt: f32) {
 	app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(dt)));
 	app.update();
 }
 
-fn spawn_owner(app: &mut App, translation: Vec3) -> Entity {
+pub(crate) fn spawn_owner(app: &mut App, translation: Vec3) -> Entity {
 	let mouth_at = translation + Vec3::new(0.0, 1.6, -0.4);
 	let owner = app
 		.world_mut()
@@ -102,7 +109,7 @@ fn spawn_owner(app: &mut App, translation: Vec3) -> Entity {
 	owner
 }
 
-fn spawn_target(app: &mut App, translation: Vec3, health: f32) -> Entity {
+pub(crate) fn spawn_target(app: &mut App, translation: Vec3, health: f32) -> Entity {
 	app.world_mut()
 		.spawn((
 			Health::from_max(health),
@@ -138,7 +145,13 @@ fn mouth(app: &mut App, owner: Entity) -> Result<Entity> {
 		.ok_or_else(|| anyhow!("owner is missing a mouth socket"))
 }
 
-fn cast(app: &mut App, owner: Entity, definition: attacks::AttackId, target: Entity, point: Vec3) {
+pub(crate) fn cast(
+	app: &mut App,
+	owner: Entity,
+	definition: attacks::AttackId,
+	target: Entity,
+	point: Vec3,
+) {
 	observe(app, owner, target, point);
 	let socket = mouth(app, owner).ok();
 	let mut begin = BeginAttack::new(owner, definition).with_target(target);

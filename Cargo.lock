@@ -2248,9 +2248,12 @@ dependencies = [
  "attacks",
  "avian3d",
  "bevy",
+ "character-motion",
  "combat-targeting",
  "damage",
  "lod-avian",
+ "maybraid-spatial-rumble",
+ "maybraid-vfx",
 ]
 
 [[package]]
@@ -2264,6 +2267,7 @@ dependencies = [
  "combat-targeting",
  "damage",
  "lod-avian",
+ "maybraid-spatial-rumble",
  "maybraid-vfx",
 ]
 

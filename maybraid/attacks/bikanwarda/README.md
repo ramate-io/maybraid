@@ -42,12 +42,16 @@ listed as an open question on the PR.
 [`presentation_adapter_plugin`](src/adapter.rs) maps [`AttackPresentationEvent`](../src/presentation.rs)
 to stable cues. Sibling lanes wire these without this crate depending on them:
 
-| Cue | Consumer (not in this crate yet) |
+| Cue | Consumer |
 | --- | --- |
-| [`GodBeamVfxCue`](src/cues.rs) / [`SonicWaveVfxCue`](src/cues.rs) | `maybraid-vfx` [#1150](https://github.com/ramate-io/maybraid/pull/1150) |
-| [`EyeGlowCue`](src/cues.rs) | character `EyeGlowControl` [#1152](https://github.com/ramate-io/maybraid/pull/1152) |
-| [`BrayAnimationCue`](src/cues.rs) | `AnimClip::EpiphantBray` [#1141](https://github.com/ramate-io/maybraid/pull/1141) |
-| [`SpatialRumbleCue`](src/cues.rs) / [`ImpactCue`](src/cues.rs) | `SpatialRumble` [#1146](https://github.com/ramate-io/maybraid/pull/1146) |
+| [`ParadeExplosionCue`](src/cues.rs) | `maybraid-vfx` `fiery_explosion` via [`consumers::parade_vfx`](src/consumers/parade_vfx.rs) |
+| [`SpatialRumbleCue`](src/cues.rs) / [`ImpactCue`](src/cues.rs) | [`maybraid-spatial-rumble`](../../spatial-rumble/lib) via [`consumers::rumble`](src/consumers/rumble.rs) |
+| [`BrayAnimationCue`](src/cues.rs) | `AnimClip::epiphant_bray` via [`consumers::bray_animation`](src/consumers/bray_animation.rs) ([#1141](https://github.com/ramate-io/maybraid/pull/1141)) |
+| mouth / [`BikanwardaMouthSocket`](src/presentation.rs) | [`sample_bray_mouth_emit`](../../world/layers/mobs/characters/motion/src/mouth_emit.rs) via [`consumers::mouth_emit`](src/consumers/mouth_emit.rs) |
+| [`GodBeamVfxCue`](src/cues.rs) / [`SonicWaveVfxCue`](src/cues.rs) | **PLACEHOLDER** meshes until `vfx-driven` + [#1150](https://github.com/ramate-io/maybraid/pull/1150) |
+| [`EyeGlowCue`](src/cues.rs) | [`PendingEyeGlow`](src/consumers/eye_glow.rs) until `eye-glow` + [#1152](https://github.com/ramate-io/maybraid/pull/1152) |
+
+Enable [`BikanwardaPresentationConsumersPlugin`](src/consumers/mod.rs) (on by default via `presentation-consumers` feature). Gameplay does not need combat HUD.
 
 [`placeholder_presentation_plugin`](src/presentation.rs) (eye spheres, head flick) is
 **opt-in** via `BikanwardaAttacksPlugin { placeholders: true }`.
@@ -63,3 +67,13 @@ Headless capture (Bevy `Screenshot` readback; X11 `scrot` of lavapipe stays blac
 cargo build -p bikanwarda-attacks-playground
 xvfb-run -a -s "-screen 0 1280x720x24" maybraid/attacks/bikanwarda/preview/capture.sh
 ```
+
+### Reconciled provider availability
+
+The landed Bray clip, mouth sampling, fiery explosion and spatial rumble providers
+are connected. `vfx-driven` and `eye-glow` remain compatibility feature names:
+current main has neither the driven God Beam / sonic provider nor
+`characters::EyeGlowControl`. Enabling those features therefore retains the
+labeled placeholder beam/rings and `PendingEyeGlow` tracking. It does not disable
+the placeholder or reference an unavailable provider. Final assets and the Bray
+Recover/restore policy remain open.
