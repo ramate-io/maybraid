@@ -3,8 +3,9 @@
 use bevy::prelude::*;
 use characters::LocomotionCapsule;
 use durham::DurhamSurface;
-use mob_intelligence::MobSlot;
+use mob_intelligence::{MobRespawnSupport, MobSlot};
 use mob_scenes::MobSceneSystems;
+use poi_intelligence::PoiSupport;
 
 pub(crate) struct SpawnSurfacePlugin;
 
@@ -24,10 +25,13 @@ impl Plugin for SpawnSurfacePlugin {
 /// standing members keep their pose.
 fn lift_new_mob_members_above_composed(
 	surface: DurhamSurface,
-	mut members: Query<&mut Transform, Added<MobSlot>>,
+	mut members: Query<(&mut Transform, Option<&MobRespawnSupport>), Added<MobSlot>>,
 ) {
 	let clearance = LocomotionCapsule::HUMANOID.spawn_height();
-	for mut transform in &mut members {
+	for (mut transform, support) in &mut members {
+		if support.is_some_and(|support| support.0 == PoiSupport::Floor) {
+			continue;
+		}
 		transform.translation =
 			surface.lift_origin_above_composed(transform.translation, clearance);
 	}
@@ -62,6 +66,14 @@ mod tests {
 	fn new_mob_members_lift_onto_composed_height() -> anyhow::Result<()> {
 		let mut world = surface_world(true);
 		let buried = world.spawn((Transform::from_xyz(8.0, 4.0, 8.0), MobSlot(0))).id();
+		let floor_pose = Vec3::new(24.0, 18.0, 24.0);
+		let floor = world
+			.spawn((
+				Transform::from_translation(floor_pose),
+				MobSlot(1),
+				MobRespawnSupport(PoiSupport::Floor),
+			))
+			.id();
 		world
 			.run_system_once(lift_new_mob_members_above_composed)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -75,6 +87,10 @@ mod tests {
 		assert_eq!(raised.xz(), Vec2::new(8.0, 8.0));
 		assert!((raised.y - (ground + LocomotionCapsule::HUMANOID.spawn_height())).abs() < 1e-4);
 		assert!(raised.y > 4.0);
+		assert_eq!(
+			world.get::<Transform>(floor).map(|transform| transform.translation),
+			Some(floor_pose)
+		);
 		Ok(())
 	}
 

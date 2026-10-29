@@ -15,7 +15,7 @@ use lod::LodScene;
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
 	DistantTilePoiLookup, GlobalPoi, LocalPoi, Poi, PoiId, PoiIntelligencePlugin, PoiKind,
-	PoiRegistry, PoiSystems,
+	PoiRegistry, PoiSupport, PoiSystems,
 };
 use richmond::{DiscoverablePlace, DiscoverablePlaceLabel};
 use urbanization_layer_model::UrbanSetting;
@@ -160,7 +160,10 @@ fn queue_global_groves(
 				translation: anchor,
 				name: "grove-global-poi",
 			},
-			poi: Poi::new(id, VEGETATION_POI).with_arrival_radius(radius).with_salience(1.25),
+			poi: Poi::new(id, VEGETATION_POI)
+				.with_support(PoiSupport::Terrain)
+				.with_arrival_radius(radius)
+				.with_salience(1.25),
 			tier: PendingPoiTier::Global,
 		});
 	}
@@ -174,6 +177,7 @@ fn queue_global_urban_settings(
 		state.pending_pois.push_back(PendingPoi {
 			target: PendingPoiTarget::Entity(entity),
 			poi: Poi::new(hashed_poi_id(URBAN_POI_SALT, setting.id), URBAN_POI)
+				.with_support(PoiSupport::Terrain)
 				.with_arrival_radius(setting.arrival_radius)
 				.with_salience(1.5),
 			tier: PendingPoiTier::Global,
@@ -220,6 +224,7 @@ fn queue_place(
 			spatial_poi_id(INTERIOR_POI_SALT ^ place.label.salt() ^ entity.to_bits(), translation),
 			kind,
 		)
+		.with_floor_support()
 		.with_arrival_radius(place.arrival_radius)
 		.with_salience(salience),
 		tier: PendingPoiTier::Local,
@@ -370,6 +375,7 @@ fn discover_local_vegetation(
 			ChildOf(entity),
 			Transform::from_translation(instance.anchor),
 			Poi::new(spatial_poi_id(VEGETATION_POI_SALT, world), VEGETATION_POI)
+				.with_support(PoiSupport::Terrain)
 				.with_arrival_radius(instance.radius.clamp(0.5, 8.0))
 				.with_salience(0.55),
 			LocalPoi,
@@ -487,9 +493,14 @@ mod tests {
 
 		assert!(app.world().get::<Poi>(host).is_some());
 		assert_eq!(app.world().get::<Poi>(host).map(|poi| poi.kind), Some(LOCAL_POI));
+		assert_eq!(app.world().get::<Poi>(host).map(|poi| poi.support), Some(PoiSupport::Floor));
 		let promoted_rooms =
 			rooms.iter().filter(|entity| app.world().get::<Poi>(**entity).is_some()).count();
 		assert_eq!(promoted_rooms, 2);
+		assert!(rooms
+			.iter()
+			.filter_map(|entity| app.world().get::<Poi>(*entity))
+			.all(|poi| { poi.support == PoiSupport::Floor }));
 	}
 
 	#[test]
@@ -512,6 +523,7 @@ mod tests {
 
 		let poi = app.world().get::<Poi>(market).copied();
 		assert_eq!(poi.map(|poi| poi.kind), Some(SALOON_POI));
+		assert_eq!(poi.map(|poi| poi.support), Some(PoiSupport::Floor));
 		assert!(app.world().get::<LocalPoi>(market).is_some());
 	}
 

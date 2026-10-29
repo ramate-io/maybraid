@@ -9,10 +9,10 @@ use lod::{
 };
 use mob_characters::{CharacterSceneSystems, MobCharacterScenesPlugin};
 use mob_intelligence::{
-	install_mob, MobIdAlloc, MobInstall, MobIntelligencePlugin, MobMemberNeeded, MobSlot,
-	MobSystems, MobTetherLock, RosterMember,
+	install_mob, MobIdAlloc, MobInstall, MobIntelligencePlugin, MobMemberNeeded, MobRespawnSupport,
+	MobSlot, MobSystems, MobTetherLock, RosterMember,
 };
-use poi_intelligence::{PoiGoal, PoiId, PoiIntelligencePlugin, PoiKind};
+use poi_intelligence::{PoiGoal, PoiId, PoiIntelligencePlugin, PoiKind, PoiSupport};
 use routing_intelligence::RoutingPlugin;
 use tether_intelligence::TetherPlugin;
 
@@ -196,7 +196,12 @@ fn spawn_needed_members(
 			continue;
 		};
 		let body = member.character.spawn(&mut commands, Transform::from_translation(request.pose));
-		commands.entity(body).insert((MobSlot(request.slot), request.id, mob.mob.kind));
+		commands.entity(body).insert((
+			MobSlot(request.slot),
+			MobRespawnSupport(request.support),
+			request.id,
+			mob.mob.kind,
+		));
 	}
 }
 
@@ -332,6 +337,7 @@ mod tests {
 			id: MobId(7),
 			slot: 0,
 			pose: Vec3::Y,
+			support: PoiSupport::Terrain,
 		});
 
 		world
@@ -365,6 +371,7 @@ mod tests {
 			id: MobId(7),
 			slot: 0,
 			pose: Vec3::Y,
+			support: PoiSupport::Terrain,
 		});
 
 		world

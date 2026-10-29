@@ -9,7 +9,6 @@ pub mod support;
 pub mod terrain;
 
 pub use pending::{PendingPlacement, PlacementTick, PlacementWork};
-pub use poi::interior_building_poi;
 pub use probe::{observe_placement_physics, register_placement_physics};
 pub use request::{
 	ActorClearance, CancelPlacement, PlacementFailed, PlacementPolicy, PlacementReady,
@@ -28,6 +27,7 @@ use bevy::prelude::*;
 use durham::DurhamSurface;
 use maybraid_spawns_player::ArrivalDestination;
 use poi_intelligence::{PoiId, PoiRegistry};
+use world_player::surface_or_hold_at;
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PlacementSystems {
@@ -127,7 +127,11 @@ impl PlacementSearch {
 		};
 		Ok(match PlacementPolicy::for_poi(record) {
 			PlacementPolicy::InteriorFloor => Self::interior_at(record.position, hull),
-			PlacementPolicy::OutdoorGround => Self::outdoor_at(surface, record.position.xz(), hull),
+			PlacementPolicy::OutdoorGround => {
+				let arrival = record.arrival();
+				let hint = arrival.surface_y(surface_or_hold_at(surface, arrival.position.xz()));
+				Self::outdoor_hint(arrival.position.xz(), hint, hull)
+			}
 			PlacementPolicy::Airborne => {
 				Self::airborne_at(record.position + Vec3::Y * hull.spawn_height(), hull)
 			}
@@ -169,7 +173,8 @@ mod tests {
 		PlacementAttempt, SpawnFailureReason, SpawnIdentity, SpawnOwner, SpawnRequestId,
 		SpawnSessionId,
 	};
-	use poi_intelligence::PoiId;
+	use poi_intelligence::{Poi, PoiId, PoiKind};
+	use world_player::surface_or_hold_at;
 
 	fn identity() -> SpawnIdentity {
 		SpawnIdentity::new(SpawnRequestId::new(1), SpawnOwner::new(SpawnSessionId::new(1)))
@@ -240,6 +245,52 @@ mod tests {
 					assert_eq!(pending.search.hull, hull);
 					assert!(pending.search.bounds_valid());
 					assert!(pending.accepted.is_none(), "collider geometry accepts the pose");
+					Ok(())
+				},
+			)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))??;
+		Ok(())
+	}
+
+	#[test]
+	fn poi_resolution_keeps_floor_y_and_uses_terrain_hint_for_outdoor_support() -> anyhow::Result<()>
+	{
+		let mut world = surface_world();
+		world
+			.run_system_once(
+				|mut registry: ResMut<PoiRegistry>, surface: DurhamSurface| -> anyhow::Result<()> {
+					let kind = PoiKind::new("same/poi-kind");
+					registry.upsert(
+						Entity::from_bits(1),
+						Poi::new(PoiId(1), kind).with_floor_support(),
+						Vec3::new(8.0, 24.0, 6.0),
+						true,
+						false,
+					)?;
+					registry.upsert(
+						Entity::from_bits(2),
+						Poi::new(PoiId(2), kind),
+						Vec3::new(8.0, 24.0, 6.0),
+						true,
+						false,
+					)?;
+					let floor = PlacementSearch::resolve_poi(
+						PoiId(1),
+						&registry,
+						&surface,
+						LocomotionCapsule::HUMANOID,
+					)?;
+					let terrain = PlacementSearch::resolve_poi(
+						PoiId(2),
+						&registry,
+						&surface,
+						LocomotionCapsule::HUMANOID,
+					)?;
+					assert_eq!(floor.policy, PlacementPolicy::InteriorFloor);
+					assert_eq!(floor.min_surface_y, 24.0 - INTERIOR_LOWER_MARGIN);
+					assert_eq!(terrain.policy, PlacementPolicy::OutdoorGround);
+					let hint = surface_or_hold_at(&surface, Vec2::new(8.0, 6.0));
+					assert_eq!(terrain.min_surface_y, hint - OUTDOOR_LOWER_MARGIN);
 					Ok(())
 				},
 			)

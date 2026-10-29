@@ -12,10 +12,10 @@ use chico::ChicoGrove;
 use geneva::{DevelopmentPlaces, LanguageGround};
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{GenerationContext, HcsgStorage};
-use mob_characters::{URBAN_POI, VEGETATION_POI};
+use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
 	collect_matching_in_xz_tile, hashed_poi_id, DistantTilePois, PoiEntry, PoiInterests, PoiOrigin,
-	PoiSet,
+	PoiSet, PoiSupport,
 };
 use richmond::{Built, RichmondGround};
 
@@ -46,6 +46,10 @@ impl PoiOrigin for GrovePois {
 				kind: VEGETATION_POI,
 				position: center,
 				arrival_radius: radius,
+				support: match place_kind(place.place.label) {
+					LOCAL_POI | SALOON_POI => PoiSupport::Floor,
+					_ => PoiSupport::Terrain,
+				},
 				salience: 1.25,
 				local: false,
 				global: true,
@@ -73,6 +77,7 @@ impl<G: RichmondGround> PoiOrigin for UrbanPois<G> {
 				kind: URBAN_POI,
 				position: built.setting_at,
 				arrival_radius: built.setting.arrival_radius,
+				support: PoiSupport::Terrain,
 				salience: 1.5,
 				local: false,
 				global: true,
@@ -106,6 +111,7 @@ impl<W: LanguageGround> PoiOrigin for PlacePois<W> {
 				kind: place_kind(place.place.label),
 				position: Vec3::new(place.xz.x, height, place.xz.y),
 				arrival_radius: place.place.arrival_radius,
+				support: PoiSupport::Terrain,
 				salience: place.place.salience.unwrap_or(place.place.label.default_salience()),
 				local: true,
 				global: false,

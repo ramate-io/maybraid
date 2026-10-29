@@ -3,7 +3,8 @@
 use bevy::prelude::*;
 use damage::{DespawnAfter, Downed, Health};
 use poi_intelligence::{
-	mix_seed, place_nearby_among, PoiId, PoiInterests, PoiRegistry, AGENT_SEPARATION,
+	mix_seed, place_nearby_among, PoiId, PoiInterests, PoiRegistry, PoiSupport,
+	AGENT_SEPARATION,
 };
 
 use crate::host::{Mob, MobId};
@@ -170,7 +171,7 @@ pub(crate) fn respawn_mob_members(
 			let excluded = member.excluded_pois().to_vec();
 			let last = member.pose;
 			let used = member.replacements_used;
-			let (pose, poi) = policy.placement(
+			let (pose, poi, support) = policy.placement(
 				transform.translation,
 				last,
 				*id,
@@ -184,7 +185,7 @@ pub(crate) fn respawn_mob_members(
 			member.remember_respawn_poi(poi);
 			member.pose = pose;
 			occupied.push(pose);
-			needed.write(MobMemberNeeded { mob: host, id: *id, slot, pose });
+			needed.write(MobMemberNeeded { mob: host, id: *id, slot, pose, support });
 		}
 	}
 }
@@ -212,9 +213,9 @@ impl MobRespawn {
 		occupied: &[Vec3],
 		registry: Option<&PoiRegistry>,
 		interests: Option<&PoiInterests>,
-	) -> (Vec3, Option<PoiId>) {
+	) -> (Vec3, Option<PoiId>, PoiSupport) {
 		if self.at != MobRespawnAt::Poi {
-			return (spawn_pose(self.at, host, last), None);
+			return (spawn_pose(self.at, host, last), None, PoiSupport::Terrain);
 		}
 		let seed = respawn_seed(mob, slot, generation);
 		let placed = place_nearby_among(
@@ -228,7 +229,8 @@ impl MobRespawn {
 			occupied,
 			AGENT_SEPARATION,
 		);
-		(with_member_height(placed.position, host, last, placed.poi.is_some()), placed.poi)
+		let pose = with_member_height(placed.position, host, last, placed.poi.is_some());
+		(pose, placed.poi, placed.support)
 	}
 
 	pub fn delay_for_slot(self, slot: u16) -> f32 {
@@ -294,6 +296,34 @@ mod tests {
 		let selected =
 			registry.choose_nearby(Vec3::ZERO, DEFAULT_NEARBY_RADIUS, &interests, &[PoiId(11)], 42);
 		assert_eq!(selected.map(|poi| poi.id), Some(PoiId(12)));
+		Ok(())
+	}
+
+	#[test]
+	fn poi_respawn_keeps_authored_floor_pose_and_support() -> Result<()> {
+		let mut registry = PoiRegistry::default();
+		registry.upsert(
+			Entity::from_bits(21),
+			Poi::new(PoiId(21), CAMP).with_floor_support(),
+			Vec3::new(12.0, 32.0, -8.0),
+			true,
+			false,
+		)?;
+		let interests = PoiInterests::one(CAMP);
+		let (pose, poi, support) = MobRespawn::default().placement(
+			Vec3::ZERO,
+			Vec3::Y,
+			MobId(3),
+			0,
+			1,
+			&[],
+			&[],
+			Some(&registry),
+			Some(&interests),
+		);
+		assert_eq!(poi, Some(PoiId(21)));
+		assert_eq!(support, PoiSupport::Floor);
+		assert_eq!(pose.y, 32.75);
 		Ok(())
 	}
 
