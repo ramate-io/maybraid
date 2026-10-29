@@ -7,7 +7,7 @@ use material_ref::{
 	StandardMaterialRefCache,
 };
 
-use crate::{is_furniture_surface_recipe, FurnitureSurfaceMaterial};
+use crate::{FurnitureSurfaceMaterial, is_furniture_surface_recipe};
 
 /// Cache of resolved [`FurnitureSurfaceMaterial`] handles.
 pub type FurnitureSurfaceMaterialRefCache = MaterialRefCache<FurnitureSurfaceMaterial>;
@@ -51,8 +51,8 @@ impl MaterialLib for FurnitureMaterialLib<'_> {
 				let handle = self.resolve(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle));
 				true
 			}
 			_ => false,

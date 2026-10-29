@@ -8,7 +8,7 @@ use material_ref::{
 };
 
 use crate::{
-	is_column_surface_recipe, is_urban_surface_recipe, ColumnSurfaceMaterial, UrbanSurfaceMaterial,
+	ColumnSurfaceMaterial, UrbanSurfaceMaterial, is_column_surface_recipe, is_urban_surface_recipe,
 };
 
 /// Cache of resolved [`UrbanSurfaceMaterial`] handles.
@@ -64,8 +64,8 @@ impl MaterialLib for ColumnSurfaceMaterialLib<'_> {
 				let handle = self.resolve(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle));
 				true
 			}
 			_ => false,
@@ -98,8 +98,8 @@ impl MaterialLib for UrbanSurfaceMaterialLib<'_> {
 				let handle = self.resolve(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle));
 				true
 			}
 			_ => self.column.try_fulfill(entity, material_ref, commands),
@@ -151,8 +151,8 @@ mod tests {
 
 	use super::*;
 	use crate::{
-		ColumnSurfaceMaterial, UrbanSurfaceMaterial, RECIPE_DORIC_COLUMN,
-		RECIPE_DORIC_COLUMN_SHAFT_KIT, RECIPE_WOOD,
+		ColumnSurfaceMaterial, RECIPE_DORIC_COLUMN, RECIPE_DORIC_COLUMN_SHAFT_KIT, RECIPE_WOOD,
+		UrbanSurfaceMaterial,
 	};
 
 	#[test]

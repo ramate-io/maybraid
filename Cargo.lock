@@ -2821,6 +2821,7 @@ dependencies = [
  "character-items",
  "character-ui-menu",
  "characters",
+ "lubikans",
  "tanz-user",
 ]
 
@@ -6934,6 +6935,7 @@ dependencies = [
  "clap",
  "layer-stack",
  "lod",
+ "lubikans",
  "maybraid-agent",
  "maybraid-character-controller",
  "maybraid-controllers-core",
@@ -7468,6 +7470,7 @@ dependencies = [
  "item-icons",
  "lod",
  "lod-avian",
+ "lubikans",
  "maybraid-character-ui-menu-renderer",
  "maybraid-controllers-core",
  "maybraid-menu-controller",

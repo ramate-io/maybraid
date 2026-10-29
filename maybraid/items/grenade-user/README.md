@@ -16,8 +16,9 @@ cancel drop owner. [`spawn_held_grenade`](src/hold.rs) installs the grenade
 handler. Execution (cook / windup, routing, recharge, equipment realize) lives
 in [`runtime`](src/runtime.rs) via [`register_grenade_user_runtime`](src/runtime.rs).
 HUD / pose / feel live in [`presentation`](src/presentation.rs). Throw publishes
-[`SpawnThrownGrenade`](../grenades/src/runtime.rs); presentation realizes the
-thrown body.
+[`SpawnThrownGrenade`](../grenades/src/runtime.rs); `maybraid-spawns-grenades`
+realizes its simulation body in [`realize.rs`](../../spawns/grenades/src/realize.rs),
+and presentation attaches visuals afterward.
 
 See [ARCHITECTURE.md](../../controllers/ARCHITECTURE.md) for the D1 / D3
 contract.

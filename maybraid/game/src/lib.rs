@@ -13,31 +13,33 @@ mod supervisor;
 
 pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, PlaySession, WorldPause};
 pub use panic_log::{
-	append_error_log, error_log_path, install_panic_log_hook, log_dir, panic_log_path, ENV_LOGS,
+	ENV_LOGS, append_error_log, error_log_path, install_panic_log_hook, log_dir, panic_log_path,
 };
 pub use paths::assets_root;
 pub use recovery::{
-	can_resume_world, clear_recovery_inbox, recovery_destination, strict_errors_from_env,
-	take_recovery_requests, LastRecovery, RecoverBoot, RecoveryDestination, RecoveryMode,
-	RecoveryPlugin, RecoverySystems, RecoveryToast, ENV_STRICT_ERRORS,
+	ENV_STRICT_ERRORS, LastRecovery, RecoverBoot, RecoveryDestination, RecoveryMode,
+	RecoveryPlugin, RecoverySystems, RecoveryToast, can_resume_world, clear_recovery_inbox,
+	recovery_destination, strict_errors_from_env, take_recovery_requests,
 };
 pub use supervisor::{
-	already_supervised, can_relaunch, child_command_args, child_is_abnormal, maybe_supervise,
-	should_run_supervisor, ENV_SUPERVISE, ENV_SUPERVISED, RELAUNCH_MAX, RELAUNCH_WINDOW,
+	ENV_SUPERVISE, ENV_SUPERVISED, RELAUNCH_MAX, RELAUNCH_WINDOW, already_supervised, can_relaunch,
+	child_command_args, child_is_abnormal, maybe_supervise, should_run_supervisor,
 };
 
 use crate::recovery::remember_world_session;
 use crate::shell::{
-	apply_pause_character_look, apply_shell_look, attach_preview_camera, despawn_loading_backdrop,
-	detach_preview_camera, enter_characters, enter_home, enter_loading_world, enter_world,
-	enter_world_menu, exit_world_menu, resolve_session_capabilities, restore_stashed_world_camera,
-	spawn_loading_backdrop, stamp_preview_render_layers, ShellRoute,
+	ShellRoute, apply_pause_character_look, apply_shell_look, attach_preview_camera,
+	despawn_loading_backdrop, detach_preview_camera, enter_characters, enter_home,
+	enter_loading_world, enter_world, enter_world_menu, exit_world_menu,
+	resolve_session_capabilities, restore_stashed_world_camera, spawn_loading_backdrop,
+	stamp_preview_render_layers,
 };
 use bevy::prelude::*;
 use bevy::render::renderer::RenderAdapterInfo;
 use bevy::window::PrimaryWindow;
+use lubikans::{LubikanLedger, LubikanOrder};
 use maybraid_character_controller::{ActorIntentEvent, CharacterIntent};
-use maybraid_controllers_core::InputRouting;
+use maybraid_controllers_core::{InputRouter, InputRouting, InputSource};
 use maybraid_gameplay::GameplayPlugin;
 use maybraid_menu_controller::{MenuController, MenuControllerPlugin, MenuStartPolicy};
 use maybraid_session::{
@@ -46,26 +48,26 @@ use maybraid_session::{
 use maybraid_sky::ShadowQuality;
 use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 use maybraid_world::{
-	host_memory_bytes, parse_device_tier_env, parse_visual_style_env, reset_first_spawn_offer,
-	resume_discovery_from_saved_waypoints, AdapterKind, AgentDrive, Durham,
-	InventoryEditCameraFollow, PlayerPhysicsEnabled, PlayerSpawnXz, TerrainStreaming, VisualStyle,
+	AdapterKind, AgentDrive, DEVICE_TIER_ENV, Durham, InventoryEditCameraFollow,
+	PlayerPhysicsEnabled, PlayerSpawnXz, TerrainStreaming, VISUAL_STYLE_ENV, VisualStyle,
 	VisualStyleSetting, VisualStyleSignals, WorldMenuShell, WorldMobHudEnabled, WorldPlayerLoadout,
-	WorldPlugin, WorldSceneryVisible, WorldSurfaceReady, WorldSurfaceSet, DEVICE_TIER_ENV,
-	VISUAL_STYLE_ENV,
+	WorldPlugin, WorldSceneryVisible, WorldSurfaceReady, WorldSurfaceSet, host_memory_bytes,
+	parse_device_tier_env, parse_visual_style_env, reset_first_spawn_offer,
+	resume_discovery_from_saved_waypoints,
 };
-use menu_components::{MenuBackRequested, TextMenuSystems, MENU_CLEAR};
+use menu_components::{MENU_CLEAR, MenuBackRequested, TextMenuSystems};
 use menu_playground::{
 	ActiveCharacter, CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState,
 	CharacterPreviewPlugin, CharacterScreenPlugin, CharacterSessionPlugin, EditingCharacter,
 	RequestEditCharacter,
 };
 use menu_screens::{
-	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
-	request_show_in_game_settings, CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice,
-	HomeScreenPlugin, InGameMenuChoice, InGameScreen, InGameScreenPlugin, InGameSettings,
-	InGameSettingsScreen, InGameSettingsSystems, InGameShadowQuality, InGameVisualStyle,
-	LoadingScreenPlugin, LoadingScreenSystems, MenuScreen, MenuScreens, RenderScaleReadout,
-	SpinRevealScreen, VisualStyleProvenance,
+	CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice, HomeScreenPlugin,
+	InGameMenuChoice, InGameScreen, InGameScreenPlugin, InGameSettings, InGameSettingsScreen,
+	InGameSettingsSystems, InGameShadowQuality, InGameVisualStyle, LoadingScreenPlugin,
+	LoadingScreenSystems, MenuScreen, MenuScreens, RenderScaleReadout, SpinRevealScreen,
+	VisualStyleProvenance, cancel_pending_create, request_show_gallery, request_show_home,
+	request_show_in_game, request_show_in_game_settings,
 };
 
 pub struct GamePlugin;
@@ -326,6 +328,8 @@ fn route_in_game_choice(
 	mut edits: MessageWriter<RequestEditCharacter>,
 	active: Option<Res<ActiveCharacter>>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
+	router: Option<Res<InputRouter>>,
+	ledgers: Query<&LubikanLedger>,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
@@ -346,6 +350,11 @@ fn route_in_game_choice(
 				id: active.id,
 				return_to: CharacterEditorReturn::InGame,
 				inventory: loadout.map(|loadout| loadout.inventory.clone()),
+				lubikans: router
+					.as_ref()
+					.and_then(|router| router.actor(InputSource::local_pad()))
+					.and_then(|actor| ledgers.get(actor.entity()).ok())
+					.map(LubikanOrder::from_ledger),
 			});
 		}
 		PauseMenuRoute::Stay => {}
@@ -386,6 +395,8 @@ fn sync_world_loadout_from_editor(
 	menu: Res<CharacterMenuState>,
 	return_to: Option<Res<CharacterEditorReturn>>,
 	mut commands: Commands,
+	router: Option<Res<InputRouter>>,
+	mut ledgers: Query<&mut LubikanLedger>,
 ) {
 	if return_to.is_none_or(|return_to| !return_to.uses_live_world_player()) {
 		return;
@@ -395,6 +406,11 @@ fn sync_world_loadout_from_editor(
 	};
 	if !menu.is_changed() && baseline.as_ref().is_none_or(|baseline| !baseline.is_changed()) {
 		return;
+	}
+	if let Some(actor) = router.as_ref().and_then(|router| router.actor(InputSource::local_pad())) {
+		if let Ok(mut ledger) = ledgers.get_mut(actor.entity()) {
+			ledger.apply_order(&menu.0.lubikans);
+		}
 	}
 	commands.insert_resource(
 		WorldPlayerLoadout::new(
@@ -652,10 +668,10 @@ mod tests {
 	use menu_playground::ActiveCharacter;
 
 	use crate::{
-		apply_settings_to_visual_style, assets_root, clear_play_session,
+		GameFlow, PlaySession, apply_settings_to_visual_style, assets_root, clear_play_session,
 		load_active_player_loadout, persist_changed_player_inventory, read_player_loadout,
 		route_home_choice, sync_world_loadout_from_editor, sync_world_shadows,
-		visual_style_readout, GameFlow, PlaySession,
+		visual_style_readout,
 	};
 	use maybraid_controllers_core::{InputRouter, RoutingEvent};
 	use maybraid_session::{SessionCapabilities, WorldPlaySessionEnded};
@@ -923,6 +939,56 @@ mod tests {
 	}
 
 	#[test]
+	fn live_lubikan_reorder_and_discard_preserve_charge_and_selected_identity() -> anyhow::Result<()>
+	{
+		use lubikans::{LubikanDefinition, LubikanDefinitionId, LubikanLedger, LubikanOrder};
+		use maybraid_controllers_core::{ActorTarget, InputSource};
+		let mut ledger = LubikanLedger::default();
+		let extra = ledger.ensure_owned(LubikanDefinition::new(
+			LubikanDefinitionId::from_raw(5),
+			20.0,
+			5.0,
+		));
+		ledger.apply_to(extra, 9.0);
+		assert!(ledger.select(Some(extra)));
+		let mut menu = CharacterMenuState::default();
+		menu.0.inventory = Some(Inventory::default());
+		menu.0.lubikans = LubikanOrder::from_ledger(&ledger);
+		let baseline = CharacterEditBaseline::capture(&menu.0);
+		assert!(menu.0.lubikans.move_account(extra, -1));
+		let mut world = World::new();
+		let owner = world.spawn(ledger).id();
+		let mut router = InputRouter::default();
+		router.assign_actor(InputSource::local_pad(), ActorTarget::new(owner));
+		world.insert_resource(router);
+		world.insert_resource(CharacterEditorReturn::InGame);
+		world.insert_resource(EditingCharacter { id: CharacterId(11) });
+		world.insert_resource(baseline.clone());
+		world.insert_resource(menu);
+		world
+			.run_system_once(sync_world_loadout_from_editor)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let live = world.get::<LubikanLedger>(owner).ok_or_else(|| anyhow::anyhow!("ledger"))?;
+		assert_eq!(live.iter().next().map(|account| account.id()), Some(extra));
+		assert_eq!(live.selection().resolved(), extra);
+		assert_eq!(live.equipped().charge().current(), 9.0);
+		// Simulate a live charge update after opening: discard must restore only order.
+		world
+			.get_mut::<LubikanLedger>(owner)
+			.ok_or_else(|| anyhow::anyhow!("ledger"))?
+			.apply_to(extra, 2.0);
+		baseline.restore_into(&mut world.resource_mut::<CharacterMenuState>().0);
+		world
+			.run_system_once(sync_world_loadout_from_editor)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let live = world.get::<LubikanLedger>(owner).ok_or_else(|| anyhow::anyhow!("ledger"))?;
+		assert!(live.iter().next().is_some_and(|account| account.id().is_self()));
+		assert_eq!(live.selection().resolved(), extra);
+		assert_eq!(live.equipped().charge().current(), 11.0);
+		Ok(())
+	}
+
+	#[test]
 	fn pause_settings_copy_onto_the_sky_sun() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.insert_resource(InGameSettings {
@@ -1029,7 +1095,7 @@ mod tests {
 
 	#[test]
 	fn start_closes_pause_only_from_the_pause_root() {
-		use crate::{start_pause_target, WorldPause};
+		use crate::{WorldPause, start_pause_target};
 
 		assert_eq!(start_pause_target(WorldPause::Playing, false), Some(WorldPause::Menu));
 		assert_eq!(start_pause_target(WorldPause::Playing, true), Some(WorldPause::Menu));

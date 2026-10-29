@@ -1,7 +1,7 @@
 # Three-clip integration pilot
 
 This pilot ports exactly three independently authored clips onto main baseline
-`75eaa5d187a81a6855f223121dccc5973795281c`. The source branches contain older shared
+`6c905c648a22bbe46b8c45924c9b9e35d2a10f50`. The source branches contain older shared
 infrastructure, so only the selected features are ported. Original pull requests
 remain open until the pilot lands; this document does not mark them resolved.
 

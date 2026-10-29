@@ -83,17 +83,11 @@ impl EquippedLubikanQueue {
 	}
 
 	fn owned_account_order(ledger: &LubikanLedger) -> Vec<LubikanAccountId> {
-		let mut order: Vec<_> = ledger.iter().map(|account| account.id()).collect();
-		order.sort();
-		order
+		ledger.iter().map(|account| account.id()).collect()
 	}
 
 	fn select_owned(ledger: &mut LubikanLedger, account: LubikanAccountId) -> bool {
-		if account.is_self() {
-			ledger.select(None)
-		} else {
-			ledger.select(Some(account))
-		}
+		if account.is_self() { ledger.select(None) } else { ledger.select(Some(account)) }
 	}
 }
 
@@ -394,6 +388,35 @@ mod tests {
 			.current();
 		assert_eq!(extra_charge, extra_after);
 		Ok(())
+	}
+
+	#[test]
+	fn lubikan_cycle_follows_edited_order_in_both_directions() {
+		let mut ledger = LubikanLedger::default();
+		let first = ledger.ensure_owned(LubikanDefinition::new(
+			LubikanDefinitionId::from_raw(9),
+			20.0,
+			5.0,
+		));
+		let second = ledger.ensure_owned(LubikanDefinition::new(
+			LubikanDefinitionId::from_raw(2),
+			20.0,
+			5.0,
+		));
+		let third = ledger.ensure_owned(LubikanDefinition::new(
+			LubikanDefinitionId::from_raw(5),
+			20.0,
+			5.0,
+		));
+		let mut order = lubikans::LubikanOrder::from_ledger(&ledger);
+		assert!(order.move_account(second, -1));
+		assert!(ledger.apply_order(&order));
+		for expected in [second, first, third, lubikans::LubikanAccountId::SELF] {
+			assert!(EquippedLubikanQueue::cycle(&mut ledger, 1));
+			assert_eq!(ledger.selection().resolved(), expected);
+		}
+		assert!(EquippedLubikanQueue::cycle(&mut ledger, -1));
+		assert_eq!(ledger.selection().resolved(), third);
 	}
 
 	#[test]

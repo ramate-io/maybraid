@@ -82,7 +82,9 @@ fn realize_equipment_teardown(
 
 fn realize_equipment_hold(mut commands: Commands, pending: Query<(Entity, &PendingEquipmentHold)>) {
 	for (entity, hold) in &pending {
-		if !matches!(hold.inventory().primary_weapon(), Some(InventoryItem::Grenade { .. })) {
+		if !hold.inventory().is_some_and(|inventory| {
+			matches!(inventory.primary_weapon(), Some(InventoryItem::Grenade { .. }))
+		}) {
 			continue;
 		}
 		spawn_held_grenade(&mut commands, entity, GrenadeUserSettings::default());

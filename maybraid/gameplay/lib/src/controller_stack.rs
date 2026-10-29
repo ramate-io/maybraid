@@ -10,6 +10,7 @@ use firearm_user::{register_firearm_user_runtime, FirearmUser, RecoilPattern};
 use firearms::{
 	FireControl, FireOnTrigger, Weapon, WeaponFired, WeaponLaunchPose, WeaponRecoil, WeaponTrigger,
 };
+use fisticuffs_user::FisticuffsUser;
 use grenade_user::{register_grenade_user_runtime, GrenadePhase, GrenadeThrow, GrenadeUser};
 use grenades::DropLiveGrenade;
 use lubikans::{
@@ -985,6 +986,48 @@ fn spawn_mixed_weapon_actor(
 	(entity.id(), bag, held)
 }
 
+fn fisticuffs_pair_inventory(other: InventoryItem, starts_with_fisticuffs: bool) -> Inventory {
+	Inventory {
+		items: vec![InventoryItem::Fisticuffs, other],
+		clothing: Vec::new(),
+		weapons: if starts_with_fisticuffs { vec![0, 1] } else { vec![1, 0] },
+		skills: Vec::new(),
+		tanzes: Vec::new(),
+	}
+}
+
+fn spawn_fisticuffs_pair_actor(
+	app: &mut App,
+	handler: EquippedItemHandler,
+	other: InventoryItem,
+) -> (Entity, Entity) {
+	let starts_with_fisticuffs = handler == EquippedItemHandler::Fisticuffs;
+	let bag = app
+		.world_mut()
+		.spawn(fisticuffs_pair_inventory(other, starts_with_fisticuffs))
+		.id();
+	let held = app.world_mut().spawn_empty().id();
+	let mut entity = app.world_mut().spawn((
+		Player,
+		VegetationPlayer,
+		InventoryUser::carrying(bag),
+		handler,
+		InventoryCycling::default(),
+	));
+	if starts_with_fisticuffs {
+		entity.insert(FisticuffsUser::default());
+	} else if matches!(handler, EquippedItemHandler::Firearm) {
+		entity.insert((FirearmUser::holding(held), PlayerUse { driver: held }));
+	} else if matches!(handler, EquippedItemHandler::Grenade) {
+		entity.insert((
+			GrenadeUser::holding(held),
+			GrenadeThrow::default(),
+			PlayerUse { driver: held },
+		));
+	}
+	(entity.id(), bag)
+}
+
 fn insert_holster_at(app: &mut App, actor: Entity, elapsed: f32, swapped: bool) {
 	app.world_mut().entity_mut(actor).insert(EquipmentHolster {
 		elapsed,
@@ -1045,6 +1088,74 @@ fn assembled_firearm_grenade_swap_keeps_player_use() -> anyhow::Result<()> {
 		Some(EquippedItemHandler::Firearm)
 	);
 	Ok(())
+}
+
+fn assembled_fisticuffs_item_swaps(
+	other: InventoryItem,
+	other_handler: EquippedItemHandler,
+) -> anyhow::Result<()> {
+	let mut app = stack_app();
+	app.add_plugins((AssetPlugin::default(), ScenePlugin));
+	let (actor, _) = spawn_fisticuffs_pair_actor(&mut app, EquippedItemHandler::Fisticuffs, other);
+	assign(&mut app, actor)?;
+	{
+		let mut user = app
+			.world_mut()
+			.get_mut::<FisticuffsUser>(actor)
+			.ok_or_else(|| anyhow::anyhow!("initial fisticuffs driver"))?;
+		user.state
+			.request(fisticuffs_user::AttackSpec::jab(fisticuffs_user::Side::Left));
+		user.state.tick(fisticuffs_user::AttackTiming::JAB.duration_secs * 0.40);
+	}
+	app.update();
+	assert!(app
+		.world_mut()
+		.query::<&fisticuffs_user::FisticuffsHitSensor>()
+		.iter(app.world())
+		.any(|sensor| sensor.attacker == actor));
+	commit_ready_holster(&mut app, actor);
+	assert!(app.world().get::<FisticuffsUser>(actor).is_none());
+	assert!(!app
+		.world_mut()
+		.query::<&fisticuffs_user::FisticuffsHitSensor>()
+		.iter(app.world())
+		.any(|sensor| sensor.attacker == actor));
+	assert_eq!(app.world().get::<EquippedItemHandler>(actor).copied(), Some(other_handler));
+	assert!(app.world().get::<PlayerUse>(actor).is_some());
+	let old_held = match other_handler {
+		EquippedItemHandler::Firearm => app.world().get::<FirearmUser>(actor).map(|user| user.held),
+		EquippedItemHandler::Grenade => app.world().get::<GrenadeUser>(actor).map(|user| user.held),
+		_ => None,
+	};
+	assert!(old_held.is_some(), "incoming item should be realized by its owner");
+	assert_eq!(app.world().get::<PlayerUse>(actor).map(|use_item| use_item.driver), old_held);
+
+	commit_ready_holster(&mut app, actor);
+	assert!(app.world().get::<FisticuffsUser>(actor).is_some());
+	assert!(app.world().get::<FirearmUser>(actor).is_none());
+	assert!(app.world().get::<GrenadeUser>(actor).is_none());
+	assert!(app.world().get::<PlayerUse>(actor).is_none());
+	assert_eq!(
+		app.world().get::<EquippedItemHandler>(actor).copied(),
+		Some(EquippedItemHandler::Fisticuffs)
+	);
+	if let Some(held) = old_held {
+		assert!(!app.world().entities().contains(held));
+	}
+	Ok(())
+}
+
+#[test]
+fn assembled_firearm_fisticuffs_swap_preserves_driver_ownership() -> anyhow::Result<()> {
+	assembled_fisticuffs_item_swaps(
+		InventoryItem::firearm(FirearmMesh::Bullpup),
+		EquippedItemHandler::Firearm,
+	)
+}
+
+#[test]
+fn assembled_grenade_fisticuffs_swap_preserves_driver_ownership() -> anyhow::Result<()> {
+	assembled_fisticuffs_item_swaps(InventoryItem::standard_grenade(), EquippedItemHandler::Grenade)
 }
 
 #[test]

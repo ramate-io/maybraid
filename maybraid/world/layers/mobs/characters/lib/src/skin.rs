@@ -72,9 +72,12 @@ pub fn fulfill_skin_ref_roots(
 		if map.by_name.is_empty() {
 			continue;
 		}
-		commands
-			.entity(entity)
-			.insert((PartRigRef { rig_root }, NeedsSkinRemap, SkinRefApplied));
+		// The part may retire after this lookup but before deferred completion.
+		commands.entity(entity).try_insert((
+			PartRigRef { rig_root },
+			NeedsSkinRemap,
+			SkinRefApplied,
+		));
 	}
 }
 

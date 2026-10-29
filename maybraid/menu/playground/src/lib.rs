@@ -149,6 +149,7 @@ fn echo_in_game_choice(
 						id: active.id,
 						return_to: crate::CharacterEditorReturn::InGame,
 						inventory: None,
+						lubikans: None,
 					});
 				}
 			}
