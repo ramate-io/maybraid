@@ -24,6 +24,11 @@ pub const IDLE_WRITE_BONES: &[&str] = &[
 
 pub const WALK_WRITE_BONES: &[&str] = &[
 	"root",
+	"lumbar",
+	"midback",
+	"upper_back",
+	"lower_neck",
+	"upper_neck",
 	"pelvis.L",
 	"pelvis.R",
 	"femur.L",
@@ -39,6 +44,12 @@ pub const WALK_WRITE_BONES: &[&str] = &[
 ];
 
 pub const RUN_WRITE_BONES: &[&str] = &[
+	"root",
+	"lumbar",
+	"midback",
+	"upper_back",
+	"lower_neck",
+	"upper_neck",
 	"pelvis.L",
 	"pelvis.R",
 	"femur.L",

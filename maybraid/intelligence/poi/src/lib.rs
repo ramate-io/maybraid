@@ -28,7 +28,7 @@ pub use goal::{
 pub use hash::{hashed_poi_id, mix as mix_seed};
 pub use kind::{PoiId, PoiKind};
 pub use knowledge::{KnownPoi, PoiIntelligenceUser, PoiKnowledge, PoiObservation};
-pub use marker::{GlobalPoi, LocalPoi, Poi, MAX_POI_ARRIVAL_RADIUS};
+pub use marker::{GlobalPoi, LocalPoi, Poi, PoiArrival, PoiSupport, MAX_POI_ARRIVAL_RADIUS};
 pub use nearby::{NearbyChoice, NearbyFallback, NearbyQuery, DEFAULT_NEARBY_RADIUS};
 pub use place::{place_nearby, place_nearby_among, ArrivalDisk, NearbyPlace, AGENT_SEPARATION};
 pub use plugin::{PoiDiscoverLimits, PoiIntelligencePlugin, PoiSystems};

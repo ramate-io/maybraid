@@ -10,6 +10,7 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+lubikans = { workspace = true }
 bevy = { workspace = true }
 bevy_math = { workspace = true }
 bevy-character-ui-menu-renderer = { workspace = true }
