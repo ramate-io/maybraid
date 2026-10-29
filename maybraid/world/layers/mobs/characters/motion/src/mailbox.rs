@@ -927,6 +927,8 @@ fn sample_humanoid_prepared(
 	sample_humanoid(clip, rig, progress, write_bones, write_effects)
 }
 
+/// Bones and effects stay independently gated ([#1354](https://github.com/ramate-io/maybraid/pull/1354)
+/// mailbox contract). When both are requested, [`Animation::apply`] may share one sample.
 fn sample_split<A, R>(
 	anim: &A,
 	rig: &mut R,
@@ -937,13 +939,14 @@ fn sample_split<A, R>(
 where
 	A: Animation<R>,
 {
-	if write_bones {
-		anim.apply_for(rig, progress);
-	}
-	if write_effects {
-		anim.effects_for(rig, progress)
-	} else {
-		Effects::IDENTITY
+	match (write_bones, write_effects) {
+		(true, true) => anim.apply(rig, progress),
+		(true, false) => {
+			anim.apply_for(rig, progress);
+			Effects::IDENTITY
+		}
+		(false, true) => anim.effects_for(rig, progress),
+		(false, false) => Effects::IDENTITY,
 	}
 }
 

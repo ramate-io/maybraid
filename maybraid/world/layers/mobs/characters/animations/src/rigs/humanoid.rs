@@ -14,6 +14,7 @@ pub mod hand_clap;
 pub mod head_nod;
 pub mod idle;
 pub mod jab;
+pub mod jump;
 pub mod land;
 pub mod leap;
 pub mod power_dash;

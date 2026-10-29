@@ -30,8 +30,8 @@ pub use clip::{
 };
 pub use clip_cache::{
 	apply_evaluated_sample, clip_bone_mask, parameters_key, AnimClipCache, AnimClipCacheSettings,
-	AnimClipCacheStats, CachedClipSample, ClipParametersId, ClipParametersKey, ClipVariantKey,
-	EvaluatedBoneOutput, PreparedClip, RigVariantId, SamplingSettings, CURRENT_CLIP_REVISION,
+	AnimClipCacheStats, CachedClipSample, ClipParametersKey, ClipVariantKey, EvaluatedBoneOutput,
+	PreparedClip, RigVariantId, SamplingSettings, CURRENT_CLIP_REVISION,
 	DEFAULT_MAX_UNBOUNDED_BINS, DEFAULT_MAX_VARIANTS,
 };
 pub use cue::{
