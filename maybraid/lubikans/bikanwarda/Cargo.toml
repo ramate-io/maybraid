@@ -10,6 +10,7 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+anyhow = { workspace = true }
 bevy = { workspace = true }
 damage = { workspace = true }
 lubikans = { workspace = true }
@@ -17,8 +18,6 @@ occupancy-rewards = { workspace = true }
 player = { workspace = true }
 threat-intelligence = { workspace = true }
 
-[dev-dependencies]
-anyhow = { workspace = true }
 chico = { workspace = true }
 lod = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
