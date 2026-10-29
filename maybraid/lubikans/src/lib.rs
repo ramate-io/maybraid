@@ -18,6 +18,7 @@ mod lifetime;
 mod order;
 mod plugin;
 mod selection;
+mod summon;
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod fixtures;
@@ -43,25 +44,40 @@ pub use heal::{
 	LubikanSelfHealConfig,
 };
 pub use identity::{LubikanAccountId, LubikanDefinition, LubikanDefinitionId};
-pub use ledger::{LubikanAccount, LubikanAccountBinding, LubikanLedger, LubikanOwner};
+pub use ledger::{
+	LubikanAccount, LubikanAccountBinding, LubikanBodies, LubikanBodyOf, LubikanCharacter,
+	LubikanLedger, LubikanOwner,
+};
 pub use lifetime::{
 	LubikanLifetimePolicy, LubikanOwnerLifetime, LubikanOwnerLifetimeKind, LubikanPersistence,
 };
 pub use order::LubikanOrder;
 pub use plugin::{LubikanSessionStore, LubikansPlugin};
 pub use selection::LubikanSelection;
+pub use summon::{
+	fixture_summon_definition, install_fixture_summon, LubikanSummon, LubikanSummonAuthority,
+	LubikanSummonCatalog, LubikanSummonConfig, LubikanSummonDeparture,
+	LubikanSummonDepartureReason, LubikanSummonEnabled, LubikanSummonInstanceId,
+	LubikanSummonInvalidPlacement, LubikanSummonPresentation, LubikanSummonRecipe,
+	LubikanSummonTargeting, LubikanSummons, FIXTURE_SUMMON_DEFINITION_ID,
+	PLACEHOLDER_SUMMON_ACTIVATION_COST, PLACEHOLDER_SUMMON_CAPACITY,
+	PLACEHOLDER_SUMMON_FORWARD_OFFSET, PLACEHOLDER_SUMMON_HEALTH, PLACEHOLDER_SUMMON_LIFETIME_SECS,
+	PLACEHOLDER_SUMMON_MAX_CONCURRENT,
+};
 
 /// Schedule sets other lanes order against. The interface plugin does not
 /// run systems in these sets; gameplay plugins do.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum LubikanSystems {
-	/// Attach, snapshot, and restore owner ledgers.
+	/// Attach the session [`LubikanCharacter`] and re-point bodies at it.
 	Owner,
 	/// Sole owner of [`LubikanActivationRequest`]s: spend once and emit a
 	/// [`LubikanActivationSession`], or emit [`LubikanActivationRefused`].
 	Activate,
 	/// Self healing consumer: pick up Self sessions, regenerate, and report.
 	Heal,
+	/// Summon consumer: pick up non-Self sessions, spawn, and report.
+	Summon,
 	/// Apply [`LubikanChargeRequest`]s and emit [`LubikanChargeChanged`].
 	Award,
 }
@@ -79,7 +95,8 @@ impl Plugin for LubikanInterfacePlugin {
 			.add_message::<LubikanActivationRefused>()
 			.add_message::<LubikanActivationReport>()
 			.add_message::<LubikanActivationFinished>()
-			.add_message::<LubikanOwnerLifetime>();
+			.add_message::<LubikanOwnerLifetime>()
+			.add_message::<LubikanSummonDeparture>();
 	}
 }
 
@@ -99,5 +116,6 @@ mod tests {
 		assert!(app.world().get_resource::<Messages<LubikanActivationReport>>().is_some());
 		assert!(app.world().get_resource::<Messages<LubikanActivationFinished>>().is_some());
 		assert!(app.world().get_resource::<Messages<LubikanOwnerLifetime>>().is_some());
+		assert!(app.world().get_resource::<Messages<LubikanSummonDeparture>>().is_some());
 	}
 }

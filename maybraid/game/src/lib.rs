@@ -37,7 +37,7 @@ use crate::shell::{
 use bevy::prelude::*;
 use bevy::render::renderer::RenderAdapterInfo;
 use bevy::window::PrimaryWindow;
-use lubikans::{LubikanLedger, LubikanOrder};
+use lubikans::{LubikanBodyOf, LubikanLedger, LubikanOrder};
 use maybraid_character_controller::{ActorIntentEvent, CharacterIntent};
 use maybraid_controllers_core::{InputRouter, InputRouting, InputSource};
 use maybraid_gameplay::GameplayPlugin;
@@ -330,6 +330,7 @@ fn route_in_game_choice(
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	router: Option<Res<InputRouter>>,
 	ledgers: Query<&LubikanLedger>,
+	bodies: Query<&LubikanBodyOf>,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
@@ -353,7 +354,11 @@ fn route_in_game_choice(
 				lubikans: router
 					.as_ref()
 					.and_then(|router| router.actor(InputSource::local_pad()))
-					.and_then(|actor| ledgers.get(actor.entity()).ok())
+					.and_then(|actor| {
+						let body = actor.entity();
+						let holder = bodies.get(body).map(LubikanBodyOf::character).unwrap_or(body);
+						ledgers.get(holder).ok()
+					})
 					.map(LubikanOrder::from_ledger),
 			});
 		}
@@ -397,6 +402,7 @@ fn sync_world_loadout_from_editor(
 	mut commands: Commands,
 	router: Option<Res<InputRouter>>,
 	mut ledgers: Query<&mut LubikanLedger>,
+	bodies: Query<&LubikanBodyOf>,
 ) {
 	if return_to.is_none_or(|return_to| !return_to.uses_live_world_player()) {
 		return;
@@ -408,7 +414,9 @@ fn sync_world_loadout_from_editor(
 		return;
 	}
 	if let Some(actor) = router.as_ref().and_then(|router| router.actor(InputSource::local_pad())) {
-		if let Ok(mut ledger) = ledgers.get_mut(actor.entity()) {
+		let body = actor.entity();
+		let holder = bodies.get(body).map(LubikanBodyOf::character).unwrap_or(body);
+		if let Ok(mut ledger) = ledgers.get_mut(holder) {
 			ledger.apply_order(&menu.0.lubikans);
 		}
 	}
@@ -957,7 +965,8 @@ mod tests {
 		let baseline = CharacterEditBaseline::capture(&menu.0);
 		assert!(menu.0.lubikans.move_account(extra, -1));
 		let mut world = World::new();
-		let owner = world.spawn(ledger).id();
+		let holder = world.spawn((lubikans::LubikanCharacter, ledger)).id();
+		let owner = world.spawn(LubikanBodyOf(holder)).id();
 		let mut router = InputRouter::default();
 		router.assign_actor(InputSource::local_pad(), ActorTarget::new(owner));
 		world.insert_resource(router);
@@ -968,20 +977,20 @@ mod tests {
 		world
 			.run_system_once(sync_world_loadout_from_editor)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let live = world.get::<LubikanLedger>(owner).ok_or_else(|| anyhow::anyhow!("ledger"))?;
+		let live = world.get::<LubikanLedger>(holder).ok_or_else(|| anyhow::anyhow!("ledger"))?;
 		assert_eq!(live.iter().next().map(|account| account.id()), Some(extra));
 		assert_eq!(live.selection().resolved(), extra);
 		assert_eq!(live.equipped().charge().current(), 9.0);
 		// Simulate a live charge update after opening: discard must restore only order.
 		world
-			.get_mut::<LubikanLedger>(owner)
+			.get_mut::<LubikanLedger>(holder)
 			.ok_or_else(|| anyhow::anyhow!("ledger"))?
 			.apply_to(extra, 2.0);
 		baseline.restore_into(&mut world.resource_mut::<CharacterMenuState>().0);
 		world
 			.run_system_once(sync_world_loadout_from_editor)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let live = world.get::<LubikanLedger>(owner).ok_or_else(|| anyhow::anyhow!("ledger"))?;
+		let live = world.get::<LubikanLedger>(holder).ok_or_else(|| anyhow::anyhow!("ledger"))?;
 		assert!(live.iter().next().is_some_and(|account| account.id().is_self()));
 		assert_eq!(live.selection().resolved(), extra);
 		assert_eq!(live.equipped().charge().current(), 11.0);

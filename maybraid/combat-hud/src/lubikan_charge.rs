@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 use lubikans::{
 	LubikanAccountId, LubikanActivation, LubikanActivationFinished, LubikanActivationOutcome,
-	LubikanActivationPhase, LubikanCatalog, LubikanCharge, LubikanLedger, LubikanOwner,
-	LubikanReadiness, LubikanSelfHeal, LubikanSelfHealChannel,
+	LubikanActivationPhase, LubikanBodyOf, LubikanCatalog, LubikanCharge, LubikanLedger,
+	LubikanOwner, LubikanReadiness, LubikanSelfHeal, LubikanSelfHealChannel,
 };
 use menu_components::{spawn_hud_text_card, HudFonts, HUD_TEXT_CARD_FACE_PX, TEXT_YELLOW};
 use player::Player;
@@ -65,7 +65,8 @@ impl LubikanActivationFinishedHudPulse {
 pub(crate) fn ingest_lubikan_activation_finished_pulse(
 	time: Res<Time>,
 	hud: Res<CombatHudVisible>,
-	players: Query<(Entity, &LubikanLedger), (With<Player>, With<LubikanOwner>)>,
+	players: Query<(Entity, Option<&LubikanBodyOf>), (With<Player>, With<LubikanOwner>)>,
+	ledgers: Query<&LubikanLedger>,
 	mut finished: MessageReader<LubikanActivationFinished>,
 	mut pulse: ResMut<LubikanActivationFinishedHudPulse>,
 ) {
@@ -74,7 +75,12 @@ pub(crate) fn ingest_lubikan_activation_finished_pulse(
 		pulse.clear();
 		return;
 	}
-	let Some((owner, ledger)) = players.iter().next() else {
+	let Some((owner, body_of)) = players.iter().next() else {
+		finished.clear();
+		return;
+	};
+	let holder = body_of.map(LubikanBodyOf::character).unwrap_or(owner);
+	let Ok(ledger) = ledgers.get(holder) else {
 		finished.clear();
 		return;
 	};
@@ -300,7 +306,8 @@ pub(crate) fn sync_lubikan_charge(
 	category: Option<Res<CombatHudInventoryCycleCategory>>,
 	self_heal: Option<Res<LubikanSelfHeal>>,
 	pulse: Option<Res<LubikanActivationFinishedHudPulse>>,
-	players: Query<(Entity, &LubikanLedger), (With<Player>, With<LubikanOwner>)>,
+	players: Query<(Entity, Option<&LubikanBodyOf>), (With<Player>, With<LubikanOwner>)>,
+	ledgers: Query<&LubikanLedger>,
 	heal_channels: Query<&LubikanSelfHealChannel>,
 	mut widgets: ParamSet<(
 		Query<(&mut Visibility, &mut BorderColor), With<LubikanChargeRoot>>,
@@ -324,7 +331,12 @@ pub(crate) fn sync_lubikan_charge(
 		hide();
 		return;
 	};
-	let Some((owner, ledger)) = players.iter().next() else {
+	let Some((owner, body_of)) = players.iter().next() else {
+		hide();
+		return;
+	};
+	let holder = body_of.map(LubikanBodyOf::character).unwrap_or(owner);
+	let Ok(ledger) = ledgers.get(holder) else {
 		hide();
 		return;
 	};
