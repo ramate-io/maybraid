@@ -113,6 +113,7 @@ pub struct AnimMailbox {
 	/// Prepared clip table. Rebuilt when the selected clip or its parameters change.
 	pub prepared_clip: Option<PreparedClip>,
 	prepared_from: Option<AnimClip>,
+	last_clip: Option<AnimClip>,
 }
 
 /// Sample coordinate for the current clip. When present, [`tick_anim_mailbox`]
@@ -145,6 +146,7 @@ impl AnimMailbox {
 			bind_transform,
 			prepared_clip: None,
 			prepared_from: None,
+			last_clip: None,
 		}
 	}
 
@@ -428,10 +430,26 @@ pub fn tick_anim_mailbox(
 		let requested = root.0.clip;
 		let requested_id = requested.id();
 		if mailbox.last != Some(requested_id) {
+			let handoff =
+				match (mailbox.last_clip.filter(|_| mailbox.clip_progress >= 1.0), requested_id) {
+					(Some(AnimClip::QuadrupedRunStart(_)), AnimId::QuadrupedRun) => Some(
+						character_animations::animations::QuadrupedRunStart::handoff_run_phase(),
+					),
+					(Some(AnimClip::QuadrupedRunToGallop(shift)), AnimId::Gallop) => {
+						Some(shift.handoff_gallop_phase_for())
+					}
+					(Some(AnimClip::WalkToRun(shift)), AnimId::Run) => {
+						Some(shift.handoff_run_phase_for())
+					}
+					(Some(AnimClip::RunToWalk(shift)), AnimId::Walk) => {
+						Some(shift.handoff_walk_phase_for())
+					}
+					_ => None,
+				};
 			mailbox.capture_base_for_crossfade();
 			mailbox.from_offset = mailbox.displayed_offset;
 			mailbox.blend_progress = 0.0;
-			mailbox.clip_progress = 0.0;
+			mailbox.clip_progress = handoff.unwrap_or(0.0);
 			mailbox.last = Some(requested_id);
 		}
 
@@ -443,6 +461,7 @@ pub fn tick_anim_mailbox(
 		if mailbox.blending() {
 			mailbox.blend_progress = (mailbox.blend_progress + dt / BLEND_DURATION).min(1.0);
 		}
+		mailbox.last_clip = Some(requested);
 		refresh_prepared_clip(&mut mailbox, requested, character_rig.skeleton, cache);
 	}
 }
@@ -1023,6 +1042,44 @@ fn sample_humanoid(
 		AnimClip::VictoryWave(wave) => {
 			sample_split(&wave, rig, progress, write_bones, write_effects)
 		}
+		AnimClip::Beckon(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::Bow(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::FacePalm(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::FistPump(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::HeadNod(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::Salute(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::Shrug(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::SpotScan(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::StompBeat(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::WalkStart(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::WalkStop(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::RunStart(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::RunStop(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::WalkToRun(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::RunToWalk(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::ProneDescent(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::ProneAscent(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::SquatAscent(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::FlapFromGlide(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::GlideFromFlap(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::Sit(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::Lay(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::CrouchWalk(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::GroundedGait(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
 		AnimClip::HandClap(clap) => sample_split(&clap, rig, progress, write_bones, write_effects),
 		AnimClip::PowerStrafe(params) => sample_split(
 			&PowerStrafe::new(params.side),
@@ -1044,6 +1101,10 @@ fn sample_humanoid(
 		}
 		AnimClip::Gallop(_)
 		| AnimClip::QuadrupedRun(_)
+		| AnimClip::QuadrupedRunToGallop(_)
+		| AnimClip::QuadrupedRunStart(_)
+		| AnimClip::QuadrupedSit(_)
+		| AnimClip::QuadrupedLieDown(_)
 		| AnimClip::QuadrupedRunStop(_)
 		| AnimClip::LateralUndulation(_)
 		| AnimClip::DorsoventralUndulation(_)
@@ -1062,6 +1123,20 @@ fn sample_quadruped(
 	write_effects: bool,
 ) -> Effects {
 	match clip {
+		AnimClip::QuadrupedSit(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::QuadrupedLieDown(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+
+		AnimClip::QuadrupedRunToGallop(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::QuadrupedRunStart(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+
 		AnimClip::QuadrupedRunStop(stop) => {
 			sample_split(&stop, rig, progress, write_bones, write_effects)
 		}
@@ -1128,6 +1203,90 @@ mod tests {
 	use std::collections::HashMap;
 	use std::hint::black_box;
 	use std::time::Instant;
+
+	#[test]
+	fn grounded_weights_keep_phase_and_completed_quad_shifts_handoff_without_cache(
+	) -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		let host = world
+			.spawn((
+				AnimRefRoot(AnimRef::new(AnimClip::grounded_gait(0.4, 0.0))),
+				AnimMailbox::new(Transform::default()),
+				CharacterRig { role: CharacterRigRole::Body, ..default() },
+			))
+			.id();
+		world
+			.run_system_once(tick_anim_mailbox)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.get_mut::<AnimMailbox>(host)
+			.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+			.clip_progress = 0.37;
+		world
+			.entity_mut(host)
+			.insert(AnimRefRoot(AnimRef::new(AnimClip::grounded_gait(1.0, 0.7))));
+		world
+			.run_system_once(tick_anim_mailbox)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(
+			world
+				.get::<AnimMailbox>(host)
+				.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+				.clip_progress,
+			0.37
+		);
+		for (walk, run, expected) in [(0.0, 0.8, 0.2), (1.0, 0.0, 1.08), (1.0, 1.0, 1.68)] {
+			assert!((AnimClip::grounded_gait(walk, run).default_speed() - expected).abs() < 1e-6);
+		}
+		world.resource_mut::<Time>().advance_by(std::time::Duration::from_secs_f32(0.1));
+		world
+			.run_system_once(tick_anim_mailbox)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let expected = 0.37 + 0.1 * AnimClip::grounded_gait(1.0, 0.7).default_speed();
+		assert!(
+			(world
+				.get::<AnimMailbox>(host)
+				.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+				.clip_progress
+				- expected)
+				.abs() < 1e-6
+		);
+		world.resource_mut::<Time>().advance_by(std::time::Duration::ZERO);
+		for (outgoing, incoming, expected) in [
+			(
+				AnimClip::quadruped_run_start(),
+				AnimClip::quadruped_run(),
+				character_animations::animations::QuadrupedRunStart::handoff_run_phase(),
+			),
+			(
+				AnimClip::quadruped_run_to_gallop(0.36),
+				AnimClip::gallop(),
+				character_animations::animations::QuadrupedRunToGallop::handoff_gallop_phase(0.36),
+			),
+		] {
+			world.entity_mut(host).insert(AnimRefRoot(AnimRef::new(outgoing)));
+			world
+				.run_system_once(tick_anim_mailbox)
+				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			world
+				.get_mut::<AnimMailbox>(host)
+				.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+				.clip_progress = 1.0;
+			world.entity_mut(host).insert(AnimRefRoot(AnimRef::new(incoming)));
+			world
+				.run_system_once(tick_anim_mailbox)
+				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			assert_eq!(
+				world
+					.get::<AnimMailbox>(host)
+					.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+					.clip_progress,
+				expected
+			);
+		}
+		Ok(())
+	}
 
 	#[test]
 	fn restart_from_visible_starts_a_mailbox_blend() {

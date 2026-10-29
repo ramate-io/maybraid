@@ -12,6 +12,12 @@
 pub const TAKEOFF_END: f32 = 0.18;
 /// Air occupies the middle slice; land is the remainder.
 pub const AIR_END: f32 = 0.72;
+/// Fraction of Air used to blend push-off into the air gather (#1173).
+pub const LEAP_TAKEOFF_BLEND_FRACTION: f32 = 0.28;
+/// Fraction of Land used to blend the final air pose into landing absorb (#1044).
+pub const LEAP_LAND_BLEND_FRACTION: f32 = 0.22;
+/// Tail fraction of Land used to blend into run phase zero (#1333).
+pub const LEAP_RUN_RECOVERY_BLEND_FRACTION: f32 = 0.20;
 
 /// Takeoff, air, or land slice of a [`Leap`] shot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -51,9 +51,15 @@ struct CaptureArgs {
 	/// Lead side for clips that use a side. "both" captures left and right.
 	#[arg(long, value_parser = ["left", "right", "both"])]
 	side: Option<String>,
-	/// Normalized sample in [0,1]; repeat or give comma-separated values.
+	/// Clip coordinate (seconds for timed clips); repeat or give comma-separated values.
 	#[arg(long = "progress")]
 	progress: Vec<String>,
+	/// Override camera distance for clips with large root effects.
+	#[arg(long)]
+	camera_distance: Option<f32>,
+	/// Override camera target height for clips with large root effects.
+	#[arg(long)]
+	camera_height: Option<f32>,
 	/// Limit capture to a camera view; may be repeated.
 	#[arg(long = "view", value_parser = ["front", "side", "three-quarter"])]
 	views: Vec<String>,
@@ -141,6 +147,8 @@ struct CapturePlan {
 	pose_ready_at: Option<Duration>,
 	requested: bool,
 	dump_pose: bool,
+	camera_distance: Option<f32>,
+	camera_height: Option<f32>,
 }
 
 fn main() -> Result<(), String> {
@@ -183,6 +191,8 @@ fn main() -> Result<(), String> {
 		pose_ready_at: None,
 		requested: false,
 		dump_pose: args.dump_pose,
+		camera_distance: args.camera_distance,
+		camera_height: args.camera_height,
 	})
 	.add_plugins(CharactersPlaygroundPlugin)
 	.add_systems(Startup, hide_command_ui)
@@ -286,8 +296,8 @@ fn parse_progress(values: &[String]) -> Result<Option<Vec<f32>>, String> {
 			let parsed = sample
 				.parse::<f32>()
 				.map_err(|error| format!("invalid --progress value {sample:?}: {error}"))?;
-			if !parsed.is_finite() || !(0.0..=1.0).contains(&parsed) {
-				return Err(format!("--progress must be finite and in [0,1], got {sample:?}"));
+			if !parsed.is_finite() || parsed < 0.0 {
+				return Err(format!("--progress must be finite and nonnegative, got {sample:?}"));
 			}
 			progress.push(parsed);
 		}
@@ -333,9 +343,16 @@ fn capture_sequence(
 		} else {
 			format!("character animate {} --side {}", shot.clip, shot.side)
 		};
+		let mut camera = format!("character camera {}", shot.view);
+		if let Some(distance) = plan.camera_distance {
+			camera.push_str(&format!(" --distance {distance}"));
+		}
+		if let Some(height) = plan.camera_height {
+			camera.push_str(&format!(" --height {height}"));
+		}
 		let commands_to_run = [
 			assemble,
-			format!("character camera {}", shot.view),
+			camera,
 			format!("character playback --progress {} --pause --once", shot.progress),
 		];
 		for line in commands_to_run {
