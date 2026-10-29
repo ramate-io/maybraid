@@ -2,7 +2,7 @@
 //!
 //! Victim filtering lives in [`super::victims`].
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use attacks::{AttackEnded, AttackInstance, BeginAttack, CancelAttacks};
 use bevy::prelude::*;
 use combat_targeting::TargetSource;
@@ -12,7 +12,7 @@ use crate::test_support::{
 	has_attack_user, observe, policy_app, policy_of, spawn_owner, spawn_summon, step,
 };
 use crate::{
-	BikanwardaSummonForm, PolicyConflict, AUTHORED_ATTACKS, ENRAGED_DEFINITION_ID,
+	AUTHORED_ATTACKS, BikanwardaSummonForm, ENRAGED_DEFINITION_ID, PolicyConflict,
 	WARD_DEFINITION_ID,
 };
 
@@ -201,5 +201,46 @@ fn both_forms_begin_the_three_authored_attacks() -> Result<()> {
 			}
 		);
 	}
+	Ok(())
+}
+
+#[test]
+fn funded_shared_ward_account_spawns_the_owned_combat_policy() -> Result<()> {
+	let mut app = App::new();
+	app.insert_resource(crate::test_support::short_params());
+	app.insert_resource(crate::BikanwardaSummonConfig { auto_cast: false });
+	app.add_plugins((
+		MinimalPlugins,
+		TransformPlugin,
+		lubikans::LubikansPlugin,
+		crate::BikanwardaLubikanPlugin,
+	));
+	app.finish();
+	let owner = spawn_owner(&mut app, Vec3::ZERO);
+	app.update();
+	bikanwarda_lubikans::equip_ward(app.world_mut(), owner)?;
+	let account = bikanwarda_lubikans::BIKANWARDA_WARD_ACCOUNT;
+	{
+		let mut ledger = lubikans::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
+			.ok_or_else(|| anyhow!("stable owner ledger"))?;
+		let _ = ledger.apply_to(account, bikanwarda_lubikans::ward_definition().activation_cost);
+	}
+	let enemy = app.world_mut().spawn(Name::new("enemy")).id();
+	observe(&mut app, owner, enemy, Vec3::NEG_Z * 4.0, TargetSource::ENEMYSHIP);
+	app.world_mut()
+		.write_message(lubikans::LubikanActivationRequest::equipped(owner));
+	step(&mut app, 0.05);
+	step(&mut app, 0.05);
+	let world = app.world_mut();
+	let mut summons = world.query::<(&lubikans::LubikanSummon, &crate::BikanwardaSummonPolicy)>();
+	let (summon, policy) = summons.iter(world).next().ok_or_else(|| anyhow!("Ward summon"))?;
+	assert_eq!(summon.owner, owner);
+	assert_eq!(summon.account, account);
+	assert_eq!(policy.form, BikanwardaSummonForm::Ward);
+	assert_eq!(policy.selected, Some(enemy));
+	assert!(policy.excluded_victims.contains(&owner));
+	let ledger = lubikans::LubikanBodyOf::ledger(world, owner)
+		.ok_or_else(|| anyhow!("stable ledger after spend"))?;
+	assert_eq!(ledger.equipped().charge().current(), 0.0);
 	Ok(())
 }
