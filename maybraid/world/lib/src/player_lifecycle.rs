@@ -16,6 +16,7 @@ use maybraid_spawns_player::{
 };
 use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
+use mob_intelligence::PreySubject;
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use player_camera::{CameraController, FollowCamera};
 use poi_intelligence::{place_nearby, PoiId, PoiKind, PoiRegistry, PoiSystems};
@@ -210,6 +211,7 @@ fn queue_downed_world_player(
 			SpotSubject,
 			ThreatSubject,
 			Affiliations,
+			PreySubject,
 		)>();
 		retired.write(ActorRetired::new(player));
 	}

@@ -1,6 +1,6 @@
 //! Pack-wide semantic memory. Not visual contact. Not a mixer.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use bevy::prelude::*;
 use combat_targeting::{CombatTargeting, TargetSource};
@@ -28,6 +28,8 @@ const SHAREABLE_TARGETS: TargetSource = TargetSource::from_bits(
 pub struct MobKnowledge {
 	pub threats: BTreeSet<ThreatId>,
 	pub targets: BTreeSet<Entity>,
+	/// First-hand bits written up from plants. `SHARED` is never stored here.
+	first_hand: BTreeMap<ThreatId, ThreatSource>,
 }
 
 /// Host grant for pack write-up / fan-out. High cull keeps the board.
@@ -52,7 +54,27 @@ pub struct ThreatShareRecipient<'a> {
 
 impl MobKnowledge {
 	pub fn adopt_threat(&mut self, id: ThreatId) -> bool {
+		self.adopt_finding(id, ThreatSource::default())
+	}
+
+	pub fn adopt_finding(&mut self, id: ThreatId, sources: ThreatSource) -> bool {
+		let mut first = sources;
+		first.remove(ThreatSource::SHARED);
+		if first.is_first_hand() {
+			self.first_hand.entry(id).or_default().insert(first);
+		}
 		self.threats.insert(id)
+	}
+
+	/// Whether the board has a first-hand finding on `subject` that matches `engage`.
+	pub fn alerts(&self, registry: &ThreatRegistry, subject: Entity, engage: ThreatSource) -> bool {
+		if engage.is_empty() {
+			return false;
+		}
+		self.first_hand.iter().any(|(id, sources)| {
+			sources.intersects(engage)
+				&& registry.get(*id).is_some_and(|record| record.entity == subject)
+		})
 	}
 
 	pub fn adopt_target(&mut self, entity: Entity) -> bool {
@@ -74,7 +96,7 @@ impl MobKnowledge {
 			if subject_is_pack_mate_id(known.id, host, roster, registry, members) {
 				continue;
 			}
-			self.adopt_threat(known.id);
+			self.adopt_finding(known.id, known.sources);
 		}
 	}
 

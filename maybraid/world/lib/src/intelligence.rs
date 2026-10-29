@@ -11,12 +11,13 @@ use firearms::FirearmWeaponsPlugin;
 use fleeing_intelligence::{FleeingPlugin, FleeingSystems};
 use hiding_intelligence::{HidingPlugin, HidingSystems};
 use intelligence_lod::{
-	IntelligenceBakeKey, IntelligenceBand, IntelligenceFocus, IntelligenceFocusSample,
-	IntelligenceLod, IntelligenceLook, IntelligenceLookFrame, IntelligencePriority,
-	LOOK_APPLY_FOV_INSET, LOOK_FOV_INSET, look_near_m, look_promotes,
+	look_near_m, look_promotes, IntelligenceBakeKey, IntelligenceBand, IntelligenceFocus,
+	IntelligenceFocusSample, IntelligenceLod, IntelligenceLook, IntelligenceLookFrame,
+	IntelligencePriority, LOOK_APPLY_FOV_INSET, LOOK_FOV_INSET,
 };
 use lod::LodViewer;
 use meandering_intelligence::MeanderingIntelligencePlugin;
+use mob_intelligence::PreySubject;
 use mob_scenes::player_affiliations;
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
@@ -67,6 +68,7 @@ type WorldPlayers<'w, 's> = Query<
 		Option<&'static SpotSubject>,
 		Option<&'static ThreatSubject>,
 		Option<&'static Affiliations>,
+		Has<PreySubject>,
 		Option<&'static LocomotionCapsule>,
 	),
 	With<VegetationPlayer>,
@@ -293,7 +295,7 @@ fn bake_intelligence_lod(
 }
 
 fn sync_world_player_threat_actor(mut commands: Commands, players: WorldPlayers) {
-	for (entity, current_spot, current_subject, current_affiliations, hull) in &players {
+	for (entity, current_spot, current_subject, current_affiliations, is_prey, hull) in &players {
 		let hull = hull.copied().unwrap_or(LocomotionCapsule::HUMANOID);
 		let spot = SpotSubject::new(
 			InterestLayers::CHARACTER,
@@ -311,6 +313,9 @@ fn sync_world_player_threat_actor(mut commands: Commands, players: WorldPlayers)
 		if current_affiliations.is_none() {
 			entity_commands.insert(player_affiliations(id));
 		}
+		if !is_prey {
+			entity_commands.insert(PreySubject);
+		}
 	}
 }
 
@@ -318,7 +323,7 @@ fn sync_world_player_threat_actor(mut commands: Commands, players: WorldPlayers)
 mod tests {
 	use super::*;
 	use damage::DamageApplied;
-	use mob_scenes::{FFA_GROUP, MobBrain, MobKind, PLAYER_GROUP};
+	use mob_scenes::{MobBrain, MobKind, FFA_GROUP, PLAYER_GROUP};
 	use threat_intelligence::{ThreatIntelligenceUser, ThreatKnowledge};
 
 	fn bake_app() -> App {
@@ -526,6 +531,7 @@ mod tests {
 
 		let entity = app.world().entity(player);
 		assert!(entity.get::<SpotSubject>().is_some());
+		assert!(entity.get::<PreySubject>().is_some());
 		assert_eq!(
 			entity.get::<ThreatSubject>().map(|subject| subject.id),
 			Some(ThreatId(player.to_bits()))
@@ -559,11 +565,10 @@ mod tests {
 		app.update();
 
 		let player_id = ThreatId(player.to_bits());
-		assert!(
-			app.world()
-				.get::<ThreatKnowledge>(mob)
-				.is_some_and(|knowledge| { knowledge.get(player_id).is_some() })
-		);
+		assert!(app
+			.world()
+			.get::<ThreatKnowledge>(mob)
+			.is_some_and(|knowledge| { knowledge.get(player_id).is_some() }));
 	}
 
 	#[test]
@@ -583,11 +588,10 @@ mod tests {
 			))
 			.id();
 		app.update();
-		assert!(
-			app.world()
-				.get::<ThreatKnowledge>(victim)
-				.is_some_and(ThreatKnowledge::is_empty)
-		);
+		assert!(app
+			.world()
+			.get::<ThreatKnowledge>(victim)
+			.is_some_and(ThreatKnowledge::is_empty));
 
 		app.world_mut().write_message(DamageApplied {
 			target: victim,
@@ -601,11 +605,10 @@ mod tests {
 		app.update();
 
 		let player_id = ThreatId(player.to_bits());
-		assert!(
-			app.world()
-				.get::<ThreatKnowledge>(victim)
-				.is_some_and(|knowledge| { knowledge.get(player_id).is_some() })
-		);
+		assert!(app
+			.world()
+			.get::<ThreatKnowledge>(victim)
+			.is_some_and(|knowledge| { knowledge.get(player_id).is_some() }));
 	}
 
 	fn threat_app() -> App {

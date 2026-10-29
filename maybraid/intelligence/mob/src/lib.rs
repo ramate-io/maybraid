@@ -12,6 +12,7 @@ mod lifecycle;
 mod lock;
 mod member;
 mod plugin;
+mod prey;
 mod roster;
 mod roster_ref;
 mod share;
@@ -24,6 +25,7 @@ pub use host::{
 pub use lock::MobTetherLock;
 pub use member::{ancestor_mob, MemberOf, MobMemberBody, MobRespawnSupport, MobSlot};
 pub use plugin::{MobIntelligencePlugin, MobSystems};
+pub use prey::{install_prey_targeting, PreySubject, PreyTargetMemory, PreyTargetingIntelligence};
 pub use roster::{
 	MobAffiliations, MobInterests, MobMemberNeeded, MobRespawn, MobRespawnAt, MobRoster,
 	RosterMember,
