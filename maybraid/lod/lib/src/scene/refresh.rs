@@ -34,8 +34,8 @@ use bevy::prelude::*;
 
 use crate::lod_ref::{LodNodePlugin, LodNodeSystems};
 use crate::scene::host::{
-	drain_lod_tree_vis, settle_lod_level_root_visibility, sync_lod_level_roots, LodTreeVisBudget,
-	LodTreeVisQueue,
+	drain_lod_tree_vis, hide_ready_world_instance_if_under_hidden_lod,
+	settle_lod_level_root_visibility, sync_lod_level_roots, LodTreeVisBudget, LodTreeVisQueue,
 };
 use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::SemanticLodScene;
@@ -65,8 +65,7 @@ pub use regions::{
 };
 pub use sync::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
-	apply_lod_cull_requests, begin_chunk_lod_fulfill, begin_chunk_lod_fulfill_erased,
-	cancel_unstarted_cull_for_desired_pending_roots,
+	apply_lod_cull_requests, begin_chunk_lod_fulfill_erased,
 	cancel_unstarted_cull_for_desired_pending_roots_erased, complete_chunk_lod_fulfill,
 	cull_lod_level_roots, drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull,
 	reset_lod_chunk_budget, LodChunkAtomicOverrun, LodChunkBeginScanCursor, LodChunkBudgetClock,
@@ -156,6 +155,7 @@ impl Plugin for LodRefreshCorePlugin {
 			.add_message::<LodSceneRefreshAabb>()
 			.add_message::<LodSceneCullAabb>()
 			.add_message::<LodSceneRefreshLevel>()
+			.add_observer(hide_ready_world_instance_if_under_hidden_lod)
 			.add_systems(
 				Update,
 				(

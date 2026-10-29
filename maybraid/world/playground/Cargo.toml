@@ -16,7 +16,8 @@ path = "src/main.rs"
 [dependencies]
 bevy = { workspace = true }
 maybraid-agent = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
+maybraid-gameplay = { workspace = true }
 maybraid-world = { workspace = true }
 
 [lints]

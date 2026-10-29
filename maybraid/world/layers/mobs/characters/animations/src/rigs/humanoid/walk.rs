@@ -3,9 +3,10 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::{UprightWalk, Walk};
+use crate::rigs::humanoid::gait_coordination::GaitCoordination;
 use crate::rigs::humanoid::gait_knee::lerp_swing_knee;
 use crate::rigs::humanoid::write_masks::{debug_assert_pose_within_mask, walk_write_mask};
-use crate::{Animation, Progress};
+use crate::Animation;
 
 impl Walk {
 	/// Authored semantic pose at `progress`. Rest is applied later by the rig.
@@ -40,30 +41,45 @@ impl Animation<HumanoidV0Rig> for UprightWalk {
 }
 
 fn sample_walk(walk: &UprightWalk, progress: f32, pose: &mut HumanoidPose) {
-	let phase = Progress(progress).cycle();
-	let left_arm_swing = -arm_swing(phase);
-	let right_arm_swing = arm_swing(phase + 0.5);
+	let gait = GaitCoordination::from_progress(progress);
+	let phase = gait.phase();
+	let left_arm_swing = -GaitCoordination::arm_swing(phase);
+	let right_arm_swing = GaitCoordination::arm_swing(phase + 0.5);
 
-	pose.apply_root(walk.torso_lean);
-	apply_leg(pose, Side::Left, phase, -1.0, walk);
-	apply_leg(pose, Side::Right, phase, 1.0, walk);
+	gait.apply_spine_counter(pose, walk.torso_lean, walk.torso_turn, walk.side_lean);
+	apply_leg(pose, Side::Left, phase, -1.0, gait, walk);
+	apply_leg(pose, Side::Right, phase, 1.0, gait, walk);
 	// Both elbows share one flexion sign. The opposite arm_down values are a
 	// hang bias, not a mirror of the joint frame.
-	apply_walk_arm(pose, Side::Left, left_arm_swing, phase, -walk.arm_down, walk);
-	apply_walk_arm(pose, Side::Right, right_arm_swing, phase, walk.arm_down, walk);
+	apply_walk_arm(pose, Side::Left, left_arm_swing, phase, -walk.arm_down, gait, walk);
+	apply_walk_arm(pose, Side::Right, right_arm_swing, phase, walk.arm_down, gait, walk);
+	gait.apply_head(pose, walk.torso_lean, walk.torso_turn, walk.side_lean, walk.head_stabilize);
 }
 
-fn apply_leg(pose: &mut HumanoidPose, side: Side, phase: f32, lift_sign: f32, walk: &UprightWalk) {
+fn apply_leg(
+	pose: &mut HumanoidPose,
+	side: Side,
+	phase: f32,
+	lift_sign: f32,
+	gait: GaitCoordination,
+	walk: &UprightWalk,
+) {
 	let phase = if side == Side::Left { phase } else { phase + side.phase_offset() };
-	let swing = thigh_swing(phase);
+	let swing = GaitCoordination::thigh_swing(phase);
+	gait.apply_pelvis_yaw_and_bob(
+		pose,
+		side,
+		swing,
+		lift_sign,
+		walk.hip_swing,
+		walk.hip_lift,
+		walk.body_bob,
+	);
 	let leg = pose.leg_mut(side);
-	// Pelvis yaw stays axial. Hip lift is a lateral hike, with opposite signs so
-	// the stance side rises. Those signs are gait bias, not axis mirrors.
-	leg.pelvis_turn = swing * walk.hip_swing * lift_sign;
-	leg.pelvis_lateral = hip_lift(swing, walk.hip_lift) * lift_sign;
 	leg.hip_flexion = swing * walk.stride;
 	leg.hip_abduction = -swing * walk.femur_medial_counter * lift_sign;
 	leg.knee_flexion = knee_flex(phase, walk);
+	leg.pelvis_flexion = swing.max(0.0) * walk.foot_roll;
 }
 
 fn apply_walk_arm(
@@ -72,43 +88,27 @@ fn apply_walk_arm(
 	arm_swing_value: f32,
 	phase: f32,
 	humerus_flex: f32,
+	gait: GaitCoordination,
 	walk: &UprightWalk,
 ) {
-	pose.apply_arm(
+	gait.apply_arm_across(
+		pose,
 		side,
-		arm_swing_value * walk.shoulder_swing,
-		-shoulder_lift(arm_swing_value, walk.shoulder_lift),
-		arm_swing_value * walk.humerus_swing_scale,
+		arm_swing_value,
 		humerus_flex,
-		elbow_flex(arm_swing_value, phase, -1.0, walk),
+		walk.shoulder_swing,
+		walk.shoulder_lift,
+		walk.humerus_swing_scale,
+		walk.arm_across,
+		GaitCoordination::elbow_flex(
+			arm_swing_value,
+			phase,
+			-1.0,
+			walk.elbow_bend,
+			walk.elbow_pump,
+			walk.elbow_cycle,
+		),
 	);
-}
-
-fn thigh_swing(phase: f32) -> f32 {
-	let p = phase.fract();
-	if p < 0.5 {
-		4.0 * p - 1.0
-	} else {
-		3.0 - 4.0 * p
-	}
-}
-
-fn arm_swing(phase: f32) -> f32 {
-	thigh_swing(phase) * 0.75
-}
-
-fn elbow_flex(arm_swing: f32, phase: f32, flex_sign: f32, walk: &UprightWalk) -> f32 {
-	let pump = arm_swing.abs();
-	let cycle = ((phase + arm_swing.signum() * 0.125) * std::f32::consts::PI * 4.0).sin().abs();
-	flex_sign * (walk.elbow_bend + pump * walk.elbow_pump + cycle * walk.elbow_cycle)
-}
-
-fn shoulder_lift(arm_swing: f32, amplitude: f32) -> f32 {
-	arm_swing * amplitude
-}
-
-fn hip_lift(leg_swing: f32, amplitude: f32) -> f32 {
-	leg_swing * amplitude
 }
 
 /// Soft knee on stance; shared swing envelope peaks mid-stride for toe clearance.
@@ -316,6 +316,110 @@ mod tests {
 			rig.posed_angle("pelvis.L") > rig.posed_angle("shoulder.L"),
 			"vertical bob comes mostly from hips"
 		);
+	}
+
+	fn walk_at(progress: f32) -> HumanoidV0Rig {
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		Walk::default().apply_for(&mut rig, progress);
+		rig
+	}
+
+	fn mean_hip_y(rig: &HumanoidV0Rig) -> f32 {
+		0.5 * (rig.character_point("femur.L").y + rig.character_point("femur.R").y)
+	}
+
+	fn shin_tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
+		rig.character_point(name) + rig.character_length(name) * rig.segment_lengths.shin
+	}
+
+	fn hand_tip(rig: &HumanoidV0Rig, name: &str) -> anyhow::Result<Vec3> {
+		let id = rig
+			.binding
+			.definition
+			.id(name)
+			.ok_or_else(|| anyhow::anyhow!("missing forearm {name}"))?;
+		let length = rig
+			.binding
+			.effective_rest
+			.get(id)
+			.ok_or_else(|| anyhow::anyhow!("missing forearm bind transform {name}"))?
+			.translation
+			.length();
+		Ok(rig.character_point(name) + rig.character_length(name) * length)
+	}
+
+	#[test]
+	fn walk_weight_shift_and_bob_follow_stance_phase() -> anyhow::Result<()> {
+		let left_plant = walk_at(0.0).rotation("lumbar") * Vec3::Y;
+		let right_plant = walk_at(0.5).rotation("lumbar") * Vec3::Y;
+		assert!(left_plant.x > 0.015, "phase zero waist leans toward left plant: {left_plant:?}");
+		assert!(
+			right_plant.x < -0.015,
+			"half cycle waist leans toward right plant: {right_plant:?}"
+		);
+		assert!(mean_hip_y(&walk_at(0.0)) > mean_hip_y(&walk_at(0.25)) + 0.015);
+		assert!(mean_hip_y(&walk_at(0.5)) > mean_hip_y(&walk_at(0.25)) + 0.015);
+		Ok(())
+	}
+
+	#[test]
+	fn walk_shoulders_and_head_counter_pelvis_and_chest() -> anyhow::Result<()> {
+		let rig = walk_at(0.0);
+		let hip_yaw = rig.character_point("femur.L").z - rig.character_point("femur.R").z;
+		let shoulder = rig.rotation("upper_back") * Vec3::Z;
+		assert!(hip_yaw > 0.04 && hip_yaw * shoulder.x < 0.0);
+		assert!(shoulder.x.abs() > 0.02, "torso counters pelvis: {shoulder:?}");
+		let chest = rig.rotation("root") * Vec3::Y;
+		let head = rig.character_length("upper_neck");
+		assert!(chest.z > 0.08, "walk retains forward lean: {chest:?}");
+		assert!(head.z.abs() < chest.z - 0.02, "neck stabilizes the head: {head:?}");
+		Ok(())
+	}
+
+	#[test]
+	fn walk_forward_hand_and_foot_roll_have_distinct_sagittal_and_across_motion(
+	) -> anyhow::Result<()> {
+		let mut no_across = UprightWalk::default();
+		no_across.arm_across = 0.0;
+		let mut authored = HumanoidV0Rig::for_clip_test();
+		let mut sagittal = HumanoidV0Rig::for_clip_test();
+		UprightWalk::default().apply_for(&mut authored, 0.0);
+		no_across.apply_for(&mut sagittal, 0.0);
+		let right_hand = hand_tip(&authored, "forearm.R")?;
+		let left_hand = hand_tip(&authored, "forearm.L")?;
+		let right_hand_without_across = hand_tip(&sagittal, "forearm.R")?;
+		assert!(right_hand.z > left_hand.z + 0.3, "right hand leads: {left_hand:?} {right_hand:?}");
+		assert!(right_hand.x.abs() < right_hand_without_across.x.abs() - 0.02);
+
+		let mut no_roll = UprightWalk::default();
+		no_roll.foot_roll = 0.0;
+		let mut rolled = HumanoidV0Rig::for_clip_test();
+		let mut flat = HumanoidV0Rig::for_clip_test();
+		UprightWalk::default().apply_for(&mut rolled, 0.5);
+		no_roll.apply_for(&mut flat, 0.5);
+		let rolled_tip = shin_tip(&rolled, "shin.L");
+		let flat_tip = shin_tip(&flat, "shin.L");
+		assert!(
+			rolled_tip.z < flat_tip.z - 0.015,
+			"heel-to-toe roll: {rolled_tip:?} vs {flat_tip:?}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn walk_depth_channels_remain_continuous_at_mailbox_rate() -> anyhow::Result<()> {
+		let bones = ["root", "lumbar", "pelvis.L", "femur.L", "shoulder.L", "upper_neck"];
+		let mut previous = walk_at(0.0);
+		for frame in 1..=70 {
+			let progress = frame as f32 * 1.08 / 60.0;
+			let current = walk_at(progress);
+			for name in bones {
+				let delta = current.rotation(name).angle_between(previous.rotation(name));
+				assert!(delta < 0.12, "60 Hz walk jump on {name} at {progress}: {delta}");
+			}
+			previous = current;
+		}
+		Ok(())
 	}
 
 	fn assert_masked_matches_full_resolve(

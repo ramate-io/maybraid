@@ -347,6 +347,8 @@ fn rooms_speak_their_buildings_language_wherever_they_stand() -> anyhow::Result<
 			key,
 			place: DiscoverablePlace::high(label, 3.0, 1.1).with_identity(development, local),
 			xz,
+			y: 0.0,
+			interior_arrival: None,
 			building,
 		}
 	};

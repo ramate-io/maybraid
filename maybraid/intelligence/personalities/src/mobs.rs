@@ -9,12 +9,12 @@ use damage::Health;
 use firearm_intelligence::FirearmEngagement;
 use lod_avian::PhysicsInteractionLayer;
 use mob_intelligence::{
-	spawn_mob, MobAffiliations, MobIdAlloc, MobInstall, MobMemberBody, MobMemberNeeded, MobSlot,
-	RosterMember,
+	spawn_mob, MobAffiliations, MobIdAlloc, MobInstall, MobMemberBody, MobMemberNeeded,
+	MobRespawnSupport, MobSlot, RosterMember,
 };
 use npc_intelligence::{NpcBody, Personality};
 use player::{spawn_npc, LocomotionCapsule, PlayerLook, CAPSULE_LENGTH, CAPSULE_RADIUS};
-use poi_intelligence::{PoiInterest, PoiInterests, PoiKind};
+use poi_intelligence::{PoiInterest, PoiInterests, PoiKind, PoiSupport};
 use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
 use std::f32::consts::TAU;
 use threat_intelligence::{
@@ -312,7 +312,7 @@ pub fn spawn_mobs(
 		commands.entity(host).insert((Name::new(recipe.name), recipe.kind));
 		let roster = members_poses(recipe);
 		for (slot, spec, at) in roster {
-			spawn_member(commands, &visuals, id, slot, spec, at);
+			spawn_member(commands, &visuals, id, slot, spec, at, PoiSupport::Terrain);
 		}
 	}
 	commands.insert_resource(visuals);
@@ -349,11 +349,13 @@ fn spawn_member(
 	slot: u16,
 	spec: MemberSpec,
 	at: Vec3,
+	support: PoiSupport,
 ) {
 	let hull = LocomotionCapsule::HUMANOID;
 	let npc = spawn_npc(commands, at, PlayerLook::default());
 	commands.entity(npc).insert((
 		MobSlot(slot),
+		MobRespawnSupport(support),
 		id,
 		MobMemberBody(NpcBody {
 			agent_radius: hull.radius,
@@ -393,7 +395,15 @@ pub fn spawn_needed_members(
 			ffa: member.threat_override.is_some(),
 			discovery_radius: member.discovery_radius,
 		};
-		spawn_member(&mut commands, &visuals, request.id, request.slot, spec, request.pose);
+		spawn_member(
+			&mut commands,
+			&visuals,
+			request.id,
+			request.slot,
+			spec,
+			request.pose,
+			request.support,
+		);
 	}
 }
 

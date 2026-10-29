@@ -179,6 +179,17 @@ pub struct ProjectileVisualCache(
 );
 
 impl ProjectileVisualCache {
+	pub fn mesh_and_material(
+		&mut self,
+		length: f32,
+		radius: f32,
+		color: Color,
+		meshes: &mut Assets<Mesh>,
+		materials: &mut Assets<StandardMaterial>,
+	) -> (Handle<Mesh>, Handle<StandardMaterial>) {
+		self.get_or_insert(length, radius, color, meshes, materials)
+	}
+
 	fn get_or_insert(
 		&mut self,
 		length: f32,
@@ -764,12 +775,43 @@ pub fn spawn_flight_aged(
 	gravity: f32,
 	age: f32,
 ) -> Entity {
+	let entity = spawn_flight_sim(
+		commands,
+		muzzle,
+		direction,
+		length,
+		radius,
+		speed,
+		max_range,
+		max_through,
+		max_age,
+		gravity,
+		age,
+	);
+	let (mesh, material) = visuals.get_or_insert(length, radius, color, meshes, materials);
+	commands.entity(entity).insert((Mesh3d(mesh), MeshMaterial3d(material)));
+	entity
+}
+
+/// Flight / collision / damage body without a mesh. Presentation attaches visuals.
+pub fn spawn_flight_sim(
+	commands: &mut Commands,
+	muzzle: Vec3,
+	direction: Vec3,
+	length: f32,
+	radius: f32,
+	speed: f32,
+	max_range: f32,
+	max_through: f32,
+	max_age: f32,
+	gravity: f32,
+	age: f32,
+) -> Entity {
 	let age = age.max(0.0);
 	let (pos, vel) = ballistic_after_age(muzzle, direction, speed, gravity, age);
 	let dir = vel.normalize_or(direction);
 	let transform = capsule_along_y(dir, pos, length, radius);
 	let collider = Collider::capsule(radius, length);
-	let (mesh, material) = visuals.get_or_insert(length, radius, color, meshes, materials);
 	let mut flight = Flight::spawn(muzzle, max_range, max_through, max_age);
 	flight.age = age;
 	let entity = commands
@@ -777,8 +819,6 @@ pub fn spawn_flight_aged(
 			Name::new("projectile"),
 			transform,
 			Visibility::default(),
-			Mesh3d(mesh),
-			MeshMaterial3d(material),
 			RigidBody::Dynamic,
 			MassPropertiesBundle::from_shape(&collider, 1.0),
 			collider,

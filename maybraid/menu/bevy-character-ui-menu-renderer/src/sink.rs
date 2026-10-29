@@ -6,9 +6,11 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{
-	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode, PreviewColor,
-	SectionOpen, SelectChoice, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
+	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode, OrderedEquipmentRow,
+	PreviewColor, SectionOpen, SelectChoice, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
 };
+
+use menu_components::{equipped_pane_fill, MENU_LIST_PAD, MENU_LIST_RADIUS};
 
 use crate::widgets::{
 	color_from_hex, compact_control_row, inline_chip_row, labeled_row, render_asset_button,
@@ -159,6 +161,26 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
 				block_label(parent, label);
 				self.grid_catalog(choices, parent, context);
 			}
+			MenuNode::OrderedEquipment { rows } => {
+				parent
+					.spawn((
+						Node {
+							width: Val::Percent(100.0),
+							flex_direction: FlexDirection::Column,
+							flex_shrink: 0.0,
+							row_gap: Val::Px(MENU_VERTICAL_GAP),
+							padding: UiRect::all(Val::Px(MENU_LIST_PAD)),
+							border_radius: BorderRadius::all(Val::Px(MENU_LIST_RADIUS)),
+							..default()
+						},
+						BackgroundColor(equipped_pane_fill()),
+						Pickable::IGNORE,
+					))
+					.with_children(|pane| {
+						block_label(pane, "Equipped");
+						self.ordered_equipment(rows, pane, context);
+					});
+			}
 			MenuNode::ShortText { label, value, .. } => {
 				inline_label_row(parent, label, |row| {
 					text(row, value, 11.0, VALUE_COLOR);
@@ -241,6 +263,53 @@ impl BevyMenuSink {
 			});
 	}
 
+	fn ordered_equipment<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+		&self,
+		rows: &[OrderedEquipmentRow<E>],
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		for row in rows {
+			parent
+				.spawn((
+					Node {
+						width: Val::Percent(100.0),
+						display: Display::Grid,
+						grid_template_columns: RepeatedGridTrack::flex(
+							menu_components::INVENTORY_TILE_COLUMNS,
+							1.0,
+						),
+						flex_shrink: 0.0,
+						row_gap: Val::Px(MENU_VERTICAL_GAP),
+						column_gap: Val::Px(8.0),
+						..default()
+					},
+					Pickable::IGNORE,
+				))
+				.with_children(|strip| {
+					for choice in &row.choices {
+						let thumbnail = grid_catalog_thumbnail(
+							&choice.tile,
+							bevy_color(choice.tile.preview),
+							context,
+						);
+						let label = if choice.tile.detail.is_empty() {
+							choice.tile.label.clone()
+						} else {
+							format!("{}\n{}", choice.tile.label, choice.tile.detail)
+						};
+						render_asset_button(
+							strip,
+							&label,
+							choice.tile.event,
+							choice.tile.selected,
+							thumbnail,
+						);
+					}
+				});
+		}
+	}
+
 	fn grid_catalog<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 		&self,
 		choices: &[GridCatalogChoice<E>],
@@ -251,8 +320,12 @@ impl BevyMenuSink {
 			.spawn((
 				Node {
 					width: Val::Percent(100.0),
-					flex_direction: FlexDirection::Row,
-					flex_wrap: FlexWrap::Wrap,
+					display: Display::Grid,
+					grid_template_columns: RepeatedGridTrack::flex(
+						menu_components::INVENTORY_TILE_COLUMNS,
+						1.0,
+					),
+					flex_shrink: 0.0,
 					column_gap: Val::Px(8.0),
 					row_gap: Val::Px(MENU_VERTICAL_GAP),
 					..default()

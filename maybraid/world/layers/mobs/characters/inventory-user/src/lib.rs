@@ -119,6 +119,7 @@ enum InventoryItemFile {
 	Tanz {
 		id: TanzId,
 	},
+	Fisticuffs,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -188,6 +189,7 @@ impl InventoryItemFile {
 				Self::Grenade { mesh: spec.mesh, stats: Some(*stats), recharge: recharge.remaining }
 			}
 			InventoryItem::Tanz { id } => Self::Tanz { id: *id },
+			InventoryItem::Fisticuffs => Self::Fisticuffs,
 		}
 	}
 
@@ -224,6 +226,7 @@ impl InventoryItemFile {
 				recharge: GrenadeRecharge { remaining: recharge },
 			},
 			Self::Tanz { id } => InventoryItem::Tanz { id },
+			Self::Fisticuffs => InventoryItem::Fisticuffs,
 		}
 	}
 }
@@ -307,7 +310,9 @@ pub fn load(root: &SaveRoot, id: CharacterId) -> Result<Inventory, PersistError>
 	let json = match fs::read_to_string(&path) {
 		Ok(json) => json,
 		Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-			return Ok(Inventory::default());
+			let mut inventory = Inventory::default();
+			inventory.ensure_fisticuffs();
+			return Ok(inventory);
 		}
 		Err(error) => return Err(error.into()),
 	};
@@ -323,13 +328,22 @@ pub fn load(root: &SaveRoot, id: CharacterId) -> Result<Inventory, PersistError>
 		let tanzes = sanitize_selection(&items, file.tanzes, InventorySlot::Tanzes);
 		let mut inventory = Inventory { items, clothing, weapons, skills, tanzes };
 		inventory.dedup_tanz_kinds();
+		inventory.ensure_fisticuffs();
 		return Ok(inventory);
 	}
 	let file: InventoryFileV1 = serde_json::from_value(value)?;
 	let items: Vec<InventoryItem> =
 		file.items.into_iter().map(ClothingItemFile::into_item).collect();
 	let clothing = sanitize_selection(&items, file.worn, InventorySlot::Clothing);
-	Ok(Inventory { items, clothing, weapons: Vec::new(), skills: Vec::new(), tanzes: Vec::new() })
+	let mut inventory = Inventory {
+		items,
+		clothing,
+		weapons: Vec::new(),
+		skills: Vec::new(),
+		tanzes: Vec::new(),
+	};
+	inventory.ensure_fisticuffs();
+	Ok(inventory)
 }
 
 pub fn spawn_bag(commands: &mut Commands, host: Entity, inventory: Inventory) -> Entity {
@@ -355,20 +369,23 @@ mod tests {
 		let loaded = load(&root, id).expect("load");
 		assert_eq!(loaded, inventory);
 		assert_eq!(loaded.weapons.len(), 3);
+		assert_eq!(loaded.equipped_tanzes(), character_items::BASE_STARTER_TANZES.to_vec());
 		assert!(loaded.items.iter().any(|item| item.grenade_spec().is_some()));
 		assert!(loaded.items[0].clothing_stats().is_some_and(|stats| stats.weight > 0));
 		assert!(loaded
 			.items
 			.iter()
 			.any(|item| item.firearm_stats().is_some_and(|stats| stats.damage > 0)));
+		assert_eq!(loaded.items.iter().filter(|item| item.is_fisticuffs()).count(), 1);
 	}
 
 	#[test]
-	fn missing_file_is_empty_bag() {
+	fn missing_file_is_normalized_with_fisticuffs() {
 		let dir = tempfile::tempdir().expect("tempdir");
 		let root = SaveRoot::at(dir.path());
 		let loaded = load(&root, CharacterId(1)).expect("load");
-		assert_eq!(loaded, Inventory::default());
+		assert_eq!(loaded.items, vec![InventoryItem::Fisticuffs]);
+		assert!(loaded.weapons.is_empty());
 	}
 
 	#[test]
@@ -402,7 +419,9 @@ mod tests {
 		save(&root, id, &inventory).expect("save");
 		let json = fs::read_to_string(root.inventory_path(id)).expect("read");
 		assert!(json.contains("\"kind\": \"firearm\""));
-		assert_eq!(load(&root, id).expect("load"), inventory);
+		let loaded = load(&root, id).expect("load");
+		assert_eq!(loaded.weapons, vec![1, 2]);
+		assert_eq!(loaded.items.iter().filter(|item| item.is_fisticuffs()).count(), 1);
 		assert!(json.contains("\"stats\""));
 	}
 
@@ -424,7 +443,7 @@ mod tests {
 		}"#;
 		fs::write(root.inventory_path(id), json).expect("write");
 		let loaded = load(&root, id).expect("load");
-		assert_eq!(loaded.items.len(), 2);
+		assert_eq!(loaded.items.len(), 3);
 		assert_eq!(
 			loaded.items[0],
 			InventoryItem::clothing(
@@ -434,6 +453,7 @@ mod tests {
 			)
 		);
 		assert_eq!(loaded.items[1], InventoryItem::firearm(FirearmMesh::Bullpup));
+		assert!(loaded.items[2].is_fisticuffs());
 		assert_eq!(loaded.clothing, vec![0]);
 		assert_eq!(loaded.weapons, vec![1]);
 	}
@@ -455,11 +475,12 @@ mod tests {
 		}"#;
 		fs::write(root.inventory_path(id), json).expect("write");
 		let loaded = load(&root, id).expect("load");
-		assert_eq!(loaded.items.len(), 2);
+		assert_eq!(loaded.items.len(), 3);
 		assert_eq!(loaded.clothing, vec![0, 1]);
 		assert!(loaded.weapons.is_empty());
 		assert!(loaded.skills.is_empty());
 		assert_eq!(loaded.items[0].mesh(), Some(ClothingMesh::Pants));
+		assert!(loaded.items[2].is_fisticuffs());
 	}
 
 	#[test]
@@ -488,7 +509,9 @@ mod tests {
 		let json = fs::read_to_string(root.inventory_path(id)).expect("read");
 		assert!(json.contains("\"kind\": \"skill-map\""));
 		assert!(json.contains("\"dumbwave\""));
-		assert_eq!(load(&root, id).expect("load"), inventory);
+		let loaded = load(&root, id).expect("load");
+		assert_eq!(loaded.skills, vec![1]);
+		assert!(loaded.items.iter().any(InventoryItem::is_fisticuffs));
 	}
 
 	#[test]
@@ -512,7 +535,10 @@ mod tests {
 		let json = fs::read_to_string(root.inventory_path(id)).expect("read");
 		assert!(json.contains("\"kind\": \"grenade\""));
 		assert!(json.contains("2.5"));
-		assert_eq!(load(&root, id).expect("load"), inventory);
+		let loaded = load(&root, id).expect("load");
+		assert_eq!(loaded.weapons, vec![0]);
+		assert_eq!(loaded.items.iter().filter_map(InventoryItem::grenade_spec).count(), 1);
+		assert!(loaded.items.iter().any(InventoryItem::is_fisticuffs));
 	}
 
 	#[test]
@@ -535,6 +561,57 @@ mod tests {
 		assert!(loaded.skills.is_empty());
 		assert!(loaded.tanzes.is_empty());
 		assert_eq!(loaded.clothing, vec![0]);
+		assert!(loaded.items.iter().any(InventoryItem::is_fisticuffs));
+		assert!(loaded.weapons.is_empty());
+	}
+
+	#[test]
+	fn fisticuffs_round_trips_and_older_saves_keep_their_primary() {
+		let dir = tempfile::tempdir().expect("tempdir");
+		let root = SaveRoot::at(dir.path());
+		let id = CharacterId(21);
+		let inventory = Inventory {
+			items: vec![InventoryItem::firearm(FirearmMesh::Bullpup), InventoryItem::Fisticuffs],
+			clothing: Vec::new(),
+			weapons: vec![1, 0],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		save(&root, id, &inventory).expect("save");
+		let json = fs::read_to_string(root.inventory_path(id)).expect("read");
+		assert!(json.contains("\"kind\": \"fisticuffs\""));
+		assert_eq!(load(&root, id).expect("load"), inventory);
+
+		let older = CharacterId(22);
+		root.ensure_dirs().expect("dirs");
+		fs::write(
+			root.inventory_path(older),
+			r#"{
+			"version": 5,
+			"id": "00000000000000000000000000000016",
+			"items": [
+				{ "kind": "firearm", "mesh": "bullpup" },
+				{ "kind": "firearm", "mesh": "reltor" },
+				{ "kind": "grenade" }
+			],
+			"clothing": [],
+			"weapons": [0, 1, 2],
+			"skills": []
+		}"#,
+		)
+		.expect("write");
+		let loaded = load(&root, older).expect("load");
+		assert_eq!(loaded.weapons, vec![0, 1, 2]);
+		assert_eq!(
+			loaded.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
+		assert_eq!(loaded.items.iter().filter(|item| item.is_fisticuffs()).count(), 1);
+		assert!(loaded
+			.items
+			.iter()
+			.enumerate()
+			.any(|(index, item)| { item.is_fisticuffs() && loaded.rank(index).is_none() }));
 	}
 
 	#[test]
@@ -548,13 +625,14 @@ mod tests {
 			InventoryItem::tanz(TanzId::RightStrafe),
 			InventoryItem::tanz(TanzId::ForwardDash),
 		];
-		let inventory = Inventory {
+		let mut inventory = Inventory {
 			items,
 			clothing: Vec::new(),
 			weapons: Vec::new(),
 			skills: Vec::new(),
 			tanzes: vec![3, 0, 1],
 		};
+		inventory.ensure_fisticuffs();
 		save(&root, id, &inventory).expect("save");
 		let json = fs::read_to_string(root.inventory_path(id)).expect("read");
 		assert!(json.contains("\"kind\": \"tanz\""));
@@ -581,9 +659,10 @@ mod tests {
 		}"#;
 		fs::write(root.inventory_path(id), json).expect("write");
 		let loaded = load(&root, id).expect("load");
-		assert_eq!(loaded.items.len(), 2);
+		assert_eq!(loaded.items.len(), 3);
 		assert!(loaded.tanzes.is_empty());
 		assert_eq!(loaded.items[1].tanz_id(), Some(TanzId::HealingSalute));
+		assert!(loaded.items[2].is_fisticuffs());
 	}
 
 	#[test]
@@ -608,8 +687,9 @@ mod tests {
 		}"#;
 		fs::write(root.inventory_path(id), json).expect("write");
 		let loaded = load(&root, id).expect("load");
-		assert_eq!(loaded.items.len(), 3, "duplicate Tanz kinds are dropped from the bag");
+		assert_eq!(loaded.items.len(), 4, "duplicate Tanz kinds are dropped from the bag");
 		assert_eq!(loaded.tanzes, vec![1, 2]);
 		assert_eq!(loaded.equipped_tanzes(), vec![TanzId::LeftStrafe, TanzId::RightStrafe]);
+		assert!(loaded.items[3].is_fisticuffs());
 	}
 }

@@ -5,7 +5,7 @@ mod ground;
 mod ui;
 
 use bevy::prelude::*;
-use maybraid_input::VirtualPadPlugin;
+use maybraid_virtual_pad_controller::VirtualPadPlugin;
 use maybraid_spatial_rumble::{SpatialRumble, SpatialRumblePlugin, SpatialRumbleSystems};
 
 use crate::camera::{camera_controller, release_modifiers_on_focus_change, setup_camera};

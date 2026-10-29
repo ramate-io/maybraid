@@ -1,8 +1,8 @@
 //! Release timing for the live [`WorldPoiTiles`] distant-tile path.
 //!
 //! Seeds [`chico::ForestSelection`] (LushJungle) so [`GrovePois`] resolve on a
-//! real grove grid. Urban / place families stay empty without Durham / Richmond
-//! roots — `WorldPoiTiles` still walks them, matching the production call.
+//! real grove grid and publishes ground support for its destinations. Urban /
+//! place families stay empty without Richmond roots; the lookup still walks them.
 //!
 //! ```bash
 //! CXX=g++ cargo test -p maybraid-world xz_tile_world_timing --release -- --ignored --nocapture
@@ -86,6 +86,24 @@ fn seed_forest() -> HcsgStorage {
 		ForestSelection { layering: Some(LayeringKind::LushJungle), ..ForestSelection::default() },
 		universal_bounds(),
 	);
+	// POI generation now requires a real support height, even in this isolated
+	// forest fixture. Publish padded cells without requesting urban generation.
+	let layout =
+		durham::TerrainCellLayout { cell_size: TILE_SIZE * PROBES as f32, ..Default::default() };
+	let base = durham::BaseTerrainNoise::from_config(&durham::TerrainConfig::new(42));
+	for z in -1..=1 {
+		for x in -1..=1 {
+			let terrain = durham::Terrain::base_cell_for_test(&layout, x, z, base.clone());
+			let cell = terrain.cell;
+			let surface = richmond::TerrainWithPads::compose(&terrain, []);
+			storage.publish(
+				lod::gen::Id::from_cell(cell),
+				std::sync::Arc::new(richmond::PaddedTerrain::<Ground>::new(surface)),
+				cell,
+			);
+		}
+	}
+	storage.seed(layout, universal_bounds());
 	storage
 }
 

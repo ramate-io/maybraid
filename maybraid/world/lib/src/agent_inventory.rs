@@ -6,9 +6,9 @@ use character_items::{Inventory, InventoryItem};
 use lubikans::{LubikanLedger, LubikanOwner};
 use maybraid_agent::{AgentButton, InventoryObservation, PadIntent};
 use maybraid_character_controller::InventoryCyclingCategory;
+use maybraid_session::WorldGameplayEnabled;
 use world_player::Player as VegetationPlayer;
 
-use crate::control::WorldGameplayEnabled;
 use crate::inventory_cycling::{gameplay_cycling_allowed, ActiveInventoryCyclingCategory};
 use crate::map_view::WorldMapView;
 use game_commands::command::TextEntryFocus;
@@ -61,13 +61,17 @@ pub(crate) fn publish_agent_inventory(
 	}
 
 	let cycling_allowed = gameplay_cycling_allowed(&gameplay, &text_focus, map.as_deref());
-	let last = state.observation.clone();
 	let (pressed_y, pressed_category) = intent
 		.as_deref()
 		.map(|intent| cycle_buttons(&intent.0))
 		.unwrap_or((false, false));
-	observation.invariants =
-		cycling_invariants(&last, &observation, pressed_y, pressed_category, cycling_allowed);
+	observation.invariants = cycling_invariants(
+		&state.observation,
+		&observation,
+		pressed_y,
+		pressed_category,
+		cycling_allowed,
+	);
 	state.observation = observation;
 }
 
