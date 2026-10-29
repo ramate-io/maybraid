@@ -986,7 +986,17 @@ mod tests {
 		world.init_resource::<WorldPlayerRespawnState>();
 		world.init_resource::<Messages<ActorRetired>>();
 		let held = world.spawn(WeaponTrigger(true)).id();
-		let bag = world.spawn_empty().id();
+		let live_inventory = character_items::Inventory {
+			items: vec![character_items::InventoryItem::Fisticuffs],
+			weapons: vec![0],
+			..default()
+		};
+		let bag = world.spawn(live_inventory.clone()).id();
+		world.insert_resource(WorldPlayerLoadout::new(
+			"retirement-inventory",
+			characters::CharacterAppearance::default(),
+			character_items::Inventory::default(),
+		));
 		let source_entity = world.spawn_empty().id();
 		world.insert_resource(PrimaryVirtualPad(source_entity));
 		let player = world
@@ -1020,6 +1030,11 @@ mod tests {
 			"item teardown is gameplay's ActorRetired coordinator"
 		);
 		assert!(world.entities().contains(bag));
+		assert_eq!(
+			world.resource::<WorldPlayerLoadout>().inventory,
+			live_inventory,
+			"capture current bag mutations before item teardown and body replacement"
+		);
 		let pending = &world.resource::<WorldPlayerRespawnState>().pending;
 		assert!(pending.is_some());
 		let notices: Vec<_> = world.resource_mut::<Messages<ActorRetired>>().drain().collect();
