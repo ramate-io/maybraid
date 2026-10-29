@@ -80,13 +80,23 @@ impl FirearmFireSounds {
 		listener: &GlobalTransform,
 		world: Vec3,
 		player: bool,
+		delay: f32,
+		duck: bool,
 	) {
 		let bus = if player { AudioBus::PlayerWeapon } else { AudioBus::Weapons };
+		if duck && player {
+			mixer.duck_player_shot();
+		}
 		audio.play_or_queue(
 			commands,
 			&self.fire,
 			clips,
-			SpatialOneShot::at(world).radius(FIRE_SPATIAL_RADIUS).gain(FIRE_VOLUME).bus(bus),
+			SpatialOneShot::at(world)
+				.radius(FIRE_SPATIAL_RADIUS)
+				.gain(FIRE_VOLUME)
+				.bus(bus)
+				.delay(delay)
+				.duck(false),
 			mixer,
 			listener,
 			"firearm-fire",
@@ -98,7 +108,9 @@ impl FirearmFireSounds {
 			SpatialOneShot::at(world)
 				.radius(HAMMER_SPATIAL_RADIUS)
 				.gain(HAMMER_VOLUME)
-				.bus(bus),
+				.bus(bus)
+				.delay(delay)
+				.duck(false),
 			mixer,
 			listener,
 			"firearm-hammer",
@@ -227,6 +239,41 @@ pub(crate) fn ensure_camera_spatial_listener(
 	commands.entity(camera).insert(FirearmFireSounds::listener());
 }
 
+/// Attach looping fizz to spawn-crate flights. Missing audio assets still
+/// stamp [`FlightFizz`] so presentation registration is testable headless.
+pub fn attach_projectile_flight_audio(
+	mut commands: Commands,
+	added: Query<
+		(Entity, &Transform, &avian3d::prelude::LinearVelocity),
+		(Added<maybraid_spawns_projectiles::ProjectileVisual>, Without<FlightFizz>),
+	>,
+	sounds: Option<Res<FirearmFireSounds>>,
+	clips: Res<Assets<AudioClip>>,
+	audio: Option<Res<Audio>>,
+	mixer: Option<Res<Mixer>>,
+	listeners: Query<&GlobalTransform, With<SpatialListener>>,
+) {
+	let listener = listeners.iter().next();
+	for (entity, transform, velocity) in &added {
+		if let (Some(sounds), Some(audio), Some(mixer), Some(listener)) =
+			(sounds.as_deref(), audio.as_deref(), mixer.as_deref(), listener)
+		{
+			sounds.loop_fizz(
+				&mut commands,
+				&clips,
+				audio,
+				mixer,
+				listener,
+				entity,
+				transform.translation,
+				velocity.0,
+			);
+		} else {
+			commands.entity(entity).insert(FlightFizz);
+		}
+	}
+}
+
 pub(crate) fn copy_flight_audio_velocity(
 	mut flights: Query<(&avian3d::prelude::LinearVelocity, &mut AudioVelocity), With<FlightFizz>>,
 ) {
@@ -243,6 +290,31 @@ mod tests {
 	fn asset_exists(path: AssetPath) {
 		let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets").join(path.as_str());
 		assert!(file.is_file(), "{}", file.display());
+	}
+
+	#[test]
+	fn spawn_registration_stamps_flight_fizz() {
+		use bevy::ecs::system::RunSystemOnce;
+		use maybraid_spawns_projectiles::{ProjectileSpec, SpawnProjectile};
+		use projectiles::BoltSpec;
+
+		let mut world = World::new();
+		world.init_resource::<Assets<AudioClip>>();
+		let projectile = world
+			.run_system_once(|mut commands: Commands| {
+				SpawnProjectile::launch(
+					Entity::from_bits(2),
+					Vec3::ZERO,
+					Vec3::Z,
+					ProjectileSpec::Bolt(BoltSpec::default()),
+					0.0,
+					None,
+				)
+				.realize(&mut commands)
+			})
+			.expect("realize");
+		world.run_system_once(attach_projectile_flight_audio).expect("attach fizz");
+		assert!(world.get::<FlightFizz>(projectile).is_some());
 	}
 
 	#[test]

@@ -1,29 +1,31 @@
-use std::marker::PhantomData;
-
 use character_rigs::humanoid::LegSegmentLengths;
+use character_rigs::Side;
 
 use crate::animations::{vertical_drop, Squat};
 
 /// Peak landing flex as a fraction of a full pre-jump squat.
 const DEFAULT_LAND_SCALE: f32 = 0.35;
+const HUMERUS_FLEX_FORWARD: f32 = 1.3;
+const FOREARM_GUARD_FLEX: f32 = -0.35;
+const HUMERUS_SWING_CLOSE: f32 = 0.45;
+const SHOULDER_FLEX_TUCK: f32 = 0.5;
 
 #[derive(Debug, Clone)]
-pub struct Land<Rig> {
+pub struct Land {
 	/// Timed squat envelope for landing compression and recovery.
-	pub squat: Squat<Rig>,
+	pub squat: Squat,
 	/// Scales peak landing joint flex relative to a full squat.
 	pub scale: f32,
-	_rig: PhantomData<Rig>,
 }
 
-impl<Rig> Land<Rig> {
+impl Land {
 	/// Landing squat with explicit compression and recovery half-cycle speeds.
-	pub fn with_speeds(descent_speed: f32, ascent_speed: f32, squat: Squat<Rig>) -> Self {
+	pub fn with_speeds(descent_speed: f32, ascent_speed: f32, squat: Squat) -> Self {
 		let mut timed = Squat::with_speeds(descent_speed, ascent_speed);
 		timed.femur_peak = squat.femur_peak;
 		timed.shin_peak = squat.shin_peak;
 		timed.root_peak = squat.root_peak;
-		Self { squat: timed, scale: DEFAULT_LAND_SCALE, _rig: PhantomData }
+		Self { squat: timed, scale: DEFAULT_LAND_SCALE }
 	}
 
 	/// Normalized landing depth before scale: 0 at touch-down extension, 1 at peak compression.
@@ -57,6 +59,26 @@ impl<Rig> Land<Rig> {
 		self.depth(progress) * self.scale * self.squat.root_peak
 	}
 
+	pub fn arm_amount(&self, progress: f32) -> f32 {
+		self.depth(progress)
+	}
+
+	pub fn shoulder_flex(&self, side: Side, progress: f32) -> f32 {
+		-self.arm_amount(progress) * SHOULDER_FLEX_TUCK * side.sign()
+	}
+
+	pub fn humerus_swing(&self, side: Side, progress: f32) -> f32 {
+		self.arm_amount(progress) * HUMERUS_SWING_CLOSE * side.sign()
+	}
+
+	pub fn humerus_flex(&self, side: Side, progress: f32) -> f32 {
+		self.arm_amount(progress) * HUMERUS_FLEX_FORWARD * side.sign()
+	}
+
+	pub fn forearm_flex(&self, progress: f32) -> f32 {
+		self.arm_amount(progress) * FOREARM_GUARD_FLEX
+	}
+
 	pub fn vertical_drop(&self, progress: f32, lengths: LegSegmentLengths) -> f32 {
 		vertical_drop(self.femur_swing(progress), self.shin_flex(progress), lengths)
 	}
@@ -71,7 +93,7 @@ impl<Rig> Land<Rig> {
 	}
 }
 
-impl<Rig> Default for Land<Rig> {
+impl Default for Land {
 	fn default() -> Self {
 		Self::with_speeds(1.0, 1.0, Squat::default())
 	}
@@ -84,8 +106,8 @@ mod tests {
 
 	#[test]
 	fn land_peak_flex_below_full_squat() -> anyhow::Result<()> {
-		let squat = Squat::<()>::for_loop(1.0, 1.0);
-		let land = Land::<()>::default();
+		let squat = Squat::for_loop(1.0, 1.0);
+		let land = Land::default();
 		let peak = land.descent_duration() / land.cycle_duration();
 		assert!(land.femur_swing(peak).abs() < squat.femur_swing(0.5).abs());
 		assert!(land.shin_flex(peak).abs() < squat.shin_flex(0.5).abs());
@@ -94,7 +116,7 @@ mod tests {
 
 	#[test]
 	fn land_starts_at_stand() -> anyhow::Result<()> {
-		let land = Land::<()>::default();
+		let land = Land::default();
 		assert!(land.depth(0.0).abs() < 1e-5);
 		assert!(land.femur_swing(0.0).abs() < 1e-5);
 		Ok(())
@@ -102,9 +124,23 @@ mod tests {
 
 	#[test]
 	fn land_compresses_gradually_after_touchdown() -> anyhow::Result<()> {
-		let land = Land::<()>::with_speeds(10.0, 1.0, Squat::default());
+		let land = Land::with_speeds(10.0, 1.0, Squat::default());
 		let early = land.descent_duration() * 0.5 / land.cycle_duration();
 		assert!(land.depth(early) > 0.0);
+		Ok(())
+	}
+
+	#[test]
+	fn land_guard_channels_follow_compression_and_mirror_sides() -> anyhow::Result<()> {
+		let land = Land::default();
+		let peak = land.descent_duration() / land.cycle_duration();
+		assert!(land.arm_amount(0.0).abs() < 1e-6);
+		assert!(land.arm_amount(peak) > 0.99);
+		assert!(land.shoulder_flex(Side::Left, peak) < 0.0);
+		assert!(land.shoulder_flex(Side::Right, peak) > 0.0);
+		assert!(land.humerus_swing(Side::Left, peak) > 0.0);
+		assert!(land.humerus_swing(Side::Right, peak) < 0.0);
+		assert!(land.forearm_flex(peak) < 0.0);
 		Ok(())
 	}
 }

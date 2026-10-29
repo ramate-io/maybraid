@@ -1,38 +1,36 @@
 //! Live character preview driven by [`CharacterMenuState`].
 
 use std::collections::HashMap;
-use std::f32::consts::{FRAC_PI_4, PI, TAU};
+use std::f32::consts::{PI, TAU};
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 use bevy::window::PrimaryWindow;
-use character_creation_menus::{
-	spin_reveal_firearm_focus, spin_reveal_focus, CharacterField, CharacterMenu, ConceptSpecies,
-	MenuEvent, BODY_FOCUS,
-};
-use character_items::{ClothingHost, ClothingMesh, FirearmSpec, InventoryItem, ItemColor};
+use character_creation_menus::{CharacterMenu, ConceptSpecies, MenuEvent};
+#[cfg(test)]
+use character_items::InventoryItem;
+use character_items::{ClothingHost, ClothingMesh, FirearmSpec, ItemColor};
 use character_persist::SaveRoot;
 use character_ui_menu::{CameraFocus, FocusRig};
 use characters::{
-	add_character_components_host, character_bounds, ActiveRigPose, AnimRef, AnimRefRoot,
-	ApplyTerrainPitch, BoneMap, CharacterComponents, CharacterHostSystems, CharacterMembers,
-	CharacterRecipe, CharacterRig, CharacterRigRole, ClothingLayer, ComponentsOnly, Layers,
-	PartNode, ResolvedPoseApplied, RigBindScales, SocketRefApplied, SocketRefRoot,
+	ActiveRigPose, AnimRef, AnimRefRoot, ApplyTerrainPitch, BoneMap, CharacterComponents,
+	CharacterHostSystems, CharacterMembers, CharacterRig, CharacterRigRole, ClothingLayer,
+	ComponentsOnly, Layers, PartNode, ResolvedPoseApplied, RigBindScales, SocketRefApplied,
+	SocketRefRoot, add_character_components_host, character_bounds,
 };
 use characters_playground::CameraController;
 use firearm_user::GeneratedFirearm;
 use firearms_components::{
-	add_firearm_components_host, firearm_bounds, firearm_preview_camera, spawn_firearm_components,
-	FirearmComponentsPlugin, FirearmRoot,
+	FirearmComponentsPlugin, FirearmRoot, add_firearm_components_host, firearm_bounds,
+	firearm_preview_camera, spawn_firearm_components,
 };
-use lod::gen::LodScene;
-use lod::gen::LodSceneLevel;
+use grenades::{GrenadeMaterial, GrenadeMaterialPlugin, grenade_material, grenade_mesh};
 use lod::lod_ref::LodRef;
+use lod::scene::LodScene;
+use lod::scene::LodSceneLevel;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use maybraid_input::produce::gamepad::GamepadAxes;
-use maybraid_input::{Deadzone, VirtualPadConfig};
-use menu_components::DESCRIPTION_PANE_LEFT_PERCENT;
+use menu_components::{CHARACTER_PANEL_WIDTH, DESCRIPTION_PANE_LEFT_PERCENT};
 use menu_screens::{
 	GalleryScreen, HomeScreen, SpinRevealCurrent, SpinRevealScreen, SpinRevealSystems,
 };
@@ -44,6 +42,11 @@ use crate::weapon_gallery::{RequestShowWeapons, WeaponGalleryScreen};
 #[derive(Component)]
 pub struct CharacterPreviewRoot;
 
+/// Menu inspect orb for a starter grenade. Realized after spawn so [`Assets`]
+/// can own the mesh / material.
+#[derive(Component)]
+struct GrenadePreview;
+
 /// Menu-playground key / fill lights. Composed applications can put these on
 /// the same render layer as [`CharacterPreviewRoot`].
 #[derive(Component)]
@@ -52,12 +55,13 @@ pub struct CharacterPreviewLight;
 #[derive(Resource, Default)]
 struct PreviewSyncState {
 	key: String,
+	species: Option<ConceptSpecies>,
 	anim: Option<AnimRef>,
 }
 
 /// Menu preview vertical FOV; gameplay leaves its own hip / ADS FOV on the
 /// shared world camera.
-const PREVIEW_FOV: f32 = FRAC_PI_4;
+const PREVIEW_FOV: f32 = CameraFocus::BODY_PREVIEW_FOV;
 const ORBIT_YAW_SPEED: f32 = 2.4;
 const ORBIT_PITCH_SPEED: f32 = 1.6;
 /// Elevation cap so the orbit never reaches the `looking_at` up-vector pole.
@@ -82,6 +86,8 @@ impl PendingCameraFocus {
 		self.focus = Some(focus);
 		self.frame = None;
 		self.orbit = PreviewOrbit::default();
+		// Hull-fit body offsets are already in preview-root space.
+		self.world_space = focus.rig == FocusRig::Body && focus.socket == "root";
 	}
 
 	fn clear(&mut self) {
@@ -283,6 +289,9 @@ impl Plugin for CharacterPreviewPlugin {
 		if !app.is_plugin_added::<FirearmComponentsPlugin>() {
 			app.add_plugins(FirearmComponentsPlugin);
 		}
+		if !app.is_plugin_added::<GrenadeMaterialPlugin>() {
+			app.add_plugins(GrenadeMaterialPlugin);
+		}
 		add_firearm_components_host::<GeneratedFirearm>(app);
 		app.init_resource::<PreviewSyncState>()
 			.init_resource::<PendingCameraFocus>()
@@ -296,12 +305,15 @@ impl Plugin for CharacterPreviewPlugin {
 				Update,
 				(
 					sync_preview.after(SpinRevealSystems::Apply),
+					realize_preview_grenades.after(sync_preview),
 					stamp_preview_animation
 						.after(sync_preview)
 						.after(CharacterHostSystems::Membership)
 						.before(characters::CharacterMotionSystems::Anim),
 					queue_preview_camera_focus,
-					steer_preview_orbit.after(queue_preview_camera_focus),
+					steer_preview_orbit
+						.after(queue_preview_camera_focus)
+						.after(maybraid_controllers_core::PadDeliverySystems),
 				),
 			)
 			.add_systems(PostUpdate, apply_preview_camera_focus.after(TransformSystems::Propagate));
@@ -362,31 +374,13 @@ fn sync_preview(
 	}
 
 	if !spin_screens.is_empty() {
+		// Starter Kit paints the granted bag on the HUD. A live inspect
+		// mesh plus camera would stack on those tiles.
+		clear_preview(&mut commands, &mut sync, &mut pending, &roots);
 		if let Some(spin) = spin {
-			if spin.item.skill_map_spec().is_some() {
-				clear_preview(&mut commands, &mut sync, &mut pending, &roots);
-				sync.key = format!("spin-map:{:?}", spin.item);
-				return;
-			}
-			let key = format!("spin:{:?}", spin.item);
-			if sync.key == key && !roots.is_empty() {
-				return;
-			}
-			sync.key = key;
-			sync.anim = None;
-			for entity in &roots {
-				commands.entity(entity).despawn();
-			}
-			spawn_from_item(&mut commands, &spin.item);
-			let focus = match spin.item.firearm_mesh() {
-				Some(_) => spin_reveal_firearm_focus(),
-				None => spin.item.mesh().map_or(BODY_FOCUS, |mesh| spin_reveal_focus(mesh.kind())),
-			};
-			pending.set_focus(focus);
-			pending.frame = None;
-			pending.world_space = true;
-			return;
+			sync.key = format!("spin-gallery:{}", spin.items.len());
 		}
+		return;
 	}
 
 	if home.is_empty() && gallery.is_empty() {
@@ -428,16 +422,18 @@ fn respawn_from_menu(
 	if sync.key == key && !roots.is_empty() {
 		return;
 	}
+	let species = menu.species.value;
+	let reframe = force_focus || pending.focus.is_none() || sync.species != Some(species);
 	sync.key = key;
+	sync.species = Some(species);
 	sync.anim = Some(AnimRef::from(menu.animation()));
 	for entity in roots {
-		commands.entity(entity).despawn();
+		commands.entity(entity).try_despawn();
 	}
 	spawn_from_menu(commands, menu);
 	pending.frame = None;
-	pending.world_space = false;
-	if force_focus || pending.focus.is_none() {
-		pending.set_focus(default_body_focus(menu));
+	if reframe {
+		pending.set_focus(menu.body_preview_focus());
 	}
 }
 
@@ -448,9 +444,10 @@ fn clear_preview(
 	roots: &Query<Entity, With<CharacterPreviewRoot>>,
 ) {
 	for entity in roots {
-		commands.entity(entity).despawn();
+		commands.entity(entity).try_despawn();
 	}
 	sync.key.clear();
+	sync.species = None;
 	sync.anim = None;
 	pending.clear();
 }
@@ -470,11 +467,21 @@ pub(crate) fn spawn_firearm(
 	spawn_firearm_components(commands, &preview, transform, firearm_bounds(&preview))
 }
 
+/// Preview orb diameter. Held gameplay scale is 0.2; inspect needs to read
+/// in the right-hand pane without using the firearm camera distance.
+#[cfg(test)]
+const GRENADE_PREVIEW_SCALE: f32 = 0.7;
+
+#[cfg(test)]
 fn spawn_from_item(commands: &mut Commands, item: &InventoryItem) {
 	if let Some(spec) = item.firearm_spec() {
 		for entity in spawn_firearm(commands, spec, Transform::IDENTITY) {
 			commands.entity(entity).insert(CharacterPreviewRoot);
 		}
+		return;
+	}
+	if item.grenade_spec().is_some() {
+		spawn_grenade_preview(commands);
 		return;
 	}
 	let Some(mesh) = item.mesh() else {
@@ -490,6 +497,31 @@ fn spawn_from_item(commands: &mut Commands, item: &InventoryItem) {
 				.with_material(material.id),
 		},
 	);
+}
+
+#[cfg(test)]
+fn spawn_grenade_preview(commands: &mut Commands) {
+	commands.spawn((
+		Name::new("preview-grenade"),
+		CharacterPreviewRoot,
+		GrenadePreview,
+		Transform::from_scale(Vec3::splat(GRENADE_PREVIEW_SCALE)),
+		Visibility::default(),
+	));
+}
+
+fn realize_preview_grenades(
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<GrenadeMaterial>>,
+	pending: Query<Entity, (With<GrenadePreview>, Without<Mesh3d>)>,
+) {
+	for entity in &pending {
+		commands.entity(entity).insert((
+			Mesh3d(meshes.add(grenade_mesh())),
+			MeshMaterial3d(materials.add(grenade_material())),
+		));
+	}
 }
 
 /// Unskinned garment in bind pose. Camera framing is per clothing kind.
@@ -517,36 +549,9 @@ impl CharacterComponents for ClothingPreview {
 }
 
 fn spawn_from_menu(commands: &mut Commands, menu: &CharacterMenu) {
-	match menu.species.value {
-		ConceptSpecies::Braidman => spawn_clothed(commands, &menu.braidman_config().clothed()),
-		ConceptSpecies::Brenal => spawn_clothed(commands, &menu.brenal_config().clothed()),
-		ConceptSpecies::Caole => spawn_clothed(commands, &menu.caole_config().clothed()),
-		ConceptSpecies::Epiphant => spawn_clothed(commands, &menu.epiphant_config().clothed()),
-		ConceptSpecies::Hars => spawn_clothed(commands, &menu.hars_config().clothed()),
-		ConceptSpecies::Yilter => spawn_clothed(commands, &menu.ylter_config().clothed()),
-		ConceptSpecies::Sonyak => spawn_clothed(commands, &menu.sonyak_config().clothed()),
-		ConceptSpecies::Claber => spawn_clothed(commands, &menu.claber_config().clothed()),
-		ConceptSpecies::Croconot => spawn_clothed(commands, &menu.croconot_config().clothed()),
-		ConceptSpecies::Brodler => spawn_clothed(commands, &menu.brodler_config().clothed()),
-		ConceptSpecies::Mygr => spawn_clothed(commands, &menu.mygr_config().clothed()),
-		ConceptSpecies::Dui => spawn_clothed(commands, &menu.dui_config().clothed()),
-		ConceptSpecies::Lidder => spawn_clothed(commands, &menu.lidder_config().clothed()),
-		ConceptSpecies::Chupri => spawn_clothed(commands, &menu.chupri_config().clothed()),
-		ConceptSpecies::Brokker => spawn_clothed(commands, &menu.brokker_config().clothed()),
-		ConceptSpecies::Tipple => spawn_clothed(commands, &menu.tipple_config().clothed()),
-		ConceptSpecies::Topple => spawn_clothed(commands, &menu.topple_config().clothed()),
-		ConceptSpecies::Kispar => spawn_clothed(commands, &menu.kispar_config().clothed()),
-		ConceptSpecies::Tapp => spawn_clothed(commands, &menu.tapp_config().clothed()),
-		ConceptSpecies::Kaller => spawn_clothed(commands, &menu.kaller_config().clothed()),
-		ConceptSpecies::Kappler => spawn_clothed(commands, &menu.kappler_config().clothed()),
-		ConceptSpecies::Wumbus => spawn_clothed(commands, &menu.wumbus_config().clothed()),
-		ConceptSpecies::Lero => spawn_clothed(commands, &menu.lero_config().clothed()),
-		ConceptSpecies::Spibmom => spawn_clothed(commands, &menu.spibmom_config().clothed()),
-		ConceptSpecies::Grener => spawn_clothed(commands, &menu.grener_config().clothed()),
-		ConceptSpecies::Thumplus => spawn_clothed(commands, &menu.thumplus_config().clothed()),
-		ConceptSpecies::Mistler => spawn_clothed(commands, &menu.mistler_config().clothed()),
-		ConceptSpecies::Tuberwaber => spawn_clothed(commands, &menu.tuberwaber_config().clothed()),
-	}
+	characters::with_clothed_concept_recipe!(&menu.species_config(), recipe => {
+		spawn_clothed(commands, &recipe);
+	});
 }
 
 fn spawn_clothed<T>(commands: &mut Commands, character: &T)
@@ -607,7 +612,7 @@ fn stamp_preview_animation(
 				Err(_) => true,
 			};
 			if needs_clip {
-				commands.entity(member).insert(AnimRefRoot(desired));
+				commands.entity(member).try_insert(AnimRefRoot(desired));
 			}
 		}
 	}
@@ -629,10 +634,8 @@ fn queue_preview_camera_focus(
 }
 
 fn steer_preview_orbit(
-	time: Res<Time>,
 	return_to: Option<Res<CharacterEditorReturn>>,
-	config: Option<Res<VirtualPadConfig>>,
-	gamepads: Query<&Gamepad>,
+	input: Query<&menu_components::PrimaryMenuInput>,
 	mut pending: ResMut<PendingCameraFocus>,
 ) {
 	if pending.focus.is_none()
@@ -640,14 +643,14 @@ fn steer_preview_orbit(
 	{
 		return;
 	}
-	let deadzone = config.map_or(Deadzone(0.15), |config| config.stick_deadzone);
-	let stick = gamepads
-		.iter()
-		.map(|gamepad| GamepadAxes::look_stick(gamepad, deadzone))
-		.sum::<Vec2>()
-		.clamp_length_max(1.0);
+	let Some(frame) =
+		input.single().ok().and_then(menu_components::PrimaryMenuInput::current_frame)
+	else {
+		return;
+	};
+	let stick = frame.pad.look_throw;
 	if stick != Vec2::ZERO {
-		pending.orbit.steer(stick, time.delta_secs());
+		pending.orbit.steer(stick, frame.delta.as_secs_f32());
 	}
 }
 
@@ -661,6 +664,7 @@ fn apply_preview_camera_focus(
 	windows: Query<&Window, With<PrimaryWindow>>,
 	home: Query<(), With<HomeScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
+	character: Query<(), With<CharacterScreen>>,
 	weapons: Query<(), With<WeaponGalleryScreen>>,
 	firearm_previews: Query<(), (With<CharacterPreviewRoot>, With<FirearmRoot>)>,
 	scene: FocusRigScene,
@@ -716,13 +720,13 @@ fn apply_preview_camera_focus(
 			.map(|window| window.width() / window.height().max(1.0))
 			.unwrap_or(16.0 / 9.0);
 		offset_camera_into_display_pane(&mut transform, &projection, look_at, aspect);
+	} else if !character.is_empty() {
+		let (aspect, width) = windows.single().ok().map_or((16.0 / 9.0, 1920.0), |window| {
+			(window.width() / window.height().max(1.0), window.width().max(1.0))
+		});
+		offset_camera_for_character_panel(&mut transform, &projection, look_at, aspect, width);
 	}
 	sync_controller_from_transform(&mut controller, &transform);
-}
-
-fn default_body_focus(menu: &CharacterMenu) -> CameraFocus {
-	menu.camera_focus_for_event(MenuEvent::Cycle(CharacterField::Animation, 0))
-		.unwrap_or(BODY_FOCUS)
 }
 
 fn sync_controller_from_transform(controller: &mut CameraController, transform: &Transform) {
@@ -756,12 +760,80 @@ fn offset_camera_into_display_pane(
 	transform.translation -= *transform.up() * ndc_y * half_height;
 }
 
+/// Shift the framed body into the open preview left of the 480px HUD panel.
+fn offset_camera_for_character_panel(
+	transform: &mut Transform,
+	projection: &Projection,
+	look_at: Vec3,
+	aspect: f32,
+	window_width: f32,
+) {
+	let Projection::Perspective(perspective) = projection else {
+		return;
+	};
+	let depth = transform.translation.distance(look_at).max(0.1);
+	let half_height = (perspective.fov * 0.5).tan() * depth;
+	let half_width = half_height * aspect.max(0.1);
+	let visible = (window_width - CHARACTER_PANEL_WIDTH).max(1.0);
+	let pane_center = (visible * 0.5) / window_width.max(1.0);
+	let ndc_x = pane_center * 2.0 - 1.0;
+	transform.translation -= *transform.right() * ndc_x * half_width;
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use character_creation_menus::focus::{EYE_FOCUS, HEAD_ROOT_FOCUS};
+	use std::f32::consts::FRAC_PI_4;
+
+	use character_creation_menus::BODY_FOCUS;
+	use character_creation_menus::focus::{
+		EYE_FOCUS, HEAD_ROOT_FOCUS, spin_reveal_firearm_focus, spin_reveal_grenade_focus,
+	};
 
 	const EPS: f32 = 1e-4;
+
+	#[test]
+	fn primary_preview_orbit_ignores_other_gamepads_and_uses_its_rich_frame() -> anyhow::Result<()>
+	{
+		use bevy::ecs::system::RunSystemOnce;
+		use maybraid_virtual_pad_controller::{VirtualPad, VirtualPadEvent};
+		let mut world = World::new();
+		let source = world.spawn_empty().id();
+		let mut secondary = Gamepad::default();
+		secondary.analog_mut().set(GamepadAxis::RightStickX, 1.0);
+		world.spawn(secondary);
+		let mut pending = PendingCameraFocus::default();
+		pending.set_focus(BODY_FOCUS);
+		world.insert_resource(pending);
+		let root = world
+			.spawn(menu_components::PrimaryMenuInput {
+				source,
+				frame: Some(VirtualPadEvent {
+					source,
+					sequence: 1,
+					delta: std::time::Duration::from_secs_f32(0.5),
+					pad: VirtualPad::default(),
+				}),
+			})
+			.id();
+		world
+			.run_system_once(steer_preview_orbit)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.resource::<PendingCameraFocus>().orbit, PreviewOrbit::default());
+		if let Some(frame) = world
+			.get_mut::<menu_components::PrimaryMenuInput>(root)
+			.ok_or_else(|| anyhow::anyhow!("primary root"))?
+			.frame
+			.as_mut()
+		{
+			frame.pad.look_throw = Vec2::X;
+		}
+		world
+			.run_system_once(steer_preview_orbit)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_ne!(world.resource::<PendingCameraFocus>().orbit, PreviewOrbit::default());
+		Ok(())
+	}
 
 	#[test]
 	fn a_resting_orbit_keeps_the_framed_offset() {
@@ -867,8 +939,8 @@ mod tests {
 	}
 
 	#[test]
-	fn head_focus_waits_for_the_socket_and_ignores_the_clip(
-	) -> Result<(), Box<dyn std::error::Error>> {
+	fn head_focus_waits_for_the_socket_and_ignores_the_clip()
+	-> Result<(), Box<dyn std::error::Error>> {
 		let mut fixture = Fixture::new();
 		fixture.world.entity_mut(fixture.body).insert(ResolvedPoseApplied);
 		assert_eq!(fixture.resolve()?, Err(FocusWait::Attach(fixture.head)));
@@ -903,5 +975,75 @@ mod tests {
 		let camera = frame.look_delta + frame.camera_delta;
 		assert!(camera.abs_diff_eq(rotation * EYE_FOCUS.camera_offset, EPS));
 		assert!(frame.look_delta.abs_diff_eq(rotation * EYE_FOCUS.look_at_offset, EPS));
+	}
+
+	#[test]
+	fn grenade_preview_spawns_an_inspect_orb() {
+		let mut world = World::new();
+		spawn_from_item(&mut world.commands(), &InventoryItem::standard_grenade());
+		world.flush();
+		let count = world.query::<(&GrenadePreview, &CharacterPreviewRoot)>().iter(&world).count();
+		assert_eq!(count, 1);
+	}
+
+	#[test]
+	fn spin_reveal_does_not_keep_a_live_item_mesh() {
+		use bevy::ecs::system::RunSystemOnce;
+		use character_items::{ClothingMaterial, ClothingMesh};
+		use menu_screens::SpinRevealCurrent;
+
+		let mut world = World::new();
+		world.insert_resource(CharacterMenuState::default());
+		world.insert_resource(PreviewSyncState::default());
+		world.insert_resource(PendingCameraFocus {
+			focus: Some(BODY_FOCUS),
+			world_space: true,
+			..default()
+		});
+		world.spawn(SpinRevealScreen);
+		world.insert_resource(SpinRevealCurrent {
+			items: vec![InventoryItem::clothing(
+				ClothingMesh::Pants,
+				ClothingMaterial::Cloth,
+				ItemColor::Red,
+			)],
+			revealed: true,
+		});
+		let leftover = world.spawn(CharacterPreviewRoot).id();
+		world.run_system_once(sync_preview).expect("sync");
+		world.flush();
+		assert!(world.get_entity(leftover).is_err(), "leftover inspect mesh must despawn");
+		assert_eq!(world.query::<&CharacterPreviewRoot>().iter(&world).count(), 0);
+		assert!(world.resource::<PendingCameraFocus>().focus.is_none());
+	}
+
+	#[test]
+	fn grenade_inspect_is_closer_than_the_firearm_kit() {
+		let gun = spin_reveal_firearm_focus();
+		let charge = spin_reveal_grenade_focus();
+		assert!(charge.camera_offset.length() < gun.camera_offset.length());
+		assert!(GRENADE_PREVIEW_SCALE > 0.2);
+	}
+
+	#[test]
+	fn body_root_focus_is_applied_in_preview_root_space() {
+		let mut pending = PendingCameraFocus::default();
+		pending.set_focus(BODY_FOCUS);
+		assert!(pending.world_space);
+		pending.set_focus(HEAD_ROOT_FOCUS);
+		assert!(!pending.world_space);
+	}
+
+	#[test]
+	fn species_change_replaces_stale_body_focus() {
+		let braidman = CharacterMenu::default();
+		let mut spibmom = CharacterMenu::default();
+		assert!(spibmom.apply(MenuEvent::SetSpecies(ConceptSpecies::Spibmom)));
+		let mut pending = PendingCameraFocus::default();
+		pending.set_focus(braidman.body_preview_focus());
+		pending.set_focus(spibmom.body_preview_focus());
+		assert_eq!(pending.focus, Some(spibmom.body_preview_focus()));
+		assert_ne!(pending.focus, Some(braidman.body_preview_focus()));
+		assert!(pending.world_space);
 	}
 }

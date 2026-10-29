@@ -34,23 +34,6 @@
 
 use bevy::prelude::*;
 use camera_controls::look::CameraLookEnabled;
-use character_creation_menus::characters::brenal::BODY_FOCUS as BRENAL_BODY_FOCUS;
-use character_creation_menus::characters::caole::BODY_FOCUS as CAOLE_BODY_FOCUS;
-use character_creation_menus::characters::claber::BODY_FOCUS as CLABER_BODY_FOCUS;
-use character_creation_menus::characters::croconot::BODY_FOCUS as CROCONOT_BODY_FOCUS;
-use character_creation_menus::characters::epiphant::BODY_FOCUS as EPIPHANT_BODY_FOCUS;
-use character_creation_menus::characters::hars::BODY_FOCUS as HARS_BODY_FOCUS;
-use character_creation_menus::characters::sonyak::BODY_FOCUS as SONYAK_BODY_FOCUS;
-use character_creation_menus::characters::tuberwaber::BODY_FOCUS as TUBERWABER_BODY_FOCUS;
-use character_creation_menus::characters::ylter::BODY_FOCUS as YILTER_BODY_FOCUS;
-use character_creation_menus::focus::CHUPRI_BODY_FOCUS;
-use character_creation_menus::focus::GRENER_BODY_FOCUS;
-use character_creation_menus::focus::MISTLER_BODY_FOCUS;
-use character_creation_menus::focus::SMALL_BIRD_BODY_FOCUS;
-use character_creation_menus::focus::SPIBMOM_BODY_FOCUS;
-use character_creation_menus::focus::THUMPLUS_BODY_FOCUS;
-use character_creation_menus::focus::TIPPLE_BODY_FOCUS;
-use character_creation_menus::BODY_FOCUS;
 use character_ui_menu::{CameraFocus, FocusRig};
 use characters::{SocketRefApplied, SocketRefRoot};
 use characters_playground::CameraController;
@@ -106,29 +89,7 @@ pub fn queue_species_default_camera_focus(
 }
 
 pub fn default_focus_target(config: &ConceptPreviewConfig) -> CameraFocus {
-	match config.species() {
-		crate::preview::ConceptSpecies::Brenal => BRENAL_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Caole => CAOLE_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Epiphant => EPIPHANT_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Hars => HARS_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Yilter => YILTER_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Sonyak => SONYAK_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Claber => CLABER_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Croconot => CROCONOT_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Spibmom => SPIBMOM_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Chupri => CHUPRI_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Tipple => TIPPLE_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Topple
-		| crate::preview::ConceptSpecies::Kispar
-		| crate::preview::ConceptSpecies::Tapp
-		| crate::preview::ConceptSpecies::Kaller
-		| crate::preview::ConceptSpecies::Kappler => SMALL_BIRD_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Grener => GRENER_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Thumplus => THUMPLUS_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Mistler => MISTLER_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Tuberwaber => TUBERWABER_BODY_FOCUS,
-		_ => BODY_FOCUS,
-	}
+	config.body_preview_focus()
 }
 
 /// Shadow rig data needed to resolve a focus target.
@@ -149,12 +110,74 @@ type ShadowRigQuery<'w, 's> = Query<
 pub fn apply_camera_suggestion(
 	time: Res<Time>,
 	look_enabled: Option<Res<CameraLookEnabled>>,
+	capture_locked: Option<Res<crate::preview_capture::CaptureCameraLocked>>,
+	capture_settings: Option<Res<crate::preview_capture::PreviewCaptureSettings>>,
+	ground_contact: Option<Res<crate::preview_capture::CaptureGroundContact>>,
 	mut pending: ResMut<PendingCameraFocus>,
 	shadow_rigs: ShadowRigQuery,
 	bone_globals: Query<&GlobalTransform>,
-	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
+	preview_meshes: Query<
+		(
+			&bevy::prelude::Mesh3d,
+			&GlobalTransform,
+			Option<&Visibility>,
+			Option<&characters::CharacterPart>,
+		),
+		(
+			With<characters::CharacterPart>,
+			Without<crate::focus_reference::FocusReferenceRig>,
+			Without<crate::preview_capture::CaptureGroundPlane>,
+		),
+	>,
+	mesh_assets: Res<Assets<Mesh>>,
+	mut cameras: Query<(&mut Transform, &mut CameraController, &Projection), With<Camera3d>>,
 	mut last_wait_log: Local<Option<String>>,
 ) {
+	if capture_locked.is_some() {
+		if let Some(settings) = capture_settings {
+			let aspect = cameras.iter().next().map_or(16.0 / 9.0, |(_, _, projection)| {
+				match projection {
+					Projection::Perspective(p) => p.aspect_ratio,
+					_ => 16.0 / 9.0,
+				}
+			});
+			let fov_y = cameras.iter().next().map_or(std::f32::consts::FRAC_PI_4, |(_, _, projection)| {
+				match projection {
+					Projection::Perspective(p) => p.fov,
+					_ => std::f32::consts::FRAC_PI_4,
+				}
+			});
+			let ground_y = ground_contact
+				.and_then(|contact| contact.y)
+				.unwrap_or_else(|| {
+					crate::preview_capture::capture_ground_anchor_y(settings.encounter_scale)
+				});
+			let (eye, look_at) = crate::preview_capture::union_preview_mesh_bounds(
+				mesh_assets.as_ref(),
+				preview_meshes.iter(),
+			)
+				.map(|bounds| {
+					crate::preview_capture::capture_camera_frame_for_bounds(
+						bounds,
+						aspect,
+						fov_y,
+						ground_y,
+					)
+				})
+				.unwrap_or_else(|| {
+					crate::preview_capture::capture_camera_frame_fallback(settings.encounter_scale)
+				});
+			for (mut transform, mut controller, _) in &mut cameras {
+				characters_playground::camera::orient_camera(
+					&mut transform,
+					&mut controller,
+					eye,
+					look_at,
+				);
+			}
+		}
+		return;
+	}
 	if look_enabled.is_none_or(|enabled| enabled.0) {
 		pending.focus = None;
 		pending.focus_trigger = None;
@@ -185,7 +208,7 @@ pub fn apply_camera_suggestion(
 	}
 
 	let target = pending.resolved_target.unwrap();
-	let Ok((mut transform, mut controller)) = cameras.single_mut() else {
+	let Ok((mut transform, mut controller, _)) = cameras.single_mut() else {
 		return;
 	};
 

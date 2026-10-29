@@ -5,9 +5,10 @@ use std::sync::Arc;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use clap::Args;
-#[cfg(test)]
-use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
+#[cfg(test)]
+use lod::scene::LodScene;
+use lod::scene::LodSceneLevel;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
@@ -28,7 +29,7 @@ use crate::grove::{
 	canopy_ball_material_from_palette, canopy_proxy_site, frond_material_from_palette,
 	grove_structural_footprint, nest_flattened_plant_chunk, placement_noise, remixed_sbs_plant,
 	stick_material_from_palette, unit_build_noise, CanopyProxySite, FlatTerrainSample,
-	GroveCellVariant, GroveExtent, GrovePreviewParams,
+	FlattenedPlantList, GroveCellVariant, GroveExtent, GrovePreviewParams,
 };
 
 #[derive(Clone, Debug, Args)]
@@ -170,37 +171,17 @@ impl Storytellers {
 		Self { plants, structural_center, footprint_radius, extent: *extent }
 	}
 
-	fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
-		if self.plants.is_empty() {
-			return Vec::new();
-		}
-		let n = self.plants.len();
-		let plants = Arc::clone(&self.plants);
-		let prev = *lod_ref.previous_transform;
-		let curr = *lod_ref.current_transform;
-		let bounds = *lod_ref.bounds;
-		let entity = lod_ref.entity;
-		let mut index = 0usize;
-		vec![SceneChunk::lazy(n as u32, n, move || {
-			if index >= plants.len() {
-				return None;
-			}
-			let plant = &plants[index];
-			index += 1;
-			let plant_lod = LodRef {
-				entity,
-				previous_transform: &prev,
-				current_transform: &curr,
-				bounds: &bounds,
-			};
-			Some(match &plant.kind {
+	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<SceneChunk> {
+		FlattenedPlantList::capture(&self.plants, lod_ref).nest_chunks(move |plant, plant_lod| {
+			match &plant.kind {
 				StorytellersKind::Oak(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
 					plant.placement,
 					&plant.stick_material,
 					&plant.ball_material,
 					&plant.frond_material,
-					&plant_lod,
+					plant_lod,
+					level,
 				),
 				StorytellersKind::Storybook(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -208,7 +189,8 @@ impl Storytellers {
 					&plant.stick_material,
 					&plant.ball_material,
 					&plant.frond_material,
-					&plant_lod,
+					plant_lod,
+					level,
 				),
 				StorytellersKind::Penmarch(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -216,7 +198,8 @@ impl Storytellers {
 					&plant.stick_material,
 					&plant.ball_material,
 					&plant.frond_material,
-					&plant_lod,
+					plant_lod,
+					level,
 				),
 				StorytellersKind::Kamakura(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -224,10 +207,11 @@ impl Storytellers {
 					&plant.stick_material,
 					&plant.ball_material,
 					&plant.frond_material,
-					&plant_lod,
+					plant_lod,
+					level,
 				),
-			})
-		})]
+			}
+		})
 	}
 
 	fn canopy_sites(&self) -> Vec<CanopyProxySite> {

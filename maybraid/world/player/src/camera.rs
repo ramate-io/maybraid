@@ -1,10 +1,11 @@
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
-use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore};
+use durham::{BaseTerrainNoise, DurhamSurface, TerrainCellLayout};
 use game_commands::command::TextEntryFocus;
 use lod::LodViewer;
-use maybraid_input::{PadButton, VirtualPad};
+use maybraid_character_controller::RoutedActorControl;
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 use std::f32::consts::PI;
 
 use crate::player::PlaygroundMode;
@@ -77,16 +78,10 @@ pub fn refocus_camera_on_elevation(
 	controller.pitch = pitch;
 }
 
-/// Composed height when the cell is stored; otherwise the holding altitude.
-pub fn surface_or_hold(
-	layout: &TerrainCellLayout,
-	store: &TerrainEntryStore,
-	base: &BaseTerrainNoise,
-) -> f32 {
-	let center = layout.region_center_xz();
-	store
-		.composed_height_at(layout, center.x, center.z)
-		.unwrap_or_else(|| crate::player::holding_elevation(base, center.x, center.z))
+/// Composed height at the layout's center once its cell is published;
+/// otherwise the holding altitude.
+pub fn surface_or_hold(surface: &DurhamSurface) -> f32 {
+	crate::player::surface_or_hold_at(surface, surface.layout().region_center_xz().xz())
 }
 
 fn camera_look_at(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
@@ -127,58 +122,66 @@ pub fn release_modifiers_on_focus_change(
 	}
 }
 
-fn command_held(keyboard: &ButtonInput<KeyCode>) -> bool {
-	keyboard.pressed(KeyCode::SuperLeft) || keyboard.pressed(KeyCode::SuperRight)
-}
-
 pub fn camera_controller(
-	keyboard_input: Res<ButtonInput<KeyCode>>,
-	pad: Res<VirtualPad>,
-	time: Res<Time>,
-	text_focus: Res<TextEntryFocus>,
-	mode: Res<PlaygroundMode>,
-	mut query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+	players: Query<&RoutedActorControl, With<crate::player::Player>>,
+	query: Query<Entity, (With<Camera3d>, With<CameraController>)>,
+	mut commands: Commands,
 ) {
-	let Ok((mut transform, mut controller)) = query.single_mut() else {
+	let Ok(camera) = query.single() else {
 		return;
 	};
-
-	// Screenshot selection drags the mouse; Command chords are not look/fly.
-	if command_held(&keyboard_input) {
+	let Some(input) = primary.as_deref().and_then(|primary| {
+		players.iter().find_map(|control| {
+			(control.source().and_then(|source| source.entity()) == Some(primary.0))
+				.then(|| control.get().copied())
+				.flatten()
+		})
+	}) else {
 		return;
-	}
-
-	controller.yaw -= pad.look_stick.x * controller.sensitivity;
-	controller.pitch -= pad.look_stick.y * controller.sensitivity;
-	controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
-
-	if *mode == PlaygroundMode::Character {
-		return;
-	}
-
-	let yaw_quat = Quat::from_axis_angle(Vec3::Y, controller.yaw);
-	let pitch_quat = Quat::from_axis_angle(Vec3::X, controller.pitch);
-	transform.rotation = yaw_quat * pitch_quat;
-
-	if text_focus.0 {
-		return;
-	}
-
-	let mut movement = Vec3::ZERO;
-	let forward = transform.forward();
-	let right = transform.right();
-	let wish = pad.move_stick;
-	movement += *forward * wish.y;
-	movement += *right * wish.x;
-	if pad.pressed(PadButton::A) {
-		movement += Vec3::Y;
-	}
-	if keyboard_input.pressed(KeyCode::ShiftLeft) || keyboard_input.pressed(KeyCode::ShiftRight) {
-		movement -= Vec3::Y;
-	}
-
-	if movement.length_squared() > 0.0 {
-		movement = movement.normalize() * controller.speed * time.delta_secs();
-		transform.translation += movement;
-	}
+	};
+	input.map(|sample| (camera, sample)).queue(&mut commands, |world, input| {
+		let (camera, sample) = input.into_payload();
+		// Screenshot selection drags the mouse; Command chords are not look/fly.
+		if sample.command_held() {
+			return;
+		}
+		let mode = world.get_resource::<PlaygroundMode>().copied();
+		let text_focus = world.get_resource::<TextEntryFocus>().is_some_and(|focus| focus.0);
+		let Ok(mut camera) = world.get_entity_mut(camera) else {
+			return;
+		};
+		let Some((yaw, pitch, speed)) =
+			camera.get_mut::<CameraController>().map(|mut controller| {
+				controller.yaw -= sample.look_stick().x * controller.sensitivity;
+				controller.pitch -= sample.look_stick().y * controller.sensitivity;
+				controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
+				(controller.yaw, controller.pitch, controller.speed)
+			})
+		else {
+			return;
+		};
+		if mode != Some(PlaygroundMode::Free) {
+			return;
+		}
+		let Some(mut transform) = camera.get_mut::<Transform>() else {
+			return;
+		};
+		transform.rotation =
+			Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_axis_angle(Vec3::X, pitch);
+		if text_focus {
+			return;
+		}
+		let mut movement = *transform.forward() * sample.move_stick().y
+			+ *transform.right() * sample.move_stick().x;
+		if sample.a().pressed() {
+			movement += Vec3::Y;
+		}
+		if sample.shift_held() {
+			movement -= Vec3::Y;
+		}
+		if movement.length_squared() > 0.0 {
+			transform.translation += movement.normalize() * speed * sample.delta().as_secs_f32();
+		}
+	});
 }

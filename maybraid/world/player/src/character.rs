@@ -15,7 +15,7 @@ use characters::{
 		tipple::TippleConfig, topple::ToppleConfig, tuberwaber::TuberwaberConfig,
 		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
-	AnimClip, AnimId, AnimRef, AnimRefRoot, CharacterAppearance, CharacterHeading,
+	AnimClip, AnimId, AnimMailbox, AnimRef, AnimRefRoot, CharacterAppearance, CharacterHeading,
 	CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot,
 	RigSkeletonKind,
 };
@@ -211,7 +211,7 @@ pub(crate) fn drive_player_locomotion(
 		(With<PlayerVisual>, With<CharacterRoot>),
 	>,
 	rigs: Query<&CharacterRig>,
-	anims: Query<&AnimRefRoot>,
+	anims: Query<(&AnimRefRoot, Option<&AnimMailbox>)>,
 ) {
 	if !motor.0 {
 		return;
@@ -225,7 +225,9 @@ pub(crate) fn drive_player_locomotion(
 
 	let ground_normal = grounded.then(|| walkable.map(|ground| ground.normal)).flatten();
 	let speed = locomotion_speed(velocity, ground_normal);
-	heading.turn_toward(&mut visual, wish.0, time.delta_secs());
+	if heading.would_turn_toward(&visual, wish.0) {
+		heading.turn_toward(&mut visual, wish.0, time.delta_secs());
+	}
 
 	for member in members.iter() {
 		let Ok(rig) = rigs.get(member) else {
@@ -235,10 +237,17 @@ pub(crate) fn drive_player_locomotion(
 			continue;
 		}
 		let current = anims.get(member).ok();
-		let clip =
-			locomotion_clip(rig.skeleton, jumping, speed, current.map(|root| root.0.clip.id()));
+		let clip = locomotion_clip(
+			rig.skeleton,
+			jumping,
+			grounded,
+			speed,
+			current.map(|(root, mailbox)| {
+				(root.0.clip.id(), mailbox.map_or(0.0, AnimMailbox::clip_progress))
+			}),
+		);
 		let desired = AnimRef::new(clip);
-		let needs = current.is_none_or(|root| root.0 != desired);
+		let needs = current.is_none_or(|(root, _)| root.0 != desired);
 		if needs {
 			commands.entity(member).insert(AnimRefRoot(desired));
 		}
@@ -257,10 +266,11 @@ fn locomotion_speed(velocity: &LinearVelocity, ground_normal: Option<Vec3>) -> f
 fn locomotion_clip(
 	skeleton: RigSkeletonKind,
 	jumping: bool,
+	grounded: bool,
 	speed: f32,
-	current: Option<AnimId>,
+	current: Option<(AnimId, f32)>,
 ) -> AnimClip {
-	let was_running = current.is_some_and(|id| {
+	let was_running = current.is_some_and(|(id, _)| {
 		matches!(id, AnimId::Run | AnimId::Gallop | AnimId::DorsoventralUndulation)
 	});
 	let running = speed > if was_running { RUN_EXIT_SPEED } else { RUN_SPEED };
@@ -285,6 +295,10 @@ fn locomotion_clip(
 				AnimClip::gallop()
 			} else if speed > WALK_SPEED {
 				AnimClip::quadruped_run()
+			} else if grounded
+				&& current.is_some_and(|(id, progress)| id.needs_quadruped_run_stop(progress))
+			{
+				AnimClip::quadruped_run_stop()
 			} else {
 				AnimClip::still()
 			}
@@ -386,17 +400,36 @@ mod tests {
 		let run = locomotion_clip(
 			RigSkeletonKind::Humanoid,
 			false,
+			true,
 			RUN_EXIT_SPEED + 0.1,
-			Some(AnimId::Run),
+			Some((AnimId::Run, 0.4)),
 		);
 		let walk = locomotion_clip(
 			RigSkeletonKind::Humanoid,
 			false,
+			true,
 			RUN_EXIT_SPEED + 0.1,
-			Some(AnimId::Walk),
+			Some((AnimId::Walk, 0.4)),
 		);
 		assert_eq!(run.id(), AnimId::Run);
 		assert_eq!(walk.id(), AnimId::Walk);
+	}
+
+	#[test]
+	fn quadruped_stop_respects_grounding_and_current_phase() {
+		let choose = |grounded, speed, current| {
+			locomotion_clip(RigSkeletonKind::Quadruped, false, grounded, speed, current).id()
+		};
+		assert_eq!(choose(true, 0.0, Some((AnimId::QuadrupedRun, 0.37))), AnimId::QuadrupedRunStop);
+		assert_eq!(choose(false, 0.0, Some((AnimId::QuadrupedRun, 0.37))), AnimId::Still);
+		assert_eq!(choose(true, 0.0, Some((AnimId::Gallop, 0.37))), AnimId::Still);
+		assert_eq!(
+			choose(true, 0.0, Some((AnimId::QuadrupedRunStop, 0.8))),
+			AnimId::QuadrupedRunStop
+		);
+		assert_eq!(choose(true, 0.0, Some((AnimId::QuadrupedRunStop, 1.0))), AnimId::Still);
+		assert_eq!(choose(true, 3.0, Some((AnimId::QuadrupedRunStop, 0.5))), AnimId::QuadrupedRun);
+		assert_eq!(choose(true, 6.0, Some((AnimId::QuadrupedRunStop, 0.5))), AnimId::Gallop);
 	}
 
 	#[test]

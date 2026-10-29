@@ -7,6 +7,8 @@
 
 use character_rigs::Side;
 
+use crate::animations::{burst_envelope, DEFAULT_BURST_EDGE};
+
 /// Golden-ratio odd constant; same mix family as POI discovery.
 const PHASE_GOLDEN: u64 = 0x9E37_79B9_7F4A_7C15;
 
@@ -15,7 +17,7 @@ const DEFAULT_ARM_HANG: f32 = 1.2;
 const DEFAULT_ELBOW_HANG: f32 = 0.32;
 const DEFAULT_ARM_SWAY: f32 = 0.06;
 const DEFAULT_NECK_ROLL: f32 = 0.2;
-const DEFAULT_HIP_SHIFT: f32 = 0.025;
+const DEFAULT_HIP_SHIFT: f32 = 0.032;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Idle {
@@ -48,7 +50,9 @@ impl Idle {
 	pub const ARM_FREQ: f32 = 1.0;
 	pub const NECK_YAW_FREQ: f32 = 0.35;
 	pub const NECK_PITCH_FREQ: f32 = 0.22;
-	pub const HIP_FREQ: f32 = 0.8;
+	pub const HIP_FREQ: f32 = 1.0;
+	/// Quarter-cycle lead puts the hip-shift peak when arm sway crosses neutral.
+	pub const HIP_WEIGHT_PHASE: f32 = -0.25;
 	/// Quiet time between scratches, in progress units (~16 s at idle speed).
 	pub const SCRATCH_PERIOD: f32 = 3.2;
 	/// Scratch burst length, in progress units (~2 s at idle speed).
@@ -73,7 +77,7 @@ impl Idle {
 		if t >= Self::SCRATCH_DURATION {
 			return 0.0;
 		}
-		burst_envelope(t / Self::SCRATCH_DURATION)
+		burst_envelope(t / Self::SCRATCH_DURATION, DEFAULT_BURST_EDGE)
 	}
 
 	/// Alternate hands each period so a long idle is not always the same arm.
@@ -85,22 +89,6 @@ impl Idle {
 			Side::Left
 		}
 	}
-}
-
-fn burst_envelope(u: f32) -> f32 {
-	let edge = 0.22;
-	if u < edge {
-		smoothstep(u / edge)
-	} else if u > 1.0 - edge {
-		smoothstep((1.0 - u) / edge)
-	} else {
-		1.0
-	}
-}
-
-fn smoothstep(t: f32) -> f32 {
-	let t = t.clamp(0.0, 1.0);
-	t * t * (3.0 - 2.0 * t)
 }
 
 #[cfg(test)]

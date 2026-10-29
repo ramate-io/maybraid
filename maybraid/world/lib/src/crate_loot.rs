@@ -7,10 +7,12 @@ use std::collections::HashMap;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use character_items::{random_starter_firearms, Inventory, ItemRng};
+use character_items::{Inventory, ItemRng};
 use furniture_assemblies::{FurnitureKitPart, PartKind};
 use lod::gen::Id;
-use maputo::PresentedFurnitureCellId;
+use lod::hcsg::HcsgNode;
+
+use crate::WorldFurnished;
 
 use crate::stash::{spawn_world_stash, StashPolicy, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS};
 
@@ -64,7 +66,7 @@ pub(crate) struct ClosedCrateQuery<'w, 's> {
 	>,
 	parts: Query<'w, 's, (Entity, &'static FurnitureKitPart, &'static GlobalTransform)>,
 	child_of: Query<'w, 's, &'static ChildOf>,
-	hosts: Query<'w, 's, &'static PresentedFurnitureCellId>,
+	hosts: Query<'w, 's, &'static HcsgNode<WorldFurnished>>,
 }
 
 impl ClosedCrateQuery<'_, '_> {
@@ -161,10 +163,11 @@ fn roll_crate_bag(finish_seed: u64) -> Inventory {
 	}
 	let mut rng = ItemRng::from_seed(finish_seed);
 	let mut bag = Inventory {
-		items: random_starter_firearms(&mut rng, 1),
+		items: rng.random_starter_firearms(1),
 		clothing: Vec::new(),
 		weapons: Vec::new(),
 		skills: Vec::new(),
+		tanzes: Vec::new(),
 	};
 	// Queue the firearm so the ground pile renders. Claim absorb ignores the queue.
 	let _ = bag.toggle(0);
@@ -198,7 +201,7 @@ pub(crate) fn open_nearest_crate(
 	>,
 	parts: &Query<(Entity, &FurnitureKitPart, &GlobalTransform)>,
 	child_of: &Query<&ChildOf>,
-	hosts: &Query<&PresentedFurnitureCellId>,
+	hosts: &Query<&HcsgNode<WorldFurnished>>,
 ) {
 	let Some(hit) = nearest_closed_crate(origin, crates, lids, parts, child_of, hosts) else {
 		return;
@@ -246,7 +249,7 @@ pub(crate) fn sync_crate_lid_poses(
 	assets: Option<Res<AssetServer>>,
 	mut crates: ResMut<CrateLoot>,
 	child_of: Query<&ChildOf>,
-	hosts: Query<&PresentedFurnitureCellId>,
+	hosts: Query<&HcsgNode<WorldFurnished>>,
 	parts: Query<(Entity, &FurnitureKitPart, &GlobalTransform)>,
 	mut lids: Query<(
 		Entity,
@@ -310,7 +313,7 @@ pub(crate) fn nearest_closed_crate_floor(
 	>,
 	parts: &Query<(Entity, &FurnitureKitPart, &GlobalTransform)>,
 	child_of: &Query<&ChildOf>,
-	hosts: &Query<&PresentedFurnitureCellId>,
+	hosts: &Query<&HcsgNode<WorldFurnished>>,
 ) -> Option<Vec3> {
 	nearest_closed_crate(origin, crates, lids, parts, child_of, hosts).map(|hit| hit.floor)
 }
@@ -324,7 +327,7 @@ fn nearest_closed_crate(
 	>,
 	parts: &Query<(Entity, &FurnitureKitPart, &GlobalTransform)>,
 	child_of: &Query<&ChildOf>,
-	hosts: &Query<&PresentedFurnitureCellId>,
+	hosts: &Query<&HcsgNode<WorldFurnished>>,
 ) -> Option<ClosedCrateHit> {
 	let mut best: Option<(ClosedCrateHit, f32)> = None;
 	for (entity, part, global) in lids {
@@ -360,7 +363,7 @@ fn trunk_floor_y(
 	key: CrateKey,
 	parts: &Query<(Entity, &FurnitureKitPart, &GlobalTransform)>,
 	child_of: &Query<&ChildOf>,
-	hosts: &Query<&PresentedFurnitureCellId>,
+	hosts: &Query<&HcsgNode<WorldFurnished>>,
 ) -> Option<f32> {
 	parts.iter().find_map(|(entity, part, global)| {
 		if part.kind != PartKind::ChestTrunk
@@ -409,17 +412,32 @@ fn apply_pose(transform: &mut Transform, want: Transform) {
 fn presented_cell_id(
 	start: Entity,
 	child_of: &Query<&ChildOf>,
-	hosts: &Query<&PresentedFurnitureCellId>,
+	hosts: &Query<&HcsgNode<WorldFurnished>>,
 ) -> Option<Id> {
 	let mut current = Some(start);
 	for _ in 0..24 {
 		let entity = current?;
-		if let Ok(id) = hosts.get(entity) {
-			return Some(id.0);
+		if let Ok(node) = hosts.get(entity) {
+			return Some(node.id);
 		}
 		current = child_of.get(entity).ok().map(|child| child.parent());
 	}
 	None
+}
+
+#[cfg(test)]
+pub(crate) fn spawn_furniture_host(world: &mut World, id: Id) -> Entity {
+	use std::sync::Arc;
+
+	use lod::gen::Version;
+	use maputo::FurnitureCellExtent;
+
+	let extent = FurnitureCellExtent::from_id(id)
+		.unwrap_or_else(|| FurnitureCellExtent::from_cell_index(0, 0));
+	let (value, bounds) = WorldFurnished::empty_host(extent);
+	world
+		.spawn(HcsgNode { id, version: Version(1), bounds, value: Arc::new(value) })
+		.id()
 }
 
 #[cfg(test)]
@@ -428,11 +446,14 @@ mod tests {
 	use crate::stash::WorldStash;
 	use bevy::ecs::system::RunSystemOnce;
 	use character_inventory_user::InventoryUser;
-	use maybraid_character_controller::CharacterIntent;
+	use maybraid_character_controller::{ActorIntentEvent, CharacterIntent};
+	use maybraid_controllers_core::{ActorTarget, InputSource, Routed};
 	use std::time::Duration;
 	use world_player::Player as VegetationPlayer;
 
 	use crate::stash::claim_nearby_stashes;
+	#[derive(Resource)]
+	struct StashObserverInstalled;
 
 	fn lid_bundle(seed: u64, at: Vec3) -> impl Bundle {
 		let transform = Transform::from_translation(at);
@@ -445,7 +466,7 @@ mod tests {
 	}
 
 	fn spawn_crate(world: &mut World, seed: u64, at: Vec3) -> Entity {
-		let host = world.spawn(PresentedFurnitureCellId(Id::Universal)).id();
+		let host = spawn_furniture_host(world, Id::Universal);
 		world.spawn((lid_bundle(seed, at), ChildOf(host))).id()
 	}
 
@@ -461,19 +482,28 @@ mod tests {
 	}
 
 	fn press_x(world: &mut World) -> anyhow::Result<()> {
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::StartInteraction);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(claim_nearby_stashes)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let actor = world
+			.query_filtered::<Entity, With<VegetationPlayer>>()
+			.iter(world)
+			.next()
+			.ok_or_else(|| anyhow::anyhow!("player"))?;
+		if !world.contains_resource::<StashObserverInstalled>() {
+			world.add_observer(claim_nearby_stashes);
+			world.insert_resource(StashObserverInstalled);
+		}
+		world.trigger(ActorIntentEvent {
+			entity: actor,
+			input: Routed::to_actor(
+				InputSource::virtual_pad(Entity::from_bits(999)),
+				ActorTarget::new(actor),
+				CharacterIntent::StartInteraction,
+			),
+		});
+		world.flush();
 		Ok(())
 	}
 
 	fn ready(world: &mut World) {
-		world.init_resource::<Messages<CharacterIntent>>();
 		world.init_resource::<CrateLoot>();
 		world.init_resource::<Time>();
 	}

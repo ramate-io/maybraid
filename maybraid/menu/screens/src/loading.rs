@@ -1,18 +1,19 @@
 //! Centered loading page: spinning mark, bar, and explainer.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::{Scene, bsn};
 use maybraid_menu_controller::MenuController;
 use menu_components::{
-	set_loading_explainer, set_loading_progress, LoadingBarFill, LoadingExplainer, LoadingStack,
-	MenuComponentsPlugin,
+	LoadingBarFill, LoadingExplainer, LoadingStack, MenuComponentsPlugin, set_loading_explainer,
+	set_loading_progress,
 };
 
-use crate::show::take_menu_show_request;
 use crate::MenuScreen;
+use crate::show::{MenuScreens, MenuShowRequest, add_menu_show_systems};
 
 /// Queue a loading-screen spawn (despawns any existing menu screen first).
 #[derive(Component, Debug, Clone, Copy)]
+#[require(MenuShowRequest = MenuShowRequest::next())]
 pub struct RequestShowLoading;
 
 /// Incoming fill, 0..=1. Applied to the visible [`LoadingScreen`].
@@ -34,7 +35,7 @@ impl LoadingScreen {
 		bsn! {
 			LoadingScreen
 			MenuScreen
-			MenuController
+			MenuController::default()
 			Node {
 				width: percent(100),
 				height: percent(100),
@@ -75,19 +76,20 @@ impl Plugin for LoadingScreenPlugin {
 			.add_message::<LoadingExplainerText>()
 			.add_systems(
 				Update,
-				(apply_show_loading, apply_loading_progress, apply_loading_explainer)
+				(apply_loading_progress, apply_loading_explainer)
 					.chain()
 					.in_set(LoadingScreenSystems::Apply),
 			);
+		add_menu_show_systems(app, apply_show_loading);
 	}
 }
 
 fn apply_show_loading(
 	mut commands: Commands,
-	requests: Query<Entity, With<RequestShowLoading>>,
-	existing: Query<Entity, With<MenuScreen>>,
+	requests: Query<(), With<RequestShowLoading>>,
+	screens: MenuScreens,
 ) {
-	if !take_menu_show_request(&mut commands, &requests, &existing) {
+	if screens.take(&mut commands, &requests).is_none() {
 		return;
 	}
 	commands.spawn_scene(LoadingScreen::scene(0.0, "Loading…"));

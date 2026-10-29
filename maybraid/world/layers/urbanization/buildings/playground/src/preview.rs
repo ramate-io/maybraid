@@ -48,7 +48,7 @@ use buildings::{
 	TrazaloidSlab, Tube, TubeCrossSectionNode, TubeFaces, WellAabb, WellSide,
 	DEFAULT_PANEL_THICKNESS,
 };
-use lod::gen::LodScene;
+use lod::scene::LodScene;
 use lod::{point_bounds, LodNode, LodNodeBounds, LodNodePose, LodRef, LodViewer};
 use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
 use urbanization_developments::MixedUseLesHallesDevelopment;
@@ -1623,7 +1623,7 @@ impl CachedPreview {
 	}
 
 	fn label_nodes(&self) -> Vec<LabelNode> {
-		use lod::gen::LodSceneLevel;
+		use lod::scene::LodSceneLevel;
 		if let Some(stall) = self.commercial_stall.as_ref() {
 			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
@@ -1917,7 +1917,7 @@ impl CachedPreview {
 fn gallery_example_labels<T: BuildingComponents>(
 	cells: &[GalleryExampleCell<T>],
 ) -> Option<Vec<LabelNode>> {
-	use lod::gen::LodSceneLevel;
+	use lod::scene::LodSceneLevel;
 	if cells.is_empty() {
 		return None;
 	}
@@ -2101,7 +2101,7 @@ fn build_livable_quarters_examples<T, P>(
 	label: &str,
 	specs: &[LivableQuartersExampleSpec],
 	cols: usize,
-	params: impl Fn(f32, f32) -> P,
+	params: impl Fn(usize, f32, f32) -> P,
 	fit: impl Fn(&Confines, NoiseParams, P) -> Result<(T, FillableRegions), FitError>,
 ) -> (Vec<GalleryExampleCell<T>>, Vec<(Aabb3d, Vec3)>) {
 	let gap = STALL_GALLERY_GAP;
@@ -2112,7 +2112,7 @@ fn build_livable_quarters_examples<T, P>(
 		let confines = demo_common_bedroom_confines(*extent, *door);
 		passages.extend(passage_aabbs_at(&confines, offset));
 		let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
-		match fit(&confines, noise, params(*spaciousness, *occupancy)) {
+		match fit(&confines, noise, params(i, *spaciousness, *occupancy)) {
 			Ok((room, _)) => cells.push(GalleryExampleCell { offset, room }),
 			Err(err) => bevy::log::error!("{label} ({extent:?} seed={seed}) failed: {err}"),
 		}
@@ -2142,25 +2142,16 @@ fn build_kitchen_examples() -> (Vec<GalleryExampleCell<Kitchen>>, Vec<(Aabb3d, V
 		KitchenCounterLayout::Peninsula,
 		KitchenCounterLayout::Galley,
 	];
-	let specs = kitchen_examples_specs();
-	let gap = STALL_GALLERY_GAP;
-	let mut cells = Vec::new();
-	let mut passages = Vec::new();
-	for (i, (extent, seed, spaciousness, occupancy, door)) in specs.iter().enumerate() {
-		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, 3, gap);
-		let confines = demo_common_bedroom_confines(*extent, *door);
-		passages.extend(passage_aabbs_at(&confines, offset));
-		let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
-		let params = buildings::KitchenParameterized::with_fill(*spaciousness, *occupancy)
-			.with_layout(layouts[i % layouts.len()]);
-		match Kitchen::fit_with_fill(&confines, noise, params) {
-			Ok((room, _)) => cells.push(GalleryExampleCell { offset, room }),
-			Err(err) => {
-				bevy::log::error!("kitchen-examples ({extent:?} seed={seed}) failed: {err}")
-			}
-		}
-	}
-	(cells, passages)
+	build_livable_quarters_examples(
+		"kitchen-examples",
+		&kitchen_examples_specs(),
+		3,
+		|i, spaciousness, occupancy| {
+			buildings::KitchenParameterized::with_fill(spaciousness, occupancy)
+				.with_layout(layouts[i % layouts.len()])
+		},
+		Kitchen::fit_with_fill,
+	)
 }
 
 fn dining_room_examples_specs() -> Vec<LivableQuartersExampleSpec> {
@@ -2181,7 +2172,7 @@ fn build_dining_room_examples() -> (Vec<GalleryExampleCell<DiningRoom>>, Vec<(Aa
 		"dining-room-examples",
 		&dining_room_examples_specs(),
 		3,
-		buildings::DiningRoomParameterized::with_fill,
+		|_, s, o| buildings::DiningRoomParameterized::with_fill(s, o),
 		DiningRoom::fit_with_fill,
 	)
 }
@@ -2202,7 +2193,7 @@ fn build_living_room_examples() -> (Vec<GalleryExampleCell<LivingRoom>>, Vec<(Aa
 		"living-room-examples",
 		&living_room_examples_specs(),
 		3,
-		buildings::LivingRoomParameterized::with_fill,
+		|_, s, o| buildings::LivingRoomParameterized::with_fill(s, o),
 		LivingRoom::fit_with_fill,
 	)
 }
@@ -2223,7 +2214,7 @@ fn build_sitting_room_examples() -> (Vec<GalleryExampleCell<SittingRoom>>, Vec<(
 		"sitting-room-examples",
 		&sitting_room_examples_specs(),
 		3,
-		buildings::SittingRoomParameterized::with_fill,
+		|_, s, o| buildings::SittingRoomParameterized::with_fill(s, o),
 		SittingRoom::fit_with_fill,
 	)
 }
@@ -2244,7 +2235,7 @@ fn build_study_examples() -> (Vec<GalleryExampleCell<Study>>, Vec<(Aabb3d, Vec3)
 		"study-examples",
 		&study_examples_specs(),
 		3,
-		buildings::StudyParameterized::with_fill,
+		|_, s, o| buildings::StudyParameterized::with_fill(s, o),
 		Study::fit_with_fill,
 	)
 }
@@ -4525,14 +4516,16 @@ fn spawn_building_preview<T>(
 	T: BuildingComponents + Clone + Send + Sync + 'static,
 {
 	use building_components::{
-		append_flattened_component_scenes, scene_children, spawn_building_components,
+		append_flattened_component_scenes, scene_children, spawn_building_components_for,
 		ComponentsOnly,
 	};
-	use lod::gen::LodScene;
+	use lod::scene::LodScene;
 	if building.structural_lod().is_some() {
-		let host = ComponentsOnly(building.clone());
+		let host = ComponentsOnly::posed(building.clone(), transform);
 		let bounds = host.scene_bounds();
-		for entity in spawn_building_components(commands, building, transform, bounds) {
+		for entity in
+			spawn_building_components_for(commands, building, transform, bounds, Some(lod_ref))
+		{
 			commands.entity(entity).insert(PreviewRoot);
 		}
 	} else {
@@ -4540,7 +4533,7 @@ fn spawn_building_preview<T>(
 		append_flattened_component_scenes(
 			building,
 			lod_ref,
-			lod::gen::LodSceneLevel::High,
+			lod::scene::LodSceneLevel::High,
 			&mut children,
 		);
 		spawn_preview(commands, transform, scene_children(children));

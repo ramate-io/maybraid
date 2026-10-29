@@ -1,0 +1,473 @@
+//! Visual style presentation modes with artistic resolution targets and effects.
+
+use bevy::prelude::*;
+
+/// Named visual styles with distinct resolution and presentation characteristics.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum VisualStyle {
+	/// Direct to the window at native resolution. No offscreen target.
+	#[default]
+	Native,
+	/// Offscreen 1080p, no treatment, linear present. Height-fit, window aspect.
+	Sharp,
+	Impressionist,
+	Watercolor,
+	Retro,
+	Antediluvian,
+	PrePostModern,
+}
+
+/// Stable style identity shared by settings persistence and rendering.
+///
+/// Menu order, serialized names, script ids, and player-facing copy live here.
+/// [`VisualStyle`] methods for treatments and resolution stay on the render type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct VisualStyleIdentity {
+	pub style: VisualStyle,
+	pub script_id: &'static str,
+	pub label: &'static str,
+	pub description: &'static str,
+}
+
+impl VisualStyleIdentity {
+	/// Menu order, serialize names, and script ids. One list for settings and render.
+	pub const ALL: [Self; 7] = [
+		Self {
+			style: VisualStyle::Native,
+			script_id: "native",
+			label: "Native",
+			description:
+				"Native physical resolution, untreated, drawn direct to the window. Default.",
+		},
+		Self {
+			style: VisualStyle::Sharp,
+			script_id: "sharp",
+			label: "Sharp",
+			description: "Fixed 1080p offscreen, untreated, presented crisply. Height-fit (1080, or the window when shorter); width follows the window aspect. Opt-in.",
+		},
+		Self {
+			style: VisualStyle::Impressionist,
+			script_id: "impressionist",
+			label: "Impressionist",
+			description: "Painterly softening at ~700×394 (16:9). Inexpensive linear upscale with a tighter wash than Watercolor. Opt-in.",
+		},
+		Self {
+			style: VisualStyle::Watercolor,
+			script_id: "watercolor",
+			label: "Watercolor",
+			description: "Wet wash at ~1280×720 (16:9). Same painterly blit as Impressionist at full strength, more source detail. Opt-in.",
+		},
+		Self {
+			style: VisualStyle::Retro,
+			script_id: "retro",
+			label: "Retro",
+			description: "Nearest-neighbor upscale from ~540×304 (16:9). Performance mode.",
+		},
+		Self {
+			style: VisualStyle::Antediluvian,
+			script_id: "antediluvian",
+			label: "Antediluvian",
+			description:
+				"Nearest-neighbor upscale from ~400×225 (16:9). Extreme performance mode.",
+		},
+		Self {
+			style: VisualStyle::PrePostModern,
+			script_id: "pre_post_modern",
+			label: "Pre-post-modern",
+			description: "Misregistered color-print effect at ~1280×720 (16:9). Slight color layer displacement and stable dithering.",
+		},
+	];
+
+	pub const SCRIPT_IDS: [&'static str; 7] = [
+		Self::ALL[0].script_id,
+		Self::ALL[1].script_id,
+		Self::ALL[2].script_id,
+		Self::ALL[3].script_id,
+		Self::ALL[4].script_id,
+		Self::ALL[5].script_id,
+		Self::ALL[6].script_id,
+	];
+
+	pub fn of(style: VisualStyle) -> Self {
+		Self::ALL
+			.into_iter()
+			.find(|identity| identity.style == style)
+			.unwrap_or(Self::ALL[0])
+	}
+
+	pub fn from_script_id(id: &str) -> Option<Self> {
+		Self::ALL.into_iter().find(|identity| identity.script_id == id)
+	}
+}
+
+impl VisualStyle {
+	pub const ALL: [Self; 7] = [
+		VisualStyleIdentity::ALL[0].style,
+		VisualStyleIdentity::ALL[1].style,
+		VisualStyleIdentity::ALL[2].style,
+		VisualStyleIdentity::ALL[3].style,
+		VisualStyleIdentity::ALL[4].style,
+		VisualStyleIdentity::ALL[5].style,
+		VisualStyleIdentity::ALL[6].style,
+	];
+
+	/// Sharp's reference height. Width follows the window aspect (`width = height * aspect`).
+	/// When the window is shorter than 1080, height clamps to the window (same planner as
+	/// the other reference-height styles). We do not letterbox; the blit fills the window
+	/// because the target shares the window's aspect.
+	pub const SHARP_REFERENCE_HEIGHT: u32 = 1080;
+
+	pub fn identity(self) -> VisualStyleIdentity {
+		VisualStyleIdentity::of(self)
+	}
+
+	pub fn label(self) -> &'static str {
+		self.identity().label
+	}
+
+	pub fn description(self) -> &'static str {
+		self.identity().description
+	}
+
+	/// Scales the shared painterly kernel. Watercolor is the 1.0 wash;
+	/// Impressionist is 14.5% tighter (5% then another 10%).
+	pub fn wash_strength(self) -> f32 {
+		match self {
+			Self::Impressionist => 0.855,
+			_ => 1.0,
+		}
+	}
+
+	/// Reference height at the window's aspect ratio for this style.
+	/// `0` means native physical size and the direct-window path.
+	pub fn reference_height(self) -> u32 {
+		match self {
+			Self::Native => 0,
+			Self::Sharp => Self::SHARP_REFERENCE_HEIGHT,
+			Self::Impressionist => 394,
+			Self::Watercolor | Self::PrePostModern => 720,
+			Self::Retro => 304,
+			Self::Antediluvian => 225,
+		}
+	}
+
+	/// Parse a stable identifier from the agent scripting API.
+	pub fn from_script_id(id: &str) -> Option<Self> {
+		VisualStyleIdentity::from_script_id(id).map(|identity| identity.style)
+	}
+
+	/// Stable identifier for the agent scripting API.
+	pub fn script_id(self) -> &'static str {
+		self.identity().script_id
+	}
+
+	/// Migrate a legacy InGameRenderScale value to a VisualStyle.
+	pub fn from_legacy_render_scale(scale: LegacyRenderScale) -> Self {
+		match scale {
+			LegacyRenderScale::Auto | LegacyRenderScale::Native => Self::Native,
+			LegacyRenderScale::Half => Self::Impressionist,
+			LegacyRenderScale::ThreeQuarter => Self::PrePostModern,
+		}
+	}
+
+	/// Plan resolution and presentation parameters for this style.
+	pub fn plan(self, window_physical: UVec2, window_scale_factor: f32) -> VisualStylePlan {
+		if window_physical.x == 0 || window_physical.y == 0 {
+			return VisualStylePlan {
+				style: self,
+				target_size: UVec2::ZERO,
+				window_logical: Vec2::ZERO,
+				image_scale_factor: 1.0,
+				treatment: PresentationTreatment::None,
+				wash_strength: self.wash_strength(),
+				force_offscreen: self.always_offscreen(),
+			};
+		}
+
+		let window_logical = window_logical_size(window_physical, window_scale_factor);
+		let reference_height = self.reference_height();
+
+		let (target_size, treatment) = if reference_height == 0 {
+			(window_physical, PresentationTreatment::None)
+		} else {
+			let aspect = window_physical.x as f32 / window_physical.y as f32;
+			let target_height = reference_height.min(window_physical.y);
+			let target_width = ((target_height as f32) * aspect).round() as u32;
+			let target_size = UVec2::new(target_width.max(1), target_height.max(1));
+
+			let treatment = match self {
+				Self::Impressionist | Self::Watercolor => PresentationTreatment::Impressionist,
+				Self::Retro | Self::Antediluvian => PresentationTreatment::NearestNeighbor,
+				Self::PrePostModern => PresentationTreatment::PrePostModern,
+				Self::Native | Self::Sharp => PresentationTreatment::None,
+			};
+
+			(target_size, treatment)
+		};
+
+		let image_scale_factor = if target_size.x > 0 && window_logical.x > 0.0 {
+			target_size.x as f32 / window_logical.x
+		} else {
+			1.0
+		};
+
+		VisualStylePlan {
+			style: self,
+			target_size,
+			window_logical,
+			image_scale_factor,
+			treatment,
+			wash_strength: self.wash_strength(),
+			force_offscreen: self.always_offscreen(),
+		}
+	}
+
+	/// Sharp always uses the offscreen present path, even when the 3D target
+	/// matches the window (1080p window, or a shorter window that clamps to itself).
+	fn always_offscreen(self) -> bool {
+		matches!(self, Self::Sharp)
+	}
+}
+
+/// Legacy render scale enum values for settings migration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LegacyRenderScale {
+	Auto,
+	Native,
+	ThreeQuarter,
+	Half,
+}
+
+/// Resolved sizes and presentation parameters for one window + visual style pair.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VisualStylePlan {
+	pub style: VisualStyle,
+	pub target_size: UVec2,
+	pub window_logical: Vec2,
+	pub image_scale_factor: f32,
+	pub treatment: PresentationTreatment,
+	pub wash_strength: f32,
+	/// Keep the offscreen blit even when the 3D target matches the window
+	/// (Native + [`super::VisualStyleSetting::force_offscreen`], or Sharp).
+	pub force_offscreen: bool,
+}
+
+impl VisualStylePlan {
+	/// Whether this plan requires an offscreen render target and presentation pass.
+	pub fn requires_offscreen(&self, window_physical: UVec2) -> bool {
+		if self.target_size == UVec2::ZERO {
+			return false;
+		}
+		if self.force_offscreen {
+			return true;
+		}
+		self.treatment != PresentationTreatment::None || self.target_size != window_physical
+	}
+}
+
+/// Presentation treatment applied during upscale.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PresentationTreatment {
+	None,
+	NearestNeighbor,
+	Impressionist,
+	PrePostModern,
+}
+
+fn window_logical_size(window_physical: UVec2, window_scale_factor: f32) -> Vec2 {
+	let factor = if window_scale_factor > 0.0 && window_scale_factor.is_finite() {
+		window_scale_factor
+	} else {
+		1.0
+	};
+	Vec2::new(window_physical.x as f32 / factor, window_physical.y as f32 / factor)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn all_styles_have_nonempty_labels_and_descriptions() {
+		for style in VisualStyle::ALL {
+			assert!(!style.label().is_empty());
+			assert!(!style.description().is_empty());
+		}
+	}
+
+	#[test]
+	fn identity_table_covers_every_style_once() -> anyhow::Result<()> {
+		assert_eq!(VisualStyle::ALL.len(), VisualStyleIdentity::ALL.len());
+		for (index, style) in VisualStyle::ALL.into_iter().enumerate() {
+			let identity = VisualStyleIdentity::ALL[index];
+			assert_eq!(identity.style, style);
+			assert_eq!(VisualStyleIdentity::of(style), identity);
+			assert_eq!(style.identity(), identity);
+			assert_eq!(style.script_id(), identity.script_id);
+			assert_eq!(style.label(), identity.label);
+			assert_eq!(style.description(), identity.description);
+		}
+		let mut seen = [false; 7];
+		for identity in VisualStyleIdentity::ALL {
+			let Some(index) = VisualStyle::ALL.iter().position(|&style| style == identity.style)
+			else {
+				return Err(anyhow::anyhow!("identity style missing from VisualStyle::ALL"));
+			};
+			assert!(!seen[index], "duplicate style in identity table");
+			seen[index] = true;
+		}
+		assert!(seen.iter().all(|&present| present));
+		Ok(())
+	}
+
+	#[test]
+	fn script_ids_round_trip() {
+		for style in VisualStyle::ALL {
+			let id = style.script_id();
+			assert_eq!(VisualStyle::from_script_id(id), Some(style));
+		}
+		assert_eq!(VisualStyle::from_script_id("unknown"), None);
+		assert_eq!(VisualStyle::from_script_id("native"), Some(VisualStyle::Native));
+		assert_eq!(VisualStyle::from_script_id("sharp"), Some(VisualStyle::Sharp));
+	}
+
+	#[test]
+	fn reference_heights_match_spec() {
+		assert_eq!(VisualStyle::Native.reference_height(), 0);
+		assert_eq!(VisualStyle::Sharp.reference_height(), 1080);
+		assert_eq!(VisualStyle::Impressionist.reference_height(), 394);
+		assert_eq!(VisualStyle::Watercolor.reference_height(), 720);
+		assert_eq!(VisualStyle::Retro.reference_height(), 304);
+		assert_eq!(VisualStyle::Antediluvian.reference_height(), 225);
+		assert_eq!(VisualStyle::PrePostModern.reference_height(), 720);
+	}
+
+	#[test]
+	fn native_uses_window_resolution_and_skips_offscreen() {
+		let plan = VisualStyle::Native.plan(UVec2::new(1920, 1080), 1.0);
+		assert_eq!(plan.target_size, UVec2::new(1920, 1080));
+		assert_eq!(plan.treatment, PresentationTreatment::None);
+		assert!(!plan.force_offscreen);
+		assert!(!plan.requires_offscreen(UVec2::new(1920, 1080)));
+		let mut forced = plan;
+		forced.force_offscreen = true;
+		assert!(forced.requires_offscreen(UVec2::new(1920, 1080)));
+	}
+
+	#[test]
+	fn sharp_is_1080p_offscreen_with_no_treatment() {
+		let window = UVec2::new(2560, 1440);
+		let plan = VisualStyle::Sharp.plan(window, 1.0);
+		assert_eq!(plan.target_size, UVec2::new(1920, 1080));
+		assert_eq!(plan.treatment, PresentationTreatment::None);
+		assert!(plan.force_offscreen);
+		assert!(plan.requires_offscreen(window));
+	}
+
+	#[test]
+	fn sharp_stays_offscreen_when_the_window_is_already_1080p() {
+		let window = UVec2::new(1920, 1080);
+		let plan = VisualStyle::Sharp.plan(window, 1.0);
+		assert_eq!(plan.target_size, window);
+		assert_eq!(plan.treatment, PresentationTreatment::None);
+		assert!(plan.requires_offscreen(window));
+	}
+
+	#[test]
+	fn sharp_fits_1080_height_and_keeps_window_aspect() {
+		let window = UVec2::new(3440, 1440);
+		let plan = VisualStyle::Sharp.plan(window, 1.0);
+		assert_eq!(plan.target_size.y, 1080);
+		let expected_width = (1080.0_f32 * 3440.0 / 1440.0).round() as u32;
+		assert_eq!(plan.target_size.x, expected_width);
+		assert_eq!(plan.treatment, PresentationTreatment::None);
+		assert!(plan.requires_offscreen(window));
+	}
+
+	#[test]
+	fn impressionist_scales_to_reference_height() {
+		let plan = VisualStyle::Impressionist.plan(UVec2::new(1920, 1080), 1.0);
+		assert_eq!(plan.target_size.y, 394);
+		let expected_width = (394.0_f32 * 1920.0 / 1080.0).round() as u32;
+		assert_eq!(plan.target_size.x, expected_width);
+		assert_eq!(plan.treatment, PresentationTreatment::Impressionist);
+		assert_eq!(plan.wash_strength, 0.855);
+		assert!(plan.requires_offscreen(UVec2::new(1920, 1080)));
+	}
+
+	#[test]
+	fn watercolor_is_720p_painterly() {
+		let plan = VisualStyle::Watercolor.plan(UVec2::new(1920, 1080), 1.0);
+		assert_eq!(plan.target_size, UVec2::new(1280, 720));
+		assert_eq!(plan.treatment, PresentationTreatment::Impressionist);
+		assert_eq!(plan.wash_strength, 1.0);
+		assert!(plan.requires_offscreen(UVec2::new(1920, 1080)));
+	}
+
+	#[test]
+	fn impressionist_wash_is_tighter_than_watercolor() {
+		assert_eq!(VisualStyle::Impressionist.wash_strength(), 0.855);
+		assert_eq!(VisualStyle::Watercolor.wash_strength(), 1.0);
+		let plan = VisualStyle::Impressionist.plan(UVec2::new(1920, 1080), 1.0);
+		assert_eq!(plan.treatment, PresentationTreatment::Impressionist);
+		assert_eq!(plan.wash_strength, 0.855);
+	}
+
+	#[test]
+	fn retro_and_antediluvian_use_nearest_neighbor() {
+		let retro = VisualStyle::Retro.plan(UVec2::new(1920, 1080), 1.0);
+		assert_eq!(retro.treatment, PresentationTreatment::NearestNeighbor);
+
+		let antediluvian = VisualStyle::Antediluvian.plan(UVec2::new(1920, 1080), 1.0);
+		assert_eq!(antediluvian.treatment, PresentationTreatment::NearestNeighbor);
+		assert!(antediluvian.target_size.y < retro.target_size.y);
+	}
+
+	#[test]
+	fn pre_post_modern_targets_720p() {
+		let plan = VisualStyle::PrePostModern.plan(UVec2::new(1920, 1080), 1.0);
+		assert_eq!(plan.target_size.y, 720);
+		assert_eq!(plan.treatment, PresentationTreatment::PrePostModern);
+	}
+
+	#[test]
+	fn target_clamped_to_native_when_viewport_is_smaller() {
+		let plan = VisualStyle::Impressionist.plan(UVec2::new(640, 360), 1.0);
+		assert_eq!(plan.target_size, UVec2::new(640, 360));
+		let sharp = VisualStyle::Sharp.plan(UVec2::new(1280, 720), 1.0);
+		assert_eq!(sharp.target_size, UVec2::new(1280, 720));
+		assert!(sharp.requires_offscreen(UVec2::new(1280, 720)));
+	}
+
+	#[test]
+	fn aspect_ratio_preserved() {
+		let window = UVec2::new(2560, 1440);
+		let aspect = window.x as f32 / window.y as f32;
+		let plan = VisualStyle::Impressionist.plan(window, 1.0);
+		let target_aspect = plan.target_size.x as f32 / plan.target_size.y as f32;
+		assert!((target_aspect - aspect).abs() < 0.01);
+		let sharp = VisualStyle::Sharp.plan(window, 1.0);
+		let sharp_aspect = sharp.target_size.x as f32 / sharp.target_size.y as f32;
+		assert!((sharp_aspect - aspect).abs() < 0.01);
+	}
+
+	#[test]
+	fn legacy_migration_matches_spec() {
+		assert_eq!(
+			VisualStyle::from_legacy_render_scale(LegacyRenderScale::Auto),
+			VisualStyle::Native
+		);
+		assert_eq!(
+			VisualStyle::from_legacy_render_scale(LegacyRenderScale::Native),
+			VisualStyle::Native
+		);
+		assert_eq!(
+			VisualStyle::from_legacy_render_scale(LegacyRenderScale::ThreeQuarter),
+			VisualStyle::PrePostModern
+		);
+		assert_eq!(
+			VisualStyle::from_legacy_render_scale(LegacyRenderScale::Half),
+			VisualStyle::Impressionist
+		);
+	}
+}

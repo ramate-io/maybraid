@@ -71,7 +71,10 @@ pub fn stamp_lobe_materials(
 ) {
 	for (entity, slot) in &pending {
 		let handle = materials.add(slot.0.clone());
-		commands.entity(entity).insert(MeshMaterial3d(handle)).remove::<LobeMaterialSlot>();
+		commands
+			.entity(entity)
+			.insert(MeshMaterial3d(handle))
+			.remove::<LobeMaterialSlot>();
 	}
 }
 

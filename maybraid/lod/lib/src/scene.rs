@@ -25,14 +25,12 @@ pub use chunk::{
 };
 pub use chunk_fulfill::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, apply_lod_cull_requests,
-	begin_chunk_lod_fulfill, begin_chunk_lod_fulfill_erased,
-	cancel_unstarted_cull_for_desired_pending_roots,
-	cancel_unstarted_cull_for_desired_pending_roots_erased, complete_chunk_lod_fulfill,
-	drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull, reset_lod_chunk_budget,
-	LodChunkAtomicOverrun, LodChunkBeginScanCursor, LodChunkBudgetClock, LodChunkBudgetPlugin,
-	LodChunkCullSystems, LodChunkDrainDiagnostics, LodChunkFulfillBudget, LodChunkFulfillSystems,
-	LodChunkFulfillment, LodCullInFlight, LodCullRequest, LodLazyPending, LodLevelRootPending,
-	LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
+	begin_chunk_lod_fulfill_erased, cancel_unstarted_cull_for_desired_pending_roots_erased,
+	complete_chunk_lod_fulfill, drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull,
+	reset_lod_chunk_budget, LodChunkAtomicOverrun, LodChunkBeginScanCursor, LodChunkBudgetClock,
+	LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkDrainDiagnostics, LodChunkFulfillBudget,
+	LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight, LodCullRequest, LodLazyPending,
+	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
 	LodSceneRefreshSyncPlugin,
 };
 pub use cull::{
@@ -41,13 +39,14 @@ pub use cull::{
 	named_band_progress, LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
 };
 pub use host::{
-	hide_lod_tree, hide_lod_tree_world, host_shows_level_root, host_shows_level_root_world,
-	lod_host_scene, lod_host_scene_pending, lod_level_roots_entity, lod_root_is_shown,
-	lod_scene_host_or_ancestor_hidden, lod_scene_host_or_ancestor_hidden_world,
+	drain_lod_tree_vis, hide_lod_tree, hide_lod_tree_world, host_shows_level_root,
+	host_shows_level_root_world, lod_host_scene, lod_host_scene_pending, lod_level_roots_entity,
+	lod_root_is_shown, lod_scene_host_or_ancestor_hidden, lod_scene_host_or_ancestor_hidden_world,
 	lod_world_entity_is_shown, nested_host_parent_allows_refresh,
 	nested_host_parent_allows_refresh_world, parent_host_desired_or_high,
 	settle_lod_level_root_visibility, show_lod_tree, sync_lod_level_roots, LodLevelRoot,
 	LodLevelRootOverlap, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost, LodSceneHostPlugin,
+	LodTreeVisBudget, LodTreeVisQueue,
 };
 pub use level::{LodSceneLevel, QuantizedDistance};
 pub use lod_scene::{LodScene, LodSceneStatus, SemanticLodScene, VisualLodScene};

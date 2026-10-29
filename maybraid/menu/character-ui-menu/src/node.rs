@@ -177,7 +177,30 @@ pub struct GridCatalogChoice<E> {
 	/// 1-based slot rank when this item is queued (weapons). Clothing leaves
 	/// this `None` and uses the Maybraid son for selection.
 	pub rank: Option<u8>,
-	pub event: E,
+	/// Bag index while this layout is unchanged. `None` for non-bag tiles
+	/// such as the always-equipped Self Lubikan.
+	pub item_key: Option<usize>,
+	/// Activate / drop action. `None` is a read-only catalog tile (Lubikan).
+	pub event: Option<E>,
+}
+
+/// One equipped item in an [`OrderedEquipmentRow`], already in slot order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EquipmentChoice<E> {
+	/// Bag index; valid while this bag layout is unchanged.
+	pub item_key: usize,
+	pub tile: GridCatalogChoice<E>,
+	pub unequip: Option<E>,
+	pub move_left: Option<E>,
+	pub move_right: Option<E>,
+}
+
+/// Ordered equipped choices for one typed inventory slot. Renderers may wrap them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OrderedEquipmentRow<E> {
+	pub label: &'static str,
+	pub capacity: usize,
+	pub choices: Vec<EquipmentChoice<E>>,
 }
 
 /// Plus / minus / read-only tone for a loadout or catalog value.
@@ -272,6 +295,8 @@ pub enum MenuNode<E> {
 	ItemMultiSelect { label: &'static str, rows: Vec<ItemRow<E>> },
 	/// Wrapping grid of owned items with a selection cap (`max_selected`).
 	GridCatalog { label: &'static str, max_selected: usize, choices: Vec<GridCatalogChoice<E>> },
+	/// Equipped pane: one group per typed slot, already in order.
+	OrderedEquipment { rows: Vec<OrderedEquipmentRow<E>> },
 	/// One-line text field. Toggle and typed changes are renderer events;
 	/// the IR only carries the current value.
 	ShortText { label: &'static str, value: String, max_len: usize },
@@ -398,6 +423,11 @@ impl<E> MenuNode<E> {
 		choices: impl IntoIterator<Item = GridCatalogChoice<E>>,
 	) -> Self {
 		Self::GridCatalog { label, max_selected, choices: choices.into_iter().collect() }
+	}
+
+	/// Equipped rows in display order (leftmost is slot rank 1).
+	pub fn ordered_equipment(rows: impl IntoIterator<Item = OrderedEquipmentRow<E>>) -> Self {
+		Self::OrderedEquipment { rows: rows.into_iter().collect() }
 	}
 
 	/// Short typed label; `max_len` is a hard cap on the stored value.

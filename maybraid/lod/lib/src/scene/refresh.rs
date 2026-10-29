@@ -33,7 +33,10 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::lod_ref::{LodNodePlugin, LodNodeSystems};
-use crate::scene::host::{settle_lod_level_root_visibility, sync_lod_level_roots};
+use crate::scene::host::{
+	drain_lod_tree_vis, hide_ready_world_instance_if_under_hidden_lod,
+	settle_lod_level_root_visibility, sync_lod_level_roots, LodTreeVisBudget, LodTreeVisQueue,
+};
 use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::SemanticLodScene;
 
@@ -62,8 +65,7 @@ pub use regions::{
 };
 pub use sync::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
-	apply_lod_cull_requests, begin_chunk_lod_fulfill, begin_chunk_lod_fulfill_erased,
-	cancel_unstarted_cull_for_desired_pending_roots,
+	apply_lod_cull_requests, begin_chunk_lod_fulfill_erased,
 	cancel_unstarted_cull_for_desired_pending_roots_erased, complete_chunk_lod_fulfill,
 	cull_lod_level_roots, drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull,
 	reset_lod_chunk_budget, LodChunkAtomicOverrun, LodChunkBeginScanCursor, LodChunkBudgetClock,
@@ -91,6 +93,11 @@ pub enum LodRefreshSystems {
 	Fulfill,
 	/// Enqueue + budgeted teardown of inactive level roots.
 	Cull,
+	/// Budgeted descendant [`Disabled`] apply for hide/show trees.
+	///
+	/// [`crate::LodTreeVisBudget::time_per_frame`] is a per-visit target, not a
+	/// hard cap — one wide [`Children`] copy can overrun.
+	VisDrain,
 }
 
 /// Order inside [`LodRefreshSystems::ProduceLevels`]: fill the shared cache, then emit.
@@ -113,6 +120,7 @@ pub(crate) fn configure_refresh_sets(app: &mut App) {
 			LodRefreshSystems::SyncRoots,
 			LodRefreshSystems::Fulfill,
 			LodRefreshSystems::Cull,
+			LodRefreshSystems::VisDrain,
 		)
 			.chain(),
 	);
@@ -142,9 +150,12 @@ impl Plugin for LodRefreshCorePlugin {
 		crate::jobs::ensure_lod_job_counter(app);
 		app.init_resource::<LodProduceCache>()
 			.init_resource::<LodCullProduceCache>()
+			.init_resource::<LodTreeVisBudget>()
+			.init_resource::<LodTreeVisQueue>()
 			.add_message::<LodSceneRefreshAabb>()
 			.add_message::<LodSceneCullAabb>()
 			.add_message::<LodSceneRefreshLevel>()
+			.add_observer(hide_ready_world_instance_if_under_hidden_lod)
 			.add_systems(
 				Update,
 				(
@@ -154,6 +165,7 @@ impl Plugin for LodRefreshCorePlugin {
 						.before(sync_lod_level_roots)
 						.in_set(LodRefreshSystems::SyncRoots),
 					sync_lod_level_roots.in_set(LodRefreshSystems::SyncRoots),
+					drain_lod_tree_vis.in_set(LodRefreshSystems::VisDrain),
 				),
 			);
 	}
