@@ -26,8 +26,8 @@ pub use gallery::{
 pub use game_mode::GameMode;
 pub use home::{request_show_home, HomeMenuChoice, HomeScreen, HomeScreenPlugin, RequestShowHome};
 pub use in_game::{
-	request_show_in_game, request_show_in_game_with_mode, InGameMenuChoice, InGameScreen,
-	InGameScreenPlugin, RequestShowInGame,
+	request_show_in_game, request_show_in_game_at, request_show_in_game_with_mode,
+	InGameMenuChoice, InGameScreen, InGameScreenPlugin, RequestShowInGame,
 };
 pub use input::{add_menu_input, MenuInputPlugin};
 pub use loading::{
@@ -36,14 +36,19 @@ pub use loading::{
 	LoadingScreenSystems, RequestShowLoading,
 };
 pub use settings::{
-	request_show_in_game_settings, InGameSettings, InGameSettingsChoice, InGameSettingsPlugin,
-	InGameSettingsScreen, InGameShadowQuality, RequestShowInGameSettings,
+	apply_seed, apply_shadows_env, classify_host, load_machine_settings, load_machine_settings_ex,
+	parse_render_scale_env, parse_shadows_env, request_show_in_game_settings,
+	save_machine_settings, seed_device_class, DeviceClass, DeviceType, HostProbe,
+	InGameRenderScale, InGameSettings, InGameSettingsChoice, InGameSettingsPlugin,
+	InGameSettingsScreen, InGameSettingsSystems, InGameShadowQuality, InGameVisualStyle,
+	PersistPolicy, Preference, QualitySeeded, RenderScaleReadout, RequestShowInGameSettings,
+	VisualStyleProvenance, ENV_RENDER_SCALE, ENV_SHADOWS,
 };
-pub use show::{despawn_menu_screens, take_menu_show_request};
+pub use show::{add_menu_show_systems, MenuScreenSystems, MenuScreens, MenuShowRequest};
 pub use spin_reveal::{
-	request_show_spin_reveal, RequestShowSpinReveal, SpinRevealChoice, SpinRevealCurrent,
-	SpinRevealFinished, SpinRevealItems, SpinRevealScreen, SpinRevealScreenPlugin,
-	SpinRevealSystems,
+	cancel_spin_reveal, request_show_spin_reveal, RequestShowSpinReveal, SpinRevealChoice,
+	SpinRevealCurrent, SpinRevealFinished, SpinRevealItems, SpinRevealScreen,
+	SpinRevealScreenPlugin, SpinRevealSystems,
 };
 
 /// Marker on every full-screen menu root so show-requests can replace each other.

@@ -10,28 +10,42 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+lubikans = { workspace = true }
 bevy = { workspace = true }
 camera-controls = { workspace = true }
 character-ui-menu = { workspace = true }
 clap = { workspace = true }
-crozon-character-playground = { workspace = true }
-crozon-character-items = { workspace = true }
-crozon-character-model-user = { workspace = true }
-crozon-character-persist = { workspace = true }
-crozon-character-ui-menus = { workspace = true }
-crozon-characters = { workspace = true }
-crozon-inventory-user = { workspace = true }
+characters-playground = { workspace = true }
+character-items = { workspace = true }
+character-model-user = { workspace = true }
+item-icons = { workspace = true }
+tanz-user = { workspace = true }
+character-persist = { workspace = true }
+character-creation-menus = { workspace = true }
+characters = { workspace = true }
+character-inventory-user = { workspace = true }
+combat-hud = { workspace = true }
+damage = { workspace = true }
 firearm-user = { workspace = true }
 firearms-components = { workspace = true }
+fisticuffs-user = { workspace = true }
+grenades = { workspace = true }
+avian3d = { workspace = true }
+lod-avian = { workspace = true }
 game-commands = { workspace = true }
 lod = { workspace = true }
 maybraid-character-ui-menu-renderer = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 maybraid-skill-map = { workspace = true }
 maybraid-menu-controller = { workspace = true }
+maybraid-controllers-core = { workspace = true }
 menu-components = { workspace = true }
 menu-screens = { workspace = true }
 player = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+screen-capture = { workspace = true }
 
 [lints]
 workspace = true

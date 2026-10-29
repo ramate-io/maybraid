@@ -1,8 +1,8 @@
 //! Duel vs free-for-all session. FFA rebuilds the field from generated loadouts.
 
 use bevy::prelude::*;
-use crozon_character_items::{FirearmSpec, FirearmStats, ItemRng};
-use crozon_characters::{
+use character_items::{FirearmSpec, FirearmStats, ItemRng};
+use characters::{
 	species::{braidman::BraidmanConfig, spibmom::SpibmomConfig},
 	CharacterRecipe, CharacterRoot, LocomotionCapsule,
 };
@@ -134,20 +134,8 @@ impl RangeSession {
 		self.epoch = self.epoch.wrapping_add(1);
 	}
 
-	pub fn is_free_for_all(&self) -> bool {
-		self.mode == RangeMode::FreeForAll
-	}
-
 	pub fn is_assault_free_for_all(&self) -> bool {
 		self.mode == RangeMode::AssaultFreeForAll
-	}
-
-	pub fn is_generated_field(&self) -> bool {
-		self.is_free_for_all() || self.is_assault_free_for_all()
-	}
-
-	pub fn field_count(&self) -> u16 {
-		self.npc_count + self.civilian_count
 	}
 
 	pub fn is_test_dummy(&self) -> bool {
@@ -179,12 +167,28 @@ pub(crate) struct CombatantKit {
 #[derive(Resource)]
 pub(crate) struct LoadoutRng(pub ItemRng);
 
-type Combatants<'w, 's> =
-	Query<'w, 's, (Entity, Option<&'static FirearmUser>), Or<(With<Player>, With<Npc>)>>;
+/// Marks a body spawned for the firing-range roster.
+///
+/// The Maybraid world already has a `player::Player`. Session systems that run
+/// inside that app only despawn and arm bodies with this marker.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct FreeForAllBody;
+
+/// Present when the roster shares an app with the streamed world.
+/// Absent in the standalone firing-range plugin, which owns every combatant.
+#[derive(Resource, Clone, Copy, Debug, Default)]
+pub struct FreeForAllHost;
+
+type Combatants<'w, 's> = Query<
+	'w,
+	's,
+	(Entity, Option<&'static FirearmUser>, Has<FreeForAllBody>),
+	Or<(With<Player>, With<Npc>)>,
+>;
 type UnarmedBodies<'w, 's> = Query<
 	'w,
 	's,
-	(Entity, Has<Npc>, Option<&'static CombatantKit>),
+	(Entity, Has<Npc>, Option<&'static CombatantKit>, Has<FreeForAllBody>),
 	(Or<(With<Player>, With<Npc>)>, Without<FirearmUser>, Without<TestDummy>, Without<Civilian>),
 >;
 
@@ -196,6 +200,7 @@ pub(crate) fn apply_session(
 	mut respawn: ResMut<CombatRespawn>,
 	mut rng: ResMut<LoadoutRng>,
 	spawn: Res<LesHallesSpawn>,
+	host: Option<Res<FreeForAllHost>>,
 	combatants: Combatants,
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
@@ -207,7 +212,7 @@ pub(crate) fn apply_session(
 	applied.epoch = session.epoch;
 	engagement.reset();
 	respawn.clear();
-	despawn_combatants(&mut commands, combatants);
+	despawn_combatants(&mut commands, combatants, host.is_some());
 	match session.mode {
 		RangeMode::FreeForAll => {
 			rng.0 = session.seed.map(ItemRng::from_seed).unwrap_or_else(ItemRng::from_entropy);
@@ -265,6 +270,7 @@ pub(crate) fn spawn_generated_player(
 		Health::from_max(loadout.sheet.health as f32),
 		headshot_band_for(hull),
 		kit_component(&loadout),
+		FreeForAllBody,
 	));
 }
 
@@ -293,6 +299,7 @@ pub(crate) fn spawn_generated_npc(
 		Some(kit_component(&loadout)),
 		Some(Health::from_max(loadout.sheet.health as f32)),
 	);
+	commands.entity(npc).insert(FreeForAllBody);
 }
 
 fn rebuild_free_for_all(
@@ -345,6 +352,7 @@ pub(crate) fn spawn_generated_civilian(
 		materials,
 	);
 	install_npc_civilian(commands, npc, translation, Some(Health::default()));
+	commands.entity(npc).insert(FreeForAllBody);
 }
 
 pub(crate) fn install_npc_civilian(
@@ -453,8 +461,11 @@ fn npc_translation(spawn: &LesHallesSpawn, index: u16, count: u16) -> Vec3 {
 	pos
 }
 
-fn despawn_combatants(commands: &mut Commands, combatants: Combatants) {
-	for (entity, user) in &combatants {
+fn despawn_combatants(commands: &mut Commands, combatants: Combatants, roster_only: bool) {
+	for (entity, user, marked) in &combatants {
+		if roster_only && !marked {
+			continue;
+		}
 		if let Some(user) = user {
 			commands.entity(user.held).try_despawn();
 		}
@@ -462,8 +473,16 @@ fn despawn_combatants(commands: &mut Commands, combatants: Combatants) {
 	}
 }
 
-pub(crate) fn spawn_held_system(mut commands: Commands, bodies: UnarmedBodies) {
-	for (body, is_npc, kit) in &bodies {
+pub(crate) fn spawn_held_system(
+	host: Option<Res<FreeForAllHost>>,
+	mut commands: Commands,
+	bodies: UnarmedBodies,
+) {
+	let roster_only = host.is_some();
+	for (body, is_npc, kit, marked) in &bodies {
+		if roster_only && !marked {
+			continue;
+		}
 		let mut settings = FirearmUserSettings::default();
 		if is_npc {
 			settings.aim_yaw_limit = std::f32::consts::PI;
@@ -484,11 +503,19 @@ pub(crate) fn spawn_held_system(mut commands: Commands, bodies: UnarmedBodies) {
 }
 
 pub(crate) fn spawn_npc_character(
+	host: Option<Res<FreeForAllHost>>,
 	mut commands: Commands,
-	npcs: Query<(Entity, Option<&CombatantKit>, Option<&DummySpecies>), With<Npc>>,
+	npcs: Query<
+		(Entity, Option<&CombatantKit>, Option<&DummySpecies>, Has<FreeForAllBody>),
+		With<Npc>,
+	>,
 	visuals: Query<&ChildOf, With<CharacterRoot>>,
 ) {
-	for (npc, kit, dummy) in &npcs {
+	let roster_only = host.is_some();
+	for (npc, kit, dummy, marked) in &npcs {
+		if roster_only && !marked {
+			continue;
+		}
 		if visuals.iter().any(|child| child.parent() == npc) {
 			continue;
 		}
@@ -514,11 +541,16 @@ pub(crate) fn spawn_npc_character(
 }
 
 pub(crate) fn spawn_player_character(
+	host: Option<Res<FreeForAllHost>>,
 	mut commands: Commands,
-	players: Query<(Entity, Option<&CombatantKit>), With<Player>>,
+	players: Query<(Entity, Option<&CombatantKit>, Has<FreeForAllBody>), With<Player>>,
 	visuals: Query<&ChildOf, With<PlayerVisual>>,
 ) {
-	for (player, kit) in &players {
+	let roster_only = host.is_some();
+	for (player, kit, marked) in &players {
+		if roster_only && !marked {
+			continue;
+		}
 		if visuals.iter().any(|child| child.parent() == player) {
 			continue;
 		}

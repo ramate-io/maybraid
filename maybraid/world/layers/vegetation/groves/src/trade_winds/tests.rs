@@ -1,0 +1,116 @@
+use super::*;
+use crate::grove::{FlatTerrainSample, GroveExtent};
+use anyhow::Result;
+use bevy_math::Vec3;
+
+#[test]
+fn distribution_matches_rfc_order_and_membership() -> Result<()> {
+	let dist = TradeWindsCell::distribution();
+	assert_eq!(
+		dist.buckets.iter().map(|b| b.item).collect::<Vec<_>>(),
+		vec![
+			None,
+			Some(TradeWindsCell::TradeStorybook),
+			Some(TradeWindsCell::TradeSopesBanyan),
+			Some(TradeWindsCell::TradeHonuBanyan),
+			Some(TradeWindsCell::RareTallTradeStorybook),
+			Some(TradeWindsCell::RareTradeWaialeaPalm),
+		]
+	);
+	for bucket in &dist.buckets {
+		assert!(
+			bucket.weight.is_finite() && bucket.weight >= 0.0,
+			"weight {} must be finite and nonnegative",
+			bucket.weight
+		);
+	}
+	Ok(())
+}
+
+#[test]
+fn placed_share_sits_in_rfc_density_range() -> Result<()> {
+	let dist = TradeWindsCell::distribution();
+	let total: f32 = dist.buckets.iter().map(|b| b.weight).sum();
+	let placed: f32 = dist.buckets.iter().filter(|b| b.item.is_some()).map(|b| b.weight).sum();
+	let share = placed / total;
+	assert!((0.08..=0.24).contains(&share), "placed share {share} outside RFC density");
+	Ok(())
+}
+
+#[test]
+fn geometry_follows_authored_bands() -> Result<()> {
+	let TradeWindsItem::Storybook(trade) = TradeWindsCell::TradeStorybook.item() else {
+		anyhow::bail!("expected trade storybook item");
+	};
+	assert_eq!(trade.height, UnitRange::new(10.0, 20.0));
+	assert_eq!(trade.canopy_density, MODERATE_CANOPY_DENSITY);
+
+	let TradeWindsItem::Honu(honu) = TradeWindsCell::TradeHonuBanyan.item() else {
+		anyhow::bail!("expected trade honu item");
+	};
+	assert_eq!(honu.height, UnitRange::new(10.0, 25.0));
+	assert_eq!(honu.descender_density, SPARSE_DESCENDER_DENSITY);
+
+	let TradeWindsItem::WaialeaPalm(palm) = TradeWindsCell::RareTradeWaialeaPalm.item() else {
+		anyhow::bail!("expected rare waialea item");
+	};
+	assert_eq!(palm.height, UnitRange::new(10.0, 40.0));
+	assert_eq!(palm.crown_density, MODERATE_CANOPY_DENSITY);
+	Ok(())
+}
+
+#[test]
+fn placement_constraints_use_full_elevation_and_rfc_steepness() -> Result<()> {
+	let dist = TradeWindsCell::distribution();
+	for bucket in dist.buckets.iter().filter(|b| b.item.is_some()) {
+		assert_eq!(bucket.constraints.elevation.start, 0.0);
+		assert_eq!(bucket.constraints.elevation.end, 1.0);
+	}
+	let sope = dist
+		.buckets
+		.iter()
+		.find(|b| b.item == Some(TradeWindsCell::TradeSopesBanyan))
+		.ok_or_else(|| anyhow::anyhow!("missing trade sope bucket"))?;
+	assert_eq!(sope.constraints.steepness.end, 0.44);
+
+	let tall = dist
+		.buckets
+		.iter()
+		.find(|b| b.item == Some(TradeWindsCell::RareTallTradeStorybook))
+		.ok_or_else(|| anyhow::anyhow!("missing rare tall storybook bucket"))?;
+	assert_eq!(tall.constraints.steepness.end, 0.50);
+	Ok(())
+}
+
+#[test]
+fn palette_resolves_for_all_varietals() -> Result<()> {
+	for cell in [
+		TradeWindsCell::TradeStorybook,
+		TradeWindsCell::TradeSopesBanyan,
+		TradeWindsCell::TradeHonuBanyan,
+		TradeWindsCell::RareTallTradeStorybook,
+		TradeWindsCell::RareTradeWaialeaPalm,
+	] {
+		for (palette, label) in
+			[(cell.stick_palette_mix(), "stick"), (cell.canopy_palette_mix(), "canopy")]
+		{
+			let mut allowed = Vec::new();
+			for slot in palette.slots {
+				allowed.extend(slot.start.resolve());
+				allowed.extend(slot.end.resolve());
+			}
+			assert!(!allowed.is_empty(), "unresolved {label} tokens for {cell:?}");
+		}
+	}
+	Ok(())
+}
+
+#[test]
+fn populated_grove_is_deterministic_and_non_empty() -> Result<()> {
+	crate::grove::populate_checks::assert_populated_grove_is_deterministic_and_non_empty(
+		definition(),
+		crate::grove::GroveFrontend::default().noise,
+		GroveExtent::new(Vec3::ZERO, Vec3::new(260.0, 1.0, 260.0)),
+		&FlatTerrainSample::default(),
+	)
+}

@@ -4,27 +4,27 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
-use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
-use crozon_characters::CharacterMotionSystems;
+use characters::CharacterMotionSystems;
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
-use firearm_user::FirearmUserPlugin;
-use firearms::{FirearmWeaponSystems, FirearmWeaponsPlugin};
+use firearms::FirearmWeaponsPlugin;
 use fleeing_intelligence::{FleeingPlugin, FleeingSystems};
 use hiding_intelligence::{HidingPlugin, HidingSystems};
 use intelligence_lod::{
-	look_near_m, look_promotes, IntelligenceBand, IntelligenceFocus, IntelligenceFocusSample,
-	IntelligenceLod, IntelligenceLook, IntelligenceLookFrame, IntelligencePriority,
-	LOOK_APPLY_FOV_INSET, LOOK_FOV_INSET,
+	look_near_m, look_promotes, IntelligenceBakeKey, IntelligenceBand, IntelligenceFocus,
+	IntelligenceFocusSample, IntelligenceLod, IntelligenceLook, IntelligenceLookFrame,
+	IntelligencePriority, LOOK_APPLY_FOV_INSET, LOOK_FOV_INSET,
 };
 use lod::LodViewer;
-use maybraid_mobs::{player_affiliations, PreySubject};
 use meandering_intelligence::MeanderingIntelligencePlugin;
+use mob_intelligence::PreySubject;
+use mob_scenes::player_affiliations;
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
 use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
+use npc_intelligence::NpcIntelligencePlugin;
 use player::LocomotionCapsule;
 use player::PlayerCameraAim;
 use player_camera::{CameraController, CameraPov, FollowCamera};
@@ -33,6 +33,7 @@ use routing_intelligence::{RoutingPlugin, RoutingSystems};
 use spotting_intelligence::{
 	InterestLayers, SpotBounds, SpotSubject, SpottingObserveLimits, SpottingSystems,
 };
+use tanz_user::TanzUserPlugin;
 use tether_intelligence::TetherSystems;
 use threat_intelligence::{
 	Affiliations, ThreatDiscoverLimits, ThreatId, ThreatIntelligencePlugin, ThreatSubject,
@@ -42,6 +43,7 @@ use threat_intelligence_damage::ThreatIntelligenceDamagePlugin;
 use threat_management_intelligence::{
 	ThreatManagementIntelligence, ThreatManagementPlugin, ThreatTactic,
 };
+use world_player::Player as VegetationPlayer;
 
 const INTELLIGENCE_LOD_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -67,6 +69,7 @@ type WorldPlayers<'w, 's> = Query<
 		Option<&'static ThreatSubject>,
 		Option<&'static Affiliations>,
 		Has<PreySubject>,
+		Option<&'static LocomotionCapsule>,
 	),
 	With<VegetationPlayer>,
 >;
@@ -85,8 +88,8 @@ impl Plugin for WorldIntelligencePlugin {
 		if !app.is_plugin_added::<FirearmWeaponsPlugin>() {
 			app.add_plugins(FirearmWeaponsPlugin);
 		}
-		if !app.is_plugin_added::<FirearmUserPlugin>() {
-			app.add_plugins(FirearmUserPlugin);
+		if !app.is_plugin_added::<TanzUserPlugin>() {
+			app.add_plugins(TanzUserPlugin);
 		}
 		if !app.is_plugin_added::<MovementIntelligencePlugin<AvianMovementSurface<'_, '_>>>() {
 			app.add_plugins(MovementIntelligencePlugin::<AvianMovementSurface<'_, '_>>::default());
@@ -120,6 +123,9 @@ impl Plugin for WorldIntelligencePlugin {
 		}
 		if !app.is_plugin_added::<MovementRealizationPlugin>() {
 			app.add_plugins(MovementRealizationPlugin);
+		}
+		if !app.is_plugin_added::<NpcIntelligencePlugin>() {
+			app.add_plugins(NpcIntelligencePlugin);
 		}
 		app.add_systems(Update, sync_world_player_threat_actor.in_set(ThreatSystems::Prepare))
 			.configure_sets(
@@ -175,10 +181,6 @@ impl Plugin for WorldIntelligencePlugin {
 			.configure_sets(
 				PostUpdate,
 				FirearmIntelligenceSystems::Fire.run_if(on_timer(Duration::from_millis(33))),
-			)
-			.configure_sets(
-				PostUpdate,
-				FirearmWeaponSystems::Fire.run_if(on_timer(Duration::from_millis(33))),
 			);
 	}
 }
@@ -186,7 +188,7 @@ impl Plugin for WorldIntelligencePlugin {
 /// Copy ADS / bore poses into the focus mailbox. Firearm control stays out of the bake.
 fn hip_fov(follow: &FollowCamera, controller: &CameraController) -> f32 {
 	match controller.pov {
-		CameraPov::ThirdPerson => follow.third_person_fov,
+		CameraPov::ThirdPerson | CameraPov::Map => follow.third_person_fov,
 		CameraPov::FirstPerson => follow.first_person_fov,
 	}
 }
@@ -258,6 +260,7 @@ fn bake_intelligence_lod(
 		&ThreatManagementIntelligence,
 	)>,
 	mut priority: ResMut<IntelligencePriority>,
+	mut rank_scratch: Local<Vec<(Entity, IntelligenceBakeKey)>>,
 ) {
 	let Ok(player) = player.single() else {
 		return;
@@ -273,7 +276,8 @@ fn bake_intelligence_lod(
 		))
 	});
 	let player_xz = player.translation().xz();
-	let mut rows: Vec<(Entity, IntelligenceLod)> = Vec::new();
+	rank_scratch.clear();
+	rank_scratch.reserve(plants.iter().len());
 	for (entity, transform, mut lod, management) in &mut plants {
 		let at = transform.translation();
 		let dist = at.xz().distance(player_xz);
@@ -281,22 +285,22 @@ fn bake_intelligence_lod(
 		lod.band =
 			IntelligenceBand::from_viewer(dist, management.tactic != ThreatTactic::Ignore, look);
 		lod.skips = lod.skips.saturating_add(1);
-		rows.push((entity, *lod));
+		rank_scratch.push((entity, lod.bake_key(entity)));
 	}
-	rows.sort_by_key(|&(entity, lod)| lod.bake_key(entity));
+	rank_scratch.sort_by_key(|&(_, key)| key);
 	priority.rank.clear();
-	for (i, (entity, _)) in rows.into_iter().enumerate() {
+	for (i, &(entity, _)) in rank_scratch.iter().enumerate() {
 		priority.rank.insert(entity, i as u32);
 	}
 }
 
 fn sync_world_player_threat_actor(mut commands: Commands, players: WorldPlayers) {
-	let hull = LocomotionCapsule::HUMANOID;
-	let spot = SpotSubject::new(
-		InterestLayers::CHARACTER,
-		SpotBounds::capsule(hull.radius, hull.half_height()),
-	);
-	for (entity, current_spot, current_subject, current_affiliations, is_prey) in &players {
+	for (entity, current_spot, current_subject, current_affiliations, is_prey, hull) in &players {
+		let hull = hull.copied().unwrap_or(LocomotionCapsule::HUMANOID);
+		let spot = SpotSubject::new(
+			InterestLayers::CHARACTER,
+			SpotBounds::capsule(hull.radius, hull.half_height()),
+		);
 		let id = ThreatId(entity.to_bits());
 		let subject = ThreatSubject::new(id);
 		let mut entity_commands = commands.entity(entity);
@@ -319,7 +323,7 @@ fn sync_world_player_threat_actor(mut commands: Commands, players: WorldPlayers)
 mod tests {
 	use super::*;
 	use damage::DamageApplied;
-	use maybraid_mobs::{MobBrain, MobKind, FFA_GROUP, PLAYER_GROUP};
+	use mob_scenes::{MobBrain, MobKind, FFA_GROUP, PLAYER_GROUP};
 	use threat_intelligence::{ThreatIntelligenceUser, ThreatKnowledge};
 
 	fn bake_app() -> App {
@@ -336,14 +340,7 @@ mod tests {
 		app.world_mut().spawn((
 			LodViewer,
 			FollowCamera { first_person_fov: base_fov, third_person_fov: base_fov, ..default() },
-			CameraController {
-				yaw: 0.0,
-				pitch: 0.0,
-				pov: CameraPov::FirstPerson,
-				focus: 0.0,
-				ads: 0.0,
-				focus_blend: 0.0,
-			},
+			CameraController { pov: CameraPov::FirstPerson, ..default() },
 			Projection::Perspective(PerspectiveProjection {
 				fov: current_fov,
 				aspect_ratio: 16.0 / 9.0,
@@ -394,6 +391,23 @@ mod tests {
 		assert!(rank[&mid] < rank[&far_waiting]);
 		assert!(rank[&far_waiting] < rank[&far_fresh]);
 		assert!(rank[&combat] < rank[&mid]);
+	}
+
+	#[test]
+	fn bake_in_frustum_ignore_at_ninety_stays_mid() {
+		let mut app = bake_app();
+		app.world_mut()
+			.spawn((VegetationPlayer, Transform::default(), GlobalTransform::default()));
+		let hip = 75_f32.to_radians();
+		spawn_look_camera(&mut app, Vec3::new(90.0, 1.6, 0.0), hip, hip);
+		let grazer = spawn_lod_plant(&mut app, Vec3::X * 90.0, ThreatTactic::Ignore, 0);
+
+		app.update();
+
+		assert_eq!(
+			app.world().get::<IntelligenceLod>(grazer).map(|lod| lod.band),
+			Some(IntelligenceBand::Mid)
+		);
 	}
 
 	#[test]
@@ -583,6 +597,7 @@ mod tests {
 			target: victim,
 			source: Some(player),
 			amount: 10.0,
+			applied: 10.0,
 			remaining: 90.0,
 			point: Vec3::ZERO,
 		});
@@ -608,5 +623,53 @@ mod tests {
 		app.world_mut()
 			.spawn((VegetationPlayer, Transform::default(), GlobalTransform::default()))
 			.id()
+	}
+
+	#[test]
+	#[ignore]
+	fn bake_lod_rank_scratch_timing() {
+		const PLANT_COUNT: usize = 256;
+		const BAKES: usize = 10_000;
+
+		let mut plants: Vec<(Entity, IntelligenceLod)> = Vec::with_capacity(PLANT_COUNT);
+		for index in 0..PLANT_COUNT {
+			let entity = Entity::from_bits(index as u64 + 1);
+			let band = match index % 3 {
+				0 => IntelligenceBand::Near,
+				1 => IntelligenceBand::Mid,
+				_ => IntelligenceBand::Far,
+			};
+			let skips = (index % (IntelligenceLod::FAIRNESS_CAP as usize + 1)) as u8;
+			plants.push((entity, IntelligenceLod { band, skips }));
+		}
+
+		let clone_start = std::time::Instant::now();
+		for _ in 0..BAKES {
+			let mut rows: Vec<(Entity, IntelligenceLod)> = Vec::with_capacity(PLANT_COUNT);
+			for &(entity, lod) in &plants {
+				rows.push((entity, lod));
+			}
+			rows.sort_by_key(|&(entity, lod)| lod.bake_key(entity));
+			std::hint::black_box(&rows);
+		}
+		let clone_elapsed = clone_start.elapsed();
+
+		let mut scratch: Vec<(Entity, IntelligenceBakeKey)> = Vec::with_capacity(PLANT_COUNT);
+		let key_start = std::time::Instant::now();
+		for _ in 0..BAKES {
+			scratch.clear();
+			scratch.reserve(PLANT_COUNT);
+			for &(entity, lod) in &plants {
+				scratch.push((entity, lod.bake_key(entity)));
+			}
+			scratch.sort_by_key(|&(_, key)| key);
+			std::hint::black_box(&scratch);
+		}
+		let key_elapsed = key_start.elapsed();
+
+		eprintln!(
+			"bake_lod_rank_scratch_timing: {PLANT_COUNT} plants × {BAKES} bakes — clone lod rows {:?}, key scratch {:?}",
+			clone_elapsed, key_elapsed,
+		);
 	}
 }

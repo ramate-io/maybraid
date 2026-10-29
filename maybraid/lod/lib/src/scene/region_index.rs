@@ -1,11 +1,12 @@
 //! Region queries for LOD refresh (hosts overlapping an AABB).
 //!
-//! Separate from [`crate::gen::SpatialIndex`]: refresh only needs “which
-//! [`LodScene`] hosts overlap this AABB?”, not generation/storage/`Id`s.
+//! Separate from HCSG storage: refresh only needs “which [`LodScene`] hosts
+//! overlap this AABB?”, not generated values or their `Id`s.
 
 use bevy::ecs::component::Component;
 use bevy::ecs::entity::Entity;
 use bevy::math::bounding::Aabb3d;
+use bevy::platform::collections::HashSet;
 
 use crate::scene::SemanticLodScene;
 
@@ -15,6 +16,14 @@ use crate::scene::SemanticLodScene;
 /// type `T` filters with `Query<&T>`.
 pub trait LodSceneHostIndex {
 	fn hosts_in_region<'a>(&'a mut self, region: Aabb3d) -> impl Iterator<Item = Entity> + 'a;
+
+	/// Union hosts overlapping `region` into `out` (order is not significant).
+	///
+	/// The default walks [`Self::hosts_in_region`]. Spatial indexes override this
+	/// so the destination set is both the uniqueness filter and the result.
+	fn extend_hosts_in_region(&mut self, region: Aabb3d, out: &mut HashSet<Entity>) {
+		out.extend(self.hosts_in_region(region));
+	}
 }
 
 /// Lookup of [`LodScene`] hosts of type `T` whose **host** volumes hit `region`.

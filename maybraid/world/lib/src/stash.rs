@@ -2,38 +2,56 @@
 //!
 //! One host type ([`WorldStash`]) holds a bag via [`InventoryUser`]. Claim is
 //! take-all on [`CharacterIntent::StartInteraction`] (pad **X**) inside
-//! [`StashPolicy::claim_radius`]. Death and player drop
-//! [`Inventory::explode`] into one stash per item so each piece is claimable
-//! on its own. Authored chests stay a single pile.
+//! [`StashPolicy::claim_radius`]. Death samples a mob-kind fraction of the
+//! droppable bag ([`Inventory::take_droppable_fraction`]) then [`Inventory::explode`]s
+//! the kept pieces so each is claimable on its own. Raiders and Guards leave about one
+//! third, Brawlers about one twelfth, and other families drop nothing.
+//! Unmarked NPCs still drop the droppable bag. Player Tab drops extract only
+//! droppable items so intrinsic Fisticuffs stay on the body. A closed loot crate swings its lid open on X and ejects one
+//! ephemeral stash ([`crate::crate_loot`]); the crate restocks on its own clock.
 //!
 //! Loot TTL is [`StashPolicy::loot_secs`] (default 60 s), independent of
 //! mob corpse lifetime (4 s). Persistent chests omit [`DespawnAfter`].
 //! Absorb never auto-equips. Claim and drop refresh [`WorldPlayerLoadout`]
 //! so the live bag can persist.
+//!
+//! In-range claim shows three concentric ground rings (yellow 1.5 m, green
+//! 0.75 m, blue 0.25 m) and a Kenney outline interact chip on the player–item
+//! line (Xbox **X** when a gamepad is connected, keyboard **E** otherwise),
+//! plus a screen-space `Pick up <name>` caption. A closed loot crate uses the
+//! same rings and an `Open` caption when no stash is already in range.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy::text::FontSize;
-use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
-use crozon_character_items::{
-	ClothingHost, Inventory, InventoryItem, InventorySlot, MaterialRefParams,
+use character_inventory_user::{spawn_bag, InventoryUser};
+use character_items::{
+	ClothingHost, Inventory, InventoryItem, InventorySlot, ItemRng, LootFraction, MaterialRefParams,
 };
-use crozon_characters::{
+use characters::{
 	add_character_components_host, character_bounds, CharacterComponents, ClothingLayer,
 	ComponentsOnly, Layers, PartNode,
 };
-use crozon_inventory_user::{spawn_bag, InventoryUser};
 use damage::{DamageSystems, DespawnAfter, Downed};
 use firearm_user::{held_scale_from_bounds, FirearmUser, FirearmUserSettings, GeneratedFirearm};
 use firearms::{firearm_bounds, spawn_firearm_components};
-use lod::gen::LodSceneLevel;
+use grenade_user::{GrenadeThrow, GrenadeUser, GrenadeUserSystems};
+use grenades::{DropLiveGrenade, GrenadeEffect};
 use lod::lod_ref::LodRef;
+use lod::scene::LodSceneLevel;
 use lod::LodScene;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
-use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use maybraid_character_controller::{
+	ActorControlStatus, ActorIntentEvent, CharacterControlSystems, CharacterIntent,
+};
+use maybraid_session::WorldGameplayEnabled;
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 use player::PlayerUse;
+use world_player::Player as VegetationPlayer;
 
-use crate::control::WorldGameplayEnabled;
+use mob_characters::CharacterBrains;
+use mob_scenes::MobKind;
+
 use crate::weapon::{AppliedWorldPlayerLoadout, WorldPlayerLoadout};
 
 /// Default unclaimed-loot lifetime. Independent of the 4 s corpse clock.
@@ -109,16 +127,55 @@ pub struct StashDisplayedItem {
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct StashHaloAnchor(pub Vec3);
 
-/// On-screen X / E prompt while a claimable stash is in radius.
+/// World-space interact chip above the nearest claimable stash.
 #[derive(Component)]
 struct StashInteractPrompt;
+
+/// Whether the chip shows [`INTERACT_PAD_ICON`] or [`INTERACT_KEY_ICON`].
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+struct StashInteractPromptIcon {
+	pad: bool,
+}
+
+/// Screen-space action next to the chip (`Pick up <name>`).
+#[derive(Component)]
+struct StashInteractCaption;
+
+/// Kenney outline Xbox X used for pad interact (`PadButton::X`).
+pub const INTERACT_PAD_ICON: &str = "iconography/kenney/input-prompts/xbox_button_x_outline.png";
+
+/// Kenney outline keyboard E when no gamepad is connected.
+pub const INTERACT_KEY_ICON: &str = "iconography/kenney/input-prompts/keyboard_e_outline.png";
+
+fn stash_interact_icon(pad_connected: bool) -> &'static str {
+	if pad_connected {
+		INTERACT_PAD_ICON
+	} else {
+		INTERACT_KEY_ICON
+	}
+}
 
 /// Ground ring around the nearest claimable stash.
 #[derive(Component)]
 struct StashClaimHalo;
 
-const HALO_INNER: f32 = 0.28;
-const HALO_OUTER: f32 = 0.46;
+/// Was 0.18 m on the single-ring halo; concentric rings stay a bit thinner.
+const HALO_RING_WIDTH: f32 = 0.12;
+const HALO_YELLOW_RADIUS: f32 = 1.5;
+const HALO_GREEN_RADIUS: f32 = 0.75;
+const HALO_BLUE_RADIUS: f32 = 0.25;
+const PROMPT_SIZE: f32 = 0.42;
+const PROMPT_ABOVE: f32 = 0.62;
+const PROMPT_TOWARD_PLAYER: f32 = 0.85;
+const PROMPT_CAPTION_GAP_PX: f32 = 22.0;
+const PROMPT_YELLOW: Color = Color::srgba(0.98, 0.86, 0.32, 1.0);
+const PROMPT_EMISSIVE: LinearRgba = LinearRgba::new(1.4, 1.05, 0.28, 1.0);
+const HALO_YELLOW: Color = Color::srgba(0.98, 0.86, 0.32, 0.88);
+const HALO_YELLOW_EMISSIVE: LinearRgba = LinearRgba::new(1.4, 1.05, 0.28, 1.0);
+const HALO_GREEN: Color = Color::srgba(0.22, 0.82, 0.38, 0.88);
+const HALO_GREEN_EMISSIVE: LinearRgba = LinearRgba::new(0.22, 1.15, 0.38, 1.0);
+const HALO_BLUE: Color = Color::srgba(0.25, 0.48, 0.98, 0.88);
+const HALO_BLUE_EMISSIVE: LinearRgba = LinearRgba::new(0.28, 0.55, 1.35, 1.0);
 
 /// Bind-pose garment so stash clothing keeps recipe + palette.
 #[derive(Clone, PartialEq)]
@@ -130,8 +187,8 @@ impl Default for StashClothingPreview {
 	fn default() -> Self {
 		Self {
 			layer: ClothingLayer::new(
-				crozon_character_items::ClothingMesh::TankTop,
-				crozon_character_items::ItemColor::Natural,
+				character_items::ClothingMesh::TankTop,
+				character_items::ItemColor::Natural,
 				ClothingHost::HUMANOID,
 			),
 		}
@@ -150,25 +207,30 @@ impl Plugin for WorldStashPlugin {
 	fn build(&self, app: &mut App) {
 		add_character_components_host::<StashClothingPreview>(app);
 		app.init_resource::<WorldStashSettings>()
-			.add_systems(Startup, spawn_stash_interact_prompt)
+			.init_resource::<crate::crate_loot::CrateLoot>()
+			.add_observer(claim_nearby_stashes)
+			.add_observer(drop_player_inventory)
 			.add_systems(
 				Update,
 				(
-					claim_nearby_stashes
-						.after(CharacterControlSystems)
-						.run_if(resource_equals(WorldGameplayEnabled(true))),
-					drop_player_inventory
-						.after(CharacterControlSystems)
-						.run_if(resource_equals(WorldGameplayEnabled(true))),
-					sync_stash_interact_prompt
-						.after(CharacterControlSystems)
-						.run_if(resource_equals(WorldGameplayEnabled(true))),
-					sync_stash_claim_halo
-						.after(CharacterControlSystems)
-						.run_if(resource_equals(WorldGameplayEnabled(true))),
-				),
+					(
+						crate::crate_loot::stamp_closed_lids,
+						crate::crate_loot::tick_lid_swings,
+						crate::crate_loot::sync_crate_lid_poses,
+					)
+						.chain(),
+					sync_stash_interact_prompt,
+					sync_stash_claim_halo,
+				)
+					.after(CharacterControlSystems)
+					.run_if(resource_equals(WorldGameplayEnabled(true))),
 			);
-		app.add_systems(PostUpdate, detach_downed_npc_loot.after(DamageSystems::Down));
+		app.add_systems(
+			PostUpdate,
+			detach_downed_npc_loot
+				.after(DamageSystems::Down)
+				.after(GrenadeUserSystems::Interrupt),
+		);
 	}
 }
 
@@ -259,7 +321,10 @@ fn attach_stash_visuals(
 	inventory: &Inventory,
 	assets: Option<&AssetServer>,
 ) {
-	let displayed = inventory.clothing.len() + inventory.weapons.len() + inventory.skills.len();
+	let displayed = inventory.clothing.len()
+		+ inventory.weapons.len()
+		+ inventory.skills.len()
+		+ inventory.tanzes.len();
 	let mut pile = 0usize;
 	for &index in &inventory.clothing {
 		let Some(item) = inventory.items.get(index) else {
@@ -303,6 +368,20 @@ fn attach_stash_visuals(
 		);
 		pile += 1;
 	}
+	for &index in &inventory.tanzes {
+		let Some(item) = inventory.items.get(index) else {
+			continue;
+		};
+		spawn_displayed_item(
+			commands,
+			host,
+			item,
+			StashDisplayedItem { slot: InventorySlot::Tanzes },
+			display_offset(pile, displayed),
+			assets,
+		);
+		pile += 1;
+	}
 }
 
 /// One item sits on the host; several fan out so they do not stack.
@@ -321,7 +400,9 @@ fn pile_offset(index: usize) -> Transform {
 
 fn visual_halo_local(item: &InventoryItem, slot: InventorySlot, transform: Transform) -> Vec3 {
 	match slot {
-		InventorySlot::Clothing | InventorySlot::Skills => transform.translation,
+		InventorySlot::Clothing | InventorySlot::Skills | InventorySlot::Tanzes => {
+			transform.translation
+		}
 		InventorySlot::Weapons => item.firearm_spec().map_or(transform.translation, |spec| {
 			let kit = GeneratedFirearm::from_spec(spec);
 			let bounds = firearm_bounds(&kit);
@@ -350,7 +431,7 @@ fn spawn_displayed_item(
 		InventorySlot::Weapons => {
 			spawn_displayed_weapon(commands, host, item, displayed, transform, assets);
 		}
-		InventorySlot::Skills => {
+		InventorySlot::Skills | InventorySlot::Tanzes => {
 			spawn_displayed_skill_map(commands, host, item, displayed, transform);
 		}
 	}
@@ -469,7 +550,27 @@ fn despawn_displayed_items(commands: &mut Commands, displayed: &[Entity]) {
 	}
 }
 
-type DownedNpcLoot<'a> = (Entity, &'a Downed, Option<&'a InventoryUser>, Option<&'a FirearmUser>);
+type DownedNpcLoot<'a> = (
+	Entity,
+	&'a Downed,
+	Option<&'a InventoryUser>,
+	Option<&'a FirearmUser>,
+	Option<&'a GrenadeUser>,
+	Option<&'a MobKind>,
+	Option<&'a CharacterBrains>,
+);
+
+fn npc_loot_fraction(kind: Option<&MobKind>, brains: Option<&CharacterBrains>) -> LootFraction {
+	kind.map(|kind| kind.loot_fraction())
+		.or_else(|| brains.map(|brains| brains.loot_fraction()))
+		.unwrap_or(LootFraction::ALL)
+}
+
+fn npc_loot_seed(entity: Entity, downed: &Downed) -> u64 {
+	entity.to_bits()
+		^ u64::from(downed.point.x.to_bits())
+		^ (u64::from(downed.point.z.to_bits()) << 32)
+}
 
 fn detach_downed_npc_loot(
 	settings: Res<WorldStashSettings>,
@@ -479,17 +580,32 @@ fn detach_downed_npc_loot(
 	mut bags: Query<&mut Inventory>,
 ) {
 	let assets = assets.as_deref();
-	for (body, downed, user, firearm) in &downed {
-		let loot = user
-			.and_then(|user| bags.get_mut(user.bag).ok())
-			.map_or_else(Inventory::default, |mut bag| bag.take_all());
+	for (body, downed, user, firearm, grenade, kind, brains) in &downed {
+		let fraction = npc_loot_fraction(kind, brains);
+		let loot = user.and_then(|user| bags.get_mut(user.bag).ok()).map_or_else(
+			Inventory::default,
+			|mut bag| {
+				bag.take_droppable_fraction(
+					&mut ItemRng::from_seed(npc_loot_seed(body, downed)),
+					fraction,
+				)
+			},
+		);
 		if let Some(user) = user {
 			commands.entity(user.bag).try_despawn();
 			commands.entity(body).remove::<InventoryUser>();
 		}
 		if let Some(firearm) = firearm {
 			commands.entity(firearm.held).try_despawn();
-			commands.entity(body).remove::<(FirearmUser, PlayerUse)>();
+			commands
+				.entity(body)
+				.remove::<(FirearmUser, PlayerUse, player::PlayerOpticAds)>();
+		}
+		if let Some(grenade) = grenade {
+			commands.entity(grenade.held).try_despawn();
+			commands
+				.entity(body)
+				.remove::<(GrenadeUser, grenade_user::GrenadeThrow, PlayerUse)>();
 		}
 		let mut policy = settings.ephemeral_policy();
 		policy.loot_secs = settings.loot_secs;
@@ -505,48 +621,83 @@ fn xz_distance(a: Vec3, b: Vec3) -> f32 {
 	a.xz().distance(b.xz())
 }
 
-fn claim_nearby_stashes(
-	mut intents: MessageReader<CharacterIntent>,
+pub(crate) fn claim_nearby_stashes(
+	event: On<ActorIntentEvent>,
 	mut commands: Commands,
 	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
-	players: Query<(Entity, &Transform, &InventoryUser), With<VegetationPlayer>>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+	gameplay: Option<Res<WorldGameplayEnabled>>,
+	time: Option<Res<Time>>,
+	mut crates: Option<ResMut<crate::crate_loot::CrateLoot>>,
+	players: Query<
+		(&Transform, &InventoryUser, Option<&ActorControlStatus>),
+		With<VegetationPlayer>,
+	>,
 	stashes: Query<(Entity, &Transform, &InventoryUser, &StashPolicy), With<WorldStash>>,
 	displayed: Query<(Entity, &ChildOf), With<StashDisplayedItem>>,
 	mut bags: Query<&mut Inventory>,
+	lids: Query<
+		(Entity, &furniture_assemblies::FurnitureKitPart, &GlobalTransform),
+		(With<crate::crate_loot::ClosedLid>, Without<crate::crate_loot::LidSwing>),
+	>,
+	parts: Query<(Entity, &furniture_assemblies::FurnitureKitPart, &GlobalTransform)>,
+	child_of: Query<&ChildOf>,
+	hosts: Query<&lod::hcsg::HcsgNode<crate::WorldFurnished>>,
 ) {
-	if !intents.read().any(|intent| matches!(intent, CharacterIntent::StartInteraction)) {
+	if !matches!(event.input.payload(), CharacterIntent::StartInteraction)
+		|| gameplay.is_some_and(|gameplay| !gameplay.0)
+	{
 		return;
 	}
-	for (player, player_transform, player_user) in &players {
-		let origin = player_origin(player_transform);
-		let Some((stash, stash_bag, policy, _)) = nearest_stash_in_radius(origin, stashes.iter())
-		else {
-			continue;
-		};
-		let Ok(mut source) = bags.get_mut(stash_bag) else {
-			continue;
-		};
-		let loot = source.take_all();
-		let Ok(mut player_bag) = bags.get_mut(player_user.bag) else {
-			continue;
-		};
-		player_bag.absorb(loot);
-		let snapshot = player_bag.clone();
-		let visual: Vec<Entity> = displayed
-			.iter()
-			.filter(|(_, child)| child.parent() == stash)
-			.map(|(entity, _)| entity)
-			.collect();
-		despawn_displayed_items(&mut commands, &visual);
+	let player = event.entity;
+	let Ok((player_transform, player_user, control)) = players.get(player) else {
+		return;
+	};
+	let origin = player_origin(player_transform);
+	let Some((stash, stash_bag, policy, _)) = nearest_stash_in_radius(origin, stashes.iter())
+	else {
+		if let (Some(time), Some(crates)) = (time.as_deref(), crates.as_deref_mut()) {
+			crate::crate_loot::open_nearest_crate(
+				origin,
+				time.elapsed_secs(),
+				&mut commands,
+				crates,
+				&lids,
+				&parts,
+				&child_of,
+				&hosts,
+			);
+		}
+		return;
+	};
+	let Ok(mut source) = bags.get_mut(stash_bag) else {
+		return;
+	};
+	let loot = source.take_all();
+	let Ok(mut player_bag) = bags.get_mut(player_user.bag) else {
+		return;
+	};
+	player_bag.absorb(loot);
+	let snapshot = player_bag.clone();
+	let visual: Vec<Entity> = displayed
+		.iter()
+		.filter(|(_, child)| child.parent() == stash)
+		.map(|(entity, _)| entity)
+		.collect();
+	despawn_displayed_items(&mut commands, &visual);
+	if primary.as_deref().is_some_and(|primary| {
+		control.and_then(|control| control.source()).and_then(|source| source.entity())
+			== Some(primary.0)
+	}) {
 		if let Some(loadout) = loadout.as_deref_mut() {
 			apply_claimed_loadout(&mut commands, player, &snapshot, loadout);
 		}
-		if policy.persist {
-			continue;
-		}
-		commands.entity(stash_bag).try_despawn();
-		commands.entity(stash).try_despawn();
 	}
+	if policy.persist {
+		return;
+	}
+	commands.entity(stash_bag).try_despawn();
+	commands.entity(stash).try_despawn();
 }
 
 fn nearest_stash_in_radius<'a>(
@@ -570,87 +721,330 @@ fn nearest_stash_in_radius<'a>(
 		.map(|(_, entity, bag, policy, translation)| (entity, bag, policy, translation))
 }
 
-type DroppingPlayer<'a> = (Entity, &'a Transform, &'a InventoryUser, Option<&'a FirearmUser>);
+type DroppingPlayer<'a> = (
+	Entity,
+	&'a Transform,
+	&'a InventoryUser,
+	Option<&'a FirearmUser>,
+	Option<&'a GrenadeUser>,
+	Option<&'a GrenadeThrow>,
+);
 
 fn drop_player_inventory(
+	event: On<ActorIntentEvent>,
 	settings: Res<WorldStashSettings>,
-	mut intents: MessageReader<CharacterIntent>,
 	mut commands: Commands,
+	mut drops: MessageWriter<DropLiveGrenade>,
 	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
-	assets: Option<Res<AssetServer>>,
-	players: Query<DroppingPlayer<'_>, With<VegetationPlayer>>,
+	(primary, gameplay, assets): (
+		Option<Res<PrimaryVirtualPad>>,
+		Option<Res<WorldGameplayEnabled>>,
+		Option<Res<AssetServer>>,
+	),
+	players: Query<(DroppingPlayer<'_>, Option<&ActorControlStatus>), With<VegetationPlayer>>,
 	mut bags: Query<&mut Inventory>,
 ) {
-	if !intents.read().any(|intent| matches!(intent, CharacterIntent::Inventory)) {
+	if !matches!(event.input.payload(), CharacterIntent::Inventory)
+		|| gameplay.is_some_and(|gameplay| !gameplay.0)
+	{
 		return;
 	}
+	let Ok(((player, transform, user, firearm, grenade, throw), control)) =
+		players.get(event.entity)
+	else {
+		return;
+	};
 	let assets = assets.as_deref();
-	for (player, transform, user, firearm) in &players {
-		let Ok(mut bag) = bags.get_mut(user.bag) else {
-			continue;
-		};
-		let loot = bag.take_all();
-		let snapshot = bag.clone();
-		if let Some(firearm) = firearm {
-			commands.entity(firearm.held).try_despawn();
-			commands.entity(player).remove::<(FirearmUser, PlayerUse)>();
-		}
+	let Ok(mut bag) = bags.get_mut(user.bag) else {
+		return;
+	};
+	if let Some((fuse, spec, stats)) = throw.and_then(|throw| {
+		let fuse = throw.live_fuse()?;
+		let spec = bag.primary_weapon().and_then(InventoryItem::grenade_spec)?;
+		let stats = bag.primary_weapon().and_then(InventoryItem::grenade_stats)?;
+		Some((fuse, spec, stats))
+	}) {
+		drops.write(DropLiveGrenade {
+			origin: transform.translation + Vec3::Y * 1.0,
+			velocity: Vec3::ZERO,
+			spec,
+			stats,
+			effect: GrenadeEffect::from_stats(&stats),
+			fuse,
+			source: player,
+		});
+	}
+	let loot = bag.take_droppable();
+	let snapshot = bag.clone();
+	if let Some(firearm) = firearm {
+		commands.entity(firearm.held).try_despawn();
+		commands
+			.entity(player)
+			.remove::<(FirearmUser, PlayerUse, player::PlayerOpticAds)>();
+	}
+	if let Some(grenade) = grenade {
+		commands.entity(grenade.held).try_despawn();
+		commands
+			.entity(player)
+			.remove::<(GrenadeUser, grenade_user::GrenadeThrow, PlayerUse)>();
+	}
+	if primary.as_deref().is_some_and(|primary| {
+		control.and_then(|control| control.source()).and_then(|source| source.entity())
+			== Some(primary.0)
+	}) {
 		if let Some(loadout) = loadout.as_deref_mut() {
 			apply_dropped_loadout(loadout, &snapshot);
 		}
-		spawn_exploded_stashes(
-			&mut commands,
-			player_origin(transform),
-			loot,
-			settings.ephemeral_policy(),
-			assets,
-		);
 	}
+	spawn_exploded_stashes(
+		&mut commands,
+		player_origin(transform),
+		loot,
+		settings.ephemeral_policy(),
+		assets,
+	);
 }
 
-fn spawn_stash_interact_prompt(mut commands: Commands) {
+fn spawn_stash_interact_prompt(
+	commands: &mut Commands,
+	assets: &AssetServer,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+	pad_connected: bool,
+) {
+	let material = materials.add(StandardMaterial {
+		base_color: PROMPT_YELLOW,
+		base_color_texture: Some(assets.load(stash_interact_icon(pad_connected))),
+		emissive: PROMPT_EMISSIVE,
+		alpha_mode: AlphaMode::Blend,
+		unlit: true,
+		cull_mode: None,
+		..default()
+	});
 	commands.spawn((
 		Name::new("stash-interact-prompt"),
 		StashInteractPrompt,
-		Node {
-			position_type: PositionType::Absolute,
-			bottom: Val::Px(48.0),
-			width: Val::Percent(100.0),
-			justify_content: JustifyContent::Center,
-			..default()
-		},
-		Text::new("X / E  Pick up"),
-		TextFont { font_size: FontSize::Px(22.0), ..default() },
-		TextColor(Color::srgba(0.95, 0.92, 0.82, 0.95)),
-		Pickable::IGNORE,
+		StashInteractPromptIcon { pad: pad_connected },
+		Mesh3d(meshes.add(Rectangle::new(PROMPT_SIZE, PROMPT_SIZE))),
+		MeshMaterial3d(material),
+		Transform::IDENTITY,
 		Visibility::Hidden,
 	));
 }
 
-fn sync_stash_interact_prompt(
-	players: Query<&Transform, With<VegetationPlayer>>,
-	stashes: Query<(Entity, &Transform, &InventoryUser, &StashPolicy), With<WorldStash>>,
-	mut prompt: Query<&mut Visibility, With<StashInteractPrompt>>,
+fn sync_stash_interact_prompt_icon(
+	pad_connected: bool,
+	assets: &AssetServer,
+	materials: &mut Assets<StandardMaterial>,
+	mut prompts: Query<
+		(&mut StashInteractPromptIcon, &MeshMaterial3d<StandardMaterial>),
+		With<StashInteractPrompt>,
+	>,
 ) {
-	let in_range = players.iter().any(|transform| {
-		nearest_stash_in_radius(player_origin(transform), stashes.iter()).is_some()
-	});
-	for mut visibility in &mut prompt {
-		*visibility = if in_range { Visibility::Visible } else { Visibility::Hidden };
+	let icon = stash_interact_icon(pad_connected);
+	for (mut current, mesh_material) in &mut prompts {
+		if current.pad == pad_connected {
+			continue;
+		}
+		current.pad = pad_connected;
+		if let Some(mut material) = materials.get_mut(&mesh_material.0) {
+			material.base_color_texture = Some(assets.load(icon));
+		}
 	}
 }
 
-fn nearest_claim_point<'a>(
+fn prompt_world_point(item: Vec3, player: Vec3) -> Vec3 {
+	let delta = Vec3::new(player.x - item.x, 0.0, player.z - item.z);
+	let dist = delta.length();
+	let toward =
+		if dist > 1e-4 { delta / dist * PROMPT_TOWARD_PLAYER.min(dist * 0.5) } else { Vec3::ZERO };
+	item + toward + Vec3::Y * PROMPT_ABOVE
+}
+
+fn prompt_billboard(at: Vec3, camera: Option<Vec3>) -> Transform {
+	let mut transform = Transform::from_translation(at);
+	if let Some(camera) = camera {
+		let away = at - camera;
+		if away.length_squared() > 1e-6 {
+			transform.look_to(away, Vec3::Y);
+		}
+	}
+	transform
+}
+
+fn pickup_action_label(inventory: &Inventory) -> String {
+	match inventory.items.as_slice() {
+		[item] => format!("Pick up {}", item.name()),
+		items if !items.is_empty() => format!("Pick up {} items", items.len()),
+		_ => String::from("Pick up"),
+	}
+}
+
+fn spawn_stash_interact_caption(commands: &mut Commands) {
+	commands.spawn((
+		Name::new("stash-interact-caption"),
+		StashInteractCaption,
+		Text::new(""),
+		TextFont { font_size: FontSize::Px(16.0), ..default() },
+		TextColor(PROMPT_YELLOW),
+		TextShadow { offset: Vec2::new(1.0, 1.0), color: Color::srgba(0.0, 0.0, 0.0, 0.72) },
+		Node {
+			position_type: PositionType::Absolute,
+			left: Val::Px(0.0),
+			top: Val::Px(0.0),
+			..default()
+		},
+		Visibility::Hidden,
+		Pickable::IGNORE,
+		ZIndex(24),
+	));
+}
+
+fn project_prompt_caption(
+	camera: &Camera,
+	camera_transform: &GlobalTransform,
+	world: Vec3,
+) -> Option<Vec2> {
+	let ndc = camera.world_to_ndc(camera_transform, world)?;
+	if ndc.z <= 0.0 || ndc.z >= 1.0 {
+		return None;
+	}
+	camera.world_to_viewport(camera_transform, world).ok()
+}
+
+fn sync_stash_interact_prompt(
+	mut commands: Commands,
+	time: Res<Time>,
+	assets: Option<Res<AssetServer>>,
+	mut meshes: Option<ResMut<Assets<Mesh>>>,
+	mut materials: Option<ResMut<Assets<StandardMaterial>>>,
+	gamepads: Query<&Gamepad>,
+	players: Query<&Transform, (With<VegetationPlayer>, Without<StashInteractPrompt>)>,
+	cameras: Query<(&Camera, &GlobalTransform), (With<Camera3d>, Without<StashInteractPrompt>)>,
+	stashes: Query<
+		(Entity, &Transform, &InventoryUser, &StashPolicy),
+		(With<WorldStash>, Without<StashInteractPrompt>),
+	>,
+	anchors: Query<(Entity, &ChildOf, Option<&StashHaloAnchor>), With<StashDisplayedItem>>,
+	crates: crate::crate_loot::ClosedCrateQuery,
+	bags: Query<&Inventory>,
+	mut prompt: Query<
+		(&mut Transform, &mut Visibility),
+		(With<StashInteractPrompt>, Without<WorldStash>, Without<VegetationPlayer>),
+	>,
+	prompt_icons: Query<
+		(&mut StashInteractPromptIcon, &MeshMaterial3d<StandardMaterial>),
+		With<StashInteractPrompt>,
+	>,
+	mut caption: Query<
+		(&mut Text, &mut Node, &mut Visibility),
+		(With<StashInteractCaption>, Without<StashInteractPrompt>),
+	>,
+) {
+	let pad_connected = !gamepads.is_empty();
+	let target = nearest_interact(players.iter(), stashes.iter(), anchors.iter(), &crates);
+	if prompt.is_empty() {
+		let Some(assets) = assets.as_deref() else {
+			return;
+		};
+		let Some(meshes) = meshes.as_mut() else {
+			return;
+		};
+		let Some(materials) = materials.as_mut() else {
+			return;
+		};
+		spawn_stash_interact_prompt(&mut commands, assets, meshes, materials, pad_connected);
+		return;
+	}
+	if let (Some(assets), Some(materials)) = (assets.as_deref(), materials.as_mut()) {
+		sync_stash_interact_prompt_icon(pad_connected, assets, materials, prompt_icons);
+	}
+	if caption.is_empty() {
+		spawn_stash_interact_caption(&mut commands);
+	}
+	let camera_at = cameras.iter().next().map(|(_, transform)| transform.translation());
+	let pulse = 1.0 + 0.08 * (time.elapsed_secs() * 5.0).sin();
+	let prompt_at = target.map(|claim| prompt_world_point(claim.at, claim.player));
+	for (mut transform, mut visibility) in &mut prompt {
+		match prompt_at {
+			Some(at) => {
+				*visibility = Visibility::Visible;
+				*transform = prompt_billboard(at, camera_at);
+				transform.scale = Vec3::splat(pulse);
+			}
+			None => *visibility = Visibility::Hidden,
+		}
+	}
+	let label = target.map(|claim| match claim.bag {
+		Some(bag) => {
+			bags.get(bag).ok().map(pickup_action_label).unwrap_or_else(|| "Pick up".into())
+		}
+		None => String::from("Open"),
+	});
+	let camera = cameras.iter().next();
+	let screen = prompt_at.and_then(|at| {
+		let (camera, camera_transform) = camera?;
+		project_prompt_caption(camera, camera_transform, at)
+	});
+	for (mut text, mut node, mut visibility) in &mut caption {
+		match (target, label.as_deref()) {
+			(Some(_), Some(action)) => {
+				text.0 = action.to_string();
+				if let Some(screen) = screen {
+					node.left = Val::Px(screen.x + PROMPT_CAPTION_GAP_PX);
+					node.top = Val::Px(screen.y - 10.0);
+					*visibility = Visibility::Visible;
+				} else if camera.is_some() {
+					*visibility = Visibility::Hidden;
+				} else {
+					*visibility = Visibility::Visible;
+				}
+			}
+			_ => *visibility = Visibility::Hidden,
+		}
+	}
+}
+
+#[derive(Clone, Copy)]
+struct NearestClaim {
+	at: Vec3,
+	player: Vec3,
+	bag: Option<Entity>,
+}
+
+fn nearest_claim<'a>(
 	players: impl IntoIterator<Item = &'a Transform>,
 	stashes: impl IntoIterator<Item = (Entity, &'a Transform, &'a InventoryUser, &'a StashPolicy)>,
 	anchors: impl IntoIterator<Item = (Entity, &'a ChildOf, Option<&'a StashHaloAnchor>)>,
-) -> Option<Vec3> {
+) -> Option<NearestClaim> {
 	let listed: Vec<_> = stashes.into_iter().collect();
 	let anchors: Vec<_> = anchors.into_iter().collect();
 	players.into_iter().find_map(|transform| {
-		nearest_stash_in_radius(player_origin(transform), listed.iter().copied())
-			.map(|(stash, _, _, at)| halo_world_point(at, stash, anchors.iter().copied()))
+		let player = player_origin(transform);
+		nearest_stash_in_radius(player, listed.iter().copied()).map(|(stash, bag, _, at)| {
+			NearestClaim {
+				at: halo_world_point(at, stash, anchors.iter().copied()),
+				player,
+				bag: Some(bag),
+			}
+		})
 	})
+}
+
+fn nearest_interact<'a>(
+	players: impl IntoIterator<Item = &'a Transform>,
+	stashes: impl IntoIterator<Item = (Entity, &'a Transform, &'a InventoryUser, &'a StashPolicy)>,
+	anchors: impl IntoIterator<Item = (Entity, &'a ChildOf, Option<&'a StashHaloAnchor>)>,
+	crates: &crate::crate_loot::ClosedCrateQuery,
+) -> Option<NearestClaim> {
+	let players: Vec<_> = players.into_iter().collect();
+	if let Some(claim) = nearest_claim(players.iter().copied(), stashes, anchors) {
+		return Some(claim);
+	}
+	let transform = *players.first()?;
+	let player = player_origin(transform);
+	let at = crates.floor(player)?;
+	Some(NearestClaim { at, player, bag: None })
 }
 
 fn halo_world_point<'a>(
@@ -682,12 +1076,14 @@ fn sync_stash_claim_halo(
 		(With<WorldStash>, Without<StashClaimHalo>),
 	>,
 	anchors: Query<(Entity, &ChildOf, Option<&StashHaloAnchor>), With<StashDisplayedItem>>,
+	crates: crate::crate_loot::ClosedCrateQuery,
 	mut halo: Query<
 		(&mut Transform, &mut Visibility),
 		(With<StashClaimHalo>, Without<WorldStash>, Without<VegetationPlayer>),
 	>,
 ) {
-	let target = nearest_claim_point(players.iter(), stashes.iter(), anchors.iter());
+	let target = nearest_interact(players.iter(), stashes.iter(), anchors.iter(), &crates)
+		.map(|claim| claim.at);
 	if halo.is_empty() {
 		let Some(meshes) = meshes.as_mut() else {
 			return;
@@ -714,40 +1110,57 @@ fn sync_stash_claim_halo(
 	}
 }
 
+fn halo_ring_material(color: Color, emissive: LinearRgba) -> StandardMaterial {
+	StandardMaterial {
+		base_color: color,
+		emissive,
+		alpha_mode: AlphaMode::Blend,
+		unlit: true,
+		cull_mode: None,
+		..default()
+	}
+}
+
+fn halo_rings() -> [(f32, Color, LinearRgba); 3] {
+	[
+		(HALO_YELLOW_RADIUS, HALO_YELLOW, HALO_YELLOW_EMISSIVE),
+		(HALO_GREEN_RADIUS, HALO_GREEN, HALO_GREEN_EMISSIVE),
+		(HALO_BLUE_RADIUS, HALO_BLUE, HALO_BLUE_EMISSIVE),
+	]
+}
+
 fn spawn_stash_claim_halo(
 	commands: &mut Commands,
 	meshes: &mut Assets<Mesh>,
 	materials: &mut Assets<StandardMaterial>,
 ) {
-	commands.spawn((
-		Name::new("stash-claim-halo"),
-		StashClaimHalo,
-		Mesh3d(meshes.add(Annulus::new(HALO_INNER, HALO_OUTER))),
-		MeshMaterial3d(materials.add(StandardMaterial {
-			base_color: Color::srgba(0.98, 0.86, 0.32, 0.88),
-			emissive: LinearRgba::new(1.4, 1.05, 0.28, 1.0),
-			alpha_mode: AlphaMode::Blend,
-			unlit: true,
-			cull_mode: None,
-			..default()
-		})),
-		Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-		Visibility::Hidden,
-	));
+	commands
+		.spawn((
+			Name::new("stash-claim-halo"),
+			StashClaimHalo,
+			Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+			Visibility::Hidden,
+		))
+		.with_children(|halo| {
+			for (radius, color, emissive) in halo_rings() {
+				halo.spawn((
+					Mesh3d(meshes.add(Annulus::new(radius - HALO_RING_WIDTH, radius))),
+					MeshMaterial3d(materials.add(halo_ring_material(color, emissive))),
+				));
+			}
+		});
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
-	use crozon_character_items::{
-		ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor,
-	};
+	use character_items::{ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor};
 	use damage::tick_queued_despawns;
 	use firearm_user::held_scale_from_bounds;
 	use material_ref::MaterialId;
 	use player::Npc;
+	use world_player::Player as VegetationPlayer;
 
 	fn mixed_bag() -> Inventory {
 		Inventory {
@@ -767,6 +1180,7 @@ mod tests {
 			clothing: vec![0],
 			weapons: vec![1],
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		}
 	}
 
@@ -778,15 +1192,6 @@ mod tests {
 		move |mut commands| {
 			spawn_world_stash(&mut commands, transform, inventory.clone(), policy, None)
 		}
-	}
-
-	#[test]
-	fn default_loot_ttl_is_sixty_seconds_not_corpse_time() {
-		assert_eq!(DEFAULT_LOOT_SECS, 60.0);
-		assert_eq!(StashPolicy::default().loot_secs, 60.0);
-		assert!(!StashPolicy::default().persist);
-		assert!(StashPolicy::chest().persist);
-		assert!(WorldStashSettings::default().loot_secs > 4.0);
 	}
 
 	#[test]
@@ -879,6 +1284,121 @@ mod tests {
 		Ok(())
 	}
 
+	fn spawn_downed_npc(
+		world: &mut World,
+		bag: Inventory,
+		kind: Option<MobKind>,
+		brains: Option<CharacterBrains>,
+		point: Vec3,
+	) -> Entity {
+		let bag_id = world.spawn(bag).id();
+		let mut entity = world.spawn((
+			Npc,
+			Transform::from_translation(point),
+			InventoryUser::carrying(bag_id),
+			Downed { source: None, point, at: 0.0 },
+		));
+		if let Some(kind) = kind {
+			entity.insert(kind);
+		}
+		if let Some(brains) = brains {
+			entity.insert(brains);
+		}
+		entity.id()
+	}
+
+	struct NpcLootCase {
+		kind: Option<MobKind>,
+		brains: Option<CharacterBrains>,
+		point: Vec3,
+		fraction: LootFraction,
+	}
+
+	impl NpcLootCase {
+		fn drop_count(self) -> anyhow::Result<usize> {
+			let mut world = World::new();
+			world.init_resource::<WorldStashSettings>();
+			let mut bag = mixed_bag();
+			let body =
+				spawn_downed_npc(&mut world, bag.clone(), self.kind, self.brains, self.point);
+			let downed = Downed { source: None, point: self.point, at: 0.0 };
+			let expected = bag.take_fraction(
+				&mut ItemRng::from_seed(npc_loot_seed(body, &downed)),
+				self.fraction,
+			);
+			world
+				.run_system_once(detach_downed_npc_loot)
+				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
+			Ok(expected.items.len())
+		}
+	}
+
+	#[test]
+	fn raider_downed_drops_one_third() -> anyhow::Result<()> {
+		assert_eq!(
+			NpcLootCase {
+				kind: Some(MobKind::Raider),
+				brains: Some(CharacterBrains::Roamer),
+				point: Vec3::new(2.0, 0.0, 1.0),
+				fraction: LootFraction::ONE_THIRD,
+			}
+			.drop_count()?,
+			1
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn guard_downed_drops_one_third() -> anyhow::Result<()> {
+		assert_eq!(
+			NpcLootCase {
+				kind: Some(MobKind::Guard),
+				brains: None,
+				point: Vec3::new(-1.0, 0.0, 3.0),
+				fraction: LootFraction::ONE_THIRD,
+			}
+			.drop_count()?,
+			1
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn brawler_downed_drops_one_twelfth() -> anyhow::Result<()> {
+		let dropped = NpcLootCase {
+			kind: Some(MobKind::Brawler),
+			brains: None,
+			point: Vec3::new(0.0, 0.0, 5.0),
+			fraction: LootFraction::ONE_TWELFTH,
+		}
+		.drop_count()?;
+		assert!(dropped <= 1);
+		Ok(())
+	}
+
+	#[test]
+	fn brains_set_loot_when_mob_kind_is_missing() -> anyhow::Result<()> {
+		NpcLootCase {
+			kind: None,
+			brains: Some(CharacterBrains::Brawler),
+			point: Vec3::ZERO,
+			fraction: LootFraction::ONE_TWELFTH,
+		}
+		.drop_count()?;
+		Ok(())
+	}
+
+	#[test]
+	fn unmarked_npc_still_drops_the_full_bag() -> anyhow::Result<()> {
+		assert_eq!(npc_loot_fraction(None, None), LootFraction::ALL);
+		assert_eq!(
+			npc_loot_fraction(Some(&MobKind::Raider), Some(&CharacterBrains::Roamer)),
+			LootFraction::ONE_THIRD
+		);
+		Ok(())
+	}
+
 	#[test]
 	fn empty_npc_bag_does_not_leave_a_stash() -> anyhow::Result<()> {
 		let mut world = World::new();
@@ -920,43 +1440,81 @@ mod tests {
 
 	#[test]
 	fn stash_outlives_corpse_ttl_and_despawns_at_loot_secs() -> anyhow::Result<()> {
-		let mut app = App::new();
-		app.add_plugins(MinimalPlugins).add_systems(Last, tick_queued_despawns);
-		let stash = app
-			.world_mut()
+		use std::time::Duration;
+
+		const LOOT_SECS: f32 = 12.0;
+		const CORPSE_SECS: f32 = 4.0;
+
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		let stash = world
 			.run_system_once(spawn_stash_system(
 				Transform::IDENTITY,
 				mixed_bag(),
-				StashPolicy::ephemeral(DEFAULT_LOOT_SECS),
+				StashPolicy::ephemeral(LOOT_SECS),
 			))
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?
 			.ok_or_else(|| anyhow::anyhow!("stash"))?;
-		let remaining = app
-			.world()
+		let remaining = world
 			.get::<DespawnAfter>(stash)
 			.ok_or_else(|| anyhow::anyhow!("ttl"))?
 			.remaining_secs();
-		assert!((remaining - DEFAULT_LOOT_SECS).abs() < 1e-3);
-		assert!(remaining > 4.0);
+		assert!((remaining - LOOT_SECS).abs() < 1e-3);
+		assert!(remaining > CORPSE_SECS);
 
-		app.world_mut().entity_mut(stash).insert(DespawnAfter::seconds(0.0));
-		app.update();
-		assert!(!app.world().entities().contains(stash));
+		world
+			.resource_mut::<Time>()
+			.advance_by(Duration::from_secs_f32(CORPSE_SECS + 0.5));
+		world
+			.run_system_once(tick_queued_despawns)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.entities().contains(stash), "stash must outlive the corpse clock");
+		let remaining = world
+			.get::<DespawnAfter>(stash)
+			.ok_or_else(|| anyhow::anyhow!("ttl after corpse"))?
+			.remaining_secs();
+		assert!(remaining > 0.0);
+		assert!(remaining < LOOT_SECS - 1.0);
+
+		world.resource_mut::<Time>().advance_by(Duration::from_secs_f32(LOOT_SECS));
+		world
+			.run_system_once(tick_queued_despawns)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.entities().contains(stash));
 		Ok(())
 	}
 
 	fn write_intent(world: &mut World, intent: CharacterIntent) -> anyhow::Result<()> {
-		world
-			.run_system_once(move |mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(intent);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		use maybraid_controllers_core::{ActorTarget, InputSource, Routed};
+		use maybraid_virtual_pad_controller::PrimaryVirtualPad;
+		let player = world
+			.query_filtered::<Entity, With<VegetationPlayer>>()
+			.iter(world)
+			.next()
+			.ok_or_else(|| anyhow::anyhow!("player"))?;
+		let source_entity = Entity::from_bits(999);
+		let source = InputSource::virtual_pad(source_entity);
+		world.insert_resource(PrimaryVirtualPad(source_entity));
+		world.entity_mut(player).insert(ActorControlStatus::assigned(source));
+		match intent {
+			CharacterIntent::StartInteraction => {
+				world.add_observer(claim_nearby_stashes);
+			}
+			CharacterIntent::Inventory => {
+				world.add_observer(drop_player_inventory);
+			}
+			_ => return Err(anyhow::anyhow!("unsupported stash intent")),
+		}
+		world.trigger(ActorIntentEvent {
+			entity: player,
+			input: Routed::to_actor(source, ActorTarget::new(player), intent),
+		});
+		world.flush();
 		Ok(())
 	}
 
 	fn claim_setup(player_at: Vec3, stash_at: Vec3) -> anyhow::Result<(World, Entity, Entity)> {
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
 		let player_bag = world.spawn(Inventory::default()).id();
 		let player = world
 			.spawn((
@@ -980,9 +1538,6 @@ mod tests {
 	fn x_in_radius_take_alls_and_despawns_an_ephemeral_stash() -> anyhow::Result<()> {
 		let (mut world, player, stash) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
 		write_intent(&mut world, CharacterIntent::StartInteraction)?;
-		world
-			.run_system_once(claim_nearby_stashes)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
 		assert!(!world.entities().contains(stash));
 		let user = world
@@ -999,9 +1554,6 @@ mod tests {
 	fn x_out_of_radius_is_a_noop() -> anyhow::Result<()> {
 		let (mut world, player, stash) = claim_setup(Vec3::ZERO, Vec3::new(20.0, 0.0, 0.0))?;
 		write_intent(&mut world, CharacterIntent::StartInteraction)?;
-		world
-			.run_system_once(claim_nearby_stashes)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
 		assert!(world.entities().contains(stash));
 		let user = world
@@ -1013,10 +1565,78 @@ mod tests {
 	}
 
 	#[test]
+	fn secondary_actor_claim_does_not_change_primary_loadout() -> anyhow::Result<()> {
+		use characters::CharacterAppearance;
+		use maybraid_controllers_core::{ActorTarget, InputSource, Routed};
+		let mut world = World::new();
+		let primary_source = world.spawn_empty().id();
+		let secondary_source = world.spawn_empty().id();
+		world.insert_resource(PrimaryVirtualPad(primary_source));
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			Inventory::default(),
+		));
+		let primary_bag = world.spawn(Inventory::default()).id();
+		let secondary_bag = world.spawn(Inventory::default()).id();
+		let primary = world
+			.spawn((
+				VegetationPlayer,
+				Transform::from_xyz(20.0, 0.0, 0.0),
+				InventoryUser::carrying(primary_bag),
+				ActorControlStatus::assigned(InputSource::virtual_pad(primary_source)),
+			))
+			.id();
+		let secondary = world
+			.spawn((
+				VegetationPlayer,
+				Transform::IDENTITY,
+				InventoryUser::carrying(secondary_bag),
+				ActorControlStatus::assigned(InputSource::virtual_pad(secondary_source)),
+			))
+			.id();
+		let stash = world
+			.run_system_once(spawn_stash_system(
+				Transform::from_xyz(1.0, 0.0, 0.0),
+				mixed_bag(),
+				StashPolicy::default(),
+			))
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?
+			.ok_or_else(|| anyhow::anyhow!("spawned stash"))?;
+		world.add_observer(claim_nearby_stashes);
+		world.trigger(ActorIntentEvent {
+			entity: secondary,
+			input: Routed::to_actor(
+				InputSource::virtual_pad(secondary_source),
+				ActorTarget::new(secondary),
+				CharacterIntent::StartInteraction,
+			),
+		});
+		world.flush();
+		assert!(!world.entities().contains(stash));
+		assert!(world
+			.get::<Inventory>(primary_bag)
+			.ok_or_else(|| anyhow::anyhow!("primary bag"))?
+			.items
+			.is_empty());
+		assert_eq!(
+			world
+				.get::<Inventory>(secondary_bag)
+				.ok_or_else(|| anyhow::anyhow!("secondary bag"))?
+				.items
+				.len(),
+			3
+		);
+		assert!(world.resource::<WorldPlayerLoadout>().inventory.items.is_empty());
+		assert!(world.get::<AppliedWorldPlayerLoadout>(primary).is_none());
+		Ok(())
+	}
+
+	#[test]
 	fn inventory_intent_explodes_the_bag_into_claimable_items() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.init_resource::<WorldStashSettings>();
-		world.init_resource::<Messages<CharacterIntent>>();
+		world.init_resource::<Messages<DropLiveGrenade>>();
 		let player_bag = world.spawn(mixed_bag()).id();
 		let player = world
 			.spawn((
@@ -1027,9 +1647,6 @@ mod tests {
 			.id();
 
 		write_intent(&mut world, CharacterIntent::Inventory)?;
-		world
-			.run_system_once(drop_player_inventory)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
 		let player_inv = world
 			.get::<Inventory>(player_bag)
@@ -1048,9 +1665,6 @@ mod tests {
 		}
 
 		write_intent(&mut world, CharacterIntent::StartInteraction)?;
-		world
-			.run_system_once(claim_nearby_stashes)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let claimed =
 			world.get::<Inventory>(player_bag).ok_or_else(|| anyhow::anyhow!("claimed"))?;
 		assert_eq!(claimed.items.len(), 1);
@@ -1088,7 +1702,7 @@ mod tests {
 	#[test]
 	fn claim_updates_world_player_loadout() -> anyhow::Result<()> {
 		use crate::weapon::WorldPlayerLoadout;
-		use crozon_characters::CharacterAppearance;
+		use characters::CharacterAppearance;
 
 		let (mut world, player, stash) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
 		world.insert_resource(WorldPlayerLoadout::new(
@@ -1097,9 +1711,6 @@ mod tests {
 			Inventory::default(),
 		));
 		write_intent(&mut world, CharacterIntent::StartInteraction)?;
-		world
-			.run_system_once(claim_nearby_stashes)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
 		assert!(!world.entities().contains(stash));
 		let loadout = world
@@ -1116,11 +1727,11 @@ mod tests {
 	#[test]
 	fn drop_clears_world_player_loadout() -> anyhow::Result<()> {
 		use crate::weapon::WorldPlayerLoadout;
-		use crozon_characters::CharacterAppearance;
+		use characters::CharacterAppearance;
 
 		let mut world = World::new();
 		world.init_resource::<WorldStashSettings>();
-		world.init_resource::<Messages<CharacterIntent>>();
+		world.init_resource::<Messages<DropLiveGrenade>>();
 		let bag = mixed_bag();
 		world.insert_resource(WorldPlayerLoadout::new(
 			"active",
@@ -1131,9 +1742,6 @@ mod tests {
 		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
 
 		write_intent(&mut world, CharacterIntent::Inventory)?;
-		world
-			.run_system_once(drop_player_inventory)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
 		let loadout = world
 			.get_resource::<WorldPlayerLoadout>()
@@ -1144,9 +1752,77 @@ mod tests {
 	}
 
 	#[test]
+	fn tab_drop_clears_the_held_firearms_optic_marker() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		world.init_resource::<Messages<DropLiveGrenade>>();
+		let bag = world.spawn(mixed_bag()).id();
+		let held = world.spawn_empty().id();
+		let actor = world
+			.spawn((
+				VegetationPlayer,
+				Transform::IDENTITY,
+				InventoryUser::carrying(bag),
+				FirearmUser::holding(held),
+				PlayerUse { driver: held },
+				player::PlayerOpticAds,
+			))
+			.id();
+		write_intent(&mut world, CharacterIntent::Inventory)?;
+		assert!(world.get::<FirearmUser>(actor).is_none());
+		assert!(world.get::<PlayerUse>(actor).is_none());
+		assert!(world.get::<player::PlayerOpticAds>(actor).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn tab_drop_keeps_fisticuffs_and_does_not_spawn_them() -> anyhow::Result<()> {
+		use crate::weapon::WorldPlayerLoadout;
+		use characters::CharacterAppearance;
+
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		world.init_resource::<Messages<DropLiveGrenade>>();
+		let bag = Inventory {
+			items: vec![
+				InventoryItem::Fisticuffs,
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::clothing(
+					ClothingMesh::Pants,
+					ClothingMaterial::Cloth,
+					ItemColor::Natural,
+				),
+			],
+			clothing: vec![2],
+			weapons: vec![0, 1],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			bag.clone(),
+		));
+		let player_bag = world.spawn(bag).id();
+		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
+
+		write_intent(&mut world, CharacterIntent::Inventory)?;
+
+		let leftover = world.get::<Inventory>(player_bag).ok_or_else(|| anyhow::anyhow!("bag"))?;
+		assert_eq!(leftover.items, vec![InventoryItem::Fisticuffs]);
+		assert_eq!(leftover.weapons, vec![0]);
+		let loadout = world
+			.get_resource::<WorldPlayerLoadout>()
+			.ok_or_else(|| anyhow::anyhow!("loadout"))?;
+		assert_eq!(loadout.inventory.items, vec![InventoryItem::Fisticuffs]);
+		assert_eq!(loadout.inventory.weapons, vec![0]);
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), 2);
+		Ok(())
+	}
+
+	#[test]
 	fn persistent_chest_stays_after_claim() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
 		let player_bag = world.spawn(Inventory::default()).id();
 		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
 		let chest = world
@@ -1160,9 +1836,6 @@ mod tests {
 		assert!(world.get::<DespawnAfter>(chest).is_none());
 
 		write_intent(&mut world, CharacterIntent::StartInteraction)?;
-		world
-			.run_system_once(claim_nearby_stashes)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
 		assert!(world.entities().contains(chest));
 		let user = world.get::<InventoryUser>(chest).ok_or_else(|| anyhow::anyhow!("chest bag"))?;
@@ -1209,6 +1882,7 @@ mod tests {
 					clothing: Vec::new(),
 					weapons: vec![0],
 					skills: Vec::new(),
+					tanzes: Vec::new(),
 				},
 				StashPolicy::default(),
 			))
@@ -1239,9 +1913,6 @@ mod tests {
 		let (mut world, player, stash) =
 			claim_setup(Vec3::new(0.0, 8.0, 0.0), Vec3::new(2.0, 0.0, 0.0))?;
 		write_intent(&mut world, CharacterIntent::StartInteraction)?;
-		world
-			.run_system_once(claim_nearby_stashes)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
 		assert!(!world.entities().contains(stash));
 		let user = world
@@ -1253,17 +1924,49 @@ mod tests {
 	}
 
 	#[test]
+	fn kenney_interact_icons_are_in_the_asset_tree() {
+		let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+		assert!(root.join(INTERACT_PAD_ICON).is_file());
+		assert!(root.join(INTERACT_KEY_ICON).is_file());
+	}
+
+	#[test]
+	fn interact_icon_prefers_pad_when_connected() {
+		assert_eq!(stash_interact_icon(true), INTERACT_PAD_ICON);
+		assert_eq!(stash_interact_icon(false), INTERACT_KEY_ICON);
+	}
+
+	#[test]
+	fn pickup_action_names_a_single_item() {
+		let pants = one_garment();
+		assert_eq!(pickup_action_label(&pants), format!("Pick up {}", pants.items[0].name()));
+		assert_eq!(pickup_action_label(&mixed_bag()), "Pick up 3 items");
+		assert_eq!(pickup_action_label(&Inventory::default()), "Pick up");
+	}
+
+	#[test]
 	fn interact_prompt_toggles_in_radius() -> anyhow::Result<()> {
 		let (mut world, _, stash) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
-		world.spawn((StashInteractPrompt, Visibility::Hidden, Text::new("X / E  Pick up")));
+		world.init_resource::<Time>();
+		world.spawn((StashInteractPrompt, Transform::IDENTITY, Visibility::Hidden));
+		world.spawn((StashInteractCaption, Text::new(""), Node::default(), Visibility::Hidden));
 		world
 			.run_system_once(sync_stash_interact_prompt)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let visible = world
-			.query_filtered::<&Visibility, With<StashInteractPrompt>>()
+		let (visible, at) = world
+			.query_filtered::<(&Visibility, &Transform), With<StashInteractPrompt>>()
 			.single(&world)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*visible, Visibility::Visible);
+		assert!(at.translation.x > 0.0 && at.translation.x < 1.0);
+		assert!(at.translation.xz().length() < 1.0);
+		assert!(at.translation.y > 0.4);
+		let (caption, caption_visible) = world
+			.query_filtered::<(&Text, &Visibility), With<StashInteractCaption>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(caption.0, "Pick up 3 items");
+		assert_eq!(*caption_visible, Visibility::Visible);
 
 		world.entity_mut(stash).insert(Transform::from_xyz(40.0, 0.0, 0.0));
 		world
@@ -1274,7 +1977,38 @@ mod tests {
 			.single(&world)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*hidden, Visibility::Hidden);
+		let caption_hidden = world
+			.query_filtered::<&Visibility, With<StashInteractCaption>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(*caption_hidden, Visibility::Hidden);
 		Ok(())
+	}
+
+	#[test]
+	fn interact_prompt_sits_between_player_and_item() {
+		let item = Vec3::new(2.0, 0.08, 0.0);
+		let player = Vec3::ZERO;
+		let at = prompt_world_point(item, player);
+		assert!(at.x > player.x && at.x < item.x);
+		assert!(at.z.abs() < 1e-4);
+		assert!((at.y - (item.y + PROMPT_ABOVE)).abs() < 1e-4);
+		let beside = prompt_world_point(item, item + Vec3::X * 0.4);
+		assert!((beside.x - (item.x + 0.2)).abs() < 1e-4);
+	}
+
+	#[test]
+	fn interact_prompt_faces_the_camera() {
+		let origin = Vec3::new(2.0, 1.0, 0.0);
+		let camera = Vec3::new(2.0, 1.5, 4.0);
+		let at = origin + Vec3::Y * PROMPT_ABOVE;
+		let transform = prompt_billboard(at, Some(camera));
+		let toward_camera = (camera - transform.translation).normalize();
+		assert!(
+			(-transform.forward()).dot(toward_camera) > 0.7,
+			"quad +Z (opposite forward) should face the camera"
+		);
+		assert!((transform.translation - at).length() < 1e-4);
 	}
 
 	fn one_garment() -> Inventory {
@@ -1287,6 +2021,7 @@ mod tests {
 			clothing: vec![0],
 			weapons: Vec::new(),
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		}
 	}
 
@@ -1313,7 +2048,6 @@ mod tests {
 	#[test]
 	fn claim_halo_marks_the_nearest_stash() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
 		world.init_resource::<Time>();
 		let player_bag = world.spawn(Inventory::default()).id();
 		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
@@ -1353,6 +2087,56 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?
 			.translation;
 		assert!((far.xz() - Vec2::new(3.0, 0.0)).length() < 1e-3);
+		Ok(())
+	}
+
+	#[test]
+	fn claim_halo_marks_a_closed_crate() -> anyhow::Result<()> {
+		use crate::crate_loot::{ClosedLid, CrateLoot};
+		use furniture_assemblies::{FurnitureKitPart, PartKind};
+		use lod::gen::Id;
+
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.init_resource::<CrateLoot>();
+		let player_bag = world.spawn(Inventory::default()).id();
+		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
+		let at = Transform::from_xyz(2.0, 0.4, 0.0);
+		let host = crate::crate_loot::spawn_furniture_host(&mut world, Id::Universal);
+		world.spawn((
+			FurnitureKitPart { kind: PartKind::ChestLid, finish_seed: 1, slot: 0 },
+			ClosedLid(at),
+			at,
+			GlobalTransform::from(at),
+			ChildOf(host),
+		));
+		world.spawn((StashClaimHalo, Transform::IDENTITY, Visibility::Hidden));
+		world
+			.run_system_once(sync_stash_claim_halo)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let (transform, visibility) = world
+			.query_filtered::<(&Transform, &Visibility), With<StashClaimHalo>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(*visibility, Visibility::Visible);
+		assert!((transform.translation.xz() - Vec2::new(2.0, 0.0)).length() < 1e-3);
+
+		world
+			.run_system_once(spawn_stash_system(
+				Transform::from_xyz(1.0, 0.0, 0.0),
+				one_garment(),
+				StashPolicy::default(),
+			))
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(sync_stash_claim_halo)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let on_stash = world
+			.query_filtered::<&Transform, With<StashClaimHalo>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?
+			.translation;
+		assert!((on_stash.xz() - Vec2::new(1.0, 0.0)).length() < 1e-3);
 		Ok(())
 	}
 

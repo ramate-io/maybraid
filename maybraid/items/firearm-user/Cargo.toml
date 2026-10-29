@@ -12,18 +12,24 @@ rust-version = { workspace = true }
 [dependencies]
 avian3d = { workspace = true }
 bevy = { workspace = true }
-crozon-character-items = { workspace = true }
-crozon-characters = { workspace = true }
-crozon-rigs = { workspace = true }
+character-items = { workspace = true }
+characters = { workspace = true }
+character-rigs = { workspace = true }
 damage = { workspace = true }
 firearms = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
 material-ref = { workspace = true }
+maybraid-audio = { workspace = true }
 maybraid-character-controller = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-controllers-core = { workspace = true }
+maybraid-equipment = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 player = { workspace = true }
 player-camera = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
 
 [lints]
 workspace = true

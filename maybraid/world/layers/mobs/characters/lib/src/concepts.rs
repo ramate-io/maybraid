@@ -1,0 +1,81 @@
+//! Shared concept-screen identifiers used by CLI, menus, and playgrounds.
+
+use clap::ValueEnum;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+pub enum ConceptAnimation {
+	#[default]
+	Still,
+	Walk,
+	Run,
+	Gallop,
+	Jump,
+	Leap,
+	Tuck,
+	TuckedFlip,
+	TwoFootedTuckedFlip,
+	Soaring,
+	Flapping,
+	Jab,
+	ThinkAgain,
+	Squat,
+	Prone,
+	LateralUndulation,
+	DorsoventralUndulation,
+	EpiphantBray,
+	EpiphantSleepEnter,
+	EpiphantSleepHold,
+	EpiphantWake,
+}
+
+impl ConceptAnimation {
+	pub const VALUES: &'static [Self] = &[
+		Self::Still,
+		Self::Walk,
+		Self::Run,
+		Self::Gallop,
+		Self::Jump,
+		Self::Leap,
+		Self::Tuck,
+		Self::TuckedFlip,
+		Self::TwoFootedTuckedFlip,
+		Self::Soaring,
+		Self::Flapping,
+		Self::Jab,
+		Self::ThinkAgain,
+		Self::Squat,
+		Self::Prone,
+		Self::LateralUndulation,
+		Self::DorsoventralUndulation,
+		Self::EpiphantBray,
+		Self::EpiphantSleepEnter,
+		Self::EpiphantSleepHold,
+		Self::EpiphantWake,
+	];
+
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::Still => "still",
+			Self::Walk => "walk",
+			Self::Run => "run",
+			Self::Gallop => "gallop",
+			Self::Jump => "jump",
+			Self::Leap => "leap",
+			Self::Tuck => "tuck",
+			Self::TuckedFlip => "tucked-flip",
+			Self::TwoFootedTuckedFlip => "two-footed-tucked-flip",
+			Self::Soaring => "soaring",
+			Self::Flapping => "flapping",
+			Self::Jab => "jab",
+			Self::ThinkAgain => "think-again",
+			Self::Squat => "squat",
+			Self::Prone => "prone",
+			Self::LateralUndulation => "lateral-undulation",
+			Self::DorsoventralUndulation => "dorsoventral-undulation",
+			Self::EpiphantBray => "epiphant-bray",
+			Self::EpiphantSleepEnter => "epiphant-sleep-enter",
+			Self::EpiphantSleepHold => "epiphant-sleep-hold",
+			Self::EpiphantWake => "epiphant-wake",
+		}
+	}
+}

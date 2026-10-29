@@ -2,21 +2,22 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{
-	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode, PreviewColor,
-	StatCard, StatTone, SwatchChoice, ThumbnailRequest,
+	AssetChoice, AssetThumbnailDisplay, EquipmentChoice, GridCatalogChoice, ItemRow, MenuNode,
+	OrderedEquipmentRow, PreviewColor, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
 };
 use menu_components::{
-	spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label, spawn_hud_action,
-	spawn_hud_plain, spawn_hud_text, spawn_labeled_row, spawn_section_header,
-	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid,
-	HudFonts, HudMenu, HudMenuItem, ShortTextField, ShortTextKey, PANEL_BLOCK_FONT_SIZE,
-	PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_LIGHT_BLUE, TEXT_LIME,
-	TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	equipped_pane_fill, spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label,
+	spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text, spawn_labeled_row,
+	spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row,
+	spawn_tile_grid, spawn_tile_grid_columns, CursorRow, HudFonts, HudMenu, HudMenuItem,
+	ShortTextField, ShortTextKey, MENU_LIST_PAD, MENU_LIST_RADIUS, PANEL_BLOCK_FONT_SIZE,
+	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP,
+	TEXT_LIGHT_BLUE, TEXT_LIME, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
 use crate::justify::MenuJustify;
 use crate::overlay::{labeled_values_preview, overlay_summary_value, primary_select};
-use crate::widgets::{MenuButton, OpenSelectKey};
+use crate::widgets::{EquippedOrderControls, InventoryItemKey, MenuButton, OpenSelectKey};
 
 /// Renderer-owned thumbnail bridge. The host adapts this to its cache.
 pub trait MenuThumbnailContext {
@@ -30,6 +31,11 @@ pub trait MenuThumbnailContext {
 
 	fn image_for_key(&mut self, _key: u64) -> Option<Handle<Image>> {
 		None
+	}
+
+	/// Multiply the catalog PNG. White leaves shaded art; yellow tints a silhouette.
+	fn tint_for_key(&mut self, _key: u64) -> Color {
+		Color::WHITE
 	}
 
 	/// Off-screen [`Camera2d`] for a catalog [`bevy::ui::widget::ViewportNode`].
@@ -66,6 +72,12 @@ pub struct RenderContext<'a, T> {
 	pub interactive: bool,
 	/// Saved-character HUD: appearance headers use a dampened yellow.
 	pub lock_appearance: bool,
+	/// Inventory uses four columns; appearance pickers stay at three.
+	pub catalog_columns: u16,
+	pub catalog_thumb_px: f32,
+	/// Follow this bag item after a rebuild. Overlay-only.
+	pub retain_key: Option<crate::widgets::InventoryItemKey>,
+	pub retained_index: Option<usize>,
 }
 
 impl<T> RenderContext<'_, T> {
@@ -75,14 +87,27 @@ impl<T> RenderContext<'_, T> {
 		item
 	}
 
+	fn note_inventory_key(&mut self, key: crate::widgets::InventoryItemKey, index: usize) {
+		if self.retain_key == Some(key) {
+			self.retained_index = Some(index);
+		}
+	}
+
 	pub fn hud_menu(&self, previous: Option<HudMenu>) -> HudMenu {
 		HudMenu::retain(self.hud_item_count, previous)
 	}
 
 	pub fn header_color(&self, label: &str) -> Color {
 		if self.lock_appearance
-			&& !matches!(label, "Clothing" | "Weapons" | "Skill Maps" | "Loadout")
-		{
+			&& !matches!(
+				label,
+				"Inventory"
+					| "Starter Kit" | "Clothing"
+					| "Weapons" | "Tools"
+					| "Skill Maps" | "Tanzes"
+					| "Equipped" | "Lubikan"
+					| "Loadout"
+			) {
 			TEXT_YELLOW_FAINT
 		} else {
 			TEXT_YELLOW
@@ -241,6 +266,13 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 					self.grid_catalog(choices, parent, context);
 				} else {
 					self.header(parent, context, label, Some(overlay_summary_value(node)));
+				}
+			}
+			MenuNode::OrderedEquipment { rows } => {
+				if self.interior {
+					self.ordered_equipment(rows, parent, context);
+				} else {
+					self.header(parent, context, "Equipped", Some(overlay_summary_value(node)));
 				}
 			}
 			MenuNode::ShortText { label, value, max_len } => {
@@ -422,6 +454,39 @@ impl MaybraidMenuSink {
 		});
 	}
 
+	fn interior_section_header<C>(
+		&self,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+		label: &'static str,
+	) {
+		parent
+			.spawn((
+				Button,
+				CursorRow,
+				context.stamp_hud_item(),
+				Node {
+					width: Val::Percent(100.0),
+					padding: UiRect::axes(Val::Px(0.0), Val::Px(4.0)),
+					flex_direction: FlexDirection::Row,
+					justify_content: self.justify.content(),
+					align_items: AlignItems::Center,
+					..default()
+				},
+				BackgroundColor(Color::NONE),
+			))
+			.with_children(|row| {
+				spawn_header_line(
+					row,
+					context.fonts,
+					label,
+					None,
+					PANEL_HEADER_FONT_SIZE,
+					TEXT_YELLOW,
+				);
+			});
+	}
+
 	fn section<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 		&self,
 		label: &'static str,
@@ -430,6 +495,7 @@ impl MaybraidMenuSink {
 		context: &mut RenderContext<'_, C>,
 	) {
 		if self.interior {
+			self.interior_section_header(parent, context, label);
 			self.render_nodes(children, parent, context);
 			return;
 		}
@@ -480,12 +546,59 @@ impl MaybraidMenuSink {
 		selected: bool,
 		rank: Option<u8>,
 		thumbnail: Option<Handle<Image>>,
+		thumbnail_tint: Color,
 		viewport: Option<Entity>,
 		swatch: Option<Color>,
-		event: E,
+		event: Option<E>,
+		item_key: Option<InventoryItemKey>,
 	) {
+		let item = context.stamp_hud_item();
+		if let Some(key) = item_key {
+			context.note_inventory_key(key, item.index);
+		}
+		let thumb_px = context.catalog_thumb_px;
+		let extra_key = item_key;
 		if context.interactive {
-			spawn_grid_catalog_tile(
+			if let Some(event) = event {
+				match extra_key {
+					Some(key) => spawn_grid_catalog_tile(
+						parent,
+						context.fonts,
+						label,
+						detail,
+						selected,
+						rank,
+						thumbnail,
+						thumbnail_tint,
+						viewport,
+						swatch,
+						false,
+						thumb_px,
+						(MenuButton(event), item, key),
+					),
+					None => spawn_grid_catalog_tile(
+						parent,
+						context.fonts,
+						label,
+						detail,
+						selected,
+						rank,
+						thumbnail,
+						thumbnail_tint,
+						viewport,
+						swatch,
+						false,
+						thumb_px,
+						(MenuButton(event), item),
+					),
+				}
+				return;
+			}
+		}
+		// Read-only tiles stay in the focus list so pad / keyboard can
+		// scroll them into view. Activate extras (equip / drop) stay off.
+		match extra_key {
+			Some(key) => spawn_grid_catalog_tile(
 				parent,
 				context.fonts,
 				label,
@@ -493,13 +606,14 @@ impl MaybraidMenuSink {
 				selected,
 				rank,
 				thumbnail,
+				thumbnail_tint,
 				viewport,
 				swatch,
 				false,
-				(MenuButton(event), context.stamp_hud_item()),
-			);
-		} else {
-			spawn_grid_catalog_tile(
+				thumb_px,
+				(item, key),
+			),
+			None => spawn_grid_catalog_tile(
 				parent,
 				context.fonts,
 				label,
@@ -507,11 +621,13 @@ impl MaybraidMenuSink {
 				selected,
 				rank,
 				thumbnail,
+				thumbnail_tint,
 				viewport,
 				swatch,
-				true,
-				Pickable::IGNORE,
-			);
+				false,
+				thumb_px,
+				item,
+			),
 		}
 	}
 
@@ -546,7 +662,7 @@ impl MaybraidMenuSink {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		spawn_tile_grid(parent, self.justify.content(), |grid| {
+		spawn_tile_grid_columns(parent, self.justify.content(), context.catalog_columns, |grid| {
 			for choice in choices {
 				let viewport =
 					choice.image_key.and_then(|key| context.thumbnails.viewport_for_key(key));
@@ -555,6 +671,10 @@ impl MaybraidMenuSink {
 				} else {
 					grid_catalog_thumbnail(choice, bevy_color(choice.preview), context)
 				};
+				let tint = choice
+					.image_key
+					.map(|key| context.thumbnails.tint_for_key(key))
+					.unwrap_or(Color::WHITE);
 				let swatch = choice.path.is_empty().then_some(bevy_color(choice.preview));
 				self.catalog_tile(
 					grid,
@@ -564,12 +684,123 @@ impl MaybraidMenuSink {
 					choice.selected,
 					choice.rank,
 					thumbnail,
+					tint,
 					viewport,
 					swatch,
 					choice.event,
+					choice.item_key.map(|index| InventoryItemKey { index, equipped: false }),
 				);
 			}
 		});
+	}
+
+	fn ordered_equipment<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+		&self,
+		rows: &[OrderedEquipmentRow<E>],
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		parent
+			.spawn((
+				Node {
+					width: Val::Percent(100.0),
+					flex_direction: FlexDirection::Column,
+					flex_grow: 0.0,
+					flex_shrink: 0.0,
+					row_gap: Val::Px(PANEL_ROW_GAP),
+					padding: UiRect::all(Val::Px(MENU_LIST_PAD)),
+					border_radius: BorderRadius::all(Val::Px(MENU_LIST_RADIUS)),
+					..default()
+				},
+				BackgroundColor(equipped_pane_fill()),
+				Pickable::IGNORE,
+			))
+			.with_children(|pane| {
+				spawn_header_line(
+					pane,
+					context.fonts,
+					"Equipped",
+					None,
+					PANEL_BLOCK_FONT_SIZE,
+					TEXT_YELLOW,
+				);
+				for row in rows {
+					spawn_tile_grid_columns(
+						pane,
+						self.justify.content(),
+						context.catalog_columns,
+						|grid| {
+							for choice in &row.choices {
+								self.equipment_tile(grid, context, choice);
+							}
+						},
+					);
+				}
+			});
+	}
+
+	fn equipment_tile<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+		&self,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+		choice: &EquipmentChoice<E>,
+	) {
+		let tile = &choice.tile;
+		let viewport = tile.image_key.and_then(|key| context.thumbnails.viewport_for_key(key));
+		let thumbnail = if viewport.is_some() {
+			None
+		} else {
+			grid_catalog_thumbnail(tile, bevy_color(tile.preview), context)
+		};
+		let tint = tile
+			.image_key
+			.map(|key| context.thumbnails.tint_for_key(key))
+			.unwrap_or(Color::WHITE);
+		let swatch = tile.path.is_empty().then_some(bevy_color(tile.preview));
+		let key = InventoryItemKey { index: choice.item_key, equipped: true };
+		let item = context.stamp_hud_item();
+		context.note_inventory_key(key, item.index);
+		let thumb_px = context.catalog_thumb_px;
+		let controls = EquippedOrderControls {
+			unequip: choice.unequip,
+			move_left: choice.move_left,
+			move_right: choice.move_right,
+		};
+		if context.interactive {
+			if let Some(event) = tile.event {
+				spawn_grid_catalog_tile(
+					parent,
+					context.fonts,
+					&tile.label,
+					&tile.detail,
+					tile.selected,
+					tile.rank,
+					thumbnail,
+					tint,
+					viewport,
+					swatch,
+					false,
+					thumb_px,
+					(MenuButton(event), item, key, controls),
+				);
+				return;
+			}
+		}
+		spawn_grid_catalog_tile(
+			parent,
+			context.fonts,
+			&tile.label,
+			&tile.detail,
+			tile.selected,
+			tile.rank,
+			thumbnail,
+			tint,
+			viewport,
+			swatch,
+			false,
+			thumb_px,
+			(item, key, controls),
+		);
 	}
 
 	fn item_row<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(

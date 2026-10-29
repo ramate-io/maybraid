@@ -3,6 +3,7 @@ members = [
 	"scripts/glb",
 	"scripts/armature-dump",
 	"scripts/iconography-png",
+	"scripts/iconography-home",
 	"scripts/blend-relink",
 	"scripts/clothes-fit",
 ]

@@ -11,19 +11,19 @@ use crate::material_ref::MaterialRef;
 /// is a `#[derive(SystemParam)]` struct that borrows only the `Assets` / caches it needs.
 ///
 /// Domain libs should claim only the recipe names they own and return `false` from
-/// [`Self::try_fulfill`] for everything else. App crates compose those libs in one
-/// [`crate::MaterialRefPlugin`] so two fulfills never race the same root.
+/// [`Self::try_fulfill`] for everything else. App composition roots compose those
+/// libs in one [`crate::MaterialRefPlugin`] so two fulfills never race the same root.
 ///
 /// ```ignore
 /// #[derive(SystemParam)]
-/// pub struct ChicoMaterialLib<'w> {
-///     leaf: ResMut<'w, Assets<ChicoLeafMaterial>>,
-///     cache: ResMut<'w, MaterialRefCache<ChicoLeafMaterial>>,
+/// pub struct VegetationMaterialLib<'w> {
+///     leaf: ResMut<'w, Assets<LeafMaterial>>,
+///     cache: ResMut<'w, MaterialRefCache<LeafMaterial>>,
 /// }
 ///
-/// impl MaterialLib for ChicoMaterialLib<'_> {
+/// impl MaterialLib for VegetationMaterialLib<'_> {
 ///     fn try_fulfill(&mut self, entity: Entity, r: &MaterialRef, commands: &mut Commands) -> bool {
-///         // insert MeshMaterial3d::<ChicoLeafMaterial>(…) and return true, or false
+///         // insert MeshMaterial3d::<LeafMaterial>(…) and return true, or false
 ///     }
 /// }
 /// ```
@@ -32,6 +32,9 @@ pub trait MaterialLib {
 	///
 	/// Return `true` when a material was inserted. Return `false` so a composed
 	/// parent lib can try the next domain lib (and eventually a Standard fallback).
+	/// Targets can retire before deferred commands apply. Use `try_insert` and
+	/// `try_remove` for material assignment; the caller's tolerant completion
+	/// marker does not protect commands queued inside this method.
 	fn try_fulfill(
 		&mut self,
 		entity: Entity,

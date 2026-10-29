@@ -1,0 +1,33 @@
+[package]
+name = "maybraid-language-mistral"
+version = { workspace = true }
+edition  = { workspace = true }
+license  = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[features]
+default = []
+metal = ["mistralrs/metal"]
+cuda = ["mistralrs/cuda"]
+
+[dependencies]
+maybraid-language-core = { workspace = true }
+mistralrs = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+# Apple Silicon: Metal is the GPU backend. Linux CUDA stays opt-in (`cuda`).
+[target.'cfg(target_os = "macos")'.dependencies]
+mistralrs = { workspace = true, features = ["metal"] }
+
+[lints]
+workspace = true

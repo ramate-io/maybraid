@@ -3,7 +3,7 @@
 use std::ffi::OsString;
 
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::PlayerSpawnXz;
+use world_player::PlayerSpawnXz;
 
 /// `MAYBRAID_START_AT=x,z` when argv does not pass `--start-at`.
 pub const START_AT_ENV: &str = "MAYBRAID_START_AT";
@@ -98,6 +98,15 @@ mod tests {
 	fn take_start_at_equals_form() {
 		let (start, rest) = take_start_at_from_args([OsString::from("--start-at=-10,20")]).unwrap();
 		assert_eq!(start, Some(Vec2::new(-10.0, 20.0)));
+		assert!(rest.is_empty());
+	}
+
+	#[test]
+	fn take_start_at_space_form_accepts_negatives() {
+		let (start, rest) =
+			take_start_at_from_args([OsString::from("--start-at"), OsString::from("-1500,-600")])
+				.unwrap();
+		assert_eq!(start, Some(Vec2::new(-1500.0, -600.0)));
 		assert!(rest.is_empty());
 	}
 }

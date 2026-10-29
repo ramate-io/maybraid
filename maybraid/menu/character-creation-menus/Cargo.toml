@@ -1,0 +1,26 @@
+[package]
+name = "character-creation-menus"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+lubikans = { workspace = true }
+bevy = { workspace = true }
+bevy_math = { workspace = true }
+bevy-character-ui-menu-renderer = { workspace = true }
+character-ui-menu = { workspace = true }
+character-items = { workspace = true }
+characters = { workspace = true }
+tanz-user = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

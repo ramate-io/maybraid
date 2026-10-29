@@ -1,10 +1,10 @@
 //! Roll a generated clothing + firearm identity for a firing-range combatant.
 
-use crozon_character_items::{
-	random_starter_clothing, realize_firearm_stats, CharacterSheet, FirearmMesh, FirearmSpec,
-	FirearmStats, Inventory, InventoryItem, ItemRng, STARTER_CLOTHING_COUNT,
+use character_items::{
+	realize_firearm_stats, CharacterSheet, FirearmMesh, FirearmSpec, FirearmStats, Inventory,
+	InventoryItem, ItemRng, STARTER_CLOTHING_COUNT,
 };
-use crozon_characters::species::braidman::BraidmanConfig;
+use characters::species::braidman::BraidmanConfig;
 use firearm_user::kit_from_spec;
 use firearms::FirearmKit;
 
@@ -19,7 +19,7 @@ pub(crate) struct CombatantLoadout {
 }
 
 pub(crate) fn roll_combatant(rng: &mut ItemRng) -> CombatantLoadout {
-	let mut items = random_starter_clothing(rng, STARTER_CLOTHING_COUNT);
+	let mut items = rng.random_starter_clothing(STARTER_CLOTHING_COUNT);
 	let body = *rng.choose(FirearmMesh::VALUES).unwrap_or(&FirearmMesh::Bullpup);
 	let spec = FirearmSpec::roll(rng, body);
 	let stats = realize_firearm_stats(rng, &spec);
@@ -52,7 +52,7 @@ fn appearance_from_inventory(inventory: &Inventory) -> BraidmanConfig {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crozon_character_items::{FirearmSight, ItemColor, ProjectileKind};
+	use character_items::{FirearmSight, ItemColor, ProjectileKind};
 	use firearms::{BarrelMesh, BodyMesh, GripMesh, SightMesh, TriggerBoxMesh};
 	use std::collections::BTreeSet;
 

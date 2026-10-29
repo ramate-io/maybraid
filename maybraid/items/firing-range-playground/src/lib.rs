@@ -18,14 +18,18 @@ mod vantage;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
+pub use session::{FreeForAllBody, FreeForAllHost};
 
+use bevy::ecs::schedule::common_conditions::resource_exists;
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
+use building_components::{apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin};
+use building_physics::BuildingWalkColliderPlugin;
 use buildings_lod::FiringRangeBuildingsLodPlugin;
+use character_items::ItemRng;
+use character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollSettings};
+use characters::{CharacterHostsPlugin, StandaloneCharacterMaterialRefPlugin};
 use combat_hud::CombatHudPlugin;
-use crozon_character_items::ItemRng;
-use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollSettings};
-use crozon_characters::CharacterHostsPlugin;
 use diagnostics::FiringRangeDiagnosticsPlugin;
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
@@ -39,7 +43,10 @@ use hiding_intelligence::{HidingPlugin, HidingSystems};
 use les_halles::LesHallesSpawn;
 use lod::LodRefreshSystems;
 use maybraid_character_controller::CharacterControllerPlugin;
-use maybraid_input::{PadGameplayEnabled, VirtualPadSystems};
+use maybraid_controllers_core::{
+	CaptureKind, CaptureToken, InputRouting, InputSource, PadPolicySystems, ScopeOwner,
+};
+use maybraid_locomotion_controller::LocomotionControllerPlugin;
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
@@ -51,10 +58,6 @@ use player::{
 	spawn_player_with_hidden_capsule, Npc, Player, PlayerLook, PlayerPlugin,
 };
 use player_camera::{spawn_follow_camera, PlayerCameraPlugin};
-use richmond_building_components::{
-	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
-};
-use richmond_building_physics::BuildingWalkColliderPlugin;
 use session::{AppliedSession, Civilian, LoadoutRng, RangeMode, RangeSession};
 use spotting_intelligence::SpottingSystems;
 use threat_intelligence::{ThreatIntelligencePlugin, ThreatSystems};
@@ -78,12 +81,21 @@ impl Plugin for FiringRangePlugin {
 		.add_plugins(FirearmHostsPlugin);
 		add_firearm_components_host::<firearm_user::GeneratedFirearm>(app);
 		app.add_plugins(FirearmWeaponsPlugin)
+			.add_plugins(StandaloneCharacterMaterialRefPlugin)
 			.add_plugins(CharacterHostsPlugin)
 			.add_plugins(CharacterControllerPlugin)
+			.add_plugins(LocomotionControllerPlugin)
 			.add_plugins(PlayerPlugin)
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(FirearmUserPlugin)
-			.add_plugins(CombatHudPlugin::default())
+			.add_plugins(CombatHudPlugin {
+				hit_markers: true,
+				directional_damage: true,
+				player_vitals: true,
+				lubikan_charge: false,
+				lubikan_point_feedback: false,
+				score: false,
+			})
 			.add_plugins(CharacterRagdollPlugin)
 			.add_plugins(FiringRangeDiagnosticsPlugin)
 			.add_plugins(FiringRangeBuildingsLodPlugin)
@@ -140,6 +152,7 @@ impl Plugin for FiringRangePlugin {
 			.init_resource::<engagement::NpcEngagement>()
 			.init_resource::<RangeSession>()
 			.init_resource::<AppliedSession>()
+			.init_resource::<RangeConsoleCapture>()
 			.insert_resource(LoadoutRng(ItemRng::from_entropy()))
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_systems(
@@ -163,7 +176,7 @@ impl Plugin for FiringRangePlugin {
 				)
 					.chain(),
 			)
-			.add_systems(PreUpdate, gate_pad.before(VirtualPadSystems::Produce))
+			.add_systems(PreUpdate, gate_pad.before(PadPolicySystems))
 			.add_systems(Update, vantage::sync_range_threat_actors.in_set(ThreatSystems::Prepare))
 			.add_systems(
 				Update,
@@ -186,9 +199,6 @@ impl Plugin for FiringRangePlugin {
 					hit_debug::draw_dummy_hit_volumes,
 					apply_parent_confines.after(LodRefreshSystems::Cull),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-					hud::sync_combat_hud_opponent_total
-						.before(combat_hud::CombatHudSystems::Health),
-					hud::sync_evasion_hud_status.before(combat_hud::CombatHudSystems::Health),
 					hud::sync_gun_stats,
 				),
 			)
@@ -205,6 +215,154 @@ impl Plugin for FiringRangePlugin {
 				vantage::note_civilian_received_fire.after(FirearmWeaponSystems::Fire),
 			);
 	}
+}
+
+/// Inserted by the host app while the free-for-all should be running.
+#[derive(Resource, Clone, Copy, Debug, Default)]
+pub struct FreeForAllLive;
+
+/// The Les Halles roster has been spawned for the current [`FreeForAllLive`].
+#[derive(Resource, Clone, Copy, Debug, Default)]
+pub struct FreeForAllMounted;
+
+/// Directional lights spawned with the roster and removed when it leaves.
+#[derive(Component)]
+struct FreeForAllLight;
+
+/// `mount_arena` inserts [`LesHallesSpawn`] through commands, so the roster waits
+/// one frame until that pose is visible.
+#[derive(Resource, Clone, Copy, Debug, Default)]
+struct FreeForAllSpawning;
+
+/// Free-for-all inside an app that already has the world intelligence stack.
+///
+/// Does not spawn at startup and does not register slash commands. [`FreeForAllLive`]
+/// mounts the playground seed arena and the generated roster.
+pub struct FreeForAllPlugin;
+
+impl Plugin for FreeForAllPlugin {
+	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<player::PlayerPlugin>() {
+			app.add_plugins(player::PlayerPlugin);
+		}
+		app.init_resource::<LesHallesSpawn>()
+			.init_resource::<damage::CombatRespawn>()
+			.init_resource::<engagement::NpcEngagement>()
+			.init_resource::<RangeSession>()
+			.init_resource::<AppliedSession>()
+			.insert_resource(LoadoutRng(ItemRng::from_entropy()))
+			.init_resource::<FreeForAllHost>()
+			.add_systems(Update, sync_free_for_all_mount)
+			.add_systems(
+				Update,
+				(
+					session::apply_session,
+					session::spawn_player_character,
+					session::spawn_npc_character,
+					session::spawn_held_system,
+					(damage::queue_flee_out_respawns, respawn_combatants).chain(),
+					vantage::sync_combat_spot_subjects
+						.after(ThreatSystems::Discover)
+						.before(SpottingSystems::Observe),
+					vantage::sync_range_threat_actors.in_set(ThreatSystems::Prepare),
+					vantage::seed_range_threat_observations
+						.in_set(ThreatSystems::Ingest)
+						.before(threat_intelligence::ingest_threat_observations),
+					apply_parent_confines.after(LodRefreshSystems::Cull),
+				)
+					.run_if(resource_exists::<FreeForAllLive>)
+					.after(sync_free_for_all_mount),
+			)
+			.add_systems(
+				PostUpdate,
+				(
+					damage::queue_downed_respawns.after(::damage::DamageSystems::Down),
+					engagement::record_player_shot.after(::damage::DamageSystems::Collect),
+					vantage::note_civilian_received_fire.after(FirearmWeaponSystems::Fire),
+				)
+					.run_if(resource_exists::<FreeForAllLive>),
+			);
+	}
+}
+
+fn sync_free_for_all_mount(
+	live: Option<Res<FreeForAllLive>>,
+	mounted: Option<Res<FreeForAllMounted>>,
+	mut session: ResMut<RangeSession>,
+	mut applied: ResMut<AppliedSession>,
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<StandardMaterial>>,
+	spawning: Option<Res<FreeForAllSpawning>>,
+	arena: Query<Entity, With<les_halles_arena::TrainingArena>>,
+	bodies: Query<(Entity, Option<&firearm_user::FirearmUser>), With<FreeForAllBody>>,
+	lights: Query<Entity, With<FreeForAllLight>>,
+) {
+	let want = live.is_some();
+	let have = mounted.is_some();
+	if !want {
+		if have || spawning.is_some() {
+			clear_free_for_all(&mut commands, &mut session, &mut applied, &bodies, &arena, &lights);
+		}
+		return;
+	}
+	if have {
+		return;
+	}
+	if spawning.is_none() {
+		les_halles_arena::mount_arena(
+			&mut commands,
+			&mut meshes,
+			&mut materials,
+			les_halles_arena::PLAYGROUND_SEED,
+		);
+		commands.insert_resource(FreeForAllSpawning);
+		return;
+	}
+	session.enter_free_for_all(session::DEFAULT_FFA_NPCS, None);
+	spawn_free_for_all_lights(&mut commands);
+	commands.insert_resource(FreeForAllMounted);
+	commands.remove_resource::<FreeForAllSpawning>();
+}
+
+fn clear_free_for_all(
+	commands: &mut Commands,
+	session: &mut RangeSession,
+	applied: &mut AppliedSession,
+	bodies: &Query<(Entity, Option<&firearm_user::FirearmUser>), With<FreeForAllBody>>,
+	arena: &Query<Entity, With<les_halles_arena::TrainingArena>>,
+	lights: &Query<Entity, With<FreeForAllLight>>,
+) {
+	for (entity, user) in bodies {
+		if let Some(user) = user {
+			commands.entity(user.held).try_despawn();
+		}
+		commands.entity(entity).despawn();
+	}
+	for entity in arena {
+		commands.entity(entity).despawn();
+	}
+	for entity in lights {
+		commands.entity(entity).despawn();
+	}
+	*session = RangeSession::default();
+	applied.epoch = 0;
+	commands.remove_resource::<FreeForAllMounted>();
+	commands.remove_resource::<FreeForAllSpawning>();
+}
+
+fn spawn_free_for_all_lights(commands: &mut Commands) {
+	use std::f32::consts::PI;
+	commands.spawn((
+		FreeForAllLight,
+		DirectionalLight { illuminance: 2500.0, shadow_maps_enabled: true, ..default() },
+		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 3.0, PI / 5.0, 0.0)),
+	));
+	commands.spawn((
+		FreeForAllLight,
+		DirectionalLight { illuminance: 200.0, shadow_maps_enabled: false, ..default() },
+		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 3.0, 0.0)),
+	));
 }
 
 fn spawn_follow_camera_system(mut commands: Commands) {
@@ -249,6 +407,7 @@ pub(crate) fn spawn_player_at(
 		PlayerLook { yaw: spawn.look_yaw, ..default() },
 		damage::Health::default(),
 		damage::headshot_band(),
+		FreeForAllBody,
 	));
 }
 
@@ -266,6 +425,7 @@ pub(crate) fn spawn_npc_at(
 		materials,
 	);
 	session::install_npc_combat(commands, npc, spawn.npc, None, None);
+	commands.entity(npc).insert(FreeForAllBody);
 }
 
 fn dummy_translation(spawn: &LesHallesSpawn, hull: player::LocomotionCapsule) -> Vec3 {
@@ -289,6 +449,7 @@ pub(crate) fn spawn_dummy_at(
 		damage::Health::default(),
 		damage::headshot_band_for(hull),
 		session::TestDummy,
+		FreeForAllBody,
 		species,
 	));
 }
@@ -298,9 +459,12 @@ fn respawn_combatants(
 	time: Res<Time>,
 	spawn: Res<LesHallesSpawn>,
 	session: Res<RangeSession>,
-	players: Query<(), (With<Player>, Without<::damage::Downed>)>,
-	combatants: Query<(), (With<Npc>, Without<Civilian>, Without<::damage::Downed>)>,
-	civilians: Query<(), (With<Civilian>, Without<::damage::Downed>)>,
+	players: Query<(), (With<Player>, With<FreeForAllBody>, Without<::damage::Downed>)>,
+	combatants: Query<
+		(),
+		(With<Npc>, With<FreeForAllBody>, Without<Civilian>, Without<::damage::Downed>),
+	>,
+	civilians: Query<(), (With<Civilian>, With<FreeForAllBody>, Without<::damage::Downed>)>,
 	mut respawn: ResMut<damage::CombatRespawn>,
 	mut rng: ResMut<LoadoutRng>,
 	mut commands: Commands,
@@ -400,8 +564,22 @@ fn spawn_reticle_system(
 	spawn_reticle(&mut commands, &mut meshes, &mut materials);
 }
 
-fn gate_pad(focus: Res<TextEntryFocus>, mut enabled: ResMut<PadGameplayEnabled>) {
-	enabled.0 = !focus.0;
+#[derive(Resource, Default)]
+struct RangeConsoleCapture {
+	token: Option<CaptureToken>,
+}
+
+fn gate_pad(
+	focus: Res<TextEntryFocus>,
+	mut router: InputRouting,
+	mut capture: ResMut<RangeConsoleCapture>,
+) {
+	router.replace_owned_capture(
+		&mut capture.token,
+		InputSource::local_pad(),
+		focus.0.then_some(ScopeOwner::console()),
+		CaptureKind::TextEntry,
+	);
 }
 
 fn setup_lighting(mut commands: Commands) {

@@ -5,15 +5,33 @@ Bevy relationship onto the kit (`held`); [`HeldBy`](src/lib.rs) is the reverse
 index on the gun. Hold / aim knobs live on [`FirearmUserSettings`](src/lib.rs)
 (defaults match the firing-range bullpup).
 
-Pose and arm IK key off the user's [`CharacterRoot`](../../crozon/characters/src/member.rs)
-child, so an [`Npc`](../../player/src/identity.rs) holds the same way as the
-player. Pad fire and the world reticle stay on the followed [`Player`](../../player/src/identity.rs).
+Pose and arm IK key off the user's [`CharacterRoot`](../../world/layers/mobs/characters/lib/src/member.rs)
+child, so an [`Npc`](../../player/lib/src/identity.rs) holds the same way as the
+player. Controlled fire consumes actor-addressed
+[`EquippedItemUse`](../equipment/src/dispatch.rs) (D1) and
+cancels a held trigger from actor-addressed routing events on capture,
+disconnect, reassignment, or removal. The fire clock lives in
+[`firearms::register_firearm_runtime`](../firearms/src/runtime.rs). NPCs keep
+the intelligence [`WeaponTrigger`](../firearms/src/projectiles.rs) writer. The
+world reticle stays on the followed [`Player`](../../player/lib/src/identity.rs).
+See [ARCHITECTURE.md](../../controllers/ARCHITECTURE.md).
 The two-bone reach resolves humerus roll with a closed-form signed angle rather
 than sampling trial poses. Hold posing runs only for actively animated,
 non-suspended body rigs, so culled LODs and ragdolls pay no arm-IK cost.
 
-Writes player handoff slots ([`PlayerUse`](../../player/src/identity.rs),
-[`PlayerCameraAim`](../../player/src/identity.rs),
+[`spawn_held_kit`](src/pose.rs) installs [`EquippedItemHandler::Firearm`](../equipment/src/dispatch.rs)
+at the equipment boundary. Execution (`fire`, recoil, equipment realize) lives in
+[`runtime`](src/runtime.rs) via [`register_firearm_user_runtime`](src/runtime.rs).
+Pose / reticle / rumble live in [`presentation`](src/presentation.rs) via
+[`register_firearm_user_presentation`](src/presentation.rs). [`FirearmUserPlugin`](src/lib.rs)
+registers both. Headless gameplay uses the runtime path only.
+
+Inventory-backed equipment requests are realized here after the outgoing kit
+tears down. The world also requests its bagless fallback through this runtime;
+that request preserves the legacy Bullpup kit with `LiveWeapon::default()`.
+
+Writes player handoff slots ([`PlayerUse`](../../player/lib/src/identity.rs),
+[`PlayerCameraAim`](../../player/lib/src/identity.rs),
 [`WeaponTrigger`](../firearms/src/projectiles.rs)) and poses the kit + arm IK.
 `PlayerLook` follows the camera's −Z convention; the pose reverses the local X
 rotation when applying that pitch to the firearm's +Z bore.
@@ -26,15 +44,15 @@ stay the same as a held gun. Inspect does not rest-fit kit bones: that left
 off the receiver.
 
 [`live_weapon_from_stats`](src/weapon.rs) bakes catalog
-[`FirearmStats`](../../crozon/character-items/src/stats.rs) into the held
+[`FirearmStats`](../../world/layers/mobs/characters/items/src/stats.rs) into the held
 [`Weapon`](../firearms/src/projectiles.rs), payload, cadence, recoil
 strength, and ADS FOV. Each shot noisily kicks yaw and pitch inside a range scaled by that
 strength; the direction is hashed from the weapon identity and shot index so
 the same gun repeats the same pattern. Each kick lerps along that path over
-80 ms instead of snapping. Followed-player kicks land on
-[`CameraController`](../../player-camera/src/look.rs) (so they survive the next
-look sync) as well as [`PlayerLook`](../../player/src/identity.rs). NPCs get
-the look kick; [`firearm-intelligence`](../../intelligence/combat/firearm/)
+80 ms instead of snapping. [`WeaponFired`](../firearms/src/projectiles.rs)
+queues the pattern; the camera is the only follow-yaw writer via
+[`CameraRecoilHandoff`](../../player/camera/src/look.rs). NPCs get the look
+kick; [`firearm-intelligence`](../../intelligence/combat/firearm/)
 observes and skill-recovers that displacement instead of overwriting it.
 Lasers emit recoil `0` and do not kick. Default spawn is a
 25 DPC bolt (catalog recoil 1.9). The world reticle flashes when the followed player's shot applies

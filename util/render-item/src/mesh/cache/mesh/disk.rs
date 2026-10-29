@@ -4,7 +4,6 @@ use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
 use std::fmt::Debug;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use bevy::mesh::Mesh;
@@ -25,17 +24,7 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 	const DEFAULT_CACHE_DIR: &str = ".maybraid/mesh-cache";
 
 	pub fn try_new(cache_dir: PathBuf, max_cached_meshes: usize) -> Result<Self, std::io::Error> {
-		// create the cache directory if it doesn't exist
 		fs::create_dir_all(&cache_dir)?;
-
-		// check if the cache directory is writable
-		if !fs::metadata(&cache_dir).unwrap().permissions().mode() & 0o777 == 0 {
-			return Err(std::io::Error::new(
-				std::io::ErrorKind::PermissionDenied,
-				"Cache directory is not writable",
-			));
-		}
-
 		Ok(Self { cache_dir, max_cached_meshes, __marker: std::marker::PhantomData })
 	}
 

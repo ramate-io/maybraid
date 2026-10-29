@@ -1,16 +1,54 @@
 //! Scope component and exclusive focus pick.
 
 use bevy::prelude::*;
+use maybraid_controllers_core::{CaptureToken, InputSource, RouteBinding, UiTarget};
 use menu_components::{HudMenu, HudOverlayMenu, TextMenu};
 
-/// Input scope. Nav from [`crate::dispatch::dispatch_menu_nav`] is delivered to
+/// Input scope. Authorized rich input is delivered to
 /// one focused descendant, not every child.
-#[derive(Component, Debug, Default, Clone, Copy)]
+#[derive(Component, Debug, Default, Clone)]
 pub struct MenuController {
-	pub focus: Option<Entity>,
+	pub focus: Option<UiTarget>,
+	/// None opts into the explicitly primary-session host adapter.
+	pub source: Option<InputSource>,
+	pub(crate) capture: Option<CaptureToken>,
+	pub(crate) blocked: bool,
+	pub(crate) context_blocked: bool,
+	pub start: MenuStartPolicy,
+	pub repeat_config: crate::repeat::MenuRepeatConfig,
+	pub(crate) streams: Vec<MenuStream>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MenuStream {
+	pub source: InputSource,
+	pub binding: Option<RouteBinding>,
+	pub sequence: u64,
+	pub await_release: bool,
+	pub repeat: crate::repeat::MenuRepeat,
+}
+
+/// Whether Start selects a row or remains available to the shell pause host.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum MenuStartPolicy {
+	#[default]
+	Select,
+	Shell,
 }
 
 impl MenuController {
+	pub fn for_source(source: InputSource) -> Self {
+		Self { source: Some(source), ..Self::default() }
+	}
+
+	pub fn focused_entity(&self) -> Option<Entity> {
+		self.focus.map(UiTarget::entity)
+	}
+
+	pub fn set_focus(&mut self, entity: Option<Entity>) {
+		self.focus = entity.map(UiTarget::new);
+	}
+
 	/// Overlay, then any HUD list, then a text column.
 	pub fn pick_focus(
 		overlay: Option<Entity>,
@@ -57,5 +95,13 @@ mod tests {
 		assert_eq!(MenuController::pick_focus(None, None, Some(text)), Some(text));
 		assert_eq!(MenuController::pick_focus(None, None, None), None);
 		Ok(())
+	}
+
+	#[test]
+	fn focus_is_a_ui_target() {
+		let mut controller = MenuController::default();
+		controller.set_focus(Some(Entity::from_bits(9)));
+		assert_eq!(controller.focused_entity(), Some(Entity::from_bits(9)));
+		assert_eq!(controller.focus, Some(UiTarget::new(Entity::from_bits(9))));
 	}
 }

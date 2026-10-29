@@ -273,7 +273,6 @@ fn drop_kind_goal(commands: &mut Commands, host: Entity, kind: PoiKind, goal: Op
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
 	use anyhow::Result;
 	use bevy::ecs::system::RunSystemOnce;

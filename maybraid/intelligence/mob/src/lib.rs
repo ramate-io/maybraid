@@ -23,7 +23,7 @@ pub use host::{
 	MobInstall,
 };
 pub use lock::MobTetherLock;
-pub use member::{ancestor_mob, MemberOf, MobMemberBody, MobSlot};
+pub use member::{ancestor_mob, MemberOf, MobMemberBody, MobRespawnSupport, MobSlot};
 pub use plugin::{MobIntelligencePlugin, MobSystems};
 pub use prey::{install_prey_targeting, PreySubject, PreyTargetMemory, PreyTargetingIntelligence};
 pub use roster::{

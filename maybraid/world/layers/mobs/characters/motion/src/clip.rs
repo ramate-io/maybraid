@@ -1,0 +1,920 @@
+//! Clip identity on a rig member. Mailbox transitions key on [`AnimId`], not knobs.
+//!
+//! Parallel to [`material_ref::MaterialRefRoot`]: insert [`AnimRefRoot`] on the
+//! body-rig host. `From<ConceptAnimation>` lives in `characters`.
+
+use bevy::prelude::*;
+use character_animations::animations::quadruped_run_stop::DEFAULT_QUADRUPED_RUN_STOP_SPEED;
+use character_animations::animations::{
+	BallisticJump, DorsoventralUndulation, EpiphantBray, EpiphantSleepEnter, EpiphantSleepHold,
+	EpiphantWake, FixedTuck, Flapping, FlipDirection, Gallop, HandClap, Jab, LateralUndulation,
+	Leap, PowerDash, PowerStrafe, QuadrupedRun, QuadrupedRunStop, Run, Soaring, TuckProfile,
+	TuckedFlip, TwoFootedJump, VictoryWave, Walk, AIR_END, DEFAULT_BACKSWING,
+	DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT,
+	DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
+	THINK_AGAIN_DURATION, THINK_AGAIN_SPEED,
+};
+use character_animations::animations::{
+	Beckon, Bow, CrouchedWalk, FacePalm, FistPump, FlapFromGlide, GlideFromFlap, GroundedGait,
+	HeadNod, ProneAscent, ProneDescent, QuadrupedRunStart, QuadrupedRunToGallop, RunStart, RunStop,
+	RunToWalk, Salute, Shrug, SpotScan, SquatAscent, StompBeat, WalkStart, WalkStop, WalkToRun,
+};
+use character_animations::animations::{Lay, QuadrupedLieDown, QuadrupedSit, Sit};
+use character_animations::{ClipTimePolicy, SampleAddress};
+use character_rigs::Side;
+
+const RUN_CYCLE_SPEED: f32 = 1.68;
+const WALK_CYCLE_SPEED: f32 = 1.08;
+/// Slow rest cycle so a crowd idle is a sway, not a march.
+pub const IDLE_CYCLE_SPEED: f32 = 0.2;
+const GALLOP_CYCLE_SPEED: f32 = 0.35;
+const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.5;
+const TUCK_CYCLE_SPEED: f32 = 0.6;
+const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
+/// Wall-clock length of one jab. Fast enough for a combo (~0.42 s).
+pub const JAB_DURATION_SECS: f32 = 0.42;
+/// One jab cycle lasts [`JAB_DURATION_SECS`] (`1 / JAB_CYCLE_SPEED`).
+pub const JAB_CYCLE_SPEED: f32 = 1.0 / JAB_DURATION_SECS;
+const THINK_AGAIN_CYCLE_SPEED: f32 = THINK_AGAIN_SPEED;
+const EPIPHANT_BRAY_CYCLE_SPEED: f32 = 0.85;
+const EPIPHANT_SLEEP_ENTER_SPEED: f32 = 0.7;
+const EPIPHANT_SLEEP_HOLD_SPEED: f32 = 0.18;
+const EPIPHANT_WAKE_SPEED: f32 = 0.75;
+const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
+const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
+/// One-shot leap lasts ~1.25 s so it covers the physics hang time.
+pub const LEAP_CYCLE_SPEED: f32 = 0.8;
+/// One-shot PowerDash matches Tanz forward-dash wall time when driven by [`AnimProgress`].
+pub const POWER_DASH_CYCLE_SPEED: f32 = 1.0;
+
+/// Clip discriminant. Mailbox transitions key on this, not knob values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum AnimId {
+	#[default]
+	Still,
+	Walk,
+	Run,
+	QuadrupedRun,
+	Gallop,
+	Jump,
+	Leap,
+	PowerDash,
+	Tuck,
+	TuckedFlip,
+	TwoFootedTuckedFlip,
+	Soaring,
+	Flapping,
+	Jab,
+	ThinkAgain,
+	Beckon,
+	Bow,
+	FacePalm,
+	FistPump,
+	HeadNod,
+	Salute,
+	Shrug,
+	SpotScan,
+	StompBeat,
+	WalkStart,
+	WalkStop,
+	RunStart,
+	RunStop,
+	WalkToRun,
+	RunToWalk,
+	QuadrupedRunStart,
+	QuadrupedRunToGallop,
+	ProneDescent,
+	ProneAscent,
+	SquatAscent,
+	FlapFromGlide,
+	GlideFromFlap,
+	Sit,
+	Lay,
+	QuadrupedSit,
+	QuadrupedLieDown,
+	CrouchWalk,
+	GroundedGait,
+	VictoryWave,
+	HandClap,
+	QuadrupedRunStop,
+	PowerStrafe,
+	Squat,
+	SquatDescent,
+	Prone,
+	LateralUndulation,
+	DorsoventralUndulation,
+	EpiphantBray,
+	EpiphantSleepEnter,
+	EpiphantSleepHold,
+	EpiphantWake,
+}
+
+impl AnimId {
+	/// Continue a grounded trot settle until its clamped one-shot reaches the endpoint.
+	/// Callers apply this only after movement and airborne clip selection.
+	pub fn needs_quadruped_run_stop(self, progress: f32) -> bool {
+		self == Self::QuadrupedRun || (self == Self::QuadrupedRunStop && progress < 1.0)
+	}
+
+	pub const fn default_speed(self) -> f32 {
+		match self {
+			Self::Still => IDLE_CYCLE_SPEED,
+			Self::Walk => WALK_CYCLE_SPEED,
+			Self::Run => RUN_CYCLE_SPEED,
+			Self::QuadrupedRun => QUADRUPED_RUN_CYCLE_SPEED,
+			Self::Gallop => GALLOP_CYCLE_SPEED,
+			Self::Jump => 1.0,
+			Self::Leap => LEAP_CYCLE_SPEED,
+			Self::PowerDash => POWER_DASH_CYCLE_SPEED,
+			Self::Tuck => TUCK_CYCLE_SPEED,
+			Self::TuckedFlip => FRONT_FLIP_CYCLE_SPEED,
+			Self::TwoFootedTuckedFlip => 1.0,
+			Self::Soaring => 1.0,
+			Self::Flapping => 1.0,
+			Self::Jab => JAB_CYCLE_SPEED,
+			Self::ThinkAgain => THINK_AGAIN_CYCLE_SPEED,
+			Self::Beckon => 1.0,
+			Self::Bow => 1.0,
+			Self::FacePalm => 1.0,
+			Self::FistPump => 1.0,
+			Self::HeadNod => 1.0,
+			Self::Salute => 1.0,
+			Self::Shrug => 1.0,
+			Self::SpotScan => 0.87,
+			Self::StompBeat => 1.0,
+			Self::WalkStart => 3.5,
+			Self::WalkStop => 3.5,
+			Self::RunStart => 4.5,
+			Self::RunStop => 2.5,
+			Self::WalkToRun => 4.0,
+			Self::RunToWalk => 4.0,
+			Self::QuadrupedRunStart => 3.5,
+			Self::QuadrupedRunToGallop => 4.0,
+			Self::ProneDescent => 2.85,
+			Self::ProneAscent => 2.85,
+			Self::SquatAscent => 2.85,
+			Self::FlapFromGlide => 1.0,
+			Self::GlideFromFlap => 1.0,
+			Self::Sit => 1.0,
+			Self::Lay => 1.0,
+			Self::QuadrupedSit => 1.0,
+			Self::QuadrupedLieDown => 1.0,
+			Self::CrouchWalk => 1.08,
+			Self::GroundedGait => 1.08,
+			Self::VictoryWave | Self::HandClap => 1.0,
+			Self::QuadrupedRunStop => DEFAULT_QUADRUPED_RUN_STOP_SPEED,
+			Self::PowerStrafe => 1.0,
+			Self::Squat => 1.0,
+			Self::SquatDescent => DEFAULT_DESCENT_SPEED,
+			Self::Prone => 1.0,
+			Self::LateralUndulation => 1.0,
+			Self::DorsoventralUndulation => 1.0,
+			Self::EpiphantBray => EPIPHANT_BRAY_CYCLE_SPEED,
+			Self::EpiphantSleepEnter => EPIPHANT_SLEEP_ENTER_SPEED,
+			Self::EpiphantSleepHold => EPIPHANT_SLEEP_HOLD_SPEED,
+			Self::EpiphantWake => EPIPHANT_WAKE_SPEED,
+		}
+	}
+}
+
+/// Untyped two-footed jump knobs ([`TwoFootedJump`] is rig-generic).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct JumpParams {
+	pub gravity: f32,
+	pub jump_height: f32,
+	pub pre_squat_speed: f32,
+	pub landing_squat_speed: f32,
+}
+
+impl Default for JumpParams {
+	fn default() -> Self {
+		Self {
+			gravity: DEFAULT_GRAVITY,
+			jump_height: DEFAULT_JUMP_HEIGHT,
+			pre_squat_speed: JUMP_PRE_SQUAT_SPEED,
+			landing_squat_speed: JUMP_LANDING_SQUAT_SPEED,
+		}
+	}
+}
+
+impl JumpParams {
+	pub(crate) fn apply_humanoid(self) -> TwoFootedJump {
+		TwoFootedJump::default()
+			.with_gravity(self.gravity)
+			.with_jump_height(self.jump_height)
+			.with_pre_squat_speed(self.pre_squat_speed)
+			.with_landing_squat_speed(self.landing_squat_speed)
+	}
+
+	/// Seconds into the two-footed jump sampler for a 0..1 takeoff/air/land phase.
+	pub fn elapsed_from_phase(self, progress: f32) -> f32 {
+		let progress = progress.clamp(0.0, 1.0);
+		let squat = 1.0 / self.pre_squat_speed.max(1e-3);
+		let takeoff = squat + DEFAULT_SPRING_DURATION;
+		let air = (BallisticJump::new(self.gravity, self.jump_height).air_duration()
+			- DEFAULT_SPRING_DURATION)
+			.max(0.05);
+		let land = 2.0 / self.landing_squat_speed.max(1e-3);
+		if progress < TAKEOFF_END {
+			(progress / TAKEOFF_END) * takeoff
+		} else if progress < AIR_END {
+			let u = (progress - TAKEOFF_END) / (AIR_END - TAKEOFF_END);
+			takeoff + u * air
+		} else {
+			let u = (progress - AIR_END) / (1.0 - AIR_END).max(1e-4);
+			takeoff + air + u * land
+		}
+	}
+}
+
+/// Untyped tuck knobs ([`Tuck`](character_animations::animations::Tuck) is rig-generic).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TuckParams {
+	pub tightness: f32,
+}
+
+impl Default for TuckParams {
+	fn default() -> Self {
+		Self { tightness: TuckProfile::DEFAULT_TIGHTNESS }
+	}
+}
+
+/// Untyped tucked-flip knobs ([`TuckedFlip`] is rig-generic).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TuckedFlipParams {
+	pub turns: f32,
+	pub direction: FlipDirection,
+	pub tightness: f32,
+}
+
+impl Default for TuckedFlipParams {
+	fn default() -> Self {
+		Self {
+			turns: 1.0,
+			direction: FlipDirection::Forward,
+			tightness: TuckProfile::DEFAULT_TIGHTNESS,
+		}
+	}
+}
+
+impl TuckedFlipParams {
+	pub(crate) fn apply_humanoid(self) -> TuckedFlip {
+		let mut flip = TuckedFlip::default();
+		flip.turns = self.turns;
+		flip.direction = self.direction;
+		flip.tuck = FixedTuck::new(self.tightness);
+		flip
+	}
+}
+
+/// Jump + flip bags for [`character_animations::animations::TwoFootedTuckedFlip`].
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct TwoFootedTuckedFlipParams {
+	pub jump: JumpParams,
+	pub flip: TuckedFlipParams,
+}
+
+/// Untyped jab knobs ([`Jab`] is rig-generic).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct JabParams {
+	pub side: Side,
+	pub backswing: f32,
+	pub target: bevy::prelude::Vec3,
+}
+
+/// Untyped power-strafe knobs ([`PowerStrafe`](character_animations::animations::PowerStrafe) is rig-generic).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PowerStrafeParams {
+	pub side: Side,
+}
+
+impl Default for PowerStrafeParams {
+	fn default() -> Self {
+		Self { side: Side::Right }
+	}
+}
+
+impl Default for JabParams {
+	fn default() -> Self {
+		Self { side: Side::Right, backswing: DEFAULT_BACKSWING, target: DEFAULT_JAB_TARGET }
+	}
+}
+
+/// Untyped Think Again knobs ([`ThinkAgain`](character_animations::animations::ThinkAgain) is rig-generic).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ThinkAgainParams {
+	pub side: Side,
+}
+
+impl Default for ThinkAgainParams {
+	fn default() -> Self {
+		Self { side: Side::Right }
+	}
+}
+
+/// Clip identity: variant + sampler knobs. Mailbox transitions use [`Self::id`].
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub enum AnimClip {
+	#[default]
+	Still,
+	Walk(Walk),
+	Run(Run),
+	QuadrupedRun(QuadrupedRun),
+	Gallop(Gallop),
+	Jump(JumpParams),
+	Leap(Leap),
+	PowerDash(PowerDash),
+	Tuck(TuckParams),
+	TuckedFlip(TuckedFlipParams),
+	TwoFootedTuckedFlip(TwoFootedTuckedFlipParams),
+	Soaring(Soaring),
+	Flapping(Flapping),
+	Jab(JabParams),
+	ThinkAgain(ThinkAgainParams),
+	Beckon(Beckon),
+	Bow(Bow),
+	FacePalm(FacePalm),
+	FistPump(FistPump),
+	HeadNod(HeadNod),
+	Salute(Salute),
+	Shrug(Shrug),
+	SpotScan(SpotScan),
+	StompBeat(StompBeat),
+	WalkStart(WalkStart),
+	WalkStop(WalkStop),
+	RunStart(RunStart),
+	RunStop(RunStop),
+	WalkToRun(WalkToRun),
+	RunToWalk(RunToWalk),
+	QuadrupedRunStart(QuadrupedRunStart),
+	QuadrupedRunToGallop(QuadrupedRunToGallop),
+	ProneDescent(ProneDescent),
+	ProneAscent(ProneAscent),
+	SquatAscent(SquatAscent),
+	FlapFromGlide(FlapFromGlide),
+	GlideFromFlap(GlideFromFlap),
+	Sit(Sit),
+	Lay(Lay),
+	QuadrupedSit(QuadrupedSit),
+	QuadrupedLieDown(QuadrupedLieDown),
+	CrouchWalk(CrouchedWalk),
+	GroundedGait(GroundedGait),
+	VictoryWave(VictoryWave),
+	HandClap(HandClap),
+	QuadrupedRunStop(QuadrupedRunStop),
+	PowerStrafe(PowerStrafeParams),
+	Squat,
+	SquatDescent,
+	Prone,
+	LateralUndulation(LateralUndulation),
+	DorsoventralUndulation(DorsoventralUndulation),
+	EpiphantBray(EpiphantBray),
+	EpiphantSleepEnter(EpiphantSleepEnter),
+	EpiphantSleepHold(EpiphantSleepHold),
+	EpiphantWake(EpiphantWake),
+}
+
+impl AnimClip {
+	pub const fn id(self) -> AnimId {
+		match self {
+			Self::Still => AnimId::Still,
+			Self::Walk(_) => AnimId::Walk,
+			Self::Run(_) => AnimId::Run,
+			Self::QuadrupedRun(_) => AnimId::QuadrupedRun,
+			Self::Gallop(_) => AnimId::Gallop,
+			Self::Jump(_) => AnimId::Jump,
+			Self::Leap(_) => AnimId::Leap,
+			Self::PowerDash(_) => AnimId::PowerDash,
+			Self::Tuck(_) => AnimId::Tuck,
+			Self::TuckedFlip(_) => AnimId::TuckedFlip,
+			Self::TwoFootedTuckedFlip(_) => AnimId::TwoFootedTuckedFlip,
+			Self::Soaring(_) => AnimId::Soaring,
+			Self::Flapping(_) => AnimId::Flapping,
+			Self::Jab(_) => AnimId::Jab,
+			Self::ThinkAgain(_) => AnimId::ThinkAgain,
+			Self::Beckon(_) => AnimId::Beckon,
+			Self::Bow(_) => AnimId::Bow,
+			Self::FacePalm(_) => AnimId::FacePalm,
+			Self::FistPump(_) => AnimId::FistPump,
+			Self::HeadNod(_) => AnimId::HeadNod,
+			Self::Salute(_) => AnimId::Salute,
+			Self::Shrug(_) => AnimId::Shrug,
+			Self::SpotScan(_) => AnimId::SpotScan,
+			Self::StompBeat(_) => AnimId::StompBeat,
+			Self::WalkStart(_) => AnimId::WalkStart,
+			Self::WalkStop(_) => AnimId::WalkStop,
+			Self::RunStart(_) => AnimId::RunStart,
+			Self::RunStop(_) => AnimId::RunStop,
+			Self::WalkToRun(_) => AnimId::WalkToRun,
+			Self::RunToWalk(_) => AnimId::RunToWalk,
+			Self::QuadrupedRunStart(_) => AnimId::QuadrupedRunStart,
+			Self::QuadrupedRunToGallop(_) => AnimId::QuadrupedRunToGallop,
+			Self::ProneDescent(_) => AnimId::ProneDescent,
+			Self::ProneAscent(_) => AnimId::ProneAscent,
+			Self::SquatAscent(_) => AnimId::SquatAscent,
+			Self::FlapFromGlide(_) => AnimId::FlapFromGlide,
+			Self::GlideFromFlap(_) => AnimId::GlideFromFlap,
+			Self::Sit(_) => AnimId::Sit,
+			Self::Lay(_) => AnimId::Lay,
+			Self::QuadrupedSit(_) => AnimId::QuadrupedSit,
+			Self::QuadrupedLieDown(_) => AnimId::QuadrupedLieDown,
+			Self::CrouchWalk(_) => AnimId::CrouchWalk,
+			Self::GroundedGait(_) => AnimId::GroundedGait,
+			Self::VictoryWave(_) => AnimId::VictoryWave,
+			Self::HandClap(_) => AnimId::HandClap,
+			Self::QuadrupedRunStop(_) => AnimId::QuadrupedRunStop,
+			Self::PowerStrafe(_) => AnimId::PowerStrafe,
+			Self::Squat => AnimId::Squat,
+			Self::SquatDescent => AnimId::SquatDescent,
+			Self::Prone => AnimId::Prone,
+			Self::LateralUndulation(_) => AnimId::LateralUndulation,
+			Self::DorsoventralUndulation(_) => AnimId::DorsoventralUndulation,
+			Self::EpiphantBray(_) => AnimId::EpiphantBray,
+			Self::EpiphantSleepEnter(_) => AnimId::EpiphantSleepEnter,
+			Self::EpiphantSleepHold(_) => AnimId::EpiphantSleepHold,
+			Self::EpiphantWake(_) => AnimId::EpiphantWake,
+		}
+	}
+
+	pub const fn default_speed(self) -> f32 {
+		if let Self::GroundedGait(gait) = self {
+			return IDLE_CYCLE_SPEED
+				+ (WALK_CYCLE_SPEED + (RUN_CYCLE_SPEED - WALK_CYCLE_SPEED) * gait.run_weight
+					- IDLE_CYCLE_SPEED)
+					* gait.walk_weight;
+		}
+		self.id().default_speed()
+	}
+
+	pub fn still() -> Self {
+		Self::Still
+	}
+
+	pub fn walk() -> Self {
+		Self::Walk(Walk::default())
+	}
+
+	pub fn run() -> Self {
+		Self::Run(Run::default())
+	}
+
+	pub fn quadruped_run() -> Self {
+		Self::QuadrupedRun(QuadrupedRun::default())
+	}
+
+	pub fn gallop() -> Self {
+		Self::Gallop(Gallop::default())
+	}
+
+	pub fn jump() -> Self {
+		Self::Jump(JumpParams::default())
+	}
+
+	pub fn leap() -> Self {
+		Self::Leap(Leap::default())
+	}
+
+	pub fn power_dash() -> Self {
+		Self::PowerDash(PowerDash::default())
+	}
+
+	pub fn tuck() -> Self {
+		Self::Tuck(TuckParams::default())
+	}
+
+	pub fn tucked_flip() -> Self {
+		Self::TuckedFlip(TuckedFlipParams::default())
+	}
+
+	pub fn two_footed_tucked_flip() -> Self {
+		Self::TwoFootedTuckedFlip(TwoFootedTuckedFlipParams::default())
+	}
+
+	pub fn soaring() -> Self {
+		Self::Soaring(Soaring::default())
+	}
+
+	pub fn flapping() -> Self {
+		Self::Flapping(Flapping::default())
+	}
+
+	pub fn jab() -> Self {
+		Self::Jab(JabParams::default())
+	}
+
+	/// Fisticuffs icon clip: the live jab, sampled at the authored guard.
+	pub fn fisticuffs_guard() -> Self {
+		Self::jab()
+	}
+
+	/// [`Jab::guard_progress`]: rest and recover, both arms in cover.
+	pub fn fisticuffs_guard_progress() -> f32 {
+		Jab::guard_progress()
+	}
+
+	pub fn think_again() -> Self {
+		Self::ThinkAgain(ThinkAgainParams::default())
+	}
+
+	pub fn beckon(side: Side) -> Self {
+		Self::Beckon(Beckon::new(side))
+	}
+	pub fn bow() -> Self {
+		Self::Bow(Bow::default())
+	}
+	pub fn face_palm(side: Side) -> Self {
+		Self::FacePalm(FacePalm::new(side))
+	}
+	pub fn fist_pump(side: Side) -> Self {
+		Self::FistPump(FistPump::new(side))
+	}
+	pub fn head_nod() -> Self {
+		Self::HeadNod(HeadNod::default())
+	}
+	pub fn salute(side: Side) -> Self {
+		Self::Salute(Salute::new(side))
+	}
+	pub fn shrug() -> Self {
+		Self::Shrug(Shrug::default())
+	}
+	pub fn spot_scan() -> Self {
+		Self::SpotScan(SpotScan::default())
+	}
+	pub fn stomp_beat(side: Side) -> Self {
+		Self::StompBeat(StompBeat::new(side))
+	}
+	pub fn walk_start() -> Self {
+		Self::WalkStart(WalkStart::default())
+	}
+	pub fn walk_stop() -> Self {
+		Self::WalkStop(WalkStop::default())
+	}
+	pub fn run_start() -> Self {
+		Self::RunStart(RunStart::default())
+	}
+	pub fn run_stop() -> Self {
+		Self::RunStop(RunStop::default())
+	}
+	pub fn walk_to_run() -> Self {
+		Self::WalkToRun(WalkToRun::default())
+	}
+	pub fn run_to_walk() -> Self {
+		Self::RunToWalk(RunToWalk::default())
+	}
+	pub fn quadruped_run_start() -> Self {
+		Self::QuadrupedRunStart(QuadrupedRunStart::default())
+	}
+	pub fn quadruped_run_to_gallop(gait_phase: f32) -> Self {
+		Self::QuadrupedRunToGallop(QuadrupedRunToGallop { gait_phase, ..Default::default() })
+	}
+	pub fn prone_descent() -> Self {
+		Self::ProneDescent(ProneDescent::default())
+	}
+	pub fn prone_ascent() -> Self {
+		Self::ProneAscent(ProneAscent::default())
+	}
+	pub fn squat_ascent() -> Self {
+		Self::SquatAscent(SquatAscent::default())
+	}
+	pub fn flap_from_glide() -> Self {
+		Self::FlapFromGlide(FlapFromGlide::default())
+	}
+	pub fn glide_from_flap() -> Self {
+		Self::GlideFromFlap(GlideFromFlap::default())
+	}
+	pub fn sit() -> Self {
+		Self::Sit(Sit::ground())
+	}
+	pub fn seat() -> Self {
+		Self::Sit(Sit::seat())
+	}
+	pub fn lay() -> Self {
+		Self::Lay(Lay::back())
+	}
+	pub fn lay_side(side: Side) -> Self {
+		Self::Lay(Lay::side(side))
+	}
+	pub fn quadruped_sit() -> Self {
+		Self::QuadrupedSit(QuadrupedSit::for_idle())
+	}
+	pub fn quadruped_lie_down() -> Self {
+		Self::QuadrupedLieDown(QuadrupedLieDown::for_rest())
+	}
+	pub fn quadruped_curl() -> Self {
+		Self::QuadrupedLieDown(QuadrupedLieDown::curled_rest())
+	}
+	pub fn crouch_walk() -> Self {
+		Self::CrouchWalk(CrouchedWalk::blended(1.0, 1.0))
+	}
+	pub fn grounded_gait(walk_weight: f32, run_weight: f32) -> Self {
+		Self::GroundedGait(GroundedGait::new(walk_weight, run_weight))
+	}
+
+	pub fn victory_wave(side: Side) -> Self {
+		Self::VictoryWave(VictoryWave::new(side))
+	}
+
+	pub fn hand_clap() -> Self {
+		Self::HandClap(HandClap)
+	}
+
+	pub fn quadruped_run_stop() -> Self {
+		Self::QuadrupedRunStop(QuadrupedRunStop::default())
+	}
+
+	pub fn power_strafe(side: Side) -> Self {
+		Self::PowerStrafe(PowerStrafeParams { side })
+	}
+
+	pub fn power_strafe_left() -> Self {
+		Self::power_strafe(Side::Left)
+	}
+
+	pub fn power_strafe_right() -> Self {
+		Self::power_strafe(Side::Right)
+	}
+
+	/// Cache / capture identity, including laterality for mirrored clips.
+	pub fn capture_key(self) -> String {
+		match self {
+			Self::PowerDash(_) => String::from("power-dash"),
+			Self::PowerStrafe(params) => match params.side {
+				Side::Left => String::from("power-strafe-left"),
+				Side::Right => String::from("power-strafe-right"),
+			},
+			Self::Jab(_) => String::from("jab"),
+			Self::FistPump(clip) => {
+				format!("fist-pump-{}", if clip.side == Side::Left { "left" } else { "right" })
+			}
+			Self::Salute(clip) => {
+				format!("salute-{}", if clip.side == Side::Left { "left" } else { "right" })
+			}
+			Self::FacePalm(clip) => {
+				format!("face-palm-{}", if clip.side == Side::Left { "left" } else { "right" })
+			}
+			Self::StompBeat(clip) => {
+				format!("stomp-beat-{}", if clip.side == Side::Left { "left" } else { "right" })
+			}
+			Self::Beckon(clip) => {
+				format!("beckon-{}", if clip.side == Side::Left { "left" } else { "right" })
+			}
+			Self::VictoryWave(wave) => {
+				format!("victory-wave-{}", if wave.side == Side::Left { "left" } else { "right" })
+			}
+			Self::Lay(lay) => match lay.orientation {
+				character_animations::animations::LayOrientation::Back => String::from("lay-back"),
+				character_animations::animations::LayOrientation::Side(side) => {
+					format!("lay-{}", if side == Side::Left { "left" } else { "right" })
+				}
+			},
+			Self::HandClap(_) => String::from("hand-clap"),
+			Self::QuadrupedRunStop(_) => String::from("quadruped-run-stop"),
+			other => format!("{:?}", other.id()).to_ascii_lowercase(),
+		}
+	}
+
+	/// Readable still on the live sampler. Tanz icons (and any other
+	/// representative capture) must use this instead of a guessed Euler pose.
+	pub fn representative_progress(self) -> f32 {
+		match self {
+			Self::PowerDash(_) => PowerDash::representative_progress(),
+			Self::PowerStrafe(_) => PowerStrafe::representative_progress(),
+			Self::Jab(_) => Jab::representative_progress(),
+			_ => 0.5,
+		}
+	}
+
+	pub fn squat() -> Self {
+		Self::Squat
+	}
+
+	pub fn squat_descent() -> Self {
+		Self::SquatDescent
+	}
+
+	pub fn prone() -> Self {
+		Self::Prone
+	}
+
+	pub fn lateral_undulation() -> Self {
+		Self::LateralUndulation(LateralUndulation::default())
+	}
+
+	pub fn dorsoventral_undulation() -> Self {
+		Self::DorsoventralUndulation(DorsoventralUndulation::default())
+	}
+
+	pub fn epiphant_bray() -> Self {
+		Self::EpiphantBray(EpiphantBray::default())
+	}
+
+	pub fn epiphant_sleep_enter() -> Self {
+		Self::EpiphantSleepEnter(EpiphantSleepEnter::default())
+	}
+
+	pub fn epiphant_sleep_hold() -> Self {
+		Self::EpiphantSleepHold(EpiphantSleepHold::default())
+	}
+
+	pub fn epiphant_wake() -> Self {
+		Self::EpiphantWake(EpiphantWake::default())
+	}
+
+	/// Content generation included in prepared-clip identity.
+	pub const fn revision(self) -> u64 {
+		0
+	}
+
+	/// Idle, walk, and run share quantized humanoid samples. Other clips stay uncached.
+	pub const fn is_sample_cacheable(self) -> bool {
+		matches!(self, Self::Still | Self::Walk(_) | Self::Run(_))
+	}
+
+	pub const fn time_policy(self) -> ClipTimePolicy {
+		match self {
+			Self::Still
+			| Self::Sit(_)
+			| Self::Lay(_)
+			| Self::QuadrupedSit(_)
+			| Self::QuadrupedLieDown(_) => ClipTimePolicy::Unbounded,
+			Self::Walk(_) | Self::Run(_) | Self::QuadrupedRun(_) | Self::Gallop(_) => {
+				ClipTimePolicy::Cycle { duration: 1.0 }
+			}
+			Self::Tuck(_) | Self::TuckedFlip(_) | Self::Jab(_) => {
+				ClipTimePolicy::Cycle { duration: 1.0 }
+			}
+			Self::Jump(_)
+			| Self::Leap(_)
+			| Self::PowerDash(_)
+			| Self::TwoFootedTuckedFlip(_)
+			| Self::PowerStrafe(_)
+			| Self::Squat
+			| Self::SquatDescent
+			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::Beckon(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::Bow(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::FacePalm(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::FistPump(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::HeadNod(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::Salute(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::Shrug(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::SpotScan(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::StompBeat(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::WalkStart(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::WalkStop(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::RunStart(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::RunStop(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::WalkToRun(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::RunToWalk(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::QuadrupedRunStart(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::QuadrupedRunToGallop(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::ProneDescent(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::ProneAscent(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::SquatAscent(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::CrouchWalk(_) | Self::GroundedGait(_) => ClipTimePolicy::Cycle { duration: 1.0 },
+			Self::FlapFromGlide(_) | Self::GlideFromFlap(_) => ClipTimePolicy::Unbounded,
+			Self::VictoryWave(_) | Self::HandClap(_) | Self::QuadrupedRunStop(_) => {
+				ClipTimePolicy::Clamp { duration: 1.0 }
+			}
+			Self::ThinkAgain(_) => ClipTimePolicy::Clamp { duration: THINK_AGAIN_DURATION },
+			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
+			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
+				ClipTimePolicy::Cycle { duration: 1.0 }
+			}
+			Self::EpiphantBray(_) | Self::EpiphantSleepEnter(_) | Self::EpiphantWake(_) => {
+				ClipTimePolicy::Clamp { duration: 1.0 }
+			}
+			Self::EpiphantSleepHold(_) => ClipTimePolicy::Cycle { duration: 1.0 },
+		}
+	}
+
+	/// Nearest bin for continuous `clip_time`. Evaluation uses [`SampleAddress::canonical_time`].
+	pub fn sample_address(self, clip_time: f32, sample_interval_us: u32) -> SampleAddress {
+		SampleAddress::from_clip_time(clip_time, sample_interval_us, self.time_policy())
+	}
+}
+
+/// Clip + playback speed on a rig member.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct AnimRef {
+	pub clip: AnimClip,
+	pub speed: f32,
+}
+
+impl AnimRef {
+	pub fn new(clip: AnimClip) -> Self {
+		Self { clip, speed: clip.default_speed() }
+	}
+
+	pub fn still() -> Self {
+		Self::new(AnimClip::still())
+	}
+}
+
+impl Default for AnimRef {
+	fn default() -> Self {
+		Self::still()
+	}
+}
+
+/// BSN / ECS identity: play this clip on this rig member.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Default)]
+pub struct AnimRefRoot(pub AnimRef);
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use character_animations::animations::Walk;
+
+	#[test]
+	fn knob_changes_keep_clip_id() {
+		let a = AnimClip::Walk(Walk { stride: 0.2, bounce: 1.0, rotation: 1.0 });
+		let b = AnimClip::Walk(Walk { stride: 0.8, bounce: 2.0, rotation: 0.5 });
+		assert_eq!(a.id(), b.id());
+		assert_ne!(a, b);
+		assert_ne!(AnimClip::walk().id(), AnimClip::run().id());
+	}
+
+	#[test]
+	fn leap_is_a_distinct_clip() {
+		assert_eq!(AnimClip::leap().id(), AnimId::Leap);
+		assert_eq!(AnimClip::leap().default_speed(), LEAP_CYCLE_SPEED);
+		assert_ne!(AnimClip::leap().id(), AnimClip::jump().id());
+	}
+
+	#[test]
+	fn representative_progress_reads_the_live_clip() {
+		assert_eq!(
+			AnimClip::power_dash().representative_progress(),
+			PowerDash::representative_progress()
+		);
+		assert_eq!(
+			AnimClip::power_strafe_left().representative_progress(),
+			PowerStrafe::representative_progress()
+		);
+		assert_eq!(AnimClip::jab().representative_progress(), Jab::representative_progress());
+		assert_eq!(AnimClip::power_strafe_left().capture_key(), "power-strafe-left");
+		assert_eq!(AnimClip::power_strafe_right().capture_key(), "power-strafe-right");
+		assert_eq!(AnimClip::power_dash().capture_key(), "power-dash");
+	}
+
+	#[test]
+	fn power_dash_is_a_distinct_clip() {
+		assert_eq!(AnimClip::power_dash().id(), AnimId::PowerDash);
+		assert_eq!(AnimClip::power_dash().default_speed(), POWER_DASH_CYCLE_SPEED);
+		assert_ne!(AnimClip::power_dash().id(), AnimClip::leap().id());
+		assert_ne!(AnimClip::power_dash().id(), AnimClip::jab().id());
+	}
+
+	#[test]
+	fn fisticuffs_guard_is_the_jab_rest() {
+		assert_eq!(AnimClip::fisticuffs_guard(), AnimClip::jab());
+		assert_eq!(AnimClip::fisticuffs_guard_progress(), Jab::guard_progress());
+		assert_eq!(AnimClip::fisticuffs_guard_progress(), 0.0);
+	}
+
+	#[test]
+	fn still_keeps_the_rest_identity() {
+		assert_eq!(AnimClip::still().id(), AnimId::Still);
+		assert_eq!(AnimClip::still().default_speed(), IDLE_CYCLE_SPEED);
+		assert!(IDLE_CYCLE_SPEED < WALK_CYCLE_SPEED);
+		assert_ne!(AnimClip::still().id(), AnimClip::walk().id());
+	}
+
+	#[test]
+	fn idle_walk_run_are_the_first_cached_clips() {
+		assert!(AnimClip::still().is_sample_cacheable());
+		assert!(AnimClip::walk().is_sample_cacheable());
+		assert!(AnimClip::run().is_sample_cacheable());
+		assert!(!AnimClip::jab().is_sample_cacheable());
+		assert!(!AnimClip::leap().is_sample_cacheable());
+		assert!(!AnimClip::power_dash().is_sample_cacheable());
+		assert_eq!(AnimClip::walk().revision(), 0);
+		assert_eq!(AnimClip::walk().sample_address(0.123, 10_000).canonical_time, 0.12);
+	}
+
+	#[test]
+	fn pilot_one_shots_keep_endpoint_time_and_sided_capture_identity() {
+		let wave_left = AnimClip::victory_wave(Side::Left);
+		let wave_right = AnimClip::victory_wave(Side::Right);
+		assert_eq!(wave_left.id(), wave_right.id());
+		assert_ne!(wave_left.capture_key(), wave_right.capture_key());
+		for clip in [wave_left, wave_right, AnimClip::hand_clap(), AnimClip::quadruped_run_stop()] {
+			assert_eq!(clip.time_policy(), ClipTimePolicy::Clamp { duration: 1.0 });
+			assert_eq!(clip.sample_address(1.5, 10_000).canonical_time, 1.0);
+			assert_eq!(clip.sample_address(-0.5, 10_000).canonical_time, 0.0);
+			assert!(!clip.is_sample_cacheable());
+		}
+	}
+
+	#[test]
+	fn jump_elapsed_follows_leap_phase_windows() {
+		let params = JumpParams::default();
+		let takeoff = params.elapsed_from_phase(TAKEOFF_END);
+		let air = params.elapsed_from_phase(AIR_END);
+		let end = params.elapsed_from_phase(1.0);
+		assert!(takeoff > 0.0);
+		assert!(air > takeoff);
+		assert!(end > air);
+	}
+}
