@@ -543,6 +543,7 @@ fn apply_intent(overlay: &mut PadOverlay, intent: &PadIntent) {
 	overlay.clear();
 	overlay.move_stick = Vec2::from(intent.move_stick);
 	overlay.look_stick = Vec2::from(intent.look_stick);
+	overlay.look_throw = Vec2::from(intent.look_stick);
 	overlay.trigger_focus = intent.trigger_focus;
 	overlay.trigger_fire = intent.trigger_fire;
 	for button in &intent.buttons {

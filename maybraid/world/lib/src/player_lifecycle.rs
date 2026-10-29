@@ -17,7 +17,7 @@ use maybraid_spawns_player::{
 use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
-use player_camera::{CameraController, FollowCamera};
+use player_camera::{CameraController, FollowCamera, ThirdPersonZoom};
 use poi_intelligence::{place_nearby, PoiId, PoiKind, PoiRegistry, PoiSystems};
 use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
@@ -624,14 +624,17 @@ fn close_respawn_map(map: &mut WorldMapView) {
 
 fn apply_camera_begin_life(
 	mut map: ResMut<WorldMapView>,
-	mut cameras: Query<&mut CameraController, With<FollowCamera>>,
+	mut cameras: Query<(&mut CameraController, Option<&mut ThirdPersonZoom>), With<FollowCamera>>,
 ) {
 	if !map.begin_life {
 		return;
 	}
 	map.begin_life = false;
-	for mut controller in &mut cameras {
+	for (mut controller, zoom) in &mut cameras {
 		controller.begin_life();
+		if let Some(mut zoom) = zoom {
+			zoom.reset();
+		}
 	}
 }
 

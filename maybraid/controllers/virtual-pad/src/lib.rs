@@ -6,6 +6,7 @@ pub mod button;
 pub mod config;
 pub mod controller;
 pub mod debug;
+pub mod flick;
 pub mod gate;
 pub mod hid;
 pub mod history;
@@ -21,6 +22,7 @@ pub use config::VirtualPadConfig;
 pub use controller::{
 	PadDevices, PrimaryVirtualPad, VirtualPadController, VirtualPadEvent, VirtualPadLifecycle,
 };
+pub use flick::{FlickLane, FLICK_MAX_SECS, FLICK_MIN_PEAK, FLICK_MIN_SECS, FLICK_REST};
 pub use gate::PadInputPolicy;
 pub use hid::{with_pad_hid, PadHidPlugins};
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};

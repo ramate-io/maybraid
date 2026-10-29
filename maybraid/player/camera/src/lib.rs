@@ -2,6 +2,7 @@
 
 mod follow;
 mod look;
+mod zoom;
 
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
@@ -18,6 +19,9 @@ pub use follow::{
 pub use look::{
 	apply_recoil_handoff, CameraController, CameraLookSuppressed, CameraPov, CameraPovLocked,
 	CameraRecoilHandoff,
+};
+pub use zoom::{
+	next_zoom_lock, third_person_obstruction_origin, zoom_flick_allowed, ThirdPersonZoom, ZoomLock,
 };
 
 /// Camera schedule. Item crates add aim writers to [`PlayerCameraSystems::Aim`].
@@ -40,6 +44,7 @@ pub struct CameraInputSource(pub InputSource);
 
 /// Per-camera follow / FOV / look-cone knobs. Runtime look state lives on [`CameraController`].
 #[derive(Component, Clone, Copy, Debug)]
+#[require(ThirdPersonZoom)]
 pub struct FollowCamera {
 	pub distance: f32,
 	pub height: f32,
@@ -156,7 +161,10 @@ pub fn register_player_camera_runtime(app: &mut App) {
 				PlayerCameraSystems::Apply.after(PlayerCameraSystems::Follow),
 			),
 		)
-		.add_systems(Update, look::sync_player_look.in_set(PlayerCameraSystems::Look))
+		.add_systems(
+			Update,
+			(look::sync_player_look, zoom::detect_zoom_flicks).in_set(PlayerCameraSystems::Look),
+		)
 		.add_systems(
 			Update,
 			(look::sync_yaw_owner, look::turn_body_with_look)
@@ -219,6 +227,7 @@ pub fn spawn_follow_camera(commands: &mut Commands) -> Entity {
 				..default()
 			}),
 			CameraController { yaw, pitch, ..default() },
+			ThirdPersonZoom::default(),
 			SpatialRumbleListener::default().rewriting_pose(),
 		))
 		.id()

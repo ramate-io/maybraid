@@ -39,6 +39,8 @@ pub(crate) fn apply_overlay_requests(
 pub struct PadOverlay {
 	pub move_stick: Vec2,
 	pub look_stick: Vec2,
+	/// Raw right-stick deflection for gesture classifiers, separate from look delta.
+	pub look_throw: Vec2,
 	pub trigger_focus: f32,
 	pub trigger_fire: f32,
 	pub buttons: [bool; PAD_BUTTON_COUNT],
@@ -49,6 +51,7 @@ impl Default for PadOverlay {
 		Self {
 			move_stick: Vec2::ZERO,
 			look_stick: Vec2::ZERO,
+			look_throw: Vec2::ZERO,
 			trigger_focus: 0.0,
 			trigger_fire: 0.0,
 			buttons: [false; PAD_BUTTON_COUNT],
@@ -68,6 +71,7 @@ impl PadOverlay {
 	pub fn apply(&self, pad: &mut VirtualPad) {
 		pad.add_move(self.move_stick);
 		pad.add_look(self.look_stick);
+		pad.add_look_throw(self.look_throw);
 		pad.max_triggers(self.trigger_focus, self.trigger_fire);
 		for button in PadButton::ALL {
 			if self.buttons[button.index()] {
@@ -88,11 +92,15 @@ mod tests {
 		pad.add_move(Vec2::new(0.2, 0.0));
 		let mut overlay = PadOverlay::default();
 		overlay.move_stick = Vec2::new(0.0, 1.0);
+		overlay.look_stick = Vec2::X * 12.0;
+		overlay.look_throw = Vec2::Y;
 		overlay.hold(PadButton::A);
 		overlay.apply(&mut pad);
 		pad.finish_digital();
 		assert!((pad.move_stick - Vec2::new(0.2, 1.0)).length() < 1e-5);
 		assert!(pad.just_pressed(PadButton::A));
+		assert_eq!(pad.look_stick, Vec2::X * 12.0);
+		assert_eq!(pad.look_throw, Vec2::Y);
 		Ok(())
 	}
 

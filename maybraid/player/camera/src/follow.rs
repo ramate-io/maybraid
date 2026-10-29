@@ -10,7 +10,7 @@ use player::{
 };
 
 use crate::look::{CameraController, CameraLookSuppressed, CameraPov};
-use crate::{CameraTarget, FollowCamera};
+use crate::{CameraTarget, FollowCamera, ThirdPersonZoom};
 use std::collections::HashMap;
 
 /// A short-lived, camera-only rotation applied to a follow pose.
@@ -52,7 +52,14 @@ pub(crate) fn follow_character_camera(
 	mut transforms: ParamSet<(
 		TransformHelper,
 		Query<
-			(Entity, &CameraTarget, &mut Transform, &mut CameraController, &FollowCamera),
+			(
+				Entity,
+				&CameraTarget,
+				&mut Transform,
+				&mut CameraController,
+				&FollowCamera,
+				&mut ThirdPersonZoom,
+			),
 			With<Camera3d>,
 		>,
 	)>,
@@ -61,7 +68,7 @@ pub(crate) fn follow_character_camera(
 	let cameras: Vec<_> = transforms
 		.p1()
 		.iter_mut()
-		.map(|(entity, target, _, _, _)| (entity, target.0))
+		.map(|(entity, target, _, _, _, _)| (entity, target.0))
 		.collect();
 	for &(camera_entity, target) in &cameras {
 		let state = presentation.entry(camera_entity).or_default();
@@ -72,7 +79,7 @@ pub(crate) fn follow_character_camera(
 		state.decay(real_time.delta_secs());
 		{
 			let mut cameras = transforms.p1();
-			let Ok((_, _, mut camera_transform, controller, _)) = cameras.get_mut(camera_entity)
+			let Ok((_, _, mut camera_transform, controller, _, _)) = cameras.get_mut(camera_entity)
 			else {
 				continue;
 			};
@@ -92,7 +99,7 @@ pub(crate) fn follow_character_camera(
 		let head = head_camera_translation(actor, &visuals, &maps, &current);
 		drop(current);
 		let mut camera = transforms.p1();
-		let Ok((_, _, mut camera_transform, mut controller, follow)) =
+		let Ok((_, _, mut camera_transform, mut controller, follow, mut zoom)) =
 			camera.get_mut(camera_entity)
 		else {
 			continue;
@@ -119,6 +126,7 @@ pub(crate) fn follow_character_camera(
 			time.delta_secs(),
 		);
 
+		zoom.tick_blend(time.delta_secs());
 		let mut pose = match controller.pov {
 			CameraPov::ThirdPerson => {
 				third_person_pose(player.translation(), yaw, look_rotation, follow, height_scale)
@@ -130,6 +138,15 @@ pub(crate) fn follow_character_camera(
 				map_pose(controller.map_focus, controller.map_ground_y, controller.map_height)
 			}
 		};
+		if controller.pov == CameraPov::ThirdPerson {
+			pose = crate::zoom::blend_third_person_pose(
+				pose,
+				player.translation(),
+				follow,
+				height_scale,
+				&zoom,
+			);
+		}
 		if controller.pov.is_first_person() {
 			if let Some(sight) = aim.pose {
 				pose = pose.interpolate(sight, controller.focus_blend);
