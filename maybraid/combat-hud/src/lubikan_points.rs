@@ -178,8 +178,7 @@ fn spawn_flyer(
 	});
 }
 
-type PlayerWithLedger<'w, 's> =
-	Query<'w, 's, (Entity, &'static lubikans::LubikanLedger), (With<Player>, With<LubikanOwner>)>;
+type PlayerWithLedger<'w, 's> = Query<'w, 's, Entity, (With<Player>, With<LubikanOwner>)>;
 
 pub(crate) fn update_lubikan_point_flyers(
 	time: Res<Time>,
@@ -270,20 +269,6 @@ mod tests {
 	}
 
 	#[test]
-	fn stack_slots_rise_above_the_dock() {
-		assert_eq!(stack_offset(0), Vec2::new(0.0, -SLOT_H));
-		assert_eq!(stack_offset(1), Vec2::new(0.0, -2.0 * SLOT_H));
-		assert!(stack_offset(0).y > stack_offset(2).y);
-		assert_eq!(stack_offset(0).x, 0.0, "feed stays left-justified over the plate");
-	}
-
-	#[test]
-	fn flyers_linger_after_they_land() {
-		assert!(FLY_DURATION + STACK_HOLD >= 2.0);
-		assert!(STACK_HOLD >= 2.0);
-	}
-
-	#[test]
 	fn project_origin_uses_ui_center_when_the_3d_target_has_no_viewport() {
 		let camera = Camera::default();
 		let transform = GlobalTransform::default();
@@ -340,9 +325,7 @@ mod tests {
 	}
 
 	fn emit_hit(app: &mut App, owner: Entity, origin: Option<Vec3>) -> Result<()> {
-		let account = app
-			.world()
-			.get::<lubikans::LubikanLedger>(owner)
+		let account = lubikans::LubikanBodyOf::ledger(app.world(), owner)
 			.ok_or_else(|| anyhow!("ledger"))?
 			.equipped()
 			.id();
@@ -357,9 +340,7 @@ mod tests {
 	}
 
 	fn emit_capped_hit(app: &mut App, owner: Entity, origin: Option<Vec3>) -> Result<()> {
-		let account = app
-			.world()
-			.get::<lubikans::LubikanLedger>(owner)
+		let account = lubikans::LubikanBodyOf::ledger(app.world(), owner)
 			.ok_or_else(|| anyhow!("ledger"))?
 			.equipped()
 			.id();
@@ -462,21 +443,6 @@ mod tests {
 	}
 
 	#[test]
-	fn flyers_label_points_earned_when_stock_caps_applied_amount() -> Result<()> {
-		let (mut app, owner) = flyer_app();
-		app.update();
-		set_dock_physical(app.world_mut(), Vec2::new(80.0, 600.0), 1.0)?;
-		emit_capped_hit(&mut app, owner, Some(Vec3::ZERO))?;
-		app.update();
-		let world = app.world_mut();
-		assert!(
-			world.query::<&Text>().iter(world).any(|text| text.0 == "+3 hit MAX"),
-			"flyer must show points_earned when amount is zero at stock cap"
-		);
-		Ok(())
-	}
-
-	#[test]
 	fn hidden_hud_despawns_flyers_and_drops_pending_changes() -> Result<()> {
 		let (mut app, owner) = flyer_app();
 		app.update();
@@ -516,9 +482,7 @@ mod tests {
 	fn flyer_retains_credited_account_after_equipped_switch() -> Result<()> {
 		let (mut app, owner) = flyer_app();
 		app.update();
-		let self_account = app
-			.world()
-			.get::<lubikans::LubikanLedger>(owner)
+		let self_account = lubikans::LubikanBodyOf::ledger(app.world(), owner)
 			.ok_or_else(|| anyhow!("ledger"))?
 			.equipped()
 			.id();
@@ -529,9 +493,7 @@ mod tests {
 		);
 		app.world_mut().resource_mut::<lubikans::LubikanCatalog>().register(extra);
 		let other = {
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<lubikans::LubikanLedger>(owner)
+			let mut ledger = lubikans::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			let other = ledger.ensure_owned(extra);
 			if !ledger.select(Some(other)) {

@@ -1,8 +1,10 @@
 //! Realize posed, painted inventory subjects into isolated capture roots.
 
+use crate::fisticuffs::{isolate_arm_joints, FisticuffsArmMask, FisticuffsGuardPose};
 use bevy::camera::primitives::MeshAabb;
 use bevy::camera::visibility::RenderLayers;
 use bevy::ecs::entity_disabling::Disabled;
+use bevy::ecs::query::{Allow, QueryFilter};
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
@@ -12,9 +14,13 @@ use character_shaders::{CharacterShadersPlugin, ClothingShaderMaterial, FaceShad
 use characters::material_lib::CharacterMaterialRefPlugin;
 use characters::species::braidman::{Braidman, BraidmanConfig};
 use characters::{
-	add_character_components_host, character_bounds, AssetNormalization, CharacterComponents,
-	CharacterComponentsPlugin, CharacterHostsPlugin, CharacterPartSlot, ClothingLayer,
-	ComponentsOnly, Layers, PartNode, RigNode,
+	add_character_components_host, character_bounds, drain_character_assembly_now,
+	hide_socketed_parts, spawn_fixed_character_assembly, AnimClip, AnimMailbox, AnimProgress,
+	AnimRef, AnimRefRoot, AnimateBones, AnimateEffects, AssetNormalization, BoneMap,
+	CharacterComponents, CharacterComponentsPlugin, CharacterHostsPlugin, CharacterMembers,
+	CharacterMotionSystems, CharacterPartSlot, CharacterRecipe, CharacterRig, CharacterRigRole,
+	ClothingLayer, ComponentsOnly, HiddenUntilSceneReady, Layers, PartNode,
+	PendingCharacterAssembly, RigNode,
 };
 use firearm_user::GeneratedFirearm;
 use firearms_components::{
@@ -28,10 +34,11 @@ use lod::{
 	add_lod_refresh_chunk_for, LodLevelRootPending, LodLevelSpawnRequest, LodRefreshCorePlugin,
 	LodRefreshDomain, LodRefreshMembership,
 };
-use material_ref::{MaterialRefApplied, StandardMaterialRefPlugin};
+use material_ref::MaterialRefApplied;
 use scene_ref::SceneRefRoot;
 use screen_capture::{
 	CaptureHostReady, CaptureHostRoot, CaptureId, CaptureSilhouetteRoot, CAPTURE_RENDER_LAYER,
+	HOST_REPRESENTATIVE_POSE,
 };
 use std::collections::HashMap;
 
@@ -40,6 +47,41 @@ pub const HOST_CLOTHING: &str = "clothing-preview";
 pub const HOST_GRENADE: &str = "grenade-preview";
 pub const HOST_SKILL_MAP: &str = "skill-map-preview";
 pub const HOST_SELF_LUBIKAN: &str = "self-lubikan-preview";
+pub const HOST_FISTICUFFS_ARMS: &str = "fisticuffs-arms-preview";
+
+/// Clip + progress for a [`HOST_REPRESENTATIVE_POSE`] (or Fisticuffs) capture host.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PoseCaptureSpec {
+	pub clip: AnimClip,
+	pub progress: f32,
+}
+
+#[derive(Resource, Default, Debug)]
+pub struct PoseCaptureSubjects {
+	poses: HashMap<CaptureId, PoseCaptureSpec>,
+}
+
+impl PoseCaptureSubjects {
+	pub fn remember(&mut self, id: CaptureId, spec: PoseCaptureSpec) {
+		self.poses.insert(id, spec);
+	}
+
+	pub fn get(&self, id: &CaptureId) -> Option<PoseCaptureSpec> {
+		self.poses.get(id).copied()
+	}
+}
+
+/// Stamp the live clip onto a realized representative-pose host.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct CapturePoseSpec {
+	pub clip: AnimClip,
+	pub progress: f32,
+}
+
+/// Fixed-assembly visual under a pose capture host. Drained without the world
+/// streaming budget so isolated stills do not wait behind nearby mobs.
+#[derive(Component)]
+struct CapturePoseAssembly;
 
 #[derive(Resource, Default, Debug)]
 pub struct ItemCaptureSubjects {
@@ -129,9 +171,6 @@ pub fn install_capture_hosts(app: &mut App) {
 	if !app.is_plugin_added::<CharacterMaterialRefPlugin>() {
 		app.add_plugins(CharacterMaterialRefPlugin);
 	}
-	if !app.is_plugin_added::<StandardMaterialRefPlugin>() {
-		app.add_plugins(StandardMaterialRefPlugin);
-	}
 	if !app.is_plugin_added::<FirearmComponentsPlugin>() {
 		app.add_plugins(FirearmComponentsPlugin);
 	}
@@ -147,6 +186,14 @@ pub fn install_capture_hosts(app: &mut App) {
 	if !app.is_plugin_added::<GrenadeMaterialPlugin>() {
 		app.add_plugins(GrenadeMaterialPlugin);
 	}
+	app.add_systems(
+		Update,
+		(
+			drain_capture_pose_assemblies,
+			pose_representative_hosts.before(CharacterMotionSystems::Anim),
+			log_pose_host_wait,
+		),
+	);
 }
 
 pub fn remember_item(subjects: &mut ItemCaptureSubjects, item: &InventoryItem) {
@@ -162,6 +209,7 @@ pub fn realize_capture_hosts(
 	mut grenade_materials: Option<ResMut<Assets<GrenadeMaterial>>>,
 	mut standard_materials: Option<ResMut<Assets<StandardMaterial>>>,
 	subjects: Res<ItemCaptureSubjects>,
+	poses: Res<PoseCaptureSubjects>,
 	hosts: Query<(Entity, &CaptureHostRoot), Without<CaptureHostRealized>>,
 ) {
 	for (root, host) in &hosts {
@@ -173,26 +221,163 @@ pub fn realize_capture_hosts(
 			commands.entity(root).try_insert(CaptureHostRealized);
 			continue;
 		}
-		let Some(item) = subjects.get(&host.id) else {
+		if host.kind == HOST_FISTICUFFS_ARMS {
+			if spawn_fisticuffs_arms_host(&mut commands, root) {
+				commands.entity(root).try_insert((
+					CaptureHostRealized,
+					CapturePoseSpec {
+						clip: FisticuffsGuardPose::clip(),
+						progress: FisticuffsGuardPose::progress(),
+					},
+				));
+			}
+			continue;
+		}
+		if let Some(item) = subjects.get(&host.id) {
+			if spawn_item_host(
+				&mut commands,
+				&mut meshes,
+				grenade_materials.as_deref_mut(),
+				root,
+				item,
+			) {
+				commands.entity(root).try_insert(CaptureHostRealized);
+			}
+			continue;
+		}
+		if host.kind != HOST_REPRESENTATIVE_POSE {
+			continue;
+		}
+		let Some(spec) = poses.get(&host.id) else {
 			continue;
 		};
-		if spawn_item_host(&mut commands, &mut meshes, grenade_materials.as_deref_mut(), root, item)
-		{
-			commands.entity(root).try_insert(CaptureHostRealized);
+		if spawn_pose_host(&mut commands, root) {
+			commands.entity(root).try_insert((
+				CaptureHostRealized,
+				CapturePoseSpec { clip: spec.clip, progress: spec.progress },
+			));
 		}
 	}
+}
+
+/// Stamp the live clip onto a realized representative-pose (or Fisticuffs) host.
+pub fn pose_representative_hosts(
+	mut commands: Commands,
+	hosts: Query<(Entity, &CapturePoseSpec), With<CaptureHostRealized>>,
+	children: Query<&Children>,
+	rigs: Query<&CharacterRig>,
+	anims: Query<&AnimRefRoot>,
+) {
+	for (root, spec) in &hosts {
+		visit_descendants(root, &children, &mut |entity| {
+			let Ok(rig) = rigs.get(entity) else {
+				return;
+			};
+			if rig.role != CharacterRigRole::Body {
+				return;
+			}
+			let desired = AnimRef::new(spec.clip);
+			let needs = match anims.get(entity) {
+				Ok(root) => root.0 != desired,
+				Err(_) => true,
+			};
+			if needs {
+				commands.entity(entity).try_insert(AnimRefRoot(desired));
+			}
+			commands.entity(entity).try_insert((
+				AnimProgress(spec.progress),
+				AnimateBones,
+				AnimateEffects,
+			));
+		});
+	}
+}
+
+fn spawn_pose_host(commands: &mut Commands, root: Entity) -> bool {
+	let preview = BraidmanConfig::default_preview().clothed();
+	let entity = spawn_fixed_character_assembly(commands, &preview, Transform::IDENTITY);
+	commands.entity(entity).try_insert(CapturePoseAssembly);
+	pin_capture_host(commands, entity, root);
+	true
+}
+
+fn log_pose_host_wait(
+	hosts: Query<
+		(Entity, &CaptureHostRoot),
+		(With<CapturePoseSpec>, With<CaptureHostRealized>, Without<CaptureHostReady>),
+	>,
+	children: Query<&Children>,
+	pending_assembly: Query<(), With<PendingCharacterAssembly>>,
+	hidden_until: Query<(), With<HiddenUntilSceneReady>>,
+	meshes: Query<Entity, (With<Mesh3d>, Allow<Disabled>)>,
+	mailboxes: Query<&AnimMailbox>,
+	mut frames: Local<u32>,
+) {
+	if hosts.is_empty() {
+		return;
+	}
+	*frames += 1;
+	if *frames % 60 != 1 {
+		return;
+	}
+	for (root, host) in &hosts {
+		let mut pending = 0_u32;
+		let mut hidden = 0_u32;
+		let mut mesh_count = 0_u32;
+		let mut mailbox_settled = false;
+		visit_descendants(root, &children, &mut |entity| {
+			if pending_assembly.get(entity).is_ok() {
+				pending += 1;
+			}
+			if hidden_until.get(entity).is_ok() {
+				hidden += 1;
+			}
+			if meshes.get(entity).is_ok() {
+				mesh_count += 1;
+			}
+			if mailboxes.get(entity).is_ok_and(AnimMailbox::settled) {
+				mailbox_settled = true;
+			}
+		});
+		info!(
+			id = %host.id.as_str(),
+			pending,
+			hidden,
+			meshes = mesh_count,
+			mailbox_settled,
+			"pose capture host waiting"
+		);
+	}
+}
+
+fn drain_capture_pose_assemblies(world: &mut World) {
+	let roots: Vec<Entity> = world
+		.query_filtered::<Entity, (With<PendingCharacterAssembly>, With<CapturePoseAssembly>)>()
+		.iter(world)
+		.collect();
+	if roots.is_empty() {
+		return;
+	}
+	drain_character_assembly_now(world, roots);
 }
 
 pub fn mark_capture_hosts_ready(
 	mut commands: Commands,
 	hosts: Query<
-		Entity,
-		(With<CaptureHostRoot>, With<CaptureHostRealized>, Without<CaptureHostReady>),
+		(Entity, &CaptureHostRoot),
+		(With<CaptureHostRealized>, Without<CaptureHostReady>),
 	>,
 	children: Query<&Children>,
-	pending_spawn: Query<(), With<LodLevelSpawnRequest>>,
-	pending_root: Query<(), With<LodLevelRootPending>>,
-	meshes: Query<Entity, With<Mesh3d>>,
+	pending: Query<
+		(),
+		Or<(
+			With<LodLevelSpawnRequest>,
+			With<LodLevelRootPending>,
+			With<PendingCharacterAssembly>,
+			With<HiddenUntilSceneReady>,
+		)>,
+	>,
+	meshes: Query<Entity, (With<Mesh3d>, Allow<Disabled>)>,
 	applied: Query<(), With<MaterialRefApplied>>,
 	standard: Query<(), With<MeshMaterial3d<StandardMaterial>>>,
 	clothing: Query<(), With<MeshMaterial3d<ClothingShaderMaterial>>>,
@@ -200,12 +385,13 @@ pub fn mark_capture_hosts_ready(
 	grenades: Query<(), With<MeshMaterial3d<GrenadeMaterial>>>,
 	poses: Query<(), With<ActiveRigPose>>,
 	posed: Query<(), With<PoseApplied>>,
+	pose_specs: Query<(), With<CapturePoseSpec>>,
+	mailboxes: Query<&AnimMailbox>,
 	pending_scene: Query<(), (With<SceneRefRoot>, Without<WorldAssetRoot>)>,
-	hosts_meta: Query<&CaptureHostRoot>,
-	bind_pose: Query<(), With<SelfLubikanBindPose>>,
+	bind_pose: Query<(), Or<(With<SelfLubikanBindPose>, With<FisticuffsArmsBindPose>)>>,
 ) {
-	for root in &hosts {
-		if hosts_meta.get(root).is_ok_and(|host| host.kind == HOST_SELF_LUBIKAN)
+	for (root, host) in &hosts {
+		if (host.kind == HOST_SELF_LUBIKAN || host.kind == HOST_FISTICUFFS_ARMS)
 			&& bind_pose.get(root).is_err()
 		{
 			continue;
@@ -213,8 +399,7 @@ pub fn mark_capture_hosts_ready(
 		if host_tree_ready(
 			root,
 			&children,
-			&pending_spawn,
-			&pending_root,
+			&pending,
 			&meshes,
 			&applied,
 			&standard,
@@ -223,6 +408,8 @@ pub fn mark_capture_hosts_ready(
 			&grenades,
 			&poses,
 			&posed,
+			pose_specs.get(root).is_ok(),
+			&mailboxes,
 			&pending_scene,
 		) {
 			commands.entity(root).try_insert(CaptureHostReady);
@@ -265,16 +452,22 @@ pub fn prepare_silhouette_hosts(
 
 pub fn keep_capture_hosts_visible(
 	mut commands: Commands,
-	roots: Query<Entity, With<CaptureHostRoot>>,
-	children: Query<&Children>,
-	hidden: Query<(), Or<(With<Disabled>, With<Visibility>)>>,
+	roots: Query<Entity, (With<CaptureHostRoot>, Allow<Disabled>)>,
+	children: Query<&Children, Allow<Disabled>>,
+	hidden: Query<Option<&Visibility>, Or<(With<Disabled>, With<Visibility>)>>,
+	arm_hidden: Query<(), (With<FisticuffsArmsHidden>, Allow<Disabled>)>,
 ) {
 	for root in &roots {
 		visit_descendants(root, &children, &mut |entity| {
-			if hidden.get(entity).is_err() {
+			let Ok(visibility) = hidden.get(entity) else {
+				return;
+			};
+			commands.entity(entity).try_remove::<Disabled>();
+			// Only nodes explicitly hidden by arm isolation retain Hidden.
+			// Other scene parts still receive generic visibility repair.
+			if arm_hidden.contains(entity) && visibility == Some(&Visibility::Hidden) {
 				return;
 			}
-			commands.entity(entity).try_remove::<Disabled>();
 			commands.entity(entity).try_insert(Visibility::Inherited);
 		});
 	}
@@ -328,8 +521,13 @@ fn spawn_item_host(
 			pin_capture_host(commands, entity, root);
 			true
 		}
-		InventoryItem::SkillMap { .. } => false,
+		InventoryItem::SkillMap { .. } | InventoryItem::Tanz { .. } => false,
+		InventoryItem::Fisticuffs => spawn_fisticuffs_arms_host(commands, root),
 	}
+}
+
+fn spawn_fisticuffs_arms_host(commands: &mut Commands, root: Entity) -> bool {
+	spawn_pose_host(commands, root)
 }
 
 fn spawn_self_lubikan_host(
@@ -353,6 +551,14 @@ fn spawn_self_lubikan_host(
 /// Finished destemming the Self Lubikan body so bind-pose vertices draw.
 #[derive(Component)]
 pub(crate) struct SelfLubikanBindPose;
+
+/// Finished destemming, posing, and isolating the Fisticuffs arms mesh.
+#[derive(Component)]
+pub(crate) struct FisticuffsArmsBindPose;
+
+/// Visibility owned by the Fisticuffs arm mask, not scene readiness.
+#[derive(Component)]
+pub(crate) struct FisticuffsArmsHidden;
 
 /// Isolated captures have no posed body rig. The GLB still instantiates
 /// `SkinnedMesh` plus JOINTS/WEIGHTS; Bevy's PBR path skips those meshes
@@ -429,6 +635,128 @@ pub fn rest_pose_self_lubikan_skins(
 		}
 		place_cross_in_corner(&mut commands, &meshes, root, &children, &mesh_3d, &crosses);
 		commands.entity(root).try_insert(SelfLubikanBindPose);
+	}
+}
+
+/// Pose has settled: hide non-arm parts and keep body triangles skinned to arm joints.
+///
+/// The live [`pose_representative_hosts`] clip supplies the guard. FitExtents
+/// crops the remaining posed AABB; this filter does not invent a fold.
+pub fn rest_pose_fisticuffs_arms_skins(
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut standard_materials: Option<ResMut<Assets<StandardMaterial>>>,
+	hosts: Query<
+		(Entity, &CaptureHostRoot),
+		(With<CaptureHostRealized>, Without<FisticuffsArmsBindPose>),
+	>,
+	children: Query<&Children>,
+	pending_scene: Query<(), (With<SceneRefRoot>, Without<WorldAssetRoot>)>,
+	pending_assembly: Query<(), With<PendingCharacterAssembly>>,
+	hidden_until: Query<(), With<HiddenUntilSceneReady>>,
+	mesh_3d: Query<&Mesh3d>,
+	skins: Query<&SkinnedMesh>,
+	maps: Query<&BoneMap>,
+	members: Query<&CharacterMembers>,
+	parts: Query<&PartNode>,
+	mut visibilities: Query<&mut Visibility>,
+	mailboxes: Query<&AnimMailbox>,
+) {
+	for (root, host) in &hosts {
+		if host.kind != HOST_FISTICUFFS_ARMS {
+			continue;
+		}
+		let mut pending = false;
+		let mut mailbox_settled = false;
+		let mut bone_map: Option<&BoneMap> = None;
+		visit_descendants(root, &children, &mut |entity| {
+			if pending_scene.get(entity).is_ok()
+				|| pending_assembly.get(entity).is_ok()
+				|| hidden_until.get(entity).is_ok()
+			{
+				pending = true;
+			}
+			if mailboxes.get(entity).is_ok_and(AnimMailbox::settled) {
+				mailbox_settled = true;
+			}
+			if bone_map.is_none() {
+				if let Ok(map) = maps.get(entity) {
+					bone_map = Some(map);
+				}
+			}
+		});
+		if pending || !mailbox_settled {
+			continue;
+		}
+		let Some(map) = bone_map else {
+			continue;
+		};
+		visit_descendants(root, &children, &mut |entity| {
+			if let Ok(list) = members.get(entity) {
+				hide_socketed_parts(
+					list,
+					&parts,
+					&mut visibilities,
+					FisticuffsArmMask::hides_part,
+					true,
+				);
+				for member in list.iter() {
+					if parts.get(member).is_ok_and(|part| FisticuffsArmMask::hides_part(part.slot)) {
+						commands.entity(member).try_insert(FisticuffsArmsHidden);
+					}
+				}
+			}
+		});
+		let mut isolated_any = false;
+		let mut saw_loaded_body = false;
+		let mut pending_mesh = false;
+		visit_descendants(root, &children, &mut |entity| {
+			if entity == root {
+				return;
+			}
+			commands.entity(entity).try_insert(RenderLayers::layer(CAPTURE_RENDER_LAYER));
+			let Ok(handle) = mesh_3d.get(entity) else {
+				return;
+			};
+			let Some(mesh) = meshes.get(&handle.0) else {
+				pending_mesh = true;
+				return;
+			};
+			saw_loaded_body = true;
+			let Ok(skin) = skins.get(entity) else {
+				commands.entity(entity).try_insert((Visibility::Hidden, FisticuffsArmsHidden));
+				return;
+			};
+			let joint_is_arm: Vec<bool> = skin
+				.joints
+				.iter()
+				.map(|joint| {
+					map.by_name
+						.iter()
+						.any(|(name, &bone)| bone == *joint && FisticuffsArmMask::shows_joint(name))
+				})
+				.collect();
+			let Some(isolated) = isolate_arm_joints(mesh, &joint_is_arm) else {
+				commands.entity(entity).try_insert((Visibility::Hidden, FisticuffsArmsHidden));
+				return;
+			};
+			commands.entity(entity).try_insert(Mesh3d(meshes.add(isolated)));
+			isolated_any = true;
+			if let Some(materials) = standard_materials.as_mut() {
+				commands.entity(entity).try_insert(MeshMaterial3d(materials.add(
+					StandardMaterial {
+						perceptual_roughness: 0.6,
+						metallic: 0.0,
+						alpha_mode: AlphaMode::Opaque,
+						..Default::default()
+					},
+				)));
+			}
+		});
+		if pending_mesh || !(saw_loaded_body && isolated_any) {
+			continue;
+		}
+		commands.entity(root).try_insert(FisticuffsArmsBindPose);
 	}
 }
 
@@ -571,9 +899,16 @@ fn spawn_character_icon<T: CharacterComponents + Component + Clone + Default + U
 fn host_tree_ready(
 	root: Entity,
 	children: &Query<&Children>,
-	pending_spawn: &Query<(), With<LodLevelSpawnRequest>>,
-	pending_root: &Query<(), With<LodLevelRootPending>>,
-	meshes: &Query<Entity, With<Mesh3d>>,
+	pending: &Query<
+		(),
+		Or<(
+			With<LodLevelSpawnRequest>,
+			With<LodLevelRootPending>,
+			With<PendingCharacterAssembly>,
+			With<HiddenUntilSceneReady>,
+		)>,
+	>,
+	meshes: &Query<Entity, (With<Mesh3d>, Allow<Disabled>)>,
 	applied: &Query<(), With<MaterialRefApplied>>,
 	standard: &Query<(), With<MeshMaterial3d<StandardMaterial>>>,
 	clothing: &Query<(), With<MeshMaterial3d<ClothingShaderMaterial>>>,
@@ -581,25 +916,28 @@ fn host_tree_ready(
 	grenades: &Query<(), With<MeshMaterial3d<GrenadeMaterial>>>,
 	poses: &Query<(), With<ActiveRigPose>>,
 	posed: &Query<(), With<PoseApplied>>,
+	require_mailbox: bool,
+	mailboxes: &Query<&AnimMailbox>,
 	pending_scene: &Query<(), (With<SceneRefRoot>, Without<WorldAssetRoot>)>,
 ) -> bool {
 	let mut found_mesh = false;
-	let mut pending = false;
+	let mut is_pending = false;
 	let mut unpainted = false;
 	let mut needs_pose = false;
 	let mut pose_ready = false;
+	let mut mailbox_ready = !require_mailbox;
 	visit_descendants(root, children, &mut |entity| {
-		if pending_spawn.get(entity).is_ok()
-			|| pending_root.get(entity).is_ok()
-			|| pending_scene.get(entity).is_ok()
-		{
-			pending = true;
+		if pending.get(entity).is_ok() || pending_scene.get(entity).is_ok() {
+			is_pending = true;
 		}
 		if poses.get(entity).is_ok() {
 			needs_pose = true;
 		}
 		if posed.get(entity).is_ok() {
 			pose_ready = true;
+		}
+		if require_mailbox && mailboxes.get(entity).is_ok_and(AnimMailbox::settled) {
+			mailbox_ready = true;
 		}
 		if meshes.get(entity).is_err() {
 			return;
@@ -614,10 +952,14 @@ fn host_tree_ready(
 			unpainted = true;
 		}
 	});
-	found_mesh && !pending && !unpainted && (!needs_pose || pose_ready)
+	found_mesh && !is_pending && !unpainted && (!needs_pose || pose_ready) && mailbox_ready
 }
 
-fn visit_descendants(root: Entity, children: &Query<&Children>, visit: &mut impl FnMut(Entity)) {
+fn visit_descendants<F: QueryFilter>(
+	root: Entity,
+	children: &Query<&Children, F>,
+	visit: &mut impl FnMut(Entity),
+) {
 	visit(root);
 	let Ok(kids) = children.get(root) else {
 		return;
@@ -844,5 +1186,141 @@ mod tests {
 		assert_eq!(app.world().get::<ChildOf>(cross).map(|parent| parent.0), Some(child));
 		let placed = app.world().get::<Transform>(cross).expect("corner");
 		assert!(placed.translation.x > 0.0 && placed.translation.y > 0.0);
+	}
+
+	#[test]
+	fn fisticuffs_waits_for_loaded_body_mesh() {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+			.init_asset::<Mesh>()
+			.init_asset::<StandardMaterial>()
+			.add_systems(Update, rest_pose_fisticuffs_arms_skins);
+		let root = app
+			.world_mut()
+			.spawn((
+				CaptureHostRoot {
+					kind: HOST_FISTICUFFS_ARMS.to_string(),
+					id: CaptureId::new("fisticuffs:braidman-arms"),
+				},
+				CaptureHostRealized,
+			))
+			.id();
+		app.world_mut().spawn((Mesh3d(Handle::default()), ChildOf(root)));
+		app.update();
+		assert!(
+			app.world().get::<FisticuffsArmsBindPose>(root).is_none(),
+			"Mesh3d without an asset must not ready the host"
+		);
+	}
+
+	#[test]
+	fn fisticuffs_arm_mask_survives_visibility_repair_after_asset_readiness() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_systems(Update, keep_capture_hosts_visible);
+		let root = app
+			.world_mut()
+			.spawn(CaptureHostRoot {
+				kind: HOST_FISTICUFFS_ARMS.to_string(),
+				id: CaptureId::new("fisticuffs:braidman-arms"),
+			})
+			.id();
+		let arm = app.world_mut().spawn((Visibility::Hidden, ChildOf(root))).id();
+		let face = app.world_mut().spawn((Visibility::Hidden, ChildOf(root))).id();
+		let hidden_child = app.world_mut().spawn((Visibility::Hidden, ChildOf(face))).id();
+		app.update();
+		assert_eq!(app.world().get::<Visibility>(arm), Some(&Visibility::Inherited));
+		assert_eq!(app.world().get::<Visibility>(face), Some(&Visibility::Inherited));
+
+		// Once the asset and arm isolation are ready, the masked face stays
+		// hidden; unrelated Hidden nodes are still repaired.
+		app.world_mut().entity_mut(root).insert(FisticuffsArmsBindPose);
+		app.world_mut().entity_mut(face).insert((Visibility::Hidden, FisticuffsArmsHidden));
+		app.world_mut().entity_mut(hidden_child).insert(Visibility::Hidden);
+		let late_part = app.world_mut().spawn((Visibility::Hidden, ChildOf(root))).id();
+		for _ in 0..3 {
+			app.update();
+			assert_eq!(app.world().get::<Visibility>(face), Some(&Visibility::Hidden));
+			assert_eq!(app.world().get::<Visibility>(hidden_child), Some(&Visibility::Inherited));
+			assert_eq!(app.world().get::<Visibility>(late_part), Some(&Visibility::Inherited));
+		}
+		assert_eq!(app.world().get::<Visibility>(arm), Some(&Visibility::Inherited));
+	}
+
+	#[test]
+	fn visibility_repair_traverses_disabled_hierarchies_and_preserves_arm_masks() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_systems(Update, keep_capture_hosts_visible);
+		let root = app
+			.world_mut()
+			.spawn((
+				CaptureHostRoot {
+					kind: HOST_FISTICUFFS_ARMS.to_string(),
+					id: CaptureId::new("fisticuffs:disabled-arms"),
+				},
+				Disabled,
+				Visibility::Hidden,
+			))
+			.id();
+		// The intermediate entity has no Visibility; it must still be traversed
+		// and enabled so its visible arm descendants can render.
+		let branch = app.world_mut().spawn((Disabled, ChildOf(root))).id();
+		let arm = app.world_mut().spawn((Disabled, Visibility::Hidden, ChildOf(branch))).id();
+		let masked = app
+			.world_mut()
+			.spawn((Disabled, Visibility::Hidden, FisticuffsArmsHidden, ChildOf(branch)))
+			.id();
+		let masked_child = app
+			.world_mut()
+			.spawn((Disabled, Visibility::Hidden, FisticuffsArmsHidden, ChildOf(masked)))
+			.id();
+		let ordinary_child =
+			app.world_mut().spawn((Disabled, Visibility::Hidden, ChildOf(masked))).id();
+		for _ in 0..3 {
+			app.update();
+			for entity in [root, branch, arm, masked, masked_child, ordinary_child] {
+				assert!(
+					app.world().get::<Disabled>(entity).is_none(),
+					"capture descendants must be enabled"
+				);
+			}
+			assert_eq!(app.world().get::<Visibility>(root), Some(&Visibility::Inherited));
+			assert_eq!(app.world().get::<Visibility>(arm), Some(&Visibility::Inherited));
+			assert_eq!(app.world().get::<Visibility>(ordinary_child), Some(&Visibility::Inherited));
+			assert_eq!(app.world().get::<Visibility>(masked), Some(&Visibility::Hidden));
+			assert_eq!(app.world().get::<Visibility>(masked_child), Some(&Visibility::Hidden));
+		}
+	}
+
+	#[test]
+	fn fisticuffs_host_uses_the_guard_pose_spec() {
+		assert_eq!(FisticuffsGuardPose::clip(), AnimClip::jab());
+		assert_eq!(FisticuffsGuardPose::progress(), AnimClip::fisticuffs_guard_progress());
+		assert_eq!(HOST_FISTICUFFS_ARMS, "fisticuffs-arms-preview");
+		assert_eq!(HOST_REPRESENTATIVE_POSE, "representative-pose");
+	}
+
+	#[test]
+	fn pose_representative_hosts_stamps_the_guard_clip() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_systems(Update, pose_representative_hosts);
+		let root = app
+			.world_mut()
+			.spawn((
+				CaptureHostRealized,
+				CapturePoseSpec {
+					clip: FisticuffsGuardPose::clip(),
+					progress: FisticuffsGuardPose::progress(),
+				},
+			))
+			.id();
+		let rig = app
+			.world_mut()
+			.spawn((CharacterRig { role: CharacterRigRole::Body, ..default() }, ChildOf(root)))
+			.id();
+		app.update();
+		let stamped = app.world().get::<AnimRefRoot>(rig).expect("anim");
+		assert_eq!(stamped.0, AnimRef::new(AnimClip::jab()));
+		assert_eq!(app.world().get::<AnimProgress>(rig).map(|progress| progress.0), Some(0.0));
+		assert!(app.world().get::<AnimateBones>(rig).is_some());
 	}
 }

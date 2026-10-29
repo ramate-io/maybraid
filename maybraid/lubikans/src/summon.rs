@@ -21,16 +21,16 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use damage::{Died, Downed, Health, ResponsibleOwner};
 
+use crate::LubikanSystems;
 use crate::activation::{
 	LubikanActivationFinished, LubikanActivationOutcome, LubikanActivationPhase,
 	LubikanActivationReport, LubikanActivationSession, LubikanActivationSessionId,
 };
 use crate::change::{LubikanChargeReason, LubikanChargeRequest};
 use crate::identity::{LubikanAccountId, LubikanDefinition, LubikanDefinitionId};
-use crate::ledger::{LubikanAccountBinding, LubikanLedger, LubikanOwner};
+use crate::ledger::{LubikanAccountBinding, LubikanOwner};
 use crate::lifetime::{LubikanOwnerLifetime, LubikanOwnerLifetimeKind};
-use crate::plugin::LubikanSessionStore;
-use crate::LubikanSystems;
+use crate::plugin::LubikanActivationAccess;
 
 mod fixture;
 
@@ -189,11 +189,7 @@ impl LubikanSummonConfig {
 	}
 
 	pub fn health(self) -> f32 {
-		if self.health.is_finite() {
-			self.health.max(1.0)
-		} else {
-			PLACEHOLDER_SUMMON_HEALTH
-		}
+		if self.health.is_finite() { self.health.max(1.0) } else { PLACEHOLDER_SUMMON_HEALTH }
 	}
 }
 
@@ -233,11 +229,7 @@ impl LubikanSummonRecipe {
 	}
 
 	pub fn health(self) -> f32 {
-		if self.health.is_finite() {
-			self.health.max(1.0)
-		} else {
-			PLACEHOLDER_SUMMON_HEALTH
-		}
+		if self.health.is_finite() { self.health.max(1.0) } else { PLACEHOLDER_SUMMON_HEALTH }
 	}
 
 	pub fn lifetime_secs(self) -> Option<f32> {
@@ -380,8 +372,7 @@ pub struct LubikanSummons {
 
 #[derive(SystemParam)]
 struct SummonClose<'w, 's> {
-	ledgers: Query<'w, 's, &'static mut LubikanLedger>,
-	store: ResMut<'w, LubikanSessionStore>,
+	activations: LubikanActivationAccess<'w, 's>,
 	reports: MessageWriter<'w, LubikanActivationReport>,
 	finished: MessageWriter<'w, LubikanActivationFinished>,
 	departures: MessageWriter<'w, LubikanSummonDeparture>,
@@ -444,20 +435,9 @@ impl SummonClose<'_, '_> {
 		session: LubikanActivationSession,
 		outcome: LubikanActivationOutcome,
 	) {
-		let mut applied = false;
-		for mut ledger in self.ledgers.iter_mut() {
-			if apply_close(&mut ledger, session, outcome) {
-				applied = true;
-				break;
-			}
-		}
-		if !applied {
-			if let Some(cached) = self.store.cached_ledger_mut() {
-				apply_close(cached, session, outcome);
-			}
-		}
+		let pulse = self.activations.close_summon(session, outcome);
 		self.reports.write(LubikanActivationReport { id: session.id, outcome });
-		self.finished.write(LubikanActivationFinished::from_session(session, outcome));
+		self.finished.write(pulse);
 	}
 }
 
@@ -501,12 +481,13 @@ fn accept_summon_sessions(mut close: SummonClose, mut accept: SummonAccept) {
 		if session.definition.is_self() {
 			continue;
 		}
-		if !session_is_active(close.ledgers.iter(), &close.store, session.id) {
+		if close.activations.session_phase(session.id) != Some(LubikanActivationPhase::Active) {
 			// Already closed (Heal / external cancel). Do not spawn or refund.
 			continue;
 		}
 		if close.config.block_while_self_active
-			&& self_account_active(&mut close.ledgers, session.owner)
+			&& close.activations.owner_phase(session.owner, LubikanAccountId::SELF)
+				== Some(LubikanActivationPhase::Active)
 		{
 			close.reject(*session, LubikanSummonDepartureReason::BlockedBySelf);
 			continue;
@@ -601,13 +582,16 @@ fn retire_summons(
 			continue;
 		}
 		if close.config.session_follows_instance
-			&& !session_is_active(close.ledgers.iter(), &close.store, live.session)
+			&& close.activations.session_phase(live.session) != Some(LubikanActivationPhase::Active)
 		{
 			retired.push((entity, *live, LubikanSummonDepartureReason::Cancelled));
 			continue;
 		}
 		if close.config.dismiss_on_select_change
-			&& selection_left_account(&mut close.ledgers, live.owner, live.account)
+			&& close
+				.activations
+				.owner_selection(live.owner)
+				.is_some_and(|account| account != live.account)
 		{
 			retired.push((entity, *live, LubikanSummonDepartureReason::Dismissed));
 		}
@@ -654,22 +638,6 @@ fn owner_unavailable(
 	downed.get(owner).is_ok() || healths.get(owner).is_ok_and(|health| health.is_dead())
 }
 
-fn self_account_active(ledgers: &mut Query<&mut LubikanLedger>, owner: Entity) -> bool {
-	ledgers.get(owner).is_ok_and(|ledger| {
-		ledger
-			.account(LubikanAccountId::SELF)
-			.is_some_and(|account| account.activation().is_active())
-	})
-}
-
-fn selection_left_account(
-	ledgers: &mut Query<&mut LubikanLedger>,
-	owner: Entity,
-	account: LubikanAccountId,
-) -> bool {
-	ledgers.get(owner).is_ok_and(|ledger| ledger.selection().resolved() != account)
-}
-
 fn should_retire_for_owner(
 	live: LubikanSummon,
 	owners: &Query<(), With<LubikanOwner>>,
@@ -707,63 +675,18 @@ fn placement_from(owner: &Transform, offset: f32) -> Option<Transform> {
 	Some(Transform::from_translation(origin).looking_to(*owner.forward(), Vec3::Y))
 }
 
-fn session_is_active<'a>(
-	ledgers: impl IntoIterator<Item = &'a LubikanLedger>,
-	store: &LubikanSessionStore,
-	id: LubikanActivationSessionId,
-) -> bool {
-	session_phase(ledgers, store, id) == Some(LubikanActivationPhase::Active)
-}
-
-fn session_phase<'a>(
-	ledgers: impl IntoIterator<Item = &'a LubikanLedger>,
-	store: &LubikanSessionStore,
-	id: LubikanActivationSessionId,
-) -> Option<LubikanActivationPhase> {
-	ledgers
-		.into_iter()
-		.find_map(|ledger| ledger_session_phase(ledger, id))
-		.or_else(|| store.cached_ledger().and_then(|ledger| ledger_session_phase(ledger, id)))
-}
-
-fn ledger_session_phase(
-	ledger: &LubikanLedger,
-	id: LubikanActivationSessionId,
-) -> Option<LubikanActivationPhase> {
-	ledger.iter().find_map(|account| {
-		(account.activation().session == Some(id)).then_some(account.activation().phase)
-	})
-}
-
-/// Close the captured account. A natural complete reports through
-/// [`LubikanActivationFinished`] and returns the account to Idle in this
-/// frame so a later activate in the same life can spend again.
-fn apply_close(
-	ledger: &mut LubikanLedger,
-	session: LubikanActivationSession,
-	outcome: LubikanActivationOutcome,
-) -> bool {
-	if !ledger.finish_activation(session.id, outcome) {
-		return false;
-	}
-	if outcome == LubikanActivationOutcome::Completed {
-		ledger.reset_activation(session.account);
-	}
-	true
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::LubikanSystems;
 	use crate::activation::{LubikanActivationDenied, LubikanActivationPhase};
 	use crate::catalog::LubikanCatalog;
 	use crate::plugin::LubikansPlugin;
-	use crate::LubikanSystems;
 	use crate::{
 		LubikanActivationFinished, LubikanActivationRefused, LubikanActivationReport,
 		LubikanActivationRequest, LubikanChargeChanged,
 	};
-	use anyhow::{anyhow, Result};
+	use anyhow::{Result, anyhow};
 	use bevy::time::{TimeUpdateStrategy, Virtual};
 	use damage::DamagePlugin;
 	use std::time::Duration;
@@ -797,9 +720,7 @@ mod tests {
 	fn unlock_fixture(app: &mut App, owner: Entity) -> Result<LubikanAccountId> {
 		let definition = fixture_summon_definition();
 		let account = {
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = crate::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			let account = ledger.ensure_owned(definition);
 			if !ledger.select(Some(account)) {
@@ -817,9 +738,7 @@ mod tests {
 	) -> Result<LubikanActivationSession> {
 		let cost = app.world().resource::<LubikanCatalog>().activation_cost(account.definition());
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = crate::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			ledger.apply_to(account, cost).ok_or_else(|| anyhow!("fund"))?;
 		}
@@ -838,16 +757,14 @@ mod tests {
 		owner: Entity,
 		account: LubikanAccountId,
 	) -> Result<LubikanActivationPhase> {
-		app.world()
-			.get::<LubikanLedger>(owner)
+		crate::LubikanBodyOf::ledger(app.world(), owner)
 			.and_then(|ledger| ledger.account(account))
 			.map(|account| account.activation().phase)
 			.ok_or_else(|| anyhow!("activation phase"))
 	}
 
 	fn charge(app: &App, owner: Entity, account: LubikanAccountId) -> Result<f32> {
-		app.world()
-			.get::<LubikanLedger>(owner)
+		crate::LubikanBodyOf::ledger(app.world(), owner)
 			.and_then(|ledger| ledger.account(account))
 			.map(|account| account.charge().current())
 			.ok_or_else(|| anyhow!("charge"))
@@ -884,9 +801,7 @@ mod tests {
 		app.world_mut().entity_mut(owner).insert(Health { current: 40.0, max: 100.0 });
 		let cost = app.world().resource::<LubikanCatalog>().self_definition().activation_cost;
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = crate::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			ledger.apply_to_equipped(cost);
 		}
@@ -1021,9 +936,7 @@ mod tests {
 		let extra = LubikanDefinition::new(LubikanDefinitionId::from_raw(3), 40.0, 5.0);
 		app.world_mut().resource_mut::<LubikanCatalog>().register(extra);
 		let account = {
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = crate::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			let account = ledger.ensure_owned(extra);
 			if !ledger.select(Some(account)) {
@@ -1047,9 +960,7 @@ mod tests {
 		fund_and_activate(&mut app, owner, account)?;
 		assert_eq!(live_summons(&mut app).len(), 1);
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = crate::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			ledger.apply_to(account, PLACEHOLDER_SUMMON_ACTIVATION_COST);
 		}
@@ -1102,9 +1013,7 @@ mod tests {
 		let owner = spawn_owner(&mut app)?;
 		let first = unlock_fixture(&mut app, owner)?;
 		let second = {
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = crate::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			let second = ledger.ensure_owned(extra);
 			ledger
@@ -1170,9 +1079,7 @@ mod tests {
 		let account = unlock_fixture(&mut app, owner)?;
 		let session = fund_and_activate(&mut app, owner, account)?;
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = crate::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			if !ledger.select(None) {
 				return Err(anyhow!("back to self"));
@@ -1321,9 +1228,7 @@ mod tests {
 		let account = unlock_fixture(&mut app, owner)?;
 		let self_cost = app.world().resource::<LubikanCatalog>().self_definition().activation_cost;
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<LubikanLedger>(owner)
+			let mut ledger = crate::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			ledger.apply_to(LubikanAccountId::SELF, self_cost);
 		}

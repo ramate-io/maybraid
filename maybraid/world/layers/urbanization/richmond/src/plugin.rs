@@ -14,6 +14,7 @@ use scene_ref::SceneRefPlugin;
 
 use crate::buildings_lod::register_developments_buildings_lod_plugin;
 use crate::config::DevelopmentConfig;
+use crate::host::PlaceArrivalSource;
 use crate::place::DiscoverablePlace;
 /// Registers SceneRef, urban MaterialRef, placeholder wireframes, building LOD, and walk colliders.
 #[derive(Default)]
@@ -60,7 +61,10 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 
 		app.init_resource::<DevelopmentConfig>()
 			.add_systems(Update, apply_parent_confines.after(LodRefreshSystems::Cull))
-			.add_systems(Update, stamp_label_places);
+			.add_systems(
+				PostUpdate,
+				stamp_label_places.after(bevy::transform::TransformSystems::Propagate),
+			);
 	}
 }
 
@@ -72,17 +76,39 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 fn stamp_label_places(
 	mut commands: Commands,
 	added: Query<
-		(Entity, &LabelNode, Option<&ChildOf>),
+		(Entity, &LabelNode, Option<&ChildOf>, Option<&GlobalTransform>),
 		(Added<LabelNode>, Without<DiscoverablePlace>),
 	>,
 	ancestors: Query<(Option<&ChildOf>, Option<&DiscoverablePlace>)>,
+	sources: Query<(&PlaceArrivalSource, &GlobalTransform)>,
 ) {
-	for (entity, node, child_of) in &added {
+	for (entity, node, child_of, transform) in &added {
 		let Some(mut place) = DiscoverablePlace::from_label_node(node) else {
 			continue;
 		};
 		if let Some(host) = ancestor_host(child_of.map(ChildOf::parent), &ancestors) {
 			place = place.with_identity(host, local_place_id(node));
+		}
+		let mut current = child_of.map(ChildOf::parent);
+		for _ in 0..32 {
+			let Some(ancestor) = current else {
+				break;
+			};
+			if let Ok((source, host_transform)) = sources.get(ancestor) {
+				place.arrival_local = transform.and_then(|transform| {
+					source.0.as_ref()?.interior_stand_local(Some(node.placement.translation)).map(
+						|point| {
+							transform
+								.to_matrix()
+								.inverse()
+								.transform_point3(host_transform.transform_point(point))
+						},
+					)
+				});
+				break;
+			}
+			current =
+				ancestors.get(ancestor).ok().and_then(|(parent, _)| parent.map(ChildOf::parent));
 		}
 		commands.entity(entity).insert(place);
 	}
@@ -135,9 +161,93 @@ mod tests {
 	use building_components::{LabelGeometry, LabelStyle, Placement};
 
 	#[test]
+	fn fresh_room_labels_author_floors_after_transformed_host_propagation() -> anyhow::Result<()> {
+		use crate::DevelopmentHost;
+		use buildings::{Confines, Fit};
+		use procedural_common::NoiseParams;
+		use std::sync::Arc;
+		let bounds = bevy::math::bounding::Aabb3d::from_min_max(
+			Vec3::new(-30.0, 0.0, -30.0),
+			Vec3::new(30.0, 64.0, 30.0),
+		);
+		let (building, _) = buildings::SingleHighrise::fit_to_confines(
+			&Confines::from_bounds(bounds),
+			NoiseParams::default(),
+		)?;
+		use building_components::BuildingComponents;
+		let mut floor_heights: Vec<_> = building
+			.floor_nodes_for_level(lod::LodSceneLevel::High)
+			.flatten()
+			.into_iter()
+			.filter_map(|floor| floor.walk_on_point().map(|point| point.y))
+			.chain(
+				building
+					.panel_nodes_for_level(lod::LodSceneLevel::High)
+					.flatten()
+					.into_iter()
+					.filter_map(|panel| panel.horizontal_walk_point().map(|point| point.y)),
+			)
+			.collect();
+		floor_heights.sort_by(f32::total_cmp);
+		floor_heights.dedup();
+		assert!(floor_heights.len() >= 2, "fixture should author several floor surfaces");
+		let heights = [floor_heights[0], floor_heights[floor_heights.len() - 1]];
+		let host = DevelopmentHost::SingleHighrise(Arc::new(building), Transform::IDENTITY);
+		let host_pose =
+			Transform::from_xyz(40.0, 17.0, -20.0).with_rotation(Quat::from_rotation_y(0.9));
+		let mut app = App::new();
+		app.add_plugins(bevy::transform::TransformPlugin).add_systems(
+			PostUpdate,
+			stamp_label_places.after(bevy::transform::TransformSystems::Propagate),
+		);
+		let source =
+			app.world_mut().spawn((PlaceArrivalSource(Some(host.clone())), host_pose)).id();
+		let mut rooms = Vec::new();
+		for y in heights {
+			let anchor = Vec3::new(3.0, y + 0.25, 2.0);
+			let expected = host
+				.interior_stand_local(Some(anchor))
+				.ok_or_else(|| anyhow::anyhow!("highrise floor should resolve"))?;
+			let room = app
+				.world_mut()
+				.spawn((
+					LabelNode::rectangle(LabelStyle::Gray, "Lounge", anchor, Vec3::splat(3.0), 0.0),
+					Transform::IDENTITY,
+					ChildOf(source),
+				))
+				.id();
+			rooms.push((room, expected));
+		}
+		app.update();
+		assert_ne!(rooms[0].1.y, rooms[1].1.y);
+		for (room, expected) in rooms {
+			let place = app
+				.world()
+				.get::<DiscoverablePlace>(room)
+				.ok_or_else(|| anyhow::anyhow!("room should receive authored place"))?;
+			let local = place
+				.arrival_local
+				.ok_or_else(|| anyhow::anyhow!("room should author a floor surface"))?;
+			assert!((local - expected).length() < 1e-4);
+			let transform = app
+				.world()
+				.get::<GlobalTransform>(room)
+				.ok_or_else(|| anyhow::anyhow!("room should propagate"))?;
+			assert!(
+				(transform.transform_point(local) - host_pose.transform_point(expected)).length()
+					< 1e-4
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn high_lounge_label_receives_a_place() -> anyhow::Result<()> {
 		let mut app = App::new();
-		app.add_systems(Update, stamp_label_places);
+		app.add_systems(
+			PostUpdate,
+			stamp_label_places.after(bevy::transform::TransformSystems::Propagate),
+		);
 		let lounge = app
 			.world_mut()
 			.spawn(LabelNode::new(
@@ -174,7 +284,10 @@ mod tests {
 		use lod::gen::Id;
 
 		let mut app = App::new();
-		app.add_systems(Update, stamp_label_places);
+		app.add_systems(
+			PostUpdate,
+			stamp_label_places.after(bevy::transform::TransformSystems::Propagate),
+		);
 		let host_id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
 			bevy::math::Vec3::ZERO,
 			bevy::math::Vec3::ONE,
@@ -215,7 +328,10 @@ mod tests {
 		use lod::gen::Id;
 
 		let mut app = App::new();
-		app.add_systems(Update, stamp_label_places);
+		app.add_systems(
+			PostUpdate,
+			stamp_label_places.after(bevy::transform::TransformSystems::Propagate),
+		);
 		let host_id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
 			bevy::math::Vec3::ZERO,
 			bevy::math::Vec3::ONE,

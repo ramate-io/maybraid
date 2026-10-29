@@ -75,6 +75,13 @@ impl LubikanAccountId {
 		self.definition.is_self() && self.instance == 0
 	}
 
+	/// Self returns to Idle after a natural complete so the same life can spend
+	/// again. Other definitions leave [`crate::LubikanActivationPhase::Completed`]
+	/// until those consumers migrate onto the same close.
+	pub const fn returns_idle_on_complete(self) -> bool {
+		self.is_self()
+	}
+
 	/// Pack `(definition, instance)` into a `u64` for durable snapshots.
 	pub const fn to_bits(self) -> u64 {
 		((self.definition.raw() as u64) << 32) | (self.instance as u64)

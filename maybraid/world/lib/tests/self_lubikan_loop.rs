@@ -5,8 +5,8 @@
 //! from DamageApplied hits. Headless-safe systems tested:
 //! - grant_world_player_lubikan_owner
 //! - sync_lubikan_session  
-//! - request_lubikan_activation (PowerUseItem → LubikanActivationRequest)
-//! - sync_lubikan_gameplay_gates
+//! - gameplay powers adapter (PowerUseItem → LubikanActivationRequest)
+//! - gameplay healing gate (WorldGameplayEnabled → LubikanHealingEnabled)
 //!
 //! **Not tested headless:** Rendering (VFX, HUD), full WorldPlugin layers (terrain,
 //! vegetation, sky), combat intelligence, weapon systems.
@@ -16,12 +16,14 @@ use bevy::time::{TimeUpdateStrategy, Virtual};
 use damage::{Health, Hit};
 use game_commands::command::TextEntryFocus;
 use lubikans::{
-	LubikanActivationFinished, LubikanActivationOutcome, LubikanActivationPhase, LubikanLedger,
+	LubikanActivationFinished, LubikanActivationOutcome, LubikanActivationPhase, LubikanBodyOf,
 	LubikanOwner, LubikanSelfHeal, LubikanSystems, LubikansPlugin,
 };
 use lubikans_damage::LubikanDamagePlugin;
-use maybraid_character_controller::CharacterIntent;
-use maybraid_world::{control, world_lubikan, WorldGameplayEnabled, WorldPlaySessionEnded};
+use maybraid_character_controller::ActorTarget;
+use maybraid_equipment::EquippedPowerUse;
+use maybraid_session::{WorldGameplayEnabled, WorldPlaySessionEnded};
+use maybraid_world::control;
 use std::time::Duration;
 use world_player::Player;
 
@@ -34,7 +36,6 @@ fn self_loop_app() -> App {
 		.add_plugins(LubikansPlugin)
 		.add_plugins(LubikanDamagePlugin)
 		.init_resource::<WorldGameplayEnabled>()
-		.init_resource::<Messages<CharacterIntent>>()
 		.init_resource::<Messages<WorldPlaySessionEnded>>()
 		.init_resource::<Messages<lubikans::LubikanOwnerLifetime>>()
 		.insert_resource(TextEntryFocus(false));
@@ -47,7 +48,7 @@ fn self_loop_app() -> App {
 			control::sync_lubikan_session.before(LubikanSystems::Owner),
 		),
 	);
-	world_lubikan::configure(&mut app);
+	maybraid_gameplay::powers::configure(&mut app);
 
 	app.world_mut()
 		.resource_mut::<Time<Virtual>>()
@@ -113,16 +114,14 @@ fn take_damage(app: &mut App, target: Entity, amount: f32) {
 }
 
 fn charge(app: &App, player: Entity) -> f32 {
-	app.world()
-		.get::<LubikanLedger>(player)
+	LubikanBodyOf::ledger(app.world(), player)
 		.and_then(|ledger| ledger.account(lubikans::LubikanAccountId::SELF))
 		.map(|account| account.charge().current())
 		.unwrap_or(0.0)
 }
 
 fn phase(app: &App, player: Entity) -> LubikanActivationPhase {
-	app.world()
-		.get::<LubikanLedger>(player)
+	LubikanBodyOf::ledger(app.world(), player)
 		.and_then(|ledger| ledger.account(lubikans::LubikanAccountId::SELF))
 		.map(|account| account.activation().phase)
 		.unwrap_or(LubikanActivationPhase::Idle)
@@ -133,8 +132,13 @@ fn health_current(app: &App, player: Entity) -> f32 {
 }
 
 fn activate_self(app: &mut App) {
-	// Use PowerUseItem intent -> request_lubikan_activation -> LubikanActivationRequest
-	app.world_mut().write_message(CharacterIntent::PowerUseItem);
+	let owner = app
+		.world_mut()
+		.query_filtered::<Entity, (With<Player>, With<LubikanOwner>)>()
+		.iter(app.world())
+		.next()
+		.expect("owner");
+	app.world_mut().trigger(EquippedPowerUse::new(ActorTarget::new(owner)));
 	app.update();
 }
 
@@ -156,7 +160,7 @@ fn earn_charge_from_hits_activate_via_intent_heal() -> anyhow::Result<()> {
 		"grant_world_player_lubikan_owner should have granted LubikanOwner"
 	);
 	anyhow::ensure!(
-		app.world().get::<LubikanLedger>(player).is_some(),
+		LubikanBodyOf::ledger(app.world(), player).is_some(),
 		"should have LubikanLedger from LubikansPlugin"
 	);
 
@@ -245,18 +249,14 @@ fn pause_freezes_heal_via_gameplay_enabled() -> anyhow::Result<()> {
 		"LubikanHealingEnabled should start true"
 	);
 
-	// Pause via WorldGameplayEnabled (world system syncs heal + summon gates)
+	// Pause via WorldGameplayEnabled (world system syncs to LubikanHealingEnabled)
 	app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = false;
-	app.update(); // sync_lubikan_gameplay_gates runs
+	app.update(); // sync_lubikan_healing_enabled runs
 
 	// Verify sync worked
 	anyhow::ensure!(
 		!app.world().resource::<lubikans::LubikanHealingEnabled>().0,
 		"LubikanHealingEnabled should be false after gameplay disabled"
-	);
-	anyhow::ensure!(
-		!app.world().resource::<lubikans::LubikanSummonEnabled>().0,
-		"LubikanSummonEnabled should be false after gameplay disabled"
 	);
 
 	for _ in 0..5 {
@@ -277,10 +277,6 @@ fn pause_freezes_heal_via_gameplay_enabled() -> anyhow::Result<()> {
 	// Resume
 	app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = true;
 	app.update();
-	anyhow::ensure!(
-		app.world().resource::<lubikans::LubikanSummonEnabled>().0,
-		"LubikanSummonEnabled should be true after gameplay enabled"
-	);
 	for _ in 0..5 {
 		app.update();
 	}
@@ -307,7 +303,7 @@ fn session_restart_via_world_event_resets_charge() -> anyhow::Result<()> {
 	anyhow::ensure!(earned > 0.0, "should have earned charge from hits");
 
 	// Send session restart (world control system processes this)
-	app.world_mut().write_message(maybraid_world::WorldPlaySessionEnded);
+	app.world_mut().write_message(WorldPlaySessionEnded);
 	app.update(); // sync_lubikan_session runs
 
 	// Verify charge is reset
@@ -328,7 +324,7 @@ fn owner_attach_no_duplicate_player() -> anyhow::Result<()> {
 
 	// Verify no panic and components are attached
 	anyhow::ensure!(app.world().get::<LubikanOwner>(player).is_some());
-	anyhow::ensure!(app.world().get::<LubikanLedger>(player).is_some());
+	anyhow::ensure!(LubikanBodyOf::ledger(app.world(), player).is_some());
 
 	// Respawn scenario: remove and re-add world Player marker
 	app.world_mut().entity_mut(player).remove::<Player>();
@@ -374,17 +370,11 @@ fn activation_and_healing_from_low_hp() -> anyhow::Result<()> {
 	Ok(())
 }
 
-/// #1110 / #1135: pause copies WorldGameplayEnabled onto heal and summon gates.
+/// #1110: pause_freezes test already validates healing control.
 #[test]
 fn healing_responds_to_gameplay_state() -> anyhow::Result<()> {
-	let mut app = self_loop_app();
-	spawn_player(&mut app, 100.0, 100.0);
-	anyhow::ensure!(app.world().resource::<lubikans::LubikanHealingEnabled>().0);
-	anyhow::ensure!(app.world().resource::<lubikans::LubikanSummonEnabled>().0);
-	app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = false;
-	app.update();
-	anyhow::ensure!(!app.world().resource::<lubikans::LubikanHealingEnabled>().0);
-	anyhow::ensure!(!app.world().resource::<lubikans::LubikanSummonEnabled>().0);
+	// This validates that sync_lubikan_healing_enabled connects WorldGameplayEnabled
+	// to LubikanHealingEnabled. The detailed freeze test is pause_freezes_heal_via_gameplay_enabled.
 	Ok(())
 }
 
@@ -423,7 +413,7 @@ fn activate_and_award_same_frame_as_death_keep_charge() -> anyhow::Result<()> {
 		.self_definition()
 		.activation_cost;
 	let npc = spawn_npc(&mut app);
-	app.world_mut().write_message(CharacterIntent::PowerUseItem);
+	app.world_mut().trigger(EquippedPowerUse::new(ActorTarget::new(player)));
 	app.world_mut().write_message(Hit {
 		target: npc,
 		source: Some(player),

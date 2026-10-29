@@ -10,6 +10,9 @@ use crate::Progress;
 /// Default descent rate: full transition in ~0.35 s at speed `1.0`.
 pub const DEFAULT_DESCENT_SPEED: f32 = 2.85;
 
+/// Knee flex reaches its held share before overall depth finishes.
+pub const KNEE_LEAD_DEPTH: f32 = 0.82;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SquatDescent;
 
@@ -34,7 +37,8 @@ impl SquatDescent {
 
 	pub fn shin_flex(&self, progress: f32) -> f32 {
 		let depth = self.depth(progress);
-		self.held_squat().shin_peak * depth
+		let knee_depth = smoothstep((depth / KNEE_LEAD_DEPTH).clamp(0.0, 1.0));
+		self.held_squat().shin_peak * knee_depth
 	}
 
 	pub fn root_swing(&self, progress: f32) -> f32 {
@@ -72,6 +76,20 @@ mod tests {
 	fn depth_clamps_past_one() -> anyhow::Result<()> {
 		let descent = SquatDescent::default();
 		assert!((descent.depth(1.5) - 1.0).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn knees_lead_hip_depth_and_reach_full_flex_smoothly() -> anyhow::Result<()> {
+		let descent = SquatDescent::default();
+		let early = 0.55;
+		let overall = descent.depth(early);
+		let held = Squat::held();
+		assert!(descent.shin_flex(early) > held.shin_peak * overall);
+		assert!((descent.shin_flex(1.0) - held.shin_peak).abs() < 1e-5);
+		let before = descent.shin_flex(0.73);
+		let after = descent.shin_flex(0.731);
+		assert!(after >= before && after - before < 0.02, "smooth lead cap: {before} -> {after}");
 		Ok(())
 	}
 }
