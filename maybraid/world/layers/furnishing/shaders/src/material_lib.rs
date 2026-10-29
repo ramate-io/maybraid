@@ -3,11 +3,11 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use material_ref::{
-	material_ref_plugin_installed, MaterialId, MaterialLib, MaterialRef, MaterialRefCache,
-	MaterialRefKey, MaterialRefPlugin, StandardMaterialLib, StandardMaterialRefCache,
+	MaterialId, MaterialLib, MaterialRef, MaterialRefCache, MaterialRefKey, StandardMaterialLib,
+	StandardMaterialRefCache,
 };
 
-use crate::{is_furniture_surface_recipe, FurnitureSurfaceMaterial};
+use crate::{FurnitureSurfaceMaterial, is_furniture_surface_recipe};
 
 /// Cache of resolved [`FurnitureSurfaceMaterial`] handles.
 pub type FurnitureSurfaceMaterialRefCache = MaterialRefCache<FurnitureSurfaceMaterial>;
@@ -51,8 +51,8 @@ impl MaterialLib for FurnitureMaterialLib<'_> {
 				let handle = self.resolve(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle));
 				true
 			}
 			_ => false,
@@ -83,16 +83,15 @@ impl MaterialLib for FurnitureStandaloneMaterialLib<'_> {
 	}
 }
 
-/// Registers caches + [`MaterialRefPlugin`] for [`FurnitureStandaloneMaterialLib`].
+/// Idempotent furniture-surface cache initializer. Does not install a resolver.
+///
+/// Isolated furniture hosts install [`MaterialRefPlugin`]`<`[`FurnitureStandaloneMaterialLib`]`>`
+/// at their composition root. Maybraid World nests [`FurnitureMaterialLib`].
 pub struct FurnitureMaterialRefPlugin;
 
 impl Plugin for FurnitureMaterialRefPlugin {
 	fn build(&self, app: &mut App) {
 		init_furniture_material_caches(app);
-		if material_ref_plugin_installed(app) {
-			return;
-		}
-		app.add_plugins(MaterialRefPlugin::<FurnitureStandaloneMaterialLib<'_>>::default());
 	}
 }
 
@@ -103,6 +102,14 @@ mod tests {
 
 	use super::*;
 	use crate::{FurnitureSurfaceMaterial, RECIPE_FURNITURE_WOOD};
+
+	#[test]
+	fn furniture_material_ref_plugin_is_cache_only() {
+		let mut app = App::new();
+		app.add_plugins(FurnitureMaterialRefPlugin);
+		assert!(app.world().contains_resource::<FurnitureSurfaceMaterialRefCache>());
+		assert!(!material_ref::material_ref_plugin_installed(&app));
+	}
 
 	#[test]
 	fn furniture_lib_fulfills_wood_as_furniture_surface() {

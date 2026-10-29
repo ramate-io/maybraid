@@ -14,11 +14,11 @@ use std::time::Duration;
 
 use bevy::audio::AudioPlugin;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
+use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
 use lubikans::{
-	install_fixture_summon, LubikanActivationRequest, LubikanLedger, LubikanOwner,
-	LubikanSummonCatalog, LubikanSummonConfig, LubikanSummonDeparture, LubikanSummonLifetime,
-	LubikanSummonRecipe, LubikanSummons, LubikansPlugin, PLACEHOLDER_SUMMON_ACTIVATION_COST,
+	LubikanActivationRequest, LubikanBodyOf, LubikanLedger, LubikanOwner, LubikanSummonCatalog,
+	LubikanSummonConfig, LubikanSummonDeparture, LubikanSummonLifetime, LubikanSummonRecipe,
+	LubikanSummons, LubikansPlugin, PLACEHOLDER_SUMMON_ACTIVATION_COST, install_fixture_summon,
 };
 
 fn main() {
@@ -135,6 +135,7 @@ fn spawn_preview(
 
 fn fund_and_request(
 	mut ledgers: Query<&mut LubikanLedger>,
+	body_of: Query<&LubikanBodyOf>,
 	owner: Option<Res<PreviewOwner>>,
 	mut requests: MessageWriter<LubikanActivationRequest>,
 	mut primed: Local<bool>,
@@ -145,7 +146,8 @@ fn fund_and_request(
 	let Some(owner) = owner else {
 		return;
 	};
-	let Ok(mut ledger) = ledgers.get_mut(owner.0) else {
+	let holder = body_of.get(owner.0).map(LubikanBodyOf::character).unwrap_or(owner.0);
+	let Ok(mut ledger) = ledgers.get_mut(holder) else {
 		return;
 	};
 	let definition = lubikans::fixture_summon_definition();

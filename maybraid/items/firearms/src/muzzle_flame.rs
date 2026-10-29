@@ -175,8 +175,8 @@ impl MaterialLib for MuzzleFlameMaterialLib<'_> {
 					resolve_muzzle_flame(&mut self.materials, &mut self.cache, material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle));
 				true
 			}
 			_ => false,

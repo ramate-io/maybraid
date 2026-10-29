@@ -142,12 +142,12 @@ impl Plugin for CombatHudPlugin {
 /// Shared meter content for the persistent player health widget.
 fn configure_health_content(app: &mut App) {
 	app.init_resource::<ContinuousHealthConfig>().add_systems(
-			PostUpdate,
-			(update_continuous_health_bar_content, trigger_completion_flash)
-				.chain()
-				.in_set(CombatHudSystems::Health)
-				.after(sync_player_vitals),
-		);
+		PostUpdate,
+		(update_continuous_health_bar_content, trigger_completion_flash)
+			.chain()
+			.in_set(CombatHudSystems::Health)
+			.after(sync_player_vitals),
+	);
 }
 
 /// Bottom-left player name + health bar (reuses continuous health bar).
@@ -972,17 +972,14 @@ mod tests {
 		let owner = lubikans::fixtures::spawn_self_owner(app.world_mut());
 		app.world_mut().entity_mut(owner).insert((Player, Health::default()));
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<lubikans::LubikanLedger>(owner)
+			let mut ledger = lubikans::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow::anyhow!("ledger"))?;
 			ledger.apply_to_equipped(80.0);
 		}
 		app.world_mut().insert_resource(CombatHudVisible(true));
 		app.update();
 		let world = app.world_mut();
-		let stored = world
-			.get::<lubikans::LubikanLedger>(owner)
+		let stored = lubikans::LubikanBodyOf::ledger(world, owner)
 			.map(|ledger| ledger.equipped().charge().current());
 		assert_eq!(stored, Some(80.0));
 		assert!(world.query::<&Text>().iter(world).any(|text| text.0 == "80"));
@@ -996,18 +993,14 @@ mod tests {
 		let owner = lubikans::fixtures::spawn_self_owner(app.world_mut());
 		app.world_mut().entity_mut(owner).insert((Player, Health::default()));
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<lubikans::LubikanLedger>(owner)
+			let mut ledger = lubikans::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow::anyhow!("ledger"))?;
 			ledger.apply_to_equipped(12.0);
 		}
 		app.world_mut().insert_resource(CombatHudVisible(false));
 		app.update();
 		{
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<lubikans::LubikanLedger>(owner)
+			let mut ledger = lubikans::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow::anyhow!("ledger"))?;
 			ledger.apply_to_equipped(33.0);
 		}
@@ -1015,8 +1008,7 @@ mod tests {
 		app.update();
 		let world = app.world_mut();
 		assert_eq!(
-			world
-				.get::<lubikans::LubikanLedger>(owner)
+			lubikans::LubikanBodyOf::ledger(world, owner)
 				.map(|ledger| ledger.equipped().charge().current()),
 			Some(45.0)
 		);
@@ -1041,9 +1033,7 @@ mod tests {
 		.with_max_stock(3);
 		{
 			app.world_mut().resource_mut::<lubikans::LubikanCatalog>().register(extra);
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<lubikans::LubikanLedger>(owner)
+			let mut ledger = lubikans::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow::anyhow!("ledger"))?;
 			let other = ledger.ensure_owned(extra);
 			ledger.apply_to(other, 50.0);
@@ -1059,8 +1049,7 @@ mod tests {
 			"multi-stock charge row must show banked / max"
 		);
 		assert_eq!(
-			world
-				.get::<lubikans::LubikanLedger>(owner)
+			lubikans::LubikanBodyOf::ledger(world, owner)
 				.map(|ledger| ledger.equipped().charge().current()),
 			Some(50.0),
 			"HUD must not award or clamp charge"

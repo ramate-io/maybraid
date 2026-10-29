@@ -31,6 +31,16 @@ impl Animation<HumanoidV0Rig> for Jab {
 			self.waist_bend(progress),
 			self.root_lean(progress),
 		);
+		let neck_pulse = 3.0_f32.to_radians() * self.extension_amount(progress);
+		let neck_yaw = neck_pulse * jab_side.sign();
+		pose.apply_neck_twisted(
+			neck_yaw * 0.45,
+			0.0,
+			-neck_pulse * 0.10,
+			neck_yaw * 0.55,
+			0.0,
+			-neck_pulse * 0.15,
+		);
 		apply_hip_turn(&mut pose, jab_side, self.hip_turn(progress));
 		apply_arm(
 			&mut pose,
@@ -211,6 +221,22 @@ mod tests {
 
 		let pelvis = rig.rotation("pelvis.R") * Vec3::Z;
 		assert!(pelvis.x.abs() > 0.02, "pelvis yaw, got {pelvis:?}");
+		Ok(())
+	}
+
+	#[test]
+	fn neck_counterpulse_peaks_on_the_jab_and_returns_in_recovery() -> anyhow::Result<()> {
+		let jab = Jab::default().with_side(Side::Right);
+		let mut rig = HumanoidV0Rig::imported();
+		jab.apply(&mut rig, 0.0);
+		let guard = rig.posed_angle("upper_neck");
+		jab.apply(&mut rig, 0.47);
+		let active = rig.posed_angle("upper_neck");
+		jab.apply(&mut rig, 0.98);
+		let recovery = rig.posed_angle("upper_neck");
+
+		assert!(active > guard + 0.02, "active jab should visibly counter-snap the neck");
+		assert!(recovery < active * 0.1, "neck pulse should fade by late recovery");
 		Ok(())
 	}
 }

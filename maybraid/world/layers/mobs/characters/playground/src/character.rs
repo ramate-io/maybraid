@@ -1,8 +1,10 @@
 use bevy::prelude::*;
 use character_rigs::Side;
 use characters::{
-	spawn_fixed_character_assembly, species::braidman::BraidmanConfig, AnimProgress, AnimRefRoot,
-	CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot,
+	spawn_fixed_character_assembly,
+	species::{braidman::BraidmanConfig, epiphant::EpiphantConfig},
+	AnimProgress, AnimRefRoot, CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole,
+	CharacterRoot,
 };
 use clap::ValueEnum;
 
@@ -13,12 +15,14 @@ use crate::animation::{AnimationMode, AnimationPlayback};
 pub enum CharacterSpecies {
 	#[default]
 	Braidman,
+	Epiphant,
 }
 
 impl CharacterSpecies {
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Braidman => "braidman",
+			Self::Epiphant => "epiphant",
 		}
 	}
 }
@@ -30,7 +34,7 @@ pub struct PlaygroundCharacter;
 pub struct CharacterConfig {
 	pub species: CharacterSpecies,
 	pub animation: AnimationMode,
-	/// Sided gestures (`jab`) read this. Ignored by symmetric clips.
+	/// Sided gestures (`jab`, `think-again`) read this. Ignored by symmetric clips.
 	pub side: Side,
 	pub transform: Transform,
 }
@@ -92,10 +96,18 @@ pub(crate) fn sync_character(
 		commands.entity(entity).try_despawn();
 	}
 
-	let clothed = match config.species {
-		CharacterSpecies::Braidman => CharacterRecipe::clothed(&BraidmanConfig::default_preview()),
+	let entity = match config.species {
+		CharacterSpecies::Braidman => spawn_fixed_character_assembly(
+			&mut commands,
+			&CharacterRecipe::clothed(&BraidmanConfig::default_preview()),
+			config.transform,
+		),
+		CharacterSpecies::Epiphant => spawn_fixed_character_assembly(
+			&mut commands,
+			&CharacterRecipe::clothed(&EpiphantConfig::default_preview()),
+			config.transform,
+		),
 	};
-	let entity = spawn_fixed_character_assembly(&mut commands, &clothed, config.transform);
 	commands.entity(entity).insert(PlaygroundCharacter);
 }
 
@@ -133,8 +145,14 @@ pub(crate) fn drive_playback(
 	roots: Query<&CharacterMembers, With<CharacterRoot>>,
 	rigs: Query<&CharacterRig>,
 ) {
-	playback.advance(time.delta_secs());
-	let progress = config.animation.mailbox_progress(playback.elapsed + playback.phase);
+	playback.advance(
+		time.delta_secs(),
+		config.animation.clip_duration(),
+		config.animation.clip_speed(),
+	);
+	let progress = config
+		.animation
+		.mailbox_progress(playback.elapsed + playback.phase, playback.looping);
 	for members in &roots {
 		for member in members.iter() {
 			if rigs.get(member).is_ok_and(|rig| rig.role == CharacterRigRole::Body) {

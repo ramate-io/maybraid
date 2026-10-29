@@ -4,30 +4,31 @@ mod catalog;
 mod persist;
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 use character_persist::SaveRoot;
 use maybraid_menu_controller::MenuController;
-use maybraid_world::render_scale::{VisualStyle, VisualStyleAutoReason};
+use maybraid_world::render_scale::{VisualStyle, VisualStyleAutoReason, VisualStyleIdentity};
 use menu_components::single_select::republish_menu_activate;
 use menu_components::single_select::text_cursor::TextCursorColumn;
 use menu_components::{
+	BrandModeLine, BrandModeTitle, MenuFocus, MenuInfoBox, MenuInfoBoxLabel, MenuStep,
+	TextColumnAlign, TextColumnAnchor, TextCursorRow, TextMenuPlugin, TextMenuSystems,
 	menu_list_panel_node, menu_region_wash, screen_back_scene, set_brand_mode_title,
-	set_info_box_for_menu, BrandModeLine, BrandModeTitle, MenuFocus, MenuInfoBox, MenuInfoBoxLabel,
-	MenuStep, TextColumnAlign, TextColumnAnchor, TextCursorRow, TextMenuPlugin, TextMenuSystems,
+	set_info_box_for_menu,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::input::add_menu_input;
-use crate::show::{add_menu_show_systems, MenuScreens, MenuShowRequest};
+use crate::show::{MenuScreens, MenuShowRequest, add_menu_show_systems};
 use crate::{GameMode, MenuScreen};
 
 pub use catalog::{
-	classify_host, seed_device_class, DeviceClass, DeviceType, HostProbe, PersistPolicy, Preference,
+	DeviceClass, DeviceType, HostProbe, PersistPolicy, Preference, classify_host, seed_device_class,
 };
 pub use persist::{
-	apply_seed, apply_shadows_env, apply_unsaved_visual_style_default, load_machine_settings,
-	load_machine_settings_ex, parse_render_scale_env, parse_shadows_env, save_machine_settings,
-	LoadedMachineSettings, QualitySeeded, ENV_RENDER_SCALE, ENV_SHADOWS,
+	ENV_RENDER_SCALE, ENV_SHADOWS, LoadedMachineSettings, QualitySeeded, apply_seed,
+	apply_shadows_env, load_machine_settings, load_machine_settings_ex, parse_render_scale_env,
+	parse_shadows_env, save_machine_settings,
 };
 
 /// Queue an in-game settings spawn (despawns any existing menu screen first).
@@ -72,33 +73,32 @@ impl InGameShadowQuality {
 
 /// Visual style presentation mode. Machine-scoped.
 ///
-/// Persist values are lowercase (`native`, `sharp`, …). Settings files at
-/// version 1 stored today's direct-window path as `sharp`; load remaps that
-/// string to [`Self::Native`] so existing players keep the same look. Version 2
-/// writes `native` / `sharp` with the new meanings.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum InGameVisualStyle {
-	#[default]
-	Native,
-	Sharp,
-	Impressionist,
-	Watercolor,
-	Retro,
-	Antediluvian,
-	#[serde(rename = "pre_post_modern")]
-	PrePostModern,
-}
+/// Persist values are the shared [`VisualStyleIdentity::script_id`] names
+/// (`native`, `sharp`, …). Settings files at version 1 stored today's
+/// direct-window path as `sharp`; load remaps that string to [`Self::Native`]
+/// so existing players keep the same look. Version 2 writes `native` / `sharp`
+/// with the new meanings.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InGameVisualStyle(VisualStyle);
 
+#[allow(non_upper_case_globals)]
 impl InGameVisualStyle {
+	pub const Native: Self = Self(VisualStyle::Native);
+	pub const Sharp: Self = Self(VisualStyle::Sharp);
+	pub const Impressionist: Self = Self(VisualStyle::Impressionist);
+	pub const Watercolor: Self = Self(VisualStyle::Watercolor);
+	pub const Retro: Self = Self(VisualStyle::Retro);
+	pub const Antediluvian: Self = Self(VisualStyle::Antediluvian);
+	pub const PrePostModern: Self = Self(VisualStyle::PrePostModern);
+
 	pub const ALL: [Self; 7] = [
-		Self::Native,
-		Self::Sharp,
-		Self::Impressionist,
-		Self::Watercolor,
-		Self::Retro,
-		Self::Antediluvian,
-		Self::PrePostModern,
+		Self(VisualStyle::ALL[0]),
+		Self(VisualStyle::ALL[1]),
+		Self(VisualStyle::ALL[2]),
+		Self(VisualStyle::ALL[3]),
+		Self(VisualStyle::ALL[4]),
+		Self(VisualStyle::ALL[5]),
+		Self(VisualStyle::ALL[6]),
 	];
 
 	pub fn step(self, delta: i32) -> Self {
@@ -111,40 +111,20 @@ impl InGameVisualStyle {
 		self.step(1)
 	}
 
+	pub fn identity(self) -> VisualStyleIdentity {
+		self.0.identity()
+	}
+
 	pub fn label(self) -> &'static str {
-		match self {
-			Self::Native => "Native",
-			Self::Impressionist => "Impressionist",
-			Self::Watercolor => "Watercolor",
-			Self::Sharp => "Sharp",
-			Self::Retro => "Retro",
-			Self::Antediluvian => "Antediluvian",
-			Self::PrePostModern => "Pre-post-modern",
-		}
+		self.identity().label
 	}
 
 	pub fn to_visual_style(self) -> VisualStyle {
-		match self {
-			Self::Native => VisualStyle::Native,
-			Self::Impressionist => VisualStyle::Impressionist,
-			Self::Watercolor => VisualStyle::Watercolor,
-			Self::Sharp => VisualStyle::Sharp,
-			Self::Retro => VisualStyle::Retro,
-			Self::Antediluvian => VisualStyle::Antediluvian,
-			Self::PrePostModern => VisualStyle::PrePostModern,
-		}
+		self.0
 	}
 
 	pub fn from_visual_style(style: VisualStyle) -> Self {
-		match style {
-			VisualStyle::Native => Self::Native,
-			VisualStyle::Impressionist => Self::Impressionist,
-			VisualStyle::Watercolor => Self::Watercolor,
-			VisualStyle::Sharp => Self::Sharp,
-			VisualStyle::Retro => Self::Retro,
-			VisualStyle::Antediluvian => Self::Antediluvian,
-			VisualStyle::PrePostModern => Self::PrePostModern,
-		}
+		Self(style)
 	}
 
 	pub fn subtext(self) -> String {
@@ -158,6 +138,21 @@ impl InGameVisualStyle {
 			InGameRenderScale::Half => Self::Impressionist,
 			InGameRenderScale::ThreeQuarter => Self::PrePostModern,
 		}
+	}
+}
+
+impl Serialize for InGameVisualStyle {
+	fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serializer.serialize_str(self.identity().script_id)
+	}
+}
+
+impl<'de> Deserialize<'de> for InGameVisualStyle {
+	fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		let raw = String::deserialize(deserializer)?;
+		VisualStyle::from_script_id(&raw).map(Self).ok_or_else(|| {
+			serde::de::Error::unknown_variant(&raw, &VisualStyleIdentity::SCRIPT_IDS)
+		})
 	}
 }
 
@@ -232,16 +227,71 @@ impl InGameRenderScale {
 	}
 }
 
-/// Whether `visual_style` was an explicit saved choice. First run / legacy auto
-/// stay `false` so the host heuristic can pick Sharp or Native.
+/// How the live visual-style preference was chosen.
+///
+/// One settings-owned value replaces the old saved-bool plus auto-pick
+/// resource. Persistence writes `visual_style` only for [`Self::Explicit`].
+/// The settings readout derives its auto-pick footnote from
+/// [`Self::AutoPicked`]. Live environment overlays stay off this enum.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct VisualStyleSaved(pub bool);
+pub enum VisualStyleProvenance {
+	/// First run, or a loaded file with no explicit visual-style choice.
+	#[default]
+	PendingAuto,
+	/// Host heuristic ran this session. Not written to `settings.json`.
+	AutoPicked(VisualStyleAutoReason),
+	/// Player (or an already-saved file) chose the style.
+	Explicit,
+}
 
-/// First-run auto-pick, when [`VisualStyleSaved`] is false and the game ran the
-/// host heuristic. Cleared when the player steps Visual Style.
-#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct VisualStyleAutoPick {
-	pub reason: Option<VisualStyleAutoReason>,
+impl VisualStyleProvenance {
+	/// True when `settings.json` should keep a `visual_style` key.
+	pub fn is_saved(self) -> bool {
+		matches!(self, Self::Explicit)
+	}
+
+	pub fn is_pending(self) -> bool {
+		matches!(self, Self::PendingAuto)
+	}
+
+	pub fn auto_reason(self) -> Option<VisualStyleAutoReason> {
+		match self {
+			Self::AutoPicked(reason) => Some(reason),
+			Self::PendingAuto | Self::Explicit => None,
+		}
+	}
+
+	pub fn mark_explicit(&mut self) {
+		*self = Self::Explicit;
+	}
+
+	/// Load-time mapping: an explicit `visual_style` (or non-`auto` legacy
+	/// `render_scale`) is [`Self::Explicit`]. Missing keys stay pending.
+	pub fn from_machine_fields(
+		fields: &std::collections::BTreeMap<String, serde_json::Value>,
+	) -> Self {
+		if catalog::visual_style_choice_is_saved(fields) {
+			Self::Explicit
+		} else {
+			Self::PendingAuto
+		}
+	}
+
+	/// Host heuristic for first-run. No-op unless [`Self::PendingAuto`].
+	/// On success, becomes [`Self::AutoPicked`] and writes the live style.
+	pub fn apply_unsaved_default(
+		&mut self,
+		settings: &mut InGameSettings,
+		signals: &maybraid_world::VisualStyleSignals,
+	) -> Option<maybraid_world::VisualStylePick> {
+		if !self.is_pending() {
+			return None;
+		}
+		let pick = maybraid_world::pick_default_visual_style(signals);
+		settings.visual_style = InGameVisualStyle::from_visual_style(pick.style);
+		*self = Self::AutoPicked(pick.reason);
+		Some(pick)
+	}
 }
 
 /// Live 3D scale + window sizes for the Settings row. The game fills this.
@@ -318,11 +368,7 @@ impl Default for InGameSettings {
 
 impl InGameSettings {
 	pub fn mob_hud_state_label(self) -> &'static str {
-		if self.mob_hud {
-			"On"
-		} else {
-			"Off"
-		}
+		if self.mob_hud { "On" } else { "Off" }
 	}
 
 	pub fn state_label(self, choice: InGameSettingsChoice) -> String {
@@ -435,7 +481,7 @@ impl InGameSettingsScreen {
 		bsn! {
 			InGameSettingsScreen
 			MenuScreen
-			MenuController
+			MenuController::default()
 			Node {
 				width: percent(100),
 				height: percent(100),
@@ -467,8 +513,7 @@ impl Plugin for InGameSettingsPlugin {
 		app.init_resource::<GameMode>()
 			.init_resource::<InGameSettings>()
 			.init_resource::<RenderScaleReadout>()
-			.init_resource::<VisualStyleSaved>()
-			.init_resource::<VisualStyleAutoPick>()
+			.init_resource::<VisualStyleProvenance>()
 			.init_resource::<persist::MachineSettings>()
 			.add_message::<SettingsStep>()
 			.add_plugins(TextMenuPlugin::<InGameSettingsChoice>::default())
@@ -497,16 +542,20 @@ fn apply_in_game_settings_choice(
 	mut steps: MessageReader<SettingsStep>,
 	mut settings: ResMut<InGameSettings>,
 	mut machine: ResMut<persist::MachineSettings>,
-	mut visual_style_saved: ResMut<VisualStyleSaved>,
-	mut auto_pick: ResMut<VisualStyleAutoPick>,
+	mut provenance: ResMut<VisualStyleProvenance>,
 	save_root: Option<Res<SaveRoot>>,
 	mut commands: Commands,
 ) {
 	let step = steps.read().last().copied();
 	let choice = choices.read().last().copied();
 	if let Some(step) = step {
-		if apply_settings_step(step, &mut settings, &mut machine, save_root.as_deref()) {
-			mark_visual_style_saved(&mut visual_style_saved, &mut auto_pick);
+		if apply_settings_step(
+			step,
+			&mut settings,
+			&mut machine,
+			&mut provenance,
+			save_root.as_deref(),
+		) {
 			request_show_in_game_settings_at(&mut commands, step.choice);
 			return;
 		}
@@ -519,15 +568,16 @@ fn apply_in_game_settings_choice(
 			settings.shadows = settings.shadows.cycle();
 			persist::write_machine_preference::<catalog::Shadows>(
 				Some(&mut machine),
+				&mut provenance,
 				settings.shadows,
 				save_root.as_deref(),
 			);
 		}
 		InGameSettingsChoice::VisualStyle => {
 			settings.visual_style = settings.visual_style.cycle();
-			mark_visual_style_saved(&mut visual_style_saved, &mut auto_pick);
 			persist::write_machine_preference::<catalog::VisualStylePref>(
 				Some(&mut machine),
+				&mut provenance,
 				settings.visual_style,
 				save_root.as_deref(),
 			);
@@ -548,6 +598,7 @@ fn apply_settings_step(
 	step: SettingsStep,
 	settings: &mut InGameSettings,
 	machine: &mut persist::MachineSettings,
+	provenance: &mut VisualStyleProvenance,
 	save_root: Option<&SaveRoot>,
 ) -> bool {
 	if step.choice != InGameSettingsChoice::VisualStyle {
@@ -556,15 +607,11 @@ fn apply_settings_step(
 	settings.visual_style = settings.visual_style.step(step.delta);
 	persist::write_machine_preference::<catalog::VisualStylePref>(
 		Some(machine),
+		provenance,
 		settings.visual_style,
 		save_root,
 	);
 	true
-}
-
-fn mark_visual_style_saved(saved: &mut VisualStyleSaved, auto: &mut VisualStyleAutoPick) {
-	saved.0 = true;
-	auto.reason = None;
 }
 
 fn apply_show_in_game_settings(
@@ -623,9 +670,9 @@ mod tests {
 	use menu_components::TextCursorRow;
 
 	use super::{
-		apply_settings_step, format_visual_style_info, persist, InGameSettings,
-		InGameSettingsChoice, InGameShadowQuality, InGameVisualStyle, RenderScaleReadout,
-		SettingsStep,
+		InGameSettings, InGameSettingsChoice, InGameShadowQuality, InGameVisualStyle,
+		RenderScaleReadout, SettingsStep, VisualStyleProvenance, apply_settings_step,
+		format_visual_style_info, persist,
 	};
 
 	#[test]
@@ -642,11 +689,7 @@ mod tests {
 			.into_iter()
 			.map(|choice| {
 				let row = TextCursorRow::new(choice.label(), choice);
-				if choice == InGameSettingsChoice::VisualStyle {
-					row.stepper()
-				} else {
-					row
-				}
+				if choice == InGameSettingsChoice::VisualStyle { row.stepper() } else { row }
 			})
 			.collect();
 		assert!(!rows[0].stepper);
@@ -695,18 +738,22 @@ mod tests {
 			visual_style: InGameVisualStyle::Native,
 		};
 		let mut machine = persist::MachineSettings::default();
+		let mut provenance = VisualStyleProvenance::PendingAuto;
 		assert!(apply_settings_step(
 			SettingsStep { choice: InGameSettingsChoice::VisualStyle, delta: 1 },
 			&mut settings,
 			&mut machine,
+			&mut provenance,
 			None,
 		));
 		assert_eq!(settings.visual_style, InGameVisualStyle::Sharp);
-		assert!(machine.visual_style_saved);
+		assert_eq!(provenance, VisualStyleProvenance::Explicit);
+		assert!(provenance.is_saved());
 		assert!(apply_settings_step(
 			SettingsStep { choice: InGameSettingsChoice::VisualStyle, delta: -1 },
 			&mut settings,
 			&mut machine,
+			&mut provenance,
 			None,
 		));
 		assert_eq!(settings.visual_style, InGameVisualStyle::Native);
@@ -714,8 +761,41 @@ mod tests {
 			SettingsStep { choice: InGameSettingsChoice::Shadows, delta: 1 },
 			&mut settings,
 			&mut machine,
+			&mut provenance,
 			None,
 		));
+	}
+
+	#[test]
+	fn visual_style_provenance_derives_saved_and_auto_reason() {
+		use maybraid_world::VisualStyleAutoReason;
+
+		assert!(!VisualStyleProvenance::PendingAuto.is_saved());
+		assert!(VisualStyleProvenance::PendingAuto.is_pending());
+		assert_eq!(VisualStyleProvenance::PendingAuto.auto_reason(), None);
+
+		let auto =
+			VisualStyleProvenance::AutoPicked(VisualStyleAutoReason::UnifiedMemoryBelow24GiB);
+		assert!(!auto.is_saved());
+		assert!(!auto.is_pending());
+		assert_eq!(auto.auto_reason(), Some(VisualStyleAutoReason::UnifiedMemoryBelow24GiB));
+
+		assert!(VisualStyleProvenance::Explicit.is_saved());
+		assert_eq!(VisualStyleProvenance::Explicit.auto_reason(), None);
+		let mut provenance = auto;
+		provenance.mark_explicit();
+		assert_eq!(provenance, VisualStyleProvenance::Explicit);
+
+		let mut fields = std::collections::BTreeMap::new();
+		assert_eq!(
+			VisualStyleProvenance::from_machine_fields(&fields),
+			VisualStyleProvenance::PendingAuto
+		);
+		fields.insert("visual_style".into(), serde_json::json!("native"));
+		assert_eq!(
+			VisualStyleProvenance::from_machine_fields(&fields),
+			VisualStyleProvenance::Explicit
+		);
 	}
 
 	#[test]
@@ -741,6 +821,27 @@ mod tests {
 			InGameSettings::default().state_label(InGameSettingsChoice::VisualStyle),
 			"Native"
 		);
+	}
+
+	#[test]
+	fn persisted_visual_style_names_match_shared_identity() -> anyhow::Result<()> {
+		use maybraid_world::VisualStyleIdentity;
+
+		assert_eq!(InGameVisualStyle::ALL.len(), VisualStyleIdentity::ALL.len());
+		for (style, identity) in InGameVisualStyle::ALL.into_iter().zip(VisualStyleIdentity::ALL) {
+			assert_eq!(style.to_visual_style(), identity.style);
+			assert_eq!(InGameVisualStyle::from_visual_style(identity.style), style);
+			assert_eq!(style.label(), identity.label);
+			let json = serde_json::to_string(&style)?;
+			assert_eq!(json, format!("\"{}\"", identity.script_id));
+			assert_eq!(serde_json::from_str::<InGameVisualStyle>(&json)?, style);
+		}
+		assert_eq!(
+			serde_json::from_str::<InGameVisualStyle>("\"pre_post_modern\"")?,
+			InGameVisualStyle::PrePostModern
+		);
+		assert!(serde_json::from_str::<InGameVisualStyle>("\"PrePostModern\"").is_err());
+		Ok(())
 	}
 
 	#[test]

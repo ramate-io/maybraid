@@ -2,7 +2,8 @@
 //!
 //! The bag is a flat [`InventoryItem`] list. Each item belongs to one
 //! [`InventorySlot`]; that slot holds an ordered unique selection of bag
-//! indices (clothing wear order, weapons switch queue, skill-map queue).
+//! indices (clothing wear order, weapons switch queue, skill-map queue,
+//! Tanz matching priority).
 
 use bevy::prelude::*;
 use procedural_common::Fnv1a64;
@@ -10,7 +11,7 @@ use procedural_common::Fnv1a64;
 use crate::{
 	ClothingKind, ClothingMaterial, ClothingMesh, ClothingStats, FirearmMesh, FirearmSpec,
 	FirearmStats, GrenadeRecharge, GrenadeSpec, GrenadeStats, ItemColor, SkillMapKind,
-	SkillMapSpec,
+	SkillMapSpec, TanzId, BASE_STARTER_TANZES,
 };
 
 /// How many garments character creation rolls before the body editor.
@@ -20,6 +21,12 @@ pub const STARTER_CLOTHING_COUNT: usize = 3;
 ///
 /// Lubikans are not bag items; this label only keys the scene-captured icon.
 pub const SELF_LUBIKAN_CAPTURE_LABEL: &str = "self-lubikan";
+
+/// Capture-id label for the intrinsic Fisticuffs tool.
+///
+/// Unlike Self Lubikan, Fisticuffs is a real bag item. The label is stable so
+/// inventory thumbs and HUD silhouettes share one cache identity.
+pub const FISTICUFFS_CAPTURE_LABEL: &str = "fisticuffs:braidman-arms";
 
 /// How many firearms character creation rolls into the bag.
 pub const STARTER_WEAPON_COUNT: usize = 2;
@@ -36,11 +43,17 @@ pub const WEAPON_QUEUE_LIMIT: usize = 3;
 /// How many skill maps character creation rolls into the bag.
 pub const STARTER_SKILL_MAP_COUNT: usize = 1;
 
+/// How many base Tanzes character creation grants.
+pub const STARTER_TANZ_COUNT: usize = crate::tanz::BASE_STARTER_TANZES.len();
+
 /// Hard cap on the equipped skill-map queue. Index 0 is the presented map.
 pub const SKILL_MAP_QUEUE_LIMIT: usize = 3;
 
 /// Hard cap on skill maps sitting in the bag (equipped or not).
 pub const SKILL_MAP_BAG_LIMIT: usize = 6;
+
+/// Hard cap on equipped Tanzes. Index 0 is highest matching priority.
+pub const TANZ_QUEUE_LIMIT: usize = 4;
 
 /// Bag partition. Slots are typed; items are not stored in separate vecs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -48,6 +61,7 @@ pub enum InventorySlot {
 	Clothing,
 	Weapons,
 	Skills,
+	Tanzes,
 }
 
 impl InventorySlot {
@@ -56,6 +70,7 @@ impl InventorySlot {
 			Self::Clothing => WORN_CLOTHING_LIMIT,
 			Self::Weapons => WEAPON_QUEUE_LIMIT,
 			Self::Skills => SKILL_MAP_QUEUE_LIMIT,
+			Self::Tanzes => TANZ_QUEUE_LIMIT,
 		}
 	}
 
@@ -64,6 +79,7 @@ impl InventorySlot {
 			Self::Clothing => "Clothing",
 			Self::Weapons => "Weapons",
 			Self::Skills => "Skill Maps",
+			Self::Tanzes => "Tanzes",
 		}
 	}
 }
@@ -108,10 +124,28 @@ impl MaterialRefParams {
 /// One owned instance in a character inventory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InventoryItem {
-	Clothing { mesh: ClothingMesh, material: MaterialRefParams, stats: ClothingStats },
-	Firearm { spec: FirearmSpec, stats: FirearmStats },
-	Grenade { spec: GrenadeSpec, stats: GrenadeStats, recharge: GrenadeRecharge },
-	SkillMap { spec: SkillMapSpec },
+	Clothing {
+		mesh: ClothingMesh,
+		material: MaterialRefParams,
+		stats: ClothingStats,
+	},
+	Firearm {
+		spec: FirearmSpec,
+		stats: FirearmStats,
+	},
+	Grenade {
+		spec: GrenadeSpec,
+		stats: GrenadeStats,
+		recharge: GrenadeRecharge,
+	},
+	SkillMap {
+		spec: SkillMapSpec,
+	},
+	Tanz {
+		id: TanzId,
+	},
+	/// Intrinsic bare-handed tool. Every playable character owns exactly one.
+	Fisticuffs,
 }
 
 impl InventoryItem {
@@ -135,6 +169,10 @@ impl InventoryItem {
 		Self::SkillMap { spec }
 	}
 
+	pub const fn tanz(id: TanzId) -> Self {
+		Self::Tanz { id }
+	}
+
 	pub const fn grenade(spec: GrenadeSpec, stats: GrenadeStats) -> Self {
 		Self::Grenade { spec, stats, recharge: GrenadeRecharge { remaining: 0.0 } }
 	}
@@ -147,74 +185,138 @@ impl InventoryItem {
 		Self::grenade(GrenadeSpec::standard(), GrenadeStats::realize(rng))
 	}
 
+	pub const fn fisticuffs() -> Self {
+		Self::Fisticuffs
+	}
+
+	pub const fn is_fisticuffs(&self) -> bool {
+		matches!(self, Self::Fisticuffs)
+	}
+
+	/// Gameplay drop paths may not remove intrinsic tools. Caller policy cannot
+	/// override this.
+	pub const fn is_droppable(&self) -> bool {
+		!self.is_fisticuffs()
+	}
+
 	pub const fn slot(&self) -> InventorySlot {
 		match self {
 			Self::Clothing { .. } => InventorySlot::Clothing,
-			Self::Firearm { .. } | Self::Grenade { .. } => InventorySlot::Weapons,
+			Self::Firearm { .. } | Self::Grenade { .. } | Self::Fisticuffs => {
+				InventorySlot::Weapons
+			}
 			Self::SkillMap { .. } => InventorySlot::Skills,
+			Self::Tanz { .. } => InventorySlot::Tanzes,
 		}
 	}
 
 	pub const fn mesh(&self) -> Option<ClothingMesh> {
 		match self {
 			Self::Clothing { mesh, .. } => Some(*mesh),
-			Self::Firearm { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+			Self::Firearm { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Tanz { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn firearm_mesh(&self) -> Option<FirearmMesh> {
 		match self {
 			Self::Firearm { spec, .. } => Some(spec.kit.body),
-			Self::Clothing { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Tanz { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn firearm_spec(&self) -> Option<FirearmSpec> {
 		match self {
 			Self::Firearm { spec, .. } => Some(*spec),
-			Self::Clothing { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Tanz { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn skill_map_spec(&self) -> Option<SkillMapSpec> {
 		match self {
 			Self::SkillMap { spec } => Some(*spec),
-			Self::Clothing { .. } | Self::Firearm { .. } | Self::Grenade { .. } => None,
+			Self::Clothing { .. }
+			| Self::Firearm { .. }
+			| Self::Grenade { .. }
+			| Self::Tanz { .. }
+			| Self::Fisticuffs => None,
+		}
+	}
+
+	pub const fn tanz_id(&self) -> Option<TanzId> {
+		match self {
+			Self::Tanz { id } => Some(*id),
+			Self::Clothing { .. }
+			| Self::Firearm { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn material(&self) -> Option<MaterialRefParams> {
 		match self {
 			Self::Clothing { material, .. } => Some(*material),
-			Self::Firearm { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+			Self::Firearm { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Tanz { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn clothing_stats(&self) -> Option<ClothingStats> {
 		match self {
 			Self::Clothing { stats, .. } => Some(*stats),
-			Self::Firearm { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+			Self::Firearm { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Tanz { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn firearm_stats(&self) -> Option<FirearmStats> {
 		match self {
 			Self::Firearm { stats, .. } => Some(*stats),
-			Self::Clothing { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. }
+			| Self::Grenade { .. }
+			| Self::SkillMap { .. }
+			| Self::Tanz { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn grenade_stats(&self) -> Option<GrenadeStats> {
 		match self {
 			Self::Grenade { stats, .. } => Some(*stats),
-			Self::Clothing { .. } | Self::Firearm { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. }
+			| Self::Firearm { .. }
+			| Self::SkillMap { .. }
+			| Self::Tanz { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
 	pub const fn grenade_spec(&self) -> Option<GrenadeSpec> {
 		match self {
 			Self::Grenade { spec, .. } => Some(*spec),
-			Self::Clothing { .. } | Self::Firearm { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. }
+			| Self::Firearm { .. }
+			| Self::SkillMap { .. }
+			| Self::Tanz { .. }
+			| Self::Fisticuffs => None,
 		}
 	}
 
@@ -226,6 +328,8 @@ impl InventoryItem {
 			Self::SkillMap { spec } => {
 				format!("{} · {:04X}", spec.kind.display_name(), spec.seed as u16)
 			}
+			Self::Tanz { id } => String::from(id.input_summary()),
+			Self::Fisticuffs => String::from("Bare hands · left and right jabs"),
 		}
 	}
 
@@ -238,6 +342,14 @@ impl InventoryItem {
 				(String::from("Kind"), spec.kind.display_name().to_string()),
 				(String::from("Seed"), format!("{:08X}", spec.seed)),
 			],
+			Self::Tanz { id } => vec![
+				(String::from("Tanz"), String::from(id.display_name())),
+				(String::from("Input"), String::from(id.input_summary())),
+			],
+			Self::Fisticuffs => vec![
+				(String::from("Kind"), String::from("Tool")),
+				(String::from("Use"), String::from("Left / right jabs")),
+			],
 		}
 	}
 
@@ -247,6 +359,8 @@ impl InventoryItem {
 			Self::Firearm { spec, .. } => spec.kit.body.label(),
 			Self::Grenade { spec, .. } => spec.mesh.label(),
 			Self::SkillMap { spec } => spec.kind.label(),
+			Self::Tanz { id } => id.script_id(),
+			Self::Fisticuffs => "Fisticuffs",
 		}
 	}
 
@@ -256,6 +370,8 @@ impl InventoryItem {
 			Self::Firearm { spec, .. } => spec.hashed_name(),
 			Self::Grenade { spec, .. } => spec.hashed_name(),
 			Self::SkillMap { spec } => spec.hashed_name(),
+			Self::Tanz { id } => String::from(id.display_name()),
+			Self::Fisticuffs => String::from("Fisticuffs"),
 		}
 	}
 
@@ -263,7 +379,9 @@ impl InventoryItem {
 		match self {
 			Self::Clothing { mesh, .. } => mesh.path(),
 			Self::Firearm { spec, .. } => spec.kit.body.path(),
-			Self::Grenade { .. } | Self::SkillMap { .. } => "",
+			Self::Grenade { .. } | Self::SkillMap { .. } | Self::Tanz { .. } | Self::Fisticuffs => {
+				""
+			}
 		}
 	}
 
@@ -281,6 +399,8 @@ impl InventoryItem {
 			Self::SkillMap { spec } => {
 				Some(format!("skill-map:{}:{}", spec.kind.label(), spec.seed))
 			}
+			Self::Tanz { id } => Some(String::from(id.capture_id_label())),
+			Self::Fisticuffs => Some(String::from(FISTICUFFS_CAPTURE_LABEL)),
 		}
 	}
 
@@ -305,19 +425,28 @@ impl InventoryItem {
 				Self::Grenade { spec: other_spec, stats: other_stats, .. },
 			) => spec == other_spec && stats == other_stats,
 			(Self::SkillMap { spec }, Self::SkillMap { spec: other_spec }) => spec == other_spec,
+			(Self::Tanz { id }, Self::Tanz { id: other_id }) => id == other_id,
+			(Self::Fisticuffs, Self::Fisticuffs) => true,
 			_ => false,
 		}
+	}
+
+	/// Catalog thumbs that capture grayscale geometry and tint yellow in UI.
+	pub const fn catalog_thumb_is_silhouette(&self) -> bool {
+		self.is_fisticuffs()
 	}
 }
 
 /// Owned items plus per-slot selections. Clothing is wear order; weapons and
 /// skill maps are switch queues (first selected is primary / presented).
+/// Tanzes are matching priority, highest first. Tanz kinds are unique per bag.
 #[derive(Component, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Inventory {
 	pub items: Vec<InventoryItem>,
 	pub clothing: Vec<usize>,
 	pub weapons: Vec<usize>,
 	pub skills: Vec<usize>,
+	pub tanzes: Vec<usize>,
 }
 
 impl Inventory {
@@ -326,6 +455,7 @@ impl Inventory {
 		self.clothing == other.clothing
 			&& self.weapons == other.weapons
 			&& self.skills == other.skills
+			&& self.tanzes == other.tanzes
 			&& self.items.len() == other.items.len()
 			&& self
 				.items
@@ -343,7 +473,7 @@ impl Inventory {
 			.map(|(index, _)| index)
 			.take(InventorySlot::Clothing.capacity())
 			.collect();
-		Self { items, clothing, weapons: Vec::new(), skills: Vec::new() }
+		Self { items, clothing, weapons: Vec::new(), skills: Vec::new(), tanzes: Vec::new() }
 	}
 
 	/// Create-mode bag: wear the first lower and first upper; queue every
@@ -376,7 +506,12 @@ impl Inventory {
 			.map(|(index, _)| index)
 			.take(InventorySlot::Skills.capacity())
 			.collect();
-		Self { items, clothing, weapons, skills }
+		let tanzes: Vec<usize> = BASE_STARTER_TANZES
+			.iter()
+			.filter_map(|id| items.iter().position(|item| item.tanz_id() == Some(*id)))
+			.take(InventorySlot::Tanzes.capacity())
+			.collect();
+		Self { items, clothing, weapons, skills, tanzes }
 	}
 
 	pub fn selected(&self, slot: InventorySlot) -> &[usize] {
@@ -384,6 +519,7 @@ impl Inventory {
 			InventorySlot::Clothing => &self.clothing,
 			InventorySlot::Weapons => &self.weapons,
 			InventorySlot::Skills => &self.skills,
+			InventorySlot::Tanzes => &self.tanzes,
 		}
 	}
 
@@ -392,7 +528,21 @@ impl Inventory {
 			InventorySlot::Clothing => &mut self.clothing,
 			InventorySlot::Weapons => &mut self.weapons,
 			InventorySlot::Skills => &mut self.skills,
+			InventorySlot::Tanzes => &mut self.tanzes,
 		}
+	}
+
+	/// Equipped Tanz kinds, highest matching priority first.
+	pub fn equipped_tanzes(&self) -> Vec<TanzId> {
+		self.tanzes
+			.iter()
+			.filter_map(|&index| self.items.get(index))
+			.filter_map(InventoryItem::tanz_id)
+			.collect()
+	}
+
+	pub fn owns_tanz(&self, id: TanzId) -> bool {
+		self.items.iter().any(|item| item.tanz_id() == Some(id))
 	}
 
 	/// Clothing wear list (compat with the old `worn` field).
@@ -466,21 +616,99 @@ impl Inventory {
 	}
 
 	/// Wear / queue or remove `index` in its slot. At capacity, selecting a
-	/// new item is a no-op. Returns whether the slot changed.
+	/// new item is a no-op. Tanz kinds are unique: selecting a second copy of
+	/// an already-equipped kind is a no-op. Returns whether the slot changed.
 	pub fn toggle(&mut self, index: usize) -> bool {
 		let Some(item) = self.items.get(index) else {
 			return false;
 		};
 		let slot = item.slot();
-		let selected = self.selected_mut(slot);
-		if let Some(position) = selected.iter().position(|&selected| selected == index) {
-			selected.remove(position);
+		let tanz_id = item.tanz_id();
+		if let Some(position) = self.selected(slot).iter().position(|&selected| selected == index) {
+			self.selected_mut(slot).remove(position);
 			return true;
 		}
-		if selected.len() >= slot.capacity() {
+		if self.selected(slot).len() >= slot.capacity() {
 			return false;
 		}
-		selected.push(index);
+		if let Some(id) = tanz_id {
+			if self.equipped_tanzes().contains(&id) {
+				return false;
+			}
+		}
+		self.selected_mut(slot).push(index);
+		true
+	}
+
+	fn can_queue(&self, index: usize) -> bool {
+		let Some(item) = self.items.get(index) else {
+			return false;
+		};
+		let slot = item.slot();
+		if self.selected(slot).contains(&index) {
+			return false;
+		}
+		if self.selected(slot).len() >= slot.capacity() {
+			return false;
+		}
+		if let Some(id) = item.tanz_id() {
+			if self.equipped_tanzes().contains(&id) {
+				return false;
+			}
+		}
+		true
+	}
+
+	/// Equip `index` at the front of its slot. Already-equipped items stay put
+	/// (reorder is a separate UI action). Capacity and unique Tanz kinds match
+	/// [`Self::toggle`].
+	pub fn equip_front(&mut self, index: usize) -> bool {
+		if !self.can_queue(index) {
+			return false;
+		}
+		let slot = self.items[index].slot();
+		self.selected_mut(slot).insert(0, index);
+		true
+	}
+
+	/// Remove `index` from its slot selection. The item stays in the bag.
+	pub fn unequip(&mut self, index: usize) -> bool {
+		let Some(item) = self.items.get(index) else {
+			return false;
+		};
+		let slot = item.slot();
+		let Some(position) = self.selected(slot).iter().position(|&selected| selected == index)
+		else {
+			return false;
+		};
+		self.selected_mut(slot).remove(position);
+		true
+	}
+
+	/// Move an equipped item one adjacent position. `delta < 0` is toward the
+	/// front (left). Clamps at the ends. Other slots are untouched.
+	pub fn move_equipped(&mut self, index: usize, delta: i8) -> bool {
+		if delta == 0 {
+			return false;
+		}
+		let Some(item) = self.items.get(index) else {
+			return false;
+		};
+		let slot = item.slot();
+		let selected = self.selected_mut(slot);
+		let Some(from) = selected.iter().position(|&selected| selected == index) else {
+			return false;
+		};
+		let to = if delta < 0 {
+			from.saturating_sub(1)
+		} else {
+			(from + 1).min(selected.len().saturating_sub(1))
+		};
+		if to == from {
+			return false;
+		}
+		selected.remove(from);
+		selected.insert(to, index);
 		true
 	}
 
@@ -527,6 +755,7 @@ impl Inventory {
 		let clothing = std::mem::take(&mut self.clothing);
 		let weapons = std::mem::take(&mut self.weapons);
 		let skills = std::mem::take(&mut self.skills);
+		let tanzes = std::mem::take(&mut self.tanzes);
 		let mut taken_items = Vec::with_capacity(keep.len());
 		let mut remain_items = Vec::with_capacity(len.saturating_sub(keep.len()));
 		let mut taken_remap = vec![None; len];
@@ -544,20 +773,52 @@ impl Inventory {
 		self.clothing = remap_selected(&clothing, &remain_remap);
 		self.weapons = remap_selected(&weapons, &remain_remap);
 		self.skills = remap_selected(&skills, &remain_remap);
+		self.tanzes = remap_selected(&tanzes, &remain_remap);
 		Self {
 			items: taken_items,
 			clothing: remap_selected(&clothing, &taken_remap),
 			weapons: remap_selected(&weapons, &taken_remap),
 			skills: remap_selected(&skills, &taken_remap),
+			tanzes: remap_selected(&tanzes, &taken_remap),
 		}
 	}
 
 	/// Append `other.items` without auto-wearing or auto-queuing.
 	///
-	/// Incoming clothing / weapon selections are dropped. Existing selections
-	/// on `self` stay valid because new items are only appended.
+	/// Incoming clothing / weapon selections are dropped. Duplicate Tanz kinds
+	/// are skipped so each owner keeps one copy. Existing selections on `self`
+	/// stay valid because new items are only appended.
 	pub fn absorb(&mut self, other: Self) {
-		self.items.extend(other.items);
+		for item in other.items {
+			if let Some(id) = item.tanz_id() {
+				if self.owns_tanz(id) {
+					continue;
+				}
+			}
+			self.items.push(item);
+		}
+	}
+
+	/// Drop later copies of the same Tanz kind and remap selections.
+	///
+	/// Grant/import/load use this so cooldowns keyed by [`TanzId`] stay unique.
+	pub fn dedup_tanz_kinds(&mut self) {
+		let mut seen = Vec::new();
+		let mut drop = Vec::new();
+		for (index, item) in self.items.iter().enumerate() {
+			let Some(id) = item.tanz_id() else {
+				continue;
+			};
+			if seen.contains(&id) {
+				drop.push(index);
+			} else {
+				seen.push(id);
+			}
+		}
+		if drop.is_empty() {
+			return;
+		}
+		let _ = self.take_indices(&drop);
 	}
 
 	/// One bag per item so each piece can sit on the ground as its own stash.
@@ -568,12 +829,14 @@ impl Inventory {
 	pub fn explode(self) -> Vec<Self> {
 		self.items
 			.into_iter()
+			.filter(InventoryItem::is_droppable)
 			.map(|item| {
 				let mut bag = Self {
 					items: vec![item],
 					clothing: Vec::new(),
 					weapons: Vec::new(),
 					skills: Vec::new(),
+					tanzes: Vec::new(),
 				};
 				let _ = bag.toggle(0);
 				bag
@@ -583,6 +846,70 @@ impl Inventory {
 
 	pub fn character_sheet(&self) -> crate::CharacterSheet {
 		crate::CharacterSheet::from_inventory(self)
+	}
+
+	/// Ensure the bag owns exactly one intrinsic Fisticuffs tool.
+	///
+	/// Older saves get one appended. An existing copy stays put so the current
+	/// primary selection does not change. Extra copies are stripped. The weapon
+	/// queue is not auto-filled: starter loadouts already sit at capacity, and
+	/// selecting Fisticuffs is an explicit toggle.
+	pub fn ensure_fisticuffs(&mut self) {
+		let found: Vec<usize> = self
+			.items
+			.iter()
+			.enumerate()
+			.filter(|(_, item)| item.is_fisticuffs())
+			.map(|(index, _)| index)
+			.collect();
+		match found.as_slice() {
+			[] => self.items.push(InventoryItem::Fisticuffs),
+			[_] => {}
+			[_, extras @ ..] => {
+				let mut extras = extras.to_vec();
+				extras.sort_unstable();
+				let _ = self.take_indices(&extras);
+			}
+		}
+	}
+
+	/// Drain every droppable item. Intrinsic tools stay on `self` with
+	/// remapped selections. This is the gameplay bulk-drop path; [`Self::take_all`]
+	/// remains a full bag move for snapshots and claims.
+	pub fn take_droppable(&mut self) -> Self {
+		let mut keep: Vec<usize> = self
+			.items
+			.iter()
+			.enumerate()
+			.filter(|(_, item)| item.is_droppable())
+			.map(|(index, _)| index)
+			.collect();
+		keep.sort_unstable();
+		self.take_indices(&keep)
+	}
+
+	/// Like [`Self::take_fraction`], but only droppable items are candidates.
+	pub fn take_droppable_fraction(&mut self, rng: &mut ItemRng, fraction: LootFraction) -> Self {
+		let droppable: Vec<usize> = self
+			.items
+			.iter()
+			.enumerate()
+			.filter(|(_, item)| item.is_droppable())
+			.map(|(index, _)| index)
+			.collect();
+		let count = fraction.count(droppable.len(), rng);
+		if count == 0 || droppable.is_empty() {
+			return Self::default();
+		}
+		if count >= droppable.len() {
+			return self.take_droppable();
+		}
+		let mut keep = rng.choose_indices(droppable.len(), count);
+		for index in &mut keep {
+			*index = droppable[*index];
+		}
+		keep.sort_unstable();
+		self.take_indices(&keep)
 	}
 }
 
@@ -749,12 +1076,21 @@ impl ItemRng {
 		items
 	}
 
-	/// Clothing starter, two unique firearms, one grenade, and one rolled skill map.
+	/// Fixed base Tanzes. No random draw, so clothing / tool rolls stay stable.
+	pub fn base_starter_tanzes(&mut self) -> Vec<InventoryItem> {
+		let _ = self;
+		BASE_STARTER_TANZES.into_iter().map(InventoryItem::tanz).collect()
+	}
+
+	/// Clothing starter, two unique firearms, one grenade, one rolled skill map,
+	/// Fisticuffs, and the four base Tanzes.
 	pub fn random_starter_loadout(&mut self) -> Vec<InventoryItem> {
 		let mut items = self.random_starter_clothing(STARTER_CLOTHING_COUNT);
 		items.extend(self.random_starter_firearms(STARTER_WEAPON_COUNT));
 		items.push(InventoryItem::rolled_grenade(self));
+		items.push(InventoryItem::Fisticuffs);
 		items.extend(self.random_starter_skill_maps(STARTER_SKILL_MAP_COUNT));
+		items.extend(self.base_starter_tanzes());
 		items
 	}
 
@@ -781,6 +1117,16 @@ pub fn icon_catalog_key_for_label(label: &str) -> u64 {
 /// Catalog thumbnail key for the Self Lubikan tile.
 pub fn self_lubikan_catalog_key() -> u64 {
 	icon_catalog_key_for_label(SELF_LUBIKAN_CAPTURE_LABEL)
+}
+
+/// Catalog thumbnail key for the intrinsic Fisticuffs tool.
+pub fn fisticuffs_catalog_key() -> u64 {
+	icon_catalog_key_for_label(FISTICUFFS_CAPTURE_LABEL)
+}
+
+/// Grayscale silhouette thumbs that the inventory multiplies by yellow.
+pub fn catalog_key_uses_yellow_silhouette(key: u64) -> bool {
+	key == self_lubikan_catalog_key() || key == fisticuffs_catalog_key()
 }
 
 fn remap_selected(selected: &[usize], remap: &[Option<usize>]) -> Vec<usize> {
@@ -860,8 +1206,13 @@ mod tests {
 			InventoryItem::firearm(FirearmMesh::Reltor),
 			InventoryItem::firearm(FirearmMesh::Snailer),
 		];
-		let mut inventory =
-			Inventory { items, clothing: Vec::new(), weapons: vec![0, 1, 2], skills: Vec::new() };
+		let mut inventory = Inventory {
+			items,
+			clothing: Vec::new(),
+			weapons: vec![0, 1, 2],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
 		assert!(inventory.swap_active());
 		assert_eq!(inventory.weapons, vec![1, 2, 0]);
 		assert_eq!(
@@ -879,8 +1230,13 @@ mod tests {
 	fn weapon_queue_caps_at_three_and_compacts_rank() {
 		let items: Vec<_> =
 			FirearmMesh::VALUES.iter().map(|mesh| InventoryItem::firearm(*mesh)).collect();
-		let mut inventory =
-			Inventory { items, clothing: Vec::new(), weapons: vec![0, 1, 2], skills: Vec::new() };
+		let mut inventory = Inventory {
+			items,
+			clothing: Vec::new(),
+			weapons: vec![0, 1, 2],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
 		assert!(!inventory.toggle(3));
 		assert!(inventory.toggle(1));
 		assert_eq!(inventory.weapons, vec![0, 2]);
@@ -900,14 +1256,18 @@ mod tests {
 				+ STARTER_WEAPON_COUNT
 				+ STARTER_GRENADE_COUNT
 				+ STARTER_SKILL_MAP_COUNT
+				+ STARTER_TANZ_COUNT
+				+ 1
 		);
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Clothing).count(), 3);
-		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Weapons).count(), 3);
+		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Weapons).count(), 4);
+		assert_eq!(items.iter().filter(|item| item.is_fisticuffs()).count(), 1);
 		assert_eq!(items.iter().filter_map(InventoryItem::grenade_spec).count(), 1);
 		let blast = items.iter().find_map(InventoryItem::grenade_stats).expect("grenade");
 		assert!((crate::BLAST_RADIUS_MIN..=crate::BLAST_RADIUS_MAX).contains(&blast.blast_radius));
 		assert!((crate::LAUNCH_SPEED_MIN..=crate::LAUNCH_SPEED_MAX).contains(&blast.launch_speed));
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Skills).count(), 1);
+		assert_eq!(items.iter().filter_map(InventoryItem::tanz_id).count(), STARTER_TANZ_COUNT);
 		let mut guns: Vec<_> = items.iter().filter_map(InventoryItem::firearm_mesh).collect();
 		guns.sort_by_key(|mesh| mesh.label());
 		guns.dedup();
@@ -915,7 +1275,42 @@ mod tests {
 		let outfit = Inventory::with_starter_outfit(items);
 		assert_eq!(outfit.weapons.len(), 3);
 		assert_eq!(outfit.skills.len(), 1);
+		assert_eq!(outfit.equipped_tanzes(), BASE_STARTER_TANZES.to_vec());
 		assert!(outfit.primary_skill_map().and_then(InventoryItem::skill_map_spec).is_some());
+		assert!(!outfit.primary_weapon().is_some_and(InventoryItem::is_fisticuffs));
+		assert!(outfit.items.iter().any(InventoryItem::is_fisticuffs));
+		assert!(outfit
+			.items
+			.iter()
+			.enumerate()
+			.any(|(index, item)| { item.is_fisticuffs() && outfit.rank(index).is_none() }));
+	}
+
+	#[test]
+	fn starter_tanzes_are_deterministic_and_do_not_consume_rng() {
+		let mut a = ItemRng::from_seed(42);
+		let mut b = ItemRng::from_seed(42);
+		assert_eq!(a.base_starter_tanzes(), b.base_starter_tanzes());
+		assert_eq!(a.base_starter_tanzes(), BASE_STARTER_TANZES.map(InventoryItem::tanz).to_vec());
+		let mut with_tanzes = ItemRng::from_seed(7);
+		let mut without = ItemRng::from_seed(7);
+		let full = with_tanzes.random_starter_loadout();
+		let mut prefix = without.random_starter_clothing(STARTER_CLOTHING_COUNT);
+		prefix.extend(without.random_starter_firearms(STARTER_WEAPON_COUNT));
+		prefix.push(InventoryItem::rolled_grenade(&mut without));
+		prefix.push(InventoryItem::Fisticuffs);
+		prefix.extend(without.random_starter_skill_maps(STARTER_SKILL_MAP_COUNT));
+		assert_eq!(&full[..prefix.len()], prefix.as_slice());
+		assert_eq!(&full[prefix.len()..], BASE_STARTER_TANZES.map(InventoryItem::tanz).as_slice());
+	}
+
+	#[test]
+	fn starter_outfit_equips_base_tanzes_in_canonical_order() {
+		let items: Vec<_> =
+			BASE_STARTER_TANZES.into_iter().rev().map(InventoryItem::tanz).collect();
+		let outfit = Inventory::with_starter_outfit(items);
+		assert_eq!(outfit.equipped_tanzes(), BASE_STARTER_TANZES.to_vec());
+		assert!(Inventory::with_starter_outfit(Vec::new()).tanzes.is_empty());
 	}
 
 	#[test]
@@ -946,8 +1341,13 @@ mod tests {
 			InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)),
 			InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Dumbwave, 2)),
 		];
-		let mut inventory =
-			Inventory { items, clothing: Vec::new(), weapons: Vec::new(), skills: vec![0, 1] };
+		let mut inventory = Inventory {
+			items,
+			clothing: Vec::new(),
+			weapons: Vec::new(),
+			skills: vec![0, 1],
+			tanzes: Vec::new(),
+		};
 		assert!(inventory.cycle_skills(1));
 		assert_eq!(inventory.skills, vec![1, 0]);
 		assert_eq!(
@@ -964,8 +1364,13 @@ mod tests {
 		let items: Vec<_> = (0..4)
 			.map(|seed| InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, seed)))
 			.collect();
-		let mut inventory =
-			Inventory { items, clothing: Vec::new(), weapons: Vec::new(), skills: vec![0, 1, 2] };
+		let mut inventory = Inventory {
+			items,
+			clothing: Vec::new(),
+			weapons: Vec::new(),
+			skills: vec![0, 1, 2],
+			tanzes: Vec::new(),
+		};
 		assert!(!inventory.toggle(3));
 		assert!(inventory.toggle(1));
 		assert_eq!(inventory.skills, vec![0, 2]);
@@ -1010,6 +1415,7 @@ mod tests {
 			clothing: vec![0],
 			weapons: vec![1],
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		};
 
 		let taken = bag.take_all();
@@ -1038,6 +1444,7 @@ mod tests {
 			clothing: vec![0],
 			weapons: Vec::new(),
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		};
 		let incoming = Inventory {
 			items: vec![
@@ -1051,6 +1458,7 @@ mod tests {
 			clothing: vec![1],
 			weapons: vec![0],
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		};
 
 		dest.absorb(incoming);
@@ -1084,6 +1492,7 @@ mod tests {
 			clothing: vec![0],
 			weapons: vec![1],
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		};
 
 		let exploded = bag.explode();
@@ -1123,6 +1532,7 @@ mod tests {
 			clothing: vec![0],
 			weapons: vec![1],
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		}
 	}
 
@@ -1171,6 +1581,7 @@ mod tests {
 			InventorySlot::Clothing => assert_eq!(taken_a.clothing, vec![0]),
 			InventorySlot::Weapons => assert_eq!(taken_a.weapons, vec![0]),
 			InventorySlot::Skills => assert_eq!(taken_a.skills, vec![0]),
+			InventorySlot::Tanzes => assert_eq!(taken_a.tanzes, vec![0]),
 		}
 		assert!(first.items.iter().all(|item| item != kept));
 	}
@@ -1216,6 +1627,10 @@ mod tests {
 				.as_deref(),
 			Some("skill-map:fireball:1")
 		);
+		assert_eq!(
+			InventoryItem::Fisticuffs.capture_id_label().as_deref(),
+			Some(FISTICUFFS_CAPTURE_LABEL)
+		);
 		Ok(())
 	}
 
@@ -1237,7 +1652,203 @@ mod tests {
 			icon_catalog_key_for_label(SELF_LUBIKAN_CAPTURE_LABEL)
 		);
 		assert_ne!(self_lubikan_catalog_key(), key);
+		assert_eq!(fisticuffs_catalog_key(), icon_catalog_key_for_label(FISTICUFFS_CAPTURE_LABEL));
+		assert_ne!(fisticuffs_catalog_key(), self_lubikan_catalog_key());
+		assert_ne!(fisticuffs_catalog_key(), key);
 		Ok(())
+	}
+
+	fn tanz_bag(equipped: Vec<usize>) -> Inventory {
+		Inventory {
+			items: TanzId::STARTER.into_iter().map(InventoryItem::tanz).collect(),
+			clothing: Vec::new(),
+			weapons: Vec::new(),
+			skills: Vec::new(),
+			tanzes: equipped,
+		}
+	}
+
+	#[test]
+	fn tanz_slot_is_typed_and_ranks_by_selection_not_enum_order() {
+		let mut bag = tanz_bag(vec![3, 0]);
+		assert_eq!(bag.items[0].slot(), InventorySlot::Tanzes);
+		assert_eq!(bag.items[0].tanz_id(), Some(TanzId::HealingSalute));
+		assert_eq!(bag.rank(3), Some(1));
+		assert_eq!(bag.rank(0), Some(2));
+		assert_eq!(bag.rank(1), None);
+		assert_eq!(bag.equipped_tanzes(), vec![TanzId::ForwardDash, TanzId::HealingSalute]);
+		assert_eq!(bag.items[0].catalog_detail(), "A · Forward");
+		assert_eq!(bag.items[0].capture_id_label().as_deref(), Some("tanz:healing_salute"));
+		assert_eq!(InventorySlot::Tanzes.capacity(), TANZ_QUEUE_LIMIT);
+		assert!(bag.toggle(1));
+		assert_eq!(
+			bag.equipped_tanzes(),
+			vec![TanzId::ForwardDash, TanzId::HealingSalute, TanzId::LeftStrafe]
+		);
+		assert!(bag.toggle(3));
+		assert_eq!(bag.equipped_tanzes(), vec![TanzId::HealingSalute, TanzId::LeftStrafe]);
+		assert_eq!(bag.tanzes, vec![0, 1]);
+	}
+
+	#[test]
+	fn tanz_kinds_are_unique_per_owner() {
+		let mut bag = tanz_bag(vec![0]);
+		bag.items.push(InventoryItem::tanz(TanzId::HealingSalute));
+		assert!(!bag.toggle(4), "second copy of an equipped kind must not queue");
+		assert_eq!(bag.tanzes, vec![0]);
+		bag.dedup_tanz_kinds();
+		assert_eq!(bag.items.len(), 4);
+		assert_eq!(bag.tanzes, vec![0]);
+		assert!(
+			!bag.owns_tanz(TanzId::HealingSalute)
+				|| bag
+					.items
+					.iter()
+					.filter(|item| item.tanz_id() == Some(TanzId::HealingSalute))
+					.count() == 1
+		);
+
+		let mut dest = tanz_bag(Vec::new());
+		dest.absorb(tanz_bag(vec![0]));
+		assert_eq!(dest.items.len(), 4);
+		assert!(dest.tanzes.is_empty());
+		assert_eq!(dest.items.iter().filter_map(InventoryItem::tanz_id).count(), 4);
+	}
+
+	#[test]
+	fn equip_front_unequip_and_move_equipped() {
+		let mut bag = tanz_bag(vec![1, 2]);
+		assert!(bag.equip_front(3));
+		assert_eq!(
+			bag.equipped_tanzes(),
+			vec![TanzId::ForwardDash, TanzId::LeftStrafe, TanzId::RightStrafe]
+		);
+		assert!(!bag.equip_front(3), "already equipped stays put");
+		assert!(!bag.equip_front(1));
+		assert!(bag.move_equipped(3, 1));
+		assert_eq!(
+			bag.equipped_tanzes(),
+			vec![TanzId::LeftStrafe, TanzId::ForwardDash, TanzId::RightStrafe]
+		);
+		assert!(!bag.move_equipped(1, -1), "clamp at the front");
+		assert!(bag.unequip(3));
+		assert_eq!(bag.equipped_tanzes(), vec![TanzId::LeftStrafe, TanzId::RightStrafe]);
+		assert!(bag.owns_tanz(TanzId::ForwardDash));
+		assert!(!bag.unequip(3));
+		assert!(!bag.move_equipped(3, 1));
+		assert!(bag.equip_front(0));
+		assert_eq!(
+			bag.equipped_tanzes(),
+			vec![TanzId::HealingSalute, TanzId::LeftStrafe, TanzId::RightStrafe]
+		);
+		let mut weapons = Inventory {
+			items: vec![
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::firearm(FirearmMesh::Reltor),
+				InventoryItem::firearm(FirearmMesh::Snailer),
+			],
+			clothing: Vec::new(),
+			weapons: vec![0, 1],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		assert!(weapons.equip_front(2));
+		assert_eq!(weapons.weapons, vec![2, 0, 1]);
+		assert!(weapons.move_equipped(2, 1));
+		assert_eq!(weapons.weapons, vec![0, 2, 1]);
+		assert!(weapons.unequip(2));
+		assert_eq!(weapons.weapons, vec![0, 1]);
+	}
+
+	#[test]
+	fn take_indices_remaps_tanz_selection() {
+		let mut bag = tanz_bag(vec![0, 2, 3]);
+		let taken = bag.take_indices(&[0, 1]);
+		assert_eq!(taken.equipped_tanzes(), vec![TanzId::HealingSalute]);
+		assert_eq!(bag.equipped_tanzes(), vec![TanzId::RightStrafe, TanzId::ForwardDash]);
+		assert_eq!(bag.tanzes, vec![0, 1]);
+	}
+
+	#[test]
+	fn ensure_fisticuffs_appends_without_changing_primary() {
+		let mut bag = Inventory {
+			items: vec![InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: vec![0],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		bag.ensure_fisticuffs();
+		assert_eq!(bag.items.len(), 2);
+		assert!(bag.items[1].is_fisticuffs());
+		assert_eq!(bag.weapons, vec![0]);
+		assert_eq!(
+			bag.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
+		bag.ensure_fisticuffs();
+		assert_eq!(bag.items.iter().filter(|item| item.is_fisticuffs()).count(), 1);
+		assert_eq!(bag.weapons, vec![0]);
+	}
+
+	#[test]
+	fn ensure_fisticuffs_strips_duplicates_and_keeps_the_first() {
+		let mut bag = Inventory {
+			items: vec![
+				InventoryItem::Fisticuffs,
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::Fisticuffs,
+			],
+			clothing: Vec::new(),
+			weapons: vec![0, 1, 2],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		bag.ensure_fisticuffs();
+		assert_eq!(
+			bag.items,
+			vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)]
+		);
+		assert_eq!(bag.weapons, vec![0, 1]);
+		assert!(bag.primary_weapon().is_some_and(InventoryItem::is_fisticuffs));
+	}
+
+	#[test]
+	fn take_droppable_keeps_fisticuffs_and_remaps_the_queue() {
+		let mut bag = Inventory {
+			items: vec![
+				InventoryItem::Fisticuffs,
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::firearm(FirearmMesh::Reltor),
+			],
+			clothing: Vec::new(),
+			weapons: vec![0, 1, 2],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		let loot = bag.take_droppable();
+		assert_eq!(loot.items.len(), 2);
+		assert!(loot.items.iter().all(|item| !item.is_fisticuffs()));
+		assert_eq!(bag.items, vec![InventoryItem::Fisticuffs]);
+		assert_eq!(bag.weapons, vec![0]);
+		assert!(bag.primary_weapon().is_some_and(InventoryItem::is_fisticuffs));
+	}
+
+	#[test]
+	fn explode_skips_intrinsic_arms() {
+		let bag = Inventory {
+			items: vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: vec![0, 1],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		let exploded = bag.explode();
+		assert_eq!(exploded.len(), 1);
+		assert_eq!(
+			exploded[0].primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
 	}
 
 	#[test]

@@ -8,7 +8,7 @@ use mob_characters::{
 	FromMobNumber, MobCharacter,
 };
 
-use poi_intelligence::{NearbyPlace, AGENT_SEPARATION};
+use poi_intelligence::{NearbyPlace, PoiSupport, AGENT_SEPARATION};
 
 use crate::MobKind;
 
@@ -64,9 +64,15 @@ impl MobRosterRecipe {
 			let preferred = disk_offset(slot, count, radius, height);
 			let occupied: Vec<Vec3> =
 				members.iter().map(|member: &MobMemberRecipe| member.offset).collect();
-			let offset = NearbyPlace { position: preferred, poi: None }
-				.clear_of(Vec3::ZERO, &occupied, AGENT_SEPARATION, (slot as u64).wrapping_add(1))
-				.position;
+			let offset =
+				NearbyPlace { position: preferred, poi: None, support: PoiSupport::Terrain }
+					.clear_of(
+						Vec3::ZERO,
+						&occupied,
+						AGENT_SEPARATION,
+						(slot as u64).wrapping_add(1),
+					)
+					.position;
 			members.push(MobMemberRecipe {
 				character: Arc::new(character),
 				offset: Vec3::new(offset.x, height, offset.z),

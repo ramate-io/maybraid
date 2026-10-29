@@ -36,20 +36,19 @@ pub use loading::{
 	LoadingScreenSystems, RequestShowLoading,
 };
 pub use settings::{
-	apply_seed, apply_shadows_env, apply_unsaved_visual_style_default, classify_host,
-	load_machine_settings, load_machine_settings_ex, parse_render_scale_env, parse_shadows_env,
-	request_show_in_game_settings, save_machine_settings, seed_device_class, DeviceClass,
-	DeviceType, HostProbe, InGameRenderScale, InGameSettings, InGameSettingsChoice,
-	InGameSettingsPlugin, InGameSettingsScreen, InGameSettingsSystems, InGameShadowQuality,
-	InGameVisualStyle, PersistPolicy, Preference, QualitySeeded, RenderScaleReadout,
-	RequestShowInGameSettings, VisualStyleAutoPick, VisualStyleSaved, ENV_RENDER_SCALE,
-	ENV_SHADOWS,
+	apply_seed, apply_shadows_env, classify_host, load_machine_settings, load_machine_settings_ex,
+	parse_render_scale_env, parse_shadows_env, request_show_in_game_settings,
+	save_machine_settings, seed_device_class, DeviceClass, DeviceType, HostProbe,
+	InGameRenderScale, InGameSettings, InGameSettingsChoice, InGameSettingsPlugin,
+	InGameSettingsScreen, InGameSettingsSystems, InGameShadowQuality, InGameVisualStyle,
+	PersistPolicy, Preference, QualitySeeded, RenderScaleReadout, RequestShowInGameSettings,
+	VisualStyleProvenance, ENV_RENDER_SCALE, ENV_SHADOWS,
 };
 pub use show::{add_menu_show_systems, MenuScreenSystems, MenuScreens, MenuShowRequest};
 pub use spin_reveal::{
-	request_show_spin_reveal, RequestShowSpinReveal, SpinRevealChoice, SpinRevealCurrent,
-	SpinRevealFinished, SpinRevealItems, SpinRevealScreen, SpinRevealScreenPlugin,
-	SpinRevealSystems,
+	cancel_spin_reveal, request_show_spin_reveal, RequestShowSpinReveal, SpinRevealChoice,
+	SpinRevealCurrent, SpinRevealFinished, SpinRevealItems, SpinRevealScreen,
+	SpinRevealScreenPlugin, SpinRevealSystems,
 };
 
 /// Marker on every full-screen menu root so show-requests can replace each other.
