@@ -787,6 +787,7 @@ mod tests {
 			kind: LOCAL_POI,
 			position: Vec3::new(90.0, 1.0, 0.0),
 			arrival_radius: 6.0,
+			support: poi_intelligence::PoiSupport::Terrain,
 			salience: 1.0,
 			local: true,
 			global: false,
@@ -798,6 +799,7 @@ mod tests {
 				kind: VEGETATION_POI,
 				position: Vec3::new(70.0 + index as f32 * 4.0, 1.0, 0.0),
 				arrival_radius: 4.0,
+				support: poi_intelligence::PoiSupport::Terrain,
 				salience: 1.0,
 				local: true,
 				global: false,
@@ -830,6 +832,7 @@ mod tests {
 				kind: VEGETATION_POI,
 				position: Vec3::new(70.0 + index as f32 * 4.0, 1.0, 0.0),
 				arrival_radius: 4.0,
+				support: poi_intelligence::PoiSupport::Terrain,
 				salience: 0.55,
 				local: true,
 				global: false,
@@ -841,6 +844,7 @@ mod tests {
 			kind: VEGETATION_POI,
 			position: Vec3::new(0.0, 1.0, 280.0),
 			arrival_radius: 24.0,
+			support: poi_intelligence::PoiSupport::Terrain,
 			salience: 1.25,
 			local: false,
 			global: true,
@@ -1313,7 +1317,9 @@ mod tests {
 		let floor = Vec3::new(80.0, 12.0, 5.0);
 		world.resource_mut::<PoiRegistry>().upsert(
 			poi,
-			poi_intelligence::Poi::new(PoiId(1), LOCAL_POI).with_arrival_radius(4.0),
+			poi_intelligence::Poi::new(PoiId(1), LOCAL_POI)
+				.with_floor_support()
+				.with_arrival_radius(4.0),
 			floor,
 			true,
 			false,
@@ -1344,24 +1350,44 @@ mod tests {
 	}
 
 	#[test]
-	fn local_rooms_are_interior_and_urban_pins_are_not() {
+	fn arrival_support_controls_floor_policy_independent_of_kind() {
 		let room = PoiRecord {
 			id: PoiId(1),
 			entity: Entity::from_bits(1),
 			kind: LOCAL_POI,
 			position: Vec3::new(8.0, 12.0, 3.0),
 			arrival_radius: 4.0,
+			support: poi_intelligence::PoiSupport::Floor,
 			salience: 1.0,
 			local: true,
 			global: false,
 		};
 		let lounge = PoiRecord { kind: SALOON_POI, ..room };
-		let urban = PoiRecord { kind: URBAN_POI, ..room };
-		let grove = PoiRecord { kind: VEGETATION_POI, local: false, global: true, ..room };
-		assert!(maybraid_spawns_placement::interior_building_poi(&room));
-		assert!(maybraid_spawns_placement::interior_building_poi(&lounge));
-		assert!(!maybraid_spawns_placement::interior_building_poi(&urban));
-		assert!(!maybraid_spawns_placement::interior_building_poi(&grove));
+		let urban =
+			PoiRecord { kind: LOCAL_POI, support: poi_intelligence::PoiSupport::Terrain, ..room };
+		let grove = PoiRecord {
+			kind: VEGETATION_POI,
+			local: false,
+			global: true,
+			support: poi_intelligence::PoiSupport::Terrain,
+			..room
+		};
+		assert_eq!(
+			maybraid_spawns_placement::PlacementPolicy::for_poi(&room),
+			maybraid_spawns_placement::PlacementPolicy::InteriorFloor
+		);
+		assert_eq!(
+			maybraid_spawns_placement::PlacementPolicy::for_poi(&lounge),
+			maybraid_spawns_placement::PlacementPolicy::InteriorFloor
+		);
+		assert_eq!(
+			maybraid_spawns_placement::PlacementPolicy::for_poi(&urban),
+			maybraid_spawns_placement::PlacementPolicy::OutdoorGround
+		);
+		assert_eq!(
+			maybraid_spawns_placement::PlacementPolicy::for_poi(&grove),
+			maybraid_spawns_placement::PlacementPolicy::OutdoorGround
+		);
 	}
 
 	#[test]
