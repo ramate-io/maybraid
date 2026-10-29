@@ -94,12 +94,11 @@ pub(crate) fn apply_inventory_drop_requests(
 		};
 		match bag.try_drop(request.index, request.policy) {
 			Ok(outcome) => {
-				let snapshot = bag.clone();
 				if is_player {
 					if let Some(loadout) = loadout.as_deref_mut() {
 						// Leave AppliedWorldPlayerLoadout stale so arm_world_player
 						// re-holds the promoted primary and refreshes clothing/stats.
-						loadout.retarget_inventory(snapshot.clone());
+						loadout.retarget_inventory(bag.clone());
 					}
 				}
 				dropped.write(InventoryDropped { owner, bag: user.bag, outcome });
@@ -234,6 +233,7 @@ fn visual_drop_bag(item: character_items::InventoryItem) -> Inventory {
 		clothing: Vec::new(),
 		weapons: Vec::new(),
 		skills: Vec::new(),
+		tanzes: Vec::new(),
 	};
 	let _ = bag.toggle(0);
 	bag
@@ -251,7 +251,7 @@ mod tests {
 	use characters::CharacterAppearance;
 	use firearm_user::FirearmUser;
 	use grenade_user::GrenadeUser;
-	use maybraid_character_controller::InventoryCyclingCategory;
+	use maybraid_equipment::InventoryCyclingCategory;
 
 	use super::*;
 	use crate::inventory_cycling::ActiveInventoryCyclingCategory;
@@ -276,6 +276,7 @@ mod tests {
 			clothing: vec![0],
 			weapons: vec![1, 2],
 			skills: vec![3, 4],
+			tanzes: Vec::new(),
 		}
 	}
 
@@ -374,6 +375,7 @@ mod tests {
 			clothing: Vec::new(),
 			weapons: vec![0, 1],
 			skills: Vec::new(),
+			tanzes: Vec::new(),
 		}
 	}
 
@@ -445,13 +447,19 @@ mod tests {
 		let id = CharacterId(7);
 		character_inventory_user::save(&root, id, &leftover)?;
 		let loaded = character_inventory_user::load(&root, id)?;
-		assert_eq!(loaded.items.len(), leftover.items.len());
+		assert_eq!(loaded.items.len(), leftover.items.len() + 1);
+		assert_eq!(loaded.items.iter().filter(|item| item.is_fisticuffs()).count(), 1);
 		assert_eq!(loaded.weapons, leftover.weapons);
 		assert_eq!(loaded.skills, leftover.skills);
 		assert_eq!(
 			loaded.primary_weapon().and_then(InventoryItem::firearm_mesh),
 			Some(FirearmMesh::Reltor)
 		);
+		assert!(loaded
+			.items
+			.iter()
+			.enumerate()
+			.any(|(index, item)| { item.is_fisticuffs() && loaded.rank(index).is_none() }));
 		Ok(())
 	}
 

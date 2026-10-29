@@ -8,7 +8,8 @@ use building_components::floors::FloorNode;
 use building_components::partitions::PartitionStyle;
 use building_components::scene_children;
 use building_components::{
-	append_flattened_component_scenes, BuildingComponents, Layers, PartitionNode,
+	append_flattened_component_scenes, append_flattened_component_scenes_at_levels,
+	BuildingComponents, Layers, PartitionNode,
 };
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneLevel};
@@ -75,6 +76,21 @@ impl WizardsTowerPerch {
 		lod_ref: &LodRef,
 	) {
 		append_flattened_component_scenes(self, lod_ref, LodSceneLevel::Medium, children);
+	}
+
+	pub(crate) fn emit_external_features_at_mesh_level(
+		&self,
+		children: &mut Vec<Box<dyn Scene>>,
+		lod_ref: &LodRef,
+		mesh_level: LodSceneLevel,
+	) {
+		append_flattened_component_scenes_at_levels(
+			self,
+			lod_ref,
+			LodSceneLevel::Medium,
+			mesh_level,
+			children,
+		);
 	}
 
 	fn is_structure_level(level: LodSceneLevel) -> bool {

@@ -5,18 +5,19 @@ use character_creation_menus::{
 	inventory_paint_state, CharacterMenu, InventoryLayout, InventoryPaint, MenuEvent,
 	INVENTORY_CAPTURE_TIMEOUT, INVENTORY_LABEL,
 };
-use character_items::{self_lubikan_catalog_key, Inventory};
+use character_items::{catalog_key_uses_yellow_silhouette, Inventory};
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
 use item_icons::{
-	request_inventory_icons, request_self_lubikan_icon, CaptureClient, ItemCaptureSubjects,
-	ItemIconCache, ItemIconDiscovery, ItemIconPlugin, ItemIconSystems,
+	request_inventory_icons, request_self_lubikan_icon, CaptureClient, IconCatalogProgress,
+	ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery, ItemIconPlugin, ItemIconSystems,
+	PoseCaptureSubjects,
 };
 use maybraid_character_ui_menu_renderer::{
 	fill_inventory_layout, fill_inventory_loading, find_overlay_node, overlay_closes_on_pick,
-	spawn_overlay_shell, CharacterHudSystems, CharacterMenuEvent,
-	MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink, MenuButton, MenuJustify, MenuSink,
-	MenuThumbnailContext, OverlayClose, OverlayOpen, OverlaySelectRoot, OverlaySelectViewport,
-	RenderContext,
+	spawn_overlay_shell, CharacterHudSystems, CharacterMenuEvent, InventoryFocusHint,
+	InventoryInteraction, InventoryItemKey, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
+	MenuButton, MenuJustify, MenuSink, MenuThumbnailContext, OverlayClose, OverlayOpen,
+	OverlaySelectRoot, OverlaySelectViewport, RenderContext,
 };
 use maybraid_menu_controller::MenuController;
 use maybraid_skill_map::{SkillMapSpinRevealHud, SkillMapTileMaterialPlugin};
@@ -34,6 +35,7 @@ use menu_screens::{
 	add_menu_show_systems, MenuScreen, MenuScreens, MenuShowRequest, SpinRevealItems,
 };
 use std::time::Duration;
+use tanz_user::request_inventory_tanz_icons;
 
 use crate::drop_prompt::CharacterDropPromptPlugin;
 use crate::leave_prompt::CharacterLeavePromptPlugin;
@@ -115,7 +117,7 @@ pub fn save_chrome(
 pub(crate) struct CharacterUiSyncState {
 	pub(crate) menu_dirty: bool,
 	save_label: Option<&'static str>,
-	icon_generation: u64,
+	icon_progress: IconCatalogProgress,
 }
 
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,7 +129,7 @@ struct OverlaySelectState {
 pub(crate) struct OverlayUiSyncState {
 	open: Option<&'static str>,
 	pub(crate) menu_dirty: bool,
-	icon_generation: u64,
+	icon_progress: IconCatalogProgress,
 	wait_started: Option<Duration>,
 	showing_loading: bool,
 }
@@ -161,16 +163,16 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn image_for_key(&mut self, key: u64) -> Option<Handle<Image>> {
-		let cache = self.icons?;
-		if key == self_lubikan_catalog_key() {
-			cache.silhouette_for_key(key)
+		let icons = self.icons?;
+		if catalog_key_uses_yellow_silhouette(key) {
+			icons.catalog_entry(key, true).and_then(|entry| entry.ready_image())
 		} else {
-			cache.shaded_for_key(key)
+			icons.catalog_for_key(key)
 		}
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
-		if key == self_lubikan_catalog_key() {
+		if catalog_key_uses_yellow_silhouette(key) {
 			TEXT_YELLOW
 		} else {
 			Color::WHITE
@@ -247,7 +249,7 @@ fn apply_show_character(
 	stack.close(MenuModalId::OVERLAY_SELECT);
 	sync_state.menu_dirty = false;
 	sync_state.save_label = save_chrome(&menu_state.0, baseline.as_deref());
-	sync_state.icon_generation = icons.as_ref().map(|cache| cache.generation).unwrap_or(0);
+	sync_state.icon_progress = character_icon_progress(&menu_state.0, icons.as_deref());
 	let (viewport, save_corner, back_corner) = spawn_character_ui_shell(&mut commands);
 	rebuild_character_ui_panel(
 		&mut commands,
@@ -278,17 +280,17 @@ fn sync_character_ui(
 		return;
 	}
 	let save_label = save_chrome(&menu_state.0, baseline.as_deref());
-	let icon_generation = icons.as_ref().map(|cache| cache.generation).unwrap_or(0);
+	let icon_progress = character_icon_progress(&menu_state.0, icons.as_deref());
 	if !sync_state.menu_dirty
 		&& !menu_state.is_changed()
 		&& sync_state.save_label == save_label
-		&& sync_state.icon_generation == icon_generation
+		&& sync_state.icon_progress == icon_progress
 	{
 		return;
 	}
 	sync_state.menu_dirty = false;
 	sync_state.save_label = save_label;
-	sync_state.icon_generation = icon_generation;
+	sync_state.icon_progress = icon_progress;
 	let previous: Vec<(Entity, Option<HudMenu>)> =
 		viewports.iter().map(|(entity, menu)| (entity, menu.copied())).collect();
 	let save_corner = save_corners.iter().next();
@@ -471,6 +473,8 @@ fn populate_character_ui_panel(
 		lock_appearance: menu_state.0.appearance_locked(),
 		catalog_columns: PANEL_TILE_COLUMNS,
 		catalog_thumb_px: CATALOG_THUMB_PX,
+		retain_key: None,
+		retained_index: None,
 	};
 	MaybraidMenuSink::new(MenuJustify::Right).render_nodes(
 		&menu_state.0.menu_nodes(),
@@ -492,6 +496,7 @@ fn sync_overlay_select(
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	icons: Option<Res<ItemIconCache>>,
 	prompt_device: Res<InputPromptDevice>,
+	focus: Res<InventoryFocusHint>,
 ) {
 	let Ok(slot) = slots.single() else {
 		for entity in &overlays {
@@ -499,10 +504,10 @@ fn sync_overlay_select(
 		}
 		return;
 	};
-	let icon_generation = icons.as_ref().map(|cache| cache.generation).unwrap_or(0);
+	let icon_progress = overlay_icon_progress(&menu_state.0, overlay.open, icons.as_deref());
 	let menu_changed = overlay_sync.menu_dirty
 		|| menu_state.is_changed()
-		|| overlay_sync.icon_generation != icon_generation;
+		|| overlay_sync.icon_progress != icon_progress;
 	let open_changed = overlay_sync.open != overlay.open;
 	let inventory_ready = inventory_overlay_ready(
 		&menu_state.0,
@@ -534,7 +539,7 @@ fn sync_overlay_select(
 	}
 	overlay_sync.open = overlay.open;
 	overlay_sync.menu_dirty = false;
-	overlay_sync.icon_generation = icon_generation;
+	overlay_sync.icon_progress = icon_progress;
 
 	let Some(key) = overlay.open else {
 		for entity in &overlays {
@@ -579,6 +584,7 @@ fn sync_overlay_select(
 			&fonts,
 			node,
 			None,
+			focus.0,
 			menu_state.0.overlay_editable(key),
 			icons.as_deref(),
 			inventory_ready,
@@ -594,6 +600,7 @@ fn sync_overlay_select(
 			&fonts,
 			node,
 			menu.copied(),
+			focus.0,
 			menu_state.0.overlay_editable(key),
 			icons.as_deref(),
 			inventory_ready,
@@ -615,10 +622,9 @@ fn inventory_overlay_ready(
 		return true;
 	};
 	let layout = InventoryLayout::character_menu(inventory);
-	let reports = layout
-		.captures
-		.iter()
-		.map(|need| icons.is_some_and(|cache| cache.filled_or_failed(need.key, need.silhouette)));
+	let reports = layout.captures.iter().map(|need| {
+		icons.is_some_and(|cache| cache.catalog_need_is_terminal(need.key, need.silhouette))
+	});
 	let waited = wait_started
 		.map(|started| now.saturating_sub(started))
 		.unwrap_or(Duration::ZERO);
@@ -645,8 +651,46 @@ fn inventory_overlay_should_warn_timeout(
 		.unwrap_or(Duration::ZERO);
 	waited >= INVENTORY_CAPTURE_TIMEOUT
 		&& !layout.captures.iter().all(|need| {
-			icons.is_some_and(|cache| cache.filled_or_failed(need.key, need.silhouette))
+			icons.is_some_and(|cache| cache.catalog_need_is_terminal(need.key, need.silhouette))
 		})
+}
+
+fn inventory_icon_needs(inventory: &Inventory) -> Vec<(u64, bool)> {
+	InventoryLayout::character_menu(inventory)
+		.captures
+		.iter()
+		.map(|need| (need.key, need.silhouette))
+		.collect()
+}
+
+fn character_icon_progress(
+	menu: &CharacterMenu,
+	icons: Option<&ItemIconCache>,
+) -> IconCatalogProgress {
+	let Some(inventory) = menu.inventory.as_ref() else {
+		return IconCatalogProgress::default();
+	};
+	overlay_progress(icons, &inventory_icon_needs(inventory))
+}
+
+fn overlay_icon_progress(
+	menu: &CharacterMenu,
+	open: Option<&'static str>,
+	icons: Option<&ItemIconCache>,
+) -> IconCatalogProgress {
+	if open != Some(INVENTORY_LABEL) {
+		return IconCatalogProgress::default();
+	}
+	let Some(inventory) = menu.inventory.as_ref() else {
+		return IconCatalogProgress::default();
+	};
+	overlay_progress(icons, &inventory_icon_needs(inventory))
+}
+
+fn overlay_progress(icons: Option<&ItemIconCache>, needs: &[(u64, bool)]) -> IconCatalogProgress {
+	icons
+		.map(|cache| cache.catalog_progress(needs.iter().copied()))
+		.unwrap_or_default()
 }
 
 fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
@@ -655,6 +699,7 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 	fonts: &HudFonts,
 	node: &character_ui_menu::MenuNode<E>,
 	previous: Option<HudMenu>,
+	retain: Option<InventoryItemKey>,
 	interactive: bool,
 	icons: Option<&ItemIconCache>,
 	ready: bool,
@@ -668,6 +713,7 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 			node,
 			interactive,
 			previous,
+			retain,
 			&mut thumbnails,
 		);
 	} else {
@@ -683,15 +729,25 @@ fn discover_menu_item_icons(
 	spin_items: Option<Res<SpinRevealItems>>,
 	mut discovery: ResMut<ItemIconDiscovery>,
 	mut subjects: ResMut<ItemCaptureSubjects>,
+	mut poses: ResMut<PoseCaptureSubjects>,
+	mut cache: ResMut<ItemIconCache>,
 	mut client: CaptureClient,
 ) {
-	request_self_lubikan_icon(&mut discovery, &mut client);
+	request_self_lubikan_icon(&mut discovery, &mut client, &mut cache);
 	if let Some(inventory) = menu_state.0.inventory.as_ref() {
-		request_inventory_icons(inventory, &mut discovery, &mut subjects, &mut client);
+		request_inventory_icons(inventory, &mut discovery, &mut subjects, &mut client, &mut cache);
+		request_inventory_tanz_icons(
+			inventory,
+			&mut discovery,
+			&mut poses,
+			&mut client,
+			&mut cache,
+		);
 	}
 	if let Some(spin) = spin_items.as_deref() {
 		let bag = Inventory { items: spin.0.clone(), ..Inventory::default() };
-		request_inventory_icons(&bag, &mut discovery, &mut subjects, &mut client);
+		request_inventory_icons(&bag, &mut discovery, &mut subjects, &mut client, &mut cache);
+		request_inventory_tanz_icons(&bag, &mut discovery, &mut poses, &mut client, &mut cache);
 	}
 }
 
@@ -723,6 +779,8 @@ fn on_overlay_close(
 	mut overlay: ResMut<OverlaySelectState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
 	mut stack: ResMut<MenuModalStack>,
+	mut interaction: ResMut<InventoryInteraction>,
+	mut focus: ResMut<InventoryFocusHint>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() {
@@ -730,11 +788,13 @@ fn on_overlay_close(
 	}
 	overlay.open = None;
 	active_overlay.0 = None;
+	*interaction = InventoryInteraction::Browse;
+	focus.0 = None;
 	stack.close(MenuModalId::OVERLAY_SELECT);
 }
 
 fn on_menu_activate(
-	activate: On<MenuActivate<MenuEvent>>,
+	mut activate: On<MenuActivate<MenuEvent>>,
 	mut menu_state: ResMut<CharacterMenuState>,
 	mut menu_events: MessageWriter<CharacterMenuEvent<MenuEvent>>,
 	mut ui_sync: ResMut<CharacterUiSyncState>,
@@ -742,14 +802,27 @@ fn on_menu_activate(
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
 	mut stack: ResMut<MenuModalStack>,
+	mut focus: ResMut<InventoryFocusHint>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() {
 		return;
 	}
+	// This is a global observer: bubbling would apply the same domain edit
+	// again at each tile/grid/pane ancestor (one move could reach the end).
+	activate.propagate(false);
 	let event = activate.event().choice;
 	if !menu_state.0.apply(event) {
 		return;
+	}
+	match event {
+		MenuEvent::EquipInventory(index) | MenuEvent::MoveEquippedInventory { index, .. } => {
+			focus.0 = Some(InventoryItemKey { index, equipped: true });
+		}
+		MenuEvent::UnequipInventory(index) => {
+			focus.0 = Some(InventoryItemKey { index, equipped: false });
+		}
+		_ => {}
 	}
 	ui_sync.menu_dirty = true;
 	overlay_sync.menu_dirty = true;
@@ -885,6 +958,92 @@ mod tests {
 	}
 
 	#[test]
+	fn catalog_thumbs_use_the_fisticuffs_silhouette() -> anyhow::Result<()> {
+		use super::CatalogThumbs;
+		use character_items::{fisticuffs_catalog_key, FISTICUFFS_CAPTURE_LABEL};
+		use item_icons::{CaptureId, ItemIconCache};
+		use maybraid_character_ui_menu_renderer::MenuThumbnailContext;
+		use menu_components::theme::TEXT_YELLOW;
+
+		let key = fisticuffs_catalog_key();
+		let mut cache = ItemIconCache::default();
+		cache.insert_silhouette(
+			CaptureId::new(FISTICUFFS_CAPTURE_LABEL),
+			bevy::prelude::Handle::default(),
+		);
+		let mut ready = CatalogThumbs { icons: Some(&cache) };
+		if ready.image_for_key(key).is_none() {
+			anyhow::bail!("Fisticuffs tile should show the silhouette");
+		}
+		if ready.tint_for_key(key) != TEXT_YELLOW {
+			anyhow::bail!("Fisticuffs silhouette should tint yellow in the inventory");
+		}
+		let mut shaded_only = ItemIconCache::default();
+		shaded_only.insert_shaded(
+			CaptureId::new(FISTICUFFS_CAPTURE_LABEL),
+			bevy::prelude::Handle::default(),
+		);
+		let mut wrong = CatalogThumbs { icons: Some(&shaded_only) };
+		if wrong.image_for_key(key).is_some() {
+			anyhow::bail!("Fisticuffs tile must not use the shaded handle");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn reopened_overlay_uses_existing_ready_entries() -> anyhow::Result<()> {
+		use super::inventory_overlay_ready;
+		use character_creation_menus::INVENTORY_LABEL;
+		use character_items::{FirearmMesh, InventoryItem, SELF_LUBIKAN_CAPTURE_LABEL};
+		use item_icons::{CaptureId, ItemIconCache};
+		use std::time::Duration;
+
+		let item = InventoryItem::firearm(FirearmMesh::Bullpup);
+		let menu = CharacterMenu::for_create(vec![item.clone()]);
+		let empty = ItemIconCache::default();
+		if inventory_overlay_ready(
+			&menu,
+			Some(INVENTORY_LABEL),
+			Some(&empty),
+			Some(Duration::ZERO),
+			Duration::from_millis(1),
+		) {
+			anyhow::bail!("missing entries must keep the overlay on the loading wheel");
+		}
+
+		let mut cache = ItemIconCache::default();
+		cache.insert_silhouette(
+			CaptureId::new(SELF_LUBIKAN_CAPTURE_LABEL),
+			bevy::prelude::Handle::default(),
+		);
+		cache.insert_shaded(
+			CaptureId::new(
+				item.capture_id_label().ok_or_else(|| anyhow::anyhow!("firearm capture id"))?,
+			),
+			bevy::prelude::Handle::default(),
+		);
+		if !inventory_overlay_ready(
+			&menu,
+			Some(INVENTORY_LABEL),
+			Some(&cache),
+			Some(Duration::ZERO),
+			Duration::from_millis(1),
+		) {
+			anyhow::bail!("ready entries should paint immediately on first open");
+		}
+		if !inventory_overlay_ready(
+			&menu,
+			Some(INVENTORY_LABEL),
+			Some(&cache),
+			Some(Duration::from_secs(12)),
+			Duration::from_secs(12),
+		) {
+			anyhow::bail!("reopening must reuse the same ready entries, not wait again");
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn inventory_timeout_warns_only_on_loading_fallback() -> anyhow::Result<()> {
 		use super::{inventory_overlay_ready, inventory_overlay_should_warn_timeout};
 		use character_creation_menus::{INVENTORY_CAPTURE_TIMEOUT, INVENTORY_LABEL};
@@ -937,3 +1096,6 @@ mod tests {
 		Ok(())
 	}
 }
+
+#[cfg(test)]
+mod ordered_inventory_tests;

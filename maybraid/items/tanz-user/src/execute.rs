@@ -8,12 +8,64 @@ use characters::{
 	CharacterRoot,
 };
 use damage::Health;
-use player::{MoveSpeedCap, MoveWish, PlayerLook};
+use player::{MotorIntent, MotorSample, PlayerLook, SpeedCapRequest, SprintRequest};
 
-use crate::actions::{TanzAction, dash_ground_speed};
+use maybraid_character_controller::ActorControlStatus;
+use maybraid_controllers_core::{ActorTarget, Routed};
+
+use crate::actions::{dash_ground_speed, TanzAction};
 use crate::input::TanzInput;
 use crate::stack::{TanzId, TanzStack};
-use crate::{ControlMode, TanzUser, look_wish, look_yaw};
+use crate::{look_wish, look_yaw, ControlMode, TanzDefinitionExt, TanzUser};
+
+/// Selection result. Execution consumes this; matching does not submit.
+#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ExecuteTanz {
+	actor: ActorTarget,
+	id: TanzId,
+}
+
+/// Pad-derived Tanz selection retaining its route until execution submission.
+#[derive(Message, Clone, Debug)]
+pub struct RoutedExecuteTanz(pub Routed<ExecuteTanz>);
+
+#[derive(EntityEvent, Clone, Debug)]
+pub struct RoutedExecuteTanzEvent {
+	pub entity: Entity,
+	pub input: Routed<ExecuteTanz>,
+}
+
+pub fn dispatch_routed_executions(
+	mut commands: Commands,
+	mut inputs: MessageReader<RoutedExecuteTanz>,
+) {
+	for input in inputs.read() {
+		input.0.clone().trigger(&mut commands, |input| RoutedExecuteTanzEvent {
+			entity: input.target().actor_entity().unwrap_or(Entity::PLACEHOLDER),
+			input,
+		});
+	}
+}
+
+pub fn submit_routed_tanz(event: On<RoutedExecuteTanzEvent>, mut users: Query<&mut TanzExecution>) {
+	if let Ok(mut execution) = users.get_mut(event.entity) {
+		execution.submit(event.input.payload().id());
+	}
+}
+
+impl ExecuteTanz {
+	pub fn new(actor: impl Into<ActorTarget>, id: TanzId) -> Self {
+		Self { actor: actor.into(), id }
+	}
+
+	pub const fn actor(self) -> ActorTarget {
+		self.actor
+	}
+
+	pub const fn id(self) -> TanzId {
+		self.id
+	}
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TanzPhase {
@@ -165,11 +217,12 @@ enum TanzMoveDrive {
 }
 
 pub fn match_tanz_inputs(
-	mut users: Query<(&TanzUser, &TanzStack, &mut TanzExecution)>,
+	users: Query<(&TanzUser, &TanzStack, &TanzExecution)>,
 	mut inputs: MessageReader<TanzInput>,
+	mut execute: MessageWriter<ExecuteTanz>,
 ) {
 	for input in inputs.read() {
-		let Ok((user, stack, mut execution)) = users.get_mut(input.user) else {
+		let Ok((user, stack, execution)) = users.get(input.user) else {
 			continue;
 		};
 		if !user.mode.is_tanzer() {
@@ -178,16 +231,39 @@ pub fn match_tanz_inputs(
 		let Some(id) = stack.match_input(input, |id| execution.cooling(id)) else {
 			continue;
 		};
-		execution.submit(id);
+		execute.write(ExecuteTanz::new(input.user, id));
+	}
+}
+
+pub fn submit_tanz_executions(
+	mut users: Query<(&mut TanzExecution, Option<&ActorControlStatus>)>,
+	mut execute: MessageReader<ExecuteTanz>,
+) {
+	for request in execute.read() {
+		let Ok((mut execution, status)) = users.get_mut(request.actor().entity()) else {
+			continue;
+		};
+		if status.is_some_and(|status| status.is_frozen()) {
+			continue;
+		}
+		execution.submit(request.id());
 	}
 }
 
 pub fn advance_tanz_execution(
 	time: Res<Time>,
-	mut users: Query<(&TanzUser, &mut TanzExecution, Option<&mut Health>)>,
+	mut users: Query<(
+		&TanzUser,
+		&mut TanzExecution,
+		Option<&mut Health>,
+		Option<&ActorControlStatus>,
+	)>,
 ) {
 	let dt = time.delta_secs();
-	for (user, mut execution, health) in &mut users {
+	for (user, mut execution, health, status) in &mut users {
+		if status.is_some_and(|status| status.is_frozen()) {
+			continue;
+		}
 		if user.mode != ControlMode::Tanzer
 			&& execution.active.is_none()
 			&& execution.buffered.is_none()
@@ -207,37 +283,46 @@ pub fn advance_tanz_execution(
 	}
 }
 
+/// Declare the Tanz motor contribution. Compose selects it; apply realizes
+/// sprint/cap without inspecting this producer.
 pub fn apply_tanz_movement(
-	mut commands: Commands,
-	users: Query<(Entity, &TanzUser, &TanzExecution, Option<&PlayerLook>)>,
-	mut wishes: Query<&mut MoveWish>,
+	mut users: Query<(
+		&TanzUser,
+		&TanzExecution,
+		Option<&PlayerLook>,
+		&mut MotorIntent,
+		Option<&ActorControlStatus>,
+	)>,
 ) {
-	for (entity, user, execution, look) in &users {
+	for (user, execution, look, mut intent, status) in &mut users {
+		if status.is_some_and(|status| status.is_frozen()) {
+			continue;
+		}
 		if !user.mode.is_tanzer() {
 			continue;
 		}
-		let Ok(mut wish) = wishes.get_mut(entity) else {
-			continue;
-		};
-		match execution.move_drive() {
-			Some(TanzMoveDrive::Jog(local)) => {
-				wish.0 = look_wish(look_yaw(look), local);
-				commands.entity(entity).remove::<MoveSpeedCap>();
-			}
+		let sample = match execution.move_drive() {
+			Some(TanzMoveDrive::Jog(local)) => MotorSample {
+				translation: look_wish(look_yaw(look), local),
+				sprint: SprintRequest::Release,
+				speed_cap: SpeedCapRequest::Release,
+				..MotorSample::default()
+			},
 			Some(TanzMoveDrive::Burst { local, speed }) => {
 				if speed > 1e-4 {
-					wish.0 = look_wish(look_yaw(look), local);
-					commands.entity(entity).insert(MoveSpeedCap(speed));
+					MotorSample {
+						translation: look_wish(look_yaw(look), local),
+						sprint: SprintRequest::Release,
+						speed_cap: SpeedCapRequest::Set(speed),
+						..MotorSample::default()
+					}
 				} else {
-					wish.0 = Vec3::ZERO;
-					commands.entity(entity).remove::<MoveSpeedCap>();
+					MotorSample { sprint: SprintRequest::Release, ..MotorSample::default() }
 				}
 			}
-			None => {
-				wish.0 = Vec3::ZERO;
-				commands.entity(entity).remove::<MoveSpeedCap>();
-			}
-		}
+			None => MotorSample { sprint: SprintRequest::Release, ..MotorSample::default() },
+		};
+		intent.set_tanz(sample);
 	}
 }
 
@@ -283,9 +368,58 @@ pub fn drive_tanz_animation(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::TanzUser;
 	use crate::actions::TanzAction;
 	use crate::input::TanzButton;
+	use crate::TanzUser;
+
+	#[test]
+	fn retired_route_does_not_submit_a_tanz() -> anyhow::Result<()> {
+		use maybraid_controllers_core::{InputRouter, InputSource};
+
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<InputRouter>()
+			.add_message::<RoutedExecuteTanz>()
+			.add_message::<ExecuteTanz>()
+			.add_observer(submit_routed_tanz)
+			.add_systems(Update, (dispatch_routed_executions, submit_tanz_executions).chain());
+		let old = app.world_mut().spawn(TanzExecution::default()).id();
+		let replacement = app.world_mut().spawn(TanzExecution::default()).id();
+		let source = InputSource::local_pad();
+		let input = {
+			let mut router = app.world_mut().resource_mut::<InputRouter>();
+			router.assign_actor(source, ActorTarget::new(old));
+			let input = router
+				.route_actor(source, ExecuteTanz::new(old, TanzId::LeftStrafe))
+				.ok_or_else(|| anyhow::anyhow!("missing old route"))?;
+			router.assign_actor(source, ActorTarget::new(replacement));
+			input
+		};
+		app.world_mut().write_message(RoutedExecuteTanz(input));
+		app.update();
+		assert!(app
+			.world()
+			.get::<TanzExecution>(old)
+			.is_some_and(|execution| execution.active.is_none()));
+		assert!(app
+			.world()
+			.get::<TanzExecution>(replacement)
+			.is_some_and(|execution| execution.active.is_none()));
+		let valid = app
+			.world()
+			.resource::<InputRouter>()
+			.route_actor(source, ExecuteTanz::new(replacement, TanzId::RightStrafe))
+			.ok_or_else(|| anyhow::anyhow!("missing replacement route"))?;
+		app.world_mut().write_message(RoutedExecuteTanz(valid));
+		app.update();
+		assert_eq!(
+			app.world()
+				.get::<TanzExecution>(replacement)
+				.and_then(|execution| execution.active.map(|active| active.id)),
+			Some(TanzId::RightStrafe)
+		);
+		Ok(())
+	}
 
 	fn input(user: Entity, direction: Vec2, button: TanzButton) -> TanzInput {
 		TanzInput { user, direction, magnitude: 0.9, coherence: 1.0, button }
@@ -339,7 +473,8 @@ mod tests {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins)
 			.add_message::<TanzInput>()
-			.add_systems(Update, match_tanz_inputs);
+			.add_message::<ExecuteTanz>()
+			.add_systems(Update, (match_tanz_inputs, submit_tanz_executions).chain());
 		let user = app
 			.world_mut()
 			.spawn((
@@ -350,11 +485,10 @@ mod tests {
 			.id();
 		app.world_mut().write_message(input(user, Vec2::ZERO, TanzButton::APress));
 		app.update();
-		assert!(
-			app.world()
-				.get::<TanzExecution>(user)
-				.is_some_and(|execution| execution.active.is_none())
-		);
+		assert!(app
+			.world()
+			.get::<TanzExecution>(user)
+			.is_some_and(|execution| execution.active.is_none()));
 		Ok(())
 	}
 
@@ -370,23 +504,19 @@ mod tests {
 			.spawn((
 				TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() },
 				execution,
-				MoveWish::default(),
+				MotorIntent::default(),
 				PlayerLook::default(),
 			))
 			.id();
 		app.update();
-		let wish = app.world().get::<MoveWish>(user).ok_or_else(|| anyhow::anyhow!("wish"))?;
-		let cap = app
+		let sample = app
 			.world()
-			.get::<MoveSpeedCap>(user)
-			.ok_or_else(|| anyhow::anyhow!("strafe should set MoveSpeedCap"))?;
-		assert!(wish.0.x < -0.9, "{}", wish.0);
-		assert!(wish.0.y.abs() < 1e-4);
-		assert!(
-			(cap.0 - crate::actions::POWER_STRAFE_CRUISE).abs() < 1e-3,
-			"glide-adjacent cap {}",
-			cap.0
-		);
+			.get::<MotorIntent>(user)
+			.and_then(MotorIntent::tanz)
+			.ok_or_else(|| anyhow::anyhow!("tanz sample"))?;
+		assert!(sample.translation.x < -0.9, "{}", sample.translation);
+		assert!(sample.translation.y.abs() < 1e-4);
+		assert_eq!(sample.speed_cap, SpeedCapRequest::Set(crate::actions::POWER_STRAFE_CRUISE));
 		Ok(())
 	}
 
@@ -402,14 +532,18 @@ mod tests {
 			.spawn((
 				TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() },
 				execution,
-				MoveWish::default(),
+				MotorIntent::default(),
 				PlayerLook::default(),
 			))
 			.id();
 		app.update();
-		let wish = app.world().get::<MoveWish>(user).ok_or_else(|| anyhow::anyhow!("wish"))?;
-		assert_eq!(wish.0, Vec3::ZERO);
-		assert!(app.world().get::<MoveSpeedCap>(user).is_none());
+		let sample = app
+			.world()
+			.get::<MotorIntent>(user)
+			.and_then(MotorIntent::tanz)
+			.ok_or_else(|| anyhow::anyhow!("tanz sample"))?;
+		assert_eq!(sample.translation, Vec3::ZERO);
+		assert_eq!(sample.speed_cap, SpeedCapRequest::Release);
 		Ok(())
 	}
 
@@ -427,18 +561,22 @@ mod tests {
 			.spawn((
 				TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() },
 				execution,
-				MoveWish::default(),
+				MotorIntent::default(),
 				PlayerLook::default(),
 			))
 			.id();
 		app.update();
-		let wish = app.world().get::<MoveWish>(user).ok_or_else(|| anyhow::anyhow!("wish"))?;
-		let cap = app
+		let sample = app
 			.world()
-			.get::<MoveSpeedCap>(user)
-			.ok_or_else(|| anyhow::anyhow!("dash should set MoveSpeedCap"))?;
-		assert!(wish.0.z.abs() > 0.9, "dash wish should be look-forward, got {}", wish.0);
-		assert!((cap.0 - FORWARD_DASH_CRUISE).abs() < 1e-3, "hold cap {}", cap.0);
+			.get::<MotorIntent>(user)
+			.and_then(MotorIntent::tanz)
+			.ok_or_else(|| anyhow::anyhow!("tanz sample"))?;
+		assert!(
+			sample.translation.z.abs() > 0.9,
+			"dash wish should be look-forward, got {}",
+			sample.translation
+		);
+		assert_eq!(sample.speed_cap, SpeedCapRequest::Set(FORWARD_DASH_CRUISE));
 		Ok(())
 	}
 
@@ -454,14 +592,18 @@ mod tests {
 			.spawn((
 				TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() },
 				execution,
-				MoveWish::default(),
+				MotorIntent::default(),
 				PlayerLook::default(),
 			))
 			.id();
 		app.update();
-		let wish = app.world().get::<MoveWish>(user).ok_or_else(|| anyhow::anyhow!("wish"))?;
-		assert_eq!(wish.0, Vec3::ZERO);
-		assert!(app.world().get::<MoveSpeedCap>(user).is_none());
+		let sample = app
+			.world()
+			.get::<MotorIntent>(user)
+			.and_then(MotorIntent::tanz)
+			.ok_or_else(|| anyhow::anyhow!("tanz sample"))?;
+		assert_eq!(sample.translation, Vec3::ZERO);
+		assert_eq!(sample.speed_cap, SpeedCapRequest::Release);
 		Ok(())
 	}
 }

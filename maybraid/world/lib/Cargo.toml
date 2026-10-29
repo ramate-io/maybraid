@@ -19,6 +19,7 @@ debug-commands = []
 layer-stack = { workspace = true }
 avian3d = { workspace = true }
 bevy = { workspace = true }
+building-physics = { workspace = true }
 chico = { workspace = true }
 vegetation-components = { workspace = true }
 clap = { workspace = true }
@@ -36,6 +37,7 @@ evasion-intelligence = { workspace = true }
 firearm-intelligence = { workspace = true }
 firearm-user = { workspace = true }
 grenade-user = { workspace = true }
+fisticuffs-user = { workspace = true }
 tanz-user = { workspace = true }
 grenades = { workspace = true }
 furniture-assemblies = { workspace = true }
@@ -56,7 +58,14 @@ maybraid-game-mode-discover = { workspace = true }
 material-ref = { workspace = true }
 world-materials = { workspace = true }
 maybraid-character-controller = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-equipment = { workspace = true }
+maybraid-controllers-core = { workspace = true }
+maybraid-locomotion-controller = { workspace = true }
+maybraid-session = { workspace = true }
+maybraid-spawns-actors = { workspace = true }
+maybraid-spawns-player = { workspace = true }
+maybraid-spawns-placement = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 maybraid-agent = { workspace = true }
 menu-components = { workspace = true }
 maybraid-skill-map = { workspace = true }
@@ -75,6 +84,7 @@ movement-intelligence = { workspace = true }
 movement-intelligence-avian = { workspace = true }
 movement-realization = { workspace = true }
 npc-intelligence = { workspace = true }
+occupancy-rewards = { workspace = true }
 poi-intelligence = { workspace = true }
 world-player = { workspace = true }
 richmond = { workspace = true }
@@ -96,6 +106,8 @@ vegetation-layer-model = { workspace = true }
 [dev-dependencies]
 anyhow = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
+maybraid-audio = { workspace = true }
+maybraid-gameplay = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]
