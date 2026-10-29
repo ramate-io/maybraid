@@ -5,8 +5,8 @@
 //! agrees them.
 
 use lubikans::{
-	LubikanCatalog, LubikanSummonCatalog, LubikanSummonPresentation, LubikanSummonRecipe,
-	PLACEHOLDER_SUMMON_HEALTH, PLACEHOLDER_SUMMON_LIFETIME_SECS,
+	LubikanCatalog, LubikanSummonCatalog, LubikanSummonLifetime, LubikanSummonPresentation,
+	LubikanSummonRecipe, PLACEHOLDER_SUMMON_HEALTH, PLACEHOLDER_SUMMON_LIFETIME_SECS,
 };
 
 pub use bikanwarda_lubikans::{
@@ -18,7 +18,7 @@ pub fn ward_recipe() -> LubikanSummonRecipe {
 	LubikanSummonRecipe {
 		definition: WARD_DEFINITION_ID,
 		health: PLACEHOLDER_SUMMON_HEALTH,
-		lifetime_secs: PLACEHOLDER_SUMMON_LIFETIME_SECS,
+		lifetime: LubikanSummonLifetime::from_secs_f32(PLACEHOLDER_SUMMON_LIFETIME_SECS),
 		presentation: LubikanSummonPresentation::PlaceholderCapsule,
 	}
 }
@@ -27,7 +27,7 @@ pub fn enraged_recipe() -> LubikanSummonRecipe {
 	LubikanSummonRecipe {
 		definition: ENRAGED_DEFINITION_ID,
 		health: PLACEHOLDER_SUMMON_HEALTH,
-		lifetime_secs: PLACEHOLDER_SUMMON_LIFETIME_SECS,
+		lifetime: LubikanSummonLifetime::from_secs_f32(PLACEHOLDER_SUMMON_LIFETIME_SECS),
 		presentation: LubikanSummonPresentation::PlaceholderCapsule,
 	}
 }
