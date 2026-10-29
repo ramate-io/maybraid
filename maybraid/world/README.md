@@ -23,8 +23,12 @@ plus world-specific adapters (loadout / arm, stash, map, occupancy, and
 world-dependent Lubikan owner grant). Session, equipment, and item-runtime
 assembly live in `gameplay/lib` (`register_gameplay_runtime` /
 `ItemRuntimes`). World intelligence does not register item runtimes.
-Persistent equipment state is in `items/equipment`, grenade cooking in
-`grenade-user`, firing cadence in `firearms`.
+World chooses and persists the player's loadout, enrolls its bag-backed player
+for equipment reconciliation, and submits the initial hold request. The item
+crates realize that request and own held-kit construction and teardown. The
+bagless fallback uses an explicit default-firearm request. Persistent equipment
+state is in `items/equipment`, grenade cooking in `grenade-user`, firing
+cadence in `firearms`, and jab-driver lifetime in `fisticuffs-user`.
 
 Equipped-item dispatch, inventory category ownership, holster-commit handler
 stamps, and Lubikan activation are documented in

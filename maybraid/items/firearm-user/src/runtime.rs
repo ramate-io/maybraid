@@ -64,6 +64,17 @@ pub fn teardown_held_firearm(commands: &mut Commands, user: Entity, firearm: &Fi
 		.remove::<(FirearmUser, PlayerUse, player::PlayerOpticAds)>();
 }
 
+/// Retire a firearm user while allowing the held kit's zero-delay cleanup
+/// system to finish its normal trigger-off and despawn lifecycle.
+pub fn retire_held_firearm(commands: &mut Commands, user: Entity, firearm: &FirearmUser) {
+	commands
+		.entity(firearm.held)
+		.insert((firearms::WeaponTrigger(false), damage::DespawnAfter::seconds(0.0)));
+	commands
+		.entity(user)
+		.remove::<(FirearmUser, PlayerUse, player::PlayerOpticAds)>();
+}
+
 fn realize_equipment_teardown(
 	mut commands: Commands,
 	pending: Query<(Entity, &FirearmUser), With<PendingEquipmentTeardown>>,
@@ -78,10 +89,14 @@ fn realize_equipment_hold(mut commands: Commands, pending: Query<(Entity, &Pendi
 	use character_items::InventoryItem;
 
 	for (entity, hold) in &pending {
-		let Some(InventoryItem::Firearm { spec, stats }) = hold.inventory().primary_weapon() else {
+		let Some(inventory) = hold.inventory() else {
+			crate::pose::spawn_held_firearm(&mut commands, entity);
 			continue;
 		};
-		let sheet = hold.inventory().character_sheet();
+		let Some(InventoryItem::Firearm { spec, stats }) = inventory.primary_weapon() else {
+			continue;
+		};
+		let sheet = inventory.character_sheet();
 		let live = live_weapon_from_stats(*stats, sheet.damage).with_weapon_identity(spec);
 		spawn_held_kit(
 			&mut commands,

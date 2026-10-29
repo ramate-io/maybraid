@@ -3,10 +3,8 @@
 
 use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
-use damage::DespawnAfter;
-use firearm_user::FirearmUser;
-use firearms::WeaponTrigger;
-use grenade_user::GrenadeUser;
+use firearm_user::{retire_held_firearm, FirearmUser};
+use grenade_user::{teardown_held_grenade, GrenadeUser};
 use maybraid_equipment::EquippedItemHandler;
 use maybraid_session::{ActorRetired, SessionLifecycleSystems};
 use tanz_user::{TanzExecution, TanzStack, TanzUser};
@@ -21,16 +19,19 @@ pub fn configure(app: &mut App) {
 
 fn apply_retired_actor_domains(
 	mut retired: MessageReader<ActorRetired>,
-	actors: Query<(
+	mut actors: Query<(
 		Option<&FirearmUser>,
 		Option<&GrenadeUser>,
 		Option<&InventoryUser>,
+		Option<&mut fisticuffs_user::FisticuffsUser>,
 		Has<TanzUser>,
 	)>,
 	mut commands: Commands,
 ) {
 	for notice in retired.read() {
-		let Ok((firearm, grenade, inventory, tanz)) = actors.get(notice.entity()) else {
+		let Ok((firearm, grenade, inventory, mut fisticuffs, tanz)) =
+			actors.get_mut(notice.entity())
+		else {
 			continue;
 		};
 		ActorDomainTeardown::new(notice.entity())
@@ -38,7 +39,7 @@ fn apply_retired_actor_domains(
 			.with_grenade(grenade)
 			.with_inventory(inventory)
 			.with_tanz(tanz)
-			.apply(&mut commands);
+			.apply(&mut commands, fisticuffs.as_deref_mut());
 	}
 }
 
@@ -96,29 +97,26 @@ impl ActorDomainTeardown {
 
 	/// Firearm trigger off + delayed kit despawn, grenade / bag despawn, and
 	/// drop of item / Lubikan / Tanz markers. Does not strip world motors.
-	pub fn apply(self, commands: &mut Commands) {
+	pub fn apply(
+		self,
+		commands: &mut Commands,
+		fisticuffs_user: Option<&mut fisticuffs_user::FisticuffsUser>,
+	) {
 		if let Some(firearm) = self.firearm {
-			commands
-				.entity(firearm.held)
-				.insert((WeaponTrigger(false), DespawnAfter::seconds(0.0)));
+			retire_held_firearm(commands, self.entity, &firearm);
 		}
 		if let Some(grenade) = self.grenade {
-			commands.entity(grenade.held).try_despawn();
+			teardown_held_grenade(commands, self.entity, &grenade);
 		}
 		if let Some(inventory) = self.inventory {
 			commands.entity(inventory.bag).try_despawn();
 		}
+		if let Some(mut fisticuffs_user) = fisticuffs_user {
+			fisticuffs_user::teardown_fisticuffs(commands, self.entity, &mut fisticuffs_user);
+		}
 		let mut entity = commands.entity(self.entity);
 		EquippedItemHandler::clear(&mut entity);
-		entity.remove::<(
-			FirearmUser,
-			player::PlayerOpticAds,
-			GrenadeUser,
-			grenade_user::GrenadeThrow,
-			fisticuffs_user::FisticuffsUser,
-			InventoryUser,
-			lubikans::LubikanOwner,
-		)>();
+		entity.remove::<(InventoryUser, lubikans::LubikanOwner)>();
 		if self.tanz {
 			entity.remove::<(TanzUser, TanzStack, TanzExecution)>();
 		}
@@ -128,6 +126,8 @@ impl ActorDomainTeardown {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use damage::DespawnAfter;
+	use firearms::WeaponTrigger;
 
 	#[test]
 	fn apply_cleans_item_domains_without_storing_state() {
@@ -150,7 +150,7 @@ mod tests {
 			.with_firearm(world.get::<FirearmUser>(actor))
 			.with_inventory(world.get::<InventoryUser>(actor))
 			.with_tanz(true);
-		teardown.apply(&mut world.commands());
+		teardown.apply(&mut world.commands(), None);
 		world.flush();
 		assert_eq!(world.get::<WeaponTrigger>(held).map(|trigger| trigger.0), Some(false));
 		assert!(world.get::<DespawnAfter>(held).is_some());

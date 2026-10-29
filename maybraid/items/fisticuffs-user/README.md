@@ -19,11 +19,11 @@ trigger axes but **do not** emit `AttackLeft` / `AttackRight` — starting to ai
 must not throw a jab. Non-mouse trigger edges remain independent while a mouse
 button is held, including after a capture ends.
 
-Jabs only start while **Fisticuffs** is the equipped primary tool. The world
-equipment adapter inserts [`FisticuffsUser`](src/lib.rs) for that selection and
-removes it (canceling a pending strike) when another item is queued. An empty
-weapon queue does not enable punches. Held guns and grenades keep LT/RT as
-focus/fire.
+Jabs only start while **Fisticuffs** is the equipped primary tool. A host opts
+its bag-backed actor into `items/equipment` inventory reconciliation; equipment
+queues the shared teardown/hold request, and this crate installs or immediately
+cancels/removes [`FisticuffsUser`](src/lib.rs). An empty weapon queue does not
+enable punches. Held guns and grenades keep LT/RT as focus/fire.
 
 ## Aim
 
