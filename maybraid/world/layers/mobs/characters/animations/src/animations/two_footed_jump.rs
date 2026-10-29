@@ -87,6 +87,21 @@ pub struct JumpTiming {
 }
 
 impl JumpTiming {
+	fn from_squats(windup: &Squat, landing: &Land, ballistic: BallisticJump) -> Self {
+		let touchdown = ballistic.touchdown_time_since_launch();
+		// Fall runs from spring end until ballistic height returns to zero. Spring already
+		// consumes part of the post-launch clock, so subtract it from the full arc.
+		let fall_duration = (touchdown - DEFAULT_SPRING_DURATION).max(MIN_SEGMENT_DURATION);
+		JumpTiming {
+			squat_descent_duration: windup.descent_duration().max(MIN_SEGMENT_DURATION),
+			squat_ascent_duration: windup.ascent_duration().max(MIN_SEGMENT_DURATION),
+			spring_duration: DEFAULT_SPRING_DURATION,
+			air_duration: fall_duration,
+			land_descent_duration: landing.descent_duration().max(MIN_SEGMENT_DURATION),
+			land_ascent_duration: landing.ascent_duration().max(MIN_SEGMENT_DURATION),
+		}
+	}
+
 	pub fn squat_duration(&self) -> f32 {
 		self.squat_descent_duration + self.squat_ascent_duration
 	}
@@ -211,18 +226,7 @@ impl TwoFootedJump {
 
 	pub fn timings(&self, lengths: LegSegmentLengths) -> JumpTiming {
 		let (windup, landing) = self.squat_configs(lengths);
-		let touchdown = self.ballistic().touchdown_time_since_launch();
-		// Fall runs from spring end until ballistic height returns to zero. Spring already
-		// consumes part of the post-launch clock, so subtract it from the full arc.
-		let fall_duration = (touchdown - DEFAULT_SPRING_DURATION).max(MIN_SEGMENT_DURATION);
-		JumpTiming {
-			squat_descent_duration: windup.descent_duration().max(MIN_SEGMENT_DURATION),
-			squat_ascent_duration: windup.ascent_duration().max(MIN_SEGMENT_DURATION),
-			spring_duration: DEFAULT_SPRING_DURATION,
-			air_duration: fall_duration,
-			land_descent_duration: landing.descent_duration().max(MIN_SEGMENT_DURATION),
-			land_ascent_duration: landing.ascent_duration().max(MIN_SEGMENT_DURATION),
-		}
+		JumpTiming::from_squats(&windup, &landing, self.ballistic())
 	}
 
 	/// Seconds after take-off when [`ballistic_height`] returns to zero on descent.
@@ -340,7 +344,7 @@ impl JumpRigDerived {
 		Self {
 			key: Self::key(jump, lengths),
 			lengths,
-			timings: jump.timings(lengths),
+			timings: JumpTiming::from_squats(&windup, &landing, jump.ballistic()),
 			windup,
 			landing,
 			ballistic: jump.ballistic(),

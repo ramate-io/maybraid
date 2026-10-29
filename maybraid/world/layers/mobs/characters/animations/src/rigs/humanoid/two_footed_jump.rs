@@ -33,6 +33,9 @@ impl TwoFootedJump {
 		cache: &mut JumpTransitionCache,
 	) {
 		cache.prepare(rig, elapsed);
+		if segment_debug_enabled() {
+			self.log_apply_debug(rig, elapsed, sample);
+		}
 		let fall = Fall::default();
 		sample.apply_humanoid_pose_with_cache(
 			rig,
