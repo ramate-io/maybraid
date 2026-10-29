@@ -1,10 +1,11 @@
 use character_items::{ClothingMaterial, ClothingMesh, ItemColor};
 use characters::{
+	ConceptAnimation,
 	presets::{BuildPreset, GenderPreset},
 	species::{
 		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalMouthMesh},
 		brodler::{
-			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
+			BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor, assets::HornMesh,
 		},
 		brokker::{BrokkerEyeColor, BrokkerHeadMesh, BrokkerPlumageColor, BrokkerSnoutColor},
 		caole::{CaoleBodyMesh, CaoleMouthMesh},
@@ -57,7 +58,6 @@ use characters::{
 		},
 		ylter::{YilterBodyMesh, YilterMouthMesh},
 	},
-	ConceptAnimation,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -383,6 +383,20 @@ pub enum MenuEvent {
 	SliderDelta(CharacterField, f32),
 	ToggleClothing(ClothingMesh),
 	ToggleInventory(usize),
+	/// Equip bag index at the front of its ordered slot.
+	EquipInventory(usize),
+	/// Remove bag index from its ordered slot; the item stays owned.
+	UnequipInventory(usize),
+	/// Move an equipped bag index one adjacent position (`delta < 0` is left).
+	MoveEquippedInventory {
+		index: usize,
+		delta: i8,
+	},
+	/// Move a ledger-owned Lubikan one adjacent queue position.
+	MoveLubikan {
+		account: lubikans::LubikanAccountId,
+		delta: i8,
+	},
 	/// Remove bag index after the host confirms (or skips confirm).
 	DropInventory(usize),
 	SetSwatch(CharacterField, SwatchValue),
@@ -395,6 +409,10 @@ impl MenuEvent {
 		matches!(
 			self,
 			Self::ToggleInventory(_)
+				| Self::EquipInventory(_)
+				| Self::UnequipInventory(_)
+				| Self::MoveEquippedInventory { .. }
+				| Self::MoveLubikan { .. }
 				| Self::DropInventory(_)
 				| Self::SetSwatch(CharacterField::Clothing(_), _)
 				| Self::SetAsset(CharacterField::ClothingMaterial(_), _)

@@ -10,6 +10,19 @@ use crate::{
 	BoneDefinition, BoneTable, Name, RiggedAxis,
 };
 
+/// Body-skin terminal points, in each forearm's bind-local coordinates.
+/// Missing geometry explicitly keeps the family fallback. Sources let the consumer
+/// discard calibration as soon as its body skin is removed or replaced.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
+pub struct HumanoidForearmEndpoints {
+	pub points: [Option<Vec3>; 2],
+	pub sources: [Option<Entity>; 2],
+}
+
+impl HumanoidForearmEndpoints {
+	pub const FALLBACK: Vec3 = Vec3::new(0.0, 0.5, 0.0);
+}
+
 /// Store the bones of the first imported humanoid rig in a semantically reasonable hierarchy.
 ///
 /// Symmetry is currently represented by explicit accessors (`arm(Side)`, `leg(Side)`) rather
@@ -19,10 +32,13 @@ use crate::{
 pub struct HumanoidV0Rig {
 	pub bones: BoneTable,
 	pub binding: RigBinding,
-	/// Last resolved local pose. Sampling always starts from [`Self::binding`] rest.
+	/// Shared working pose: mailbox InitWorking copies the immutable base here
+	/// once per apply; item overlays mutate it; Publish writes it to scene bones.
+	/// Sampling itself always starts from [`Self::binding`] rest.
 	pub pose: PoseBuffer,
 	pub scratch: PoseScratch,
 	pub segment_lengths: LegSegmentLengths,
+	pub forearm_endpoints: [Vec3; 2],
 }
 
 impl HumanoidV0Rig {
@@ -51,6 +67,7 @@ impl HumanoidV0Rig {
 			scratch: PoseScratch::identity(len),
 			binding,
 			segment_lengths: LegSegmentLengths::default(),
+			forearm_endpoints: [HumanoidForearmEndpoints::FALLBACK; 2],
 		}
 	}
 

@@ -618,11 +618,22 @@ mod tests {
 			sample,
 			&mut cached.pose,
 		);
-		if live.rotation("femur.L").angle_between(cached.rotation("femur.L")) > 1e-4 {
-			anyhow::bail!("cached deltas must match live walk compose");
+		for name in live.animation_bone_names() {
+			let a = live.rotation(name).normalize();
+			let b = cached.rotation(name).normalize();
+			if a.dot(b).abs() < 1.0 - 1e-6 {
+				anyhow::bail!(
+					"cached deltas must match live walk compose at {name}: {a:?} / {b:?}"
+				);
+			}
 		}
 		let mut edited = HumanoidV0Rig::imported();
-		edited.seed_rest("femur.L", Transform::from_rotation(Quat::from_rotation_x(0.15)));
+		edited.seed_rest(
+			"femur.L",
+			Transform::from_rotation(Quat::from_rotation_x(0.15))
+				.with_translation(Vec3::new(0.1, 0.8, 0.0))
+				.with_scale(Vec3::new(0.8, 1.2, 0.9)),
+		);
 		apply_evaluated_sample(
 			&edited.binding.effective_rest,
 			prepared.bone_mask(),
@@ -631,6 +642,13 @@ mod tests {
 		);
 		if cached.rotation("femur.L") == edited.rotation("femur.L") {
 			anyhow::bail!("deltas must compose onto each character's rest");
+		}
+		for (posed, rest) in edited.pose.local.iter().zip(&edited.binding.effective_rest.local) {
+			assert_eq!(
+				posed.translation, rest.translation,
+				"cached masked output uses current rest translation"
+			);
+			assert_eq!(posed.scale, rest.scale, "cached masked output uses current rest scale");
 		}
 		Ok(())
 	}

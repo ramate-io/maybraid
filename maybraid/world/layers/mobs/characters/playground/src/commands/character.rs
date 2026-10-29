@@ -105,20 +105,11 @@ impl Character {
 				});
 			}
 			Character::Camera(args) => {
-				let eye = match args.view {
-					CameraView::Front => Vec3::new(0.0, 1.2, 3.2),
-					CameraView::Side => Vec3::new(3.2, 1.2, 0.0),
-					CameraView::ThreeQuarter => Vec3::new(2.2, 1.5, 2.4),
-				};
 				commands.queue(move |world: &mut World| {
+					let (eye, target) = args.framing(world.resource::<CharacterConfig>());
 					let mut cameras = world.query::<(&mut Transform, &mut CameraController)>();
 					if let Some((mut transform, mut controller)) = cameras.iter_mut(world).next() {
-						orient_camera(
-							&mut transform,
-							&mut controller,
-							eye,
-							Vec3::new(0.0, 1.0, 0.0),
-						);
+						orient_camera(&mut transform, &mut controller, eye, target);
 					}
 				});
 			}
@@ -265,6 +256,29 @@ pub enum CameraView {
 pub struct CameraArgs {
 	#[arg(value_enum)]
 	pub view: CameraView,
+	/// Camera distance in world units; defaults to 5 for Braidman, 7 for Epiphant.
+	#[arg(long)]
+	pub distance: Option<f32>,
+	/// Target height above the character origin; defaults to 0 (the hip-centered bind).
+	#[arg(long)]
+	pub height: Option<f32>,
+}
+
+impl CameraArgs {
+	fn framing(&self, config: &CharacterConfig) -> (Vec3, Vec3) {
+		let distance = self.distance.unwrap_or(match config.species {
+			CharacterSpecies::Braidman => 5.0,
+			CharacterSpecies::Epiphant => 7.0,
+		});
+		let target = config.transform.translation + Vec3::Y * self.height.unwrap_or(0.0);
+		let direction = match self.view {
+			CameraView::Front => Vec3::new(0.0, 0.06, 1.0),
+			CameraView::Side => Vec3::new(1.0, 0.06, 0.0),
+			CameraView::ThreeQuarter => Vec3::new(0.65, 0.15, 0.76),
+		}
+		.normalize();
+		(target + direction * distance, target)
+	}
 }
 
 #[derive(Clone, Args)]

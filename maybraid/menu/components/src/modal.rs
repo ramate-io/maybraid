@@ -6,8 +6,9 @@
 //! [`MenuModalStack::open`]; [`consume_menu_modal_back`] takes Back for the
 //! top layer before any screen leave system runs.
 
+use crate::{MenuNav, MenuNavPad};
 use bevy::prelude::*;
-use maybraid_input::{MenuNav, MenuNavPad, PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::PadButton;
 
 use crate::controls::section::ActiveOverlayKey;
 use crate::controls::short_text::ShortTextModal;
@@ -23,6 +24,11 @@ pub enum MenuModalSystems {
 	/// Individual modals apply dismiss.
 	Apply,
 }
+
+/// When true, [`consume_menu_modal_back`] skips this frame (inventory reorder
+/// owns Back until it returns to browse).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MenuModalBackHold(pub bool);
 
 /// Stable identity for a layer on [`MenuModalStack`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -228,8 +234,14 @@ impl MenuModalStack {
 	}
 }
 
-pub fn begin_menu_modal_frame(mut stack: ResMut<MenuModalStack>) {
+pub fn begin_menu_modal_frame(
+	mut stack: ResMut<MenuModalStack>,
+	hold: Option<ResMut<MenuModalBackHold>>,
+) {
 	stack.begin_frame();
+	if let Some(mut hold) = hold {
+		hold.0 = false;
+	}
 }
 
 pub fn sync_menu_modal_stack(
@@ -244,8 +256,12 @@ pub fn consume_menu_modal_back(
 	mut stack: ResMut<MenuModalStack>,
 	mut nav: ResMut<MenuNavPad>,
 	keyboard: Res<ButtonInput<KeyCode>>,
+	hold: Option<Res<MenuModalBackHold>>,
 	mut dismiss: MessageWriter<MenuModalDismiss>,
 ) {
+	if hold.is_some_and(|hold| hold.0) {
+		return;
+	}
 	let back = nav.just_pressed(MenuNav::Back) || keyboard.just_pressed(KeyCode::Escape);
 	let Some(id) = stack.take_back(back) else {
 		return;
@@ -256,10 +272,15 @@ pub fn consume_menu_modal_back(
 
 pub fn tick_menu_modal_holds(
 	mut stack: ResMut<MenuModalStack>,
-	pad: Option<Res<VirtualPad>>,
+	primary: Query<&crate::PrimaryMenuInput>,
 	keyboard: Res<ButtonInput<KeyCode>>,
 	nav: Res<MenuNavPad>,
 ) {
+	let pad = primary
+		.single()
+		.ok()
+		.and_then(crate::PrimaryMenuInput::current_frame)
+		.map(|frame| &frame.pad);
 	let back_down = pad.as_deref().is_some_and(|pad| pad.pressed(PadButton::B))
 		|| keyboard.pressed(KeyCode::Escape)
 		|| nav.just_pressed(MenuNav::Back);
@@ -325,13 +346,13 @@ pub fn consume_screen_back(
 #[cfg(test)]
 mod tests {
 	use super::{
-		consume_menu_modal_back, consume_screen_back, tick_menu_modal_holds, MenuModalDismiss,
-		MenuModalId, MenuModalLayer, MenuModalStack,
+		MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack, consume_menu_modal_back,
+		consume_screen_back, tick_menu_modal_holds,
 	};
 	use crate::single_select::text_cursor::ScreenBackPressed;
+	use crate::{MenuNav, MenuNavPad};
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
-	use maybraid_input::{MenuNav, MenuNavPad};
 
 	#[test]
 	fn top_layer_is_highest_order() {
@@ -347,7 +368,7 @@ mod tests {
 
 	#[test]
 	fn entity_under_nav_owner_hides_the_parent_catalog() {
-		use super::{entity_under_nav_owner, MenuModal};
+		use super::{MenuModal, entity_under_nav_owner};
 		use crate::HudMenu;
 		use bevy::ecs::system::RunSystemOnce;
 
@@ -546,4 +567,24 @@ mod tests {
 			)
 			.expect("consume_screen_back")
 	}
+}
+
+/// Resolve pointer eligibility within the entity's own session, if it has one.
+pub fn entity_under_scoped_nav_owner(
+	entity: Entity,
+	sessions: &Query<&crate::MenuSession>,
+	roots: &Query<(Entity, &MenuModal)>,
+	child_of: &Query<&ChildOf>,
+) -> Option<bool> {
+	let mut current = Some(entity);
+	while let Some(here) = current {
+		if let Ok(session) = sessions.get(here) {
+			return Some(
+				!session.text_locked
+					&& entity_under_nav_owner(entity, &session.modals, roots, child_of),
+			);
+		}
+		current = child_of.get(here).ok().map(ChildOf::parent);
+	}
+	None
 }

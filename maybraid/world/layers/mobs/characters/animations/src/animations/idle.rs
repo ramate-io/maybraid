@@ -17,7 +17,7 @@ const DEFAULT_ARM_HANG: f32 = 1.2;
 const DEFAULT_ELBOW_HANG: f32 = 0.32;
 const DEFAULT_ARM_SWAY: f32 = 0.06;
 const DEFAULT_NECK_ROLL: f32 = 0.2;
-const DEFAULT_HIP_SHIFT: f32 = 0.025;
+const DEFAULT_HIP_SHIFT: f32 = 0.032;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Idle {
@@ -50,7 +50,9 @@ impl Idle {
 	pub const ARM_FREQ: f32 = 1.0;
 	pub const NECK_YAW_FREQ: f32 = 0.35;
 	pub const NECK_PITCH_FREQ: f32 = 0.22;
-	pub const HIP_FREQ: f32 = 0.8;
+	pub const HIP_FREQ: f32 = 1.0;
+	/// Quarter-cycle lead puts the hip-shift peak when arm sway crosses neutral.
+	pub const HIP_WEIGHT_PHASE: f32 = -0.25;
 	/// Quiet time between scratches, in progress units (~16 s at idle speed).
 	pub const SCRATCH_PERIOD: f32 = 3.2;
 	/// Scratch burst length, in progress units (~2 s at idle speed).
