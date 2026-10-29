@@ -27,7 +27,6 @@ use bevy::prelude::*;
 use durham::DurhamSurface;
 use maybraid_spawns_player::ArrivalDestination;
 use poi_intelligence::{PoiId, PoiRegistry};
-use world_player::surface_or_hold_at;
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PlacementSystems {
@@ -108,7 +107,7 @@ impl PlacementSearch {
 		hull: characters::LocomotionCapsule,
 	) -> Result<Self, maybraid_spawns_player::SpawnFailureReason> {
 		match destination {
-			ArrivalDestination::Poi(id) => Self::resolve_poi(id, registry, surface, hull),
+			ArrivalDestination::Poi(id) => Self::resolve_poi(id, registry, hull),
 			ArrivalDestination::Fallback => Ok(Self::outdoor_at(surface, fallback_at.xz(), hull)),
 			ArrivalDestination::Resume(at) | ArrivalDestination::DeathInPlace(at) => {
 				Ok(Self::outdoor_at(surface, at.xz(), hull))
@@ -119,7 +118,6 @@ impl PlacementSearch {
 	pub fn resolve_poi(
 		id: PoiId,
 		registry: &PoiRegistry,
-		surface: &DurhamSurface,
 		hull: characters::LocomotionCapsule,
 	) -> Result<Self, maybraid_spawns_player::SpawnFailureReason> {
 		let Some(record) = registry.get(id) else {
@@ -127,10 +125,12 @@ impl PlacementSearch {
 		};
 		Ok(match PlacementPolicy::for_poi(record) {
 			PlacementPolicy::InteriorFloor => Self::interior_at(record.position, hull),
+			// `PoiRecord.position.y` is generated from the presented support
+			// surface. Use it as the search hint so a padded ground below or
+			// above raw Durham remains the intended placement band; collider
+			// validation still decides whether support is ready.
 			PlacementPolicy::OutdoorGround => {
-				let arrival = record.arrival();
-				let hint = arrival.surface_y(surface_or_hold_at(surface, arrival.position.xz()));
-				Self::outdoor_hint(arrival.position.xz(), hint, hull)
+				Self::outdoor_hint(record.position.xz(), record.position.y, hull)
 			}
 			PlacementPolicy::Airborne => {
 				Self::airborne_at(record.position + Vec3::Y * hull.spawn_height(), hull)
@@ -174,7 +174,6 @@ mod tests {
 		SpawnSessionId,
 	};
 	use poi_intelligence::{Poi, PoiId, PoiKind};
-	use world_player::surface_or_hold_at;
 
 	fn identity() -> SpawnIdentity {
 		SpawnIdentity::new(SpawnRequestId::new(1), SpawnOwner::new(SpawnSessionId::new(1)))
@@ -253,49 +252,51 @@ mod tests {
 	}
 
 	#[test]
-	fn poi_resolution_keeps_floor_y_and_uses_terrain_hint_for_outdoor_support() -> anyhow::Result<()>
-	{
-		let mut world = surface_world();
+	fn poi_resolution_uses_authored_floor_and_generated_terrain_heights() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<PoiRegistry>();
 		world
-			.run_system_once(
-				|mut registry: ResMut<PoiRegistry>, surface: DurhamSurface| -> anyhow::Result<()> {
-					let kind = PoiKind::new("same/poi-kind");
-					registry.upsert(
-						Entity::from_bits(1),
-						Poi::new(PoiId(1), kind).with_floor_support(),
-						Vec3::new(8.0, 24.0, 6.0),
-						true,
-						false,
-					)?;
-					registry.upsert(
-						Entity::from_bits(2),
-						Poi::new(PoiId(2), kind),
-						Vec3::new(8.0, 24.0, 6.0),
-						true,
-						false,
-					)?;
-					let floor = PlacementSearch::resolve_poi(
-						PoiId(1),
-						&registry,
-						&surface,
-						LocomotionCapsule::HUMANOID,
-					)
-					.map_err(|reason| anyhow::anyhow!("floor placement failed: {reason:?}"))?;
-					let terrain = PlacementSearch::resolve_poi(
-						PoiId(2),
-						&registry,
-						&surface,
-						LocomotionCapsule::HUMANOID,
-					)
-					.map_err(|reason| anyhow::anyhow!("terrain placement failed: {reason:?}"))?;
-					assert_eq!(floor.policy, PlacementPolicy::InteriorFloor);
-					assert_eq!(floor.min_surface_y, 24.0 - INTERIOR_LOWER_MARGIN);
-					assert_eq!(terrain.policy, PlacementPolicy::OutdoorGround);
-					let hint = surface_or_hold_at(&surface, Vec2::new(8.0, 6.0));
-					assert_eq!(terrain.min_surface_y, hint - OUTDOOR_LOWER_MARGIN);
-					Ok(())
-				},
-			)
+			.run_system_once(|mut registry: ResMut<PoiRegistry>| -> anyhow::Result<()> {
+				let kind = PoiKind::new("same/poi-kind");
+				registry.upsert(
+					Entity::from_bits(1),
+					Poi::new(PoiId(1), kind).with_floor_support(),
+					Vec3::new(8.0, 24.0, 6.0),
+					true,
+					false,
+				)?;
+				registry.upsert(
+					Entity::from_bits(2),
+					Poi::new(PoiId(2), kind),
+					Vec3::new(8.0, 24.0, 6.0),
+					true,
+					false,
+				)?;
+				registry.upsert(
+					Entity::from_bits(3),
+					Poi::new(PoiId(3), kind),
+					Vec3::new(8.0, -24.0, 6.0),
+					true,
+					false,
+				)?;
+				let floor =
+					PlacementSearch::resolve_poi(PoiId(1), &registry, LocomotionCapsule::HUMANOID)
+						.map_err(|reason| anyhow::anyhow!("floor placement failed: {reason:?}"))?;
+				let terrain =
+					PlacementSearch::resolve_poi(PoiId(2), &registry, LocomotionCapsule::HUMANOID)
+						.map_err(|reason| {
+							anyhow::anyhow!("terrain placement failed: {reason:?}")
+						})?;
+				assert_eq!(floor.policy, PlacementPolicy::InteriorFloor);
+				assert_eq!(floor.min_surface_y, 24.0 - INTERIOR_LOWER_MARGIN);
+				assert_eq!(terrain.policy, PlacementPolicy::OutdoorGround);
+				assert_eq!(terrain.min_surface_y, 24.0 - OUTDOOR_LOWER_MARGIN);
+				let below =
+					PlacementSearch::resolve_poi(PoiId(3), &registry, LocomotionCapsule::HUMANOID)
+						.map_err(|reason| anyhow::anyhow!("{reason:?}"))?;
+				assert_eq!(below.min_surface_y, -24.0 - OUTDOOR_LOWER_MARGIN);
+				Ok(())
+			})
 			.map_err(|error| anyhow::anyhow!("{error:?}"))??;
 		Ok(())
 	}

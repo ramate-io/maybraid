@@ -348,7 +348,8 @@ mod tests {
 			Ok(None)
 		);
 
-		storage.publish(id, Arc::new(PaddedTerrain::new(surface)), surface.cell);
+		let cell = surface.cell;
+		storage.publish(id, Arc::new(PaddedTerrain::<Ground>::new(surface)), cell);
 		assert_eq!(
 			PaddedTerrain::<Ground>::published_height_at(&storage, center.x, center.z),
 			Ok(Some(expected))

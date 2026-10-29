@@ -5,7 +5,7 @@ use std::sync::Arc;
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{
-	bsn, template_value, Commands, CommandsSceneExt, Entity, Transform, Visibility,
+	bsn, template_value, Commands, CommandsSceneExt, Component, Entity, Transform, Visibility,
 };
 use bevy::scene::Scene;
 use building_components::{
@@ -51,73 +51,80 @@ pub enum DevelopmentHost {
 	SkybridgeHall(Arc<Skybridge>, Transform),
 }
 
+/// Floor authoring retained on a presented host for its streamed room labels.
+#[derive(Component, Clone, Default)]
+pub(crate) struct PlaceArrivalSource(pub Option<DevelopmentHost>);
+
 impl DevelopmentHost {
 	/// Always-on place pin for this host. Roofs and circulation are omitted.
 	pub fn discoverable_place(&self) -> Option<DiscoverablePlace> {
-		Some(match self {
-			Self::LesHallesStorey(_, _) => DiscoverablePlace::host(
-				DiscoverablePlaceLabel::Storey,
-				8.0,
-				DiscoverablePlaceLabel::Storey.default_salience(),
-			),
-			Self::ShepherdsHouse(building, _) => DiscoverablePlace::host(
-				DiscoverablePlaceLabel::House,
-				arrival_from_building(&**building),
-				DiscoverablePlaceLabel::House.default_salience(),
-			),
-			Self::ShepherdsHut(building, _) => DiscoverablePlace::host(
-				DiscoverablePlaceLabel::Hut,
-				arrival_from_building(&**building),
-				DiscoverablePlaceLabel::Hut.default_salience(),
-			),
-			Self::OldCityMarketTerrace(building, _) => DiscoverablePlace::host(
-				DiscoverablePlaceLabel::Market,
-				arrival_from_building(&**building),
-				DiscoverablePlaceLabel::Market.default_salience(),
-			),
-			Self::RingFortCircularTower(building, _) => DiscoverablePlace::host(
-				DiscoverablePlaceLabel::Tower,
-				arrival_from_building(&**building),
-				DiscoverablePlaceLabel::Tower.default_salience(),
-			),
-			Self::RingFortTrazaloidTower(building, _) => DiscoverablePlace::host(
-				DiscoverablePlaceLabel::Tower,
-				arrival_from_building(&**building),
-				DiscoverablePlaceLabel::Tower.default_salience(),
-			),
-			Self::RingFortGalleryTerrace(building, _) => DiscoverablePlace::host(
-				DiscoverablePlaceLabel::Storey,
-				arrival_from_building(building.as_ref()),
-				DiscoverablePlaceLabel::Storey.default_salience(),
-			),
-			Self::SingleHighrise(building, _) => DiscoverablePlace::host(
-				DiscoverablePlaceLabel::Highrise,
-				arrival_from_building(&**building),
-				DiscoverablePlaceLabel::Highrise.default_salience(),
-			),
-			Self::TempleSanctum(building, _) => DiscoverablePlace::host(
-				DiscoverablePlaceLabel::Sanctum,
-				arrival_from_building(&**building),
-				DiscoverablePlaceLabel::Sanctum.default_salience(),
-			),
-			Self::WizardsTower(building, _) => {
-				let bounds = building.scene_bounds();
-				DiscoverablePlace::host(
+		Some(
+			match self {
+				Self::LesHallesStorey(_, _) => DiscoverablePlace::host(
+					DiscoverablePlaceLabel::Storey,
+					8.0,
+					DiscoverablePlaceLabel::Storey.default_salience(),
+				),
+				Self::ShepherdsHouse(building, _) => DiscoverablePlace::host(
+					DiscoverablePlaceLabel::House,
+					arrival_from_building(&**building),
+					DiscoverablePlaceLabel::House.default_salience(),
+				),
+				Self::ShepherdsHut(building, _) => DiscoverablePlace::host(
+					DiscoverablePlaceLabel::Hut,
+					arrival_from_building(&**building),
+					DiscoverablePlaceLabel::Hut.default_salience(),
+				),
+				Self::OldCityMarketTerrace(building, _) => DiscoverablePlace::host(
+					DiscoverablePlaceLabel::Market,
+					arrival_from_building(&**building),
+					DiscoverablePlaceLabel::Market.default_salience(),
+				),
+				Self::RingFortCircularTower(building, _) => DiscoverablePlace::host(
 					DiscoverablePlaceLabel::Tower,
-					arrival_from_bounds(bounds),
+					arrival_from_building(&**building),
 					DiscoverablePlaceLabel::Tower.default_salience(),
-				)
+				),
+				Self::RingFortTrazaloidTower(building, _) => DiscoverablePlace::host(
+					DiscoverablePlaceLabel::Tower,
+					arrival_from_building(&**building),
+					DiscoverablePlaceLabel::Tower.default_salience(),
+				),
+				Self::RingFortGalleryTerrace(building, _) => DiscoverablePlace::host(
+					DiscoverablePlaceLabel::Storey,
+					arrival_from_building(building.as_ref()),
+					DiscoverablePlaceLabel::Storey.default_salience(),
+				),
+				Self::SingleHighrise(building, _) => DiscoverablePlace::host(
+					DiscoverablePlaceLabel::Highrise,
+					arrival_from_building(&**building),
+					DiscoverablePlaceLabel::Highrise.default_salience(),
+				),
+				Self::TempleSanctum(building, _) => DiscoverablePlace::host(
+					DiscoverablePlaceLabel::Sanctum,
+					arrival_from_building(&**building),
+					DiscoverablePlaceLabel::Sanctum.default_salience(),
+				),
+				Self::WizardsTower(building, _) => {
+					let bounds = building.scene_bounds();
+					DiscoverablePlace::host(
+						DiscoverablePlaceLabel::Tower,
+						arrival_from_bounds(bounds),
+						DiscoverablePlaceLabel::Tower.default_salience(),
+					)
+				}
+				Self::SkybridgeHall(building, _) => DiscoverablePlace::host(
+					DiscoverablePlaceLabel::Skybridge,
+					arrival_from_building(&**building),
+					DiscoverablePlaceLabel::Skybridge.default_salience(),
+				),
+				Self::LesHallesStairwell(_, _)
+				| Self::LesHallesRoof(_, _)
+				| Self::RingFortGalleryColonnade(_, _)
+				| Self::RingFortGalleryRoof(_, _) => return None,
 			}
-			Self::SkybridgeHall(building, _) => DiscoverablePlace::host(
-				DiscoverablePlaceLabel::Skybridge,
-				arrival_from_building(&**building),
-				DiscoverablePlaceLabel::Skybridge.default_salience(),
-			),
-			Self::LesHallesStairwell(_, _)
-			| Self::LesHallesRoof(_, _)
-			| Self::RingFortGalleryColonnade(_, _)
-			| Self::RingFortGalleryRoof(_, _) => return None,
-		})
+			.with_arrival_local(self.interior_stand_local(None)),
+		)
 	}
 
 	/// World transform of the development host (building-local furniture composes under this).
@@ -174,7 +181,15 @@ impl DevelopmentHost {
 				building
 					.floor_nodes_for_level(LodSceneLevel::High)
 					.flatten()
+					.into_iter()
 					.filter_map(|floor| floor.walk_on_point())
+					.chain(
+						building
+							.panel_nodes_for_level(LodSceneLevel::High)
+							.flatten()
+							.into_iter()
+							.filter_map(|panel| panel.horizontal_walk_point()),
+					)
 					.filter(|point| point.is_finite()),
 				near,
 			)
@@ -313,7 +328,8 @@ impl DevelopmentHost {
 		if let Some(id) = host_id {
 			place = place.with_identity(id, self.place_local_id());
 		}
-		Box::new((host, bsn! { template_value(place) }))
+		let source = PlaceArrivalSource(Some(self.clone()));
+		Box::new((host, bsn! { template_value(place) template_value(source) }))
 	}
 }
 
@@ -347,8 +363,8 @@ fn les_halles_gallery_stand(
 		return None;
 	}
 	let center = plan.center_xz;
-	let gap_x = ((plan.outer.x - plan.courtyard.x) * 0.25).max(0.5);
-	let gap_z = ((plan.outer.y - plan.courtyard.y) * 0.25).max(0.5);
+	let gap_x = ((plan.outer.x + plan.gallery_inner.x) * 0.25).max(0.5);
+	let gap_z = ((plan.outer.y + plan.gallery_inner.y) * 0.25).max(0.5);
 	let mut candidates = vec![
 		bevy::math::Vec3::new(center.x, y, center.z - gap_z),
 		bevy::math::Vec3::new(center.x, y, center.z + gap_z),
@@ -595,12 +611,35 @@ mod tests {
 		SuburbanHomes,
 	};
 
-	use super::{nearest_floor_point, DevelopmentHost, DevelopmentHosts};
+	use super::{les_halles_gallery_stand, nearest_floor_point, DevelopmentHost, DevelopmentHosts};
 	use crate::cell::DevelopmentExtent;
 	use crate::place::DiscoverablePlaceLabel;
 	use crate::BuiltDevelopment;
 
 	struct DryFlat;
+
+	#[test]
+	fn les_halles_gallery_arrivals_avoid_the_courtyard_and_shafts() -> anyhow::Result<()> {
+		use buildings::storeys::les_halles::{LesHallesFloorPlan, LesHallesParameterized};
+		let bounds =
+			Aabb3d::from_min_max(Vec3::new(-30.0, 12.0, -30.0), Vec3::new(30.0, 18.0, 30.0));
+		let confines = Confines::from_bounds(bounds);
+		let parameters = LesHallesParameterized::sample(&confines, NoiseParams::default())?;
+		let (mut plan, _) = LesHallesFloorPlan::from_parameterized(parameters, &confines)?;
+		let first = les_halles_gallery_stand(&plan, None)
+			.ok_or_else(|| anyhow::anyhow!("gallery should author a floor arrival"))?;
+		assert_eq!(first.y, 12.0);
+		assert!(plan.gallery.floor_covers_xz(first.x, first.z));
+		assert!(first.x.abs() > plan.courtyard.x * 0.5 || first.z.abs() > plan.courtyard.y * 0.5);
+		plan.shaft_bounds
+			.push(Aabb3d::from_min_max(first - Vec3::splat(1.0), first + Vec3::splat(1.0)));
+		let second = les_halles_gallery_stand(&plan, Some(first))
+			.ok_or_else(|| anyhow::anyhow!("another gallery band should remain"))?;
+		assert_ne!(first, second);
+		assert!(plan.gallery.floor_covers_xz(second.x, second.z));
+		assert!(les_halles_gallery_stand(&plan, Some(Vec3::ZERO)).is_none());
+		Ok(())
+	}
 
 	#[test]
 	fn room_stand_selection_uses_the_label_storey_before_xz_distance() {

@@ -46,6 +46,7 @@ impl Plugin for WorldLayersPlugin {
 		app.add_plugins((GenerationModePlugin::<Discovery>::initial(), DurhamWorldPlugin {
 			seed: WORLD_SEED,
 		}))
+		.insert_resource(crate::poi::PaddedTerrainPoiGround)
 		.insert_resource(richmond.development_config())
 		.insert_resource(richmond.urbanization_selection())
 		.init_resource::<AuthoredDevelopments>()
