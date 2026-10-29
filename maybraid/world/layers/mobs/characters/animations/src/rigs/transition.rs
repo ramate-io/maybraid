@@ -37,6 +37,33 @@ where
 	}
 }
 
+impl<A> Transition<A>
+where
+	A: Animation<character_rigs::rigs::quadruped_v0::QuadrupedV0Rig>,
+{
+	/// Blend a captured visible quadruped pose into the target sample.
+	pub fn apply_quadruped(
+		&self,
+		rig: &mut character_rigs::rigs::quadruped_v0::QuadrupedV0Rig,
+		animation_progress: f32,
+		transition_progress: f32,
+	) -> Effects {
+		let weight = self.weight(transition_progress);
+		if weight <= 0.0 {
+			rig.pose.copy_from(&self.from_pose);
+			return self.from_offset;
+		}
+		self.animation.apply_for(rig, animation_progress);
+		let effects = self.animation.effects_for(rig, animation_progress);
+		if weight >= 1.0 {
+			return effects;
+		}
+		rig.scratch.b.copy_from(&rig.pose);
+		PoseBuffer::blend_into(&self.from_pose, &rig.scratch.b, weight, &mut rig.pose);
+		mix_effects(self.from_offset, effects, weight)
+	}
+}
+
 /// Samples an animation into an owned buffer. Prefer [`capture_into`] on a reused slot.
 pub fn capture_animation_pose<A>(anim: &A, rig: &mut HumanoidV0Rig, progress: f32) -> PoseBuffer
 where

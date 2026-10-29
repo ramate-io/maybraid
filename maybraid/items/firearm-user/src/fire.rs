@@ -1,10 +1,10 @@
-//! Copy the live squeeze onto the held gun's [`WeaponTrigger`], and kick look / camera.
+//! Realize addressed [`EquippedItemUse`] on the held gun, and hand recoil to the camera.
 
 use bevy::prelude::*;
 use firearms::{WeaponFired, WeaponTrigger};
-use maybraid_input::{PadButton, VirtualPad, VirtualPadConfig};
-use player::{clamp_aim_pitch, CameraFollow, Player, PlayerLook};
-use player_camera::CameraController;
+use maybraid_controllers_core::{ActorRoutingEvent, RoutingKind};
+use maybraid_equipment::EquippedItemUse;
+use player_camera::{CameraRecoilHandoff, CameraTarget, FollowCamera};
 
 use crate::weapon::RecoilPattern;
 use crate::{FirearmUser, WeaponSwap};
@@ -13,35 +13,47 @@ use crate::{FirearmUser, WeaponSwap};
 /// the remaining path over a fresh window.
 pub(crate) const RECOIL_LERP_SECS: f32 = 0.08;
 
-pub(crate) fn trigger_squeezed(
-	pad: Option<&VirtualPad>,
-	config: Option<&VirtualPadConfig>,
-	mouse: &ButtonInput<MouseButton>,
-) -> bool {
-	if let Some(pad) = pad {
-		if pad.pressed(PadButton::TriggerFire) {
-			return true;
-		}
-		let threshold = config.map(|config| config.trigger_press_threshold).unwrap_or(0.5);
-		if pad.trigger_fire >= threshold {
-			return true;
-		}
-	}
-	mouse.pressed(MouseButton::Left)
-}
-
-pub(crate) fn apply_fire_intents(
-	mouse: Res<ButtonInput<MouseButton>>,
-	pad: Option<Res<VirtualPad>>,
-	config: Option<Res<VirtualPadConfig>>,
-	users: Query<(&FirearmUser, Has<WeaponSwap>), With<Player>>,
+pub fn apply_fire_intents(
+	use_item: On<EquippedItemUse>,
+	users: Query<(&FirearmUser, Has<WeaponSwap>)>,
 	mut triggers: Query<&mut WeaponTrigger>,
 ) {
-	let fire = trigger_squeezed(pad.as_deref(), config.as_deref(), &mouse);
-	for (user, swapping) in &users {
-		if let Ok(mut trigger) = triggers.get_mut(user.held) {
-			trigger.0 = fire && !swapping;
-		}
+	if !use_item.handler().is_firearm() {
+		return;
+	}
+	let Ok((user, swapping)) = users.get(use_item.entity) else {
+		return;
+	};
+	if let Ok(mut trigger) = triggers.get_mut(user.held) {
+		trigger.0 = use_item.held() && !swapping;
+	}
+}
+
+/// Clear an actor's held trigger when delivery is blocked or ownership ends.
+/// Suspension keeps the pad's held state for resume, while the trigger stays
+/// neutral during the frozen interval.
+pub fn apply_fire_routing(
+	event: On<ActorRoutingEvent>,
+	users: Query<&FirearmUser>,
+	mut triggers: Query<&mut WeaponTrigger>,
+) {
+	if !event.event.applies_to(event.entity) {
+		return;
+	}
+	match event.event.kind() {
+		RoutingKind::Suspended
+		| RoutingKind::Disconnected
+		| RoutingKind::Removed
+		| RoutingKind::Reassigned
+		| RoutingKind::SourceChanged
+		| RoutingKind::Captured => {}
+		_ => return,
+	}
+	let Ok(user) = users.get(event.entity) else {
+		return;
+	};
+	if let Ok(mut trigger) = triggers.get_mut(user.held) {
+		trigger.0 = false;
 	}
 }
 
@@ -71,9 +83,8 @@ pub(crate) fn advance_weapon_recoil(
 	time: Res<Time>,
 	users: Query<(Entity, &FirearmUser)>,
 	mut patterns: Query<&mut RecoilPattern>,
-	followed: Query<(), With<CameraFollow>>,
-	mut cameras: Query<&mut CameraController, With<Camera3d>>,
-	mut looks: Query<&mut PlayerLook>,
+	followed: Query<&CameraTarget, With<FollowCamera>>,
+	mut handoffs: MessageWriter<CameraRecoilHandoff>,
 ) {
 	let dt = time.delta_secs();
 	for (shooter, user) in &users {
@@ -86,26 +97,11 @@ pub(crate) fn advance_weapon_recoil(
 		if step.length_squared() < 1e-12 {
 			continue;
 		}
-		apply_recoil_step(shooter, step, &followed, &mut cameras, &mut looks);
-	}
-}
-
-fn apply_recoil_step(
-	shooter: Entity,
-	step: Vec2,
-	followed: &Query<(), With<CameraFollow>>,
-	cameras: &mut Query<&mut CameraController, With<Camera3d>>,
-	looks: &mut Query<&mut PlayerLook>,
-) {
-	if followed.contains(shooter) {
-		if let Ok(mut camera) = cameras.single_mut() {
-			camera.yaw += step.x;
-			camera.pitch = clamp_aim_pitch(camera.pitch + step.y);
-		}
-	}
-	if let Ok(mut look) = looks.get_mut(shooter) {
-		look.yaw += step.x;
-		look.pitch = clamp_aim_pitch(look.pitch + step.y);
+		handoffs.write(CameraRecoilHandoff::new(
+			shooter,
+			step,
+			followed.iter().any(|target| target.0 == Some(shooter)),
+		));
 	}
 }
 
@@ -152,43 +148,95 @@ fn mix(seed: u64, value: u64) -> u64 {
 mod tests {
 	use super::*;
 	use bevy::time::TimeUpdateStrategy;
-	use player_camera::CameraPov;
+	use maybraid_controllers_core::{
+		ActorTarget, CaptureKind, InputRouter, InputSource, RoutingKind, ScopeOwner, UiTarget,
+	};
+	use maybraid_equipment::{EquippedItemHandler, EquippedItemUse};
+	use player::{CameraFollow, PlayerLook};
+	use player_camera::{CameraController, CameraPov};
 
 	const STRENGTH: f32 = 0.08;
 
 	#[test]
-	fn rest_analog_is_not_a_squeeze() {
-		let mut pad = VirtualPad::default();
-		pad.trigger_fire = 0.02;
-		let mouse = ButtonInput::<MouseButton>::default();
-		assert!(!trigger_squeezed(Some(&pad), None, &mouse));
-	}
-
-	#[test]
-	fn digital_trigger_or_mouse_is_a_squeeze() {
-		let mut pad = VirtualPad::default();
-		pad.hold_digital(PadButton::TriggerFire);
-		pad.finish_digital();
-		let mouse = ButtonInput::<MouseButton>::default();
-		assert!(trigger_squeezed(Some(&pad), None, &mouse));
-
-		let pad = VirtualPad::default();
-		let mut mouse = ButtonInput::<MouseButton>::default();
-		mouse.press(MouseButton::Left);
-		assert!(trigger_squeezed(Some(&pad), None, &mouse));
-	}
-
-	#[test]
-	fn releasing_the_squeeze_clears_the_weapon_trigger() {
+	fn item_use_and_release_touch_only_the_addressed_trigger() -> anyhow::Result<()> {
 		let mut app = App::new();
-		app.add_plugins(MinimalPlugins)
-			.init_resource::<ButtonInput<MouseButton>>()
-			.init_resource::<VirtualPad>()
-			.add_systems(Update, apply_fire_intents);
+		app.add_observer(apply_fire_intents);
+		let first_gun = app.world_mut().spawn(WeaponTrigger(false)).id();
+		let second_gun = app.world_mut().spawn(WeaponTrigger(true)).id();
+		let first = app.world_mut().spawn(FirearmUser::holding(first_gun)).id();
+		let second = app.world_mut().spawn(FirearmUser::holding(second_gun)).id();
+		app.world_mut().trigger(EquippedItemUse::new(
+			ActorTarget::new(first),
+			EquippedItemHandler::Firearm,
+			1.0,
+			true,
+		));
+		assert_eq!(
+			app.world().get::<WeaponTrigger>(first_gun).map(|trigger| trigger.0),
+			Some(true)
+		);
+		assert_eq!(
+			app.world().get::<WeaponTrigger>(second_gun).map(|trigger| trigger.0),
+			Some(true)
+		);
+		app.world_mut().trigger(EquippedItemUse::new(
+			ActorTarget::new(first),
+			EquippedItemHandler::Firearm,
+			0.0,
+			false,
+		));
+		assert_eq!(
+			app.world().get::<WeaponTrigger>(first_gun).map(|trigger| trigger.0),
+			Some(false)
+		);
+		assert_eq!(
+			app.world().get::<WeaponTrigger>(second_gun).map(|trigger| trigger.0),
+			Some(true)
+		);
+		app.world_mut().trigger(EquippedItemUse::new(
+			ActorTarget::new(second),
+			EquippedItemHandler::Grenade,
+			1.0,
+			true,
+		));
+		assert_eq!(
+			app.world().get::<WeaponTrigger>(second_gun).map(|trigger| trigger.0),
+			Some(true)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn captured_actor_clears_held_trigger() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_observer(apply_fire_routing);
 		let gun = app.world_mut().spawn(WeaponTrigger(true)).id();
-		app.world_mut().spawn((Player, FirearmUser::holding(gun)));
-		app.update();
+		let shooter = app.world_mut().spawn(FirearmUser::holding(gun)).id();
+		let mut router = InputRouter::default();
+		router.assign_actor(InputSource::local_pad(), ActorTarget::new(shooter));
+		router.acquire_capture(
+			InputSource::local_pad(),
+			ScopeOwner::ui(UiTarget::new(Entity::from_bits(3))),
+			CaptureKind::Overlay,
+		);
+		let event = router
+			.take_events()
+			.into_iter()
+			.find(|event| event.kind() == RoutingKind::Captured)
+			.ok_or_else(|| anyhow::anyhow!("captured routing event"))?;
+		app.world_mut().trigger(ActorRoutingEvent {
+			entity: shooter,
+			event,
+			status: maybraid_controllers_core::ActorRouteStatus {
+				source: InputSource::local_pad(),
+				connected: true,
+				captured: true,
+				suspended: false,
+				assigned: true,
+			},
+		});
 		assert_eq!(app.world().get::<WeaponTrigger>(gun).map(|trigger| trigger.0), Some(false));
+		Ok(())
 	}
 
 	#[test]
@@ -256,18 +304,25 @@ mod tests {
 				std::time::Duration::from_secs_f32(dt),
 			))
 			.add_message::<WeaponFired>()
-			.add_systems(Update, (queue_weapon_recoil, advance_weapon_recoil).chain());
-		let camera = app
-			.world_mut()
-			.spawn((
-				Camera3d::default(),
-				CameraController { pov: CameraPov::ThirdPerson, ..default() },
-			))
-			.id();
+			.add_message::<CameraRecoilHandoff>()
+			.add_systems(
+				Update,
+				(queue_weapon_recoil, advance_weapon_recoil, player_camera::apply_recoil_handoff)
+					.chain(),
+			);
 		let gun = app.world_mut().spawn(RecoilPattern::from_seed(seed)).id();
 		let shooter = app
 			.world_mut()
 			.spawn((CameraFollow, FirearmUser::holding(gun), PlayerLook::default()))
+			.id();
+		let camera = app
+			.world_mut()
+			.spawn((
+				Camera3d::default(),
+				FollowCamera::default(),
+				CameraTarget(Some(shooter)),
+				CameraController { pov: CameraPov::ThirdPerson, ..default() },
+			))
 			.id();
 		app.update();
 		(app, shooter, camera)

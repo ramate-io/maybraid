@@ -10,6 +10,7 @@
 //! flattened 50 m cell hosts in a neighborhood around the camera.
 
 mod agent;
+mod agent_inventory;
 mod camera;
 pub mod commands;
 pub mod control;
@@ -21,6 +22,7 @@ mod inventory_cycling;
 mod inventory_drop;
 mod item_icons;
 mod map_view;
+mod occupancy;
 pub mod world_lubikan;
 
 #[cfg(feature = "debug-commands")]
@@ -33,6 +35,7 @@ mod player_position;
 mod poi;
 pub mod render_scale;
 mod screenshot;
+mod spawn_picker;
 mod spawn_surface;
 mod start;
 mod stash;
@@ -44,7 +47,8 @@ mod world_layers;
 
 pub use world_furnished::WorldFurnished;
 
-pub use agent::AgentDrive;
+pub use agent::{AgentDrive, AgentMenuState};
+pub use agent_inventory::AgentInventoryState;
 pub use character_items::{
 	ActiveInventoryDropPolicy, InventoryDrop, InventoryDropError, InventoryDropPolicy,
 	InventoryDropRefused, InventoryDropRequest, InventoryDropped, InventoryMenuDropped,
@@ -56,8 +60,8 @@ pub use commands::{
 };
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
-	InventoryEditCameraFollow, WorldGameplayEnabled, WorldMenuShell, WorldPlaySessionEnded,
-	WorldSceneryVisible, WorldSurfaceReady, WorldSurfaceSet,
+	InventoryEditCameraFollow, WorldMenuShell, WorldSceneryVisible, WorldSurfaceReady,
+	WorldSurfaceSet,
 };
 pub use cycle_target::InventoryCycleTarget;
 pub use durham::Durham;
@@ -66,19 +70,9 @@ pub use first_wave::UnitXTile;
 pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
-pub use inventory_cycling::ActiveInventoryCyclingCategory;
-pub use item_icons::{
-	discover_icon_cache_dir, item_icon_requests, InventoryItemSubject, ItemIconCache,
-	ItemIconPlugin, ITEM_ICON_RESOLUTION,
-};
-pub use lod::hcsg::{HcsgClass, HcsgDemand, Outstanding};
-pub use lod::LodJobCounter;
+pub use item_icons::ItemIconPlugin;
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
-pub use maybraid_sky::{
-	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
-	SUN_COLOR, SUN_ILLUMINANCE,
-};
-pub use player_camera::{CameraPov, CameraPovLocked};
+pub use occupancy::{WorldOccupancyPlugin, WorldOccupancySystems};
 pub use player_lifecycle::{
 	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
 };
@@ -99,6 +93,7 @@ pub use render_scale::{
 	VisualStyleSignals, DEVICE_TIER_ENV, FORCE_OFFSCREEN_ENV, PRESENTATION_TREATMENT_ENV,
 	RENDER_SCALE_ENV, UNIFIED_MEMORY_NATIVE_BYTES, VISUAL_STYLE_ENV,
 };
+pub use spawn_picker::{SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet};
 pub use start::{
 	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
 	START_AT_ENV,
@@ -122,19 +117,20 @@ use characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use combat_hud::CombatHudPlugin;
 use durham::TerrainFrictionConfig;
 use firearms::EnergyMaterialPlugin;
+use fisticuffs_user::FisticuffsSensorDebug;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
-use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
+use maybraid_controllers_core::CaptureResolveSystems;
 use maybraid_game_mode_discover::DiscoveryPlayerPlugin;
-use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
-use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
+use maybraid_locomotion_controller::LocomotionControllerPlugin;
+use maybraid_skill_map::SkillMapSystems;
 use maybraid_sky::SkyDomePlugin;
 use maybraid_vfx::VfxPlugin;
+use maybraid_virtual_pad_controller::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_weather::WeatherPlugin;
-use maybraid_world_controller::WorldControllerPlugin;
 use player::{
-	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
+	register_motor_traction_physics, MotorRequestStage, PlayerPlugin, PlayerPresentationPlugin,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
 use world_player::{
@@ -169,6 +165,10 @@ const WORLD_COMBAT_HUD: CombatHudPlugin = CombatHudPlugin {
 const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbes(false);
 
 /// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
+///
+/// Session, equipment, and item-runtime assembly live on `GameplayPlugin`
+/// (`register_gameplay_runtime`). Game and the world playground add that
+/// plugin beside this one. Intelligence does not register item runtimes.
 ///
 /// Playground chrome (command drawer and FPS HUD) is on by default.
 /// The game executable uses [`WorldPlugin::game`] (FPS log, no HUD or console).
@@ -216,9 +216,8 @@ impl Plugin for WorldPlugin {
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,
 				..default()
-			}))
-			.add_plugins(CharacterControllerPlugin)
-			.add_plugins(WorldControllerPlugin)
+			}));
+		app.add_plugins(LocomotionControllerPlugin)
 			.add_plugins(PlayerPresentationPlugin)
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(WORLD_COMBAT_HUD)
@@ -231,10 +230,10 @@ impl Plugin for WorldPlugin {
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(crate::spawn_surface::SpawnSurfacePlugin)
 			.add_plugins(WeatherPlugin)
-			.add_plugins(SkillMapPlugin)
 			.add_plugins(world_lubikan::WorldLubikanPlugin)
 			.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
 			.add_plugins(WorldPoiPlugin)
+			.add_plugins(WorldOccupancyPlugin)
 			.add_plugins(WorldMapViewPlugin)
 			.add_plugins(WorldPlayerLifecyclePlugin)
 			.add_plugins(WorldStashPlugin)
@@ -243,13 +242,14 @@ impl Plugin for WorldPlugin {
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(VegetationPlayerMotor(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
-			.add_message::<control::WorldPlaySessionEnded>()
 			.init_resource::<InventoryEditCameraFollow>()
 			.init_resource::<WorldSurfaceReady>()
 			.init_resource::<crate::WorldMenuShell>()
 			.init_resource::<crate::FirstWave>()
 			.init_resource::<WorldSceneryVisible>()
+			.init_resource::<control::ConsoleCapture>()
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
+			.insert_resource(FisticuffsSensorDebug::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
 				exclude_extent: WORLD_LATTICE_EXCLUDE_M,
@@ -272,6 +272,7 @@ impl Plugin for WorldPlugin {
 		} else {
 			app.init_resource::<TextEntryFocus>();
 		}
+		MotorRequestStage::configure(app);
 		app.add_systems(Startup, vsync::apply_startup_vsync).add_systems(
 			Update,
 			(
@@ -294,17 +295,14 @@ impl Plugin for WorldPlugin {
 					control::update_world_surface_ready.in_set(control::WorldSurfaceSet),
 					control::sync_world_scenery,
 					control::sync_combat_hud_visible,
+					control::sync_console_capture.in_set(CaptureResolveSystems),
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
-					control::apply_intents_to_movement
-						.after(CharacterControlSystems)
-						.after(map_view::WorldMapSet::Toggle)
-						.after(PlayerSystems::Intent)
-						.before(PlayerSystems::Body)
-						.before(PlayerControlSystems),
+					control::apply_world_motor_filter
+						.in_set(MotorRequestStage::WorldFilter)
+						.after(map_view::WorldMapSet::Toggle),
 				),
 			);
 		camera::configure(app);
-		inventory_cycling::configure(app);
 		inventory_drop::configure(app);
 		cycle_target::configure(app);
 		weapon::configure(app);
@@ -344,15 +342,12 @@ impl Plugin for WorldPlugin {
 		#[cfg(feature = "debug-commands")]
 		app.add_plugins(world_debug::WorldDebugPlugin);
 		if self.debug_chrome {
-			app.add_systems(Startup, ui::spawn_mob_debug_hud).add_systems(
-				Update,
-				(
-					control::echo_character_intents
-						.after(CharacterControlSystems)
-						.before(game_commands::ui::update_debug_ui),
+			app.add_observer(control::echo_character_intents)
+				.add_systems(Startup, ui::spawn_mob_debug_hud)
+				.add_systems(
+					Update,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-				),
-			);
+				);
 		}
 	}
 }
@@ -364,6 +359,7 @@ fn spawn_default_braidman(mut commands: Commands) {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use player::PlayerSystems;
 
 	#[test]
 	fn world_slope_is_below_wall_grade() {
@@ -408,6 +404,18 @@ mod tests {
 	fn game_world_starts_with_mob_hud_off() {
 		assert!(!WorldMobHudEnabled::from_debug_chrome(WorldPlugin::game().debug_chrome).0);
 		assert!(WorldMobHudEnabled::from_debug_chrome(WorldPlugin::default().debug_chrome).0);
+		assert!(
+			!fisticuffs_user::FisticuffsSensorDebug::from_debug_chrome(
+				WorldPlugin::game().debug_chrome
+			)
+			.0
+		);
+		assert!(
+			fisticuffs_user::FisticuffsSensorDebug::from_debug_chrome(
+				WorldPlugin::default().debug_chrome
+			)
+			.0
+		);
 	}
 
 	#[test]
