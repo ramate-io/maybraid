@@ -5,11 +5,11 @@ use bevy::prelude::*;
 use character_motion::{AnimClip, AnimRef, AnimRefRoot};
 use maybraid_spatial_rumble::{SpatialRumblePlugin, SpatialRumbleSource};
 
-use crate::{
-	BikanwardaAttackParams, BikanwardaPresentationConsumersPlugin, PendingEyeGlow, SpatialRumbleCue,
-	BRAY, GOD_BEAM,
-};
 use crate::runtime_tests::{attack_app_with_extra_plugins, cast, spawn_owner, spawn_target, step};
+use crate::{
+	BRAY, BikanwardaAttackParams, BikanwardaPresentationConsumersPlugin, GOD_BEAM, PendingEyeGlow,
+	SpatialRumbleCue,
+};
 
 fn consumer_app() -> App {
 	attack_app_with_extra_plugins(|app| {
@@ -22,7 +22,7 @@ fn consumer_app() -> App {
 fn spatial_rumble_cue_presets_map_to_spatial_rumble() {
 	let params = BikanwardaAttackParams::PLACEHOLDER;
 	let instance = attacks::AttackInstanceId(1);
-	let owner = Entity::from_raw_u32(9).unwrap();
+	let owner = Entity::from_bits(9);
 	let wave = SpatialRumbleCue::bray_wave(instance, owner, Vec3::ZERO, &params.bray);
 	let wave_rumble = wave.to_spatial_rumble();
 	let land = SpatialRumbleCue::heavy_landing(instance, owner, Vec3::ZERO);
@@ -51,7 +51,9 @@ fn spatial_rumble_consumer_ingests_bray_wave() -> anyhow::Result<()> {
 fn bray_animation_consumer_plays_epiphant_bray_clip() -> anyhow::Result<()> {
 	let mut app = consumer_app();
 	let owner = spawn_owner(&mut app, Vec3::ZERO);
-	app.world_mut().entity_mut(owner).insert(AnimRefRoot(AnimRef::new(AnimClip::still())));
+	app.world_mut()
+		.entity_mut(owner)
+		.insert(AnimRefRoot(AnimRef::new(AnimClip::still())));
 	let target = spawn_target(&mut app, Vec3::new(0.0, 1.0, -3.0), 200.0);
 	cast(&mut app, owner, BRAY, target, Vec3::new(0.0, 1.0, -3.0));
 	step(&mut app, 0.05);

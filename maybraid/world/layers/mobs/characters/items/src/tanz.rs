@@ -16,10 +16,16 @@ pub enum TanzId {
 	ForwardDash,
 }
 
+/// Canonical new-character Tanzes, highest matching priority first.
+///
+/// Keep this the single content list for generation, `TanzStack::starter`
+/// fixtures, and starter-outfit selection.
+pub const BASE_STARTER_TANZES: [TanzId; 4] =
+	[TanzId::HealingSalute, TanzId::LeftStrafe, TanzId::RightStrafe, TanzId::ForwardDash];
+
 impl TanzId {
 	/// Canonical starter kinds, highest matching priority first.
-	pub const STARTER: [Self; 4] =
-		[Self::HealingSalute, Self::LeftStrafe, Self::RightStrafe, Self::ForwardDash];
+	pub const STARTER: [Self; 4] = BASE_STARTER_TANZES;
 
 	pub const fn script_id(self) -> &'static str {
 		match self {

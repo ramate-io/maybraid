@@ -3,10 +3,10 @@
 //! `From<ConceptAnimation>` stays here so motion does not depend on recipes.
 
 pub use character_motion::{
-	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimClipCues,
-	AnimCueKind, AnimCueSheet, AnimId, AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, JabParams,
-	JumpParams, PowerStrafeParams, ThinkAgainParams, TuckParams, TuckedFlipParams,
-	TwoFootedTuckedFlipParams, cue_sheet,
+	apply_anim_mailbox, cue_sheet, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip,
+	AnimClipCues, AnimCueKind, AnimCueSheet, AnimId, AnimMailbox, AnimProgress, AnimRef,
+	AnimRefRoot, JabParams, JumpParams, PowerStrafeParams, ThinkAgainParams, TuckParams,
+	TuckedFlipParams, TwoFootedTuckedFlipParams, JAB_CYCLE_SPEED, JAB_DURATION_SECS,
 };
 
 use crate::concepts::ConceptAnimation;

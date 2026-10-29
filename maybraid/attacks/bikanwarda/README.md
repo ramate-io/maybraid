@@ -67,3 +67,13 @@ Headless capture (Bevy `Screenshot` readback; X11 `scrot` of lavapipe stays blac
 cargo build -p bikanwarda-attacks-playground
 xvfb-run -a -s "-screen 0 1280x720x24" maybraid/attacks/bikanwarda/preview/capture.sh
 ```
+
+### Reconciled provider availability
+
+The landed Bray clip, mouth sampling, fiery explosion and spatial rumble providers
+are connected. `vfx-driven` and `eye-glow` remain compatibility feature names:
+current main has neither the driven God Beam / sonic provider nor
+`characters::EyeGlowControl`. Enabling those features therefore retains the
+labeled placeholder beam/rings and `PendingEyeGlow` tracking. It does not disable
+the placeholder or reference an unavailable provider. Final assets and the Bray
+Recover/restore policy remain open.

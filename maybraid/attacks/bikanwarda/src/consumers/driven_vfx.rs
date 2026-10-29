@@ -30,21 +30,16 @@ struct DrivenBindings {
 }
 
 pub fn plugin(app: &mut App, placeholder: bool) {
-	if placeholder && !cfg!(feature = "vfx-driven") {
+	if placeholder {
 		app.init_resource::<PlaceholderDrivenAssets>()
 			.init_resource::<DrivenBindings>()
 			.add_systems(Startup, seed_placeholder_driven_assets)
 			.add_systems(
 				Update,
-				(
-					consume_god_beam_placeholder,
-					consume_sonic_wave_placeholder,
-				)
+				(consume_god_beam_placeholder, consume_sonic_wave_placeholder)
 					.in_set(BikanwardaPresentationSystems::Consume),
 			);
 	}
-	#[cfg(feature = "vfx-driven")]
-	vfx_driven::plugin(app);
 }
 
 fn seed_placeholder_driven_assets(
@@ -85,10 +80,9 @@ fn consume_god_beam_placeholder(
 			PresentationPhase::Spawned | PresentationPhase::Updated => {
 				let height = cue.gameplay_height.max(0.1);
 				let scale = Vec3::new(cue.diameter.max(0.1), height, cue.diameter.max(0.1));
-				let transform = Transform::from_translation(
-					cue.ground + Vec3::new(0.0, height * 0.5, 0.0),
-				)
-					.with_scale(scale);
+				let transform =
+					Transform::from_translation(cue.ground + Vec3::new(0.0, height * 0.5, 0.0))
+						.with_scale(scale);
 				if let Some(entity) = bindings.beam.get(&cue.instance) {
 					if let Ok(mut tf) = transforms.get_mut(*entity) {
 						*tf = transform;
@@ -133,13 +127,20 @@ fn consume_sonic_wave_placeholder(
 	};
 	for cue in cues.read() {
 		match (&cue.kind, cue.phase) {
-			(SonicWaveVfxKind::Follow(wave), PresentationPhase::Spawned | PresentationPhase::Updated) => {
+			(
+				SonicWaveVfxKind::Follow(wave),
+				PresentationPhase::Spawned | PresentationPhase::Updated,
+			) => {
 				let key = (cue.instance, wave.wave_index);
 				let heading = wave.direction.normalize_or(Vec3::Z);
 				let rotation = Quat::from_rotation_arc(Vec3::Z, heading);
 				let transform = Transform::from_translation(wave.position)
 					.with_rotation(rotation)
-					.with_scale(Vec3::new(wave.radius.max(0.05) * 2.0, wave.thickness.max(0.05), wave.radius.max(0.05) * 2.0));
+					.with_scale(Vec3::new(
+						wave.radius.max(0.05) * 2.0,
+						wave.thickness.max(0.05),
+						wave.radius.max(0.05) * 2.0,
+					));
 				if let Some(entity) = bindings.rings.get(&key) {
 					if let Ok(mut tf) = transforms.get_mut(*entity) {
 						*tf = transform;
@@ -178,37 +179,5 @@ fn consume_sonic_wave_placeholder(
 			}
 			_ => {}
 		}
-	}
-}
-
-#[cfg(feature = "vfx-driven")]
-mod vfx_driven {
-	use super::*;
-	use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
-
-	pub fn plugin(app: &mut App) {
-		app.add_systems(
-			Update,
-			(consume_god_beam_vfx, consume_sonic_wave_vfx)
-				.in_set(BikanwardaPresentationSystems::Consume),
-		);
-	}
-
-	fn consume_god_beam_vfx(
-		mut cues: MessageReader<GodBeamVfxCue>,
-		library: Option<Res<VfxLibrary>>,
-		mut commands: Commands,
-	) {
-		let _ = (cues, library, commands);
-		// Seam: enable when `library.god_beam` lands in [#1150](https://github.com/ramate-io/maybraid/pull/1150).
-	}
-
-	fn consume_sonic_wave_vfx(
-		mut cues: MessageReader<SonicWaveVfxCue>,
-		library: Option<Res<VfxLibrary>>,
-		mut commands: Commands,
-	) {
-		let _ = (cues, library, commands);
-		// Seam: enable when `library.sonic_wave` lands in [#1150](https://github.com/ramate-io/maybraid/pull/1150).
 	}
 }
