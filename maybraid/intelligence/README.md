@@ -4,7 +4,7 @@ Higher-order brains write objectives; lower-order crates field them.
 
 ## Movement
 
-- [`movement-intelligence`](movement/lib) — [`MovementIntelligence`](movement/lib/src/user.rs) on a capsule. It fields [`MovementObjective`](movement/lib/src/objective.rs) and writes [`MoveWish`](../player/src/body.rs). It does not lock onto other entities.
+- [`movement-intelligence`](movement/lib) — [`MovementIntelligence`](movement/lib/src/user.rs) on a capsule. It fields [`MovementObjective`](movement/lib/src/objective.rs) and writes [`MoveWish`](../player/lib/src/body.rs). It does not lock onto other entities.
 - [`movement-intelligence-avian`](movement/avian) — collider-backed surface over Avian `Fixed` geometry.
 - [`movement-intelligence-richmond`](movement/richmond) — composes the Avian surface with Les Halles storey / stairwell IR.
 
@@ -82,4 +82,3 @@ rate, retention, candidate budget, and memory capacity remain independent contro
 
 - [`routing-intelligence`](routing) — hierarchical long-range corridors. Band segment lengths are per-user policy. Coarse chords are probed for buildings and cliffs; finer bands search along the committed corridor. The current fine hop is written as `Reach` for movement intelligence.
 - [`tether-intelligence`](tether) — stay inside a leash or within a two-radius stalking annulus around a live entity. The user is the installed brain (`enabled` is the higher-order grant); [`TetherMemory`](tether/src/memory.rs) survives uninstall. Close remaining work writes `Reach` / `EdgeOf`; far remaining work routes to the nearest allowed boundary.
-- [`routing-playground`](routing-playground) — Durham patch (models-playground survey camera, vegetation lighting, no groves). One NPC tethers or stalks the player; gizmos show coarse → fine corridors. `cargo run -p routing-playground --release`.

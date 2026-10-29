@@ -28,11 +28,11 @@ pub use tower_lod::{HIGH_FOOTPRINT_MULTIPLIER, LOW_RES_CUTOFF_METERS};
 use bevy::prelude::{Component, Transform};
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::{
-	cull_offset_bands, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk,
-};
 use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
+use lod::scene::{
+	cull_offset_bands, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk,
+};
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 
@@ -75,6 +75,8 @@ pub struct WizardsTower {
 	pub wall_material: Option<MaterialRef>,
 	/// Finish stamped onto high-detail room partitions.
 	pub room_material: Option<MaterialRef>,
+	/// World (or parent) pose used to map a world-space viewer into the local AABB.
+	pub host_transform: Transform,
 }
 
 impl WizardsTower {
@@ -103,6 +105,7 @@ impl WizardsTower {
 			column,
 			wall_material: None,
 			room_material: None,
+			host_transform: Transform::IDENTITY,
 		}
 	}
 
@@ -148,12 +151,16 @@ impl WizardsTower {
 	fn high_primitives(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		for floor in &self.column.floors {
-			floor.emit_external_features(&mut children, lod_ref);
+			floor.emit_external_features_at_mesh_level(&mut children, lod_ref, LodSceneLevel::High);
 			// Rooms and lantern. The deck comes from the Medium exterior flatten.
 			// Spire stairs come from that flatten too, not a second High-only bake.
 			floor.emit_internal_features(&mut children, lod_ref);
 		}
-		self.column.perch.emit_external_features(&mut children, lod_ref);
+		self.column.perch.emit_external_features_at_mesh_level(
+			&mut children,
+			lod_ref,
+			LodSceneLevel::High,
+		);
 		scene_children(children)
 	}
 }
@@ -180,12 +187,14 @@ impl TowerLodFootprint for WizardsTower {
 
 impl LodScene for WizardsTower {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
-		self.level_for_lod_ref(lod_ref)
+		self.level_for_world_lod_ref(lod_ref, &self.host_transform)
 	}
 
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
-		let prev = self.level_for(lod_ref.previous_transform);
-		let curr = self.level_for(lod_ref.current_transform);
+		let prev =
+			self.level_for_world(lod_ref.previous_transform.translation, &self.host_transform);
+		let curr =
+			self.level_for_world(lod_ref.current_transform.translation, &self.host_transform);
 		if prev == curr {
 			LodSceneStatus::Unchanged
 		} else {
@@ -195,7 +204,7 @@ impl LodScene for WizardsTower {
 
 	fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
 		// Offset bands: drop High once ~halfway into Medium; Low keeps Medium warm.
-		let (level, progress) = self.band_progress_for_lod_ref(lod_ref);
+		let (level, progress) = self.band_progress_for_world_lod_ref(lod_ref, &self.host_transform);
 		cull_offset_bands(level, progress).with_customs()
 	}
 
@@ -223,12 +232,20 @@ impl LodScene for WizardsTower {
 				let mut chunks = Vec::new();
 				for floor in &self.column.floors {
 					let mut children: Vec<Box<dyn Scene>> = Vec::new();
-					floor.emit_external_features(&mut children, lod_ref);
+					floor.emit_external_features_at_mesh_level(
+						&mut children,
+						lod_ref,
+						LodSceneLevel::High,
+					);
 					floor.emit_internal_features(&mut children, lod_ref);
 					chunks.push(SceneChunk::weighted(4, scene_children(children)));
 				}
 				let mut perch_children: Vec<Box<dyn Scene>> = Vec::new();
-				self.column.perch.emit_external_features(&mut perch_children, lod_ref);
+				self.column.perch.emit_external_features_at_mesh_level(
+					&mut perch_children,
+					lod_ref,
+					LodSceneLevel::High,
+				);
 				chunks.push(SceneChunk::weighted(3, scene_children(perch_children)));
 				SceneChunk::chunks(chunks)
 			}
@@ -248,8 +265,12 @@ impl LodScene for WizardsTower {
 
 #[cfg(test)]
 mod tests {
+	use bevy::prelude::{App, AssetPlugin, Children, Entity, TaskPoolPlugin, Transform};
+	use bevy::scene::{ScenePlugin, WorldSceneExt};
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use material_ref::MaterialRefRoot;
+	use scene_ref::SceneRefRoot;
 
 	use super::*;
 
@@ -259,6 +280,144 @@ mod tests {
 			Vec3::new(10.0, 80.0, 10.0),
 		));
 		WizardsTower::new(&constraints, 0.0)
+	}
+
+	fn scene_refs_for_material(app: &App, material: &material_ref::MaterialRef) -> Vec<String> {
+		let world = app.world();
+		let roots: Vec<Entity> = world
+			.iter_entities()
+			.filter_map(|entity| {
+				entity
+					.get::<MaterialRefRoot>()
+					.filter(|root| &root.0 == material)
+					.map(|_| entity.id())
+			})
+			.collect();
+		let mut paths = Vec::new();
+		for root in roots {
+			let mut pending = vec![root];
+			while let Some(entity) = pending.pop() {
+				if let Some(scene_ref) = world.get::<SceneRefRoot>(entity) {
+					paths.push(scene_ref.0.path.clone());
+				}
+				if let Some(children) = world.get::<Children>(entity) {
+					pending.extend(children.iter());
+				}
+			}
+		}
+		paths
+	}
+
+	fn scene_app() -> App {
+		let mut app = App::new();
+		app.add_plugins((
+			TaskPoolPlugin::default(),
+			AssetPlugin::default(),
+			ScenePlugin::default(),
+		));
+		app
+	}
+
+	fn spawn_scene(app: &mut App, scene: impl bevy::scene::Scene + 'static) {
+		assert!(app.world_mut().spawn_scene(scene).is_ok());
+	}
+
+	fn expected_room_scene_ref_count(tower: &WizardsTower, lod_ref: &LodRef) -> usize {
+		let mut app = scene_app();
+		for floor in &tower.column.floors {
+			for room in &floor.rooms {
+				for node in room.partition_nodes_for_level(LodSceneLevel::High).flatten() {
+					spawn_scene(&mut app, node.scene_with_level(lod_ref, LodSceneLevel::High));
+				}
+			}
+		}
+		match &tower.room_material {
+			Some(material) => scene_refs_for_material(&app, material).len(),
+			None => 0,
+		}
+	}
+
+	fn expected_shell_scene_ref_count(tower: &WizardsTower, lod_ref: &LodRef) -> usize {
+		let mut app = scene_app();
+		for floor in &tower.column.floors {
+			for node in floor.partition_nodes_for_level(LodSceneLevel::Medium).flatten() {
+				spawn_scene(&mut app, node.scene_with_level(lod_ref, LodSceneLevel::High));
+			}
+		}
+		for node in tower.column.perch.partition_nodes_for_level(LodSceneLevel::Medium).flatten() {
+			spawn_scene(&mut app, node.scene_with_level(lod_ref, LodSceneLevel::High));
+		}
+		match &tower.wall_material {
+			Some(material) => scene_refs_for_material(&app, material).len(),
+			None => 0,
+		}
+	}
+
+	fn assert_tier(paths: &[String], suffix: &str) {
+		assert!(!paths.is_empty());
+		assert!(paths.iter().all(|path| path.contains(suffix)));
+	}
+
+	#[test]
+	fn high_exterior_uses_high_meshes_without_duplicating_rooms() {
+		let wall = MaterialRef::named("wizard-shell");
+		let room = MaterialRef::named("wizard-room");
+		let tower = tower().with_finish(wall.clone(), room.clone());
+		let transform = Transform::IDENTITY;
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &transform,
+			current_transform: &transform,
+			bounds: &bounds,
+		};
+		let expected_rooms = expected_room_scene_ref_count(&tower, &lod_ref);
+		let expected_shell = expected_shell_scene_ref_count(&tower, &lod_ref);
+		assert!(expected_rooms > 0);
+		assert!(expected_shell > 0);
+
+		let mut high_app = scene_app();
+		spawn_scene(&mut high_app, tower.scene_with_level(&lod_ref, LodSceneLevel::High));
+		let high_shell = scene_refs_for_material(&high_app, &wall);
+		assert_tier(&high_shell, "_high_res.");
+		assert_eq!(high_shell.len(), expected_shell);
+		assert_eq!(scene_refs_for_material(&high_app, &room).len(), expected_rooms);
+
+		let mut medium_app = scene_app();
+		spawn_scene(&mut medium_app, tower.scene_with_level(&lod_ref, LodSceneLevel::Medium));
+		let medium_shell = scene_refs_for_material(&medium_app, &wall);
+		assert_tier(&medium_shell, "_mid_res.");
+		assert_eq!(medium_shell.len(), expected_shell);
+		assert!(scene_refs_for_material(&medium_app, &room).is_empty());
+	}
+
+	#[test]
+	fn high_chunks_use_high_exterior_meshes_without_duplicating_rooms() {
+		let wall = MaterialRef::named("wizard-shell");
+		let room = MaterialRef::named("wizard-room");
+		let tower = tower().with_finish(wall.clone(), room.clone());
+		let transform = Transform::IDENTITY;
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &transform,
+			current_transform: &transform,
+			bounds: &bounds,
+		};
+		let expected_rooms = expected_room_scene_ref_count(&tower, &lod_ref);
+		let expected_shell = expected_shell_scene_ref_count(&tower, &lod_ref);
+		assert!(expected_rooms > 0);
+		assert!(expected_shell > 0);
+		let mut app = scene_app();
+		for (_, scene) in
+			tower.scene_chunks_with_level(&lod_ref, LodSceneLevel::High).into_primitives()
+		{
+			spawn_scene(&mut app, scene);
+		}
+		let shell = scene_refs_for_material(&app, &wall);
+		assert_tier(&shell, "_high_res.");
+		assert_eq!(shell.len(), expected_shell);
+		assert_eq!(scene_refs_for_material(&app, &room).len(), expected_rooms);
 	}
 
 	#[test]
@@ -312,6 +471,43 @@ mod tests {
 		let low = tower.partition_nodes_for_level(LodSceneLevel::Low).len();
 		assert!(high > medium);
 		assert_eq!(low, 0);
+	}
+
+	#[test]
+	fn offset_tower_bands_from_the_world_viewer() {
+		let mut tower = tower();
+		tower.host_transform = Transform::from_xyz(2_000.0, 0.0, 0.0);
+		let bounds = tower.scene_bounds();
+		let beside = Transform::from_xyz(2_000.0, 1.5, 0.0);
+		let far = Transform::from_xyz(1_400.0, 1.5, 0.0);
+		let beside_ref = LodRef {
+			entity: bevy::prelude::Entity::PLACEHOLDER,
+			previous_transform: &beside,
+			current_transform: &beside,
+			bounds: &bounds,
+		};
+		let far_ref = LodRef {
+			entity: bevy::prelude::Entity::PLACEHOLDER,
+			previous_transform: &far,
+			current_transform: &far,
+			bounds: &bounds,
+		};
+		assert_eq!(tower.scene_lod_level(&beside_ref), LodSceneLevel::High);
+		assert_eq!(tower.scene_lod_level(&far_ref), LodSceneLevel::Low);
+		let local_beside = Transform::from_xyz(0.0, 1.5, 0.0);
+		assert_eq!(tower.level_for(&local_beside), LodSceneLevel::High);
+		assert_eq!(
+			tower.level_for_lod_ref(&far_ref),
+			LodSceneLevel::Low,
+			"local-space helper still reads the world camera as local"
+		);
+		let local_ref = LodRef {
+			entity: bevy::prelude::Entity::PLACEHOLDER,
+			previous_transform: &local_beside,
+			current_transform: &local_beside,
+			bounds: &bounds,
+		};
+		assert_eq!(tower.band_progress_for_lod_ref(&local_ref).0, LodSceneLevel::High);
 	}
 
 	#[test]

@@ -28,7 +28,7 @@ use building_physics::BuildingWalkColliderPlugin;
 use buildings_lod::FiringRangeBuildingsLodPlugin;
 use character_items::ItemRng;
 use character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollSettings};
-use characters::CharacterHostsPlugin;
+use characters::{CharacterHostsPlugin, StandaloneCharacterMaterialRefPlugin};
 use combat_hud::CombatHudPlugin;
 use diagnostics::FiringRangeDiagnosticsPlugin;
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
@@ -43,7 +43,10 @@ use hiding_intelligence::{HidingPlugin, HidingSystems};
 use les_halles::LesHallesSpawn;
 use lod::LodRefreshSystems;
 use maybraid_character_controller::CharacterControllerPlugin;
-use maybraid_input::{PadGameplayEnabled, VirtualPadSystems};
+use maybraid_controllers_core::{
+	CaptureKind, CaptureToken, InputRouting, InputSource, PadPolicySystems, ScopeOwner,
+};
+use maybraid_locomotion_controller::LocomotionControllerPlugin;
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
@@ -78,12 +81,21 @@ impl Plugin for FiringRangePlugin {
 		.add_plugins(FirearmHostsPlugin);
 		add_firearm_components_host::<firearm_user::GeneratedFirearm>(app);
 		app.add_plugins(FirearmWeaponsPlugin)
+			.add_plugins(StandaloneCharacterMaterialRefPlugin)
 			.add_plugins(CharacterHostsPlugin)
 			.add_plugins(CharacterControllerPlugin)
+			.add_plugins(LocomotionControllerPlugin)
 			.add_plugins(PlayerPlugin)
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(FirearmUserPlugin)
-			.add_plugins(CombatHudPlugin::default())
+			.add_plugins(CombatHudPlugin {
+				hit_markers: true,
+				directional_damage: true,
+				player_vitals: true,
+				lubikan_charge: false,
+				lubikan_point_feedback: false,
+				score: false,
+			})
 			.add_plugins(CharacterRagdollPlugin)
 			.add_plugins(FiringRangeDiagnosticsPlugin)
 			.add_plugins(FiringRangeBuildingsLodPlugin)
@@ -140,6 +152,7 @@ impl Plugin for FiringRangePlugin {
 			.init_resource::<engagement::NpcEngagement>()
 			.init_resource::<RangeSession>()
 			.init_resource::<AppliedSession>()
+			.init_resource::<RangeConsoleCapture>()
 			.insert_resource(LoadoutRng(ItemRng::from_entropy()))
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_systems(
@@ -163,7 +176,7 @@ impl Plugin for FiringRangePlugin {
 				)
 					.chain(),
 			)
-			.add_systems(PreUpdate, gate_pad.before(VirtualPadSystems::Produce))
+			.add_systems(PreUpdate, gate_pad.before(PadPolicySystems))
 			.add_systems(Update, vantage::sync_range_threat_actors.in_set(ThreatSystems::Prepare))
 			.add_systems(
 				Update,
@@ -186,9 +199,6 @@ impl Plugin for FiringRangePlugin {
 					hit_debug::draw_dummy_hit_volumes,
 					apply_parent_confines.after(LodRefreshSystems::Cull),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-					hud::sync_combat_hud_opponent_total
-						.before(combat_hud::CombatHudSystems::Health),
-					hud::sync_evasion_hud_status.before(combat_hud::CombatHudSystems::Health),
 					hud::sync_gun_stats,
 				),
 			)
@@ -207,7 +217,7 @@ impl Plugin for FiringRangePlugin {
 	}
 }
 
-/// Inserted by the game while Training Ground should be running free-for-all.
+/// Inserted by the host app while the free-for-all should be running.
 #[derive(Resource, Clone, Copy, Debug, Default)]
 pub struct FreeForAllLive;
 
@@ -554,8 +564,22 @@ fn spawn_reticle_system(
 	spawn_reticle(&mut commands, &mut meshes, &mut materials);
 }
 
-fn gate_pad(focus: Res<TextEntryFocus>, mut enabled: ResMut<PadGameplayEnabled>) {
-	enabled.0 = !focus.0;
+#[derive(Resource, Default)]
+struct RangeConsoleCapture {
+	token: Option<CaptureToken>,
+}
+
+fn gate_pad(
+	focus: Res<TextEntryFocus>,
+	mut router: InputRouting,
+	mut capture: ResMut<RangeConsoleCapture>,
+) {
+	router.replace_owned_capture(
+		&mut capture.token,
+		InputSource::local_pad(),
+		focus.0.then_some(ScopeOwner::console()),
+		CaptureKind::TextEntry,
+	);
 }
 
 fn setup_lighting(mut commands: Commands) {

@@ -13,11 +13,11 @@ use building_components::partitions::PartitionStyle;
 use building_components::scene_children;
 use building_components::stairs::{SpiralStair, StairNode};
 use building_components::{
-	append_flattened_component_scenes, confined_scene, BuildingComponents, Layers, ParentConfines,
-	PartitionNode,
+	append_flattened_component_scenes, append_flattened_component_scenes_at_levels, confined_scene,
+	BuildingComponents, Layers, ParentConfines, PartitionNode,
 };
-use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
+use lod::scene::{LodScene, LodSceneLevel};
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 
@@ -134,6 +134,21 @@ impl WizardsTowerFloor {
 		append_flattened_component_scenes(self, lod_ref, LodSceneLevel::Medium, children);
 	}
 
+	pub(crate) fn emit_external_features_at_mesh_level(
+		&self,
+		children: &mut Vec<Box<dyn Scene>>,
+		lod_ref: &LodRef,
+		mesh_level: LodSceneLevel,
+	) {
+		append_flattened_component_scenes_at_levels(
+			self,
+			lod_ref,
+			LodSceneLevel::Medium,
+			mesh_level,
+			children,
+		);
+	}
+
 	pub(crate) fn emit_internal_features(
 		&self,
 		children: &mut Vec<Box<dyn Scene>>,
@@ -246,8 +261,8 @@ impl BuildingComponents for WizardsTowerFloor {
 }
 
 impl LodScene for WizardsTowerFloor {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::scene::LodSceneStatus {
+		lod::scene::LodSceneStatus::Unchanged
 	}
 
 	fn scene_with_level(&self, lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {

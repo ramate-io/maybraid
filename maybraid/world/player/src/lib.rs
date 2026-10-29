@@ -23,8 +23,8 @@ pub use durham::{TerrainCoverage, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS
 pub use game_commands::command::PendingStartupCommand;
 pub use player::{
 	holding_elevation, player_position_above_surface, player_spawn_point_at, spawn_player_body,
-	AwaitingTerrainSurface, CharacterCameraFollowEnabled, CharacterLocomotion, Jumping, MoveWish,
-	MovementAction, OffTerrainAnchor, PadMovementEnabled, Player, PlayerCapsule,
+	surface_or_hold_at, AwaitingTerrainSurface, CharacterCameraFollowEnabled, CharacterLocomotion,
+	Jumping, MoveWish, OffTerrainAnchor, PadMovementEnabled, Player, PlayerCapsule,
 	PlayerControlSystems, PlayerPhysicsEnabled, PlayerPlugin, PlayerSpawnXz, PlaygroundMode,
 	VegetationPlayerMotor,
 };
@@ -41,10 +41,12 @@ use camera::{
 };
 use character::{apply_set_character, drive_player_locomotion};
 use characters::{CharacterHostsPlugin, CharacterMotionSystems};
-use durham::{TerrainCellLayout, TerrainEntryStore};
-use game_commands::command::{TextEntryBlocked, TextEntryFocus};
+use durham::DurhamSurface;
 use game_commands::ui::GameCommandStatusText;
-use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
+use maybraid_character_controller::{CharacterBindSystems, CharacterControllerPlugin};
+use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource};
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
+use maybraid_virtual_pad_controller::VirtualPadPlugin;
 use player::{respawn_player_on_layout, snap_player_to_composed_surface};
 
 /// Character, camera, snap, and locomotion without owning Durham fill.
@@ -52,6 +54,9 @@ pub struct VegetationHostPlugin {
 	/// Spawn and drive the playground fly/follow camera.
 	pub register_camera: bool,
 }
+
+#[derive(Resource, Default)]
+struct DefaultPrimaryAssignment(Option<Entity>);
 
 impl Default for VegetationHostPlugin {
 	fn default() -> Self {
@@ -67,29 +72,61 @@ impl Plugin for VegetationHostPlugin {
 		if !app.is_plugin_added::<PlayerPlugin>() {
 			app.add_plugins(PlayerPlugin);
 		}
+		if !app.is_plugin_added::<CharacterControllerPlugin>() {
+			app.add_plugins(CharacterControllerPlugin);
+		}
 		if !app.is_plugin_added::<CharacterHostsPlugin>() {
 			app.add_plugins(CharacterHostsPlugin);
 		}
-		app.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
-			.add_systems(
-				Update,
-				(
-					apply_set_character,
-					apply_mode_commands.after(apply_set_character),
-					snap_player_to_composed_surface
-						.after(apply_mode_commands)
-						.before(PlayerControlSystems),
-					drive_player_locomotion
-						.after(PlayerControlSystems)
-						.before(CharacterMotionSystems::Anim),
-				),
-			);
+		app.init_resource::<DefaultPrimaryAssignment>();
+		app.configure_sets(Update, PlayerControlSystems.after(CharacterBindSystems::Produce));
+		app.add_systems(
+			Update,
+			(
+				assign_primary_world_player.before(CharacterBindSystems::Route),
+				apply_set_character,
+				apply_mode_commands.after(apply_set_character),
+				snap_player_to_composed_surface
+					.after(apply_mode_commands)
+					.before(PlayerControlSystems),
+				drive_player_locomotion
+					.after(PlayerControlSystems)
+					.before(CharacterMotionSystems::Anim),
+			),
+		);
 		if self.register_camera {
 			app.add_systems(Startup, setup_camera).add_systems(
 				Update,
-				(release_modifiers_on_focus_change.before(camera_controller), camera_controller),
+				(
+					release_modifiers_on_focus_change.before(camera_controller),
+					camera_controller
+						.after(CharacterBindSystems::Produce)
+						.before(PlayerControlSystems),
+				),
 			);
 		}
+	}
+}
+
+/// Standalone host policy: bind the sole world player to the primary controller.
+/// Assembled worlds may assign an actor first; that explicit assignment wins.
+fn assign_primary_world_player(
+	primary: Res<PrimaryVirtualPad>,
+	players: Query<Entity, With<Player>>,
+	mut router: ResMut<InputRouter>,
+	mut default_assignment: ResMut<DefaultPrimaryAssignment>,
+) {
+	if default_assignment.0.is_some_and(|player| players.contains(player)) {
+		return;
+	}
+	default_assignment.0 = None;
+	let source = InputSource::virtual_pad(primary.0);
+	if router.actor(source).is_some() || !router.connected(source) {
+		return;
+	}
+	if let Ok(player) = players.single() {
+		router.assign_actor(source, ActorTarget::new(player));
+		default_assignment.0 = Some(player);
 	}
 }
 
@@ -97,9 +134,7 @@ fn apply_mode_commands(
 	mut commands: Commands,
 	mut mode: ResMut<PlaygroundMode>,
 	mut status: Option<ResMut<GameCommandStatusText>>,
-	layout: Res<TerrainCellLayout>,
-	base: Res<WorldBaseTerrain>,
-	store: Res<TerrainEntryStore>,
+	surface: DurhamSurface,
 	free: Query<Entity, With<RequestModeFree>>,
 	character: Query<Entity, With<RequestModeCharacter>>,
 	mut players: Query<(Entity, &mut Transform, &mut LinearVelocity), With<Player>>,
@@ -110,8 +145,8 @@ fn apply_mode_commands(
 		ui::write_status(&mut status, "mode free");
 		if let Ok((mut cam_t, mut controller)) = cameras.single_mut() {
 			refocus_camera_on_elevation(
-				&layout,
-				surface_or_hold(&layout, &store, &base.0),
+				surface.layout(),
+				surface_or_hold(&surface),
 				&mut cam_t,
 				&mut controller,
 			);
@@ -127,9 +162,9 @@ fn apply_mode_commands(
 		ui::write_status(&mut status, "mode character — WASD move, mouse look, Space jump");
 		if reset_to_layout_spawn {
 			if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
-				let center = layout.region_center_xz();
-				if let Some(elevation) = store.composed_height_at(&layout, center.x, center.z) {
-					respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
+				let layout = surface.layout();
+				if let Ok(Some(elevation)) = surface.height_at(layout.region_center_xz().xz()) {
+					respawn_player_on_layout(layout, elevation, &mut transform, &mut velocity);
 				}
 				commands.entity(player).insert(AwaitingTerrainSurface);
 			}
@@ -138,21 +173,13 @@ fn apply_mode_commands(
 	}
 }
 
-fn sync_pad_gameplay(
-	focus: Option<Res<TextEntryFocus>>,
-	blocked: Option<Res<TextEntryBlocked>>,
-	mut enabled: ResMut<PadGameplayEnabled>,
-) {
-	let text = focus.is_some_and(|focus| focus.0) || blocked.is_some_and(|blocked| blocked.0);
-	enabled.0 = !text;
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use avian3d::prelude::GravityScale;
 	use bevy::ecs::system::RunSystemOnce;
-	use durham::{BaseTerrainNoise, TerrainConfig};
+	use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainConfig};
+	use lod::hcsg::HcsgStorage;
 	use player::AwaitingTerrainSurface;
 
 	#[test]
@@ -186,7 +213,7 @@ mod tests {
 		app.insert_resource(PlaygroundMode::Character)
 			.insert_resource(PlayerPhysicsEnabled::default())
 			.insert_resource(TerrainCellLayout::default())
-			.insert_resource(TerrainEntryStore::default())
+			.init_resource::<HcsgStorage>()
 			.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
 				42,
 			))))
@@ -259,7 +286,7 @@ mod tests {
 		world.insert_resource(mode);
 		world.insert_resource(PlayerPhysicsEnabled::default());
 		world.insert_resource(TerrainCellLayout::default());
-		world.insert_resource(TerrainEntryStore::default());
+		world.init_resource::<HcsgStorage>();
 		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
 			&TerrainConfig::new(42),
 		)));

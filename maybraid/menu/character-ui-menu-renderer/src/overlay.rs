@@ -2,13 +2,15 @@
 //! a picker and what paints inside it.
 
 use bevy::prelude::*;
-use character_ui_menu::{MenuNode, SelectGroup};
+use character_ui_menu::{AssetThumbnailDisplay, MenuNode, SelectGroup};
 
-use crate::sink::{MaybraidMenuSink, MenuSink, MenuThumbnailContext, RenderContext};
-use crate::widgets::CloseOverlaySelect;
 use crate::MenuJustify;
+use crate::sink::{MaybraidMenuSink, MenuSink, MenuThumbnailContext, RenderContext};
+use crate::widgets::{CloseOverlaySelect, InventoryItemKey};
 use menu_components::{
-	spawn_header_line, spawn_text_button, HudFonts, PANEL_HEADER_FONT_SIZE, PANEL_ROW_GAP,
+	HudFonts, HudMenu, INVENTORY_THUMB_PX, INVENTORY_TILE_COLUMNS, InputPromptDevice,
+	MENU_LIST_PAD, MENU_LIST_RADIUS, MenuModal, PANEL_HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
+	menu_region_wash, spawn_header_line, spawn_inventory_action_prompts, spawn_text_button,
 };
 
 /// Catalog nodes that can show a selected name on a header.
@@ -19,6 +21,7 @@ pub fn is_select_node<E>(node: &MenuNode<E>) -> bool {
 			| MenuNode::BlockAsset { .. }
 			| MenuNode::ItemMultiSelect { .. }
 			| MenuNode::GridCatalog { .. }
+			| MenuNode::OrderedEquipment { .. }
 	)
 }
 
@@ -51,15 +54,10 @@ pub fn primary_select<'a, E>(children: &'a [MenuNode<E>]) -> Option<&'a MenuNode
 pub fn is_picker_only<E>(node: &MenuNode<E>) -> bool {
 	match node {
 		MenuNode::SectionSelect { .. } | MenuNode::BlockAsset { .. } => true,
-		MenuNode::ItemMultiSelect { .. } | MenuNode::GridCatalog { .. } => false,
 		MenuNode::Section { children, .. } => {
 			let flat = flatten_nodes(children);
 			flat.len() == 1 && is_select_node(flat[0]) && is_picker_only(flat[0])
 		}
-		MenuNode::ShortText { .. }
-		| MenuNode::Action { .. }
-		| MenuNode::LabeledValue { .. }
-		| MenuNode::StatGrid { .. } => false,
 		_ => false,
 	}
 }
@@ -81,14 +79,7 @@ pub fn find_overlay_node<'a, E>(nodes: &'a [MenuNode<E>], key: &str) -> Option<&
 fn find_in_node<'a, E>(node: &'a MenuNode<E>, key: &str) -> Option<&'a MenuNode<E>> {
 	match node {
 		MenuNode::Fragment(children) => find_overlay_node(children, key),
-		MenuNode::Section { label, children } => {
-			if *label == key {
-				Some(node)
-			} else {
-				find_overlay_node(children, key)
-			}
-		}
-		MenuNode::SectionSelect { label, children, .. } => {
+		MenuNode::Section { label, children } | MenuNode::SectionSelect { label, children, .. } => {
 			if *label == key {
 				Some(node)
 			} else {
@@ -111,14 +102,19 @@ fn find_in_node<'a, E>(node: &'a MenuNode<E>, key: &str) -> Option<&'a MenuNode<
 		| MenuNode::LabeledSwatch { .. }
 		| MenuNode::BlockAsset { .. }
 		| MenuNode::ItemMultiSelect { .. }
-		| MenuNode::GridCatalog { .. } => None,
+		| MenuNode::GridCatalog { .. }
+		| MenuNode::OrderedEquipment { .. } => None,
 	}
 }
 
 pub fn overlay_summary_value<E>(node: &MenuNode<E>) -> String {
 	match node {
+		MenuNode::Section { label: "Inventory" | "Starter Kit", children } => {
+			inventory_section_preview(children)
+		}
 		MenuNode::Section { children, .. } => primary_select(children)
 			.map(overlay_summary_value)
+			.or_else(|| equipped_section_preview(children))
 			.unwrap_or_else(|| labeled_values_preview(children)),
 		MenuNode::SectionSelect { groups, .. } => {
 			selected_select_label(groups).unwrap_or("—").to_string()
@@ -134,11 +130,15 @@ pub fn overlay_summary_value<E>(node: &MenuNode<E>) -> String {
 		}
 		MenuNode::GridCatalog { label, choices, .. } => {
 			let count = choices.iter().filter(|choice| choice.selected).count();
-			if *label == "Weapons" || *label == "Skill Maps" {
+			if matches!(*label, "Weapons" | "Skill Maps" | "Tools" | "Tanzes" | "Equipped") {
 				format!("{count} queued")
 			} else {
 				format!("{count} worn")
 			}
+		}
+		MenuNode::OrderedEquipment { rows } => {
+			let count: usize = rows.iter().map(|row| row.choices.len()).sum();
+			format!("{count} queued")
 		}
 		MenuNode::LabeledValue { value, .. } => value.clone(),
 		MenuNode::StatGrid { cards } => stat_grid_preview(cards),
@@ -198,23 +198,27 @@ fn selected_select_label<E>(groups: &[SelectGroup<E>]) -> Option<&'static str> {
 		.map(|choice| choice.label)
 }
 
-/// Full-screen picker chrome. The host fills the returned viewport.
+/// Picker chrome that fills the host cell (left column of the character grid).
+///
+/// `action_prompts` is only for the interactive Inventory modal. The
+/// read-only Starter Kit uses [`spawn_starter_kit_shell`] and has no chips.
 pub fn spawn_overlay_shell(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
 	title: &str,
 	title_color: Color,
+	action_prompts: Option<(&AssetServer, InputPromptDevice)>,
 ) -> Entity {
 	let mut viewport = Entity::PLACEHOLDER;
 	parent
 		.spawn((
 			crate::widgets::OverlaySelectRoot,
+			MenuModal::OVERLAY_SELECT,
 			Node {
-				position_type: PositionType::Absolute,
-				left: Val::Px(0.0),
-				top: Val::Px(0.0),
 				width: Val::Percent(100.0),
 				height: Val::Percent(100.0),
+				min_width: Val::Px(0.0),
+				min_height: Val::Px(0.0),
 				..default()
 			},
 			Pickable::IGNORE,
@@ -231,20 +235,21 @@ pub fn spawn_overlay_shell(
 					height: Val::Percent(100.0),
 					..default()
 				},
-				BackgroundColor(Color::srgba(0.04, 0.05, 0.07, 0.88)),
+				BackgroundColor(Color::NONE),
 			));
 			root.spawn((
 				Node {
-					position_type: PositionType::Absolute,
-					left: Val::Percent(6.0),
-					top: Val::Percent(8.0),
-					width: Val::Percent(62.0),
-					height: Val::Percent(84.0),
+					width: Val::Percent(100.0),
+					height: Val::Percent(100.0),
+					min_width: Val::Px(0.0),
 					flex_direction: FlexDirection::Column,
 					row_gap: Val::Px(PANEL_ROW_GAP),
-					padding: UiRect::all(Val::Px(8.0)),
+					padding: UiRect::all(Val::Px(MENU_LIST_PAD)),
+					border_radius: BorderRadius::all(Val::Px(MENU_LIST_RADIUS)),
+					overflow: Overflow::clip(),
 					..default()
 				},
+				BackgroundColor(menu_region_wash()),
 				Pickable::IGNORE,
 			))
 			.with_children(|panel| {
@@ -276,19 +281,195 @@ pub fn spawn_overlay_shell(
 					AlignItems::FlexStart,
 					PANEL_ROW_GAP,
 				);
+				if let Some((assets, device)) = action_prompts {
+					spawn_inventory_action_prompts(panel, fonts, assets, device);
+				}
 			});
 		});
 	viewport
 }
 
 /// Overlay interiors are the sink with catalogs painted inline.
+///
+/// A root [`MenuNode::Section`] unwraps so the overlay chrome can own the
+/// title; nested sections paint their own headers (Inventory / Starter Kit →
+/// Clothing / Tools / Skill Maps / Tanzes / Lubikan), each stacking an
+/// equipped pane over that section's unequipped catalog.
 pub fn render_overlay_body<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 	node: &MenuNode<E>,
 	parent: &mut ChildSpawnerCommands,
 	context: &mut RenderContext<'_, C>,
 	justify: MenuJustify,
 ) {
-	MaybraidMenuSink::overlay(justify).render_node(node, parent, context);
+	let sink = MaybraidMenuSink::overlay(justify);
+	match node {
+		MenuNode::Section { children, .. } => sink.render_nodes(children, parent, context),
+		other => sink.render_node(other, parent, context),
+	}
+}
+
+/// Paint the shared inventory body into an existing scroll viewport.
+///
+/// `interactive` is false on the Starter Kit (focusable tiles, no equip /
+/// drop extras) and true in the character-menu modal.
+pub fn fill_inventory_layout<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+	commands: &mut Commands,
+	viewport: Entity,
+	fonts: &HudFonts,
+	node: &MenuNode<E>,
+	interactive: bool,
+	previous: Option<HudMenu>,
+	retain: Option<InventoryItemKey>,
+	thumbnails: &mut C,
+) -> usize {
+	let mut prewarm = Vec::new();
+	let Ok(mut entity) = commands.get_entity(viewport) else {
+		return 0;
+	};
+	entity.despawn_related::<Children>();
+	let mut item_count = 0;
+	let mut retained = None;
+	entity.with_children(|body| {
+		let mut context = RenderContext {
+			fonts,
+			thumbnails,
+			asset_thumbnails: AssetThumbnailDisplay::None,
+			prewarm: &mut prewarm,
+			hud_menu: viewport,
+			hud_item_count: 0,
+			interactive,
+			lock_appearance: !interactive,
+			catalog_columns: INVENTORY_TILE_COLUMNS,
+			catalog_thumb_px: INVENTORY_THUMB_PX,
+			retain_key: retain,
+			retained_index: None,
+		};
+		render_overlay_body(node, body, &mut context, MenuJustify::Left);
+		item_count = context.hud_item_count;
+		retained = context.retained_index;
+	});
+	drop(entity);
+	if let Ok(mut entity) = commands.get_entity(viewport) {
+		let mut menu = HudMenu::retain(item_count, previous);
+		if let Some(index) = retained {
+			if item_count > 0 {
+				menu.selected = index.min(item_count - 1);
+			}
+		}
+		entity.insert(menu);
+	}
+	item_count
+}
+
+/// Centered spinning mark while catalog captures are still filling.
+pub fn fill_inventory_loading(commands: &mut Commands, viewport: Entity, fonts: &HudFonts) {
+	let Ok(mut entity) = commands.get_entity(viewport) else {
+		return;
+	};
+	entity.despawn_related::<Children>();
+	entity.with_children(|body| {
+		body.spawn((
+			Node {
+				width: Val::Percent(100.0),
+				min_height: Val::Px(220.0),
+				flex_grow: 1.0,
+				justify_content: JustifyContent::Center,
+				align_items: AlignItems::Center,
+				..default()
+			},
+			Pickable::IGNORE,
+		))
+		.with_children(|center| {
+			let (icon, spinning) = menu_components::SpinningIcon::maybraid(48.0, TEXT_YELLOW);
+			center.spawn((
+				icon,
+				spinning,
+				ImageNode { image: fonts.logo.clone(), color: TEXT_YELLOW, ..default() },
+				Node { width: Val::Px(48.0), height: Val::Px(48.0), flex_shrink: 0.0, ..default() },
+				Pickable::IGNORE,
+			));
+		});
+	});
+	if let Ok(mut entity) = commands.get_entity(viewport) {
+		entity.insert(HudMenu::retain(0, None));
+	}
+}
+
+/// Full-screen Starter Kit chrome: title + growing scroll pane. The host
+/// adds Continue under the returned viewport. No action prompts — this
+/// surface is read-only.
+pub fn spawn_starter_kit_shell(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	title: &str,
+	title_color: Color,
+	viewport_extra: impl Bundle,
+) -> Entity {
+	let mut viewport = Entity::PLACEHOLDER;
+	parent
+		.spawn((
+			Node {
+				width: Val::Percent(100.0),
+				flex_grow: 1.0,
+				flex_shrink: 1.0,
+				min_height: Val::Px(0.0),
+				flex_direction: FlexDirection::Column,
+				row_gap: Val::Px(PANEL_ROW_GAP),
+				padding: UiRect::axes(Val::Px(48.0), Val::Px(32.0)),
+				..default()
+			},
+			Pickable::IGNORE,
+		))
+		.with_children(|column| {
+			spawn_header_line(column, fonts, title, None, PANEL_HEADER_FONT_SIZE, title_color);
+			viewport = menu_components::spawn_scroll_pane(
+				column,
+				viewport_extra,
+				AlignItems::FlexStart,
+				PANEL_ROW_GAP,
+			);
+		});
+	viewport
+}
+
+/// Equipped pane count when a typed section stacks OrderedEquipment over a catalog.
+fn equipped_section_preview<E>(children: &[MenuNode<E>]) -> Option<String> {
+	let flat = flatten_nodes(children);
+	let has_catalog = flat.iter().any(|node| matches!(node, MenuNode::GridCatalog { .. }));
+	if !has_catalog {
+		return None;
+	}
+	let rows = flat.iter().find_map(|node| match node {
+		MenuNode::OrderedEquipment { rows } => Some(rows.as_slice()),
+		_ => None,
+	})?;
+	let count: usize = rows.iter().map(|row| row.choices.len()).sum();
+	let worn = rows.iter().any(|row| row.label == "Clothing");
+	Some(if worn { format!("{count} worn") } else { format!("{count} queued") })
+}
+
+fn inventory_section_preview<E>(children: &[MenuNode<E>]) -> String {
+	let mut count = 0usize;
+	for node in flatten_nodes(children) {
+		count += match node {
+			MenuNode::Section { children, .. } => flatten_nodes(children)
+				.into_iter()
+				.map(|inner| match inner {
+					MenuNode::GridCatalog { choices, .. } => choices.len(),
+					MenuNode::OrderedEquipment { rows } => {
+						rows.iter().map(|row| row.choices.len()).sum()
+					}
+					MenuNode::LabeledValue { .. } => 1,
+					_ => 0,
+				})
+				.sum(),
+			MenuNode::GridCatalog { choices, .. } => choices.len(),
+			MenuNode::OrderedEquipment { rows } => rows.iter().map(|row| row.choices.len()).sum(),
+			MenuNode::LabeledValue { .. } => 1,
+			_ => 0,
+		};
+	}
+	if count == 0 { String::from("empty") } else { format!("{count} items") }
 }
 
 #[cfg(test)]
@@ -321,11 +502,13 @@ mod tests {
 		};
 		assert!(!is_picker_only(&section));
 		assert!(!overlay_closes_on_pick(&section));
-		assert!(primary_select(match &section {
-			MenuNode::Section { children, .. } => children,
-			_ => unreachable!(),
-		})
-		.is_some());
+		assert!(
+			primary_select(match &section {
+				MenuNode::Section { children, .. } => children,
+				_ => unreachable!(),
+			})
+			.is_some()
+		);
 	}
 
 	#[test]
@@ -355,5 +538,83 @@ mod tests {
 			find_overlay_node(&tree, "Head"),
 			Some(MenuNode::Section { label: "Head", .. })
 		));
+	}
+
+	#[test]
+	fn inventory_header_counts_nested_catalogs() {
+		use character_ui_menu::{EquipmentChoice, GridCatalogChoice, OrderedEquipmentRow};
+
+		let choice = |label: &str| GridCatalogChoice {
+			label: label.to_string(),
+			detail: String::new(),
+			path: "",
+			thumbnail_camera: character_ui_menu::ThumbnailCamera::DEFAULT,
+			preview: PreviewColor::WHITE,
+			image_key: None,
+			selected: false,
+			rank: None,
+			item_key: None,
+			event: Some(0u8),
+		};
+		let equipped = |label: &'static str, tile: &str| {
+			MenuNode::ordered_equipment([OrderedEquipmentRow {
+				label,
+				capacity: 4,
+				choices: vec![EquipmentChoice {
+					item_key: 0,
+					tile: {
+						let mut tile = choice(tile);
+						tile.selected = true;
+						tile
+					},
+					unequip: None,
+					move_left: None,
+					move_right: None,
+				}],
+			}])
+		};
+		let clothing = MenuNode::<u8>::Section {
+			label: "Clothing",
+			children: vec![
+				equipped("Clothing", "coat"),
+				MenuNode::grid_catalog("Clothing", 6, [] as [GridCatalogChoice<u8>; 0]),
+			],
+		};
+		let tools = MenuNode::<u8>::Section {
+			label: "Tools",
+			children: vec![
+				equipped("Tools", "gun"),
+				MenuNode::grid_catalog("Tools", 3, [choice("nade")]),
+			],
+		};
+		assert_eq!(overlay_summary_value(&clothing), "1 worn");
+		assert_eq!(overlay_summary_value(&tools), "1 queued");
+		assert!(!is_picker_only(&clothing));
+		let node = MenuNode::<u8>::Section {
+			label: "Inventory",
+			children: vec![
+				clothing,
+				tools,
+				MenuNode::Section {
+					label: "Lubikan",
+					children: vec![MenuNode::grid_catalog("Lubikan", 1, [choice("Self")])],
+				},
+			],
+		};
+		assert_eq!(overlay_summary_value(&node), "4 items");
+		assert_eq!(
+			overlay_summary_value(&MenuNode::grid_catalog("Tools", 3, [choice("gun")])),
+			"0 queued"
+		);
+		let MenuNode::Section { children, .. } = &node else {
+			panic!("inventory node");
+		};
+		assert_eq!(
+			overlay_summary_value(&MenuNode::Section {
+				label: "Starter Kit",
+				children: children.clone(),
+			}),
+			"4 items"
+		);
 	}
 }

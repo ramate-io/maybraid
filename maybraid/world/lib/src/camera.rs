@@ -4,19 +4,23 @@ use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilt
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use durham::WorldBaseTerrain;
+use fisticuffs_user::{FisticuffsImpact, FisticuffsStrike};
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
-use maybraid_input::{PadButton, VirtualPad};
-use player::{CameraFollow, Player};
+use maybraid_character_controller::{ActorControlStatus, RoutedActorControl};
+use maybraid_session::WorldGameplayEnabled;
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
+use player::{CameraFollow, Player, PlayerSystems};
 use player_camera::{
-	spawn_follow_camera, CameraController, CameraPov, CameraPovLocked, FollowCamera,
-	PlayerCameraSystems,
+	spawn_follow_camera, CameraController, CameraLookSuppressed, CameraPov, CameraPovLocked,
+	CameraPresentationImpulse, FollowCamera, PlayerCameraSystems,
 };
 use world_player::{
 	player::holding_elevation, Player as VegetationPlayer, PlayerSpawnXz, PlaygroundMode,
 };
 
-use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
+use crate::control::InventoryEditCameraFollow;
+use crate::map_view::{WorldMapSet, WorldMapView};
 
 const CAMERA_COLLISION_RADIUS: f32 = 0.18;
 const CAMERA_COLLISION_SKIN: f32 = 0.08;
@@ -24,6 +28,19 @@ const CAMERA_COLLISION_MIN: f32 = 0.12;
 const WORLD_CAMERA_FAR: f32 = 8_000.0;
 const WORLD_CAMERA_NEAR: f32 = 0.1;
 const WORLD_FREE_CAMERA_SPEED: f32 = 40.0;
+
+type PlayerFollowQuery<'w, 's> = Query<
+	'w,
+	's,
+	(Entity, &'static Transform),
+	(With<Player>, With<CameraFollow>, Without<Camera3d>),
+>;
+type CameraFollowQuery<'w, 's> = Query<
+	'w,
+	's,
+	(&'static mut Transform, &'static CameraController, &'static FollowCamera),
+	(With<Camera3d>, Without<Player>),
+>;
 
 #[derive(Component)]
 struct WorldFreeCamera {
@@ -73,38 +90,50 @@ pub(crate) fn spawn_world_camera(
 }
 
 /// Enable shared gameplay follow only while the world owns gameplay input.
-pub(crate) fn sync_camera_mode(
+/// One writer for follow, POV lock, and look suppress.
+pub(crate) fn sync_camera_session_state(
 	mut commands: Commands,
 	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
+	primary: Option<Res<PrimaryVirtualPad>>,
 	inventory_edit: Option<Res<InventoryEditCameraFollow>>,
-	players: Query<(Entity, Has<CameraFollow>), (With<VegetationPlayer>, With<Player>)>,
+	map: Option<Res<WorldMapView>>,
+	players: Query<
+		(Entity, Has<CameraFollow>, Option<&ActorControlStatus>),
+		With<VegetationPlayer>,
+	>,
+	mut locked: Option<ResMut<CameraPovLocked>>,
+	mut suppressed: Option<ResMut<CameraLookSuppressed>>,
+	mut cameras: Query<&mut CameraController, With<FollowCamera>>,
 ) {
-	let follow = *mode == PlaygroundMode::Character
-		&& (gameplay.0 || inventory_edit.is_some_and(|edit| edit.0));
-	for (entity, following) in &players {
-		if follow && !following {
+	let edit = inventory_edit.is_some_and(|edit| edit.0);
+	let map_open = map.is_some_and(|map| map.open);
+	let presenting = map_open && gameplay.0;
+	let follow = *mode == PlaygroundMode::Character && (gameplay.0 || edit);
+	for (entity, following, control) in &players {
+		let primary_actor = primary.as_deref().is_some_and(|primary| {
+			control.and_then(|control| control.source()).and_then(|source| source.entity())
+				== Some(primary.0)
+		});
+		if follow && primary_actor && !following {
 			commands.entity(entity).insert(CameraFollow);
-		} else if !follow && following {
+		} else if (!follow || !primary_actor) && following {
 			commands.entity(entity).remove::<CameraFollow>();
 		}
 	}
-}
-
-pub(crate) fn sync_inventory_edit_look(
-	edit: Res<InventoryEditCameraFollow>,
-	mut locked: Option<ResMut<CameraPovLocked>>,
-	mut cameras: Query<&mut CameraController, With<Camera3d>>,
-) {
 	if let Some(locked) = locked.as_deref_mut() {
-		if locked.0 != edit.0 {
-			locked.0 = edit.0;
-		}
+		locked.0 = presenting || edit || map_open;
 	}
-	if !edit.0 {
+	if let Some(suppressed) = suppressed.as_deref_mut() {
+		suppressed.0 = presenting;
+	}
+	if !edit || map_open {
 		return;
 	}
 	for mut controller in &mut cameras {
+		if controller.pov.is_map() {
+			continue;
+		}
 		controller.pov = CameraPov::ThirdPerson;
 		controller.focus = 0.0;
 		controller.ads = 0.0;
@@ -113,55 +142,74 @@ pub(crate) fn sync_inventory_edit_look(
 
 /// Preserve the playground's debug free-fly mode on the sole shared camera.
 fn fly_world_camera(
-	keyboard: Res<ButtonInput<KeyCode>>,
-	pad: Res<VirtualPad>,
-	time: Res<Time>,
-	text_focus: Res<TextEntryFocus>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+	players: Query<&RoutedActorControl, With<VegetationPlayer>>,
 	mode: Res<PlaygroundMode>,
-	gameplay: Res<WorldGameplayEnabled>,
 	mut cameras: Query<
-		(&mut Transform, &CameraController, &FollowCamera, &WorldFreeCamera, &mut Projection),
+		(Entity, &CameraController, &FollowCamera, &WorldFreeCamera, &mut Projection),
 		With<Camera3d>,
 	>,
+	mut commands: Commands,
 ) {
 	if *mode != PlaygroundMode::Free {
 		return;
 	}
-	let Ok((mut transform, controller, follow, free, mut projection)) = cameras.single_mut() else {
+	let Ok((camera, controller, follow, free, mut projection)) = cameras.single_mut() else {
 		return;
 	};
-	transform.rotation =
-		Quat::from_rotation_y(controller.yaw) * Quat::from_rotation_x(controller.pitch);
 	if let Projection::Perspective(perspective) = projection.as_mut() {
 		perspective.fov = follow.third_person_fov;
 	}
-	if text_focus.0 || !gameplay.0 {
+	let Some(input) = primary.as_deref().and_then(|primary| {
+		players.iter().find_map(|control| {
+			(control.source().and_then(|source| source.entity()) == Some(primary.0))
+				.then(|| control.get().copied())
+				.flatten()
+		})
+	}) else {
 		return;
-	}
-
-	let mut movement = Vec3::ZERO;
-	movement += *transform.forward() * pad.move_stick.y;
-	movement += *transform.right() * pad.move_stick.x;
-	if pad.pressed(PadButton::A) {
-		movement += Vec3::Y;
-	}
-	if keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight) {
-		movement -= Vec3::Y;
-	}
-	if movement.length_squared() > 0.0 {
-		transform.translation += movement.normalize() * free.speed * time.delta_secs();
-	}
+	};
+	let (yaw, pitch, speed) = (controller.yaw, controller.pitch, free.speed);
+	input.map(|sample| (camera, sample)).queue(&mut commands, move |world, input| {
+		if world
+			.get_resource::<PlaygroundMode>()
+			.is_none_or(|mode| *mode != PlaygroundMode::Free)
+		{
+			return;
+		}
+		let can_move = world.get_resource::<TextEntryFocus>().is_some_and(|focus| !focus.0)
+			&& world.get_resource::<WorldGameplayEnabled>().is_some_and(|gameplay| gameplay.0);
+		let (camera, sample) = input.into_payload();
+		let Ok(mut camera) = world.get_entity_mut(camera) else {
+			return;
+		};
+		let Some(mut transform) = camera.get_mut::<Transform>() else {
+			return;
+		};
+		transform.rotation = Quat::from_rotation_y(yaw) * Quat::from_rotation_x(pitch);
+		if !can_move {
+			return;
+		}
+		let mut movement = *transform.forward() * sample.move_stick().y
+			+ *transform.right() * sample.move_stick().x;
+		if sample.a().pressed() {
+			movement += Vec3::Y;
+		}
+		if sample.shift_held() {
+			movement -= Vec3::Y;
+		}
+		if movement.length_squared() > 0.0 {
+			transform.translation += movement.normalize() * speed * sample.delta().as_secs_f32();
+		}
+	});
 }
 
 /// Pull only the third-person translation toward the player when Fixed geometry blocks it.
 pub(crate) fn obstruct_world_camera(
 	mode: Res<PlaygroundMode>,
 	spatial: SpatialQuery,
-	players: Query<(Entity, &Transform), (With<Player>, With<CameraFollow>, Without<Camera3d>)>,
-	mut cameras: Query<
-		(&mut Transform, &CameraController, &FollowCamera),
-		(With<Camera3d>, Without<Player>),
-	>,
+	players: PlayerFollowQuery,
+	mut cameras: CameraFollowQuery,
 ) {
 	if *mode != PlaygroundMode::Character {
 		return;
@@ -218,11 +266,47 @@ fn camera_cast_travel(
 	}
 }
 
+/// Keep impact presentation in the world layer, which owns both combat and camera domains.
+fn present_fisticuffs_impact(
+	mode: Res<PlaygroundMode>,
+	mut strikes: MessageReader<FisticuffsStrike>,
+	mut impacts: MessageReader<FisticuffsImpact>,
+	mut impulses: MessageWriter<CameraPresentationImpulse>,
+) {
+	if *mode != PlaygroundMode::Character {
+		strikes.clear();
+		impacts.clear();
+		return;
+	}
+	for strike in strikes.read() {
+		impulses.write(CameraPresentationImpulse {
+			target: strike.attacker,
+			rotation: Vec2::new(strike.side.sign() * 0.4_f32.to_radians(), -0.25_f32.to_radians()),
+		});
+	}
+	for impact in impacts.read() {
+		let yaw = impact.side.sign() * 0.8_f32.to_radians();
+		let pitch = -0.3_f32.to_radians();
+		impulses.write(CameraPresentationImpulse {
+			target: impact.attacker,
+			rotation: Vec2::new(yaw, pitch),
+		});
+	}
+}
+
 pub(crate) fn configure(app: &mut App) {
 	app.add_systems(Startup, spawn_world_camera)
 		.add_systems(
 			Update,
-			(sync_camera_mode, sync_inventory_edit_look).before(PlayerCameraSystems::Look),
+			present_fisticuffs_impact
+				.after(PlayerSystems::Intent)
+				.before(PlayerCameraSystems::Follow),
+		)
+		.add_systems(
+			Update,
+			sync_camera_session_state
+				.after(WorldMapSet::Toggle)
+				.before(PlayerCameraSystems::Look),
 		)
 		.add_systems(
 			Update,
@@ -272,22 +356,89 @@ mod tests {
 	}
 
 	#[test]
-	fn inventory_edit_keeps_follow_while_paused() -> anyhow::Result<()> {
-		use bevy::ecs::system::RunSystemOnce;
+	fn camera_follow_tracks_session_state_before_look() -> anyhow::Result<()> {
 		use player::{CameraFollow, Player};
+		use player_camera::{CameraLookSuppressed, CameraPovLocked};
 		use world_player::Player as VegetationPlayer;
 
 		use crate::InventoryEditCameraFollow;
 
-		let mut world = World::new();
-		world.insert_resource(PlaygroundMode::Character);
-		world.insert_resource(WorldGameplayEnabled(false));
-		world.insert_resource(InventoryEditCameraFollow(true));
-		let player = world.spawn((VegetationPlayer, Player)).id();
-		world
-			.run_system_once(sync_camera_mode)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(world.get::<CameraFollow>(player).is_some());
+		#[derive(Resource, Default)]
+		struct FollowAtLook(Vec<Vec<Entity>>);
+
+		fn record_follow_at_look(
+			players: Query<(Entity, Has<CameraFollow>), With<VegetationPlayer>>,
+			mut frames: ResMut<FollowAtLook>,
+		) {
+			frames.0.push(
+				players
+					.iter()
+					.filter_map(|(entity, follows)| follows.then_some(entity))
+					.collect(),
+			);
+		}
+
+		let mut app = App::new();
+		app.insert_resource(PlaygroundMode::Character)
+			.insert_resource(WorldGameplayEnabled(true))
+			.insert_resource(InventoryEditCameraFollow(false))
+			.init_resource::<CameraPovLocked>()
+			.init_resource::<CameraLookSuppressed>()
+			.init_resource::<FollowAtLook>()
+			.add_systems(Update, sync_camera_session_state.before(PlayerCameraSystems::Look))
+			.add_systems(Update, record_follow_at_look.in_set(PlayerCameraSystems::Look));
+
+		let source = app.world_mut().spawn_empty().id();
+		app.world_mut().insert_resource(PrimaryVirtualPad(source));
+		let status = ActorControlStatus::assigned(
+			maybraid_controllers_core::InputSource::virtual_pad(source),
+		);
+		let player = app.world_mut().spawn((VegetationPlayer, Player, status)).id();
+		app.update();
+		assert!(app
+			.world()
+			.resource::<FollowAtLook>()
+			.0
+			.last()
+			.is_some_and(|following| following.len() == 1 && following[0] == player));
+		assert!(!app.world().resource::<CameraPovLocked>().0);
+
+		app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = false;
+		app.world_mut().resource_mut::<InventoryEditCameraFollow>().0 = true;
+		app.update();
+		assert!(app
+			.world()
+			.resource::<FollowAtLook>()
+			.0
+			.last()
+			.is_some_and(|following| following.len() == 1 && following[0] == player));
+		assert!(app.world().resource::<CameraPovLocked>().0);
+
+		app.world_mut().despawn(player);
+		let replacement = app.world_mut().spawn((VegetationPlayer, Player, status)).id();
+		app.update();
+		assert!(app
+			.world()
+			.resource::<FollowAtLook>()
+			.0
+			.last()
+			.is_some_and(|following| following.len() == 1 && following[0] == replacement));
+		assert!(app.world().resource::<CameraPovLocked>().0);
+
+		app.world_mut().resource_mut::<InventoryEditCameraFollow>().0 = false;
+		app.update();
+		assert!(app.world().resource::<FollowAtLook>().0.last().is_some_and(Vec::is_empty));
+		assert!(!app.world().resource::<CameraPovLocked>().0);
+
+		app.world_mut().resource_mut::<WorldGameplayEnabled>().0 = true;
+		app.update();
+		assert!(app
+			.world()
+			.resource::<FollowAtLook>()
+			.0
+			.last()
+			.is_some_and(|following| following.len() == 1 && following[0] == replacement));
+		assert!(!app.world().resource::<CameraPovLocked>().0);
 		Ok(())
 	}
 }

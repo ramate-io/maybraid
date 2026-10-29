@@ -25,11 +25,25 @@ pub struct SpatialOneShot {
 	pub radius: f32,
 	pub gain: f32,
 	pub bus: AudioBus,
+	/// Seconds of silence before the clip. Sample-accurate on the mixer clock.
+	pub delay: f32,
+	/// Playback rate (`1.0` = authored pitch). Values below 1 lengthen the clip.
+	pub playback_rate: f32,
+	/// When false, skip the [`AudioBus::PlayerWeapon`] transient duck.
+	pub duck: bool,
 }
 
 impl SpatialOneShot {
 	pub fn at(position: Vec3) -> Self {
-		Self { position, radius: 1.0, gain: 1.0, bus: AudioBus::Weapons }
+		Self {
+			position,
+			radius: 1.0,
+			gain: 1.0,
+			bus: AudioBus::Weapons,
+			delay: 0.0,
+			playback_rate: 1.0,
+			duck: true,
+		}
 	}
 
 	pub fn radius(mut self, radius: f32) -> Self {
@@ -44,6 +58,21 @@ impl SpatialOneShot {
 
 	pub fn bus(mut self, bus: AudioBus) -> Self {
 		self.bus = bus;
+		self
+	}
+
+	pub fn delay(mut self, delay: f32) -> Self {
+		self.delay = delay.max(0.0);
+		self
+	}
+
+	pub fn duck(mut self, duck: bool) -> Self {
+		self.duck = duck;
+		self
+	}
+
+	pub fn playback_rate(mut self, rate: f32) -> Self {
+		self.playback_rate = rate.clamp(0.5, 2.0);
 		self
 	}
 }
@@ -120,6 +149,29 @@ impl SpatialVoice {
 	}
 }
 
+struct PlaybackRate<S> {
+	inner: S,
+	rate: f32,
+}
+
+impl<S> PlaybackRate<S> {
+	fn new(inner: S, rate: f32) -> Self {
+		Self { inner, rate: rate.clamp(0.5, 2.0) }
+	}
+}
+
+impl<S: oddio::Signal<Frame = oddio::Sample>> oddio::Signal for PlaybackRate<S> {
+	type Frame = oddio::Sample;
+
+	fn sample(&mut self, interval: f32, out: &mut [oddio::Sample]) {
+		self.inner.sample(interval * self.rate, out);
+	}
+
+	fn is_finished(&self) -> bool {
+		self.inner.is_finished()
+	}
+}
+
 struct Stoppable<T> {
 	inner: T,
 	stop: Arc<AtomicBool>,
@@ -187,6 +239,16 @@ fn options(
 	}
 }
 
+fn delayed_playback(
+	frames: Arc<oddio::Frames<oddio::Sample>>,
+	delay: f32,
+	playback_rate: f32,
+) -> PlaybackRate<FramesSignal<oddio::Sample>> {
+	let rate = playback_rate.clamp(0.5, 2.0);
+	let (_, frames) = FramesSignal::new(frames, -f64::from(delay * rate));
+	PlaybackRate::new(frames, rate)
+}
+
 impl Audio {
 	pub fn play(
 		&self,
@@ -197,12 +259,13 @@ impl Audio {
 		listener: &GlobalTransform,
 		name: &'static str,
 	) {
-		if spec.bus == AudioBus::PlayerWeapon {
+		if spec.duck && spec.bus == AudioBus::PlayerWeapon {
 			mixer.duck_player_shot();
 		}
 		let stop = Arc::new(AtomicBool::new(false));
-		let (mut gain, signal) =
-			Gain::new(Stoppable::new(FramesSignal::from(clip.frames.clone()), stop.clone()));
+		let rate = spec.playback_rate.clamp(0.5, 2.0);
+		let frames = delayed_playback(clip.frames.clone(), spec.delay, rate);
+		let (mut gain, signal) = Gain::new(Stoppable::new(frames, stop.clone()));
 		let peak = spec.gain * mixer.gain(spec.bus);
 		gain.set_amplitude_ratio(peak);
 		let Some(spatial) = self.play_buffered(
@@ -435,10 +498,45 @@ mod tests {
 
 	#[test]
 	fn oneshot_builder_is_world_fixed() {
-		let spec = SpatialOneShot::at(Vec3::X).radius(20.0).gain(0.7).bus(AudioBus::PlayerWeapon);
+		let spec = SpatialOneShot::at(Vec3::X)
+			.radius(20.0)
+			.gain(0.7)
+			.bus(AudioBus::PlayerWeapon)
+			.delay(0.016)
+			.duck(false);
 		assert!((spec.position - Vec3::X).length() < 1e-5);
 		assert!((spec.radius - 20.0).abs() < 1e-5);
 		assert!(matches!(spec.bus, AudioBus::PlayerWeapon));
+		assert!((spec.delay - 0.016).abs() < 1e-5);
+		assert!(!spec.duck);
+	}
+
+	#[test]
+	fn playback_rate_preserves_mixer_clock_delay() {
+		use oddio::Signal;
+
+		const SAMPLE_RATE: u32 = 48_000;
+		let source = oddio::Frames::from_slice(SAMPLE_RATE, &[1.0_f32; 144_000]);
+		for rate in [0.5_f32, 1.0, 2.0, 0.1, 3.0] {
+			let effective_rate = rate.clamp(0.5, 2.0);
+			let mut signal = delayed_playback(source.clone(), 1.0, rate);
+			let mut frame = [0.0];
+			let first_audible = (0..96_000).find(|_| {
+				signal.sample(1.0 / SAMPLE_RATE as f32, &mut frame);
+				frame[0].abs() > 0.1
+			});
+			assert!(first_audible.is_some(), "rate {rate} signal never started");
+			let Some(first_audible) = first_audible else { continue };
+			let onset = first_audible as f32 / SAMPLE_RATE as f32;
+			// FramesSignal interpolates the first sample across the negative-to-zero
+			// boundary. At the slowest rate that spans two mixer samples; allow two
+			// more samples for the accumulated f32 phase.
+			let boundary_tolerance = 4.0 / SAMPLE_RATE as f32;
+			assert!(
+				(onset - 1.0).abs() <= boundary_tolerance,
+				"rate {rate} (effective {effective_rate}) began at {onset:.8}s"
+			);
+		}
 	}
 
 	#[test]

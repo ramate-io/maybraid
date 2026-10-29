@@ -14,6 +14,7 @@ name = "maybraid"
 path = "src/main.rs"
 
 [dependencies]
+lubikans = { workspace = true }
 layer-stack = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
@@ -23,19 +24,28 @@ character-inventory-user = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-game-mode-discover = { workspace = true }
 maybraid-game-mode-reliquary = { workspace = true }
-maybraid-game-mode-training-ground = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
+maybraid-agent = { workspace = true }
 maybraid-menu-controller = { workspace = true }
+maybraid-gameplay = { workspace = true }
+maybraid-controllers-core = { workspace = true }
+maybraid-session = { workspace = true }
+maybraid-sky = { workspace = true }
+lod = { workspace = true }
 maybraid-world = { workspace = true }
 menu-components = { workspace = true }
 menu-playground = { workspace = true }
 menu-screens = { workspace = true }
 character-persist = { workspace = true }
 
+[features]
+debug-commands = ["maybraid-world/debug-commands"]
+
 [dev-dependencies]
 anyhow = { workspace = true }
 character-items = { workspace = true }
 characters = { workspace = true }
+maybraid-world = { workspace = true, features = ["test-support"] }
 tempfile = { workspace = true }
 
 [lints]

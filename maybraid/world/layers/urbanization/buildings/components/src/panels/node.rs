@@ -3,8 +3,8 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Component;
 use bevy::scene::prelude::Scene;
-use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 
@@ -35,6 +35,34 @@ pub struct PanelNode {
 impl PanelNode {
 	pub fn new(style: PanelStyle, geometry: PanelGeometry, placement: Placement) -> Self {
 		Self { style, geometry, placement, material: None }
+	}
+
+	/// Surface point on an authored horizontal slab. The hull corners match
+	/// the building walk collider, including triangle tessellation and mirrors.
+	/// Vertical walls and pitched panels do not provide interior floor hints.
+	pub fn horizontal_walk_point(&self) -> Option<bevy_math::Vec3> {
+		use crate::panels::{
+			rectangle_kit_hull, right_triangle_kit_hull, tessellated_triangle_kit_hull,
+		};
+		use bevy_math::Vec3;
+		let rotation = self.placement.rotation();
+		if (rotation * Vec3::Y).y.abs() < 0.999 {
+			return None;
+		}
+		let scale = self.placement.scale;
+		let points = match &self.geometry {
+			PanelGeometry::Rectangle(_) => rectangle_kit_hull(scale),
+			PanelGeometry::RightTriangle(triangle) => {
+				right_triangle_kit_hull(scale, triangle.mirror)
+			}
+			PanelGeometry::TessellatedTriangle(triangle) => {
+				tessellated_triangle_kit_hull(triangle.a, triangle.b, triangle.c, scale)
+			}
+		};
+		let center = points.iter().copied().sum::<Vec3>() / points.len() as f32;
+		let point =
+			self.placement.translation + rotation * center + Vec3::Y * (0.2 * scale.y.abs());
+		point.is_finite().then_some(point)
 	}
 
 	pub fn with_material(mut self, material: MaterialRef) -> Self {
@@ -135,6 +163,25 @@ impl LodScene for PanelNode {
 mod tests {
 	use super::*;
 	use crate::panels::geometry::PanelGeometry;
+
+	#[test]
+	fn horizontal_walk_point_matches_slab_hull_and_ignores_walls() {
+		use bevy_math::Vec3;
+		let placement =
+			Placement::new(Vec3::new(4.0, 12.0, -3.0), 0.0).with_scale(Vec3::new(8.0, 0.5, 6.0));
+		let slab = PanelNode::rough_stone(PanelGeometry::rectangle(), placement);
+		assert_eq!(slab.horizontal_walk_point(), Some(Vec3::new(8.0, 12.1, -6.0)));
+		let wall = PanelNode::rough_stone(
+			PanelGeometry::rectangle(),
+			Placement { pitch: std::f32::consts::FRAC_PI_2, ..placement },
+		);
+		assert_eq!(wall.horizontal_walk_point(), None);
+		let triangle = PanelNode::rough_stone(PanelGeometry::right_triangle(None), placement);
+		let expected = Vec3::new(4.0 + 8.0 / 3.0, 12.1, -3.0 - 6.0 / 3.0);
+		assert!(triangle
+			.horizontal_walk_point()
+			.is_some_and(|point| (point - expected).length() < 1e-4));
+	}
 
 	#[test]
 	fn with_material_stamps_ref_without_changing_style() {

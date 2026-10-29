@@ -3,12 +3,10 @@
 //! [`UprightWalk`] holds art-level humanoid knobs. Rig-agnostic callers use [`Walk`](super::Walk)
 //! and convert via [`UprightWalk::from_walk`].
 
-use std::marker::PhantomData;
-
 use super::Walk;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct UprightWalk<Rig> {
+pub struct UprightWalk {
 	/// Humerus flex bias that keeps forearms slightly forward of the torso.
 	pub arm_down: f32,
 	/// Baseline elbow bend while the arm hangs at the side.
@@ -19,11 +17,11 @@ pub struct UprightWalk<Rig> {
 	pub elbow_cycle: f32,
 	/// Shoulder swing amplitude opposite the matching leg.
 	pub shoulder_swing: f32,
-	/// Vertical shoulder bounce over the stride (kept small; lift comes from hips).
+	/// Small shoulder lift over the stride.
 	pub shoulder_lift: f32,
 	/// Pelvis sagittal swing in phase with the femur (radians).
 	pub hip_swing: f32,
-	/// Vertical pelvis bounce over the stride (primary source of body lift).
+	/// Hip hike / roll over the stride (one side up, the other down).
 	pub hip_lift: f32,
 	/// Femur forward/back swing amplitude.
 	pub stride: f32,
@@ -33,36 +31,52 @@ pub struct UprightWalk<Rig> {
 	pub humerus_swing_scale: f32,
 	/// Constant forward root lean while walking (radians).
 	pub torso_lean: f32,
+	/// Shoulder-girdle yaw opposite the pelvis (radians at full stride).
+	pub torso_turn: f32,
+	/// Whole-pelvis vertical bob, twice per cycle, high at midstance (radians).
+	pub body_bob: f32,
+	/// Waist side-bend toward the stance foot (radians at full stride).
+	pub side_lean: f32,
+	/// Inward shoulder/humerus on the forward arm (radians at full forward swing).
+	pub arm_across: f32,
+	/// How much the neck counters lean, yaw, and side-bend (`0..=1`).
+	pub head_stabilize: f32,
+	/// Per-leg pelvis pitch on the trailing side (heel-to-toe without a foot bone).
+	pub foot_roll: f32,
 	/// Shin flex on the stance leg (radians).
 	pub knee_stance_bend: f32,
 	/// Peak shin flex during swing for toe clearance (radians).
 	pub knee_swing_bend: f32,
-	_rig: PhantomData<Rig>,
 }
 
-impl<Rig> Default for UprightWalk<Rig> {
+impl Default for UprightWalk {
 	fn default() -> Self {
 		Self {
 			arm_down: 1.2,
 			elbow_bend: 0.35,
-			elbow_pump: 0.12,
-			elbow_cycle: 0.05,
-			shoulder_swing: 0.08,
-			shoulder_lift: 0.0,
-			hip_swing: 0.03,
-			hip_lift: 0.15,
+			elbow_pump: 0.18,
+			elbow_cycle: 0.08,
+			shoulder_swing: 0.12,
+			shoulder_lift: 0.04,
+			hip_swing: 0.12,
+			hip_lift: 0.12,
 			stride: 0.35,
-			femur_medial_counter: 0.1,
-			humerus_swing_scale: 0.5,
-			torso_lean: 0.08,
+			femur_medial_counter: 0.08,
+			humerus_swing_scale: 0.55,
+			torso_lean: 0.10,
+			torso_turn: 0.10,
+			body_bob: 0.06,
+			side_lean: 0.06,
+			arm_across: 0.10,
+			head_stabilize: 0.8,
+			foot_roll: 0.08,
 			knee_stance_bend: 0.1,
 			knee_swing_bend: 0.8,
-			_rig: PhantomData,
 		}
 	}
 }
 
-impl<Rig> UprightWalk<Rig> {
+impl UprightWalk {
 	/// Scale the tuned upright template from rig-agnostic [`Walk`] knobs.
 	pub fn from_walk(walk: &Walk) -> Self {
 		let template = Self::default();
@@ -72,10 +86,15 @@ impl<Rig> UprightWalk<Rig> {
 		Self {
 			stride: template.stride * stride_scale,
 			hip_lift: template.hip_lift * walk.bounce,
+			body_bob: template.body_bob * walk.bounce,
 			hip_swing: template.hip_swing * walk.rotation,
 			femur_medial_counter: template.femur_medial_counter * walk.rotation,
 			torso_lean: template.torso_lean * walk.rotation,
+			torso_turn: template.torso_turn * walk.rotation,
+			side_lean: template.side_lean * walk.rotation,
 			shoulder_swing: template.shoulder_swing * walk.rotation,
+			arm_across: template.arm_across * walk.rotation,
+			foot_roll: template.foot_roll * walk.rotation,
 			knee_stance_bend: template.knee_stance_bend * stride_scale,
 			knee_swing_bend: template.knee_swing_bend * stride_scale,
 			shoulder_lift: template.shoulder_lift * walk.bounce,
@@ -84,7 +103,7 @@ impl<Rig> UprightWalk<Rig> {
 			elbow_pump: template.elbow_pump,
 			elbow_cycle: template.elbow_cycle,
 			humerus_swing_scale: template.humerus_swing_scale,
-			_rig: PhantomData,
+			head_stabilize: template.head_stabilize,
 		}
 	}
 }
@@ -96,14 +115,14 @@ mod tests {
 	#[test]
 	fn from_walk_default_matches_template() {
 		let walk = Walk::default();
-		assert_eq!(UprightWalk::<()>::from_walk(&walk), UprightWalk::<()>::default());
+		assert_eq!(UprightWalk::from_walk(&walk), UprightWalk::default());
 	}
 
 	#[test]
 	fn from_walk_scales_stride() {
 		let walk = Walk { stride: 0.7, ..Walk::default() };
-		let upright = UprightWalk::<()>::from_walk(&walk);
-		let template = UprightWalk::<()>::default();
+		let upright = UprightWalk::from_walk(&walk);
+		let template = UprightWalk::default();
 		assert!((upright.stride - template.stride * 2.0).abs() < 1e-5);
 		assert!((upright.knee_swing_bend - template.knee_swing_bend * 2.0).abs() < 1e-5);
 	}
@@ -111,10 +130,12 @@ mod tests {
 	#[test]
 	fn from_walk_scales_bounce_and_rotation() {
 		let walk = Walk { bounce: 2.0, rotation: 0.5, ..Walk::default() };
-		let upright = UprightWalk::<()>::from_walk(&walk);
-		let template = UprightWalk::<()>::default();
+		let upright = UprightWalk::from_walk(&walk);
+		let template = UprightWalk::default();
 		assert!((upright.hip_lift - template.hip_lift * 2.0).abs() < 1e-5);
+		assert!((upright.body_bob - template.body_bob * 2.0).abs() < 1e-5);
 		assert!((upright.hip_swing - template.hip_swing * 0.5).abs() < 1e-5);
 		assert!((upright.torso_lean - template.torso_lean * 0.5).abs() < 1e-5);
+		assert!((upright.torso_turn - template.torso_turn * 0.5).abs() < 1e-5);
 	}
 }

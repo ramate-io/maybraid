@@ -9,12 +9,13 @@ use std::f32::consts::PI;
 use avian3d::prelude::*;
 use bevy::{ecs::query::Has, prelude::*};
 use durham::{
-	terrain_collider_covers_xz, BaseTerrainNoise, CascadeChunk, TerrainCellLayout,
-	TerrainEntryStore, TerrainTrimeshCollider,
+	terrain_collider_covers_xz, BaseTerrainNoise, CascadeChunk, DurhamSurface, TerrainCellLayout,
+	TerrainTrimeshCollider,
 };
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
-use maybraid_input::{PadButton, VirtualPad};
+use maybraid_character_controller::{ActorControlStatus, RoutedActorControl};
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 
 use crate::{camera::CameraController, WorldBaseTerrain};
 
@@ -154,12 +155,6 @@ struct JumpImpulse(f32);
 #[derive(Component)]
 struct MaxSlopeAngle(f32);
 
-#[derive(Message, Clone, Copy, Debug)]
-pub enum MovementAction {
-	Move(Vec2),
-	Jump,
-}
-
 /// When false, this crate skips grounded / wish / jump on the capsule so a
 /// downstream motor (world player buoyancy) can own velocity. Snap and
 /// fall-respawn still run.
@@ -172,7 +167,7 @@ impl Default for VegetationPlayerMotor {
 	}
 }
 
-/// When false, a downstream controller writes [`MovementAction`] / [`MoveWish`].
+/// When false, a downstream controller writes [`MoveWish`].
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct PadMovementEnabled(pub bool);
 
@@ -204,12 +199,12 @@ impl Plugin for PlayerPlugin {
 			.init_resource::<PlayerRespawn>()
 			.init_resource::<PlayerPhysicsEnabled>()
 			.init_resource::<PlayerSpawnXz>()
-			.add_message::<MovementAction>()
 			.add_systems(Startup, spawn_player)
 			.add_systems(
 				Update,
 				(
 					keyboard_movement_input,
+					bevy::ecs::schedule::ApplyDeferred,
 					update_grounded,
 					apply_character_movement,
 					follow_character_camera,
@@ -300,9 +295,20 @@ pub fn player_position_above_surface(surface: Vec3) -> Vec3 {
 	surface + Vec3::Y * (capsule_half_height() + 0.5)
 }
 
-/// Elevation used before [`TerrainEntryStore`] has the cell underfoot.
+/// Elevation used before the cell underfoot is published.
 pub fn holding_elevation(base: &BaseTerrainNoise, x: f32, z: f32) -> f32 {
 	base.height_at(x, z) + base.height_scale * HOLD_ABOVE_BASE_FACTOR
+}
+
+/// Composed height at `xz`, or [`holding_elevation`] while the cell is unpublished or busy.
+///
+/// Spawn placement must not use [`DurhamSurface::height_or_fallback`]: raw base
+/// noise sits under jersey plateaus. Hold above the base until snap can drop
+/// onto the published cell.
+pub fn surface_or_hold_at(surface: &DurhamSurface, xz: Vec2) -> f32 {
+	surface
+		.composed_height_at(xz)
+		.unwrap_or_else(|| holding_elevation(surface.base(), xz.x, xz.y))
 }
 
 pub fn player_spawn_point_at(xz: Vec2, elevation: f32) -> Vec3 {
@@ -316,8 +322,7 @@ pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 pub(crate) fn snap_player_to_composed_surface(
 	mut commands: Commands,
 	physics: Res<PlayerPhysicsEnabled>,
-	store: Res<TerrainEntryStore>,
-	layout: Res<TerrainCellLayout>,
+	surface: DurhamSurface,
 	awaiting: Query<Entity, (With<Player>, With<AwaitingTerrainSurface>)>,
 	mut players: Query<
 		(Entity, &mut Transform, &mut LinearVelocity, &mut GravityScale, Option<&OffTerrainAnchor>),
@@ -329,6 +334,10 @@ pub(crate) fn snap_player_to_composed_surface(
 	else {
 		return;
 	};
+
+	if awaiting.single().is_err() {
+		return;
+	}
 
 	if !physics.0 {
 		gravity.0 = 0.0;
@@ -343,23 +352,22 @@ pub(crate) fn snap_player_to_composed_surface(
 	}
 
 	let xz = transform.translation.xz();
-	let Some(elevation) = store.composed_height_at(&layout, xz.x, xz.y) else {
-		gravity.0 = 0.0;
-		**velocity = Vec3::ZERO;
-		return;
+	let elevation = match surface.height_at(xz) {
+		Ok(Some(elevation)) => elevation,
+		Ok(None) | Err(lod::hcsg::Busy) => {
+			gravity.0 = 0.0;
+			**velocity = Vec3::ZERO;
+			return;
+		}
 	};
 
 	let target = player_spawn_point_at(xz, elevation);
-	if awaiting.single().is_ok() {
-		transform.translation = target;
-		**velocity = Vec3::ZERO;
-	}
+	transform.translation = target;
+	**velocity = Vec3::ZERO;
 
 	if terrain_collider_covers_xz(target, terrain_colliders.iter()) {
 		gravity.0 = PLAY_GRAVITY_SCALE;
-		if let Ok(entity) = awaiting.single() {
-			commands.entity(entity).remove::<AwaitingTerrainSurface>();
-		}
+		commands.entity(entity).remove::<AwaitingTerrainSurface>();
 	} else {
 		// Lost or not-yet-streamed column: freeze in place. Do not re-insert
 		// [`AwaitingTerrainSurface`] — that marker is first-drop only, and snap
@@ -399,9 +407,7 @@ fn queue_void_player_respawn(
 
 fn recover_void_player(
 	time: Res<Time>,
-	store: Res<TerrainEntryStore>,
-	layout: Res<TerrainCellLayout>,
-	base: Res<WorldBaseTerrain>,
+	surface: DurhamSurface,
 	mut respawn: ResMut<PlayerRespawn>,
 	mut commands: Commands,
 	mut player: Query<
@@ -426,9 +432,10 @@ fn recover_void_player(
 		return;
 	}
 	let xz = transform.translation.xz();
-	let elevation = store
-		.composed_height_at(&layout, xz.x, xz.y)
-		.unwrap_or_else(|| holding_elevation(&base.0, xz.x, xz.y));
+	let elevation = match surface.height_at(xz) {
+		Ok(Some(elevation)) => elevation,
+		Ok(None) | Err(lod::hcsg::Busy) => holding_elevation(surface.base(), xz.x, xz.y),
+	};
 	transform.translation = player_spawn_point_at(xz, elevation);
 	**velocity = Vec3::ZERO;
 	respawn.queued_at = None;
@@ -451,44 +458,58 @@ fn keyboard_movement_input(
 	mode: Res<PlaygroundMode>,
 	text_focus: Res<TextEntryFocus>,
 	pad_movement: Res<PadMovementEnabled>,
-	pad: Res<VirtualPad>,
+	primary: Option<Res<PrimaryVirtualPad>>,
 	cameras: Query<&CameraController, With<Camera3d>>,
-	mut wishes: Query<&mut MoveWish, With<Player>>,
-	mut writer: MessageWriter<MovementAction>,
+	mut wishes: Query<
+		(Entity, &mut MoveWish, Option<&RoutedActorControl>, Option<&ActorControlStatus>),
+		With<Player>,
+	>,
+	mut commands: Commands,
 ) {
 	if !pad_movement.0 {
 		return;
 	}
 	if *mode != PlaygroundMode::Character || text_focus.0 {
-		for mut wish in &mut wishes {
+		for (_, mut wish, _, _) in &mut wishes {
 			wish.0 = Vec3::ZERO;
 		}
 		return;
 	}
-
-	let direction = pad.move_stick.clamp_length_max(1.0);
-
-	let wish_dir = if direction != Vec2::ZERO {
-		if let Ok(camera) = cameras.single() {
-			let yaw = Quat::from_axis_angle(Vec3::Y, camera.yaw);
-			let forward = yaw * -Vec3::Z;
-			let right_dir = yaw * Vec3::X;
-			(right_dir * direction.x + forward * direction.y).normalize_or_zero()
+	let Some(primary) = primary.as_deref() else {
+		return;
+	};
+	for (entity, mut wish, control, status) in &mut wishes {
+		if status.and_then(|status| status.source()).and_then(|source| source.entity())
+			!= Some(primary.0)
+		{
+			continue;
+		}
+		// Neutral is immediate; positive motion must keep the source's delivery grant.
+		wish.0 = Vec3::ZERO;
+		let Some(input) = control.and_then(RoutedActorControl::get).copied() else {
+			continue;
+		};
+		let direction = input.payload().move_stick().clamp_length_max(1.0);
+		let wish_dir = if direction != Vec2::ZERO {
+			if let Ok(camera) = cameras.single() {
+				let yaw = Quat::from_axis_angle(Vec3::Y, camera.yaw);
+				let forward = yaw * -Vec3::Z;
+				let right_dir = yaw * Vec3::X;
+				(right_dir * direction.x + forward * direction.y).normalize_or_zero()
+			} else {
+				Vec3::ZERO
+			}
 		} else {
 			Vec3::ZERO
+		};
+		if wish_dir != Vec3::ZERO {
+			input.map(|_| (entity, wish_dir)).queue(&mut commands, |world, input| {
+				let (entity, direction) = input.into_payload();
+				if let Some(mut wish) = world.get_mut::<MoveWish>(entity) {
+					wish.0 = direction;
+				}
+			});
 		}
-	} else {
-		Vec3::ZERO
-	};
-	for mut wish in &mut wishes {
-		wish.0 = wish_dir;
-	}
-
-	if direction != Vec2::ZERO {
-		writer.write(MovementAction::Move(direction));
-	}
-	if pad.just_pressed(PadButton::A) {
-		writer.write(MovementAction::Jump);
 	}
 }
 
@@ -619,7 +640,6 @@ fn apply_character_movement(
 	mode: Res<PlaygroundMode>,
 	motor: Res<VegetationPlayerMotor>,
 	time: Res<Time>,
-	mut reader: MessageReader<MovementAction>,
 	mut controllers: Query<
 		(
 			Entity,
@@ -633,20 +653,16 @@ fn apply_character_movement(
 			Has<Grounded>,
 			Option<&Jumping>,
 			Has<Player>,
+			Option<&RoutedActorControl>,
 		),
 		With<CharacterController>,
 	>,
 ) {
 	if !motor.0 || *mode != PlaygroundMode::Character {
-		for _ in reader.read() {}
 		return;
 	}
 
 	let dt = time.delta_secs();
-	let mut jump_requested = false;
-	for action in reader.read() {
-		jump_requested |= matches!(action, MovementAction::Jump);
-	}
 
 	for (
 		entity,
@@ -660,8 +676,13 @@ fn apply_character_movement(
 		grounded,
 		jumping,
 		is_player,
+		control,
 	) in &mut controllers
 	{
+		let jump_input = control
+			.and_then(RoutedActorControl::get)
+			.copied()
+			.filter(|input| input.payload().a().just_pressed());
 		if let Some(normal) = grounded_plane(hits, walkable, grounded) {
 			if jumping.is_none() {
 				control_ground_velocity(&mut velocity, wish.0, normal, max_slope.0, accel.0, dt);
@@ -671,9 +692,26 @@ fn apply_character_movement(
 		} else {
 			control_air_velocity(&mut velocity, wish.0, accel.0, dt);
 		}
-		if jump_requested && grounded && is_player {
-			velocity.y = jump.0;
-			commands.entity(entity).insert(Jumping { left_ground: false });
+		if grounded && is_player {
+			if let Some(input) = jump_input {
+				let impulse = jump.0;
+				input.map(|_| (entity, impulse)).queue(&mut commands, |world, input| {
+					let (entity, impulse) = input.into_payload();
+					if world.get::<Grounded>(entity).is_none() {
+						return;
+					}
+					let jumped = if let Some(mut velocity) = world.get_mut::<LinearVelocity>(entity)
+					{
+						velocity.y = impulse;
+						true
+					} else {
+						false
+					};
+					if jumped {
+						world.entity_mut(entity).insert(Jumping { left_ground: false });
+					}
+				});
+			}
 		}
 	}
 }
@@ -714,6 +752,7 @@ fn follow_character_camera(
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use durham::TerrainConfig;
+	use lod::hcsg::HcsgStorage;
 
 	use super::*;
 
@@ -722,6 +761,24 @@ mod tests {
 		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
 		let hold = holding_elevation(&base, 0.0, 0.0);
 		assert!(hold > base.height_at(0.0, 0.0) + 50.0);
+	}
+
+	#[test]
+	fn surface_or_hold_at_holds_above_unpublished_cells() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let layout = TerrainCellLayout::default();
+		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
+		world.init_resource::<HcsgStorage>();
+		world.insert_resource(layout);
+		world.insert_resource(WorldBaseTerrain(base.clone()));
+
+		let mut state = bevy::ecs::system::SystemState::<DurhamSurface>::new(&mut world);
+		let surface = state.get(&world)?;
+		let xz = Vec2::new(80.0, 5.0);
+		let hold = surface_or_hold_at(&surface, xz);
+		assert_eq!(hold, holding_elevation(&base, xz.x, xz.y));
+		assert!(hold > surface.fallback_height_at(xz) + 50.0);
+		Ok(())
 	}
 
 	#[test]
@@ -765,7 +822,7 @@ mod tests {
 	}
 
 	#[test]
-	fn snap_freezes_released_player_without_teleport() -> anyhow::Result<()> {
+	fn snap_ignores_a_placed_body_without_awaiting() -> anyhow::Result<()> {
 		let pose = Vec3::new(4.0, 12.0, -3.0);
 		let (mut world, player) = void_world(pose);
 		world
@@ -777,7 +834,11 @@ mod tests {
 			Some(pose)
 		);
 		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
-		assert_eq!(world.get::<GravityScale>(player).map(|gravity| gravity.0), Some(0.0));
+		assert_eq!(
+			world.get::<GravityScale>(player).map(|gravity| gravity.0),
+			Some(PLAY_GRAVITY_SCALE),
+			"a placed body is not held by snap"
+		);
 		Ok(())
 	}
 
@@ -866,7 +927,7 @@ mod tests {
 		world.insert_resource(PlayerPhysicsEnabled::default());
 		world.insert_resource(PlayerRespawn::default());
 		world.insert_resource(TerrainCellLayout::default());
-		world.insert_resource(TerrainEntryStore::default());
+		world.init_resource::<HcsgStorage>();
 		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
 			&TerrainConfig::new(42),
 		)));

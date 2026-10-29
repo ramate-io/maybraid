@@ -18,14 +18,14 @@ writes [`VantageOn`](../../intelligence/movement/lib/src/objective.rs)
 into [`movement-intelligence`](../../intelligence/movement/lib) at an ~8 m
 standoff (no close-range flee). Lost sightlines raise sightline weight so the
 NPC does not glue to a cover crack. Firearm combat aims
-[`PlayerLook`](../../player/src/identity.rs) from the stock (shoulder pivot), not
+[`PlayerLook`](../../player/lib/src/identity.rs) from the stock (shoulder pivot), not
 the muzzle, and holds the trigger after the first on-target acquire;
 `trigger_happiness` is only the delay before that first pull.
 Projectile sweeps include both fixed geometry and animated character capsules.
 Collider size comes from the character recipe
 [`LocomotionCapsule`](../../world/layers/mobs/characters/lib/src/components.rs) (Braidman is
 the 0.4 / 1.0 humanoid hull). Walk uses the shared player
-[`MotorTraction`](../../player/src/contact.rs) contact hooks so Les Halles
+[`MotorTraction`](../../player/lib/src/contact.rs) contact hooks so Les Halles
 floors keep grip for props without dragging the capsule. Each character starts with 100 health and takes 25 damage per bolt contact
 in `duel`. `free-for-all` bakes the rolled firearm's DPC, speed, range,
 penetration, cadence, and recoil (plus clothing HP / outgoing damage) into the
@@ -36,7 +36,7 @@ world reticle flashes when the followed player lands a hit, and `+1` / `+2` /
 top capsule hemisphere, 1.25× HP, light blue), or a down. Catalog recoil noisily
 kicks the follow camera (and NPC look) along a short lerp to the hashed offset
 (scaled by the rolled recoil value); lasers do not kick. NPC aim tracks at a
-finite angular rate, uses 0.75 counter-recoil skill, and must recover its actual
+finite angular rate, uses 0.45 counter-recoil skill, and must recover its actual
 bore inside the short alignment grace to keep firing. Connected pads rumble
 on the followed player's fire and hit-confirm (faster / harder shots scale the
 pulse; lasers stay a low constant tick). The
@@ -91,6 +91,8 @@ no return fire — so projectile contacts can be checked in isolation.
 capsule (amber), the query-only head capsule (cyan, Y-stretched), and the
 headshot plane (blue) so a miss on the crown is visible.
 
-The standalone `firing-range` executable is retired. Free-for-all is entered from the Maybraid home row: Training Ground runs this roster inside `maybraid`.
+The standalone `firing-range` executable is retired. This crate is a library
+([`FiringRangePlugin`](src/lib.rs), [`FreeForAllPlugin`](src/lib.rs)) with no
+workspace `[[bin]]` and no current host in `maybraid` or Training Ground.
 
 WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses through the optic FOV; middle mouse / left bumper / C ADS with iron FOV.
