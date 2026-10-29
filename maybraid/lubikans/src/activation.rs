@@ -68,6 +68,15 @@ impl LubikanActivationSession {
 	) -> Self {
 		Self { owner, account, definition, id }
 	}
+
+	pub fn report(self, outcome: LubikanActivationOutcome) -> LubikanActivationReport {
+		LubikanActivationReport { id: self.id, outcome }
+	}
+
+	/// Self idles after complete so a later activate in this life can spend.
+	pub fn returns_idle_on_complete(self) -> bool {
+		self.account.returns_idle_on_complete()
+	}
 }
 
 /// Ledger-side accept: the account that paid and the session id to emit.

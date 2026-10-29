@@ -1,6 +1,6 @@
 //! Outcome and unlock regressions. No combat-hud.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use bevy::prelude::*;
 use bevy::time::{TimeUpdateStrategy, Virtual};
 use damage::Died;
@@ -9,10 +9,10 @@ use encounters::{
 	EncounterFinishedReentry, EncounterId, EncounterLifetimePolicy, EncounterOutcome,
 	EncounterSignal,
 };
-use lubikans::{LubikanAccountId, LubikanCatalog, LubikanLedger, LubikanOwner, LubikansPlugin};
+use lubikans::{LubikanAccountId, LubikanBodyOf, LubikanCatalog, LubikanOwner, LubikansPlugin};
 use std::time::Duration;
 
-use crate::identity::{chained_encounter_id, ENRAGED_DEFINITION_ID, WARD_DEFINITION_ID};
+use crate::identity::{ENRAGED_DEFINITION_ID, WARD_DEFINITION_ID, chained_encounter_id};
 use crate::outcomes::{BikanwardaDeparted, BikanwardaDeparture, EncounterUnlockAwarded};
 use crate::plugin::BikanwardaEncounterPlugin;
 
@@ -58,12 +58,12 @@ fn drain_departures(app: &mut App) -> Vec<BikanwardaDeparted> {
 }
 
 fn owned(app: &App, owner: Entity, definition: lubikans::LubikanDefinitionId) -> Result<bool> {
-	let ledger = app.world().get::<LubikanLedger>(owner).ok_or_else(|| anyhow!("ledger"))?;
+	let ledger = LubikanBodyOf::ledger(app.world(), owner).ok_or_else(|| anyhow!("ledger"))?;
 	Ok(ledger.contains(LubikanAccountId::unique(definition)))
 }
 
 fn account_count(app: &App, owner: Entity) -> Result<usize> {
-	let ledger = app.world().get::<LubikanLedger>(owner).ok_or_else(|| anyhow!("ledger"))?;
+	let ledger = LubikanBodyOf::ledger(app.world(), owner).ok_or_else(|| anyhow!("ledger"))?;
 	Ok(ledger.iter().count())
 }
 

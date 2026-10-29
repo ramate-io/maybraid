@@ -4,9 +4,11 @@
 //!
 //! [`Jab::target`] is relative to the body COM (root on humanoid v0). Axes match the
 //! target vector — **not** Bevy camera forward:
-//! - **+X** = right
+//! - **+X** = character left on `for_clip_test` (left-hand side)
 //! - **+Y** = up
 //! - **+Z** = ahead (fight forward)
+//!
+//! Camera-to-character is a 180° yaw (negate X and Z). Do not flip Z only.
 //!
 //! [`Jab::humerus_along`] builds a length direction in character space. The resolver
 //! aims the humerus with that direction and a roll. The elbow stays a bone-local
@@ -25,9 +27,12 @@ pub const DEFAULT_JAB_TARGET: Vec3 = Vec3::new(0.0, 0.35, 0.7);
 /// Nominal chamber depth (`1.0` matches the tuned preparatory motion).
 pub const DEFAULT_BACKSWING: f32 = 1.0;
 
-const BACKSWING_END: f32 = 0.18;
-const EXTEND_END: f32 = 0.42;
-const HOLD_END: f32 = 0.52;
+/// Clip progress where chamber ends and the fist starts to extend.
+pub const BACKSWING_END: f32 = 0.18;
+/// Clip progress where the fist first reaches full extension.
+pub const EXTEND_END: f32 = 0.42;
+/// Clip progress where the hold ends and recovery begins.
+pub const HOLD_END: f32 = 0.52;
 
 // --- Elbow ---
 const GUARD_ELBOW: f32 = 1.5;
@@ -105,6 +110,14 @@ impl Jab {
 
 	pub fn opposite_side(&self) -> Side {
 		self.side.opposite()
+	}
+
+	/// Authored boxing guard: rest and recover of the jab clip (`progress = 0`).
+	///
+	/// Both arms sit in [`GUARD_ELBOW`] cover. Fisticuffs icons must sample this
+	/// still rather than folding bind-pose vertices.
+	pub fn guard_progress() -> f32 {
+		0.0
 	}
 
 	/// Salute / hold still (mid-hold after full extend). Tanz Healing Salute
@@ -198,14 +211,38 @@ impl Jab {
 		base + (self.target.x - base) * HUMERUS_LATERAL_BLEND * self.extension_amount(progress)
 	}
 
+	/// Character-space look the punching fist follows at full extension.
+	///
+	/// [`Self::target`] is a point `(dir.x * reach, default.y + dir.y * reach, dir.z * reach)`.
+	/// On `for_clip_test`, **+X is the character's left** (left-hand side).
+	pub fn punch_aim_dir(&self) -> Vec3 {
+		let dir = Vec3::new(self.target.x, self.target.y - DEFAULT_JAB_TARGET.y, self.target.z);
+		if dir.length_squared() < 1e-8 {
+			Vec3::Z
+		} else {
+			dir.normalize()
+		}
+	}
+
 	/// Character-space humerus length direction. The resolver aims with this vector.
+	///
+	/// Chamber uses the stylized boxing path. The punching arm lerps onto
+	/// [`Self::punch_aim_dir`] as it extends so the fist tracks look at Active.
 	pub fn humerus_along(&self, side: Side, progress: f32) -> Vec3 {
-		Vec3::new(
+		let stylized = Vec3::new(
 			self.humerus_lateral(side, progress),
 			-self.arm_drop(side, progress),
 			self.humerus_forward(side, progress),
 		)
-		.normalize()
+		.normalize();
+		if side != self.side {
+			return stylized;
+		}
+		// Square the envelope so the first extend frames stay on the chamber
+		// path; Active (`extend = 1`) still lands on the look direction.
+		stylized
+			.lerp(self.punch_aim_dir(), self.extension_amount(progress).powi(2))
+			.normalize()
 	}
 
 	/// Tiny shoulder aim/height assist.
@@ -279,11 +316,22 @@ mod tests {
 	const FOREARM_SEGMENT: f32 = 0.48;
 	/// Punching-hand tip Z on `for_clip_test()` with quadratic extend easing (`main`).
 	const QUADRATIC_PUNCH_TIP_Z_AT_0312: f32 = 1.1004;
-	const HOLD_PUNCH_TIP_Z: f32 = 1.4488;
-	const HOLD_PUNCH_TIP_X: f32 = -0.0424;
+	const HOLD_PUNCH_TIP_Z: f32 = 1.4668;
+	const HOLD_PUNCH_TIP_X: f32 = -0.0973;
+
+	#[test]
+	fn guard_progress_is_the_authored_rest() {
+		let jab = Jab::default();
+		let progress = Jab::guard_progress();
+		assert_eq!(progress, 0.0);
+		assert_eq!(jab.extension_amount(progress), 0.0);
+		assert_eq!(jab.chamber_amount(progress), 0.0);
+		assert!((jab.jab_elbow(progress) - GUARD_ELBOW).abs() < 1e-5);
+		assert!(jab.guard_elbow(progress) > 1.0);
+	}
 
 	fn peak() -> f32 {
-		Jab::representative_progress()
+		(EXTEND_END + HOLD_END) * 0.5
 	}
 
 	fn forearm_hand_tip(rig: &HumanoidV0Rig, side: Side) -> Vec3 {
@@ -425,6 +473,17 @@ mod tests {
 				< 1e-4
 		);
 		assert!(jab.torso_turn(p).abs() > jab.torso_turn(guard).abs());
+		Ok(())
+	}
+
+	#[test]
+	fn punch_aim_dir_follows_target_offset_from_default() -> anyhow::Result<()> {
+		let level = Jab::default();
+		assert!((level.punch_aim_dir() - Vec3::Z).length() < 1e-4);
+		let left = Jab::default().with_target(Vec3::new(0.7, 0.35, 0.7));
+		assert!(left.punch_aim_dir().x > 0.4);
+		let up = Jab::default().with_target(Vec3::new(0.0, 0.35 + 0.7, 0.7));
+		assert!(up.punch_aim_dir().y > 0.4);
 		Ok(())
 	}
 

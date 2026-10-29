@@ -16,17 +16,18 @@ test-support = []
 debug-commands = []
 
 [dependencies]
+encounters = { workspace = true }
+bikanwarda-encounter = { workspace = true }
 layer-stack = { workspace = true }
 avian3d = { workspace = true }
 bevy = { workspace = true }
+building-physics = { workspace = true }
 chico = { workspace = true }
 vegetation-components = { workspace = true }
 clap = { workspace = true }
 combat-hud = { workspace = true }
 lubikans = { workspace = true }
 lubikans-damage = { workspace = true }
-encounters = { workspace = true }
-bikanwarda-encounter = { workspace = true }
 character-items = { workspace = true }
 character-ragdoll = { workspace = true }
 characters = { workspace = true }
@@ -38,6 +39,7 @@ evasion-intelligence = { workspace = true }
 firearm-intelligence = { workspace = true }
 firearm-user = { workspace = true }
 grenade-user = { workspace = true }
+fisticuffs-user = { workspace = true }
 tanz-user = { workspace = true }
 grenades = { workspace = true }
 furniture-assemblies = { workspace = true }
@@ -58,8 +60,14 @@ maybraid-game-mode-discover = { workspace = true }
 material-ref = { workspace = true }
 world-materials = { workspace = true }
 maybraid-character-controller = { workspace = true }
-maybraid-world-controller = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-equipment = { workspace = true }
+maybraid-controllers-core = { workspace = true }
+maybraid-locomotion-controller = { workspace = true }
+maybraid-session = { workspace = true }
+maybraid-spawns-actors = { workspace = true }
+maybraid-spawns-player = { workspace = true }
+maybraid-spawns-placement = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 maybraid-agent = { workspace = true }
 menu-components = { workspace = true }
 maybraid-skill-map = { workspace = true }
@@ -98,9 +106,11 @@ urbanization-layer-model = { workspace = true }
 vegetation-layer-model = { workspace = true }
 
 [dev-dependencies]
+encounters = { workspace = true, features = ["test-support"] }
 anyhow = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
-encounters = { workspace = true, features = ["test-support"] }
+maybraid-audio = { workspace = true }
+maybraid-gameplay = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]

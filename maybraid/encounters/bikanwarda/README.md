@@ -20,3 +20,12 @@ After a free, this crate emits [`BikanwardaDeparted`](src/outcomes.rs) with
 
 Unlocks go through [`LubikanLedger::ensure_owned`](../../lubikans/src/ledger.rs)
 on the signal source. They do **not** clone [`LubikanSessionStore`](../../lubikans/src/plugin.rs).
+
+### Shared content catalog
+
+Unlocks resolve the stable character ledger through the player's body link.
+Their ids and default placeholder balance row now come from
+`bikanwarda-lubikans`: Ward=1, Enraged=2, capacity100 / cost25 / stock4. This
+displaces the older reversed ids and isolated512 /512 defaults; it prevents
+charge, unlock and summon registration from describing different accounts.
+Balance remains configurable and provisional.

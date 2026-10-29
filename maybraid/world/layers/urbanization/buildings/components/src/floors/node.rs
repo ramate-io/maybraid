@@ -67,6 +67,22 @@ impl FloorNode {
 		self
 	}
 
+	/// Authored walk point on this floor, in the building's local space.
+	///
+	/// Rectangle placements are authored at their lower-left corner and are
+	/// recentered for the kit. Other floor geometries keep their authored anchor.
+	/// Floor kits use normalized Y `[-0.2, 0.2]`, so the upper surface is
+	/// `0.2 * scale.y` above the resolved pose.
+	pub fn walk_on_point(&self) -> Option<Vec3> {
+		let placement = match &self.geometry {
+			FloorGeometry::Rectangle(_) => to_centered_rect_placement(self.placement),
+			// The center of these geometries can be a courtyard, a shaft, or
+			// outside the tessellated surface. Let a shape-specific author choose.
+			_ => return None,
+		};
+		Some(placement.translation + Vec3::Y * (0.2 * placement.scale.y.abs()))
+	}
+
 	/// Walk prisms for tessellated right-triangle floor kits (local hull + pose).
 	pub fn triangle_walk_hulls(&self) -> Vec<(Vec3, Quat, Vec<Vec3>)> {
 		self.geometry
@@ -211,5 +227,14 @@ mod tests {
 			node.material.as_ref().map(|m| &m.name),
 			Some(&material_ref::MaterialId::named("stucco"))
 		);
+	}
+
+	#[test]
+	fn walk_point_uses_the_authored_slab_surface() {
+		let floor = FloorNode::rough_stone(
+			FloorGeometry::rectangle(),
+			Placement::new(Vec3::new(4.0, 12.0, -3.0), 0.0).with_scale(Vec3::new(8.0, 0.5, 6.0)),
+		);
+		assert_eq!(floor.walk_on_point(), Some(Vec3::new(8.0, 12.1, 0.0)));
 	}
 }

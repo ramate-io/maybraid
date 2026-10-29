@@ -11,7 +11,7 @@ use encounters::{EncounterSignal, EncounterSignalKind, EncounterSystems, Encount
 use lubikans::{LubikanOwnerLifetime, LubikanOwnerLifetimeKind};
 use world_player::Player;
 
-use crate::control::{WorldGameplayEnabled, WorldPlaySessionEnded};
+use maybraid_session::{WorldGameplayEnabled, WorldPlaySessionEnded};
 
 /// Wires Bikanwarda outcomes into the world plugin graph.
 pub struct WorldEncounterPlugin;
@@ -33,7 +33,9 @@ pub fn configure(app: &mut App) {
 			sync_encounter_time_enabled.before(EncounterSystems::Ingest),
 			forward_world_session_end.before(EncounterSystems::Resolve),
 			forward_owner_lifetime.before(EncounterSystems::Resolve),
-			forward_player_deaths.before(EncounterSystems::Resolve),
+			forward_player_deaths
+				.after(damage::DamageSystems::Down)
+				.before(EncounterSystems::Resolve),
 		),
 	);
 }

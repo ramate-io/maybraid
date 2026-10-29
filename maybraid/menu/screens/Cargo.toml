@@ -20,7 +20,7 @@ item-icons = { workspace = true }
 tanz-user = { workspace = true }
 game-commands = { workspace = true }
 maybraid-character-ui-menu-renderer = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 maybraid-menu-controller = { workspace = true }
 maybraid-world = { workspace = true }
 menu-components = { workspace = true }

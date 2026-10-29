@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use bevy::prelude::*;
-use maybraid_input::PadRumble;
+use maybraid_virtual_pad_controller::PadRumble;
 
 use crate::compose::{SpatialRumbleOutput, SpatialRumbleSettings};
 use crate::listener::{AppliedCameraRumble, SpatialRumbleListener};

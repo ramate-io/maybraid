@@ -3,12 +3,12 @@
 use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_items::{Inventory, InventoryItem};
-use lubikans::{LubikanLedger, LubikanOwner};
+use lubikans::{LubikanBodyOf, LubikanLedger};
 use maybraid_agent::{AgentButton, InventoryObservation, PadIntent};
 use maybraid_character_controller::InventoryCyclingCategory;
+use maybraid_session::WorldGameplayEnabled;
 use world_player::Player as VegetationPlayer;
 
-use crate::control::WorldGameplayEnabled;
 use crate::inventory_cycling::{gameplay_cycling_allowed, ActiveInventoryCyclingCategory};
 use crate::map_view::WorldMapView;
 use game_commands::command::TextEntryFocus;
@@ -30,9 +30,10 @@ pub(crate) fn publish_agent_inventory(
 	text_focus: Res<TextEntryFocus>,
 	map: Option<Res<WorldMapView>>,
 	category: Option<Res<ActiveInventoryCyclingCategory>>,
-	players: Query<(&InventoryUser, Option<&LubikanLedger>), With<VegetationPlayer>>,
+	players: Query<(Entity, &InventoryUser), With<VegetationPlayer>>,
 	bags: Query<&Inventory>,
-	ledgers: Query<&LubikanLedger, With<LubikanOwner>>,
+	body_of: Query<&LubikanBodyOf>,
+	ledgers: Query<&LubikanLedger>,
 	intent: Option<Res<AgentLastPadIntent>>,
 ) {
 	let mut observation = InventoryObservation {
@@ -42,14 +43,15 @@ pub(crate) fn publish_agent_inventory(
 			.unwrap_or_default(),
 		..InventoryObservation::default()
 	};
-	if let Some((user, player_ledger)) = players.iter().next() {
+	if let Some((player, user)) = players.iter().next() {
 		if let Ok(bag) = bags.get(user.bag) {
 			observation.weapons = queue_ids(bag, bag.weapons.iter().copied());
 			observation.skill_maps = queue_ids(bag, bag.skills.iter().copied());
 			observation.weapon = observation.weapons.first().cloned();
 			observation.skill_map = observation.skill_maps.first().cloned();
 		}
-		let ledger = player_ledger.or_else(|| ledgers.iter().next());
+		let holder = body_of.get(player).map(LubikanBodyOf::character).unwrap_or(player);
+		let ledger = ledgers.get(holder).ok();
 		if let Some(ledger) = ledger {
 			observation.lubikans = ledger
 				.iter()
@@ -61,13 +63,17 @@ pub(crate) fn publish_agent_inventory(
 	}
 
 	let cycling_allowed = gameplay_cycling_allowed(&gameplay, &text_focus, map.as_deref());
-	let last = state.observation.clone();
 	let (pressed_y, pressed_category) = intent
 		.as_deref()
 		.map(|intent| cycle_buttons(&intent.0))
 		.unwrap_or((false, false));
-	observation.invariants =
-		cycling_invariants(&last, &observation, pressed_y, pressed_category, cycling_allowed);
+	observation.invariants = cycling_invariants(
+		&state.observation,
+		&observation,
+		pressed_y,
+		pressed_category,
+		cycling_allowed,
+	);
 	state.observation = observation;
 }
 

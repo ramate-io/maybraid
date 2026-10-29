@@ -83,6 +83,19 @@ mod tests {
 	}
 
 	#[test]
+	fn knee_flex_leads_hip_fold_during_the_descent() -> anyhow::Result<()> {
+		let mut early = HumanoidV0Rig::for_clip_test();
+		let mut held = HumanoidV0Rig::for_clip_test();
+		let descent = SquatDescent::default();
+		descent.apply(&mut early, 0.55);
+		descent.apply(&mut held, 1.0);
+		let knee_fraction = early.posed_angle("shin.L") / held.posed_angle("shin.L");
+		let hip_fraction = early.posed_angle("femur.L") / held.posed_angle("femur.L");
+		assert!(knee_fraction > hip_fraction + 0.1, "knee={knee_fraction} hip={hip_fraction}");
+		Ok(())
+	}
+
+	#[test]
 	fn resampling_does_not_accumulate() -> anyhow::Result<()> {
 		let mut once = HumanoidV0Rig::for_clip_test();
 		let mut twice = HumanoidV0Rig::for_clip_test();

@@ -3,13 +3,13 @@
 use bevy::prelude::*;
 use bevy::time::{TimeUpdateStrategy, Virtual};
 use bikanwarda_encounter::{
-	chained_encounter_id, BikanwardaEncounterPlugin, ENRAGED_DEFINITION_ID, WARD_DEFINITION_ID,
+	BikanwardaEncounterPlugin, ENRAGED_DEFINITION_ID, WARD_DEFINITION_ID, chained_encounter_id,
 };
 use damage::Died;
 use encounters::fixtures::spawn_instance;
 use encounters::{EncounterOutcome, EncounterProgressStore};
-use lubikans::{LubikanAccountId, LubikanLedger, LubikanOwner, LubikansPlugin};
-use maybraid_world::{world_encounter, WorldGameplayEnabled, WorldPlaySessionEnded};
+use lubikans::{LubikanAccountId, LubikanBodyOf, LubikanOwner, LubikansPlugin};
+use maybraid_world::{WorldGameplayEnabled, WorldPlaySessionEnded, world_encounter};
 use std::time::Duration;
 
 const DT: f32 = 0.1;
@@ -40,10 +40,8 @@ fn world_kill_awards_enraged_without_combat_hud() -> anyhow::Result<()> {
 	app.world_mut()
 		.write_message(Died { entity: boss, source: Some(owner), point: Vec3::ZERO });
 	app.update();
-	let ledger = app
-		.world()
-		.get::<LubikanLedger>(owner)
-		.ok_or_else(|| anyhow::anyhow!("ledger"))?;
+	let ledger =
+		LubikanBodyOf::ledger(app.world(), owner).ok_or_else(|| anyhow::anyhow!("ledger"))?;
 	anyhow::ensure!(
 		ledger.contains(LubikanAccountId::unique(ENRAGED_DEFINITION_ID)),
 		"enraged unlock"
