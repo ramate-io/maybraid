@@ -16,6 +16,7 @@ test-support = []
 debug-commands = []
 
 [dependencies]
+character-motion = { workspace = true }
 encounters = { workspace = true }
 bikanwarda-encounter = { workspace = true }
 layer-stack = { workspace = true }

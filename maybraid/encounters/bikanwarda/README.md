@@ -21,6 +21,11 @@ After a free, this crate emits [`BikanwardaDeparted`](src/outcomes.rs) with
 Unlocks go through [`LubikanLedger::ensure_owned`](../../lubikans/src/ledger.rs)
 on the signal source. They do **not** clone [`LubikanSessionStore`](../../lubikans/src/plugin.rs).
 
+Sleep/recovery is owned by [`encounters::EncounterSleepPolicy::bikanwarda`](../src/sleep.rs).
+This plugin enables it. Presentation uses the Epiphant sleep/wake clips from
+[#1141](https://github.com/ramate-io/maybraid/pull/1141) when `AnimRefRoot` is
+present; fixtures without a clip still run gameplay.
+
 ### Shared content catalog
 
 Unlocks resolve the stable character ledger through the player's body link.
