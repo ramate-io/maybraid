@@ -15,7 +15,7 @@ impl Idle {
 		let arm = (TAU * (progress * Idle::ARM_FREQ)).sin();
 		let yaw = Idle::look_wave(progress, Idle::NECK_YAW_FREQ, 0.15);
 		let nod = Idle::look_wave(progress, Idle::NECK_PITCH_FREQ, 0.41);
-		let hip = (TAU * (progress * Idle::HIP_FREQ + 0.4)).sin();
+		let hip = (TAU * (progress * Idle::HIP_FREQ + Idle::HIP_WEIGHT_PHASE)).sin();
 		let scratch = Idle::scratch_weight(progress);
 		let scratch_side = Idle::scratch_side(progress);
 
@@ -104,6 +104,28 @@ mod tests {
 	use bevy::prelude::Vec3;
 
 	use super::*;
+
+	fn pose_at(progress: f32) -> HumanoidV0Rig {
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		Idle::default().apply(&mut rig, progress);
+		rig
+	}
+
+	fn bone_endpoint(rig: &HumanoidV0Rig, name: &str) -> anyhow::Result<Vec3> {
+		let id = rig
+			.binding
+			.definition
+			.id(name)
+			.ok_or_else(|| anyhow::anyhow!("missing bind bone {name}"))?;
+		let length = rig
+			.binding
+			.effective_rest
+			.get(id)
+			.ok_or_else(|| anyhow::anyhow!("missing effective rest for {name}"))?
+			.translation
+			.length();
+		Ok(rig.character_point(name) + rig.character_length(name) * length)
+	}
 
 	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
 		rig.rotation(name) * Vec3::Y
@@ -216,5 +238,50 @@ mod tests {
 			a.rotation("shoulder.L").angle_between(b.rotation("shoulder.L")) > 1e-4,
 			"phase should move the shoulder"
 		);
+	}
+
+	#[test]
+	fn idle_hip_shift_peaks_when_arm_sway_crosses_neutral() -> anyhow::Result<()> {
+		let arm_peak = pose_at(0.25);
+		let hip_peak = pose_at(0.5);
+		let arm_peak_x = arm_peak.character_point("femur.L").x - 0.25;
+		let hip_peak_x = hip_peak.character_point("femur.L").x - 0.25;
+		assert!(arm_peak_x.abs() < 1e-4, "hip stays near neutral at arm peak: {arm_peak_x}");
+		assert!(hip_peak_x < -5e-5, "left hip shifts inward at weight peak: {hip_peak_x}");
+		let bind = HumanoidV0Rig::for_clip_test();
+		let arm_peak_sway =
+			bone_endpoint(&arm_peak, "forearm.L")?.z - bone_endpoint(&bind, "forearm.L")?.z;
+		let hip_peak_sway =
+			bone_endpoint(&hip_peak, "forearm.L")?.z - bone_endpoint(&bind, "forearm.L")?.z;
+		assert!(arm_peak_sway.abs() > hip_peak_sway.abs() + 0.01);
+		let vertical =
+			hip_peak.character_point("femur.L").y - arm_peak.character_point("femur.L").y;
+		assert!(vertical.abs() > 0.006, "hip has a visible vertical shift: {vertical}");
+		Ok(())
+	}
+
+	#[test]
+	fn idle_weight_shift_keeps_actual_foot_height_near_planted() -> anyhow::Result<()> {
+		let neutral = pose_at(0.25);
+		for (side, shin) in [(Side::Left, "shin.L"), (Side::Right, "shin.R")] {
+			let rest_foot = bone_endpoint(&neutral, shin)?;
+			let femur = match side {
+				Side::Left => "femur.L",
+				Side::Right => "femur.R",
+			};
+			let neutral_hip = neutral.character_point(femur);
+			for progress in [0.0, 0.125, 0.25, 0.375, 0.5, 0.75, 1.0] {
+				let rig = pose_at(progress);
+				let hip = rig.character_point(femur);
+				let foot = bone_endpoint(&rig, shin)?;
+				assert!((hip - neutral_hip).length() < 0.01, "{side:?} hip drift at {progress}");
+				assert!((foot.y - rest_foot.y).abs() < 0.01, "{side:?} foot height at {progress}");
+				assert!(
+					(foot.x - rest_foot.x).abs() < 0.033,
+					"{side:?} foot lateral skim at {progress}"
+				);
+			}
+		}
+		Ok(())
 	}
 }
