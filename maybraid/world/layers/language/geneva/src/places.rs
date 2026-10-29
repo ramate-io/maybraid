@@ -4,7 +4,7 @@
 use std::marker::PhantomData;
 
 use bevy::math::bounding::{Aabb3d, BoundingVolume};
-use bevy::math::{Vec2, Vec3Swizzles};
+use bevy::math::{Vec2, Vec3, Vec3Swizzles};
 use building_components::{BuildingComponents, LabelNode};
 use chico::ForestGround;
 use lod::gen::{Id, OriginalId};
@@ -37,6 +37,10 @@ pub struct DevelopmentPlace {
 	pub key: NameKey,
 	pub place: DiscoverablePlace,
 	pub xz: Vec2,
+	/// World-space Y of the authored pin pose (independent of capsule offset).
+	pub y: f32,
+	/// Optional world-space authored floor stand for an interior arrival.
+	pub interior_arrival: Option<Vec3>,
 	/// For a room, the index of its building's place.
 	pub building: Option<usize>,
 }
@@ -71,10 +75,15 @@ impl<W> DevelopmentPlaces<W> {
 			let transform = host.transform();
 			let building = host.discoverable_place().map(|place| {
 				let local = host.place_local_id();
+				let local_stand = host.interior_stand_local(None);
+				let pin = transform.transform_point(host.local_bounds().center().into());
+				let interior_arrival = local_stand.map(|point| transform.transform_point(point));
 				push(DevelopmentPlace {
 					key: NameKey::Place { host: development, local },
 					place: place.with_identity(development, local),
-					xz: transform.transform_point(host.local_bounds().center().into()).xz(),
+					xz: pin.xz(),
+					y: pin.y,
+					interior_arrival,
 					building: None,
 				})
 			});
@@ -83,10 +92,16 @@ impl<W> DevelopmentPlaces<W> {
 					continue;
 				};
 				let local = local_place_id(&node);
+				let pin = transform.transform_point(node.placement.translation);
+				let interior_arrival = host
+					.interior_stand_local(Some(node.placement.translation))
+					.map(|point| transform.transform_point(point));
 				push(DevelopmentPlace {
 					key: NameKey::Place { host: development, local },
 					place: place.with_identity(development, local),
-					xz: transform.transform_point(node.placement.translation).xz(),
+					xz: pin.xz(),
+					y: pin.y,
+					interior_arrival,
 					building,
 				});
 			}

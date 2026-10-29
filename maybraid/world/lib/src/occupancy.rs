@@ -21,6 +21,7 @@ use damage::{DamageSystems, Downed};
 use lod::gen::Id;
 use lod::hcsg::{Busy, HcsgStorage};
 use lubikans::LubikansPlugin;
+use maybraid_session::{WorldGameplayEnabled, WorldPlaySessionEnded};
 use occupancy_rewards::{
 	CellMetadata, CellMetadataStore, ConstructionTag, ForestCellId, ForestInfo, GroveInfo,
 	GroveKindTag, GroveLayerId, GroveTileId, LayeringTag, OccupancyDemoConfig,
@@ -28,8 +29,6 @@ use occupancy_rewards::{
 	SemanticCellKey, VegetationLayer,
 };
 use world_player::Player as VegetationPlayer;
-
-use crate::control::{WorldGameplayEnabled, WorldPlaySessionEnded};
 
 /// Occupancy metadata publish and player mark.
 ///

@@ -2,7 +2,12 @@ use character_rigs::authoring::HumanoidPose;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
-use crate::animations::{LeapPhase, LeapTimeline, LinearBlend, UprightLeap};
+use crate::animations::{
+	smoothstep, LeapPhase, LeapTimeline, LinearBlend, Run, UprightLeap, AIR_END,
+	LEAP_LAND_BLEND_FRACTION, LEAP_RUN_RECOVERY_BLEND_FRACTION, LEAP_TAKEOFF_BLEND_FRACTION,
+	TAKEOFF_END,
+};
+use crate::rigs::mix::blend_clips;
 use crate::{Animation, Progress};
 
 #[derive(Clone, Copy)]
@@ -19,30 +24,59 @@ struct LeapPose {
 	elbow: f32,
 }
 
+#[derive(Clone, Copy)]
+struct LeapLandFrame<'a> {
+	leap: &'a UprightLeap,
+	u: f32,
+}
+
+impl Animation<HumanoidV0Rig> for LeapLandFrame<'_> {
+	fn apply_for(&self, rig: &mut HumanoidV0Rig, _progress: f32) {
+		write_leap_pose(rig, self.leap.land(self.u));
+	}
+}
+
+fn write_leap_pose(rig: &mut HumanoidV0Rig, sample: LeapPose) {
+	let mut pose = HumanoidPose::default();
+	pose.apply_leg(Side::Left, sample.left_femur, sample.left_shin);
+	pose.apply_leg(Side::Right, sample.right_femur, sample.right_shin);
+	pose.apply_root(sample.lean);
+	pose.apply_arm(Side::Left, sample.left_shoulder, 0.0, sample.left_humerus, 0.0, sample.elbow);
+	pose.apply_arm(
+		Side::Right,
+		sample.right_shoulder,
+		0.0,
+		sample.right_humerus,
+		0.0,
+		sample.elbow,
+	);
+	rig.write_pose(&pose);
+}
+
 impl Animation<HumanoidV0Rig> for UprightLeap {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		let mut pose = HumanoidPose::default();
-		let sample = self.pose_at(Progress(progress).clamp());
-		pose.apply_leg(Side::Left, sample.left_femur, sample.left_shin);
-		pose.apply_leg(Side::Right, sample.right_femur, sample.right_shin);
-		pose.apply_root(sample.lean);
-		pose.apply_arm(
-			Side::Left,
-			sample.left_shoulder,
-			0.0,
-			sample.left_humerus,
-			0.0,
-			sample.elbow,
-		);
-		pose.apply_arm(
-			Side::Right,
-			sample.right_shoulder,
-			0.0,
-			sample.right_humerus,
-			0.0,
-			sample.elbow,
-		);
-		rig.write_pose(&pose);
+		let t = Progress(progress).clamp();
+		if t >= 1.0 {
+			Run::default().apply_for(rig, 0.0);
+			return;
+		}
+		if t >= AIR_END {
+			let land_span = (1.0 - AIR_END).max(f32::EPSILON);
+			let land_local = (t - AIR_END) / land_span;
+			let recovery_start = 1.0 - LEAP_RUN_RECOVERY_BLEND_FRACTION;
+			if land_local >= recovery_start {
+				let weight = smoothstep(
+					((land_local - recovery_start)
+						/ LEAP_RUN_RECOVERY_BLEND_FRACTION.max(f32::EPSILON))
+					.clamp(0.0, 1.0),
+				);
+				let (_, land_u) = LeapTimeline::sample(t);
+				let land = LeapLandFrame { leap: self, u: land_u };
+				blend_clips(rig, &land, land_u, &Run::default(), 0.0, weight);
+				return;
+			}
+		}
+		write_leap_pose(rig, self.pose_at(t));
 	}
 }
 
@@ -50,8 +84,32 @@ impl UprightLeap {
 	fn pose_at(&self, t: f32) -> LeapPose {
 		match LeapTimeline::sample(t) {
 			(LeapPhase::Takeoff, u) => self.takeoff(u),
-			(LeapPhase::Air, u) => self.air(u),
-			(LeapPhase::Land, u) => self.land(u),
+			(LeapPhase::Air, u) => {
+				let air = self.air(u);
+				let air_span = (AIR_END - TAKEOFF_END).max(f32::EPSILON);
+				let air_local = (t - TAKEOFF_END) / air_span;
+				if air_local < LEAP_TAKEOFF_BLEND_FRACTION {
+					let weight = smoothstep(
+						(air_local / LEAP_TAKEOFF_BLEND_FRACTION.max(f32::EPSILON)).clamp(0.0, 1.0),
+					);
+					blend_leap_pose(self.takeoff(1.0), air, weight)
+				} else {
+					air
+				}
+			}
+			(LeapPhase::Land, u) => {
+				let land_span = (1.0 - AIR_END).max(f32::EPSILON);
+				let land_local = (t - AIR_END) / land_span;
+				let land = self.land(u);
+				if land_local < LEAP_LAND_BLEND_FRACTION {
+					let weight = smoothstep(
+						(land_local / LEAP_LAND_BLEND_FRACTION.max(f32::EPSILON)).clamp(0.0, 1.0),
+					);
+					blend_leap_pose(self.air(1.0), land, weight)
+				} else {
+					land
+				}
+			}
 		}
 	}
 
@@ -120,6 +178,23 @@ impl UprightLeap {
 	}
 }
 
+fn blend_leap_pose(from: LeapPose, to: LeapPose, weight: f32) -> LeapPose {
+	let t = weight.clamp(0.0, 1.0);
+	let blend = |a: f32, b: f32| a + (b - a) * t;
+	LeapPose {
+		left_femur: blend(from.left_femur, to.left_femur),
+		right_femur: blend(from.right_femur, to.right_femur),
+		left_shin: blend(from.left_shin, to.left_shin),
+		right_shin: blend(from.right_shin, to.right_shin),
+		lean: blend(from.lean, to.lean),
+		left_shoulder: blend(from.left_shoulder, to.left_shoulder),
+		right_shoulder: blend(from.right_shoulder, to.right_shoulder),
+		left_humerus: blend(from.left_humerus, to.left_humerus),
+		right_humerus: blend(from.right_humerus, to.right_humerus),
+		elbow: blend(from.elbow, to.elbow),
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -135,6 +210,12 @@ mod tests {
 
 	fn apply_leap(rig: &mut HumanoidV0Rig, progress: f32) -> crate::Effects {
 		UprightLeap::from_leap(&Leap::default()).apply(rig, progress)
+	}
+
+	fn max_rotation_delta(a: &HumanoidV0Rig, b: &HumanoidV0Rig) -> f32 {
+		a.animation_bone_names()
+			.map(|name| a.rotation(name).normalize().angle_between(b.rotation(name).normalize()))
+			.fold(0.0, f32::max)
 	}
 
 	#[test]
@@ -211,9 +292,12 @@ mod tests {
 	fn land_absorbs_then_recovers() {
 		let mut mid = HumanoidV0Rig::imported();
 		apply_leap(&mut mid, 0.86);
-		let mut end = HumanoidV0Rig::imported();
-		apply_leap(&mut end, 1.0);
-		assert!(mid.posed_angle("femur.L") > end.posed_angle("femur.L") + 0.04);
+		let mut recovery = HumanoidV0Rig::imported();
+		apply_leap(&mut recovery, 0.94);
+		assert!(
+			mid.posed_angle("femur.L") > recovery.posed_angle("femur.L") + 0.04,
+			"landing flex eases before the authored run handoff"
+		);
 	}
 
 	#[test]
@@ -230,5 +314,99 @@ mod tests {
 		apply_leap(&mut a, 1.0);
 		apply_leap(&mut b, 1.7);
 		assert!((femur_z(&a, Side::Left) - femur_z(&b, Side::Left)).abs() < 1e-5);
+	}
+
+	#[test]
+	fn three_composed_windows_match_their_authored_endpoints() -> anyhow::Result<()> {
+		let leap = UprightLeap::from_leap(&Leap::default());
+		let air_span = AIR_END - TAKEOFF_END;
+		let land_span = 1.0 - AIR_END;
+		let endpoints = [
+			(TAKEOFF_END, leap.takeoff(1.0)),
+			(
+				TAKEOFF_END + air_span * LEAP_TAKEOFF_BLEND_FRACTION,
+				leap.air(smoothstep(LEAP_TAKEOFF_BLEND_FRACTION)),
+			),
+			(AIR_END, leap.air(1.0)),
+			(
+				AIR_END + land_span * LEAP_LAND_BLEND_FRACTION,
+				leap.land(smoothstep(LEAP_LAND_BLEND_FRACTION)),
+			),
+			(
+				AIR_END + land_span * (1.0 - LEAP_RUN_RECOVERY_BLEND_FRACTION),
+				leap.land(smoothstep(1.0 - LEAP_RUN_RECOVERY_BLEND_FRACTION)),
+			),
+		];
+		for (progress, expected) in endpoints {
+			let mut actual = HumanoidV0Rig::for_clip_test();
+			let mut reference = HumanoidV0Rig::for_clip_test();
+			apply_leap(&mut actual, progress);
+			write_leap_pose(&mut reference, expected);
+			assert!(
+				max_rotation_delta(&actual, &reference) < 1e-4,
+				"window endpoint at {progress}"
+			);
+			assert_eq!(actual.scratch.depth, 0);
+		}
+		let mut end = HumanoidV0Rig::for_clip_test();
+		let mut run = HumanoidV0Rig::for_clip_test();
+		apply_leap(&mut end, 1.0);
+		Run::default().apply(&mut run, 0.0);
+		for name in end.animation_bone_names() {
+			assert!(
+				end.rotation(name).normalize().dot(run.rotation(name).normalize()).abs()
+					> 1.0 - 1e-6,
+				"final run handoff differs on {name}"
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn composed_windows_stay_continuous_and_converge_at_60_and_240hz() -> anyhow::Result<()> {
+		let mut max_60 = 0.0_f32;
+		let mut previous = HumanoidV0Rig::for_clip_test();
+		apply_leap(&mut previous, 0.0);
+		for frame in 1..=60 {
+			let mut current = HumanoidV0Rig::for_clip_test();
+			let effects = apply_leap(&mut current, frame as f32 / 60.0);
+			assert!(effects.is_identity());
+			max_60 = max_60.max(max_rotation_delta(&current, &previous));
+			previous = current;
+		}
+		let mut max_240 = 0.0_f32;
+		let mut previous = HumanoidV0Rig::for_clip_test();
+		apply_leap(&mut previous, 0.0);
+		for frame in 1..=240 {
+			let mut current = HumanoidV0Rig::for_clip_test();
+			apply_leap(&mut current, frame as f32 / 240.0);
+			max_240 = max_240.max(max_rotation_delta(&current, &previous));
+			previous = current;
+		}
+		assert!(max_60.is_finite() && max_60 > 0.02);
+		assert!(max_240 < max_60 * 0.35, "240 Hz {max_240} vs 60 Hz {max_60}");
+		for progress in [TAKEOFF_END, AIR_END] {
+			let mut before = HumanoidV0Rig::for_clip_test();
+			let mut after = HumanoidV0Rig::for_clip_test();
+			apply_leap(&mut before, progress - 1e-4);
+			apply_leap(&mut after, progress + 1e-4);
+			assert!(max_rotation_delta(&before, &after) < 0.01, "phase edge at {progress}");
+		}
+		let land_tail_start = AIR_END + (1.0 - AIR_END) * (1.0 - LEAP_RUN_RECOVERY_BLEND_FRACTION);
+		let mut before = HumanoidV0Rig::for_clip_test();
+		let mut after = HumanoidV0Rig::for_clip_test();
+		apply_leap(&mut before, land_tail_start - 1e-4);
+		apply_leap(&mut after, land_tail_start + 1e-4);
+		assert!(max_rotation_delta(&before, &after) < 0.01, "run blend entry");
+		let rest = HumanoidV0Rig::for_clip_test();
+		let mut mid = HumanoidV0Rig::for_clip_test();
+		apply_leap(&mut mid, 0.5);
+		for name in ["lower_neck", "upper_neck"] {
+			assert!(
+				mid.rotation(name).normalize().dot(rest.rotation(name).normalize()).abs()
+					> 1.0 - 1e-6
+			);
+		}
+		Ok(())
 	}
 }

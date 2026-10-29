@@ -19,6 +19,7 @@ maybraid-audio = { workspace = true }
 projectiles = { workspace = true }
 damage = { workspace = true }
 lod-avian = { workspace = true }
+maybraid-spawns-projectiles = { workspace = true }
 lod = { workspace = true }
 material-ref = { workspace = true }
 procedural-common = { workspace = true }

@@ -171,8 +171,8 @@ fn attach_new_owners(
 			store.character = Some(of.character());
 			continue;
 		}
-		if ledgers.contains(entity) {
-			let ledger = ledgers.get(entity).expect("ledger").clone();
+		if let Ok(ledger) = ledgers.get(entity) {
+			let ledger = ledger.clone();
 			commands.entity(entity).try_remove::<(LubikanLedger, LubikanAccountBinding)>();
 			let binding = LubikanAccountBinding::from_selection(ledger.selection(), entity);
 			let character = commands.spawn((LubikanCharacter, ledger, binding)).id();
@@ -236,36 +236,32 @@ fn apply_lifetime_notices(
 	}
 }
 
-fn sync_account_bindings(
-	mut characters: Query<
-		(Entity, &LubikanLedger, Option<&mut LubikanAccountBinding>, Option<&LubikanBodies>),
-		With<LubikanCharacter>,
-	>,
-	mut fixtures: Query<
-		(Entity, &LubikanLedger, Option<&mut LubikanAccountBinding>),
-		(With<LubikanOwner>, Without<LubikanCharacter>, Without<LubikanBodyOf>),
-	>,
-	mut commands: Commands,
-) {
-	for (entity, ledger, binding, bodies) in &mut characters {
-		let body = bodies.and_then(LubikanBodies::current).unwrap_or(entity);
-		let wanted = LubikanAccountBinding::from_selection(ledger.selection(), body);
-		match binding {
-			Some(mut binding) if *binding != wanted => *binding = wanted,
-			None => {
-				commands.entity(entity).insert(wanted);
+fn sync_account_bindings(world: &mut World) {
+	let mut updates = Vec::new();
+	{
+		let mut ledgers = world.query_filtered::<
+			(Entity, &LubikanLedger, Option<&LubikanBodies>),
+			Or<(With<LubikanCharacter>, With<LubikanOwner>)>,
+		>();
+		for (holder, ledger, bodies) in ledgers.iter(world) {
+			let owner = bodies.and_then(LubikanBodies::current).unwrap_or(holder);
+			updates
+				.push((holder, LubikanAccountBinding::from_selection(ledger.selection(), owner)));
+			if let Some(bodies) = bodies {
+				for body in bodies.iter() {
+					updates.push((
+						body,
+						LubikanAccountBinding::from_selection(ledger.selection(), body),
+					));
+				}
 			}
-			Some(_) => {}
 		}
 	}
-	for (entity, ledger, binding) in &mut fixtures {
-		let wanted = LubikanAccountBinding::from_selection(ledger.selection(), entity);
-		match binding {
-			Some(mut binding) if *binding != wanted => *binding = wanted,
-			None => {
-				commands.entity(entity).insert(wanted);
+	for (entity, binding) in updates {
+		if world.get::<LubikanAccountBinding>(entity) != Some(&binding) {
+			if let Ok(mut entity) = world.get_entity_mut(entity) {
+				entity.insert(binding);
 			}
-			Some(_) => {}
 		}
 	}
 }
@@ -333,7 +329,7 @@ mod tests {
 		LubikanActivationReport, LubikanActivationRequest, LubikanBodyOf, LubikanCharacter,
 		LubikanChargeChanged, LubikanChargeReason,
 	};
-	use anyhow::{anyhow, Result};
+	use anyhow::{Result, anyhow};
 	use damage::{DamagePlugin, Health, Hit};
 
 	fn gameplay() -> App {
@@ -369,7 +365,40 @@ mod tests {
 		assert_eq!(ledger.equipped().id(), LubikanAccountId::SELF);
 		assert_eq!(ledger.equipped().charge().current(), 0.0);
 		assert!(app.world().get::<LubikanOwner>(owner).is_some());
-		assert!(LubikanBodyOf::binding(app.world(), owner).is_some_and(|binding| binding.is_self()));
+		assert!(
+			LubikanBodyOf::binding(app.world(), owner).is_some_and(|binding| binding.is_self())
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn stable_ledger_projects_damage_binding_onto_the_current_body() -> Result<()> {
+		let mut app = gameplay();
+		let first = spawn_player(&mut app);
+		app.update();
+		let character = LubikanBodyOf::holder(app.world(), first);
+		let extra = LubikanDefinition::new(LubikanDefinitionId::from_raw(7), 40.0, 2.0);
+		let extra_id = {
+			let mut ledger = ledger_mut(&mut app, first)?;
+			let account = ledger.ensure_owned(extra);
+			assert!(ledger.select(Some(account)));
+			account
+		};
+		app.update();
+		assert_eq!(
+			app.world().get::<LubikanAccountBinding>(first).map(|b| b.account),
+			Some(extra_id)
+		);
+		app.world_mut().entity_mut(first).despawn();
+		let second = spawn_player(&mut app);
+		app.update();
+		assert_eq!(LubikanBodyOf::holder(app.world(), second), character);
+		let binding = app
+			.world()
+			.get::<LubikanAccountBinding>(second)
+			.ok_or_else(|| anyhow!("body binding"))?;
+		assert_eq!(binding.owner, second);
+		assert_eq!(binding.account, extra_id);
 		Ok(())
 	}
 
@@ -434,20 +463,28 @@ mod tests {
 			Some(11.0)
 		);
 		assert_eq!(ledger.account(other).map(|account| account.charge().current()), Some(7.0));
-		assert!(LubikanBodyOf::binding(app.world(), owner)
-			.is_some_and(|binding| binding.account == other));
+		assert!(
+			LubikanBodyOf::binding(app.world(), owner)
+				.is_some_and(|binding| binding.account == other)
+		);
 		Ok(())
 	}
 
 	#[test]
-	fn body_replace_retains_charge_by_default() -> Result<()> {
+	fn body_replace_retains_charge_and_edited_order_by_default() -> Result<()> {
 		let mut app = gameplay();
 		let first = spawn_player(&mut app);
 		app.update();
-		{
+		let extra = LubikanDefinition::new(LubikanDefinitionId::from_raw(8), 40.0, 2.0);
+		let extra_id = {
 			let mut ledger = ledger_mut(&mut app, first)?;
 			ledger.apply_to_equipped(18.0);
-		}
+			let extra_id = ledger.ensure_owned(extra);
+			let mut order = crate::LubikanOrder::from_ledger(&ledger);
+			assert!(order.move_account(extra_id, -1));
+			assert!(ledger.apply_order(&order));
+			extra_id
+		};
 		app.update();
 		let character = LubikanBodyOf::holder(app.world(), first);
 		assert_ne!(character, first);
@@ -456,6 +493,10 @@ mod tests {
 		let second = spawn_player(&mut app);
 		app.update();
 		assert_eq!(ledger(&app, second)?.equipped().charge().current(), 18.0);
+		assert_eq!(
+			ledger(&app, second)?.iter().map(|account| account.id()).collect::<Vec<_>>(),
+			vec![extra_id, LubikanAccountId::SELF]
+		);
 		assert!(app.world().get::<LubikanLedger>(first).is_none());
 		assert_eq!(LubikanBodyOf::holder(app.world(), second), character);
 		assert!(app.world().get::<LubikanCharacter>(character).is_some());

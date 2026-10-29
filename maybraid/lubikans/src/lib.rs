@@ -15,6 +15,7 @@ mod heal;
 mod identity;
 mod ledger;
 mod lifetime;
+mod order;
 mod plugin;
 mod selection;
 
@@ -31,15 +32,15 @@ pub use activation::{
 };
 pub use award::LubikanCombatAward;
 pub use catalog::{
-	LubikanCatalog, LubikanSelfConfig, DEFAULT_SELF_ACTIVATION_COST, DEFAULT_SELF_CAPACITY,
-	DEFAULT_SELF_MAX_STOCK,
+	DEFAULT_SELF_ACTIVATION_COST, DEFAULT_SELF_CAPACITY, DEFAULT_SELF_MAX_STOCK, LubikanCatalog,
+	LubikanSelfConfig,
 };
 pub use change::{LubikanChargeChanged, LubikanChargeReason, LubikanChargeRequest};
 pub use charge::{LubikanCharge, LubikanChargeMutation};
 pub use heal::{
-	LubikanHealingEnabled, LubikanSelfHeal, LubikanSelfHealChannel, LubikanSelfHealConfig,
 	DEFAULT_SELF_HEAL_CAP_DAMAGED, DEFAULT_SELF_HEAL_CAP_HEALTHY, DEFAULT_SELF_HEAL_DURATION_SECS,
-	DEFAULT_SELF_HEAL_RATE_FRAC,
+	DEFAULT_SELF_HEAL_RATE_FRAC, LubikanHealingEnabled, LubikanSelfHeal, LubikanSelfHealChannel,
+	LubikanSelfHealConfig,
 };
 pub use identity::{LubikanAccountId, LubikanDefinition, LubikanDefinitionId};
 pub use ledger::{
@@ -49,6 +50,7 @@ pub use ledger::{
 pub use lifetime::{
 	LubikanLifetimePolicy, LubikanOwnerLifetime, LubikanOwnerLifetimeKind, LubikanPersistence,
 };
+pub use order::LubikanOrder;
 pub use plugin::{LubikanSessionStore, LubikansPlugin};
 pub use selection::LubikanSelection;
 

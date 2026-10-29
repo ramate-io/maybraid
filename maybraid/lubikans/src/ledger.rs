@@ -213,6 +213,18 @@ impl LubikanLedger {
 		&mut self.accounts[index]
 	}
 
+	/// Apply an editor's account order without replacing live account state.
+	/// Accounts acquired since the editor opened remain at the end; stale IDs
+	/// cannot grant ownership. Self and the selected account retain their identity.
+	pub fn apply_order(&mut self, order: &crate::LubikanOrder) -> bool {
+		let before: Vec<_> = self.accounts.iter().map(|account| account.id).collect();
+		self.accounts.sort_by_key(|account| {
+			order.accounts().iter().position(|&id| id == account.id).unwrap_or(usize::MAX)
+		});
+		self.accounts.iter().map(|account| account.id).ne(before)
+	}
+
+	/// Accounts in their configured cycling order.
 	pub fn iter(&self) -> impl Iterator<Item = &LubikanAccount> {
 		self.accounts.iter()
 	}
@@ -478,7 +490,7 @@ impl Default for LubikanLedger {
 mod tests {
 	use super::*;
 	use crate::activation::LubikanActivationPhase;
-	use anyhow::{anyhow, Result};
+	use anyhow::{Result, anyhow};
 
 	fn extra(capacity: f32) -> LubikanDefinition {
 		LubikanDefinition::new(LubikanDefinitionId::from_raw(7), capacity, 4.0)

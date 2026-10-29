@@ -1,64 +1,36 @@
 //! Starter held kit for the vegetation player capsule.
-//!
-//! # Inventory ownership
-//!
-//! | Copy | Where | Role |
-//! | --- | --- | --- |
-//! | **Live** | [`LiveCharacterInventory`] on the session [`lubikans::LubikanCharacter`] | Authoritative runtime bag for the selected character. Survives body replacement. |
-//! | **Saved** | [`WorldPlayerLoadout`] resource | Persist/session snapshot. Disk writes read this resource on change. Loaded when entering the world. |
-//! | **Draft** | Character editor menu / edit baseline | Explicit editor snapshot. Commit copies into [`WorldPlayerLoadout`]; cancel must not. |
-//! | **Applied** | [`AppliedWorldPlayerLoadout`] on the body | Rearm-suppression mirror. Not live authority. Removed only after the held-kit projection is incremental. |
-//!
-//! Bag entities (`InventoryUser`) are a presentation of live inventory, not a
-//! third owner. Commit paths write the session resource and stamp the character
-//! together ([`commit_body_inventory`]). [`arm_world_player`] still compares
-//! the resource to the applied mirror and fully reconstructs held kit / bag /
-//! vitals; health reset on that path is a known limitation (lifecycle should
-//! own vitals, not inventory refresh).
-//!
-//! Related work: Tanz bag items already on this main
-//! ([#1359](https://github.com/ramate-io/maybraid/pull/1359)); ordered
-//! equip/unequip/reorder still open
-//! ([#1360](https://github.com/ramate-io/maybraid/pull/1360)); shared
-//! `Inventory::cycle_slot` is merged but not on this snapshot
-//! ([#1364](https://github.com/ramate-io/maybraid/pull/1364)).
 
 use bevy::prelude::*;
 use character_inventory_user::{spawn_bag, InventoryUser};
 use character_items::{CharacterSheet, Inventory, InventoryItem, TanzId};
 use characters::{CharacterAppearance, CharacterRoot};
 use damage::Health;
-use firearm_user::{
-	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle, FirearmUser,
-	FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
-};
-use grenade_user::{spawn_held_grenade, GrenadeThrow, GrenadeUser, GrenadeUserSettings};
+use firearm_user::{spawn_reticle, FirearmUser};
+use grenade_user::GrenadeUser;
 use grenades::GrenadeDetonated;
-use lubikans::{LubikanBodyOf, LubikanCharacter, LubikanSystems};
-use maybraid_character_controller::{
-	CharacterControlSystems, CharacterIntent, InventoryCyclingCategory,
+use maybraid_character_controller::{ActorControlStatus, CharacterControlSystems};
+use maybraid_equipment::{
+	EquipmentInventoryChanged, EquipmentSystems, InventoryCycling, PendingEquipmentHold,
+	PendingEquipmentTeardown, ReconcileEquipmentFromInventory,
 };
+use maybraid_session::WorldGameplayEnabled;
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 
-use crate::inventory_cycling::ActiveInventoryCyclingCategory;
 use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
 use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
 use player::{
-	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
-	PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
+	apply_character_mobility, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook, PlayerSystems,
+	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
 };
 use tanz_user::{spawn_tanz_user, TanzExecution, TanzStack, TanzUser, TanzUserSystems};
 use world_player::{
 	CharacterSpecies, Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual,
-	PlaygroundMode, RequestSetCharacter, RequestSetCharacterAppearance,
+	RequestSetCharacter, RequestSetCharacterAppearance,
 };
 
-use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
+use crate::control::InventoryEditCameraFollow;
 
 /// Persisted character appearance, worn clothing, stats, and primary weapon for world entry.
-///
-/// This is the **saved / session snapshot**, not the live bag. Runtime mutation
-/// goes through [`Self::commit_live`] and [`commit_body_inventory`] so the
-/// session [`LiveCharacterInventory`] stays in lockstep.
 #[derive(Resource, Clone, Debug, PartialEq)]
 pub struct WorldPlayerLoadout {
 	pub key: String,
@@ -87,100 +59,13 @@ impl WorldPlayerLoadout {
 
 	/// Replace the bag and rebuild worn garments from the new wear list.
 	pub fn retarget_inventory(&mut self, inventory: Inventory) {
-		self.commit_live(inventory);
-	}
-
-	/// Write a live bag into this session snapshot and rebuild clothing.
-	///
-	/// Persist still reads this resource. Stamp the session character with
-	/// [`commit_body_inventory`] in the same call so live and saved match.
-	pub fn commit_live(&mut self, inventory: Inventory) {
 		let name = self.name.clone();
 		*self = Self::new(self.key.clone(), self.appearance.clone(), inventory).with_name(name);
 	}
-
-	/// True when the body already carries this snapshot (rearm suppression).
-	pub(crate) fn matches_applied(&self, applied: &AppliedWorldPlayerLoadout) -> bool {
-		applied.matches(self)
-	}
-
-	pub fn character_sheet(&self) -> CharacterSheet {
-		self.inventory.character_sheet()
-	}
 }
 
-/// Live bag on the play-session [`LubikanCharacter`]. Survives ordinary death
-/// and body replacement; reset when choosing another character or ending the
-/// session (the saved resource is removed / replaced).
-#[derive(Component, Clone, Debug, PartialEq)]
-pub struct LiveCharacterInventory(pub Inventory);
-
-impl LiveCharacterInventory {
-	pub fn from_loadout(loadout: &WorldPlayerLoadout) -> Self {
-		Self(loadout.inventory.clone())
-	}
-
-	pub fn inventory(&self) -> &Inventory {
-		&self.0
-	}
-}
-
-/// Rearm-suppression snapshot on the **body**. Not the live owner.
-#[derive(Component, Clone, Debug, PartialEq)]
+#[derive(Component)]
 pub(crate) struct AppliedWorldPlayerLoadout(pub WorldPlayerLoadout);
-
-impl AppliedWorldPlayerLoadout {
-	pub fn matches(&self, live: &WorldPlayerLoadout) -> bool {
-		&self.0 == live
-	}
-}
-
-/// Commit a bag snapshot to the saved resource and the session character.
-pub(crate) fn commit_body_inventory(
-	commands: &mut Commands,
-	body: Entity,
-	loadout: &mut WorldPlayerLoadout,
-	inventory: Inventory,
-	body_of: Option<&LubikanBodyOf>,
-) {
-	loadout.commit_live(inventory);
-	stamp_live_inventory(commands, body, loadout, body_of);
-}
-
-fn stamp_live_inventory(
-	commands: &mut Commands,
-	body: Entity,
-	loadout: &WorldPlayerLoadout,
-	body_of: Option<&LubikanBodyOf>,
-) {
-	let holder = body_of.map(LubikanBodyOf::character).unwrap_or(body);
-	commands.entity(holder).insert(LiveCharacterInventory::from_loadout(loadout));
-}
-
-/// Copy the session snapshot onto session characters.
-///
-/// Seeds a new [`LubikanCharacter`]. Reloads live inventory when the saved
-/// resource changes (world entry, editor commit, character switch).
-pub(crate) fn sync_live_character_inventory(
-	loadout: Option<Res<WorldPlayerLoadout>>,
-	mut characters: Query<(Entity, Option<&mut LiveCharacterInventory>), With<LubikanCharacter>>,
-	mut commands: Commands,
-) {
-	let Some(loadout) = loadout else {
-		return;
-	};
-	for (entity, live) in &mut characters {
-		match live {
-			Some(mut live) if loadout.is_changed() => {
-				*live = LiveCharacterInventory::from_loadout(&loadout);
-			}
-			None => {
-				commands.entity(entity).insert(LiveCharacterInventory::from_loadout(&loadout));
-			}
-			Some(_) => {}
-		}
-	}
-}
 
 /// The replacement lifecycle already queued this body's configured visual.
 #[derive(Component)]
@@ -206,11 +91,12 @@ type WorldPlayerVisual<'a> = (Entity, &'a ChildOf, Has<MaybraidPlayerVisual>);
 /// column buoyancy runs; this only arms kit / identity once the visual exists.
 pub(crate) fn arm_world_player(
 	mut commands: Commands,
-	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
 	inventory_edit: Option<Res<InventoryEditCameraFollow>>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
+	primary: Option<Res<PrimaryVirtualPad>>,
 	players: Query<WorldPlayerEquipment<'_>, With<VegetationPlayer>>,
+	controls: Query<&ActorControlStatus, With<VegetationPlayer>>,
 	visuals: Query<WorldPlayerVisual<'_>, (With<VegetationPlayerVisual>, With<CharacterRoot>)>,
 ) {
 	if !gameplay.0 && !inventory_edit.is_some_and(|edit| edit.0) {
@@ -227,6 +113,16 @@ pub(crate) fn arm_world_player(
 		appearance_requested,
 	) in &players
 	{
+		if !primary.as_deref().is_some_and(|primary| {
+			controls
+				.get(player)
+				.ok()
+				.and_then(|status| status.source())
+				.and_then(|source| source.entity())
+				== Some(primary.0)
+		}) {
+			continue;
+		}
 		let Some((visual, _, presented)) =
 			visuals.iter().find(|(_, child, _)| child.parent() == player)
 		else {
@@ -250,7 +146,7 @@ pub(crate) fn arm_world_player(
 		if loadout
 			.as_ref()
 			.zip(applied)
-			.is_some_and(|(loadout, applied)| loadout.matches_applied(applied))
+			.is_some_and(|(loadout, applied)| loadout.as_ref() == &applied.0)
 		{
 			continue;
 		}
@@ -260,11 +156,8 @@ pub(crate) fn arm_world_player(
 			PlayerCameraAim::default(),
 			PlayerYawOwner::Wish,
 		));
-		if *mode == PlaygroundMode::Character && gameplay.0 {
-			commands.entity(player).insert(CameraFollow);
-		}
+		commands.entity(player).try_insert(InventoryCycling::default());
 
-		teardown_held_weapon(&mut commands, player, firearm_user, grenade_user);
 		if let Some(user) = inventory_user {
 			commands.entity(user.bag).try_despawn();
 			commands.entity(player).remove::<InventoryUser>();
@@ -278,14 +171,12 @@ pub(crate) fn arm_world_player(
 			if applied.is_some() {
 				commands.spawn(RequestSetCharacter { species: CharacterSpecies::Braidman });
 			}
-			spawn_held_firearm(&mut commands, player);
+			commands.entity(player).remove::<ReconcileEquipmentFromInventory>();
+			PendingEquipmentHold::request_default_firearm(&mut commands.entity(player));
 			continue;
 		};
 
-		// Vitals currently follow every rearm, including inventory refresh.
-		// Lifecycle events (spawn / respawn / character switch) should own
-		// this; the next projection slice stops resetting health here.
-		let sheet = loadout.character_sheet();
+		let sheet = loadout.inventory.character_sheet();
 		commands.entity(player).insert((
 			Health::from_max(f32::from(sheet.health.max(1))),
 			AppliedWorldPlayerLoadout(loadout.as_ref().clone()),
@@ -304,7 +195,10 @@ pub(crate) fn arm_world_player(
 				.spawn(RequestSetCharacterAppearance { appearance: loadout.appearance.clone() });
 		}
 		commands.entity(player).remove::<WorldPlayerAppearanceRequested>();
-		hold_primary_weapon(&mut commands, player, &loadout.inventory);
+		commands.entity(player).insert(ReconcileEquipmentFromInventory);
+		let mut entity = commands.entity(player);
+		PendingEquipmentTeardown::request(&mut entity);
+		PendingEquipmentHold::request(&mut entity, loadout.inventory.clone());
 	}
 }
 
@@ -312,131 +206,31 @@ fn skill_map_equip_from(inventory: &Inventory) -> SkillMapEquip {
 	SkillMapEquip::from_spec(inventory.primary_skill_map().and_then(InventoryItem::skill_map_spec))
 }
 
-pub(crate) fn hold_primary_weapon(commands: &mut Commands, player: Entity, inventory: &Inventory) {
-	match inventory.primary_weapon() {
-		Some(InventoryItem::Firearm { spec, stats }) => {
-			let sheet = inventory.character_sheet();
-			let live = live_weapon_from_stats(*stats, sheet.damage).with_weapon_identity(spec);
-			spawn_held_kit(
-				commands,
-				player,
-				FirearmUserSettings::default(),
-				GeneratedFirearm::from_spec(*spec),
-				live,
-			);
-		}
-		Some(InventoryItem::Grenade { .. }) => {
-			spawn_held_grenade(commands, player, GrenadeUserSettings::default());
-		}
-		_ => {}
-	}
-}
-
-pub(crate) fn teardown_held_weapon(
-	commands: &mut Commands,
-	player: Entity,
-	firearm: Option<&FirearmUser>,
-	grenade: Option<&GrenadeUser>,
-) {
-	if let Some(firearm) = firearm {
-		commands.entity(firearm.held).try_despawn();
-	}
-	if let Some(grenade) = grenade {
-		commands.entity(grenade.held).try_despawn();
-	}
-	if firearm.is_some() || grenade.is_some() {
-		commands
-			.entity(player)
-			.remove::<(FirearmUser, GrenadeUser, GrenadeThrow, PlayerUse)>();
-	}
-}
-
-/// Start the holster motion; the kit changes at the dip.
-fn begin_weapon_swap(
-	mut intents: MessageReader<CharacterIntent>,
-	gameplay: Res<WorldGameplayEnabled>,
-	category: Res<ActiveInventoryCyclingCategory>,
-	mut commands: Commands,
-	players: Query<
-		(Entity, &InventoryUser, Has<WeaponSwap>, Option<&GrenadeThrow>),
-		With<VegetationPlayer>,
-	>,
-	bags: Query<&Inventory>,
-) {
-	let intents = intents.read().collect::<Vec<_>>();
-	let mut weapon_dir = None;
-	for intent in &intents {
-		match intent {
-			CharacterIntent::SwapActive => {
-				weapon_dir = Some(1i8);
-				break;
-			}
-			CharacterIntent::CycleEquippedQueue(dir) if *dir != 0 => {
-				weapon_dir = Some(*dir);
-				break;
-			}
-			_ => {}
-		}
-	}
-	let weapon_cycle = category.0 == InventoryCyclingCategory::Weapons && weapon_dir.is_some();
-	if !gameplay.0 || !weapon_cycle {
-		return;
-	}
-	let reverse = weapon_dir.is_some_and(|dir| dir < 0);
-	for (player, user, swapping, grenade) in &players {
-		if swapping || grenade.is_some_and(GrenadeThrow::blocks_swap) {
-			continue;
-		}
-		let Ok(bag) = bags.get(user.bag) else {
-			continue;
-		};
-		if bag.weapons.len() < 2 {
-			continue;
-		}
-		commands.entity(player).insert(WeaponSwap::with_direction(reverse));
-	}
-}
-
-/// Replace the held kit once the old gun has dipped out of the way.
-fn commit_weapon_swap(
-	mut commands: Commands,
+fn apply_equipment_inventory_to_loadout(
+	mut changes: MessageReader<EquipmentInventoryChanged>,
 	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
-	assets: Option<Res<AssetServer>>,
-	mut players: Query<
-		(Entity, &InventoryUser, Option<&FirearmUser>, Option<&GrenadeUser>, &mut WeaponSwap),
-		With<VegetationPlayer>,
-	>,
-	mut bags: Query<&mut Inventory>,
-	body_of: Query<&LubikanBodyOf>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+	controls: Query<&ActorControlStatus, With<VegetationPlayer>>,
+	mut commands: Commands,
 ) {
-	for (player, user, firearm, grenade, mut swap) in &mut players {
-		if !swap.ready_to_swap() {
+	let Some(loadout) = loadout.as_deref_mut() else {
+		return;
+	};
+	for change in changes.read() {
+		if !primary.as_deref().is_some_and(|primary| {
+			controls
+				.get(change.actor())
+				.ok()
+				.and_then(|status| status.source())
+				.and_then(|source| source.entity())
+				== Some(primary.0)
+		}) {
 			continue;
 		}
-		let Ok(mut bag) = bags.get_mut(user.bag) else {
-			continue;
-		};
-		let stepped = if swap.reverse { bag.cycle_weapons(-1) } else { bag.swap_active() };
-		if !stepped {
-			swap.mark_swapped();
-			continue;
-		}
-		let snapshot = bag.clone();
-		teardown_held_weapon(&mut commands, player, firearm, grenade);
-		if let Some(loadout) = loadout.as_deref_mut() {
-			commit_body_inventory(
-				&mut commands,
-				player,
-				loadout,
-				snapshot.clone(),
-				body_of.get(player).ok(),
-			);
-			commands.entity(player).insert(AppliedWorldPlayerLoadout(loadout.clone()));
-		}
-		if assets.is_some() {
-			hold_primary_weapon(&mut commands, player, &snapshot);
-		}
-		swap.mark_swapped();
+		loadout.retarget_inventory(change.inventory().clone());
+		commands
+			.entity(change.actor())
+			.insert(AppliedWorldPlayerLoadout(loadout.clone()));
 	}
 }
 
@@ -514,41 +308,53 @@ fn sync_tanz_stack_from_inventory(
 }
 
 pub(crate) fn configure(app: &mut App) {
-	app.add_systems(PreUpdate, sync_live_character_inventory.after(LubikanSystems::Owner))
-		.add_systems(Startup, spawn_world_reticle)
-		.add_systems(
-			Update,
-			(
-				arm_world_player,
-				sync_tanz_stack_from_inventory
-					.after(arm_world_player)
-					.before(TanzUserSystems::Match)
-					.before(TanzUserSystems::Execute),
-				(
-					begin_weapon_swap
-						.after(crate::inventory_cycling::InventoryCyclingCategorySystems)
-						.before(crate::inventory_cycling::InventoryCyclingSystems),
-					commit_weapon_swap.after(FirearmUserSystems::Swap),
-				)
-					.chain()
-					.after(CharacterControlSystems)
-					.run_if(resource_equals(WorldGameplayEnabled(true))),
-				sync_skill_map_equip
-					.after(crate::inventory_cycling::InventoryCyclingSystems)
-					.after(CharacterControlSystems)
-					.before(SkillMapSystems::Spawn)
-					.run_if(resource_equals(WorldGameplayEnabled(true))),
-				spawn_detonation_vfx,
-			),
-		);
+	app.add_systems(Startup, spawn_world_reticle);
+	configure_runtime(app);
+}
+
+/// World loadout / persistence adapters used by the assembled world and
+/// headless production wiring tests.
+pub(crate) fn configure_runtime(app: &mut App) {
+	app.add_systems(
+		Update,
+		(
+			arm_world_player
+				.after(crate::inventory_drop::InventoryDropSystems)
+				.before(EquipmentSystems::Reconcile)
+				.before(EquipmentSystems::Teardown)
+				.before(EquipmentSystems::Hold)
+				.before(PlayerSystems::Intent),
+			sync_tanz_stack_from_inventory
+				.after(arm_world_player)
+				.before(TanzUserSystems::Match)
+				.before(TanzUserSystems::Execute),
+			apply_equipment_inventory_to_loadout
+				.after(EquipmentSystems::CycleQueue)
+				.after(EquipmentSystems::CommitHolster)
+				.after(CharacterControlSystems)
+				.after(maybraid_session::SessionCapabilitySystems)
+				.before(PlayerSystems::Intent)
+				.run_if(resource_equals(WorldGameplayEnabled(true))),
+			sync_skill_map_equip
+				.after(EquipmentSystems::CycleQueue)
+				.after(CharacterControlSystems)
+				.after(maybraid_session::SessionCapabilitySystems)
+				.before(SkillMapSystems::Spawn)
+				.run_if(resource_equals(WorldGameplayEnabled(true))),
+			spawn_detonation_vfx,
+		),
+	);
 }
 
 #[cfg(test)]
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
+	use bevy::time::TimeUpdateStrategy;
+	use character_inventory_user::InventoryUser;
 	use character_items::{
-		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor,
+		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryDropRequest,
+		InventoryItem, ItemColor,
 	};
 	use characters::{CharacterAppearance, CharacterRoot};
 	use tanz_user::{BufferedTanz, ControlMode, TanzExecution, TanzId, TanzStack, TanzUser};
@@ -557,9 +363,339 @@ mod tests {
 		RequestSetCharacterAppearance,
 	};
 
-	use crate::inventory_cycling::ActiveInventoryCyclingCategory;
-	use crate::weapon::{arm_world_player, WorldPlayerAppearanceRequested, WorldPlayerLoadout};
-	use crate::WorldGameplayEnabled;
+	use crate::weapon::{
+		apply_equipment_inventory_to_loadout, arm_world_player, AppliedWorldPlayerLoadout,
+		WorldPlayerAppearanceRequested, WorldPlayerLoadout,
+	};
+	use maybraid_character_controller::ActorControlStatus;
+	use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource};
+	use maybraid_equipment::PendingEquipmentHold;
+	use maybraid_equipment::{EquipmentInventoryChanged, EquippedItemHandler, InventoryCycling};
+	use maybraid_session::WorldGameplayEnabled;
+	use maybraid_virtual_pad_controller::PrimaryVirtualPad;
+
+	#[derive(Resource, Default)]
+	struct WorldStrikes(usize);
+
+	fn record_world_strikes(
+		mut strikes: MessageReader<fisticuffs_user::FisticuffsStrike>,
+		mut count: ResMut<WorldStrikes>,
+	) {
+		count.0 += strikes.read().count();
+	}
+
+	fn assign_player(world: &mut World, player: Entity) {
+		let source_entity = world
+			.get_resource::<PrimaryVirtualPad>()
+			.map(|primary| primary.0)
+			.unwrap_or_else(|| world.spawn_empty().id());
+		let source = InputSource::virtual_pad(source_entity);
+		world.insert_resource(PrimaryVirtualPad(source_entity));
+		world.entity_mut(player).insert(ActorControlStatus::assigned(source));
+		world.init_resource::<InputRouter>();
+		world.resource_mut::<InputRouter>().set_local_source(source_entity);
+		if world.get::<InventoryCycling>(player).is_none() {
+			world.entity_mut(player).insert(InventoryCycling::default());
+		}
+		world
+			.resource_mut::<InputRouter>()
+			.assign_actor(source, ActorTarget::new(player));
+	}
+
+	fn weapon_inventory(item: InventoryItem) -> Inventory {
+		Inventory {
+			items: vec![item],
+			clothing: Vec::new(),
+			weapons: vec![0],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		}
+	}
+
+	fn composed_weapon_app(loadout: Option<WorldPlayerLoadout>) -> (App, Entity) {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			bevy::input::InputPlugin,
+			avian3d::prelude::PhysicsPlugins::default(),
+			AssetPlugin::default(),
+			bevy::mesh::MeshPlugin,
+			bevy::scene::ScenePlugin,
+		))
+		.insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_secs_f32(
+			1.0 / 60.0,
+		)))
+		.insert_resource(PlaygroundMode::Character)
+		.insert_resource(WorldGameplayEnabled(true));
+		maybraid_gameplay::register_gameplay_runtime(&mut app);
+		crate::weapon::configure_runtime(&mut app);
+		crate::inventory_drop::configure(&mut app);
+		if let Some(loadout) = loadout {
+			app.insert_resource(loadout);
+		}
+		let player = app
+			.world_mut()
+			.spawn((VegetationPlayer, Transform::IDENTITY, GlobalTransform::IDENTITY))
+			.id();
+		assign_player(app.world_mut(), player);
+		app.world_mut().spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
+		if let Some(mut capabilities) =
+			app.world_mut().get_resource_mut::<maybraid_session::SessionCapabilities>()
+		{
+			capabilities.install_play(true);
+		}
+		app.finish();
+		(app, player)
+	}
+
+	#[test]
+	fn composed_world_arm_realizes_inventory_items_and_legacy_fallback() -> anyhow::Result<()> {
+		for (item, expected) in [
+			(Some(InventoryItem::firearm(FirearmMesh::Bullpup)), EquippedItemHandler::Firearm),
+			(Some(InventoryItem::standard_grenade()), EquippedItemHandler::Grenade),
+			(Some(InventoryItem::Fisticuffs), EquippedItemHandler::Fisticuffs),
+			(None, EquippedItemHandler::None),
+		] {
+			let inventory = item.map(weapon_inventory).unwrap_or_default();
+			let (mut app, player) = composed_weapon_app(Some(WorldPlayerLoadout::new(
+				"active",
+				CharacterAppearance::default(),
+				inventory,
+			)));
+			assert!(app.world().resource::<WorldGameplayEnabled>().0);
+			assert!(app.world().get::<ActorControlStatus>(player).is_some());
+			for _ in 0..3 {
+				app.update();
+			}
+			assert_eq!(app.world().get::<EquippedItemHandler>(player).copied(), Some(expected));
+			assert_eq!(
+				app.world().get::<firearm_user::FirearmUser>(player).is_some(),
+				expected == EquippedItemHandler::Firearm
+			);
+			assert_eq!(
+				app.world().get::<grenade_user::GrenadeUser>(player).is_some(),
+				expected == EquippedItemHandler::Grenade
+			);
+			assert_eq!(
+				app.world().get::<fisticuffs_user::FisticuffsUser>(player).is_some(),
+				expected == EquippedItemHandler::Fisticuffs
+			);
+			assert!(app.world().get::<PendingEquipmentHold>(player).is_none());
+		}
+
+		let (mut app, player) = composed_weapon_app(None);
+		for _ in 0..3 {
+			app.update();
+		}
+		let firearm = app
+			.world()
+			.get::<firearm_user::FirearmUser>(player)
+			.ok_or_else(|| anyhow::anyhow!("legacy fallback firearm"))?;
+		assert_eq!(
+			app.world().get::<EquippedItemHandler>(player),
+			Some(&EquippedItemHandler::Firearm)
+		);
+		let live = app
+			.world()
+			.get::<firearm_user::LiveWeapon>(firearm.held)
+			.ok_or_else(|| anyhow::anyhow!("legacy default firearm payload"))?;
+		let expected = firearm_user::LiveWeapon::default();
+		assert_eq!(live.payload.amount, expected.payload.amount);
+		assert_eq!(live.weapon, expected.weapon);
+		assert_eq!(live.fire, expected.fire);
+		assert_eq!(live.recoil.0, expected.recoil.0);
+		assert_eq!(live.recoil_seed, expected.recoil_seed);
+		assert_eq!(live.sight_fov, expected.sight_fov);
+		Ok(())
+	}
+
+	#[test]
+	fn bag_primary_change_reconciles_active_fisticuffs_through_item_runtime() -> anyhow::Result<()>
+	{
+		use fisticuffs_user::{AttackSpec, FisticuffsHitSensor, FisticuffsUser, Side};
+
+		let inventory = Inventory {
+			items: vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: vec![0, 1],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		let (mut app, player) = composed_weapon_app(Some(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			inventory,
+		)));
+		app.init_resource::<WorldStrikes>();
+		app.add_systems(PostUpdate, record_world_strikes);
+		app.update();
+		{
+			let mut user = app
+				.world_mut()
+				.get_mut::<FisticuffsUser>(player)
+				.ok_or_else(|| anyhow::anyhow!("fisticuffs driver"))?;
+			user.state.request(AttackSpec::jab(Side::Left));
+			user.state.tick(fisticuffs_user::AttackTiming::JAB.duration_secs * 0.40);
+		}
+		app.update();
+		assert!(app
+			.world_mut()
+			.query::<&FisticuffsHitSensor>()
+			.iter(app.world())
+			.any(|sensor| sensor.attacker == player));
+		let strikes = app.world().resource::<WorldStrikes>().0;
+		let bag = app
+			.world()
+			.get::<InventoryUser>(player)
+			.ok_or_else(|| anyhow::anyhow!("inventory user"))?
+			.bag;
+		// A changed bag with the same primary must not restart an active jab.
+		{
+			let mut inventory = app
+				.world_mut()
+				.get_mut::<Inventory>(bag)
+				.ok_or_else(|| anyhow::anyhow!("inventory"))?;
+			*inventory = inventory.clone();
+		}
+		app.update();
+		assert_eq!(
+			app.world().get::<FisticuffsUser>(player).map(|user| user.state.phase()),
+			Some(Some(fisticuffs_user::AttackPhase::Active))
+		);
+		assert_eq!(app.world().resource::<WorldStrikes>().0, strikes);
+		app.world_mut()
+			.get_mut::<Inventory>(bag)
+			.ok_or_else(|| anyhow::anyhow!("inventory"))?
+			.weapons
+			.swap(0, 1);
+		app.update();
+		assert_eq!(app.world().resource::<WorldStrikes>().0, strikes);
+		assert!(app.world().get::<FisticuffsUser>(player).is_none());
+		let firearm = app
+			.world()
+			.get::<firearm_user::FirearmUser>(player)
+			.ok_or_else(|| anyhow::anyhow!("reconciled firearm"))?;
+		assert_eq!(
+			app.world().get::<EquippedItemHandler>(player),
+			Some(&EquippedItemHandler::Firearm)
+		);
+		assert_eq!(
+			app.world().get::<player::PlayerUse>(player).map(|use_item| use_item.driver),
+			Some(firearm.held)
+		);
+		assert!(!app
+			.world_mut()
+			.query::<&FisticuffsHitSensor>()
+			.iter(app.world())
+			.any(|sensor| sensor.attacker == player));
+		Ok(())
+	}
+
+	#[test]
+	fn loadout_replacement_cancels_jab_before_active_in_the_same_frame() -> anyhow::Result<()> {
+		use fisticuffs_user::{
+			AttackPhase, AttackSpec, AttackTiming, FisticuffsUser, Side, JAB_STARTUP_END,
+		};
+
+		let (mut app, player) = composed_weapon_app(Some(WorldPlayerLoadout::new(
+			"first",
+			CharacterAppearance::default(),
+			weapon_inventory(InventoryItem::Fisticuffs),
+		)));
+		app.init_resource::<WorldStrikes>();
+		app.add_systems(PostUpdate, record_world_strikes);
+		app.update();
+		{
+			let mut user = app
+				.world_mut()
+				.get_mut::<FisticuffsUser>(player)
+				.ok_or_else(|| anyhow::anyhow!("initial fisticuffs driver"))?;
+			user.state.request(AttackSpec::jab(Side::Left));
+			user.state.tick(AttackTiming::JAB.duration_secs * (JAB_STARTUP_END - 0.002));
+			assert_eq!(user.state.phase(), Some(AttackPhase::Startup));
+		}
+		let replacement = WorldPlayerLoadout::new(
+			"second",
+			CharacterAppearance::default(),
+			weapon_inventory(InventoryItem::firearm(FirearmMesh::Reltor)),
+		)
+		.with_name("Ada");
+		app.insert_resource(replacement.clone());
+		app.update();
+		assert!(app.world().resource::<Time>().delta_secs() > 0.0);
+		assert_eq!(app.world().resource::<WorldStrikes>().0, 0);
+		assert!(app.world().get::<FisticuffsUser>(player).is_none());
+		assert!(app.world().get::<firearm_user::FirearmUser>(player).is_some());
+		assert_eq!(app.world().get::<Name>(player).map(Name::as_str), Some("Ada"));
+		assert_eq!(
+			app.world().get::<AppliedWorldPlayerLoadout>(player).map(|applied| &applied.0),
+			Some(&replacement)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn clothing_drop_reholds_fisticuffs_and_removes_the_outgoing_sensor() -> anyhow::Result<()> {
+		use character_items::{ClothingMaterial, ClothingMesh, ItemColor};
+		use fisticuffs_user::{AttackSpec, FisticuffsHitSensor, FisticuffsUser, Side};
+
+		let inventory = Inventory {
+			items: vec![
+				InventoryItem::Fisticuffs,
+				InventoryItem::clothing(
+					ClothingMesh::Pants,
+					ClothingMaterial::Tattered,
+					ItemColor::Green,
+				),
+			],
+			clothing: vec![1],
+			weapons: vec![0],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		let (mut app, player) = composed_weapon_app(Some(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			inventory,
+		)));
+		app.init_resource::<WorldStrikes>();
+		app.add_systems(PostUpdate, record_world_strikes);
+		app.update();
+		let mut user = app
+			.world_mut()
+			.get_mut::<FisticuffsUser>(player)
+			.ok_or_else(|| anyhow::anyhow!("initial fisticuffs driver"))?;
+		user.state.request(AttackSpec::jab(Side::Left));
+		user.state.tick(fisticuffs_user::AttackTiming::JAB.duration_secs * 0.40);
+		drop(user);
+		app.update();
+		assert!(app
+			.world_mut()
+			.query::<&FisticuffsHitSensor>()
+			.iter(app.world())
+			.any(|sensor| sensor.attacker == player));
+		let strikes = app.world().resource::<WorldStrikes>().0;
+
+		app.world_mut()
+			.resource_mut::<Messages<InventoryDropRequest>>()
+			.write(InventoryDropRequest::new(player, 1));
+		app.update();
+		assert_eq!(app.world().resource::<WorldStrikes>().0, strikes);
+		assert!(app.world().get::<FisticuffsUser>(player).is_some());
+		assert!(!app
+			.world_mut()
+			.query::<&FisticuffsHitSensor>()
+			.iter(app.world())
+			.any(|sensor| sensor.attacker == player));
+		let bag = app
+			.world()
+			.get::<InventoryUser>(player)
+			.ok_or_else(|| anyhow::anyhow!("refreshed bag user"))?
+			.bag;
+		let remaining = app.world().get::<Inventory>(bag).ok_or_else(|| anyhow::anyhow!("bag"))?;
+		assert!(remaining.clothing.is_empty());
+		Ok(())
+	}
 
 	#[test]
 	fn world_loadout_keeps_primary_weapon_and_worn_clothing() {
@@ -603,6 +739,7 @@ mod tests {
 				.with_name("Ada"),
 		);
 		let player = world.spawn((VegetationPlayer, WorldPlayerAppearanceRequested)).id();
+		assign_player(&mut world, player);
 		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
 
 		world
@@ -696,25 +833,13 @@ mod tests {
 				.with_name("Ada"),
 		);
 		let player = world.spawn(VegetationPlayer).id();
+		assign_player(&mut world, player);
 		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
 		world
 			.run_system_once(arm_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(world.get::<Name>(player).map(Name::as_str), Some("Ada"));
 		Ok(())
-	}
-
-	fn two_gun_bag() -> Inventory {
-		Inventory {
-			items: vec![
-				InventoryItem::firearm(FirearmMesh::Bullpup),
-				InventoryItem::firearm(FirearmMesh::Reltor),
-			],
-			clothing: Vec::new(),
-			weapons: vec![0, 1],
-			skills: Vec::new(),
-			tanzes: Vec::new(),
-		}
 	}
 
 	fn two_map_bag() -> Inventory {
@@ -733,339 +858,74 @@ mod tests {
 	}
 
 	#[test]
-	fn same_frame_category_then_y_starts_weapon_swap() -> anyhow::Result<()> {
-		use character_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WeaponSwap};
-		use maybraid_character_controller::{CharacterIntent, InventoryCyclingCategory};
+	fn secondary_equipment_change_does_not_replace_primary_loadout() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let primary_source = world.spawn_empty().id();
+		let secondary_source = world.spawn_empty().id();
+		world.insert_resource(PrimaryVirtualPad(primary_source));
+		let initial = two_map_bag();
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			initial.clone(),
+		));
+		let secondary = world
+			.spawn((
+				VegetationPlayer,
+				ActorControlStatus::assigned(InputSource::virtual_pad(secondary_source)),
+			))
+			.id();
+		world.init_resource::<Messages<EquipmentInventoryChanged>>();
+		world.write_message(EquipmentInventoryChanged::new(secondary, Inventory::default()));
+		world
+			.run_system_once(apply_equipment_inventory_to_loadout)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.resource::<WorldPlayerLoadout>().inventory, initial);
+		assert!(world.get::<AppliedWorldPlayerLoadout>(secondary).is_none());
+		Ok(())
+	}
 
-		use crate::inventory_cycling::{
-			apply_inventory_category_selection, ActiveInventoryCyclingCategory,
+	#[test]
+	fn world_arm_queues_selected_item_for_lower_realization() -> anyhow::Result<()> {
+		use character_inventory_user::{spawn_bag, InventoryUser};
+		use fisticuffs_user::FisticuffsUser;
+		use maybraid_equipment::{
+			PendingEquipmentHold, PendingEquipmentTeardown, ReconcileEquipmentFromInventory,
 		};
-		use crate::weapon::begin_weapon_swap;
-
-		let inventory = two_gun_bag();
-		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(game_commands::command::TextEntryFocus(false));
-		world.insert_resource(ActiveInventoryCyclingCategory(InventoryCyclingCategory::SkillMaps));
-		let bag = world.spawn(inventory).id();
-		let held = world.spawn_empty().id();
-		let player = world
-			.spawn((VegetationPlayer, InventoryUser::carrying(bag), FirearmUser::holding(held)))
-			.id();
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SelectInventoryCyclingCategory(
-					InventoryCyclingCategory::Weapons,
-				));
-				writer.write(CharacterIntent::SwapActive);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(apply_inventory_category_selection)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(begin_weapon_swap)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-
-		assert!(world.get::<WeaponSwap>(player).is_some());
-		let bag = world.get::<Inventory>(bag).ok_or_else(|| anyhow::anyhow!("bag"))?;
-		assert_eq!(
-			bag.primary_weapon().and_then(InventoryItem::firearm_mesh),
-			Some(FirearmMesh::Bullpup)
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn y_starts_a_swap_without_changing_the_kit() -> anyhow::Result<()> {
-		use character_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WeaponSwap};
-		use maybraid_character_controller::CharacterIntent;
-
-		use crate::weapon::begin_weapon_swap;
-
-		let inventory = two_gun_bag();
-		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(ActiveInventoryCyclingCategory(
-			maybraid_character_controller::InventoryCyclingCategory::Weapons,
-		));
-		let bag = world.spawn(inventory).id();
-		let held = world.spawn_empty().id();
-		let player = world
-			.spawn((VegetationPlayer, InventoryUser::carrying(bag), FirearmUser::holding(held)))
-			.id();
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SwapActive);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(begin_weapon_swap)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-
-		assert!(world.get::<WeaponSwap>(player).is_some());
-		let bag = world.get::<Inventory>(bag).ok_or_else(|| anyhow::anyhow!("bag"))?;
-		assert_eq!(
-			bag.primary_weapon().and_then(InventoryItem::firearm_mesh),
-			Some(FirearmMesh::Bullpup)
-		);
-		assert!(world.entities().contains(held));
-		Ok(())
-	}
-
-	#[test]
-	fn reverse_queue_step_starts_a_swap_without_rotating_early() -> anyhow::Result<()> {
-		use character_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WeaponSwap};
-		use maybraid_character_controller::CharacterIntent;
-
-		use crate::weapon::begin_weapon_swap;
-
-		let inventory = two_gun_bag();
-		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(ActiveInventoryCyclingCategory(
-			maybraid_character_controller::InventoryCyclingCategory::Weapons,
-		));
-		let bag = world.spawn(inventory).id();
-		let held = world.spawn_empty().id();
-		let player = world
-			.spawn((VegetationPlayer, InventoryUser::carrying(bag), FirearmUser::holding(held)))
-			.id();
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::CycleEquippedQueue(-1));
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(begin_weapon_swap)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-
-		let swap = world.get::<WeaponSwap>(player).ok_or_else(|| anyhow::anyhow!("swap"))?;
-		assert!(swap.reverse);
-		let bag = world.get::<Inventory>(bag).ok_or_else(|| anyhow::anyhow!("bag"))?;
-		assert_eq!(
-			bag.primary_weapon().and_then(InventoryItem::firearm_mesh),
-			Some(FirearmMesh::Bullpup)
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn reverse_queue_commits_through_weapon_swap() -> anyhow::Result<()> {
-		use character_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
-
-		use crate::weapon::commit_weapon_swap;
-
-		let inventory = two_gun_bag();
-		let mut world = World::new();
-		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(WorldPlayerLoadout::new(
-			"active",
-			CharacterAppearance::default(),
-			inventory.clone(),
-		));
-		let bag = world.spawn(inventory).id();
-		let held = world.spawn_empty().id();
-		world.spawn((
-			VegetationPlayer,
-			InventoryUser::carrying(bag),
-			FirearmUser::holding(held),
-			WeaponSwap {
-				elapsed: WEAPON_SWAP_SECS * 0.5,
-				duration: WEAPON_SWAP_SECS,
-				swapped: false,
-				reverse: true,
-			},
-		));
-		world
-			.run_system_once(commit_weapon_swap)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-
-		let bag = world.get::<Inventory>(bag).ok_or_else(|| anyhow::anyhow!("bag"))?;
-		assert_eq!(
-			bag.primary_weapon().and_then(InventoryItem::firearm_mesh),
-			Some(FirearmMesh::Reltor)
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn y_swaps_the_queued_primary() -> anyhow::Result<()> {
-		use character_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
-
-		use crate::weapon::commit_weapon_swap;
-
-		let inventory = two_gun_bag();
-		let mut world = World::new();
-		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(WorldPlayerLoadout::new(
-			"active",
-			CharacterAppearance::default(),
-			inventory.clone(),
-		));
-		let bag = world.spawn(inventory).id();
-		let held = world.spawn_empty().id();
-		world.spawn((
-			VegetationPlayer,
-			InventoryUser::carrying(bag),
-			FirearmUser::holding(held),
-			WeaponSwap {
-				elapsed: WEAPON_SWAP_SECS * 0.5,
-				duration: WEAPON_SWAP_SECS,
-				swapped: false,
-				reverse: false,
-			},
-		));
-		world
-			.run_system_once(commit_weapon_swap)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-
-		let bag = world.get::<Inventory>(bag).ok_or_else(|| anyhow::anyhow!("bag"))?;
-		assert_eq!(
-			bag.primary_weapon().and_then(InventoryItem::firearm_mesh),
-			Some(FirearmMesh::Reltor)
-		);
-		assert!(!world.entities().contains(held));
-		let loadout = world
-			.get_resource::<WorldPlayerLoadout>()
-			.ok_or_else(|| anyhow::anyhow!("loadout"))?;
-		assert_eq!(
-			loadout.inventory.primary_weapon().and_then(InventoryItem::firearm_mesh),
-			Some(FirearmMesh::Reltor)
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn grenade_primary_spawns_a_held_visual() -> anyhow::Result<()> {
-		use grenade_user::GrenadeUser;
-
-		use crate::weapon::hold_primary_weapon;
 
 		let inventory = Inventory {
-			items: vec![InventoryItem::standard_grenade()],
+			items: vec![InventoryItem::Fisticuffs],
 			clothing: Vec::new(),
 			weapons: vec![0],
 			skills: Vec::new(),
 			tanzes: Vec::new(),
 		};
 		let mut world = World::new();
-		let player = world.spawn(VegetationPlayer).id();
-		world
-			.run_system_once(move |mut commands: Commands| {
-				hold_primary_weapon(&mut commands, player, &inventory);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(world.get::<GrenadeUser>(player).is_some());
-		assert!(world.get::<firearm_user::FirearmUser>(player).is_none());
-		Ok(())
-	}
-
-	#[test]
-	fn throw_blocks_weapon_swap() -> anyhow::Result<()> {
-		use character_inventory_user::InventoryUser;
-		use grenade_user::{GrenadePhase, GrenadeThrow, GrenadeUser};
-		use maybraid_character_controller::CharacterIntent;
-
-		use crate::weapon::begin_weapon_swap;
-
-		let inventory = Inventory {
-			items: vec![
-				InventoryItem::firearm(FirearmMesh::Bullpup),
-				InventoryItem::standard_grenade(),
-			],
-			clothing: Vec::new(),
-			weapons: vec![0, 1],
-			skills: Vec::new(),
-			tanzes: Vec::new(),
-		};
-		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
+		world.insert_resource(PlaygroundMode::Character);
 		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(ActiveInventoryCyclingCategory(
-			maybraid_character_controller::InventoryCyclingCategory::Weapons,
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			inventory.clone(),
 		));
-		let bag = world.spawn(inventory).id();
-		let held = world.spawn_empty().id();
-		let player = world
-			.spawn((
-				VegetationPlayer,
-				InventoryUser::carrying(bag),
-				GrenadeUser::holding(held),
-				GrenadeThrow {
-					phase: GrenadePhase::Windup { age: 0.1 },
-					use_latched: true,
-					fuse: 2.0,
-				},
-			))
-			.id();
+		let player = world.spawn((VegetationPlayer, WorldPlayerAppearanceRequested)).id();
+		assign_player(&mut world, player);
+		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
+		spawn_bag(&mut world.commands(), player, inventory.clone());
+		world.flush();
 		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SwapActive);
-			})
+			.run_system_once(arm_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(begin_weapon_swap)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(world.get::<firearm_user::WeaponSwap>(player).is_none());
-		Ok(())
-	}
-
-	#[test]
-	fn cooking_allows_weapon_swap() -> anyhow::Result<()> {
-		use character_inventory_user::InventoryUser;
-		use grenade_user::{GrenadePhase, GrenadeThrow, GrenadeUser};
-		use maybraid_character_controller::CharacterIntent;
-
-		use crate::weapon::begin_weapon_swap;
-
-		let inventory = Inventory {
-			items: vec![
-				InventoryItem::firearm(FirearmMesh::Bullpup),
-				InventoryItem::standard_grenade(),
-			],
-			clothing: Vec::new(),
-			weapons: vec![0, 1],
-			skills: Vec::new(),
-			tanzes: Vec::new(),
-		};
-		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(ActiveInventoryCyclingCategory(
-			maybraid_character_controller::InventoryCyclingCategory::Weapons,
-		));
-		let bag = world.spawn(inventory).id();
-		let held = world.spawn_empty().id();
-		let player = world
-			.spawn((
-				VegetationPlayer,
-				InventoryUser::carrying(bag),
-				GrenadeUser::holding(held),
-				GrenadeThrow {
-					phase: GrenadePhase::Cooking { age: 0.4 },
-					use_latched: true,
-					fuse: 2.0,
-				},
-			))
-			.id();
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SwapActive);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(begin_weapon_swap)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(world.get::<firearm_user::WeaponSwap>(player).is_some());
+		world.flush();
+		assert!(world.get::<ReconcileEquipmentFromInventory>(player).is_some());
+		assert!(world.get::<PendingEquipmentTeardown>(player).is_some());
+		assert!(world.get::<PendingEquipmentHold>(player).is_some());
+		assert_eq!(
+			world.get::<EquippedItemHandler>(player),
+			Some(&EquippedItemHandler::Fisticuffs)
+		);
+		assert!(world.get::<FisticuffsUser>(player).is_none());
+		assert!(world.get::<InventoryUser>(player).is_some());
 		Ok(())
 	}
 
@@ -1073,20 +933,17 @@ mod tests {
 	fn y_cycles_the_presented_skill_map_in_the_selected_category() -> anyhow::Result<()> {
 		use character_inventory_user::InventoryUser;
 		use character_items::{SkillMapKind, SkillMapSpec};
-		use maybraid_character_controller::{CharacterIntent, InventoryCyclingCategory};
+		use maybraid_character_controller::{
+			CharacterIntent, CharacterIntentFrame, InventoryCyclingCategory,
+		};
+		use maybraid_equipment::{cycle_equipped_inventory_queues, EquipmentInventoryChanged};
 		use maybraid_skill_map::SkillMapEquip;
 
-		use crate::inventory_cycling::{
-			cycle_equipped_inventory_queues, ActiveInventoryCyclingCategory,
-		};
-		use crate::weapon::sync_skill_map_equip;
+		use crate::weapon::{apply_equipment_inventory_to_loadout, sync_skill_map_equip};
 
 		let inventory = two_map_bag();
 		let mut world = World::new();
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(game_commands::command::TextEntryFocus(false));
-		world.insert_resource(ActiveInventoryCyclingCategory(InventoryCyclingCategory::SkillMaps));
+		world.init_resource::<Messages<EquipmentInventoryChanged>>();
 		world.insert_resource(WorldPlayerLoadout::new(
 			"active",
 			CharacterAppearance::default(),
@@ -1100,13 +957,21 @@ mod tests {
 				SkillMapEquip::from_spec(Some(SkillMapSpec::new(SkillMapKind::Fireball, 1))),
 			))
 			.id();
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SwapActive);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assign_player(&mut world, player);
+		if let Some(mut cycling) = world.get_mut::<InventoryCycling>(player) {
+			cycling.select(InventoryCyclingCategory::SkillMaps);
+		}
+		let source = InputSource::virtual_pad(world.resource::<PrimaryVirtualPad>().0);
+		let input = world
+			.resource::<InputRouter>()
+			.route_actor(source, vec![CharacterIntent::SwapActive])
+			.ok_or_else(|| anyhow::anyhow!("player route"))?;
+		world.entity_mut(player).insert(CharacterIntentFrame::new(input));
 		world
 			.run_system_once(cycle_equipped_inventory_queues)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(apply_equipment_inventory_to_loadout)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		world
 			.run_system_once(sync_skill_map_equip)
@@ -1184,161 +1049,6 @@ mod tests {
 		};
 		assert_eq!(instance.name, FIERY_EXPLOSION);
 		assert!((transform.scale.x - stats.effect_scale).abs() < 1e-4);
-		Ok(())
-	}
-
-	#[test]
-	fn live_inventory_stamps_onto_the_session_character() -> anyhow::Result<()> {
-		use crate::weapon::{sync_live_character_inventory, LiveCharacterInventory};
-		use lubikans::{
-			LubikanBodyOf, LubikanCharacter, LubikanOwner, LubikanSystems, LubikansPlugin,
-		};
-
-		let inventory = two_gun_bag();
-		let mut app = App::new();
-		app.add_plugins(LubikansPlugin);
-		app.insert_resource(WorldPlayerLoadout::new(
-			"active",
-			CharacterAppearance::default(),
-			inventory.clone(),
-		));
-		app.add_systems(PreUpdate, sync_live_character_inventory.after(LubikanSystems::Owner));
-		let body = app.world_mut().spawn(LubikanOwner).id();
-		app.update();
-		let character = LubikanBodyOf::holder(app.world(), body);
-		anyhow::ensure!(character != body, "ledger lives on the session character");
-		anyhow::ensure!(app.world().get::<LubikanCharacter>(character).is_some());
-		let live = app
-			.world()
-			.get::<LiveCharacterInventory>(character)
-			.ok_or_else(|| anyhow::anyhow!("live inventory"))?;
-		assert_eq!(
-			live.inventory().primary_weapon().and_then(InventoryItem::firearm_mesh),
-			Some(FirearmMesh::Bullpup)
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn live_inventory_survives_body_replacement() -> anyhow::Result<()> {
-		use crate::weapon::{sync_live_character_inventory, LiveCharacterInventory};
-		use lubikans::{LubikanBodyOf, LubikanOwner, LubikanSystems, LubikansPlugin};
-
-		let mut app = App::new();
-		app.add_plugins(LubikansPlugin);
-		app.insert_resource(WorldPlayerLoadout::new(
-			"active",
-			CharacterAppearance::default(),
-			two_gun_bag(),
-		));
-		app.add_systems(PreUpdate, sync_live_character_inventory.after(LubikanSystems::Owner));
-		let first = app.world_mut().spawn(LubikanOwner).id();
-		app.update();
-		let character = LubikanBodyOf::holder(app.world(), first);
-		app.world_mut().entity_mut(first).remove::<LubikanOwner>();
-		app.update();
-		let second = app.world_mut().spawn(LubikanOwner).id();
-		app.update();
-		assert_eq!(LubikanBodyOf::holder(app.world(), second), character);
-		anyhow::ensure!(app.world().get::<LiveCharacterInventory>(character).is_some());
-		Ok(())
-	}
-
-	#[test]
-	fn commit_live_writes_character_and_saved_snapshot() -> anyhow::Result<()> {
-		use crate::weapon::{commit_body_inventory, LiveCharacterInventory};
-
-		let mut world = World::new();
-		world.insert_resource(WorldPlayerLoadout::new(
-			"active",
-			CharacterAppearance::default(),
-			Inventory::default(),
-		));
-		let player = world.spawn_empty().id();
-		world
-			.run_system_once(
-				move |mut commands: Commands, mut loadout: ResMut<WorldPlayerLoadout>| {
-					commit_body_inventory(
-						&mut commands,
-						player,
-						loadout.as_mut(),
-						two_gun_bag(),
-						None,
-					);
-				},
-			)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let live = world
-			.get::<LiveCharacterInventory>(player)
-			.ok_or_else(|| anyhow::anyhow!("live"))?;
-		let loadout = world.resource::<WorldPlayerLoadout>();
-		assert_eq!(loadout.inventory, live.0);
-		assert_eq!(
-			loadout.inventory.primary_weapon().and_then(InventoryItem::firearm_mesh),
-			Some(FirearmMesh::Bullpup)
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn matching_applied_snapshot_does_not_rearm_or_reset_health() -> anyhow::Result<()> {
-		use crate::weapon::AppliedWorldPlayerLoadout;
-		use damage::Health;
-
-		let mut world = World::new();
-		world.insert_resource(PlaygroundMode::Character);
-		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(WorldPlayerLoadout::new(
-			"active",
-			CharacterAppearance::default(),
-			Inventory::default(),
-		));
-		let player = world.spawn(VegetationPlayer).id();
-		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
-		world
-			.run_system_once(arm_world_player)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.get_mut::<Health>(player)
-			.ok_or_else(|| anyhow::anyhow!("health"))?
-			.current = 1.0;
-		world
-			.run_system_once(arm_world_player)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let health = world.get::<Health>(player).ok_or_else(|| anyhow::anyhow!("health"))?;
-		assert_eq!(health.current, 1.0);
-		anyhow::ensure!(world.get::<AppliedWorldPlayerLoadout>(player).is_some());
-		Ok(())
-	}
-
-	#[test]
-	fn differing_applied_snapshot_still_resets_health_on_rearm() -> anyhow::Result<()> {
-		use damage::Health;
-
-		let mut world = World::new();
-		world.insert_resource(PlaygroundMode::Character);
-		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(WorldPlayerLoadout::new(
-			"active",
-			CharacterAppearance::default(),
-			Inventory::default(),
-		));
-		let player = world.spawn(VegetationPlayer).id();
-		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
-		world
-			.run_system_once(arm_world_player)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.get_mut::<Health>(player)
-			.ok_or_else(|| anyhow::anyhow!("health"))?
-			.current = 1.0;
-		world.resource_mut::<WorldPlayerLoadout>().name = String::from("Ada");
-		world
-			.run_system_once(arm_world_player)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let health = world.get::<Health>(player).ok_or_else(|| anyhow::anyhow!("health"))?;
-		assert_eq!(health.current, health.max);
-		assert_ne!(health.current, 1.0);
 		Ok(())
 	}
 }

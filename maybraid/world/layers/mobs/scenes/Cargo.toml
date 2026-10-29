@@ -26,6 +26,7 @@ threat-intelligence = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+gimme-bench-support = { workspace = true }
 npc-intelligence = { workspace = true }
 
 [lints]

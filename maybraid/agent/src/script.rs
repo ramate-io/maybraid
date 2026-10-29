@@ -119,6 +119,7 @@ mod tests {
 		"smoke-origin-walk.jsonl",
 		"smoke-player-down.jsonl",
 		"smoke-menu-home.jsonl",
+		"smoke-pause-menu.jsonl",
 		"smoke-mobs-guard.jsonl",
 		"menu-home-focus.jsonl",
 		"menu-home-characters.jsonl",
