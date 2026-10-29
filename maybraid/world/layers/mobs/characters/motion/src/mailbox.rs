@@ -20,6 +20,7 @@ use character_animations::{
 		SquatDescent, ThinkAgain, Tuck, TwoFootedTuckedFlip, UprightLeap, UprightPowerDash,
 		THINK_AGAIN_DURATION,
 	},
+	rigs::jump_transition_cache::JumpTransitionCache,
 	Animation, Effects,
 };
 use character_rigs::{
@@ -114,6 +115,7 @@ pub struct AnimMailbox {
 	pub prepared_clip: Option<PreparedClip>,
 	prepared_from: Option<AnimClip>,
 	last_clip: Option<AnimClip>,
+	jump_transition: JumpTransitionCache,
 }
 
 /// Sample coordinate for the current clip. When present, [`tick_anim_mailbox`]
@@ -147,6 +149,7 @@ impl AnimMailbox {
 			prepared_clip: None,
 			prepared_from: None,
 			last_clip: None,
+			jump_transition: JumpTransitionCache::default(),
 		}
 	}
 
@@ -206,6 +209,7 @@ impl AnimMailbox {
 		self.from_offset = self.displayed_offset;
 		self.blend_progress = 0.0;
 		self.clip_progress = 0.0;
+		self.jump_transition.invalidate();
 	}
 
 	#[cfg(test)]
@@ -429,6 +433,9 @@ pub fn tick_anim_mailbox(
 
 		let requested = root.0.clip;
 		let requested_id = requested.id();
+		if mailbox.last_clip != Some(requested) {
+			mailbox.jump_transition.invalidate();
+		}
 		if mailbox.last != Some(requested_id) {
 			let handoff =
 				match (mailbox.last_clip.filter(|_| mailbox.clip_progress >= 1.0), requested_id) {
@@ -555,16 +562,31 @@ pub fn apply_anim_mailbox(
 							}
 						}
 					}
-					let prepared = mailbox.prepared_clip.as_ref();
-					let effects = sample_humanoid_prepared(
-						requested,
-						&mut rig,
-						progress,
-						write_bones,
-						write_effects,
-						cache,
-						prepared,
-					);
+					let effects = if let AnimClip::Jump(params) = requested {
+						let jump = params.apply_humanoid();
+						if write_bones {
+							jump.apply_for_with_cache(
+								&mut rig,
+								progress,
+								&mut mailbox.jump_transition,
+							);
+						}
+						if write_effects {
+							jump.effects_for(&rig, progress)
+						} else {
+							Effects::IDENTITY
+						}
+					} else {
+						sample_humanoid_prepared(
+							requested,
+							&mut rig,
+							progress,
+							write_bones,
+							write_effects,
+							cache,
+							mailbox.prepared_clip.as_ref(),
+						)
+					};
 					if write_bones {
 						publish_pose(&mut mailbox, &rig.pose, weight);
 					}

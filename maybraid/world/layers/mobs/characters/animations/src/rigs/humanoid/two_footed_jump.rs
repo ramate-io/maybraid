@@ -6,12 +6,44 @@ use log::info;
 use crate::animations::{
 	smoothstep, Fall, JumpSegment, Spring, Squat, TwoFootedJump, FALL_BLEND_FRACTION,
 };
+use crate::rigs::jump_transition_cache::{JumpTransitionCache, JumpTransitionKey};
 use crate::rigs::mix::blend_clips;
 use crate::rigs::segment_debug::segment_debug_enabled;
 use crate::{Animation, Effects};
 
 impl Animation<HumanoidV0Rig> for TwoFootedJump {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, elapsed: f32) {
+		self.apply_for_inner(rig, elapsed, None);
+	}
+
+	fn effects_for(&self, rig: &HumanoidV0Rig, elapsed: f32) -> Effects {
+		let y = self.vertical_offset(rig.segment_lengths, elapsed);
+		if y.abs() > f32::EPSILON {
+			ArmatureOffset::from_translation(Vec3::new(0.0, y, 0.0))
+		} else {
+			ArmatureOffset::IDENTITY
+		}
+	}
+}
+
+impl TwoFootedJump {
+	/// Sample with endpoint poses retained by a single character's mailbox.
+	pub fn apply_for_with_cache(
+		&self,
+		rig: &mut HumanoidV0Rig,
+		elapsed: f32,
+		cache: &mut JumpTransitionCache,
+	) {
+		cache.prepare(rig, elapsed);
+		self.apply_for_inner(rig, elapsed, Some(cache));
+	}
+
+	fn apply_for_inner(
+		&self,
+		rig: &mut HumanoidV0Rig,
+		elapsed: f32,
+		cache: Option<&mut JumpTransitionCache>,
+	) {
 		let lengths = rig.segment_lengths;
 		let (segment, local) = self.segment(lengths, elapsed);
 		let timings = self.timings(lengths);
@@ -23,7 +55,9 @@ impl Animation<HumanoidV0Rig> for TwoFootedJump {
 				squat.apply_for(rig, progress);
 			}
 			JumpSegment::Spring => {
-				blend_clips(
+				blend_jump_clips(
+					cache,
+					JumpTransitionKey::SpringFromSquat,
 					rig,
 					&Squat::for_loop(1.0, 1.0),
 					0.0,
@@ -47,7 +81,9 @@ impl Animation<HumanoidV0Rig> for TwoFootedJump {
 				}
 				if local < blend_end {
 					let transition_progress = (local / blend_end).clamp(0.0, 1.0);
-					blend_clips(
+					blend_jump_clips(
+						cache,
+						JumpTransitionKey::FallFromSpring,
 						rig,
 						&Spring::default(),
 						1.0,
@@ -83,7 +119,9 @@ impl Animation<HumanoidV0Rig> for TwoFootedJump {
 					);
 				}
 				if transition_progress < 1.0 {
-					blend_clips(
+					blend_jump_clips(
+						cache,
+						JumpTransitionKey::LandFromFall,
 						rig,
 						&Fall::default(),
 						1.0,
@@ -98,17 +136,6 @@ impl Animation<HumanoidV0Rig> for TwoFootedJump {
 		}
 	}
 
-	fn effects_for(&self, rig: &HumanoidV0Rig, elapsed: f32) -> Effects {
-		let y = self.vertical_offset(rig.segment_lengths, elapsed);
-		if y.abs() > f32::EPSILON {
-			ArmatureOffset::from_translation(Vec3::new(0.0, y, 0.0))
-		} else {
-			ArmatureOffset::IDENTITY
-		}
-	}
-}
-
-impl TwoFootedJump {
 	pub fn log_landing_debug(&self, rig: &HumanoidV0Rig, elapsed: f32, label: &str) {
 		let lengths = rig.segment_lengths;
 		let timings = self.timings(lengths);
@@ -135,6 +162,26 @@ impl TwoFootedJump {
 			self.pre_squat_speed,
 			self.landing_squat_speed,
 		);
+	}
+}
+
+fn blend_jump_clips<A, B>(
+	cache: Option<&mut JumpTransitionCache>,
+	key: JumpTransitionKey,
+	rig: &mut HumanoidV0Rig,
+	from: &A,
+	from_progress: f32,
+	to: &B,
+	to_progress: f32,
+	weight: f32,
+) where
+	A: Animation<HumanoidV0Rig>,
+	B: Animation<HumanoidV0Rig>,
+{
+	if let Some(cache) = cache {
+		cache.blend(rig, key, from, from_progress, to, to_progress, weight);
+	} else {
+		blend_clips(rig, from, from_progress, to, to_progress, weight);
 	}
 }
 
@@ -221,6 +268,33 @@ mod tests {
 			rig.posed_angle("shoulder.L") < fall_rig.posed_angle("shoulder.L"),
 			"blend is short of the full fall spread"
 		);
+		Ok(())
+	}
+	#[test]
+	fn cached_jump_matches_live_across_cycles_and_rest_changes() -> anyhow::Result<()> {
+		use bevy::prelude::{Quat, Transform};
+
+		let jump = TwoFootedJump::default().with_jump_height(2.2).with_pre_squat_speed(2.1);
+		let mut live = HumanoidV0Rig::for_clip_test();
+		let mut cached = live.clone();
+		let mut cache = JumpTransitionCache::default();
+		for cycle in 0..3 {
+			if cycle == 1 {
+				let rest = Transform::from_rotation(Quat::from_rotation_z(0.2));
+				live.seed_rest("root", rest);
+				cached.seed_rest("root", rest);
+			}
+			let timings = jump.timings(live.segment_lengths);
+			let mut samples: Vec<f32> =
+				(0..=96).map(|step| timings.cycle_duration() * step as f32 / 96.0).collect();
+			samples.extend([timings.squat_end(), timings.spring_end(), timings.air_end()]);
+			for elapsed in samples {
+				jump.apply_for(&mut live, elapsed);
+				jump.apply_for_with_cache(&mut cached, elapsed, &mut cache);
+				assert_eq!(live.pose, cached.pose, "cycle {cycle}, elapsed {elapsed}");
+				assert_eq!(jump.effects_for(&live, elapsed), jump.effects_for(&cached, elapsed));
+			}
+		}
 		Ok(())
 	}
 }
