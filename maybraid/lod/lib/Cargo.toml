@@ -16,6 +16,7 @@ default = []
 lod-cascade = { workspace = true }
 lod-cascade-system = { workspace = true }
 bevy = { workspace = true }
+gimme-core = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

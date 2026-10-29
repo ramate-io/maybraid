@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use lod::{LodChunkCullSystems, LodSceneLevel};
 use mob_characters::CharacterSceneRecipe;
 use mob_intelligence::{ancestor_mob, MemberOf, Mob, MobId, MobSlot, RosterBinding, RosterRef};
-use poi_intelligence::{NearbyPlace, AGENT_SEPARATION};
+use poi_intelligence::{NearbyPlace, PoiSupport, AGENT_SEPARATION};
 
 use crate::plugin::MobSceneSystems;
 use crate::MobScene;
@@ -60,7 +60,7 @@ fn fulfill_roster_refs(
 			.map(|(_, transform)| transform.translation)
 			.chain(placed.iter().filter(|(placed_host, _)| *placed_host == host).map(|(_, at)| *at))
 			.collect();
-		let cleared = NearbyPlace { position: preferred, poi: None }
+		let cleared = NearbyPlace { position: preferred, poi: None, support: PoiSupport::Terrain }
 			.clear_of(
 				transform.translation,
 				&occupied,

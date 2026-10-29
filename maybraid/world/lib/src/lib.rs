@@ -5,45 +5,95 @@
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
 //! cover the grove fill ring. Urbanization hopscotch streams at the same
 //! 1 km / 3 km rings without re-registering Durham (base terrain generation owns
-//! the fill; raw present is a separate plugin, off until Training).
+//! the fill; raw present is a separate plugin, off in the world).
 //! Painted furniture is a generate pass over Richmond High slots, presented as
 //! flattened 50 m cell hosts in a neighborhood around the camera.
 
+mod agent;
+mod agent_inventory;
 mod camera;
 pub mod commands;
-mod control;
+pub mod control;
 mod crate_loot;
+mod cycle_target;
+mod first_wave;
 mod intelligence;
+mod inventory_cycling;
+mod inventory_drop;
+mod item_icons;
+mod map_view;
+mod occupancy;
+pub mod world_lubikan;
+
+#[cfg(feature = "debug-commands")]
+pub mod world_debug;
+
+mod mob_spawn;
 mod pitch;
 mod player_lifecycle;
 mod player_position;
 mod poi;
+pub mod render_scale;
+mod screenshot;
+mod spawn_picker;
+mod spawn_surface;
 mod start;
 mod stash;
 mod ui;
 mod vsync;
 mod weapon;
+mod world_furnished;
 mod world_layers;
 
+pub use world_furnished::WorldFurnished;
+
+pub use agent::{AgentDrive, AgentMenuState};
+pub use agent_inventory::AgentInventoryState;
+pub use character_items::{
+	ActiveInventoryDropPolicy, InventoryDrop, InventoryDropError, InventoryDropPolicy,
+	InventoryDropRefused, InventoryDropRequest, InventoryDropped, InventoryMenuDropped,
+};
+#[cfg(feature = "debug-commands")]
+pub use commands::{
+	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestPeaceful,
+	RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
+};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
-	InventoryEditCameraFollow, WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady,
+	InventoryEditCameraFollow, WorldMenuShell, WorldSceneryVisible, WorldSurfaceReady,
 	WorldSurfaceSet,
 };
+pub use cycle_target::InventoryCycleTarget;
 pub use durham::Durham;
+#[cfg(any(test, feature = "test-support"))]
+pub use first_wave::UnitXTile;
+pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
-pub use lod::LodJobCounter;
-pub use maybraid_sky::{
-	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
-	SUN_COLOR, SUN_ILLUMINANCE,
+pub use item_icons::ItemIconPlugin;
+pub use map_view::{WorldMapView, WorldMapViewPlugin};
+pub use occupancy::{WorldOccupancyPlugin, WorldOccupancySystems};
+pub use player_lifecycle::{
+	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
 };
-pub use player_camera::{CameraPov, CameraPovLocked};
-pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use player_position::{
 	resume_discovery_from_saved_waypoints, PlayerPositionPlugin, PlayerPositionWaypoints,
 };
-pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
+pub use poi::{
+	GrovePois, PlacePois, UrbanPois, WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems,
+	WorldPoiTiles,
+};
+pub use render_scale::{
+	host_memory_bytes, map_render_to_window, map_window_to_render, parse_device_tier_env,
+	parse_force_offscreen_env, parse_meminfo_total_bytes, parse_presentation_treatment_env,
+	parse_render_scale_env, parse_visual_style_env, pick_default_visual_style,
+	target_physical_size, window_above_1080p, AdapterKind, DeviceTier, RenderScale,
+	RequestForceOffscreen, RequestRenderScale, RequestVisualStyle, VisualStyle,
+	VisualStyleAutoReason, VisualStyleIdentity, VisualStylePick, VisualStyleSetting,
+	VisualStyleSignals, DEVICE_TIER_ENV, FORCE_OFFSCREEN_ENV, PRESENTATION_TREATMENT_ENV,
+	RENDER_SCALE_ENV, UNIFIED_MEMORY_NATIVE_BYTES, VISUAL_STYLE_ENV,
+};
+pub use spawn_picker::{SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet};
 pub use start::{
 	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
 	START_AT_ENV,
@@ -67,18 +117,20 @@ use characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use combat_hud::CombatHudPlugin;
 use durham::TerrainFrictionConfig;
 use firearms::EnergyMaterialPlugin;
+use fisticuffs_user::FisticuffsSensorDebug;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
-use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
+use maybraid_controllers_core::CaptureResolveSystems;
 use maybraid_game_mode_discover::DiscoveryPlayerPlugin;
-use maybraid_game_mode_training_ground::TrainingGroundPlugin;
-use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
-use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
+use maybraid_locomotion_controller::LocomotionControllerPlugin;
+use maybraid_skill_map::SkillMapSystems;
 use maybraid_sky::SkyDomePlugin;
+use maybraid_vfx::VfxPlugin;
+use maybraid_virtual_pad_controller::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_weather::WeatherPlugin;
 use player::{
-	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
+	register_motor_traction_physics, MotorRequestStage, PlayerPlugin, PlayerPresentationPlugin,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
 use world_player::{
@@ -103,19 +155,26 @@ const WORLD_BULLSEYE_OUTER_M: f32 = 2_000.0;
 const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;
 const WORLD_COMBAT_HUD: CombatHudPlugin = CombatHudPlugin {
-	health_bars: false,
 	hit_markers: true,
 	directional_damage: true,
 	player_vitals: true,
+	lubikan_charge: true,
+	lubikan_point_feedback: true,
 	score: true,
 };
 const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbes(false);
 
 /// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
 ///
+/// Session, equipment, and item-runtime assembly live on `GameplayPlugin`
+/// (`register_gameplay_runtime`). Game and the world playground add that
+/// plugin beside this one. Intelligence does not register item runtimes.
+///
 /// Playground chrome (command drawer and FPS HUD) is on by default.
 /// The game executable uses [`WorldPlugin::game`] (FPS log, no HUD or console).
 /// `F8` / `/stats vsync` / `MAYBRAID_VSYNC=off` toggles vsync for Tracy flights.
+/// `/render scale <f>` / `MAYBRAID_RENDER_SCALE` shades 3D below native window
+/// size without resizing the window.
 pub struct WorldPlugin {
 	/// `/` console, debug gizmos, and FPS HUD.
 	pub debug_chrome: bool,
@@ -153,11 +212,12 @@ impl Plugin for WorldPlugin {
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(EnergyMaterialPlugin)
+			.add_plugins(VfxPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,
 				..default()
-			}))
-			.add_plugins(CharacterControllerPlugin)
+			}));
+		app.add_plugins(LocomotionControllerPlugin)
 			.add_plugins(PlayerPresentationPlugin)
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(WORLD_COMBAT_HUD)
@@ -166,23 +226,30 @@ impl Plugin for WorldPlugin {
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
 			.add_plugins(WorldLayersPlugin)
-			.add_plugins((DiscoveryPlayerPlugin, TrainingGroundPlugin))
+			.add_plugins(DiscoveryPlayerPlugin)
 			.add_plugins(WorldIntelligencePlugin)
+			.add_plugins(crate::spawn_surface::SpawnSurfacePlugin)
 			.add_plugins(WeatherPlugin)
-			.add_plugins(SkillMapPlugin)
+			.add_plugins(world_lubikan::WorldLubikanPlugin)
 			.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
 			.add_plugins(WorldPoiPlugin)
+			.add_plugins(WorldOccupancyPlugin)
+			.add_plugins(WorldMapViewPlugin)
 			.add_plugins(WorldPlayerLifecyclePlugin)
 			.add_plugins(WorldStashPlugin)
+			.add_plugins(ItemIconPlugin)
 			.add_plugins(PlayerPositionPlugin)
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(VegetationPlayerMotor(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
-			.init_resource::<WorldGameplayEnabled>()
 			.init_resource::<InventoryEditCameraFollow>()
 			.init_resource::<WorldSurfaceReady>()
+			.init_resource::<crate::WorldMenuShell>()
+			.init_resource::<crate::FirstWave>()
 			.init_resource::<WorldSceneryVisible>()
+			.init_resource::<control::ConsoleCapture>()
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
+			.insert_resource(FisticuffsSensorDebug::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
 				exclude_extent: WORLD_LATTICE_EXCLUDE_M,
@@ -205,9 +272,18 @@ impl Plugin for WorldPlugin {
 		} else {
 			app.init_resource::<TextEntryFocus>();
 		}
-		app.add_systems(Startup, vsync::apply_startup_vsync)
-			.add_systems(Update, (vsync::toggle_vsync, commands::apply_sky_commands))
-			.add_systems(PostStartup, spawn_default_braidman)
+		MotorRequestStage::configure(app);
+		app.add_systems(Startup, vsync::apply_startup_vsync).add_systems(
+			Update,
+			(
+				vsync::toggle_vsync,
+				commands::apply_sky_commands,
+				mob_spawn::apply_spawn_mob_requests,
+			),
+		);
+		render_scale::configure(app);
+		screenshot::configure(app);
+		app.add_systems(PostStartup, spawn_default_braidman)
 			.add_systems(
 				PreUpdate,
 				(control::stamp_vegetation_motor_traction, control::stamp_world_player_motor),
@@ -219,15 +295,16 @@ impl Plugin for WorldPlugin {
 					control::update_world_surface_ready.in_set(control::WorldSurfaceSet),
 					control::sync_world_scenery,
 					control::sync_combat_hud_visible,
+					control::sync_console_capture.in_set(CaptureResolveSystems),
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
-					control::apply_intents_to_movement
-						.after(CharacterControlSystems)
-						.after(PlayerSystems::Intent)
-						.before(PlayerSystems::Body)
-						.before(PlayerControlSystems),
+					control::apply_world_motor_filter
+						.in_set(MotorRequestStage::WorldFilter)
+						.after(map_view::WorldMapSet::Toggle),
 				),
 			);
 		camera::configure(app);
+		inventory_drop::configure(app);
+		cycle_target::configure(app);
 		weapon::configure(app);
 		app.configure_sets(
 			Update,
@@ -259,16 +336,18 @@ impl Plugin for WorldPlugin {
 				ui::draw_npc_behavior_gizmos.run_if(resource_equals(WorldMobHudEnabled(true))),
 			),
 		);
+		if app.world().contains_resource::<AgentDrive>() {
+			app.add_plugins(agent::WorldAgentPlugin);
+		}
+		#[cfg(feature = "debug-commands")]
+		app.add_plugins(world_debug::WorldDebugPlugin);
 		if self.debug_chrome {
-			app.add_systems(Startup, ui::spawn_mob_debug_hud).add_systems(
-				Update,
-				(
-					control::echo_character_intents
-						.after(CharacterControlSystems)
-						.before(game_commands::ui::update_debug_ui),
+			app.add_observer(control::echo_character_intents)
+				.add_systems(Startup, ui::spawn_mob_debug_hud)
+				.add_systems(
+					Update,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-				),
-			);
+				);
 		}
 	}
 }
@@ -280,6 +359,7 @@ fn spawn_default_braidman(mut commands: Commands) {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use player::PlayerSystems;
 
 	#[test]
 	fn world_slope_is_below_wall_grade() {
@@ -308,10 +388,11 @@ mod tests {
 
 	#[test]
 	fn world_only_enables_combat_feedback_without_health_bars() {
-		assert!(!WORLD_COMBAT_HUD.health_bars);
 		assert!(WORLD_COMBAT_HUD.hit_markers);
 		assert!(WORLD_COMBAT_HUD.directional_damage);
 		assert!(WORLD_COMBAT_HUD.player_vitals);
+		assert!(WORLD_COMBAT_HUD.lubikan_charge);
+		assert!(WORLD_COMBAT_HUD.lubikan_point_feedback);
 	}
 
 	#[test]
@@ -323,6 +404,18 @@ mod tests {
 	fn game_world_starts_with_mob_hud_off() {
 		assert!(!WorldMobHudEnabled::from_debug_chrome(WorldPlugin::game().debug_chrome).0);
 		assert!(WorldMobHudEnabled::from_debug_chrome(WorldPlugin::default().debug_chrome).0);
+		assert!(
+			!fisticuffs_user::FisticuffsSensorDebug::from_debug_chrome(
+				WorldPlugin::game().debug_chrome
+			)
+			.0
+		);
+		assert!(
+			fisticuffs_user::FisticuffsSensorDebug::from_debug_chrome(
+				WorldPlugin::default().debug_chrome
+			)
+			.0
+		);
 	}
 
 	#[test]

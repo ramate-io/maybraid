@@ -5,8 +5,9 @@ use crate::{
 	choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi, KnownPoi, LocalPoi, Poi,
 	PoiDiscoverLimits, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId, PoiIntelligencePlugin,
 	PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
-	PoiObservation, PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState, AGENT_SEPARATION,
-	DEFAULT_NEARBY_RADIUS,
+	NearbyFallback, NearbyQuery, PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiSupport,
+	PoiVisitPolicy, PoiVisitState,
+	AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
 };
 use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};
 use movement_intelligence::MovementIntelligence;
@@ -49,6 +50,48 @@ fn registry_separates_local_and_sparse_global_sets() -> anyhow::Result<()> {
 }
 
 #[test]
+fn support_survives_registry_and_nearby_selection_independent_of_kind() -> anyhow::Result<()> {
+	let mut world = World::new();
+	let floor = world.spawn_empty().id();
+	let terrain = world.spawn_empty().id();
+	let mut registry = PoiRegistry::default();
+	registry.upsert(
+		floor,
+		Poi::new(PoiId(10), CAMP).with_floor_support(),
+		Vec3::new(4.0, 18.0, 4.0),
+		true,
+		false,
+	)?;
+	registry.upsert(terrain, Poi::new(PoiId(11), CAMP), Vec3::new(80.0, 3.0, 4.0), true, false)?;
+	assert_eq!(registry.get(PoiId(10)).map(|record| record.support), Some(PoiSupport::Floor));
+	assert_eq!(registry.get(PoiId(11)).map(|record| record.support), Some(PoiSupport::Terrain));
+
+	let interests = PoiInterests::one(CAMP);
+	let selected = registry.place_nearby(
+		Vec3::new(4.0, 18.0, 4.0),
+		NearbyQuery::nearest_beyond(4.0, 0.0),
+		&interests,
+		None,
+		5,
+		NearbyFallback::HOST,
+	);
+	assert_eq!(selected.poi, Some(PoiId(10)));
+	assert_eq!(selected.support, PoiSupport::Floor);
+	assert_eq!(selected.position.y, 18.0);
+	Ok(())
+}
+
+#[test]
+fn poi_arrival_surface_height_respects_support() {
+	let floor = crate::PoiArrival::floor(Vec3::new(1.0, 12.0, 2.0), 4.0);
+	let terrain = crate::PoiArrival::terrain(Vec3::new(1.0, 3.0, 2.0), 4.0);
+	assert!(floor.stands_on_floor());
+	assert_eq!(floor.surface_y(99.0), 12.0);
+	assert!(!terrain.stands_on_floor());
+	assert_eq!(terrain.surface_y(99.0), 99.0);
+}
+
+#[test]
 fn weighted_nearby_choice_avoids_the_previous_poi() -> anyhow::Result<()> {
 	let mut world = World::new();
 	let first = world.spawn_empty().id();
@@ -64,6 +107,27 @@ fn weighted_nearby_choice_avoids_the_previous_poi() -> anyhow::Result<()> {
 		registry.choose_nearby(Vec3::ZERO, DEFAULT_NEARBY_RADIUS, &interests, &[PoiId(1)], 42);
 
 	assert_eq!(selected.map(|record| record.id), Some(PoiId(2)));
+	Ok(())
+}
+
+#[test]
+fn nearby_in_lists_local_and_global_outside_the_hole() -> anyhow::Result<()> {
+	let mut world = World::new();
+	let near = world.spawn_empty().id();
+	let mid = world.spawn_empty().id();
+	let global = world.spawn_empty().id();
+	let mut registry = PoiRegistry::default();
+	registry.upsert(near, Poi::new(PoiId(1), CAMP), Vec3::X * 10.0, true, false)?;
+	registry.upsert(mid, Poi::new(PoiId(2), CAMP), Vec3::X * 80.0, true, false)?;
+	registry.upsert(global, Poi::new(PoiId(3), CAMP), Vec3::Z * 90.0, false, true)?;
+	let interests = PoiInterests::one(CAMP);
+	let listed = registry.nearby_in(
+		Vec3::ZERO,
+		crate::NearbyQuery::nearest_beyond(DEFAULT_NEARBY_RADIUS, 60.0),
+		&interests,
+		&[PoiId(2)],
+	);
+	assert_eq!(listed.iter().map(|record| record.id).collect::<Vec<_>>(), [PoiId(3)]);
 	Ok(())
 }
 
@@ -424,6 +488,41 @@ fn far_skip_does_not_reset_skips() -> anyhow::Result<()> {
 }
 
 #[test]
+fn settled_discover_leaves_capped_learner_unchanged() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	let learner = spawn_learner(
+		&mut app,
+		camp_learner(),
+		PoiKnowledge::default(),
+		IntelligenceLod::missing(),
+	);
+	app.update();
+	if let Some(mut user) = app.world_mut().get_mut::<PoiIntelligenceUser>(learner) {
+		user.learning_credit = user.policy.candidates_per_scan.max(1) as f32;
+		user.next_forget_at = 100.0;
+		user.next_local_scan_at = 100.0;
+		user.next_global_scan_at = 100.0;
+	}
+	let before = app
+		.world()
+		.entity(learner)
+		.get_change_ticks::<PoiIntelligenceUser>()
+		.ok_or_else(|| anyhow::anyhow!("missing learner"))?
+		.changed
+		.get();
+	app.update();
+	let after = app
+		.world()
+		.entity(learner)
+		.get_change_ticks::<PoiIntelligenceUser>()
+		.ok_or_else(|| anyhow::anyhow!("missing learner"))?
+		.changed
+		.get();
+	anyhow::ensure!(before == after, "settled discover rewrote learner: {before} -> {after}");
+	Ok(())
+}
+
+#[test]
 fn maintain_still_runs_on_far_we_do_not_scan() -> anyhow::Result<()> {
 	let mut app = discover_app();
 	app.insert_resource(PoiDiscoverLimits { max_scans_per_tick: 1 });
@@ -521,4 +620,178 @@ fn far_does_not_run_global_scan_even_when_fair() -> anyhow::Result<()> {
 		.get::<PoiKnowledge>(far)
 		.is_some_and(|knowledge| knowledge.get(global).is_none()));
 	Ok(())
+}
+
+#[test]
+#[ignore]
+fn local_query_clone_timing() {
+	const POI_COUNT: usize = 128;
+	const SCANS: usize = 10_000;
+	const RADIUS: f32 = 80.0;
+	let interests = PoiInterests::one(CAMP);
+
+	let mut registry = PoiRegistry::default();
+	for index in 0..POI_COUNT {
+		let id = PoiId(index as u64 + 1);
+		let angle = (index as f32 / POI_COUNT as f32) * core::f32::consts::TAU;
+		let position = Vec3::new(angle.cos() * 40.0, 0.0, angle.sin() * 40.0);
+		registry
+			.upsert(Entity::from_bits(index as u64 + 1), Poi::new(id, CAMP), position, true, false)
+			.expect("upsert poi");
+	}
+
+	let clone_start = std::time::Instant::now();
+	for _ in 0..SCANS {
+		let records = registry.local_matching(Vec3::ZERO, RADIUS, &interests);
+		std::hint::black_box(records);
+	}
+	let clone_elapsed = clone_start.elapsed();
+
+	let mut scratch = Vec::new();
+	let id_start = std::time::Instant::now();
+	for _ in 0..SCANS {
+		registry.collect_local_matching(Vec3::ZERO, RADIUS, &interests, &mut scratch);
+		for id in &scratch {
+			std::hint::black_box(registry.get(*id));
+		}
+	}
+	let id_elapsed = id_start.elapsed();
+
+	eprintln!(
+		"local_query_clone_timing: {POI_COUNT} pois × {SCANS} scans — clone local_matching() {:?}, collect_local_matching+get {:?}",
+		clone_elapsed, id_elapsed,
+	);
+}
+
+#[test]
+fn catalog_scheme_resolves_only_the_queried_tile() -> anyhow::Result<()> {
+	use crate::{collect_matching_in_xz_tile, Catalog, PoiCatalog, PoiEntry};
+	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
+
+	let storage = HcsgStorage::default();
+	storage.seed(
+		PoiCatalog {
+			entries: vec![
+				PoiEntry {
+					id: PoiId(1),
+					kind: CAMP,
+					position: Vec3::new(40.0, 0.0, 40.0),
+					arrival_radius: 1.0,
+					support: PoiSupport::Terrain,
+					salience: 1.0,
+					local: true,
+					global: false,
+				},
+				PoiEntry {
+					id: PoiId(2),
+					kind: CAMP,
+					position: Vec3::new(400.0, 0.0, 400.0),
+					arrival_radius: 1.0,
+					support: PoiSupport::Terrain,
+					salience: 1.0,
+					local: false,
+					global: true,
+				},
+			],
+		},
+		universal_bounds(),
+	);
+	let mut cx = GenerationContext::new(&storage);
+	let interests = PoiInterests::one(CAMP);
+	let mut ids = Vec::new();
+	collect_matching_in_xz_tile::<Catalog>(&mut cx, IVec2::ZERO, 256.0, 0.0, &interests, &mut ids);
+	assert_eq!(ids.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(1)]);
+	collect_matching_in_xz_tile::<Catalog>(
+		&mut cx,
+		IVec2::new(1, 1),
+		256.0,
+		0.0,
+		&interests,
+		&mut ids,
+	);
+	assert_eq!(ids.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(2)]);
+	Ok(())
+}
+
+#[test]
+fn grid_scheme_tile_lookup_is_one_origin_id() -> anyhow::Result<()> {
+	use crate::{collect_matching_in_xz_tile, xz_tile_region, GridTiles, PoiOrigin, GRID_KIND};
+	use lod::hcsg::{GenerationContext, HcsgStorage};
+
+	let storage = HcsgStorage::default();
+	let mut cx = GenerationContext::new(&storage);
+	let region = xz_tile_region(IVec2::new(3, -2), 256.0, 0.0).expect("finite tile");
+	let origins = GridTiles::original_ids_for(&mut cx, region);
+	assert_eq!(origins.len(), 1);
+	let interests = PoiInterests::one(GRID_KIND);
+	let mut pois = Vec::new();
+	collect_matching_in_xz_tile::<GridTiles>(
+		&mut cx,
+		IVec2::new(3, -2),
+		256.0,
+		0.0,
+		&interests,
+		&mut pois,
+	);
+	assert_eq!(pois.len(), 1);
+	assert_eq!(GridTiles::original_ids_for(&mut cx, region).len(), 1);
+	Ok(())
+}
+
+#[test]
+#[ignore]
+fn choose_in_clone_timing() {
+	use crate::hash::unit_f32;
+	use crate::NearbyQuery;
+
+	const POI_COUNT: usize = 128;
+	const PICKS: usize = 10_000;
+	const RADIUS: f32 = 160.0;
+	let interests = PoiInterests::one(CAMP);
+	let query = NearbyQuery::weighted(RADIUS);
+	let excluded = [PoiId(1)];
+
+	let mut registry = PoiRegistry::default();
+	for index in 0..POI_COUNT {
+		let id = PoiId(index as u64 + 1);
+		let angle = (index as f32 / POI_COUNT as f32) * core::f32::consts::TAU;
+		let position = Vec3::new(angle.cos() * 80.0, 0.0, angle.sin() * 80.0);
+		let global = index % 8 == 0;
+		registry
+			.upsert(Entity::from_bits(index as u64 + 1), Poi::new(id, CAMP), position, true, global)
+			.expect("upsert poi");
+	}
+
+	let weight = |candidate: PoiRecord| {
+		let interest = interests.weight(candidate.kind).unwrap_or(0.0);
+		let proximity = 1.0 / (1.0 + Vec3::ZERO.distance(candidate.position) / RADIUS.max(1.0));
+		interest * candidate.salience.max(0.1) * proximity
+	};
+
+	let clone_start = std::time::Instant::now();
+	for seed in 0..PICKS {
+		let candidates = registry.nearby_in(Vec3::ZERO, query, &interests, &excluded);
+		let total: f32 = candidates.iter().copied().map(weight).sum();
+		let mut draw = unit_f32(seed as u64) * total;
+		for candidate in candidates {
+			draw -= weight(candidate);
+			if draw <= 0.0 {
+				std::hint::black_box(candidate);
+				break;
+			}
+		}
+	}
+	let clone_elapsed = clone_start.elapsed();
+
+	let id_start = std::time::Instant::now();
+	for seed in 0..PICKS {
+		let chosen = registry.choose_in(Vec3::ZERO, query, &interests, &excluded, seed as u64);
+		std::hint::black_box(chosen);
+	}
+	let id_elapsed = id_start.elapsed();
+
+	eprintln!(
+		"choose_in_clone_timing: {POI_COUNT} pois × {PICKS} picks — nearby_in+weighted {:?}, choose_in {:?}",
+		clone_elapsed, id_elapsed,
+	);
 }

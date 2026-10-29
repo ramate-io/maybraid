@@ -1,24 +1,39 @@
 //! Hierarchical world POIs over streamed Chico and Richmond scenes.
 
+mod hcsg;
+#[cfg(test)]
+mod scheme_timing;
+
+pub use hcsg::{GrovePois, PlacePois, UrbanPois, WorldPoiTiles};
+
 use std::collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 
 use bevy::prelude::*;
 use chico::ChicoGroveHost;
+use lod::hcsg::HcsgStorage;
 use lod::LodScene;
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
-	GlobalPoi, LocalPoi, Poi, PoiId, PoiIntelligencePlugin, PoiKind, PoiRegistry, PoiSystems,
+	DistantTilePoiLookup, GlobalPoi, LocalPoi, Poi, PoiId, PoiIntelligencePlugin, PoiKind,
+	PoiRegistry, PoiSupport, PoiSystems,
 };
-use richmond::{DiscoverablePlace, DiscoverablePlaceLabel};
+use richmond::{DiscoverablePlace, DiscoverablePlaceLabel, PaddedTerrain};
 use urbanization_layer_model::UrbanSetting;
 use vegetation_components::VegetationInstance;
 
-const LOCAL_VEGETATION_TILE: f32 = 48.0;
+const LOCAL_VEGETATION_TILE: f32 = 160.0;
 const VEGETATION_POI_SALT: u64 = 0x7665_6765_7461_7469;
 const GROVE_POI_SALT: u64 = 0x6772_6f76_652d_706f;
 const URBAN_POI_SALT: u64 = 0x7572_6261_6e2d_706f;
 const INTERIOR_POI_SALT: u64 = 0x696e_7465_7269_6f72;
+
+type Ground = terrain_layer_model::OnTerrain<durham::Durham>;
+
+/// The assembled world presents padded Richmond ground. Missing published
+/// samples keep candidates in the existing discovery queue until ready.
+#[derive(Resource)]
+pub(crate) struct PaddedTerrainPoiGround;
 
 /// Expensive candidate resolutions allowed per frame.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,9 +46,9 @@ pub struct WorldPoiDiscoveryBudget {
 impl Default for WorldPoiDiscoveryBudget {
 	fn default() -> Self {
 		Self {
-			scene_candidates_per_frame: 16,
-			vegetation_candidates_per_frame: 24,
-			local_places_per_building: 6,
+			scene_candidates_per_frame: 24,
+			vegetation_candidates_per_frame: 6,
+			local_places_per_building: 8,
 		}
 	}
 }
@@ -82,14 +97,14 @@ impl Plugin for WorldPoiPlugin {
 		}
 		app.init_resource::<WorldPoiDiscoveryBudget>()
 			.init_resource::<WorldPoiDiscoveryState>()
+			.insert_resource(DistantTilePoiLookup::new(hcsg::WorldPoiTiles))
 			.configure_sets(
-				Update,
-				(WorldPoiSystems::Collect, WorldPoiSystems::Discover)
-					.chain()
-					.before(PoiSystems::Index),
+				PostUpdate,
+				WorldPoiSystems::Collect.after(bevy::transform::TransformSystems::Propagate),
 			)
+			.configure_sets(Update, WorldPoiSystems::Discover.before(PoiSystems::Index))
 			.add_systems(
-				Update,
+				PostUpdate,
 				(
 					collect_vegetation_instances,
 					queue_global_groves,
@@ -104,6 +119,7 @@ impl Plugin for WorldPoiPlugin {
 					.chain()
 					.in_set(WorldPoiSystems::Discover),
 			);
+		hcsg::register_world_poi_generation(app);
 	}
 }
 
@@ -151,7 +167,10 @@ fn queue_global_groves(
 				translation: anchor,
 				name: "grove-global-poi",
 			},
-			poi: Poi::new(id, VEGETATION_POI).with_arrival_radius(radius).with_salience(1.25),
+			poi: Poi::new(id, VEGETATION_POI)
+				.with_support(PoiSupport::Terrain)
+				.with_arrival_radius(radius)
+				.with_salience(1.25),
 			tier: PendingPoiTier::Global,
 		});
 	}
@@ -165,6 +184,7 @@ fn queue_global_urban_settings(
 		state.pending_pois.push_back(PendingPoi {
 			target: PendingPoiTarget::Entity(entity),
 			poi: Poi::new(hashed_poi_id(URBAN_POI_SALT, setting.id), URBAN_POI)
+				.with_support(PoiSupport::Terrain)
 				.with_arrival_radius(setting.arrival_radius)
 				.with_salience(1.5),
 			tier: PendingPoiTier::Global,
@@ -206,18 +226,28 @@ fn queue_place(
 	let kind = place_kind(place.label);
 	let salience = place.salience.unwrap_or(place.label.default_salience());
 	state.pending_pois.push_back(PendingPoi {
-		target: PendingPoiTarget::Entity(entity),
+		target: match place.arrival_local {
+			Some(translation) => {
+				PendingPoiTarget::Child { parent: entity, translation, name: "floor-place-poi" }
+			}
+			None => PendingPoiTarget::Entity(entity),
+		},
 		poi: Poi::new(
 			spatial_poi_id(INTERIOR_POI_SALT ^ place.label.salt() ^ entity.to_bits(), translation),
 			kind,
 		)
+		.with_support(if place.arrival_local.is_some() {
+			PoiSupport::Floor
+		} else {
+			PoiSupport::Terrain
+		})
 		.with_arrival_radius(place.arrival_radius)
 		.with_salience(salience),
 		tier: PendingPoiTier::Local,
 	});
 }
 
-fn place_kind(label: DiscoverablePlaceLabel) -> PoiKind {
+pub(super) fn place_kind(label: DiscoverablePlaceLabel) -> PoiKind {
 	match label {
 		DiscoverablePlaceLabel::Stall
 		| DiscoverablePlaceLabel::Lounge
@@ -260,11 +290,14 @@ fn promote_pending_pois(
 	mut state: ResMut<WorldPoiDiscoveryState>,
 	registry: Res<PoiRegistry>,
 	entities: Query<()>,
+	transforms: Query<&GlobalTransform>,
+	storage: Option<Res<HcsgStorage>>,
+	padded_ground: Option<Res<PaddedTerrainPoiGround>>,
 ) {
 	let attempts = budget.scene_candidates_per_frame.min(state.pending_pois.len());
 	let mut claimed = HashSet::new();
 	for _ in 0..attempts {
-		let Some(candidate) = state.pending_pois.pop_front() else {
+		let Some(mut candidate) = state.pending_pois.pop_front() else {
 			break;
 		};
 		let source = match candidate.target {
@@ -281,6 +314,36 @@ fn promote_pending_pois(
 			}
 			state.pending_pois.push_back(candidate);
 			continue;
+		}
+		if candidate.poi.support == PoiSupport::Terrain && padded_ground.is_some() {
+			let Some(storage) = storage.as_deref() else {
+				state.pending_pois.push_back(candidate);
+				continue;
+			};
+			let Ok(transform) = transforms.get(source) else {
+				state.pending_pois.push_back(candidate);
+				continue;
+			};
+			let point = match candidate.target {
+				PendingPoiTarget::Entity(_) => transform.translation(),
+				PendingPoiTarget::Child { translation, .. } => {
+					transform.transform_point(translation)
+				}
+			};
+			let Ok(Some(y)) =
+				PaddedTerrain::<Ground>::published_height_at(storage, point.x, point.z)
+			else {
+				state.pending_pois.push_back(candidate);
+				continue;
+			};
+			candidate.target = PendingPoiTarget::Child {
+				parent: source,
+				translation: transform
+					.to_matrix()
+					.inverse()
+					.transform_point3(Vec3::new(point.x, y, point.z)),
+				name: "padded-ground-poi",
+			};
 		}
 		if !claimed.insert(candidate.poi.id) {
 			state.pending_pois.push_back(candidate);
@@ -301,6 +364,12 @@ fn promote_pending_pois(
 						Name::new(name),
 						ChildOf(parent),
 						Transform::from_translation(translation),
+						transforms
+							.get(parent)
+							.map(|transform| {
+								transform.mul_transform(Transform::from_translation(translation))
+							})
+							.unwrap_or_default(),
 						candidate.poi,
 						LocalPoi,
 					));
@@ -310,6 +379,12 @@ fn promote_pending_pois(
 						Name::new(name),
 						ChildOf(parent),
 						Transform::from_translation(translation),
+						transforms
+							.get(parent)
+							.map(|transform| {
+								transform.mul_transform(Transform::from_translation(translation))
+							})
+							.unwrap_or_default(),
 						candidate.poi,
 						GlobalPoi,
 					));
@@ -320,7 +395,6 @@ fn promote_pending_pois(
 }
 
 fn discover_local_vegetation(
-	mut commands: Commands,
 	budget: Res<WorldPoiDiscoveryBudget>,
 	mut state: ResMut<WorldPoiDiscoveryState>,
 	instances: Query<(&VegetationInstance, &GlobalTransform)>,
@@ -356,15 +430,18 @@ fn discover_local_vegetation(
 			continue;
 		}
 		state.vegetation_tiles.insert(tile, entity);
-		commands.spawn((
-			Name::new("vegetation-local-poi"),
-			ChildOf(entity),
-			Transform::from_translation(instance.anchor),
-			Poi::new(spatial_poi_id(VEGETATION_POI_SALT, world), VEGETATION_POI)
+		state.pending_pois.push_back(PendingPoi {
+			target: PendingPoiTarget::Child {
+				parent: entity,
+				translation: instance.anchor,
+				name: "vegetation-local-poi",
+			},
+			poi: Poi::new(spatial_poi_id(VEGETATION_POI_SALT, world), VEGETATION_POI)
+				.with_support(PoiSupport::Terrain)
 				.with_arrival_radius(instance.radius.clamp(0.5, 8.0))
-				.with_salience(1.0),
-			LocalPoi,
-		));
+				.with_salience(0.55),
+			tier: PendingPoiTier::Local,
+		});
 	}
 }
 
@@ -395,11 +472,147 @@ mod tests {
 	use super::*;
 	use anyhow::Result;
 
+	fn discovery_app() -> App {
+		let mut app = App::new();
+		app.add_plugins(bevy::transform::TransformPlugin)
+			.init_resource::<WorldPoiDiscoveryBudget>()
+			.init_resource::<WorldPoiDiscoveryState>()
+			.init_resource::<PoiRegistry>()
+			.init_resource::<HcsgStorage>()
+			.insert_resource(PaddedTerrainPoiGround)
+			.add_systems(
+				PostUpdate,
+				queue_local_places.after(bevy::transform::TransformSystems::Propagate),
+			)
+			.add_systems(
+				Update,
+				(promote_pending_pois, poi_intelligence::sync_poi_registry).chain(),
+			);
+		app
+	}
+
+	fn live_records(app: &mut App) -> Vec<poi_intelligence::PoiRecord> {
+		let world = app.world_mut();
+		let ids: Vec<_> = world.query::<&Poi>().iter(world).map(|poi| poi.id).collect();
+		ids.into_iter()
+			.filter_map(|id| world.resource::<PoiRegistry>().get(id).copied())
+			.collect()
+	}
+
+	#[test]
+	fn published_pads_above_and_below_durham_reach_live_placement() -> Result<()> {
+		use durham::{
+			BaseTerrainNoise, Terrain, TerrainCellLayout, TerrainConfig, WorldBaseTerrain,
+		};
+		use maybraid_spawns_placement::{PlacementSearch, OUTDOOR_LOWER_MARGIN};
+		use richmond::{PadComplex, TerrainWithPads};
+		use std::sync::Arc;
+		for difference in [-40.0, 40.0] {
+			let mut app = discovery_app();
+			let layout = TerrainCellLayout::default();
+			let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
+			let terrain = Terrain::base_cell_for_test(&layout, 0, 0, base.clone());
+			let raw = terrain.sdf.terrain().height_at_with_all_modulations(8.0, 8.0);
+			let height = raw + difference;
+			let pad = PadComplex::building_skirt(
+				Vec2::new(8.0, 8.0),
+				Vec2::splat(20.0),
+				0.0,
+				height,
+				Default::default(),
+			);
+			let padded = TerrainWithPads::compose(&terrain, [&pad]);
+			let cell = terrain.cell;
+			app.insert_resource(layout).insert_resource(WorldBaseTerrain(base));
+			let storage = app.world().resource::<HcsgStorage>();
+			storage.publish(lod::gen::Id::from_cell(cell), Arc::new(terrain), cell);
+			let source = app
+				.world_mut()
+				.spawn((
+					DiscoverablePlace::host(DiscoverablePlaceLabel::Market, 4.0, 1.25),
+					Transform::from_xyz(8.0, 700.0, 8.0).with_rotation(Quat::from_rotation_y(0.8)),
+				))
+				.id();
+			app.update();
+			app.update();
+			assert_eq!(app.world().resource::<PoiRegistry>().len(), 0);
+			assert_eq!(app.world().resource::<WorldPoiDiscoveryState>().pending_pois.len(), 1);
+			app.world().resource::<HcsgStorage>().publish(
+				lod::gen::Id::from_cell(cell),
+				Arc::new(PaddedTerrain::<Ground>::new(padded)),
+				cell,
+			);
+			app.update();
+			let record = live_records(&mut app)
+				.into_iter()
+				.next()
+				.ok_or_else(|| anyhow::anyhow!("published pad should promote one live POI"))?;
+			assert_ne!(record.entity, source);
+			assert_eq!(record.support, PoiSupport::Terrain);
+			assert!((record.position.y - height).abs() < 1e-3);
+			let search = PlacementSearch::resolve_poi(
+				record.id,
+				app.world().resource::<PoiRegistry>(),
+				characters::LocomotionCapsule::HUMANOID,
+			)
+			.map_err(|reason| anyhow::anyhow!("{reason:?}"))?;
+			assert!((search.min_surface_y - (height - OUTDOOR_LOWER_MARGIN)).abs() < 1e-3);
+			app.update();
+			let fresh = app
+				.world()
+				.resource::<PoiRegistry>()
+				.get(record.id)
+				.ok_or_else(|| anyhow::anyhow!("POI stays indexed"))?;
+			assert!((fresh.position.y - height).abs() < 1e-3);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn authored_storey_children_keep_floor_y_through_fresh_registry_sync() -> Result<()> {
+		let mut app = discovery_app();
+		let pose = Transform::from_xyz(30.0, 5.0, -10.0).with_rotation(Quat::from_rotation_y(0.7));
+		for height in [4.0, 12.0] {
+			app.world_mut().spawn((
+				DiscoverablePlace::host(DiscoverablePlaceLabel::Storey, 4.0, 1.1)
+					.with_arrival_local(Some(Vec3::new(3.0, height, 2.0))),
+				pose,
+			));
+		}
+		app.update();
+		app.update();
+		let mut entries: Vec<_> = live_records(&mut app);
+		entries.sort_by(|a, b| a.position.y.total_cmp(&b.position.y));
+		assert_eq!(entries.len(), 2);
+		assert_ne!(entries[0].id, entries[1].id);
+		for (entry, height) in entries.iter().zip([4.0, 12.0]) {
+			assert_eq!(entry.support, PoiSupport::Floor);
+			assert!(
+				(entry.position - pose.transform_point(Vec3::new(3.0, height, 2.0))).length()
+					< 1e-4
+			);
+		}
+		app.update();
+		for entry in entries {
+			let fresh = app
+				.world()
+				.resource::<PoiRegistry>()
+				.get(entry.id)
+				.ok_or_else(|| anyhow::anyhow!("floor stays indexed"))?;
+			assert!((fresh.position - entry.position).length() < 1e-4);
+		}
+		Ok(())
+	}
+
 	#[test]
 	fn vegetation_tiles_are_stable_across_height() {
 		assert_eq!(
 			vegetation_tile(Vec3::new(49.0, 2.0, -1.0)),
 			vegetation_tile(Vec3::new(49.0, 900.0, -1.0))
+		);
+		assert_ne!(
+			vegetation_tile(Vec3::new(0.0, 0.0, 0.0)),
+			vegetation_tile(Vec3::new(LOCAL_VEGETATION_TILE, 0.0, 0.0))
 		);
 	}
 
@@ -474,9 +687,14 @@ mod tests {
 
 		assert!(app.world().get::<Poi>(host).is_some());
 		assert_eq!(app.world().get::<Poi>(host).map(|poi| poi.kind), Some(LOCAL_POI));
+		assert_eq!(app.world().get::<Poi>(host).map(|poi| poi.support), Some(PoiSupport::Terrain));
 		let promoted_rooms =
 			rooms.iter().filter(|entity| app.world().get::<Poi>(**entity).is_some()).count();
 		assert_eq!(promoted_rooms, 2);
+		assert!(rooms
+			.iter()
+			.filter_map(|entity| app.world().get::<Poi>(*entity))
+			.all(|poi| { poi.support == PoiSupport::Terrain }));
 	}
 
 	#[test]
@@ -499,6 +717,7 @@ mod tests {
 
 		let poi = app.world().get::<Poi>(market).copied();
 		assert_eq!(poi.map(|poi| poi.kind), Some(SALOON_POI));
+		assert_eq!(poi.map(|poi| poi.support), Some(PoiSupport::Terrain));
 		assert!(app.world().get::<LocalPoi>(market).is_some());
 	}
 

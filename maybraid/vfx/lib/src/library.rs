@@ -9,7 +9,7 @@ use crate::composition::EffectDefinition;
 use crate::effects::fiery_explosion;
 use crate::layers::{fireball, flash, smoke, sparks};
 use crate::lobes::rounded_lobe_mesh;
-use crate::names::{FIREBALL, FIERY_EXPLOSION, FLASH, SMOKE, SPARKS};
+use crate::names::{FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
 
 /// Shared definitions. Clone a handle out; never mutate the compiled assets.
 #[derive(Resource, Clone, Debug)]

@@ -23,7 +23,8 @@ fleeing-intelligence = { workspace = true }
 hiding-intelligence = { workspace = true }
 lod-avian = { workspace = true }
 maybraid-character-controller = { workspace = true }
-maybraid-input = { workspace = true }
+maybraid-locomotion-controller = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 meandering-intelligence = { workspace = true }
 movement-intelligence = { workspace = true }
 movement-intelligence-avian = { workspace = true }

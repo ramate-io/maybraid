@@ -59,7 +59,12 @@ impl ExplosionPalette {
 }
 
 fn mul(a: LinearRgba, b: LinearRgba) -> LinearRgba {
-	LinearRgba { red: a.red * b.red, green: a.green * b.green, blue: a.blue * b.blue, alpha: a.alpha * b.alpha }
+	LinearRgba {
+		red: a.red * b.red,
+		green: a.green * b.green,
+		blue: a.blue * b.blue,
+		alpha: a.alpha * b.alpha,
+	}
 }
 
 #[cfg(test)]
