@@ -14,7 +14,7 @@ const SWEEP_END: f32 = 0.30;
 const CLAP_END: f32 = 0.78;
 const CLAP_PULSES: f32 = 2.0;
 
-const CHEST_TARGET_OFFSET: Vec3 = Vec3::new(0.0, 0.0, 0.40);
+const CHEST_TARGET_OFFSET: Vec3 = Vec3::new(0.0, -0.06, 0.32);
 const MAX_HAND_GAP: f32 = 0.14;
 
 /// Short celebration clap in front of the chest.

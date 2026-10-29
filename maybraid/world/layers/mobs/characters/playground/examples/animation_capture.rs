@@ -8,7 +8,16 @@
 //! xvfb-run -a cargo run -p characters-playground --example animation_capture -- \
 //!   --output-dir /workspace/animation-pilot/captures
 //! ```
+//!
+//! Arbitrary registered clips need no source changes or rebuild:
+//! ```sh
+//! xvfb-run -a cargo run -p characters-playground --example animation_capture -- \
+//!   --output-dir /workspace/animation-pilot/captures --species braidman \
+//!   --clip victory-wave --clip hand-clap --side both --progress 0.42,0.54,0.66 \
+//!   --view front --view three-quarter
+//! ```
 
+use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -33,9 +42,18 @@ const ASSEMBLY_SETTLE: Duration = Duration::from_secs(8);
 #[derive(Debug, Parser)]
 #[command(about = "Capture assembled animation clips at repeatable poses")]
 struct CaptureArgs {
-	/// Limit capture to a clip name; may be repeated.
+	/// Clip name; may be repeated. With --species, use arbitrary registered clips.
 	#[arg(long = "clip")]
 	clips: Vec<String>,
+	/// Character species for arbitrary clips (e.g. braidman, epiphant).
+	#[arg(long)]
+	species: Option<String>,
+	/// Lead side for clips that use a side. "both" captures left and right.
+	#[arg(long, value_parser = ["left", "right", "both"])]
+	side: Option<String>,
+	/// Normalized sample in [0,1]; repeat or give comma-separated values.
+	#[arg(long = "progress")]
+	progress: Vec<String>,
 	/// Limit capture to a camera view; may be repeated.
 	#[arg(long = "view", value_parser = ["front", "side", "three-quarter"])]
 	views: Vec<String>,
@@ -54,6 +72,14 @@ struct Subject {
 	clip: &'static str,
 	sides: &'static [&'static str],
 	progress: &'static [f32],
+}
+
+struct CaptureSubject {
+	name: String,
+	species: String,
+	clip: String,
+	sides: Vec<String>,
+	progress: Vec<f32>,
 }
 
 const SUBJECTS: [Subject; 5] = [
@@ -96,9 +122,9 @@ const SUBJECTS: [Subject; 5] = [
 
 #[derive(Clone)]
 struct Shot {
-	species: &'static str,
-	clip: &'static str,
-	side: &'static str,
+	species: String,
+	clip: String,
+	side: String,
 	view: String,
 	progress: f32,
 	file: PathBuf,
@@ -110,7 +136,7 @@ struct CapturePlan {
 	index: usize,
 	started: Duration,
 	configured: bool,
-	configured_species: Option<&'static str>,
+	configured_species: Option<String>,
 	species_changed: bool,
 	pose_ready_at: Option<Duration>,
 	requested: bool,
@@ -166,35 +192,72 @@ fn main() -> Result<(), String> {
 }
 
 fn build_shots(args: &CaptureArgs, output_dir: &Path) -> Result<Vec<Shot>, String> {
-	let subjects: Vec<_> = SUBJECTS
-		.iter()
-		.filter(|subject| {
-			args.clips.is_empty()
-				|| args.clips.iter().any(|clip| clip == subject.name || clip == subject.clip)
-		})
-		.collect();
 	let views: Vec<String> = if args.views.is_empty() {
 		["front", "side", "three-quarter"].into_iter().map(str::to_string).collect()
 	} else {
 		args.views.clone()
 	};
+	let requested_progress = parse_progress(&args.progress)?;
+	let mut subjects = Vec::new();
+	if let Some(species) = &args.species {
+		if args.clips.is_empty() {
+			return Err("--species requires at least one --clip".into());
+		}
+		let sides = match args.side.as_deref().unwrap_or("right") {
+			"left" => vec![String::from("left")],
+			"right" => vec![String::from("right")],
+			"both" => vec![String::from("left"), String::from("right")],
+			_ => return Err("--side must be left, right, or both".into()),
+		};
+		let progress = requested_progress.unwrap_or_else(|| PROGRESS.to_vec());
+		for clip in &args.clips {
+			subjects.push(CaptureSubject {
+				name: clip.clone(),
+				species: species.clone(),
+				clip: clip.clone(),
+				sides: sides.clone(),
+				progress: progress.clone(),
+			});
+		}
+	} else {
+		for subject in SUBJECTS.iter().filter(|subject| {
+			args.clips.is_empty()
+				|| args.clips.iter().any(|clip| clip == subject.name || clip == subject.clip)
+		}) {
+			let sides = match args.side.as_deref() {
+				Some("left") => vec![String::from("left")],
+				Some("right") => vec![String::from("right")],
+				Some("both") => vec![String::from("left"), String::from("right")],
+				_ => subject.sides.iter().map(|side| String::from(*side)).collect(),
+			};
+			subjects.push(CaptureSubject {
+				name: subject.name.to_string(),
+				species: subject.species.to_string(),
+				clip: subject.clip.to_string(),
+				sides,
+				progress: requested_progress.clone().unwrap_or_else(|| subject.progress.to_vec()),
+			});
+		}
+	}
 	let mut shots = Vec::new();
+	let mut destinations = HashSet::new();
 	for subject in subjects {
 		for side in subject.sides {
 			for view in &views {
-				for &progress in subject.progress {
+				for &progress in &subject.progress {
 					let sample = format!("{progress:.2}").replace('.', "-");
 					let file =
 						output_dir.join(format!("{}-{side}-{view}-{sample}.png", subject.name));
-					if file.exists() {
-						std::fs::remove_file(&file).map_err(|error| {
-							format!("could not remove stale capture {}: {error}", file.display())
-						})?;
+					if !destinations.insert(file.clone()) {
+						return Err(format!(
+							"multiple capture samples map to {}; choose progress values with distinct two-decimal names",
+							file.display()
+						));
 					}
 					shots.push(Shot {
-						species: subject.species,
-						clip: subject.clip,
-						side,
+						species: subject.species.clone(),
+						clip: subject.clip.clone(),
+						side: side.clone(),
 						view: view.clone(),
 						progress,
 						file,
@@ -203,7 +266,36 @@ fn build_shots(args: &CaptureArgs, output_dir: &Path) -> Result<Vec<Shot>, Strin
 			}
 		}
 	}
+	for shot in &shots {
+		if shot.file.exists() {
+			std::fs::remove_file(&shot.file).map_err(|error| {
+				format!("could not remove stale capture {}: {error}", shot.file.display())
+			})?;
+		}
+	}
 	Ok(shots)
+}
+
+fn parse_progress(values: &[String]) -> Result<Option<Vec<f32>>, String> {
+	if values.is_empty() {
+		return Ok(None);
+	}
+	let mut progress = Vec::new();
+	for value in values {
+		for sample in value.split(',').map(str::trim).filter(|sample| !sample.is_empty()) {
+			let parsed = sample
+				.parse::<f32>()
+				.map_err(|error| format!("invalid --progress value {sample:?}: {error}"))?;
+			if !parsed.is_finite() || !(0.0..=1.0).contains(&parsed) {
+				return Err(format!("--progress must be finite and in [0,1], got {sample:?}"));
+			}
+			progress.push(parsed);
+		}
+	}
+	if progress.is_empty() {
+		return Err("--progress requires at least one sample".into());
+	}
+	Ok(Some(progress))
 }
 
 fn hide_command_ui(mut visible: ResMut<GameCommandDrawerVisible>) {
@@ -232,7 +324,7 @@ fn capture_sequence(
 	if !plan.configured {
 		plan.started = now;
 		let shot = plan.shots[plan.index].clone();
-		plan.species_changed = plan.configured_species != Some(shot.species);
+		plan.species_changed = plan.configured_species.as_deref() != Some(shot.species.as_str());
 		let assemble = if plan.species_changed {
 			format!(
 				"character assemble --species {} --animation {} --side {}",
@@ -302,15 +394,25 @@ fn capture_sequence(
 					let Some(id) = binding.definition.id(name) else {
 						continue;
 					};
-					let _ = writeln!(dump, "BIND {name}: parent={:?} rest={:?} pose={:?} rest_point={:?} pose_point={:?}",
-						binding.definition.parent(id), binding.effective_rest.get(id), pose.get(id),
+					let _ = writeln!(
+						dump,
+						"BIND {name}: parent={:?} rest={:?} pose={:?} rest_point={:?} pose_point={:?}",
+						binding.definition.parent(id),
+						binding.effective_rest.get(id),
+						pose.get(id),
 						binding.definition.translation_in_character(&binding.effective_rest, id),
-						binding.definition.translation_in_character(pose, id));
+						binding.definition.translation_in_character(pose, id)
+					);
 				}
 			}
 			for (entity, bone, local, global, parent) in &bones {
-				let _ = writeln!(dump, "LIVE {} {entity:?}: parent={parent:?} rest={:?} local={local:?} global={global:?} local_y_half_probe={:?}",
-					bone.name, bone.rest, global.transform_point(Vec3::Y * 0.5));
+				let _ = writeln!(
+					dump,
+					"LIVE {} {entity:?}: parent={parent:?} rest={:?} local={local:?} global={global:?} local_y_half_probe={:?}",
+					bone.name,
+					bone.rest,
+					global.transform_point(Vec3::Y * 0.5)
+				);
 			}
 			if let Err(error) = std::fs::write(path.with_extension("pose.txt"), dump) {
 				error!("cannot save pose beside {}: {error}", path.display());

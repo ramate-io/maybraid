@@ -127,7 +127,7 @@ impl Animation<HumanoidV0Rig> for HandClap {
 		}
 		// Refine the isotropic two-bone seed against the actual affine FK. The
 		// humerus thickness scale changes both distal length and hinge direction.
-		for _ in 0..4 {
+		for _ in 0..8 {
 			for side in [Side::Left, Side::Right] {
 				let arm = pose.arm_mut(side);
 				if let Some(reach) = ClapReach::solve(
@@ -189,6 +189,10 @@ mod tests {
 	use crate::animations::{HandClap, Transition};
 
 	const CONTACT: f32 = 0.54;
+	const STANDARD_FOREARM_ENDPOINTS: [Vec3; 2] =
+		[Vec3::new(-0.00224, 0.37539, -0.00511), Vec3::new(-0.00091, 0.37579, -0.00535)];
+	const FULL_FOREARM_ENDPOINTS: [Vec3; 2] =
+		[Vec3::new(0.004056, 0.308892, 0.010478), Vec3::new(-0.022457, 0.312406, 0.013176)];
 
 	fn joint(rig: &HumanoidV0Rig, name: &str) -> anyhow::Result<Vec3> {
 		let Some(bone) = rig.binding.definition.id(name) else {
@@ -200,7 +204,7 @@ mod tests {
 		Ok(affine.transform_point3(Vec3::ZERO))
 	}
 
-	/// Palm center extrapolated from the actual posed forearm direction and family fallback.
+	/// Distal forearm point from the bound body's actual skinned terminal metadata.
 	fn palm(rig: &HumanoidV0Rig, side: Side) -> anyhow::Result<Vec3> {
 		let name = match side {
 			Side::Left => "forearm.L",
@@ -217,6 +221,7 @@ mod tests {
 
 	fn posed(clap: &HandClap, progress: f32) -> HumanoidV0Rig {
 		let mut rig = HumanoidV0Rig::for_clip_test();
+		rig.forearm_endpoints = STANDARD_FOREARM_ENDPOINTS;
 		clap.apply(&mut rig, progress);
 		rig
 	}
@@ -248,10 +253,15 @@ mod tests {
 		let right = palm(&rig, Side::Right)?;
 		assert!((left - right).length() < 0.04, "palms meet: {left:?} {right:?}");
 		for (side, hand) in [(Side::Left, left), (Side::Right, right)] {
-			assert!(hand.z > chest.z + 0.25, "{side:?} palm in front of chest: {hand:?} {chest:?}");
+			let target = chest + clap.hand_target(side, CONTACT);
 			assert!(
-				(hand.y - chest.y).abs() < 0.015,
-				"{side:?} palm at chest marker: {hand:?} {chest:?}"
+				(hand - target).length() < 0.025,
+				"{side:?} palm reaches lower forward sternum target: {hand:?} {target:?}"
+			);
+			assert!(hand.y < chest.y - 0.045, "{side:?} palm below chest: {hand:?} {chest:?}");
+			assert!(
+				hand.z > chest.z + 0.27,
+				"{side:?} palm in front of sternum: {hand:?} {chest:?}"
 			);
 			assert!(hand.y < head.y - 0.10, "{side:?} palm below upper neck: {hand:?} {head:?}");
 			assert!(hand.x * side.sign() >= -0.01, "{side:?} palm stays on its side: {hand:?}");
@@ -289,9 +299,11 @@ mod tests {
 	fn idle_endpoints_and_clamped_samples_are_exact() -> anyhow::Result<()> {
 		let clap = HandClap;
 		let mut neutral = HumanoidV0Rig::for_clip_test();
+		neutral.forearm_endpoints = STANDARD_FOREARM_ENDPOINTS;
 		Idle::default().apply(&mut neutral, 0.0);
 		for progress in [-1.0, 0.0, 1.0, 2.0] {
 			let mut rig = HumanoidV0Rig::for_clip_test();
+			rig.forearm_endpoints = STANDARD_FOREARM_ENDPOINTS;
 			let effects = clap.apply(&mut rig, progress);
 			assert_eq!(rig.pose, neutral.pose, "progress {progress} returns full pose to Idle(0)");
 			assert_eq!(effects, ArmatureOffset::IDENTITY);
@@ -310,6 +322,7 @@ mod tests {
 	fn motion_is_smooth_at_60hz_and_unwritten_bones_stay_at_rest() -> anyhow::Result<()> {
 		let clap = HandClap;
 		let mut neutral = HumanoidV0Rig::for_clip_test();
+		neutral.forearm_endpoints = STANDARD_FOREARM_ENDPOINTS;
 		Idle::default().apply(&mut neutral, 0.0);
 		let mut previous = posed(&clap, 0.0);
 		let mut max_palm_step = 0.0_f32;
@@ -411,6 +424,7 @@ mod tests {
 			assert!((left.z - right.z).abs() < 0.03);
 		}
 		let mut long_arm = HumanoidV0Rig::for_clip_test();
+		long_arm.forearm_endpoints = STANDARD_FOREARM_ENDPOINTS;
 		long_arm.seed_rest("forearm.L", bevy::prelude::Transform::from_translation(Vec3::Y * 0.62));
 		long_arm.seed_rest("forearm.R", bevy::prelude::Transform::from_translation(Vec3::Y * 0.62));
 		clap.apply(&mut long_arm, CONTACT);
@@ -428,25 +442,37 @@ mod tests {
 	#[test]
 	fn braidman_scale_affine_reaches_chest_without_crossing() -> anyhow::Result<()> {
 		let clap = HandClap;
-		let mut rig = HumanoidV0Rig::for_clip_test();
-		let mut lumbar = bevy::prelude::Transform::from_translation(Vec3::Y * 0.25);
-		lumbar.scale = Vec3::splat(0.8);
-		rig.seed_rest("lumbar", lumbar);
-		for name in ["humerus.L", "humerus.R"] {
-			let mut humerus = bevy::prelude::Transform::from_translation(Vec3::Y * 0.35);
-			humerus.scale = Vec3::new(0.8, 1.0, 0.8);
-			rig.seed_rest(name, humerus);
-		}
-		clap.apply(&mut rig, CONTACT);
-		let chest = joint(&rig, "upper_back")?;
-		let head = joint(&rig, "upper_neck")?;
-		let left = palm(&rig, Side::Left)?;
-		let right = palm(&rig, Side::Right)?;
-		assert!((left - right).length() < 0.01, "affine palms meet: {left:?} {right:?}");
-		for (side, hand) in [(Side::Left, left), (Side::Right, right)] {
-			assert!((hand.y - chest.y).abs() < 0.015, "palm at chest marker: {hand:?} {chest:?}");
-			assert!(hand.y < head.y - 0.10, "palm below upper neck: {hand:?} {head:?}");
-			assert!(hand.x * side.sign() >= -0.005, "no side crossing: {side:?} {hand:?}");
+		for endpoints in [STANDARD_FOREARM_ENDPOINTS, FULL_FOREARM_ENDPOINTS] {
+			let mut rig = HumanoidV0Rig::for_clip_test();
+			rig.forearm_endpoints = endpoints;
+			let mut lumbar = bevy::prelude::Transform::from_translation(Vec3::Y * 0.25);
+			lumbar.scale = Vec3::splat(0.8);
+			rig.seed_rest("lumbar", lumbar);
+			for name in ["humerus.L", "humerus.R"] {
+				let mut humerus = bevy::prelude::Transform::from_translation(Vec3::Y * 0.35);
+				humerus.scale = Vec3::new(0.8, 1.0, 0.8);
+				rig.seed_rest(name, humerus);
+			}
+			clap.apply(&mut rig, CONTACT);
+			let chest = joint(&rig, "upper_back")?;
+			let head = joint(&rig, "upper_neck")?;
+			let left = palm(&rig, Side::Left)?;
+			let right = palm(&rig, Side::Right)?;
+			assert!((left - right).length() < 0.01, "affine palms meet: {left:?} {right:?}");
+			for (side, hand) in [(Side::Left, left), (Side::Right, right)] {
+				let target = chest + clap.hand_target(side, CONTACT);
+				assert!(
+					(hand - target).length() < 0.025,
+					"affine palm reaches lower forward sternum target: {side:?} {hand:?} {target:?}"
+				);
+				assert!(hand.y < chest.y - 0.045, "palm below chest landmark: {hand:?} {chest:?}");
+				assert!(hand.y < head.y - 0.10, "palm below upper neck: {hand:?} {head:?}");
+				assert!(
+					hand.z > chest.z + 0.27,
+					"palm stays in front of sternum: {hand:?} {chest:?}"
+				);
+				assert!(hand.x * side.sign() >= -0.005, "no side crossing: {side:?} {hand:?}");
+			}
 		}
 		Ok(())
 	}
