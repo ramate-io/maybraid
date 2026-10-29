@@ -1,12 +1,17 @@
 //! World gameplay filter and scenery. Motor requests are declared, not applied here.
 
 use bevy::prelude::*;
+use character_inventory_user::InventoryUser;
+use character_items::{Inventory, InventorySlot};
+use combat_hud::{CombatHudEquippedQueue, CombatHudEquippedSlot};
 use durham::{
 	terrain_collider_covers_xz, CascadeChunk, DurhamSurface, TerrainCellLayout,
 	TerrainTrimeshCollider,
 };
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
-use maybraid_character_controller::{ActorControlStatus, ActorIntentEvent, CharacterIntent};
+use maybraid_character_controller::{
+	ActorControlStatus, ActorIntentEvent, CharacterIntent, InventoryCyclingCategory,
+};
 use maybraid_controllers_core::{CaptureKind, InputRouting, InputSource, ScopeOwner};
 use maybraid_session::{SessionCapabilities, WorldGameplayEnabled, WorldPlaySessionEnded};
 use maybraid_skill_map::SkillMapEnabled;
@@ -20,6 +25,7 @@ use player::{
 };
 use world_player::{MoveWish, Player, PlayerPhysicsEnabled, PlayerSpawnXz, PlaygroundMode};
 
+use crate::inventory_cycling::ActiveInventoryCyclingCategory;
 use crate::map_view::WorldMapView;
 
 /// Keep third-person follow while the in-game inventory editor is open.
@@ -131,6 +137,63 @@ pub(crate) fn sync_combat_hud_visible(
 	if hud.0 != next {
 		hud.0 = next;
 	}
+}
+
+/// Compose the selected inventory queue into the small snapshot consumed by the HUD.
+pub(crate) fn sync_combat_hud_equipped_queue(
+	category: Res<ActiveInventoryCyclingCategory>,
+	queue: Option<ResMut<CombatHudEquippedQueue>>,
+	players: Query<&InventoryUser, With<Player>>,
+	bags: Query<&Inventory>,
+) {
+	let Some(mut queue) = queue else {
+		return;
+	};
+	let Some(user) = players.iter().next() else {
+		if !queue.slots.is_empty() {
+			*queue = CombatHudEquippedQueue::default();
+		}
+		return;
+	};
+	let Ok(inventory) = bags.get(user.bag) else {
+		if !queue.slots.is_empty() {
+			*queue = CombatHudEquippedQueue::default();
+		}
+		return;
+	};
+	let next = equipped_queue_from_inventory(inventory, category.0);
+	if *queue != next {
+		*queue = next;
+	}
+}
+
+pub(crate) fn equipped_queue_from_inventory(
+	inventory: &Inventory,
+	category: InventoryCyclingCategory,
+) -> CombatHudEquippedQueue {
+	let slot = match category {
+		InventoryCyclingCategory::Weapons => InventorySlot::Weapons,
+		InventoryCyclingCategory::SkillMaps => InventorySlot::Skills,
+		InventoryCyclingCategory::Lubikans => return CombatHudEquippedQueue::default(),
+	};
+	let indices = inventory.selected(slot);
+	let mut slots: Vec<_> = indices
+		.iter()
+		.filter_map(|&index| {
+			inventory.items.get(index).map(|item| CombatHudEquippedSlot {
+				key: index as u64,
+				label: item.label().to_string(),
+			})
+		})
+		.collect();
+	// Queue cycling rotates the active entry to the front. Keep chip positions
+	// stable by bag identity so the highlight visibly moves between entries.
+	slots.sort_by_key(|slot| slot.key);
+	let selected = indices
+		.first()
+		.and_then(|index| slots.iter().position(|slot| slot.key == *index as u64))
+		.unwrap_or(0);
+	CombatHudEquippedQueue { slots, selected }
 }
 
 #[derive(Resource, Default)]
@@ -360,6 +423,7 @@ pub(crate) fn strip_world_player_motor(commands: &mut Commands, body: Entity) {
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
+	use character_items::{FirearmMesh, InventoryItem};
 	use durham::{terrain_collider_covers_xz, CascadeChunk};
 	use maybraid_controllers_core::InputRouter;
 
@@ -381,6 +445,30 @@ mod tests {
 		assert!(WorldGameplayEnabled(true).accepts_character_input(false, false));
 		assert!(!WorldGameplayEnabled(false).accepts_character_input(false, false));
 		assert!(!WorldGameplayEnabled(true).accepts_character_input(true, false));
+	}
+
+	#[test]
+	fn equipped_queue_snapshot_keeps_chip_positions_and_tracks_rotating_primary() {
+		let mut inventory = Inventory {
+			items: vec![
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::firearm(FirearmMesh::Reltor),
+				InventoryItem::firearm(FirearmMesh::Snailer),
+			],
+			weapons: vec![2, 0, 1],
+			..Default::default()
+		};
+		let queue = equipped_queue_from_inventory(&inventory, InventoryCyclingCategory::Weapons);
+		assert_eq!(queue.slots.iter().map(|slot| slot.key).collect::<Vec<_>>(), vec![0, 1, 2]);
+		assert_eq!(queue.selected, 2);
+		assert_eq!(queue.slots[queue.selected].label, "snailer");
+		inventory.cycle_weapons(1);
+		let next = equipped_queue_from_inventory(&inventory, InventoryCyclingCategory::Weapons);
+		assert_eq!(next.slots, queue.slots);
+		assert_eq!(next.selected, 0);
+		assert!(equipped_queue_from_inventory(&inventory, InventoryCyclingCategory::Lubikans)
+			.slots
+			.is_empty());
 	}
 
 	#[test]

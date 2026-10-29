@@ -295,6 +295,10 @@ impl Plugin for WorldPlugin {
 					control::update_world_surface_ready.in_set(control::WorldSurfaceSet),
 					control::sync_world_scenery,
 					control::sync_combat_hud_visible,
+					control::sync_combat_hud_equipped_queue
+						.after(cycle_target::sync_combat_hud_cycle_category)
+						.after(maybraid_equipment::EquipmentSystems::CycleQueue)
+						.after(maybraid_equipment::EquipmentSystems::CommitHolster),
 					control::sync_console_capture.in_set(CaptureResolveSystems),
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
 					control::apply_world_motor_filter
