@@ -170,6 +170,7 @@ impl QuadrupedLieDown {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::animations::QuadrupedSit;
 
 	#[test]
 	fn held_depth_is_progress() -> anyhow::Result<()> {
@@ -215,7 +216,8 @@ mod tests {
 	#[test]
 	fn sphinx_reaches_more_in_front_than_it_plants_in_a_sit() -> anyhow::Result<()> {
 		let lie = QuadrupedLieDown::default();
-		assert!(lie.front_hinge > lie.front_reach);
+		let sit = QuadrupedSit::default();
+		assert!(lie.front_reach > sit.front_plant);
 		assert!(lie.spine_settle > lie.neck_rest);
 		assert!(lie.breath < lie.neck_rest);
 		Ok(())
