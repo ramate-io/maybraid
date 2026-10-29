@@ -33,8 +33,8 @@ pub fn setup_camera(mut commands: Commands) {
 	orient_camera(
 		&mut transform,
 		&mut controller,
-		Vec3::new(0.0, 1.6, 3.5),
-		Vec3::new(0.0, 1.0, 0.0),
+		Vec3::new(0.0, 0.06, 1.0).normalize() * 5.0,
+		Vec3::ZERO,
 	);
 	commands.spawn((
 		Camera3d::default(),

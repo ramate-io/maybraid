@@ -2,32 +2,54 @@
 
 use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
-use character_rigs::articulation::{
-	compose_parent_rotation, rotation_along_with_roll, TwoBoneAim, BONE_LENGTH_AXIS,
-};
-use character_rigs::authoring::humanoid_bone_axis;
-use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
+use character_rigs::articulation::{
+	BONE_LENGTH_AXIS, TwoBoneAim, compose_parent_rotation, rotation_along_with_roll,
+};
+use character_rigs::authoring::{humanoid_bone_axis, humanoid_write_mask};
+use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use characters::{
-	AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterMembers, CharacterRoot, SuspendAnimation,
+	AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterMembers, CharacterRoot, MailboxApplySet,
+	SuspendAnimation, mailbox_apply_allows,
 };
 use firearms::{FirearmMembers, FirearmRoot};
 
-use crate::pose::HeldFirearm;
 use crate::FirearmUser;
+use crate::pose::HeldFirearm;
 
 /// Body-rig marker: after locomotion, apply the firearm hold.
 #[derive(Component, Clone, Copy, Default)]
 pub struct HoldingArms;
 
+impl HoldingArms {
+	/// Bones this overlay writes. Same [`humanoid_write_mask`] family as clip
+	/// write masks and jab-guard arm isolation — not a second mask system.
+	pub const AFFECTED_BONES: &'static [&'static str] = &[
+		"lumbar",
+		"midback",
+		"upper_back",
+		"shoulder.L",
+		"humerus.L",
+		"forearm.L",
+		"shoulder.R",
+		"humerus.R",
+		"forearm.R",
+	];
+
+	pub fn write_mask() -> u32 {
+		humanoid_write_mask(Self::AFFECTED_BONES)
+	}
+}
+
 /// Point the trigger hand at `trigger_point` and the support hand at the grip socket.
 pub fn sync_hands_to_firearm(
+	set: Option<Res<MailboxApplySet>>,
 	users: Query<&FirearmUser>,
 	visuals: Query<(Entity, &CharacterMembers, &ChildOf), (With<CharacterRoot>, Without<AnimBone>)>,
 	guns: Query<&FirearmMembers, (With<HeldFirearm>, With<FirearmRoot>, Without<AnimBone>)>,
 	gun_maps: Query<&BoneMap, Without<HoldingArms>>,
 	mut rigs: Query<
-		(&mut HumanoidV0Rig, &BoneMap, &AnimMailbox),
+		(Entity, &mut HumanoidV0Rig, &BoneMap, &AnimMailbox),
 		(With<HoldingArms>, With<AnimateBones>, Without<SuspendAnimation>),
 	>,
 	mut transforms: ParamSet<(
@@ -53,7 +75,10 @@ pub fn sync_hands_to_firearm(
 		}
 
 		for member in members.iter() {
-			let Ok((mut rig, map, mailbox)) = rigs.get_mut(member) else {
+			if !mailbox_apply_allows(set.as_deref(), member) {
+				continue;
+			}
+			let Ok((_entity, mut rig, map, mailbox)) = rigs.get_mut(member) else {
 				continue;
 			};
 			if !mailbox.posed {
@@ -68,7 +93,6 @@ pub fn sync_hands_to_firearm(
 			});
 			drop(current);
 			let mut bones = transforms.p1();
-			rig.pose.copy_from(&mailbox.output);
 			pose_firing_torso(&mut rig, settings.firing_torso_yaw);
 			let right = arm_reach(&rig, Side::Right, right_target, settings.right_pole, 1.0);
 			let left = arm_reach(
@@ -335,17 +359,7 @@ fn write_hold_bones(
 	map: &BoneMap,
 	bones: &mut Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<CharacterRoot>)>,
 ) {
-	for name in [
-		"lumbar",
-		"midback",
-		"upper_back",
-		"shoulder.L",
-		"humerus.L",
-		"forearm.L",
-		"shoulder.R",
-		"humerus.R",
-		"forearm.R",
-	] {
+	for name in HoldingArms::AFFECTED_BONES {
 		write_bone(rig, map, bones, name);
 	}
 }
@@ -381,6 +395,29 @@ mod tests {
 
 	fn settings() -> FirearmUserSettings {
 		FirearmUserSettings::default()
+	}
+
+	#[test]
+	fn sync_hands_honors_mailbox_apply_set() -> anyhow::Result<()> {
+		use std::collections::HashSet;
+
+		let mut world = hold_world()?;
+		let body = world
+			.query_filtered::<Entity, With<HoldingArms>>()
+			.single(&world)
+			.map_err(|_| anyhow::anyhow!("missing body"))?;
+		world.init_resource::<MailboxApplySet>();
+		world.resource_mut::<MailboxApplySet>().only = Some(HashSet::new());
+		anyhow::ensure!(
+			!mailbox_apply_allows(world.get_resource::<MailboxApplySet>(), body),
+			"firearm overlay must skip when host is not in MailboxApplySet"
+		);
+		world.resource_mut::<MailboxApplySet>().only = Some(HashSet::from([body]));
+		anyhow::ensure!(
+			mailbox_apply_allows(world.get_resource::<MailboxApplySet>(), body),
+			"firearm overlay must run when host is selected"
+		);
+		Ok(())
 	}
 
 	#[test]
@@ -538,6 +575,177 @@ mod tests {
 	}
 
 	#[test]
+	fn hold_mask_reuses_humanoid_write_bits() {
+		let mask = HoldingArms::write_mask();
+		assert_ne!(mask, 0);
+		assert_eq!(mask, humanoid_write_mask(HoldingArms::AFFECTED_BONES));
+	}
+
+	#[test]
+	fn hold_from_working_pose_matches_legacy_copy_from_base() -> anyhow::Result<()> {
+		let mut mailbox = AnimMailbox::new(Transform::IDENTITY);
+		let mut rig = HumanoidV0Rig::imported();
+		mailbox.output = rig.pose.clone();
+		mailbox.posed = true;
+		let mut legacy = rig.clone();
+		legacy.pose.copy_from(mailbox.base_pose());
+		pose_firing_torso(&mut legacy, settings().firing_torso_yaw);
+		mailbox.init_working_pose(&mut rig.pose);
+		pose_firing_torso(&mut rig, settings().firing_torso_yaw);
+		anyhow::ensure!(
+			legacy.pose.local == rig.pose.local,
+			"InitWorking then overlay must match copy_from(base) then overlay"
+		);
+		anyhow::ensure!(
+			mailbox.base_pose().local != rig.pose.local,
+			"hold overlay must change the working pose"
+		);
+		anyhow::ensure!(
+			mailbox.output.local == mailbox.base_pose().local,
+			"hold overlay must not write mailbox output"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn sync_hands_does_not_contaminate_mailbox_base() -> anyhow::Result<()> {
+		let mut world = hold_world()?;
+		let body = world
+			.query_filtered::<Entity, With<HoldingArms>>()
+			.single(&world)
+			.map_err(|_| anyhow::anyhow!("missing body"))?;
+		let before = world.get::<AnimMailbox>(body).expect("mailbox").output.clone();
+		world
+			.run_system_once(sync_hands_to_firearm)
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+		let after = world.get::<AnimMailbox>(body).expect("mailbox").output.clone();
+		anyhow::ensure!(before.local == after.local, "firearm overlay must not write cached base");
+		Ok(())
+	}
+
+	/// Real Overlay-stage restore: `InitWorking` then `CharacterPoseOverlay::Firearm`
+	/// (`sync_hands_to_firearm` + write mask), then clear the hold and assert the
+	/// current base — not a stale overlay — is back on the working pose.
+	///
+	/// `character-motion` cannot run this consumer without a reverse dependency on
+	/// this crate. Clip sampling is not rebuilt here (that would duplicate the
+	/// mailbox host fixture); the next SampleBase is written into `AnimMailbox::output`.
+	#[test]
+	fn firearm_overlay_stage_restores_current_base_when_hold_clears() -> anyhow::Result<()> {
+		use character_rigs::authoring::{humanoid_v0_definition, humanoid_write_mask};
+		use characters::{init_working_pose, CharacterPoseOverlay, CharacterPoseSystems};
+
+		let mut app = App::new();
+		CharacterPoseSystems::configure(&mut app);
+		app.init_resource::<MailboxApplySet>();
+		app.add_systems(
+			Update,
+			(
+				init_working_pose.in_set(CharacterPoseSystems::InitWorking),
+				sync_hands_to_firearm.in_set(CharacterPoseOverlay::Firearm),
+			),
+		);
+		hold_scene(
+			app.world_mut(),
+			Vec3::new(0.2, 1.45, -0.4),
+			Vec3::new(-0.15, 1.4, -0.35),
+		)?;
+		app.world_mut()
+			.run_system_once(crate::pose::pose_held_firearm)
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+		sync_gun_global(app.world_mut());
+
+		let body = app
+			.world_mut()
+			.query_filtered::<Entity, With<HoldingArms>>()
+			.single(app.world())
+			.map_err(|_| anyhow::anyhow!("missing body"))?;
+		let base_before = app
+			.world()
+			.get::<AnimMailbox>(body)
+			.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+			.output
+			.clone();
+
+		app.update();
+
+		let working_overlayed = app
+			.world()
+			.get::<HumanoidV0Rig>(body)
+			.ok_or_else(|| anyhow::anyhow!("rig"))?
+			.pose
+			.clone();
+		let base_after_overlay = app
+			.world()
+			.get::<AnimMailbox>(body)
+			.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+			.output
+			.clone();
+		anyhow::ensure!(
+			base_after_overlay.local == base_before.local,
+			"firearm overlay must not write cached base"
+		);
+		anyhow::ensure!(
+			working_overlayed.local != base_before.local,
+			"Overlay::Firearm must mutate the shared working pose"
+		);
+
+		let definition = humanoid_v0_definition();
+		let mask = HoldingArms::write_mask();
+		for (index, name) in definition.names.iter().enumerate() {
+			let bit = humanoid_write_mask(&[*name]);
+			if bit & mask == 0 {
+				anyhow::ensure!(
+					working_overlayed.local[index] == base_before.local[index],
+					"overlay write mask must leave {name}"
+				);
+			}
+		}
+		let lumbar = definition
+			.id("lumbar")
+			.ok_or_else(|| anyhow::anyhow!("missing lumbar"))?
+			.index();
+		anyhow::ensure!(
+			working_overlayed.local[lumbar] != base_before.local[lumbar],
+			"firearm overlay must twist masked torso bones"
+		);
+
+		let femur = definition
+			.id("femur.L")
+			.ok_or_else(|| anyhow::anyhow!("missing femur.L"))?
+			.index();
+		let mut next_base = base_before.clone();
+		next_base.local[femur].translation.y += 0.11;
+		app.world_mut()
+			.get_mut::<AnimMailbox>(body)
+			.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+			.output
+			.copy_from(&next_base);
+		app.world_mut().entity_mut(body).remove::<HoldingArms>();
+		app.update();
+
+		let restored = app
+			.world()
+			.get::<HumanoidV0Rig>(body)
+			.ok_or_else(|| anyhow::anyhow!("rig"))?
+			.pose
+			.clone();
+		anyhow::ensure!(
+			restored.local == next_base.local,
+			"clearing the hold must restore the current (advanced) base, not a stale overlay"
+		);
+		anyhow::ensure!(
+			restored.local != working_overlayed.local,
+			"stale overlay transforms must be absent after the hold is cleared"
+		);
+		anyhow::ensure!(
+			restored.local[femur] != base_before.local[femur],
+			"restored working pose must follow the current base, not the pre-overlay snapshot"
+		);
+		Ok(())
+	}
+
+	#[test]
 	fn failed_reach_keeps_idle_hang() -> anyhow::Result<()> {
 		let mut world = hold_world()?;
 		let right = world.resource::<HoldBones>().humerus_r;
@@ -621,14 +829,18 @@ mod tests {
 	}
 
 	fn hold_world() -> anyhow::Result<World> {
-		hold_scene(Vec3::new(0.2, 1.5, 0.0), Vec3::new(-0.2, 1.5, 0.0))
+		let mut world = World::new();
+		hold_scene(&mut world, Vec3::new(0.2, 1.5, 0.0), Vec3::new(-0.2, 1.5, 0.0))?;
+		Ok(world)
 	}
 
 	fn hold_world_reachable() -> anyhow::Result<World> {
-		hold_scene(Vec3::new(0.2, 1.45, -0.4), Vec3::new(-0.15, 1.4, -0.35))
+		let mut world = World::new();
+		hold_scene(&mut world, Vec3::new(0.2, 1.45, -0.4), Vec3::new(-0.15, 1.4, -0.35))?;
+		Ok(world)
 	}
 
-	fn hold_scene(trigger_at: Vec3, grip_at: Vec3) -> anyhow::Result<World> {
+	fn hold_scene(world: &mut World, trigger_at: Vec3, grip_at: Vec3) -> anyhow::Result<()> {
 		use std::collections::HashMap;
 
 		use crate::{FirearmUser, FirearmUserSettings};
@@ -639,7 +851,6 @@ mod tests {
 
 		use crate::pose::HeldFirearm;
 
-		let mut world = World::new();
 		let mut rig = HumanoidV0Rig::imported();
 		let hang_r = hang_transform(Vec3::new(0.2, 1.5, 0.0));
 		let hang_l = hang_transform(Vec3::new(-0.2, 1.5, 0.0));
@@ -673,6 +884,8 @@ mod tests {
 			.spawn((
 				FirearmUser { held: gun, settings: FirearmUserSettings::default() },
 				PlayerLook::default(),
+				Transform::IDENTITY,
+				GlobalTransform::IDENTITY,
 			))
 			.id();
 		let visual = world
@@ -754,7 +967,7 @@ mod tests {
 		world.flush();
 
 		world.insert_resource(HoldBones { humerus_r, gun, stock });
-		Ok(world)
+		Ok(())
 	}
 
 	fn sync_gun_global(world: &mut World) {

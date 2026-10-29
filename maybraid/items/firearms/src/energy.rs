@@ -317,8 +317,8 @@ impl MaterialLib for EnergyMaterialLib<'_> {
 				let handle = resolve_energy(&mut self.materials, &mut self.cache, material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle));
 				true
 			}
 			_ => false,

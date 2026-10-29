@@ -167,6 +167,7 @@ fn roll_crate_bag(finish_seed: u64) -> Inventory {
 		clothing: Vec::new(),
 		weapons: Vec::new(),
 		skills: Vec::new(),
+		tanzes: Vec::new(),
 	};
 	// Queue the firearm so the ground pile renders. Claim absorb ignores the queue.
 	let _ = bag.toggle(0);
@@ -445,11 +446,14 @@ mod tests {
 	use crate::stash::WorldStash;
 	use bevy::ecs::system::RunSystemOnce;
 	use character_inventory_user::InventoryUser;
-	use maybraid_character_controller::CharacterIntent;
+	use maybraid_character_controller::{ActorIntentEvent, CharacterIntent};
+	use maybraid_controllers_core::{ActorTarget, InputSource, Routed};
 	use std::time::Duration;
 	use world_player::Player as VegetationPlayer;
 
 	use crate::stash::claim_nearby_stashes;
+	#[derive(Resource)]
+	struct StashObserverInstalled;
 
 	fn lid_bundle(seed: u64, at: Vec3) -> impl Bundle {
 		let transform = Transform::from_translation(at);
@@ -478,19 +482,28 @@ mod tests {
 	}
 
 	fn press_x(world: &mut World) -> anyhow::Result<()> {
-		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::StartInteraction);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(claim_nearby_stashes)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let actor = world
+			.query_filtered::<Entity, With<VegetationPlayer>>()
+			.iter(world)
+			.next()
+			.ok_or_else(|| anyhow::anyhow!("player"))?;
+		if !world.contains_resource::<StashObserverInstalled>() {
+			world.add_observer(claim_nearby_stashes);
+			world.insert_resource(StashObserverInstalled);
+		}
+		world.trigger(ActorIntentEvent {
+			entity: actor,
+			input: Routed::to_actor(
+				InputSource::virtual_pad(Entity::from_bits(999)),
+				ActorTarget::new(actor),
+				CharacterIntent::StartInteraction,
+			),
+		});
+		world.flush();
 		Ok(())
 	}
 
 	fn ready(world: &mut World) {
-		world.init_resource::<Messages<CharacterIntent>>();
 		world.init_resource::<CrateLoot>();
 		world.init_resource::<Time>();
 	}

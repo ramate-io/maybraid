@@ -507,13 +507,9 @@ fn apply_cycle_capture_step(
 	if let Some(current) = ledger.account(last).map(|account| account.charge().current()) {
 		ledger.apply_to(last, 18.0 - current);
 	}
-	while !ledger.selection().is_self() {
-		if !ledger.cycle_selection(1) {
-			break;
-		}
-	}
+	ledger.select(None);
 	if matches!(kind, StateKind::CycleAfterDark | StateKind::CycleAfterLight) {
-		let _ = ledger.cycle_selection(1);
+		ledger.select(Some(mid));
 	}
 }
 

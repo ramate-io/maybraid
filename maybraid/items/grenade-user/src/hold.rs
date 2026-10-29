@@ -8,15 +8,17 @@ use character_rigs::arm_reach::{ArmReachPole, BodyReachSpace, OverhandThrow};
 use character_rigs::articulation::{
 	compose_parent_rotation, rotation_along_with_roll, TwoBoneAim, BONE_LENGTH_AXIS,
 };
-use character_rigs::authoring::humanoid_bone_axis;
+use character_rigs::authoring::{humanoid_bone_axis, humanoid_write_mask};
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 use characters::{
-	AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterHeading, CharacterMembers, CharacterRig,
-	CharacterRigRole, CharacterRoot, RigSkeletonKind, SuspendAnimation,
+	mailbox_apply_allows, AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterHeading,
+	CharacterMembers, CharacterRig, CharacterRigRole, CharacterRoot, MailboxApplySet,
+	RigSkeletonKind, SuspendAnimation,
 };
 use firearm_user::{HoldingArms, WeaponSwap};
 use grenades::{grenade_material, grenade_mesh, GrenadeMaterial};
+use maybraid_equipment::EquippedItemHandler;
 use player::{look_forward, yaw_xz, PlayerLook, PlayerUse};
 use std::f32::consts::FRAC_PI_2;
 
@@ -35,6 +37,16 @@ pub struct HeldGrenade {
 #[derive(Component, Debug)]
 pub struct HoldingGrenade;
 
+impl HoldingGrenade {
+	/// Right-arm throw overlay. Subset of the firearm hold mask; grenade runs
+	/// later in [`characters::CharacterPoseOverlay`] so it wins those bones.
+	pub const AFFECTED_BONES: &'static [&'static str] = &["shoulder.R", "humerus.R", "forearm.R"];
+
+	pub fn write_mask() -> u32 {
+		humanoid_write_mask(Self::AFFECTED_BONES)
+	}
+}
+
 pub fn spawn_held_grenade(
 	commands: &mut Commands,
 	user: Entity,
@@ -48,11 +60,13 @@ pub fn spawn_held_grenade(
 			HeldGrenade { scale: HELD_SCALE },
 		))
 		.id();
-	commands.entity(user).insert((
+	let mut entity = commands.entity(user);
+	entity.insert((
 		GrenadeUser { held, settings },
 		GrenadeThrow::default(),
 		PlayerUse { driver: held },
 	));
+	EquippedItemHandler::Grenade.install(&mut entity);
 	held
 }
 
@@ -141,6 +155,7 @@ pub fn apply_grenade_swap_pose(
 }
 
 pub fn sync_throw_arm(
+	set: Option<Res<MailboxApplySet>>,
 	users: Query<(&GrenadeUser, &GrenadeThrow, Has<WeaponSwap>)>,
 	carriers: Query<&InventoryUser>,
 	bags: Query<&Inventory>,
@@ -149,7 +164,7 @@ pub fn sync_throw_arm(
 		(With<CharacterRoot>, Without<AnimBone>),
 	>,
 	mut rigs: Query<
-		(&mut HumanoidV0Rig, &BoneMap, &AnimMailbox),
+		(Entity, &mut HumanoidV0Rig, &BoneMap, &AnimMailbox),
 		(With<HoldingGrenade>, With<AnimateBones>, Without<SuspendAnimation>),
 	>,
 	mut transforms: ParamSet<(
@@ -180,14 +195,16 @@ pub fn sync_throw_arm(
 		let target = OverhandThrow::reach_at(t);
 		let pole = OverhandThrow::pole();
 		for member in members.iter() {
-			let Ok((mut rig, map, mailbox)) = rigs.get_mut(member) else {
+			if !mailbox_apply_allows(set.as_deref(), member) {
+				continue;
+			}
+			let Ok((_entity, mut rig, map, mailbox)) = rigs.get_mut(member) else {
 				continue;
 			};
 			if !mailbox.posed {
 				continue;
 			}
 			let mut bones = transforms.p1();
-			rig.pose.copy_from(&mailbox.output);
 			if let Some(reach) = throw_arm_reach(&rig, Side::Right, target, pole) {
 				reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
 				pose_throw_arm(&mut rig, Side::Right, reach);
@@ -408,7 +425,7 @@ fn write_throw_bones(
 		(Without<AnimMailbox>, Without<CharacterRoot>, Without<HeldGrenade>),
 	>,
 ) {
-	for name in ["shoulder.R", "humerus.R", "forearm.R"] {
+	for &name in HoldingGrenade::AFFECTED_BONES {
 		let Some(&entity) = map.by_name.get(name) else {
 			continue;
 		};
@@ -427,6 +444,8 @@ fn write_throw_bones(
 
 #[cfg(test)]
 mod tests {
+	use std::collections::HashMap;
+
 	use bevy::ecs::system::RunSystemOnce;
 
 	use super::*;
@@ -446,6 +465,75 @@ mod tests {
 		world
 			.run_system_once(sync_throw_arm)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		Ok(())
+	}
+
+	#[test]
+	fn sync_throw_arm_honors_mailbox_apply_set() -> anyhow::Result<()> {
+		use std::collections::HashSet;
+
+		let mut world = World::new();
+		world.init_resource::<MailboxApplySet>();
+		let rig = HumanoidV0Rig::imported();
+		let mut mailbox = AnimMailbox::new(Transform::IDENTITY);
+		mailbox.posed = true;
+		mailbox.output = rig.pose.clone();
+		let body = world
+			.spawn((
+				HoldingGrenade,
+				AnimateBones,
+				rig,
+				mailbox,
+				BoneMap { by_name: HashMap::new() },
+			))
+			.id();
+		world.resource_mut::<MailboxApplySet>().only = Some(HashSet::new());
+		anyhow::ensure!(
+			!mailbox_apply_allows(world.get_resource::<MailboxApplySet>(), body),
+			"grenade overlay must skip when host is not in MailboxApplySet"
+		);
+		let mut selected = HashSet::new();
+		selected.insert(body);
+		world.resource_mut::<MailboxApplySet>().only = Some(selected);
+		anyhow::ensure!(
+			mailbox_apply_allows(world.get_resource::<MailboxApplySet>(), body),
+			"grenade overlay must run when host is selected"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn throw_mask_is_right_arm_subset_of_firearm_hold() {
+		use firearm_user::HoldingArms;
+
+		let throw = HoldingGrenade::write_mask();
+		let hold = HoldingArms::write_mask();
+		assert_ne!(throw, 0);
+		assert_eq!(throw, humanoid_write_mask(HoldingGrenade::AFFECTED_BONES));
+		assert_eq!(throw & !hold, 0);
+	}
+
+	#[test]
+	fn throw_from_working_pose_matches_legacy_copy_from_base() -> anyhow::Result<()> {
+		let mut mailbox = AnimMailbox::new(Transform::IDENTITY);
+		let mut rig = HumanoidV0Rig::imported();
+		mailbox.output = rig.pose.clone();
+		mailbox.posed = true;
+		let mut legacy = rig.clone();
+		legacy.pose.copy_from(mailbox.base_pose());
+		if let Some(id) = legacy.binding.definition.id("humerus.R") {
+			if let Some(slot) = legacy.pose.local.get_mut(id.index()) {
+				slot.rotation = Quat::from_rotation_x(0.4);
+			}
+		}
+		mailbox.init_working_pose(&mut rig.pose);
+		if let Some(id) = rig.binding.definition.id("humerus.R") {
+			if let Some(slot) = rig.pose.local.get_mut(id.index()) {
+				slot.rotation = Quat::from_rotation_x(0.4);
+			}
+		}
+		anyhow::ensure!(legacy.pose.local == rig.pose.local);
+		anyhow::ensure!(mailbox.output.local != rig.pose.local);
 		Ok(())
 	}
 

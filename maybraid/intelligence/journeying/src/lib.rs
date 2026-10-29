@@ -302,7 +302,7 @@ fn splitmix64(mut value: u64) -> u64 {
 mod tests {
 	use super::*;
 	use lod::hcsg::universal_bounds;
-	use poi_intelligence::{PoiCatalog, PoiEntry, PoiId, PoiInterests, PoiKind};
+	use poi_intelligence::{PoiCatalog, PoiEntry, PoiId, PoiInterests, PoiKind, PoiSupport};
 
 	#[test]
 	fn distant_tiles_are_outside_the_local_origin() -> anyhow::Result<()> {
@@ -343,6 +343,7 @@ mod tests {
 					kind,
 					position: Vec3::new(center.x, 0.0, center.y),
 					arrival_radius: 1.0,
+					support: PoiSupport::Terrain,
 					salience: 1.0,
 					local: true,
 					global: false,

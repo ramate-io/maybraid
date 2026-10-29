@@ -1,15 +1,15 @@
 //! Centered loading page: spinning mark, bar, and explainer.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::{Scene, bsn};
 use maybraid_menu_controller::MenuController;
 use menu_components::{
-	set_loading_explainer, set_loading_progress, LoadingBarFill, LoadingExplainer, LoadingStack,
-	MenuComponentsPlugin,
+	LoadingBarFill, LoadingExplainer, LoadingStack, MenuComponentsPlugin, set_loading_explainer,
+	set_loading_progress,
 };
 
-use crate::show::{add_menu_show_systems, MenuScreens, MenuShowRequest};
 use crate::MenuScreen;
+use crate::show::{MenuScreens, MenuShowRequest, add_menu_show_systems};
 
 /// Queue a loading-screen spawn (despawns any existing menu screen first).
 #[derive(Component, Debug, Clone, Copy)]
@@ -35,7 +35,7 @@ impl LoadingScreen {
 		bsn! {
 			LoadingScreen
 			MenuScreen
-			MenuController
+			MenuController::default()
 			Node {
 				width: percent(100),
 				height: percent(100),

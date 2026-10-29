@@ -118,9 +118,7 @@ pub(crate) fn cycle_slot_views(
 	ledger: Option<&LubikanLedger>,
 ) -> Vec<CycleSlotView> {
 	if category.is_equipped_items() {
-		if let Some(queue) = queue.filter(|queue| !queue.slots.is_empty()) {
-			return equipped_item_views(queue);
-		}
+		return queue.map(equipped_item_views).unwrap_or_default();
 	}
 	ledger.map(lubikan_views).unwrap_or_default()
 }
@@ -128,8 +126,8 @@ pub(crate) fn cycle_slot_views(
 fn lubikan_views(ledger: &LubikanLedger) -> Vec<CycleSlotView> {
 	let selected = ledger.selection().resolved();
 	ledger
-		.cycle_order()
-		.into_iter()
+		.iter()
+		.map(|account| account.id())
 		.map(|id| CycleSlotView {
 			key: id.to_bits(),
 			label: slot_label(id),
@@ -166,7 +164,10 @@ pub(crate) fn cycle_slot_window_start(
 }
 
 /// Slice the full view list down to at most [`CYCLE_SLOT_POOL`] chips.
-pub(crate) fn windowed_cycle_slot_views(views: &[CycleSlotView], pool: usize) -> Vec<CycleSlotView> {
+pub(crate) fn windowed_cycle_slot_views(
+	views: &[CycleSlotView],
+	pool: usize,
+) -> Vec<CycleSlotView> {
 	if views.is_empty() || pool == 0 {
 		return Vec::new();
 	}
@@ -357,11 +358,7 @@ mod tests {
 	#[test]
 	fn windowed_views_cap_at_pool_and_keep_selected() {
 		let views: Vec<CycleSlotView> = (0..10)
-			.map(|key| CycleSlotView {
-				key,
-				label: format!("w{key}"),
-				selected: key == 9,
-			})
+			.map(|key| CycleSlotView { key, label: format!("w{key}"), selected: key == 9 })
 			.collect();
 		let windowed = windowed_cycle_slot_views(&views, 8);
 		assert_eq!(windowed.len(), 8);
@@ -369,6 +366,51 @@ mod tests {
 		assert_eq!(windowed[7].key, 9);
 		assert_eq!(windowed.iter().filter(|view| view.selected).count(), 1);
 		assert!(windowed[7].selected);
+	}
+
+	#[test]
+	fn empty_equipped_category_does_not_show_lubikans() {
+		let ledger = LubikanLedger::default();
+		for category in
+			[CombatHudInventoryCycleCategory::Weapons, CombatHudInventoryCycleCategory::SkillMaps]
+		{
+			assert!(cycle_slot_views(category, None, Some(&ledger)).is_empty());
+			assert!(cycle_slot_views(
+				category,
+				Some(&CombatHudEquippedQueue::default()),
+				Some(&ledger)
+			)
+			.is_empty());
+		}
+	}
+
+	#[test]
+	fn lubikan_chips_follow_configured_account_order() {
+		use lubikans::{LubikanDefinition, LubikanDefinitionId, LubikanOrder};
+		let mut ledger = LubikanLedger::default();
+		let first = ledger.ensure_owned(LubikanDefinition::new(
+			LubikanDefinitionId::from_raw(8),
+			20.0,
+			5.0,
+		));
+		let second = ledger.ensure_owned(LubikanDefinition::new(
+			LubikanDefinitionId::from_raw(3),
+			20.0,
+			5.0,
+		));
+		let mut order = LubikanOrder::from_ledger(&ledger);
+		assert!(order.move_account(second, -1));
+		assert!(order.move_account(second, -1));
+		assert!(ledger.apply_order(&order));
+		assert!(ledger.select(Some(first)));
+		let views =
+			cycle_slot_views(CombatHudInventoryCycleCategory::Lubikans, None, Some(&ledger));
+		assert_eq!(
+			views.iter().map(|view| view.key).collect::<Vec<_>>(),
+			vec![second.to_bits(), LubikanAccountId::SELF.to_bits(), first.to_bits()]
+		);
+		assert!(views[2].selected);
+		assert_eq!(views.iter().filter(|view| view.selected).count(), 1);
 	}
 
 	#[test]
