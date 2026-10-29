@@ -2276,10 +2276,26 @@ dependencies = [
  "avian3d",
  "bevy",
  "bikanwarda-attacks",
+ "bikanwarda-lubikans",
  "combat-targeting",
  "damage",
  "lod-avian",
  "lubikans",
+ "threat-intelligence",
+]
+
+[[package]]
+name = "bikanwarda-lubikans"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chico",
+ "damage",
+ "lod",
+ "lubikans",
+ "occupancy-rewards",
+ "player",
  "threat-intelligence",
 ]
 

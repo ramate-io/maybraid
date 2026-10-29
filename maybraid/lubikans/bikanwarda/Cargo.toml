@@ -1,0 +1,27 @@
+[package]
+name = "bikanwarda-lubikans"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+bevy = { workspace = true }
+damage = { workspace = true }
+lubikans = { workspace = true }
+occupancy-rewards = { workspace = true }
+player = { workspace = true }
+threat-intelligence = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+chico = { workspace = true }
+lod = { workspace = true }
+lubikans = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

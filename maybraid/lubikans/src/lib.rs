@@ -31,7 +31,7 @@ pub use activation::{
 	LubikanActivationReport, LubikanActivationRequest, LubikanActivationSession,
 	LubikanActivationSessionId, LubikanReadiness,
 };
-pub use award::LubikanCombatAward;
+pub use award::{LubikanAwardPhase, LubikanCombatAward};
 pub use catalog::{
 	DEFAULT_SELF_ACTIVATION_COST, DEFAULT_SELF_CAPACITY, DEFAULT_SELF_MAX_STOCK, LubikanCatalog,
 	LubikanSelfConfig,

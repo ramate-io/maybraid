@@ -41,3 +41,10 @@ and in the crate rustdoc. They are not silently closed.
 ```shell
 cargo test -p bikanwarda-lubikan --all-targets
 ```
+
+The policy crate is located in `bikanwarda-combat` and consumes the shared
+`bikanwarda-lubikans` charge catalog. Ward=1 and Enraged=2, capacity 100,
+activation cost 25 and stock 4 are the same labeled placeholders used by charge
+and encounter unlocks. The former separate 0xB1A0 ids are displaced so an
+encounter unlock is the account that this summon policy consumes. Balance and
+selection/victim policy questions above remain open.

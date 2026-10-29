@@ -122,6 +122,7 @@ members = [
   "maybraid/lubikans",
   "maybraid/lubikans/damage",
   "maybraid/lubikans/bikanwarda-combat",
+  "maybraid/lubikans/bikanwarda",
   "maybraid/player/lib",
   "maybraid/player/camera",
   "maybraid/world/layers/mobs/characters/generated",
@@ -406,6 +407,7 @@ combat-hud-playground = { path = "maybraid/combat-hud/playground" }
 lubikans = { path = "maybraid/lubikans" }
 lubikans-damage = { path = "maybraid/lubikans/damage" }
 bikanwarda-lubikan = { path = "maybraid/lubikans/bikanwarda-combat" }
+bikanwarda-lubikans = { path = "maybraid/lubikans/bikanwarda" }
 player = { path = "maybraid/player/lib" }
 player-camera = { path = "maybraid/player/camera" }
 movement-realization = { path = "maybraid/movement/realization" }

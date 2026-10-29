@@ -5,32 +5,14 @@
 //! agrees them.
 
 use lubikans::{
-	LubikanCatalog, LubikanDefinition, LubikanDefinitionId, LubikanSummonCatalog,
-	LubikanSummonPresentation, LubikanSummonRecipe, PLACEHOLDER_SUMMON_ACTIVATION_COST,
-	PLACEHOLDER_SUMMON_CAPACITY, PLACEHOLDER_SUMMON_HEALTH, PLACEHOLDER_SUMMON_LIFETIME_SECS,
+	LubikanCatalog, LubikanSummonCatalog, LubikanSummonPresentation, LubikanSummonRecipe,
+	PLACEHOLDER_SUMMON_HEALTH, PLACEHOLDER_SUMMON_LIFETIME_SECS,
 };
 
-/// Ward catalog id. Not the fixture `0xFFFF_FF01` placeholder.
-pub const WARD_DEFINITION_ID: LubikanDefinitionId = LubikanDefinitionId::from_raw(0xB1A0_0001);
-
-/// Enraged catalog id. Not the fixture `0xFFFF_FF01` placeholder.
-pub const ENRAGED_DEFINITION_ID: LubikanDefinitionId = LubikanDefinitionId::from_raw(0xB1A0_0002);
-
-pub fn ward_definition() -> LubikanDefinition {
-	LubikanDefinition::new(
-		WARD_DEFINITION_ID,
-		PLACEHOLDER_SUMMON_CAPACITY,
-		PLACEHOLDER_SUMMON_ACTIVATION_COST,
-	)
-}
-
-pub fn enraged_definition() -> LubikanDefinition {
-	LubikanDefinition::new(
-		ENRAGED_DEFINITION_ID,
-		PLACEHOLDER_SUMMON_CAPACITY,
-		PLACEHOLDER_SUMMON_ACTIVATION_COST,
-	)
-}
+pub use bikanwarda_lubikans::{
+	BIKANWARDA_ENRAGED_DEFINITION as ENRAGED_DEFINITION_ID,
+	BIKANWARDA_WARD_DEFINITION as WARD_DEFINITION_ID, enraged_definition, ward_definition,
+};
 
 pub fn ward_recipe() -> LubikanSummonRecipe {
 	LubikanSummonRecipe {
