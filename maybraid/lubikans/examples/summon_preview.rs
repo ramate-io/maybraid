@@ -17,8 +17,8 @@ use bevy::prelude::*;
 use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
 use lubikans::{
 	LubikanActivationRequest, LubikanBodyOf, LubikanLedger, LubikanOwner, LubikanSummonCatalog,
-	LubikanSummonConfig, LubikanSummonDeparture, LubikanSummonRecipe, LubikanSummons,
-	LubikansPlugin, PLACEHOLDER_SUMMON_ACTIVATION_COST, install_fixture_summon,
+	LubikanSummonConfig, LubikanSummonDeparture, LubikanSummonLifetime, LubikanSummonRecipe,
+	LubikanSummons, LubikansPlugin, PLACEHOLDER_SUMMON_ACTIVATION_COST, install_fixture_summon,
 };
 
 fn main() {
@@ -40,7 +40,10 @@ fn main() {
 	install_fixture_summon(&mut app);
 	app.world_mut()
 		.resource_mut::<LubikanSummonCatalog>()
-		.register(LubikanSummonRecipe { lifetime_secs: 4.0, ..LubikanSummonRecipe::fixture() });
+		.register(LubikanSummonRecipe {
+			lifetime: LubikanSummonLifetime::from_secs_f32(4.0),
+			..LubikanSummonRecipe::fixture()
+		});
 	app.add_systems(Startup, spawn_preview)
 		.add_systems(
 			Update,
