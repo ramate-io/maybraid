@@ -1032,8 +1032,8 @@ fn sample_humanoid(
 			write_bones,
 			write_effects,
 		),
-		AnimClip::ThinkAgain(params) => sample_split(
-			&ThinkAgain::new(params.side),
+		AnimClip::ThinkAgain { side } => sample_split(
+			&ThinkAgain::new(side),
 			rig,
 			progress.clamp(0.0, THINK_AGAIN_DURATION),
 			write_bones,
