@@ -1,11 +1,13 @@
 //! Drop icon-cache PNGs that no saved inventory still needs.
 //!
 //! The shared Self Lubikan tile is not a bag item, so its cache key is always
-//! retained even when no character save still owns a bag.
+//! retained even when no character save still owns a bag. Fisticuffs is a bag
+//! item, but prune still keeps its capture identity so a roster without a
+//! saved bag cannot drop the intrinsic arms icon.
 
 use bevy::prelude::*;
 use character_inventory_user;
-use character_items::Inventory;
+use character_items::{Inventory, InventoryItem};
 use character_persist::SaveRoot;
 use screen_capture::{CaptureCache, CaptureCacheKey, CaptureCacheRoot, CaptureLighting};
 use std::collections::HashSet;
@@ -25,6 +27,13 @@ pub fn kept_icon_file_names<'a>(
 		CaptureCacheKey::from_request(&self_lubikan_icon_request(CaptureRevision::CURRENT))
 			.file_name(),
 	);
+	for request in item_icon_requests(
+		&InventoryItem::Fisticuffs,
+		CaptureLighting::studio(),
+		CaptureRevision::CURRENT,
+	) {
+		keep.insert(CaptureCacheKey::from_request(&request).file_name());
+	}
 	for inventory in inventories {
 		for item in &inventory.items {
 			for request in
@@ -147,17 +156,47 @@ mod tests {
 		let cache = CaptureCache::new(dir.path().join("icons"));
 		fs::create_dir_all(cache.root())?;
 		let keep = kept_icon_file_names(std::iter::empty());
-		let lubikan = keep.iter().next().cloned().ok_or_else(|| anyhow::anyhow!("self-lubikan"))?;
-		assert_eq!(keep.len(), 1);
+		let lubikan = keep
+			.iter()
+			.find(|name| name.contains("self-lubikan"))
+			.cloned()
+			.ok_or_else(|| anyhow::anyhow!("self-lubikan"))?;
 		assert!(
-			lubikan.contains("self-lubikan"),
-			"retention set should name the shared tile, got {lubikan}"
+			keep.iter().any(|name| name.contains("fisticuffs")),
+			"retention set should keep the intrinsic arms icon, got {keep:?}"
 		);
+		assert!(keep.len() >= 2, "Self Lubikan plus Fisticuffs must stay retained");
 		fs::write(cache.root().join(&lubikan), b"keep")?;
 		fs::write(cache.root().join("orphan_shaded_256x256_deadbeef.png"), b"drop")?;
 		assert_eq!(prune_icon_cache_to_saved_inventories(&save, &cache), 1);
 		assert!(cache.root().join(&lubikan).is_file());
 		assert!(!cache.root().join("orphan_shaded_256x256_deadbeef.png").is_file());
+		Ok(())
+	}
+
+	#[test]
+	fn prune_keeps_fisticuffs_without_saved_bags() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let save = SaveRoot::at(dir.path().join("saves"));
+		save.ensure_dirs()?;
+		let cache = CaptureCache::new(dir.path().join("icons"));
+		fs::create_dir_all(cache.root())?;
+		let keep = kept_icon_file_names(std::iter::empty());
+		let fists = keep
+			.iter()
+			.filter(|name| name.contains("fisticuffs"))
+			.cloned()
+			.collect::<Vec<_>>();
+		assert!(!fists.is_empty(), "Fisticuffs cache identity must be retained");
+		for name in &fists {
+			fs::write(cache.root().join(name), b"keep")?;
+		}
+		fs::write(cache.root().join("orphan_silhouette_256x256_deadbeef.png"), b"drop")?;
+		assert_eq!(prune_icon_cache_to_saved_inventories(&save, &cache), 1);
+		for name in &fists {
+			assert!(cache.root().join(name).is_file());
+		}
+		assert!(!cache.root().join("orphan_silhouette_256x256_deadbeef.png").is_file());
 		Ok(())
 	}
 }

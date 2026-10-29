@@ -1,8 +1,10 @@
 use bevy::prelude::*;
 use character_rigs::Side;
 use characters::{
-	spawn_fixed_character_assembly, species::braidman::BraidmanConfig, AnimProgress, AnimRefRoot,
-	CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot,
+	spawn_fixed_character_assembly,
+	species::{braidman::BraidmanConfig, epiphant::EpiphantConfig},
+	AnimProgress, AnimRefRoot, CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole,
+	CharacterRoot,
 };
 use clap::ValueEnum;
 
@@ -13,12 +15,14 @@ use crate::animation::{AnimationMode, AnimationPlayback};
 pub enum CharacterSpecies {
 	#[default]
 	Braidman,
+	Epiphant,
 }
 
 impl CharacterSpecies {
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Braidman => "braidman",
+			Self::Epiphant => "epiphant",
 		}
 	}
 }
@@ -92,10 +96,18 @@ pub(crate) fn sync_character(
 		commands.entity(entity).try_despawn();
 	}
 
-	let clothed = match config.species {
-		CharacterSpecies::Braidman => CharacterRecipe::clothed(&BraidmanConfig::default_preview()),
+	let entity = match config.species {
+		CharacterSpecies::Braidman => spawn_fixed_character_assembly(
+			&mut commands,
+			&CharacterRecipe::clothed(&BraidmanConfig::default_preview()),
+			config.transform,
+		),
+		CharacterSpecies::Epiphant => spawn_fixed_character_assembly(
+			&mut commands,
+			&CharacterRecipe::clothed(&EpiphantConfig::default_preview()),
+			config.transform,
+		),
 	};
-	let entity = spawn_fixed_character_assembly(&mut commands, &clothed, config.transform);
 	commands.entity(entity).insert(PlaygroundCharacter);
 }
 

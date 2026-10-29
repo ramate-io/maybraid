@@ -28,7 +28,7 @@ use crate::compose::{compose_rumbles, ingest_rumbles, tick_rumbles};
 use crate::present::{cleanup_removed_listeners, present_camera_rumble, present_pad_rumble};
 
 /// Registers ingest / tick / compose / present. Pad pulses use existing
-/// [`maybraid_input::PadRumble`]; keyboard and mouse need no extra path.
+/// [`maybraid_virtual_pad_controller::PadRumble`]; keyboard and mouse need no extra path.
 pub struct SpatialRumblePlugin;
 
 impl Plugin for SpatialRumblePlugin {
@@ -37,8 +37,8 @@ impl Plugin for SpatialRumblePlugin {
 			.init_resource::<SpatialRumbleOutput>()
 			.init_resource::<PadRumbleClock>()
 			.add_message::<SpatialRumble>();
-		if !app.world().contains_resource::<Messages<maybraid_input::PadRumble>>() {
-			app.add_message::<maybraid_input::PadRumble>();
+		if !app.world().contains_resource::<Messages<maybraid_virtual_pad_controller::PadRumble>>() {
+			app.add_message::<maybraid_virtual_pad_controller::PadRumble>();
 		}
 		app.configure_sets(
 			Update,
@@ -229,8 +229,8 @@ mod tests {
 		Ok(())
 	}
 
-	fn collect_pad(app: &mut App) -> Vec<maybraid_input::PadRumble> {
-		let messages = app.world().resource::<Messages<maybraid_input::PadRumble>>();
+	fn collect_pad(app: &mut App) -> Vec<maybraid_virtual_pad_controller::PadRumble> {
+		let messages = app.world().resource::<Messages<maybraid_virtual_pad_controller::PadRumble>>();
 		let mut cursor = messages.get_cursor();
 		cursor.read(messages).cloned().collect()
 	}

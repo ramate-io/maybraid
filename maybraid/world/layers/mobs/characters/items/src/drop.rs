@@ -20,11 +20,13 @@
 //!    accepted owner's transform. Gallery / create stay on the pure bag
 //!    mutation and remain delete-only. Tab still explodes the whole bag
 //!    through the stash module.
-//! 2. **Undroppable items.** Lubikans are not bag items (ledger + charge live
+//! 2. **Undroppable items.** Intrinsic bag tools ([`InventoryItem::is_droppable`])
+//!    refuse in [`Inventory::can_drop`] / [`Inventory::try_drop`]; caller policy
+//!    cannot override. Lubikans are not bag items (ledger + charge live
 //!    elsewhere). Tanzes are ordinary bag items in the Tanzes slot and follow
 //!    this same placeholder policy (equipped drops are allowed; no extra
-//!    undroppable flag). Starter items have no durable flag. Default allows
-//!    equipped items and an empty leftover bag. Flip
+//!    undroppable flag). Starter items have no durable flag. Default still
+//!    allows equipped droppable items and an empty leftover bag. Flip
 //!    [`InventoryDropPolicy::allow_equipped`] or
 //!    [`InventoryDropPolicy::allow_empty_bag`] when those rules exist.
 //! 3. **Confirm.** Default `require_confirm` is `true`. The domain does not
@@ -113,6 +115,7 @@ pub enum InventoryDropError {
 	MissingIndex,
 	PolicyForbidsEquipped,
 	PolicyForbidsEmptyBag,
+	ItemNotDroppable,
 }
 
 impl std::fmt::Display for InventoryDropError {
@@ -121,6 +124,7 @@ impl std::fmt::Display for InventoryDropError {
 			Self::MissingIndex => write!(f, "bag index is missing"),
 			Self::PolicyForbidsEquipped => write!(f, "policy forbids dropping an equipped item"),
 			Self::PolicyForbidsEmptyBag => write!(f, "policy forbids emptying the bag"),
+			Self::ItemNotDroppable => write!(f, "item cannot be dropped"),
 		}
 	}
 }
@@ -176,6 +180,9 @@ impl Inventory {
 		let Some(item) = self.items.get(index) else {
 			return Err(InventoryDropError::MissingIndex);
 		};
+		if !item.is_droppable() {
+			return Err(InventoryDropError::ItemNotDroppable);
+		}
 		let selected = self.selected(item.slot());
 		if selected.contains(&index) && !policy.allow_equipped {
 			return Err(InventoryDropError::PolicyForbidsEquipped);
@@ -373,5 +380,29 @@ mod tests {
 		let outcome = bag.try_drop(3, InventoryDropPolicy::PLACEHOLDER)?;
 		assert!(!outcome.spawn_world_pickup);
 		Ok(())
+	}
+
+	#[test]
+	fn fisticuffs_is_not_droppable_even_under_accepted_removal() {
+		let mut bag = Inventory {
+			items: vec![InventoryItem::Fisticuffs, InventoryItem::firearm(FirearmMesh::Bullpup)],
+			clothing: Vec::new(),
+			weapons: vec![0, 1],
+			skills: Vec::new(),
+			tanzes: Vec::new(),
+		};
+		assert_eq!(
+			bag.can_drop(0, InventoryDropPolicy::PLACEHOLDER).err(),
+			Some(InventoryDropError::ItemNotDroppable)
+		);
+		assert_eq!(
+			bag.try_drop(0, crate::ACCEPTED_DROP_REMOVAL).err(),
+			Some(InventoryDropError::ItemNotDroppable)
+		);
+		assert_eq!(bag.items.len(), 2);
+		assert_eq!(bag.weapons, vec![0, 1]);
+		assert!(bag.try_drop(1, InventoryDropPolicy::PLACEHOLDER).is_ok());
+		assert_eq!(bag.items, vec![InventoryItem::Fisticuffs]);
+		assert_eq!(bag.weapons, vec![0]);
 	}
 }

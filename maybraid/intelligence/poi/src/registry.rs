@@ -7,8 +7,8 @@ use gimme_core::{BaseScale, HashMapStore, Level, SpatialId, SpatialIndexError, T
 use crate::hash::unit_f32;
 use crate::place::ArrivalDisk;
 use crate::{
-	NearbyChoice, NearbyQuery, Poi, PoiId, PoiInterests, PoiKind, PoiObservation, PoiSource,
-	MAX_POI_ARRIVAL_RADIUS,
+	NearbyChoice, NearbyQuery, Poi, PoiArrival, PoiId, PoiInterests, PoiKind, PoiObservation,
+	PoiSource, PoiSupport, MAX_POI_ARRIVAL_RADIUS,
 };
 
 const LOCAL_BASE_SCALE: f64 = 64.0;
@@ -22,12 +22,17 @@ pub struct PoiRecord {
 	pub kind: PoiKind,
 	pub position: Vec3,
 	pub arrival_radius: f32,
+	pub support: PoiSupport,
 	pub salience: f32,
 	pub local: bool,
 	pub global: bool,
 }
 
 impl PoiRecord {
+	pub fn arrival(self) -> PoiArrival {
+		PoiArrival { position: self.position, radius: self.arrival_radius, support: self.support }
+	}
+
 	pub fn arrival_disk(self) -> ArrivalDisk {
 		ArrivalDisk::new(self.position, self.arrival_radius)
 	}
@@ -116,6 +121,7 @@ impl PoiRegistry {
 			kind: poi.kind,
 			position,
 			arrival_radius: poi.arrival_radius.clamp(0.0, MAX_POI_ARRIVAL_RADIUS),
+			support: poi.support,
 			salience: poi.salience.max(0.0),
 			local,
 			global,

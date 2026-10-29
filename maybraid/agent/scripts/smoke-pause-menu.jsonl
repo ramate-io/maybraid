@@ -1,0 +1,54 @@
+# Script API 7. Full-game smoke: pause/settings/resume, then close and reopen
+# the map before pausing and navigating a row. The runner adds --start-at.
+
+{"cmd":"wait_for","flow":"world","pause":"playing","timeout":90}
+{"cmd":"wait","secs":0.4}
+{"cmd":"press","button":"start"}
+{"cmd":"wait_for","screen":"in_game","pause":"menu","focus_label":"Character","timeout":10}
+{"cmd":"expect","screen":"in_game","pause":"menu","focus_label":"Character"}
+{"cmd":"wait","secs":0.2}
+{"cmd":"press","button":"dpad_down"}
+{"cmd":"wait","secs":0.2}
+{"cmd":"press","button":"dpad_down"}
+{"cmd":"wait","secs":0.2}
+{"cmd":"press","button":"dpad_down"}
+{"cmd":"wait_for","screen":"in_game","pause":"menu","focus_label":"Settings","timeout":5}
+{"cmd":"expect","screen":"in_game","pause":"menu","focus_label":"Settings"}
+{"cmd":"press","button":"confirm"}
+{"cmd":"wait_for","screen":"settings","pause":"menu","focus_label":"Shadows","timeout":10}
+{"cmd":"expect","screen":"settings","pause":"menu","focus_label":"Shadows"}
+{"cmd":"wait","secs":0.2}
+{"cmd":"press","button":"dpad_down"}
+{"cmd":"wait","secs":0.2}
+{"cmd":"press","button":"dpad_down"}
+{"cmd":"wait_for","screen":"settings","pause":"menu","focus_label":"Mob HUD","timeout":5}
+{"cmd":"expect","screen":"settings","pause":"menu","focus_label":"Mob HUD"}
+{"cmd":"press","button":"confirm"}
+{"cmd":"wait","secs":0.3}
+{"cmd":"expect","screen":"settings","pause":"menu","focus_label":"Mob HUD"}
+{"cmd":"press","button":"back"}
+{"cmd":"wait_for","screen":"in_game","pause":"menu","focus_label":"Character","timeout":10}
+{"cmd":"expect","screen":"in_game","pause":"menu","focus_label":"Character"}
+{"cmd":"wait","secs":0.2}
+{"cmd":"press","button":"start"}
+{"cmd":"wait_for","screen":"none","flow":"world","pause":"playing","timeout":10}
+{"cmd":"expect","screen":"none","flow":"world","pause":"playing"}
+{"cmd":"wait","secs":0.2}
+{"cmd":"press","button":"map"}
+{"cmd":"wait","secs":0.3}
+{"cmd":"press","button":"map"}
+{"cmd":"wait","secs":0.3}
+{"cmd":"press","button":"map"}
+{"cmd":"wait","secs":0.3}
+{"cmd":"press","button":"start"}
+{"cmd":"wait_for","screen":"in_game","pause":"menu","focus_label":"Character","timeout":10}
+{"cmd":"expect","screen":"in_game","pause":"menu","focus_label":"Character"}
+{"cmd":"wait","secs":0.2}
+{"cmd":"press","button":"dpad_down"}
+{"cmd":"wait_for","screen":"in_game","pause":"menu","focus_label":"Records","timeout":5}
+{"cmd":"expect","screen":"in_game","pause":"menu","focus_label":"Records"}
+{"cmd":"wait","secs":0.2}
+{"cmd":"press","button":"start"}
+{"cmd":"wait_for","screen":"none","flow":"world","pause":"playing","timeout":10}
+{"cmd":"expect","screen":"none","flow":"world","pause":"playing"}
+{"cmd":"quit"}
