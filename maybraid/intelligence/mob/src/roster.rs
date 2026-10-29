@@ -5,7 +5,8 @@ use damage::Health;
 use firearm_intelligence::FirearmEngagement;
 use npc_intelligence::{NpcBody, NpcInstall, Personality};
 use poi_intelligence::{
-	NearbyChoice, NearbyFallback, NearbyQuery, PoiId, PoiInterests, DEFAULT_NEARBY_RADIUS,
+	NearbyChoice, NearbyFallback, NearbyQuery, PoiId, PoiInterests, PoiSupport,
+	DEFAULT_NEARBY_RADIUS,
 };
 
 /// How many recent replace destinations a slot remembers for [`choose_in`].
@@ -134,6 +135,7 @@ pub struct MobMemberNeeded {
 	pub id: MobId,
 	pub slot: u16,
 	pub pose: Vec3,
+	pub support: PoiSupport,
 }
 
 /// One High plant spec plus the last known live snapshot.

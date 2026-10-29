@@ -2,37 +2,37 @@
 
 use bevy::prelude::*;
 use character_creation_menus::{
-	inventory_paint_state, CharacterMenu, InventoryLayout, InventoryPaint, MenuEvent,
-	INVENTORY_CAPTURE_TIMEOUT, INVENTORY_LABEL,
+	CharacterMenu, INVENTORY_CAPTURE_TIMEOUT, INVENTORY_LABEL, InventoryLayout, InventoryPaint,
+	MenuEvent, inventory_paint_state,
 };
-use character_items::{self_lubikan_catalog_key, Inventory};
+use character_items::{Inventory, catalog_key_uses_yellow_silhouette};
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
 use item_icons::{
-	request_inventory_icons, request_self_lubikan_icon, CaptureClient, IconCatalogProgress,
-	ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery, ItemIconPlugin, ItemIconSystems,
-	PoseCaptureSubjects,
+	CaptureClient, IconCatalogProgress, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery,
+	ItemIconPlugin, ItemIconSystems, PoseCaptureSubjects, request_inventory_icons,
+	request_self_lubikan_icon,
 };
 use maybraid_character_ui_menu_renderer::{
-	fill_inventory_layout, fill_inventory_loading, find_overlay_node, overlay_closes_on_pick,
-	spawn_overlay_shell, CharacterHudSystems, CharacterMenuEvent,
-	MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink, MenuButton, MenuJustify, MenuSink,
-	MenuThumbnailContext, OverlayClose, OverlayOpen, OverlaySelectRoot, OverlaySelectViewport,
-	RenderContext,
+	CharacterHudSystems, CharacterMenuEvent, InventoryFocusHint, InventoryInteraction,
+	InventoryItemKey, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink, MenuButton,
+	MenuJustify, MenuSink, MenuThumbnailContext, OverlayClose, OverlayOpen, OverlaySelectRoot,
+	OverlaySelectViewport, RenderContext, fill_inventory_layout, fill_inventory_loading,
+	find_overlay_node, overlay_closes_on_pick, spawn_overlay_shell,
 };
 use maybraid_menu_controller::MenuController;
 use maybraid_skill_map::{SkillMapSpinRevealHud, SkillMapTileMaterialPlugin};
 use menu_components::theme::{
-	character_screen_grid_node, menu_region_wash, CORNER_BOTTOM, CORNER_INSET, MENU_LIST_PAD,
-	MENU_LIST_RADIUS,
+	CORNER_BOTTOM, CORNER_INSET, MENU_LIST_PAD, MENU_LIST_RADIUS, character_screen_grid_node,
+	menu_region_wash,
 };
 use menu_components::{
-	spawn_corner_action, spawn_scroll_pane, ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem,
-	HudOverlayMenu, InputPromptDevice, MenuActivate, MenuFocus, MenuModalId, MenuModalLayer,
-	MenuModalStack, ScreenBack, ShortTextChange, CATALOG_THUMB_PX, PANEL_ROW_GAP,
-	PANEL_TILE_COLUMNS, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	ActiveOverlayKey, CATALOG_THUMB_PX, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu,
+	InputPromptDevice, MenuActivate, MenuFocus, MenuModalId, MenuModalLayer, MenuModalStack,
+	PANEL_ROW_GAP, PANEL_TILE_COLUMNS, ScreenBack, ShortTextChange, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	spawn_corner_action, spawn_scroll_pane,
 };
 use menu_screens::{
-	add_menu_show_systems, MenuScreen, MenuScreens, MenuShowRequest, SpinRevealItems,
+	MenuScreen, MenuScreens, MenuShowRequest, SpinRevealItems, add_menu_show_systems,
 };
 use std::time::Duration;
 use tanz_user::request_inventory_tanz_icons;
@@ -69,15 +69,20 @@ impl CharacterMenuState {
 pub struct CharacterEditBaseline {
 	pub name: String,
 	pub inventory: Inventory,
+	pub lubikans: lubikans::LubikanOrder,
 }
 
 impl CharacterEditBaseline {
 	pub fn capture(menu: &CharacterMenu) -> Self {
-		Self { name: menu.saved_name(), inventory: menu.inventory.clone().unwrap_or_default() }
+		Self {
+			name: menu.saved_name(),
+			inventory: menu.inventory.clone().unwrap_or_default(),
+			lubikans: menu.lubikans.clone(),
+		}
 	}
 
 	pub fn is_dirty(&self, menu: &CharacterMenu) -> bool {
-		if menu.saved_name() != self.name {
+		if menu.saved_name() != self.name || menu.lubikans != self.lubikans {
 			return true;
 		}
 		match menu.inventory.as_ref() {
@@ -90,6 +95,7 @@ impl CharacterEditBaseline {
 	pub fn restore_into(&self, menu: &mut CharacterMenu) {
 		menu.name.clone_from(&self.name);
 		menu.set_inventory(self.inventory.clone());
+		menu.lubikans.clone_from(&self.lubikans);
 	}
 
 	/// Remove an already-accepted bag index without adopting the live
@@ -164,7 +170,7 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 
 	fn image_for_key(&mut self, key: u64) -> Option<Handle<Image>> {
 		let icons = self.icons?;
-		if key == self_lubikan_catalog_key() {
+		if catalog_key_uses_yellow_silhouette(key) {
 			icons.catalog_entry(key, true).and_then(|entry| entry.ready_image())
 		} else {
 			icons.catalog_for_key(key)
@@ -172,11 +178,7 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
-		if key == self_lubikan_catalog_key() {
-			TEXT_YELLOW
-		} else {
-			Color::WHITE
-		}
+		if catalog_key_uses_yellow_silhouette(key) { TEXT_YELLOW } else { Color::WHITE }
 	}
 
 	fn viewport_for_key(&mut self, _key: u64) -> Option<Entity> {
@@ -473,6 +475,8 @@ fn populate_character_ui_panel(
 		lock_appearance: menu_state.0.appearance_locked(),
 		catalog_columns: PANEL_TILE_COLUMNS,
 		catalog_thumb_px: CATALOG_THUMB_PX,
+		retain_key: None,
+		retained_index: None,
 	};
 	MaybraidMenuSink::new(MenuJustify::Right).render_nodes(
 		&menu_state.0.menu_nodes(),
@@ -494,6 +498,7 @@ fn sync_overlay_select(
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	icons: Option<Res<ItemIconCache>>,
 	prompt_device: Res<InputPromptDevice>,
+	focus: Res<InventoryFocusHint>,
 ) {
 	let Ok(slot) = slots.single() else {
 		for entity in &overlays {
@@ -581,6 +586,7 @@ fn sync_overlay_select(
 			&fonts,
 			node,
 			None,
+			focus.0,
 			menu_state.0.overlay_editable(key),
 			icons.as_deref(),
 			inventory_ready,
@@ -596,6 +602,7 @@ fn sync_overlay_select(
 			&fonts,
 			node,
 			menu.copied(),
+			focus.0,
 			menu_state.0.overlay_editable(key),
 			icons.as_deref(),
 			inventory_ready,
@@ -694,6 +701,7 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 	fonts: &HudFonts,
 	node: &character_ui_menu::MenuNode<E>,
 	previous: Option<HudMenu>,
+	retain: Option<InventoryItemKey>,
 	interactive: bool,
 	icons: Option<&ItemIconCache>,
 	ready: bool,
@@ -707,6 +715,7 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 			node,
 			interactive,
 			previous,
+			retain,
 			&mut thumbnails,
 		);
 	} else {
@@ -772,6 +781,8 @@ fn on_overlay_close(
 	mut overlay: ResMut<OverlaySelectState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
 	mut stack: ResMut<MenuModalStack>,
+	mut interaction: ResMut<InventoryInteraction>,
+	mut focus: ResMut<InventoryFocusHint>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() {
@@ -779,11 +790,13 @@ fn on_overlay_close(
 	}
 	overlay.open = None;
 	active_overlay.0 = None;
+	*interaction = InventoryInteraction::Browse;
+	focus.0 = None;
 	stack.close(MenuModalId::OVERLAY_SELECT);
 }
 
 fn on_menu_activate(
-	activate: On<MenuActivate<MenuEvent>>,
+	mut activate: On<MenuActivate<MenuEvent>>,
 	mut menu_state: ResMut<CharacterMenuState>,
 	mut menu_events: MessageWriter<CharacterMenuEvent<MenuEvent>>,
 	mut ui_sync: ResMut<CharacterUiSyncState>,
@@ -791,14 +804,41 @@ fn on_menu_activate(
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
 	mut stack: ResMut<MenuModalStack>,
+	mut focus: ResMut<InventoryFocusHint>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() {
 		return;
 	}
+	// This is a global observer: bubbling would apply the same domain edit
+	// again at each tile/grid/pane ancestor (one move could reach the end).
+	activate.propagate(false);
 	let event = activate.event().choice;
 	if !menu_state.0.apply(event) {
 		return;
+	}
+	match event {
+		MenuEvent::EquipInventory(index) | MenuEvent::MoveEquippedInventory { index, .. } => {
+			focus.0 = Some(InventoryItemKey { index, equipped: true });
+		}
+		MenuEvent::MoveLubikan { account, .. } => {
+			focus.0 = menu_state
+				.0
+				.inventory
+				.as_ref()
+				.and_then(|inventory| {
+					character_creation_menus::InventoryLayout::lubikan_item_key(
+						inventory,
+						&menu_state.0.lubikans,
+						account,
+					)
+				})
+				.map(|index| InventoryItemKey { index, equipped: true });
+		}
+		MenuEvent::UnequipInventory(index) => {
+			focus.0 = Some(InventoryItemKey { index, equipped: false });
+		}
+		_ => {}
 	}
 	ui_sync.menu_dirty = true;
 	overlay_sync.menu_dirty = true;
@@ -849,7 +889,7 @@ fn on_short_text_change(
 
 #[cfg(test)]
 mod tests {
-	use super::{save_chrome, CharacterEditBaseline};
+	use super::{CharacterEditBaseline, save_chrome};
 	use character_creation_menus::CharacterMenu;
 	use character_items::Inventory;
 
@@ -903,7 +943,7 @@ mod tests {
 	#[test]
 	fn catalog_thumbs_use_the_self_lubikan_silhouette() -> anyhow::Result<()> {
 		use super::CatalogThumbs;
-		use character_items::{self_lubikan_catalog_key, SELF_LUBIKAN_CAPTURE_LABEL};
+		use character_items::{SELF_LUBIKAN_CAPTURE_LABEL, self_lubikan_catalog_key};
 		use item_icons::{CaptureId, ItemIconCache};
 		use maybraid_character_ui_menu_renderer::MenuThumbnailContext;
 		use menu_components::theme::TEXT_YELLOW;
@@ -929,6 +969,39 @@ mod tests {
 		let mut wrong = CatalogThumbs { icons: Some(&shaded_only) };
 		if wrong.image_for_key(key).is_some() {
 			anyhow::bail!("Self Lubikan tile must not use the shaded handle");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn catalog_thumbs_use_the_fisticuffs_silhouette() -> anyhow::Result<()> {
+		use super::CatalogThumbs;
+		use character_items::{FISTICUFFS_CAPTURE_LABEL, fisticuffs_catalog_key};
+		use item_icons::{CaptureId, ItemIconCache};
+		use maybraid_character_ui_menu_renderer::MenuThumbnailContext;
+		use menu_components::theme::TEXT_YELLOW;
+
+		let key = fisticuffs_catalog_key();
+		let mut cache = ItemIconCache::default();
+		cache.insert_silhouette(
+			CaptureId::new(FISTICUFFS_CAPTURE_LABEL),
+			bevy::prelude::Handle::default(),
+		);
+		let mut ready = CatalogThumbs { icons: Some(&cache) };
+		if ready.image_for_key(key).is_none() {
+			anyhow::bail!("Fisticuffs tile should show the silhouette");
+		}
+		if ready.tint_for_key(key) != TEXT_YELLOW {
+			anyhow::bail!("Fisticuffs silhouette should tint yellow in the inventory");
+		}
+		let mut shaded_only = ItemIconCache::default();
+		shaded_only.insert_shaded(
+			CaptureId::new(FISTICUFFS_CAPTURE_LABEL),
+			bevy::prelude::Handle::default(),
+		);
+		let mut wrong = CatalogThumbs { icons: Some(&shaded_only) };
+		if wrong.image_for_key(key).is_some() {
+			anyhow::bail!("Fisticuffs tile must not use the shaded handle");
 		}
 		Ok(())
 	}
@@ -1039,3 +1112,6 @@ mod tests {
 		Ok(())
 	}
 }
+
+#[cfg(test)]
+mod ordered_inventory_tests;

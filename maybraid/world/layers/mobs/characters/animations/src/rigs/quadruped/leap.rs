@@ -2,7 +2,9 @@ use character_rigs::authoring::QuadrupedPose;
 use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 use character_rigs::Side;
 
-use crate::animations::{LeapPhase, LeapTimeline, LinearBlend, QuadrupedLeap};
+use crate::animations::{
+	LeapPhase, LeapTimeline, LinearBlend, QuadrupedLeap, LEAP_LAND_BLEND_FRACTION,
+};
 use crate::rigs::quadruped::apply::{apply_front_leg, apply_hind_leg, apply_neck, apply_spine};
 use crate::{Animation, Progress};
 
@@ -61,7 +63,19 @@ impl QuadrupedLeap {
 		match LeapTimeline::sample(t) {
 			(LeapPhase::Takeoff, u) => self.takeoff(u),
 			(LeapPhase::Air, u) => self.air(u),
-			(LeapPhase::Land, u) => self.land(u),
+			(LeapPhase::Land, u) => {
+				let land_span = (1.0 - crate::animations::AIR_END).max(f32::EPSILON);
+				let land_local = (t - crate::animations::AIR_END) / land_span;
+				let land = self.land(u);
+				if land_local < LEAP_LAND_BLEND_FRACTION {
+					let weight = crate::animations::smoothstep(
+						(land_local / LEAP_LAND_BLEND_FRACTION.max(f32::EPSILON)).clamp(0.0, 1.0),
+					);
+					blend_quad_leap_pose(self.air(1.0), land, weight)
+				} else {
+					land
+				}
+			}
 		}
 	}
 
@@ -103,6 +117,18 @@ impl QuadrupedLeap {
 			front_shin: self.land_compress * front_absorb,
 			spine: self.spine_gather * (1.0 - u) - self.spine_gather * 0.35 * front_absorb,
 		}
+	}
+}
+
+fn blend_quad_leap_pose(from: QuadLeapPose, to: QuadLeapPose, weight: f32) -> QuadLeapPose {
+	let t = weight.clamp(0.0, 1.0);
+	let blend = |a: f32, b: f32| a + (b - a) * t;
+	QuadLeapPose {
+		hind_thigh: blend(from.hind_thigh, to.hind_thigh),
+		front_thigh: blend(from.front_thigh, to.front_thigh),
+		hind_shin: blend(from.hind_shin, to.hind_shin),
+		front_shin: blend(from.front_shin, to.front_shin),
+		spine: blend(from.spine, to.spine),
 	}
 }
 
@@ -196,5 +222,43 @@ mod tests {
 		let left = a.rotation("posterior_thigh.L");
 		let right = b.rotation("posterior_thigh.L");
 		assert!(left.dot(right).abs() > 1.0 - 1e-5);
+	}
+
+	#[test]
+	fn air_to_land_window_meets_both_composed_endpoints() -> anyhow::Result<()> {
+		let leap = QuadrupedLeap::default();
+		let land_span = 1.0 - crate::animations::AIR_END;
+		let band_end = crate::animations::AIR_END + land_span * LEAP_LAND_BLEND_FRACTION;
+		let at_land = leap.pose_at(crate::animations::AIR_END);
+		let air_end = leap.air(1.0);
+		assert!((at_land.hind_thigh - air_end.hind_thigh).abs() < 1e-6);
+		assert!((at_land.front_shin - air_end.front_shin).abs() < 1e-6);
+		let at_band_end = leap.pose_at(band_end);
+		let land_end = leap.land(crate::animations::smoothstep(LEAP_LAND_BLEND_FRACTION));
+		assert!((at_band_end.hind_thigh - land_end.hind_thigh).abs() < 1e-6);
+		assert!((at_band_end.front_shin - land_end.front_shin).abs() < 1e-6);
+		Ok(())
+	}
+
+	#[test]
+	fn air_land_seam_is_fine_sample_continuous_without_root_motion() -> anyhow::Result<()> {
+		let epsilon = 1e-4;
+		let mut before = QuadrupedV0Rig::for_clip_test();
+		let mut after = QuadrupedV0Rig::for_clip_test();
+		QuadrupedLeap::default().apply(&mut before, crate::animations::AIR_END - epsilon);
+		let effects =
+			QuadrupedLeap::default().apply(&mut after, crate::animations::AIR_END + epsilon);
+		assert!(effects.is_identity());
+		for name in before.animation_bone_names() {
+			assert!(
+				before
+					.rotation(name)
+					.normalize()
+					.angle_between(after.rotation(name).normalize())
+					< 0.01,
+				"air/land seam should stay continuous on {name}"
+			);
+		}
+		Ok(())
 	}
 }

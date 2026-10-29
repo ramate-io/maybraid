@@ -404,6 +404,12 @@ fn apply_masked(
 			continue;
 		}
 		let bone = BoneId(index as u16);
+		// Masked channels author rotations; their translation and scale still
+		// belong to the current effective rest, including after a proportion edit.
+		if let (Some(source), Some(target)) = (rest.local.get(index), out.local.get_mut(index)) {
+			target.translation = source.translation;
+			target.scale = source.scale;
+		}
 		let Some((swing, flex, twist)) = channels_for(name, pose) else {
 			continue;
 		};
@@ -799,5 +805,25 @@ mod tests {
 		let parent = binding.definition.parent_rotation(&out, humerus);
 		let aimed = (parent * out.rotation(humerus) * BONE_LENGTH_AXIS).normalize();
 		assert!(aimed.dot(Vec3::new(0.0, -0.2, 1.0).normalize()) > 0.99, "aim {aimed:?}");
+	}
+	#[test]
+	fn masked_sampling_uses_updated_rest_translations_and_scales() -> anyhow::Result<()> {
+		let mut binding = identity_binding();
+		let femur = binding.definition.id("femur.L").ok_or_else(|| anyhow::anyhow!("femur.L"))?;
+		let mut out = binding.effective_rest.clone();
+		let mut updated = binding.effective_rest.clone();
+		updated.local[femur.index()].translation = Vec3::new(0.1, 0.8, 0.0);
+		updated.local[femur.index()].scale = Vec3::new(0.8, 1.2, 0.9);
+		binding.refresh_rest(updated);
+		let mut pose = HumanoidPose::default();
+		pose.leg_mut(Side::Left).hip_flexion = 0.42;
+		let mask = humanoid_bone_bit("femur.L").ok_or_else(|| anyhow::anyhow!("femur mask"))?;
+		resolve_humanoid_masked(&pose, mask, &binding, &mut out);
+		let mut expected = PoseBuffer::identity(binding.definition.len());
+		resolve_humanoid(&pose, &binding, &mut expected);
+		assert_eq!(out, expected, "masked rotation writes must rebase every transform component");
+		resolve_humanoid_masked(&pose, mask, &binding, &mut out);
+		assert_eq!(out, expected, "repeated sampling must not retain an old rest transform");
+		Ok(())
 	}
 }

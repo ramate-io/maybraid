@@ -11,20 +11,20 @@ mod ui;
 mod weapon_gallery;
 
 pub use character::{
-	request_show_character, CharacterEditBaseline, CharacterMenuState, CharacterScreen,
-	CharacterScreenPlugin, RequestShowCharacter,
+	CharacterEditBaseline, CharacterMenuState, CharacterScreen, CharacterScreenPlugin,
+	RequestShowCharacter, request_show_character,
 };
-pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
+pub use commands::{PLAYGROUND_CLI_NAME, PlaygroundCommand};
 pub use drop_prompt::CharacterDropPrompt;
 pub use game_commands::command::PendingStartupCommand;
 pub use leave_prompt::CharacterLeavePrompt;
 pub use preview::{CharacterPreviewLight, CharacterPreviewPlugin, CharacterPreviewRoot};
 pub use session::{
-	end_character_editor, leave_character_editor, save_editing_character, ActiveCharacter,
-	CharacterEditorReturn, CharacterSession, CharacterSessionPlugin, EditingCharacter,
-	RequestEditCharacter,
+	ActiveCharacter, CharacterEditorReturn, CharacterSession, CharacterSessionPlugin,
+	EditingCharacter, RequestEditCharacter, end_character_editor, leave_character_editor,
+	save_editing_character,
 };
-pub use weapon_gallery::{request_show_weapons, WeaponGalleryPlugin, WeaponGalleryScreen};
+pub use weapon_gallery::{WeaponGalleryPlugin, WeaponGalleryScreen, request_show_weapons};
 
 use bevy::prelude::*;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
@@ -35,15 +35,16 @@ use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use maybraid_input::{MenuNavPad, VirtualPadPlugin};
 use maybraid_menu_controller::MenuControllerPlugin;
-use menu_components::{consume_screen_back, MenuModalStack, ScreenBackPressed, TextMenuSystems};
+use maybraid_virtual_pad_controller::VirtualPadPlugin;
+use menu_components::MenuNavPad;
+use menu_components::{MenuModalStack, ScreenBackPressed, TextMenuSystems, consume_screen_back};
 use menu_screens::{
+	CreateCharacterPlugin, GalleryChoice, GalleryScreen, HomeMenuChoice, HomeScreen,
+	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettingsChoice,
+	InGameSettingsScreen, LoadingScreenPlugin, LoadingScreenSystems, SpinRevealScreen,
 	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
-	request_show_in_game_settings, CreateCharacterPlugin, GalleryChoice, GalleryScreen,
-	HomeMenuChoice, HomeScreen, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin,
-	InGameSettingsChoice, InGameSettingsScreen, LoadingScreenPlugin, LoadingScreenSystems,
-	SpinRevealScreen,
+	request_show_in_game_settings,
 };
 
 pub struct MenuPlaygroundPlugin;
@@ -90,7 +91,9 @@ impl Plugin for MenuPlaygroundPlugin {
 				echo_in_game_settings_choice,
 				echo_character_menu,
 				echo_gallery_choice,
-				editor_back.after(TextMenuSystems::Navigate),
+				editor_back
+					.after(TextMenuSystems::Navigate)
+					.after(maybraid_controllers_core::PadDeliverySystems),
 				loading_demo::run_loading_demo.before(LoadingScreenSystems::Apply),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 			),
@@ -146,6 +149,7 @@ fn echo_in_game_choice(
 						id: active.id,
 						return_to: crate::CharacterEditorReturn::InGame,
 						inventory: None,
+						lubikans: None,
 					});
 				}
 			}
@@ -239,14 +243,17 @@ mod tests {
 	use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
 	use bevy::input::{ButtonState, InputPlugin, InputSystems};
 	use bevy::prelude::*;
-	use maybraid_input::{
-		produce::keyboard::produce_keyboard, KeyboardPadMap, MenuNavPad, MenuOwnsBack, PadButton,
-		PadGameplayEnabled, VirtualPad, VirtualPadConfig,
+	use maybraid_menu_controller::{
+		InputRouter, MenuController, MenuNavCapture, RoutingEvent, dispatch,
 	};
-	use maybraid_menu_controller::{dispatch, MenuController};
+	use maybraid_virtual_pad_controller::{
+		PadButton, PrimaryVirtualPad, VirtualPadController, VirtualPadEvent, VirtualPadSystems,
+		produce::keyboard::KeyboardPad,
+	};
+	use menu_components::MenuNavPad;
 	use menu_components::{
 		HudMenu, HudMenuItem, MenuComponentsPlugin, ShortTextField, ShortTextKey, ShortTextModal,
-		TextMenuInputLock, TextMenuSystems,
+		TextMenuSystems,
 	};
 	use menu_screens::RequestShowGallery;
 
@@ -254,45 +261,49 @@ mod tests {
 	#[derive(Resource, Default)]
 	struct HeldPad(Vec<PadButton>);
 
-	/// Mirrors the menu controller's gate: the GameController backend cannot run
-	/// off the main thread, so tests skip `MenuControllerPlugin`.
-	fn gate_pad(
-		lock: Res<TextMenuInputLock>,
-		modal: Res<ShortTextModal>,
-		owns: Res<MenuOwnsBack>,
-		mut enabled: ResMut<PadGameplayEnabled>,
-		mut keys: ResMut<KeyboardPadMap>,
+	/// Exercise the real value mapping and source-owned held state without installing HID.
+	fn produce_fixture_frame(
+		held: Res<HeldPad>,
+		keyboard: Res<ButtonInput<KeyCode>>,
+		primary: Res<PrimaryVirtualPad>,
+		mut sources: Query<&mut VirtualPadController>,
+		mut sequence: Local<u64>,
+		mut events: MessageWriter<VirtualPadEvent>,
 	) {
-		enabled.set_menu(!lock.0 || modal.is_open());
-		*keys = if modal.is_open() || lock.0 || owns.0 {
-			KeyboardPadMap::Menu
-		} else {
-			KeyboardPadMap::Gameplay
+		let Ok(mut source) = sources.get_mut(primary.0) else {
+			return;
 		};
-	}
-
-	fn begin_held_pad(held: Res<HeldPad>, mut pad: ResMut<VirtualPad>) {
-		pad.begin_frame();
+		let policy = source.policy;
+		let config = source.config.clone();
+		source.pad.begin_frame();
 		for button in &held.0 {
-			pad.hold_digital(*button);
+			source.pad.hold_digital(*button);
 		}
-	}
-
-	fn finish_held_pad(
-		config: Res<VirtualPadConfig>,
-		enabled: Res<PadGameplayEnabled>,
-		mut pad: ResMut<VirtualPad>,
-		mut nav: ResMut<MenuNavPad>,
-	) {
-		if !enabled.is_enabled() {
-			pad.suppress_gameplay();
+		KeyboardPad::apply(&keyboard, policy, &mut source.pad);
+		if policy.suppress_gameplay() {
+			source.pad.suppress_gameplay();
 		}
-		pad.finish_digital();
-		nav.derive(&pad, &config, 1.0 / 60.0);
+		source.pad.apply_trigger_digital(config.trigger_press_threshold);
+		source.pad.finish_digital();
+		source.pad.tick_holds(1.0 / 60.0);
+		*sequence += 1;
+		events.write(VirtualPadEvent {
+			source: primary.0,
+			sequence: *sequence,
+			delta: std::time::Duration::from_secs_f32(1.0 / 60.0),
+			pad: source.pad.clone(),
+		});
 	}
 
 	fn editor_app() -> App {
 		let mut app = App::new();
+		maybraid_controllers_core::register_controllers_core(&mut app);
+		let source = app
+			.world_mut()
+			.spawn(maybraid_virtual_pad_controller::VirtualPadController::new(Default::default()))
+			.id();
+		app.insert_resource(maybraid_virtual_pad_controller::PrimaryVirtualPad(source));
+		app.add_observer(dispatch::interpret_menu_pad);
 		app.add_plugins((
 			MinimalPlugins,
 			AssetPlugin::default(),
@@ -302,12 +313,10 @@ mod tests {
 		.init_asset::<Font>()
 		.init_asset::<Image>()
 		.init_resource::<HeldPad>()
-		.init_resource::<VirtualPad>()
-		.init_resource::<VirtualPadConfig>()
 		.init_resource::<MenuNavPad>()
-		.init_resource::<MenuOwnsBack>()
-		.init_resource::<PadGameplayEnabled>()
-		.init_resource::<KeyboardPadMap>()
+		.init_resource::<InputRouter>()
+		.init_resource::<Messages<RoutingEvent>>()
+		.init_resource::<MenuNavCapture>()
 		.init_resource::<bevy::picking::hover::HoverMap>()
 		.init_resource::<crate::CharacterMenuState>()
 		.insert_resource(character_persist::SaveRoot::at(
@@ -315,19 +324,45 @@ mod tests {
 		))
 		.add_plugins((MenuComponentsPlugin, CharacterLeavePromptPlugin))
 		.add_plugins(menu_screens::MenuInputPlugin)
+		.configure_sets(
+			PreUpdate,
+			(
+				VirtualPadSystems::Produce,
+				VirtualPadSystems::Derive.after(VirtualPadSystems::Produce),
+			),
+		)
 		.add_systems(
 			PreUpdate,
-			(gate_pad, begin_held_pad, produce_keyboard, finish_held_pad)
+			(
+				maybraid_menu_controller::primary::sync_primary_menu_host,
+				maybraid_menu_controller::primary::sync_text_menu_capture,
+			)
 				.chain()
-				.after(InputSystems),
+				.before(maybraid_controllers_core::PadPolicySystems),
+		)
+		.add_systems(
+			PreUpdate,
+			produce_fixture_frame.in_set(VirtualPadSystems::Produce).after(InputSystems),
+		)
+		.add_systems(
+			Update,
+			maybraid_menu_controller::primary::clear_primary_menu_frame
+				.before(maybraid_controllers_core::PadDeliverySystems),
+		)
+		.configure_sets(
+			Update,
+			menu_components::PrimaryMenuFrameSystems
+				.after(maybraid_controllers_core::PadDeliverySystems),
 		)
 		.add_systems(
 			Update,
 			(
-				(dispatch::refresh_menu_focus, dispatch::dispatch_menu_nav)
-					.chain()
-					.in_set(TextMenuSystems::Navigate),
-				editor_back.after(TextMenuSystems::Navigate),
+				dispatch::refresh_menu_focus
+					.in_set(maybraid_controllers_core::CaptureResolveSystems)
+					.after(menu_components::MenuModalSystems::Sync),
+				editor_back
+					.after(TextMenuSystems::Navigate)
+					.after(maybraid_controllers_core::PadDeliverySystems),
 			),
 		);
 		let screen = app.world_mut().spawn((CharacterScreen, MenuController::default())).id();
@@ -403,6 +438,43 @@ mod tests {
 		assert!(!left_editor(&mut app));
 	}
 
+	#[derive(Resource, Default)]
+	struct ActorModalEdges(Vec<PadButton>);
+
+	fn record_actor_modal_edges(
+		event: On<maybraid_controllers_core::ActorPadEvent>,
+		mut edges: ResMut<ActorModalEdges>,
+	) {
+		for button in [PadButton::B, PadButton::Start] {
+			if event.input.payload().frame.pad.just_pressed(button) {
+				edges.0.push(button);
+			}
+		}
+	}
+
+	#[test]
+	fn primary_modal_back_and_start_finish_in_the_delivery_frame_without_actor_edges() {
+		for button in [PadButton::B, PadButton::Start] {
+			let mut app = editor_app();
+			open_keyboard(&mut app);
+			app.init_resource::<ActorModalEdges>().add_observer(record_actor_modal_edges);
+			let source = maybraid_controllers_core::InputSource::virtual_pad(
+				app.world().resource::<PrimaryVirtualPad>().0,
+			);
+			let actor =
+				maybraid_controllers_core::ActorTarget::new(app.world_mut().spawn_empty().id());
+			app.world_mut().resource_mut::<InputRouter>().assign_actor(source, actor);
+			app.world_mut().resource_mut::<HeldPad>().0 = vec![button];
+			app.update();
+			assert!(
+				!app.world().resource::<ShortTextModal>().is_open(),
+				"{button:?} must finish in the delivery frame"
+			);
+			assert!(app.world().resource::<ActorModalEdges>().0.is_empty());
+			assert!(!left_editor(&mut app));
+		}
+	}
+
 	#[test]
 	fn typing_then_b_on_the_name_keyboard_only_closes_the_keyboard() {
 		let mut app = editor_app();
@@ -461,18 +533,24 @@ mod tests {
 	}
 
 	#[test]
-	fn wasd_on_the_name_keyboard_does_not_steer_the_pad() {
+	fn wasd_on_the_name_keyboard_does_not_steer_the_pad() -> anyhow::Result<()> {
 		let mut app = editor_app();
 		open_keyboard(&mut app);
 		for key_code in [KeyCode::KeyW, KeyCode::KeyA, KeyCode::KeyS, KeyCode::KeyD] {
 			key(&mut app, key_code, ButtonState::Pressed);
 		}
 		app.update();
-		let pad = app.world().resource::<VirtualPad>();
+		let primary = app.world().resource::<PrimaryVirtualPad>();
+		let source = app
+			.world()
+			.get::<VirtualPadController>(primary.0)
+			.ok_or_else(|| anyhow::anyhow!("primary source"))?;
+		let pad = &source.pad;
 		assert_eq!(pad.move_stick, Vec2::ZERO);
 		assert_eq!(pad.dpad, Vec2::ZERO);
 		assert!(app.world().resource::<ShortTextModal>().is_open());
 		assert!(!left_editor(&mut app));
+		Ok(())
 	}
 
 	#[test]

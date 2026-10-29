@@ -90,9 +90,9 @@ impl MaterialLib for VegetationMaterialLib<'_> {
 				let handle = self.resolve_stick(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle))
-					.insert(NotShadowCaster);
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle))
+					.try_insert(NotShadowCaster);
 				true
 			}
 			MaterialId::Name(name) if name == FROND_MATERIAL => {
@@ -137,14 +137,14 @@ fn fulfill_canopy_material<M: Asset + Clone + Material>(
 	if canopy_casts {
 		commands
 			.entity(entity)
-			.remove::<MeshMaterial3d<StandardMaterial>>()
-			.insert(MeshMaterial3d(handle));
+			.try_remove::<MeshMaterial3d<StandardMaterial>>()
+			.try_insert(MeshMaterial3d(handle));
 	} else {
 		commands
 			.entity(entity)
-			.remove::<MeshMaterial3d<StandardMaterial>>()
-			.insert(MeshMaterial3d(handle))
-			.insert(NotShadowCaster);
+			.try_remove::<MeshMaterial3d<StandardMaterial>>()
+			.try_insert(MeshMaterial3d(handle))
+			.try_insert(NotShadowCaster);
 	}
 }
 
@@ -191,8 +191,8 @@ impl Plugin for VegetationMaterialRefPlugin {
 mod tests {
 	use bevy::prelude::*;
 	use material_ref::{
-		material_ref_plugin_installed, MaterialRef, MaterialRefApplied, MaterialRefPlugin,
-		MaterialRefRoot, StandardMaterialRefCache,
+		MaterialRef, MaterialRefApplied, MaterialRefPlugin, MaterialRefRoot,
+		StandardMaterialRefCache, material_ref_plugin_installed,
 	};
 	use vegetation_components::LEAF_MATERIAL;
 

@@ -32,6 +32,9 @@ pub trait MaterialLib {
 	///
 	/// Return `true` when a material was inserted. Return `false` so a composed
 	/// parent lib can try the next domain lib (and eventually a Standard fallback).
+	/// Targets can retire before deferred commands apply. Use `try_insert` and
+	/// `try_remove` for material assignment; the caller's tolerant completion
+	/// marker does not protect commands queued inside this method.
 	fn try_fulfill(
 		&mut self,
 		entity: Entity,

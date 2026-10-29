@@ -24,7 +24,7 @@ pub use game_commands::command::PendingStartupCommand;
 pub use player::{
 	holding_elevation, player_position_above_surface, player_spawn_point_at, spawn_player_body,
 	surface_or_hold_at, AwaitingTerrainSurface, CharacterCameraFollowEnabled, CharacterLocomotion,
-	Jumping, MoveWish, MovementAction, OffTerrainAnchor, PadMovementEnabled, Player, PlayerCapsule,
+	Jumping, MoveWish, OffTerrainAnchor, PadMovementEnabled, Player, PlayerCapsule,
 	PlayerControlSystems, PlayerPhysicsEnabled, PlayerPlugin, PlayerSpawnXz, PlaygroundMode,
 	VegetationPlayerMotor,
 };
@@ -42,9 +42,11 @@ use camera::{
 use character::{apply_set_character, drive_player_locomotion};
 use characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham::DurhamSurface;
-use game_commands::command::TextEntryFocus;
 use game_commands::ui::GameCommandStatusText;
-use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
+use maybraid_character_controller::{CharacterBindSystems, CharacterControllerPlugin};
+use maybraid_controllers_core::{ActorTarget, InputRouter, InputSource};
+use maybraid_virtual_pad_controller::PrimaryVirtualPad;
+use maybraid_virtual_pad_controller::VirtualPadPlugin;
 use player::{respawn_player_on_layout, snap_player_to_composed_surface};
 
 /// Character, camera, snap, and locomotion without owning Durham fill.
@@ -52,6 +54,9 @@ pub struct VegetationHostPlugin {
 	/// Spawn and drive the playground fly/follow camera.
 	pub register_camera: bool,
 }
+
+#[derive(Resource, Default)]
+struct DefaultPrimaryAssignment(Option<Entity>);
 
 impl Default for VegetationHostPlugin {
 	fn default() -> Self {
@@ -67,29 +72,61 @@ impl Plugin for VegetationHostPlugin {
 		if !app.is_plugin_added::<PlayerPlugin>() {
 			app.add_plugins(PlayerPlugin);
 		}
+		if !app.is_plugin_added::<CharacterControllerPlugin>() {
+			app.add_plugins(CharacterControllerPlugin);
+		}
 		if !app.is_plugin_added::<CharacterHostsPlugin>() {
 			app.add_plugins(CharacterHostsPlugin);
 		}
-		app.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
-			.add_systems(
-				Update,
-				(
-					apply_set_character,
-					apply_mode_commands.after(apply_set_character),
-					snap_player_to_composed_surface
-						.after(apply_mode_commands)
-						.before(PlayerControlSystems),
-					drive_player_locomotion
-						.after(PlayerControlSystems)
-						.before(CharacterMotionSystems::Anim),
-				),
-			);
+		app.init_resource::<DefaultPrimaryAssignment>();
+		app.configure_sets(Update, PlayerControlSystems.after(CharacterBindSystems::Produce));
+		app.add_systems(
+			Update,
+			(
+				assign_primary_world_player.before(CharacterBindSystems::Route),
+				apply_set_character,
+				apply_mode_commands.after(apply_set_character),
+				snap_player_to_composed_surface
+					.after(apply_mode_commands)
+					.before(PlayerControlSystems),
+				drive_player_locomotion
+					.after(PlayerControlSystems)
+					.before(CharacterMotionSystems::Anim),
+			),
+		);
 		if self.register_camera {
 			app.add_systems(Startup, setup_camera).add_systems(
 				Update,
-				(release_modifiers_on_focus_change.before(camera_controller), camera_controller),
+				(
+					release_modifiers_on_focus_change.before(camera_controller),
+					camera_controller
+						.after(CharacterBindSystems::Produce)
+						.before(PlayerControlSystems),
+				),
 			);
 		}
+	}
+}
+
+/// Standalone host policy: bind the sole world player to the primary controller.
+/// Assembled worlds may assign an actor first; that explicit assignment wins.
+fn assign_primary_world_player(
+	primary: Res<PrimaryVirtualPad>,
+	players: Query<Entity, With<Player>>,
+	mut router: ResMut<InputRouter>,
+	mut default_assignment: ResMut<DefaultPrimaryAssignment>,
+) {
+	if default_assignment.0.is_some_and(|player| players.contains(player)) {
+		return;
+	}
+	default_assignment.0 = None;
+	let source = InputSource::virtual_pad(primary.0);
+	if router.actor(source).is_some() || !router.connected(source) {
+		return;
+	}
+	if let Ok(player) = players.single() {
+		router.assign_actor(source, ActorTarget::new(player));
+		default_assignment.0 = Some(player);
 	}
 }
 
@@ -134,12 +171,6 @@ fn apply_mode_commands(
 		}
 		commands.entity(entity).despawn();
 	}
-}
-
-fn sync_pad_gameplay(focus: Option<Res<TextEntryFocus>>, mut enabled: ResMut<PadGameplayEnabled>) {
-	// Only the console focus lane. A name-modal sets `TextEntryBlocked` so `/`
-	// stays off the field; the pad must stay up for the keypad.
-	enabled.set_text(!focus.is_some_and(|focus| focus.0));
 }
 
 #[cfg(test)]

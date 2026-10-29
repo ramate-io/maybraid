@@ -7,22 +7,25 @@ use bevy::text::FontSize;
 use durham::DurhamSurface;
 use game_commands::command::TextEntryFocus;
 use geneva::{LanguageOverlay, NameKey, NamedOverlay};
-use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use maybraid_character_controller::{
+	ActorControlStatus, ActorIntentEvent, CharacterControlSystems, CharacterIntent,
+};
+use maybraid_controllers_core::{
+	CaptureKind, CaptureToken, InputRouting, InputSource, ScopeOwner, UiPadEvent, UiTarget,
+};
+use maybraid_session::{SessionCapabilitySystems, WorldGameplayEnabled};
+use maybraid_virtual_pad_controller::{PadButton, PrimaryVirtualPad};
 use menu_components::{
 	BARLOW_BLACK, BONES_ICON, ITEM_FONT_SIZE, MAP_ARROW_ICON, MAP_GROVE_ICON, MAP_HOUSE_ICON,
 	MAP_MOUNTAIN_ICON, MAP_TOWN_ICON, MAP_TREE_ICON, MAP_WATER_ICON, NOTO_SANS_REGULAR,
 	TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
-use player::CameraFollow;
-use player_camera::{
-	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
-};
+use player_camera::{CameraController, FollowCamera, PlayerCameraSystems};
 use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiRegistry};
 use richmond::DiscoverablePlace;
 use world_player::{Player as VegetationPlayer, PlayerLifeSet, PlaygroundMode};
 
-use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
 use crate::player_lifecycle::WorldPlayerRespawnState;
 use combat_hud::ScreenPin;
 
@@ -66,6 +69,8 @@ pub struct WorldMapView {
 	pub close_locked: bool,
 	/// Death picker / new body: stamp third person instead of restoring the last POV.
 	pub begin_life: bool,
+	/// Source and actor allowed to operate this single presented map.
+	pub(crate) owner: Option<(InputSource, Entity)>,
 }
 
 impl Default for WorldMapView {
@@ -76,6 +81,7 @@ impl Default for WorldMapView {
 			height: DEFAULT_MAP_HEIGHT,
 			close_locked: false,
 			begin_life: false,
+			owner: None,
 		}
 	}
 }
@@ -89,6 +95,12 @@ impl WorldMapView {
 			self.height = DEFAULT_MAP_HEIGHT;
 		}
 		self.close_locked = close_locked;
+		self.owner = None;
+	}
+
+	fn open_for_actor(&mut self, focus: Vec2, source: InputSource, actor: Entity) {
+		self.open_at(focus, false);
+		self.owner = Some((source, actor));
 	}
 
 	pub fn close(&mut self) {
@@ -97,10 +109,29 @@ impl WorldMapView {
 		}
 		self.open = false;
 		self.close_locked = false;
+		self.owner = None;
 	}
 
 	pub fn request_begin_life(&mut self) {
 		self.begin_life = true;
+	}
+
+	fn presented_player_xz(
+		&self,
+		primary: Option<Entity>,
+		players: &Query<(Entity, &Transform, Option<&ActorControlStatus>), With<VegetationPlayer>>,
+	) -> Option<Vec2> {
+		if let Some((_, actor)) = self.owner {
+			return players.get(actor).ok().map(|(_, transform, _)| transform.translation.xz());
+		}
+		let primary = primary?;
+		players
+			.iter()
+			.find(|(_, _, control)| {
+				control.and_then(|control| control.source()).and_then(InputSource::entity)
+					== Some(primary)
+			})
+			.map(|(_, transform, _)| transform.translation.xz())
 	}
 }
 
@@ -113,7 +144,7 @@ pub(crate) enum WorldMapSet {
 struct MapLabelFont(Handle<Font>);
 
 #[derive(Component)]
-struct MapNameHud;
+pub(crate) struct MapNameHud;
 
 #[derive(Component)]
 struct RespawnPickerTitle;
@@ -245,19 +276,18 @@ impl Plugin for WorldMapViewPlugin {
 		app.init_resource::<WorldMapView>()
 			.init_resource::<LanguageOverlay>()
 			.init_resource::<MapPresentation>()
+			.init_resource::<MapOverlayCapture>()
+			.add_observer(toggle_map_view)
+			.add_observer(handle_map_pad)
 			.configure_sets(
 				Update,
 				WorldMapSet::Toggle
 					.after(CharacterControlSystems)
+					.after(SessionCapabilitySystems)
 					.before(PlayerCameraSystems::Look),
 			)
 			.add_systems(Startup, spawn_map_name_hud)
-			.add_systems(
-				Update,
-				(toggle_map_view, sync_map_camera_locks, pan_map_view)
-					.chain()
-					.in_set(WorldMapSet::Toggle),
-			)
+			.add_systems(Update, sync_map_capture.in_set(WorldMapSet::Toggle))
 			.add_systems(
 				Update,
 				stamp_map_camera
@@ -363,84 +393,106 @@ fn spawn_map_name_hud(mut commands: Commands, assets: Res<AssetServer>) {
 }
 
 pub(crate) fn toggle_map_view(
+	event: On<ActorIntentEvent>,
 	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
 	text_focus: Res<TextEntryFocus>,
+	primary: Option<Res<PrimaryVirtualPad>>,
 	mut map: ResMut<WorldMapView>,
-	mut intents: MessageReader<CharacterIntent>,
 	players: Query<&Transform, With<VegetationPlayer>>,
-	followers: Query<&Transform, (With<CameraFollow>, Without<Camera3d>)>,
 ) {
-	if text_focus.0 || *mode != PlaygroundMode::Character {
+	if !matches!(event.input.payload(), CharacterIntent::ToggleMap)
+		|| text_focus.0
+		|| *mode != PlaygroundMode::Character
+	{
 		return;
-	}
-	let mut open = false;
-	let mut close = false;
-	for intent in intents.read() {
-		match intent {
-			CharacterIntent::ToggleMap if map.open => close = true,
-			CharacterIntent::ToggleMap => open = true,
-			_ => {}
-		}
 	}
 	if map.close_locked {
 		return;
 	}
-	if close && map.open {
+	if map.open {
+		if map.owner == Some((event.input.source(), event.entity)) {
+			map.close();
+		}
+		return;
+	}
+	if !gameplay.0
+		|| primary
+			.as_deref()
+			.is_none_or(|primary| event.input.source().entity() != Some(primary.0))
+	{
+		return;
+	}
+	let Ok(player) = players.get(event.entity) else {
+		return;
+	};
+	map.open_for_actor(player.translation.xz(), event.input.source(), event.entity);
+}
+
+#[derive(Resource, Default)]
+struct MapOverlayCapture {
+	token: Option<CaptureToken>,
+}
+
+fn sync_map_capture(
+	mut map: ResMut<WorldMapView>,
+	mut router: InputRouting,
+	mut capture: ResMut<MapOverlayCapture>,
+	hud: Query<Entity, With<MapNameHud>>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+	actors: Query<Option<&ActorControlStatus>>,
+) {
+	if let Some((source, actor)) = map.owner {
+		let valid = actors.get(actor).is_ok_and(|status| {
+			status.is_none_or(|status| status.source() == Some(source) && status.is_connected())
+		});
+		if !valid {
+			map.close();
+		}
+	}
+	let source = map
+		.owner
+		.map(|(source, _)| source)
+		.or_else(|| primary.as_deref().map(|primary| InputSource::virtual_pad(primary.0)));
+	let owner = hud.single().ok().map(|entity| ScopeOwner::ui(UiTarget::new(entity)));
+	router.replace_owned_capture(
+		&mut capture.token,
+		source.unwrap_or(InputSource::local_pad()),
+		(map.open && !map.close_locked).then_some(owner).flatten(),
+		CaptureKind::Overlay,
+	);
+}
+
+fn handle_map_pad(
+	event: On<UiPadEvent>,
+	mut commands: Commands,
+	mut map: ResMut<WorldMapView>,
+	hud: Query<Entity, With<MapNameHud>>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+) {
+	let source = map
+		.owner
+		.map(|(source, _)| source)
+		.or_else(|| primary.as_deref().map(|primary| InputSource::virtual_pad(primary.0)));
+	if !map.open || hud.get(event.entity).is_err() || source != Some(event.input.source()) {
+		return;
+	}
+	let frame = event.input.payload();
+	let pad = &frame.pad;
+	if !map.close_locked
+		&& (pad.keys.just_pressed(KeyCode::KeyM)
+			|| (pad.just_pressed(PadButton::Select) && !pad.keys.just_pressed(KeyCode::Tab)))
+	{
+		event.input.consume_frame(&mut commands);
 		map.close();
 		return;
 	}
-	if !open || map.open || !gameplay.0 {
-		return;
-	}
-	let Some(xz) = players
-		.iter()
-		.next()
-		.or_else(|| followers.iter().next())
-		.map(|transform| transform.translation.xz())
-	else {
-		return;
-	};
-	map.open_at(xz, false);
-}
-
-fn sync_map_camera_locks(
-	map: Res<WorldMapView>,
-	gameplay: Res<WorldGameplayEnabled>,
-	edit: Option<Res<InventoryEditCameraFollow>>,
-	mut locked: Option<ResMut<CameraPovLocked>>,
-	mut suppressed: Option<ResMut<CameraLookSuppressed>>,
-) {
-	let presenting = map.open && gameplay.0;
-	let hold = presenting || edit.is_some_and(|edit| edit.0);
-	if let Some(locked) = locked.as_deref_mut() {
-		locked.0 = hold;
-	}
-	if let Some(suppressed) = suppressed.as_deref_mut() {
-		suppressed.0 = presenting;
-	}
-}
-
-fn pan_map_view(
-	time: Res<Time>,
-	mut map: ResMut<WorldMapView>,
-	mut intents: MessageReader<CharacterIntent>,
-) {
-	if !map.open {
-		return;
-	}
-	let mut zoom_in = 0.0;
-	let mut zoom_out = 0.0;
-	for intent in intents.read() {
-		match *intent {
-			CharacterIntent::Focus(value) => zoom_in += value,
-			CharacterIntent::Ads(value) => zoom_out += value,
-			_ => {}
-		}
-	}
+	let zoom_in = pad.trigger_focus;
+	let zoom_out =
+		if pad.pressed(PadButton::BumperFocus) && !pad.bumper_chord_held() { 1.0 } else { 0.0 };
 	let zoom = (zoom_in - zoom_out).clamp(-1.0, 1.0);
-	map.height =
-		(map.height * (1.0 - zoom * 0.6 * time.delta_secs())).clamp(MIN_MAP_HEIGHT, MAX_MAP_HEIGHT);
+	map.height = (map.height * (1.0 - zoom * 0.6 * frame.delta.as_secs_f32()))
+		.clamp(MIN_MAP_HEIGHT, MAX_MAP_HEIGHT);
 }
 
 fn stamp_map_camera(
@@ -1500,7 +1552,8 @@ fn place_edge_arrow(node: &mut Node, label: Vec2, dir: Vec2) {
 fn sync_map_player_marker(
 	map: Res<WorldMapView>,
 	gameplay: Res<WorldGameplayEnabled>,
-	players: Query<&Transform, With<VegetationPlayer>>,
+	primary: Option<Res<PrimaryVirtualPad>>,
+	players: Query<(Entity, &Transform, Option<&ActorControlStatus>), With<VegetationPlayer>>,
 	camera: MapCameraQuery,
 	surface: DurhamSurface,
 	mut markers: Query<(&mut Node, &mut Visibility), With<MapPlayerMarker>>,
@@ -1508,10 +1561,7 @@ fn sync_map_player_marker(
 	let screen = if !map.open || !gameplay.0 || picker_prompt_visible(&map, gameplay.0) {
 		None
 	} else {
-		players
-			.iter()
-			.next()
-			.map(|transform| transform.translation.xz())
+		map.presented_player_xz(primary.as_deref().map(|primary| primary.0), &players)
 			.and_then(|xz| MapHudMarker::project(&surface, &camera, xz))
 	};
 	for (mut node, mut visibility) in &mut markers {
@@ -1538,13 +1588,12 @@ fn sync_map_death_bones(
 	surface: DurhamSurface,
 	mut markers: Query<(&mut Node, &mut Visibility), With<MapDeathBones>>,
 ) {
-	let screen = if !picker_prompt_visible(&map, gameplay.0)
-		|| pending_is_first_life(pending.as_deref())
-	{
-		None
-	} else {
-		death_xz(pending.as_deref()).and_then(|xz| MapHudMarker::project(&surface, &camera, xz))
-	};
+	let screen =
+		if !picker_prompt_visible(&map, gameplay.0) || pending_is_first_life(pending.as_deref()) {
+			None
+		} else {
+			death_xz(pending.as_deref()).and_then(|xz| MapHudMarker::project(&surface, &camera, xz))
+		};
 	for (mut node, mut visibility) in &mut markers {
 		MapHudMarker::DEATH_BONES.apply(&mut node, &mut visibility, screen);
 	}
@@ -1861,9 +1910,10 @@ fn place_selection_marker(node: &mut Node, screen: Vec2) {
 fn draw_highlighted_poi(
 	map: Res<WorldMapView>,
 	gameplay: Res<WorldGameplayEnabled>,
+	primary: Option<Res<PrimaryVirtualPad>>,
 	registry: Option<Res<PoiRegistry>>,
 	pending: Option<Res<WorldPlayerRespawnState>>,
-	players: Query<&Transform, With<VegetationPlayer>>,
+	players: Query<(Entity, &Transform, Option<&ActorControlStatus>), With<VegetationPlayer>>,
 	surface: DurhamSurface,
 	mut gizmos: Gizmos,
 ) {
@@ -1871,7 +1921,9 @@ fn draw_highlighted_poi(
 		return;
 	}
 	if !picker_prompt_visible(&map, gameplay.0) {
-		if let Some(xz) = players.iter().next().map(|transform| transform.translation.xz()) {
+		if let Some(xz) =
+			map.presented_player_xz(primary.as_deref().map(|primary| primary.0), &players)
+		{
 			if let Ok(world) = pin_world(&surface, xz) {
 				gizmos.sphere(Isometry3d::from_translation(world), 2.2, TEXT_YELLOW);
 			}
@@ -1912,10 +1964,27 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use game_commands::command::TextEntryFocus;
+	use maybraid_controllers_core::InputRouter;
 	use player::CameraFollow;
+	#[derive(Resource)]
+	struct ToggleObserverInstalled;
 
-	fn write_toggle(world: &mut World) {
-		world.write_message(CharacterIntent::ToggleMap);
+	fn map_source(world: &mut World) -> (Entity, InputSource) {
+		let source = world.spawn_empty().id();
+		world.insert_resource(PrimaryVirtualPad(source));
+		(source, InputSource::virtual_pad(source))
+	}
+
+	fn write_toggle(world: &mut World, player: Entity, source: InputSource) {
+		use maybraid_controllers_core::{ActorTarget, Routed};
+		if !world.contains_resource::<ToggleObserverInstalled>() {
+			world.add_observer(toggle_map_view);
+			world.insert_resource(ToggleObserverInstalled);
+		}
+		world.trigger(ActorIntentEvent {
+			entity: player,
+			input: Routed::to_actor(source, ActorTarget::new(player), CharacterIntent::ToggleMap),
+		});
 	}
 
 	#[test]
@@ -1925,90 +1994,256 @@ mod tests {
 		world.insert_resource(WorldGameplayEnabled(true));
 		world.insert_resource(TextEntryFocus(false));
 		world.init_resource::<WorldMapView>();
-		world.init_resource::<Messages<CharacterIntent>>();
 		let player = world
 			.spawn((VegetationPlayer, CameraFollow, Transform::from_xyz(12.0, 3.0, -8.0)))
 			.id();
-
-		write_toggle(&mut world);
+		let (source_entity, source) = map_source(&mut world);
+		world.entity_mut(player).insert(ActorControlStatus::assigned(source));
+		world.spawn(MapNameHud);
+		world.init_resource::<InputRouter>();
+		world.resource_mut::<InputRouter>().set_local_source(source_entity);
+		world.init_resource::<Messages<maybraid_controllers_core::RoutingEvent>>();
+		world.init_resource::<MapOverlayCapture>();
+		write_toggle(&mut world, player, source);
 		world
-			.run_system_once(toggle_map_view)
+			.run_system_once(sync_map_capture)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		world
-			.run_system_once(crate::camera::sync_camera_mode)
+			.run_system_once(crate::camera::sync_camera_session_state)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
 		let map = world.resource::<WorldMapView>();
 		assert!(map.open);
 		assert_eq!(map.focus, Vec2::new(12.0, -8.0));
-		assert!(!map.close_locked);
+		assert_eq!(map.owner, Some((source, player)));
 		assert!(world.get::<CameraFollow>(player).is_some());
+		assert!(world.resource::<InputRouter>().blocks_actor(source));
 		Ok(())
 	}
 
 	#[test]
-	fn locked_map_ignores_toggle() -> anyhow::Result<()> {
+	fn map_and_menu_captures_release_independently() -> anyhow::Result<()> {
+		use maybraid_controllers_core::{CaptureKind, ScopeOwner, UiTarget};
+		let mut world = World::new();
+		let (source_entity, source) = map_source(&mut world);
+		let player = world.spawn_empty().id();
+		world.spawn(MapNameHud);
+		world.insert_resource(WorldMapView {
+			open: true,
+			owner: Some((source, player)),
+			..default()
+		});
+		world.init_resource::<InputRouter>();
+		world.resource_mut::<InputRouter>().set_local_source(source_entity);
+		world.init_resource::<Messages<maybraid_controllers_core::RoutingEvent>>();
+		world.init_resource::<MapOverlayCapture>();
+		world
+			.run_system_once(sync_map_capture)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let menu = world.resource_mut::<InputRouter>().acquire_capture(
+			source,
+			ScopeOwner::ui(UiTarget::new(Entity::from_bits(7))),
+			CaptureKind::MenuNav,
+		);
+		assert_eq!(world.resource::<InputRouter>().captures().len(), 2);
+		world.resource_mut::<InputRouter>().release_capture(menu);
+		world
+			.run_system_once(sync_map_capture)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<InputRouter>().blocks_actor(source));
+		assert_eq!(
+			world.resource::<InputRouter>().top_capture().map(|layer| layer.kind()),
+			Some(CaptureKind::Overlay)
+		);
+		world.resource_mut::<WorldMapView>().close();
+		world
+			.run_system_once(sync_map_capture)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<InputRouter>().captures().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn locked_respawn_map_leaves_input_to_picker_capture() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let (source_entity, _) = map_source(&mut world);
+		world.spawn(MapNameHud);
+		world.insert_resource(WorldMapView { open: true, close_locked: true, ..default() });
+		world.init_resource::<InputRouter>();
+		world.resource_mut::<InputRouter>().set_local_source(source_entity);
+		world.init_resource::<Messages<maybraid_controllers_core::RoutingEvent>>();
+		world.init_resource::<MapOverlayCapture>();
+		world
+			.run_system_once(sync_map_capture)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<InputRouter>().captures().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn only_the_primary_actor_can_open_the_presented_map() {
 		let mut world = World::new();
 		world.insert_resource(PlaygroundMode::Character);
 		world.insert_resource(WorldGameplayEnabled(true));
 		world.insert_resource(TextEntryFocus(false));
-		world.insert_resource(WorldMapView {
-			open: true,
-			focus: Vec2::ZERO,
-			height: DEFAULT_MAP_HEIGHT,
-			close_locked: true,
-			begin_life: false,
-		});
-		world.init_resource::<Messages<CharacterIntent>>();
-		write_toggle(&mut world);
-		world
-			.run_system_once(toggle_map_view)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.init_resource::<WorldMapView>();
+		let primary = world.spawn((VegetationPlayer, Transform::from_xyz(10.0, 0.0, 0.0))).id();
+		let secondary = world.spawn((VegetationPlayer, Transform::from_xyz(90.0, 0.0, 0.0))).id();
+		let (_, source) = map_source(&mut world);
+		write_toggle(&mut world, secondary, InputSource::virtual_pad(secondary));
+		assert!(!world.resource::<WorldMapView>().open);
+		write_toggle(&mut world, primary, source);
+		assert_eq!(world.resource::<WorldMapView>().focus, Vec2::new(10.0, 0.0));
+	}
+
+	#[test]
+	fn locked_map_ignores_toggle() {
+		let mut world = World::new();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(TextEntryFocus(false));
+		world.insert_resource(WorldMapView { open: true, close_locked: true, ..default() });
+		let player = world.spawn((VegetationPlayer, Transform::IDENTITY)).id();
+		let (_, source) = map_source(&mut world);
+		write_toggle(&mut world, player, source);
 		assert!(world.resource::<WorldMapView>().open);
 		assert!(world.resource::<WorldMapView>().close_locked);
-		Ok(())
 	}
 
 	#[test]
-	fn stick_intents_do_not_pan_the_map() -> anyhow::Result<()> {
+	fn captured_map_accepts_only_its_own_source_for_close() {
+		use maybraid_controllers_core::{Routed, UiTarget};
+		use maybraid_virtual_pad_controller::{VirtualPad, VirtualPadEvent};
 		let mut world = World::new();
-		world.init_resource::<Time>();
+		let hud = world.spawn(MapNameHud).id();
+		let actor = world.spawn_empty().id();
+		let (source_entity, source) = map_source(&mut world);
 		world.insert_resource(WorldMapView {
 			open: true,
-			focus: Vec2::new(10.0, 20.0),
-			height: DEFAULT_MAP_HEIGHT,
-			close_locked: false,
-			begin_life: false,
+			owner: Some((source, actor)),
+			..default()
 		});
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.write_message(CharacterIntent::Move(Vec2::X));
-		world.write_message(CharacterIntent::Look(Vec2::Y));
-		world
-			.run_system_once(pan_map_view)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert_eq!(world.resource::<WorldMapView>().focus, Vec2::new(10.0, 20.0));
-		Ok(())
-	}
-
-	#[test]
-	fn toggle_map_closes_an_unlocked_map() -> anyhow::Result<()> {
-		let mut world = World::new();
-		world.insert_resource(PlaygroundMode::Character);
-		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(TextEntryFocus(false));
-		world.insert_resource(WorldMapView {
-			open: true,
-			focus: Vec2::ZERO,
-			height: DEFAULT_MAP_HEIGHT,
-			close_locked: false,
-			begin_life: false,
+		world.add_observer(handle_map_pad);
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.hold_digital(PadButton::Select);
+		pad.finish_digital();
+		let frame = VirtualPadEvent {
+			source: source_entity,
+			sequence: 1,
+			delta: std::time::Duration::from_millis(16),
+			pad,
+		};
+		world.trigger(UiPadEvent {
+			entity: hud,
+			input: Routed::to_ui(
+				InputSource::virtual_pad(actor),
+				UiTarget::new(hud),
+				frame.clone(),
+			),
 		});
-		world.init_resource::<Messages<CharacterIntent>>();
-		world.write_message(CharacterIntent::ToggleMap);
-		world
-			.run_system_once(toggle_map_view)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<WorldMapView>().open);
+		world.trigger(UiPadEvent {
+			entity: hud,
+			input: Routed::to_ui(source, UiTarget::new(hud), frame),
+		});
 		assert!(!world.resource::<WorldMapView>().open);
+	}
+
+	#[derive(Resource, Default)]
+	struct MapToggleIntents(usize);
+
+	#[derive(Resource, Default)]
+	struct MapUiFrames(Vec<Entity>);
+
+	fn record_map_toggle(event: On<ActorIntentEvent>, mut intents: ResMut<MapToggleIntents>) {
+		if matches!(event.input.payload(), CharacterIntent::ToggleMap) {
+			intents.0 += 1;
+		}
+	}
+
+	fn record_map_ui(event: On<UiPadEvent>, mut frames: ResMut<MapUiFrames>) {
+		frames.0.push(event.entity);
+	}
+
+	#[test]
+	fn select_closes_captured_map_without_reopening_through_actor_shell() -> anyhow::Result<()> {
+		use maybraid_character_controller::produce::produce_character_intents;
+		use maybraid_controllers_core::{
+			register_controllers_core, ActorTarget, CaptureKind, InputRouter, PadDeliverySystems,
+		};
+		use maybraid_virtual_pad_controller::{
+			PadButton, PadDevices, PrimaryVirtualPad, VirtualPad, VirtualPadController,
+			VirtualPadEvent,
+		};
+		use std::time::Duration;
+
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		register_controllers_core(&mut app);
+		app.insert_resource(PlaygroundMode::Character)
+			.insert_resource(WorldGameplayEnabled(true))
+			.insert_resource(TextEntryFocus(false))
+			.init_resource::<WorldMapView>()
+			.init_resource::<MapOverlayCapture>()
+			.init_resource::<MapToggleIntents>()
+			.init_resource::<MapUiFrames>()
+			.add_observer(produce_character_intents)
+			.add_observer(toggle_map_view)
+			.add_observer(handle_map_pad)
+			.add_observer(record_map_toggle)
+			.add_observer(record_map_ui)
+			.add_systems(
+				Update,
+				(bevy::ecs::schedule::ApplyDeferred, sync_map_capture)
+					.chain()
+					.after(PadDeliverySystems),
+			);
+
+		let source_entity = app
+			.world_mut()
+			.spawn(VirtualPadController::new(PadDevices::keyboard_mouse()))
+			.id();
+		let source = InputSource::virtual_pad(source_entity);
+		app.insert_resource(PrimaryVirtualPad(source_entity));
+		app.world_mut().resource_mut::<InputRouter>().set_local_source(source_entity);
+		let actor = app
+			.world_mut()
+			.spawn((VegetationPlayer, Transform::IDENTITY, ActorControlStatus::assigned(source)))
+			.id();
+		app.world_mut()
+			.resource_mut::<InputRouter>()
+			.assign_actor(source, ActorTarget::new(actor));
+		let hud = app.world_mut().spawn(MapNameHud).id();
+
+		for sequence in [1, 2] {
+			let mut pad = VirtualPad::default();
+			pad.begin_frame();
+			pad.hold_digital(PadButton::Select);
+			pad.finish_digital();
+			app.world_mut().write_message(VirtualPadEvent {
+				source: source_entity,
+				sequence,
+				delta: Duration::from_millis(16),
+				pad,
+			});
+			app.update();
+			if sequence == 1 {
+				assert!(app.world().resource::<WorldMapView>().open, "first Select opens map");
+				assert_eq!(
+					app.world().resource::<InputRouter>().top_capture().map(|layer| layer.kind()),
+					Some(CaptureKind::Overlay)
+				);
+			}
+		}
+
+		assert_eq!(app.world().resource::<MapUiFrames>().0, [hud]);
+		assert_eq!(app.world().resource::<MapToggleIntents>().0, 1);
+		assert!(
+			!app.world().resource::<WorldMapView>().open,
+			"closing Select must not reopen the map"
+		);
+		assert!(app.world().resource::<InputRouter>().captures().is_empty());
 		Ok(())
 	}
 
@@ -2036,6 +2271,7 @@ mod tests {
 			kind: PoiKind::new("mobs/vegetation"),
 			position: Vec3::new(xz.x, 4.0, xz.y),
 			arrival_radius: 8.0,
+			support: poi_intelligence::PoiSupport::Terrain,
 			salience: 1.0,
 			local: true,
 			global: false,
@@ -2069,6 +2305,7 @@ mod tests {
 			kind: LOCAL_POI,
 			position: Vec3::new(10.0, 4.0, 6.0),
 			arrival_radius: 8.0,
+			support: poi_intelligence::PoiSupport::Terrain,
 			salience: 1.0,
 			local: true,
 			global: false,
@@ -2116,6 +2353,7 @@ mod tests {
 			height: DEFAULT_MAP_HEIGHT,
 			close_locked: false,
 			begin_life: false,
+			owner: None,
 		};
 		let overlay = LanguageOverlay {
 			names: vec![NamedOverlay {
@@ -2145,6 +2383,7 @@ mod tests {
 			height: DEFAULT_MAP_HEIGHT,
 			close_locked: false,
 			begin_life: false,
+			owner: None,
 		};
 		let overlay = LanguageOverlay {
 			names: vec![

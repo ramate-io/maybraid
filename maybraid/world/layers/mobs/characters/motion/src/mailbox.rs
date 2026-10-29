@@ -15,32 +15,34 @@ use bevy::ecs::batching::BatchingStrategy;
 use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
-	Animation, Effects,
 	animations::{
 		Idle, Jab, PowerStrafe, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat,
-		SquatDescent, THINK_AGAIN_DURATION, ThinkAgain, Tuck, TwoFootedTuckedFlip, UprightLeap,
-		UprightPowerDash,
+		SquatDescent, ThinkAgain, Tuck, TwoFootedTuckedFlip, UprightLeap, UprightPowerDash,
+		THINK_AGAIN_DURATION,
 	},
+	Animation, Effects,
 };
 use character_rigs::{
-	Name as RigName,
 	authoring::{
-		ArmatureOffset, BlendCurve, PoseBuffer, RigBinding, RigDefinition,
-		forelimbed_v0_definition, humanoid_v0_definition, quadruped_v0_definition,
+		forelimbed_v0_definition, humanoid_v0_definition, quadruped_v0_definition, ArmatureOffset,
+		BlendCurve, PoseBuffer, RigBinding, RigDefinition,
 	},
 	rigs::{
-		forelimbed_v0::ForelimbedV0Rig, humanoid_v0::HumanoidV0Rig, quadruped_v0::QuadrupedV0Rig,
+		forelimbed_v0::ForelimbedV0Rig,
+		humanoid_v0::{HumanoidForearmEndpoints, HumanoidV0Rig},
+		quadruped_v0::QuadrupedV0Rig,
 	},
+	Name as RigName,
 };
 use intelligence_lod::{
-	IntelligenceFocus, IntelligenceLod, IntelligenceLookFrame, IntelligencePriority, look_applies,
+	look_applies, IntelligenceFocus, IntelligenceLod, IntelligenceLookFrame, IntelligencePriority,
 };
 
 use crate::clip::{AnimClip, AnimId, AnimRefRoot};
-use crate::clip_cache::{AnimClipCache, PreparedClip, apply_evaluated_sample};
+use crate::clip_cache::{apply_evaluated_sample, AnimClipCache, PreparedClip};
 use crate::markers::{AnimateBones, AnimateEffects, SuspendAnimation};
 use crate::plant::plant_lod_entity;
-use crate::rig::{BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind, bone_map_ready};
+use crate::rig::{bone_map_ready, BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind};
 use rigs::PoseSkipRotation;
 use std::collections::HashSet;
 
@@ -111,6 +113,7 @@ pub struct AnimMailbox {
 	/// Prepared clip table. Rebuilt when the selected clip or its parameters change.
 	pub prepared_clip: Option<PreparedClip>,
 	prepared_from: Option<AnimClip>,
+	last_clip: Option<AnimClip>,
 }
 
 /// Sample coordinate for the current clip. When present, [`tick_anim_mailbox`]
@@ -143,6 +146,7 @@ impl AnimMailbox {
 			bind_transform,
 			prepared_clip: None,
 			prepared_from: None,
+			last_clip: None,
 		}
 	}
 
@@ -188,6 +192,20 @@ impl AnimMailbox {
 		if self.posed {
 			self.from_pose.copy_from(&self.output);
 		}
+	}
+
+	/// Capture the currently displayed pose as a blend source and restart clip time.
+	///
+	/// Use this when the next sample stays on the same [`AnimId`] (left jab →
+	/// right jab) so the mailbox still crossfades from the visible pose, the same
+	/// way [`tick_anim_mailbox`] does when [`AnimId`] changes. Authoring
+	/// [`character_animations::animations::Transition::from_visible`] is the
+	/// offline equivalent; the mailbox already owns the runtime crossfade.
+	pub fn restart_from_visible(&mut self) {
+		self.capture_base_for_crossfade();
+		self.from_offset = self.displayed_offset;
+		self.blend_progress = 0.0;
+		self.clip_progress = 0.0;
 	}
 
 	#[cfg(test)]
@@ -412,10 +430,26 @@ pub fn tick_anim_mailbox(
 		let requested = root.0.clip;
 		let requested_id = requested.id();
 		if mailbox.last != Some(requested_id) {
+			let handoff =
+				match (mailbox.last_clip.filter(|_| mailbox.clip_progress >= 1.0), requested_id) {
+					(Some(AnimClip::QuadrupedRunStart(_)), AnimId::QuadrupedRun) => Some(
+						character_animations::animations::QuadrupedRunStart::handoff_run_phase(),
+					),
+					(Some(AnimClip::QuadrupedRunToGallop(shift)), AnimId::Gallop) => {
+						Some(shift.handoff_gallop_phase_for())
+					}
+					(Some(AnimClip::WalkToRun(shift)), AnimId::Run) => {
+						Some(shift.handoff_run_phase_for())
+					}
+					(Some(AnimClip::RunToWalk(shift)), AnimId::Walk) => {
+						Some(shift.handoff_walk_phase_for())
+					}
+					_ => None,
+				};
 			mailbox.capture_base_for_crossfade();
 			mailbox.from_offset = mailbox.displayed_offset;
 			mailbox.blend_progress = 0.0;
-			mailbox.clip_progress = 0.0;
+			mailbox.clip_progress = handoff.unwrap_or(0.0);
 			mailbox.last = Some(requested_id);
 		}
 
@@ -427,6 +461,7 @@ pub fn tick_anim_mailbox(
 		if mailbox.blending() {
 			mailbox.blend_progress = (mailbox.blend_progress + dt / BLEND_DURATION).min(1.0);
 		}
+		mailbox.last_clip = Some(requested);
 		refresh_prepared_clip(&mut mailbox, requested, character_rig.skeleton, cache);
 	}
 }
@@ -448,6 +483,8 @@ pub fn apply_anim_mailbox(
 			&mut Transform,
 			Has<AnimateBones>,
 			Has<AnimateEffects>,
+			Has<AnimProgress>,
+			Option<&HumanoidForearmEndpoints>,
 			Option<&mut HumanoidV0Rig>,
 			Option<&mut QuadrupedV0Rig>,
 			Option<&mut ForelimbedV0Rig>,
@@ -460,6 +497,7 @@ pub fn apply_anim_mailbox(
 		),
 	>,
 	bones: Query<&AnimBone, Without<AnimMailbox>>,
+	entities: Query<()>,
 ) {
 	let only = set.as_ref().and_then(|set| set.only.as_ref());
 	let cache = cache.as_deref();
@@ -473,6 +511,8 @@ pub fn apply_anim_mailbox(
 			mut armature,
 			write_bones,
 			write_effects,
+			manual_progress,
+			forearm_endpoints,
 			humanoid,
 			quadruped,
 			forelimbed,
@@ -485,7 +525,11 @@ pub fn apply_anim_mailbox(
 			}
 
 			let requested = root.0.clip;
-			let progress = clip_progress(requested, mailbox.clip_progress, entity);
+			let progress = if manual_progress {
+				mailbox.clip_progress
+			} else {
+				clip_progress(requested, mailbox.clip_progress, entity)
+			};
 			let blend_progress = mailbox.blend_progress;
 			let weight = clip_crossfade_weight(blend_progress);
 			let effects = match character_rig.skeleton {
@@ -496,6 +540,20 @@ pub fn apply_anim_mailbox(
 					};
 					if write_bones {
 						sync_humanoid_rest(&mut rig, &bones);
+					}
+					rig.forearm_endpoints = [HumanoidForearmEndpoints::FALLBACK; 2];
+					if let Some(endpoints) = forearm_endpoints {
+						for side in 0..2 {
+							if endpoints.sources[side]
+								.is_some_and(|source| entities.contains(source))
+							{
+								if let Some(point) =
+									endpoints.points[side].filter(|point| point.is_finite())
+								{
+									rig.forearm_endpoints[side] = point;
+								}
+							}
+						}
 					}
 					let prepared = mailbox.prepared_clip.as_ref();
 					let effects = sample_humanoid_prepared(
@@ -676,7 +734,11 @@ fn clip_progress(clip: AnimClip, clip_progress: f32, entity: Entity) -> f32 {
 
 /// Smooth-stepped crossfade weight for mailbox clip transitions.
 fn clip_crossfade_weight(blend_progress: f32) -> f32 {
-	if blend_progress >= 1.0 { 1.0 } else { BlendCurve::SmoothStep.sample(blend_progress) }
+	if blend_progress >= 1.0 {
+		1.0
+	} else {
+		BlendCurve::SmoothStep.sample(blend_progress)
+	}
 }
 
 /// Blend sampled armature effects against the pose captured at the last clip change.
@@ -878,7 +940,11 @@ where
 	if write_bones {
 		anim.apply_for(rig, progress);
 	}
-	if write_effects { anim.effects_for(rig, progress) } else { Effects::IDENTITY }
+	if write_effects {
+		anim.effects_for(rig, progress)
+	} else {
+		Effects::IDENTITY
+	}
 }
 
 /// Hash the resolved humanoid still at `progress`. Capture ids use this so a
@@ -973,6 +1039,48 @@ fn sample_humanoid(
 			write_bones,
 			write_effects,
 		),
+		AnimClip::VictoryWave(wave) => {
+			sample_split(&wave, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::Beckon(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::Bow(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::FacePalm(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::FistPump(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::HeadNod(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::Salute(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::Shrug(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::SpotScan(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::StompBeat(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::WalkStart(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::WalkStop(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::RunStart(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::RunStop(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::WalkToRun(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::RunToWalk(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::ProneDescent(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::ProneAscent(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::SquatAscent(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::FlapFromGlide(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::GlideFromFlap(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::Sit(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::Lay(clip) => sample_split(&clip, rig, progress, write_bones, write_effects),
+		AnimClip::CrouchWalk(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::GroundedGait(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::HandClap(clap) => sample_split(&clap, rig, progress, write_bones, write_effects),
 		AnimClip::PowerStrafe(params) => sample_split(
 			&PowerStrafe::new(params.side),
 			rig,
@@ -993,6 +1101,11 @@ fn sample_humanoid(
 		}
 		AnimClip::Gallop(_)
 		| AnimClip::QuadrupedRun(_)
+		| AnimClip::QuadrupedRunToGallop(_)
+		| AnimClip::QuadrupedRunStart(_)
+		| AnimClip::QuadrupedSit(_)
+		| AnimClip::QuadrupedLieDown(_)
+		| AnimClip::QuadrupedRunStop(_)
 		| AnimClip::LateralUndulation(_)
 		| AnimClip::DorsoventralUndulation(_)
 		| AnimClip::EpiphantBray(_)
@@ -1010,6 +1123,23 @@ fn sample_quadruped(
 	write_effects: bool,
 ) -> Effects {
 	match clip {
+		AnimClip::QuadrupedSit(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::QuadrupedLieDown(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+
+		AnimClip::QuadrupedRunToGallop(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+		AnimClip::QuadrupedRunStart(clip) => {
+			sample_split(&clip, rig, progress, write_bones, write_effects)
+		}
+
+		AnimClip::QuadrupedRunStop(stop) => {
+			sample_split(&stop, rig, progress, write_bones, write_effects)
+		}
 		AnimClip::QuadrupedRun(run) => {
 			sample_split(&run, rig, progress, write_bones, write_effects)
 		}
@@ -1073,6 +1203,112 @@ mod tests {
 	use std::collections::HashMap;
 	use std::hint::black_box;
 	use std::time::Instant;
+
+	#[test]
+	fn grounded_weights_keep_phase_and_completed_quad_shifts_handoff_without_cache(
+	) -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		let host = world
+			.spawn((
+				AnimRefRoot(AnimRef::new(AnimClip::grounded_gait(0.4, 0.0))),
+				AnimMailbox::new(Transform::default()),
+				CharacterRig { role: CharacterRigRole::Body, ..default() },
+			))
+			.id();
+		world
+			.run_system_once(tick_anim_mailbox)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.get_mut::<AnimMailbox>(host)
+			.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+			.clip_progress = 0.37;
+		world
+			.entity_mut(host)
+			.insert(AnimRefRoot(AnimRef::new(AnimClip::grounded_gait(1.0, 0.7))));
+		world
+			.run_system_once(tick_anim_mailbox)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(
+			world
+				.get::<AnimMailbox>(host)
+				.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+				.clip_progress,
+			0.37
+		);
+		for (walk, run, expected) in [(0.0, 0.8, 0.2), (1.0, 0.0, 1.08), (1.0, 1.0, 1.68)] {
+			assert!((AnimClip::grounded_gait(walk, run).default_speed() - expected).abs() < 1e-6);
+		}
+		world.resource_mut::<Time>().advance_by(std::time::Duration::from_secs_f32(0.1));
+		world
+			.run_system_once(tick_anim_mailbox)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let expected = 0.37 + 0.1 * AnimClip::grounded_gait(1.0, 0.7).default_speed();
+		assert!(
+			(world
+				.get::<AnimMailbox>(host)
+				.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+				.clip_progress
+				- expected)
+				.abs() < 1e-6
+		);
+		world.resource_mut::<Time>().advance_by(std::time::Duration::ZERO);
+		for (outgoing, incoming, expected) in [
+			(
+				AnimClip::quadruped_run_start(),
+				AnimClip::quadruped_run(),
+				character_animations::animations::QuadrupedRunStart::handoff_run_phase(),
+			),
+			(
+				AnimClip::quadruped_run_to_gallop(0.36),
+				AnimClip::gallop(),
+				character_animations::animations::QuadrupedRunToGallop::handoff_gallop_phase(0.36),
+			),
+		] {
+			world.entity_mut(host).insert(AnimRefRoot(AnimRef::new(outgoing)));
+			world
+				.run_system_once(tick_anim_mailbox)
+				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			world
+				.get_mut::<AnimMailbox>(host)
+				.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+				.clip_progress = 1.0;
+			world.entity_mut(host).insert(AnimRefRoot(AnimRef::new(incoming)));
+			world
+				.run_system_once(tick_anim_mailbox)
+				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			assert_eq!(
+				world
+					.get::<AnimMailbox>(host)
+					.ok_or_else(|| anyhow::anyhow!("mailbox"))?
+					.clip_progress,
+				expected
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn restart_from_visible_starts_a_mailbox_blend() {
+		let mut mailbox = AnimMailbox::new(Transform::default());
+		mailbox.posed = true;
+		mailbox.blend_progress = 1.0;
+		mailbox.clip_progress = 0.4;
+		mailbox.restart_from_visible();
+		assert!(mailbox.blending());
+		assert_eq!(mailbox.clip_progress, 0.0);
+	}
+
+	#[test]
+	fn settled_waits_for_pose_and_crossfade() {
+		let mut mailbox = AnimMailbox::new(Transform::default());
+		assert!(!mailbox.settled());
+		mailbox.posed = true;
+		mailbox.blend_progress = 0.0;
+		assert!(!mailbox.settled());
+		mailbox.blend_progress = 1.0;
+		assert!(mailbox.settled());
+	}
 
 	fn run_select(world: &mut World) {
 		world.init_resource::<MailboxApplySet>();
@@ -1260,6 +1496,133 @@ mod tests {
 		let b = Entity::from_bits(2);
 		assert_ne!(clip_progress(AnimClip::Still, 0.0, a), clip_progress(AnimClip::Still, 0.0, b));
 		assert_eq!(clip_progress(AnimClip::walk(), 0.3, a), 0.3);
+	}
+
+	#[test]
+	fn manual_still_samples_exact_coordinate_while_automatic_idles_remain_desynchronized(
+	) -> anyhow::Result<()> {
+		ensure_task_pools();
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.init_resource::<AnimClipCache>();
+		let a = spawn_mailbox_apply_host(&mut world, AnimClip::Still, 0.0);
+		let b = spawn_mailbox_apply_host(&mut world, AnimClip::Still, 0.0);
+		world.entity_mut(a).insert(AnimProgress(0.0));
+		world.entity_mut(b).insert(AnimProgress(0.0));
+		world
+			.run_system_once(tick_anim_mailbox)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(apply_anim_mailbox)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let output = |world: &World, host| -> anyhow::Result<PoseBuffer> {
+			Ok(world
+				.get::<AnimMailbox>(host)
+				.ok_or_else(|| anyhow::anyhow!("missing mailbox"))?
+				.output
+				.clone())
+		};
+		let mut expected = world
+			.get::<HumanoidV0Rig>(a)
+			.cloned()
+			.ok_or_else(|| anyhow::anyhow!("missing humanoid rig"))?;
+		Idle::default().apply_for(&mut expected, 0.0);
+		let assert_equivalent = |left: &PoseBuffer, right: &PoseBuffer| {
+			assert_eq!(left.len(), right.len());
+			for (index, (left, right)) in left.local.iter().zip(&right.local).enumerate() {
+				assert!(
+					left.translation.distance(right.translation) < 1e-6,
+					"bone {index} translation"
+				);
+				assert!(
+					left.rotation.normalize().dot(right.rotation.normalize()).abs() > 1.0 - 1e-6,
+					"bone {index} rotation"
+				);
+				assert!(left.scale.distance(right.scale) < 1e-6, "bone {index} scale");
+			}
+		};
+		assert_equivalent(&output(&world, a)?, &expected.pose);
+		assert_equivalent(&output(&world, a)?, &output(&world, b)?);
+		world.entity_mut(a).remove::<AnimProgress>();
+		world.entity_mut(b).remove::<AnimProgress>();
+		world
+			.run_system_once(apply_anim_mailbox)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_ne!(
+			output(&world, a)?,
+			output(&world, b)?,
+			"ordinary automatic idles keep their per-entity phase"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn paused_clap_consumes_new_body_terminals_and_discards_removed_sources() -> anyhow::Result<()>
+	{
+		ensure_task_pools();
+		let mut world = World::new();
+		let host = spawn_mailbox_apply_host(&mut world, AnimClip::hand_clap(), 0.54);
+		let fixture = HumanoidV0Rig::for_clip_test();
+		let bone_entities = world
+			.get::<HumanoidV0Rig>(host)
+			.ok_or_else(|| anyhow::anyhow!("missing rig"))?
+			.binding
+			.entities
+			.clone();
+		for (index, entity) in bone_entities.iter().copied().enumerate() {
+			let rest = fixture.binding.effective_rest.local[index];
+			world.entity_mut(entity).insert((
+				AnimBone { name: RigName::from(fixture.binding.definition.names[index]), rest },
+				rest,
+			));
+		}
+		world.entity_mut(host).insert(AnimProgress(0.54));
+		world
+			.run_system_once(apply_anim_mailbox)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let fallback_pose = world
+			.get::<AnimMailbox>(host)
+			.ok_or_else(|| anyhow::anyhow!("missing mailbox"))?
+			.output
+			.clone();
+		let left = world.spawn_empty().id();
+		let right = world.spawn_empty().id();
+		let measured =
+			[Vec3::new(-0.00224, 0.375388, -0.00511), Vec3::new(-0.00091, 0.375788, -0.00535)];
+		world.entity_mut(host).insert(HumanoidForearmEndpoints {
+			points: measured.map(Some),
+			sources: [Some(left), Some(right)],
+		});
+		world
+			.run_system_once(apply_anim_mailbox)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let rig = world
+			.get::<HumanoidV0Rig>(host)
+			.ok_or_else(|| anyhow::anyhow!("missing calibrated rig"))?;
+		assert_eq!(rig.forearm_endpoints, measured);
+		let calibrated_pose = world
+			.get::<AnimMailbox>(host)
+			.ok_or_else(|| anyhow::anyhow!("missing mailbox"))?
+			.output
+			.clone();
+		assert_ne!(
+			calibrated_pose, fallback_pose,
+			"a paused clip resamples after calibration arrives"
+		);
+		world.entity_mut(left).despawn();
+		world.entity_mut(right).despawn();
+		world
+			.run_system_once(apply_anim_mailbox)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(
+			world
+				.get::<HumanoidV0Rig>(host)
+				.ok_or_else(|| anyhow::anyhow!("missing reset rig"))?
+				.forearm_endpoints,
+			[HumanoidForearmEndpoints::FALLBACK; 2],
+			"removed body sources cannot leave stale terminal calibration"
+		);
+		Ok(())
 	}
 
 	#[test]
@@ -2079,8 +2442,8 @@ mod tests {
 
 	#[test]
 	fn clip_change_crossfade_captures_published_base_not_overlay_rig() -> anyhow::Result<()> {
-		use character_animations::Animation;
 		use character_animations::animations::{Run, Walk};
+		use character_animations::Animation;
 
 		let mut rig = HumanoidV0Rig::imported();
 		Walk::default().apply_for(&mut rig, 0.35);

@@ -7,7 +7,7 @@ use material_ref::{
 	MaterialId, MaterialLib, MaterialRef, MaterialRefCache, MaterialRefKey, MaterialRefPlugin,
 	StandardMaterialLib, StandardMaterialRefCache,
 };
-use vegetation_shaders::{BumpOutMaterial, BUMP_OUT_MATERIAL};
+use vegetation_shaders::{BUMP_OUT_MATERIAL, BumpOutMaterial};
 
 pub type BumpOutMaterialRefCache = MaterialRefCache<BumpOutMaterial>;
 
@@ -48,8 +48,8 @@ impl MaterialLib for BumpOutMaterialLib<'_> {
 				let handle = self.resolve(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert((MeshMaterial3d(handle), NotShadowCaster));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert((MeshMaterial3d(handle), NotShadowCaster));
 				true
 			}
 			_ => false,

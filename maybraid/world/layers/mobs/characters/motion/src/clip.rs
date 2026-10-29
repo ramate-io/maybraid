@@ -4,14 +4,22 @@
 //! body-rig host. `From<ConceptAnimation>` lives in `characters`.
 
 use bevy::prelude::*;
+use character_animations::animations::quadruped_run_stop::DEFAULT_QUADRUPED_RUN_STOP_SPEED;
 use character_animations::animations::{
 	BallisticJump, DorsoventralUndulation, EpiphantBray, EpiphantSleepEnter, EpiphantSleepHold,
-	EpiphantWake, FixedTuck, Flapping, FlipDirection, Gallop, Jab, LateralUndulation, Leap,
-	PowerDash, PowerStrafe, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
-	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
-	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
-	DEFAULT_SPRING_DURATION, TAKEOFF_END, THINK_AGAIN_DURATION, THINK_AGAIN_SPEED,
+	EpiphantWake, FixedTuck, Flapping, FlipDirection, Gallop, HandClap, Jab, LateralUndulation,
+	Leap, PowerDash, PowerStrafe, QuadrupedRun, QuadrupedRunStop, Run, Soaring, TuckProfile,
+	TuckedFlip, TwoFootedJump, VictoryWave, Walk, AIR_END, DEFAULT_BACKSWING,
+	DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT,
+	DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
+	THINK_AGAIN_DURATION, THINK_AGAIN_SPEED,
 };
+use character_animations::animations::{
+	Beckon, Bow, CrouchedWalk, FacePalm, FistPump, FlapFromGlide, GlideFromFlap, GroundedGait,
+	HeadNod, ProneAscent, ProneDescent, QuadrupedRunStart, QuadrupedRunToGallop, RunStart, RunStop,
+	RunToWalk, Salute, Shrug, SpotScan, SquatAscent, StompBeat, WalkStart, WalkStop, WalkToRun,
+};
+use character_animations::animations::{Lay, QuadrupedLieDown, QuadrupedSit, Sit};
 use character_animations::{ClipTimePolicy, SampleAddress};
 use character_rigs::Side;
 
@@ -23,7 +31,10 @@ const GALLOP_CYCLE_SPEED: f32 = 0.35;
 const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.5;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
-const JAB_CYCLE_SPEED: f32 = 0.9;
+/// Wall-clock length of one jab. Fast enough for a combo (~0.42 s).
+pub const JAB_DURATION_SECS: f32 = 0.42;
+/// One jab cycle lasts [`JAB_DURATION_SECS`] (`1 / JAB_CYCLE_SPEED`).
+pub const JAB_CYCLE_SPEED: f32 = 1.0 / JAB_DURATION_SECS;
 const THINK_AGAIN_CYCLE_SPEED: f32 = THINK_AGAIN_SPEED;
 const EPIPHANT_BRAY_CYCLE_SPEED: f32 = 0.85;
 const EPIPHANT_SLEEP_ENTER_SPEED: f32 = 0.7;
@@ -55,6 +66,37 @@ pub enum AnimId {
 	Flapping,
 	Jab,
 	ThinkAgain,
+	Beckon,
+	Bow,
+	FacePalm,
+	FistPump,
+	HeadNod,
+	Salute,
+	Shrug,
+	SpotScan,
+	StompBeat,
+	WalkStart,
+	WalkStop,
+	RunStart,
+	RunStop,
+	WalkToRun,
+	RunToWalk,
+	QuadrupedRunStart,
+	QuadrupedRunToGallop,
+	ProneDescent,
+	ProneAscent,
+	SquatAscent,
+	FlapFromGlide,
+	GlideFromFlap,
+	Sit,
+	Lay,
+	QuadrupedSit,
+	QuadrupedLieDown,
+	CrouchWalk,
+	GroundedGait,
+	VictoryWave,
+	HandClap,
+	QuadrupedRunStop,
 	PowerStrafe,
 	Squat,
 	SquatDescent,
@@ -68,6 +110,12 @@ pub enum AnimId {
 }
 
 impl AnimId {
+	/// Continue a grounded trot settle until its clamped one-shot reaches the endpoint.
+	/// Callers apply this only after movement and airborne clip selection.
+	pub fn needs_quadruped_run_stop(self, progress: f32) -> bool {
+		self == Self::QuadrupedRun || (self == Self::QuadrupedRunStop && progress < 1.0)
+	}
+
 	pub const fn default_speed(self) -> f32 {
 		match self {
 			Self::Still => IDLE_CYCLE_SPEED,
@@ -85,6 +133,36 @@ impl AnimId {
 			Self::Flapping => 1.0,
 			Self::Jab => JAB_CYCLE_SPEED,
 			Self::ThinkAgain => THINK_AGAIN_CYCLE_SPEED,
+			Self::Beckon => 1.0,
+			Self::Bow => 1.0,
+			Self::FacePalm => 1.0,
+			Self::FistPump => 1.0,
+			Self::HeadNod => 1.0,
+			Self::Salute => 1.0,
+			Self::Shrug => 1.0,
+			Self::SpotScan => 0.87,
+			Self::StompBeat => 1.0,
+			Self::WalkStart => 3.5,
+			Self::WalkStop => 3.5,
+			Self::RunStart => 4.5,
+			Self::RunStop => 2.5,
+			Self::WalkToRun => 4.0,
+			Self::RunToWalk => 4.0,
+			Self::QuadrupedRunStart => 3.5,
+			Self::QuadrupedRunToGallop => 4.0,
+			Self::ProneDescent => 2.85,
+			Self::ProneAscent => 2.85,
+			Self::SquatAscent => 2.85,
+			Self::FlapFromGlide => 1.0,
+			Self::GlideFromFlap => 1.0,
+			Self::Sit => 1.0,
+			Self::Lay => 1.0,
+			Self::QuadrupedSit => 1.0,
+			Self::QuadrupedLieDown => 1.0,
+			Self::CrouchWalk => 1.08,
+			Self::GroundedGait => 1.08,
+			Self::VictoryWave | Self::HandClap => 1.0,
+			Self::QuadrupedRunStop => DEFAULT_QUADRUPED_RUN_STOP_SPEED,
 			Self::PowerStrafe => 1.0,
 			Self::Squat => 1.0,
 			Self::SquatDescent => DEFAULT_DESCENT_SPEED,
@@ -253,6 +331,37 @@ pub enum AnimClip {
 	Flapping(Flapping),
 	Jab(JabParams),
 	ThinkAgain(ThinkAgainParams),
+	Beckon(Beckon),
+	Bow(Bow),
+	FacePalm(FacePalm),
+	FistPump(FistPump),
+	HeadNod(HeadNod),
+	Salute(Salute),
+	Shrug(Shrug),
+	SpotScan(SpotScan),
+	StompBeat(StompBeat),
+	WalkStart(WalkStart),
+	WalkStop(WalkStop),
+	RunStart(RunStart),
+	RunStop(RunStop),
+	WalkToRun(WalkToRun),
+	RunToWalk(RunToWalk),
+	QuadrupedRunStart(QuadrupedRunStart),
+	QuadrupedRunToGallop(QuadrupedRunToGallop),
+	ProneDescent(ProneDescent),
+	ProneAscent(ProneAscent),
+	SquatAscent(SquatAscent),
+	FlapFromGlide(FlapFromGlide),
+	GlideFromFlap(GlideFromFlap),
+	Sit(Sit),
+	Lay(Lay),
+	QuadrupedSit(QuadrupedSit),
+	QuadrupedLieDown(QuadrupedLieDown),
+	CrouchWalk(CrouchedWalk),
+	GroundedGait(GroundedGait),
+	VictoryWave(VictoryWave),
+	HandClap(HandClap),
+	QuadrupedRunStop(QuadrupedRunStop),
 	PowerStrafe(PowerStrafeParams),
 	Squat,
 	SquatDescent,
@@ -283,6 +392,37 @@ impl AnimClip {
 			Self::Flapping(_) => AnimId::Flapping,
 			Self::Jab(_) => AnimId::Jab,
 			Self::ThinkAgain(_) => AnimId::ThinkAgain,
+			Self::Beckon(_) => AnimId::Beckon,
+			Self::Bow(_) => AnimId::Bow,
+			Self::FacePalm(_) => AnimId::FacePalm,
+			Self::FistPump(_) => AnimId::FistPump,
+			Self::HeadNod(_) => AnimId::HeadNod,
+			Self::Salute(_) => AnimId::Salute,
+			Self::Shrug(_) => AnimId::Shrug,
+			Self::SpotScan(_) => AnimId::SpotScan,
+			Self::StompBeat(_) => AnimId::StompBeat,
+			Self::WalkStart(_) => AnimId::WalkStart,
+			Self::WalkStop(_) => AnimId::WalkStop,
+			Self::RunStart(_) => AnimId::RunStart,
+			Self::RunStop(_) => AnimId::RunStop,
+			Self::WalkToRun(_) => AnimId::WalkToRun,
+			Self::RunToWalk(_) => AnimId::RunToWalk,
+			Self::QuadrupedRunStart(_) => AnimId::QuadrupedRunStart,
+			Self::QuadrupedRunToGallop(_) => AnimId::QuadrupedRunToGallop,
+			Self::ProneDescent(_) => AnimId::ProneDescent,
+			Self::ProneAscent(_) => AnimId::ProneAscent,
+			Self::SquatAscent(_) => AnimId::SquatAscent,
+			Self::FlapFromGlide(_) => AnimId::FlapFromGlide,
+			Self::GlideFromFlap(_) => AnimId::GlideFromFlap,
+			Self::Sit(_) => AnimId::Sit,
+			Self::Lay(_) => AnimId::Lay,
+			Self::QuadrupedSit(_) => AnimId::QuadrupedSit,
+			Self::QuadrupedLieDown(_) => AnimId::QuadrupedLieDown,
+			Self::CrouchWalk(_) => AnimId::CrouchWalk,
+			Self::GroundedGait(_) => AnimId::GroundedGait,
+			Self::VictoryWave(_) => AnimId::VictoryWave,
+			Self::HandClap(_) => AnimId::HandClap,
+			Self::QuadrupedRunStop(_) => AnimId::QuadrupedRunStop,
 			Self::PowerStrafe(_) => AnimId::PowerStrafe,
 			Self::Squat => AnimId::Squat,
 			Self::SquatDescent => AnimId::SquatDescent,
@@ -297,6 +437,12 @@ impl AnimClip {
 	}
 
 	pub const fn default_speed(self) -> f32 {
+		if let Self::GroundedGait(gait) = self {
+			return IDLE_CYCLE_SPEED
+				+ (WALK_CYCLE_SPEED + (RUN_CYCLE_SPEED - WALK_CYCLE_SPEED) * gait.run_weight
+					- IDLE_CYCLE_SPEED)
+					* gait.walk_weight;
+		}
 		self.id().default_speed()
 	}
 
@@ -356,8 +502,124 @@ impl AnimClip {
 		Self::Jab(JabParams::default())
 	}
 
+	/// Fisticuffs icon clip: the live jab, sampled at the authored guard.
+	pub fn fisticuffs_guard() -> Self {
+		Self::jab()
+	}
+
+	/// [`Jab::guard_progress`]: rest and recover, both arms in cover.
+	pub fn fisticuffs_guard_progress() -> f32 {
+		Jab::guard_progress()
+	}
+
 	pub fn think_again() -> Self {
 		Self::ThinkAgain(ThinkAgainParams::default())
+	}
+
+	pub fn beckon(side: Side) -> Self {
+		Self::Beckon(Beckon::new(side))
+	}
+	pub fn bow() -> Self {
+		Self::Bow(Bow::default())
+	}
+	pub fn face_palm(side: Side) -> Self {
+		Self::FacePalm(FacePalm::new(side))
+	}
+	pub fn fist_pump(side: Side) -> Self {
+		Self::FistPump(FistPump::new(side))
+	}
+	pub fn head_nod() -> Self {
+		Self::HeadNod(HeadNod::default())
+	}
+	pub fn salute(side: Side) -> Self {
+		Self::Salute(Salute::new(side))
+	}
+	pub fn shrug() -> Self {
+		Self::Shrug(Shrug::default())
+	}
+	pub fn spot_scan() -> Self {
+		Self::SpotScan(SpotScan::default())
+	}
+	pub fn stomp_beat(side: Side) -> Self {
+		Self::StompBeat(StompBeat::new(side))
+	}
+	pub fn walk_start() -> Self {
+		Self::WalkStart(WalkStart::default())
+	}
+	pub fn walk_stop() -> Self {
+		Self::WalkStop(WalkStop::default())
+	}
+	pub fn run_start() -> Self {
+		Self::RunStart(RunStart::default())
+	}
+	pub fn run_stop() -> Self {
+		Self::RunStop(RunStop::default())
+	}
+	pub fn walk_to_run() -> Self {
+		Self::WalkToRun(WalkToRun::default())
+	}
+	pub fn run_to_walk() -> Self {
+		Self::RunToWalk(RunToWalk::default())
+	}
+	pub fn quadruped_run_start() -> Self {
+		Self::QuadrupedRunStart(QuadrupedRunStart::default())
+	}
+	pub fn quadruped_run_to_gallop(gait_phase: f32) -> Self {
+		Self::QuadrupedRunToGallop(QuadrupedRunToGallop { gait_phase, ..Default::default() })
+	}
+	pub fn prone_descent() -> Self {
+		Self::ProneDescent(ProneDescent::default())
+	}
+	pub fn prone_ascent() -> Self {
+		Self::ProneAscent(ProneAscent::default())
+	}
+	pub fn squat_ascent() -> Self {
+		Self::SquatAscent(SquatAscent::default())
+	}
+	pub fn flap_from_glide() -> Self {
+		Self::FlapFromGlide(FlapFromGlide::default())
+	}
+	pub fn glide_from_flap() -> Self {
+		Self::GlideFromFlap(GlideFromFlap::default())
+	}
+	pub fn sit() -> Self {
+		Self::Sit(Sit::ground())
+	}
+	pub fn seat() -> Self {
+		Self::Sit(Sit::seat())
+	}
+	pub fn lay() -> Self {
+		Self::Lay(Lay::back())
+	}
+	pub fn lay_side(side: Side) -> Self {
+		Self::Lay(Lay::side(side))
+	}
+	pub fn quadruped_sit() -> Self {
+		Self::QuadrupedSit(QuadrupedSit::for_idle())
+	}
+	pub fn quadruped_lie_down() -> Self {
+		Self::QuadrupedLieDown(QuadrupedLieDown::for_rest())
+	}
+	pub fn quadruped_curl() -> Self {
+		Self::QuadrupedLieDown(QuadrupedLieDown::curled_rest())
+	}
+	pub fn crouch_walk() -> Self {
+		Self::CrouchWalk(CrouchedWalk::blended(1.0, 1.0))
+	}
+	pub fn grounded_gait(walk_weight: f32, run_weight: f32) -> Self {
+		Self::GroundedGait(GroundedGait::new(walk_weight, run_weight))
+	}
+
+	pub fn victory_wave(side: Side) -> Self {
+		Self::VictoryWave(VictoryWave::new(side))
+	}
+
+	pub fn hand_clap() -> Self {
+		Self::HandClap(HandClap)
+	}
+
+	pub fn quadruped_run_stop() -> Self {
+		Self::QuadrupedRunStop(QuadrupedRunStop::default())
 	}
 
 	pub fn power_strafe(side: Side) -> Self {
@@ -381,6 +643,32 @@ impl AnimClip {
 				Side::Right => String::from("power-strafe-right"),
 			},
 			Self::Jab(_) => String::from("jab"),
+			Self::FistPump(clip) => {
+				format!("fist-pump-{}", if clip.side == Side::Left { "left" } else { "right" })
+			}
+			Self::Salute(clip) => {
+				format!("salute-{}", if clip.side == Side::Left { "left" } else { "right" })
+			}
+			Self::FacePalm(clip) => {
+				format!("face-palm-{}", if clip.side == Side::Left { "left" } else { "right" })
+			}
+			Self::StompBeat(clip) => {
+				format!("stomp-beat-{}", if clip.side == Side::Left { "left" } else { "right" })
+			}
+			Self::Beckon(clip) => {
+				format!("beckon-{}", if clip.side == Side::Left { "left" } else { "right" })
+			}
+			Self::VictoryWave(wave) => {
+				format!("victory-wave-{}", if wave.side == Side::Left { "left" } else { "right" })
+			}
+			Self::Lay(lay) => match lay.orientation {
+				character_animations::animations::LayOrientation::Back => String::from("lay-back"),
+				character_animations::animations::LayOrientation::Side(side) => {
+					format!("lay-{}", if side == Side::Left { "left" } else { "right" })
+				}
+			},
+			Self::HandClap(_) => String::from("hand-clap"),
+			Self::QuadrupedRunStop(_) => String::from("quadruped-run-stop"),
 			other => format!("{:?}", other.id()).to_ascii_lowercase(),
 		}
 	}
@@ -444,7 +732,11 @@ impl AnimClip {
 
 	pub const fn time_policy(self) -> ClipTimePolicy {
 		match self {
-			Self::Still => ClipTimePolicy::Unbounded,
+			Self::Still
+			| Self::Sit(_)
+			| Self::Lay(_)
+			| Self::QuadrupedSit(_)
+			| Self::QuadrupedLieDown(_) => ClipTimePolicy::Unbounded,
 			Self::Walk(_) | Self::Run(_) | Self::QuadrupedRun(_) | Self::Gallop(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
 			}
@@ -459,6 +751,31 @@ impl AnimClip {
 			| Self::Squat
 			| Self::SquatDescent
 			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::Beckon(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::Bow(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::FacePalm(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::FistPump(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::HeadNod(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::Salute(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::Shrug(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::SpotScan(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::StompBeat(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::WalkStart(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::WalkStop(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::RunStart(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::RunStop(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::WalkToRun(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::RunToWalk(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::QuadrupedRunStart(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::QuadrupedRunToGallop(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::ProneDescent(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::ProneAscent(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::SquatAscent(_) => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::CrouchWalk(_) | Self::GroundedGait(_) => ClipTimePolicy::Cycle { duration: 1.0 },
+			Self::FlapFromGlide(_) | Self::GlideFromFlap(_) => ClipTimePolicy::Unbounded,
+			Self::VictoryWave(_) | Self::HandClap(_) | Self::QuadrupedRunStop(_) => {
+				ClipTimePolicy::Clamp { duration: 1.0 }
+			}
 			Self::ThinkAgain(_) => ClipTimePolicy::Clamp { duration: THINK_AGAIN_DURATION },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
@@ -550,6 +867,13 @@ mod tests {
 	}
 
 	#[test]
+	fn fisticuffs_guard_is_the_jab_rest() {
+		assert_eq!(AnimClip::fisticuffs_guard(), AnimClip::jab());
+		assert_eq!(AnimClip::fisticuffs_guard_progress(), Jab::guard_progress());
+		assert_eq!(AnimClip::fisticuffs_guard_progress(), 0.0);
+	}
+
+	#[test]
 	fn still_keeps_the_rest_identity() {
 		assert_eq!(AnimClip::still().id(), AnimId::Still);
 		assert_eq!(AnimClip::still().default_speed(), IDLE_CYCLE_SPEED);
@@ -567,6 +891,20 @@ mod tests {
 		assert!(!AnimClip::power_dash().is_sample_cacheable());
 		assert_eq!(AnimClip::walk().revision(), 0);
 		assert_eq!(AnimClip::walk().sample_address(0.123, 10_000).canonical_time, 0.12);
+	}
+
+	#[test]
+	fn pilot_one_shots_keep_endpoint_time_and_sided_capture_identity() {
+		let wave_left = AnimClip::victory_wave(Side::Left);
+		let wave_right = AnimClip::victory_wave(Side::Right);
+		assert_eq!(wave_left.id(), wave_right.id());
+		assert_ne!(wave_left.capture_key(), wave_right.capture_key());
+		for clip in [wave_left, wave_right, AnimClip::hand_clap(), AnimClip::quadruped_run_stop()] {
+			assert_eq!(clip.time_policy(), ClipTimePolicy::Clamp { duration: 1.0 });
+			assert_eq!(clip.sample_address(1.5, 10_000).canonical_time, 1.0);
+			assert_eq!(clip.sample_address(-0.5, 10_000).canonical_time, 0.0);
+			assert!(!clip.is_sample_cacheable());
+		}
 	}
 
 	#[test]
