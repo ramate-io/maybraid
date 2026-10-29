@@ -8,12 +8,12 @@
 
 use crate::animations::smoothstep;
 
-const DEFAULT_FRONT_REACH: f32 = 0.42;
-const DEFAULT_FRONT_HINGE: f32 = 0.88;
-const DEFAULT_HIND_TUCK: f32 = 0.64;
-const DEFAULT_HIND_HINGE: f32 = 0.82;
+const DEFAULT_FRONT_REACH: f32 = 0.80;
+const DEFAULT_FRONT_HINGE: f32 = 0.40;
+const DEFAULT_HIND_TUCK: f32 = 1.60;
+const DEFAULT_HIND_HINGE: f32 = 1.20;
 const DEFAULT_HIP_SPLAY: f32 = 0.20;
-const DEFAULT_SPINE_SETTLE: f32 = 0.48;
+const DEFAULT_SPINE_SETTLE: f32 = 0.40;
 const DEFAULT_CURL: f32 = 0.0;
 const DEFAULT_NECK_REST: f32 = 0.10;
 const DEFAULT_BREATH: f32 = 0.028;
@@ -131,6 +131,22 @@ impl QuadrupedLieDown {
 			1.0
 		} else {
 			1.0 - smoothstep((t - Self::HOLD_END) / (Self::UP_END - Self::HOLD_END))
+		}
+	}
+
+	/// Body lowering as a fraction of the measured combined leg length.
+	/// Follow the front-chain compression so entry/exit do not sink before folding.
+	pub fn body_lowering(&self, progress: f32) -> f32 {
+		let depth = self.settle_weight(progress);
+		let compression = |depth: f32| {
+			2.0 - (self.front_reach * depth).cos()
+				- ((self.front_reach + self.front_hinge) * depth).cos()
+		};
+		let full = compression(1.0);
+		if full <= f32::EPSILON {
+			0.0
+		} else {
+			0.65 * compression(depth) / full
 		}
 	}
 

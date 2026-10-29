@@ -8,12 +8,12 @@
 
 use crate::animations::smoothstep;
 
-const DEFAULT_HIND_STRIDE: f32 = 0.72;
-const DEFAULT_HIND_HINGE: f32 = 0.98;
+const DEFAULT_HIND_STRIDE: f32 = 0.80;
+const DEFAULT_HIND_HINGE: f32 = 1.20;
 const DEFAULT_HIP_SPLAY: f32 = 0.16;
 const DEFAULT_FRONT_PLANT: f32 = 0.10;
 const DEFAULT_FRONT_HINGE: f32 = 0.14;
-const DEFAULT_SPINE_UPRIGHT: f32 = 0.28;
+const DEFAULT_SPINE_UPRIGHT: f32 = 0.80;
 const DEFAULT_SPINE_GATHER: f32 = 0.12;
 const DEFAULT_NECK_ALERT: f32 = 0.16;
 const DEFAULT_SWAY: f32 = 0.016;

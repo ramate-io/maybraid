@@ -36,6 +36,8 @@ A sample reads the clip definition, the effective rest, the clip parameters, and
 
 Identity rest is not a production T-pose. Clip tests that need bind geometry use `HumanoidV0Rig::for_clip_test()` / `QuadrupedV0Rig::for_clip_test()`, which seed the inspected local translations and rotations.
 
+Quadruped animation locals omit the fixed front/rear midback branches. Their typed FK coordinates are not world coordinates. Support/height tests must include those branches and species proportions; the shared [Epiphant test fixture](src/rigs/quadruped/production_fixture.rs) reproduces the captured LIVE affines. Use world Y for height and inspect the rendered fold before accepting angle-only assertions.
+
 Segment lengths are joint-to-joint. Femur length is the shin origin’s translation. When no distal joint or calibrated mesh terminal is available, the explicit family fallback is 0.5 m. A fallback does not prove visible mesh contact.
 
 ## Playground

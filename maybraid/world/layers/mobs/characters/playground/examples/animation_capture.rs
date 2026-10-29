@@ -26,6 +26,7 @@ use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use character_rigs::rigs::{humanoid_v0::HumanoidV0Rig, quadruped_v0::QuadrupedV0Rig};
 use characters::{AnimBone, AnimMailbox, AnimProgress, CharacterRig};
+use characters_playground::character::CharacterConfig;
 use characters_playground::{CharactersPlaygroundPlugin, PendingStartupCommand, PlaygroundCommand};
 use clap::Parser;
 use game_commands::command::GameCommand;
@@ -197,8 +198,10 @@ fn main() -> Result<(), String> {
 	.add_plugins(CharactersPlaygroundPlugin)
 	.add_systems(Startup, hide_command_ui)
 	.add_systems(Update, capture_sequence);
-	app.run();
-	Ok(())
+	match app.run() {
+		AppExit::Success => Ok(()),
+		exit => Err(format!("capture failed: {exit:?}")),
+	}
 }
 
 fn build_shots(args: &CaptureArgs, output_dir: &Path) -> Result<Vec<Shot>, String> {
@@ -316,6 +319,7 @@ fn capture_sequence(
 	mut commands: Commands,
 	time: Res<Time>,
 	mut plan: ResMut<CapturePlan>,
+	config: Res<CharacterConfig>,
 	meshes: Query<(), With<Mesh3d>>,
 	rigs: Query<(), With<CharacterRig>>,
 	posed: Query<&AnimMailbox>,
@@ -374,7 +378,8 @@ fn capture_sequence(
 		exit.write(AppExit::error());
 		return;
 	}
-	let expected_progress = plan.shots[plan.index].progress;
+	let expected_progress =
+		config.animation.mailbox_progress(plan.shots[plan.index].progress, false);
 	let sample_ready = progress.iter().any(|sample| (sample.0 - expected_progress).abs() < 0.001);
 	let rig_ready = !meshes.is_empty()
 		&& !rigs.is_empty()

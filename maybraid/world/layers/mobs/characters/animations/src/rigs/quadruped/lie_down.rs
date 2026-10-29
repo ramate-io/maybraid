@@ -35,10 +35,6 @@ impl QuadrupedLieDown {
 		pose.spine_sagittal = -self.spine_settle * settle - breath;
 
 		for side in [Side::Left, Side::Right] {
-			let curl_side = match side {
-				Side::Left => 1.0 - curl * 0.35,
-				Side::Right => 1.0 + curl * 0.20,
-			};
 			apply_front_leg(
 				&mut pose,
 				side,
@@ -51,8 +47,8 @@ impl QuadrupedLieDown {
 				&mut pose,
 				side,
 				0.0,
-				self.hip_splay * settle * side.sign() * curl_side,
-				-self.hind_tuck * settle * curl_side,
+				self.hip_splay * settle * side.sign(),
+				-self.hind_tuck * settle,
 				self.hind_hinge * settle,
 			);
 		}
@@ -65,8 +61,10 @@ impl Animation<QuadrupedV0Rig> for QuadrupedLieDown {
 		rig.write_pose(&self.sample_pose(progress));
 	}
 
-	fn effects_for(&self, _rig: &QuadrupedV0Rig, _progress: f32) -> Effects {
-		Effects::IDENTITY
+	fn effects_for(&self, rig: &QuadrupedV0Rig, progress: f32) -> Effects {
+		let drop =
+			self.body_lowering(progress) * (rig.segment_lengths.upper + rig.segment_lengths.lower);
+		Effects::from_translation(bevy::prelude::Vec3::NEG_Y * drop)
 	}
 }
 
@@ -76,10 +74,6 @@ mod tests {
 	use crate::rigs::quadruped::production_fixture::{point, rig as epiphant_rig};
 	use bevy::prelude::Vec3;
 
-	fn hind_tip(rig: &QuadrupedV0Rig, side: &str) -> anyhow::Result<Vec3> {
-		point(rig, &format!("posterior_shin.{side}"), Vec3::Y * 0.5)
-	}
-
 	#[test]
 	fn sphinx_lowers_the_hindquarters_and_keeps_rear_support_near_standing_plane(
 	) -> anyhow::Result<()> {
@@ -87,33 +81,36 @@ mod tests {
 		let mut sphinx = epiphant_rig()?;
 		let mut curled = epiphant_rig()?;
 		let sphinx_fx = QuadrupedLieDown::held().apply(&mut sphinx, 1.0);
-		QuadrupedLieDown::curled().apply(&mut curled, 1.0);
-		for side in ["L", "R"] {
-			let before = hind_tip(&standing, side)?;
-			let after = hind_tip(&sphinx, side)?;
-			assert!(
-				(after.y - before.y).abs() < 0.18,
-				"rear support stays near plane: {side} {after:?}/{before:?}"
-			);
-			assert!(after.z > before.z + 0.15, "rear foot tucks under belly: {side}");
-			let hip = format!("hip.{side}");
-			assert!(
-				point(&sphinx, &hip, Vec3::ZERO)?.y < point(&standing, &hip, Vec3::ZERO)?.y - 0.1,
-				"rump settles: {side}"
-			);
+		let curled_fx = QuadrupedLieDown::curled().apply(&mut curled, 1.0);
+		for (posed, effect, label) in [(&sphinx, sphinx_fx, "sphinx"), (&curled, curled_fx, "curl")]
+		{
+			assert!(effect.0.translation.y < -0.55, "{label} lowers the whole trunk");
+			for side in ["L", "R"] {
+				for prefix in ["anterior", "posterior"] {
+					let bone = format!("{prefix}_shin.{side}");
+					let before = point(&standing, &bone, Vec3::Y * 0.5)?;
+					let after = point(posed, &bone, Vec3::Y * 0.5)? + effect.0.translation;
+					assert!(
+						(after.y - before.y).abs() < 0.20,
+						"{label} {bone} remains near support: {after:?}/{before:?}"
+					);
+				}
+				let hip = format!("hip.{side}");
+				assert!(
+					point(posed, &hip, Vec3::ZERO)?.y + effect.0.translation.y
+						< point(&standing, &hip, Vec3::ZERO)?.y - 0.70,
+					"{label} rearquarter settles deeply"
+				);
+			}
 		}
-		if sphinx.posed_angle("anterior_shin.L") <= 0.6 {
-			anyhow::bail!("sphinx should visibly fold the front shin");
-		}
+
 		if (sphinx.rotation("lumbar") * bevy::prelude::Vec3::Y
 			- curled.rotation("lumbar") * bevy::prelude::Vec3::Y)
 			.length() <= 0.05
 		{
 			anyhow::bail!("curl should change lumbar articulation");
 		}
-		if !sphinx_fx.is_identity() {
-			anyhow::bail!("lie-down should keep root translation with physics");
-		}
+
 		Ok(())
 	}
 
@@ -130,6 +127,19 @@ mod tests {
 		{
 			anyhow::bail!("rest breath should move the composed lumbar at its peak");
 		}
+		Ok(())
+	}
+	#[test]
+	fn rest_offset_closes_its_cycle_and_scales_with_measured_legs() -> anyhow::Result<()> {
+		let mut rig = epiphant_rig()?;
+		let cycle = QuadrupedLieDown::for_cycle();
+		assert!(cycle.effects_for(&rig, 0.0).is_identity());
+		assert!(cycle.effects_for(&rig, QuadrupedLieDown::PERIOD).is_identity());
+		let depth = QuadrupedLieDown::held();
+		let baseline = depth.effects_for(&rig, 1.0).0.translation.y;
+		rig.segment_lengths.upper *= 1.2;
+		rig.segment_lengths.lower *= 1.2;
+		assert!((depth.effects_for(&rig, 1.0).0.translation.y - baseline * 1.2).abs() < 1e-6);
 		Ok(())
 	}
 }

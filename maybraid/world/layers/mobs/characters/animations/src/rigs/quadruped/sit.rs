@@ -89,7 +89,7 @@ mod tests {
 			);
 			let hip = format!("hip.{side}");
 			assert!(
-				point(&rig, &hip, Vec3::ZERO)?.y < point(&rest, &hip, Vec3::ZERO)?.y - 0.10,
+				point(&rig, &hip, Vec3::ZERO)?.y < point(&rest, &hip, Vec3::ZERO)?.y - 0.40,
 				"rump lowers: {side}"
 			);
 			assert!(
