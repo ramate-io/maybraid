@@ -6,11 +6,12 @@
 use bevy::prelude::*;
 use character_animations::animations::{
 	BallisticJump, DorsoventralUndulation, EpiphantBray, EpiphantSleepEnter, EpiphantSleepHold,
-	EpiphantWake, FixedTuck, Flapping, FlipDirection, Gallop, Jab, LateralUndulation, Leap,
-	PowerDash, PowerStrafe, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
-	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
-	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
-	DEFAULT_SPRING_DURATION, TAKEOFF_END, THINK_AGAIN_DURATION, THINK_AGAIN_SPEED,
+	EpiphantWake, FixedTuck, Flapping, FlipDirection, Gallop, HandClap, Jab, LateralUndulation,
+	Leap, PowerDash, PowerStrafe, QuadrupedRun, QuadrupedRunStop, Run, Soaring, TuckProfile,
+	TuckedFlip, TwoFootedJump, VictoryWave, Walk, AIR_END, DEFAULT_BACKSWING,
+	DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT,
+	DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
+	THINK_AGAIN_DURATION, THINK_AGAIN_SPEED,
 };
 use character_animations::{ClipTimePolicy, SampleAddress};
 use character_rigs::Side;
@@ -58,6 +59,9 @@ pub enum AnimId {
 	Flapping,
 	Jab,
 	ThinkAgain,
+	VictoryWave,
+	HandClap,
+	QuadrupedRunStop,
 	PowerStrafe,
 	Squat,
 	SquatDescent,
@@ -71,6 +75,12 @@ pub enum AnimId {
 }
 
 impl AnimId {
+	/// Continue a grounded trot settle until its clamped one-shot reaches the endpoint.
+	/// Callers apply this only after movement and airborne clip selection.
+	pub fn needs_quadruped_run_stop(self, progress: f32) -> bool {
+		self == Self::QuadrupedRun || (self == Self::QuadrupedRunStop && progress < 1.0)
+	}
+
 	pub const fn default_speed(self) -> f32 {
 		match self {
 			Self::Still => IDLE_CYCLE_SPEED,
@@ -88,6 +98,8 @@ impl AnimId {
 			Self::Flapping => 1.0,
 			Self::Jab => JAB_CYCLE_SPEED,
 			Self::ThinkAgain => THINK_AGAIN_CYCLE_SPEED,
+			Self::VictoryWave | Self::HandClap => 1.0,
+			Self::QuadrupedRunStop => character_animations::animations::quadruped_run_stop::DEFAULT_QUADRUPED_RUN_STOP_SPEED,
 			Self::PowerStrafe => 1.0,
 			Self::Squat => 1.0,
 			Self::SquatDescent => DEFAULT_DESCENT_SPEED,
@@ -256,6 +268,9 @@ pub enum AnimClip {
 	Flapping(Flapping),
 	Jab(JabParams),
 	ThinkAgain(ThinkAgainParams),
+	VictoryWave(VictoryWave),
+	HandClap(HandClap),
+	QuadrupedRunStop(QuadrupedRunStop),
 	PowerStrafe(PowerStrafeParams),
 	Squat,
 	SquatDescent,
@@ -286,6 +301,9 @@ impl AnimClip {
 			Self::Flapping(_) => AnimId::Flapping,
 			Self::Jab(_) => AnimId::Jab,
 			Self::ThinkAgain(_) => AnimId::ThinkAgain,
+			Self::VictoryWave(_) => AnimId::VictoryWave,
+			Self::HandClap(_) => AnimId::HandClap,
+			Self::QuadrupedRunStop(_) => AnimId::QuadrupedRunStop,
 			Self::PowerStrafe(_) => AnimId::PowerStrafe,
 			Self::Squat => AnimId::Squat,
 			Self::SquatDescent => AnimId::SquatDescent,
@@ -373,6 +391,18 @@ impl AnimClip {
 		Self::ThinkAgain(ThinkAgainParams::default())
 	}
 
+	pub fn victory_wave(side: Side) -> Self {
+		Self::VictoryWave(VictoryWave::new(side))
+	}
+
+	pub fn hand_clap() -> Self {
+		Self::HandClap(HandClap)
+	}
+
+	pub fn quadruped_run_stop() -> Self {
+		Self::QuadrupedRunStop(QuadrupedRunStop::default())
+	}
+
 	pub fn power_strafe(side: Side) -> Self {
 		Self::PowerStrafe(PowerStrafeParams { side })
 	}
@@ -394,6 +424,11 @@ impl AnimClip {
 				Side::Right => String::from("power-strafe-right"),
 			},
 			Self::Jab(_) => String::from("jab"),
+			Self::VictoryWave(wave) => {
+				format!("victory-wave-{}", if wave.side == Side::Left { "left" } else { "right" })
+			}
+			Self::HandClap(_) => String::from("hand-clap"),
+			Self::QuadrupedRunStop(_) => String::from("quadruped-run-stop"),
 			other => format!("{:?}", other.id()).to_ascii_lowercase(),
 		}
 	}
@@ -472,6 +507,9 @@ impl AnimClip {
 			| Self::Squat
 			| Self::SquatDescent
 			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::VictoryWave(_) | Self::HandClap(_) | Self::QuadrupedRunStop(_) => {
+				ClipTimePolicy::Clamp { duration: 1.0 }
+			}
 			Self::ThinkAgain(_) => ClipTimePolicy::Clamp { duration: THINK_AGAIN_DURATION },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
@@ -587,6 +625,20 @@ mod tests {
 		assert!(!AnimClip::power_dash().is_sample_cacheable());
 		assert_eq!(AnimClip::walk().revision(), 0);
 		assert_eq!(AnimClip::walk().sample_address(0.123, 10_000).canonical_time, 0.12);
+	}
+
+	#[test]
+	fn pilot_one_shots_keep_endpoint_time_and_sided_capture_identity() {
+		let wave_left = AnimClip::victory_wave(Side::Left);
+		let wave_right = AnimClip::victory_wave(Side::Right);
+		assert_eq!(wave_left.id(), wave_right.id());
+		assert_ne!(wave_left.capture_key(), wave_right.capture_key());
+		for clip in [wave_left, wave_right, AnimClip::hand_clap(), AnimClip::quadruped_run_stop()] {
+			assert_eq!(clip.time_policy(), ClipTimePolicy::Clamp { duration: 1.0 });
+			assert_eq!(clip.sample_address(1.5, 10_000).canonical_time, 1.0);
+			assert_eq!(clip.sample_address(-0.5, 10_000).canonical_time, 0.0);
+			assert!(!clip.is_sample_cacheable());
+		}
 	}
 
 	#[test]

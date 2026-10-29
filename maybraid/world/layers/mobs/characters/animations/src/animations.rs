@@ -4,6 +4,7 @@ pub mod fixed;
 pub mod fixed_tuck;
 pub mod flapping;
 pub mod gallop;
+pub mod hand_clap;
 pub mod idle;
 pub mod jab;
 pub mod land;
@@ -18,6 +19,7 @@ pub mod quadruped_gallop;
 pub mod quadruped_idle;
 pub mod quadruped_leap;
 pub mod quadruped_run;
+pub mod quadruped_run_stop;
 pub mod quadruped_sleep;
 pub mod run;
 pub mod soaring;
@@ -34,6 +36,7 @@ pub mod upright_leap;
 pub mod upright_power_dash;
 pub mod upright_run;
 pub mod upright_walk;
+pub mod victory_wave;
 pub mod walk;
 
 pub use dorsoventral_undulation::DorsoventralUndulation;
@@ -42,6 +45,7 @@ pub use fixed::FixedPosition;
 pub use fixed_tuck::FixedTuck;
 pub use flapping::Flapping;
 pub use gallop::Gallop;
+pub use hand_clap::HandClap;
 pub use idle::Idle;
 pub use jab::{
 	Jab, BACKSWING_END, DEFAULT_BACKSWING, DEFAULT_JAB_TARGET, EXTEND_END, HOLD_END as JAB_HOLD_END,
@@ -55,16 +59,15 @@ pub use power_dash::{
 };
 pub use power_strafe::PowerStrafe;
 pub use prone::Prone;
-pub use quadruped_bray::{
-	EpiphantBray, MOUTH_EMIT_NECK_LOCAL, MOUTH_EMIT_SOCKET, SONIC_EMIT_NORM,
-};
+pub use quadruped_bray::{EpiphantBray, MOUTH_EMIT_NECK_LOCAL, MOUTH_EMIT_SOCKET, SONIC_EMIT_NORM};
 pub use quadruped_gallop::QuadrupedGallop;
 pub use quadruped_idle::QuadrupedIdle;
 pub use quadruped_leap::QuadrupedLeap;
+pub use quadruped_run::{QuadrupedRun, QuadrupedRunPose};
+pub use quadruped_run_stop::QuadrupedRunStop;
 pub use quadruped_sleep::{
 	EpiphantSleepEnter, EpiphantSleepHold, EpiphantWake, SLEEP_ENTER_IMPACT_NORM, WAKE_IMPACT_NORM,
 };
-pub use quadruped_run::{QuadrupedRun, QuadrupedRunPose};
 pub use run::Run;
 pub use soaring::Soaring;
 pub use spring::Spring;
@@ -86,4 +89,5 @@ pub use upright_leap::UprightLeap;
 pub use upright_power_dash::UprightPowerDash;
 pub use upright_run::UprightRun;
 pub use upright_walk::UprightWalk;
+pub use victory_wave::VictoryWave;
 pub use walk::Walk;

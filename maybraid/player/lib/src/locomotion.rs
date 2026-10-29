@@ -3,11 +3,11 @@
 use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
 use characters::{
-	AnimClip, AnimProgress, AnimRef, AnimRefRoot, CharacterHeading, CharacterMembers, CharacterRig,
-	CharacterRigRole, CharacterRoot, JumpParams, RigSkeletonKind,
+	AnimClip, AnimMailbox, AnimProgress, AnimRef, AnimRefRoot, CharacterHeading, CharacterMembers,
+	CharacterRig, CharacterRigRole, CharacterRoot, JumpParams, RigSkeletonKind,
 };
 
-use crate::body::{CharacterController, Jumping, MoveWish, LEAP_SPEED};
+use crate::body::{CharacterController, Grounded, Jumping, MoveWish, LEAP_SPEED};
 use crate::identity::PlayerYawOwner;
 use crate::stance::{CharacterStance, StanceKind};
 
@@ -99,16 +99,17 @@ pub(crate) fn face_wish_yaw(
 pub fn drive_player_locomotion(
 	mut commands: Commands,
 	controllers: Query<
-		(&LinearVelocity, &MoveWish, Option<&Jumping>, Option<&CharacterStance>),
+		(&LinearVelocity, &MoveWish, Option<&Jumping>, Option<&CharacterStance>, Has<Grounded>),
 		With<CharacterController>,
 	>,
 	visuals: Query<(&CharacterMembers, &ChildOf), With<CharacterRoot>>,
 	rigs: Query<&CharacterRig>,
-	anims: Query<&AnimRefRoot>,
+	anims: Query<(&AnimRefRoot, Option<&AnimMailbox>)>,
 	gait: Query<&StandLocomotionGait>,
 ) {
 	for (members, child_of) in &visuals {
-		let Ok((velocity, _wish, jumping, stance)) = controllers.get(child_of.parent()) else {
+		let Ok((velocity, _wish, jumping, stance, grounded)) = controllers.get(child_of.parent())
+		else {
 			continue;
 		};
 		let speed = Vec3::new(velocity.x, 0.0, velocity.z).length();
@@ -131,12 +132,25 @@ pub fn drive_player_locomotion(
 			} else {
 				None
 			};
+			let current = anims.get(member).ok();
 			let clip = locomotion_clip(rig.skeleton, jumping, &stance, speed, stand_band);
-			let desired = AnimRef::new(clip);
-			let needs = match anims.get(member) {
-				Ok(root) => root.0 != desired,
-				Err(_) => true,
+			let clip = if rig.skeleton == RigSkeletonKind::Quadruped
+				&& grounded && jumping.is_none()
+				&& stance.squat_settled()
+				&& matches!(stance.kind, StanceKind::Stand)
+				&& clip.id() == characters::AnimId::Still
+				&& current.is_some_and(|(root, mailbox)| {
+					root.0
+						.clip
+						.id()
+						.needs_quadruped_run_stop(mailbox.map_or(0.0, AnimMailbox::clip_progress))
+				}) {
+				AnimClip::quadruped_run_stop()
+			} else {
+				clip
 			};
+			let desired = AnimRef::new(clip);
+			let needs = current.is_none_or(|(root, _)| root.0 != desired);
 			if needs {
 				commands.entity(member).insert(AnimRefRoot(desired));
 			}
@@ -221,7 +235,105 @@ fn stand_locomotion_clip_direct(speed: f32) -> AnimClip {
 mod tests {
 	use super::*;
 	use crate::body::{JumpPhase, JOG_SPEED, MOVE_SPEED};
+	use bevy::ecs::system::RunSystemOnce;
 	use characters::AnimId;
+
+	#[test]
+	fn production_quadruped_trot_stops_once_and_allows_movement_or_jump() -> anyhow::Result<()> {
+		use characters::{tick_anim_mailbox, MemberOf};
+		use std::time::Duration;
+
+		let mut world = World::new();
+		let mut time = Time::<()>::default();
+		time.advance_by(Duration::from_secs_f32(0.05));
+		world.insert_resource(time);
+		let controller = world
+			.spawn((
+				CharacterController,
+				LinearVelocity(Vec3::X * 3.0),
+				MoveWish(Vec3::ZERO),
+				Grounded,
+			))
+			.id();
+		let visual = world.spawn((CharacterRoot, ChildOf(controller))).id();
+		let body = world
+			.spawn((
+				MemberOf(visual),
+				CharacterRig { role: CharacterRigRole::Body, skeleton: RigSkeletonKind::Quadruped },
+				AnimRefRoot(AnimRef::new(AnimClip::quadruped_run())),
+				AnimMailbox::new(Transform::IDENTITY),
+				AnimProgress(0.37),
+			))
+			.id();
+		let mut schedule = Schedule::default();
+		schedule.add_systems((drive_player_locomotion, tick_anim_mailbox).chain());
+		let selected = |world: &World| -> anyhow::Result<AnimId> {
+			Ok(world
+				.get::<AnimRefRoot>(body)
+				.ok_or_else(|| anyhow::anyhow!("missing body clip"))?
+				.0
+				.clip
+				.id())
+		};
+		// Begin at an arbitrary trot clock phase, then let the production mailbox clock run.
+		world.run_system_once(tick_anim_mailbox).map_err(|e| anyhow::anyhow!("{e:?}"))?;
+		world.entity_mut(body).remove::<AnimProgress>();
+		world.entity_mut(controller).insert(LinearVelocity(Vec3::ZERO));
+		schedule.run(&mut world);
+		assert_eq!(selected(&world)?, AnimId::QuadrupedRunStop);
+		world.entity_mut(controller).insert(LinearVelocity(Vec3::X * 3.0));
+		schedule.run(&mut world);
+		assert_eq!(
+			selected(&world)?,
+			AnimId::QuadrupedRun,
+			"movement interrupts the unfinished stop"
+		);
+		world.entity_mut(controller).insert(LinearVelocity(Vec3::ZERO));
+		schedule.run(&mut world);
+		assert_eq!(selected(&world)?, AnimId::QuadrupedRunStop);
+		for _ in 0..8 {
+			schedule.run(&mut world);
+		}
+		assert_eq!(selected(&world)?, AnimId::Still);
+		for _ in 0..4 {
+			schedule.run(&mut world);
+		}
+		assert_eq!(selected(&world)?, AnimId::Still, "idle does not repeatedly restart stopping");
+		world.entity_mut(controller).insert(LinearVelocity(Vec3::X * 3.0));
+		schedule.run(&mut world);
+		world.entity_mut(controller).insert(LinearVelocity(Vec3::ZERO));
+		schedule.run(&mut world);
+		assert_eq!(selected(&world)?, AnimId::QuadrupedRunStop);
+		world.entity_mut(controller).insert(Jumping::start(3.0));
+		schedule.run(&mut world);
+		assert_eq!(selected(&world)?, AnimId::Leap);
+		world.entity_mut(controller).remove::<Jumping>();
+		schedule.run(&mut world);
+		assert_eq!(selected(&world)?, AnimId::Still, "landing must not synthesize a trot stop");
+		for stance in [
+			CharacterStance::settled(StanceKind::Prone),
+			CharacterStance { kind: StanceKind::Squat, blend: 0.4 },
+		] {
+			world.entity_mut(controller).insert((
+				LinearVelocity(Vec3::X * 3.0),
+				CharacterStance::settled(StanceKind::Stand),
+			));
+			schedule.run(&mut world);
+			world.entity_mut(controller).insert(LinearVelocity(Vec3::ZERO));
+			schedule.run(&mut world);
+			assert_eq!(selected(&world)?, AnimId::QuadrupedRunStop);
+			world.entity_mut(controller).insert(stance);
+			for _ in 0..4 {
+				schedule.run(&mut world);
+				assert_eq!(
+					selected(&world)?,
+					AnimId::Still,
+					"stance progress must not pin the stop clock"
+				);
+			}
+		}
+		Ok(())
+	}
 
 	#[test]
 	fn standing_hop_uses_jump_clip() {

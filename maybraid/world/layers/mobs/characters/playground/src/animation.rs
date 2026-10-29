@@ -28,6 +28,9 @@ pub enum AnimationMode {
 	Flapping,
 	Jab,
 	ThinkAgain,
+	VictoryWave,
+	HandClap,
+	QuadrupedRunStop,
 	PowerStrafe,
 	PowerDash,
 	Prone,
@@ -35,7 +38,7 @@ pub enum AnimationMode {
 
 impl AnimationMode {
 	pub const fn uses_side(self) -> bool {
-		matches!(self, Self::Jab | Self::ThinkAgain | Self::PowerStrafe)
+		matches!(self, Self::Jab | Self::ThinkAgain | Self::PowerStrafe | Self::VictoryWave)
 	}
 
 	pub const fn label(self) -> &'static str {
@@ -55,6 +58,9 @@ impl AnimationMode {
 			Self::Flapping => "flapping",
 			Self::Jab => "jab",
 			Self::ThinkAgain => "think-again",
+			Self::VictoryWave => "victory-wave",
+			Self::HandClap => "hand-clap",
+			Self::QuadrupedRunStop => "quadruped-run-stop",
 			Self::PowerStrafe => "power-strafe",
 			Self::PowerDash => "power-dash",
 			Self::Prone => "prone",
@@ -81,6 +87,9 @@ impl AnimationMode {
 				target: DEFAULT_JAB_TARGET,
 			}),
 			Self::ThinkAgain => AnimClip::ThinkAgain(ThinkAgainParams { side }),
+			Self::VictoryWave => AnimClip::victory_wave(side),
+			Self::HandClap => AnimClip::hand_clap(),
+			Self::QuadrupedRunStop => AnimClip::quadruped_run_stop(),
 			Self::PowerStrafe => AnimClip::power_strafe(side),
 			Self::PowerDash => AnimClip::power_dash(),
 			Self::Prone => AnimClip::prone(),
@@ -119,6 +128,7 @@ impl AnimationMode {
 	pub const fn clip_speed(self) -> f32 {
 		match self {
 			Self::ThinkAgain => THINK_AGAIN_SPEED,
+            Self::QuadrupedRunStop => character_animations::animations::quadruped_run_stop::DEFAULT_QUADRUPED_RUN_STOP_SPEED,
 			_ => 1.0,
 		}
 	}

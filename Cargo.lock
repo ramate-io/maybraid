@@ -2948,6 +2948,7 @@ dependencies = [
  "rigs",
  "scene-ref",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
