@@ -7,8 +7,8 @@ use gimme_core::{BaseScale, HashMapStore, Level, SpatialId, SpatialIndexError, T
 use crate::hash::unit_f32;
 use crate::place::ArrivalDisk;
 use crate::{
-	NearbyChoice, NearbyQuery, Poi, PoiId, PoiInterests, PoiKind, PoiObservation, PoiSource,
-	MAX_POI_ARRIVAL_RADIUS,
+	NearbyChoice, NearbyQuery, Poi, PoiArrival, PoiId, PoiInterests, PoiKind, PoiObservation,
+	PoiSource, PoiSupport, MAX_POI_ARRIVAL_RADIUS,
 };
 
 const LOCAL_BASE_SCALE: f64 = 64.0;
@@ -22,12 +22,17 @@ pub struct PoiRecord {
 	pub kind: PoiKind,
 	pub position: Vec3,
 	pub arrival_radius: f32,
+	pub support: PoiSupport,
 	pub salience: f32,
 	pub local: bool,
 	pub global: bool,
 }
 
 impl PoiRecord {
+	pub fn arrival(self) -> PoiArrival {
+		PoiArrival { position: self.position, radius: self.arrival_radius, support: self.support }
+	}
+
 	pub fn arrival_disk(self) -> ArrivalDisk {
 		ArrivalDisk::new(self.position, self.arrival_radius)
 	}
@@ -116,6 +121,7 @@ impl PoiRegistry {
 			kind: poi.kind,
 			position,
 			arrival_radius: poi.arrival_radius.clamp(0.0, MAX_POI_ARRIVAL_RADIUS),
+			support: poi.support,
 			salience: poi.salience.max(0.0),
 			local,
 			global,
@@ -309,43 +315,6 @@ impl PoiRegistry {
 		}
 	}
 
-	pub fn matching_in_xz_tile(
-		&self,
-		tile: IVec2,
-		tile_size: f32,
-		center_y: f32,
-		interests: &PoiInterests,
-	) -> Vec<PoiRecord> {
-		if !tile_size.is_finite() || !center_y.is_finite() {
-			return Vec::new();
-		}
-		let size = tile_size.clamp(1.0, MAX_LOCAL_QUERY_RADIUS);
-		let min_xz = tile.as_vec2() * size;
-		let max_xz = min_xz + Vec2::splat(size);
-		let region = Aabb3d::from_min_max(
-			Vec3::new(min_xz.x, center_y - MAX_LOCAL_QUERY_RADIUS, min_xz.y),
-			Vec3::new(max_xz.x, center_y + MAX_LOCAL_QUERY_RADIUS, max_xz.y),
-		);
-		let query_level = BaseScale::new(self.local.grid().base_scale())
-			.map(|base| base.insertion_level(&region))
-			.unwrap_or(0);
-		let mut records = BTreeMap::new();
-		for (record, _) in self
-			.local
-			.query_values(region, BaseScale::levels_through(query_level.max(self.local_max_level)))
-		{
-			if interests.contains(record.kind) && xz_tile(record.position, size) == tile {
-				records.insert(record.id, *record);
-			}
-		}
-		for record in self.global_matching(interests) {
-			if xz_tile(record.position, size) == tile {
-				records.insert(record.id, record);
-			}
-		}
-		records.into_values().collect()
-	}
-
 	pub fn len(&self) -> usize {
 		self.records.len()
 	}
@@ -411,8 +380,4 @@ fn choose_weighted(
 
 fn xz_distance(a: Vec3, b: Vec3) -> f32 {
 	(a.xz() - b.xz()).length()
-}
-
-fn xz_tile(position: Vec3, tile_size: f32) -> IVec2 {
-	(position.xz() / tile_size).floor().as_ivec2()
 }

@@ -1,4 +1,6 @@
 # This workflow runs cargo check on every pushed commit.
+# Restores the cargo-test rust-cache (release + registry) and does not save,
+# so check stays covered without a second ~1.5 GB cache entry.
 
 name: Cargo Check
 
@@ -10,7 +12,8 @@ jobs:
   cargo-check:
     uses: ./.github/workflows/nix-command.yml
     with:
-      command: cargo check
+      command: bin/check-controller-boundaries.sh && cargo check --locked
       nix_flake_path: '.'
-      runner: 'ubuntu-latest'
-      rust_cache_key: cargo-check
+      runner: 'ubuntu-24.04'
+      rust_cache_key: cargo-release-test
+      rust_cache_save: false

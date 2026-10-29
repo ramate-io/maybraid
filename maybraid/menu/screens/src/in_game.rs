@@ -1,18 +1,18 @@
 //! In-game pause menu: centered actions plus upper-left brand / mode.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 use maybraid_menu_controller::MenuController;
 use menu_components::single_select::republish_menu_activate;
 use menu_components::single_select::text_cursor::TextCursorColumn;
 use menu_components::{
-	set_brand_mode_title, BrandModeLine, BrandModeTitle, TextColumnAlign, TextColumnAnchor,
-	TextCursorRow, TextMenuPlugin,
+	BrandModeLine, BrandModeTitle, TextColumnAlign, TextColumnAnchor, TextCursorRow,
+	TextMenuPlugin, menu_list_panel_node, menu_region_wash, set_brand_mode_title,
 };
 
 use crate::input::add_menu_input;
 use crate::settings::InGameSettingsPlugin;
-use crate::show::{add_menu_show_systems, MenuScreens, MenuShowRequest};
+use crate::show::{MenuScreens, MenuShowRequest, add_menu_show_systems};
 use crate::{GameMode, MenuScreen};
 
 /// Queue an in-game menu spawn (despawns any existing menu screen first).
@@ -71,20 +71,27 @@ impl InGameScreen {
 		let selected = selected
 			.and_then(|selected| rows.iter().position(|row| row.action == selected))
 			.unwrap_or(0);
+		let panel = menu_list_panel_node(AlignItems::Center);
+		let list: Vec<Box<dyn Scene>> = vec![Box::new(
+			TextCursorColumn::untitled_rows(rows)
+				.anchored(TextColumnAnchor::Center)
+				.aligned(TextColumnAlign::Center)
+				.with_selected(selected)
+				.scene(),
+		)];
 		let children: Vec<Box<dyn Scene>> = vec![
-			Box::new(
-				TextCursorColumn::untitled_rows(rows)
-					.anchored(TextColumnAnchor::Center)
-					.aligned(TextColumnAlign::Center)
-					.with_selected(selected)
-					.scene(),
-			),
+			Box::new(bsn! {
+				template_value(panel)
+				BackgroundColor(menu_region_wash())
+				Pickable::IGNORE
+				Children [ {list} ]
+			}),
 			Box::new(BrandModeLine::new(mode.label.clone()).scene()),
 		];
 		bsn! {
 			InGameScreen
 			MenuScreen
-			MenuController
+			MenuController::default()
 			Node {
 				width: percent(100),
 				height: percent(100),

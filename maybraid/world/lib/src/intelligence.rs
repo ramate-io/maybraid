@@ -7,15 +7,13 @@ use bevy::time::common_conditions::on_timer;
 use characters::CharacterMotionSystems;
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
-use firearm_user::FirearmUserPlugin;
 use firearms::FirearmWeaponsPlugin;
 use fleeing_intelligence::{FleeingPlugin, FleeingSystems};
-use grenade_user::GrenadeUserPlugin;
 use hiding_intelligence::{HidingPlugin, HidingSystems};
 use intelligence_lod::{
-	look_near_m, look_promotes, IntelligenceBakeKey, IntelligenceBand, IntelligenceFocus,
-	IntelligenceFocusSample, IntelligenceLod, IntelligenceLook, IntelligenceLookFrame,
-	IntelligencePriority, LOOK_APPLY_FOV_INSET, LOOK_FOV_INSET,
+	IntelligenceBakeKey, IntelligenceBand, IntelligenceFocus, IntelligenceFocusSample,
+	IntelligenceLod, IntelligenceLook, IntelligenceLookFrame, IntelligencePriority,
+	LOOK_APPLY_FOV_INSET, LOOK_FOV_INSET, look_near_m, look_promotes,
 };
 use lod::LodViewer;
 use meandering_intelligence::MeanderingIntelligencePlugin;
@@ -34,6 +32,7 @@ use routing_intelligence::{RoutingPlugin, RoutingSystems};
 use spotting_intelligence::{
 	InterestLayers, SpotBounds, SpotSubject, SpottingObserveLimits, SpottingSystems,
 };
+use tanz_user::TanzUserPlugin;
 use tether_intelligence::TetherSystems;
 use threat_intelligence::{
 	Affiliations, ThreatDiscoverLimits, ThreatId, ThreatIntelligencePlugin, ThreatSubject,
@@ -87,11 +86,8 @@ impl Plugin for WorldIntelligencePlugin {
 		if !app.is_plugin_added::<FirearmWeaponsPlugin>() {
 			app.add_plugins(FirearmWeaponsPlugin);
 		}
-		if !app.is_plugin_added::<FirearmUserPlugin>() {
-			app.add_plugins(FirearmUserPlugin);
-		}
-		if !app.is_plugin_added::<GrenadeUserPlugin>() {
-			app.add_plugins(GrenadeUserPlugin);
+		if !app.is_plugin_added::<TanzUserPlugin>() {
+			app.add_plugins(TanzUserPlugin);
 		}
 		if !app.is_plugin_added::<MovementIntelligencePlugin<AvianMovementSurface<'_, '_>>>() {
 			app.add_plugins(MovementIntelligencePlugin::<AvianMovementSurface<'_, '_>>::default());
@@ -322,7 +318,7 @@ fn sync_world_player_threat_actor(mut commands: Commands, players: WorldPlayers)
 mod tests {
 	use super::*;
 	use damage::DamageApplied;
-	use mob_scenes::{MobBrain, MobKind, FFA_GROUP, PLAYER_GROUP};
+	use mob_scenes::{FFA_GROUP, MobBrain, MobKind, PLAYER_GROUP};
 	use threat_intelligence::{ThreatIntelligenceUser, ThreatKnowledge};
 
 	fn bake_app() -> App {
@@ -563,10 +559,11 @@ mod tests {
 		app.update();
 
 		let player_id = ThreatId(player.to_bits());
-		assert!(app
-			.world()
-			.get::<ThreatKnowledge>(mob)
-			.is_some_and(|knowledge| { knowledge.get(player_id).is_some() }));
+		assert!(
+			app.world()
+				.get::<ThreatKnowledge>(mob)
+				.is_some_and(|knowledge| { knowledge.get(player_id).is_some() })
+		);
 	}
 
 	#[test]
@@ -586,10 +583,11 @@ mod tests {
 			))
 			.id();
 		app.update();
-		assert!(app
-			.world()
-			.get::<ThreatKnowledge>(victim)
-			.is_some_and(ThreatKnowledge::is_empty));
+		assert!(
+			app.world()
+				.get::<ThreatKnowledge>(victim)
+				.is_some_and(ThreatKnowledge::is_empty)
+		);
 
 		app.world_mut().write_message(DamageApplied {
 			target: victim,
@@ -603,10 +601,11 @@ mod tests {
 		app.update();
 
 		let player_id = ThreatId(player.to_bits());
-		assert!(app
-			.world()
-			.get::<ThreatKnowledge>(victim)
-			.is_some_and(|knowledge| { knowledge.get(player_id).is_some() }));
+		assert!(
+			app.world()
+				.get::<ThreatKnowledge>(victim)
+				.is_some_and(|knowledge| { knowledge.get(player_id).is_some() })
+		);
 	}
 
 	fn threat_app() -> App {

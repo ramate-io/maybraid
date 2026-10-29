@@ -11,7 +11,7 @@ lifetime types.
 ```text
 LubikanDefinitionId / LubikanAccountId
         ↓
-LubikanLedger  (owned accounts + equipped selection)
+LubikanLedger  (ordered owned accounts + equipped selection)
         ↓
 LubikanCharge::apply → LubikanChargeMutation
         ↓
@@ -71,6 +71,20 @@ Self fallback) and writes [`LubikanActivationRequest`](src/activation.rs) from
 adds [`LubikanDamagePlugin`](damage/) so bindings copy onto generic
 `DamageCredit` before history ingest. The plugin has no Bikanwarda or HUD
 dependency.
+
+## Inventory order
+
+`LubikanLedger::iter` is the cycling order, including Self. The inventory
+editor receives a [`LubikanOrder`](src/order.rs) projection and shows it in
+the same numbered equipped pane as bag equipment. Reordering moves one
+adjacent account at a time; all owned accounts remain in the queue and Self
+cannot be removed or dropped.
+
+`LubikanLedger::apply_order` applies only that order. It preserves account
+charge, activation, selected identity, and any accounts acquired while the
+editor was open. Discard restores the opening order through the same API.
+The existing ledger lifetime policy carries order through body replacement;
+this does not add disk persistence for Lubikan ownership.
 
 ## Consumer fixture
 

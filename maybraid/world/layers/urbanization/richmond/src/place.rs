@@ -2,7 +2,7 @@
 //!
 //! World composition assigns POI kinds. This crate stays free of `Poi` / mob taxonomy.
 
-use bevy::prelude::Component;
+use bevy::prelude::{Component, Vec3};
 use building_components::LabelNode;
 use lod::gen::Id;
 
@@ -40,6 +40,8 @@ pub struct DiscoverablePlace {
 	pub persistent: bool,
 	pub host: Option<Id>,
 	pub local: u32,
+	/// Authored floor surface in this entity's local space; absent for outdoor places.
+	pub arrival_local: Option<Vec3>,
 }
 
 /// Compatibility name for the original Les Halles storey marker.
@@ -60,6 +62,7 @@ impl DiscoverablePlace {
 			persistent: true,
 			host: None,
 			local: 0,
+			arrival_local: None,
 		}
 	}
 
@@ -71,7 +74,13 @@ impl DiscoverablePlace {
 			persistent: false,
 			host: None,
 			local: 0,
+			arrival_local: None,
 		}
+	}
+
+	pub const fn with_arrival_local(mut self, arrival: Option<Vec3>) -> Self {
+		self.arrival_local = arrival;
+		self
 	}
 
 	pub const fn with_identity(mut self, host: Id, local: u32) -> Self {

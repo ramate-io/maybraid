@@ -6,8 +6,9 @@ use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
 
 use crate::controls::hud_menu::{HudMenu, HudMenuItem};
+use crate::modal::MenuModalStack;
 use crate::theme::{SCROLLBAR_THUMB, SCROLLBAR_TRACK, SCROLLBAR_WIDTH, TILE_FOCUS_PAD};
-use maybraid_input::{MenuNav, MenuNavImpulse};
+use crate::{MenuNav, MenuNavImpulse};
 
 const SCROLL_LINE_PX: f32 = 14.0;
 const MIN_THUMB_PX: f32 = 24.0;
@@ -17,6 +18,10 @@ const HUD_NAV_SCROLL_LINE: f32 = 56.0;
 /// Scrollable column that a [`HudScrollThumb`] tracks.
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct HudScrollViewport;
+
+/// Horizontal equipped-row strip. Focus follows the item across overflow.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct HudScrollStrip;
 
 /// Vertical track; hidden when content fits.
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -148,8 +153,10 @@ pub fn sync_hud_scrollbars(
 }
 
 pub fn send_hud_scroll_events(
+	stack: Res<MenuModalStack>,
 	mut mouse_wheel_reader: MessageReader<MouseWheel>,
 	hover_map: Res<HoverMap>,
+	scoped: Query<(), With<crate::ScopedMenuSession>>,
 	mut commands: Commands,
 ) {
 	for mouse_wheel in mouse_wheel_reader.read() {
@@ -159,6 +166,9 @@ pub fn send_hud_scroll_events(
 		}
 		for pointer_map in hover_map.values() {
 			for entity in pointer_map.keys().copied() {
+				if stack.owns_nav() && !scoped.contains(entity) {
+					continue;
+				}
 				commands.trigger(HudScroll { entity, delta });
 			}
 		}
@@ -277,6 +287,64 @@ pub(crate) fn reveal_item_in_viewport(
 	add_scroll_y(scroll, view, delta * scale);
 }
 
+/// Keep the focused HUD item visible inside a horizontal equipped strip.
+pub fn scroll_hud_selection_into_strip(
+	menus: Query<&HudMenu>,
+	items: Query<(Entity, &HudMenuItem, &ComputedNode, &bevy::ui::UiGlobalTransform)>,
+	mut strips: Query<
+		(Entity, &ComputedNode, &mut ScrollPosition, &bevy::ui::UiGlobalTransform),
+		With<HudScrollStrip>,
+	>,
+	child_of: Query<&ChildOf>,
+) {
+	for (strip, computed, mut scroll, strip_tf) in &mut strips {
+		let Some((_, _, item_node, item_tf)) = items.iter().find(|(entity, item, _, _)| {
+			menus.get(item.menu).is_ok_and(|menu| menu.selected == item.index)
+				&& entity_is_under(*entity, strip, &child_of)
+		}) else {
+			continue;
+		};
+		reveal_item_in_strip(computed, strip_tf, item_node, item_tf, TILE_FOCUS_PAD, &mut scroll);
+	}
+}
+
+fn reveal_item_in_strip(
+	view: &ComputedNode,
+	view_tf: &bevy::ui::UiGlobalTransform,
+	item: &ComputedNode,
+	item_tf: &bevy::ui::UiGlobalTransform,
+	slack_px: f32,
+	scroll: &mut ScrollPosition,
+) {
+	let scale = view.inverse_scale_factor();
+	let view_w = view.size().x;
+	let item_w = item.size().x;
+	if view_w <= 0.0 || item_w <= 0.0 {
+		return;
+	}
+	let slack = slack_px / scale.max(f32::EPSILON);
+	let delta = scroll_delta_to_reveal(
+		view_tf.affine().translation.x,
+		view_w,
+		item_tf.affine().translation.x,
+		item_w,
+		slack,
+	);
+	if delta == 0.0 {
+		return;
+	}
+	add_scroll_x(scroll, view, delta * scale);
+}
+
+fn add_scroll_x(scroll: &mut ScrollPosition, computed: &ComputedNode, delta: f32) {
+	let scale = computed.inverse_scale_factor();
+	let max_scroll = ((computed.content_size().x - computed.size().x) * scale).max(0.0);
+	if max_scroll <= 0.0 {
+		return;
+	}
+	scroll.x = (scroll.x + delta).clamp(0.0, max_scroll);
+}
+
 fn add_scroll_y(scroll: &mut ScrollPosition, computed: &ComputedNode, delta: f32) {
 	let scale = computed.inverse_scale_factor();
 	let max_scroll = ((computed.content_size().y - computed.size().y) * scale).max(0.0);
@@ -327,8 +395,8 @@ pub(crate) fn entity_is_under(
 
 #[cfg(test)]
 mod tests {
-	use super::{hud_nav_scroll_delta, scroll_delta_to_reveal, HUD_NAV_SCROLL_LINE};
-	use maybraid_input::MenuNav;
+	use super::{HUD_NAV_SCROLL_LINE, hud_nav_scroll_delta, scroll_delta_to_reveal};
+	use crate::MenuNav;
 
 	#[test]
 	fn item_already_visible_does_not_scroll() {
@@ -365,5 +433,75 @@ mod tests {
 		assert_eq!(hud_nav_scroll_delta(MenuNav::Up), Some(-HUD_NAV_SCROLL_LINE));
 		assert_eq!(hud_nav_scroll_delta(MenuNav::Left), None);
 		assert_eq!(hud_nav_scroll_delta(MenuNav::Select), None);
+	}
+
+	#[test]
+	fn overflowing_tile_column_scrolls_the_focused_tail_into_view() {
+		const TILE_H: f32 = 120.0;
+		const TILES: usize = 20;
+		const VIEW_H: f32 = 400.0;
+		let content_h = TILES as f32 * TILE_H;
+		assert!(content_h > VIEW_H, "fixture must overflow the pane");
+		let view_center = VIEW_H * 0.5;
+		let last_center = (TILES as f32 - 0.5) * TILE_H;
+		let delta = scroll_delta_to_reveal(view_center, VIEW_H, last_center, TILE_H, 6.0);
+		assert!(delta > 0.0, "last tile is below the fold, got {delta}");
+		let max_scroll = content_h - VIEW_H;
+		assert!(delta.clamp(0.0, max_scroll) > 0.0);
+		assert_eq!(scroll_delta_to_reveal(view_center, VIEW_H, view_center, TILE_H, 6.0), 0.0);
+	}
+
+	#[test]
+	fn wheel_does_not_scroll_while_a_confirm_modal_owns_nav() {
+		use super::{HudScroll, send_hud_scroll_events};
+		use crate::modal::{MenuModalId, MenuModalLayer, MenuModalStack};
+		use bevy::ecs::entity::EntityHashMap;
+		use bevy::ecs::system::RunSystemOnce;
+		use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
+		use bevy::input::touch::TouchPhase;
+		use bevy::picking::backend::HitData;
+		use bevy::picking::hover::HoverMap;
+		use bevy::picking::pointer::PointerId;
+		use bevy::prelude::*;
+
+		#[derive(Resource, Default)]
+		struct ScrollHits(u32);
+
+		fn count(scroll: On<HudScroll>, mut hits: ResMut<ScrollHits>) {
+			hits.0 += 1;
+			let _ = scroll;
+		}
+
+		fn wheel() -> MouseWheel {
+			MouseWheel {
+				unit: MouseScrollUnit::Line,
+				x: 0.0,
+				y: 1.0,
+				window: Entity::PLACEHOLDER,
+				phase: TouchPhase::Moved,
+			}
+		}
+
+		let mut world = World::new();
+		world.init_resource::<MenuModalStack>();
+		world.init_resource::<HoverMap>();
+		world.init_resource::<Messages<MouseWheel>>();
+		world.init_resource::<ScrollHits>();
+		world.add_observer(count);
+		let viewport = world.spawn_empty().id();
+		let mut hits = EntityHashMap::default();
+		hits.insert(viewport, HitData::new(Entity::PLACEHOLDER, 0.0, None, None));
+		world.resource_mut::<HoverMap>().0.insert(PointerId::Mouse, hits);
+		world.resource_mut::<Messages<MouseWheel>>().write(wheel());
+		world.resource_mut::<MenuModalStack>().open(MenuModalLayer::ITEM_DROP);
+		world.run_system_once(send_hud_scroll_events).expect("blocked wheel");
+		world.flush();
+		assert_eq!(world.resource::<ScrollHits>().0, 0);
+		world.resource_mut::<MenuModalStack>().close(MenuModalId::ITEM_DROP);
+		world.resource_mut::<ScrollHits>().0 = 0;
+		world.resource_mut::<Messages<MouseWheel>>().write(wheel());
+		world.run_system_once(send_hud_scroll_events).expect("restored wheel");
+		world.flush();
+		assert!(world.resource::<ScrollHits>().0 >= 1);
 	}
 }

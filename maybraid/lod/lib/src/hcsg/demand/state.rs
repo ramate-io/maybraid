@@ -30,8 +30,8 @@ pub(super) fn discover<T: GenerationScheme>(cx: &mut GenerationContext, region: 
 	T::original_ids_for(cx, region).into_iter().map(|OriginalId(id)| id).collect()
 }
 
-pub(super) fn generate<T: GenerationScheme>(cx: &mut GenerationContext, id: Id) -> bool {
-	cx.get_or_generate::<T>(id).is_some()
+pub(crate) fn generate<T: GenerationScheme>(cx: &mut GenerationContext, id: Id) -> bool {
+	cx.generate_cached::<T>(id)
 }
 
 pub(super) struct Subscription {
@@ -70,6 +70,11 @@ pub(super) struct DemandState {
 	pub shutdown: bool,
 	/// The live subscription set changed since the last sweep.
 	pub sweep_needed: bool,
+	/// After [`super::HcsgDemand::advance_epoch`], the next sweep must evict as
+	/// if no subscription were live, even if a system already resubscribed.
+	/// Otherwise a same-frame resubscribe can keep old-session cache hits and
+	/// never bump versions.
+	pub epoch_sweep_pending: bool,
 }
 
 pub(super) struct DemandShared {

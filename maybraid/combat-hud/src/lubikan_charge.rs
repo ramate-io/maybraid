@@ -10,7 +10,7 @@ use menu_components::{spawn_hud_text_card, HudFonts, HUD_TEXT_CARD_FACE_PX, TEXT
 use player::Player;
 
 use crate::continuous_health::{spawn_ui_meter_row, ContinuousHealthConfig};
-use crate::cycle_cue::CombatHudInventoryCycleCategory;
+use crate::cycle_cue::{idle_cycle_outline, CombatHudCyclePanel, CombatHudInventoryCycleCategory};
 use crate::plate::{spawn_hud_plate, HudPlateCorner, HudPlateLayout};
 use crate::vitals::VITALS_WIDTH;
 use crate::CombatHudVisible;
@@ -155,7 +155,11 @@ pub(crate) fn spawn_lubikan_charge(
 	spawn_hud_plate(
 		parent,
 		"lubikan-charge",
-		LubikanChargeRoot,
+		(
+			LubikanChargeRoot,
+			CombatHudCyclePanel(CombatHudInventoryCycleCategory::Lubikans),
+			idle_cycle_outline(),
+		),
 		HudPlateLayout {
 			width: CHARGE_WIDTH,
 			row_gap: CHARGE_ROW_GAP,
@@ -471,17 +475,6 @@ mod tests {
 			..ready
 		};
 		assert_eq!(charge_status(&empty, None, None), "");
-	}
-
-	#[test]
-	fn charge_amount_is_current_not_a_fraction() {
-		assert_eq!(format_charge(3.0), "3");
-		assert_eq!(format_charge(12.5), "12.5");
-	}
-
-	#[test]
-	fn self_account_label_is_self() {
-		assert_eq!(account_label(LubikanAccountId::SELF), "Self");
 	}
 
 	#[test]

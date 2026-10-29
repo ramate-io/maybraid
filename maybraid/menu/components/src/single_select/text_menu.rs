@@ -6,15 +6,17 @@
 //! copies activate onto [`Message<E>`] for listeners outside the screen.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 use bevy::text::{FontSourceTemplate, Justify};
 
+use crate::controls::focus::{FocusTag, first_focus_tag, paint_focus_tag};
 use crate::theme::{
 	BARLOW_BLACK, BARLOW_SEMIBOLD, COLUMN_BOTTOM, COLUMN_INSET, CORNER_BOTTOM, CORNER_INSET,
-	HEADER_FONT_SIZE, HEADER_MARGIN_BOTTOM, ITEM_FONT_SIZE, ITEM_ROW_GAP, TEXT_YELLOW,
-	TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS, TEXT_YELLOW_HOVER,
+	FOCUS_TAG_PAD_X, FOCUS_TAG_PAD_Y, FOCUS_TAG_RADIUS, HEADER_FONT_SIZE, HEADER_MARGIN_BOTTOM,
+	ITEM_FONT_SIZE, ITEM_ROW_GAP, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS,
+	TEXT_YELLOW_HOVER,
 };
-use maybraid_input::{MenuNav, MenuNavImpulse};
+use crate::{MenuNav, MenuNavImpulse};
 
 /// When `true`, arrow keys, Enter, and pick activations stay with the command line.
 #[derive(Resource, Default, Clone, Copy, Debug)]
@@ -111,6 +113,31 @@ impl TextMenuItem {
 		let label = label.into();
 		let justify_content = align.justify_content();
 		let text_justify = align.text_justify();
+		let tag = FocusTag::new(self.idle);
+		let label_children: Vec<Box<dyn Scene>> = vec![Box::new(bsn! {
+			template_value(Text::new(label))
+			TextFont {
+				font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
+				font_size: px(ITEM_FONT_SIZE),
+			}
+			TextColor(TEXT_YELLOW)
+			TextLayout::new(text_justify, bevy::text::LineBreak::NoWrap)
+			TextMenuItemLabel
+			Pickable::IGNORE
+		})];
+		let children: Vec<Box<dyn Scene>> = vec![Box::new(bsn! {
+			template_value(tag)
+			Node {
+				padding: UiRect::axes(px(FOCUS_TAG_PAD_X), px(FOCUS_TAG_PAD_Y)),
+				border_radius: BorderRadius::all(px(FOCUS_TAG_RADIUS)),
+				justify_content: JustifyContent::Center,
+				align_items: AlignItems::Center,
+				flex_shrink: 0.0,
+			}
+			BackgroundColor(Color::NONE)
+			Pickable::IGNORE
+			Children [ {label_children} ]
+		})];
 		bsn! {
 			Button
 			template_value(self)
@@ -121,22 +148,37 @@ impl TextMenuItem {
 				align_items: AlignItems::Center,
 			}
 			BackgroundColor(Color::NONE)
-			Children [(
-				template_value(Text::new(label))
-				TextFont {
-					font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
-					font_size: px(ITEM_FONT_SIZE),
-				}
-				TextColor(TEXT_YELLOW)
-				TextLayout::new(text_justify, bevy::text::LineBreak::NoWrap)
-				TextMenuItemLabel
-				Pickable::IGNORE
-			)]
+			Children [ {children} ]
 		}
+	}
+
+	/// Row title, including the focus-tag grandchild used by cursor columns.
+	pub fn label_under(
+		row: Entity,
+		children: &Query<&Children>,
+		labels: &Query<&Text, With<TextMenuItemLabel>>,
+	) -> Option<String> {
+		Self::first_label_under(row, children, labels)
+	}
+
+	fn first_label_under(
+		entity: Entity,
+		children: &Query<&Children>,
+		labels: &Query<&Text, With<TextMenuItemLabel>>,
+	) -> Option<String> {
+		if let Ok(text) = labels.get(entity) {
+			if !text.0.is_empty() {
+				return Some(text.0.clone());
+			}
+		}
+		let Ok(childs) = children.get(entity) else {
+			return None;
+		};
+		childs.iter().find_map(|child| Self::first_label_under(child, children, labels))
 	}
 }
 
-/// Marker on the label [`Text`] child of a [`TextMenuItem`].
+/// Marker on the label [`Text`] of a [`TextMenuItem`] (often a focus-tag grandchild).
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct TextMenuItemLabel;
 
@@ -191,7 +233,7 @@ pub enum TextColumnAnchor {
 /// How labels sit inside the column and inside each row.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TextColumnAlign {
-	/// Reserved cursor gutter; labels share a left edge.
+	/// Labels share a left edge. The focus tag hugs each title.
 	#[default]
 	Start,
 	/// Each label is centered on the column axis.
@@ -482,14 +524,13 @@ pub fn emit_menu_activate_on_enter<E: Component + Copy + Send + Sync + 'static>(
 /// Activate the focused row when a controller fires [`MenuNav::Select`].
 pub fn emit_menu_activate_on_nav<E: Component + Copy + Send + Sync + 'static>(
 	impulse: On<MenuNavImpulse>,
-	lock: Res<TextMenuInputLock>,
 	menus: Query<&TextMenu>,
 	items: Query<(Entity, &TextMenuItem, &E, &ChildOf)>,
 	locked: Query<(), With<MenuItemLocked>>,
 	child_of: Query<&ChildOf>,
 	mut commands: Commands,
 ) {
-	if lock.0 || impulse.event().nav != MenuNav::Select {
+	if impulse.event().nav != MenuNav::Select {
 		return;
 	}
 	let menu_entity = impulse.entity;
@@ -500,7 +541,7 @@ pub fn emit_menu_activate_on_nav<E: Component + Copy + Send + Sync + 'static>(
 		if locked.contains(item) {
 			return;
 		}
-		commands.trigger(MenuActivate { entity: menu_entity, choice });
+		impulse.deliver(&mut commands, MenuActivate { entity: menu_entity, choice });
 	}
 }
 
@@ -510,15 +551,11 @@ pub fn emit_menu_activate_on_nav<E: Component + Copy + Send + Sync + 'static>(
 /// that moves onto a stepper does not also step it.
 pub fn apply_text_menu_nav(
 	impulse: On<MenuNavImpulse>,
-	lock: Res<TextMenuInputLock>,
 	mut menus: Query<&mut TextMenu>,
 	steppers: Query<(Entity, &TextMenuItem, &ChildOf), With<MenuStepper>>,
 	child_of: Query<&ChildOf>,
 	mut commands: Commands,
 ) {
-	if lock.0 {
-		return;
-	}
 	let menu_entity = impulse.entity;
 	let Ok(mut menu) = menus.get_mut(menu_entity) else {
 		return;
@@ -604,15 +641,33 @@ pub fn sync_text_menu_item_colors(
 	menus: Query<&TextMenu>,
 	child_of: Query<&ChildOf>,
 	items: Query<(Entity, &TextMenuItem, &Children)>,
-	mut labels: Query<&mut TextColor, With<TextMenuItemLabel>>,
+	locked: Query<(), With<MenuItemLocked>>,
+	tags: Query<(), With<FocusTag>>,
+	children: Query<&Children>,
+	mut backgrounds: Query<&mut BackgroundColor, With<FocusTag>>,
+	mut colors: Query<&mut TextColor>,
 ) {
-	for (entity, item, children) in &items {
+	for (entity, item, item_children) in &items {
 		let Some(menu) = text_menu_for_item(entity, &child_of, &menus) else {
 			continue;
 		};
-		let color = if item.index == menu.selected { item.active } else { item.idle };
-		for child in children {
-			if let Ok(mut text_color) = labels.get_mut(*child) {
+		let focused = item.index == menu.selected;
+		let is_locked = locked.contains(entity);
+		if let Some(tag) = first_focus_tag(item_children, &tags) {
+			paint_focus_tag(
+				tag,
+				focused,
+				is_locked,
+				item.idle,
+				&children,
+				&mut backgrounds,
+				&mut colors,
+			);
+			continue;
+		}
+		let color = if focused { item.active } else { item.idle };
+		for child in item_children {
+			if let Ok(mut text_color) = colors.get_mut(*child) {
 				text_color.0 = color;
 			}
 		}
@@ -728,6 +783,46 @@ mod tests {
 		assert_eq!(app.world().resource::<ActivateHits>().0, 1);
 	}
 
+	#[derive(Resource)]
+	struct LabelRow {
+		entity: Entity,
+		want: &'static str,
+	}
+
+	fn assert_label_under(
+		row: Res<LabelRow>,
+		children: Query<&Children>,
+		labels: Query<&Text, With<super::TextMenuItemLabel>>,
+	) {
+		assert_eq!(
+			super::TextMenuItem::label_under(row.entity, &children, &labels).as_deref(),
+			Some(row.want)
+		);
+	}
+
+	#[test]
+	fn label_under_walks_the_focus_tag() {
+		let mut app = App::new();
+		app.add_systems(Update, assert_label_under);
+		let row = app.world_mut().spawn(super::TextMenuItem::yellow(2)).id();
+		let tag = app.world_mut().spawn(ChildOf(row)).id();
+		app.world_mut()
+			.spawn((Text::new("Characters"), super::TextMenuItemLabel, ChildOf(tag)));
+		app.insert_resource(LabelRow { entity: row, want: "Characters" });
+		app.update();
+	}
+
+	#[test]
+	fn label_under_still_reads_a_direct_child() {
+		let mut app = App::new();
+		app.add_systems(Update, assert_label_under);
+		let row = app.world_mut().spawn(super::TextMenuItem::yellow(0)).id();
+		app.world_mut()
+			.spawn((Text::new("Discovery"), super::TextMenuItemLabel, ChildOf(row)));
+		app.insert_resource(LabelRow { entity: row, want: "Discovery" });
+		app.update();
+	}
+
 	#[test]
 	fn locked_row_does_not_activate_on_nav_select() {
 		let mut app = App::new();
@@ -736,8 +831,10 @@ mod tests {
 			.add_observer(count_activate)
 			.add_observer(super::emit_menu_activate_on_nav::<TestChoice>);
 		let menu = spawn_row(&mut app, true);
-		app.world_mut()
-			.trigger(maybraid_input::MenuNavImpulse::new(menu, maybraid_input::MenuNav::Select));
+		app.world_mut().trigger(crate::MenuNavImpulse::new(
+			menu,
+			crate::MenuNav::Select,
+		));
 		assert_eq!(app.world().resource::<ActivateHits>().0, 0);
 	}
 
@@ -769,8 +866,9 @@ mod tests {
 		(app, menu)
 	}
 
-	fn nav(app: &mut App, menu: Entity, nav: maybraid_input::MenuNav) {
-		app.world_mut().trigger(maybraid_input::MenuNavImpulse::new(menu, nav));
+	fn nav(app: &mut App, menu: Entity, nav: crate::MenuNav) {
+		app.world_mut()
+			.trigger(crate::MenuNavImpulse::new(menu, nav));
 		app.world_mut().flush();
 	}
 
@@ -781,8 +879,8 @@ mod tests {
 	#[test]
 	fn stepper_row_steps_once_and_keeps_selection() {
 		let (mut app, menu) = stepper_app(0);
-		nav(&mut app, menu, maybraid_input::MenuNav::Left);
-		nav(&mut app, menu, maybraid_input::MenuNav::Right);
+		nav(&mut app, menu, crate::MenuNav::Left);
+		nav(&mut app, menu, crate::MenuNav::Right);
 		assert_eq!(selected(&app, menu), 0);
 		assert_eq!(app.world().resource::<StepDeltas>().0, vec![-1, 1]);
 	}
@@ -790,10 +888,10 @@ mod tests {
 	#[test]
 	fn moving_onto_a_stepper_does_not_step_it() {
 		let (mut app, menu) = stepper_app(1);
-		nav(&mut app, menu, maybraid_input::MenuNav::Right);
+		nav(&mut app, menu, crate::MenuNav::Right);
 		assert_eq!(selected(&app, menu), 1);
 		app.world_mut().entity_mut(menu).get_mut::<super::TextMenu>().unwrap().selected = 2;
-		nav(&mut app, menu, maybraid_input::MenuNav::Left);
+		nav(&mut app, menu, crate::MenuNav::Left);
 		assert_eq!(selected(&app, menu), 1);
 		assert!(app.world().resource::<StepDeltas>().0.is_empty());
 	}

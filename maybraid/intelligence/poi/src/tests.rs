@@ -5,7 +5,8 @@ use crate::{
 	choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi, KnownPoi, LocalPoi, Poi,
 	PoiDiscoverLimits, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId, PoiIntelligencePlugin,
 	PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
-	PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState,
+	NearbyFallback, NearbyQuery, PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiSupport,
+	PoiVisitPolicy, PoiVisitState,
 	AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
 };
 use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};
@@ -46,6 +47,48 @@ fn registry_separates_local_and_sparse_global_sets() -> anyhow::Result<()> {
 	assert_eq!(local.iter().map(|record| record.id).collect::<Vec<_>>(), [PoiId(1)]);
 	assert_eq!(global.iter().map(|record| record.id).collect::<Vec<_>>(), [PoiId(2)]);
 	Ok(())
+}
+
+#[test]
+fn support_survives_registry_and_nearby_selection_independent_of_kind() -> anyhow::Result<()> {
+	let mut world = World::new();
+	let floor = world.spawn_empty().id();
+	let terrain = world.spawn_empty().id();
+	let mut registry = PoiRegistry::default();
+	registry.upsert(
+		floor,
+		Poi::new(PoiId(10), CAMP).with_floor_support(),
+		Vec3::new(4.0, 18.0, 4.0),
+		true,
+		false,
+	)?;
+	registry.upsert(terrain, Poi::new(PoiId(11), CAMP), Vec3::new(80.0, 3.0, 4.0), true, false)?;
+	assert_eq!(registry.get(PoiId(10)).map(|record| record.support), Some(PoiSupport::Floor));
+	assert_eq!(registry.get(PoiId(11)).map(|record| record.support), Some(PoiSupport::Terrain));
+
+	let interests = PoiInterests::one(CAMP);
+	let selected = registry.place_nearby(
+		Vec3::new(4.0, 18.0, 4.0),
+		NearbyQuery::nearest_beyond(4.0, 0.0),
+		&interests,
+		None,
+		5,
+		NearbyFallback::HOST,
+	);
+	assert_eq!(selected.poi, Some(PoiId(10)));
+	assert_eq!(selected.support, PoiSupport::Floor);
+	assert_eq!(selected.position.y, 18.0);
+	Ok(())
+}
+
+#[test]
+fn poi_arrival_surface_height_respects_support() {
+	let floor = crate::PoiArrival::floor(Vec3::new(1.0, 12.0, 2.0), 4.0);
+	let terrain = crate::PoiArrival::terrain(Vec3::new(1.0, 3.0, 2.0), 4.0);
+	assert!(floor.stands_on_floor());
+	assert_eq!(floor.surface_y(99.0), 12.0);
+	assert!(!terrain.stands_on_floor());
+	assert_eq!(terrain.surface_y(99.0), 99.0);
 }
 
 #[test]
@@ -616,9 +659,83 @@ fn local_query_clone_timing() {
 
 	eprintln!(
 		"local_query_clone_timing: {POI_COUNT} pois × {SCANS} scans — clone local_matching() {:?}, collect_local_matching+get {:?}",
-		clone_elapsed,
-		id_elapsed,
+		clone_elapsed, id_elapsed,
 	);
+}
+
+#[test]
+fn catalog_scheme_resolves_only_the_queried_tile() -> anyhow::Result<()> {
+	use crate::{collect_matching_in_xz_tile, Catalog, PoiCatalog, PoiEntry};
+	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
+
+	let storage = HcsgStorage::default();
+	storage.seed(
+		PoiCatalog {
+			entries: vec![
+				PoiEntry {
+					id: PoiId(1),
+					kind: CAMP,
+					position: Vec3::new(40.0, 0.0, 40.0),
+					arrival_radius: 1.0,
+					support: PoiSupport::Terrain,
+					salience: 1.0,
+					local: true,
+					global: false,
+				},
+				PoiEntry {
+					id: PoiId(2),
+					kind: CAMP,
+					position: Vec3::new(400.0, 0.0, 400.0),
+					arrival_radius: 1.0,
+					support: PoiSupport::Terrain,
+					salience: 1.0,
+					local: false,
+					global: true,
+				},
+			],
+		},
+		universal_bounds(),
+	);
+	let mut cx = GenerationContext::new(&storage);
+	let interests = PoiInterests::one(CAMP);
+	let mut ids = Vec::new();
+	collect_matching_in_xz_tile::<Catalog>(&mut cx, IVec2::ZERO, 256.0, 0.0, &interests, &mut ids);
+	assert_eq!(ids.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(1)]);
+	collect_matching_in_xz_tile::<Catalog>(
+		&mut cx,
+		IVec2::new(1, 1),
+		256.0,
+		0.0,
+		&interests,
+		&mut ids,
+	);
+	assert_eq!(ids.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(2)]);
+	Ok(())
+}
+
+#[test]
+fn grid_scheme_tile_lookup_is_one_origin_id() -> anyhow::Result<()> {
+	use crate::{collect_matching_in_xz_tile, xz_tile_region, GridTiles, PoiOrigin, GRID_KIND};
+	use lod::hcsg::{GenerationContext, HcsgStorage};
+
+	let storage = HcsgStorage::default();
+	let mut cx = GenerationContext::new(&storage);
+	let region = xz_tile_region(IVec2::new(3, -2), 256.0, 0.0).expect("finite tile");
+	let origins = GridTiles::original_ids_for(&mut cx, region);
+	assert_eq!(origins.len(), 1);
+	let interests = PoiInterests::one(GRID_KIND);
+	let mut pois = Vec::new();
+	collect_matching_in_xz_tile::<GridTiles>(
+		&mut cx,
+		IVec2::new(3, -2),
+		256.0,
+		0.0,
+		&interests,
+		&mut pois,
+	);
+	assert_eq!(pois.len(), 1);
+	assert_eq!(GridTiles::original_ids_for(&mut cx, region).len(), 1);
+	Ok(())
 }
 
 #[test]
@@ -675,7 +792,6 @@ fn choose_in_clone_timing() {
 
 	eprintln!(
 		"choose_in_clone_timing: {POI_COUNT} pois × {PICKS} picks — nearby_in+weighted {:?}, choose_in {:?}",
-		clone_elapsed,
-		id_elapsed,
+		clone_elapsed, id_elapsed,
 	);
 }

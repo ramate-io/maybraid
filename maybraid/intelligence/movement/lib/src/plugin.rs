@@ -4,9 +4,11 @@ use std::marker::PhantomData;
 
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::prelude::*;
-use player::MoveWish;
+use player::{MotorIntent, MotorSample};
 
-use intelligence_lod::{due_by_rank, IntelligenceBand, IntelligenceLod, IntelligencePriority};
+use intelligence_lod::{
+	IntelligenceBand, IntelligenceDueEntities, IntelligenceLod, IntelligencePriority,
+};
 
 use crate::ability::MovementSheet;
 use crate::configure_movement_intelligence_sets;
@@ -61,6 +63,7 @@ pub fn replan_movement<S, I, A>(
 		With<ReplanMovement>,
 	>,
 	mut commands: Commands,
+	mut due_entities: Local<IntelligenceDueEntities>,
 ) where
 	S: SystemParam + 'static,
 	for<'w, 's> S::Item<'w, 's>: MovementIntelligenceSurface<I, A>,
@@ -70,8 +73,11 @@ pub fn replan_movement<S, I, A>(
 	let mut surface = surface.into_inner();
 	let mut remaining = limits.max_replans_per_frame;
 	let mut probes = WalkProbeBudget::new(limits.max_walk_probes_per_frame);
-	let mut due: Vec<Entity> = movers.iter_mut().map(|(entity, ..)| entity).collect();
-	due_by_rank(&mut due, &priority);
+	due_entities.clear();
+	for (entity, ..) in movers.iter_mut() {
+		due_entities.push(entity);
+	}
+	let due = due_entities.finish(&priority);
 	let fair = due.iter().copied().find(|entity| {
 		movers.get_mut(*entity).is_ok_and(|(_, _, _, lod)| {
 			lod.as_deref().is_some_and(|lod| {
@@ -80,7 +86,7 @@ pub fn replan_movement<S, I, A>(
 		})
 	});
 
-	for entity in due {
+	for &entity in due {
 		if remaining == 0 || probes.is_exhausted() {
 			break;
 		}
@@ -128,33 +134,31 @@ pub fn replan_movement<S, I, A>(
 
 pub fn drive_movement<I, A>(
 	time: Res<Time>,
-	mut movers: Query<(Entity, &Transform, &mut MovementIntelligence<I, A>, &mut MoveWish)>,
+	mut movers: Query<(Entity, &Transform, &mut MovementIntelligence<I, A>, &mut MotorIntent)>,
 	mut commands: Commands,
 ) where
 	I: MovementDrive + Send + Sync + 'static,
 	A: Send + Sync + 'static,
 {
 	let dt = time.delta_secs();
-	for (entity, transform, mut brain, mut wish) in &mut movers {
-		match brain.drive(dt, transform.translation) {
-			MovementDriveResult::Wish(dir) => {
-				// Motor unstick may override this wish later this frame.
-				wish.set_if_neq(MoveWish(dir));
-			}
+	for (entity, transform, mut brain, mut intent) in &mut movers {
+		let sample = match brain.drive(dt, transform.translation) {
+			MovementDriveResult::Wish(dir) => MotorSample::translation(dir),
 			MovementDriveResult::Stuck { wish: dir } => {
-				wish.set_if_neq(MoveWish(dir));
 				if dir.length_squared() < 1e-6 {
 					commands.entity(entity).insert(ReplanMovement);
 				}
+				MotorSample::translation(dir)
 			}
-			MovementDriveResult::Hold => {
-				wish.set_if_neq(MoveWish(Vec3::ZERO));
-			}
+			MovementDriveResult::Hold => MotorSample::translation(Vec3::ZERO),
 			MovementDriveResult::Retry => {
-				wish.set_if_neq(MoveWish(Vec3::ZERO));
 				commands.entity(entity).insert(ReplanMovement);
+				MotorSample::translation(Vec3::ZERO)
 			}
-		}
+		};
+		let mut next = *intent;
+		next.set_npc(sample);
+		intent.set_if_neq(next);
 	}
 }
 
@@ -383,7 +387,7 @@ mod tests {
 				MovementIntelligence::<MovementStep, MovementAbility>::new(
 					MovementObjective::Reach(MovementLocation::new(Vec3::ZERO, 0.5)),
 				),
-				MoveWish(Vec3::ZERO),
+				MotorIntent::default(),
 			))
 			.id();
 		anyhow::ensure!(world
@@ -391,8 +395,8 @@ mod tests {
 			.is_ok());
 		let before = world
 			.entity(entity)
-			.get_change_ticks::<MoveWish>()
-			.ok_or_else(|| anyhow::anyhow!("missing wish"))?
+			.get_change_ticks::<MotorIntent>()
+			.ok_or_else(|| anyhow::anyhow!("missing intent"))?
 			.changed
 			.get();
 		anyhow::ensure!(world
@@ -400,8 +404,8 @@ mod tests {
 			.is_ok());
 		let after = world
 			.entity(entity)
-			.get_change_ticks::<MoveWish>()
-			.ok_or_else(|| anyhow::anyhow!("missing wish"))?
+			.get_change_ticks::<MotorIntent>()
+			.ok_or_else(|| anyhow::anyhow!("missing intent"))?
 			.changed
 			.get();
 		anyhow::ensure!(before == after);

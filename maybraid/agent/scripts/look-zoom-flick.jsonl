@@ -1,5 +1,5 @@
 # Headless smoke: two right-stick flicks lock 10 m then 20 m, R3 releases.
-# Playback waits for the world surface. Look analog is a full-deflection
+# Playback waits for the world surface. Raw look throw is a full-deflection
 # throw that returns home — not a sustained pan — so the shared FlickLane
 # classifier commits. `--agent-quit` exits when the script is idle.
 

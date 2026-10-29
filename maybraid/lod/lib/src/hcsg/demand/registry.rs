@@ -116,7 +116,7 @@ impl HcsgDemand {
 
 	/// Whether `id` still exists; `false` once replaced, removed, or dropped by
 	/// [`Self::advance_epoch`].
-	pub fn try_is_live(&self, id: SubscriptionId) -> Result<bool, Busy> {
+	pub(crate) fn try_is_live(&self, id: SubscriptionId) -> Result<bool, Busy> {
 		Ok(self.try_lock()?.subscriptions.contains_key(&id))
 	}
 
@@ -129,6 +129,7 @@ impl HcsgDemand {
 		}
 		state.epoch += 1;
 		state.sweep_needed = true;
+		state.epoch_sweep_pending = true;
 		self.0.wake.notify_all();
 		self.0.idle.notify_all();
 		state.epoch

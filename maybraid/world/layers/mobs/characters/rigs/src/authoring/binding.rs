@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use bevy::math::Affine3A;
 use bevy::prelude::*;
 
 use super::buffer::PoseBuffer;
@@ -122,6 +123,27 @@ impl RigDefinition {
 			}
 		}
 		transform.translation
+	}
+
+	/// Full character-space affine, retaining ancestor scale and rotation-induced shear.
+	/// Returns `None` for an incomplete pose or a chain deeper than 24 bones.
+	pub fn affine_in_character(&self, pose: &PoseBuffer, bone: BoneId) -> Option<Affine3A> {
+		let mut chain = [BoneId(0); 24];
+		let mut count = 0;
+		let mut cursor = Some(bone);
+		while let Some(id) = cursor {
+			if count == chain.len() {
+				return None;
+			}
+			chain[count] = id;
+			count += 1;
+			cursor = self.parent(id);
+		}
+		let mut affine = Affine3A::IDENTITY;
+		for id in chain[..count].iter().rev() {
+			affine *= pose.get(*id)?.compute_affine();
+		}
+		Some(affine)
 	}
 
 	fn first_child(&self, bone: BoneId) -> Option<BoneId> {
@@ -264,5 +286,38 @@ mod tests {
 		assert!((metrics.humanoid_leg.shin - 0.5).abs() < 1e-4, "shin keeps the default");
 		let femur = definition.id("femur.L").expect("femur");
 		assert!((rest.get(femur).expect("t").translation.length() - 0.25).abs() < 1e-4);
+	}
+	#[test]
+	fn affine_preserves_scaled_rotated_distal_geometry() -> anyhow::Result<()> {
+		let definition = RigDefinition::from_names(
+			SkeletonFamily::Humanoid,
+			&["root", "humerus", "forearm"],
+			&[("humerus", "root"), ("forearm", "humerus")],
+		);
+		let mut pose = PoseBuffer::identity(3);
+		pose.local[0] = Transform::from_translation(Vec3::new(1.0, 2.0, 3.0))
+			.with_rotation(Quat::from_rotation_y(0.3))
+			.with_scale(Vec3::splat(0.8));
+		pose.local[1] = Transform::from_translation(Vec3::Y * 0.35)
+			.with_rotation(Quat::from_rotation_z(0.7))
+			.with_scale(Vec3::new(0.8, 1.0, 0.8));
+		pose.local[2] =
+			Transform::from_translation(Vec3::Y * 0.48).with_rotation(Quat::from_rotation_z(1.2));
+		let distal = Vec3::Y * 0.5;
+		let expected = pose.local[0]
+			.transform_point(pose.local[1].transform_point(pose.local[2].transform_point(distal)));
+		let forearm = definition.id("forearm").ok_or_else(|| anyhow::anyhow!("missing forearm"))?;
+		let affine = definition
+			.affine_in_character(&pose, forearm)
+			.ok_or_else(|| anyhow::anyhow!("incomplete affine chain"))?;
+		assert!(affine.transform_point3(distal).distance(expected) < 1e-6);
+		let rotation_only = definition.translation_in_character(&pose, forearm)
+			+ definition.rotation_in_character(&pose, forearm) * distal;
+		assert!(
+			rotation_only.distance(expected) > 0.05,
+			"fixture must distinguish scaled endpoint from unit direction"
+		);
+		assert!(definition.affine_in_character(&PoseBuffer::identity(1), forearm).is_none());
+		Ok(())
 	}
 }

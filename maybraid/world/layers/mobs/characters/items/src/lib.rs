@@ -1,7 +1,7 @@
 //! Items that map onto characters.
 //!
 //! This crate owns the catalog of wearable and carried items (clothing,
-//! firearms, grenades, and skill maps), the shared item color palette, clothing surface
+//! firearms, grenades, skill maps, Tanzes, and the intrinsic Fisticuffs tool), the shared item color palette, clothing surface
 //! recipes, hashed display names, and the inventory bag used at character
 //! creation. Species
 //! crates describe *how* an item attaches to a particular character (rig, slot,
@@ -11,6 +11,7 @@
 pub mod clothing;
 pub mod clothing_material;
 pub mod clothing_roll;
+pub mod drop;
 pub mod firearm;
 pub mod firearm_material;
 pub mod firearm_roll;
@@ -21,12 +22,18 @@ pub mod names;
 pub mod palette;
 pub mod skill_map;
 pub mod stats;
+pub mod tanz;
 
 mod menu_traits;
 
 pub use clothing::{ClothingColor, ClothingHost, ClothingKind, ClothingMesh, ClothingSlot};
 pub use clothing_material::{ClothingMaterial, ClothingMaterialChoice};
 pub use clothing_roll::{generate_clothing_stats, ClothingBuff, ClothingPriors};
+pub use drop::{
+	ActiveInventoryDropPolicy, InventoryDrop, InventoryDropError, InventoryDropPolicy,
+	InventoryDropRefused, InventoryDropRequest, InventoryDropped, InventoryMenuDropped,
+	ACCEPTED_DROP_REMOVAL,
+};
 pub use firearm::{
 	FirearmBarrel, FirearmGrip, FirearmKitSpec, FirearmLooks, FirearmMesh, FirearmScales,
 	FirearmSight, FirearmSpec, FirearmStock, FirearmTriggerBox, SlotLook, SlotRest, SlotScale,
@@ -44,11 +51,14 @@ pub use grenade_roll::{
 	LAUNCH_SPEED_MIN,
 };
 pub use inventory::{
-	icon_catalog_key_for_label, Inventory, InventoryItem, InventorySlot, ItemRng, LootFraction,
-	MaterialRefParams, ITEM_ICON_CATALOG_TAG, SKILL_MAP_BAG_LIMIT, SKILL_MAP_QUEUE_LIMIT,
-	STARTER_CLOTHING_COUNT, STARTER_GRENADE_COUNT, STARTER_SKILL_MAP_COUNT, STARTER_WEAPON_COUNT,
+	catalog_key_uses_yellow_silhouette, fisticuffs_catalog_key, icon_catalog_key_for_label,
+	self_lubikan_catalog_key, Inventory, InventoryItem, InventorySlot, ItemRng, LootFraction,
+	MaterialRefParams, FISTICUFFS_CAPTURE_LABEL, ITEM_ICON_CATALOG_TAG, SELF_LUBIKAN_CAPTURE_LABEL,
+	SKILL_MAP_BAG_LIMIT, SKILL_MAP_QUEUE_LIMIT, STARTER_CLOTHING_COUNT, STARTER_GRENADE_COUNT,
+	STARTER_SKILL_MAP_COUNT, STARTER_TANZ_COUNT, STARTER_WEAPON_COUNT, TANZ_QUEUE_LIMIT,
 	WEAPON_QUEUE_LIMIT, WORN_CLOTHING_LIMIT,
 };
 pub use palette::ItemColor;
 pub use skill_map::{SkillMapKind, SkillMapSpec};
 pub use stats::{CharacterSheet, ClothingStats, FireMode, FirearmStats, ProjectileKind};
+pub use tanz::{TanzId, BASE_STARTER_TANZES};

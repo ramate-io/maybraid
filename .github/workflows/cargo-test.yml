@@ -1,4 +1,6 @@
-# This workflow runs cargo test on every pushed commit.
+# This workflow runs cargo test on every pushed commit, including main.
+# Main pushes must keep running: rust-cache only saves on main, and PR
+# jobs restore that entry.
 
 name: Cargo Test
 
@@ -10,7 +12,7 @@ jobs:
   cargo-test:
     uses: ./.github/workflows/nix-command.yml
     with:
-      command: cargo test --release
+      command: cargo test --release --locked
       nix_flake_path: '.'
-      runner: 'ubuntu-latest'
+      runner: 'ubuntu-24.04'
       rust_cache_key: cargo-release-test

@@ -6,8 +6,9 @@
 //! [`MenuModalStack::open`]; [`consume_menu_modal_back`] takes Back for the
 //! top layer before any screen leave system runs.
 
+use crate::{MenuNav, MenuNavPad};
 use bevy::prelude::*;
-use maybraid_input::{MenuNav, MenuNavPad, PadButton, VirtualPad};
+use maybraid_virtual_pad_controller::PadButton;
 
 use crate::controls::section::ActiveOverlayKey;
 use crate::controls::short_text::ShortTextModal;
@@ -24,6 +25,11 @@ pub enum MenuModalSystems {
 	Apply,
 }
 
+/// When true, [`consume_menu_modal_back`] skips this frame (inventory reorder
+/// owns Back until it returns to browse).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MenuModalBackHold(pub bool);
+
 /// Stable identity for a layer on [`MenuModalStack`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct MenuModalId(pub &'static str);
@@ -31,6 +37,7 @@ pub struct MenuModalId(pub &'static str);
 impl MenuModalId {
 	pub const OVERLAY_SELECT: Self = Self("overlay-select");
 	pub const SHORT_TEXT: Self = Self("short-text");
+	pub const ITEM_DROP: Self = Self("item-drop");
 	pub const CHARACTER_LEAVE: Self = Self("character-leave");
 
 	pub fn as_str(self) -> &'static str {
@@ -40,6 +47,12 @@ impl MenuModalId {
 	/// Resource-driven layers rebuilt every [`MenuModalSystems::Sync`].
 	pub fn is_auto(self) -> bool {
 		matches!(self, Self::OVERLAY_SELECT | Self::SHORT_TEXT)
+	}
+
+	/// Confirm / text layers take directional nav, stick, and wheel away from
+	/// the parent list. Overlay select *is* the focused catalog, so it does not.
+	pub fn owns_nav(self) -> bool {
+		matches!(self, Self::SHORT_TEXT | Self::ITEM_DROP | Self::CHARACTER_LEAVE)
 	}
 }
 
@@ -53,6 +66,7 @@ pub struct MenuModalLayer {
 impl MenuModalLayer {
 	pub const OVERLAY_SELECT: Self = Self { id: MenuModalId::OVERLAY_SELECT, order: 10 };
 	pub const SHORT_TEXT: Self = Self { id: MenuModalId::SHORT_TEXT, order: 20 };
+	pub const ITEM_DROP: Self = Self { id: MenuModalId::ITEM_DROP, order: 25 };
 	pub const CHARACTER_LEAVE: Self = Self { id: MenuModalId::CHARACTER_LEAVE, order: 30 };
 
 	pub fn new(id: MenuModalId, order: i32) -> Self {
@@ -73,6 +87,8 @@ impl MenuModal {
 		Self { id: MenuModalId::OVERLAY_SELECT, order: MenuModalLayer::OVERLAY_SELECT.order };
 	pub const SHORT_TEXT: Self =
 		Self { id: MenuModalId::SHORT_TEXT, order: MenuModalLayer::SHORT_TEXT.order };
+	pub const ITEM_DROP: Self =
+		Self { id: MenuModalId::ITEM_DROP, order: MenuModalLayer::ITEM_DROP.order };
 	pub const CHARACTER_LEAVE: Self =
 		Self { id: MenuModalId::CHARACTER_LEAVE, order: MenuModalLayer::CHARACTER_LEAVE.order };
 
@@ -129,6 +145,15 @@ impl MenuModalStack {
 		self.consumed
 	}
 
+	/// Top layer steals stick / D-pad / keyboard / wheel from the parent HUD.
+	pub fn owns_nav(&self) -> bool {
+		self.nav_owner().is_some()
+	}
+
+	pub fn nav_owner(&self) -> Option<MenuModalId> {
+		self.top().map(|layer| layer.id).filter(|id| id.owns_nav())
+	}
+
 	pub fn blocks_screen_back(&self) -> bool {
 		self.is_open() || self.consumed || self.back_held
 	}
@@ -149,6 +174,15 @@ impl MenuModalStack {
 
 	pub fn close(&mut self, id: MenuModalId) {
 		self.layers.retain(|layer| layer.id != id);
+	}
+
+	/// Drop every layer and the consume/hold latches. Recovery and other
+	/// shell teardowns use this so a leftover modal cannot block the next screen.
+	pub fn clear(&mut self) {
+		self.layers.clear();
+		self.consumed = false;
+		self.back_held = false;
+		self.start_held = false;
 	}
 
 	/// Remember that this frame's Back/Start belongs to a modal.
@@ -200,8 +234,14 @@ impl MenuModalStack {
 	}
 }
 
-pub fn begin_menu_modal_frame(mut stack: ResMut<MenuModalStack>) {
+pub fn begin_menu_modal_frame(
+	mut stack: ResMut<MenuModalStack>,
+	hold: Option<ResMut<MenuModalBackHold>>,
+) {
 	stack.begin_frame();
+	if let Some(mut hold) = hold {
+		hold.0 = false;
+	}
 }
 
 pub fn sync_menu_modal_stack(
@@ -216,8 +256,12 @@ pub fn consume_menu_modal_back(
 	mut stack: ResMut<MenuModalStack>,
 	mut nav: ResMut<MenuNavPad>,
 	keyboard: Res<ButtonInput<KeyCode>>,
+	hold: Option<Res<MenuModalBackHold>>,
 	mut dismiss: MessageWriter<MenuModalDismiss>,
 ) {
+	if hold.is_some_and(|hold| hold.0) {
+		return;
+	}
 	let back = nav.just_pressed(MenuNav::Back) || keyboard.just_pressed(KeyCode::Escape);
 	let Some(id) = stack.take_back(back) else {
 		return;
@@ -228,16 +272,62 @@ pub fn consume_menu_modal_back(
 
 pub fn tick_menu_modal_holds(
 	mut stack: ResMut<MenuModalStack>,
-	pad: Option<Res<VirtualPad>>,
+	primary: Query<&crate::PrimaryMenuInput>,
 	keyboard: Res<ButtonInput<KeyCode>>,
 	nav: Res<MenuNavPad>,
 ) {
+	let pad = primary
+		.single()
+		.ok()
+		.and_then(crate::PrimaryMenuInput::current_frame)
+		.map(|frame| &frame.pad);
 	let back_down = pad.as_deref().is_some_and(|pad| pad.pressed(PadButton::B))
 		|| keyboard.pressed(KeyCode::Escape)
 		|| nav.just_pressed(MenuNav::Back);
 	let start_down = pad.as_deref().is_some_and(|pad| pad.pressed(PadButton::Start))
 		|| keyboard.pressed(KeyCode::Enter);
 	stack.tick_buttons(back_down, start_down);
+}
+
+/// HudMenu under the exclusive nav owner. Short text uses the keypad pad.
+pub fn hud_menu_under_modal(
+	id: MenuModalId,
+	roots: &Query<(Entity, &MenuModal)>,
+	menus: &Query<Entity, With<crate::HudMenu>>,
+	children: &Query<&Children>,
+) -> Option<Entity> {
+	for (root, modal) in roots.iter() {
+		if modal.id != id {
+			continue;
+		}
+		if menus.contains(root) {
+			return Some(root);
+		}
+		if let Some(menu) = children.iter_descendants(root).find(|entity| menus.contains(*entity)) {
+			return Some(menu);
+		}
+	}
+	None
+}
+
+/// True when `entity` sits under the stack's exclusive nav owner (or none is open).
+pub fn entity_under_nav_owner(
+	entity: Entity,
+	stack: &MenuModalStack,
+	roots: &Query<(Entity, &MenuModal)>,
+	child_of: &Query<&ChildOf>,
+) -> bool {
+	let Some(id) = stack.nav_owner() else {
+		return true;
+	};
+	let mut current = Some(entity);
+	while let Some(here) = current {
+		if roots.get(here).is_ok_and(|(_, modal)| modal.id == id) {
+			return true;
+		}
+		current = child_of.get(here).ok().map(ChildOf::parent);
+	}
+	false
 }
 
 /// Click on [`crate::ScreenBack`], or pad B, while no modal is holding Back.
@@ -256,13 +346,13 @@ pub fn consume_screen_back(
 #[cfg(test)]
 mod tests {
 	use super::{
-		consume_menu_modal_back, consume_screen_back, tick_menu_modal_holds, MenuModalDismiss,
-		MenuModalId, MenuModalLayer, MenuModalStack,
+		MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack, consume_menu_modal_back,
+		consume_screen_back, tick_menu_modal_holds,
 	};
 	use crate::single_select::text_cursor::ScreenBackPressed;
+	use crate::{MenuNav, MenuNavPad};
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
-	use maybraid_input::{MenuNav, MenuNavPad};
 
 	#[test]
 	fn top_layer_is_highest_order() {
@@ -270,8 +360,67 @@ mod tests {
 		stack.open(MenuModalLayer::OVERLAY_SELECT);
 		stack.open(MenuModalLayer::SHORT_TEXT);
 		assert_eq!(stack.top().map(|layer| layer.id), Some(MenuModalId::SHORT_TEXT));
+		stack.open(MenuModalLayer::ITEM_DROP);
+		assert_eq!(stack.top().map(|layer| layer.id), Some(MenuModalId::ITEM_DROP));
 		stack.open(MenuModalLayer::CHARACTER_LEAVE);
 		assert_eq!(stack.top().map(|layer| layer.id), Some(MenuModalId::CHARACTER_LEAVE));
+	}
+
+	#[test]
+	fn entity_under_nav_owner_hides_the_parent_catalog() {
+		use super::{MenuModal, entity_under_nav_owner};
+		use crate::HudMenu;
+		use bevy::ecs::system::RunSystemOnce;
+
+		let mut world = World::new();
+		world.init_resource::<MenuModalStack>();
+		let catalog = world.spawn(HudMenu::new(3)).id();
+		let drop_item = world.spawn_empty().id();
+		let drop_root = world.spawn(MenuModal::ITEM_DROP).id();
+		world.entity_mut(drop_root).add_child(drop_item);
+		world.resource_mut::<MenuModalStack>().open(MenuModalLayer::ITEM_DROP);
+		let (under_drop, under_catalog) = world
+			.run_system_once(
+				move |stack: Res<MenuModalStack>,
+				      roots: Query<(Entity, &MenuModal)>,
+				      child_of: Query<&ChildOf>| {
+					(
+						entity_under_nav_owner(drop_item, &stack, &roots, &child_of),
+						entity_under_nav_owner(catalog, &stack, &roots, &child_of),
+					)
+				},
+			)
+			.expect("under");
+		assert!(under_drop);
+		assert!(!under_catalog);
+		world.resource_mut::<MenuModalStack>().close(MenuModalId::ITEM_DROP);
+		let restored = world
+			.run_system_once(
+				move |stack: Res<MenuModalStack>,
+				      roots: Query<(Entity, &MenuModal)>,
+				      child_of: Query<&ChildOf>| {
+					entity_under_nav_owner(catalog, &stack, &roots, &child_of)
+				},
+			)
+			.expect("restored");
+		assert!(restored);
+	}
+
+	#[test]
+	fn confirm_layers_own_nav_and_overlay_does_not() {
+		assert!(!MenuModalId::OVERLAY_SELECT.owns_nav());
+		assert!(MenuModalId::SHORT_TEXT.owns_nav());
+		assert!(MenuModalId::ITEM_DROP.owns_nav());
+		assert!(MenuModalId::CHARACTER_LEAVE.owns_nav());
+		let mut stack = MenuModalStack::default();
+		stack.open(MenuModalLayer::OVERLAY_SELECT);
+		assert!(!stack.owns_nav());
+		assert_eq!(stack.nav_owner(), None);
+		stack.open(MenuModalLayer::ITEM_DROP);
+		assert!(stack.owns_nav());
+		assert_eq!(stack.nav_owner(), Some(MenuModalId::ITEM_DROP));
+		stack.close(MenuModalId::ITEM_DROP);
+		assert!(!stack.owns_nav());
 	}
 
 	#[test]
@@ -324,6 +473,20 @@ mod tests {
 		stack.tick_buttons(false, true);
 		assert!(stack.blocks_screen_select());
 		stack.tick_buttons(false, false);
+		assert!(!stack.blocks_screen_select());
+	}
+
+	#[test]
+	fn clear_drops_layers_and_latches() {
+		let mut stack = MenuModalStack::default();
+		stack.open(MenuModalLayer::SHORT_TEXT);
+		stack.open(MenuModalLayer::CHARACTER_LEAVE);
+		stack.mark_consumed();
+		stack.tick_buttons(true, true);
+		stack.clear();
+		assert!(!stack.is_open());
+		assert!(!stack.consumed());
+		assert!(!stack.blocks_screen_back());
 		assert!(!stack.blocks_screen_select());
 	}
 
@@ -404,4 +567,24 @@ mod tests {
 			)
 			.expect("consume_screen_back")
 	}
+}
+
+/// Resolve pointer eligibility within the entity's own session, if it has one.
+pub fn entity_under_scoped_nav_owner(
+	entity: Entity,
+	sessions: &Query<&crate::MenuSession>,
+	roots: &Query<(Entity, &MenuModal)>,
+	child_of: &Query<&ChildOf>,
+) -> Option<bool> {
+	let mut current = Some(entity);
+	while let Some(here) = current {
+		if let Ok(session) = sessions.get(here) {
+			return Some(
+				!session.text_locked
+					&& entity_under_nav_owner(entity, &session.modals, roots, child_of),
+			);
+		}
+		current = child_of.get(here).ok().map(ChildOf::parent);
+	}
+	None
 }
