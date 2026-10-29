@@ -16,9 +16,9 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, PowerStrafe, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat,
-		SquatDescent, ThinkAgain, Tuck, TwoFootedTuckedFlip, UprightLeap, UprightPowerDash,
-		THINK_AGAIN_DURATION,
+		Idle, Jab, JumpSamplingCache, PowerStrafe, Prone, QuadrupedIdle, QuadrupedLeap,
+		QuadrupedRun, Squat, SquatDescent, ThinkAgain, Tuck, TwoFootedTuckedFlip, UprightLeap,
+		UprightPowerDash, THINK_AGAIN_DURATION,
 	},
 	rigs::jump_transition_cache::JumpTransitionCache,
 	Animation, Effects,
@@ -116,6 +116,7 @@ pub struct AnimMailbox {
 	prepared_from: Option<AnimClip>,
 	last_clip: Option<AnimClip>,
 	jump_transition: JumpTransitionCache,
+	jump_sampling: JumpSamplingCache,
 }
 
 /// Sample coordinate for the current clip. When present, [`tick_anim_mailbox`]
@@ -150,6 +151,7 @@ impl AnimMailbox {
 			prepared_from: None,
 			last_clip: None,
 			jump_transition: JumpTransitionCache::default(),
+			jump_sampling: JumpSamplingCache::default(),
 		}
 	}
 
@@ -564,15 +566,18 @@ pub fn apply_anim_mailbox(
 					}
 					let effects = if let AnimClip::Jump(params) = requested {
 						let jump = params.apply_humanoid();
+						let sample =
+							mailbox.jump_sampling.sample(&jump, rig.segment_lengths, progress);
 						if write_bones {
-							jump.apply_for_with_cache(
+							jump.apply_sample_with_cache(
 								&mut rig,
 								progress,
+								sample,
 								&mut mailbox.jump_transition,
 							);
 						}
 						if write_effects {
-							jump.effects_for(&rig, progress)
+							sample.effects()
 						} else {
 							Effects::IDENTITY
 						}
@@ -949,6 +954,8 @@ fn sample_humanoid_prepared(
 	sample_humanoid(clip, rig, progress, write_bones, write_effects)
 }
 
+/// Bones and effects stay independently gated ([#1354](https://github.com/ramate-io/maybraid/pull/1354)
+/// mailbox contract). When both are requested, [`Animation::apply`] may share one sample.
 fn sample_split<A, R>(
 	anim: &A,
 	rig: &mut R,
@@ -959,13 +966,14 @@ fn sample_split<A, R>(
 where
 	A: Animation<R>,
 {
-	if write_bones {
-		anim.apply_for(rig, progress);
-	}
-	if write_effects {
-		anim.effects_for(rig, progress)
-	} else {
-		Effects::IDENTITY
+	match (write_bones, write_effects) {
+		(true, true) => anim.apply(rig, progress),
+		(true, false) => {
+			anim.apply_for(rig, progress);
+			Effects::IDENTITY
+		}
+		(false, true) => anim.effects_for(rig, progress),
+		(false, false) => Effects::IDENTITY,
 	}
 }
 
@@ -1054,8 +1062,8 @@ fn sample_humanoid(
 			write_bones,
 			write_effects,
 		),
-		AnimClip::ThinkAgain(params) => sample_split(
-			&ThinkAgain::new(params.side),
+		AnimClip::ThinkAgain { side } => sample_split(
+			&ThinkAgain::new(side),
 			rig,
 			progress.clamp(0.0, THINK_AGAIN_DURATION),
 			write_bones,

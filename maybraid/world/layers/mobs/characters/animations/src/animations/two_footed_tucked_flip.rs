@@ -2,7 +2,7 @@
 
 use character_rigs::humanoid::LegSegmentLengths;
 
-use crate::animations::{JumpSegment, JumpTiming, TuckedFlip, TwoFootedJump};
+use crate::animations::{JumpSample, JumpSegment, JumpTiming, TuckedFlip, TwoFootedJump};
 
 #[derive(Debug, Clone)]
 pub struct TwoFootedTuckedFlip {
@@ -36,21 +36,24 @@ impl TwoFootedTuckedFlip {
 	}
 
 	pub fn segment(&self, lengths: LegSegmentLengths, elapsed: f32) -> (JumpSegment, f32) {
-		self.jump.segment(lengths, elapsed)
+		let sample = self.sample(lengths, elapsed);
+		(sample.segment, sample.local)
+	}
+
+	pub fn sample(&self, lengths: LegSegmentLengths, elapsed: f32) -> JumpSample {
+		let sample = self.jump.sample(lengths, elapsed);
+		let flip_pitch =
+			(sample.segment == JumpSegment::Fall).then(|| self.flip.pitch_radians(sample.local));
+		sample.with_flip_pitch(flip_pitch)
 	}
 
 	pub fn vertical_offset(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
-		self.jump.vertical_offset(lengths, elapsed)
+		self.sample(lengths, elapsed).height
 	}
 
 	/// Flip pitch during the airborne segment; zero on ground phases.
 	pub fn flip_pitch_radians(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
-		let (segment, local) = self.segment(lengths, elapsed);
-		if segment == JumpSegment::Fall {
-			self.flip.pitch_radians(local)
-		} else {
-			0.0
-		}
+		self.sample(lengths, elapsed).flip_pitch.unwrap_or(0.0)
 	}
 }
 

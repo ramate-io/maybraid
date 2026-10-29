@@ -125,6 +125,27 @@ pub enum JumpSegment {
 	Land,
 }
 
+/// One resolved jump instant: segment, local progress, timings, height, optional flip pitch.
+///
+/// Pose and effects both read this so a mailbox that asks for both does not
+/// recompute segment/time independently.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct JumpSample {
+	pub segment: JumpSegment,
+	pub local: f32,
+	pub timings: JumpTiming,
+	pub height: f32,
+	/// Airborne tucked-flip pitch in radians. `None` on ground or a plain jump.
+	pub flip_pitch: Option<f32>,
+}
+
+impl JumpSample {
+	pub fn with_flip_pitch(mut self, flip_pitch: Option<f32>) -> Self {
+		self.flip_pitch = flip_pitch;
+		self
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct TwoFootedJump {
 	/// Downward acceleration for ballistic motion (units/s²).
@@ -247,7 +268,13 @@ impl TwoFootedJump {
 	}
 
 	pub fn segment(&self, lengths: LegSegmentLengths, elapsed: f32) -> (JumpSegment, f32) {
-		Self::segment_at_time(self.time_in_cycle(lengths, elapsed), &self.timings(lengths))
+		let sample = self.sample(lengths, elapsed);
+		(sample.segment, sample.local)
+	}
+
+	/// Resolve segment, local progress, timings, and height once.
+	pub fn sample(&self, lengths: LegSegmentLengths, elapsed: f32) -> JumpSample {
+		JumpRigDerived::new(self, lengths).sample(elapsed)
 	}
 
 	pub fn time_since_launch(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
@@ -273,24 +300,98 @@ impl TwoFootedJump {
 	}
 
 	pub fn vertical_offset(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
-		let (segment, local) = self.segment(lengths, elapsed);
-		let timings = self.timings(lengths);
+		self.sample(lengths, elapsed).height
+	}
+}
 
-		match segment {
+/// Per-character timing data retained across frames, independent of rig pose.
+#[derive(Debug, Clone, Default)]
+pub struct JumpSamplingCache {
+	derived: Option<JumpRigDerived>,
+	#[cfg(test)]
+	rebuilds: usize,
+}
+
+#[derive(Debug, Clone)]
+struct JumpRigDerived {
+	key: [u32; 6],
+	lengths: LegSegmentLengths,
+	timings: JumpTiming,
+	windup: Squat,
+	landing: Land,
+	ballistic: BallisticJump,
+}
+
+impl JumpRigDerived {
+	fn key(jump: &TwoFootedJump, lengths: LegSegmentLengths) -> [u32; 6] {
+		[
+			jump.gravity,
+			jump.jump_height,
+			jump.pre_squat_speed,
+			jump.landing_squat_speed,
+			lengths.femur,
+			lengths.shin,
+		]
+		.map(f32::to_bits)
+	}
+
+	fn new(jump: &TwoFootedJump, lengths: LegSegmentLengths) -> Self {
+		let (windup, landing) = jump.squat_configs(lengths);
+		Self {
+			key: Self::key(jump, lengths),
+			lengths,
+			timings: jump.timings(lengths),
+			windup,
+			landing,
+			ballistic: jump.ballistic(),
+		}
+	}
+
+	fn sample(&self, elapsed: f32) -> JumpSample {
+		let timings = self.timings;
+		let cycle = timings.cycle_duration();
+		let time_in_cycle = if cycle <= f32::EPSILON { 0.0 } else { elapsed % cycle };
+		let (segment, local) = TwoFootedJump::segment_at_time(time_in_cycle, &timings);
+		let height = match segment {
 			JumpSegment::Squat => {
-				let squat = self.prejump_squat(lengths);
 				let p = local / timings.squat_duration().max(f32::EPSILON);
-				-squat.vertical_drop(p, lengths)
+				-self.windup.vertical_drop(p, self.lengths)
 			}
 			JumpSegment::Spring | JumpSegment::Fall => {
-				let since_launch = self.time_since_launch(lengths, elapsed);
-				self.ballistic_height(since_launch.min(self.touchdown_time_since_launch()))
+				let since_launch = (time_in_cycle - timings.squat_end()).max(0.0);
+				self.ballistic.ballistic_height(
+					since_launch.min(self.ballistic.touchdown_time_since_launch()),
+				)
 			}
 			JumpSegment::Land => {
-				let land = self.landing_squat(lengths);
 				let p = local / timings.land_duration().max(f32::EPSILON);
-				-land.vertical_drop(p, lengths)
+				-self.landing.vertical_drop(p, self.lengths)
 			}
+		};
+		JumpSample { segment, local, timings, height, flip_pitch: None }
+	}
+}
+
+impl JumpSamplingCache {
+	/// Public jump fields and rig proportions participate in the key, including
+	/// mutations made without builders. Rest-pose edits do not affect timing.
+	pub fn sample(
+		&mut self,
+		jump: &TwoFootedJump,
+		lengths: LegSegmentLengths,
+		elapsed: f32,
+	) -> JumpSample {
+		let key = JumpRigDerived::key(jump, lengths);
+		if self.derived.as_ref().is_none_or(|derived| derived.key != key) {
+			self.derived = Some(JumpRigDerived::new(jump, lengths));
+			#[cfg(test)]
+			{
+				self.rebuilds += 1;
+			}
+		}
+		match &self.derived {
+			Some(derived) => derived.sample(elapsed),
+			None => jump.sample(lengths, elapsed),
 		}
 	}
 }
@@ -298,6 +399,31 @@ impl TwoFootedJump {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn mailbox_cache_reuses_derivation_and_tracks_all_inputs() -> anyhow::Result<()> {
+		let mut cache = JumpSamplingCache::default();
+		let mut lengths = LegSegmentLengths::default();
+		let mut jump = TwoFootedJump::default();
+		for input in 0..7 {
+			for step in 0..=48 {
+				// Mailboxes construct a new jump value every frame.
+				let fresh = jump.clone();
+				let elapsed = step as f32 * 0.075;
+				assert_eq!(cache.sample(&fresh, lengths, elapsed), fresh.sample(lengths, elapsed));
+			}
+			assert_eq!(cache.rebuilds, input + 1);
+			match input {
+				0 => jump.gravity = 12.0,
+				1 => jump.jump_height = 2.2,
+				2 => jump.pre_squat_speed = 1.5,
+				3 => jump.landing_squat_speed = 2.0,
+				4 => lengths.femur = 0.7,
+				_ => lengths.shin = 0.6,
+			}
+		}
+		Ok(())
+	}
 
 	fn default_jump() -> TwoFootedJump {
 		TwoFootedJump::default()
