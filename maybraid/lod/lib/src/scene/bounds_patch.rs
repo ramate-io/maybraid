@@ -95,6 +95,57 @@ fn patch_marshaled_bounds<M: LodSceneBoundsMarshaller>(
 	hosts: Query<(Entity, &LodHostBounds), (With<LodSceneHost>, Changed<LodHostBounds>)>,
 ) {
 	for (entity, bounds) in &hosts {
-		commands.entity(entity).insert(M::volume_from_bounds(bounds.0));
+		// Host teardown may run before this deferred bounds patch is applied.
+		commands.entity(entity).try_insert(M::volume_from_bounds(bounds.0));
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use bevy::ecs::system::{IntoSystem, System};
+	use bevy::math::bounding::Aabb3d;
+	use bevy::prelude::*;
+
+	use crate::scene::bounds_patch::{patch_marshaled_bounds, LodSceneBoundsMarshaller};
+	use crate::scene::host::LodSceneHost;
+	use crate::scene::refresh::LodHostBounds;
+
+	#[derive(Component, Debug, PartialEq)]
+	struct TestVolume(Aabb3d);
+
+	struct TestMarshaller;
+
+	impl LodSceneBoundsMarshaller for TestMarshaller {
+		type Volume = TestVolume;
+
+		fn volume_from_bounds(bounds: Aabb3d) -> Self::Volume {
+			TestVolume(bounds)
+		}
+	}
+
+	#[test]
+	fn queued_bounds_patch_tolerates_despawn_and_preserves_live_updates() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let initial = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let removed = world.spawn((LodSceneHost, LodHostBounds(initial))).id();
+		let live = world.spawn((LodSceneHost, LodHostBounds(initial))).id();
+		let mut patch = IntoSystem::into_system(patch_marshaled_bounds::<TestMarshaller>);
+		patch.initialize(&mut world);
+
+		patch
+			.run_without_applying_deferred((), &mut world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<TestVolume>(live).is_none(), "the patch must still be queued");
+		assert!(world.despawn(removed));
+		patch.apply_deferred(&mut world);
+
+		assert!(world.get_entity(removed).is_err());
+		assert_eq!(world.get::<TestVolume>(live), Some(&TestVolume(initial)));
+
+		let updated = Aabb3d::from_min_max(Vec3::splat(-2.0), Vec3::splat(3.0));
+		world.entity_mut(live).insert(LodHostBounds(updated));
+		patch.run((), &mut world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.get::<TestVolume>(live), Some(&TestVolume(updated)));
+		Ok(())
 	}
 }
