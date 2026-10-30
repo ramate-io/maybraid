@@ -3,6 +3,7 @@
 pub mod character;
 pub mod commands;
 mod drop_prompt;
+mod delete_prompt;
 mod leave_prompt;
 mod loading_demo;
 mod preview;
@@ -191,6 +192,7 @@ fn echo_gallery_choice(
 	for choice in choices.read() {
 		console.0 = match choice {
 			GalleryChoice::New => String::from("gallery: create a character"),
+			GalleryChoice::Delete => String::from("gallery: delete selected character"),
 			GalleryChoice::Select(id) => format!("gallery: {}", id.to_hex()),
 		};
 	}

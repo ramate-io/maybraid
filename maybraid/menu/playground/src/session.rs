@@ -84,7 +84,8 @@ impl Plugin for CharacterSessionPlugin {
 		if !app.world().contains_resource::<SaveRoot>() {
 			app.insert_resource(SaveRoot::workspace());
 		}
-		app.add_message::<RequestEditCharacter>()
+		app.add_plugins(crate::delete_prompt::CharacterDeletePlugin)
+			.add_message::<RequestEditCharacter>()
 			.add_observer(on_save_character)
 			.add_systems(Startup, load_active_character)
 			.add_systems(
@@ -186,6 +187,24 @@ pub(crate) fn finish_character_editor_exit(
 	commands.remove_resource::<CharacterEditBaseline>();
 }
 
+/// Delete a saved character and persist a valid replacement before changing UI state.
+pub(crate) fn delete_saved_character(
+	root: &SaveRoot,
+	id: CharacterId,
+	active: Option<CharacterId>,
+) -> Result<Option<CharacterId>, PersistError> {
+	root.list_ids()?; // Surface roster I/O failures instead of treating them as an empty roster.
+	let remaining = character_model_user::list_summaries(root)
+		.into_iter()
+		.filter(|summary| summary.id != id)
+		.collect::<Vec<_>>();
+	let next = active
+		.filter(|active| remaining.iter().any(|summary| summary.id == *active))
+		.or_else(|| remaining.first().map(|summary| summary.id));
+	root.delete_and_select(id, next)?;
+	Ok(next)
+}
+
 pub fn set_active_character(commands: &mut Commands, root: &SaveRoot, id: CharacterId) {
 	commands.insert_resource(ActiveCharacter { id });
 	if let Err(error) = character_persist::save_active(root, id) {
@@ -272,6 +291,7 @@ fn open_gallery_choice(
 		return;
 	};
 	match choice {
+		GalleryChoice::Delete => {} // The delete confirmation owns this intent.
 		GalleryChoice::New => {
 			let id = CharacterId::new();
 			commands.insert_resource(EditingCharacter { id });
@@ -491,6 +511,31 @@ mod tests {
 			assert_eq!(model.id, id);
 			character_inventory_user::load(&root, id)?;
 		}
+		std::fs::remove_dir_all(&root.path)?;
+		Ok(())
+	}
+
+	#[test]
+	fn deleting_selected_other_and_last_characters_preserves_valid_selection()
+	-> Result<(), Box<dyn std::error::Error>> {
+		let root = scratch_root();
+		let ids = [CharacterId(1), CharacterId(2), CharacterId(3)];
+		for (id, name) in ids.into_iter().zip(["First", "Second", "Third"]) {
+			let mut menu = CharacterMenuState::default();
+			menu.0.name = name.into();
+			save_editing_character(&root, id, &menu.0)?;
+		}
+		character_persist::save_active(&root, ids[1])?;
+		let next = super::delete_saved_character(&root, ids[0], Some(ids[1]))?;
+		assert_eq!(next, Some(ids[1]));
+		assert_eq!(character_persist::load_active(&root), next);
+		let next = super::delete_saved_character(&root, ids[1], next)?;
+		assert_eq!(next, Some(ids[2]));
+		assert_eq!(character_persist::load_active(&root), next);
+		let next = super::delete_saved_character(&root, ids[2], next)?;
+		assert_eq!(next, None);
+		assert!(character_model_user::list_summaries(&root).is_empty());
+		assert_eq!(character_persist::load_active(&root), None);
 		std::fs::remove_dir_all(&root.path)?;
 		Ok(())
 	}
