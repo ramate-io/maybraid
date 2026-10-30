@@ -73,6 +73,7 @@ mod tests {
 		use maybraid_character_controller::CharacterControllerPlugin;
 
 		let mut app = App::new();
+		app.insert_resource(maybraid_virtual_pad_controller::PadHidPolicy::External);
 		app.add_plugins((
 			MinimalPlugins,
 			AssetPlugin::default(),

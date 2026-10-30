@@ -77,6 +77,7 @@ fn near_regions_sent(app: &App) -> usize {
 #[test]
 fn discovery_seeds_its_session_and_streams_only_when_enabled() -> anyhow::Result<()> {
 	let mut app = App::new();
+	app.insert_resource(maybraid_virtual_pad_controller::PadHidPolicy::External);
 	// Mob scenes run with the player stack, which this app does not install.
 	app.set_error_handler(bevy::ecs::error::warn);
 	app.add_plugins((MinimalPlugins, AssetPlugin::default(), StatesPlugin, ScenePlugin))
