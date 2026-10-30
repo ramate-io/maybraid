@@ -2,6 +2,7 @@
 
 use avian3d::prelude::{LinearVelocity, Position};
 use bevy::app::AppExit;
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use damage::{Health, Hit};
 use durham::{CascadeChunk, Durham, DurhamSurface, WorldBaseTerrain};
@@ -302,6 +303,42 @@ fn agent_sync_ready(
 	);
 }
 
+/// A single selection supplies both pose and movement readiness; the fallback
+/// player follows the same spawn-handoff contract as the capsule motor.
+#[derive(SystemParam)]
+struct AgentPlayerState<'w, 's> {
+	motors: Query<
+		'w,
+		's,
+		(
+			&'static Transform,
+			Has<maybraid_spawns_support::PendingActorSupport>,
+			Has<AwaitingTerrainSurface>,
+		),
+		With<MotorPlayer>,
+	>,
+	vegetation: Query<
+		'w,
+		's,
+		(
+			&'static Transform,
+			Has<maybraid_spawns_support::PendingActorSupport>,
+			Has<AwaitingTerrainSurface>,
+		),
+		(With<VegetationPlayer>, Without<MotorPlayer>),
+	>,
+}
+
+impl AgentPlayerState<'_, '_> {
+	fn selected(&self) -> Option<(&Transform, bool)> {
+		self.motors
+			.single()
+			.ok()
+			.or_else(|| self.vegetation.single().ok())
+			.map(|(transform, pending, awaiting)| (transform, pending || awaiting))
+	}
+}
+
 #[allow(clippy::too_many_arguments)]
 fn agent_tick_playback(
 	mut runtime: ResMut<AgentRuntime>,
@@ -311,8 +348,7 @@ fn agent_tick_playback(
 	menu: Res<AgentMenuState>,
 	inventory: Res<AgentInventoryState>,
 	time: Res<Time>,
-	motors: Query<&Transform, With<MotorPlayer>>,
-	vegetation: Query<&Transform, (With<VegetationPlayer>, Without<MotorPlayer>)>,
+	players: AgentPlayerState,
 	cameras: Query<&CameraController, With<Camera3d>>,
 ) {
 	runtime.frame = runtime.frame.saturating_add(1);
@@ -325,9 +361,10 @@ fn agent_tick_playback(
 		}
 		return;
 	}
-	let pose = motors.single().ok().or_else(|| vegetation.single().ok());
+	let pose = players.selected();
 	let view = TickView {
-		player_xz: pose.map(|transform| {
+		player_waiting_for_support: pose.is_some_and(|(_, waiting)| waiting),
+		player_xz: pose.map(|(transform, _)| {
 			let xz = transform.translation.xz();
 			[xz.x, xz.y]
 		}),
@@ -1229,6 +1266,48 @@ mod tests {
 		let mut time = Time::<()>::default();
 		time.advance_by(std::time::Duration::from_secs_f32(secs));
 		time
+	}
+
+	#[test]
+	fn selected_player_readiness_tracks_both_support_markers_for_motor_and_fallback(
+	) -> anyhow::Result<()> {
+		fn sample(players: AgentPlayerState) -> Option<(Vec3, bool)> {
+			players.selected().map(|(pose, waiting)| (pose.translation, waiting))
+		}
+		for motor in [false, true] {
+			for markers in 0..4 {
+				let mut world = World::new();
+				let entity = world.spawn(Transform::from_translation(Vec3::X)).id();
+				if motor {
+					world.entity_mut(entity).insert(MotorPlayer);
+				} else {
+					world.entity_mut(entity).insert(VegetationPlayer);
+				}
+				if markers & 1 != 0 {
+					world.entity_mut(entity).insert(
+						maybraid_spawns_support::PendingActorSupport::new(
+							Vec3::X,
+							player::LocomotionCapsule::HUMANOID,
+							None,
+						),
+					);
+				}
+				if markers & 2 != 0 {
+					world.entity_mut(entity).insert(AwaitingTerrainSurface);
+				}
+				if motor {
+					world.spawn((VegetationPlayer, Transform::from_translation(Vec3::Z)));
+				}
+				let selected =
+					world.run_system_once(sample).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+				assert_eq!(
+					selected,
+					Some((Vec3::X, markers != 0)),
+					"motor={motor}, markers={markers}"
+				);
+			}
+		}
+		Ok(())
 	}
 
 	fn insert_ready_deps(world: &mut World) {

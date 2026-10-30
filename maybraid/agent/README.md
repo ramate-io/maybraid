@@ -72,7 +72,7 @@ with `"cmd"`.
 | `wait_for` | `screen`, `modal`, `flow`, `pause`, `focus_row`, `focus_label`, `cycle_category`, `weapon`, `skill_map`, `lubikan`, `timeout` (default 10) | idle until the snapshot matches; fails with `detail` on timeout |
 | `expect` | same matcher as `wait_for` | instant; `failed` on mismatch |
 | `mash` | `buttons`, `rate_hz` (default 15), `secs`, `seed` | seeded random presses and chords |
-| `goto` | `xz`, `timeout` (default 30), `radius` (default 3), `sprint`, optional `look` | steer until reached; stall jumps / strafes then fails `stuck` |
+| `goto` | `xz`, `timeout` (default 30), `radius` (default 3), `sprint`, optional `look` | steer until reached; stall jumps / strafes then fails `stuck`; pending spawn/teleport support waits with neutral input |
 | `teleport` | `xz`, optional `y` | instant (utility) |
 | `console` | `line` (`stats vsync`, `sky noon`, …) | instant |
 | `visual_style` | `style` (`native`, `sharp`, `impressionist`, `watercolor`, `retro`, `antediluvian`, `pre_post_modern`) | instant; `started` is receipt, `finished` includes resolved `WIDTHxHEIGHT` |
@@ -81,6 +81,12 @@ with `"cmd"`.
 | `screenshot` | `path` | instant start; `finished` after GPU readback writes the PNG (`detail` has mean luma) |
 | `scenario` | `name`, `mark` (`start` / `end`) | instant; Tracy message |
 | `quit` | | request process exit |
+
+`goto.timeout` bounds movement time and also supplies a separate cumulative budget
+for waiting on spawn or teleport support. While support is pending, movement and
+stall timers pause and input stays neutral. The support budget survives readiness
+changes; exhausting it fails with `support timeout`. `start` and `teleport` consume
+their playback tick so a following `goto` sees the relocated player on the next tick.
 
 Buttons: `jump` (`a`, `confirm`), `sprint` (`l3`), `stance` (`b`, `back`),
 `interact` (`x`), `swap` (`y`), `ads` (`lb`), `fire` (`rt`), `focus` (`lt`),
