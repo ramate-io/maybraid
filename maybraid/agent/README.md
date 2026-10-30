@@ -23,6 +23,23 @@ maybraid --start-at=0,0 \
 `MAYBRAID_AGENT_QUIT` are the env equivalents. With none of those set the
 plugin is not added.
 
+For reproducible captures, add `--agent-exclusive` or set
+`MAYBRAID_AGENT_EXCLUSIVE=1`:
+
+```bash
+MAYBRAID_AGENT_EXCLUSIVE=1 maybraid \
+  --agent-script maybraid/agent/scripts/origin-walk.jsonl \
+  --agent-events /tmp/maybraid-events.jsonl --agent-quit
+```
+
+Exclusive mode uses only scripted pad input on the primary controller, ignoring
+its keyboard, mouse and gamepad contributions. It holds a neutral exclusive
+overlay while waiting for readiness and between commands. Device assignments
+and other controllers remain active. Startup logs `agent input exclusive=true`
+so a capture can verify the setting. Without this option, scripted input still
+adds to physical input. The exclusive flag alone does not enable the agent;
+a script or pipe is required.
+
 Playback starts when Discovery surface is ready, when the Home / Characters
 shell has been up for two seconds (terrain streaming off), or when the 90 s
 ready timeout fires. A leaked `WorldGameplayEnabled` default must not block

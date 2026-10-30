@@ -13,7 +13,7 @@ use maybraid_agent::{
 use maybraid_character_controller::OrdinaryLocomotion;
 use maybraid_session::WorldGameplayEnabled;
 use maybraid_virtual_pad_controller::{
-	PadButton, PadOverlay, PadOverlayRequest, PrimaryVirtualPad, VirtualPadSystems,
+	PadButton, PadOverlay, PadOverlayMode, PadOverlayRequest, PrimaryVirtualPad, VirtualPadSystems,
 };
 use mob_characters::CharacterSceneRecipe;
 use mob_scenes::MobScene;
@@ -71,6 +71,7 @@ struct AgentRuntime {
 	pending: Vec<(u32, AgentCommand)>,
 	quit: bool,
 	quit_when_idle: bool,
+	exclusive: bool,
 	load_error: Option<String>,
 	ready_timeout: f32,
 	sample_period: f32,
@@ -83,6 +84,7 @@ pub(crate) struct WorldAgentPlugin;
 impl Plugin for WorldAgentPlugin {
 	fn build(&self, app: &mut App) {
 		let drive = app.world().resource::<AgentDrive>().clone();
+		info!(target: "maybraid.agent", "agent input exclusive={}", drive.args.exclusive);
 		let mut playback = Playback::new();
 		let mut load_error = None;
 		if let Some(path) = &drive.args.script {
@@ -140,6 +142,7 @@ impl Plugin for WorldAgentPlugin {
 				pending: Vec::new(),
 				quit: false,
 				quit_when_idle: drive.args.quit_when_idle,
+				exclusive: drive.args.exclusive,
 				load_error,
 				ready_timeout: drive.ready_timeout,
 				sample_period: drive.sample_period,
@@ -230,6 +233,13 @@ fn agent_drain_pipe(mut runtime: ResMut<AgentRuntime>, time: Res<Time>) {
 }
 
 impl AgentRuntime {
+	fn neutral_overlay(&self) -> PadOverlay {
+		PadOverlay {
+			mode: if self.exclusive { PadOverlayMode::Exclusive } else { PadOverlayMode::Additive },
+			..default()
+		}
+	}
+
 	fn playback_next_id(&self) -> u32 {
 		// Playback ids are assigned on push; a failed parse has no id.
 		u32::MAX
@@ -308,7 +318,10 @@ fn agent_tick_playback(
 	runtime.frame = runtime.frame.saturating_add(1);
 	if !runtime.ready {
 		if let Some(primary) = primary {
-			overlays.write(PadOverlayRequest { source: primary.0, overlay: None });
+			overlays.write(PadOverlayRequest {
+				source: primary.0,
+				overlay: runtime.exclusive.then(|| runtime.neutral_overlay()),
+			});
 		}
 		return;
 	}
@@ -325,7 +338,7 @@ fn agent_tick_playback(
 	let tick = runtime.playback.tick(time.delta_secs(), &view);
 	runtime.last_intent = tick.intent.clone();
 	last_pad.0 = tick.intent.clone();
-	let mut overlay = PadOverlay::default();
+	let mut overlay = runtime.neutral_overlay();
 	apply_intent(&mut overlay, &tick.intent);
 	if let Some(primary) = primary {
 		overlays.write(PadOverlayRequest { source: primary.0, overlay: Some(overlay) });
@@ -1122,6 +1135,69 @@ mod tests {
 	}
 
 	#[test]
+	fn intent_updates_preserve_exclusive_mode_and_buttons() {
+		let mut overlay = PadOverlay { mode: PadOverlayMode::Exclusive, ..default() };
+		apply_intent(&mut overlay, &PadIntent::press(AgentButton::Jump));
+		assert_eq!(overlay.mode, PadOverlayMode::Exclusive);
+		assert!(overlay.buttons[PadButton::A.index()]);
+		apply_intent(&mut overlay, &PadIntent::default());
+		assert_eq!(overlay, PadOverlay { mode: PadOverlayMode::Exclusive, ..default() });
+	}
+
+	#[test]
+	fn exclusive_playback_is_neutral_before_ready_and_keeps_script_buttons_after_ready(
+	) -> anyhow::Result<()> {
+		for exclusive in [false, true] {
+			let mut world = World::new();
+			let source = world.spawn_empty().id();
+			world.insert_resource(PrimaryVirtualPad(source));
+			let mut runtime = idle_runtime();
+			runtime.exclusive = exclusive;
+			runtime
+				.playback
+				.push(AgentCommand::Press { button: Some(AgentButton::Jump), buttons: Vec::new() });
+			world.insert_resource(runtime);
+			world.init_resource::<AgentLastPadIntent>();
+			world.init_resource::<AgentMenuState>();
+			world.init_resource::<AgentInventoryState>();
+			world.init_resource::<Messages<PadOverlayRequest>>();
+			world.insert_resource(advance_time(1.0 / 60.0));
+			let mut cursor = world.resource::<Messages<PadOverlayRequest>>().get_cursor();
+			world
+				.run_system_once(agent_tick_playback)
+				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			{
+				let messages = world.resource::<Messages<PadOverlayRequest>>();
+				let request = cursor
+					.read(messages)
+					.next()
+					.ok_or_else(|| anyhow::anyhow!("pre-ready overlay request"))?;
+				assert_eq!(request.source, source);
+				assert_eq!(
+					request.overlay,
+					exclusive.then(|| PadOverlay { mode: PadOverlayMode::Exclusive, ..default() })
+				);
+			}
+			world.resource_mut::<AgentRuntime>().ready = true;
+			world
+				.run_system_once(agent_tick_playback)
+				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			let messages = world.resource::<Messages<PadOverlayRequest>>();
+			let overlay = cursor
+				.read(messages)
+				.next()
+				.and_then(|request| request.overlay.as_ref())
+				.ok_or_else(|| anyhow::anyhow!("ready overlay"))?;
+			assert_eq!(
+				overlay.mode,
+				if exclusive { PadOverlayMode::Exclusive } else { PadOverlayMode::Additive }
+			);
+			assert!(overlay.buttons[PadButton::A.index()]);
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn ready_prefers_surface_then_menu() {
 		assert_eq!(ready_detail(true, true), "surface");
 		assert_eq!(ready_detail(false, true), "menu");
@@ -1140,6 +1216,7 @@ mod tests {
 			pending: Vec::new(),
 			quit: false,
 			quit_when_idle: false,
+			exclusive: false,
 			load_error: None,
 			ready_timeout: DEFAULT_READY_TIMEOUT,
 			sample_period: DEFAULT_SAMPLE_PERIOD,
