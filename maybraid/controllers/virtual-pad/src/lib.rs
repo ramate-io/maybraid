@@ -22,7 +22,7 @@ pub use controller::{
 	PadDevices, PrimaryVirtualPad, VirtualPadController, VirtualPadEvent, VirtualPadLifecycle,
 };
 pub use gate::PadInputPolicy;
-pub use hid::{with_pad_hid, PadHidPlugins};
+pub use hid::{with_pad_hid, PadHidPlugins, PadHidPolicy};
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};
 pub use overlay::{PadOverlay, PadOverlayRequest};
 pub use pad::VirtualPad;

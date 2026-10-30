@@ -24,6 +24,7 @@ maybraid-controllers-core = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+maybraid-virtual-pad-controller = { workspace = true }
 
 [lints]
 workspace = true

@@ -100,6 +100,7 @@ mod tests {
 	fn missing_overlay_is_a_noop() -> anyhow::Result<()> {
 		use crate::{PrimaryVirtualPad, VirtualPadController, VirtualPadPlugin};
 		let mut app = App::new();
+		app.insert_resource(crate::PadHidPolicy::External);
 		app.add_plugins((MinimalPlugins, bevy::input::InputPlugin, VirtualPadPlugin::default()));
 		let primary = app.world().resource::<PrimaryVirtualPad>().0;
 		app.update();
@@ -117,6 +118,7 @@ mod tests {
 	fn addressed_requests_inject_and_remove_only_the_named_controller() -> anyhow::Result<()> {
 		use crate::{PadDevices, PrimaryVirtualPad, VirtualPadController, VirtualPadPlugin};
 		let mut app = App::new();
+		app.insert_resource(crate::PadHidPolicy::External);
 		app.add_plugins((
 			MinimalPlugins,
 			bevy::input::InputPlugin,
