@@ -1157,22 +1157,10 @@ fn refresh_row_span(
 	children: &Query<&Children>,
 	spans: &mut Query<&mut TextSpan, With<ShortTextValue>>,
 ) {
-	let Ok(row_children) = children.get(entity) else {
-		return;
-	};
-	for child in row_children {
-		if let Ok(mut span) = spans.get_mut(*child) {
+	for descendant in children.iter_descendants(entity) {
+		if let Ok(mut span) = spans.get_mut(descendant) {
 			span.0 = row_value_display(value);
 			return;
-		}
-		let Ok(nested) = children.get(*child) else {
-			continue;
-		};
-		for grandchild in nested {
-			if let Ok(mut span) = spans.get_mut(*grandchild) {
-				span.0 = row_value_display(value);
-				return;
-			}
 		}
 	}
 }
@@ -1273,6 +1261,55 @@ mod tests {
 	use crate::{MenuNav, MenuNavPad};
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
+
+	#[test]
+	fn name_row_displays_committed_value_under_focus_tag() -> Result<()> {
+		let mut world = World::new();
+		world
+			.run_system_once(|mut commands: Commands| {
+				let fonts = crate::HudFonts {
+					black: default(),
+					semibold: default(),
+					regular: default(),
+					logo: default(),
+				};
+				commands.spawn_empty().with_children(|parent| {
+					super::spawn_short_text_button(
+						parent,
+						&fonts,
+						"Name",
+						"",
+						false,
+						JustifyContent::FlexEnd,
+						ShortTextField { value: String::new(), max_len: 16, editing: false },
+					);
+				});
+			})
+			.map_err(|error| format!("{error:?}"))?;
+		assert_eq!(
+			world
+				.query_filtered::<&TextSpan, With<super::ShortTextValue>>()
+				.single(&world)?
+				.0,
+			"  —"
+		);
+
+		// Submission updates the field without rebuilding the character panel.
+		for (name, display) in [("Misty", "  Misty"), ("Mist", "  Mist"), ("", "  —")] {
+			world.query::<&mut ShortTextField>().single_mut(&mut world)?.value = name.into();
+			world
+				.run_system_once(super::sync_short_text_display)
+				.map_err(|error| format!("{error:?}"))?;
+			assert_eq!(
+				world
+					.query_filtered::<&TextSpan, With<super::ShortTextValue>>()
+					.single(&world)?
+					.0,
+				display
+			);
+		}
+		Ok(())
+	}
 
 	#[test]
 	fn pad_letters_follow_shift() {
