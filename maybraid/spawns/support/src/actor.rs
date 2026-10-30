@@ -1,17 +1,20 @@
 //! Persistent support readiness for bodies constructed before their floor.
 
 use avian3d::prelude::{
-	AngularVelocity, Collider, GravityScale, LinearVelocity, PhysicsSystems, Position, RigidBody,
-	SpatialQuery, SpatialQueryFilter,
+	AngularVelocity, Collider, CollisionLayers, GravityScale, LinearVelocity, PhysicsSystems,
+	Position, RigidBody, SpatialQuery, SpatialQueryFilter,
 };
 use bevy::{ecs::query::Has, prelude::*, transform::TransformSystems};
 use characters::{CharacterLocomotion, LocomotionCapsule};
 use lod_avian::PhysicsInteractionLayer;
 
-use crate::{
-	clearance_blocked, probe_search_with_locomotion, PlacementSearch, SupportProbeFailure,
-	SupportProbeOutcome,
+mod handoff;
+
+use crate::actor::handoff::{
+	confirm_actor_support, guard_actor_support, SettlingSupport, SupportGeometry,
 };
+
+use crate::{PlacementSearch, SupportProbeFailure, SupportProbeOutcome};
 
 /// Log once when the reason a live actor remains held changes. This state is
 /// cloned with adapter refreshes, so a persistent request never logs per frame.
@@ -38,8 +41,16 @@ pub enum ActorSupportSearchPolicy {
 	},
 }
 
-/// Holds one existing actor until its intended support column is usable.
+/// Holds one existing actor through placement and two validated physics ticks.
 /// Search updates never replace the original pose or gravity snapshot.
+///
+/// Ordinary downward-gravity ground arrivals require real floor contacts. Original
+/// zero/upward gravity or an elevated authored minimum instead requires two stable
+/// live-support/clearance validations; airborne arrivals require only clearance.
+/// A blocked capsule may lift at most 1 m within its intended column. Validation
+/// visits local overlaps and the retained support, rather than scanning the world.
+/// Failed settling returns to the hold. Removing this component completes handoff;
+/// released actors have no continuing spawn guard.
 #[derive(Component, Clone, Debug)]
 pub struct PendingActorSupport {
 	held_position: Vec3,
@@ -55,6 +66,7 @@ pub struct PendingActorSupport {
 	resume_gravity: Option<Option<f32>>,
 	last_diagnostic: Option<SupportDiagnostic>,
 	pub failure: Option<SupportProbeFailure>,
+	settling: Option<SettlingSupport>,
 }
 
 impl PendingActorSupport {
@@ -75,6 +87,7 @@ impl PendingActorSupport {
 			resume_gravity: None,
 			last_diagnostic: None,
 			failure: None,
+			settling: None,
 		}
 	}
 
@@ -136,6 +149,7 @@ impl PendingActorSupport {
 		hull: LocomotionCapsule,
 		minimum_center_y: Option<f32>,
 	) {
+		self.settling = None;
 		self.held_position = held_position;
 		self.hull = hull;
 		self.minimum_center_y = minimum_center_y;
@@ -216,6 +230,9 @@ impl PendingActorSupport {
 
 	pub fn set_enabled(&mut self, enabled: bool) {
 		self.enabled = enabled;
+		if !enabled {
+			self.settling = None;
+		}
 	}
 
 	pub const fn held_position(&self) -> Vec3 {
@@ -241,7 +258,7 @@ impl PendingActorSupport {
 pub enum ActorSupportSystems {
 	/// Domain adapters enqueue actors and refresh generated search hints.
 	Prepare,
-	/// Shared geometry validates the final pose and releases accepted actors.
+	/// Shared geometry validates the final pose before guarded physics settling.
 	Resolve,
 	/// Enforce held pose and zero motion after frame motors / before physics.
 	Hold,
@@ -269,10 +286,18 @@ pub fn register_actor_support(app: &mut App) {
 		)
 		.add_systems(
 			FixedPostUpdate,
-			hold_actor_support
+			(guard_actor_support, hold_actor_support)
+				.chain()
 				.in_set(ActorSupportSystems::Hold)
 				.after(PhysicsSystems::Prepare)
 				.before(PhysicsSystems::StepSimulation),
+		)
+		.add_systems(
+			FixedPostUpdate,
+			(confirm_actor_support, hold_actor_support)
+				.chain()
+				.after(PhysicsSystems::StepSimulation)
+				.before(PhysicsSystems::Writeback),
 		);
 }
 
@@ -280,6 +305,7 @@ fn resolve_actor_support(
 	mut commands: Commands,
 	spatial: Option<SpatialQuery>,
 	locomotion: Option<Res<CharacterLocomotion>>,
+	geometry: SupportGeometry,
 	collider_names: Query<(Option<&Name>, Has<durham::TerrainTrimeshCollider>)>,
 	mut actors: Query<(
 		Entity,
@@ -288,12 +314,13 @@ fn resolve_actor_support(
 		Option<&RigidBody>,
 		Option<&Collider>,
 		Option<&GravityScale>,
+		Option<&CollisionLayers>,
 		Option<&mut LinearVelocity>,
 		Option<&mut AngularVelocity>,
 	)>,
 ) {
 	let Some(spatial) = spatial else {
-		for (entity, mut pending, _, body, collider, _, _, _) in &mut actors {
+		for (entity, mut pending, _, body, collider, _, _, _, _) in &mut actors {
 			pending.diagnose(
 				entity,
 				SupportDiagnostic::MissingSpatialQuery,
@@ -305,7 +332,7 @@ fn resolve_actor_support(
 	};
 	let locomotion = locomotion.as_deref().copied().unwrap_or_default();
 	let filter = PhysicsInteractionLayer::Fixed.query_filter();
-	for (entity, mut pending, mut transform, body, collider, gravity, velocity, angular) in
+	for (entity, mut pending, mut transform, body, collider, gravity, layers, velocity, angular) in
 		&mut actors
 	{
 		if body != Some(&RigidBody::Dynamic) || collider.is_none() {
@@ -321,6 +348,9 @@ fn resolve_actor_support(
 			continue;
 		}
 		pending.resume_gravity.get_or_insert_with(|| gravity.map(|gravity| gravity.0));
+		if pending.settling.is_some() {
+			continue;
+		}
 		if pending.exhausted {
 			continue;
 		}
@@ -332,7 +362,7 @@ fn resolve_actor_support(
 			pending.diagnose(entity, SupportDiagnostic::MissingSearch, body.copied(), true);
 			continue;
 		};
-		match probe_search_with_locomotion(&spatial, &filter, search, &locomotion) {
+		match crate::probe::actor_candidate(&spatial, &filter, search, &locomotion) {
 			SupportProbeOutcome::Waiting => {
 				pending.failure = None;
 				pending.diagnose(
@@ -360,33 +390,50 @@ fn resolve_actor_support(
 				if let Some(minimum) = pending.minimum_center_y {
 					pose.position.y = pose.position.y.max(minimum);
 				}
-				// A raised authored offset needs clearance at its final position,
-				// not just at the lower contact accepted by the support cast.
-				if clearance_blocked(
-					&spatial,
-					&filter,
-					pose.position,
-					pending.hull,
-					support.map(|hit| hit.entity),
-				) {
+				let layers = layers.copied().unwrap_or(CollisionLayers::DEFAULT);
+				let elevated = support.is_some_and(|hit| {
+					pending.minimum_center_y.is_some_and(|minimum| {
+						minimum > hit.point.y + pending.hull.half_height() + 1e-3
+					})
+				});
+				let requires_contact =
+					geometry.requires_contact(pending.resume_gravity.flatten(), elevated);
+				let Some(position) = geometry
+					.clear_pose(pose.position, support, search, &layers)
+					.and_then(|position| {
+						if requires_contact && search.policy.waits_for_support() {
+							geometry.contact_pose(
+								position,
+								support?,
+								search,
+								pending.minimum_center_y,
+							)
+						} else {
+							Some(position)
+						}
+					})
+				else {
 					pending.failure = Some(SupportProbeFailure::Clearance);
-					if pending.diagnose(
+					pending.diagnose(
 						entity,
 						SupportDiagnostic::FinalPoseClearance,
 						body.copied(),
 						true,
-					) {
-						pending.diagnose_geometry(
-							entity,
-							&spatial,
-							&filter,
-							&collider_names,
-							&locomotion,
-						);
-					}
+					);
 					pending.advance_after_failure();
 					continue;
+				};
+				pose.position = position;
+				pending.failure = None;
+				if search.policy.waits_for_support() {
+					pending.settling = Some(SettlingSupport::new(
+						pose.position,
+						support,
+						search,
+						requires_contact,
+					));
 				}
+
 				pending.diagnose(
 					entity,
 					SupportDiagnostic::Ready {
@@ -405,15 +452,17 @@ fn resolve_actor_support(
 				}
 				let mut actor = commands.entity(entity);
 				actor.try_insert(Position(pose.position));
-				match pending.resume_gravity.flatten() {
-					Some(gravity) => {
-						actor.try_insert(GravityScale(gravity));
+				if pending.settling.is_none() {
+					match pending.resume_gravity.flatten() {
+						Some(gravity) => {
+							actor.try_insert(GravityScale(gravity));
+						}
+						None => {
+							actor.remove::<GravityScale>();
+						}
 					}
-					None => {
-						actor.remove::<GravityScale>();
-					}
+					actor.remove::<PendingActorSupport>();
 				}
-				actor.remove::<PendingActorSupport>();
 			}
 		}
 	}
@@ -435,6 +484,9 @@ fn hold_actor_support(
 	for (entity, mut pending, mut transform, position, body, gravity, velocity, angular) in
 		&mut actors
 	{
+		if pending.settling.is_some() {
+			continue;
+		}
 		transform.translation = pending.held_position;
 		if let Some(mut position) = position {
 			position.0 = pending.held_position;

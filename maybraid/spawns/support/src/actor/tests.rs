@@ -1,3 +1,5 @@
+mod handoff;
+
 use crate::{
 	register_actor_support, ActorSupportSystems, PendingActorSupport, PlacementSearch,
 	SupportProbeFailure,
@@ -144,7 +146,11 @@ fn zero_and_absent_gravity_survive_pending_retries() {
 		for _ in 0..3 {
 			app.update();
 		}
-		assert!(app.world().get::<PendingActorSupport>(entity).is_none());
+		assert!(
+			app.world().get::<PendingActorSupport>(entity).is_none(),
+			"gravity={gravity:?}, pending={:?}",
+			app.world().get::<PendingActorSupport>(entity)
+		);
 		assert_eq!(app.world().get::<GravityScale>(entity).map(|value| value.0), gravity);
 	}
 }
@@ -198,6 +204,13 @@ fn disabled_support_waits_even_with_a_valid_floor() {
 		pending.set_enabled(true);
 	}
 	app.update();
+	assert!(
+		app.world().get::<PendingActorSupport>(entity).is_some(),
+		"validated placement still awaits physics confirmation"
+	);
+	for _ in 0..3 {
+		app.update();
+	}
 	assert!(app.world().get::<PendingActorSupport>(entity).is_none());
 	assert_eq!(app.world().get::<GravityScale>(entity).map(|gravity| gravity.0), Some(1.8));
 }
