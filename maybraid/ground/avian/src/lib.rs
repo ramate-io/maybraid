@@ -70,12 +70,7 @@ impl ColumnHits {
 }
 
 impl ElevationProbe for AvianElevationProbe<'_, '_> {
-	fn hit_down(
-		&mut self,
-		origin: Vec3,
-		max_distance: f32,
-		exclude: &[Entity],
-	) -> Option<GroundHit> {
+	fn hit_down(&self, origin: Vec3, max_distance: f32, exclude: &[Entity]) -> Option<GroundHit> {
 		if max_distance <= 0.0 {
 			return None;
 		}
@@ -164,5 +159,145 @@ mod tests {
 	fn column_ignores_only_near_start_hits() {
 		assert_eq!(select_column_distance(&[0.4, 1.9], MIN_GROUND_DROP), None);
 		assert_eq!(select_column_distance(&[8.5], MIN_GROUND_DROP), Some(8.5));
+	}
+
+	#[derive(bevy::prelude::Component)]
+	struct BackendSample {
+		origin: Vec3,
+		max_distance: f32,
+		exclude: Vec<Entity>,
+		expected: Option<Entity>,
+	}
+
+	#[derive(bevy::prelude::Component, Default)]
+	struct SerialSample(Option<GroundHit>);
+
+	#[derive(bevy::prelude::Component, Default)]
+	struct ParallelSample(Option<GroundHit>);
+
+	fn sample_backend_serial(
+		probe: AvianElevationProbe,
+		mut samples: bevy::prelude::Query<(&BackendSample, &mut SerialSample)>,
+	) {
+		for (sample, mut result) in &mut samples {
+			result.0 = probe.hit_down(sample.origin, sample.max_distance, &sample.exclude);
+		}
+	}
+
+	fn sample_backend_parallel(
+		probe: AvianElevationProbe,
+		mut samples: bevy::prelude::Query<(&BackendSample, &mut ParallelSample)>,
+	) {
+		use bevy::ecs::batching::BatchingStrategy;
+		samples.par_iter_mut().batching_strategy(BatchingStrategy::fixed(16)).for_each(
+			|(sample, mut result)| {
+				result.0 = probe.hit_down(sample.origin, sample.max_distance, &sample.exclude);
+			},
+		);
+	}
+
+	#[test]
+	fn concurrent_avian_samples_match_serial_snapshot() -> Result<(), Box<dyn std::error::Error>> {
+		use avian3d::prelude::{Collider, PhysicsPlugins, RigidBody};
+		use bevy::ecs::system::RunSystemOnce;
+		use bevy::prelude::{App, MinimalPlugins, Quat, Transform, TransformPlugin};
+		use bevy::time::TimeUpdateStrategy;
+		use std::time::Duration;
+
+		let pool = bevy::tasks::ComputeTaskPool::get_or_init(|| {
+			bevy::tasks::TaskPoolBuilder::default().num_threads(2).build()
+		});
+		assert!(pool.thread_num() > 1, "backend concurrency test needs multiple compute workers");
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			PhysicsPlugins::default(),
+			bevy::asset::AssetPlugin::default(),
+			bevy::mesh::MeshPlugin,
+			bevy::scene::ScenePlugin,
+		))
+		.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f64(1.0 / 60.0)));
+		let ground = app
+			.world_mut()
+			.spawn((
+				RigidBody::Static,
+				Collider::cuboid(80.0, 0.5, 80.0),
+				Transform::from_xyz(0.0, -0.25, 0.0),
+				PhysicsInteractionLayer::fixed_layers(),
+			))
+			.id();
+		let lower_canopy = app
+			.world_mut()
+			.spawn((
+				RigidBody::Static,
+				Collider::cuboid(10.0, 0.2, 10.0),
+				Transform::from_xyz(0.0, 1.5, 0.0),
+				PhysicsInteractionLayer::fixed_layers(),
+			))
+			.id();
+		app.world_mut().spawn((
+			RigidBody::Static,
+			Collider::cuboid(10.0, 0.2, 10.0),
+			Transform::from_xyz(0.0, 3.0, 0.0),
+			PhysicsInteractionLayer::fixed_layers(),
+		));
+		let slope = app
+			.world_mut()
+			.spawn((
+				RigidBody::Static,
+				Collider::cuboid(10.0, 0.5, 10.0),
+				Transform::from_xyz(60.0, 1.0, 0.0).with_rotation(Quat::from_rotation_z(0.2)),
+				PhysicsInteractionLayer::fixed_layers(),
+			))
+			.id();
+		app.world_mut().spawn((
+			RigidBody::Static,
+			Collider::cuboid(10.0, 0.5, 10.0),
+			Transform::from_xyz(-60.0, -0.25, 0.0),
+			PhysicsInteractionLayer::animated_layers(),
+		));
+		for index in 0..192 {
+			let z = (index % 7) as f32 - 3.0;
+			let (x, max_distance, exclude, expected) = match index % 6 {
+				0 => (0.0, 12.0, Vec::new(), Some(ground)),
+				1 => (0.0, 12.0, vec![ground], Some(lower_canopy)),
+				2 => (60.0, 12.0, Vec::new(), Some(slope)),
+				3 => (100.0, 12.0, Vec::new(), None),
+				4 => (0.0, 1.0, Vec::new(), None),
+				_ => (-60.0, 12.0, Vec::new(), None),
+			};
+			app.world_mut().spawn((
+				BackendSample { origin: Vec3::new(x, 8.0, z), max_distance, exclude, expected },
+				SerialSample::default(),
+				ParallelSample::default(),
+			));
+		}
+		app.finish();
+		for _ in 0..4 {
+			app.update();
+		}
+		// No physics updates between passes: both paths query the identical real BVH snapshot.
+		for _ in 0..8 {
+			app.world_mut().run_system_once(sample_backend_serial).map_err(|error| {
+				std::io::Error::other(format!("serial sampling failed: {error:?}"))
+			})?;
+			app.world_mut().run_system_once(sample_backend_parallel).map_err(|error| {
+				std::io::Error::other(format!("parallel sampling failed: {error:?}"))
+			})?;
+			let mut query =
+				app.world_mut().query::<(&BackendSample, &SerialSample, &ParallelSample)>();
+			for (sample, serial, parallel) in query.iter(app.world()) {
+				assert_eq!(serial.0.map(|hit| hit.entity), sample.expected);
+				assert_eq!(serial.0, parallel.0, "backend differs at {:?}", sample.origin);
+				if let Some(hit) = serial.0 {
+					assert!(hit.normal.is_normalized());
+					if hit.entity == slope {
+						assert!(hit.normal.distance(Vec3::Y) > 0.1);
+					}
+				}
+			}
+		}
+		Ok(())
 	}
 }
