@@ -163,6 +163,9 @@ pub enum AgentCommand {
 	/// Camera-relative walk toward world XZ until reached or `timeout`.
 	Goto {
 		xz: [f32; 2],
+		/// Movement seconds, plus a separate cumulative support-wait budget of
+		/// the same length. Pending spawn/teleport support emits neutral input;
+		/// exhausting that wait fails with `support timeout` instead of `stuck`.
 		#[serde(default = "default_goto_timeout")]
 		timeout: f32,
 		#[serde(default = "default_goto_radius")]
