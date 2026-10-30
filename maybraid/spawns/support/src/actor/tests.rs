@@ -1,4 +1,5 @@
 mod handoff;
+mod trimesh;
 
 use crate::{
 	register_actor_support, ActorSupportSystems, PendingActorSupport, PlacementSearch,
