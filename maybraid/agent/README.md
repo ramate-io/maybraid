@@ -168,7 +168,7 @@ and `frame`.
 | `waypoint` | `goto` reached, timed out, or stuck |
 | `scenario` | script markers |
 | `chunk_loads` | count of new cascade chunks this frame (cheap summary) |
-| `actors` | `hosts` / `bodies` / `brains` plus `min_y` / `max_y` / `ground_at_min_y` when the census or Y band changes |
+| `actors` | `hosts` / `bodies` / `brains` / `pending_support` plus `min_y` / `max_y` / `ground_at_min_y` when the census, pending count, or Y band changes |
 | `picker` | locked spawn picker opened or closed (`open`) |
 | `presentation` | offscreen `resize` / `recreate` (`window`, `target`) — must be zero in a measure window |
 | `screen` | live menu screen (`home`, `gallery`, `spin_reveal`, `character`, `in_game`, `settings`, `loading`, `none`) |
@@ -183,3 +183,8 @@ and `frame`.
 
 Scenario / command / waypoint / ready also emit Tracy messages when the
 binary is built with `bevy/trace_tracy`.
+
+`pending_support` counts mob bodies held by the shared spawn support lifecycle.
+Check it alongside body heights when validating spawn completion: suspended
+bodies have not yet passed support and clearance checks. Older event files omit
+this field and deserialize it as zero; that default is not evidence of placement.

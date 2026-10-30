@@ -7,53 +7,7 @@ use maybraid_spawns_player::{
 	ArrivalDestination, PlacementAttempt, SpawnFailureReason, SpawnIdentity,
 };
 
-/// How the actor should meet the world. Interior and outdoor share one
-/// probe; only the vertical search interval differs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlacementPolicy {
-	OutdoorGround,
-	InteriorFloor,
-	Airborne,
-}
-
-impl PlacementPolicy {
-	/// Outdoor ground and interior floors both wait for their supporting
-	/// collider. An interior coordinate does not prove the floor is ready.
-	pub const fn waits_for_support(self) -> bool {
-		matches!(self, Self::OutdoorGround | Self::InteriorFloor)
-	}
-
-	pub const fn interior(self) -> bool {
-		matches!(self, Self::InteriorFloor)
-	}
-
-	pub const fn support_policy(self) -> SupportPolicy {
-		match self {
-			Self::InteriorFloor => SupportPolicy::BuildingWalk,
-			Self::OutdoorGround | Self::Airborne => SupportPolicy::FixedUpward,
-		}
-	}
-}
-
-/// Which colliders may become the accepted support. Roof / surface
-/// eligibility is this filter plus the column bounds, not special-case
-/// skip logic in the probe.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SupportPolicy {
-	/// Any Fixed collider with an upward normal inside the column.
-	FixedUpward,
-	/// Same Fixed/upward filter; the tighter interior interval excludes
-	/// roofs and lower terrain.
-	BuildingWalk,
-}
-
-impl SupportPolicy {
-	pub const UPWARD: f32 = 0.55;
-
-	pub fn accepts_normal(self, normal: Vec3) -> bool {
-		normal.y > Self::UPWARD
-	}
-}
+pub use maybraid_spawns_support::{PlacementPolicy, PlacementSupportHit, SupportPolicy};
 
 /// Capsule clearance used when lifting onto a floor or composed surface.
 /// Prefer [`LocomotionCapsule`] on new requests; this remains a thin
@@ -126,20 +80,6 @@ impl ResolvePlacement {
 
 	pub fn matches_attempt(self, identity: SpawnIdentity, attempt: PlacementAttempt) -> bool {
 		self.belongs_to(identity) && self.attempt == attempt
-	}
-}
-
-/// Contact that became the accepted support. Construction may revalidate it.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct PlacementSupportHit {
-	pub entity: Entity,
-	pub point: Vec3,
-	pub normal: Vec3,
-}
-
-impl PlacementSupportHit {
-	pub const fn new(entity: Entity, point: Vec3, normal: Vec3) -> Self {
-		Self { entity, point, normal }
 	}
 }
 

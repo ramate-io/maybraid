@@ -5,7 +5,6 @@ use bevy::ecs::query::Has;
 use bevy::prelude::*;
 use characters::LocomotionCapsule;
 use lod_avian::PhysicsInteractionLayer;
-use std::f32::consts::PI;
 
 pub(crate) const JOG_SPEED: f32 = 6.0; // ≤ LEAP_SPEED, walk / slow-run clip
 pub(crate) const MOVE_SPEED: f32 = 10.5; // sprint; run clip
@@ -14,25 +13,11 @@ pub(crate) const MOVE_ACCEL: f32 = 40.0;
 pub(crate) const MOVE_BRAKE: f32 = 50.0;
 const AIR_CONTROL: f32 = 0.25;
 pub(crate) const JUMP_IMPULSE: f32 = 8.0;
-pub(crate) const MAX_SLOPE_ANGLE: f32 = PI * 0.45;
 pub(crate) const GROUND_CAST_DISTANCE: f32 = 0.45;
 const GROUND_SNAP_SPEED: f32 = 1.5;
 
-/// Walkable grounded slope for FFA / NPC capsules. Insert before [`crate::PlayerPlugin`]
-/// to override the default (~81°). World / Durham playgrounds use ~70° so cliffs
-/// never count as floor. Uncontrolled bodies need static floor friction above
-/// `tan(this)`; motor capsules idle-brake to rest instead.
-#[derive(Resource, Clone, Copy, Debug, PartialEq)]
-pub struct CharacterLocomotion {
-	/// Hits steeper than this (radians from up) are not grounded.
-	pub max_slope_angle: f32,
-}
-
-impl Default for CharacterLocomotion {
-	fn default() -> Self {
-		Self { max_slope_angle: MAX_SLOPE_ANGLE }
-	}
-}
+// Public compatibility path for the shared movement and arrival slope policy.
+pub use characters::CharacterLocomotion;
 
 #[derive(Component, Default, Clone, Copy, PartialEq)]
 pub struct MoveWish(pub Vec3);
@@ -231,7 +216,7 @@ pub fn apply_character_controller(commands: &mut Commands, body: Entity, hull: L
 		LockedAxes::ROTATION_LOCKED,
 		MovementAcceleration(MOVE_ACCEL),
 		JumpImpulse(JUMP_IMPULSE),
-		MaxSlopeAngle(MAX_SLOPE_ANGLE),
+		MaxSlopeAngle(CharacterLocomotion::default().max_slope_angle),
 		MoveWish::default(),
 		crate::motor::MotorIntent::default(),
 		WalkableGround::default(),
@@ -586,7 +571,10 @@ mod tests {
 
 	#[test]
 	fn default_locomotion_keeps_legacy_slope() {
-		assert!((CharacterLocomotion::default().max_slope_angle - MAX_SLOPE_ANGLE).abs() < 1e-6);
+		assert!(
+			(CharacterLocomotion::default().max_slope_angle - std::f32::consts::PI * 0.45).abs()
+				< 1e-6
+		);
 	}
 
 	#[test]

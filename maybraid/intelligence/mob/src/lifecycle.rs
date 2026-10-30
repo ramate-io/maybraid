@@ -3,8 +3,7 @@
 use bevy::prelude::*;
 use damage::{DespawnAfter, Downed, Health};
 use poi_intelligence::{
-	mix_seed, place_nearby_among, PoiId, PoiInterests, PoiRegistry, PoiSupport,
-	AGENT_SEPARATION,
+	mix_seed, place_nearby_among, PoiId, PoiInterests, PoiRegistry, PoiSupport, AGENT_SEPARATION,
 };
 
 use crate::host::{Mob, MobId};
@@ -171,7 +170,7 @@ pub(crate) fn respawn_mob_members(
 			let excluded = member.excluded_pois().to_vec();
 			let last = member.pose;
 			let used = member.replacements_used;
-			let (pose, poi, support) = policy.placement(
+			let (pose, poi, support, support_y) = policy.placement(
 				transform.translation,
 				last,
 				*id,
@@ -185,7 +184,7 @@ pub(crate) fn respawn_mob_members(
 			member.remember_respawn_poi(poi);
 			member.pose = pose;
 			occupied.push(pose);
-			needed.write(MobMemberNeeded { mob: host, id: *id, slot, pose, support });
+			needed.write(MobMemberNeeded { mob: host, id: *id, slot, pose, support, support_y });
 		}
 	}
 }
@@ -213,9 +212,9 @@ impl MobRespawn {
 		occupied: &[Vec3],
 		registry: Option<&PoiRegistry>,
 		interests: Option<&PoiInterests>,
-	) -> (Vec3, Option<PoiId>, PoiSupport) {
+	) -> (Vec3, Option<PoiId>, PoiSupport, Option<f32>) {
 		if self.at != MobRespawnAt::Poi {
-			return (spawn_pose(self.at, host, last), None, PoiSupport::Terrain);
+			return (spawn_pose(self.at, host, last), None, PoiSupport::Terrain, None);
 		}
 		let seed = respawn_seed(mob, slot, generation);
 		let placed = place_nearby_among(
@@ -230,7 +229,7 @@ impl MobRespawn {
 			AGENT_SEPARATION,
 		);
 		let pose = with_member_height(placed.position, host, last, placed.poi.is_some());
-		(pose, placed.poi, placed.support)
+		(pose, placed.poi, placed.support, placed.poi.map(|_| placed.position.y))
 	}
 
 	pub fn delay_for_slot(self, slot: u16) -> f32 {
@@ -310,7 +309,7 @@ mod tests {
 			false,
 		)?;
 		let interests = PoiInterests::one(CAMP);
-		let (pose, poi, support) = MobRespawn::default().placement(
+		let (pose, poi, support, support_y) = MobRespawn::default().placement(
 			Vec3::ZERO,
 			Vec3::Y,
 			MobId(3),
@@ -323,6 +322,7 @@ mod tests {
 		);
 		assert_eq!(poi, Some(PoiId(21)));
 		assert_eq!(support, PoiSupport::Floor);
+		assert_eq!(support_y, Some(32.0));
 		assert_eq!(pose.y, 33.0);
 		Ok(())
 	}

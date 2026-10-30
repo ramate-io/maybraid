@@ -9,6 +9,7 @@ pub mod support;
 pub mod terrain;
 
 pub use pending::{PendingPlacement, PlacementTick, PlacementWork};
+pub use poi::PoiPlacementPolicy;
 pub use probe::{observe_placement_physics, register_placement_physics};
 pub use request::{
 	ActorClearance, CancelPlacement, PlacementFailed, PlacementPolicy, PlacementReady,
@@ -89,17 +90,38 @@ impl ResolvePlacement {
 						maybraid_spawns_player::SpawnFailureReason::InvalidBounds,
 					));
 				}
-				Ok(PendingPlacement::new(self.identity, self.attempt, self.destination, search))
+				let pending =
+					PendingPlacement::new(self.identity, self.attempt, self.destination, search);
+				Ok(if matches!(self.destination, ArrivalDestination::Poi(_)) {
+					pending
+				} else {
+					pending.with_published_terrain()
+				})
 			}
 			Err(reason) => Err(PlacementFailed::new(self.identity, self.attempt, reason)),
 		}
 	}
 }
 
-impl PlacementSearch {
+pub trait ResolvePlacementSearch: Sized {
+	fn resolve(
+		destination: ArrivalDestination,
+		registry: &PoiRegistry,
+		surface: &DurhamSurface,
+		fallback_at: Vec3,
+		hull: characters::LocomotionCapsule,
+	) -> Result<Self, maybraid_spawns_player::SpawnFailureReason>;
+	fn resolve_poi(
+		id: PoiId,
+		registry: &PoiRegistry,
+		hull: characters::LocomotionCapsule,
+	) -> Result<Self, maybraid_spawns_player::SpawnFailureReason>;
+}
+
+impl ResolvePlacementSearch for PlacementSearch {
 	/// Resolve a picker / resume destination into a bounded column.
 	/// Generated heights define the interval; the probe reads colliders.
-	pub fn resolve(
+	fn resolve(
 		destination: ArrivalDestination,
 		registry: &PoiRegistry,
 		surface: &DurhamSurface,
@@ -115,7 +137,7 @@ impl PlacementSearch {
 		}
 	}
 
-	pub fn resolve_poi(
+	fn resolve_poi(
 		id: PoiId,
 		registry: &PoiRegistry,
 		hull: characters::LocomotionCapsule,

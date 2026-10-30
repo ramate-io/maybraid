@@ -20,6 +20,7 @@ characters = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
 maybraid-character-controller = { workspace = true }
+maybraid-spawns-support = { workspace = true }
 maybraid-controllers-core = { workspace = true }
 maybraid-virtual-pad-controller = { workspace = true }
 player-camera = { workspace = true }

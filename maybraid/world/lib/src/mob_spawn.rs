@@ -6,11 +6,10 @@
 
 use barking::{GroupKind, MobEnvironmentSample, MobGroup, PendingMobGroups, PlacedMob};
 use bevy::prelude::*;
-use durham::{DurhamSurface, WorldBaseTerrain};
+use durham::DurhamSurface;
 use game_commands::command::CommandConsoleOutput;
 use mob_scenes::{MobKind, MobScene};
-use world_player::player::holding_elevation;
-use world_player::Player;
+use world_player::{surface_or_hold_at, Player};
 
 #[derive(Component, Clone, Debug, PartialEq)]
 pub struct RequestSpawnMobs {
@@ -49,7 +48,6 @@ pub(crate) fn apply_spawn_mob_requests(
 	requests: Query<(Entity, &RequestSpawnMobs)>,
 	players: Query<&Transform, With<Player>>,
 	surface: DurhamSurface,
-	base: Res<WorldBaseTerrain>,
 	pending: Option<ResMut<PendingMobGroups>>,
 	mut console: Option<ResMut<CommandConsoleOutput>>,
 ) {
@@ -78,10 +76,7 @@ pub(crate) fn apply_spawn_mob_requests(
 			.into_iter()
 			.enumerate()
 			.map(|(index, xz)| {
-				let elevation = match surface.height_at(xz) {
-					Ok(Some(elevation)) => elevation,
-					Ok(None) | Err(_) => holding_elevation(&base.0, xz.x, xz.y),
-				};
+				let elevation = surface_or_hold_at(&surface, xz);
 				let scene = MobScene::of_kind(request.kind, request.roster_num(index));
 				members += scene.mob.roster.members.len();
 				PlacedMob {

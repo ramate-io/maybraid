@@ -71,6 +71,9 @@ pub enum AgentEventBody {
 		hosts: u32,
 		bodies: u32,
 		brains: u32,
+		/// Mob bodies still suspended while waiting for support and clearance.
+		#[serde(default)]
+		pending_support: u32,
 		/// Lowest / highest mob-body Y when `bodies > 0`.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		min_y: Option<f32>,
@@ -157,9 +160,17 @@ impl AgentEvent {
 			}
 			AgentEventBody::Ready { detail } => Some(format!("agent.ready {detail}")),
 			AgentEventBody::Picker { open } => Some(format!("agent.picker open={open}")),
-			AgentEventBody::Actors { hosts, bodies, brains, min_y, max_y, ground_at_min_y } => {
+			AgentEventBody::Actors {
+				hosts,
+				bodies,
+				brains,
+				pending_support,
+				min_y,
+				max_y,
+				ground_at_min_y,
+			} => {
 				let mut message =
-					format!("agent.actors hosts={hosts} bodies={bodies} brains={brains}");
+					format!("agent.actors hosts={hosts} bodies={bodies} brains={brains} pending_support={pending_support}");
 				if let Some(min_y) = min_y {
 					message.push_str(&format!(" min_y={min_y:.1}"));
 				}
@@ -236,6 +247,7 @@ mod tests {
 				hosts: 4,
 				bodies: 61,
 				brains: 61,
+				pending_support: 2,
 				min_y: Some(-2.0),
 				max_y: Some(14.0),
 				ground_at_min_y: Some(0.5),
@@ -246,7 +258,7 @@ mod tests {
 		assert_eq!(AgentEvent::parse_line(&line).map_err(|e| anyhow::anyhow!("{e}"))?, event);
 		assert_eq!(
 			event.tracy_message().as_deref(),
-			Some("agent.actors hosts=4 bodies=61 brains=61 min_y=-2.0 max_y=14.0 ground=0.5")
+			Some("agent.actors hosts=4 bodies=61 brains=61 pending_support=2 min_y=-2.0 max_y=14.0 ground=0.5")
 		);
 		Ok(())
 	}
@@ -267,7 +279,13 @@ mod tests {
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
 		assert!(matches!(
 			actors.body,
-			AgentEventBody::Actors { min_y: None, max_y: None, ground_at_min_y: None, .. }
+			AgentEventBody::Actors {
+				pending_support: 0,
+				min_y: None,
+				max_y: None,
+				ground_at_min_y: None,
+				..
+			}
 		));
 		Ok(())
 	}

@@ -504,7 +504,9 @@ mod tests {
 		use durham::{
 			BaseTerrainNoise, Terrain, TerrainCellLayout, TerrainConfig, WorldBaseTerrain,
 		};
-		use maybraid_spawns_placement::{PlacementSearch, OUTDOOR_LOWER_MARGIN};
+		use maybraid_spawns_placement::{
+			PlacementSearch, ResolvePlacementSearch, OUTDOOR_LOWER_MARGIN,
+		};
 		use richmond::{PadComplex, TerrainWithPads};
 		use std::sync::Arc;
 		for difference in [-40.0, 40.0] {
