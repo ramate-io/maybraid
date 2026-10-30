@@ -87,7 +87,22 @@ grenade construction is synchronous and untracked.
 Existing bodies carry `PendingActorSupport` until their collider and intended
 support are ready. Missing or busy terrain and delayed collision presentation
 retry independently for every actor. Retargeting updates this component while
-preserving the original gravity. Accepted bodies leave the lifecycle; ordinary
+preserving the original gravity. Terrain-backed bodies also wait for cooked,
+eligible terrain chunks to cover the capsule's XZ footprint, including across
+tile seams and excluding omitted regions. This checks presentation coverage,
+not a flat floor across the footprint: fully presented cliffs remain usable.
+Missing coverage waits on the current destination without spending nearby-search
+candidates.
+
+The shared handoff validates capsule clearance and retains ordinary grounded
+arrivals through two fresh physics contacts. Losing support or coverage during
+that handoff returns the body to holding. Bounded upward adjustment can repair
+shallow floor overlap; it cannot pass through walls or ceilings. Authored elevated
+placements and zero/upward gravity retain their intended pose through two fresh
+geometry validations. Nonoriented terrain meshes are surfaces rather than solid
+volumes for containment checks; capsule collision checks still apply.
+
+Accepted bodies leave the lifecycle; ordinary
 movement and swimming do not repeatedly snap to terrain. Mob respawns retain
 the selected floor elevation separately from their authored body offset.
 

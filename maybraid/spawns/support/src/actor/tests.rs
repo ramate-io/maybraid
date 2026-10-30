@@ -1,3 +1,4 @@
+mod coverage;
 mod handoff;
 mod trimesh;
 

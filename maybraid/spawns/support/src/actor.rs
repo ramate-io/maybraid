@@ -414,6 +414,16 @@ fn resolve_actor_support(
 					});
 				let position = match prepared_pose {
 					Ok(position) => position,
+					Err(PoseRejection::TerrainCoverage) => {
+						pending.failure = None;
+						pending.diagnose(
+							entity,
+							SupportDiagnostic::WaitingForPresentation,
+							body.copied(),
+							true,
+						);
+						continue;
+					}
 					Err(reason) => {
 						pending.failure = Some(SupportProbeFailure::Clearance);
 						pending.diagnose(
