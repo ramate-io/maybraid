@@ -11,7 +11,7 @@ use lod_avian::PhysicsInteractionLayer;
 mod handoff;
 
 use crate::actor::handoff::{
-	confirm_actor_support, guard_actor_support, SettlingSupport, SupportGeometry,
+	confirm_actor_support, guard_actor_support, PoseRejection, SettlingSupport, SupportGeometry,
 };
 
 use crate::{PlacementSearch, SupportProbeFailure, SupportProbeOutcome};
@@ -26,7 +26,7 @@ enum SupportDiagnostic {
 	MissingSearch,
 	WaitingForPresentation,
 	Failed(SupportProbeFailure),
-	FinalPoseClearance,
+	FinalPoseClearance(PoseRejection),
 	Ready { position: Vec3, support: Option<Entity> },
 }
 
@@ -398,30 +398,33 @@ fn resolve_actor_support(
 				});
 				let requires_contact =
 					geometry.requires_contact(pending.resume_gravity.flatten(), elevated);
-				let Some(position) = geometry
+				let prepared_pose = geometry
 					.clear_pose(pose.position, support, search, &layers)
 					.and_then(|position| {
 						if requires_contact && search.policy.waits_for_support() {
 							geometry.contact_pose(
 								position,
-								support?,
+								support.ok_or(PoseRejection::SupportGeometry)?,
 								search,
 								pending.minimum_center_y,
 							)
 						} else {
-							Some(position)
+							Ok(position)
 						}
-					})
-				else {
-					pending.failure = Some(SupportProbeFailure::Clearance);
-					pending.diagnose(
-						entity,
-						SupportDiagnostic::FinalPoseClearance,
-						body.copied(),
-						true,
-					);
-					pending.advance_after_failure();
-					continue;
+					});
+				let position = match prepared_pose {
+					Ok(position) => position,
+					Err(reason) => {
+						pending.failure = Some(SupportProbeFailure::Clearance);
+						pending.diagnose(
+							entity,
+							SupportDiagnostic::FinalPoseClearance(reason),
+							body.copied(),
+							true,
+						);
+						pending.advance_after_failure();
+						continue;
+					}
 				};
 				pose.position = position;
 				pending.failure = None;

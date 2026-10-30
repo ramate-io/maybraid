@@ -9,14 +9,34 @@ use std::time::Duration;
 use crate::actor::SupportDiagnostic;
 
 use crate::{
-	clearance_blocked, PendingActorSupport, PlacementSearch, PlacementSupportHit,
-	SupportProbeFailure,
+	PendingActorSupport, PlacementSearch, PlacementSupportHit, SupportProbeFailure,
+	clearance_blocked,
 };
 
 const CLEARANCE_TOLERANCE: f32 = 0.03;
 const MAX_LIFT: f32 = 1.0;
 const LIFT_STEP: f32 = 0.125;
 const SETTLE_TIMEOUT: f32 = 0.75;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum PoseRejection {
+	SupportGeometry,
+	SupportUnavailable,
+	SupportDisabled,
+	SupportLayers,
+	SupportBand,
+	SupportContaining,
+	SupportNoContact,
+	SupportContactNormal,
+	SupportContactBand,
+	CapsuleClearance,
+	ContactCast,
+	ContactNormal,
+	ContactBand,
+	ContactPlane,
+	AuthoredMinimum,
+	ContactClearance,
+}
 
 #[derive(Clone, Debug)]
 pub(super) struct SettlingSupport {
@@ -92,6 +112,26 @@ impl SupportGeometry<'_, '_> {
 		!elevated && gravity_y * gravity.unwrap_or(1.0) < 0.0
 	}
 
+	/// Unoriented triangle meshes are surfaces, so their point query cannot
+	/// establish solid containment. In particular, a degenerate triangle may
+	/// report off-surface points inside its AABB as contained. Capsule contacts
+	/// still enforce clearance against these surfaces in clear() and lift_safe().
+	fn contains_volume(
+		collider: &Collider,
+		position: Position,
+		rotation: Rotation,
+		point: Vec3,
+	) -> bool {
+		if collider
+			.shape_scaled()
+			.as_trimesh()
+			.is_some_and(|mesh| mesh.pseudo_normals_if_oriented().is_none())
+		{
+			return false;
+		}
+		collider.contains_point(position, rotation, point)
+	}
+
 	fn accepts_normal(&self, normal: Vec3) -> bool {
 		self.locomotion
 			.as_deref()
@@ -107,7 +147,7 @@ impl SupportGeometry<'_, '_> {
 		hit: PlacementSupportHit,
 		search: PlacementSearch,
 		layers: &CollisionLayers,
-	) -> bool {
+	) -> Result<(), PoseRejection> {
 		let Ok((
 			position,
 			rotation,
@@ -119,22 +159,27 @@ impl SupportGeometry<'_, '_> {
 			body,
 		)) = self.colliders.get(hit.entity)
 		else {
-			return false;
+			return Err(PoseRejection::SupportUnavailable);
 		};
 		if sensor
 			|| disabled
 			|| body_disabled
 			|| body.is_some_and(|body| self.disabled_bodies.contains(body.body))
-			|| !support_layers.memberships.has_all(PhysicsInteractionLayer::Fixed)
-			|| !support_layers.interacts_with(*layers)
-			|| !search.contains_surface(hit.point.y)
 		{
-			return false;
+			return Err(PoseRejection::SupportDisabled);
+		}
+		if !support_layers.memberships.has_all(PhysicsInteractionLayer::Fixed)
+			|| !support_layers.interacts_with(*layers)
+		{
+			return Err(PoseRejection::SupportLayers);
+		}
+		if !search.contains_surface(hit.point.y) {
+			return Err(PoseRejection::SupportBand);
 		}
 		let disk = Collider::cylinder((search.hull.radius * 0.5).max(0.08), 0.04);
 		let origin = Vec3::new(search.xz.x, hit.point.y + 0.05, search.xz.y);
-		if collider.contains_point(*position, *rotation, origin) {
-			return false;
+		if Self::contains_volume(collider, *position, *rotation, origin) {
+			return Err(PoseRejection::SupportContaining);
 		}
 		let mut contacts = Vec::new();
 		contact_query::contact_manifolds(
@@ -147,13 +192,23 @@ impl SupportGeometry<'_, '_> {
 			0.1,
 			&mut contacts,
 		);
-		contacts.iter().any(|manifold| {
-			self.accepts_normal(-manifold.normal)
-				&& manifold.points.iter().any(|point| {
-					point.point.y >= search.min_surface_y - CLEARANCE_TOLERANCE
-						&& point.point.y <= search.max_surface_y + CLEARANCE_TOLERANCE
-				})
-		})
+		if contacts.is_empty() {
+			return Err(PoseRejection::SupportNoContact);
+		}
+		if !contacts.iter().any(|manifold| self.accepts_normal(-manifold.normal)) {
+			return Err(PoseRejection::SupportContactNormal);
+		}
+		contacts
+			.iter()
+			.any(|manifold| {
+				self.accepts_normal(-manifold.normal)
+					&& manifold.points.iter().any(|point| {
+						point.point.y >= search.min_surface_y - CLEARANCE_TOLERANCE
+							&& point.point.y <= search.max_surface_y + CLEARANCE_TOLERANCE
+					})
+			})
+			.then_some(())
+			.ok_or(PoseRejection::SupportContactBand)
 	}
 
 	fn clear(
@@ -180,7 +235,7 @@ impl SupportGeometry<'_, '_> {
 			else {
 				return false;
 			};
-			if collider.contains_point(*other_position, *other_rotation, position) {
+			if Self::contains_volume(collider, *other_position, *other_rotation, position) {
 				return false;
 			}
 			let mut contacts = Vec::new();
@@ -226,7 +281,7 @@ impl SupportGeometry<'_, '_> {
 			else {
 				return false;
 			};
-			if collider.contains_point(*other_position, *other_rotation, position) {
+			if Self::contains_volume(collider, *other_position, *other_rotation, position) {
 				return false;
 			}
 			let mut contacts = Vec::new();
@@ -259,9 +314,9 @@ impl SupportGeometry<'_, '_> {
 		support: PlacementSupportHit,
 		search: PlacementSearch,
 		minimum: Option<f32>,
-	) -> Option<Vec3> {
+	) -> Result<Vec3, PoseRejection> {
 		let (floor_position, floor_rotation, collider, ..) =
-			self.colliders.get(support.entity).ok()?;
+			self.colliders.get(support.entity).map_err(|_| PoseRejection::SupportGeometry)?;
 		let capsule = Collider::capsule(search.hull.radius, search.hull.length);
 		let hit = contact_query::time_of_impact(
 			&capsule,
@@ -274,7 +329,8 @@ impl SupportGeometry<'_, '_> {
 			Vec3::ZERO,
 			MAX_LIFT + 0.3,
 		)
-		.ok()??;
+		.map_err(|_| PoseRejection::ContactCast)?
+		.ok_or(PoseRejection::ContactCast)?;
 		if hit.time_of_impact <= 1e-4 {
 			// TOI's stop-at-penetration result may have no usable normal. A shallow
 			// contact already checked by clear() can instead be validated directly.
@@ -296,20 +352,26 @@ impl SupportGeometry<'_, '_> {
 							point.penetration >= -0.005 && search.contains_surface(point.point.y)
 						})
 				}))
-			.then_some(position);
+			.then_some(position)
+			.ok_or(PoseRejection::ContactClearance);
 		}
 		let surface = floor_position.0 + floor_rotation.0 * hit.point2;
-		if !self.accepts_normal(floor_rotation.0 * hit.normal2)
-			|| !search.contains_surface(surface.y)
-			|| (surface - support.point).dot(support.normal).abs() > 0.1
-		{
-			return None;
+		if !self.accepts_normal(floor_rotation.0 * hit.normal2) {
+			return Err(PoseRejection::ContactNormal);
+		}
+		if !search.contains_surface(surface.y) {
+			return Err(PoseRejection::ContactBand);
+		}
+		if (surface - support.point).dot(support.normal).abs() > 0.1 {
+			return Err(PoseRejection::ContactPlane);
 		}
 		let standing = position + Vec3::NEG_Y * hit.time_of_impact;
 		if minimum.is_some_and(|minimum| standing.y < minimum) {
-			return None;
+			return Err(PoseRejection::AuthoredMinimum);
 		}
-		self.clear(standing, search.hull, Some(support)).then_some(standing)
+		self.clear(standing, search.hull, Some(support))
+			.then_some(standing)
+			.ok_or(PoseRejection::ContactClearance)
 	}
 
 	pub(super) fn clear_pose(
@@ -318,9 +380,9 @@ impl SupportGeometry<'_, '_> {
 		support: Option<PlacementSupportHit>,
 		search: PlacementSearch,
 		layers: &CollisionLayers,
-	) -> Option<Vec3> {
-		if support.is_some_and(|hit| !self.support_valid(hit, search, layers)) {
-			return None;
+	) -> Result<Vec3, PoseRejection> {
+		if let Some(hit) = support {
+			self.support_valid(hit, search, layers)?;
 		}
 		let upper = (search.max_surface_y + search.hull.spawn_height()).max(position.y);
 		for step in 0..=8 {
@@ -329,7 +391,7 @@ impl SupportGeometry<'_, '_> {
 				break;
 			}
 			if self.clear(lifted, search.hull, support) {
-				return Some(lifted);
+				return Ok(lifted);
 			}
 			if !self.lift_safe(lifted, search.hull, support) {
 				break;
@@ -339,7 +401,7 @@ impl SupportGeometry<'_, '_> {
 				break;
 			}
 		}
-		None
+		Err(PoseRejection::CapsuleClearance)
 	}
 
 	fn validate(
@@ -351,7 +413,10 @@ impl SupportGeometry<'_, '_> {
 		if !state.contains(position) {
 			return Err(SupportProbeFailure::Placement);
 		}
-		if !state.support.is_some_and(|hit| self.support_valid(hit, state.search, layers)) {
+		if !state
+			.support
+			.is_some_and(|hit| self.support_valid(hit, state.search, layers).is_ok())
+		{
 			return Err(SupportProbeFailure::NoEligibleSupport);
 		}
 		if !self.clear(position, state.search.hull, state.support) {
