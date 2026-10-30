@@ -17,17 +17,15 @@ pub struct GroundHit {
 /// character’s own collider via `exclude`. The Avian backend walks Fixed
 /// colliders in the column and returns the lowest standable hit, not the
 /// first volume the ray enters.
+///
+/// Sampling uses shared access: each call keeps its temporary hit state local,
+/// allowing independent characters to sample a thread-safe backend concurrently.
 pub trait ElevationProbe {
-	fn hit_down(
-		&mut self,
-		origin: Vec3,
-		max_distance: f32,
-		exclude: &[Entity],
-	) -> Option<GroundHit>;
+	fn hit_down(&self, origin: Vec3, max_distance: f32, exclude: &[Entity]) -> Option<GroundHit>;
 
 	/// Height of the ground hit under `(x, from_y, z)`, if any.
 	fn height_at(
-		&mut self,
+		&self,
 		x: f32,
 		z: f32,
 		from_y: f32,
