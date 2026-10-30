@@ -4,13 +4,14 @@
 use bevy::prelude::*;
 use character_ui_menu::{AssetThumbnailDisplay, MenuNode, SelectGroup};
 
-use crate::MenuJustify;
 use crate::sink::{MaybraidMenuSink, MenuSink, MenuThumbnailContext, RenderContext};
 use crate::widgets::{CloseOverlaySelect, InventoryItemKey};
+use crate::MenuJustify;
+use menu_components::theme::{CatalogSizing, STARTER_KIT_MAX_WIDTH, STARTER_KIT_PAD};
 use menu_components::{
-	HudFonts, HudMenu, INVENTORY_THUMB_PX, INVENTORY_TILE_COLUMNS, InputPromptDevice,
-	MENU_LIST_PAD, MENU_LIST_RADIUS, MenuModal, PANEL_HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
 	menu_region_wash, spawn_header_line, spawn_inventory_action_prompts, spawn_text_button,
+	HudFonts, HudMenu, InputPromptDevice, MenuModal, INVENTORY_TILE_COLUMNS, MENU_LIST_PAD,
+	MENU_LIST_RADIUS, PANEL_HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
 };
 
 /// Catalog nodes that can show a selected name on a header.
@@ -340,7 +341,7 @@ pub fn fill_inventory_layout<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 			interactive,
 			lock_appearance: !interactive,
 			catalog_columns: INVENTORY_TILE_COLUMNS,
-			catalog_thumb_px: INVENTORY_THUMB_PX,
+			catalog_sizing: CatalogSizing::INVENTORY,
 			retain_key: retain,
 			retained_index: None,
 		};
@@ -410,12 +411,14 @@ pub fn spawn_starter_kit_shell(
 		.spawn((
 			Node {
 				width: Val::Percent(100.0),
+				max_width: Val::Px(STARTER_KIT_MAX_WIDTH),
+				align_self: AlignSelf::Center,
 				flex_grow: 1.0,
 				flex_shrink: 1.0,
 				min_height: Val::Px(0.0),
 				flex_direction: FlexDirection::Column,
 				row_gap: Val::Px(PANEL_ROW_GAP),
-				padding: UiRect::axes(Val::Px(48.0), Val::Px(32.0)),
+				padding: UiRect::all(Val::Px(STARTER_KIT_PAD)),
 				..default()
 			},
 			Pickable::IGNORE,
@@ -469,7 +472,11 @@ fn inventory_section_preview<E>(children: &[MenuNode<E>]) -> String {
 			_ => 0,
 		};
 	}
-	if count == 0 { String::from("empty") } else { format!("{count} items") }
+	if count == 0 {
+		String::from("empty")
+	} else {
+		format!("{count} items")
+	}
 }
 
 #[cfg(test)]
@@ -502,13 +509,11 @@ mod tests {
 		};
 		assert!(!is_picker_only(&section));
 		assert!(!overlay_closes_on_pick(&section));
-		assert!(
-			primary_select(match &section {
-				MenuNode::Section { children, .. } => children,
-				_ => unreachable!(),
-			})
-			.is_some()
-		);
+		assert!(primary_select(match &section {
+			MenuNode::Section { children, .. } => children,
+			_ => unreachable!(),
+		})
+		.is_some());
 	}
 
 	#[test]

@@ -5,6 +5,7 @@ use character_ui_menu::{
 	AssetChoice, AssetThumbnailDisplay, EquipmentChoice, GridCatalogChoice, ItemRow, MenuNode,
 	OrderedEquipmentRow, PreviewColor, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
 };
+use menu_components::theme::CatalogSizing;
 use menu_components::{
 	equipped_pane_fill, spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label,
 	spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text, spawn_labeled_row,
@@ -74,7 +75,7 @@ pub struct RenderContext<'a, T> {
 	pub lock_appearance: bool,
 	/// Inventory uses four columns; appearance pickers stay at three.
 	pub catalog_columns: u16,
-	pub catalog_thumb_px: f32,
+	pub catalog_sizing: CatalogSizing,
 	/// Follow this bag item after a rebuild. Overlay-only.
 	pub retain_key: Option<crate::widgets::InventoryItemKey>,
 	pub retained_index: Option<usize>,
@@ -481,7 +482,7 @@ impl MaybraidMenuSink {
 					context.fonts,
 					label,
 					None,
-					PANEL_HEADER_FONT_SIZE,
+					context.catalog_sizing.font_size(PANEL_HEADER_FONT_SIZE),
 					TEXT_YELLOW,
 				);
 			});
@@ -556,7 +557,7 @@ impl MaybraidMenuSink {
 		if let Some(key) = item_key {
 			context.note_inventory_key(key, item.index);
 		}
-		let thumb_px = context.catalog_thumb_px;
+		let sizing = context.catalog_sizing;
 		let extra_key = item_key;
 		if context.interactive {
 			if let Some(event) = event {
@@ -573,7 +574,7 @@ impl MaybraidMenuSink {
 						viewport,
 						swatch,
 						false,
-						thumb_px,
+						sizing,
 						(MenuButton(event), item, key),
 					),
 					None => spawn_grid_catalog_tile(
@@ -588,7 +589,7 @@ impl MaybraidMenuSink {
 						viewport,
 						swatch,
 						false,
-						thumb_px,
+						sizing,
 						(MenuButton(event), item),
 					),
 				}
@@ -610,7 +611,7 @@ impl MaybraidMenuSink {
 				viewport,
 				swatch,
 				false,
-				thumb_px,
+				sizing,
 				(item, key),
 			),
 			None => spawn_grid_catalog_tile(
@@ -625,7 +626,7 @@ impl MaybraidMenuSink {
 				viewport,
 				swatch,
 				false,
-				thumb_px,
+				sizing,
 				item,
 			),
 		}
@@ -721,7 +722,7 @@ impl MaybraidMenuSink {
 					context.fonts,
 					"Equipped",
 					None,
-					PANEL_BLOCK_FONT_SIZE,
+					context.catalog_sizing.font_size(PANEL_BLOCK_FONT_SIZE),
 					TEXT_YELLOW,
 				);
 				for row in rows {
@@ -760,7 +761,7 @@ impl MaybraidMenuSink {
 		let key = InventoryItemKey { index: choice.item_key, equipped: true };
 		let item = context.stamp_hud_item();
 		context.note_inventory_key(key, item.index);
-		let thumb_px = context.catalog_thumb_px;
+		let sizing = context.catalog_sizing;
 		let controls = EquippedOrderControls {
 			unequip: choice.unequip,
 			move_left: choice.move_left,
@@ -780,7 +781,7 @@ impl MaybraidMenuSink {
 					viewport,
 					swatch,
 					false,
-					thumb_px,
+					sizing,
 					(MenuButton(event), item, key, controls),
 				);
 				return;
@@ -798,7 +799,7 @@ impl MaybraidMenuSink {
 			viewport,
 			swatch,
 			false,
-			thumb_px,
+			sizing,
 			(item, key, controls),
 		);
 	}

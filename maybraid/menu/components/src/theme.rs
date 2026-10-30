@@ -316,6 +316,28 @@ pub const INVENTORY_TILE_COLUMNS: u16 = 4;
 /// Inventory catalog thumbnail. Smaller than the appearance 72px tiles.
 pub const INVENTORY_THUMB_PX: f32 = 52.0;
 
+/// Keep the generated Starter Kit readable without stretching across the window.
+pub const STARTER_KIT_MAX_WIDTH: f32 = 800.0;
+
+/// Space around the Starter Kit title and scrolling inventory.
+pub const STARTER_KIT_PAD: f32 = 32.0;
+
+/// Shared catalog preview and typography sizing.
+#[derive(Clone, Copy, Debug)]
+pub struct CatalogSizing {
+	pub thumbnail_px: f32,
+	font_scale: f32,
+}
+
+impl CatalogSizing {
+	pub const APPEARANCE: Self = Self { thumbnail_px: CATALOG_THUMB_PX, font_scale: 1.0 };
+	pub const INVENTORY: Self = Self { thumbnail_px: INVENTORY_THUMB_PX, font_scale: 0.8 };
+
+	pub fn font_size(self, size: f32) -> f32 {
+		size * self.font_scale
+	}
+}
+
 /// Appearance / picker catalog thumbnail.
 pub const CATALOG_THUMB_PX: f32 = 72.0;
 
@@ -367,9 +389,9 @@ mod tests {
 	use bevy::prelude::*;
 
 	use super::{
+		character_screen_grid_node, equipped_pane_fill, menu_list_panel_node, menu_region_wash,
 		CHARACTER_OVERLAY_GAP, CHARACTER_PANEL_WIDTH, MENU_CLEAR, MENU_LIST_RADIUS,
-		MENU_REGION_WASH_ALPHA, TEXT_DEEP_BLUE, TEXT_YELLOW, character_screen_grid_node,
-		equipped_pane_fill, menu_list_panel_node, menu_region_wash,
+		MENU_REGION_WASH_ALPHA, TEXT_DEEP_BLUE, TEXT_YELLOW,
 	};
 
 	#[test]

@@ -5,7 +5,7 @@ use bevy::text::{Justify, LineBreak, LineHeight, TextBounds, TextSpan};
 use bevy::ui::widget::ViewportNode;
 
 use crate::theme::{
-	CATALOG_THUMB_PX, MENU_CLEAR, OBJECTIVE_MARKER_BORDER, OBJECTIVE_MARKER_RADIUS, PANEL_CHIP_GAP,
+	CatalogSizing, MENU_CLEAR, OBJECTIVE_MARKER_BORDER, OBJECTIVE_MARKER_RADIUS, PANEL_CHIP_GAP,
 	PANEL_GROUP_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_TILE_COLUMNS, PANEL_TILE_MIN_HEIGHT,
 	TEXT_DEEP_BLUE, TEXT_LIME, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_HOVER,
 	TILE_FOCUS_PAD,
@@ -48,11 +48,16 @@ fn tile_node() -> Node {
 #[derive(Component)]
 pub struct TileWrap;
 
-fn tile_caption_text(caption: impl Into<String>, face: Color, fonts: &HudFonts) -> impl Bundle {
+fn tile_caption_text(
+	caption: impl Into<String>,
+	face: Color,
+	fonts: &HudFonts,
+	font_px: f32,
+) -> impl Bundle {
 	(
 		TileWrap,
 		Text::new(caption.into()),
-		fonts.item(PANEL_ITEM_FONT_SIZE),
+		fonts.item(font_px),
 		TextColor(face),
 		TextLayout::new(Justify::Center, LineBreak::WordOrCharacter),
 		TextBounds::UNBOUNDED,
@@ -100,7 +105,7 @@ pub fn spawn_asset_tile(
 					Pickable::IGNORE,
 				));
 			}
-			button.spawn(tile_caption_text(tile_caption(label), face, fonts));
+			button.spawn(tile_caption_text(tile_caption(label), face, fonts, PANEL_ITEM_FONT_SIZE));
 		});
 }
 
@@ -110,6 +115,7 @@ pub struct SlotRank(pub u8);
 
 /// Pickable catalog cell. Clothing selection uses the Maybraid son; weapons
 /// selection uses the 1-based queue rank. `detail` is a compact stat line.
+/// Preview and typography share catalog sizing; narrow cells can shrink previews further.
 pub fn spawn_grid_catalog_tile(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
@@ -122,13 +128,13 @@ pub fn spawn_grid_catalog_tile(
 	viewport: Option<Entity>,
 	swatch: Option<Color>,
 	muted: bool,
-	thumb_px: f32,
+	sizing: CatalogSizing,
 	extra: impl Bundle,
 ) {
 	let face = tile_face(selected, muted);
 	let mark = if muted { TEXT_YELLOW_FAINT } else { TEXT_YELLOW };
 	let pictured = thumbnail.is_some() || viewport.is_some();
-	let thumb_px = if thumb_px > 0.0 { thumb_px } else { CATALOG_THUMB_PX };
+	let thumb_px = sizing.thumbnail_px;
 	let mut tile = parent.spawn((
 		Button,
 		HoverTile { equipped: selected, preserve_fill: false, face },
@@ -146,9 +152,13 @@ pub fn spawn_grid_catalog_tile(
 			.spawn((
 				Node {
 					width: if pictured { Val::Percent(100.0) } else { Val::Px(48.0) },
+					// Respect the catalog's thumbnail size even in a wide grid cell.
+					max_width: Val::Px(if pictured { thumb_px } else { 48.0 }),
+					max_height: Val::Px(if pictured { thumb_px } else { 48.0 }),
+					min_height: Val::Px(0.0),
 					height: if pictured { Val::Auto } else { Val::Px(48.0) },
 					aspect_ratio: pictured.then_some(1.0),
-					min_height: Val::Px(if pictured { thumb_px } else { 48.0 }),
+					flex_shrink: 0.0,
 					position_type: PositionType::Relative,
 					justify_content: JustifyContent::Center,
 					align_items: AlignItems::Center,
@@ -209,7 +219,7 @@ pub fn spawn_grid_catalog_tile(
 					));
 				}
 				if let Some(rank) = rank {
-					spawn_rank_tag(slot, fonts, rank, mark);
+					spawn_rank_tag(slot, fonts, rank, mark, sizing.font_size(PANEL_ITEM_FONT_SIZE));
 				} else if selected && !pictured {
 					// Clothing without a thumbnail uses the Maybraid son.
 					// A pictured tile is just the icon — no select overlay.
@@ -220,14 +230,25 @@ pub fn spawn_grid_catalog_tile(
 					);
 				}
 			});
-		button.spawn(tile_caption_text(tile_caption(label), face, fonts));
+		button.spawn(tile_caption_text(
+			tile_caption(label),
+			face,
+			fonts,
+			sizing.font_size(PANEL_ITEM_FONT_SIZE),
+		));
 		if !detail.is_empty() {
-			spawn_detail_line(button, fonts, detail);
+			spawn_detail_line(button, fonts, detail, sizing.font_size(PANEL_GROUP_FONT_SIZE));
 		}
 	});
 }
 
-fn spawn_rank_tag(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, rank: u8, face: Color) {
+fn spawn_rank_tag(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	rank: u8,
+	face: Color,
+	font_px: f32,
+) {
 	parent
 		.spawn((
 			Node {
@@ -249,14 +270,19 @@ fn spawn_rank_tag(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, rank: u8,
 		.with_children(|tag| {
 			tag.spawn((
 				Text::new(rank.to_string()),
-				fonts.item(PANEL_ITEM_FONT_SIZE),
+				fonts.item(font_px),
 				TextColor(face),
 				Pickable::IGNORE,
 			));
 		});
 }
 
-fn spawn_detail_line(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, detail: &str) {
+fn spawn_detail_line(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	detail: &str,
+	font_px: f32,
+) {
 	let mut parts = detail.split(" · ");
 	let Some(first) = parts.next() else {
 		return;
@@ -265,7 +291,7 @@ fn spawn_detail_line(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, detail
 		.spawn((
 			TileWrap,
 			Text::new(first),
-			fonts.item(PANEL_GROUP_FONT_SIZE),
+			fonts.item(font_px),
 			TextColor(detail_chip_color(first)),
 			TextLayout::new(Justify::Center, LineBreak::WordOrCharacter),
 			TextBounds::UNBOUNDED,
@@ -277,13 +303,13 @@ fn spawn_detail_line(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, detail
 			for part in parts {
 				text.spawn((
 					TextSpan::new(" · "),
-					fonts.item(PANEL_GROUP_FONT_SIZE),
+					fonts.item(font_px),
 					TextColor(TEXT_YELLOW_FAINT),
 					LineHeight::RelativeToFont(1.0),
 				));
 				text.spawn((
 					TextSpan::new(part),
-					fonts.item(PANEL_GROUP_FONT_SIZE),
+					fonts.item(font_px),
 					TextColor(detail_chip_color(part)),
 					LineHeight::RelativeToFont(1.0),
 				));
