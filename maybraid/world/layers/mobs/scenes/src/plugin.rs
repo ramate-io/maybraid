@@ -198,7 +198,7 @@ fn spawn_needed_members(
 		let body = member.character.spawn(&mut commands, Transform::from_translation(request.pose));
 		commands.entity(body).insert((
 			MobSlot(request.slot),
-			MobRespawnSupport(request.support),
+			MobRespawnSupport::new(request.support, request.support_y),
 			request.id,
 			mob.mob.kind,
 		));
@@ -339,6 +339,7 @@ mod tests {
 			slot: 0,
 			pose: Vec3::Y,
 			support: PoiSupport::Terrain,
+			support_y: None,
 		});
 
 		world
@@ -355,7 +356,7 @@ mod tests {
 	}
 
 	#[test]
-	fn respawn_stamps_the_host_mob_kind_on_the_body() -> Result<()> {
+	fn respawn_preserves_mob_kind_and_support_contract() -> Result<()> {
 		let mut world = World::new();
 		world.init_resource::<Time>();
 		world.init_resource::<Messages<MobMemberNeeded>>();
@@ -371,8 +372,9 @@ mod tests {
 			mob: host,
 			id: MobId(7),
 			slot: 0,
-			pose: Vec3::Y,
-			support: PoiSupport::Terrain,
+			pose: Vec3::new(0.0, 33.0, 0.0),
+			support: PoiSupport::Floor,
+			support_y: Some(32.0),
 		});
 
 		world
@@ -386,6 +388,12 @@ mod tests {
 			.next()
 			.ok_or_else(|| anyhow::anyhow!("respawned body missing mob kind"))?;
 		assert_eq!(kind, MobKind::Raider);
+		let support = world
+			.query::<&MobRespawnSupport>()
+			.iter(&world)
+			.next()
+			.ok_or_else(|| anyhow::anyhow!("respawned body missing support contract"))?;
+		assert_eq!(*support, MobRespawnSupport::new(PoiSupport::Floor, Some(32.0)));
 		Ok(())
 	}
 

@@ -20,6 +20,7 @@ pub struct PendingPlacement {
 	pub attempt: PlacementAttempt,
 	pub destination: ArrivalDestination,
 	pub search: PlacementSearch,
+	refresh_terrain: bool,
 	pub accepted: Option<PlacementPose>,
 	pub support: Option<PlacementSupportHit>,
 	pub policy: PlacementPolicy,
@@ -42,11 +43,23 @@ impl PendingPlacement {
 			policy: search.policy,
 			hull: search.hull,
 			search,
+			refresh_terrain: false,
 			accepted: None,
 			support: None,
 			readiness: SupportReadiness::default(),
 			failed: None,
 		}
+	}
+
+	/// Generated destination heights are refreshed until the shared collider
+	/// probe accepts support; authored POI search bands remain fixed.
+	pub fn with_published_terrain(mut self) -> Self {
+		self.refresh_terrain = true;
+		self
+	}
+
+	pub const fn refreshes_terrain(&self) -> bool {
+		self.refresh_terrain
 	}
 
 	pub fn identity(&self) -> SpawnIdentity {

@@ -4,17 +4,18 @@
 //! shape-cast grounded check, jump impulse), with walk direction relative to
 //! the camera yaw.
 
-use std::f32::consts::PI;
-
 use avian3d::prelude::*;
 use bevy::{ecs::query::Has, prelude::*};
-use durham::{
-	terrain_collider_covers_xz, BaseTerrainNoise, CascadeChunk, DurhamSurface, TerrainCellLayout,
-	TerrainTrimeshCollider,
-};
+use characters::LocomotionCapsule;
+use durham::{BaseTerrainNoise, DurhamSurface, TerrainCellLayout};
 use game_commands::command::TextEntryFocus;
+use lod::hcsg::HcsgStorage;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_character_controller::{ActorControlStatus, RoutedActorControl};
+use maybraid_spawns_support::{
+	register_actor_support, terrain_height_at, ActorSupportSystems, PendingActorSupport,
+	PlacementSearch,
+};
 use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 
 use crate::{camera::CameraController, WorldBaseTerrain};
@@ -26,8 +27,6 @@ const MOVE_ACCEL: f32 = 40.0;
 const MOVE_BRAKE: f32 = 50.0;
 const AIR_CONTROL: f32 = 0.25;
 const JUMP_IMPULSE: f32 = 8.0;
-/// Default maximum uphill drive (~81°). Downhill travel remains unrestricted.
-const DEFAULT_MAX_SLOPE_ANGLE: f32 = PI * 0.45;
 /// Reject near-vertical side contacts as support while retaining steep cliffs.
 const MIN_SUPPORT_NORMAL_Y: f32 = 0.05;
 /// Third-person orbit for a ~2 m humanoid (capsule center is hip height).
@@ -37,8 +36,6 @@ pub const CAMERA_LOOK_HEIGHT: f32 = 0.65;
 const GROUND_CAST_DISTANCE: f32 = 0.45;
 const GROUND_SNAP_SPEED: f32 = 1.5;
 const PLAY_GRAVITY_SCALE: f32 = 1.25;
-/// Hold above base noise until composed height exists (`height_scale` is 500).
-const HOLD_ABOVE_BASE_FACTOR: f32 = 0.35;
 /// Bedrock is `-4 * height_scale`. Recover only after falling through that floor.
 const VOID_FLOOR_MARGIN: f32 = 500.0;
 const VOID_RESPAWN_DELAY_SECS: f32 = 0.75;
@@ -50,20 +47,8 @@ pub struct MoveWish(pub Vec3);
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PlayerControlSystems;
 
-/// Grounded-walk feel. Insert before [`PlayerPlugin`] to override the default
-/// (~81°) uphill limit. The limit only removes drive toward the top of steeper
-/// surfaces; downhill and contour movement remain available.
-#[derive(Resource, Clone, Copy, Debug, PartialEq)]
-pub struct CharacterLocomotion {
-	/// Uphill drive is blocked above this angle (radians from up).
-	pub max_slope_angle: f32,
-}
-
-impl Default for CharacterLocomotion {
-	fn default() -> Self {
-		Self { max_slope_angle: DEFAULT_MAX_SLOPE_ANGLE }
-	}
-}
+// Preserve the world-player API while sharing the same slope policy as all actors.
+pub use characters::CharacterLocomotion;
 
 /// Playground interaction mode.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -78,9 +63,13 @@ pub enum PlaygroundMode {
 #[derive(Component)]
 pub struct Player;
 
-/// Gravity off until composed height and a terrain trimesh exist.
+/// Request shared support validation before releasing this player's first drop.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct AwaitingTerrainSurface;
+
+/// The legacy player arrival marker has entered the shared actor-support lifecycle.
+#[derive(Component)]
+pub(crate) struct PlayerSupportQueued;
 
 /// Stand on a local collider instead of streamed terrain.
 /// Fall recovery returns to [`Self::translation`].
@@ -93,6 +82,7 @@ pub struct OffTerrainAnchor {
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct PlayerRespawn {
 	queued_at: Option<f32>,
+	resume_gravity: Option<f32>,
 }
 
 /// Optional Discovery / playground spawn on XZ (metres). `None` uses the
@@ -191,6 +181,8 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
 	fn build(&self, app: &mut App) {
+		register_actor_support(app);
+		app.add_systems(Update, finish_player_surface_arrivals.after(ActorSupportSystems::Resolve));
 		app.init_resource::<PlaygroundMode>()
 			.init_resource::<PadMovementEnabled>()
 			.init_resource::<VegetationPlayerMotor>()
@@ -232,7 +224,11 @@ fn spawn_player(
 	let spawn = player_spawn_point_at(xz, holding_elevation(&base.0, xz.x, xz.y));
 	let player =
 		spawn_player_body(&mut commands, &mut meshes, &mut materials, locomotion.as_ref(), spawn);
-	commands.entity(player).insert(AwaitingTerrainSurface);
+	commands.entity(player).insert((
+		AwaitingTerrainSurface,
+		PendingActorSupport::new(spawn, LocomotionCapsule::HUMANOID, None)
+			.with_resume_gravity(Some(PLAY_GRAVITY_SCALE)),
+	));
 }
 
 /// Spawn the terrain player's dynamic capsule at a known body-center position.
@@ -295,21 +291,8 @@ pub fn player_position_above_surface(surface: Vec3) -> Vec3 {
 	surface + Vec3::Y * (capsule_half_height() + 0.5)
 }
 
-/// Elevation used before the cell underfoot is published.
-pub fn holding_elevation(base: &BaseTerrainNoise, x: f32, z: f32) -> f32 {
-	base.height_at(x, z) + base.height_scale * HOLD_ABOVE_BASE_FACTOR
-}
-
-/// Composed height at `xz`, or [`holding_elevation`] while the cell is unpublished or busy.
-///
-/// Spawn placement must not use [`DurhamSurface::height_or_fallback`]: raw base
-/// noise sits under jersey plateaus. Hold above the base until snap can drop
-/// onto the published cell.
-pub fn surface_or_hold_at(surface: &DurhamSurface, xz: Vec2) -> f32 {
-	surface
-		.composed_height_at(xz)
-		.unwrap_or_else(|| holding_elevation(surface.base(), xz.x, xz.y))
-}
+// Keep the player-facing API while sharing initial hints with all actor domains.
+pub use maybraid_spawns_support::{holding_elevation, surface_or_hold_at};
 
 pub fn player_spawn_point_at(xz: Vec2, elevation: f32) -> Vec3 {
 	player_position_above_surface(Vec3::new(xz.x, elevation, xz.y))
@@ -319,61 +302,79 @@ pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 	player_spawn_point_at(layout.region_center_xz().xz(), elevation)
 }
 
+/// Adapt player first-drop requests into the shared actor support lifecycle.
+/// The shared resolver owns geometry checks, retrying, placement, and physics holds.
 pub(crate) fn snap_player_to_composed_surface(
 	mut commands: Commands,
 	physics: Res<PlayerPhysicsEnabled>,
 	surface: DurhamSurface,
-	awaiting: Query<Entity, (With<Player>, With<AwaitingTerrainSurface>)>,
+	storage: Option<Res<HcsgStorage>>,
 	mut players: Query<
-		(Entity, &mut Transform, &mut LinearVelocity, &mut GravityScale, Option<&OffTerrainAnchor>),
+		(
+			Entity,
+			&Transform,
+			Ref<AwaitingTerrainSurface>,
+			Option<&OffTerrainAnchor>,
+			Option<&LocomotionCapsule>,
+			Option<&GravityScale>,
+			Option<&mut PendingActorSupport>,
+			Has<PlayerSupportQueued>,
+		),
 		With<Player>,
 	>,
-	terrain_colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
 ) {
-	let Ok((entity, mut transform, mut velocity, mut gravity, anchor)) = players.single_mut()
-	else {
-		return;
-	};
-
-	if awaiting.single().is_err() {
-		return;
-	}
-
-	if !physics.0 {
-		gravity.0 = 0.0;
-		**velocity = Vec3::ZERO;
-		return;
-	}
-
-	if anchor.is_some() {
-		gravity.0 = PLAY_GRAVITY_SCALE;
-		commands.entity(entity).remove::<AwaitingTerrainSurface>();
-		return;
-	}
-
-	let xz = transform.translation.xz();
-	let elevation = match surface.height_at(xz) {
-		Ok(Some(elevation)) => elevation,
-		Ok(None) | Err(lod::hcsg::Busy) => {
-			gravity.0 = 0.0;
-			**velocity = Vec3::ZERO;
-			return;
+	for (entity, transform, awaiting, anchor, hull, gravity, pending, queued) in &mut players {
+		if anchor.is_some() && physics.0 {
+			let resume_gravity = pending
+				.as_deref()
+				.and_then(PendingActorSupport::resume_gravity)
+				.unwrap_or_else(|| gravity.map(|gravity| gravity.0));
+			let mut player = commands.entity(entity);
+			player.remove::<(AwaitingTerrainSurface, PlayerSupportQueued, PendingActorSupport)>();
+			match resume_gravity {
+				Some(gravity) => {
+					player.insert(GravityScale(gravity));
+				}
+				None => {
+					player.remove::<GravityScale>();
+				}
+			}
+			continue;
 		}
-	};
+		if pending.is_none() && queued && !awaiting.is_changed() {
+			continue;
+		}
+		let mut support = if let Some(pending) = pending.as_deref() {
+			let mut support = pending.clone();
+			if awaiting.is_changed() {
+				let hull = hull.copied().unwrap_or(support.hull());
+				support.retarget(transform.translation, hull, None);
+			}
+			support
+		} else {
+			PendingActorSupport::new(
+				transform.translation,
+				hull.copied().unwrap_or(LocomotionCapsule::HUMANOID),
+				None,
+			)
+		};
+		support.set_enabled(physics.0);
+		let xz = support.held_position().xz();
+		let search = terrain_height_at(&surface, storage.as_deref(), xz)
+			.map(|height| PlacementSearch::outdoor_hint(xz, height, support.hull()));
+		support.observe_search(search);
+		commands.entity(entity).insert((support, PlayerSupportQueued));
+	}
+}
 
-	let target = player_spawn_point_at(xz, elevation);
-	transform.translation = target;
-	**velocity = Vec3::ZERO;
-
-	if terrain_collider_covers_xz(target, terrain_colliders.iter()) {
-		gravity.0 = PLAY_GRAVITY_SCALE;
-		commands.entity(entity).remove::<AwaitingTerrainSurface>();
-	} else {
-		// Lost or not-yet-streamed column: freeze in place. Do not re-insert
-		// [`AwaitingTerrainSurface`] — that marker is first-drop only, and snap
-		// would teleport a released body back onto the heightfield sample.
-		gravity.0 = 0.0;
-		**velocity = Vec3::ZERO;
+fn finish_player_surface_arrivals(
+	mut commands: Commands,
+	players: Query<Entity, (With<Player>, With<PlayerSupportQueued>, Without<PendingActorSupport>)>,
+) {
+	for entity in &players {
+		commands
+			.entity(entity)
+			.remove::<(AwaitingTerrainSurface, PlayerSupportQueued)>();
 	}
 }
 
@@ -401,6 +402,7 @@ fn queue_void_player_respawn(
 		return;
 	}
 	respawn.queued_at = Some(time.elapsed_secs() + VOID_RESPAWN_DELAY_SECS);
+	respawn.resume_gravity = Some(gravity.0);
 	gravity.0 = 0.0;
 	**velocity = Vec3::ZERO;
 }
@@ -411,7 +413,13 @@ fn recover_void_player(
 	mut respawn: ResMut<PlayerRespawn>,
 	mut commands: Commands,
 	mut player: Query<
-		(Entity, &mut Transform, &mut LinearVelocity, Option<&OffTerrainAnchor>),
+		(
+			Entity,
+			&mut Transform,
+			&mut LinearVelocity,
+			Option<&OffTerrainAnchor>,
+			Option<&mut PendingActorSupport>,
+		),
 		With<Player>,
 	>,
 ) {
@@ -421,7 +429,7 @@ fn recover_void_player(
 	if time.elapsed_secs() < at {
 		return;
 	}
-	let Ok((entity, mut transform, mut velocity, anchor)) = player.single_mut() else {
+	let Ok((entity, mut transform, mut velocity, anchor, pending)) = player.single_mut() else {
 		respawn.queued_at = None;
 		return;
 	};
@@ -429,6 +437,9 @@ fn recover_void_player(
 		transform.translation = anchor.translation;
 		**velocity = Vec3::ZERO;
 		respawn.queued_at = None;
+		commands
+			.entity(entity)
+			.insert(GravityScale(respawn.resume_gravity.take().unwrap_or(PLAY_GRAVITY_SCALE)));
 		return;
 	}
 	let xz = transform.translation.xz();
@@ -439,8 +450,15 @@ fn recover_void_player(
 	transform.translation = player_spawn_point_at(xz, elevation);
 	**velocity = Vec3::ZERO;
 	respawn.queued_at = None;
-	// First-drop hold so snap waits for composed height + a collider column.
-	commands.entity(entity).insert(AwaitingTerrainSurface);
+	// Requeue the same actor without losing a pending destination to the fixed hold.
+	let mut support = pending.as_deref().cloned().unwrap_or_else(|| {
+		PendingActorSupport::new(transform.translation, LocomotionCapsule::HUMANOID, None)
+			.with_resume_gravity(Some(respawn.resume_gravity.unwrap_or(PLAY_GRAVITY_SCALE)))
+	});
+	let hull = support.hull();
+	support.retarget(transform.translation, hull, None);
+	respawn.resume_gravity = None;
+	commands.entity(entity).insert((AwaitingTerrainSurface, support));
 }
 
 /// Reposition the player after terrain layout regeneration.
@@ -751,7 +769,7 @@ fn follow_character_camera(
 #[cfg(test)]
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
-	use durham::TerrainConfig;
+	use durham::{terrain_collider_covers_xz, CascadeChunk, TerrainConfig};
 	use lod::hcsg::HcsgStorage;
 
 	use super::*;
@@ -862,10 +880,118 @@ mod tests {
 		Ok(())
 	}
 
+	fn shared_support_app() -> App {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		register_actor_support(&mut app);
+		app.init_resource::<PlayerPhysicsEnabled>();
+		app.init_resource::<TerrainCellLayout>();
+		app.init_resource::<HcsgStorage>();
+		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
+			42,
+		))));
+		app.add_systems(
+			Update,
+			snap_player_to_composed_surface.in_set(ActorSupportSystems::Prepare),
+		);
+		app.add_systems(Update, finish_player_surface_arrivals.after(ActorSupportSystems::Resolve));
+		app
+	}
+
+	fn waiting_player(app: &mut App, position: Vec3) -> Entity {
+		app.world_mut()
+			.spawn((
+				Player,
+				AwaitingTerrainSurface,
+				Transform::from_translation(position),
+				RigidBody::Dynamic,
+				Collider::capsule(CAPSULE_RADIUS, CAPSULE_LENGTH),
+				GravityScale(PLAY_GRAVITY_SCALE),
+				LinearVelocity(Vec3::new(4.0, -7.0, 2.0)),
+			))
+			.id()
+	}
+
+	#[test]
+	fn each_awaiting_player_uses_the_shared_retry_lifecycle() -> anyhow::Result<()> {
+		let mut app = shared_support_app();
+		let a = waiting_player(&mut app, Vec3::new(8.0, 700.0, 8.0));
+		let b = waiting_player(&mut app, Vec3::new(48.0, 800.0, 48.0));
+		app.update();
+		for entity in [a, b] {
+			let pending = app
+				.world()
+				.get::<PendingActorSupport>(entity)
+				.ok_or_else(|| anyhow::anyhow!("player missing shared pending support"))?;
+			assert!(pending.search().is_none(), "unpublished height must remain pending");
+			assert!(app.world().get::<AwaitingTerrainSurface>(entity).is_some());
+			assert_eq!(app.world().get::<GravityScale>(entity).map(|g| g.0), Some(0.0));
+			assert_eq!(app.world().get::<LinearVelocity>(entity).map(|v| v.0), Some(Vec3::ZERO));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn teleport_replaces_an_existing_pending_destination() -> anyhow::Result<()> {
+		let mut app = shared_support_app();
+		app.add_plugins((
+			TransformPlugin,
+			PhysicsPlugins::default(),
+			bevy::asset::AssetPlugin::default(),
+			bevy::mesh::MeshPlugin,
+		));
+		app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+			std::time::Duration::from_secs_f64(1.0 / 30.0),
+		));
+		app.finish();
+		let a = Vec3::new(8.0, 700.0, 8.0);
+		let b = Vec3::new(4_008.0, 900.0, 4_008.0);
+		let player = waiting_player(&mut app, a);
+		app.update();
+		if let Some(mut pending) = app.world_mut().get_mut::<PendingActorSupport>(player) {
+			let hull = pending.hull();
+			pending.retarget(b, hull, None);
+		}
+		app.world_mut()
+			.entity_mut(player)
+			.insert((Transform::from_translation(b), AwaitingTerrainSurface));
+		for _ in 0..4 {
+			app.update();
+		}
+		let pending = app
+			.world()
+			.get::<PendingActorSupport>(player)
+			.ok_or_else(|| anyhow::anyhow!("teleported player missing pending support"))?;
+		assert_eq!(pending.held_position(), b);
+		assert_eq!(app.world().get::<Transform>(player).map(|t| t.translation), Some(b));
+		assert!(pending.search().is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn live_arrival_preserves_custom_gravity_through_hold_and_anchor_release() {
+		for gravity in [0.0, 0.65] {
+			let mut app = shared_support_app();
+			let pose = Vec3::new(8.0, 700.0, 8.0);
+			let player = waiting_player(&mut app, pose);
+			app.world_mut().entity_mut(player).insert(GravityScale(gravity));
+			app.update();
+			assert_eq!(app.world().get::<GravityScale>(player).map(|g| g.0), Some(0.0));
+			app.world_mut()
+				.entity_mut(player)
+				.insert(OffTerrainAnchor { translation: pose });
+			app.update();
+			assert!(app.world().get::<PendingActorSupport>(player).is_none());
+			assert!(app.world().get::<AwaitingTerrainSurface>(player).is_none());
+			assert_eq!(app.world().get::<GravityScale>(player).map(|g| g.0), Some(gravity));
+		}
+	}
+
 	#[test]
 	fn default_locomotion_keeps_legacy_slope() {
 		assert!(
-			(CharacterLocomotion::default().max_slope_angle - DEFAULT_MAX_SLOPE_ANGLE).abs() < 1e-6
+			(CharacterLocomotion::default().max_slope_angle - std::f32::consts::PI * 0.45).abs()
+				< 1e-6
 		);
 	}
 

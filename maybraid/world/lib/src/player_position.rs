@@ -8,6 +8,7 @@ use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
 use character_persist::{CharacterId, PersistError, SaveRoot};
 use durham::{Durham, TerrainCellLayout, WorldBaseTerrain};
+use maybraid_spawns_support::PendingActorSupport;
 use player_camera::FollowCamera;
 use serde::{Deserialize, Serialize};
 use terrain_layer_model::{terrain_streaming, TerrainStreaming};
@@ -129,6 +130,7 @@ pub fn resume_discovery_from_saved_waypoints(
 			Option<&mut GlobalTransform>,
 			Option<&mut Position>,
 			Option<&mut LinearVelocity>,
+			Option<&mut PendingActorSupport>,
 		),
 		With<Player>,
 	>,
@@ -194,6 +196,7 @@ fn apply_pending_resume(
 			Option<&mut GlobalTransform>,
 			Option<&mut Position>,
 			Option<&mut LinearVelocity>,
+			Option<&mut PendingActorSupport>,
 		),
 		With<Player>,
 	>,
@@ -235,6 +238,7 @@ fn apply_resume_pose(
 			Option<&mut GlobalTransform>,
 			Option<&mut Position>,
 			Option<&mut LinearVelocity>,
+			Option<&mut PendingActorSupport>,
 		),
 		With<Player>,
 	>,
@@ -250,7 +254,8 @@ fn apply_resume_pose(
 	id: Option<CharacterId>,
 ) -> bool {
 	let mut found = players.iter_mut();
-	let Some((player, mut player_tf, mut player_global, mut body, mut velocity)) = found.next()
+	let Some((player, mut player_tf, mut player_global, mut body, mut velocity, pending)) =
+		found.next()
 	else {
 		return false;
 	};
@@ -306,6 +311,10 @@ fn apply_resume_pose(
 		}
 		if let Some(velocity) = velocity.as_deref_mut() {
 			velocity.0 = Vec3::ZERO;
+		}
+		if let Some(mut pending) = pending {
+			let hull = pending.hull();
+			pending.retarget(at, hull, None);
 		}
 		// Leftover bodies and persisted underground samples need a first-drop
 		// snap. Same-character resume from the default spawn already has this

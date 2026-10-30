@@ -155,7 +155,8 @@ impl Plugin for WorldAgentPlugin {
 			.add_systems(
 				Update,
 				(
-					agent_apply_world_ops,
+					agent_apply_world_ops
+						.before(maybraid_spawns_support::ActorSupportSystems::Prepare),
 					agent_emit_presentation_churn,
 					agent_emit_tanz,
 					agent_screenshot_finished,
@@ -597,6 +598,7 @@ fn agent_apply_world_ops(
 			Option<&mut Position>,
 			Option<&mut LinearVelocity>,
 			Option<&Health>,
+			Option<&mut maybraid_spawns_support::PendingActorSupport>,
 		),
 		With<MotorPlayer>,
 	>,
@@ -621,7 +623,7 @@ fn agent_apply_world_ops(
 					},
 				};
 				let at = player_spawn_point_at(target, elevation);
-				if let Ok((entity, mut transform, mut global, mut body, mut velocity, _)) =
+				if let Ok((entity, mut transform, mut global, mut body, mut velocity, _, pending)) =
 					players.single_mut()
 				{
 					transform.translation = at;
@@ -632,6 +634,10 @@ fn agent_apply_world_ops(
 					if let Some(velocity) = velocity.as_deref_mut() {
 						velocity.0 = Vec3::ZERO;
 					}
+					if let Some(mut pending) = pending {
+						let hull = pending.hull();
+						pending.retarget(at, hull, None);
+					}
 					commands.entity(entity).insert(AwaitingTerrainSurface);
 				}
 			}
@@ -639,7 +645,7 @@ fn agent_apply_world_ops(
 				// Agent-only: not a PlaygroundCommand, so production `/` never
 				// registers a kill. Lethal self-hit so death-picker scripts can
 				// confirm a POI without debug-commands in the game plugin.
-				if let Ok((entity, transform, _, _, _, health)) = players.single() {
+				if let Ok((entity, transform, _, _, _, health, _)) = players.single() {
 					let amount = health.map(|pool| pool.current + 1.0).unwrap_or(200.0);
 					hits.write(Hit {
 						target: entity,
@@ -865,6 +871,7 @@ struct ActorCensus {
 	hosts: u32,
 	bodies: u32,
 	brains: u32,
+	pending_support: u32,
 	/// 0.5 m bins so a post-spawn sink is a census change.
 	min_y_q: Option<i32>,
 	max_y_q: Option<i32>,
@@ -879,7 +886,10 @@ fn agent_actor_census(
 	time: Res<Time>,
 	surface: DurhamSurface,
 	hosts: Query<(), With<MobScene>>,
-	bodies: Query<&Transform, (With<CharacterSceneRecipe>, Without<MotorPlayer>)>,
+	bodies: Query<
+		(&Transform, Has<maybraid_spawns_support::PendingActorSupport>),
+		(With<CharacterSceneRecipe>, Without<MotorPlayer>),
+	>,
 	brains: Query<(), With<ThreatManagementIntelligence>>,
 	mut last: Local<Option<ActorCensus>>,
 	mut last_at: Local<f32>,
@@ -895,7 +905,9 @@ fn agent_actor_census(
 	let mut max_y = None;
 	let mut ground_at_min_y = None;
 	let mut body_count = 0u32;
-	for transform in &bodies {
+	let mut pending_support = 0u32;
+	for (transform, pending) in &bodies {
+		pending_support += u32::from(pending);
 		let y = transform.translation.y;
 		body_count += 1;
 		match min_y {
@@ -911,6 +923,7 @@ fn agent_actor_census(
 		hosts: hosts.iter().len() as u32,
 		bodies: body_count,
 		brains: brains.iter().len() as u32,
+		pending_support,
 		min_y_q: min_y.map(quantize_metres),
 		max_y_q: max_y.map(quantize_metres),
 	};
@@ -929,6 +942,7 @@ fn agent_actor_census(
 				hosts: census.hosts,
 				bodies: census.bodies,
 				brains: census.brains,
+				pending_support: census.pending_support,
 				min_y,
 				max_y,
 				ground_at_min_y,

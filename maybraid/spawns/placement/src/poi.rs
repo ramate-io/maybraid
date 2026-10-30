@@ -5,8 +5,12 @@ use poi_intelligence::PoiRecord;
 
 use crate::request::PlacementPolicy;
 
-impl PlacementPolicy {
-	pub fn for_poi(record: &PoiRecord) -> Self {
+pub trait PoiPlacementPolicy {
+	fn for_poi(record: &PoiRecord) -> Self;
+}
+
+impl PoiPlacementPolicy for PlacementPolicy {
+	fn for_poi(record: &PoiRecord) -> Self {
 		if record.arrival().stands_on_floor() {
 			Self::InteriorFloor
 		} else {
@@ -18,8 +22,8 @@ impl PlacementPolicy {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy::prelude::*;
 	use bevy::prelude::Entity;
+	use bevy::prelude::*;
 	use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiSupport};
 
 	fn record(kind: PoiKind, local: bool, support: PoiSupport, y: f32) -> PoiRecord {
