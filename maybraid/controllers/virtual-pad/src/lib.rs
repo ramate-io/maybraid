@@ -24,7 +24,7 @@ pub use controller::{
 pub use gate::PadInputPolicy;
 pub use hid::{with_pad_hid, PadHidPlugins, PadHidPolicy};
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};
-pub use overlay::{PadOverlay, PadOverlayRequest};
+pub use overlay::{PadOverlay, PadOverlayMode, PadOverlayRequest};
 pub use pad::VirtualPad;
 pub use rumble::{PadRumble, PadRumbleSystems};
 pub use surface::cursor::PadCursor;

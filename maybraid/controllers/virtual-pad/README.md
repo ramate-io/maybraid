@@ -50,6 +50,13 @@ entity; `None` removes that source's injection. Requests are applied inside `Pro
 before physical sampling, so hosts write them before `VirtualPadSystems::Produce`.
 Overlay storage belongs to the named controller.
 
+`PadOverlayMode::Additive` is the default. Set an overlay's mode to `Exclusive`
+to sample its injected input while ignoring physical keyboard, mouse and
+gamepad contributions on that controller. Device assignments and snapshot
+history remain on the controller; other sources continue sampling normally.
+Removing the overlay restores physical sampling. `PadOverlay::clear` clears
+its input values while preserving the mode.
+
 Set [`VirtualPadConfig::debug_overlay`] to dump raw `Gamepad` sticks/buttons
 and each enabled controller onto the screen. Unmapped gilrs axes (`Other(0)` / `Other(1)`) fill in when `LeftStick` is idle.
 

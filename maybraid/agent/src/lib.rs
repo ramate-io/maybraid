@@ -16,7 +16,8 @@ pub mod script;
 pub mod sink;
 
 pub use cli::{
-	take_agent_args, AgentArgs, AGENT_EVENTS_ENV, AGENT_PIPE_ENV, AGENT_QUIT_ENV, AGENT_SCRIPT_ENV,
+	take_agent_args, AgentArgs, AGENT_EVENTS_ENV, AGENT_EXCLUSIVE_ENV, AGENT_PIPE_ENV,
+	AGENT_QUIT_ENV, AGENT_SCRIPT_ENV,
 };
 pub use command::{AgentButton, AgentCommand, ScenarioMark, SCRIPT_API_VERSION};
 pub use event::{AgentEvent, AgentEventBody, CommandStatus};

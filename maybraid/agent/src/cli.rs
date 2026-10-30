@@ -9,6 +9,7 @@ pub const AGENT_SCRIPT_ENV: &str = "MAYBRAID_AGENT_SCRIPT";
 pub const AGENT_EVENTS_ENV: &str = "MAYBRAID_AGENT_EVENTS";
 pub const AGENT_PIPE_ENV: &str = "MAYBRAID_AGENT_PIPE";
 pub const AGENT_QUIT_ENV: &str = "MAYBRAID_AGENT_QUIT";
+pub const AGENT_EXCLUSIVE_ENV: &str = "MAYBRAID_AGENT_EXCLUSIVE";
 
 /// Flags the game / world playground accept. Empty means the agent is off.
 #[derive(Args, Debug, Clone, Default, PartialEq, Eq)]
@@ -26,6 +27,9 @@ pub struct AgentArgs {
 	/// Exit when the script and pipe are idle.
 	#[arg(long = "agent-quit")]
 	pub quit_when_idle: bool,
+	/// Replace physical pad input with scripted input, including before readiness.
+	#[arg(long = "agent-exclusive")]
+	pub exclusive: bool,
 }
 
 impl AgentArgs {
@@ -45,6 +49,9 @@ impl AgentArgs {
 		}
 		if !self.quit_when_idle {
 			self.quit_when_idle = env_flag(AGENT_QUIT_ENV);
+		}
+		if !self.exclusive {
+			self.exclusive = env_flag(AGENT_EXCLUSIVE_ENV);
 		}
 		self
 	}
@@ -106,6 +113,10 @@ pub fn take_agent_args(
 			agent.quit_when_idle = true;
 			continue;
 		}
+		if text == "--agent-exclusive" {
+			agent.exclusive = true;
+			continue;
+		}
 		rest.push(arg);
 	}
 	Ok((agent, rest))
@@ -129,6 +140,7 @@ mod tests {
 			OsString::from("scripts/walk.jsonl"),
 			OsString::from("--agent-events=events.jsonl"),
 			OsString::from("--agent-quit"),
+			OsString::from("--agent-exclusive"),
 			OsString::from("stats"),
 			OsString::from("vsync"),
 		])
@@ -136,6 +148,7 @@ mod tests {
 		assert_eq!(agent.script.as_deref(), Some(std::path::Path::new("scripts/walk.jsonl")));
 		assert_eq!(agent.events.as_deref(), Some(std::path::Path::new("events.jsonl")));
 		assert!(agent.quit_when_idle);
+		assert!(agent.exclusive);
 		assert!(agent.enabled());
 		assert_eq!(
 			rest,
@@ -152,5 +165,36 @@ mod tests {
 	#[test]
 	fn disabled_when_empty() {
 		assert!(!AgentArgs::default().enabled());
+	}
+
+	#[test]
+	fn exclusive_flag_alone_does_not_enable_agent() -> anyhow::Result<()> {
+		let (agent, rest) = take_agent_args([OsString::from("--agent-exclusive")])
+			.map_err(|error| anyhow::anyhow!("{error}"))?;
+		assert!(agent.exclusive);
+		assert!(!agent.enabled());
+		assert!(rest.is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn clap_accepts_exclusive_with_script() -> anyhow::Result<()> {
+		use clap::Parser;
+
+		#[derive(Parser)]
+		struct TestArgs {
+			#[command(flatten)]
+			agent: AgentArgs,
+		}
+
+		let args = TestArgs::try_parse_from([
+			"maybraid",
+			"--agent-exclusive",
+			"--agent-script",
+			"walk.jsonl",
+		])?;
+		assert!(args.agent.exclusive);
+		assert!(args.agent.enabled());
+		Ok(())
 	}
 }
