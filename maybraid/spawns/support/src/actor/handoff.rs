@@ -3,14 +3,18 @@
 use avian3d::{collision::collider::contact_query, prelude::*};
 use bevy::{ecs::system::SystemParam, prelude::*};
 use characters::{CharacterLocomotion, LocomotionCapsule};
+use chunk::cascade::CascadeChunk;
+
+mod coverage;
+use coverage::Footprint;
 use lod_avian::PhysicsInteractionLayer;
 use std::time::Duration;
 
 use crate::actor::SupportDiagnostic;
 
 use crate::{
-	PendingActorSupport, PlacementSearch, PlacementSupportHit, SupportProbeFailure,
-	clearance_blocked,
+	clearance_blocked, PendingActorSupport, PlacementSearch, PlacementSupportHit,
+	SupportProbeFailure,
 };
 
 const CLEARANCE_TOLERANCE: f32 = 0.03;
@@ -21,6 +25,7 @@ const SETTLE_TIMEOUT: f32 = 0.75;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum PoseRejection {
 	SupportGeometry,
+	TerrainCoverage,
 	SupportUnavailable,
 	SupportDisabled,
 	SupportLayers,
@@ -101,9 +106,65 @@ pub(super) struct SupportGeometry<'w, 's> {
 		Without<PendingActorSupport>,
 	>,
 	disabled_bodies: Query<'w, 's, (), With<RigidBodyDisabled>>,
+	terrain: Query<
+		'w,
+		's,
+		(Entity, Option<&'static CascadeChunk>),
+		With<durham::TerrainTrimeshCollider>,
+	>,
 }
 
 impl SupportGeometry<'_, '_> {
+	/// Presentation readiness concerns the generated footprint, not whether every
+	/// part of that footprint is a floor. A fully cooked cliff remains a valid edge.
+	fn terrain_coverage_ready(
+		&self,
+		position: Vec3,
+		hull: LocomotionCapsule,
+		support: Option<PlacementSupportHit>,
+		layers: &CollisionLayers,
+	) -> bool {
+		if !support.is_some_and(|hit| self.terrain.contains(hit.entity)) {
+			return true;
+		}
+		Footprint::capsule(position, hull.radius).covered_by(
+			self.terrain
+				.iter()
+				.filter_map(|(entity, chunk)| {
+					let (
+						position,
+						rotation,
+						collider,
+						fixed_layers,
+						sensor,
+						disabled,
+						body_disabled,
+						body,
+					) = self.colliders.get(entity).ok()?;
+					if sensor
+						|| disabled || body_disabled
+						|| body.is_some_and(|body| self.disabled_bodies.contains(body.body))
+						|| !fixed_layers.memberships.has_all(PhysicsInteractionLayer::Fixed)
+						|| !fixed_layers.interacts_with(*layers)
+					{
+						return None;
+					}
+					let chunk = chunk?;
+					// Durham vertices are local to chunk.origin. Do not credit stale
+					// authored bounds after a collider has moved, rotated, or scaled.
+					if position.0 != chunk.origin
+						|| (rotation.0 != Quat::IDENTITY && rotation.0 != -Quat::IDENTITY)
+						|| collider.scale() != Vec3::ONE
+					{
+						return None;
+					}
+					Some(Footprint::chunk(chunk))
+				})
+				.flatten()
+				.flatten(),
+		)
+	}
+
 	/// Compatibility policy: an authored elevated minimum or original zero/upward
 	/// effective gravity validates stable live support twice without forcing a fall.
 	/// Absent GravityScale still means ordinary Avian gravity; restore its absence.
@@ -384,6 +445,9 @@ impl SupportGeometry<'_, '_> {
 		if let Some(hit) = support {
 			self.support_valid(hit, search, layers)?;
 		}
+		if !self.terrain_coverage_ready(position, search.hull, support, layers) {
+			return Err(PoseRejection::TerrainCoverage);
+		}
 		let upper = (search.max_surface_y + search.hull.spawn_height()).max(position.y);
 		for step in 0..=8 {
 			let lifted = position + Vec3::Y * (step as f32 * LIFT_STEP);
@@ -409,7 +473,10 @@ impl SupportGeometry<'_, '_> {
 		state: &SettlingSupport,
 		position: Vec3,
 		layers: &CollisionLayers,
-	) -> Result<(), SupportProbeFailure> {
+	) -> Result<bool, SupportProbeFailure> {
+		if !self.terrain_coverage_ready(position, state.search.hull, state.support, layers) {
+			return Ok(false);
+		}
 		if !state.contains(position) {
 			return Err(SupportProbeFailure::Placement);
 		}
@@ -422,11 +489,22 @@ impl SupportGeometry<'_, '_> {
 		if !self.clear(position, state.search.hull, state.support) {
 			return Err(SupportProbeFailure::Clearance);
 		}
-		Ok(())
+		Ok(true)
 	}
 }
 
 impl PendingActorSupport {
+	fn wait_for_terrain_coverage(&mut self, entity: Entity) {
+		self.settling = None;
+		self.failure = None;
+		self.diagnose(
+			entity,
+			SupportDiagnostic::WaitingForPresentation,
+			Some(RigidBody::Dynamic),
+			true,
+		);
+	}
+
 	fn cancel_handoff(&mut self, entity: Entity, failure: SupportProbeFailure, advance: bool) {
 		self.settling = None;
 		self.failure = Some(failure);
@@ -486,9 +564,16 @@ pub(super) fn guard_actor_support(
 			pending.cancel_handoff(entity, SupportProbeFailure::Placement, false);
 			continue;
 		}
-		if let Err(failure) = geometry.validate(&state, position.0, &layers) {
-			pending.cancel_handoff(entity, failure, failure == SupportProbeFailure::Clearance);
-			continue;
+		match geometry.validate(&state, position.0, &layers) {
+			Ok(true) => {}
+			Ok(false) => {
+				pending.wait_for_terrain_coverage(entity);
+				continue;
+			}
+			Err(failure) => {
+				pending.cancel_handoff(entity, failure, failure == SupportProbeFailure::Clearance);
+				continue;
+			}
 		}
 		if state.elapsed >= SETTLE_TIMEOUT {
 			pending.cancel_handoff(entity, SupportProbeFailure::Placement, true);
@@ -575,9 +660,16 @@ pub(super) fn confirm_actor_support(
 			pending.cancel_handoff(entity, SupportProbeFailure::Placement, false);
 			continue;
 		}
-		if let Err(failure) = geometry.validate(&state, position.0, &layers) {
-			pending.cancel_handoff(entity, failure, failure == SupportProbeFailure::Clearance);
-			continue;
+		match geometry.validate(&state, position.0, &layers) {
+			Ok(true) => {}
+			Ok(false) => {
+				pending.wait_for_terrain_coverage(entity);
+				continue;
+			}
+			Err(failure) => {
+				pending.cancel_handoff(entity, failure, failure == SupportProbeFailure::Clearance);
+				continue;
+			}
 		}
 		if state.elapsed >= SETTLE_TIMEOUT {
 			pending.cancel_handoff(entity, SupportProbeFailure::Placement, true);
