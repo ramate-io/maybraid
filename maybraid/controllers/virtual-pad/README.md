@@ -63,6 +63,15 @@ Apple GameController and Core Haptics objects are main-thread-only. The
 its poll / rumble / init systems with Bevy `NonSendMarker` so the multithreaded
 executor keeps them on the main thread.
 
+Headless hosts and tests should insert `PadHidPolicy::External` before adding
+`VirtualPadPlugin` or a gameplay plugin that installs it. This omits this crate's
+hardware initialization while keeping Bevy input processing, device discovery,
+and virtual-pad sampling active, so fixtures can supply `Gamepad` components,
+input messages, or overlays. It does not disable separately installed hardware
+plugins such as gilrs. The default `PadHidPolicy::Platform` retains the native
+Apple backend and its process-main-thread requirement. Set the policy during
+app construction; changing it later does not reconfigure an installed backend.
+
 ## Rumble
 
 Gameplay writes [`PadRumble`](src/rumble.rs); the plugin copies it onto every

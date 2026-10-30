@@ -281,6 +281,7 @@ mod tests {
 
 	fn app() -> App {
 		let mut app = App::new();
+		app.insert_resource(crate::PadHidPolicy::External);
 		app.add_plugins((
 			MinimalPlugins,
 			bevy::input::InputPlugin,
@@ -389,6 +390,7 @@ mod tests {
 	fn default_host_reuses_primary_and_secondary_sources_without_fresh_held_edges(
 	) -> anyhow::Result<()> {
 		let mut app = App::new();
+		app.insert_resource(crate::PadHidPolicy::External);
 		app.add_plugins((
 			MinimalPlugins,
 			bevy::input::InputPlugin,
