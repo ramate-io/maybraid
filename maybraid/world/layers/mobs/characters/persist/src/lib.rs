@@ -6,7 +6,7 @@
 //! keyed by the same [`CharacterId`].
 
 use bevy::prelude::*;
-use serde::{de::Error as DeError, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 use std::env;
 use std::fs;
 use std::io;
@@ -169,9 +169,85 @@ impl SaveRoot {
 
 	/// Removes appearance, inventory, and position files when present.
 	pub fn delete(&self, id: CharacterId) -> io::Result<()> {
-		remove_if_exists(&self.character_path(id))?;
-		remove_if_exists(&self.inventory_path(id))?;
-		remove_if_exists(&self.position_path(id))?;
+		self.delete_files(id, None)
+	}
+
+	/// Commit roster removal and its resulting selection together. Files are staged
+	/// beside the saves and restored if staging or writing the selection fails.
+	pub fn delete_and_select(
+		&self,
+		id: CharacterId,
+		active: Option<CharacterId>,
+	) -> io::Result<()> {
+		self.delete_files(id, Some(active))
+	}
+
+	fn delete_files(&self, id: CharacterId, active: Option<Option<CharacterId>>) -> io::Result<()> {
+		let mut paths =
+			vec![self.character_path(id), self.inventory_path(id), self.position_path(id)];
+		if active.is_some() {
+			paths.push(self.active_path());
+		}
+		// Reject directories (including malformed save fixtures) before moving anything.
+		for path in &paths {
+			match fs::symlink_metadata(path) {
+				Ok(metadata) if !metadata.file_type().is_file() => {
+					return Err(io::Error::other(format!(
+						"save is not a regular file: {}",
+						path.display()
+					)));
+				}
+				Ok(_) => {}
+				Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+				Err(error) => return Err(error),
+			}
+		}
+		if !self.path.exists() {
+			return Ok(());
+		}
+		let staging = self.path.join(format!(".delete-{}", CharacterId::new().to_hex()));
+		fs::create_dir(&staging)?;
+		let mut staged = Vec::new();
+		let mut writing_active = false;
+		let result = (|| {
+			for (index, path) in paths.iter().enumerate() {
+				let backup = staging.join(index.to_string());
+				match fs::rename(path, &backup) {
+					Ok(()) => staged.push((path, backup)),
+					Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+					Err(error) => return Err(error),
+				}
+			}
+			if let Some(Some(active)) = active {
+				writing_active = true;
+				let json = serde_json::to_vec_pretty(&ActiveFile { version: 1, id: active })?;
+				fs::write(self.active_path(), json)?;
+			}
+			Ok(())
+		})();
+		if let Err(error) = result {
+			let rollback = (|| -> io::Result<()> {
+				if writing_active {
+					remove_if_exists(&self.active_path())?;
+				}
+				for (path, backup) in staged.iter().rev() {
+					fs::rename(backup, path)?;
+				}
+				fs::remove_dir(&staging)
+			})();
+			return match rollback {
+				Ok(()) => Err(error),
+				Err(rollback) => Err(io::Error::other(format!(
+					"{error}; restore failed: {rollback}; recovery files: {}",
+					staging.display()
+				))),
+			};
+		}
+		// The transaction has committed. A cleanup failure must not report that
+		// the character is still saved; staged files never appear in the roster.
+		if let Err(error) = fs::remove_dir_all(&staging) {
+			warn!("could not clean deleted character files {}: {error}", staging.display());
+		}
 		Ok(())
 	}
 }
@@ -297,6 +373,58 @@ mod tests {
 		assert!(!root.character_path(id).exists());
 		assert!(!root.inventory_path(id).exists());
 		assert!(!root.position_path(id).exists());
+	}
+
+	#[test]
+	fn deletion_commits_all_files_and_replacement_selection()
+	-> Result<(), Box<dyn std::error::Error>> {
+		let dir = tempfile::tempdir()?;
+		let root = SaveRoot::at(dir.path());
+		root.ensure_dirs()?;
+		let id = CharacterId(1);
+		let next = CharacterId(2);
+		for path in [
+			root.character_path(id),
+			root.inventory_path(id),
+			root.position_path(id),
+			root.character_path(next),
+		] {
+			fs::write(path, "{}")?;
+		}
+		save_active(&root, id)?;
+		root.delete_and_select(id, Some(next))?;
+		assert_eq!(root.list_ids()?, vec![next]);
+		assert_eq!(load_active(&root), Some(next));
+		assert!(!root.inventory_path(id).exists());
+		assert!(!root.position_path(id).exists());
+		root.delete_and_select(next, None)?;
+		assert!(root.list_ids()?.is_empty());
+		assert!(!root.active_path().exists());
+		assert_eq!(fs::read_dir(&root.path)?.count(), 3);
+		Ok(())
+	}
+
+	#[test]
+	fn deletion_failure_keeps_roster_and_selection() -> Result<(), Box<dyn std::error::Error>> {
+		let dir = tempfile::tempdir()?;
+		let root = SaveRoot::at(dir.path());
+		root.ensure_dirs()?;
+		let id = CharacterId(1);
+		fs::write(root.character_path(id), "appearance")?;
+		fs::write(root.inventory_path(id), "inventory")?;
+		fs::create_dir(root.position_path(id))?;
+		save_active(&root, id)?;
+		assert!(root.delete_and_select(id, None).is_err());
+		assert_eq!(fs::read_to_string(root.character_path(id))?, "appearance");
+		assert_eq!(fs::read_to_string(root.inventory_path(id))?, "inventory");
+		assert_eq!(load_active(&root), Some(id));
+		// The active file is part of the same preflight validation.
+		fs::remove_dir(root.position_path(id))?;
+		fs::remove_file(root.active_path())?;
+		fs::create_dir(root.active_path())?;
+		assert!(root.delete_and_select(id, Some(CharacterId(2))).is_err());
+		assert_eq!(root.list_ids()?, vec![id]);
+		Ok(())
 	}
 
 	#[test]

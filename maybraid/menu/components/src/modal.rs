@@ -39,6 +39,7 @@ impl MenuModalId {
 	pub const SHORT_TEXT: Self = Self("short-text");
 	pub const ITEM_DROP: Self = Self("item-drop");
 	pub const CHARACTER_LEAVE: Self = Self("character-leave");
+	pub const CHARACTER_DELETE: Self = Self("character-delete");
 
 	pub fn as_str(self) -> &'static str {
 		self.0
@@ -52,7 +53,10 @@ impl MenuModalId {
 	/// Confirm / text layers take directional nav, stick, and wheel away from
 	/// the parent list. Overlay select *is* the focused catalog, so it does not.
 	pub fn owns_nav(self) -> bool {
-		matches!(self, Self::SHORT_TEXT | Self::ITEM_DROP | Self::CHARACTER_LEAVE)
+		matches!(
+			self,
+			Self::SHORT_TEXT | Self::ITEM_DROP | Self::CHARACTER_LEAVE | Self::CHARACTER_DELETE
+		)
 	}
 }
 

@@ -31,6 +31,7 @@ pub enum GalleryChoice {
 	#[default]
 	New,
 	Select(CharacterId),
+	Delete,
 }
 
 pub fn request_show_gallery(commands: &mut Commands) {
@@ -90,6 +91,9 @@ fn gallery_rows(
 			row.with_hidden_objective(MenuObjectiveKind::Selected)
 		}
 	}));
+	if !summaries.is_empty() {
+		rows.push(TextCursorRow::new("Delete Selected Character", GalleryChoice::Delete));
+	}
 	rows
 }
 
@@ -175,6 +179,20 @@ mod tests {
 		assert_eq!(rows[1].subtext.as_deref(), Some("Braidman"));
 		assert_eq!(rows[1].objective, Some(MenuObjectiveKind::Selected));
 		assert!(!rows[1].objective_visible);
+	}
+
+	#[test]
+	fn delete_action_is_available_only_for_a_saved_roster() {
+		assert!(!gallery_rows(&[], None).iter().any(|row| row.action == GalleryChoice::Delete));
+		let summaries = [CharacterSummary {
+			id: CharacterId(1),
+			name: "Jeff".into(),
+			species_title: "Braidman",
+		}];
+		let rows = gallery_rows(&summaries, Some(CharacterId(1)));
+		assert_eq!(rows[2].action, GalleryChoice::Delete);
+		assert_eq!(rows[2].label, "Delete Selected Character");
+		assert!(!rows[2].locked);
 	}
 
 	#[test]
