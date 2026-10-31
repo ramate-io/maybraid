@@ -773,6 +773,9 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 			},
 		))
 		.with_children(|tile| {
+			if let Some(rank) = current_equipped_rank(choice) {
+				spawn_inventory_rank_badge(tile, fonts, rank, 26.0, true);
+			}
 			let mut art = tile.spawn((
 				Node {
 					width: Val::Px(ROTARY_ART_SIZE),
@@ -827,15 +830,11 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 				Pickable::IGNORE,
 			))
 			.with_children(|label| {
-				if let Some(rank) = current_equipped_rank(choice) {
-					spawn_inventory_rank_badge(label, fonts, rank, 26.0);
-				}
 				label
 					.spawn((
 						InventoryCarouselCaptionGroup,
 						Node {
-							flex_grow: 1.0,
-							min_width: Val::Px(0.0),
+							width: Val::Percent(100.0),
 							flex_direction: FlexDirection::Column,
 							align_items: AlignItems::Center,
 							row_gap: Val::Px(1.0),
@@ -944,10 +943,11 @@ fn spawn_compact_gallery_button<E: Copy + Send + Sync + 'static>(
 				min_height: Val::Px(INVENTORY_GALLERY_ROW_HEIGHT),
 				flex_shrink: 0.0,
 				min_width: Val::Px(0.0),
-				padding: UiRect::all(Val::Px(3.0)),
-				flex_direction: FlexDirection::Row,
+				padding: UiRect::axes(Val::Px(2.0), Val::Px(1.0)),
+				flex_direction: FlexDirection::Column,
+				justify_content: JustifyContent::Center,
 				align_items: AlignItems::Center,
-				column_gap: Val::Px(6.0),
+				row_gap: Val::Px(1.0),
 				border: UiRect::all(Val::Px(1.0)),
 				..default()
 			},
@@ -956,72 +956,65 @@ fn spawn_compact_gallery_button<E: Copy + Send + Sync + 'static>(
 			Outline::new(Val::Px(2.0), Val::Px(2.0), Color::NONE),
 		))
 		.with_children(|tile| {
-			let mut leading = tile.spawn((
+			if let Some(rank) = current_equipped_rank(choice) {
+				spawn_inventory_rank_badge(tile, fonts, rank, 24.0, true);
+			}
+			let mut image_slot = tile.spawn((
 				Node {
-					width: Val::Px(36.0),
-					min_width: Val::Px(36.0),
-					height: Val::Px(64.0),
-					flex_direction: FlexDirection::Column,
+					width: Val::Px(40.0),
+					height: Val::Px(40.0),
+					flex_shrink: 0.0,
 					justify_content: JustifyContent::Center,
 					align_items: AlignItems::Center,
-					row_gap: Val::Px(2.0),
+					position_type: PositionType::Relative,
 					..default()
 				},
 				Pickable::IGNORE,
 			));
-			leading.with_children(|leading| {
-				if let Some(rank) = current_equipped_rank(choice) {
-					spawn_inventory_rank_badge(leading, fonts, rank, 24.0);
-				}
-				let mut image_slot = leading.spawn((
-					Node {
-						width: Val::Px(32.0),
-						height: Val::Px(32.0),
-						min_width: Val::Px(32.0),
-						min_height: Val::Px(32.0),
-						justify_content: JustifyContent::Center,
-						align_items: AlignItems::Center,
-						position_type: PositionType::Relative,
-						..default()
-					},
-					Pickable::IGNORE,
-				));
-				if let Some(camera) = viewport {
-					image_slot.with_children(|slot| {
-						slot.spawn((
-							bevy::ui::widget::ViewportNode::new(camera),
-							Node {
-								width: Val::Percent(100.0),
-								height: Val::Percent(100.0),
-								..default()
-							},
-							Pickable::IGNORE,
-						));
-					});
-				} else if let Some(image) = thumbnail {
-					image_slot.with_children(|slot| {
-						slot.spawn((
-							ImageNode { image, color: tint, ..default() },
-							Node {
-								width: Val::Percent(100.0),
-								height: Val::Percent(100.0),
-								..default()
-							},
-							Pickable::IGNORE,
-						));
-					});
-				} else if choice.path.is_empty() {
-					image_slot.insert(BackgroundColor(inventory_color(choice.preview)));
-				}
-			});
+			if let Some(camera) = viewport {
+				image_slot.with_children(|slot| {
+					slot.spawn((
+						bevy::ui::widget::ViewportNode::new(camera),
+						Node {
+							width: Val::Percent(100.0),
+							height: Val::Percent(100.0),
+							..default()
+						},
+						Pickable::IGNORE,
+					));
+				});
+			} else if let Some(image) = thumbnail {
+				image_slot.with_children(|slot| {
+					slot.spawn((
+						ImageNode { image, color: tint, ..default() },
+						Node {
+							width: Val::Percent(100.0),
+							height: Val::Percent(100.0),
+							..default()
+						},
+						Pickable::IGNORE,
+					));
+				});
+			} else if choice.path.is_empty() {
+				image_slot.insert(BackgroundColor(inventory_color(choice.preview)));
+			}
 			tile.spawn((
 				TileWrap,
 				Text::new(choice.label.clone()),
 				fonts.item(11.0),
 				TextColor(face),
-				TextLayout::new(bevy::text::Justify::Left, bevy::text::LineBreak::WordOrCharacter),
+				TextLayout::new(
+					bevy::text::Justify::Center,
+					bevy::text::LineBreak::WordOrCharacter,
+				),
 				bevy::text::TextBounds::UNBOUNDED,
-				Node { flex_grow: 1.0, min_width: Val::Px(0.0), ..default() },
+				Node {
+					width: Val::Percent(100.0),
+					flex_grow: 1.0,
+					min_width: Val::Px(0.0),
+					min_height: Val::Px(0.0),
+					..default()
+				},
 				Pickable::IGNORE,
 			));
 		});
@@ -1085,7 +1078,7 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 	}
 	row.with_children(|row| {
 		if let Some(rank) = tile.rank {
-			spawn_inventory_rank_badge(row, fonts, rank, 40.0);
+			spawn_inventory_rank_badge(row, fonts, rank, 40.0, false);
 		}
 		let mut image_slot = row.spawn((
 			Node {
@@ -1142,53 +1135,55 @@ fn spawn_inventory_rank_badge(
 	fonts: &HudFonts,
 	rank: u8,
 	size: f32,
+	float: bool,
 ) {
 	let unit_scale = size / 40.0;
 	let fill_size = 100.0 * unit_scale;
 	let angle = 0.12_f32;
 	let fill_left = -62.8 * unit_scale;
 	let numeral_size = (size * 0.44).max(11.0);
-	parent
-		.spawn((
+	let mut badge = parent.spawn((
+		Node {
+			width: Val::Px(size),
+			height: Val::Px(size),
+			min_width: Val::Px(size),
+			min_height: Val::Px(size),
+			position_type: if float { PositionType::Absolute } else { PositionType::Relative },
+			left: if float { Val::Px(2.0) } else { Val::Auto },
+			top: if float { Val::Px(2.0) } else { Val::Auto },
+			overflow: Overflow::clip(),
+			justify_content: JustifyContent::Center,
+			align_items: AlignItems::Center,
+			..default()
+		},
+		InventoryRankBadge(rank),
+		Pickable::IGNORE,
+	));
+	if float {
+		badge.insert(ZIndex(100));
+	}
+	badge.with_children(|badge| {
+		badge.spawn((
 			Node {
-				width: Val::Px(size),
-				height: Val::Px(size),
-				min_width: Val::Px(size),
-				min_height: Val::Px(size),
-				position_type: PositionType::Relative,
-				overflow: Overflow::clip(),
-				justify_content: JustifyContent::Center,
-				align_items: AlignItems::Center,
+				position_type: PositionType::Absolute,
+				left: Val::Px(fill_left),
+				top: Val::Px(-30.0 * unit_scale),
+				width: Val::Px(fill_size),
+				height: Val::Px(fill_size),
 				..default()
 			},
-			InventoryRankBadge(rank),
+			UiTransform { rotation: Rot2::radians(angle), ..default() },
+			BackgroundColor(TEXT_YELLOW),
 			Pickable::IGNORE,
-		))
-		.with_children(|badge| {
-			badge.spawn((
-				Node {
-					position_type: PositionType::Absolute,
-					left: Val::Px(fill_left),
-					top: Val::Px(-30.0 * unit_scale),
-					width: Val::Px(fill_size),
-					height: Val::Px(fill_size),
-					..default()
-				},
-				UiTransform { rotation: Rot2::radians(angle), ..default() },
-				BackgroundColor(TEXT_YELLOW),
-				Pickable::IGNORE,
-			));
-			badge.spawn((
-				Text::new(rank.to_string()),
-				fonts.item(numeral_size),
-				TextColor(MENU_CLEAR),
-				TextLayout::new(
-					bevy::text::Justify::Center,
-					bevy::text::LineBreak::WordOrCharacter,
-				),
-				Pickable::IGNORE,
-			));
-		});
+		));
+		badge.spawn((
+			Text::new(rank.to_string()),
+			fonts.item(numeral_size),
+			TextColor(MENU_CLEAR),
+			TextLayout::new(bevy::text::Justify::Center, bevy::text::LineBreak::WordOrCharacter),
+			Pickable::IGNORE,
+		));
+	});
 }
 
 fn spawn_empty_slot(
