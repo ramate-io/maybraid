@@ -1170,20 +1170,20 @@ fn spawn_equipped_rank_badge(parent: &mut ChildSpawnerCommands, fonts: &HudFonts
 			badge.spawn((
 				Node {
 					position_type: PositionType::Absolute,
-					left: Val::Px(-64.0),
+					left: Val::Px(-62.8),
 					top: Val::Px(-30.0),
 					width: Val::Px(100.0),
 					height: Val::Px(100.0),
 					..default()
 				},
-				UiTransform { rotation: Rot2::radians(0.30), ..default() },
-				BackgroundColor(Color::srgb(0.98, 0.84, 0.48)),
+				UiTransform { rotation: Rot2::radians(0.12), ..default() },
+				BackgroundColor(TEXT_DEEP_BLUE),
 				Pickable::IGNORE,
 			));
 			badge.spawn((
 				Text::new(rank.to_string()),
 				fonts.item(18.0),
-				TextColor(Color::srgb(0.78, 0.29, 0.06)),
+				TextColor(TEXT_YELLOW),
 				TextLayout::new(
 					bevy::text::Justify::Center,
 					bevy::text::LineBreak::WordOrCharacter,
