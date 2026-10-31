@@ -85,6 +85,10 @@ const GALLERY_VIEWPORT_HEIGHT: f32 = INVENTORY_GALLERY_ROW_HEIGHT
 	+ GALLERY_ROW_GAP * (INVENTORY_GALLERY_VISIBLE_ROWS - 1) as f32;
 pub const INVENTORY_GALLERY_ROW_STEP: f32 = INVENTORY_GALLERY_ROW_HEIGHT + GALLERY_ROW_GAP;
 const GALLERY_PANEL_HEIGHT: f32 = 196.0;
+const ROTARY_CARD_WIDTH: f32 = 164.0;
+const ROTARY_CARD_HEIGHT: f32 = 110.0;
+const ROTARY_ART_SIZE: f32 = 56.0;
+const ROTARY_FRONT_OFFSET: f32 = 14.0;
 
 /// Rebuild the inventory shell and return its preview slot and two focus roots.
 pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
@@ -265,11 +269,11 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 						Node {
 							width: Val::Percent(100.0),
 							height: Val::Px(match session.drawer {
-								InventoryDrawerMode::Rotary => 230.0,
+								InventoryDrawerMode::Rotary => 190.0,
 								InventoryDrawerMode::Gallery => GALLERY_PANEL_HEIGHT,
 							}),
 							min_height: Val::Px(match session.drawer {
-								InventoryDrawerMode::Rotary => 230.0,
+								InventoryDrawerMode::Rotary => 190.0,
 								InventoryDrawerMode::Gallery => GALLERY_PANEL_HEIGHT,
 							}),
 							flex_shrink: 0.0,
@@ -318,10 +322,9 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 							),
 						};
 					});
-					spawn_inventory_action_footer(right, fonts, assets, device, interactive);
 				});
 			});
-			spawn_inventory_back_control(screen, fonts);
+			spawn_inventory_footer_row(screen, fonts, assets, device, interactive);
 		});
 	});
 	slots
@@ -444,45 +447,50 @@ fn spawn_inventory_icon_button(
 		});
 }
 
-fn spawn_inventory_action_footer(
+fn spawn_inventory_footer_row(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
 	assets: &AssetServer,
 	device: InputPromptDevice,
 	interactive: bool,
 ) {
-	if !interactive {
-		return;
-	}
 	parent
 		.spawn((
 			Node {
 				width: Val::Percent(100.0),
-				min_height: Val::Px(28.0),
+				height: Val::Px(32.0),
+				min_height: Val::Px(32.0),
 				flex_direction: FlexDirection::Row,
+				column_gap: Val::Px(12.0),
 				align_items: AlignItems::Center,
-				justify_content: JustifyContent::Center,
 				flex_shrink: 0.0,
 				..default()
 			},
 			Pickable::IGNORE,
 		))
-		.with_children(|footer| spawn_inventory_action_prompts(footer, fonts, assets, device));
-}
-
-fn spawn_inventory_back_control(parent: &mut ChildSpawnerCommands, fonts: &HudFonts) {
-	parent
-		.spawn((
-			Node {
-				position_type: PositionType::Absolute,
-				left: Val::Px(0.0),
-				bottom: Val::Px(0.0),
+		.with_children(|footer| {
+			let mut back = footer.spawn(Node {
+				width: Val::Percent(26.0),
+				min_width: Val::Px(150.0),
+				height: Val::Percent(100.0),
+				align_items: AlignItems::Center,
 				..default()
-			},
-			Pickable::IGNORE,
-		))
-		.with_children(|back| {
-			spawn_text_button(back, fonts, "Back", CloseOverlaySelect);
+			});
+			back.with_children(|back| spawn_text_button(back, fonts, "Back", CloseOverlaySelect));
+			let mut actions = footer.spawn(Node {
+				width: Val::Percent(74.0),
+				min_width: Val::Px(0.0),
+				height: Val::Percent(100.0),
+				flex_grow: 1.0,
+				justify_content: JustifyContent::Center,
+				align_items: AlignItems::Center,
+				..default()
+			});
+			if interactive {
+				actions.with_children(|actions| {
+					spawn_inventory_action_prompts(actions, fonts, assets, device);
+				});
+			}
 		});
 }
 
@@ -558,9 +566,13 @@ fn spawn_rotary_carousel<E: Copy + Send + Sync + 'static, C: MenuThumbnailContex
 					position_type: PositionType::Absolute,
 					left: Val::Percent(50.0),
 					top: Val::Percent(50.0),
-					width: Val::Px(164.0),
-					height: Val::Px(122.0),
-					margin: UiRect { left: Val::Px(-82.0), top: Val::Px(-61.0), ..default() },
+					width: Val::Px(ROTARY_CARD_WIDTH),
+					height: Val::Px(ROTARY_CARD_HEIGHT),
+					margin: UiRect {
+						left: Val::Px(-ROTARY_CARD_WIDTH / 2.0),
+						top: Val::Px(-ROTARY_CARD_HEIGHT / 2.0),
+						..default()
+					},
 					..default()
 				},
 				UiTransform {
@@ -794,7 +806,7 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 			extra,
 			Node {
 				width: Val::Percent(100.0),
-				height: Val::Px(122.0),
+				height: Val::Px(ROTARY_CARD_HEIGHT),
 				padding: UiRect::all(Val::Px(6.0)),
 				flex_direction: FlexDirection::Column,
 				justify_content: JustifyContent::Center,
@@ -806,8 +818,8 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 		.with_children(|tile| {
 			let mut art = tile.spawn((
 				Node {
-					width: Val::Px(68.0),
-					height: Val::Px(68.0),
+					width: Val::Px(ROTARY_ART_SIZE),
+					height: Val::Px(ROTARY_ART_SIZE),
 					justify_content: JustifyContent::Center,
 					align_items: AlignItems::Center,
 					position_type: PositionType::Relative,
@@ -1085,12 +1097,15 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 		}
 	}
 	row.with_children(|row| {
+		if let Some(rank) = tile.rank {
+			spawn_equipped_rank_badge(row, fonts, rank);
+		}
 		let mut image_slot = row.spawn((
 			Node {
-				width: Val::Px(46.0),
-				height: Val::Px(46.0),
-				min_width: Val::Px(46.0),
-				min_height: Val::Px(46.0),
+				width: Val::Px(38.0),
+				height: Val::Px(38.0),
+				min_width: Val::Px(38.0),
+				min_height: Val::Px(38.0),
 				position_type: PositionType::Relative,
 				justify_content: JustifyContent::Center,
 				align_items: AlignItems::Center,
@@ -1132,17 +1147,50 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 			Node { flex_grow: 1.0, min_width: Val::Px(0.0), ..default() },
 			Pickable::IGNORE,
 		));
-		if let Some(rank) = tile.rank {
-			row.spawn((
-				TileWrap,
-				Text::new(rank.to_string()),
-				fonts.item(12.0),
-				TextColor(face),
+	});
+}
+
+fn spawn_equipped_rank_badge(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, rank: u8) {
+	parent
+		.spawn((
+			Node {
+				width: Val::Px(40.0),
+				height: Val::Px(40.0),
+				min_width: Val::Px(40.0),
+				min_height: Val::Px(40.0),
+				position_type: PositionType::Relative,
+				overflow: Overflow::clip(),
+				justify_content: JustifyContent::Center,
+				align_items: AlignItems::Center,
+				..default()
+			},
+			Pickable::IGNORE,
+		))
+		.with_children(|badge| {
+			badge.spawn((
+				Node {
+					position_type: PositionType::Absolute,
+					left: Val::Px(-64.0),
+					top: Val::Px(-30.0),
+					width: Val::Px(100.0),
+					height: Val::Px(100.0),
+					..default()
+				},
+				UiTransform { rotation: Rot2::radians(0.30), ..default() },
+				BackgroundColor(Color::srgb(0.98, 0.84, 0.48)),
 				Pickable::IGNORE,
 			));
-		}
-		spawn_equipped_check(row);
-	});
+			badge.spawn((
+				Text::new(rank.to_string()),
+				fonts.item(18.0),
+				TextColor(Color::srgb(0.78, 0.29, 0.06)),
+				TextLayout::new(
+					bevy::text::Justify::Center,
+					bevy::text::LineBreak::WordOrCharacter,
+				),
+				Pickable::IGNORE,
+			));
+		});
 }
 
 fn spawn_empty_slot(
@@ -1359,7 +1407,7 @@ fn rotary_x(ordinal: usize, selected: usize, count: usize) -> f32 {
 }
 
 fn rotary_y(ordinal: usize, selected: usize, count: usize) -> f32 {
-	(1.0 + rotary_angle(ordinal, selected, count).cos()) * 11.0
+	(1.0 + rotary_angle(ordinal, selected, count).cos()) * ROTARY_FRONT_OFFSET / 2.0
 }
 
 fn rotary_scale(ordinal: usize, selected: usize, count: usize) -> f32 {
@@ -1393,7 +1441,7 @@ pub(crate) fn animate_inventory_carousel(
 			- std::f32::consts::PI;
 		motion.angle += delta * alpha;
 		let x = motion.angle.sin() * 228.0;
-		let y = (1.0 + motion.angle.cos()) * 11.0;
+		let y = (1.0 + motion.angle.cos()) * ROTARY_FRONT_OFFSET / 2.0;
 		transform.translation = Val2::px(x, y);
 		let scale = rotary_scale(card.ordinal, selected, card.count);
 		motion.scale += (scale - motion.scale) * alpha;
