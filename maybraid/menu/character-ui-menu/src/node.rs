@@ -11,6 +11,82 @@ use crate::{
 	SwatchSingleSelect, ThumbnailCamera,
 };
 
+/// Inventory page shown in the shared character inventory.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum InventorySection {
+	#[default]
+	Clothing,
+	Tools,
+	Skills,
+	Tanzes,
+	Lubikan,
+}
+
+impl InventorySection {
+	pub const ALL: [Self; 5] =
+		[Self::Clothing, Self::Tools, Self::Skills, Self::Tanzes, Self::Lubikan];
+
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::Clothing => "Clothing",
+			Self::Tools => "Tools",
+			Self::Skills => "Skill Maps",
+			Self::Tanzes => "Tanzes",
+			Self::Lubikan => "Lubikan",
+		}
+	}
+
+	pub const fn index(self) -> usize {
+		match self {
+			Self::Clothing => 0,
+			Self::Tools => 1,
+			Self::Skills => 2,
+			Self::Tanzes => 3,
+			Self::Lubikan => 4,
+		}
+	}
+
+	pub fn from_label(label: &str) -> Option<Self> {
+		Self::ALL.into_iter().find(|section| section.label() == label)
+	}
+}
+
+/// Inventory item representation shown by the UI, independently of whether
+/// that item is equipped in the domain inventory.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum InventoryRegion {
+	#[default]
+	Drawer,
+	Equipped,
+}
+
+impl InventoryRegion {
+	pub const fn index(self) -> usize {
+		match self {
+			Self::Drawer => 0,
+			Self::Equipped => 1,
+		}
+	}
+}
+
+/// Layout used for inventory selection drawer tiles.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum InventoryDrawerMode {
+	#[default]
+	Rotary,
+	Gallery,
+}
+
+/// Navigation action emitted by the inventory shell controls.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum InventoryControlAction {
+	PreviousSection,
+	NextSection,
+	ToggleDrawer,
+	ToggleRegion,
+	FocusDrawer,
+}
+
 /// sRGBA tint applied to asset thumbnails, resolved when a menu lowers to IR.
 ///
 /// This replaces the old imperative `RenderContext.preview_color` scoping:

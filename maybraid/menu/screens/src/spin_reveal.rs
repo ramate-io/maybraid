@@ -5,17 +5,21 @@ use character_creation_menus::{
 	inventory_paint_state, InventoryLayout, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT,
 };
 use character_items::{catalog_key_uses_yellow_silhouette, Inventory, InventoryItem};
+use character_ui_menu::{InventoryDrawerMode, InventorySection};
 use item_icons::{
 	request_inventory_icons, CaptureClient, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery,
 	ItemIconPlugin, PoseCaptureSubjects,
 };
 use maybraid_character_ui_menu_renderer::{
-	fill_inventory_layout, fill_inventory_loading, spawn_starter_kit_shell, MenuThumbnailContext,
+	fill_inventory_loading, fill_inventory_screen, spawn_starter_kit_shell, CloseOverlaySelect,
+	InventoryMenuSession, MenuThumbnailContext,
 };
 use maybraid_menu_controller::MenuController;
+use menu_components::InputPromptDevice;
 use menu_components::{
 	spawn_hud_action, spawn_hud_text, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu,
-	KeyboardMenuNav, MenuComponentsPlugin, ScreenBack, TextMenuInputLock, MENU_CLEAR, TEXT_YELLOW,
+	HudScrollViewport, KeyboardMenuNav, MenuComponentsPlugin, ScreenBack, TextMenuInputLock,
+	MENU_CLEAR, TEXT_YELLOW,
 };
 use menu_components::{MenuNav, MenuNavImpulse};
 use std::time::Duration;
@@ -53,6 +57,15 @@ pub struct StarterKitViewport;
 /// Continue footer. Activate finishes the grant.
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct StarterKitContinue;
+
+#[derive(Component, Debug, Default, Clone, Copy)]
+struct StarterKitLoadingBack;
+
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+struct StarterKitRenderedView {
+	section: InventorySection,
+	drawer: InventoryDrawerMode,
+}
 
 /// Continue from the Starter Kit into the body editor.
 #[derive(Clone, Copy, Debug, Default, Message, Component, PartialEq, Eq)]
@@ -106,6 +119,8 @@ impl Plugin for SpinRevealScreenPlugin {
 					finish_spin_reveal,
 					drop_stale_gallery,
 					reveal_starter_kit_icons,
+					sync_starter_kit_inventory,
+					replace_starter_kit_overlay_back,
 				)
 					.chain()
 					.in_set(SpinRevealSystems::Apply),
@@ -179,8 +194,13 @@ fn spawn_starter_kit(
 			Pickable::IGNORE,
 		))
 		.with_children(|root| {
-			viewport =
-				spawn_starter_kit_shell(root, fonts, layout.title, TEXT_YELLOW, StarterKitViewport);
+			viewport = spawn_starter_kit_shell(
+				root,
+				fonts,
+				layout.title,
+				TEXT_YELLOW,
+				(StarterKitViewport, InventoryMenuSession::default()),
+			);
 			continue_parent = root
 				.spawn((
 					Node {
@@ -196,6 +216,7 @@ fn spawn_starter_kit(
 			root.spawn((
 				Button,
 				ScreenBack,
+				StarterKitLoadingBack,
 				Node {
 					position_type: PositionType::Absolute,
 					left: Val::Px(16.0),
@@ -274,11 +295,14 @@ fn reveal_starter_kit_icons(
 	mut commands: Commands,
 	time: Res<Time>,
 	assets: Res<AssetServer>,
+	device: Res<InputPromptDevice>,
 	cache: Option<Res<ItemIconCache>>,
 	current: Option<Res<SpinRevealCurrent>>,
 	wait: Option<ResMut<StarterKitIconWait>>,
 	viewports: Query<Entity, With<StarterKitViewport>>,
+	sessions: Query<&InventoryMenuSession, With<StarterKitViewport>>,
 	continues: Query<Entity, With<StarterKitContinue>>,
+	loading_backs: Query<Entity, With<StarterKitLoadingBack>>,
 ) {
 	let Some(mut wait) = wait else {
 		return;
@@ -311,24 +335,159 @@ fn reveal_starter_kit_icons(
 		);
 	}
 	let fonts = HudFonts::load(assets.as_ref());
-	let mut thumbs = CatalogThumbs { icons };
-	let count = fill_inventory_layout(
+	let session = sessions.get(viewport).copied().unwrap_or_default();
+	paint_starter_kit_inventory(
 		&mut commands,
 		viewport,
 		&fonts,
-		&layout.node,
-		false,
-		None,
-		None,
-		&mut thumbs,
+		assets.as_ref(),
+		*device,
+		&layout,
+		&session,
+		icons,
+		&continues,
 	);
+	for entity in &loading_backs {
+		commands.entity(entity).try_despawn();
+	}
 	wait.revealed = true;
 	commands.insert_resource(SpinRevealCurrent { items: current.items.clone(), revealed: true });
-	for entity in &continues {
-		commands.entity(entity).try_insert(HudMenuItem { index: count, menu: viewport });
+}
+
+fn sync_starter_kit_inventory(
+	mut commands: Commands,
+	assets: Res<AssetServer>,
+	device: Res<InputPromptDevice>,
+	cache: Option<Res<ItemIconCache>>,
+	current: Option<Res<SpinRevealCurrent>>,
+	sessions: Query<
+		(Entity, &InventoryMenuSession, Option<&StarterKitRenderedView>),
+		With<StarterKitViewport>,
+	>,
+	continues: Query<Entity, With<StarterKitContinue>>,
+) {
+	if !current.as_ref().is_some_and(|current| current.revealed) {
+		return;
 	}
-	if let Ok(mut entity) = commands.get_entity(viewport) {
-		entity.insert((HudMenu::retain(count + 1, None), HudOverlayMenu));
+	let icons = cache.as_deref();
+	let fonts = HudFonts::load(assets.as_ref());
+	for (viewport, session, rendered) in &sessions {
+		if rendered.is_some_and(|rendered| {
+			rendered.section == session.section && rendered.drawer == session.drawer
+		}) {
+			continue;
+		}
+		let layout = InventoryLayout::starter_kit(
+			current.as_ref().map(|current| current.items.clone()).unwrap_or_default(),
+		);
+		paint_starter_kit_inventory(
+			&mut commands,
+			viewport,
+			&fonts,
+			assets.as_ref(),
+			*device,
+			&layout,
+			&session,
+			icons,
+			&continues,
+		);
+	}
+}
+
+fn paint_starter_kit_inventory(
+	commands: &mut Commands,
+	viewport: Entity,
+	fonts: &HudFonts,
+	assets: &AssetServer,
+	device: InputPromptDevice,
+	layout: &InventoryLayout,
+	session: &InventoryMenuSession,
+	icons: Option<&ItemIconCache>,
+	continues: &Query<Entity, With<StarterKitContinue>>,
+) {
+	let mut thumbnails = CatalogThumbs { icons };
+	let slots = fill_inventory_screen(
+		commands,
+		viewport,
+		fonts,
+		assets,
+		device,
+		&layout.node,
+		false,
+		session,
+		&mut thumbnails,
+	);
+	commands
+		.entity(viewport)
+		.insert(StarterKitRenderedView { section: session.section, drawer: session.drawer });
+	populate_starter_kit_preview(commands, slots.preview, fonts);
+	commands
+		.entity(viewport)
+		.remove::<HudMenu>()
+		.remove::<HudOverlayMenu>()
+		.remove::<HudScrollViewport>();
+	let drawer = slots.menus[0];
+	let count = slots.item_count[0];
+	if drawer != Entity::PLACEHOLDER {
+		let selected = slots.focused_index[0].unwrap_or(0).min(count);
+		commands.entity(drawer).insert(HudMenu { selected, item_count: count + 1 });
+		for entity in continues {
+			commands.entity(entity).insert(HudMenuItem { index: count, menu: drawer });
+		}
+	} else {
+		commands.entity(viewport).insert((HudMenu::retain(1, None), HudOverlayMenu));
+		for entity in continues {
+			commands.entity(entity).insert(HudMenuItem { index: 0, menu: viewport });
+		}
+	}
+}
+
+fn populate_starter_kit_preview(commands: &mut Commands, preview: Entity, fonts: &HudFonts) {
+	if preview == Entity::PLACEHOLDER {
+		return;
+	}
+	commands.entity(preview).with_children(|preview| {
+		preview
+			.spawn(Node {
+				width: Val::Percent(100.0),
+				height: Val::Percent(100.0),
+				flex_direction: FlexDirection::Column,
+				align_items: AlignItems::Center,
+				justify_content: JustifyContent::Center,
+				row_gap: Val::Px(12.0),
+				..default()
+			})
+			.with_children(|summary| {
+				spawn_hud_text(
+					summary,
+					fonts.item(32.0),
+					"Your Starter Kit",
+					TEXT_YELLOW,
+					bevy::text::Justify::Center,
+				);
+				spawn_hud_text(
+					summary,
+					fonts.item(20.0),
+					"The items below will be ready for your character.",
+					TEXT_YELLOW,
+					bevy::text::Justify::Center,
+				);
+			});
+	});
+}
+
+fn replace_starter_kit_overlay_back(
+	mut commands: Commands,
+	backs: Query<Entity, (With<CloseOverlaySelect>, Added<CloseOverlaySelect>)>,
+	parents: Query<&ChildOf>,
+	viewports: Query<(), With<StarterKitViewport>>,
+) {
+	for entity in &backs {
+		let in_starter_kit =
+			parents.iter_ancestors(entity).any(|parent| viewports.contains(parent));
+		if in_starter_kit {
+			commands.entity(entity).remove::<CloseOverlaySelect>().insert(ScreenBack);
+		}
 	}
 }
 
@@ -347,7 +506,7 @@ fn click_starter_kit_continue(
 fn select_starter_kit_continue(
 	impulse: On<MenuNavImpulse>,
 	lock: Res<TextMenuInputLock>,
-	menus: Query<&HudMenu, With<StarterKitViewport>>,
+	menus: Query<&HudMenu, With<HudOverlayMenu>>,
 	items: Query<(&HudMenuItem, Option<&StarterKitContinue>)>,
 	mut choices: MessageWriter<SpinRevealChoice>,
 ) {
@@ -368,7 +527,7 @@ fn enter_starter_kit_continue(
 	keyboard: Res<ButtonInput<KeyCode>>,
 	keyboard_nav: Res<KeyboardMenuNav>,
 	lock: Res<TextMenuInputLock>,
-	menus: Query<(Entity, &HudMenu), With<StarterKitViewport>>,
+	menus: Query<(Entity, &HudMenu), With<HudOverlayMenu>>,
 	items: Query<(&HudMenuItem, Option<&StarterKitContinue>)>,
 	mut choices: MessageWriter<SpinRevealChoice>,
 ) {
@@ -489,7 +648,9 @@ mod tests {
 	}
 
 	fn continue_world(lock: bool, keyboard_nav: bool) -> World {
-		use menu_components::{HudMenu, HudMenuItem, KeyboardMenuNav, TextMenuInputLock};
+		use menu_components::{
+			HudMenu, HudMenuItem, HudOverlayMenu, KeyboardMenuNav, TextMenuInputLock,
+		};
 
 		let mut world = World::new();
 		world.insert_resource(TextMenuInputLock(lock));
@@ -498,8 +659,10 @@ mod tests {
 		let mut keys = ButtonInput::<KeyCode>::default();
 		keys.press(KeyCode::Enter);
 		world.insert_resource(keys);
-		let menu = world.spawn((HudMenu::retain(1, None), StarterKitViewport)).id();
-		world.spawn((HudMenuItem { index: 0, menu }, StarterKitContinue));
+		let menu = world
+			.spawn((HudMenu { selected: 2, item_count: 3 }, HudOverlayMenu, StarterKitViewport))
+			.id();
+		world.spawn((HudMenuItem { index: 2, menu }, StarterKitContinue));
 		world
 	}
 

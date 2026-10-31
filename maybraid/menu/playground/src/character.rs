@@ -2,37 +2,38 @@
 
 use bevy::prelude::*;
 use character_creation_menus::{
-	CharacterMenu, INVENTORY_CAPTURE_TIMEOUT, INVENTORY_LABEL, InventoryLayout, InventoryPaint,
-	MenuEvent, inventory_paint_state,
+	inventory_paint_state, CharacterMenu, InventoryLayout, InventoryPaint, MenuEvent,
+	INVENTORY_CAPTURE_TIMEOUT, INVENTORY_LABEL,
 };
-use character_items::{Inventory, catalog_key_uses_yellow_silhouette};
-use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
+use character_items::{catalog_key_uses_yellow_silhouette, Inventory};
+use character_ui_menu::{AssetThumbnailDisplay, InventoryRegion, MenuComponent};
 use item_icons::{
-	CaptureClient, IconCatalogProgress, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery,
-	ItemIconPlugin, ItemIconSystems, PoseCaptureSubjects, request_inventory_icons,
-	request_self_lubikan_icon,
+	request_inventory_icons, request_self_lubikan_icon, CaptureClient, IconCatalogProgress,
+	ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery, ItemIconPlugin, ItemIconSystems,
+	PoseCaptureSubjects,
 };
 use maybraid_character_ui_menu_renderer::{
-	CharacterHudSystems, CharacterMenuEvent, InventoryFocusHint, InventoryInteraction,
-	InventoryItemKey, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink, MenuButton,
-	MenuJustify, MenuSink, MenuThumbnailContext, OverlayClose, OverlayOpen, OverlaySelectRoot,
-	OverlaySelectViewport, RenderContext, fill_inventory_layout, fill_inventory_loading,
-	find_overlay_node, overlay_closes_on_pick, spawn_overlay_shell,
+	fill_inventory_layout, fill_inventory_loading, fill_inventory_screen, find_overlay_node,
+	overlay_closes_on_pick, spawn_overlay_shell, CharacterHudSystems, CharacterMenuEvent,
+	InventoryFocusHint, InventoryInteraction, InventoryItemKey, InventoryMenuSession,
+	MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink, MenuButton, MenuJustify, MenuSink,
+	MenuThumbnailContext, OverlayClose, OverlayOpen, OverlaySelectRoot, OverlaySelectViewport,
+	RenderContext,
 };
 use maybraid_menu_controller::MenuController;
 use maybraid_skill_map::{SkillMapSpinRevealHud, SkillMapTileMaterialPlugin};
 use menu_components::theme::{
-	CORNER_BOTTOM, CORNER_INSET, MENU_LIST_PAD, MENU_LIST_RADIUS, character_screen_grid_node,
-	menu_region_wash,
+	character_screen_grid_node, menu_region_wash, CORNER_BOTTOM, CORNER_INSET, MENU_LIST_PAD,
+	MENU_LIST_RADIUS,
 };
 use menu_components::{
-	ActiveOverlayKey, CATALOG_THUMB_PX, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu,
-	InputPromptDevice, MenuActivate, MenuFocus, MenuModalId, MenuModalLayer, MenuModalStack,
-	PANEL_ROW_GAP, PANEL_TILE_COLUMNS, ScreenBack, ShortTextChange, TEXT_YELLOW, TEXT_YELLOW_FAINT,
-	spawn_corner_action, spawn_scroll_pane,
+	spawn_corner_action, spawn_scroll_pane, ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem,
+	HudOverlayMenu, InputPromptDevice, MenuActivate, MenuFocus, MenuModalId, MenuModalLayer,
+	MenuModalStack, ScreenBack, ShortTextChange, CATALOG_THUMB_PX, PANEL_ROW_GAP,
+	PANEL_TILE_COLUMNS, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 use menu_screens::{
-	MenuScreen, MenuScreens, MenuShowRequest, SpinRevealItems, add_menu_show_systems,
+	add_menu_show_systems, MenuScreen, MenuScreens, MenuShowRequest, SpinRevealItems,
 };
 use std::time::Duration;
 use tanz_user::request_inventory_tanz_icons;
@@ -140,8 +141,27 @@ pub(crate) struct OverlayUiSyncState {
 	showing_loading: bool,
 }
 
+#[derive(Resource, Default, Clone, Copy)]
+pub(crate) struct CharacterInventorySession {
+	pub(crate) state: InventoryMenuSession,
+	rendered_section: Option<character_ui_menu::InventorySection>,
+	rendered_drawer: Option<character_ui_menu::InventoryDrawerMode>,
+}
+
+impl CharacterInventorySession {
+	pub(crate) fn remap_after_drop(&mut self, index: usize) {
+		self.state.remap_after_drop(index);
+	}
+}
+
 #[derive(Component)]
 struct CharacterPanelViewport;
+
+#[derive(Component)]
+struct CharacterPanelBody;
+
+#[derive(Component)]
+pub(crate) struct CharacterInventoryViewport;
 
 /// Left grid cell. Overlay pickers spawn here so they cannot cover the HUD.
 #[derive(Component)]
@@ -178,7 +198,11 @@ impl MenuThumbnailContext for CatalogThumbs<'_> {
 	}
 
 	fn tint_for_key(&mut self, key: u64) -> Color {
-		if catalog_key_uses_yellow_silhouette(key) { TEXT_YELLOW } else { Color::WHITE }
+		if catalog_key_uses_yellow_silhouette(key) {
+			TEXT_YELLOW
+		} else {
+			Color::WHITE
+		}
 	}
 
 	fn viewport_for_key(&mut self, _key: u64) -> Option<Entity> {
@@ -211,6 +235,7 @@ impl Plugin for CharacterScreenPlugin {
 			.init_resource::<CharacterUiSyncState>()
 			.init_resource::<OverlaySelectState>()
 			.init_resource::<OverlayUiSyncState>()
+			.init_resource::<CharacterInventorySession>()
 			.add_observer(on_overlay_open)
 			.add_observer(on_overlay_close)
 			.add_observer(on_menu_activate)
@@ -219,7 +244,12 @@ impl Plugin for CharacterScreenPlugin {
 			.add_systems(Update, discover_menu_item_icons.in_set(ItemIconSystems::Discover))
 			.add_systems(
 				Update,
-				(sync_character_ui, sync_overlay_select, sync_spin_reveal_item_icon)
+				(
+					sync_character_ui,
+					sync_inventory_overlay,
+					sync_overlay_select,
+					sync_spin_reveal_item_icon,
+				)
 					.chain()
 					.in_set(CharacterHudSystems::Sync),
 			);
@@ -337,6 +367,7 @@ fn spawn_character_ui_shell(commands: &mut Commands) -> (Entity, Entity, Entity)
 						Pickable::IGNORE,
 					));
 					grid.spawn((
+						CharacterPanelBody,
 						Node {
 							width: Val::Percent(100.0),
 							height: Val::Percent(100.0),
@@ -362,6 +393,7 @@ fn spawn_character_ui_shell(commands: &mut Commands) -> (Entity, Entity, Entity)
 			save_corner = root
 				.spawn((
 					CharacterSaveCorner,
+					GlobalZIndex(90),
 					Node {
 						position_type: PositionType::Absolute,
 						right: Val::Px(CORNER_INSET),
@@ -375,6 +407,7 @@ fn spawn_character_ui_shell(commands: &mut Commands) -> (Entity, Entity, Entity)
 			back_corner = root
 				.spawn((
 					CharacterBackCorner,
+					GlobalZIndex(90),
 					Node {
 						position_type: PositionType::Absolute,
 						left: Val::Px(CORNER_INSET),
@@ -500,6 +533,9 @@ fn sync_overlay_select(
 	prompt_device: Res<InputPromptDevice>,
 	focus: Res<InventoryFocusHint>,
 ) {
+	if overlay.open == Some(INVENTORY_LABEL) {
+		return;
+	}
 	let Ok(slot) = slots.single() else {
 		for entity in &overlays {
 			commands.entity(entity).try_despawn();
@@ -608,6 +644,148 @@ fn sync_overlay_select(
 			inventory_ready,
 		);
 	}
+}
+
+fn sync_inventory_overlay(
+	mut commands: Commands,
+	assets: Res<AssetServer>,
+	time: Res<Time>,
+	screens: Query<Entity, With<CharacterScreen>>,
+	viewports: Query<Entity, With<CharacterInventoryViewport>>,
+	sessions: Query<Ref<InventoryMenuSession>, With<CharacterInventoryViewport>>,
+	mut panel_body: Query<
+		&mut Visibility,
+		(With<CharacterPanelBody>, Without<CharacterBackCorner>),
+	>,
+	mut save_corners: Query<
+		&mut Visibility,
+		(With<CharacterSaveCorner>, Without<CharacterBackCorner>, Without<CharacterPanelBody>),
+	>,
+	mut back_corners: Query<
+		&mut Visibility,
+		(With<CharacterBackCorner>, Without<CharacterPanelBody>),
+	>,
+	menu_state: Res<CharacterMenuState>,
+	overlay: Res<OverlaySelectState>,
+	mut overlay_sync: ResMut<OverlayUiSyncState>,
+	mut remembered: ResMut<CharacterInventorySession>,
+	icons: Option<Res<ItemIconCache>>,
+	device: Res<InputPromptDevice>,
+) {
+	let open = overlay.open == Some(INVENTORY_LABEL);
+	if let Ok(mut body) = panel_body.single_mut() {
+		*body = if open { Visibility::Hidden } else { Visibility::Inherited };
+	}
+	for mut visibility in &mut save_corners {
+		*visibility = if open { Visibility::Hidden } else { Visibility::Inherited };
+	}
+	for mut visibility in &mut back_corners {
+		*visibility = if open { Visibility::Hidden } else { Visibility::Inherited };
+	}
+	if !open {
+		if let Some(session) = sessions.iter().next() {
+			remembered.state = *session;
+		}
+		if !viewports.is_empty() || overlay_sync.open == Some(INVENTORY_LABEL) {
+			for viewport in &viewports {
+				commands.entity(viewport).try_despawn();
+			}
+			overlay_sync.open = None;
+			overlay_sync.menu_dirty = false;
+			overlay_sync.wait_started = None;
+			overlay_sync.showing_loading = false;
+		}
+		return;
+	}
+	let icon_progress = overlay_icon_progress(&menu_state.0, overlay.open, icons.as_deref());
+	let session = sessions.iter().next().map(|session| *session).unwrap_or(remembered.state);
+	let open_changed = overlay_sync.open != overlay.open;
+	let menu_changed = overlay_sync.menu_dirty
+		|| menu_state.is_changed()
+		|| remembered.rendered_section != Some(session.section)
+		|| remembered.rendered_drawer != Some(session.drawer)
+		|| overlay_sync.icon_progress != icon_progress;
+	let inventory_ready = inventory_overlay_ready(
+		&menu_state.0,
+		overlay.open,
+		icons.as_deref(),
+		overlay_sync.wait_started,
+		time.elapsed(),
+	);
+	let loading_flip = overlay_sync.showing_loading && inventory_ready;
+	if !open_changed && !menu_changed && !loading_flip {
+		remembered.state = session;
+		return;
+	}
+	overlay_sync.open = overlay.open;
+	overlay_sync.menu_dirty = false;
+	overlay_sync.icon_progress = icon_progress;
+	if open_changed {
+		overlay_sync.wait_started = Some(time.elapsed());
+	}
+	let nodes = menu_state.0.menu_nodes();
+	let Some(node) = find_overlay_node(&nodes, INVENTORY_LABEL) else {
+		return;
+	};
+	let fonts = HudFonts::load(assets.as_ref());
+	let viewport = if let Some(viewport) = viewports.iter().next() {
+		viewport
+	} else {
+		let Ok(screen) = screens.single() else { return };
+		let mut viewport = Entity::PLACEHOLDER;
+		let Ok(mut screen) = commands.get_entity(screen) else { return };
+		screen.with_children(|screen| {
+			viewport = spawn_inventory_viewport(screen, remembered.state);
+		});
+		viewport
+	};
+	commands.entity(viewport).insert(CharacterInventoryViewport);
+	if inventory_ready {
+		let mut thumbnails = CatalogThumbs { icons: icons.as_deref() };
+		let session = sessions.get(viewport).map(|session| *session).unwrap_or(session);
+		fill_inventory_screen(
+			&mut commands,
+			viewport,
+			&fonts,
+			assets.as_ref(),
+			*device,
+			node,
+			menu_state.0.overlay_editable(INVENTORY_LABEL),
+			&session,
+			&mut thumbnails,
+		);
+		remembered.state = session;
+		remembered.rendered_section = Some(session.section);
+		remembered.rendered_drawer = Some(session.drawer);
+	} else {
+		commands.entity(viewport).despawn_related::<Children>();
+		fill_inventory_loading(&mut commands, viewport, &fonts);
+		remembered.state = session;
+	}
+	overlay_sync.showing_loading = !inventory_ready;
+}
+
+fn spawn_inventory_viewport(
+	parent: &mut ChildSpawnerCommands,
+	session: InventoryMenuSession,
+) -> Entity {
+	parent
+		.spawn((
+			CharacterInventoryViewport,
+			OverlaySelectRoot,
+			session,
+			Node {
+				position_type: PositionType::Absolute,
+				left: Val::Px(0.0),
+				top: Val::Px(0.0),
+				width: Val::Percent(100.0),
+				height: Val::Percent(100.0),
+				..default()
+			},
+			BackgroundColor(Color::srgba(0.08, 0.10, 0.14, 0.38)),
+			Pickable::IGNORE,
+		))
+		.id()
 }
 
 fn inventory_overlay_ready(
@@ -819,7 +997,8 @@ fn on_menu_activate(
 	}
 	match event {
 		MenuEvent::EquipInventory(index) | MenuEvent::MoveEquippedInventory { index, .. } => {
-			focus.0 = Some(InventoryItemKey { index, equipped: true });
+			focus.0 =
+				Some(InventoryItemKey { index, equipped: true, region: InventoryRegion::Equipped });
 		}
 		MenuEvent::MoveLubikan { account, .. } => {
 			focus.0 = menu_state
@@ -833,10 +1012,15 @@ fn on_menu_activate(
 						account,
 					)
 				})
-				.map(|index| InventoryItemKey { index, equipped: true });
+				.map(|index| InventoryItemKey {
+					index,
+					equipped: true,
+					region: InventoryRegion::Equipped,
+				});
 		}
 		MenuEvent::UnequipInventory(index) => {
-			focus.0 = Some(InventoryItemKey { index, equipped: false });
+			focus.0 =
+				Some(InventoryItemKey { index, equipped: false, region: InventoryRegion::Drawer });
 		}
 		_ => {}
 	}
@@ -889,7 +1073,7 @@ fn on_short_text_change(
 
 #[cfg(test)]
 mod tests {
-	use super::{CharacterEditBaseline, save_chrome};
+	use super::{save_chrome, CharacterEditBaseline};
 	use character_creation_menus::CharacterMenu;
 	use character_items::Inventory;
 
@@ -943,7 +1127,7 @@ mod tests {
 	#[test]
 	fn catalog_thumbs_use_the_self_lubikan_silhouette() -> anyhow::Result<()> {
 		use super::CatalogThumbs;
-		use character_items::{SELF_LUBIKAN_CAPTURE_LABEL, self_lubikan_catalog_key};
+		use character_items::{self_lubikan_catalog_key, SELF_LUBIKAN_CAPTURE_LABEL};
 		use item_icons::{CaptureId, ItemIconCache};
 		use maybraid_character_ui_menu_renderer::MenuThumbnailContext;
 		use menu_components::theme::TEXT_YELLOW;
@@ -976,7 +1160,7 @@ mod tests {
 	#[test]
 	fn catalog_thumbs_use_the_fisticuffs_silhouette() -> anyhow::Result<()> {
 		use super::CatalogThumbs;
-		use character_items::{FISTICUFFS_CAPTURE_LABEL, fisticuffs_catalog_key};
+		use character_items::{fisticuffs_catalog_key, FISTICUFFS_CAPTURE_LABEL};
 		use item_icons::{CaptureId, ItemIconCache};
 		use maybraid_character_ui_menu_renderer::MenuThumbnailContext;
 		use menu_components::theme::TEXT_YELLOW;
@@ -1115,3 +1299,6 @@ mod tests {
 
 #[cfg(test)]
 mod ordered_inventory_tests;
+
+#[cfg(test)]
+mod inventory_screen_tests;

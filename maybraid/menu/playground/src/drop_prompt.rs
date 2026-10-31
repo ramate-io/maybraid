@@ -14,8 +14,9 @@ use character_items::{
 	ActiveInventoryDropPolicy, Inventory, InventoryDropPolicy, InventoryDropRequest,
 	InventoryDropped, InventoryItem,
 };
-use maybraid_character_ui_menu_renderer::{CharacterMenuEvent, MenuButton, OverlaySelectViewport};
+use maybraid_character_ui_menu_renderer::{CharacterMenuEvent, InventoryMenuSession, MenuButton};
 use menu_components::theme::{HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW};
+use menu_components::InventoryHudMenu;
 use menu_components::{
 	spawn_hud_action, spawn_hud_text, ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem,
 	HudOverlayMenu, InventoryDropPromptChip, MenuModal, MenuModalDismiss, MenuModalId,
@@ -139,6 +140,16 @@ struct LiveWorldDrop<'w, 's> {
 	owners: Query<'w, 's, Entity, (With<Player>, With<InventoryUser>)>,
 }
 
+#[derive(SystemParam)]
+struct CharacterInventoryDropUi<'w, 's> {
+	menus: Query<'w, 's, &'static HudMenu, (With<InventoryHudMenu>, With<HudOverlayMenu>)>,
+	viewports: Query<'w, 's, Entity, With<crate::character::CharacterInventoryViewport>>,
+	sessions: Query<'w, 's, &'static mut InventoryMenuSession>,
+	remembered: ResMut<'w, crate::character::CharacterInventorySession>,
+	items: Query<'w, 's, (&'static HudMenuItem, &'static MenuButton<MenuEvent>)>,
+	parents: Query<'w, 's, &'static ChildOf>,
+}
+
 /// How [`LiveWorldDrop::request`] resolved a catalog confirm.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum LiveDropCommit {
@@ -188,8 +199,7 @@ fn on_catalog_drop_action(
 	mut menu_events: MessageWriter<CharacterMenuEvent<MenuEvent>>,
 	mut live: LiveWorldDrop,
 	screens: Query<(), With<CharacterScreen>>,
-	viewports: Query<&HudMenu, With<OverlaySelectViewport>>,
-	items: Query<(&HudMenuItem, &MenuButton<MenuEvent>)>,
+	mut inventory_ui: CharacterInventoryDropUi,
 ) {
 	if impulse.action != MenuAction::Drop
 		|| screens.is_empty()
@@ -202,10 +212,17 @@ fn on_catalog_drop_action(
 	if !catalog_drop_action(overlay.0, prompt.is_open()) {
 		return;
 	}
-	let Ok(menu) = viewports.get(impulse.entity) else {
+	let Ok(menu) = inventory_ui.menus.get(impulse.entity) else {
 		return;
 	};
-	let Some(index) = items.iter().find_map(|(item, button)| {
+	let Some(viewport) = character_inventory_viewport_for(
+		impulse.entity,
+		&inventory_ui.parents,
+		&inventory_ui.viewports,
+	) else {
+		return;
+	};
+	let Some(index) = inventory_ui.items.iter().find_map(|(item, button)| {
 		if item.menu == impulse.entity && item.index == menu.selected {
 			drop_index_from_event(button.0)
 		} else {
@@ -231,6 +248,7 @@ fn on_catalog_drop_action(
 		return;
 	}
 	stack.mark_consumed();
+	let previous_len = menu_state.0.inventory.as_ref().map(|inventory| inventory.items.len());
 	commit_catalog_drop(
 		index,
 		policy.0,
@@ -240,13 +258,52 @@ fn on_catalog_drop_action(
 		&mut menu_events,
 		&mut live,
 	);
+	let new_len = menu_state.0.inventory.as_ref().map(|inventory| inventory.items.len());
+	if new_len.zip(previous_len).is_some_and(|(new, previous)| new < previous) {
+		remap_character_sessions_after_drop(
+			Some(viewport),
+			&mut inventory_ui.sessions,
+			&mut inventory_ui.remembered,
+			index,
+		);
+	}
+}
+
+/// Rebase only the current character inventory session. Duplicate catalog rows
+/// and dynamic Lubikan rows are distinguished by their bag indices.
+fn remap_character_sessions_after_drop(
+	viewport: Option<Entity>,
+	sessions: &mut Query<&mut InventoryMenuSession>,
+	remembered: &mut crate::character::CharacterInventorySession,
+	dropped: usize,
+) {
+	if let Some(viewport) = viewport {
+		if let Ok(mut session) = sessions.get_mut(viewport) {
+			session.remap_after_drop(dropped);
+		}
+	}
+	remembered.remap_after_drop(dropped);
+}
+
+fn character_inventory_viewport_for(
+	entity: Entity,
+	parents: &Query<&ChildOf>,
+	viewports: &Query<Entity, With<crate::character::CharacterInventoryViewport>>,
+) -> Option<Entity> {
+	let mut current = entity;
+	loop {
+		if viewports.get(current).is_ok() {
+			return Some(current);
+		}
+		current = parents.get(current).ok()?.parent();
+	}
 }
 
 fn sync_inventory_drop_prompt_chip(
 	overlay: Res<ActiveOverlayKey>,
 	policy: Res<ActiveInventoryDropPolicy>,
 	menu_state: Res<CharacterMenuState>,
-	viewports: Query<(Entity, &HudMenu), With<OverlaySelectViewport>>,
+	viewports: Query<(Entity, &HudMenu), (With<HudOverlayMenu>, With<InventoryHudMenu>)>,
 	items: Query<(&HudMenuItem, &MenuButton<MenuEvent>)>,
 	mut chips: Query<&mut Node, With<InventoryDropPromptChip>>,
 ) {
@@ -445,6 +502,9 @@ fn on_drop_prompt_click(
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	mut menu_events: MessageWriter<CharacterMenuEvent<MenuEvent>>,
 	mut live: LiveWorldDrop,
+	viewports: Query<Entity, With<crate::character::CharacterInventoryViewport>>,
+	mut sessions: Query<&mut InventoryMenuSession>,
+	mut remembered: ResMut<crate::character::CharacterInventorySession>,
 	policy: Res<ActiveInventoryDropPolicy>,
 	mut commands: Commands,
 ) {
@@ -460,6 +520,9 @@ fn on_drop_prompt_click(
 			&mut overlay_sync,
 			&mut menu_events,
 			&mut live,
+			&viewports,
+			&mut sessions,
+			&mut remembered,
 			policy.0,
 			&mut commands,
 		);
@@ -477,6 +540,9 @@ fn on_drop_prompt_click(
 			&mut overlay_sync,
 			&mut menu_events,
 			&mut live,
+			&viewports,
+			&mut sessions,
+			&mut remembered,
 			policy.0,
 			&mut commands,
 		);
@@ -495,6 +561,9 @@ fn on_drop_prompt_nav(
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	mut menu_events: MessageWriter<CharacterMenuEvent<MenuEvent>>,
 	mut live: LiveWorldDrop,
+	viewports: Query<Entity, With<crate::character::CharacterInventoryViewport>>,
+	mut sessions: Query<&mut InventoryMenuSession>,
+	mut remembered: ResMut<crate::character::CharacterInventorySession>,
 	policy: Res<ActiveInventoryDropPolicy>,
 	mut commands: Commands,
 ) {
@@ -524,6 +593,9 @@ fn on_drop_prompt_nav(
 				&mut overlay_sync,
 				&mut menu_events,
 				&mut live,
+				&viewports,
+				&mut sessions,
+				&mut remembered,
 				policy.0,
 				&mut commands,
 			);
@@ -543,6 +615,9 @@ fn on_drop_prompt_nav(
 				&mut overlay_sync,
 				&mut menu_events,
 				&mut live,
+				&viewports,
+				&mut sessions,
+				&mut remembered,
 				policy.0,
 				&mut commands,
 			);
@@ -568,10 +643,14 @@ fn apply_drop_prompt(
 	overlay_sync: &mut OverlayUiSyncState,
 	menu_events: &mut MessageWriter<CharacterMenuEvent<MenuEvent>>,
 	live: &mut LiveWorldDrop,
+	viewports: &Query<Entity, With<crate::character::CharacterInventoryViewport>>,
+	sessions: &mut Query<&mut InventoryMenuSession>,
+	remembered: &mut crate::character::CharacterInventorySession,
 	policy: InventoryDropPolicy,
 	commands: &mut Commands,
 ) {
 	if action == DropPromptAction::Confirm {
+		let previous_len = menu_state.0.inventory.as_ref().map(|inventory| inventory.items.len());
 		if let Some(index) = prompt.index {
 			commit_catalog_drop(
 				index,
@@ -582,6 +661,15 @@ fn apply_drop_prompt(
 				menu_events,
 				live,
 			);
+			let new_len = menu_state.0.inventory.as_ref().map(|inventory| inventory.items.len());
+			if new_len.zip(previous_len).is_some_and(|(new, previous)| new < previous) {
+				remap_character_sessions_after_drop(
+					viewports.iter().next(),
+					sessions,
+					remembered,
+					index,
+				);
+			}
 		}
 	}
 	close_drop_prompt(prompt, stack, roots, commands);
@@ -656,6 +744,9 @@ fn apply_accepted_world_drops(
 	mut ui_sync: ResMut<CharacterUiSyncState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	mut menu_events: MessageWriter<CharacterMenuEvent<MenuEvent>>,
+	viewports: Query<Entity, With<crate::character::CharacterInventoryViewport>>,
+	mut sessions: Query<&mut InventoryMenuSession>,
+	mut remembered: ResMut<crate::character::CharacterInventorySession>,
 ) {
 	if screens.is_empty() || return_to.is_none_or(|return_to| !return_to.uses_live_world_player()) {
 		return;
@@ -670,6 +761,12 @@ fn apply_accepted_world_drops(
 			event.outcome.index,
 			&mut menu_state.0,
 			baseline.as_deref_mut(),
+		);
+		remap_character_sessions_after_drop(
+			viewports.iter().next(),
+			&mut sessions,
+			&mut remembered,
+			event.outcome.index,
 		);
 		ui_sync.menu_dirty = true;
 		overlay_sync.menu_dirty = true;
@@ -729,11 +826,11 @@ mod tests {
 		InventoryDropPolicy, InventoryItem, ItemColor,
 	};
 	use maybraid_character_ui_menu_renderer::{
-		CharacterMenuEvent, MenuButton, OverlaySelectViewport,
+		CharacterMenuEvent, InventoryMenuSession, MenuButton,
 	};
 	use menu_components::{
-		ActiveOverlayKey, HudMenu, HudMenuItem, MenuModalId, MenuModalLayer, MenuModalStack,
-		TextMenuInputLock,
+		ActiveOverlayKey, HudMenu, HudMenuItem, HudOverlayMenu, InventoryHudMenu, MenuModalId,
+		MenuModalLayer, MenuModalStack, TextMenuInputLock,
 	};
 	use menu_components::{MenuAction, MenuActionImpulse};
 	use player::Player;
@@ -753,6 +850,7 @@ mod tests {
 		world.init_resource::<CharacterDropPrompt>();
 		world.init_resource::<MenuModalStack>();
 		world.init_resource::<TextMenuInputLock>();
+		world.init_resource::<crate::character::CharacterInventorySession>();
 		world.insert_resource(ActiveInventoryDropPolicy(InventoryDropPolicy::PLACEHOLDER));
 		world.insert_resource(ActiveOverlayKey(Some("Inventory")));
 		world.insert_resource(CharacterMenuState::for_create(vec![
@@ -764,22 +862,23 @@ mod tests {
 		world.init_resource::<Messages<InventoryDropRequest>>();
 		world.init_resource::<Messages<CharacterMenuEvent<MenuEvent>>>();
 		world.spawn(CharacterScreen);
-		let first = world.spawn((HudMenu::new(1), OverlaySelectViewport)).id();
-		let second = world.spawn((HudMenu::new(2), OverlaySelectViewport)).id();
-		if let Some(mut menu) = world.entity_mut(second).get_mut::<HudMenu>() {
-			menu.selected = 1;
-		}
-		world.spawn((
-			HudMenuItem { menu: first, index: 0 },
-			MenuButton(MenuEvent::ToggleInventory(0)),
-		));
+		let viewport = world
+			.spawn((crate::character::CharacterInventoryViewport, InventoryMenuSession::default()))
+			.id();
+		let first = world
+			.spawn((HudMenu::new(1), InventoryHudMenu, HudOverlayMenu, ChildOf(viewport)))
+			.id();
+		let foreign_viewport = world.spawn(InventoryMenuSession::default()).id();
+		let second = world
+			.spawn((HudMenu::new(1), InventoryHudMenu, HudOverlayMenu, ChildOf(foreign_viewport)))
+			.id();
 		world.spawn((
 			HudMenuItem { menu: second, index: 0 },
-			MenuButton(MenuEvent::ToggleInventory(0)),
+			MenuButton(MenuEvent::EquipInventory(0)),
 		));
 		world.spawn((
-			HudMenuItem { menu: second, index: 1 },
-			MenuButton(MenuEvent::ToggleInventory(1)),
+			HudMenuItem { menu: first, index: 0 },
+			MenuButton(MenuEvent::EquipInventory(0)),
 		));
 		world.add_observer(on_catalog_drop_action);
 		(world, first, second)
@@ -791,24 +890,23 @@ mod tests {
 
 	#[test]
 	fn drop_action_uses_the_captured_inventory_viewport() {
-		let (mut world, _first, second) = drop_action_world();
-		send_drop_action(&mut world, second);
-		assert_eq!(world.resource::<CharacterDropPrompt>().index, Some(1));
+		let (mut world, first, _second) = drop_action_world();
+		send_drop_action(&mut world, first);
+		assert_eq!(world.resource::<CharacterDropPrompt>().index, Some(0));
 	}
 
 	#[test]
-	fn drop_action_to_another_modal_does_not_target_inventory() {
-		let (mut world, _first, _second) = drop_action_world();
-		let modal = world.spawn(HudMenu::new(1)).id();
-		send_drop_action(&mut world, modal);
+	fn drop_action_to_an_unrelated_inventory_session_does_not_target_character_bag() {
+		let (mut world, _first, second) = drop_action_world();
+		send_drop_action(&mut world, second);
 		assert!(!world.resource::<CharacterDropPrompt>().is_open());
 	}
 
 	#[test]
 	fn a_consumed_modal_action_does_not_open_the_drop_prompt() {
-		let (mut world, _first, second) = drop_action_world();
+		let (mut world, first, _second) = drop_action_world();
 		world.resource_mut::<MenuModalStack>().mark_consumed();
-		send_drop_action(&mut world, second);
+		send_drop_action(&mut world, first);
 		assert!(!world.resource::<CharacterDropPrompt>().is_open());
 	}
 

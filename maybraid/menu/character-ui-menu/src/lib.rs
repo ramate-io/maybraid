@@ -14,7 +14,8 @@ pub mod traits;
 
 pub use camera_focus::{CameraFocus, FocusRig};
 pub use node::{
-	normalize, AssetChoice, EquipmentChoice, GridCatalogChoice, ItemRow, MenuComponent, MenuNode,
+	normalize, AssetChoice, EquipmentChoice, GridCatalogChoice, InventoryControlAction,
+	InventoryDrawerMode, InventoryRegion, InventorySection, ItemRow, MenuComponent, MenuNode,
 	OrderedEquipmentRow, PreviewColor, SelectChoice, SelectGroup, StatCard, StatLine, StatTone,
 	SwatchChoice,
 };

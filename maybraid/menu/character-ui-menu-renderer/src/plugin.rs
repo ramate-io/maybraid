@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use menu_components::{
-	MenuComponentsPlugin, MenuModalSystems, TextMenuSystems, restore_short_text_editing,
+	restore_short_text_editing, MenuComponentsPlugin, MenuModalSystems, TextMenuSystems,
 };
 use std::marker::PhantomData;
 
@@ -56,6 +56,10 @@ where
 		.add_observer(emit_inventory_reorder_nav::<E>)
 		.add_observer(crate::input::consume_scoped_inventory_reorder_back)
 		.add_observer(emit_inventory_unequip_on_action::<E>)
+		.add_observer(crate::input::emit_inventory_control_on_click)
+		.add_observer(crate::input::apply_inventory_navigation_impulse)
+		.add_observer(crate::input::navigate_inventory_menu)
+		.add_observer(crate::input::emit_inventory_control_on_nav)
 		.add_observer(emit_overlay_open_on_click)
 		.add_observer(emit_overlay_close_on_click)
 		.add_systems(Update, close_overlay_on_modal_dismiss.in_set(MenuModalSystems::Apply))
@@ -67,14 +71,35 @@ where
 		)
 		.add_systems(
 			Update,
+			crate::input::consume_inventory_session_keyboard_back
+				.in_set(MenuModalSystems::Consume)
+				.before(menu_components::consume_menu_modal_back),
+		)
+		.add_systems(
+			Update,
 			(
 				emit_inventory_reorder_keyboard,
+				crate::input::emit_inventory_keyboard_navigation,
+				crate::input::emit_inventory_control_on_enter,
 				emit_hud_focus::<E>,
 				emit_hud_activate_on_enter::<E>,
 				mark_reorder_tiles,
 			)
 				.in_set(CharacterHudSystems::Input),
 		)
+		.add_systems(
+			Update,
+			(
+				crate::input::sync_inventory_focus_from_menu,
+				crate::input::sync_inventory_region_focus,
+			)
+				.chain()
+				.after(CharacterHudSystems::Sync),
+		)
 		.add_systems(Update, restore_short_text_editing.after(CharacterHudSystems::Sync));
+		app.add_systems(
+			Update,
+			crate::inventory::animate_inventory_carousel.after(CharacterHudSystems::Input),
+		);
 	}
 }

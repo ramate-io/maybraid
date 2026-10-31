@@ -47,6 +47,49 @@ pub enum MenuNav {
 	Right,
 }
 
+/// Capability marker for a HudMenu that belongs to the inventory shell.
+/// Generic menu controllers ignore inventory shortcuts unless this marker is present.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct InventoryHudMenu;
+
+/// Inventory-only shell actions routed through the owning menu controller.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InventoryNavigation {
+	PreviousSection,
+	NextSection,
+	ToggleDrawer,
+	ToggleRegion,
+	FocusDrawer,
+}
+
+#[derive(EntityEvent, Clone, Copy, Debug)]
+pub struct InventoryNavigationImpulse {
+	pub entity: Entity,
+	pub action: InventoryNavigation,
+	authorization: Option<maybraid_controllers_core::Routed<()>>,
+}
+
+impl InventoryNavigationImpulse {
+	pub fn new(entity: Entity, action: InventoryNavigation) -> Self {
+		Self { entity, action, authorization: None }
+	}
+	pub fn routed(input: maybraid_controllers_core::Routed<InventoryNavigation>) -> Self {
+		let entity = input.target().ui_entity().unwrap_or(Entity::PLACEHOLDER);
+		Self { entity, action: *input.payload(), authorization: Some(input.map(|_| ())) }
+	}
+	pub fn queue(
+		&self,
+		commands: &mut Commands,
+		action: impl FnOnce(&mut World) + Send + Sync + 'static,
+	) {
+		if let Some(input) = self.authorization {
+			input.queue(commands, move |world, _| action(world));
+		} else {
+			commands.queue(action);
+		}
+	}
+}
+
 /// Pad faces that fire [`MenuNav::Select`] (catalog equip / unequip).
 pub const MENU_SELECT_PAD: [PadButton; 2] = [PadButton::A, PadButton::Start];
 

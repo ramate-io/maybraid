@@ -334,6 +334,15 @@ pub const PROMPT_KEY_DROP: &str = "iconography/kenney/input-prompts/keyboard_e_o
 /// Kenney Double Xbox **Y** — [`maybraid_virtual_pad_controller::INVENTORY_UNEQUIP_PAD`].
 pub const PROMPT_PAD_UNEQUIP: &str = "iconography/kenney/input-prompts/xbox_button_y_outline.png";
 
+/// Kenney Xbox bumper prompts for inventory section paging.
+pub const PROMPT_PAD_PREVIOUS_SECTION: &str =
+	"iconography/kenney/input-prompts/xbox_lb_outline.png";
+pub const PROMPT_PAD_NEXT_SECTION: &str = "iconography/kenney/input-prompts/xbox_rb_outline.png";
+
+/// Kenney Xbox left-stick press prompt for changing the inventory drawer mode.
+pub const PROMPT_PAD_TOGGLE_DRAWER: &str =
+	"iconography/kenney/input-prompts/xbox_stick_l_press.png";
+
 /// Keyboard **Y** shares the pad Y glyph; the committed Kenney pack has no
 /// `keyboard_y` outline.
 pub const PROMPT_KEY_UNEQUIP: &str = PROMPT_PAD_UNEQUIP;
@@ -367,9 +376,9 @@ mod tests {
 	use bevy::prelude::*;
 
 	use super::{
+		character_screen_grid_node, equipped_pane_fill, menu_list_panel_node, menu_region_wash,
 		CHARACTER_OVERLAY_GAP, CHARACTER_PANEL_WIDTH, MENU_CLEAR, MENU_LIST_RADIUS,
-		MENU_REGION_WASH_ALPHA, TEXT_DEEP_BLUE, TEXT_YELLOW, character_screen_grid_node,
-		equipped_pane_fill, menu_list_panel_node, menu_region_wash,
+		MENU_REGION_WASH_ALPHA, TEXT_DEEP_BLUE, TEXT_YELLOW,
 	};
 
 	#[test]
