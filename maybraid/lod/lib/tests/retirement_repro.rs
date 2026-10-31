@@ -31,9 +31,9 @@ impl LodScene for RenderableProbe {
 		_: &LodRef,
 		level: LodSceneLevel,
 	) -> impl bevy::scene::Scene + 'static {
-		use bevy::scene::prelude::{bsn, template_value};
+		use bevy::scene::prelude::bsn;
 		bsn! {
-			template_value(BandMesh(level))
+			~{BandMesh(level)}
 			Mesh3d::default()
 			MeshMaterial3d::<StandardMaterial>::default()
 			Transform::default()
@@ -57,7 +57,7 @@ fn app() -> anyhow::Result<(App, Entity, Entity)> {
 	let viewer = app.world_mut().spawn((LodViewer, Transform::IDENTITY)).id();
 	let host = app.world_mut().spawn_scene(lod_host_scene_pending(
 		LodSceneLevel::High,
-		bevy::math::bounding::Aabb3d::from_min_max(Vec3::splat(-5.0), Vec3::splat(5.0)),
+		bevy::shape::Aabb3d::from_min_max(Vec3::splat(-5.0), Vec3::splat(5.0)),
 	))?;
 	let host = host.id();
 	app.world_mut().entity_mut(host).insert(RenderableProbe);

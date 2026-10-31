@@ -74,7 +74,7 @@ impl BuildingComponents for Janitorial {
 mod tests {
 	use super::*;
 	use crate::openings::Openings;
-	use bevy_math::bounding::Aabb3d;
+	use bevy_shape::Aabb3d;
 
 	#[test]
 	fn fits_minimum_closet() {

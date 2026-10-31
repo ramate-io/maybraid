@@ -4,10 +4,10 @@
 //! it intersects, updated on transform / bounds change, and removed on despawn.
 
 use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::Aabb3d;
 use bevy::math::{DVec3, Vec3};
 use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use gimme_core::{SpatialIndex, SpatialIndexQuery};
 use lod::{
 	LodHostBounds, LodRefreshSystems, LodSceneBoundsMarshaller, LodSceneHost, LodSceneHostIndex,

@@ -89,7 +89,7 @@ impl BumpOut {
 			template(move |_ctx| Ok(self.clone()))
 			template(move |_ctx| Ok(terrain_ref.clone()))
 			template(move |_ctx| Ok(material.clone()))
-			template_value(transform)
+			~{transform}
 			Visibility::default()
 			template(move |_ctx| Ok(aabb))
 			template(|_ctx| Ok(NoAutoAabb))

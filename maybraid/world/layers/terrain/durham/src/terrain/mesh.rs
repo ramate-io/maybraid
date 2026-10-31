@@ -2,8 +2,8 @@
 
 use crate::terrain::cell::{expand_aabb_xz, TerrainCellLayout};
 use crate::terrain::config::TerrainConfig;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use render_item::sdf::cpu_shot::WallFaces;
 use terrain_shaders::TerrainShader;
 

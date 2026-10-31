@@ -1,7 +1,7 @@
 //! Layer 2: footprint / ridge slabs cut by non-passage, non-aperture openings.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use building_components::panels::PanelStyle;
 
 use crate::openings::Openings;

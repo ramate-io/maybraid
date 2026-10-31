@@ -1,8 +1,8 @@
 //! Roof IR node: style + geometry + placement — fine-phase [`LodScene`] host.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Quat, Transform};
 use bevy::scene::prelude::Scene;
+use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::SceneChunk;

@@ -55,9 +55,9 @@ pub use structural_lod::{
 };
 
 use bevy::ecs::template::template;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::{cull_offset_bands_from_factor, lod_host_scene_pending, SceneChunk};
@@ -514,7 +514,7 @@ where
 	(
 		lod_host_scene_pending(level, bounds),
 		bsn! {
-			template_value(instance)
+			~{instance}
 			template(move |_ctx| Ok(host_for_template.clone()))
 		},
 	)
@@ -544,7 +544,7 @@ where
 		.spawn_scene((
 			pending,
 			bsn! {
-				template_value(transform)
+				~{transform}
 				Visibility::default()
 			},
 		))
@@ -612,7 +612,7 @@ where
 		.spawn_scene((
 			pending,
 			bsn! {
-				template_value(transform)
+				~{transform}
 				Visibility::default()
 			},
 		))

@@ -15,8 +15,8 @@
 //! volumes. Scene-host refresh uses Gimme, not Host colliders.
 
 use avian3d::prelude::{Collider, CollisionLayers, LayerMask, PhysicsLayer, SpatialQueryFilter};
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 
 use crate::AvianLodSceneBoundsMarshaller;
 use lod::LodSceneBoundsMarshaller;

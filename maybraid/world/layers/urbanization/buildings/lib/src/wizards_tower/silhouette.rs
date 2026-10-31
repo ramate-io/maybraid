@@ -3,7 +3,7 @@
 use std::sync::OnceLock;
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 
 /// Shared unit cylinder silhouette (must be initialized by [`TowerSilhouettePlugin`]).
 #[derive(Resource, Debug, Clone)]
@@ -49,7 +49,7 @@ pub fn silhouette_scene(
 	bsn! {
 		Mesh3d({mesh})
 		MeshMaterial3d::<StandardMaterial>({material})
-		template_value(transform)
+		~{transform}
 		Visibility::Inherited
 	}
 }

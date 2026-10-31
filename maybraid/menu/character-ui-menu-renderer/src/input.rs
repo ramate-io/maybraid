@@ -16,7 +16,7 @@ use crate::widgets::{
 };
 
 pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	lock: Res<TextMenuInputLock>,
 	buttons: Query<&MenuButton<E>>,
 	keys: Query<&InventoryItemKey>,
@@ -86,7 +86,7 @@ pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
 }
 
 pub fn emit_overlay_open_on_click(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	lock: Res<TextMenuInputLock>,
 	keys: Query<&OpenSelectKey>,
 	scoped: Query<(), With<ScopedMenuSession>>,
@@ -102,7 +102,7 @@ pub fn emit_overlay_open_on_click(
 }
 
 pub fn emit_overlay_close_on_click(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	lock: Res<TextMenuInputLock>,
 	closes: Query<(), With<CloseOverlaySelect>>,
 	scoped: Query<(), With<ScopedMenuSession>>,
@@ -461,7 +461,11 @@ pub fn mark_reorder_tiles(
 			.get(item.menu)
 			.map(|s| s.interaction)
 			.unwrap_or_else(|_| {
-				if scoped.contains(item.menu) { InventoryInteraction::Browse } else { *interaction }
+				if scoped.contains(item.menu) {
+					InventoryInteraction::Browse
+				} else {
+					*interaction
+				}
 			})
 			.reordering();
 		let want = selected == Some(key.index) && key.equipped;
@@ -493,13 +497,13 @@ pub fn close_overlay_on_modal_dismiss(
 
 #[cfg(test)]
 mod tests {
-	use super::{OverlaySelectRoot, close_overlay_on_modal_dismiss};
+	use super::{close_overlay_on_modal_dismiss, OverlaySelectRoot};
 	use crate::event::OverlayClose as OverlayCloseEvent;
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
 	use menu_components::{
-		MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack, ScreenBackPressed,
-		consume_menu_modal_back, consume_screen_back,
+		consume_menu_modal_back, consume_screen_back, MenuModalDismiss, MenuModalId,
+		MenuModalLayer, MenuModalStack, ScreenBackPressed,
 	};
 	use menu_components::{MenuNav, MenuNavPad};
 
@@ -693,8 +697,8 @@ mod scoped_tests {
 		hits.0.push((event.entity, event.choice));
 	}
 	#[test]
-	fn independent_reorder_sessions_target_stable_items_and_cleanup_only_the_selected_menu()
-	-> anyhow::Result<()> {
+	fn independent_reorder_sessions_target_stable_items_and_cleanup_only_the_selected_menu(
+	) -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.init_resource::<InventoryInteraction>();
 		world.init_resource::<InventoryFocusHint>();
@@ -750,16 +754,12 @@ mod scoped_tests {
 		world.trigger(MenuActionImpulse::new(second, MenuAction::Unequip));
 		world.flush();
 		assert_eq!(world.resource::<Hits>().0.last(), Some(&(selected, 30)));
-		assert!(
-			world
-				.get::<InventoryMenuSession>(second)
-				.is_some_and(|s| s.interaction == InventoryInteraction::Browse)
-		);
-		assert!(
-			world
-				.get::<InventoryMenuSession>(first)
-				.is_some_and(|s| s.interaction.reordering() == Some(7))
-		);
+		assert!(world
+			.get::<InventoryMenuSession>(second)
+			.is_some_and(|s| s.interaction == InventoryInteraction::Browse));
+		assert!(world
+			.get::<InventoryMenuSession>(first)
+			.is_some_and(|s| s.interaction.reordering() == Some(7)));
 		assert!(world.get::<HudMenuNavLocked>(first).is_some());
 		assert!(world.get::<HudMenuNavLocked>(second).is_none());
 		assert_eq!(world.resource::<InventoryInteraction>().reordering(), Some(99));

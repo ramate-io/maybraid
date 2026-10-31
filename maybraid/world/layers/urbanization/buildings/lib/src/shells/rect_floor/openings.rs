@@ -1,7 +1,7 @@
 //! Wall opening resolution: positioned RectInset per cardinal side.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb3d;
 
 use crate::openings::{MappedOpenings, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::RectInset;

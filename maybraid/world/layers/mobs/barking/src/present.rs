@@ -2,8 +2,8 @@
 
 use std::time::Duration;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use bevy::time::common_conditions::on_timer;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};

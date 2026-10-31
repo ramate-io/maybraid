@@ -383,7 +383,7 @@ mod tests {
 		let expected_large = 0.04 * (0.1_f32).sqrt();
 		assert!(
 			(f_large - expected_large).abs() < 1e-4,
-			"10× radius with √ power: got {f_large}, want ~{expected_large}"
+			"10× radius with √ power: got {f_large}, want expected_large"
 		);
 		let f_linear = scale_noise_freq(0.04, NOISE_FREQ_REF_RADIUS * 10.0, 1.0);
 		assert!(

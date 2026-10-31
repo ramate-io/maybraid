@@ -81,8 +81,8 @@ impl ClippedRectangularStrip {
 mod tests {
 	use super::*;
 	use crate::openings::{Opening, OpeningId, OpeningLabel};
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::{Vec2, Vec3};
+	use bevy_shape::Aabb3d;
 
 	#[test]
 	fn empty_openings_yields_solid_strip() {

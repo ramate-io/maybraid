@@ -17,7 +17,7 @@ pub use ownership::{BoundaryOwnershipEntry, BoundaryOwnershipStatus};
 pub use region::BoundaryRegionList;
 pub use thickness::BoundaryThicknessEntry;
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use face::FaceKind as Face;
 
 /// Failure modes for [`CellConstraints::subset`].
@@ -171,7 +171,8 @@ impl CellConstraints {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::{bounding::Aabb2d, Vec2, Vec3};
+	use bevy_math::{Vec2, Vec3};
+	use bevy_shape::Aabb2d;
 
 	#[test]
 	fn subset_rejects_uncontained_child() -> anyhow::Result<()> {

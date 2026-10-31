@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use std::sync::Arc;
 
 #[cfg(test)]
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 use clap::Args;
 use lod::lod_ref::LodRef;
 #[cfg(test)]

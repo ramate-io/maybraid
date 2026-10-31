@@ -10,13 +10,11 @@
 // self-shadow ray.
 //---------------------------------------------------------
 
-#import bevy_pbr::{
-    forward_io::VertexOutput,
-    mesh_view_bindings::view,
-    pbr_fragment::pbr_input_from_vertex_output,
-    pbr_functions as fns,
-}
-#import bevy_core_pipeline::tonemapping::tone_mapping
+import bevy_pbr::render::forward_io::VertexOutput;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::pbr_fragment::pbr_input_from_vertex_output;
+import bevy_pbr::render::pbr_functions as fns;
+import bevy_core_pipeline::tonemapping::tone_mapping;
 
 struct UrbanSurfaceUniform {
     colors: array<vec4<f32>, 8>,
@@ -27,7 +25,7 @@ struct UrbanSurfaceUniform {
     _pad: vec3<u32>,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> material: UrbanSurfaceUniform;
 
 const KIND_STUCCO: u32 = 0u;
@@ -245,8 +243,8 @@ const POM_REFINE_STEPS: i32 = 5;
 const RELIEF_NORMAL_EPS_M: f32 = 0.006;
 
 fn relief_hash(p: vec2<i32>, seed: u32) -> u32 {
-    var v = bitcast<u32>(p.x) * 0x8da6b343u
-          ^ bitcast<u32>(p.y) * 0xd8163841u ^ seed;
+    var v = (bitcast<u32>(p.x) * 0x8da6b343u)
+          ^ (bitcast<u32>(p.y) * 0xd8163841u) ^ seed;
     v = (v ^ (v >> 16u)) * 0x7feb352du;
     v = (v ^ (v >> 15u)) * 0x846ca68bu;
     return v ^ (v >> 16u);

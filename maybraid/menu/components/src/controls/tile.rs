@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use bevy::text::{Justify, LineBreak, LineHeight, TextBounds, TextSpan};
 use bevy::ui::widget::ViewportNode;
+use bevy::ui_widgets::Button;
 
 use crate::theme::{
 	CATALOG_THUMB_PX, MENU_CLEAR, OBJECTIVE_MARKER_BORDER, OBJECTIVE_MARKER_RADIUS, PANEL_CHIP_GAP,
@@ -85,6 +86,7 @@ pub fn spawn_asset_tile(
 	parent
 		.spawn((
 			Button,
+			bevy::picking::hover::Hovered::default(),
 			HoverTile { equipped: selected, preserve_fill: false, face },
 			extra,
 			tile_node(),
@@ -131,6 +133,7 @@ pub fn spawn_grid_catalog_tile(
 	let thumb_px = if thumb_px > 0.0 { thumb_px } else { CATALOG_THUMB_PX };
 	let mut tile = parent.spawn((
 		Button,
+		bevy::picking::hover::Hovered::default(),
 		HoverTile { equipped: selected, preserve_fill: false, face },
 		extra,
 		tile_node(),
@@ -325,7 +328,8 @@ pub fn sync_hover_tiles(
 		Entity,
 		&HoverTile,
 		Option<&HudMenuItem>,
-		Option<&Interaction>,
+		Option<&bevy::picking::hover::Hovered>,
+		Has<bevy::ui::Pressed>,
 		Option<&ReorderMark>,
 		Option<&mut Outline>,
 		&mut Node,
@@ -339,7 +343,8 @@ pub fn sync_hover_tiles(
 		entity,
 		tile,
 		item,
-		interaction,
+		hovered,
+		pressed,
 		reorder,
 		mut outline,
 		mut node,
@@ -349,7 +354,7 @@ pub fn sync_hover_tiles(
 	{
 		let focused = item
 			.is_some_and(|item| menus.get(item.menu).is_ok_and(|menu| menu.selected == item.index));
-		let hovered = matches!(interaction, Some(Interaction::Hovered | Interaction::Pressed));
+		let hovered = hovered.is_some_and(|hovered| hovered.get()) || pressed;
 		let live = focused || hovered;
 		if reorder.is_some() {
 			node.border = UiRect::all(Val::Px(TILE_BORDER));
@@ -476,6 +481,33 @@ mod tests {
 		assert_eq!(PANEL_TILE_COLUMNS, 3);
 		assert_eq!(tile_grid_columns(PANEL_TILE_COLUMNS).len(), 1);
 		assert_eq!(tile_node().width, Val::Percent(100.0));
+	}
+
+	#[test]
+	fn pointer_hover_and_press_keep_tile_highlighted_until_both_clear(
+	) -> Result<(), bevy::ecs::system::RunSystemError> {
+		let mut world = World::new();
+		let tile = world
+			.spawn((
+				HoverTile { equipped: false, preserve_fill: false, face: TEXT_YELLOW },
+				Node::default(),
+				BorderColor::all(Color::NONE),
+				BackgroundColor(Color::NONE),
+				bevy::picking::hover::Hovered(true),
+			))
+			.id();
+		world.run_system_once(sync_hover_tiles)?;
+		assert_eq!(world.get::<BackgroundColor>(tile).map(|color| color.0), Some(TEXT_YELLOW));
+
+		world.entity_mut(tile).insert(bevy::ui::Pressed);
+		world.entity_mut(tile).insert(bevy::picking::hover::Hovered(false));
+		world.run_system_once(sync_hover_tiles)?;
+		assert_eq!(world.get::<BackgroundColor>(tile).map(|color| color.0), Some(TEXT_YELLOW));
+
+		world.entity_mut(tile).remove::<bevy::ui::Pressed>();
+		world.run_system_once(sync_hover_tiles)?;
+		assert_eq!(world.get::<BackgroundColor>(tile).map(|color| color.0), Some(Color::NONE));
+		Ok(())
 	}
 
 	#[test]

@@ -21,12 +21,12 @@ use bevy::{
 };
 use vegetation_components::CanopyShadowMode;
 
-/// Registers embedded **`leaf_material.wgsl`** and [`MaterialPlugin`] for [`LeafMaterial`].
+/// Registers embedded **`leaf_material.wesl`** and [`MaterialPlugin`] for [`LeafMaterial`].
 pub struct LeafMaterialPlugin;
 
 impl Plugin for LeafMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "leaf_material.wgsl");
+		embedded_asset!(app, "leaf_material.wesl");
 		app.add_plugins(MaterialPlugin::<LeafMaterial>::default());
 		app.add_systems(PostUpdate, disable_leaf_shadow_casters);
 	}
@@ -59,11 +59,11 @@ impl Default for LeafMaterial {
 
 impl Material for LeafMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "leaf_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "leaf_material.wesl").into()
 	}
 
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "leaf_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "leaf_material.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
@@ -92,7 +92,7 @@ impl Material for LeafMaterial {
 	}
 }
 
-/// Cheese / sway LOD mirrored from `leaf_material.wgsl`.
+/// Cheese / sway LOD mirrored from `leaf_material.wesl`.
 ///
 /// `view_dist` is centroid meters divided by ball radius. Cheese stays on
 /// while that ratio is below [`LEAF_MID_DIST`]. Keep this in lockstep with

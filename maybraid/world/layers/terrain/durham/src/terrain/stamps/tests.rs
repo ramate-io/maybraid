@@ -7,8 +7,8 @@ use crate::terrain::stamps::plateau::{
 use crate::terrain::stamps::shared::{leaf_selected, LeafAabbs};
 use crate::terrain::stamps::valley::{ValleyLowPassControllerCell, ValleyLowPassControllerLayout};
 use anyhow::{bail, Result};
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::Vec3;
+use bevy::shape::{Aabb3d, IntersectsVolume};
 use lod::gen::Id;
 
 fn assert_tiles_parent(parent: Aabb3d, leaves: &[Aabb3d]) -> Result<()> {

@@ -1,7 +1,7 @@
 //! Regular XZ host lattice and overlapping query regions.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 
 /// Regular XZ lattice used by the index and fill production-path microbenches.
 #[derive(Clone, Copy, Debug)]

@@ -1,7 +1,7 @@
 //! Unit tests for [`super::LivableApartment`].
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use building_components::{BuildingComponents, Layer};
 use lod::scene::LodSceneLevel;
 use procedural_common::{aabb2_area, NoiseParams};

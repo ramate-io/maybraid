@@ -84,11 +84,11 @@ mod tests {
 			if !matches!(level, LodSceneLevel::High) {
 				return Layers::new();
 			}
-			let host = bevy::math::bounding::Aabb3d::from_min_max(
+			let host = bevy::shape::Aabb3d::from_min_max(
 				bevy::math::Vec3::ZERO,
 				bevy::math::Vec3::new(8.0, 3.5, 6.0),
 			);
-			let band = bevy::math::bounding::Aabb3d::from_min_max(
+			let band = bevy::shape::Aabb3d::from_min_max(
 				bevy::math::Vec3::new(1.0, 0.0, 0.0),
 				bevy::math::Vec3::new(5.4, 3.5, 0.8),
 			);

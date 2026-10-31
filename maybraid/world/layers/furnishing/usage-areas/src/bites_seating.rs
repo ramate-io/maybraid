@@ -1,7 +1,7 @@
 //! Sit-down pocket → communal tables with wide spacing.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
+use bevy::shape::Aabb3d;
 use building_components::furniture::abutment::local_scale_for_yaw;
 use building_components::{FurnitureNode, FurnitureUsageNode, Placement};
 

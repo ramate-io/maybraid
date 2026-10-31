@@ -1,7 +1,7 @@
 //! Shared ~2 m square shelf towers, floor-to-ceiling partitions, leftover fill.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
+use bevy::shape::Aabb3d;
 use building_components::{FurnitureAbutment, FurnitureNode};
 
 use crate::bites_seating::BitesSeatingUsage;

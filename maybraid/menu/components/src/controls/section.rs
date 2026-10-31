@@ -1,6 +1,7 @@
 //! Overlay-opening section header.
 
 use bevy::prelude::*;
+use bevy::ui_widgets::Button;
 
 use crate::theme::{PANEL_HEADER_FONT_SIZE, TEXT_YELLOW};
 
@@ -37,6 +38,7 @@ pub fn spawn_section_header(
 	parent
 		.spawn((
 			Button,
+			bevy::picking::hover::Hovered::default(),
 			OverlayHeader,
 			OverlayHeaderKey(label),
 			CursorRow,
@@ -66,7 +68,13 @@ pub struct CursorRow;
 pub fn sync_hud_focus_tags(
 	active: Res<ActiveOverlayKey>,
 	rows: Query<
-		(&Children, Option<&HudMenuItem>, Option<&OverlayHeaderKey>, Option<&Interaction>),
+		(
+			&Children,
+			Option<&HudMenuItem>,
+			Option<&OverlayHeaderKey>,
+			Option<&bevy::picking::hover::Hovered>,
+			Has<bevy::ui::Pressed>,
+		),
 		Or<(With<CursorRow>, With<OverlayHeader>)>,
 	>,
 	menus: Query<&HudMenu>,
@@ -76,11 +84,11 @@ pub fn sync_hud_focus_tags(
 	mut backgrounds: Query<&mut BackgroundColor, With<FocusTag>>,
 	mut colors: Query<&mut TextColor>,
 ) {
-	for (row_children, item, key, interaction) in &rows {
+	for (row_children, item, key, hovered, pressed) in &rows {
 		let focused = item
 			.is_some_and(|item| menus.get(item.menu).is_ok_and(|menu| menu.selected == item.index));
 		let overlay = key.is_some_and(|key| active.0 == Some(key.0));
-		let hovered = matches!(interaction, Some(Interaction::Hovered | Interaction::Pressed));
+		let hovered = hovered.is_some_and(|hovered| hovered.get()) || pressed;
 		let show = focused || overlay || hovered;
 		let Some(tag) = first_focus_tag(row_children, &tags) else {
 			continue;

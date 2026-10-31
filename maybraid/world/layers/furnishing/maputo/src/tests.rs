@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
+use bevy::shape::Aabb3d;
 use building_components::FurnitureNode;
 use buildings::{Confines, Fit};
 use durham::Durham;

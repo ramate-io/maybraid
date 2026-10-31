@@ -1,7 +1,7 @@
 //! [`LodNode`] drivers that produce ephemeral [`super::LodRef`]s.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 
 use super::LodRef;
 

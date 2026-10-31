@@ -1,6 +1,6 @@
 //! Shared presentable fill for a walled private room with an authored door.
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use building_components::{LabelNode, LabelStyle};
 
 use crate::fit::{Confines, FillRegion, SpaceKind};

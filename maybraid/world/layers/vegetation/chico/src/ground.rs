@@ -28,9 +28,9 @@ fn cascade_chunk(surface: &TerrainWithPads) -> (Vec3, Vec3) {
 mod tests {
 	use std::sync::Arc;
 
-	use bevy::math::bounding::Aabb3d;
 	use bevy::math::Vec3;
 	use bevy::prelude::World;
+	use bevy::shape::Aabb3d;
 	use durham::{BaseTerrainNoise, Terrain, TerrainCellLayout, TerrainConfig, TerrainMeshBuilder};
 	use lod::gen::Id;
 	use lod::hcsg::HcsgStorage;

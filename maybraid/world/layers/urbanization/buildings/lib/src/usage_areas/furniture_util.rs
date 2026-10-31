@@ -1,7 +1,7 @@
 //! Shared furniture placement helpers for usage-area fills.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use building_components::furniture::{
 	FurnitureGeometry, FurnitureNode, FurnitureUsage, FurnitureUsageNode,
 };
@@ -303,7 +303,7 @@ pub fn occasional_chest_in_confines(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::bounding::Aabb3d;
+	use bevy_shape::Aabb3d;
 	use building_components::FurnitureGeometry;
 
 	#[test]

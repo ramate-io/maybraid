@@ -11,7 +11,7 @@
 
 use bevy::math::Vec3;
 use bevy::prelude::{Children, Component, Transform, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 
 /// Reveal internal confines when viewer distance ≤ this × confine radius.
 pub const INTERNAL_REVEAL_FACTOR: f32 = 5.0;
@@ -85,7 +85,7 @@ pub fn confined_scene(
 ) -> impl Scene + 'static {
 	let children: Vec<Box<dyn Scene>> = vec![Box::new(content)];
 	bsn! {
-		template_value(confines)
+		~{confines}
 		Transform::default()
 		Visibility::Inherited
 		Children [ {children} ]

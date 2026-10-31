@@ -701,7 +701,8 @@ pub fn rest_pose_fisticuffs_arms_skins(
 					true,
 				);
 				for member in list.iter() {
-					if parts.get(member).is_ok_and(|part| FisticuffsArmMask::hides_part(part.slot)) {
+					if parts.get(member).is_ok_and(|part| FisticuffsArmMask::hides_part(part.slot))
+					{
 						commands.entity(member).try_insert(FisticuffsArmsHidden);
 					}
 				}
@@ -779,7 +780,7 @@ fn place_cross_in_corner(
 		let Some(mesh) = meshes.get(&handle.0) else {
 			return;
 		};
-		let Some(local) = mesh.compute_aabb() else {
+		let Some(local) = mesh.get_aabb() else {
 			return;
 		};
 		let min = Vec3::from(local.min());
@@ -1234,7 +1235,9 @@ mod tests {
 		// Once the asset and arm isolation are ready, the masked face stays
 		// hidden; unrelated Hidden nodes are still repaired.
 		app.world_mut().entity_mut(root).insert(FisticuffsArmsBindPose);
-		app.world_mut().entity_mut(face).insert((Visibility::Hidden, FisticuffsArmsHidden));
+		app.world_mut()
+			.entity_mut(face)
+			.insert((Visibility::Hidden, FisticuffsArmsHidden));
 		app.world_mut().entity_mut(hidden_child).insert(Visibility::Hidden);
 		let late_part = app.world_mut().spawn((Visibility::Hidden, ChildOf(root))).id();
 		for _ in 0..3 {

@@ -1,6 +1,6 @@
 //! [`GenerationScheme`] for [`SelectedUrbanization`] and its producer channel.
 
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext};
 

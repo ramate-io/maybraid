@@ -1,8 +1,8 @@
 //! Shared fixtures for chunk-entity tracker tests.
 
 use anyhow::{anyhow, Result};
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use lod_cascade::{Cascade, Chunk};
 
 use crate::cascade_production::{

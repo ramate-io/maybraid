@@ -1,6 +1,6 @@
 //! Parameterized (noise-sampled) knobs + deterministic fit for [`super::BitesStall`].
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use building_components::LabelStyle;
 use procedural_common::{NoiseConfig, NoiseParams, OptionalFaceBand};
 

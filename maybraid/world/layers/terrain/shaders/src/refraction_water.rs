@@ -5,12 +5,12 @@ use bevy::{
 	shader::ShaderRef,
 };
 
-/// Registers the embedded WGSL and [`MaterialPlugin`] for [`RefractionWater`].
+/// Registers the embedded WESL and [`MaterialPlugin`] for [`RefractionWater`].
 pub struct RefractionWaterPlugin;
 
 impl Plugin for RefractionWaterPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "refraction_water.wgsl");
+		embedded_asset!(app, "refraction_water.wesl");
 		app.add_plugins(MaterialPlugin::<RefractionWater>::default());
 	}
 }
@@ -63,7 +63,7 @@ impl RefractionWater {
 
 impl Material for RefractionWater {
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "refraction_water.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "refraction_water.wesl").into()
 	}
 
 	fn reads_view_transmission_texture(&self) -> bool {
@@ -109,7 +109,7 @@ mod tests {
 	#[test]
 	fn fragment_shader_ref_matches_embedded_asset_path() {
 		let expected =
-			concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "refraction_water.wgsl");
+			concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "refraction_water.wesl");
 		match <RefractionWater as Material>::fragment_shader() {
 			ShaderRef::Path(p) => assert_eq!(p.to_string(), expected),
 			ShaderRef::Default => panic!("unexpected Default shader ref"),
@@ -118,11 +118,11 @@ mod tests {
 	}
 
 	#[test]
-	fn embedded_wgsl_registers_with_asset_plugin() {
+	fn embedded_wesl_registers_with_asset_plugin() {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins);
 		app.add_plugins(AssetPlugin::default());
-		embedded_asset!(app, "refraction_water.wgsl");
+		embedded_asset!(app, "refraction_water.wesl");
 		app.update();
 	}
 }

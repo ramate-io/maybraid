@@ -1,8 +1,8 @@
 //! 50 m furniture cells. These are the furniture [`lod::LodSceneHost`]s.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::{EulerRot, Vec3};
 use bevy::prelude::Transform;
+use bevy::shape::Aabb3d;
 use building_components::{FurnitureNode, Placement};
 use lod::gen::Id;
 
@@ -123,7 +123,7 @@ pub fn intersects_xz(a: Aabb3d, b: Aabb3d) -> bool {
 
 #[cfg(test)]
 mod tests {
-	use bevy::math::bounding::IntersectsVolume;
+	use bevy::shape::IntersectsVolume;
 
 	use super::*;
 

@@ -33,9 +33,9 @@ impl PlanAabb {
 		)
 	}
 
-	/// Plan footprint as [`bevy_math::bounding::Aabb2d`] (\(x → X\), \(y → Z\)).
-	pub fn to_aabb2(self) -> bevy_math::bounding::Aabb2d {
-		bevy_math::bounding::Aabb2d {
+	/// Plan footprint as [`bevy_shape::Aabb2d`] (\(x → X\), \(y → Z\)).
+	pub fn to_aabb2(self) -> bevy_shape::Aabb2d {
+		bevy_shape::Aabb2d {
 			min: Vec2::new(self.min_x, self.min_z),
 			max: Vec2::new(self.max_x, self.max_z),
 		}

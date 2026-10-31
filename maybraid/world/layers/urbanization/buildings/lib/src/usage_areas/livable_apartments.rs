@@ -287,7 +287,7 @@ fn singleton_host(
 mod tests {
 	use super::*;
 	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
-	use bevy_math::bounding::Aabb3d;
+	use bevy_shape::Aabb3d;
 	use building_components::Layer;
 
 	fn host_with_shafts_and_passage() -> Confines {

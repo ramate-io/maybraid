@@ -3,8 +3,8 @@
 //! v1: `cuts_slab` openings that erase enough of the annulus omit the whole
 //! piece. Positioned polygonal bites are not supported by ApproximatedCircle.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 
 use crate::openings::Openings;
 use crate::paneling::approximated_circle::ApproximatedCircle;

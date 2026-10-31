@@ -4,8 +4,8 @@
 //! keep their own work: [`super::generation::Generated`] never reads results;
 //! [`super::presentation::Presented`] keeps hosts, cursor, and retirement.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
+use bevy::shape::Aabb3d;
 
 use super::bounds::{HcsgClass, HcsgRegions};
 use super::context::GenerationScheme;
@@ -101,8 +101,8 @@ impl HcsgRequest {
 
 #[cfg(test)]
 mod tests {
-	use bevy::math::bounding::Aabb3d;
 	use bevy::math::Vec3;
+	use bevy::shape::Aabb3d;
 
 	use crate::gen::{Id, OriginalId};
 	use crate::hcsg::demand::SubscriptionId;

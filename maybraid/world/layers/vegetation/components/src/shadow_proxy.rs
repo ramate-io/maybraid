@@ -9,7 +9,7 @@
 
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use lod::scene::LodSceneLevel;
 
 use crate::foliage::geometry::FoliageGeometry;
@@ -96,7 +96,7 @@ pub fn proxy_render_layers() -> RenderLayers {
 pub fn posed_shadow_proxy(transform: Transform) -> impl Scene + 'static {
 	bsn! {
 		CanopyShadowProxy
-		template_value(transform)
+		~{transform}
 		Visibility::Inherited
 	}
 }

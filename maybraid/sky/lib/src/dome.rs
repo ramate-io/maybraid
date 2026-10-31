@@ -93,11 +93,11 @@ impl Default for SkyDomeMaterial {
 
 impl Material for SkyDomeMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "dome.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "dome.wesl").into()
 	}
 
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "dome.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "dome.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
@@ -131,7 +131,7 @@ pub struct SkyDomeMaterialPlugin;
 
 impl Plugin for SkyDomeMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "dome.wgsl");
+		embedded_asset!(app, "dome.wesl");
 		app.init_asset::<SkyDomeMaterial>();
 		if app.is_plugin_added::<bevy::render::RenderPlugin>() {
 			app.add_plugins(MaterialPlugin::<SkyDomeMaterial>::default());

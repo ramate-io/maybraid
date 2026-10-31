@@ -1,7 +1,7 @@
 //! Animated bounds envelopes for Bray and sleep clips (rig sampling).
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Vec3;
+use bevy::shape::Aabb3d;
 use character_animations::animations::{
 	EpiphantBray, EpiphantSleepEnter, EpiphantSleepHold, EpiphantWake,
 };

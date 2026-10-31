@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Scene};
+use bevy::shape::Aabb3d;
 
 use crate::gen::{Id, Version};
 use crate::lod_ref::LodRef;

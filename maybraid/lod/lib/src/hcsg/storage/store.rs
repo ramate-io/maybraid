@@ -9,8 +9,8 @@ use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard, Try
 #[cfg(debug_assertions)]
 use std::sync::{Mutex, MutexGuard};
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
+use bevy::shape::Aabb3d;
 
 use crate::gen::Id;
 
@@ -95,9 +95,7 @@ impl<T> TypedStore<T> {
 		self.nodes.write().unwrap_or_else(PoisonError::into_inner)
 	}
 
-	pub(in crate::hcsg) fn try_read(
-		&self,
-	) -> Result<RwLockReadGuard<'_, NodeStore<Arc<T>>>, Busy> {
+	pub(in crate::hcsg) fn try_read(&self) -> Result<RwLockReadGuard<'_, NodeStore<Arc<T>>>, Busy> {
 		match self.nodes.try_read() {
 			Ok(guard) => Ok(guard),
 			Err(TryLockError::Poisoned(poisoned)) => Ok(poisoned.into_inner()),

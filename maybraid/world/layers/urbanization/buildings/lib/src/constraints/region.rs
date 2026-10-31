@@ -1,6 +1,7 @@
 //! Boundary-local region lists.
 
-use bevy_math::{bounding::Aabb2d, Vec2};
+use bevy_math::Vec2;
+use bevy_shape::Aabb2d;
 
 use crate::constraints::face::FACE_EPS;
 

@@ -1,7 +1,7 @@
 //! Typed spatial index composing [`SpatialIndex`](super::SpatialIndex) over [`SpatialStore`](super::store::SpatialStore).
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::DVec3;
+use bevy_shape::Aabb3d;
 
 use crate::error::SpatialIndexError;
 use crate::spatial_index::grid::Level;

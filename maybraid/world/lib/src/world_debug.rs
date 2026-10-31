@@ -211,16 +211,16 @@ fn log_player_lifecycle(
 	let frame_count = frame.elapsed().as_secs_f32() * 60.0;
 	if frame_count >= 100.0 && frame_count <= 180.0 {
 		for entity in &added {
-			eprintln!("[LIFECYCLE] frame~{:.0} Added<WorldPlayer>: {:?}", frame_count, entity);
+			eprintln!("[LIFECYCLE] frame:.0 Added<WorldPlayer>: {:?}", frame_count, entity);
 		}
 		for entity in removed.read() {
 			eprintln!(
-				"[LIFECYCLE] frame~{:.0} RemovedComponents<WorldPlayer>: {:?}",
+				"[LIFECYCLE] frame:.0 RemovedComponents<WorldPlayer>: {:?}",
 				frame_count, entity
 			);
 		}
 		if existing.is_empty() {
-			eprintln!("[LIFECYCLE] frame~{:.0} No WorldPlayer entities exist!", frame_count);
+			eprintln!("[LIFECYCLE] frame:.0 No WorldPlayer entities exist!", frame_count);
 		}
 	}
 }

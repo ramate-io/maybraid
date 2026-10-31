@@ -3,7 +3,7 @@
 use bevy::prelude::{
 	Children, Handle, Mesh, Mesh3d, MeshMaterial3d, StandardMaterial, Transform, Visibility,
 };
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use lod::LodLazyPending;
 use material_ref::{MaterialRef, MaterialRefRoot};
 
@@ -27,7 +27,7 @@ pub fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scen
 	(
 		child,
 		bsn! {
-			template_value(transform)
+			~{transform}
 		},
 	)
 }
@@ -40,7 +40,7 @@ pub fn posed_mesh(
 	bsn! {
 		Mesh3d({mesh})
 		MeshMaterial3d::<StandardMaterial>({material})
-		template_value(transform)
+		~{transform}
 		Visibility::default()
 	}
 }
@@ -55,9 +55,9 @@ pub fn posed_mesh_material_ref(
 	bsn! {
 		Mesh3d({mesh})
 		MeshMaterial3d::<StandardMaterial>({placeholder})
-		template_value(MaterialRefRoot(material))
+		~{MaterialRefRoot(material)}
 		LodLazyPending
-		template_value(transform)
+		~{transform}
 		Visibility::default()
 	}
 }

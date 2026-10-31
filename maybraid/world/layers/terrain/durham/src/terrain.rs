@@ -22,9 +22,9 @@ use crate::terrain::watersheds::{
 	HydroComplexCell, WatershedAproningCell, WatershedCarvingCell, WatershedRimmingCell,
 };
 use bevy::ecs::template::template;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext};
 use lod::lod_ref::LodRef;
@@ -218,8 +218,8 @@ impl Terrain {
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
 		bsn! {
-			template_value(transform)
-			template_value(chunk)
+			~{transform}
+			~{chunk}
 			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<TerrainShader>({material.clone()})
 			TerrainColliderMeshSource
@@ -236,8 +236,8 @@ impl Terrain {
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
 		bsn! {
-			template_value(transform)
-			template_value(chunk)
+			~{transform}
+			~{chunk}
 			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<TerrainShader>({material.clone()})
 		}

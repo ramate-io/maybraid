@@ -20,10 +20,10 @@ pub use rigs::{
 	SocketRefApplied, SocketRefRoot,
 };
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::{lod_host_scene_pending, SceneChunk};
@@ -199,7 +199,7 @@ impl<T: FirearmComponents + Send + Sync + 'static> LodScene for ComponentsOnly<T
 		let _ = lod_ref;
 		let host = self.clone();
 		bsn! {
-			template_value(host)
+			~{host}
 			AssemblyRoot
 			FirearmRoot
 			Visibility::default()
@@ -345,7 +345,7 @@ where
 		.spawn_scene((
 			pending,
 			bsn! {
-				template_value(transform)
+				~{transform}
 				Visibility::default()
 			},
 		))

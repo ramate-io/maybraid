@@ -3,7 +3,7 @@
 //! Geometric only: no room program. Callers (e.g. [`super::livable_apartment`])
 //! assign kinds per rect after clustering.
 
-use bevy_math::bounding::{Aabb2d, BoundingVolume};
+use bevy_shape::{Aabb2d, BoundingVolume};
 use procedural_common::{aabb2_area, aabb3_to_plan, PlanAxes, PlanOpeningFace};
 
 use crate::fit::Confines;

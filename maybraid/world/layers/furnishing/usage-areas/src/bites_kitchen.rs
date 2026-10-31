@@ -1,7 +1,7 @@
 //! Kitchen remainder → wall counters, peninsula, sit-on cooktop, fridge, leftover fill.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
+use bevy::shape::Aabb3d;
 use building_components::{FurnitureAbutment, FurnitureNode, FurnitureUsageNode};
 
 use crate::region::{

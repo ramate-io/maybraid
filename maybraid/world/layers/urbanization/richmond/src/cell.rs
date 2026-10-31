@@ -1,7 +1,7 @@
 //! 300 m development lattice and occupancy.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
+use bevy::shape::Aabb3d;
 use lod::gen::{Id, OriginalId};
 
 /// Square development-cell edge length (metres).

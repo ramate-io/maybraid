@@ -83,7 +83,7 @@ macro_rules! impl_tuft_grove_lod_emit {
 				self.tuft_scene_chunks(lod_ref, level)
 			}
 
-			fn scene_bounds(&self) -> bevy::math::bounding::Aabb3d {
+			fn scene_bounds(&self) -> bevy::shape::Aabb3d {
 				self.structural_lod()
 					.map(|p| p.footprint_aabb())
 					.unwrap_or_else(|| vegetation_components::vegetation_bounds(self))

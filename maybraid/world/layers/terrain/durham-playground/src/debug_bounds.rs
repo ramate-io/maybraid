@@ -1,7 +1,7 @@
 //! Optional cell HUD for Terrain / jersey / Watershed inspection.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use durham::{
 	cascade_chunk_for_cell, PlateauLowPassControllerLayout, Terrain, TerrainCellLayout,
 	WatershedLeafKind,

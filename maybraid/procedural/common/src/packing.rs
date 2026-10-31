@@ -16,8 +16,8 @@
 //! - [`Aabb2dPack::grow_pair_toward_areas`] — area-capped pair grow, then scrap fill
 //! - [`Aabb2dPack::is_clear_of`] — open-overlap clear test for a candidate band
 
-use bevy_math::bounding::Aabb2d;
 use bevy_math::Vec2;
+use bevy_shape::Aabb2d;
 
 use crate::bounds::{aabb2_area, grow_aabb2, intersects_aabb2};
 

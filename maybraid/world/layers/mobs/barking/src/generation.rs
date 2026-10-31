@@ -1,7 +1,7 @@
 //! Environment-weighted group selection over 400 m generation bounds.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use mob_characters::FromMobNumber;
 use mob_scenes::{MobKind, MobScene};
 use urbanization_cells::UrbanizationKind;

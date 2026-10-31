@@ -4,8 +4,8 @@
 //! payloads. Grid internals (`cell_count`, `max_level`, buckets, `grid()` /
 //! `store()`) stay on concrete types.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_platform::collections::HashSet;
+use bevy_shape::Aabb3d;
 
 use super::index::SpatialIndex;
 
@@ -48,8 +48,8 @@ where
 mod tests {
 	use super::*;
 	use anyhow::Result;
-	use bevy_math::bounding::IntersectsVolume;
 	use bevy_math::{DVec3, Vec3};
+	use bevy_shape::IntersectsVolume;
 
 	fn aabb(min: [f32; 3], max: [f32; 3]) -> Aabb3d {
 		Aabb3d::from_min_max(Vec3::from_array(min), Vec3::from_array(max))

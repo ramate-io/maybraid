@@ -2,8 +2,8 @@
 
 use crate::terrain::cell::{expand_aabb_xz_y, TERRAIN_MESH_PAD_VOXELS, TERRAIN_MESH_PAD_Y_SLOPE};
 use crate::terrain::sdf::ComposedTerrain;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use chunk::cascade::CascadeChunk;
 use render_item::mesh::cache::handle::map::HandleMap;
 use render_item::mesh::cache::mesh::disk::DiskMeshCache;

@@ -4,8 +4,8 @@ mod terrace;
 
 pub use terrace::{OldCityMarketTerrace, OldCityMarketTier, MARKET_PLATFORM_HEIGHT};
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use procedural_common::{Bounds2, HysteresisConfig, HysteresisGraph, NoiseParams, SeededHash};
 
 use super::raise_toward_peak;

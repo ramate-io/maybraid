@@ -4,16 +4,16 @@ use bevy::prelude::*;
 use bevy::text::Justify;
 use character_persist::{CharacterId, SaveRoot};
 use menu_components::theme::{
-	HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW, menu_list_panel_node, menu_region_wash,
+	menu_list_panel_node, menu_region_wash, HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
 };
 use menu_components::{
-	HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, MenuModal, MenuModalDismiss, MenuModalId,
-	MenuModalLayer, MenuModalStack, MenuModalSystems, MenuNav, MenuNavImpulse, TextMenuSystems,
-	spawn_hud_action, spawn_hud_text,
+	spawn_hud_action, spawn_hud_text, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, MenuModal,
+	MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack, MenuModalSystems, MenuNav,
+	MenuNavImpulse, TextMenuSystems,
 };
-use menu_screens::{GalleryChoice, GalleryScreen, request_show_gallery};
+use menu_screens::{request_show_gallery, GalleryChoice, GalleryScreen};
 
-use crate::session::{ActiveCharacter, delete_saved_character};
+use crate::session::{delete_saved_character, ActiveCharacter};
 
 #[derive(Resource, Default)]
 struct DeletePrompt {
@@ -151,7 +151,7 @@ fn on_nav(
 }
 
 fn on_click(
-	mut click: On<Pointer<Click>>,
+	mut click: On<PointerClick>,
 	actions: Query<&DeleteAction>,
 	parents: Query<&ChildOf>,
 	mut commands: Commands,
@@ -281,8 +281,8 @@ fn paint(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::CharacterMenuState;
 	use crate::session::save_editing_character;
+	use crate::CharacterMenuState;
 	use bevy::ecs::system::RunSystemOnce;
 
 	fn world() -> Result<World, Box<dyn std::error::Error>> {
@@ -309,8 +309,8 @@ mod tests {
 	}
 
 	#[test]
-	fn default_confirmation_and_back_cancel_without_deleting()
-	-> Result<(), Box<dyn std::error::Error>> {
+	fn default_confirmation_and_back_cancel_without_deleting(
+	) -> Result<(), Box<dyn std::error::Error>> {
 		for nav in [MenuNav::Select, MenuNav::Back] {
 			let mut world = world()?;
 			let menu = world.spawn((DeletePromptMenu, HudMenu::new(2))).id();
@@ -328,8 +328,8 @@ mod tests {
 	}
 
 	#[test]
-	fn opening_edge_cannot_confirm_and_next_confirm_deletes_last_character()
-	-> Result<(), Box<dyn std::error::Error>> {
+	fn opening_edge_cannot_confirm_and_next_confirm_deletes_last_character(
+	) -> Result<(), Box<dyn std::error::Error>> {
 		let mut world = world()?;
 		let menu = world.spawn((DeletePromptMenu, HudMenu { selected: 1, item_count: 2 })).id();
 		world.resource_mut::<DeletePrompt>().opened_this_frame = true;
@@ -349,8 +349,8 @@ mod tests {
 	}
 
 	#[test]
-	fn storage_failure_leaves_confirmation_roster_and_selection_available()
-	-> Result<(), Box<dyn std::error::Error>> {
+	fn storage_failure_leaves_confirmation_roster_and_selection_available(
+	) -> Result<(), Box<dyn std::error::Error>> {
 		let mut world = world()?;
 		let root = world.resource::<SaveRoot>().clone();
 		std::fs::create_dir(root.position_path(CharacterId(7)))?;

@@ -22,18 +22,19 @@
 // or self-shadow ray.
 //---------------------------------------------------------
 
-#import bevy_pbr::{
-    forward_io::VertexOutput,
-    mesh_view_bindings::{view, lights, globals},
-    prepass_utils::prepass_depth,
-    pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
-    pbr_functions as fns,
-}
-#import bevy_core_pipeline::tonemapping::tone_mapping
+import bevy_pbr::render::forward_io::VertexOutput;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::mesh_view_bindings::lights;
+import bevy_pbr::render::mesh_view_bindings::globals;
+import bevy_pbr::prepass::utils::prepass_depth;
+import bevy_pbr::render::pbr_types::PbrInput;
+import bevy_pbr::render::pbr_types::pbr_input_new;
+import bevy_pbr::render::pbr_types::STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT;
+import bevy_pbr::render::pbr_functions as fns;
+import bevy_core_pipeline::tonemapping::tone_mapping;
 
-#ifdef DISTANCE_FOG
-#import bevy_pbr::mesh_view_bindings::fog
-#endif
+@if(DISTANCE_FOG)
+import bevy_pbr::render::mesh_view_bindings::fog;
 
 
 fn with_distance_fog(
@@ -41,7 +42,7 @@ fn with_distance_fog(
     world_position: vec3<f32>,
     frag_xy: vec2<f32>
 ) -> vec4<f32> {
-#ifdef DISTANCE_FOG
+    @if(DISTANCE_FOG)
     return fns::apply_fog(
         fog,
         color,
@@ -49,9 +50,8 @@ fn with_distance_fog(
         view.world_position.xyz,
         frag_xy
     );
-#else
+    @if(!DISTANCE_FOG)
     return color;
-#endif
 }
 
 
@@ -77,13 +77,13 @@ struct DurhamTerrainNoise {
     bands: array<DurhamTerrainBand, 4>,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> terrain_noise: DurhamTerrainNoise;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(1)
+@group(constants::MATERIAL_BIND_GROUP) @binding(1)
 var<uniform> style_params: vec4<f32>;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(2)
+@group(constants::MATERIAL_BIND_GROUP) @binding(2)
 var<uniform> base_color: vec4<f32>;
 
 struct DurhamTerrainGrass {
@@ -96,7 +96,7 @@ struct DurhamTerrainGrass {
     dry_tip: vec4<f32>,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(3)
+@group(constants::MATERIAL_BIND_GROUP) @binding(3)
 var<uniform> grass: DurhamTerrainGrass;
 
 
@@ -395,8 +395,8 @@ fn relief_hash(
     seed: u32
 ) -> u32 {
     var v =
-          bitcast<u32>(p.x) * 0x8da6b343u
-        ^ bitcast<u32>(p.y) * 0xd8163841u
+          (bitcast<u32>(p.x) * 0x8da6b343u)
+        ^ (bitcast<u32>(p.y) * 0xd8163841u)
         ^ seed;
 
     v = (v ^ (v >> 16u)) * 0x7feb352du;

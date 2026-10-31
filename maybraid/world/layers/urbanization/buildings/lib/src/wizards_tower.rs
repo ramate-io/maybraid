@@ -180,7 +180,7 @@ impl BuildingComponents for WizardsTower {
 }
 
 impl TowerLodFootprint for WizardsTower {
-	fn lod_aabb(&self) -> &bevy_math::bounding::Aabb3d {
+	fn lod_aabb(&self) -> &bevy_shape::Aabb3d {
 		&self.constraints.aabb
 	}
 }
@@ -253,7 +253,7 @@ impl LodScene for WizardsTower {
 		}
 	}
 
-	fn scene_bounds(&self) -> bevy_math::bounding::Aabb3d {
+	fn scene_bounds(&self) -> bevy_shape::Aabb3d {
 		self.constraints.aabb
 	}
 
@@ -267,8 +267,8 @@ impl LodScene for WizardsTower {
 mod tests {
 	use bevy::prelude::{App, AssetPlugin, Children, Entity, TaskPoolPlugin, Transform};
 	use bevy::scene::{ScenePlugin, WorldSceneExt};
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 	use material_ref::MaterialRefRoot;
 	use scene_ref::SceneRefRoot;
 

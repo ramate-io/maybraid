@@ -4,7 +4,7 @@ use std::path::Path;
 
 use bevy::asset::{AssetPath, AssetServer, Handle, HandleTemplate};
 use bevy::prelude::{Component, Vec3};
-use bevy::scene::prelude::{bsn, template_value};
+use bevy::scene::prelude::bsn;
 use bevy::scene::Scene;
 use bevy::world_serialization::WorldAsset;
 
@@ -97,7 +97,7 @@ impl SceneRef {
 	/// BSN scene root for this ref (`SceneRefRoot`; fulfilled to [`WorldAssetRoot`]).
 	pub fn scene(self) -> impl Scene + 'static {
 		bsn! {
-			template_value(SceneRefRoot(self))
+			~{SceneRefRoot(self)}
 		}
 	}
 }

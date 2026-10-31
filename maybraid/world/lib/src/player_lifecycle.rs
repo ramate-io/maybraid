@@ -723,7 +723,7 @@ mod tests {
 	}
 	use crate::{FirstWave, UnitXTile};
 	use bevy::ecs::system::RunSystemOnce;
-	use bevy::math::bounding::Aabb3d;
+	use bevy::shape::Aabb3d;
 	use durham::TerrainCellLayout;
 	use layer_stack::GenerationMode;
 	use lod::hcsg::{spawn_worker, HcsgClass, HcsgStorage};

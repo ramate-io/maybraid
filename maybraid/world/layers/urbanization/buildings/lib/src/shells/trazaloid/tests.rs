@@ -49,10 +49,7 @@ fn can_omit_ceiling_and_cut_floor_with_shaft() -> anyhow::Result<()> {
 	openings.insert(
 		"shaft",
 		Opening::new(
-			bevy_math::bounding::Aabb3d::from_min_max(
-				Vec3::new(-1.0, -0.5, -1.0),
-				Vec3::new(1.0, 0.5, 1.0),
-			),
+			bevy_shape::Aabb3d::from_min_max(Vec3::new(-1.0, -0.5, -1.0), Vec3::new(1.0, 0.5, 1.0)),
 			OpeningLabel::Shaft,
 		),
 	);
@@ -217,10 +214,7 @@ fn shaft_cuts_floor_when_origin_is_translated() -> anyhow::Result<()> {
 	openings.insert(
 		"shaft",
 		Opening::new(
-			bevy_math::bounding::Aabb3d::from_min_max(
-				Vec3::new(-1.0, -0.5, -1.0),
-				Vec3::new(1.0, 0.5, 1.0),
-			),
+			bevy_shape::Aabb3d::from_min_max(Vec3::new(-1.0, -0.5, -1.0), Vec3::new(1.0, 0.5, 1.0)),
 			OpeningLabel::Shaft,
 		),
 	);

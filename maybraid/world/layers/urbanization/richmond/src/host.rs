@@ -3,11 +3,9 @@
 use std::sync::Arc;
 
 use bevy::ecs::template::template;
-use bevy::math::bounding::Aabb3d;
-use bevy::prelude::{
-	bsn, template_value, Commands, CommandsSceneExt, Component, Entity, Transform, Visibility,
-};
+use bevy::prelude::{bsn, Commands, CommandsSceneExt, Component, Entity, Transform, Visibility};
 use bevy::scene::Scene;
+use bevy::shape::Aabb3d;
 use building_components::{
 	building_bounds, building_components_host_for, BuildingComponents, FurnitureNode,
 	FurnitureUsageNode,
@@ -329,7 +327,7 @@ impl DevelopmentHost {
 			place = place.with_identity(id, self.place_local_id());
 		}
 		let source = PlaceArrivalSource(Some(self.clone()));
-		Box::new((host, bsn! { template_value(place) template_value(source) }))
+		Box::new((host, bsn! { place source }))
 	}
 }
 
@@ -407,7 +405,7 @@ fn arrival_from_building(building: &impl BuildingComponents) -> f32 {
 	arrival_from_bounds(building_bounds(building))
 }
 
-fn arrival_from_bounds(bounds: bevy::math::bounding::Aabb3d) -> f32 {
+fn arrival_from_bounds(bounds: bevy::shape::Aabb3d) -> f32 {
 	let xz = (bounds.max.x - bounds.min.x).max(bounds.max.z - bounds.min.z);
 	(xz * 0.35).clamp(6.0, 24.0)
 }
@@ -573,7 +571,7 @@ fn wizards_tower_host(
 	let host = (
 		lod_host_scene_pending(level, bounds),
 		bsn! {
-			template_value(transform)
+			~{transform}
 			Visibility::default()
 			template(move |_ctx| Ok(tower.clone()))
 		},
@@ -602,8 +600,8 @@ fn with_walk_colliders(
 
 #[cfg(test)]
 mod tests {
-	use bevy::math::bounding::Aabb3d;
 	use bevy::math::{Vec2, Vec3};
+	use bevy::shape::Aabb3d;
 	use buildings::{Confines, Fit};
 	use procedural_common::NoiseParams;
 	use urbanization_developments::{

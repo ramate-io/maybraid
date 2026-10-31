@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 
 use crate::gen::Id;
 

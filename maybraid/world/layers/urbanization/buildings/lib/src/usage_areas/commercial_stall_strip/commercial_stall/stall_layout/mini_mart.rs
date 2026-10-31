@@ -4,8 +4,8 @@
 //! Office packing uses shared [`super::enclosed_room`]. Shelves are optional wall
 //! bands on host faces free of customer passages.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
+use bevy_shape::{Aabb2d, Aabb3d};
 use procedural_common::{
 	aabb3_to_plan, clamp_min_size2, intersects_aabb2, max_empty_rect2, plan_to_aabb3, Aabb2dPack,
 	OptionalFaceBand, PlanAxes, PlanOpeningFace,

@@ -1,7 +1,7 @@
 //! Domain-agnostic furniture propose/try helpers.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use procedural_common::{aabb3_to_plan, NoiseConfig, PlanAxes};
 
 use super::predicates::{against_wall, clear_of_keep_outs, in_host, long_face_on_wall};

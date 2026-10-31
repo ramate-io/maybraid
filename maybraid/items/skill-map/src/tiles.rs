@@ -1,8 +1,8 @@
 //! Noise-dispatched land / water / power tiles and 2D AABB claims.
 
 use bevy::camera::visibility::RenderLayers;
-use bevy::math::bounding::{Aabb2d, IntersectsVolume};
 use bevy::prelude::*;
+use bevy::shape::{Aabb2d, IntersectsVolume};
 use menu_components::HudFonts;
 use noise::{Fbm, MultiFractal, NoiseFn, OpenSimplex};
 

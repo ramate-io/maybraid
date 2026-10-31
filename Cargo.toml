@@ -200,7 +200,7 @@ authors = ["Ramate LLC"]
 repository = "www.github.com/ramate-io/maybraid"
 homepage = "www.github.com/ramate-io/maybraid"
 publish = false
-rust-version = "1.95.0"
+rust-version = "1.97.1"
 
 
 [workspace.dependencies]
@@ -258,8 +258,9 @@ gloo-timers = { version = "0.2" }
 chrono = { version = "0.4.41" }
 reqwest = { version = "0.12", features = ["json"] }
 base64 = "0.22"
-bevy = { version = "0.19.1" }
-bevy_hanabi = { version = "0.19", default-features = false, features = ["3d"] }
+bevy = { version = "0.20.1" }
+# Hanabi's Bevy 0.20 port is upstream but not yet published to crates.io.
+bevy_hanabi = { git = "https://github.com/djeedai/bevy_hanabi", rev = "d277555d4a2350da6787245d15c56c62c739594d", default-features = false, features = ["3d"] }
 js-sys = "0.3"
 log = "0.4"
 console_log = "1"
@@ -271,8 +272,9 @@ noise = { version = "0.9" }
 fastnoise-lite = "1.1.1"
 lz4_flex = "0.11"
 bincode = "1.3.3"
-bevy_math = "0.19.0"
-bevy_platform = { version = "0.19.1", default-features = false, features = ["std"] }
+bevy_math = "0.20.1"
+bevy_shape = "0.20.1"
+bevy_platform = { version = "0.20.1", default-features = false, features = ["std"] }
 cpal = "0.15"
 hound = "3.5"
 mint = "0.5"
@@ -338,7 +340,7 @@ visual-geometry-core = { path = "maybraid/visual-geometry-core" }
 material-ref = { path = "maybraid/material-ref" }
 screen-capture = { path = "maybraid/screen-capture" }
 terrain-chunk-ref = { path = "maybraid/terrain-chunk-ref" }
-avian3d = "0.7"
+avian3d = "0.8"
 
 layer-stack = { path = "maybraid/world/layers/stack" }
 terrain-layer-model = { path = "maybraid/world/layers/terrain/model" }

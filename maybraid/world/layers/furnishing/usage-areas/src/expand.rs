@@ -23,8 +23,8 @@ pub fn expand_usages(nodes: impl IntoIterator<Item = FurnitureUsageNode>) -> Vec
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy::math::bounding::Aabb3d;
 	use bevy::math::Vec3;
+	use bevy::shape::Aabb3d;
 	use building_components::{FurnitureGeometry, Placement};
 
 	#[test]

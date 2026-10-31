@@ -2,9 +2,9 @@
 
 use std::collections::HashSet;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::{Rect, Vec2};
 use bevy::prelude::{Local, Res, ResMut, Resource};
+use bevy::shape::Aabb3d;
 use lod::hcsg::{Busy, HcsgStorage};
 
 use crate::hcsg::{naming_revision, read_nearby, LanguageWindow};

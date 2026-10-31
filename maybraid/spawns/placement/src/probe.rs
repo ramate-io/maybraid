@@ -196,7 +196,7 @@ mod tests {
 		let expected = LocomotionCapsule::HUMANOID.spawn_height() + 4.2;
 		assert!(
 			(ready[0].position.y - expected).abs() < 0.35,
-			"accepted {} want ~{expected}",
+			"accepted {} want expected",
 			ready[0].position.y
 		);
 		assert_eq!(ready[0].position.xz(), Vec2::ZERO);

@@ -1,8 +1,8 @@
 //! Fine-phase armature [`lod::LodScene`] host.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Vec3, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use character_rigs::ResolvedRigPose;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
@@ -138,14 +138,14 @@ impl RigNode {
 		let rig_root = RigRoot::new(node.id.into()).with_landmarks(node.skeleton.landmark_bones());
 		(
 			bsn! {
-				template_value(node)
-				template_value(transform)
-				template_value(rig)
+				~{node}
+				~{transform}
+				~{rig}
 				AssemblyHost
-				template_value(rig_root)
-				template_value(BoneMap::default())
-				template_value(pose)
-				template_value(RigBindScales::default())
+				~{rig_root}
+				~{BoneMap::default()}
+				~{pose}
+				~{RigBindScales::default()}
 			},
 			maybe_component(lod_rig),
 			maybe_component(socket),

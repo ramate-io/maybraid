@@ -1,6 +1,6 @@
 # Doric column POM UV / tangent contract
 
-Copy this section into the [#1133](https://github.com/ramate-io/maybraid/issues/1133) column/pedestal GLB authoring spec. The shader is [`column_surface.wgsl`](src/column_surface.wgsl). Placeholders that already meet the contract: [`PlaceholderShaft`](src/column_surface/shaft.rs) (compact cylinder) and [`placeholder_tapered_shaft_mesh`](src/column_surface/shaft.rs) (unit-D taper).
+Copy this section into the [#1133](https://github.com/ramate-io/maybraid/issues/1133) column/pedestal GLB authoring spec. The shader is [`column_surface.wesl`](src/column_surface.wesl). Placeholders that already meet the contract: [`PlaceholderShaft`](src/column_surface/shaft.rs) (compact cylinder) and [`placeholder_tapered_shaft_mesh`](src/column_surface/shaft.rs) (unit-D taper).
 
 **Kit-level source** for this convention is [#1144](https://github.com/ramate-io/maybraid/pull/1144) [`AUTHORING.md`](../../../mobs/architectural/doric-column/AUTHORING.md) (`maybraid/world/layers/mobs/architectural/doric-column/AUTHORING.md`). This file is the POM / UV / texel addendum for the shaft only.
 

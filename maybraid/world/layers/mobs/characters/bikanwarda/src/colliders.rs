@@ -31,7 +31,7 @@ pub fn motor_collider(capsule: LocomotionCapsule) -> Collider {
 mod tests {
 	use super::*;
 	use crate::recipe::BikanwardaActorRecipe;
-	use bevy::math::bounding::Aabb3d;
+	use bevy::shape::Aabb3d;
 	use characters::{CharacterComponents, CharacterRecipe};
 
 	#[test]

@@ -1,6 +1,6 @@
 //! Richmond urbanization Hopscotch + leaf selection.
 
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::Id;
 use procedural_common::{Bounds2, BucketThrow, NoiseConfig, NoiseParams, UnitRange};

@@ -1,9 +1,9 @@
 //! Shared [`App`] wiring for refresh pipeline tests (scan index, no Avian).
 
 use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use bevy::scene::prelude::Scene;
+use bevy::shape::{Aabb3d, IntersectsVolume};
 
 use crate::cull_offset_bands_from_factor;
 use crate::lod_ref::LodRef;

@@ -3,8 +3,8 @@
 //! Geometry: one linear partition on the spire-facing edge and a rectangular
 //! floor slab. Doors / stairs are omitted for now (empty scenes).
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use building_components::floors::{Floor, FloorNode};
 use building_components::partitions::{
 	wall_placement_from_centered, Partition, PartitionNode, DEFAULT_THICK,

@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use bevy::ecs::query::{IterQueryData, QueryData, QueryFilter};
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use lod_cascade::{Cascade, Chunk};
 
 /// Axis-aligned bounds of the **track** entity whose snapshot drives cascade focal updates (`AaBb` in the RFC).

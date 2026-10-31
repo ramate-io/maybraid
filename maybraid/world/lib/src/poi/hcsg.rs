@@ -6,8 +6,8 @@
 
 use std::marker::PhantomData;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::{DVec3, IVec2, Vec3};
+use bevy::shape::Aabb3d;
 use chico::ChicoGrove;
 use geneva::{DevelopmentPlaces, LanguageGround};
 use lod::gen::{Id, OriginalId};

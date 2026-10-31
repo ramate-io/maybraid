@@ -4,8 +4,8 @@
 //! that frozen plan through every storey. The three exterior families share the
 //! same [`LivableApartments`] allocator and one aligned stair column per shaft.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d, BoundingVolume};
 use building_components::doors::DoorNode;
 use building_components::floors::FloorNode;
 use building_components::furniture::FurnitureNode;

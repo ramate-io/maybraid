@@ -3,7 +3,7 @@
 //! RFC starts at 1600 m forest cells with 200 m grove tiles. Production grove tiles
 //! are [`vegetation_groves::DEFAULT_GROVE_EXTENT_XZ`] (100 m).
 
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::{Id, OriginalId};
 use vegetation_groves::{GroveExtent, DEFAULT_GROVE_EXTENT_XZ};

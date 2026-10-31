@@ -238,11 +238,11 @@ impl ReferenceMaterial for EnergyMaterial {
 
 impl Material for EnergyMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "energy.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "energy.wesl").into()
 	}
 
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "energy.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "energy.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
@@ -277,7 +277,7 @@ pub struct EnergyMaterialPlugin;
 
 impl Plugin for EnergyMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "energy.wgsl");
+		embedded_asset!(app, "energy.wesl");
 		if !app.is_plugin_added::<MaterialPlugin<EnergyMaterial>>() {
 			app.add_plugins(MaterialPlugin::<EnergyMaterial>::default());
 		}

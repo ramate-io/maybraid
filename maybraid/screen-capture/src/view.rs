@@ -1,7 +1,7 @@
 //! Preferred camera transform, projection, and framing.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Color, Transform, Vec3};
+use bevy::shape::Aabb3d;
 
 /// Camera placement and projection for one capture.
 #[derive(Clone, Copy, Debug, PartialEq)]

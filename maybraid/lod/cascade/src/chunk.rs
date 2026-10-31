@@ -1,8 +1,8 @@
 use std::hash::{Hash, Hasher};
 use std::ops::Sub;
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec3, Vec3A};
+use bevy_shape::Aabb3d;
 
 /// Geometric footprint for cascade work (RFC §3.1): solid axis-aligned bounds \(B\) with optional
 /// omission \(O\) so the effective region is \(B \setminus O\). \(B\) need not be a cube.

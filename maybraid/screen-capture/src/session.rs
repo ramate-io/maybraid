@@ -4,13 +4,13 @@ use bevy::asset::{Assets, RenderAssetUsages};
 use bevy::camera::primitives::MeshAabb;
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{ClearColorConfig, RenderTarget};
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Affine3A;
 use bevy::mesh::skinning::{InfluenceIterator, SkinnedMesh, SkinnedMeshInverseBindposes};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use bevy::render::gpu_readback::{Readback, ReadbackComplete};
 use bevy::render::render_resource::TextureFormat;
+use bevy::shape::Aabb3d;
 use bevy::world_serialization::WorldAssetRoot;
 use procedural_common::union_aabb3;
 use scene_ref::SceneRefRoot;
@@ -404,7 +404,7 @@ fn subject_local_aabb(root: Entity, sources: &ExtentSources) -> Option<Aabb3d> {
 		let world_aabb = match skinned_world_aabb(entity, mesh, sources) {
 			Some(aabb) => aabb,
 			None => {
-				let Some(local) = mesh.compute_aabb() else {
+				let Some(local) = mesh.get_aabb() else {
 					return;
 				};
 				let Ok(world) = sources.globals.get(entity) else {

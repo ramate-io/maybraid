@@ -1,9 +1,9 @@
 //! Stick IR node: geometry + placement.
 
 use bevy::light::NotShadowCaster;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Vec3, Visibility};
 use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{
 	cull_offset_bands_from_factor, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus,

@@ -3,15 +3,15 @@
 //! See `maybraid/world/layers/mobs/characters/animations/previews/epiphant-1130/README.md`.
 
 use bevy::camera::primitives::Aabb;
-use bevy::math::bounding::Aabb3d;
 use bevy::mesh::{Mesh, VertexAttributeValues};
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use character_motion::{sample_bray_mouth_emit, BrayMouthEmit};
+use characters::species::epiphant::{pose::EpiphantPose, EpiphantConfig};
 use characters::{
 	BoneMap, CharacterMembers, CharacterPart, CharacterPartSlot, CharacterRig, CharacterRigRole,
 	LocomotionCapsule,
 };
-use characters::species::epiphant::{pose::EpiphantPose, EpiphantConfig};
 use game_commands::GameCommandDrawerVisible;
 
 use crate::focus_reference::FocusReferenceRig;
@@ -151,7 +151,9 @@ pub struct PreviewMeshScan {
 
 pub fn scan_preview_meshes<'a>(
 	mesh_assets: &Assets<Mesh>,
-	meshes: impl Iterator<Item = (&'a Mesh3d, &'a GlobalTransform, Option<&'a Visibility>, Option<&'a CharacterPart>)>,
+	meshes: impl Iterator<
+		Item = (&'a Mesh3d, &'a GlobalTransform, Option<&'a Visibility>, Option<&'a CharacterPart>),
+	>,
 ) -> PreviewMeshScan {
 	let mut union: Option<Aabb3d> = None;
 	let mut foot_min: Option<f32> = None;
@@ -176,10 +178,7 @@ pub fn scan_preview_meshes<'a>(
 			Some(acc) => Aabb3d::from_min_max(acc.min.min(world.min), acc.max.max(world.max)),
 		});
 	}
-	PreviewMeshScan {
-		bounds: union,
-		foot_contact_y: foot_min.or(all_min),
-	}
+	PreviewMeshScan { bounds: union, foot_contact_y: foot_min.or(all_min) }
 }
 
 /// Rest-pose foot depth for the default Epiphant preview recipe, scaled to encounter size.
@@ -192,7 +191,9 @@ pub fn capture_ground_anchor_y(encounter_scale: f32) -> f32 {
 
 pub fn union_preview_mesh_bounds<'a>(
 	mesh_assets: &Assets<Mesh>,
-	meshes: impl Iterator<Item = (&'a Mesh3d, &'a GlobalTransform, Option<&'a Visibility>, Option<&'a CharacterPart>)>,
+	meshes: impl Iterator<
+		Item = (&'a Mesh3d, &'a GlobalTransform, Option<&'a Visibility>, Option<&'a CharacterPart>),
+	>,
 ) -> Option<Aabb3d> {
 	scan_preview_meshes(mesh_assets, meshes).bounds
 }
@@ -255,17 +256,8 @@ pub fn align_capture_ground_to_contact(
 	settings: Option<Res<PreviewCaptureSettings>>,
 	mut contact: ResMut<CaptureGroundContact>,
 	meshes: Query<
-		(
-			&Mesh3d,
-			&GlobalTransform,
-			Option<&Visibility>,
-			Option<&CharacterPart>,
-		),
-		(
-			With<CharacterPart>,
-			Without<FocusReferenceRig>,
-			Without<CaptureGroundPlane>,
-		),
+		(&Mesh3d, &GlobalTransform, Option<&Visibility>, Option<&CharacterPart>),
+		(With<CharacterPart>, Without<FocusReferenceRig>, Without<CaptureGroundPlane>),
 	>,
 	mesh_assets: Res<Assets<Mesh>>,
 	mut ground: Query<&mut Transform, With<CaptureGroundPlane>>,

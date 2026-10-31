@@ -5,8 +5,8 @@
 //! ([`KindSpec`], [`pick_kind`], [`OccupiedBudget`]). Bed / nightstand adjacency
 //! and ensuite `max_axis_frac: 0.5` stay bedroom-local in `try_place`.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec3;
+use bevy_shape::{Aabb2d, Aabb3d};
 use procedural_common::{
 	aabb2_area, aabb3_to_plan, inflate_aabb2, intersects_aabb2, plan_to_aabb3, touches_aabb2,
 	NoiseConfig, NoiseParams, PlanAxes,

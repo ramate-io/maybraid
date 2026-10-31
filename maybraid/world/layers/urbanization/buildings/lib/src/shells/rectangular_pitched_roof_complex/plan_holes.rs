@@ -3,8 +3,8 @@
 //! Pitch openings clip a face after geometry is solved. Keep footprints need the
 //! massing itself to go around the tower, so we CSG the AABBs in \(XZ\) first.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 
 const EPS: f32 = 1e-4;
 const MIN_SPAN: f32 = 0.4;

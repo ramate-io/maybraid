@@ -14,7 +14,7 @@
 //!
 //! ```
 //! # use bevy::prelude::*;
-//! # use bevy::math::bounding::Aabb3d;
+//! # use bevy::shape::Aabb3d;
 //! # use lod_cascade::Cascade;
 //! # use lod_cascade_system::{
 //! #     CascadeProduction, CascadeProductionPlugin, ChunkEntityPosition, ChunkEntityTrackerPlugin,

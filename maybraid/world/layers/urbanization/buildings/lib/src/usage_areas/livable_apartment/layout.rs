@@ -46,8 +46,8 @@
 //! [`RectPassageCluster`], [`RectangularLivableArea`], scrap → closet banding in
 //! [`push_leftover`].
 
-use bevy_math::bounding::Aabb2d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb2d;
 use building_components::labels::{LabelNode, LabelStyle};
 use procedural_common::{aabb2_area, inflate_aabb2, NoiseParams};
 

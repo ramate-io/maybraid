@@ -1,4 +1,4 @@
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Bounds {

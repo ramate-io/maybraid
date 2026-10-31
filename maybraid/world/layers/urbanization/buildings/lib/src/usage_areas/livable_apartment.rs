@@ -15,8 +15,8 @@ mod tests;
 
 pub use room::ApartmentRoom;
 
-use bevy_math::bounding::{Aabb2d, BoundingVolume};
 use bevy_math::Vec3;
+use bevy_shape::{Aabb2d, BoundingVolume};
 use building_components::furniture::FurnitureNode;
 use building_components::joints::JointNode;
 use building_components::labels::{LabelNode, LabelStyle};
