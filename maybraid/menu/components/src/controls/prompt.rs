@@ -3,11 +3,11 @@
 
 use bevy::prelude::*;
 
-use crate::HudFonts;
 use crate::theme::{
-	PANEL_GROUP_FONT_SIZE, PANEL_ROW_GAP, PROMPT_KEY_DROP, PROMPT_KEY_SELECT, PROMPT_KEY_UNEQUIP,
-	PROMPT_PAD_DROP, PROMPT_PAD_SELECT, PROMPT_PAD_UNEQUIP, TEXT_YELLOW,
+	PANEL_GROUP_FONT_SIZE, PROMPT_KEY_DROP, PROMPT_KEY_SELECT, PROMPT_KEY_UNEQUIP, PROMPT_PAD_DROP,
+	PROMPT_PAD_SELECT, PROMPT_PAD_UNEQUIP, TEXT_YELLOW,
 };
+use crate::HudFonts;
 
 /// Last device that produced a press. Starts on keyboard so headless shots
 /// show key chips until a pad speaks.
@@ -92,12 +92,12 @@ pub fn spawn_inventory_action_prompts(
 			InventoryActionPrompts,
 			Node {
 				width: Val::Percent(100.0),
+				min_width: Val::Px(0.0),
 				flex_direction: FlexDirection::Row,
-				flex_wrap: FlexWrap::Wrap,
-				column_gap: Val::Px(16.0),
-				row_gap: Val::Px(PANEL_ROW_GAP),
+				justify_content: JustifyContent::Center,
 				align_items: AlignItems::Center,
-				padding: UiRect::top(Val::Px(4.0)),
+				column_gap: Val::Px(18.0),
+				padding: UiRect::vertical(Val::Px(2.0)),
 				flex_shrink: 0.0,
 				..default()
 			},
@@ -191,7 +191,7 @@ pub fn sync_inventory_prompt_glyphs(
 
 #[cfg(test)]
 mod tests {
-	use super::{INVENTORY_PROMPT_KINDS, InputPromptDevice, InventoryPromptKind};
+	use super::{InputPromptDevice, InventoryPromptKind, INVENTORY_PROMPT_KINDS};
 	use crate::theme::{
 		PROMPT_KEY_DROP, PROMPT_KEY_SELECT, PROMPT_KEY_UNEQUIP, PROMPT_PAD_DROP, PROMPT_PAD_SELECT,
 		PROMPT_PAD_UNEQUIP,

@@ -2,8 +2,9 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{
-	AssetChoice, AssetThumbnailDisplay, EquipmentChoice, GridCatalogChoice, ItemRow, MenuNode,
-	OrderedEquipmentRow, PreviewColor, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
+	AssetChoice, AssetThumbnailDisplay, EquipmentChoice, GridCatalogChoice, InventoryRegion,
+	ItemRow, MenuNode, OrderedEquipmentRow, PreviewColor, StatCard, StatTone, SwatchChoice,
+	ThumbnailRequest,
 };
 use menu_components::{
 	equipped_pane_fill, spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label,
@@ -688,7 +689,11 @@ impl MaybraidMenuSink {
 					viewport,
 					swatch,
 					choice.event,
-					choice.item_key.map(|index| InventoryItemKey { index, equipped: false }),
+					choice.item_key.map(|index| InventoryItemKey {
+						index,
+						equipped: choice.selected,
+						region: InventoryRegion::Drawer,
+					}),
 				);
 			}
 		});
@@ -757,7 +762,11 @@ impl MaybraidMenuSink {
 			.map(|key| context.thumbnails.tint_for_key(key))
 			.unwrap_or(Color::WHITE);
 		let swatch = tile.path.is_empty().then_some(bevy_color(tile.preview));
-		let key = InventoryItemKey { index: choice.item_key, equipped: true };
+		let key = InventoryItemKey {
+			index: choice.item_key,
+			equipped: true,
+			region: InventoryRegion::Equipped,
+		};
 		let item = context.stamp_hud_item();
 		context.note_inventory_key(key, item.index);
 		let thumb_px = context.catalog_thumb_px;

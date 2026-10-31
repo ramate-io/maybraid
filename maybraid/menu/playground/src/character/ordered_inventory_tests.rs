@@ -3,23 +3,23 @@ use anyhow::{Context, Result};
 use bevy::{ecs::system::RunSystemOnce, prelude::*};
 use character_creation_menus::{CharacterMenu, MenuEvent};
 use character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
-use character_ui_menu::MenuComponent;
+use character_ui_menu::{InventoryRegion, MenuComponent};
 use maybraid_character_ui_menu_renderer::{
-	InventoryFocusHint, InventoryInteraction, InventoryItemKey, NoThumbnails,
 	fill_inventory_layout, find_overlay_node,
 	input::{
 		emit_hud_activate_on_nav, emit_inventory_reorder_keyboard, emit_inventory_reorder_nav,
 	},
+	InventoryFocusHint, InventoryInteraction, InventoryItemKey, NoThumbnails,
 };
 use menu_components::{
-	HudFonts, HudMenu, HudMenuItem, HudMenuNavLocked, HudOverlayMenu, KeyboardMenuNav,
-	MenuModalStack, TextMenuInputLock, apply_hud_menu_nav, navigate_hud_menus,
+	apply_hud_menu_nav, navigate_hud_menus, HudFonts, HudMenu, HudMenuItem, HudMenuNavLocked,
+	HudOverlayMenu, KeyboardMenuNav, MenuModalStack, TextMenuInputLock,
 };
 use menu_components::{MenuNav, MenuNavImpulse};
 
 use crate::character::{
-	CharacterMenuState, CharacterScreen, CharacterUiSyncState, OverlaySelectState,
-	OverlayUiSyncState, on_menu_activate,
+	on_menu_activate, CharacterMenuState, CharacterScreen, CharacterUiSyncState,
+	OverlaySelectState, OverlayUiSyncState,
 };
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
 use menu_components::ActiveOverlayKey;
@@ -113,7 +113,12 @@ fn select_item(world: &mut World, viewport: Entity, identity: usize) -> Result<u
 	let ordinal = world
 		.query::<(&HudMenuItem, &InventoryItemKey)>()
 		.iter(world)
-		.find(|(item, key)| item.menu == viewport && key.equipped && key.index == identity)
+		.find(|(item, key)| {
+			item.menu == viewport
+				&& key.equipped
+				&& key.region == InventoryRegion::Equipped
+				&& key.index == identity
+		})
 		.map(|(item, _)| item.index)
 		.context("item ordinal")?;
 	world.get_mut::<HudMenu>(viewport).context("menu")?.selected = ordinal;
@@ -131,9 +136,16 @@ fn reorder_from_both_ends_visits_every_slot_and_retains_identity() -> Result<()>
 		let original_ordinal = select_item(&mut world, viewport, identity)?;
 		world.trigger(MenuNavImpulse::new(viewport, MenuNav::Select));
 		world.flush();
-		assert_eq!(world.resource::<InventoryInteraction>().reordering(), Some(identity));
+		assert_eq!(
+			world.resource::<InventoryInteraction>().reordering(),
+			Some(InventoryItemKey {
+				index: identity,
+				equipped: true,
+				region: InventoryRegion::Equipped
+			})
+		);
 		assert!(world.get::<HudMenuNavLocked>(viewport).is_some());
-		let nav = if from_end { MenuNav::Left } else { MenuNav::Right };
+		let nav = if from_end { MenuNav::Up } else { MenuNav::Down };
 		for step in 1..before.len() {
 			// A stale/hovered ordinal must never select a different bag item's controls.
 			world.get_mut::<HudMenu>(viewport).context("menu")?.selected = original_ordinal;
@@ -152,8 +164,6 @@ fn reorder_from_both_ends_visits_every_slot_and_retains_identity() -> Result<()>
 		let at_end = order(&world)?;
 		world.trigger(MenuNavImpulse::new(viewport, nav));
 		world.flush();
-		world.trigger(MenuNavImpulse::new(viewport, MenuNav::Down));
-		world.flush();
 		assert_eq!(order(&world)?, at_end);
 		world.trigger(MenuNavImpulse::new(viewport, MenuNav::Select));
 		world.flush();
@@ -171,7 +181,7 @@ fn standalone_keyboard_moves_the_item_once_without_moving_browse_focus() -> Resu
 	let original_ordinal = select_item(&mut world, viewport, before[0])?;
 	world.trigger(MenuNavImpulse::new(viewport, MenuNav::Select));
 	world.flush();
-	world.resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::ArrowRight);
+	world.resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::ArrowDown);
 	world
 		.run_system_once(navigate_hud_menus)
 		.map_err(|err| anyhow::anyhow!("browse: {err}"))?;
@@ -215,7 +225,9 @@ fn hover_cannot_steal_reorder_focus_but_click_can_retarget_it() -> Result<()> {
 	let target = world
 		.query::<(Entity, &InventoryItemKey)>()
 		.iter(&world)
-		.find(|(_, key)| key.equipped && key.index == before[1])
+		.find(|(_, key)| {
+			key.equipped && key.region == InventoryRegion::Equipped && key.index == before[1]
+		})
 		.map(|(entity, _)| entity)
 		.context("other tile")?;
 	let location = Location {
@@ -244,7 +256,14 @@ fn hover_cannot_steal_reorder_focus_but_click_can_retarget_it() -> Result<()> {
 	));
 	world.flush();
 	assert_eq!(selected_key(&mut world, viewport)?, before[1]);
-	assert_eq!(world.resource::<InventoryInteraction>().reordering(), Some(before[1]));
+	assert_eq!(
+		world.resource::<InventoryInteraction>().reordering(),
+		Some(InventoryItemKey {
+			index: before[1],
+			equipped: true,
+			region: InventoryRegion::Equipped
+		})
+	);
 	world.trigger(MenuNavImpulse::new(viewport, MenuNav::Select));
 	world.flush();
 	assert_eq!(*world.resource::<InventoryInteraction>(), InventoryInteraction::Browse);
@@ -278,7 +297,7 @@ fn lubikan_reorder_uses_stable_identity_and_discard_restores_order() -> Result<(
 		vec![lubikans::LubikanAccountId::SELF, last, first],
 		vec![last, lubikans::LubikanAccountId::SELF, first],
 	] {
-		world.trigger(MenuNavImpulse::new(viewport, MenuNav::Left));
+		world.trigger(MenuNavImpulse::new(viewport, MenuNav::Up));
 		world.flush();
 		rebuild(&mut world, viewport)?;
 		assert_eq!(world.resource::<CharacterMenuState>().0.lubikans.accounts(), expected);

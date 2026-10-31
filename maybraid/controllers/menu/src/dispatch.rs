@@ -1,9 +1,9 @@
 //! Scoped menu focus and rich routed-pad interpretation.
-use crate::MenuController;
 pub use crate::primary::{
-	ExclusiveNav, MenuNavCapture, exclusive_nav_menu,
-	refresh_primary_menu_focus as refresh_menu_focus,
+	exclusive_nav_menu, refresh_primary_menu_focus as refresh_menu_focus, ExclusiveNav,
+	MenuNavCapture,
 };
+use crate::MenuController;
 use bevy::prelude::*;
 use maybraid_controllers_core::{CaptureKind, InputRouting, ScopeOwner, UiTarget};
 use menu_components::{HudMenu, HudOverlayMenu, MenuModal, MenuNav, MenuNavImpulse, TextMenu};
@@ -74,6 +74,7 @@ pub fn interpret_menu_pad(
 	mut sessions: Query<&mut crate::MenuSession>,
 	mut text: crate::text::ScopedTextInput,
 	reorder: Query<(), With<menu_components::HudMenuNavLocked>>,
+	inventory_menus: Query<(), With<menu_components::InventoryHudMenu>>,
 	mut commands: Commands,
 ) {
 	let input = &event.input;
@@ -152,6 +153,53 @@ pub fn interpret_menu_pad(
 			}
 			stream.repeat.derive(&interpreted_pad, &config, frame.delta.as_secs_f32());
 			let mut events = stream.repeat.events.clone();
+			// Inventory shell shortcuts are edge-triggered and use their own
+			// routed event, so generic menus never see them as spatial navigation.
+			let inventory_modal_owner = if primary {
+				primary_stack.as_ref().and_then(|stack| stack.nav_owner())
+			} else {
+				sessions.get(entity).ok().and_then(|session| session.modals.nav_owner())
+			};
+			let inventory_context_allowed = !context_blocked
+				|| inventory_modal_owner == Some(menu_components::MenuModalId::OVERLAY_SELECT);
+			let inventory_shortcut = if inventory_menus.contains(target) {
+				let keys = &frame.pad.keys;
+				if frame.pad.just_pressed(maybraid_virtual_pad_controller::PadButton::BumperFocus)
+					|| keys.just_pressed(KeyCode::PageUp)
+				{
+					Some(menu_components::InventoryNavigation::PreviousSection)
+				} else if frame
+					.pad
+					.just_pressed(maybraid_virtual_pad_controller::PadButton::BumperFire)
+					|| keys.just_pressed(KeyCode::PageDown)
+				{
+					Some(menu_components::InventoryNavigation::NextSection)
+				} else if frame
+					.pad
+					.just_pressed(maybraid_virtual_pad_controller::PadButton::StickClickMove)
+					|| keys.just_pressed(KeyCode::KeyG)
+				{
+					Some(menu_components::InventoryNavigation::ToggleDrawer)
+				} else if frame
+					.pad
+					.just_pressed(maybraid_virtual_pad_controller::PadButton::TriggerFocus)
+					|| frame
+						.pad
+						.just_pressed(maybraid_virtual_pad_controller::PadButton::TriggerFire)
+					|| keys.just_pressed(KeyCode::Tab)
+				{
+					Some(menu_components::InventoryNavigation::ToggleRegion)
+				} else {
+					None
+				}
+			} else {
+				None
+			};
+			let inventory_allowed = inventory_context_allowed && !reorder.contains(target);
+			let inventory_action = inventory_shortcut.filter(|_| inventory_allowed);
+			let inventory_suppressed = inventory_menus.contains(target)
+				&& inventory_shortcut.is_some()
+				&& !inventory_allowed;
 			if primary {
 				if let Some(host) = host.as_mut() {
 					host.frame = Some(frame.clone());
@@ -214,6 +262,17 @@ pub fn interpret_menu_pad(
 					.clone()
 					.map(|_| MenuNav::Back)
 					.trigger(&mut commands, move |routed| MenuNavImpulse::routed(routed));
+				return;
+			}
+			if inventory_suppressed {
+				input.consume_frame(&mut commands);
+				return;
+			}
+			if let Some(action) = inventory_action {
+				input.consume_frame(&mut commands);
+				input.clone().map(move |_| action).trigger(&mut commands, move |routed| {
+					menu_components::InventoryNavigationImpulse::routed(routed)
+				});
 				return;
 			}
 			if !events.is_empty() {

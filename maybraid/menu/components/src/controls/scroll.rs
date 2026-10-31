@@ -19,6 +19,11 @@ const HUD_NAV_SCROLL_LINE: f32 = 56.0;
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct HudScrollViewport;
 
+/// A scroll viewport whose position is owned by the screen (for example, a
+/// manually browsed catalog). Focus reveal must not pull it back each frame.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct HudScrollManual;
+
 /// Horizontal equipped-row strip. Focus follows the item across overflow.
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct HudScrollStrip;
@@ -235,7 +240,7 @@ fn hud_nav_scroll_delta(nav: MenuNav) -> Option<f32> {
 pub fn scroll_hud_selection_into_view(
 	mut viewports: Query<
 		(Entity, &HudMenu, &ComputedNode, &mut ScrollPosition),
-		With<HudScrollViewport>,
+		(With<HudScrollViewport>, Without<HudScrollManual>),
 	>,
 	items: Query<(Entity, &HudMenuItem, &ComputedNode, &bevy::ui::UiGlobalTransform)>,
 	transforms: Query<&bevy::ui::UiGlobalTransform>,
@@ -395,7 +400,7 @@ pub(crate) fn entity_is_under(
 
 #[cfg(test)]
 mod tests {
-	use super::{HUD_NAV_SCROLL_LINE, hud_nav_scroll_delta, scroll_delta_to_reveal};
+	use super::{hud_nav_scroll_delta, scroll_delta_to_reveal, HUD_NAV_SCROLL_LINE};
 	use crate::MenuNav;
 
 	#[test]
@@ -453,7 +458,7 @@ mod tests {
 
 	#[test]
 	fn wheel_does_not_scroll_while_a_confirm_modal_owns_nav() {
-		use super::{HudScroll, send_hud_scroll_events};
+		use super::{send_hud_scroll_events, HudScroll};
 		use crate::modal::{MenuModalId, MenuModalLayer, MenuModalStack};
 		use bevy::ecs::entity::EntityHashMap;
 		use bevy::ecs::system::RunSystemOnce;
