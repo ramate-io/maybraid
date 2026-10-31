@@ -9,9 +9,10 @@ use character_ui_menu::{
 use menu_components::{
 	menu_region_wash, spawn_header_line, spawn_hud_text, spawn_inventory_action_prompts,
 	spawn_text_button, HoverTile, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, HudScrollManual,
-	HudScrollViewport, InputPromptDevice, InventoryHudMenu, TileWrap, PANEL_HEADER_FONT_SIZE,
-	PANEL_ITEM_FONT_SIZE, PROMPT_PAD_NEXT_SECTION, PROMPT_PAD_PREVIOUS_SECTION,
-	PROMPT_PAD_TOGGLE_DRAWER, TEXT_DEEP_BLUE, TEXT_LIME, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	HudScrollViewport, InputPromptDevice, InventoryHudMenu, TileWrap, MENU_CLEAR,
+	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PROMPT_PAD_NEXT_SECTION,
+	PROMPT_PAD_PREVIOUS_SECTION, PROMPT_PAD_TOGGLE_DRAWER, TEXT_DEEP_BLUE, TEXT_YELLOW,
+	TEXT_YELLOW_FAINT,
 };
 
 use crate::sink::MenuThumbnailContext;
@@ -40,6 +41,9 @@ pub struct InventoryAIOPSlot {
 	pub capacity: usize,
 }
 
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+struct InventoryRankBadge(u8);
+
 /// Rotary item position. Cards remain alive while focus moves.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct InventoryCarouselCard {
@@ -56,6 +60,9 @@ pub(crate) struct InventoryCarouselLabel {
 
 #[derive(Component)]
 pub(crate) struct InventoryCarouselCaption;
+
+#[derive(Component)]
+pub(crate) struct InventoryCarouselCaptionGroup;
 
 #[derive(Component, Clone, Copy, Debug)]
 pub(crate) struct InventoryCarouselMotion {
@@ -686,56 +693,6 @@ fn spawn_gallery<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 	menu
 }
 
-/// A drawn check badge avoids relying on a font glyph missing from some HUD
-/// typefaces.
-fn spawn_equipped_check(parent: &mut ChildSpawnerCommands) {
-	parent
-		.spawn((
-			Node {
-				position_type: PositionType::Absolute,
-				top: Val::Px(4.0),
-				right: Val::Px(4.0),
-				width: Val::Px(18.0),
-				height: Val::Px(18.0),
-				border_radius: BorderRadius::MAX,
-				justify_content: JustifyContent::Center,
-				align_items: AlignItems::Center,
-				..default()
-			},
-			BackgroundColor(TEXT_LIME),
-			ZIndex(10),
-			Pickable::IGNORE,
-		))
-		.with_children(|badge| {
-			badge.spawn((
-				Node {
-					position_type: PositionType::Absolute,
-					width: Val::Px(3.0),
-					height: Val::Px(7.0),
-					left: Val::Px(5.0),
-					top: Val::Px(5.0),
-					..default()
-				},
-				BackgroundColor(Color::WHITE),
-				UiTransform { rotation: Rot2::radians(-0.65), ..default() },
-				Pickable::IGNORE,
-			));
-			badge.spawn((
-				Node {
-					position_type: PositionType::Absolute,
-					width: Val::Px(3.0),
-					height: Val::Px(10.0),
-					left: Val::Px(9.0),
-					top: Val::Px(3.0),
-					..default()
-				},
-				BackgroundColor(Color::WHITE),
-				UiTransform { rotation: Rot2::radians(0.65), ..default() },
-				Pickable::IGNORE,
-			));
-		});
-}
-
 fn spawn_rotary_tile<E: Copy + Send + Sync + 'static>(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
@@ -860,50 +817,65 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 					width: Val::Percent(100.0),
 					padding: UiRect::axes(Val::Px(8.0), Val::Px(3.0)),
 					border_radius: BorderRadius::all(Val::Px(4.0)),
-					flex_direction: FlexDirection::Column,
+					flex_direction: FlexDirection::Row,
 					justify_content: JustifyContent::Center,
 					align_items: AlignItems::Center,
-					row_gap: Val::Px(1.0),
+					column_gap: Val::Px(3.0),
 					..default()
 				},
 				BackgroundColor(Color::NONE),
 				Pickable::IGNORE,
 			))
 			.with_children(|label| {
-				label.spawn((
-					InventoryCarouselCaption,
-					TileWrap,
-					Text::new(choice.label.clone()),
-					fonts.item(14.0),
-					TextColor(face),
-					TextLayout::new(
-						bevy::text::Justify::Center,
-						bevy::text::LineBreak::WordOrCharacter,
-					),
-					bevy::text::TextBounds::UNBOUNDED,
-					Node { width: Val::Percent(100.0), ..default() },
-					Pickable::IGNORE,
-				));
-				if !choice.detail.is_empty() {
-					label.spawn((
-						InventoryCarouselCaption,
-						TileWrap,
-						Text::new(choice.detail.clone()),
-						fonts.item(11.0),
-						TextColor(TEXT_YELLOW_FAINT),
-						TextLayout::new(
-							bevy::text::Justify::Center,
-							bevy::text::LineBreak::WordOrCharacter,
-						),
-						bevy::text::TextBounds::UNBOUNDED,
-						Node { width: Val::Percent(100.0), ..default() },
-						Pickable::IGNORE,
-					));
+				if let Some(rank) = current_equipped_rank(choice) {
+					spawn_inventory_rank_badge(label, fonts, rank, 26.0);
 				}
+				label
+					.spawn((
+						InventoryCarouselCaptionGroup,
+						Node {
+							flex_grow: 1.0,
+							min_width: Val::Px(0.0),
+							flex_direction: FlexDirection::Column,
+							align_items: AlignItems::Center,
+							row_gap: Val::Px(1.0),
+							..default()
+						},
+						Pickable::IGNORE,
+					))
+					.with_children(|text| {
+						text.spawn((
+							InventoryCarouselCaption,
+							TileWrap,
+							Text::new(choice.label.clone()),
+							fonts.item(14.0),
+							TextColor(face),
+							TextLayout::new(
+								bevy::text::Justify::Center,
+								bevy::text::LineBreak::WordOrCharacter,
+							),
+							bevy::text::TextBounds::UNBOUNDED,
+							Node { width: Val::Percent(100.0), ..default() },
+							Pickable::IGNORE,
+						));
+						if !choice.detail.is_empty() {
+							text.spawn((
+								InventoryCarouselCaption,
+								TileWrap,
+								Text::new(choice.detail.clone()),
+								fonts.item(11.0),
+								TextColor(TEXT_YELLOW_FAINT),
+								TextLayout::new(
+									bevy::text::Justify::Center,
+									bevy::text::LineBreak::WordOrCharacter,
+								),
+								bevy::text::TextBounds::UNBOUNDED,
+								Node { width: Val::Percent(100.0), ..default() },
+								Pickable::IGNORE,
+							));
+						}
+					});
 			});
-			if choice.selected {
-				spawn_equipped_check(tile);
-			}
 		});
 }
 
@@ -984,46 +956,64 @@ fn spawn_compact_gallery_button<E: Copy + Send + Sync + 'static>(
 			Outline::new(Val::Px(2.0), Val::Px(2.0), Color::NONE),
 		))
 		.with_children(|tile| {
-			let mut image_slot = tile.spawn((
+			let mut leading = tile.spawn((
 				Node {
 					width: Val::Px(36.0),
-					height: Val::Px(36.0),
 					min_width: Val::Px(36.0),
-					min_height: Val::Px(36.0),
+					height: Val::Px(64.0),
+					flex_direction: FlexDirection::Column,
 					justify_content: JustifyContent::Center,
 					align_items: AlignItems::Center,
-					position_type: PositionType::Relative,
+					row_gap: Val::Px(2.0),
 					..default()
 				},
 				Pickable::IGNORE,
 			));
-			if let Some(camera) = viewport {
-				image_slot.with_children(|slot| {
-					slot.spawn((
-						bevy::ui::widget::ViewportNode::new(camera),
-						Node {
-							width: Val::Percent(100.0),
-							height: Val::Percent(100.0),
-							..default()
-						},
-						Pickable::IGNORE,
-					));
-				});
-			} else if let Some(image) = thumbnail {
-				image_slot.with_children(|slot| {
-					slot.spawn((
-						ImageNode { image, color: tint, ..default() },
-						Node {
-							width: Val::Percent(100.0),
-							height: Val::Percent(100.0),
-							..default()
-						},
-						Pickable::IGNORE,
-					));
-				});
-			} else if choice.path.is_empty() {
-				image_slot.insert(BackgroundColor(inventory_color(choice.preview)));
-			}
+			leading.with_children(|leading| {
+				if let Some(rank) = current_equipped_rank(choice) {
+					spawn_inventory_rank_badge(leading, fonts, rank, 24.0);
+				}
+				let mut image_slot = leading.spawn((
+					Node {
+						width: Val::Px(32.0),
+						height: Val::Px(32.0),
+						min_width: Val::Px(32.0),
+						min_height: Val::Px(32.0),
+						justify_content: JustifyContent::Center,
+						align_items: AlignItems::Center,
+						position_type: PositionType::Relative,
+						..default()
+					},
+					Pickable::IGNORE,
+				));
+				if let Some(camera) = viewport {
+					image_slot.with_children(|slot| {
+						slot.spawn((
+							bevy::ui::widget::ViewportNode::new(camera),
+							Node {
+								width: Val::Percent(100.0),
+								height: Val::Percent(100.0),
+								..default()
+							},
+							Pickable::IGNORE,
+						));
+					});
+				} else if let Some(image) = thumbnail {
+					image_slot.with_children(|slot| {
+						slot.spawn((
+							ImageNode { image, color: tint, ..default() },
+							Node {
+								width: Val::Percent(100.0),
+								height: Val::Percent(100.0),
+								..default()
+							},
+							Pickable::IGNORE,
+						));
+					});
+				} else if choice.path.is_empty() {
+					image_slot.insert(BackgroundColor(inventory_color(choice.preview)));
+				}
+			});
 			tile.spawn((
 				TileWrap,
 				Text::new(choice.label.clone()),
@@ -1034,9 +1024,6 @@ fn spawn_compact_gallery_button<E: Copy + Send + Sync + 'static>(
 				Node { flex_grow: 1.0, min_width: Val::Px(0.0), ..default() },
 				Pickable::IGNORE,
 			));
-			if choice.selected {
-				spawn_equipped_check(tile);
-			}
 		});
 }
 
@@ -1098,7 +1085,7 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 	}
 	row.with_children(|row| {
 		if let Some(rank) = tile.rank {
-			spawn_equipped_rank_badge(row, fonts, rank);
+			spawn_inventory_rank_badge(row, fonts, rank, 40.0);
 		}
 		let mut image_slot = row.spawn((
 			Node {
@@ -1150,40 +1137,51 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 	});
 }
 
-fn spawn_equipped_rank_badge(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, rank: u8) {
+fn spawn_inventory_rank_badge(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	rank: u8,
+	size: f32,
+) {
+	let unit_scale = size / 40.0;
+	let fill_size = 100.0 * unit_scale;
+	let angle = 0.12_f32;
+	let fill_left = -62.8 * unit_scale;
+	let numeral_size = (size * 0.44).max(11.0);
 	parent
 		.spawn((
 			Node {
-				width: Val::Px(40.0),
-				height: Val::Px(40.0),
-				min_width: Val::Px(40.0),
-				min_height: Val::Px(40.0),
+				width: Val::Px(size),
+				height: Val::Px(size),
+				min_width: Val::Px(size),
+				min_height: Val::Px(size),
 				position_type: PositionType::Relative,
 				overflow: Overflow::clip(),
 				justify_content: JustifyContent::Center,
 				align_items: AlignItems::Center,
 				..default()
 			},
+			InventoryRankBadge(rank),
 			Pickable::IGNORE,
 		))
 		.with_children(|badge| {
 			badge.spawn((
 				Node {
 					position_type: PositionType::Absolute,
-					left: Val::Px(-62.8),
-					top: Val::Px(-30.0),
-					width: Val::Px(100.0),
-					height: Val::Px(100.0),
+					left: Val::Px(fill_left),
+					top: Val::Px(-30.0 * unit_scale),
+					width: Val::Px(fill_size),
+					height: Val::Px(fill_size),
 					..default()
 				},
-				UiTransform { rotation: Rot2::radians(0.12), ..default() },
-				BackgroundColor(TEXT_DEEP_BLUE),
+				UiTransform { rotation: Rot2::radians(angle), ..default() },
+				BackgroundColor(TEXT_YELLOW),
 				Pickable::IGNORE,
 			));
 			badge.spawn((
 				Text::new(rank.to_string()),
-				fonts.item(18.0),
-				TextColor(TEXT_YELLOW),
+				fonts.item(numeral_size),
+				TextColor(MENU_CLEAR),
 				TextLayout::new(
 					bevy::text::Justify::Center,
 					bevy::text::LineBreak::WordOrCharacter,
@@ -1391,6 +1389,10 @@ fn bounded_focus(focused: usize, count: usize) -> Option<usize> {
 	(count > 0).then(|| focused.min(count - 1))
 }
 
+fn current_equipped_rank<E>(choice: &GridCatalogChoice<E>) -> Option<u8> {
+	choice.selected.then_some(choice.rank).flatten()
+}
+
 fn gallery_content_height(rows: usize) -> f32 {
 	rows as f32 * INVENTORY_GALLERY_ROW_HEIGHT + rows.saturating_sub(1) as f32 * GALLERY_ROW_GAP
 }
@@ -1426,6 +1428,7 @@ pub(crate) fn animate_inventory_carousel(
 	)>,
 	menus: Query<&HudMenu>,
 	mut labels: Query<(&InventoryCarouselLabel, &Children, &mut BackgroundColor)>,
+	caption_groups: Query<&Children, With<InventoryCarouselCaptionGroup>>,
 	mut captions: Query<&mut TextColor, With<InventoryCarouselCaption>>,
 ) {
 	let alpha = (1.0 - (-14.0 * time.delta_secs()).exp()).clamp(0.0, 1.0);
@@ -1452,8 +1455,12 @@ pub(crate) fn animate_inventory_carousel(
 		let selected = menus.get(label.menu).is_ok_and(|menu| menu.selected == label.ordinal);
 		background.0 = if selected { TEXT_YELLOW } else { Color::NONE };
 		for child in children.iter() {
-			if let Ok(mut color) = captions.get_mut(child) {
-				color.0 = if selected { TEXT_DEEP_BLUE } else { TEXT_YELLOW_FAINT };
+			if let Ok(text_children) = caption_groups.get(child) {
+				for text_child in text_children.iter() {
+					if let Ok(mut color) = captions.get_mut(text_child) {
+						color.0 = if selected { TEXT_DEEP_BLUE } else { TEXT_YELLOW_FAINT };
+					}
+				}
 			}
 		}
 	}
@@ -1499,6 +1506,110 @@ mod tests {
 			GALLERY_VIEWPORT_HEIGHT
 		);
 		Ok(())
+	}
+
+	#[test]
+	fn drawer_rank_badges_match_equipped_catalog_order_in_both_modes() -> anyhow::Result<()> {
+		for drawer in [InventoryDrawerMode::Rotary, InventoryDrawerMode::Gallery] {
+			let choices = [Some(2), None, Some(1)]
+				.into_iter()
+				.enumerate()
+				.map(|(index, rank)| GridCatalogChoice {
+					label: format!("item-{index}"),
+					detail: String::new(),
+					path: "",
+					thumbnail_camera: character_ui_menu::ThumbnailCamera::DEFAULT,
+					preview: character_ui_menu::PreviewColor::WHITE,
+					image_key: None,
+					selected: rank.is_some(),
+					rank,
+					item_key: Some(index),
+					event: Some(index as u8),
+				})
+				.collect();
+			let node = MenuNode::Section {
+				label: "Inventory",
+				children: vec![MenuNode::Section {
+					label: "Clothing",
+					children: vec![MenuNode::GridCatalog {
+						label: "Clothing",
+						max_selected: 6,
+						choices,
+					}],
+				}],
+			};
+			let mut app = App::new();
+			app.add_plugins(MinimalPlugins);
+			app.add_plugins(AssetPlugin::default());
+			app.init_asset::<Image>();
+			let viewport = app.world_mut().spawn(crate::widgets::OverlaySelectViewport).id();
+			let fonts = HudFonts {
+				black: Handle::default(),
+				semibold: Handle::default(),
+				regular: Handle::default(),
+				logo: Handle::default(),
+			};
+			let session = InventoryMenuSession { drawer, ..default() };
+			app.world_mut()
+				.run_system_once(move |mut commands: Commands, assets: Res<AssetServer>| {
+					let mut thumbnails = crate::NoThumbnails;
+					fill_inventory_screen(
+						&mut commands,
+						viewport,
+						&fonts,
+						&assets,
+						InputPromptDevice::Keyboard,
+						&node,
+						true,
+						&session,
+						&mut thumbnails,
+					)
+				})
+				.map_err(|error| anyhow::anyhow!("render system failed: {error}"))?;
+			app.world_mut().flush();
+			let tiles = {
+				let mut query = app.world_mut().query::<(Entity, &InventoryTile)>();
+				let mut tiles = query
+					.iter(app.world())
+					.filter(|(_, tile)| tile.region == InventoryRegion::Drawer)
+					.map(|(entity, tile)| (tile.ordinal, entity))
+					.collect::<Vec<_>>();
+				tiles.sort_by_key(|(ordinal, _)| *ordinal);
+				tiles
+			};
+			assert_eq!(tiles.len(), 3);
+			let ranks = tiles
+				.into_iter()
+				.map(|(_, tile)| descendant_rank_badges(app.world(), tile))
+				.collect::<Vec<_>>();
+			assert_eq!(
+				ranks,
+				vec![vec![(2, "2".to_owned())], vec![], vec![(1, "1".to_owned())]],
+				"mode: {drawer:?}"
+			);
+		}
+		Ok(())
+	}
+
+	fn descendant_rank_badges(world: &World, root: Entity) -> Vec<(u8, String)> {
+		let mut pending = vec![root];
+		let mut ranks = Vec::new();
+		while let Some(entity) = pending.pop() {
+			if let Some(badge) = world.get::<InventoryRankBadge>(entity) {
+				let numeral = world
+					.get::<Children>(entity)
+					.into_iter()
+					.flat_map(|children| children.iter())
+					.find_map(|child| world.get::<Text>(child).map(|text| text.0.clone()))
+					.unwrap_or_default();
+				ranks.push((badge.0, numeral));
+			}
+			if let Some(children) = world.get::<Children>(entity) {
+				pending.extend(children.iter());
+			}
+		}
+		ranks.sort_unstable_by_key(|(rank, _)| *rank);
+		ranks
 	}
 
 	#[test]

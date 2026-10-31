@@ -237,8 +237,8 @@ pub struct ItemRow<E> {
 	pub materials: Vec<SelectChoice<E>>,
 }
 
-/// One cell in a [`MenuNode::GridCatalog`]. Selection is marked by the host
-/// (Maybraid son for clothing, 1-based rank for weapons).
+/// One cell in a [`MenuNode::GridCatalog`]. Selection is marked by the host;
+/// the currently equipped item also carries its 1-based slot rank.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GridCatalogChoice<E> {
 	pub label: String,
@@ -250,8 +250,8 @@ pub struct GridCatalogChoice<E> {
 	/// Host-rendered image (skill-map catalog). Checked before mesh path.
 	pub image_key: Option<u64>,
 	pub selected: bool,
-	/// 1-based slot rank when this item is queued (weapons). Clothing leaves
-	/// this `None` and uses the Maybraid son for selection.
+	/// 1-based currently equipped slot rank. Unequipped catalog choices leave
+	/// this `None`; `selected` still records the host's selection state.
 	pub rank: Option<u8>,
 	/// Bag index while this layout is unchanged. `None` for non-bag tiles
 	/// such as the always-equipped Self Lubikan.
