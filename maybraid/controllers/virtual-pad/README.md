@@ -50,6 +50,13 @@ entity; `None` removes that source's injection. Requests are applied inside `Pro
 before physical sampling, so hosts write them before `VirtualPadSystems::Produce`.
 Overlay storage belongs to the named controller.
 
+`PadOverlayMode::Additive` is the default. Set an overlay's mode to `Exclusive`
+to sample its injected input while ignoring physical keyboard, mouse and
+gamepad contributions on that controller. Device assignments and snapshot
+history remain on the controller; other sources continue sampling normally.
+Removing the overlay restores physical sampling. `PadOverlay::clear` clears
+its input values while preserving the mode.
+
 Set [`VirtualPadConfig::debug_overlay`] to dump raw `Gamepad` sticks/buttons
 and each enabled controller onto the screen. Unmapped gilrs axes (`Other(0)` / `Other(1)`) fill in when `LeftStick` is idle.
 
@@ -62,6 +69,15 @@ Apple GameController and Core Haptics objects are main-thread-only. The
 `hid/gamecontroller.rs` backend stores them in thread-local storage and marks
 its poll / rumble / init systems with Bevy `NonSendMarker` so the multithreaded
 executor keeps them on the main thread.
+
+Headless hosts and tests should insert `PadHidPolicy::External` before adding
+`VirtualPadPlugin` or a gameplay plugin that installs it. This omits this crate's
+hardware initialization while keeping Bevy input processing, device discovery,
+and virtual-pad sampling active, so fixtures can supply `Gamepad` components,
+input messages, or overlays. It does not disable separately installed hardware
+plugins such as gilrs. The default `PadHidPolicy::Platform` retains the native
+Apple backend and its process-main-thread requirement. Set the policy during
+app construction; changing it later does not reconfigure an installed backend.
 
 ## Rumble
 

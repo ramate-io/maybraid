@@ -23,6 +23,8 @@ const STUCK_GIVE_UP: f32 = 5.5;
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TickView {
 	pub player_xz: Option<[f32; 2]>,
+	/// Selected player is waiting for spawn/teleport physics handoff.
+	pub player_waiting_for_support: bool,
 	pub yaw: f32,
 	pub menu: MenuObservation,
 	pub inventory: InventoryObservation,
@@ -69,6 +71,7 @@ enum Active {
 		sprint: bool,
 		look: Option<[f32; 2]>,
 		elapsed: f32,
+		support_wait_elapsed: f32,
 		last_remaining: f32,
 		stall_secs: f32,
 	},
@@ -269,6 +272,7 @@ fn start_command(
 				sprint,
 				look,
 				elapsed: 0.0,
+				support_wait_elapsed: 0.0,
 				last_remaining: f32::MAX,
 				stall_secs: 0.0,
 			});
@@ -289,6 +293,13 @@ fn start_command(
 		command @ AgentCommand::Tanz { .. } => {
 			effects.push(TickEffect::Instant { id, command });
 			true
+		}
+		command @ (AgentCommand::Start { .. } | AgentCommand::Teleport { .. }) => {
+			effects.push(TickEffect::Instant { id, command });
+			effects.push(TickEffect::Finished { id, cmd: label });
+			// World effects run after playback. Wait for the next view before
+			// a following Goto can inspect the player's pre-relocation pose.
+			false
 		}
 		command => {
 			effects.push(TickEffect::Instant { id, command });
@@ -332,9 +343,31 @@ fn step_active(
 			sprint,
 			look,
 			elapsed,
+			support_wait_elapsed,
 			last_remaining,
 			stall_secs,
 		} => {
+			if view.player_waiting_for_support && view.player_xz.is_some() {
+				*intent = PadIntent::default();
+				let support_wait_elapsed = support_wait_elapsed + dt;
+				if support_wait_elapsed >= timeout {
+					let remaining =
+						view.player_xz.map(|from| xz_distance(from, xz)).unwrap_or(timeout);
+					return fail_goto(id, xz, remaining, "support timeout", effects);
+				}
+				return Step::Continue(Active::Goto {
+					id,
+					xz,
+					timeout,
+					radius,
+					sprint,
+					look,
+					elapsed,
+					support_wait_elapsed,
+					last_remaining: f32::MAX,
+					stall_secs: 0.0,
+				});
+			}
 			let elapsed = elapsed + dt;
 			let mut last_remaining = last_remaining;
 			let mut stall_secs = stall_secs;
@@ -372,6 +405,7 @@ fn step_active(
 				sprint,
 				look,
 				elapsed,
+				support_wait_elapsed,
 				last_remaining,
 				stall_secs,
 			})
@@ -876,3 +910,6 @@ mod tests {
 		Ok(())
 	}
 }
+
+#[cfg(test)]
+mod support_tests;

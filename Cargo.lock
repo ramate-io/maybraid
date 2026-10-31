@@ -7269,6 +7269,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "characters",
+ "chunk",
  "durham",
  "lod",
  "lod-avian",
@@ -9332,6 +9333,7 @@ dependencies = [
  "maybraid-audio",
  "maybraid-character-controller",
  "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
 ]
 
 [[package]]

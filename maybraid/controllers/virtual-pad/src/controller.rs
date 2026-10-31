@@ -204,6 +204,8 @@ pub(crate) fn produce_controllers(
 		.collect();
 	let mouse_delta: Vec2 = mouse_events.read().map(|event| event.delta).sum();
 	for (entity, mut controller, overlay) in &mut controllers {
+		let exclusive =
+			overlay.is_some_and(|overlay| overlay.0.mode == crate::PadOverlayMode::Exclusive);
 		let devices = controller.devices.clone();
 		let config = controller.config.clone();
 		let changed = controller
@@ -222,14 +224,14 @@ pub(crate) fn produce_controllers(
 		controller.connected = connected;
 		controller.previous_devices = Some(devices.clone());
 		controller.pad.begin_frame();
-		if devices.keyboard {
+		if devices.keyboard && !exclusive {
 			let policy = controller.policy;
 			crate::produce::keyboard::KeyboardPad::apply(&keyboard, policy, &mut controller.pad);
 			controller.pad.key_events = keys.clone();
 		} else {
 			controller.pad.keys = ButtonInput::default();
 		}
-		if devices.mouse {
+		if devices.mouse && !exclusive {
 			crate::produce::mouse::MousePad::apply(
 				&keyboard,
 				&mouse,
@@ -237,20 +239,22 @@ pub(crate) fn produce_controllers(
 				&mut controller.pad,
 			);
 		}
-		for gamepad in &devices.gamepads {
-			if let Ok(gamepad) = gamepads.get(*gamepad) {
-				crate::produce::gamepad::GamepadAxes::apply(
-					gamepad,
-					&config,
-					time.delta_secs(),
-					&mut controller.pad,
-				);
+		if !exclusive {
+			for gamepad in &devices.gamepads {
+				if let Ok(gamepad) = gamepads.get(*gamepad) {
+					crate::produce::gamepad::GamepadAxes::apply(
+						gamepad,
+						&config,
+						time.delta_secs(),
+						&mut controller.pad,
+					);
+				}
 			}
 		}
 		if let Some(overlay) = overlay {
 			overlay.0.apply(&mut controller.pad);
 		}
-		if changed || (connected && !was_connected) {
+		if !exclusive && (changed || (connected && !was_connected)) {
 			// Device transfer cancels holds; a still-held device must release first.
 			controller.pad.suppress_gameplay();
 		}
@@ -281,6 +285,7 @@ mod tests {
 
 	fn app() -> App {
 		let mut app = App::new();
+		app.insert_resource(crate::PadHidPolicy::External);
 		app.add_plugins((
 			MinimalPlugins,
 			bevy::input::InputPlugin,
@@ -389,6 +394,7 @@ mod tests {
 	fn default_host_reuses_primary_and_secondary_sources_without_fresh_held_edges(
 	) -> anyhow::Result<()> {
 		let mut app = App::new();
+		app.insert_resource(crate::PadHidPolicy::External);
 		app.add_plugins((
 			MinimalPlugins,
 			bevy::input::InputPlugin,

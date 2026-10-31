@@ -23,6 +23,23 @@ maybraid --start-at=0,0 \
 `MAYBRAID_AGENT_QUIT` are the env equivalents. With none of those set the
 plugin is not added.
 
+For reproducible captures, add `--agent-exclusive` or set
+`MAYBRAID_AGENT_EXCLUSIVE=1`:
+
+```bash
+MAYBRAID_AGENT_EXCLUSIVE=1 maybraid \
+  --agent-script maybraid/agent/scripts/origin-walk.jsonl \
+  --agent-events /tmp/maybraid-events.jsonl --agent-quit
+```
+
+Exclusive mode uses only scripted pad input on the primary controller, ignoring
+its keyboard, mouse and gamepad contributions. It holds a neutral exclusive
+overlay while waiting for readiness and between commands. Device assignments
+and other controllers remain active. Startup logs `agent input exclusive=true`
+so a capture can verify the setting. Without this option, scripted input still
+adds to physical input. The exclusive flag alone does not enable the agent;
+a script or pipe is required.
+
 Playback starts when Discovery surface is ready, when the Home / Characters
 shell has been up for two seconds (terrain streaming off), or when the 90 s
 ready timeout fires. A leaked `WorldGameplayEnabled` default must not block
@@ -55,7 +72,7 @@ with `"cmd"`.
 | `wait_for` | `screen`, `modal`, `flow`, `pause`, `focus_row`, `focus_label`, `cycle_category`, `weapon`, `skill_map`, `lubikan`, `timeout` (default 10) | idle until the snapshot matches; fails with `detail` on timeout |
 | `expect` | same matcher as `wait_for` | instant; `failed` on mismatch |
 | `mash` | `buttons`, `rate_hz` (default 15), `secs`, `seed` | seeded random presses and chords |
-| `goto` | `xz`, `timeout` (default 30), `radius` (default 3), `sprint`, optional `look` | steer until reached; stall jumps / strafes then fails `stuck` |
+| `goto` | `xz`, `timeout` (default 30), `radius` (default 3), `sprint`, optional `look` | steer until reached; stall jumps / strafes then fails `stuck`; pending spawn/teleport support waits with neutral input |
 | `teleport` | `xz`, optional `y` | instant (utility) |
 | `console` | `line` (`stats vsync`, `sky noon`, …) | instant |
 | `visual_style` | `style` (`native`, `sharp`, `impressionist`, `watercolor`, `retro`, `antediluvian`, `pre_post_modern`) | instant; `started` is receipt, `finished` includes resolved `WIDTHxHEIGHT` |
@@ -64,6 +81,12 @@ with `"cmd"`.
 | `screenshot` | `path` | instant start; `finished` after GPU readback writes the PNG (`detail` has mean luma) |
 | `scenario` | `name`, `mark` (`start` / `end`) | instant; Tracy message |
 | `quit` | | request process exit |
+
+`goto.timeout` bounds movement time and also supplies a separate cumulative budget
+for waiting on spawn or teleport support. While support is pending, movement and
+stall timers pause and input stays neutral. The support budget survives readiness
+changes; exhausting it fails with `support timeout`. `start` and `teleport` consume
+their playback tick so a following `goto` sees the relocated player on the next tick.
 
 Buttons: `jump` (`a`, `confirm`), `sprint` (`l3`), `stance` (`b`, `back`),
 `interact` (`x`), `swap` (`y`), `ads` (`lb`), `fire` (`rt`), `focus` (`lt`),

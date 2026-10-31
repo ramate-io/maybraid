@@ -95,7 +95,7 @@ mod tests {
 	use avian3d::prelude::{
 		Collider, GravityScale, LinearVelocity, PhysicsPlugins, Position, RigidBody,
 	};
-	use bevy::ecs::system::RunSystemOnce;
+	use bevy::{ecs::system::RunSystemOnce, time::TimeUpdateStrategy};
 	use durham::{BaseTerrainNoise, Terrain, TerrainCellLayout, TerrainConfig, WorldBaseTerrain};
 	use lod::gen::Id;
 	use lod_avian::PhysicsInteractionLayer;
@@ -109,6 +109,11 @@ mod tests {
 			PhysicsPlugins::default(),
 			bevy::asset::AssetPlugin::default(),
 			bevy::mesh::MeshPlugin,
+		));
+		// One physics tick per update lets assertions observe the first completed
+		// handoff before released actors resume ordinary gravity and movement.
+		app.insert_resource(TimeUpdateStrategy::ManualDuration(
+			std::time::Duration::from_secs_f64(1.0 / 64.0),
 		));
 		app.insert_resource(TerrainCellLayout::default());
 		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
@@ -128,6 +133,7 @@ mod tests {
 				LocomotionCapsule::HUMANOID,
 				RigidBody::Dynamic,
 				Collider::capsule(0.4, 1.0),
+				PhysicsInteractionLayer::animated_layers(),
 				GravityScale(1.25),
 				LinearVelocity(Vec3::new(10.0, -20.0, 4.0)),
 			))
@@ -164,6 +170,25 @@ mod tests {
 		}
 	}
 
+	fn advance_until_released(app: &mut App, entity: Entity) -> anyhow::Result<()> {
+		for _ in 0..64 {
+			app.update();
+			anyhow::ensure!(
+				app.world().entities().contains(entity),
+				"member vanished before handoff"
+			);
+			if app.world().get::<MobSupportQueued>(entity).is_some()
+				&& app.world().get::<PendingActorSupport>(entity).is_none()
+			{
+				return Ok(());
+			}
+		}
+		Err(anyhow::anyhow!(
+			"member did not complete physics handoff: {:?}",
+			app.world().get::<PendingActorSupport>(entity)
+		))
+	}
+
 	#[test]
 	fn unpublished_members_retry_independently_and_drop_from_holding_altitude() -> anyhow::Result<()>
 	{
@@ -185,7 +210,7 @@ mod tests {
 			"height alone is insufficient"
 		);
 		fixed_floor(&mut app, pose.xz(), ground);
-		advance(&mut app);
+		advance_until_released(&mut app, near)?;
 		assert!(app.world().get::<PendingActorSupport>(near).is_none());
 		assert!(app.world().get::<PendingActorSupport>(far).is_some());
 		let placed = app
@@ -232,7 +257,7 @@ mod tests {
 		);
 		assert_eq!(app.world().get::<Transform>(floor).map(|t| t.translation), Some(pose));
 		fixed_floor(&mut app, pose.xz(), 12.0);
-		advance(&mut app);
+		advance_until_released(&mut app, floor)?;
 		assert!(app.world().get::<PendingActorSupport>(floor).is_none());
 		assert_eq!(app.world().get::<Transform>(floor).map(|t| t.translation), Some(pose));
 		assert_eq!(app.world().get::<GravityScale>(floor).map(|g| g.0), Some(1.25));
@@ -240,7 +265,7 @@ mod tests {
 	}
 
 	#[test]
-	fn terrain_respawn_retains_its_authored_clearance() {
+	fn terrain_respawn_retains_its_authored_clearance() -> anyhow::Result<()> {
 		let mut app = support_app();
 		let ground = publish_origin(&mut app);
 		let pose = Vec3::new(8.0, ground + 2.5, 8.0);
@@ -249,9 +274,10 @@ mod tests {
 			.entity_mut(body)
 			.insert(MobRespawnSupport::new(PoiSupport::Terrain, Some(ground)));
 		fixed_floor(&mut app, pose.xz(), ground);
-		advance(&mut app);
+		advance_until_released(&mut app, body)?;
 		assert!(app.world().get::<PendingActorSupport>(body).is_none());
 		assert_eq!(app.world().get::<Transform>(body).map(|t| t.translation), Some(pose));
+		Ok(())
 	}
 	fn obstacle(app: &mut App, center: Vec3, width: f32) {
 		app.world_mut().spawn((
@@ -262,13 +288,15 @@ mod tests {
 		));
 	}
 
-	fn broad_floor(app: &mut App, center: Vec3) {
-		app.world_mut().spawn((
-			Transform::from_translation(center - Vec3::Y * 0.1),
-			RigidBody::Static,
-			Collider::cuboid(30.0, 0.1, 30.0),
-			PhysicsInteractionLayer::fixed_layers(),
-		));
+	fn broad_floor(app: &mut App, center: Vec3) -> Entity {
+		app.world_mut()
+			.spawn((
+				Transform::from_translation(center - Vec3::Y * 0.1),
+				RigidBody::Static,
+				Collider::cuboid(30.0, 0.1, 30.0),
+				PhysicsInteractionLayer::fixed_layers(),
+			))
+			.id()
 	}
 
 	#[test]
@@ -290,7 +318,7 @@ mod tests {
 			Collider::cuboid(30.0, 0.1, 30.0),
 			PhysicsInteractionLayer::fixed_layers(),
 		));
-		advance(&mut app);
+		advance_until_released(&mut app, body)?;
 		assert!(
 			app.world().get::<PendingActorSupport>(body).is_none(),
 			"motor-walkable slopes accept arrivals"
@@ -337,12 +365,10 @@ mod tests {
 		let mut app = support_app();
 		let ground = publish_origin(&mut app);
 		let center = Vec3::new(8.0, ground, 8.0);
-		broad_floor(&mut app, center);
+		let support = broad_floor(&mut app, center);
 		obstacle(&mut app, center, 1.0);
 		let body = member(&mut app, center + Vec3::Y * 200.0, 0);
-		for _ in 0..12 {
-			app.update();
-		}
+		advance_until_released(&mut app, body)?;
 		assert!(
 			app.world().get::<PendingActorSupport>(body).is_none(),
 			"a nearby clear column should release"
@@ -364,11 +390,11 @@ mod tests {
 					&PhysicsInteractionLayer::Fixed.query_filter(),
 					pose,
 					hull,
-					None,
+					Some(support),
 				)
 			})
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(!result, "the accepted standing capsule must clear fixed geometry");
+		assert!(!result, "the accepted standing capsule must clear geometry other than its floor");
 		Ok(())
 	}
 

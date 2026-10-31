@@ -57,7 +57,25 @@ pub fn probe_search_with_locomotion(
 	if !column_presentation_ready(spatial, filter, search) {
 		return SupportProbeOutcome::Waiting;
 	}
-	cast_column(spatial, filter, search, locomotion)
+	cast_column(spatial, filter, search, locomotion, true)
+}
+
+/// Actor handoff validates full-capsule clearance with a bounded live-geometry
+/// adjustment before starting physics. Keep the first-hit and start-overlap
+/// rules here; only defer final standing clearance to that guarded handoff.
+pub(crate) fn actor_candidate(
+	spatial: &SpatialQuery,
+	filter: &SpatialQueryFilter,
+	search: PlacementSearch,
+	locomotion: &CharacterLocomotion,
+) -> SupportProbeOutcome {
+	if !search.bounds_valid() || search.policy == PlacementPolicy::Airborne {
+		return probe_search_with_locomotion(spatial, filter, search, locomotion);
+	}
+	if !column_presentation_ready(spatial, filter, search) {
+		return SupportProbeOutcome::Waiting;
+	}
+	cast_column(spatial, filter, search, locomotion, false)
 }
 
 fn cast_column(
@@ -65,6 +83,7 @@ fn cast_column(
 	filter: &SpatialQueryFilter,
 	search: PlacementSearch,
 	locomotion: &CharacterLocomotion,
+	check_clearance: bool,
 ) -> SupportProbeOutcome {
 	let origin = support_origin(search);
 	if start_overlaps(spatial, filter, origin, search.hull) {
@@ -93,7 +112,9 @@ fn cast_column(
 	if (standing.xz() - search.xz).length() > 1e-3 {
 		return SupportProbeOutcome::Failed(SupportProbeFailure::Placement);
 	}
-	if clearance_blocked(spatial, filter, standing, search.hull, Some(hit.entity)) {
+	if check_clearance
+		&& clearance_blocked(spatial, filter, standing, search.hull, Some(hit.entity))
+	{
 		return SupportProbeOutcome::Failed(SupportProbeFailure::Clearance);
 	}
 	SupportProbeOutcome::Ready {

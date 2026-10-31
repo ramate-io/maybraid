@@ -13,6 +13,7 @@ rust-version = { workspace = true }
 avian3d = { workspace = true }
 bevy = { workspace = true }
 characters = { workspace = true }
+chunk = { workspace = true }
 durham = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
