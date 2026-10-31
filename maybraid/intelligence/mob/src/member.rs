@@ -14,8 +14,19 @@ use crate::MobId;
 pub struct MobSlot(pub u16);
 
 /// Support contract carried from a POI-selected respawn onto the spawned body.
-#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct MobRespawnSupport(pub PoiSupport);
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
+pub struct MobRespawnSupport {
+	pub support: PoiSupport,
+	/// Selected support elevation before adding the member's body offset.
+	/// Unknown terrain must be resolved by the shared placement lifecycle.
+	pub surface_y: Option<f32>,
+}
+
+impl MobRespawnSupport {
+	pub const fn new(support: PoiSupport, surface_y: Option<f32>) -> Self {
+		Self { support, surface_y }
+	}
+}
 
 /// Resolved membership. Written by bind; cleared when the plant despawns.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]

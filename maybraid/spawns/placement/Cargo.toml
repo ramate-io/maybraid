@@ -15,13 +15,13 @@ bevy = { workspace = true }
 characters = { workspace = true }
 durham = { workspace = true }
 lod-avian = { workspace = true }
+lod = { workspace = true }
 maybraid-spawns-player = { workspace = true }
 poi-intelligence = { workspace = true }
-world-player = { workspace = true }
+maybraid-spawns-support = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-lod = { workspace = true }
 
 [lints]
 workspace = true

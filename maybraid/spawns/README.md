@@ -52,14 +52,16 @@ emit per-shot success events.
 | Directory | Package | Owns |
 |---|---|---|
 | `spawns/player` | `maybraid-spawns-player` | Arrival identity, `PlacementAttempt`, picker, destination, cancellation, `ActorSpawned` → `ActivatePlayerArrival` |
-| `spawns/placement` | `maybraid-spawns-placement` | Bounded column probe + presentation wait + standing clearance |
+| `spawns/support` | `maybraid-spawns-support` | Shared bounded support probe, standing clearance, terrain hints, and persistent holds for existing bodies |
+| `spawns/placement` | `maybraid-spawns-placement` | Arrival identities and destinations adapted to the shared support probe |
 | `spawns/actors` | `maybraid-spawns-actors` | Thin `spawn_player_body` interpreter at the accepted pose; emits `ActorSpawned` |
 | `spawns/projectiles` | `maybraid-spawns-projectiles` | Batched flight construction + same-pass visual attach |
 | `spawns/grenades` | `maybraid-spawns-grenades` | Thrown-body construction |
 
 `world/lib` keeps first-wave HCSG gates, the locked map sheet, and
-activation interpreters (motor, camera, picker close). Placement physics
-lives in `spawns/placement`. `gameplay/lib` assembles spawn runtimes.
+activation interpreters (motor, camera, picker close). Support physics
+lives in `spawns/support`; both placement requests and existing player/mob
+bodies use it. `gameplay/lib` assembles spawn runtimes.
 
 ## Scheduling
 
@@ -75,10 +77,31 @@ lives in `spawns/placement`. `gameplay/lib` assembles spawn runtimes.
 | Projectile presentation | after realize | Fallback attach + flight fizz. Headless sim skips this. |
 | Grenade presentation | after thrown-body realize | Mesh / bounce audio. |
 | NPC members | existing cell batch | `character.spawn`; no per-member spawn events. |
+| Existing body support | `ActorSupportSystems::Prepare` → `Resolve` | Player and mob adapters refresh hints; the shared probe accepts the final pose. |
+| Pending body hold | `PostUpdate`, and before each physics step | Preserve the target, zero motion and suspend gravity until support and clearance are usable. |
 
 Persistent work (arrivals, placement) lives in resources so generation
 that outlives message retention cannot drop a request. Projectile and
 grenade construction is synchronous and untracked.
+
+Existing bodies carry `PendingActorSupport` until their collider and intended
+support are ready. Missing or busy terrain and delayed collision presentation
+retry independently for every actor. Retargeting updates this component while
+preserving the original gravity. Accepted bodies leave the lifecycle; ordinary
+movement and swimming do not repeatedly snap to terrain. Mob respawns retain
+the selected floor elevation separately from their authored body offset.
+
+Movement and placement share `characters::CharacterLocomotion`, including the
+world's configured slope limit. Initial terrain mobs may try up to 32 nearby
+columns within 8 m when their original column fails geometry checks. Each
+candidate uses the same published-height, support and clearance checks; missing
+terrain or colliders keep the current candidate pending. Exhausted initial
+placements are logged and omitted. Player destinations and authored floor
+respawns remain exact.
+
+Use `RUST_LOG=info,spawn.support=debug` to inspect support-state transitions and
+the collider geometry behind a rejection. Detailed queries run only for a
+failure transition when that logging target is enabled.
 
 ## Dependency direction
 
@@ -97,7 +120,8 @@ barking / mob-scenes issue actor + placement requests directly
 Spawn crates depend on world-query APIs (`world-player`,
 `poi-intelligence`, `durham`, `projectiles`). They do **not** depend on
 the assembled `world/lib` crate. Player does not depend on placement or
-actors.
+actors. The `spawns/support` leaf depends on geometry, character hulls and
+terrain query APIs, and is shared by `world-player` and `spawns/placement`.
 
 ## Invariants
 

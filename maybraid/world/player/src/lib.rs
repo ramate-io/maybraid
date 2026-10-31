@@ -88,6 +88,7 @@ impl Plugin for VegetationHostPlugin {
 				apply_mode_commands.after(apply_set_character),
 				snap_player_to_composed_surface
 					.after(apply_mode_commands)
+					.in_set(maybraid_spawns_support::ActorSupportSystems::Prepare)
 					.before(PlayerControlSystems),
 				drive_player_locomotion
 					.after(PlayerControlSystems)
@@ -137,7 +138,15 @@ fn apply_mode_commands(
 	surface: DurhamSurface,
 	free: Query<Entity, With<RequestModeFree>>,
 	character: Query<Entity, With<RequestModeCharacter>>,
-	mut players: Query<(Entity, &mut Transform, &mut LinearVelocity), With<Player>>,
+	mut players: Query<
+		(
+			Entity,
+			&mut Transform,
+			&mut LinearVelocity,
+			Option<&mut maybraid_spawns_support::PendingActorSupport>,
+		),
+		With<Player>,
+	>,
 	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
 ) {
 	for entity in &free {
@@ -161,10 +170,14 @@ fn apply_mode_commands(
 		*mode = PlaygroundMode::Character;
 		ui::write_status(&mut status, "mode character — WASD move, mouse look, Space jump");
 		if reset_to_layout_spawn {
-			if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
+			if let Ok((player, mut transform, mut velocity, pending)) = players.single_mut() {
 				let layout = surface.layout();
 				if let Ok(Some(elevation)) = surface.height_at(layout.region_center_xz().xz()) {
 					respawn_player_on_layout(layout, elevation, &mut transform, &mut velocity);
+				}
+				if let Some(mut pending) = pending {
+					let hull = pending.hull();
+					pending.retarget(transform.translation, hull, None);
 				}
 				commands.entity(player).insert(AwaitingTerrainSurface);
 			}

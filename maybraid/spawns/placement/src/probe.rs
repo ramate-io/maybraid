@@ -1,24 +1,17 @@
-//! Bounded downward shape cast + standing-capsule clearance.
-//!
-//! Interior and outdoor share this probe. Generated heights define the
-//! search column; collider geometry determines the accepted pose. The
-//! first ineligible hit fails — the cast does not punch through a wall
-//! or roof just because it is unsuitable for standing.
+//! Player-arrival adapter for the shared actor support probe.
 
-use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilter};
+use avian3d::prelude::SpatialQuery;
 use bevy::prelude::*;
-use characters::LocomotionCapsule;
+use characters::CharacterLocomotion;
+use durham::DurhamSurface;
+use lod::hcsg::HcsgStorage;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_spawns_player::SpawnFailureReason;
+use maybraid_spawns_support::{
+	probe_search_with_locomotion, terrain_height_at, SupportProbeFailure, SupportProbeOutcome,
+};
 
-use crate::pending::PlacementWork;
-use crate::request::{PlacementPolicy, PlacementSupportHit};
-use crate::support::{column_presentation_ready, SupportReadiness};
-use crate::terrain::{PlacementPose, PlacementSearch};
-
-const MAX_HITS: u32 = 8;
-const PROBE_HALF_HEIGHT: f32 = 0.02;
-const START_LIFT: f32 = 0.05;
+use crate::{PlacementWork, SupportReadiness};
 
 #[derive(Resource, Default)]
 struct PlacementPhysics;
@@ -35,135 +28,54 @@ pub fn register_placement_physics(app: &mut App) {
 		.add_systems(Update, observe_placement_physics.in_set(crate::PlacementSystems::Observe));
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum ProbeOutcome {
-	Waiting,
-	Ready { pose: PlacementPose, support: Option<PlacementSupportHit> },
-	Failed(SpawnFailureReason),
-}
-
 /// Downward support + standing-capsule clearance for every pending column.
 /// Without [`SpatialQuery`], every request stays waiting.
-pub fn observe_placement_physics(spatial: Option<SpatialQuery>, mut work: ResMut<PlacementWork>) {
+pub fn observe_placement_physics(
+	spatial: Option<SpatialQuery>,
+	surface: Option<DurhamSurface>,
+	storage: Option<Res<HcsgStorage>>,
+	locomotion: Option<Res<CharacterLocomotion>>,
+	mut work: ResMut<PlacementWork>,
+) {
 	let Some(spatial) = spatial else {
 		for pending in work.pending_mut() {
 			pending.observe(SupportReadiness::waiting());
 		}
 		return;
 	};
+	let locomotion = locomotion.as_deref().copied().unwrap_or_default();
 	let filter = PhysicsInteractionLayer::Fixed.query_filter();
 	for pending in work.pending_mut() {
-		match probe_search(&spatial, &filter, pending.search) {
-			ProbeOutcome::Waiting => pending.observe(SupportReadiness::waiting()),
-			ProbeOutcome::Ready { pose, support } => pending.accept(pose, support),
-			ProbeOutcome::Failed(reason) => pending.fail(reason),
+		if pending.refreshes_terrain() {
+			let height = surface.as_ref().and_then(|surface| {
+				terrain_height_at(surface, storage.as_deref(), pending.search.xz)
+			});
+			let Some(height) = height else {
+				pending.observe(SupportReadiness::waiting());
+				continue;
+			};
+			pending.search =
+				crate::PlacementSearch::outdoor_hint(pending.search.xz, height, pending.hull);
+		}
+		match probe_search_with_locomotion(&spatial, &filter, pending.search, &locomotion) {
+			SupportProbeOutcome::Waiting => pending.observe(SupportReadiness::waiting()),
+			SupportProbeOutcome::Ready { pose, support } => pending.accept(pose, support),
+			SupportProbeOutcome::Failed(reason) => pending.fail(match reason {
+				SupportProbeFailure::InvalidBounds => SpawnFailureReason::InvalidBounds,
+				SupportProbeFailure::Clearance => SpawnFailureReason::Clearance,
+				SupportProbeFailure::NoEligibleSupport => SpawnFailureReason::NoEligibleSupport,
+				SupportProbeFailure::Placement => SpawnFailureReason::Placement,
+			}),
 		}
 	}
-}
-
-fn probe_search(
-	spatial: &SpatialQuery,
-	filter: &SpatialQueryFilter,
-	search: PlacementSearch,
-) -> ProbeOutcome {
-	if !search.bounds_valid() {
-		return ProbeOutcome::Failed(SpawnFailureReason::InvalidBounds);
-	}
-	if search.policy == PlacementPolicy::Airborne {
-		let pose = PlacementPose::new(
-			Vec3::new(search.xz.x, search.max_surface_y, search.xz.y),
-			search.policy,
-			search.hull,
-		);
-		return if clearance_blocked(spatial, filter, pose.position, search.hull, None) {
-			ProbeOutcome::Failed(SpawnFailureReason::Clearance)
-		} else {
-			ProbeOutcome::Ready { pose, support: None }
-		};
-	}
-	if !column_presentation_ready(spatial, filter, search) {
-		return ProbeOutcome::Waiting;
-	}
-	cast_column(spatial, filter, search)
-}
-
-fn cast_column(
-	spatial: &SpatialQuery,
-	filter: &SpatialQueryFilter,
-	search: PlacementSearch,
-) -> ProbeOutcome {
-	let origin = support_origin(search);
-	if start_overlaps(spatial, filter, origin, search.hull) {
-		return ProbeOutcome::Failed(SpawnFailureReason::Clearance);
-	}
-	let probe = support_probe(search.hull);
-	let config = ShapeCastConfig::from_max_distance(search.cast_distance().max(0.1));
-	let mut hits =
-		spatial.shape_hits(&probe, origin, Quat::IDENTITY, Dir3::NEG_Y, MAX_HITS, &config, filter);
-	hits.sort_by(|left, right| left.distance.total_cmp(&right.distance));
-	let Some(hit) = hits.into_iter().next() else {
-		return ProbeOutcome::Failed(SpawnFailureReason::NoEligibleSupport);
-	};
-	if !search.support.accepts_normal(hit.normal1) || !search.contains_surface(hit.point1.y) {
-		return ProbeOutcome::Failed(if search.support.accepts_normal(hit.normal1) {
-			SpawnFailureReason::NoEligibleSupport
-		} else {
-			SpawnFailureReason::Clearance
-		});
-	}
-	let standing = search.standing_at(hit.point1.y);
-	if (standing.xz() - search.xz).length() > 1e-3 {
-		return ProbeOutcome::Failed(SpawnFailureReason::Placement);
-	}
-	if clearance_blocked(spatial, filter, standing, search.hull, Some(hit.entity)) {
-		return ProbeOutcome::Failed(SpawnFailureReason::Clearance);
-	}
-	ProbeOutcome::Ready {
-		pose: PlacementPose::new(standing, search.policy, search.hull),
-		support: Some(PlacementSupportHit::new(hit.entity, hit.point1, hit.normal1)),
-	}
-}
-
-fn support_origin(search: PlacementSearch) -> Vec3 {
-	Vec3::new(search.xz.x, search.max_surface_y + START_LIFT, search.xz.y)
-}
-
-fn start_overlaps(
-	spatial: &SpatialQuery,
-	filter: &SpatialQueryFilter,
-	origin: Vec3,
-	hull: LocomotionCapsule,
-) -> bool {
-	!spatial
-		.shape_intersections(&support_probe(hull), origin, Quat::IDENTITY, filter)
-		.is_empty()
-}
-
-fn support_probe(hull: LocomotionCapsule) -> Collider {
-	Collider::cylinder((hull.radius * 0.5).max(0.08), PROBE_HALF_HEIGHT * 2.0)
-}
-
-fn hull_collider(hull: LocomotionCapsule) -> Collider {
-	Collider::capsule(hull.radius.max(0.01), hull.length.max(0.01))
-}
-
-fn clearance_blocked(
-	spatial: &SpatialQuery,
-	filter: &SpatialQueryFilter,
-	standing: Vec3,
-	hull: LocomotionCapsule,
-	support: Option<Entity>,
-) -> bool {
-	spatial
-		.shape_intersections(&hull_collider(hull), standing, Quat::IDENTITY, filter)
-		.into_iter()
-		.any(|entity| support != Some(entity))
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::PlacementSearch;
 	use avian3d::prelude::{Collider, PhysicsPlugins, RigidBody};
+	use characters::LocomotionCapsule;
 	use maybraid_spawns_player::{
 		ArrivalDestination, PlacementAttempt, SpawnIdentity, SpawnOwner, SpawnRequestId,
 		SpawnSessionId,
@@ -437,6 +349,103 @@ mod tests {
 		assert_eq!(ready.len(), 1);
 		assert!(ready[0].support_ready);
 		assert!(ready[0].support.is_some());
+	}
+
+	#[test]
+	fn generated_destination_retries_publication_and_late_collider_with_same_identity(
+	) -> anyhow::Result<()> {
+		use crate::ResolvePlacement;
+		use bevy::ecs::system::RunSystemOnce;
+		use durham::{
+			BaseTerrainNoise, Terrain, TerrainCellLayout, TerrainConfig, WorldBaseTerrain,
+		};
+		use lod::gen::Id;
+		use poi_intelligence::PoiRegistry;
+		use std::sync::Arc;
+
+		let mut app = physics_app();
+		let layout = TerrainCellLayout::default();
+		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
+		let terrain = Terrain::base_cell_for_test(&layout, 0, 0, base.clone());
+		let point = Vec2::splat(8.0);
+		let height = terrain.sdf.terrain().height_at_with_all_modulations(point.x, point.y);
+		app.insert_resource(layout);
+		app.insert_resource(WorldBaseTerrain(base));
+		app.init_resource::<HcsgStorage>();
+		app.init_resource::<PoiRegistry>();
+		let request = ResolvePlacement::humanoid(
+			identity(),
+			attempt(),
+			ArrivalDestination::Fallback,
+			Vec3::new(point.x, 0.0, point.y),
+		);
+		let pending = app
+			.world_mut()
+			.run_system_once(move |registry: Res<PoiRegistry>, surface: DurhamSurface| {
+				request.realize(&registry, &surface)
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(pending.refreshes_terrain());
+		app.world_mut().resource_mut::<PlacementWork>().insert(pending);
+		let (ready, failed) = drain_outcomes(&mut app);
+		assert!(ready.is_empty());
+		assert!(failed.is_empty());
+		assert_eq!(app.world().resource::<PlacementWork>().len(), 1);
+
+		let cell = terrain.cell;
+		app.world()
+			.resource::<HcsgStorage>()
+			.publish(Id::from_cell(cell), Arc::new(terrain), cell);
+		let (ready, failed) = drain_outcomes(&mut app);
+		assert!(ready.is_empty(), "published height alone cannot release the player arrival");
+		assert!(failed.is_empty());
+		assert_eq!(app.world().resource::<PlacementWork>().len(), 1);
+		let refreshed = app
+			.world()
+			.resource::<PlacementWork>()
+			.get(identity())
+			.ok_or_else(|| anyhow::anyhow!("placement identity was lost"))?;
+		assert!((refreshed.search.hint_surface_y() - height).abs() < 1e-3);
+
+		spawn_fixed(
+			&mut app,
+			Transform::from_xyz(point.x, height, point.y),
+			Collider::cuboid(8.0, 0.2, 8.0),
+		);
+		let (ready, failed) = drain_outcomes(&mut app);
+		assert!(failed.is_empty(), "{failed:?}");
+		assert_eq!(ready.len(), 1);
+		assert!(ready[0].matches_attempt(identity(), attempt()));
+		assert!(
+			(ready[0].position.y - height - LocomotionCapsule::HUMANOID.spawn_height()).abs()
+				< 0.35
+		);
+		assert!(app.world().resource::<PlacementWork>().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn bodyless_arrival_reads_the_same_configured_locomotion_slope() {
+		for (degrees, accepted) in [(57.0_f32, true), (72.0_f32, false)] {
+			let mut app = physics_app();
+			app.insert_resource(CharacterLocomotion { max_slope_angle: 70.0_f32.to_radians() });
+			spawn_fixed(
+				&mut app,
+				Transform::from_rotation(Quat::from_rotation_z(degrees.to_radians())),
+				Collider::cuboid(12.0, 0.2, 12.0),
+			);
+			insert_search(
+				&mut app,
+				PlacementSearch::interior_at(Vec3::ZERO, LocomotionCapsule::HUMANOID),
+			);
+			let (ready, failed) = drain_outcomes(&mut app);
+			assert_eq!(ready.len(), usize::from(accepted), "slope={degrees}");
+			assert_eq!(failed.len(), usize::from(!accepted), "slope={degrees}");
+			if !accepted {
+				assert_eq!(failed[0].reason, SpawnFailureReason::Clearance);
+			}
+		}
 	}
 
 	#[test]

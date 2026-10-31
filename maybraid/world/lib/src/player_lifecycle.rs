@@ -727,6 +727,7 @@ mod tests {
 	use durham::TerrainCellLayout;
 	use layer_stack::GenerationMode;
 	use lod::hcsg::{spawn_worker, HcsgClass, HcsgStorage};
+	use maybraid_spawns_placement::PoiPlacementPolicy;
 	use maybraid_spawns_player::{map_flick_dir, nearest_in_direction, SpawnPickerSheet};
 	use maybraid_virtual_pad_controller::{
 		PadButton, PadDevices, PrimaryVirtualPad, VirtualPad, VirtualPadController, VirtualPadEvent,

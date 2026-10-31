@@ -29,6 +29,7 @@ pub mod concepts;
 pub mod fixed;
 pub mod hosts;
 pub mod layer;
+pub mod locomotion;
 pub mod material_lib;
 pub mod member;
 pub mod menu_traits;
@@ -77,6 +78,7 @@ pub use fixed::{
 };
 pub use hosts::CharacterHostsPlugin;
 pub use layer::{Layer, Layers};
+pub use locomotion::CharacterLocomotion;
 pub use material_lib::{
 	init_character_material_caches, CharacterMaterialLib, CharacterMaterialRefPlugin,
 	StandaloneCharacterMaterialLib, StandaloneCharacterMaterialRefPlugin,

@@ -34,6 +34,7 @@ members = [
   "maybraid/gameplay/lib",
   "maybraid/spawns/player",
   "maybraid/spawns/placement",
+  "maybraid/spawns/support",
   "maybraid/spawns/actors",
   "maybraid/spawns/projectiles",
   "maybraid/spawns/grenades",
@@ -325,6 +326,7 @@ maybraid-session = { path = "maybraid/gameplay/session" }
 maybraid-gameplay = { path = "maybraid/gameplay/lib" }
 maybraid-spawns-player = { path = "maybraid/spawns/player" }
 maybraid-spawns-placement = { path = "maybraid/spawns/placement" }
+maybraid-spawns-support = { path = "maybraid/spawns/support" }
 maybraid-spawns-actors = { path = "maybraid/spawns/actors" }
 maybraid-spawns-projectiles = { path = "maybraid/spawns/projectiles" }
 maybraid-spawns-grenades = { path = "maybraid/spawns/grenades" }

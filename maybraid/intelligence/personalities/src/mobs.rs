@@ -14,7 +14,7 @@ use mob_intelligence::{
 };
 use npc_intelligence::{NpcBody, Personality};
 use player::{spawn_npc, LocomotionCapsule, PlayerLook, CAPSULE_LENGTH, CAPSULE_RADIUS};
-use poi_intelligence::{PoiInterest, PoiInterests, PoiKind, PoiSupport};
+use poi_intelligence::{PoiInterest, PoiInterests, PoiKind};
 use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
 use std::f32::consts::TAU;
 use threat_intelligence::{
@@ -312,7 +312,7 @@ pub fn spawn_mobs(
 		commands.entity(host).insert((Name::new(recipe.name), recipe.kind));
 		let roster = members_poses(recipe);
 		for (slot, spec, at) in roster {
-			spawn_member(commands, &visuals, id, slot, spec, at, PoiSupport::Terrain);
+			spawn_member(commands, &visuals, id, slot, spec, at, None);
 		}
 	}
 	commands.insert_resource(visuals);
@@ -349,13 +349,12 @@ fn spawn_member(
 	slot: u16,
 	spec: MemberSpec,
 	at: Vec3,
-	support: PoiSupport,
+	support: Option<MobRespawnSupport>,
 ) {
 	let hull = LocomotionCapsule::HUMANOID;
 	let npc = spawn_npc(commands, at, PlayerLook::default());
 	commands.entity(npc).insert((
 		MobSlot(slot),
-		MobRespawnSupport(support),
 		id,
 		MobMemberBody(NpcBody {
 			agent_radius: hull.radius,
@@ -367,6 +366,9 @@ fn spawn_member(
 			SpotBounds::capsule(hull.radius, hull.half_height()),
 		),
 	));
+	if let Some(support) = support {
+		commands.entity(npc).insert(support);
+	}
 	commands.spawn((
 		Name::new("NpcCapsule"),
 		ChildOf(npc),
@@ -402,7 +404,7 @@ pub fn spawn_needed_members(
 			request.slot,
 			spec,
 			request.pose,
-			request.support,
+			Some(MobRespawnSupport::new(request.support, request.support_y)),
 		);
 	}
 }

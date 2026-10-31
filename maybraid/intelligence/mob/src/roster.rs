@@ -136,6 +136,8 @@ pub struct MobMemberNeeded {
 	pub slot: u16,
 	pub pose: Vec3,
 	pub support: PoiSupport,
+	/// Actual selected support, before applying the member height offset.
+	pub support_y: Option<f32>,
 }
 
 /// One High plant spec plus the last known live snapshot.

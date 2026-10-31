@@ -7232,8 +7232,8 @@ dependencies = [
  "lod",
  "lod-avian",
  "maybraid-spawns-player",
+ "maybraid-spawns-support",
  "poi-intelligence",
- "world-player",
 ]
 
 [[package]]
@@ -7259,6 +7259,21 @@ dependencies = [
  "damage",
  "gimme-bench-support",
  "projectiles",
+]
+
+[[package]]
+name = "maybraid-spawns-support"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "characters",
+ "durham",
+ "lod",
+ "lod-avian",
+ "richmond",
+ "terrain-layer-model",
 ]
 
 [[package]]
@@ -7347,6 +7362,7 @@ dependencies = [
  "maybraid-spawns-actors",
  "maybraid-spawns-placement",
  "maybraid-spawns-player",
+ "maybraid-spawns-support",
  "maybraid-vfx",
  "maybraid-virtual-pad-controller",
  "maybraid-weather",
@@ -14117,6 +14133,7 @@ dependencies = [
  "lod-avian",
  "maybraid-character-controller",
  "maybraid-controllers-core",
+ "maybraid-spawns-support",
  "maybraid-virtual-pad-controller",
  "player-camera",
  "vegetation-components",
