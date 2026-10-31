@@ -632,7 +632,7 @@ mod tests {
 
 	#[test]
 	fn large_footprint_keeps_courtyard_near_half() {
-		let confines = Confines::from_bounds(bevy_math::bounding::Aabb3d::from_min_max(
+		let confines = Confines::from_bounds(bevy_shape::Aabb3d::from_min_max(
 			bevy_math::Vec3::new(-24.0, 0.0, -18.0),
 			bevy_math::Vec3::new(24.0, 4.0, 18.0),
 		));
@@ -711,7 +711,7 @@ mod tests {
 
 	#[test]
 	fn sample_livable_biases_gallery_depth() {
-		let confines = Confines::from_bounds(bevy_math::bounding::Aabb3d::from_min_max(
+		let confines = Confines::from_bounds(bevy_shape::Aabb3d::from_min_max(
 			bevy_math::Vec3::new(-36.0, 0.0, -27.0),
 			bevy_math::Vec3::new(36.0, 4.0, 27.0),
 		));
@@ -734,11 +734,11 @@ mod tests {
 
 	#[test]
 	fn storey_count_spans_two_to_seven_on_tall_host() {
-		let short = Confines::from_bounds(bevy_math::bounding::Aabb3d::from_min_max(
+		let short = Confines::from_bounds(bevy_shape::Aabb3d::from_min_max(
 			bevy_math::Vec3::new(-36.0, 0.0, -27.0),
 			bevy_math::Vec3::new(36.0, 10.0, 27.0),
 		));
-		let tall = Confines::from_bounds(bevy_math::bounding::Aabb3d::from_min_max(
+		let tall = Confines::from_bounds(bevy_shape::Aabb3d::from_min_max(
 			bevy_math::Vec3::new(-36.0, 0.0, -27.0),
 			bevy_math::Vec3::new(36.0, 35.0, 27.0),
 		));
@@ -759,7 +759,7 @@ mod tests {
 
 	#[test]
 	fn sample_curtain_deepens_the_gallery() {
-		let confines = Confines::from_bounds(bevy_math::bounding::Aabb3d::from_min_max(
+		let confines = Confines::from_bounds(bevy_shape::Aabb3d::from_min_max(
 			bevy_math::Vec3::new(-80.0, 0.0, -80.0),
 			bevy_math::Vec3::new(80.0, 12.0, 80.0),
 		));

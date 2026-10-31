@@ -5,8 +5,8 @@ mod parameterized;
 
 pub use parameterized::{EatingAreaPacked, EatingAreaParameterized, EatingAreaPlan, SCOPE};
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use building_components::furniture::FurnitureNode;
 use building_components::joints::JointNode;
 use building_components::panels::PanelNode;
@@ -148,8 +148,8 @@ impl BuildingComponents for EatingArea {
 mod tests {
 	use super::*;
 	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 
 	fn host_with_south_door(sx: f32, sz: f32) -> Confines {
 		let mut openings = Openings::new();

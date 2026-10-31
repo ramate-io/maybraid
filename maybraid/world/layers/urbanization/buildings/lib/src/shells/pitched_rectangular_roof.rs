@@ -16,8 +16,8 @@ mod openings;
 #[cfg(test)]
 mod tests;
 
-use bevy_math::bounding::Aabb2d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb2d;
 use building_components::joints::JointNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume};

@@ -12,12 +12,12 @@ use bevy::{
 	shader::ShaderRef,
 };
 
-/// Registers embedded **`stick_material.wgsl`** and [`MaterialPlugin`] for [`StickMaterial`].
+/// Registers embedded **`stick_material.wesl`** and [`MaterialPlugin`] for [`StickMaterial`].
 pub struct StickMaterialPlugin;
 
 impl Plugin for StickMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "stick_material.wgsl");
+		embedded_asset!(app, "stick_material.wesl");
 		app.add_plugins(MaterialPlugin::<StickMaterial>::default());
 	}
 }
@@ -36,7 +36,7 @@ impl Default for StickMaterial {
 
 impl Material for StickMaterial {
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "stick_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "stick_material.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {

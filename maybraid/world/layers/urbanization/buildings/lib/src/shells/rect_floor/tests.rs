@@ -37,7 +37,7 @@ fn south_passage_clips_and_maps_offset() {
 	let mut o = opening;
 	let min = Vec3::from(o.bounds.min) + Vec3::new(2.0, 0.0, 0.0);
 	let max = Vec3::from(o.bounds.max) + Vec3::new(2.0, 0.0, 0.0);
-	o.bounds = bevy_math::bounding::Aabb3d::from_min_max(min, max);
+	o.bounds = bevy_shape::Aabb3d::from_min_max(min, max);
 	openings.insert("south", o);
 
 	let r = RectFloorParams::default().openings(openings).build();
@@ -80,10 +80,7 @@ fn shaft_cuts_floor_at_position() {
 	openings.insert(
 		"shaft",
 		Opening::new(
-			bevy_math::bounding::Aabb3d::from_min_max(
-				Vec3::new(1.0, -0.5, -2.0),
-				Vec3::new(2.5, 0.5, -0.5),
-			),
+			bevy_shape::Aabb3d::from_min_max(Vec3::new(1.0, -0.5, -2.0), Vec3::new(2.5, 0.5, -0.5)),
 			OpeningLabel::Shaft,
 		),
 	);

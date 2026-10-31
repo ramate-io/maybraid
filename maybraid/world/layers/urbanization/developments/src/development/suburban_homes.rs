@@ -1,7 +1,7 @@
 //! [`SuburbanHomes`]: a neighborhood of homes on one terrace.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
+use bevy_shape::{Aabb2d, Aabb3d};
 use buildings::Confines;
 use procedural_common::{Bounds2, NoiseParams, SeededHash};
 

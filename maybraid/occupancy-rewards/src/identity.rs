@@ -1,8 +1,8 @@
 //! Geometric semantic-cell identity. Matches Chico forest / grove grids
 //! ([`chico::ForestExtent`], [`chico::grove_id`]) without a Chico dependency.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Vec3;
+use bevy::shape::Aabb3d;
 
 use crate::metadata::CellMetadataStore;
 

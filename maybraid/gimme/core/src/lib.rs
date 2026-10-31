@@ -11,7 +11,7 @@ pub use spatial_index::{
 	TypedIndex,
 };
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 
 /// Typed spatial query and insert over a backing store.
 ///

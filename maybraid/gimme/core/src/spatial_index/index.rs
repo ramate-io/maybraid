@@ -6,9 +6,9 @@
 
 use std::collections::{HashMap, HashSet as CellSet};
 
-use bevy_math::bounding::{Aabb3d, IntersectsVolume};
 use bevy_math::{DVec3, IVec3};
 use bevy_platform::collections::HashSet;
+use bevy_shape::{Aabb3d, IntersectsVolume};
 
 use crate::error::SpatialIndexError;
 

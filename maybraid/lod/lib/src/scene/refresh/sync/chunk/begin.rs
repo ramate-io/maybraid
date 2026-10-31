@@ -10,8 +10,8 @@
 //! shared begin weight for **prefilled** primitives only
 //! ([`LodChunkFulfillBudget::begin_prefill_weights_per_job`]); lazy tails drain later.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 
 use crate::lod_ref::{point_bounds, LodNode, LodNodeBounds, LodNodePose, LodRef};
 use crate::scene::chunk::materialize_front;
@@ -456,7 +456,7 @@ fn sort_begin_near_first(list: &mut [BeginCandidate]) {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy::math::bounding::Aabb3d;
+	use bevy::shape::Aabb3d;
 
 	#[test]
 	fn identity_transform_uses_bounds_center() {

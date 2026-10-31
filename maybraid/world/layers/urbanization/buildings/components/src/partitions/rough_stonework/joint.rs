@@ -2,9 +2,9 @@
 //!
 //! High + mid GLBs only; low / ultra-low LOD omit this filler.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::{Component, Transform};
+use bevy::shape::Aabb3d;
 use lod::SceneChunk;
 
 use crate::partitions::geometry::JointLod;

@@ -1,25 +1,25 @@
 //! Exercise item identity across the real layout → input → inventory → rebuild path.
-use anyhow::{Context, Result};
+use anyhow::{Context as ContextExt, Result};
 use bevy::{ecs::system::RunSystemOnce, prelude::*};
 use character_creation_menus::{CharacterMenu, MenuEvent};
 use character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
 use character_ui_menu::MenuComponent;
 use maybraid_character_ui_menu_renderer::{
-	InventoryFocusHint, InventoryInteraction, InventoryItemKey, NoThumbnails,
 	fill_inventory_layout, find_overlay_node,
 	input::{
 		emit_hud_activate_on_nav, emit_inventory_reorder_keyboard, emit_inventory_reorder_nav,
 	},
+	InventoryFocusHint, InventoryInteraction, InventoryItemKey, NoThumbnails,
 };
 use menu_components::{
-	HudFonts, HudMenu, HudMenuItem, HudMenuNavLocked, HudOverlayMenu, KeyboardMenuNav,
-	MenuModalStack, TextMenuInputLock, apply_hud_menu_nav, navigate_hud_menus,
+	apply_hud_menu_nav, navigate_hud_menus, HudFonts, HudMenu, HudMenuItem, HudMenuNavLocked,
+	HudOverlayMenu, KeyboardMenuNav, MenuModalStack, TextMenuInputLock,
 };
 use menu_components::{MenuNav, MenuNavImpulse};
 
 use crate::character::{
-	CharacterMenuState, CharacterScreen, CharacterUiSyncState, OverlaySelectState,
-	OverlayUiSyncState, on_menu_activate,
+	on_menu_activate, CharacterMenuState, CharacterScreen, CharacterUiSyncState,
+	OverlaySelectState, OverlayUiSyncState,
 };
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
 use menu_components::ActiveOverlayKey;
@@ -223,25 +223,21 @@ fn hover_cannot_steal_reorder_focus_but_click_can_retarget_it() -> Result<()> {
 		position: Vec2::ZERO,
 	};
 	let hit = HitData::new(Entity::PLACEHOLDER, 0.0, None, None);
-	world.trigger(Pointer::new(
-		PointerId::Mouse,
-		location.clone(),
-		Over { hit: hit.clone() },
-		target,
-	));
+	world.trigger(PointerOver {
+		entity: target,
+		pointer: Pointer::new(PointerId::Mouse, location.clone()),
+		hit: hit.clone(),
+	});
 	world.flush();
 	assert_eq!(selected_key(&mut world, viewport)?, before[0]);
-	world.trigger(Pointer::new(
-		PointerId::Mouse,
-		location,
-		Click {
-			button: PointerButton::Primary,
-			hit,
-			duration: std::time::Duration::ZERO,
-			count: 1,
-		},
-		target,
-	));
+	world.trigger(PointerClick {
+		entity: target,
+		pointer: Pointer::new(PointerId::Mouse, location),
+		button: PointerButton::Primary,
+		hit,
+		duration: std::time::Duration::ZERO,
+		count: 1,
+	});
 	world.flush();
 	assert_eq!(selected_key(&mut world, viewport)?, before[1]);
 	assert_eq!(world.resource::<InventoryInteraction>().reordering(), Some(before[1]));

@@ -9,8 +9,8 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{
 	self, GenerationContext, HcsgClass, HcsgValue, PresentationPlugin, ViewerHcsgBounds,

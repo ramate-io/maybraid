@@ -63,14 +63,11 @@ macro_rules! define_stamp_family {
 			/// Stamp strength upper bound.
 			pub const STRENGTH_MAX: f32 = $strength_max;
 
-			pub fn cell_bounds(&self, ix: i32, iz: i32) -> bevy::math::bounding::Aabb3d {
+			pub fn cell_bounds(&self, ix: i32, iz: i32) -> bevy::shape::Aabb3d {
 				self.grid.cell_bounds(ix, iz)
 			}
 
-			pub fn region_in_grid_space(
-				&self,
-				region: bevy::math::bounding::Aabb3d,
-			) -> bevy::math::bounding::Aabb3d {
+			pub fn region_in_grid_space(&self, region: bevy::shape::Aabb3d) -> bevy::shape::Aabb3d {
 				self.grid.region_in_grid_space(region)
 			}
 		}
@@ -78,7 +75,7 @@ macro_rules! define_stamp_family {
 		$crate::terrain::cell::derived_universal_scheme!($Layout, |_cx| Some($Layout::default()));
 
 		impl $crate::terrain::cell::CellTiling for $Layout {
-			fn cell_ids(&self, region: bevy::math::bounding::Aabb3d) -> Vec<lod::gen::OriginalId> {
+			fn cell_ids(&self, region: bevy::shape::Aabb3d) -> Vec<lod::gen::OriginalId> {
 				self.grid.cell_ids(region)
 			}
 		}
@@ -86,13 +83,13 @@ macro_rules! define_stamp_family {
 		/// Controller cell: owns this band's guillotine cuts.
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $Controller {
-			pub cell: bevy::math::bounding::Aabb3d,
+			pub cell: bevy::shape::Aabb3d,
 			pub cuts: comproc::guillotine::GuillotineCuts<2>,
 		}
 
 		impl $Controller {
 			pub fn from_family_config<P>(
-				cell: bevy::math::bounding::Aabb3d,
+				cell: bevy::shape::Aabb3d,
 				config: &$crate::terrain::stamps::configs::FamilyGuillotineConfig<P>,
 			) -> Self {
 				Self { cell, cuts: $crate::terrain::stamps::shared::guillotine_cuts(cell, config) }
@@ -100,7 +97,7 @@ macro_rules! define_stamp_family {
 		}
 
 		impl $crate::terrain::stamps::shared::LeafAabbs for $Controller {
-			fn leaf_aabbs(&self) -> Vec<bevy::math::bounding::Aabb3d> {
+			fn leaf_aabbs(&self) -> Vec<bevy::shape::Aabb3d> {
 				$crate::terrain::stamps::shared::leaf_aabbs(self.cell, &self.cuts)
 			}
 		}
@@ -109,7 +106,7 @@ macro_rules! define_stamp_family {
 			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
 				cx: &mut lod::hcsg::GenerationContext,
-				region: bevy::math::bounding::Aabb3d,
+				region: bevy::shape::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
 				<$Layout as $crate::terrain::cell::CellTiling>::origin_ids_in(cx, region)
 			}
@@ -117,7 +114,7 @@ macro_rules! define_stamp_family {
 			fn build_with_id(
 				cx: &mut lod::hcsg::GenerationContext,
 				id: lod::gen::Id,
-			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+			) -> Option<(Self, bevy::shape::Aabb3d)> {
 				let bounds = id.origin_cell_bounds()?;
 				let configs = cx
 					.get_or_generate::<$crate::terrain::stamps::configs::TerrainStampConfigs>(
@@ -131,12 +128,12 @@ macro_rules! define_stamp_family {
 		/// Stamp output on one leaf of this band's guillotine partition.
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $Stamp {
-			pub cell: bevy::math::bounding::Aabb3d,
+			pub cell: bevy::shape::Aabb3d,
 			pub modulations: Vec<terrain_stamps::StampModulation>,
 		}
 
 		impl $crate::terrain::stamps::shared::StampLeaf for $Stamp {
-			fn cell(&self) -> bevy::math::bounding::Aabb3d {
+			fn cell(&self) -> bevy::shape::Aabb3d {
 				self.cell
 			}
 
@@ -149,7 +146,7 @@ macro_rules! define_stamp_family {
 			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
 				cx: &mut lod::hcsg::GenerationContext,
-				region: bevy::math::bounding::Aabb3d,
+				region: bevy::shape::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
 				<$Controller as $crate::terrain::stamps::shared::LeafAabbs>::leaf_ids_in(cx, region)
 			}
@@ -157,7 +154,7 @@ macro_rules! define_stamp_family {
 			fn build_with_id(
 				cx: &mut lod::hcsg::GenerationContext,
 				id: lod::gen::Id,
-			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+			) -> Option<(Self, bevy::shape::Aabb3d)> {
 				let cell = id.origin_cell_bounds()?;
 				let configs = cx
 					.get_or_generate::<$crate::terrain::stamps::configs::TerrainStampConfigs>(
@@ -174,7 +171,7 @@ macro_rules! define_stamp_family {
 			/// This band's stamp on leaf `cell`: empty unless the occupancy
 			/// gate selects the leaf.
 			pub fn on_leaf(
-				cell: bevy::math::bounding::Aabb3d,
+				cell: bevy::shape::Aabb3d,
 				configs: &$crate::terrain::stamps::configs::TerrainStampConfigs,
 				base: &$crate::terrain::base_noise::BaseTerrainNoise,
 			) -> Self {

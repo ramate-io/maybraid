@@ -6,10 +6,11 @@
 //! copies activate onto [`Message<E>`] for listeners outside the screen.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn, template_value};
+use bevy::scene::prelude::{bsn, Scene};
 use bevy::text::{FontSourceTemplate, Justify};
+use bevy::ui_widgets::Button;
 
-use crate::controls::focus::{FocusTag, first_focus_tag, paint_focus_tag};
+use crate::controls::focus::{first_focus_tag, paint_focus_tag, FocusTag};
 use crate::theme::{
 	BARLOW_BLACK, BARLOW_SEMIBOLD, COLUMN_BOTTOM, COLUMN_INSET, CORNER_BOTTOM, CORNER_INSET,
 	FOCUS_TAG_PAD_X, FOCUS_TAG_PAD_Y, FOCUS_TAG_RADIUS, HEADER_FONT_SIZE, HEADER_MARGIN_BOTTOM,
@@ -115,7 +116,7 @@ impl TextMenuItem {
 		let text_justify = align.text_justify();
 		let tag = FocusTag::new(self.idle);
 		let label_children: Vec<Box<dyn Scene>> = vec![Box::new(bsn! {
-			template_value(Text::new(label))
+			~{Text::new(label)}
 			TextFont {
 				font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
 				font_size: px(ITEM_FONT_SIZE),
@@ -126,7 +127,7 @@ impl TextMenuItem {
 			Pickable::IGNORE
 		})];
 		let children: Vec<Box<dyn Scene>> = vec![Box::new(bsn! {
-			template_value(tag)
+			~{tag}
 			Node {
 				padding: UiRect::axes(px(FOCUS_TAG_PAD_X), px(FOCUS_TAG_PAD_Y)),
 				border_radius: BorderRadius::all(px(FOCUS_TAG_RADIUS)),
@@ -140,8 +141,9 @@ impl TextMenuItem {
 		})];
 		bsn! {
 			Button
-			template_value(self)
-			template_value(action)
+			~{bevy::picking::hover::Hovered::default()}
+			~{self}
+			~{action}
 			Node {
 				padding: UiRect::axes(px(0.0), px(2.0)),
 				justify_content: justify_content,
@@ -202,7 +204,7 @@ impl TextMenuHeader {
 		let label = self.label;
 		let margin_left = self.margin_left;
 		bsn! {
-			template_value(Text::new(label))
+			~{Text::new(label)}
 			TextFont {
 				font: FontSourceTemplate::Handle(BARLOW_BLACK),
 				font_size: px(HEADER_FONT_SIZE),
@@ -344,8 +346,8 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextMenuColu
 		}
 		let node = self.anchor.node(self.align);
 		bsn! {
-			template_value(TextMenu::new(item_count))
-			template_value(node)
+			~{TextMenu::new(item_count)}
+			~{node}
 			Children [ {children} ]
 		}
 	}
@@ -370,7 +372,7 @@ pub fn text_menu_entity(
 }
 
 pub fn select_text_menu_item_on_over(
-	over: On<Pointer<Over>>,
+	over: On<PointerOver>,
 	items: Query<&TextMenuItem>,
 	child_of: Query<&ChildOf>,
 	mut menus: Query<&mut TextMenu>,
@@ -477,7 +479,7 @@ pub fn emit_menu_focus<E: Component + Copy + Send + Sync + 'static>(
 
 /// Trigger [`MenuActivate<E>`] on the row’s parent menu.
 pub fn emit_menu_activate_on_click<E: Component + Copy>(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	lock: Res<TextMenuInputLock>,
 	items: Query<&E, With<TextMenuItem>>,
 	locked: Query<(), With<MenuItemLocked>>,
@@ -831,10 +833,8 @@ mod tests {
 			.add_observer(count_activate)
 			.add_observer(super::emit_menu_activate_on_nav::<TestChoice>);
 		let menu = spawn_row(&mut app, true);
-		app.world_mut().trigger(crate::MenuNavImpulse::new(
-			menu,
-			crate::MenuNav::Select,
-		));
+		app.world_mut()
+			.trigger(crate::MenuNavImpulse::new(menu, crate::MenuNav::Select));
 		assert_eq!(app.world().resource::<ActivateHits>().0, 0);
 	}
 
@@ -867,8 +867,7 @@ mod tests {
 	}
 
 	fn nav(app: &mut App, menu: Entity, nav: crate::MenuNav) {
-		app.world_mut()
-			.trigger(crate::MenuNavImpulse::new(menu, nav));
+		app.world_mut().trigger(crate::MenuNavImpulse::new(menu, nav));
 		app.world_mut().flush();
 	}
 

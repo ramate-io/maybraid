@@ -120,8 +120,8 @@ mod tests {
 	use super::super::stall_layout::{BitesPassageSpec, EligibleBitesPassage};
 	use super::*;
 	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 	use procedural_common::{
 		aabb2_area, aabb3_to_plan, OptionalFaceBand, PlanAxes, PlanOpeningFace,
 	};

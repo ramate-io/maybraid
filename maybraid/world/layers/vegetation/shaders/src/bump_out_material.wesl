@@ -3,24 +3,21 @@
 // interpolation, and opaque stochastic fragment dropout.
 //---------------------------------------------------------
 
-#import bevy_pbr::{
-    forward_io::Vertex,
-    mesh_functions,
-    mesh_view_bindings::{view, lights},
-    pbr_functions as fns,
-    view_transformations::position_world_to_clip,
-}
-#import bevy_core_pipeline::tonemapping::tone_mapping
-#ifdef DISTANCE_FOG
-#import bevy_pbr::mesh_view_bindings::fog
-#endif
+import bevy_pbr::render::forward_io::{Vertex, UncompressedVertex, decompress_vertex};
+import bevy_pbr::render::mesh_functions;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::mesh_view_bindings::lights;
+import bevy_pbr::render::pbr_functions as fns;
+import bevy_pbr::render::view_transformations::position_world_to_clip;
+import bevy_core_pipeline::tonemapping::tone_mapping;
+@if(DISTANCE_FOG)
+import bevy_pbr::render::mesh_view_bindings::fog;
 
 fn with_distance_fog(color: vec4<f32>, world_position: vec3<f32>, frag_xy: vec2<f32>) -> vec4<f32> {
-#ifdef DISTANCE_FOG
+    @if(DISTANCE_FOG)
     return fns::apply_fog(fog, color, world_position, view.world_position.xyz, frag_xy);
-#else
+    @if(!DISTANCE_FOG)
     return color;
-#endif
 }
 
 struct BumpOutUniform {
@@ -36,31 +33,25 @@ const RASTER_BITE_SIZE_DEVIATION: u32 = 2u;
 const RASTER_AVERAGE_HEIGHT: u32 = 3u;
 const RASTER_HEIGHT_DEVIATION: u32 = 4u;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> bump: BumpOutUniform;
 
 struct BumpOutVertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) world_position: vec4<f32>,
     @location(1) world_normal: vec3<f32>,
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     @location(2) uv: vec2<f32>,
-#endif
-#ifdef VERTEX_UVS_B
+    @if(VERTEX_UVS_B)
     @location(3) uv_b: vec2<f32>,
-#endif
-#ifdef VERTEX_TANGENTS
+    @if(VERTEX_TANGENTS)
     @location(4) world_tangent: vec4<f32>,
-#endif
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     @location(5) color: vec4<f32>,
-#endif
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     @location(6) @interpolate(flat) instance_index: u32,
-#endif
-#ifdef VISIBILITY_RANGE_DITHER
+    @if(VISIBILITY_RANGE_DITHER)
     @location(7) @interpolate(flat) visibility_range_dither: i32,
-#endif
     @location(8) density: f32,
     @location(9) bite_size: f32,
     @location(10) bite_size_deviation: f32,
@@ -114,18 +105,18 @@ fn sample_grid(rows: array<vec4<f32>, 3>, uv: vec2<f32>) -> f32 {
 }
 
 @vertex
-fn vertex(vertex: Vertex) -> BumpOutVertexOutput {
+fn vertex(packed_vertex: Vertex) -> BumpOutVertexOutput {
+    let vertex = decompress_vertex(packed_vertex, packed_vertex.instance_index);
     var out: BumpOutVertexOutput;
     let world_from_local = mesh_functions::get_world_from_local(vertex.instance_index);
     var profile_uv = vec2<f32>(0.5);
 
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     profile_uv = vertex.uv;
+    @if(VERTEX_UVS_A)
     out.uv = vertex.uv;
-#endif
-#ifdef VERTEX_UVS_B
+    @if(VERTEX_UVS_B)
     out.uv_b = vertex.uv_b;
-#endif
 
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
@@ -150,33 +141,28 @@ fn vertex(vertex: Vertex) -> BumpOutVertexOutput {
         + (displacement_noise - 0.5) * 2.0 * height_deviation;
     out.position = position_world_to_clip(out.world_position.xyz);
 
-#ifdef VERTEX_NORMALS
+    @if(VERTEX_NORMALS)
     out.world_normal = mesh_functions::mesh_normal_local_to_world(
         vertex.normal,
         vertex.instance_index,
     );
-#else
+    @if(!VERTEX_NORMALS)
     out.world_normal = vec3<f32>(0.0, 1.0, 0.0);
-#endif
-#ifdef VERTEX_TANGENTS
+    @if(VERTEX_TANGENTS)
     out.world_tangent = mesh_functions::mesh_tangent_local_to_world(
         world_from_local,
         vertex.tangent,
         vertex.instance_index,
     );
-#endif
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     out.color = vertex.color;
-#endif
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex.instance_index;
-#endif
-#ifdef VISIBILITY_RANGE_DITHER
+    @if(VISIBILITY_RANGE_DITHER)
     out.visibility_range_dither = mesh_functions::get_visibility_range_dither_level(
         vertex.instance_index,
         world_from_local[3],
     );
-#endif
     return out;
 }
 

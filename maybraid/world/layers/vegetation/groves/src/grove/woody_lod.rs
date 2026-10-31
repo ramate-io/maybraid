@@ -235,7 +235,7 @@ macro_rules! impl_woody_grove_lod {
 				($lod).scene_chunks(level, lod_ref, self.nest_plant_chunks(lod_ref, level), self)
 			}
 
-			fn scene_bounds(&self) -> bevy::math::bounding::Aabb3d {
+			fn scene_bounds(&self) -> bevy::shape::Aabb3d {
 				self.structural_lod()
 					.map(|p| p.footprint_aabb())
 					.unwrap_or_else(|| vegetation_components::vegetation_bounds(self))

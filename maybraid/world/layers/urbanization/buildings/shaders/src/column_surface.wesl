@@ -14,13 +14,11 @@
 // distance, screen footprint, and grazing angle.
 //---------------------------------------------------------
 
-#import bevy_pbr::{
-    forward_io::VertexOutput,
-    mesh_view_bindings::view,
-    pbr_fragment::pbr_input_from_vertex_output,
-    pbr_functions as fns,
-}
-#import bevy_core_pipeline::tonemapping::tone_mapping
+import bevy_pbr::render::forward_io::VertexOutput;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::pbr_fragment::pbr_input_from_vertex_output;
+import bevy_pbr::render::pbr_functions as fns;
+import bevy_core_pipeline::tonemapping::tone_mapping;
 
 struct ColumnSurfaceUniform {
     colors: array<vec4<f32>, 8>,
@@ -31,7 +29,7 @@ struct ColumnSurfaceUniform {
     _pad: vec3<u32>,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> material: ColumnSurfaceUniform;
 
 const KIND_DORIC: u32 = 0u;
@@ -318,12 +316,12 @@ fn relief_gradient(uv: vec2<f32>) -> vec2<f32> {
 /// from the outward normal (Y-up shaft). Seam matches the placeholder: U = 0
 /// on local −Z.
 fn column_uv(mesh: VertexOutput, n: vec3<f32>) -> vec2<f32> {
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     let mesh_uv = mesh.uv;
+    @if(VERTEX_UVS_A)
     if (length(dpdx(mesh_uv)) + length(dpdy(mesh_uv)) > 1e-7) {
         return mesh_uv;
     }
-#endif
     let radial = vec2<f32>(n.x, n.z);
     let u = fract(atan2(radial.x, radial.y) / TAU + 0.5);
     return vec2<f32>(u, mesh.world_position.y);

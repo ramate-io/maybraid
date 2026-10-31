@@ -103,12 +103,12 @@ fn derived_mouth_palette(lip: Vec4) -> [Vec4; MOUTH_PALETTE_DETAIL_SLOTS] {
 	]
 }
 
-/// Registers embedded **`face_material.wgsl`** and [`MaterialPlugin`].
+/// Registers embedded **`face_material.wesl`** and [`MaterialPlugin`].
 pub struct FaceShaderMaterialPlugin;
 
 impl Plugin for FaceShaderMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "face_material.wgsl");
+		embedded_asset!(app, "face_material.wesl");
 		app.add_plugins(MaterialPlugin::<FaceShaderMaterial>::default());
 	}
 }
@@ -267,11 +267,11 @@ impl Default for FaceShaderMaterial {
 
 impl Material for FaceShaderMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "face_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "face_material.wesl").into()
 	}
 
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "face_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "face_material.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {

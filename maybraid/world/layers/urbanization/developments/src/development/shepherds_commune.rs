@@ -1,7 +1,7 @@
 //! [`ShepherdsCommune`]: shepherds' buildings joined by graded lanes.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec2;
+use bevy_shape::Aabb3d;
 use procedural_common::{Bounds2, HysteresisConfig, HysteresisGraph, NoiseParams, SeededHash};
 
 use super::raise_toward_peak;

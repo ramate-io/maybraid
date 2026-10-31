@@ -1,9 +1,9 @@
 //! Domain IR + structural [`lod::LodScene`] host for characters.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::{Quat, Vec3};
 use bevy::prelude::{Component, Transform, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use character_items::{ClothingHost, ClothingMaterial, ClothingMesh, ItemColor};
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
@@ -636,7 +636,7 @@ impl<T: CharacterComponents + Send + Sync + 'static> LodScene for ComponentsOnly
 		let host = self.clone();
 		(
 			bsn! {
-				template_value(host)
+				~{host}
 				AssemblyRoot
 				CharacterRoot
 				CharacterHeading::default()

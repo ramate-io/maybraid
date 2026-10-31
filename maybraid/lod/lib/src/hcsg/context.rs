@@ -4,8 +4,8 @@ use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
+use bevy::shape::Aabb3d;
 
 use crate::gen::{Id, OriginalId};
 

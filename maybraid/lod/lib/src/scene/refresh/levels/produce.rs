@@ -5,9 +5,9 @@ use std::marker::PhantomData;
 
 use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
-use bevy::math::bounding::Aabb3d;
 use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 
 use crate::lod_ref::{
 	collect_node_snapshots_into, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose,
@@ -104,7 +104,7 @@ impl LodLevelProducer {
 	}
 }
 
-fn attach_lod_level_producer<T>(add: On<Add, T>, mut commands: Commands)
+fn attach_lod_level_producer<T>(add: On<Add<T>>, mut commands: Commands)
 where
 	T: Component + SemanticLodScene + 'static,
 {
@@ -113,7 +113,7 @@ where
 	}
 }
 
-pub(crate) fn attach_refresh_membership<T, D>(add: On<Add, T>, mut commands: Commands)
+pub(crate) fn attach_refresh_membership<T, D>(add: On<Add<T>>, mut commands: Commands)
 where
 	T: Component,
 	D: Send + Sync + 'static,

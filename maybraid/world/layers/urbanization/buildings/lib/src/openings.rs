@@ -24,8 +24,8 @@ pub use facade_bays::{
 	generate_windows, BaySpec, PlacedBay,
 };
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb3d;
 use building_components::normalize_xz;
 use std::collections::HashMap;
 

@@ -12,9 +12,10 @@ rust-version = { workspace = true }
 [features]
 default = []
 clap = ["dep:clap"]
-serde = ["dep:serde", "bevy_math/serialize"]
+serde = ["dep:serde", "bevy_math/serialize", "bevy_shape/serialize"]
 
 [dependencies]
+bevy_shape = { workspace = true }
 bevy_math = { workspace = true }
 clap = { workspace = true, optional = true }
 fastnoise-lite = { workspace = true }

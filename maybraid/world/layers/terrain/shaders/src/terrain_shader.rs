@@ -19,12 +19,12 @@ use bevy::{
 	shader::ShaderRef,
 };
 
-/// Registers the embedded WGSL and [`MaterialPlugin`] for [`TerrainShader`].
+/// Registers the embedded WESL and [`MaterialPlugin`] for [`TerrainShader`].
 pub struct TerrainShaderPlugin;
 
 impl Plugin for TerrainShaderPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "terrain_shader.wgsl");
+		embedded_asset!(app, "terrain_shader.wesl");
 		app.add_plugins(MaterialPlugin::<TerrainShader>::default());
 		app.add_plugins(crate::RefractionWaterPlugin);
 	}
@@ -94,7 +94,7 @@ impl TerrainShader {
 
 impl Material for TerrainShader {
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "terrain_shader.wgsl",).into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "terrain_shader.wesl",).into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
@@ -199,7 +199,7 @@ mod tests {
 	#[test]
 	fn fragment_shader_ref_matches_embedded_asset_path() {
 		let expected =
-			concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "terrain_shader.wgsl",);
+			concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "terrain_shader.wesl",);
 		match <TerrainShader as Material>::fragment_shader() {
 			ShaderRef::Path(p) => assert_eq!(p.to_string(), expected),
 			ShaderRef::Default => panic!("unexpected Default shader ref"),
@@ -208,11 +208,11 @@ mod tests {
 	}
 
 	#[test]
-	fn embedded_wgsl_registers_with_asset_plugin() {
+	fn embedded_wesl_registers_with_asset_plugin() {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins);
 		app.add_plugins(AssetPlugin::default());
-		embedded_asset!(app, "terrain_shader.wgsl");
+		embedded_asset!(app, "terrain_shader.wesl");
 		app.update();
 	}
 

@@ -1,6 +1,7 @@
 //! Color chips.
 
 use bevy::prelude::*;
+use bevy::ui_widgets::Button;
 
 use crate::theme::{
 	PANEL_CHIP_GAP, PANEL_SWATCH_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT, TILE_FOCUS_PAD,
@@ -33,6 +34,7 @@ pub fn spawn_swatch(
 ) {
 	parent.spawn((
 		Button,
+		bevy::picking::hover::Hovered::default(),
 		crate::controls::tile::HoverTile {
 			equipped: selected,
 			preserve_fill: true,

@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use super::variants::trade_winds_banyan::{HonuBanyanSamples, SopeBanyanSamples};
 
-#[cfg(test)]
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+#[cfg(test)]
+use bevy::shape::Aabb3d;
 use clap::Args;
 use lod::lod_ref::LodRef;
 #[cfg(test)]

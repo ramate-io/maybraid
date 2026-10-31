@@ -6,7 +6,7 @@
 //! The monotower maps inbound shafts onto aligned storey slots. Stairwells and
 //! roof are owned by the tower consumer (a Richmond development).
 //!
-//! When monotowers fit an [`Aabb3d`](bevy_math::bounding::Aabb3d), they choose a
+//! When monotowers fit an [`Aabb3d`](bevy_shape::Aabb3d), they choose a
 //! floor height from a range and then adjust to have a whole number of storeys.
 //!
 //! Monotowers typically follow a Parameterized → FloorPlan → UsagePlan approach:

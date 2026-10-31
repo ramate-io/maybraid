@@ -4,8 +4,8 @@
 //! - Coaxial nested (longer+narrower under shorter+wider) → two lower wings
 //!   that butt into the higher volume's end gables.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 
 use super::geometry::{LongAxis, EPS};
 use super::topology::PlanRect;

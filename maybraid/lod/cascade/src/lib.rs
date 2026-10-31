@@ -5,6 +5,6 @@
 mod cascade;
 mod chunk;
 
-pub use bevy_math::bounding::Aabb3d;
+pub use bevy_shape::Aabb3d;
 pub use cascade::{Cascade, GridConfig};
 pub use chunk::Chunk;

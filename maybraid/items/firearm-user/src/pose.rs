@@ -1,7 +1,7 @@
 //! Stock-at-shoulder pose and spawn helpers.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use bevy::transform::helper::TransformHelper;
 use characters::{
 	BoneMap, CharacterHeading, CharacterMembers, CharacterRig, CharacterRigRole, CharacterRoot,

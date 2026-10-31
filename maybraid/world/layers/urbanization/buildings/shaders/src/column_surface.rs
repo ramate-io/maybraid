@@ -13,8 +13,8 @@ use bevy::{
 	shader::ShaderRef,
 };
 use material_ref::{
-	MATERIAL_PALETTE_SLOTS, MATERIAL_RASTER_CHANNELS, MATERIAL_RASTER_WIDTH,
-	MATERIAL_SCALAR_FLOATS, MaterialRasters, MaterialRef,
+	MaterialRasters, MaterialRef, MATERIAL_PALETTE_SLOTS, MATERIAL_RASTER_CHANNELS,
+	MATERIAL_RASTER_WIDTH, MATERIAL_SCALAR_FLOATS,
 };
 
 pub mod shaft;
@@ -44,12 +44,12 @@ const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_LIMESTONE: Vec4 = Vec4::new(0.84, 0.80, 0.72, 1.0);
 const DEFAULT_ACCENT: Vec4 = Vec4::new(0.58, 0.52, 0.44, 1.0);
 
-/// Registers embedded **`column_surface.wgsl`** and [`MaterialPlugin`].
+/// Registers embedded **`column_surface.wesl`** and [`MaterialPlugin`].
 pub struct ColumnSurfaceMaterialPlugin;
 
 impl Plugin for ColumnSurfaceMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "column_surface.wgsl");
+		embedded_asset!(app, "column_surface.wesl");
 		app.add_plugins(MaterialPlugin::<ColumnSurfaceMaterial>::default());
 	}
 }
@@ -149,7 +149,7 @@ impl Default for ColumnSurfaceMaterial {
 
 impl Material for ColumnSurfaceMaterial {
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "column_surface.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "column_surface.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
@@ -159,13 +159,7 @@ impl Material for ColumnSurfaceMaterial {
 
 /// Named recipes claimed by the column-surface lib.
 pub fn is_column_surface_recipe(name: &str) -> bool {
-	matches!(
-		name,
-		RECIPE_DORIC_COLUMN
-			| RECIPE_DORIC_COLUMN_SHAFT_KIT
-			| "doric"
-			| "doric-column"
-	)
+	matches!(name, RECIPE_DORIC_COLUMN | RECIPE_DORIC_COLUMN_SHAFT_KIT | "doric" | "doric-column")
 }
 
 /// Authored limestone Doric look used by the materials playground and kits.
@@ -208,7 +202,7 @@ pub fn doric_column_flat_ref() -> MaterialRef {
 
 #[cfg(test)]
 mod tests {
-	use material_ref::{MATERIAL_RASTER_SAMPLES, MaterialId};
+	use material_ref::{MaterialId, MATERIAL_RASTER_SAMPLES};
 
 	use super::*;
 

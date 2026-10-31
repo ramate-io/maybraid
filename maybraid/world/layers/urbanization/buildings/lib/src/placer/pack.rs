@@ -1,7 +1,7 @@
 //! Shared greedy furniture pack loop for usage-area rooms.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec3;
+use bevy_shape::{Aabb2d, Aabb3d};
 use procedural_common::{aabb2_area, aabb3_to_plan, NoiseConfig, NoiseParams, PlanAxes};
 
 use crate::fit::{Confines, FitError};

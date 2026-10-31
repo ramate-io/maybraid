@@ -6,8 +6,8 @@
 //! AllOpen). Party walls and RLA internals use the same
 //! [`INTERNAL_WALLS_LAYER`] High-only band as [`crate::LivableApartments`].
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use building_components::furniture::FurnitureNode;
 use building_components::joints::JointNode;
 use building_components::labels::LabelNode;

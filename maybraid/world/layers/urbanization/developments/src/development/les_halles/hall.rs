@@ -5,8 +5,8 @@
 //! host. The top storey has a gallery ceiling and no stairwell; the penultimate
 //! well walks off on that last gallery.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use building_components::panels::PanelStyle;
 use buildings::{
 	Confines, ConnectingStairwell, FillableRegions, Fit, FitError, LesHallesArcadeUsage,
@@ -331,8 +331,8 @@ fn offset_roof_half(half: RoofHalf, delta: Vec3) -> RoofHalf {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 	use buildings::OpeningLabel;
 
 	fn large_tower_bounds() -> Aabb3d {

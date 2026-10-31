@@ -1,5 +1,5 @@
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use building_components::partitions::{Partition, SLICE_KIT_HEIGHT};
 
 use crate::openings::{MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};

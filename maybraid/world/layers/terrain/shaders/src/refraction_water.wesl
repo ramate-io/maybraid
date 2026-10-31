@@ -1,40 +1,37 @@
 //---------------------------------------------------------
 // Durham refraction water (ported from naturescapes).
 //---------------------------------------------------------
-#import bevy_pbr::{
-    forward_io::VertexOutput,
-    mesh_view_bindings::view,
-    mesh_view_bindings::view_transmission_texture,
-    mesh_view_bindings::view_transmission_sampler,
-    mesh_view_bindings::depth_prepass_texture,
-    mesh_view_bindings::globals,
-    utils::coords_to_viewport_uv,
-    view_transformations::depth_ndc_to_view_z,
-}
-#ifdef DISTANCE_FOG
-#import bevy_pbr::mesh_view_bindings::fog
-#import bevy_pbr::pbr_functions as fns
-#endif
+import bevy_pbr::render::forward_io::VertexOutput;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::mesh_view_bindings::view_transmission_texture;
+import bevy_pbr::render::mesh_view_bindings::view_transmission_sampler;
+import bevy_pbr::render::mesh_view_bindings::depth_prepass_texture;
+import bevy_pbr::render::mesh_view_bindings::globals;
+import bevy_pbr::render::utils::coords_to_viewport_uv;
+import bevy_pbr::render::view_transformations::depth_ndc_to_view_z;
+@if(DISTANCE_FOG)
+import bevy_pbr::render::mesh_view_bindings::fog;
+@if(DISTANCE_FOG)
+import bevy_pbr::render::pbr_functions as fns;
 
 fn with_distance_fog(color: vec4<f32>, world_position: vec3<f32>, frag_xy: vec2<f32>) -> vec4<f32> {
-#ifdef DISTANCE_FOG
+    @if(DISTANCE_FOG)
     return fns::apply_fog(fog, color, world_position, view.world_position.xyz, frag_xy);
-#else
+    @if(!DISTANCE_FOG)
     return color;
-#endif
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> water_color: vec4<f32>; // rgb tint, a = opacity
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(1)
+@group(constants::MATERIAL_BIND_GROUP) @binding(1)
 var<uniform> shallow_color: vec4<f32>;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(2)
+@group(constants::MATERIAL_BIND_GROUP) @binding(2)
 var<uniform> deep_color: vec4<f32>;
 
 // x = distortion_strength, y = depth_scale, z = close_fade_strength
-@group(#{MATERIAL_BIND_GROUP}) @binding(3)
+@group(constants::MATERIAL_BIND_GROUP) @binding(3)
 var<uniform> water_params: vec4<f32>;
 
 fn saturate(x: f32) -> f32 {

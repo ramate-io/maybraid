@@ -1,7 +1,7 @@
 //! [`SolitaryWizardsTower`]: the procedural Wizard's Tower fitted to confines.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use building_components::{
 	BuildingComponents, DoorNode, FloorNode, FurnitureNode, FurnitureUsageNode, JointNode,
 	LabelNode, Layers, PanelNode, PartitionNode, RoofNode, StairNode,

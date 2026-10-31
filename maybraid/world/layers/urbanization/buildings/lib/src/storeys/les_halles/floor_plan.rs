@@ -1,7 +1,7 @@
 //! Les Halles floor plan: gallery ring (walls + floor) and balcony floor ring.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use building_components::joints::JointNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{
@@ -1744,8 +1744,8 @@ mod tests {
 	use super::*;
 	use crate::fit::{aabb_xz_near_eq, Fit};
 	use crate::openings::{MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 	use procedural_common::{NoiseConfig, NoiseParams};
 
 	fn nominal_confines() -> Confines {

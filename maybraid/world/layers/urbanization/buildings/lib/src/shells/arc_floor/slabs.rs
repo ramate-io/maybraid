@@ -1,7 +1,7 @@
 //! Layer 2: floor / ceiling slabs cut by slab-relevant openings.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use building_components::floors::{Floor, FloorNode};
 use building_components::Placement;
 

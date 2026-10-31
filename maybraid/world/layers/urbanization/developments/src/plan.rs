@@ -3,8 +3,8 @@
 use std::f32::consts::TAU;
 
 use bevy::transform::components::Transform;
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Quat, Vec2, Vec3};
+use bevy_shape::Aabb3d;
 
 /// Map a unit sample in \([0, 1]\) onto a heading in \([0, \tau]\).
 pub fn sample_confines_yaw(unit: f32) -> f32 {

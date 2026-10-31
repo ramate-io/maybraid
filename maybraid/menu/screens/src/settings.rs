@@ -4,31 +4,30 @@ mod catalog;
 mod persist;
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn, template_value};
+use bevy::scene::prelude::{bsn, Scene};
 use character_persist::SaveRoot;
 use maybraid_menu_controller::MenuController;
 use maybraid_world::render_scale::{VisualStyle, VisualStyleAutoReason, VisualStyleIdentity};
 use menu_components::single_select::republish_menu_activate;
 use menu_components::single_select::text_cursor::TextCursorColumn;
 use menu_components::{
-	BrandModeLine, BrandModeTitle, MenuFocus, MenuInfoBox, MenuInfoBoxLabel, MenuStep,
-	TextColumnAlign, TextColumnAnchor, TextCursorRow, TextMenuPlugin, TextMenuSystems,
 	menu_list_panel_node, menu_region_wash, screen_back_scene, set_brand_mode_title,
-	set_info_box_for_menu,
+	set_info_box_for_menu, BrandModeLine, BrandModeTitle, MenuFocus, MenuInfoBox, MenuInfoBoxLabel,
+	MenuStep, TextColumnAlign, TextColumnAnchor, TextCursorRow, TextMenuPlugin, TextMenuSystems,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::input::add_menu_input;
-use crate::show::{MenuScreens, MenuShowRequest, add_menu_show_systems};
+use crate::show::{add_menu_show_systems, MenuScreens, MenuShowRequest};
 use crate::{GameMode, MenuScreen};
 
 pub use catalog::{
-	DeviceClass, DeviceType, HostProbe, PersistPolicy, Preference, classify_host, seed_device_class,
+	classify_host, seed_device_class, DeviceClass, DeviceType, HostProbe, PersistPolicy, Preference,
 };
 pub use persist::{
-	ENV_RENDER_SCALE, ENV_SHADOWS, LoadedMachineSettings, QualitySeeded, apply_seed,
-	apply_shadows_env, load_machine_settings, load_machine_settings_ex, parse_render_scale_env,
-	parse_shadows_env, save_machine_settings,
+	apply_seed, apply_shadows_env, load_machine_settings, load_machine_settings_ex,
+	parse_render_scale_env, parse_shadows_env, save_machine_settings, LoadedMachineSettings,
+	QualitySeeded, ENV_RENDER_SCALE, ENV_SHADOWS,
 };
 
 /// Queue an in-game settings spawn (despawns any existing menu screen first).
@@ -368,7 +367,11 @@ impl Default for InGameSettings {
 
 impl InGameSettings {
 	pub fn mob_hud_state_label(self) -> &'static str {
-		if self.mob_hud { "On" } else { "Off" }
+		if self.mob_hud {
+			"On"
+		} else {
+			"Off"
+		}
 	}
 
 	pub fn state_label(self, choice: InGameSettingsChoice) -> String {
@@ -470,7 +473,7 @@ impl InGameSettingsScreen {
 		];
 		let children: Vec<Box<dyn Scene>> = vec![
 			Box::new(bsn! {
-				template_value(menu_list_panel_node(AlignItems::Center))
+				~{menu_list_panel_node(AlignItems::Center)}
 				BackgroundColor(menu_region_wash())
 				Pickable::IGNORE
 				Children [ {column} ]
@@ -670,9 +673,9 @@ mod tests {
 	use menu_components::TextCursorRow;
 
 	use super::{
-		InGameSettings, InGameSettingsChoice, InGameShadowQuality, InGameVisualStyle,
-		RenderScaleReadout, SettingsStep, VisualStyleProvenance, apply_settings_step,
-		format_visual_style_info, persist,
+		apply_settings_step, format_visual_style_info, persist, InGameSettings,
+		InGameSettingsChoice, InGameShadowQuality, InGameVisualStyle, RenderScaleReadout,
+		SettingsStep, VisualStyleProvenance,
 	};
 
 	#[test]
@@ -689,7 +692,11 @@ mod tests {
 			.into_iter()
 			.map(|choice| {
 				let row = TextCursorRow::new(choice.label(), choice);
-				if choice == InGameSettingsChoice::VisualStyle { row.stepper() } else { row }
+				if choice == InGameSettingsChoice::VisualStyle {
+					row.stepper()
+				} else {
+					row
+				}
 			})
 			.collect();
 		assert!(!rows[0].stepper);

@@ -10,8 +10,8 @@ use bevy::asset::RenderAssetUsages;
 use bevy::light::NotShadowCaster;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
-use bevy_math::bounding::Aabb2d;
+use bevy::scene::prelude::{bsn, Scene};
+use bevy_shape::Aabb2d;
 use lod::scene::LodSceneLevel;
 use lod::LodLazyPending;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
@@ -313,9 +313,9 @@ pub fn massing_primitive_scene(volume: &MassingVolume) -> impl Scene + 'static {
 	bsn! {
 		Mesh3d({mesh})
 		NotShadowCaster
-		template_value(transform)
+		~{transform}
 		Visibility::Inherited
-		template_value(MaterialRefRoot(material))
+		~{MaterialRefRoot(material)}
 		PropagateToDescendants
 		LodLazyPending
 	}
@@ -413,9 +413,9 @@ pub fn massing_box_scene(transform: Transform) -> impl Scene + 'static {
 	bsn! {
 		Mesh3d({mesh})
 		NotShadowCaster
-		template_value(transform)
+		~{transform}
 		Visibility::Inherited
-		template_value(MaterialRefRoot(material))
+		~{MaterialRefRoot(material)}
 		PropagateToDescendants
 		LodLazyPending
 	}

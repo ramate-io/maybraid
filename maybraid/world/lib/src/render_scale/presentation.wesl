@@ -6,7 +6,7 @@
 // Material2d loads this file as one Shader asset and picks an @fragment
 // entry in specialize. Do not address entries as asset-path #labels.
 
-#import bevy_sprite::mesh2d_vertex_output::VertexOutput
+import bevy_sprite_render::mesh2d::vertex_output::VertexOutput;
 
 @group(2) @binding(0) var source_texture: texture_2d<f32>;
 @group(2) @binding(1) var source_sampler: sampler;

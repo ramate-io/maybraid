@@ -1,4 +1,4 @@
-//! Vegetation shaders: reusable Bevy [`Material`] types with embedded WGSL.
+//! Vegetation shaders: reusable Bevy [`Material`] types with embedded WESL.
 //!
 //! - [`StickMaterial`] — edge-accent PBR (from `playgrounds/objects/assets/shaders/edge_material.wgsl`).
 //! - [`LeafMaterial`] — object-space leafy breakup + vertex sway + split light.

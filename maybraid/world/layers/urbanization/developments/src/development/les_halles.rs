@@ -46,8 +46,8 @@ impl TerraceDevelopment for LesHalles {
 mod tests {
 	use std::f32::consts::TAU;
 
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 	use material_ref::MaterialId;
 
 	use super::*;

@@ -1,7 +1,7 @@
 //! Stacked circular storey shells ([`ArcFloor`]) with developer-chosen openings and slabs.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb3d;
 use building_components::floors::FloorNode;
 use building_components::partitions::{PartitionNode, PartitionStyle};
 use building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume};

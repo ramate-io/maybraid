@@ -1,7 +1,6 @@
 use character_items::{Inventory, InventoryDropPolicy, InventoryItem};
 use character_ui_menu::{CameraFocus, MenuComponent, MenuNode, SingleSelect};
 use characters::{
-	CharacterAppearance, ConceptAnimation, ConceptSpeciesConfig,
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig,
 		brokker::BrokkerConfig, caole::CaoleConfig, chupri::ChupriConfig, claber::ClaberConfig,
@@ -12,6 +11,7 @@ use characters::{
 		tipple::TippleConfig, topple::ToppleConfig, tuberwaber::TuberwaberConfig,
 		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
+	CharacterAppearance, ConceptAnimation, ConceptSpeciesConfig,
 };
 
 use crate::{
@@ -151,7 +151,11 @@ impl CharacterMenu {
 
 	pub fn saved_name(&self) -> String {
 		let name = self.name.trim();
-		if name.is_empty() { String::from("Unnamed") } else { name.to_string() }
+		if name.is_empty() {
+			String::from("Unnamed")
+		} else {
+			name.to_string()
+		}
 	}
 
 	pub fn is_create(&self) -> bool {
@@ -513,7 +517,11 @@ impl CharacterMenu {
 			ConceptSpecies::Mistler => self.mistler.menu_node(),
 			ConceptSpecies::Tuberwaber => self.tuberwaber.menu_node(),
 		};
-		if self.inventory.is_some() { omit_clothing_section(node) } else { node }
+		if self.inventory.is_some() {
+			omit_clothing_section(node)
+		} else {
+			node
+		}
 	}
 
 	pub fn animation(&self) -> ConceptAnimation {
@@ -801,7 +809,7 @@ impl CharacterMenu {
 	}
 
 	/// Rest-pose envelope used to frame the live preview for the selected species.
-	pub fn preview_aabb(&self) -> bevy_math::bounding::Aabb3d {
+	pub fn preview_aabb(&self) -> bevy_shape::Aabb3d {
 		self.locomotion_capsule().preview_aabb_for(self.species.value.skeleton_kind())
 	}
 

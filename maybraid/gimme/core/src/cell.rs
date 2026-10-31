@@ -3,8 +3,8 @@
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3A;
+use bevy_shape::Aabb3d;
 
 /// World-space axis-aligned cell region (RFC-142 `(D, Cell)` bucket identity).
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -1,7 +1,7 @@
 //! Pocket-water leaf typing for debug overlays and HUD.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Color;
+use bevy::shape::Aabb3d;
 
 /// Resolved Watershed stamp on a guillotine leaf (after empty fallbacks).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

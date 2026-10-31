@@ -7,8 +7,8 @@
 
 use std::sync::Arc;
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use building_components::panels::PanelStyle;
 use building_components::{
 	BuildingComponents, BuildingStructuralLodProbe, DoorNode, FloorNode, FurnitureNode, JointNode,

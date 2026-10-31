@@ -3,8 +3,8 @@
 
 use std::marker::PhantomData;
 
-use bevy::math::bounding::{Aabb3d, BoundingVolume};
 use bevy::math::{Vec2, Vec3, Vec3Swizzles};
+use bevy::shape::{Aabb3d, BoundingVolume};
 use building_components::{BuildingComponents, LabelNode};
 use chico::ForestGround;
 use lod::gen::{Id, OriginalId};

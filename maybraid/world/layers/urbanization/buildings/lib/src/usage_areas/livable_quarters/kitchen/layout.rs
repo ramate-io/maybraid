@@ -1,7 +1,7 @@
 //! Kitchen plan packer: counter layouts (galley / L / peninsula) + optional island.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec3;
+use bevy_shape::{Aabb2d, Aabb3d};
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{Confines, FitError};

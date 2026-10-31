@@ -5,9 +5,9 @@
 //! [`SceneChunk`] of `Box<dyn Scene>` — that is still the exclusive spawn path.
 
 use bevy::ecs::component::Component;
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 
 use crate::lod_ref::LodRef;
 
@@ -116,7 +116,7 @@ pub trait SemanticLodScene {
 		let _ = lod_ref;
 		let host = self.clone();
 		bsn! {
-			template_value(host)
+			~{host}
 		}
 	}
 

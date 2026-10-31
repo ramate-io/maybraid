@@ -1,7 +1,7 @@
 //! Host AABBs (scene / spawn concerns — not [`crate::lod_ref::LodRef`] driver extents).
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 
 /// AABB for a [`crate::LodSceneHost`] (host geometry / indexing helpers).
 ///

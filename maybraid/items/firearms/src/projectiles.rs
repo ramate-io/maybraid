@@ -440,7 +440,7 @@ fn flame_effect(kind: FlameKind) -> EffectAsset {
 		writer.lit(life.0).uniform(writer.lit(life.1)).expr(),
 	);
 	let update_drag = LinearDragModifier::new(writer.lit(drag).expr());
-	let texture_slot = writer.lit(0u32).expr();
+	let texture_slot = 0;
 
 	let mut color = Gradient::new();
 	color.add_key(0.0, Vec4::new(4.0, 3.2, 1.6, 1.0));
@@ -452,7 +452,7 @@ fn flame_effect(kind: FlameKind) -> EffectAsset {
 	size_gradient.add_key(1.0, Vec3::splat(size.2));
 
 	let mut module = writer.finish();
-	module.add_texture_slot("puff");
+	module.add_texture_slot("puff", bevy_hanabi::SlotDimension::D2);
 
 	EffectAsset::new(capacity, spawner, module)
 		.with_name(name)

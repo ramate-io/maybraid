@@ -3,9 +3,9 @@
 use std::marker::PhantomData;
 
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
-use bevy::math::bounding::Aabb3d;
 use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 
 use crate::lod_ref::{
 	collect_node_snapshots_into, LodNode, LodNodeBounds, LodNodePose, LodNodeSnapshot,

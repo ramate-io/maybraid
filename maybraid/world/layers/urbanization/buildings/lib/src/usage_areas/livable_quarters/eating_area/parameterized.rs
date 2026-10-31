@@ -1,6 +1,6 @@
 //! Parameterized knobs + plan for [`super::EatingArea`].
 
-use bevy_math::bounding::Aabb2d;
+use bevy_shape::Aabb2d;
 use building_components::LabelStyle;
 use procedural_common::{NoiseConfig, NoiseParams};
 

@@ -22,10 +22,10 @@ pub(crate) fn walk_collider(slots: &[FurnitureNode]) -> Option<Collider> {
 /// identity host, so the collider is too.
 pub(crate) fn walk_collider_scene(collider: Collider) -> impl Scene + 'static {
 	bsn! {
-		template_value(Name::new("furniture-walk-collider"))
+		~{Name::new("furniture-walk-collider")}
 		FurnitureWalkCollider
-		template_value(Transform::IDENTITY)
-		template_value(Visibility::Hidden)
+		~{Transform::IDENTITY}
+		~{Visibility::Hidden}
 		template(|_ctx| Ok(RigidBody::Static))
 		template(move |_ctx| Ok(collider.clone()))
 		template(|_ctx| Ok(PhysicsInteractionLayer::fixed_layers()))

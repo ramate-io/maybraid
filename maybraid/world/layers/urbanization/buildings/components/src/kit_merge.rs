@@ -5,7 +5,7 @@
 //! instance across the city.
 
 use bevy::prelude::Transform;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use lod::LodLazyPending;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use scene_ref::SceneRef;
@@ -48,7 +48,7 @@ pub(crate) fn with_optional_material(
 	match material {
 		Some(material) => Box::new((
 			bsn! {
-				template_value(MaterialRefRoot(material))
+				~{MaterialRefRoot(material)}
 				PropagateToDescendants
 				LodLazyPending
 			},

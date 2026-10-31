@@ -166,7 +166,7 @@ mod tests {
 		use buildings::{Confines, Fit};
 		use procedural_common::NoiseParams;
 		use std::sync::Arc;
-		let bounds = bevy::math::bounding::Aabb3d::from_min_max(
+		let bounds = bevy::shape::Aabb3d::from_min_max(
 			Vec3::new(-30.0, 0.0, -30.0),
 			Vec3::new(30.0, 64.0, 30.0),
 		);
@@ -288,7 +288,7 @@ mod tests {
 			PostUpdate,
 			stamp_label_places.after(bevy::transform::TransformSystems::Propagate),
 		);
-		let host_id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
+		let host_id = Id::from_cell(bevy::shape::Aabb3d::from_min_max(
 			bevy::math::Vec3::ZERO,
 			bevy::math::Vec3::ONE,
 		));
@@ -332,7 +332,7 @@ mod tests {
 			PostUpdate,
 			stamp_label_places.after(bevy::transform::TransformSystems::Propagate),
 		);
-		let host_id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
+		let host_id = Id::from_cell(bevy::shape::Aabb3d::from_min_max(
 			bevy::math::Vec3::ZERO,
 			bevy::math::Vec3::ONE,
 		));

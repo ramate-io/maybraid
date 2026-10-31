@@ -1,4 +1,4 @@
-//! Terrain shaders: reusable Bevy materials and embedded WGSL for Maybraid terrain work.
+//! Terrain shaders: reusable Bevy materials and embedded WESL for Maybraid terrain work.
 
 mod refraction_water;
 mod terrain_shader;

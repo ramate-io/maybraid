@@ -5,8 +5,8 @@
 //! the wall strip is subdivided into solid and opening bays along the run
 //! (same policy as [`crate::shells::RectRingFloor`]).
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 
 use crate::openings::{MappedOpenings, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;

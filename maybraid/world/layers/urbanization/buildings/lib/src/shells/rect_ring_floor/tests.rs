@@ -71,7 +71,7 @@ fn passage_on_outer_south_maps() {
 fn cornerish_passage_maps_to_intersecting_side_not_nearest_mid() {
 	// Midpoint is closer to East face, but the AABB only intersects the South
 	// wall volume — must still cut South (Les Halles awkward SE door case).
-	let opening = Opening::passage(bevy_math::bounding::Aabb3d::from_min_max(
+	let opening = Opening::passage(bevy_shape::Aabb3d::from_min_max(
 		Vec3::new(2.8, 0.2, -3.15),
 		Vec3::new(3.6, 2.8, -2.85),
 	));
@@ -99,7 +99,7 @@ fn corner_depth_nibble_loses_to_true_face_span() {
 	door.bounds = {
 		let min = Vec3::from(door.bounds.min) + Vec3::new(2.6, 0.0, 0.0);
 		let max = Vec3::from(door.bounds.max) + Vec3::new(2.6, 0.0, 0.0);
-		bevy_math::bounding::Aabb3d::from_min_max(min, max)
+		bevy_shape::Aabb3d::from_min_max(min, max)
 	};
 	let r = RectRingFloorParams::default()
 		.openings(Openings::new().with("se_door", door))
@@ -151,7 +151,7 @@ fn multiple_openings_on_same_outer_side_all_map() {
 	door.bounds = {
 		let min = Vec3::from(door.bounds.min) + Vec3::new(-2.0, 0.0, 0.0);
 		let max = Vec3::from(door.bounds.max) + Vec3::new(-2.0, 0.0, 0.0);
-		bevy_math::bounding::Aabb3d::from_min_max(min, max)
+		bevy_shape::Aabb3d::from_min_max(min, max)
 	};
 	let mut win = RectRingFloor::side_aperture_opening(
 		OrthoSide::South,
@@ -164,7 +164,7 @@ fn multiple_openings_on_same_outer_side_all_map() {
 	win.bounds = {
 		let min = Vec3::from(win.bounds.min) + Vec3::new(2.0, 0.0, 0.0);
 		let max = Vec3::from(win.bounds.max) + Vec3::new(2.0, 0.0, 0.0);
-		bevy_math::bounding::Aabb3d::from_min_max(min, max)
+		bevy_shape::Aabb3d::from_min_max(min, max)
 	};
 	openings.insert("door", door);
 	openings.insert("win", win);
@@ -207,7 +207,7 @@ fn cuts_slab_can_remove_a_frame_band() {
 	openings.insert(
 		"shaft",
 		Opening::new(
-			bevy_math::bounding::Aabb3d::from_min_max(
+			bevy_shape::Aabb3d::from_min_max(
 				Vec3::new(-5.0, -0.5, -3.5),
 				Vec3::new(5.0, 0.5, -1.0),
 			),
@@ -245,7 +245,7 @@ fn two_corner_shafts_both_cut_south_floor_band() {
 	openings.insert(
 		"sw",
 		Opening::new(
-			bevy_math::bounding::Aabb3d::from_min_max(
+			bevy_shape::Aabb3d::from_min_max(
 				Vec3::new(-4.0, -0.5, -3.0),
 				Vec3::new(-2.0, 0.5, -1.5),
 			),
@@ -255,10 +255,7 @@ fn two_corner_shafts_both_cut_south_floor_band() {
 	openings.insert(
 		"se",
 		Opening::new(
-			bevy_math::bounding::Aabb3d::from_min_max(
-				Vec3::new(2.0, -0.5, -3.0),
-				Vec3::new(4.0, 0.5, -1.5),
-			),
+			bevy_shape::Aabb3d::from_min_max(Vec3::new(2.0, -0.5, -3.0), Vec3::new(4.0, 0.5, -1.5)),
 			OpeningLabel::Shaft,
 		),
 	);

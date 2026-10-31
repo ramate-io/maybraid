@@ -5,7 +5,7 @@ use bevy::prelude::{
 	Added, ChildOf, Children, Commands, Component, Entity, Mesh3d, Query, Res, Transform,
 	Visibility, With, Without,
 };
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use lod::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use lod::scene::LodSceneLevel;
 use lod::LodLazyPending;
@@ -32,7 +32,7 @@ pub fn posed_material_asset_tier(
 		None => vec![],
 	};
 	bsn! {
-		template_value(transform)
+		~{transform}
 		Visibility::Inherited
 		Children [ {children} ]
 	}
@@ -43,7 +43,7 @@ fn material_asset_scene(asset: AssetPath, material: Option<MaterialRef>) -> Box<
 	match material {
 		Some(material) => Box::new((
 			bsn! {
-				template_value(MaterialRefRoot(material))
+				~{MaterialRefRoot(material)}
 				PropagateToDescendants
 				LodLazyPending
 			},
@@ -83,7 +83,7 @@ pub fn posed_frond_multi_scene_merge(
 ) -> impl Scene + 'static {
 	(
 		bsn! {
-			template_value(MaterialRefRoot(material))
+			~{MaterialRefRoot(material)}
 			PropagateToDescendants
 			LodLazyPending
 		},
@@ -102,7 +102,7 @@ pub fn posed_foliage_multi_scene_merge(
 	(
 		bsn! {
 			NotShadowCaster
-			template_value(MaterialRefRoot(material))
+			~{MaterialRefRoot(material)}
 			PropagateToDescendants
 			LodLazyPending
 		},
@@ -253,9 +253,9 @@ fn host_with_probe_only<P: Component + Clone + Default + Unpin>(
 	let host_children = vec![level_roots];
 	bsn! {
 		LodSceneHost
-		template_value(level)
-		template_value(probe)
-		template_value(transform)
+		~{level}
+		~{probe}
+		~{transform}
 		Visibility::Inherited
 		Children [ {host_children} ]
 	}
@@ -273,9 +273,9 @@ fn mesh_level_root(
 	};
 	let visibility = if visible { Visibility::Inherited } else { Visibility::Hidden };
 	Box::new(bsn! {
-		template_value(LodLevelRoot(level))
+		~{LodLevelRoot(level)}
 		Transform::default()
-		template_value(visibility)
+		~{visibility}
 		Children [ {children} ]
 	})
 }
@@ -288,9 +288,9 @@ fn content_level_root(
 	let children: Vec<Box<dyn Scene>> = vec![content];
 	let visibility = if visible { Visibility::Inherited } else { Visibility::Hidden };
 	Box::new(bsn! {
-		template_value(LodLevelRoot(level))
+		~{LodLevelRoot(level)}
 		Transform::default()
-		template_value(visibility)
+		~{visibility}
 		Children [ {children} ]
 	})
 }

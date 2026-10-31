@@ -1,9 +1,7 @@
 //! Circulation requirements on boundary regions.
 
-use bevy_math::{
-	bounding::{Aabb2d, Aabb3d},
-	Vec3,
-};
+use bevy_math::Vec3;
+use bevy_shape::{Aabb2d, Aabb3d};
 
 use crate::constraints::face::{FaceKind, FACE_EPS};
 use crate::constraints::ownership::BoundaryOwnershipEntry;

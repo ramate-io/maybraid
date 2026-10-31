@@ -3,7 +3,7 @@
 //! No interior rooms — just clearance bands and opportunistic `PlanOpeningFace`
 //! bands along host walls (including free segments beside passages).
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use procedural_common::{
 	aabb3_to_plan, intersects_aabb2, plan_to_aabb3, Aabb2dPack, OptionalFaceBand, PlanAxes,
 	PlanOpeningFace,

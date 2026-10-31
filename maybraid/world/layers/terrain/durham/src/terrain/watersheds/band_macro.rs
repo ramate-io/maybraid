@@ -80,20 +80,20 @@ macro_rules! define_marazion_band {
 			.map(|configs| $layout_fn(&configs)));
 
 		impl $crate::terrain::cell::CellTiling for $Layout {
-			fn cell_ids(&self, region: bevy::math::bounding::Aabb3d) -> Vec<lod::gen::OriginalId> {
+			fn cell_ids(&self, region: bevy::shape::Aabb3d) -> Vec<lod::gen::OriginalId> {
 				self.grid.cell_ids(region)
 			}
 		}
 
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $PreCell {
-			pub cell: bevy::math::bounding::Aabb3d,
+			pub cell: bevy::shape::Aabb3d,
 			pub pre: terrain_watersheds::PrePocket,
 		}
 
 		/// Pocket AABBs on this pre-pocket's lattice.
 		impl $crate::terrain::stamps::shared::LeafAabbs for $PreCell {
-			fn leaf_aabbs(&self) -> Vec<bevy::math::bounding::Aabb3d> {
+			fn leaf_aabbs(&self) -> Vec<bevy::shape::Aabb3d> {
 				let (vy_min, vy_max) = (self.cell.min.y, self.cell.max.y);
 				(0..self.pre.nx)
 					.flat_map(|px| (0..self.pre.nz).map(move |pz| (px, pz)))
@@ -110,7 +110,7 @@ macro_rules! define_marazion_band {
 			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
 				cx: &mut lod::hcsg::GenerationContext,
-				region: bevy::math::bounding::Aabb3d,
+				region: bevy::shape::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
 				<$Layout as $crate::terrain::cell::CellTiling>::origin_ids_in(cx, region)
 			}
@@ -118,7 +118,7 @@ macro_rules! define_marazion_band {
 			fn build_with_id(
 				cx: &mut lod::hcsg::GenerationContext,
 				id: lod::gen::Id,
-			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+			) -> Option<(Self, bevy::shape::Aabb3d)> {
 				let cell = id.origin_cell_bounds()?;
 				let configs = cx
 					.get_or_generate::<$crate::terrain::watersheds::config::WatershedConfigs>(
@@ -131,7 +131,7 @@ macro_rules! define_marazion_band {
 		impl $PreCell {
 			/// The pre-pocket containing `cell`'s center.
 			pub fn on_cell(
-				cell: bevy::math::bounding::Aabb3d,
+				cell: bevy::shape::Aabb3d,
 				configs: &$crate::terrain::watersheds::config::WatershedConfigs,
 			) -> Self {
 				let cx = (cell.min.x + cell.max.x) * 0.5;
@@ -145,12 +145,12 @@ macro_rules! define_marazion_band {
 
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $Pocket {
-			pub cell: bevy::math::bounding::Aabb3d,
-			pub leaves: Vec<bevy::math::bounding::Aabb3d>,
+			pub cell: bevy::shape::Aabb3d,
+			pub leaves: Vec<bevy::shape::Aabb3d>,
 		}
 
 		impl $crate::terrain::stamps::shared::LeafAabbs for $Pocket {
-			fn leaf_aabbs(&self) -> Vec<bevy::math::bounding::Aabb3d> {
+			fn leaf_aabbs(&self) -> Vec<bevy::shape::Aabb3d> {
 				self.leaves.clone()
 			}
 		}
@@ -159,7 +159,7 @@ macro_rules! define_marazion_band {
 			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
 				cx: &mut lod::hcsg::GenerationContext,
-				region: bevy::math::bounding::Aabb3d,
+				region: bevy::shape::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
 				<$PreCell as $crate::terrain::stamps::shared::LeafAabbs>::leaf_ids_in(cx, region)
 			}
@@ -167,7 +167,7 @@ macro_rules! define_marazion_band {
 			fn build_with_id(
 				cx: &mut lod::hcsg::GenerationContext,
 				id: lod::gen::Id,
-			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+			) -> Option<(Self, bevy::shape::Aabb3d)> {
 				let cell = id.origin_cell_bounds()?;
 				let configs = cx
 					.get_or_generate::<$crate::terrain::watersheds::config::WatershedConfigs>(
@@ -180,7 +180,7 @@ macro_rules! define_marazion_band {
 		impl $Pocket {
 			/// The guillotine leaves partitioning pocket `cell`.
 			pub fn on_cell(
-				cell: bevy::math::bounding::Aabb3d,
+				cell: bevy::shape::Aabb3d,
 				configs: &$crate::terrain::watersheds::config::WatershedConfigs,
 			) -> Self {
 				use procedural_common::Bounds2;
@@ -203,7 +203,7 @@ macro_rules! define_marazion_band {
 		/// Guillotine leaf holding one authored pocket-water stamp (not a compiled complex).
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $PocketWaters {
-			pub cell: bevy::math::bounding::Aabb3d,
+			pub cell: bevy::shape::Aabb3d,
 			pub band: $crate::terrain::watersheds::leaf_kind::WatershedBandPass,
 			pub authored: $crate::terrain::watersheds::pocket_water::PocketWater,
 		}
@@ -235,7 +235,7 @@ macro_rules! define_marazion_band {
 			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
 				cx: &mut lod::hcsg::GenerationContext,
-				region: bevy::math::bounding::Aabb3d,
+				region: bevy::shape::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
 				<$Pocket as $crate::terrain::stamps::shared::LeafAabbs>::leaf_ids_in(cx, region)
 			}
@@ -243,7 +243,7 @@ macro_rules! define_marazion_band {
 			fn build_with_id(
 				cx: &mut lod::hcsg::GenerationContext,
 				id: lod::gen::Id,
-			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+			) -> Option<(Self, bevy::shape::Aabb3d)> {
 				let cell = id.origin_cell_bounds()?;
 				let configs = cx
 					.get_or_generate::<$crate::terrain::watersheds::config::WatershedConfigs>(
@@ -267,7 +267,7 @@ macro_rules! define_marazion_band {
 			/// pre-watershed surface through `height_at`; empty unless the
 			/// occupancy gate selects the leaf and some kind fits.
 			pub fn author(
-				cell: bevy::math::bounding::Aabb3d,
+				cell: bevy::shape::Aabb3d,
 				configs: &$crate::terrain::watersheds::config::WatershedConfigs,
 				height_at: &dyn Fn(f32, f32) -> f32,
 			) -> Self {

@@ -4,9 +4,9 @@
 //! host type. Typed `/show orchard` keeps the concrete grove `LodScene`.
 
 use bevy::ecs::template::template;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::LodScene;
 use lod::{lod_host_scene_pending, LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk};
@@ -36,7 +36,7 @@ impl ChicoGroveHost {
 		(
 			lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds()),
 			bsn! {
-				template_value(Transform::IDENTITY)
+				~{Transform::IDENTITY}
 				Visibility::default()
 				template(move |_ctx| Ok(host.clone()))
 			},

@@ -1,7 +1,7 @@
 //! Packed-box helpers shared by usage expanders.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
+use bevy::shape::Aabb3d;
 use building_components::{FurnitureAbutment, FurnitureNode, Placement};
 
 /// Packed counter AABBs are often storey-tall; the kit is one world unit high.

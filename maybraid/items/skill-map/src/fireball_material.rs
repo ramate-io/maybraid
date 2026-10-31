@@ -33,11 +33,11 @@ impl Default for FireballMaterial {
 
 impl Material for FireballMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "fireball_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "fireball_material.wesl").into()
 	}
 
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "fireball_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "fireball_material.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
@@ -61,7 +61,7 @@ pub struct FireballMaterialPlugin;
 
 impl Plugin for FireballMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "fireball_material.wgsl");
+		embedded_asset!(app, "fireball_material.wesl");
 		app.add_plugins(MaterialPlugin::<FireballMaterial>::default());
 		app.add_systems(PostUpdate, disable_fireball_shadow_casters);
 	}

@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::DVec3;
 use bevy::prelude::*;
+use bevy::shape::{Aabb3d, IntersectsVolume};
 use lod::gen::Id;
 use lod::hcsg::{Busy, HcsgStorage, StoredEntry};
 use procedural_common::NoiseParams;

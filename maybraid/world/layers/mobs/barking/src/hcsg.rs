@@ -11,9 +11,9 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::DVec3;
 use bevy::prelude::*;
+use bevy::shape::{Aabb3d, IntersectsVolume};
 use chico::{ForestGround, GroundSurface};
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds};
@@ -183,7 +183,7 @@ impl<G: MobGround> LodScene for PlacedMobCell<G> {
 					.collect();
 				let name = Name::new(format!("{:?} mob group", group.kind));
 				Box::new(bsn! {
-					template_value(name)
+					~{name}
 					MobGroupRoot
 					Transform::default()
 					Visibility::default()
@@ -193,7 +193,7 @@ impl<G: MobGround> LodScene for PlacedMobCell<G> {
 			.collect();
 		let name = Name::new(format!("mob-cell {ix},{iz}"));
 		bsn! {
-			template_value(name)
+			~{name}
 			MobCellRoot
 			Transform::default()
 			Visibility::default()
@@ -233,7 +233,7 @@ const MOB_CELL_SCALE: DVec3 = DVec3::new(MOB_CELL_EXTENT as f64, 1.0, MOB_CELL_E
 /// host with its scene, its members go with it; despawn the host in `Last`
 /// so commands queued on either through `PostUpdate` still land.
 pub fn retire_members_with_their_mob(
-	despawned: On<Despawn, Mob>,
+	despawned: On<Despawn<Mob>>,
 	members: Query<(Entity, &MemberOf)>,
 	mut commands: Commands,
 ) {

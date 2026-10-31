@@ -4,8 +4,8 @@ mod test_utils;
 
 use bevy::prelude::*;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::scene::ScenePlugin;
+use bevy::shape::Aabb3d;
 
 use crate::lod_ref::{LodNode, LodNodePose};
 use crate::scene::host::LodLevelSpawnRequest;

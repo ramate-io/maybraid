@@ -113,9 +113,9 @@ impl Plugin for HcsgSessionPlugin {
 mod tests {
 	use std::sync::Arc;
 
-	use bevy::math::bounding::Aabb3d;
 	use bevy::math::Vec3;
 	use bevy::prelude::{App, MinimalPlugins, Update};
+	use bevy::shape::Aabb3d;
 
 	use super::*;
 	use crate::gen::{Id, OriginalId};

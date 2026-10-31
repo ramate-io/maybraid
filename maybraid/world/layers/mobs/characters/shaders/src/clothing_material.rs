@@ -37,12 +37,12 @@ pub const FLAG_NO_SWAY: u32 = 1;
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_CLOTH_COLOR: Vec4 = Vec4::new(0.46, 0.60, 0.72, 1.0);
 
-/// Registers embedded **`clothing_material.wgsl`** and [`MaterialPlugin`].
+/// Registers embedded **`clothing_material.wesl`** and [`MaterialPlugin`].
 pub struct ClothingShaderMaterialPlugin;
 
 impl Plugin for ClothingShaderMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "clothing_material.wgsl");
+		embedded_asset!(app, "clothing_material.wesl");
 		app.add_plugins(MaterialPlugin::<ClothingShaderMaterial>::default());
 	}
 }
@@ -188,11 +188,11 @@ impl Default for ClothingShaderMaterial {
 
 impl Material for ClothingShaderMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "clothing_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "clothing_material.wesl").into()
 	}
 
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "clothing_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "clothing_material.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {

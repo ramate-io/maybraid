@@ -14,13 +14,13 @@ use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dKey, Material2dPlug
 
 use super::visual_style::PresentationTreatment;
 
-/// Asset path Bevy registers for `embedded_asset!(app, "presentation.wgsl")`
+/// Asset path Bevy registers for `embedded_asset!(app, "presentation.wesl")`
 /// called from this module (`src` is stripped; the subdirectory is not).
 ///
 /// Do not append `#entry` — that is an asset-server label, not a WGSL
 /// function. [`Material2d::specialize`] selects the fragment entry point.
 const PRESENTATION_SHADER: &str =
-	concat!("embedded://", env!("CARGO_CRATE_NAME"), "/render_scale/presentation.wgsl");
+	concat!("embedded://", env!("CARGO_CRATE_NAME"), "/render_scale/presentation.wesl");
 
 fn use_presentation_entry(descriptor: &mut RenderPipelineDescriptor, entry: &'static str) {
 	if let Some(fragment) = descriptor.fragment.as_mut() {
@@ -71,6 +71,7 @@ impl Material2d for ImpressionistMaterial {
 	}
 
 	fn specialize(
+		_pipeline: &bevy::sprite_render::Material2dPipeline,
 		descriptor: &mut RenderPipelineDescriptor,
 		_layout: &MeshVertexBufferLayoutRef,
 		_key: Material2dKey<Self>,
@@ -111,6 +112,7 @@ impl Material2d for PrePostModernMaterial {
 	}
 
 	fn specialize(
+		_pipeline: &bevy::sprite_render::Material2dPipeline,
 		descriptor: &mut RenderPipelineDescriptor,
 		_layout: &MeshVertexBufferLayoutRef,
 		_key: Material2dKey<Self>,
@@ -146,6 +148,7 @@ impl Material2d for NearestNeighborMaterial {
 	}
 
 	fn specialize(
+		_pipeline: &bevy::sprite_render::Material2dPipeline,
 		descriptor: &mut RenderPipelineDescriptor,
 		_layout: &MeshVertexBufferLayoutRef,
 		_key: Material2dKey<Self>,
@@ -166,7 +169,7 @@ pub struct PresentationMaterialsPlugin;
 
 impl Plugin for PresentationMaterialsPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "presentation.wgsl");
+		embedded_asset!(app, "presentation.wesl");
 		app.add_plugins((
 			Material2dPlugin::<ImpressionistMaterial>::default(),
 			Material2dPlugin::<PrePostModernMaterial>::default(),
@@ -206,11 +209,11 @@ mod tests {
 
 	#[test]
 	fn shader_ref_matches_embedded_asset_path() {
-		let path = embedded_path!("presentation.wgsl");
+		let path = embedded_path!("presentation.wesl");
 		let registered = path.to_str().unwrap().replace('\\', "/");
 		assert_eq!(
 			registered,
-			format!("{}/render_scale/presentation.wgsl", env!("CARGO_CRATE_NAME")),
+			format!("{}/render_scale/presentation.wesl", env!("CARGO_CRATE_NAME")),
 			"Material2d ShaderRef must use this path; Bevy embeds subdirectory WGSL under src/"
 		);
 		assert!(PRESENTATION_SHADER.ends_with(&registered));

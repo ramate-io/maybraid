@@ -14,9 +14,9 @@
 
 pub mod commercial_stall;
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
 use bevy_math::Vec3;
+use bevy_shape::{Aabb2d, Aabb3d};
 use building_components::furniture::FurnitureNode;
 use building_components::panels::PanelNode;
 use building_components::{BuildingComponents, LabelNode, Layers};
@@ -402,8 +402,8 @@ impl BuildingComponents for CommercialStallStrip {
 mod tests {
 	use super::*;
 	use crate::openings::Opening;
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 
 	fn strip_with_doors(door_mids: &[f32], extent_x: f32) -> Confines {
 		let mut openings = Openings::new();

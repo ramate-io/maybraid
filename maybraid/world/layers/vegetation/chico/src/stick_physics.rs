@@ -102,7 +102,7 @@ where
 	app.add_observer(attach_vegetation_producer::<T>);
 }
 
-fn attach_vegetation_producer<T>(insert: On<Insert, T>, mut commands: Commands)
+fn attach_vegetation_producer<T>(insert: On<Insert<T>>, mut commands: Commands)
 where
 	T: VegetationComponents + Component,
 {
@@ -118,7 +118,7 @@ where
 	}
 }
 
-fn attach_stick_node_producer(insert: On<Insert, StickNode>, mut commands: Commands) {
+fn attach_stick_node_producer(insert: On<Insert<StickNode>>, mut commands: Commands) {
 	if let Ok(mut entity) = commands.get_entity(insert.entity) {
 		entity.insert(StickPhysicsProducer(|world, entity, level| {
 			world

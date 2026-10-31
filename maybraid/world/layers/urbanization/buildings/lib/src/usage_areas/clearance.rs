@@ -6,8 +6,8 @@
 //! Also: pack regions that **abut** a clearance band without overlapping it
 //! (walkway stays open; furniture / sinks sit against its edge).
 
-use bevy_math::bounding::Aabb2d;
 use bevy_math::Vec2;
+use bevy_shape::Aabb2d;
 use procedural_common::{
 	aabb2_area, aabb3_to_plan, clamp_min_size2, inflate_aabb2, intersects_aabb2,
 	max_empty_rect2_by, touches_aabb2, Aabb2dPack, PlanAxes, PlanOpeningFace,
@@ -320,8 +320,8 @@ mod tests {
 		use crate::fit::Confines;
 		use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 		use crate::placer::init_host;
-		use bevy_math::bounding::Aabb3d;
 		use bevy_math::Vec3;
+		use bevy_shape::Aabb3d;
 		use procedural_common::intersects_aabb2;
 
 		// Room north of a door on its south wall (thru on y=0).

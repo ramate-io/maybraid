@@ -1,7 +1,7 @@
 //! Wall opening resolution: rectangle straights + clipped quarter-arc corners.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb3d;
 use building_components::partitions::PartitionStyle;
 use std::f32::consts::FRAC_PI_2;
 

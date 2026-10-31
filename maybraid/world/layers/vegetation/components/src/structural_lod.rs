@@ -5,8 +5,8 @@
 //! or a grove type that implements [`lod::scene::LodScene`].
 
 use bevy::prelude::Transform;
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodSceneLevel, LodSceneStatus};
 

@@ -1,8 +1,8 @@
 //! Firearm domain nodes that implement [`lod::LodScene`].
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform, Vec3};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::SceneChunk;
@@ -154,10 +154,10 @@ impl LodScene for PartNode {
 		let material = MaterialRefRoot(node.material.clone());
 		(
 			bsn! {
-				template_value(node)
+				~{node}
 				Transform::IDENTITY
 				AssemblyHost
-				template_value(material)
+				~{material}
 				PropagateToDescendants
 			},
 			maybe_component(socket),
@@ -230,13 +230,13 @@ impl LodScene for RigNode {
 		let _ = lod_ref;
 		let node = self.clone();
 		bsn! {
-			template_value(node)
+			~{node}
 			Transform::IDENTITY
 			AssemblyHost
-			template_value(RigRoot::new(RigKey::named("receiver")).with_landmarks(RECEIVER_LANDMARKS))
-			template_value(BoneMap::default())
-			template_value(ActiveRigPose::default())
-			template_value(BindPose::default())
+			~{RigRoot::new(RigKey::named("receiver")).with_landmarks(RECEIVER_LANDMARKS)}
+			~{BoneMap::default()}
+			~{ActiveRigPose::default()}
+			~{BindPose::default()}
 		}
 	}
 }

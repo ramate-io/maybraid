@@ -102,8 +102,8 @@ mod tests {
 	use crate::fit::{FillRegion, SpaceKind};
 	use crate::usage_areas::livable_apartment::INTERNAL_WALLS_LAYER;
 	use crate::usage_areas::rectangular_livable_area::{RectAreaRoom, RectLivableStrategy};
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 	use building_components::{BuildingComponents, Layer};
 	use lod::scene::LodSceneLevel;
 	use procedural_common::NoiseParams;

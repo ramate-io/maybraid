@@ -1,8 +1,8 @@
 //! Inner lattice for update frequency; outer cube is the emitted refresh region.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::{IVec3, Vec3};
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 
 use crate::lod_ref::LodRef;
 

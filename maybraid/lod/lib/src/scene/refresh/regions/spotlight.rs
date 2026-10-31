@@ -1,8 +1,8 @@
 //! Continuous cube around the driver position (fires on translation change).
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 
 use crate::lod_ref::LodRef;
 

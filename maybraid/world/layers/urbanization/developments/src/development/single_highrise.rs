@@ -1,6 +1,6 @@
 //! [`SingleHighrise`]: one tower on a yawed terrace.
 
-use bevy_math::bounding::Aabb2d;
+use bevy_shape::Aabb2d;
 use buildings::Fit;
 use procedural_common::SeededHash;
 
@@ -42,8 +42,8 @@ impl BuildingFootprint for buildings::SingleHighrise {
 
 #[cfg(test)]
 mod tests {
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 	use buildings::Confines;
 	use procedural_common::NoiseParams;
 

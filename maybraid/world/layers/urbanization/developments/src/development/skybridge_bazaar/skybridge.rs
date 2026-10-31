@@ -1,7 +1,7 @@
 //! [`Skybridge`]: an enclosed lane between two bazaar towers.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
+use bevy_shape::{Aabb2d, Aabb3d};
 use building_components::joints::JointNode;
 use building_components::panels::PanelNode;
 use building_components::{

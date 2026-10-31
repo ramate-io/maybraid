@@ -1,7 +1,7 @@
 //! Visual bounds helpers (rest pose).
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Vec3;
+use bevy::shape::Aabb3d;
 use characters::components::CharacterComponents;
 
 use crate::recipe::BikanwardaActor;
@@ -21,7 +21,9 @@ pub fn visual_bounds_half_extents(aabb: Aabb3d) -> Vec3 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::measure::{encounter_standing_height_m, ENCOUNTER_STANDING_HEIGHT_M, STANDING_HEIGHT_TOLERANCE_M};
+	use crate::measure::{
+		encounter_standing_height_m, ENCOUNTER_STANDING_HEIGHT_M, STANDING_HEIGHT_TOLERANCE_M,
+	};
 	use crate::recipe::BikanwardaActorRecipe;
 	use characters::CharacterRecipe;
 

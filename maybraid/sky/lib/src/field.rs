@@ -68,11 +68,11 @@ impl Default for SkyFieldMaterial {
 
 impl Material for SkyFieldMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "field.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "field.wesl").into()
 	}
 
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "field.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "field.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
@@ -106,7 +106,7 @@ pub struct SkyFieldMaterialPlugin;
 
 impl Plugin for SkyFieldMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "field.wgsl");
+		embedded_asset!(app, "field.wesl");
 		app.init_asset::<SkyFieldMaterial>();
 		if app.is_plugin_added::<bevy::render::RenderPlugin>() {
 			app.add_plugins(MaterialPlugin::<SkyFieldMaterial>::default());

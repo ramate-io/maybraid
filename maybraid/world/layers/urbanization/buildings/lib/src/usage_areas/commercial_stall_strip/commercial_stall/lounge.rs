@@ -63,8 +63,8 @@ impl BuildingComponents for Lounge {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 
 	#[test]
 	fn lounge_fits_tiny_bay() {

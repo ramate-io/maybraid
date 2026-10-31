@@ -22,8 +22,8 @@ impl GamepadAxes {
 
 	pub fn other_pair(gamepad: &Gamepad, x: u8, y: u8) -> Vec2 {
 		Vec2::new(
-			gamepad.get(GamepadAxis::Other(x)).unwrap_or(0.0),
-			gamepad.get(GamepadAxis::Other(y)).unwrap_or(0.0),
+			gamepad.get(GamepadAxis::Other(x.into())).unwrap_or(0.0),
+			gamepad.get(GamepadAxis::Other(y.into())).unwrap_or(0.0),
 		)
 	}
 

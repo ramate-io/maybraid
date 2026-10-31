@@ -3,8 +3,8 @@ use crate::fit::Fit;
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 use crate::usage_areas::clearance::PASSAGE_CLEARANCE;
 use crate::usage_areas::livable_quarters::ResidentialBathroom;
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use building_components::furniture::FurnitureAbutment;
 use building_components::FurnitureGeometry;
 use procedural_common::{aabb3_to_plan, PlanAxes};
@@ -404,7 +404,7 @@ fn common_bedroom_avoids_passage_clearance() {
 		for band in &bands {
 			assert!(
 				!procedural_common::intersects_aabb2(p, *band),
-				"bed intersects passage clearance (depth ~{PASSAGE_CLEARANCE})"
+				"bed intersects passage clearance (depth PASSAGE_CLEARANCE)"
 			);
 		}
 	}

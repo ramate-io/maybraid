@@ -215,7 +215,7 @@ pub fn mesh_assets(
 mod tests {
 	use super::*;
 	use crate::terrain::cell::CellTiling;
-	use bevy::math::bounding::{Aabb3d, IntersectsVolume};
+	use bevy::shape::{Aabb3d, IntersectsVolume};
 	use lod::gen::OriginalId;
 
 	fn playable_rings() -> [TerrainCellRing; 3] {

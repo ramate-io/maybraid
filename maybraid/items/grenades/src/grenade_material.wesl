@@ -7,15 +7,15 @@
 // stays on the sphere domain; the march does not resample look.
 //---------------------------------------------------------
 
-#import bevy_pbr::{
-    mesh_functions,
-    forward_io::Vertex,
-    view_transformations::position_world_to_clip,
-    mesh_view_bindings::{view, globals},
-    pbr_types::{PbrInput, pbr_input_new},
-    pbr_functions as fns,
-}
-#import bevy_core_pipeline::tonemapping::tone_mapping
+import bevy_pbr::render::mesh_functions;
+import bevy_pbr::render::forward_io::{Vertex, UncompressedVertex, decompress_vertex};
+import bevy_pbr::render::view_transformations::position_world_to_clip;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::mesh_view_bindings::globals;
+import bevy_pbr::render::pbr_types::PbrInput;
+import bevy_pbr::render::pbr_types::pbr_input_new;
+import bevy_pbr::render::pbr_functions as fns;
+import bevy_core_pipeline::tonemapping::tone_mapping;
 
 struct GrenadeMaterialUniform {
     shell: vec4<f32>,
@@ -24,7 +24,7 @@ struct GrenadeMaterialUniform {
     extras: vec4<f32>,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> material: GrenadeMaterialUniform;
 
 struct GrenadeVertexOutput {
@@ -32,9 +32,8 @@ struct GrenadeVertexOutput {
     @location(0) world_position: vec4<f32>,
     @location(1) world_normal: vec3<f32>,
     @location(2) local_pos: vec3<f32>,
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     @location(6) @interpolate(flat) instance_index: u32,
-#endif
 }
 
 struct ReliefStyle {
@@ -248,7 +247,8 @@ fn relief_gradient(uv: vec2<f32>) -> vec2<f32> {
 }
 
 @vertex
-fn vertex(vertex_no_morph: Vertex) -> GrenadeVertexOutput {
+fn vertex(packed_vertex: Vertex) -> GrenadeVertexOutput {
+    let vertex_no_morph = decompress_vertex(packed_vertex, packed_vertex.instance_index);
     var out: GrenadeVertexOutput;
     var vertex = vertex_no_morph;
     let world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
@@ -262,9 +262,8 @@ fn vertex(vertex_no_morph: Vertex) -> GrenadeVertexOutput {
         vec4<f32>(vertex.position, 1.0),
     );
     out.position = position_world_to_clip(out.world_position.xyz);
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex_no_morph.instance_index;
-#endif
     return out;
 }
 
