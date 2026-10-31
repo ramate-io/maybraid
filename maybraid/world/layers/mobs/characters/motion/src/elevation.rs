@@ -12,6 +12,7 @@
 //! write [`CharacterHeading`], so pitch never infers yaw from its own output.
 //! Pitch, roll, and support continuously follow valid samples.
 
+use bevy::ecs::batching::BatchingStrategy;
 use bevy::prelude::*;
 use ground::ElevationProbe;
 
@@ -89,7 +90,7 @@ fn ancestor_exclude(
 /// every ancestor so a cell/group root is never treated as the capsule.
 pub fn apply_terrain_pitch<P>(
 	time: Res<Time>,
-	mut probe: P,
+	probe: P,
 	mut visuals: Query<
 		(Entity, &mut Transform, &GlobalTransform, &mut TerrainPitch, &mut CharacterHeading),
 		With<ApplyTerrainPitch>,
@@ -98,115 +99,124 @@ pub fn apply_terrain_pitch<P>(
 	parents: Query<&GlobalTransform, Without<ApplyTerrainPitch>>,
 	suspended: Query<(), With<SuspendTerrainPitch>>,
 ) where
-	P: ElevationProbe,
+	P: ElevationProbe + Sync,
 {
 	let dt = time.delta_secs();
-	for (entity, mut visual, global, mut pitch, mut heading) in &mut visuals {
-		let yaw_facing = heading.facing(&visual);
-		if heading.0 != yaw_facing {
-			heading.0 = yaw_facing;
-		}
-		let ray_facing = pitch.sample_facing(yaw_facing);
-		let right = Vec3::new(yaw_facing.z, 0.0, -yaw_facing.x);
-
-		let (exclude, suspend) = ancestor_exclude(Some(entity), &child_of, &suspended);
-		let offset_local_y =
-			child_of.get(entity).is_ok() && is_local_visual_child(visual.translation);
-		let parent_world = child_of
-			.get(entity)
-			.ok()
-			.and_then(|child| parents.get(child.parent()).ok())
-			.map(GlobalTransform::translation);
-		let origin = probe_origin(global.translation(), parent_world, offset_local_y);
-
-		let from_y = probe_from_y(origin.y, pitch.half_span);
-		let max_distance = probe_distance(pitch.half_span);
-		let mut sample = |xz: Vec3| -> (Vec3, bool) {
-			match probe.height_at(xz.x, xz.z, from_y, max_distance, &exclude) {
-				Some(h) => (Vec3::new(xz.x, h, xz.z), true),
-				None => (Vec3::new(xz.x, origin.y, xz.z), false),
+	visuals.par_iter_mut().batching_strategy(BatchingStrategy::fixed(16)).for_each(
+		|(entity, mut visual, global, mut pitch, mut heading)| {
+			let yaw_facing = heading.facing(&visual);
+			if heading.0 != yaw_facing {
+				heading.0 = yaw_facing;
 			}
-		};
+			let ray_facing = pitch.sample_facing(yaw_facing);
+			let right = Vec3::new(yaw_facing.z, 0.0, -yaw_facing.x);
 
-		let (center, center_hit) = sample(origin);
-		let center_h = center.y;
-		let mut run = pitch.half_span;
-		let mut front = center;
-		let mut hind = center;
-		let mut front_hit = false;
-		let mut hind_hit = false;
-		let mut left_h = center_h;
-		let mut right_h = center_h;
-		let mut support_hits = false;
-		if !suspend {
-			let (coarse_front, coarse_front_hit) = sample(origin + ray_facing * pitch.half_span);
-			let (coarse_hind, coarse_hind_hit) = sample(origin - ray_facing * pitch.half_span);
-			let coarse =
-				TerrainPitch::observed_pitch(coarse_front.y, coarse_hind.y, pitch.half_span);
-			run = pitch.pitched_half_run(coarse);
-			(front, front_hit) = sample(origin + ray_facing * run);
-			(hind, hind_hit) = sample(origin - ray_facing * run);
-			support_hits =
-				center_hit && coarse_front_hit && coarse_hind_hit && front_hit && hind_hit;
-			if pitch.roll_weight > 0.0 {
-				let (left, left_hit) = sample(origin - right * pitch.half_width);
-				let (right, right_hit) = sample(origin + right * pitch.half_width);
-				left_h = left.y;
-				right_h = right.y;
-				support_hits &= left_hit && right_hit;
-			}
-		}
+			let (exclude, suspend) = ancestor_exclude(Some(entity), &child_of, &suspended);
+			let offset_local_y =
+				child_of.get(entity).is_ok() && is_local_visual_child(visual.translation);
+			let parent_world = child_of
+				.get(entity)
+				.ok()
+				.and_then(|child| parents.get(child.parent()).ok())
+				.map(GlobalTransform::translation);
+			let origin = probe_origin(global.translation(), parent_world, offset_local_y);
 
-		let targets = if suspend {
-			Some((0.0, 0.0, 0.0))
-		} else if support_hits {
-			Some((
-				TerrainPitch::observed_pitch(front.y, hind.y, run) * pitch.pitch_weight,
-				TerrainPitch::observed_roll(left_h, right_h, pitch.half_width) * pitch.roll_weight,
-				TerrainPitch::support_offset(center_h, front.y, hind.y),
-			))
-		} else {
-			None
-		};
-		if let Some((target_pitch, target_roll, _)) = targets {
-			let next_pitch = TerrainPitch::follow_target(pitch.pitch, target_pitch, dt, TILT_RATE);
-			let next_roll = TerrainPitch::follow_target(pitch.roll, target_roll, dt, TILT_RATE);
-			if pitch.pitch != next_pitch {
-				pitch.pitch = next_pitch;
-			}
-			if pitch.roll != next_roll {
-				pitch.roll = next_roll;
-			}
-		}
-		let next_probe = TerrainPitchProbe {
-			origin: Vec3::new(origin.x, center_h, origin.z),
-			front,
-			hind,
-			front_hit,
-			hind_hit,
-			visual_facing: yaw_facing,
-			sample_facing: ray_facing,
-		};
-		if pitch.probe != next_probe {
-			pitch.probe = next_probe;
-		}
-		let next_rotation = pitch.facing_with_support_tilt(yaw_facing, ray_facing);
-		if visual.rotation != next_rotation {
-			visual.rotation = next_rotation;
-		}
-		if offset_local_y {
-			if let Some((_, _, target_support)) = targets {
-				let next_support =
-					TerrainPitch::follow_target(pitch.support, target_support, dt, SUPPORT_RATE);
-				if pitch.support != next_support {
-					pitch.support = next_support;
+			let from_y = probe_from_y(origin.y, pitch.half_span);
+			let max_distance = probe_distance(pitch.half_span);
+			let sample = |xz: Vec3| -> (Vec3, bool) {
+				match probe.height_at(xz.x, xz.z, from_y, max_distance, &exclude) {
+					Some(h) => (Vec3::new(xz.x, h, xz.z), true),
+					None => (Vec3::new(xz.x, origin.y, xz.z), false),
+				}
+			};
+
+			let (center, center_hit) = sample(origin);
+			let center_h = center.y;
+			let mut run = pitch.half_span;
+			let mut front = center;
+			let mut hind = center;
+			let mut front_hit = false;
+			let mut hind_hit = false;
+			let mut left_h = center_h;
+			let mut right_h = center_h;
+			let mut support_hits = false;
+			if !suspend {
+				let (coarse_front, coarse_front_hit) =
+					sample(origin + ray_facing * pitch.half_span);
+				let (coarse_hind, coarse_hind_hit) = sample(origin - ray_facing * pitch.half_span);
+				let coarse =
+					TerrainPitch::observed_pitch(coarse_front.y, coarse_hind.y, pitch.half_span);
+				run = pitch.pitched_half_run(coarse);
+				(front, front_hit) = sample(origin + ray_facing * run);
+				(hind, hind_hit) = sample(origin - ray_facing * run);
+				support_hits =
+					center_hit && coarse_front_hit && coarse_hind_hit && front_hit && hind_hit;
+				if pitch.roll_weight > 0.0 {
+					let (left, left_hit) = sample(origin - right * pitch.half_width);
+					let (right, right_hit) = sample(origin + right * pitch.half_width);
+					left_h = left.y;
+					right_h = right.y;
+					support_hits &= left_hit && right_hit;
 				}
 			}
-			if visual.translation.y != pitch.support {
-				visual.translation.y = pitch.support;
+
+			let targets = if suspend {
+				Some((0.0, 0.0, 0.0))
+			} else if support_hits {
+				Some((
+					TerrainPitch::observed_pitch(front.y, hind.y, run) * pitch.pitch_weight,
+					TerrainPitch::observed_roll(left_h, right_h, pitch.half_width)
+						* pitch.roll_weight,
+					TerrainPitch::support_offset(center_h, front.y, hind.y),
+				))
+			} else {
+				None
+			};
+			if let Some((target_pitch, target_roll, _)) = targets {
+				let next_pitch =
+					TerrainPitch::follow_target(pitch.pitch, target_pitch, dt, TILT_RATE);
+				let next_roll = TerrainPitch::follow_target(pitch.roll, target_roll, dt, TILT_RATE);
+				if pitch.pitch != next_pitch {
+					pitch.pitch = next_pitch;
+				}
+				if pitch.roll != next_roll {
+					pitch.roll = next_roll;
+				}
 			}
-		}
-	}
+			let next_probe = TerrainPitchProbe {
+				origin: Vec3::new(origin.x, center_h, origin.z),
+				front,
+				hind,
+				front_hit,
+				hind_hit,
+				visual_facing: yaw_facing,
+				sample_facing: ray_facing,
+			};
+			if pitch.probe != next_probe {
+				pitch.probe = next_probe;
+			}
+			let next_rotation = pitch.facing_with_support_tilt(yaw_facing, ray_facing);
+			if visual.rotation != next_rotation {
+				visual.rotation = next_rotation;
+			}
+			if offset_local_y {
+				if let Some((_, _, target_support)) = targets {
+					let next_support = TerrainPitch::follow_target(
+						pitch.support,
+						target_support,
+						dt,
+						SUPPORT_RATE,
+					);
+					if pitch.support != next_support {
+						pitch.support = next_support;
+					}
+				}
+				if visual.translation.y != pitch.support {
+					visual.translation.y = pitch.support;
+				}
+			}
+		},
+	);
 }
 
 /// Front = lime, hind = orange, misses = red. Yellow = sample axis, cyan = heading.
@@ -300,7 +310,7 @@ mod tests {
 
 	impl ElevationProbe for FlatProbe {
 		fn hit_down(
-			&mut self,
+			&self,
 			origin: Vec3,
 			_max_distance: f32,
 			_exclude: &[Entity],
@@ -342,6 +352,9 @@ mod tests {
 		use crate::rig::RigSkeletonKind;
 		use bevy::ecs::system::RunSystemOnce;
 
+		bevy::tasks::ComputeTaskPool::get_or_init(|| {
+			bevy::tasks::TaskPoolBuilder::default().num_threads(2).build()
+		});
 		let mut world = World::new();
 		world.init_resource::<Time>();
 		let visual = world
@@ -371,6 +384,296 @@ mod tests {
 			before == after,
 			"settled pitch rewrote components: {before:?} -> {after:?}"
 		);
+		Ok(())
+	}
+
+	#[derive(Clone, Debug, PartialEq)]
+	struct RecordedRay {
+		origin: Vec3,
+		max_distance: f32,
+		exclude: Vec<Entity>,
+	}
+
+	#[derive(Clone, Copy)]
+	struct SampleCase {
+		origin: Vec3,
+		kind: usize,
+		miss_center: bool,
+	}
+
+	impl SampleCase {
+		fn height(&self, at: Vec3) -> f32 {
+			if self.kind == 0 {
+				0.0
+			} else {
+				1.0 + 0.125 * (at.x - self.origin.x) + 0.25 * (at.z - self.origin.z)
+			}
+		}
+
+		fn hit(&self, ray: usize) -> bool {
+			self.kind != 2 && !(self.kind == 3 && ray == 6) && !(self.miss_center && ray == 0)
+		}
+	}
+
+	#[derive(Resource, Default)]
+	struct ProbeFixture {
+		cases: std::collections::HashMap<Entity, SampleCase>,
+		rays: std::sync::Mutex<std::collections::HashMap<Entity, Vec<RecordedRay>>>,
+	}
+
+	struct CheckedProbe<'a>(&'a ProbeFixture);
+
+	impl ElevationProbe for CheckedProbe<'_> {
+		fn hit_down(
+			&self,
+			origin: Vec3,
+			max_distance: f32,
+			exclude: &[Entity],
+		) -> Option<GroundHit> {
+			let entity = *exclude.first()?;
+			let mut recordings = self.0.rays.lock().ok()?;
+			let rays = recordings.entry(entity).or_default();
+			let ray = rays.len();
+			rays.push(RecordedRay { origin, max_distance, exclude: exclude.to_vec() });
+			drop(recordings);
+			let case = self.0.cases.get(&entity)?;
+			case.hit(ray).then(|| GroundHit {
+				point: Vec3::new(origin.x, case.height(origin), origin.z),
+				normal: Vec3::new(-0.125, 1.0, -0.25).normalize(),
+				entity: Entity::PLACEHOLDER,
+			})
+		}
+	}
+
+	fn apply_checked_pitch(
+		time: Res<Time>,
+		fixture: Res<ProbeFixture>,
+		visuals: Query<
+			(Entity, &mut Transform, &GlobalTransform, &mut TerrainPitch, &mut CharacterHeading),
+			With<ApplyTerrainPitch>,
+		>,
+		child_of: Query<&ChildOf>,
+		parents: Query<&GlobalTransform, Without<ApplyTerrainPitch>>,
+		suspended: Query<(), With<SuspendTerrainPitch>>,
+	) {
+		apply_terrain_pitch(time, CheckedProbe(&fixture), visuals, child_of, parents, suspended);
+	}
+
+	#[test]
+	fn batches_preserve_visual_geometry_exclusions_and_support() -> anyhow::Result<()> {
+		use crate::rig::RigSkeletonKind;
+		use bevy::ecs::system::RunSystemOnce;
+
+		bevy::tasks::ComputeTaskPool::get_or_init(|| {
+			bevy::tasks::TaskPoolBuilder::default().num_threads(2).build()
+		});
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		let dt = 1.0 / 60.0;
+		world.resource_mut::<Time>().advance_by(std::time::Duration::from_secs_f32(dt));
+		let mut fixture = ProbeFixture::default();
+		let mut characters = Vec::new();
+		// Mixed archetypes span multiple batches, including a parentless visual
+		// and self/ancestor suspension. Kind: flat, banked, missing, missing side, suspended.
+		for index in 0..48 {
+			let placement = index % 3;
+			let kind = (index / 3) % 5;
+			let direction = (index / 5) % 6;
+			let origin = Vec3::new(20.0 + index as f32 * 4.0, 2.0, index as f32 * 0.5);
+			let case = SampleCase { origin, kind, miss_center: kind == 4 && direction % 2 == 0 };
+			let ancestors = if placement < 2 {
+				let root = world.spawn(GlobalTransform::IDENTITY).id();
+				let parent =
+					world.spawn((GlobalTransform::from_translation(origin), ChildOf(root))).id();
+				Some((parent, root))
+			} else {
+				None
+			};
+			let mut pitch = TerrainPitch::new(RigSkeletonKind::Humanoid, 0.35, 0.2);
+			pitch.pitch_weight = 1.0;
+			pitch.roll_weight = if kind == 1 || kind == 3 || kind == 4 { 1.0 } else { 0.0 };
+			pitch.pitch = 0.2;
+			pitch.roll = -0.1;
+			pitch.support = 0.1;
+			pitch.sagittal = match (index / 5) % 3 {
+				0 => Vec3::ZERO,
+				1 => Vec3::X,
+				_ => Vec3::new(-1.0, 0.0, 1.0),
+			};
+			let heading = CharacterHeading(match direction {
+				0 => Vec3::Z,
+				1 => Vec3::X,
+				2 => Vec3::NEG_Z,
+				3 => Vec3::NEG_X,
+				4 => Vec3::new(1.0, 0.0, 1.0).normalize(),
+				_ => Vec3::ZERO,
+			});
+			let visual =
+				Transform::from_translation(if placement == 1 { origin } else { Vec3::Y * 0.5 })
+					.with_rotation(Quat::from_rotation_y(0.37));
+			let global = if placement == 0 { origin + Vec3::Y * 7.0 } else { origin };
+			let entity = world
+				.spawn((
+					ApplyTerrainPitch,
+					visual,
+					GlobalTransform::from_translation(global),
+					pitch,
+					heading,
+				))
+				.id();
+			let mut exclude = vec![entity];
+			if let Some((parent, root)) = ancestors {
+				world.entity_mut(entity).insert(ChildOf(parent));
+				exclude.extend([parent, root]);
+			}
+			if kind == 4 {
+				let suspended = if direction % 2 == 0 {
+					entity
+				} else {
+					*exclude.last().ok_or_else(|| anyhow::anyhow!("empty exclusions"))?
+				};
+				world.entity_mut(suspended).insert(SuspendTerrainPitch);
+			}
+			fixture.cases.insert(entity, case);
+			characters.push((entity, case, placement, visual, pitch, heading, exclude));
+		}
+		// A complete visual without the marker is outside the system's membership.
+		let untouched = world
+			.spawn((
+				Transform::from_xyz(3.0, 4.0, 5.0),
+				GlobalTransform::IDENTITY,
+				TerrainPitch::new(RigSkeletonKind::Humanoid, 0.35, 0.2),
+				CharacterHeading(Vec3::Z),
+			))
+			.id();
+		let untouched_ticks = (
+			change_tick::<Transform>(&world, untouched)?,
+			change_tick::<TerrainPitch>(&world, untouched)?,
+			change_tick::<CharacterHeading>(&world, untouched)?,
+		);
+		world.insert_resource(fixture);
+		anyhow::ensure!(world.run_system_once(apply_checked_pitch).is_ok());
+		let fixture = world.resource::<ProbeFixture>();
+		let recordings =
+			fixture.rays.lock().map_err(|_| anyhow::anyhow!("poisoned ray recorder"))?;
+		assert_eq!(recordings.len(), characters.len());
+		for (entity, case, placement, before, initial, heading, exclude) in characters {
+			let pitch = world
+				.get::<TerrainPitch>(entity)
+				.ok_or_else(|| anyhow::anyhow!("missing pitch"))?;
+			let visual = world
+				.get::<Transform>(entity)
+				.ok_or_else(|| anyhow::anyhow!("missing visual"))?;
+			let facing = heading.facing(&before);
+			let sample_facing = initial.sample_facing(facing);
+			let right = Vec3::new(facing.z, 0.0, -facing.x);
+			let mut points = vec![case.origin];
+			if case.kind != 4 {
+				let coarse = if case.kind == 0 || case.kind == 2 {
+					0.0
+				} else {
+					TerrainPitch::observed_pitch(
+						case.height(case.origin + sample_facing * initial.half_span),
+						case.height(case.origin - sample_facing * initial.half_span),
+						initial.half_span,
+					)
+				};
+				let run = initial.pitched_half_run(coarse);
+				points.extend([
+					case.origin + sample_facing * initial.half_span,
+					case.origin - sample_facing * initial.half_span,
+					case.origin + sample_facing * run,
+					case.origin - sample_facing * run,
+				]);
+				if initial.roll_weight > 0.0 {
+					points.extend([
+						case.origin - right * initial.half_width,
+						case.origin + right * initial.half_width,
+					]);
+				}
+			}
+			let rays = recordings
+				.get(&entity)
+				.ok_or_else(|| anyhow::anyhow!("missing rays for {entity}"))?;
+			assert_eq!(
+				rays.len(),
+				if case.kind == 4 {
+					1
+				} else if initial.roll_weight > 0.0 {
+					7
+				} else {
+					5
+				}
+			);
+			for (ray, point) in rays.iter().zip(&points) {
+				let expected_origin =
+					Vec3::new(point.x, probe_from_y(case.origin.y, initial.half_span), point.z);
+				assert_eq!(
+					ray,
+					&RecordedRay {
+						origin: expected_origin,
+						max_distance: probe_distance(initial.half_span),
+						exclude: exclude.clone(),
+					},
+					"ray signature differs for {entity}"
+				);
+			}
+			assert_eq!(world.get::<CharacterHeading>(entity), Some(&CharacterHeading(facing)));
+			assert_eq!(pitch.probe.visual_facing, facing);
+			assert_eq!(pitch.probe.sample_facing, sample_facing);
+			let sampled = |ray: usize| {
+				let at = points[ray];
+				Vec3::new(at.x, if case.hit(ray) { case.height(at) } else { case.origin.y }, at.z)
+			};
+			assert_eq!(pitch.probe.origin, sampled(0));
+			let suspended = case.kind == 4;
+			let front = if suspended { sampled(0) } else { sampled(3) };
+			let hind = if suspended { sampled(0) } else { sampled(4) };
+			assert_eq!(pitch.probe.front, front);
+			assert_eq!(pitch.probe.hind, hind);
+			assert_eq!(pitch.probe.front_hit, !suspended && case.hit(3));
+			assert_eq!(pitch.probe.hind_hit, !suspended && case.hit(4));
+			let (expected_pitch, expected_roll, expected_support) = if case.kind == 2
+				|| case.kind == 3
+			{
+				(initial.pitch, initial.roll, initial.support)
+			} else {
+				let target_pitch = if case.kind == 1 {
+					-(0.125 * sample_facing.x + 0.25 * sample_facing.z).atan()
+				} else {
+					0.0
+				};
+				let target_roll =
+					if case.kind == 1 { (0.125 * right.x + 0.25 * right.z).atan() } else { 0.0 };
+				(
+					TerrainPitch::follow_target(initial.pitch, target_pitch, dt, TILT_RATE),
+					TerrainPitch::follow_target(initial.roll, target_roll, dt, TILT_RATE),
+					TerrainPitch::follow_target(initial.support, 0.0, dt, SUPPORT_RATE),
+				)
+			};
+			assert!((pitch.pitch - expected_pitch).abs() < 1e-5);
+			assert!((pitch.roll - expected_roll).abs() < 1e-5);
+			assert!(
+				(pitch.support - if placement == 0 { expected_support } else { initial.support })
+					.abs() < 1e-5
+			);
+			assert_eq!(visual.translation.x, before.translation.x);
+			assert_eq!(visual.translation.z, before.translation.z);
+			assert_eq!(
+				visual.translation.y,
+				if placement == 0 { pitch.support } else { before.translation.y }
+			);
+			assert_eq!(visual.rotation, pitch.facing_with_support_tilt(facing, sample_facing));
+		}
+		assert_eq!(
+			untouched_ticks,
+			(
+				change_tick::<Transform>(&world, untouched)?,
+				change_tick::<TerrainPitch>(&world, untouched)?,
+				change_tick::<CharacterHeading>(&world, untouched)?,
+			)
+		);
+		assert_eq!(world.get::<Transform>(untouched), Some(&Transform::from_xyz(3.0, 4.0, 5.0)));
 		Ok(())
 	}
 }
