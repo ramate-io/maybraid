@@ -9,8 +9,9 @@ spawns those scenes in the main World.
 [`VisualLodScene`](../lib/src/scene/lod_scene.rs) builds
 [`VisualSceneChunk`](../lib/src/scene/chunk.rs) = `LodChunk<VisualLodPrimitive>`.
 That tree is **not** a Bevy `Scene` and is **not** consumed by
-`drain_chunk_lod_fulfill`. [#667](https://github.com/ramate-io/maybraid/issues/667)
-fills the visual leaf; this crate only defines the fork.
+`drain_chunk_lod_fulfill`. [`VisualLodPrimitive`](../lib/src/scene/chunk.rs)
+holds a packed-batch identity ([#956](https://github.com/ramate-io/maybraid/issues/956));
+Chico's orchard plugin consumes it. The default remains a level-only stub.
 
 ## API
 

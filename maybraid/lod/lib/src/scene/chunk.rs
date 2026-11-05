@@ -44,11 +44,60 @@ pub type SceneChunk = SemanticSceneChunk;
 /// Per-view render tree. Not consumed by semantic drain.
 pub type VisualSceneChunk = LodChunk<VisualLodPrimitive>;
 
-/// Stub visual leaf. [#667](https://github.com/ramate-io/maybraid/issues/667)
-/// replaces this with packed grove / instance / impostor data.
+/// Shader recipe a packed visual batch binds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum VisualMaterialKind {
+	#[default]
+	Leaf,
+	Stick,
+	Frond,
+}
+
+/// Concrete visual leaf. [#667](https://github.com/ramate-io/maybraid/issues/667)
+/// / [#956](https://github.com/ramate-io/maybraid/issues/956) fill this with
+/// packed grove batches; the default is still a level-only stub.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct VisualLodPrimitive {
 	pub level: LodSceneLevel,
+	pub kind: VisualLodKind,
+}
+
+/// What one visual primitive draws. The packed cache owns instance bytes;
+/// this record is the cheap planning identity.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum VisualLodKind {
+	#[default]
+	Stub,
+	/// Shared kit mesh instanced for one grove cell / LOD / material group.
+	PackedBatch {
+		/// Hash of the shared kit path (not a unique baked mesh).
+		kit: u64,
+		material: VisualMaterialKind,
+		instance_count: u32,
+	},
+}
+
+impl VisualLodPrimitive {
+	/// Level-only stub used by the default [`crate::VisualLodScene`] impl.
+	pub fn stub(level: LodSceneLevel) -> Self {
+		Self { level, kind: VisualLodKind::Stub }
+	}
+
+	pub fn packed_batch(
+		level: LodSceneLevel,
+		kit: u64,
+		material: VisualMaterialKind,
+		instance_count: u32,
+	) -> Self {
+		Self { level, kind: VisualLodKind::PackedBatch { kit, material, instance_count } }
+	}
+
+	pub fn instance_count(self) -> u32 {
+		match self.kind {
+			VisualLodKind::Stub => 0,
+			VisualLodKind::PackedBatch { instance_count, .. } => instance_count,
+		}
+	}
 }
 
 impl<P> LodChunk<P> {
@@ -248,12 +297,13 @@ mod tests {
 
 	#[test]
 	fn visual_chunk_is_not_a_scene() {
-		let chunk = VisualSceneChunk::primitive(VisualLodPrimitive { level: LodSceneLevel::Low });
+		let chunk = VisualSceneChunk::primitive(VisualLodPrimitive::stub(LodSceneLevel::Low));
 		assert_eq!(chunk.total_weight(), DEFAULT_CHUNK_WEIGHT);
 		assert_eq!(chunk.total_primitives(), 1);
 		let mut queue = chunk.into_fulfill_queue();
 		let (weight, payload) = pull_payload(&mut queue).expect("visual primitive");
 		assert_eq!(weight, DEFAULT_CHUNK_WEIGHT);
 		assert_eq!(payload.level, LodSceneLevel::Low);
+		assert_eq!(payload.kind, VisualLodKind::Stub);
 	}
 }

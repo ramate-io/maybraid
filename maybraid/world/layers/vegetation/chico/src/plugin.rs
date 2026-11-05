@@ -7,6 +7,7 @@ use vegetation_shaders::{
 	init_vegetation_material_caches, VegetationMaterialRefPlugin, VegetationShadersPlugin,
 };
 
+use crate::packed::PackedGrovePlugin;
 use crate::view::VegetationLodRefreshPlugin;
 
 /// Shaders, kit caches, and Avian LOD refresh for forest / grove hosts.
@@ -32,6 +33,9 @@ impl Plugin for VegetationViewPlugin {
 		init_vegetation_material_caches(app);
 		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
 			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
+		}
+		if !app.is_plugin_added::<PackedGrovePlugin>() {
+			app.add_plugins(PackedGrovePlugin);
 		}
 	}
 }
