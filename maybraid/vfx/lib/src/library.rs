@@ -6,6 +6,7 @@ use bevy_hanabi::EffectAsset;
 
 use crate::assets::{fire_flipbook, smoke_flipbook, spark_taper, VfxFlipbooks};
 use crate::composition::EffectDefinition;
+use crate::dust::{DustPart, DUST};
 use crate::effects::fiery_explosion;
 use crate::layers::{fireball, flash, smoke, sparks};
 use crate::lobes::rounded_lobe_mesh;
@@ -14,6 +15,7 @@ use crate::names::{FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
 /// Shared definitions. Clone a handle out; never mutate the compiled assets.
 #[derive(Resource, Clone, Debug)]
 pub struct VfxLibrary {
+	pub dust: EffectDefinition,
 	pub flipbooks: VfxFlipbooks,
 	pub flash: EffectDefinition,
 	pub fireball: EffectDefinition,
@@ -25,6 +27,7 @@ pub struct VfxLibrary {
 impl VfxLibrary {
 	pub fn get(&self, name: &str) -> Option<&EffectDefinition> {
 		match canonicalize_effect_name(name)? {
+			DUST => Some(&self.dust),
 			FLASH => Some(&self.flash),
 			FIREBALL => Some(&self.fireball),
 			SMOKE => Some(&self.smoke),
@@ -38,6 +41,7 @@ impl VfxLibrary {
 /// Accept kebab, snake, and a few aliases used by the playground.
 pub fn canonicalize_effect_name(name: &str) -> Option<&'static str> {
 	match name.trim().to_ascii_lowercase().replace('_', "-").as_str() {
+		"dust" | "rolling-wave" => Some(DUST),
 		"flash" => Some(FLASH),
 		"fireball" | "fire" => Some(FIREBALL),
 		"smoke" => Some(SMOKE),
@@ -49,6 +53,7 @@ pub fn canonicalize_effect_name(name: &str) -> Option<&'static str> {
 
 pub fn setup_vfx_library(
 	mut commands: Commands,
+	server: Res<AssetServer>,
 	mut images: ResMut<Assets<Image>>,
 	mut effects: ResMut<Assets<EffectAsset>>,
 	mut meshes: ResMut<Assets<Mesh>>,
@@ -66,6 +71,12 @@ pub fn setup_vfx_library(
 	let smoke_wisps = smoke::compile_wisps(&mut effects, &flipbooks.smoke);
 	let sparks_part = sparks::compile(&mut effects, flipbooks.spark.clone());
 	let library = VfxLibrary {
+		dust: DustPart {
+			flipbook: server.load("vfx/dust/rolling_wave.flipbook.json"),
+			mesh: meshes.add(Rectangle::default()),
+			duration: 48.0 / 15.0,
+		}
+		.definition(),
 		flash: flash::definition(flash_mesh.clone()),
 		fireball: fireball::definition(fireball_mesh.clone(), fireball_wisps.clone()),
 		smoke: smoke::definition(smoke_mesh.clone(), smoke_wisps.clone()),

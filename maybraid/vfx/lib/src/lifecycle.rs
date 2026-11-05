@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{CompiledParticleEffect, EffectSpawner, EffectSystems, SpawnerSettings};
 
+use crate::dust::{tick_dust, VfxDust};
 use crate::lobe_material::LobeMaterial;
 use crate::lobes::{lobe_transform, stamp_lobe_materials, VfxLobe};
 use crate::membership::{VfxInstanceMembers, VfxMemberOf};
@@ -33,10 +34,15 @@ pub fn gate_vfx_instances(
 	emitters: Query<(&VfxEmitter, Has<VfxEmitterArmed>, Has<VfxEmitterBurst>)>,
 	mut spawners: Query<Option<&mut EffectSpawner>, With<VfxEmitter>>,
 	mut instances: Query<(Entity, &mut VfxInstance, &VfxInstanceMembers)>,
+	dust: Query<&VfxLayerLife, With<VfxDust>>,
 ) {
 	for (_entity, mut instance, members) in &mut instances {
 		if !instance.armed {
-			if !members.emitters_ready(&emitters) {
+			if !members.emitters_ready(&emitters)
+				|| members
+					.iter()
+					.any(|entity| dust.get(entity).is_ok_and(|life| life.waiting_for_emitter))
+			{
 				continue;
 			}
 			instance.armed = true;
@@ -171,6 +177,7 @@ pub fn vfx_lifecycle_plugin(app: &mut App) {
 		Update,
 		(
 			stamp_lobe_materials,
+			tick_dust,
 			tick_vfx_instances,
 			tick_vfx_flashes,
 			tick_vfx_lobes,

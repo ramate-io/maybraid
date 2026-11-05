@@ -124,8 +124,9 @@ fn burst(
 	definition: &maybraid_vfx::EffectDefinition,
 	request: &VfxShowRequest,
 ) -> VfxSpawn {
+	let origin = if definition.name == maybraid_vfx::dust::DUST { Vec3::ZERO } else { SHOW_ORIGIN };
 	let spawn = VfxSpawn {
-		transform: Transform::from_translation(SHOW_ORIGIN + Vec3::Z * request.distance),
+		transform: Transform::from_translation(origin + Vec3::Z * request.distance),
 		scale: request.scale,
 		intensity: request.intensity,
 		seed: request.seed,

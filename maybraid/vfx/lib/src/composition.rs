@@ -3,6 +3,8 @@
 use bevy::prelude::*;
 use bevy_hanabi::EffectAsset;
 
+use crate::dust::DustPart;
+
 /// Which explosion colors a particle layer samples from the instance palette.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ParticleShade {
@@ -118,6 +120,7 @@ impl MeshPart {
 /// Concrete particle, light, or mesh variant owned by a layer.
 #[derive(Clone, Debug)]
 pub enum EffectPart {
+	Dust(DustPart),
 	Particle(ParticlePart),
 	Light(LightPulse),
 	Mesh(MeshPart),
@@ -133,6 +136,15 @@ pub struct EffectLayer {
 }
 
 impl EffectLayer {
+	pub fn dust(part: DustPart) -> Self {
+		Self {
+			part: EffectPart::Dust(part),
+			delay: 0.0,
+			transform: Transform::IDENTITY,
+			scale: 1.0,
+		}
+	}
+
 	pub fn particle(part: ParticlePart) -> Self {
 		Self {
 			part: EffectPart::Particle(part),
@@ -176,6 +188,7 @@ impl EffectLayer {
 
 	pub fn part_lifetime(&self) -> f32 {
 		match &self.part {
+			EffectPart::Dust(part) => part.duration,
 			EffectPart::Particle(part) => part.max_lifetime,
 			EffectPart::Light(pulse) => pulse.fade,
 			EffectPart::Mesh(part) => part.duration,

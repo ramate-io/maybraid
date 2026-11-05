@@ -1012,6 +1012,7 @@ mod tests {
 		let fiery = EffectDefinition::new(FIERY_EXPLOSION, [])
 			.with_scale_bounds(ScaleBounds { min: 0.25, max: 20.0 });
 		world.insert_resource(VfxLibrary {
+			dust: blank.clone(),
 			flipbooks: VfxFlipbooks {
 				fire: FlipbookAsset {
 					image: Handle::default(),

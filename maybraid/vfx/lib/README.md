@@ -10,3 +10,30 @@ Near fire and smoke use overlapping mesh lobes with a crate-owned stylized mater
 cargo test -p maybraid-vfx
 cargo run -p vfx-playground
 ```
+
+## Packaged dust
+
+`VfxLibrary::dust` is the shared eight-view baked dust definition. It uses the
+same layer composition, spatial scale, playback controls, instance ownership,
+and cancellation/cleanup as other effects. Each instance owns its material
+clock; all instances share the KTX2 texture. `intensity` adjusts this baked
+layer's brightness rather than spawning extra particles.
+
+`PackagedVfxPlugin` registers typed `PackagedFlipbook` and `StaticVolume` loaders
+for `.flipbook.json` and `.volume.json`. `VfxPlugin` includes it automatically.
+Images load through Bevy's standard KTX2 decoder with linear clamp sampling;
+their manifest-relative paths and handles remain normal AssetServer
+dependencies. Configure the application's asset root to `maybraid/assets`, as
+the game and playground already do. Await recursive dependency loading before
+using a manifest's image. The dust layer cancels its instance if loading fails.
+
+Use a camera with Bevy's `DepthPrepass` for independent scene-depth rejection
+and soft contact fading of each captured plane; the playground enables it.
+Without that prepass, the material uses an approximate blended depth. The bake
+was authored at 20° elevation and supplies no scene lighting response or
+volumetric simulation. Cold GPU pipeline compilation may skip opening frames;
+warm the effect before comparing a precise authored timestamp.
+
+See [asset metadata and provenance](../../assets/vfx/dust/README.md),
+[offline export tools](../../../bin/vfx/README.md), and
+[playground controls](../playground/README.md).

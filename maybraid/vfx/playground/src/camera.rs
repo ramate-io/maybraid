@@ -1,5 +1,6 @@
 use std::f32::consts::PI;
 
+use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
 use game_commands::command::TextEntryFocus;
@@ -29,6 +30,7 @@ pub fn setup_camera(mut commands: Commands) {
 
 	commands.spawn((
 		Camera3d::default(),
+		DepthPrepass,
 		transform,
 		Projection::Perspective(PerspectiveProjection { near: 0.05, far: 400.0, ..default() }),
 		CameraController { speed: 6.0, sensitivity: 0.005, yaw, pitch },

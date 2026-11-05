@@ -10,6 +10,7 @@
 pub mod assets;
 pub mod atlas;
 pub mod composition;
+pub mod dust;
 pub mod effects;
 pub mod flipbook;
 pub mod layers;
@@ -19,6 +20,7 @@ pub mod lobe_material;
 pub mod lobes;
 pub mod membership;
 pub mod names;
+pub mod packaged;
 pub mod palette;
 pub mod particles;
 pub mod seed;
@@ -32,6 +34,7 @@ pub use composition::{
 pub use library::{canonicalize_effect_name, VfxLibrary};
 pub use lobe_material::{LobeMaterial, LobeMaterialPlugin};
 pub use names::{FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
+pub use packaged::{PackagedFlipbook, PackagedVfxPlugin, StaticVolume};
 pub use palette::ExplosionPalette;
 pub use spawn::{spawn_vfx, SpawnVfxExt, VfxInstance, VfxSpawn, MAX_PLAYBACK, MIN_PLAYBACK};
 
@@ -46,6 +49,12 @@ pub struct VfxPlugin;
 
 impl Plugin for VfxPlugin {
 	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<PackagedVfxPlugin>() {
+			app.add_plugins(PackagedVfxPlugin);
+		}
+		if !app.is_plugin_added::<dust::DustPlugin>() {
+			app.add_plugins(dust::DustPlugin);
+		}
 		if !app.is_plugin_added::<HanabiPlugin>() {
 			app.add_plugins(HanabiPlugin);
 		}

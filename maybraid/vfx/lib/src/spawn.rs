@@ -227,6 +227,7 @@ pub fn realize_layer(
 		scale: Vec3::splat(layer.scale),
 	};
 	match &layer.part {
+		EffectPart::Dust(part) => part.spawn(commands, parent, transform, spawn),
 		EffectPart::Particle(part) => {
 			let count = (part.count * spawn.clamped_intensity()).clamp(1.0, part.capacity as f32);
 			let mut entity = commands.spawn((

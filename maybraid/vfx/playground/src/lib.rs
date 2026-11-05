@@ -73,6 +73,14 @@ mod tests {
 	use maybraid_vfx::{FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
 
 	#[test]
+	fn parses_playback_controls() -> Result<(), String> {
+		for line in ["pause", "play", "reset", "cancel", "spread"] {
+			<PlaygroundCommand as GameCommand>::parse_line(line)?;
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn parses_help() -> Result<(), String> {
 		let command = <PlaygroundCommand as GameCommand>::parse_line("help")?;
 		assert!(matches!(command, PlaygroundCommand::Help));
@@ -130,6 +138,7 @@ mod tests {
 			("show flash", FLASH),
 			("show fireball", FIREBALL),
 			("show smoke", SMOKE),
+			("show dust", maybraid_vfx::dust::DUST),
 			("show sparks", SPARKS),
 			("show fiery-explosion", FIERY_EXPLOSION),
 		] {
