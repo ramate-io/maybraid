@@ -52,10 +52,6 @@ var<uniform> style_params: vec4<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(2)
 var<uniform> base_color: vec4<f32>;
 
-fn saturate(x: f32) -> f32 {
-    return clamp(x, 0.0, 1.0);
-}
-
 fn spread_noise(t: f32, amount: f32) -> f32 {
     let x = saturate(t);
     return saturate(0.5 + (x - 0.5) * amount);

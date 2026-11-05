@@ -34,10 +34,6 @@ var<uniform> deep_color: vec4<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(3)
 var<uniform> water_params: vec4<f32>;
 
-fn saturate(x: f32) -> f32 {
-    return clamp(x, 0.0, 1.0);
-}
-
 fn posterize3(c: vec3<f32>, steps: f32) -> vec3<f32> {
     let s = max(steps, 1.0);
     return floor(c * s) / s;

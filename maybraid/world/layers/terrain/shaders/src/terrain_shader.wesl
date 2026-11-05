@@ -100,11 +100,6 @@ struct DurhamTerrainGrass {
 var<uniform> grass: DurhamTerrainGrass;
 
 
-fn saturate(x: f32) -> f32 {
-    return clamp(x, 0.0, 1.0);
-}
-
-
 fn spread_noise(t: f32, amount: f32) -> f32 {
     let x = saturate(t);
     return saturate(0.5 + (x - 0.5) * amount);

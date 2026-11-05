@@ -57,10 +57,6 @@ struct BumpOutVertexOutput {
     @location(10) bite_size_deviation: f32,
 }
 
-fn saturate(x: f32) -> f32 {
-    return clamp(x, 0.0, 1.0);
-}
-
 fn hash21(p: vec2<f32>) -> f32 {
     let q = vec3<f32>(p.x, p.y, p.x) * vec3<f32>(0.1031, 0.1030, 0.0973);
     let f = fract(q);
