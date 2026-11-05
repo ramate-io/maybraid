@@ -404,7 +404,7 @@ fn common_bedroom_avoids_passage_clearance() {
 		for band in &bands {
 			assert!(
 				!procedural_common::intersects_aabb2(p, *band),
-				"bed intersects passage clearance (depth PASSAGE_CLEARANCE)"
+				"bed intersects passage clearance (depth ~{PASSAGE_CLEARANCE})"
 			);
 		}
 	}
