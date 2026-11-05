@@ -56,6 +56,63 @@ impl ExplosionPalette {
 	pub fn color(color: LinearRgba) -> Color {
 		Color::from(color)
 	}
+
+	pub fn as_field(&self) -> FieldPalette {
+		FieldPalette {
+			hot: self.fire_hot,
+			mid: self.fire_mid,
+			cool: self.fire_cool,
+			flash: self.flash,
+		}
+	}
+}
+
+/// Heavenly / shock colors for driven field meshes. Distinct from explosion lobes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FieldPalette {
+	pub hot: LinearRgba,
+	pub mid: LinearRgba,
+	pub cool: LinearRgba,
+	pub flash: LinearRgba,
+}
+
+impl Default for FieldPalette {
+	fn default() -> Self {
+		Self::heaven()
+	}
+}
+
+impl FieldPalette {
+	pub fn heaven() -> Self {
+		Self {
+			hot: LinearRgba::rgb(1.55, 1.12, 0.55),
+			mid: LinearRgba::rgb(1.05, 0.58, 0.14),
+			cool: LinearRgba::rgb(0.22, 0.32, 0.78),
+			flash: LinearRgba::rgb(1.25, 0.95, 0.55),
+		}
+	}
+
+	pub fn shock() -> Self {
+		Self {
+			hot: LinearRgba::rgb(1.05, 1.12, 1.28),
+			mid: LinearRgba::rgb(0.62, 0.78, 0.95),
+			cool: LinearRgba::rgb(0.18, 0.22, 0.32),
+			flash: LinearRgba::rgb(0.95, 0.98, 1.05),
+		}
+	}
+
+	pub fn with_tint(self, tint: Option<Color>) -> Self {
+		let Some(tint) = tint else {
+			return self;
+		};
+		let tint = LinearRgba::from(tint);
+		Self {
+			hot: mul(self.hot, tint),
+			mid: mul(self.mid, tint),
+			cool: mul(self.cool, tint),
+			flash: mul(self.flash, tint),
+		}
+	}
 }
 
 fn mul(a: LinearRgba, b: LinearRgba) -> LinearRgba {

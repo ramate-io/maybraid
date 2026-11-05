@@ -9,6 +9,10 @@ pub const LAYER_FLASH: u32 = 1;
 pub const LAYER_FIRE: u32 = 2;
 pub const LAYER_SMOKE: u32 = 3;
 pub const LAYER_SPARKS: u32 = 4;
+pub const LAYER_COLUMN: u32 = 5;
+pub const LAYER_CONTACT: u32 = 6;
+pub const LAYER_WAVE: u32 = 7;
+pub const LAYER_TRAIL: u32 = 8;
 
 pub fn mix64(mut x: u64) -> u64 {
 	x = x.wrapping_add(0x9e37_79b9_7f4a_7c15);
