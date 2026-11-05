@@ -11,6 +11,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
+bevy_hanabi = { workspace = true }
 maybraid-audio = { workspace = true }
 
 [lints]

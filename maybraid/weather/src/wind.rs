@@ -7,6 +7,8 @@ use maybraid_audio::{
 	Audio, AudioBus, AudioClip, AudioVelocity, Mixer, SpatialEmitter, SpatialOneShot,
 };
 
+use crate::swirl::{self, WindSwirlEffects};
+
 pub const BREEZE_CLIP: &str = "sound-effects/environment/wind/breeze_001.wav";
 pub const GUST_CLIP: &str = "sound-effects/environment/wind/gust_001.wav";
 
@@ -157,6 +159,7 @@ pub(crate) fn spawn_weather_near_listener(
 	audio: Option<Res<Audio>>,
 	sounds: Option<Res<WeatherSounds>>,
 	mixer: Option<ResMut<Mixer>>,
+	swirls: Option<Res<WindSwirlEffects>>,
 	listeners: Query<&GlobalTransform, With<SpatialListener>>,
 	events: Query<&WeatherEvent>,
 ) {
@@ -165,6 +168,7 @@ pub(crate) fn spawn_weather_near_listener(
 	else {
 		return;
 	};
+	let swirls = swirls.as_deref();
 	let dt = time.delta_secs();
 	clock.next_breeze = (clock.next_breeze - dt).max(0.0);
 	clock.next_gust = (clock.next_gust - dt).max(0.0);
@@ -189,16 +193,42 @@ pub(crate) fn spawn_weather_near_listener(
 			))
 			.id();
 		sounds.play_breeze(&mut commands, &clips, audio, &mixer, listener, event, world);
+		if let Some(swirls) = swirls {
+			let sign = if unit(&mut clock.noise) < 0.5 { -1.0 } else { 1.0 };
+			swirl::spawn_wind_swirl(
+				&mut commands,
+				swirls,
+				listener,
+				event,
+				WeatherKind::Breeze,
+				life,
+				sign,
+			);
+		}
 		clock.next_breeze = lerp(BREEZE_GAP_MIN, BREEZE_GAP_MAX, unit(&mut clock.noise));
 	}
 	if !live_gust && clock.next_gust <= 0.0 {
 		let world = point_near_listener(origin, &mut clock.noise);
-		commands.spawn((
-			Name::new("weather-gust"),
-			Transform::from_translation(world),
-			WeatherEvent::gust(),
-		));
+		let event = commands
+			.spawn((
+				Name::new("weather-gust"),
+				Transform::from_translation(world),
+				WeatherEvent::gust(),
+			))
+			.id();
 		sounds.play_gust(&mut commands, &clips, audio, &mut mixer, listener, world);
+		if let Some(swirls) = swirls {
+			let sign = if unit(&mut clock.noise) < 0.5 { -1.0 } else { 1.0 };
+			swirl::spawn_wind_swirl(
+				&mut commands,
+				swirls,
+				listener,
+				event,
+				WeatherKind::Gust,
+				GUST_LIFE,
+				sign,
+			);
+		}
 		clock.next_gust = lerp(GUST_GAP_MIN, GUST_GAP_MAX, unit(&mut clock.noise));
 	}
 }
