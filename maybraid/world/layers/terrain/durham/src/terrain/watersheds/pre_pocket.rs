@@ -1,7 +1,7 @@
 //! Shared pre-pocket AABB helpers for dual-band Watershed stacks.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
+use bevy::shape::Aabb3d;
 use procedural_common::Bounds2;
 use terrain_watersheds::PrePocket;
 

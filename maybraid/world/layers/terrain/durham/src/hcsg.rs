@@ -4,8 +4,8 @@
 //! Start a session with [`lod::hcsg::request_hcsg_session_restart`].
 
 use bevy::ecs::system::{SystemParam, SystemParamItem};
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 #[cfg(test)]
 use lod::gen::Id;
 use lod::hcsg::{

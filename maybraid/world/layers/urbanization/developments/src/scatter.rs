@@ -1,7 +1,7 @@
 //! Deterministic, recipe-driven jittered-grid scattering.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
+use bevy_shape::{Aabb2d, Aabb3d};
 use procedural_common::{Bounds2, SeededHash};
 
 use crate::math::lerp;

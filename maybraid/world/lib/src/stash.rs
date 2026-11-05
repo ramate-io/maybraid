@@ -22,7 +22,7 @@
 //! same rings and an `Open` caption when no stash is already in range.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value};
+use bevy::scene::prelude::bsn;
 use bevy::text::FontSize;
 use character_inventory_user::{spawn_bag, InventoryUser};
 use character_items::{
@@ -480,7 +480,7 @@ fn spawn_displayed_clothing(
 			.spawn_scene((
 				ComponentsOnly(preview).host(&lod_ref),
 				bsn! {
-					template_value(transform)
+					~{transform}
 				},
 			))
 			.id();

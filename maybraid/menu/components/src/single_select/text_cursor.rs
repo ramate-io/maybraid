@@ -1,8 +1,9 @@
 //! Text menu whose active row inverts to a navy-on-yellow tag.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn, template_value};
+use bevy::scene::prelude::{bsn, Scene};
 use bevy::text::{FontSourceTemplate, Justify};
+use bevy::ui_widgets::Button;
 
 use super::text_menu::{
 	MenuItemLocked, MenuStepper, TextColumnAlign, TextColumnAnchor, TextMenu, TextMenuHeader,
@@ -259,7 +260,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 			};
 			children.push(Box::new(bsn! {
 				TextCursorScroll
-				template_value(scroll_node)
+				~{scroll_node}
 				ScrollPosition::default()
 				Children [ {rows} ]
 			}));
@@ -271,8 +272,8 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 		}
 		bsn! {
 			TextCursorMenu
-			template_value(TextMenu::with_selected(item_count, selected))
-			template_value(node)
+			~{TextMenu::with_selected(item_count, selected)}
+			~{node}
 			Children [ {children} ]
 		}
 	}
@@ -322,8 +323,8 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> ButtonWithSu
 		let node = self.anchor.node(TextColumnAlign::Start);
 		bsn! {
 			TextCursorMenu
-			template_value(TextMenu::new(1))
-			template_value(node)
+			~{TextMenu::new(1)}
+			~{node}
 			Children [ {children} ]
 		}
 	}
@@ -348,6 +349,7 @@ pub fn screen_back_scene() -> impl Scene + 'static {
 	))];
 	bsn! {
 		Button
+		~{bevy::picking::hover::Hovered::default()}
 		ScreenBack
 		CursorRow
 		Node {
@@ -364,7 +366,7 @@ pub fn screen_back_scene() -> impl Scene + 'static {
 }
 
 pub fn emit_screen_back_on_click(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	backs: Query<(), With<ScreenBack>>,
 	mut pressed: MessageWriter<ScreenBackPressed>,
 	mut commands: Commands,
@@ -391,6 +393,7 @@ pub fn screen_edit_scene() -> impl Scene + 'static {
 	))];
 	bsn! {
 		Button
+		~{bevy::picking::hover::Hovered::default()}
 		ScreenEdit
 		CursorRow
 		Node {
@@ -407,7 +410,7 @@ pub fn screen_edit_scene() -> impl Scene + 'static {
 }
 
 pub fn emit_screen_edit_on_click(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	edits: Query<(), With<ScreenEdit>>,
 	mut pressed: MessageWriter<ScreenEditPressed>,
 ) {
@@ -463,8 +466,8 @@ fn subtext_caption_scene(subtext: String, align: TextColumnAlign) -> impl Scene 
 			margin: margin,
 		}
 		Pickable::IGNORE
-		Children [(
-			template_value(Text::new(subtext))
+		Children [
+			~{Text::new(subtext)}
 			TextFont {
 				font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
 				font_size: px(DESCRIPTION_FONT_SIZE),
@@ -472,7 +475,7 @@ fn subtext_caption_scene(subtext: String, align: TextColumnAlign) -> impl Scene 
 			TextColor(TEXT_YELLOW_FAINT)
 			TextLayout::new(justify, bevy::text::LineBreak::NoWrap)
 			Pickable::IGNORE
-		)]
+		]
 	}
 }
 
@@ -508,8 +511,9 @@ where
 	if locked {
 		Box::new(bsn! {
 			Button
-			template_value(item)
-			template_value(action)
+			~{bevy::picking::hover::Hovered::default()}
+			~{item}
+			~{action}
 			MenuItemLocked
 			Node {
 				padding: UiRect::axes(px(0.0), px(2.0)),
@@ -524,8 +528,9 @@ where
 	} else if stepper {
 		Box::new(bsn! {
 			Button
-			template_value(item)
-			template_value(action)
+			~{bevy::picking::hover::Hovered::default()}
+			~{item}
+			~{action}
 			MenuStepper
 			Node {
 				padding: UiRect::axes(px(0.0), px(2.0)),
@@ -540,8 +545,9 @@ where
 	} else {
 		Box::new(bsn! {
 			Button
-			template_value(item)
-			template_value(action)
+			~{bevy::picking::hover::Hovered::default()}
+			~{item}
+			~{action}
 			Node {
 				padding: UiRect::axes(px(0.0), px(2.0)),
 				flex_direction: FlexDirection::Row,
@@ -561,7 +567,7 @@ fn objective_marker_scene(kind: MenuObjectiveKind, visibility: Visibility) -> im
 	let color = marker.color;
 	let fill = color.with_alpha(0.14);
 	let children: Vec<Box<dyn Scene>> = vec![Box::new(bsn! {
-		template_value(Text::new(label))
+		~{Text::new(label)}
 		TextFont {
 			font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
 			font_size: px(OBJECTIVE_MARKER_FONT_SIZE),
@@ -571,9 +577,9 @@ fn objective_marker_scene(kind: MenuObjectiveKind, visibility: Visibility) -> im
 		Pickable::IGNORE
 	})];
 	bsn! {
-		template_value(kind)
-		template_value(marker)
-		template_value(visibility)
+		~{kind}
+		~{marker}
+		~{visibility}
 		Node {
 			padding: UiRect::axes(px(OBJECTIVE_MARKER_PAD_X), px(OBJECTIVE_MARKER_PAD_Y)),
 			border: UiRect::all(px(OBJECTIVE_MARKER_BORDER)),
@@ -600,7 +606,7 @@ fn focus_tag_scene(
 	let tag = FocusTag::new(idle);
 	let fill = FocusTag::fill(focused, locked);
 	bsn! {
-		template_value(tag)
+		~{tag}
 		Node {
 			padding: UiRect::axes(px(FOCUS_TAG_PAD_X), px(FOCUS_TAG_PAD_Y)),
 			border_radius: BorderRadius::all(px(FOCUS_TAG_RADIUS)),
@@ -617,7 +623,7 @@ fn focus_tag_scene(
 fn cursor_label_scene(label: String, align: TextColumnAlign, color: Color) -> impl Scene {
 	let text_justify = align.text_justify();
 	bsn! {
-		template_value(Text::new(label))
+		~{Text::new(label)}
 		TextFont {
 			font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
 			font_size: px(ITEM_FONT_SIZE),
@@ -663,9 +669,9 @@ pub fn scroll_text_cursor_selection_into_view(
 #[cfg(test)]
 mod tests {
 	use super::{MenuObjectiveKind, TextCursorColumn, TextCursorRow};
-	use crate::ITEM_FONT_SIZE;
 	use crate::single_select::{TextColumnAlign, TextColumnAnchor};
 	use crate::theme::{OBJECTIVE_MARKER_FONT_SIZE, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON};
+	use crate::ITEM_FONT_SIZE;
 
 	#[derive(Clone, Copy)]
 	enum RowAction {

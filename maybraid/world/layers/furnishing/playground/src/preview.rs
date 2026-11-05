@@ -1,7 +1,7 @@
 //! Preview subject sync for `/show`.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value};
+use bevy::scene::prelude::bsn;
 use building_components::FurnitureGeometry;
 use furniture_assemblies::{filled_slots_scene, FurnitureKitMeshes};
 use game_commands::ui::GameCommandStatusText;
@@ -97,7 +97,7 @@ pub fn present_preview(
 		.spawn_scene((
 			filled_slots_scene(&nodes, &kits),
 			bsn! {
-				template_value(transform)
+				~{transform}
 				Visibility::default()
 			},
 		))

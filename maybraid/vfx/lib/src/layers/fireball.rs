@@ -93,11 +93,11 @@ pub fn compile_wisps(effects: &mut Assets<EffectAsset>, fire: &FlipbookAsset) ->
 	let update_size =
 		update_scaled_size3(&writer, &props.scale, Vec3::splat(0.32), Vec3::splat(0.72));
 	let update_sprite = update_sprite_index(&writer, fire);
-	let texture_slot = writer.lit(0u32).expr();
+	let texture_slot = 0;
 	let color = value_lifetime_gradient(&[(0.0, 0.95), (0.4, 0.72), (1.0, 0.0)]);
 
 	let mut module = writer.finish();
-	module.add_texture_slot("fire");
+	module.add_texture_slot("fire", bevy_hanabi::SlotDimension::D2);
 
 	let effect = effects.add(
 		EffectAsset::new(FIREBALL_CAPACITY, SpawnerSettings::once(FIREBALL_COUNT.into()), module)

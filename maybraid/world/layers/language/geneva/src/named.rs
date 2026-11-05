@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::{DVec3, Rect, Vec2};
+use bevy::shape::Aabb3d;
 use chico::{ChicoForest, ChicoGrove, GrownGrove};
 use durham::terrain::stamps::StampLeaf;
 use durham::terrain::watersheds::{PocketWater, PocketWatersHighPass, PocketWatersLowPass};

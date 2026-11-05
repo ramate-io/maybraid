@@ -4,8 +4,8 @@
 //! than hard-coding parallel thresholds for walk clear, door face, suite join,
 //! and room min extent.
 
-use bevy_math::bounding::Aabb2d;
 use bevy_math::Vec2;
+use bevy_shape::Aabb2d;
 use procedural_common::aabb2_area;
 
 const EPS: f32 = 1e-3;

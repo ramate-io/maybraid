@@ -1,6 +1,6 @@
 //! Living room plan packer: primary seating + optional secondary + filler.
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FitError};

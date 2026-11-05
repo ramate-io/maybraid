@@ -1,7 +1,7 @@
 //! Hint strip: static mark plus faint copy.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::icons::maybraid::Icon;
@@ -45,7 +45,7 @@ impl TextMenuHint {
 fn hint_label_scene(initial: String) -> impl Scene {
 	bsn! {
 		TextMenuHintLabel
-		template_value(Text::new(initial))
+		~{Text::new(initial)}
 		TextFont {
 			font: FontSourceTemplate::Handle(BARLOW_REGULAR),
 			font_size: px(HINT_FONT_SIZE),

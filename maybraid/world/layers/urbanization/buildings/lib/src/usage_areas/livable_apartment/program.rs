@@ -1,7 +1,7 @@
 //! Residential room-count program and per-rect kind distribution.
 
-use bevy_math::bounding::Aabb2d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb2d;
 use procedural_common::{aabb2_area, NoiseConfig, NoiseParams};
 
 use crate::usage_areas::rectangular_livable_area::RectQuarterKind;

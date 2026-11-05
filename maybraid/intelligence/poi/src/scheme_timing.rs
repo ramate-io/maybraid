@@ -14,8 +14,8 @@ use std::collections::HashSet;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
 
 use crate::{

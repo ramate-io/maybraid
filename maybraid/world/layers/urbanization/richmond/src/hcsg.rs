@@ -7,8 +7,8 @@
 use std::marker::PhantomData;
 
 use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use lod::hcsg::universal_bounds;
 use lod::hcsg::{self, register_session_seed, HcsgClass, PresentationPlugin, ViewerHcsgBounds};
 use urbanization_cells::{UrbanizationExtent, UrbanizationSelection};
@@ -110,8 +110,8 @@ mod tests {
 	use std::time::Duration;
 
 	use bevy::ecs::entity_disabling::Disabled;
-	use bevy::math::bounding::Aabb3d;
 	use bevy::scene::ScenePlugin;
+	use bevy::shape::Aabb3d;
 	use bevy::state::app::StatesPlugin;
 	use building_physics::BuildingWalkCollider;
 	use durham::{

@@ -3,7 +3,7 @@
 use bevy::prelude::{
 	Children, Handle, Mesh, Mesh3d, MeshMaterial3d, StandardMaterial, Transform, Visibility,
 };
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 
 use crate::assets::AssetPath;
 use crate::placed::Placement;
@@ -33,7 +33,7 @@ pub fn posed_glb(asset: AssetPath, transform: Transform) -> impl Scene + 'static
 	(
 		asset.scene_ref().scene(),
 		bsn! {
-			template_value(transform)
+			~{transform}
 		},
 	)
 }
@@ -47,7 +47,7 @@ pub fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scen
 	(
 		child,
 		bsn! {
-			template_value(transform)
+			~{transform}
 		},
 	)
 }
@@ -59,7 +59,7 @@ pub fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scen
 pub fn posed_scene(transform: Transform, child: impl Scene + 'static) -> impl Scene + 'static {
 	let children: Vec<Box<dyn Scene>> = vec![Box::new(child)];
 	bsn! {
-		template_value(transform)
+		~{transform}
 		Visibility::default()
 		Children [ {children} ]
 	}
@@ -76,7 +76,7 @@ pub fn wireframe_box_with_handles(
 	bsn! {
 		Mesh3d({mesh})
 		MeshMaterial3d::<StandardMaterial>({material})
-		template_value(transform)
+		~{transform}
 		Visibility::default()
 	}
 }

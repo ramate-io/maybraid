@@ -1,8 +1,8 @@
 //! Fine-phase mesh / feature [`lod::LodScene`] host.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform, Vec3, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use character_shaders::{eye_palette, mouth_palette, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
@@ -180,10 +180,10 @@ impl PartNode {
 		let skin = node.skin.map(SkinRefRoot);
 		(
 			bsn! {
-				template_value(node)
-				template_value(transform)
-				template_value(part)
-				template_value(material)
+				~{node}
+				~{transform}
+				~{part}
+				material
 				PropagateToDescendants
 				AssemblyHost
 			},

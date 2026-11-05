@@ -3,7 +3,7 @@
 //! One [`scene_ref::SceneRef`] per part — do not [`scene_ref::MultiSceneMerge`].
 
 use bevy::prelude::{Children, Transform, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use building_components::{pose, scene_children, AssetPath};
 use lod::LodLazyPending;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
@@ -18,14 +18,14 @@ pub fn posed_kit(
 ) -> impl Scene + 'static {
 	let children: Vec<Box<dyn Scene>> = vec![Box::new((
 		bsn! {
-			template_value(MaterialRefRoot(material))
+			~{MaterialRefRoot(material)}
 			PropagateToDescendants
 			LodLazyPending
 		},
 		asset.scene_ref().scene(),
 	))];
 	bsn! {
-		template_value(transform)
+		~{transform}
 		Visibility::default()
 		Children [ {children} ]
 	}
@@ -40,15 +40,15 @@ pub fn posed_kit_part(
 ) -> impl Scene + 'static {
 	let children: Vec<Box<dyn Scene>> = vec![Box::new((
 		bsn! {
-			template_value(MaterialRefRoot(material))
+			~{MaterialRefRoot(material)}
 			PropagateToDescendants
 			LodLazyPending
 		},
 		asset.scene_ref().scene(),
 	))];
 	bsn! {
-		template_value(transform)
-		template_value(part)
+		~{transform}
+		~{part}
 		Visibility::default()
 		Children [ {children} ]
 	}

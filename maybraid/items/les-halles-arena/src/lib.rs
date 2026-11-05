@@ -4,8 +4,8 @@
 
 mod pad;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use building_components::{building_bounds, spawn_building_components};
 use building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
 use buildings::{Confines, Fit, FitError, Openings};

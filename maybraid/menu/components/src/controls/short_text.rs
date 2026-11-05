@@ -6,29 +6,30 @@
 //! keyboard types into the same visible line. Submit emits [`ShortTextChange`].
 
 use bevy::ecs::event::EntityEvent;
-use bevy::input::ButtonState;
 use bevy::input::keyboard::KeyboardInput;
+use bevy::input::ButtonState;
 use bevy::prelude::*;
 use bevy::text::{Justify, LineBreak, LineHeight, TextSpan};
+use bevy::ui_widgets::Button;
 use bevy::window::{Ime, PrimaryWindow};
 
-use crate::ScopedMenuSession;
 use crate::modal::{MenuModal, MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack};
 use crate::single_select::{KeyboardMenuNav, TextMenuInputLock};
 use crate::theme::{
-	HEADER_FONT_SIZE, PANEL_CHIP_GAP, PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_ROW_GAP,
-	PANEL_VALUE_FONT_SIZE, TEXT_DEEP_BLUE, TEXT_YELLOW, TEXT_YELLOW_FAINT, menu_list_panel_node,
-	menu_region_wash,
+	menu_list_panel_node, menu_region_wash, HEADER_FONT_SIZE, PANEL_CHIP_GAP,
+	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_ROW_GAP, PANEL_VALUE_FONT_SIZE,
+	TEXT_DEEP_BLUE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
+use crate::ScopedMenuSession;
 use crate::{MenuNav, MenuNavImpulse};
 use maybraid_virtual_pad_controller::{PadButton, VirtualPad};
 
-use super::HudFonts;
 use super::button::spawn_text_button;
 use super::display::menu_display_name;
-use super::focus::{FocusTag, first_focus_tag, paint_focus_tag, spawn_focus_tag};
+use super::focus::{first_focus_tag, paint_focus_tag, spawn_focus_tag, FocusTag};
 use super::hud_menu::{HudMenu, HudMenuIgnoresLock, HudMenuItem, HudOverlayMenu};
 use super::text::spawn_hud_text;
+use super::HudFonts;
 
 /// IR / host key for a short-text field.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -145,6 +146,7 @@ pub fn spawn_short_text_button(
 	parent
 		.spawn((
 			Button,
+			bevy::picking::hover::Hovered::default(),
 			extra,
 			Node {
 				width: Val::Percent(100.0),
@@ -193,7 +195,11 @@ fn spawn_short_text_line(
 }
 
 fn row_value_display(value: &str) -> String {
-	if value.is_empty() { String::from("  —") } else { format!("  {value}") }
+	if value.is_empty() {
+		String::from("  —")
+	} else {
+		format!("  {value}")
+	}
 }
 
 fn modal_value_display(value: &str) -> String {
@@ -317,12 +323,12 @@ pub fn emit_short_text_submit_on_confirm(
 	);
 }
 
-pub fn observe_short_text_submit_button(add: On<Add, ShortTextSubmit>, mut commands: Commands) {
+pub fn observe_short_text_submit_button(add: On<Add<ShortTextSubmit>>, mut commands: Commands) {
 	commands.entity(add.entity).observe(on_short_text_submit_click);
 }
 
 fn on_short_text_submit_click(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	roots: Query<Entity, (With<ShortTextModalRoot>, Without<ScopedMenuSession>)>,
 	mut fields: Query<&mut ShortTextField, Without<ScopedMenuSession>>,
 	mut active: ResMut<ActiveShortText>,
@@ -345,7 +351,7 @@ fn on_short_text_submit_click(
 }
 
 pub fn emit_short_text_toggle_on_click(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	lock: Res<TextMenuInputLock>,
 	keys: Query<&ShortTextKey>,
 	child_of: Query<&ChildOf>,
@@ -498,7 +504,7 @@ fn open_selected_short_text(
 }
 
 pub fn emit_short_text_submit_on_click(
-	mut click: On<Pointer<Click>>,
+	mut click: On<PointerClick>,
 	submits: Query<(), With<ShortTextSubmit>>,
 	child_of: Query<&ChildOf>,
 	roots: Query<Entity, (With<ShortTextModalRoot>, Without<ScopedMenuSession>)>,
@@ -527,7 +533,7 @@ pub fn emit_short_text_submit_on_click(
 }
 
 pub fn emit_short_text_pad_on_click(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	scoped: Query<(), With<ScopedMenuSession>>,
 	keys: Query<&ShortTextPadKey>,
 	child_of: Query<&ChildOf>,
@@ -670,7 +676,7 @@ fn activate_selected_pad_item(
 }
 
 pub fn emit_short_text_cancel_on_click(
-	mut click: On<Pointer<Click>>,
+	mut click: On<PointerClick>,
 	cancels: Query<(), With<ShortTextCancel>>,
 	child_of: Query<&ChildOf>,
 	roots: Query<Entity, (With<ShortTextModalRoot>, Without<ScopedMenuSession>)>,
@@ -865,6 +871,7 @@ pub fn spawn_short_text_modal(
 		.with_children(|root| {
 			root.spawn((
 				Button,
+				bevy::picking::hover::Hovered::default(),
 				ShortTextCancel,
 				Node {
 					position_type: PositionType::Absolute,
@@ -1080,6 +1087,7 @@ fn spawn_pad_key(
 	parent
 		.spawn((
 			Button,
+			bevy::picking::hover::Hovered::default(),
 			extra,
 			Node {
 				min_width: Val::Px(min_width),
@@ -1112,7 +1120,7 @@ fn pad_letter_label(letter: char, shift: bool) -> String {
 }
 
 fn pointer_target(
-	click: &On<Pointer<Click>>,
+	click: &On<PointerClick>,
 	child_of: &Query<&ChildOf>,
 	matches: impl Fn(Entity) -> bool,
 ) -> Option<Entity> {
@@ -1259,17 +1267,17 @@ pub fn sync_short_text_ime(
 #[cfg(test)]
 mod tests {
 	use super::{
+		apply_short_text_pad_key, cancel_short_text_modal, close_short_text_on_modal_dismiss,
+		is_short_text_char, pad_letter_label, push_short_text_char, submit_short_text_modal,
 		ActiveShortText, ShortTextField, ShortTextModal, ShortTextModalRoot, ShortTextPadKey,
-		ShortTextSession, apply_short_text_pad_key, cancel_short_text_modal,
-		close_short_text_on_modal_dismiss, is_short_text_char, pad_letter_label,
-		push_short_text_char, submit_short_text_modal,
+		ShortTextSession,
 	};
-	use crate::ScopedMenuSession;
 	use crate::modal::{
-		MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack, consume_menu_modal_back,
-		consume_screen_back,
+		consume_menu_modal_back, consume_screen_back, MenuModalDismiss, MenuModalId,
+		MenuModalLayer, MenuModalStack,
 	};
 	use crate::single_select::text_cursor::ScreenBackPressed;
+	use crate::ScopedMenuSession;
 	use crate::{MenuNav, MenuNavPad};
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;

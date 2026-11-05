@@ -4,8 +4,8 @@
 //! next neighbor a Boundary keep-out (no double wall). Exterior faces that the
 //! shell already walls are also marked Boundary before fill.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 
 use crate::fit::Confines;
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};

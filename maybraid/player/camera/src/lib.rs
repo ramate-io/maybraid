@@ -201,6 +201,7 @@ pub fn spawn_follow_camera(commands: &mut Commands) -> Entity {
 	commands
 		.spawn((
 			Camera3d::default(),
+			bevy::pbr::ScreenSpaceTransmission::default(),
 			lod::LodViewer,
 			SpatialListener::new(SPATIAL_LISTENER_GAP),
 			follow,

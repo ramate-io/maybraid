@@ -2,7 +2,7 @@
 //!
 //! Selection uses the presenting tile's cells. Grow only the placements that won.
 
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 use bevy_math::Vec2;
 use gimme_gen::Cell;
 use lod::lod_ref::LodRef;
@@ -209,7 +209,7 @@ mod tests {
 	use super::*;
 	use anyhow::Result;
 	use bevy_math::Vec3;
-	use vegetation_groves::{FlatTerrainSample, GroveExtent, OrchardParams, cell_center};
+	use vegetation_groves::{cell_center, FlatTerrainSample, GroveExtent, OrchardParams};
 
 	#[test]
 	fn orchard_cell_extent_matches_definition() -> Result<()> {

@@ -1,9 +1,9 @@
 //! Rough-stonework unit rectangle panel kit (LOD triad + flat UltraLow).
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::Component;
 use bevy::scene::prelude::Scene;
+use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::SceneChunk;

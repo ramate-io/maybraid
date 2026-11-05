@@ -14,7 +14,7 @@ use bevy::ecs::reflect::AppTypeRegistry;
 use bevy::mesh::Mesh;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::{Assets, Component, Resource, StandardMaterial, Transform};
-use bevy::scene::prelude::{bsn, template_value};
+use bevy::scene::prelude::bsn;
 use bevy::scene::Scene;
 use bevy::world_serialization::WorldAsset;
 
@@ -68,7 +68,7 @@ impl MultiSceneMerge {
 	/// BSN scene root (`MultiSceneMergeRoot`; fulfilled to [`WorldAssetRoot`]).
 	pub fn scene(self) -> impl Scene + 'static {
 		bsn! {
-			template_value(MultiSceneMergeRoot(self))
+			~{MultiSceneMergeRoot(self)}
 		}
 	}
 
@@ -77,8 +77,8 @@ impl MultiSceneMerge {
 	/// Part transforms stay collection-/unit-local; `transform` places the whole merge.
 	pub fn scene_at(self, transform: Transform) -> impl Scene + 'static {
 		bsn! {
-			template_value(MultiSceneMergeRoot(self))
-			template_value(transform)
+			~{MultiSceneMergeRoot(self)}
+			~{transform}
 			bevy::prelude::Visibility::Inherited
 		}
 	}

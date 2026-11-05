@@ -1,7 +1,7 @@
 //! Large language tiles and guillotine small tiles.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
+use bevy::shape::Aabb3d;
 use comproc::guillotine::{Bounds2, DepthRange, GuillotineConfig, VariableGuillotine};
 use comproc::noise::config::NoiseConfig;
 use lod::gen::{Id, OriginalId};

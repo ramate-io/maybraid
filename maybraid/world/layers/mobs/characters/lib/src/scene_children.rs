@@ -2,7 +2,7 @@
 
 use bevy::ecs::component::Component;
 use bevy::prelude::{Children, Transform, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 
 /// Group child scenes under a hierarchy-safe root.
 pub fn scene_children(children: Vec<Box<dyn Scene>>) -> impl Scene + 'static {
@@ -20,7 +20,7 @@ where
 {
 	match value {
 		Some(c) => Box::new(bsn! {
-			template_value(c)
+			~{c}
 		}),
 		None => Box::new(bsn! {
 			Visibility::Inherited

@@ -9,8 +9,8 @@
 
 use std::collections::HashMap;
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use procedural_common::NoiseParams;
 
 use crate::fit::{aabb_xz_extent, Confines, FillRegion, FitError, MultiConfines, SpaceKind};

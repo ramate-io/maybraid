@@ -8,8 +8,8 @@
 //! [`MediumCanopyBumpOut`] uses the 320 m Far terrain grid on the aligned
 //! 1.28–2.56 km band.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Color, Vec2, Vec3};
+use bevy::shape::Aabb3d;
 use lod::gen::Id;
 use procedural_common::NoiseParams;
 use vegetation_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutStyle};

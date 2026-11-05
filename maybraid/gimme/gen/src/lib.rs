@@ -1,6 +1,6 @@
 pub use gimme_core::Cell;
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use gimme_core::{SpatialIndexError, TypedSpatialIndex};
 use thiserror::Error;
 

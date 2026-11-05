@@ -5,8 +5,8 @@
 
 use bevy::ecs::component::Component;
 use bevy::ecs::entity::Entity;
-use bevy::math::bounding::Aabb3d;
 use bevy::platform::collections::HashSet;
+use bevy::shape::Aabb3d;
 
 use crate::scene::SemanticLodScene;
 

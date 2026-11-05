@@ -154,8 +154,8 @@ mod tests {
 	use crate::usage_areas::plan_cells::{PlanCell, MIN_GROUP_CONNECTIVITY};
 	use crate::usage_areas::plan_geom::host_xz;
 	use bevy::prelude::Transform;
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 	use building_components::{
 		STRUCTURAL_HIGH_OUTSIDE_METERS, STRUCTURAL_LOW_OUTSIDE_METERS,
 		STRUCTURAL_MEDIUM_OUTSIDE_METERS,
@@ -332,8 +332,8 @@ mod tests {
 		use crate::usage_areas::livable_apartment::ApartmentRoom;
 		use crate::usage_areas::plan_cells::shared_edge_span;
 		use crate::usage_areas::PASSAGE_WALL_LIP;
-		use bevy_math::bounding::{Aabb2d, BoundingVolume};
 		use bevy_math::Vec2;
+		use bevy_shape::{Aabb2d, BoundingVolume};
 		use procedural_common::{aabb2_area, intersects_aabb2};
 
 		fn fill_xz(t: bevy_math::Vec3, s: bevy_math::Vec3) -> Aabb2d {

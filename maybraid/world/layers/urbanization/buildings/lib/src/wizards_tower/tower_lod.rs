@@ -7,8 +7,8 @@
 //! eligible at that range, showing them is fine.
 
 use bevy::prelude::{GlobalTransform, Transform};
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use building_components::distance_to_segment;
 use lod::lod_ref::LodRef;
 use lod::scene::LodSceneLevel;

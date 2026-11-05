@@ -7,11 +7,11 @@
 use bevy_math::Vec3;
 use gimme_gen::Cell;
 use procedural_common::{
-	BucketThrow, FirstFitIndices, MIN_BUCKET_WEIGHT, NoiseConfig, NoiseParams, perturb_weights,
+	perturb_weights, BucketThrow, FirstFitIndices, NoiseConfig, NoiseParams, MIN_BUCKET_WEIGHT,
 };
 
-use crate::grove::GroveCellOutcome;
 use crate::grove::terrain::{GroveWorldSample, PlacementConstraints};
+use crate::grove::GroveCellOutcome;
 
 /// Noise lane for the per-cell bucket throw (offset from the placement position).
 const SELECTION_LANE: Vec3 = Vec3::new(30.0, 0.0, 0.0);
@@ -319,7 +319,7 @@ mod tests {
 
 	#[test]
 	fn exclusion_zone_rejects_placed_buckets() -> Result<()> {
-		use bevy_math::bounding::Aabb3d;
+		use bevy_shape::Aabb3d;
 
 		struct Blocked {
 			zones: Vec<Aabb3d>,

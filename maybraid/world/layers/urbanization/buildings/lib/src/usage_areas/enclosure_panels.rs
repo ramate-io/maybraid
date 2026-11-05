@@ -2,8 +2,8 @@
 //!
 //! Shared by [`super::enclosed_room`] (and any shell that needs face panels).
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 
 use crate::constraints::FaceKind;
 use crate::paneling::Rectangle;

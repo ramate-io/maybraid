@@ -1,7 +1,7 @@
 //! Shared [`LabelNode`] helpers for usage-area placeholders (AABB → filled label).
 
-use bevy_math::bounding::{Aabb3d, BoundingVolume};
 use bevy_math::Vec3;
+use bevy_shape::{Aabb3d, BoundingVolume};
 use building_components::{LabelNode, LabelStyle};
 
 /// Label filling `aabb` (unit cube scaled to extents).

@@ -4,8 +4,8 @@
 use std::collections::HashSet;
 
 use anyhow::Result;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Entity, Transform, Vec3};
+use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneLevel};
 use vegetation_components::{FoliageGeometry, VegetationComponents};

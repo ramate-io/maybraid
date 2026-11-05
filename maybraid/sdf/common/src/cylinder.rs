@@ -10,8 +10,8 @@
 
 pub mod render_item_plugin;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use chunk::cascade::CascadeChunk;
 use procedural_common::NUMERIC_SURFACE_EPSILON;
 use render_item::{
@@ -107,7 +107,7 @@ impl IdentifiedMesh for TaperedCylinder {
 mod tests {
 	use super::*;
 	use anyhow::Result;
-	use bevy::math::bounding::BoundingVolume;
+	use bevy::shape::BoundingVolume;
 
 	#[test]
 	fn axis_point_inside_leaves_negative_distance() -> Result<()> {

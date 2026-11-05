@@ -3,30 +3,30 @@
 // view-facing silhouette, opacity breakup from the start.
 //---------------------------------------------------------
 
-#import bevy_pbr::{
-    mesh_functions,
-    forward_io::{Vertex, VertexOutput},
-    view_transformations::position_world_to_clip,
-    mesh_view_bindings::{view, globals},
-}
-#import bevy_core_pipeline::tonemapping::tone_mapping
+import bevy_pbr::render::mesh_functions;
+import bevy_pbr::render::forward_io::{Vertex, UncompressedVertex, decompress_vertex};
+import bevy_pbr::render::forward_io::VertexOutput;
+import bevy_pbr::render::view_transformations::position_world_to_clip;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::mesh_view_bindings::globals;
+import bevy_core_pipeline::tonemapping::tone_mapping;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> params: vec4<f32>;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(1)
+@group(constants::MATERIAL_BIND_GROUP) @binding(1)
 var<uniform> tint: vec4<f32>;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(2)
+@group(constants::MATERIAL_BIND_GROUP) @binding(2)
 var<uniform> extras: vec4<f32>;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(3)
+@group(constants::MATERIAL_BIND_GROUP) @binding(3)
 var<uniform> color_hot: vec4<f32>;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(4)
+@group(constants::MATERIAL_BIND_GROUP) @binding(4)
 var<uniform> color_mid: vec4<f32>;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(5)
+@group(constants::MATERIAL_BIND_GROUP) @binding(5)
 var<uniform> color_cool: vec4<f32>;
 
 fn hash21(p: vec2<f32>) -> f32 {
@@ -84,12 +84,11 @@ fn rotate_y(p: vec3<f32>, a: f32) -> vec3<f32> {
     return vec3<f32>(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
 }
 
-fn object_pos(vertex: Vertex) -> vec3<f32> {
-#ifdef VERTEX_COLORS
+fn object_pos(vertex: UncompressedVertex) -> vec3<f32> {
+    @if(VERTEX_COLORS)
     return vertex.color.xyz;
-#else
+    @if(!VERTEX_COLORS)
     return vertex.position;
-#endif
 }
 
 fn deform(local: vec3<f32>, age_n: f32) -> vec3<f32> {
@@ -123,7 +122,8 @@ fn deform_normal(local: vec3<f32>, age_n: f32, n: vec3<f32>, p0: vec3<f32>) -> v
 }
 
 @vertex
-fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
+fn vertex(packed_vertex: Vertex) -> VertexOutput {
+    let vertex_no_morph = decompress_vertex(packed_vertex, packed_vertex.instance_index);
     var out: VertexOutput;
     var vertex = vertex_no_morph;
     let world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
@@ -131,44 +131,37 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     let local0 = object_pos(vertex);
     let local = deform(local0, age_n);
     let n_local = deform_normal(local0, age_n, vertex.normal, local);
-#ifdef VERTEX_NORMALS
+    @if(VERTEX_NORMALS)
     out.world_normal = mesh_functions::mesh_normal_local_to_world(
         n_local,
         vertex_no_morph.instance_index,
     );
-#endif
-#ifdef VERTEX_POSITIONS
+    @if(VERTEX_POSITIONS)
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
         vec4<f32>(local, 1.0),
     );
+    @if(VERTEX_POSITIONS)
     out.position = position_world_to_clip(out.world_position.xyz);
-#endif
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     out.uv = vertex.uv;
-#endif
-#ifdef VERTEX_UVS_B
+    @if(VERTEX_UVS_B)
     out.uv_b = vertex.uv_b;
-#endif
-#ifdef VERTEX_TANGENTS
+    @if(VERTEX_TANGENTS)
     out.world_tangent = mesh_functions::mesh_tangent_local_to_world(
         world_from_local,
         vertex.tangent,
         vertex_no_morph.instance_index,
     );
-#endif
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     out.color = vec4<f32>(local, 1.0);
-#endif
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex_no_morph.instance_index;
-#endif
-#ifdef VISIBILITY_RANGE_DITHER
+    @if(VISIBILITY_RANGE_DITHER)
     out.visibility_range_dither = mesh_functions::get_visibility_range_dither_level(
         vertex_no_morph.instance_index,
         world_from_local[3],
     );
-#endif
     return out;
 }
 
@@ -214,11 +207,10 @@ fn shade_flash(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>, age_n: f32) 
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let view_dir = normalize(view.world_position.xyz - mesh.world_position.xyz);
     let n = normalize(mesh.world_normal);
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     let local = mesh.color.xyz;
-#else
+    @if(!VERTEX_COLORS)
     let local = vec3<f32>(0.0);
-#endif
     let age_n = saturate(params.x / max(params.y, 1e-3));
     var shaded: vec4<f32>;
     if params.w > 1.5 {

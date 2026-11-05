@@ -122,8 +122,8 @@ fn full_capsule_can_contact_a_neighboring_creased_terrain_triangle() -> anyhow::
 
 #[test]
 fn collinear_mesh_triangle_does_not_claim_volume_above_retained_support() -> anyhow::Result<()> {
-	use crate::PlacementSupportHit;
 	use crate::actor::handoff::SupportGeometry;
+	use crate::PlacementSupportHit;
 	use bevy::ecs::system::SystemState;
 
 	let mut app = app();
@@ -140,10 +140,10 @@ fn collinear_mesh_triangle_does_not_claim_volume_above_retained_support() -> any
 		vec![[0, 2, 1], [0, 3, 2], [4, 5, 6]],
 		TrimeshFlags::MERGE_DUPLICATE_VERTICES,
 	)?;
-	// Parry's degenerate-triangle point query reports interior at this
-	// off-surface point inside the AABB of a diagonal line.
+	// This off-surface point lies inside the diagonal line's AABB but outside
+	// the mesh. Avian 0.8's Parry query now classifies it correctly.
 	let above_floor = Vec3::Y * 0.05;
-	assert!(mesh.contains_point(Vec3::ZERO, Quat::IDENTITY, above_floor));
+	assert!(!mesh.contains_point(Vec3::ZERO, Quat::IDENTITY, above_floor));
 	let line_direction = Vec3::ONE.normalize();
 	assert!(above_floor.cross(line_direction).length() > 0.03);
 	let floor = app
@@ -175,8 +175,8 @@ fn collinear_mesh_triangle_does_not_claim_volume_above_retained_support() -> any
 
 #[test]
 fn oriented_closed_triangle_mesh_retains_solid_containment_guard() -> anyhow::Result<()> {
-	use crate::PlacementSupportHit;
 	use crate::actor::handoff::{PoseRejection, SupportGeometry};
+	use crate::PlacementSupportHit;
 	use bevy::ecs::system::SystemState;
 
 	let mut app = app();

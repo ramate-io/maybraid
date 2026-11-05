@@ -3,7 +3,7 @@ use std::any::TypeId;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 
 use crate::gen::{Id, Version};
 
@@ -71,8 +71,7 @@ impl HcsgStorage {
 		self.clear_evictions();
 		self.0.top_rebuilds.store(0, Ordering::Relaxed);
 		self.0.nested_rebuilds.store(0, Ordering::Relaxed);
-		let stores: Vec<Arc<dyn ErasedStore>> =
-			self.0.read_stores().values().cloned().collect();
+		let stores: Vec<Arc<dyn ErasedStore>> = self.0.read_stores().values().cloned().collect();
 		for store in stores {
 			store.reset(self.stamp());
 		}

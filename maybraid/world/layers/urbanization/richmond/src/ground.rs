@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
+use bevy::shape::Aabb3d;
 use durham::{Durham, Terrain};
 use lod::hcsg::{self, GenerationContext};
 use procedural_common::Bounds2;

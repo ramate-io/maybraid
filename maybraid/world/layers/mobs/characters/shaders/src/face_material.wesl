@@ -3,18 +3,21 @@
 // Kind: 0 eye, 1 mouth. Phase = globals.time + instance seed.
 //---------------------------------------------------------
 
-#import bevy_pbr::{
-    mesh_bindings::mesh,
-    mesh_functions,
-    skinning,
-    morph::{morph_position, morph_normal, morph_tangent},
-    forward_io::Vertex,
-    view_transformations::position_world_to_clip,
-    mesh_view_bindings::{view, globals},
-    pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
-    pbr_functions as fns,
-}
-#import bevy_core_pipeline::tonemapping::tone_mapping
+import bevy_pbr::render::mesh_bindings::mesh;
+import bevy_pbr::render::mesh_functions;
+import bevy_pbr::render::skinning;
+import bevy_pbr::render::morph::morph_position;
+import bevy_pbr::render::morph::morph_normal;
+import bevy_pbr::render::morph::morph_tangent;
+import bevy_pbr::render::forward_io::{Vertex, UncompressedVertex, decompress_vertex};
+import bevy_pbr::render::view_transformations::position_world_to_clip;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::mesh_view_bindings::globals;
+import bevy_pbr::render::pbr_types::PbrInput;
+import bevy_pbr::render::pbr_types::pbr_input_new;
+import bevy_pbr::render::pbr_types::STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT;
+import bevy_pbr::render::pbr_functions as fns;
+import bevy_core_pipeline::tonemapping::tone_mapping;
 
 struct FaceMaterialUniform {
     colors: array<vec4<f32>, 8>,
@@ -26,7 +29,7 @@ struct FaceMaterialUniform {
     _pad: vec2<u32>,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> material: FaceMaterialUniform;
 
 const KIND_EYE: u32 = 0u;
@@ -36,15 +39,12 @@ struct FaceVertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) world_position: vec4<f32>,
     @location(1) world_normal: vec3<f32>,
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     @location(2) uv: vec2<f32>,
-#endif
-#ifdef VERTEX_TANGENTS
+    @if(VERTEX_TANGENTS)
     @location(4) world_tangent: vec4<f32>,
-#endif
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     @location(6) @interpolate(flat) instance_index: u32,
-#endif
     @location(8) local_pos: vec3<f32>,
     @location(9) blink: f32,
 }
@@ -222,39 +222,37 @@ fn mouth_look(local_pos: vec3<f32>, open: f32) -> vec3<f32> {
     return tint;
 }
 
-#ifdef MORPH_TARGETS
-fn morph_vertex(vertex_in: Vertex, instance_index: u32) -> Vertex {
+@if(MORPH_TARGETS)
+fn morph_vertex(vertex_in: UncompressedVertex, instance_index: u32) -> UncompressedVertex {
     var vertex = vertex_in;
     let first_vertex = mesh[instance_index].first_vertex_index;
     let vertex_index = vertex.index - first_vertex;
 
-    let weight_count = bevy_pbr::morph::layer_count(instance_index);
+    let morph_descriptor_index = mesh[instance_index].morph_descriptor_index;
+    let weight_count = bevy_pbr::render::morph::layer_count(morph_descriptor_index);
     for (var i: u32 = 0u; i < weight_count; i++) {
-        let weight = bevy_pbr::morph::weight_at(i, instance_index);
+        let weight = bevy_pbr::render::morph::weight_at(i, morph_descriptor_index);
         if weight == 0.0 {
             continue;
         }
-        vertex.position += weight * morph_position(vertex_index, i, instance_index);
-#ifdef VERTEX_NORMALS
-        vertex.normal += weight * morph_normal(vertex_index, i, instance_index);
-#endif
-#ifdef VERTEX_TANGENTS
-        vertex.tangent += vec4(weight * morph_tangent(vertex_index, i, instance_index), 0.0);
-#endif
+        vertex.position += weight * morph_position(vertex_index, i, morph_descriptor_index);
+        @if(VERTEX_NORMALS)
+        vertex.normal += weight * morph_normal(vertex_index, i, morph_descriptor_index);
+        @if(VERTEX_TANGENTS)
+        vertex.tangent += vec4(weight * morph_tangent(vertex_index, i, morph_descriptor_index), 0.0);
     }
     return vertex;
 }
-#endif
 
 @vertex
-fn vertex(vertex_no_morph: Vertex) -> FaceVertexOutput {
+fn vertex(packed_vertex: Vertex) -> FaceVertexOutput {
+    let vertex_no_morph = decompress_vertex(packed_vertex, packed_vertex.instance_index);
     var out: FaceVertexOutput;
 
-#ifdef MORPH_TARGETS
+    @if(MORPH_TARGETS)
     var vertex = morph_vertex(vertex_no_morph, vertex_no_morph.instance_index);
-#else
+    @if(!MORPH_TARGETS)
     var vertex = vertex_no_morph;
-#endif
 
     let mesh_world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
     let seed = face_seed(vertex_no_morph.instance_index);
@@ -270,26 +268,22 @@ fn vertex(vertex_no_morph: Vertex) -> FaceVertexOutput {
     }
     out.blink = amount;
 
-#ifdef SKINNED
+    @if(SKINNED)
     var world_from_local = skinning::skin_model(
         vertex.joint_indices,
         vertex.joint_weights,
         vertex_no_morph.instance_index
     );
-#else
+    @if(!SKINNED)
     var world_from_local = mesh_world_from_local;
-#endif
 
-#ifdef VERTEX_NORMALS
-#ifdef SKINNED
+    @if(VERTEX_NORMALS && SKINNED)
     out.world_normal = skinning::skin_normals(world_from_local, vertex.normal);
-#else
+    @if(VERTEX_NORMALS && !SKINNED)
     out.world_normal = mesh_functions::mesh_normal_local_to_world(
         vertex.normal,
         vertex_no_morph.instance_index
     );
-#endif
-#endif
 
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
@@ -297,21 +291,18 @@ fn vertex(vertex_no_morph: Vertex) -> FaceVertexOutput {
     );
     out.position = position_world_to_clip(out.world_position.xyz);
 
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     out.uv = vertex.uv;
-#endif
 
-#ifdef VERTEX_TANGENTS
+    @if(VERTEX_TANGENTS)
     out.world_tangent = mesh_functions::mesh_tangent_local_to_world(
         world_from_local,
         vertex.tangent,
         vertex_no_morph.instance_index
     );
-#endif
 
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex_no_morph.instance_index;
-#endif
 
     return out;
 }

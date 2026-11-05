@@ -5,6 +5,7 @@
 //! carried on the nodes.
 
 use bevy::prelude::*;
+use bevy::ui_widgets::Button;
 use character_ui_menu::{
 	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode, OrderedEquipmentRow,
 	PreviewColor, SectionOpen, SelectChoice, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
@@ -86,6 +87,7 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
 						for choice in &group.choices {
 							row.spawn((
 								Button,
+								bevy::picking::hover::Hovered::default(),
 								select_tile_node(),
 								BackgroundColor(if choice.selected { ACTIVE } else { INACTIVE }),
 								crate::widgets::MenuButton(choice.event),
@@ -235,6 +237,7 @@ impl BevyMenuSink {
 				section
 					.spawn((
 						Button,
+						bevy::picking::hover::Hovered::default(),
 						Node {
 							min_width: Val::Px(28.0),
 							height: Val::Px(crate::widgets::BUTTON_HEIGHT),
@@ -455,6 +458,7 @@ fn swatch_row<E: Copy + Send + Sync + 'static>(
 		for choice in choices {
 			row.spawn((
 				Button,
+				bevy::picking::hover::Hovered::default(),
 				swatch_node(choice.selected),
 				BorderColor::all(if choice.selected { Color::WHITE } else { MUTED }),
 				BackgroundColor(color_from_hex(choice.color_hex)),
@@ -472,6 +476,7 @@ fn select_row<E: Copy + Send + Sync + 'static>(
 		for choice in choices {
 			row.spawn((
 				Button,
+				bevy::picking::hover::Hovered::default(),
 				select_tile_node(),
 				BackgroundColor(if choice.selected { ACTIVE } else { INACTIVE }),
 				crate::widgets::MenuButton(choice.event),

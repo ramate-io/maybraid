@@ -1,6 +1,6 @@
 //! Dining room plan packer: host-scaled table + optional filler.
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FitError};

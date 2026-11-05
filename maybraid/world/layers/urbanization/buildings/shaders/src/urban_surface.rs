@@ -32,12 +32,12 @@ pub const KIND_STONE: u32 = 5;
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_STUCCO_COLOR: Vec4 = Vec4::new(0.78, 0.72, 0.62, 1.0);
 
-/// Registers embedded **`urban_surface.wgsl`** and [`MaterialPlugin`].
+/// Registers embedded **`urban_surface.wesl`** and [`MaterialPlugin`].
 pub struct UrbanSurfaceMaterialPlugin;
 
 impl Plugin for UrbanSurfaceMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "urban_surface.wgsl");
+		embedded_asset!(app, "urban_surface.wesl");
 		app.add_plugins(MaterialPlugin::<UrbanSurfaceMaterial>::default());
 	}
 }
@@ -167,7 +167,7 @@ impl Default for UrbanSurfaceMaterial {
 
 impl Material for UrbanSurfaceMaterial {
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "urban_surface.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "urban_surface.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {

@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::text::Justify;
+use bevy::ui_widgets::Button;
 
 use crate::theme::{ITEM_FONT_SIZE, PANEL_HEADER_FONT_SIZE, PANEL_VALUE_FONT_SIZE, TEXT_YELLOW};
 
@@ -21,6 +22,7 @@ pub fn spawn_text_button(
 	parent
 		.spawn((
 			Button,
+			bevy::picking::hover::Hovered::default(),
 			HoverTile { equipped: false, preserve_fill: false, face: TEXT_YELLOW },
 			extra,
 			Node {
@@ -57,6 +59,7 @@ pub fn spawn_hud_action(
 	parent
 		.spawn((
 			Button,
+			bevy::picking::hover::Hovered::default(),
 			CursorRow,
 			extra,
 			Node {
@@ -87,6 +90,7 @@ pub fn spawn_corner_action(
 	parent
 		.spawn((
 			Button,
+			bevy::picking::hover::Hovered::default(),
 			CursorRow,
 			extra,
 			Node {

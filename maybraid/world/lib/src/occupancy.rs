@@ -462,7 +462,7 @@ mod tests {
 	use std::time::Duration;
 
 	use bevy::ecs::system::RunSystemOnce;
-	use bevy::math::bounding::Aabb3d;
+	use bevy::shape::Aabb3d;
 	use chico::{ForestExtent, ForestSelection, LayeringKind};
 	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
 	use lubikans::{

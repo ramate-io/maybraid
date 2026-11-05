@@ -12,8 +12,8 @@
 //! is truncated to fit (up to [`OPENING_SPAN_TRUNCATE_MAX`]); larger overruns
 //! reject that edge so a better face can win — or the opening goes unmapped.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb3d;
 
 use crate::openings::{MappedOpenings, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;

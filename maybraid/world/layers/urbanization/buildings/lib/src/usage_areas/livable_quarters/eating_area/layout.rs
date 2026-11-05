@@ -1,7 +1,7 @@
 //! Pack kitchen + dining side-by-side, or kitchen alone.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d, BoundingVolume};
 use procedural_common::{
 	aabb2_area, aabb3_to_plan, Aabb2dPack, NoiseParams, PlanAxes, PlanOpeningFace,
 };

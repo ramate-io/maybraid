@@ -3,8 +3,8 @@
 //! Shared by storey typologies that pack multi-cell apartments (or similar
 //! program groups) from residual rectangles after halls/shafts are carved.
 
-use bevy_math::bounding::Aabb2d;
 use bevy_math::Vec2;
+use bevy_shape::Aabb2d;
 use procedural_common::{aabb2_area, Aabb2dPack};
 
 use crate::usage_areas::plan_access::{GroupFootprint, PlanAccessParams};

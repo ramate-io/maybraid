@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 
 use crate::error::SpatialIndexError;
 

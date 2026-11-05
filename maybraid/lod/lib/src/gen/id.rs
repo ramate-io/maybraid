@@ -1,4 +1,4 @@
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 use core::cmp::Ordering;
 
 /// Spatial cell bounds for procedural origin ids.

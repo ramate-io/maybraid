@@ -74,7 +74,7 @@ fn shaft_can_remove_a_slab_piece() {
 	openings.insert(
 		"shaft",
 		Opening::new(
-			bevy_math::bounding::Aabb3d::from_min_max(
+			bevy_shape::Aabb3d::from_min_max(
 				Vec3::new(-10.0, -0.5, 2.0),
 				Vec3::new(10.0, 0.5, 10.0),
 			),

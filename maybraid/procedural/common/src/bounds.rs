@@ -5,8 +5,8 @@
 //! 2. [`max_empty_rect2`] / [`max_empty_rect2_with_clearance`] for the largest free box.
 //! 3. Strip down with [`inset_aabb2`] / [`clamp_min_size2`] as domain policy requires.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 
 const EPS: f32 = 1e-4;
 const MIN_SPAN: f32 = 1e-3;

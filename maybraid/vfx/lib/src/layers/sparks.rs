@@ -45,11 +45,11 @@ pub fn compile(effects: &mut Assets<EffectAsset>, taper: Handle<Image>) -> Parti
 		Vec3::new(0.24, 0.036, 1.0),
 		Vec3::new(0.10, 0.014, 1.0),
 	);
-	let texture_slot = writer.lit(0u32).expr();
+	let texture_slot = 0;
 	let color = value_lifetime_gradient(&[(0.0, 1.0), (0.4, 1.0), (1.0, 0.0)]);
 
 	let mut module = writer.finish();
-	module.add_texture_slot("spark");
+	module.add_texture_slot("spark", bevy_hanabi::SlotDimension::D2);
 
 	let effect = effects.add(
 		EffectAsset::new(SPARKS_CAPACITY, SpawnerSettings::once(SPARKS_COUNT.into()), module)

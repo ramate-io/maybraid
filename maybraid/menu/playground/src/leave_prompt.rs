@@ -2,22 +2,23 @@
 
 use bevy::prelude::*;
 use bevy::text::Justify;
+use bevy::ui_widgets::Button;
 use character_persist::SaveRoot;
 use maybraid_virtual_pad_controller::PadButton;
 use menu_components::theme::{
-	HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW, menu_list_panel_node, menu_region_wash,
+	menu_list_panel_node, menu_region_wash, HEADER_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
 };
 use menu_components::{
-	HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, MenuModal, MenuModalDismiss, MenuModalId,
-	MenuModalLayer, MenuModalStack, MenuModalSystems, ScreenBackPressed, TextMenuSystems,
-	emit_short_text_submit_on_confirm, spawn_hud_action, spawn_hud_text,
+	emit_short_text_submit_on_confirm, spawn_hud_action, spawn_hud_text, HudFonts, HudMenu,
+	HudMenuItem, HudOverlayMenu, MenuModal, MenuModalDismiss, MenuModalId, MenuModalLayer,
+	MenuModalStack, MenuModalSystems, ScreenBackPressed, TextMenuSystems,
 };
 use menu_components::{MenuNav, MenuNavImpulse, MenuNavPad};
 
-use crate::character::{CharacterEditBaseline, CharacterMenuState, CharacterScreen, save_chrome};
+use crate::character::{save_chrome, CharacterEditBaseline, CharacterMenuState, CharacterScreen};
 use crate::session::{
-	CharacterEditorReturn, EditingCharacter, leave_character_editor, save_editing_character,
-	set_active_character,
+	leave_character_editor, save_editing_character, set_active_character, CharacterEditorReturn,
+	EditingCharacter,
 };
 
 /// Save-and-exit or discard-and-exit while the editor HUD is up.
@@ -145,7 +146,11 @@ pub fn character_leave_decision(
 	kind: CharacterLeaveKind,
 	needs_save: bool,
 ) -> CharacterLeaveDecision {
-	if needs_save { CharacterLeaveDecision::Prompt(kind) } else { CharacterLeaveDecision::Leave }
+	if needs_save {
+		CharacterLeaveDecision::Prompt(kind)
+	} else {
+		CharacterLeaveDecision::Leave
+	}
 }
 
 fn intercept_character_leave_edges(
@@ -279,6 +284,7 @@ fn spawn_leave_prompt(
 		.with_children(|root| {
 			root.spawn((
 				Button,
+				bevy::picking::hover::Hovered::default(),
 				LeavePromptCancel,
 				Node {
 					position_type: PositionType::Absolute,
@@ -346,7 +352,7 @@ fn prompt_copy(kind: CharacterLeaveKind) -> (&'static str, &'static str) {
 }
 
 fn on_leave_prompt_click(
-	mut click: On<Pointer<Click>>,
+	mut click: On<PointerClick>,
 	confirms: Query<(), With<LeavePromptConfirm>>,
 	cancels: Query<(), With<LeavePromptCancel>>,
 	child_of: Query<&ChildOf>,
@@ -519,7 +525,7 @@ fn close_leave_prompt(
 }
 
 fn pointer_target(
-	click: &On<Pointer<Click>>,
+	click: &On<PointerClick>,
 	child_of: &Query<&ChildOf>,
 	matches: impl Fn(Entity) -> bool,
 ) -> Option<Entity> {
@@ -536,21 +542,21 @@ fn pointer_target(
 #[cfg(test)]
 mod tests {
 	use super::{
-		CharacterLeaveDecision, CharacterLeaveKind, CharacterLeavePrompt, CharacterLeavePromptMenu,
 		character_leave_decision, character_leave_edge, close_leave_on_modal_dismiss,
-		intercept_character_leave_edges,
+		intercept_character_leave_edges, CharacterLeaveDecision, CharacterLeaveKind,
+		CharacterLeavePrompt, CharacterLeavePromptMenu,
 	};
 	use crate::character::{CharacterEditBaseline, CharacterMenuState, CharacterScreen};
 	use crate::session::{
-		CharacterEditorExit, CharacterEditorReturn, EditingCharacter, finish_character_editor_exit,
+		finish_character_editor_exit, CharacterEditorExit, CharacterEditorReturn, EditingCharacter,
 	};
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
 	use character_items::Inventory;
 	use character_persist::{CharacterId, SaveRoot};
 	use menu_components::{
-		HudMenu, MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack, ScreenBackPressed,
-		consume_menu_modal_back, consume_screen_back,
+		consume_menu_modal_back, consume_screen_back, HudMenu, MenuModalDismiss, MenuModalId,
+		MenuModalLayer, MenuModalStack, ScreenBackPressed,
 	};
 	use menu_components::{MenuNav, MenuNavImpulse, MenuNavPad};
 	use menu_screens::{InGameScreen, MenuScreen, RequestShowInGame};
@@ -799,11 +805,10 @@ mod tests {
 		app.update();
 		app.update();
 
-		assert!(
-			app.world()
-				.get_resource::<CharacterLeavePrompt>()
-				.is_some_and(|prompt| !prompt.is_open())
-		);
+		assert!(app
+			.world()
+			.get_resource::<CharacterLeavePrompt>()
+			.is_some_and(|prompt| !prompt.is_open()));
 		assert!(has_component::<CharacterScreen>(&mut app));
 		assert_eq!(
 			app.world().get_resource::<CharacterEditorReturn>().copied(),
@@ -827,11 +832,10 @@ mod tests {
 		assert!(app.world().get_resource::<CharacterEditorReturn>().is_none());
 		assert!(app.world().get_resource::<CharacterEditorExit>().is_none());
 		assert_eq!(app.world().resource::<CharacterMenuState>().0.name, "Roamer");
-		assert!(
-			app.world()
-				.get_resource::<CharacterLeavePrompt>()
-				.is_some_and(|prompt| !prompt.is_open())
-		);
+		assert!(app
+			.world()
+			.get_resource::<CharacterLeavePrompt>()
+			.is_some_and(|prompt| !prompt.is_open()));
 	}
 
 	#[test]

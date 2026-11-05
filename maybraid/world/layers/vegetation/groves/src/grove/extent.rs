@@ -1,7 +1,7 @@
 //! Grove LOD footprint ([RFC-170 §3.1.3], [RFC-183 §3.4.2.3]).
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb3d;
 use gimme_gen::Cell;
 
 /// Default square grove preview / isolation-render footprint in metres on X and Z.

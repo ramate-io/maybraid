@@ -208,7 +208,7 @@ mod tests {
 		let flow = world.resource::<NextState<GameFlow>>();
 		let mode = world.resource::<NextState<ActiveGenerationMode>>();
 		let flow_ok = matches!(flow, NextState::Pending(GameFlow::World));
-		let mode_ok = matches!(mode, NextState::PendingIfNeq(mode) if mode.is::<Discovery>());
+		let mode_ok = matches!(mode, NextState::PendingIfDifferent(mode) if mode.is::<Discovery>());
 		if !flow_ok || !mode_ok {
 			return Err(anyhow::anyhow!("unveil requested flow {flow:?} mode {mode:?}"));
 		}
@@ -243,8 +243,8 @@ mod tests {
 		world
 	}
 
-	fn near_region() -> bevy::math::bounding::Aabb3d {
-		bevy::math::bounding::Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(4.0, 1.0, 1.0))
+	fn near_region() -> bevy::shape::Aabb3d {
+		bevy::shape::Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(4.0, 1.0, 1.0))
 	}
 
 	fn unveiled(world: &World) -> bool {
@@ -254,12 +254,7 @@ mod tests {
 	#[test]
 	fn finish_world_loading_does_not_unveil_while_near_is_outstanding() -> anyhow::Result<()> {
 		let demand = HcsgDemand::default();
-		demand.subscribe::<UnitXTile>(
-			None,
-			vec![near_region()],
-			None,
-			lod::hcsg::HcsgClass::Near,
-		);
+		demand.subscribe::<UnitXTile>(None, vec![near_region()], None, lod::hcsg::HcsgClass::Near);
 		let mut world = gated_world(demand);
 		world
 			.run_system_once(finish_world_loading)

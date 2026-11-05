@@ -1,7 +1,7 @@
 //! Seeded ornamental landmarks used at the center of a temple complex.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use building_components::{
 	BuildingComponents, BuildingStructuralLodProbe, FloorNode, JointNode, Layers, PanelNode,
 	PartitionNode, StairNode,

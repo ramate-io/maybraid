@@ -91,14 +91,14 @@ fn split_stations(along: f32, seed: u64) -> (usize, Option<f32>) {
 	}
 }
 
-fn last_slab(node: &FurnitureNode) -> bevy::math::bounding::Aabb3d {
+fn last_slab(node: &FurnitureNode) -> bevy::shape::Aabb3d {
 	let c = node.placement.translation;
 	let half = node.placement.scale * 0.5;
 	// Local scale may swap XZ under yaw; recover a conservative world slab.
 	let hx = half.x.max(half.z);
 	let hz = half.x.min(half.z).max(0.15);
 	floor_height_aabb(
-		&bevy::math::bounding::Aabb3d::from_min_max(
+		&bevy::shape::Aabb3d::from_min_max(
 			Vec3::new(c.x - hx, c.y - half.y, c.z - hz),
 			Vec3::new(c.x + hx, c.y + half.y, c.z + hz),
 		),
@@ -107,8 +107,8 @@ fn last_slab(node: &FurnitureNode) -> bevy::math::bounding::Aabb3d {
 }
 
 fn sit_ons_on(
-	slab: &bevy::math::bounding::Aabb3d,
-	host: &bevy::math::bounding::Aabb3d,
+	slab: &bevy::shape::Aabb3d,
+	host: &bevy::shape::Aabb3d,
 	wall: FurnitureAbutment,
 	seed: u64,
 ) -> Vec<FurnitureNode> {
@@ -134,7 +134,7 @@ fn sit_ons_on(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy::math::bounding::Aabb3d;
+	use bevy::shape::Aabb3d;
 	use building_components::{FurnitureGeometry, FurnitureUsageNode, Placement};
 	use std::f32::consts::PI;
 

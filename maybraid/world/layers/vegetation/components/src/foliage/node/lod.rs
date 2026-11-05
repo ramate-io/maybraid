@@ -4,8 +4,8 @@
 //! [`super::present`] — one chunk per node, whether the collection merged or
 //! instanced its kits.
 
-use bevy::math::bounding::Aabb3d;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{
 	cull_offset_bands_from_factor, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus,
@@ -26,8 +26,8 @@ impl LodScene for FoliageNode {
 		let host = self.clone();
 		let probe = self.probe();
 		bsn! {
-			template_value(host)
-			template_value(probe)
+			~{host}
+			~{probe}
 		}
 	}
 

@@ -1,7 +1,7 @@
 //! Generated 100 m grove on one forest layer.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Vec3;
+use bevy::shape::Aabb3d;
 use lod::gen::Id;
 use vegetation_groves::{GroveExtent, GroveWorldSample};
 

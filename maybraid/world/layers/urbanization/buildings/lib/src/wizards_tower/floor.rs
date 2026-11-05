@@ -6,7 +6,7 @@
 //! also carries a lantern-like point light (mesh TBD).
 
 use bevy::prelude::{Color, PointLight, Transform, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use bevy_math::Vec3;
 use building_components::floors::FloorNode;
 use building_components::partitions::PartitionStyle;
@@ -198,7 +198,7 @@ impl WizardsTowerFloor {
 				range: {range},
 				shadow_maps_enabled: false,
 			}
-			template_value(transform)
+			~{transform}
 			Visibility::default()
 		}
 	}

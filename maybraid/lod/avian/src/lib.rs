@@ -17,8 +17,8 @@ pub use lod_gimme::{
 
 use avian3d::prelude::{Collider, SpatialQuery, SpatialQueryFilter};
 use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use lod::scene::SemanticLodScene;
 use lod::{LodSceneHost, LodSceneHostIndex, LodSceneRegionIndex};
 

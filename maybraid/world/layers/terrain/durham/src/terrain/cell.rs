@@ -1,8 +1,8 @@
 //! Terrain cell size and origin tiling helpers.
 
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{IVec2, UVec2, Vec3};
 use bevy::prelude::*;
+use bevy::shape::{Aabb3d, IntersectsVolume};
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext};
 use lod::LodSceneLevel;
@@ -65,7 +65,7 @@ macro_rules! derived_universal_scheme {
 			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
 				_cx: &mut lod::hcsg::GenerationContext,
-				_region: bevy::math::bounding::Aabb3d,
+				_region: bevy::shape::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
 				vec![lod::gen::OriginalId::universal()]
 			}
@@ -73,7 +73,7 @@ macro_rules! derived_universal_scheme {
 			fn build_with_id(
 				$cx: &mut lod::hcsg::GenerationContext,
 				id: lod::gen::Id,
-			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+			) -> Option<(Self, bevy::shape::Aabb3d)> {
 				if id != lod::gen::Id::Universal {
 					return None;
 				}
