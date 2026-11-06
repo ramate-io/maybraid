@@ -7,11 +7,8 @@
 //! reusable flash / fireball / smoke / sparks layers and the composed
 //! `fiery_explosion`.
 
-pub mod assets;
-pub mod atlas;
 pub mod composition;
 pub mod effects;
-pub mod flipbook;
 pub mod layers;
 pub mod library;
 pub mod lifecycle;
@@ -22,7 +19,6 @@ pub mod parts;
 pub mod seed;
 pub mod spawn;
 
-pub use assets::{FlipbookAsset, VfxFlipbooks};
 pub use composition::{
 	EffectDefinition, EffectLayer, EffectPart, EffectRecipe, FlipbookPart, LightPulse, LobeKind,
 	LobeSpec, MeshPart, ParticlePart, ParticleShade, ScaleBounds, DEFAULT_SCALE_MAX,
@@ -37,6 +33,7 @@ pub use palette::ExplosionPalette;
 pub use parts::flipbook_card::{DustMaterial, DustPlugin, VfxDust};
 pub use parts::lobe::{LobeMaterial, LobeMaterialPlugin};
 pub use parts::packaged::{PackagedFlipbook, PackagedVfxPlugin, StaticVolume};
+pub use parts::particle::{FlipbookAsset, VfxFlipbooks};
 pub use spawn::{
 	spawn_vfx, Effect, SpawnVfxExt, Vfx, VfxInstance, VfxSpawn, MAX_PLAYBACK, MIN_PLAYBACK,
 };

@@ -55,13 +55,13 @@ the primitive:
 | `flipbook_card` | `FlipbookPart` | Capture-plane renderer for packaged KTX |
 | `packaged` | assets for `FlipbookPart` | `.flipbook.json` / `.volume.json` loaders and manifests |
 | `lobe` | `MeshPart` | Overlapping mesh volumes and `LobeMaterial` |
-| `particle` | `ParticlePart` | Hanabi instance properties, launch math, and spawn |
+| `particle` | `ParticlePart` | Hanabi instance properties, procedural sprite atlases, and spawn |
+
+`particle/flipbook.rs` is Hanabi `SPRITE_INDEX` over lifetime for wisp cards.
+That pipeline is not packaged KTX. Never merge it with `flipbook_card`.
 
 Do **not** put these in `parts/`:
 
-- Hanabi `flipbook.rs`, `assets.rs`, and `atlas.rs` — procedural sprite atlases
-  for particle wisps. That pipeline is not packaged KTX. Never merge it with
-  `flipbook_card`. Nest under `particle` later if the crate-root list grows.
 - `LightPulse` — a short `PointLight` fade, dispatched from `spawn.rs`.
 - Host types (`VfxSpawn`, `VfxInstance`, membership, lifecycle clocks).
 
@@ -94,6 +94,10 @@ lib/src/parts/lobe.rs
 lib/src/parts/lobe/material.rs
 lib/src/parts/packaged.rs
 lib/src/parts/packaged/manifest.rs
+lib/src/parts/particle.rs
+lib/src/parts/particle/assets.rs
+lib/src/parts/particle/atlas.rs
+lib/src/parts/particle/flipbook.rs
 ```
 
 Bevy `embedded_asset!` paths follow `file!()`. After a move, update

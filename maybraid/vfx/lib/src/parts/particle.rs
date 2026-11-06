@@ -1,5 +1,11 @@
 //! Hanabi particle primitive: instance properties, launch math, and spawn.
 
+pub mod assets;
+pub mod atlas;
+pub mod flipbook;
+
+pub use assets::{FlipbookAsset, VfxFlipbooks};
+
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{

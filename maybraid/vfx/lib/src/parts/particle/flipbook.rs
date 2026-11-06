@@ -3,7 +3,7 @@
 use bevy_hanabi::prelude::{Attribute, ExprWriter, SetAttributeModifier, WriterExpr};
 use bevy_hanabi::ScalarType;
 
-use crate::assets::FlipbookAsset;
+use crate::parts::particle::assets::FlipbookAsset;
 
 /// `min(age / lifetime * frames, last_frame)` so the last puff stays visible.
 pub fn sprite_index_over_lifetime(writer: &ExprWriter, flipbook: &FlipbookAsset) -> WriterExpr {

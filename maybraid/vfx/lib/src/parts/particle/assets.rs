@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::atlas::{fire_cell, paint_atlas, paint_spark_taper, smoke_cell};
+use crate::parts::particle::atlas::{fire_cell, paint_atlas, paint_spark_taper, smoke_cell};
 
 /// Texture handle, atlas grid, frame count, and playback duration.
 #[derive(Clone, Debug)]

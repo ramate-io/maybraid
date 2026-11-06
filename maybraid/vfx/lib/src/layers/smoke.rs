@@ -8,12 +8,12 @@ use bevy_hanabi::prelude::{
 	ShapeDimension, SimulationSpace, SpawnerSettings,
 };
 
-use crate::assets::FlipbookAsset;
 use crate::composition::{
 	EffectDefinition, EffectLayer, LobeKind, LobeSpec, MeshPart, ParticlePart, ParticleShade,
 };
-use crate::flipbook::update_sprite_index;
 use crate::names::SMOKE;
+use crate::parts::particle::assets::FlipbookAsset;
+use crate::parts::particle::flipbook::update_sprite_index;
 use crate::parts::particle::{
 	add_instance_properties, init_lifetime, init_palette_color, init_smoke_velocity,
 	update_palette_color, update_scaled_size3, value_lifetime_gradient,
@@ -178,7 +178,7 @@ pub fn definition(mesh: MeshPart, wisps: ParticlePart) -> EffectDefinition {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::assets::smoke_flipbook;
+	use crate::parts::particle::assets::smoke_flipbook;
 	use crate::parts::particle::smoke_launch_velocity;
 
 	#[test]
