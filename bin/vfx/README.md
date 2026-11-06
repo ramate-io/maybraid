@@ -27,7 +27,7 @@ For an artist who has just authored an effect in Houdini:
    frame order consistent. Preserve the intended color space and alpha convention.
 2. Record the export contract: frame count and timing, atlas dimensions and
    gutters, view directions, capture size, pivot and bounds. Keep this metadata
-   with the local source images. The current `DustPart` renderer expects uniformly
+   with the local source images. The current capture-plane renderer expects uniformly
    timed frames and an evenly spaced ring of views at one elevation, with array
    layers in consecutive azimuth order.
 3. Pack those local atlases with KTX-Software into a KTX2 texture array, one layer
@@ -40,7 +40,7 @@ For an artist who has just authored an effect in Houdini:
    [existing flipbook manifest](../../maybraid/assets/vfx/dust/rolling_wave.flipbook.json)
    for the required fields. New source hashes describe the new local inputs;
    they do not require a Git commit to exist first.
-5. Wire the new manifest into a `DustPart`/effect definition and preview it in
+5. Wire the new manifest into a `FlipbookPart` / `Dust` recipe and preview it in
    `vfx-playground`. Check frame order, alpha edges, view transitions, pivot,
    timing and ground intersections. The current `show dust` preset loads
    `rolling_wave.flipbook.json`; it does not automatically discover new filenames.

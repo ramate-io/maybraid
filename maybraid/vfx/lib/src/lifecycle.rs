@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{CompiledParticleEffect, EffectSpawner, EffectSystems, SpawnerSettings};
 
-use crate::dust::{tick_dust, VfxDust};
+use crate::flipbook_card::{tick_dust, VfxDust};
 use crate::lobe_material::LobeMaterial;
 use crate::lobes::{lobe_transform, stamp_lobe_materials, VfxLobe};
 use crate::membership::{VfxInstanceMembers, VfxMemberOf};

@@ -142,6 +142,35 @@ impl FlipbookManifest {
 		Ok(())
 	}
 
+	/// Evenly spaced capture planes at one elevation, in consecutive azimuth order.
+	pub fn azimuth_ring(&self) -> Option<AzimuthRing> {
+		let first = self.views.first()?;
+		let step = 360.0 / self.views.len() as f32;
+		self.views.iter().enumerate().all(|(i, view)| {
+			view.layer == i as u32
+				&& (view.elevation_degrees - first.elevation_degrees).abs() < 1e-3
+				&& ((view.azimuth_degrees - first.azimuth_degrees).rem_euclid(360.0)
+					- i as f32 * step)
+					.abs() < 1e-3
+		})
+		.then_some(AzimuthRing {
+			elevation_radians: first.elevation_degrees.to_radians(),
+			first_azimuth_radians: first.azimuth_degrees.to_radians(),
+			view_count: self.views.len() as u32,
+		})
+	}
+
+	/// Frame pair, interpolation, and end-behavior opacity for a playback age.
+	pub fn clock_at(&self, age: f32) -> FlipbookClock {
+		let frame = self.frame_at(age);
+		FlipbookClock {
+			frame_0: frame.floor(),
+			frame_1: (frame.floor() + 1.0).min(self.frame_count.saturating_sub(1) as f32),
+			fract: frame.fract(),
+			opacity: self.opacity_at(age),
+		}
+	}
+
 	/// Samples start at zero; the clip ends at the final captured timestamp.
 	pub fn duration_seconds(&self) -> f32 {
 		self.frame_count.saturating_sub(1) as f32 / self.fps
@@ -181,6 +210,29 @@ impl FlipbookManifest {
 					.total_cmp(&b.direction().dot(local_direction))
 			})
 			.map_or(0, |view| view.layer)
+	}
+}
+
+/// Even azimuth ring used by the capture-plane flipbook renderer.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AzimuthRing {
+	pub elevation_radians: f32,
+	pub first_azimuth_radians: f32,
+	pub view_count: u32,
+}
+
+/// Material clock for one packaged flipbook age sample.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FlipbookClock {
+	pub frame_0: f32,
+	pub frame_1: f32,
+	pub fract: f32,
+	pub opacity: f32,
+}
+
+impl FlipbookClock {
+	pub fn time(self) -> Vec4 {
+		Vec4::new(self.frame_0, self.frame_1, self.fract, self.opacity)
 	}
 }
 

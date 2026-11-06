@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy_hanabi::EffectAsset;
 
-use crate::dust::DustPart;
+use crate::packaged::PackagedFlipbook;
 
 /// Which explosion colors a particle layer samples from the instance palette.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -117,10 +117,29 @@ impl MeshPart {
 	}
 }
 
-/// Concrete particle, light, or mesh variant owned by a layer.
+/// Shared packaged flipbook handle and proxy mesh. Duration is a fallback until the manifest loads.
+#[derive(Clone, Debug, Default)]
+pub struct FlipbookPart {
+	pub flipbook: Handle<PackagedFlipbook>,
+	pub mesh: Handle<Mesh>,
+	pub duration: f32,
+}
+
+impl FlipbookPart {
+	pub fn load(
+		server: &AssetServer,
+		path: impl Into<String>,
+		mesh: Handle<Mesh>,
+		duration: f32,
+	) -> Self {
+		Self { flipbook: server.load(path.into()), mesh, duration }
+	}
+}
+
+/// Concrete particle, light, mesh, or packaged flipbook variant owned by a layer.
 #[derive(Clone, Debug)]
 pub enum EffectPart {
-	Dust(DustPart),
+	Flipbook(FlipbookPart),
 	Particle(ParticlePart),
 	Light(LightPulse),
 	Mesh(MeshPart),
@@ -136,9 +155,9 @@ pub struct EffectLayer {
 }
 
 impl EffectLayer {
-	pub fn dust(part: DustPart) -> Self {
+	pub fn flipbook(part: FlipbookPart) -> Self {
 		Self {
-			part: EffectPart::Dust(part),
+			part: EffectPart::Flipbook(part),
 			delay: 0.0,
 			transform: Transform::IDENTITY,
 			scale: 1.0,
@@ -182,13 +201,18 @@ impl EffectLayer {
 		self
 	}
 
+	pub fn with_transform(mut self, transform: Transform) -> Self {
+		self.transform = transform;
+		self
+	}
+
 	pub fn duration(&self) -> f32 {
 		self.delay + self.part_lifetime()
 	}
 
 	pub fn part_lifetime(&self) -> f32 {
 		match &self.part {
-			EffectPart::Dust(part) => part.duration,
+			EffectPart::Flipbook(part) => part.duration,
 			EffectPart::Particle(part) => part.max_lifetime,
 			EffectPart::Light(pulse) => pulse.fade,
 			EffectPart::Mesh(part) => part.duration,
@@ -238,4 +262,9 @@ impl EffectDefinition {
 	pub fn duration(&self) -> f32 {
 		self.layers.iter().map(EffectLayer::duration).fold(0.0, f32::max)
 	}
+}
+
+/// Authored configuration that lowers into a flattened [`EffectDefinition`].
+pub trait EffectRecipe {
+	fn effect_definition(&self) -> EffectDefinition;
 }

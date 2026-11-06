@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 use game_commands::ui::GameCommandStatusText;
-use maybraid_vfx::{spawn_vfx, VfxLibrary, VfxSpawn};
+use maybraid_vfx::{
+	canonicalize_effect_name, spawn_vfx, Effect, VfxLibrary, VfxSpawn, DUST, FIERY_EXPLOSION,
+};
 
 use crate::commands::{LoopEnabled, PendingVfxShows, PreviewFreeze, SpreadOnce, VfxShowRequest};
 
@@ -56,7 +58,7 @@ pub fn apply_pending_shows(
 		let Some(definition) = library.get(&request.effect) else {
 			continue;
 		};
-		let spawn = burst(&mut commands, definition, &request);
+		let spawn = burst(&mut commands, &library, &definition, &request);
 		if looping.0 {
 			repeating.request = Some(VfxShowRequest { seed: spawn.seed, ..request.clone() });
 			repeating.wait = 0.0;
@@ -99,7 +101,7 @@ pub fn repeat_shown_effect(
 	let playback = request.playback.clamp(maybraid_vfx::MIN_PLAYBACK, maybraid_vfx::MAX_PLAYBACK);
 	if repeating.wait >= definition.duration() / playback + 0.45 {
 		repeating.wait = 0.0;
-		burst(&mut commands, definition, &request);
+		burst(&mut commands, &library, &definition, &request);
 	}
 }
 
@@ -121,10 +123,11 @@ pub fn pause_at_frozen_age(
 
 fn burst(
 	commands: &mut Commands,
+	library: &VfxLibrary,
 	definition: &maybraid_vfx::EffectDefinition,
 	request: &VfxShowRequest,
 ) -> VfxSpawn {
-	let origin = if definition.name == maybraid_vfx::dust::DUST { Vec3::ZERO } else { SHOW_ORIGIN };
+	let origin = if definition.name == DUST { Vec3::ZERO } else { SHOW_ORIGIN };
 	let spawn = VfxSpawn {
 		transform: Transform::from_translation(origin + Vec3::Z * request.distance),
 		scale: request.scale,
@@ -134,6 +137,19 @@ fn burst(
 		..default()
 	}
 	.resolved_for(definition);
-	spawn_vfx(commands, definition, spawn.clone());
+	match canonicalize_effect_name(&request.effect) {
+		Some(DUST) => {
+			commands.spawn_scene(Effect { recipe: library.dust.clone(), spawn: spawn.clone() });
+		}
+		Some(FIERY_EXPLOSION) => {
+			commands.spawn_scene(Effect {
+				recipe: library.fiery_explosion.clone(),
+				spawn: spawn.clone(),
+			});
+		}
+		_ => {
+			spawn_vfx(commands, definition, spawn.clone());
+		}
+	}
 	spawn
 }

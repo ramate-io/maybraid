@@ -1,4 +1,4 @@
-//! Shared eight-view baked dust. Only the small material clock belongs to an instance.
+//! Capture-plane renderer for packaged KTX flipbooks. Shared texture, per-instance clock.
 
 use bevy::asset::{embedded_asset, LoadState, RecursiveDependencyLoadState};
 use bevy::camera::visibility::NoFrustumCulling;
@@ -11,26 +11,12 @@ use bevy::render::render_resource::{
 };
 use bevy::shader::ShaderRef;
 
-use crate::composition::{EffectDefinition, EffectLayer};
+use crate::composition::FlipbookPart;
 use crate::membership::VfxMemberOf;
 use crate::packaged::{AlphaConvention, PackagedFlipbook};
 use crate::spawn::{VfxInstance, VfxLayerLife, VfxSpawn};
 
-pub const DUST: &str = "dust";
-
-/// Immutable baked data and proxy mesh shared by all instances of this layer.
-#[derive(Clone, Debug)]
-pub struct DustPart {
-	pub flipbook: Handle<PackagedFlipbook>,
-	pub mesh: Handle<Mesh>,
-	pub duration: f32,
-}
-
-impl DustPart {
-	pub fn definition(self) -> EffectDefinition {
-		EffectDefinition::new(DUST, [EffectLayer::dust(self)])
-	}
-
+impl FlipbookPart {
 	pub(crate) fn spawn(
 		&self,
 		commands: &mut Commands,
@@ -39,7 +25,7 @@ impl DustPart {
 		spawn: &VfxSpawn,
 	) {
 		commands.spawn((
-			Name::new("vfx-layer-dust"),
+			Name::new("vfx-layer-flipbook"),
 			ChildOf(parent),
 			VfxMemberOf(parent),
 			transform,
@@ -97,17 +83,7 @@ pub struct DustMaterial {
 impl DustMaterial {
 	/// This renderer blends a single evenly spaced ring of authored capture planes.
 	pub fn supports(asset: &PackagedFlipbook) -> bool {
-		let Some(first) = asset.manifest.views.first() else {
-			return false;
-		};
-		let step = 360.0 / asset.manifest.views.len() as f32;
-		asset.manifest.views.iter().enumerate().all(|(i, view)| {
-			view.layer == i as u32
-				&& (view.elevation_degrees - first.elevation_degrees).abs() < 1e-3
-				&& ((view.azimuth_degrees - first.azimuth_degrees).rem_euclid(360.0)
-					- i as f32 * step)
-					.abs() < 1e-3
-		})
+		asset.manifest.azimuth_ring().is_some()
 	}
 
 	pub fn new(asset: &PackagedFlipbook, tint: Color, intensity: f32) -> Self {
@@ -147,19 +123,13 @@ impl DustMaterial {
 	}
 
 	pub fn set_age(&mut self, asset: &PackagedFlipbook, age: f32) {
-		let frame = asset.manifest.frame_at(age);
-		self.time = Vec4::new(
-			frame.floor(),
-			(frame.floor() + 1.0).min(self.atlas.w - 1.0),
-			frame.fract(),
-			asset.manifest.opacity_at(age),
-		);
+		self.time = asset.manifest.clock_at(age).time();
 	}
 }
 
 impl Material for DustMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/dust/dust.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/flipbook_card/flipbook_card.wgsl").into()
 	}
 	fn fragment_shader() -> ShaderRef {
 		Self::vertex_shader()
@@ -190,7 +160,7 @@ impl Material for DustMaterial {
 pub struct DustPlugin;
 impl Plugin for DustPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "dust/dust.wgsl");
+		embedded_asset!(app, "flipbook_card/flipbook_card.wgsl");
 		app.add_plugins(MaterialPlugin::<DustMaterial>::default());
 	}
 }

@@ -5,36 +5,36 @@ use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
 use bevy_hanabi::EffectAsset;
 
 use crate::assets::{fire_flipbook, smoke_flipbook, spark_taper, VfxFlipbooks};
-use crate::composition::EffectDefinition;
-use crate::dust::{DustPart, DUST};
-use crate::effects::fiery_explosion;
+use crate::composition::{EffectDefinition, EffectRecipe};
+use crate::effects::dust::Dust;
+use crate::effects::fiery_explosion::FieryExplosion;
 use crate::layers::{fireball, flash, smoke, sparks};
 use crate::lobes::rounded_lobe_mesh;
-use crate::names::{FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
+use crate::names::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
 
 /// Shared definitions. Clone a handle out; never mutate the compiled assets.
 #[derive(Resource, Clone, Debug)]
 pub struct VfxLibrary {
-	pub dust: EffectDefinition,
+	pub dust: Dust,
 	pub flipbooks: VfxFlipbooks,
 	pub flash: EffectDefinition,
 	pub fireball: EffectDefinition,
 	pub smoke: EffectDefinition,
 	pub sparks: EffectDefinition,
-	pub fiery_explosion: EffectDefinition,
+	pub fiery_explosion: FieryExplosion,
 }
 
 impl VfxLibrary {
-	pub fn get(&self, name: &str) -> Option<&EffectDefinition> {
-		match canonicalize_effect_name(name)? {
-			DUST => Some(&self.dust),
-			FLASH => Some(&self.flash),
-			FIREBALL => Some(&self.fireball),
-			SMOKE => Some(&self.smoke),
-			SPARKS => Some(&self.sparks),
-			FIERY_EXPLOSION => Some(&self.fiery_explosion),
-			_ => None,
-		}
+	pub fn get(&self, name: &str) -> Option<EffectDefinition> {
+		Some(match canonicalize_effect_name(name)? {
+			DUST => self.dust.effect_definition(),
+			FLASH => self.flash.clone(),
+			FIREBALL => self.fireball.clone(),
+			SMOKE => self.smoke.clone(),
+			SPARKS => self.sparks.clone(),
+			FIERY_EXPLOSION => self.fiery_explosion.effect_definition(),
+			_ => return None,
+		})
 	}
 }
 
@@ -71,17 +71,12 @@ pub fn setup_vfx_library(
 	let smoke_wisps = smoke::compile_wisps(&mut effects, &flipbooks.smoke);
 	let sparks_part = sparks::compile(&mut effects, flipbooks.spark.clone());
 	let library = VfxLibrary {
-		dust: DustPart {
-			flipbook: server.load("vfx/dust/rolling_wave.flipbook.json"),
-			mesh: meshes.add(Rectangle::default()),
-			duration: 48.0 / 15.0,
-		}
-		.definition(),
+		dust: Dust::rolling_wave(&server, &mut meshes),
 		flash: flash::definition(flash_mesh.clone()),
 		fireball: fireball::definition(fireball_mesh.clone(), fireball_wisps.clone()),
 		smoke: smoke::definition(smoke_mesh.clone(), smoke_wisps.clone()),
 		sparks: sparks::definition(sparks_part.clone()),
-		fiery_explosion: fiery_explosion::definition(
+		fiery_explosion: FieryExplosion::new(
 			flash_mesh,
 			fireball_mesh,
 			fireball_wisps.clone(),

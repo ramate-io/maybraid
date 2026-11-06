@@ -10,9 +10,9 @@
 pub mod assets;
 pub mod atlas;
 pub mod composition;
-pub mod dust;
 pub mod effects;
 pub mod flipbook;
+pub mod flipbook_card;
 pub mod layers;
 pub mod library;
 pub mod lifecycle;
@@ -28,15 +28,22 @@ pub mod spawn;
 
 pub use assets::{FlipbookAsset, VfxFlipbooks};
 pub use composition::{
-	EffectDefinition, EffectLayer, EffectPart, LightPulse, LobeKind, LobeSpec, MeshPart,
-	ParticlePart, ParticleShade, ScaleBounds, DEFAULT_SCALE_MAX, DEFAULT_SCALE_MIN,
+	EffectDefinition, EffectLayer, EffectPart, EffectRecipe, FlipbookPart, LightPulse, LobeKind,
+	LobeSpec, MeshPart, ParticlePart, ParticleShade, ScaleBounds, DEFAULT_SCALE_MAX,
+	DEFAULT_SCALE_MIN,
 };
+pub use effects::dust::Dust;
+pub use effects::fiery_explosion::FieryExplosion;
+pub use flipbook_card::{DustMaterial, DustPlugin, VfxDust};
+pub use layers::dust::DustLayer;
 pub use library::{canonicalize_effect_name, VfxLibrary};
 pub use lobe_material::{LobeMaterial, LobeMaterialPlugin};
-pub use names::{FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
+pub use names::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
 pub use packaged::{PackagedFlipbook, PackagedVfxPlugin, StaticVolume};
 pub use palette::ExplosionPalette;
-pub use spawn::{spawn_vfx, SpawnVfxExt, VfxInstance, VfxSpawn, MAX_PLAYBACK, MIN_PLAYBACK};
+pub use spawn::{
+	spawn_vfx, Effect, SpawnVfxExt, Vfx, VfxInstance, VfxSpawn, MAX_PLAYBACK, MIN_PLAYBACK,
+};
 
 use bevy::prelude::*;
 use bevy_hanabi::HanabiPlugin;
@@ -52,8 +59,8 @@ impl Plugin for VfxPlugin {
 		if !app.is_plugin_added::<PackagedVfxPlugin>() {
 			app.add_plugins(PackagedVfxPlugin);
 		}
-		if !app.is_plugin_added::<dust::DustPlugin>() {
-			app.add_plugins(dust::DustPlugin);
+		if !app.is_plugin_added::<DustPlugin>() {
+			app.add_plugins(DustPlugin);
 		}
 		if !app.is_plugin_added::<HanabiPlugin>() {
 			app.add_plugins(HanabiPlugin);

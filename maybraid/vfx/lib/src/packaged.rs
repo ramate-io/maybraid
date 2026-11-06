@@ -7,8 +7,8 @@ mod loaders;
 mod manifest;
 
 pub use manifest::{
-	AlphaConvention, Bounds3, EndBehavior, FlipbookManifest, FlipbookView, VolumeFormat,
-	VolumeManifest,
+	AlphaConvention, AzimuthRing, Bounds3, EndBehavior, FlipbookClock, FlipbookManifest,
+	FlipbookView, VolumeFormat, VolumeManifest,
 };
 
 use bevy::prelude::*;

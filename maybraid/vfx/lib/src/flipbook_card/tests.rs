@@ -2,12 +2,16 @@ use std::time::Duration;
 
 use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
+use bevy::scene::ScenePlugin;
 use bevy::time::TimeUpdateStrategy;
 
-use crate::dust::{tick_dust, DustMaterial, DustPart, VfxDust};
+use crate::composition::{EffectRecipe, FlipbookPart};
+use crate::effects::dust::Dust;
+use crate::flipbook_card::{tick_dust, DustMaterial, VfxDust};
+use crate::layers::dust::DustLayer;
 use crate::lifecycle::{gate_vfx_instances, tick_vfx_instances};
 use crate::packaged::{FlipbookManifest, PackagedFlipbook};
-use crate::spawn::{spawn_vfx, VfxLayerLife, VfxSpawn};
+use crate::spawn::{spawn_vfx, Effect, VfxLayerLife, VfxSpawn};
 
 fn manifest() -> Result<FlipbookManifest, Box<dyn std::error::Error>> {
 	Ok(serde_json::from_str(include_str!(
@@ -15,9 +19,13 @@ fn manifest() -> Result<FlipbookManifest, Box<dyn std::error::Error>> {
 	))?)
 }
 
+fn dust_recipe(flipbook: Handle<PackagedFlipbook>, mesh: Handle<Mesh>) -> Dust {
+	Dust::new(DustLayer::new(FlipbookPart { flipbook, mesh, duration: Dust::ROLLING_WAVE_DURATION }))
+}
+
 #[test]
-fn interpolation_clamps_and_material_clocks_are_independent(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn interpolation_clamps_and_material_clocks_are_independent()
+-> Result<(), Box<dyn std::error::Error>> {
 	let asset = PackagedFlipbook { manifest: manifest()?, image: Handle::default() };
 	assert!(DustMaterial::supports(&asset));
 	let mut first = DustMaterial::new(&asset, Color::WHITE, 1.0);
@@ -52,7 +60,7 @@ fn concurrent_instances_pause_cancel_and_finish() -> Result<(), Box<dyn std::err
 		.resource_mut::<Assets<PackagedFlipbook>>()
 		.add(PackagedFlipbook { manifest: manifest()?, image });
 	let mesh = app.world_mut().resource_mut::<Assets<Mesh>>().add(Rectangle::default());
-	let definition = DustPart { flipbook, mesh, duration: 48.0 / 15.0 }.definition();
+	let definition = dust_recipe(flipbook, mesh).effect_definition();
 	let slow = spawn_vfx(
 		&mut app.world_mut().commands(),
 		&definition,
@@ -97,10 +105,7 @@ fn concurrent_instances_pause_cancel_and_finish() -> Result<(), Box<dyn std::err
 	assert!((paused_age - slow_state.1 - fast_state.1).abs() < 1e-5);
 	app.world_mut().despawn(slow);
 	assert_eq!(
-		app.world_mut()
-			.query_filtered::<Entity, With<VfxDust>>()
-			.iter(app.world())
-			.count(),
+		app.world_mut().query_filtered::<Entity, With<VfxDust>>().iter(app.world()).count(),
 		1
 	);
 	app.world_mut().resource_mut::<Time<Virtual>>().unpause();
@@ -109,10 +114,7 @@ fn concurrent_instances_pause_cancel_and_finish() -> Result<(), Box<dyn std::err
 	}
 	assert!(app.world().get_entity(fast).is_err());
 	assert_eq!(
-		app.world_mut()
-			.query_filtered::<Entity, With<VfxDust>>()
-			.iter(app.world())
-			.count(),
+		app.world_mut().query_filtered::<Entity, With<VfxDust>>().iter(app.world()).count(),
 		0
 	);
 	Ok(())
@@ -126,12 +128,10 @@ fn failed_asset_cancels_waiting_root_and_children() -> Result<(), Box<dyn std::e
 		.init_asset::<Mesh>()
 		.init_asset::<DustMaterial>()
 		.add_systems(Update, tick_dust);
-	let flipbook = app
-		.world()
-		.resource::<AssetServer>()
-		.load("missing-vfx-test/dust.flipbook.json");
+	let flipbook =
+		app.world().resource::<AssetServer>().load("missing-vfx-test/dust.flipbook.json");
 	let mesh = app.world_mut().resource_mut::<Assets<Mesh>>().add(Rectangle::default());
-	let definition = DustPart { flipbook, mesh, duration: 3.2 }.definition();
+	let definition = dust_recipe(flipbook, mesh).effect_definition();
 	let root = spawn_vfx(&mut app.world_mut().commands(), &definition, VfxSpawn::default());
 	app.world_mut().flush();
 	let deadline = std::time::Instant::now() + Duration::from_secs(5);
@@ -144,11 +144,34 @@ fn failed_asset_cancels_waiting_root_and_children() -> Result<(), Box<dyn std::e
 		"a failed load must not leave an immortal invisible root"
 	);
 	assert_eq!(
-		app.world_mut()
-			.query_filtered::<Entity, With<VfxDust>>()
-			.iter(app.world())
-			.count(),
+		app.world_mut().query_filtered::<Entity, With<VfxDust>>().iter(app.world()).count(),
 		0
 	);
+	Ok(())
+}
+
+#[test]
+fn spawn_scene_retains_the_dust_recipe_on_the_root() -> Result<(), Box<dyn std::error::Error>> {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin))
+		.init_asset::<Image>()
+		.init_asset::<Mesh>()
+		.init_asset::<PackagedFlipbook>();
+	let image = app.world_mut().resource_mut::<Assets<Image>>().add(Image::default());
+	let flipbook = app
+		.world_mut()
+		.resource_mut::<Assets<PackagedFlipbook>>()
+		.add(PackagedFlipbook { manifest: manifest()?, image });
+	let mesh = app.world_mut().resource_mut::<Assets<Mesh>>().add(Rectangle::default());
+	let recipe = dust_recipe(flipbook, mesh);
+	let root = app
+		.world_mut()
+		.commands()
+		.spawn_scene(Effect { recipe: recipe.clone(), spawn: VfxSpawn::default() })
+		.id();
+	app.world_mut().flush();
+	let dust = app.world().get::<Dust>(root).ok_or("missing Dust recipe on root")?;
+	assert_eq!(dust.layer.part.duration, Dust::ROLLING_WAVE_DURATION);
+	assert!(app.world().get::<crate::spawn::VfxInstance>(root).is_some());
 	Ok(())
 }
