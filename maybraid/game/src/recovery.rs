@@ -5,12 +5,51 @@
 //! in [`First`] drains that inbox and routes with the same helpers live
 //! navigation uses ([`MenuScreens::clear`], [`end_character_editor`],
 //! [`MenuModalStack::clear`]).
+//!
+//! # Recover-mode policy
+//!
+//! [`RecoveryMode::Strict`] (debug / `--agent-*` default, or
+//! [`ENV_STRICT_ERRORS`]) still panics. That path is unchanged.
+//!
+//! [`RecoveryMode::Recover`] treats an isolated `Severity::Error` /
+//! `Severity::Panic` as log-and-route at the **current** flow level:
+//!
+//! | State when the error happened | Destination |
+//! |---|---|
+//! | [`GameFlow::World`] | Stay in the world: clear menus, end the character editor, drop modals, resume [`WorldPause::Playing`] |
+//! | any other flow | [`GameFlow::Home`] |
+//!
+//! Render-world errors are logged and counted, but they do not change game
+//! state unless an escalate rule below already applies.
+//!
+//! Escalation is **World → Home → Halt** (`AppExit(2)`). It fires only when:
+//!
+//! 1. **In-progress.** An error lands while a recovery step is still applying
+//!    (its deferred commands have not finished, or those commands themselves
+//!    produced a new inbox item). That is a failure *of* recovery, not a
+//!    later independent bug.
+//! 2. **Flapping window.** More than [`RECOVERY_LOOP_MAX`] recoveries in
+//!    [`RECOVERY_LOOP_WINDOW`]. The window is time-based: it ages out, and
+//!    it does **not** reset just because a step completed. A quiet stretch
+//!    longer than the window returns the count to zero.
+//!
+//! Completing a step clears the in-progress flag. A recovered World (or Home)
+//! is therefore back to the normal Recover state: a later, unrelated command
+//! error — the classic deferred `EntityCommand` on an already-despawned
+//! entity — recovers at the same level again. It does not walk the ladder
+//! toward Halt.
+//!
+//! `in_progress` is set when a step actually routes, and cleared after that
+//! step's deferred-command flush if the inbox is empty. A leftover inbox item
+//! means the step itself failed, so the flag stays set and the next [`First`]
+//! escalates.
 
 use crate::flow::{GameFlow, PlaySession, WorldPause};
 use crate::panic_log::{append_error_log, error_log_path};
 use crate::shell::ShellRoute;
 use bevy::app::AppExit;
 use bevy::ecs::error::{BevyError, ErrorContext, Severity};
+use bevy::ecs::schedule::ApplyDeferred;
 use bevy::prelude::*;
 use character_persist::SaveRoot;
 use maybraid_world::AgentDrive;
@@ -35,13 +74,33 @@ const LAST_SESSION_FILE: &str = "last_session";
 
 static STRICT: AtomicBool = AtomicBool::new(false);
 
-fn inbox() -> &'static Mutex<Vec<RecoveryRequest>> {
-	static INBOX: OnceLock<Mutex<Vec<RecoveryRequest>>> = OnceLock::new();
-	INBOX.get_or_init(|| Mutex::new(Vec::new()))
-}
+/// Static inbox the fallback handler can push into without World access.
+struct RecoveryInbox;
 
-fn lock_inbox() -> std::sync::MutexGuard<'static, Vec<RecoveryRequest>> {
-	inbox().lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+impl RecoveryInbox {
+	fn lock() -> std::sync::MutexGuard<'static, Vec<RecoveryRequest>> {
+		static INBOX: OnceLock<Mutex<Vec<RecoveryRequest>>> = OnceLock::new();
+		INBOX
+			.get_or_init(|| Mutex::new(Vec::new()))
+			.lock()
+			.unwrap_or_else(|poisoned| poisoned.into_inner())
+	}
+
+	fn push(request: RecoveryRequest) {
+		Self::lock().push(request);
+	}
+
+	fn take() -> Vec<RecoveryRequest> {
+		Self::lock().drain(..).collect()
+	}
+
+	fn clear() {
+		Self::lock().clear();
+	}
+
+	fn is_empty() -> bool {
+		Self::lock().is_empty()
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,7 +200,10 @@ impl RecoveryToast {
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RecoverySystems {
+	/// Drain the inbox and route (or escalate) one recovery step.
 	Apply,
+	/// Flush that step's commands, then clear the in-progress flag if it completed.
+	Complete,
 }
 
 #[derive(Resource, Debug, Default)]
@@ -149,9 +211,55 @@ struct RecoveryHistory {
 	times: VecDeque<Instant>,
 }
 
+impl RecoveryHistory {
+	fn prune(&mut self, now: Instant) {
+		self.times.retain(|at| now.duration_since(*at) <= RECOVERY_LOOP_WINDOW);
+	}
+
+	fn record(&mut self, at: Instant) {
+		self.times.push_back(at);
+	}
+
+	fn clear(&mut self) {
+		self.times.clear();
+	}
+
+	/// Escalate when a step is still applying, or the flapping window is full.
+	fn should_escalate(&self, now: Instant, apply: &RecoveryApply, incoming: usize) -> bool {
+		if apply.is_in_progress() {
+			return true;
+		}
+		let recent = self
+			.times
+			.iter()
+			.filter(|at| now.duration_since(**at) <= RECOVERY_LOOP_WINDOW)
+			.count() + incoming;
+		recent > RECOVERY_LOOP_MAX
+	}
+}
+
+/// Sticky only while a routed recovery step is applying.
+///
+/// Set when a step actually routes. Cleared after that step's deferred
+/// commands flush, if the inbox is empty. A leftover inbox item is treated
+/// as a failure during recovery, so the next [`First`] escalates.
 #[derive(Resource, Debug, Default)]
 struct RecoveryApply {
 	in_progress: bool,
+}
+
+impl RecoveryApply {
+	fn begin(&mut self) {
+		self.in_progress = true;
+	}
+
+	fn complete(&mut self) {
+		self.in_progress = false;
+	}
+
+	fn is_in_progress(&self) -> bool {
+		self.in_progress
+	}
 }
 
 #[derive(Component)]
@@ -179,8 +287,12 @@ impl Plugin for RecoveryPlugin {
 			.set_error_handler(main_error_handler)
 			.init_resource::<RecoveryHistory>()
 			.init_resource::<RecoveryApply>()
-			.configure_sets(First, RecoverySystems::Apply)
+			.configure_sets(First, (RecoverySystems::Apply, RecoverySystems::Complete).chain())
 			.add_systems(First, apply_recovery.in_set(RecoverySystems::Apply))
+			.add_systems(
+				First,
+				(ApplyDeferred, complete_recovery).chain().in_set(RecoverySystems::Complete),
+			)
 			.add_systems(Update, tick_recovery_toast);
 		if let Some(render_app) = app.get_sub_app_mut(bevy::render::RenderApp) {
 			render_app
@@ -216,29 +328,12 @@ pub fn recovery_destination(flow: GameFlow, escalate: bool) -> RecoveryDestinati
 	}
 }
 
-pub fn should_escalate(
-	times: &[Instant],
-	now: Instant,
-	in_progress: bool,
-	incoming: usize,
-) -> bool {
-	if in_progress {
-		return true;
-	}
-	let recent = times
-		.iter()
-		.filter(|at| now.duration_since(**at) <= RECOVERY_LOOP_WINDOW)
-		.count()
-		+ incoming;
-	recent > RECOVERY_LOOP_MAX
-}
-
 pub fn take_recovery_requests() -> Vec<RecoveryRequest> {
-	lock_inbox().drain(..).collect()
+	RecoveryInbox::take()
 }
 
 pub fn clear_recovery_inbox() {
-	lock_inbox().clear();
+	RecoveryInbox::clear();
 }
 
 pub fn write_last_session(root: &SaveRoot, session: PlaySession) {
@@ -301,7 +396,7 @@ fn handle_error(error: BevyError, ctx: ErrorContext, source: RecoverySource) {
 	let message = format!("{error}");
 	error!("recoverable {context}: {message}");
 	let _ = append_error_log(&format!("{context}\n{message}"));
-	lock_inbox().push(RecoveryRequest { message, context, source, at: Instant::now() });
+	RecoveryInbox::push(RecoveryRequest { message, context, source, at: Instant::now() });
 }
 
 fn apply_recovery(
@@ -317,22 +412,17 @@ fn apply_recovery(
 	agent: Option<Res<AgentDrive>>,
 	mut exits: MessageWriter<AppExit>,
 ) {
-	let requests = take_recovery_requests();
+	let requests = RecoveryInbox::take();
 	if requests.is_empty() {
-		apply.in_progress = false;
+		apply.complete();
 		return;
 	}
 	let now = Instant::now();
-	history.times.retain(|at| now.duration_since(*at) <= RECOVERY_LOOP_WINDOW);
+	history.prune(now);
 	let has_main = requests.iter().any(|request| request.source == RecoverySource::Main);
-	let escalate = should_escalate(
-		&Vec::from_iter(history.times.iter().copied()),
-		now,
-		apply.in_progress,
-		requests.len(),
-	);
+	let escalate = history.should_escalate(now, &apply, requests.len());
 	for request in &requests {
-		history.times.push_back(request.at);
+		history.record(request.at);
 	}
 	if !has_main && !escalate {
 		commands.insert_resource(LastRecovery { destination: RecoveryDestination::Logged });
@@ -340,7 +430,7 @@ fn apply_recovery(
 	}
 	let flow = *flow.get();
 	let destination = recovery_destination(flow, escalate);
-	apply.in_progress = true;
+	apply.begin();
 	tear_down_shell(&mut commands, &screens, stack.as_deref_mut(), prompt.as_deref_mut());
 	match destination {
 		RecoveryDestination::World => {
@@ -349,7 +439,7 @@ fn apply_recovery(
 			}
 		}
 		RecoveryDestination::Home => {
-			history.times.clear();
+			history.clear();
 			route.enter(GameFlow::Home);
 		}
 		RecoveryDestination::Halt => {
@@ -363,6 +453,17 @@ fn apply_recovery(
 	}
 	if agent.is_some() {
 		exits.write(AppExit::from_code(2));
+	}
+}
+
+/// Clear the in-progress flag after the just-routed step's commands flush.
+///
+/// A non-empty inbox here means those commands (or something else in the same
+/// flush) produced another error, so recovery is still in progress and the
+/// next apply in [`First`] will escalate.
+fn complete_recovery(mut apply: ResMut<RecoveryApply>) {
+	if apply.is_in_progress() && RecoveryInbox::is_empty() {
+		apply.complete();
 	}
 }
 
@@ -482,8 +583,12 @@ mod tests {
 		app
 	}
 
-	fn queue_insert_on_missing(target: Res<MissingTarget>, mut commands: Commands) {
+	fn queue_insert_on_missing(target: Option<Res<MissingTarget>>, mut commands: Commands) {
+		let Some(target) = target else {
+			return;
+		};
 		commands.entity(target.0).insert(Gone);
+		commands.remove_resource::<MissingTarget>();
 	}
 
 	fn run_until_recovery(app: &mut App) -> LastRecovery {
@@ -519,17 +624,52 @@ mod tests {
 	#[test]
 	fn loop_guard_trips_after_more_than_n_in_the_window() {
 		let now = Instant::now();
-		let times = [now, now, now];
-		assert!(!should_escalate(&times, now, false, 0));
-		assert!(should_escalate(&times, now, false, 1));
-		assert!(should_escalate(&[], now, true, 1));
+		let history = RecoveryHistory { times: [now, now, now].into() };
+		let idle = RecoveryApply::default();
+		let applying = RecoveryApply { in_progress: true };
+		assert!(!history.should_escalate(now, &idle, 0));
+		assert!(history.should_escalate(now, &idle, 1));
+		assert!(RecoveryHistory::default().should_escalate(now, &applying, 1));
 	}
 
-	fn trigger_missing_insert(app: &mut App) {
+	fn queue_missing_insert(app: &mut App) {
 		let gone = app.world_mut().spawn_empty().id();
 		app.world_mut().despawn(gone);
 		app.insert_resource(MissingTarget(gone));
+	}
+
+	fn trigger_missing_insert(app: &mut App) {
+		queue_missing_insert(app);
 		app.add_systems(Update, queue_insert_on_missing);
+	}
+
+	#[derive(Resource)]
+	struct InjectDuringRecovery;
+
+	fn fail_after_recovery_apply(
+		inject: Option<Res<InjectDuringRecovery>>,
+		target: Option<Res<MissingTarget>>,
+		apply: Res<RecoveryApply>,
+		mut commands: Commands,
+	) {
+		let (Some(_), Some(target)) = (inject, target) else {
+			return;
+		};
+		if !apply.is_in_progress() {
+			return;
+		}
+		commands.entity(target.0).insert(Gone);
+		commands.remove_resource::<InjectDuringRecovery>();
+		commands.remove_resource::<MissingTarget>();
+	}
+
+	fn main_request(message: &str) -> RecoveryRequest {
+		RecoveryRequest {
+			message: String::from(message),
+			context: String::from("command"),
+			source: RecoverySource::Main,
+			at: Instant::now(),
+		}
 	}
 
 	#[test]
@@ -598,26 +738,19 @@ mod tests {
 		let mut app = recovery_app(GameFlow::World);
 		trigger_missing_insert(&mut app);
 		for _ in 0..RECOVERY_LOOP_MAX {
-			lock_inbox().push(RecoveryRequest {
-				message: String::from("prior"),
-				context: String::from("command"),
-				source: RecoverySource::Main,
-				at: Instant::now(),
-			});
+			RecoveryInbox::push(main_request("prior"));
 		}
 		let last = run_until_recovery(&mut app);
 		anyhow::ensure!(last.destination == RecoveryDestination::Home);
+		anyhow::ensure!(
+			!app.world().resource::<RecoveryApply>().is_in_progress(),
+			"completed Home recovery must clear in_progress"
+		);
 
 		app.insert_resource(State::new(GameFlow::Home));
 		for _ in 0..RECOVERY_LOOP_MAX + 1 {
-			lock_inbox().push(RecoveryRequest {
-				message: String::from("home"),
-				context: String::from("command"),
-				source: RecoverySource::Main,
-				at: Instant::now(),
-			});
+			RecoveryInbox::push(main_request("home"));
 		}
-		app.world_mut().insert_resource(RecoveryApply { in_progress: false });
 		let last = run_until_recovery(&mut app);
 		anyhow::ensure!(last.destination == RecoveryDestination::Halt);
 		let exits = app.world_mut().resource_mut::<Messages<AppExit>>().drain().count();
@@ -626,10 +759,86 @@ mod tests {
 	}
 
 	#[test]
+	fn isolated_world_errors_recover_at_the_same_level() -> anyhow::Result<()> {
+		let _guard = lock_recovery_tests();
+		let mut app = recovery_app(GameFlow::World);
+		trigger_missing_insert(&mut app);
+		let first = run_until_recovery(&mut app);
+		anyhow::ensure!(first.destination == RecoveryDestination::World);
+		anyhow::ensure!(
+			!app.world().resource::<RecoveryApply>().is_in_progress(),
+			"first recovery must complete before a later error"
+		);
+		let pause = *app.world().resource::<State<WorldPause>>().get();
+		anyhow::ensure!(pause == WorldPause::Playing, "pause {pause:?}");
+
+		app.world_mut().remove_resource::<LastRecovery>();
+		app.update();
+		anyhow::ensure!(
+			app.world().get_resource::<LastRecovery>().is_none(),
+			"quiet frame must not start another recovery"
+		);
+		anyhow::ensure!(!app.world().resource::<RecoveryApply>().is_in_progress());
+
+		queue_missing_insert(&mut app);
+		let second = run_until_recovery(&mut app);
+		anyhow::ensure!(
+			second.destination == RecoveryDestination::World,
+			"later isolated error escalated to {:?}",
+			second.destination
+		);
+		anyhow::ensure!(!app.world().resource::<RecoveryApply>().is_in_progress());
+		let pause = *app.world().resource::<State<WorldPause>>().get();
+		anyhow::ensure!(pause == WorldPause::Playing, "pause {pause:?}");
+		let flow = *app.world().resource::<State<GameFlow>>().get();
+		anyhow::ensure!(flow == GameFlow::World, "flow {flow:?}");
+		Ok(())
+	}
+
+	#[test]
+	fn error_during_in_progress_recovery_escalates() -> anyhow::Result<()> {
+		let _guard = lock_recovery_tests();
+		let mut app = recovery_app(GameFlow::World);
+		app.add_systems(
+			First,
+			fail_after_recovery_apply.after(apply_recovery).before(ApplyDeferred),
+		);
+		queue_missing_insert(&mut app);
+		app.insert_resource(InjectDuringRecovery);
+		RecoveryInbox::push(main_request("first"));
+		app.update();
+		let first = app
+			.world()
+			.get_resource::<LastRecovery>()
+			.cloned()
+			.ok_or_else(|| anyhow::anyhow!("first recovery"))?;
+		anyhow::ensure!(first.destination == RecoveryDestination::World);
+		anyhow::ensure!(
+			app.world().resource::<RecoveryApply>().is_in_progress(),
+			"error flushed with the recovery step must keep in_progress"
+		);
+
+		app.update();
+		let second = app
+			.world()
+			.get_resource::<LastRecovery>()
+			.cloned()
+			.ok_or_else(|| anyhow::anyhow!("escalated recovery"))?;
+		anyhow::ensure!(
+			second.destination == RecoveryDestination::Home,
+			"in-progress error should escalate World -> Home, got {:?}",
+			second.destination
+		);
+		let flow = *app.world().resource::<State<GameFlow>>().get();
+		anyhow::ensure!(flow == GameFlow::Home, "flow {flow:?}");
+		Ok(())
+	}
+
+	#[test]
 	fn render_errors_log_without_routing_until_the_guard_trips() -> anyhow::Result<()> {
 		let _guard = lock_recovery_tests();
 		let mut app = recovery_app(GameFlow::World);
-		lock_inbox().push(RecoveryRequest {
+		RecoveryInbox::push(RecoveryRequest {
 			message: String::from("render"),
 			context: String::from("system"),
 			source: RecoverySource::Render,
