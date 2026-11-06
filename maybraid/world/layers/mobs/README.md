@@ -1,5 +1,11 @@
 # Mobs
 
+Proposal (review only, not an implementation):
+[scripted boss HCSG + runtime chain ownership](proposals/scripted-boss-and-runtime-chain.md)
+([#1116](https://github.com/ramate-io/maybraid/issues/1116),
+[#1125](https://github.com/ramate-io/maybraid/issues/1125)–[#1127](https://github.com/ramate-io/maybraid/issues/1127)).
+Liam owns those implementation issues.
+
 - [`characters/`](characters/): characters define mob NPCs and noisy builders thereof. They include a species, an inventory, and a set of brains. We define four sets of noisy constructors: 
     - **build:** base attribute adjustments for the character. 
     - **species:** defines a species. 
