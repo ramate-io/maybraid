@@ -17,7 +17,7 @@ also retained. Static volumes are available to consumers but are not needed by
 the multiview flipbook renderer.
 
 `*.flipbook.json` and `*.volume.json` are versioned manifests loaded by
-`maybraid_vfx::packaged::PackagedVfxPlugin`. Texture paths resolve relative to
+`maybraid_vfx::parts::packaged::PackagedVfxPlugin`. Texture paths resolve relative to
 the manifest through Bevy's AssetServer. Volume matrices are column-major and
 map integer indices to local voxel centers; bounds include the half-voxel border.
 Grid values are linear density, not color. Flipbook frame zero starts at time

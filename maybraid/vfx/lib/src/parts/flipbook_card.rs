@@ -13,7 +13,7 @@ use bevy::shader::ShaderRef;
 
 use crate::composition::FlipbookPart;
 use crate::membership::VfxMemberOf;
-use crate::packaged::{AlphaConvention, PackagedFlipbook};
+use crate::parts::packaged::{AlphaConvention, PackagedFlipbook};
 use crate::spawn::{VfxInstance, VfxLayerLife, VfxSpawn};
 
 impl FlipbookPart {
@@ -129,7 +129,8 @@ impl DustMaterial {
 
 impl Material for DustMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/flipbook_card/flipbook_card.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/parts/flipbook_card/flipbook_card.wgsl")
+			.into()
 	}
 	fn fragment_shader() -> ShaderRef {
 		Self::vertex_shader()

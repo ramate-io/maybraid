@@ -36,7 +36,7 @@ For an artist who has just authored an effect in Houdini:
    mip level to avoid cross-frame bleeding.
 4. Create the matching `.flipbook.json` runtime manifest and record source hashes
    and encoder settings in separate provenance metadata. See the
-   [manifest types](../../maybraid/vfx/lib/src/packaged/manifest.rs) and the
+   [manifest types](../../maybraid/vfx/lib/src/parts/packaged/manifest.rs) and the
    [existing flipbook manifest](../../maybraid/assets/vfx/dust/rolling_wave.flipbook.json)
    for the required fields. New source hashes describe the new local inputs;
    they do not require a Git commit to exist first.

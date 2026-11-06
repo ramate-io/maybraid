@@ -11,8 +11,8 @@ use bevy::image::{
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureViewDimension};
 
-use crate::packaged::loaders::KtxHeader;
-use crate::packaged::*;
+use crate::parts::packaged::loaders::KtxHeader;
+use crate::parts::packaged::*;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -34,7 +34,7 @@ impl Fixture {
 
 	fn flipbook() -> Result<FlipbookManifest, PackagedAssetError> {
 		FlipbookManifest::from_json(include_bytes!(
-			"../../../../assets/vfx/dust/rolling_wave.flipbook.json"
+			"../../../../../assets/vfx/dust/rolling_wave.flipbook.json"
 		))
 	}
 

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::packaged::PackagedAssetError;
+use crate::parts::packaged::PackagedAssetError;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -146,18 +146,21 @@ impl FlipbookManifest {
 	pub fn azimuth_ring(&self) -> Option<AzimuthRing> {
 		let first = self.views.first()?;
 		let step = 360.0 / self.views.len() as f32;
-		self.views.iter().enumerate().all(|(i, view)| {
-			view.layer == i as u32
-				&& (view.elevation_degrees - first.elevation_degrees).abs() < 1e-3
-				&& ((view.azimuth_degrees - first.azimuth_degrees).rem_euclid(360.0)
-					- i as f32 * step)
-					.abs() < 1e-3
-		})
-		.then_some(AzimuthRing {
-			elevation_radians: first.elevation_degrees.to_radians(),
-			first_azimuth_radians: first.azimuth_degrees.to_radians(),
-			view_count: self.views.len() as u32,
-		})
+		self.views
+			.iter()
+			.enumerate()
+			.all(|(i, view)| {
+				view.layer == i as u32
+					&& (view.elevation_degrees - first.elevation_degrees).abs() < 1e-3
+					&& ((view.azimuth_degrees - first.azimuth_degrees).rem_euclid(360.0)
+						- i as f32 * step)
+						.abs() < 1e-3
+			})
+			.then_some(AzimuthRing {
+				elevation_radians: first.elevation_degrees.to_radians(),
+				first_azimuth_radians: first.azimuth_degrees.to_radians(),
+				view_count: self.views.len() as u32,
+			})
 	}
 
 	/// Frame pair, interpolation, and end-behavior opacity for a playback age.

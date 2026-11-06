@@ -2,7 +2,7 @@ use bevy::asset::{io::Reader, AssetLoader, LoadContext};
 use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::*;
 
-use crate::packaged::{
+use crate::parts::packaged::{
 	AlphaConvention, FlipbookManifest, PackagedAssetError, PackagedFlipbook, StaticVolume,
 	VolumeManifest,
 };

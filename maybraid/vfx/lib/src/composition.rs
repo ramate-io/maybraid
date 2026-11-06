@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy_hanabi::EffectAsset;
 
-use crate::packaged::PackagedFlipbook;
+use crate::parts::packaged::PackagedFlipbook;
 
 /// Which explosion colors a particle layer samples from the instance palette.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
