@@ -129,7 +129,7 @@ impl DustMaterial {
 
 impl Material for DustMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/parts/flipbook_card/flipbook_card.wgsl")
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/parts/flipbook_card/flipbook_card.wesl")
 			.into()
 	}
 	fn fragment_shader() -> ShaderRef {
@@ -161,7 +161,7 @@ impl Material for DustMaterial {
 pub struct DustPlugin;
 impl Plugin for DustPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "flipbook_card/flipbook_card.wgsl");
+		embedded_asset!(app, "flipbook_card/flipbook_card.wesl");
 		app.add_plugins(MaterialPlugin::<DustMaterial>::default());
 	}
 }

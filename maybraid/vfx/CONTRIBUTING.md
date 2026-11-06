@@ -89,7 +89,7 @@ repository:
 ```text
 lib/src/parts.rs
 lib/src/parts/flipbook_card.rs
-lib/src/parts/flipbook_card/flipbook_card.wgsl
+lib/src/parts/flipbook_card/flipbook_card.wesl
 lib/src/parts/lobe.rs
 lib/src/parts/lobe/lobe_material.wesl
 lib/src/parts/lobe/material.rs
@@ -103,7 +103,7 @@ lib/src/parts/particle/flipbook.rs
 
 Bevy `embedded_asset!` paths follow `file!()`. After a move, update
 `ShaderRef` to the path under `src/` (for example
-`embedded://maybraid_vfx/parts/flipbook_card/flipbook_card.wgsl`).
+`embedded://maybraid_vfx/parts/flipbook_card/flipbook_card.wesl`).
 
 Prefer methods on the part type (`FlipbookPart::spawn`, `MeshPart::spawn`) over
 free functions in `spawn.rs`. Use `use crate::…` rather than `super::` chains.

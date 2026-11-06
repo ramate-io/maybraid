@@ -1,18 +1,25 @@
 // Eight authored capture planes; no density texture or runtime volume integration.
-#import bevy_pbr::{mesh_functions, forward_io::Vertex, mesh_view_bindings::view, view_transformations::position_world_to_clip}
-#import bevy_core_pipeline::tonemapping::tone_mapping
-#ifdef DEPTH_PREPASS
-#import bevy_pbr::{prepass_utils::prepass_depth, view_transformations::{position_ndc_to_world, frag_coord_to_ndc}}
-#endif
+import bevy_pbr::render::mesh_functions;
+import bevy_pbr::render::forward_io::{Vertex, decompress_vertex};
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::view_transformations::position_world_to_clip;
+import bevy_core_pipeline::tonemapping::tone_mapping;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0) var atlas_image: texture_2d_array<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(1) var atlas_sampler: sampler;
-@group(#{MATERIAL_BIND_GROUP}) @binding(2) var<uniform> time: vec4<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(3) var<uniform> atlas: vec4<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(4) var<uniform> frame: vec4<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(5) var<uniform> center: vec4<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(6) var<uniform> capture: vec4<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(7) var<uniform> tint: vec4<f32>;
+@if(DEPTH_PREPASS)
+import bevy_pbr::prepass::utils::prepass_depth;
+@if(DEPTH_PREPASS)
+import bevy_pbr::render::view_transformations::position_ndc_to_world;
+@if(DEPTH_PREPASS)
+import bevy_pbr::render::view_transformations::frag_coord_to_ndc;
+
+@group(constants::MATERIAL_BIND_GROUP) @binding(0) var atlas_image: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(1) var atlas_sampler: sampler;
+@group(constants::MATERIAL_BIND_GROUP) @binding(2) var<uniform> time: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(3) var<uniform> atlas: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(4) var<uniform> frame: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(5) var<uniform> center: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(6) var<uniform> capture: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(7) var<uniform> tint: vec4<f32>;
 
 struct DustVertex {
     @builtin(position) position: vec4<f32>,
@@ -22,19 +29,20 @@ struct DustVertex {
 }
 
 @vertex
-fn vertex(input: Vertex) -> DustVertex {
-    let model = mesh_functions::get_world_from_local(input.instance_index);
+fn vertex(packed_vertex: Vertex) -> DustVertex {
+    let vertex = decompress_vertex(packed_vertex, packed_vertex.instance_index);
+    let model = mesh_functions::get_world_from_local(vertex.instance_index);
     let axis_x = model[0].xyz;
     let axis_y = model[1].xyz;
     let axis_z = model[2].xyz;
-    let local_from_world = mesh_functions::get_local_from_world(input.instance_index);
+    let local_from_world = mesh_functions::get_local_from_world(vertex.instance_index);
     let world_center = (model * vec4(center.xyz, 1.0)).xyz;
     // Camera axes also remain defined while looking straight down.
     let right = view.world_from_view[0].xyz;
     let up = view.world_from_view[1].xyz;
     // A square of sqrt(2) * max(width,height) encloses every rotated capture plane.
     let size = 1.414214 * max(capture.x, capture.y) * max(length(axis_x), max(length(axis_y), length(axis_z)));
-    let world = world_center + (right * input.position.x + up * input.position.y) * size;
+    let world = world_center + (right * vertex.position.x + up * vertex.position.y) * size;
     var out: DustVertex;
     out.position = position_world_to_clip(world);
     out.world_position = world;
@@ -87,7 +95,7 @@ fn fragment(input: DustVertex) -> DustFragment {
     let world_ray = input.world_position - view.world_position.xyz;
     let ray_length = length(world_ray);
     var limit = 1e20;
-#ifdef DEPTH_PREPASS
+    @if(DEPTH_PREPASS)
     // Reject and soften EACH capture plane before blending, as in the authored demo.
     let opaque = prepass_depth(input.position, 0u);
     if opaque > 0.0 {
@@ -95,7 +103,6 @@ fn fragment(input: DustVertex) -> DustFragment {
         let opaque_world = position_ndc_to_world(vec3(ndc.xy, opaque));
         limit = max(0.0, dot(opaque_world - view.world_position.xyz, world_ray) / dot(world_ray, world_ray));
     }
-#endif
     let a = sample_plane(input.local_camera, ray, first, limit, ray_length);
     let b = sample_plane(input.local_camera, ray, second, limit, ray_length);
     let sample = mix(a.color, b.color, blend);
@@ -108,9 +115,8 @@ fn fragment(input: DustVertex) -> DustFragment {
     var out: DustFragment;
     out.depth = clamp(clip.z / clip.w, 0.0, 1.0);
     var rgb = straight;
-#ifndef HDR
+    @if(!HDR)
     rgb = tone_mapping(vec4(rgb, 1.0), view.color_grading).rgb;
-#endif
     out.color = vec4(rgb, sample.a * time.w * tint.a);
     return out;
 }
