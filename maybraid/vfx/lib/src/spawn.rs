@@ -5,17 +5,13 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use bevy::scene::{ResolveContext, ResolveSceneError, SceneDependencies};
-use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
 
 use crate::composition::{
-	EffectDefinition, EffectLayer, EffectPart, EffectRecipe, LobeKind, ScaleBounds,
-	DEFAULT_SCALE_MAX, DEFAULT_SCALE_MIN,
+	EffectDefinition, EffectLayer, EffectPart, EffectRecipe, ScaleBounds, DEFAULT_SCALE_MAX,
+	DEFAULT_SCALE_MIN,
 };
-use crate::lobe_material::LobeMaterial;
-use crate::lobes::{lobe_transform, vary_lobe, LobeMaterialSlot, VfxLobe};
 use crate::membership::VfxMemberOf;
 use crate::palette::ExplosionPalette;
-use crate::particles::effect_properties;
 use crate::seed;
 
 pub const MAX_INTENSITY: f32 = 2.0;
@@ -320,29 +316,7 @@ pub fn realize_layer(
 	};
 	match &layer.part {
 		EffectPart::Flipbook(part) => part.spawn(commands, parent, transform, spawn),
-		EffectPart::Particle(part) => {
-			let count = (part.count * spawn.clamped_intensity()).clamp(1.0, part.capacity as f32);
-			let mut entity = commands.spawn((
-				Name::new(format!("vfx-layer-{}", part.name)),
-				ChildOf(parent),
-				VfxMemberOf(parent),
-				transform,
-				Visibility::Inherited,
-				ParticleEffect::new(part.effect.clone()),
-				effect_properties(spawn, layer.scale, part.shade),
-				VfxEmitter { count },
-				VfxLayerLife {
-					age: 0.0,
-					duration: part.max_lifetime,
-					playback: spawn.clamped_playback(),
-					waiting_for_emitter: true,
-				},
-				NotShadowCaster,
-			));
-			if !part.images.is_empty() {
-				entity.insert(EffectMaterial { images: part.images.clone() });
-			}
-		}
+		EffectPart::Particle(part) => part.spawn(commands, parent, transform, spawn, layer.scale),
 		EffectPart::Light(pulse) => {
 			let peak = pulse.peak_intensity * spawn.clamped_intensity();
 			let color = ExplosionPalette::color(spawn.palette().with_tint(spawn.tint).flash);
@@ -368,55 +342,7 @@ pub fn realize_layer(
 				},
 			));
 		}
-		EffectPart::Mesh(part) => {
-			let cluster = commands
-				.spawn((
-					Name::new(format!("vfx-layer-{}", part.name)),
-					ChildOf(parent),
-					VfxMemberOf(parent),
-					transform,
-					Visibility::Inherited,
-					NotShadowCaster,
-				))
-				.id();
-			let layer_id = layer_stream(part.kind);
-			for (index, spec) in part.lobes.iter().copied().enumerate() {
-				let spec = vary_lobe(spec, spawn.resolved_seed(), layer_id, index as u32);
-				let material = LobeMaterial::new(
-					part.kind,
-					spec.duration,
-					seed::unit(seed::stream(spawn.resolved_seed(), layer_id, index as u32)),
-					&spawn.palette(),
-					spawn.tint_or_white(),
-					spawn.clamped_intensity(),
-				);
-				commands.spawn((
-					Name::new(format!("vfx-lobe-{}-{index}", part.name)),
-					ChildOf(cluster),
-					VfxMemberOf(parent),
-					Mesh3d(part.mesh.clone()),
-					lobe_transform(&spec, 0.0),
-					Visibility::Hidden,
-					VfxLobe { age: 0.0, spec, playback: spawn.clamped_playback() },
-					VfxLayerLife {
-						age: 0.0,
-						duration: spec.duration,
-						playback: spawn.clamped_playback(),
-						waiting_for_emitter: false,
-					},
-					NotShadowCaster,
-					LobeMaterialSlot(material),
-				));
-			}
-		}
-	}
-}
-
-fn layer_stream(kind: LobeKind) -> u32 {
-	match kind {
-		LobeKind::Fire => seed::LAYER_FIRE,
-		LobeKind::Smoke => seed::LAYER_SMOKE,
-		LobeKind::Flash => seed::LAYER_FLASH,
+		EffectPart::Mesh(part) => part.spawn(commands, parent, transform, spawn),
 	}
 }
 
@@ -425,6 +351,9 @@ mod tests {
 	use super::*;
 	use crate::composition::{EffectLayer, LightPulse, ParticleShade};
 	use crate::layers::flash::FLASH_FADE;
+	use crate::parts::particle::{
+		effect_properties, PROP_COLOR0, PROP_PLAYBACK, PROP_SEED, PROP_TINT,
+	};
 
 	#[test]
 	fn spawn_clamps_scale_intensity_and_playback() {
@@ -491,9 +420,9 @@ mod tests {
 		}
 		.resolved();
 		let props = effect_properties(&spawn, 1.0, ParticleShade::Fire);
-		assert!(props.get_stored(crate::particles::PROP_TINT).is_some());
-		assert!(props.get_stored(crate::particles::PROP_SEED).is_some());
-		assert!(props.get_stored(crate::particles::PROP_PLAYBACK).is_some());
-		assert!(props.get_stored(crate::particles::PROP_COLOR0).is_some());
+		assert!(props.get_stored(PROP_TINT).is_some());
+		assert!(props.get_stored(PROP_SEED).is_some());
+		assert!(props.get_stored(PROP_PLAYBACK).is_some());
+		assert!(props.get_stored(PROP_COLOR0).is_some());
 	}
 }

@@ -14,7 +14,7 @@ use crate::composition::{
 };
 use crate::flipbook::update_sprite_index;
 use crate::names::FIREBALL;
-use crate::particles::{
+use crate::parts::particle::{
 	add_instance_properties, init_lifetime, init_palette_color, init_radial_velocity,
 	update_palette_color, update_scaled_size3, value_lifetime_gradient,
 };

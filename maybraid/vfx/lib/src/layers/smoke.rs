@@ -14,7 +14,7 @@ use crate::composition::{
 };
 use crate::flipbook::update_sprite_index;
 use crate::names::SMOKE;
-use crate::particles::{
+use crate::parts::particle::{
 	add_instance_properties, init_lifetime, init_palette_color, init_smoke_velocity,
 	update_palette_color, update_scaled_size3, value_lifetime_gradient,
 };
@@ -179,7 +179,7 @@ pub fn definition(mesh: MeshPart, wisps: ParticlePart) -> EffectDefinition {
 mod tests {
 	use super::*;
 	use crate::assets::smoke_flipbook;
-	use crate::particles::smoke_launch_velocity;
+	use crate::parts::particle::smoke_launch_velocity;
 
 	#[test]
 	fn standalone_smoke_keeps_its_delay() {

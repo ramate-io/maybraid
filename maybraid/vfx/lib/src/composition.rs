@@ -95,7 +95,7 @@ impl LobeSpec {
 	}
 }
 
-/// Shared mesh plus a lobe arrangement. Runtime animation stays in [`crate::lobes`].
+/// Shared mesh plus a lobe arrangement. Runtime animation stays in [`crate::parts::lobe`].
 #[derive(Clone, Debug)]
 pub struct MeshPart {
 	pub name: String,

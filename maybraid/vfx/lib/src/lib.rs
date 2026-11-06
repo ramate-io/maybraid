@@ -15,12 +15,9 @@ pub mod flipbook;
 pub mod layers;
 pub mod library;
 pub mod lifecycle;
-pub mod lobe_material;
-pub mod lobes;
 pub mod membership;
 pub mod names;
 pub mod palette;
-pub mod particles;
 pub mod parts;
 pub mod seed;
 pub mod spawn;
@@ -35,10 +32,10 @@ pub use effects::dust::Dust;
 pub use effects::fiery_explosion::FieryExplosion;
 pub use layers::dust::DustLayer;
 pub use library::{canonicalize_effect_name, VfxLibrary};
-pub use lobe_material::{LobeMaterial, LobeMaterialPlugin};
 pub use names::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
 pub use palette::ExplosionPalette;
 pub use parts::flipbook_card::{DustMaterial, DustPlugin, VfxDust};
+pub use parts::lobe::{LobeMaterial, LobeMaterialPlugin};
 pub use parts::packaged::{PackagedFlipbook, PackagedVfxPlugin, StaticVolume};
 pub use spawn::{
 	spawn_vfx, Effect, SpawnVfxExt, Vfx, VfxInstance, VfxSpawn, MAX_PLAYBACK, MIN_PLAYBACK,

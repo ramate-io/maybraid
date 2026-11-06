@@ -83,11 +83,11 @@ impl Default for LobeMaterial {
 
 impl Material for LobeMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "lobe_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/parts/lobe/lobe_material.wgsl").into()
 	}
 
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "lobe_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/parts/lobe/lobe_material.wgsl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {

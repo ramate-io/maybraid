@@ -1,10 +1,16 @@
-//! Lobe mesh, sampled variation, and age-driven transforms.
+//! Mesh-lobe primitive: sampled variation, age-driven transforms, and spawn.
 
+mod material;
+
+pub use material::{LobeMaterial, LobeMaterialPlugin};
+
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
-use crate::composition::LobeSpec;
-use crate::lobe_material::LobeMaterial;
-use crate::seed::{signed_salted, stream};
+use crate::composition::{LobeKind, LobeSpec, MeshPart};
+use crate::membership::VfxMemberOf;
+use crate::seed::{self, signed_salted, stream};
+use crate::spawn::{VfxInstance, VfxLayerLife, VfxSpawn};
 
 /// Low-poly icosphere with vertex colors holding object-space positions.
 pub fn rounded_lobe_mesh() -> Mesh {
@@ -16,6 +22,64 @@ pub fn rounded_lobe_mesh() -> Mesh {
 	let colors: Vec<[f32; 4]> = positions.iter().map(|p| [p[0], p[1], p[2], 1.0]).collect();
 	mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
 	mesh
+}
+
+impl MeshPart {
+	pub(crate) fn spawn(
+		&self,
+		commands: &mut Commands,
+		parent: Entity,
+		transform: Transform,
+		spawn: &VfxSpawn,
+	) {
+		let cluster = commands
+			.spawn((
+				Name::new(format!("vfx-layer-{}", self.name)),
+				ChildOf(parent),
+				VfxMemberOf(parent),
+				transform,
+				Visibility::Inherited,
+				NotShadowCaster,
+			))
+			.id();
+		let layer_id = seed_layer(self.kind);
+		for (index, spec) in self.lobes.iter().copied().enumerate() {
+			let spec = vary_lobe(spec, spawn.resolved_seed(), layer_id, index as u32);
+			let material = LobeMaterial::new(
+				self.kind,
+				spec.duration,
+				seed::unit(seed::stream(spawn.resolved_seed(), layer_id, index as u32)),
+				&spawn.palette(),
+				spawn.tint_or_white(),
+				spawn.clamped_intensity(),
+			);
+			commands.spawn((
+				Name::new(format!("vfx-lobe-{}-{index}", self.name)),
+				ChildOf(cluster),
+				VfxMemberOf(parent),
+				Mesh3d(self.mesh.clone()),
+				lobe_transform(&spec, 0.0),
+				Visibility::Hidden,
+				VfxLobe { age: 0.0, spec, playback: spawn.clamped_playback() },
+				VfxLayerLife {
+					age: 0.0,
+					duration: spec.duration,
+					playback: spawn.clamped_playback(),
+					waiting_for_emitter: false,
+				},
+				NotShadowCaster,
+				LobeMaterialSlot(material),
+			));
+		}
+	}
+}
+
+fn seed_layer(kind: LobeKind) -> u32 {
+	match kind {
+		LobeKind::Fire => seed::LAYER_FIRE,
+		LobeKind::Smoke => seed::LAYER_SMOKE,
+		LobeKind::Flash => seed::LAYER_FLASH,
+	}
 }
 
 /// Fast initial swell, slower later motion. Shared so lobes read as one blast.
@@ -75,6 +139,40 @@ pub fn stamp_lobe_materials(
 			.entity(entity)
 			.insert(MeshMaterial3d(handle))
 			.remove::<LobeMaterialSlot>();
+	}
+}
+
+pub(crate) fn tick_lobes(
+	time: Res<Time>,
+	instances: Query<&VfxInstance>,
+	mut materials: ResMut<Assets<LobeMaterial>>,
+	mut lobes: Query<(
+		Entity,
+		&VfxMemberOf,
+		&mut VfxLobe,
+		&mut Transform,
+		&mut Visibility,
+		Option<&MeshMaterial3d<LobeMaterial>>,
+		Option<&mut VfxLayerLife>,
+	)>,
+) {
+	let dt = time.delta_secs();
+	for (_entity, member, mut lobe, mut transform, mut visibility, material, life) in &mut lobes {
+		if !member.instance_armed(&instances) {
+			*visibility = Visibility::Hidden;
+			continue;
+		}
+		*visibility = Visibility::Inherited;
+		lobe.age += dt * lobe.playback;
+		if let Some(mut life) = life {
+			life.age = lobe.age;
+		}
+		*transform = lobe_transform(&lobe.spec, lobe.age);
+		if let Some(handle) = material {
+			if let Some(mut material) = materials.get_mut(&handle.0) {
+				material.set_age(lobe.age);
+			}
+		}
 	}
 }
 

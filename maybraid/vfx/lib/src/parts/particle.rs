@@ -1,14 +1,50 @@
-//! Shared Hanabi instance properties and smoke launch math.
+//! Hanabi particle primitive: instance properties, launch math, and spawn.
 
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{
-	Attribute, EffectProperties, ExprWriter, SetAttributeModifier, WriterExpr,
+	Attribute, EffectMaterial, EffectProperties, ExprWriter, ParticleEffect, SetAttributeModifier,
+	WriterExpr,
 };
 
-use crate::composition::ParticleShade;
+use crate::composition::{ParticlePart, ParticleShade};
+use crate::membership::VfxMemberOf;
 use crate::palette::ExplosionPalette;
 use crate::seed;
-use crate::spawn::VfxSpawn;
+use crate::spawn::{VfxEmitter, VfxLayerLife, VfxSpawn};
+
+impl ParticlePart {
+	pub(crate) fn spawn(
+		&self,
+		commands: &mut Commands,
+		parent: Entity,
+		transform: Transform,
+		spawn: &VfxSpawn,
+		layer_scale: f32,
+	) {
+		let count = (self.count * spawn.clamped_intensity()).clamp(1.0, self.capacity as f32);
+		let mut entity = commands.spawn((
+			Name::new(format!("vfx-layer-{}", self.name)),
+			ChildOf(parent),
+			VfxMemberOf(parent),
+			transform,
+			Visibility::Inherited,
+			ParticleEffect::new(self.effect.clone()),
+			effect_properties(spawn, layer_scale, self.shade),
+			VfxEmitter { count },
+			VfxLayerLife {
+				age: 0.0,
+				duration: self.max_lifetime,
+				playback: spawn.clamped_playback(),
+				waiting_for_emitter: true,
+			},
+			NotShadowCaster,
+		));
+		if !self.images.is_empty() {
+			entity.insert(EffectMaterial { images: self.images.clone() });
+		}
+	}
+}
 
 pub const PROP_SCALE: &str = "vfx_scale";
 pub const PROP_TINT: &str = "vfx_tint";

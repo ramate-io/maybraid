@@ -1,4 +1,6 @@
-//! Reusable spawned primitives: packaged assets, flipbook cards, and related parts.
+//! Spawned primitives: packaged assets, flipbook cards, mesh lobes, and particles.
 
 pub mod flipbook_card;
+pub mod lobe;
 pub mod packaged;
+pub mod particle;
