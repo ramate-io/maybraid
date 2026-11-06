@@ -51,12 +51,15 @@ impl LubikanActivationSessionId {
 
 /// Accepted activation. Exactly one consumer (#1110 healing for Self, later
 /// summons) picks this up and writes a [`LubikanActivationReport`].
-#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Message, Clone, Copy, Debug, PartialEq)]
 pub struct LubikanActivationSession {
 	pub owner: Entity,
 	pub account: LubikanAccountId,
 	pub definition: LubikanDefinitionId,
 	pub id: LubikanActivationSessionId,
+	/// Applied spend captured at accept (negative of the catalog cost after
+	/// clamp). Refunds use this value, not a later catalog lookup.
+	pub spent: f32,
 }
 
 impl LubikanActivationSession {
@@ -66,7 +69,21 @@ impl LubikanActivationSession {
 		definition: LubikanDefinitionId,
 		id: LubikanActivationSessionId,
 	) -> Self {
-		Self { owner, account, definition, id }
+		Self { owner, account, definition, id, spent: 0.0 }
+	}
+
+	pub fn with_spent(self, spent: f32) -> Self {
+		Self { spent, ..self }
+	}
+
+	/// Charge to restore after a rejected spawn. Uses the applied spend, not
+	/// the current catalog cost.
+	pub fn refund_amount(self) -> f32 {
+		if self.spent.is_finite() {
+			self.spent.abs()
+		} else {
+			0.0
+		}
 	}
 
 	pub fn report(self, outcome: LubikanActivationOutcome) -> LubikanActivationReport {
@@ -93,6 +110,7 @@ pub struct LubikanActivationGrant {
 impl LubikanActivationGrant {
 	pub fn session(self, owner: Entity) -> LubikanActivationSession {
 		LubikanActivationSession::new(owner, self.account, self.definition, self.id)
+			.with_spent(self.spent)
 	}
 }
 
@@ -288,5 +306,19 @@ mod tests {
 		activation.reset();
 		assert!(!activation.is_busy());
 		assert_eq!(activation.session, None);
+	}
+
+	#[test]
+	fn session_refund_uses_captured_spend() {
+		let session = LubikanActivationSession::new(
+			Entity::from_bits(1),
+			LubikanAccountId::SELF,
+			LubikanDefinitionId::SELF,
+			LubikanActivationSessionId::from_raw(7),
+		)
+		.with_spent(-25.0);
+		assert_eq!(session.refund_amount(), 25.0);
+		let later = session.with_spent(-10.0);
+		assert_eq!(later.refund_amount(), 10.0);
 	}
 }

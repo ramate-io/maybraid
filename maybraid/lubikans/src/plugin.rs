@@ -44,9 +44,47 @@ impl LubikanSessionStore {
 #[derive(SystemParam)]
 pub(crate) struct LubikanActivationAccess<'w, 's> {
 	ledgers: Query<'w, 's, &'static mut LubikanLedger>,
+	body_of: Query<'w, 's, &'static LubikanBodyOf>,
 }
 
 impl LubikanActivationAccess<'_, '_> {
+	pub fn owner_phase(
+		&self,
+		owner: Entity,
+		account: LubikanAccountId,
+	) -> Option<LubikanActivationPhase> {
+		let holder = self.body_of.get(owner).map(LubikanBodyOf::character).unwrap_or(owner);
+		self.ledgers
+			.get(holder)
+			.ok()?
+			.account(account)
+			.map(|account| account.activation().phase)
+	}
+
+	pub fn owner_selection(&self, owner: Entity) -> Option<LubikanAccountId> {
+		let holder = self.body_of.get(owner).map(LubikanBodyOf::character).unwrap_or(owner);
+		self.ledgers.get(holder).ok().map(|ledger| ledger.selection().resolved())
+	}
+
+	/// Summons return their captured account to Idle after natural departure.
+	pub fn close_summon(
+		&mut self,
+		session: LubikanActivationSession,
+		outcome: LubikanActivationOutcome,
+	) -> LubikanActivationFinished {
+		for mut ledger in self.ledgers.iter_mut() {
+			if ledger.account_id_for_session(session.id).is_some() {
+				if ledger.close_activation(session.id, outcome)
+					&& outcome == LubikanActivationOutcome::Completed
+				{
+					ledger.reset_activation(session.account);
+				}
+				break;
+			}
+		}
+		LubikanActivationFinished::from_session(session, outcome)
+	}
+
 	pub fn session_phase(&self, id: LubikanActivationSessionId) -> Option<LubikanActivationPhase> {
 		self.ledgers.iter().find_map(|ledger| ledger.activation_phase(id))
 	}
@@ -127,6 +165,7 @@ impl Plugin for LubikansPlugin {
 			);
 		crate::award::configure(app);
 		crate::heal::configure(app);
+		crate::summon::configure(app);
 	}
 }
 
@@ -642,6 +681,7 @@ mod tests {
 			.ok_or_else(|| anyhow!("accepted session"))?;
 		assert_eq!(session.owner, owner);
 		assert_eq!(session.account, LubikanAccountId::SELF);
+		assert_eq!(session.spent, -cost);
 		let spend = app
 			.world_mut()
 			.resource_mut::<Messages<LubikanChargeChanged>>()
