@@ -2,7 +2,8 @@
 
 use bevy::prelude::*;
 use lubikans::{
-	LubikanChargeRequest, LubikanInterfacePlugin, LubikanLedger, LubikanOwner, LubikanSystems,
+	LubikanBodyOf, LubikanChargeRequest, LubikanInterfacePlugin, LubikanLedger, LubikanOwner,
+	LubikanSystems,
 };
 
 use crate::charge::adapt_award;
@@ -91,18 +92,23 @@ pub fn evaluate_occupancy_rewards(
 	store: Res<CellMetadataStore>,
 	rules: Res<RewardRuleSet>,
 	mut users: Query<
-		(Entity, &GlobalTransform, &mut OccupancyRewardsUser, &LubikanLedger),
+		(Entity, &GlobalTransform, &mut OccupancyRewardsUser, Option<&LubikanBodyOf>),
 		With<LubikanOwner>,
 	>,
+	ledgers: Query<&LubikanLedger>,
 	mut events: MessageWriter<OccupancyEvent>,
 	mut awards: MessageWriter<OccupancyAward>,
 	mut charges: MessageWriter<LubikanChargeRequest>,
 ) {
 	let dt = time.delta();
-	for (entity, transform, mut user, ledger) in &mut users {
+	for (entity, transform, mut user, body_of) in &mut users {
 		if user.session.is_closed() {
 			continue;
 		}
+		let holder = body_of.map(LubikanBodyOf::character).unwrap_or(entity);
+		let Ok(ledger) = ledgers.get(holder) else {
+			continue;
+		};
 		let identity = OccupancyIdentity::resolve(transform.translation(), store.as_ref());
 		let locally_paused = paused.0 || !user.enabled;
 		let stepped = step_occupancy(

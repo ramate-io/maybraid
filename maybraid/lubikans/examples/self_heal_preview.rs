@@ -17,8 +17,8 @@ use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use damage::Health;
 use lubikans::{
-	LubikanActivationFinished, LubikanActivationOutcome, LubikanActivationRequest, LubikanLedger,
-	LubikanOwner, LubikanSelfHealConfig, LubikansPlugin,
+	LubikanActivationFinished, LubikanActivationOutcome, LubikanActivationRequest, LubikanBodyOf,
+	LubikanLedger, LubikanOwner, LubikanSelfHealConfig, LubikansPlugin,
 };
 
 fn main() {
@@ -131,6 +131,7 @@ fn spawn_preview(mut commands: Commands) {
 
 fn fund_and_request(
 	mut ledgers: Query<&mut LubikanLedger>,
+	body_of: Query<&LubikanBodyOf>,
 	owner: Option<Res<PreviewOwner>>,
 	mut requests: MessageWriter<LubikanActivationRequest>,
 	mut primed: Local<bool>,
@@ -141,7 +142,8 @@ fn fund_and_request(
 	let Some(owner) = owner else {
 		return;
 	};
-	let Ok(mut ledger) = ledgers.get_mut(owner.0) else {
+	let holder = body_of.get(owner.0).map(LubikanBodyOf::character).unwrap_or(owner.0);
+	let Ok(mut ledger) = ledgers.get_mut(holder) else {
 		return;
 	};
 	ledger.apply_to_equipped(25.0);
