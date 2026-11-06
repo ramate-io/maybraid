@@ -8,14 +8,15 @@ use bevy::prelude::*;
 use bevy::winit::WinitSettings;
 use clap::Parser;
 use combat_hud::{
-	idle_cycle_outline, CombatHudCyclePanel, CombatHudInventoryCycleCategory, CombatHudPlugin,
-	CombatHudVisible,
+	idle_cycle_outline, CombatHudCyclePanel, CombatHudEquippedQueue, CombatHudEquippedSlot,
+	CombatHudInventoryCycleCategory, CombatHudPlugin, CombatHudVisible,
 };
 use damage::Health;
 use lubikans::{
 	fixtures::{install_gameplay, install_interface, spawn_self_owner},
 	LubikanActivationRequest, LubikanCatalog, LubikanChargeChanged, LubikanChargeReason,
-	LubikanHealingEnabled, LubikanInterfacePlugin, LubikanLedger, LubikanOwner, LubikanSelfHeal,
+	LubikanDefinition, LubikanDefinitionId, LubikanHealingEnabled, LubikanInterfacePlugin,
+	LubikanLedger, LubikanOwner, LubikanSelfHeal,
 };
 use player::Player;
 
@@ -32,6 +33,9 @@ struct Cli {
 	/// Three frames: teal outline on the D-pad-selected system panel.
 	#[arg(long)]
 	capture_cycle: bool,
+	/// Before/after cycle-slot highlight frames (dark and light backdrops).
+	#[arg(long)]
+	capture_cycle_slots: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,6 +49,11 @@ enum StateKind {
 	CycleWeapons,
 	CycleSkillMaps,
 	CycleLubikans,
+	CycleBeforeDark,
+	CycleAfterDark,
+	CycleBeforeLight,
+	CycleAfterLight,
+	CycleOverflowWeapons,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -82,6 +91,8 @@ fn artifacts_dir() -> PathBuf {
 fn capture_png_path(label: &str) -> PathBuf {
 	if label.starts_with("cycle-") {
 		artifacts_dir().join(format!("{label}.png"))
+	} else if label.contains("cycle") {
+		artifacts_dir().join(format!("cycle-slot-{label}.png"))
 	} else {
 		artifacts_dir().join(format!("lubikan-hud-state-{label}.png"))
 	}
@@ -153,7 +164,7 @@ fn capture_steps() -> Vec<StateStep> {
 	]
 }
 
-fn cycle_capture_steps() -> Vec<StateStep> {
+fn cycle_panel_capture_steps() -> Vec<StateStep> {
 	vec![
 		StateStep { label: "cycle-01-weapons", kind: StateKind::CycleWeapons, dwell_secs: 2.4 },
 		StateStep {
@@ -162,6 +173,36 @@ fn cycle_capture_steps() -> Vec<StateStep> {
 			dwell_secs: 0.8,
 		},
 		StateStep { label: "cycle-03-lubikans", kind: StateKind::CycleLubikans, dwell_secs: 0.8 },
+	]
+}
+
+fn cycle_slot_capture_steps() -> Vec<StateStep> {
+	vec![
+		StateStep {
+			label: "01-before-cycle-dark",
+			kind: StateKind::CycleBeforeDark,
+			dwell_secs: 3.0,
+		},
+		StateStep {
+			label: "02-after-cycle-dark",
+			kind: StateKind::CycleAfterDark,
+			dwell_secs: 0.80,
+		},
+		StateStep {
+			label: "03-before-cycle-light",
+			kind: StateKind::CycleBeforeLight,
+			dwell_secs: 0.80,
+		},
+		StateStep {
+			label: "04-after-cycle-light",
+			kind: StateKind::CycleAfterLight,
+			dwell_secs: 0.80,
+		},
+		StateStep {
+			label: "05-overflow-cycle-visible",
+			kind: StateKind::CycleOverflowWeapons,
+			dwell_secs: 2.0,
+		},
 	]
 }
 
@@ -275,13 +316,21 @@ fn main() {
 	app.add_systems(Update, (apply_capture_state, drive_capture_states).chain());
 	let capture_states = app.world().resource::<Cli>().capture_states;
 	let capture_cycle = app.world().resource::<Cli>().capture_cycle;
+	let capture_cycle_slots = app.world().resource::<Cli>().capture_cycle_slots;
 	if capture_cycle {
 		app.add_systems(Startup, spawn_cycle_standin_plates);
 	}
-	if capture_states || capture_cycle {
+	if capture_states || capture_cycle || capture_cycle_slots {
 		let _ = std::fs::create_dir_all(artifacts_dir());
+		let steps = if capture_cycle_slots {
+			cycle_slot_capture_steps()
+		} else if capture_cycle {
+			cycle_panel_capture_steps()
+		} else {
+			capture_steps()
+		};
 		app.insert_resource(StateCapturePlan {
-			steps: if capture_cycle { cycle_capture_steps() } else { capture_steps() },
+			steps,
 			index: 0,
 			dwell: 0.0,
 			last_applied: None,
@@ -317,11 +366,13 @@ fn apply_capture_state(
 	mut priming: ResMut<CaptureSelfHealPriming>,
 	mut healing_enabled: ResMut<LubikanHealingEnabled>,
 	mut category: ResMut<CombatHudInventoryCycleCategory>,
+	mut equipped_queue: ResMut<CombatHudEquippedQueue>,
+	mut clear: ResMut<ClearColor>,
 	mut ledgers: Query<&mut LubikanLedger, With<LubikanOwner>>,
 	mut healths: Query<&mut Health>,
 	mut commands: Commands,
 ) {
-	if !cli.capture_states && !cli.capture_cycle {
+	if !cli.capture_states && !cli.capture_cycle && !cli.capture_cycle_slots {
 		return;
 	}
 	let Some(mut plan) = plan else { return };
@@ -338,10 +389,16 @@ fn apply_capture_state(
 	healing_enabled.0 = true;
 	*category = match step.kind {
 		StateKind::CycleSkillMaps => CombatHudInventoryCycleCategory::SkillMaps,
-		StateKind::CycleLubikans => CombatHudInventoryCycleCategory::Lubikans,
+		StateKind::CycleLubikans
+		| StateKind::CycleBeforeDark
+		| StateKind::CycleAfterDark
+		| StateKind::CycleBeforeLight
+		| StateKind::CycleAfterLight => CombatHudInventoryCycleCategory::Lubikans,
+		StateKind::CycleOverflowWeapons => CombatHudInventoryCycleCategory::Weapons,
 		_ => CombatHudInventoryCycleCategory::Weapons,
 	};
 	*hud = CombatHudVisible(true);
+	*clear = ClearColor(Color::srgb(0.05, 0.06, 0.08));
 
 	if let Ok(mut health) = healths.get_mut(owner.0) {
 		*health = Health { current: 68.0, max: 100.0 };
@@ -391,7 +448,68 @@ fn apply_capture_state(
 			StateKind::CycleWeapons | StateKind::CycleSkillMaps | StateKind::CycleLubikans => {
 				ledger.apply_to_equipped(48.0 - current);
 			}
+			StateKind::CycleBeforeDark
+			| StateKind::CycleAfterDark
+			| StateKind::CycleBeforeLight
+			| StateKind::CycleAfterLight
+			| StateKind::CycleOverflowWeapons => {}
 		}
+	}
+
+	if matches!(
+		step.kind,
+		StateKind::CycleBeforeDark
+			| StateKind::CycleAfterDark
+			| StateKind::CycleBeforeLight
+			| StateKind::CycleAfterLight
+	) {
+		apply_cycle_capture_step(step.kind, owner.0, &mut category, &mut clear, &mut ledgers);
+	}
+	if step.kind == StateKind::CycleOverflowWeapons {
+		apply_overflow_weapons_capture(&mut equipped_queue, &mut clear);
+	}
+}
+
+fn apply_overflow_weapons_capture(queue: &mut CombatHudEquippedQueue, clear: &mut ClearColor) {
+	*clear = ClearColor(Color::srgb(0.05, 0.06, 0.08));
+	queue.slots = (0..10)
+		.map(|key| CombatHudEquippedSlot { key, label: format!("W{key}") })
+		.collect();
+	queue.selected = 9;
+}
+
+fn apply_cycle_capture_step(
+	kind: StateKind,
+	owner: Entity,
+	category: &mut CombatHudInventoryCycleCategory,
+	clear: &mut ClearColor,
+	ledgers: &mut Query<&mut LubikanLedger, With<LubikanOwner>>,
+) {
+	*category = CombatHudInventoryCycleCategory::Lubikans;
+	*clear = ClearColor(match kind {
+		StateKind::CycleBeforeLight | StateKind::CycleAfterLight => Color::srgb(0.86, 0.88, 0.91),
+		_ => Color::srgb(0.05, 0.06, 0.08),
+	});
+	let Ok(mut ledger) = ledgers.get_mut(owner) else {
+		return;
+	};
+	let mid =
+		ledger.ensure_owned(LubikanDefinition::new(LubikanDefinitionId::from_raw(2), 40.0, 5.0));
+	let last =
+		ledger.ensure_owned(LubikanDefinition::new(LubikanDefinitionId::from_raw(3), 40.0, 5.0));
+	let self_id = lubikans::LubikanAccountId::SELF;
+	if let Some(current) = ledger.account(self_id).map(|account| account.charge().current()) {
+		ledger.apply_to(self_id, 48.0 - current);
+	}
+	if let Some(current) = ledger.account(mid).map(|account| account.charge().current()) {
+		ledger.apply_to(mid, 40.0 - current);
+	}
+	if let Some(current) = ledger.account(last).map(|account| account.charge().current()) {
+		ledger.apply_to(last, 18.0 - current);
+	}
+	ledger.select(None);
+	if matches!(kind, StateKind::CycleAfterDark | StateKind::CycleAfterLight) {
+		ledger.select(Some(mid));
 	}
 }
 
@@ -406,7 +524,7 @@ fn drive_capture_states(
 	ledgers: Query<&LubikanLedger, With<LubikanOwner>>,
 	mut exit: MessageWriter<AppExit>,
 ) {
-	if !cli.capture_states && !cli.capture_cycle {
+	if !cli.capture_states && !cli.capture_cycle && !cli.capture_cycle_slots {
 		return;
 	}
 	let Some(mut plan) = plan else { return };
