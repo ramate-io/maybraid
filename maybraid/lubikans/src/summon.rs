@@ -16,6 +16,7 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -110,27 +111,17 @@ pub enum LubikanSummonInvalidPlacement {
 	KeepSpendAndCancel,
 }
 
-/// PLACEHOLDER targeting. Ward / Enraged policies are #1137.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LubikanSummonTargeting {
-	/// No combat AI or victim filter.
-	Passive,
-}
-
-/// PLACEHOLDER who may consume a summon session.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LubikanSummonAuthority {
-	/// Any [`LubikanOwner`] whose non-Self account just paid.
-	AnyOwner,
-}
-
 /// Configurable summon policies. Defaults are labeled placeholders.
+///
+/// Spawn health comes from [`LubikanSummonRecipe::health`], not this resource.
+/// Targeting and who-may-summon stay open in
+/// [#1135](https://github.com/ramate-io/maybraid/issues/1135) / [#1137](https://github.com/ramate-io/maybraid/issues/1137)
+/// and are not stored here until a second variant exists.
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct LubikanSummonConfig {
 	pub max_concurrent: u32,
 	pub lifetime_secs: f32,
 	pub forward_offset: f32,
-	pub health: f32,
 	/// PLACEHOLDER: refund spent charge when spawn is rejected.
 	pub invalid_placement: LubikanSummonInvalidPlacement,
 	/// PLACEHOLDER: keep the activation session Active while the instance lives.
@@ -143,8 +134,6 @@ pub struct LubikanSummonConfig {
 	pub retire_on_owner_lifetime: bool,
 	/// PLACEHOLDER: owner must be living (not dead / downed) to spawn.
 	pub require_living_owner: bool,
-	pub targeting: LubikanSummonTargeting,
-	pub authority: LubikanSummonAuthority,
 }
 
 impl Default for LubikanSummonConfig {
@@ -153,15 +142,12 @@ impl Default for LubikanSummonConfig {
 			max_concurrent: PLACEHOLDER_SUMMON_MAX_CONCURRENT,
 			lifetime_secs: PLACEHOLDER_SUMMON_LIFETIME_SECS,
 			forward_offset: PLACEHOLDER_SUMMON_FORWARD_OFFSET,
-			health: PLACEHOLDER_SUMMON_HEALTH,
 			invalid_placement: LubikanSummonInvalidPlacement::RefundAndCancel,
 			session_follows_instance: true,
 			dismiss_on_select_change: false,
 			block_while_self_active: false,
 			retire_on_owner_lifetime: true,
 			require_living_owner: true,
-			targeting: LubikanSummonTargeting::Passive,
-			authority: LubikanSummonAuthority::AnyOwner,
 		}
 	}
 }
@@ -171,10 +157,11 @@ impl LubikanSummonConfig {
 		self.max_concurrent.max(1)
 	}
 
-	/// `None` means the instance lives until dismissed or the owner retires.
-	pub fn lifetime_secs(self) -> Option<f32> {
+	/// Global timeout. `None` means spawned instances live until dismissed or
+	/// the owner retires, unless a recipe picks [`LubikanSummonLifetime::Duration`].
+	pub fn lifetime(self) -> Option<Duration> {
 		if self.lifetime_secs.is_finite() && self.lifetime_secs > 0.0 {
-			Some(self.lifetime_secs)
+			Some(Duration::from_secs_f32(self.lifetime_secs))
 		} else {
 			None
 		}
@@ -186,10 +173,6 @@ impl LubikanSummonConfig {
 		} else {
 			PLACEHOLDER_SUMMON_FORWARD_OFFSET
 		}
-	}
-
-	pub fn health(self) -> f32 {
-		if self.health.is_finite() { self.health.max(1.0) } else { PLACEHOLDER_SUMMON_HEALTH }
 	}
 }
 
@@ -209,12 +192,53 @@ pub enum LubikanSummonPresentation {
 	PlaceholderCapsule,
 }
 
+/// How a recipe chooses the spawned instance's timeout.
+///
+/// Resolved once at spawn into `Option<Duration>` on [`LubikanSummon`].
+///
+/// **Current policy (preserved):**
+/// - Config `None` (non-positive / non-finite [`LubikanSummonConfig::lifetime_secs`])
+///   means no timeout.
+/// - [`Self::InheritDefault`] takes that global value. An "untimed" recipe
+///   (`0` / non-finite under the old `f32` field) does **not** override a
+///   finite default with unlimited — it inherits.
+/// - [`Self::Duration`] overrides the default, including an unlimited default.
+/// - [`Self::Forever`] is the explicit unlimited recipe. The old `f32` field
+///   could not say this: `0` sanitized to inherit, not forever.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LubikanSummonLifetime {
+	InheritDefault,
+	Forever,
+	Duration(Duration),
+}
+
+impl LubikanSummonLifetime {
+	/// Finite lifetime, or [`Self::InheritDefault`] when `secs` is non-positive
+	/// or non-finite — the previous recipe `f32` sanitizer.
+	pub fn from_secs_f32(secs: f32) -> Self {
+		if secs.is_finite() && secs > 0.0 {
+			Self::Duration(Duration::from_secs_f32(secs))
+		} else {
+			Self::InheritDefault
+		}
+	}
+
+	/// Runtime timeout stored on the live component. `None` means no timeout.
+	pub fn resolve(self, default: Option<Duration>) -> Option<Duration> {
+		match self {
+			Self::InheritDefault => default,
+			Self::Forever => None,
+			Self::Duration(duration) => Some(duration),
+		}
+	}
+}
+
 /// Lubikan-supplied spawn recipe. Missing recipes reject the session.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LubikanSummonRecipe {
 	pub definition: LubikanDefinitionId,
 	pub health: f32,
-	pub lifetime_secs: f32,
+	pub lifetime: LubikanSummonLifetime,
 	pub presentation: LubikanSummonPresentation,
 }
 
@@ -223,7 +247,7 @@ impl LubikanSummonRecipe {
 		Self {
 			definition: FIXTURE_SUMMON_DEFINITION_ID,
 			health: PLACEHOLDER_SUMMON_HEALTH,
-			lifetime_secs: PLACEHOLDER_SUMMON_LIFETIME_SECS,
+			lifetime: LubikanSummonLifetime::from_secs_f32(PLACEHOLDER_SUMMON_LIFETIME_SECS),
 			presentation: LubikanSummonPresentation::PlaceholderCapsule,
 		}
 	}
@@ -232,12 +256,8 @@ impl LubikanSummonRecipe {
 		if self.health.is_finite() { self.health.max(1.0) } else { PLACEHOLDER_SUMMON_HEALTH }
 	}
 
-	pub fn lifetime_secs(self) -> Option<f32> {
-		if self.lifetime_secs.is_finite() && self.lifetime_secs > 0.0 {
-			Some(self.lifetime_secs)
-		} else {
-			None
-		}
+	pub fn resolve_lifetime(self, default: Option<Duration>) -> Option<Duration> {
+		self.lifetime.resolve(default)
 	}
 }
 
@@ -300,8 +320,9 @@ pub struct LubikanSummon {
 	pub definition: LubikanDefinitionId,
 	pub session: LubikanActivationSessionId,
 	pub instance: LubikanSummonInstanceId,
-	pub elapsed: f32,
-	pub lifetime: f32,
+	pub elapsed: Duration,
+	/// `None` means the instance lives until dismissed or the owner retires.
+	pub lifetime: Option<Duration>,
 	/// Applied activation spend captured on the session (negative).
 	pub spent: f32,
 }
@@ -313,8 +334,89 @@ impl LubikanSummon {
 	}
 
 	pub fn timed_out(self) -> bool {
-		self.lifetime > 0.0 && self.elapsed >= self.lifetime
+		self.lifetime.is_some_and(|limit| self.elapsed >= limit)
 	}
+
+	/// Why this instance should retire this frame, if it should.
+	///
+	/// Precedence: combat [`Died`] on the instance, owner lifetime, cancelled
+	/// session, selection dismiss. Owner-lifetime reason is world-reset when
+	/// any restart notice is in this batch, otherwise owner-retired.
+	fn retire_reason(
+		self,
+		entity: Entity,
+		config: LubikanSummonConfig,
+		batch: &SummonRetireBatch,
+		access: SummonRetireAccess,
+	) -> Option<LubikanSummonDepartureReason> {
+		if batch.deaths.iter().any(|death| death.entity == entity) {
+			return Some(LubikanSummonDepartureReason::Interrupted);
+		}
+		if config.retire_on_owner_lifetime && access.owner_gone {
+			return Some(self.owner_lifetime_reason(batch.notices));
+		}
+		if config.session_follows_instance && !access.session_active {
+			return Some(LubikanSummonDepartureReason::Cancelled);
+		}
+		if config.dismiss_on_select_change && access.selection_left {
+			return Some(LubikanSummonDepartureReason::Dismissed);
+		}
+		None
+	}
+
+	fn owner_lifetime_reason(
+		self,
+		notices: &[LubikanOwnerLifetime],
+	) -> LubikanSummonDepartureReason {
+		if notices
+			.iter()
+			.any(|notice| notice.kind == LubikanOwnerLifetimeKind::RestartSession)
+		{
+			LubikanSummonDepartureReason::WorldReset
+		} else {
+			LubikanSummonDepartureReason::OwnerRetired
+		}
+	}
+
+	fn owner_should_retire(
+		self,
+		owners: &Query<(), With<LubikanOwner>>,
+		healths: &Query<&Health>,
+		downed: &Query<(), With<Downed>>,
+		batch: &SummonRetireBatch,
+	) -> bool {
+		if owners.get(self.owner).is_err() {
+			return true;
+		}
+		if owner_unavailable(self.owner, healths, downed) {
+			return true;
+		}
+		if batch.deaths.iter().any(|death| death.entity == self.owner) {
+			return true;
+		}
+		batch.notices.iter().any(|notice| match notice.kind {
+			LubikanOwnerLifetimeKind::RestartSession => true,
+			LubikanOwnerLifetimeKind::ReplaceBody | LubikanOwnerLifetimeKind::Unequip => {
+				notice.previous == Some(self.owner)
+			}
+			LubikanOwnerLifetimeKind::Equip => false,
+		})
+	}
+}
+
+/// Death and owner-lifetime notices, kept for the whole retire pass because
+/// every live summon inspects the same batch.
+struct SummonRetireBatch<'a> {
+	deaths: &'a [Died],
+	notices: &'a [LubikanOwnerLifetime],
+}
+
+/// Per-summon ledger facts that do not belong on the shared batch.
+#[derive(Clone, Copy)]
+struct SummonRetireAccess {
+	session_active: bool,
+	selection_left: bool,
+	owner_gone: bool,
 }
 
 /// Typed departure. Distinct from [`Died`] — do not emit kill rewards here.
@@ -520,9 +622,7 @@ fn accept_summon_sessions(mut close: SummonClose, mut accept: SummonAccept) {
 			close.reject(*session, LubikanSummonDepartureReason::InvalidPlacement);
 			continue;
 		};
-		let lifetime = recipe
-			.lifetime_secs()
-			.unwrap_or_else(|| close.config.lifetime_secs().unwrap_or(0.0));
+		let lifetime = recipe.resolve_lifetime(close.config.lifetime());
 		let instance = LubikanSummonInstanceId::mint();
 		let live = LubikanSummon {
 			owner: session.owner,
@@ -530,7 +630,7 @@ fn accept_summon_sessions(mut close: SummonClose, mut accept: SummonAccept) {
 			definition: session.definition,
 			session: session.id,
 			instance,
-			elapsed: 0.0,
+			elapsed: Duration::ZERO,
 			lifetime,
 			spent: session.spent,
 		};
@@ -561,43 +661,21 @@ fn retire_summons(
 ) {
 	let deaths: Vec<Died> = deaths.read().copied().collect();
 	let notices: Vec<LubikanOwnerLifetime> = lives.read().copied().collect();
-	let mut retired = Vec::new();
+	let batch = SummonRetireBatch { deaths: &deaths, notices: &notices };
+	let config = *close.config;
 	for (entity, live) in &summons {
-		if deaths.iter().any(|death| death.entity == entity) {
-			retired.push((entity, *live, LubikanSummonDepartureReason::Interrupted));
-			continue;
-		}
-		if close.config.retire_on_owner_lifetime
-			&& should_retire_for_owner(*live, &owners, &healths, &downed, &deaths, &notices)
-		{
-			let reason = if notices
-				.iter()
-				.any(|notice| notice.kind == LubikanOwnerLifetimeKind::RestartSession)
-			{
-				LubikanSummonDepartureReason::WorldReset
-			} else {
-				LubikanSummonDepartureReason::OwnerRetired
-			};
-			retired.push((entity, *live, reason));
-			continue;
-		}
-		if close.config.session_follows_instance
-			&& close.activations.session_phase(live.session) != Some(LubikanActivationPhase::Active)
-		{
-			retired.push((entity, *live, LubikanSummonDepartureReason::Cancelled));
-			continue;
-		}
-		if close.config.dismiss_on_select_change
-			&& close
+		let access = SummonRetireAccess {
+			session_active: close.activations.session_phase(live.session)
+				== Some(LubikanActivationPhase::Active),
+			selection_left: close
 				.activations
 				.owner_selection(live.owner)
-				.is_some_and(|account| account != live.account)
-		{
-			retired.push((entity, *live, LubikanSummonDepartureReason::Dismissed));
+				.is_some_and(|account| account != live.account),
+			owner_gone: live.owner_should_retire(&owners, &healths, &downed, &batch),
+		};
+		if let Some(reason) = live.retire_reason(entity, config, &batch, access) {
+			close.retire(entity, *live, reason);
 		}
-	}
-	for (entity, live, reason) in retired {
-		close.retire(entity, live, reason);
 	}
 }
 
@@ -610,16 +688,13 @@ fn tick_summons(
 	if !enabled.0 {
 		return;
 	}
-	let dt = time.delta_secs().max(0.0);
-	let mut expired = Vec::new();
+	let dt = time.delta();
 	for (entity, mut live) in &mut summons {
-		live.elapsed += dt;
+		live.elapsed = live.elapsed.saturating_add(dt);
 		if live.timed_out() {
-			expired.push((entity, *live));
+			let snapshot = *live;
+			close.retire(entity, snapshot, LubikanSummonDepartureReason::Timeout);
 		}
-	}
-	for (entity, live) in expired {
-		close.retire(entity, live, LubikanSummonDepartureReason::Timeout);
 	}
 }
 
@@ -636,32 +711,6 @@ fn owner_unavailable(
 	downed: &Query<(), With<Downed>>,
 ) -> bool {
 	downed.get(owner).is_ok() || healths.get(owner).is_ok_and(|health| health.is_dead())
-}
-
-fn should_retire_for_owner(
-	live: LubikanSummon,
-	owners: &Query<(), With<LubikanOwner>>,
-	healths: &Query<&Health>,
-	downed: &Query<(), With<Downed>>,
-	deaths: &[Died],
-	notices: &[LubikanOwnerLifetime],
-) -> bool {
-	if owners.get(live.owner).is_err() {
-		return true;
-	}
-	if owner_unavailable(live.owner, healths, downed) {
-		return true;
-	}
-	if deaths.iter().any(|death| death.entity == live.owner) {
-		return true;
-	}
-	notices.iter().any(|notice| match notice.kind {
-		LubikanOwnerLifetimeKind::RestartSession => true,
-		LubikanOwnerLifetimeKind::ReplaceBody | LubikanOwnerLifetimeKind::Unequip => {
-			notice.previous == Some(live.owner)
-		}
-		LubikanOwnerLifetimeKind::Equip => false,
-	})
 }
 
 fn placement_from(owner: &Transform, offset: f32) -> Option<Transform> {
@@ -689,7 +738,6 @@ mod tests {
 	use anyhow::{Result, anyhow};
 	use bevy::time::{TimeUpdateStrategy, Virtual};
 	use damage::DamagePlugin;
-	use std::time::Duration;
 
 	const DT: f32 = 1.0;
 
@@ -774,6 +822,12 @@ mod tests {
 		let world = app.world_mut();
 		let mut query = world.query::<(Entity, &LubikanSummon)>();
 		query.iter(world).map(|(entity, summon)| (entity, *summon)).collect()
+	}
+
+	fn register_lifetime(app: &mut App, lifetime: LubikanSummonLifetime) {
+		app.world_mut()
+			.resource_mut::<LubikanSummonCatalog>()
+			.register(LubikanSummonRecipe { lifetime, ..LubikanSummonRecipe::fixture() });
 	}
 
 	fn departures(app: &mut App) -> Vec<LubikanSummonDeparture> {
@@ -1100,9 +1154,7 @@ mod tests {
 		let mut app = summon_app();
 		app.add_plugins(DamagePlugin);
 		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 2.0;
-		app.world_mut()
-			.resource_mut::<LubikanSummonCatalog>()
-			.register(LubikanSummonRecipe { lifetime_secs: 2.0, ..LubikanSummonRecipe::fixture() });
+		register_lifetime(&mut app, LubikanSummonLifetime::from_secs_f32(2.0));
 		let owner = spawn_owner(&mut app)?;
 		let account = unlock_fixture(&mut app, owner)?;
 		let session = fund_and_activate(&mut app, owner, account)?;
@@ -1202,9 +1254,7 @@ mod tests {
 	fn pause_freezes_lifetime_without_dismissing() -> Result<()> {
 		let mut app = summon_app();
 		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 2.0;
-		app.world_mut()
-			.resource_mut::<LubikanSummonCatalog>()
-			.register(LubikanSummonRecipe { lifetime_secs: 2.0, ..LubikanSummonRecipe::fixture() });
+		register_lifetime(&mut app, LubikanSummonLifetime::from_secs_f32(2.0));
 		let owner = spawn_owner(&mut app)?;
 		let account = unlock_fixture(&mut app, owner)?;
 		fund_and_activate(&mut app, owner, account)?;
@@ -1217,6 +1267,124 @@ mod tests {
 		app.update();
 		app.update();
 		assert!(live_summons(&mut app).is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn recipe_lifetime_resolve_keeps_inherit_from_overriding_a_finite_default() {
+		let two = Duration::from_secs(2);
+		assert_eq!(
+			LubikanSummonLifetime::from_secs_f32(0.0),
+			LubikanSummonLifetime::InheritDefault
+		);
+		assert_eq!(
+			LubikanSummonLifetime::from_secs_f32(f32::NAN),
+			LubikanSummonLifetime::InheritDefault
+		);
+		assert_eq!(
+			LubikanSummonLifetime::from_secs_f32(f32::INFINITY),
+			LubikanSummonLifetime::InheritDefault
+		);
+		assert_eq!(LubikanSummonLifetime::InheritDefault.resolve(Some(two)), Some(two));
+		assert_eq!(LubikanSummonLifetime::InheritDefault.resolve(None), None);
+		assert_eq!(LubikanSummonLifetime::Forever.resolve(Some(two)), None);
+		assert_eq!(LubikanSummonLifetime::Duration(two).resolve(None), Some(two));
+	}
+
+	#[test]
+	fn inherited_lifetime_uses_the_config_timeout() -> Result<()> {
+		let mut app = summon_app();
+		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 2.0;
+		register_lifetime(&mut app, LubikanSummonLifetime::InheritDefault);
+		let owner = spawn_owner(&mut app)?;
+		let account = unlock_fixture(&mut app, owner)?;
+		fund_and_activate(&mut app, owner, account)?;
+		assert_eq!(
+			live_summons(&mut app)[0].1.lifetime,
+			Some(Duration::from_secs(2)),
+			"untimed recipe must inherit the finite default, not override it"
+		);
+		app.update();
+		assert!(live_summons(&mut app).is_empty());
+		assert_eq!(
+			departures(&mut app).last().map(|event| event.reason),
+			Some(LubikanSummonDepartureReason::Timeout)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn finite_recipe_lifetime_overrides_an_unlimited_default() -> Result<()> {
+		let mut app = summon_app();
+		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 0.0;
+		register_lifetime(&mut app, LubikanSummonLifetime::from_secs_f32(2.0));
+		let owner = spawn_owner(&mut app)?;
+		let account = unlock_fixture(&mut app, owner)?;
+		fund_and_activate(&mut app, owner, account)?;
+		assert_eq!(live_summons(&mut app)[0].1.lifetime, Some(Duration::from_secs_f32(2.0)));
+		app.update();
+		assert!(live_summons(&mut app).is_empty());
+		assert_eq!(
+			departures(&mut app).last().map(|event| event.reason),
+			Some(LubikanSummonDepartureReason::Timeout)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn unlimited_recipe_does_not_timeout_when_the_default_is_finite() -> Result<()> {
+		let mut app = summon_app();
+		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 2.0;
+		register_lifetime(&mut app, LubikanSummonLifetime::Forever);
+		let owner = spawn_owner(&mut app)?;
+		let account = unlock_fixture(&mut app, owner)?;
+		fund_and_activate(&mut app, owner, account)?;
+		assert_eq!(live_summons(&mut app)[0].1.lifetime, None);
+		app.update();
+		app.update();
+		app.update();
+		assert_eq!(live_summons(&mut app).len(), 1);
+		assert!(departures(&mut app).is_empty());
+		assert_eq!(phase(&app, owner, account)?, LubikanActivationPhase::Active);
+		Ok(())
+	}
+
+	#[test]
+	fn inherited_unlimited_default_does_not_timeout() -> Result<()> {
+		let mut app = summon_app();
+		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 0.0;
+		register_lifetime(&mut app, LubikanSummonLifetime::InheritDefault);
+		let owner = spawn_owner(&mut app)?;
+		let account = unlock_fixture(&mut app, owner)?;
+		fund_and_activate(&mut app, owner, account)?;
+		assert_eq!(live_summons(&mut app)[0].1.lifetime, None);
+		app.update();
+		app.update();
+		assert_eq!(live_summons(&mut app).len(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn pause_freezes_inherited_lifetime_then_resumes() -> Result<()> {
+		let mut app = summon_app();
+		app.world_mut().resource_mut::<LubikanSummonConfig>().lifetime_secs = 2.0;
+		register_lifetime(&mut app, LubikanSummonLifetime::InheritDefault);
+		let owner = spawn_owner(&mut app)?;
+		let account = unlock_fixture(&mut app, owner)?;
+		fund_and_activate(&mut app, owner, account)?;
+		app.world_mut().resource_mut::<LubikanSummonEnabled>().0 = false;
+		app.update();
+		app.update();
+		assert_eq!(live_summons(&mut app).len(), 1);
+		assert_eq!(phase(&app, owner, account)?, LubikanActivationPhase::Active);
+		app.world_mut().resource_mut::<LubikanSummonEnabled>().0 = true;
+		app.update();
+		app.update();
+		assert!(live_summons(&mut app).is_empty());
+		assert_eq!(
+			departures(&mut app).last().map(|event| event.reason),
+			Some(LubikanSummonDepartureReason::Timeout)
+		);
 		Ok(())
 	}
 
