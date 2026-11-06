@@ -2,28 +2,25 @@
 // Chico stick / bark: PBR + screen-space edge darkening from world normals.
 // Adapted from `playgrounds/objects/assets/shaders/edge_material.wgsl`.
 //---------------------------------------------------------
-#import bevy_pbr::{
-    forward_io::VertexOutput,
-    mesh_view_bindings::view,
-    pbr_types::{PbrInput, pbr_input_new},
-    pbr_functions as fns,
-    pbr_bindings,
-}
-#import bevy_core_pipeline::tonemapping::tone_mapping
-#ifdef DISTANCE_FOG
-#import bevy_pbr::mesh_view_bindings::fog
-#endif
+import bevy_pbr::render::forward_io::VertexOutput;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::pbr_types::PbrInput;
+import bevy_pbr::render::pbr_types::pbr_input_new;
+import bevy_pbr::render::pbr_functions as fns;
+import bevy_pbr::render::pbr_bindings;
+import bevy_core_pipeline::tonemapping::tone_mapping;
+@if(DISTANCE_FOG)
+import bevy_pbr::render::mesh_view_bindings::fog;
 
 fn with_distance_fog(color: vec4<f32>, world_position: vec3<f32>, frag_xy: vec2<f32>) -> vec4<f32> {
-#ifdef DISTANCE_FOG
+    @if(DISTANCE_FOG)
     return fns::apply_fog(fog, color, world_position, view.world_position.xyz, frag_xy);
-#else
+    @if(!DISTANCE_FOG)
     return color;
-#endif
 }
 
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> base_color: vec4<f32>;
 
 

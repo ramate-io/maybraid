@@ -1,6 +1,6 @@
 //! Streamed vs pinned region helpers presentation and padding share.
 
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 use terrain_layer_model::TerrainExtent;
 
 /// Visual region for padding. Streamed extents use the presentation ring; a

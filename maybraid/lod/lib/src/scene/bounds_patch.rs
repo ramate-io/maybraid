@@ -6,8 +6,8 @@
 
 use std::marker::PhantomData;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 
 use crate::scene::host::LodSceneHost;
 use crate::scene::refresh::{LodHostBounds, LodRefreshSystems};
@@ -59,7 +59,7 @@ where
 	}
 }
 
-fn update_scene_bounds<T>(insert: On<Insert, T>, mut commands: Commands, scenes: Query<&T>)
+fn update_scene_bounds<T>(insert: On<Insert<T>>, mut commands: Commands, scenes: Query<&T>)
 where
 	T: Component + SemanticLodScene + 'static,
 {
@@ -103,8 +103,8 @@ fn patch_marshaled_bounds<M: LodSceneBoundsMarshaller>(
 #[cfg(test)]
 mod tests {
 	use bevy::ecs::system::{IntoSystem, System};
-	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
+	use bevy::shape::Aabb3d;
 
 	use crate::scene::bounds_patch::{patch_marshaled_bounds, LodSceneBoundsMarshaller};
 	use crate::scene::host::LodSceneHost;

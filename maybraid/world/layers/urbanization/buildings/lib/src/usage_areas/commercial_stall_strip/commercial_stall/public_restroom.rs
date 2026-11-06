@@ -12,7 +12,7 @@ pub mod parameterized;
 
 pub use parameterized::{PublicRestroomParameterized, PublicRestroomPlan};
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use building_components::panels::PanelNode;
 use building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 use lod::scene::LodSceneLevel;
@@ -131,8 +131,8 @@ mod tests {
 
 	#[test]
 	fn restroom_fits_walled_stalls_door_and_sinks() {
-		use bevy_math::bounding::Aabb2d;
 		use bevy_math::Vec2;
+		use bevy_shape::Aabb2d;
 		use procedural_common::{aabb2_area, intersects_aabb2};
 
 		let confines = roomy_south();

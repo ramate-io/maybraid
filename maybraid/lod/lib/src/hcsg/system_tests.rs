@@ -2,10 +2,10 @@
 //! with the real worker.
 
 use bevy::ecs::system::SystemParamItem;
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{DVec3, Vec3};
 use bevy::prelude::*;
 use bevy::scene::ScenePlugin;
+use bevy::shape::{Aabb3d, IntersectsVolume};
 
 use crate::gen::tests::test_utils::{cell, stub_scene, Terrain, Vegetation};
 use crate::gen::{Id, OriginalId, Version};

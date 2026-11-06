@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::{cull_non_adjacent_bands, lod_host_scene_pending, SceneChunk};
@@ -86,7 +86,7 @@ impl MobScene {
 			lod_host_scene_pending(scene.level_for(&transform), scene.scene_bounds()),
 			scene.contents(),
 			bsn! {
-				template_value(transform)
+				~{transform}
 			},
 		)
 	}
@@ -95,8 +95,8 @@ impl MobScene {
 		let host = self.clone();
 		let kind = self.mob.kind;
 		bsn! {
-			template_value(host)
-			template_value(kind)
+			~{host}
+			~{kind}
 			Name::new(format!("{kind:?} mob"))
 			Visibility::default()
 		}
@@ -118,7 +118,7 @@ impl MobScene {
 		let roster = MemberRosterRef::new(Arc::clone(&member.character), slot, member.offset);
 		bsn! {
 			Name::new("roster-stub")
-			template_value(roster)
+			~{roster}
 			Transform::default()
 			Visibility::Hidden
 		}

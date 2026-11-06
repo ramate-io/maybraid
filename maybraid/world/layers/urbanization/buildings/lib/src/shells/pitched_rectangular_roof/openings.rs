@@ -1,7 +1,7 @@
 //! Pitch and gable-end openings: passages / apertures clip faces and map contact.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb3d;
 
 use crate::openings::{
 	MappedOpening, MappedOpeningQuad, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings,

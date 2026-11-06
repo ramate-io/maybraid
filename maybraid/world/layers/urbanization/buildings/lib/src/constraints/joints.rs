@@ -1,6 +1,7 @@
 //! Joints on boundary faces.
 
-use bevy_math::{bounding::Aabb2d, Vec3};
+use bevy_math::Vec3;
+use bevy_shape::Aabb2d;
 
 use crate::constraints::face::FACE_EPS;
 

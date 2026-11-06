@@ -7,56 +7,52 @@
 // the blade; the GLB outline is the silhouette.
 //---------------------------------------------------------
 
-#import bevy_pbr::{
-    mesh_bindings::mesh,
-    mesh_functions,
-    skinning,
-    morph::{morph_position, morph_normal, morph_tangent},
-    forward_io::Vertex,
-    view_transformations::position_world_to_clip,
-    mesh_view_bindings::{view, globals, lights},
-    pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
-    pbr_functions as fns,
-    pbr_bindings,
-}
-#import bevy_core_pipeline::tonemapping::tone_mapping
-#ifdef DISTANCE_FOG
-#import bevy_pbr::mesh_view_bindings::fog
-#endif
+import bevy_pbr::render::mesh_bindings::mesh;
+import bevy_pbr::render::mesh_functions;
+import bevy_pbr::render::skinning;
+import bevy_pbr::render::morph::morph_position;
+import bevy_pbr::render::morph::morph_normal;
+import bevy_pbr::render::morph::morph_tangent;
+import bevy_pbr::render::forward_io::{Vertex, UncompressedVertex, decompress_vertex};
+import bevy_pbr::render::view_transformations::position_world_to_clip;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::mesh_view_bindings::globals;
+import bevy_pbr::render::mesh_view_bindings::lights;
+import bevy_pbr::render::pbr_types::PbrInput;
+import bevy_pbr::render::pbr_types::pbr_input_new;
+import bevy_pbr::render::pbr_types::STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT;
+import bevy_pbr::render::pbr_functions as fns;
+import bevy_pbr::render::pbr_bindings;
+import bevy_core_pipeline::tonemapping::tone_mapping;
+@if(DISTANCE_FOG)
+import bevy_pbr::render::mesh_view_bindings::fog;
 
 fn with_distance_fog(color: vec4<f32>, world_position: vec3<f32>, frag_xy: vec2<f32>) -> vec4<f32> {
-#ifdef DISTANCE_FOG
+    @if(DISTANCE_FOG)
     return fns::apply_fog(fog, color, world_position, view.world_position.xyz, frag_xy);
-#else
+    @if(!DISTANCE_FOG)
     return color;
-#endif
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> base_color: vec4<f32>;
 
 struct FrondVertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) world_position: vec4<f32>,
     @location(1) world_normal: vec3<f32>,
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     @location(2) uv: vec2<f32>,
-#endif
-#ifdef VERTEX_UVS_B
+    @if(VERTEX_UVS_B)
     @location(3) uv_b: vec2<f32>,
-#endif
-#ifdef VERTEX_TANGENTS
+    @if(VERTEX_TANGENTS)
     @location(4) world_tangent: vec4<f32>,
-#endif
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     @location(5) color: vec4<f32>,
-#endif
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     @location(6) @interpolate(flat) instance_index: u32,
-#endif
-#ifdef VISIBILITY_RANGE_DITHER
+    @if(VISIBILITY_RANGE_DITHER)
     @location(7) @interpolate(flat) visibility_range_dither: i32,
-#endif
     @location(8) local_pos: vec3<f32>,
     @location(9) view_dist: f32,
 }
@@ -125,87 +121,89 @@ fn frond_sway(
     return offset;
 }
 
-#ifdef MORPH_TARGETS
-fn morph_vertex(vertex_in: Vertex, instance_index: u32) -> Vertex {
+@if(MORPH_TARGETS)
+fn morph_vertex(vertex_in: UncompressedVertex, instance_index: u32) -> UncompressedVertex {
     var vertex = vertex_in;
     let first_vertex = mesh[instance_index].first_vertex_index;
     let vertex_index = vertex.index - first_vertex;
 
-    let weight_count = bevy_pbr::morph::layer_count(instance_index);
+    let morph_descriptor_index = mesh[instance_index].morph_descriptor_index;
+    let weight_count = bevy_pbr::render::morph::layer_count(morph_descriptor_index);
     for (var i: u32 = 0u; i < weight_count; i++) {
-        let weight = bevy_pbr::morph::weight_at(i, instance_index);
+        let weight = bevy_pbr::render::morph::weight_at(i, morph_descriptor_index);
         if weight == 0.0 {
             continue;
         }
-        vertex.position += weight * morph_position(vertex_index, i, instance_index);
-#ifdef VERTEX_NORMALS
-        vertex.normal += weight * morph_normal(vertex_index, i, instance_index);
-#endif
-#ifdef VERTEX_TANGENTS
-        vertex.tangent += vec4(weight * morph_tangent(vertex_index, i, instance_index), 0.0);
-#endif
+        vertex.position += weight * morph_position(vertex_index, i, morph_descriptor_index);
+        @if(VERTEX_NORMALS)
+        vertex.normal += weight * morph_normal(vertex_index, i, morph_descriptor_index);
+        @if(VERTEX_TANGENTS)
+        vertex.tangent += vec4(weight * morph_tangent(vertex_index, i, morph_descriptor_index), 0.0);
     }
     return vertex;
 }
-#endif
 
 @vertex
-fn vertex(vertex_no_morph: Vertex) -> FrondVertexOutput {
+fn vertex(packed_vertex: Vertex) -> FrondVertexOutput {
+    let vertex_no_morph = decompress_vertex(packed_vertex, packed_vertex.instance_index);
     var out: FrondVertexOutput;
     out.local_pos = vec3<f32>(0.0, 0.0, 0.0);
     out.world_normal = vec3<f32>(0.0, 1.0, 0.0);
     out.view_dist = 0.0;
 
-#ifdef MORPH_TARGETS
+    @if(MORPH_TARGETS)
     var vertex = morph_vertex(vertex_no_morph, vertex_no_morph.instance_index);
-#else
+    @if(!MORPH_TARGETS)
     var vertex = vertex_no_morph;
-#endif
 
     let mesh_world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
 
-#ifdef SKINNED
+    @if(SKINNED)
     var world_from_local = skinning::skin_model(
         vertex.joint_indices,
         vertex.joint_weights,
         vertex_no_morph.instance_index
     );
-#else
+    @if(!SKINNED)
     var world_from_local = mesh_world_from_local;
-#endif
 
-#ifdef VERTEX_NORMALS
-#ifdef SKINNED
+    @if(VERTEX_NORMALS && SKINNED)
     out.world_normal = skinning::skin_normals(world_from_local, vertex.normal);
-#else
+    @if(VERTEX_NORMALS && !SKINNED)
     out.world_normal = mesh_functions::mesh_normal_local_to_world(
         vertex.normal,
         vertex_no_morph.instance_index
     );
-#endif
-#endif
 
-#ifdef VERTEX_POSITIONS
-#ifdef VERTEX_COLORS
+    @if(VERTEX_POSITIONS && VERTEX_COLORS)
     let kit_local = vertex.color.xyz;
+    @if(VERTEX_POSITIONS && VERTEX_COLORS)
     let part_scale = max(vertex.color.w, 1e-4);
+    @if(VERTEX_POSITIONS && VERTEX_COLORS)
     let ball_local = vertex.position - kit_local * part_scale;
+    @if(VERTEX_POSITIONS && VERTEX_COLORS)
     let centroid = mesh_functions::mesh_position_local_to_world(
         world_from_local,
         vec4<f32>(ball_local, 1.0),
     ).xyz;
+    @if(VERTEX_POSITIONS && VERTEX_COLORS)
     let scale = instance_scale(mesh_world_from_local) * part_scale;
-#else
+    @if(VERTEX_POSITIONS && !VERTEX_COLORS)
     let kit_local = vertex.position;
+    @if(VERTEX_POSITIONS && !VERTEX_COLORS)
     let centroid = mesh_world_from_local[3].xyz;
+    @if(VERTEX_POSITIONS && !VERTEX_COLORS)
     let scale = instance_scale(mesh_world_from_local);
-#endif
+    @if(VERTEX_POSITIONS)
     out.local_pos = kit_local;
+    @if(VERTEX_POSITIONS)
     out.view_dist = length(centroid - view.world_position);
+    @if(VERTEX_POSITIONS)
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
         vec4<f32>(vertex.position, 1.0),
     );
+    @if(VERTEX_POSITIONS)
     out.world_position += vec4<f32>(
         frond_sway(
             kit_local,
@@ -216,38 +214,32 @@ fn vertex(vertex_no_morph: Vertex) -> FrondVertexOutput {
         ),
         0.0,
     );
+    @if(VERTEX_POSITIONS)
     out.position = position_world_to_clip(out.world_position.xyz);
-#endif
 
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     out.uv = vertex.uv;
-#endif
-#ifdef VERTEX_UVS_B
+    @if(VERTEX_UVS_B)
     out.uv_b = vertex.uv_b;
-#endif
 
-#ifdef VERTEX_TANGENTS
+    @if(VERTEX_TANGENTS)
     out.world_tangent = mesh_functions::mesh_tangent_local_to_world(
         world_from_local,
         vertex.tangent,
         vertex_no_morph.instance_index
     );
-#endif
 
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     out.color = vertex.color;
-#endif
 
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex_no_morph.instance_index;
-#endif
 
-#ifdef VISIBILITY_RANGE_DITHER
+    @if(VISIBILITY_RANGE_DITHER)
     out.visibility_range_dither = mesh_functions::get_visibility_range_dither_level(
         vertex_no_morph.instance_index,
         mesh_world_from_local[3],
     );
-#endif
 
     return out;
 }

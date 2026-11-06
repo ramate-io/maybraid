@@ -6,8 +6,8 @@
 //! [`SpaceKind::InternalSpace`] rectangles (so apartment doors never sit on
 //! the shaft face).
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use procedural_common::{aabb2_area, NoiseConfig, NoiseParams};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;

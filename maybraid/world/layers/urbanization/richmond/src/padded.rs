@@ -1,10 +1,10 @@
 //! Terrain origin cell with development-pad elevation ops applied.
 
 use bevy::ecs::template::template;
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use durham::terrain::ElevationModulation;
 use durham::{
 	cascade_chunk_for_cell, stream_banded_level, stream_banded_scene, ComposedTerrain,
@@ -127,8 +127,8 @@ impl TerrainWithPads {
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
 		bsn! {
-			template_value(transform)
-			template_value(chunk)
+			~{transform}
+			~{chunk}
 			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<TerrainShader>({material.clone()})
 		}

@@ -10,8 +10,8 @@
 use bevy::prelude::{
 	App, Component, GlobalTransform, IntoScheduleConfigs, Plugin, Query, Transform, Update, With,
 };
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::LodSceneHost;
 use lod::scene::{LodSceneLevel, LodSceneStatus};

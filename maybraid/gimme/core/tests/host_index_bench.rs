@@ -19,7 +19,7 @@ fn sorted(out: &HashSet<u32>) -> Vec<u32> {
 	got
 }
 
-fn query_union(idx: &SpatialIndex<u32>, regions: &[bevy_math::bounding::Aabb3d]) -> Vec<u32> {
+fn query_union(idx: &SpatialIndex<u32>, regions: &[bevy_shape::Aabb3d]) -> Vec<u32> {
 	let mut expected = HashSet::new();
 	for region in regions {
 		expected.extend(idx.query(*region));

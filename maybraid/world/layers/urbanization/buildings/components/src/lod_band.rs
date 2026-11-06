@@ -3,8 +3,8 @@
 //! Partitions and roofs each own factor constants and probe components; they share
 //! this mapping from `distance / extent` onto High / Medium / Low / UltraLow.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use lod::scene::{cull_bands_with_adjacent_depth, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 
 use crate::placed::Placement;

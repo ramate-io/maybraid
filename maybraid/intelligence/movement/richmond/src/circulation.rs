@@ -1,7 +1,7 @@
 //! World-space storey slabs and stairwell links, derived from Richmond IR.
 
 use bevy::prelude::*;
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use buildings::{ConnectingStairwell, MixedUseLesHallesStorey};
 
 /// One Les Halles storey volume in world space.

@@ -5,8 +5,8 @@
 //! Stairs and roof are deferred to the tower consumer — shafts remain
 //! [`SpaceKind::InternalSpace`] residuals.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use building_components::furniture::FurnitureNode;
 use building_components::joints::JointNode;
 use building_components::labels::LabelNode;
@@ -406,8 +406,8 @@ fn floor_noise(noise: NoiseParams, floor_i: usize) -> NoiseParams {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 
 	use crate::storeys::les_halles::{MAX_MONOTOWER_STOREYS, MIN_MONOTOWER_STOREYS};
 

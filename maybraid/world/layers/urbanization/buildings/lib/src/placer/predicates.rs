@@ -1,6 +1,6 @@
 //! Shared geometric predicates for the layout trier.
 
-use bevy_math::bounding::Aabb2d;
+use bevy_shape::Aabb2d;
 use procedural_common::{intersects_aabb2, touches_aabb2};
 
 use crate::usage_areas::clearance::approach_blocked;

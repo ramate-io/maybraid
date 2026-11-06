@@ -3,7 +3,7 @@
 //! Composes [`BitesStallParameterized`] for counters/style, then reserves seating
 //! before the kitchen remainder.
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use building_components::LabelStyle;
 use procedural_common::{aabb2_area, aabb3_to_plan, NoiseConfig, NoiseParams, PlanAxes};
 

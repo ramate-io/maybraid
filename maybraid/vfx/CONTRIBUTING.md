@@ -91,6 +91,7 @@ lib/src/parts.rs
 lib/src/parts/flipbook_card.rs
 lib/src/parts/flipbook_card/flipbook_card.wgsl
 lib/src/parts/lobe.rs
+lib/src/parts/lobe/lobe_material.wesl
 lib/src/parts/lobe/material.rs
 lib/src/parts/packaged.rs
 lib/src/parts/packaged/manifest.rs

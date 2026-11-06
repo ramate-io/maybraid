@@ -1,9 +1,7 @@
 //! Cell face identity and coincidence / coverage helpers.
 
-use bevy_math::{
-	bounding::{Aabb2d, Aabb3d},
-	Vec2,
-};
+use bevy_math::Vec2;
+use bevy_shape::{Aabb2d, Aabb3d};
 
 /// Epsilon for face-coincidence and containment checks.
 pub(crate) const FACE_EPS: f32 = 1e-4;

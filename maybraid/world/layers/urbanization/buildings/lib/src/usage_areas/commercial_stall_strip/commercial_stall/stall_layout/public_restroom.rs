@@ -5,8 +5,8 @@
 //! Stall enclosure uses shared [`super::enclosed_room`]. Door id scope:
 //! `public_restroom`.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
+use bevy_shape::{Aabb2d, Aabb3d};
 use procedural_common::{aabb2_area, aabb3_to_plan, plan_to_aabb3, PlanAxes, PlanOpeningFace};
 
 use crate::fit::{Confines, FitError};

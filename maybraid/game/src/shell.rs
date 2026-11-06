@@ -182,7 +182,7 @@ pub(crate) struct ShellRoute<'w> {
 impl ShellRoute<'_> {
 	pub(crate) fn enter(&mut self, flow: GameFlow) {
 		self.flow.set(flow);
-		NextState::set_if_neq(&mut self.mode, ActiveGenerationMode::of::<Discovery>());
+		NextState::set_if_different(&mut self.mode, ActiveGenerationMode::of::<Discovery>());
 	}
 }
 
@@ -445,7 +445,7 @@ mod tests {
 		let flow = world.resource::<NextState<GameFlow>>();
 		let mode = world.resource::<NextState<ActiveGenerationMode>>();
 		let flow_ok = matches!(flow, NextState::Pending(GameFlow::LoadingWorld));
-		let mode_ok = matches!(mode, NextState::PendingIfNeq(mode) if mode.is::<Discovery>());
+		let mode_ok = matches!(mode, NextState::PendingIfDifferent(mode) if mode.is::<Discovery>());
 		if !flow_ok || !mode_ok {
 			return Err(anyhow::anyhow!("route requested flow {flow:?} mode {mode:?}"));
 		}

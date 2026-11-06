@@ -3,8 +3,8 @@
 //! Generation reads stored values through [`GenerationContext`] on each
 //! scheme's [`lod::hcsg::GenerationScheme::build_with_id`].
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::{DVec3, Vec3};
+use bevy::shape::Aabb3d;
 
 use crate::cell::DEVELOPMENT_CELL_SIZE;
 

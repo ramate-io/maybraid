@@ -12,8 +12,8 @@
 //! Axis-aligned bound helpers used while fitting live here alongside [`Confines`]
 //! ([`aabb_near_plane`], [`aabb_xz_near_eq`], [`aabb_xz_overlap_area`], …).
 
-use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d, BoundingVolume};
 use procedural_common::NoiseParams;
 
 use crate::openings::Openings;
@@ -389,8 +389,8 @@ pub trait Fit: Sized {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 
 	#[derive(Debug)]
 	struct MinFootprint;

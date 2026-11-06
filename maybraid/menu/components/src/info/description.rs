@@ -1,7 +1,7 @@
 //! Description copy stacked with a menu, or in the remainder to the right.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::theme::{
@@ -30,7 +30,7 @@ impl TextMenuDescription {
 				justify_content: JustifyContent::FlexEnd,
 			}
 			Pickable::IGNORE
-			Children [(
+			Children [
 				Node {
 					width: percent(80),
 					height: px(DESCRIPTION_BAND_HEIGHT),
@@ -38,9 +38,9 @@ impl TextMenuDescription {
 					align_items: AlignItems::Center,
 				}
 				Pickable::IGNORE
-				Children [(
+				Children [
 					TextMenuDescription
-					template_value(Text::new(initial))
+					~{Text::new(initial)}
 					TextFont {
 						font: FontSourceTemplate::Handle(BARLOW_REGULAR),
 						font_size: px(DESCRIPTION_FONT_SIZE),
@@ -48,8 +48,8 @@ impl TextMenuDescription {
 					TextColor(TEXT_YELLOW_FAINT)
 					TextLayout::new(Justify::Center, LineBreak::WordBoundary)
 					Pickable::IGNORE
-				)]
-			)]
+				]
+			]
 		}
 	}
 
@@ -63,9 +63,9 @@ impl TextMenuDescription {
 				max_width: px(DESCRIPTION_UNDER_COLUMN_MAX_WIDTH),
 			}
 			Pickable::IGNORE
-			Children [(
+			Children [
 				TextMenuDescription
-				template_value(Text::new(initial))
+				~{Text::new(initial)}
 				TextFont {
 					font: FontSourceTemplate::Handle(BARLOW_REGULAR),
 					font_size: px(DESCRIPTION_FONT_SIZE),
@@ -73,7 +73,7 @@ impl TextMenuDescription {
 				TextColor(TEXT_YELLOW_FAINT)
 				TextLayout::new(Justify::Left, LineBreak::WordBoundary)
 				Pickable::IGNORE
-			)]
+			]
 		}
 	}
 }

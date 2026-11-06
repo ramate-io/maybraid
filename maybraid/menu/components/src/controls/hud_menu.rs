@@ -84,7 +84,7 @@ pub struct HudMenuIgnoresLock;
 pub struct HudMenuNavLocked;
 
 pub fn select_hud_item_on_over(
-	over: On<Pointer<Over>>,
+	over: On<PointerOver>,
 	stack: Res<crate::modal::MenuModalStack>,
 	roots: Query<(Entity, &crate::modal::MenuModal)>,
 	child_of: Query<&ChildOf>,
@@ -93,7 +93,9 @@ pub fn select_hud_item_on_over(
 	mut menus: Query<&mut HudMenu, Without<HudMenuNavLocked>>,
 ) {
 	if !crate::modal::entity_under_scoped_nav_owner(over.entity, &sessions, &roots, &child_of)
-        .unwrap_or_else(|| crate::modal::entity_under_nav_owner(over.entity, &stack, &roots, &child_of)) {
+		.unwrap_or_else(|| {
+			crate::modal::entity_under_nav_owner(over.entity, &stack, &roots, &child_of)
+		}) {
 		return;
 	}
 	let Ok(item) = items.get(over.entity) else {
@@ -267,7 +269,7 @@ mod tests {
 
 	#[test]
 	fn keyboard_nav_skips_the_catalog_while_item_drop_owns_nav() {
-		use super::{HudMenu, HudOverlayMenu, navigate_hud_menus};
+		use super::{navigate_hud_menus, HudMenu, HudOverlayMenu};
 		use crate::modal::{MenuModal, MenuModalId, MenuModalLayer, MenuModalStack};
 		use crate::single_select::{KeyboardMenuNav, TextMenuInputLock};
 		use bevy::ecs::system::RunSystemOnce;

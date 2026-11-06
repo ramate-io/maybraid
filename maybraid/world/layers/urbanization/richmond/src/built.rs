@@ -3,9 +3,9 @@
 use std::marker::PhantomData;
 
 use bevy::ecs::template::template;
-use bevy::math::bounding::Aabb3d;
-use bevy::prelude::{bsn, template_value, Name, Transform, Vec3};
+use bevy::prelude::{bsn, Name, Transform, Vec3};
 use bevy::scene::Scene;
+use bevy::shape::Aabb3d;
 use building_components::scene_children;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext};
@@ -73,9 +73,9 @@ impl<G: RichmondGround> LodScene for Built<G> {
 		let setting = self.setting;
 		let at = Transform::from_translation(self.setting_at);
 		let mut children: Vec<Box<dyn Scene>> = vec![Box::new(bsn! {
-			template_value(Name::new("urban-setting"))
+			~{Name::new("urban-setting")}
 			template(move |_ctx| Ok(setting))
-			template_value(at)
+			~{at}
 		})];
 		children.extend(
 			self.development

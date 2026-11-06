@@ -1,7 +1,7 @@
 //! 400 m mob cells and placement helpers.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use lod::gen::{Id, OriginalId};
 
 use crate::generation::MobGroup;

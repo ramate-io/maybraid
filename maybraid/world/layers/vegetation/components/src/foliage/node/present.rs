@@ -43,10 +43,10 @@ mod tests {
 		.with_probe(Vec3::ZERO, 1.0)
 	}
 
-	fn dummy_lod() -> (Transform, bevy::math::bounding::Aabb3d) {
+	fn dummy_lod() -> (Transform, bevy::shape::Aabb3d) {
 		(
 			Transform::from_translation(Vec3::new(0.0, 2.0, 8.0)),
-			bevy::math::bounding::Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
+			bevy::shape::Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		)
 	}
 

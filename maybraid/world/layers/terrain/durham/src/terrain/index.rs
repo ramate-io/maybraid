@@ -21,7 +21,7 @@ use std::sync::Arc;
 #[cfg(test)]
 use {
 	crate::terrain::cell::CellTiling, crate::terrain::geography::GeographicFeature,
-	crate::water::Water, bevy::math::bounding::Aabb3d, lod::gen::Version, lod::hcsg::Busy,
+	crate::water::Water, bevy::shape::Aabb3d, lod::gen::Version, lod::hcsg::Busy,
 	procedural_common::Bounds2,
 };
 

@@ -1,9 +1,9 @@
 //! Flattened furniture kits under one 50 m [`FurnitureCell`] host.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use building_components::{pose, scene_children, FurnitureNode, FLATTENED_KIT_CHUNK_WEIGHT};
 use furniture_components::{posed_kit_part, FurnitureKitPart};
 use lod::lod_host_scene_pending;

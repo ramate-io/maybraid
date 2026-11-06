@@ -6,13 +6,12 @@
 //       5 lava, 6 cosmos, 7 scales, 8 lacquer, 9 metal, 10 rockadder.
 //---------------------------------------------------------
 
-#import bevy_pbr::{
-    forward_io::VertexOutput,
-    mesh_view_bindings::{view, globals},
-    pbr_fragment::pbr_input_from_vertex_output,
-    pbr_functions as fns,
-}
-#import bevy_core_pipeline::tonemapping::tone_mapping
+import bevy_pbr::render::forward_io::VertexOutput;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::mesh_view_bindings::globals;
+import bevy_pbr::render::pbr_fragment::pbr_input_from_vertex_output;
+import bevy_pbr::render::pbr_functions as fns;
+import bevy_core_pipeline::tonemapping::tone_mapping;
 
 struct FurnitureSurfaceUniform {
     colors: array<vec4<f32>, 8>,
@@ -23,7 +22,7 @@ struct FurnitureSurfaceUniform {
     _pad: vec3<u32>,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> material: FurnitureSurfaceUniform;
 
 const KIND_WOOD: u32 = 0u;

@@ -1,7 +1,7 @@
 //! I-Apartment floor plan: fit an [`IFloor`], cut façade windows, map shafts.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d, BoundingVolume};
 use building_components::joints::JointNode;
 use building_components::labels::{LabelNode, LabelStyle};
 use building_components::panels::{PanelNode, PanelStyle};

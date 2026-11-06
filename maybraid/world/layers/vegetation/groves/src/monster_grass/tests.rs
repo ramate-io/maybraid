@@ -308,7 +308,7 @@ mod render_tests {
 
 	#[test]
 	fn fold_bins_are_square_not_strips() -> Result<()> {
-		use crate::grove::{DEFAULT_GROVE_EXTENT_XZ, GroveCellVariant, GroveExtent};
+		use crate::grove::{GroveCellVariant, GroveExtent, DEFAULT_GROVE_EXTENT_XZ};
 
 		let placements = vec![
 			GroveCellVariant::new(MonsterGrassCell::GiantWetBlade, Vec3::new(5.0, 0.0, 5.0), 1.0),
@@ -333,13 +333,13 @@ mod render_tests {
 	#[test]
 	fn high_collections_present_as_merged_kits() -> Result<()> {
 		use crate::grove::GroveCellVariant;
-		use bevy::math::bounding::Aabb3d;
 		use bevy::prelude::{Entity, Transform};
-		use lod::SceneChunk;
+		use bevy::shape::Aabb3d;
 		use lod::lod_ref::LodRef;
 		use lod::scene::{LodScene, LodSceneLevel};
+		use lod::SceneChunk;
 		use vegetation_components::{
-			CollectionPresent, FLATTENED_KIT_CHUNK_WEIGHT, VegetationComponents,
+			CollectionPresent, VegetationComponents, FLATTENED_KIT_CHUNK_WEIGHT,
 		};
 
 		let grove = MonsterGrassParams::with_resolved_placements(
@@ -401,7 +401,7 @@ mod render_tests {
 
 	#[test]
 	fn structural_lod_thins_to_proxy_grids() -> Result<()> {
-		use crate::grove::{DEFAULT_GROVE_EXTENT_XZ, GroveCellVariant};
+		use crate::grove::{GroveCellVariant, DEFAULT_GROVE_EXTENT_XZ};
 		use crate::monster_grass::{
 			MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR, MONSTER_GRASS_STRUCTURAL_LOW_FACTOR,
 			MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR,

@@ -16,8 +16,8 @@ pub use parameterized::{
 };
 use slot_policy::{min_area_for, SlotPolicy};
 
-use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d, BoundingVolume};
 use building_components::furniture::FurnitureNode;
 use building_components::joints::JointNode;
 use building_components::labels::{LabelNode, LabelStyle};

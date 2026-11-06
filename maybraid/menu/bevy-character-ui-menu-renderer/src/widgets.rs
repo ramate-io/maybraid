@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy::text::{LineBreak, TextBounds};
+use bevy::ui_widgets::Button;
 
 pub const BUTTON_HEIGHT: f32 = 22.0;
 pub const SELECT_TILE_SIZE: f32 = 52.0;
@@ -29,6 +30,7 @@ pub fn render_button<E: Copy + Send + Sync + 'static>(
 	parent
 		.spawn((
 			Button,
+			bevy::picking::hover::Hovered::default(),
 			Node {
 				min_width: Val::Px(28.0),
 				height: Val::Px(BUTTON_HEIGHT),
@@ -52,6 +54,7 @@ pub fn render_asset_button<E: Copy + Send + Sync + 'static>(
 ) {
 	let mut tile = parent.spawn((
 		Button,
+		bevy::picking::hover::Hovered::default(),
 		Node {
 			min_width: Val::Px(72.0),
 			min_height: Val::Px(54.0),

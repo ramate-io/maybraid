@@ -4,8 +4,8 @@ mod skybridge;
 
 pub use skybridge::Skybridge;
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb3d;
 use buildings::{
 	CardinalFace, Confines, ConnectingHall, Fit, MappedOpening, MappedOpeningQuad, SingleHighrise,
 };

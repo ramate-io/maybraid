@@ -76,13 +76,13 @@ pub use structural_probe::{
 };
 
 use bevy::ecs::template::template;
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::{
 	Commands, CommandsSceneExt, Component, Entity, GlobalTransform, Transform, Visibility,
 };
-use bevy::scene::prelude::{bsn, template_value};
+use bevy::scene::prelude::bsn;
 use bevy::scene::{ResolveContext, ResolvedScene, Scene};
+use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{cull_named_from_factor, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::{lod_host_scene_pending, SceneChunk};
@@ -610,13 +610,13 @@ where
 	let pending = (
 		lod_host_scene_pending(level, bounds),
 		bsn! {
-			template_value(transform)
+			~{transform}
 			Visibility::default()
 			template(move |_ctx| Ok(host.clone()))
 		},
 	);
 	match building.structural_lod() {
-		Some(probe) => Box::new((pending, bsn! { template_value(probe) })) as Box<dyn Scene>,
+		Some(probe) => Box::new((pending, bsn! { probe })) as Box<dyn Scene>,
 		None => Box::new(pending) as Box<dyn Scene>,
 	}
 }

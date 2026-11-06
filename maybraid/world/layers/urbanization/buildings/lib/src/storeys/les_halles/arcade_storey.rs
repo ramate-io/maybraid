@@ -81,8 +81,8 @@ impl BuildingComponents for LesHallesArcadeStorey {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 	use procedural_common::NoiseParams;
 
 	use crate::fit::SpaceKind;

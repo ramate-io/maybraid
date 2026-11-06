@@ -1,7 +1,7 @@
 //! Callout box: circled `i` in the upper left, rounded border, wrapping copy.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::theme::{
@@ -59,8 +59,8 @@ fn info_mark_scene() -> impl Scene {
 		BorderColor::all(TEXT_YELLOW)
 		BackgroundColor(INFO_BOX_MARK_FILL)
 		Pickable::IGNORE
-		Children [(
-			template_value(Text::new("i"))
+		Children [
+			~{Text::new("i")}
 			TextFont {
 				font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
 				font_size: px(INFO_BOX_MARK_FONT_SIZE),
@@ -68,14 +68,14 @@ fn info_mark_scene() -> impl Scene {
 			TextColor(TEXT_YELLOW)
 			TextLayout::new(Justify::Center, LineBreak::NoWrap)
 			Pickable::IGNORE
-		)]
+		]
 	}
 }
 
 fn info_label_scene(text: String) -> impl Scene {
 	bsn! {
 		MenuInfoBoxLabel
-		template_value(Text::new(text))
+		~{Text::new(text)}
 		TextFont {
 			font: FontSourceTemplate::Handle(BARLOW_REGULAR),
 			font_size: px(DESCRIPTION_FONT_SIZE),

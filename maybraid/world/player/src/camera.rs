@@ -34,6 +34,7 @@ pub fn setup_camera(
 
 	commands.spawn((
 		Camera3d::default(),
+		bevy::pbr::ScreenSpaceTransmission::default(),
 		transform,
 		Projection::Perspective(PerspectiveProjection { near: 0.1, far: 8_000.0, ..default() }),
 		DistanceFog {

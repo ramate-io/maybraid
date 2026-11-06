@@ -1,7 +1,7 @@
 //! Thin fillable loading track.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 
 use crate::theme::{LOADING_BAR_HEIGHT, LOADING_BAR_WIDTH, TEXT_YELLOW, TEXT_YELLOW_FAINT};
 
@@ -36,15 +36,15 @@ pub fn loading_bar_scene(progress: f32) -> impl Scene + 'static {
 		}
 		BackgroundColor(TEXT_YELLOW_FAINT)
 		Pickable::IGNORE
-		Children [(
-			template_value(fill)
+		Children [
+			~{fill}
 			Node {
 				width: percent(width_percent),
 				height: percent(100),
 			}
 			BackgroundColor(TEXT_YELLOW)
 			Pickable::IGNORE
-		)]
+		]
 	}
 }
 

@@ -14,6 +14,6 @@ pub struct CheckerboardMaterial {
 
 impl Material for CheckerboardMaterial {
 	fn fragment_shader() -> ShaderRef {
-		"shaders/checkerboard_material.wgsl".into()
+		"shaders/checkerboard_material.wesl".into()
 	}
 }

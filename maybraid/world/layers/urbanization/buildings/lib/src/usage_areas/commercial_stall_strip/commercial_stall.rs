@@ -31,8 +31,8 @@ pub use mini_mart::{MiniMart, MiniMartParameterized, MiniMartPlan};
 pub use parts_stall::{PartsStall, PartsStallParameterized, PartsStallPlan};
 pub use public_restroom::{PublicRestroom, PublicRestroomParameterized, PublicRestroomPlan};
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb3d;
 use building_components::furniture::FurnitureNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
@@ -333,11 +333,11 @@ fn opening_covers_face(bounds: &Aabb3d, face: FaceKind, opening: &Aabb3d) -> boo
 		return false;
 	}
 	let face_region = match face {
-		FaceKind::Front | FaceKind::Back => bevy_math::bounding::Aabb2d {
+		FaceKind::Front | FaceKind::Back => bevy_shape::Aabb2d {
 			min: bevy_math::Vec2::new(bmin.x, bmin.z - 0.5),
 			max: bevy_math::Vec2::new(bmax.x, bmax.z + 0.5),
 		},
-		FaceKind::Left | FaceKind::Right => bevy_math::bounding::Aabb2d {
+		FaceKind::Left | FaceKind::Right => bevy_shape::Aabb2d {
 			min: bevy_math::Vec2::new(bmin.x - 0.5, bmin.z),
 			max: bevy_math::Vec2::new(bmax.x + 0.5, bmax.z),
 		},
@@ -367,8 +367,8 @@ mod tests {
 	use super::*;
 	use crate::openings::{Opening, OpeningId};
 	use crate::paneling::clipped_rectangular_strip::ClippedRectangularStripPiece;
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 
 	#[test]
 	fn stall_fit_emits_walls_and_interior_labels() {

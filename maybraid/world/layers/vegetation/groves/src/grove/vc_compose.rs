@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use bevy::ecs::template::template;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Color, Entity, Transform, Vec3, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::{cull_offset_bands_from_factor, SceneChunk};
@@ -525,7 +525,7 @@ where
 	let host_for_template = host.clone();
 	(
 		bsn! {
-			template_value(instance)
+			~{instance}
 			template(move |_ctx| Ok(host_for_template.clone()))
 			Visibility::Inherited
 		},

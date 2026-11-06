@@ -1,6 +1,6 @@
 //! Urbanization cell footprint (1600 m), parallel to forest cells.
 
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::{Id, OriginalId};
 

@@ -3,15 +3,15 @@
 // Pose and scale live on Transform. Flight is object +Y.
 //---------------------------------------------------------
 
-#import bevy_pbr::{
-    mesh_functions,
-    forward_io::{Vertex, VertexOutput},
-    view_transformations::position_world_to_clip,
-    mesh_view_bindings::{view, globals},
-}
-#import bevy_core_pipeline::tonemapping::tone_mapping
+import bevy_pbr::render::mesh_functions;
+import bevy_pbr::render::forward_io::{Vertex, UncompressedVertex, decompress_vertex};
+import bevy_pbr::render::forward_io::VertexOutput;
+import bevy_pbr::render::view_transformations::position_world_to_clip;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::mesh_view_bindings::globals;
+import bevy_core_pipeline::tonemapping::tone_mapping;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> base_color: vec4<f32>;
 
 const FIREBALL_RADIUS: f32 = 1.18;
@@ -64,53 +64,50 @@ fn displace_local(local: vec3<f32>, normal: vec3<f32>, instance_index: u32) -> v
 }
 
 @vertex
-fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
+fn vertex(packed_vertex: Vertex) -> VertexOutput {
+    let vertex_no_morph = decompress_vertex(packed_vertex, packed_vertex.instance_index);
     var out: VertexOutput;
     var vertex = vertex_no_morph;
     let world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
-#ifdef VERTEX_NORMALS
+    @if(VERTEX_NORMALS)
     let normal = vertex.normal;
+    @if(VERTEX_NORMALS)
     out.world_normal = mesh_functions::mesh_normal_local_to_world(
         vertex.normal,
         vertex_no_morph.instance_index,
     );
-#else
+    @if(!VERTEX_NORMALS)
     let normal = vec3<f32>(0.0, 1.0, 0.0);
+    @if(!VERTEX_NORMALS)
     out.world_normal = vec3<f32>(0.0, 1.0, 0.0);
-#endif
-#ifdef VERTEX_POSITIONS
+    @if(VERTEX_POSITIONS)
     let local = displace_local(vertex.position, normal, vertex_no_morph.instance_index);
+    @if(VERTEX_POSITIONS)
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
         vec4<f32>(local, 1.0),
     );
+    @if(VERTEX_POSITIONS)
     out.position = position_world_to_clip(out.world_position.xyz);
-#endif
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     out.uv = vertex.uv;
-#endif
-#ifdef VERTEX_UVS_B
+    @if(VERTEX_UVS_B)
     out.uv_b = vertex.uv_b;
-#endif
-#ifdef VERTEX_TANGENTS
+    @if(VERTEX_TANGENTS)
     out.world_tangent = mesh_functions::mesh_tangent_local_to_world(
         world_from_local,
         vertex.tangent,
         vertex_no_morph.instance_index,
     );
-#endif
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     out.color = vertex.color;
-#endif
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex_no_morph.instance_index;
-#endif
-#ifdef VISIBILITY_RANGE_DITHER
+    @if(VISIBILITY_RANGE_DITHER)
     out.visibility_range_dither = mesh_functions::get_visibility_range_dither_level(
         vertex_no_morph.instance_index,
         world_from_local[3],
     );
-#endif
     return out;
 }
 

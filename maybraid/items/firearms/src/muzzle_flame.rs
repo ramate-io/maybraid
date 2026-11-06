@@ -95,11 +95,11 @@ impl ReferenceMaterial for MuzzleFlameMaterial {
 
 impl Material for MuzzleFlameMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "muzzle_flame.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "muzzle_flame.wesl").into()
 	}
 
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "muzzle_flame.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "muzzle_flame.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
@@ -134,7 +134,7 @@ pub struct MuzzleFlameMaterialPlugin;
 
 impl Plugin for MuzzleFlameMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "muzzle_flame.wgsl");
+		embedded_asset!(app, "muzzle_flame.wesl");
 		if !app.is_plugin_added::<MaterialPlugin<MuzzleFlameMaterial>>() {
 			app.add_plugins(MaterialPlugin::<MuzzleFlameMaterial>::default());
 		}

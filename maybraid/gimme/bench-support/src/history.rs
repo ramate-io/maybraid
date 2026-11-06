@@ -4,8 +4,8 @@
 //! uses that sorted pair walk. This type lives here so production `SpatialIndex`
 //! does not grow a benchmark-only method.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_platform::collections::HashSet;
+use bevy_shape::Aabb3d;
 use gimme_core::{BaseScale, SpatialIndex, SpatialIndexQuery};
 
 /// Main's sorted pair-walk fill (`out.extend(query_pairs → Vec<Id>)`).

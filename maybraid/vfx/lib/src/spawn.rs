@@ -153,7 +153,7 @@ impl Scene for Vfx {
 		let immediate = prepared.immediate.clone();
 		bsn! {
 			template(move |_ctx| Ok(name.clone()))
-			template_value(transform)
+			~{transform}
 			Visibility::Visible
 			template(move |ctx| {
 				let parent = ctx.entity.id();

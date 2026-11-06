@@ -11,9 +11,9 @@ use std::marker::PhantomData;
 
 use anyhow::Result;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
-use bevy::math::bounding::Aabb3d;
 use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use gimme_bench_support::{
 	AbReport, HostGrid, MessageBuffers, Microbench, PairWalkFill, PassLifetime, PersistentSystem,
 };

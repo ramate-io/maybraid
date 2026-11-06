@@ -39,12 +39,12 @@ pub const KIND_ROCKADDER: u32 = 10;
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_WOOD: Vec4 = Vec4::new(0.72, 0.46, 0.20, 1.0);
 
-/// Registers embedded **`furniture_surface.wgsl`** and [`MaterialPlugin`].
+/// Registers embedded **`furniture_surface.wesl`** and [`MaterialPlugin`].
 pub struct FurnitureSurfaceMaterialPlugin;
 
 impl Plugin for FurnitureSurfaceMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "furniture_surface.wgsl");
+		embedded_asset!(app, "furniture_surface.wesl");
 		app.add_plugins(MaterialPlugin::<FurnitureSurfaceMaterial>::default());
 	}
 }
@@ -184,7 +184,7 @@ impl Default for FurnitureSurfaceMaterial {
 
 impl Material for FurnitureSurfaceMaterial {
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "furniture_surface.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "furniture_surface.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {

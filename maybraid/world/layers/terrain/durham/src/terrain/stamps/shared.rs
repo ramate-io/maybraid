@@ -1,7 +1,7 @@
 //! Shared helpers for per-family jersey guillotine stacks.
 
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{Vec2, Vec3};
+use bevy::shape::{Aabb3d, IntersectsVolume};
 use comproc::guillotine::{Bounds2, Guillotine, GuillotineCuts};
 use comproc::noise::config::NoiseConfig;
 use lod::gen::{Id, OriginalId};

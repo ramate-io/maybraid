@@ -1,7 +1,7 @@
 //! Upper-left brand plus the current game mode.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use bevy::text::{FontSourceTemplate, Justify};
 
 use crate::theme::{BARLOW_BLACK, BRAND_MODE_FONT_SIZE, COLUMN_INSET, TEXT_YELLOW};
@@ -64,14 +64,14 @@ impl BrandModeLine {
 		};
 		bsn! {
 			BrandModeTitle
-			template_value(Text::new(label))
+			~{Text::new(label)}
 			TextFont {
 				font: FontSourceTemplate::Handle(BARLOW_BLACK),
 				font_size: px(BRAND_MODE_FONT_SIZE),
 			}
 			TextColor(TEXT_YELLOW)
 			TextLayout::new(justify, bevy::text::LineBreak::NoWrap)
-			template_value(node)
+			~{node}
 			Pickable::IGNORE
 		}
 	}

@@ -119,11 +119,11 @@ pub fn compile_wisps_kind(
 	let update_size =
 		update_scaled_size3(&writer, &props.scale, Vec3::splat(0.42), Vec3::splat(0.95));
 	let update_sprite = update_sprite_index(&writer, smoke);
-	let texture_slot = writer.lit(0u32).expr();
+	let texture_slot = 0;
 	let color = value_lifetime_gradient(&[(0.0, 0.72), (0.45, 0.42), (1.0, 0.0)]);
 
 	let mut module = writer.finish();
-	module.add_texture_slot("smoke");
+	module.add_texture_slot("smoke", bevy_hanabi::SlotDimension::D2);
 
 	let effect = effects.add(
 		EffectAsset::new(SMOKE_CAPACITY, SpawnerSettings::once(SMOKE_COUNT.into()), module)

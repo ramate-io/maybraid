@@ -18,12 +18,12 @@ use bevy::{
 };
 use vegetation_components::CanopyShadowMode;
 
-/// Registers embedded **`frond_material.wgsl`** and [`MaterialPlugin`] for [`FrondMaterial`].
+/// Registers embedded **`frond_material.wesl`** and [`MaterialPlugin`] for [`FrondMaterial`].
 pub struct FrondMaterialPlugin;
 
 impl Plugin for FrondMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "frond_material.wgsl");
+		embedded_asset!(app, "frond_material.wesl");
 		app.add_plugins(MaterialPlugin::<FrondMaterial>::default());
 		app.add_systems(PostUpdate, disable_frond_shadow_casters);
 	}
@@ -56,11 +56,11 @@ impl Default for FrondMaterial {
 
 impl Material for FrondMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "frond_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "frond_material.wesl").into()
 	}
 
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "frond_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "frond_material.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {

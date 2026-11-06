@@ -178,7 +178,7 @@ fn smoke_effect() -> EffectAsset {
 	);
 	let update_accel = AccelModifier::new(writer.lit(Vec3::new(0.0, 0.8, 0.0)).expr());
 	let update_drag = LinearDragModifier::new(writer.lit(1.8).expr());
-	let texture_slot = writer.lit(0u32).expr();
+	let texture_slot = 0;
 
 	let mut color = Gradient::new();
 	color.add_key(0.0, Vec4::new(0.5, 0.52, 0.54, 0.35));
@@ -189,7 +189,7 @@ fn smoke_effect() -> EffectAsset {
 	size.add_key(1.0, Vec3::splat(0.39));
 
 	let mut module = writer.finish();
-	module.add_texture_slot("puff");
+	module.add_texture_slot("puff", bevy_hanabi::SlotDimension::D2);
 
 	EffectAsset::new(48, SpawnerSettings::once(24.0.into()), module)
 		.with_name("bolt-smoke")

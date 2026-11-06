@@ -3,9 +3,9 @@
 use crate::commands::show::opening::{openings_from_preview, PreviewOpening};
 use crate::commands::show::rectangular_pitched_roof_complex::build_params as build_roof_complex_params;
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value};
-use bevy_math::bounding::Aabb3d;
+use bevy::scene::prelude::bsn;
 use bevy_math::{Isometry3d, Vec2};
+use bevy_shape::Aabb3d;
 use building_components::panels::{PanelGeometry, PanelNode, TessellatedTriangle};
 use building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkLinear, RoughStoneworkSlice90,
@@ -3307,7 +3307,7 @@ fn build_livable_rectangles_examples() -> Vec<LivableRectangleExampleCell> {
 	let specs = livable_rectangles_examples_specs();
 	let mut fitted = Vec::new();
 	for (si, spec) in specs.iter().enumerate() {
-		let host = bevy_math::bounding::Aabb2d { min: Vec2::ZERO, max: spec.extent };
+		let host = bevy_shape::Aabb2d { min: Vec2::ZERO, max: spec.extent };
 		let openings = passages_on_faces(host, 0.0, spec.height, spec.ports);
 		let confines = Confines::new(
 			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(spec.extent.x, spec.height, spec.extent.y)),
@@ -4217,7 +4217,7 @@ pub fn present_preview_lod(
 					.spawn_scene((
 						tower.scene_with_lod(&lod_ref),
 						bsn! {
-							template_value(transform)
+							~{transform}
 							Visibility::default()
 						},
 					))
@@ -4545,7 +4545,7 @@ fn spawn_preview(commands: &mut Commands, transform: Transform, scene: impl bevy
 		.spawn_scene((
 			scene,
 			bsn! {
-				template_value(transform)
+				~{transform}
 				Visibility::default()
 			},
 		))

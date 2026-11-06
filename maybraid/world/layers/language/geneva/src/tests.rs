@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
+use bevy::shape::Aabb3d;
 use chico::ForestGroveKind;
 use durham::terrain::watersheds::{PocketWater, PocketWatersHighPass};
 use durham::terrain::MassifHighPassStampCell;

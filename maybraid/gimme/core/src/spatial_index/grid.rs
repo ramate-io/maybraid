@@ -1,7 +1,7 @@
 //! Grid coordinate math and canonical [`Cell`] construction ([RFC-142 §3.1]).
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{DVec3, IVec3, Vec3A};
+use bevy_shape::Aabb3d;
 
 use crate::cell::Cell;
 use crate::error::SpatialIndexError;

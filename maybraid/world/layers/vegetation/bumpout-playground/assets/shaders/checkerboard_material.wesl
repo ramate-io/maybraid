@@ -1,25 +1,25 @@
 //---------------------------------------------------------
 // Required imports for a PBR fragment shader in Bevy 0.17
 //---------------------------------------------------------
-#import bevy_pbr::{
-    forward_io::VertexOutput,
-    mesh_view_bindings::view,
-    pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
-    pbr_functions as fns,
-    pbr_bindings,
-}
-#import bevy_core_pipeline::tonemapping::tone_mapping
+import bevy_pbr::render::forward_io::VertexOutput;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::pbr_types::PbrInput;
+import bevy_pbr::render::pbr_types::pbr_input_new;
+import bevy_pbr::render::pbr_types::STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT;
+import bevy_pbr::render::pbr_functions as fns;
+import bevy_pbr::render::pbr_bindings;
+import bevy_core_pipeline::tonemapping::tone_mapping;
 
 //---------------------------------------------------------
 // Material uniforms
 //---------------------------------------------------------
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> checker_size_m: f32;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(1)
+@group(constants::MATERIAL_BIND_GROUP) @binding(1)
 var<uniform> color1: vec4<f32>;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(2)
+@group(constants::MATERIAL_BIND_GROUP) @binding(2)
 var<uniform> color2: vec4<f32>;
 
 //---------------------------------------------------------

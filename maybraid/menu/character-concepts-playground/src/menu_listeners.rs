@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::ui_widgets::Button;
 use bevy_character_ui_menu_renderer::{CharacterMenuEvent, MenuButton, ToggleSectionKey};
 use character_creation_menus::{CharacterMenu, MenuEvent, SectionId};
 
@@ -46,13 +47,18 @@ pub fn sync_menu_state_from_config(
 pub fn dispatch_menu_interactions(
 	mut menu_state: ResMut<CharacterMenuState>,
 	mut menu_events: MessageWriter<CharacterMenuEvent<CharacterMenu>>,
-	mut section_interactions: Query<
-		(&Interaction, &ToggleSectionKey),
-		(Changed<Interaction>, With<Button>),
-	>,
+	mut section_interactions: Query<&ToggleSectionKey, (Added<bevy::ui::Pressed>, With<Button>)>,
 	mut menu_interactions: Query<
-		(&Interaction, &MenuButton<MenuEvent>),
-		(Changed<Interaction>, With<Button>, Without<ToggleSectionKey>),
+		(
+			Option<&bevy::picking::hover::Hovered>,
+			Option<Ref<bevy::ui::Pressed>>,
+			&MenuButton<MenuEvent>,
+		),
+		(
+			Or<(Added<bevy::ui::Pressed>, Changed<bevy::picking::hover::Hovered>)>,
+			With<Button>,
+			Without<ToggleSectionKey>,
+		),
 	>,
 	mut config: ResMut<ConceptPreviewConfig>,
 	mut ui_state: ResMut<crate::ui::CreatorUiState>,
@@ -64,23 +70,20 @@ pub fn dispatch_menu_interactions(
 	mut pending_camera: ResMut<PendingCameraFocus>,
 	mut camera_boot: ResMut<CameraFocusBootState>,
 ) {
-	for (interaction, toggle) in &mut section_interactions {
-		if *interaction != Interaction::Pressed {
-			continue;
-		}
+	for toggle in &mut section_interactions {
 		if let Some(section) = section_id_for_label(toggle.0) {
 			ui_state.toggle_section(section);
 		}
 	}
 
-	for (interaction, button) in &mut menu_interactions {
-		if *interaction == Interaction::Hovered {
-			if let Some(focus) = menu_state.0.camera_focus_for_event(button.0) {
+	for (hovered, pressed, button) in &mut menu_interactions {
+		if !pressed.is_some_and(|pressed| pressed.is_added()) {
+			if let Some(focus) = hovered
+				.filter(|hovered| hovered.get())
+				.and_then(|_| menu_state.0.camera_focus_for_event(button.0))
+			{
 				ui_state.hovered = Some(focus);
 			}
-			continue;
-		}
-		if *interaction != Interaction::Pressed {
 			continue;
 		}
 		let event = button.0;

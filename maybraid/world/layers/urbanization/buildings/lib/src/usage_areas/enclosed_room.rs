@@ -3,8 +3,8 @@
 //! Used by MiniMart / Parts offices and PublicRestroom toilet stalls. Callers keep
 //! domain mins, reserves, door catalogs, and post-pack fill (aisles, sinks, …).
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::{Aabb2d, Aabb3d};
 use procedural_common::{
 	aabb2_area, clamp_min_size2, intersects_aabb2, plan_to_aabb3, Aabb2dPack, PlanAxes,
 	PlanOpeningFace,

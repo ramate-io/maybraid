@@ -4,11 +4,10 @@
 // 6 rock land, 7 cosmos land, 8 rock mark, 9 cosmos mark.
 //---------------------------------------------------------
 
-#import bevy_sprite::{
-    mesh2d_functions as mesh_functions,
-    mesh2d_vertex_output::VertexOutput,
-    mesh2d_view_bindings::{view, globals},
-}
+import bevy_sprite_render::mesh2d::functions as mesh_functions;
+import bevy_sprite_render::mesh2d::vertex_output::VertexOutput;
+import bevy_sprite_render::mesh2d::view_bindings::view;
+import bevy_sprite_render::mesh2d::view_bindings::globals;
 
 struct TileParams {
     // rgb + unused
@@ -17,7 +16,7 @@ struct TileParams {
     style: vec4<f32>,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> material: TileParams;
 
 const KIND_LAND: f32 = 0.0;
@@ -88,49 +87,47 @@ fn water_pinch(origin: vec2<f32>, world: vec2<f32>, uv: vec2<f32>) -> vec2<f32> 
 
 struct Vertex {
     @builtin(instance_index) instance_index: u32,
-#ifdef VERTEX_POSITIONS
+    @if(VERTEX_POSITIONS)
     @location(0) position: vec3<f32>,
-#endif
-#ifdef VERTEX_NORMALS
+    @if(VERTEX_NORMALS)
     @location(1) normal: vec3<f32>,
-#endif
-#ifdef VERTEX_UVS
+    @if(VERTEX_UVS)
     @location(2) uv: vec2<f32>,
-#endif
-#ifdef VERTEX_TANGENTS
+    @if(VERTEX_TANGENTS)
     @location(3) tangent: vec4<f32>,
-#endif
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     @location(4) color: vec4<f32>,
-#endif
 }
 
 @vertex
 fn vertex(vertex: Vertex) -> VertexOutput {
     var out: VertexOutput;
-#ifdef VERTEX_UVS
+    @if(VERTEX_UVS)
     out.uv = vertex.uv;
-#endif
-#ifdef VERTEX_POSITIONS
+    @if(VERTEX_POSITIONS)
     let world_from_local = mesh_functions::get_world_from_local(vertex.instance_index);
+    @if(VERTEX_POSITIONS)
     var world_pos = mesh_functions::mesh2d_position_local_to_world(
         world_from_local,
         vec4<f32>(vertex.position, 1.0),
     );
+    @if(VERTEX_POSITIONS)
     let kind = tile_kind();
+    @if(VERTEX_POSITIONS)
     let t = globals.time;
+    @if(VERTEX_POSITIONS)
     let origin = world_from_local[3].xy;
+    @if(VERTEX_POSITIONS)
     if kind > 3.5 && kind < 4.5 {
         let pulse = 0.5 + 0.5 * sin(t * 5.2);
         let scale = 1.0 + (pulse - 0.5) * 0.08;
         world_pos.x = origin.x + (world_pos.x - origin.x) * scale;
         world_pos.y = origin.y + (world_pos.y - origin.y) * scale;
     } else {
-#ifdef VERTEX_UVS
+        @if(VERTEX_UVS)
         let uv = vertex.uv;
-#else
+        @if(!VERTEX_UVS)
         let uv = vec2<f32>(0.5, 0.5);
-#endif
         if kind > 0.5 && kind < 1.5 {
             let pinched = water_pinch(origin, world_pos.xy, uv);
             world_pos.x = pinched.x;
@@ -140,24 +137,22 @@ fn vertex(vertex: Vertex) -> VertexOutput {
         world_pos.x += sway.x;
         world_pos.y += sway.y;
     }
+    @if(VERTEX_POSITIONS)
     out.world_position = world_pos;
+    @if(VERTEX_POSITIONS)
     out.position = mesh_functions::mesh2d_position_world_to_clip(world_pos);
-#endif
-#ifdef VERTEX_NORMALS
+    @if(VERTEX_NORMALS)
     out.world_normal = mesh_functions::mesh2d_normal_local_to_world(
         vertex.normal,
         vertex.instance_index,
     );
-#endif
-#ifdef VERTEX_TANGENTS
+    @if(VERTEX_TANGENTS)
     out.world_tangent = mesh_functions::mesh2d_tangent_local_to_world(
         world_from_local,
         vertex.tangent,
     );
-#endif
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     out.color = vertex.color;
-#endif
     return out;
 }
 

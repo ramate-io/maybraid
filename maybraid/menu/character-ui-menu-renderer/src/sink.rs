@@ -1,6 +1,7 @@
 //! Forward contract from the [`MenuNode`] IR to Maybraid HUD widgets.
 
 use bevy::prelude::*;
+use bevy::ui_widgets::Button;
 use character_ui_menu::{
 	AssetChoice, AssetThumbnailDisplay, EquipmentChoice, GridCatalogChoice, ItemRow, MenuNode,
 	OrderedEquipmentRow, PreviewColor, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
@@ -463,6 +464,7 @@ impl MaybraidMenuSink {
 		parent
 			.spawn((
 				Button,
+				bevy::picking::hover::Hovered::default(),
 				CursorRow,
 				context.stamp_hud_item(),
 				Node {
