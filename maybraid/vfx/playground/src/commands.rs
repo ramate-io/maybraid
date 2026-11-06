@@ -59,6 +59,12 @@ pub enum PlaygroundCommand {
 		#[arg(allow_hyphen_values = true)]
 		age: f32,
 	},
+	/// Pause all current effect clocks.
+	Pause,
+	/// Cancel all instances and replay the last effect from frame zero.
+	Reset,
+	/// Cancel every instance and automatic replay.
+	Cancel,
 	/// Resume playback after `/freeze`.
 	Play,
 	/// Stop automatically repeating the last show.
@@ -132,7 +138,7 @@ impl PlaygroundCommand {
 			Self::Show { effect, scale, intensity, distance, seed, playback } => {
 				let Some(name) = canonicalize_effect_name(&effect) else {
 					*console = format!(
-						"unknown effect `{effect}` — try fiery-explosion, flash, fireball, smoke, sparks"
+						"unknown effect `{effect}` — try fiery-explosion, flash, fireball, smoke, sparks, dust"
 					);
 					return;
 				};
@@ -165,6 +171,36 @@ impl PlaygroundCommand {
 					Some(age) => format!("freeze at {age:.2}s"),
 					None => "freeze off".into(),
 				};
+			}
+			Self::Pause => {
+				commands.queue(|world: &mut World| world.resource_mut::<Time<Virtual>>().pause());
+				*console = "paused".into();
+			}
+			Self::Reset | Self::Cancel => {
+				let reset = matches!(self, Self::Reset);
+				commands.queue(move |world: &mut World| {
+					let roots: Vec<_> = world
+						.query_filtered::<Entity, With<maybraid_vfx::VfxInstance>>()
+						.iter(world)
+						.collect();
+					for root in roots {
+						world.despawn(root);
+					}
+					world.resource_mut::<PendingVfxShows>().0.clear();
+					world.resource_mut::<crate::show::RepeatingVfxShow>().request = None;
+					world.resource_mut::<SpreadOnce>().0 = false;
+					world.resource_mut::<PreviewFreeze>().age = None;
+					world.resource_mut::<LoopEnabled>().0 = reset;
+					world.resource_mut::<Time<Virtual>>().unpause();
+					if reset {
+						if let Some(request) =
+							world.resource::<crate::show::LastVfxShow>().request.clone()
+						{
+							world.resource_mut::<PendingVfxShows>().0.push(request);
+						}
+					}
+				});
+				*console = if reset { "reset" } else { "cancelled" }.into();
 			}
 			Self::Play => {
 				commands.queue(|world: &mut World| {

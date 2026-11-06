@@ -1,18 +1,17 @@
 //! Public spawn API and layer dispatch.
 
+use bevy::ecs::template::template;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
-use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::{ResolveContext, ResolveSceneError, SceneDependencies};
 
 use crate::composition::{
-	EffectDefinition, EffectLayer, EffectPart, LobeKind, ScaleBounds, DEFAULT_SCALE_MAX,
+	EffectDefinition, EffectLayer, EffectPart, EffectRecipe, ScaleBounds, DEFAULT_SCALE_MAX,
 	DEFAULT_SCALE_MIN,
 };
-use crate::lobe_material::LobeMaterial;
-use crate::lobes::{lobe_transform, vary_lobe, LobeMaterialSlot, VfxLobe};
 use crate::membership::VfxMemberOf;
 use crate::palette::ExplosionPalette;
-use crate::particles::effect_properties;
 use crate::seed;
 
 pub const MAX_INTENSITY: f32 = 2.0;
@@ -107,8 +106,77 @@ impl VfxSpawn {
 	}
 }
 
+/// Spawn payload: typed recipe plus per-instance overrides.
+#[derive(Clone, Debug)]
+pub struct Effect<T> {
+	pub recipe: T,
+	pub spawn: VfxSpawn,
+}
+
+impl<T: EffectRecipe + Component + Clone> Scene for Effect<T> {
+	fn resolve(
+		self,
+		context: &mut ResolveContext,
+		scene: &mut bevy::scene::ResolvedScene,
+	) -> Result<(), ResolveSceneError> {
+		let definition = self.recipe.effect_definition();
+		let recipe = self.recipe;
+		(Vfx { definition, spawn: self.spawn }, bsn! { template(move |_ctx| Ok(recipe.clone())) })
+			.resolve(context, scene)
+	}
+
+	fn register_dependencies(&self, dependencies: &mut SceneDependencies) {
+		Vfx { definition: self.recipe.effect_definition(), spawn: self.spawn.clone() }
+			.register_dependencies(dependencies);
+	}
+}
+
+/// Flattened definition path. Does not insert a typed recipe identity.
+#[derive(Clone, Debug)]
+pub struct Vfx {
+	pub definition: EffectDefinition,
+	pub spawn: VfxSpawn,
+}
+
+impl Scene for Vfx {
+	fn resolve(
+		self,
+		context: &mut ResolveContext,
+		scene: &mut bevy::scene::ResolvedScene,
+	) -> Result<(), ResolveSceneError> {
+		let prepared = PreparedVfx::new(&self.definition, self.spawn);
+		let name = prepared.name.clone();
+		let transform = prepared.transform;
+		let instance = prepared.instance.clone();
+		let pending = prepared.pending_component.clone();
+		let spawn = prepared.spawn.clone();
+		let immediate = prepared.immediate.clone();
+		bsn! {
+			template(move |_ctx| Ok(name.clone()))
+			~{transform}
+			Visibility::Visible
+			template(move |ctx| {
+				let parent = ctx.entity.id();
+				let spawn = spawn.clone();
+				let immediate = immediate.clone();
+				ctx.entity.world_scope(|world| {
+					let mut commands = world.commands();
+					for layer in &immediate {
+						realize_layer(&mut commands, parent, layer, &spawn);
+					}
+					world.flush();
+				});
+				Ok(instance.clone())
+			})
+			template(move |_ctx| Ok(pending.clone()))
+			NotShadowCaster
+		}
+		.resolve(context, scene)
+	}
+}
+
 /// Root of one spawned instance.
-#[derive(Component, Debug)]
+#[derive(Clone, Component, Debug)]
 pub struct VfxInstance {
 	pub name: String,
 	pub age: f32,
@@ -120,7 +188,7 @@ pub struct VfxInstance {
 }
 
 /// Layers waiting for their start delay relative to the root.
-#[derive(Component, Debug)]
+#[derive(Clone, Component, Debug)]
 pub struct VfxPendingLayers {
 	pub layers: Vec<EffectLayer>,
 	pub spawn: VfxSpawn,
@@ -157,48 +225,68 @@ pub struct VfxLayerLife {
 	pub waiting_for_emitter: bool,
 }
 
+struct PreparedVfx {
+	name: Name,
+	transform: Transform,
+	instance: VfxInstance,
+	pending_component: VfxPendingLayers,
+	spawn: VfxSpawn,
+	immediate: Vec<EffectLayer>,
+}
+
+impl PreparedVfx {
+	fn new(definition: &EffectDefinition, spawn: VfxSpawn) -> Self {
+		let spawn = spawn.resolved_for(definition);
+		let mut pending = Vec::new();
+		let mut immediate = Vec::new();
+		for layer in &definition.layers {
+			if layer.delay <= 0.0 {
+				immediate.push(layer.clone());
+			} else {
+				pending.push(layer.clone());
+			}
+		}
+		Self {
+			name: Name::new(format!("vfx-{}", definition.name)),
+			transform: Transform {
+				translation: spawn.transform.translation,
+				rotation: spawn.transform.rotation,
+				scale: Vec3::splat(spawn.scale),
+			},
+			instance: VfxInstance {
+				name: definition.name.clone(),
+				age: 0.0,
+				duration: definition.duration(),
+				playback: spawn.clamped_playback(),
+				seed: spawn.resolved_seed(),
+				armed: false,
+			},
+			pending_component: VfxPendingLayers { layers: pending, spawn: spawn.clone() },
+			spawn,
+			immediate,
+		}
+	}
+}
+
 /// Spawn a named definition at `spawn.transform`. Returns the root entity.
 pub fn spawn_vfx(
 	commands: &mut Commands,
 	definition: &EffectDefinition,
 	spawn: VfxSpawn,
 ) -> Entity {
-	let spawn = spawn.resolved_for(definition);
-	let duration = definition.duration();
-	let mut pending = Vec::new();
-	let mut immediate = Vec::new();
-	for layer in &definition.layers {
-		if layer.delay <= 0.0 {
-			immediate.push(layer.clone());
-		} else {
-			pending.push(layer.clone());
-		}
-	}
-
-	let root_transform = Transform {
-		translation: spawn.transform.translation,
-		rotation: spawn.transform.rotation,
-		scale: Vec3::splat(spawn.scale),
-	};
+	let prepared = PreparedVfx::new(definition, spawn);
+	let spawn = prepared.spawn.clone();
 	let root = commands
 		.spawn((
-			Name::new(format!("vfx-{}", definition.name)),
-			root_transform,
+			prepared.name,
+			prepared.transform,
 			Visibility::Visible,
-			VfxInstance {
-				name: definition.name.clone(),
-				age: 0.0,
-				duration,
-				playback: spawn.clamped_playback(),
-				seed: spawn.resolved_seed(),
-				armed: false,
-			},
-			VfxPendingLayers { layers: pending, spawn: spawn.clone() },
+			prepared.instance,
+			prepared.pending_component,
 			NotShadowCaster,
 		))
 		.id();
-
-	for layer in immediate {
+	for layer in prepared.immediate {
 		realize_layer(commands, root, &layer, &spawn);
 	}
 	root
@@ -227,29 +315,8 @@ pub fn realize_layer(
 		scale: Vec3::splat(layer.scale),
 	};
 	match &layer.part {
-		EffectPart::Particle(part) => {
-			let count = (part.count * spawn.clamped_intensity()).clamp(1.0, part.capacity as f32);
-			let mut entity = commands.spawn((
-				Name::new(format!("vfx-layer-{}", part.name)),
-				ChildOf(parent),
-				VfxMemberOf(parent),
-				transform,
-				Visibility::Inherited,
-				ParticleEffect::new(part.effect.clone()),
-				effect_properties(spawn, layer.scale, part.shade),
-				VfxEmitter { count },
-				VfxLayerLife {
-					age: 0.0,
-					duration: part.max_lifetime,
-					playback: spawn.clamped_playback(),
-					waiting_for_emitter: true,
-				},
-				NotShadowCaster,
-			));
-			if !part.images.is_empty() {
-				entity.insert(EffectMaterial { images: part.images.clone() });
-			}
-		}
+		EffectPart::Flipbook(part) => part.spawn(commands, parent, transform, spawn),
+		EffectPart::Particle(part) => part.spawn(commands, parent, transform, spawn, layer.scale),
 		EffectPart::Light(pulse) => {
 			let peak = pulse.peak_intensity * spawn.clamped_intensity();
 			let color = ExplosionPalette::color(spawn.palette().with_tint(spawn.tint).flash);
@@ -275,55 +342,7 @@ pub fn realize_layer(
 				},
 			));
 		}
-		EffectPart::Mesh(part) => {
-			let cluster = commands
-				.spawn((
-					Name::new(format!("vfx-layer-{}", part.name)),
-					ChildOf(parent),
-					VfxMemberOf(parent),
-					transform,
-					Visibility::Inherited,
-					NotShadowCaster,
-				))
-				.id();
-			let layer_id = layer_stream(part.kind);
-			for (index, spec) in part.lobes.iter().copied().enumerate() {
-				let spec = vary_lobe(spec, spawn.resolved_seed(), layer_id, index as u32);
-				let material = LobeMaterial::new(
-					part.kind,
-					spec.duration,
-					seed::unit(seed::stream(spawn.resolved_seed(), layer_id, index as u32)),
-					&spawn.palette(),
-					spawn.tint_or_white(),
-					spawn.clamped_intensity(),
-				);
-				commands.spawn((
-					Name::new(format!("vfx-lobe-{}-{index}", part.name)),
-					ChildOf(cluster),
-					VfxMemberOf(parent),
-					Mesh3d(part.mesh.clone()),
-					lobe_transform(&spec, 0.0),
-					Visibility::Hidden,
-					VfxLobe { age: 0.0, spec, playback: spawn.clamped_playback() },
-					VfxLayerLife {
-						age: 0.0,
-						duration: spec.duration,
-						playback: spawn.clamped_playback(),
-						waiting_for_emitter: false,
-					},
-					NotShadowCaster,
-					LobeMaterialSlot(material),
-				));
-			}
-		}
-	}
-}
-
-fn layer_stream(kind: LobeKind) -> u32 {
-	match kind {
-		LobeKind::Fire => seed::LAYER_FIRE,
-		LobeKind::Smoke => seed::LAYER_SMOKE,
-		LobeKind::Flash => seed::LAYER_FLASH,
+		EffectPart::Mesh(part) => part.spawn(commands, parent, transform, spawn),
 	}
 }
 
@@ -332,6 +351,9 @@ mod tests {
 	use super::*;
 	use crate::composition::{EffectLayer, LightPulse, ParticleShade};
 	use crate::layers::flash::FLASH_FADE;
+	use crate::parts::particle::{
+		effect_properties, PROP_COLOR0, PROP_PLAYBACK, PROP_SEED, PROP_TINT,
+	};
 
 	#[test]
 	fn spawn_clamps_scale_intensity_and_playback() {
@@ -398,9 +420,9 @@ mod tests {
 		}
 		.resolved();
 		let props = effect_properties(&spawn, 1.0, ParticleShade::Fire);
-		assert!(props.get_stored(crate::particles::PROP_TINT).is_some());
-		assert!(props.get_stored(crate::particles::PROP_SEED).is_some());
-		assert!(props.get_stored(crate::particles::PROP_PLAYBACK).is_some());
-		assert!(props.get_stored(crate::particles::PROP_COLOR0).is_some());
+		assert!(props.get_stored(PROP_TINT).is_some());
+		assert!(props.get_stored(PROP_SEED).is_some());
+		assert!(props.get_stored(PROP_PLAYBACK).is_some());
+		assert!(props.get_stored(PROP_COLOR0).is_some());
 	}
 }

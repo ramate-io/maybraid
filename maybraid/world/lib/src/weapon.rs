@@ -17,7 +17,7 @@ use maybraid_session::WorldGameplayEnabled;
 use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 
 use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
-use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
+use maybraid_vfx::{EffectRecipe, SpawnVfxExt, VfxLibrary, VfxSpawn};
 use player::{
 	apply_character_mobility, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook, PlayerSystems,
 	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
@@ -267,7 +267,7 @@ fn spawn_detonation_vfx(
 	};
 	for event in detonations.read() {
 		commands.spawn_vfx(
-			&library.fiery_explosion,
+			&library.fiery_explosion.effect_definition(),
 			VfxSpawn {
 				transform: Transform::from_translation(event.position),
 				scale: event.effect.scale,
@@ -1002,16 +1002,36 @@ mod tests {
 		use character_items::GrenadeStats;
 		use grenades::{GrenadeDetonated, GrenadeEffect};
 		use maybraid_vfx::{
-			EffectDefinition, FlipbookAsset, ScaleBounds, VfxFlipbooks, VfxInstance, VfxLibrary,
+			Dust, DustLayer, EffectDefinition, FieryExplosion, FlipbookAsset, FlipbookPart,
+			LobeKind, MeshPart, ParticlePart, ParticleShade, VfxFlipbooks, VfxInstance, VfxLibrary,
 			FIERY_EXPLOSION,
 		};
 
 		let mut world = World::new();
 		world.init_resource::<Messages<GrenadeDetonated>>();
 		let blank = EffectDefinition::new("stub", []);
-		let fiery = EffectDefinition::new(FIERY_EXPLOSION, [])
-			.with_scale_bounds(ScaleBounds { min: 0.25, max: 20.0 });
+		fn blank_mesh() -> MeshPart {
+			MeshPart {
+				name: "stub".into(),
+				mesh: Handle::default(),
+				kind: LobeKind::Flash,
+				lobes: Vec::new(),
+				duration: 0.0,
+			}
+		}
+		fn blank_particle() -> ParticlePart {
+			ParticlePart {
+				name: "stub".into(),
+				effect: Handle::default(),
+				images: Vec::new(),
+				count: 1.0,
+				capacity: 1,
+				max_lifetime: 0.0,
+				shade: ParticleShade::Fire,
+			}
+		}
 		world.insert_resource(VfxLibrary {
+			dust: Dust::new(DustLayer::new(FlipbookPart::default())),
 			flipbooks: VfxFlipbooks {
 				fire: FlipbookAsset {
 					image: Handle::default(),
@@ -1031,7 +1051,14 @@ mod tests {
 			fireball: blank.clone(),
 			smoke: blank.clone(),
 			sparks: blank,
-			fiery_explosion: fiery,
+			fiery_explosion: FieryExplosion::new(
+				blank_mesh(),
+				blank_mesh(),
+				blank_particle(),
+				blank_mesh(),
+				blank_particle(),
+				blank_particle(),
+			),
 		});
 		let stats = GrenadeStats::standard();
 		world.resource_mut::<Messages<GrenadeDetonated>>().write(GrenadeDetonated {

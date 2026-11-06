@@ -10,7 +10,7 @@ use bevy_hanabi::prelude::{
 
 use crate::composition::{EffectDefinition, EffectLayer, ParticlePart, ParticleShade};
 use crate::names::SPARKS;
-use crate::particles::{
+use crate::parts::particle::{
 	add_instance_properties, init_lifetime, init_palette_color, init_radial_velocity,
 	update_palette_color, update_scaled_size3, value_lifetime_gradient,
 };

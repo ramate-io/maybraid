@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/mosb2bls/maybraid_VFX",
+  "commit": "75e21c0d5a3a40d954bcee4ea16c2892ea3ae72d",
+  "source_root": "maybraid/vfx/Dust_Style",
+  "inventory": {
+    "path": "Combined/Assets/Inventory.json",
+    "bytes": 113430,
+    "sha256": "daefc68c8a0620a903c4ce13818faabd7bbb1097c0455c155e447ece80f4858a"
+  },
+  "reusable": [
+    {
+      "path": "Combined/Assets/Body/BodyAssets.json",
+      "bytes": 10180,
+      "sha256": "aa3098c7b94957098fa52879f9937fbe51387d690e807158b56cb4dd3d7b9099"
+    },
+    {
+      "path": "Combined/Assets/Body/Column.glb",
+      "bytes": 48068,
+      "sha256": "640f58bb7a7dbdbbea356ecbe4b27204477ac41fc2bfca4c8c9d31c5ba1b0532"
+    },
+    {
+      "path": "Combined/Assets/Body/ColumnDensity.f16",
+      "bytes": 3211264,
+      "sha256": "56f3e1167758a02d70639398c949ace2a2ddbd18531ff26c3bff69ef5e12bc47"
+    },
+    {
+      "path": "Combined/Assets/Body/LocalDeformation.f32",
+      "bytes": 6960,
+      "sha256": "2246cd4afdde5293a2877bbc633f7f4c6cc53ded089b780e43690ae1e188f99f"
+    },
+    {
+      "path": "Combined/Assets/Body/Shoulder.glb",
+      "bytes": 44472,
+      "sha256": "52f1c1a45169266ea21716cf88170909bad753545fb10d441023825723b3e8c6"
+    },
+    {
+      "path": "Combined/Assets/Body/ShoulderDensity.f16",
+      "bytes": 3211264,
+      "sha256": "0bd39ecaa835d14030489ca6580d270cfdb410261e35363eee3f737413d073a2"
+    },
+    {
+      "path": "Combined/Assets/Body/Swept.glb",
+      "bytes": 40868,
+      "sha256": "fc2ad6c2fa123323858b38a74cae2e0b47ab3bf20c82e43b6d3e16fdb8223c4e"
+    },
+    {
+      "path": "Combined/Assets/Body/SweptDensity.f16",
+      "bytes": 3211264,
+      "sha256": "21aabc682db5cc33ead0c5ad61a72bd0061e1264dbf54904c0a9819d5e77de0c"
+    },
+    {
+      "path": "Combined/Assets/DynamicDust/DynamicRules.json",
+      "bytes": 1994,
+      "sha256": "fc15a43f1e1a9f1980005ba6d0694840f4657363c4eb9009dabb1644209fbce8"
+    },
+    {
+      "path": "Combined/Assets/DynamicDust/SmallClouds/Billow.f16",
+      "bytes": 524288,
+      "sha256": "20f4cd0e3a172f955936a3169a05f46a5700e31d9cffd20a1360ac2380f02f51"
+    },
+    {
+      "path": "Combined/Assets/DynamicDust/SmallClouds/CloudLibrary.json",
+      "bytes": 4614,
+      "sha256": "4e865047306e6a85ce51dfb0656750887858e275d2b2d33bf1eb02467313b6fa"
+    },
+    {
+      "path": "Combined/Assets/DynamicDust/SmallClouds/Cluster.f16",
+      "bytes": 524288,
+      "sha256": "dd590f34f390d82155c837faed956ecc17a1ece90f6f5c5b0e4b247c7a9011c9"
+    },
+    {
+      "path": "Combined/Assets/DynamicDust/SmallClouds/Curl.f16",
+      "bytes": 524288,
+      "sha256": "60aa3b9fe4255a7eb8012858c095214704546f4242824d92543806a9b9a882f1"
+    },
+    {
+      "path": "Combined/Assets/DynamicDust/SmallClouds/Trail.f16",
+      "bytes": 524288,
+      "sha256": "5708a9917787ad5ba27552099f7f1ca6f55afd287b0e36fb54e592508dc5d5bd"
+    },
+    {
+      "path": "Combined/Assets/MotionRules.json",
+      "bytes": 91615,
+      "sha256": "0fa1a926801ef4b285251c205d2c06ede71b0b47066458f6f64464b246a2f669"
+    },
+    {
+      "path": "Combined/Assets/Provenance.json",
+      "bytes": 477,
+      "sha256": "4df66f9c6fdac70ac1f851e63a8fa2c42700647af57faae1869b9b72c3a33212"
+    },
+    {
+      "path": "README.md",
+      "bytes": 5920,
+      "sha256": "a858d840673d77a49446fec719bf1c0ba0b5001e9ace0084a63315444c386dca"
+    }
+  ],
+  "optional_groups": {
+    "recordings": {
+      "prefixes": [
+        "Combined/Assets/Reference/Pyro/"
+      ],
+      "file_count": 485,
+      "bytes": 474914261
+    },
+    "authoring": {
+      "prefixes": [
+        "Cartoon/",
+        "Combined/",
+        "README.md"
+      ],
+      "exclude_prefixes": [
+        "Combined/Assets/Reference/Pyro/"
+      ],
+      "file_count": 110,
+      "bytes": 34735202,
+      "description": "Complete delivery except the optional Pyro recording; includes original relative paths, supporting metadata, native projects, sources, previews and duplicate authoring inputs."
+    }
+  },
+  "notes": [
+    "Immutable upstream files remain the source; no new archive or release is claimed.",
+    "Optional groups are never inputs to runtime packages, normal builds, or tests."
+  ],
+  "deduplicated_sources": [
+    {
+      "source": "Combined/Assets/Body/BodyAssets.json",
+      "duplicate": "Cartoon/Assets/Body/BodyAssets.json",
+      "sha256": "aa3098c7b94957098fa52879f9937fbe51387d690e807158b56cb4dd3d7b9099"
+    },
+    {
+      "source": "Combined/Assets/Body/Column.glb",
+      "duplicate": "Cartoon/Assets/Body/Column.glb",
+      "sha256": "640f58bb7a7dbdbbea356ecbe4b27204477ac41fc2bfca4c8c9d31c5ba1b0532"
+    },
+    {
+      "source": "Combined/Assets/Body/ColumnDensity.f16",
+      "duplicate": "Cartoon/Assets/Body/ColumnDensity.f16",
+      "sha256": "56f3e1167758a02d70639398c949ace2a2ddbd18531ff26c3bff69ef5e12bc47"
+    },
+    {
+      "source": "Combined/Assets/Body/LocalDeformation.f32",
+      "duplicate": "Cartoon/Assets/Body/LocalDeformation.f32",
+      "sha256": "2246cd4afdde5293a2877bbc633f7f4c6cc53ded089b780e43690ae1e188f99f"
+    },
+    {
+      "source": "Combined/Assets/Body/Shoulder.glb",
+      "duplicate": "Cartoon/Assets/Body/Shoulder.glb",
+      "sha256": "52f1c1a45169266ea21716cf88170909bad753545fb10d441023825723b3e8c6"
+    },
+    {
+      "source": "Combined/Assets/Body/ShoulderDensity.f16",
+      "duplicate": "Cartoon/Assets/Body/ShoulderDensity.f16",
+      "sha256": "0bd39ecaa835d14030489ca6580d270cfdb410261e35363eee3f737413d073a2"
+    },
+    {
+      "source": "Combined/Assets/Body/Swept.glb",
+      "duplicate": "Cartoon/Assets/Body/Swept.glb",
+      "sha256": "fc2ad6c2fa123323858b38a74cae2e0b47ab3bf20c82e43b6d3e16fdb8223c4e"
+    },
+    {
+      "source": "Combined/Assets/Body/SweptDensity.f16",
+      "duplicate": "Cartoon/Assets/Body/SweptDensity.f16",
+      "sha256": "21aabc682db5cc33ead0c5ad61a72bd0061e1264dbf54904c0a9819d5e77de0c"
+    },
+    {
+      "source": "Combined/Assets/MotionRules.json",
+      "duplicate": "Cartoon/Assets/MotionRules.json",
+      "sha256": "0fa1a926801ef4b285251c205d2c06ede71b0b47066458f6f64464b246a2f669"
+    }
+  ]
+}
