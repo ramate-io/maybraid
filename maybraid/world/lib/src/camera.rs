@@ -12,8 +12,9 @@ use maybraid_session::WorldGameplayEnabled;
 use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 use player::{CameraFollow, Player, PlayerSystems};
 use player_camera::{
-	spawn_follow_camera, CameraController, CameraLookSuppressed, CameraPov, CameraPovLocked,
-	CameraPresentationImpulse, FollowCamera, PlayerCameraSystems,
+	spawn_follow_camera, third_person_obstruction_origin, CameraController, CameraLookSuppressed,
+	CameraPov, CameraPovLocked, CameraPresentationImpulse, FollowCamera, PlayerCameraSystems,
+	ThirdPersonZoom,
 };
 use world_player::{
 	player::holding_elevation, Player as VegetationPlayer, PlayerSpawnXz, PlaygroundMode,
@@ -38,7 +39,12 @@ type PlayerFollowQuery<'w, 's> = Query<
 type CameraFollowQuery<'w, 's> = Query<
 	'w,
 	's,
-	(&'static mut Transform, &'static CameraController, &'static FollowCamera),
+	(
+		&'static mut Transform,
+		&'static CameraController,
+		&'static FollowCamera,
+		&'static ThirdPersonZoom,
+	),
 	(With<Camera3d>, Without<Player>),
 >;
 
@@ -217,7 +223,7 @@ pub(crate) fn obstruct_world_camera(
 	let Ok((player_entity, player)) = players.single() else {
 		return;
 	};
-	let Ok((mut camera, controller, follow)) = cameras.single_mut() else {
+	let Ok((mut camera, controller, follow, zoom)) = cameras.single_mut() else {
 		return;
 	};
 	if controller.pov != CameraPov::ThirdPerson {
@@ -225,8 +231,7 @@ pub(crate) fn obstruct_world_camera(
 	}
 
 	let yaw = Quat::from_rotation_y(controller.yaw);
-	let target =
-		player.translation + Vec3::Y * follow.look_height + yaw * Vec3::X * follow.shoulder_offset;
+	let target = third_person_obstruction_origin(player.translation, yaw, follow, Some(zoom));
 	camera.translation =
 		obstructed_camera_translation(&spatial, target, camera.translation, player_entity);
 }
@@ -351,8 +356,51 @@ mod tests {
 	}
 
 	#[test]
+	fn zoom_hit_clamps_short_of_ten_and_twenty() {
+		assert!((camera_cast_travel(10.0, Some(4.0), 0.08, 0.12) - 3.92).abs() < 1e-5);
+		assert!((camera_cast_travel(20.0, Some(4.0), 0.08, 0.12) - 3.92).abs() < 1e-5);
+		assert_eq!(camera_cast_travel(20.0, None, 0.08, 0.12), 20.0);
+	}
+
+	#[test]
 	fn near_hit_does_not_cross_the_target() {
 		assert_eq!(camera_cast_travel(3.6, Some(0.05), 0.08, 0.12), 0.12);
+	}
+
+	#[test]
+	fn shapecast_clamps_a_twenty_metre_lock_short_of_a_wall() -> anyhow::Result<()> {
+		use avian3d::prelude::{PhysicsPlugins, RigidBody};
+		use bevy::ecs::system::RunSystemOnce;
+
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			PhysicsPlugins::default(),
+			bevy::asset::AssetPlugin::default(),
+			bevy::mesh::MeshPlugin,
+		));
+		app.finish();
+		let player = app.world_mut().spawn_empty().id();
+		app.world_mut().spawn((
+			RigidBody::Static,
+			Collider::cuboid(0.2, 2.0, 2.0),
+			Transform::from_xyz(5.0, 0.0, 0.0),
+			PhysicsInteractionLayer::fixed_layers(),
+		));
+		app.update();
+
+		let origin = Vec3::ZERO;
+		let desired = Vec3::X * 20.0;
+		let clamped = app
+			.world_mut()
+			.run_system_once(move |spatial: SpatialQuery| {
+				obstructed_camera_translation(&spatial, origin, desired, player)
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(clamped.x > CAMERA_COLLISION_MIN);
+		assert!(clamped.x < 5.0, "must stop short of the wall at 5 m, got {}", clamped.x);
+		Ok(())
 	}
 
 	#[test]

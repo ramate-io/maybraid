@@ -1,0 +1,15 @@
+# Headless smoke: two right-stick flicks lock 10 m then 20 m, R3 releases.
+# Playback waits for the world surface. Raw look throw is a full-deflection
+# throw that returns home — not a sustained pan — so the shared FlickLane
+# classifier commits. `--agent-quit` exits when the script is idle.
+
+{"cmd":"scenario","name":"look-zoom-flick","mark":"start"}
+{"cmd":"wait","secs":1}
+{"cmd":"hold","look":[1,0],"secs":0.16}
+{"cmd":"wait","secs":0.12}
+{"cmd":"hold","look":[1,0],"secs":0.16}
+{"cmd":"wait","secs":1.0}
+{"cmd":"press","button":"swap_pov"}
+{"cmd":"wait","secs":0.6}
+{"cmd":"scenario","name":"look-zoom-flick","mark":"end"}
+{"cmd":"quit"}

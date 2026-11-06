@@ -1,6 +1,6 @@
 //! Look intents, POV, body cone, and copy onto [`PlayerLook`].
 
-use crate::{CameraInputSource, CameraTarget, FollowCamera};
+use crate::{CameraInputSource, CameraTarget, FollowCamera, ThirdPersonZoom};
 use bevy::prelude::*;
 use characters::CharacterHeading;
 use maybraid_character_controller::{ActorControlEvent, ActorIntentEvent, CharacterIntent};
@@ -196,6 +196,7 @@ pub(crate) fn apply_look_intent(
 			&mut CameraTarget,
 			Option<&CameraInputSource>,
 			&mut CameraController,
+			&mut ThirdPersonZoom,
 			&FollowCamera,
 			Option<&Projection>,
 		),
@@ -205,7 +206,7 @@ pub(crate) fn apply_look_intent(
 	if suppressed.is_some_and(|suppressed| suppressed.0) {
 		return;
 	}
-	for (mut target, source, mut controller, follow, projection) in &mut cameras {
+	for (mut target, source, mut controller, mut zoom, follow, projection) in &mut cameras {
 		if !source
 			.is_some_and(|source| source_matches(source, event.input.source(), primary.as_deref()))
 			&& target.0 != Some(event.entity)
@@ -240,6 +241,7 @@ pub(crate) fn apply_look_intent(
 				controller.ads = controller.ads.max(value).clamp(0.0, 1.0)
 			}
 			CharacterIntent::SkillMap => controller.ads = 0.0,
+			CharacterIntent::SwapPov if zoom.lock.is_some() => zoom.release(),
 			CharacterIntent::SwapPov if !locked.as_ref().is_some_and(|locked| locked.0) => {
 				controller.pov.toggle()
 			}
@@ -375,6 +377,40 @@ mod tests {
 			entity: actor,
 			input: Routed::to_actor(InputSource::local_pad(), ActorTarget::new(actor), intent),
 		});
+	}
+
+	#[test]
+	fn look_click_releases_zoom_before_toggling_pov() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_observer(apply_look_intent);
+		let actor = app.world_mut().spawn_empty().id();
+		let camera = app
+			.world_mut()
+			.spawn((
+				FollowCamera::default(),
+				CameraTarget(Some(actor)),
+				CameraController::default(),
+			))
+			.id();
+		app.world_mut()
+			.get_mut::<ThirdPersonZoom>(camera)
+			.ok_or_else(|| anyhow::anyhow!("zoom"))?
+			.apply(crate::next_zoom_lock(None, Vec2::X, Vec2::X));
+		send(&mut app, actor, CharacterIntent::SwapPov);
+		assert!(app
+			.world()
+			.get::<ThirdPersonZoom>(camera)
+			.is_some_and(|zoom| zoom.lock.is_none()));
+		assert!(app
+			.world()
+			.get::<CameraController>(camera)
+			.is_some_and(|controller| controller.pov == CameraPov::ThirdPerson));
+		send(&mut app, actor, CharacterIntent::SwapPov);
+		assert!(app
+			.world()
+			.get::<CameraController>(camera)
+			.is_some_and(|controller| controller.pov == CameraPov::FirstPerson));
+		Ok(())
 	}
 
 	#[test]

@@ -7424,6 +7424,7 @@ dependencies = [
  "lod-avian",
  "maybraid-character-controller",
  "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
  "menu-components",
  "noise",
  "player",
