@@ -1,7 +1,8 @@
 //! Scripted Maybraid promotional title sequence.
 //!
 //! Timeline math is pure and unit-tested. The Bevy plugin reuses the furniture
-//! rockadder / cosmos shaders, the HUD Maybraid mark, and the menu header face.
+//! rockadder / cosmos shaders, the HUD Maybraid mark, and a centered
+//! [`menu_components::HudTextCard`] for the configurable label.
 //! The binary captures a fixed-timestep PNG sequence and encodes MP4 with ffmpeg.
 
 pub mod args;
@@ -17,6 +18,7 @@ pub use plugin::{
 	window_plugins, SequenceClock, TitleSequenceConfig, TitleSequencePlugin, TitleSequenceSystems,
 };
 pub use timeline::{
-	Keyframe, LabelPose, StarPose, TitleFrame, TitleSequence, TrailBead, DEFAULT_FPS,
-	DEFAULT_HEIGHT, DEFAULT_WIDTH, DURATION_SECS, STAR_SIZE_PX, TRAIL_BEADS,
+	Celestial, FieldStar, Keyframe, LabelPose, NebulaWash, SparkMote, StarPose, TitleFrame,
+	TitleSequence, TrailBead, DEFAULT_FPS, DEFAULT_HEIGHT, DEFAULT_WIDTH, DURATION_SECS,
+	FIELD_STAR_COUNT, NEBULA_COUNT, SPARK_COUNT, STAR_SIZE_PX, TRAIL_BEADS,
 };

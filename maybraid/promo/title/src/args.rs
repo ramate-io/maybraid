@@ -10,10 +10,10 @@ use crate::timeline::{DEFAULT_FPS, DEFAULT_HEIGHT, DEFAULT_WIDTH, DURATION_SECS}
 #[derive(Parser, Debug, Clone)]
 #[command(
 	name = "promo-title",
-	about = "Scripted Maybraid title sequence: rockadder/cosimo background, fallen-star icon, pulsing menu label, optional MP4 capture."
+	about = "Scripted Maybraid title sequence: cosmic rockadder/cosmos blend, arcing fallen-star with a pulsing tail, centered rounded label, optional MP4 capture."
 )]
 pub struct Args {
-	/// Menu label drawn with the existing header face after the star lands.
+	/// Copy for the centered rounded card that fades in after the star lands.
 	#[arg(long, env = "PROMO_TITLE_LABEL", default_value = "Maybraid")]
 	pub label: String,
 
