@@ -84,7 +84,7 @@ pub struct HudMenuIgnoresLock;
 pub struct HudMenuNavLocked;
 
 pub fn select_hud_item_on_over(
-	over: On<Pointer<Over>>,
+	over: On<PointerOver>,
 	stack: Res<crate::modal::MenuModalStack>,
 	roots: Query<(Entity, &crate::modal::MenuModal)>,
 	child_of: Query<&ChildOf>,

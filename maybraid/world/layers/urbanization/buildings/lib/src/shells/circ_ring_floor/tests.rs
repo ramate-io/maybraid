@@ -48,10 +48,7 @@ fn cuts_slab_can_omit_annulus() {
 	openings.insert(
 		"shaft",
 		Opening::new(
-			bevy_math::bounding::Aabb3d::from_min_max(
-				Vec3::new(-6.0, -0.5, -6.0),
-				Vec3::new(6.0, 0.5, 6.0),
-			),
+			bevy_shape::Aabb3d::from_min_max(Vec3::new(-6.0, -0.5, -6.0), Vec3::new(6.0, 0.5, 6.0)),
 			OpeningLabel::Shaft,
 		),
 	);

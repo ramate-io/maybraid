@@ -71,8 +71,8 @@ pub fn spawn_worker(storage: HcsgStorage, demand: HcsgDemand) -> std::io::Result
 	worker::HcsgWorker::spawn(storage, demand).map(TestWorkerGuard)
 }
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
+use bevy::shape::Aabb3d;
 
 /// Bounds for universal entries: everything a region query could ask about.
 pub fn universal_bounds() -> Aabb3d {
@@ -96,7 +96,7 @@ macro_rules! seeded_root {
 		impl $crate::hcsg::GenerationScheme for $T {
 			fn original_ids_for(
 				_cx: &mut $crate::hcsg::GenerationContext,
-				_region: bevy::math::bounding::Aabb3d,
+				_region: bevy::shape::Aabb3d,
 			) -> Vec<$crate::gen::OriginalId> {
 				vec![$crate::gen::OriginalId::universal()]
 			}
@@ -104,7 +104,7 @@ macro_rules! seeded_root {
 			fn build_with_id(
 				_cx: &mut $crate::hcsg::GenerationContext,
 				_id: $crate::gen::Id,
-			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+			) -> Option<(Self, bevy::shape::Aabb3d)> {
 				None
 			}
 		}

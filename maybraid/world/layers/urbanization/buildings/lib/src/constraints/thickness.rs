@@ -1,6 +1,6 @@
 //! Boundary thickness.
 
-use bevy_math::bounding::Aabb2d;
+use bevy_shape::Aabb2d;
 
 use crate::constraints::region::{BoundaryRegionList, BoundaryRegionListExt};
 

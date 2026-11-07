@@ -9,7 +9,7 @@ pub use building::{
 	HUT_MIN_FOOTPRINT,
 };
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use procedural_common::{Bounds2, NoiseParams, SeededHash};
 
 use crate::plan::cell_salt;

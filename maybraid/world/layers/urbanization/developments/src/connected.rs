@@ -1,6 +1,6 @@
 //! Reusable node-edge wrapper for developments organized by a higher-order graph.
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 
 /// One connection between two indices in [`ConnectedDevelopment::nodes`].
 #[derive(Debug, Clone, PartialEq)]
@@ -67,7 +67,8 @@ impl<N, E> ConnectedDevelopment<N, E> {
 
 #[cfg(test)]
 mod tests {
-	use bevy_math::{bounding::Aabb3d, Vec3};
+	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 
 	use super::*;
 

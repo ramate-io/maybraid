@@ -190,7 +190,7 @@ impl SupportGeometry<'_, '_> {
 		{
 			return false;
 		}
-		collider.contains_point(position, rotation, point)
+		collider.contains_point(position.0, rotation, point)
 	}
 
 	fn accepts_normal(&self, normal: Vec3) -> bool {
@@ -248,7 +248,7 @@ impl SupportGeometry<'_, '_> {
 			origin,
 			Quat::IDENTITY,
 			collider,
-			*position,
+			position.0,
 			*rotation,
 			0.1,
 			&mut contacts,
@@ -305,7 +305,7 @@ impl SupportGeometry<'_, '_> {
 				position,
 				Quat::IDENTITY,
 				collider,
-				*other_position,
+				other_position.0,
 				*other_rotation,
 				0.0,
 				&mut contacts,
@@ -351,7 +351,7 @@ impl SupportGeometry<'_, '_> {
 				position,
 				Quat::IDENTITY,
 				collider,
-				*other_position,
+				other_position.0,
 				*other_rotation,
 				0.0,
 				&mut contacts,
@@ -385,7 +385,7 @@ impl SupportGeometry<'_, '_> {
 			Quat::IDENTITY,
 			Vec3::NEG_Y,
 			collider,
-			*floor_position,
+			floor_position.0,
 			*floor_rotation,
 			Vec3::ZERO,
 			MAX_LIFT + 0.3,
@@ -401,7 +401,7 @@ impl SupportGeometry<'_, '_> {
 				position,
 				Quat::IDENTITY,
 				collider,
-				*floor_position,
+				floor_position.0,
 				*floor_rotation,
 				0.005,
 				&mut contacts,

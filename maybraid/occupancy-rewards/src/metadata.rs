@@ -5,9 +5,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::{Resource, Vec3};
+use bevy::shape::Aabb3d;
 use gimme_core::{BaseScale, HashMapStore, SpatialId, TypedIndex};
 
 use crate::identity::{

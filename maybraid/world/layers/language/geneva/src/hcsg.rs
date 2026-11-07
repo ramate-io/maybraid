@@ -9,9 +9,9 @@
 use std::marker::PhantomData;
 
 use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use durham::terrain::watersheds::{PocketWatersHighPass, PocketWatersLowPass};
 use durham::terrain::{
 	CanyonHighPassStampCell, CanyonLowPassStampCell, MassifHighPassStampCell,

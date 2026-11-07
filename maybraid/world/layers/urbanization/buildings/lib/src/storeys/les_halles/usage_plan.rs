@@ -165,7 +165,7 @@ impl LesHallesArcadeUsage {
 	pub fn paint_avoiding(
 		regions: FillableRegions,
 		noise: NoiseParams,
-		keep_outs: &[bevy_math::bounding::Aabb2d],
+		keep_outs: &[bevy_shape::Aabb2d],
 	) -> Result<(Self, FillableRegions), FitError> {
 		let residual_chests = chests_for_regions_clear(&regions.within, noise, keep_outs);
 		Ok((Self { residual_chests }, regions))
@@ -174,7 +174,7 @@ impl LesHallesArcadeUsage {
 	/// Keep-outs for [`LesHallesFloorPlan::arcade_pillars`].
 	pub fn pillar_keep_outs_of(
 		plan: &super::floor_plan::LesHallesFloorPlan,
-	) -> Vec<bevy_math::bounding::Aabb2d> {
+	) -> Vec<bevy_shape::Aabb2d> {
 		pillar_keep_outs(
 			plan.arcade_pillars.iter().flat_map(|line| &line.pillars),
 			PILLAR_CHEST_PAD,

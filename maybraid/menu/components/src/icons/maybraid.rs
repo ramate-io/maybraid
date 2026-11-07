@@ -5,7 +5,7 @@ pub mod spinning;
 pub use spinning::{spin_icons, SpinningIcon};
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 
 use crate::theme::{MAYBRAID_LOGO, TEXT_YELLOW};
 
@@ -35,8 +35,8 @@ impl Icon {
 		let size = self.size;
 		let color = self.color;
 		bsn! {
-			template_value(self)
-			template_value(visibility)
+			~{self}
+			~{visibility}
 			ImageNode {
 				image: MAYBRAID_LOGO,
 				color: color,

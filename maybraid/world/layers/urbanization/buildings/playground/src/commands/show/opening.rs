@@ -24,8 +24,8 @@ pub struct PreviewOpening {
 }
 
 impl PreviewOpening {
-	pub fn bounds(&self) -> bevy_math::bounding::Aabb3d {
-		bevy_math::bounding::Aabb3d::from_min_max(self.min.min(self.max), self.min.max(self.max))
+	pub fn bounds(&self) -> bevy_shape::Aabb3d {
+		bevy_shape::Aabb3d::from_min_max(self.min.min(self.max), self.min.max(self.max))
 	}
 
 	pub fn into_pair(self) -> (OpeningId, Opening) {

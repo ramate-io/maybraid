@@ -8,13 +8,13 @@ use bevy_hanabi::prelude::{
 	ShapeDimension, SimulationSpace, SpawnerSettings,
 };
 
-use crate::assets::FlipbookAsset;
 use crate::composition::{
 	EffectDefinition, EffectLayer, LobeKind, LobeSpec, MeshPart, ParticlePart, ParticleShade,
 };
-use crate::flipbook::update_sprite_index;
 use crate::names::SMOKE;
-use crate::particles::{
+use crate::parts::particle::assets::FlipbookAsset;
+use crate::parts::particle::flipbook::update_sprite_index;
+use crate::parts::particle::{
 	add_instance_properties, init_lifetime, init_palette_color, init_smoke_velocity,
 	update_palette_color, update_scaled_size3, value_lifetime_gradient,
 };
@@ -119,11 +119,11 @@ pub fn compile_wisps_kind(
 	let update_size =
 		update_scaled_size3(&writer, &props.scale, Vec3::splat(0.42), Vec3::splat(0.95));
 	let update_sprite = update_sprite_index(&writer, smoke);
-	let texture_slot = writer.lit(0u32).expr();
+	let texture_slot = 0;
 	let color = value_lifetime_gradient(&[(0.0, 0.72), (0.45, 0.42), (1.0, 0.0)]);
 
 	let mut module = writer.finish();
-	module.add_texture_slot("smoke");
+	module.add_texture_slot("smoke", bevy_hanabi::SlotDimension::D2);
 
 	let effect = effects.add(
 		EffectAsset::new(SMOKE_CAPACITY, SpawnerSettings::once(SMOKE_COUNT.into()), module)
@@ -178,8 +178,8 @@ pub fn definition(mesh: MeshPart, wisps: ParticlePart) -> EffectDefinition {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::assets::smoke_flipbook;
-	use crate::particles::smoke_launch_velocity;
+	use crate::parts::particle::assets::smoke_flipbook;
+	use crate::parts::particle::smoke_launch_velocity;
 
 	#[test]
 	fn standalone_smoke_keeps_its_delay() {

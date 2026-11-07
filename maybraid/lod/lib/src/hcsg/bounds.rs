@@ -4,11 +4,11 @@
 use std::marker::PhantomData;
 
 use bevy::ecs::system::{StaticSystemParam, SystemParam, SystemParamItem};
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::{
 	App, IntoScheduleConfigs, Local, Message, MessageWriter, Plugin, Query, Transform, Update, With,
 };
+use bevy::shape::Aabb3d;
 
 use crate::LodViewer;
 

@@ -8,13 +8,13 @@ use bevy_hanabi::prelude::{
 	ShapeDimension, SimulationSpace, SpawnerSettings,
 };
 
-use crate::assets::FlipbookAsset;
 use crate::composition::{
 	EffectDefinition, EffectLayer, LobeKind, LobeSpec, MeshPart, ParticlePart, ParticleShade,
 };
-use crate::flipbook::update_sprite_index;
 use crate::names::FIREBALL;
-use crate::particles::{
+use crate::parts::particle::assets::FlipbookAsset;
+use crate::parts::particle::flipbook::update_sprite_index;
+use crate::parts::particle::{
 	add_instance_properties, init_lifetime, init_palette_color, init_radial_velocity,
 	update_palette_color, update_scaled_size3, value_lifetime_gradient,
 };
@@ -93,11 +93,11 @@ pub fn compile_wisps(effects: &mut Assets<EffectAsset>, fire: &FlipbookAsset) ->
 	let update_size =
 		update_scaled_size3(&writer, &props.scale, Vec3::splat(0.32), Vec3::splat(0.72));
 	let update_sprite = update_sprite_index(&writer, fire);
-	let texture_slot = writer.lit(0u32).expr();
+	let texture_slot = 0;
 	let color = value_lifetime_gradient(&[(0.0, 0.95), (0.4, 0.72), (1.0, 0.0)]);
 
 	let mut module = writer.finish();
-	module.add_texture_slot("fire");
+	module.add_texture_slot("fire", bevy_hanabi::SlotDimension::D2);
 
 	let effect = effects.add(
 		EffectAsset::new(FIREBALL_CAPACITY, SpawnerSettings::once(FIREBALL_COUNT.into()), module)
@@ -146,8 +146,8 @@ pub fn definition(mesh: MeshPart, wisps: ParticlePart) -> EffectDefinition {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::assets::fire_flipbook;
 	use crate::composition::EffectPart;
+	use crate::parts::particle::assets::fire_flipbook;
 
 	#[test]
 	fn fireball_owns_mesh_core_and_wisps() {

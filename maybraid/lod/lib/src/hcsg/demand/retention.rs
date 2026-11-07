@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::PoisonError;
 
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 
 use super::schedule::{pick_job, Job};
 use super::state::{lock_mutex, DemandState};
@@ -33,14 +33,12 @@ fn take_sweep_plan(state: &mut DemandState) -> Option<HashMap<TypeId, Vec<Aabb3d
 pub(crate) enum WorkerWait {
 	Job(Job),
 	/// Regions to retain, keyed by the types live subscriptions reach.
-	Sweep(HashMap<TypeId, Vec<bevy::math::bounding::Aabb3d>>),
+	Sweep(HashMap<TypeId, Vec<bevy::shape::Aabb3d>>),
 	Shutdown,
 }
 
-pub(super) fn retention_plan(
-	state: &DemandState,
-) -> HashMap<TypeId, Vec<bevy::math::bounding::Aabb3d>> {
-	let mut regions_by_type: HashMap<TypeId, Vec<bevy::math::bounding::Aabb3d>> = HashMap::new();
+pub(super) fn retention_plan(state: &DemandState) -> HashMap<TypeId, Vec<bevy::shape::Aabb3d>> {
+	let mut regions_by_type: HashMap<TypeId, Vec<bevy::shape::Aabb3d>> = HashMap::new();
 	for subscription in state.subscriptions.values() {
 		for type_id in lock_mutex(&subscription.reach).iter() {
 			regions_by_type

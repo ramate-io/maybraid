@@ -7,9 +7,9 @@ use std::marker::PhantomData;
 
 use bevy::ecs::schedule::SystemSet;
 use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 
 /// Whether fill and dependent streams may advance for contract owner `M`.
 #[derive(Resource, Debug, PartialEq, Eq)]

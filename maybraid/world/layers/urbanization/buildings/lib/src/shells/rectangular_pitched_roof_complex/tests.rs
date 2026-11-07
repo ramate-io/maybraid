@@ -1,5 +1,5 @@
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 
 use crate::openings::{MapsOpenings, OpeningId, OpeningLabel};
 use crate::ClippedStripPiece;

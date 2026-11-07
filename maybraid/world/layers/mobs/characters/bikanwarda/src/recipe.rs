@@ -1,7 +1,7 @@
 //! Inner [`CharacterComponents`] recipe for Bikanwarda.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Component;
+use bevy::shape::Aabb3d;
 use characters::{
 	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,

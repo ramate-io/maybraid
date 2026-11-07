@@ -7,12 +7,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use bevy::ecs::entity_disabling::Disabled;
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::Vec3;
 use bevy::prelude::{
 	Allow, App, Commands, CommandsSceneExt, Component, Entity, IntoScheduleConfigs, Local,
 	MessageReader, Plugin, Res, Transform, Update, Visibility, With, World,
 };
+use bevy::shape::{Aabb3d, IntersectsVolume};
 
 use super::node_store::StoredEntry;
 use crate::gen::{Id, Version};

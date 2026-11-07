@@ -172,8 +172,8 @@ impl BuildingComponents for CommercialStallInterior {
 mod tests {
 	use super::*;
 	use crate::openings::{Opening, OpeningId, Openings};
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 
 	#[test]
 	fn cellular_pick_varies_across_neighbors() {

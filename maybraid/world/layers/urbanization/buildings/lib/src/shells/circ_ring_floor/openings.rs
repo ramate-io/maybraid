@@ -1,7 +1,7 @@
 //! Ring opening plan helpers and construct-time mapped contact geometry.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb3d;
 use building_components::arc_kit::arc_ring_dir_deg;
 use building_components::partitions::PartitionStyle;
 use std::f32::consts::TAU;

@@ -3,12 +3,12 @@
 Blue / haze atmosphere over an opaque Cosimo field. An inverted sphere
 follows the camera. This is an aesthetic mask, not a cull clock.
 
-The inner shell ([`dome.wgsl`](lib/src/dome.wgsl)) is a blending
+The inner shell ([`dome.wesl`](lib/src/dome.wesl)) is a blending
 atmosphere: soft-edged haze islands, sparse pinpoints, and a paper sun
 (flat disk plus shards turned along the rim, like the Maybraid icon).
 Both shells are icospheres.
 
-The outer shell ([`field.wgsl`](lib/src/field.wgsl)) is Cosimo halfway
+The outer shell ([`field.wesl`](lib/src/field.wesl)) is Cosimo halfway
 flattened. Paper sun and moon live only on the dome, and only for
 pixels near the disk. Haze is two octaves; stars are cell hashes.
 A paused clock does not rewrite materials. Daytime field skips stars.

@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
-use bevy::math::{bounding::Aabb3d, DVec3};
+use bevy::math::DVec3;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use gimme_core::{BaseScale, HashMapStore, Level, SpatialId, SpatialIndexError, TypedIndex};
 
 use crate::{Affiliations, ThreatId, ThreatSubject};

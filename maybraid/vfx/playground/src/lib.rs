@@ -70,7 +70,15 @@ fn setup_lighting(mut commands: Commands) {
 mod tests {
 	use super::*;
 	use game_commands::command::GameCommand;
-	use maybraid_vfx::{FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
+	use maybraid_vfx::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
+
+	#[test]
+	fn parses_playback_controls() -> Result<(), String> {
+		for line in ["pause", "play", "reset", "cancel", "spread"] {
+			<PlaygroundCommand as GameCommand>::parse_line(line)?;
+		}
+		Ok(())
+	}
 
 	#[test]
 	fn parses_help() -> Result<(), String> {
@@ -130,6 +138,7 @@ mod tests {
 			("show flash", FLASH),
 			("show fireball", FIREBALL),
 			("show smoke", SMOKE),
+			("show dust", DUST),
 			("show sparks", SPARKS),
 			("show fiery-explosion", FIERY_EXPLOSION),
 		] {

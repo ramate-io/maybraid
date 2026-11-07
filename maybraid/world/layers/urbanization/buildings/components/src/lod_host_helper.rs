@@ -8,7 +8,7 @@
 //! (high / mid / low — ultra-low when authored) onto a [`lod::scene::LodSceneLevel`].
 
 use bevy::prelude::{Children, Transform, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use scene_ref::SceneRef;
 
 use crate::assets::AssetPath;
@@ -35,7 +35,7 @@ impl LodHostHelper {
 			None => vec![],
 		};
 		bsn! {
-			template_value(transform)
+			~{transform}
 			Visibility::Inherited
 			Children [ {children} ]
 		}

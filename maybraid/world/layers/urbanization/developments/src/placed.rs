@@ -1,7 +1,7 @@
 //! Shared placement and plan-footprint records for development buildings.
 
-use bevy_math::bounding::Aabb2d;
 use bevy_math::Vec2;
+use bevy_shape::Aabb2d;
 use buildings::{Confines, FillableRegions, Fit, FitError};
 use procedural_common::NoiseParams;
 

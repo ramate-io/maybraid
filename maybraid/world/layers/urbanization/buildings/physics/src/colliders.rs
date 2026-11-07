@@ -163,7 +163,7 @@ fn cuboid_shape(pose: CuboidPose) -> (Vec3, Quat, Collider) {
 }
 
 fn hull_shape(hull: WalkHull) -> Option<(Vec3, Quat, Collider)> {
-	if let Some(collider) = Collider::convex_hull(hull.points.clone()) {
+	if let Some(collider) = Collider::convex_hull(&hull.points) {
 		return Some((hull.translation, hull.rotation, collider));
 	}
 	// Thin / large kits can fail convex hull; keep an AABB so floors still collide.
@@ -324,7 +324,7 @@ mod tests {
 		assert!(pts.iter().any(|p| (p - Vec3::new(0.0, PANEL_Y_HALF, 0.0)).length() < 1e-4));
 		assert!(pts.iter().any(|p| (p - Vec3::new(1.0, -PANEL_Y_HALF, 0.0)).length() < 1e-4));
 		assert!(pts.iter().any(|p| (p - Vec3::new(0.0, -PANEL_Y_HALF, -1.0)).length() < 1e-4));
-		assert!(Collider::convex_hull(pts).is_some());
+		assert!(Collider::convex_hull(&pts).is_some());
 		Ok(())
 	}
 
@@ -339,7 +339,7 @@ mod tests {
 		};
 		assert_eq!(hull.points.len(), 8);
 		assert!(hull.translation.length() < 1e-6);
-		assert!(Collider::convex_hull(hull.points).is_some());
+		assert!(Collider::convex_hull(&hull.points).is_some());
 		Ok(())
 	}
 
@@ -355,7 +355,7 @@ mod tests {
 		};
 		assert_eq!(hull.points.len(), 6);
 		assert!(hull.points.iter().any(|p| (Vec2::new(p.x, p.z) - tri.c).length() < 1e-4));
-		assert!(Collider::convex_hull(hull.points).is_some());
+		assert!(Collider::convex_hull(&hull.points).is_some());
 		Ok(())
 	}
 
@@ -371,7 +371,7 @@ mod tests {
 		let (translation, _rotation, points) = &hulls[0];
 		assert!(translation.length() < 1e-6);
 		assert!(points.iter().any(|p| (p.z - 4.0).abs() < 1e-3 && p.x.abs() < 1e-3));
-		assert!(Collider::convex_hull(points.clone()).is_some());
+		assert!(Collider::convex_hull(&points).is_some());
 		Ok(())
 	}
 

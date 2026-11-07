@@ -3,9 +3,9 @@
 //! [`NoisySurface`] stores authoring [`NoiseParams`] (CLI / serde friendly) and keeps a private
 //! [`NoiseConfig`] built from those params for sampling.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3A;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use chunk::cascade::CascadeChunk;
 use procedural_common::{
 	sdf_band_margin, NoiseConfig, NoiseParams, NoiseType, NUMERIC_SURFACE_EPSILON,
@@ -164,7 +164,7 @@ impl NormalizeChunk for NoisyBall {
 mod tests {
 	use super::*;
 	use anyhow::Result;
-	use bevy::math::bounding::BoundingVolume;
+	use bevy::shape::BoundingVolume;
 	use procedural_common::NUMERIC_SURFACE_EPSILON;
 
 	#[test]

@@ -11,7 +11,7 @@ pub mod parameterized;
 
 pub use parameterized::{KnickKnackStallParameterized, KnickKnackStallPlan};
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 use lod::scene::LodSceneLevel;
 use procedural_common::NoiseParams;
@@ -71,8 +71,8 @@ impl BuildingComponents for KnickKnackStall {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 	use procedural_common::{aabb3_to_plan, PlanAxes};
 
 	use crate::openings::{Opening, OpeningId, Openings};

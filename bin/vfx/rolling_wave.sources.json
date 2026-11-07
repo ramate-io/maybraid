@@ -1,0 +1,16 @@
+{
+  "repository": "mosb2bls/maybraid_VFX",
+  "commit": "652022ebe0bf1a41c9953ea46915bfa59566e04b",
+  "directory": "maybraid/vfx/showcase/data/wind_dust_multiview",
+  "files": {
+    "manifest.json": "197284b28708786d35b8b65505e86d3dc8ff5d8333e061637a612cc14ce20021",
+    "atlases/view_00.png": "2ee9b0c8b688ac501273e471586f831d9b201a9da6abc8a660b26104c45130c2",
+    "atlases/view_01.png": "57cee0e7f71a1051e3aee50f33416bf91943f6bb34c80c32d5be1a05dd046158",
+    "atlases/view_02.png": "37cf620415233487d95ffe8707982333a509b725952a189eade11ca16d9e6416",
+    "atlases/view_03.png": "7fdbda96c809bd69eef679621fc4f2083a60beaceb2930bb94fb5dff42d06ce7",
+    "atlases/view_04.png": "e7ae9329a8d41477bf05f7ec21552ef476816ac5b94cbb2b52ae55f965b27b4b",
+    "atlases/view_05.png": "c9d34b5a1c7b590f63e6ae6f985083590d4d731a7466d247d5e531e1af623f35",
+    "atlases/view_06.png": "502c519943c6c6f9157ef2fab6dd05bb94101893a9dc4f62c0620084b4ca7f9b",
+    "atlases/view_07.png": "bb2ca430c47656712af62e416dc31abb9a748eaf43ca217b02be4dcfde08a375"
+  }
+}

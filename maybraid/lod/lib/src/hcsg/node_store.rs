@@ -2,8 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use bevy::math::bounding::{Aabb3d, BoundingVolume, IntersectsVolume};
 use bevy::math::{DVec3, Vec3};
+use bevy::shape::{Aabb3d, BoundingVolume, IntersectsVolume};
 
 use crate::gen::{Id, Version};
 

@@ -5,9 +5,9 @@ use std::time::{Duration, Instant};
 
 use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::query::{QueryData, QueryFilter};
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
+use bevy::shape::Aabb3d;
 use bevy::world_serialization::WorldInstanceReady;
 
 use crate::scene::cull::closest_available_lod_level;
@@ -609,7 +609,7 @@ pub fn lod_host_scene(
 ) -> impl Scene + 'static {
 	let content_children: Vec<Box<dyn Scene>> = vec![Box::new(content)];
 	let level_root: Box<dyn Scene> = Box::new(bsn! {
-		template_value(LodLevelRoot(level))
+		~{LodLevelRoot(level)}
 		Transform::default()
 		Visibility::Inherited
 		Children [ {content_children} ]
@@ -625,8 +625,8 @@ pub fn lod_host_scene(
 	let host_bounds = crate::scene::refresh::LodHostBounds(bounds);
 	bsn! {
 		LodSceneHost
-		template_value(level)
-		template_value(host_bounds)
+		~{level}
+		~{host_bounds}
 		Transform::default()
 		Visibility::Inherited
 		Children [ {host_children} ]
@@ -647,9 +647,9 @@ pub fn lod_host_scene_pending(level: LodSceneLevel, bounds: Aabb3d) -> impl Scen
 	let host_bounds = crate::scene::refresh::LodHostBounds(bounds);
 	bsn! {
 		LodSceneHost
-		template_value(level)
-		template_value(host_bounds)
-		template_value(LodLevelSpawnRequest { level })
+		~{level}
+		~{host_bounds}
+		~{LodLevelSpawnRequest { level }}
 		Transform::default()
 		Visibility::Inherited
 		Children [ {host_children} ]

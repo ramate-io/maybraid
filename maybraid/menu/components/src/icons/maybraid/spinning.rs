@@ -3,7 +3,7 @@
 use std::f32::consts::TAU;
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 
 use crate::theme::{LOADING_SPIN_SECS, MAYBRAID_LOGO};
 
@@ -35,8 +35,8 @@ impl SpinningIcon {
 		let size = icon.size;
 		let color = icon.color;
 		bsn! {
-			template_value(icon)
-			template_value(spinning)
+			~{icon}
+			~{spinning}
 			ImageNode {
 				image: MAYBRAID_LOGO,
 				color: color,

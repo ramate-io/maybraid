@@ -649,7 +649,7 @@ pub(crate) fn sync_inventory_region_focus(
 }
 
 pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	lock: Res<TextMenuInputLock>,
 	buttons: Query<&MenuButton<E>>,
 	keys: Query<&InventoryItemKey>,
@@ -772,7 +772,7 @@ fn activate_inventory_item(
 }
 
 pub fn emit_overlay_open_on_click(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	lock: Res<TextMenuInputLock>,
 	keys: Query<&OpenSelectKey>,
 	scoped: Query<(), With<ScopedMenuSession>>,
@@ -788,7 +788,7 @@ pub fn emit_overlay_open_on_click(
 }
 
 pub fn emit_overlay_close_on_click(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	lock: Res<TextMenuInputLock>,
 	closes: Query<(), With<CloseOverlaySelect>>,
 	scoped: Query<(), With<ScopedMenuSession>>,

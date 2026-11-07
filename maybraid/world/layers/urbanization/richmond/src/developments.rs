@@ -6,8 +6,8 @@
 
 pub mod site;
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
+use bevy::shape::Aabb3d;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext};
 use procedural_common::Bounds2;

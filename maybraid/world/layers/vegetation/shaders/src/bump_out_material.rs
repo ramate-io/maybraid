@@ -135,11 +135,11 @@ impl BumpOutMaterial {
 
 impl Material for BumpOutMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "bump_out_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "bump_out_material.wesl").into()
 	}
 
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "bump_out_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "bump_out_material.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
@@ -166,7 +166,7 @@ pub struct BumpOutMaterialPlugin;
 
 impl Plugin for BumpOutMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "bump_out_material.wgsl");
+		embedded_asset!(app, "bump_out_material.wesl");
 		app.add_plugins(MaterialPlugin::<BumpOutMaterial>::default())
 			.add_systems(PostUpdate, disable_bump_out_shadow_casters);
 	}

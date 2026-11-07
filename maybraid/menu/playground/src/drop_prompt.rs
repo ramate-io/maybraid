@@ -8,6 +8,7 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::text::Justify;
+use bevy::ui_widgets::Button;
 use character_creation_menus::MenuEvent;
 use character_inventory_user::InventoryUser;
 use character_items::{
@@ -424,6 +425,7 @@ fn spawn_drop_prompt(
 		.with_children(|root| {
 			root.spawn((
 				Button,
+				bevy::picking::hover::Hovered::default(),
 				DropPromptCancel,
 				Node {
 					position_type: PositionType::Absolute,
@@ -490,7 +492,7 @@ fn spawn_drop_prompt(
 
 #[allow(clippy::too_many_arguments)]
 fn on_drop_prompt_click(
-	mut click: On<Pointer<Click>>,
+	mut click: On<PointerClick>,
 	confirms: Query<(), With<DropPromptConfirm>>,
 	cancels: Query<(), With<DropPromptCancel>>,
 	child_of: Query<&ChildOf>,
@@ -790,7 +792,7 @@ fn close_drop_prompt(
 }
 
 fn pointer_target(
-	click: &On<Pointer<Click>>,
+	click: &On<PointerClick>,
 	child_of: &Query<&ChildOf>,
 	matches: impl Fn(Entity) -> bool,
 ) -> Option<Entity> {

@@ -59,8 +59,8 @@ pub use unit_x_tile::UnitXTile;
 
 #[cfg(any(test, feature = "test-support"))]
 mod unit_x_tile {
-	use bevy::math::bounding::Aabb3d;
 	use bevy::math::Vec3;
+	use bevy::shape::Aabb3d;
 	use lod::gen::{Id, OriginalId};
 	use lod::hcsg::{GenerationContext, GenerationScheme};
 

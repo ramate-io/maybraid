@@ -116,7 +116,7 @@ impl PlacementSample {
 
 /// Parent cell center used for placement ownership.
 pub fn cell_center(cell: &Cell) -> Vec3 {
-	use bevy_math::bounding::BoundingVolume;
+	use bevy_shape::BoundingVolume;
 	cell.as_region().center().into()
 }
 
@@ -182,7 +182,7 @@ mod tests {
 
 	#[test]
 	fn position_in_shifts_from_cell_center() -> Result<()> {
-		use bevy_math::bounding::Aabb3d;
+		use bevy_shape::Aabb3d;
 		let cell = Cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 1.0, 10.0)));
 		let sample = PlacementSample { scale: 1.0, offset: Vec2::new(1.0, -2.0) };
 		let p = sample.position_in(&cell);

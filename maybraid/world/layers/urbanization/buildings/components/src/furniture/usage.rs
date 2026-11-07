@@ -1,8 +1,8 @@
 //! Region IR: a packed usage AABB that later expands into an ensemble of
 //! [`super::FurnitureNode`]s (not a single stretched kit).
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
+use bevy::shape::Aabb3d;
 
 use crate::furniture::abutment::FurnitureAbutment;
 use crate::placed::Placement;

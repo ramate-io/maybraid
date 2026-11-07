@@ -1,8 +1,8 @@
 //! The stacked circular column of the Wizard's Tower.
 
 use bevy::scene::prelude::Scene;
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use building_components::floors::FloorNode;
 use building_components::scene_children;
 use building_components::stairs::StairNode;

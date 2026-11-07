@@ -1,7 +1,7 @@
 //! [`Terrace`]: one level pad at the cell center and the confines drawn on it.
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use bevy_shape::Aabb3d;
 use buildings::{Confines, Openings};
 use procedural_common::{NoiseParams, SeededHash};
 

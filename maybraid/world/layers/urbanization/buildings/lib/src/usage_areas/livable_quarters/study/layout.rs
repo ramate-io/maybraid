@@ -1,6 +1,6 @@
 //! Study plan packer: wall desk + optional bookcase filler.
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FitError};

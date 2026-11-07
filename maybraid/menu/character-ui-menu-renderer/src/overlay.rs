@@ -2,6 +2,7 @@
 //! a picker and what paints inside it.
 
 use bevy::prelude::*;
+use bevy::ui_widgets::Button;
 use character_ui_menu::{AssetThumbnailDisplay, MenuNode, SelectGroup};
 
 use crate::sink::{MaybraidMenuSink, MenuSink, MenuThumbnailContext, RenderContext};
@@ -226,6 +227,7 @@ pub fn spawn_overlay_shell(
 		.with_children(|root| {
 			root.spawn((
 				Button,
+				bevy::picking::hover::Hovered::default(),
 				CloseOverlaySelect,
 				Node {
 					position_type: PositionType::Absolute,

@@ -32,7 +32,7 @@ pub use suburban_homes::SuburbanHomes;
 pub use temple_complex::TempleComplex;
 pub use wizards_tower::WizardsTower;
 
-use bevy_math::bounding::Aabb3d;
+use bevy_shape::Aabb3d;
 use procedural_common::{NoiseParams, SeededHash};
 
 use crate::plan::cell_salt;

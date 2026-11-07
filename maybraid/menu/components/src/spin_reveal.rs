@@ -1,7 +1,7 @@
 //! Spin-and-reveal slot: spinning mark, then a picture or a camera viewport.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::icons::maybraid::SpinningIcon;
@@ -113,7 +113,7 @@ fn cover_scene(visibility: Visibility) -> impl Scene + 'static {
 		vec![Box::new(SpinningIcon::maybraid_scene(LOADING_ICON_SIZE, TEXT_YELLOW))];
 	bsn! {
 		SpinRevealCover
-		template_value(visibility)
+		~{visibility}
 		Node {
 			width: px(SPIN_REVEAL_SLOT_SIZE),
 			height: px(SPIN_REVEAL_SLOT_SIZE),
@@ -128,7 +128,7 @@ fn cover_scene(visibility: Visibility) -> impl Scene + 'static {
 fn picture_scene(image: &'static str, visibility: Visibility) -> impl Scene + 'static {
 	bsn! {
 		SpinRevealFace
-		template_value(visibility)
+		~{visibility}
 		ImageNode {
 			image: image,
 		}
@@ -143,8 +143,8 @@ fn picture_scene(image: &'static str, visibility: Visibility) -> impl Scene + 's
 fn camera_scene(path: String, visibility: Visibility) -> impl Scene + 'static {
 	bsn! {
 		SpinRevealFace
-		template_value(visibility)
-		template_value(SpinRevealViewport { path })
+		~{visibility}
+		~{SpinRevealViewport { path }}
 		Node {
 			width: px(SPIN_REVEAL_SLOT_SIZE),
 			height: px(SPIN_REVEAL_SLOT_SIZE),
@@ -160,7 +160,7 @@ fn camera_scene(path: String, visibility: Visibility) -> impl Scene + 'static {
 
 fn caption_line(text: String, size: f32, color: Color) -> impl Scene + 'static {
 	bsn! {
-		template_value(Text::new(text))
+		~{Text::new(text)}
 		TextFont {
 			font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
 			font_size: px(size),

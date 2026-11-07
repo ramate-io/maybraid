@@ -1,7 +1,7 @@
 //! Centered line under the loading bar.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{bsn, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::theme::{
@@ -17,7 +17,7 @@ impl LoadingExplainer {
 		let initial = initial.into();
 		bsn! {
 			LoadingExplainer
-			template_value(Text::new(initial))
+			~{Text::new(initial)}
 			TextFont {
 				font: FontSourceTemplate::Handle(BARLOW_REGULAR),
 				font_size: px(LOADING_EXPLAINER_FONT_SIZE),

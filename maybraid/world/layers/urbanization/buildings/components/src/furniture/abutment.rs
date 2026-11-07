@@ -1,6 +1,6 @@
 //! Wall side a furniture slot sits against, in building-local XZ.
 
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 use std::f32::consts::{FRAC_PI_2, PI};
 
 /// Host or partition face a packed slot flushes to.

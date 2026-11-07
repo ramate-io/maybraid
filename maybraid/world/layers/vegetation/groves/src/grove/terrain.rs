@@ -1,7 +1,7 @@
 //! World sampling and per-variant placement constraints ([RFC-183 3.4.1.5–6, 3.4.2.4]).
 
-use bevy_math::bounding::{Aabb3d, BoundingVolume};
 use bevy_math::{Vec3, Vec3A};
+use bevy_shape::{Aabb3d, BoundingVolume};
 use procedural_common::UnitRange;
 
 /// Terrain height field usable by terrain-bound grove world samples.

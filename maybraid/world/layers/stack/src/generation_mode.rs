@@ -316,7 +316,7 @@ mod tests {
 
 		{
 			let mut next = app.world_mut().resource_mut::<NextState<ActiveGenerationMode>>();
-			NextState::set_if_neq(&mut next, ActiveGenerationMode::of::<Beta>());
+			NextState::set_if_different(&mut next, ActiveGenerationMode::of::<Beta>());
 		}
 		app.update();
 		let counts = app.world().resource::<TransitionCounts>();

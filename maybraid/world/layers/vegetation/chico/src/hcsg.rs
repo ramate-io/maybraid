@@ -10,9 +10,9 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use durham::{TerrainCellLayout, TerrainMeshBuilder};
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::universal_bounds;

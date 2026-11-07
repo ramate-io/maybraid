@@ -1,5 +1,5 @@
 //! Exercise item identity across the real layout → input → inventory → rebuild path.
-use anyhow::{Context, Result};
+use anyhow::{Context as ContextExt, Result};
 use bevy::{ecs::system::RunSystemOnce, prelude::*};
 use character_creation_menus::{CharacterMenu, MenuEvent};
 use character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
@@ -235,25 +235,21 @@ fn hover_cannot_steal_reorder_focus_but_click_can_retarget_it() -> Result<()> {
 		position: Vec2::ZERO,
 	};
 	let hit = HitData::new(Entity::PLACEHOLDER, 0.0, None, None);
-	world.trigger(Pointer::new(
-		PointerId::Mouse,
-		location.clone(),
-		Over { hit: hit.clone() },
-		target,
-	));
+	world.trigger(PointerOver {
+		entity: target,
+		pointer: Pointer::new(PointerId::Mouse, location.clone()),
+		hit: hit.clone(),
+	});
 	world.flush();
 	assert_eq!(selected_key(&mut world, viewport)?, before[0]);
-	world.trigger(Pointer::new(
-		PointerId::Mouse,
-		location,
-		Click {
-			button: PointerButton::Primary,
-			hit,
-			duration: std::time::Duration::ZERO,
-			count: 1,
-		},
-		target,
-	));
+	world.trigger(PointerClick {
+		entity: target,
+		pointer: Pointer::new(PointerId::Mouse, location),
+		button: PointerButton::Primary,
+		hit,
+		duration: std::time::Duration::ZERO,
+		count: 1,
+	});
 	world.flush();
 	assert_eq!(selected_key(&mut world, viewport)?, before[1]);
 	assert_eq!(

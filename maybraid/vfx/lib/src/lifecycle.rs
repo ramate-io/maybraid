@@ -3,9 +3,9 @@
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{CompiledParticleEffect, EffectSpawner, EffectSystems, SpawnerSettings};
 
-use crate::lobe_material::LobeMaterial;
-use crate::lobes::{lobe_transform, stamp_lobe_materials, VfxLobe};
 use crate::membership::{VfxInstanceMembers, VfxMemberOf};
+use crate::parts::flipbook_card::{tick_dust, VfxDust};
+use crate::parts::lobe::{stamp_lobe_materials, tick_lobes};
 use crate::spawn::{
 	realize_layer, VfxEmitter, VfxEmitterArmed, VfxEmitterBurst, VfxFlash, VfxInstance,
 	VfxLayerLife, VfxPendingLayers,
@@ -33,10 +33,15 @@ pub fn gate_vfx_instances(
 	emitters: Query<(&VfxEmitter, Has<VfxEmitterArmed>, Has<VfxEmitterBurst>)>,
 	mut spawners: Query<Option<&mut EffectSpawner>, With<VfxEmitter>>,
 	mut instances: Query<(Entity, &mut VfxInstance, &VfxInstanceMembers)>,
+	dust: Query<&VfxLayerLife, With<VfxDust>>,
 ) {
 	for (_entity, mut instance, members) in &mut instances {
 		if !instance.armed {
-			if !members.emitters_ready(&emitters) {
+			if !members.emitters_ready(&emitters)
+				|| members
+					.iter()
+					.any(|entity| dust.get(entity).is_ok_and(|life| life.waiting_for_emitter))
+			{
 				continue;
 			}
 			instance.armed = true;
@@ -108,40 +113,6 @@ pub fn tick_vfx_flashes(
 	}
 }
 
-pub fn tick_vfx_lobes(
-	time: Res<Time>,
-	instances: Query<&VfxInstance>,
-	mut materials: ResMut<Assets<LobeMaterial>>,
-	mut lobes: Query<(
-		Entity,
-		&VfxMemberOf,
-		&mut VfxLobe,
-		&mut Transform,
-		&mut Visibility,
-		Option<&MeshMaterial3d<LobeMaterial>>,
-		Option<&mut VfxLayerLife>,
-	)>,
-) {
-	let dt = time.delta_secs();
-	for (_entity, member, mut lobe, mut transform, mut visibility, material, life) in &mut lobes {
-		if !member.instance_armed(&instances) {
-			*visibility = Visibility::Hidden;
-			continue;
-		}
-		*visibility = Visibility::Inherited;
-		lobe.age += dt * lobe.playback;
-		if let Some(mut life) = life {
-			life.age = lobe.age;
-		}
-		*transform = lobe_transform(&lobe.spec, lobe.age);
-		if let Some(handle) = material {
-			if let Some(mut material) = materials.get_mut(&handle.0) {
-				material.set_age(lobe.age);
-			}
-		}
-	}
-}
-
 pub fn tick_vfx_layer_lives(
 	time: Res<Time>,
 	armed: Query<Has<VfxEmitterArmed>, With<VfxEmitter>>,
@@ -171,9 +142,10 @@ pub fn vfx_lifecycle_plugin(app: &mut App) {
 		Update,
 		(
 			stamp_lobe_materials,
+			tick_dust,
 			tick_vfx_instances,
 			tick_vfx_flashes,
-			tick_vfx_lobes,
+			tick_lobes,
 			tick_vfx_layer_lives,
 		)
 			.chain(),

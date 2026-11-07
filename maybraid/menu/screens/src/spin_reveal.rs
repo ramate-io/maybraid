@@ -1,6 +1,7 @@
 //! Starter Kit: the shared inventory layout in read-only mode.
 
 use bevy::prelude::*;
+use bevy::ui_widgets::Button;
 use character_creation_menus::{
 	inventory_paint_state, InventoryLayout, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT,
 };
@@ -215,6 +216,7 @@ fn spawn_starter_kit(
 				.id();
 			root.spawn((
 				Button,
+				bevy::picking::hover::Hovered::default(),
 				ScreenBack,
 				StarterKitLoadingBack,
 				Node {
@@ -492,7 +494,7 @@ fn replace_starter_kit_overlay_back(
 }
 
 fn click_starter_kit_continue(
-	click: On<Pointer<Click>>,
+	click: On<PointerClick>,
 	lock: Res<TextMenuInputLock>,
 	continues: Query<(), With<StarterKitContinue>>,
 	mut choices: MessageWriter<SpinRevealChoice>,

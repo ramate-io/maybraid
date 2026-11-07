@@ -70,5 +70,5 @@ pub struct RectangularLivableAreaPlan {
 	pub parameterized: RectangularLivableAreaParameterized,
 	/// Concrete strategy that produced the layout (never `CaseAttempt`).
 	pub chosen: RectLivableStrategy,
-	pub hall_bands: Vec<bevy_math::bounding::Aabb2d>,
+	pub hall_bands: Vec<bevy_shape::Aabb2d>,
 }

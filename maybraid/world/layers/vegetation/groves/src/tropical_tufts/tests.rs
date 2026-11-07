@@ -98,11 +98,11 @@ mod render_tests {
 	use super::*;
 	use crate::grove::GroveCellVariant;
 	use crate::tropical_tufts::TropicalTuftsParams;
-	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::{Entity, Transform};
-	use lod::SceneChunk;
+	use bevy::shape::Aabb3d;
 	use lod::lod_ref::LodRef;
 	use lod::scene::{LodScene, LodSceneLevel};
+	use lod::SceneChunk;
 	use vegetation_components::VegetationComponents;
 
 	#[test]

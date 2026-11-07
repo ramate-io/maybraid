@@ -151,10 +151,7 @@ fn footprint_detects_an_interior_hole_between_center_and_corner_probes() -> anyh
 	app.world_mut()
 		.get_mut::<CascadeChunk>(support)
 		.ok_or_else(|| anyhow::anyhow!("missing chunk"))?
-		.omit = Some(bevy::math::bounding::Aabb3d::new(
-		Vec3::new(0.2, 0.0, 0.2),
-		Vec3::new(0.05, 10.0, 0.05),
-	));
+		.omit = Some(bevy::shape::Aabb3d::new(Vec3::new(0.2, 0.0, 0.2), Vec3::new(0.05, 10.0, 0.05)));
 	for _ in 0..3 {
 		app.update();
 	}

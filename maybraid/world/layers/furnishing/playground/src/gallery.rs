@@ -1,7 +1,7 @@
 //! Richmond-shaped slots plus authored extremes for `/show gallery`.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
+use bevy::shape::Aabb3d;
 use building_components::{
 	BuildingComponents, FurnitureAbutment, FurnitureGeometry, FurnitureNode, Placement,
 };

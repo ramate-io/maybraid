@@ -7,8 +7,8 @@ pub mod ring;
 
 pub use ring::StackedRing;
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use bevy_shape::Aabb3d;
 use building_components::partitions::PartitionNode;
 use building_components::{BuildingComponents, Layers};
 use lod::scene::LodSceneLevel;

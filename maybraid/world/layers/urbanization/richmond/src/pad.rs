@@ -16,8 +16,8 @@ pub use elevation::PadElevation;
 pub use footprint::{PadFootprint, PadReach, PadRect};
 pub use node::{PadNode, PadStage};
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
+use bevy::shape::Aabb3d;
 use procedural_common::Bounds2;
 use urbanization_developments::PadParams;
 

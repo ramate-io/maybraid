@@ -1,7 +1,7 @@
 //! Multi-run composition helpers (L-corner, peninsula stub).
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec3;
+use bevy_shape::{Aabb2d, Aabb3d};
 use procedural_common::{aabb3_to_plan, NoiseConfig, PlanAxes};
 
 use super::pack::WALL_EPS;

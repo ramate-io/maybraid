@@ -105,7 +105,7 @@ fn edge_strip_plans(plan: PlanRect, radius: f32) -> [PlanRect; 4] {
 fn resolve_piece(
 	style: PanelStyle,
 	plan: PlanRect,
-	cutting: &[bevy_math::bounding::Aabb3d],
+	cutting: &[bevy_shape::Aabb3d],
 	thickness: f32,
 ) -> Option<RoundedSlabPiece> {
 	match merge_slab_insets(plan, cutting.iter().copied()) {

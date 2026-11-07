@@ -1,5 +1,5 @@
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::Hash;

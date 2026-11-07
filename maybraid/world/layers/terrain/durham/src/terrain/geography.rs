@@ -8,8 +8,8 @@
 //! runtime; it stays compiled so a reader can return to it.
 #![cfg_attr(not(test), allow(dead_code))]
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
+use bevy::shape::Aabb3d;
 use lod::gen::{Id, Version};
 use lod::hcsg::HcsgValue;
 use lod::hcsg::{Busy, HcsgStorage};

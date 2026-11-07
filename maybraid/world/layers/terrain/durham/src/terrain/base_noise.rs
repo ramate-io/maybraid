@@ -4,8 +4,8 @@ use crate::terrain::cell::universal_bounds;
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::mesh::TerrainMeshAssets;
 use crate::terrain::sdf::{ComposedTerrain, TerrainSdf};
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext};
 

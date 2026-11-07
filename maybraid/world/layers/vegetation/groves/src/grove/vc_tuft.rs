@@ -748,8 +748,8 @@ mod tests {
 
 	#[test]
 	fn high_medium_chunks_clone_the_plant_arc() {
-		use bevy::math::bounding::Aabb3d;
 		use bevy::prelude::Entity;
+		use bevy::shape::Aabb3d;
 
 		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(20.0, 1.0, 20.0));
 		let body = TuftGroveBody::from_plants(

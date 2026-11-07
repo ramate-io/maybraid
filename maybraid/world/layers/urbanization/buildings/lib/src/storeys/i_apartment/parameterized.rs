@@ -253,8 +253,8 @@ fn sample_arms(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use bevy_shape::Aabb3d;
 
 	fn large_confines() -> Confines {
 		Confines::from_bounds(Aabb3d::from_min_max(

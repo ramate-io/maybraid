@@ -4,9 +4,9 @@
 //! **tessellated** concepts (polyline / continuous arc → many tiles under **one** LOD
 //! parent host).
 
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform};
 use bevy::scene::prelude::Scene;
+use bevy::shape::Aabb3d;
 use bevy_math::Vec3;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
@@ -211,8 +211,8 @@ macro_rules! impl_partition_mesh_lod_scene {
 				::lod::SceneChunk::primitive(self.scene_with_level(lod_ref, level))
 			}
 
-			fn scene_bounds(&self) -> ::bevy::math::bounding::Aabb3d {
-				::bevy::math::bounding::Aabb3d::from_min_max(
+			fn scene_bounds(&self) -> ::bevy::shape::Aabb3d {
+				::bevy::shape::Aabb3d::from_min_max(
 					::bevy::math::Vec3::new(0.0, 0.0, 0.0),
 					::bevy::math::Vec3::new(1.0, 1.0, 1.0),
 				)
