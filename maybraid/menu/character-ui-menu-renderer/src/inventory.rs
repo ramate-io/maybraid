@@ -2,6 +2,7 @@
 //! Starter Kit continue to use the shared `MenuNode` sink.
 
 use bevy::prelude::*;
+use bevy::ui_widgets::Button;
 use character_ui_menu::{
 	EquipmentChoice, GridCatalogChoice, InventoryDrawerMode, InventoryRegion, InventorySection,
 	MenuNode,
@@ -136,7 +137,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 		.focused_item
 		.filter(|key| key.region == InventoryRegion::Equipped)
 		.and_then(|key| equipment.iter().position(|choice| choice.item_key == key.index))
-		.unwrap_or(0);
+		.unwrap_or(equipped_memory.focused_ordinal);
 	let aiop_focus_capacity = if interactive { capacity } else { equipment.len().min(capacity) };
 	root.with_children(|host_viewport| {
 		let mut shell = host_viewport.spawn((
@@ -194,7 +195,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 						InventoryScreenArea(InventoryRegion::Equipped),
 						InventoryHudMenu,
 						HudMenu {
-							selected: equipped_focus.min(equipment.len().saturating_sub(1)),
+							selected: equipped_focus.min(aiop_focus_capacity.saturating_sub(1)),
 							item_count: aiop_focus_capacity,
 						},
 						HudScrollViewport,
@@ -399,7 +400,8 @@ fn spawn_inventory_header(
 				});
 			header
 				.spawn((
-					Button,
+					Button::default(),
+					bevy::picking::hover::Hovered::default(),
 					InventoryControl(character_ui_menu::InventoryControlAction::ToggleDrawer),
 					Node {
 						flex_direction: FlexDirection::Row,
@@ -439,7 +441,8 @@ fn spawn_inventory_icon_button(
 ) {
 	parent
 		.spawn((
-			Button,
+			Button::default(),
+			bevy::picking::hover::Hovered::default(),
 			action,
 			Node { width: Val::Px(40.0), height: Val::Px(36.0), ..default() },
 			BackgroundColor(Color::NONE),
@@ -759,7 +762,8 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 	let face = if choice.selected { TEXT_YELLOW } else { TEXT_YELLOW_FAINT };
 	parent
 		.spawn((
-			Button,
+			Button::default(),
+			bevy::picking::hover::Hovered::default(),
 			extra,
 			Node {
 				width: Val::Percent(100.0),
@@ -934,7 +938,8 @@ fn spawn_compact_gallery_button<E: Copy + Send + Sync + 'static>(
 	let face = if choice.selected { TEXT_YELLOW } else { TEXT_YELLOW_FAINT };
 	parent
 		.spawn((
-			Button,
+			Button::default(),
+			bevy::picking::hover::Hovered::default(),
 			HoverTile { equipped: choice.selected, preserve_fill: false, face },
 			extra,
 			Node {
@@ -1052,7 +1057,8 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 	let (thumbnail, viewport, tint) = image;
 	let face = if tile.selected { TEXT_YELLOW } else { TEXT_YELLOW_FAINT };
 	let mut row = parent.spawn((
-		Button,
+		Button::default(),
+		bevy::picking::hover::Hovered::default(),
 		HoverTile { equipped: tile.selected, preserve_fill: false, face },
 		base,
 		Node {
@@ -1212,7 +1218,8 @@ fn spawn_empty_slot(
 	));
 	if interactive {
 		slot.insert((
-			Button,
+			Button::default(),
+			bevy::picking::hover::Hovered::default(),
 			InventoryAIOPSlot { section, ordinal, capacity },
 			HudMenuItem { index: ordinal, menu },
 			InventoryControl(character_ui_menu::InventoryControlAction::FocusDrawer),

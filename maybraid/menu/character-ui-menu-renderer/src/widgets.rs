@@ -96,7 +96,18 @@ pub struct InventoryFocusHint(pub Option<InventoryItemKey>);
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct InventorySectionMemory {
 	pub focused_item: Option<InventoryItemKey>,
+	/// Last selected row when the region contains empty equipped slots.
+	pub focused_ordinal: usize,
 	pub gallery_scroll: usize,
+}
+
+/// AIOP row that opened the selection drawer. `item` is absent for an empty slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InventoryPickerSource {
+	pub ordinal: usize,
+	pub item: Option<InventoryItemKey>,
+	/// Candidate whose host action is awaiting an accepted model/UI refresh.
+	pub attempted_item: Option<usize>,
 }
 
 /// State for one inventory viewport. Primary editor hosts may mirror their legacy resources.
@@ -107,6 +118,7 @@ pub struct InventoryMenuSession {
 	pub section: InventorySection,
 	pub drawer: InventoryDrawerMode,
 	pub region: InventoryRegion,
+	pub picker_source: Option<InventoryPickerSource>,
 	pub section_memory: [[InventorySectionMemory; 2]; 5],
 }
 
@@ -130,6 +142,16 @@ impl InventoryMenuSession {
 			}
 		}
 		self.interaction = self.interaction.remap_after_drop(dropped_index);
+		if let Some(source) = &mut self.picker_source {
+			source.item = source.item.and_then(|item| item.remap_after_drop(dropped_index));
+			source.attempted_item = source.attempted_item.and_then(|index| {
+				(index != dropped_index).then_some(if index > dropped_index {
+					index - 1
+				} else {
+					index
+				})
+			});
+		}
 	}
 }
 

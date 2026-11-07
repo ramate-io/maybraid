@@ -53,6 +53,7 @@ where
 		.add_message::<CharacterMenuEvent<E>>()
 		.add_observer(emit_hud_activate_on_click::<E>)
 		.add_observer(emit_hud_activate_on_nav::<E>)
+		.add_observer(crate::input::emit_aiop_reorder_on_nav::<E>)
 		.add_observer(emit_inventory_reorder_nav::<E>)
 		.add_observer(crate::input::consume_scoped_inventory_reorder_back)
 		.add_observer(emit_inventory_unequip_on_action::<E>)
@@ -92,6 +93,7 @@ where
 			(
 				crate::input::sync_inventory_focus_from_menu,
 				crate::input::sync_inventory_region_focus,
+				crate::input::resolve_pending_inventory_choice,
 			)
 				.chain()
 				.after(CharacterHudSystems::Sync),
