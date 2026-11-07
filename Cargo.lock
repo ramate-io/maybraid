@@ -2380,22 +2380,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bikanwarda-character"
-version = "0.1.5"
-dependencies = [
- "anyhow",
- "avian3d",
- "bevy",
- "character-animations",
- "character-motion",
- "character-rigs",
- "characters",
- "lod",
- "lod-avian",
- "rigs",
-]
-
-[[package]]
 name = "bikanwarda-attacks"
 version = "0.1.5"
 dependencies = [
@@ -2424,6 +2408,22 @@ dependencies = [
  "lod-avian",
  "maybraid-spatial-rumble",
  "maybraid-vfx",
+]
+
+[[package]]
+name = "bikanwarda-character"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "character-animations",
+ "character-motion",
+ "character-rigs",
+ "characters",
+ "lod",
+ "lod-avian",
+ "rigs",
 ]
 
 [[package]]
@@ -9885,6 +9885,18 @@ dependencies = [
  "avian3d",
  "bevy",
  "lod-avian",
+]
+
+[[package]]
+name = "promo-title"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "clap",
+ "furniture-assemblies",
+ "furniture-shaders",
+ "menu-components",
 ]
 
 [[package]]

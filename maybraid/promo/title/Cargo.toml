@@ -1,0 +1,25 @@
+[package]
+name = "promo-title"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[[bin]]
+name = "promo-title"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+bevy = { workspace = true }
+clap = { workspace = true, features = ["env"] }
+furniture-assemblies = { workspace = true }
+furniture-shaders = { workspace = true }
+menu-components = { workspace = true }
+
+[lints]
+workspace = true

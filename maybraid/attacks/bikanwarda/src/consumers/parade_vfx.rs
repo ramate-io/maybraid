@@ -1,7 +1,7 @@
 //! [`ParadeExplosionCue`] → `maybraid-vfx` [`fiery_explosion`](maybraid_vfx::FIERY_EXPLOSION).
 
 use bevy::prelude::*;
-use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
+use maybraid_vfx::{EffectRecipe, SpawnVfxExt, VfxLibrary, VfxSpawn};
 
 use crate::consumers::BikanwardaPresentationSystems;
 use crate::ParadeExplosionCue;
@@ -23,7 +23,7 @@ fn consume_parade_explosions(
 	};
 	for cue in cues.read() {
 		commands.spawn_vfx(
-			&library.fiery_explosion,
+			&library.fiery_explosion.effect_definition(),
 			VfxSpawn {
 				transform: Transform::from_translation(cue.position),
 				scale: (cue.radius / 1.2).clamp(1.0, 8.0),
