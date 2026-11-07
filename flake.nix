@@ -53,6 +53,7 @@
           gcc
           rust
           python311
+          ffmpeg
         ] ++ lib.optionals stdenv.isDarwin [
           libelf
           macosBlender
