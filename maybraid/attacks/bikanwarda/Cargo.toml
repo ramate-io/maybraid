@@ -1,0 +1,39 @@
+[package]
+name = "bikanwarda-attacks"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+attacks = { workspace = true }
+bevy = { workspace = true }
+character-motion = { workspace = true, optional = true }
+damage = { workspace = true }
+maybraid-spatial-rumble = { workspace = true, optional = true }
+maybraid-vfx = { workspace = true, optional = true }
+
+[features]
+default = ["presentation-consumers"]
+presentation-consumers = [
+	"dep:character-motion",
+	"dep:maybraid-spatial-rumble",
+	"dep:maybraid-vfx",
+]
+## Real `god_beam` / `sonic_wave` in `maybraid-vfx` ([#1150](https://github.com/ramate-io/maybraid/pull/1150)).
+vfx-driven = ["presentation-consumers"]
+## `characters::EyeGlowControl` ([#1152](https://github.com/ramate-io/maybraid/pull/1152)).
+eye-glow = ["presentation-consumers"]
+
+[dev-dependencies]
+anyhow = { workspace = true }
+avian3d = { workspace = true }
+combat-targeting = { workspace = true }
+lod-avian = { workspace = true }
+
+[lints]
+workspace = true
