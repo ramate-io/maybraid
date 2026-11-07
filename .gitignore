@@ -27,6 +27,7 @@ packaging/*.local.md
 packaging/*.local.env
 packaging/identity.local.md
 .DS_Store
+maybraid/promo/title/durop-pack/*.mov
 *.logicx
 *.gguf
 *.udpipe

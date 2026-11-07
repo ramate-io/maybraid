@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Headless, frame-exact title-sequence capture.
-# Bevy Screenshot GPU-readback writes the PNG sequence; ffmpeg encodes the MP4.
+# Bevy Screenshot GPU-readback writes the PNG sequence; ffmpeg encodes H.264
+# preview MP4 plus a ProRes 4444 overlay MOV with swallow alpha.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"

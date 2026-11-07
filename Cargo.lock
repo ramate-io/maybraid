@@ -9896,6 +9896,7 @@ dependencies = [
  "clap",
  "furniture-assemblies",
  "furniture-shaders",
+ "image",
  "menu-components",
 ]
 

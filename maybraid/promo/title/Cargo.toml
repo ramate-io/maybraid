@@ -19,6 +19,7 @@ bevy = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 furniture-assemblies = { workspace = true }
 furniture-shaders = { workspace = true }
+image = { version = "0.25", default-features = false, features = ["png"] }
 menu-components = { workspace = true }
 
 [lints]
