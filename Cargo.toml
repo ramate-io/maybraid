@@ -25,6 +25,7 @@ members = [
   "maybraid/menu/character-ui-menu-renderer",
   "maybraid/menu/screens",
   "maybraid/menu/playground",
+  "maybraid/promo/title",
   "maybraid/controllers/core",
   "maybraid/controllers/menu",
   "maybraid/controllers/character",
@@ -318,6 +319,7 @@ furnishing-layer-model = { path = "maybraid/world/layers/furnishing/model" }
 maputo = { path = "maybraid/world/layers/furnishing/maputo" }
 
 menu-components = { path = "maybraid/menu/components" }
+promo-title = { path = "maybraid/promo/title" }
 maybraid-character-ui-menu-renderer = { path = "maybraid/menu/character-ui-menu-renderer" }
 menu-screens = { path = "maybraid/menu/screens" }
 menu-playground = { path = "maybraid/menu/playground" }
