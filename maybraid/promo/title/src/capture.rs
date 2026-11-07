@@ -9,7 +9,8 @@ use bevy::time::TimeUpdateStrategy;
 use bevy::winit::WinitSettings;
 
 use crate::encode::{
-	apply_swallow_alpha, composite_over_checkerboard, encode_overlay_sequence, encode_png_sequence,
+	apply_swallow_alpha, composite_over_checkerboard, encode_checkerboard_preview,
+	encode_overlay_sequence, encode_png_sequence,
 };
 use crate::plugin::{SequenceClock, TitleSequenceConfig, TitleSequenceSystems};
 use crate::timeline::Keyframe;
@@ -19,6 +20,7 @@ use crate::timeline::Keyframe;
 pub struct CaptureIo {
 	pub output: PathBuf,
 	pub overlay: PathBuf,
+	pub checkerboard: PathBuf,
 	pub frames_dir: PathBuf,
 	pub stills_dir: PathBuf,
 	pub ffmpeg: PathBuf,
@@ -42,11 +44,13 @@ impl CaptureIo {
 			.unwrap_or_else(|| Path::new("."));
 		let overlay =
 			overlay.unwrap_or_else(|| parent.join(format!("{}.mov", stem.to_string_lossy())));
+		let checkerboard = parent.join(format!("{}-checkerboard.mp4", stem.to_string_lossy()));
 		Self {
 			frames_dir: parent.join(format!("{}_frames", stem.to_string_lossy())),
 			stills_dir: parent.join(format!("{}_stills", stem.to_string_lossy())),
 			output,
 			overlay,
+			checkerboard,
 			ffmpeg,
 			keep_frames,
 			warmup_frames,
@@ -197,6 +201,8 @@ fn finish_capture(config: &TitleSequenceConfig, io: &CaptureIo) -> anyhow::Resul
 
 	encode_overlay_sequence(&io.ffmpeg, config.fps, &io.frames_dir, &io.overlay)?;
 	info!("title overlay: {}", io.overlay.display());
+	encode_checkerboard_preview(&io.ffmpeg, config.fps, &io.frames_dir, &io.checkerboard)?;
+	info!("title checkerboard: {}", io.checkerboard.display());
 	if !io.keep_frames {
 		let _ = std::fs::remove_dir_all(&io.frames_dir);
 	}

@@ -28,6 +28,7 @@ That is the only command you need. It builds `promo-title` if missing, runs it u
 | Path | Contents |
 |---|---|
 | `title-sequence.mp4` | Six-second H.264 preview (opaque RGB, swallow not punched) |
+| `title-sequence-checkerboard.mp4` | Same timeline composited over a checkerboard so the swallow is visible |
 | `title-sequence.mov` | ProRes 4444 overlay with swallow alpha (durop asset) |
 | `title-sequence_stills/01_background_blend.png` | Shader blend, stars, no fallen star |
 | `title-sequence_stills/02_mid_arc_tail.png` | Curved tail + energy motes |
@@ -71,7 +72,7 @@ Durop packs are a `durop.json` plus per-clip JSON (`id`, `title`, `asset`, optio
 
 Native overlay playback on macOS is AVFoundation. The measured alpha fixture in durop is **HEVC-with-alpha MOV** (`AVVideoCodecType.hevcWithAlpha`, `alpha-hevc.mov`). GIF also carries alpha, via a separate decoder. Linux native A/V is unsupported (GIF only).
 
-This capture emits **ProRes 4444 MOV** (`prores_ks` + `yuva444p10le`) because that is the alpha-capable allowlisted format this Linux encoder can actually preserve:
+This capture emits **ProRes 4444 MOV** (`prores_ks` + `yuva444p10le` + `-qscale:v 13`) because that is the alpha-capable allowlisted format this Linux encoder can actually preserve, at a size that stays under durop's 256 MiB per-file limit:
 
 - **HEVC-with-alpha** is what durop measured, but `libx265` here rejects `yuva420p` (`Incompatible pixel format`, unknown `alpha=` option). Apple `hevc_videotoolbox` is not available on Linux. Transcode the MOV on a Mac if you want the measured codec: `ffmpeg -i title-sequence.mov -c:v hevc_videotoolbox -alpha_quality 0.75 -tag:v hvc1 title-swallow-hevc.mov`.
 - **VP9 WebM** is allowlisted, but ffmpeg 6.1.1 `libvpx-vp9` on this VM muxes `yuva420p` as opaque `yuv420p` (decoded center alpha is 255). Unusable as an overlay until that pipeline is proven.

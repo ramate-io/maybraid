@@ -18,9 +18,10 @@ From the Maybraid repository root:
   --overlay maybraid/promo/title/durop-pack/title-swallow.mov
 ```
 
-`title-swallow.mov` is ProRes 4444 with straight-alpha swallow. It is generated,
-not committed: 1080p60 ProRes exceeds GitHub's comfortable blob size, and durop
-rejects unresolved Git LFS pointers.
+`title-swallow.mov` is ProRes 4444 (`-qscale:v 13`) with straight-alpha swallow.
+It is generated, not committed: even the smaller qscale is ~200 MiB at 1080p60,
+over GitHub's blob limit, and durop rejects unresolved Git LFS pointers. It
+does fit durop's 256 MiB per-file catalog cap.
 
 Load this folder as a **local directory** pack in durop's Catalog menu (or
 `--pack /path/to/maybraid/promo/title/durop-pack`). Visual placement is

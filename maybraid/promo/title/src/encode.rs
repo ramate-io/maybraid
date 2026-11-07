@@ -49,6 +49,8 @@ pub fn ffmpeg_overlay_args(fps: u32, frames_dir: &Path, output: &Path) -> Vec<St
 		"4444".into(),
 		"-pix_fmt".into(),
 		"yuva444p10le".into(),
+		"-qscale:v".into(),
+		"13".into(),
 		"-vendor".into(),
 		"apl0".into(),
 		output.display().to_string(),
@@ -73,6 +75,72 @@ pub fn encode_overlay_sequence(
 	output: &Path,
 ) -> anyhow::Result<PathBuf> {
 	run_ffmpeg(ffmpeg, &ffmpeg_overlay_args(fps, frames_dir, output), output)
+}
+
+/// ffmpeg argv: RGBA frames over a looping checkerboard, H.264 proof video.
+pub fn ffmpeg_checkerboard_args(
+	fps: u32,
+	frames_dir: &Path,
+	checker: &Path,
+	output: &Path,
+) -> Vec<String> {
+	let pattern = frames_dir.join("frame_%05d.png");
+	vec![
+		"-y".into(),
+		"-loglevel".into(),
+		"error".into(),
+		"-loop".into(),
+		"1".into(),
+		"-framerate".into(),
+		fps.to_string(),
+		"-i".into(),
+		checker.display().to_string(),
+		"-framerate".into(),
+		fps.to_string(),
+		"-i".into(),
+		pattern.display().to_string(),
+		"-filter_complex".into(),
+		"[1:v]format=rgba[fg];[0:v][fg]overlay=shortest=1".into(),
+		"-c:v".into(),
+		"libx264".into(),
+		"-pix_fmt".into(),
+		"yuv420p".into(),
+		"-crf".into(),
+		"18".into(),
+		"-r".into(),
+		fps.to_string(),
+		"-movflags".into(),
+		"+faststart".into(),
+		output.display().to_string(),
+	]
+}
+
+/// Composite the punched RGBA sequence over a checkerboard and encode H.264.
+pub fn encode_checkerboard_preview(
+	ffmpeg: &Path,
+	fps: u32,
+	frames_dir: &Path,
+	output: &Path,
+) -> anyhow::Result<PathBuf> {
+	let first = frames_dir.join("frame_00000.png");
+	let image = image::open(&first)
+		.map_err(|err| anyhow::anyhow!("{}: {err}", first.display()))?
+		.to_rgba8();
+	let (width, height) = image.dimensions();
+	let checker = frames_dir.join(".checker.png");
+	write_checker_png(&checker, width, height)?;
+	run_ffmpeg(ffmpeg, &ffmpeg_checkerboard_args(fps, frames_dir, &checker, output), output)
+}
+
+fn write_checker_png(path: &Path, width: u32, height: u32) -> anyhow::Result<()> {
+	let mut image = RgbImage::new(width.max(1), height.max(1));
+	for (x, y, pixel) in image.enumerate_pixels_mut() {
+		*pixel = image::Rgb(checker_rgb(x, y));
+	}
+	image
+		.save(path)
+		.map_err(|err| anyhow::anyhow!("write {}: {err}", path.display()))?;
+	Ok(())
 }
 
 fn run_ffmpeg(ffmpeg: &Path, args: &[String], output: &Path) -> anyhow::Result<PathBuf> {
@@ -183,7 +251,10 @@ fn lerp_u8(bg: u8, fg: u8, alpha: f32) -> u8 {
 
 #[cfg(test)]
 mod tests {
-	use super::{apply_swallow_to_rgba, checkerboard_preview, ffmpeg_args, ffmpeg_overlay_args};
+	use super::{
+		apply_swallow_to_rgba, checkerboard_preview, ffmpeg_args, ffmpeg_checkerboard_args,
+		ffmpeg_overlay_args,
+	};
 	use crate::timeline::{Keyframe, TitleSequence};
 	use image::{Rgba, RgbaImage};
 	use std::path::Path;
@@ -210,7 +281,26 @@ mod tests {
 		assert!(args.iter().any(|arg| arg == "prores_ks"));
 		assert!(args.iter().any(|arg| arg == "4444"));
 		assert!(args.iter().any(|arg| arg == "yuva444p10le"));
+		let qscale = args
+			.windows(2)
+			.find(|pair| pair[0] == "-qscale:v")
+			.ok_or_else(|| anyhow::anyhow!("missing -qscale:v"))?;
+		assert_eq!(qscale[1], "13");
 		assert_eq!(args.last().map(String::as_str), Some("/tmp/out.mov"));
+		Ok(())
+	}
+
+	#[test]
+	fn checkerboard_args_overlay_rgba_on_a_still() -> anyhow::Result<()> {
+		let args = ffmpeg_checkerboard_args(
+			60,
+			Path::new("/tmp/frames"),
+			Path::new("/tmp/checker.png"),
+			Path::new("/tmp/out-checker.mp4"),
+		);
+		assert!(args.iter().any(|arg| arg.contains("overlay=shortest=1")));
+		assert!(args.iter().any(|arg| arg == "libx264"));
+		assert!(args.iter().any(|arg| arg.contains("frame_%05d.png")));
 		Ok(())
 	}
 

@@ -15,8 +15,9 @@ pub mod timeline;
 pub use args::Args;
 pub use capture::{CaptureIo, TitleCapturePlugin};
 pub use encode::{
-	apply_swallow_alpha, composite_over_checkerboard, encode_overlay_sequence, encode_png_sequence,
-	ffmpeg_args, ffmpeg_overlay_args,
+	apply_swallow_alpha, composite_over_checkerboard, encode_checkerboard_preview,
+	encode_overlay_sequence, encode_png_sequence, ffmpeg_args, ffmpeg_checkerboard_args,
+	ffmpeg_overlay_args,
 };
 pub use plugin::{
 	window_plugins, SequenceClock, TitleSequenceConfig, TitleSequencePlugin, TitleSequenceSystems,
