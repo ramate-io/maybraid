@@ -9,7 +9,7 @@ use bevy::ui::UiGlobalTransform;
 
 use crate::single_select::{KeyboardMenuNav, TextMenuInputLock};
 use crate::theme::TEXT_YELLOW;
-use crate::{MenuNav, MenuNavImpulse};
+use crate::{InventoryHudMenu, MenuNav, MenuNavImpulse};
 
 /// Focus index for a HUD list (panel headers or overlay leaves).
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,10 +113,11 @@ pub fn select_hud_item_on_over(
 pub fn apply_hud_menu_nav(
 	impulse: On<MenuNavImpulse>,
 	held: Query<(), With<HudMenuNavLocked>>,
+	inventory: Query<(), With<InventoryHudMenu>>,
 	items: Query<(&HudMenuItem, &UiGlobalTransform)>,
 	mut menus: Query<&mut HudMenu>,
 ) {
-	if held.get(impulse.entity).is_ok() {
+	if held.get(impulse.entity).is_ok() || inventory.get(impulse.entity).is_ok() {
 		return;
 	}
 	let Ok(mut menu) = menus.get_mut(impulse.entity) else {
@@ -185,6 +186,7 @@ pub fn navigate_hud_menus(
 	roots: Query<(Entity, &crate::modal::MenuModal)>,
 	child_of: Query<&ChildOf>,
 	overlay_menus: Query<Entity, With<HudOverlayMenu>>,
+	inventory_menus: Query<(), With<InventoryHudMenu>>,
 	mut menus: Query<(Entity, &mut HudMenu), Without<HudMenuNavLocked>>,
 ) {
 	if !keyboard_nav.is_enabled() || lock.0 {
@@ -201,6 +203,9 @@ pub fn navigate_hud_menus(
 	};
 	let overlay_open = !overlay_menus.is_empty();
 	for (entity, mut menu) in &mut menus {
+		if inventory_menus.contains(entity) {
+			continue;
+		}
 		if overlay_open != overlay_menus.contains(entity) {
 			continue;
 		}

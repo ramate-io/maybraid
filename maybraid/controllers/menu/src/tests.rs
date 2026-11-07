@@ -13,6 +13,7 @@ use menu_components::{
 struct Hits {
 	nav: Vec<(Entity, MenuNav)>,
 	actions: Vec<(Entity, MenuAction)>,
+	inventory: Vec<(Entity, menu_components::InventoryNavigation)>,
 }
 fn nav(event: On<MenuNavImpulse>, menus: Query<(), With<HudMenu>>, mut hits: ResMut<Hits>) {
 	if menus.contains(event.entity) {
@@ -22,6 +23,12 @@ fn nav(event: On<MenuNavImpulse>, menus: Query<(), With<HudMenu>>, mut hits: Res
 fn action(event: On<MenuActionImpulse>, mut hits: ResMut<Hits>) {
 	hits.actions.push((event.entity, event.action));
 }
+fn inventory_action(
+	event: On<menu_components::InventoryNavigationImpulse>,
+	mut hits: ResMut<Hits>,
+) {
+	hits.inventory.push((event.entity, event.action));
+}
 fn world() -> World {
 	let mut world = World::new();
 	world.init_resource::<InputRouter>();
@@ -29,7 +36,61 @@ fn world() -> World {
 	world.add_observer(crate::dispatch::interpret_menu_pad);
 	world.add_observer(nav);
 	world.add_observer(action);
+	world.add_observer(inventory_action);
 	world
+}
+
+#[test]
+fn inventory_shortcuts_are_scoped_and_back_wins() -> anyhow::Result<()> {
+	use menu_components::{InventoryHudMenu, InventoryNavigation, MenuModalLayer, MenuSession};
+	let mut world = world();
+	let (source, target, _) = menu(&mut world);
+	world.entity_mut(target).insert(InventoryHudMenu);
+	send(&mut world, source, target, 1, &buttons(&[PadButton::BumperFocus]), 0.0)?;
+	assert_eq!(
+		world.resource::<Hits>().inventory,
+		[(target, InventoryNavigation::PreviousSection)]
+	);
+	let mut page_down = VirtualPad::default();
+	page_down.keys.press(KeyCode::PageDown);
+	send(&mut world, source, target, 2, &page_down, 0.0)?;
+	assert_eq!(
+		world.resource::<Hits>().inventory.last(),
+		Some(&(target, InventoryNavigation::NextSection))
+	);
+	let back_and_next = buttons(&[PadButton::B, PadButton::BumperFire]);
+	send(&mut world, source, target, 3, &back_and_next, 0.0)?;
+	assert_eq!(world.resource::<Hits>().inventory.len(), 2);
+	assert_eq!(world.resource::<Hits>().nav.last(), Some(&(target, MenuNav::Back)));
+
+	// A move button can't switch inventory context while reorder owns the menu.
+	world.entity_mut(target).insert(menu_components::HudMenuNavLocked);
+	send(&mut world, source, target, 4, &buttons(&[PadButton::BumperFire]), 0.0)?;
+	assert_eq!(world.resource::<Hits>().inventory.len(), 2);
+	world.entity_mut(target).remove::<menu_components::HudMenuNavLocked>();
+
+	// Confirmation modals suppress shell actions while preserving their routed frame.
+	let root = world
+		.get::<ChildOf>(target)
+		.ok_or_else(|| anyhow::anyhow!("controller root"))?
+		.parent();
+	world.entity_mut(root).insert(MenuSession::default());
+	world
+		.get_mut::<MenuSession>(root)
+		.ok_or_else(|| anyhow::anyhow!("menu session"))?
+		.modals
+		.open(MenuModalLayer::ITEM_DROP);
+	world
+		.get_mut::<MenuController>(root)
+		.ok_or_else(|| anyhow::anyhow!("menu controller"))?
+		.context_blocked = true;
+	send(&mut world, source, target, 5, &buttons(&[PadButton::BumperFire]), 0.0)?;
+	assert_eq!(world.resource::<Hits>().inventory.len(), 2);
+	// A regular menu receiving the same edge has no inventory side effect.
+	let (other_source, other_target, _) = menu(&mut world);
+	send(&mut world, other_source, other_target, 1, &buttons(&[PadButton::BumperFocus]), 0.0)?;
+	assert_eq!(world.resource::<Hits>().inventory.len(), 2);
+	Ok(())
 }
 fn menu(world: &mut World) -> (InputSource, Entity, CaptureToken) {
 	let source = InputSource::virtual_pad(
@@ -182,8 +243,8 @@ fn pause_root_start_reaches_shell_while_a_and_submenu_start_select() -> anyhow::
 }
 
 #[test]
-fn scoped_text_sessions_with_the_same_field_key_open_and_dismiss_independently()
--> anyhow::Result<()> {
+fn scoped_text_sessions_with_the_same_field_key_open_and_dismiss_independently(
+) -> anyhow::Result<()> {
 	let mut world = world();
 	let (first, first_menu, _) = menu(&mut world);
 	let (second, second_menu, _) = menu(&mut world);
@@ -209,38 +270,26 @@ fn scoped_text_sessions_with_the_same_field_key_open_and_dismiss_independently()
 	let second_field = world.spawn(field(second_menu, "Beta")).id();
 	send(&mut world, first, first_menu, 1, &buttons(&[PadButton::A]), 0.0)?;
 	send(&mut world, second, second_menu, 1, &buttons(&[PadButton::A]), 0.0)?;
-	assert!(
-		world
-			.get::<crate::MenuSession>(first_root)
-			.is_some_and(|session| session.text.is_open())
-	);
-	assert!(
-		world
-			.get::<crate::MenuSession>(second_root)
-			.is_some_and(|session| session.text.is_open())
-	);
+	assert!(world
+		.get::<crate::MenuSession>(first_root)
+		.is_some_and(|session| session.text.is_open()));
+	assert!(world
+		.get::<crate::MenuSession>(second_root)
+		.is_some_and(|session| session.text.is_open()));
 	send(&mut world, first, first_menu, 2, &buttons(&[PadButton::B]), 0.0)?;
-	assert!(
-		world
-			.get::<crate::MenuSession>(first_root)
-			.is_some_and(|session| !session.text.is_open() && session.modals.consumed())
-	);
-	assert!(
-		world
-			.get::<crate::MenuSession>(second_root)
-			.is_some_and(|session| session.text.is_open())
-	);
-	assert!(
-		world
-			.get::<menu_components::ShortTextField>(first_field)
-			.is_some_and(|field| !field.editing && field.value == "Alpha")
-	);
+	assert!(world
+		.get::<crate::MenuSession>(first_root)
+		.is_some_and(|session| !session.text.is_open() && session.modals.consumed()));
+	assert!(world
+		.get::<crate::MenuSession>(second_root)
+		.is_some_and(|session| session.text.is_open()));
+	assert!(world
+		.get::<menu_components::ShortTextField>(first_field)
+		.is_some_and(|field| !field.editing && field.value == "Alpha"));
 	send(&mut world, second, second_menu, 2, &buttons(&[PadButton::Start]), 0.0)?;
-	assert!(
-		world
-			.get::<menu_components::ShortTextField>(second_field)
-			.is_some_and(|field| !field.editing && field.value == "Beta")
-	);
+	assert!(world
+		.get::<menu_components::ShortTextField>(second_field)
+		.is_some_and(|field| !field.editing && field.value == "Beta"));
 	assert!(
 		world.resource::<Hits>().nav.is_empty(),
 		"opening, cancel, and Start submit must not also activate rows"
@@ -281,8 +330,8 @@ fn nested_domain_actions_and_back_requests_keep_their_original_authorization() -
 }
 
 #[test]
-fn held_direction_waits_for_neutral_after_capture_retirement_without_blocking_another_source()
--> anyhow::Result<()> {
+fn held_direction_waits_for_neutral_after_capture_retirement_without_blocking_another_source(
+) -> anyhow::Result<()> {
 	let mut world = world();
 	let (first, first_menu, token) = menu(&mut world);
 	let (second, second_menu, _) = menu(&mut world);
@@ -329,30 +378,24 @@ fn primary_root_only_mirrors_its_addressed_source_and_clears_each_frame() -> any
 		.ok_or_else(|| anyhow::anyhow!("secondary parent"))?
 		.parent();
 	send(&mut world, source, target, 1, &buttons(&[PadButton::DpadDown]), 0.0)?;
-	assert!(
-		world
-			.get::<PrimaryMenuInput>(root)
-			.and_then(PrimaryMenuInput::current_frame)
-			.is_some_and(|frame| frame.source == source.entity().unwrap_or(Entity::PLACEHOLDER))
-	);
+	assert!(world
+		.get::<PrimaryMenuInput>(root)
+		.and_then(PrimaryMenuInput::current_frame)
+		.is_some_and(|frame| frame.source == source.entity().unwrap_or(Entity::PLACEHOLDER)));
 	assert_eq!(world.resource::<MenuNavPad>().events, [MenuNav::Down]);
 	world
 		.run_system_once(crate::primary::clear_primary_menu_frame)
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	assert!(
-		world
-			.get::<PrimaryMenuInput>(root)
-			.and_then(PrimaryMenuInput::current_frame)
-			.is_none()
-	);
+	assert!(world
+		.get::<PrimaryMenuInput>(root)
+		.and_then(PrimaryMenuInput::current_frame)
+		.is_none());
 	assert!(world.resource::<MenuNavPad>().events.is_empty());
 	send(&mut world, other_source, other_target, 1, &buttons(&[PadButton::DpadUp]), 0.0)?;
-	assert!(
-		world
-			.get::<PrimaryMenuInput>(root)
-			.and_then(PrimaryMenuInput::current_frame)
-			.is_none()
-	);
+	assert!(world
+		.get::<PrimaryMenuInput>(root)
+		.and_then(PrimaryMenuInput::current_frame)
+		.is_none());
 	assert!(world.get::<PrimaryMenuInput>(other_root).is_none());
 	assert!(world.resource::<MenuNavPad>().events.is_empty());
 	// A valid route to another subtree cannot update the chosen root, even when
@@ -363,12 +406,10 @@ fn primary_root_only_mirrors_its_addressed_source_and_clears_each_frame() -> any
 		CaptureKind::MenuNav,
 	);
 	send(&mut world, source, other_target, 2, &buttons(&[PadButton::A]), 0.0)?;
-	assert!(
-		world
-			.get::<PrimaryMenuInput>(root)
-			.and_then(PrimaryMenuInput::current_frame)
-			.is_none()
-	);
+	assert!(world
+		.get::<PrimaryMenuInput>(root)
+		.and_then(PrimaryMenuInput::current_frame)
+		.is_none());
 	assert!(world.resource::<MenuNavPad>().events.is_empty());
 	assert_eq!(
 		world.resource::<Hits>().nav,
@@ -411,10 +452,8 @@ fn primary_host_selection_fails_closed_and_keeps_an_explicit_choice() -> anyhow:
 	world
 		.run_system_once(crate::primary::sync_primary_menu_host)
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	assert!(
-		world
-			.get::<PrimaryMenuInput>(first)
-			.is_some_and(|input| input.source == replacement && input.current_frame().is_none())
-	);
+	assert!(world
+		.get::<PrimaryMenuInput>(first)
+		.is_some_and(|input| input.source == replacement && input.current_frame().is_none()));
 	Ok(())
 }

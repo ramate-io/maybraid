@@ -454,17 +454,31 @@ fn inventory_section_preview<E>(children: &[MenuNode<E>]) -> String {
 	let mut count = 0usize;
 	for node in flatten_nodes(children) {
 		count += match node {
-			MenuNode::Section { children, .. } => flatten_nodes(children)
-				.into_iter()
-				.map(|inner| match inner {
-					MenuNode::GridCatalog { choices, .. } => choices.len(),
-					MenuNode::OrderedEquipment { rows } => {
-						rows.iter().map(|row| row.choices.len()).sum()
+			MenuNode::Section { children, .. } => {
+				let inner = flatten_nodes(children);
+				let mut bag_keys = std::collections::HashSet::new();
+				let mut anonymous_labels = std::collections::HashSet::new();
+				for inner in inner {
+					match inner {
+						MenuNode::GridCatalog { choices, .. } => {
+							for choice in choices {
+								if let Some(key) = choice.item_key {
+									bag_keys.insert(key);
+								} else {
+									anonymous_labels.insert(choice.label.as_str());
+								}
+							}
+						}
+						MenuNode::OrderedEquipment { rows } => {
+							for choice in rows.iter().flat_map(|row| &row.choices) {
+								bag_keys.insert(choice.item_key);
+							}
+						}
+						_ => {}
 					}
-					MenuNode::LabeledValue { .. } => 1,
-					_ => 0,
-				})
-				.sum(),
+				}
+				bag_keys.len() + anonymous_labels.len()
+			}
 			MenuNode::GridCatalog { choices, .. } => choices.len(),
 			MenuNode::OrderedEquipment { rows } => rows.iter().map(|row| row.choices.len()).sum(),
 			MenuNode::LabeledValue { .. } => 1,

@@ -9,12 +9,12 @@
 //! reuse pose-capture catalog keys from `tanz-user`.
 
 use character_items::{
-	Inventory, InventoryItem, InventorySlot, SELF_LUBIKAN_CAPTURE_LABEL, WORN_CLOTHING_LIMIT,
-	self_lubikan_catalog_key,
+	self_lubikan_catalog_key, Inventory, InventoryItem, InventorySlot, SELF_LUBIKAN_CAPTURE_LABEL,
+	WORN_CLOTHING_LIMIT,
 };
 use character_ui_menu::{
-	AssetOption, EquipmentChoice, GridCatalogChoice, MenuNode, OrderedEquipmentRow, PreviewColor,
-	ThumbnailCamera,
+	AssetOption, EquipmentChoice, GridCatalogChoice, InventorySection, MenuNode,
+	OrderedEquipmentRow, PreviewColor, ThumbnailCamera,
 };
 use lubikans::{LubikanAccountId, LubikanOrder};
 use std::time::Duration;
@@ -165,6 +165,18 @@ impl InventoryLayout {
 	pub fn section_labels(&self) -> Vec<&'static str> {
 		section_labels(&self.node)
 	}
+
+	/// Return one page body by its shared typed section key.
+	pub fn section_node(&self, section: InventorySection) -> Option<&MenuNode<MenuEvent>> {
+		let MenuNode::Section { children, .. } = &self.node else {
+			return None;
+		};
+		children.iter().find(|child| {
+			matches!(child,
+				MenuNode::Section { label, .. } if *label == section.label()
+			)
+		})
+	}
 }
 
 fn required_captures_for(inventory: &Inventory) -> Vec<InventoryIconNeed> {
@@ -201,7 +213,7 @@ fn inventory_node(
 				equipped_row("Clothing", WORN_CLOTHING_LIMIT, inventory, mode, |index, item| {
 					clothing_tile(inventory, index, item, mode)
 				}),
-				clothing_catalog(inventory, mode, false),
+				clothing_catalog(inventory, mode),
 			),
 			typed_section(
 				TOOLS_LABEL,
@@ -212,7 +224,7 @@ fn inventory_node(
 					mode,
 					|index, item| tools_tile(inventory, index, item, mode),
 				),
-				tools_catalog(inventory, mode, false),
+				tools_catalog(inventory, mode),
 			),
 			typed_section(
 				InventorySlot::Skills.label(),
@@ -223,7 +235,7 @@ fn inventory_node(
 					mode,
 					|index, item| skills_tile(inventory, index, item, mode),
 				),
-				skills_catalog(inventory, mode, false),
+				skills_catalog(inventory, mode),
 			),
 			typed_section(
 				InventorySlot::Tanzes.label(),
@@ -234,7 +246,7 @@ fn inventory_node(
 					mode,
 					|index, item| tanz_tile(inventory, index, item, mode),
 				),
-				tanz_catalog(inventory, mode, false),
+				tanz_catalog(inventory, mode),
 			),
 			lubikan_section(inventory, lubikans, mode),
 		]),
@@ -399,63 +411,51 @@ where
 	OrderedEquipmentRow { label, capacity, choices }
 }
 
-fn clothing_catalog(
-	inventory: &Inventory,
-	mode: InventoryLayoutMode,
-	equipped: bool,
-) -> MenuNode<MenuEvent> {
+fn clothing_catalog(inventory: &Inventory, mode: InventoryLayoutMode) -> MenuNode<MenuEvent> {
 	MenuNode::grid_catalog(
 		"Clothing",
 		WORN_CLOTHING_LIMIT,
-		inventory.items.iter().enumerate().filter_map(|(index, item)| {
-			let tile = clothing_tile(inventory, index, item, mode)?;
-			(tile.selected == equipped).then_some(tile)
-		}),
+		inventory
+			.items
+			.iter()
+			.enumerate()
+			.filter_map(|(index, item)| clothing_tile(inventory, index, item, mode)),
 	)
 }
 
-fn tools_catalog(
-	inventory: &Inventory,
-	mode: InventoryLayoutMode,
-	equipped: bool,
-) -> MenuNode<MenuEvent> {
+fn tools_catalog(inventory: &Inventory, mode: InventoryLayoutMode) -> MenuNode<MenuEvent> {
 	MenuNode::grid_catalog(
 		TOOLS_LABEL,
 		InventorySlot::Weapons.capacity(),
-		inventory.items.iter().enumerate().filter_map(|(index, item)| {
-			let tile = tools_tile(inventory, index, item, mode)?;
-			(tile.selected == equipped).then_some(tile)
-		}),
+		inventory
+			.items
+			.iter()
+			.enumerate()
+			.filter_map(|(index, item)| tools_tile(inventory, index, item, mode)),
 	)
 }
 
-fn skills_catalog(
-	inventory: &Inventory,
-	mode: InventoryLayoutMode,
-	equipped: bool,
-) -> MenuNode<MenuEvent> {
+fn skills_catalog(inventory: &Inventory, mode: InventoryLayoutMode) -> MenuNode<MenuEvent> {
 	MenuNode::grid_catalog(
 		InventorySlot::Skills.label(),
 		InventorySlot::Skills.capacity(),
-		inventory.items.iter().enumerate().filter_map(|(index, item)| {
-			let tile = skills_tile(inventory, index, item, mode)?;
-			(tile.selected == equipped).then_some(tile)
-		}),
+		inventory
+			.items
+			.iter()
+			.enumerate()
+			.filter_map(|(index, item)| skills_tile(inventory, index, item, mode)),
 	)
 }
 
-fn tanz_catalog(
-	inventory: &Inventory,
-	mode: InventoryLayoutMode,
-	equipped: bool,
-) -> MenuNode<MenuEvent> {
+fn tanz_catalog(inventory: &Inventory, mode: InventoryLayoutMode) -> MenuNode<MenuEvent> {
 	MenuNode::grid_catalog(
 		InventorySlot::Tanzes.label(),
 		InventorySlot::Tanzes.capacity(),
-		inventory.items.iter().enumerate().filter_map(|(index, item)| {
-			let tile = tanz_tile(inventory, index, item, mode)?;
-			(tile.selected == equipped).then_some(tile)
-		}),
+		inventory
+			.items
+			.iter()
+			.enumerate()
+			.filter_map(|(index, item)| tanz_tile(inventory, index, item, mode)),
 	)
 }
 
@@ -525,8 +525,8 @@ mod tests {
 	use super::{InventoryLayout, InventoryLayoutMode, STARTER_KIT_LABEL};
 	use crate::MenuEvent;
 	use character_items::{
-		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor, ItemRng,
-		STARTER_CLOTHING_COUNT, SkillMapKind, SkillMapSpec, self_lubikan_catalog_key,
+		self_lubikan_catalog_key, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory,
+		InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec, STARTER_CLOTHING_COUNT,
 	};
 	use character_ui_menu::MenuNode;
 
@@ -552,6 +552,8 @@ mod tests {
 			InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Red),
 			InventoryItem::firearm(FirearmMesh::Bullpup),
 			InventoryItem::standard_grenade(),
+			InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)),
+			InventoryItem::tanz(character_items::TanzId::HealingSalute),
 		]
 	}
 
@@ -569,6 +571,21 @@ mod tests {
 		assert_eq!(menu.title, "Inventory");
 		assert_eq!(starter.mode, InventoryLayoutMode::ReadOnly);
 		assert_eq!(menu.mode, InventoryLayoutMode::Interactive);
+	}
+
+	#[test]
+	fn shared_section_keys_resolve_the_inventory_pages_in_order() {
+		let layout =
+			InventoryLayout::character_menu(&Inventory::with_starter_outfit(sample_items()));
+		assert_eq!(
+			character_ui_menu::InventorySection::ALL.map(|section| {
+				layout.section_node(section).and_then(|node| match node {
+					MenuNode::Section { label, .. } => Some(*label),
+					_ => None,
+				})
+			}),
+			[Some("Clothing"), Some("Tools"), Some("Skill Maps"), Some("Tanzes"), Some("Lubikan"),]
+		);
 	}
 
 	#[test]
@@ -637,13 +654,7 @@ mod tests {
 			};
 			for inner in children {
 				match inner {
-					MenuNode::OrderedEquipment { rows } => {
-						count += rows
-							.iter()
-							.filter(|row| row.label == "Clothing")
-							.map(|row| row.choices.len())
-							.sum::<usize>();
-					}
+					MenuNode::OrderedEquipment { .. } => {}
 					MenuNode::GridCatalog { choices, .. } => count += choices.len(),
 					_ => {}
 				}
@@ -671,7 +682,7 @@ mod tests {
 	}
 
 	#[test]
-	fn each_equippable_section_stacks_equipped_over_unequipped() {
+	fn each_equippable_section_keeps_equipped_items_in_its_catalog() {
 		let layout =
 			InventoryLayout::character_menu(&Inventory::with_starter_outfit(sample_items()));
 		for label in ["Clothing", "Tools", "Skill Maps", "Tanzes"] {
@@ -685,6 +696,17 @@ mod tests {
 			};
 			assert_eq!(rows.len(), 1);
 			assert_eq!(rows[0].label, label);
+			let MenuNode::GridCatalog { choices, .. } = &body[1] else {
+				unreachable!();
+			};
+			for equipped in &rows[0].choices {
+				assert!(
+					choices.iter().any(|choice| {
+						choice.item_key == Some(equipped.item_key) && choice.selected
+					}),
+					"{label} catalog must retain each equipped item as checked"
+				);
+			}
 		}
 		let lubikan = section_body(&layout, "Lubikan");
 		assert!(
@@ -799,12 +821,13 @@ mod tests {
 			panic!("Tanzes unequipped must be a catalog");
 		};
 		assert_eq!(*max_selected, 4);
-		assert_eq!(choices.len(), 1);
-		assert_eq!(choices[0].label, "Left Strafe");
-		assert!(!choices[0].selected);
-		assert_eq!(choices[0].rank, None);
-		assert_eq!(choices[0].item_key, Some(1));
-		assert_eq!(choices[0].event, Some(MenuEvent::EquipInventory(1)));
+		assert_eq!(choices.len(), 2);
+		let owned_salute = choices.iter().find(|choice| choice.label == "Healing Salute");
+		assert!(owned_salute.is_some_and(|choice| choice.selected && choice.rank == Some(1)));
+		let owned_left = choices.iter().find(|choice| choice.label == "Left Strafe");
+		assert!(owned_left.is_some_and(|choice| !choice.selected && choice.rank.is_none()));
+		assert_eq!(owned_left.and_then(|choice| choice.item_key), Some(1));
+		assert_eq!(owned_left.and_then(|choice| choice.event), Some(MenuEvent::EquipInventory(1)));
 		assert!(layout.captures.iter().any(|need| {
 			need.silhouette && need.key == TanzPose(TanzId::LeftStrafe).icon_catalog_key()
 		}));
@@ -835,7 +858,7 @@ mod tests {
 
 	#[test]
 	fn layout_stays_loading_until_every_capture_reports() {
-		use super::{INVENTORY_CAPTURE_TIMEOUT, InventoryPaint, inventory_paint_state};
+		use super::{inventory_paint_state, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT};
 		use std::time::Duration;
 
 		let layout = InventoryLayout::starter_kit(sample_items());
@@ -866,7 +889,7 @@ mod tests {
 
 	#[test]
 	fn timeout_reveals_without_every_report() {
-		use super::{INVENTORY_CAPTURE_TIMEOUT, InventoryPaint, inventory_paint_state};
+		use super::{inventory_paint_state, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT};
 
 		let layout = InventoryLayout::starter_kit(sample_items());
 		assert_eq!(

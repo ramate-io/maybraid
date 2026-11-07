@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::f32::consts::{PI, TAU};
 
 use bevy::ecs::system::SystemParam;
+use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 use bevy::window::PrimaryWindow;
@@ -14,22 +15,24 @@ use character_items::{ClothingHost, ClothingMesh, FirearmSpec, ItemColor};
 use character_persist::SaveRoot;
 use character_ui_menu::{CameraFocus, FocusRig};
 use characters::{
-	ActiveRigPose, AnimRef, AnimRefRoot, ApplyTerrainPitch, BoneMap, CharacterComponents,
-	CharacterHostSystems, CharacterMembers, CharacterRig, CharacterRigRole, ClothingLayer,
-	ComponentsOnly, Layers, PartNode, ResolvedPoseApplied, RigBindScales, SocketRefApplied,
-	SocketRefRoot, add_character_components_host, character_bounds,
+	add_character_components_host, character_bounds, ActiveRigPose, AnimRef, AnimRefRoot,
+	ApplyTerrainPitch, BoneMap, CharacterComponents, CharacterHostSystems, CharacterMembers,
+	CharacterRig, CharacterRigRole, ClothingLayer, ComponentsOnly, Layers, PartNode,
+	ResolvedPoseApplied, RigBindScales, SocketRefApplied, SocketRefRoot,
 };
 use characters_playground::CameraController;
 use firearm_user::GeneratedFirearm;
 use firearms_components::{
-	FirearmComponentsPlugin, FirearmRoot, add_firearm_components_host, firearm_bounds,
-	firearm_preview_camera, spawn_firearm_components,
+	add_firearm_components_host, firearm_bounds, firearm_preview_camera, spawn_firearm_components,
+	FirearmComponentsPlugin, FirearmRoot,
 };
-use grenades::{GrenadeMaterial, GrenadeMaterialPlugin, grenade_material, grenade_mesh};
+use grenades::{grenade_material, grenade_mesh, GrenadeMaterial, GrenadeMaterialPlugin};
 use lod::lod_ref::LodRef;
 use lod::scene::LodScene;
 use lod::scene::LodSceneLevel;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
+use maybraid_character_ui_menu_renderer::InventoryCharacterPreviewSlot;
+use menu_components::{MenuModalId, MenuModalStack, TextMenuInputLock};
 use menu_components::{CHARACTER_PANEL_WIDTH, DESCRIPTION_PANE_LEFT_PERCENT};
 use menu_screens::{
 	GalleryScreen, HomeScreen, SpinRevealCurrent, SpinRevealScreen, SpinRevealSystems,
@@ -75,6 +78,11 @@ struct PendingCameraFocus {
 	world_space: bool,
 	orbit: PreviewOrbit,
 	waiting: Option<FocusWait>,
+}
+
+#[derive(Resource, Default)]
+struct PreviewMouseOrbitState {
+	dragging: bool,
 }
 
 impl PendingCameraFocus {
@@ -295,6 +303,7 @@ impl Plugin for CharacterPreviewPlugin {
 		add_firearm_components_host::<GeneratedFirearm>(app);
 		app.init_resource::<PreviewSyncState>()
 			.init_resource::<PendingCameraFocus>()
+			.init_resource::<PreviewMouseOrbitState>()
 			.insert_resource(GlobalAmbientLight {
 				color: Color::WHITE,
 				brightness: 200.0,
@@ -314,6 +323,7 @@ impl Plugin for CharacterPreviewPlugin {
 					steer_preview_orbit
 						.after(queue_preview_camera_focus)
 						.after(maybraid_controllers_core::PadDeliverySystems),
+					steer_preview_mouse_orbit,
 				),
 			)
 			.add_systems(PostUpdate, apply_preview_camera_focus.after(TransformSystems::Propagate));
@@ -654,6 +664,48 @@ fn steer_preview_orbit(
 	}
 }
 
+fn steer_preview_mouse_orbit(
+	buttons: Res<ButtonInput<MouseButton>>,
+	motion: Res<AccumulatedMouseMotion>,
+	windows: Query<&Window, With<PrimaryWindow>>,
+	slots: Query<(&ComputedNode, &UiGlobalTransform), With<InventoryCharacterPreviewSlot>>,
+	input_lock: Res<TextMenuInputLock>,
+	modal_stack: Res<MenuModalStack>,
+	mut drag: ResMut<PreviewMouseOrbitState>,
+	mut pending: ResMut<PendingCameraFocus>,
+) {
+	let blocked = input_lock.0
+		|| modal_stack.contains(MenuModalId::SHORT_TEXT)
+		|| modal_stack.contains(MenuModalId::ITEM_DROP)
+		|| modal_stack.contains(MenuModalId::CHARACTER_LEAVE)
+		|| modal_stack.contains(MenuModalId::CHARACTER_DELETE);
+	if blocked || !buttons.pressed(MouseButton::Left) {
+		drag.dragging = false;
+		return;
+	}
+	let (Ok(window), Ok((computed, transform))) = (windows.single(), slots.single()) else {
+		drag.dragging = false;
+		return;
+	};
+	let Some(cursor) = window.cursor_position() else { return };
+	let cursor = cursor * window.scale_factor();
+	let center = transform.affine().translation;
+	let half = computed.size() * 0.5;
+	let inside = !(cursor.x < center.x - half.x
+		|| cursor.x > center.x + half.x
+		|| cursor.y < center.y - half.y
+		|| cursor.y > center.y + half.y);
+	if buttons.just_pressed(MouseButton::Left) {
+		drag.dragging = inside;
+	}
+	if !drag.dragging || motion.delta == Vec2::ZERO {
+		return;
+	}
+	let pixels_to_radians = 0.004;
+	pending.orbit.yaw = (pending.orbit.yaw - motion.delta.x * pixels_to_radians).rem_euclid(TAU);
+	pending.orbit.pitch -= motion.delta.y * pixels_to_radians;
+}
+
 fn apply_preview_camera_focus(
 	return_to: Option<Res<CharacterEditorReturn>>,
 	mut pending: ResMut<PendingCameraFocus>,
@@ -665,6 +717,10 @@ fn apply_preview_camera_focus(
 	home: Query<(), With<HomeScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
 	character: Query<(), With<CharacterScreen>>,
+	inventory_slots: Query<
+		(&ComputedNode, &UiGlobalTransform),
+		With<InventoryCharacterPreviewSlot>,
+	>,
 	weapons: Query<(), With<WeaponGalleryScreen>>,
 	firearm_previews: Query<(), (With<CharacterPreviewRoot>, With<FirearmRoot>)>,
 	scene: FocusRigScene,
@@ -681,11 +737,29 @@ fn apply_preview_camera_focus(
 	else {
 		return;
 	};
+	let inventory_frame = if character.is_empty() {
+		None
+	} else {
+		inventory_slots.single().ok().and_then(|(computed, transform)| {
+			windows
+				.single()
+				.ok()
+				.and_then(|window| inventory_preview_frame(computed, transform, window))
+		})
+	};
+	// Keep the camera on the full window: Bevy uses its target size to lay out UI.
+	// We frame the character into the reserved rectangle with projection and offset.
 	camera.viewport = None;
 	if matches!(&*projection, Projection::Perspective(p) if p.fov != PREVIEW_FOV) {
 		if let Projection::Perspective(perspective) = projection.as_mut() {
-			perspective.fov = PREVIEW_FOV;
+			perspective.fov = inventory_frame
+				.map(|frame| frame.vertical_fov(PREVIEW_FOV))
+				.unwrap_or(PREVIEW_FOV);
 		}
+	} else if let (Some(frame), Projection::Perspective(perspective)) =
+		(inventory_frame, projection.as_mut())
+	{
+		perspective.fov = frame.vertical_fov(PREVIEW_FOV);
 	}
 	let frame = if !firearm_previews.is_empty() {
 		let (camera, look_at) = firearm_preview_camera(PREVIEW_FOV);
@@ -720,6 +794,13 @@ fn apply_preview_camera_focus(
 			.map(|window| window.width() / window.height().max(1.0))
 			.unwrap_or(16.0 / 9.0);
 		offset_camera_into_display_pane(&mut transform, &projection, look_at, aspect);
+	} else if let Some(frame) = inventory_frame {
+		let aspect = windows
+			.single()
+			.ok()
+			.map(|window| window.width() / window.height().max(1.0))
+			.unwrap_or(16.0 / 9.0);
+		offset_camera_for_inventory_rect(&mut transform, &projection, look_at, aspect, frame);
 	} else if !character.is_empty() {
 		let (aspect, width) = windows.single().ok().map_or((16.0 / 9.0, 1920.0), |window| {
 			(window.width() / window.height().max(1.0), window.width().max(1.0))
@@ -727,6 +808,55 @@ fn apply_preview_camera_focus(
 		offset_camera_for_character_panel(&mut transform, &projection, look_at, aspect, width);
 	}
 	sync_controller_from_transform(&mut controller, &transform);
+}
+
+#[derive(Clone, Copy, Debug)]
+struct InventoryPreviewFrame {
+	center_ndc: Vec2,
+	vertical_fraction: f32,
+}
+
+impl InventoryPreviewFrame {
+	fn vertical_fov(self, base_fov: f32) -> f32 {
+		let half = (base_fov * 0.5).tan() / self.vertical_fraction.max(0.01);
+		(2.0 * half.atan()).clamp(0.05, PI - 0.05)
+	}
+}
+
+fn inventory_preview_frame(
+	computed: &ComputedNode,
+	transform: &UiGlobalTransform,
+	window: &Window,
+) -> Option<InventoryPreviewFrame> {
+	let center = transform.affine().translation;
+	let size = computed.size();
+	let window_size = Vec2::new(window.physical_width() as f32, window.physical_height() as f32);
+	if size.x <= 1.0 || size.y <= 1.0 || window_size.x <= 1.0 || window_size.y <= 1.0 {
+		return None;
+	}
+	let center_ndc =
+		Vec2::new(center.x / window_size.x * 2.0 - 1.0, 1.0 - center.y / window_size.y * 2.0);
+	Some(InventoryPreviewFrame {
+		center_ndc,
+		vertical_fraction: (size.y / window_size.y).clamp(0.01, 1.0),
+	})
+}
+
+fn offset_camera_for_inventory_rect(
+	transform: &mut Transform,
+	projection: &Projection,
+	look_at: Vec3,
+	aspect: f32,
+	frame: InventoryPreviewFrame,
+) {
+	let Projection::Perspective(perspective) = projection else {
+		return;
+	};
+	let depth = transform.translation.distance(look_at).max(0.1);
+	let half_height = (perspective.fov * 0.5).tan() * depth;
+	let half_width = half_height * aspect.max(0.1);
+	transform.translation -= *transform.right() * frame.center_ndc.x * half_width;
+	transform.translation -= *transform.up() * frame.center_ndc.y * half_height;
 }
 
 fn sync_controller_from_transform(controller: &mut CameraController, transform: &Transform) {
@@ -785,12 +915,28 @@ mod tests {
 	use super::*;
 	use std::f32::consts::FRAC_PI_4;
 
-	use character_creation_menus::BODY_FOCUS;
 	use character_creation_menus::focus::{
-		EYE_FOCUS, HEAD_ROOT_FOCUS, spin_reveal_firearm_focus, spin_reveal_grenade_focus,
+		spin_reveal_firearm_focus, spin_reveal_grenade_focus, EYE_FOCUS, HEAD_ROOT_FOCUS,
 	};
+	use character_creation_menus::BODY_FOCUS;
 
 	const EPS: f32 = 1e-4;
+
+	#[test]
+	fn inventory_preview_frame_uses_physical_ui_geometry_at_high_dpi() -> anyhow::Result<()> {
+		let mut window = Window::default();
+		window.resolution.set_physical_resolution(2000, 1000);
+		window.resolution.set_scale_factor(2.0);
+		let computed =
+			ComputedNode { size: Vec2::new(500.0, 250.0), inverse_scale_factor: 0.5, ..default() };
+		let transform = UiGlobalTransform::from_xy(1000.0, 500.0);
+		let Some(frame) = inventory_preview_frame(&computed, &transform, &window) else {
+			return Err(anyhow::anyhow!("expected a non-empty preview frame"));
+		};
+		assert!(frame.center_ndc.abs_diff_eq(Vec2::ZERO, EPS));
+		assert!((frame.vertical_fraction - 0.25).abs() < EPS);
+		Ok(())
+	}
 
 	#[test]
 	fn primary_preview_orbit_ignores_other_gamepads_and_uses_its_rich_frame() -> anyhow::Result<()>
@@ -939,8 +1085,8 @@ mod tests {
 	}
 
 	#[test]
-	fn head_focus_waits_for_the_socket_and_ignores_the_clip()
-	-> Result<(), Box<dyn std::error::Error>> {
+	fn head_focus_waits_for_the_socket_and_ignores_the_clip(
+	) -> Result<(), Box<dyn std::error::Error>> {
 		let mut fixture = Fixture::new();
 		fixture.world.entity_mut(fixture.body).insert(ResolvedPoseApplied);
 		assert_eq!(fixture.resolve()?, Err(FocusWait::Attach(fixture.head)));
