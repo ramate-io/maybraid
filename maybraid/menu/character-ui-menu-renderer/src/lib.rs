@@ -20,7 +20,7 @@ pub mod widgets;
 pub use event::{CharacterMenuEvent, OverlayClose, OverlayOpen};
 pub use inventory::{
 	fill_inventory_screen, InventoryAIOPSlot, InventoryCarouselCard, InventoryCharacterPreviewSlot,
-	InventoryScreenArea, InventoryScreenSlots, InventoryTile,
+	InventoryScreenArea, InventoryScreenReadOnly, InventoryScreenSlots, InventoryTile,
 };
 pub use justify::MenuJustify;
 pub use overlay::{
@@ -33,5 +33,6 @@ pub use sink::{MaybraidMenuSink, MenuSink, MenuThumbnailContext, NoThumbnails, R
 pub use widgets::{
 	CloseOverlaySelect, EquippedOrderControls, InventoryControl, InventoryFocusHint,
 	InventoryInteraction, InventoryItemKey, InventoryMenuSession, InventoryPickerSource,
-	InventorySectionMemory, MenuButton, OpenSelectKey, OverlaySelectRoot, OverlaySelectViewport,
+	InventorySectionMemory, InventorySlotEvent, MenuButton, OpenSelectKey, OverlaySelectRoot,
+	OverlaySelectViewport,
 };

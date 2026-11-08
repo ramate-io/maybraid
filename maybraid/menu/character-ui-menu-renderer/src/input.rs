@@ -12,8 +12,8 @@ use menu_components::{MenuNav, MenuNavImpulse, MenuNavPad};
 use crate::event::{OverlayClose, OverlayOpen};
 use crate::widgets::{
 	CloseOverlaySelect, EquippedOrderControls, InventoryControl, InventoryFocusHint,
-	InventoryInteraction, InventoryItemKey, InventoryMenuSession, MenuButton, OpenSelectKey,
-	OverlaySelectRoot, OverlaySelectViewport,
+	InventoryInteraction, InventoryItemKey, InventoryMenuSession, InventorySlotEvent, MenuButton,
+	OpenSelectKey, OverlaySelectRoot, OverlaySelectViewport,
 };
 
 fn inventory_session_ancestor(
@@ -97,30 +97,21 @@ fn apply_inventory_navigation(
 				}
 			};
 		}
-		menu_components::InventoryNavigation::ToggleRegion => {
-			session.region = match session.region {
-				character_ui_menu::InventoryRegion::Drawer => {
-					character_ui_menu::InventoryRegion::Equipped
-				}
-				character_ui_menu::InventoryRegion::Equipped => {
-					character_ui_menu::InventoryRegion::Drawer
-				}
-			};
-		}
-		menu_components::InventoryNavigation::FocusDrawer => {
-			session.region = character_ui_menu::InventoryRegion::Drawer;
-		}
+		// AIOP activation is the sole entry to the selection drawer.
+		menu_components::InventoryNavigation::ToggleRegion
+		| menu_components::InventoryNavigation::FocusDrawer => {}
 	}
 	session.focus.0 = session.active_memory().focused_item;
 }
 
 /// Clickable shell controls share the same state transitions as routed pad input.
-pub fn emit_inventory_control_on_click(
+pub fn emit_inventory_control_on_click<E: Copy + Send + Sync + 'static>(
 	click: On<PointerClick>,
 	controls: Query<&InventoryControl>,
 	items: Query<&HudMenuItem>,
 	parents: Query<&ChildOf>,
 	mut sessions: Query<&mut InventoryMenuSession>,
+	slot_events: Query<&InventorySlotEvent<E>>,
 	stack: Res<menu_components::MenuModalStack>,
 ) {
 	if inventory_modal_blocks_shell(&stack) {
@@ -135,6 +126,9 @@ pub fn emit_inventory_control_on_click(
 	};
 	if let Ok(mut session) = sessions.get_mut(session_entity) {
 		if control.0 == character_ui_menu::InventoryControlAction::FocusDrawer {
+			if !slot_events.contains(session_entity) {
+				return;
+			}
 			let ordinal = items.get(click.entity).ok().map(|item| item.index).or_else(|| {
 				std::iter::once(click.entity)
 					.chain(parents.iter_ancestors(click.entity))
@@ -171,13 +165,14 @@ fn control_navigation(
 	}
 }
 
-pub fn emit_inventory_control_on_nav(
+pub fn emit_inventory_control_on_nav<E: Copy + Send + Sync + 'static>(
 	mut impulse: On<MenuNavImpulse>,
 	areas: Query<&crate::inventory::InventoryScreenArea>,
 	menus: Query<&HudMenu>,
 	items: Query<(&HudMenuItem, &InventoryControl)>,
 	parents: Query<&ChildOf>,
 	mut sessions: Query<&mut InventoryMenuSession>,
+	slot_events: Query<&InventorySlotEvent<E>>,
 	stack: Res<menu_components::MenuModalStack>,
 ) {
 	if impulse.event().nav != MenuNav::Select || inventory_modal_blocks_shell(&stack) {
@@ -199,6 +194,9 @@ pub fn emit_inventory_control_on_nav(
 	let Some(session_entity) = session_entity else { return };
 	if let Ok(mut session) = sessions.get_mut(session_entity) {
 		if control.0 == character_ui_menu::InventoryControlAction::FocusDrawer {
+			if !slot_events.contains(session_entity) {
+				return;
+			}
 			begin_inventory_picker(&mut session, menu.selected, None);
 		} else {
 			apply_inventory_navigation(&mut session, control_navigation(control.0));
@@ -207,7 +205,7 @@ pub fn emit_inventory_control_on_nav(
 	impulse.propagate(false);
 }
 
-pub fn emit_inventory_control_on_enter(
+pub fn emit_inventory_control_on_enter<E: Copy + Send + Sync + 'static>(
 	keyboard: Res<ButtonInput<KeyCode>>,
 	keyboard_nav: Res<KeyboardMenuNav>,
 	lock: Res<TextMenuInputLock>,
@@ -220,6 +218,7 @@ pub fn emit_inventory_control_on_enter(
 	>,
 	items: Query<(&HudMenuItem, &InventoryControl)>,
 	mut sessions: Query<&mut InventoryMenuSession>,
+	slot_events: Query<&InventorySlotEvent<E>>,
 ) {
 	if !keyboard_nav.is_enabled()
 		|| lock.0
@@ -244,6 +243,9 @@ pub fn emit_inventory_control_on_enter(
 		if let Some(session_entity) = session_entity {
 			if let Ok(mut session) = sessions.get_mut(session_entity) {
 				if control.0 == character_ui_menu::InventoryControlAction::FocusDrawer {
+					if !slot_events.contains(session_entity) {
+						return;
+					}
 					begin_inventory_picker(&mut session, menu.selected, None);
 				} else {
 					apply_inventory_navigation(&mut session, control_navigation(control.0));
@@ -366,6 +368,7 @@ pub fn emit_inventory_keyboard_navigation(
 pub fn navigate_inventory_menu(
 	mut impulse: On<MenuNavImpulse>,
 	areas: Query<&crate::inventory::InventoryScreenArea>,
+	read_only: Query<(), With<crate::inventory::InventoryScreenReadOnly>>,
 	parents: Query<&ChildOf>,
 	mut menus: Query<&mut HudMenu>,
 	items: Query<(
@@ -387,7 +390,13 @@ pub fn navigate_inventory_menu(
 		.find(|entity| sessions.contains(*entity));
 	let Some(session_entity) = session_entity else { return };
 	let Ok(mut session) = sessions.get_mut(session_entity) else { return };
-	if inventory_modal_blocks_shell(&stack) || session.interaction.reordering().is_some() {
+	if inventory_modal_blocks_shell(&stack)
+		|| session.interaction.reordering().is_some()
+		|| session.region != area.0
+		|| (area.0 == character_ui_menu::InventoryRegion::Drawer
+			&& session.picker_source.is_none()
+			&& !read_only.contains(session_entity))
+	{
 		return;
 	}
 	let nav = impulse.event().nav;
@@ -486,9 +495,7 @@ pub fn navigate_inventory_menu(
 	let drawer_mode = session.drawer;
 	let memory = session.active_memory_mut();
 	memory.focused_ordinal = next;
-	if key.is_some() {
-		memory.focused_item = key;
-	}
+	memory.focused_item = key;
 	if area.0 == character_ui_menu::InventoryRegion::Drawer
 		&& drawer_mode == character_ui_menu::InventoryDrawerMode::Gallery
 	{
@@ -505,9 +512,7 @@ pub fn navigate_inventory_menu(
 			.entity(session_entity)
 			.insert(InventoryKeyboardScrollIntent(memory.gallery_scroll));
 	}
-	if let Some(key) = key {
-		session.focus.0 = Some(key);
-	}
+	session.focus.0 = key;
 }
 
 /// Keep section memory aligned with pointer focus and host-driven menu selection.
@@ -700,7 +705,8 @@ pub(crate) fn resolve_pending_inventory_choice(
 		let Some(candidate) = source.attempted_item else { continue };
 		let accepted = items.iter().any(|(item, tile, key)| {
 			tile.section == session.section
-				&& tile.region == character_ui_menu::InventoryRegion::Drawer
+				&& tile.region == character_ui_menu::InventoryRegion::Equipped
+				&& tile.ordinal == source.ordinal
 				&& key.index == candidate
 				&& key.equipped
 				&& std::iter::once(item.menu)
@@ -709,6 +715,13 @@ pub(crate) fn resolve_pending_inventory_choice(
 		});
 		if accepted {
 			finish_inventory_picker(&mut session);
+			let item = InventoryItemKey {
+				index: candidate,
+				equipped: true,
+				region: character_ui_menu::InventoryRegion::Equipped,
+			};
+			session.active_memory_mut().focused_item = Some(item);
+			session.focus.0 = Some(item);
 		}
 	}
 }
@@ -718,6 +731,7 @@ pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
 	lock: Res<TextMenuInputLock>,
 	buttons: Query<&MenuButton<E>>,
 	keys: Query<&InventoryItemKey>,
+	slot_events: Query<&InventorySlotEvent<E>>,
 	items: Query<&HudMenuItem>,
 	mut menus: Query<&mut HudMenu>,
 	parents: Query<&ChildOf>,
@@ -735,26 +749,52 @@ pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
 		return;
 	};
 	if let Some(menu_entity) = menu {
-		if let Ok(mut menu) = menus.get_mut(menu_entity) {
-			if let Ok(item) = items.get(click.entity) {
-				menu.selected = item.index;
-			}
-			drop(menu);
+		if menus.contains(menu_entity) {
 			let session_entity = std::iter::once(menu_entity)
 				.chain(parents.iter_ancestors(menu_entity))
 				.find(|entity| sessions.contains(*entity));
 			if let Some(session_entity) = session_entity {
 				if let Ok(mut session) = sessions.get_mut(session_entity) {
-					if activate_inventory_item(
-						click.entity,
-						menu_entity,
-						&keys,
-						true,
-						items.get(click.entity).map_or(0, |item| item.index),
-						&mut session,
-						&mut commands,
-					) {
+					if session_entity != menu_entity
+						&& keys.get(click.entity).is_ok_and(|key| {
+							(key.region == character_ui_menu::InventoryRegion::Drawer
+								&& session.picker_source.is_none())
+								|| (key.region == character_ui_menu::InventoryRegion::Equipped
+									&& session.picker_source.is_some())
+						}) {
 						return;
+					}
+					if let (Ok(mut menu), Ok(item)) =
+						(menus.get_mut(menu_entity), items.get(click.entity))
+					{
+						menu.selected = item.index;
+					}
+					if session_entity != menu_entity
+						&& activate_inventory_item(
+							click.entity,
+							menu_entity,
+							&keys,
+							Some(button.0),
+							slot_events.get(session_entity).ok(),
+							None,
+							items.get(click.entity).map_or(0, |item| item.index),
+							&mut session,
+							&mut commands,
+						) {
+						return;
+					}
+					if session_entity == menu_entity {
+						let InventoryMenuSession { interaction, focus, .. } = &mut *session;
+						if intercept_equipped_activate(
+							click.entity,
+							Some(menu_entity),
+							&keys,
+							interaction,
+							focus,
+							&mut commands,
+						) {
+							return;
+						}
 					}
 					commands.trigger(MenuActivate { entity: click.entity, choice: button.0 });
 					return;
@@ -778,6 +818,11 @@ pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
 			}
 		}
 	}
+	if let Some(menu_entity) = menu {
+		if let (Ok(mut menu), Ok(item)) = (menus.get_mut(menu_entity), items.get(click.entity)) {
+			menu.selected = item.index;
+		}
+	}
 	if intercept_equipped_activate(
 		click.entity,
 		menu,
@@ -791,62 +836,54 @@ pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
 	commands.trigger(MenuActivate { entity: click.entity, choice: button.0 });
 }
 
-fn activate_inventory_item(
+fn activate_inventory_item<E: Copy + Send + Sync + 'static>(
 	entity: Entity,
 	menu: Entity,
 	keys: &Query<&InventoryItemKey>,
-	can_activate: bool,
+	choice: Option<E>,
+	adapter: Option<&InventorySlotEvent<E>>,
+	impulse: Option<&MenuNavImpulse>,
 	ordinal: usize,
 	session: &mut InventoryMenuSession,
 	commands: &mut Commands,
 ) -> bool {
-	let Ok(key) = keys.get(entity) else {
-		if session.interaction.reordering().is_some() {
-			session.interaction = InventoryInteraction::Browse;
-			commands.entity(menu).try_remove::<HudMenuNavLocked>();
-		}
-		return false;
-	};
-	if session.picker_source.is_some() && key.region == character_ui_menu::InventoryRegion::Drawer {
-		session.active_memory_mut().focused_item = Some(*key);
-		session.focus.0 = Some(*key);
-		if let Some(source) = &mut session.picker_source {
-			source.attempted_item = None;
-		}
-		if key.equipped {
-			finish_inventory_picker(session);
+	let Ok(key) = keys.get(entity) else { return false };
+	if key.region == character_ui_menu::InventoryRegion::Drawer {
+		let Some(source) = session.picker_source else { return true };
+		if session.region != character_ui_menu::InventoryRegion::Drawer
+			|| source.attempted_item.is_some()
+			|| (source.item.is_none() && key.equipped)
+		{
 			return true;
 		}
-		if can_activate {
-			if let Some(source) = &mut session.picker_source {
-				source.attempted_item = Some(key.index);
-			}
+		let Some(event) = choice.and_then(|choice| {
+			adapter.and_then(|adapter| (adapter.0)(choice, session.section, source.ordinal))
+		}) else {
+			return true;
+		};
+		session.active_memory_mut().focused_item = Some(*key);
+		session.active_memory_mut().focused_ordinal = ordinal;
+		session.focus.0 = Some(*key);
+		if let Some(source) = &mut session.picker_source {
+			source.attempted_item = Some(key.index);
 		}
-		return false;
-	}
-	if key.equipped && key.region == character_ui_menu::InventoryRegion::Drawer {
-		let target =
-			InventoryItemKey { region: character_ui_menu::InventoryRegion::Equipped, ..*key };
-		session.region = character_ui_menu::InventoryRegion::Equipped;
-		session.active_memory_mut().focused_item = Some(target);
-		session.focus.0 = Some(target);
-		session.interaction = InventoryInteraction::Browse;
-		commands.entity(menu).try_remove::<HudMenuNavLocked>();
+		if let Some(impulse) = impulse {
+			impulse.deliver(commands, MenuActivate { entity, choice: event });
+		} else {
+			commands.trigger(MenuActivate { entity, choice: event });
+		}
 		return true;
 	}
 	if key.equipped && key.region == character_ui_menu::InventoryRegion::Equipped {
-		if can_activate {
+		if choice.is_some_and(|choice| {
+			adapter.is_some_and(|adapter| (adapter.0)(choice, session.section, ordinal).is_some())
+		}) && session.region == character_ui_menu::InventoryRegion::Equipped
+		{
 			begin_inventory_picker(session, ordinal, Some(*key));
 		}
 		return true;
 	}
-	session.region = key.region;
-	session.active_memory_mut().focused_item = Some(*key);
-	session.focus.0 = Some(*key);
-	if session.interaction.reordering().is_some() {
-		session.interaction = InventoryInteraction::Browse;
-		commands.entity(menu).try_remove::<HudMenuNavLocked>();
-	}
+	commands.entity(menu).try_remove::<HudMenuNavLocked>();
 	false
 }
 
@@ -855,7 +892,9 @@ fn begin_inventory_picker(
 	ordinal: usize,
 	item: Option<InventoryItemKey>,
 ) {
-	if session.picker_source.is_some() {
+	if session.picker_source.is_some()
+		|| session.region != character_ui_menu::InventoryRegion::Equipped
+	{
 		return;
 	}
 	let memory = &mut session.section_memory[session.section.index()]
@@ -873,9 +912,11 @@ fn finish_inventory_picker(session: &mut InventoryMenuSession) {
 	let Some(source) = session.picker_source.take() else { return };
 	session.region = character_ui_menu::InventoryRegion::Equipped;
 	let memory = session.active_memory_mut();
-	memory.focused_item = source.item;
+	// Slot position remains authoritative even if its old occupant moved while
+	// an assignment or another host edit was being applied.
+	memory.focused_item = None;
 	memory.focused_ordinal = source.ordinal;
-	session.focus.0 = source.item;
+	session.focus.0 = None;
 	session.interaction = InventoryInteraction::Browse;
 }
 
@@ -950,6 +991,7 @@ pub fn emit_hud_activate_on_enter<E: Copy + Send + Sync + 'static>(
 		Option<&CloseOverlaySelect>,
 	)>,
 	keys: Query<&InventoryItemKey>,
+	slot_events: Query<&InventorySlotEvent<E>>,
 	parents: Query<&ChildOf>,
 	mut sessions: Query<&mut InventoryMenuSession>,
 	mut interaction: ResMut<InventoryInteraction>,
@@ -973,15 +1015,18 @@ pub fn emit_hud_activate_on_enter<E: Copy + Send + Sync + 'static>(
 				.iter()
 				.find(|(_, item, _, _, _)| item.menu == menu_entity && item.index == menu.selected)
 			{
-				if activate_inventory_item(
-					entity,
-					menu_entity,
-					&keys,
-					button.is_some(),
-					item.index,
-					&mut session,
-					&mut commands,
-				) {
+				if session_entity != menu_entity
+					&& activate_inventory_item(
+						entity,
+						menu_entity,
+						&keys,
+						button.map(|button| button.0),
+						slot_events.get(session_entity).ok(),
+						None,
+						item.index,
+						&mut session,
+						&mut commands,
+					) {
 					return;
 				}
 			}
@@ -1025,6 +1070,7 @@ pub fn emit_hud_activate_on_nav<E: Copy + Send + Sync + 'static>(
 		Option<&CloseOverlaySelect>,
 	)>,
 	keys: Query<&InventoryItemKey>,
+	slot_events: Query<&InventorySlotEvent<E>>,
 	mut interaction: ResMut<InventoryInteraction>,
 	mut focus: ResMut<InventoryFocusHint>,
 	mut commands: Commands,
@@ -1043,15 +1089,18 @@ pub fn emit_hud_activate_on_nav<E: Copy + Send + Sync + 'static>(
 			if let Some((entity, item, button, _, _)) = items.iter().find(|(_, item, _, _, _)| {
 				item.menu == impulse.entity && item.index == menu.selected
 			}) {
-				if activate_inventory_item(
-					entity,
-					impulse.entity,
-					&keys,
-					button.is_some(),
-					item.index,
-					&mut state,
-					&mut commands,
-				) {
+				if session_entity != impulse.entity
+					&& activate_inventory_item(
+						entity,
+						impulse.entity,
+						&keys,
+						button.map(|button| button.0),
+						slot_events.get(session_entity).ok(),
+						Some(impulse.event()),
+						item.index,
+						&mut state,
+						&mut commands,
+					) {
 					return;
 				}
 			}
@@ -1237,72 +1286,6 @@ pub fn emit_inventory_reorder_nav<E: Copy + Send + Sync + 'static>(
 	}
 }
 
-/// AIOP keeps reordering available without reserving row activation for reorder mode.
-pub fn emit_aiop_reorder_on_nav<E: Copy + Send + Sync + 'static>(
-	mut impulse: On<MenuNavImpulse>,
-	areas: Query<&crate::inventory::InventoryScreenArea>,
-	menus: Query<&HudMenu>,
-	parents: Query<&ChildOf>,
-	mut sessions: Query<&mut InventoryMenuSession>,
-	stack: Res<menu_components::MenuModalStack>,
-	roots: Query<(Entity, &menu_components::MenuModal)>,
-	items: Query<(
-		Entity,
-		&HudMenuItem,
-		&InventoryItemKey,
-		&EquippedOrderControls<E>,
-		Option<&MenuButton<E>>,
-	)>,
-	mut commands: Commands,
-) {
-	if !matches!(impulse.nav, MenuNav::Left | MenuNav::Right) {
-		return;
-	}
-	let Ok(area) = areas.get(impulse.entity) else { return };
-	if area.0 != character_ui_menu::InventoryRegion::Equipped {
-		return;
-	}
-	if inventory_modal_blocks_shell(&stack)
-		|| !menu_components::entity_under_nav_owner(impulse.entity, &stack, &roots, &parents)
-	{
-		return;
-	}
-	let Some(session_entity) = std::iter::once(impulse.entity)
-		.chain(parents.iter_ancestors(impulse.entity))
-		.find(|ancestor| sessions.contains(*ancestor))
-	else {
-		return;
-	};
-	let Ok(mut session) = sessions.get_mut(session_entity) else { return };
-	if session.region != character_ui_menu::InventoryRegion::Equipped
-		|| session.picker_source.is_some()
-		|| session.interaction.reordering().is_some()
-	{
-		return;
-	}
-	let Ok(menu) = menus.get(impulse.entity) else { return };
-	let Some((entity, item, key, controls, Some(_))) = items.iter().find(|(_, item, key, _, _)| {
-		item.menu == impulse.entity
-			&& item.index == menu.selected
-			&& key.equipped
-			&& key.region == character_ui_menu::InventoryRegion::Equipped
-	}) else {
-		return;
-	};
-	let event = match impulse.nav {
-		MenuNav::Left => controls.move_left,
-		MenuNav::Right => controls.move_right,
-		_ => None,
-	};
-	session.focus.0 = Some(*key);
-	session.active_memory_mut().focused_item = Some(*key);
-	session.active_memory_mut().focused_ordinal = item.index;
-	if let Some(event) = event {
-		impulse.deliver(&mut commands, MenuActivate { entity, choice: event });
-		impulse.propagate(false);
-	}
-}
-
 /// Standalone renderers use keyboard edges; controller hosts disable this path
 /// and supply the same impulses through their repeat/deadzone controller.
 pub fn emit_inventory_reorder_keyboard(
@@ -1417,6 +1400,7 @@ pub fn emit_inventory_unequip_on_action<E: Copy + Send + Sync + 'static>(
 	impulse: On<MenuActionImpulse>,
 	overlay_menus: Query<(Entity, &HudMenu), With<HudOverlayMenu>>,
 	parents: Query<&ChildOf>,
+	read_only: Query<(), With<crate::inventory::InventoryScreenReadOnly>>,
 	mut sessions: Query<&mut InventoryMenuSession>,
 	items: Query<(
 		Entity,
@@ -1434,6 +1418,12 @@ pub fn emit_inventory_unequip_on_action<E: Copy + Send + Sync + 'static>(
 	let Ok((menu_entity, menu)) = overlay_menus.get(impulse.entity) else {
 		return;
 	};
+	if std::iter::once(menu_entity)
+		.chain(parents.iter_ancestors(menu_entity))
+		.any(|entity| read_only.contains(entity))
+	{
+		return;
+	}
 	let Some((entity, _, key, Some(controls))) = items
 		.iter()
 		.find(|(_, item, _, _)| item.menu == menu_entity && item.index == menu.selected)
@@ -1735,7 +1725,7 @@ pub fn consume_scoped_inventory_reorder_back(
 mod scoped_tests {
 	use crate::{
 		EquippedOrderControls, InventoryFocusHint, InventoryInteraction, InventoryItemKey,
-		InventoryMenuSession, MenuButton, OverlaySelectViewport,
+		InventoryMenuSession, InventorySlotEvent, MenuButton, OverlaySelectViewport,
 	};
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
@@ -1843,7 +1833,12 @@ mod scoped_tests {
 		world.add_observer(super::emit_hud_activate_on_nav::<u8>);
 		world.add_observer(consume_scoped_inventory_reorder_back);
 		let key = InventoryItemKey { index: 12, equipped: true, region: InventoryRegion::Equipped };
-		let viewport = world.spawn(InventoryMenuSession::default()).id();
+		let viewport = world
+			.spawn((
+				InventoryMenuSession::default(),
+				InventorySlotEvent::<u8>(|event, _, _| Some(event)),
+			))
+			.id();
 		let menu = world.spawn((HudMenu::new(1), HudOverlayMenu)).id();
 		world.entity_mut(viewport).add_child(menu);
 		world.spawn((HudMenuItem { menu, index: 0 }, key, MenuButton(7u8)));
@@ -1888,7 +1883,7 @@ mod scoped_tests {
 	}
 
 	#[test]
-	fn checked_drawer_select_moves_focus_to_aiop_representation() -> anyhow::Result<()> {
+	fn checked_drawer_select_without_source_keeps_aiop_focus() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.init_resource::<InventoryInteraction>();
 		world.init_resource::<InventoryFocusHint>();
@@ -1907,10 +1902,7 @@ mod scoped_tests {
 			.get::<InventoryMenuSession>(viewport)
 			.ok_or_else(|| anyhow::anyhow!("viewport state"))?;
 		assert_eq!(session.region, InventoryRegion::Equipped);
-		assert_eq!(
-			session.active_memory().focused_item,
-			Some(InventoryItemKey { region: InventoryRegion::Equipped, ..drawer_key })
-		);
+		assert_eq!(session.active_memory().focused_item, None);
 		assert_eq!(session.interaction, InventoryInteraction::Browse);
 		assert_eq!(world.resource::<Activations>().0, 0);
 		Ok(())
@@ -1926,6 +1918,7 @@ mod scoped_tests {
 			InventoryItemKey { index: 5, equipped: true, region: InventoryRegion::Drawer };
 		let equipped_key = InventoryItemKey { region: InventoryRegion::Equipped, ..drawer_key };
 		let mut session = InventoryMenuSession::default();
+		session.region = InventoryRegion::Drawer;
 		session.section_memory[session.section.index()][InventoryRegion::Drawer.index()]
 			.focused_item = Some(drawer_key);
 		session.section_memory[session.section.index()][InventoryRegion::Equipped.index()]
@@ -1994,12 +1987,12 @@ mod scoped_tests {
 			&mut session,
 			menu_components::InventoryNavigation::FocusDrawer,
 		);
-		assert_eq!(session.region, InventoryRegion::Drawer);
+		assert_eq!(session.region, InventoryRegion::Equipped);
 		super::apply_inventory_navigation(
 			&mut session,
 			menu_components::InventoryNavigation::FocusDrawer,
 		);
-		assert_eq!(session.region, InventoryRegion::Drawer);
+		assert_eq!(session.region, InventoryRegion::Equipped);
 		let before = session;
 		session.interaction = InventoryInteraction::Reorder {
 			item: InventoryItemKey { index: 9, equipped: true, region: InventoryRegion::Equipped },
@@ -2020,6 +2013,7 @@ mod scoped_tests {
 		let remembered =
 			InventoryItemKey { index: 20, equipped: false, region: InventoryRegion::Drawer };
 		let mut session = InventoryMenuSession::default();
+		session.region = InventoryRegion::Drawer;
 		session.section_memory[InventorySection::Tools.index()][InventoryRegion::Drawer.index()]
 			.focused_item = Some(remembered);
 		session.section = InventorySection::Tools;
@@ -2097,6 +2091,12 @@ mod scoped_tests {
 		let focused =
 			InventoryItemKey { index: 4, equipped: false, region: InventoryRegion::Drawer };
 		let mut session = InventoryMenuSession::default();
+		session.region = InventoryRegion::Drawer;
+		session.picker_source = Some(crate::widgets::InventoryPickerSource {
+			ordinal: 0,
+			item: None,
+			attempted_item: None,
+		});
 		session.drawer = InventoryDrawerMode::Gallery;
 		session.active_memory_mut().focused_item = Some(focused);
 		let viewport = app.world_mut().spawn((OverlaySelectViewport, session)).id();
@@ -2331,6 +2331,7 @@ mod scoped_tests {
 		use menu_components::{HudScrollManual, HudScrollViewport};
 		let mut world = World::new();
 		let mut session = InventoryMenuSession::default();
+		session.region = InventoryRegion::Drawer;
 		session.drawer = InventoryDrawerMode::Gallery;
 		session.active_memory_mut().gallery_scroll = 1;
 		let viewport = world.spawn((OverlaySelectViewport, session)).id();
@@ -2384,81 +2385,6 @@ mod scoped_tests {
 		Ok(())
 	}
 
-	#[derive(Resource, Default)]
-	struct AIOPMoveHits(Vec<(Entity, u8)>);
-
-	fn record_aiop_move(event: On<MenuActivate<u8>>, mut hits: ResMut<AIOPMoveHits>) {
-		hits.0.push((event.entity, event.choice));
-	}
-
-	#[test]
-	fn aiop_left_right_reorders_only_actionable_active_rows_and_keeps_identity_focus(
-	) -> anyhow::Result<()> {
-		use crate::inventory::InventoryScreenArea;
-		use menu_components::{MenuModalStack, MenuNavImpulse};
-
-		let mut world = World::new();
-		world.init_resource::<MenuModalStack>();
-		world.init_resource::<AIOPMoveHits>();
-		world.add_observer(super::emit_aiop_reorder_on_nav::<u8>);
-		world.add_observer(record_aiop_move);
-
-		let mut session = InventoryMenuSession::default();
-		session.region = InventoryRegion::Equipped;
-		let viewport = world.spawn((OverlaySelectViewport, session)).id();
-		let menu = world
-			.spawn((
-				InventoryScreenArea(InventoryRegion::Equipped),
-				HudMenu::new(1),
-				HudOverlayMenu,
-			))
-			.id();
-		world.entity_mut(viewport).add_child(menu);
-		let key = InventoryItemKey { index: 7, equipped: true, region: InventoryRegion::Equipped };
-		let actionable = world
-			.spawn((
-				HudMenuItem { menu, index: 0 },
-				key,
-				EquippedOrderControls::<u8> {
-					unequip: None,
-					move_left: Some(1),
-					move_right: Some(2),
-				},
-				MenuButton(3u8),
-			))
-			.id();
-		world.trigger(MenuNavImpulse::new(menu, MenuNav::Left));
-		world.flush();
-		assert_eq!(world.resource::<AIOPMoveHits>().0, [(actionable, 1)]);
-		let session = world
-			.get::<InventoryMenuSession>(viewport)
-			.copied()
-			.ok_or_else(|| anyhow::anyhow!("session"))?;
-		assert_eq!(session.focus.0, Some(key));
-		assert_eq!(session.active_memory().focused_item, Some(key));
-		assert_eq!(session.active_memory().focused_ordinal, 0);
-
-		// Read-only rows have order controls for rendering but no action payload.
-		let read_only_viewport = world.spawn((OverlaySelectViewport, session)).id();
-		let read_only_menu = world
-			.spawn((
-				InventoryScreenArea(InventoryRegion::Equipped),
-				HudMenu::new(1),
-				HudOverlayMenu,
-			))
-			.id();
-		world.entity_mut(read_only_viewport).add_child(read_only_menu);
-		world.spawn((
-			HudMenuItem { menu: read_only_menu, index: 0 },
-			key,
-			EquippedOrderControls::<u8> { unequip: None, move_left: Some(1), move_right: Some(2) },
-		));
-		world.trigger(MenuNavImpulse::new(read_only_menu, MenuNav::Left));
-		world.flush();
-		assert_eq!(world.resource::<AIOPMoveHits>().0, [(actionable, 1)]);
-		Ok(())
-	}
-
 	#[test]
 	fn pending_choice_waits_for_host_rebuild_then_returns_to_source() -> anyhow::Result<()> {
 		use crate::inventory::InventoryTile;
@@ -2505,6 +2431,18 @@ mod scoped_tests {
 			.get_mut::<InventoryItemKey>(tile)
 			.ok_or_else(|| anyhow::anyhow!("candidate key"))?
 			.equipped = true;
+		// An equipped candidate at another position is still not an acknowledgment.
+		world
+			.run_system_once(super::resolve_pending_inventory_choice)
+			.map_err(|error| anyhow::anyhow!("wrong-position acknowledgment: {error:?}"))?;
+		assert!(world
+			.get::<InventoryMenuSession>(viewport)
+			.is_some_and(|session| session.picker_source.is_some()));
+		world.entity_mut(tile).insert(InventoryTile {
+			section: InventorySection::Clothing,
+			region: InventoryRegion::Equipped,
+			ordinal: 3,
+		});
 		world
 			.run_system_once(super::resolve_pending_inventory_choice)
 			.map_err(|error| anyhow::anyhow!("pending choice after host rebuild: {error:?}"))?;
@@ -2513,7 +2451,14 @@ mod scoped_tests {
 			.ok_or_else(|| anyhow::anyhow!("inventory session"))?;
 		assert!(session.picker_source.is_none());
 		assert_eq!(session.region, InventoryRegion::Equipped);
-		assert_eq!(session.active_memory().focused_item, Some(source));
+		assert_eq!(
+			session.active_memory().focused_item,
+			Some(InventoryItemKey {
+				equipped: true,
+				region: InventoryRegion::Equipped,
+				..candidate
+			})
+		);
 		assert_eq!(session.active_memory().focused_ordinal, 3);
 		Ok(())
 	}

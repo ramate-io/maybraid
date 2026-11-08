@@ -110,8 +110,15 @@ pub struct InventoryPickerSource {
 	pub attempted_item: Option<usize>,
 }
 
+/// Host conversion from a catalog action to assignment at the selected AIOP slot.
+/// Kept on the viewport so independent hosts retain their own event vocabulary.
+#[derive(Component, Clone, Copy)]
+pub struct InventorySlotEvent<E: Copy + Send + Sync + 'static>(
+	pub fn(E, InventorySection, usize) -> Option<E>,
+);
+
 /// State for one inventory viewport. Primary editor hosts may mirror their legacy resources.
-#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryMenuSession {
 	pub interaction: InventoryInteraction,
 	pub focus: InventoryFocusHint,
@@ -120,6 +127,20 @@ pub struct InventoryMenuSession {
 	pub region: InventoryRegion,
 	pub picker_source: Option<InventoryPickerSource>,
 	pub section_memory: [[InventorySectionMemory; 2]; 5],
+}
+
+impl Default for InventoryMenuSession {
+	fn default() -> Self {
+		Self {
+			interaction: InventoryInteraction::default(),
+			focus: InventoryFocusHint::default(),
+			section: InventorySection::default(),
+			drawer: InventoryDrawerMode::default(),
+			region: InventoryRegion::Equipped,
+			picker_source: None,
+			section_memory: [[InventorySectionMemory::default(); 2]; 5],
+		}
+	}
 }
 
 impl InventoryMenuSession {

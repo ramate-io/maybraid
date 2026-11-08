@@ -6,7 +6,7 @@ use character_creation_menus::{
 	inventory_paint_state, InventoryLayout, InventoryPaint, INVENTORY_CAPTURE_TIMEOUT,
 };
 use character_items::{catalog_key_uses_yellow_silhouette, Inventory, InventoryItem};
-use character_ui_menu::{InventoryDrawerMode, InventorySection};
+use character_ui_menu::{InventoryDrawerMode, InventoryRegion, InventorySection};
 use item_icons::{
 	request_inventory_icons, CaptureClient, ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery,
 	ItemIconPlugin, PoseCaptureSubjects,
@@ -54,6 +54,12 @@ pub struct SpinRevealScreen;
 /// Scroll viewport that owns Starter Kit focus.
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct StarterKitViewport;
+
+impl StarterKitViewport {
+	fn initial_session() -> InventoryMenuSession {
+		InventoryMenuSession { region: InventoryRegion::Drawer, ..default() }
+	}
+}
 
 /// Continue footer. Activate finishes the grant.
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -200,7 +206,7 @@ fn spawn_starter_kit(
 				fonts,
 				layout.title,
 				TEXT_YELLOW,
-				(StarterKitViewport, InventoryMenuSession::default()),
+				(StarterKitViewport, StarterKitViewport::initial_session()),
 			);
 			continue_parent = root
 				.spawn((
@@ -705,6 +711,89 @@ mod tests {
 			.map_err(|error| format!("{error:?}"))?;
 		if continue_choices(&mut world) != 1 {
 			return Err("unlocked keyboard Enter should activate Continue".into());
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn painted_starter_kit_browses_without_a_picker_and_reaches_continue() -> anyhow::Result<()> {
+		use bevy::asset::{AssetApp, AssetPlugin};
+		use character_ui_menu::{InventoryDrawerMode, InventoryRegion};
+		use maybraid_character_ui_menu_renderer::{
+			InventoryMenuSession, InventoryScreenArea, InventoryScreenReadOnly,
+		};
+		use menu_components::{
+			HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, MenuModal, MenuModalStack, MenuNav,
+			MenuNavImpulse, TextMenuInputLock,
+		};
+		for drawer_mode in [InventoryDrawerMode::Rotary, InventoryDrawerMode::Gallery] {
+			let mut app = App::new();
+			app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+			app.init_asset::<Image>();
+			app.init_resource::<MenuModalStack>();
+			app.init_resource::<TextMenuInputLock>();
+			app.init_resource::<Messages<SpinRevealChoice>>();
+			app.add_observer(maybraid_character_ui_menu_renderer::input::navigate_inventory_menu);
+			app.add_observer(super::select_starter_kit_continue);
+			let mut session = StarterKitViewport::initial_session();
+			session.drawer = drawer_mode;
+			let viewport = app.world_mut().spawn((StarterKitViewport, session)).id();
+			let footer = app.world_mut().spawn(StarterKitContinue).id();
+			app.world_mut()
+				.run_system_once(
+					move |mut commands: Commands,
+					      assets: Res<AssetServer>,
+					      continues: Query<Entity, With<StarterKitContinue>>| {
+						let fonts = HudFonts {
+							black: Handle::default(),
+							semibold: Handle::default(),
+							regular: Handle::default(),
+							logo: Handle::default(),
+						};
+						super::paint_starter_kit_inventory(
+							&mut commands,
+							viewport,
+							&fonts,
+							&assets,
+							menu_components::InputPromptDevice::Keyboard,
+							&SpinRevealScreen::layout(&[pants()]),
+							&session,
+							None,
+							&continues,
+						);
+					},
+				)
+				.map_err(|error| anyhow::anyhow!("Starter Kit paint: {error}"))?;
+			app.world_mut().flush();
+			assert!(app.world().get::<InventoryScreenReadOnly>(viewport).is_some());
+			assert!(app.world().get::<MenuModal>(viewport).is_none());
+			let drawer = app
+				.world_mut()
+				.query::<(Entity, &InventoryScreenArea, &HudMenu, &HudOverlayMenu)>()
+				.iter(app.world())
+				.find_map(|(entity, area, _, _)| {
+					(area.0 == InventoryRegion::Drawer).then_some(entity)
+				})
+				.ok_or_else(|| anyhow::anyhow!("active Starter Kit drawer"))?;
+			let continue_index = app
+				.world()
+				.get::<HudMenuItem>(footer)
+				.ok_or_else(|| anyhow::anyhow!("Continue position"))?
+				.index;
+			assert_eq!(continue_index, 1);
+			app.world_mut().trigger(MenuNavImpulse::new(drawer, MenuNav::Right));
+			app.world_mut().flush();
+			assert_eq!(
+				app.world().get::<HudMenu>(drawer).map(|menu| menu.selected),
+				Some(continue_index)
+			);
+			assert!(app
+				.world()
+				.get::<InventoryMenuSession>(viewport)
+				.is_some_and(|session| session.picker_source.is_none()));
+			app.world_mut().trigger(MenuNavImpulse::new(drawer, MenuNav::Select));
+			app.world_mut().flush();
+			assert_eq!(continue_choices(app.world_mut()), 1);
 		}
 		Ok(())
 	}

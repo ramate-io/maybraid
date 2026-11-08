@@ -26,6 +26,10 @@ use crate::widgets::{
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryScreenArea(pub InventoryRegion);
 
+/// Presentation-only inventory browsing, without a slot assignment transaction.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct InventoryScreenReadOnly;
+
 /// Catalog identity used by inventory navigation. Ordinals follow catalog order.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryTile {
@@ -124,6 +128,12 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 	};
 	root.despawn_related::<Children>();
 	root.insert(crate::widgets::OverlaySelectViewport);
+	if interactive {
+		root.insert(menu_components::MenuModal::OVERLAY_SELECT);
+		root.remove::<InventoryScreenReadOnly>();
+	} else {
+		root.insert(InventoryScreenReadOnly);
+	}
 	let drawer_memory =
 		session.section_memory[session.section.index()][InventoryRegion::Drawer.index()];
 	let equipped_memory =
@@ -138,7 +148,12 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 		.filter(|key| key.region == InventoryRegion::Equipped)
 		.and_then(|key| equipment.iter().position(|choice| choice.item_key == key.index))
 		.unwrap_or(equipped_memory.focused_ordinal);
-	let aiop_focus_capacity = if interactive { capacity } else { equipment.len().min(capacity) };
+	// Dense domain orders can fill the next empty slot without creating holes.
+	let aiop_focus_capacity = if interactive {
+		(equipment.len() + 1).min(capacity)
+	} else {
+		equipment.len().min(capacity)
+	};
 	root.with_children(|host_viewport| {
 		let mut shell = host_viewport.spawn((
 			Node {
@@ -230,15 +245,15 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 									slots.menus[1],
 								);
 							} else {
-								// Keep empty AIOP capacity reachable so its plus action can jump to the drawer.
+								// Only the next dense slot exposes an actionable plus.
 								spawn_empty_slot(
 									list,
 									fonts,
 									session.section,
 									ordinal,
-									capacity,
+									aiop_focus_capacity,
 									slots.menus[1],
-									interactive,
+									interactive && ordinal < aiop_focus_capacity,
 								);
 							}
 						}
@@ -1343,8 +1358,6 @@ fn section_data<E: Copy>(
 		choices.extend(equipment.iter().map(|choice| {
 			let mut tile = choice.tile.clone();
 			tile.selected = true;
-			tile.item_key = None;
-			tile.event = None;
 			tile
 		}));
 	}
@@ -1654,14 +1667,15 @@ mod tests {
 		assert_eq!(drawer.len(), 3);
 		assert!(drawer
 			.iter()
-			.all(|choice| choice.selected && choice.item_key.is_none() && choice.event.is_none()));
+			.all(|choice| choice.selected && choice.item_key.is_some() && choice.event.is_none()));
 		assert_eq!(ledger.len(), 3);
 		assert_eq!(capacity, 3);
 		Ok(())
 	}
 
 	#[test]
-	fn gallery_shell_spawns_two_rows_and_focusable_capacity_slots() -> anyhow::Result<()> {
+	fn gallery_shell_spawns_two_rows_and_only_the_next_empty_slot_is_focusable(
+	) -> anyhow::Result<()> {
 		let choices = (0..15)
 			.map(|index| GridCatalogChoice {
 				label: format!("item-{index}"),
@@ -1722,14 +1736,14 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("render system failed: {error}"))?;
 		app.world_mut().flush();
 		let mut slots = app.world_mut().query::<&InventoryAIOPSlot>();
-		assert_eq!(slots.iter(app.world()).count(), 6);
+		assert_eq!(slots.iter(app.world()).count(), 1);
 		let mut menus = app.world_mut().query::<&HudMenu>();
 		assert_eq!(
 			menus
 				.get(app.world(), _slots.menus[1])
 				.map_err(|_| anyhow::anyhow!("missing Equipped menu"))?
 				.item_count,
-			6
+			1
 		);
 		let mut manual_scroll = app.world_mut().query::<(&HudScrollManual, &ScrollPosition)>();
 		let manual_offsets = manual_scroll.iter(app.world()).collect::<Vec<_>>();

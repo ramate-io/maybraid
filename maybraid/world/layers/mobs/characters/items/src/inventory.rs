@@ -671,6 +671,45 @@ impl Inventory {
 		true
 	}
 
+	/// Assign an owned item to an exact zero-based position in its typed slot.
+	///
+	/// An unequipped item replaces the occupant without removing it from the bag.
+	/// An equipped item swaps with the occupant, preserving every other position.
+	/// Selections are dense: only the next empty position accepts a new item, and
+	/// an equipped item cannot move into that empty position and leave a hole.
+	/// Returns whether the assignment was accepted, including a same-item no-op.
+	pub fn assign_to_slot(&mut self, slot: InventorySlot, position: usize, index: usize) -> bool {
+		let Some(item) = self.items.get(index) else {
+			return false;
+		};
+		let selected = self.selected(slot);
+		if item.slot() != slot || position >= slot.capacity() || position > selected.len() {
+			return false;
+		}
+		let from = selected.iter().position(|&selected| selected == index);
+		if position == selected.len() && from.is_some() {
+			return false;
+		}
+		if let Some(id) = item.tanz_id() {
+			if selected.iter().enumerate().any(|(other_position, &other)| {
+				(other_position != position || from.is_some())
+					&& other != index
+					&& self.items.get(other).and_then(InventoryItem::tanz_id) == Some(id)
+			}) {
+				return false;
+			}
+		}
+		let selected = self.selected_mut(slot);
+		if let Some(from) = from {
+			selected.swap(from, position);
+		} else if position == selected.len() {
+			selected.push(index);
+		} else {
+			selected[position] = index;
+		}
+		true
+	}
+
 	/// Remove `index` from its slot selection. The item stays in the bag.
 	pub fn unequip(&mut self, index: usize) -> bool {
 		let Some(item) = self.items.get(index) else {
@@ -1758,6 +1797,90 @@ mod tests {
 		assert_eq!(weapons.weapons, vec![0, 2, 1]);
 		assert!(weapons.unequip(2));
 		assert_eq!(weapons.weapons, vec![0, 1]);
+	}
+
+	fn slot_assignment_bag() -> Inventory {
+		Inventory {
+			items: vec![
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::firearm(FirearmMesh::Reltor),
+				InventoryItem::firearm(FirearmMesh::Snailer),
+				InventoryItem::Fisticuffs,
+				InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)),
+			],
+			weapons: vec![0, 1, 2],
+			..Inventory::default()
+		}
+	}
+
+	#[test]
+	fn assign_to_slot_replaces_the_middle_at_capacity_and_keeps_the_displaced_item() {
+		let mut bag = slot_assignment_bag();
+		let owned = bag.items.clone();
+		assert!(bag.assign_to_slot(InventorySlot::Weapons, 1, 3));
+		assert_eq!(bag.weapons, vec![0, 3, 2]);
+		assert_eq!(bag.items, owned);
+		assert_eq!(bag.rank(1), None);
+		assert_eq!(bag.rank(3), Some(2));
+	}
+
+	#[test]
+	fn assign_to_slot_swaps_equipped_items_and_accepts_the_same_item() {
+		let mut bag = slot_assignment_bag();
+		assert!(bag.assign_to_slot(InventorySlot::Weapons, 1, 2));
+		assert_eq!(bag.weapons, vec![0, 2, 1]);
+		let before = bag.clone();
+		assert!(bag.assign_to_slot(InventorySlot::Weapons, 1, 2));
+		assert_eq!(bag, before);
+		assert!(bag.assign_to_slot(InventorySlot::Weapons, 0, 1));
+		assert_eq!(bag.weapons, vec![1, 2, 0]);
+	}
+
+	#[test]
+	fn assign_to_slot_fills_only_the_next_empty_position_with_an_unequipped_item() {
+		let mut bag = slot_assignment_bag();
+		bag.weapons = vec![0];
+		let before = bag.clone();
+		assert!(!bag.assign_to_slot(InventorySlot::Weapons, 2, 3));
+		assert!(!bag.assign_to_slot(InventorySlot::Weapons, 1, 0));
+		assert_eq!(bag, before);
+		assert!(bag.assign_to_slot(InventorySlot::Weapons, 1, 3));
+		assert_eq!(bag.weapons, vec![0, 3]);
+		assert!(bag.assign_to_slot(InventorySlot::Weapons, 2, 1));
+		assert_eq!(bag.weapons, vec![0, 3, 1]);
+	}
+
+	#[test]
+	fn assign_to_slot_rejects_invalid_items_categories_and_positions_without_mutation() {
+		let mut bag = slot_assignment_bag();
+		let before = bag.clone();
+		for (slot, position, index) in [
+			(InventorySlot::Weapons, 1, usize::MAX),
+			(InventorySlot::Weapons, usize::MAX, 3),
+			(InventorySlot::Weapons, WEAPON_QUEUE_LIMIT, 3),
+			(InventorySlot::Weapons, 0, 4),
+			(InventorySlot::Skills, 0, 3),
+		] {
+			assert!(!bag.assign_to_slot(slot, position, index));
+			assert_eq!(bag, before);
+		}
+	}
+
+	#[test]
+	fn assign_to_slot_preserves_unique_tanz_kinds() {
+		let mut bag = tanz_bag(vec![0, 1, 2]);
+		bag.items.push(InventoryItem::tanz(TanzId::HealingSalute));
+		let before = bag.clone();
+		assert!(!bag.assign_to_slot(InventorySlot::Tanzes, 1, 4));
+		assert!(!bag.assign_to_slot(InventorySlot::Tanzes, 3, 4));
+		assert_eq!(bag, before);
+		assert!(bag.assign_to_slot(InventorySlot::Tanzes, 0, 4));
+		assert_eq!(bag.tanzes, vec![4, 1, 2]);
+		assert!(bag.assign_to_slot(InventorySlot::Tanzes, 1, 3));
+		assert_eq!(bag.tanzes, vec![4, 3, 2]);
+		assert!(bag.assign_to_slot(InventorySlot::Tanzes, 2, 4));
+		assert_eq!(bag.tanzes, vec![2, 3, 4]);
+		assert_eq!(bag.items.len(), 5);
 	}
 
 	#[test]

@@ -53,14 +53,13 @@ where
 		.add_message::<CharacterMenuEvent<E>>()
 		.add_observer(emit_hud_activate_on_click::<E>)
 		.add_observer(emit_hud_activate_on_nav::<E>)
-		.add_observer(crate::input::emit_aiop_reorder_on_nav::<E>)
 		.add_observer(emit_inventory_reorder_nav::<E>)
 		.add_observer(crate::input::consume_scoped_inventory_reorder_back)
 		.add_observer(emit_inventory_unequip_on_action::<E>)
-		.add_observer(crate::input::emit_inventory_control_on_click)
+		.add_observer(crate::input::emit_inventory_control_on_click::<E>)
 		.add_observer(crate::input::apply_inventory_navigation_impulse)
 		.add_observer(crate::input::navigate_inventory_menu)
-		.add_observer(crate::input::emit_inventory_control_on_nav)
+		.add_observer(crate::input::emit_inventory_control_on_nav::<E>)
 		.add_observer(emit_overlay_open_on_click)
 		.add_observer(emit_overlay_close_on_click)
 		.add_systems(Update, close_overlay_on_modal_dismiss.in_set(MenuModalSystems::Apply))
@@ -81,7 +80,7 @@ where
 			(
 				emit_inventory_reorder_keyboard,
 				crate::input::emit_inventory_keyboard_navigation,
-				crate::input::emit_inventory_control_on_enter,
+				crate::input::emit_inventory_control_on_enter::<E>,
 				emit_hud_focus::<E>,
 				emit_hud_activate_on_enter::<E>,
 				mark_reorder_tiles,

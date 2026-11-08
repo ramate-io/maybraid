@@ -50,9 +50,11 @@ impl InventoryLayoutMode {
 		match event {
 			MenuEvent::ToggleInventory(_)
 			| MenuEvent::EquipInventory(_)
+			| MenuEvent::AssignInventorySlot { .. }
 			| MenuEvent::UnequipInventory(_)
 			| MenuEvent::MoveEquippedInventory { .. }
-			| MenuEvent::MoveLubikan { .. } => self.allows_equip(),
+			| MenuEvent::MoveLubikan { .. }
+			| MenuEvent::AssignLubikanSlot { .. } => self.allows_equip(),
 			MenuEvent::DropInventory(_) => self.allows_drop(),
 			_ => false,
 		}
@@ -593,6 +595,15 @@ mod tests {
 		let layout = InventoryLayout::starter_kit(sample_items());
 		assert!(!layout.allows(MenuEvent::ToggleInventory(0)));
 		assert!(!layout.allows(MenuEvent::EquipInventory(0)));
+		assert!(!layout.allows(MenuEvent::AssignInventorySlot {
+			slot: character_items::InventorySlot::Weapons,
+			position: 0,
+			index: 0,
+		}));
+		assert!(!layout.allows(MenuEvent::AssignLubikanSlot {
+			position: 0,
+			account: lubikans::LubikanAccountId::SELF,
+		}));
 		assert!(!layout.allows(MenuEvent::UnequipInventory(0)));
 		assert!(!layout.allows(MenuEvent::MoveEquippedInventory { index: 0, delta: 1 }));
 		assert!(!layout.allows(MenuEvent::DropInventory(0)));
@@ -607,6 +618,15 @@ mod tests {
 		let layout = InventoryLayout::character_menu(&inventory);
 		assert!(layout.allows(MenuEvent::ToggleInventory(0)));
 		assert!(layout.allows(MenuEvent::EquipInventory(0)));
+		assert!(layout.allows(MenuEvent::AssignInventorySlot {
+			slot: character_items::InventorySlot::Weapons,
+			position: 0,
+			index: 0,
+		}));
+		assert!(layout.allows(MenuEvent::AssignLubikanSlot {
+			position: 0,
+			account: lubikans::LubikanAccountId::SELF,
+		}));
 		assert!(layout.allows(MenuEvent::UnequipInventory(0)));
 		assert!(layout.allows(MenuEvent::MoveEquippedInventory { index: 0, delta: -1 }));
 		assert!(layout.allows(MenuEvent::DropInventory(0)));

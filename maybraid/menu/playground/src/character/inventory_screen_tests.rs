@@ -6,22 +6,22 @@ use bevy::{
 	ecs::system::RunSystemOnce,
 	prelude::*,
 };
-use character_creation_menus::{CharacterMenu, MenuEvent};
+use character_creation_menus::{CharacterMenu, InventoryLayout, MenuEvent};
 use character_items::{ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor};
 use character_ui_menu::MenuComponent;
 use maybraid_character_ui_menu_renderer::{
 	fill_inventory_screen, InventoryAIOPSlot, InventoryFocusHint, InventoryInteraction,
-	InventoryItemKey, InventoryMenuSession, InventoryScreenArea,
+	InventoryItemKey, InventoryMenuSession, InventoryScreenArea, InventorySlotEvent,
 	MaybraidCharacterMenuRendererPlugin, NoThumbnails, OverlayClose, OverlaySelectViewport,
 };
 use menu_components::{
 	HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, InventoryNavigation,
-	InventoryNavigationImpulse, MenuActivate, MenuComponentsPlugin, MenuNav, MenuNavImpulse,
+	InventoryNavigationImpulse, MenuComponentsPlugin, MenuNav, MenuNavImpulse,
 };
 
 use crate::character::{
-	on_menu_activate, CharacterMenuState, CharacterScreen, CharacterUiSyncState,
-	OverlaySelectState, OverlayUiSyncState,
+	inventory_slot_event, on_menu_activate, CharacterMenuState, CharacterScreen,
+	CharacterUiSyncState, OverlaySelectState, OverlayUiSyncState,
 };
 
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
@@ -83,55 +83,14 @@ fn fixture_with_items(items: Vec<InventoryItem>) -> Result<(App, Entity)> {
 		.world_mut()
 		.spawn((
 			OverlaySelectViewport,
+			maybraid_character_ui_menu_renderer::OverlaySelectRoot,
 			InventoryMenuSession::default(),
+			InventorySlotEvent(inventory_slot_event),
 			Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
 			ChildOf(screen),
 		))
 		.id();
 	Ok((app, viewport))
-}
-
-#[test]
-fn gallery_navigation_uses_five_columns_and_clamps_the_incomplete_last_row() -> Result<()> {
-	let items = (0..16)
-		.map(|_| {
-			InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Red)
-		})
-		.collect();
-	let (mut app, viewport) = fixture_with_items(items)?;
-	{
-		let mut session = app
-			.world_mut()
-			.get_mut::<InventoryMenuSession>(viewport)
-			.context("inventory session")?;
-		session.drawer = character_ui_menu::InventoryDrawerMode::Gallery;
-		session.active_memory_mut().focused_item = Some(InventoryItemKey {
-			index: 4,
-			equipped: false,
-			region: character_ui_menu::InventoryRegion::Drawer,
-		});
-	}
-	render(&mut app, viewport, true)?;
-	let drawer = screen_slots(app.world_mut())?[0];
-	assert_eq!(app.world().get::<HudMenu>(drawer).context("Drawer menu")?.selected, 4);
-
-	for (expected, expected_row) in [(9, 0), (14, 1), (15, 2)] {
-		app.world_mut().trigger(MenuNavImpulse::new(drawer, MenuNav::Down));
-		app.world_mut().flush();
-		assert_eq!(app.world().get::<HudMenu>(drawer).context("Drawer menu")?.selected, expected);
-		let session =
-			app.world().get::<InventoryMenuSession>(viewport).context("inventory session")?;
-		assert_eq!(session.active_memory().gallery_scroll, expected_row);
-		let focused = session.active_memory().focused_item;
-		let mut items = app.world_mut().query::<(&HudMenuItem, &InventoryItemKey)>();
-		let selected_key = items
-			.iter(app.world())
-			.find(|(item, _)| item.menu == drawer && item.index == expected)
-			.map(|(_, key)| *key)
-			.context("selected gallery item")?;
-		assert_eq!(focused, Some(selected_key));
-	}
-	Ok(())
 }
 
 fn render(app: &mut App, viewport: Entity, interactive: bool) -> Result<()> {
@@ -217,325 +176,20 @@ fn focus_identity(world: &World, viewport: Entity) -> Result<InventoryItemKey> {
 }
 
 #[derive(Resource, Default)]
-struct InventoryEquipActivations(Vec<usize>);
-
-#[derive(Resource, Default)]
-struct InventoryMoveActivations(Vec<(usize, i8)>);
-
-#[derive(Resource, Default)]
 struct OverlayCloseActivations(usize);
 
-fn record_inventory_equip(
-	event: On<MenuActivate<MenuEvent>>,
-	mut activations: ResMut<InventoryEquipActivations>,
-) {
-	if let MenuEvent::EquipInventory(index) = event.choice {
-		activations.0.push(index);
-	}
+fn record_overlay_close(mut event: On<OverlayClose>, mut hits: ResMut<OverlayCloseActivations>) {
+	// This fixture is the close-event host. Count its delivery once, before bubbling.
+	event.propagate(false);
+	hits.0 += 1;
 }
 
-fn record_inventory_move(
-	event: On<MenuActivate<MenuEvent>>,
-	mut activations: ResMut<InventoryMoveActivations>,
-) {
-	if let MenuEvent::MoveEquippedInventory { index, delta } = event.choice {
-		activations.0.push((index, delta));
-	}
+fn nav(app: &mut App, menu: Entity, action: MenuNav) {
+	app.world_mut().trigger(MenuNavImpulse::new(menu, action));
+	app.world_mut().flush();
 }
 
-fn record_overlay_close(
-	_event: On<OverlayClose>,
-	mut activations: ResMut<OverlayCloseActivations>,
-) {
-	activations.0 += 1;
-}
-
-#[test]
-fn aiop_activation_opens_drawer_back_cancels_and_left_right_still_reorders() -> Result<()> {
-	let (mut app, viewport) = fixture()?;
-	app.init_resource::<InventoryEquipActivations>();
-	app.init_resource::<InventoryMoveActivations>();
-	app.add_observer(record_inventory_equip);
-	app.add_observer(record_inventory_move);
-	let initial_order = clothing_order(app.world())?;
-	let source_index = *initial_order.get(1).context("second equipped item")?;
-	let source = InventoryItemKey {
-		index: source_index,
-		equipped: true,
-		region: character_ui_menu::InventoryRegion::Equipped,
-	};
-	app.world_mut()
-		.get_mut::<InventoryMenuSession>(viewport)
-		.context("session")?
-		.region = character_ui_menu::InventoryRegion::Equipped;
-	render(&mut app, viewport, true)?;
-	let [drawer, equipped] = screen_slots(app.world_mut())?;
-	let (source_ordinal, _) = tile(app.world_mut(), equipped, source_index)?;
-	app.world_mut()
-		.get_mut::<HudMenu>(equipped)
-		.context("Equipped HUD menu")?
-		.selected = source_ordinal;
-	app.world_mut().trigger(MenuNavImpulse::new(equipped, MenuNav::Select));
-	app.world_mut().flush();
-	app.update();
-	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
-	assert_eq!(session.region, character_ui_menu::InventoryRegion::Drawer);
-	assert_eq!(session.picker_source.map(|source| source.item), Some(Some(source)));
-	assert!(app.world().get::<HudOverlayMenu>(drawer).is_some());
-	assert!(app.world().get::<HudOverlayMenu>(equipped).is_none());
-
-	app.world_mut()
-		.trigger(InventoryNavigationImpulse::new(equipped, InventoryNavigation::ToggleRegion));
-	app.world_mut().flush();
-	app.world_mut()
-		.trigger(InventoryNavigationImpulse::new(equipped, InventoryNavigation::NextSection));
-	app.world_mut().flush();
-	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
-	assert_eq!(session.region, character_ui_menu::InventoryRegion::Drawer);
-	assert_eq!(session.section, character_ui_menu::InventorySection::Clothing);
-
-	// Back cancels the chooser and leaves the inventory screen open at its source row.
-	app.world_mut().trigger(MenuNavImpulse::new(drawer, MenuNav::Back));
-	app.world_mut().flush();
-	app.update();
-	assert!(app.world().get::<OverlaySelectViewport>(viewport).is_some());
-	assert_eq!(app.world().resource::<OverlayCloseActivations>().0, 0);
-	assert_eq!(
-		app.world().get::<InventoryMenuSession>(viewport).context("session")?.region,
-		character_ui_menu::InventoryRegion::Equipped
-	);
-	assert_eq!(focus_identity(app.world(), viewport)?, source);
-
-	// Left/Right still dispatch the existing adjacent-order event from the active AIOP row.
-	let stale_focus = InventoryItemKey {
-		index: *initial_order.first().context("stale focused item")?,
-		equipped: true,
-		region: character_ui_menu::InventoryRegion::Equipped,
-	};
-	app.world_mut()
-		.get_mut::<InventoryMenuSession>(viewport)
-		.context("session")?
-		.active_memory_mut()
-		.focused_item = Some(stale_focus);
-	let [_, equipped] = screen_slots(app.world_mut())?;
-	app.world_mut().trigger(MenuNavImpulse::new(equipped, MenuNav::Left));
-	app.world_mut().flush();
-	let mut expected = initial_order.clone();
-	expected.swap(0, 1);
-	assert_eq!(clothing_order(app.world())?, expected);
-	assert_eq!(focus_identity(app.world(), viewport)?.index, source_index);
-	assert_eq!(app.world().resource::<InventoryMoveActivations>().0, [(source_index, -1)]);
-	render(&mut app, viewport, true)?;
-	let [_, equipped] = screen_slots(app.world_mut())?;
-	let selected = app.world().get::<HudMenu>(equipped).context("Equipped HUD menu")?.selected;
-	let mut current_items = app.world_mut().query::<(&HudMenuItem, &InventoryItemKey)>();
-	assert!(current_items
-		.iter(app.world())
-		.any(|(item, key)| { item.menu == equipped && item.index == selected && *key == source }));
-	Ok(())
-}
-
-#[test]
-fn gallery_page_switch_restores_drawer_item_focus() -> Result<()> {
-	let (mut app, viewport) = fixture()?;
-	render(&mut app, viewport, true)?;
-	let drawer = screen_slots(app.world_mut())?[0];
-	app.world_mut().trigger(MenuNavImpulse::new(drawer, MenuNav::Right));
-	app.world_mut().flush();
-	let original_focus = focus_identity(app.world(), viewport)?;
-	assert_eq!(original_focus.region, character_ui_menu::InventoryRegion::Drawer);
-
-	app.world_mut()
-		.trigger(InventoryNavigationImpulse::new(drawer, InventoryNavigation::ToggleDrawer));
-	app.world_mut().flush();
-	assert_eq!(
-		app.world().get::<InventoryMenuSession>(viewport).context("session")?.drawer,
-		character_ui_menu::InventoryDrawerMode::Gallery,
-	);
-	render(&mut app, viewport, true)?;
-
-	let drawer = screen_slots(app.world_mut())?[0];
-	app.world_mut()
-		.trigger(InventoryNavigationImpulse::new(drawer, InventoryNavigation::NextSection));
-	app.world_mut().flush();
-	assert_eq!(
-		app.world().get::<InventoryMenuSession>(viewport).context("session")?.section,
-		character_ui_menu::InventorySection::Tools,
-	);
-	render(&mut app, viewport, true)?;
-
-	let drawer = screen_slots(app.world_mut())?[0];
-	app.world_mut()
-		.trigger(InventoryNavigationImpulse::new(drawer, InventoryNavigation::PreviousSection));
-	app.world_mut().flush();
-	render(&mut app, viewport, true)?;
-	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
-	assert_eq!(session.section, character_ui_menu::InventorySection::Clothing);
-	assert_eq!(session.drawer, character_ui_menu::InventoryDrawerMode::Gallery);
-	assert_eq!(session.active_memory().focused_item, Some(original_focus));
-	let drawer = screen_slots(app.world_mut())?[0];
-	let selected = app.world().get::<HudMenu>(drawer).context("Drawer HUD menu")?.selected;
-	let mut items = app.world_mut().query::<(&HudMenuItem, &InventoryItemKey)>();
-	assert!(items.iter(app.world()).any(|(item, key)| {
-		item.menu == drawer && item.index == selected && *key == original_focus
-	}));
-	Ok(())
-}
-
-#[test]
-fn picker_waits_for_rebuilt_drawer_to_acknowledge_one_equip() -> Result<()> {
-	let (mut app, viewport) = fixture()?;
-	app.init_resource::<InventoryEquipActivations>();
-	app.add_observer(record_inventory_equip);
-	let source_index = *clothing_order(app.world())?.first().context("equipped source")?;
-	app.world_mut()
-		.get_mut::<InventoryMenuSession>(viewport)
-		.context("session")?
-		.region = character_ui_menu::InventoryRegion::Equipped;
-	render(&mut app, viewport, true)?;
-	let [_, equipped] = screen_slots(app.world_mut())?;
-	let (source_ordinal, _) = tile(app.world_mut(), equipped, source_index)?;
-	app.world_mut()
-		.get_mut::<HudMenu>(equipped)
-		.context("Equipped HUD menu")?
-		.selected = source_ordinal;
-	app.world_mut().trigger(MenuNavImpulse::new(equipped, MenuNav::Select));
-	app.world_mut().flush();
-	app.update();
-
-	let [drawer, _] = screen_slots(app.world_mut())?;
-	let current_order = clothing_order(app.world())?;
-	let candidate = (0..5)
-		.find(|index| !current_order.contains(index))
-		.context("unequipped clothing candidate")?;
-	let (candidate_ordinal, _) = tile(app.world_mut(), drawer, candidate)?;
-	app.world_mut().get_mut::<HudMenu>(drawer).context("Drawer HUD menu")?.selected =
-		candidate_ordinal;
-	app.world_mut().trigger(MenuNavImpulse::new(drawer, MenuNav::Select));
-	app.world_mut().flush();
-	assert_eq!(app.world().resource::<InventoryEquipActivations>().0, [candidate]);
-	assert!(clothing_order(app.world())?.contains(&candidate));
-	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
-	assert_eq!(session.region, character_ui_menu::InventoryRegion::Drawer);
-	assert_eq!(session.picker_source.and_then(|source| source.attempted_item), Some(candidate));
-
-	// The host has accepted the action, but the picker waits for the rebuilt tile state.
-	render(&mut app, viewport, true)?;
-	assert!(app
-		.world()
-		.get::<InventoryMenuSession>(viewport)
-		.context("session")?
-		.picker_source
-		.is_some());
-	app.update();
-	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
-	assert!(session.picker_source.is_none());
-	assert_eq!(session.region, character_ui_menu::InventoryRegion::Equipped);
-	assert_eq!(focus_identity(app.world(), viewport)?.index, source_index);
-	Ok(())
-}
-
-#[test]
-fn rejected_full_capacity_choice_remains_in_the_drawer() -> Result<()> {
-	let (mut app, viewport) = fixture()?;
-	let mut full_menu = CharacterMenu::for_create(
-		(0..8)
-			.map(|_| {
-				InventoryItem::clothing(
-					ClothingMesh::Pants,
-					ClothingMaterial::Cloth,
-					ItemColor::Red,
-				)
-			})
-			.collect(),
-	);
-	for index in 0..6 {
-		if full_menu
-			.inventory
-			.as_ref()
-			.is_some_and(|inventory| inventory.clothing.contains(&index))
-		{
-			continue;
-		}
-		if !full_menu.apply(MenuEvent::EquipInventory(index)) {
-			anyhow::bail!("fixture clothing item {index} should equip");
-		}
-	}
-	app.insert_resource(CharacterMenuState(full_menu));
-	app.init_resource::<InventoryEquipActivations>();
-	app.add_observer(record_inventory_equip);
-	let candidate = 6;
-	let source_index = *clothing_order(app.world())?.first().context("equipped source")?;
-	app.world_mut()
-		.get_mut::<InventoryMenuSession>(viewport)
-		.context("session")?
-		.region = character_ui_menu::InventoryRegion::Equipped;
-	render(&mut app, viewport, true)?;
-	let [_, equipped] = screen_slots(app.world_mut())?;
-	let (source_ordinal, _) = tile(app.world_mut(), equipped, source_index)?;
-	app.world_mut()
-		.get_mut::<HudMenu>(equipped)
-		.context("Equipped HUD menu")?
-		.selected = source_ordinal;
-	app.world_mut().trigger(MenuNavImpulse::new(equipped, MenuNav::Select));
-	app.world_mut().flush();
-	app.update();
-	let [drawer, _] = screen_slots(app.world_mut())?;
-	let (candidate_ordinal, _) = tile(app.world_mut(), drawer, candidate)?;
-	app.world_mut().get_mut::<HudMenu>(drawer).context("Drawer HUD menu")?.selected =
-		candidate_ordinal;
-	app.world_mut().trigger(MenuNavImpulse::new(drawer, MenuNav::Select));
-	app.world_mut().flush();
-	assert_eq!(app.world().resource::<InventoryEquipActivations>().0, [candidate]);
-	assert_eq!(clothing_order(app.world())?.len(), 6);
-	app.update();
-	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
-	assert_eq!(session.region, character_ui_menu::InventoryRegion::Drawer);
-	assert_eq!(session.picker_source.and_then(|source| source.attempted_item), Some(candidate));
-	assert!(app.world().get::<OverlaySelectViewport>(viewport).is_some());
-	Ok(())
-}
-
-#[test]
-fn choosing_equipped_duplicate_finishes_picker_without_domain_action() -> Result<()> {
-	let (mut app, viewport) = fixture()?;
-	app.init_resource::<InventoryEquipActivations>();
-	app.add_observer(record_inventory_equip);
-	let before = clothing_order(app.world())?;
-	let source_index = *before.first().context("equipped source")?;
-	app.world_mut()
-		.get_mut::<InventoryMenuSession>(viewport)
-		.context("session")?
-		.region = character_ui_menu::InventoryRegion::Equipped;
-	render(&mut app, viewport, true)?;
-	let [_, equipped] = screen_slots(app.world_mut())?;
-	let (source_ordinal, _) = tile(app.world_mut(), equipped, source_index)?;
-	app.world_mut()
-		.get_mut::<HudMenu>(equipped)
-		.context("Equipped HUD menu")?
-		.selected = source_ordinal;
-	app.world_mut().trigger(MenuNavImpulse::new(equipped, MenuNav::Select));
-	app.world_mut().flush();
-	app.update();
-	render(&mut app, viewport, true)?;
-	let [drawer, _] = screen_slots(app.world_mut())?;
-	let (duplicate_ordinal, _) = tile(app.world_mut(), drawer, source_index)?;
-	app.world_mut().get_mut::<HudMenu>(drawer).context("Drawer HUD menu")?.selected =
-		duplicate_ordinal;
-	app.world_mut().trigger(MenuNavImpulse::new(drawer, MenuNav::Select));
-	app.world_mut().flush();
-	assert_eq!(clothing_order(app.world())?, before);
-	assert!(app.world().resource::<InventoryEquipActivations>().0.is_empty());
-	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
-	assert!(session.picker_source.is_none());
-	assert_eq!(session.region, character_ui_menu::InventoryRegion::Equipped);
-	assert_eq!(focus_identity(app.world(), viewport)?.index, source_index);
-	assert!(app.world().get::<OverlaySelectViewport>(viewport).is_some());
-	Ok(())
-}
-
-#[test]
-fn empty_equipped_slot_picker_restores_its_ordinal_after_back() -> Result<()> {
+fn click(app: &mut App, entity: Entity) {
 	use bevy::{
 		camera::NormalizedRenderTarget,
 		picking::{
@@ -543,120 +197,477 @@ fn empty_equipped_slot_picker_restores_its_ordinal_after_back() -> Result<()> {
 			pointer::{Location, PointerButton, PointerId},
 		},
 	};
-
-	let (mut app, viewport) = fixture()?;
-	{
-		let mut session =
-			app.world_mut().get_mut::<InventoryMenuSession>(viewport).context("session")?;
-		session.section = character_ui_menu::InventorySection::Tools;
-		session.region = character_ui_menu::InventoryRegion::Equipped;
-	}
-	render(&mut app, viewport, true)?;
-	let [_, equipped] = screen_slots(app.world_mut())?;
-	let order_len = app
-		.world()
-		.resource::<CharacterMenuState>()
-		.0
-		.inventory
-		.as_ref()
-		.context("inventory")?
-		.weapons
-		.len();
-	let mut slots = app.world_mut().query::<(&HudMenuItem, &InventoryAIOPSlot)>();
-	let ordinal = slots
-		.iter(app.world())
-		.filter(|(item, slot)| item.menu == equipped && slot.ordinal >= order_len)
-		.map(|(_, slot)| slot.ordinal)
-		.min()
-		.context("empty equipped slot after the occupied range")?;
-	app.world_mut()
-		.get_mut::<HudMenu>(equipped)
-		.context("Equipped HUD menu")?
-		.selected = ordinal;
-	let stale_selection = if ordinal == 0 { 1 } else { 0 };
-	app.world_mut().trigger(MenuNavImpulse::new(equipped, MenuNav::Select));
-	app.world_mut().flush();
-	app.update();
-	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
-	let source = session.picker_source.context("empty-slot picker")?;
-	assert_eq!(source.ordinal, ordinal);
-	assert!(source.item.is_none());
-	assert_eq!(session.region, character_ui_menu::InventoryRegion::Drawer);
-	let other_empty = {
-		let mut slots = app.world_mut().query::<(Entity, &HudMenuItem, &InventoryAIOPSlot)>();
-		slots
-			.iter(app.world())
-			.find(|(_, item, slot)| item.menu == equipped && slot.ordinal != ordinal)
-			.map(|(entity, _, _)| entity)
-			.context("another empty equipped slot")?
-	};
-	let location = Location {
-		target: NormalizedRenderTarget::None { width: 800, height: 600 },
-		position: Vec2::ZERO,
-	};
 	app.world_mut().trigger(PointerClick {
-		entity: other_empty,
-		pointer: Pointer::new(PointerId::Mouse, location),
+		entity,
+		pointer: Pointer::new(
+			PointerId::Mouse,
+			Location {
+				target: NormalizedRenderTarget::None { width: 800, height: 600 },
+				position: Vec2::ZERO,
+			},
+		),
 		button: PointerButton::Primary,
 		hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
 		duration: std::time::Duration::ZERO,
 		count: 1,
 	});
 	app.world_mut().flush();
+}
+
+fn start_picker(app: &mut App, viewport: Entity, position: usize) -> Result<Entity> {
+	let [drawer, equipped] = screen_slots(app.world_mut())?;
+	app.world_mut().get_mut::<HudMenu>(equipped).context("AIOP menu")?.selected = position;
+	nav(app, equipped, MenuNav::Select);
+	app.update();
+	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
+	assert_eq!(session.picker_source.map(|source| source.ordinal), Some(position));
+	assert_eq!(session.region, character_ui_menu::InventoryRegion::Drawer);
+	assert!(app.world().get::<HudOverlayMenu>(drawer).is_some());
+	assert!(app.world().get::<HudOverlayMenu>(equipped).is_none());
+	Ok(drawer)
+}
+
+fn choose_item(app: &mut App, drawer: Entity, index: usize) -> Result<()> {
+	let (ordinal, _) = tile(app.world_mut(), drawer, index)?;
+	app.world_mut().get_mut::<HudMenu>(drawer).context("Drawer menu")?.selected = ordinal;
+	nav(app, drawer, MenuNav::Select);
+	Ok(())
+}
+
+#[test]
+fn aiop_owns_input_until_slot_selection_and_drawer_clicks_cannot_bypass_it() -> Result<()> {
+	let (mut app, viewport) = fixture()?;
+	render(&mut app, viewport, true)?;
+	let before = clothing_order(app.world())?;
+	let [drawer, equipped] = screen_slots(app.world_mut())?;
+	assert!(app.world().get::<HudOverlayMenu>(equipped).is_some());
+	assert!(app.world().get::<HudOverlayMenu>(drawer).is_none());
+	assert_eq!(
+		app.world().get::<InventoryMenuSession>(viewport).context("session")?.region,
+		character_ui_menu::InventoryRegion::Equipped
+	);
+	let initial_drawer_selection =
+		app.world().get::<HudMenu>(drawer).context("Drawer menu")?.selected;
+	let (_, candidate) = tile(app.world_mut(), drawer, 4)?;
+	click(&mut app, candidate);
+	nav(&mut app, drawer, MenuNav::Right);
+	nav(&mut app, drawer, MenuNav::Select);
+	for action in [InventoryNavigation::ToggleRegion, InventoryNavigation::FocusDrawer] {
+		app.world_mut().trigger(InventoryNavigationImpulse::new(drawer, action));
+		app.world_mut().flush();
+	}
+	assert_eq!(
+		app.world().get::<HudMenu>(drawer).context("Drawer menu")?.selected,
+		initial_drawer_selection
+	);
+	assert_eq!(clothing_order(app.world())?, before);
+	assert!(app
+		.world()
+		.get::<InventoryMenuSession>(viewport)
+		.context("session")?
+		.picker_source
+		.is_none());
+
+	// Up/Down choose slots. Left/Right neither mutate nor move the AIOP selection.
+	nav(&mut app, equipped, MenuNav::Down);
+	assert_eq!(app.world().get::<HudMenu>(equipped).context("AIOP menu")?.selected, 1);
+	nav(&mut app, equipped, MenuNav::Left);
+	nav(&mut app, equipped, MenuNav::Right);
+	assert_eq!(app.world().get::<HudMenu>(equipped).context("AIOP menu")?.selected, 1);
+	assert_eq!(clothing_order(app.world())?, before);
+	nav(&mut app, equipped, MenuNav::Up);
+	assert_eq!(app.world().get::<HudMenu>(equipped).context("AIOP menu")?.selected, 0);
+
+	let drawer = start_picker(&mut app, viewport, 1)?;
+	let old = app.world().get::<HudMenu>(drawer).context("Drawer menu")?.selected;
+	nav(&mut app, drawer, MenuNav::Right);
+	assert_eq!(app.world().get::<HudMenu>(drawer).context("Drawer menu")?.selected, (old + 1) % 5);
+	nav(&mut app, drawer, MenuNav::Left);
+	assert_eq!(app.world().get::<HudMenu>(drawer).context("Drawer menu")?.selected, old);
+	nav(&mut app, drawer, MenuNav::Down);
+	assert_eq!(app.world().get::<HudMenu>(drawer).context("Drawer menu")?.selected, old);
+	assert_eq!(clothing_order(app.world())?, before);
+	Ok(())
+}
+
+#[test]
+fn middle_slot_choice_replaces_exact_slot_and_waits_for_that_slot_in_the_host_rebuild() -> Result<()>
+{
+	let (mut app, viewport) = fixture()?;
+	render(&mut app, viewport, true)?;
+	let before = clothing_order(app.world())?;
+	let candidate = (0..5).find(|index| !before.contains(index)).context("owned candidate")?;
+	let drawer = start_picker(&mut app, viewport, 1)?;
+	choose_item(&mut app, drawer, candidate)?;
+	let mut expected = before.clone();
+	expected[1] = candidate;
+	assert_eq!(clothing_order(app.world())?, expected);
+	app.update();
+	assert!(app
+		.world()
+		.get::<InventoryMenuSession>(viewport)
+		.context("session")?
+		.picker_source
+		.is_some());
+	render(&mut app, viewport, true)?;
+	app.update();
+	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
+	assert!(session.picker_source.is_none());
+	assert_eq!(session.region, character_ui_menu::InventoryRegion::Equipped);
+	assert_eq!(session.active_memory().focused_ordinal, 1);
+	assert_eq!(focus_identity(app.world(), viewport)?.index, candidate);
+	app.update();
+	let equipped = screen_slots(app.world_mut())?[1];
+	assert_eq!(app.world().get::<HudMenu>(equipped).context("AIOP menu")?.selected, 1);
+	Ok(())
+}
+
+#[test]
+fn full_slot_replacement_and_equipped_candidate_swap_preserve_other_slots() -> Result<()> {
+	let items = (0..8)
+		.map(|_| {
+			InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Red)
+		})
+		.collect();
+	let (mut app, viewport) = fixture_with_items(items)?;
+	for index in 0..6 {
+		let menu = &mut app.world_mut().resource_mut::<CharacterMenuState>().0;
+		if !menu
+			.inventory
+			.as_ref()
+			.is_some_and(|inventory| inventory.clothing.contains(&index))
+		{
+			assert!(menu.apply(MenuEvent::EquipInventory(index)));
+		}
+	}
+	render(&mut app, viewport, true)?;
+	let mut expected = clothing_order(app.world())?;
+	let drawer = start_picker(&mut app, viewport, 3)?;
+	choose_item(&mut app, drawer, 6)?;
+	expected[3] = 6;
+	assert_eq!(clothing_order(app.world())?, expected);
+	render(&mut app, viewport, true)?;
+	app.update();
+	let drawer = start_picker(&mut app, viewport, 2)?;
+	let candidate = expected[5];
+	choose_item(&mut app, drawer, candidate)?;
+	expected.swap(2, 5);
+	assert_eq!(clothing_order(app.world())?, expected);
+	// A stale Drawer equipped marker cannot acknowledge a relocation to another slot.
+	app.update();
+	assert!(app
+		.world()
+		.get::<InventoryMenuSession>(viewport)
+		.context("session")?
+		.picker_source
+		.is_some());
+	render(&mut app, viewport, true)?;
+	app.update();
+	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
+	assert!(session.picker_source.is_none());
+	assert_eq!(session.active_memory().focused_ordinal, 2);
+	assert_eq!(focus_identity(app.world(), viewport)?.index, candidate);
+	Ok(())
+}
+
+#[test]
+fn back_cancels_picker_before_second_back_closes_inventory() -> Result<()> {
+	use menu_components::{MenuModalLayer, MenuModalStack, MenuNavPad};
+	let (mut app, viewport) = fixture()?;
+	app.world_mut().resource_mut::<ActiveOverlayKey>().0 = Some("Inventory");
+	app.world_mut()
+		.resource_mut::<MenuModalStack>()
+		.open(MenuModalLayer::OVERLAY_SELECT);
+	render(&mut app, viewport, true)?;
+	let before = clothing_order(app.world())?;
+	let drawer = start_picker(&mut app, viewport, 2)?;
+	nav(&mut app, drawer, MenuNav::Right);
+	nav(&mut app, drawer, MenuNav::Back);
+	app.update();
+	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
+	assert!(session.picker_source.is_none());
+	assert_eq!(session.region, character_ui_menu::InventoryRegion::Equipped);
+	assert_eq!(session.active_memory().focused_ordinal, 2);
+	assert_eq!(clothing_order(app.world())?, before);
+	assert_eq!(app.world().resource::<OverlayCloseActivations>().0, 0);
+	// The next fresh Back is allowed through to the existing modal dismissal path.
+	app.world_mut().resource_mut::<MenuNavPad>().events.push(MenuNav::Back);
+	// Preserve the registered modal systems and their message-reader cursors.
+	app.world_mut().run_schedule(Update);
+	app.world_mut().flush();
+	assert_eq!(app.world().resource::<OverlayCloseActivations>().0, 1);
+	Ok(())
+}
+
+#[test]
+fn only_next_empty_slot_is_actionable_and_fill_returns_to_its_exact_position() -> Result<()> {
+	let (mut app, viewport) = fixture()?;
+	render(&mut app, viewport, true)?;
+	let before = clothing_order(app.world())?;
+	let equipped = screen_slots(app.world_mut())?[1];
+	assert_eq!(
+		app.world().get::<HudMenu>(equipped).context("AIOP menu")?.item_count,
+		before.len() + 1
+	);
+	let mut slots = app.world_mut().query::<(&HudMenuItem, &InventoryAIOPSlot)>();
+	assert!(slots
+		.iter(app.world())
+		.filter(|(item, _)| item.menu == equipped)
+		.all(|(_, slot)| slot.ordinal <= before.len()));
+	let drawer = start_picker(&mut app, viewport, before.len())?;
+	choose_item(&mut app, drawer, before[0])?;
+	assert_eq!(clothing_order(app.world())?, before);
 	assert_eq!(
 		app.world()
 			.get::<InventoryMenuSession>(viewport)
 			.context("session")?
 			.picker_source
-			.map(|source| source.ordinal),
-		Some(ordinal),
+			.and_then(|source| source.attempted_item),
+		None
 	);
-	app.world_mut()
-		.get_mut::<HudMenu>(equipped)
-		.context("inactive Equipped HUD menu")?
-		.selected = stale_selection;
-
-	let [drawer, _] = screen_slots(app.world_mut())?;
-	app.world_mut().trigger(MenuNavImpulse::new(drawer, MenuNav::Back));
-	app.world_mut().flush();
+	let candidate = (0..5).find(|index| !before.contains(index)).context("owned candidate")?;
+	choose_item(&mut app, drawer, candidate)?;
+	let mut expected = before.clone();
+	expected.push(candidate);
+	assert_eq!(clothing_order(app.world())?, expected);
+	render(&mut app, viewport, true)?;
 	app.update();
 	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
 	assert!(session.picker_source.is_none());
-	assert_eq!(session.region, character_ui_menu::InventoryRegion::Equipped);
-	assert_eq!(session.active_memory().focused_ordinal, ordinal);
-	assert_eq!(
-		app.world().get::<HudMenu>(equipped).context("Equipped HUD menu")?.selected,
-		ordinal
-	);
-	assert_eq!(app.world().resource::<OverlayCloseActivations>().0, 0);
+	assert_eq!(session.active_memory().focused_ordinal, before.len());
+	assert_eq!(focus_identity(app.world(), viewport)?.index, candidate);
 	Ok(())
 }
 
 #[test]
-fn read_only_screen_cannot_mutate_character_inventory() -> Result<()> {
+fn gallery_navigation_uses_five_columns_after_aiop_opens_the_drawer() -> Result<()> {
+	let items = (0..16)
+		.map(|_| {
+			InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Red)
+		})
+		.collect();
+	let (mut app, viewport) = fixture_with_items(items)?;
+	render(&mut app, viewport, true)?;
+	let drawer = start_picker(&mut app, viewport, 1)?;
+	app.world_mut()
+		.trigger(InventoryNavigationImpulse::new(drawer, InventoryNavigation::ToggleDrawer));
+	app.world_mut().flush();
+	{
+		let mut session =
+			app.world_mut().get_mut::<InventoryMenuSession>(viewport).context("session")?;
+		session.active_memory_mut().focused_item = Some(InventoryItemKey {
+			index: 4,
+			equipped: false,
+			region: character_ui_menu::InventoryRegion::Drawer,
+		});
+	}
+	render(&mut app, viewport, true)?;
+	let drawer = screen_slots(app.world_mut())?[0];
+	for (expected, scroll) in [(9, 0), (14, 1), (15, 2)] {
+		nav(&mut app, drawer, MenuNav::Down);
+		assert_eq!(app.world().get::<HudMenu>(drawer).context("Drawer menu")?.selected, expected);
+		assert_eq!(
+			app.world()
+				.get::<InventoryMenuSession>(viewport)
+				.context("session")?
+				.active_memory()
+				.gallery_scroll,
+			scroll
+		);
+	}
+	let section = app.world().get::<InventoryMenuSession>(viewport).context("session")?.section;
+	app.world_mut()
+		.trigger(InventoryNavigationImpulse::new(drawer, InventoryNavigation::NextSection));
+	app.world_mut().flush();
+	assert_eq!(
+		app.world().get::<InventoryMenuSession>(viewport).context("session")?.section,
+		section
+	);
+	nav(&mut app, drawer, MenuNav::Back);
+	app.update();
+	app.world_mut()
+		.trigger(InventoryNavigationImpulse::new(drawer, InventoryNavigation::NextSection));
+	app.world_mut().flush();
+	app.world_mut()
+		.trigger(InventoryNavigationImpulse::new(drawer, InventoryNavigation::PreviousSection));
+	app.world_mut().flush();
+	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
+	assert_eq!(session.drawer, character_ui_menu::InventoryDrawerMode::Gallery);
+	assert_eq!(
+		session.section_memory[section.index()][character_ui_menu::InventoryRegion::Drawer.index()]
+			.focused_ordinal,
+		15
+	);
+	Ok(())
+}
+
+#[test]
+fn read_only_screen_blocks_picker_pointer_and_controller_mutations() -> Result<()> {
 	let (mut app, viewport) = fixture()?;
 	render(&mut app, viewport, false)?;
 	let before = app.world().resource::<CharacterMenuState>().0.clone();
-	let drawer = screen_slots(app.world_mut())?[0];
-	let (ordinal, _) = tile(app.world_mut(), drawer, 4)?;
-	app.world_mut().get_mut::<HudMenu>(drawer).context("Drawer HUD menu")?.selected = ordinal;
-	app.world_mut().trigger(MenuNavImpulse::new(drawer, MenuNav::Select));
+	let [drawer, equipped] = screen_slots(app.world_mut())?;
+	let (_, candidate) = tile(app.world_mut(), drawer, 4)?;
+	click(&mut app, candidate);
+	for action in [MenuNav::Select, MenuNav::Left, MenuNav::Right, MenuNav::Up, MenuNav::Down] {
+		nav(&mut app, drawer, action);
+		nav(&mut app, equipped, action);
+	}
+	assert!(app
+		.world()
+		.get::<InventoryMenuSession>(viewport)
+		.context("session")?
+		.picker_source
+		.is_none());
+	app.world_mut().trigger(menu_components::MenuActionImpulse::new(
+		equipped,
+		menu_components::MenuAction::Unequip,
+	));
 	app.world_mut().flush();
 	assert_eq!(app.world().resource::<CharacterMenuState>().0, before);
+	Ok(())
+}
 
+#[test]
+fn rejected_tanz_candidate_allows_retry_in_the_same_slot_picker() -> Result<()> {
+	use character_items::TanzId;
+	let (mut app, viewport) = fixture()?;
+	let start;
+	{
+		let mut state = app.world_mut().resource_mut::<CharacterMenuState>();
+		let inventory = state.0.inventory.as_mut().context("inventory")?;
+		let [first, second, valid, ..] = TanzId::STARTER;
+		start = inventory.items.len();
+		inventory.items.extend([first, second, first, valid].map(InventoryItem::tanz));
+		inventory.tanzes = vec![start, start + 1];
+	}
 	app.world_mut()
 		.get_mut::<InventoryMenuSession>(viewport)
 		.context("session")?
-		.region = character_ui_menu::InventoryRegion::Equipped;
-	render(&mut app, viewport, false)?;
-	let equipped = screen_slots(app.world_mut())?[1];
-	let (ordinal, _) = tile(app.world_mut(), equipped, 1)?;
+		.section = character_ui_menu::InventorySection::Tanzes;
+	render(&mut app, viewport, true)?;
+	let drawer = start_picker(&mut app, viewport, 1)?;
+	choose_item(&mut app, drawer, start + 2)?;
+	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
+	assert_eq!(session.picker_source.and_then(|source| source.attempted_item), None);
+	assert_eq!(session.region, character_ui_menu::InventoryRegion::Drawer);
+	assert_eq!(
+		app.world()
+			.resource::<CharacterMenuState>()
+			.0
+			.inventory
+			.as_ref()
+			.context("inventory")?
+			.tanzes,
+		vec![start, start + 1]
+	);
+	choose_item(&mut app, drawer, start + 3)?;
+	assert_eq!(
+		app.world()
+			.resource::<CharacterMenuState>()
+			.0
+			.inventory
+			.as_ref()
+			.context("inventory")?
+			.tanzes,
+		vec![start, start + 3]
+	);
+	render(&mut app, viewport, true)?;
+	app.update();
+	assert!(app
+		.world()
+		.get::<InventoryMenuSession>(viewport)
+		.context("session")?
+		.picker_source
+		.is_none());
+	assert_eq!(focus_identity(app.world(), viewport)?.index, start + 3);
+	Ok(())
+}
+
+#[test]
+fn pointer_back_and_escape_cancel_the_picker_before_dismissal() -> Result<()> {
+	for keyboard_back in [false, true] {
+		let (mut app, viewport) = fixture()?;
+		render(&mut app, viewport, true)?;
+		start_picker(&mut app, viewport, 1)?;
+		if keyboard_back {
+			app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::Escape);
+			// Inject at the Update input boundary, after InputPlugin's edge reset.
+			app.world_mut().run_schedule(Update);
+			app.world_mut().resource_mut::<ButtonInput<KeyCode>>().release(KeyCode::Escape);
+		} else {
+			let back = app
+				.world_mut()
+				.query_filtered::<Entity, With<maybraid_character_ui_menu_renderer::CloseOverlaySelect>>(
+				)
+				.iter(app.world())
+				.next()
+				.context("footer Back")?;
+			click(&mut app, back);
+			app.update();
+		}
+		let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
+		assert!(session.picker_source.is_none());
+		assert_eq!(session.region, character_ui_menu::InventoryRegion::Equipped);
+		assert_eq!(session.active_memory().focused_ordinal, 1);
+		assert_eq!(app.world().resource::<OverlayCloseActivations>().0, 0);
+	}
+	Ok(())
+}
+
+#[test]
+fn lubikan_slot_picker_swaps_owned_accounts_and_keeps_self_protected() -> Result<()> {
+	use lubikans::{
+		LubikanAccountId, LubikanDefinition, LubikanDefinitionId, LubikanLedger, LubikanOrder,
+	};
+	let (mut app, viewport) = fixture()?;
+	let mut ledger = LubikanLedger::default();
+	let first =
+		ledger.ensure_owned(LubikanDefinition::new(LubikanDefinitionId::from_raw(8), 20.0, 5.0));
+	let second =
+		ledger.ensure_owned(LubikanDefinition::new(LubikanDefinitionId::from_raw(3), 20.0, 5.0));
+	app.world_mut().resource_mut::<CharacterMenuState>().0.lubikans =
+		LubikanOrder::from_ledger(&ledger);
 	app.world_mut()
-		.get_mut::<HudMenu>(equipped)
-		.context("Equipped HUD menu")?
-		.selected = ordinal;
-	app.world_mut().trigger(MenuNavImpulse::new(equipped, MenuNav::Left));
-	app.world_mut().flush();
-	assert_eq!(app.world().resource::<CharacterMenuState>().0, before);
+		.get_mut::<InventoryMenuSession>(viewport)
+		.context("session")?
+		.section = character_ui_menu::InventorySection::Lubikan;
+	render(&mut app, viewport, true)?;
+	let equipped = screen_slots(app.world_mut())?[1];
+	nav(&mut app, equipped, MenuNav::Select);
+	assert!(app
+		.world()
+		.get::<InventoryMenuSession>(viewport)
+		.context("session")?
+		.picker_source
+		.is_none());
+	let drawer = start_picker(&mut app, viewport, 1)?;
+	let candidate = {
+		let state = &app.world().resource::<CharacterMenuState>().0;
+		InventoryLayout::lubikan_item_key(
+			state.inventory.as_ref().context("inventory")?,
+			&state.lubikans,
+			second,
+		)
+		.context("second Lubikan key")?
+	};
+	choose_item(&mut app, drawer, candidate)?;
+	assert_eq!(
+		app.world().resource::<CharacterMenuState>().0.lubikans.accounts(),
+		&[LubikanAccountId::SELF, second, first]
+	);
+	app.update();
+	assert!(app
+		.world()
+		.get::<InventoryMenuSession>(viewport)
+		.context("session")?
+		.picker_source
+		.is_some());
+	render(&mut app, viewport, true)?;
+	app.update();
+	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
+	assert!(session.picker_source.is_none());
+	assert_eq!(session.active_memory().focused_ordinal, 1);
+	assert_eq!(focus_identity(app.world(), viewport)?.index, candidate);
 	Ok(())
 }

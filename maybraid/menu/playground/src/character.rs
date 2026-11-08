@@ -16,9 +16,9 @@ use maybraid_character_ui_menu_renderer::{
 	fill_inventory_layout, fill_inventory_loading, fill_inventory_screen, find_overlay_node,
 	overlay_closes_on_pick, spawn_overlay_shell, CharacterHudSystems, CharacterMenuEvent,
 	InventoryFocusHint, InventoryInteraction, InventoryItemKey, InventoryMenuSession,
-	MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink, MenuButton, MenuJustify, MenuSink,
-	MenuThumbnailContext, OverlayClose, OverlayOpen, OverlaySelectRoot, OverlaySelectViewport,
-	RenderContext,
+	InventorySlotEvent, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink, MenuButton,
+	MenuJustify, MenuSink, MenuThumbnailContext, OverlayClose, OverlayOpen, OverlaySelectRoot,
+	OverlaySelectViewport, RenderContext,
 };
 use maybraid_menu_controller::MenuController;
 use maybraid_skill_map::{SkillMapSpinRevealHud, SkillMapTileMaterialPlugin};
@@ -765,6 +765,34 @@ fn sync_inventory_overlay(
 	overlay_sync.showing_loading = !inventory_ready;
 }
 
+/// Convert an owned catalog choice into assignment at the AIOP-selected position.
+fn inventory_slot_event(
+	event: MenuEvent,
+	section: character_ui_menu::InventorySection,
+	position: usize,
+) -> Option<MenuEvent> {
+	use character_items::InventorySlot;
+	use character_ui_menu::InventorySection;
+	match event {
+		MenuEvent::EquipInventory(index) | MenuEvent::UnequipInventory(index) => {
+			let slot = match section {
+				InventorySection::Clothing => InventorySlot::Clothing,
+				InventorySection::Tools => InventorySlot::Weapons,
+				InventorySection::Skills => InventorySlot::Skills,
+				InventorySection::Tanzes => InventorySlot::Tanzes,
+				InventorySection::Lubikan => return None,
+			};
+			Some(MenuEvent::AssignInventorySlot { slot, position, index })
+		}
+		MenuEvent::MoveLubikan { account, .. }
+			if section == InventorySection::Lubikan && !account.is_self() =>
+		{
+			Some(MenuEvent::AssignLubikanSlot { position, account })
+		}
+		_ => None,
+	}
+}
+
 fn spawn_inventory_viewport(
 	parent: &mut ChildSpawnerCommands,
 	session: InventoryMenuSession,
@@ -772,6 +800,7 @@ fn spawn_inventory_viewport(
 	parent
 		.spawn((
 			CharacterInventoryViewport,
+			InventorySlotEvent(inventory_slot_event),
 			OverlaySelectRoot,
 			session,
 			Node {
@@ -984,6 +1013,8 @@ fn on_menu_activate(
 	mut stack: ResMut<MenuModalStack>,
 	mut focus: ResMut<InventoryFocusHint>,
 	screens: Query<Entity, With<CharacterScreen>>,
+	parents: Query<&ChildOf>,
+	mut inventory_sessions: Query<&mut InventoryMenuSession>,
 ) {
 	if screens.is_empty() {
 		return;
@@ -993,14 +1024,32 @@ fn on_menu_activate(
 	activate.propagate(false);
 	let event = activate.event().choice;
 	if !menu_state.0.apply(event) {
+		// A rejected candidate leaves the picker usable for the next choice.
+		if matches!(
+			event,
+			MenuEvent::AssignInventorySlot { .. } | MenuEvent::AssignLubikanSlot { .. }
+		) {
+			if let Some(viewport) = std::iter::once(activate.entity)
+				.chain(parents.iter_ancestors(activate.entity))
+				.find(|entity| inventory_sessions.contains(*entity))
+			{
+				if let Ok(mut session) = inventory_sessions.get_mut(viewport) {
+					if let Some(source) = &mut session.picker_source {
+						source.attempted_item = None;
+					}
+				}
+			}
+		}
 		return;
 	}
 	match event {
-		MenuEvent::EquipInventory(index) | MenuEvent::MoveEquippedInventory { index, .. } => {
+		MenuEvent::EquipInventory(index)
+		| MenuEvent::AssignInventorySlot { index, .. }
+		| MenuEvent::MoveEquippedInventory { index, .. } => {
 			focus.0 =
 				Some(InventoryItemKey { index, equipped: true, region: InventoryRegion::Equipped });
 		}
-		MenuEvent::MoveLubikan { account, .. } => {
+		MenuEvent::MoveLubikan { account, .. } | MenuEvent::AssignLubikanSlot { account, .. } => {
 			focus.0 = menu_state
 				.0
 				.inventory

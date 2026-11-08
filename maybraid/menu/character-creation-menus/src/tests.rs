@@ -11,9 +11,9 @@ use characters::{
 };
 
 use crate::{
-	MenuEvent,
 	character::{CharacterMenu, ConceptSpecies},
 	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, tuberwaber::TuberwaberMenu},
+	MenuEvent,
 };
 
 /// In-range, off-default slider sample. Preview defaults are 1.0; menus clamp to 0.8..=1.2.
@@ -58,7 +58,7 @@ fn inventory_body<'a>(
 trait MenuNodesExt {
 	fn labeled(&self, label: &str) -> anyhow::Result<&MenuNode<MenuEvent>>;
 	fn species_select(&self)
-	-> anyhow::Result<(&[SelectGroup<MenuEvent>], &[MenuNode<MenuEvent>])>;
+		-> anyhow::Result<(&[SelectGroup<MenuEvent>], &[MenuNode<MenuEvent>])>;
 }
 
 impl MenuNodesExt for [MenuNode<MenuEvent>] {
@@ -872,7 +872,7 @@ fn create_menu_weapons_is_ranked_grid_catalog() -> anyhow::Result<()> {
 
 #[test]
 fn create_menu_skill_maps_is_ranked_grid_catalog() -> anyhow::Result<()> {
-	use character_items::{InventoryItem, SKILL_MAP_QUEUE_LIMIT, SkillMapKind, SkillMapSpec};
+	use character_items::{InventoryItem, SkillMapKind, SkillMapSpec, SKILL_MAP_QUEUE_LIMIT};
 
 	let items = vec![
 		InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)),
@@ -926,17 +926,13 @@ fn create_menu_inventory_is_one_section_with_four_headers() -> anyhow::Result<()
 		anyhow::bail!("Inventory must be a Section");
 	};
 	assert_eq!(section_labels(children), ["Clothing", "Tools", "Skill Maps", "Tanzes", "Lubikan"]);
-	assert!(
-		nodes
-			.iter()
-			.all(|node| !matches!(node, MenuNode::Section { label: "Weapons" | "Skill Maps", .. }))
-	);
+	assert!(nodes
+		.iter()
+		.all(|node| !matches!(node, MenuNode::Section { label: "Weapons" | "Skill Maps", .. })));
 	let (_, species) = nodes.species_select()?;
-	assert!(
-		species
-			.iter()
-			.all(|node| !matches!(node, MenuNode::Section { label: "Clothing", .. }))
-	);
+	assert!(species
+		.iter()
+		.all(|node| !matches!(node, MenuNode::Section { label: "Clothing", .. })));
 	let tools = inventory_body(&nodes, "Tools")?;
 	let [MenuNode::OrderedEquipment { rows }, MenuNode::GridCatalog { .. }] = tools else {
 		anyhow::bail!("Tools must have equipped and unequipped panes");
@@ -1237,6 +1233,69 @@ fn drop_inventory_removes_an_item_and_unequips_it() -> anyhow::Result<()> {
 }
 
 #[test]
+fn slot_assignment_is_allowed_after_appearance_lock_and_updates_clothing() -> anyhow::Result<()> {
+	use character_items::{ClothingMaterial, InventoryItem, InventorySlot, ItemColor};
+
+	let mut menu = CharacterMenu::for_create(vec![
+		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Natural),
+		InventoryItem::clothing(ClothingMesh::TankTop, ClothingMaterial::Cloth, ItemColor::Red),
+		InventoryItem::clothing(ClothingMesh::Robe, ClothingMaterial::Cloth, ItemColor::Cool),
+	]);
+	menu.appearance_locked = true;
+	let event =
+		MenuEvent::AssignInventorySlot { slot: InventorySlot::Clothing, position: 1, index: 2 };
+	assert!(event.edits_inventory());
+	assert_eq!(menu.camera_focus_for_event(event), Some(menu.body_preview_focus()));
+	assert!(menu.apply(event));
+	let inventory = menu.inventory.as_ref().ok_or_else(|| anyhow::anyhow!("inventory"))?;
+	assert_eq!(inventory.clothing, vec![0, 2]);
+	assert_eq!(inventory.items.len(), 3);
+	assert!(menu.braidman.clothing.value.layers.contains(ClothingMesh::Robe));
+	assert!(!menu.braidman.clothing.value.layers.contains(ClothingMesh::TankTop));
+	assert!(menu.brodler.clothing.value.layers.contains(ClothingMesh::Robe));
+	let before = menu.clone();
+	assert!(menu.apply(event), "same-item selection completes without mutation");
+	assert_eq!(menu, before);
+	assert!(!menu.apply(MenuEvent::AssignInventorySlot {
+		slot: InventorySlot::Weapons,
+		position: 0,
+		index: 2,
+	}));
+	assert_eq!(menu, before);
+	assert!(!CharacterMenu::default().apply(event));
+	Ok(())
+}
+
+#[test]
+fn lubikan_slot_assignment_swaps_owned_accounts_and_preserves_self() {
+	use lubikans::{
+		LubikanAccountId, LubikanDefinition, LubikanDefinitionId, LubikanLedger, LubikanOrder,
+	};
+
+	let mut ledger = LubikanLedger::default();
+	let first =
+		ledger.ensure_owned(LubikanDefinition::new(LubikanDefinitionId::from_raw(1), 20.0, 5.0));
+	let second =
+		ledger.ensure_owned(LubikanDefinition::new(LubikanDefinitionId::from_raw(2), 20.0, 5.0));
+	let mut menu = CharacterMenu::default();
+	menu.lubikans = LubikanOrder::from_ledger(&ledger);
+	menu.appearance_locked = true;
+	let event = MenuEvent::AssignLubikanSlot { position: 1, account: second };
+	assert!(event.edits_inventory());
+	assert_eq!(menu.camera_focus_for_event(event), Some(menu.body_preview_focus()));
+	assert!(menu.apply(event));
+	assert_eq!(menu.lubikans.accounts(), &[LubikanAccountId::SELF, second, first]);
+	let before = menu.clone();
+	assert!(menu.apply(event));
+	assert!(!menu.apply(MenuEvent::AssignLubikanSlot { position: 0, account: first }));
+	assert!(
+		!menu.apply(MenuEvent::AssignLubikanSlot { position: 1, account: LubikanAccountId::SELF })
+	);
+	assert!(!menu.apply(MenuEvent::AssignLubikanSlot { position: 3, account: first }));
+	assert_eq!(menu, before);
+}
+
+#[test]
 fn apply_drop_refuses_intrinsic_fisticuffs() -> anyhow::Result<()> {
 	use character_items::{FirearmMesh, InventoryItem};
 
@@ -1293,13 +1352,13 @@ fn default_character_menu_uses_braidman_preview_without_recursing() {
 #[test]
 fn from_species_constructors_set_selected_and_keep_inactive_defaults() {
 	use characters::{
-		ConceptAnimation,
 		presets::GenderPreset,
 		species::{
 			brenal::{BrenalConfig, BrenalHornMesh},
 			grener::{GrenerBodyColor, GrenerConfig},
 			tuberwaber::TuberwaberConfig,
 		},
+		ConceptAnimation,
 	};
 
 	use crate::characters::brenal::BrenalMenu;
