@@ -1,4 +1,4 @@
-//! Title-sequence window. Pass `--output` to write a frame-exact MP4.
+//! Title-sequence window. Pass `--output` to write a frame-exact preview + overlay.
 
 use std::path::PathBuf;
 
@@ -29,6 +29,7 @@ fn main() {
 	if let Some(output) = args.output {
 		app.insert_resource(CaptureIo::new(
 			output,
+			args.overlay,
 			args.ffmpeg,
 			args.keep_frames,
 			args.warmup_frames,
