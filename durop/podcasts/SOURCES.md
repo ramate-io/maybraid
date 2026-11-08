@@ -1,7 +1,7 @@
 # Podcast asset sources
 
-All 26 catalog slots contain downloaded media and generated 320-pixel-wide PNG icons.
-Twenty selections use the requested source; six use commercially usable alternatives
+All 28 catalog slots contain downloaded media and generated 320-pixel-wide PNG icons.
+Twenty-two selections use the requested source; six use commercially usable alternatives
 approved after provider access failed. Original URLs and placement requests remain
 in the `pending/` selection records and in the substitution table below. IDs stay
 stable so replacing a source does not break a Durop binding.
@@ -11,7 +11,8 @@ Freesound alternative uses the site's high-quality MP3 preview. Icons use an unf
 media frame at its original aspect ratio or a cyan audio waveform on a transparent background,
 matching Durop’s base reactions catalog. They omit titles, which Durop displays
 separately; source licenses also apply to these previews. No trimming, audio replacement, green-screen removal, or
-transcoding was applied. [SHA256SUMS](SHA256SUMS) records media and icon bytes.
+transcoding was applied. The title-swallow MOV is copied byte-for-byte from
+`maybraid/art/promo/title-swallow.mov` on main (merge `9f9fbf658`). [SHA256SUMS](SHA256SUMS) records media and icon bytes.
 
 Provider licenses are linked per item; these files are not relicensed under
 Maybraid's repository license. Pexels permits free commercial use with its stated
@@ -54,6 +55,12 @@ All 11 requested bottom-right defaults are preserved, including substitutions.
 | `youtube-GSYu6NqrAYw` | video | [Sad older man (stock alternative)](https://www.pexels.com/video/close-up-video-of-a-sad-man-with-beard-9644245/) | Ivan S | [Pexels License](https://www.pexels.com/license/) | bottom-right |
 | `youtube-ksGSw7hA-WQ` | video | [Suit dance (stock alternative)](https://www.pexels.com/video/a-man-dancing-in-a-suit-7672395/) | KoolShooters | [Pexels License](https://www.pexels.com/license/) | bottom-right |
 | `youtube-m_usau745Ig` | video | [Shock — close-up reaction (stock alternative)](https://www.pexels.com/video/close-up-video-of-a-man-looking-at-camera-4954375/) | Nothing Ahead | [Pexels License](https://www.pexels.com/license/) | bottom-right |
+| `dj-airhorn` | audio | [DJ airhorn](https://pixabay.com/sound-effects/film-special-effects-dj-airhorn-sound-39405/) | freesound_community | [Pixabay Content License](https://pixabay.com/service/license-summary/) | audio |
+| `title-swallow` | video | [Maybraid title swallow — PR #1563](https://github.com/ramate-io/maybraid/pull/1563) | Maybraid contributors | [Maybraid repository license](https://github.com/ramate-io/maybraid/blob/main/LICENSE.md) | fullscreen center |
+
+The title swallow retains its upstream fullscreen `center` / width 1 / `cover`
+placement and 6500 ms playback cap. It is separate from the eleven bottom-right
+reaction defaults.
 
 ## Approved substitutions
 
@@ -103,3 +110,6 @@ Each URL below identifies the exact unchanged rendition bundled in `pack/`.
 | `youtube-GSYu6NqrAYw` | [Provider file](https://videos.pexels.com/video-files/9644245/9644245-hd_1280_720_25fps.mp4) |
 | `youtube-ksGSw7hA-WQ` | [Provider file](https://videos.pexels.com/video-files/7672395/7672395-hd_1280_720_25fps.mp4) |
 | `youtube-m_usau745Ig` | [Provider file](https://videos.pexels.com/video-files/4954375/4954375-hd_1280_720_25fps.mp4) |
+
+| `dj-airhorn` | [Provider file](https://cdn.pixabay.com/download/audio/2022/03/10/audio_5cb595572d.mp3?filename=freesound_community-dj-airhorn-sound-39405.mp3) |
+| `title-swallow` | [Main source MOV](https://github.com/ramate-io/maybraid/blob/9f9fbf658d5419af23c683639cb4a3ea80071494/maybraid/art/promo/title-swallow.mov) |

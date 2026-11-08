@@ -1,7 +1,7 @@
 # Maybraid podcast drops
 
 This directory holds the podcast catalog for [Durop](https://github.com/ramate-io/durop).
-The loadable `pack/` contains all 26 podcast slots: 20 requested assets and six
+The loadable `pack/` contains all 28 podcast slots: 22 requested assets and six
 approved alternatives for blocked sources, each with a generated 320-pixel-wide PNG
 icon. [SOURCES.md](SOURCES.md) records creators, licenses, exact downloads and
 substitutions; [VALIDATION.md](VALIDATION.md) records Durop acceptance checks.
@@ -30,8 +30,9 @@ The template media suffix is a suggestion; importing uses the local file's actua
 supported extension. Pending templates remain as the original selection record
 after import; the corresponding `pack/<category>/<id>.json` indicates readiness.
 
-Visual selections use `bottom-right`, `contain`, and one quarter of the display
-width. Audio selections omit visual metadata, except `cute-level-up`, whose
+Reaction visuals use `bottom-right`, `contain`, and one quarter of the display
+width. The title swallow is a fullscreen transition: `center`, full width, and
+`cover`, with a 6500 ms cap for its six-second sequence. Audio selections omit visual metadata, except `cute-level-up`, whose
 requested bottom-right setting is preserved (it remains an audio file).
 Clips play once, restart on retrigger, and use Durop's 10-second duration cap.
 Adjust individual metadata if a selected clip needs a longer duration, at most
@@ -44,6 +45,7 @@ Run `python3 durop/podcasts/generate_icons.py` with FFmpeg on PATH. Like Duropâ€
 base reactions catalog, visual thumbnails are unframed source images at 320 pixels
 wide with their original aspect ratio. Audio thumbnails are 320 Ã— 180 cyan
 waveforms on a transparent background. Thumbnails contain no titles; Durop displays the clip names.
+The title-swallow thumbnail uses its title-card frame at 3.9 seconds.
 Refresh `SHA256SUMS` after regenerating the icons.
 
 ## Load in Durop

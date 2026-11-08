@@ -1,0 +1,16 @@
+{
+  "id": "dj-airhorn",
+  "title": "DJ airhorn",
+  "asset": "dj-airhorn.mp3",
+  "tags": [
+    "podcast",
+    "audio",
+    "dj",
+    "airhorn"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  }
+}

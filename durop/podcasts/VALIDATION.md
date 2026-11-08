@@ -48,3 +48,24 @@ path to this `pack/`, trigger each clip, and inspect the lower-right overlay.
 Thumbnail styling updated 2026-11-08 (America/Los_Angeles) to match Durop’s base
 reactions pack. Regenerated all 26 icons with `generate_icons.py`, refreshed
 checksums, decoded all PNGs, and reloaded the catalog through Durop.
+
+## Airhorn and title-swallow additions — 2026-11-08
+
+Merged main at `9f9fbf658` (including PR #1563). The catalog now contains 28
+clips: the previous 26, DJ airhorn from Pixabay, and the six-second title swallow
+copied byte-for-byte from `maybraid/art/promo/title-swallow.mov`. The title uses
+its upstream fullscreen center / width 1 / cover placement and 6500 ms cap;
+the eleven original bottom-right defaults remain unchanged.
+
+All 28 records pass the upstream schema and match their placement templates.
+All 28 PNGs decode at 320 pixels wide. FFmpeg fully decodes both added media
+files; the other 26 media files retain their previously validated bytes. Durop's
+Rust loader, cache preparation, pinning, unchanged cached bytes, and offline
+reload pass with all 28 clips. The 56 media/icon checksums pass; media totals
+59,156,199 bytes. `git diff --check` passes. All files remain ordinary Git blobs.
+
+The source title MOV is 3840 × 2160, 60 fps, six seconds, encoded with Apple's
+`hevc_videotoolbox`. It is bundled unchanged to preserve its alpha encoding.
+Linux FFmpeg validates the HEVC color stream; macOS AVFoundation alpha playback
+and the live fullscreen swallow still require acceptance on the recording Mac.
+The title thumbnail samples the visible title card at 3.9 seconds.

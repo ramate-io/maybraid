@@ -16,7 +16,11 @@ def main():
             continue
         metadata = json.loads(path.read_text())
         media = path.parent / metadata["asset"]
-        command = ["ffmpeg", "-v", "error", "-y", "-i", str(media)]
+        command = ["ffmpeg", "-v", "error", "-y"]
+        # Show the title card before the swallow rather than its opening background.
+        if metadata["id"] == "title-swallow":
+            command += ["-ss", "3.9"]
+        command += ["-i", str(media)]
         if path.parent.name == "audio":
             command += [
                 "-filter_complex",
