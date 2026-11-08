@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 use bevy::ui::widget::ViewportNode;
 use character_inventory_user::InventoryUser;
-use character_items::{Inventory, InventoryItem};
+use character_items::{Inventory, InventoryItem, SkillMapCategory};
 use item_icons::{ItemIconCache, FIREARM_SILHOUETTE_RESOLUTION};
 use menu_components::{
 	spawn_hud_text_card, spawn_hud_text_card_label, HudFonts, HUD_TEXT_CARD_FACE_PX,
@@ -155,6 +155,9 @@ pub fn present_skill_maps(
 		let Some(spec) = equip.spec else {
 			continue;
 		};
+		if spec.kind.category() == SkillMapCategory::Feed {
+			commands.entity(mapping.maps).insert(crate::feed::FeedState::default());
+		}
 		spawn_one_map(
 			&mut commands,
 			&mut images,
@@ -181,6 +184,7 @@ fn clear_presented(
 			commands.entity(entity).try_despawn();
 		}
 	}
+	commands.entity(session).remove::<crate::feed::FeedState>();
 	viewports.cameras.clear();
 	viewports.nodes.clear();
 	viewports.presented = None;
@@ -290,17 +294,18 @@ fn spawn_one_map(
 			node = spawn_map_frame(hud, fonts, asset_server, camera, spec, member, caption);
 		});
 
-	commands.spawn((
-		Name::new(format!("skill-map-cursor-{}", spec.label)),
-		SkillMapCursor,
-		spec.id,
-		member,
-		Mesh2d(tiles.cursor_mesh.clone()),
-		MeshMaterial2d(tiles.cursor.clone()),
-		Transform::from_xyz(0.0, 0.0, 1.0),
-		layer,
-	));
-
+	if spec.category == SkillMapCategory::Map {
+		commands.spawn((
+			Name::new(format!("skill-map-cursor-{}", spec.label)),
+			SkillMapCursor,
+			spec.id,
+			member,
+			Mesh2d(tiles.cursor_mesh.clone()),
+			MeshMaterial2d(tiles.cursor.clone()),
+			Transform::from_xyz(0.0, 0.0, 1.0),
+			layer,
+		));
+	}
 	viewports.cameras.insert(spec.id, camera);
 	viewports.nodes.insert(spec.id, node);
 }
@@ -361,6 +366,9 @@ fn spawn_map_frame(
 				.with_children(|slot| {
 					spawn_hud_text_card_label(slot, fonts, caption, SkillMapLabel);
 				});
+			if spec.category == SkillMapCategory::Feed {
+				crate::feed_view::spawn_feed_status(frame, fonts, member);
+			}
 			frame
 				.spawn((
 					Node {

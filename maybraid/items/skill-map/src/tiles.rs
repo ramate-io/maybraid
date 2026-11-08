@@ -3,6 +3,7 @@
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use bevy::shape::{Aabb2d, IntersectsVolume};
+use character_items::SkillMapCategory;
 use menu_components::HudFonts;
 use noise::{Fbm, MultiFractal, NoiseFn, OpenSimplex};
 
@@ -76,6 +77,10 @@ pub fn spawn_map_tiles_at(
 	origin: Vec2,
 	parent: Option<Entity>,
 ) {
+	if spec.category == SkillMapCategory::Feed {
+		crate::feed_view::spawn_feed_scene(commands, spec, member, assets, origin, parent);
+		return;
+	}
 	let extents = MapExtents::default();
 	let size = extents.tile_size();
 	let layer = render_layer(spec.id);

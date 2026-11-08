@@ -3,12 +3,13 @@
 use bevy::prelude::*;
 
 use crate::controller::{skill_map_steer_held, RoutedSkillMapFlickEvent, SkillMapFlick};
+use crate::feed::FeedState;
 use crate::map::{render_layer, SkillMapId};
 use crate::tile_material::SkillMapTileAssets;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSteerLock, SkillMapUser};
 use crate::viewport::{map_view_extent, SkillMapViewportCamera};
-use crate::SkillMapEnabled;
-use maybraid_character_controller::{OrdinaryLocomotion, RoutedActorControl};
+use crate::{SkillKind, SkillMapEnabled, SkillMapEvent};
+use maybraid_character_controller::{ActorControlStatus, OrdinaryLocomotion, RoutedActorControl};
 
 pub const CURSOR_SPEED: f32 = 64.0;
 pub const WATER_LOCK_SECS: f32 = 2.0;
@@ -61,12 +62,25 @@ pub fn tick_steer_lock(
 	}
 }
 
+type FlickUsers<'w, 's> = Query<
+	'w,
+	's,
+	(
+		&'static SkillMapUser,
+		&'static SkillMapSteerLock,
+		Option<&'static SkillMapHeld>,
+		Option<&'static ActorControlStatus>,
+	),
+>;
+
 pub fn apply_flicks(
 	mut commands: Commands,
 	assets: Option<Res<SkillMapTileAssets>>,
 	enabled: Res<SkillMapEnabled>,
 	mut flicks: MessageReader<SkillMapFlick>,
-	users: Query<(&SkillMapUser, &SkillMapSteerLock)>,
+	users: FlickUsers,
+	mut feeds: Query<&mut FeedState>,
+	mut events: MessageWriter<SkillMapEvent>,
 	mut cameras: Query<
 		(&SkillMapId, &SkillMapMember, &mut Transform, &Projection),
 		(With<SkillMapViewportCamera>, Without<SkillMapCursor>),
@@ -77,7 +91,15 @@ pub fn apply_flicks(
 		return;
 	}
 	for flick in flicks.read() {
-		apply_one_flick(*flick, &mut commands, assets.as_deref(), &users, &mut cameras);
+		apply_one_flick(
+			*flick,
+			&mut commands,
+			assets.as_deref(),
+			&users,
+			&mut feeds,
+			&mut events,
+			&mut cameras,
+		);
 	}
 }
 
@@ -87,7 +109,9 @@ pub fn apply_routed_flick(
 	mut commands: Commands,
 	assets: Option<Res<SkillMapTileAssets>>,
 	enabled: Res<SkillMapEnabled>,
-	users: Query<(&SkillMapUser, &SkillMapSteerLock)>,
+	users: FlickUsers,
+	mut feeds: Query<&mut FeedState>,
+	mut events: MessageWriter<SkillMapEvent>,
 	mut cameras: Query<
 		(&SkillMapId, &SkillMapMember, &mut Transform, &Projection),
 		(With<SkillMapViewportCamera>, Without<SkillMapCursor>),
@@ -99,6 +123,8 @@ pub fn apply_routed_flick(
 			&mut commands,
 			assets.as_deref(),
 			&users,
+			&mut feeds,
+			&mut events,
 			&mut cameras,
 		);
 	}
@@ -108,7 +134,9 @@ fn apply_one_flick(
 	flick: SkillMapFlick,
 	commands: &mut Commands,
 	assets: Option<&SkillMapTileAssets>,
-	users: &Query<(&SkillMapUser, &SkillMapSteerLock)>,
+	users: &FlickUsers,
+	feeds: &mut Query<&mut FeedState>,
+	events: &mut MessageWriter<SkillMapEvent>,
 	cameras: &mut Query<
 		(&SkillMapId, &SkillMapMember, &mut Transform, &Projection),
 		(With<SkillMapViewportCamera>, Without<SkillMapCursor>),
@@ -121,10 +149,22 @@ fn apply_one_flick(
 		if !flick.addresses(member.user, member.session) {
 			continue;
 		}
-		let Some((user, lock)) = users.iter().find(|(user, _)| user.maps == member.session) else {
+		let Some((user, lock, held, status)) =
+			users.iter().find(|(user, _, _, _)| user.maps == member.session)
+		else {
 			continue;
 		};
 		if lock.locked() {
+			continue;
+		}
+		if let Ok(mut feed) = feeds.get_mut(member.session) {
+			if held.is_some_and(|held| held.0)
+				&& status.is_none_or(|status| status.is_delivered())
+				&& feed.strike(flick.throw())
+			{
+				events
+					.write(SkillMapEvent::Claim { user: member.user, kind: SkillKind::Rockadder });
+			}
 			continue;
 		}
 		let start = transform.translation.xy();
@@ -221,6 +261,7 @@ mod tests {
 		app.add_plugins(MinimalPlugins)
 			.init_resource::<SkillMapEnabled>()
 			.add_message::<SkillMapFlick>()
+			.add_message::<SkillMapEvent>()
 			.add_systems(Update, apply_flicks);
 		let user_a = app.world_mut().spawn_empty().id();
 		let user_b = app.world_mut().spawn_empty().id();
@@ -253,6 +294,105 @@ mod tests {
 		let b = app.world().get::<Transform>(cam_b).expect("cam b").translation.xy();
 		assert!(a.x > 1.0, "addressed map should move, got {a}");
 		assert_eq!(b, Vec2::ZERO, "unrelated map must stay put");
+	}
+
+	fn feed_test_actor(world: &mut World) -> (Entity, Entity, Entity) {
+		let session = world.spawn(crate::feed::FeedState::default()).id();
+		let user = world
+			.spawn((
+				SkillMapUser::mapping(session),
+				SkillMapHeld(true),
+				SkillMapSteerLock::default(),
+			))
+			.id();
+		let camera = world
+			.spawn((
+				SkillMapId(0),
+				SkillMapMember { user, session },
+				SkillMapViewportCamera,
+				Transform::default(),
+				Projection::Orthographic(OrthographicProjection::default_2d()),
+			))
+			.id();
+		(user, session, camera)
+	}
+
+	#[test]
+	fn feed_input_claims_only_addressed_prompt_and_never_pans() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<SkillMapEnabled>()
+			.add_message::<SkillMapFlick>()
+			.add_message::<SkillMapEvent>()
+			.add_systems(Update, apply_flicks);
+		let (user, session, camera) = feed_test_actor(app.world_mut());
+		let (_, other_session, _) = feed_test_actor(app.world_mut());
+		app.world_mut()
+			.write_message(SkillMapFlick::new(user, Some(other_session), Vec2::NEG_X));
+		app.update();
+		assert!(app
+			.world_mut()
+			.resource_mut::<Messages<SkillMapEvent>>()
+			.drain()
+			.next()
+			.is_none());
+		app.world_mut()
+			.write_message(SkillMapFlick::new(user, Some(session), Vec2::NEG_X));
+		app.world_mut()
+			.write_message(SkillMapFlick::new(user, Some(session), Vec2::NEG_X));
+		app.update();
+		let events: Vec<_> =
+			app.world_mut().resource_mut::<Messages<SkillMapEvent>>().drain().collect();
+		assert_eq!(events, vec![SkillMapEvent::Claim { user, kind: SkillKind::Rockadder }]);
+		assert_eq!(
+			app.world()
+				.get::<Transform>(camera)
+				.ok_or_else(|| anyhow::anyhow!("missing camera"))?
+				.translation,
+			Vec3::ZERO
+		);
+		assert!(!app
+			.world()
+			.get::<FeedState>(other_session)
+			.ok_or_else(|| anyhow::anyhow!("missing other feed"))?
+			.started());
+		Ok(())
+	}
+
+	#[test]
+	fn routed_feed_inputs_obey_enabled_and_held_gates() -> anyhow::Result<()> {
+		use maybraid_controllers_core::{InputSource, Routed};
+		let mut app = App::new();
+		app.init_resource::<SkillMapEnabled>()
+			.add_message::<SkillMapEvent>()
+			.add_observer(apply_routed_flick);
+		let (user, session, _) = feed_test_actor(app.world_mut());
+		let input = Routed::to_actor(
+			InputSource::local_pad(),
+			user.into(),
+			SkillMapFlick::new(user, Some(session), Vec2::NEG_X),
+		);
+		app.world_mut().resource_mut::<SkillMapEnabled>().0 = false;
+		app.world_mut()
+			.trigger(RoutedSkillMapFlickEvent { entity: user, input: input.clone() });
+		app.world_mut().resource_mut::<SkillMapEnabled>().0 = true;
+		app.world_mut().entity_mut(user).insert(SkillMapHeld(false));
+		app.world_mut()
+			.trigger(RoutedSkillMapFlickEvent { entity: user, input: input.clone() });
+		assert!(!app
+			.world()
+			.get::<FeedState>(session)
+			.ok_or_else(|| anyhow::anyhow!("missing feed"))?
+			.started());
+		app.world_mut().entity_mut(user).insert(SkillMapHeld(true));
+		app.world_mut().trigger(RoutedSkillMapFlickEvent { entity: user, input });
+		assert!(app
+			.world()
+			.get::<FeedState>(session)
+			.ok_or_else(|| anyhow::anyhow!("missing feed"))?
+			.started());
+		assert_eq!(app.world_mut().resource_mut::<Messages<SkillMapEvent>>().drain().count(), 1);
+		Ok(())
 	}
 
 	#[test]

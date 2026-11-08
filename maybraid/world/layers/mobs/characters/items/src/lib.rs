@@ -59,6 +59,6 @@ pub use inventory::{
 	WEAPON_QUEUE_LIMIT, WORN_CLOTHING_LIMIT,
 };
 pub use palette::ItemColor;
-pub use skill_map::{SkillMapKind, SkillMapSpec};
+pub use skill_map::{SkillMapCategory, SkillMapKind, SkillMapSpec};
 pub use stats::{CharacterSheet, ClothingStats, FireMode, FirearmStats, ProjectileKind};
 pub use tanz::{TanzId, BASE_STARTER_TANZES};

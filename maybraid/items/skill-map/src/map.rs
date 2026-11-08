@@ -2,7 +2,7 @@
 
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
-use character_items::{SkillMapKind, SkillMapSpec};
+use character_items::{SkillMapCategory, SkillMapKind, SkillMapSpec};
 
 /// User-facing map id. Live play presents one equipped spec at layer `0`.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -34,7 +34,7 @@ impl SkillKind {
 		match kind {
 			SkillMapKind::Fireball => Self::Fireball,
 			SkillMapKind::Dumbwave => Self::Dumbwave,
-			SkillMapKind::Rockadder => Self::Rockadder,
+			SkillMapKind::Rockadder | SkillMapKind::RockadderFeed => Self::Rockadder,
 			SkillMapKind::Cosimo => Self::Cosimo,
 		}
 	}
@@ -77,6 +77,7 @@ pub fn render_layer(id: SkillMapId) -> RenderLayers {
 #[derive(Clone, Copy, Debug)]
 pub struct AuthoredMap {
 	pub id: SkillMapId,
+	pub category: SkillMapCategory,
 	pub kind: SkillKind,
 	pub seed: u32,
 	pub frequency: f64,
@@ -86,6 +87,7 @@ pub struct AuthoredMap {
 pub fn authored_map(kind: SkillKind, seed: u32) -> AuthoredMap {
 	AuthoredMap {
 		id: SkillMapId(0),
+		category: SkillMapCategory::Map,
 		kind,
 		seed,
 		frequency: match kind {
@@ -99,10 +101,15 @@ pub fn authored_map(kind: SkillKind, seed: u32) -> AuthoredMap {
 }
 
 pub fn authored_map_from_spec(spec: SkillMapSpec) -> AuthoredMap {
-	authored_map(SkillKind::from_item(spec.kind), spec.seed)
+	AuthoredMap {
+		category: spec.kind.category(),
+		label: spec.kind.display_name(),
+		..authored_map(SkillKind::from_item(spec.kind), spec.seed)
+	}
 }
 
-/// Catalog of kinds. Live play presents one equipped spec, not this list.
+/// Base spatial maps. Item catalogs and live play use [`authored_map_from_spec`]
+/// to preserve a kind's category, including feeds.
 pub fn authored_maps() -> [AuthoredMap; 4] {
 	SkillKind::ALL.map(|kind| authored_map(kind, kind.catalog_seed()))
 }
@@ -138,4 +145,21 @@ impl MapExtents {
 pub fn pinned_power_cells(steps: u32) -> [(u32, u32); 3] {
 	let mid = steps / 2;
 	[(mid + 2, mid), (mid.saturating_sub(2), mid + 2), (mid + 1, mid.saturating_sub(3))]
+}
+
+#[cfg(test)]
+mod tests {
+	use crate::map::{authored_map_from_spec, SkillKind};
+	use character_items::{SkillMapCategory, SkillMapKind, SkillMapSpec};
+
+	#[test]
+	fn feed_reuses_rockadder_effect_but_preserves_its_presentation_category() {
+		let map = authored_map_from_spec(SkillMapSpec::new(SkillMapKind::RockadderFeed, 42));
+		assert_eq!(map.kind, SkillKind::Rockadder);
+		assert_eq!(map.category, SkillMapCategory::Feed);
+		assert_eq!(map.seed, 42);
+		assert_eq!(map.label, "Rockadder Feed");
+		let original = authored_map_from_spec(SkillMapSpec::new(SkillMapKind::Rockadder, 42));
+		assert_eq!(original.category, SkillMapCategory::Map);
+	}
 }

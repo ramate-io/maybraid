@@ -853,6 +853,7 @@ mod tests {
 			.init_resource::<maybraid_skill_map::SkillMapEnabled>()
 			.add_message::<TanzInput>()
 			.add_message::<SkillMapFlick>()
+			.add_message::<maybraid_skill_map::SkillMapEvent>()
 			.add_systems(Update, (publish_tanz_map_inputs, apply_flicks).chain());
 		let user_a = app
 			.world_mut()

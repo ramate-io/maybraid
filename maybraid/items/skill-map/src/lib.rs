@@ -1,6 +1,7 @@
-//! Discover skill maps: a 2D paradimension a [`SkillMapUser`] steers with stick
-//! flicks while **RB** is held. Either stick; a hold is not a flick. Walks claim
-//! authored tiles that dispatch world effects.
+//! Discover skill maps: spatial tile walks and timed directional feeds driven
+//! by a [`SkillMapUser`]'s Laufer/Tanz stick flicks. Laufer holds **RB**; either
+//! stick works and a hold is not a flick. Tile claims and correctly timed feed
+//! prompts dispatch world effects.
 //!
 //! Stamp [`SkillMapUser`] on the live character (same install as
 //! [`firearm_user::FirearmUser`]). Pause / text-entry should clear
@@ -10,6 +11,8 @@ mod burst;
 mod controller;
 mod cursor;
 mod effects;
+mod feed;
+mod feed_view;
 mod fireball_embers;
 mod fireball_material;
 mod fireball_trail;
@@ -39,6 +42,10 @@ pub use controller::{
 pub use cursor::apply_flicks;
 pub use effects::{
 	forget_chance, FIREBALL_COLOR, FIREBALL_GRAVITY, FIREBALL_RADIUS, FIREBALL_SPEED,
+};
+pub use feed::{
+	FeedDirection, FeedState, FeedStepStatus, FEED_PAUSE_SECS, FEED_STEPS, FEED_STEP_SECS,
+	FEED_WINDOW_SECS,
 };
 pub use map::{authored_map, authored_map_from_spec, authored_maps, SkillKind, SkillMapId};
 pub use preview::{
@@ -116,6 +123,7 @@ impl Plugin for SkillMapPlugin {
 			.add_message::<controller::RoutedSkillMapFlick>()
 			.add_observer(controller::apply_skill_map_routing)
 			.add_observer(cursor::apply_routed_flick)
+			.add_observer(feed::apply_feed_routing)
 			.configure_sets(
 				Update,
 				(
@@ -135,8 +143,10 @@ impl Plugin for SkillMapPlugin {
 					controller::detect_skill_map_flicks,
 					cursor::sync_skill_map_held,
 					cursor::tick_steer_lock,
+					feed::tick_feeds,
 					controller::dispatch_routed_flicks,
 					cursor::apply_flicks,
+					feed_view::sync_feed_view,
 					cursor::tick_flick_beads,
 					viewport::sync_viewport_chrome,
 					viewport::sync_firearm_chrome,
