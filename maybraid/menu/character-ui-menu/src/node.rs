@@ -11,6 +11,82 @@ use crate::{
 	SwatchSingleSelect, ThumbnailCamera,
 };
 
+/// Inventory page shown in the shared character inventory.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum InventorySection {
+	#[default]
+	Clothing,
+	Tools,
+	Skills,
+	Tanzes,
+	Lubikan,
+}
+
+impl InventorySection {
+	pub const ALL: [Self; 5] =
+		[Self::Clothing, Self::Tools, Self::Skills, Self::Tanzes, Self::Lubikan];
+
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::Clothing => "Clothing",
+			Self::Tools => "Tools",
+			Self::Skills => "Skill Maps",
+			Self::Tanzes => "Tanzes",
+			Self::Lubikan => "Lubikan",
+		}
+	}
+
+	pub const fn index(self) -> usize {
+		match self {
+			Self::Clothing => 0,
+			Self::Tools => 1,
+			Self::Skills => 2,
+			Self::Tanzes => 3,
+			Self::Lubikan => 4,
+		}
+	}
+
+	pub fn from_label(label: &str) -> Option<Self> {
+		Self::ALL.into_iter().find(|section| section.label() == label)
+	}
+}
+
+/// Inventory item representation shown by the UI, independently of whether
+/// that item is equipped in the domain inventory.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum InventoryRegion {
+	#[default]
+	Drawer,
+	Equipped,
+}
+
+impl InventoryRegion {
+	pub const fn index(self) -> usize {
+		match self {
+			Self::Drawer => 0,
+			Self::Equipped => 1,
+		}
+	}
+}
+
+/// Layout used for inventory selection drawer tiles.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum InventoryDrawerMode {
+	#[default]
+	Rotary,
+	Gallery,
+}
+
+/// Navigation action emitted by the inventory shell controls.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum InventoryControlAction {
+	PreviousSection,
+	NextSection,
+	ToggleDrawer,
+	ToggleRegion,
+	FocusDrawer,
+}
+
 /// sRGBA tint applied to asset thumbnails, resolved when a menu lowers to IR.
 ///
 /// This replaces the old imperative `RenderContext.preview_color` scoping:
@@ -161,8 +237,8 @@ pub struct ItemRow<E> {
 	pub materials: Vec<SelectChoice<E>>,
 }
 
-/// One cell in a [`MenuNode::GridCatalog`]. Selection is marked by the host
-/// (Maybraid son for clothing, 1-based rank for weapons).
+/// One cell in a [`MenuNode::GridCatalog`]. Selection is marked by the host;
+/// the currently equipped item also carries its 1-based slot rank.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GridCatalogChoice<E> {
 	pub label: String,
@@ -174,8 +250,8 @@ pub struct GridCatalogChoice<E> {
 	/// Host-rendered image (skill-map catalog). Checked before mesh path.
 	pub image_key: Option<u64>,
 	pub selected: bool,
-	/// 1-based slot rank when this item is queued (weapons). Clothing leaves
-	/// this `None` and uses the Maybraid son for selection.
+	/// 1-based currently equipped slot rank. Unequipped catalog choices leave
+	/// this `None`; `selected` still records the host's selection state.
 	pub rank: Option<u8>,
 	/// Bag index while this layout is unchanged. `None` for non-bag tiles
 	/// such as the always-equipped Self Lubikan.

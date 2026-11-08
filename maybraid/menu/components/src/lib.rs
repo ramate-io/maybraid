@@ -32,11 +32,11 @@ pub use controls::{
 	sync_hud_focus_tags, sync_hud_item_focus, sync_hud_scrollbars, sync_input_prompt_device,
 	sync_inventory_prompt_glyphs, sync_tile_wrap, ActiveOverlayKey, ActiveShortText, CursorRow,
 	FocusTag, HoverTile, HudFonts, HudMenu, HudMenuIgnoresLock, HudMenuItem, HudMenuNavLocked,
-	HudOverlayMenu, HudScroll, HudScrollStrip, HudScrollThumb, HudScrollTrack, HudScrollViewport,
-	InputPromptDevice, InventoryActionPrompts, InventoryDropPromptChip, InventoryPromptGlyph,
-	InventoryPromptKind, OverlayHeader, OverlayHeaderKey, ReorderMark, ShortTextChange,
-	ShortTextField, ShortTextKey, ShortTextModal, ShortTextModalRoot, ShortTextPad,
-	ShortTextToggle, ShortTextValue, SlotRank,
+	HudOverlayMenu, HudScroll, HudScrollManual, HudScrollStrip, HudScrollThumb, HudScrollTrack,
+	HudScrollViewport, InputPromptDevice, InventoryActionPrompts, InventoryDropPromptChip,
+	InventoryPromptGlyph, InventoryPromptKind, OverlayHeader, OverlayHeaderKey, ReorderMark,
+	ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal, ShortTextModalRoot,
+	ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank, TileWrap,
 };
 pub use icons::{spin_icons, Icon, SpinningIcon};
 pub use info::{
@@ -79,7 +79,8 @@ pub use theme::{
 	MAP_MOUNTAIN_ICON, MAP_TOWN_ICON, MAP_TREE_ICON, MAP_WATER_ICON, MENU_CLEAR, MENU_LIST_PAD,
 	MENU_LIST_RADIUS, MENU_REGION_WASH_ALPHA, NOTO_SANS_REGULAR, OBJECTIVE_MARKER_FONT_SIZE,
 	PANEL_BLOCK_FONT_SIZE, PANEL_GROUP_FONT_SIZE, PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE,
-	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, PANEL_TILE_COLUMNS, TEXT_DEEP_BLUE, TEXT_LIGHT_BLUE,
+	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, PANEL_TILE_COLUMNS, PROMPT_PAD_NEXT_SECTION,
+	PROMPT_PAD_PREVIOUS_SECTION, PROMPT_PAD_TOGGLE_DRAWER, TEXT_DEEP_BLUE, TEXT_LIGHT_BLUE,
 	TEXT_LIME, TEXT_PURPLE, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS,
 	TEXT_YELLOW_HOVER,
 };

@@ -10,6 +10,7 @@
 
 pub mod event;
 pub mod input;
+pub mod inventory;
 pub mod justify;
 pub mod overlay;
 pub mod plugin;
@@ -17,6 +18,10 @@ pub mod sink;
 pub mod widgets;
 
 pub use event::{CharacterMenuEvent, OverlayClose, OverlayOpen};
+pub use inventory::{
+	fill_inventory_screen, InventoryAIOPSlot, InventoryCarouselCard, InventoryCharacterPreviewSlot,
+	InventoryScreenArea, InventoryScreenReadOnly, InventoryScreenSlots, InventoryTile,
+};
 pub use justify::MenuJustify;
 pub use overlay::{
 	fill_inventory_layout, fill_inventory_loading, find_overlay_node, flatten_nodes,
@@ -26,7 +31,8 @@ pub use overlay::{
 pub use plugin::{CharacterHudSystems, MaybraidCharacterMenuRendererPlugin};
 pub use sink::{MaybraidMenuSink, MenuSink, MenuThumbnailContext, NoThumbnails, RenderContext};
 pub use widgets::{
-	CloseOverlaySelect, EquippedOrderControls, InventoryFocusHint, InventoryInteraction,
-	InventoryItemKey, InventoryMenuSession, MenuButton, OpenSelectKey, OverlaySelectRoot,
+	CloseOverlaySelect, EquippedOrderControls, InventoryControl, InventoryFocusHint,
+	InventoryInteraction, InventoryItemKey, InventoryMenuSession, InventoryPickerSource,
+	InventorySectionMemory, InventorySlotEvent, MenuButton, OpenSelectKey, OverlaySelectRoot,
 	OverlaySelectViewport,
 };

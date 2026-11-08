@@ -35,7 +35,7 @@ pub use row::spawn_labeled_row;
 pub use scroll::{
 	on_hud_scroll, scroll_hud_selection_into_strip, scroll_hud_selection_into_view,
 	scroll_hud_viewport_on_nav, send_hud_scroll_events, spawn_scroll_pane, sync_hud_scrollbars,
-	HudScroll, HudScrollStrip, HudScrollThumb, HudScrollTrack, HudScrollViewport,
+	HudScroll, HudScrollManual, HudScrollStrip, HudScrollThumb, HudScrollTrack, HudScrollViewport,
 };
 pub use section::{
 	spawn_section_header, sync_hud_focus_tags, ActiveOverlayKey, CursorRow, OverlayHeader,
@@ -61,5 +61,5 @@ pub use text::{
 };
 pub use tile::{
 	spawn_asset_tile, spawn_grid_catalog_tile, spawn_tile_grid, spawn_tile_grid_columns,
-	sync_hover_tiles, sync_tile_wrap, HoverTile, ReorderMark, SlotRank,
+	sync_hover_tiles, sync_tile_wrap, HoverTile, ReorderMark, SlotRank, TileWrap,
 };

@@ -1,11 +1,10 @@
 use character_items::{ClothingMaterial, ClothingMesh, ItemColor};
 use characters::{
-	ConceptAnimation,
 	presets::{BuildPreset, GenderPreset},
 	species::{
 		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalMouthMesh},
 		brodler::{
-			BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor, assets::HornMesh,
+			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
 		brokker::{BrokkerEyeColor, BrokkerHeadMesh, BrokkerPlumageColor, BrokkerSnoutColor},
 		caole::{CaoleBodyMesh, CaoleMouthMesh},
@@ -58,6 +57,7 @@ use characters::{
 		},
 		ylter::{YilterBodyMesh, YilterMouthMesh},
 	},
+	ConceptAnimation,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -385,6 +385,12 @@ pub enum MenuEvent {
 	ToggleInventory(usize),
 	/// Equip bag index at the front of its ordered slot.
 	EquipInventory(usize),
+	/// Assign an owned item to an exact typed slot position; accepted no-ops complete selection.
+	AssignInventorySlot {
+		slot: character_items::InventorySlot,
+		position: usize,
+		index: usize,
+	},
 	/// Remove bag index from its ordered slot; the item stays owned.
 	UnequipInventory(usize),
 	/// Move an equipped bag index one adjacent position (`delta < 0` is left).
@@ -396,6 +402,11 @@ pub enum MenuEvent {
 	MoveLubikan {
 		account: lubikans::LubikanAccountId,
 		delta: i8,
+	},
+	/// Swap an owned non-Self Lubikan into an exact queue position.
+	AssignLubikanSlot {
+		position: usize,
+		account: lubikans::LubikanAccountId,
 	},
 	/// Remove bag index after the host confirms (or skips confirm).
 	DropInventory(usize),
@@ -410,9 +421,11 @@ impl MenuEvent {
 			self,
 			Self::ToggleInventory(_)
 				| Self::EquipInventory(_)
+				| Self::AssignInventorySlot { .. }
 				| Self::UnequipInventory(_)
 				| Self::MoveEquippedInventory { .. }
 				| Self::MoveLubikan { .. }
+				| Self::AssignLubikanSlot { .. }
 				| Self::DropInventory(_)
 				| Self::SetSwatch(CharacterField::Clothing(_), _)
 				| Self::SetAsset(CharacterField::ClothingMaterial(_), _)

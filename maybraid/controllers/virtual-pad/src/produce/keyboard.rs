@@ -77,6 +77,18 @@ impl KeyboardPad {
 		if keyboard.pressed(KeyCode::KeyY) {
 			pad.hold_digital(PadButton::Y);
 		}
+		if keyboard.pressed(KeyCode::PageUp) {
+			pad.hold_digital(PadButton::BumperFocus);
+		}
+		if keyboard.pressed(KeyCode::PageDown) {
+			pad.hold_digital(PadButton::BumperFire);
+		}
+		if keyboard.pressed(KeyCode::KeyG) {
+			pad.hold_digital(PadButton::StickClickMove);
+		}
+		if keyboard.pressed(KeyCode::Tab) {
+			pad.hold_digital(PadButton::TriggerFocus);
+		}
 	}
 	fn hold_arrows(keyboard: &ButtonInput<KeyCode>, pad: &mut VirtualPad) {
 		let mut dpad = Vec2::ZERO;
@@ -170,5 +182,18 @@ mod tests {
 	#[test]
 	fn menu_map_y_holds_unequip() {
 		assert!(sample(&[KeyCode::KeyY], PadInputPolicy::menu()).digital_held(PadButton::Y));
+	}
+	#[test]
+	fn menu_map_inventory_shortcuts_use_page_g_and_tab_keys() {
+		assert!(
+			sample(&[KeyCode::PageUp], PadInputPolicy::menu()).digital_held(PadButton::BumperFocus)
+		);
+		assert!(sample(&[KeyCode::PageDown], PadInputPolicy::menu())
+			.digital_held(PadButton::BumperFire));
+		assert!(sample(&[KeyCode::KeyG], PadInputPolicy::menu())
+			.digital_held(PadButton::StickClickMove));
+		assert!(
+			sample(&[KeyCode::Tab], PadInputPolicy::menu()).digital_held(PadButton::TriggerFocus)
+		);
 	}
 }

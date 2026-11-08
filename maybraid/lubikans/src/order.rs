@@ -38,6 +38,22 @@ impl LubikanOrder {
 		self.accounts.swap(from, to);
 		true
 	}
+
+	/// Swap an owned account into an exact queue position. Self is protected in
+	/// the slot picker. Returns acceptance, including a same-account no-op.
+	pub fn assign_to_slot(&mut self, account: LubikanAccountId, position: usize) -> bool {
+		let Some(&target) = self.accounts.get(position) else {
+			return false;
+		};
+		if account.is_self() || target.is_self() {
+			return false;
+		}
+		let Some(from) = self.accounts.iter().position(|&owned| owned == account) else {
+			return false;
+		};
+		self.accounts.swap(from, position);
+		true
+	}
 }
 
 impl Default for LubikanOrder {
@@ -49,6 +65,37 @@ impl Default for LubikanOrder {
 #[cfg(test)]
 mod tests {
 	use crate::{LubikanDefinition, LubikanDefinitionId, LubikanLedger, LubikanOrder};
+
+	#[test]
+	fn slot_assignment_swaps_owned_accounts_and_protects_self() {
+		let mut ledger = LubikanLedger::default();
+		let first = ledger.ensure_owned(LubikanDefinition::new(
+			LubikanDefinitionId::from_raw(8),
+			20.0,
+			5.0,
+		));
+		let second = ledger.ensure_owned(LubikanDefinition::new(
+			LubikanDefinitionId::from_raw(3),
+			20.0,
+			5.0,
+		));
+		let mut order = LubikanOrder::from_ledger(&ledger);
+		assert!(order.assign_to_slot(second, 1));
+		assert_eq!(order.accounts(), &[crate::LubikanAccountId::SELF, second, first]);
+		let before = order.clone();
+		assert!(order.assign_to_slot(second, 1), "same account completes selection");
+		assert_eq!(order, before);
+		for (account, position) in [
+			(crate::LubikanAccountId::SELF, 1),
+			(first, 0),
+			(first, 3),
+			(first, usize::MAX),
+			(crate::LubikanAccountId::unique(LubikanDefinitionId::from_raw(99)), 1),
+		] {
+			assert!(!order.assign_to_slot(account, position));
+			assert_eq!(order, before);
+		}
+	}
 
 	#[test]
 	fn reorder_preserves_identity_charge_selection_and_new_accounts() -> anyhow::Result<()> {

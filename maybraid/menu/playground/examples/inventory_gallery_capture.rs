@@ -10,6 +10,7 @@
 //!   xvfb-run -a cargo run -p menu-playground --example inventory_gallery_capture
 //! ```
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -18,30 +19,34 @@ use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::query::Allow;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
-use character_creation_menus::{CharacterMenu, InventoryLayout, STARTER_KIT_LABEL};
+use character_creation_menus::{CharacterMenu, InventoryLayout, MenuEvent, STARTER_KIT_LABEL};
 use character_items::{
 	catalog_key_uses_yellow_silhouette, self_lubikan_catalog_key, ClothingMaterial, ClothingMesh,
-	FirearmMesh, Inventory, InventoryItem, ItemColor, ItemRng, SkillMapKind, SkillMapSpec, TanzId,
-	BASE_STARTER_TANZES,
+	FirearmMesh, Inventory, InventoryItem, ItemColor, ItemRng, TanzId, BASE_STARTER_TANZES,
 };
-use character_ui_menu::MenuComponent;
+use character_ui_menu::{InventoryDrawerMode, InventoryRegion, InventorySection, MenuComponent};
 use characters::StandaloneCharacterMaterialRefPlugin;
-use characters::{HiddenUntilSceneReady, PendingCharacterAssembly};
+use characters::{CharacterHostsPlugin, HiddenUntilSceneReady, PendingCharacterAssembly};
 use item_icons::{
 	request_inventory_icons, request_self_lubikan_icon, CaptureCacheRoot, CaptureClient,
 	CaptureCompleted, CaptureFailed, CaptureHostReady, CaptureHostRealized, CaptureHostRoot,
-	ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery, ItemIconPlugin,
+	ItemCaptureSubjects, ItemIconCache, ItemIconDiscovery, ItemIconPlugin, PoseCaptureSubjects,
+};
+use lod::LodViewer;
+use maybraid_character_ui_menu_renderer::inventory::{
+	INVENTORY_GALLERY_COLUMNS, INVENTORY_GALLERY_VISIBLE_ROWS,
 };
 use maybraid_character_ui_menu_renderer::{
-	fill_inventory_layout, fill_inventory_loading, find_overlay_node, spawn_overlay_shell,
-	spawn_starter_kit_shell, InventoryItemKey, MenuThumbnailContext,
+	fill_inventory_loading, fill_inventory_screen, find_overlay_node, spawn_starter_kit_shell,
+	InventoryItemKey, InventoryMenuSession, MenuThumbnailContext,
 };
 use menu_components::theme::TEXT_YELLOW;
 use menu_components::{
-	spawn_header_line, spawn_hud_action, HudFonts, HudMenuItem, HudScrollViewport,
-	InputPromptDevice, ReorderMark,
+	spawn_header_line, spawn_hud_action, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu,
+	HudScrollViewport, InputPromptDevice, InventoryHudMenu, ReorderMark,
 };
 use menu_screens::SpinRevealScreen;
+use tanz_user::request_inventory_tanz_icons;
 
 fn assets_path() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -54,7 +59,7 @@ fn main() {
 				.set(WindowPlugin {
 					primary_window: Some(Window {
 						title: "Inventory layout capture".into(),
-						resolution: (960, 1080).into(),
+						resolution: capture_resolution().into(),
 						..default()
 					}),
 					..default()
@@ -62,16 +67,57 @@ fn main() {
 				.set(AssetPlugin { file_path: assets_path().to_string_lossy().into(), ..default() })
 				.disable::<AudioPlugin>(),
 		)
+		.add_plugins(CharacterHostsPlugin)
 		.add_plugins(StandaloneCharacterMaterialRefPlugin)
+		.add_plugins(maybraid_character_ui_menu_renderer::MaybraidCharacterMenuRendererPlugin::<
+			MenuEvent,
+		>::default())
+		.add_plugins(menu_playground::CharacterPreviewPlugin)
+		.insert_resource(menu_playground::CharacterMenuState(CharacterMenu::default()))
 		.add_plugins(ItemIconPlugin)
 		.add_systems(Update, menu_components::sync_hover_tiles)
 		.insert_resource(ClearColor(Color::srgb(0.07, 0.08, 0.10)))
 		.insert_resource(CaptureDir(shot_dir()))
 		.init_resource::<CaptureShots>()
-		.add_systems(Startup, (setup, allow_slow_braidman_icon, request_icon))
+		.add_systems(
+			Startup,
+			(
+				setup,
+				(
+					characters_playground::camera::setup_camera,
+					add_lod_viewer_to_camera.after(characters_playground::camera::setup_camera),
+				)
+					.chain(),
+				allow_slow_braidman_icon,
+				request_icon,
+			),
+		)
 		.add_systems(Update, (log_capture_outcome, log_host_progress, apply_reorder_mark))
-		.add_systems(Update, (apply_capture_scroll, capture_scene, advance_after_shot).chain())
+		.add_systems(
+			Update,
+			(apply_capture_scroll, capture_scene, advance_after_shot, log_gallery_viewport).chain(),
+		)
 		.run();
+}
+
+fn capture_resolution() -> (u32, u32) {
+	std::env::var("INVENTORY_GALLERY_RESOLUTION")
+		.ok()
+		.and_then(|value| {
+			let (width, height) = value.split_once('x')?;
+			Some((width.parse().ok()?, height.parse().ok()?))
+		})
+		.filter(|(width, height)| *width > 0 && *height > 0)
+		.unwrap_or((960, 1080))
+}
+
+fn add_lod_viewer_to_camera(
+	mut commands: Commands,
+	cameras: Query<Entity, (With<Camera3d>, Without<LodViewer>)>,
+) {
+	for entity in &cameras {
+		commands.entity(entity).insert(LodViewer);
+	}
 }
 
 #[derive(Resource)]
@@ -82,6 +128,8 @@ struct CaptureShots {
 	scene: CaptureScene,
 	requested: bool,
 	shown_at: Option<Duration>,
+	icon_wait_started: Option<Duration>,
+	failed: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -192,17 +240,12 @@ fn real_starter_items() -> Vec<InventoryItem> {
 /// Scroll-demo fixture. Not granted by generation. Lives only in this example
 /// and in `#[cfg(test)]` overflow coverage.
 fn overflow_fixture_items() -> Vec<InventoryItem> {
-	let mut items: Vec<InventoryItem> = ClothingMesh::VALUES
-		.iter()
-		.copied()
-		.map(|mesh| InventoryItem::clothing(mesh, ClothingMaterial::Cloth, ItemColor::Natural))
-		.collect();
-	items.extend(FirearmMesh::VALUES.iter().copied().map(InventoryItem::firearm));
-	items.push(InventoryItem::standard_grenade());
-	items.push(InventoryItem::Fisticuffs);
-	items.push(InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)));
-	items.push(InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Dumbwave, 2)));
-	items
+	let sample = [
+		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Natural),
+		InventoryItem::clothing(ClothingMesh::TankTop, ClothingMaterial::Cloth, ItemColor::Red),
+		InventoryItem::clothing(ClothingMesh::Robe, ClothingMaterial::Cloth, ItemColor::Natural),
+	];
+	(0..12).map(|index| sample[index % sample.len()].clone()).collect()
 }
 
 fn sample_menu(items: Vec<InventoryItem>) -> CharacterMenu {
@@ -227,30 +270,42 @@ fn tanz_modal_items() -> Vec<InventoryItem> {
 #[derive(Component)]
 struct CaptureRoot;
 
-fn setup(mut commands: Commands, dir: Res<CaptureDir>) {
+fn setup(dir: Res<CaptureDir>) {
 	let _ = std::fs::create_dir_all(&dir.0);
-	commands.spawn(Camera2d);
 }
 
 fn allow_slow_braidman_icon(mut cache: ResMut<CaptureCacheRoot>) {
 	cache.max_wait_frames = 1800;
+	// The offscreen render can report completion before the software backend
+	// has finished warming materials and copies. Match the longer settle used
+	// by the equipment capture fixture so first-run shaded icons are populated.
+	cache.settle_frames = 30;
 }
 
 fn request_icon(
 	mut discovery: ResMut<ItemIconDiscovery>,
 	mut subjects: ResMut<ItemCaptureSubjects>,
+	mut poses: ResMut<PoseCaptureSubjects>,
 	mut cache: ResMut<ItemIconCache>,
 	mut client: CaptureClient,
 ) {
 	// Screen-capture is one session at a time. Pose stills must enqueue
 	// before clothing / firearm hosts, which can sit unrealized for the
 	// full wait window and starve Tanz thumbnails.
-	request_self_lubikan_icon(&mut discovery, &mut client, &mut cache);
-	for inventory in capture_icon_inventories() {
-		request_inventory_icons(&inventory, &mut discovery, &mut subjects, &mut client, &mut cache);
+	let inventories = capture_icon_inventories();
+	for inventory in &inventories {
+		request_inventory_tanz_icons(
+			inventory,
+			&mut discovery,
+			&mut poses,
+			&mut client,
+			&mut cache,
+		);
 	}
-	let starter = Inventory::with_starter_outfit(real_starter_items());
-	request_inventory_icons(&starter, &mut discovery, &mut subjects, &mut client, &mut cache);
+	request_self_lubikan_icon(&mut discovery, &mut client, &mut cache);
+	for inventory in &inventories {
+		request_inventory_icons(inventory, &mut discovery, &mut subjects, &mut client, &mut cache);
+	}
 }
 
 fn capture_icon_inventories() -> [Inventory; 2] {
@@ -353,12 +408,18 @@ fn log_host_progress(
 }
 
 fn icon_ready(cache: &ItemIconCache) -> bool {
-	capture_icon_inventories().iter().all(|inventory| {
+	let catalog_ready = capture_icon_inventories().iter().all(|inventory| {
 		InventoryLayout::starter_kit(inventory.items.clone())
 			.captures
 			.iter()
-			.all(|need| cache.catalog_need_is_terminal(need.key, need.silhouette))
-	})
+			.all(|need| {
+				cache
+					.catalog_entry(need.key, need.silhouette)
+					.and_then(|entry| entry.ready_image())
+					.is_some()
+			})
+	});
+	catalog_ready && cache.silhouette_for_key(self_lubikan_catalog_key()).is_some()
 }
 
 const SCENE_DEADLINE: Duration = Duration::from_secs(48);
@@ -370,13 +431,14 @@ fn scene_deadline_hit(shown_at: Option<Duration>, now: Duration) -> bool {
 fn spawn_grant_scene(
 	commands: &mut Commands,
 	fonts: &HudFonts,
+	assets: &AssetServer,
 	items: Vec<InventoryItem>,
 	title: &str,
 	icons: Option<&ItemIconCache>,
 ) {
 	let layout = InventoryLayout::starter_kit(items);
 	let mut viewport = Entity::PLACEHOLDER;
-	let mut footer = Entity::PLACEHOLDER;
+	let mut continue_parent = Entity::PLACEHOLDER;
 	commands
 		.spawn((
 			CaptureRoot,
@@ -390,14 +452,23 @@ fn spawn_grant_scene(
 			BackgroundColor(Color::srgb(0.04, 0.05, 0.07)),
 		))
 		.with_children(|root| {
-			viewport = spawn_starter_kit_shell(root, fonts, title, TEXT_YELLOW, ());
-			footer = root
+			viewport = spawn_starter_kit_shell(
+				root,
+				fonts,
+				title,
+				TEXT_YELLOW,
+				(
+					maybraid_character_ui_menu_renderer::OverlaySelectRoot,
+					InventoryMenuSession::default(),
+				),
+			);
+			continue_parent = root
 				.spawn((
 					Node {
 						width: Val::Percent(100.0),
 						flex_direction: FlexDirection::Column,
 						align_items: AlignItems::Center,
-						padding: UiRect::bottom(Val::Px(16.0)),
+						padding: UiRect::bottom(Val::Px(24.0)),
 						..default()
 					},
 					Pickable::IGNORE,
@@ -405,26 +476,30 @@ fn spawn_grant_scene(
 				.id();
 		});
 	let mut thumbs = CatalogThumbs { icons };
-	let count = fill_inventory_layout(
+	let slots = fill_inventory_screen(
 		commands,
 		viewport,
 		fonts,
+		assets,
+		InputPromptDevice::Keyboard,
 		&layout.node,
 		false,
-		None,
-		None,
+		&InventoryMenuSession::default(),
 		&mut thumbs,
 	);
-	if let Ok(mut footer) = commands.get_entity(footer) {
+	if let Ok(mut footer) = commands.get_entity(continue_parent) {
 		footer.with_children(|footer| {
 			spawn_hud_action(
 				footer,
 				fonts,
 				"Continue",
 				JustifyContent::Center,
-				HudMenuItem { index: count, menu: viewport },
+				HudMenuItem { index: slots.item_count[0], menu: viewport },
 			);
 		});
+	}
+	if let Ok(mut viewport) = commands.get_entity(viewport) {
+		viewport.insert((HudMenu::retain(slots.item_count[0] + 1, None), HudOverlayMenu));
 	}
 }
 
@@ -433,10 +508,12 @@ fn spawn_modal_scene(
 	fonts: &HudFonts,
 	assets: &AssetServer,
 	icons: Option<&ItemIconCache>,
+	items: Vec<InventoryItem>,
+	session: InventoryMenuSession,
 	unequip_back_two: bool,
 	overlay_width: Option<f32>,
 ) {
-	let mut menu = sample_menu(tanz_modal_items());
+	let mut menu = sample_menu(items);
 	// Mixed shots: clothing and tools each keep one unequipped tile, and
 	// Healing Salute / Left Strafe stay equipped so Tanzes also stacks.
 	if unequip_back_two {
@@ -463,27 +540,47 @@ fn spawn_modal_scene(
 		return;
 	};
 	let mut viewport = Entity::PLACEHOLDER;
+	commands.insert_resource(menu_playground::CharacterMenuState(menu.clone()));
 	commands
 		.spawn((
 			CaptureRoot,
+			menu_playground::CharacterScreen,
 			Node {
 				width: overlay_width.map(Val::Px).unwrap_or(Val::Percent(100.0)),
 				height: Val::Percent(100.0),
 				..default()
 			},
-			BackgroundColor(Color::srgb(0.07, 0.08, 0.10)),
+			BackgroundColor(Color::srgba(0.07, 0.08, 0.10, 0.38)),
 		))
 		.with_children(|root| {
-			viewport = spawn_overlay_shell(
-				root,
-				fonts,
-				"Inventory",
-				TEXT_YELLOW,
-				Some((assets, InputPromptDevice::Keyboard)),
-			);
+			viewport = root
+				.spawn((
+					maybraid_character_ui_menu_renderer::OverlaySelectRoot,
+					session,
+					Node {
+						position_type: PositionType::Absolute,
+						left: Val::Px(0.0),
+						top: Val::Px(0.0),
+						width: Val::Percent(100.0),
+						height: Val::Percent(100.0),
+						..default()
+					},
+					Pickable::IGNORE,
+				))
+				.id();
 		});
 	let mut thumbs = CatalogThumbs { icons };
-	fill_inventory_layout(commands, viewport, fonts, &node, true, None, None, &mut thumbs);
+	fill_inventory_screen(
+		commands,
+		viewport,
+		fonts,
+		assets,
+		InputPromptDevice::Keyboard,
+		&node,
+		true,
+		&session,
+		&mut thumbs,
+	);
 }
 
 fn apply_reorder_mark(
@@ -497,7 +594,9 @@ fn apply_reorder_mark(
 	if tiles.iter().any(|(_, _, mark)| mark.is_some()) {
 		return;
 	}
-	let Some((entity, _, _)) = tiles.iter().find(|(_, key, _)| key.equipped) else {
+	let Some((entity, _, _)) =
+		tiles.iter().find(|(_, key, _)| key.region == InventoryRegion::Equipped)
+	else {
 		return;
 	};
 	commands.entity(entity).insert(ReorderMark);
@@ -531,6 +630,33 @@ fn spawn_icon_closeup(commands: &mut Commands, fonts: &HudFonts, image: Option<H
 		});
 }
 
+fn inventory_session(
+	section: InventorySection,
+	drawer: InventoryDrawerMode,
+	region: InventoryRegion,
+	scroll_rows: usize,
+) -> InventoryMenuSession {
+	let mut session = InventoryMenuSession { section, drawer, region, ..default() };
+	let memory = &mut session.section_memory[section.index()][region.index()];
+	memory.gallery_scroll = scroll_rows;
+	if region == InventoryRegion::Drawer
+		&& drawer == InventoryDrawerMode::Gallery
+		&& scroll_rows > 0
+	{
+		// Keep focus in the last visible row for any saved scroll offset.
+		let item_count = overflow_fixture_items().len();
+		let key = InventoryItemKey {
+			index: ((scroll_rows + INVENTORY_GALLERY_VISIBLE_ROWS - 1) * INVENTORY_GALLERY_COLUMNS)
+				.min(item_count.saturating_sub(1)),
+			equipped: false,
+			region,
+		};
+		memory.focused_item = Some(key);
+		session.focus.0 = Some(key);
+	}
+	session
+}
+
 fn spawn_scene(
 	commands: &mut Commands,
 	fonts: &HudFonts,
@@ -540,22 +666,117 @@ fn spawn_scene(
 ) {
 	match scene {
 		CaptureScene::RealStarterKit => {
-			spawn_grant_scene(commands, fonts, real_starter_items(), STARTER_KIT_LABEL, icons);
-		}
-		CaptureScene::OverflowFixtureTop | CaptureScene::OverflowFixtureScrolled => {
 			spawn_grant_scene(
 				commands,
 				fonts,
-				overflow_fixture_items(),
-				"Overflow fixture (not the starter grant)",
+				assets,
+				real_starter_items(),
+				STARTER_KIT_LABEL,
 				icons,
 			);
 		}
-		CaptureScene::ModalInventory | CaptureScene::ModalReorder | CaptureScene::ModalLubikan => {
-			spawn_modal_scene(commands, fonts, assets, icons, true, None);
+		CaptureScene::OverflowFixtureTop => {
+			spawn_modal_scene(
+				commands,
+				fonts,
+				assets,
+				icons,
+				overflow_fixture_items(),
+				inventory_session(
+					InventorySection::Clothing,
+					InventoryDrawerMode::Gallery,
+					InventoryRegion::Drawer,
+					0,
+				),
+				true,
+				None,
+			);
+		}
+		CaptureScene::OverflowFixtureScrolled => {
+			spawn_modal_scene(
+				commands,
+				fonts,
+				assets,
+				icons,
+				overflow_fixture_items(),
+				inventory_session(
+					InventorySection::Clothing,
+					InventoryDrawerMode::Gallery,
+					InventoryRegion::Drawer,
+					1,
+				),
+				true,
+				None,
+			);
+		}
+		CaptureScene::ModalInventory => {
+			spawn_modal_scene(
+				commands,
+				fonts,
+				assets,
+				icons,
+				tanz_modal_items(),
+				inventory_session(
+					InventorySection::Clothing,
+					InventoryDrawerMode::Rotary,
+					InventoryRegion::Drawer,
+					0,
+				),
+				true,
+				None,
+			);
+		}
+		CaptureScene::ModalReorder => {
+			let session = inventory_session(
+				InventorySection::Tools,
+				InventoryDrawerMode::Rotary,
+				InventoryRegion::Equipped,
+				0,
+			);
+			spawn_modal_scene(
+				commands,
+				fonts,
+				assets,
+				icons,
+				tanz_modal_items(),
+				session,
+				true,
+				None,
+			);
+		}
+		CaptureScene::ModalLubikan => {
+			spawn_modal_scene(
+				commands,
+				fonts,
+				assets,
+				icons,
+				tanz_modal_items(),
+				inventory_session(
+					InventorySection::Lubikan,
+					InventoryDrawerMode::Gallery,
+					InventoryRegion::Drawer,
+					0,
+				),
+				true,
+				None,
+			);
 		}
 		CaptureScene::OverflowTanzEquipped => {
-			spawn_modal_scene(commands, fonts, assets, icons, false, Some(260.0));
+			spawn_modal_scene(
+				commands,
+				fonts,
+				assets,
+				icons,
+				tanz_modal_items(),
+				inventory_session(
+					InventorySection::Tanzes,
+					InventoryDrawerMode::Rotary,
+					InventoryRegion::Equipped,
+					0,
+				),
+				false,
+				None,
+			);
 		}
 		CaptureScene::IconCloseup => {
 			let image =
@@ -588,13 +809,45 @@ fn spawn_scene(
 
 fn apply_capture_scroll(
 	shots: Res<CaptureShots>,
-	mut viewports: Query<(&ComputedNode, &mut ScrollPosition), With<HudScrollViewport>>,
+	mut viewports: Query<
+		(&ComputedNode, &mut ScrollPosition),
+		(With<HudScrollViewport>, Without<InventoryHudMenu>),
+	>,
 ) {
 	for (computed, mut scroll) in &mut viewports {
 		let max = ((computed.content_size().y - computed.size().y)
 			* computed.inverse_scale_factor())
 		.max(0.0);
 		scroll.y = max * shots.scene.scroll_factor();
+	}
+}
+
+fn log_gallery_viewport(
+	mut logged: Local<HashSet<Entity>>,
+	viewports: Query<
+		(Entity, &ComputedNode, &ScrollPosition),
+		(With<InventoryHudMenu>, With<HudScrollViewport>),
+	>,
+) {
+	for (entity, computed, scroll) in &viewports {
+		let content = computed.content_size();
+		let size = computed.size();
+		if size.min_element() <= 0.0 || content.min_element() <= 0.0 {
+			continue;
+		}
+		if logged.insert(entity) {
+			let max_scroll = ((content.y - size.y) * computed.inverse_scale_factor()).max(0.0);
+			info!(
+				?entity,
+				content_width = content.x,
+				content_height = content.y,
+				viewport_width = size.x,
+				viewport_height = size.y,
+				scroll_y = scroll.y,
+				max_scroll,
+				"inventory gallery viewport laid out"
+			);
+		}
 	}
 }
 
@@ -606,17 +859,32 @@ fn capture_scene(
 	cache: Res<ItemIconCache>,
 	mut shots: ResMut<CaptureShots>,
 	roots: Query<(), With<CaptureRoot>>,
+	preview_roots: Query<
+		&characters::CharacterMembers,
+		With<menu_playground::CharacterPreviewRoot>,
+	>,
+	preview_entities: Query<(), With<menu_playground::CharacterPreviewRoot>>,
+	mut exit: MessageWriter<AppExit>,
 ) {
-	if shots.scene == CaptureScene::Done || shots.requested {
+	if shots.failed || shots.scene == CaptureScene::Done || shots.requested {
 		return;
 	}
 	if shots.scene == CaptureScene::WaitingForIcon {
-		if icon_ready(&cache) || time.elapsed_secs() > 90.0 {
+		let wait_started = *shots.icon_wait_started.get_or_insert(time.elapsed());
+		if icon_ready(&cache) {
 			let have = cache.silhouette_for_key(self_lubikan_catalog_key()).is_some();
 			info!(have, secs = time.elapsed_secs(), "self-lubikan icon wait finished");
+			shots.icon_wait_started = None;
 			shots.scene = CaptureScene::RealStarterKit;
 			let fonts = HudFonts::load(assets.as_ref());
 			spawn_scene(&mut commands, &fonts, assets.as_ref(), shots.scene, Some(cache.as_ref()));
+		} else if time.elapsed() > wait_started + Duration::from_secs(90) {
+			shots.failed = true;
+			error!(
+				secs = time.elapsed_secs(),
+				"item thumbnails did not become ready before capture deadline; see capture host diagnostics"
+			);
+			exit.write(AppExit::error());
 		}
 		return;
 	}
@@ -630,15 +898,42 @@ fn capture_scene(
 	if shots.shown_at.is_none() {
 		shots.shown_at = Some(time.elapsed());
 	}
-	if shots
-		.shown_at
-		.is_none_or(|at| time.elapsed() <= at + Duration::from_millis(2200))
-	{
+	if scene_needs_character_preview(shots.scene) && preview_roots.is_empty() {
+		if scene_deadline_hit(shots.shown_at, time.elapsed()) {
+			shots.failed = true;
+			error!(
+				scene = shots.scene.file_stem(),
+				preview_roots = preview_entities.iter().count(),
+				secs = time.elapsed_secs(),
+				"character preview did not realize before capture deadline"
+			);
+			exit.write(AppExit::error());
+		}
+		return;
+	}
+	let settle_time = if scene_needs_character_preview(shots.scene) {
+		Duration::from_secs(6)
+	} else {
+		Duration::from_millis(2200)
+	};
+	if shots.shown_at.is_none_or(|at| time.elapsed() <= at + settle_time) {
 		return;
 	}
 	let path = dir.0.join(format!("{}.png", shots.scene.file_stem()));
 	commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
 	shots.requested = true;
+}
+
+fn scene_needs_character_preview(scene: CaptureScene) -> bool {
+	matches!(
+		scene,
+		CaptureScene::OverflowFixtureTop
+			| CaptureScene::OverflowFixtureScrolled
+			| CaptureScene::ModalInventory
+			| CaptureScene::ModalReorder
+			| CaptureScene::OverflowTanzEquipped
+			| CaptureScene::ModalLubikan
+	)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -654,6 +949,9 @@ fn advance_after_shot(
 	mut ready_at: Local<Option<Duration>>,
 	roots: Query<Entity, With<CaptureRoot>>,
 ) {
+	if shots.failed {
+		return;
+	}
 	if shots.scene == CaptureScene::Done {
 		if time.elapsed_secs() > 16.0 {
 			exit.write(AppExit::Success);
@@ -664,7 +962,9 @@ fn advance_after_shot(
 		if shots.scene != CaptureScene::WaitingForIcon
 			&& scene_deadline_hit(shots.shown_at, time.elapsed())
 		{
-			exit.write(AppExit::Success);
+			shots.failed = true;
+			error!(scene = shots.scene.file_stem(), "capture scene timed out before screenshot");
+			exit.write(AppExit::error());
 		}
 		return;
 	}
@@ -672,9 +972,18 @@ fn advance_after_shot(
 	if path.is_file() && capturing.is_empty() && ready_at.is_none() {
 		*ready_at = Some(time.elapsed());
 	}
-	if !(ready_at.is_some_and(|at| time.elapsed() > at + Duration::from_millis(250))
-		|| scene_deadline_hit(shots.shown_at, time.elapsed()))
+	if scene_deadline_hit(shots.shown_at, time.elapsed())
+		&& !ready_at.is_some_and(|at| time.elapsed() > at + Duration::from_millis(250))
 	{
+		shots.failed = true;
+		error!(
+			scene = shots.scene.file_stem(),
+			"screenshot did not finish before capture deadline"
+		);
+		exit.write(AppExit::error());
+		return;
+	}
+	if !ready_at.is_some_and(|at| time.elapsed() > at + Duration::from_millis(250)) {
 		return;
 	}
 	for entity in &roots {
