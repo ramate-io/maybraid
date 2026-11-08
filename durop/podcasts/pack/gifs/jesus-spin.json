@@ -1,0 +1,19 @@
+{
+  "id": "jesus-spin",
+  "title": "Jesus, Earth and Moon spin",
+  "asset": "jesus-spin.gif",
+  "tags": [
+    "podcast",
+    "gifs"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  },
+  "visual": {
+    "anchor": "bottom-right",
+    "widthFraction": 0.25,
+    "fit": "contain"
+  }
+}

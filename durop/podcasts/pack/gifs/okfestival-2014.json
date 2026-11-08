@@ -1,0 +1,19 @@
+{
+  "id": "okfestival-2014",
+  "title": "OKFestival 2014 GIF selection",
+  "asset": "okfestival-2014.gif",
+  "tags": [
+    "podcast",
+    "gifs"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  },
+  "visual": {
+    "anchor": "bottom-right",
+    "widthFraction": 0.25,
+    "fit": "contain"
+  }
+}

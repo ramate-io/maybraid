@@ -1,0 +1,14 @@
+{
+  "id": "iii-like-it",
+  "title": "III like it 2",
+  "asset": "iii-like-it.mp3",
+  "tags": [
+    "podcast",
+    "audio"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  }
+}

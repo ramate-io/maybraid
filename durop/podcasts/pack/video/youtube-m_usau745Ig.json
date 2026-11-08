@@ -1,0 +1,20 @@
+{
+  "id": "youtube-m_usau745Ig",
+  "title": "Shock — close-up reaction (stock alternative)",
+  "asset": "youtube-m_usau745Ig.mp4",
+  "tags": [
+    "podcast",
+    "video",
+    "alternative"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  },
+  "visual": {
+    "anchor": "bottom-right",
+    "widthFraction": 0.25,
+    "fit": "contain"
+  }
+}

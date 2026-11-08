@@ -1,0 +1,19 @@
+{
+  "id": "cute-level-up",
+  "title": "Cute level up 3",
+  "asset": "cute-level-up.mp3",
+  "tags": [
+    "podcast",
+    "audio"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  },
+  "visual": {
+    "anchor": "bottom-right",
+    "widthFraction": 0.25,
+    "fit": "contain"
+  }
+}

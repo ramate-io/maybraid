@@ -1,0 +1,15 @@
+{
+  "id": "openverse-lame",
+  "title": "Dull groan — bored crowd (Lame alternative)",
+  "asset": "openverse-lame.mp3",
+  "tags": [
+    "podcast",
+    "audio",
+    "alternative"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  }
+}

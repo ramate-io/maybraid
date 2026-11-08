@@ -1,0 +1,19 @@
+{
+  "id": "youtube-GSYu6NqrAYw",
+  "title": "YouTube selection GSYu6NqrAYw",
+  "asset": "youtube-GSYu6NqrAYw.mp4",
+  "tags": [
+    "podcast",
+    "video"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  },
+  "visual": {
+    "anchor": "bottom-right",
+    "widthFraction": 0.25,
+    "fit": "contain"
+  }
+}

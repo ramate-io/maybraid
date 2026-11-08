@@ -1,0 +1,21 @@
+{
+  "id": "title-swallow",
+  "title": "Maybraid title swallow",
+  "asset": "title-swallow.mov",
+  "tags": [
+    "podcast",
+    "maybraid",
+    "title",
+    "transition"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 6500
+  },
+  "visual": {
+    "anchor": "center",
+    "widthFraction": 1.0,
+    "fit": "cover"
+  }
+}
