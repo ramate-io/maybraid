@@ -1216,6 +1216,8 @@ fn spawn_empty_slot(
 	menu: Entity,
 	interactive: bool,
 ) {
+	// Match the dim idle text used by locked TemporarilyRemoved menu rows.
+	let face = if interactive { TEXT_YELLOW } else { TEXT_YELLOW_FAINT };
 	let mut slot = parent.spawn((
 		Node {
 			width: Val::Percent(100.0),
@@ -1227,7 +1229,7 @@ fn spawn_empty_slot(
 			border_radius: BorderRadius::all(Val::Px(8.0)),
 			..default()
 		},
-		BorderColor::all(TEXT_YELLOW_FAINT),
+		BorderColor::all(face),
 		BackgroundColor(Color::NONE),
 		Pickable::default(),
 	));
@@ -1235,19 +1237,22 @@ fn spawn_empty_slot(
 		slot.insert((
 			Button::default(),
 			bevy::picking::hover::Hovered::default(),
+			// This visual flag retains the idle row stroke, as on occupied slots.
+			HoverTile { equipped: true, preserve_fill: false, face },
 			InventoryAIOPSlot { section, ordinal, capacity },
 			HudMenuItem { index: ordinal, menu },
 			InventoryControl(character_ui_menu::InventoryControlAction::FocusDrawer),
 		));
 	}
 	slot.with_children(|slot| {
-		spawn_hud_text(
-			slot,
+		slot.spawn((
+			TileWrap,
+			Text::new("+"),
 			fonts.item(PANEL_HEADER_FONT_SIZE),
-			if interactive { "+" } else { "—" },
-			TEXT_YELLOW_FAINT,
-			bevy::text::Justify::Center,
-		);
+			TextColor(face),
+			TextLayout::new(bevy::text::Justify::Center, bevy::text::LineBreak::WordBoundary),
+			Pickable::IGNORE,
+		));
 	});
 }
 
@@ -1690,21 +1695,39 @@ mod tests {
 				event: Some(index as u8),
 			})
 			.collect::<Vec<_>>();
+		let mut equipped_tile = choices
+			.first()
+			.cloned()
+			.ok_or_else(|| anyhow::anyhow!("fixture catalog choice"))?;
+		equipped_tile.selected = true;
 		let node = MenuNode::Section {
 			label: "Inventory",
 			children: vec![MenuNode::Section {
 				label: "Clothing",
-				children: vec![MenuNode::GridCatalog {
-					label: "Clothing",
-					max_selected: 6,
-					choices,
-				}],
+				children: vec![
+					MenuNode::GridCatalog { label: "Clothing", max_selected: 6, choices },
+					MenuNode::OrderedEquipment {
+						rows: vec![character_ui_menu::OrderedEquipmentRow {
+							label: "Clothing",
+							capacity: 6,
+							choices: vec![EquipmentChoice {
+								item_key: 0,
+								tile: equipped_tile,
+								unequip: Some(0),
+								move_left: None,
+								move_right: None,
+							}],
+						}],
+					},
+				],
 			}],
 		};
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins);
 		app.add_plugins(AssetPlugin::default());
 		app.init_asset::<Image>();
+		app.init_resource::<menu_components::MenuModalStack>();
+		app.add_observer(crate::input::navigate_inventory_menu);
 		let viewport = app.world_mut().spawn(crate::widgets::OverlaySelectViewport).id();
 		let fonts = HudFonts {
 			black: Handle::default(),
@@ -1717,6 +1740,7 @@ mod tests {
 		session.section_memory[InventorySection::Clothing.index()]
 			[InventoryRegion::Drawer.index()]
 		.gallery_scroll = 1;
+		app.world_mut().entity_mut(viewport).insert(session);
 		let _slots = app
 			.world_mut()
 			.run_system_once(move |mut commands: Commands, assets: Res<AssetServer>| {
@@ -1736,14 +1760,14 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("render system failed: {error}"))?;
 		app.world_mut().flush();
 		let mut slots = app.world_mut().query::<&InventoryAIOPSlot>();
-		assert_eq!(slots.iter(app.world()).count(), 1);
+		assert_eq!(slots.iter(app.world()).count(), 2);
 		let mut menus = app.world_mut().query::<&HudMenu>();
 		assert_eq!(
 			menus
 				.get(app.world(), _slots.menus[1])
 				.map_err(|_| anyhow::anyhow!("missing Equipped menu"))?
 				.item_count,
-			1
+			2
 		);
 		let mut manual_scroll = app.world_mut().query::<(&HudScrollManual, &ScrollPosition)>();
 		let manual_offsets = manual_scroll.iter(app.world()).collect::<Vec<_>>();
@@ -1765,7 +1789,81 @@ mod tests {
 				&& node.flex_shrink == 0.0
 		}));
 		let mut tiles = app.world_mut().query::<&InventoryTile>();
-		assert_eq!(tiles.iter(app.world()).count(), 15);
+		assert_eq!(tiles.iter(app.world()).count(), 16);
+
+		let pluses = app
+			.world_mut()
+			.query::<(Entity, &Text, &ChildOf)>()
+			.iter(app.world())
+			.filter(|(_, text, _)| text.0 == "+")
+			.map(|(entity, _, parent)| (entity, parent.parent()))
+			.collect::<Vec<_>>();
+		assert_eq!(pluses.len(), 5, "every empty capacity slot retains its plus");
+		let (caption, reachable) = pluses
+			.iter()
+			.copied()
+			.find(|(_, row)| {
+				app.world()
+					.get::<HudMenuItem>(*row)
+					.is_some_and(|item| item.menu == _slots.menus[1] && item.index == 1)
+			})
+			.ok_or_else(|| anyhow::anyhow!("next empty slot"))?;
+		for &(label, row) in &pluses {
+			let locked = row != reachable;
+			assert_eq!(
+				app.world().get::<TextColor>(label).map(|color| color.0),
+				Some(if locked { TEXT_YELLOW_FAINT } else { TEXT_YELLOW })
+			);
+			if locked {
+				assert!(app.world().get::<HudMenuItem>(row).is_none());
+				assert!(app.world().get::<InventoryControl>(row).is_none());
+				assert!(app.world().get::<HoverTile>(row).is_none());
+				assert_eq!(
+					app.world().get::<BorderColor>(row),
+					Some(&BorderColor::all(TEXT_YELLOW_FAINT))
+				);
+			}
+		}
+		app.world_mut().trigger(menu_components::MenuNavImpulse::new(
+			_slots.menus[1],
+			menu_components::MenuNav::Down,
+		));
+		app.world_mut().flush();
+		app.world_mut()
+			.run_system_once(menu_components::sync_hover_tiles)
+			.map_err(|error| anyhow::anyhow!("empty slot highlight: {error}"))?;
+		assert_eq!(
+			app.world().get::<BackgroundColor>(reachable).map(|color| color.0),
+			Some(TEXT_YELLOW)
+		);
+		assert_eq!(
+			app.world().get::<TextColor>(caption).map(|color| color.0),
+			Some(TEXT_DEEP_BLUE)
+		);
+		for &(label, row) in pluses.iter().filter(|(_, row)| *row != reachable) {
+			assert_eq!(
+				app.world().get::<TextColor>(label).map(|color| color.0),
+				Some(TEXT_YELLOW_FAINT)
+			);
+			assert_eq!(
+				app.world().get::<BackgroundColor>(row).map(|color| color.0),
+				Some(Color::NONE)
+			);
+		}
+		app.world_mut().trigger(menu_components::MenuNavImpulse::new(
+			_slots.menus[1],
+			menu_components::MenuNav::Up,
+		));
+		app.world_mut().flush();
+		app.world_mut()
+			.run_system_once(menu_components::sync_hover_tiles)
+			.map_err(|error| anyhow::anyhow!("empty slot idle style: {error}"))?;
+		assert_eq!(
+			app.world().get::<BackgroundColor>(reachable).map(|color| color.0),
+			Some(Color::NONE)
+		);
+		assert_eq!(app.world().get::<TextColor>(caption).map(|color| color.0), Some(TEXT_YELLOW));
+		assert_ne!(app.world().get::<BorderColor>(reachable), Some(&BorderColor::all(Color::NONE)));
 		Ok(())
 	}
 }
