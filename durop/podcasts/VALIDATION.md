@@ -10,7 +10,9 @@ with Rust 1.97.1, FFmpeg/ffprobe and Pillow on Linux.
   the resulting pin retains the same revision. Cached media and icon bytes match
   the source files, and `load_local` successfully reloads the cached pack offline.
 - All 26 media files fully decode through FFmpeg; all 26 PNG icons decode through
-  Pillow and have dimensions 512 × 512. The contact sheet was visually inspected.
+  Pillow. Thumbnails are 320 pixels wide; visual frames retain their aspect ratio
+  and audio waveforms are 320 × 180. No title bars or card padding are baked in.
+  The contact sheet was visually inspected.
 - All 11 visual records exactly match their original templates: `bottom-right`,
   `widthFraction: 0.25`, `fit: contain`. This includes the audio-only level-up clip
   and all five replacement videos.
@@ -42,3 +44,7 @@ cargo test -p durop-catalog --locked
 
 For playback acceptance on the recording machine, launch Durop with the absolute
 path to this `pack/`, trigger each clip, and inspect the lower-right overlay.
+
+Thumbnail styling updated 2026-11-08 (America/Los_Angeles) to match Durop’s base
+reactions pack. Regenerated all 26 icons with `generate_icons.py`, refreshed
+checksums, decoded all PNGs, and reloaded the catalog through Durop.

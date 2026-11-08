@@ -2,7 +2,7 @@
 
 This directory holds the podcast catalog for [Durop](https://github.com/ramate-io/durop).
 The loadable `pack/` contains all 26 podcast slots: 20 requested assets and six
-approved alternatives for blocked sources, each with a generated 512 × 512 PNG
+approved alternatives for blocked sources, each with a generated 320-pixel-wide PNG
 icon. [SOURCES.md](SOURCES.md) records creators, licenses, exact downloads and
 substitutions; [VALIDATION.md](VALIDATION.md) records Durop acceptance checks.
 Media and icons are ordinary Git files without LFS.
@@ -10,7 +10,7 @@ Media and icons are ordinary Git files without LFS.
 ## Add selected media
 
 Durop v1 plays local files, not provider page URLs. Download the selected media,
-prepare a PNG card icon (the bundled icons use media frames or audio waveforms), and record the creator, license/permission and required
+prepare a PNG card icon, and record the creator, license/permission and required
 attribution in `SOURCES.md`. Import with Python 3 and `ffprobe` on PATH:
 
 ```sh
@@ -37,6 +37,14 @@ Clips play once, restart on retrigger, and use Durop's 10-second duration cap.
 Adjust individual metadata if a selected clip needs a longer duration, at most
 600000 ms. Replacement titles describe the bundled assets; original selection templates keep
 their original names and IDs. See the substitution table before choosing a clip.
+
+## Regenerate thumbnails
+
+Run `python3 durop/podcasts/generate_icons.py` with FFmpeg on PATH. Like Durop’s
+base reactions catalog, visual thumbnails are unframed source images at 320 pixels
+wide with their original aspect ratio. Audio thumbnails are 320 × 180 cyan
+waveforms on a transparent background. Thumbnails contain no titles; Durop displays the clip names.
+Refresh `SHA256SUMS` after regenerating the icons.
 
 ## Load in Durop
 

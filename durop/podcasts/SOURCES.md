@@ -1,15 +1,16 @@
 # Podcast asset sources
 
-All 26 catalog slots contain downloaded media and generated 512 × 512 PNG icons.
+All 26 catalog slots contain downloaded media and generated 320-pixel-wide PNG icons.
 Twenty selections use the requested source; six use commercially usable alternatives
 approved after provider access failed. Original URLs and placement requests remain
 in the `pending/` selection records and in the substitution table below. IDs stay
 stable so replacing a source does not break a Durop binding.
 
 Source media is copied unchanged from the provider rendition linked here. The
-Freesound alternative uses the site's high-quality MP3 preview. Icons combine a
-media frame or audio waveform with the catalog title; source licenses also apply
-to these previews. No trimming, audio replacement, green-screen removal, or
+Freesound alternative uses the site's high-quality MP3 preview. Icons use an unframed
+media frame at its original aspect ratio or a cyan audio waveform on a transparent background,
+matching Durop’s base reactions catalog. They omit titles, which Durop displays
+separately; source licenses also apply to these previews. No trimming, audio replacement, green-screen removal, or
 transcoding was applied. [SHA256SUMS](SHA256SUMS) records media and icon bytes.
 
 Provider licenses are linked per item; these files are not relicensed under
