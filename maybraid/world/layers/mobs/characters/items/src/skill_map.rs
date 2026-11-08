@@ -1,9 +1,18 @@
 //! Discover skill-map items in a character bag.
 //!
 //! Kind plus seed is the whole identity: the same kind with a different seed
-//! is a different map. The live session presents one equipped spec at a time.
+//! is a different map. Kinds select spatial maps or timed feeds; both occupy
+//! the same inventory slot. The live session presents one equipped spec at a time.
 
 use serde::{Deserialize, Serialize};
+
+/// How a skill map turns stick movements into claims.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum SkillMapCategory {
+	#[default]
+	Map,
+	Feed,
+}
 
 /// Authored Discover map a character can carry.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -14,11 +23,19 @@ pub enum SkillMapKind {
 	Dumbwave,
 	Rockadder,
 	Cosimo,
+	RockadderFeed,
 }
 
 impl SkillMapKind {
 	pub const VALUES: &'static [Self] =
-		&[Self::Fireball, Self::Dumbwave, Self::Rockadder, Self::Cosimo];
+		&[Self::Fireball, Self::Dumbwave, Self::Rockadder, Self::Cosimo, Self::RockadderFeed];
+
+	pub const fn category(self) -> SkillMapCategory {
+		match self {
+			Self::RockadderFeed => SkillMapCategory::Feed,
+			_ => SkillMapCategory::Map,
+		}
+	}
 
 	pub const fn label(self) -> &'static str {
 		match self {
@@ -26,6 +43,7 @@ impl SkillMapKind {
 			Self::Dumbwave => "dumbwave",
 			Self::Rockadder => "rockadder",
 			Self::Cosimo => "cosimo",
+			Self::RockadderFeed => "rockadder-feed",
 		}
 	}
 
@@ -35,6 +53,7 @@ impl SkillMapKind {
 			Self::Dumbwave => "Dumbwave",
 			Self::Rockadder => "Rockadder",
 			Self::Cosimo => "Cosimo",
+			Self::RockadderFeed => "Rockadder Feed",
 		}
 	}
 
@@ -42,7 +61,9 @@ impl SkillMapKind {
 		match self {
 			Self::Fireball => &["Searing", "Ember", "Cinder", "Solar", "Ashen"],
 			Self::Dumbwave => &["Dull", "Hollow", "Mute", "Blank", "Haze"],
-			Self::Rockadder => &["Inlaid", "Tessellated", "Faceted", "Mosaic", "Geometric"],
+			Self::Rockadder | Self::RockadderFeed => {
+				&["Inlaid", "Tessellated", "Faceted", "Mosaic", "Geometric"]
+			}
 			Self::Cosimo => &["Celestial", "Astral", "Violet", "Sidereal", "Midnight"],
 		}
 	}
@@ -52,13 +73,13 @@ impl SkillMapKind {
 		match self {
 			Self::Fireball => [0.82, 0.22, 0.08],
 			Self::Dumbwave => [0.12, 0.62, 0.72],
-			Self::Rockadder => [0.78, 0.58, 0.18],
+			Self::Rockadder | Self::RockadderFeed => [0.78, 0.58, 0.18],
 			Self::Cosimo => [0.48, 0.18, 0.78],
 		}
 	}
 }
 
-/// One owned skill map: which effect, and which noise field.
+/// One owned skill map: its authored kind and visual seed.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SkillMapSpec {
 	pub kind: SkillMapKind,
@@ -77,7 +98,33 @@ impl SkillMapSpec {
 			SkillMapKind::Dumbwave => 1,
 			SkillMapKind::Rockadder => 2,
 			SkillMapKind::Cosimo => 3,
+			SkillMapKind::RockadderFeed => 4,
 		};
 		(kind << 32) | self.seed as u64
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use crate::skill_map::{SkillMapCategory, SkillMapKind, SkillMapSpec};
+
+	#[test]
+	fn feed_has_its_own_inventory_identity_without_changing_existing_keys() {
+		for (index, kind) in [
+			SkillMapKind::Fireball,
+			SkillMapKind::Dumbwave,
+			SkillMapKind::Rockadder,
+			SkillMapKind::Cosimo,
+		]
+		.into_iter()
+		.enumerate()
+		{
+			assert_eq!(kind.category(), SkillMapCategory::Map);
+			assert_eq!(SkillMapSpec::new(kind, 13).catalog_key(), ((index as u64) << 32) | 13);
+		}
+		let feed = SkillMapSpec::new(SkillMapKind::RockadderFeed, 13);
+		assert_eq!(feed.kind.category(), SkillMapCategory::Feed);
+		assert!(SkillMapKind::VALUES.contains(&feed.kind));
+		assert_eq!(feed.catalog_key(), (4_u64 << 32) | 13);
 	}
 }

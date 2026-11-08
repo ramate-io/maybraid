@@ -5,9 +5,9 @@ use bevy::camera::{ClearColorConfig, RenderTarget, ScalingMode};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
 use bevy::ui::widget::ViewportNode;
-use character_items::SkillMapSpec;
+use character_items::{SkillMapCategory, SkillMapSpec};
 
-use crate::map::{authored_map, authored_map_from_spec, MapExtents, SkillKind, SkillMapId};
+use crate::map::{authored_map_from_spec, MapExtents, SkillMapId};
 use crate::tile_material::SkillMapTileAssets;
 use crate::tiles::spawn_map_tiles_at;
 use crate::user::SkillMapMember;
@@ -47,9 +47,12 @@ pub(crate) fn catalog_world_span() -> f32 {
 	extents.tile_size().x * extents.steps as f32
 }
 
-fn catalog_projection() -> OrthographicProjection {
+fn catalog_projection(category: SkillMapCategory) -> OrthographicProjection {
 	let mut projection = OrthographicProjection::default_2d();
-	let span = catalog_world_span();
+	let span = match category {
+		SkillMapCategory::Map => catalog_world_span(),
+		SkillMapCategory::Feed => crate::viewport::map_view_extent().x,
+	};
 	projection.scaling_mode = ScalingMode::Fixed { width: span, height: span };
 	projection.scale = 1.0;
 	projection
@@ -88,7 +91,7 @@ pub fn spawn_skill_map_paint_view(
 				..default()
 			},
 			RenderTarget::Image(image_handle.clone().into()),
-			Projection::Orthographic(catalog_projection()),
+			Projection::Orthographic(catalog_projection(authored.category)),
 			Transform::from_xyz(0.0, 0.0, 1.0),
 			id,
 			crate::map::render_layer(id),
@@ -107,7 +110,7 @@ pub fn spawn_skill_map_catalog_preview(
 	slot: u32,
 ) -> SkillMapCatalogPreview {
 	let id = SkillMapId(MENU_PREVIEW_ID_BASE + slot);
-	let mut authored = authored_map(SkillKind::from_item(spec.kind), spec.seed);
+	let mut authored = authored_map_from_spec(spec);
 	authored.id = id;
 	let host = commands
 		.spawn((
@@ -123,7 +126,7 @@ pub fn spawn_skill_map_catalog_preview(
 		authored,
 		member,
 		-40 - slot as isize,
-		catalog_projection(),
+		catalog_projection(authored.category),
 		(),
 	);
 	SkillMapCatalogPreview { host, camera: view.camera, image: view.image, spec }
