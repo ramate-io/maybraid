@@ -71,7 +71,7 @@ where
 		)
 		.add_systems(
 			Update,
-			crate::input::consume_inventory_session_keyboard_back
+			crate::input::consume_inventory_session_back
 				.in_set(MenuModalSystems::Consume)
 				.before(menu_components::consume_menu_modal_back),
 		)
@@ -93,6 +93,7 @@ where
 				crate::input::sync_inventory_focus_from_menu,
 				crate::input::sync_inventory_region_focus,
 				crate::input::resolve_pending_inventory_choice,
+				crate::inventory::sync_inventory_presentation,
 			)
 				.chain()
 				.after(CharacterHudSystems::Sync),

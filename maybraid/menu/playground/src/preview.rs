@@ -74,6 +74,8 @@ const ORBIT_ELEVATION_LIMIT: f32 = 1.3;
 struct PendingCameraFocus {
 	focus: Option<CameraFocus>,
 	frame: Option<FocusFrame>,
+	/// Keep the last laid-out rectangle through inventory page rebuilds.
+	inventory_frame: Option<InventoryPreviewFrame>,
 	/// Garment reveals have no rig; offsets are world space around the origin.
 	world_space: bool,
 	orbit: PreviewOrbit,
@@ -326,7 +328,12 @@ impl Plugin for CharacterPreviewPlugin {
 					steer_preview_mouse_orbit,
 				),
 			)
-			.add_systems(PostUpdate, apply_preview_camera_focus.after(TransformSystems::Propagate));
+			.add_systems(
+				PostUpdate,
+				apply_preview_camera_focus
+					.after(TransformSystems::Propagate)
+					.after(bevy::ui::UiSystems::Layout),
+			);
 	}
 }
 
@@ -717,6 +724,7 @@ fn apply_preview_camera_focus(
 	home: Query<(), With<HomeScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
 	character: Query<(), With<CharacterScreen>>,
+	inventory_viewports: Query<(), With<crate::character::CharacterInventoryViewport>>,
 	inventory_slots: Query<
 		(&ComputedNode, &UiGlobalTransform),
 		With<InventoryCharacterPreviewSlot>,
@@ -737,16 +745,26 @@ fn apply_preview_camera_focus(
 	else {
 		return;
 	};
-	let inventory_frame = if character.is_empty() {
-		None
-	} else {
-		inventory_slots.single().ok().and_then(|(computed, transform)| {
+	let inventory_open = !character.is_empty() && !inventory_viewports.is_empty();
+	let inventory_frame = if inventory_open {
+		if let Some(frame) = inventory_slots.single().ok().and_then(|(computed, transform)| {
 			windows
 				.single()
 				.ok()
 				.and_then(|window| inventory_preview_frame(computed, transform, window))
-		})
+		}) {
+			pending.inventory_frame = Some(frame);
+		}
+		pending.inventory_frame
+	} else {
+		pending.inventory_frame = None;
+		None
 	};
+	// New page nodes may still have zero-size geometry. Keep the prior framing,
+	// or wait for the first layout, rather than flashing the full character pane.
+	if inventory_open && inventory_frame.is_none() {
+		return;
+	}
 	// Keep the camera on the full window: Bevy uses its target size to lay out UI.
 	// We frame the character into the reserved rectangle with projection and offset.
 	camera.viewport = None;
@@ -921,6 +939,91 @@ mod tests {
 	use character_creation_menus::BODY_FOCUS;
 
 	const EPS: f32 = 1e-4;
+
+	#[test]
+	fn inventory_preview_page_rebuild_retains_camera_framing_until_layout_and_clears_on_close(
+	) -> anyhow::Result<()> {
+		use crate::character::CharacterInventoryViewport;
+		use bevy::ecs::system::RunSystemOnce;
+		let mut world = World::new();
+		let mut pending = PendingCameraFocus::default();
+		pending.set_focus(BODY_FOCUS);
+		world.insert_resource(pending);
+		world.spawn(CharacterScreen);
+		let mut window = Window::default();
+		window.resolution.set_physical_resolution(1600, 1000);
+		world.spawn((window, PrimaryWindow));
+		let camera = world
+			.spawn((
+				Camera3d::default(),
+				Transform::default(),
+				Projection::Perspective(PerspectiveProjection::default()),
+				CameraController { speed: 6.0, sensitivity: 0.005, yaw: 0.0, pitch: 0.0 },
+			))
+			.id();
+		let viewport = world.spawn(CharacterInventoryViewport).id();
+		let slot = world
+			.spawn((
+				InventoryCharacterPreviewSlot,
+				ComputedNode { size: Vec2::new(800.0, 400.0), ..default() },
+				UiGlobalTransform::from_xy(1000.0, 400.0),
+				ChildOf(viewport),
+			))
+			.id();
+		let apply = |world: &mut World| -> anyhow::Result<()> {
+			world
+				.run_system_once(apply_preview_camera_focus)
+				.map_err(|error| anyhow::anyhow!("preview framing: {error}"))?;
+			Ok(())
+		};
+		let camera_pose = |world: &World| -> anyhow::Result<(Transform, f32)> {
+			let transform = *world
+				.get::<Transform>(camera)
+				.ok_or_else(|| anyhow::anyhow!("camera transform"))?;
+			let Some(Projection::Perspective(projection)) = world.get::<Projection>(camera) else {
+				anyhow::bail!("camera projection")
+			};
+			Ok((transform, projection.fov))
+		};
+		apply(&mut world)?;
+		let (framed_pose, framed_fov) = camera_pose(&world)?;
+		world.despawn(slot);
+		// Page rebuilds replace the old slot before the new node has layout geometry.
+		let rebuilt = world
+			.spawn((
+				InventoryCharacterPreviewSlot,
+				ComputedNode::default(),
+				UiGlobalTransform::default(),
+				ChildOf(viewport),
+			))
+			.id();
+		for _ in 0..2 {
+			apply(&mut world)?;
+			let (pose, fov) = camera_pose(&world)?;
+			assert!(pose.translation.abs_diff_eq(framed_pose.translation, EPS));
+			assert!((fov - framed_fov).abs() < EPS);
+		}
+		world.entity_mut(rebuilt).insert((
+			ComputedNode { size: Vec2::new(800.0, 400.0), ..default() },
+			UiGlobalTransform::from_xy(1000.0, 400.0),
+		));
+		apply(&mut world)?;
+		let (pose, fov) = camera_pose(&world)?;
+		assert!(pose.translation.abs_diff_eq(framed_pose.translation, EPS));
+		assert!((fov - framed_fov).abs() < EPS);
+		world.despawn(viewport);
+		apply(&mut world)?;
+		let (closed_pose, closed_fov) = camera_pose(&world)?;
+		assert!((closed_fov - PREVIEW_FOV).abs() < EPS);
+		assert!(!closed_pose.translation.abs_diff_eq(framed_pose.translation, EPS));
+		// A fresh inventory opening must wait for its own layout, not reuse old geometry.
+		world.spawn(CharacterInventoryViewport);
+		apply(&mut world)?;
+		let (waiting_pose, waiting_fov) = camera_pose(&world)?;
+		assert!(waiting_pose.translation.abs_diff_eq(closed_pose.translation, EPS));
+		assert!((waiting_fov - closed_fov).abs() < EPS);
+		Ok(())
+	}
 
 	#[test]
 	fn inventory_preview_frame_uses_physical_ui_geometry_at_high_dpi() -> anyhow::Result<()> {

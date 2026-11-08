@@ -1343,7 +1343,10 @@ pub fn consume_inventory_reorder_back(
 	}
 }
 
-pub fn consume_inventory_session_keyboard_back(
+/// Primary routed Back is reserved for modal consumers by the menu controller,
+/// so picker cancellation must run before generic overlay dismissal. Local
+/// Escape remains available for renderers without a controller host.
+pub fn consume_inventory_session_back(
 	keyboard: Res<ButtonInput<KeyCode>>,
 	keyboard_nav: Res<KeyboardMenuNav>,
 	lock: Res<TextMenuInputLock>,
@@ -1364,11 +1367,9 @@ pub fn consume_inventory_session_keyboard_back(
 	mut nav: ResMut<MenuNavPad>,
 	mut commands: Commands,
 ) {
-	if !keyboard_nav.is_enabled()
-		|| lock.0
-		|| !keyboard.just_pressed(KeyCode::Escape)
-		|| inventory_modal_blocks_shell(&stack)
-	{
+	let back = nav.just_pressed(MenuNav::Back)
+		|| (keyboard_nav.is_enabled() && keyboard.just_pressed(KeyCode::Escape));
+	if !back || lock.0 || inventory_modal_blocks_shell(&stack) {
 		return;
 	}
 	for menu in &menus {

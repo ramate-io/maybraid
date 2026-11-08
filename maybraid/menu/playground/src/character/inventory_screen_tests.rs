@@ -399,6 +399,128 @@ fn back_cancels_picker_before_second_back_closes_inventory() -> Result<()> {
 	Ok(())
 }
 
+/// Keep production gamepad sampling, routing, capture, and menu interpretation
+/// active; only the platform HID backend is omitted in this headless fixture.
+fn routed_gamepad_fixture() -> Result<(App, Entity, Entity)> {
+	use maybraid_menu_controller::{MenuController, MenuControllerPlugin};
+	use maybraid_virtual_pad_controller::PadHidPolicy;
+
+	let (mut app, viewport) = fixture()?;
+	app.insert_resource(PadHidPolicy::External);
+	app.add_plugins(MenuControllerPlugin);
+	let screen = app.world().get::<ChildOf>(viewport).context("inventory screen")?.parent();
+	app.world_mut().entity_mut(screen).insert(MenuController::default());
+	let gamepad = app.world_mut().spawn(Gamepad::default()).id();
+	app.world_mut().resource_mut::<ActiveOverlayKey>().0 = Some("Inventory");
+	render(&mut app, viewport, true)?;
+	app.update();
+	assert!(!app.world().resource::<menu_components::KeyboardMenuNav>().is_enabled());
+	Ok((app, viewport, gamepad))
+}
+
+fn gamepad_button(app: &mut App, gamepad: Entity, button: GamepadButton, down: bool) -> Result<()> {
+	let mut device = app.world_mut().get_mut::<Gamepad>(gamepad).context("gamepad device")?;
+	if down {
+		device.digital_mut().press(button);
+	} else {
+		device.digital_mut().release(button);
+	}
+	app.update();
+	Ok(())
+}
+
+fn tap_gamepad(app: &mut App, gamepad: Entity, button: GamepadButton) -> Result<()> {
+	gamepad_button(app, gamepad, button, true)?;
+	gamepad_button(app, gamepad, button, false)
+}
+
+fn drawer_visibility(app: &mut App) -> Result<Visibility> {
+	let drawer = screen_slots(app.world_mut())?[0];
+	let panel = app.world().get::<ChildOf>(drawer).context("drawer panel parent")?.parent();
+	app.world().get::<Visibility>(panel).copied().context("drawer panel visibility")
+}
+
+#[test]
+fn routed_gamepad_b_cancels_picker_and_holds_until_release_before_closing() -> Result<()> {
+	use character_ui_menu::InventoryRegion;
+	use maybraid_virtual_pad_controller::{PadButton, PrimaryVirtualPad, VirtualPadController};
+	use menu_components::{MenuModalId, MenuModalStack, MenuNavPad};
+
+	let (mut app, viewport, gamepad) = routed_gamepad_fixture()?;
+	let before = clothing_order(app.world())?;
+	assert_eq!(drawer_visibility(&mut app)?, Visibility::Hidden);
+	for _ in 0..2 {
+		tap_gamepad(&mut app, gamepad, GamepadButton::DPadDown)?;
+	}
+	tap_gamepad(&mut app, gamepad, GamepadButton::South)?;
+	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
+	assert_eq!(session.picker_source.map(|source| source.ordinal), Some(2));
+	assert_eq!(session.region, InventoryRegion::Drawer);
+	assert_eq!(drawer_visibility(&mut app)?, Visibility::Inherited);
+
+	gamepad_button(&mut app, gamepad, GamepadButton::East, true)?;
+	let primary = app.world().resource::<PrimaryVirtualPad>().0;
+	assert!(app
+		.world()
+		.get::<VirtualPadController>(primary)
+		.context("primary pad")?
+		.pad
+		.just_pressed(PadButton::B));
+	let session = app.world().get::<InventoryMenuSession>(viewport).context("session")?;
+	assert!(session.picker_source.is_none());
+	assert_eq!(session.region, InventoryRegion::Equipped);
+	assert_eq!(session.active_memory().focused_ordinal, 2);
+	assert_eq!(clothing_order(app.world())?, before);
+	assert_eq!(drawer_visibility(&mut app)?, Visibility::Hidden);
+	assert!(app.world().resource::<MenuModalStack>().contains(MenuModalId::OVERLAY_SELECT));
+	assert!(!app.world().resource::<MenuNavPad>().just_pressed(MenuNav::Back));
+	assert_eq!(app.world().resource::<OverlayCloseActivations>().0, 0);
+	// A sustained B must never escape to the outer overlay after cancellation.
+	for _ in 0..3 {
+		app.update();
+		assert_eq!(app.world().resource::<OverlayCloseActivations>().0, 0);
+	}
+	gamepad_button(&mut app, gamepad, GamepadButton::East, false)?;
+	assert_eq!(app.world().resource::<OverlayCloseActivations>().0, 0);
+	gamepad_button(&mut app, gamepad, GamepadButton::East, true)?;
+	assert_eq!(app.world().resource::<OverlayCloseActivations>().0, 1);
+	Ok(())
+}
+
+#[test]
+fn routed_gamepad_b_dismisses_higher_modal_without_cancelling_picker() -> Result<()> {
+	use menu_components::{MenuModal, MenuModalDismiss, MenuModalLayer, MenuModalStack};
+
+	let (mut app, viewport, gamepad) = routed_gamepad_fixture()?;
+	tap_gamepad(&mut app, gamepad, GamepadButton::South)?;
+	assert!(app
+		.world()
+		.get::<InventoryMenuSession>(viewport)
+		.context("session")?
+		.picker_source
+		.is_some());
+	let screen = app.world().get::<ChildOf>(viewport).context("inventory screen")?.parent();
+	app.world_mut().spawn((MenuModal::ITEM_DROP, HudMenu::new(1), ChildOf(screen)));
+	app.world_mut().resource_mut::<MenuModalStack>().open(MenuModalLayer::ITEM_DROP);
+	let mut dismissed = app.world().resource::<Messages<MenuModalDismiss>>().get_cursor_current();
+	app.update();
+	gamepad_button(&mut app, gamepad, GamepadButton::East, true)?;
+	assert!(app
+		.world()
+		.get::<InventoryMenuSession>(viewport)
+		.context("session")?
+		.picker_source
+		.is_some());
+	assert_eq!(drawer_visibility(&mut app)?, Visibility::Inherited);
+	assert_eq!(app.world().resource::<OverlayCloseActivations>().0, 0);
+	let dismissals = dismissed
+		.read(app.world().resource::<Messages<MenuModalDismiss>>())
+		.map(|dismiss| dismiss.id)
+		.collect::<Vec<_>>();
+	assert_eq!(dismissals, [menu_components::MenuModalId::ITEM_DROP]);
+	Ok(())
+}
+
 #[test]
 fn only_next_empty_slot_is_actionable_and_fill_returns_to_its_exact_position() -> Result<()> {
 	let (mut app, viewport) = fixture()?;
