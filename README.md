@@ -49,6 +49,8 @@ cargo build -p maybraid --release
 
 ## Players
 
+Podcast reaction media is cataloged separately in the [Durop podcast catalog](durop/podcasts/README.md).
+
 If you are interested in playing Maybraid, check out the following resources:
 
 <p>

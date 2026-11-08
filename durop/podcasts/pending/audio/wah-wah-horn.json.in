@@ -1,0 +1,14 @@
+{
+  "id": "wah-wah-horn",
+  "title": "Wah wah horn",
+  "asset": "wah-wah-horn.mp3",
+  "tags": [
+    "podcast",
+    "audio"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  }
+}

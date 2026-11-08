@@ -1,0 +1,19 @@
+{
+  "id": "youtube-m_usau745Ig",
+  "title": "YouTube selection m_usau745Ig",
+  "asset": "youtube-m_usau745Ig.mp4",
+  "tags": [
+    "podcast",
+    "video"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  },
+  "visual": {
+    "anchor": "bottom-right",
+    "widthFraction": 0.25,
+    "fit": "contain"
+  }
+}
