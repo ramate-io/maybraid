@@ -941,7 +941,7 @@ mod tests {
 	const EPS: f32 = 1e-4;
 
 	#[test]
-	fn inventory_preview_page_rebuild_retains_camera_framing_until_layout_and_clears_on_close(
+	fn inventory_preview_follows_expanded_layout_retains_page_framing_and_clears_on_close(
 	) -> anyhow::Result<()> {
 		use crate::character::CharacterInventoryViewport;
 		use bevy::ecs::system::RunSystemOnce;
@@ -1011,6 +1011,24 @@ mod tests {
 		let (pose, fov) = camera_pose(&world)?;
 		assert!(pose.translation.abs_diff_eq(framed_pose.translation, EPS));
 		assert!((fov - framed_fov).abs() < EPS);
+		// Closing the picker gives the preview the drawer's former space.
+		world.entity_mut(rebuilt).insert((
+			ComputedNode { size: Vec2::new(800.0, 650.0), ..default() },
+			UiGlobalTransform::from_xy(1000.0, 525.0),
+		));
+		apply(&mut world)?;
+		let (expanded_pose, expanded_fov) = camera_pose(&world)?;
+		assert!(expanded_fov < framed_fov);
+		assert!(!expanded_pose.translation.abs_diff_eq(framed_pose.translation, EPS));
+		// Reopening the picker restores the compact preview framing.
+		world.entity_mut(rebuilt).insert((
+			ComputedNode { size: Vec2::new(800.0, 400.0), ..default() },
+			UiGlobalTransform::from_xy(1000.0, 400.0),
+		));
+		apply(&mut world)?;
+		let (compact_pose, compact_fov) = camera_pose(&world)?;
+		assert!(compact_pose.translation.abs_diff_eq(framed_pose.translation, EPS));
+		assert!((compact_fov - framed_fov).abs() < EPS);
 		world.despawn(viewport);
 		apply(&mut world)?;
 		let (closed_pose, closed_fov) = camera_pose(&world)?;

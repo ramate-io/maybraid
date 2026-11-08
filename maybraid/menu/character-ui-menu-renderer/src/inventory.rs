@@ -30,7 +30,7 @@ pub struct InventoryScreenArea(pub InventoryRegion);
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct InventoryScreenReadOnly;
 
-/// The drawer keeps its layout space while the slot picker is closed.
+/// The drawer collapses out of the layout while the slot picker is closed.
 #[derive(Component)]
 pub(crate) struct InventoryDrawerPresentation;
 
@@ -300,8 +300,9 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 					let preview_node = if interactive {
 						Node {
 							width: Val::Percent(100.0),
-							height: Val::Percent(62.0),
+							height: Val::Auto,
 							min_height: Val::Px(80.0),
+							flex_basis: Val::Px(0.0),
 							flex_grow: 1.0,
 							position_type: PositionType::Relative,
 							..default()
@@ -318,6 +319,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 						InventoryDrawerPresentation,
 						if drawer_visible { Visibility::Inherited } else { Visibility::Hidden },
 						Node {
+							display: if drawer_visible { Display::Flex } else { Display::None },
 							width: Val::Percent(100.0),
 							height: Val::Px(match session.drawer {
 								InventoryDrawerMode::Rotary => 190.0,
@@ -381,16 +383,16 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 	slots
 }
 
-/// Change picker visibility without rebuilding the shell or resizing the preview.
+/// Show the picker in place, allowing the preview to fill its space when closed.
 pub(crate) fn sync_inventory_presentation(
 	sessions: Query<(&InventoryMenuSession, Has<InventoryScreenReadOnly>)>,
 	parents: Query<&ChildOf>,
 	mut panels: Query<
-		(Entity, &mut Visibility, Has<InventoryAIOPDim>),
+		(Entity, &mut Visibility, &mut Node, Has<InventoryAIOPDim>),
 		Or<(With<InventoryDrawerPresentation>, With<InventoryAIOPDim>)>,
 	>,
 ) {
-	for (entity, mut visibility, aiop_dim) in &mut panels {
+	for (entity, mut visibility, mut node, aiop_dim) in &mut panels {
 		let Some((session, read_only)) =
 			parents.iter_ancestors(entity).find_map(|ancestor| sessions.get(ancestor).ok())
 		else {
@@ -399,6 +401,12 @@ pub(crate) fn sync_inventory_presentation(
 		let picker_open = !read_only && session.picker_source.is_some();
 		let visible = if aiop_dim { picker_open } else { read_only || picker_open };
 		*visibility = if visible { Visibility::Inherited } else { Visibility::Hidden };
+		if !aiop_dim {
+			let display = if visible { Display::Flex } else { Display::None };
+			if node.display != display {
+				node.display = display;
+			}
+		}
 	}
 }
 
@@ -1728,7 +1736,7 @@ mod tests {
 	}
 
 	#[test]
-	fn inventory_drawer_visibility_and_aiop_dim_follow_picker_without_changing_layout(
+	fn inventory_drawer_collapses_and_preview_fills_available_space_until_picker_opens(
 	) -> anyhow::Result<()> {
 		let mut app = App::new();
 		app.add_plugins((MinimalPlugins, AssetPlugin::default()));
@@ -1765,46 +1773,66 @@ mod tests {
 				)
 				.map_err(|error| anyhow::anyhow!("inventory render: {error}"))?
 		};
-		let slots = render(app.world_mut(), true)?;
-		app.world_mut().flush();
-		let drawer = app
-			.world()
-			.get::<ChildOf>(slots.menus[0])
-			.map(ChildOf::parent)
-			.ok_or_else(|| anyhow::anyhow!("drawer panel"))?;
-		let dim = app
-			.world_mut()
-			.query_filtered::<Entity, With<InventoryAIOPDim>>()
-			.single(app.world())?;
-		let drawer_height = app.world().get::<Node>(drawer).map(|node| node.height);
-		let preview_height = app.world().get::<Node>(slots.preview).map(|node| node.height);
-		assert_eq!(app.world().get::<Visibility>(drawer), Some(&Visibility::Hidden));
-		assert_eq!(app.world().get::<Visibility>(dim), Some(&Visibility::Hidden));
-		for picker_open in [true, false, true, false] {
-			let mut session = app
-				.world_mut()
-				.get_mut::<InventoryMenuSession>(viewport)
-				.ok_or_else(|| anyhow::anyhow!("session"))?;
-			session.picker_source = picker_open.then_some(crate::InventoryPickerSource {
-				ordinal: 0,
-				item: None,
-				attempted_item: None,
-			});
-			session.region =
-				if picker_open { InventoryRegion::Drawer } else { InventoryRegion::Equipped };
-			drop(session);
+		for (mode, expected_height) in [
+			(InventoryDrawerMode::Rotary, 190.0),
+			(InventoryDrawerMode::Gallery, GALLERY_PANEL_HEIGHT),
+		] {
 			app.world_mut()
-				.run_system_once(sync_inventory_presentation)
-				.map_err(|error| anyhow::anyhow!("picker presentation: {error}"))?;
-			let expected = if picker_open { Visibility::Inherited } else { Visibility::Hidden };
-			assert_eq!(app.world().get::<Visibility>(drawer), Some(&expected));
-			assert_eq!(app.world().get::<Visibility>(dim), Some(&expected));
-			assert_eq!(app.world().get::<Node>(drawer).map(|node| node.height), drawer_height);
+				.get_mut::<InventoryMenuSession>(viewport)
+				.ok_or_else(|| anyhow::anyhow!("session"))?
+				.drawer = mode;
+			let slots = render(app.world_mut(), true)?;
+			app.world_mut().flush();
+			let drawer = app
+				.world()
+				.get::<ChildOf>(slots.menus[0])
+				.map(ChildOf::parent)
+				.ok_or_else(|| anyhow::anyhow!("drawer panel"))?;
+			let dim = app
+				.world_mut()
+				.query_filtered::<Entity, With<InventoryAIOPDim>>()
+				.single(app.world())?;
+			let drawer_height = app.world().get::<Node>(drawer).map(|node| node.height);
+			assert_eq!(drawer_height, Some(Val::Px(expected_height)));
+			let preview = app
+				.world()
+				.get::<Node>(slots.preview)
+				.ok_or_else(|| anyhow::anyhow!("preview layout"))?;
+			assert_eq!(preview.height, Val::Auto);
+			assert_eq!(preview.flex_basis, Val::Px(0.0));
+			assert_eq!(preview.flex_grow, 1.0);
 			assert_eq!(
-				app.world().get::<Node>(slots.preview).map(|node| node.height),
-				preview_height
+				app.world().get::<Node>(drawer).map(|node| node.display),
+				Some(Display::None)
 			);
-			assert!(app.world().get::<InventoryCharacterPreviewSlot>(slots.preview).is_some());
+			assert_eq!(app.world().get::<Visibility>(drawer), Some(&Visibility::Hidden));
+			assert_eq!(app.world().get::<Visibility>(dim), Some(&Visibility::Hidden));
+			for picker_open in [true, false, true, false] {
+				let mut session = app
+					.world_mut()
+					.get_mut::<InventoryMenuSession>(viewport)
+					.ok_or_else(|| anyhow::anyhow!("session"))?;
+				session.picker_source = picker_open.then_some(crate::InventoryPickerSource {
+					ordinal: 0,
+					item: None,
+					attempted_item: None,
+				});
+				session.region =
+					if picker_open { InventoryRegion::Drawer } else { InventoryRegion::Equipped };
+				drop(session);
+				app.world_mut()
+					.run_system_once(sync_inventory_presentation)
+					.map_err(|error| anyhow::anyhow!("picker presentation: {error}"))?;
+				let expected = if picker_open { Visibility::Inherited } else { Visibility::Hidden };
+				assert_eq!(app.world().get::<Visibility>(drawer), Some(&expected));
+				assert_eq!(app.world().get::<Visibility>(dim), Some(&expected));
+				assert_eq!(app.world().get::<Node>(drawer).map(|node| node.height), drawer_height);
+				assert_eq!(
+					app.world().get::<Node>(drawer).map(|node| node.display),
+					Some(if picker_open { Display::Flex } else { Display::None })
+				);
+				assert!(app.world().get::<InventoryCharacterPreviewSlot>(slots.preview).is_some());
+			}
 		}
 		let readonly = render(app.world_mut(), false)?;
 		app.world_mut().flush();
@@ -1817,6 +1845,7 @@ mod tests {
 			.run_system_once(sync_inventory_presentation)
 			.map_err(|error| anyhow::anyhow!("read-only presentation: {error}"))?;
 		assert_eq!(app.world().get::<Visibility>(drawer), Some(&Visibility::Inherited));
+		assert_eq!(app.world().get::<Node>(drawer).map(|node| node.display), Some(Display::Flex));
 		let dim = app
 			.world_mut()
 			.query_filtered::<Entity, With<InventoryAIOPDim>>()
