@@ -6,11 +6,11 @@ use clap::Parser;
 
 use crate::timeline::{DEFAULT_FPS, DEFAULT_HEIGHT, DEFAULT_WIDTH, DURATION_SECS};
 
-/// Render a deterministic ~5 s Maybraid title sequence.
+/// Render a deterministic ~6 s Maybraid title sequence.
 #[derive(Parser, Debug, Clone)]
 #[command(
 	name = "promo-title",
-	about = "Scripted Maybraid title sequence: cosmic rockadder/cosmos blend, arcing fallen-star with a pulsing tail, centered rounded label, optional MP4 capture."
+	about = "Scripted Maybraid title sequence: cosmic rockadder/cosmos blend, arcing fallen-star with a pulsing tail, centered rounded label, circular swallow overlay, optional capture."
 )]
 pub struct Args {
 	/// Copy for the centered rounded card that fades in after the star lands.
@@ -29,13 +29,17 @@ pub struct Args {
 	#[arg(long, env = "PROMO_TITLE_FPS", default_value_t = DEFAULT_FPS)]
 	pub fps: u32,
 
-	/// Sequence length in seconds. Authored motion is 5 s; override only for tests.
+	/// Sequence length in seconds. Authored motion is 6 s; override only for tests.
 	#[arg(long, env = "PROMO_TITLE_DURATION", default_value_t = DURATION_SECS)]
 	pub duration: f32,
 
-	/// Write an MP4 here (PNG sequence + ffmpeg). Omit to play the sequence live.
+	/// Write the H.264 preview here (PNG sequence + ffmpeg). Omit to play live.
 	#[arg(long, env = "PROMO_TITLE_OUTPUT")]
 	pub output: Option<PathBuf>,
+
+	/// Write the ProRes 4444 overlay MOV here. Defaults to the preview stem with `.mov`.
+	#[arg(long, env = "PROMO_TITLE_OVERLAY")]
+	pub overlay: Option<PathBuf>,
 
 	/// ffmpeg binary. Defaults to `ffmpeg` on PATH.
 	#[arg(long, env = "PROMO_TITLE_FFMPEG", default_value = "ffmpeg")]
@@ -77,6 +81,7 @@ mod tests {
 		assert_eq!(args.height, 720);
 		assert_eq!(args.fps, 30);
 		assert_eq!(args.output.as_deref(), Some(std::path::Path::new("out.mp4")));
+		assert!(args.overlay.is_none());
 		Ok(())
 	}
 

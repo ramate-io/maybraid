@@ -1,12 +1,12 @@
-//! Deterministic title-sequence clock: arcing star, pulsing tail, celestial field.
+//! Deterministic title-sequence clock: arcing star, pulsing tail, circular swallow.
 
 use std::f32::consts::{PI, TAU};
 
 use bevy::math::Vec2;
 use menu_components::theme::LOADING_SPIN_SECS;
 
-/// Authored length of the promotional title sequence.
-pub const DURATION_SECS: f32 = 5.0;
+/// Authored length of the promotional title sequence, including the swallow hold.
+pub const DURATION_SECS: f32 = 6.0;
 
 /// Default capture rate.
 pub const DEFAULT_FPS: u32 = 60;
@@ -38,6 +38,8 @@ const FLIGHT_END: f32 = 1.85;
 const BOUNCE_END: f32 = 2.55;
 const LABEL_FADE_START: f32 = 2.70;
 const LABEL_FADE_END: f32 = 3.45;
+const SWALLOW_START: f32 = 4.50;
+const SWALLOW_END: f32 = 5.80;
 const PULSE_PERIOD: f32 = 1.2;
 const TRAIL_SPACING: f32 = 0.022;
 const BOUNCE_HEIGHT: f32 = 0.20;
@@ -60,9 +62,17 @@ impl Keyframe {
 	pub const MID_ARC_TAIL: Self = Self { name: "02_mid_arc_tail", time: 0.95 };
 	pub const LANDING_BOUNCE: Self = Self { name: "03_landing_bounce", time: 1.96 };
 	pub const LABEL_VISIBLE: Self = Self { name: "04_label_visible", time: 3.90 };
+	pub const SWALLOW_MID: Self = Self { name: "05_swallow_mid", time: 5.15 };
+	pub const SWALLOW_CLEAR: Self = Self { name: "06_swallow_clear", time: 5.92 };
 
-	pub const ALL: [Self; 4] =
-		[Self::BACKGROUND_BLEND, Self::MID_ARC_TAIL, Self::LANDING_BOUNCE, Self::LABEL_VISIBLE];
+	pub const ALL: [Self; 6] = [
+		Self::BACKGROUND_BLEND,
+		Self::MID_ARC_TAIL,
+		Self::LANDING_BOUNCE,
+		Self::LABEL_VISIBLE,
+		Self::SWALLOW_MID,
+		Self::SWALLOW_CLEAR,
+	];
 }
 
 /// One title sequence. Label is the only per-run payload; motion is authored.
@@ -100,6 +110,7 @@ impl TitleSequence {
 			star: StarPose::at(t),
 			label: LabelPose::at(t),
 			celestial: Celestial::at(t),
+			swallow: Swallow::at(t),
 		}
 	}
 
@@ -117,6 +128,52 @@ pub struct TitleFrame {
 	pub star: StarPose,
 	pub label: LabelPose,
 	pub celestial: Celestial,
+	pub swallow: Swallow,
+}
+
+/// Expanding circular hole used as a durop overlay transition.
+///
+/// `radius` 0 keeps the scene; 1 covers the farthest corner from the label
+/// center. `scene_alpha` is 1 outside the hole and 0 inside it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Swallow {
+	pub x: f32,
+	pub y: f32,
+	pub radius: f32,
+	pub feather: f32,
+}
+
+impl Swallow {
+	fn at(t: f32) -> Self {
+		Self { x: 0.5, y: 0.5, radius: smoothstep(SWALLOW_START, SWALLOW_END, t), feather: 0.012 }
+	}
+
+	/// Coverage of the authored scene: 1 keep, 0 swallowed (transparent).
+	pub fn scene_alpha(&self, px: u32, py: u32, width: u32, height: u32) -> f32 {
+		if self.radius <= 0.0 {
+			return 1.0;
+		}
+		let width = width.max(1) as f32;
+		let height = height.max(1) as f32;
+		let aspect = width / height;
+		let nx = (px as f32 + 0.5) / width;
+		let ny = (py as f32 + 0.5) / height;
+		let dist = ((nx - self.x) * aspect).hypot(ny - self.y);
+		let cover = corner_cover(self.x, self.y, aspect);
+		let radius = self.radius * cover;
+		let feather = (self.feather * cover).max(1.0 / height);
+		smoothstep(radius - feather, radius + feather, dist)
+	}
+}
+
+fn corner_cover(cx: f32, cy: f32, aspect: f32) -> f32 {
+	let mut cover = 0.0_f32;
+	for x in [0.0, 1.0] {
+		for y in [0.0, 1.0] {
+			cover = cover.max(((x - cx) * aspect).hypot(y - cy));
+		}
+	}
+	cover.max(1e-5)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -440,9 +497,9 @@ mod tests {
 	}
 
 	#[test]
-	fn five_seconds_at_sixty_fps_is_three_hundred_frames() -> anyhow::Result<()> {
+	fn six_seconds_at_sixty_fps_is_three_hundred_sixty_frames() -> anyhow::Result<()> {
 		let sequence = TitleSequence::new("Maybraid");
-		assert_eq!(sequence.frame_count(60), 300);
+		assert_eq!(sequence.frame_count(60), 360);
 		assert!((sequence.time_of_frame(0, 60) - 0.0).abs() < 1e-6);
 		assert!((sequence.time_of_frame(60, 60) - 1.0).abs() < 1e-6);
 		assert_eq!(sequence.frame_at(1.0, 60), 60);
@@ -590,6 +647,28 @@ mod tests {
 	}
 
 	#[test]
+	fn swallow_expands_from_the_label_until_the_frame_is_clear() -> anyhow::Result<()> {
+		let sequence = TitleSequence::new("Maybraid");
+		let before = sequence.sample(SWALLOW_START - 0.05).swallow;
+		assert!(before.radius < 0.01);
+		assert!((before.scene_alpha(960, 540, 1920, 1080) - 1.0).abs() < 1e-5);
+
+		let mid = sequence.sample(Keyframe::SWALLOW_MID.time).swallow;
+		assert!(mid.radius > 0.28 && mid.radius < 0.72, "mid swallow radius {}", mid.radius);
+		assert!(
+			mid.scene_alpha(960, 540, 1920, 1080) < 0.05,
+			"label center should already be eaten"
+		);
+		assert!(mid.scene_alpha(8, 8, 1920, 1080) > 0.95, "corners should still show the scene");
+
+		let done = sequence.sample(Keyframe::SWALLOW_CLEAR.time).swallow;
+		assert!(done.radius > 0.98);
+		assert!(done.scene_alpha(8, 8, 1920, 1080) < 0.05);
+		assert!(done.scene_alpha(1912, 1072, 1920, 1080) < 0.05);
+		Ok(())
+	}
+
+	#[test]
 	fn keyframes_are_ordered_inside_the_duration() -> anyhow::Result<()> {
 		let mut previous = -1.0;
 		for key in Keyframe::ALL {
@@ -598,6 +677,8 @@ mod tests {
 			previous = key.time;
 		}
 		assert_eq!(Keyframe::MID_ARC_TAIL.name, "02_mid_arc_tail");
+		assert_eq!(Keyframe::SWALLOW_MID.name, "05_swallow_mid");
+		assert_eq!(Keyframe::SWALLOW_CLEAR.name, "06_swallow_clear");
 		Ok(())
 	}
 

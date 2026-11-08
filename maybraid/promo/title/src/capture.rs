@@ -8,7 +8,10 @@ use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use bevy::time::TimeUpdateStrategy;
 use bevy::winit::WinitSettings;
 
-use crate::encode::encode_png_sequence;
+use crate::encode::{
+	apply_swallow_alpha, composite_over_checkerboard, encode_checkerboard_preview,
+	encode_overlay_sequence, encode_png_sequence,
+};
 use crate::plugin::{SequenceClock, TitleSequenceConfig, TitleSequenceSystems};
 use crate::timeline::Keyframe;
 
@@ -16,6 +19,8 @@ use crate::timeline::Keyframe;
 #[derive(Resource, Clone, Debug)]
 pub struct CaptureIo {
 	pub output: PathBuf,
+	pub overlay: PathBuf,
+	pub checkerboard: PathBuf,
 	pub frames_dir: PathBuf,
 	pub stills_dir: PathBuf,
 	pub ffmpeg: PathBuf,
@@ -25,16 +30,27 @@ pub struct CaptureIo {
 }
 
 impl CaptureIo {
-	pub fn new(output: PathBuf, ffmpeg: PathBuf, keep_frames: bool, warmup_frames: u32) -> Self {
+	pub fn new(
+		output: PathBuf,
+		overlay: Option<PathBuf>,
+		ffmpeg: PathBuf,
+		keep_frames: bool,
+		warmup_frames: u32,
+	) -> Self {
 		let stem = output.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("title-sequence"));
 		let parent = output
 			.parent()
 			.filter(|path| !path.as_os_str().is_empty())
 			.unwrap_or_else(|| Path::new("."));
+		let overlay =
+			overlay.unwrap_or_else(|| parent.join(format!("{}.mov", stem.to_string_lossy())));
+		let checkerboard = parent.join(format!("{}-checkerboard.mp4", stem.to_string_lossy()));
 		Self {
 			frames_dir: parent.join(format!("{}_frames", stem.to_string_lossy())),
 			stills_dir: parent.join(format!("{}_stills", stem.to_string_lossy())),
 			output,
+			overlay,
+			checkerboard,
 			ffmpeg,
 			keep_frames,
 			warmup_frames,
@@ -165,16 +181,28 @@ fn request_capture_frame(
 
 fn finish_capture(config: &TitleSequenceConfig, io: &CaptureIo) -> anyhow::Result<()> {
 	std::fs::create_dir_all(&io.stills_dir)?;
+	encode_png_sequence(&io.ffmpeg, config.fps, &io.frames_dir, &io.output)?;
+	info!("title mp4: {}", io.output.display());
+
+	apply_swallow_alpha(&config.sequence, config.fps, &io.frames_dir)?;
 	for key in Keyframe::ALL {
 		let frame = config.sequence.frame_at(key.time, config.fps);
 		let src = io.frames_dir.join(format!("frame_{frame:05}.png"));
 		let dest = io.stills_dir.join(format!("{}.png", key.name));
-		std::fs::copy(&src, &dest)
-			.map_err(|err| anyhow::anyhow!("copy {} → {}: {err}", src.display(), dest.display()))?;
+		if key == Keyframe::SWALLOW_MID || key == Keyframe::SWALLOW_CLEAR {
+			composite_over_checkerboard(&src, &dest)?;
+		} else {
+			std::fs::copy(&src, &dest).map_err(|err| {
+				anyhow::anyhow!("copy {} → {}: {err}", src.display(), dest.display())
+			})?;
+		}
 		info!("title still: {}", dest.display());
 	}
-	encode_png_sequence(&io.ffmpeg, config.fps, &io.frames_dir, &io.output)?;
-	info!("title mp4: {}", io.output.display());
+
+	encode_overlay_sequence(&io.ffmpeg, config.fps, &io.frames_dir, &io.overlay)?;
+	info!("title overlay: {}", io.overlay.display());
+	encode_checkerboard_preview(&io.ffmpeg, config.fps, &io.frames_dir, &io.checkerboard)?;
+	info!("title checkerboard: {}", io.checkerboard.display());
 	if !io.keep_frames {
 		let _ = std::fs::remove_dir_all(&io.frames_dir);
 	}
