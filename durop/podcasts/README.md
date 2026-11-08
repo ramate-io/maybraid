@@ -1,14 +1,16 @@
 # Maybraid podcast drops
 
 This directory holds the podcast catalog for [Durop](https://github.com/ramate-io/durop).
-The initial 26 unique selections and their source links are in [SOURCES.md](SOURCES.md).
-**No media has been downloaded yet. The loadable `pack/` currently has zero clips.**
-Acquisition is blocked by this environment's outbound network policy.
+The loadable `pack/` contains all 26 podcast slots: 20 requested assets and six
+approved alternatives for blocked sources, each with a generated 512 × 512 PNG
+icon. [SOURCES.md](SOURCES.md) records creators, licenses, exact downloads and
+substitutions; [VALIDATION.md](VALIDATION.md) records Durop acceptance checks.
+Media and icons are ordinary Git files without LFS.
 
 ## Add selected media
 
 Durop v1 plays local files, not provider page URLs. Download the selected media,
-prepare a PNG card icon, and record the creator, license/permission and required
+prepare a PNG card icon (the bundled icons use media frames or audio waveforms), and record the creator, license/permission and required
 attribution in `SOURCES.md`. Import with Python 3 and `ffprobe` on PATH:
 
 ```sh
@@ -33,7 +35,8 @@ width. Audio selections omit visual metadata, except `cute-level-up`, whose
 requested bottom-right setting is preserved (it remains an audio file).
 Clips play once, restart on retrigger, and use Durop's 10-second duration cap.
 Adjust individual metadata if a selected clip needs a longer duration, at most
-600000 ms. YouTube titles and the Openverse title are provisional until inspected.
+600000 ms. Replacement titles describe the bundled assets; original selection templates keep
+their original names and IDs. See the substitution table before choosing a clip.
 
 ## Load in Durop
 
@@ -44,7 +47,7 @@ Durop's **Catalog** menu, or run from a separate Durop checkout:
 cargo run -p durop --bin durop --locked -- --pack /absolute/path/to/maybraid/durop/podcasts/pack
 ```
 
-After committing the pack, configure the Git repository
+For a Git-backed catalog, configure the Git repository
 `https://github.com/ramate-io/maybraid.git`, the desired branch or commit, and
 **Pack folder** `durop/podcasts/pack`. The equivalent launch argument is:
 

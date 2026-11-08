@@ -1,0 +1,14 @@
+{
+  "id": "omaga",
+  "title": "Omaga (Rturr version)",
+  "asset": "omaga.mp3",
+  "tags": [
+    "podcast",
+    "audio"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  }
+}

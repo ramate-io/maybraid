@@ -1,0 +1,2 @@
+# Store podcast media and icons as ordinary Git blobs, without LFS filters.
+pack/** -filter

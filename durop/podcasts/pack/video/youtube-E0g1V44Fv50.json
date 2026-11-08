@@ -1,0 +1,20 @@
+{
+  "id": "youtube-E0g1V44Fv50",
+  "title": "Wow — surprised reaction (stock alternative)",
+  "asset": "youtube-E0g1V44Fv50.mp4",
+  "tags": [
+    "podcast",
+    "video",
+    "alternative"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  },
+  "visual": {
+    "anchor": "bottom-right",
+    "widthFraction": 0.25,
+    "fit": "contain"
+  }
+}

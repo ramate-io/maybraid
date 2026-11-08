@@ -1,0 +1,14 @@
+{
+  "id": "goofy-rubber-bounce",
+  "title": "Goofy rubber bounce sting",
+  "asset": "goofy-rubber-bounce.mp3",
+  "tags": [
+    "podcast",
+    "audio"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "comedy-rimshot",
+  "title": "Comedy rimshot",
+  "asset": "comedy-rimshot.mp3",
+  "tags": [
+    "podcast",
+    "audio"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  }
+}

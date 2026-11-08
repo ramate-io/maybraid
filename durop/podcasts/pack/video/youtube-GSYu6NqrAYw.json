@@ -1,0 +1,20 @@
+{
+  "id": "youtube-GSYu6NqrAYw",
+  "title": "Sad older man (stock alternative)",
+  "asset": "youtube-GSYu6NqrAYw.mp4",
+  "tags": [
+    "podcast",
+    "video",
+    "alternative"
+  ],
+  "playback": {
+    "retrigger": "restart",
+    "loop": false,
+    "maxDurationMs": 10000
+  },
+  "visual": {
+    "anchor": "bottom-right",
+    "widthFraction": 0.25,
+    "fit": "contain"
+  }
+}
