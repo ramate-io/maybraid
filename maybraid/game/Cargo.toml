@@ -39,6 +39,7 @@ menu-screens = { workspace = true }
 character-persist = { workspace = true }
 
 [features]
+generation-tracing = ["lod/generation-tracing"]
 debug-commands = ["maybraid-world/debug-commands"]
 
 [dev-dependencies]

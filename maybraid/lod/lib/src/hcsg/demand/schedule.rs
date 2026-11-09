@@ -31,6 +31,8 @@ pub(crate) struct Job {
 	pub discovered: Option<Vec<Id>>,
 	pub cursor: usize,
 	pub reach: Arc<Mutex<HashSet<TypeId>>>,
+	#[cfg(feature = "generation-tracing")]
+	pub(in crate::hcsg) trace: Option<super::super::trace::JobTrace>,
 }
 
 /// What the worker writes back after one quantum.
@@ -72,6 +74,10 @@ pub(super) fn pick_job(state: &mut DemandState) -> Option<Job> {
 		.min_by(|(id_a, a), (id_b, b)| a.pass.total_cmp(&b.pass).then(id_b.cmp(id_a)))
 		.map(|(id, _)| *id)?;
 	let subscription = state.subscriptions.get_mut(&id)?;
+	#[cfg(feature = "generation-tracing")]
+	if let Some(trace) = &mut subscription.trace {
+		trace.pick();
+	}
 	Some(Job {
 		id,
 		regions: subscription.regions.clone(),
@@ -82,6 +88,8 @@ pub(super) fn pick_job(state: &mut DemandState) -> Option<Job> {
 		discovered: subscription.discovered.take(),
 		cursor: subscription.cursor,
 		reach: Arc::clone(&subscription.reach),
+		#[cfg(feature = "generation-tracing")]
+		trace: subscription.trace.clone(),
 	})
 }
 
@@ -108,6 +116,10 @@ impl HcsgDemand {
 			subscription.cursor = progress.cursor;
 			if !progress.published.is_empty() {
 				subscription.published.extend(progress.published);
+			}
+			#[cfg(feature = "generation-tracing")]
+			if let Some(trace) = &mut subscription.trace {
+				trace.requeue();
 			}
 			if progress.done {
 				subscription.done = true;

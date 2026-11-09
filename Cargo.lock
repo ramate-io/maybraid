@@ -6920,7 +6920,10 @@ dependencies = [
  "gimme-core",
  "lod-cascade",
  "lod-cascade-system",
+ "lod-generation-diagnostics",
  "thiserror 1.0.69",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -6948,6 +6951,15 @@ dependencies = [
  "anyhow",
  "bevy",
  "lod-cascade",
+]
+
+[[package]]
+name = "lod-generation-diagnostics"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
