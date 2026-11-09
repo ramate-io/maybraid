@@ -25,3 +25,11 @@ The optional game feature `packed-diagnostics` installs the dedicated `packed-gr
 Clean CPU/GPU timing runs omit this feature/env and GPU capture injection. Core preparation and culling have lightweight stable Tracy zones (`maybraid.packed.profile`). A separate diagnostic run and one-frame hardware capture establish actual visible migration, bins/draws and pass coverage.
 
 No performance improvement has been established. Hardware gates include default Proxy/Off shading/depth/normal/shadow parity, supported production orchard census and mixed-world coverage, move-away/LOD-return with unchanged instance upload counters, camera/light/pipeline changes and initial→fallback→readmission. Match settings/route/population evidence and use counterbalanced repeats of the same switchable binary before judging a win.
+
+### Targeted coverage diagnostics
+
+The optional crate propagates chico's `packed-diagnostics` feature. Extra per-batch draw-counter allocation/cloning and increments are absent when that feature is disabled. `packed_view_lod_candidates` reports CPU frustum/distance candidates, not actual phase visibility. Disjoint UI camera layers are excluded. Actual main-draw totals in `packed_tile_lod` are cumulative across all main views and must not be summed across repeated view rows.
+
+Once a tile has actually issued a main draw, the diagnostic subscriber pins a nearby candidate for the launch. `MAYBRAID_PACKED_GROVE_DIAGNOSTIC_TILE` can target explicit entity bits instead; these bits are not a cross-launch world identity. Correlate center/bounds and source revision. Each LOD records at most the lowest64 batch ordinals' buffer IDs/byte sizes, with explicit truncation. A target can remain resident while off-camera; an absent target is reported explicitly. Completion sample sequence and view truncation fields make missing coverage visible. Unchanged target revision and exact buffer IDs across observed LOD return support residency; global uploads can increase legitimately as different world tiles enter.
+
+The crate's separate `fixture` example runs the real census formatters on an empty headless world without a renderer. Its three exported messages prove durable zero-view/target-absent completion only; hardware must verify real candidates, issued geometry and pass coverage.

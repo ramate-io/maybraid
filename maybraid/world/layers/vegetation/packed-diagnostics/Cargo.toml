@@ -9,9 +9,16 @@ homepage = { workspace = true }
 publish = { workspace = true }
 rust-version = { workspace = true }
 
+[features]
+fixture = []
+
+[[example]]
+name = "packed_census_fixture"
+required-features = ["fixture"]
+
 [dependencies]
 bevy = { workspace = true }
-chico = { workspace = true }
+chico = { workspace = true, features = ["packed-diagnostics"] }
 
 [lints]
 workspace = true
