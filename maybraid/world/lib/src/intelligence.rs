@@ -47,7 +47,7 @@ use world_player::Player as VegetationPlayer;
 const INTELLIGENCE_LOD_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
 
 const WORLD_SPOTTING_LIMITS: SpottingObserveLimits =
-	SpottingObserveLimits { max_observers_per_tick: 8 };
+	SpottingObserveLimits { max_observers_per_tick: 8, max_retained_observers_per_tick: 8 };
 
 const WORLD_POI_LIMITS: PoiDiscoverLimits = PoiDiscoverLimits { max_scans_per_tick: 8 };
 
@@ -507,6 +507,7 @@ mod tests {
 		assert_eq!(WORLD_MOVEMENT_LIMITS.max_replans_per_frame, 4);
 		assert_eq!(WORLD_MOVEMENT_LIMITS.max_walk_probes_per_frame, 8);
 		assert_eq!(WORLD_SPOTTING_LIMITS.max_observers_per_tick, 8);
+		assert_eq!(WORLD_SPOTTING_LIMITS.max_retained_observers_per_tick, 8);
 		assert_eq!(WORLD_POI_LIMITS.max_scans_per_tick, 8);
 		assert_eq!(WORLD_THREAT_LIMITS.max_scans_per_tick, 8);
 		assert!(

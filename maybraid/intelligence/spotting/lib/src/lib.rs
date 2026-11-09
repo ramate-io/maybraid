@@ -28,14 +28,17 @@ pub enum SpottingSystems {
 	Observe,
 }
 
-/// How many due observers may start discovery on one Observe tick.
+/// Independent observer budgets for discovery and additional retained-contact refresh.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SpottingObserveLimits {
+	/// Maximum discovery observers, including their due retained contacts.
 	pub max_observers_per_tick: usize,
+	/// Maximum additional observers that may refresh retained contacts without discovery.
+	pub max_retained_observers_per_tick: usize,
 }
 
 impl Default for SpottingObserveLimits {
 	fn default() -> Self {
-		Self { max_observers_per_tick: 8 }
+		Self { max_observers_per_tick: 8, max_retained_observers_per_tick: 8 }
 	}
 }
