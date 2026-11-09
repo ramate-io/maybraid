@@ -22,9 +22,9 @@ use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 use crate::grove::{
 	canopy_ball_material_from_palette, canopy_proxy_crown, canopy_proxy_site,
 	foliage_low_canopy_balls, frond_material_from_palette, grove_structural_footprint,
-	nest_flattened_plant_chunk, placed_palm_low_fronds, placement_noise, remixed_sbs_plant,
-	stick_material_from_palette, CanopyProxySite, FlatTerrainSample, FlattenedPlantList,
-	GroveCellVariant, GroveExtent, GrovePreviewParams,
+	placed_palm_low_fronds, placement_noise, remixed_sbs_plant, stick_material_from_palette,
+	CanopyProxySite, FlatTerrainSample, FlattenedPlantList, GroveCellVariant, GroveExtent,
+	GrovePreviewParams,
 };
 
 #[derive(Clone, Debug, Args)]
@@ -106,35 +106,7 @@ impl Shamanhome {
 
 	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<SceneChunk> {
 		FlattenedPlantList::capture(&self.plants, lod_ref).nest_chunks(move |plant, plant_lod| {
-			match &plant.kind {
-				ShamanhomeKind::Oak(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-				ShamanhomeKind::Date(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-				ShamanhomeKind::Sope(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-			}
+			crate::grove::nest_posed_plant(plant, plant_lod, level)
 		})
 	}
 
@@ -246,3 +218,31 @@ crate::impl_woody_grove_lod!(Shamanhome, WOODY_LOD, low_nodes);
 
 #[cfg(test)]
 mod tests;
+
+impl crate::grove::PosedGrovePlant for ShamanhomePlant {
+	fn visit<V: crate::grove::PosedPlantVisitor>(&self, visitor: &mut V) -> V::Output {
+		match &self.kind {
+			ShamanhomeKind::Oak(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+			ShamanhomeKind::Date(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+			ShamanhomeKind::Sope(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+		}
+	}
+}

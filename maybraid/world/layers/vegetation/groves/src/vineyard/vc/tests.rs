@@ -55,3 +55,11 @@ fn tree_variants_quantize_archetypes() -> Result<()> {
 	)?;
 	Ok(())
 }
+
+#[test]
+fn shared_posed_visitor_matches_spawned_ordinary_sources() -> Result<()> {
+	let grove = small_grove();
+	let mut parity = crate::grove::woody_checks::PosedSourceParity::default();
+	grove.visit_posed_plants(&mut parity);
+	crate::grove::woody_checks::assert_posed_source_parity(&grove, parity)
+}

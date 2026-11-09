@@ -8,7 +8,8 @@ use bevy::render::render_phase::ViewBinnedRenderPhases;
 use bevy::render::view::ExtractedView;
 use bevy::render::{Render, RenderApp, RenderSystems};
 use chico::packed::{
-	GpuPackedInstances, PackedBatchInstance, PackedCounters, PackedSnapshot, PackedViewSelection,
+	GpuPackedInstances, PackedAdmissionSnapshot, PackedBatchInstance, PackedCounters,
+	PackedSnapshot, PackedViewSelection,
 };
 use std::{
 	collections::BTreeSet,
@@ -40,6 +41,15 @@ fn record_main_metrics(world: &mut World, mut previous: Local<Option<Instant>>) 
 	}
 	*previous = Some(now);
 	let snapshot = PackedSnapshot::read(world);
+	let admission = PackedAdmissionSnapshot::read(world);
+	const MAX_ADMISSION_ROWS: usize = 128;
+	for row in admission.rows.iter().take(MAX_ADMISSION_ROWS) {
+		bevy::log::tracing::trace!(target:"maybraid.packed.metrics", family=row.family, reason=row.reason, loaded_host_tiles=row.tiles, "packed_family_admission");
+	}
+	bevy::log::tracing::trace!(target:"maybraid.packed.metrics", loaded_host_tiles=admission.host_tiles,
+        family_reason_rows=admission.rows.len(), emitted_rows=admission.rows.len().min(MAX_ADMISSION_ROWS),
+        rows_truncated=admission.rows.len()>MAX_ADMISSION_ROWS, "packed_admission_complete");
+
 	let count = world.query_filtered::<Entity, With<Mesh3d>>().iter(world).count();
 	bevy::log::tracing::trace!(target:"maybraid.packed.metrics",  global_mesh_entities=count,resident_packed_tiles=snapshot.resident_tiles,active_packed_tiles=snapshot.active_tiles,
   resident_packed_batches=snapshot.resident_batches, resident_packed_instances_all_lods=snapshot.resident_instances_all_lods,

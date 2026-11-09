@@ -6,10 +6,10 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 use bevy::shape::Aabb3d;
-use lod::{LodScene, LodSceneLevel};
+use lod::LodSceneLevel;
 
-use crate::packed::instances::{pack_orchard_batches, pack_orchard_shadows, PackedBatch};
-use crate::{ChicoGroveHost, ForestLayer};
+use crate::packed::instances::{pack_grove_band, PackedBatch};
+use crate::ChicoGroveHost;
 
 pub const LEVELS: [LodSceneLevel; 4] =
 	[LodSceneLevel::High, LodSceneLevel::Medium, LodSceneLevel::Low, LodSceneLevel::UltraLow];
@@ -68,31 +68,83 @@ impl TileSignal {
 
 /// All bands are packed once from the same grown source. Only Arc references
 /// cross extraction; camera motion never visits individual instances.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AdmissionReason {
+	EmptyContent,
+	ModeOff,
+	UnselectedFamily,
+	UnsupportedAdapter,
+	UnsupportedGeometry,
+	UnsupportedMaterial,
+	UnsupportedPose,
+	UnsupportedKit,
+	ViewPolicy,
+	ShadowPolicy,
+	Budget,
+	PendingAssets,
+	PendingGpuReadiness,
+	Active,
+	RestoringOrdinary,
+}
+impl AdmissionReason {
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::EmptyContent => "empty_content",
+			Self::ModeOff => "mode_off",
+			Self::UnselectedFamily => "unselected_family",
+			Self::UnsupportedAdapter => "unsupported_adapter",
+			Self::UnsupportedGeometry => "unsupported_geometry",
+			Self::UnsupportedMaterial => "unsupported_material",
+			Self::UnsupportedPose => "unsupported_pose",
+			Self::UnsupportedKit => "unsupported_kit",
+			Self::ViewPolicy => "view_policy",
+			Self::ShadowPolicy => "shadow_policy",
+			Self::Budget => "budget",
+			Self::PendingAssets => "pending_assets",
+			Self::PendingGpuReadiness => "pending_gpu_readiness",
+			Self::Active => "active",
+			Self::RestoringOrdinary => "restoring_ordinary",
+		}
+	}
+}
+
 pub struct TilePayload {
 	pub revision: u64,
 	pub proxy_shadows: bool,
 	pub bounds: Aabb3d,
 	pub center: Vec3,
 	pub radius: f32,
+	pub structural_lod: vegetation_components::StructuralLod,
+	pub plant_count: usize,
 	pub lods: [Arc<[PackedBatch]>; 4],
 	pub cpu_payload_bytes: u64,
 	pub gpu_payload_bytes: u64,
 }
 
 impl TilePayload {
-	pub fn from_host(host: &ChicoGroveHost, revision: u64, proxy_shadows: bool) -> Option<Self> {
-		let orchard = host.tile.as_orchard()?;
-		let drop = crate::LayerDropOut::for_stacked(host.layer, false);
-		let lods: [Arc<[PackedBatch]>; 4] = LEVELS.map(|level| {
-			if drop.omits(level) {
-				return Arc::from([]);
+	pub fn from_host(
+		host: &ChicoGroveHost,
+		revision: u64,
+		proxy_shadows: bool,
+	) -> Result<Self, AdmissionReason> {
+		let plants = crate::stick_physics::packed_plants(&host.tile)
+			.ok_or(AdmissionReason::UnsupportedAdapter)?;
+		let structural_lod =
+			host.tile.structural_lod().ok_or(AdmissionReason::UnsupportedAdapter)?;
+		let drop = host.drop_out();
+		let mut lods: [Arc<[PackedBatch]>; 4] = LEVELS.map(|_| Arc::from([]));
+		for (index, level) in LEVELS.into_iter().enumerate() {
+			// Validate all bands atomically even if the current stacking layer drops one.
+			let batches = pack_grove_band(&host.tile, &plants, level, proxy_shadows)?;
+			if !drop.omits(level) {
+				lods[index] = Arc::from(batches);
 			}
-			let mut batches = pack_orchard_batches(orchard, level);
-			if proxy_shadows {
-				batches.extend(pack_orchard_shadows(orchard, level));
-			}
-			Arc::from(batches)
-		});
+		}
+
+		if lods.iter().all(|batches| batches.is_empty()) {
+			return Err(AdmissionReason::EmptyContent);
+		}
+
 		if lods
 			.iter()
 			.flat_map(|batches| batches.iter())
@@ -101,7 +153,7 @@ impl TilePayload {
 				!instance.world_from_local.is_finite()
 					|| instance.world_from_local.determinant() < 1e-12
 			}) {
-			return None;
+			return Err(AdmissionReason::UnsupportedPose);
 		}
 		let cpu_payload_bytes = lods
 			.iter()
@@ -113,7 +165,7 @@ impl TilePayload {
 			.flat_map(|batches| batches.iter())
 			.map(|batch| batch.instances.len() as u64)
 			.sum::<u64>();
-		let bounds = orchard.scene_bounds();
+		let bounds = host.tile.scene_bounds();
 		// Original leaf sway is bounded by 0.108 times the part radius.
 		let max_scale = lods
 			.iter()
@@ -130,12 +182,14 @@ impl TilePayload {
 			})
 			.fold(1.0_f32, f32::max);
 		let slack = bevy::math::Vec3A::splat(2.0 + max_scale * 0.108);
-		Some(Self {
+		Ok(Self {
 			revision,
 			proxy_shadows,
 			bounds: Aabb3d { min: bounds.min - slack, max: bounds.max + slack },
-			center: orchard.structural_center,
-			radius: orchard.footprint_radius,
+			center: structural_lod.center,
+			radius: structural_lod.tree_radius,
+			structural_lod,
+			plant_count: plants.len(),
 			lods,
 			cpu_payload_bytes,
 			gpu_payload_bytes: instances * 176,
@@ -169,7 +223,6 @@ pub struct ResidentTile {
 	pub payload: Arc<TilePayload>,
 	pub signal: Arc<TileSignal>,
 	pub proxies: Vec<Entity>,
-	pub layer: ForestLayer,
 	pub last_kit_epoch: u64,
 }
 
@@ -179,7 +232,7 @@ pub struct ResidentTile {
 pub struct PackedGroveCache {
 	pub tiles: HashMap<Entity, ResidentTile>,
 	pub denied: HashMap<Entity, u64>,
-	pub unsupported: HashMap<Entity, u64>,
+	pub unsupported: HashMap<Entity, (u64, AdmissionReason)>,
 	pub epoch: u64,
 	pub revision: u64,
 	pub budget_bytes: u64,

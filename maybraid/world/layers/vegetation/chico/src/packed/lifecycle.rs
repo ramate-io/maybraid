@@ -28,7 +28,7 @@ fn ordinary_level(world: &mut World, payload: &TilePayload) -> LodSceneLevel {
 	cameras
 		.iter(world)
 		.filter(|(_, camera)| camera.is_active)
-		.map(|(xf, _)| select_band(payload.center, payload.radius, xf.translation()))
+		.map(|(xf, _)| select_band(payload.structural_lod, xf.translation()))
 		.max()
 		.unwrap_or(LodSceneLevel::UltraLow)
 }
@@ -111,11 +111,7 @@ fn finish_restore(world: &mut World, entity: Entity, tile: &ResidentTile) -> boo
 		world.get::<LodSceneLevel>(entity),
 		Some(LodSceneLevel::High | LodSceneLevel::Medium)
 	) {
-		let expected = world
-			.get::<ChicoGroveHost>(entity)
-			.and_then(|host| host.tile.as_orchard())
-			.map_or(0, |orchard| orchard.plants.len());
-		if !crate::stick_physics::ordinary_packed_physics_ready(world, entity, expected) {
+		if !crate::stick_physics::ordinary_packed_physics_ready(world, bag) {
 			return false;
 		}
 	}
@@ -261,7 +257,7 @@ fn spawn_proxies(
 /// Initial admission supports one active scene camera on the ordinary grove
 /// layer and directional shadow views. Other camera/light configurations retain
 /// ordinary rendering until their distinct pipeline readiness can be proven.
-fn supported_view_configuration(world: &mut World) -> bool {
+pub(crate) fn supported_view_configuration(world: &mut World) -> bool {
 	let mut cameras = world.query_filtered::<(&Camera, Option<&RenderLayers>), With<Camera3d>>();
 	let ordinary = RenderLayers::default();
 	let views = cameras
@@ -283,16 +279,24 @@ fn supported_view_configuration(world: &mut World) -> bool {
 		&& !world.query::<&SpotLight>().iter(world).any(|light| light.shadow_maps_enabled)
 }
 
+fn source_revision_changed(current: &ChicoGroveHost, original: &ChicoGroveHost) -> bool {
+	current.layer != original.layer
+		|| current.tile.family_name() != original.tile.family_name()
+		|| current.tile.plant_list_identity() != original.tile.plant_list_identity()
+		|| current.tile.structural_lod() != original.tile.structural_lod()
+		|| current.tile.scene_bounds() != original.tile.scene_bounds()
+}
+
 pub fn sync_packed_tiles(world: &mut World) {
-	let mode = world.resource::<PackMode>().packs_orchard();
-	if !mode && world.resource::<PackedGroveCache>().tiles.is_empty() {
+	let mode = *world.resource::<PackMode>();
+	if mode.is_off() && world.resource::<PackedGroveCache>().tiles.is_empty() {
 		return;
 	}
 	let _span =
 		bevy::log::tracing::trace_span!(target: "maybraid.packed.profile", "packed_sync_tiles")
 			.entered();
 	let canopy = world.get_resource::<CanopyShadowMode>().copied().unwrap_or_default();
-	let enabled = mode && !canopy.canopy_casts() && supported_view_configuration(world);
+	let enabled = !mode.is_off() && !canopy.canopy_casts() && supported_view_configuration(world);
 	let Some(mut cache) = world.remove_resource::<PackedGroveCache>() else { return };
 	let Some(mut kits) = world.remove_resource::<PackedKitMeshes>() else {
 		world.insert_resource(cache);
@@ -323,7 +327,7 @@ pub fn sync_packed_tiles(world: &mut World) {
 	for entity in rejected {
 		if let Some(tile) = cache.tiles.remove(&entity) {
 			restore_ordinary(world, entity, &tile);
-			cache.unsupported.insert(entity, kits.epoch);
+			cache.unsupported.insert(entity, (kits.epoch, AdmissionReason::UnsupportedKit));
 		}
 	}
 	if !enabled {
@@ -349,13 +353,9 @@ pub fn sync_packed_tiles(world: &mut World) {
 		.filter(|(entity, tile)| {
 			tile.last_kit_epoch != kits.epoch
 				|| tile.payload.proxy_shadows != canopy.emit_proxies()
-				|| world.get::<ChicoGroveHost>(**entity).is_some_and(|host| {
-					host.layer != tile.original.layer
-						|| match (host.tile.as_orchard(), tile.original.tile.as_orchard()) {
-							(Some(a), Some(b)) => !Arc::ptr_eq(&a.plants, &b.plants),
-							_ => true,
-						}
-				})
+				|| world
+					.get::<ChicoGroveHost>(**entity)
+					.is_some_and(|host| source_revision_changed(host, &tile.original))
 		})
 		.map(|(&entity, _)| entity)
 		.collect();
@@ -382,21 +382,24 @@ pub fn sync_packed_tiles(world: &mut World) {
 		query
 			.iter(world)
 			.filter(|(entity, host)| {
-				host.tile.as_orchard().is_some()
+				mode.accepts(&host.tile)
 					&& !cache.tiles.contains_key(entity)
 					&& (host.is_changed()
 						|| (cache.denied.get(entity) != Some(&cache.epoch)
-							&& cache.unsupported.get(entity) != Some(&kits.epoch)))
+							&& cache.unsupported.get(entity).map(|(epoch, _)| *epoch)
+								!= Some(kits.epoch)))
 			})
 			.map(|(entity, host)| (entity, (*host).clone()))
 			.collect::<Vec<_>>()
 	};
 	for (entity, host) in sources {
 		cache.revision = cache.revision.wrapping_add(1);
-		let Some(payload) = TilePayload::from_host(&host, cache.revision, canopy.emit_proxies())
-		else {
-			cache.unsupported.insert(entity, kits.epoch);
-			continue;
+		let payload = match TilePayload::from_host(&host, cache.revision, canopy.emit_proxies()) {
+			Ok(payload) => payload,
+			Err(reason) => {
+				cache.unsupported.insert(entity, (kits.epoch, reason));
+				continue;
+			}
 		};
 		if payload
 			.lods
@@ -404,7 +407,9 @@ pub fn sync_packed_tiles(world: &mut World) {
 			.flat_map(|batches| batches.iter())
 			.any(|batch| batch.key.material_kind == VisualMaterialKind::Frond)
 		{
-			cache.unsupported.insert(entity, kits.epoch);
+			cache
+				.unsupported
+				.insert(entity, (kits.epoch, AdmissionReason::UnsupportedGeometry));
 			continue;
 		}
 		if !cache.admit(entity, payload.gpu_payload_bytes) {
@@ -413,11 +418,11 @@ pub fn sync_packed_tiles(world: &mut World) {
 		for batch in payload.lods.iter().flat_map(|batches| batches.iter()) {
 			kits.request(world.resource::<AssetServer>(), batch.key.kit);
 		}
+		cache.unsupported.remove(&entity);
 		cache.builds += 1;
 		cache.tiles.insert(
 			entity,
 			ResidentTile {
-				layer: host.layer,
 				original: host,
 				payload: Arc::new(payload),
 				signal: Arc::new(TileSignal::new([])),
@@ -483,6 +488,8 @@ mod tests {
 			bounds: Aabb3d { min: Vec3::splat(-1.0).into(), max: Vec3::ONE.into() },
 			center: Vec3::ZERO,
 			radius: 1.0,
+			structural_lod: vegetation_components::StructuralLod::new(Vec3::ZERO, 1.0),
+			plant_count: 0,
 			lods: LEVELS.map(|_| Arc::from([])),
 			cpu_payload_bytes: 0,
 			gpu_payload_bytes: 0,
@@ -494,7 +501,6 @@ mod tests {
 				payload: Arc::new(payload),
 				signal,
 				proxies: vec![proxy],
-				layer: crate::ForestLayer::UpperCanopy,
 				last_kit_epoch: 0,
 			},
 		)
@@ -551,5 +557,107 @@ mod tests {
 		assert!(!supported_view_configuration(&mut world));
 		world.entity_mut(opposite).insert(RenderLayers::layer(29));
 		assert!(supported_view_configuration(&mut world));
+	}
+	#[test]
+	fn changed_source_count_and_unsupported_adapter_restore_after_new_bag_streams() {
+		for replacement in [crate::ForestGroveKind::HighBush, crate::ForestGroveKind::CommonTufts] {
+			let mut world = World::new();
+			let (cell, tile) = fixture(&mut world);
+			let source = replacement.grow_tile(
+				GroveExtent::new(Vec3::ZERO, Vec3::splat(40.0)),
+				&vegetation_groves::FlatTerrainSample::default(),
+			);
+			world
+				.entity_mut(cell)
+				.insert(ChicoGroveHost::new(source, crate::ForestLayer::Understory));
+			restore_ordinary(&mut world, cell, &tile);
+			let bag = world.spawn((LodLevelRoots, ChildOf(cell), Visibility::Hidden)).id();
+			world.spawn((ChildOf(bag), lod::LodLevelRootStreamed));
+			// Fully streamed replacements do not depend on the old packed count/type.
+			assert!(finish_restore(&mut world, cell, &tile));
+			assert!(world.get::<PackedGroveCell>(cell).is_none());
+		}
+	}
+	#[test]
+	fn retained_plant_arc_metadata_revisions_invalidate_old_selection_and_bounds() {
+		let mut world = World::new();
+		let (_, tile) = fixture(&mut world);
+		let original = &tile.original;
+		let mut replacement = original.clone();
+		assert!(!source_revision_changed(&replacement, original));
+		if let crate::ForestGroveTile::Orchard(grove) = &mut replacement.tile {
+			grove.structural_center += Vec3::X * 50.0;
+		}
+		assert_eq!(replacement.tile.plant_list_identity(), original.tile.plant_list_identity());
+		assert!(source_revision_changed(&replacement, original));
+		let mut replacement = original.clone();
+		if let crate::ForestGroveTile::Orchard(grove) = &mut replacement.tile {
+			grove.footprint_radius *= 2.0;
+		}
+		assert_eq!(replacement.tile.plant_list_identity(), original.tile.plant_list_identity());
+		assert!(source_revision_changed(&replacement, original));
+	}
+	#[test]
+	fn unavailable_ultra_low_kit_keeps_entire_ordinary_tile() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(PackMode::Compatible);
+		world.insert_resource(CanopyShadowMode::Off);
+		world.spawn((Camera3d::default(), Camera::default(), Transform::IDENTITY));
+		let host = ChicoGroveHost::new(
+			crate::ForestGroveKind::HighBush.grow_tile(
+				GroveExtent::new(Vec3::ZERO, Vec3::splat(40.0)),
+				&vegetation_groves::FlatTerrainSample::default(),
+			),
+			crate::ForestLayer::UpperCanopy,
+		);
+		let payload = TilePayload::from_host(&host, 1, false)
+			.map_err(|reason| anyhow::anyhow!("fixture rejected {reason:?}"))?;
+		let missing = payload.lods[3]
+			.first()
+			.map(|batch| batch.key.kit)
+			.ok_or_else(|| anyhow::anyhow!("fixture has no UltraLow kit"))?;
+		let mut kits = PackedKitMeshes::default();
+		for batch in payload.lods.iter().flat_map(|batches| batches.iter()) {
+			kits.states.insert(batch.key.kit, KitState::Ready(Handle::default()));
+		}
+		kits.states.insert(missing, KitState::Loading(Handle::default()));
+		let cell = world.spawn((host.clone(), LodSceneHost, LodSceneLevel::High)).id();
+		let bag = world.spawn((ChildOf(cell), LodLevelRoots)).id();
+		let mut cache = PackedGroveCache::default();
+		cache.tiles.insert(
+			cell,
+			ResidentTile {
+				original: host,
+				payload: Arc::new(payload),
+				signal: Arc::new(TileSignal::new([])),
+				proxies: Vec::new(),
+				last_kit_epoch: 0,
+			},
+		);
+		world.insert_resource(cache);
+		world.insert_resource(kits);
+		world.clear_trackers();
+		sync_packed_tiles(&mut world);
+		assert!(world.get::<ChicoGroveHost>(cell).is_some());
+		assert!(world.get_entity(bag).is_ok());
+		assert!(world.get::<PackedGroveCell>(cell).is_none());
+		assert!(world.resource::<PackedGroveCache>().tiles[&cell].proxies.is_empty());
+		world
+			.resource_mut::<PackedKitMeshes>()
+			.states
+			.insert(missing, KitState::Unsupported);
+		sync_packed_tiles(&mut world);
+		assert!(world.get::<ChicoGroveHost>(cell).is_some());
+		assert!(world.get_entity(bag).is_ok());
+		assert!(!world.resource::<PackedGroveCache>().tiles.contains_key(&cell));
+		assert_eq!(
+			world
+				.resource::<PackedGroveCache>()
+				.unsupported
+				.get(&cell)
+				.map(|(_, reason)| *reason),
+			Some(AdmissionReason::UnsupportedKit)
+		);
+		Ok(())
 	}
 }

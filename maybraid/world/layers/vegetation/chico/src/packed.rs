@@ -1,4 +1,4 @@
-//! Opt-in resident orchard instances in the ordinary material render phases.
+//! Opt-in resident compatible woody instances in the ordinary material render phases.
 mod cache;
 mod draw;
 mod gpu;
@@ -10,6 +10,8 @@ mod telemetry;
 pub use gpu::{GpuPackedInstances, PackedBatchInstance, PackedCounters};
 pub use select::PackedViewSelection;
 pub use telemetry::PackedSnapshot;
+#[cfg(feature = "packed-diagnostics")]
+pub use telemetry::{PackedAdmissionCount, PackedAdmissionSnapshot};
 mod mode;
 mod render;
 mod select;

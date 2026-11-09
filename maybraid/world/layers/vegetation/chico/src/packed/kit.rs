@@ -86,7 +86,7 @@ pub fn resolve_kit_meshes(
 			}
 			continue;
 		};
-		// The representative orchard kits have one identity node and primitive.
+		// Supported shared kits have one identity node and primitive.
 		// Anything richer stays on SceneRef rather than dropping a scene part.
 		if gltf.nodes.len() != 1 || gltf.meshes.len() != 1 || gltf.scenes.len() != 1 {
 			*state = KitState::Unsupported;

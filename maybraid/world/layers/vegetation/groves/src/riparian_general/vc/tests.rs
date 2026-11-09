@@ -69,3 +69,33 @@ fn tree_variants_quantize_archetypes() -> Result<()> {
 	)?;
 	Ok(())
 }
+
+#[test]
+fn shared_posed_visitor_matches_spawned_ordinary_sources() -> Result<()> {
+	let grove = RiparianGeneral::from_placements(
+		&[
+			GroveCellVariant::new(
+				RiparianGeneralCell::RiparianBraidOak,
+				Vec3::new(4.0, 0.0, 4.0),
+				1.0,
+			),
+			GroveCellVariant::new(
+				RiparianGeneralCell::RiparianStorybook,
+				Vec3::new(20.0, 0.0, 4.0),
+				1.0,
+			),
+			GroveCellVariant::new(
+				RiparianGeneralCell::RareRiparianHighBush,
+				Vec3::new(36.0, 0.0, 4.0),
+				1.0,
+			),
+		],
+		NoiseParams::default(),
+		&GroveExtent::new(Vec3::ZERO, Vec3::splat(40.0)),
+		1,
+	);
+	assert_eq!(grove.plants.len(), 3);
+	let mut parity = crate::grove::woody_checks::PosedSourceParity::default();
+	grove.visit_posed_plants(&mut parity);
+	crate::grove::woody_checks::assert_posed_source_parity(&grove, parity)
+}

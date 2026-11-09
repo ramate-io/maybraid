@@ -1,4 +1,4 @@
-//! Launch-time switch for the packed orchard renderer.
+//! Launch-time switch for the capability-based woody renderer.
 
 use std::sync::OnceLock;
 
@@ -15,6 +15,7 @@ pub enum PackMode {
 	#[default]
 	Off,
 	Orchard,
+	Compatible,
 }
 
 impl PackMode {
@@ -33,13 +34,18 @@ impl PackMode {
 
 	pub fn parse(value: &str) -> Self {
 		match value.trim().to_ascii_lowercase().as_str() {
-			"1" | "on" | "true" | "orchard" => Self::Orchard,
+			"orchard" => Self::Orchard,
+			"1" | "on" | "true" | "compatible" | "woody" => Self::Compatible,
 			_ => Self::Off,
 		}
 	}
 
-	pub fn packs_orchard(self) -> bool {
-		matches!(self, Self::Orchard)
+	pub fn accepts(self, tile: &crate::ForestGroveTile) -> bool {
+		match self {
+			Self::Off => false,
+			Self::Orchard => tile.as_orchard().is_some(),
+			Self::Compatible => true,
+		}
 	}
 
 	pub fn is_off(self) -> bool {

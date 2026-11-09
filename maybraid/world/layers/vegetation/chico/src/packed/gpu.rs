@@ -136,7 +136,7 @@ pub fn prepare_packed_gpu(
 			continue;
 		}
 		let buffer = device.create_buffer_with_data(&BufferInitDescriptor {
-			label: Some("packed orchard resident instances"),
+			label: Some("packed woody resident instances"),
 			contents: &instance.bytes,
 			usage: BufferUsages::VERTEX,
 		});
