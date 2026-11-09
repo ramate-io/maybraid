@@ -110,11 +110,19 @@ scene and drawable match the ready screenshot. Bound any open/replay wait; a fil
 on disk alone is insufficient evidence of viewer compatibility. Do not claim
 bring-up complete before a real fullscreen Maybraid document has been inspected.
 
-Programmatic capture has been proven by a standalone Swift Metal probe on the
-bring-up host (macOS 27.0.1, Xcode 16.4). The `gpucapture` CLI hung during discovery
-for both the game and the probe, so this route does not depend on that CLI. Xcode
-open/replay compatibility for those host versions remains to be verified by the
-real game capture. Do not install or repeatedly retry the CLI to work around it.
+Programmatic capture is proven both by a standalone Swift probe and by a real
+foreground fullscreen Maybraid run on macOS 27.0.1 / Xcode 16.4. The game produced a
+nonempty GPU trace document with requested/start/stop update2400, zero waiting or
+failed pipelines, native1920×1080 screenshot/window metadata, successful fixtures
+and clean exit0. The first AX-gated attempt never triggered and remains invalid.
+
+Xcode inspection remains blocked: LaunchServices rejected `/Applications/Xcode.app`
+before document load with error−10664 (`kLSIncompatibleApplicationVersionErr`, app
+incompatible with the current OS). Therefore no command-buffer/draw/presented-color
+inspection or replay acceptance is claimed. A compatible viewer is still needed.
+The `gpucapture` CLI separately hung during discovery for both game and probe;
+this programmatic route does not depend on it. Do not repeatedly retry that CLI or
+bypass the Xcode compatibility rejection.
 
 All output remains under ignored `profiling/captures/`. Raw captures are not
 published by the harness; publication requires explicit authorization and follows
