@@ -42,7 +42,11 @@ cadence, a long round can still exceed the 200 ms firing freshness window.
 Unknown-actor discovery fairness and application cadence remain separate policy.
 
 Trace-level `spotting_discovery` and `spotting_retained_refresh` spans expose
-observer grants and allocated visibility samples, collected in the existing
-execution loops without an additional diagnostic scan. Enable just these coarse
-phases with `RUST_LOG=info,maybraid.spotting.profile=trace` during recordings;
-the spans use that dedicated target and allocate no per-ray spans.
+phase timings and entry-known due/queued observer counts in Tracy.
+`tracing-tracy` 0.12 formats fields when entering a span, so late-recorded
+observer grants and allocated visibility sample counts are available only to
+other subscribers that support field updates; they are not captured in Tracy
+0.12 zones. These counters are collected in existing execution loops without
+an additional diagnostic scan. Enable the coarse phases with
+`RUST_LOG=info,maybraid.spotting.profile=trace` during recordings; the dedicated
+target allocates no per-ray spans.
