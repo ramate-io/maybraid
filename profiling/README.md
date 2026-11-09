@@ -98,3 +98,9 @@ the current build via `MAYBRAID_BIN`.
 MAYBRAID_BIN=/tmp/maybraid-base profiling/tracy-flight.sh crowd-16 ab-base 1
 profiling/tracy-flight.sh crowd-16 ab-after 1
 ```
+
+## GPU frame inspection (Metal)
+
+For a warm, one-render-update `.gputrace` document, use the default-off
+[`gpu-frame-capture` diagnostic feature and harness](gpu-frame-capture.md).
+Capture-enabled runs are for Xcode inspection and must not supply benchmark timings.
