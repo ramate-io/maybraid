@@ -25,7 +25,14 @@ pub use user::{SpottingHint, SpottingHintSource, SpottingSettings, SpottingUser}
 /// Shared schedule location for spotting backends.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SpottingSystems {
+	/// Parent set retained for application ordering and optional whole-pipeline gates.
 	Observe,
+	/// Clear this Update's service ledger and expire invalid contacts.
+	Prepare,
+	/// Broadphase and explicit-hint discovery; applications own its cadence.
+	Discover,
+	/// Bounded existing-contact refresh; applications own its cadence.
+	Refresh,
 }
 
 /// Independent observer budgets for discovery and additional retained-contact refresh.
@@ -35,10 +42,19 @@ pub struct SpottingObserveLimits {
 	pub max_observers_per_tick: usize,
 	/// Maximum additional observers that may refresh retained contacts without discovery.
 	pub max_retained_observers_per_tick: usize,
+	/// Maximum allocated visibility samples across discovery observers in one Update.
+	pub max_discovery_samples_per_tick: usize,
+	/// Independent maximum allocated samples across retained observers in one Update.
+	pub max_retained_samples_per_tick: usize,
 }
 
 impl Default for SpottingObserveLimits {
 	fn default() -> Self {
-		Self { max_observers_per_tick: 8, max_retained_observers_per_tick: 8 }
+		Self {
+			max_observers_per_tick: 8,
+			max_retained_observers_per_tick: 8,
+			max_discovery_samples_per_tick: 384,
+			max_retained_samples_per_tick: 384,
+		}
 	}
 }

@@ -46,8 +46,12 @@ use world_player::Player as VegetationPlayer;
 
 const INTELLIGENCE_LOD_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
 
-const WORLD_SPOTTING_LIMITS: SpottingObserveLimits =
-	SpottingObserveLimits { max_observers_per_tick: 8, max_retained_observers_per_tick: 8 };
+const WORLD_SPOTTING_LIMITS: SpottingObserveLimits = SpottingObserveLimits {
+	max_observers_per_tick: 8,
+	max_retained_observers_per_tick: 8,
+	max_discovery_samples_per_tick: 80,
+	max_retained_samples_per_tick: 80,
+};
 
 const WORLD_POI_LIMITS: PoiDiscoverLimits = PoiDiscoverLimits { max_scans_per_tick: 8 };
 
@@ -128,11 +132,7 @@ impl Plugin for WorldIntelligencePlugin {
 		app.add_systems(Update, sync_world_player_threat_actor.in_set(ThreatSystems::Prepare))
 			.configure_sets(
 				Update,
-				SpottingSystems::Observe.run_if(on_timer(Duration::from_millis(125))),
-			)
-			.configure_sets(
-				Update,
-				FirearmIntelligenceSystems::Spotting.run_if(on_timer(Duration::from_millis(125))),
+				SpottingSystems::Discover.run_if(on_timer(Duration::from_millis(125))),
 			)
 			.configure_sets(
 				Update,
@@ -508,6 +508,8 @@ mod tests {
 		assert_eq!(WORLD_MOVEMENT_LIMITS.max_walk_probes_per_frame, 8);
 		assert_eq!(WORLD_SPOTTING_LIMITS.max_observers_per_tick, 8);
 		assert_eq!(WORLD_SPOTTING_LIMITS.max_retained_observers_per_tick, 8);
+		assert_eq!(WORLD_SPOTTING_LIMITS.max_discovery_samples_per_tick, 80);
+		assert_eq!(WORLD_SPOTTING_LIMITS.max_retained_samples_per_tick, 80);
 		assert_eq!(WORLD_POI_LIMITS.max_scans_per_tick, 8);
 		assert_eq!(WORLD_THREAT_LIMITS.max_scans_per_tick, 8);
 		assert!(
