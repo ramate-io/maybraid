@@ -61,9 +61,19 @@ pub struct PackedBatchInstance {
 	pub bytes: Arc<[u8]>,
 	pub instances: u32,
 	pub shadow_only: bool,
+	/// Optional diagnostic target only: actual main-pass commands, not selected bins.
+	#[cfg(feature = "packed-diagnostics")]
+	pub diagnostic_main_draws: Arc<AtomicU64>,
 }
 
 impl PackedBatchInstance {
+	pub fn lod_index(&self) -> usize {
+		crate::packed::cache::TilePayload::level_index(self.level)
+	}
+	pub fn is_active(&self) -> bool {
+		self.extracted_phase == crate::packed::cache::ACTIVE
+	}
+
 	pub fn encode(instances: &[PackedInstance]) -> Option<Arc<[u8]>> {
 		let values =
 			instances.iter().map(GpuInstance::from_instance).collect::<Option<Vec<_>>>()?;

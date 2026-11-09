@@ -108,6 +108,11 @@ impl<P: PhaseItem + 'static> RenderCommand<P> for DrawPackedInstances {
 		let counters = counters.into_inner();
 		match phase {
 			READY_MAIN => {
+				#[cfg(feature = "packed-diagnostics")]
+				if bevy::log::tracing::enabled!(target:"maybraid.packed.metrics",bevy::log::tracing::Level::TRACE)
+				{
+					instance.diagnostic_main_draws.fetch_add(1, Ordering::Relaxed);
+				}
 				counters.0.issued_main_draws.fetch_add(1, Ordering::Relaxed);
 				counters
 					.0

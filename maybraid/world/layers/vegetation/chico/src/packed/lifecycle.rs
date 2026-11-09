@@ -209,6 +209,8 @@ fn spawn_proxies(
 				ordinal,
 				level,
 				bytes,
+				#[cfg(feature = "packed-diagnostics")]
+				diagnostic_main_draws: Arc::new(std::sync::atomic::AtomicU64::new(0)),
 				instances: batch.instances.len() as u32,
 				shadow_only,
 			};
