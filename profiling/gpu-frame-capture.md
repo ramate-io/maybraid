@@ -116,13 +116,22 @@ nonempty GPU trace document with requested/start/stop update2400, zero waiting o
 failed pipelines, native1920×1080 screenshot/window metadata, successful fixtures
 and clean exit0. The first AX-gated attempt never triggered and remains invalid.
 
-Xcode inspection remains blocked: LaunchServices rejected `/Applications/Xcode.app`
-before document load with error−10664 (`kLSIncompatibleApplicationVersionErr`, app
-incompatible with the current OS). Therefore no command-buffer/draw/presented-color
-inspection or replay acceptance is claimed. A compatible viewer is still needed.
-The `gpucapture` CLI separately hung during discovery for both game and probe;
-this programmatic route does not depend on it. Do not repeatedly retry that CLI or
-bypass the Xcode compatibility rejection.
+Xcode 16.4 was initially rejected before document load with LaunchServices−10664
+(`kLSIncompatibleApplicationVersionErr`). After updating to Xcode 27.2/build27B52,
+the same real game document loaded and replayed successfully. Its summary exposes
+104 command buffers, 15 render encoders, 4,687 draws and 1,722 dispatches. The
+presentDrawable call and CAMetalLayer Display Drawable show the matching fixed
+pillar/courtyard scene at1920×1080 BGRA8Unorm_sRGB. That establishes document,
+command-stream and presented-image acceptance; it does not establish representative
+scene coverage, packed-renderer parity or a performance improvement.
+
+Aggregate replay profiling also works. Xcode warned that the optional Metal
+Toolchain component was absent for shader debugging/profiling; no component was
+installed during acceptance. The profiler sampled only5/16 cores at Medium
+performance state with Overlapping execution. Treat its cost shares as sampled
+replay diagnostics, not elapsed per-pass times or A/B benchmark measurements.
+The `gpucapture` CLI separately hung during discovery for game and probe; this
+working programmatic route does not depend on it.
 
 All output remains under ignored `profiling/captures/`. Raw captures are not
 published by the harness; publication requires explicit authorization and follows
@@ -133,4 +142,4 @@ it is never triggered, Bevy can warn that main-thread teardown forgets that stat
 no native capture has started, so this cannot stop or corrupt another capture.
 Successful/failed triggered runs remove their state on the render thread. A later
 cleanup change can separate Send run/status state from the native session; that
-engine refactor is deferred while the first capture is validated.
+engine refactor remains a separate cleanup follow-up.
