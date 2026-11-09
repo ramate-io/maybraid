@@ -183,6 +183,13 @@ impl ForestGroveTile {
 		)
 	}
 
+	pub fn as_orchard(&self) -> Option<&vegetation_groves::Orchard> {
+		match self {
+			Self::Orchard(grove) => Some(grove),
+			_ => None,
+		}
+	}
+
 	pub fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		match_forest_grove_tile!(self, g => g.scene_lod_level(lod_ref))
 	}

@@ -20,6 +20,7 @@ mod kind;
 mod layer;
 pub mod layerings;
 mod material;
+pub mod packed;
 mod plugin;
 mod recipe;
 mod stick_physics;

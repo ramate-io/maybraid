@@ -195,6 +195,11 @@ fn sync_stick_colliders(world: &mut World) {
 		if playable_level_for(world, entity).is_none() {
 			continue;
 		}
+		if crate::packed::PackMode::current().packs_orchard()
+			&& handoff_ordinary_packed_physics(world, entity)
+		{
+			continue;
+		}
 		if world.get::<StickPhysicsAttached>(entity).is_some() && has_compound(world, entity) {
 			continue;
 		}
@@ -551,5 +556,357 @@ mod tests {
 		for host in hosts {
 			assert!(has_compound(app.world(), host));
 		}
+	}
+}
+
+/// Physics/semantic plant anchors survive the packed visual handoff. This keeps
+/// the ordinary one-compound-per-plant grouping and the shared drain budget.
+#[derive(Component, Clone)]
+struct PackedTreePhysics(
+	vegetation_components::PlacedVegetation<std::sync::Arc<sbs_trees::StorybookTree>>,
+);
+
+pub(crate) fn attach_packed_source(world: &mut World, cell: Entity, host: crate::ChicoGroveHost) {
+	use lod::LodScene;
+	use std::sync::Arc;
+	use vegetation_components::{FlattenedComponentsOnly, PlacedVegetation, VegetationInstance};
+	type Source = FlattenedComponentsOnly<PlacedVegetation<Arc<sbs_trees::StorybookTree>>>;
+	let Some(orchard) = host.tile.as_orchard() else { return };
+	let mut pending = vec![cell];
+	let mut existing = Vec::new();
+	while let Some(entity) = pending.pop() {
+		if let Some(children) = world.get::<Children>(entity) {
+			pending.extend(children.iter());
+		}
+		if let Some(source) = world.get::<Source>(entity) {
+			existing.push((entity, source.0.clone()));
+		}
+	}
+	let mut transferred = Vec::with_capacity(orchard.plants.len());
+	for plant in orchard.plants.iter() {
+		let placed = plant.placed();
+		let retained = existing
+			.iter()
+			.enumerate()
+			.filter(|(_, (_, source))| {
+				source.placement == placed.placement
+					&& Arc::ptr_eq(&source.vegetation, &placed.vegetation)
+			})
+			.min_by_key(|(_, (entity, _))| {
+				(
+					world.get::<bevy::ecs::entity_disabling::Disabled>(*entity).is_some(),
+					!has_compound(world, *entity),
+				)
+			})
+			.map(|(index, _)| index);
+		let entity = if let Some(index) = retained {
+			let (entity, _) = existing.swap_remove(index);
+			// Reparent before the ordinary visual root bag is retired. Existing compound
+			// children and their bodies remain the exact same entities.
+			world
+				.entity_mut(entity)
+				.remove::<Source>()
+				.remove::<lod::LodSceneHost>()
+				.remove::<LodSceneLevel>();
+			let visuals = world
+				.get::<Children>(entity)
+				.map(|children| {
+					children
+						.iter()
+						.filter(|child| world.get::<StickPhysicsCompound>(*child).is_none())
+						.collect::<Vec<_>>()
+				})
+				.unwrap_or_default();
+			for visual in visuals {
+				let _ = world.despawn(visual);
+			}
+			entity
+		} else {
+			let bounds = FlattenedComponentsOnly(placed.clone()).scene_bounds();
+			let center = (bounds.min + bounds.max) * 0.5;
+			let radius =
+				((bounds.max.x - bounds.min.x).max(bounds.max.z - bounds.min.z) * 0.5).max(0.05);
+			world
+				.spawn((
+					ChildOf(cell),
+					Transform::IDENTITY,
+					Visibility::Inherited,
+					VegetationInstance::new(center.into(), radius),
+				))
+				.id()
+		};
+		transferred.push(entity);
+		world.entity_mut(entity).insert((
+			PackedTreePhysics(placed),
+			StickPhysicsProducer(|world, entity, level| {
+				world
+					.get::<PackedTreePhysics>(entity)
+					.into_iter()
+					.flat_map(|source| source.0.stick_nodes_for_level(level).flatten())
+					.flat_map(|node| collider_poses(&node, level))
+					.collect()
+			}),
+		));
+	}
+	lod::scene::host::transfer_lod_tree_ownership(world, &transferred, cell);
+}
+
+pub(crate) fn remove_packed_sources(world: &mut World, cell: Entity) {
+	let sources = world
+		.get::<Children>(cell)
+		.map(|children| {
+			children
+				.iter()
+				.filter(|child| world.get::<PackedTreePhysics>(*child).is_some())
+				.collect::<Vec<_>>()
+		})
+		.unwrap_or_default();
+	for source in sources {
+		let _ = world.despawn(source);
+	}
+}
+
+/// During reverse handoff reuse exact existing bodies before the normal drain
+/// attempts a replacement. No extra queue or collider grouping is introduced.
+fn handoff_ordinary_packed_physics(world: &mut World, entity: Entity) -> bool {
+	use std::sync::Arc;
+	use vegetation_components::{FlattenedComponentsOnly, PlacedVegetation};
+	type Source = FlattenedComponentsOnly<PlacedVegetation<Arc<sbs_trees::StorybookTree>>>;
+	let Some(source) = world.get::<Source>(entity).map(|source| source.0.clone()) else {
+		return false;
+	};
+	let mut ancestor = world.get::<ChildOf>(entity).map(ChildOf::parent);
+	let mut cell = None;
+	while let Some(parent) = ancestor {
+		if world.get::<crate::packed::lifecycle::RestoringOrdinary>(parent).is_some() {
+			cell = Some(parent);
+			break;
+		}
+		ancestor = world.get::<ChildOf>(parent).map(ChildOf::parent);
+	}
+	let Some(cell) = cell else {
+		return false;
+	};
+	let retained = world.get::<Children>(cell).and_then(|children| {
+		children.iter().find(|child| {
+			world.get::<PackedTreePhysics>(*child).is_some_and(|old| {
+				old.0.placement == source.placement
+					&& Arc::ptr_eq(&old.0.vegetation, &source.vegetation)
+			})
+		})
+	});
+	let Some(retained) = retained else {
+		return false;
+	};
+	if world.get::<StickPhysicsAttached>(retained).is_none() {
+		return false;
+	}
+	let compounds = world
+		.get::<Children>(retained)
+		.map(|children| {
+			children
+				.iter()
+				.filter(|child| world.get::<StickPhysicsCompound>(*child).is_some())
+				.collect::<Vec<_>>()
+		})
+		.unwrap_or_default();
+	lod::scene::host::transfer_lod_tree_ownership(world, &compounds, entity);
+	for compound in compounds {
+		world.entity_mut(compound).insert(Visibility::Hidden);
+	}
+	world.entity_mut(entity).insert(StickPhysicsAttached);
+	let _ = world.despawn(retained);
+	true
+}
+
+pub(crate) fn ordinary_packed_physics_ready(world: &World, cell: Entity, expected: usize) -> bool {
+	use std::sync::Arc;
+	use vegetation_components::{FlattenedComponentsOnly, PlacedVegetation};
+	type Source = FlattenedComponentsOnly<PlacedVegetation<Arc<sbs_trees::StorybookTree>>>;
+	let mut pending = vec![cell];
+	let mut count = 0;
+	while let Some(entity) = pending.pop() {
+		if world.get::<Source>(entity).is_some() {
+			count += 1;
+			if world.get::<StickPhysicsAttached>(entity).is_none() {
+				return false;
+			}
+		}
+		if let Some(children) = world.get::<Children>(entity) {
+			pending.extend(children.iter());
+		}
+	}
+	count >= expected
+}
+
+#[cfg(test)]
+mod packed_transfer_tests {
+	use super::*;
+	use bevy::ecs::entity_disabling::Disabled;
+	use lod::{LodLevelRoot, LodLevelRoots, LodTreeVisQueue};
+	use std::sync::Arc;
+	use vegetation_components::{FlattenedComponentsOnly, PlacedVegetation};
+	use vegetation_groves::grove::GroveCellVariant;
+	use vegetation_groves::orchard::OrchardCell;
+	use vegetation_groves::{GroveExtent, Orchard};
+	type Source = FlattenedComponentsOnly<PlacedVegetation<Arc<sbs_trees::StorybookTree>>>;
+
+	fn fixture() -> (App, Entity, crate::ChicoGroveHost) {
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::splat(10.0));
+		let orchard = Orchard::from_placements(
+			&[GroveCellVariant::new(OrchardCell::FruitingStorybook, Vec3::new(3.0, 0.0, 3.0), 1.0)],
+			procedural_common::NoiseParams::default(),
+			&extent,
+			1,
+		);
+		assert_eq!(orchard.plants.len(), 1);
+		let host = crate::ChicoGroveHost::new(
+			crate::ForestGroveTile::Orchard(orchard),
+			crate::ForestLayer::UpperCanopy,
+		);
+		let mut app = App::new();
+		app.add_plugins(StickPhysicsPlugin);
+		register_vegetation_stick_colliders::<Source>(&mut app);
+		let cell = app
+			.world_mut()
+			.spawn((LodSceneLevel::High, lod::LodSceneHost, Visibility::Inherited))
+			.id();
+		(app, cell, host)
+	}
+	fn ordinary_source(
+		app: &mut App,
+		cell: Entity,
+		host: &crate::ChicoGroveHost,
+	) -> anyhow::Result<(Entity, Entity, Entity)> {
+		let plant = host
+			.tile
+			.as_orchard()
+			.and_then(|orchard| orchard.plants.first())
+			.ok_or_else(|| anyhow::anyhow!("missing fixture plant"))?;
+		let bag = app.world_mut().spawn((LodLevelRoots, ChildOf(cell))).id();
+		let root = app
+			.world_mut()
+			.spawn((LodLevelRoot(LodSceneLevel::High), ChildOf(bag), Visibility::Inherited))
+			.id();
+		let source = app
+			.world_mut()
+			.spawn((
+				FlattenedComponentsOnly(plant.placed()),
+				ChildOf(root),
+				Transform::IDENTITY,
+				Visibility::Inherited,
+			))
+			.id();
+		app.update();
+		let compound = app
+			.world()
+			.get::<Children>(source)
+			.and_then(|children| {
+				children
+					.iter()
+					.find(|child| app.world().get::<StickPhysicsCompound>(*child).is_some())
+			})
+			.ok_or_else(|| anyhow::anyhow!("real tree did not produce its compound"))?;
+		Ok((bag, source, compound))
+	}
+	fn hide(app: &mut App, entity: Entity) {
+		lod::scene::host::hide_lod_tree(&mut app.world_mut().commands(), entity);
+		app.world_mut().flush();
+	}
+	fn assert_enabled_body(app: &mut App, source: Entity, body: Entity) {
+		assert!(app.world().get::<Disabled>(source).is_none());
+		assert!(app.world().get::<Disabled>(body).is_none());
+		assert!(app.world().get::<StickPhysicsProducer>(source).is_some());
+		assert!(app.world().get::<Collider>(body).is_some());
+		assert_eq!(app.world().get::<ChildOf>(body).map(ChildOf::parent), Some(source));
+		assert_eq!(
+			app.world_mut()
+				.query_filtered::<Entity, With<StickPhysicsCompound>>()
+				.iter(app.world())
+				.count(),
+			1
+		);
+	}
+	#[test]
+	fn hidden_real_source_survives_queued_hide_and_body_return() -> anyhow::Result<()> {
+		let (mut app, cell, host) = fixture();
+		let (bag, source, body) = ordinary_source(&mut app, cell, &host)?;
+		hide(&mut app, bag);
+		assert!(app.world().get::<Disabled>(source).is_some());
+		assert!(app.world().get::<Disabled>(body).is_some());
+		app.world_mut().insert_resource(LodTreeVisQueue::default());
+		// Leave an old hide job with explicit surviving source/body visits pending.
+		lod::scene::host::show_lod_tree(&mut app.world_mut().commands(), bag);
+		app.world_mut().flush();
+		hide(&mut app, bag);
+		app.world_mut().insert_resource(lod::LodTreeVisBudget {
+			entities_per_frame: 1,
+			time_per_frame: std::time::Duration::from_secs(1),
+		});
+		lod::scene::host::drain_lod_tree_vis(app.world_mut());
+		attach_packed_source(app.world_mut(), cell, host.clone());
+		app.world_mut().despawn(bag);
+		lod::scene::host::drain_lod_tree_vis(app.world_mut());
+		assert_enabled_body(&mut app, source, body);
+		assert_eq!(
+			app.world_mut()
+				.query_filtered::<Entity, With<PackedTreePhysics>>()
+				.iter(app.world())
+				.count(),
+			1
+		);
+		app.world_mut()
+			.entity_mut(cell)
+			.insert(crate::packed::lifecycle::RestoringOrdinary);
+		let placed = host
+			.tile
+			.as_orchard()
+			.and_then(|orchard| orchard.plants.first())
+			.ok_or_else(|| anyhow::anyhow!("plant disappeared"))?
+			.placed();
+		let ordinary = app
+			.world_mut()
+			.spawn((
+				FlattenedComponentsOnly(placed),
+				ChildOf(cell),
+				Transform::IDENTITY,
+				Visibility::Inherited,
+			))
+			.id();
+		app.world_mut().flush();
+		assert!(handoff_ordinary_packed_physics(app.world_mut(), ordinary));
+		lod::scene::host::drain_lod_tree_vis(app.world_mut());
+		assert!(app.world().get_entity(source).is_err());
+		assert_enabled_body(&mut app, ordinary, body);
+		app.update();
+		assert_enabled_body(&mut app, ordinary, body);
+		Ok(())
+	}
+	#[test]
+	fn live_matching_source_is_preferred_to_disabled_warm_copy() -> anyhow::Result<()> {
+		let (mut app, cell, host) = fixture();
+		let (hidden_bag, hidden, _) = ordinary_source(&mut app, cell, &host)?;
+		hide(&mut app, hidden_bag);
+		let (live_bag, live, body) = ordinary_source(&mut app, cell, &host)?;
+		attach_packed_source(app.world_mut(), cell, host);
+		app.world_mut().despawn(hidden_bag);
+		app.world_mut().despawn(live_bag);
+		assert!(app.world().get_entity(hidden).is_err());
+		assert_enabled_body(&mut app, live, body);
+		Ok(())
+	}
+	#[test]
+	fn transferred_real_body_preserves_disabled_cell_ownership() -> anyhow::Result<()> {
+		let (mut app, cell, host) = fixture();
+		let (bag, source, body) = ordinary_source(&mut app, cell, &host)?;
+		hide(&mut app, cell);
+		attach_packed_source(app.world_mut(), cell, host);
+		app.world_mut().despawn(bag);
+		assert!(app.world().get::<Disabled>(source).is_some());
+		assert!(app.world().get::<Disabled>(body).is_some());
+		lod::scene::host::show_lod_tree(&mut app.world_mut().commands(), cell);
+		app.world_mut().flush();
+		assert_enabled_body(&mut app, source, body);
+		Ok(())
 	}
 }

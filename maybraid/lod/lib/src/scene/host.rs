@@ -194,6 +194,65 @@ fn show_lod_tree_descendants_now(world: &mut World, root: Entity, mut stack: Vec
 	}
 }
 
+/// Transfer surviving semantic/physics roots out of retired visual LOD owners.
+/// Old queued visits are invalidated before reparenting, so a deferred hide
+/// cannot later stamp the surviving bodies with an obsolete owner's state.
+/// This is an ownership transition, not a per-frame visibility walk.
+pub fn transfer_lod_tree_ownership(world: &mut World, roots: &[Entity], owner: Entity) {
+	let roots: std::collections::HashSet<_> = roots.iter().copied().collect();
+	let under_transferred = |world: &World, mut entity: Entity| loop {
+		if roots.contains(&entity) {
+			return true;
+		}
+		let Some(parent) = world.get::<ChildOf>(entity) else {
+			return false;
+		};
+		entity = parent.parent();
+	};
+	if let Some(mut queue) = world.remove_resource::<LodTreeVisQueue>() {
+		for jobs in [&mut queue.shows, &mut queue.hides] {
+			jobs.retain_mut(|job| {
+				if under_transferred(world, job.root) {
+					return false;
+				}
+				job.stack.retain(|entity| !under_transferred(world, *entity));
+				!job.stack.is_empty()
+			});
+		}
+		world.insert_resource(queue);
+	}
+	let mut ancestor = Some(owner);
+	let mut disabled = false;
+	while let Some(entity) = ancestor {
+		disabled |= world.get::<Disabled>(entity).is_some();
+		ancestor = world.get::<ChildOf>(entity).map(ChildOf::parent);
+	}
+	for root in roots {
+		let Ok(mut entity) = world.get_entity_mut(root) else {
+			continue;
+		};
+		entity.insert((ChildOf(owner), Visibility::Inherited));
+		let mut pending = vec![root];
+		while let Some(entity) = pending.pop() {
+			let Ok(mut entity) = world.get_entity_mut(entity) else {
+				continue;
+			};
+			if let Some(children) = entity.get::<Children>() {
+				pending.extend(children.iter());
+			}
+			// Independent old hide ownership no longer applies to these surviving
+			// anchors/bodies. The new structural owner is solely responsible for hide.
+			entity.remove::<LodTreeHideActive>();
+			if disabled {
+				entity.insert(Disabled);
+			} else {
+				entity.remove::<Disabled>();
+			}
+			mark_propagated_components_changed(&mut entity);
+		}
+	}
+}
+
 /// Revisit propagation inputs that were ignored while their tree was disabled.
 ///
 /// Bumping change ticks leaves authored Transform and Visibility values intact.

@@ -7245,6 +7245,7 @@ dependencies = [
  "menu-components",
  "menu-playground",
  "menu-screens",
+ "packed-grove-diagnostics",
  "tempfile",
 ]
 
@@ -9326,6 +9327,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36820e9051aca1014ddc75770aab4d68bc1e9e632f0f5627c4086bc216fb583b"
 dependencies = [
  "ttf-parser",
+]
+
+[[package]]
+name = "packed-grove-diagnostics"
+version = "0.1.5"
+dependencies = [
+ "bevy",
+ "chico",
 ]
 
 [[package]]

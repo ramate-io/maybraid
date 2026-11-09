@@ -280,6 +280,62 @@ fn vertex(packed_vertex: Vertex) -> LeafVertexOutput {
 // Fragment
 // --------------------------------------------------------
 
+// The packed orchard uses the exact same wind, noise, distance and fragment
+// functions. Only the persistent instance input replaces mesh-uniform lookup.
+// Unsupported compressed/skinned/morphed kits stay on the ordinary renderer.
+@if(PACKED_GROVE)
+struct PackedTransform {
+    @location(5) model0: vec4<f32>,
+    @location(6) model1: vec4<f32>,
+    @location(7) model2: vec4<f32>,
+    @location(8) model3: vec4<f32>,
+    @location(9) normal0: vec4<f32>,
+    @location(10) normal1: vec4<f32>,
+    @location(11) normal2: vec4<f32>,
+    @location(12) root0: vec4<f32>,
+    @location(13) root1: vec4<f32>,
+    @location(14) root2: vec4<f32>,
+    @location(15) plant_origin: vec4<f32>,
+}
+
+@if(PACKED_GROVE)
+@vertex
+fn packed_vertex(vertex: UncompressedVertex, transform: PackedTransform) -> LeafVertexOutput {
+    var out: LeafVertexOutput;
+    let model = mat4x4<f32>(transform.model0, transform.model1, transform.model2, transform.model3);
+    let normal = mat3x3<f32>(transform.normal0.xyz, transform.normal1.xyz, transform.normal2.xyz);
+    out.world_normal = vec3<f32>(0.0, 1.0, 0.0);
+    @if(VERTEX_NORMALS)
+    out.world_normal = normalize(normal * vertex.normal);
+    out.plant_origin = transform.plant_origin.xyz;
+    let kit_local = vertex.position;
+    var centroid = model[3].xyz;
+    var scale = instance_scale(model);
+    if (transform.normal1.w > 0.5) {
+        let root_linear = mat3x3<f32>(transform.root0.xyz, transform.root1.xyz, transform.root2.xyz);
+        centroid = (model * vec4<f32>(vertex.position, 1.0)).xyz - root_linear * (vertex.position * transform.normal0.w);
+        scale = max(length(transform.root0.xyz), max(length(transform.root1.xyz), length(transform.root2.xyz))) * transform.normal0.w;
+    }
+    out.local_pos = kit_local;
+    out.view_dist = length(centroid - view.world_position) / max(scale, 1e-4);
+    out.world_position = model * vec4<f32>(vertex.position, 1.0);
+    out.world_position += vec4<f32>(canopy_sway(kit_local, out.world_normal, centroid, scale, out.view_dist), 0.0);
+    out.position = position_world_to_clip(out.world_position.xyz);
+    @if(VERTEX_UVS_A)
+    out.uv = vertex.uv;
+    @if(VERTEX_UVS_B)
+    out.uv_b = vertex.uv_b;
+    @if(VERTEX_TANGENTS)
+    out.world_tangent = vec4<f32>(normalize((model * vec4<f32>(vertex.tangent.xyz, 0.0)).xyz), vertex.tangent.w);
+    @if(VERTEX_COLORS)
+    out.color = vertex.color;
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
+    out.instance_index = 0u;
+    @if(VISIBILITY_RANGE_DITHER)
+    out.visibility_range_dither = 0i;
+    return out;
+}
+
 @fragment
 fn fragment(
     @builtin(front_facing) is_front: bool,

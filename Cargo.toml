@@ -3,6 +3,7 @@
 resolver = "2"
 
 members = [
+  "maybraid/world/layers/vegetation/packed-diagnostics",
 
   # maybraid game crates, typically following rfcs  
   "maybraid/world/layers/urbanization/buildings/components",
