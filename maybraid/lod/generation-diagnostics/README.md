@@ -31,6 +31,8 @@ Lifecycle messages are emitted after the demand guard is released; a worker can
 pick the job before its enqueue message is emitted. The enqueue timestamp is
 captured at queue eligibility, and `enqueue_age_ns` exposes the emission delay.
 Use identity/epoch/quantum joins rather than message ordering for causality.
+These records do not snapshot `HcsgClass` or the scheduler's stride `pass`; they
+support caller/lifecycle attribution, not priority-policy attribution.
 Publication detail is likewise emitted after releasing the store write guard.
 
 Every operation emits `hcsg.operation.complete` as a structured tracing event
