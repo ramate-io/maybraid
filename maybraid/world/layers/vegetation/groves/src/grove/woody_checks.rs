@@ -165,3 +165,85 @@ pub fn assert_shared_unit_arcs<P>(plants: &[P], arc_ptr: impl Fn(&P) -> *const (
 	anyhow::ensure!(plants.len() > ptrs.len(), "expected repeated variants to share one unit Arc");
 	Ok(())
 }
+
+/// Compare the visitor to actual ordinary scene sources after draining its lazy
+/// chunks, not to another packed collector. Captures type, Arc identity, pose,
+/// materials and all four bands of domain IR.
+#[derive(Default)]
+pub struct PosedSourceParity {
+	checks: Vec<Box<dyn Fn(&mut bevy::prelude::World) -> bool>>,
+}
+impl super::PosedPlantVisitor for PosedSourceParity {
+	type Output = ();
+	fn plant<T: VegetationComponents + Send + Sync + 'static>(
+		&mut self,
+		plant: std::sync::Arc<T>,
+		placement: vegetation_components::Placement,
+		stick: &material_ref::MaterialRef,
+		ball: &material_ref::MaterialRef,
+		frond: &material_ref::MaterialRef,
+	) {
+		let placed = super::placed(plant, placement, stick, ball, frond);
+		self.checks.push(Box::new(move |world| {
+			type Source<T> = vegetation_components::FlattenedComponentsOnly<
+				vegetation_components::PlacedVegetation<std::sync::Arc<T>>,
+			>;
+			world.query::<&Source<T>>().iter(world).any(|source| {
+				let actual = &source.0;
+				actual.placement == placed.placement
+					&& std::sync::Arc::ptr_eq(&actual.vegetation, &placed.vegetation)
+					&& actual.stick_material == placed.stick_material
+					&& actual.ball_material == placed.ball_material
+					&& actual.frond_material == placed.frond_material
+					&& [
+						LodSceneLevel::High,
+						LodSceneLevel::Medium,
+						LodSceneLevel::Low,
+						LodSceneLevel::UltraLow,
+					]
+					.into_iter()
+					.all(|level| {
+						actual.stick_nodes_for_level(level).flatten()
+							== placed.stick_nodes_for_level(level).flatten()
+							&& actual.foliage_nodes_for_level(level).flatten()
+								== placed.foliage_nodes_for_level(level).flatten()
+					})
+			})
+		}));
+	}
+}
+pub fn assert_posed_source_parity(grove: &impl LodScene, parity: PosedSourceParity) -> Result<()> {
+	use bevy::scene::prelude::WorldSceneExt;
+	let (camera, bounds) = preview_camera_and_bounds();
+	let lod_ref = preview_lod_ref(&camera, &bounds);
+	let mut pending = vec![grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::High)];
+	let mut app = bevy::prelude::App::new();
+	app.add_plugins((
+		bevy::prelude::MinimalPlugins,
+		bevy::asset::AssetPlugin::default(),
+		bevy::scene::ScenePlugin,
+	));
+	app.finish();
+	let world = app.world_mut();
+	while let Some(chunk) = pending.pop() {
+		match chunk {
+			lod::SceneChunk::SubChunks(parts) => pending.extend(parts),
+			lod::SceneChunk::Lazy { mut next, .. } => {
+				while let Some(chunk) = next() {
+					pending.push(chunk);
+				}
+			}
+			lod::SceneChunk::Primitive { payload, .. } => {
+				world.spawn_scene(payload)?;
+			}
+		}
+	}
+	world.flush();
+	let sources = world.query::<&vegetation_components::VegetationInstance>().iter(&world).count();
+	anyhow::ensure!(!parity.checks.is_empty(), "fixture must contain real plants");
+	anyhow::ensure!(sources == parity.checks.len(), "ordinary source count differs from visitor");
+	for check in parity.checks {
+		anyhow::ensure!(check(world), "ordinary typed pose/material/IR differs from visitor");
+	}
+	Ok(())
+}

@@ -21,9 +21,8 @@ use super::{definition, JungleMassivesCell, JungleMassivesItem};
 use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 use crate::grove::{
 	canopy_ball_material_from_palette, canopy_proxy_site, frond_material_from_palette,
-	grove_structural_footprint, nest_flattened_plant_chunk, placement_noise,
-	stick_material_from_palette, CanopyProxySite, FlatTerrainSample, FlattenedPlantList,
-	GroveCellVariant, GroveExtent, GrovePreviewParams,
+	grove_structural_footprint, placement_noise, stick_material_from_palette, CanopyProxySite,
+	FlatTerrainSample, FlattenedPlantList, GroveCellVariant, GroveExtent, GrovePreviewParams,
 };
 
 #[derive(Clone, Debug, Args)]
@@ -103,35 +102,7 @@ impl JungleMassives {
 
 	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<SceneChunk> {
 		FlattenedPlantList::capture(&self.plants, lod_ref).nest_chunks(move |plant, plant_lod| {
-			match &plant.kind {
-				JungleMassivesKind::Honu(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-				JungleMassivesKind::Sope(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-				JungleMassivesKind::JungleStorybook(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-			}
+			crate::grove::nest_posed_plant(plant, plant_lod, level)
 		})
 	}
 
@@ -218,3 +189,31 @@ crate::impl_woody_grove_lod!(JungleMassives, WOODY_LOD);
 
 #[cfg(test)]
 mod tests;
+
+impl crate::grove::PosedGrovePlant for JungleMassivesPlant {
+	fn visit<V: crate::grove::PosedPlantVisitor>(&self, visitor: &mut V) -> V::Output {
+		match &self.kind {
+			JungleMassivesKind::Honu(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+			JungleMassivesKind::Sope(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+			JungleMassivesKind::JungleStorybook(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+		}
+	}
+}

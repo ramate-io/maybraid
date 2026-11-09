@@ -195,7 +195,7 @@ fn sync_stick_colliders(world: &mut World) {
 		if playable_level_for(world, entity).is_none() {
 			continue;
 		}
-		if crate::packed::PackMode::current().packs_orchard()
+		if !crate::packed::PackMode::current().is_off()
 			&& handoff_ordinary_packed_physics(world, entity)
 		{
 			continue;
@@ -559,53 +559,94 @@ mod tests {
 	}
 }
 
-/// Physics/semantic plant anchors survive the packed visual handoff. This keeps
-/// the ordinary one-compound-per-plant grouping and the shared drain budget.
-#[derive(Component, Clone)]
-struct PackedTreePhysics(
-	vegetation_components::PlacedVegetation<std::sync::Arc<sbs_trees::StorybookTree>>,
+/// Type-erased ownership recipe retains the exact typed posed plant and callbacks.
+/// No mesh/entity scan is used to reconstruct its visual IR.
+pub(crate) trait PackedPlantRecipe: VegetationComponents + Send + Sync {
+	fn origin(&self) -> Vec3;
+	fn matches(&self, world: &World, entity: Entity) -> bool;
+	fn attach(
+		&self,
+		recipe: std::sync::Arc<dyn PackedPlantRecipe>,
+		world: &mut World,
+		cell: Entity,
+		existing: &[Entity],
+		groups: &mut std::collections::HashMap<std::any::TypeId, Vec<Entity>>,
+	) -> Entity;
+}
+struct TypedPlantRecipe<T: Send + Sync + 'static>(
+	vegetation_components::PlacedVegetation<std::sync::Arc<T>>,
 );
-
-pub(crate) fn attach_packed_source(world: &mut World, cell: Entity, host: crate::ChicoGroveHost) {
-	use lod::LodScene;
-	use std::sync::Arc;
-	use vegetation_components::{FlattenedComponentsOnly, PlacedVegetation, VegetationInstance};
-	type Source = FlattenedComponentsOnly<PlacedVegetation<Arc<sbs_trees::StorybookTree>>>;
-	let Some(orchard) = host.tile.as_orchard() else { return };
-	let mut pending = vec![cell];
-	let mut existing = Vec::new();
-	while let Some(entity) = pending.pop() {
-		if let Some(children) = world.get::<Children>(entity) {
-			pending.extend(children.iter());
-		}
-		if let Some(source) = world.get::<Source>(entity) {
-			existing.push((entity, source.0.clone()));
-		}
+impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for TypedPlantRecipe<T> {
+	fn stick_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> vegetation_components::Layers<StickNode> {
+		self.0.stick_nodes_for_level(level)
 	}
-	let mut transferred = Vec::with_capacity(orchard.plants.len());
-	for plant in orchard.plants.iter() {
-		let placed = plant.placed();
+	fn foliage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> vegetation_components::Layers<vegetation_components::FoliageNode> {
+		self.0.foliage_nodes_for_level(level)
+	}
+	fn structural_lod(&self) -> Option<vegetation_components::StructuralLod> {
+		self.0.structural_lod()
+	}
+}
+impl<T: VegetationComponents + Send + Sync + 'static> PackedPlantRecipe for TypedPlantRecipe<T> {
+	fn origin(&self) -> Vec3 {
+		self.0.placement.translation
+	}
+	fn matches(&self, world: &World, entity: Entity) -> bool {
+		use vegetation_components::{FlattenedComponentsOnly, PlacedVegetation};
+		world
+			.get::<FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<T>>>>(entity)
+			.is_some_and(|source| {
+				source.0.placement == self.0.placement
+					&& std::sync::Arc::ptr_eq(&source.0.vegetation, &self.0.vegetation)
+			})
+	}
+	fn attach(
+		&self,
+		recipe: std::sync::Arc<dyn PackedPlantRecipe>,
+		world: &mut World,
+		cell: Entity,
+		candidates: &[Entity],
+		groups: &mut std::collections::HashMap<std::any::TypeId, Vec<Entity>>,
+	) -> Entity {
+		use lod::LodScene;
+		use std::sync::Arc;
+		use vegetation_components::{
+			FlattenedComponentsOnly, PlacedVegetation, VegetationInstance,
+		};
+		type Source<T> = FlattenedComponentsOnly<PlacedVegetation<Arc<T>>>;
+		let existing = groups.entry(std::any::TypeId::of::<T>()).or_insert_with(|| {
+			candidates
+				.iter()
+				.copied()
+				.filter(|&entity| world.get::<Source<T>>(entity).is_some())
+				.collect()
+		});
+		let placed = self.0.clone();
 		let retained = existing
 			.iter()
 			.enumerate()
-			.filter(|(_, (_, source))| {
-				source.placement == placed.placement
-					&& Arc::ptr_eq(&source.vegetation, &placed.vegetation)
-			})
-			.min_by_key(|(_, (entity, _))| {
+			.filter(|(_, entity)| self.matches(world, **entity))
+			.min_by_key(|(_, entity)| {
 				(
-					world.get::<bevy::ecs::entity_disabling::Disabled>(*entity).is_some(),
-					!has_compound(world, *entity),
+					world.get::<bevy::ecs::entity_disabling::Disabled>(**entity).is_some(),
+					!has_compound(world, **entity),
 				)
 			})
 			.map(|(index, _)| index);
+
 		let entity = if let Some(index) = retained {
-			let (entity, _) = existing.swap_remove(index);
+			let entity = existing.swap_remove(index);
 			// Reparent before the ordinary visual root bag is retired. Existing compound
 			// children and their bodies remain the exact same entities.
 			world
 				.entity_mut(entity)
-				.remove::<Source>()
+				.remove::<Source<T>>()
 				.remove::<lod::LodSceneHost>()
 				.remove::<LodSceneLevel>();
 			let visuals = world
@@ -635,9 +676,8 @@ pub(crate) fn attach_packed_source(world: &mut World, cell: Entity, host: crate:
 				))
 				.id()
 		};
-		transferred.push(entity);
 		world.entity_mut(entity).insert((
-			PackedTreePhysics(placed),
+			PackedTreePhysics(recipe),
 			StickPhysicsProducer(|world, entity, level| {
 				world
 					.get::<PackedTreePhysics>(entity)
@@ -646,6 +686,55 @@ pub(crate) fn attach_packed_source(world: &mut World, cell: Entity, host: crate:
 					.flat_map(|node| collider_poses(&node, level))
 					.collect()
 			}),
+		));
+		entity
+	}
+}
+#[derive(Component, Clone)]
+struct PackedTreePhysics(std::sync::Arc<dyn PackedPlantRecipe>);
+
+#[derive(Default)]
+pub(crate) struct PackedPlantCollector(pub Vec<std::sync::Arc<dyn PackedPlantRecipe>>);
+impl vegetation_groves::grove::PosedPlantVisitor for PackedPlantCollector {
+	type Output = ();
+	fn plant<T: VegetationComponents + Send + Sync + 'static>(
+		&mut self,
+		plant: std::sync::Arc<T>,
+		placement: Placement,
+		stick: &material_ref::MaterialRef,
+		ball: &material_ref::MaterialRef,
+		frond: &material_ref::MaterialRef,
+	) {
+		self.0
+			.push(std::sync::Arc::new(TypedPlantRecipe(vegetation_groves::grove::placed(
+				plant, placement, stick, ball, frond,
+			))));
+	}
+}
+pub(crate) fn packed_plants(
+	tile: &crate::ForestGroveTile,
+) -> Option<Vec<std::sync::Arc<dyn PackedPlantRecipe>>> {
+	let mut visitor = PackedPlantCollector::default();
+	tile.visit_posed_plants(&mut visitor).then_some(visitor.0)
+}
+pub(crate) fn attach_packed_source(world: &mut World, cell: Entity, host: crate::ChicoGroveHost) {
+	let mut pending = vec![cell];
+	let mut existing = Vec::new();
+	while let Some(entity) = pending.pop() {
+		existing.push(entity);
+		if let Some(children) = world.get::<Children>(entity) {
+			pending.extend(children.iter());
+		}
+	}
+	let mut groups = std::collections::HashMap::new();
+	let mut transferred = Vec::new();
+	for recipe in packed_plants(&host.tile).into_iter().flatten() {
+		transferred.push(recipe.attach(
+			std::sync::Arc::clone(&recipe),
+			world,
+			cell,
+			&existing,
+			&mut groups,
 		));
 	}
 	lod::scene::host::transfer_lod_tree_ownership(world, &transferred, cell);
@@ -669,12 +758,6 @@ pub(crate) fn remove_packed_sources(world: &mut World, cell: Entity) {
 /// During reverse handoff reuse exact existing bodies before the normal drain
 /// attempts a replacement. No extra queue or collider grouping is introduced.
 fn handoff_ordinary_packed_physics(world: &mut World, entity: Entity) -> bool {
-	use std::sync::Arc;
-	use vegetation_components::{FlattenedComponentsOnly, PlacedVegetation};
-	type Source = FlattenedComponentsOnly<PlacedVegetation<Arc<sbs_trees::StorybookTree>>>;
-	let Some(source) = world.get::<Source>(entity).map(|source| source.0.clone()) else {
-		return false;
-	};
 	let mut ancestor = world.get::<ChildOf>(entity).map(ChildOf::parent);
 	let mut cell = None;
 	while let Some(parent) = ancestor {
@@ -689,10 +772,9 @@ fn handoff_ordinary_packed_physics(world: &mut World, entity: Entity) -> bool {
 	};
 	let retained = world.get::<Children>(cell).and_then(|children| {
 		children.iter().find(|child| {
-			world.get::<PackedTreePhysics>(*child).is_some_and(|old| {
-				old.0.placement == source.placement
-					&& Arc::ptr_eq(&old.0.vegetation, &source.vegetation)
-			})
+			world
+				.get::<PackedTreePhysics>(*child)
+				.is_some_and(|old| old.0.matches(world, entity))
 		})
 	});
 	let Some(retained) = retained else {
@@ -719,24 +801,21 @@ fn handoff_ordinary_packed_physics(world: &mut World, entity: Entity) -> bool {
 	true
 }
 
-pub(crate) fn ordinary_packed_physics_ready(world: &World, cell: Entity, expected: usize) -> bool {
-	use std::sync::Arc;
-	use vegetation_components::{FlattenedComponentsOnly, PlacedVegetation};
-	type Source = FlattenedComponentsOnly<PlacedVegetation<Arc<sbs_trees::StorybookTree>>>;
-	let mut pending = vec![cell];
-	let mut count = 0;
+/// Called only after the replacement ordinary bag has completely streamed.
+/// Inspect that bag's actual producers, never the old packed source count/type.
+pub(crate) fn ordinary_packed_physics_ready(world: &World, bag: Entity) -> bool {
+	let mut pending = vec![bag];
 	while let Some(entity) = pending.pop() {
-		if world.get::<Source>(entity).is_some() {
-			count += 1;
-			if world.get::<StickPhysicsAttached>(entity).is_none() {
-				return false;
-			}
+		if world.get::<StickPhysicsProducer>(entity).is_some()
+			&& world.get::<StickPhysicsAttached>(entity).is_none()
+		{
+			return false;
 		}
 		if let Some(children) = world.get::<Children>(entity) {
 			pending.extend(children.iter());
 		}
 	}
-	count >= expected
+	true
 }
 
 #[cfg(test)]
@@ -908,5 +987,157 @@ mod packed_transfer_tests {
 		app.world_mut().flush();
 		assert_enabled_body(&mut app, source, body);
 		Ok(())
+	}
+	#[test]
+	fn mixed_oak_storybook_bush_preserves_real_source_and_body_ids_both_directions(
+	) -> anyhow::Result<()> {
+		use vegetation_groves::grove::PosedPlantVisitor;
+		use vegetation_groves::{riparian_general::RiparianGeneralCell, RiparianGeneral};
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::splat(40.0));
+		let grove = RiparianGeneral::from_placements(
+			&[
+				GroveCellVariant::new(
+					RiparianGeneralCell::RiparianBraidOak,
+					Vec3::new(4.0, 0.0, 4.0),
+					1.0,
+				),
+				GroveCellVariant::new(
+					RiparianGeneralCell::RiparianStorybook,
+					Vec3::new(20.0, 0.0, 4.0),
+					1.0,
+				),
+				GroveCellVariant::new(
+					RiparianGeneralCell::RareRiparianHighBush,
+					Vec3::new(36.0, 0.0, 4.0),
+					1.0,
+				),
+			],
+			procedural_common::NoiseParams::default(),
+			&extent,
+			1,
+		);
+		let host = crate::ChicoGroveHost::new(
+			crate::ForestGroveTile::RiparianGeneral(grove),
+			crate::ForestLayer::UpperCanopy,
+		);
+		struct Spawn<'a> {
+			world: &'a mut World,
+			parent: Entity,
+			sources: Vec<Entity>,
+		}
+		impl PosedPlantVisitor for Spawn<'_> {
+			type Output = ();
+			fn plant<T: VegetationComponents + Send + Sync + 'static>(
+				&mut self,
+				plant: Arc<T>,
+				placement: Placement,
+				stick: &material_ref::MaterialRef,
+				ball: &material_ref::MaterialRef,
+				frond: &material_ref::MaterialRef,
+			) {
+				let placed = vegetation_groves::grove::placed(plant, placement, stick, ball, frond);
+				self.sources.push(
+					self.world
+						.spawn((
+							FlattenedComponentsOnly(placed),
+							ChildOf(self.parent),
+							Transform::IDENTITY,
+							Visibility::Inherited,
+						))
+						.id(),
+				);
+			}
+		}
+		let mut app = App::new();
+		app.add_plugins(StickPhysicsPlugin);
+		register_vegetation_stick_colliders::<Source>(&mut app);
+		register_vegetation_stick_colliders::<
+			FlattenedComponentsOnly<PlacedVegetation<Arc<sbs_trees::BraidOakTree>>>,
+		>(&mut app);
+		register_vegetation_stick_colliders::<
+			FlattenedComponentsOnly<PlacedVegetation<Arc<sbs_trees::HighBushShoots>>>,
+		>(&mut app);
+		let cell = app
+			.world_mut()
+			.spawn((LodSceneLevel::High, lod::LodSceneHost, Visibility::Inherited))
+			.id();
+		let bag = app
+			.world_mut()
+			.spawn((LodLevelRoots, ChildOf(cell), Visibility::Inherited))
+			.id();
+		let mut spawn = Spawn { world: app.world_mut(), parent: bag, sources: Vec::new() };
+		assert!(host.tile.visit_posed_plants(&mut spawn));
+		let sources = spawn.sources;
+		assert_eq!(sources.len(), 3);
+		app.update();
+		let bodies = sources
+			.iter()
+			.map(|source| {
+				app.world()
+					.get::<Children>(*source)
+					.and_then(|children| {
+						children
+							.iter()
+							.find(|child| app.world().get::<StickPhysicsCompound>(*child).is_some())
+					})
+					.ok_or_else(|| anyhow::anyhow!("mixed plant missing real body"))
+			})
+			.collect::<anyhow::Result<Vec<_>>>()?;
+		hide(&mut app, bag);
+		attach_packed_source(app.world_mut(), cell, host.clone());
+		app.world_mut().despawn(bag);
+		for (&source, &body) in sources.iter().zip(&bodies) {
+			assert!(app.world().get_entity(source).is_ok());
+			assert!(app.world().get::<Disabled>(body).is_none());
+			assert_eq!(app.world().get::<ChildOf>(body).map(ChildOf::parent), Some(source));
+		}
+		app.world_mut()
+			.entity_mut(cell)
+			.insert(crate::packed::lifecycle::RestoringOrdinary);
+		let new_bag = app.world_mut().spawn((LodLevelRoots, ChildOf(cell))).id();
+		let mut spawn = Spawn { world: app.world_mut(), parent: new_bag, sources: Vec::new() };
+		host.tile.visit_posed_plants(&mut spawn);
+		let restored = spawn.sources;
+		app.world_mut().flush();
+		assert!(!ordinary_packed_physics_ready(app.world(), new_bag));
+		for &source in &restored {
+			assert!(handoff_ordinary_packed_physics(app.world_mut(), source));
+		}
+		assert!(ordinary_packed_physics_ready(app.world(), new_bag));
+		for (&source, &body) in restored.iter().zip(&bodies) {
+			assert_eq!(app.world().get::<ChildOf>(body).map(ChildOf::parent), Some(source));
+		}
+		for source in sources {
+			assert!(app.world().get_entity(source).is_err());
+		}
+		assert_eq!(
+			app.world_mut()
+				.query_filtered::<Entity, With<StickPhysicsCompound>>()
+				.iter(app.world())
+				.count(),
+			3
+		);
+		Ok(())
+	}
+	#[test]
+	fn changed_count_replacement_waits_for_its_actual_two_producers() {
+		let mut app = App::new();
+		app.add_plugins(StickPhysicsPlugin);
+		let cell = app.world_mut().spawn(LodSceneLevel::High).id();
+		let bag = app.world_mut().spawn(ChildOf(cell)).id();
+		for _ in 0..2 {
+			app.world_mut()
+				.spawn((ChildOf(bag), StickPhysicsProducer(|_, _, _| Vec::new())));
+		}
+		assert!(!ordinary_packed_physics_ready(app.world(), bag));
+		app.update();
+		assert!(ordinary_packed_physics_ready(app.world(), bag));
+		assert_eq!(
+			app.world_mut()
+				.query_filtered::<Entity, With<StickPhysicsAttached>>()
+				.iter(app.world())
+				.count(),
+			2
+		);
 	}
 }

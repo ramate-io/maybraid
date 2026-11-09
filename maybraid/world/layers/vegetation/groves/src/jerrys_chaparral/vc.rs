@@ -27,10 +27,9 @@ use super::{
 use crate::grove::vc_tuft::patch_variant_index;
 use crate::grove::{
 	canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
-	frond_material_from_palette, grove_structural_footprint, nest_flattened_plant_chunk,
-	placement_noise, remixed_bush_plant, remixed_sbs_plant, stick_material_from_palette,
-	unit_build_noise, CanopyProxySite, FlatTerrainSample, FlattenedPlantList, GroveCellVariant,
-	GroveExtent, GrovePreviewParams,
+	frond_material_from_palette, grove_structural_footprint, placement_noise, remixed_bush_plant,
+	remixed_sbs_plant, stick_material_from_palette, unit_build_noise, CanopyProxySite,
+	FlatTerrainSample, FlattenedPlantList, GroveCellVariant, GroveExtent, GrovePreviewParams,
 };
 
 #[derive(Clone, Debug, Args)]
@@ -134,35 +133,7 @@ impl JerrysChaparral {
 
 	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<SceneChunk> {
 		FlattenedPlantList::capture(&self.plants, lod_ref).nest_chunks(move |plant, plant_lod| {
-			match &plant.kind {
-				JerrysChaparralKind::Rory(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-				JerrysChaparralKind::Bush(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-				JerrysChaparralKind::Friends(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-			}
+			crate::grove::nest_posed_plant(plant, plant_lod, level)
 		})
 	}
 
@@ -255,3 +226,31 @@ crate::impl_woody_grove_lod!(JerrysChaparral, WOODY_LOD, trunks);
 
 #[cfg(test)]
 mod tests;
+
+impl crate::grove::PosedGrovePlant for JerrysChaparralPlant {
+	fn visit<V: crate::grove::PosedPlantVisitor>(&self, visitor: &mut V) -> V::Output {
+		match &self.kind {
+			JerrysChaparralKind::Rory(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+			JerrysChaparralKind::Bush(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+			JerrysChaparralKind::Friends(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+		}
+	}
+}

@@ -24,6 +24,8 @@ mod tuft_patch;
 #[cfg(test)]
 pub(crate) mod populate_checks;
 #[cfg(feature = "render")]
+mod posed_plant;
+#[cfg(feature = "render")]
 mod preview;
 #[cfg(feature = "render")]
 mod quantized;
@@ -37,6 +39,8 @@ pub mod vc_tuft;
 pub(crate) mod woody_checks;
 #[cfg(feature = "render")]
 mod woody_lod;
+#[cfg(feature = "render")]
+pub use posed_plant::{nest_posed_plant, placed, PosedGrovePlant, PosedPlantVisitor};
 
 pub use distribution::{
 	parse_variant_weights, GroveBucket, GroveDistribution, PreparedGroveDistribution,

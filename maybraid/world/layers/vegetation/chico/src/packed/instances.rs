@@ -1,20 +1,18 @@
-//! Shared-kit instance lists for one orchard tile / LOD band.
+//! Shared-kit instance lists for one capability-compatible woody tile / LOD band.
 
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+use super::cache::AdmissionReason;
+use crate::stick_physics::PackedPlantRecipe;
+use crate::ForestGroveTile;
 use bevy::math::{Mat4, Vec3, Vec4};
-use lod::{LodSceneLevel, VisualLodKind, VisualLodPrimitive, VisualMaterialKind, VisualSceneChunk};
+use lod::{LodSceneLevel, VisualLodPrimitive, VisualMaterialKind};
 use material_ref::{MaterialRef, MaterialRefKey};
 use vegetation_components::{
-	FoliageGeometry, FoliageNode, Placement, StickNode, VegetationComponents, FROND_MATERIAL,
-	LEAF_MATERIAL, STICK_MATERIAL,
+	FoliageGeometry, FoliageNode, Placement, StickNode, LEAF_MATERIAL, STICK_MATERIAL,
 };
-use vegetation_groves::grove::{
-	canopy_proxy_site, foliage_ultra_low_merged_balls, ULTRA_LOW_CANOPY_BIN_METERS,
-};
-use vegetation_groves::Orchard;
 
 /// One posed kit instance. Transform is grove-local (host transform is identity).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -81,124 +79,120 @@ impl PackedBatchKey {
 	}
 }
 
-/// Group orchard kit instances by shared GLB + material. Collections stay instanced.
-pub fn pack_orchard_batches(orchard: &Orchard, level: LodSceneLevel) -> Vec<PackedBatch> {
-	match level {
-		LodSceneLevel::High | LodSceneLevel::Medium => pack_detail(orchard, level),
-		LodSceneLevel::Low => pack_canopy(orchard, level),
-		LodSceneLevel::UltraLow | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => {
-			pack_ultra_low(orchard)
-		}
-	}
-}
-
-/// Exact shared-icosphere poses used by the ordinary Proxy canopy mode.
-pub fn pack_orchard_shadows(orchard: &Orchard, level: LodSceneLevel) -> Option<PackedBatch> {
-	let mut instances = Vec::new();
-	if matches!(level, LodSceneLevel::High | LodSceneLevel::Medium) {
-		for plant in orchard.plants.iter() {
-			let Some(lod) = plant.placed().structural_lod() else { continue };
-			let model = Mat4::from_scale_rotation_translation(
-				Vec3::splat(lod.tree_radius.max(0.25)),
-				bevy::math::Quat::IDENTITY,
-				lod.center,
-			);
-			instances.push(PackedInstance::plain(model, lod.center));
+/// Assemble exactly the ordinary grove presentation policy for this band.
+/// Detailed typed plants and grove proxy IR are intentionally distinct sources.
+pub(crate) fn pack_grove_band(
+	tile: &ForestGroveTile,
+	plants: &[Arc<dyn PackedPlantRecipe>],
+	level: LodSceneLevel,
+	proxy_shadows: bool,
+) -> Result<Vec<PackedBatch>, AdmissionReason> {
+	let policy = tile.woody_lod().ok_or(AdmissionReason::UnsupportedAdapter)?;
+	let mut groups = BTreeMap::new();
+	let mut shadows = Vec::new();
+	if let Some(plant_level) = policy.nest_plant_level(level) {
+		for plant in plants {
+			let sticks = plant.stick_nodes_for_level(plant_level).flatten();
+			let foliage = plant.foliage_nodes_for_level(plant_level).flatten();
+			validate_nodes(&sticks, &foliage, plant_level)?;
+			for node in &sticks {
+				push_stick(&mut groups, node, plant_level, plant.origin());
+			}
+			for node in &foliage {
+				push_foliage(&mut groups, node, plant_level, plant.origin());
+			}
+			if let Some(lod) = plant.structural_lod() {
+				let model = Mat4::from_scale_rotation_translation(
+					Vec3::splat(lod.tree_radius.max(0.25)),
+					bevy::math::Quat::IDENTITY,
+					lod.center,
+				);
+				shadows.push(PackedInstance::plain(model, lod.center));
+			}
 		}
 	} else {
-		for node in orchard.foliage_nodes_for_level(level).flatten() {
+		// Ordinary flattened_canopy_proxy_chunks uses Low sticks at UltraLow,
+		// and merges canopy proxies *before* choosing their wind/centroid input.
+		let stick_level = if level == LodSceneLevel::UltraLow { LodSceneLevel::Low } else { level };
+		let sticks = tile.proxy_stick_nodes(stick_level);
+		let foliage = FoliageNode::merge_canopy_proxies(tile.proxy_foliage_nodes(level));
+		validate_nodes(&sticks, &foliage, stick_level)?;
+		for node in &sticks {
+			push_stick(&mut groups, node, stick_level, node.placement.translation);
+		}
+		for node in &foliage {
+			push_foliage(&mut groups, node, level, node.placement.translation);
 			match &node.geometry {
-				FoliageGeometry::CheapBall => instances.push(PackedInstance::plain(
+				FoliageGeometry::CheapBall => shadows.push(PackedInstance::plain(
 					node.placement.affine(),
 					node.placement.translation,
 				)),
 				FoliageGeometry::CheapBallCollection(collection) => {
-					for placement in collection.placements_for_level(level) {
-						let placement = node.placement.compose_child(placement);
-						instances
-							.push(PackedInstance::plain(placement.affine(), placement.translation));
+					for child in collection.placements_for_level(level) {
+						let pose = node.placement.compose_child(child);
+						shadows.push(PackedInstance::plain(pose.affine(), pose.translation));
 					}
 				}
 				_ => {}
 			}
 		}
 	}
-	(!instances.is_empty()).then(|| PackedBatch {
-		key: PackedBatchKey {
-			kit: SHADOW_KIT,
-			material_kind: VisualMaterialKind::ShadowProxy,
-			material_hash: 0,
-		},
-		base_color: Vec4::ONE,
-		instances: instances.into(),
-	})
+	let mut batches = finish_groups(groups);
+	if proxy_shadows && !shadows.is_empty() {
+		batches.push(PackedBatch {
+			key: PackedBatchKey {
+				kit: SHADOW_KIT,
+				material_kind: VisualMaterialKind::ShadowProxy,
+				material_hash: 0,
+			},
+			base_color: Vec4::ONE,
+			instances: shadows.into(),
+		});
+	}
+	Ok(batches)
 }
-
 pub const SHADOW_KIT: &str = "@canopy-shadow-proxy";
 
-/// Planning tree the [`lod::VisualLodScene`] consume path walks.
-pub fn visual_chunks_for_orchard(orchard: &Orchard, level: LodSceneLevel) -> VisualSceneChunk {
-	let batches = pack_orchard_batches(orchard, level);
-	if batches.is_empty() {
-		return VisualSceneChunk::primitive(VisualLodPrimitive::stub(level));
-	}
-	VisualSceneChunk::chunks(batches.into_iter().map(|batch| {
-		let count = batch.instances.len().max(1) as u32;
-		VisualSceneChunk::weighted(count, batch.visual_primitive(level))
-	}))
+fn material_is(material: &MaterialRef, expected: &str) -> bool {
+	matches!(&material.name, material_ref::MaterialId::Name(name) if name == expected)
+		&& material.rasters.is_empty()
+		&& material.scalars.is_empty()
 }
-
-fn pack_detail(orchard: &Orchard, level: LodSceneLevel) -> Vec<PackedBatch> {
-	let mut groups: BTreeMap<PackedBatchKey, (Vec4, Vec<PackedInstance>)> = BTreeMap::new();
-	for plant in orchard.plants.iter() {
-		let placed = plant.placed();
-		let origin = plant.placement.translation;
-		for node in placed.stick_nodes_for_level(level).flatten() {
-			push_stick(&mut groups, &node, level, origin);
+fn validate_nodes(
+	sticks: &[StickNode],
+	foliage: &[FoliageNode],
+	level: LodSceneLevel,
+) -> Result<(), AdmissionReason> {
+	for node in sticks {
+		if !material_is(&node.material, STICK_MATERIAL) {
+			return Err(AdmissionReason::UnsupportedMaterial);
 		}
-		for node in placed.foliage_nodes_for_level(level).flatten() {
-			push_foliage(&mut groups, &node, level, origin);
+		if let Some(collection) = &node.collection {
+			if collection
+				.members_for_level(level)
+				.iter()
+				.any(|member| member.geometry.standard_glb_for_level(level).is_none())
+			{
+				return Err(AdmissionReason::UnsupportedGeometry);
+			}
+		} else if node.geometry.standard_glb_for_level(level).is_none() {
+			return Err(AdmissionReason::UnsupportedGeometry);
 		}
 	}
-	finish_groups(groups)
-}
-
-fn pack_canopy(orchard: &Orchard, level: LodSceneLevel) -> Vec<PackedBatch> {
-	let mut groups: BTreeMap<PackedBatchKey, (Vec4, Vec<PackedInstance>)> = BTreeMap::new();
-	for plant in orchard.plants.iter() {
-		let Some(site) =
-			canopy_proxy_site(&plant.tree, plant.placement, &plant.placed().ball_material)
-		else {
-			continue;
-		};
-		let placement =
-			Placement::new(site.center, 0.0).with_scale(site.half_extents.max(Vec3::splat(0.25)));
-		push_instance(
-			&mut groups,
-			FoliageGeometry::cheap_ball_glb_for_level(level).as_str(),
-			&site.material,
-			VisualMaterialKind::Leaf,
-			placement,
-			site.center,
-		);
+	for node in foliage {
+		if !matches!(
+			node.geometry,
+			FoliageGeometry::CheapBall
+				| FoliageGeometry::CheapBallCollection(_)
+				| FoliageGeometry::LayeredBall
+		) {
+			return Err(AdmissionReason::UnsupportedGeometry);
+		}
+		if !material_is(&node.material, LEAF_MATERIAL) {
+			return Err(AdmissionReason::UnsupportedMaterial);
+		}
 	}
-	finish_groups(groups)
-}
-
-fn pack_ultra_low(orchard: &Orchard) -> Vec<PackedBatch> {
-	let sites: Vec<_> = orchard
-		.plants
-		.iter()
-		.filter_map(|plant| {
-			canopy_proxy_site(&plant.tree, plant.placement, &plant.placed().ball_material)
-		})
-		.collect();
-	let nodes = foliage_ultra_low_merged_balls(&sites, ULTRA_LOW_CANOPY_BIN_METERS);
-	let mut groups: BTreeMap<PackedBatchKey, (Vec4, Vec<PackedInstance>)> = BTreeMap::new();
-	for node in nodes {
-		push_foliage(&mut groups, &node, LodSceneLevel::UltraLow, node.placement.translation);
-	}
-	finish_groups(groups)
+	Ok(())
 }
 
 fn push_stick(
@@ -352,13 +346,11 @@ fn finish_groups(
 		.collect()
 }
 
-fn material_kind(material: &MaterialRef, geometry: &FoliageGeometry) -> VisualMaterialKind {
+fn material_kind(material: &MaterialRef, _geometry: &FoliageGeometry) -> VisualMaterialKind {
 	match &material.name {
 		material_ref::MaterialId::Name(name) if name == STICK_MATERIAL => VisualMaterialKind::Stick,
-		material_ref::MaterialId::Name(name) if name == FROND_MATERIAL => VisualMaterialKind::Frond,
 		material_ref::MaterialId::Name(name) if name == LEAF_MATERIAL => VisualMaterialKind::Leaf,
-		_ if geometry.is_frond_kit() || geometry.is_frond_collection() => VisualMaterialKind::Frond,
-		_ => VisualMaterialKind::Leaf,
+		_ => VisualMaterialKind::Frond, // fail closed if a new call bypasses validation
 	}
 }
 
@@ -400,16 +392,134 @@ impl Ord for PackedBatchKey {
 	}
 }
 
-/// Packed-batch identity used by tests and metrics.
-pub fn packed_kind_count(chunks: &VisualSceneChunk) -> usize {
-	fn walk(chunk: &VisualSceneChunk) -> usize {
-		match chunk {
-			VisualSceneChunk::SubChunks(children) => children.iter().map(walk).sum(),
-			VisualSceneChunk::Primitive { payload, .. } => {
-				usize::from(matches!(payload.kind, VisualLodKind::PackedBatch { .. }))
-			}
-			VisualSceneChunk::Lazy { remaining_primitives, .. } => *remaining_primitives,
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::{ChicoGroveHost, ForestGroveKind, ForestLayer};
+	use vegetation_groves::{FlatTerrainSample, GroveExtent};
+	fn tile(kind: ForestGroveKind) -> ForestGroveTile {
+		if kind == ForestGroveKind::ForlornSavanna {
+			use vegetation_groves::{
+				forlorn_savanna::ForlornSavannaCell, grove::GroveCellVariant, ForlornSavanna,
+			};
+			return ForestGroveTile::ForlornSavanna(ForlornSavanna::from_placements(
+				&[
+					GroveCellVariant::new(
+						ForlornSavannaCell::SavannaRory,
+						Vec3::new(4.0, 0.0, 4.0),
+						1.0,
+					),
+					GroveCellVariant::new(
+						ForlornSavannaCell::AcaciaHighBush,
+						Vec3::new(28.0, 0.0, 4.0),
+						1.0,
+					),
+				],
+				procedural_common::NoiseParams::default(),
+				&GroveExtent::new(Vec3::ZERO, Vec3::splat(40.0)),
+				1,
+			));
 		}
+		kind.grow_tile(
+			GroveExtent::new(Vec3::ZERO, Vec3::new(80.0, 1.0, 80.0)),
+			&FlatTerrainSample::default(),
+		)
 	}
-	walk(chunks)
+	#[test]
+	fn compatible_natural_woody_policies_keep_original_bands_and_trunks() -> anyhow::Result<()> {
+		for kind in [
+			ForestGroveKind::RiparianGeneral,
+			ForestGroveKind::RollingOaks,
+			ForestGroveKind::HighBush,
+			ForestGroveKind::Vineyard,
+			ForestGroveKind::ForlornSavanna,
+		] {
+			let tile = tile(kind);
+			let host = ChicoGroveHost::new(tile.clone(), ForestLayer::UpperCanopy);
+			let payload = super::super::cache::TilePayload::from_host(&host, 7, true)
+				.map_err(|reason| anyhow::anyhow!("{} rejected: {reason:?}", tile.family_name()))?;
+			assert!(payload.plant_count > 0);
+			assert_eq!(Some(payload.structural_lod), tile.structural_lod());
+			assert!(payload.lods[0]
+				.iter()
+				.any(|batch| batch.key.material_kind == VisualMaterialKind::Leaf));
+			if kind == ForestGroveKind::Vineyard {
+				for index in [2, 3] {
+					assert!(payload.lods[index]
+						.iter()
+						.any(|batch| batch.key.material_kind == VisualMaterialKind::Stick));
+					assert!(payload.lods[index]
+						.iter()
+						.filter(|batch| batch.key.material_kind == VisualMaterialKind::Stick)
+						.all(|batch| batch.key.kit.contains("low")));
+				}
+			}
+			let original = FoliageNode::merge_canopy_proxies(
+				tile.proxy_foliage_nodes(LodSceneLevel::UltraLow),
+			);
+			let ordinary_members: usize = original
+				.iter()
+				.map(|node| match &node.geometry {
+					FoliageGeometry::CheapBallCollection(collection) => {
+						collection.placements_for_level(LodSceneLevel::UltraLow).len()
+					}
+					_ => 1,
+				})
+				.sum();
+			let packed_members: usize = payload.lods[3]
+				.iter()
+				.filter(|batch| batch.key.material_kind == VisualMaterialKind::Leaf)
+				.map(|batch| batch.instances.len())
+				.sum();
+			assert_eq!(packed_members, ordinary_members, "{}", tile.family_name());
+		}
+		Ok(())
+	}
+	#[test]
+	fn actual_frond_tile_and_unknown_material_fail_closed() -> anyhow::Result<()> {
+		let tile = tile(ForestGroveKind::DateGrove);
+		assert!(tile
+			.woody_lod()
+			.is_some_and(|lod| lod.nest_plant_level(LodSceneLevel::Low).is_some()));
+		let plants = crate::stick_physics::packed_plants(&tile)
+			.ok_or_else(|| anyhow::anyhow!("missing DateGrove adapter"))?;
+		assert!(plants.iter().any(|plant| {
+			plant
+				.foliage_nodes_for_level(LodSceneLevel::High)
+				.flatten()
+				.iter()
+				.any(|node| node.geometry.is_frond_collection() || node.geometry.is_frond_kit())
+		}));
+		let host = ChicoGroveHost::new(tile, ForestLayer::UpperCanopy);
+		assert!(matches!(
+			super::super::cache::TilePayload::from_host(&host, 1, true),
+			Err(AdmissionReason::UnsupportedGeometry)
+		));
+		let unknown = FoliageNode::cheap_ball(Placement::IDENTITY)
+			.with_material(MaterialRef::named("unknown-leaf-lookalike"));
+		assert_eq!(
+			validate_nodes(&[], &[unknown], LodSceneLevel::High),
+			Err(AdmissionReason::UnsupportedMaterial)
+		);
+		Ok(())
+	}
+	#[test]
+	fn empty_and_tuft_are_explicit_fallbacks() {
+		let orchard = vegetation_groves::Orchard {
+			plants: Arc::from([]),
+			structural_center: Vec3::ZERO,
+			footprint_radius: 1.0,
+			extent: GroveExtent::new(Vec3::ZERO, Vec3::ONE),
+		};
+		let host = ChicoGroveHost::new(ForestGroveTile::Orchard(orchard), ForestLayer::UpperCanopy);
+		assert!(matches!(
+			super::super::cache::TilePayload::from_host(&host, 1, false),
+			Err(AdmissionReason::EmptyContent)
+		));
+		let host = ChicoGroveHost::new(tile(ForestGroveKind::CommonTufts), ForestLayer::Tufts);
+		assert!(matches!(
+			super::super::cache::TilePayload::from_host(&host, 1, false),
+			Err(AdmissionReason::UnsupportedAdapter)
+		));
+	}
 }

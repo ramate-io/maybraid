@@ -190,6 +190,296 @@ impl ForestGroveTile {
 		}
 	}
 
+	/// Stable finite family label for bounded diagnostics (not a zone name).
+	pub fn family_name(&self) -> &'static str {
+		match self {
+			Self::Alpine(_) => "Alpine",
+			Self::AridConiferSapling(_) => "AridConiferSapling",
+			Self::BraidGrass(_) => "BraidGrass",
+			Self::BushScrub(_) => "BushScrub",
+			Self::ChristmasTaiga(_) => "ChristmasTaiga",
+			Self::CommonTufts(_) => "CommonTufts",
+			Self::ConiferMassives(_) => "ConiferMassives",
+			Self::ConiferSapling(_) => "ConiferSapling",
+			Self::DateGrove(_) => "DateGrove",
+			Self::Dryland(_) => "Dryland",
+			Self::ForlornSavanna(_) => "ForlornSavanna",
+			Self::GoettingenFollow(_) => "GoettingenFollow",
+			Self::HighBush(_) => "HighBush",
+			Self::JerrysChaparral(_) => "JerrysChaparral",
+			Self::JungleLowerMassives(_) => "JungleLowerMassives",
+			Self::JungleMassives(_) => "JungleMassives",
+			Self::Leeward(_) => "Leeward",
+			Self::LevantineScrub(_) => "LevantineScrub",
+			Self::LowBush(_) => "LowBush",
+			Self::MonsterGrass(_) => "MonsterGrass",
+			Self::Orchard(_) => "Orchard",
+			Self::PalmShade(_) => "PalmShade",
+			Self::RiparianGeneral(_) => "RiparianGeneral",
+			Self::RiparianMix(_) => "RiparianMix",
+			Self::RiverineGreen(_) => "RiverineGreen",
+			Self::RollingOaks(_) => "RollingOaks",
+			Self::Shamanhome(_) => "Shamanhome",
+			Self::SpottyBushes(_) => "SpottyBushes",
+			Self::Storytellers(_) => "Storytellers",
+			Self::StrangeOasis(_) => "StrangeOasis",
+			Self::TallGrass(_) => "TallGrass",
+			Self::TemperateLowerMassives(_) => "TemperateLowerMassives",
+			Self::TemperateMassives(_) => "TemperateMassives",
+			Self::TradeWinds(_) => "TradeWinds",
+			Self::TropicalThicket(_) => "TropicalThicket",
+			Self::TropicalTufts(_) => "TropicalTufts",
+			Self::TropicalUndergrowth(_) => "TropicalUndergrowth",
+			Self::UnendingJungle(_) => "UnendingJungle",
+			Self::Vineyard(_) => "Vineyard",
+			Self::WanderingAcacia(_) => "WanderingAcacia",
+			Self::WildGrass(_) => "WildGrass",
+		}
+	}
+	pub fn woody_lod(&self) -> Option<vegetation_groves::grove::WoodyGroveLod> {
+		match self {
+			Self::Alpine(g) => Some(g.woody_lod()),
+			Self::AridConiferSapling(g) => Some(g.woody_lod()),
+			Self::BushScrub(g) => Some(g.woody_lod()),
+			Self::ChristmasTaiga(g) => Some(g.woody_lod()),
+			Self::ConiferMassives(g) => Some(g.woody_lod()),
+			Self::ConiferSapling(g) => Some(g.woody_lod()),
+			Self::DateGrove(g) => Some(g.woody_lod()),
+			Self::Dryland(g) => Some(g.woody_lod()),
+			Self::ForlornSavanna(g) => Some(g.woody_lod()),
+			Self::GoettingenFollow(g) => Some(g.woody_lod()),
+			Self::HighBush(g) => Some(g.woody_lod()),
+			Self::JerrysChaparral(g) => Some(g.woody_lod()),
+			Self::JungleLowerMassives(g) => Some(g.woody_lod()),
+			Self::JungleMassives(g) => Some(g.woody_lod()),
+			Self::Leeward(g) => Some(g.woody_lod()),
+			Self::LevantineScrub(g) => Some(g.woody_lod()),
+			Self::LowBush(g) => Some(g.woody_lod()),
+			Self::Orchard(g) => Some(g.woody_lod()),
+			Self::PalmShade(g) => Some(g.woody_lod()),
+			Self::RiparianGeneral(g) => Some(g.woody_lod()),
+			Self::RiparianMix(g) => Some(g.woody_lod()),
+			Self::RiverineGreen(g) => Some(g.woody_lod()),
+			Self::RollingOaks(g) => Some(g.woody_lod()),
+			Self::Shamanhome(g) => Some(g.woody_lod()),
+			Self::SpottyBushes(g) => Some(g.woody_lod()),
+			Self::Storytellers(g) => Some(g.woody_lod()),
+			Self::StrangeOasis(g) => Some(g.woody_lod()),
+			Self::TemperateLowerMassives(g) => Some(g.woody_lod()),
+			Self::TemperateMassives(g) => Some(g.woody_lod()),
+			Self::TradeWinds(g) => Some(g.woody_lod()),
+			Self::TropicalThicket(g) => Some(g.woody_lod()),
+			Self::TropicalUndergrowth(g) => Some(g.woody_lod()),
+			Self::UnendingJungle(g) => Some(g.woody_lod()),
+			Self::Vineyard(g) => Some(g.woody_lod()),
+			Self::WanderingAcacia(g) => Some(g.woody_lod()),
+			_ => None,
+		}
+	}
+	pub fn plant_list_identity(&self) -> Option<usize> {
+		match self {
+			Self::Alpine(g) => Some(g.plant_list_identity()),
+			Self::AridConiferSapling(g) => Some(g.plant_list_identity()),
+			Self::BushScrub(g) => Some(g.plant_list_identity()),
+			Self::ChristmasTaiga(g) => Some(g.plant_list_identity()),
+			Self::ConiferMassives(g) => Some(g.plant_list_identity()),
+			Self::ConiferSapling(g) => Some(g.plant_list_identity()),
+			Self::DateGrove(g) => Some(g.plant_list_identity()),
+			Self::Dryland(g) => Some(g.plant_list_identity()),
+			Self::ForlornSavanna(g) => Some(g.plant_list_identity()),
+			Self::GoettingenFollow(g) => Some(g.plant_list_identity()),
+			Self::HighBush(g) => Some(g.plant_list_identity()),
+			Self::JerrysChaparral(g) => Some(g.plant_list_identity()),
+			Self::JungleLowerMassives(g) => Some(g.plant_list_identity()),
+			Self::JungleMassives(g) => Some(g.plant_list_identity()),
+			Self::Leeward(g) => Some(g.plant_list_identity()),
+			Self::LevantineScrub(g) => Some(g.plant_list_identity()),
+			Self::LowBush(g) => Some(g.plant_list_identity()),
+			Self::Orchard(g) => Some(g.plant_list_identity()),
+			Self::PalmShade(g) => Some(g.plant_list_identity()),
+			Self::RiparianGeneral(g) => Some(g.plant_list_identity()),
+			Self::RiparianMix(g) => Some(g.plant_list_identity()),
+			Self::RiverineGreen(g) => Some(g.plant_list_identity()),
+			Self::RollingOaks(g) => Some(g.plant_list_identity()),
+			Self::Shamanhome(g) => Some(g.plant_list_identity()),
+			Self::SpottyBushes(g) => Some(g.plant_list_identity()),
+			Self::Storytellers(g) => Some(g.plant_list_identity()),
+			Self::StrangeOasis(g) => Some(g.plant_list_identity()),
+			Self::TemperateLowerMassives(g) => Some(g.plant_list_identity()),
+			Self::TemperateMassives(g) => Some(g.plant_list_identity()),
+			Self::TradeWinds(g) => Some(g.plant_list_identity()),
+			Self::TropicalThicket(g) => Some(g.plant_list_identity()),
+			Self::TropicalUndergrowth(g) => Some(g.plant_list_identity()),
+			Self::UnendingJungle(g) => Some(g.plant_list_identity()),
+			Self::Vineyard(g) => Some(g.plant_list_identity()),
+			Self::WanderingAcacia(g) => Some(g.plant_list_identity()),
+			_ => None,
+		}
+	}
+	pub fn visit_posed_plants<V: vegetation_groves::grove::PosedPlantVisitor<Output = ()>>(
+		&self,
+		visitor: &mut V,
+	) -> bool {
+		match self {
+			Self::Alpine(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::AridConiferSapling(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::BushScrub(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::ChristmasTaiga(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::ConiferMassives(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::ConiferSapling(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::DateGrove(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::Dryland(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::ForlornSavanna(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::GoettingenFollow(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::HighBush(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::JerrysChaparral(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::JungleLowerMassives(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::JungleMassives(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::Leeward(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::LevantineScrub(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::LowBush(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::Orchard(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::PalmShade(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::RiparianGeneral(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::RiparianMix(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::RiverineGreen(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::RollingOaks(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::Shamanhome(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::SpottyBushes(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::Storytellers(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::StrangeOasis(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::TemperateLowerMassives(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::TemperateMassives(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::TradeWinds(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::TropicalThicket(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::TropicalUndergrowth(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::UnendingJungle(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::Vineyard(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			Self::WanderingAcacia(g) => {
+				g.visit_posed_plants(visitor);
+				true
+			}
+			_ => false,
+		}
+	}
+	pub fn proxy_stick_nodes(&self, level: LodSceneLevel) -> Vec<vegetation_components::StickNode> {
+		use vegetation_components::VegetationComponents;
+		match_forest_grove_tile!(self, g => g.stick_nodes_for_level(level).flatten())
+	}
+	pub fn proxy_foliage_nodes(
+		&self,
+		level: LodSceneLevel,
+	) -> Vec<vegetation_components::FoliageNode> {
+		use vegetation_components::VegetationComponents;
+		match_forest_grove_tile!(self, g => g.foliage_nodes_for_level(level).flatten())
+	}
+	pub fn structural_lod(&self) -> Option<vegetation_components::StructuralLod> {
+		use vegetation_components::VegetationComponents;
+		match_forest_grove_tile!(self, g => g.structural_lod())
+	}
+
 	pub fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		match_forest_grove_tile!(self, g => g.scene_lod_level(lod_ref))
 	}

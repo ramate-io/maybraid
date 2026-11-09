@@ -26,10 +26,9 @@ use super::{
 use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 use crate::grove::{
 	canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
-	frond_material_from_palette, grove_structural_footprint, nest_flattened_plant_chunk,
-	placement_noise, remixed_bush_plant, remixed_sbs_plant, stick_material_from_palette,
-	unit_build_noise, CanopyProxySite, FlatTerrainSample, FlattenedPlantList, GroveCellVariant,
-	GroveExtent, GrovePreviewParams,
+	frond_material_from_palette, grove_structural_footprint, placement_noise, remixed_bush_plant,
+	remixed_sbs_plant, stick_material_from_palette, unit_build_noise, CanopyProxySite,
+	FlatTerrainSample, FlattenedPlantList, GroveCellVariant, GroveExtent, GrovePreviewParams,
 };
 
 /// Authoring / CLI parameters for Levantine Scrub.
@@ -153,62 +152,7 @@ impl LevantineScrub {
 
 	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<SceneChunk> {
 		FlattenedPlantList::capture(&self.plants, lod_ref).nest_chunks(move |plant, plant_lod| {
-			match &plant.kind {
-				LevantineScrubKind::Rory(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-				LevantineScrubKind::Vase(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-				LevantineScrubKind::Bush(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-				LevantineScrubKind::Torch(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-				LevantineScrubKind::Oak(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-				LevantineScrubKind::Hedge(t) => nest_flattened_plant_chunk(
-					Arc::clone(t),
-					plant.placement,
-					&plant.stick_material,
-					&plant.ball_material,
-					&plant.frond_material,
-					plant_lod,
-					level,
-				),
-			}
+			crate::grove::nest_posed_plant(plant, plant_lod, level)
 		})
 	}
 
@@ -323,3 +267,52 @@ crate::impl_woody_grove_lod!(LevantineScrub, WOODY_LOD, trunks);
 
 #[cfg(test)]
 mod tests;
+
+impl crate::grove::PosedGrovePlant for LevantineScrubPlant {
+	fn visit<V: crate::grove::PosedPlantVisitor>(&self, visitor: &mut V) -> V::Output {
+		match &self.kind {
+			LevantineScrubKind::Rory(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+			LevantineScrubKind::Vase(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+			LevantineScrubKind::Bush(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+			LevantineScrubKind::Torch(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+			LevantineScrubKind::Oak(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+			LevantineScrubKind::Hedge(t) => visitor.plant(
+				Arc::clone(t),
+				self.placement,
+				&self.stick_material,
+				&self.ball_material,
+				&self.frond_material,
+			),
+		}
+	}
+}

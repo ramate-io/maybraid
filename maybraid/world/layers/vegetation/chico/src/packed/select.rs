@@ -8,9 +8,6 @@ use bevy::render::view::{ExtractedView, RetainedViewEntity};
 use lod::LodSceneLevel;
 use std::collections::HashMap;
 use vegetation_components::StructuralLod;
-use vegetation_groves::orchard::{
-	ORCHARD_STRUCTURAL_HIGH_FACTOR, ORCHARD_STRUCTURAL_LOW_FACTOR, ORCHARD_STRUCTURAL_MEDIUM_FACTOR,
-};
 
 #[derive(Resource, Default)]
 pub struct PackedViewSelection {
@@ -19,15 +16,8 @@ pub struct PackedViewSelection {
 	pub culled_cells: usize,
 }
 
-pub fn select_band(center: Vec3, radius: f32, viewer: Vec3) -> LodSceneLevel {
-	StructuralLod::new(center, radius)
-		.with_factors(
-			ORCHARD_STRUCTURAL_HIGH_FACTOR,
-			ORCHARD_STRUCTURAL_MEDIUM_FACTOR,
-			ORCHARD_STRUCTURAL_LOW_FACTOR,
-		)
-		.with_preserve_ultra_low(true)
-		.level_for(&Transform::from_translation(viewer))
+pub fn select_band(band: StructuralLod, viewer: Vec3) -> LodSceneLevel {
+	band.level_for(&Transform::from_translation(viewer))
 }
 
 pub fn select_packed_views(
@@ -77,7 +67,7 @@ pub fn select_packed_views(
 			};
 			selection.levels.insert(
 				(view.retained_view_entity, cell),
-				select_band(payload.center, payload.radius, viewer),
+				select_band(payload.structural_lod, viewer),
 			);
 			selection.visible_cells += 1;
 		}

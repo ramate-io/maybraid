@@ -176,6 +176,14 @@ macro_rules! impl_woody_grove_lod {
 		$crate::impl_woody_grove_lod!(@emit $Grove, $lod, trunks, low_nodes);
 	};
 	(@emit $Grove:ty, $lod:expr, $trunks:ident, $low:ident) => {
+        impl $Grove {
+            pub fn woody_lod(&self) -> $crate::grove::WoodyGroveLod { $lod }
+            /// Stable revision identity is the retained grown plant list, never camera state.
+            pub fn plant_list_identity(&self) -> usize { std::sync::Arc::as_ptr(&self.plants) as *const () as usize }
+            pub fn visit_posed_plants<V: $crate::grove::PosedPlantVisitor<Output = ()>>(&self, visitor: &mut V) {
+                for plant in self.plants.iter() { $crate::grove::PosedGrovePlant::visit(plant, visitor); }
+            }
+        }
 		impl vegetation_components::VegetationComponents for $Grove {
 			fn stick_nodes_for_level(
 				&self,
