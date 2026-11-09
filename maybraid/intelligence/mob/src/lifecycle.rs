@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use damage::{DespawnAfter, Downed, Health};
 use poi_intelligence::{
-	mix_seed, place_nearby_among, PoiId, PoiInterests, PoiRegistry, PoiSupport, AGENT_SEPARATION,
+	AGENT_SEPARATION, PoiId, PoiInterests, PoiRegistry, PoiSupport, mix_seed, place_nearby_among,
 };
 
 use crate::host::{Mob, MobId};
@@ -165,12 +165,10 @@ pub(crate) fn respawn_mob_members(
 			let Some(member) = roster.get_mut(slot) else {
 				continue;
 			};
-			member.spawn_requested = true;
-			member.health.current = member.health.max;
 			let excluded = member.excluded_pois().to_vec();
 			let last = member.pose;
 			let used = member.replacements_used;
-			let (pose, poi, support, support_y) = policy.placement(
+			let Some((pose, poi, support, support_y)) = policy.placement(
 				transform.translation,
 				last,
 				*id,
@@ -180,7 +178,13 @@ pub(crate) fn respawn_mob_members(
 				&occupied,
 				registry.as_deref(),
 				interests.map(|interests| &interests.0),
-			);
+			) else {
+				// A crowded authored Floor is still pending. Do not consume the
+				// request, heal the slot, or advance its destination history.
+				continue;
+			};
+			member.spawn_requested = true;
+			member.health.current = member.health.max;
 			member.remember_respawn_poi(poi);
 			member.pose = pose;
 			occupied.push(pose);
@@ -212,9 +216,9 @@ impl MobRespawn {
 		occupied: &[Vec3],
 		registry: Option<&PoiRegistry>,
 		interests: Option<&PoiInterests>,
-	) -> (Vec3, Option<PoiId>, PoiSupport, Option<f32>) {
+	) -> Option<(Vec3, Option<PoiId>, PoiSupport, Option<f32>)> {
 		if self.at != MobRespawnAt::Poi {
-			return (spawn_pose(self.at, host, last), None, PoiSupport::Terrain, None);
+			return Some((spawn_pose(self.at, host, last), None, PoiSupport::Terrain, None));
 		}
 		let seed = respawn_seed(mob, slot, generation);
 		let placed = place_nearby_among(
@@ -227,9 +231,9 @@ impl MobRespawn {
 			self.fallback,
 			occupied,
 			AGENT_SEPARATION,
-		);
+		)?;
 		let pose = with_member_height(placed.position, host, last, placed.poi.is_some());
-		(pose, placed.poi, placed.support, placed.poi.map(|_| placed.position.y))
+		Some((pose, placed.poi, placed.support, placed.poi.map(|_| placed.position.y)))
 	}
 
 	pub fn delay_for_slot(self, slot: u16) -> f32 {
@@ -261,9 +265,12 @@ fn schedule_respawn(member: &mut RosterMember, slot: u16, policy: MobRespawn, no
 }
 
 #[cfg(test)]
+mod floor_tests;
+
+#[cfg(test)]
 mod tests {
 	use anyhow::Result;
-	use poi_intelligence::{NearbyFallback, Poi, PoiInterest, PoiKind, DEFAULT_NEARBY_RADIUS};
+	use poi_intelligence::{DEFAULT_NEARBY_RADIUS, NearbyFallback, Poi, PoiInterest, PoiKind};
 
 	use super::*;
 
@@ -309,17 +316,19 @@ mod tests {
 			false,
 		)?;
 		let interests = PoiInterests::one(CAMP);
-		let (pose, poi, support, support_y) = MobRespawn::default().placement(
-			Vec3::ZERO,
-			Vec3::Y,
-			MobId(3),
-			0,
-			1,
-			&[],
-			&[],
-			Some(&registry),
-			Some(&interests),
-		);
+		let (pose, poi, support, support_y) = MobRespawn::default()
+			.placement(
+				Vec3::ZERO,
+				Vec3::Y,
+				MobId(3),
+				0,
+				1,
+				&[],
+				&[],
+				Some(&registry),
+				Some(&interests),
+			)
+			.ok_or_else(|| anyhow::anyhow!("unoccupied Floor POI should be available"))?;
 		assert_eq!(poi, Some(PoiId(21)));
 		assert_eq!(support, PoiSupport::Floor);
 		assert_eq!(support_y, Some(32.0));
@@ -328,15 +337,26 @@ mod tests {
 	}
 
 	#[test]
-	fn poi_respawn_fallback_varies_around_the_host() {
+	fn poi_respawn_fallback_varies_around_the_host() -> Result<()> {
 		let policy = MobRespawn::default();
-		let first = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, &[], &[], None, None).0;
-		let second = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 2, &[], &[], None, None).0;
+		let first = policy
+			.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, &[], &[], None, None)
+			.ok_or_else(|| anyhow::anyhow!("expected Terrain fallback"))?
+			.0;
+		let second = policy
+			.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 2, &[], &[], None, None)
+			.ok_or_else(|| anyhow::anyhow!("expected Terrain fallback"))?
+			.0;
 		assert_ne!(first, second);
-		assert!((policy.fallback.min_radius..=policy.fallback.max_radius)
-			.contains(&first.xz().length()));
-		assert!((policy.fallback.min_radius..=policy.fallback.max_radius)
-			.contains(&second.xz().length()));
+		assert!(
+			(policy.fallback.min_radius..=policy.fallback.max_radius)
+				.contains(&first.xz().length())
+		);
+		assert!(
+			(policy.fallback.min_radius..=policy.fallback.max_radius)
+				.contains(&second.xz().length())
+		);
+		Ok(())
 	}
 
 	#[test]
@@ -352,12 +372,17 @@ mod tests {
 	}
 
 	#[test]
-	fn death_replace_keeps_siblings_apart_on_an_empty_registry() {
+	fn death_replace_keeps_siblings_apart_on_an_empty_registry() -> Result<()> {
 		let policy = MobRespawn::default();
-		let first = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, &[], &[], None, None).0;
+		let first = policy
+			.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, &[], &[], None, None)
+			.ok_or_else(|| anyhow::anyhow!("expected Terrain fallback"))?
+			.0;
 		let second = policy
 			.placement(Vec3::ZERO, Vec3::Y, MobId(3), 1, 1, &[], &[first], None, None)
+			.ok_or_else(|| anyhow::anyhow!("expected separated Terrain fallback"))?
 			.0;
 		assert!((first.xz() - second.xz()).length() >= AGENT_SEPARATION - 1e-3);
+		Ok(())
 	}
 }
