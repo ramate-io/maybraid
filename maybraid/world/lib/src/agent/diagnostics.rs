@@ -1,5 +1,7 @@
 //! Message-driven gameplay evidence, installed only by --agent-diagnostics.
-//! No entity scans, visibility probes, tracing text, or AI mutations.
+//! NPC selection scans only on an explicit snapshot request; no visibility probes or AI mutations.
+
+mod npc;
 
 use avian3d::prelude::{GravityScale, LinearVelocity, Sleeping};
 use bevy::prelude::*;
@@ -19,10 +21,37 @@ pub(super) struct AgentDiagnostics {
 	pub enabled: bool,
 	/// Keep the selected identity through same-frame retirement.
 	pub player: Option<Entity>,
+	pending_npc: Option<(u32, maybraid_agent::AgentNpcSelector)>,
+}
+
+impl AgentDiagnostics {
+	pub(super) fn request_npc_snapshot(
+		&mut self,
+		id: u32,
+		selector: maybraid_agent::AgentNpcSelector,
+	) -> Result<String, String> {
+		if !self.enabled {
+			return Err("diagnostics are off".into());
+		}
+		if self.pending_npc.is_some() {
+			return Err("an NPC snapshot is already pending this frame".into());
+		}
+		if let maybraid_agent::AgentNpcSelector::Nearest { radius } = &selector {
+			if !radius.is_finite() || *radius <= 0.0 || *radius > 100.0 {
+				return Err("radius must be finite and in (0, 100] metres".into());
+			}
+		}
+		if let maybraid_agent::AgentNpcSelector::Entity { entity } = &selector {
+			let bits = entity.parse::<u64>().map_err(|_| "invalid decimal entity bits")?;
+			Entity::try_from_bits(bits).ok_or("invalid entity bits")?;
+		}
+		self.pending_npc = Some((id, selector));
+		Ok("NPC snapshot queued for Last".into())
+	}
 }
 
 pub(super) fn install(app: &mut App) {
-	app.insert_resource(AgentDiagnostics { enabled: true, player: None })
+	app.insert_resource(AgentDiagnostics { enabled: true, player: None, pending_npc: None })
 		.add_systems(
 			PostUpdate,
 			observe_damage
@@ -30,6 +59,7 @@ pub(super) fn install(app: &mut App) {
 				.before(SessionLifecycleSystems::Notify),
 		)
 		.add_systems(Last, observe_shots);
+	npc::install(app);
 }
 
 pub(super) type PlayerVitalsQuery<'w, 's> = Query<

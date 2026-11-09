@@ -3,7 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::command::ScenarioMark;
-use crate::diagnostics::{AgentDiagnosticActor, AgentPlayerVitals};
+use crate::diagnostics::{
+	AgentDiagnosticActor, AgentNpcSelector, AgentNpcSnapshot, AgentPlayerVitals,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -86,6 +88,14 @@ pub enum AgentEventBody {
 	},
 	Diagnostics {
 		enabled: bool,
+	},
+	/// Explicit one-shot NPC evidence, capped at eight actors. Missing state is null.
+	NpcSnapshot {
+		request_id: u32,
+		selector: AgentNpcSelector,
+		player: Option<String>,
+		actors: Vec<AgentNpcSnapshot>,
+		error: Option<String>,
 	},
 	Command {
 		id: u32,

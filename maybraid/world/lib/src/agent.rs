@@ -736,6 +736,19 @@ fn agent_apply_world_ops(
 							);
 							Ok(format!("diagnostics enabled={enabled}"))
 						}
+						DiagnosticCommand::Npcs { radius } => {
+							let (entity, _, _, _, _, _, _) =
+								players.single().map_err(|_| "no single live motor player")?;
+							diagnostics.player = Some(entity);
+							diagnostics.request_npc_snapshot(
+								id,
+								maybraid_agent::AgentNpcSelector::Nearest { radius },
+							)
+						}
+						DiagnosticCommand::Npc { entity } => diagnostics.request_npc_snapshot(
+							id,
+							maybraid_agent::AgentNpcSelector::Entity { entity: entity.to_string() },
+						),
 						DiagnosticCommand::Health(amount) => {
 							let (entity, transform, _, _, _, health, _) =
 								players.single_mut().map_err(|_| "no single live motor player")?;

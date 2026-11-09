@@ -21,7 +21,11 @@ pub use cli::{
 	AGENT_SCRIPT_ENV, AgentArgs, take_agent_args,
 };
 pub use command::{AgentButton, AgentCommand, SCRIPT_API_VERSION, ScenarioMark};
-pub use diagnostics::{AgentDiagnosticActor, AgentPlayerVitals, DiagnosticCommand};
+pub use diagnostics::{
+	AgentDiagnosticActor, AgentNpcCombat, AgentNpcGroundHit, AgentNpcGroundHits, AgentNpcSelector,
+	AgentNpcSnapshot, AgentNpcSpotContact, AgentNpcSupport, AgentNpcTrajectory, AgentNpcWeapon,
+	AgentPlayerVitals, DiagnosticCommand,
+};
 pub use event::{AgentEvent, AgentEventBody, CommandStatus};
 pub use inventory::{AgentMatcher, InventoryMatcher, InventoryObservation};
 pub use io::LineInbox;
