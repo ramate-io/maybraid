@@ -24,16 +24,14 @@ fn forget_invalid_contacts(
 	}
 }
 
-fn collect_due_spotters(
+fn collect_due_discoverers(
 	now: f32,
 	spotters: &mut Query<(Entity, &mut SpottingUser, Option<&mut IntelligenceLod>)>,
 	due_entities: &mut IntelligenceDueEntities,
 ) {
 	due_entities.clear();
 	for (entity, user, _) in spotters.iter_mut() {
-		let due = now >= user.next_discovery_at
-			|| user.contacts.values().any(|contact| contact.is_due(now));
-		if due {
+		if now >= user.next_discovery_at {
 			due_entities.push(entity);
 		}
 	}
@@ -58,13 +56,12 @@ fn schedule_discovery(
 	band: IntelligenceBand,
 	spotter_entity: Entity,
 	fair: Option<Entity>,
-) -> (bool, f32, usize) {
+) -> (bool, f32) {
 	let discovery_due = now >= user.next_discovery_at;
 	let next_interval = next_discovery_interval(user);
 	let run_discovery =
 		discovery_due && (band != IntelligenceBand::Far || Some(spotter_entity) == fair);
-	let discovery_sample_cursor = if run_discovery { user.advance_sample_cursor() } else { 0 };
-	(run_discovery, next_interval, discovery_sample_cursor)
+	(run_discovery, next_interval)
 }
 
 fn advance_discovery_clock(
@@ -101,8 +98,9 @@ impl ProbeBatch {
 		user: &mut SpottingUser,
 		now: f32,
 		observer: Vec3,
-		discovery_sample_cursor: usize,
+		discovery: bool,
 		band: IntelligenceBand,
+		sample_cap: usize,
 		spatial: &SpatialQuery,
 		fixed_filter: &SpatialQueryFilter,
 		subjects: &Query<(Entity, &SpotSubject, Option<&avian3d::prelude::LinearVelocity>)>,
@@ -113,7 +111,7 @@ impl ProbeBatch {
 		self.ranked.extend(self.candidates.values().map(|candidate| candidate.rank));
 		SpotCandidate::rank(&mut self.ranked);
 		let candidate_budget = band.scale_count(user.settings.candidate_budget);
-		let vision_samples = band.scale_count(user.settings.vision_samples);
+		let vision_samples = band.scale_count(user.settings.vision_samples).min(sample_cap);
 		SpotCandidate::apply_budget(&mut self.ranked, candidate_budget);
 		SpotCandidate::allocate_sample_budget_into(
 			&self.ranked,
@@ -121,6 +119,9 @@ impl ProbeBatch {
 			vision_samples,
 			&mut self.grants,
 		);
+		let allocated = self.grants.iter().sum();
+		let discovery_sample_cursor =
+			if discovery && allocated > 0 { user.advance_sample_cursor() } else { 0 };
 		probe_candidate_visibility(
 			user,
 			now,
@@ -134,124 +135,164 @@ impl ProbeBatch {
 			subjects,
 			transforms,
 		);
-		self.grants.iter().sum()
+		allocated
 	}
 }
 
-/// Discover up to D observers, then refresh up to R additional retained-contact
-/// observers. Each observer uses its existing candidate and ray-sample caps.
-/// The private service round advances independently of shared intelligence skips.
-pub fn observe_spotting(
+/// Shared service ledger for one Update, reset by [`prepare_spotting`].
+/// Plugin registration initializes it; manual registration must do the same.
+#[derive(Resource, Default)]
+#[doc(hidden)]
+pub struct SpottingFrameState {
+	observed: HashSet<Entity>,
+	discovery_observers: usize,
+	discovery_samples: usize,
+	retained_observers: usize,
+	retained_samples: usize,
+}
+
+/// Expire contacts and start a fresh bounded service ledger, independently of
+/// whether discovery or retained budgets are zero in this Update.
+pub fn prepare_spotting(
+	time: Res<Time>,
+	mut frame: ResMut<SpottingFrameState>,
+	mut spotters: Query<(Entity, &mut SpottingUser, Option<&mut IntelligenceLod>)>,
+	subjects: Query<(Entity, &SpotSubject, Option<&avian3d::prelude::LinearVelocity>)>,
+) {
+	let _span = trace_span!(target: "maybraid.spotting.profile", "spotting_prepare").entered();
+	frame.observed.clear();
+	frame.discovery_observers = 0;
+	frame.discovery_samples = 0;
+	frame.retained_observers = 0;
+	frame.retained_samples = 0;
+	forget_invalid_contacts(time.elapsed_secs(), &mut spotters, &subjects);
+}
+
+/// Bounded broadphase/hint discovery, including the observer's due contacts.
+/// Must run after Prepare and before Refresh within the parent Observe set.
+pub fn discover_spotting(
 	spatial: SpatialQuery,
 	time: Res<Time>,
 	priority: Res<IntelligencePriority>,
 	limits: Res<SpottingObserveLimits>,
+	mut frame: ResMut<SpottingFrameState>,
 	mut spotters: Query<(Entity, &mut SpottingUser, Option<&mut IntelligenceLod>)>,
 	subjects: Query<(Entity, &SpotSubject, Option<&avian3d::prelude::LinearVelocity>)>,
 	parents: Query<&ChildOf>,
 	transforms: TransformHelper,
 	mut due_entities: Local<IntelligenceDueEntities>,
 	mut batch: Local<ProbeBatch>,
-	mut discovered: Local<HashSet<Entity>>,
-	mut retained_round: Local<VecDeque<Entity>>,
 ) {
 	let now = time.elapsed_secs();
 	let animated_filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Animated);
 	let fixed_filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
-
-	// Cleanup is independent of both budgets, including when either is zero.
-	forget_invalid_contacts(now, &mut spotters, &subjects);
-	collect_due_spotters(now, &mut spotters, &mut due_entities);
+	collect_due_discoverers(now, &mut spotters, &mut due_entities);
 	let due = due_entities.finish(&priority);
 	let fair = fair_far_spotter(due, &mut spotters);
-	discovered.clear();
-	{
-		let span = trace_span!(
-			target: "maybraid.spotting.profile",
-			"spotting_discovery",
-			due_observers = due.len(),
-			observers = bevy::log::tracing::field::Empty,
-			allocated_samples = bevy::log::tracing::field::Empty
+	let span = trace_span!(target: "maybraid.spotting.profile", "spotting_discovery",
+		due_observers = due.len(), observer_cap = limits.max_observers_per_tick,
+		sample_cap = limits.max_discovery_samples_per_tick);
+	let _guard = span.enter();
+	for &entity in due {
+		let remaining =
+			limits.max_discovery_samples_per_tick.saturating_sub(frame.discovery_samples);
+		if frame.discovery_observers >= limits.max_observers_per_tick || remaining == 0 {
+			break;
+		}
+		if frame.observed.contains(&entity) {
+			continue;
+		}
+		let Ok((_, mut user, mut lod)) = spotters.get_mut(entity) else { continue };
+		let band = IntelligenceLod::band_or_near(lod.as_deref());
+		let Ok(transform) = transforms.compute_global_transform(entity) else { continue };
+		let observer = transform.translation() + transform.rotation() * user.eye_offset;
+		let discovery_due = now >= user.next_discovery_at;
+		let (run_discovery, interval) = schedule_discovery(now, &mut user, band, entity, fair);
+		advance_discovery_clock(now, &mut user, band, run_discovery, discovery_due, interval);
+		if !run_discovery {
+			continue;
+		}
+		frame.discovery_observers += 1;
+		frame.observed.insert(entity);
+		batch.candidates.clear();
+		discover_subjects(
+			entity,
+			&user,
+			now,
+			observer,
+			&spatial,
+			&animated_filter,
+			&subjects,
+			&parents,
+			&transforms,
+			&mut batch.candidates,
 		);
-		let _guard = span.enter();
-		let mut allocated_samples = 0usize;
-		for &spotter_entity in due {
-			if discovered.len() == limits.max_observers_per_tick {
-				break;
-			}
-			let Ok((_, mut user, mut lod)) = spotters.get_mut(spotter_entity) else {
-				continue;
-			};
-			let band = IntelligenceLod::band_or_near(lod.as_deref());
-			let Ok(transform) = transforms.compute_global_transform(spotter_entity) else {
-				continue;
-			};
-			let observer = transform.translation() + transform.rotation() * user.eye_offset;
-			let discovery_due = now >= user.next_discovery_at;
-			let (run_discovery, interval, cursor) =
-				schedule_discovery(now, &mut user, band, spotter_entity, fair);
-			advance_discovery_clock(now, &mut user, band, run_discovery, discovery_due, interval);
-			if !run_discovery {
-				continue;
-			}
-			discovered.insert(spotter_entity);
-			batch.candidates.clear();
-			discover_subjects(
-				spotter_entity,
-				&user,
-				now,
-				observer,
-				&spatial,
-				&animated_filter,
-				&subjects,
-				&parents,
-				&transforms,
-				&mut batch.candidates,
-			);
-			allocated_samples += batch.execute(
-				&mut user,
-				now,
-				observer,
-				cursor,
-				band,
-				&spatial,
-				&fixed_filter,
-				&subjects,
-				&transforms,
-			);
-			if let Some(lod) = lod.as_deref_mut() {
-				if lod.skips != 0 {
-					lod.skips = 0;
-				}
+		frame.discovery_samples += batch.execute(
+			&mut user,
+			now,
+			observer,
+			true,
+			band,
+			remaining,
+			&spatial,
+			&fixed_filter,
+			&subjects,
+			&transforms,
+		);
+		if let Some(lod) = lod.as_deref_mut() {
+			if lod.skips != 0 {
+				lod.skips = 0;
 			}
 		}
-		span.record("observers", discovered.len());
-		span.record("allocated_samples", allocated_samples);
 	}
+	let _counts = trace_span!(target: "maybraid.spotting.profile", "spotting_discovery_grants",
+        observers = frame.discovery_observers, allocated_samples = frame.discovery_samples)
+	.entered();
+}
 
-	// Snapshot once per round, in current priority order. Do not refill a drained
-	// round in this tick: stable priority prefixes cannot keep re-entering ahead
-	// of actors already waiting. Stale/despawned entries are rechecked on pop.
-	if retained_round.is_empty() && limits.max_retained_observers_per_tick > 0 {
-		retained_round.extend(due.iter().copied().filter(|entity| {
-			spotters
-				.get_mut(*entity)
-				.is_ok_and(|(_, user, _)| user.contacts.values().any(|contact| contact.is_due(now)))
-		}));
+/// Refresh only retained contacts in a persistent fair round. The independent
+/// observer/sample caps reset each Update; elapsed time never earns extra credit.
+pub fn refresh_spotting(
+	spatial: SpatialQuery,
+	time: Res<Time>,
+	priority: Res<IntelligencePriority>,
+	limits: Res<SpottingObserveLimits>,
+	mut frame: ResMut<SpottingFrameState>,
+	mut spotters: Query<(Entity, &mut SpottingUser, Option<&mut IntelligenceLod>)>,
+	subjects: Query<(Entity, &SpotSubject, Option<&avian3d::prelude::LinearVelocity>)>,
+	transforms: TransformHelper,
+	mut due_entities: Local<IntelligenceDueEntities>,
+	mut batch: Local<ProbeBatch>,
+	mut retained_round: Local<VecDeque<Entity>>,
+) {
+	let now = time.elapsed_secs();
+	if limits.max_retained_observers_per_tick == 0 || limits.max_retained_samples_per_tick == 0 {
+		return;
 	}
-	let span = trace_span!(
-		target: "maybraid.spotting.profile",
-		"spotting_retained_refresh",
-		queued_observers = retained_round.len(),
-		observers = bevy::log::tracing::field::Empty,
-		allocated_samples = bevy::log::tracing::field::Empty
-	);
+	if retained_round.is_empty() {
+		due_entities.clear();
+		for (entity, user, _) in &mut spotters {
+			if !frame.observed.contains(&entity)
+				&& user.contacts.values().any(|contact| contact.is_due(now))
+			{
+				due_entities.push(entity);
+			}
+		}
+		retained_round.extend(due_entities.finish(&priority).iter().copied());
+	}
+	let span = trace_span!(target: "maybraid.spotting.profile", "spotting_retained_refresh",
+		queued_observers = retained_round.len(), observer_cap = limits.max_retained_observers_per_tick,
+		sample_cap = limits.max_retained_samples_per_tick);
 	let _guard = span.enter();
-	let mut refreshed = 0usize;
-	let mut allocated_samples = 0usize;
-	while refreshed < limits.max_retained_observers_per_tick {
+	let fixed_filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
+	while frame.retained_observers < limits.max_retained_observers_per_tick {
+		let remaining = limits.max_retained_samples_per_tick.saturating_sub(frame.retained_samples);
+		// Preserve the unserved head when this Update's sample credit is exhausted.
+		if remaining == 0 {
+			break;
+		}
 		let Some(entity) = retained_round.pop_front() else { break };
-		if discovered.contains(&entity) {
+		if frame.observed.contains(&entity) {
 			continue;
 		}
 		let Ok((_, mut user, lod)) = spotters.get_mut(entity) else { continue };
@@ -262,21 +303,24 @@ pub fn observe_spotting(
 		let observer = transform.translation() + transform.rotation() * user.eye_offset;
 		let band = IntelligenceLod::band_or_near(lod.as_deref());
 		batch.candidates.clear();
-		allocated_samples += batch.execute(
+		frame.retained_samples += batch.execute(
 			&mut user,
 			now,
 			observer,
-			0,
+			false,
 			band,
+			remaining,
 			&spatial,
 			&fixed_filter,
 			&subjects,
 			&transforms,
 		);
-		refreshed += 1;
+		frame.retained_observers += 1;
+		frame.observed.insert(entity);
 	}
-	span.record("observers", refreshed);
-	span.record("allocated_samples", allocated_samples);
+	let _counts = trace_span!(target: "maybraid.spotting.profile", "spotting_retained_grants",
+        observers = frame.retained_observers, allocated_samples = frame.retained_samples)
+	.entered();
 }
 
 #[cfg(test)]
@@ -388,6 +432,7 @@ mod tests {
 		app.insert_resource(SpottingObserveLimits {
 			max_observers_per_tick: 1,
 			max_retained_observers_per_tick: 0,
+			..default()
 		});
 		let subject = spawn_animated_subject(&mut app, Vec3::X * 4.0);
 		let far = app
@@ -430,6 +475,7 @@ mod tests {
 		app.insert_resource(SpottingObserveLimits {
 			max_observers_per_tick: 1,
 			max_retained_observers_per_tick: 0,
+			..default()
 		});
 		let subject = spawn_animated_subject(&mut app, Vec3::X * 4.0);
 		let far = app
@@ -461,6 +507,7 @@ mod tests {
 		app.insert_resource(SpottingObserveLimits {
 			max_observers_per_tick: 1,
 			max_retained_observers_per_tick: 0,
+			..default()
 		});
 		let stale = spawn_subject(&mut app, Vec3::X * 3.0);
 		let keep = spawn_subject(&mut app, Vec3::X * 5.0);
@@ -533,3 +580,7 @@ mod tests {
 #[cfg(test)]
 #[path = "observe/retained_tests.rs"]
 mod retained_tests;
+
+#[cfg(test)]
+#[path = "observe/cadence_tests.rs"]
+mod cadence_tests;

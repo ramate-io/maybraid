@@ -19,8 +19,15 @@ pub(crate) fn sync_spotted_combat_targets(
 	mut combatants: Query<(&Transform, &SpottingUser, &FirearmIntelligence, &mut CombatTargeting)>,
 ) {
 	for (transform, spotting, firearm, mut targeting) in &mut combatants {
-		targeting.memory_secs = firearm.settings.target_spotting_memory.max(0.0);
-		targeting.algebra.continuity = firearm.settings.focus.clamp(0.0, 1.0) * 8.0;
+		let memory_secs = firearm.settings.target_spotting_memory.max(0.0);
+		let continuity = firearm.settings.focus.clamp(0.0, 1.0) * 8.0;
+		if targeting.memory_secs != memory_secs || targeting.algebra.continuity != continuity {
+			targeting.memory_secs = memory_secs;
+			targeting.algebra.continuity = continuity;
+			// Previously contact upserts implicitly dirtied these policy changes.
+			// Equal contact snapshots must still recompute rank/expiry when policy changes.
+			targeting.dirty = true;
+		}
 		let forgotten: Vec<Entity> = targeting
 			.memory
 			.keys()
@@ -46,14 +53,21 @@ pub(crate) fn sync_spotted_combat_targets(
 				targeting.remove_source(contact.subject, TargetSource::SPOTTING);
 				continue;
 			}
-			targeting.upsert_contact(CombatContact {
+			let observed = CombatContact {
 				subject: contact.subject,
 				position: contact.position,
 				movement_vector: contact.velocity,
 				visible_point: contact.visible_point,
 				visible_head: contact.visible_head,
 				last_spotted_at: contact.last_success_at,
-			});
+			};
+			if targeting.contact(contact.subject) != Some(&observed) {
+				targeting.upsert_contact(observed);
+			} else {
+				// Restore this adapter's membership if another tactic transition
+				// removed it, without dirtying an unchanged target every Update.
+				targeting.include(contact.subject, TargetSource::SPOTTING);
+			}
 			let delta = contact.position - transform.translation;
 			let distance = Vec2::new(delta.x, delta.z).length();
 			let previous = targeting
@@ -74,8 +88,8 @@ mod tests {
 	use spotting_intelligence::{InterestLayers, SpotDirective, SpottedContact, SpottingSettings};
 
 	#[test]
-	fn spotted_contacts_enter_weighted_combat_memory(
-	) -> Result<(), bevy::ecs::system::RunSystemError> {
+	fn spotted_contacts_enter_weighted_combat_memory()
+	-> Result<(), bevy::ecs::system::RunSystemError> {
 		let target = Entity::from_bits(7);
 		let mut world = World::new();
 		let mut spotting =
@@ -97,15 +111,17 @@ mod tests {
 		world.run_system_once(sync_spotted_combat_targets)?;
 		let targeting = world.query::<&CombatTargeting>().single(&world)?;
 		assert!(targeting.contact(target).is_none());
-		assert!(targeting
-			.active_target(target)
-			.is_some_and(|target| target.has_source(TargetSource::ENEMYSHIP)));
+		assert!(
+			targeting
+				.active_target(target)
+				.is_some_and(|target| target.has_source(TargetSource::ENEMYSHIP))
+		);
 		Ok(())
 	}
 
 	#[test]
-	fn disabled_targeting_does_not_admit_spotted_contacts(
-	) -> Result<(), bevy::ecs::system::RunSystemError> {
+	fn disabled_targeting_does_not_admit_spotted_contacts()
+	-> Result<(), bevy::ecs::system::RunSystemError> {
 		let target = Entity::from_bits(7);
 		let mut world = World::new();
 		let mut spotting =
@@ -122,15 +138,17 @@ mod tests {
 		world.run_system_once(sync_spotted_combat_targets)?;
 		let targeting = world.query::<&CombatTargeting>().single(&world)?;
 		assert!(targeting.contact(target).is_none());
-		assert!(targeting
-			.active_target(target)
-			.is_some_and(|target| target.has_source(TargetSource::ENEMYSHIP)));
+		assert!(
+			targeting
+				.active_target(target)
+				.is_some_and(|target| target.has_source(TargetSource::ENEMYSHIP))
+		);
 		Ok(())
 	}
 
 	#[test]
-	fn visible_allies_do_not_enter_the_actionable_target_set(
-	) -> Result<(), bevy::ecs::system::RunSystemError> {
+	fn visible_allies_do_not_enter_the_actionable_target_set()
+	-> Result<(), bevy::ecs::system::RunSystemError> {
 		let enemy = Entity::from_bits(7);
 		let ally = Entity::from_bits(8);
 		let mut world = World::new();
@@ -158,8 +176,8 @@ mod tests {
 	}
 
 	#[test]
-	fn shared_membership_can_admit_a_later_sighting(
-	) -> Result<(), bevy::ecs::system::RunSystemError> {
+	fn shared_membership_can_admit_a_later_sighting()
+	-> Result<(), bevy::ecs::system::RunSystemError> {
 		let target = Entity::from_bits(7);
 		let mut world = World::new();
 		let mut spotting =
@@ -176,10 +194,70 @@ mod tests {
 		world.run_system_once(sync_spotted_combat_targets)?;
 		let targeting = world.query::<&CombatTargeting>().single(&world)?;
 		assert!(targeting.contact(target).is_some());
-		assert!(targeting
-			.active_target(target)
-			.is_some_and(|target| target.has_source(TargetSource::SHARED)
-				&& target.has_source(TargetSource::SPOTTING)));
+		assert!(
+			targeting
+				.active_target(target)
+				.is_some_and(|target| target.has_source(TargetSource::SHARED)
+					&& target.has_source(TargetSource::SPOTTING))
+		);
+		Ok(())
+	}
+	#[test]
+	fn unchanged_contact_keeps_membership_and_updates_observer_factors_and_settings()
+	-> anyhow::Result<()> {
+		let target = Entity::from_bits(7);
+		let mut world = World::new();
+		let mut spotting = SpottingUser::default();
+		spotting.contacts.insert(
+			target,
+			SpottedContact::new(target, Vec3::X * 4.0, Vec3::ZERO, Vec3::X * 4.0, None, 1.0, 0.125),
+		);
+		let mut targeting = CombatTargeting::default();
+		targeting.include(target, TargetSource::ENEMYSHIP);
+		let observer = world
+			.spawn((Transform::default(), spotting, FirearmIntelligence::default(), targeting))
+			.id();
+		world
+			.run_system_once(sync_spotted_combat_targets)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		if let Some(mut targeting) = world.get_mut::<CombatTargeting>(observer) {
+			targeting.rebalance(1.0);
+		}
+		world
+			.run_system_once(sync_spotted_combat_targets)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<CombatTargeting>(observer).is_some_and(|targeting| !targeting.dirty));
+		if let Some(mut brain) = world.get_mut::<FirearmIntelligence>(observer) {
+			brain.settings.focus = 1.0;
+			brain.settings.target_spotting_memory = 7.0;
+		}
+		world
+			.run_system_once(sync_spotted_combat_targets)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<CombatTargeting>(observer).is_some_and(|targeting| targeting.dirty));
+		if let Some(mut targeting) = world.get_mut::<CombatTargeting>(observer) {
+			targeting.rebalance(1.0);
+		}
+		if let Some(mut transform) = world.get_mut::<Transform>(observer) {
+			transform.translation = Vec3::X * 2.0;
+		}
+		if let Some(mut targeting) = world.get_mut::<CombatTargeting>(observer) {
+			targeting.remove_source(target, TargetSource::SPOTTING);
+			targeting.rebalance(1.0);
+		}
+		world
+			.run_system_once(sync_spotted_combat_targets)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let targeting = world
+			.get::<CombatTargeting>(observer)
+			.ok_or_else(|| anyhow::anyhow!("missing targeting"))?;
+		assert_eq!(targeting.memory_secs, 7.0);
+		assert_eq!(targeting.algebra.continuity, 8.0);
+		assert_eq!(targeting.contact(target).map(|contact| contact.last_spotted_at), Some(1.0));
+		assert!(targeting.active_target(target).is_some_and(|active| {
+			active.has_source(TargetSource::SPOTTING) && active.factors.bias == -2.0
+		}));
+		assert!(targeting.dirty);
 		Ok(())
 	}
 }
