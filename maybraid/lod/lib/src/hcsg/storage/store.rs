@@ -18,6 +18,66 @@ use super::super::context::GenerationScheme;
 use super::super::node_store::{NodeStore, DEFAULT_BASE_SCALE};
 use super::{Busy, HcsgStorage, HcsgValue};
 
+#[cfg(feature = "generation-tracing")]
+type ReadGuard<'a, T> = lod_generation_diagnostics::MeasuredGuard<RwLockReadGuard<'a, T>>;
+#[cfg(not(feature = "generation-tracing"))]
+type ReadGuard<'a, T> = RwLockReadGuard<'a, T>;
+#[cfg(feature = "generation-tracing")]
+type WriteGuard<'a, T> = lod_generation_diagnostics::MeasuredGuard<RwLockWriteGuard<'a, T>>;
+#[cfg(not(feature = "generation-tracing"))]
+type WriteGuard<'a, T> = RwLockWriteGuard<'a, T>;
+
+fn read_lock<'a, T>(lock: &'a RwLock<T>, _kind: &'static str) -> ReadGuard<'a, T> {
+	#[cfg(feature = "generation-tracing")]
+	let wait = lod_generation_diagnostics::LockWait::new(_kind);
+	let guard = lock.read().unwrap_or_else(PoisonError::into_inner);
+	#[cfg(feature = "generation-tracing")]
+	{
+		wait.acquired(guard)
+	}
+	#[cfg(not(feature = "generation-tracing"))]
+	{
+		guard
+	}
+}
+fn write_lock<'a, T>(lock: &'a RwLock<T>, _kind: &'static str) -> WriteGuard<'a, T> {
+	#[cfg(feature = "generation-tracing")]
+	let wait = lod_generation_diagnostics::LockWait::new(_kind);
+	let guard = lock.write().unwrap_or_else(PoisonError::into_inner);
+	#[cfg(feature = "generation-tracing")]
+	{
+		wait.acquired(guard)
+	}
+	#[cfg(not(feature = "generation-tracing"))]
+	{
+		guard
+	}
+}
+fn try_read_lock<'a, T>(
+	lock: &'a RwLock<T>,
+	_kind: &'static str,
+) -> Result<ReadGuard<'a, T>, Busy> {
+	#[cfg(feature = "generation-tracing")]
+	let wait = lod_generation_diagnostics::LockWait::new(_kind);
+	let guard = match lock.try_read() {
+		Ok(guard) => guard,
+		Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+		Err(TryLockError::WouldBlock) => {
+			#[cfg(feature = "generation-tracing")]
+			lod_generation_diagnostics::update(|c| c.busy += 1);
+			return Err(Busy);
+		}
+	};
+	#[cfg(feature = "generation-tracing")]
+	{
+		Ok(wait.acquired(guard))
+	}
+	#[cfg(not(feature = "generation-tracing"))]
+	{
+		Ok(guard)
+	}
+}
+
 #[derive(Default)]
 pub(super) struct Registry {
 	pub stores: RwLock<HashMap<TypeId, Arc<dyn ErasedStore>>>,
@@ -32,40 +92,34 @@ pub(super) struct Registry {
 }
 
 impl Registry {
-	pub(super) fn read_stores(&self) -> RwLockReadGuard<'_, HashMap<TypeId, Arc<dyn ErasedStore>>> {
-		self.stores.read().unwrap_or_else(PoisonError::into_inner)
+	pub(super) fn read_stores(&self) -> ReadGuard<'_, HashMap<TypeId, Arc<dyn ErasedStore>>> {
+		read_lock(&self.stores, "registry")
 	}
 
-	pub(super) fn write_stores(
-		&self,
-	) -> RwLockWriteGuard<'_, HashMap<TypeId, Arc<dyn ErasedStore>>> {
-		self.stores.write().unwrap_or_else(PoisonError::into_inner)
+	pub(super) fn write_stores(&self) -> WriteGuard<'_, HashMap<TypeId, Arc<dyn ErasedStore>>> {
+		write_lock(&self.stores, "registry")
 	}
 
 	pub(super) fn try_read_stores(
 		&self,
-	) -> Result<RwLockReadGuard<'_, HashMap<TypeId, Arc<dyn ErasedStore>>>, Busy> {
-		match self.stores.try_read() {
-			Ok(guard) => Ok(guard),
-			Err(TryLockError::Poisoned(poisoned)) => Ok(poisoned.into_inner()),
-			Err(TryLockError::WouldBlock) => Err(Busy),
-		}
+	) -> Result<ReadGuard<'_, HashMap<TypeId, Arc<dyn ErasedStore>>>, Busy> {
+		try_read_lock(&self.stores, "registry")
 	}
 
-	pub(super) fn read_base_scales(&self) -> RwLockReadGuard<'_, HashMap<TypeId, DVec3>> {
-		self.base_scales.read().unwrap_or_else(PoisonError::into_inner)
+	pub(super) fn read_base_scales(&self) -> ReadGuard<'_, HashMap<TypeId, DVec3>> {
+		read_lock(&self.base_scales, "registry")
 	}
 
-	pub(super) fn write_base_scales(&self) -> RwLockWriteGuard<'_, HashMap<TypeId, DVec3>> {
-		self.base_scales.write().unwrap_or_else(PoisonError::into_inner)
+	pub(super) fn write_base_scales(&self) -> WriteGuard<'_, HashMap<TypeId, DVec3>> {
+		write_lock(&self.base_scales, "registry")
 	}
 
-	pub(super) fn read_retention_margins(&self) -> RwLockReadGuard<'_, HashMap<TypeId, DVec3>> {
-		self.retention_margins.read().unwrap_or_else(PoisonError::into_inner)
+	pub(super) fn read_retention_margins(&self) -> ReadGuard<'_, HashMap<TypeId, DVec3>> {
+		read_lock(&self.retention_margins, "registry")
 	}
 
-	pub(super) fn write_retention_margins(&self) -> RwLockWriteGuard<'_, HashMap<TypeId, DVec3>> {
-		self.retention_margins.write().unwrap_or_else(PoisonError::into_inner)
+	pub(super) fn write_retention_margins(&self) -> WriteGuard<'_, HashMap<TypeId, DVec3>> {
+		write_lock(&self.retention_margins, "registry")
 	}
 
 	#[cfg(debug_assertions)]
@@ -85,22 +139,18 @@ impl<T> TypedStore<T> {
 
 	/// Values are immutable and published whole, so a poisoned lock still guards
 	/// a consistent store.
-	pub(in crate::hcsg) fn read(&self) -> RwLockReadGuard<'_, NodeStore<Arc<T>>> {
-		self.nodes.read().unwrap_or_else(PoisonError::into_inner)
+	pub(in crate::hcsg) fn read(&self) -> ReadGuard<'_, NodeStore<Arc<T>>> {
+		read_lock(&self.nodes, "store")
 	}
 
 	/// Values are immutable and published whole, so a poisoned lock still guards
 	/// a consistent store.
-	pub(in crate::hcsg) fn write(&self) -> RwLockWriteGuard<'_, NodeStore<Arc<T>>> {
-		self.nodes.write().unwrap_or_else(PoisonError::into_inner)
+	pub(in crate::hcsg) fn write(&self) -> WriteGuard<'_, NodeStore<Arc<T>>> {
+		write_lock(&self.nodes, "store")
 	}
 
-	pub(in crate::hcsg) fn try_read(&self) -> Result<RwLockReadGuard<'_, NodeStore<Arc<T>>>, Busy> {
-		match self.nodes.try_read() {
-			Ok(guard) => Ok(guard),
-			Err(TryLockError::Poisoned(poisoned)) => Ok(poisoned.into_inner()),
-			Err(TryLockError::WouldBlock) => Err(Busy),
-		}
+	pub(in crate::hcsg) fn try_read(&self) -> Result<ReadGuard<'_, NodeStore<Arc<T>>>, Busy> {
+		try_read_lock(&self.nodes, "store")
 	}
 }
 
@@ -121,15 +171,42 @@ impl<T: HcsgValue> ErasedStore for TypedStore<T> {
 	}
 
 	fn reset(&self, revision: u64) {
-		self.write().reset(revision);
+		let mut nodes = self.write();
+		#[cfg(feature = "generation-tracing")]
+		let before = nodes.len();
+		nodes.reset(revision);
+		#[cfg(feature = "generation-tracing")]
+		lod_generation_diagnostics::update(|c| {
+			c.removed += before.saturating_sub(nodes.len()) as u64
+		});
 	}
 
 	fn evict_outside(&self, regions: &[Aabb3d], revision: u64) -> Vec<Id> {
-		self.write().evict_outside(regions, revision)
+		{
+			let mut nodes = self.write();
+			#[cfg(feature = "generation-tracing")]
+			let before = nodes.len();
+			let removed = nodes.evict_outside(regions, revision);
+			#[cfg(feature = "generation-tracing")]
+			lod_generation_diagnostics::update(|c| {
+				c.removed += before.saturating_sub(nodes.len()) as u64
+			});
+			removed
+		}
 	}
 
 	fn clear_non_universal(&self, revision: u64) -> Vec<Id> {
-		self.write().clear_non_universal(revision)
+		{
+			let mut nodes = self.write();
+			#[cfg(feature = "generation-tracing")]
+			let before = nodes.len();
+			let removed = nodes.clear_non_universal(revision);
+			#[cfg(feature = "generation-tracing")]
+			lod_generation_diagnostics::update(|c| {
+				c.removed += before.saturating_sub(nodes.len()) as u64
+			});
+			removed
+		}
 	}
 
 	fn len(&self) -> usize {

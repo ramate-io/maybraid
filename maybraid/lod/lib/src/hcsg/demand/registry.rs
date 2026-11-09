@@ -40,21 +40,47 @@ impl HcsgDemand {
 		focus: Option<Vec3>,
 		class: HcsgClass,
 	) -> SubscriptionId {
+		self.subscribe_with_origin::<T>(previous, regions, focus, class, "external")
+	}
+
+	pub(in crate::hcsg) fn subscribe_with_origin<T: GenerationScheme>(
+		&self,
+		previous: Option<SubscriptionId>,
+		regions: Vec<Aabb3d>,
+		focus: Option<Vec3>,
+		class: HcsgClass,
+		_origin: &'static str,
+	) -> SubscriptionId {
 		let id = SubscriptionId::new(self.0.next_id.fetch_add(1, Ordering::Relaxed));
 		let mut state = self.lock();
-		let inherited =
-			previous
-				.and_then(|previous| state.subscriptions.remove(&previous))
-				.map(|previous| {
-					previous.cancel();
-					(previous.pass, Arc::clone(&previous.reach))
-				});
+		#[cfg(feature = "generation-tracing")]
+		let mut cancelled = None;
+		let inherited = previous
+			.and_then(|previous_id| {
+				state
+					.subscriptions
+					.remove(&previous_id)
+					.map(|subscription| (previous_id, subscription))
+			})
+			.map(|(_previous_id, previous)| {
+				previous.cancel();
+				#[cfg(feature = "generation-tracing")]
+				if let Some(trace) = &previous.trace {
+					cancelled = Some((_previous_id.trace_raw(), trace.epoch));
+				}
+				(previous.pass, Arc::clone(&previous.reach))
+			});
 		let floor = min_pass(&state);
 		let (pass, reach) = match inherited {
 			Some((pass, reach)) => (pass.max(floor), reach),
 			None => (floor, Arc::new(std::sync::Mutex::new(HashSet::new()))),
 		};
 		lock_mutex(&reach).insert(TypeId::of::<T>());
+		#[cfg(feature = "generation-tracing")]
+		let trace =
+			super::super::trace::JobTrace::queued(_origin, std::any::type_name::<T>(), state.epoch);
+		#[cfg(feature = "generation-tracing")]
+		let enqueue = trace.clone();
 		state.subscriptions.insert(
 			id,
 			Subscription {
@@ -71,21 +97,44 @@ impl HcsgDemand {
 				done: false,
 				cancelled: Arc::new(AtomicBool::new(false)),
 				reach,
+				#[cfg(feature = "generation-tracing")]
+				trace,
 			},
 		);
 		state.sweep_needed = true;
 		self.0.wake.notify_all();
+		drop(state);
+		#[cfg(feature = "generation-tracing")]
+		{
+			if let Some((previous, epoch)) = cancelled {
+				lod_generation_diagnostics::cancel(previous, epoch, "replaced");
+			}
+			if let Some(trace) = enqueue {
+				trace.emit_enqueue(id.trace_raw());
+			}
+		}
 		id
 	}
 
 	pub(crate) fn unsubscribe(&self, id: SubscriptionId) {
 		let mut state = self.lock();
+		#[cfg(feature = "generation-tracing")]
+		let mut cancelled = None;
 		if let Some(subscription) = state.subscriptions.remove(&id) {
 			subscription.cancel();
+			#[cfg(feature = "generation-tracing")]
+			if let Some(trace) = &subscription.trace {
+				cancelled = Some(trace.epoch);
+			}
 			state.sweep_needed = true;
 			self.0.wake.notify_all();
 		}
 		self.0.idle.notify_all();
+		drop(state);
+		#[cfg(feature = "generation-tracing")]
+		if let Some(epoch) = cancelled {
+			lod_generation_diagnostics::cancel(id.trace_raw(), epoch, "unsubscribed");
+		}
 	}
 
 	/// Ids published for `id` from `cursor` on.
@@ -124,14 +173,26 @@ impl HcsgDemand {
 	/// worker is still generating are not published.
 	pub(crate) fn advance_epoch(&self) -> u64 {
 		let mut state = self.lock();
-		for (_, subscription) in state.subscriptions.drain() {
+		#[cfg(feature = "generation-tracing")]
+		let mut cancelled = Vec::new();
+		for (_id, subscription) in state.subscriptions.drain() {
 			subscription.cancel();
+			#[cfg(feature = "generation-tracing")]
+			if let Some(trace) = &subscription.trace {
+				cancelled.push((_id.trace_raw(), trace.epoch));
+			}
 		}
 		state.epoch += 1;
 		state.sweep_needed = true;
 		state.epoch_sweep_pending = true;
 		self.0.wake.notify_all();
 		self.0.idle.notify_all();
-		state.epoch
+		let epoch = state.epoch;
+		drop(state);
+		#[cfg(feature = "generation-tracing")]
+		for (id, epoch) in cancelled {
+			lod_generation_diagnostics::cancel(id, epoch, "epoch");
+		}
+		epoch
 	}
 }

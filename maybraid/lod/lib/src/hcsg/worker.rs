@@ -33,9 +33,15 @@ pub(crate) struct HcsgWorker {
 
 impl HcsgWorker {
 	pub(crate) fn spawn(storage: HcsgStorage, demand: HcsgDemand) -> std::io::Result<Self> {
+		#[cfg(feature = "generation-tracing")]
+		let dispatch = bevy::log::tracing::dispatcher::get_default(Clone::clone);
 		let thread = thread::Builder::new().name("hcsg-worker".into()).spawn({
 			let demand = demand.clone();
-			move || run(&storage, &demand)
+			move || {
+				#[cfg(feature = "generation-tracing")]
+				let _subscriber = bevy::log::tracing::dispatcher::set_default(&dispatch);
+				run(&storage, &demand)
+			}
 		})?;
 		Ok(Self { demand, thread: Some(thread) })
 	}
@@ -57,6 +63,14 @@ fn run(storage: &HcsgStorage, demand: &HcsgDemand) {
 			WorkerWait::Sweep(regions_by_type) => storage.retain_reached(&regions_by_type),
 			WorkerWait::Job(job) => {
 				let id = job.id;
+				#[cfg(feature = "generation-tracing")]
+				let trace = job.trace.clone();
+				#[cfg(feature = "generation-tracing")]
+				let cancelled = job.cancelled.clone();
+				#[cfg(feature = "generation-tracing")]
+				let trace_started = trace.as_ref().map(|_| Instant::now());
+				#[cfg(feature = "generation-tracing")]
+				let trace_cursor = job.cursor;
 				let reach = job.reach.clone();
 				let progress = panic::catch_unwind(AssertUnwindSafe(|| fill_quantum(storage, job)))
 					.unwrap_or_else(|_| {
@@ -65,6 +79,20 @@ fn run(storage: &HcsgStorage, demand: &HcsgDemand) {
 						);
 						QuantumProgress { done: true, ..QuantumProgress::default() }
 					});
+				#[cfg(feature = "generation-tracing")]
+				if let (Some(trace), Some(started)) = (trace, trace_started) {
+					let elapsed = started.elapsed();
+					lod_generation_diagnostics::quantum_complete(
+						id.trace_raw(),
+						trace.epoch,
+						trace.quantum,
+						progress.done,
+						cancelled.load(Ordering::Acquire),
+						progress.cursor.saturating_sub(trace_cursor),
+						elapsed,
+						elapsed > QUANTUM_TIME,
+					);
+				}
 				demand.finish_quantum(id, progress, Some(reach));
 			}
 		}
@@ -74,7 +102,22 @@ fn run(storage: &HcsgStorage, demand: &HcsgDemand) {
 fn fill_quantum(storage: &HcsgStorage, job: Job) -> QuantumProgress {
 	let stale = || job.cancelled.load(Ordering::Acquire);
 	let started = Instant::now();
+	#[cfg(feature = "generation-tracing")]
+	let mut cx = if let Some(trace) = &job.trace {
+		GenerationContext::for_worker(
+			storage,
+			&stale,
+			trace.origin,
+			trace.scheme,
+			trace.correlation(job.id.trace_raw()),
+		)
+	} else {
+		GenerationContext::with_stale(storage, &stale)
+	};
+	#[cfg(not(feature = "generation-tracing"))]
 	let mut cx = GenerationContext::with_stale(storage, &stale);
+	#[cfg(feature = "generation-tracing")]
+	let _scope = cx.trace_scope();
 	let first_discover = job.discovered.is_none();
 	let ids = match job.discovered {
 		Some(ids) => ids,

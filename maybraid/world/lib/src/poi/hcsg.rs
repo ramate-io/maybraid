@@ -145,7 +145,7 @@ impl DistantTilePois for WorldPoiTiles {
 		type Urban = urbanization_layer_model::Urbanization<richmond::Richmond<Ground>>;
 
 		out.clear();
-		let mut cx = GenerationContext::new(storage);
+		let mut cx = GenerationContext::with_origin(storage, "journey-poi");
 		let mut scratch = Vec::new();
 		collect_matching_in_xz_tile::<GrovePois>(
 			&mut cx,
