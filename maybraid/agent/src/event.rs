@@ -34,6 +34,8 @@ pub enum AgentEventBody {
 		y: f32,
 		z: f32,
 		yaw: f32,
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		pitch: Option<f32>,
 		#[serde(rename = "move")]
 		r#move: [f32; 2],
 		/// Composed Durham height under the capsule, when that cell is published.
@@ -72,6 +74,13 @@ pub enum AgentEventBody {
 	/// Explicit diagnostic fixture mutation. No invulnerability is installed.
 	FixtureHealth {
 		actor: AgentDiagnosticActor,
+		before: [f32; 2],
+		after: [f32; 2],
+	},
+	/// One-shot, explicitly requested camera reset; angles are yaw/pitch radians.
+	FixtureView {
+		actor: AgentDiagnosticActor,
+		camera: String,
 		before: [f32; 2],
 		after: [f32; 2],
 	},
@@ -259,6 +268,7 @@ mod tests {
 				y: 12.5,
 				z: -1.0,
 				yaw: 0.4,
+				pitch: Some(-0.12),
 				r#move: [0.0, 1.0],
 				ground: Some(11.4),
 				map_open: false,
@@ -347,9 +357,15 @@ mod tests {
 			AgentEventBody::Died { actor: actor.clone(), source: None, point: [1.0, 2.0, 3.0] },
 			AgentEventBody::WeaponFired { shooter: actor.clone(), recoil: 0.0, age: 0.1 },
 			AgentEventBody::FixtureHealth {
-				actor,
+				actor: actor.clone(),
 				before: [100.0, 100.0],
 				after: [1_000_000.0; 2],
+			},
+			AgentEventBody::FixtureView {
+				actor,
+				camera: "9007199254740993".into(),
+				before: [0.1, 0.2],
+				after: [0.0, -0.12],
 			},
 			AgentEventBody::Diagnostics { enabled: false },
 		] {

@@ -31,6 +31,7 @@ pub struct AgentPlayerVitals {
 pub enum DiagnosticCommand {
 	Enabled(bool),
 	Health(f32),
+	View { yaw: f32, pitch: f32 },
 }
 
 impl DiagnosticCommand {
@@ -47,7 +48,15 @@ impl DiagnosticCommand {
 				}
 				Ok(Self::Health(amount))
 			}
-			_ => Err("expected diagnostics on | off | health POSITIVE_FINITE_AMOUNT".into()),
+			["diagnostics", "view", yaw, pitch] => {
+				let yaw = yaw.parse::<f32>().map_err(|_| "yaw must be a number")?;
+				let pitch = pitch.parse::<f32>().map_err(|_| "pitch must be a number")?;
+				if !yaw.is_finite() || !pitch.is_finite() {
+					return Err("yaw and pitch must be finite radians".into());
+				}
+				Ok(Self::View { yaw, pitch })
+			}
+			_ => Err("expected diagnostics on | off | health AMOUNT | view YAW PITCH".into()),
 		}
 	}
 }
@@ -83,6 +92,24 @@ mod tests {
 		assert_eq!(
 			DiagnosticCommand::parse("diagnostics health 1000000").map_err(anyhow::Error::msg)?,
 			DiagnosticCommand::Health(1_000_000.0)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn view_requires_exactly_two_finite_angles() -> anyhow::Result<()> {
+		for line in [
+			"diagnostics view NaN 0",
+			"diagnostics view 0 inf",
+			"diagnostics view -inf 0",
+			"diagnostics view 1",
+			"diagnostics view 1 2 extra",
+		] {
+			assert!(DiagnosticCommand::parse(line).is_err(), "accepted {line}");
+		}
+		assert_eq!(
+			DiagnosticCommand::parse("diagnostics view 7 -2").map_err(anyhow::Error::msg)?,
+			DiagnosticCommand::View { yaw: 7.0, pitch: -2.0 },
 		);
 		Ok(())
 	}

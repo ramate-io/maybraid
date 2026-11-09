@@ -162,7 +162,8 @@ impl Plugin for WorldAgentPlugin {
 				Update,
 				(
 					agent_apply_world_ops
-						.before(maybraid_spawns_support::ActorSupportSystems::Prepare),
+						.before(maybraid_spawns_support::ActorSupportSystems::Prepare)
+						.before(player_camera::PlayerCameraSystems::Look),
 					agent_emit_presentation_churn,
 					agent_emit_tanz,
 					agent_screenshot_finished,
@@ -659,6 +660,7 @@ fn agent_apply_world_ops(
 		With<MotorPlayer>,
 	>,
 	mut tanzers: Query<(Entity, &mut TanzUser, &mut TanzExecution)>,
+	mut view_cameras: diagnostics::ViewCameras,
 ) {
 	let pending = std::mem::take(&mut runtime.pending);
 	let t = time.elapsed_secs();
@@ -761,6 +763,36 @@ fn agent_apply_world_ops(
 								},
 							);
 							Ok(format!("player fixture health={amount}"))
+						}
+						DiagnosticCommand::View { yaw, pitch } => {
+							let (entity, transform, _, _, _, _, _) =
+								players.single().map_err(|_| "no single live motor player")?;
+							let fixture = diagnostics::ViewFixture::apply(
+								entity,
+								yaw,
+								pitch,
+								&mut view_cameras,
+							)?;
+							emit(
+								&runtime.sink,
+								AgentEvent {
+									t,
+									frame,
+									body: AgentEventBody::FixtureView {
+										actor: diagnostics::player_identity(
+											entity,
+											transform.translation,
+										),
+										camera: fixture.camera.to_bits().to_string(),
+										before: fixture.before,
+										after: fixture.after,
+									},
+								},
+							);
+							Ok(format!(
+								"player fixture view yaw={} pitch={}",
+								fixture.after[0], fixture.after[1]
+							))
 						}
 					}
 				})();
@@ -905,6 +937,10 @@ fn agent_sample_player(
 	};
 	let p = transform.translation;
 	let yaw = cameras.single().ok().map(|camera| camera.yaw).unwrap_or(0.0);
+	let pitch = diagnostics
+		.as_deref()
+		.filter(|diagnostics| diagnostics.enabled)
+		.and_then(|_| cameras.single().ok().map(|camera| camera.pitch));
 	let r#move = runtime.last_intent.move_stick;
 	let ground = surface.composed_height_at(p.xz());
 	let map_open = map.as_deref().is_some_and(|map| map.open);
@@ -926,6 +962,7 @@ fn agent_sample_player(
 				y: p.y,
 				z: p.z,
 				yaw,
+				pitch,
 				r#move,
 				ground,
 				map_open,

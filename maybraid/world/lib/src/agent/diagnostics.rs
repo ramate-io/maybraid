@@ -9,6 +9,7 @@ use maybraid_agent::{AgentDiagnosticActor, AgentEvent, AgentEventBody, AgentPlay
 use maybraid_session::SessionLifecycleSystems;
 use maybraid_spawns_support::PendingActorSupport;
 use player::{CharacterController, Grounded, Player as MotorPlayer};
+use player_camera::{CameraController, CameraTarget, FollowCamera};
 use world_player::{Player as VegetationPlayer, player::AwaitingTerrainSurface};
 
 use crate::agent::{AgentRuntime, emit};
@@ -71,6 +72,42 @@ pub(super) fn player_identity(entity: Entity, position: Vec3) -> AgentDiagnostic
 		player: true,
 		name: None,
 		position: Some(position.to_array()),
+	}
+}
+
+pub(super) type ViewCameras<'w, 's> = Query<
+	'w,
+	's,
+	(Entity, &'static CameraTarget, &'static mut CameraController),
+	(With<Camera3d>, With<FollowCamera>),
+>;
+
+pub(super) struct ViewFixture {
+	pub camera: Entity,
+	pub before: [f32; 2],
+	pub after: [f32; 2],
+}
+
+impl ViewFixture {
+	pub fn apply(
+		player: Entity,
+		yaw: f32,
+		pitch: f32,
+		cameras: &mut ViewCameras,
+	) -> Result<Self, String> {
+		if !yaw.is_finite() || !pitch.is_finite() {
+			return Err("yaw and pitch must be finite radians".into());
+		}
+		let (camera, target, mut controller) =
+			cameras.single_mut().map_err(|_| "requires one follow camera")?;
+		if target.0 != Some(player) {
+			return Err("follow camera does not target the selected player".into());
+		}
+		let before = [controller.yaw, controller.pitch];
+		let after = [player::wrap_pi(yaw), player::clamp_aim_pitch(pitch)];
+		controller.yaw = after[0];
+		controller.pitch = after[1];
+		Ok(Self { camera, before, after })
 	}
 }
 
@@ -178,6 +215,7 @@ fn observe_shots(
 mod tests {
 	use super::*;
 	use crate::agent::tests::idle_runtime;
+	use bevy::ecs::system::RunSystemOnce;
 	use maybraid_agent::EventSink;
 
 	#[test]
@@ -246,6 +284,73 @@ mod tests {
 		app.world_mut().resource_mut::<AgentDiagnostics>().enabled = true;
 		app.update();
 		assert_eq!(std::fs::read_to_string(&path)?.lines().count(), 3);
+		Ok(())
+	}
+
+	#[test]
+	fn view_fixture_requires_selected_camera_then_wraps_and_clamps_once() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let player = world.spawn_empty().id();
+		let other = world.spawn_empty().id();
+		let camera = world
+			.spawn((
+				Camera3d::default(),
+				FollowCamera::default(),
+				CameraTarget(Some(other)),
+				CameraController { yaw: 0.2, pitch: 0.3, ..default() },
+			))
+			.id();
+		let result = world
+			.run_system_once(move |mut cameras: ViewCameras| {
+				ViewFixture::apply(player, 7.0, -9.0, &mut cameras)
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(result.is_err());
+		assert!(
+			world
+				.get::<CameraController>(camera)
+				.is_some_and(|controller| controller.yaw == 0.2 && controller.pitch == 0.3)
+		);
+		world.entity_mut(camera).insert(CameraTarget(Some(player)));
+		let fixture = world
+			.run_system_once(move |mut cameras: ViewCameras| {
+				ViewFixture::apply(player, 7.0, -9.0, &mut cameras)
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?
+			.map_err(anyhow::Error::msg)?;
+		assert_eq!(fixture.camera, camera);
+		assert_eq!(fixture.before, [0.2, 0.3]);
+		assert_eq!(fixture.after, [player::wrap_pi(7.0), player::clamp_aim_pitch(-9.0)]);
+		assert!(
+			world
+				.get::<CameraController>(camera)
+				.is_some_and(|controller| [controller.yaw, controller.pitch] == fixture.after)
+		);
+		// A second follow camera makes the selection ambiguous; neither changes.
+		let second = world
+			.spawn((
+				Camera3d::default(),
+				FollowCamera::default(),
+				CameraTarget(Some(player)),
+				CameraController::default(),
+			))
+			.id();
+		let result = world
+			.run_system_once(move |mut cameras: ViewCameras| {
+				ViewFixture::apply(player, 1.0, 1.0, &mut cameras)
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(result.is_err());
+		assert!(
+			world
+				.get::<CameraController>(camera)
+				.is_some_and(|controller| [controller.yaw, controller.pitch] == fixture.after)
+		);
+		assert!(
+			world
+				.get::<CameraController>(second)
+				.is_some_and(|controller| controller.yaw == 0.0 && controller.pitch == 0.0)
+		);
 		Ok(())
 	}
 }

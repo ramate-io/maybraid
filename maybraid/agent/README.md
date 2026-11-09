@@ -178,6 +178,7 @@ published outside the repo (Traces releases) state the version they target.
 | 6 | Menu playtests: Home boot ready (`detail: "menu"`), `confirm` / `back` / `start` aliases, `press.buttons` chords, `wait_for` / `expect` / `mash` (including `focus_row` / `focus_label`), and `screen` / `modal` / `focus` / `flow` / `invariant` events |
 | 7 | Inventory cycling: `wait_for` / `expect` also match `cycle_category` / `weapon` / `skill_map` / `lubikan`; `cycle` and `equipped` events; per-frame cycling invariants (Y vs category, D-pad vs item, queue membership). Also `tanz_mode`, `tanz`, and `screenshot` (GPU readback of the presented 3D surface); Tanz mode / active Tanz emit `kind: tanz` events |
 | 8 | Opt-in gameplay diagnostics: `--agent-diagnostics`, player vitals, accepted damage/death/actual-shot events, and agent-only `diagnostics on`, `off`, and `health AMOUNT` console utilities |
+| 9 | Agent-only `diagnostics view YAW PITCH` resets the selected player's follow camera once, records `fixture_view`, and adds optional player pitch telemetry |
 
 ## Opt-in gameplay diagnostics
 
@@ -218,6 +219,17 @@ flag-enabled run. Paused events are discarded rather than replayed on resume.
 Fixture mutations remain recorded even while observation is paused. Collect
 diagnostic evidence outside benchmark windows: event serialization and flushed
 disk writes have a cost. No nearby-NPC scans or visibility probes are added.
+
+For repeatable capture framing, `diagnostics view YAW_RADIANS PITCH_RADIANS`
+sets the selected player's single follow-camera yaw/pitch once. Both angles
+must be finite; yaw wraps and pitch uses the ordinary player aim clamp. The
+command rejects ambiguous cameras and cameras targeting another actor. It
+requires the startup diagnostics flag, records a `fixture_view` before/after
+event even while observations are paused, and changes only camera angles.
+The optional `player.pitch` field is emitted while diagnostics are enabled.
+Recoil and ordinary input continue after the reset; this utility does not aim,
+track targets, or continuously compensate recoil. Use the same explicit resets
+on both sides of a capture comparison and disclose them as view fixtures.
 
 ## Events
 
