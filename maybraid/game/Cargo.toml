@@ -39,9 +39,12 @@ menu-playground = { workspace = true }
 menu-screens = { workspace = true }
 character-persist = { workspace = true }
 
+maybraid-gpu-frame-capture = { path = "../diagnostics/gpu-frame-capture", optional = true }
+
 [features]
 generation-tracing = ["lod/generation-tracing"]
 packed-diagnostics = ["dep:packed-grove-diagnostics"]
+gpu-frame-capture = ["dep:maybraid-gpu-frame-capture"]
 debug-commands = ["maybraid-world/debug-commands"]
 
 [dev-dependencies]

@@ -71,6 +71,8 @@ fn main() {
 	.add_plugins(GamePlugin);
 	#[cfg(feature = "packed-diagnostics")]
 	app.add_plugins(packed_grove_diagnostics::PackedGroveDiagnosticsPlugin);
+	#[cfg(feature = "gpu-frame-capture")]
+	app.add_plugins(maybraid_gpu_frame_capture::GpuFrameCapturePlugin);
 	app.run();
 }
 

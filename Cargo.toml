@@ -117,6 +117,7 @@ members = [
   "maybraid/items/skill-map",
   "maybraid/items/equipment",
   "maybraid/game",
+  "maybraid/diagnostics/gpu-frame-capture",
   "maybraid/world/modes/discover",
   "maybraid/world/modes/reliquary",
   "maybraid/controllers/virtual-pad",

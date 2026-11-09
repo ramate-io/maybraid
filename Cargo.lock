@@ -7237,6 +7237,7 @@ dependencies = [
  "maybraid-game-mode-discover",
  "maybraid-game-mode-reliquary",
  "maybraid-gameplay",
+ "maybraid-gpu-frame-capture",
  "maybraid-menu-controller",
  "maybraid-session",
  "maybraid-sky",
@@ -7371,6 +7372,19 @@ dependencies = [
  "player-camera",
  "tanz-user",
  "world-player",
+]
+
+[[package]]
+name = "maybraid-gpu-frame-capture"
+version = "0.1.5"
+dependencies = [
+ "bevy",
+ "objc2 0.6.4",
+ "objc2-foundation 0.3.2",
+ "objc2-metal 0.3.2",
+ "serde_json",
+ "tempfile",
+ "wgpu",
 ]
 
 [[package]]
