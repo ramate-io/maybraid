@@ -177,6 +177,47 @@ published outside the repo (Traces releases) state the version they target.
 | 5 | `visual_style` adds `native` (direct window). `sharp` is now untreated 1080p offscreen (height-fit); v4 `sharp` was today's Native |
 | 6 | Menu playtests: Home boot ready (`detail: "menu"`), `confirm` / `back` / `start` aliases, `press.buttons` chords, `wait_for` / `expect` / `mash` (including `focus_row` / `focus_label`), and `screen` / `modal` / `focus` / `flow` / `invariant` events |
 | 7 | Inventory cycling: `wait_for` / `expect` also match `cycle_category` / `weapon` / `skill_map` / `lubikan`; `cycle` and `equipped` events; per-frame cycling invariants (Y vs category, D-pad vs item, queue membership). Also `tanz_mode`, `tanz`, and `screenshot` (GPU readback of the presented 3D surface); Tanz mode / active Tanz emit `kind: tanz` events |
+| 8 | Opt-in gameplay diagnostics: `--agent-diagnostics`, player vitals, accepted damage/death/actual-shot events, and agent-only `diagnostics on`, `off`, and `health AMOUNT` console utilities |
+
+## Opt-in gameplay diagnostics
+
+Pass `--agent-diagnostics` (or `MAYBRAID_AGENT_DIAGNOSTICS=1`) together with
+`--agent-script` / `--agent-pipe` to diagnose short lives and support state.
+The diagnostics flag alone does not enable the agent. Ordinary gameplay does
+not install the diagnostic message readers; ordinary agent runs omit vitals.
+
+At the existing player sample cadence, the optional `player.vitals` object
+records opaque entity bits as a decimal string, current/max health, velocity,
+motor grounding, pending support, awaiting surface, gravity scale, and sleep.
+Fallback-player grounding is `null` because that controller's marker is private.
+Metadata comes from the already selected player, with no additional entity scan.
+
+`damage_applied` records target/source identity, accepted amount, actual HP lost,
+remaining health, and impact point. `died` preserves the source and entity before
+session retirement. `weapon_fired` observes authoritative shot emission, including
+shot age, rather than inferring fire from input; it does not prove that a projectile
+was realized or hit anything. Use `damage_applied` for accepted hit evidence.
+Names/positions may be absent if an entity
+has already retired. These JSONL events do not emit Tracy text messages.
+
+For an unmodified death investigation, leave the health pool unchanged. A
+separate protected diagnostic run can start with the explicit fixture command:
+
+```jsonl
+{"cmd":"console","line":"diagnostics health 1000000"}
+```
+
+This sets the live motor player's current and maximum health once, emits a
+`fixture_health` event with before/after values, and preserves damage, projectiles,
+and threat behavior. It rejects non-finite/non-positive values and dead players;
+it does not apply to a replacement life automatically. Mark such runs as modified
+health fixtures when comparing behavior or timing.
+
+`diagnostics off` / `diagnostics on` pause/resume gameplay observations within a
+flag-enabled run. Paused events are discarded rather than replayed on resume.
+Fixture mutations remain recorded even while observation is paused. Collect
+diagnostic evidence outside benchmark windows: event serialization and flushed
+disk writes have a cost. No nearby-NPC scans or visibility probes are added.
 
 ## Events
 
