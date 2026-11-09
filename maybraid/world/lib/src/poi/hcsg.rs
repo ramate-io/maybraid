@@ -147,7 +147,7 @@ impl DistantTilePois for WorldPoiTiles {
 		out.clear();
 		let mut cx = GenerationContext::new(storage);
 		let mut scratch = Vec::new();
-		{
+		if interests.contains(VEGETATION_POI) {
 			let span = bevy::log::trace_span!(
 				target: "maybraid.poi.profile",
 				"poi.grove_tile",
@@ -167,7 +167,7 @@ impl DistantTilePois for WorldPoiTiles {
 			);
 			out.extend(scratch.iter().copied());
 		}
-		{
+		if interests.contains(URBAN_POI) {
 			let span = bevy::log::trace_span!(
 				target: "maybraid.poi.profile",
 				"poi.urban_tile",
@@ -187,7 +187,7 @@ impl DistantTilePois for WorldPoiTiles {
 			);
 			out.extend(scratch.iter().copied());
 		}
-		{
+		if interests.contains(LOCAL_POI) || interests.contains(SALOON_POI) {
 			let span = bevy::log::trace_span!(
 				target: "maybraid.poi.profile",
 				"poi.place_tile",
@@ -301,3 +301,6 @@ mod tests {
 		Ok(())
 	}
 }
+
+#[cfg(test)]
+mod interest_tests;
