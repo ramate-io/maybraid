@@ -14,6 +14,7 @@ name = "maybraid"
 path = "src/main.rs"
 
 [dependencies]
+packed-grove-diagnostics = { path = "../world/layers/vegetation/packed-diagnostics", optional = true }
 lubikans = { workspace = true }
 layer-stack = { workspace = true }
 bevy = { workspace = true }
@@ -39,6 +40,7 @@ menu-screens = { workspace = true }
 character-persist = { workspace = true }
 
 [features]
+packed-diagnostics = ["dep:packed-grove-diagnostics"]
 debug-commands = ["maybraid-world/debug-commands"]
 
 [dev-dependencies]
