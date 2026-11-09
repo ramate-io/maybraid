@@ -18,16 +18,42 @@ def read_json(path):
         return {}
 
 
-def foreground(pid):
-    script = ('tell application "System Events"\n'
-              f'set p to first process whose unix id is {pid}\n'
-              'set frontmost of p to true\nreturn {frontmost of p, size of front window of p}\nend tell')
-    result = subprocess.run(['/usr/bin/osascript', '-e', script], text=True,
-                            capture_output=True, timeout=5, check=True).stdout.strip().split(',')
-    if len(result) != 3:
-        raise RuntimeError(f'unexpected foreground readback: {result}')
-    return {'frontmost': result[0].strip() == 'true',
-            'window_width': int(result[1]), 'window_height': int(result[2])}
+def compile_foreground_helper(run):
+    source = Path(__file__).with_name('gpu-frame-foreground.swift')
+    helper = run / 'foreground-helper'
+    command = ['/usr/bin/xcrun', 'swiftc', '-O', str(source), '-o', str(helper)]
+    result = subprocess.run(command, text=True, capture_output=True, timeout=60)
+    (run / 'foreground-helper-build.json').write_text(json.dumps({
+        'command': command, 'returncode': result.returncode,
+        'stdout': result.stdout, 'stderr': result.stderr,
+        'source_sha256': hashlib.sha256(source.read_bytes()).hexdigest(),
+    }, indent=2))
+    if result.returncode:
+        raise RuntimeError(f'foreground helper compilation failed: {result.stderr}')
+    return helper
+
+
+def foreground(pid, helper):
+    try:
+        result = subprocess.run([str(helper), str(pid)], text=True,
+                                capture_output=True, timeout=5)
+    except subprocess.TimeoutExpired as error:
+        def captured_text(value):
+            return value.decode(errors='replace') if isinstance(value, bytes) else value
+        return {'frontmost': False, 'error': 'foreground helper timeout',
+                'helper_stdout': captured_text(error.stdout),
+                'helper_stderr': captured_text(error.stderr), 'helper_returncode': None}
+    try:
+        value = json.loads(result.stdout)
+        if not isinstance(value, dict):
+            raise ValueError('helper JSON is not an object')
+    except (json.JSONDecodeError, ValueError):
+        value = {'frontmost': False, 'error': 'invalid helper JSON'}
+    value.update(helper_returncode=result.returncode, helper_stdout=result.stdout,
+                 helper_stderr=result.stderr)
+    if result.returncode or value.get('application_active') is not True or value.get('frontmost_pid') != pid:
+        value['frontmost'] = False
+    return value
 
 
 def main():
@@ -80,7 +106,15 @@ def main():
                MAYBRAID_SHADOWS='high', MAYBRAID_CANOPY_SHADOWS='proxy',
                MAYBRAID_AGENT_EXCLUSIVE='1', MAYBRAID_SAVES=str(run / 'saves'),
                MAYBRAID_LOGS=str(run / 'logs'), MAYBRAID_ASSETS=str(args.assets.resolve(strict=True)))
+    helper = compile_foreground_helper(run)
+    source_commit = subprocess.run(['git', '-C', str(Path(__file__).resolve().parent), 'rev-parse', 'HEAD'],
+                                   capture_output=True, text=True, timeout=5)
     provenance = dict(manifest, binary=str(binary), binary_sha256=digest,
+                      harness_source_commit=source_commit.stdout.strip() if source_commit.returncode == 0 else None,
+                      harness_path=str(Path(__file__).resolve()),
+                      foreground_helper_source_sha256=hashlib.sha256(Path(__file__).with_name('gpu-frame-foreground.swift').read_bytes()).hexdigest(),
+                      harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                      foreground_helper_sha256=hashlib.sha256(helper.read_bytes()).hexdigest(),
                       script_sha256=hashlib.sha256(script.encode()).hexdigest(),
                       start_at=args.start_at, env={k: v for k, v in env.items() if k.startswith(('MAYBRAID_', 'MTL_'))},
                       scope='one render update; diagnostic only; device background work may appear',
@@ -88,26 +122,32 @@ def main():
     (run / 'provenance.json').write_text(json.dumps(provenance, indent=2))
     print(f'RUN={run}', flush=True)
     process = None
+    wake = None
     try:
         with (run / 'game.log').open('x') as log:
             process = subprocess.Popen([str(binary), '--no-supervise', f'--start-at={args.start_at}',
                                         '--agent-script', str(script_path), '--agent-events', str(run / 'events.jsonl'),
                                         '--agent-quit'], env=env, stdout=log, stderr=subprocess.STDOUT)
             provenance['pid'] = process.pid
+            wake = subprocess.Popen(['/usr/bin/caffeinate', '-disu', '-w', str(process.pid)])
+            provenance['wake_assertion_pid'] = wake.pid
+            print(f'GAME_PID={process.pid}\nWAKE_PID={wake.pid}', flush=True)
             deadline = time.monotonic() + args.timeout
             triggered = False
             foreground_seen = False
+            captured = False
             while time.monotonic() < deadline:
                 if process.poll() is not None:
-                    raise RuntimeError(f'game exited before capture completed: {process.returncode}')
-                try:
-                    front = foreground(process.pid)
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
-                    front = {'frontmost': False, 'error': str(error)}
+                    if captured and process.returncode == 0:
+                        provenance['result'] = 'captured; clean game exit; Xcode inspection still required'
+                        print('GAME_EXIT=0', flush=True)
+                        return
+                    raise RuntimeError(f'game exited before accepted capture/clean exit: {process.returncode}')
+                front = foreground(process.pid, helper)
                 with (run / 'foreground.jsonl').open('a') as log_front:
                     log_front.write(json.dumps({'utc': time.time(), 'pid': process.pid, **front}) + '\n')
                 if not front['frontmost']:
-                    if foreground_seen:
+                    if foreground_seen and not captured:
                         raise RuntimeError('foreground readback failed after initial acquisition')
                     time.sleep(1)
                     continue
@@ -129,6 +169,9 @@ def main():
                 warm = any(e.get('name') == 'gpu-frame-ready' and e.get('mark') == 'start' for e in events)
                 screenshot = run / 'ready.png'
                 if not triggered and ready and warm and screenshot.exists() and status.get('state') == 'armed':
+                    if (front.get('window_owner_pid') != process.pid or front.get('window_layer') != 0
+                            or front.get('window_onscreen') is not True):
+                        raise RuntimeError(f'target on-screen window ownership not verified: {front}')
                     if (front['window_width'], front['window_height']) != (1920, 1080):
                         raise RuntimeError(f'fullscreen dimensions differ from native target: {front}')
                     png = screenshot.read_bytes()
@@ -137,17 +180,21 @@ def main():
                     with (run / 'trigger').open('x') as trigger:
                         trigger.write(status['request_id'] + '\n')
                     triggered = True
-                if status.get('state') == 'complete':
+                if status.get('state') == 'complete' and not captured:
                     if status['started_render_frame'] != status['stopped_render_frame']:
                         raise RuntimeError('capture spanned multiple render updates')
                     trace = run / 'frame.gputrace'
                     if not trace.is_dir() or not any(trace.iterdir()):
                         raise RuntimeError('capture stopped without a nonempty GPU trace document')
-                    provenance['result'] = 'captured; Xcode inspection still required'
+                    captured = True
+                    provenance['result'] = 'captured; awaiting clean game exit and Xcode inspection'
                     print(f'CAPTURE_COMPLETE={trace}', flush=True)
-                    return
                 time.sleep(1)
             raise TimeoutError('bounded readiness/capture timeout')
+    except BaseException as error:
+        provenance['result'] = 'failed'
+        provenance['error'] = str(error)
+        raise
     finally:
         if process is not None and process.poll() is None:
             process.terminate()
@@ -156,6 +203,13 @@ def main():
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=5)
+        if wake is not None and wake.poll() is None:
+            wake.terminate()
+            try:
+                wake.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                wake.kill()
+                wake.wait(timeout=5)
         provenance['game_exit_status'] = None if process is None else process.returncode
         provenance['end_utc'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
         (run / 'provenance.json').write_text(json.dumps(provenance, indent=2))

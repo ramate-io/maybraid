@@ -31,8 +31,23 @@ fullscreen game. It waits for surface readiness, 30 seconds of warmup, a complet
 native screenshot, the `gpu-frame-ready` scenario mark, and foreground/window
 readback before creating the capture trigger. It preserves the script, manifest,
 environment, PID, foreground observations, screenshot, sidecar, and game log.
-Readiness/capture waits and subprocess shutdown are bounded. Cleanup targets only
-the process it launched. Accessibility access is needed for foreground readback.
+Readiness/capture waits and subprocess shutdown are bounded. The harness owns a
+`caffeinate` assertion tied to its game PID, waits for the scripted clean game exit
+after capture, and cleans only its own game/assertion processes on failure.
+
+Foreground verification uses a small Swift helper compiled once before launch.
+`NSRunningApplication` requests activation and reports active state; `NSWorkspace`
+reports the frontmost PID; `CGWindowListCopyWindowInfo` supplies only the target
+PID's on-screen layer-zero window bounds. The gate verifies target ownership,
+active/frontmost identity, window dimensions, and the in-engine PNG. It does not
+use Accessibility or take screenshots of unrelated windows. Helper build output,
+return codes, stdout/stderr, source/binary hashes and the harness source commit
+are preserved separately from the immutable engine manifest.
+
+The first real ready-game attempt exposed an Accessibility denial when System
+Events read `size of front window` (`osascript is not allowed assistive access`).
+That attempt never wrote a trigger and is invalid; its successful screenshot is
+not capture proof. The metadata helper replaces that permission-dependent read.
 
 Use `--script path.jsonl` to supply a different stable scene. Include a
 `gpu-frame-ready` scenario start **after** settled assets/pipelines and a screenshot
@@ -104,3 +119,10 @@ real game capture. Do not install or repeatedly retry the CLI to work around it.
 All output remains under ignored `profiling/captures/`. Raw captures are not
 published by the harness; publication requires explicit authorization and follows
 the repository's [Traces release](../CONTRIBUTING.md#traces-releases) conventions.
+
+An armed request currently retains a non-Send run-state resource until exit. If
+it is never triggered, Bevy can warn that main-thread teardown forgets that state;
+no native capture has started, so this cannot stop or corrupt another capture.
+Successful/failed triggered runs remove their state on the render thread. A later
+cleanup change can separate Send run/status state from the native session; that
+engine refactor is deferred while the first capture is validated.
