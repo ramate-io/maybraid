@@ -15,6 +15,9 @@ const AIR_CONTROL: f32 = 0.25;
 pub(crate) const JUMP_IMPULSE: f32 = 8.0;
 pub(crate) const GROUND_CAST_DISTANCE: f32 = 0.45;
 const GROUND_SNAP_SPEED: f32 = 1.5;
+/// Preserve a short cast miss across a terrain seam, then return Y to gravity.
+/// Fifty milliseconds bridges one 30 Hz sample without frame-rate dependence.
+const GROUND_CONTACT_GRACE_SECONDS: f32 = 0.05;
 
 // Public compatibility path for the shared movement and arrival slope policy.
 pub use characters::CharacterLocomotion;
@@ -31,7 +34,7 @@ pub struct MoveSpeedCap(pub f32);
 
 /// Last walkable contact plane. Default is world up (flat XZ heading).
 ///
-/// Used only while [`Grounded`]: if the down-cast misses for a snap frame, drive
+/// Used only while [`Grounded`]: if the down-cast briefly misses, drive
 /// still follows this plane instead of ramming world XZ into the mesh. Off the
 /// ground, gravity owns Y.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
@@ -174,7 +177,21 @@ const LEAP_AIR_END: f32 = 0.72;
 pub struct PlayerControlSystems;
 
 #[derive(Component)]
+#[require(GroundContactGrace)]
 pub struct CharacterController;
+
+/// Ground grace is earned by a walkable cast, never by the marker alone.
+/// Required-component insertion preserves existing credit on controller restamps.
+#[derive(Component, Default)]
+pub(crate) struct GroundContactGrace(f32);
+
+impl GroundContactGrace {
+	fn observe(&mut self, walkable_contact: bool, dt: f32) -> bool {
+		self.0 =
+			if walkable_contact { GROUND_CONTACT_GRACE_SECONDS } else { (self.0 - dt).max(0.0) };
+		self.0 > 0.0
+	}
+}
 
 #[derive(Component)]
 #[component(storage = "SparseSet")]
@@ -273,6 +290,7 @@ pub(crate) fn spawn_character_controller(
 
 pub(crate) fn update_grounded(
 	mut commands: Commands,
+	time: Res<Time>,
 	mut query: Query<
 		(
 			Entity,
@@ -281,29 +299,28 @@ pub(crate) fn update_grounded(
 			Option<&MaxSlopeAngle>,
 			Has<Grounded>,
 			Option<&mut Jumping>,
+			&mut GroundContactGrace,
 		),
 		With<CharacterController>,
 	>,
 ) {
-	for (entity, hits, velocity, max_slope_angle, was_grounded, jumping) in &mut query {
+	for (entity, hits, velocity, max_slope_angle, was_grounded, jumping, mut grace) in &mut query {
 		if let Some(normal) = walkable_contact_normal(hits, max_slope_angle.map(|angle| angle.0)) {
 			commands.entity(entity).insert(WalkableGround { normal });
 		}
-		let mut is_grounded = hits.iter().any(|hit| {
+		let walkable_contact = hits.iter().any(|hit| {
 			if let Some(angle) = max_slope_angle {
 				(-hit.normal2).angle_between(Vec3::Y).abs() <= angle.0
 			} else {
 				true
 			}
 		});
-		if !is_grounded
-			&& was_grounded
-			&& jumping.as_ref().is_none_or(|jump| !jump.airborne())
-			&& velocity.y > -GROUND_SNAP_SPEED
-			&& velocity.y < GROUND_SNAP_SPEED
-		{
-			is_grounded = true;
-		}
+		let has_grace = grace.observe(walkable_contact, time.delta_secs());
+		let is_grounded = walkable_contact
+			|| (was_grounded
+				&& has_grace && jumping.as_ref().is_none_or(|jump| !jump.airborne())
+				&& velocity.y > -GROUND_SNAP_SPEED
+				&& velocity.y < GROUND_SNAP_SPEED);
 		if is_grounded {
 			commands.entity(entity).insert(Grounded);
 		} else {
@@ -564,6 +581,9 @@ pub(crate) fn advance_jump_phases(
 		}
 	}
 }
+
+#[cfg(test)]
+mod grounding_tests;
 
 #[cfg(test)]
 mod tests {
