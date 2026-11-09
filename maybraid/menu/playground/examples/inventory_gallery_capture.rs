@@ -38,7 +38,8 @@ use maybraid_character_ui_menu_renderer::inventory::{
 };
 use maybraid_character_ui_menu_renderer::{
 	fill_inventory_loading, fill_inventory_screen, find_overlay_node, spawn_starter_kit_shell,
-	InventoryItemKey, InventoryMenuSession, MenuThumbnailContext,
+	InventoryItemKey, InventoryLeftFocus, InventoryMenuSession, InventoryPickerSource,
+	MenuThumbnailContext,
 };
 use menu_components::theme::TEXT_YELLOW;
 use menu_components::{
@@ -141,6 +142,7 @@ enum CaptureScene {
 	OverflowFixtureTop,
 	OverflowFixtureScrolled,
 	ModalInventory,
+	ModalFolders,
 	ModalReorder,
 	OverflowTanzEquipped,
 	ModalLubikan,
@@ -156,7 +158,8 @@ impl CaptureScene {
 			Self::RealStarterKit => Self::OverflowFixtureTop,
 			Self::OverflowFixtureTop => Self::OverflowFixtureScrolled,
 			Self::OverflowFixtureScrolled => Self::ModalInventory,
-			Self::ModalInventory => Self::ModalReorder,
+			Self::ModalInventory => Self::ModalFolders,
+			Self::ModalFolders => Self::ModalReorder,
 			Self::ModalReorder => Self::OverflowTanzEquipped,
 			Self::OverflowTanzEquipped => Self::ModalLubikan,
 			Self::ModalLubikan => Self::IconCloseup,
@@ -172,6 +175,7 @@ impl CaptureScene {
 			Self::OverflowFixtureTop => "overflow_fixture_top",
 			Self::OverflowFixtureScrolled => "overflow_fixture_scrolled",
 			Self::ModalInventory => "inventory_modal",
+			Self::ModalFolders => "inventory_folders_preview",
 			Self::ModalReorder => "inventory_modal_reorder",
 			Self::OverflowTanzEquipped => "inventory_overflow_tanzes",
 			Self::ModalLubikan => "inventory_modal_lubikan",
@@ -437,6 +441,11 @@ fn spawn_grant_scene(
 	icons: Option<&ItemIconCache>,
 ) {
 	let layout = InventoryLayout::starter_kit(items);
+	let session = InventoryMenuSession {
+		region: InventoryRegion::Drawer,
+		folder_navigation: false,
+		..default()
+	};
 	let mut viewport = Entity::PLACEHOLDER;
 	let mut continue_parent = Entity::PLACEHOLDER;
 	commands
@@ -457,10 +466,7 @@ fn spawn_grant_scene(
 				fonts,
 				title,
 				TEXT_YELLOW,
-				(
-					maybraid_character_ui_menu_renderer::OverlaySelectRoot,
-					InventoryMenuSession::default(),
-				),
+				(maybraid_character_ui_menu_renderer::OverlaySelectRoot, session),
 			);
 			continue_parent = root
 				.spawn((
@@ -484,7 +490,7 @@ fn spawn_grant_scene(
 		InputPromptDevice::Keyboard,
 		&layout.node,
 		false,
-		&InventoryMenuSession::default(),
+		&session,
 		&mut thumbs,
 	);
 	if let Ok(mut footer) = commands.get_entity(continue_parent) {
@@ -555,6 +561,7 @@ fn spawn_modal_scene(
 		.with_children(|root| {
 			viewport = root
 				.spawn((
+					menu_playground::character::CharacterInventoryViewport,
 					maybraid_character_ui_menu_renderer::OverlaySelectRoot,
 					session,
 					Node {
@@ -636,7 +643,19 @@ fn inventory_session(
 	region: InventoryRegion,
 	scroll_rows: usize,
 ) -> InventoryMenuSession {
-	let mut session = InventoryMenuSession { section, drawer, region, ..default() };
+	let mut session = InventoryMenuSession {
+		section,
+		drawer,
+		region,
+		expanded_section: Some(section),
+		left_focus: InventoryLeftFocus::Slot { section, ordinal: 0 },
+		picker_source: (region == InventoryRegion::Drawer).then_some(InventoryPickerSource {
+			ordinal: 0,
+			item: None,
+			attempted_item: None,
+		}),
+		..default()
+	};
 	let memory = &mut session.section_memory[section.index()][region.index()];
 	memory.gallery_scroll = scroll_rows;
 	if region == InventoryRegion::Drawer
@@ -740,6 +759,18 @@ fn spawn_scene(
 				icons,
 				tanz_modal_items(),
 				session,
+				true,
+				None,
+			);
+		}
+		CaptureScene::ModalFolders => {
+			spawn_modal_scene(
+				commands,
+				fonts,
+				assets,
+				icons,
+				tanz_modal_items(),
+				InventoryMenuSession { expanded_section: None, ..default() },
 				true,
 				None,
 			);
@@ -930,6 +961,7 @@ fn scene_needs_character_preview(scene: CaptureScene) -> bool {
 		CaptureScene::OverflowFixtureTop
 			| CaptureScene::OverflowFixtureScrolled
 			| CaptureScene::ModalInventory
+			| CaptureScene::ModalFolders
 			| CaptureScene::ModalReorder
 			| CaptureScene::OverflowTanzEquipped
 			| CaptureScene::ModalLubikan

@@ -27,6 +27,23 @@ pub struct OverlaySelectViewport;
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryControl(pub InventoryControlAction);
 
+/// Navigable category header in the editable inventory's equipped list.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InventoryFolderHeader(pub InventorySection);
+
+/// Stable selection in the left list; menu indices also include category headers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InventoryLeftFocus {
+	Header(InventorySection),
+	Slot { section: InventorySection, ordinal: usize },
+}
+
+impl Default for InventoryLeftFocus {
+	fn default() -> Self {
+		Self::Header(InventorySection::Clothing)
+	}
+}
+
 /// Bag index stamped on inventory tiles so reorder/focus can follow identity.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryItemKey {
@@ -123,6 +140,10 @@ pub struct InventoryMenuSession {
 	pub interaction: InventoryInteraction,
 	pub focus: InventoryFocusHint,
 	pub section: InventorySection,
+	/// Editable inventory uses folders; direct read-only catalogs retain page navigation.
+	pub folder_navigation: bool,
+	pub expanded_section: Option<InventorySection>,
+	pub left_focus: InventoryLeftFocus,
 	pub drawer: InventoryDrawerMode,
 	pub region: InventoryRegion,
 	pub picker_source: Option<InventoryPickerSource>,
@@ -135,6 +156,9 @@ impl Default for InventoryMenuSession {
 			interaction: InventoryInteraction::default(),
 			focus: InventoryFocusHint::default(),
 			section: InventorySection::default(),
+			folder_navigation: true,
+			expanded_section: Some(InventorySection::Clothing),
+			left_focus: InventoryLeftFocus::default(),
 			drawer: InventoryDrawerMode::default(),
 			region: InventoryRegion::Equipped,
 			picker_source: None,
@@ -144,6 +168,37 @@ impl Default for InventoryMenuSession {
 }
 
 impl InventoryMenuSession {
+	/// Header focus never overwrites the remembered slot within its category.
+	pub fn focus_header(&mut self, section: InventorySection) {
+		self.left_focus = InventoryLeftFocus::Header(section);
+		self.focus.0 = None;
+	}
+
+	pub fn focus_slot(
+		&mut self,
+		section: InventorySection,
+		ordinal: usize,
+		item: Option<InventoryItemKey>,
+	) {
+		self.section = section;
+		self.left_focus = InventoryLeftFocus::Slot { section, ordinal };
+		let memory = &mut self.section_memory[section.index()][InventoryRegion::Equipped.index()];
+		memory.focused_ordinal = ordinal;
+		memory.focused_item = item;
+		self.focus.0 = item;
+	}
+
+	pub fn toggle_folder(&mut self, section: InventorySection) {
+		if self.picker_source.is_some() || self.interaction.reordering().is_some() {
+			return;
+		}
+		self.region = InventoryRegion::Equipped;
+		self.section = section;
+		self.focus_header(section);
+		self.expanded_section =
+			if self.expanded_section == Some(section) { None } else { Some(section) };
+	}
+
 	pub fn active_memory(&self) -> &InventorySectionMemory {
 		&self.section_memory[self.section.index()][self.region.index()]
 	}
