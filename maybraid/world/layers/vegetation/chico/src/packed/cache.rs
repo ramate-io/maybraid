@@ -137,6 +137,7 @@ impl AdmissionReason {
 	}
 }
 
+#[derive(Clone)]
 pub struct TilePayload {
 	#[cfg(feature = "packed-diagnostics")]
 	pub diagnostic_family: &'static str,
@@ -197,28 +198,14 @@ impl TilePayload {
 			.map(|batch| batch.instances.len() as u64)
 			.sum::<u64>();
 		let bounds = host.tile.scene_bounds();
-		// Original leaf sway is bounded by 0.108 times the part radius.
-		let max_scale = lods
-			.iter()
-			.flat_map(|batches| batches.iter())
-			.flat_map(|batch| batch.instances.iter())
-			.map(|instance| {
-				instance
-					.world_from_local
-					.x_axis
-					.truncate()
-					.length()
-					.max(instance.world_from_local.y_axis.truncate().length())
-					.max(instance.world_from_local.z_axis.truncate().length())
-			})
-			.fold(1.0_f32, f32::max);
-		let slack = bevy::math::Vec3A::splat(2.0 + max_scale * 0.108);
+
 		Ok(Self {
 			#[cfg(feature = "packed-diagnostics")]
 			diagnostic_family: host.tile.family_name(),
 			revision,
 			proxy_shadows,
-			bounds: Aabb3d { min: bounds.min - slack, max: bounds.max + slack },
+			// Provisional indexing bounds; replaced by geometric bounds before any proxy exists.
+			bounds,
 			center: structural_lod.center,
 			radius: structural_lod.tree_radius,
 			structural_lod,
@@ -227,6 +214,57 @@ impl TilePayload {
 			cpu_payload_bytes,
 			gpu_payload_bytes: instances * 176,
 		})
+	}
+
+	/// Union every rendered LOD and shadow kit in world space. Authored LOD
+	/// bands stay separate: structural footprint metadata is not mesh bounds.
+	pub fn geometric_bounds(&self, kits: &crate::packed::kit::PackedKitMeshes) -> Option<Aabb3d> {
+		let _span = bevy::log::tracing::trace_span!(target:"maybraid.packed.profile", "packed_geometry_bounds").entered();
+		let mut union: Option<(Vec3, Vec3)> = None;
+		for batch in self.lods.iter().flat_map(|batches| batches.iter()) {
+			let local = kits.ready_bounds(batch.key.kit)?;
+			let center = Vec3::from((local.min + local.max) * 0.5);
+			let half = Vec3::from((local.max - local.min) * 0.5);
+			for instance in batch.instances.iter() {
+				let model = instance.world_from_local;
+				let center = model.transform_point3(center);
+				let extent = model.x_axis.truncate().abs() * half.x
+					+ model.y_axis.truncate().abs() * half.y
+					+ model.z_axis.truncate().abs() * half.z;
+				let wind = if batch.key.material_kind == lod::VisualMaterialKind::Leaf {
+					let scale = if instance.merged_leaf {
+						instance
+							.collection_root
+							.x_axis
+							.truncate()
+							.length()
+							.max(instance.collection_root.y_axis.truncate().length())
+							.max(instance.collection_root.z_axis.truncate().length())
+							* instance.part_scale.abs()
+					} else {
+						model
+							.x_axis
+							.truncate()
+							.length()
+							.max(model.y_axis.truncate().length())
+							.max(model.z_axis.truncate().length())
+					};
+					0.108 * scale
+				} else {
+					0.0
+				};
+				let extent = extent + Vec3::splat(wind);
+				let (min, max) = (center - extent, center + extent);
+				if !min.is_finite() || !max.is_finite() {
+					return None;
+				}
+				union = Some(match union {
+					Some((old_min, old_max)) => (old_min.min(min), old_max.max(max)),
+					None => (min, max),
+				});
+			}
+		}
+		union.map(|(min, max)| Aabb3d::from_min_max(min, max))
 	}
 
 	pub fn batch_count(&self) -> usize {

@@ -4,6 +4,7 @@ use crate::packed::instances::SHADOW_KIT;
 use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::mesh::{PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use std::collections::HashMap;
 use vegetation_components::VegetationProceduralAssets;
 
@@ -17,6 +18,7 @@ pub enum KitState {
 #[derive(Resource, Default)]
 pub struct PackedKitMeshes {
 	pub states: HashMap<&'static str, KitState>,
+	pub local_bounds: HashMap<&'static str, Aabb3d>,
 	pub epoch: u64,
 	pub sources: HashMap<&'static str, Handle<Gltf>>,
 }
@@ -42,6 +44,34 @@ impl PackedKitMeshes {
 			KitState::Ready(mesh) => Some(mesh.clone()),
 			_ => None,
 		}
+	}
+
+	/// Exact POSITION AABB for the accepted CPU mesh, cached per kit revision.
+	pub fn bounds_for_mesh(mesh: &Mesh) -> Option<Aabb3d> {
+		let Some(VertexAttributeValues::Float32x3(positions)) =
+			mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+		else {
+			return None;
+		};
+		if positions.is_empty() {
+			return None;
+		}
+		let mut min = Vec3::splat(f32::INFINITY);
+		let mut max = Vec3::splat(f32::NEG_INFINITY);
+		for position in positions {
+			let position = Vec3::from_array(*position);
+			if !position.is_finite() {
+				return None;
+			}
+			min = min.min(position);
+			max = max.max(position);
+		}
+		Some(Aabb3d::from_min_max(min, max))
+	}
+
+	pub fn ready_bounds(&self, kit: &'static str) -> Option<Aabb3d> {
+		self.mesh(kit)?;
+		self.local_bounds.get(kit).copied()
 	}
 
 	pub fn supports_mesh(mesh: &Mesh) -> bool {
@@ -111,6 +141,22 @@ pub fn resolve_kit_meshes(
 			KitState::Unsupported
 		};
 	}
+	let kits = &mut *kits;
+	for (&kit, state) in &mut kits.states {
+		if kits.local_bounds.contains_key(kit) {
+			continue;
+		}
+		let KitState::Ready(handle) = state else { continue };
+		let Some(mesh) = meshes.get(handle.id()) else { continue };
+		match PackedKitMeshes::bounds_for_mesh(mesh) {
+			Some(bounds) => {
+				kits.local_bounds.insert(kit, bounds);
+			}
+			None => {
+				*state = KitState::Unsupported;
+			}
+		}
+	}
 }
 
 /// Hot-reloaded kit content retires the old tile revision before replacement.
@@ -126,10 +172,15 @@ pub fn invalidate_changed_kits(
 			_ => None,
 		})
 		.collect::<Vec<_>>();
+	let mut removed_meshes = std::collections::HashSet::new();
 	let mesh_changes = mesh_events
 		.read()
 		.filter_map(|event| match event {
-			AssetEvent::Modified { id } | AssetEvent::Removed { id } => Some(*id),
+			AssetEvent::Modified { id } => Some(*id),
+			AssetEvent::Removed { id } => {
+				removed_meshes.insert(*id);
+				Some(*id)
+			}
 			_ => None,
 		})
 		.collect::<Vec<_>>();
@@ -147,8 +198,12 @@ pub fn invalidate_changed_kits(
 	}
 	kits.epoch = kits.epoch.wrapping_add(1);
 	for kit in dirty {
+		kits.local_bounds.remove(kit);
 		if let Some(source) = kits.sources.get(kit).cloned() {
 			kits.states.insert(kit, KitState::Loading(source));
+		} else if matches!(kits.states.get(kit),Some(KitState::Ready(mesh)) if removed_meshes.contains(&mesh.id()))
+		{
+			kits.states.insert(kit, KitState::Unsupported);
 		}
 	}
 }
