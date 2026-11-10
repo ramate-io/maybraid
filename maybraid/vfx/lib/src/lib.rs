@@ -26,9 +26,11 @@ pub use composition::{
 };
 pub use effects::dust::Dust;
 pub use effects::fiery_explosion::FieryExplosion;
+pub use effects::ooze_burst::OozeBurst;
+pub use effects::spirit_dissolve::SpiritDissolve;
 pub use layers::dust::DustLayer;
 pub use library::{canonicalize_effect_name, VfxLibrary};
-pub use names::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
+pub use names::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, OOZE_BURST, SMOKE, SPARKS, SPIRIT_DISSOLVE};
 pub use palette::ExplosionPalette;
 pub use parts::flipbook_card::{DustMaterial, DustPlugin, VfxDust};
 pub use parts::lobe::{LobeMaterial, LobeMaterialPlugin};

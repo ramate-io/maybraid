@@ -9,8 +9,10 @@ use crate::parts::packaged::PackagedFlipbook;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ParticleShade {
 	Fire,
+	Ooze,
 	Smoke,
 	Spark,
+	Spirit,
 }
 
 /// Shared Hanabi effect handle and configurable spawn defaults.

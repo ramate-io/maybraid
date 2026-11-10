@@ -21,6 +21,32 @@ impl Default for ExplosionPalette {
 }
 
 impl ExplosionPalette {
+	/// Dark viscous combat fluid — stylized, not photoreal gore.
+	pub fn maybraid_ooze() -> Self {
+		Self {
+			fire_hot: LinearRgba::rgb(0.42, 0.08, 0.12),
+			fire_mid: LinearRgba::rgb(0.22, 0.04, 0.10),
+			fire_cool: LinearRgba::rgb(0.08, 0.02, 0.06),
+			smoke_lit: LinearRgba::rgb(0.18, 0.06, 0.10),
+			smoke_shadow: LinearRgba::rgb(0.06, 0.02, 0.05),
+			spark: LinearRgba::rgb(0.55, 0.12, 0.18),
+			flash: LinearRgba::rgb(0.35, 0.08, 0.12),
+		}
+	}
+
+	/// Rising wisps on defeat — soft celestial tones used elsewhere in Maybraid.
+	pub fn celestial() -> Self {
+		Self {
+			fire_hot: LinearRgba::rgb(1.05, 0.92, 1.25),
+			fire_mid: LinearRgba::rgb(0.55, 0.72, 1.15),
+			fire_cool: LinearRgba::rgb(0.22, 0.38, 0.85),
+			smoke_lit: LinearRgba::rgb(0.75, 0.82, 1.05),
+			smoke_shadow: LinearRgba::rgb(0.18, 0.28, 0.55),
+			spark: LinearRgba::rgb(1.2, 1.0, 1.35),
+			flash: LinearRgba::rgb(0.85, 0.90, 1.1),
+		}
+	}
+
 	pub fn maybraid() -> Self {
 		Self {
 			fire_hot: LinearRgba::rgb(1.12, 0.88, 0.38),
