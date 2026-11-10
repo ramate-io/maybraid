@@ -138,6 +138,8 @@ impl AdmissionReason {
 }
 
 pub struct TilePayload {
+	#[cfg(feature = "packed-diagnostics")]
+	pub diagnostic_family: &'static str,
 	pub revision: u64,
 	pub proxy_shadows: bool,
 	pub bounds: Aabb3d,
@@ -212,6 +214,8 @@ impl TilePayload {
 			.fold(1.0_f32, f32::max);
 		let slack = bevy::math::Vec3A::splat(2.0 + max_scale * 0.108);
 		Ok(Self {
+			#[cfg(feature = "packed-diagnostics")]
+			diagnostic_family: host.tile.family_name(),
 			revision,
 			proxy_shadows,
 			bounds: Aabb3d { min: bounds.min - slack, max: bounds.max + slack },

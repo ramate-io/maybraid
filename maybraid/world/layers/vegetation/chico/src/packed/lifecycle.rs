@@ -466,6 +466,8 @@ mod tests {
 		let signal = Arc::new(TileSignal::new([]));
 		assert!(signal.activate());
 		let payload = TilePayload {
+			#[cfg(feature = "packed-diagnostics")]
+			diagnostic_family: "Orchard",
 			revision: 1,
 			proxy_shadows: false,
 			bounds: Aabb3d { min: Vec3::splat(-1.0).into(), max: Vec3::ONE.into() },
