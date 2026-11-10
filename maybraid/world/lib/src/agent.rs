@@ -8,8 +8,8 @@ use damage::{Health, Hit};
 use durham::{CascadeChunk, Durham, DurhamSurface, WorldBaseTerrain};
 use maybraid_agent::{
 	read_script_commands, take_leading_start, AgentArgs, AgentButton, AgentCommand, AgentEvent,
-	AgentEventBody, CommandStatus, EventSink, InventoryObservation, LineInbox, MenuObservation,
-	PadIntent, Playback, TickEffect, TickView, SCRIPT_API_VERSION,
+	AgentEventBody, CommandStatus, DiagnosticCommand, EventSink, InventoryObservation, LineInbox,
+	MenuObservation, PadIntent, Playback, TickEffect, TickView, SCRIPT_API_VERSION,
 };
 use maybraid_character_controller::OrdinaryLocomotion;
 use maybraid_session::WorldGameplayEnabled;
@@ -33,6 +33,8 @@ use crate::map_view::WorldMapView;
 use crate::render_scale::{PresentationChurn, RequestVisualStyle, VisualStyle};
 use crate::screenshot::{GameplayScreenshotFinished, RequestGameplayScreenshot};
 use crate::PlayerSpawnXz;
+
+mod diagnostics;
 
 const DEFAULT_SAMPLE_PERIOD: f32 = 0.5;
 const DEFAULT_READY_TIMEOUT: f32 = 90.0;
@@ -160,7 +162,8 @@ impl Plugin for WorldAgentPlugin {
 				Update,
 				(
 					agent_apply_world_ops
-						.before(maybraid_spawns_support::ActorSupportSystems::Prepare),
+						.before(maybraid_spawns_support::ActorSupportSystems::Prepare)
+						.before(player_camera::PlayerCameraSystems::Look),
 					agent_emit_presentation_churn,
 					agent_emit_tanz,
 					agent_screenshot_finished,
@@ -173,6 +176,9 @@ impl Plugin for WorldAgentPlugin {
 					.chain(),
 			)
 			.add_systems(Last, (publish_agent_inventory, agent_emit_observation_churn).chain());
+		if drive.args.diagnostics {
+			diagnostics::install(app);
+		}
 	}
 }
 
@@ -640,6 +646,8 @@ fn agent_apply_world_ops(
 	windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
 	time: Res<Time>,
 	mut hits: MessageWriter<Hit>,
+	mut diagnostics: Option<ResMut<diagnostics::AgentDiagnostics>>,
+	mut camera_requests: Option<ResMut<diagnostics::camera::CameraRequests>>,
 	mut players: Query<
 		(
 			Entity,
@@ -647,12 +655,13 @@ fn agent_apply_world_ops(
 			&mut GlobalTransform,
 			Option<&mut Position>,
 			Option<&mut LinearVelocity>,
-			Option<&Health>,
+			Option<&mut Health>,
 			Option<&mut maybraid_spawns_support::PendingActorSupport>,
 		),
 		With<MotorPlayer>,
 	>,
 	mut tanzers: Query<(Entity, &mut TanzUser, &mut TanzExecution)>,
+	mut view_cameras: diagnostics::ViewCameras,
 ) {
 	let pending = std::mem::take(&mut runtime.pending);
 	let t = time.elapsed_secs();
@@ -708,6 +717,126 @@ fn agent_apply_world_ops(
 				} else {
 					warn!(target: "maybraid.agent", "player down: no live player");
 				}
+			}
+			AgentCommand::Console { line }
+				if line.split_whitespace().next() == Some("diagnostics") =>
+			{
+				let mut queued_camera = false;
+				let result = (|| -> Result<String, String> {
+					let diagnostics =
+						diagnostics.as_deref_mut().ok_or("requires --agent-diagnostics")?;
+					match DiagnosticCommand::parse(&line)? {
+						DiagnosticCommand::Enabled(enabled) => {
+							diagnostics.enabled = enabled;
+							emit(
+								&runtime.sink,
+								AgentEvent {
+									t,
+									frame,
+									body: AgentEventBody::Diagnostics { enabled },
+								},
+							);
+							Ok(format!("diagnostics enabled={enabled}"))
+						}
+						DiagnosticCommand::Npcs { radius } => {
+							let (entity, _, _, _, _, _, _) =
+								players.single().map_err(|_| "no single live motor player")?;
+							diagnostics.player = Some(entity);
+							diagnostics.request_npc_snapshot(
+								id,
+								maybraid_agent::AgentNpcSelector::Nearest { radius },
+							)
+						}
+						DiagnosticCommand::Npc { entity } => diagnostics.request_npc_snapshot(
+							id,
+							maybraid_agent::AgentNpcSelector::Entity { entity: entity.to_string() },
+						),
+						DiagnosticCommand::Health(amount) => {
+							let (entity, transform, _, _, _, health, _) =
+								players.single_mut().map_err(|_| "no single live motor player")?;
+							let mut health = health.ok_or("player has no health pool")?;
+							if health.is_dead() {
+								return Err("cannot change the fixture after player death".into());
+							}
+							let before = [health.current, health.max];
+							health.current = amount;
+							health.max = amount;
+							diagnostics.player = Some(entity);
+							emit(
+								&runtime.sink,
+								AgentEvent {
+									t,
+									frame,
+									body: AgentEventBody::FixtureHealth {
+										actor: diagnostics::player_identity(
+											entity,
+											transform.translation,
+										),
+										before,
+										after: [health.current, health.max],
+									},
+								},
+							);
+							Ok(format!("player fixture health={amount}"))
+						}
+						DiagnosticCommand::Camera { pose } => {
+							camera_requests
+								.as_deref_mut()
+								.ok_or("camera diagnostics unavailable")?
+								.queue(id, line.clone(), pose)?;
+							queued_camera = true;
+							Ok("camera request queued for Last".into())
+						}
+						DiagnosticCommand::View { yaw, pitch } => {
+							let (entity, transform, _, _, _, _, _) =
+								players.single().map_err(|_| "no single live motor player")?;
+							let fixture = diagnostics::ViewFixture::apply(
+								entity,
+								yaw,
+								pitch,
+								&mut view_cameras,
+							)?;
+							emit(
+								&runtime.sink,
+								AgentEvent {
+									t,
+									frame,
+									body: AgentEventBody::FixtureView {
+										actor: diagnostics::player_identity(
+											entity,
+											transform.translation,
+										),
+										camera: fixture.camera.to_bits().to_string(),
+										before: fixture.before,
+										after: fixture.after,
+									},
+								},
+							);
+							Ok(format!(
+								"player fixture view yaw={} pitch={}",
+								fixture.after[0], fixture.after[1]
+							))
+						}
+					}
+				})();
+				let (status, detail) = match result {
+					Ok(_) if queued_camera => continue,
+					Ok(detail) => (CommandStatus::Finished, detail),
+					Err(detail) => (CommandStatus::Failed, detail),
+				};
+				emit(
+					&runtime.sink,
+					AgentEvent {
+						t,
+						frame,
+						body: AgentEventBody::Command {
+							id,
+							status,
+							cmd: line,
+							detail: Some(detail),
+						},
+					},
+				);
 			}
 			AgentCommand::Console { line } => {
 				let mut console = String::new();
@@ -812,8 +941,10 @@ fn agent_sample_player(
 	time: Res<Time>,
 	surface: DurhamSurface,
 	map: Option<Res<WorldMapView>>,
-	motors: Query<&Transform, With<MotorPlayer>>,
-	vegetation: Query<&Transform, (With<VegetationPlayer>, Without<MotorPlayer>)>,
+	motors: Query<(Entity, &Transform), With<MotorPlayer>>,
+	vegetation: Query<(Entity, &Transform), (With<VegetationPlayer>, Without<MotorPlayer>)>,
+	mut diagnostics: Option<ResMut<diagnostics::AgentDiagnostics>>,
+	vitals: diagnostics::PlayerVitalsQuery,
 	cameras: Query<&CameraController, With<Camera3d>>,
 ) {
 	if !runtime.ready {
@@ -824,15 +955,27 @@ fn agent_sample_player(
 		return;
 	}
 	runtime.last_sample = now;
-	let Some(transform) = motors.single().ok().or_else(|| vegetation.single().ok()) else {
+	let Some((entity, transform)) = motors.single().ok().or_else(|| vegetation.single().ok())
+	else {
 		return;
 	};
 	let p = transform.translation;
 	let yaw = cameras.single().ok().map(|camera| camera.yaw).unwrap_or(0.0);
+	let pitch = diagnostics
+		.as_deref()
+		.filter(|diagnostics| diagnostics.enabled)
+		.and_then(|_| cameras.single().ok().map(|camera| camera.pitch));
 	let r#move = runtime.last_intent.move_stick;
 	let ground = surface.composed_height_at(p.xz());
 	let map_open = map.as_deref().is_some_and(|map| map.open);
 	let picker = map.as_deref().is_some_and(|map| map.open && map.close_locked);
+	let vitals = diagnostics.as_deref_mut().and_then(|diagnostics| {
+		diagnostics.player = Some(entity);
+		diagnostics
+			.enabled
+			.then(|| diagnostics::player_vitals(entity, &vitals))
+			.flatten()
+	});
 	emit(
 		&runtime.sink,
 		AgentEvent {
@@ -843,10 +986,12 @@ fn agent_sample_player(
 				y: p.y,
 				z: p.z,
 				yaw,
+				pitch,
 				r#move,
 				ground,
 				map_open,
 				picker,
+				vitals,
 			},
 		},
 	);
@@ -1241,7 +1386,7 @@ mod tests {
 		assert_eq!(ready_detail(false, false), "timeout");
 	}
 
-	fn idle_runtime() -> AgentRuntime {
+	pub(super) fn idle_runtime() -> AgentRuntime {
 		AgentRuntime {
 			playback: Playback::new(),
 			sink: EventSink::none(),
