@@ -1,6 +1,7 @@
 //! Combat impact ooze and spiritual corpse dissolution wired through `maybraid-vfx`.
 
 mod impact;
+mod spawn_in;
 mod spirit;
 
 use bevy::prelude::*;
@@ -8,6 +9,7 @@ use character_ragdoll::CharacterRagdollSystems;
 use damage::{DamageSystems, tick_queued_despawns};
 
 pub use impact::{CombatOozeTint, DEFAULT_OOZE_TINT};
+pub use spawn_in::{SpiritMaterialize, SPIRIT_SPAWN_REVEAL, SPIRIT_SPAWN_SECS};
 pub use spirit::{SPIRIT_DISSOLVE_SECS, SpiritDissolveStarted};
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -15,6 +17,7 @@ pub enum CombatVfxSystems {
 	Impact,
 	Settle,
 	Despawn,
+	Materialize,
 }
 
 pub struct CombatVfxPlugin;
@@ -26,6 +29,12 @@ impl Plugin for CombatVfxPlugin {
 			impact::spawn_ooze_on_damage
 				.after(DamageSystems::Apply)
 				.in_set(CombatVfxSystems::Impact),
+		)
+		.add_systems(
+			Update,
+			(spawn_in::begin_spirit_materialize, spawn_in::tick_spirit_materialize)
+				.chain()
+				.in_set(CombatVfxSystems::Materialize),
 		)
 		.add_systems(
 			Update,
