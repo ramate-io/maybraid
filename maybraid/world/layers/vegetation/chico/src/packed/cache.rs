@@ -1,15 +1,15 @@
 //! Revision-owned resident payloads. Visibility never owns cache residency.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use bevy::prelude::*;
 use bevy::shape::Aabb3d;
 use lod::LodSceneLevel;
 
-use crate::packed::instances::{pack_grove_band, PackedBatch};
 use crate::ChicoGroveHost;
+use crate::packed::instances::{PackedBatch, pack_grove_band};
 
 pub const LEVELS: [LodSceneLevel; 4] =
 	[LodSceneLevel::High, LodSceneLevel::Medium, LodSceneLevel::Low, LodSceneLevel::UltraLow];
@@ -256,12 +256,45 @@ pub struct ResidentTile {
 	pub last_kit_epoch: u64,
 }
 
-/// Active sources are pinned. A denied source retries only after an admission
-/// epoch changes (retirement/budget/source change), never because a camera moves.
+/// Metadata-only identity for a rejected payload. The change tick conservatively
+/// invalidates even an equal replacement and prevents plant-Arc address reuse
+/// from making a different source look unchanged. No grown recipe/IR is retained.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AdmissionKey {
+	source_change_tick: u32,
+	layer: crate::ForestLayer,
+	family: &'static str,
+	plant_identity: Option<usize>,
+	structural_lod: Option<vegetation_components::StructuralLod>,
+	bounds: Aabb3d,
+	proxy_shadows: bool,
+}
+
+impl AdmissionKey {
+	pub fn from_host(host: &ChicoGroveHost, source_change_tick: u32, proxy_shadows: bool) -> Self {
+		Self {
+			source_change_tick,
+			layer: host.layer,
+			family: host.tile.family_name(),
+			plant_identity: host.tile.plant_list_identity(),
+			structural_lod: host.tile.structural_lod(),
+			bounds: host.tile.scene_bounds(),
+			proxy_shadows,
+		}
+	}
+}
+
+pub struct DeniedAdmission {
+	key: AdmissionKey,
+	required_gpu_bytes: u64,
+}
+
+/// All resident sources stay charged until retirement, including preparing and
+/// restoring tiles. Unchanged denials retry only when their known size fits.
 #[derive(Resource)]
 pub struct PackedGroveCache {
 	pub tiles: HashMap<Entity, ResidentTile>,
-	pub denied: HashMap<Entity, u64>,
+	pub denied: HashMap<Entity, DeniedAdmission>,
 	pub unsupported: HashMap<Entity, (u64, AdmissionReason)>,
 	pub epoch: u64,
 	pub revision: u64,
@@ -298,12 +331,23 @@ impl PackedGroveCache {
 		self.tiles.values().map(|tile| tile.payload.cpu_payload_bytes).sum()
 	}
 
-	pub fn admit(&mut self, entity: Entity, bytes: u64) -> bool {
-		if self.denied.get(&entity) == Some(&self.epoch) {
-			return false;
-		}
-		if bytes > self.budget_bytes.saturating_sub(self.retained_gpu_bytes()) {
-			self.denied.insert(entity, self.epoch);
+	pub fn available_gpu_bytes(&self) -> u64 {
+		self.budget_bytes.saturating_sub(self.retained_gpu_bytes())
+	}
+
+	/// `available` is a current capacity snapshot, rechecked before assembly
+	/// after earlier candidates have admitted. Camera movement is not an input.
+	pub fn should_build_payload(&self, entity: Entity, key: &AdmissionKey, available: u64) -> bool {
+		self.denied
+			.get(&entity)
+			.is_none_or(|denial| denial.key != *key || denial.required_gpu_bytes <= available)
+	}
+
+	pub fn admit(&mut self, entity: Entity, key: AdmissionKey, bytes: u64) -> bool {
+		// A changed source may now be smaller even without any retirement.
+		// Always decide from its actual new size, never an old denial epoch.
+		if bytes > self.available_gpu_bytes() {
+			self.denied.insert(entity, DeniedAdmission { key, required_gpu_bytes: bytes });
 			self.budget_denials += 1;
 			return false;
 		}
@@ -336,17 +380,82 @@ mod tests {
 		let next = TileSignal::new([READY_MAIN | READY_BUFFER]);
 		assert!(!next.is_ready());
 	}
+	fn admission_key() -> AdmissionKey {
+		let host = ChicoGroveHost::new(
+			crate::ForestGroveTile::Orchard(vegetation_groves::Orchard {
+				plants: Arc::from([]),
+				structural_center: Vec3::ZERO,
+				footprint_radius: 1.0,
+				extent: vegetation_groves::GroveExtent::new(Vec3::ZERO, Vec3::splat(10.0)),
+			}),
+			crate::ForestLayer::UpperCanopy,
+		);
+		AdmissionKey::from_host(&host, 1, false)
+	}
+
 	#[test]
-	fn denied_admission_does_not_retry_on_camera_motion() {
+	fn unchanged_denial_waits_for_sufficient_capacity_not_epoch_changes() {
 		let mut world = World::new();
 		let entity = world.spawn_empty().id();
+		let key = admission_key();
 		let mut cache = PackedGroveCache::with_budget(128);
-		assert!(!cache.admit(entity, 256));
-		assert!(!cache.admit(entity, 64));
-		assert_eq!(cache.budget_denials, 1);
+		assert!(!cache.admit(entity, key.clone(), 256));
 		cache.epoch += 1;
-		assert!(cache.admit(entity, 64));
+		assert!(!cache.should_build_payload(entity, &key, cache.available_gpu_bytes()));
+		// A tiny release/budget increase still cannot fit the unchanged payload.
+		cache.budget_bytes = 255;
+		assert!(!cache.should_build_payload(entity, &key, cache.available_gpu_bytes()));
+		assert_eq!(cache.budget_denials, 1);
+		cache.budget_bytes = 256;
+		assert!(cache.should_build_payload(entity, &key, cache.available_gpu_bytes()));
+		assert!(cache.admit(entity, key, 256));
+		assert!(!cache.denied.contains_key(&entity));
 	}
+
+	#[test]
+	fn changed_smaller_source_admits_without_a_retirement() {
+		let mut world = World::new();
+		let entity = world.spawn_empty().id();
+		let key = admission_key();
+		let mut cache = PackedGroveCache::with_budget(128);
+		assert!(!cache.admit(entity, key.clone(), 256));
+		let mut changed = key;
+		changed.source_change_tick += 1;
+		assert!(cache.should_build_payload(entity, &changed, cache.available_gpu_bytes()));
+		assert!(cache.admit(entity, changed, 64));
+		assert_eq!(cache.epoch, 0);
+	}
+
+	#[test]
+	fn source_metadata_policy_and_entity_generation_invalidate_known_size() {
+		let mut world = World::new();
+		let entity = world.spawn_empty().id();
+		let key = admission_key();
+		let mut cache = PackedGroveCache::with_budget(128);
+		assert!(!cache.admit(entity, key.clone(), 256));
+		for changed in [
+			AdmissionKey { proxy_shadows: true, ..key.clone() },
+			AdmissionKey { source_change_tick: 2, ..key.clone() },
+			AdmissionKey { layer: crate::ForestLayer::Understory, ..key.clone() },
+			AdmissionKey { family: "replacement", ..key.clone() },
+			AdmissionKey { plant_identity: Some(42), ..key.clone() },
+			AdmissionKey {
+				structural_lod: Some(vegetation_components::StructuralLod::new(Vec3::X, 2.0)),
+				..key.clone()
+			},
+			AdmissionKey {
+				bounds: Aabb3d { min: Vec3::splat(-20.0).into(), max: Vec3::splat(20.0).into() },
+				..key.clone()
+			},
+		] {
+			assert!(cache.should_build_payload(entity, &changed, cache.available_gpu_bytes()));
+		}
+		world.despawn(entity);
+		let replacement = world.spawn_empty().id();
+		assert_ne!(entity, replacement);
+		assert!(cache.should_build_payload(replacement, &key, cache.available_gpu_bytes()));
+	}
+
 	#[cfg(feature = "packed-diagnostics")]
 	#[test]
 	fn readiness_snapshot_distinguishes_required_acknowledged_and_missing_passes() {

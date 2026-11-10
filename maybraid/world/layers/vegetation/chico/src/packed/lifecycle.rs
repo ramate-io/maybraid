@@ -1,13 +1,13 @@
 //! One-time ordinary-to-packed handoff and revision/retirement ownership.
 
 use super::view_policy::PackedViewPolicy;
+use crate::ChicoGroveHost;
 use crate::packed::cache::*;
 use crate::packed::gpu::PackedBatchInstance;
 use crate::packed::kit::{KitState, PackedKitMeshes};
 use crate::packed::material::{PackedLeafMaterial, PackedShadowMaterial, PackedStickMaterial};
 use crate::packed::mode::PackMode;
 use crate::packed::select::select_band;
-use crate::ChicoGroveHost;
 use bevy::camera::primitives::Aabb;
 use bevy::camera::visibility::RenderLayers;
 use bevy::light::NotShadowCaster;
@@ -292,7 +292,7 @@ pub fn sync_packed_tiles(world: &mut World) {
 	for entity in stale {
 		cache.remove(entity);
 	}
-	cache.denied.retain(|entity, _| world.get_entity(*entity).is_ok());
+	cache.denied.retain(|entity, _| world.get::<ChicoGroveHost>(*entity).is_some());
 	cache.unsupported.retain(|entity, _| world.get_entity(*entity).is_ok());
 	let rejected = cache
 		.tiles
@@ -306,7 +306,7 @@ pub fn sync_packed_tiles(world: &mut World) {
 		.map(|(&entity, _)| entity)
 		.collect::<Vec<_>>();
 	for entity in rejected {
-		if let Some(tile) = cache.tiles.remove(&entity) {
+		if let Some(tile) = cache.remove(entity) {
 			restore_ordinary(world, entity, &tile);
 			cache.unsupported.insert(entity, (kits.epoch, AdmissionReason::UnsupportedKit));
 		}
@@ -359,6 +359,10 @@ pub fn sync_packed_tiles(world: &mut World) {
 	for entity in restored {
 		cache.remove(entity);
 	}
+	// Snapshot once for the initial filter; recompute before each candidate
+	// because earlier candidates consume capacity. No resident is reclaimable
+	// until the normal handoff/retirement path actually removes it.
+	let available = cache.available_gpu_bytes();
 	let sources = {
 		let mut query = world.query::<(Entity, Ref<ChicoGroveHost>)>();
 		query
@@ -367,14 +371,29 @@ pub fn sync_packed_tiles(world: &mut World) {
 				mode.accepts(&host.tile)
 					&& !cache.tiles.contains_key(entity)
 					&& (host.is_changed()
-						|| (cache.denied.get(entity) != Some(&cache.epoch)
-							&& cache.unsupported.get(entity).map(|(epoch, _)| *epoch)
-								!= Some(kits.epoch)))
+						|| cache.unsupported.get(entity).map(|(epoch, _)| *epoch)
+							!= Some(kits.epoch))
 			})
-			.map(|(entity, host)| (entity, (*host).clone()))
+			.filter_map(|(entity, host)| {
+				let key = AdmissionKey::from_host(
+					&host,
+					host.last_changed().get(),
+					canopy.emit_proxies(),
+				);
+				cache
+					.should_build_payload(entity, &key, available)
+					.then(|| (entity, (*host).clone(), key))
+			})
 			.collect::<Vec<_>>()
 	};
-	for (entity, host) in sources {
+	for (entity, host, key) in sources {
+		if !cache.should_build_payload(entity, &key, cache.available_gpu_bytes()) {
+			continue;
+		}
+		// A stale identity must not label a newly unsupported revision as a
+		// budget denial. Only the small key/size survives a fresh rejection.
+		cache.denied.remove(&entity);
+		cache.unsupported.remove(&entity);
 		cache.revision = cache.revision.wrapping_add(1);
 		let payload = match TilePayload::from_host(&host, cache.revision, canopy.emit_proxies()) {
 			Ok(payload) => payload,
@@ -394,13 +413,12 @@ pub fn sync_packed_tiles(world: &mut World) {
 				.insert(entity, (kits.epoch, AdmissionReason::UnsupportedGeometry));
 			continue;
 		}
-		if !cache.admit(entity, payload.gpu_payload_bytes) {
+		if !cache.admit(entity, key, payload.gpu_payload_bytes) {
 			continue;
 		}
 		for batch in payload.lods.iter().flat_map(|batches| batches.iter()) {
 			kits.request(world.resource::<AssetServer>(), batch.key.kit);
 		}
-		cache.unsupported.remove(&entity);
 		cache.builds += 1;
 		cache.tiles.insert(
 			entity,
@@ -582,6 +600,179 @@ mod tests {
 		assert!(source_revision_changed(&replacement, original));
 	}
 	#[test]
+	fn denied_payload_is_not_reassembled_for_change_flags_or_noop_epochs() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(PackMode::Compatible);
+		world.insert_resource(CanopyShadowMode::Off);
+		world.init_resource::<PackedKitMeshes>();
+		world.spawn((Camera3d::default(), Camera::default(), Transform::IDENTITY));
+		let host = ChicoGroveHost::new(
+			crate::ForestGroveKind::HighBush.grow_tile(
+				GroveExtent::new(Vec3::ZERO, Vec3::splat(40.0)),
+				&vegetation_groves::FlatTerrainSample::default(),
+			),
+			crate::ForestLayer::UpperCanopy,
+		);
+		let payload = TilePayload::from_host(&host, 1, false)
+			.map_err(|reason| anyhow::anyhow!("fixture rejected {reason:?}"))?;
+		let cell = world.spawn(host).id();
+		let mut query = world.query::<(Entity, Ref<ChicoGroveHost>)>();
+		let key = query
+			.iter(&world)
+			.find(|(entity, _)| *entity == cell)
+			.map(|(_, host)| AdmissionKey::from_host(&host, host.last_changed().get(), false))
+			.ok_or_else(|| anyhow::anyhow!("fixture host absent"))?;
+		let mut cache = PackedGroveCache::with_budget(payload.gpu_payload_bytes.saturating_sub(1));
+		assert!(!cache.admit(cell, key, payload.gpu_payload_bytes));
+		world.insert_resource(cache);
+		// The host remains marked changed, and an unrelated epoch changes.
+		// The old filter rebuilt in either case before rejecting at admit().
+		for _ in 0..3 {
+			world.resource_mut::<PackedGroveCache>().epoch += 1;
+			sync_packed_tiles(&mut world);
+			assert_eq!(world.resource::<PackedGroveCache>().revision, 0);
+			assert_eq!(world.resource::<PackedGroveCache>().budget_denials, 1);
+		}
+		// Metadata records do not outlive a removed source component.
+		world.entity_mut(cell).remove::<ChicoGroveHost>();
+		sync_packed_tiles(&mut world);
+		assert!(!world.resource::<PackedGroveCache>().denied.contains_key(&cell));
+		Ok(())
+	}
+
+	fn admission_app(payload: &TilePayload) -> App {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+		app.init_asset::<bevy::gltf::Gltf>();
+		let world = app.world_mut();
+		world.insert_resource(PackMode::Compatible);
+		world.insert_resource(CanopyShadowMode::Off);
+		world.spawn((Camera3d::default(), Camera::default(), Transform::IDENTITY));
+		let mut kits = PackedKitMeshes::default();
+		// Stop before proxy publication: this test exercises CPU admission,
+		// without requiring renderer/material resources or a successful asset load.
+		for batch in payload.lods.iter().flat_map(|batches| batches.iter()) {
+			kits.states.insert(batch.key.kit, KitState::Loading(Handle::default()));
+		}
+		world.insert_resource(kits);
+		app
+	}
+
+	#[test]
+	fn smaller_replacement_passes_real_sync_admission_in_the_same_epoch() -> anyhow::Result<()> {
+		let original = ChicoGroveHost::new(
+			crate::ForestGroveKind::HighBush.grow_tile(
+				GroveExtent::new(Vec3::ZERO, Vec3::splat(40.0)),
+				&vegetation_groves::FlatTerrainSample::default(),
+			),
+			crate::ForestLayer::UpperCanopy,
+		);
+		let mut replacement = original.clone();
+		replacement.layer = crate::ForestLayer::Tufts;
+		let large = TilePayload::from_host(&original, 1, false)
+			.map_err(|reason| anyhow::anyhow!("original rejected {reason:?}"))?;
+		let small = TilePayload::from_host(&replacement, 2, false)
+			.map_err(|reason| anyhow::anyhow!("replacement rejected {reason:?}"))?;
+		assert!(small.gpu_payload_bytes > 0 && small.gpu_payload_bytes < large.gpu_payload_bytes);
+		let mut app = admission_app(&small);
+		let world = app.world_mut();
+		let cell = world.spawn(original).id();
+		let mut query = world.query::<(Entity, Ref<ChicoGroveHost>)>();
+		let key = query
+			.iter(world)
+			.find(|(entity, _)| *entity == cell)
+			.map(|(_, host)| AdmissionKey::from_host(&host, host.last_changed().get(), false))
+			.ok_or_else(|| anyhow::anyhow!("original host absent"))?;
+		let mut cache = PackedGroveCache::with_budget(small.gpu_payload_bytes);
+		assert!(!cache.admit(cell, key, large.gpu_payload_bytes));
+		world.insert_resource(cache);
+		world.clear_trackers();
+		world.entity_mut(cell).insert(replacement);
+		sync_packed_tiles(world);
+		let cache = world.resource::<PackedGroveCache>();
+		assert_eq!(cache.epoch, 0);
+		assert_eq!(cache.builds, 1);
+		assert_eq!(cache.revision, 1);
+		assert_eq!(cache.tiles[&cell].payload.gpu_payload_bytes, small.gpu_payload_bytes);
+		assert!(!cache.denied.contains_key(&cell));
+		sync_packed_tiles(world);
+		assert_eq!(world.resource::<PackedGroveCache>().revision, 1);
+		Ok(())
+	}
+
+	#[test]
+	fn sufficient_capacity_retries_real_payload_assembly_once() -> anyhow::Result<()> {
+		let host = ChicoGroveHost::new(
+			crate::ForestGroveKind::HighBush.grow_tile(
+				GroveExtent::new(Vec3::ZERO, Vec3::splat(40.0)),
+				&vegetation_groves::FlatTerrainSample::default(),
+			),
+			crate::ForestLayer::UpperCanopy,
+		);
+		let payload = TilePayload::from_host(&host, 1, false)
+			.map_err(|reason| anyhow::anyhow!("fixture rejected {reason:?}"))?;
+		let mut app = admission_app(&payload);
+		let world = app.world_mut();
+		let cell = world.spawn(host).id();
+		let mut query = world.query::<(Entity, Ref<ChicoGroveHost>)>();
+		let key = query
+			.iter(world)
+			.find(|(entity, _)| *entity == cell)
+			.map(|(_, host)| AdmissionKey::from_host(&host, host.last_changed().get(), false))
+			.ok_or_else(|| anyhow::anyhow!("fixture host absent"))?;
+		let mut cache = PackedGroveCache::with_budget(payload.gpu_payload_bytes.saturating_sub(1));
+		assert!(!cache.admit(cell, key, payload.gpu_payload_bytes));
+		world.insert_resource(cache);
+		world.clear_trackers();
+		sync_packed_tiles(world);
+		assert_eq!(world.resource::<PackedGroveCache>().revision, 0);
+		world.resource_mut::<PackedGroveCache>().budget_bytes = payload.gpu_payload_bytes;
+		sync_packed_tiles(world);
+		assert_eq!(world.resource::<PackedGroveCache>().revision, 1);
+		assert_eq!(world.resource::<PackedGroveCache>().builds, 1);
+		sync_packed_tiles(world);
+		assert_eq!(world.resource::<PackedGroveCache>().revision, 1);
+		Ok(())
+	}
+
+	#[test]
+	fn preparing_and_active_tiles_stay_charged_until_actual_removal() {
+		for active in [false, true] {
+			let mut world = World::new();
+			let (cell, mut tile) = fixture(&mut world);
+			if !active {
+				tile.signal = Arc::new(TileSignal::new([READY_MAIN | READY_BUFFER]));
+			}
+			let payload = TilePayload {
+				revision: 1,
+				proxy_shadows: false,
+				bounds: Aabb3d { min: Vec3::NEG_ONE.into(), max: Vec3::ONE.into() },
+				center: Vec3::ZERO,
+				radius: 1.0,
+				structural_lod: vegetation_components::StructuralLod::new(Vec3::ZERO, 1.0),
+				plant_count: 0,
+				lods: LEVELS.map(|_| Arc::from([])),
+				cpu_payload_bytes: 0,
+				gpu_payload_bytes: 96,
+			};
+			// No selection/phase makes this charge implicitly reclaimable.
+			tile.payload = Arc::new(payload);
+			let waiting = world.spawn_empty().id();
+			let key = AdmissionKey::from_host(&tile.original, 0, false);
+			let mut cache = PackedGroveCache::with_budget(128);
+			cache.tiles.insert(cell, tile);
+			assert_eq!(cache.available_gpu_bytes(), 32);
+			assert!(!cache.admit(waiting, key.clone(), 64));
+			assert!(!cache.should_build_payload(waiting, &key, cache.available_gpu_bytes()));
+			let removed = cache.remove(cell);
+			assert!(removed.is_some());
+			assert_eq!(cache.available_gpu_bytes(), 128);
+			assert_eq!(cache.epoch, 1);
+			assert!(cache.should_build_payload(waiting, &key, cache.available_gpu_bytes()));
+			assert!(cache.admit(waiting, key, 64));
+		}
+	}
+	#[test]
 	fn unavailable_ultra_low_kit_keeps_entire_ordinary_tile() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.insert_resource(PackMode::Compatible);
@@ -628,6 +819,8 @@ mod tests {
 		assert!(world.get_entity(bag).is_ok());
 		assert!(world.get::<PackedGroveCell>(cell).is_none());
 		assert!(world.resource::<PackedGroveCache>().tiles[&cell].proxies.is_empty());
+		let capacity_before = world.resource::<PackedGroveCache>().available_gpu_bytes();
+		let epoch_before = world.resource::<PackedGroveCache>().epoch;
 		world
 			.resource_mut::<PackedKitMeshes>()
 			.states
@@ -636,6 +829,8 @@ mod tests {
 		assert!(world.get::<ChicoGroveHost>(cell).is_some());
 		assert!(world.get_entity(bag).is_ok());
 		assert!(!world.resource::<PackedGroveCache>().tiles.contains_key(&cell));
+		assert!(world.resource::<PackedGroveCache>().available_gpu_bytes() > capacity_before);
+		assert_eq!(world.resource::<PackedGroveCache>().epoch, epoch_before + 1);
 		assert_eq!(
 			world
 				.resource::<PackedGroveCache>()
