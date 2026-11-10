@@ -66,6 +66,35 @@ impl TileSignal {
 	}
 }
 
+/// Optional diagnostic snapshot: unique coarse batches, not issued draw calls.
+#[cfg(feature = "packed-diagnostics")]
+#[derive(Default)]
+pub struct PackedReadinessSnapshot {
+	pub proxy_tiles: usize,
+	pub fully_ready_tiles: usize,
+	pub batches: u64,
+	/// Main / prepass / shadow / buffer bits respectively.
+	pub required: [u64; 4],
+	pub acknowledged: [u64; 4],
+	pub missing_masks: [u64; 16],
+}
+#[cfg(feature = "packed-diagnostics")]
+impl PackedReadinessSnapshot {
+	pub fn add_signal(&mut self, signal: &TileSignal) {
+		for (ready, required) in signal.ready.iter().zip(&signal.required) {
+			let ready = ready.load(Ordering::Acquire);
+			self.batches += 1;
+			for (index, bit) in
+				[READY_MAIN, READY_PREPASS, READY_SHADOW, READY_BUFFER].into_iter().enumerate()
+			{
+				self.required[index] += u64::from(required & bit != 0);
+				self.acknowledged[index] += u64::from(ready & bit != 0);
+			}
+			self.missing_masks[usize::from(required & !ready)] += 1;
+		}
+	}
+}
+
 /// All bands are packed once from the same grown source. Only Arc references
 /// cross extraction; camera motion never visits individual instances.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -317,5 +346,26 @@ mod tests {
 		assert_eq!(cache.budget_denials, 1);
 		cache.epoch += 1;
 		assert!(cache.admit(entity, 64));
+	}
+	#[cfg(feature = "packed-diagnostics")]
+	#[test]
+	fn readiness_snapshot_distinguishes_required_acknowledged_and_missing_passes() {
+		let signal = TileSignal::new([
+			READY_MAIN | READY_BUFFER,
+			READY_SHADOW | READY_BUFFER,
+			READY_MAIN | READY_PREPASS | READY_BUFFER,
+		]);
+		signal.acknowledge(0, READY_MAIN | READY_BUFFER);
+		signal.acknowledge(1, READY_BUFFER);
+		signal.acknowledge(2, READY_MAIN | READY_BUFFER);
+		let mut snapshot = PackedReadinessSnapshot::default();
+		snapshot.add_signal(&signal);
+		assert_eq!(snapshot.batches, 3);
+		assert_eq!(snapshot.required, [2, 1, 1, 3]);
+		assert_eq!(snapshot.acknowledged, [2, 0, 0, 3]);
+		assert_eq!(snapshot.missing_masks[0], 1);
+		assert_eq!(snapshot.missing_masks[usize::from(READY_SHADOW)], 1);
+		assert_eq!(snapshot.missing_masks[usize::from(READY_PREPASS)], 1);
+		assert!(!signal.is_ready());
 	}
 }

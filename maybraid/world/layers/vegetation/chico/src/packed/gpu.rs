@@ -9,6 +9,7 @@ use bevy::render::render_resource::encase::StorageBuffer;
 use bevy::render::render_resource::{Buffer, BufferInitDescriptor, BufferUsages, ShaderType};
 use bevy::render::renderer::RenderDevice;
 use bevy::render::sync_component::SyncComponent;
+use bevy::render::sync_world::{MainEntity, MainEntityHashMap};
 use bevy::render::RenderApp;
 use lod::LodSceneLevel;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -104,6 +105,27 @@ pub struct GpuPackedInstances {
 	pub source: Arc<[u8]>,
 }
 
+/// Mesh phases may deliberately omit their render entity. Resolve their exact
+/// main-world identity to this frame's extracted coarse proxy, never by ID equality.
+#[derive(Resource, Default)]
+pub struct PackedDrawEntities(MainEntityHashMap<Entity>);
+impl PackedDrawEntities {
+	pub fn begin_frame(&mut self) {
+		self.0.clear();
+	}
+	pub fn insert_live(&mut self, main: MainEntity, render: Entity, phase: u8) {
+		if phase != crate::packed::cache::RETIRED {
+			self.0.insert(main, render);
+		}
+	}
+	pub fn len(&self) -> usize {
+		self.0.len()
+	}
+	pub fn get(&self, main: MainEntity) -> Option<Entity> {
+		self.0.get(&main).copied()
+	}
+}
+
 #[derive(Default)]
 pub struct CounterValues {
 	pub submitted_payload_bytes: AtomicU64,
@@ -113,6 +135,12 @@ pub struct CounterValues {
 	pub issued_prepass_draws: AtomicU64,
 	pub issued_shadow_draws: AtomicU64,
 	pub issued_main_instances: AtomicU64,
+	#[cfg(feature = "packed-diagnostics")]
+	pub draw_callbacks: [AtomicU64; 3],
+	#[cfg(feature = "packed-diagnostics")]
+	pub draw_lookup_misses: [AtomicU64; 3],
+	#[cfg(feature = "packed-diagnostics")]
+	pub draw_mesh_misses: [AtomicU64; 3],
 }
 
 #[derive(Resource, Clone, Default)]
@@ -121,13 +149,18 @@ pub struct PackedCounters(pub Arc<CounterValues>);
 pub fn prepare_packed_gpu(
 	mut commands: Commands,
 	device: Res<RenderDevice>,
-	instances: Query<(Entity, &PackedBatchInstance, Option<&GpuPackedInstances>)>,
+	instances: Query<(Entity, &MainEntity, &PackedBatchInstance, Option<&GpuPackedInstances>)>,
+	mut draw_entities: ResMut<PackedDrawEntities>,
 	counters: Res<PackedCounters>,
 ) {
 	let _span =
 		bevy::log::tracing::trace_span!(target: "maybraid.packed.profile", "packed_prepare_gpu")
 			.entered();
-	for (entity, instance, gpu) in &instances {
+	draw_entities.begin_frame();
+	for (entity, main, instance, gpu) in &instances {
+		// Rebuild before the unchanged-buffer early return; empty/retired frames
+		// cannot retain a stale identity mapping.
+		draw_entities.insert_live(*main, entity, instance.extracted_phase);
 		if instance.extracted_phase == crate::packed::cache::RETIRED {
 			continue;
 		}
