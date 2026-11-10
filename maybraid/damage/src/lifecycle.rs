@@ -1,5 +1,7 @@
 //! One-shot downing and component-backed deferred despawn.
 
+use std::time::Duration;
+
 use bevy::prelude::*;
 
 use crate::{Died, Health};
@@ -27,6 +29,14 @@ impl DespawnAfter {
 
 	pub fn remaining_secs(&self) -> f32 {
 		self.0.remaining_secs()
+	}
+
+	pub fn tick_secs(&mut self, delta_secs: f32) {
+		self.0.tick(Duration::from_secs_f32(delta_secs.max(0.0)));
+	}
+
+	pub fn is_finished(&self) -> bool {
+		self.0.is_finished()
 	}
 }
 
@@ -96,7 +106,7 @@ pub fn ensure_downed_have_despawn(
 pub fn tick_queued_despawns(
 	time: Res<Time>,
 	mut commands: Commands,
-	mut queued: Query<(Entity, &mut DespawnAfter)>,
+	mut queued: Query<(Entity, &mut DespawnAfter), Without<Downed>>,
 ) {
 	for (entity, mut despawn) in &mut queued {
 		despawn.0.tick(time.delta());

@@ -1,0 +1,24 @@
+[package]
+name = "combat-vfx-playground"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[[example]]
+name = "capture"
+path = "examples/capture.rs"
+
+[dependencies]
+bevy = { workspace = true }
+combat-vfx = { workspace = true }
+damage = { workspace = true }
+maybraid-vfx = { workspace = true }
+player = { workspace = true }
+
+[lints]
+workspace = true

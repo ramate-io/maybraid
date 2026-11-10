@@ -250,6 +250,16 @@ pub struct RagdollState {
 	pose_dirty: bool,
 }
 
+impl RagdollState {
+	pub fn corpse(&self) -> Entity {
+		self.corpse
+	}
+
+	pub fn is_sleeping(&self) -> bool {
+		self.sleeping
+	}
+}
+
 /// Body-side acknowledgement that its retained visual entered corpse ownership.
 #[derive(Component, Clone, Copy, Debug)]
 struct CorpseHandoff {

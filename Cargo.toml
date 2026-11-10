@@ -121,6 +121,8 @@ members = [
   "maybraid/agent",
   "maybraid/combat-hud",
   "maybraid/combat-hud/playground",
+  "maybraid/combat-vfx",
+  "maybraid/combat-vfx/playground",
   "maybraid/lubikans",
   "maybraid/lubikans/damage",
   "maybraid/player/lib",
@@ -408,6 +410,8 @@ maybraid-virtual-pad-controller = { path = "maybraid/controllers/virtual-pad" }
 maybraid-agent = { path = "maybraid/agent" }
 combat-hud = { path = "maybraid/combat-hud" }
 combat-hud-playground = { path = "maybraid/combat-hud/playground" }
+combat-vfx = { path = "maybraid/combat-vfx" }
+combat-vfx-playground = { path = "maybraid/combat-vfx/playground" }
 lubikans = { path = "maybraid/lubikans" }
 lubikans-damage = { path = "maybraid/lubikans/damage" }
 player = { path = "maybraid/player/lib" }
