@@ -8,7 +8,7 @@ pub(crate) mod lifecycle;
 mod material;
 mod telemetry;
 mod view_policy;
-pub use gpu::{GpuPackedInstances, PackedBatchInstance, PackedCounters};
+pub use gpu::{GpuPackedInstances, PackedBatchInstance, PackedCounters, PackedDrawEntities};
 pub use select::PackedViewSelection;
 pub use telemetry::PackedSnapshot;
 #[cfg(feature = "packed-diagnostics")]
@@ -62,6 +62,7 @@ impl Plugin for PackedGrovesPlugin {
 			render
 				.insert_resource(counters)
 				.init_resource::<select::PackedViewSelection>()
+				.init_resource::<gpu::PackedDrawEntities>()
 				.add_render_command::<Opaque3d, draw::DrawPackedMaterial>()
 				.add_render_command::<Opaque3dPrepass, draw::DrawPackedPrepass>()
 				.add_render_command::<Opaque3dPrepass, draw::DrawPackedDepthOnly>()

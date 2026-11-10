@@ -9,7 +9,7 @@ use bevy::render::view::ExtractedView;
 use bevy::render::{Render, RenderApp, RenderSystems};
 use chico::packed::{
 	GpuPackedInstances, PackedAdmissionSnapshot, PackedBatchInstance, PackedCounters,
-	PackedSnapshot, PackedViewSelection,
+	PackedDrawEntities, PackedSnapshot, PackedViewSelection,
 };
 use std::{
 	collections::BTreeSet,
@@ -43,6 +43,10 @@ fn record_main_metrics(world: &mut World, mut previous: Local<Option<Instant>>) 
 	}
 	*previous = Some(now);
 	let snapshot = PackedSnapshot::read(world);
+	bevy::log::tracing::trace!(target:"maybraid.packed.metrics",proxy_tiles=snapshot.readiness.proxy_tiles,fully_ready_tiles=snapshot.readiness.fully_ready_tiles,
+        batches=snapshot.readiness.batches,required_main=snapshot.readiness.required[0],required_prepass=snapshot.readiness.required[1],required_shadow=snapshot.readiness.required[2],required_buffer=snapshot.readiness.required[3],
+        acknowledged_main=snapshot.readiness.acknowledged[0],acknowledged_prepass=snapshot.readiness.acknowledged[1],acknowledged_shadow=snapshot.readiness.acknowledged[2],acknowledged_buffer=snapshot.readiness.acknowledged[3],
+        missing_mask_counts=?snapshot.readiness.missing_masks,scope="unique resident batch pass masks; bits main1 prepass2 shadow4 buffer8; not issued draws","packed_readiness_census");
 	let admission = PackedAdmissionSnapshot::read(world);
 	view_policy::record(world, &admission.view_policy);
 	const MAX_ADMISSION_ROWS: usize = 128;
@@ -63,6 +67,7 @@ fn record_main_metrics(world: &mut World, mut previous: Local<Option<Instant>>) 
 fn record_render_metrics(
 	phases: Res<ViewBinnedRenderPhases<Opaque3d>>,
 	counters: Res<PackedCounters>,
+	draw_entities: Option<Res<PackedDrawEntities>>,
 	instances: Query<(&PackedBatchInstance, Option<&GpuPackedInstances>)>,
 	views: Query<(&ExtractedView, Has<ShadowView>, Option<&RenderLayers>)>,
 	selection: Option<Res<PackedViewSelection>>,
@@ -88,6 +93,11 @@ fn record_render_metrics(
   issued_prepass_draws=counters.0.issued_prepass_draws.load(Ordering::Relaxed),
   issued_shadow_draws=counters.0.issued_shadow_draws.load(Ordering::Relaxed),
   issued_main_instances=counters.0.issued_main_instances.load(Ordering::Relaxed),"packed_render_census");
+	bevy::log::tracing::trace!(target:"maybraid.packed.metrics",indexed_live_proxies=draw_entities.map_or(0,|entities|entities.len()),
+        callbacks_main=counters.0.draw_callbacks[0].load(Ordering::Relaxed),callbacks_prepass=counters.0.draw_callbacks[1].load(Ordering::Relaxed),callbacks_shadow=counters.0.draw_callbacks[2].load(Ordering::Relaxed),
+        lookup_misses_main=counters.0.draw_lookup_misses[0].load(Ordering::Relaxed),lookup_misses_prepass=counters.0.draw_lookup_misses[1].load(Ordering::Relaxed),lookup_misses_shadow=counters.0.draw_lookup_misses[2].load(Ordering::Relaxed),
+        mesh_misses_main=counters.0.draw_mesh_misses[0].load(Ordering::Relaxed),mesh_misses_prepass=counters.0.draw_mesh_misses[1].load(Ordering::Relaxed),mesh_misses_shadow=counters.0.draw_mesh_misses[2].load(Ordering::Relaxed),
+        scope="cumulative final-command callbacks after pipeline/bind-group prefixes; misses are lookup/GPU or mesh allocation; not issued draws","packed_draw_callback_census");
 	detail.emit(&instances, &views, selection.as_deref());
 }
 

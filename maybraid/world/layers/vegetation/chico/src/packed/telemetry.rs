@@ -4,6 +4,8 @@ use bevy::prelude::*;
 use std::sync::atomic::Ordering;
 #[derive(Default)]
 pub struct PackedSnapshot {
+	#[cfg(feature = "packed-diagnostics")]
+	pub readiness: super::cache::PackedReadinessSnapshot,
 	pub resident_tiles: usize,
 	pub active_tiles: usize,
 	pub resident_batches: usize,
@@ -17,7 +19,19 @@ pub struct PackedSnapshot {
 impl PackedSnapshot {
 	pub fn read(world: &World) -> Self {
 		let Some(cache) = world.get_resource::<PackedGroveCache>() else { return Self::default() };
+		#[cfg(feature = "packed-diagnostics")]
+		let readiness = {
+			let mut snapshot = super::cache::PackedReadinessSnapshot::default();
+			for tile in cache.tiles.values().filter(|tile| !tile.proxies.is_empty()) {
+				snapshot.proxy_tiles += 1;
+				snapshot.fully_ready_tiles += usize::from(tile.signal.is_ready());
+				snapshot.add_signal(&tile.signal);
+			}
+			snapshot
+		};
 		Self {
+			#[cfg(feature = "packed-diagnostics")]
+			readiness,
 			resident_tiles: cache.tiles.len(),
 			active_tiles: cache
 				.tiles
