@@ -19,6 +19,7 @@ required-features = ["fixture"]
 [dependencies]
 bevy = { workspace = true }
 chico = { workspace = true, features = ["packed-diagnostics"] }
+lod = { workspace = true }
 
 [lints]
 workspace = true
