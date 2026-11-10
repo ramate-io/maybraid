@@ -9,7 +9,7 @@ use crate::tile_material::SkillMapTileAssets;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSteerLock, SkillMapUser};
 use crate::viewport::{map_view_extent, SkillMapViewportCamera};
 use crate::{SkillKind, SkillMapEnabled, SkillMapEvent};
-use maybraid_character_controller::{ActorControlStatus, OrdinaryLocomotion, RoutedActorControl};
+use maybraid_character_controller::{ActorControlStatus, RoutedActorControl};
 
 pub const CURSOR_SPEED: f32 = 64.0;
 pub const WATER_LOCK_SECS: f32 = 2.0;
@@ -32,21 +32,13 @@ pub(crate) struct FlickBead {
 
 pub fn sync_skill_map_held(
 	enabled: Res<SkillMapEnabled>,
-	mut users: Query<
-		(Entity, &mut SkillMapHeld, Option<&OrdinaryLocomotion>, Option<&RoutedActorControl>),
-		With<SkillMapUser>,
-	>,
+	mut users: Query<(Entity, &mut SkillMapHeld, Option<&RoutedActorControl>), With<SkillMapUser>>,
 ) {
-	for (entity, mut slot, ordinary, routed) in &mut users {
-		let ordinary = ordinary.is_none_or(|flag| flag.0);
+	for (entity, mut slot, routed) in &mut users {
 		slot.0 = enabled.0
-			&& if ordinary {
-				routed.is_some_and(|routed| {
-					routed.addresses(entity) && routed.payload().is_some_and(skill_map_steer_held)
-				})
-			} else {
-				true
-			};
+			&& routed.is_some_and(|routed| {
+				routed.addresses(entity) && routed.payload().is_some_and(skill_map_steer_held)
+			});
 	}
 }
 
@@ -157,11 +149,11 @@ fn apply_one_flick(
 		if lock.locked() {
 			continue;
 		}
+		if !held.is_some_and(|flag| flag.0) {
+			continue;
+		}
 		if let Ok(mut feed) = feeds.get_mut(member.session) {
-			if held.is_some_and(|held| held.0)
-				&& status.is_none_or(|status| status.is_delivered())
-				&& feed.strike(flick.throw())
-			{
+			if status.is_none_or(|status| status.is_delivered()) && feed.strike(flick.throw()) {
 				events
 					.write(SkillMapEvent::Claim { user: member.user, kind: SkillKind::Rockadder });
 			}
@@ -268,6 +260,8 @@ mod tests {
 		let maps_a = spawn_skill_maps(&mut app.world_mut().commands(), user_a);
 		let maps_b = spawn_skill_maps(&mut app.world_mut().commands(), user_b);
 		app.world_mut().flush();
+		app.world_mut().entity_mut(user_a).insert(SkillMapHeld(true));
+		app.world_mut().entity_mut(user_b).insert(SkillMapHeld(true));
 		let cam_a = app
 			.world_mut()
 			.spawn((
@@ -432,9 +426,12 @@ mod tests {
 	}
 
 	#[test]
-	fn tanz_policy_holds_without_rb() {
+	fn tanz_policy_requires_rb() {
 		use bevy::ecs::system::RunSystemOnce;
-		use maybraid_character_controller::OrdinaryLocomotion;
+		use maybraid_character_controller::{
+			ActorControlSample, OrdinaryLocomotion, RoutedActorControl,
+		};
+		use maybraid_controllers_core::{ActorTarget, InputSource, Routed};
 
 		use crate::user::spawn_skill_maps;
 
@@ -447,6 +444,19 @@ mod tests {
 		world.flush();
 		world.entity_mut(user).insert(OrdinaryLocomotion(false));
 		world.run_system_once(sync_skill_map_held).expect("held in tanz");
+		assert!(
+			!world.get::<SkillMapHeld>(user).expect("slot").0,
+			"Tanzer without RB must leave the map collapsed"
+		);
+
+		let mut control = RoutedActorControl::default();
+		control.set(Routed::to_actor(
+			InputSource::local_pad(),
+			ActorTarget::new(user),
+			ActorControlSample::default().with_bumpers(false, true),
+		));
+		world.entity_mut(user).insert(control);
+		world.run_system_once(sync_skill_map_held).expect("held with rb");
 		assert!(world.get::<SkillMapHeld>(user).expect("slot").0);
 	}
 }

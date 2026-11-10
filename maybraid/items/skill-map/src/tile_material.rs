@@ -28,7 +28,7 @@ const TILE_DIVISIONS: u32 = 12;
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct TileParams {
 	pub tint: Vec4,
-	/// `x` kind, `y` intensity, `z` seed.
+	/// `x` kind, `y` intensity, `z` seed, `w` overlay amount.
 	pub style: Vec4,
 }
 
@@ -87,6 +87,14 @@ impl SkillMapTileMaterial {
 			},
 		}
 	}
+
+	pub fn overlay_amount(&self) -> f32 {
+		self.params.style.w
+	}
+
+	pub fn set_overlay_amount(&mut self, amount: f32) {
+		self.params.style.w = amount.clamp(0.0, 1.0);
+	}
 }
 
 impl Material2d for SkillMapTileMaterial {
@@ -99,11 +107,7 @@ impl Material2d for SkillMapTileMaterial {
 	}
 
 	fn alpha_mode(&self) -> AlphaMode2d {
-		if (self.params.style.x - TILE_KIND_WATER).abs() < 0.1 {
-			AlphaMode2d::Blend
-		} else {
-			AlphaMode2d::Opaque
-		}
+		AlphaMode2d::Blend
 	}
 }
 
@@ -258,5 +262,14 @@ mod tests {
 		let cosmos = SkillMapTileMaterial::for_kind(TileKind::Power(SkillKind::Cosimo), 0);
 		assert_eq!(rock.params.style.x, TILE_KIND_ROCK);
 		assert_eq!(cosmos.params.style.x, TILE_KIND_COSMO);
+	}
+
+	#[test]
+	fn overlay_amount_lives_on_the_unused_style_channel() {
+		let mut land = SkillMapTileMaterial::land(SkillKind::Fireball);
+		assert_eq!(land.overlay_amount(), 0.0);
+		land.set_overlay_amount(1.0);
+		assert_eq!(land.overlay_amount(), 1.0);
+		assert_eq!(land.alpha_mode(), AlphaMode2d::Blend);
 	}
 }
