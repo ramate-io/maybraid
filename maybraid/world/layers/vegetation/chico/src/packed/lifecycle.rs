@@ -11,7 +11,7 @@ use crate::packed::material::{
 use crate::packed::mode::PackMode;
 use crate::packed::select::select_band;
 use bevy::camera::primitives::Aabb;
-use bevy::camera::visibility::RenderLayers;
+use bevy::camera::visibility::{NoAutoAabb, RenderLayers};
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::render::batching::NoAutomaticBatching;
@@ -216,6 +216,8 @@ fn spawn_proxies(
 				Mesh3d(mesh),
 				instance,
 				NoAutomaticBatching,
+				// Native Changed<Mesh3d> bounds must not replace the instance union.
+				NoAutoAabb,
 				Transform::IDENTITY,
 				Visibility::Inherited,
 				aabb,
