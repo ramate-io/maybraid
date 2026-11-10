@@ -17,7 +17,9 @@ use std::{
 	time::{Duration, Instant},
 };
 
+mod target;
 mod view_policy;
+use target::{TargetCandidate, TargetSelector};
 
 pub struct PackedGroveDiagnosticsPlugin;
 impl Plugin for PackedGroveDiagnosticsPlugin {
@@ -112,7 +114,7 @@ const LOD_NAMES: [&str; 4] = ["high", "medium", "low", "ultra_low"];
 struct CoverageSampler {
 	sequence: u64,
 	target: Option<u64>,
-	initialized: bool,
+	selector: Option<TargetSelector>,
 }
 #[derive(Default)]
 struct LodCoverage {
@@ -130,12 +132,16 @@ impl CoverageSampler {
 		selection: Option<&PackedViewSelection>,
 	) {
 		self.sequence += 1;
-		if !self.initialized {
-			self.initialized = true;
-			self.target = std::env::var("MAYBRAID_PACKED_GROVE_DIAGNOSTIC_TILE")
-				.ok()
-				.and_then(|s| s.parse().ok());
+		if self.selector.is_none() {
+			let entity = std::env::var("MAYBRAID_PACKED_GROVE_DIAGNOSTIC_TILE").ok();
+			let xz = std::env::var("MAYBRAID_PACKED_GROVE_DIAGNOSTIC_XZ").ok();
+			let selector = TargetSelector::parse(entity.as_deref(), xz.as_deref());
+			if let TargetSelector::Entity(entity) = selector {
+				self.target = Some(entity);
+			}
+			self.selector = Some(selector);
 		}
+		let selector = self.selector.as_ref().expect("initialized selector");
 		let mut ordered = views
 			.iter()
 			.filter(|(_, shadow, layers)| {
@@ -150,7 +156,10 @@ impl CoverageSampler {
 				view.retained_view_entity.subview_index,
 			)
 		});
-		if self.target.is_none() {
+		if self.target.is_none()
+			&& matches!(selector, TargetSelector::NearestCamera | TargetSelector::Xz(_))
+		{
+			let mut anchored = None;
 			let mut nearest: Option<(f32, u64)> = None;
 			for (view, shadow) in &ordered {
 				if *shadow {
@@ -169,6 +178,20 @@ impl CoverageSampler {
 					}) {
 						continue;
 					}
+					if let Some(anchor) = selector.anchor() {
+						anchored = TargetCandidate::choose(
+							anchored,
+							TargetCandidate {
+								entity: batch.cell.to_bits(),
+								family: batch.payload.diagnostic_family,
+								center: batch.payload.center,
+								min: batch.payload.bounds.min.into(),
+								max: batch.payload.bounds.max.into(),
+							},
+							anchor,
+						);
+						continue;
+					}
 					let candidate = (
 						view.world_from_view.translation().distance_squared(batch.payload.center),
 						batch.cell.to_bits(),
@@ -180,7 +203,11 @@ impl CoverageSampler {
 					}
 				}
 			}
-			self.target = nearest.map(|(_, tile)| tile);
+			self.target = if selector.anchor().is_some() {
+				anchored.map(|candidate| candidate.entity)
+			} else {
+				nearest.map(|(_, tile)| tile)
+			};
 		}
 		let mut sample = std::array::from_fn::<_, 4, _>(|_| LodCoverage::default());
 		let mut tile = None;
@@ -236,7 +263,7 @@ impl CoverageSampler {
 				});
 				for (index, lod) in sample.iter().enumerate() {
 					bevy::log::tracing::trace!(target:"maybraid.packed.metrics",sample=self.sequence,
-      view=view.retained_view_entity.main_entity.id().to_bits(),tile=tile.cell.to_bits(),revision=tile.payload.revision,
+      view=view.retained_view_entity.main_entity.id().to_bits(),tile=tile.cell.to_bits(),revision=tile.payload.revision,family=tile.payload.diagnostic_family,
       center_x=tile.payload.center.x,center_y=tile.payload.center.y,center_z=tile.payload.center.z,
       min=?tile.payload.bounds.min,max=?tile.payload.bounds.max,phase=tile.extracted_phase,
       lod=LOD_NAMES[index],candidate_selected=selected.is_some_and(|level|instances.iter().any(|(batch,_)|batch.cell==tile.cell&&batch.level==*level&&batch.lod_index()==index)),
@@ -245,6 +272,13 @@ impl CoverageSampler {
 				}
 			}
 		}
+		bevy::log::tracing::trace!(target:"maybraid.packed.metrics", sample=self.sequence,
+            selector=selector.name(), anchor_xz=?selector.anchor(), config_error=?selector.error(), target=?self.target,
+            status=if selector.error().is_some() { "invalid_configuration" } else if self.target.is_none() { "waiting_for_eligible_main_draw" } else if tile.is_some() { "resident" } else { "pinned_nonresident" },
+            family=?tile.map(|tile|tile.payload.diagnostic_family), center=?tile.map(|tile|tile.payload.center),
+            bounds_min=?tile.map(|tile|tile.payload.bounds.min), bounds_max=?tile.map(|tile|tile.payload.bounds.max),
+            scope="launch-local entity; xz requires containing bounds and prior main draw; pinned after selection", "packed_target_selection");
+
 		bevy::log::tracing::trace!(target:"maybraid.packed.metrics",sample=self.sequence,target=?self.target,
    target_resident=tile.is_some(),views_total=ordered.len(),views_emitted=ordered.len().min(MAX_VIEWS),
    views_truncated=ordered.len()>MAX_VIEWS,selection_available=selection.is_some(),"packed_coverage_complete");

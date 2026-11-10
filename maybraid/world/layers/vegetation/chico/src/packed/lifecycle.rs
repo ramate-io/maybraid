@@ -162,6 +162,9 @@ fn spawn_proxies(
 	kits: &PackedKitMeshes,
 	policy: &PackedViewPolicy,
 ) -> bool {
+	// Validate every mesh bound before any proxy or new pass signal is published.
+	let Some(bounds) = tile.payload.geometric_bounds(kits) else { return false };
+	Arc::make_mut(&mut tile.payload).bounds = bounds;
 	let needs_prepass = policy.needs_prepass;
 	let shadows = policy.shadow_directionals_relevant > 0;
 
@@ -443,10 +446,12 @@ pub fn sync_packed_tiles(world: &mut World) {
 			}
 		}
 		if tile.proxies.is_empty() {
-			let all_ready =
-				tile.payload.lods.iter().flat_map(|batches| batches.iter()).all(|batch| {
-					matches!(kits.states.get(batch.key.kit), Some(KitState::Ready(_)))
-				});
+			let all_ready = tile
+				.payload
+				.lods
+				.iter()
+				.flat_map(|batches| batches.iter())
+				.all(|batch| kits.ready_bounds(batch.key.kit).is_some());
 			if all_ready && !spawn_proxies(world, entity, tile, &kits, &policy) {
 				for proxy in tile.proxies.drain(..) {
 					let _ = world.despawn(proxy);
@@ -484,6 +489,8 @@ mod tests {
 		let signal = Arc::new(TileSignal::new([]));
 		assert!(signal.activate());
 		let payload = TilePayload {
+			#[cfg(feature = "packed-diagnostics")]
+			diagnostic_family: "Orchard",
 			revision: 1,
 			proxy_shadows: false,
 			bounds: Aabb3d { min: Vec3::splat(-1.0).into(), max: Vec3::ONE.into() },
@@ -744,6 +751,8 @@ mod tests {
 				tile.signal = Arc::new(TileSignal::new([READY_MAIN | READY_BUFFER]));
 			}
 			let payload = TilePayload {
+				#[cfg(feature = "packed-diagnostics")]
+				diagnostic_family: "Orchard",
 				revision: 1,
 				proxy_shadows: false,
 				bounds: Aabb3d { min: Vec3::NEG_ONE.into(), max: Vec3::ONE.into() },

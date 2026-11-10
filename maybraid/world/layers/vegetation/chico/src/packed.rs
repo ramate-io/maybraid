@@ -82,3 +82,6 @@ impl Plugin for PackedGrovesPlugin {
 		}
 	}
 }
+
+#[cfg(test)]
+mod geometry_tests;
