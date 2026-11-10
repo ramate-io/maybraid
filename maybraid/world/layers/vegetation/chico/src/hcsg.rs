@@ -219,11 +219,25 @@ impl hcsg::GenerationScheme for ChicoGrove {
 				push_grove_ids_for_tile(&mut ids, tile, &forest, &neighbors);
 			}
 		}
+		#[cfg(feature = "persistent-vegetation-fixture")]
+		if let Some(fixture) = cx.get::<crate::persistent::VegetationInstanceFixture>(Id::Universal)
+		{
+			fixture.include_id(&mut ids, region);
+		}
 		ids
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
 		let (extent, layer) = grove_from_id(id)?;
+		#[cfg(feature = "persistent-vegetation-fixture")]
+		if let Some(recipe) = cx
+			.get::<crate::persistent::VegetationInstanceFixture>(Id::Universal)
+			.and_then(|fixture| fixture.recipe(extent, layer))
+		{
+			let grove = Self::selected(extent, layer, vec![recipe]);
+			let bounds = grove.aabb();
+			return Some((grove, bounds));
+		}
 		let forest_extent = forest_of(extent);
 		let (forest, neighbors) = forest_with_neighbors(cx, forest_extent)?;
 		let kind = layer.kind(forest.layers);
@@ -292,6 +306,8 @@ impl<G: ForestGround> GroveWorldSample for GroundSurface<G> {
 pub struct GrownGrove<G> {
 	pub layer: ForestLayer,
 	pub tiles: Vec<ForestGroveTile>,
+	#[cfg(feature = "persistent-vegetation-fixture")]
+	fixture: Option<crate::persistent::VegetationInstanceFixture>,
 	_ground: PhantomData<fn() -> G>,
 }
 
@@ -316,7 +332,21 @@ impl<G: ForestGround> hcsg::GenerationScheme for GrownGrove<G> {
 				.map(ForestGroveTile::scene_bounds)
 				.filter(|bounds| bounds.min.is_finite() && bounds.max.is_finite()),
 		)?;
-		Some((Self { layer: grove.layer, tiles, _ground: PhantomData }, bounds))
+		#[cfg(feature = "persistent-vegetation-fixture")]
+		let fixture = cx
+			.get::<crate::persistent::VegetationInstanceFixture>(Id::Universal)
+			.filter(|fixture| fixture.selects(grove.extent, grove.layer))
+			.map(|fixture| *fixture);
+		Some((
+			Self {
+				layer: grove.layer,
+				tiles,
+				#[cfg(feature = "persistent-vegetation-fixture")]
+				fixture,
+				_ground: PhantomData,
+			},
+			bounds,
+		))
 	}
 }
 
@@ -333,6 +363,12 @@ impl<G: ForestGround> LodScene for GrownGrove<G> {
 				.iter()
 				.map(|tile| {
 					let host = ChicoGroveHost::new(tile.clone(), self.layer);
+					#[cfg(feature = "persistent-vegetation-fixture")]
+					let host = host
+						.with_fixture(self.fixture.map(|fixture| fixture.mode))
+						.with_fixture_shadows(
+							self.fixture.map(|fixture| fixture.canopy_shadows).unwrap_or_default(),
+						);
 					Box::new(host.scene(lod_ref)) as Box<dyn Scene>
 				})
 				.collect(),
@@ -382,12 +418,16 @@ const GROWN_SCALE: DVec3 =
 #[derive(SystemParam)]
 pub struct ChicoRoots<'w> {
 	selection: Res<'w, ForestSelection>,
+	#[cfg(feature = "persistent-vegetation-fixture")]
+	fixture: Option<Res<'w, crate::persistent::VegetationInstanceFixture>>,
 }
 
 impl ChicoRoots<'_> {
 	/// Seeds Chico's forest selection root over ground `G`.
 	pub fn seed<G: ForestGround>(&self, storage: &hcsg::HcsgStorage) {
 		storage.seed(*self.selection, universal_bounds());
+		#[cfg(feature = "persistent-vegetation-fixture")]
+		storage.seed(self.fixture.as_deref().copied().unwrap_or_default(), universal_bounds());
 	}
 }
 

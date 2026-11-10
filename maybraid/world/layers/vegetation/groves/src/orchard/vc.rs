@@ -9,7 +9,7 @@ use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
 use sbs_trees::{QuantizedPlant, StorybookTree, StorybookTreeParams};
-use vegetation_components::{Placement, VegetationComponents};
+use vegetation_components::{PlacedVegetation, Placement, VegetationComponents};
 
 use super::{definition, OrchardCell, OrchardStorybook, FRUITING_STORYBOOK, PALE_BLOOM_STORYBOOK};
 use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
@@ -102,6 +102,19 @@ pub struct Orchard {
 }
 
 impl Orchard {
+	/// The ordinary posed sources, shared by the explicit instancing fixture.
+	pub fn placed_plants(&self) -> impl Iterator<Item = PlacedVegetation<Arc<StorybookTree>>> + '_ {
+		self.plants.iter().map(|plant| {
+			PlacedVegetation::new(
+				Arc::clone(&plant.tree),
+				plant.placement,
+				plant.stick_material.clone(),
+				plant.ball_material.clone(),
+				plant.frond_material.clone(),
+			)
+		})
+	}
+
 	pub fn from_placements(
 		placements: &[GroveCellVariant<OrchardCell>],
 		grove_noise: NoiseParams,

@@ -7215,6 +7215,7 @@ dependencies = [
  "character-persist",
  "characters",
  "characters-playground",
+ "chico",
  "clap",
  "layer-stack",
  "lod",
@@ -7234,6 +7235,7 @@ dependencies = [
  "menu-playground",
  "menu-screens",
  "tempfile",
+ "vegetation-persistent-diagnostics",
 ]
 
 [[package]]
@@ -13274,6 +13276,18 @@ dependencies = [
  "layer-stack",
  "lod",
  "terrain-layer-model",
+]
+
+[[package]]
+name = "vegetation-persistent-diagnostics"
+version = "0.1.5"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "chico",
+ "serde",
+ "serde_json",
+ "vegetation-components",
 ]
 
 [[package]]

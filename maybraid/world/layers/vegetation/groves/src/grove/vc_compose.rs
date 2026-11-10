@@ -518,19 +518,25 @@ where
 		frond_material.clone(),
 	);
 	let host = FlattenedComponentsOnly(placed);
+	(nest_flattened_plant_source(host.0.clone()), flattened_component_scene(&host, lod_ref, level))
+}
+
+/// Semantic identity and collision source without a visual hierarchy.
+/// The ordinary and persistent fixture presenters share this exact constructor.
+pub fn nest_flattened_plant_source<T>(placed: PlacedVegetation<T>) -> impl Scene + 'static
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	let host = FlattenedComponentsOnly(placed);
 	let bounds = host.scene_bounds();
 	let anchor = (bounds.min + bounds.max) * 0.5;
 	let radius = ((bounds.max.x - bounds.min.x).max(bounds.max.z - bounds.min.z) * 0.5).max(0.05);
 	let instance = VegetationInstance::new(anchor.into(), radius);
-	let host_for_template = host.clone();
-	(
-		bsn! {
-			~{instance}
-			template(move |_ctx| Ok(host_for_template.clone()))
-			Visibility::Inherited
-		},
-		flattened_component_scene(&host, lod_ref, level),
-	)
+	bsn! {
+		~{instance}
+		template(move |_ctx| Ok(host.clone()))
+		Visibility::Inherited
+	}
 }
 
 /// Drain weight for one posed woody plant ([`FLATTENED_KIT_CHUNK_WEIGHT`]).

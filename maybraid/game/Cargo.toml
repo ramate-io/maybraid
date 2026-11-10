@@ -14,6 +14,8 @@ name = "maybraid"
 path = "src/main.rs"
 
 [dependencies]
+chico = { workspace = true }
+vegetation-persistent-diagnostics = { workspace = true, optional = true }
 lubikans = { workspace = true }
 layer-stack = { workspace = true }
 bevy = { workspace = true }
@@ -39,6 +41,8 @@ menu-screens = { workspace = true }
 character-persist = { workspace = true }
 
 [features]
+persistent-vegetation-fixture = ["chico/persistent-vegetation-fixture"]
+persistent-vegetation-diagnostics = ["persistent-vegetation-fixture", "dep:vegetation-persistent-diagnostics"]
 debug-commands = ["maybraid-world/debug-commands"]
 
 [dev-dependencies]

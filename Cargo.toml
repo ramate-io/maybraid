@@ -176,6 +176,7 @@ members = [
   "maybraid/world/layers/vegetation/sbs-geometry",
   "maybraid/world/layers/vegetation/groves",
   "maybraid/world/layers/vegetation/chico",
+    "maybraid/world/layers/vegetation/persistent-diagnostics",
   "maybraid/gimme/core",
   "maybraid/gimme/bench-support",
   "maybraid/gimme/gen",
@@ -391,6 +392,7 @@ vegetation-components = { path = "maybraid/world/layers/vegetation/components" }
 sbs-geometry = { path = "maybraid/world/layers/vegetation/sbs-geometry" }
 vegetation-groves = { path = "maybraid/world/layers/vegetation/groves" }
 chico = { path = "maybraid/world/layers/vegetation/chico" }
+vegetation-persistent-diagnostics = { path = "maybraid/world/layers/vegetation/persistent-diagnostics" }
 vegetation-shaders = { path = "maybraid/world/layers/vegetation/shaders" }
 world-player = { path = "maybraid/world/player" }
 maybraid-sky = { path = "maybraid/sky/lib" }

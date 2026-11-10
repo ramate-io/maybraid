@@ -20,6 +20,8 @@ mod kind;
 mod layer;
 pub mod layerings;
 mod material;
+#[cfg(feature = "persistent-vegetation-fixture")]
+pub mod persistent;
 mod plugin;
 mod recipe;
 mod stick_physics;

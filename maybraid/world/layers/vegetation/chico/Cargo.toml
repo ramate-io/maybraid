@@ -9,6 +9,10 @@ homepage = { workspace = true }
 publish = { workspace = true }
 rust-version = { workspace = true }
 
+[features]
+persistent-vegetation-fixture = []
+persistent-vegetation-diagnostics = ["persistent-vegetation-fixture"]
+
 [dependencies]
 avian3d = { workspace = true }
 bevy = { workspace = true }

@@ -29,6 +29,8 @@ impl Plugin for VegetationViewPlugin {
 		if !app.is_plugin_added::<VegetationMaterialRefPlugin>() {
 			app.add_plugins(VegetationMaterialRefPlugin);
 		}
+		#[cfg(feature = "persistent-vegetation-fixture")]
+		app.add_plugins(crate::persistent::PersistentVegetationPlugin);
 		init_vegetation_material_caches(app);
 		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
 			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());

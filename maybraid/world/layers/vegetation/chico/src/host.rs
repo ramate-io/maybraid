@@ -18,11 +18,37 @@ use crate::{ForestGroveTile, ForestLayer, LayerDropOut};
 pub struct ChicoGroveHost {
 	pub tile: ForestGroveTile,
 	pub layer: ForestLayer,
+	#[cfg(feature = "persistent-vegetation-fixture")]
+	pub fixture: Option<crate::persistent::FixtureMode>,
+	#[cfg(feature = "persistent-vegetation-fixture")]
+	pub fixture_shadows: vegetation_components::CanopyShadowMode,
 }
 
 impl ChicoGroveHost {
 	pub fn new(tile: ForestGroveTile, layer: ForestLayer) -> Self {
-		Self { tile, layer }
+		Self {
+			tile,
+			layer,
+			#[cfg(feature = "persistent-vegetation-fixture")]
+			fixture: None,
+			#[cfg(feature = "persistent-vegetation-fixture")]
+			fixture_shadows: vegetation_components::CanopyShadowMode::Proxy,
+		}
+	}
+
+	#[cfg(feature = "persistent-vegetation-fixture")]
+	pub fn with_fixture(mut self, fixture: Option<crate::persistent::FixtureMode>) -> Self {
+		self.fixture = fixture;
+		self
+	}
+
+	#[cfg(feature = "persistent-vegetation-fixture")]
+	pub fn with_fixture_shadows(
+		mut self,
+		shadows: vegetation_components::CanopyShadowMode,
+	) -> Self {
+		self.fixture_shadows = shadows;
+		self
 	}
 
 	pub fn drop_out(&self) -> LayerDropOut {
@@ -90,14 +116,26 @@ impl ChicoGroveHost {
 
 impl LodScene for ChicoGroveHost {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		#[cfg(feature = "persistent-vegetation-fixture")]
+		if self.fixture.is_some() {
+			return LodSceneLevel::High;
+		}
 		self.tile.scene_lod_level(lod_ref)
 	}
 
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		#[cfg(feature = "persistent-vegetation-fixture")]
+		if self.fixture.is_some() {
+			return LodSceneStatus::Unchanged;
+		}
 		self.tile.scene_lod_status(lod_ref)
 	}
 
 	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+		#[cfg(feature = "persistent-vegetation-fixture")]
+		if self.fixture.is_some() {
+			return LodSceneCulls::None;
+		}
 		self.tile.scene_lod_culls(lod_ref, current)
 	}
 
@@ -106,6 +144,15 @@ impl LodScene for ChicoGroveHost {
 	}
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		#[cfg(feature = "persistent-vegetation-fixture")]
+		if let Some(mode) = self.fixture {
+			return crate::persistent::fixture_chunks(
+				&self.tile,
+				lod_ref,
+				mode,
+				self.fixture_shadows,
+			);
+		}
 		let drop = self.drop_out();
 		if drop.omits(level) {
 			return Self::empty_chunks();
