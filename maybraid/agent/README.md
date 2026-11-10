@@ -291,3 +291,19 @@ binary is built with `bevy/trace_tracy`.
 Check it alongside body heights when validating spawn completion: suspended
 bodies have not yet passed support and clearance checks. Older event files omit
 this field and deserialize it as zero; that default is not evidence of placement.
+
+### Explicit free-camera fixture
+
+These additive agent-console utilities require `--agent-diagnostics` at launch, but also work after `diagnostics off`; they do not enable periodic observations. Ordinary console/gameplay camera semantics are unchanged. In the full game `mode free` disables player follow but does not guarantee a camera reset, because the legacy refocus command and shared gameplay camera use different controller types.
+
+```
+{"cmd":"console","line":"mode free"}
+{"cmd":"wait","secs":1}
+{"cmd":"console","line":"diagnostics camera 150 30 -350 0 -0.12"}
+{"cmd":"wait","secs":1}
+{"cmd":"console","line":"diagnostics camera"}
+```
+
+`diagnostics camera X Y Z YAW PITCH` sets an absolute unparented camera pose with finite metres and radians, wrapping yaw/clamping pitch consistently with `diagnostics view`. `diagnostics camera` reads the actual camera without mutation. Both require Free mode, a closed map and exactly one active `Camera3d` with shared `FollowCamera`; parented cameras and custom projections are rejected. The setter resets shared map/focus camera state so idle free-fly does not restore a map pose. It does not freeze input, rumble or future gameplay changes. `diagnostics view` remains the existing player-targeted yaw/pitch utility.
+
+Requests emit command Started then finish once in Last, after ordinary camera updates. On success `camera_snapshot.request_id` equals the command ID and includes actual local/global translation and quaternion, shared controller angles, and perspective FOV/near/far/aspect or orthographic near/far/scale. Setter records have `applied_local=true,global_pose_pre_apply=true`: the global transform still comes from propagation before that local write. Wait and request a separate snapshot (`false,false`) to verify the propagated world pose. Failures emit the matching command Failed and no snapshot. Camera/entity IDs are process-local. There is no per-frame camera scan or new observation stream; API version and older scripts remain compatible.

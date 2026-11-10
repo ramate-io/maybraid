@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::command::ScenarioMark;
 use crate::diagnostics::{
-	AgentDiagnosticActor, AgentNpcSelector, AgentNpcSnapshot, AgentPlayerVitals,
+	AgentCameraSnapshot, AgentDiagnosticActor, AgentNpcSelector, AgentNpcSnapshot,
+	AgentPlayerVitals,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -86,6 +87,15 @@ pub enum AgentEventBody {
 		before: [f32; 2],
 		after: [f32; 2],
 	},
+	/// One-shot actual camera evidence. After a set, global pose still precedes
+	/// that local write; request a later snapshot after transform propagation.
+	CameraSnapshot {
+		request_id: u32,
+		applied_local: bool,
+		global_pose_pre_apply: bool,
+		state: AgentCameraSnapshot,
+	},
+
 	Diagnostics {
 		enabled: bool,
 	},
@@ -476,6 +486,41 @@ mod tests {
 		let line = event.to_line().map_err(|e| anyhow::anyhow!("{e}"))?;
 		assert!(line.contains("timeout"));
 		assert!(event.tracy_message().is_some());
+		Ok(())
+	}
+}
+
+#[cfg(test)]
+mod camera_snapshot_tests {
+	use crate::{AgentCameraProjection, AgentCameraSnapshot, AgentEvent, AgentEventBody};
+	#[test]
+	fn actual_camera_snapshot_roundtrip_is_explicit_about_propagation() -> Result<(), String> {
+		let event = AgentEvent {
+			t: 10.,
+			frame: 600,
+			body: AgentEventBody::CameraSnapshot {
+				request_id: 7,
+				applied_local: true,
+				global_pose_pre_apply: true,
+				state: AgentCameraSnapshot {
+					entity: "18446744073709551615".into(),
+					local_translation: [1., 2., 3.],
+					local_rotation: [0., 0., 0., 1.],
+					global_translation: [9., 8., 7.],
+					global_rotation: [0., 0., 0., 1.],
+					controller_yaw: 0.,
+					controller_pitch: 0.,
+					projection: AgentCameraProjection::Perspective {
+						fov: 1.,
+						near: 0.1,
+						far: 8000.,
+						aspect_ratio: 16. / 9.,
+					},
+				},
+			},
+		};
+		assert_eq!(AgentEvent::parse_line(&event.to_line()?)?, event);
+		assert_eq!(event.tracy_message(), None);
 		Ok(())
 	}
 }

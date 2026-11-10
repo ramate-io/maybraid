@@ -17,14 +17,14 @@ pub mod script;
 pub mod sink;
 
 pub use cli::{
-	AGENT_DIAGNOSTICS_ENV, AGENT_EVENTS_ENV, AGENT_EXCLUSIVE_ENV, AGENT_PIPE_ENV, AGENT_QUIT_ENV,
-	AGENT_SCRIPT_ENV, AgentArgs, take_agent_args,
+	take_agent_args, AgentArgs, AGENT_DIAGNOSTICS_ENV, AGENT_EVENTS_ENV, AGENT_EXCLUSIVE_ENV,
+	AGENT_PIPE_ENV, AGENT_QUIT_ENV, AGENT_SCRIPT_ENV,
 };
-pub use command::{AgentButton, AgentCommand, SCRIPT_API_VERSION, ScenarioMark};
+pub use command::{AgentButton, AgentCommand, ScenarioMark, SCRIPT_API_VERSION};
 pub use diagnostics::{
-	AgentDiagnosticActor, AgentNpcCombat, AgentNpcGroundHit, AgentNpcGroundHits, AgentNpcSelector,
-	AgentNpcSnapshot, AgentNpcSpotContact, AgentNpcSupport, AgentNpcTrajectory, AgentNpcWeapon,
-	AgentPlayerVitals, DiagnosticCommand,
+	AgentCameraProjection, AgentCameraSnapshot, AgentDiagnosticActor, AgentNpcCombat,
+	AgentNpcGroundHit, AgentNpcGroundHits, AgentNpcSelector, AgentNpcSnapshot, AgentNpcSpotContact,
+	AgentNpcSupport, AgentNpcTrajectory, AgentNpcWeapon, AgentPlayerVitals, DiagnosticCommand,
 };
 pub use event::{AgentEvent, AgentEventBody, CommandStatus};
 pub use inventory::{AgentMatcher, InventoryMatcher, InventoryObservation};
