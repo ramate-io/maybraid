@@ -95,6 +95,7 @@ members = [
   "maybraid/menu/character-ui-menu",
   "maybraid/menu/character-creation-menus",
   "maybraid/world/layers/mobs/characters/lib",
+  "maybraid/world/layers/mobs/characters/mesh-export",
   "maybraid/world/layers/mobs/characters/rigs",
   "maybraid/world/layers/mobs/characters/playground",
   "maybraid/world/layers/mobs/architectural/doric-column",
@@ -378,6 +379,7 @@ character-model-user = { path = "maybraid/world/layers/mobs/characters/model-use
 character-shaders = { path = "maybraid/world/layers/mobs/characters/shaders" }
 character-creation-menus = { path = "maybraid/menu/character-creation-menus" }
 characters = { path = "maybraid/world/layers/mobs/characters/lib" }
+character-mesh-export = { path = "maybraid/world/layers/mobs/characters/mesh-export" }
 character-motion = { path = "maybraid/world/layers/mobs/characters/motion" }
 character-ragdoll = { path = "maybraid/world/layers/mobs/characters/ragdoll" }
 rigs = { path = "maybraid/rigs" }
