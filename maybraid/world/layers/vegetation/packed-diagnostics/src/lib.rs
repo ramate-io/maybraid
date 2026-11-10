@@ -17,8 +17,10 @@ use std::{
 	time::{Duration, Instant},
 };
 
+mod queue;
 mod target;
 mod view_policy;
+mod visibility;
 use target::{TargetCandidate, TargetSelector};
 
 pub struct PackedGroveDiagnosticsPlugin;
@@ -30,10 +32,16 @@ impl Plugin for PackedGroveDiagnosticsPlugin {
 		) {
 			return;
 		}
-		app.add_systems(PostUpdate, record_main_metrics);
+		app.init_resource::<visibility::VisibilitySample>()
+			.add_plugins(bevy::render::extract_resource::ExtractResourcePlugin::<
+				visibility::VisibilitySample,
+			>::default())
+			.add_systems(Last, visibility::record)
+			.add_systems(PostUpdate, record_main_metrics);
 		if let Some(render) = app.get_sub_app_mut(RenderApp) {
 			render
 				.init_resource::<PackedCounters>()
+				.add_systems(Render, queue::record.in_set(RenderSystems::Cleanup))
 				.add_systems(Render, record_render_metrics.in_set(RenderSystems::Cleanup));
 		}
 	}

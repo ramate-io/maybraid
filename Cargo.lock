@@ -9349,6 +9349,7 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "chico",
+ "lod",
 ]
 
 [[package]]
