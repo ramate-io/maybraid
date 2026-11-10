@@ -123,7 +123,7 @@ mod tests {
 		TargetCandidate { entity, family, center, min: Vec3::splat(-2.), max: Vec3::splat(2.) }
 	}
 	#[test]
-	fn containing_bounds_wait_and_deterministic_nearest_ties() {
+	fn containing_bounds_wait_and_deterministic_nearest_ties() -> Result<(), &'static str> {
 		let anchor = Vec2::ZERO;
 		let far = TargetCandidate {
 			min: Vec3::splat(10.),
@@ -137,20 +137,24 @@ mod tests {
 			candidate(8, "A", Vec3::X),
 			candidate(7, "Z", Vec3::new(0.5, 99., 0.)),
 		];
-		let select = |items: Vec<TargetCandidate>| {
-			items
+		let select = |items: Vec<TargetCandidate>| -> Result<u64, &'static str> {
+			let selected = items
 				.into_iter()
 				.fold(None, |best, c| TargetCandidate::choose(best, c, anchor))
-				.unwrap()
-				.entity
+				.ok_or("expected a containing candidate")?;
+			Ok(selected.entity)
 		};
-		assert_eq!(select(candidates.to_vec()), 7);
-		assert_eq!(select(candidates.into_iter().rev().collect()), 7);
+		assert_eq!(select(candidates.to_vec())?, 7);
+		assert_eq!(select(candidates.into_iter().rev().collect())?, 7);
 		let a = candidate(9, "A", Vec3::X);
 		let b = candidate(8, "B", Vec3::X);
-		assert_eq!(TargetCandidate::choose(Some(b), a, anchor).unwrap().entity, 9);
+		assert_eq!(
+			TargetCandidate::choose(Some(b), a, anchor).ok_or("expected stable tie winner")?.entity,
+			9
+		);
 		let changed = TargetCandidate { min: Vec3::new(-1., -2., -2.), ..a };
 		assert!(a.compare(&changed, anchor).is_lt());
 		assert!(a.contains_xz(Vec2::new(2., -2.)));
+		Ok(())
 	}
 }
