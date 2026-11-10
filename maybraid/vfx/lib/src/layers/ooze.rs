@@ -8,20 +8,24 @@ use bevy_hanabi::prelude::{
 	SimulationSpace, SpawnerSettings,
 };
 
-use crate::composition::{EffectDefinition, EffectLayer, ParticlePart, ParticleShade};
+use crate::composition::{
+	EffectDefinition, EffectLayer, LightPulse, LobeKind, LobeSpec, MeshPart, ParticlePart,
+	ParticleShade,
+};
+use crate::palette::ExplosionPalette;
 use crate::names::{OOZE_BURST, SMOKE};
 use crate::parts::particle::{
 	add_instance_properties, init_lifetime, init_palette_color, seeded_range, update_palette_color,
 	update_scaled_size3, value_lifetime_gradient,
 };
 
-pub const OOZE_DROPLETS_COUNT: f32 = 22.0;
-pub const OOZE_DROPLETS_CAPACITY: u32 = 40;
+pub const OOZE_DROPLETS_COUNT: f32 = 48.0;
+pub const OOZE_DROPLETS_CAPACITY: u32 = 72;
 pub const OOZE_DROPLET_LIFE_MIN: f32 = 0.22;
 pub const OOZE_DROPLET_LIFE_MAX: f32 = 0.55;
 
-pub const OOZE_DRIP_COUNT: f32 = 6.0;
-pub const OOZE_DRIP_CAPACITY: u32 = 12;
+pub const OOZE_DRIP_COUNT: f32 = 14.0;
+pub const OOZE_DRIP_CAPACITY: u32 = 24;
 pub const OOZE_DRIP_LIFE_MIN: f32 = 0.45;
 pub const OOZE_DRIP_LIFE_MAX: f32 = 1.1;
 pub const OOZE_DRIP_DELAY: f32 = 0.06;
@@ -71,11 +75,11 @@ pub fn compile_droplets(effects: &mut Assets<EffectAsset>, blob: Handle<Image>) 
 	let update_size = update_scaled_size3(
 		&writer,
 		&props.scale,
-		Vec3::new(0.18, 0.18, 0.55),
-		Vec3::new(0.10, 0.10, 0.22),
+		Vec3::new(0.52, 0.52, 1.05),
+		Vec3::new(0.22, 0.22, 0.42),
 	);
 	let texture_slot = 0;
-	let color = value_lifetime_gradient(&[(0.0, 0.95), (0.35, 0.85), (0.75, 0.4), (1.0, 0.0)]);
+	let color = value_lifetime_gradient(&[(0.0, 1.0), (0.3, 0.92), (0.7, 0.55), (1.0, 0.0)]);
 
 	let mut module = writer.finish();
 	module.add_texture_slot("ooze", bevy_hanabi::SlotDimension::D2);
@@ -104,7 +108,7 @@ pub fn compile_droplets(effects: &mut Assets<EffectAsset>, blob: Handle<Image>) 
 		})
 		.render(ColorOverLifetimeModifier {
 			gradient: color,
-			blend: ColorBlendMode::Modulate,
+			blend: ColorBlendMode::Overwrite,
 			mask: ColorBlendMask::RGBA,
 		})
 		.render(OrientModifier::new(OrientMode::AlongVelocity)),
@@ -146,11 +150,11 @@ pub fn compile_drips(effects: &mut Assets<EffectAsset>, blob: Handle<Image>) -> 
 	let update_size = update_scaled_size3(
 		&writer,
 		&props.scale,
-		Vec3::new(0.22, 0.22, 0.08),
-		Vec3::new(0.34, 0.34, 0.04),
+		Vec3::new(0.55, 0.55, 0.18),
+		Vec3::new(0.72, 0.72, 0.08),
 	);
 	let texture_slot = 0;
-	let color = value_lifetime_gradient(&[(0.0, 0.7), (0.5, 0.55), (1.0, 0.0)]);
+	let color = value_lifetime_gradient(&[(0.0, 0.95), (0.45, 0.72), (1.0, 0.0)]);
 
 	let mut module = writer.finish();
 	module.add_texture_slot("ooze", bevy_hanabi::SlotDimension::D2);
@@ -175,7 +179,7 @@ pub fn compile_drips(effects: &mut Assets<EffectAsset>, blob: Handle<Image>) -> 
 			})
 			.render(ColorOverLifetimeModifier {
 				gradient: color,
-				blend: ColorBlendMode::Modulate,
+				blend: ColorBlendMode::Overwrite,
 				mask: ColorBlendMask::RGBA,
 			}),
 	);
@@ -191,10 +195,45 @@ pub fn compile_drips(effects: &mut Assets<EffectAsset>, blob: Handle<Image>) -> 
 	}
 }
 
-pub fn definition(droplets: ParticlePart, drips: ParticlePart) -> EffectDefinition {
+pub const OOZE_SPLAT_FADE: f32 = 0.38;
+
+pub fn compile_splat(mesh: Handle<Mesh>) -> MeshPart {
+	MeshPart::duration_from_lobes(
+		OOZE_BURST,
+		mesh,
+		LobeKind::Smoke,
+		vec![
+			LobeSpec::new(Vec3::new(0.04, 0.02, 0.02), Vec3::new(0.52, 0.44, 0.32))
+				.with_euler(Vec3::new(0.35, 0.18, -0.22))
+				.with_expand(1.15)
+				.with_duration(OOZE_SPLAT_FADE),
+			LobeSpec::new(Vec3::new(-0.08, -0.05, 0.12), Vec3::new(0.28, 0.22, 0.18))
+				.with_euler(Vec3::new(-0.4, 0.75, 0.35))
+				.with_expand(0.95)
+				.with_duration(OOZE_SPLAT_FADE * 0.85),
+			LobeSpec::new(Vec3::new(0.14, -0.12, -0.04), Vec3::new(0.22, 0.34, 0.16))
+				.with_euler(Vec3::new(0.85, -0.15, 0.5))
+				.with_expand(0.85)
+				.with_duration(OOZE_SPLAT_FADE * 0.75),
+		],
+	)
+}
+
+pub fn splat_light() -> LightPulse {
+	LightPulse {
+		color: ExplosionPalette::color(ExplosionPalette::maybraid_ooze().spark),
+		peak_intensity: 28_000.0,
+		range: 3.5,
+		fade: 0.4,
+	}
+}
+
+pub fn definition(splat: MeshPart, droplets: ParticlePart, drips: ParticlePart) -> EffectDefinition {
 	EffectDefinition::new(
 		OOZE_BURST,
 		[
+			EffectLayer::mesh(splat),
+			EffectLayer::light(splat_light()),
 			EffectLayer::particle(droplets),
 			EffectLayer::particle(drips).with_delay(OOZE_DRIP_DELAY),
 		],
@@ -210,7 +249,7 @@ mod tests {
 		let mut effects = Assets::<EffectAsset>::default();
 		let part = compile_droplets(&mut effects, Handle::default());
 		let drips = compile_drips(&mut effects, Handle::default());
-		let def = definition(part, drips);
+		let def = definition(compile_splat(Handle::default()), part, drips);
 		assert_eq!(def.name, OOZE_BURST);
 		assert!(
 			(def.duration() - OOZE_DRIP_LIFE_MAX - OOZE_DRIP_DELAY).abs() < 1e-4,

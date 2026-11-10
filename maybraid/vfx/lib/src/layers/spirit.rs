@@ -3,11 +3,15 @@
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{
 	AccelModifier, Attribute, ColorBlendMask, ColorBlendMode, ColorOverLifetimeModifier,
-	EffectAsset, ExprWriter, LinearDragModifier, SetAttributeModifier, SetPositionSphereModifier,
-	ShapeDimension, SimulationSpace, SpawnerSettings,
+	EffectAsset, ExprWriter, FlipbookModifier, ImageSampleMapping, LinearDragModifier,
+	ParticleTextureModifier, SetAttributeModifier, SetPositionSphereModifier, ShapeDimension,
+	SimulationSpace, SpawnerSettings,
 };
 
-use crate::composition::{EffectDefinition, EffectLayer, LightPulse, ParticlePart, ParticleShade};
+use crate::composition::{
+	EffectDefinition, EffectLayer, LightPulse, LobeKind, LobeSpec, MeshPart, ParticlePart,
+	ParticleShade,
+};
 use crate::names::SPIRIT_DISSOLVE;
 use crate::palette::ExplosionPalette;
 use crate::parts::particle::assets::FlipbookAsset;
@@ -17,13 +21,13 @@ use crate::parts::particle::{
 	update_palette_color, update_scaled_size3, value_lifetime_gradient,
 };
 
-pub const SPIRIT_COUNT: f32 = 18.0;
-pub const SPIRIT_CAPACITY: u32 = 32;
+pub const SPIRIT_COUNT: f32 = 40.0;
+pub const SPIRIT_CAPACITY: u32 = 48;
 pub const SPIRIT_LIFE_MIN: f32 = 1.4;
 pub const SPIRIT_LIFE_MAX: f32 = 2.6;
 pub const SPIRIT_LIGHT_FADE: f32 = 2.2;
-pub const SPIRIT_LIGHT_PEAK: f32 = 28_000.0;
-pub const SPIRIT_LIGHT_RANGE: f32 = 5.5;
+pub const SPIRIT_LIGHT_PEAK: f32 = 55_000.0;
+pub const SPIRIT_LIGHT_RANGE: f32 = 7.5;
 
 pub fn light_pulse() -> LightPulse {
 	LightPulse {
@@ -32,6 +36,33 @@ pub fn light_pulse() -> LightPulse {
 		range: SPIRIT_LIGHT_RANGE,
 		fade: SPIRIT_LIGHT_FADE,
 	}
+}
+
+pub const SPIRIT_MESH_FADE: f32 = 2.1;
+
+pub fn compile_core(mesh: Handle<Mesh>) -> MeshPart {
+	MeshPart::duration_from_lobes(
+		SPIRIT_DISSOLVE,
+		mesh,
+		LobeKind::Flash,
+		vec![
+			LobeSpec::new(Vec3::new(0.0, 0.22, 0.0), Vec3::new(0.36, 0.62, 0.30))
+				.with_euler(Vec3::new(0.1, 0.25, -0.12))
+				.with_expand(1.18)
+				.with_rise(0.28)
+				.with_duration(SPIRIT_MESH_FADE),
+			LobeSpec::new(Vec3::new(0.06, 0.34, 0.05), Vec3::new(0.22, 0.48, 0.22))
+				.with_euler(Vec3::new(-0.35, 0.45, 0.2))
+				.with_expand(1.05)
+				.with_rise(0.35)
+				.with_duration(SPIRIT_MESH_FADE * 0.88),
+			LobeSpec::new(Vec3::new(-0.05, 0.42, 0.02), Vec3::new(0.18, 0.42, 0.18))
+				.with_euler(Vec3::new(0.55, -0.2, 0.35))
+				.with_expand(0.95)
+				.with_rise(0.32)
+				.with_duration(SPIRIT_MESH_FADE * 0.82),
+		],
+	)
 }
 
 pub fn compile_wisps(
@@ -58,6 +89,7 @@ pub fn compile_wisps(
 	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
 	let init_lifetime =
 		init_lifetime(&writer, &props.playback, &props.seed, SPIRIT_LIFE_MIN, SPIRIT_LIFE_MAX);
+	let init_sprite = SetAttributeModifier::new(Attribute::SPRITE_INDEX, writer.lit(0i32).expr());
 	let init_color = init_palette_color(&props);
 	let update_color = update_palette_color(&writer, &props);
 	let update_drag = LinearDragModifier::new((writer.lit(0.55) * props.playback.clone()).expr());
@@ -67,14 +99,18 @@ pub fn compile_wisps(
 	let update_size = update_scaled_size3(
 		&writer,
 		&props.scale,
-		Vec3::new(0.20, 0.20, 0.20),
-		Vec3::new(0.38, 0.38, 0.38),
+		Vec3::new(0.42, 0.42, 0.42),
+		Vec3::new(0.95, 0.95, 0.95),
 	);
 	let sprite = update_sprite_index(&writer, smoke);
-	let color = value_lifetime_gradient(&[(0.0, 0.0), (0.12, 0.85), (0.55, 0.7), (1.0, 0.0)]);
+	let texture_slot = 0;
+	let color = value_lifetime_gradient(&[(0.0, 0.0), (0.08, 0.95), (0.5, 0.82), (1.0, 0.0)]);
+
+	let mut module = writer.finish();
+	module.add_texture_slot("smoke", bevy_hanabi::SlotDimension::D2);
 
 	let effect = effects.add(
-		EffectAsset::new(SPIRIT_CAPACITY, SpawnerSettings::once(SPIRIT_COUNT.into()), writer.finish())
+		EffectAsset::new(SPIRIT_CAPACITY, SpawnerSettings::once(SPIRIT_COUNT.into()), module)
 			.with_name("vfx-spirit-wisps")
 			.with_simulation_space(SimulationSpace::Global)
 			.with_alpha_mode(bevy_hanabi::AlphaMode::Add)
@@ -82,12 +118,18 @@ pub fn compile_wisps(
 			.init(init_vel)
 			.init(init_age)
 			.init(init_lifetime)
+			.init(init_sprite)
 			.init(init_color)
 			.update(update_drag)
 			.update(update_accel)
 			.update(update_size)
-			.update(update_color)
 			.update(sprite)
+			.update(update_color)
+			.render(ParticleTextureModifier {
+				texture_slot,
+				sample_mapping: ImageSampleMapping::Modulate,
+			})
+			.render(FlipbookModifier { sprite_grid_size: smoke.grid })
 			.render(ColorOverLifetimeModifier {
 				gradient: color,
 				blend: ColorBlendMode::Modulate,
@@ -106,10 +148,14 @@ pub fn compile_wisps(
 	}
 }
 
-pub fn definition(wisps: ParticlePart) -> EffectDefinition {
+pub fn definition(core: MeshPart, wisps: ParticlePart) -> EffectDefinition {
 	EffectDefinition::new(
 		SPIRIT_DISSOLVE,
-		[EffectLayer::light(light_pulse()), EffectLayer::particle(wisps)],
+		[
+			EffectLayer::mesh(core),
+			EffectLayer::light(light_pulse()),
+			EffectLayer::particle(wisps),
+		],
 	)
 }
 
@@ -127,6 +173,9 @@ mod tests {
 			playback: 1.0,
 		};
 		let part = compile_wisps(&mut effects, &smoke);
-		assert_eq!(definition(part).name, SPIRIT_DISSOLVE);
+		assert_eq!(
+			definition(compile_core(Handle::default()), part).name,
+			SPIRIT_DISSOLVE
+		);
 	}
 }

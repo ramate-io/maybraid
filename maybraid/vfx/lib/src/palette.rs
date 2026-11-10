@@ -24,13 +24,13 @@ impl ExplosionPalette {
 	/// Dark viscous combat fluid — stylized, not photoreal gore.
 	pub fn maybraid_ooze() -> Self {
 		Self {
-			fire_hot: LinearRgba::rgb(0.42, 0.08, 0.12),
-			fire_mid: LinearRgba::rgb(0.22, 0.04, 0.10),
-			fire_cool: LinearRgba::rgb(0.08, 0.02, 0.06),
-			smoke_lit: LinearRgba::rgb(0.18, 0.06, 0.10),
-			smoke_shadow: LinearRgba::rgb(0.06, 0.02, 0.05),
-			spark: LinearRgba::rgb(0.55, 0.12, 0.18),
-			flash: LinearRgba::rgb(0.35, 0.08, 0.12),
+			fire_hot: LinearRgba::rgb(1.05, 0.32, 0.36),
+			fire_mid: LinearRgba::rgb(0.72, 0.12, 0.22),
+			fire_cool: LinearRgba::rgb(0.28, 0.06, 0.12),
+			smoke_lit: LinearRgba::rgb(0.48, 0.14, 0.18),
+			smoke_shadow: LinearRgba::rgb(0.16, 0.05, 0.09),
+			spark: LinearRgba::rgb(0.98, 0.28, 0.32),
+			flash: LinearRgba::rgb(0.65, 0.16, 0.22),
 		}
 	}
 

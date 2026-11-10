@@ -2,24 +2,25 @@
 
 use bevy::prelude::*;
 
-use crate::composition::{EffectDefinition, EffectRecipe, ParticlePart};
+use crate::composition::{EffectDefinition, EffectRecipe, MeshPart, ParticlePart};
 use crate::layers::ooze;
 
 #[derive(Component, Clone, Debug)]
 pub struct OozeBurst {
+	pub splat: MeshPart,
 	pub droplets: ParticlePart,
 	pub drips: ParticlePart,
 }
 
 impl OozeBurst {
-	pub fn new(droplets: ParticlePart, drips: ParticlePart) -> Self {
-		Self { droplets, drips }
+	pub fn new(splat: MeshPart, droplets: ParticlePart, drips: ParticlePart) -> Self {
+		Self { splat, droplets, drips }
 	}
 }
 
 impl EffectRecipe for OozeBurst {
 	fn effect_definition(&self) -> EffectDefinition {
-		ooze::definition(self.droplets.clone(), self.drips.clone())
+		ooze::definition(self.splat.clone(), self.droplets.clone(), self.drips.clone())
 	}
 }
 
@@ -43,8 +44,15 @@ mod tests {
 
 	#[test]
 	fn recipe_names_the_composite() {
-		let recipe = OozeBurst::new(stub_particle(0.5), stub_particle(1.0));
+		let mesh = crate::composition::MeshPart {
+			name: "stub".into(),
+			mesh: Handle::default(),
+			kind: crate::composition::LobeKind::Smoke,
+			lobes: Vec::new(),
+			duration: 0.5,
+		};
+		let recipe = OozeBurst::new(mesh, stub_particle(0.5), stub_particle(1.0));
 		assert_eq!(recipe.effect_definition().name, OOZE_BURST);
-		assert_eq!(recipe.effect_definition().layers.len(), 2);
+		assert_eq!(recipe.effect_definition().layers.len(), 4);
 	}
 }

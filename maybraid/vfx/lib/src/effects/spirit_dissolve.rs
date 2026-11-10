@@ -2,22 +2,23 @@
 
 use bevy::prelude::*;
 
-use crate::composition::{EffectDefinition, EffectRecipe, ParticlePart};
+use crate::composition::{EffectDefinition, EffectRecipe, MeshPart, ParticlePart};
 use crate::layers::spirit;
 #[derive(Component, Clone, Debug)]
 pub struct SpiritDissolve {
+	pub core: MeshPart,
 	pub wisps: ParticlePart,
 }
 
 impl SpiritDissolve {
-	pub fn new(wisps: ParticlePart) -> Self {
-		Self { wisps }
+	pub fn new(core: MeshPart, wisps: ParticlePart) -> Self {
+		Self { core, wisps }
 	}
 }
 
 impl EffectRecipe for SpiritDissolve {
 	fn effect_definition(&self) -> EffectDefinition {
-		spirit::definition(self.wisps.clone())
+		spirit::definition(self.core.clone(), self.wisps.clone())
 	}
 }
 
@@ -38,7 +39,14 @@ mod tests {
 			max_lifetime: spirit::SPIRIT_LIFE_MAX,
 			shade: ParticleShade::Spirit,
 		};
-		let recipe = SpiritDissolve::new(wisps);
+		let core = MeshPart {
+			name: SPIRIT_DISSOLVE.into(),
+			mesh: Handle::default(),
+			kind: crate::composition::LobeKind::Flash,
+			lobes: Vec::new(),
+			duration: spirit::SPIRIT_MESH_FADE,
+		};
+		let recipe = SpiritDissolve::new(core, wisps);
 		assert_eq!(recipe.effect_definition().name, SPIRIT_DISSOLVE);
 		assert!(
 			(recipe.effect_definition().duration() - spirit::SPIRIT_LIFE_MAX).abs() < 1e-4,

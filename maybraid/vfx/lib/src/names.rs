@@ -8,3 +8,4 @@ pub const OOZE_BURST: &str = "ooze_burst";
 pub const SMOKE: &str = "smoke";
 pub const SPARKS: &str = "sparks";
 pub const SPIRIT_DISSOLVE: &str = "spirit_dissolve";
+pub const SPIRIT_SPAWN: &str = "spirit_spawn";
