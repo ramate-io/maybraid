@@ -14,7 +14,7 @@ Storybook, Braid Oak, High Bush, Rory and ball-based conifers can use the existi
 
 
 - One active 3D scene camera rendering the default grove layer. Disjoint UI cameras do not count. Multiple overlapping scene cameras retain the whole ordinary tile until their distinct initial pipeline readiness can be tracked.
-- At most one directional shadow light; point/spot shadow configurations retain ordinary rendering.
+- At most one shadowed directional light relevant to the admitted scene camera's **full** RenderLayers; relevant shadowed point/spot lights retain ordinary rendering. Disjoint preview/UI lights do not block the world camera. No energy/visibility relaxation is used.
 - Canopy shadow mode Proxy or Off. Full canopy and frond-containing tiles retain ordinary rendering.
 - Exact Leaf/Stick material identities; unknown recipes or raster/scalar extensions retain the entire ordinary tile.
 - Original shared kits with one scene, one identity mesh node and one triangle primitive; unskinned, unmorphed and no authored COLOR channel. Richer scenes remain ordinary, without dropping primitives.
@@ -41,3 +41,11 @@ Once a tile has actually issued a main draw, the diagnostic subscriber pins a ne
 `packed_family_admission` and `packed_admission_complete` classify loaded presented host ownership by finite family/reason, including unsupported ordinary hosts and retained active tiles whose ordinary source component was removed. Entity-union dedup counts each tile once, including disabled warm hosts. This is not a viewport visibility denominator. Reasons distinguish unsupported adapter/material/geometry/kit/pose, empty content, view/shadow policy, budget, pending assets/GPU readiness, restoring and active state. At most 128 sorted family/reason rows are emitted per second with explicit total/truncation; actual candidate/draw evidence remains separate.
 
 The crate's separate `fixture` example runs real census formatters on an empty headless world without a renderer. Such export-format checks prove no real candidates, issued geometry or pass coverage. The generalized natural-scene census must validate its actual admission and completion events before clean A/B timing.
+
+### View policy evidence
+
+The first generalized natural-origin census reached 1,464–1,606 loaded host tiles but all ten woody families were rejected by the old global light-count guard. The normal game installs a shadowed character-preview key light isolated from world layer0. Bevy filters lights by their intersection with each camera's actual layers, so a disjoint preview key is not a second world shadow light. Admission and required prepass/shadow readiness now use the same sole scene-camera policy; a camera that includes proxy layer30 correctly makes a preview light on1+30 relevant again.
+
+Optional `packed_view_policy`, bounded `packed_policy_camera`/`packed_policy_light`, and `packed_policy_complete` records expose condition counts, the rejected subreason, full-layer relevance, active state, target/viewport, energy and visibility observations. No zero-energy or visibility value bypasses the conservative light guard. These records classify admission, not final rendering correctness. Unrelated preview shadow views still follow generic shadow queues and may share proxy-layer casters; this correction does not suppress or establish their full parity. Live changes to an unsupported relevant light configuration restore ordinary ownership before retiring packed content.
+
+Admitted readiness is keyed by sole-camera identity/full layers, distinct Depth/NormalPrepass state and relevant shadow-light identity. Supported-to-supported changes retire preparing masks or stage active ordinary restoration/repreparation, so an old mask cannot approve a newly required pass. Camera movement does not change this key.

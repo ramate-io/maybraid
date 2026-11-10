@@ -1,5 +1,6 @@
 //! One-time ordinary-to-packed handoff and revision/retirement ownership.
 
+use super::view_policy::PackedViewPolicy;
 use crate::packed::cache::*;
 use crate::packed::gpu::PackedBatchInstance;
 use crate::packed::kit::{KitState, PackedKitMeshes};
@@ -9,7 +10,6 @@ use crate::packed::select::select_band;
 use crate::ChicoGroveHost;
 use bevy::camera::primitives::Aabb;
 use bevy::camera::visibility::RenderLayers;
-use bevy::core_pipeline::prepass::{DepthPrepass, NormalPrepass};
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::render::batching::NoAutomaticBatching;
@@ -24,11 +24,12 @@ pub struct PackedGroveCell;
 pub struct PackedGroveProxy;
 
 fn ordinary_level(world: &mut World, payload: &TilePayload) -> LodSceneLevel {
-	let mut cameras = world.query_filtered::<(&GlobalTransform, &Camera), With<Camera3d>>();
+	let mut cameras = world
+		.query_filtered::<(&GlobalTransform, &Camera, Option<&RenderLayers>), With<Camera3d>>();
 	cameras
 		.iter(world)
-		.filter(|(_, camera)| camera.is_active)
-		.map(|(xf, _)| select_band(payload.structural_lod, xf.translation()))
+		.filter(|(_, camera, layers)| PackedViewPolicy::is_scene_camera(camera, *layers))
+		.map(|(xf, _, _)| select_band(payload.structural_lod, xf.translation()))
 		.max()
 		.unwrap_or(LodSceneLevel::UltraLow)
 }
@@ -159,16 +160,11 @@ fn spawn_proxies(
 	entity: Entity,
 	tile: &mut ResidentTile,
 	kits: &PackedKitMeshes,
+	policy: &PackedViewPolicy,
 ) -> bool {
-	let needs_prepass = {
-		let mut cameras =
-			world.query_filtered::<(Has<DepthPrepass>, Has<NormalPrepass>), With<Camera3d>>();
-		cameras.iter(world).any(|(depth, normal)| depth || normal)
-	};
-	let shadows = world
-		.query::<&DirectionalLight>()
-		.iter(world)
-		.any(|light| light.shadow_maps_enabled);
+	let needs_prepass = policy.needs_prepass;
+	let shadows = policy.shadow_directionals_relevant > 0;
+
 	let mut required = Vec::new();
 	for batch in tile.payload.lods.iter().flat_map(|batches| batches.iter()) {
 		let mask = match batch.key.material_kind {
@@ -257,26 +253,9 @@ fn spawn_proxies(
 /// Initial admission supports one active scene camera on the ordinary grove
 /// layer and directional shadow views. Other camera/light configurations retain
 /// ordinary rendering until their distinct pipeline readiness can be proven.
+#[cfg(test)]
 pub(crate) fn supported_view_configuration(world: &mut World) -> bool {
-	let mut cameras = world.query_filtered::<(&Camera, Option<&RenderLayers>), With<Camera3d>>();
-	let ordinary = RenderLayers::default();
-	let views = cameras
-		.iter(world)
-		.filter(|(camera, layers)| {
-			camera.is_active && layers.is_none_or(|layers| layers.intersects(&ordinary))
-		})
-		.count();
-	if views != 1 {
-		return false;
-	}
-	let directional = world
-		.query::<&DirectionalLight>()
-		.iter(world)
-		.filter(|light| light.shadow_maps_enabled)
-		.count();
-	directional <= 1
-		&& !world.query::<&PointLight>().iter(world).any(|light| light.shadow_maps_enabled)
-		&& !world.query::<&SpotLight>().iter(world).any(|light| light.shadow_maps_enabled)
+	PackedViewPolicy::read(world).supported()
 }
 
 fn source_revision_changed(current: &ChicoGroveHost, original: &ChicoGroveHost) -> bool {
@@ -296,7 +275,9 @@ pub fn sync_packed_tiles(world: &mut World) {
 		bevy::log::tracing::trace_span!(target: "maybraid.packed.profile", "packed_sync_tiles")
 			.entered();
 	let canopy = world.get_resource::<CanopyShadowMode>().copied().unwrap_or_default();
-	let enabled = !mode.is_off() && !canopy.canopy_casts() && supported_view_configuration(world);
+	let policy = PackedViewPolicy::read(world);
+	let readiness_policy = policy.readiness_key();
+	let enabled = !mode.is_off() && !canopy.canopy_casts() && policy.supported();
 	let Some(mut cache) = world.remove_resource::<PackedGroveCache>() else { return };
 	let Some(mut kits) = world.remove_resource::<PackedKitMeshes>() else {
 		world.insert_resource(cache);
@@ -353,6 +334,7 @@ pub fn sync_packed_tiles(world: &mut World) {
 		.filter(|(entity, tile)| {
 			tile.last_kit_epoch != kits.epoch
 				|| tile.payload.proxy_shadows != canopy.emit_proxies()
+				|| tile.readiness_policy != readiness_policy
 				|| world
 					.get::<ChicoGroveHost>(**entity)
 					.is_some_and(|host| source_revision_changed(host, &tile.original))
@@ -423,6 +405,7 @@ pub fn sync_packed_tiles(world: &mut World) {
 		cache.tiles.insert(
 			entity,
 			ResidentTile {
+				readiness_policy: readiness_policy.clone(),
 				original: host,
 				payload: Arc::new(payload),
 				signal: Arc::new(TileSignal::new([])),
@@ -446,7 +429,7 @@ pub fn sync_packed_tiles(world: &mut World) {
 				tile.payload.lods.iter().flat_map(|batches| batches.iter()).all(|batch| {
 					matches!(kits.states.get(batch.key.kit), Some(KitState::Ready(_)))
 				});
-			if all_ready && !spawn_proxies(world, entity, tile, &kits) {
+			if all_ready && !spawn_proxies(world, entity, tile, &kits, &policy) {
 				for proxy in tile.proxies.drain(..) {
 					let _ = world.despawn(proxy);
 				}
@@ -497,6 +480,7 @@ mod tests {
 		(
 			cell,
 			ResidentTile {
+				readiness_policy: Default::default(),
 				original: host,
 				payload: Arc::new(payload),
 				signal,
@@ -623,10 +607,12 @@ mod tests {
 		kits.states.insert(missing, KitState::Loading(Handle::default()));
 		let cell = world.spawn((host.clone(), LodSceneHost, LodSceneLevel::High)).id();
 		let bag = world.spawn((ChildOf(cell), LodLevelRoots)).id();
+		let readiness_policy = PackedViewPolicy::read(&mut world).readiness_key();
 		let mut cache = PackedGroveCache::default();
 		cache.tiles.insert(
 			cell,
 			ResidentTile {
+				readiness_policy,
 				original: host,
 				payload: Arc::new(payload),
 				signal: Arc::new(TileSignal::new([])),
@@ -659,5 +645,78 @@ mod tests {
 			Some(AdmissionReason::UnsupportedKit)
 		);
 		Ok(())
+	}
+	#[test]
+	fn newly_relevant_second_shadow_light_restores_ordinary_before_retiring_packed() {
+		let mut world = World::new();
+		world.insert_resource(PackMode::Compatible);
+		world.insert_resource(CanopyShadowMode::Off);
+		world.init_resource::<PackedKitMeshes>();
+		world.spawn((Camera3d::default(), Camera::default(), Transform::IDENTITY));
+		world.spawn(DirectionalLight { shadow_maps_enabled: true, ..default() });
+		let preview = world
+			.spawn((
+				DirectionalLight { shadow_maps_enabled: true, ..default() },
+				RenderLayers::layer(1).with(30),
+			))
+			.id();
+		let (cell, mut tile) = fixture(&mut world);
+		tile.readiness_policy = PackedViewPolicy::read(&mut world).readiness_key();
+		world.entity_mut(cell).remove::<ChicoGroveHost>();
+		let proxy = tile.proxies[0];
+		let signal = Arc::clone(&tile.signal);
+		let mut cache = PackedGroveCache::default();
+		cache.tiles.insert(cell, tile);
+		world.insert_resource(cache);
+		sync_packed_tiles(&mut world);
+		assert!(world.get::<RestoringOrdinary>(cell).is_none());
+		assert_eq!(signal.phase.load(std::sync::atomic::Ordering::Acquire), ACTIVE);
+		world.entity_mut(preview).insert(RenderLayers::default());
+		sync_packed_tiles(&mut world);
+		assert!(world.get::<RestoringOrdinary>(cell).is_some());
+		assert!(world.get::<ChicoGroveHost>(cell).is_some());
+		assert!(world.get_entity(proxy).is_ok());
+		assert_eq!(signal.phase.load(std::sync::atomic::Ordering::Acquire), ACTIVE);
+	}
+	#[test]
+	fn supported_pass_change_restores_active_or_retires_preparing_readiness() {
+		for preparing in [false, true] {
+			for add_shadow in [false, true] {
+				let mut world = World::new();
+				world.insert_resource(PackMode::Compatible);
+				world.insert_resource(CanopyShadowMode::Off);
+				world.init_resource::<PackedKitMeshes>();
+				let camera =
+					world.spawn((Camera3d::default(), Camera::default(), Transform::IDENTITY)).id();
+				let (cell, mut tile) = fixture(&mut world);
+				tile.readiness_policy = PackedViewPolicy::read(&mut world).readiness_key();
+				if preparing {
+					tile.signal = Arc::new(TileSignal::new([READY_BUFFER | READY_MAIN]));
+				} else {
+					world.entity_mut(cell).remove::<ChicoGroveHost>();
+				}
+				let proxy = tile.proxies[0];
+				let signal = Arc::clone(&tile.signal);
+				let mut cache = PackedGroveCache::default();
+				cache.tiles.insert(cell, tile);
+				world.insert_resource(cache);
+				if add_shadow {
+					world.spawn(DirectionalLight { shadow_maps_enabled: true, ..default() });
+				} else {
+					world.entity_mut(camera).insert(bevy::core_pipeline::prepass::DepthPrepass);
+				}
+				assert!(PackedViewPolicy::read(&mut world).supported());
+				sync_packed_tiles(&mut world);
+				assert!(world.get::<ChicoGroveHost>(cell).is_some());
+				if preparing {
+					assert_eq!(signal.phase.load(std::sync::atomic::Ordering::Acquire), RETIRED);
+					assert!(world.get_entity(proxy).is_err());
+				} else {
+					assert!(world.get::<RestoringOrdinary>(cell).is_some());
+					assert_eq!(signal.phase.load(std::sync::atomic::Ordering::Acquire), ACTIVE);
+					assert!(world.get_entity(proxy).is_ok());
+				}
+			}
+		}
 	}
 }

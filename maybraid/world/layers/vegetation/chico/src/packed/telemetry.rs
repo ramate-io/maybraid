@@ -50,6 +50,7 @@ impl PackedSnapshot {
 #[cfg(feature = "packed-diagnostics")]
 #[derive(Default)]
 pub struct PackedAdmissionSnapshot {
+	pub view_policy: super::view_policy::PackedViewPolicy,
 	pub host_tiles: usize,
 	pub rows: Vec<PackedAdmissionCount>,
 }
@@ -73,7 +74,8 @@ impl PackedAdmissionSnapshot {
 			.collect::<std::collections::HashMap<_, _>>();
 		let mode = world.get_resource::<PackMode>().copied().unwrap_or_else(PackMode::current);
 		let canopy = world.get_resource::<CanopyShadowMode>().copied().unwrap_or_default();
-		let views_supported = super::lifecycle::supported_view_configuration(world);
+		let view_policy = super::view_policy::PackedViewPolicy::read(world);
+		let views_supported = view_policy.supported();
 		let cache = world.get_resource::<PackedGroveCache>();
 		if let Some(cache) = cache {
 			for (&entity, tile) in &cache.tiles {
@@ -116,6 +118,7 @@ impl PackedAdmissionSnapshot {
 			*counts.entry((host.tile.family_name(), reason)).or_insert(0usize) += 1;
 		}
 		Self {
+			view_policy,
 			host_tiles,
 			rows: counts
 				.into_iter()
@@ -162,6 +165,7 @@ mod admission_tests {
 		cache.tiles.insert(
 			entity,
 			ResidentTile {
+				readiness_policy: Default::default(),
 				original: host,
 				payload: Arc::new(payload),
 				signal,

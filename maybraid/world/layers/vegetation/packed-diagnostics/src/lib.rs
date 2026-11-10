@@ -17,6 +17,8 @@ use std::{
 	time::{Duration, Instant},
 };
 
+mod view_policy;
+
 pub struct PackedGroveDiagnosticsPlugin;
 impl Plugin for PackedGroveDiagnosticsPlugin {
 	fn build(&self, app: &mut App) {
@@ -42,6 +44,7 @@ fn record_main_metrics(world: &mut World, mut previous: Local<Option<Instant>>) 
 	*previous = Some(now);
 	let snapshot = PackedSnapshot::read(world);
 	let admission = PackedAdmissionSnapshot::read(world);
+	view_policy::record(world, &admission.view_policy);
 	const MAX_ADMISSION_ROWS: usize = 128;
 	for row in admission.rows.iter().take(MAX_ADMISSION_ROWS) {
 		bevy::log::tracing::trace!(target:"maybraid.packed.metrics", family=row.family, reason=row.reason, loaded_host_tiles=row.tiles, "packed_family_admission");
