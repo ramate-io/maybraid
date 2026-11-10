@@ -219,6 +219,7 @@ impl TilePayload {
 }
 
 pub struct ResidentTile {
+	pub(crate) readiness_policy: super::view_policy::ReadinessPolicy,
 	pub original: ChicoGroveHost,
 	pub payload: Arc<TilePayload>,
 	pub signal: Arc<TileSignal>,

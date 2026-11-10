@@ -7,11 +7,13 @@ mod kit;
 pub(crate) mod lifecycle;
 mod material;
 mod telemetry;
+mod view_policy;
 pub use gpu::{GpuPackedInstances, PackedBatchInstance, PackedCounters};
 pub use select::PackedViewSelection;
 pub use telemetry::PackedSnapshot;
 #[cfg(feature = "packed-diagnostics")]
 pub use telemetry::{PackedAdmissionCount, PackedAdmissionSnapshot};
+pub use view_policy::PackedViewPolicy;
 mod mode;
 mod render;
 mod select;
