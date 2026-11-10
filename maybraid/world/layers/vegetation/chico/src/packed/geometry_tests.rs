@@ -92,7 +92,9 @@ fn elevated_and_depressed_groves_bound_every_actual_kit_vertex() -> Result<(), S
 				}
 			}
 		}
-		println!("elevation={elevation} checked_vertices={vertices} old_index_bounds_misses={old_misses} old={old:?} geometric={bounds:?}");
+		println!(
+			"elevation={elevation} checked_vertices={vertices} old_index_bounds_misses={old_misses} old={old:?} geometric={bounds:?}"
+		);
 		assert!(
 			vertices > 0 && old_misses > 0,
 			"old indexing footprint must miss terrain-displaced geometry"
@@ -165,8 +167,8 @@ fn merged_nonuniform_leaf_padding_uses_shader_root_scale() -> Result<(), String>
 	Ok(())
 }
 #[test]
-fn invalid_kit_positions_and_procedural_shadow_revisions_do_not_keep_stale_bounds(
-) -> Result<(), String> {
+fn invalid_kit_positions_and_procedural_shadow_revisions_do_not_keep_stale_bounds()
+-> Result<(), String> {
 	let empty = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all())
 		.with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, Vec::<[f32; 3]>::new());
 	assert!(PackedKitMeshes::bounds_for_mesh(&empty).is_none());
@@ -207,5 +209,67 @@ fn invalid_kit_positions_and_procedural_shadow_revisions_do_not_keep_stale_bound
 	assert_eq!(cache.epoch, 2);
 	assert!(cache.ready_bounds(kit).is_none());
 	assert!(matches!(cache.states.get(kit), Some(KitState::Unsupported)));
+	Ok(())
+}
+
+#[test]
+fn native_calculate_bounds_preserves_only_explicit_manual_instance_bounds() -> Result<(), String> {
+	use bevy::asset::AssetApp;
+	use bevy::camera::{
+		primitives::Aabb,
+		visibility::{NoAutoAabb, calculate_bounds},
+	};
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+		.init_asset::<Mesh>()
+		.add_systems(PostUpdate, calculate_bounds.after(bevy::asset::AssetEventSystems));
+	let first = app.world_mut().resource_mut::<Assets<Mesh>>().add(mesh());
+	let custom = Aabb {
+		center: Vec3::new(150., -300., -350.).into(),
+		half_extents: Vec3::new(40., 25., 40.).into(),
+	};
+	let packed = app.world_mut().spawn((Mesh3d(first.clone()), custom, NoAutoAabb)).id();
+	let control = app.world_mut().spawn((Mesh3d(first), custom)).id();
+	app.update();
+	assert_eq!(app.world().get::<Aabb>(packed), Some(&custom));
+	assert_eq!(
+		app.world().get::<Aabb>(control).map(|a| a.center),
+		Some(Vec3::ZERO.into()),
+		"unmarked initial Mesh3d must reproduce kit-local overwrite"
+	);
+
+	let second =
+		app.world_mut()
+			.resource_mut::<Assets<Mesh>>()
+			.add(mesh().with_inserted_attribute(
+				Mesh::ATTRIBUTE_POSITION,
+				vec![[4., -1., -1.], [8., 1., 1.], [6., 1., -1.]],
+			));
+	app.world_mut().entity_mut(packed).insert(Mesh3d(second.clone()));
+	app.world_mut().entity_mut(control).insert((Mesh3d(second.clone()), custom));
+	app.update();
+	assert_eq!(app.world().get::<Aabb>(packed), Some(&custom));
+	assert_eq!(
+		app.world().get::<Aabb>(control).map(|a| a.center),
+		Some(Vec3::new(6., 0., 0.).into()),
+		"handle changes must preserve manual bounds only"
+	);
+
+	app.world_mut().entity_mut(control).insert(custom);
+	app.world_mut()
+		.resource_mut::<Assets<Mesh>>()
+		.get_mut(&second)
+		.ok_or("missing modified mesh")?
+		.insert_attribute(
+			Mesh::ATTRIBUTE_POSITION,
+			vec![[10., -1., -1.], [14., 1., 1.], [12., 1., -1.]],
+		);
+	app.update();
+	assert_eq!(app.world().get::<Aabb>(packed), Some(&custom));
+	assert_eq!(
+		app.world().get::<Aabb>(control).map(|a| a.center),
+		Some(Vec3::new(12., 0., 0.).into()),
+		"asset changes must preserve manual bounds only"
+	);
 	Ok(())
 }
