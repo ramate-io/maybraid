@@ -34,6 +34,41 @@ impl ExplosionPalette {
 		}
 	}
 
+	/// Magical spawn/despawn burst derived from a single character hue (cyan default).
+	pub fn spirit_burst(tint: Color) -> Self {
+		let tint = LinearRgba::from(tint);
+		let hot = boost(
+			LinearRgba::rgb(
+				(0.92 + tint.red * 0.55).min(1.55),
+				(0.98 + tint.green * 0.45).min(1.55),
+				(1.05 + tint.blue * 0.55).min(1.65),
+			),
+			1.25,
+		);
+		let mid = boost(tint, 1.05);
+		let cool = darken(tint, 0.42);
+		let shadow = darken(tint, 0.18);
+		let spark = hot;
+		let flash = LinearRgba::rgb(
+			(1.2 + tint.red * 0.25).min(1.65),
+			(1.18 + tint.green * 0.22).min(1.62),
+			(1.22 + tint.blue * 0.28).min(1.68),
+		);
+		Self {
+			fire_hot: hot,
+			fire_mid: mid,
+			fire_cool: cool,
+			smoke_lit: mid,
+			smoke_shadow: shadow,
+			spark,
+			flash,
+		}
+	}
+
+	pub fn default_spirit_tint() -> Color {
+		Color::srgb(0.12, 0.88, 1.05)
+	}
+
 	/// Rising wisps on defeat — soft celestial tones used elsewhere in Maybraid.
 	pub fn celestial() -> Self {
 		Self {
@@ -81,6 +116,24 @@ impl ExplosionPalette {
 
 	pub fn color(color: LinearRgba) -> Color {
 		Color::from(color)
+	}
+}
+
+fn boost(color: LinearRgba, factor: f32) -> LinearRgba {
+	LinearRgba {
+		red: color.red * factor,
+		green: color.green * factor,
+		blue: color.blue * factor,
+		alpha: color.alpha,
+	}
+}
+
+fn darken(color: LinearRgba, factor: f32) -> LinearRgba {
+	LinearRgba {
+		red: color.red * factor,
+		green: color.green * factor,
+		blue: color.blue * factor,
+		alpha: color.alpha,
 	}
 }
 

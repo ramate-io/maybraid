@@ -90,10 +90,14 @@ pub fn setup_vfx_library(
 	let ooze_splat = ooze::compile_splat(lobe_mesh.clone());
 	let ooze_droplets = ooze::compile_droplets(&mut effects, flipbooks.ooze.clone());
 	let ooze_drips = ooze::compile_drips(&mut effects, flipbooks.ooze.clone());
-	let spirit_core = spirit::compile_core(lobe_mesh.clone());
-	let spirit_wisps = spirit::compile_wisps(&mut effects, &flipbooks.smoke);
-	let spawn_core = spirit_spawn::compile_core(lobe_mesh.clone());
-	let spawn_wisps = spirit_spawn::compile_wisps(&mut effects, &flipbooks.smoke);
+	let spirit_shell = spirit::compile_shell(lobe_mesh.clone());
+	let spirit_streaks = spirit::compile_streaks(&mut effects, flipbooks.spark.clone());
+	let spirit_motes = spirit::compile_motes(&mut effects, &flipbooks.smoke);
+	let spirit_embers = spirit::compile_embers_layer(&mut effects, flipbooks.spark.clone());
+	let spawn_shell = spirit_spawn::compile_shell(lobe_mesh.clone());
+	let spawn_streaks = spirit_spawn::compile_streaks(&mut effects, flipbooks.spark.clone());
+	let spawn_motes = spirit_spawn::compile_motes(&mut effects, &flipbooks.smoke);
+	let spawn_embers = spirit_spawn::compile_embers_layer(&mut effects, flipbooks.spark.clone());
 	let library = VfxLibrary {
 		dust: Dust::rolling_wave(&server, &mut meshes),
 		flash: flash::definition(flash_mesh.clone()),
@@ -101,8 +105,18 @@ pub fn setup_vfx_library(
 		smoke: smoke::definition(smoke_mesh.clone(), smoke_wisps.clone()),
 		sparks: sparks::definition(sparks_part.clone()),
 		ooze_burst: OozeBurst::new(ooze_splat, ooze_droplets.clone(), ooze_drips.clone()),
-		spirit_dissolve: SpiritDissolve::new(spirit_core, spirit_wisps.clone()),
-		spirit_spawn: SpiritSpawn::new(spawn_core, spawn_wisps.clone()),
+		spirit_dissolve: SpiritDissolve::new(
+			spirit_shell.clone(),
+			spirit_streaks.clone(),
+			spirit_motes.clone(),
+			spirit_embers.clone(),
+		),
+		spirit_spawn: SpiritSpawn::new(
+			spawn_shell.clone(),
+			spawn_streaks.clone(),
+			spawn_motes.clone(),
+			spawn_embers.clone(),
+		),
 		fiery_explosion: FieryExplosion::new(
 			flash_mesh,
 			fireball_mesh,
@@ -119,8 +133,12 @@ pub fn setup_vfx_library(
 		&sparks_part,
 		&ooze_droplets,
 		&ooze_drips,
-		&spirit_wisps,
-		&spawn_wisps,
+		&spirit_streaks,
+		&spirit_motes,
+		&spirit_embers,
+		&spawn_streaks,
+		&spawn_motes,
+		&spawn_embers,
 	] {
 		let mut warmup = commands.spawn((
 			Name::new(format!("vfx-warmup-{}", part.name)),

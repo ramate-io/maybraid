@@ -1,4 +1,4 @@
-//! Headless stills: braidman hit ooze, then spiritual dissolve on defeat.
+//! Headless stills: braidman spiritual spawn-in and dissolve in two tint palettes.
 //!
 //! ```bash
 //! COMBAT_VFX_CAPTURE_DIR=/tmp/combat-vfx \
@@ -20,9 +20,9 @@ use characters_playground::{
 	camera::orient_camera, AnimationMode, CameraController, CharacterConfig, CharacterSpecies,
 	CharactersPlaygroundPlugin, PlaygroundCharacter,
 };
-use combat_vfx::{CombatVfxPlugin, SPIRIT_DISSOLVE_SECS, SPIRIT_SPAWN_SECS};
+use combat_vfx::{CombatVfxPlugin, SpiritTint, DEFAULT_SPIRIT_TINT, SPIRIT_DISSOLVE_SECS, SPIRIT_SPAWN_SECS};
 use maybraid_vfx::SPIRIT_SPAWN;
-use damage::{DamageApplied, DamagePlugin, Health};
+use damage::{DamagePlugin, Health};
 use game_commands::ui::GameCommandDrawerVisible;
 use maybraid_vfx::{EffectRecipe, ExplosionPalette, SpawnVfxExt, VfxInstance, VfxLibrary, VfxSpawn, VfxPlugin};
 use player::Npc;
@@ -71,7 +71,6 @@ fn main() {
 		})
 		.add_systems(Startup, (hide_command_ui, add_ground))
 		.add_systems(Update, (tag_combat_subject, frame_capture_camera, advance_capture).chain())
-		.add_message::<DamageApplied>()
 		.run();
 }
 
@@ -82,6 +81,7 @@ struct CaptureDir(PathBuf);
 struct Shot {
 	file: PathBuf,
 	kind: ShotKind,
+	tint: Color,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -89,8 +89,6 @@ enum ShotKind {
 	SpiritSpawnStart,
 	SpiritSpawnMid,
 	SpiritSpawnComplete,
-	OozeBurst,
-	OozeDrips,
 	SpiritSettle,
 	SpiritMid,
 	SpiritComplete,
@@ -112,25 +110,36 @@ struct CapturePlan {
 	character_hidden: bool,
 }
 
+const ROSE_SPIRIT_TINT: Color = Color::srgb(1.0, 0.22, 0.55);
+
+fn spirit_palette(tint: Color) -> ExplosionPalette {
+	ExplosionPalette::spirit_burst(tint)
+}
+
 impl CapturePlan {
 	fn bootstrap(dir: &Path) -> Self {
-		let names = [
-			("spirit_spawn_start", ShotKind::SpiritSpawnStart),
-			("spirit_spawn_mid", ShotKind::SpiritSpawnMid),
-			("spirit_spawn_complete", ShotKind::SpiritSpawnComplete),
-			("ooze_burst_mid", ShotKind::OozeBurst),
-			("ooze_burst_drips", ShotKind::OozeDrips),
-			("spirit_settle", ShotKind::SpiritSettle),
-			("spirit_dissolve_mid", ShotKind::SpiritMid),
-			("spirit_dissolve_complete", ShotKind::SpiritComplete),
+		let sequences = [
+			("cyan", DEFAULT_SPIRIT_TINT),
+			("magenta", ROSE_SPIRIT_TINT),
 		];
-		Self {
-			shots: names
-				.into_iter()
-				.map(|(stem, kind)| Shot { file: dir.join(format!("{stem}.png")), kind })
-				.collect(),
-			..default()
+		let mut shots = Vec::new();
+		for (label, tint) in sequences {
+			for (stem, kind) in [
+				("spawn_start", ShotKind::SpiritSpawnStart),
+				("spawn_mid", ShotKind::SpiritSpawnMid),
+				("spawn_complete", ShotKind::SpiritSpawnComplete),
+				("settle", ShotKind::SpiritSettle),
+				("dissolve_mid", ShotKind::SpiritMid),
+				("dissolve_complete", ShotKind::SpiritComplete),
+			] {
+				shots.push(Shot {
+					file: dir.join(format!("spirit_{label}_{stem}.png")),
+					kind,
+					tint,
+				});
+			}
 		}
+		Self { shots, ..default() }
 	}
 }
 
@@ -157,7 +166,9 @@ fn tag_combat_subject(
 	pending: Query<Entity, (With<PlaygroundCharacter>, Without<Health>)>,
 ) {
 	for entity in &pending {
-		commands.entity(entity).insert((Npc, Health::from_max(48.0), CombatSubject));
+		commands
+			.entity(entity)
+			.insert((Npc, Health::from_max(48.0), CombatSubject, SpiritTint::default()));
 	}
 }
 
@@ -184,23 +195,8 @@ fn frame_capture_camera(
 		return;
 	};
 	let focus = subject.translation() + Vec3::new(0.0, 0.45, 0.0);
-	let offset = match plan.shots[plan.index].kind {
-		ShotKind::OozeBurst | ShotKind::OozeDrips => Vec3::new(0.55, 0.18, 1.35),
-		_ => Vec3::new(0.4, 0.22, 1.55),
-	};
+	let offset = Vec3::new(0.4, 0.22, 1.55);
 	orient_camera(&mut transform, &mut controller, focus + offset, focus);
-}
-
-fn peak_ooze(instances: &Query<(Entity, &VfxInstance)>) -> Option<(Entity, f32)> {
-	instances
-		.iter()
-		.filter(|(_, instance)| instance.name.contains("ooze") && instance.armed)
-		.max_by(|a, b| a.1.age.partial_cmp(&b.1.age).unwrap_or(std::cmp::Ordering::Equal))
-		.map(|(entity, instance)| (entity, instance.age))
-}
-
-fn ooze_age_in_window(instances: &Query<(Entity, &VfxInstance)>, min_age: f32, max_age: f32) -> bool {
-	peak_ooze(instances).is_some_and(|(_, age)| age >= min_age && age <= max_age)
 }
 
 fn active_spirit(instances: &Query<(Entity, &VfxInstance)>) -> Option<(Entity, f32)> {
@@ -268,7 +264,8 @@ fn advance_capture(
 		plan.index += 1;
 		plan.requested = false;
 		plan.hold_frames = 0;
-		if matches!(plan.shots.get(plan.index.saturating_sub(1)).map(|s| s.kind), Some(ShotKind::SpiritSpawnComplete)) {
+		let prev = plan.shots.get(plan.index.saturating_sub(1));
+		if matches!(prev.map(|s| s.kind), Some(ShotKind::SpiritSpawnComplete)) {
 			plan.spawn_in_fired = false;
 			plan.spawn_revealed = false;
 			plan.character_hidden = false;
@@ -276,12 +273,18 @@ fn advance_capture(
 				commands.entity(root).insert(Visibility::Inherited);
 			}
 		}
-		let keep_ooze_hit = matches!(
-			(plan.shots.get(plan.index.saturating_sub(1)).map(|s| s.kind), plan.shots.get(plan.index).map(|s| s.kind)),
-			(Some(ShotKind::OozeBurst), Some(ShotKind::OozeDrips))
-		);
-		if !keep_ooze_hit {
+		if matches!(
+			plan.shots.get(plan.index).map(|s| s.kind),
+			Some(ShotKind::SpiritSpawnStart)
+		) {
+			plan.spawn_in_fired = false;
+			plan.spawn_revealed = false;
+			plan.spirit_spawned = false;
+			plan.character_hidden = false;
 			plan.hit_fired = false;
+			if let Ok(root) = roots.single() {
+				commands.entity(root).insert(Visibility::Inherited);
+			}
 		}
 		plan.spirit_spawned = false;
 		plan.phase_started = time.elapsed();
@@ -308,21 +311,22 @@ fn advance_capture(
 	let ready = match shot.kind {
 		ShotKind::SpiritSpawnStart => {
 			if !plan.spawn_in_fired {
+				let Ok((body, transform)) = subject.single() else {
+					return;
+				};
+				commands.entity(body).insert(SpiritTint(shot.tint));
 				if let Ok(root) = roots.single() {
 					commands.entity(root).insert(Visibility::Hidden);
 				}
-				let Ok((_, transform)) = subject.single() else {
-					return;
-				};
 				commands.spawn_vfx(
 					&library.as_ref().expect("library").spirit_spawn.effect_definition(),
 					VfxSpawn {
 						transform: Transform::from_translation(
 							transform.translation() + Vec3::new(0.0, 0.35, 0.0),
 						),
-						scale: 1.2,
-						intensity: 1.4,
-						palette: Some(ExplosionPalette::celestial()),
+						scale: 1.35,
+						intensity: 1.65,
+						palette: Some(spirit_palette(shot.tint)),
 						..default()
 					},
 				);
@@ -331,15 +335,18 @@ fn advance_capture(
 				return;
 			}
 			plan.spawn_in_fired
-				&& (spirit_spawn_age_in_window(&instances, 0.03, 0.55)
+				&& (spirit_spawn_age_in_window(&instances, 0.06, 0.32)
 					|| time.elapsed().saturating_sub(plan.phase_started)
-						>= Duration::from_millis(450))
+						>= Duration::from_millis(320))
 		}
 		ShotKind::SpiritSpawnMid => {
-			!plan.spawn_revealed
-				&& (spirit_spawn_age_in_window(&instances, 0.35, 1.2)
-					|| time.elapsed().saturating_sub(plan.phase_started)
-						>= Duration::from_millis(950))
+			plan.spawn_in_fired
+				&& !plan.spawn_revealed
+				&& (spirit_spawn_age_in_window(&instances, 0.45, 1.25)
+					|| active_spirit_spawn(&instances)
+						.is_some_and(|(_, age)| age >= 0.55)
+						&& time.elapsed().saturating_sub(plan.phase_started)
+							>= Duration::from_millis(180))
 		}
 		ShotKind::SpiritSpawnComplete => {
 			if !plan.spawn_revealed {
@@ -359,50 +366,8 @@ fn advance_capture(
 				&& wisps_done
 				&& time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(200)
 		}
-		ShotKind::OozeBurst => {
-			if !plan.hit_fired {
-				let Ok((target, transform)) = subject.single() else {
-					return;
-				};
-				let point = transform.translation() + Vec3::new(0.05, 0.55, 0.62);
-				commands.write_message(DamageApplied {
-					target,
-					source: None,
-					amount: 22.0,
-					applied: 22.0,
-					remaining: 26.0,
-					point,
-				});
-				plan.hit_fired = true;
-				plan.phase_started = time.elapsed();
-				return;
-			}
-			ooze_age_in_window(&instances, 0.08, 0.55)
-				&& time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(80)
-		}
-		ShotKind::OozeDrips => {
-			if peak_ooze(&instances).is_none() && !plan.hit_fired {
-				let Ok((target, transform)) = subject.single() else {
-					return;
-				};
-				let point = transform.translation() + Vec3::new(0.05, 0.55, 0.62);
-				commands.write_message(DamageApplied {
-					target,
-					source: None,
-					amount: 22.0,
-					applied: 22.0,
-					remaining: 26.0,
-					point,
-				});
-				plan.hit_fired = true;
-				plan.phase_started = time.elapsed();
-				return;
-			}
-			ooze_age_in_window(&instances, 0.32, 1.15)
-				|| time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(900)
-		}
 		ShotKind::SpiritSettle => {
-			// Clear any remaining ooze instances so the defeat shot reads cleanly.
+			// Clear prior spirit instances so the dissolve reads cleanly.
 			for (entity, _) in &instances {
 				commands.entity(entity).try_despawn();
 			}
@@ -410,22 +375,19 @@ fn advance_capture(
 		}
 		ShotKind::SpiritMid => {
 			if !plan.spirit_spawned {
-				let Ok(root) = roots.single() else {
+				let Ok((body, transform)) = subject.single() else {
 					return;
 				};
-				let Ok((_, transform)) = subject.single() else {
-					return;
-				};
-				let palette = ExplosionPalette::celestial();
+				commands.entity(body).insert(SpiritTint(shot.tint));
 				commands.spawn_vfx(
 					&library.as_ref().expect("library").spirit_dissolve.effect_definition(),
 					VfxSpawn {
 						transform: Transform::from_translation(
-							transform.translation() + Vec3::new(0.0, 0.9, 0.0),
+							transform.translation() + Vec3::new(0.0, 0.35, 0.0),
 						),
-						scale: 1.6,
-						intensity: 1.8,
-						palette: Some(palette),
+						scale: 1.35,
+						intensity: 1.65,
+						palette: Some(spirit_palette(shot.tint)),
 						..default()
 					},
 				);

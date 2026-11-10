@@ -3,6 +3,7 @@
 mod impact;
 mod spawn_in;
 mod spirit;
+mod tint;
 
 use bevy::prelude::*;
 use character_ragdoll::CharacterRagdollSystems;
@@ -11,6 +12,7 @@ use damage::{DamageSystems, tick_queued_despawns};
 pub use impact::{CombatOozeTint, DEFAULT_OOZE_TINT};
 pub use spawn_in::{SpiritMaterialize, SPIRIT_SPAWN_REVEAL, SPIRIT_SPAWN_SECS};
 pub use spirit::{SPIRIT_DISSOLVE_SECS, SpiritDissolveStarted};
+pub use tint::{SpiritTint, DEFAULT_SPIRIT_TINT};
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CombatVfxSystems {
@@ -54,5 +56,6 @@ impl Plugin for CombatVfxPlugin {
 				.in_set(CombatVfxSystems::Despawn),
 		);
 		impact::configure_ooze_tints(app);
+		tint::configure_spirit_tints(app);
 	}
 }

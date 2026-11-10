@@ -4,9 +4,8 @@ use bevy::prelude::*;
 use character_ragdoll::{Corpse, RagdollState};
 use characters::CharacterRoot;
 use damage::{DespawnAfter, Downed};
-use maybraid_vfx::{
-	ExplosionPalette, EffectRecipe, SpawnVfxExt, VfxLibrary, VfxSpawn,
-};
+use crate::tint::resolve_spirit_palette;
+use maybraid_vfx::{EffectRecipe, SpawnVfxExt, VfxLibrary, VfxSpawn};
 
 /// Corpse visual is dissolving; gameplay body gets a matching despawn clock.
 #[derive(Component, Clone, Copy, Debug)]
@@ -15,7 +14,7 @@ pub struct SpiritDissolveStarted {
 }
 
 /// How long wisps rise after the body is hidden.
-pub const SPIRIT_DISSOLVE_SECS: f32 = 2.85;
+pub const SPIRIT_DISSOLVE_SECS: f32 = 2.05;
 
 /// Wait for ragdoll motion to settle (or this fallback without a solver).
 pub const CORPSE_SETTLE_SECS: f32 = 0.85;
@@ -51,6 +50,7 @@ pub(crate) fn begin_spirit_dissolve(
 	ragdolls: Query<&RagdollState>,
 	parents: Query<&ChildOf>,
 	hosts: Query<(Entity, &RagdollState)>,
+	tints: Query<&crate::SpiritTint>,
 ) {
 	let Some(library) = library else {
 		return;
@@ -76,14 +76,19 @@ pub(crate) fn begin_spirit_dissolve(
 				commands.entity(host).remove::<RagdollState>();
 			}
 		}
+		let palette = parents.get(visual).ok().and_then(|parent| {
+			tints.get(parent.parent()).ok().map(|tint| tint.palette())
+		});
 		commands.spawn_vfx(
 			&library.spirit_dissolve.effect_definition(),
 			VfxSpawn {
 				transform: Transform::from_translation(transform.translation()),
-				scale: 1.0,
-				intensity: 1.0,
+				scale: 1.35,
+				intensity: 1.65,
 				playback: 1.0,
-				palette: Some(ExplosionPalette::celestial()),
+				palette: palette.or_else(|| {
+					parents.get(visual).ok().map(|p| resolve_spirit_palette(p.parent(), &tints))
+				}),
 				seed: Some(visual.to_bits() ^ 0x5a17_d15c),
 				..default()
 			},

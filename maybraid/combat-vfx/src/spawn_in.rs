@@ -4,9 +4,8 @@ use bevy::prelude::*;
 use character_ragdoll::Corpse;
 use characters::CharacterRoot;
 use damage::Health;
-use maybraid_vfx::{
-	EffectRecipe, ExplosionPalette, SpawnVfxExt, VfxInstance, VfxLibrary, VfxSpawn,
-};
+use crate::tint::resolve_spirit_palette;
+use maybraid_vfx::{EffectRecipe, SpawnVfxExt, VfxInstance, VfxLibrary, VfxSpawn};
 use player::{Npc, Player};
 
 /// Character mesh stays hidden until wisps converge.
@@ -21,8 +20,8 @@ pub struct SpiritMaterialize {
 pub(crate) struct SpiritSpawnPlayed;
 
 /// Wisps and soft light duration; character reveals partway through.
-pub const SPIRIT_SPAWN_SECS: f32 = 1.75;
-pub const SPIRIT_SPAWN_REVEAL: f32 = 0.95;
+pub const SPIRIT_SPAWN_SECS: f32 = 1.65;
+pub const SPIRIT_SPAWN_REVEAL: f32 = 0.82;
 
 pub(crate) fn begin_spirit_materialize(
 	time: Res<Time>,
@@ -30,6 +29,7 @@ pub(crate) fn begin_spirit_materialize(
 	library: Option<Res<VfxLibrary>>,
 	added: Query<(Entity, &GlobalTransform, &ChildOf), Added<CharacterRoot>>,
 	bodies: Query<(Entity, &GlobalTransform, Has<SpiritSpawnPlayed>), (Or<(With<Player>, With<Npc>)>, With<Health>)>,
+	tints: Query<&crate::SpiritTint>,
 	corpses: Query<(), With<Corpse>>,
 	dissolving: Query<(), With<super::spirit::SpiritDissolveStarted>>,
 ) {
@@ -55,9 +55,9 @@ pub(crate) fn begin_spirit_materialize(
 				transform: Transform::from_translation(
 					transform.translation() + Vec3::new(0.0, 0.35, 0.0),
 				),
-				scale: 1.15,
-				intensity: 1.35,
-				palette: Some(ExplosionPalette::celestial()),
+				scale: 1.35,
+				intensity: 1.65,
+				palette: Some(resolve_spirit_palette(body, &tints)),
 				seed: Some(body.to_bits() ^ visual.to_bits() ^ 0x5a17_5ca4),
 				..default()
 			},
@@ -139,8 +139,18 @@ mod tests {
 			smoke: EffectDefinition::new("smoke", []),
 			sparks: EffectDefinition::new("sparks", []),
 			ooze_burst: OozeBurst::new(mesh.clone(), particle.clone(), particle.clone()),
-			spirit_dissolve: SpiritDissolve::new(mesh.clone(), particle.clone()),
-			spirit_spawn: SpiritSpawn::new(mesh.clone(), particle.clone()),
+			spirit_dissolve: SpiritDissolve::new(
+				mesh.clone(),
+				particle.clone(),
+				particle.clone(),
+				particle.clone(),
+			),
+			spirit_spawn: SpiritSpawn::new(
+				mesh.clone(),
+				particle.clone(),
+				particle.clone(),
+				particle.clone(),
+			),
 			fiery_explosion: FieryExplosion::new(
 				mesh.clone(),
 				mesh.clone(),

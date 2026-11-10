@@ -1054,8 +1054,18 @@ mod tests {
 			smoke: blank.clone(),
 			sparks: blank.clone(),
 			ooze_burst: OozeBurst::new(blank_mesh(), blank_particle(), blank_particle()),
-			spirit_dissolve: SpiritDissolve::new(blank_mesh(), blank_particle()),
-			spirit_spawn: SpiritSpawn::new(blank_mesh(), blank_particle()),
+			spirit_dissolve: SpiritDissolve::new(
+				blank_mesh(),
+				blank_particle(),
+				blank_particle(),
+				blank_particle(),
+			),
+			spirit_spawn: SpiritSpawn::new(
+				blank_mesh(),
+				blank_particle(),
+				blank_particle(),
+				blank_particle(),
+			),
 			fiery_explosion: FieryExplosion::new(
 				blank_mesh(),
 				blank_mesh(),

@@ -142,8 +142,18 @@ mod tests {
 			smoke: EffectDefinition::new("smoke", []),
 			sparks: EffectDefinition::new("sparks", []),
 			ooze_burst: OozeBurst::new(blank_mesh.clone(), particle.clone(), particle.clone()),
-			spirit_dissolve: SpiritDissolve::new(blank_mesh.clone(), particle.clone()),
-			spirit_spawn: SpiritSpawn::new(blank_mesh.clone(), particle.clone()),
+			spirit_dissolve: SpiritDissolve::new(
+				blank_mesh.clone(),
+				particle.clone(),
+				particle.clone(),
+				particle.clone(),
+			),
+			spirit_spawn: SpiritSpawn::new(
+				blank_mesh.clone(),
+				particle.clone(),
+				particle.clone(),
+				particle.clone(),
+			),
 			fiery_explosion: FieryExplosion::new(
 				blank_mesh.clone(),
 				blank_mesh.clone(),
