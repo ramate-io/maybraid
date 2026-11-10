@@ -1,15 +1,15 @@
 //! One-time ordinary-to-packed handoff and revision/retirement ownership.
 
 use super::view_policy::PackedViewPolicy;
+use crate::ChicoGroveHost;
 use crate::packed::cache::*;
 use crate::packed::gpu::PackedBatchInstance;
 use crate::packed::kit::{KitState, PackedKitMeshes};
 use crate::packed::material::{PackedLeafMaterial, PackedShadowMaterial, PackedStickMaterial};
 use crate::packed::mode::PackMode;
 use crate::packed::select::select_band;
-use crate::ChicoGroveHost;
 use bevy::camera::primitives::Aabb;
-use bevy::camera::visibility::RenderLayers;
+use bevy::camera::visibility::{NoAutoAabb, RenderLayers};
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::render::batching::NoAutomaticBatching;
@@ -214,6 +214,8 @@ fn spawn_proxies(
 				Mesh3d(mesh),
 				instance,
 				NoAutomaticBatching,
+				// Native Changed<Mesh3d> bounds must not replace the instance union.
+				NoAutoAabb,
 				Transform::IDENTITY,
 				Visibility::Inherited,
 				aabb,
