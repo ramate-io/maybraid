@@ -278,6 +278,13 @@ fn start_command(
 			});
 			false
 		}
+		AgentCommand::Console { line }
+			if line.split_whitespace().take(2).eq(["diagnostics", "camera"]) =>
+		{
+			effects.push(TickEffect::Instant { id, command: AgentCommand::Console { line } });
+			true
+		}
+
 		command @ AgentCommand::VisualStyle { .. } => {
 			effects.push(TickEffect::Instant { id, command });
 			true
@@ -569,6 +576,19 @@ mod tests {
 			.iter()
 			.any(|effect| matches!(effect, TickEffect::Finished { id: 1, .. })));
 		Ok(())
+	}
+
+	#[test]
+	fn camera_console_waits_for_world_completion() {
+		let mut playback =
+			Playback::from_commands([AgentCommand::Console { line: "diagnostics camera".into() }]);
+		let tick = playback.tick(0.016, &TickView::default());
+		assert_eq!(started(&tick.effects), vec![0]);
+		assert!(tick
+			.effects
+			.iter()
+			.any(|effect| matches!(effect, TickEffect::Instant { id: 0, .. })));
+		assert!(!tick.effects.iter().any(|effect| matches!(effect, TickEffect::Finished { .. })));
 	}
 
 	#[test]
