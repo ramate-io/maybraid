@@ -1,21 +1,34 @@
-//! Headless stills of combat ooze burst and spirit dissolve.
+//! Headless stills: braidman hit ooze, then spiritual dissolve on defeat.
 //!
 //! ```bash
 //! COMBAT_VFX_CAPTURE_DIR=/tmp/combat-vfx \
 //!   VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
 //!   WGPU_BACKEND=vk \
+//!   WINIT_UNIX_BACKEND=x11 WAYLAND_DISPLAY= \
 //!   xvfb-run -a cargo run -p combat-vfx-playground --example capture
 //! ```
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use bevy::audio::AudioPlugin;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
-use combat_vfx::{CombatVfxPlugin, SPIRIT_DISSOLVE_SECS};
-use damage::{DamageApplied, Health};
-use maybraid_vfx::{EffectRecipe, ExplosionPalette, SpawnVfxExt, VfxLibrary, VfxSpawn, VfxPlugin};
+use character_rigs::Side;
+use characters::CharacterRig;
+use characters_playground::{
+	camera::orient_camera, AnimationMode, CameraController, CharacterConfig, CharacterSpecies,
+	CharactersPlaygroundPlugin, PlaygroundCharacter,
+};
+use combat_vfx::{CombatVfxPlugin, SPIRIT_DISSOLVE_SECS, SPIRIT_SPAWN_SECS};
+use maybraid_vfx::SPIRIT_SPAWN;
+use damage::{DamageApplied, DamagePlugin, Health};
+use game_commands::ui::GameCommandDrawerVisible;
+use maybraid_vfx::{EffectRecipe, ExplosionPalette, SpawnVfxExt, VfxInstance, VfxLibrary, VfxSpawn, VfxPlugin};
 use player::Npc;
+
+const TIMEOUT: Duration = Duration::from_secs(120);
+const ASSEMBLY_SETTLE: Duration = Duration::from_secs(8);
 
 fn capture_dir() -> PathBuf {
 	std::env::var_os("COMBAT_VFX_CAPTURE_DIR")
@@ -32,7 +45,7 @@ fn main() {
 				.set(WindowPlugin {
 					primary_window: Some(Window {
 						title: "Combat VFX capture".into(),
-						resolution: (960u32, 720u32).into(),
+						resolution: (1280u32, 960u32).into(),
 						..default()
 					}),
 					..default()
@@ -43,172 +56,429 @@ fn main() {
 						.to_string_lossy()
 						.into(),
 					..default()
-				}),
+				})
+				.disable::<AudioPlugin>(),
 		)
-		.add_plugins((VfxPlugin, CombatVfxPlugin))
-		.insert_resource(ClearColor(Color::srgb(0.06, 0.07, 0.10)))
+		.add_plugins((DamagePlugin, VfxPlugin, CombatVfxPlugin, CharactersPlaygroundPlugin))
+		.insert_resource(ClearColor(Color::srgb(0.14, 0.16, 0.20)))
 		.insert_resource(CaptureDir(dir))
-		.init_resource::<CaptureShots>()
+		.init_resource::<CapturePlan>()
+		.insert_resource(CharacterConfig {
+			species: CharacterSpecies::Braidman,
+			animation: AnimationMode::Still,
+			side: Side::Right,
+			transform: Transform::from_xyz(0.0, 0.92, 0.0),
+		})
+		.add_systems(Startup, (hide_command_ui, add_ground))
+		.add_systems(Update, (tag_combat_subject, frame_capture_camera, advance_capture).chain())
 		.add_message::<DamageApplied>()
-		.add_systems(Startup, setup)
-		.add_systems(Update, (capture_frames, advance_shots).chain())
 		.run();
 }
 
 #[derive(Resource)]
 struct CaptureDir(PathBuf);
 
-#[derive(Resource, Default)]
-struct CaptureShots {
-	phase: CapturePhase,
-	requested: bool,
-	shown_at: Option<Duration>,
+#[derive(Clone)]
+struct Shot {
+	file: PathBuf,
+	kind: ShotKind,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-enum CapturePhase {
-	#[default]
+#[derive(Clone, Copy, Debug)]
+enum ShotKind {
+	SpiritSpawnStart,
+	SpiritSpawnMid,
+	SpiritSpawnComplete,
 	OozeBurst,
+	OozeDrips,
+	SpiritSettle,
 	SpiritMid,
-	SpiritDone,
-	Finished,
+	SpiritComplete,
 }
 
-impl CapturePhase {
-	fn file_stem(self) -> &'static str {
-		match self {
-			Self::OozeBurst => "ooze_burst_mid",
-			Self::SpiritMid => "spirit_dissolve_mid",
-			Self::SpiritDone => "spirit_dissolve_complete",
-			Self::Finished => "finished",
+#[derive(Resource, Default)]
+struct CapturePlan {
+	shots: Vec<Shot>,
+	index: usize,
+	scene_ready: bool,
+	requested: bool,
+	hold_frames: u8,
+	started: Duration,
+	phase_started: Duration,
+	hit_fired: bool,
+	spawn_in_fired: bool,
+	spawn_revealed: bool,
+	spirit_spawned: bool,
+	character_hidden: bool,
+}
+
+impl CapturePlan {
+	fn bootstrap(dir: &Path) -> Self {
+		let names = [
+			("spirit_spawn_start", ShotKind::SpiritSpawnStart),
+			("spirit_spawn_mid", ShotKind::SpiritSpawnMid),
+			("spirit_spawn_complete", ShotKind::SpiritSpawnComplete),
+			("ooze_burst_mid", ShotKind::OozeBurst),
+			("ooze_burst_drips", ShotKind::OozeDrips),
+			("spirit_settle", ShotKind::SpiritSettle),
+			("spirit_dissolve_mid", ShotKind::SpiritMid),
+			("spirit_dissolve_complete", ShotKind::SpiritComplete),
+		];
+		Self {
+			shots: names
+				.into_iter()
+				.map(|(stem, kind)| Shot { file: dir.join(format!("{stem}.png")), kind })
+				.collect(),
+			..default()
 		}
 	}
+}
 
-	fn next(self) -> Self {
-		match self {
-			Self::OozeBurst => Self::SpiritMid,
-			Self::SpiritMid => Self::SpiritDone,
-			Self::SpiritDone | Self::Finished => Self::Finished,
-		}
+fn hide_command_ui(mut visible: ResMut<GameCommandDrawerVisible>) {
+	visible.0 = false;
+}
+
+fn add_ground(
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+	let mesh = meshes.add(Plane3d::default().mesh().size(12.0, 12.0));
+	let material = materials.add(StandardMaterial {
+		base_color: Color::srgb(0.22, 0.23, 0.26),
+		perceptual_roughness: 0.92,
+		..default()
+	});
+	commands.spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::IDENTITY));
+}
+
+fn tag_combat_subject(
+	mut commands: Commands,
+	pending: Query<Entity, (With<PlaygroundCharacter>, Without<Health>)>,
+) {
+	for entity in &pending {
+		commands.entity(entity).insert((Npc, Health::from_max(48.0), CombatSubject));
 	}
 }
 
 #[derive(Component)]
-struct CaptureCamera;
+struct CombatSubject;
 
-fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
-	let ground = meshes.add(Plane3d::default().mesh().size(8.0, 8.0));
-	let mat = materials.add(StandardMaterial {
-		base_color: Color::srgb(0.18, 0.19, 0.22),
-		..default()
-	});
-	commands.spawn((Mesh3d(ground), MeshMaterial3d(mat), Transform::IDENTITY));
-	commands.spawn((
-		CaptureCamera,
-		Camera3d::default(),
-		Transform::from_xyz(0.0, 1.25, 2.8).looking_at(Vec3::new(0.0, 0.85, 0.0), Vec3::Y),
-	));
-	commands.spawn((
-		DirectionalLight::default(),
-		Transform::from_xyz(4.0, 6.0, 2.0).looking_at(Vec3::ZERO, Vec3::Y),
-	));
-	commands.spawn((
-		Npc,
-		Health::from_max(40.0),
-		Transform::from_xyz(0.0, 0.9, 0.0),
-		GlobalTransform::IDENTITY,
-	));
+fn character_ready(has_library: bool, has_subject: bool, rig_count: usize, mesh_count: usize) -> bool {
+	has_library && has_subject && rig_count > 0 && mesh_count > 6
 }
 
-fn capture_frames(
-	time: Res<Time>,
-	mut commands: Commands,
-	mut shots: ResMut<CaptureShots>,
-	dir: Res<CaptureDir>,
-	library: Option<Res<VfxLibrary>>,
-	capturing: Query<(), With<Capturing>>,
-	camera: Query<Entity, With<CaptureCamera>>,
+/// Tighten framing on the torso so impact particles fill the still.
+fn frame_capture_camera(
+	plan: Res<CapturePlan>,
+	subject: Query<&GlobalTransform, With<CombatSubject>>,
+	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
-	if shots.phase == CapturePhase::Finished || !capturing.is_empty() {
+	if plan.index >= plan.shots.len() || plan.shots.is_empty() {
 		return;
 	}
-	let Some(library) = library else {
+	let Ok(subject) = subject.single() else {
 		return;
 	};
-	let ready = match shots.phase {
-		CapturePhase::OozeBurst => {
-			if !shots.requested {
-				commands.write_message(DamageApplied {
-					target: Entity::PLACEHOLDER,
-					source: None,
-					amount: 18.0,
-					applied: 18.0,
-					remaining: 0.0,
-					point: Vec3::new(0.0, 1.0, 0.0),
-				});
-				shots.requested = true;
-				shots.shown_at = Some(time.elapsed());
-			}
-			shots.shown_at.is_some_and(|started| time.elapsed().saturating_sub(started) >= Duration::from_millis(120))
+	let Ok((mut transform, mut controller)) = cameras.single_mut() else {
+		return;
+	};
+	let focus = subject.translation() + Vec3::new(0.0, 0.45, 0.0);
+	let offset = match plan.shots[plan.index].kind {
+		ShotKind::OozeBurst | ShotKind::OozeDrips => Vec3::new(0.55, 0.18, 1.35),
+		_ => Vec3::new(0.4, 0.22, 1.55),
+	};
+	orient_camera(&mut transform, &mut controller, focus + offset, focus);
+}
+
+fn peak_ooze(instances: &Query<(Entity, &VfxInstance)>) -> Option<(Entity, f32)> {
+	instances
+		.iter()
+		.filter(|(_, instance)| instance.name.contains("ooze") && instance.armed)
+		.max_by(|a, b| a.1.age.partial_cmp(&b.1.age).unwrap_or(std::cmp::Ordering::Equal))
+		.map(|(entity, instance)| (entity, instance.age))
+}
+
+fn ooze_age_in_window(instances: &Query<(Entity, &VfxInstance)>, min_age: f32, max_age: f32) -> bool {
+	peak_ooze(instances).is_some_and(|(_, age)| age >= min_age && age <= max_age)
+}
+
+fn active_spirit(instances: &Query<(Entity, &VfxInstance)>) -> Option<(Entity, f32)> {
+	instances
+		.iter()
+		.filter(|(_, instance)| instance.name.contains("dissolve") && instance.armed)
+		.map(|(entity, instance)| (entity, instance.age))
+		.next()
+}
+
+fn active_spirit_spawn(instances: &Query<(Entity, &VfxInstance)>) -> Option<(Entity, f32)> {
+	instances
+		.iter()
+		.filter(|(_, instance)| instance.name == SPIRIT_SPAWN && instance.armed)
+		.map(|(entity, instance)| (entity, instance.age))
+		.next()
+}
+
+fn spirit_spawn_age_in_window(
+	instances: &Query<(Entity, &VfxInstance)>,
+	min_age: f32,
+	max_age: f32,
+) -> bool {
+	active_spirit_spawn(instances).is_some_and(|(_, age)| age >= min_age && age <= max_age)
+}
+
+fn advance_capture(
+	time: Res<Time>,
+	mut commands: Commands,
+	mut plan: ResMut<CapturePlan>,
+	dir: Res<CaptureDir>,
+	library: Option<Res<VfxLibrary>>,
+	meshes: Query<(), With<Mesh3d>>,
+	rigs: Query<(), With<CharacterRig>>,
+	subject: Query<(Entity, &GlobalTransform), With<CombatSubject>>,
+	roots: Query<Entity, With<PlaygroundCharacter>>,
+	instances: Query<(Entity, &VfxInstance)>,
+	names: Query<&Name>,
+	capturing: Query<(), With<Capturing>>,
+	mut exit: MessageWriter<AppExit>,
+) {
+	if plan.shots.is_empty() {
+		*plan = CapturePlan::bootstrap(&dir.0);
+		plan.started = time.elapsed();
+		return;
+	}
+	if plan.index >= plan.shots.len() {
+		for root in &roots {
+			commands.entity(root).try_despawn();
 		}
-		CapturePhase::SpiritMid => {
-			if !shots.requested {
+		exit.write(AppExit::Success);
+		return;
+	}
+	if time.elapsed().saturating_sub(plan.started) > TIMEOUT {
+		error!("capture timed out on {}", plan.shots[plan.index].file.display());
+		exit.write(AppExit::error());
+		return;
+	}
+	if !capturing.is_empty() {
+		return;
+	}
+
+	if plan.scene_ready && plan.requested && plan.shots[plan.index].file.is_file() {
+		info!("captured {}", plan.shots[plan.index].file.display());
+		plan.index += 1;
+		plan.requested = false;
+		plan.hold_frames = 0;
+		if matches!(plan.shots.get(plan.index.saturating_sub(1)).map(|s| s.kind), Some(ShotKind::SpiritSpawnComplete)) {
+			plan.spawn_in_fired = false;
+			plan.spawn_revealed = false;
+			plan.character_hidden = false;
+			if let Ok(root) = roots.single() {
+				commands.entity(root).insert(Visibility::Inherited);
+			}
+		}
+		let keep_ooze_hit = matches!(
+			(plan.shots.get(plan.index.saturating_sub(1)).map(|s| s.kind), plan.shots.get(plan.index).map(|s| s.kind)),
+			(Some(ShotKind::OozeBurst), Some(ShotKind::OozeDrips))
+		);
+		if !keep_ooze_hit {
+			plan.hit_fired = false;
+		}
+		plan.spirit_spawned = false;
+		plan.phase_started = time.elapsed();
+		return;
+	}
+
+	if !plan.scene_ready {
+		if !character_ready(
+			library.is_some(),
+			!subject.is_empty(),
+			rigs.iter().len(),
+			meshes.iter().count(),
+		) {
+			return;
+		}
+		if time.elapsed().saturating_sub(plan.started) < ASSEMBLY_SETTLE {
+			return;
+		}
+		plan.scene_ready = true;
+		plan.phase_started = time.elapsed();
+	}
+
+	let shot = plan.shots[plan.index].clone();
+	let ready = match shot.kind {
+		ShotKind::SpiritSpawnStart => {
+			if !plan.spawn_in_fired {
+				if let Ok(root) = roots.single() {
+					commands.entity(root).insert(Visibility::Hidden);
+				}
+				let Ok((_, transform)) = subject.single() else {
+					return;
+				};
+				commands.spawn_vfx(
+					&library.as_ref().expect("library").spirit_spawn.effect_definition(),
+					VfxSpawn {
+						transform: Transform::from_translation(
+							transform.translation() + Vec3::new(0.0, 0.35, 0.0),
+						),
+						scale: 1.2,
+						intensity: 1.4,
+						palette: Some(ExplosionPalette::celestial()),
+						..default()
+					},
+				);
+				plan.spawn_in_fired = true;
+				plan.phase_started = time.elapsed();
+				return;
+			}
+			plan.spawn_in_fired
+				&& (spirit_spawn_age_in_window(&instances, 0.03, 0.55)
+					|| time.elapsed().saturating_sub(plan.phase_started)
+						>= Duration::from_millis(450))
+		}
+		ShotKind::SpiritSpawnMid => {
+			!plan.spawn_revealed
+				&& (spirit_spawn_age_in_window(&instances, 0.35, 1.2)
+					|| time.elapsed().saturating_sub(plan.phase_started)
+						>= Duration::from_millis(950))
+		}
+		ShotKind::SpiritSpawnComplete => {
+			if !plan.spawn_revealed {
+				if let Ok(root) = roots.single() {
+					commands.entity(root).insert(Visibility::Inherited);
+				}
+				plan.spawn_revealed = true;
+				plan.phase_started = time.elapsed();
+			}
+			let wisps_done = instances
+				.iter()
+				.all(|(_, i)| i.name != SPIRIT_SPAWN)
+				|| active_spirit_spawn(&instances)
+					.is_some_and(|(_, age)| age >= SPIRIT_SPAWN_SECS * 0.85)
+				|| time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(1400);
+			plan.spawn_revealed
+				&& wisps_done
+				&& time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(200)
+		}
+		ShotKind::OozeBurst => {
+			if !plan.hit_fired {
+				let Ok((target, transform)) = subject.single() else {
+					return;
+				};
+				let point = transform.translation() + Vec3::new(0.05, 0.55, 0.62);
+				commands.write_message(DamageApplied {
+					target,
+					source: None,
+					amount: 22.0,
+					applied: 22.0,
+					remaining: 26.0,
+					point,
+				});
+				plan.hit_fired = true;
+				plan.phase_started = time.elapsed();
+				return;
+			}
+			ooze_age_in_window(&instances, 0.08, 0.55)
+				&& time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(80)
+		}
+		ShotKind::OozeDrips => {
+			if peak_ooze(&instances).is_none() && !plan.hit_fired {
+				let Ok((target, transform)) = subject.single() else {
+					return;
+				};
+				let point = transform.translation() + Vec3::new(0.05, 0.55, 0.62);
+				commands.write_message(DamageApplied {
+					target,
+					source: None,
+					amount: 22.0,
+					applied: 22.0,
+					remaining: 26.0,
+					point,
+				});
+				plan.hit_fired = true;
+				plan.phase_started = time.elapsed();
+				return;
+			}
+			ooze_age_in_window(&instances, 0.32, 1.15)
+				|| time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(900)
+		}
+		ShotKind::SpiritSettle => {
+			// Clear any remaining ooze instances so the defeat shot reads cleanly.
+			for (entity, _) in &instances {
+				commands.entity(entity).try_despawn();
+			}
+			time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(200)
+		}
+		ShotKind::SpiritMid => {
+			if !plan.spirit_spawned {
+				let Ok(root) = roots.single() else {
+					return;
+				};
+				let Ok((_, transform)) = subject.single() else {
+					return;
+				};
 				let palette = ExplosionPalette::celestial();
 				commands.spawn_vfx(
-					&library.spirit_dissolve.effect_definition(),
+					&library.as_ref().expect("library").spirit_dissolve.effect_definition(),
 					VfxSpawn {
-						transform: Transform::from_translation(Vec3::new(0.0, 0.9, 0.0)),
+						transform: Transform::from_translation(
+							transform.translation() + Vec3::new(0.0, 0.9, 0.0),
+						),
+						scale: 1.6,
+						intensity: 1.8,
 						palette: Some(palette),
 						..default()
 					},
 				);
-				shots.requested = true;
-				shots.shown_at = Some(time.elapsed());
+				plan.spirit_spawned = true;
+				plan.phase_started = time.elapsed();
+				return;
 			}
-			shots.shown_at.is_some_and(|started| {
-				time.elapsed().saturating_sub(started) >= Duration::from_secs_f32(SPIRIT_DISSOLVE_SECS * 0.45)
-			})
+			active_spirit(&instances)
+				.is_some_and(|(_, age)| age >= SPIRIT_DISSOLVE_SECS * 0.38)
 		}
-		CapturePhase::SpiritDone => {
-			if !shots.requested {
-				shots.requested = true;
-				shots.shown_at = Some(time.elapsed());
+		ShotKind::SpiritComplete => {
+			if !plan.character_hidden {
+				if let Ok(root) = roots.single() {
+					commands.entity(root).insert(Visibility::Hidden);
+					plan.character_hidden = true;
+					plan.phase_started = time.elapsed();
+				}
 			}
-			shots.shown_at.is_some_and(|started| {
-				time.elapsed().saturating_sub(started) >= Duration::from_secs_f32(SPIRIT_DISSOLVE_SECS + 0.35)
-			})
+			let wisps_done = instances.is_empty()
+				|| active_spirit(&instances)
+					.is_some_and(|(_, age)| age >= SPIRIT_DISSOLVE_SECS * 0.92);
+			plan.character_hidden
+				&& wisps_done
+				&& time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(180)
 		}
-		CapturePhase::Finished => false,
 	};
-	if !ready {
+
+	if !ready || plan.requested {
 		return;
 	}
-	let Ok(camera) = camera.single() else {
+	if plan.hold_frames < 2 {
+		plan.hold_frames += 1;
 		return;
-	};
-	let path = dir.0.join(format!("{}.png", shots.phase.file_stem()));
+	}
+
 	commands
 		.spawn(Screenshot::primary_window())
-		.observe(save_to_disk(path.clone()));
-	commands.entity(camera).insert(Capturing);
-	info!(path = %path.display(), "requested combat vfx capture");
-}
-
-fn advance_shots(
-	mut commands: Commands,
-	mut shots: ResMut<CaptureShots>,
-	capturing: Query<Entity, With<Capturing>>,
-) {
-	if capturing.is_empty() || !shots.requested {
-		return;
-	}
-	for entity in &capturing {
-		commands.entity(entity).remove::<Capturing>();
-	}
-	shots.phase = shots.phase.next();
-	shots.requested = false;
-	shots.shown_at = None;
-	if shots.phase == CapturePhase::Finished {
-		commands.write_message(AppExit::Success);
-	}
+		.observe(save_to_disk(shot.file.clone()));
+	plan.requested = true;
+	let instance_snapshot: Vec<_> = instances
+		.iter()
+		.map(|(_, instance)| format!("{} armed={} age={:.3}", instance.name, instance.armed, instance.age))
+		.collect();
+	let vfx_layers = names
+		.iter()
+		.filter(|name| name.as_str().starts_with("vfx-layer-"))
+		.map(|name| name.as_str().to_string())
+		.collect::<Vec<_>>();
+	info!(
+		path = %shot.file.display(),
+		?shot.kind,
+		vfx_layers = ?vfx_layers,
+		instances = ?instance_snapshot,
+		"requested combat vfx capture"
+	);
 }

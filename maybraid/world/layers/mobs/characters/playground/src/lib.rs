@@ -1,20 +1,21 @@
 //! Interactive viewer for character clips on a clothed species.
 
-mod animation;
+pub mod animation;
 pub mod camera;
 pub mod character;
 pub mod commands;
 mod skinning;
 mod ui;
 
+pub use animation::AnimationMode;
 pub use camera::CameraController;
+pub use character::{CharacterConfig, CharacterSpecies, PlaygroundCharacter};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 
 use animation::{apply_joint_preview, draw_authoring_gizmos, AnimationPlayback};
 use bevy::prelude::*;
 use camera_controls::look::CameraLookPlugin;
-use character::CharacterConfig;
 use characters::{
 	CharacterHostSystems, CharacterHostsPlugin, CharacterMotionSystems,
 	StandaloneCharacterMaterialRefPlugin,

@@ -15,8 +15,12 @@ path = "examples/capture.rs"
 
 [dependencies]
 bevy = { workspace = true }
+character-rigs = { workspace = true }
+characters = { workspace = true }
+characters-playground = { workspace = true }
 combat-vfx = { workspace = true }
 damage = { workspace = true }
+game-commands = { workspace = true }
 maybraid-vfx = { workspace = true }
 player = { workspace = true }
 

@@ -3391,6 +3391,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "combat-vfx"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_hanabi",
+ "character-ragdoll",
+ "characters",
+ "damage",
+ "maybraid-vfx",
+ "player",
+]
+
+[[package]]
+name = "combat-vfx-playground"
+version = "0.1.5"
+dependencies = [
+ "bevy",
+ "character-rigs",
+ "characters",
+ "characters-playground",
+ "combat-vfx",
+ "damage",
+ "game-commands",
+ "maybraid-vfx",
+ "player",
+]
+
+[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7608,6 +7637,7 @@ dependencies = [
  "chico",
  "clap",
  "combat-hud",
+ "combat-vfx",
  "damage",
  "durham",
  "evasion-intelligence",

@@ -64,8 +64,8 @@ pub(crate) fn spawn_ooze_on_damage(
 			&library.ooze_burst.effect_definition(),
 			VfxSpawn {
 				transform,
-				scale: strength.sqrt().clamp(0.55, 1.6),
-				intensity: strength.clamp(0.5, 1.8),
+				scale: strength.sqrt().clamp(1.35, 2.6),
+				intensity: strength.clamp(1.05, 2.0),
 				playback: 1.0,
 				tint: Some(tint),
 				palette: Some(palette),
@@ -98,7 +98,8 @@ mod tests {
 	use super::*;
 	use maybraid_vfx::{
 		Dust, DustLayer, EffectDefinition, FieryExplosion, FlipbookPart, LobeKind, MeshPart,
-		OozeBurst, ParticlePart, ParticleShade, SpiritDissolve, VfxFlipbooks, VfxInstance, VfxLibrary,
+		OozeBurst, ParticlePart, ParticleShade, SpiritDissolve, SpiritSpawn, VfxFlipbooks, VfxInstance,
+		VfxLibrary,
 	};
 
 	fn stub_library() -> VfxLibrary {
@@ -140,8 +141,9 @@ mod tests {
 			fireball: EffectDefinition::new("fireball", []),
 			smoke: EffectDefinition::new("smoke", []),
 			sparks: EffectDefinition::new("sparks", []),
-			ooze_burst: OozeBurst::new(particle.clone(), particle.clone()),
-			spirit_dissolve: SpiritDissolve::new(particle.clone()),
+			ooze_burst: OozeBurst::new(blank_mesh.clone(), particle.clone(), particle.clone()),
+			spirit_dissolve: SpiritDissolve::new(blank_mesh.clone(), particle.clone()),
+			spirit_spawn: SpiritSpawn::new(blank_mesh.clone(), particle.clone()),
 			fiery_explosion: FieryExplosion::new(
 				blank_mesh.clone(),
 				blank_mesh.clone(),
