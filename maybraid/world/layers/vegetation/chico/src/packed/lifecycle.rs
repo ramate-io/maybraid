@@ -1,13 +1,15 @@
 //! One-time ordinary-to-packed handoff and revision/retirement ownership.
 
 use super::view_policy::PackedViewPolicy;
+use crate::ChicoGroveHost;
 use crate::packed::cache::*;
 use crate::packed::gpu::PackedBatchInstance;
 use crate::packed::kit::{KitState, PackedKitMeshes};
-use crate::packed::material::{PackedLeafMaterial, PackedShadowMaterial, PackedStickMaterial};
+use crate::packed::material::{
+	PackedLeafMaterial, PackedStickMaterial, SharedPackedShadowMaterial,
+};
 use crate::packed::mode::PackMode;
 use crate::packed::select::select_band;
-use crate::ChicoGroveHost;
 use bevy::camera::primitives::Aabb;
 use bevy::camera::visibility::RenderLayers;
 use bevy::light::NotShadowCaster;
@@ -236,9 +238,7 @@ fn spawn_proxies(
 					world.entity_mut(proxy_id).insert(MeshMaterial3d(material));
 				}
 				VisualMaterialKind::ShadowProxy => {
-					let material = world
-						.resource_mut::<Assets<PackedShadowMaterial>>()
-						.add(PackedShadowMaterial { base_color: batch.base_color });
+					let material = SharedPackedShadowMaterial::for_color(world, batch.base_color);
 					world.entity_mut(proxy_id).insert(MeshMaterial3d(material));
 				}
 				VisualMaterialKind::Frond => return false,
@@ -582,6 +582,73 @@ mod tests {
 		}
 		assert_eq!(replacement.tile.plant_list_identity(), original.tile.plant_list_identity());
 		assert!(source_revision_changed(&replacement, original));
+	}
+	#[test]
+	fn shadow_proxy_recreation_reuses_one_strong_owned_material() -> anyhow::Result<()> {
+		use crate::packed::material::PackedShadowMaterial;
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+		app.init_asset::<PackedLeafMaterial>()
+			.init_asset::<PackedStickMaterial>()
+			.init_asset::<PackedShadowMaterial>()
+			.init_resource::<SharedPackedShadowMaterial>();
+		let world = app.world_mut();
+		world.spawn((Camera3d::default(), Camera::default(), Transform::IDENTITY));
+		world.spawn(DirectionalLight { shadow_maps_enabled: true, ..default() });
+		let host = ChicoGroveHost::new(
+			crate::ForestGroveKind::HighBush.grow_tile(
+				GroveExtent::new(Vec3::ZERO, Vec3::splat(40.0)),
+				&vegetation_groves::FlatTerrainSample::default(),
+			),
+			crate::ForestLayer::UpperCanopy,
+		);
+		let payload = TilePayload::from_host(&host, 1, true)
+			.map_err(|reason| anyhow::anyhow!("fixture rejected {reason:?}"))?;
+		let mut kits = PackedKitMeshes::default();
+		for batch in payload.lods.iter().flat_map(|batches| batches.iter()) {
+			kits.states.insert(batch.key.kit, KitState::Ready(Handle::default()));
+		}
+		let cell = world.spawn((host.clone(), LodSceneHost)).id();
+		let ordinary = world.spawn((LodLevelRoots, ChildOf(cell))).id();
+		let policy = PackedViewPolicy::read(world);
+		let mut tile = ResidentTile {
+			readiness_policy: policy.readiness_key(),
+			original: host,
+			payload: Arc::new(payload),
+			signal: Arc::new(TileSignal::new([])),
+			proxies: Vec::new(),
+			last_kit_epoch: 0,
+		};
+		let shared = SharedPackedShadowMaterial::for_color(world, Vec4::ONE);
+		assert!(shared.is_strong());
+		for _ in 0..2 {
+			assert!(spawn_proxies(world, cell, &mut tile, &kits, &policy));
+			let handles = tile
+				.proxies
+				.iter()
+				.filter_map(|entity| world.get::<MeshMaterial3d<PackedShadowMaterial>>(*entity))
+				.collect::<Vec<_>>();
+			assert!(handles.len() > 1, "fixture needs shadow casters from multiple bands");
+			assert!(handles.iter().all(|material| material.0.id() == shared.id()));
+			assert_eq!(world.resource::<Assets<PackedShadowMaterial>>().len(), 1);
+			assert_eq!(tile.signal.phase.load(std::sync::atomic::Ordering::Acquire), PREPARING);
+			restore_ordinary(world, cell, &tile);
+			assert!(tile.proxies.iter().all(|entity| world.get_entity(*entity).is_err()));
+			tile.proxies.clear();
+			assert!(world.get_entity(ordinary).is_ok());
+		}
+		assert_eq!(SharedPackedShadowMaterial::for_color(world, Vec4::ONE).id(), shared.id());
+		let assets = world.resource::<Assets<PackedShadowMaterial>>();
+		let material =
+			assets.get(&shared).ok_or_else(|| anyhow::anyhow!("shared asset missing"))?;
+		assert_eq!(material.base_color, Vec4::ONE);
+		// Do not silently substitute white if future recipes change the color.
+		let color = Vec4::new(0.2, 0.3, 0.4, 1.0);
+		let colored = SharedPackedShadowMaterial::for_color(world, color);
+		assert_ne!(colored.id(), shared.id());
+		let assets = world.resource::<Assets<PackedShadowMaterial>>();
+		assert_eq!(assets.get(&colored).map(|material| material.base_color), Some(color));
+		Ok(())
 	}
 	#[test]
 	fn unavailable_ultra_low_kit_keeps_entire_ordinary_tile() -> anyhow::Result<()> {

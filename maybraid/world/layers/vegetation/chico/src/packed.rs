@@ -48,6 +48,7 @@ impl Plugin for PackedGrovesPlugin {
 				MaterialPlugin::<material::PackedShadowMaterial>::default(),
 				ExtractComponentPlugin::<gpu::PackedBatchInstance>::default(),
 			))
+			.init_resource::<material::SharedPackedShadowMaterial>()
 			.add_systems(
 				Update,
 				(

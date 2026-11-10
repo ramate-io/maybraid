@@ -26,6 +26,35 @@ pub struct PackedShadowMaterial {
 	pub base_color: Vec4,
 }
 
+/// The canopy proxy producer uses one immutable white material for every band.
+/// Keep a strong owner independent of proxy lifetimes so retirement/recreation
+/// cannot churn identical source assets and prepared material bindings.
+#[derive(Resource)]
+pub(crate) struct SharedPackedShadowMaterial(Handle<PackedShadowMaterial>);
+
+impl FromWorld for SharedPackedShadowMaterial {
+	fn from_world(world: &mut World) -> Self {
+		Self(
+			world
+				.resource_mut::<Assets<PackedShadowMaterial>>()
+				.add(PackedShadowMaterial { base_color: Vec4::ONE }),
+		)
+	}
+}
+
+impl SharedPackedShadowMaterial {
+	pub fn for_color(world: &mut World, base_color: Vec4) -> Handle<PackedShadowMaterial> {
+		if base_color == Vec4::ONE {
+			world.resource::<Self>().0.clone()
+		} else {
+			// Preserve actual data if a future producer uses colored casters.
+			world
+				.resource_mut::<Assets<PackedShadowMaterial>>()
+				.add(PackedShadowMaterial { base_color })
+		}
+	}
+}
+
 fn specialize_instances(descriptor: &mut RenderPipelineDescriptor) {
 	let prepass =
 		descriptor.vertex.shader_defs.iter().any(
