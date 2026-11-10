@@ -1,7 +1,12 @@
 use crate::capture::{
 	BufferKind, BufferSnapshot, Capture, Census, Settings, MAX_DETAIL_SPANS, MAX_VIEWS,
 };
+use crate::UploadOutcome;
 use std::cell::Cell;
+
+fn queued() -> UploadOutcome {
+	UploadOutcome { queued: true, ..Default::default() }
+}
 
 fn capture(phase: &'static str) -> Capture {
 	Capture { frame: 120, phase, views: Cell::new(0), details: Cell::new(0) }
@@ -29,11 +34,35 @@ fn cadence_is_frame_based_and_disabled_switch_has_no_samples() {
 #[test]
 fn complete_counts_preserve_exact_uploads_and_separate_scratch() {
 	let mut census = Census::default();
-	census.record_buffer(BufferKind::Instances, snapshot(10, 8, 4), snapshot(10, 8, 10), true);
-	census.record_buffer(BufferKind::Metadata, snapshot(2, 12, 8), snapshot(2, 12, 8), false);
+	census.record_buffer(
+		BufferKind::Instances,
+		snapshot(10, 8, 4),
+		snapshot(10, 8, 10),
+		true,
+		queued(),
+	);
+	census.record_buffer(
+		BufferKind::Metadata,
+		snapshot(2, 12, 8),
+		snapshot(2, 12, 8),
+		false,
+		queued(),
+	);
 	// Lookup length includes holes: use actual vector length, not bin count or capacity.
-	census.record_buffer(BufferKind::Lookup, snapshot(7, 4, 12), snapshot(7, 4, 12), false);
-	census.record_buffer(BufferKind::Fan, snapshot(3, 4, 0), snapshot(3, 4, 3), true);
+	census.record_buffer(
+		BufferKind::Lookup,
+		snapshot(7, 4, 12),
+		snapshot(7, 4, 12),
+		false,
+		queued(),
+	);
+	census.record_buffer(
+		BufferKind::Fan,
+		snapshot(3, 4, 0),
+		snapshot(3, 4, 3),
+		true,
+		UploadOutcome::default(),
+	);
 	assert_eq!(census.buffers.iter().map(|buffer| buffer.queue_calls).sum::<u64>(), 3);
 	assert_eq!(census.buffers.iter().map(|buffer| buffer.upload_bytes).sum::<u64>(), 132);
 	assert_eq!(census.buffers[2].logical_bytes, 28);
@@ -49,7 +78,13 @@ fn complete_counts_preserve_exact_uploads_and_separate_scratch() {
 fn empty_vectors_do_not_count_queue_calls_or_uploads() {
 	let mut census = Census::default();
 	for kind in [BufferKind::Instances, BufferKind::Metadata, BufferKind::Lookup, BufferKind::Fan] {
-		census.record_buffer(kind, snapshot(0, 4, 8), snapshot(0, 4, 8), false);
+		census.record_buffer(
+			kind,
+			snapshot(0, 4, 8),
+			snapshot(0, 4, 8),
+			false,
+			UploadOutcome::default(),
+		);
 	}
 	assert!(census
 		.buffers
@@ -71,11 +106,31 @@ fn phase_samples_and_view_limits_are_independent_and_detail_cap_keeps_counts() {
 	for _ in 0..MAX_DETAIL_SPANS + 5 {
 		let before = snapshot(2, 8, 2);
 		let _span = opaque.buffer_span(BufferKind::Instances, before);
-		census.record_buffer(BufferKind::Instances, before, before, false);
+		census.record_buffer(BufferKind::Instances, before, before, false, queued());
 	}
 	assert_eq!(opaque.details.get(), MAX_DETAIL_SPANS + 5);
 	assert!(opaque.buffer_span(BufferKind::Instances, snapshot(1, 8, 1)).is_none());
 	assert_eq!(census.buffers[0].queue_calls, (MAX_DETAIL_SPANS + 5) as u64);
 	assert_eq!(census.buffers[0].upload_bytes, ((MAX_DETAIL_SPANS + 5) * 16) as u64);
 	assert_eq!(shadow.details.get(), 0);
+}
+
+#[test]
+fn retained_payload_uses_explicit_skipped_and_shadow_outcomes() {
+	let mut census = Census::default();
+	let outcome = UploadOutcome { skipped: true, shadow_checked: true, ..Default::default() };
+	census.record_buffer(
+		BufferKind::Instances,
+		snapshot(4, 8, 4),
+		snapshot(4, 8, 4),
+		false,
+		outcome,
+	);
+	assert_eq!(census.buffers[0].logical_nonempty_requests, 1);
+	assert_eq!(census.buffers[0].queue_calls, 0);
+	assert_eq!(census.buffers[0].upload_bytes, 0);
+	assert_eq!(census.buffers[0].skipped_uploads, 1);
+	assert_eq!(census.buffers[0].skipped_bytes, 32);
+	assert_eq!(census.buffers[0].shadow_checks, 1);
+	assert_eq!(census.buffers[0].shadow_mismatches, 0);
 }

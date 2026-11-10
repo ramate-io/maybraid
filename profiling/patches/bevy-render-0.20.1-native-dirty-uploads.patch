@@ -1,0 +1,275 @@
+--- a/src/render_phase/mod.rs
++++ b/src/render_phase/mod.rs
+@@ -47,7 +47,7 @@
+     GpuBinMetadata, GpuPreprocessingMode, GpuPreprocessingSupport, PhaseBatchedInstanceBuffers,
+     PhaseIndirectParametersBuffers,
+ };
+-use crate::render_resource::{RawBufferVec, UninitBufferVec};
++use crate::render_resource::UninitBufferVec;
+ use crate::renderer::RenderDevice;
+ use crate::sync_world::{MainEntity, MainEntityHashMap};
+ use crate::view::{ExtractedView, RetainedViewEntity};
+@@ -82,6 +82,13 @@
+ };
+ use smallvec::SmallVec;
+ 
++#[cfg(feature = "native-binned-dirty-uploads")]
++mod binned_input;
++#[cfg(feature = "native-binned-dirty-uploads")]
++pub use binned_input::BinnedInputBuffer;
++#[cfg(not(feature = "native-binned-dirty-uploads"))]
++use crate::render_resource::RawBufferVec as BinnedInputBuffer;
++
+ /// Stores the rendering instructions for a single phase that uses bins in all
+ /// views.
+ ///
+@@ -228,17 +235,17 @@
+     /// A mapping from each binned mesh instance
+     /// (`RenderBinnedMeshInstanceIndex`) to its input uniform index
+     /// ([`InputUniformIndex`]) and bin index (`RenderBinIndex`).
+-    pub render_binned_mesh_instance_buffer: RawBufferVec<GpuRenderBinnedMeshInstance>,
++    pub render_binned_mesh_instance_buffer: BinnedInputBuffer<GpuRenderBinnedMeshInstance>,
+ 
+     /// A mapping from each `RenderBinMetadataIndex` to the offset of its indirect draw
+     /// parameters.
+-    pub bin_metadata_buffer: RawBufferVec<GpuBinMetadata>,
++    pub bin_metadata_buffer: BinnedInputBuffer<GpuBinMetadata>,
+ 
+     /// A mapping from each `RenderBinIndex` to the associated bin metadata
+     /// index.
+     ///
+     /// This array isn't necessarily tightly packed (i.e. it can have holes).
+-    pub bin_index_to_bin_metadata_index_buffer: RawBufferVec<u32>,
++    pub bin_index_to_bin_metadata_index_buffer: BinnedInputBuffer<u32>,
+ 
+     /// A temporary buffer used to store intermediate sums during the uniform
+     /// allocation phase.
+@@ -248,11 +255,11 @@
+ impl RenderMultidrawableBatchSetGpuBuffers {
+     /// Creates a new set of GPU buffers for a multidrawable batch set.
+     fn new() -> RenderMultidrawableBatchSetGpuBuffers {
+-        let mut render_bin_entry_buffer = RawBufferVec::new(BufferUsages::STORAGE);
++        let mut render_bin_entry_buffer = BinnedInputBuffer::new(BufferUsages::STORAGE);
+         render_bin_entry_buffer.set_label(Some("render bin entry buffer"));
+-        let mut bin_metadata_buffer = RawBufferVec::new(BufferUsages::STORAGE);
++        let mut bin_metadata_buffer = BinnedInputBuffer::new(BufferUsages::STORAGE);
+         bin_metadata_buffer.set_label(Some("bin metadata buffer"));
+-        let mut bin_index_to_bin_metadata_index_buffer = RawBufferVec::new(BufferUsages::STORAGE);
++        let mut bin_index_to_bin_metadata_index_buffer = BinnedInputBuffer::new(BufferUsages::STORAGE);
+         bin_index_to_bin_metadata_index_buffer
+             .set_label(Some("bin-index-to-bin-metadata-index buffer"));
+         let mut fan_buffer = UninitBufferVec::new(BufferUsages::STORAGE);
+--- /dev/null
++++ b/src/render_phase/binned_input.rs
+@@ -0,0 +1,211 @@
++//! Opt-in persistence for the three CPU-authored, shader-read-only bin inputs.
++//! No global RawBufferVec behavior is changed; mutable deref is forbidden.
++use crate::{
++    render_resource::{BufferId, RawBufferVec},
++    renderer::{RenderDevice, RenderQueue},
++};
++use bytemuck::NoUninit;
++use core::ops::Deref;
++use maybraid_render_prep_diagnostics::{UploadMode, UploadOutcome, UploadState};
++use wgpu::BufferUsages;
++
++pub struct BinnedInputBuffer<T: NoUninit> {
++    raw: RawBufferVec<T>,
++    state: UploadState<BufferId>,
++    mode: UploadMode,
++    usage: BufferUsages,
++    device: Option<RenderDevice>,
++    last_write: UploadOutcome,
++    #[cfg(feature = "render-prep-diagnostics")]
++    submitted: maybraid_render_prep_diagnostics::SubmittedBytes,
++}
++
++impl<T: NoUninit> BinnedInputBuffer<T> {
++    pub fn new(usage: BufferUsages) -> Self {
++        let mode = UploadMode::runtime();
++        bevy_log::info_once!("native_binned_dirty_uploads mode={}", mode.name());
++        Self::with_mode(usage, mode)
++    }
++
++    fn with_mode(usage: BufferUsages, mode: UploadMode) -> Self {
++        Self {
++            raw: RawBufferVec::new(usage),
++            state: UploadState::default(),
++            mode,
++            usage,
++            device: None,
++            last_write: UploadOutcome::default(),
++            #[cfg(feature = "render-prep-diagnostics")]
++            submitted: Default::default(),
++        }
++    }
++
++    pub fn push(&mut self, value: T) -> usize {
++        self.state.changed();
++        self.raw.push(value)
++    }
++
++    pub fn set(&mut self, index: u32, value: T) {
++        self.state.changed();
++        self.raw.set(index, value);
++    }
++
++    pub fn values_mut(&mut self) -> &mut Vec<T> {
++        self.state.changed();
++        self.raw.values_mut()
++    }
++
++    pub fn swap_remove(&mut self, index: usize) -> T {
++        self.state.changed();
++        self.raw.swap_remove(index)
++    }
++
++    pub fn set_label(&mut self, label: Option<&str>) {
++        // reserve must still process the label before the skip decision.
++        self.raw.set_label(label);
++    }
++
++    pub fn last_upload_outcome(&self) -> UploadOutcome {
++        self.last_write
++    }
++
++    pub fn write_buffer(&mut self, device: &RenderDevice, queue: &RenderQueue) {
++        self.last_write = UploadOutcome::default();
++        if self.mode == UploadMode::Force {
++            // The A path always requests exactly the native RawBufferVec write.
++            // Diagnostic snapshots are absent from clean timing builds.
++            self.request_upload(device, queue);
++            return;
++        }
++        if self.raw.is_empty() {
++            return;
++        }
++        self.prepare_device(device);
++        // Growth and same-capacity label changes may replace the destination.
++        self.raw.reserve(self.raw.len(), device);
++        let destination = self.raw.buffer().map(|buffer| buffer.id());
++        if !self
++            .state
++            .needs_upload(self.mode, destination, self.raw.len())
++        {
++            #[cfg(feature = "render-prep-diagnostics")]
++            {
++                self.last_write.shadow_checked = true;
++                if !self
++                    .submitted
++                    .matches(bytemuck::cast_slice(self.raw.values()))
++                {
++                    self.last_write.shadow_mismatch = true;
++                    self.state.changed();
++                    bevy_log::error!(
++                        "native_binned_dirty_mismatch: unchanged generation differs from last submitted bytes; forcing upload"
++                    );
++                }
++            }
++            if !self.last_write.shadow_mismatch {
++                self.last_write.skipped = true;
++                return;
++            }
++        }
++        self.request_upload(device, queue);
++    }
++
++    fn prepare_device(&mut self, device: &RenderDevice) {
++        if self
++            .device
++            .as_ref()
++            .is_some_and(|previous| previous.wgpu_device() != device.wgpu_device())
++        {
++            self.state.invalidate_destination();
++            let mut replacement = RawBufferVec::new(self.usage);
++            replacement.set_label(self.raw.get_label());
++            core::mem::swap(replacement.values_mut(), self.raw.values_mut());
++            self.raw = replacement;
++        }
++        if self
++            .device
++            .as_ref()
++            .is_none_or(|previous| previous.wgpu_device() != device.wgpu_device())
++        {
++            self.device = Some(device.clone());
++        }
++    }
++
++    fn request_upload(&mut self, device: &RenderDevice, queue: &RenderQueue) {
++        #[cfg(feature = "render-prep-diagnostics")]
++        {
++            self.last_write.queued_equal = !self.raw.is_empty()
++                && self
++                    .submitted
++                    .matches(bytemuck::cast_slice(self.raw.values()));
++        }
++        self.raw.write_buffer(device, queue);
++        let destination = self.raw.buffer().map(|buffer| buffer.id());
++        self.last_write.queued = !self.raw.is_empty() && destination.is_some();
++        if self.last_write.queued {
++            self.state.queued(destination, self.raw.len());
++            #[cfg(feature = "render-prep-diagnostics")]
++            self.submitted
++                .submitted(bytemuck::cast_slice(self.raw.values()));
++        }
++    }
++}
++
++impl<T: NoUninit> Deref for BinnedInputBuffer<T> {
++    type Target = RawBufferVec<T>;
++    fn deref(&self) -> &Self::Target {
++        &self.raw
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use crate::render_phase::binned_input::BinnedInputBuffer;
++    use crate::render_resource::BufferId;
++    use maybraid_render_prep_diagnostics::UploadMode;
++    use wgpu::BufferUsages;
++
++    fn acknowledge(buffer: &mut BinnedInputBuffer<u32>, id: BufferId) {
++        let len = buffer.len();
++        buffer.state.queued(Some(id), len);
++    }
++
++    #[test]
++    fn native_mutators_invalidate_equal_length_and_swap_displacement() {
++        let mut buffer = BinnedInputBuffer::with_mode(BufferUsages::STORAGE, UploadMode::Dirty);
++        let id = BufferId::new();
++        buffer.push(10);
++        buffer.push(20);
++        acknowledge(&mut buffer, id);
++        assert!(!buffer.state.needs_upload(UploadMode::Dirty, Some(id), 2));
++        buffer.set(0, 11);
++        assert!(buffer.state.needs_upload(UploadMode::Dirty, Some(id), 2));
++        acknowledge(&mut buffer, id);
++        assert_eq!(buffer.swap_remove(0), 11);
++        assert_eq!(buffer.values(), &[20]);
++        assert!(buffer.state.needs_upload(UploadMode::Dirty, Some(id), 1));
++        buffer.push(30);
++        acknowledge(&mut buffer, id);
++        buffer.values_mut()[0] = 21;
++        assert!(buffer.state.needs_upload(UploadMode::Dirty, Some(id), 2));
++    }
++
++    #[test]
++    fn clear_refill_and_mutable_metadata_updates_preserve_independent_state() {
++        let mut first = BinnedInputBuffer::with_mode(BufferUsages::STORAGE, UploadMode::Dirty);
++        let mut second = BinnedInputBuffer::with_mode(BufferUsages::STORAGE, UploadMode::Dirty);
++        let id = BufferId::new();
++        first.push(1);
++        second.push(2);
++        acknowledge(&mut first, id);
++        acknowledge(&mut second, id);
++        first.values_mut().clear();
++        first.values_mut().resize(1, 3);
++        assert!(first.state.needs_upload(UploadMode::Dirty, Some(id), 1));
++        assert!(!second.state.needs_upload(UploadMode::Dirty, Some(id), 1));
++        acknowledge(&mut first, id);
++        first.values_mut()[0] += 1;
++        assert!(first.state.needs_upload(UploadMode::Dirty, Some(id), 1));
++        assert_eq!(second.values(), &[2]);
++    }
++}

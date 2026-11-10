@@ -5,3 +5,10 @@
 mod capture;
 #[cfg(feature = "diagnostics")]
 pub use capture::{BufferKind, BufferSnapshot, Capture, Census};
+
+#[cfg(any(feature = "diagnostics", feature = "native-dirty-uploads"))]
+mod upload;
+#[cfg(feature = "diagnostics")]
+pub use upload::SubmittedBytes;
+#[cfg(any(feature = "diagnostics", feature = "native-dirty-uploads"))]
+pub use upload::{UploadMode, UploadOutcome, UploadState};

@@ -1,3 +1,4 @@
+use crate::UploadOutcome;
 use std::{cell::Cell, sync::OnceLock};
 
 const MAX_VIEWS: usize = 32;
@@ -144,8 +145,15 @@ impl BufferSnapshot {
 struct BufferCounts {
 	entries: u64,
 	logical_bytes: u64,
+	logical_nonempty_requests: u64,
 	queue_calls: u64,
 	upload_bytes: u64,
+	queued_equal_uploads: u64,
+	queued_equal_bytes: u64,
+	skipped_uploads: u64,
+	skipped_bytes: u64,
+	shadow_checks: u64,
+	shadow_mismatches: u64,
 	capacity_before: u64,
 	capacity_after: u64,
 	destination_bytes_before: u64,
@@ -161,15 +169,28 @@ impl BufferCounts {
 		before: BufferSnapshot,
 		after: BufferSnapshot,
 		handle_changed: bool,
+		outcome: UploadOutcome,
 	) {
 		self.entries += before.entries as u64;
 		self.logical_bytes += before.logical_bytes();
-		// Called only AFTER the native write returns. The pinned RawBufferVec
-		// implementation invokes queue.write_buffer once for every nonempty
-		// vector; fan is UninitBufferVec scratch and performs no CPU upload.
-		if !matches!(kind, BufferKind::Fan) && before.entries > 0 {
-			self.queue_calls += 1;
-			self.upload_bytes += before.logical_bytes();
+		// The patched writer supplies the actual decision; nonempty data can
+		// now be retained without another CPU queue request. Fan is scratch.
+		if !matches!(kind, BufferKind::Fan) {
+			self.logical_nonempty_requests += u64::from(before.entries > 0);
+			if outcome.queued {
+				self.queue_calls += 1;
+				self.upload_bytes += before.logical_bytes();
+			}
+			if outcome.queued && outcome.queued_equal {
+				self.queued_equal_uploads += 1;
+				self.queued_equal_bytes += before.logical_bytes();
+			}
+			if outcome.skipped {
+				self.skipped_uploads += 1;
+				self.skipped_bytes += before.logical_bytes();
+			}
+			self.shadow_checks += u64::from(outcome.shadow_checked);
+			self.shadow_mismatches += u64::from(outcome.shadow_mismatch);
 		}
 		self.capacity_before += before.capacity as u64;
 		self.capacity_after += after.capacity as u64;
@@ -235,8 +256,9 @@ impl Census {
 		before: BufferSnapshot,
 		after: BufferSnapshot,
 		handle_changed: bool,
+		outcome: UploadOutcome,
 	) {
-		self.buffers[kind.index()].record(kind, before, after, handle_changed);
+		self.buffers[kind.index()].record(kind, before, after, handle_changed, outcome);
 	}
 }
 

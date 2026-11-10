@@ -8,7 +8,7 @@
      mut views: Query<&ExtractedView>,
      mut view_binned_render_phases: ResMut<ViewBinnedRenderPhases<BPI>>,
      bin_unpacking_buffers: ResMut<SceneUnpackingBuffers>,
-@@ -2847,6 +2848,53 @@
+@@ -2847,6 +2848,64 @@
      BPI: BinnedPhaseItem,
      GFBD: GetFullBatchData,
  {
@@ -22,6 +22,16 @@
 +
 +    // The diagnostic macro preserves the native write order and arguments.
 +    // With the feature disabled it expands only to the original buffer write.
++    #[cfg(feature = "render-prep-diagnostics")]
++    macro_rules! diagnostic_outcome {
++        (Fan, $buffer:expr) => { maybraid_render_prep_diagnostics::UploadOutcome::default() };
++        ($kind:ident, $buffer:expr) => {{
++            #[cfg(feature = "native-binned-dirty-uploads")]
++            { $buffer.last_upload_outcome() }
++            #[cfg(not(feature = "native-binned-dirty-uploads"))]
++            { maybraid_render_prep_diagnostics::UploadOutcome { queued: !$buffer.is_empty(), ..Default::default() } }
++        }};
++    }
 +    macro_rules! diagnostic_write {
 +        ($buffer:expr, $kind:ident, $item:ty, $census:expr, $($argument:expr),+) => {{
 +            let buffer = &mut $buffer;
@@ -54,6 +64,7 @@
 +                census.record_buffer(
 +                    maybraid_render_prep_diagnostics::BufferKind::$kind,
 +                    before, after, before_id != buffer.buffer().map(|buffer| buffer.id()),
++                    diagnostic_outcome!($kind, buffer),
 +                );
 +            }
 +        }};
@@ -62,7 +73,7 @@
      let bin_unpacking_buffers = bin_unpacking_buffers.into_inner();
  
      let phase_type_id = TypeId::of::<BPI>();
-@@ -2857,12 +2905,46 @@
+@@ -2857,12 +2916,46 @@
  
      for extracted_view in &mut views {
          all_seen_view_entities.insert(extracted_view.retained_view_entity);
@@ -109,7 +120,7 @@
  
          // Since we currently only perform GPU-side bin unpacking for multidrawn
          // batch sets, we bail out for all other types of batch sets.
-@@ -2903,6 +2985,12 @@
+@@ -2903,6 +2996,12 @@
          let mut representative_entity_to_batch_set_scene_unpacking_metadata =
              MainEntityHashMap::default();
  
@@ -122,7 +133,7 @@
          for batch_set in batch_sets {
              let main_entity = batch_set.first_batch.representative_entity.1;
              if *main_entity != Entity::PLACEHOLDER
-@@ -2926,6 +3014,15 @@
+@@ -2926,6 +3025,15 @@
              }
          }
  
@@ -138,7 +149,7 @@
          // Now loop over all the batch sets in the phase. Look up the
          // corresponding `BatchSetBinUnpackingMetadata`, and use it to prepare
          // the `GpuBinUnpackingMetadata` and the `BinUnpackingJob`s. Also, kick
-@@ -2933,33 +3030,43 @@
+@@ -2933,33 +3041,43 @@
          // up in earlier phases.
          for (batch_set_key, batch_set) in view_binned_render_phase.multidrawable_meshes.iter_mut() {
              let Some(representative_entity) = batch_set.representative_entity() else {
@@ -198,7 +209,7 @@
  
              let (
                  Some(render_bin_entry_buffer),
-@@ -2979,6 +3086,8 @@
+@@ -2979,6 +3097,8 @@
                      .buffer(),
              )
              else {
@@ -207,7 +218,7 @@
                  continue;
              };
  
-@@ -3021,6 +3130,8 @@
+@@ -3021,6 +3141,8 @@
                  NonMaxU32::new(gpu_uniform_allocation_metadata_index as u32),
              )
              else {
@@ -216,7 +227,7 @@
                  continue;
              };
  
-@@ -3042,10 +3153,14 @@
+@@ -3042,10 +3164,14 @@
              };
  
              if batch_set_key.indexed() {

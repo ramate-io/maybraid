@@ -55,5 +55,21 @@ class ArchiveSafety(unittest.TestCase):
                 self.assertEqual(list(output.iterdir()), [])
 
 
+class ActualWrapperHarness(unittest.TestCase):
+    def test_harness_uses_the_patched_file_and_pinned_public_apis(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            lock = root / "input.lock"
+            lock.write_text("version = 4\n")
+            manifest = MODULE.wrapper_test_harness(root, root / "actual-bevy", root / "core", lock)
+            text = manifest.read_text()
+            self.assertNotIn("\\n", text)
+            self.assertIn('version = "=0.20.1"', text)
+            self.assertIn('render-prep-diagnostics = ["maybraid-render-prep-diagnostics/diagnostics"]', text)
+            module = (manifest.parent / "src/lib.rs").read_text()
+            self.assertIn(str(root / "actual-bevy/src/render_phase/binned_input.rs"), module)
+            self.assertIn('pub use bevy::render::render_resource::*;', module)
+
+
 if __name__ == "__main__":
     unittest.main()

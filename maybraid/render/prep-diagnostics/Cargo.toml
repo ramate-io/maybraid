@@ -12,6 +12,7 @@ rust-version = { workspace = true }
 [features]
 default = []
 diagnostics = ["dep:tracing"]
+native-dirty-uploads = []
 
 [dependencies]
 tracing = { workspace = true, optional = true }
