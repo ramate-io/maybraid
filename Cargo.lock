@@ -7429,6 +7429,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-render-prep-diagnostics"
+version = "0.1.5"
+dependencies = [
+ "tracing",
+]
+
+[[package]]
 name = "maybraid-session"
 version = "0.1.5"
 dependencies = [

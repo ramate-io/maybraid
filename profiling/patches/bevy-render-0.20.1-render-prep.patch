@@ -1,0 +1,233 @@
+--- a/src/batching/gpu_preprocessing.rs
++++ b/src/batching/gpu_preprocessing.rs
+@@ -2838,6 +2838,7 @@
+ /// The bin data consists of the IDs of the mesh instances, as well as the
+ /// metadata needed for the `unpack_bins` shader to unpack them.
+ pub fn write_binned_instance_buffers<BPI, GFBD>(
++    #[cfg(feature = "render-prep-diagnostics")] frame_count: Res<bevy_diagnostic::FrameCount>,
+     mut views: Query<&ExtractedView>,
+     mut view_binned_render_phases: ResMut<ViewBinnedRenderPhases<BPI>>,
+     bin_unpacking_buffers: ResMut<SceneUnpackingBuffers>,
+@@ -2847,6 +2848,53 @@
+     BPI: BinnedPhaseItem,
+     GFBD: GetFullBatchData,
+ {
++    #[cfg(feature = "render-prep-diagnostics")]
++    let diagnostic = maybraid_render_prep_diagnostics::Capture::begin(
++        frame_count.0,
++        core::any::type_name::<BPI>(),
++    );
++    #[cfg(feature = "render-prep-diagnostics")]
++    let _writer_span = diagnostic.as_ref().map(|capture| capture.writer_span().entered());
++
++    // The diagnostic macro preserves the native write order and arguments.
++    // With the feature disabled it expands only to the original buffer write.
++    macro_rules! diagnostic_write {
++        ($buffer:expr, $kind:ident, $item:ty, $census:expr, $($argument:expr),+) => {{
++            let buffer = &mut $buffer;
++            #[cfg(feature = "render-prep-diagnostics")]
++            let before = $census.as_ref().map(|_| maybraid_render_prep_diagnostics::BufferSnapshot {
++                entries: buffer.len(),
++                item_size: core::mem::size_of::<$item>(),
++                capacity: buffer.capacity(),
++                destination_bytes: buffer.buffer().map_or(0, |buffer| buffer.size()),
++            });
++            #[cfg(feature = "render-prep-diagnostics")]
++            let before_id = $census.as_ref().map(|_| buffer.buffer().map(|buffer| buffer.id()));
++            #[cfg(feature = "render-prep-diagnostics")]
++            let _buffer_span = diagnostic.as_ref().and_then(|capture| {
++                before.and_then(|before| capture.buffer_span(
++                    maybraid_render_prep_diagnostics::BufferKind::$kind, before,
++                )).map(|span| span.entered())
++            });
++            buffer.write_buffer($($argument),+);
++            #[cfg(feature = "render-prep-diagnostics")]
++            drop(_buffer_span);
++            #[cfg(feature = "render-prep-diagnostics")]
++            if let (Some(census), Some(before), Some(before_id)) = ($census.as_mut(), before, before_id) {
++                let after = maybraid_render_prep_diagnostics::BufferSnapshot {
++                    entries: buffer.len(),
++                    item_size: core::mem::size_of::<$item>(),
++                    capacity: buffer.capacity(),
++                    destination_bytes: buffer.buffer().map_or(0, |buffer| buffer.size()),
++                };
++                census.record_buffer(
++                    maybraid_render_prep_diagnostics::BufferKind::$kind,
++                    before, after, before_id != buffer.buffer().map(|buffer| buffer.id()),
++                );
++            }
++        }};
++    }
++
+     let bin_unpacking_buffers = bin_unpacking_buffers.into_inner();
+ 
+     let phase_type_id = TypeId::of::<BPI>();
+@@ -2857,12 +2905,46 @@
+ 
+     for extracted_view in &mut views {
+         all_seen_view_entities.insert(extracted_view.retained_view_entity);
++        #[cfg(feature = "render-prep-diagnostics")]
++        let mut census = diagnostic.as_ref().and_then(|capture| {
++            capture.view(|| format!("{:?}", extracted_view.retained_view_entity))
++        });
++        #[cfg(feature = "render-prep-diagnostics")]
++        if let Some(census) = census.as_mut() {
++            census.mode = "phase_absent";
++        }
+ 
+         let Some(view_binned_render_phase) =
+             view_binned_render_phases.get_mut(&extracted_view.retained_view_entity)
+         else {
+             continue;
+         };
++
++        #[cfg(feature = "render-prep-diagnostics")]
++        if let Some(census) = census.as_mut() {
++            census.mode = match &view_binned_render_phase.batch_sets {
++                BinnedRenderPhaseBatchSets::DynamicUniforms(_) => "dynamic_uniforms_skipped",
++                BinnedRenderPhaseBatchSets::Direct(_) => "direct_skipped",
++                BinnedRenderPhaseBatchSets::MultidrawIndirect(_) => "multidraw_indirect",
++            };
++            census.candidate_sets = view_binned_render_phase.multidrawable_meshes.len();
++            if !matches!(view_binned_render_phase.batch_sets, BinnedRenderPhaseBatchSets::MultidrawIndirect(_)) {
++                census.skipped_mode_sets = census.candidate_sets;
++            }
++            for batch_set in view_binned_render_phase.multidrawable_meshes.values() {
++                census.bins += batch_set.bin_count();
++                census.instances += batch_set.gpu_buffers.render_binned_mesh_instance_buffer.len();
++            }
++            census.batchable_bins = view_binned_render_phase.batchable_meshes.len();
++            census.batchable_instances = view_binned_render_phase.batchable_meshes.values()
++                .map(|bin| bin.entities().len()).sum();
++            census.unbatchable_bins = view_binned_render_phase.unbatchable_meshes.len();
++            census.unbatchable_instances = view_binned_render_phase.unbatchable_meshes.values()
++                .map(|bin| bin.entities.len()).sum();
++            census.non_mesh_bins = view_binned_render_phase.non_mesh_items.len();
++            census.non_mesh_instances = view_binned_render_phase.non_mesh_items.values()
++                .map(|bin| bin.entities.len()).sum();
++        }
+ 
+         // Since we currently only perform GPU-side bin unpacking for multidrawn
+         // batch sets, we bail out for all other types of batch sets.
+@@ -2903,6 +2985,12 @@
+         let mut representative_entity_to_batch_set_scene_unpacking_metadata =
+             MainEntityHashMap::default();
+ 
++        #[cfg(feature = "render-prep-diagnostics")]
++        let lookup_span = census.as_ref().map(|census| census.lookup_span().entered());
++        #[cfg(feature = "render-prep-diagnostics")]
++        if let Some(census) = census.as_mut() {
++            census.lookup_input_sets = batch_sets.len();
++        }
+         for batch_set in batch_sets {
+             let main_entity = batch_set.first_batch.representative_entity.1;
+             if *main_entity != Entity::PLACEHOLDER
+@@ -2926,6 +3014,15 @@
+             }
+         }
+ 
++        #[cfg(feature = "render-prep-diagnostics")]
++        drop(lookup_span);
++        #[cfg(feature = "render-prep-diagnostics")]
++        if let Some(census) = census.as_mut() {
++            census.lookup_entries = representative_entity_to_batch_set_scene_unpacking_metadata.len();
++        }
++        #[cfg(feature = "render-prep-diagnostics")]
++        let _upload_jobs_span = census.as_ref().map(|census| census.upload_jobs_span().entered());
++
+         // Now loop over all the batch sets in the phase. Look up the
+         // corresponding `BatchSetBinUnpackingMetadata`, and use it to prepare
+         // the `GpuBinUnpackingMetadata` and the `BinUnpackingJob`s. Also, kick
+@@ -2933,33 +3030,43 @@
+         // up in earlier phases.
+         for (batch_set_key, batch_set) in view_binned_render_phase.multidrawable_meshes.iter_mut() {
+             let Some(representative_entity) = batch_set.representative_entity() else {
++                #[cfg(feature = "render-prep-diagnostics")]
++                if let Some(census) = census.as_mut() { census.skipped_no_representative += 1; }
+                 continue;
+             };
+             let Some(scene_unpacking_metadata) =
+                 representative_entity_to_batch_set_scene_unpacking_metadata
+                     .get(&representative_entity)
+             else {
++                #[cfg(feature = "render-prep-diagnostics")]
++                if let Some(census) = census.as_mut() { census.skipped_no_metadata += 1; }
+                 continue;
+             };
++            #[cfg(feature = "render-prep-diagnostics")]
++            if let Some(census) = census.as_mut() { census.eligible_sets += 1; }
+ 
+             // Write the various buffers to the GPU.
+ 
+-            batch_set
+-                .gpu_buffers
+-                .render_binned_mesh_instance_buffer
+-                .write_buffer(&render_device, &render_queue);
+-            batch_set
+-                .gpu_buffers
+-                .bin_metadata_buffer
+-                .write_buffer(&render_device, &render_queue);
+-            batch_set
+-                .gpu_buffers
+-                .fan_buffer
+-                .write_buffer(&render_device);
+-            batch_set
+-                .gpu_buffers
+-                .bin_index_to_bin_metadata_index_buffer
+-                .write_buffer(&render_device, &render_queue);
++            diagnostic_write!(
++                batch_set.gpu_buffers.render_binned_mesh_instance_buffer,
++                Instances, crate::render_phase::GpuRenderBinnedMeshInstance, census,
++                &render_device, &render_queue
++            );
++            diagnostic_write!(
++                batch_set.gpu_buffers.bin_metadata_buffer,
++                Metadata, GpuBinMetadata, census,
++                &render_device, &render_queue
++            );
++            diagnostic_write!(
++                batch_set.gpu_buffers.fan_buffer,
++                Fan, u32, census,
++                &render_device
++            );
++            diagnostic_write!(
++                batch_set.gpu_buffers.bin_index_to_bin_metadata_index_buffer,
++                Lookup, u32, census,
++                &render_device, &render_queue
++            );
+ 
+             let (
+                 Some(render_bin_entry_buffer),
+@@ -2979,6 +3086,8 @@
+                     .buffer(),
+             )
+             else {
++                #[cfg(feature = "render-prep-diagnostics")]
++                if let Some(census) = census.as_mut() { census.skipped_missing_buffers += 1; }
+                 continue;
+             };
+ 
+@@ -3021,6 +3130,8 @@
+                 NonMaxU32::new(gpu_uniform_allocation_metadata_index as u32),
+             )
+             else {
++                #[cfg(feature = "render-prep-diagnostics")]
++                if let Some(census) = census.as_mut() { census.skipped_index_overflow += 1; }
+                 continue;
+             };
+ 
+@@ -3042,10 +3153,14 @@
+             };
+ 
+             if batch_set_key.indexed() {
++                #[cfg(feature = "render-prep-diagnostics")]
++                if let Some(census) = census.as_mut() { census.indexed_jobs += 1; }
+                 view_phase_bin_unpacking_buffers
+                     .indexed_unpacking_jobs
+                     .push(job);
+             } else {
++                #[cfg(feature = "render-prep-diagnostics")]
++                if let Some(census) = census.as_mut() { census.non_indexed_jobs += 1; }
+                 view_phase_bin_unpacking_buffers
+                     .non_indexed_unpacking_jobs
+                     .push(job);
