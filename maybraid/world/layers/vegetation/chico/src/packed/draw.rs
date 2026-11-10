@@ -202,6 +202,8 @@ mod tests {
 	use std::sync::Arc;
 	fn batch(main: Entity) -> PackedBatchInstance {
 		let payload = TilePayload {
+			#[cfg(feature = "packed-diagnostics")]
+			diagnostic_family: "Orchard",
 			revision: 1,
 			proxy_shadows: false,
 			bounds: bevy::shape::Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
