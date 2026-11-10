@@ -505,7 +505,17 @@ pub(crate) fn apply_wish_movement(
 		let ground =
 			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, airborne);
 		if let Some(normal) = ground {
+			// A remembered snap plane still steers the wish, but without a
+			// current walkable hit it must not erase gravity between physics
+			// steps. Actual contact keeps the existing ground projection.
+			let unsupported_normal_velocity = contact.is_none().then(|| {
+				let normal = normal.normalize_or_zero();
+				normal * velocity.dot(normal)
+			});
 			control_ground_velocity(&mut velocity, wish.0, drive_accel, dt, normal, max_speed);
+			if let Some(retained) = unsupported_normal_velocity {
+				velocity.0 += retained;
+			}
 		} else {
 			control_air_velocity(&mut velocity, wish.0, drive_accel, dt, max_speed);
 		}
@@ -568,6 +578,111 @@ pub(crate) fn advance_jump_phases(
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn missing_contact_does_not_erase_fixed_gravity_at_render_cadences() -> anyhow::Result<()> {
+		// Drive the real Update systems, including snap hysteresis and plane
+		// selection, between fixed 64 Hz gravity steps. No collision plugin is
+		// needed: this capsule has explicitly lost all current cast hits.
+		for update_hz in [30, 60, 120] {
+			let mut app = App::new();
+			app.insert_resource(Time::<()>::default());
+			app.add_systems(Update, (update_grounded, apply_wish_movement).chain());
+			let entity = app
+				.world_mut()
+				.spawn((
+					CharacterController,
+					MoveWish(Vec3::ZERO),
+					ShapeHits::default(),
+					WalkableGround { normal: Vec3::Y },
+					Grounded,
+					MovementAcceleration(MOVE_ACCEL),
+					LinearVelocity(Vec3::ZERO),
+				))
+				.id();
+			let gravity = -9.81 * 1.25;
+			// LCM of 30/60/120 Update Hz and 64 physics Hz is 960.
+			for tick in 1..=960 {
+				if tick % 15 == 0 {
+					app.world_mut()
+						.get_mut::<LinearVelocity>(entity)
+						.ok_or_else(|| anyhow::anyhow!("test capsule lost velocity"))?
+						.y += gravity / 64.0;
+				}
+				if tick % (960 / update_hz) == 0 {
+					app.world_mut()
+						.resource_mut::<Time>()
+						.advance_by(std::time::Duration::from_secs_f64(1.0 / f64::from(update_hz)));
+					app.update();
+				}
+			}
+			let velocity = app
+				.world()
+				.get::<LinearVelocity>(entity)
+				.ok_or_else(|| anyhow::anyhow!("test capsule lost velocity"))?;
+			assert!(
+				(velocity.y - gravity).abs() < 1e-4,
+				"{update_hz} Hz Update erased gravity: {velocity:?}"
+			);
+			assert!(
+				app.world().get::<Grounded>(entity).is_none(),
+				"downward speed must eventually leave the snap band"
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn only_remembered_slope_preserves_normal_velocity() -> anyhow::Result<()> {
+		let normal = Vec3::new(-0.5, 3.0_f32.sqrt() / 2.0, 0.0);
+		for current_contact in [false, true] {
+			let mut app = App::new();
+			let mut time = Time::<()>::default();
+			time.advance_by(std::time::Duration::from_secs(1));
+			app.insert_resource(time);
+			app.add_systems(Update, (update_grounded, apply_wish_movement).chain());
+			let hits = if current_contact {
+				ShapeHits(vec![ShapeHitData {
+					entity: Entity::PLACEHOLDER,
+					distance: 0.1,
+					point1: Default::default(),
+					point2: Default::default(),
+					normal1: normal,
+					normal2: -normal,
+				}])
+			} else {
+				ShapeHits::default()
+			};
+			let entity = app
+				.world_mut()
+				.spawn((
+					CharacterController,
+					MoveWish(Vec3::X),
+					hits,
+					WalkableGround { normal },
+					Grounded,
+					MovementAcceleration(MOVE_ACCEL),
+					LinearVelocity(-normal * 0.5),
+				))
+				.id();
+			app.update();
+			let velocity = app
+				.world()
+				.get::<LinearVelocity>(entity)
+				.ok_or_else(|| anyhow::anyhow!("test capsule lost velocity"))?;
+			let expected_normal = if current_contact { 0.0 } else { -0.5 };
+			assert!(
+				(velocity.dot(normal) - expected_normal).abs() < 1e-5,
+				"current_contact={current_contact}: {velocity:?}"
+			);
+			let tangent = velocity.0 - normal * velocity.dot(normal);
+			assert!(
+				(tangent.length() - JOG_SPEED).abs() < 1e-5,
+				"remembered plane must still steer the moving wish"
+			);
+		}
+		Ok(())
+	}
 
 	#[test]
 	fn default_locomotion_keeps_legacy_slope() {
