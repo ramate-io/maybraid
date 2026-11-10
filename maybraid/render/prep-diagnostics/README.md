@@ -48,22 +48,48 @@ or an explicitly refreshed manifest; the core is a live path dependency.
 
 ## Capture ordinary gameplay
 
+Use a controlled **capture-only** runner with a frozen run manifest. Pin the
+absolute path and SHA256 of the verified, immutable patched executable, its
+source/build manifest and explicit patch configuration. The runner must launch
+that exact executable; a checkout's `target/release/maybraid` is not an acceptable
+fallback. Also pin the absolute collector executable and its hash. This dependency
+graph requires Tracy **0.14.1 / protocol 82**; stock Nix Tracy 0.13.1 is incompatible.
+
+Freeze the script, viewport, VSync, actual camera pose and motion controls before
+comparison. Set the run manifest's environment to
+`MAYBRAID_RENDER_PREP_DIAGNOSTICS=1`,
+`MAYBRAID_RENDER_PREP_SAMPLE_FRAMES=120` and
+`RUST_LOG=info,wgpu=error,maybraid.poi.profile=off,wgpu_core::device::queue=info,wgpu_core::resource=info`.
+The current natural-area runner supplies these values through its frozen
+configuration rather than inheriting arbitrary shell environment overrides.
+Do not add a synthetic scene to inflate a denominator.
+
+The render-prep capture procedure verifies source, binary and tool hashes,
+requires exclusive ownership of the game and collector, establishes warmup and
+foreground/window validity, then attaches the collector before the premeasurement
+screenshot gate. Its generated frozen launcher has this invocation shape:
+
 ```sh
-PATH="/absolute/path/to/tracy-0.14.1/bin:$PATH" \
-MAYBRAID_RENDER_PREP_DIAGNOSTICS=1 \
-MAYBRAID_RENDER_PREP_SAMPLE_FRAMES=120 \
-RUST_LOG='info,wgpu=error,naga=warn,wgpu_core::device::queue=info,wgpu_core::resource=info' \
-profiling/tracy-flight.sh <ordinary-gameplay-script.jsonl> native-prep 1
+bash /absolute/path/to/frozen-native-prep/run.sh \
+  --phase cpu --output /absolute/new/capture-directory
 ```
 
-Use a protocol-compatible Tracy **0.14.1 / protocol 82** capture executable for
-this pinned dependency graph; stock Nix Tracy 0.13.1 is incompatible. The PATH
-prefix must contain both `tracy-capture` and `tracy-csvexport`; the flight script
-resolves both by PATH. Check the
-[profiling instructions](../../../profiling/README.md) and preserve the normal
-script, viewport, VSync, camera and motion controls across comparisons. Do not
-add a synthetic scene to inflate a denominator. Capture tools do not rebuild the
-binary; verify the executable and explicit patch config in the build manifest.
+Prepare and review that launcher/configuration for the specific run first; the
+placeholder above is not a shipped repository command. Use a fresh output path
+and finite wall-clock, game-log and capture-size limits. The current procedure
+uses 750 seconds, 2 GiB for the game log and 8 GiB for the on-disk capture,
+terminating only its owned processes on failure. The file-size limit cannot see
+collector data still buffered in memory. Verify deliberate game completion,
+collector completion, window/camera evidence and capture provenance afterward.
+
+Do **not** use the legacy `profiling/tracy-flight.sh` for this workflow. It defaults
+to a checkout binary and automatically runs aggregate/message exports and an
+unfiltered `tracy-csvexport -u` stream. Merely setting `MAYBRAID_BIN` fixes neither
+its implicit exports nor their lack of finite budgets. The controlled collector
+produces the `.tracy` and run evidence only. Export separately after capture under
+an explicit offline export scope: exact requested zones/messages and measurement
+window, with finite time, output-byte and record limits. Never implicitly export
+all zones or an unrestricted unwrap stream.
 
 The narrow wgpu overrides expose existing INFO-level `Queue::write_buffer`,
 `StagingBuffer::new` and copy profiling scopes in wgpu 30.0.1. Bevy's default
