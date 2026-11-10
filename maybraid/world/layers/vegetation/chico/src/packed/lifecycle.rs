@@ -164,6 +164,9 @@ fn spawn_proxies(
 	kits: &PackedKitMeshes,
 	policy: &PackedViewPolicy,
 ) -> bool {
+	// Validate every mesh bound before any proxy or new pass signal is published.
+	let Some(bounds) = tile.payload.geometric_bounds(kits) else { return false };
+	Arc::make_mut(&mut tile.payload).bounds = bounds;
 	let needs_prepass = policy.needs_prepass;
 	let shadows = policy.shadow_directionals_relevant > 0;
 
@@ -425,10 +428,12 @@ pub fn sync_packed_tiles(world: &mut World) {
 			}
 		}
 		if tile.proxies.is_empty() {
-			let all_ready =
-				tile.payload.lods.iter().flat_map(|batches| batches.iter()).all(|batch| {
-					matches!(kits.states.get(batch.key.kit), Some(KitState::Ready(_)))
-				});
+			let all_ready = tile
+				.payload
+				.lods
+				.iter()
+				.flat_map(|batches| batches.iter())
+				.all(|batch| kits.ready_bounds(batch.key.kit).is_some());
 			if all_ready && !spawn_proxies(world, entity, tile, &kits, &policy) {
 				for proxy in tile.proxies.drain(..) {
 					let _ = world.despawn(proxy);
@@ -604,9 +609,26 @@ mod tests {
 		);
 		let payload = TilePayload::from_host(&host, 1, true)
 			.map_err(|reason| anyhow::anyhow!("fixture rejected {reason:?}"))?;
+		// Supply accepted synthetic POSITION bounds, as now required before
+		// proxy publication. Real GLB/hardware parity is a separate gate.
+		let mesh = Mesh::new(
+			bevy::mesh::PrimitiveTopology::TriangleList,
+			bevy::asset::RenderAssetUsages::all(),
+		)
+		.with_inserted_attribute(
+			Mesh::ATTRIBUTE_POSITION,
+			vec![[-1., -1., -1.], [1., 1., 1.], [-1., 1., -1.]],
+		)
+		.with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0., 1., 0.]; 3]);
+		assert!(PackedKitMeshes::supports_mesh(&mesh));
+		let bounds = PackedKitMeshes::bounds_for_mesh(&mesh)
+			.ok_or_else(|| anyhow::anyhow!("synthetic kit bounds missing"))?;
+		let mut mesh_assets = Assets::<Mesh>::default();
+		let mesh = mesh_assets.add(mesh);
 		let mut kits = PackedKitMeshes::default();
 		for batch in payload.lods.iter().flat_map(|batches| batches.iter()) {
-			kits.states.insert(batch.key.kit, KitState::Ready(Handle::default()));
+			kits.states.insert(batch.key.kit, KitState::Ready(mesh.clone()));
+			kits.local_bounds.insert(batch.key.kit, bounds);
 		}
 		let cell = world.spawn((host.clone(), LodSceneHost)).id();
 		let ordinary = world.spawn((LodLevelRoots, ChildOf(cell))).id();
