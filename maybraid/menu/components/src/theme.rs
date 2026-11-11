@@ -16,6 +16,9 @@ pub const BARLOW_REGULAR: &str = "fonts/barlow/BarlowSemiCondensed-Regular.ttf";
 /// Noto Sans Regular — IPA coverage for generated place names.
 pub const NOTO_SANS_REGULAR: &str = "fonts/noto/NotoSans-Regular.ttf";
 
+/// Pixel size of the Tanz trigger callout icon, and of rhythm-map direction arrows.
+pub const TANZ_CALLOUT_ICON_PX: f32 = 40.0;
+
 /// Largest face on a text menu (title / header).
 pub const HEADER_FONT_SIZE: f32 = 96.0;
 

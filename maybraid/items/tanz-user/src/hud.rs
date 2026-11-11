@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use item_icons::ItemIconCache;
-use menu_components::{LoadingBarFill, TEXT_YELLOW, TEXT_YELLOW_FAINT};
+use menu_components::{LoadingBarFill, TANZ_CALLOUT_ICON_PX, TEXT_YELLOW, TEXT_YELLOW_FAINT};
 use screen_capture::CaptureSubject;
 
 use crate::callout::TanzCallout;
@@ -10,7 +10,6 @@ use crate::{ControlMode, TanzUser};
 
 const PANEL: Color = Color::srgba(0.05, 0.05, 0.08, 0.55);
 const INK: Color = Color::srgb(0.92, 0.9, 0.82);
-const ICON_PX: f32 = 40.0;
 /// Same proportions as the loading screen track, scaled for the corner HUD.
 const MODE_BAR_WIDTH: f32 = 168.0;
 const MODE_BAR_HEIGHT: f32 = 4.0;
@@ -125,8 +124,8 @@ pub fn spawn_tanz_callout_hud(mut commands: Commands) {
 						TanzCalloutHudIcon,
 						ImageNode { color: Color::NONE, ..default() },
 						Node {
-							width: Val::Px(ICON_PX),
-							height: Val::Px(ICON_PX),
+							width: Val::Px(TANZ_CALLOUT_ICON_PX),
+							height: Val::Px(TANZ_CALLOUT_ICON_PX),
 							flex_shrink: 0.0,
 							display: Display::None,
 							..default()

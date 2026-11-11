@@ -32,7 +32,8 @@ readable through coloured, refracted glass. The expand edge plays the authored
 skill-map input is inactive or gameplay is suspended.
 Changing the equipped map starts a fresh feed, waiting for its first flick.
 Timing and sequence definitions live in `src/feed.rs`; presentation lives in
-`src/feed_view.rs`.
+`src/feed_view.rs`. Rhythm maps draw only the chevrons and the hit line — no
+lane slots — at [`TANZ_CALLOUT_ICON_PX`].
 
 Run the focused checks with:
 
