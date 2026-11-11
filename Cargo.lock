@@ -3099,6 +3099,8 @@ dependencies = [
  "bevy",
  "characters",
  "clap",
+ "material-ref",
+ "png 0.17.16",
  "rigs",
  "tempfile",
  "zip 2.6.1",

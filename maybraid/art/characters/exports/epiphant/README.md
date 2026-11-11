@@ -3,15 +3,19 @@
 Wavefront export of `EpiphantConfig::default_preview()`, assembled the same way as
 runtime (`spawn_fixed_character_assembly`). Rest / bind pose, Y-up, metres.
 
-Mesh only: one OBJ with `vt` UVs and `vn` normals. No MTL, no texture images.
+Each independently paintable component is its own `o` object, `*_mat` material, and
+`*_color.png` (1024×1024, filled with that part's palette colour). MTL `Kd` is white
+so the image supplies the colour.
 
 | File | Role |
 | --- | --- |
-| `epiphant_default_preview.obj` | One `o` object per part (body, head, ears, eyes, nose, tail) |
+| `epiphant_default_preview.obj` | One `o` per part: `body`, `head`, `ear_left`, `ear_right`, `eye_left`, `eye_right`, `nose`, `tail` |
+| `epiphant_default_preview.mtl` | `newmtl {part}_mat` with `Kd 1 1 1`, `d 1`, `map_Kd {part}_color.png` |
+| `{part}_color.png` | Unique 1024×1024 albedo for that part (not shared, even if colours match) |
 
-Each part has an independent chart unwrap in 0..1 with island padding, so
-mirrored left/right surfaces are separately paintable. Degenerate geometry may
-have tiny UVs; every nondegenerate triangle has nonzero UV area.
+UVs are a chart unwrap **per component** in 0..1 with island padding. Left/right ears
+are different images; each ear's front and back occupy distinct UV space in that image.
+Degenerate geometry may have tiny UVs; every nondegenerate triangle has nonzero UV area.
 
 ## Rebuild
 
@@ -27,15 +31,15 @@ See [`mesh-export/README.md`](../../../../world/layers/mobs/characters/mesh-expo
 
 Actual Procreate import is the acceptance check and is **not** verified in CI.
 
-1. Copy `epiphant_default_preview.obj` onto the iPad (On My iPad, not iCloud).
+1. Put the OBJ, MTL, and PNGs in **one local On My iPad folder** (not iCloud).
    Extract a zip first if you were given one — do not import the zip.
-2. Gallery → Import often greys `.obj` out. That is a Files UTI issue; official
-   import is drag-and-drop of the lone OBJ
-   ([handbook](https://help.procreate.com/procreate/handbook/3d-painting/import)).
-3. Split View Files + Procreate. Drag the `.obj` onto the Gallery until a green
-   plus appears, drop.
-4. Open the model, tap a mesh, paint. Confirm left/right ears and eyes paint
-   independently, and that no triangle is an unpaintable collapsed island.
+2. Gallery → Import often greys `.obj` out. Official import is drag-and-drop of the
+   **folder** ([handbook](https://help.procreate.com/procreate/handbook/3d-painting/import)).
+3. Split View Files + Procreate. Long-press the folder, drag onto the Gallery until a
+   green plus appears, drop. That creates a fresh 3D artwork.
+4. Open the model. Confirm a separate texture set per component.
+5. Disable **Paint through mesh**. Paint the head: body and both ears must not change.
+   Paint the left ear: the right ear must not change.
 
 If the file is greyed out but still opens when tapped, that matches
 [community reports](https://folio.procreate.com/help-support/59141) and is not a

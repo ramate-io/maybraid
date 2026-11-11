@@ -8,8 +8,9 @@ use bevy::prelude::*;
 use bevy::window::WindowPlugin;
 use character_mesh_export::export::{
 	assembly_block_reason, assembly_ready, assets_root, collect_groups, write_import_zip,
-	write_obj_bundle,
+	write_obj_bundle_with,
 };
+use character_mesh_export::texture::TextureConfig;
 use characters::{
 	spawn_fixed_character_assembly, species::epiphant::EpiphantConfig, CharacterAssemblyBudget,
 	CharacterHostsPlugin, CharacterRecipe,
@@ -29,13 +30,17 @@ struct Cli {
 	#[arg(long, value_enum, default_value_t = Species::Epiphant)]
 	species: Species,
 
-	/// Output `.obj` path (mesh only: no MTL or textures).
+	/// Output `.obj` path. A companion `.mtl` and per-component `*_color.png` are written alongside.
 	#[arg(long)]
 	output: PathBuf,
 
-	/// Optional zip of the OBJ plus a short README for handing to an iPad.
+	/// Optional zip of a folder containing OBJ + MTL + PNGs + README for an iPad.
 	#[arg(long)]
 	zip: Option<PathBuf>,
+
+	/// Square color-map resolution per component.
+	#[arg(long, default_value_t = character_mesh_export::DEFAULT_TEXTURE_RESOLUTION)]
+	texture_resolution: u32,
 
 	/// Maximum frames to wait for GLB load + skin remap.
 	#[arg(long, default_value_t = 600)]
@@ -46,6 +51,7 @@ struct Cli {
 struct ExportJob {
 	output: PathBuf,
 	zip: Option<PathBuf>,
+	texture_resolution: u32,
 	timeout_frames: u32,
 	frames: u32,
 	root: Option<Entity>,
@@ -74,6 +80,7 @@ fn main() -> ExitCode {
 	.insert_resource(ExportJob {
 		output: cli.output,
 		zip: cli.zip,
+		texture_resolution: cli.texture_resolution,
 		timeout_frames: cli.timeout_frames,
 		frames: 0,
 		root: None,
@@ -141,10 +148,11 @@ fn tick_export(world: &mut World) {
 		}
 
 		let output = job.output.clone();
-		match write_obj_bundle(&output, &groups) {
+		let textures = TextureConfig::new(job.texture_resolution);
+		match write_obj_bundle_with(&output, &groups, textures) {
 			Ok(report) => {
 				if !report.validation_ok {
-					eprintln!("OBJ / UV validation failed");
+					eprintln!("OBJ / UV / material validation failed");
 					exit = app_error(5);
 					finished = true;
 					return;
@@ -160,12 +168,13 @@ fn tick_export(world: &mut World) {
 				}
 				println!("Wrote {}", output.display());
 				println!(
-					"groups={} vertices={} faces={} uvs={} normals={} bbox_min=({:.3}, {:.3}, {:.3}) bbox_max=({:.3}, {:.3}, {:.3}) obj_bytes={}",
+					"groups={} vertices={} faces={} uvs={} normals={} textures={} bbox_min=({:.3}, {:.3}, {:.3}) bbox_max=({:.3}, {:.3}, {:.3}) obj_bytes={} mtl_bytes={}",
 					report.groups,
 					report.vertices,
 					report.faces,
 					report.has_uvs,
 					report.has_normals,
+					report.textures,
 					report.bounds_min.x,
 					report.bounds_min.y,
 					report.bounds_min.z,
@@ -173,6 +182,7 @@ fn tick_export(world: &mut World) {
 					report.bounds_max.y,
 					report.bounds_max.z,
 					report.obj_bytes,
+					report.mtl_bytes,
 				);
 				finished = true;
 			}
