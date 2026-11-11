@@ -231,34 +231,17 @@ mod tests {
 	}
 
 	#[test]
-	fn inspect_window_starts_at_cursor() -> anyhow::Result<()> {
-		let (visited, next) = take(0, 10, 3);
-		assert_eq!(visited, vec![0, 1, 2]);
-		assert_eq!(next, 3);
-		Ok(())
-	}
-
-	#[test]
-	fn inspect_window_wraps_and_advances_cursor() -> anyhow::Result<()> {
-		let (visited, next) = take(8, 10, 3);
-		assert_eq!(visited, vec![8, 9, 0]);
-		assert_eq!(next, 1);
-		Ok(())
-	}
-
-	#[test]
-	fn inspect_window_resets_when_the_query_is_smaller_than_the_budget() -> anyhow::Result<()> {
-		let (visited, next) = take(0, 2, 10);
-		assert_eq!(visited, vec![0, 1]);
-		assert_eq!(next, 0);
-		Ok(())
-	}
-
-	#[test]
-	fn inspect_window_skips_a_zero_budget() -> anyhow::Result<()> {
-		let (visited, next) = take(4, 10, 0);
-		assert!(visited.is_empty());
-		assert_eq!(next, 4);
+	fn inspect_window_cursor_and_budget_cases() -> anyhow::Result<()> {
+		for (start, len, inspect, expected_visited, expected_next) in [
+			(0, 10, 3, vec![0, 1, 2], 3),
+			(8, 10, 3, vec![8, 9, 0], 1),
+			(0, 2, 10, vec![0, 1], 0),
+			(4, 10, 0, vec![], 4),
+		] {
+			let (visited, next) = take(start, len, inspect);
+			assert_eq!(visited, expected_visited, "start={start} len={len} inspect={inspect}");
+			assert_eq!(next, expected_next, "start={start} len={len} inspect={inspect}");
+		}
 		Ok(())
 	}
 }
