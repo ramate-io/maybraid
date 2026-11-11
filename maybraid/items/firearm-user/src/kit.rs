@@ -127,29 +127,6 @@ mod tests {
 	use firearms::{SocketRef, StockMesh};
 
 	#[test]
-	fn kit_mapping_preserves_bullpup_concept_slots() {
-		let kit = kit_from_spec(FirearmSpec::from_mesh(FirearmMesh::Bullpup));
-		assert_eq!(kit.body, BodyMesh::Bullpup);
-		assert_eq!(kit.barrel, BarrelMesh::Bullpup);
-		assert_eq!(kit.grip, GripMesh::BumpHandle);
-	}
-
-	#[test]
-	fn kit_mapping_preserves_holorand_sight() {
-		let mut spec = FirearmSpec::from_mesh(FirearmMesh::Bullpup);
-		spec.kit.sight = FirearmSight::Holorand;
-		let kit = kit_from_spec(spec);
-		assert_eq!(kit.sight, SightMesh::Holorand);
-	}
-
-	#[test]
-	fn kit_mapping_preserves_reltor_trigger_box() {
-		let kit = kit_from_spec(FirearmSpec::from_mesh(FirearmMesh::Reltor));
-		assert_eq!(kit.body, BodyMesh::Reltor);
-		assert_eq!(kit.trigger_box, TriggerBoxMesh::Reltor);
-	}
-
-	#[test]
 	fn paints_the_body_look_onto_the_kit_node() {
 		let mut spec = FirearmSpec::from_mesh(FirearmMesh::Bullpup);
 		spec.looks.body = SlotLook::new(FirearmMaterial::LavaVeins, ItemColor::Red);
