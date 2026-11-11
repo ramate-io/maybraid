@@ -18,8 +18,8 @@ use menu_components::{
 
 use crate::sink::MenuThumbnailContext;
 use crate::widgets::{
-	CloseOverlaySelect, EquippedOrderControls, InventoryControl, InventoryItemKey,
-	InventoryMenuSession, MenuButton,
+	CloseOverlaySelect, EquippedOrderControls, InventoryControl, InventoryFolderHeader,
+	InventoryItemKey, InventoryLeftFocus, InventoryMenuSession, MenuButton,
 };
 
 /// Region identity stamped on the independent Drawer and Equipped focus lists.
@@ -128,14 +128,19 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 		item_count: [0; 2],
 		focused_index: [None; 2],
 	};
-	let Some((choices, equipment, capacity)) = section_data(node, session.section) else {
-		return slots;
-	};
+	let (choices, equipment, capacity) = section_data(node, session.section).unwrap_or_default();
+	let folders = InventorySection::ALL.map(|section| {
+		let (_, equipment, capacity) = section_data(node, section).unwrap_or_default();
+		(section, equipment, capacity)
+	});
 	let Ok(mut root) = commands.get_entity(viewport) else {
 		return slots;
 	};
 	root.despawn_related::<Children>();
-	root.insert(crate::widgets::OverlaySelectViewport);
+	root.insert((
+		crate::widgets::OverlaySelectViewport,
+		InventoryMenuSession { folder_navigation: interactive, ..*session },
+	));
 	if interactive {
 		root.insert(menu_components::MenuModal::OVERLAY_SELECT);
 		root.remove::<InventoryScreenReadOnly>();
@@ -163,6 +168,29 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 		(equipment.len() + 1).min(capacity)
 	} else {
 		equipment.len().min(capacity)
+	};
+	let mut left_rows = Vec::new();
+	if interactive {
+		for (section, equipment, capacity) in &folders {
+			left_rows.push(InventoryLeftFocus::Header(*section));
+			if session.expanded_section == Some(*section) {
+				left_rows.extend(
+					(0..(equipment.len() + 1).min(*capacity))
+						.map(|ordinal| InventoryLeftFocus::Slot { section: *section, ordinal }),
+				);
+			}
+		}
+	}
+	let left_count = if interactive { left_rows.len() } else { aiop_focus_capacity };
+	let left_focus = if interactive {
+		left_rows.iter().position(|row| *row == session.left_focus).unwrap_or_else(|| {
+			left_rows
+				.iter()
+				.position(|row| *row == InventoryLeftFocus::Header(session.section))
+				.unwrap_or(0)
+		})
+	} else {
+		equipped_focus
 	};
 	root.with_children(|host_viewport| {
 		let mut shell = host_viewport.spawn((
@@ -205,14 +233,15 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 					BackgroundColor(menu_region_wash()),
 					Pickable::IGNORE,
 				));
-				slots.item_count[1] = aiop_focus_capacity;
-				slots.focused_index[1] = bounded_focus(equipped_focus, slots.item_count[1]);
+				slots.item_count[1] = left_count;
+				slots.focused_index[1] = bounded_focus(left_focus, left_count);
+				let equipped_count = format!("{}/{}", equipment.len().min(capacity), capacity);
 				aiop.with_children(|aiop| {
 					spawn_header_line(
 						aiop,
 						fonts,
 						"Equipped Items",
-						Some(&format!("{}/{}", equipment.len().min(capacity), capacity)),
+						(!interactive).then_some(equipped_count.as_str()),
 						PANEL_ITEM_FONT_SIZE,
 						TEXT_YELLOW,
 					);
@@ -220,8 +249,8 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 						InventoryScreenArea(InventoryRegion::Equipped),
 						InventoryHudMenu,
 						HudMenu {
-							selected: equipped_focus.min(aiop_focus_capacity.saturating_sub(1)),
-							item_count: aiop_focus_capacity,
+							selected: left_focus.min(left_count.saturating_sub(1)),
+							item_count: left_count,
 						},
 						HudScrollViewport,
 						ScrollPosition::default(),
@@ -241,30 +270,61 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 					}
 					slots.menus[1] = list_root.id();
 					list_root.with_children(|list| {
-						for ordinal in 0..capacity {
-							if let Some(choice) = equipment.get(ordinal) {
-								spawn_equipped_slot(
+						let mut menu_index = 0;
+						for (section, equipment, capacity) in &folders {
+							if interactive {
+								spawn_inventory_folder_header(
 									list,
 									fonts,
-									choice,
-									session.section,
-									ordinal,
-									aiop_focus_capacity,
-									interactive,
-									thumbnails,
+									*section,
+									equipment.len().min(*capacity),
+									*capacity,
+									session.expanded_section == Some(*section),
 									slots.menus[1],
+									menu_index,
 								);
+								menu_index += 1;
+								if session.expanded_section != Some(*section) {
+									continue;
+								}
+							} else if *section != session.section {
+								continue;
+							}
+							let focus_capacity = if interactive {
+								(equipment.len() + 1).min(*capacity)
 							} else {
-								// Only the next dense slot exposes an actionable plus.
-								spawn_empty_slot(
-									list,
-									fonts,
-									session.section,
-									ordinal,
-									aiop_focus_capacity,
-									slots.menus[1],
-									interactive && ordinal < aiop_focus_capacity,
-								);
+								equipment.len().min(*capacity)
+							};
+							for ordinal in 0..*capacity {
+								if let Some(choice) = equipment.get(ordinal) {
+									spawn_equipped_slot(
+										list,
+										fonts,
+										choice,
+										*section,
+										ordinal,
+										*capacity,
+										menu_index,
+										interactive,
+										thumbnails,
+										slots.menus[1],
+									);
+								} else {
+									// Only the next dense slot exposes an actionable plus.
+									spawn_empty_slot(
+										list,
+										fonts,
+										*section,
+										ordinal,
+										*capacity,
+										menu_index,
+										slots.menus[1],
+										interactive && ordinal < focus_capacity,
+									);
+								}
+								if ordinal < focus_capacity {
+									menu_index += 1;
+								}
 							}
 						}
 					});
@@ -296,7 +356,14 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 					..default()
 				});
 				center.with_children(|right| {
-					spawn_inventory_header(right, fonts, assets, session.section, session.drawer);
+					spawn_inventory_header(
+						right,
+						fonts,
+						assets,
+						session.section,
+						session.drawer,
+						!interactive,
+					);
 					let preview_node = if interactive {
 						Node {
 							width: Val::Percent(100.0),
@@ -410,12 +477,80 @@ pub(crate) fn sync_inventory_presentation(
 	}
 }
 
+/// Folder rows share the equipped list so navigation and scrolling include headers.
+fn spawn_inventory_folder_header(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	section: InventorySection,
+	equipped: usize,
+	capacity: usize,
+	expanded: bool,
+	menu: Entity,
+	index: usize,
+) {
+	parent
+		.spawn((
+			Button::default(),
+			bevy::picking::hover::Hovered::default(),
+			InventoryFolderHeader(section),
+			HudMenuItem { menu, index },
+			HoverTile { equipped: false, preserve_fill: false, face: TEXT_YELLOW },
+			Node {
+				width: Val::Percent(100.0),
+				height: Val::Px(38.0),
+				min_height: Val::Px(38.0),
+				flex_shrink: 0.0,
+				padding: UiRect::axes(Val::Px(6.0), Val::Px(4.0)),
+				flex_direction: FlexDirection::Row,
+				align_items: AlignItems::Center,
+				column_gap: Val::Px(6.0),
+				border_radius: BorderRadius::all(Val::Px(8.0)),
+				..default()
+			},
+			BorderColor::all(Color::NONE),
+			BackgroundColor(Color::NONE),
+			Outline::new(Val::Px(2.0), Val::Px(2.0), Color::NONE),
+		))
+		.with_children(|header| {
+			header.spawn((
+				TileWrap,
+				// ASCII folder indicators are supported by the shared HUD font.
+				Text::new(if expanded { "-" } else { "+" }),
+				fonts.item(18.0),
+				TextColor(TEXT_YELLOW),
+				Node { min_width: Val::Px(14.0), ..default() },
+				Pickable::IGNORE,
+			));
+			let label = match section {
+				InventorySection::Skills => "Skills",
+				InventorySection::Lubikan => "Lubikans",
+				_ => section.label(),
+			};
+			header.spawn((
+				TileWrap,
+				Text::new(label),
+				fonts.item(PANEL_ITEM_FONT_SIZE),
+				TextColor(TEXT_YELLOW),
+				Node { flex_grow: 1.0, min_width: Val::Px(0.0), ..default() },
+				Pickable::IGNORE,
+			));
+			header.spawn((
+				TileWrap,
+				Text::new(format!("{equipped}/{capacity}")),
+				fonts.item(12.0),
+				TextColor(TEXT_YELLOW_FAINT),
+				Pickable::IGNORE,
+			));
+		});
+}
+
 fn spawn_inventory_header(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
 	assets: &AssetServer,
 	section: InventorySection,
 	drawer: InventoryDrawerMode,
+	section_controls: bool,
 ) {
 	parent
 		.spawn((
@@ -447,14 +582,16 @@ fn spawn_inventory_header(
 					Pickable::IGNORE,
 				))
 				.with_children(|title_row| {
-					spawn_inventory_icon_button(
-						title_row,
-						assets,
-						PROMPT_PAD_PREVIOUS_SECTION,
-						InventoryControl(
-							character_ui_menu::InventoryControlAction::PreviousSection,
-						),
-					);
+					if section_controls {
+						spawn_inventory_icon_button(
+							title_row,
+							assets,
+							PROMPT_PAD_PREVIOUS_SECTION,
+							InventoryControl(
+								character_ui_menu::InventoryControlAction::PreviousSection,
+							),
+						);
+					}
 					spawn_header_line(
 						title_row,
 						fonts,
@@ -463,12 +600,16 @@ fn spawn_inventory_header(
 						PANEL_HEADER_FONT_SIZE,
 						TEXT_YELLOW,
 					);
-					spawn_inventory_icon_button(
-						title_row,
-						assets,
-						PROMPT_PAD_NEXT_SECTION,
-						InventoryControl(character_ui_menu::InventoryControlAction::NextSection),
-					);
+					if section_controls {
+						spawn_inventory_icon_button(
+							title_row,
+							assets,
+							PROMPT_PAD_NEXT_SECTION,
+							InventoryControl(
+								character_ui_menu::InventoryControlAction::NextSection,
+							),
+						);
+					}
 				});
 			header
 				.spawn((
@@ -1104,6 +1245,7 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 	section: InventorySection,
 	ordinal: usize,
 	capacity: usize,
+	menu_index: usize,
 	interactive: bool,
 	thumbnails: &mut C,
 	menu: Entity,
@@ -1118,7 +1260,7 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 	let base = (
 		InventoryAIOPSlot { section, ordinal, capacity },
 		InventoryTile { section, region: InventoryRegion::Equipped, ordinal },
-		HudMenuItem { index: ordinal, menu },
+		HudMenuItem { index: menu_index, menu },
 		key,
 		EquippedOrderControls {
 			unequip: choice.unequip,
@@ -1137,6 +1279,7 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 			width: Val::Percent(100.0),
 			height: Val::Px(58.0),
 			min_height: Val::Px(58.0),
+			flex_shrink: 0.0,
 			padding: UiRect::axes(Val::Px(6.0), Val::Px(4.0)),
 			flex_direction: FlexDirection::Row,
 			align_items: AlignItems::Center,
@@ -1270,6 +1413,7 @@ fn spawn_empty_slot(
 	section: InventorySection,
 	ordinal: usize,
 	capacity: usize,
+	menu_index: usize,
 	menu: Entity,
 	interactive: bool,
 ) {
@@ -1279,6 +1423,7 @@ fn spawn_empty_slot(
 		Node {
 			width: Val::Percent(100.0),
 			min_height: Val::Px(48.0),
+			flex_shrink: 0.0,
 			flex_direction: FlexDirection::Row,
 			justify_content: JustifyContent::Center,
 			align_items: AlignItems::Center,
@@ -1297,7 +1442,8 @@ fn spawn_empty_slot(
 			// This visual flag retains the idle row stroke, as on occupied slots.
 			HoverTile { equipped: true, preserve_fill: false, face },
 			InventoryAIOPSlot { section, ordinal, capacity },
-			HudMenuItem { index: ordinal, menu },
+			InventoryTile { section, region: InventoryRegion::Equipped, ordinal },
+			HudMenuItem { index: menu_index, menu },
 			InventoryControl(character_ui_menu::InventoryControlAction::FocusDrawer),
 		));
 	}
@@ -1851,6 +1997,164 @@ mod tests {
 			.query_filtered::<Entity, With<InventoryAIOPDim>>()
 			.single(app.world())?;
 		assert_eq!(app.world().get::<Visibility>(dim), Some(&Visibility::Hidden));
+		assert_eq!(app.world_mut().query::<&InventoryFolderHeader>().iter(app.world()).count(), 0,);
+		assert_eq!(
+			app.world_mut()
+				.query::<&InventoryControl>()
+				.iter(app.world())
+				.filter(|control| {
+					matches!(
+						control.0,
+						character_ui_menu::InventoryControlAction::PreviousSection
+							| character_ui_menu::InventoryControlAction::NextSection
+					)
+				})
+				.count(),
+			2,
+		);
+		assert!(!app
+			.world()
+			.get::<InventoryMenuSession>(viewport)
+			.is_some_and(|session| session.folder_navigation));
+		Ok(())
+	}
+
+	#[test]
+	fn folders_share_one_scrolling_menu_and_keep_slot_ordinals_separate() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+		app.init_asset::<Image>();
+		let viewport = app.world_mut().spawn_empty().id();
+		for expanded in InventorySection::ALL.into_iter().map(Some).chain([None]) {
+			let section = expanded.unwrap_or(InventorySection::Clothing);
+			let session = InventoryMenuSession {
+				section,
+				expanded_section: expanded,
+				left_focus: expanded.map_or(InventoryLeftFocus::Header(section), |section| {
+					InventoryLeftFocus::Slot { section, ordinal: 0 }
+				}),
+				..default()
+			};
+			let node = MenuNode::Fragment(
+				InventorySection::ALL
+					.into_iter()
+					.map(|section| grid_section(section, 2))
+					.collect(),
+			);
+			let slots = app
+				.world_mut()
+				.run_system_once(move |mut commands: Commands, assets: Res<AssetServer>| {
+					let fonts = HudFonts {
+						black: Handle::default(),
+						semibold: Handle::default(),
+						regular: Handle::default(),
+						logo: Handle::default(),
+					};
+					fill_inventory_screen(
+						&mut commands,
+						viewport,
+						&fonts,
+						&assets,
+						InputPromptDevice::Keyboard,
+						&node,
+						true,
+						&session,
+						&mut crate::NoThumbnails,
+					)
+				})
+				.map_err(|error| anyhow::anyhow!("folder render: {error}"))?;
+			app.world_mut().flush();
+			let mut headers = app.world_mut().query::<(&InventoryFolderHeader, &HudMenuItem)>();
+			let mut headers = headers
+				.iter(app.world())
+				.map(|(header, row)| (header.0, row.index, row.menu))
+				.collect::<Vec<_>>();
+			headers.sort_by_key(|(_, index, _)| *index);
+			assert_eq!(headers.len(), InventorySection::ALL.len());
+			assert_eq!(
+				headers.iter().map(|(section, _, _)| *section).collect::<Vec<_>>(),
+				InventorySection::ALL
+			);
+			assert!(headers.iter().all(|(_, _, menu)| *menu == slots.menus[1]));
+			assert!(app.world().get::<HudScrollViewport>(slots.menus[1]).is_some());
+			let mut tiles =
+				app.world_mut().query::<(&InventoryTile, &InventoryAIOPSlot, &HudMenuItem)>();
+			let tiles = tiles.iter(app.world()).collect::<Vec<_>>();
+			let has_slot = expanded.is_some_and(|section| section != InventorySection::Lubikan);
+			assert_eq!(tiles.len(), usize::from(has_slot));
+			assert_eq!(slots.item_count[1], 5 + tiles.len());
+			if let Some(section) = expanded.filter(|_| has_slot) {
+				let (tile, slot, row) = tiles[0];
+				assert_eq!(tile.section, section);
+				assert_eq!(tile.ordinal, 0);
+				assert_eq!(slot.ordinal, 0);
+				assert_eq!(slot.capacity, 2);
+				assert_eq!(row.index, section.index() + 1);
+				assert_eq!(slots.focused_index[1], Some(row.index));
+			}
+			let mut controls = app.world_mut().query::<&InventoryControl>();
+			assert!(!controls.iter(app.world()).any(|control| matches!(
+				control.0,
+				character_ui_menu::InventoryControlAction::PreviousSection
+					| character_ui_menu::InventoryControlAction::NextSection
+			)));
+			let (header, index) = app
+				.world_mut()
+				.query::<(Entity, &InventoryFolderHeader, &HudMenuItem)>()
+				.iter(app.world())
+				.find_map(|(entity, _, row)| (row.index == 0).then_some((entity, row.index)))
+				.ok_or_else(|| anyhow::anyhow!("first folder header"))?;
+			app.world_mut()
+				.get_mut::<HudMenu>(slots.menus[1])
+				.ok_or_else(|| anyhow::anyhow!("folder menu"))?
+				.selected = index;
+			app.world_mut()
+				.run_system_once(menu_components::sync_hover_tiles)
+				.map_err(|error| anyhow::anyhow!("folder focus paint: {error}"))?;
+			assert_eq!(
+				app.world().get::<BackgroundColor>(header).map(|color| color.0),
+				Some(TEXT_YELLOW),
+			);
+			let captions = app
+				.world()
+				.get::<Children>(header)
+				.ok_or_else(|| anyhow::anyhow!("folder header captions"))?
+				.iter()
+				.collect::<Vec<_>>();
+			assert_eq!(captions.len(), 3);
+			let indicator = captions
+				.first()
+				.and_then(|entity| app.world().get::<Text>(*entity))
+				.ok_or_else(|| anyhow::anyhow!("folder indicator"))?;
+			assert_eq!(
+				indicator.0,
+				if expanded == Some(InventorySection::Clothing) { "-" } else { "+" },
+			);
+			for caption in &captions {
+				assert!(app.world().get::<TileWrap>(*caption).is_some());
+				assert_eq!(
+					app.world().get::<TextColor>(*caption).map(|color| color.0),
+					Some(TEXT_DEEP_BLUE),
+				);
+			}
+			app.world_mut()
+				.get_mut::<HudMenu>(slots.menus[1])
+				.ok_or_else(|| anyhow::anyhow!("folder menu"))?
+				.selected = index + 1;
+			app.world_mut()
+				.run_system_once(menu_components::sync_hover_tiles)
+				.map_err(|error| anyhow::anyhow!("folder idle paint: {error}"))?;
+			assert_eq!(
+				app.world().get::<BackgroundColor>(header).map(|color| color.0),
+				Some(Color::NONE),
+			);
+			for caption in captions {
+				assert_eq!(
+					app.world().get::<TextColor>(caption).map(|color| color.0),
+					Some(TEXT_YELLOW),
+				);
+			}
+		}
 		Ok(())
 	}
 
@@ -1911,8 +2215,14 @@ mod tests {
 			regular: Handle::default(),
 			logo: Handle::default(),
 		};
-		let mut session =
-			InventoryMenuSession { drawer: InventoryDrawerMode::Gallery, ..default() };
+		let mut session = InventoryMenuSession {
+			drawer: InventoryDrawerMode::Gallery,
+			left_focus: InventoryLeftFocus::Slot {
+				section: InventorySection::Clothing,
+				ordinal: 0,
+			},
+			..default()
+		};
 		session.section_memory[InventorySection::Clothing.index()]
 			[InventoryRegion::Drawer.index()]
 		.gallery_scroll = 1;
@@ -1943,7 +2253,7 @@ mod tests {
 				.get(app.world(), _slots.menus[1])
 				.map_err(|_| anyhow::anyhow!("missing Equipped menu"))?
 				.item_count,
-			2
+			7
 		);
 		let mut manual_scroll = app.world_mut().query::<(&HudScrollManual, &ScrollPosition)>();
 		let manual_offsets = manual_scroll.iter(app.world()).collect::<Vec<_>>();
@@ -1965,7 +2275,7 @@ mod tests {
 				&& node.flex_shrink == 0.0
 		}));
 		let mut tiles = app.world_mut().query::<&InventoryTile>();
-		assert_eq!(tiles.iter(app.world()).count(), 16);
+		assert_eq!(tiles.iter(app.world()).count(), 17);
 
 		let pluses = app
 			.world_mut()
@@ -1981,7 +2291,7 @@ mod tests {
 			.find(|(_, row)| {
 				app.world()
 					.get::<HudMenuItem>(*row)
-					.is_some_and(|item| item.menu == _slots.menus[1] && item.index == 1)
+					.is_some_and(|item| item.menu == _slots.menus[1] && item.index == 2)
 			})
 			.ok_or_else(|| anyhow::anyhow!("next empty slot"))?;
 		for &(label, row) in &pluses {

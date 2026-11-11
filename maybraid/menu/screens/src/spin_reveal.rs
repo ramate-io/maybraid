@@ -57,7 +57,11 @@ pub struct StarterKitViewport;
 
 impl StarterKitViewport {
 	fn initial_session() -> InventoryMenuSession {
-		InventoryMenuSession { region: InventoryRegion::Drawer, ..default() }
+		InventoryMenuSession {
+			region: InventoryRegion::Drawer,
+			folder_navigation: false,
+			..default()
+		}
 	}
 }
 
