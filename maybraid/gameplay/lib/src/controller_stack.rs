@@ -6,12 +6,12 @@ use bevy::scene::ScenePlugin;
 use bevy::time::TimeUpdateStrategy;
 use character_inventory_user::InventoryUser;
 use character_items::{FirearmMesh, Inventory, InventoryItem};
-use firearm_user::{register_firearm_user_runtime, FirearmUser, RecoilPattern};
+use firearm_user::{FirearmUser, RecoilPattern, register_firearm_user_runtime};
 use firearms::{
 	FireControl, FireOnTrigger, Weapon, WeaponFired, WeaponLaunchPose, WeaponRecoil, WeaponTrigger,
 };
 use fisticuffs_user::FisticuffsUser;
-use grenade_user::{register_grenade_user_runtime, GrenadePhase, GrenadeThrow, GrenadeUser};
+use grenade_user::{GrenadePhase, GrenadeThrow, GrenadeUser, register_grenade_user_runtime};
 use grenades::DropLiveGrenade;
 use lubikans::{
 	LubikanActivationDenied, LubikanActivationRefused, LubikanLedger, LubikanOwner,
@@ -24,17 +24,17 @@ use maybraid_controllers_core::{
 	UiTarget,
 };
 use maybraid_equipment::{
-	ActiveInventoryCyclingCategory, EquipmentHolster, EquippedItemHandler, InventoryCycling,
-	RoutedItemActor, EQUIPMENT_HOLSTER_SECS,
+	ActiveInventoryCyclingCategory, EQUIPMENT_HOLSTER_SECS, EquipmentHolster, EquippedItemHandler,
+	InventoryCycling, RoutedItemActor,
 };
-use maybraid_session::{apply_in_game_menu_pause, SessionCapabilities, WorldGameplayEnabled};
+use maybraid_session::{SessionCapabilities, WorldGameplayEnabled, apply_in_game_menu_pause};
 use maybraid_virtual_pad_controller::{
 	PadButton, PadOverlay, PadOverlayRequest, PrimaryVirtualPad, VirtualPadSystems,
 };
 use player::{CameraFollow, Player, PlayerLook, PlayerPlugin, PlayerUse};
 use player_camera::{
-	register_player_camera_runtime, CameraController, CameraRecoilHandoff, CameraTarget,
-	FollowCamera,
+	CameraController, CameraRecoilHandoff, CameraTarget, FollowCamera,
+	register_player_camera_runtime,
 };
 use std::time::Duration;
 use world_player::Player as VegetationPlayer;
@@ -282,12 +282,13 @@ fn denied_shot_produces_no_recoil() -> anyhow::Result<()> {
 	assert_eq!(app.world().get::<WeaponTrigger>(gun).map(|t| t.0), Some(true));
 	assert!(app.world_mut().resource_mut::<Messages<WeaponFired>>().drain().next().is_none());
 	app.update();
-	assert!(app
-		.world_mut()
-		.resource_mut::<Messages<CameraRecoilHandoff>>()
-		.drain()
-		.next()
-		.is_none());
+	assert!(
+		app.world_mut()
+			.resource_mut::<Messages<CameraRecoilHandoff>>()
+			.drain()
+			.next()
+			.is_none()
+	);
 	let denied = app
 		.world()
 		.entity(camera)
@@ -509,12 +510,13 @@ fn reassignment_then_capture_in_one_frame_cleans_the_old_actor() -> anyhow::Resu
 		Some(GrenadePhase::Ready),
 		"the reassignment event must still drop the old cook when capture follows in the same frame"
 	);
-	assert!(app
-		.world_mut()
-		.resource_mut::<Messages<DropLiveGrenade>>()
-		.drain()
-		.next()
-		.is_some());
+	assert!(
+		app.world_mut()
+			.resource_mut::<Messages<DropLiveGrenade>>()
+			.drain()
+			.next()
+			.is_some()
+	);
 	Ok(())
 }
 
@@ -566,15 +568,11 @@ fn lubikan_spends_once_from_addressed_dispatch() -> anyhow::Result<()> {
 		.id();
 	assign(&mut app, actor)?;
 	{
-		let mut ledger = app
-			.world_mut()
-			.get_mut::<LubikanLedger>(actor)
+		let mut ledger = lubikans::LubikanBodyOf::ledger_mut(app.world_mut(), actor)
 			.ok_or_else(|| anyhow::anyhow!("required fixture value"))?;
 		let _ = ledger.apply_to_equipped(512.0);
 	}
-	let before = app
-		.world()
-		.get::<LubikanLedger>(actor)
+	let before = lubikans::LubikanBodyOf::ledger(app.world(), actor)
 		.ok_or_else(|| anyhow::anyhow!("required fixture value"))?
 		.account(lubikans::LubikanAccountId::SELF)
 		.ok_or_else(|| anyhow::anyhow!("required fixture value"))?
@@ -582,9 +580,7 @@ fn lubikan_spends_once_from_addressed_dispatch() -> anyhow::Result<()> {
 		.current();
 	send_pad(&mut app, &[PadButton::X], 1.0);
 	app.update();
-	let after = app
-		.world()
-		.get::<LubikanLedger>(actor)
+	let after = lubikans::LubikanBodyOf::ledger(app.world(), actor)
 		.ok_or_else(|| anyhow::anyhow!("required fixture value"))?
 		.account(lubikans::LubikanAccountId::SELF)
 		.ok_or_else(|| anyhow::anyhow!("required fixture value"))?
@@ -604,9 +600,7 @@ fn lubikan_spends_once_from_addressed_dispatch() -> anyhow::Result<()> {
 		refused.is_some_and(|refused| refused.reason == LubikanActivationDenied::AlreadyActive),
 		"second spend must refuse, not charge again"
 	);
-	let again = app
-		.world()
-		.get::<LubikanLedger>(actor)
+	let again = lubikans::LubikanBodyOf::ledger(app.world(), actor)
 		.ok_or_else(|| anyhow::anyhow!("required fixture value"))?
 		.account(lubikans::LubikanAccountId::SELF)
 		.ok_or_else(|| anyhow::anyhow!("required fixture value"))?
@@ -856,10 +850,11 @@ fn loading_play_inventory_resume_home_on_plugin_session() -> anyhow::Result<()> 
 		session.install_loading(true);
 	}
 	app.update();
-	assert!(!app
-		.world()
-		.resource::<SessionCapabilities>()
-		.gameplay_enabled(app.world().resource::<InputRouter>()));
+	assert!(
+		!app.world()
+			.resource::<SessionCapabilities>()
+			.gameplay_enabled(app.world().resource::<InputRouter>())
+	);
 	assert!(app.world().resource::<SessionCapabilities>().streaming_enabled());
 
 	{
@@ -867,27 +862,30 @@ fn loading_play_inventory_resume_home_on_plugin_session() -> anyhow::Result<()> 
 		session.install_play(true);
 	}
 	app.update();
-	assert!(app
-		.world()
-		.resource::<SessionCapabilities>()
-		.gameplay_enabled(app.world().resource::<InputRouter>()));
+	assert!(
+		app.world()
+			.resource::<SessionCapabilities>()
+			.gameplay_enabled(app.world().resource::<InputRouter>())
+	);
 	assert!(app.world().resource::<SessionCapabilities>().physics_installed());
 
 	app.world_mut().resource_mut::<InputRouter>().set_paused(true);
 	app.update();
-	assert!(!app
-		.world()
-		.resource::<SessionCapabilities>()
-		.gameplay_enabled(app.world().resource::<InputRouter>()));
+	assert!(
+		!app.world()
+			.resource::<SessionCapabilities>()
+			.gameplay_enabled(app.world().resource::<InputRouter>())
+	);
 	assert!(app.world().resource::<SessionCapabilities>().physics_installed());
 	assert!(app.world().resource::<SessionCapabilities>().simulation_active());
 
 	app.world_mut().resource_mut::<InputRouter>().set_paused(false);
 	app.update();
-	assert!(app
-		.world()
-		.resource::<SessionCapabilities>()
-		.gameplay_enabled(app.world().resource::<InputRouter>()));
+	assert!(
+		app.world()
+			.resource::<SessionCapabilities>()
+			.gameplay_enabled(app.world().resource::<InputRouter>())
+	);
 
 	{
 		let mut session = app.world_mut().resource_mut::<SessionCapabilities>();
@@ -895,10 +893,11 @@ fn loading_play_inventory_resume_home_on_plugin_session() -> anyhow::Result<()> 
 	}
 	app.world_mut().resource_mut::<InputRouter>().set_paused(false);
 	app.update();
-	assert!(!app
-		.world()
-		.resource::<SessionCapabilities>()
-		.gameplay_enabled(app.world().resource::<InputRouter>()));
+	assert!(
+		!app.world()
+			.resource::<SessionCapabilities>()
+			.gameplay_enabled(app.world().resource::<InputRouter>())
+	);
 	assert!(!app.world().resource::<SessionCapabilities>().physics_installed());
 	assert!(app.world().resource::<SessionCapabilities>().menu_shell_active());
 	Ok(())
@@ -1108,18 +1107,20 @@ fn assembled_fisticuffs_item_swaps(
 		user.state.tick(fisticuffs_user::AttackTiming::JAB.duration_secs * 0.40);
 	}
 	app.update();
-	assert!(app
-		.world_mut()
-		.query::<&fisticuffs_user::FisticuffsHitSensor>()
-		.iter(app.world())
-		.any(|sensor| sensor.attacker == actor));
+	assert!(
+		app.world_mut()
+			.query::<&fisticuffs_user::FisticuffsHitSensor>()
+			.iter(app.world())
+			.any(|sensor| sensor.attacker == actor)
+	);
 	commit_ready_holster(&mut app, actor);
 	assert!(app.world().get::<FisticuffsUser>(actor).is_none());
-	assert!(!app
-		.world_mut()
-		.query::<&fisticuffs_user::FisticuffsHitSensor>()
-		.iter(app.world())
-		.any(|sensor| sensor.attacker == actor));
+	assert!(
+		!app.world_mut()
+			.query::<&fisticuffs_user::FisticuffsHitSensor>()
+			.iter(app.world())
+			.any(|sensor| sensor.attacker == actor)
+	);
 	assert_eq!(app.world().get::<EquippedItemHandler>(actor).copied(), Some(other_handler));
 	assert!(app.world().get::<PlayerUse>(actor).is_some());
 	let old_held = match other_handler {
