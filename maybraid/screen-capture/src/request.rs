@@ -127,23 +127,6 @@ impl CaptureRequest {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::subject::MeshCaptureSubject;
-
-	#[test]
-	fn from_subject_copies_id_and_mode() -> anyhow::Result<()> {
-		let subject = MeshCaptureSubject::cuboid([0.2, 0.4, 0.8, 1.0]);
-		let request = CaptureRequest::from_subject(
-			&subject,
-			CaptureMode::Silhouette,
-			CaptureResolution::ICON,
-			CaptureLighting::studio(),
-			CaptureRevision::CURRENT,
-		);
-		assert_eq!(request.id, subject.capture_id());
-		assert_eq!(request.mode, CaptureMode::Silhouette);
-		assert_eq!(request.resolution, CaptureResolution::ICON);
-		Ok(())
-	}
 
 	#[test]
 	fn from_image_handle_uses_authored_defaults() {

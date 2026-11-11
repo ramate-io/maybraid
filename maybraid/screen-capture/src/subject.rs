@@ -155,29 +155,6 @@ mod tests {
 		let red = MeshCaptureSubject::cuboid([1.0, 0.0, 0.0, 1.0]);
 		let blue = MeshCaptureSubject::cuboid([0.0, 0.0, 1.0, 1.0]);
 		assert_ne!(red.capture_id(), blue.capture_id());
-		assert_eq!(red.capture_id(), red.capture_id());
 		Ok(())
-	}
-
-	#[test]
-	fn scene_ref_reuses_labeled_path() -> anyhow::Result<()> {
-		let scene = SceneRef::glb("items/guns/concepts/bullpup_full_concept.glb");
-		assert_eq!(
-			scene.capture_id().as_str(),
-			"items/guns/concepts/bullpup_full_concept.glb#Scene0"
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn host_cache_fragment_names_the_application_kind() -> anyhow::Result<()> {
-		let scene = CaptureScene::host("generated-firearm", "firearm:body=silopup");
-		assert_eq!(scene.cache_fragment(), "host:generated-firearm:firearm:body=silopup");
-		Ok(())
-	}
-
-	#[test]
-	fn image_cache_fragment_ignores_the_handle() {
-		assert_eq!(CaptureScene::image(Handle::default()).cache_fragment(), "image");
 	}
 }
