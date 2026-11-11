@@ -38,7 +38,9 @@ impl ArrivalDisk {
 		self.radius.clamp(Self::PLANT_MIN, Self::PLANT_MAX)
 	}
 
-	/// Uniform XZ point in the plant disk. Height stays on `center`.
+	/// Uniform XZ point in the legacy Terrain/plant disk. Height stays on `center`.
+	/// Floor replacement uses the authored disk through [`place_nearby_among`]
+	/// instead: its footprint must not expand to the plant minimum.
 	pub fn offset(self, salt: u64) -> Vec3 {
 		let radius = self.plant_radius();
 		let distance = unit_f32(mix(salt ^ DISK_DISTANCE_SALT)).sqrt() * radius;
@@ -52,6 +54,27 @@ impl ArrivalDisk {
 		} else {
 			MovementLocation::new(self.offset(salt), AGENT_SEPARATION)
 		}
+	}
+
+	/// Bounded Floor arrival search. Every candidate retains the pin's exact Y.
+	fn floor_position(self, occupied: &[Vec3], min_separation: f32, seed: u64) -> Option<Vec3> {
+		for attempt in 0..16 {
+			let candidate = match attempt {
+				0 => self.floor_offset(seed),
+				1 => self.center,
+				_ => self.floor_offset(mix(seed.wrapping_add(attempt))),
+			};
+			if min_separation <= 0.0 || NearbyPlace::separated(candidate, occupied, min_separation)
+			{
+				return Some(candidate);
+			}
+		}
+		None
+	}
+
+	fn floor_offset(self, salt: u64) -> Vec3 {
+		let distance = unit_f32(mix(salt ^ DISK_DISTANCE_SALT)).sqrt() * self.radius.max(0.0);
+		self.center + polar_xz(distance, mix(salt ^ DISK_ANGLE_SALT))
 	}
 }
 
@@ -78,10 +101,20 @@ pub fn place_nearby(
 	fallback: NearbyFallback,
 ) -> NearbyPlace {
 	let excluded = previous.as_ref().map(core::slice::from_ref).unwrap_or(&[]);
+	// Empty occupancy cannot block a finite Floor record. Preserve the legacy
+	// infallible convenience API with an explicitly Terrain fallback.
 	place_nearby_among(registry, center, query, interests, excluded, seed, fallback, &[], 0.0)
+		.unwrap_or_else(|| NearbyPlace {
+			position: offset_in_fallback_ring(center, seed, fallback),
+			poi: None,
+			support: PoiSupport::Terrain,
+		})
 }
 
 /// [`place_nearby`] plus last-N exclusion and sibling occupancy.
+/// A selected Floor POI stays inside its authored arrival disk. If the bounded
+/// separation search cannot place it, return `None` so the caller can wait;
+/// never orbit the host or silently relabel an unsupported position as Floor.
 pub fn place_nearby_among(
 	registry: Option<&PoiRegistry>,
 	center: Vec3,
@@ -92,11 +125,16 @@ pub fn place_nearby_among(
 	fallback: NearbyFallback,
 	occupied: &[Vec3],
 	min_separation: f32,
-) -> NearbyPlace {
+) -> Option<NearbyPlace> {
 	let poi = registry.zip(interests).and_then(|(registry, interests)| {
 		registry.choose_in(center, query, interests, excluded, seed)
 	});
 	let placed = match poi {
+		Some(poi) if poi.support == PoiSupport::Floor => {
+			return poi.arrival_disk().floor_position(occupied, min_separation, seed).map(
+				|position| NearbyPlace { position, poi: Some(poi.id), support: PoiSupport::Floor },
+			);
+		}
 		Some(poi) => NearbyPlace {
 			position: ArrivalDisk::new(poi.position, poi.arrival_radius).offset(seed),
 			poi: Some(poi.id),
@@ -108,11 +146,13 @@ pub fn place_nearby_among(
 			support: PoiSupport::Terrain,
 		},
 	};
-	placed.clear_of(center, occupied, min_separation, seed)
+	Some(placed.clear_of(center, occupied, min_separation, seed))
 }
 
 impl NearbyPlace {
-	/// Orbit `center` until XZ is at least `min_separation` from every occupant.
+	/// Legacy Terrain/plant separation: orbit `center`, then push off a neighbor.
+	/// This is not bounded by an authored Floor footprint. Floor arrivals must
+	/// use [`place_nearby_among`] while the selected POI's disk is available.
 	pub fn clear_of(self, center: Vec3, occupied: &[Vec3], min_separation: f32, seed: u64) -> Self {
 		if occupied.is_empty() || min_separation <= 0.0 {
 			return self;
@@ -187,7 +227,7 @@ impl PoiRegistry {
 		fallback: NearbyFallback,
 		occupied: &[Vec3],
 		min_separation: f32,
-	) -> NearbyPlace {
+	) -> Option<NearbyPlace> {
 		place_nearby_among(
 			Some(self),
 			center,
@@ -215,9 +255,12 @@ fn polar_xz(distance: f32, angle_seed: u64) -> Vec3 {
 }
 
 #[cfg(test)]
+mod floor_tests;
+
+#[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::{Poi, PoiInterest, PoiKind, DEFAULT_NEARBY_RADIUS};
+	use crate::{DEFAULT_NEARBY_RADIUS, Poi, PoiInterest, PoiKind};
 
 	const CAMP: PoiKind = PoiKind::new("test/place-camp");
 
@@ -370,7 +413,7 @@ mod tests {
 	}
 
 	#[test]
-	fn occupancy_keeps_two_fallback_plants_apart() {
+	fn occupancy_keeps_two_fallback_plants_apart() -> anyhow::Result<()> {
 		let first = place_nearby(
 			None,
 			Vec3::ZERO,
@@ -390,8 +433,10 @@ mod tests {
 			NearbyFallback::new(4.0, 4.0),
 			&[first.position],
 			AGENT_SEPARATION,
-		);
+		)
+		.ok_or_else(|| anyhow::anyhow!("Terrain fallback should remain available"))?;
 		assert!((first.position.xz() - second.position.xz()).length() >= AGENT_SEPARATION - 1e-3);
+		Ok(())
 	}
 
 	#[test]
@@ -419,16 +464,18 @@ mod tests {
 			false,
 		)?;
 		let interests = PoiInterests::new([PoiInterest::new(CAMP, 1.0)]);
-		let placed = registry.place_nearby_among(
-			Vec3::ZERO,
-			NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),
-			&interests,
-			&[PoiId(11), PoiId(12)],
-			42,
-			NearbyFallback::new(4.0, 12.0),
-			&[],
-			0.0,
-		);
+		let placed = registry
+			.place_nearby_among(
+				Vec3::ZERO,
+				NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),
+				&interests,
+				&[PoiId(11), PoiId(12)],
+				42,
+				NearbyFallback::new(4.0, 12.0),
+				&[],
+				0.0,
+			)
+			.ok_or_else(|| anyhow::anyhow!("unoccupied destination should be available"))?;
 		assert_eq!(placed.poi, Some(PoiId(13)));
 		Ok(())
 	}
