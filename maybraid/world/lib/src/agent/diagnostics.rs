@@ -4,14 +4,17 @@
 pub(super) mod camera;
 mod npc;
 
-use avian3d::prelude::{GravityScale, LinearVelocity, Sleeping};
+use avian3d::prelude::{GravityScale, LinearVelocity, Position, ShapeHits, Sleeping};
 use bevy::prelude::*;
 use damage::{DamageApplied, DamageSystems, Died, Health};
 use firearms::WeaponFired;
-use maybraid_agent::{AgentDiagnosticActor, AgentEvent, AgentEventBody, AgentPlayerVitals};
+use maybraid_agent::{
+	AgentDiagnosticActor, AgentEvent, AgentEventBody, AgentNpcGroundHit, AgentNpcGroundHits,
+	AgentPlayerVitals,
+};
 use maybraid_session::SessionLifecycleSystems;
 use maybraid_spawns_support::PendingActorSupport;
-use player::{CharacterController, Grounded, Player as MotorPlayer};
+use player::{CharacterController, Grounded, LocomotionCapsule, Player as MotorPlayer};
 use player_camera::{CameraController, CameraTarget, FollowCamera};
 use world_player::{Player as VegetationPlayer, player::AwaitingTerrainSurface};
 
@@ -76,6 +79,9 @@ pub(super) type PlayerVitalsQuery<'w, 's> = Query<
 		Has<AwaitingTerrainSurface>,
 		Option<&'static GravityScale>,
 		Has<Sleeping>,
+		Option<&'static Position>,
+		Option<&'static ShapeHits>,
+		Option<&'static LocomotionCapsule>,
 	),
 >;
 
@@ -83,13 +89,37 @@ pub(super) fn player_vitals(
 	entity: Entity,
 	query: &PlayerVitalsQuery,
 ) -> Option<AgentPlayerVitals> {
-	let (health, velocity, motor, grounded, pending_support, awaiting_surface, gravity, sleeping) =
-		query.get(entity).ok()?;
+	let (
+		health,
+		velocity,
+		motor,
+		grounded,
+		pending_support,
+		awaiting_surface,
+		gravity,
+		sleeping,
+		position,
+		hits,
+		capsule,
+	) = query.get(entity).ok()?;
 	Some(AgentPlayerVitals {
 		entity: entity.to_bits().to_string(),
 		health: health.map(|pool| pool.current),
 		max_health: health.map(|pool| pool.max),
 		velocity: velocity.map(|velocity| velocity.0.to_array()),
+		physics_position: position.map(|position| position.0.to_array()),
+		ground_cast: hits.map(|hits| AgentNpcGroundHits {
+			count: hits.len(),
+			nearest: hits.iter().min_by(|a, b| a.distance.total_cmp(&b.distance)).map(|hit| {
+				AgentNpcGroundHit {
+					entity: hit.entity.to_bits().to_string(),
+					distance: hit.distance,
+					normal: (-hit.normal2).to_array(),
+				}
+			}),
+		}),
+		capsule_radius: capsule.map(|capsule| capsule.radius),
+		capsule_length: capsule.map(|capsule| capsule.length),
 		grounded: motor.then_some(grounded),
 		pending_support,
 		awaiting_surface,
@@ -249,6 +279,62 @@ mod tests {
 	use crate::agent::tests::idle_runtime;
 	use bevy::ecs::system::RunSystemOnce;
 	use maybraid_agent::EventSink;
+
+	#[test]
+	fn player_vitals_observe_existing_physics_hits_and_live_hull_read_only() -> anyhow::Result<()> {
+		use avian3d::prelude::ShapeHitData;
+		let mut world = World::new();
+		let collider = world.spawn_empty().id();
+		let hull = LocomotionCapsule::HUMANOID;
+		let position = Vec3::new(1.0, 2.0, 3.0);
+		let hits = ShapeHits(vec![ShapeHitData {
+			entity: collider,
+			distance: 0.441,
+			point1: Default::default(),
+			point2: Default::default(),
+			normal1: Vec3::Y,
+			normal2: Vec3::NEG_Y,
+		}]);
+		let entity = world
+			.spawn((
+				CharacterController,
+				Grounded,
+				Position(position),
+				hits.clone(),
+				hull,
+				Transform::from_translation(Vec3::new(4.0, 5.0, 6.0)),
+			))
+			.id();
+		let observed = world
+			.run_system_once(move |query: PlayerVitalsQuery| player_vitals(entity, &query))
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?
+			.ok_or_else(|| anyhow::anyhow!("missing player vitals"))?;
+		assert_eq!(observed.physics_position, Some(position.to_array()));
+		let cast = observed.ground_cast.ok_or_else(|| anyhow::anyhow!("missing raw cast"))?;
+		assert_eq!(cast.count, 1);
+		assert_eq!(
+			cast.nearest.map(|hit| (hit.distance, hit.normal)),
+			Some((0.441, [0.0, 1.0, 0.0]))
+		);
+		assert_eq!(
+			(observed.capsule_radius, observed.capsule_length),
+			(Some(hull.radius), Some(hull.length))
+		);
+		assert_eq!(world.get::<ShapeHits>(entity), Some(&hits));
+		assert_eq!(world.get::<Position>(entity).map(|p| p.0), Some(position));
+		assert_eq!(
+			world.get::<Transform>(entity).map(|t| t.translation),
+			Some(Vec3::new(4.0, 5.0, 6.0))
+		);
+		let missing = world.spawn_empty().id();
+		let unavailable = world
+			.run_system_once(move |query: PlayerVitalsQuery| player_vitals(missing, &query))
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?
+			.ok_or_else(|| anyhow::anyhow!("missing fallback vitals"))?;
+		assert!(unavailable.physics_position.is_none() && unavailable.ground_cast.is_none());
+		assert!(unavailable.capsule_radius.is_none() && unavailable.capsule_length.is_none());
+		Ok(())
+	}
 
 	#[test]
 	fn records_damage_death_and_actual_shots_read_only_and_does_not_replay_paused_messages()

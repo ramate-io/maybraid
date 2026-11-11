@@ -19,6 +19,17 @@ pub struct AgentPlayerVitals {
 	pub health: Option<f32>,
 	pub max_health: Option<f32>,
 	pub velocity: Option<[f32; 3]>,
+	/// Existing Avian position, independent of the Transform in the player row.
+	#[serde(default)]
+	pub physics_position: Option<[f32; 3]>,
+	/// Existing raw caster hits; absence differs from a present empty hit list.
+	#[serde(default)]
+	pub ground_cast: Option<AgentNpcGroundHits>,
+	/// Live locomotion hull in metres; length is cylinder length, not total height.
+	#[serde(default)]
+	pub capsule_radius: Option<f32>,
+	#[serde(default)]
+	pub capsule_length: Option<f32>,
 	/// None for the fallback controller whose ground marker is private.
 	pub grounded: Option<bool>,
 	pub pending_support: bool,
@@ -339,6 +350,25 @@ mod camera_tests {
 		] {
 			assert!(DiagnosticCommand::parse(line).is_err(), "accepted {line}");
 		}
+		Ok(())
+	}
+}
+
+#[cfg(test)]
+mod player_observation_tests {
+	use super::AgentPlayerVitals;
+
+	#[test]
+	fn old_player_vitals_leave_new_observations_unavailable() -> anyhow::Result<()> {
+		let vitals: AgentPlayerVitals = serde_json::from_value(serde_json::json!({
+			"entity": "18446744073709551615", "health": null, "max_health": null,
+			"velocity": null, "grounded": null, "pending_support": false,
+			"awaiting_surface": false, "gravity_scale": null, "sleeping": false
+		}))?;
+		assert!(vitals.physics_position.is_none());
+		assert!(vitals.ground_cast.is_none());
+		assert!(vitals.capsule_radius.is_none());
+		assert!(vitals.capsule_length.is_none());
 		Ok(())
 	}
 }
