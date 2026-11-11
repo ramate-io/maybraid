@@ -127,6 +127,7 @@ mod tests {
 		assert!(app.world().get_resource::<Messages<LubikanActivationReport>>().is_some());
 		assert!(app.world().get_resource::<Messages<LubikanActivationFinished>>().is_some());
 		assert!(app.world().get_resource::<Messages<LubikanOwnerLifetime>>().is_some());
+		assert!(app.world().get_resource::<Messages<crate::LubikanSummonDeparture>>().is_some());
 		let extra = LubikanDefinition::new(LubikanDefinitionId::from_raw(2), 15.0, 5.0);
 		let id = fixture.unlock(app.world_mut(), extra).ok_or_else(|| anyhow!("unlock"))?;
 		assert_ne!(id, LubikanAccountId::SELF);
