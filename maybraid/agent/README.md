@@ -179,6 +179,7 @@ published outside the repo (Traces releases) state the version they target.
 | 7 | Inventory cycling: `wait_for` / `expect` also match `cycle_category` / `weapon` / `skill_map` / `lubikan`; `cycle` and `equipped` events; per-frame cycling invariants (Y vs category, D-pad vs item, queue membership). Also `tanz_mode`, `tanz`, and `screenshot` (GPU readback of the presented 3D surface); Tanz mode / active Tanz emit `kind: tanz` events |
 | 8 | Opt-in gameplay diagnostics: `--agent-diagnostics`, player vitals, accepted damage/death/actual-shot events, and agent-only `diagnostics on`, `off`, and `health AMOUNT` console utilities |
 | 9 | Agent-only `diagnostics view YAW PITCH` resets the selected player's follow camera once, records `fixture_view`, and adds optional player pitch telemetry |
+| 10 | One-shot `diagnostics npcs RADIUS` / `diagnostics npc DECIMAL_ENTITY_BITS` snapshots of at most eight nearby or one selected NPC, using cached support, ground, contact and weapon evidence |
 
 ## Opt-in gameplay diagnostics
 
@@ -218,7 +219,8 @@ health fixtures when comparing behavior or timing.
 flag-enabled run. Paused events are discarded rather than replayed on resume.
 Fixture mutations remain recorded even while observation is paused. Collect
 diagnostic evidence outside benchmark windows: event serialization and flushed
-disk writes have a cost. No nearby-NPC scans or visibility probes are added.
+disk writes have a cost. Nearby-NPC selection runs only for an explicit snapshot request, never at the
+player sample cadence. No visibility probes are added.
 
 For repeatable capture framing, `diagnostics view YAW_RADIANS PITCH_RADIANS`
 sets the selected player's single follow-camera yaw/pitch once. Both angles
@@ -230,6 +232,31 @@ The optional `player.pitch` field is emitted while diagnostics are enabled.
 Recoil and ordinary input continue after the reset; this utility does not aim,
 track targets, or continuously compensate recoil. Use the same explicit resets
 on both sides of a capture comparison and disclose them as view fixtures.
+
+For a visible floating or non-firing NPC, request a one-shot snapshot:
+
+```jsonl
+{"cmd":"console","line":"diagnostics npcs 30"}
+{"cmd":"console","line":"diagnostics npc 4294967295"}
+```
+
+Both require the startup diagnostics flag and enabled observations. Radius must
+be finite and in `(0, 100]` metres. Nearest selection includes at most eight mob
+character bodies by player XZ distance with stable entity ties; ignoring Y keeps
+floating actors selectable. Direct opaque decimal entity selection does not scan
+NPCs. One pending request is allowed per frame, consumed once in `Last` as an
+`npc_snapshot` event with its command `request_id`; a retired target produces an
+error in that event. The command acknowledgement means queued, not yet sampled.
+
+Snapshots read existing velocity/gravity, motor `Grounded`, shape-hit count and
+nearest hit, cached ground normal, pending-support failure/held/search data,
+engaged/player contact ages, spotting success/attempt ages, cached muzzle
+trajectory visibility/age, and held-weapon trigger/launch readiness. Missing
+components serialize as `null`. Cached ground normals and trajectories are not
+new geometry checks or a computed firing decision; pending support does not
+identify the private waiting-versus-settling phase. Snapshots do not mutate
+actors, acquire targets or fabricate sightings. Take them outside benchmark
+windows because request-time selection and JSONL writes have a cost.
 
 ## Events
 
@@ -264,3 +291,19 @@ binary is built with `bevy/trace_tracy`.
 Check it alongside body heights when validating spawn completion: suspended
 bodies have not yet passed support and clearance checks. Older event files omit
 this field and deserialize it as zero; that default is not evidence of placement.
+
+### Explicit free-camera fixture
+
+These additive agent-console utilities require `--agent-diagnostics` at launch, but also work after `diagnostics off`; they do not enable periodic observations. Ordinary console/gameplay camera semantics are unchanged. In the full game `mode free` disables player follow but does not guarantee a camera reset, because the legacy refocus command and shared gameplay camera use different controller types.
+
+```
+{"cmd":"console","line":"mode free"}
+{"cmd":"wait","secs":1}
+{"cmd":"console","line":"diagnostics camera 150 30 -350 0 -0.12"}
+{"cmd":"wait","secs":1}
+{"cmd":"console","line":"diagnostics camera"}
+```
+
+`diagnostics camera X Y Z YAW PITCH` sets an absolute unparented camera pose with finite metres and radians, wrapping yaw/clamping pitch consistently with `diagnostics view`. `diagnostics camera` reads the actual camera without mutation. Both require Free mode, a closed map and exactly one active `Camera3d` with shared `FollowCamera`; parented cameras and custom projections are rejected. The setter resets shared map/focus camera state so idle free-fly does not restore a map pose. It does not freeze input, rumble or future gameplay changes. `diagnostics view` remains the existing player-targeted yaw/pitch utility.
+
+Requests emit command Started then finish once in Last, after ordinary camera updates. On success `camera_snapshot.request_id` equals the command ID and includes actual local/global translation and quaternion, shared controller angles, and perspective FOV/near/far/aspect or orthographic near/far/scale. Setter records have `applied_local=true,global_pose_pre_apply=true`: the global transform still comes from propagation before that local write. Wait and request a separate snapshot (`false,false`) to verify the propagated world pose. Failures emit the matching command Failed and no snapshot. Camera/entity IDs are process-local. There is no per-frame camera scan or new observation stream; API version and older scripts remain compatible.

@@ -11,8 +11,11 @@ rust-version = { workspace = true }
 
 [features]
 default = []
+# Opt-in structured Tracy phases and completion accounting; no default logging.
+generation-tracing = ["dep:lod-generation-diagnostics"]
 
 [dependencies]
+lod-generation-diagnostics = { workspace = true, optional = true }
 lod-cascade = { workspace = true }
 lod-cascade-system = { workspace = true }
 bevy = { workspace = true }
@@ -20,6 +23,8 @@ gimme-core = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
 
 [lints]

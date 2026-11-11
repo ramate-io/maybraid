@@ -145,7 +145,7 @@ impl DistantTilePois for WorldPoiTiles {
 		type Urban = urbanization_layer_model::Urbanization<richmond::Richmond<Ground>>;
 
 		out.clear();
-		let mut cx = GenerationContext::new(storage);
+		let mut cx = GenerationContext::with_origin(storage, "journey-poi");
 		let mut scratch = Vec::new();
 		if interests.contains(VEGETATION_POI) {
 			let span = bevy::log::trace_span!(

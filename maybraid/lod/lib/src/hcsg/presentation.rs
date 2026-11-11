@@ -102,7 +102,7 @@ pub fn presentation<C, T>(
 impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 	/// `false` when demand is busy; defer the rest of the frame.
 	fn request(&mut self, demand: &HcsgDemand) -> bool {
-		match self.request.sync::<T>(demand) {
+		match self.request.sync_with_origin::<T>(demand, "presentation") {
 			Ok(None) => true,
 			Ok(Some(sync)) => {
 				// Same transition as [`Self::spawn`] on `Ok(None)`: the id is gone after an epoch.
@@ -131,6 +131,22 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 			}
 			Err(Busy) => return,
 		};
+		#[cfg(feature = "generation-tracing")]
+		let _operation = (!published.ids.is_empty())
+			.then(|| {
+				lod_generation_diagnostics::Operation::new(
+					"presentation.read",
+					std::any::type_name::<T>(),
+					lod_generation_diagnostics::Correlation {
+						subscription: subscription.trace_raw(),
+						application_session: self.session,
+						..Default::default()
+					},
+				)
+			})
+			.flatten();
+		#[cfg(feature = "generation-tracing")]
+		let _scope = _operation.as_ref().and_then(lod_generation_diagnostics::Operation::enter);
 		let mut read_all = true;
 		let entries = match storage.try_entries::<T>(&published.ids) {
 			Ok(entries) => entries,
@@ -146,6 +162,8 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 			};
 			if let Some(host) = self.hosts.get_mut(id).filter(|host| host.version == entry.version)
 			{
+				#[cfg(feature = "generation-tracing")]
+				lod_generation_diagnostics::update(|c| c.unchanged += 1);
 				host.session = self.session;
 				continue;
 			}
@@ -178,6 +196,17 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 		{
 			return;
 		}
+		#[cfg(feature = "generation-tracing")]
+		let _operation = lod_generation_diagnostics::Operation::new(
+			"presentation.retire",
+			std::any::type_name::<T>(),
+			lod_generation_diagnostics::Correlation {
+				application_session: self.session,
+				..Default::default()
+			},
+		);
+		#[cfg(feature = "generation-tracing")]
+		let _scope = _operation.as_ref().and_then(lod_generation_diagnostics::Operation::enter);
 		self.retired_against = Some(self.request.wanted().to_vec());
 		let wanted = self.request.wanted();
 		self.hosts.retain(|_, host| {
@@ -203,6 +232,8 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 pub struct RetiredHost;
 
 fn retire_host(commands: &mut Commands, entity: Entity) {
+	#[cfg(feature = "generation-tracing")]
+	lod_generation_diagnostics::update(|c| c.retired += 1);
 	commands.entity(entity).try_insert((RetiredHost, Visibility::Hidden));
 }
 
@@ -224,6 +255,14 @@ pub(super) fn despawn_retired_hosts(world: &mut World) {
 		return;
 	}
 
+	#[cfg(feature = "generation-tracing")]
+	let _operation = lod_generation_diagnostics::Operation::new(
+		"maintenance.despawn",
+		"RetiredHost",
+		Default::default(),
+	);
+	#[cfg(feature = "generation-tracing")]
+	let _scope = _operation.as_ref().and_then(lod_generation_diagnostics::Operation::enter);
 	let start = Instant::now();
 	let mut despawned = 0u32;
 	for entity in entities {
@@ -234,6 +273,8 @@ pub(super) fn despawn_retired_hosts(world: &mut World) {
 			break;
 		}
 		world.despawn(entity);
+		#[cfg(feature = "generation-tracing")]
+		lod_generation_diagnostics::update(|c| c.removed += 1);
 		despawned += 1;
 	}
 }
@@ -253,10 +294,28 @@ fn spawn_host<T: GenerationScheme + SemanticLodScene>(
 	};
 	let level = entry.value.scene_lod_level(&lod_ref);
 	let node = HcsgNode { id, version: entry.version, bounds: entry.bounds, value: entry.value };
-	commands
-		.spawn_scene(lod_host_scene_pending(level, node.bounds))
-		.insert(node)
-		.id()
+	let entity = commands.spawn_scene(lod_host_scene_pending(level, node.bounds)).id();
+	#[cfg(feature = "generation-tracing")]
+	commands.entity(entity).queue(move |mut entity: bevy::prelude::EntityWorldMut| {
+		// This closure executes in command application, not while enqueuing.
+		let _operation = lod_generation_diagnostics::Operation::new(
+			"presentation.apply",
+			std::any::type_name::<T>(),
+			Default::default(),
+		);
+		#[cfg(feature = "generation-tracing")]
+		let _scope = _operation.as_ref().and_then(lod_generation_diagnostics::Operation::enter);
+		let version = node.version.0;
+		entity.insert(node);
+		lod_generation_diagnostics::update(|c| {
+			c.applied += 1;
+			c.first_version = version;
+			c.last_version = version;
+		});
+	});
+	#[cfg(not(feature = "generation-tracing"))]
+	commands.entity(entity).insert(node);
+	entity
 }
 
 /// Presents `T` within channel `C`'s regions: requests its generation and

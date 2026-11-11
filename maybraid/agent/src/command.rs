@@ -6,7 +6,7 @@ use crate::inventory::AgentMatcher;
 
 /// Script API version. Bump when a command is added or its meaning changes;
 /// record each bump in `maybraid/agent/README.md`.
-pub const SCRIPT_API_VERSION: u32 = 9;
+pub const SCRIPT_API_VERSION: u32 = 10;
 
 fn default_wait_for_timeout() -> f32 {
 	10.0

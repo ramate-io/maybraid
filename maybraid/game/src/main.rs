@@ -68,8 +68,10 @@ fn main() {
 			.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() })
 			.with_pad_hid(),
 	)
-	.add_plugins(GamePlugin)
-	.run();
+	.add_plugins(GamePlugin);
+	#[cfg(feature = "gpu-frame-capture")]
+	app.add_plugins(maybraid_gpu_frame_capture::GpuFrameCapturePlugin);
+	app.run();
 }
 
 const ENV_RESOLUTION: &str = "MAYBRAID_RESOLUTION";

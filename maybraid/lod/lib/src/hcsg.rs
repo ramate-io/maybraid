@@ -29,6 +29,8 @@ mod runtime;
 mod session;
 mod storage;
 mod test_support;
+#[cfg(feature = "generation-tracing")]
+mod trace;
 mod worker;
 
 #[cfg(test)]

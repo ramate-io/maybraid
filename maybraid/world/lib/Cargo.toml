@@ -24,6 +24,7 @@ chico = { workspace = true }
 vegetation-components = { workspace = true }
 clap = { workspace = true }
 combat-hud = { workspace = true }
+combat-targeting = { workspace = true }
 lubikans = { workspace = true }
 lubikans-damage = { workspace = true }
 character-items = { workspace = true }

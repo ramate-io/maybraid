@@ -71,9 +71,18 @@ impl HcsgRequest {
 	///
 	/// `Ok(None)`: already aligned. `Ok(Some)`: replaced or dropped.
 	/// `Err(Busy)`: demand lock contended; caller defers.
+	#[cfg(test)]
 	pub(crate) fn sync<T: GenerationScheme>(
 		&mut self,
 		demand: &HcsgDemand,
+	) -> Result<Option<RequestSync>, Busy> {
+		self.sync_with_origin::<T>(demand, "external")
+	}
+
+	pub(crate) fn sync_with_origin<T: GenerationScheme>(
+		&mut self,
+		demand: &HcsgDemand,
+		origin: &'static str,
 	) -> Result<Option<RequestSync>, Busy> {
 		let live = match self.subscription {
 			Some(subscription) => demand.try_is_live(subscription)?,
@@ -90,8 +99,13 @@ impl HcsgRequest {
 		self.requested = self.wanted.clone();
 		if wants {
 			let regions = self.wanted.clone();
-			self.subscription =
-				Some(demand.subscribe::<T>(self.subscription, regions, self.focus, self.class));
+			self.subscription = Some(demand.subscribe_with_origin::<T>(
+				self.subscription,
+				regions,
+				self.focus,
+				self.class,
+				origin,
+			));
 		} else if let Some(subscription) = self.subscription.take() {
 			demand.unsubscribe(subscription);
 		}
