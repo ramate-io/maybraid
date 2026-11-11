@@ -21,13 +21,17 @@ impl SubscriptionId {
 	pub(super) fn new(raw: u64) -> Self {
 		Self(raw)
 	}
+	#[cfg(feature = "generation-tracing")]
+	pub(in crate::hcsg) fn trace_raw(self) -> u64 {
+		self.0
+	}
 }
 
 pub(super) type Discover = fn(&mut GenerationContext, Aabb3d) -> Vec<Id>;
 pub(super) type Generate = fn(&mut GenerationContext, Id) -> bool;
 
 pub(super) fn discover<T: GenerationScheme>(cx: &mut GenerationContext, region: Aabb3d) -> Vec<Id> {
-	T::original_ids_for(cx, region).into_iter().map(|OriginalId(id)| id).collect()
+	cx.original_ids_for::<T>(region).into_iter().map(|OriginalId(id)| id).collect()
 }
 
 pub(crate) fn generate<T: GenerationScheme>(cx: &mut GenerationContext, id: Id) -> bool {
@@ -54,6 +58,8 @@ pub(super) struct Subscription {
 	/// This scheme's type plus every type its fills have read. Shared with
 	/// replacements so a mid-quantum finish still lands on the live chain.
 	pub reach: Arc<Mutex<HashSet<TypeId>>>,
+	#[cfg(feature = "generation-tracing")]
+	pub trace: Option<super::super::trace::JobTrace>,
 }
 
 impl Subscription {

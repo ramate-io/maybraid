@@ -69,6 +69,7 @@ members = [
   "maybraid/world/layers/language/geneva",
 
   "maybraid/lod/lib",
+  "maybraid/lod/generation-diagnostics",
   "maybraid/lod/avian",
   "maybraid/lod/gimme",
   "maybraid/lod/cascade",
@@ -115,6 +116,7 @@ members = [
   "maybraid/items/skill-map",
   "maybraid/items/equipment",
   "maybraid/game",
+  "maybraid/diagnostics/gpu-frame-capture",
   "maybraid/world/modes/discover",
   "maybraid/world/modes/reliquary",
   "maybraid/controllers/virtual-pad",
@@ -355,6 +357,7 @@ language-layer-model = { path = "maybraid/world/layers/language/model" }
 geneva = { path = "maybraid/world/layers/language/geneva" }
 
 lod = { path = "maybraid/lod/lib" }
+lod-generation-diagnostics = { path = "maybraid/lod/generation-diagnostics" }
 lod-avian = { path = "maybraid/lod/avian" }
 lod-gimme = { path = "maybraid/lod/gimme" }
 lod-cascade = { path = "maybraid/lod/cascade" }
