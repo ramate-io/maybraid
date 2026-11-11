@@ -12,7 +12,7 @@ use chico::ChicoGrove;
 use geneva::{DevelopmentPlaces, LanguageGround};
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{GenerationContext, HcsgStorage};
-use mob_characters::{URBAN_POI, VEGETATION_POI};
+use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
 	collect_matching_in_xz_tile, hashed_poi_id, DistantTilePois, PoiEntry, PoiInterests, PoiOrigin,
 	PoiSet, PoiSupport,
@@ -147,33 +147,67 @@ impl DistantTilePois for WorldPoiTiles {
 		out.clear();
 		let mut cx = GenerationContext::new(storage);
 		let mut scratch = Vec::new();
-		collect_matching_in_xz_tile::<GrovePois>(
-			&mut cx,
-			tile,
-			tile_size,
-			center_y,
-			interests,
-			&mut scratch,
-		);
-		out.extend(scratch.iter().copied());
-		collect_matching_in_xz_tile::<UrbanPois<Ground>>(
-			&mut cx,
-			tile,
-			tile_size,
-			center_y,
-			interests,
-			&mut scratch,
-		);
-		out.extend(scratch.iter().copied());
-		collect_matching_in_xz_tile::<PlacePois<Urban>>(
-			&mut cx,
-			tile,
-			tile_size,
-			center_y,
-			interests,
-			&mut scratch,
-		);
-		out.extend(scratch.iter().copied());
+		{
+			let span = bevy::log::trace_span!(
+				target: "maybraid.poi.profile",
+				"poi.grove_tile",
+				tile_x = tile.x,
+				tile_z = tile.y,
+				requested = interests.contains(VEGETATION_POI),
+				prior_matches = out.len(),
+			);
+			let _entered = span.enter();
+			collect_matching_in_xz_tile::<GrovePois>(
+				&mut cx,
+				tile,
+				tile_size,
+				center_y,
+				interests,
+				&mut scratch,
+			);
+			out.extend(scratch.iter().copied());
+		}
+		{
+			let span = bevy::log::trace_span!(
+				target: "maybraid.poi.profile",
+				"poi.urban_tile",
+				tile_x = tile.x,
+				tile_z = tile.y,
+				requested = interests.contains(URBAN_POI),
+				prior_matches = out.len(),
+			);
+			let _entered = span.enter();
+			collect_matching_in_xz_tile::<UrbanPois<Ground>>(
+				&mut cx,
+				tile,
+				tile_size,
+				center_y,
+				interests,
+				&mut scratch,
+			);
+			out.extend(scratch.iter().copied());
+		}
+		{
+			let span = bevy::log::trace_span!(
+				target: "maybraid.poi.profile",
+				"poi.place_tile",
+				tile_x = tile.x,
+				tile_z = tile.y,
+				requested_local = interests.contains(LOCAL_POI),
+				requested_saloon = interests.contains(SALOON_POI),
+				prior_matches = out.len(),
+			);
+			let _entered = span.enter();
+			collect_matching_in_xz_tile::<PlacePois<Urban>>(
+				&mut cx,
+				tile,
+				tile_size,
+				center_y,
+				interests,
+				&mut scratch,
+			);
+			out.extend(scratch.iter().copied());
+		}
 		out.sort_unstable_by_key(|poi| poi.id);
 		out.dedup_by_key(|poi| poi.id);
 	}
