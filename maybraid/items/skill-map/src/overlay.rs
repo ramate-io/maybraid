@@ -28,9 +28,17 @@ const FIREARM_CARD_BORDER: f32 = 1.5;
 const FIREARM_CARD_RADIUS: f32 = 8.0;
 
 /// How strongly overlay mode warps the map (and the world seen through it).
-pub const OVERLAY_WARP: f32 = 0.85;
+/// Was `0.85`; lowered so refraction does not hide the 3D world.
+pub const OVERLAY_WARP: f32 = 0.28;
 /// How much stained-glass color washes the warped map.
-pub const OVERLAY_GLASS: f32 = 0.42;
+/// Was `0.42`; lowered so pane tint stays a hint rather than a wash.
+pub const OVERLAY_GLASS: f32 = 0.12;
+/// Tile overlay uniform when expanded (`style.w`). Was `1.0`.
+pub const OVERLAY_TILE_AMOUNT: f32 = 0.50;
+/// Map-camera clear alpha while expanded. Was `0.14`.
+pub const OVERLAY_CLEAR_ALPHA: f32 = 0.04;
+/// Expanded frame fill alpha. Was `0.04`.
+pub const OVERLAY_FRAME_FILL_ALPHA: f32 = 0.018;
 
 /// Collapsed corner HUD versus the full-screen stained-glass overlay.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -44,7 +52,7 @@ impl SkillKind {
 	pub fn overlay_clear(self, overlay: SkillMapOverlay) -> Color {
 		let base = self.viewport_clear();
 		if overlay.expanded() {
-			base.with_alpha(0.14)
+			base.with_alpha(OVERLAY_CLEAR_ALPHA)
 		} else {
 			base
 		}
@@ -176,7 +184,7 @@ impl SkillMapOverlay {
 
 	pub fn frame_fill(self) -> Color {
 		if self.expanded() {
-			Color::srgba(0.02, 0.01, 0.04, 0.04)
+			Color::srgba(0.02, 0.01, 0.04, OVERLAY_FRAME_FILL_ALPHA)
 		} else {
 			Color::srgba(0.0, 0.0, 0.0, 0.12)
 		}
@@ -197,6 +205,12 @@ impl SkillMapOverlay {
 			ZIndex(0)
 		}
 	}
+}
+
+/// Expand-edge cue so overlay SFX fires once per RB hold, not every frame.
+#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SkillMapOverlayCue {
+	pub user: Entity,
 }
 
 /// Viewport camera image shown through the overlay compositor.
@@ -261,14 +275,17 @@ pub struct SkillMapOverlayPlugin;
 impl Plugin for SkillMapOverlayPlugin {
 	fn build(&self, app: &mut App) {
 		embedded_asset!(app, "overlay_material.wesl");
-		app.add_plugins(UiMaterialPlugin::<SkillMapOverlayMaterial>::default());
+		app.add_plugins(UiMaterialPlugin::<SkillMapOverlayMaterial>::default())
+			.add_message::<SkillMapOverlayCue>();
+		crate::sound::configure_overlay_audio(app);
 	}
 }
 
 /// Mirror [`SkillMapHeld`] onto overlay layout, tile overlay uniforms, and the compositor.
 pub fn sync_skill_map_overlay(
 	enabled: Res<SkillMapEnabled>,
-	mut users: Query<(&SkillMapUser, &SkillMapHeld, &mut SkillMapOverlay)>,
+	mut users: Query<(Entity, &SkillMapUser, &SkillMapHeld, &mut SkillMapOverlay)>,
+	mut cues: MessageWriter<SkillMapOverlayCue>,
 	mut huds: Query<(&SkillMapMember, &mut Node), With<SkillMapHud>>,
 	mut frames: Query<
 		(&SkillMapMember, &mut Node, &mut BorderColor, &mut BackgroundColor),
@@ -289,10 +306,13 @@ pub fn sync_skill_map_overlay(
 	mut overlay_materials: Option<ResMut<Assets<SkillMapOverlayMaterial>>>,
 	mut tiles: Option<ResMut<Assets<SkillMapTileMaterial>>>,
 ) {
-	for (user, held, mut overlay) in &mut users {
+	for (entity, user, held, mut overlay) in &mut users {
 		let next =
 			if enabled.0 { SkillMapOverlay::from_held(held.0) } else { SkillMapOverlay::Collapsed };
 		if *overlay != next {
+			if next.expanded() {
+				cues.write(SkillMapOverlayCue { user: entity });
+			}
 			*overlay = next;
 		}
 		apply_overlay_layout(
@@ -307,7 +327,11 @@ pub fn sync_skill_map_overlay(
 		);
 	}
 	if let Some(tiles) = tiles.as_deref_mut() {
-		let amount = if users.iter().any(|(_, _, overlay)| overlay.expanded()) { 1.0 } else { 0.0 };
+		let amount = if users.iter().any(|(_, _, _, overlay)| overlay.expanded()) {
+			OVERLAY_TILE_AMOUNT
+		} else {
+			0.0
+		};
 		set_tile_overlay_amount(tiles, amount);
 	}
 }
@@ -441,13 +465,36 @@ mod tests {
 	fn overlay_app() -> App {
 		let mut app = App::new();
 		register_character_controller(&mut app);
-		app.add_plugins(MinimalPlugins).init_resource::<SkillMapEnabled>().add_systems(
-			Update,
-			(crate::cursor::sync_skill_map_held, sync_skill_map_overlay)
-				.chain()
-				.after(CharacterControlSystems),
-		);
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<SkillMapEnabled>()
+			.add_message::<SkillMapOverlayCue>()
+			.add_systems(
+				Update,
+				(crate::cursor::sync_skill_map_held, sync_skill_map_overlay)
+					.chain()
+					.after(CharacterControlSystems),
+			)
+			.add_systems(PostUpdate, crate::sound::play_overlay_activate_sounds);
 		app
+	}
+
+	fn overlay_sound_app() -> App {
+		use maybraid_audio::{decode_wav_mono, AudioClip};
+		let mut app = overlay_app();
+		app.add_plugins(AssetPlugin::default());
+		app.init_asset::<AudioClip>();
+		let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+			.join("../../assets")
+			.join(crate::OVERLAY_ACTIVATE_SOUND);
+		let bytes = std::fs::read(&file).unwrap_or_else(|_| panic!("{}", file.display()));
+		let clip = AudioClip { frames: decode_wav_mono(&bytes).expect("mono wav") };
+		let handle = app.world_mut().resource_mut::<Assets<AudioClip>>().add(clip);
+		app.world_mut().insert_resource(crate::SkillMapOverlaySounds::from_clip(handle));
+		app
+	}
+
+	fn activations(app: &App) -> u32 {
+		app.world().resource::<crate::SkillMapOverlaySounds>().activations()
 	}
 
 	fn spawn_overlay_user(app: &mut App, ordinary: bool) -> (Entity, Entity) {
@@ -564,6 +611,54 @@ mod tests {
 		send_pad(&mut app, source, 1, hold_rb(&[PadButton::BumperFocus, PadButton::BumperFire]));
 		app.update();
 		assert_eq!(overlay_of(&app, user), SkillMapOverlay::Collapsed);
+		Ok(())
+	}
+
+	fn assert_activate_once_per_hold(app: &mut App, user: Entity, source: Entity) {
+		drive_rb(app, source, 1, false);
+		assert_eq!(overlay_of(app, user), SkillMapOverlay::Collapsed);
+		assert_eq!(activations(app), 0);
+		drive_rb(app, source, 2, true);
+		assert_eq!(overlay_of(app, user), SkillMapOverlay::Expanded);
+		assert_eq!(activations(app), 1, "RB hold must play the activate clip once");
+		drive_rb(app, source, 3, true);
+		assert_eq!(overlay_of(app, user), SkillMapOverlay::Expanded);
+		assert_eq!(activations(app), 1, "held RB must not retrigger the activate clip");
+		drive_rb(app, source, 4, false);
+		assert_eq!(overlay_of(app, user), SkillMapOverlay::Collapsed);
+		assert_eq!(activations(app), 1);
+		drive_rb(app, source, 5, true);
+		assert_eq!(overlay_of(app, user), SkillMapOverlay::Expanded);
+		assert_eq!(activations(app), 2, "a second hold is a new activation");
+	}
+
+	#[test]
+	fn laufer_rb_hold_plays_activate_sound_once() -> anyhow::Result<()> {
+		let mut app = overlay_sound_app();
+		let (user, _) = spawn_overlay_user(&mut app, true);
+		let source = assign_pad(&mut app, user);
+		assert_activate_once_per_hold(&mut app, user, source);
+		Ok(())
+	}
+
+	#[test]
+	fn tanzer_rb_hold_plays_activate_sound_once() -> anyhow::Result<()> {
+		let mut app = overlay_sound_app();
+		let (user, _) = spawn_overlay_user(&mut app, false);
+		let source = assign_pad(&mut app, user);
+		assert_activate_once_per_hold(&mut app, user, source);
+		Ok(())
+	}
+
+	#[test]
+	fn bumper_chord_does_not_play_activate_sound() -> anyhow::Result<()> {
+		let mut app = overlay_sound_app();
+		let (user, _) = spawn_overlay_user(&mut app, true);
+		let source = assign_pad(&mut app, user);
+		send_pad(&mut app, source, 1, hold_rb(&[PadButton::BumperFocus, PadButton::BumperFire]));
+		app.update();
+		assert_eq!(overlay_of(&app, user), SkillMapOverlay::Collapsed);
+		assert_eq!(activations(&app), 0, "LB+RB chord must not play the overlay clip");
 		Ok(())
 	}
 }

@@ -20,6 +20,7 @@ mod icon;
 mod map;
 mod overlay;
 mod preview;
+mod sound;
 mod tile_material;
 mod tiles;
 mod user;
@@ -50,13 +51,18 @@ pub use feed::{
 };
 pub use map::{authored_map, authored_map_from_spec, authored_maps, SkillKind, SkillMapId};
 pub use overlay::{
-	SkillMapBackdrop, SkillMapOverlay, SkillMapOverlayMaterial, SkillMapOverlayPane, OVERLAY_GLASS,
-	OVERLAY_WARP,
+	SkillMapBackdrop, SkillMapOverlay, SkillMapOverlayCue, SkillMapOverlayMaterial,
+	SkillMapOverlayPane, OVERLAY_CLEAR_ALPHA, OVERLAY_FRAME_FILL_ALPHA, OVERLAY_GLASS,
+	OVERLAY_TILE_AMOUNT, OVERLAY_WARP,
 };
 pub use preview::{
 	spawn_skill_map_catalog_preview, spawn_skill_map_spin_reveal_hud,
 	spawn_skill_map_spin_reveal_image, SkillMapCatalogPreview, SkillMapMenuPreview,
 	SkillMapSpinRevealHud, SkillMapSpinRevealHudView, CATALOG_PREVIEW_PX,
+};
+pub use sound::{
+	SkillMapOverlaySounds, OVERLAY_ACTIVATE_SOUND, OVERLAY_ACTIVATE_SOUND_NAME,
+	OVERLAY_ACTIVATE_SPATIAL_RADIUS, OVERLAY_ACTIVATE_VOLUME,
 };
 pub use tile_material::{SkillMapTileAssets, SkillMapTileMaterialPlugin};
 pub use tiles::{classify_noise, TileKind};
@@ -217,7 +223,7 @@ mod tests {
 		assert_ne!(SkillKind::Rockadder.viewport_clear(), SkillKind::Cosimo.viewport_clear());
 		assert_eq!(
 			SkillKind::Fireball.overlay_clear(SkillMapOverlay::Expanded),
-			SkillKind::Fireball.viewport_clear().with_alpha(0.14)
+			SkillKind::Fireball.viewport_clear().with_alpha(OVERLAY_CLEAR_ALPHA)
 		);
 		let seeded = authored_map(SkillKind::Fireball, 99);
 		assert_eq!(seeded.seed, 99);

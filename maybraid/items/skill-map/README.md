@@ -25,10 +25,11 @@ count as repeated flicks. After the last timing window closes, a 1.5-second
 pause leads into the same sequence automatically.
 
 Holding RB expands the map from the bottom-right corner into a full-screen
-stained-glass overlay: tile shaders switch to overlay mode (semi-transparent
-panes, stronger sway) and a compositor warps the map camera image so the world
-shows through coloured, refracted glass. The clock pauses when skill-map input
-is inactive or gameplay is suspended.
+stained-glass overlay: tile shaders switch to overlay mode (lighter tint,
+gentler sway) and a compositor warps the map camera image so the world stays
+readable through coloured, refracted glass. The expand edge plays the authored
+`change_item` clip on the UI bus; releasing RB is silent. The clock pauses when
+skill-map input is inactive or gameplay is suspended.
 Changing the equipped map starts a fresh feed, waiting for its first flick.
 Timing and sequence definitions live in `src/feed.rs`; presentation lives in
 `src/feed_view.rs`.

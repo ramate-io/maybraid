@@ -58,6 +58,14 @@ fn tile_kind() -> f32 { return material.style.x; }
 fn tile_seed() -> f32 { return material.style.z; }
 fn overlay_amount() -> f32 { return saturate(material.style.w); }
 
+// Overlay tile strengths. Previous sway 1.65 / tint 0.58 / alpha 0.40+0.16 / rim 0.12.
+const OVERLAY_SWAY_BOOST: f32 = 0.40;
+const OVERLAY_TINT_MIX: f32 = 0.22;
+const OVERLAY_ALPHA_SCALE: f32 = 0.28;
+const OVERLAY_ALPHA_BIAS: f32 = 0.05;
+const OVERLAY_RIM: f32 = 0.05;
+const OVERLAY_ALPHA_MIX_GAIN: f32 = 1.85;
+
 /// Frequencies stay off the 16-unit grid so value-noise cells do not reprint the tiles.
 fn tile_sway(world: vec2<f32>, t: f32) -> vec2<f32> {
     let n = fbm(world * 0.053);
@@ -134,7 +142,7 @@ fn vertex(vertex: Vertex) -> VertexOutput {
             world_pos.x = pinched.x;
             world_pos.y = pinched.y;
         }
-        let sway = tile_sway(world_pos.xy, t) * (1.0 + overlay_amount() * 1.65);
+        let sway = tile_sway(world_pos.xy, t) * (1.0 + overlay_amount() * OVERLAY_SWAY_BOOST);
         world_pos.x += sway.x;
         world_pos.y += sway.y;
     }
@@ -394,10 +402,11 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     if glass > 0.001 {
         let luma = dot(color, vec3<f32>(0.30, 0.59, 0.11));
         let pane = color * color * 1.28 + vec3<f32>(0.16, 0.05, 0.22) * luma;
-        color = mix(color, pane, glass * 0.58);
+        color = mix(color, pane, glass * OVERLAY_TINT_MIX);
         let rim = pow(saturate(1.0 - abs(in.uv.x - 0.5) * abs(in.uv.y - 0.5) * 4.0), 2.0);
-        color += vec3<f32>(0.85, 0.72, 0.40) * rim * glass * 0.12;
-        alpha = mix(alpha, alpha * 0.40 + 0.16, glass);
+        color += vec3<f32>(0.85, 0.72, 0.40) * rim * glass * OVERLAY_RIM;
+        let glass_mix = saturate(glass * OVERLAY_ALPHA_MIX_GAIN);
+        alpha = mix(alpha, alpha * OVERLAY_ALPHA_SCALE + OVERLAY_ALPHA_BIAS, glass_mix);
     }
     return vec4<f32>(color, alpha);
 }

@@ -7453,6 +7453,7 @@ dependencies = [
  "evasion-intelligence",
  "item-icons",
  "lod-avian",
+ "maybraid-audio",
  "maybraid-character-controller",
  "maybraid-controllers-core",
  "maybraid-virtual-pad-controller",

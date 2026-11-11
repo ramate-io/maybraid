@@ -18,6 +18,16 @@ var map_sampler: sampler;
 @group(1) @binding(2)
 var<uniform> params: OverlayParams;
 
+// Compositor strengths. Previous values (warp 0.046, fringe 0.006, pane 0.55,
+// came 0.82, sample 0.52, bias 0.20, came-alpha 0.25) veiling the world.
+const OVERLAY_WARP_SCALE: f32 = 0.028;
+const OVERLAY_FRINGE_SCALE: f32 = 0.0025;
+const OVERLAY_PANE_MIX: f32 = 0.32;
+const OVERLAY_CAME_MIX: f32 = 0.28;
+const OVERLAY_ALPHA_SAMPLE: f32 = 0.88;
+const OVERLAY_ALPHA_BIAS: f32 = 0.045;
+const OVERLAY_CAME_ALPHA: f32 = 0.10;
+
 fn hash12(p: vec2<f32>) -> f32 {
     let p3 = fract(vec3<f32>(p.x, p.y, p.x) * vec3<f32>(0.1031, 0.1030, 0.0973));
     let d = p3 + vec3<f32>(dot(p3, p3.yzx + 33.33));
@@ -94,18 +104,22 @@ fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
     let seed = hash12(floor(in.uv * vec2<f32>(7.0, 5.5)));
     let n = value_noise(in.uv * 18.0 + local * 3.0);
     let normal = normalize(vec2<f32>(local.x, local.y) + vec2<f32>(n - 0.5, 0.5 - n) * 0.35);
-    let warp = normal * (0.046 * params.warp * amount);
+    let warp = normal * (OVERLAY_WARP_SCALE * params.warp * amount);
     let uv = clamp(in.uv + warp, vec2<f32>(0.0), vec2<f32>(1.0));
-    let fringe = 0.006 * amount * params.warp;
+    let fringe = OVERLAY_FRINGE_SCALE * amount * params.warp;
     let sample = textureSample(map_texture, map_sampler, uv);
     let r = textureSample(map_texture, map_sampler, uv + vec2<f32>(fringe, 0.0)).r;
     let g = sample.g;
     let b = textureSample(map_texture, map_sampler, uv - vec2<f32>(fringe, 0.0)).b;
     var color = mix(sample.xyz, vec3<f32>(r, g, b), amount);
     let pane = glass_tint(seed);
-    color = mix(color, mix(color, pane, 0.55), amount * params.glass);
-    color = mix(color, vec3<f32>(0.06, 0.04, 0.05), came * amount * 0.82);
+    color = mix(color, mix(color, pane, OVERLAY_PANE_MIX), amount * params.glass);
+    color = mix(color, vec3<f32>(0.06, 0.04, 0.05), came * amount * OVERLAY_CAME_MIX);
     let lead = 0.22 + 0.18 * n;
-    let alpha = mix(sample.a, sample.a * 0.52 + 0.20 + came * lead * 0.25, amount);
+    let alpha = mix(
+        sample.a,
+        sample.a * OVERLAY_ALPHA_SAMPLE + OVERLAY_ALPHA_BIAS + came * lead * OVERLAY_CAME_ALPHA,
+        amount,
+    );
     return vec4<f32>(color, alpha);
 }

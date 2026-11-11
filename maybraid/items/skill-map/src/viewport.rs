@@ -1055,17 +1055,20 @@ mod tests {
 	#[test]
 	fn chrome_and_track_queries_are_disjoint() {
 		let mut app = App::new();
-		app.add_plugins(MinimalPlugins).init_resource::<SkillMapEnabled>().add_systems(
-			Update,
-			(
-				sync_viewport_chrome,
-				crate::overlay::sync_skill_map_overlay,
-				sync_firearm_chrome,
-				sync_grenade_chrome,
-				track_cursors,
-				tick_debraid,
-			),
-		);
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<SkillMapEnabled>()
+			.add_message::<crate::SkillMapOverlayCue>()
+			.add_systems(
+				Update,
+				(
+					sync_viewport_chrome,
+					crate::overlay::sync_skill_map_overlay,
+					sync_firearm_chrome,
+					sync_grenade_chrome,
+					track_cursors,
+					tick_debraid,
+				),
+			);
 		app.update();
 	}
 
