@@ -1079,9 +1079,12 @@ fn quantize_metres(y: f32) -> i32 {
 
 /// Stable tie-breaking keeps the selected body observable even when heights tie.
 fn actor_is_lower(current: Option<(Entity, f32)>, entity: Entity, y: f32) -> bool {
-	current.is_none_or(|(previous, previous_y)| {
-		y < previous_y || (y == previous_y && entity.to_bits() < previous.to_bits())
-	})
+	y.is_finite()
+		&& current.is_none_or(|(previous, previous_y)| {
+			!previous_y.is_finite()
+				|| y < previous_y
+				|| (y == previous_y && entity.to_bits() < previous.to_bits())
+		})
 }
 
 fn agent_actor_census(
@@ -1128,6 +1131,9 @@ fn agent_actor_census(
 		pending_support += u32::from(pending);
 		let y = transform.translation.y;
 		body_count += 1;
+		if !y.is_finite() {
+			continue;
+		}
 		if actor_is_lower(min_entity.zip(min_y), entity, y) {
 			min_entity = Some(entity);
 			min_y = Some(y);
@@ -1325,6 +1331,10 @@ mod tests {
 		let first = world.spawn_empty().id();
 		let second = world.spawn_empty().id();
 		assert!(actor_is_lower(None, first, -1999.0));
+		assert!(!actor_is_lower(None, first, f32::NAN));
+		assert!(!actor_is_lower(None, first, f32::NEG_INFINITY));
+		assert!(!actor_is_lower(Some((first, -1999.0)), second, f32::INFINITY));
+		assert!(actor_is_lower(Some((first, f32::NAN)), second, -1999.0));
 		assert!(actor_is_lower(Some((first, -193.0)), second, -1999.0));
 		assert!(!actor_is_lower(Some((first, -1999.0)), second, -193.0));
 		let (lower, higher) =

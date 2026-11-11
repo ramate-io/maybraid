@@ -141,7 +141,8 @@ pub enum AgentEventBody {
 		min_y: Option<f32>,
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		max_y: Option<f32>,
-		/// Composed height under the lowest body, when that cell is published.
+		/// Published scalar terrain height under the lowest body; excludes tube
+		/// carving and does not establish the actual collision floor.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		ground_at_min_y: Option<f32>,
 		/// Identity and full pose of the body selected by the minimum-Y census.
