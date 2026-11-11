@@ -144,6 +144,19 @@ pub enum AgentEventBody {
 		/// Composed height under the lowest body, when that cell is published.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		ground_at_min_y: Option<f32>,
+		/// Identity and full pose of the body selected by the minimum-Y census.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		min_body: Option<AgentDiagnosticActor>,
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		min_body_physics_position: Option<[f32; 3]>,
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		min_body_velocity: Option<[f32; 3]>,
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		min_body_health: Option<f32>,
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		min_body_downed: Option<bool>,
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		min_body_pending_support: Option<bool>,
 	},
 	/// Locked first-life / death spawn picker opened or closed.
 	Picker {
@@ -230,6 +243,8 @@ impl AgentEvent {
 				min_y,
 				max_y,
 				ground_at_min_y,
+				min_body,
+				..
 			} => {
 				let mut message = format!(
 					"agent.actors hosts={hosts} bodies={bodies} brains={brains} pending_support={pending_support}"
@@ -239,6 +254,9 @@ impl AgentEvent {
 				}
 				if let Some(max_y) = max_y {
 					message.push_str(&format!(" max_y={max_y:.1}"));
+				}
+				if let Some(body) = min_body {
+					message.push_str(&format!(" min_body={}", body.entity));
 				}
 				if let Some(ground) = ground_at_min_y {
 					message.push_str(&format!(" ground={ground:.1}"));
@@ -316,6 +334,12 @@ mod tests {
 				min_y: Some(-2.0),
 				max_y: Some(14.0),
 				ground_at_min_y: Some(0.5),
+				min_body: None,
+				min_body_physics_position: None,
+				min_body_velocity: None,
+				min_body_health: None,
+				min_body_downed: None,
+				min_body_pending_support: None,
 			},
 		};
 		let line = event.to_line().map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -327,6 +351,19 @@ mod tests {
 				"agent.actors hosts=4 bodies=61 brains=61 pending_support=2 min_y=-2.0 max_y=14.0 ground=0.5"
 			)
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn minimum_actor_observation_roundtrips() -> anyhow::Result<()> {
+		let line = r#"{"t":2.0,"frame":20,"kind":"actors","hosts":1,"bodies":3,"brains":3,"min_body":{"entity":"18446744073709551615","player":false,"position":[10.0,-1999.3,20.0]},"min_body_physics_position":[10.0,-1999.3,20.0],"min_body_velocity":[0.0,0.0,0.0],"min_body_health":25.0,"min_body_downed":false,"min_body_pending_support":false}"#;
+		let event = AgentEvent::parse_line(line).map_err(|e| anyhow::anyhow!("{e}"))?;
+		let encoded = event.to_line().map_err(|e| anyhow::anyhow!("{e}"))?;
+		assert_eq!(AgentEvent::parse_line(&encoded).map_err(|e| anyhow::anyhow!("{e}"))?, event);
+		assert!(encoded.contains("18446744073709551615"));
+		assert!(event
+			.tracy_message()
+			.is_some_and(|message| message.contains("min_body=18446744073709551615")));
 		Ok(())
 	}
 
@@ -351,6 +388,8 @@ mod tests {
 				min_y: None,
 				max_y: None,
 				ground_at_min_y: None,
+				min_body: None,
+				min_body_downed: None,
 				..
 			}
 		));

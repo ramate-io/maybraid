@@ -1067,6 +1067,7 @@ struct ActorCensus {
 	bodies: u32,
 	brains: u32,
 	pending_support: u32,
+	min_body: Option<Entity>,
 	/// 0.5 m bins so a post-spawn sink is a census change.
 	min_y_q: Option<i32>,
 	max_y_q: Option<i32>,
@@ -1076,13 +1077,28 @@ fn quantize_metres(y: f32) -> i32 {
 	(y * 2.0).round() as i32
 }
 
+/// Stable tie-breaking keeps the selected body observable even when heights tie.
+fn actor_is_lower(current: Option<(Entity, f32)>, entity: Entity, y: f32) -> bool {
+	current.is_none_or(|(previous, previous_y)| {
+		y < previous_y || (y == previous_y && entity.to_bits() < previous.to_bits())
+	})
+}
+
 fn agent_actor_census(
 	runtime: Res<AgentRuntime>,
 	time: Res<Time>,
 	surface: DurhamSurface,
 	hosts: Query<(), With<MobScene>>,
 	bodies: Query<
-		(&Transform, Has<maybraid_spawns_support::PendingActorSupport>),
+		(
+			Entity,
+			&Transform,
+			Option<&Position>,
+			Option<&LinearVelocity>,
+			Option<&Health>,
+			Has<damage::Downed>,
+			Has<maybraid_spawns_support::PendingActorSupport>,
+		),
 		(With<CharacterSceneRecipe>, Without<MotorPlayer>),
 	>,
 	brains: Query<(), With<ThreatManagementIntelligence>>,
@@ -1097,28 +1113,46 @@ fn agent_actor_census(
 		return;
 	}
 	let mut min_y = None;
+	let mut min_entity = None;
+	let mut min_body = None;
+	let mut min_body_physics_position = None;
+	let mut min_body_velocity = None;
+	let mut min_body_health = None;
+	let mut min_body_downed = None;
+	let mut min_body_pending_support = None;
 	let mut max_y = None;
 	let mut ground_at_min_y = None;
 	let mut body_count = 0u32;
 	let mut pending_support = 0u32;
-	for (transform, pending) in &bodies {
+	for (entity, transform, position, velocity, health, downed, pending) in &bodies {
 		pending_support += u32::from(pending);
 		let y = transform.translation.y;
 		body_count += 1;
-		match min_y {
-			Some(current) if y >= current => {}
-			_ => {
-				min_y = Some(y);
-				ground_at_min_y = surface.composed_height_at(transform.translation.xz());
-			}
+		if actor_is_lower(min_entity.zip(min_y), entity, y) {
+			min_entity = Some(entity);
+			min_y = Some(y);
+			min_body = Some(maybraid_agent::AgentDiagnosticActor {
+				entity: entity.to_bits().to_string(),
+				player: false,
+				name: None,
+				position: Some(transform.translation.to_array()),
+			});
+			min_body_physics_position = position.map(|position| position.0.to_array());
+			min_body_velocity = velocity.map(|velocity| velocity.0.to_array());
+			min_body_health = health.map(|health| health.current);
+			min_body_downed = Some(downed);
+			min_body_pending_support = Some(pending);
+			ground_at_min_y = surface.composed_height_at(transform.translation.xz());
 		}
 		max_y = Some(max_y.map_or(y, |current: f32| current.max(y)));
 	}
+
 	let census = ActorCensus {
 		hosts: hosts.iter().len() as u32,
 		bodies: body_count,
 		brains: brains.iter().len() as u32,
 		pending_support,
+		min_body: min_entity,
 		min_y_q: min_y.map(quantize_metres),
 		max_y_q: max_y.map(quantize_metres),
 	};
@@ -1141,6 +1175,12 @@ fn agent_actor_census(
 				min_y,
 				max_y,
 				ground_at_min_y,
+				min_body,
+				min_body_physics_position,
+				min_body_velocity,
+				min_body_health,
+				min_body_downed,
+				min_body_pending_support,
 			},
 		},
 	);
@@ -1278,6 +1318,22 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 
 	use super::*;
+
+	#[test]
+	fn actor_minimum_selects_full_height_then_stable_identity() {
+		let mut world = World::new();
+		let first = world.spawn_empty().id();
+		let second = world.spawn_empty().id();
+		assert!(actor_is_lower(None, first, -1999.0));
+		assert!(actor_is_lower(Some((first, -193.0)), second, -1999.0));
+		assert!(!actor_is_lower(Some((first, -1999.0)), second, -193.0));
+		let (lower, higher) =
+			if first.to_bits() < second.to_bits() { (first, second) } else { (second, first) };
+		assert!(actor_is_lower(Some((higher, -1999.0)), lower, -1999.0));
+		assert!(!actor_is_lower(Some((lower, -1999.0)), higher, -1999.0));
+		let original = ActorCensus { min_body: Some(first), min_y_q: Some(-3998), ..default() };
+		assert!(original != ActorCensus { min_body: Some(second), ..original });
+	}
 
 	#[test]
 	fn jump_maps_to_face_a() {
