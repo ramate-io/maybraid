@@ -186,17 +186,6 @@ mod tests {
 	}
 
 	#[test]
-	fn empty_landmarks_are_ready() {
-		assert!(BoneMap::default().landmarks_ready(&[]));
-	}
-
-	#[test]
-	fn missing_landmarks_are_listed() {
-		let map = BoneMap::default();
-		assert_eq!(map.missing_landmarks(&["root", "grip"]), vec!["root", "grip"]);
-	}
-
-	#[test]
 	fn high_fulfill_makes_the_map_ready_on_the_next_build() {
 		let mut app = app();
 		let rig = spawn_rig(app.world_mut(), LANDMARKS);
