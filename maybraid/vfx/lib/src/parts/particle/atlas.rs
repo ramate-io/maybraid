@@ -28,6 +28,27 @@ pub fn paint_atlas(grid: UVec2, cell_px: u32, cell: fn(f32, f32, f32) -> [u8; 4]
 	atlas_image(width, height, data)
 }
 
+pub fn paint_ooze_blob() -> Image {
+	const W: u32 = 32;
+	const H: u32 = 32;
+	let mut data = vec![0u8; (W * H * 4) as usize];
+	for y in 0..H {
+		for x in 0..W {
+			let u = (x as f32 + 0.5) / W as f32;
+			let v = (y as f32 + 0.5) / H as f32;
+			let dx = (u - 0.5) * 2.0;
+			let dy = (v - 0.5) * 2.4;
+			let r = (dx * dx + dy * dy).sqrt();
+			let core = (1.0 - (r / 0.92).clamp(0.0, 1.0)).powf(2.2);
+			let tail = (1.0 - ((u - 0.72).max(0.0) * 3.4)).clamp(0.0, 1.0) * (1.0 - r * 0.5).max(0.0);
+			let alpha = (core * 0.85 + tail * 0.35).clamp(0.0, 1.0);
+			let i = ((y * W + x) * 4) as usize;
+			data[i..i + 4].copy_from_slice(&value(0.95, alpha));
+		}
+	}
+	atlas_image(W, H, data)
+}
+
 pub fn paint_spark_taper() -> Image {
 	const W: u32 = 64;
 	const H: u32 = 16;

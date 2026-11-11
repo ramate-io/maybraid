@@ -116,6 +116,11 @@ pub fn shade_colors(shade: ParticleShade, palette: &ExplosionPalette) -> [Vec4; 
 			ExplosionPalette::vec4(palette.fire_mid),
 			ExplosionPalette::vec4(palette.fire_cool),
 		],
+		ParticleShade::Ooze => [
+			ExplosionPalette::vec4(palette.spark),
+			ExplosionPalette::vec4(palette.fire_mid),
+			ExplosionPalette::vec4(palette.fire_cool),
+		],
 		ParticleShade::Smoke => [
 			ExplosionPalette::vec4(palette.smoke_lit),
 			ExplosionPalette::vec4(mix_lin(palette.smoke_lit, palette.smoke_shadow, 0.45)),
@@ -123,6 +128,11 @@ pub fn shade_colors(shade: ParticleShade, palette: &ExplosionPalette) -> [Vec4; 
 		],
 		ParticleShade::Spark => [
 			ExplosionPalette::vec4(palette.spark),
+			ExplosionPalette::vec4(palette.fire_mid),
+			ExplosionPalette::vec4(palette.fire_cool),
+		],
+		ParticleShade::Spirit => [
+			ExplosionPalette::vec4(palette.fire_hot),
 			ExplosionPalette::vec4(palette.fire_mid),
 			ExplosionPalette::vec4(palette.fire_cool),
 		],
