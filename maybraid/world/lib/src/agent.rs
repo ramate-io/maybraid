@@ -7,9 +7,9 @@ use bevy::prelude::*;
 use damage::{Health, Hit};
 use durham::{CascadeChunk, Durham, DurhamSurface, WorldBaseTerrain};
 use maybraid_agent::{
-	AgentArgs, AgentButton, AgentCommand, AgentEvent, AgentEventBody, CommandStatus,
-	DiagnosticCommand, EventSink, InventoryObservation, LineInbox, MenuObservation, PadIntent,
-	Playback, SCRIPT_API_VERSION, TickEffect, TickView, read_script_commands, take_leading_start,
+	read_script_commands, take_leading_start, AgentArgs, AgentButton, AgentCommand, AgentEvent,
+	AgentEventBody, CommandStatus, DiagnosticCommand, EventSink, InventoryObservation, LineInbox,
+	MenuObservation, PadIntent, Playback, TickEffect, TickView, SCRIPT_API_VERSION,
 };
 use maybraid_character_controller::OrdinaryLocomotion;
 use maybraid_session::WorldGameplayEnabled;
@@ -23,16 +23,16 @@ use player_camera::CameraController;
 use tanz_user::{ControlMode, TanzExecution, TanzId, TanzUser};
 use terrain_layer_model::TerrainStreaming;
 use threat_management_intelligence::ThreatManagementIntelligence;
+use world_player::player::{holding_elevation, player_spawn_point_at, AwaitingTerrainSurface};
 use world_player::Player as VegetationPlayer;
-use world_player::player::{AwaitingTerrainSurface, holding_elevation, player_spawn_point_at};
 
-use crate::PlayerSpawnXz;
-use crate::agent_inventory::{AgentInventoryState, AgentLastPadIntent, publish_agent_inventory};
+use crate::agent_inventory::{publish_agent_inventory, AgentInventoryState, AgentLastPadIntent};
 use crate::commands::PlaygroundCommand;
 use crate::control::{WorldMenuShell, WorldSurfaceReady};
 use crate::map_view::WorldMapView;
 use crate::render_scale::{PresentationChurn, RequestVisualStyle, VisualStyle};
 use crate::screenshot::{GameplayScreenshotFinished, RequestGameplayScreenshot};
+use crate::PlayerSpawnXz;
 
 mod diagnostics;
 
@@ -647,6 +647,7 @@ fn agent_apply_world_ops(
 	time: Res<Time>,
 	mut hits: MessageWriter<Hit>,
 	mut diagnostics: Option<ResMut<diagnostics::AgentDiagnostics>>,
+	mut camera_requests: Option<ResMut<diagnostics::camera::CameraRequests>>,
 	mut players: Query<
 		(
 			Entity,
@@ -720,6 +721,7 @@ fn agent_apply_world_ops(
 			AgentCommand::Console { line }
 				if line.split_whitespace().next() == Some("diagnostics") =>
 			{
+				let mut queued_camera = false;
 				let result = (|| -> Result<String, String> {
 					let diagnostics =
 						diagnostics.as_deref_mut().ok_or("requires --agent-diagnostics")?;
@@ -777,6 +779,14 @@ fn agent_apply_world_ops(
 							);
 							Ok(format!("player fixture health={amount}"))
 						}
+						DiagnosticCommand::Camera { pose } => {
+							camera_requests
+								.as_deref_mut()
+								.ok_or("camera diagnostics unavailable")?
+								.queue(id, line.clone(), pose)?;
+							queued_camera = true;
+							Ok("camera request queued for Last".into())
+						}
 						DiagnosticCommand::View { yaw, pitch } => {
 							let (entity, transform, _, _, _, _, _) =
 								players.single().map_err(|_| "no single live motor player")?;
@@ -810,6 +820,7 @@ fn agent_apply_world_ops(
 					}
 				})();
 				let (status, detail) = match result {
+					Ok(_) if queued_camera => continue,
 					Ok(detail) => (CommandStatus::Finished, detail),
 					Err(detail) => (CommandStatus::Failed, detail),
 				};
@@ -1316,8 +1327,8 @@ mod tests {
 	}
 
 	#[test]
-	fn exclusive_playback_is_neutral_before_ready_and_keeps_script_buttons_after_ready()
-	-> anyhow::Result<()> {
+	fn exclusive_playback_is_neutral_before_ready_and_keeps_script_buttons_after_ready(
+	) -> anyhow::Result<()> {
 		for exclusive in [false, true] {
 			let mut world = World::new();
 			let source = world.spawn_empty().id();
@@ -1403,8 +1414,8 @@ mod tests {
 	}
 
 	#[test]
-	fn selected_player_readiness_tracks_both_support_markers_for_motor_and_fallback()
-	-> anyhow::Result<()> {
+	fn selected_player_readiness_tracks_both_support_markers_for_motor_and_fallback(
+	) -> anyhow::Result<()> {
 		fn sample(players: AgentPlayerState) -> Option<(Vec3, bool)> {
 			players.selected().map(|(pose, waiting)| (pose.translation, waiting))
 		}

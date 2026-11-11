@@ -1,6 +1,7 @@
 //! Message-driven gameplay evidence, installed only by --agent-diagnostics.
 //! NPC selection scans only on an explicit snapshot request; no visibility probes or AI mutations.
 
+pub(super) mod camera;
 mod npc;
 
 use avian3d::prelude::{GravityScale, LinearVelocity, Sleeping};
@@ -60,6 +61,7 @@ pub(super) fn install(app: &mut App) {
 		)
 		.add_systems(Last, observe_shots);
 	npc::install(app);
+	camera::install(app);
 }
 
 pub(super) type PlayerVitalsQuery<'w, 's> = Query<

@@ -107,11 +107,31 @@ pub struct AgentNpcSnapshot {
 	pub weapon: Option<AgentNpcWeapon>,
 }
 
+/// Actual camera state from an explicit request, never a player-position proxy.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentCameraSnapshot {
+	pub entity: String,
+	pub local_translation: [f32; 3],
+	pub local_rotation: [f32; 4],
+	pub global_translation: [f32; 3],
+	pub global_rotation: [f32; 4],
+	pub controller_yaw: f32,
+	pub controller_pitch: f32,
+	pub projection: AgentCameraProjection,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AgentCameraProjection {
+	Perspective { fov: f32, near: f32, far: f32, aspect_ratio: f32 },
+	Orthographic { near: f32, far: f32, scale: f32 },
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DiagnosticCommand {
 	Enabled(bool),
 	Health(f32),
 	View { yaw: f32, pitch: f32 },
+	Camera { pose: Option<[f32; 5]> },
 	Npcs { radius: f32 },
 	Npc { entity: u64 },
 }
@@ -138,6 +158,15 @@ impl DiagnosticCommand {
 				}
 				Ok(Self::View { yaw, pitch })
 			}
+			["diagnostics", "camera"] => Ok(Self::Camera { pose: None }),
+            ["diagnostics", "camera", x, y, z, yaw, pitch] => {
+                let mut pose = [0.0; 5];
+                for (output, text) in pose.iter_mut().zip([x,y,z,yaw,pitch]) {
+                    *output = text.parse::<f32>().map_err(|_| "camera pose must contain finite numbers")?;
+                    if !output.is_finite() { return Err("camera pose must contain finite numbers".into()); }
+                }
+                Ok(Self::Camera { pose: Some(pose) })
+            }
 			["diagnostics", "npcs", radius] => {
 				let radius = radius.parse::<f32>().map_err(|_| "radius must be a number")?;
 				if !radius.is_finite() || radius <= 0.0 || radius > 100.0 {
@@ -152,7 +181,7 @@ impl DiagnosticCommand {
 				let entity = entity.parse::<u64>().map_err(|_| "invalid decimal entity bits")?;
 				Ok(Self::Npc { entity })
 			}
-			_ => Err("expected diagnostics on | off | health AMOUNT | view YAW PITCH | npcs RADIUS | npc ENTITY".into()),
+			_ => Err("expected diagnostics on | off | health AMOUNT | view YAW PITCH | camera [X Y Z YAW PITCH] | npcs RADIUS | npc ENTITY".into()),
 		}
 	}
 }
@@ -283,6 +312,33 @@ mod npc_tests {
 		assert_eq!(json["actors"][0]["actor"]["entity"], u64::MAX.to_string());
 		assert_eq!(AgentEvent::parse_line(&line).map_err(anyhow::Error::msg)?, event);
 		assert_eq!(event.tracy_message(), None);
+		Ok(())
+	}
+}
+
+#[cfg(test)]
+mod camera_tests {
+	use crate::diagnostics::DiagnosticCommand;
+	#[test]
+	fn camera_pose_parser_requires_exact_finite_arguments() -> Result<(), String> {
+		assert_eq!(
+			DiagnosticCommand::parse("diagnostics camera")?,
+			DiagnosticCommand::Camera { pose: None }
+		);
+		assert_eq!(
+			DiagnosticCommand::parse("diagnostics camera 1 -2 3 4 -5")?,
+			DiagnosticCommand::Camera { pose: Some([1., -2., 3., 4., -5.]) }
+		);
+		for line in [
+			"diagnostics camera 1 2 3 4",
+			"diagnostics camera 1 2 3 4 5 6",
+			"diagnostics camera NaN 0 0 0 0",
+			"diagnostics camera 0 inf 0 0 0",
+			"diagnostics camera 0 0 0 0 -inf",
+			"diagnostics camera 0 0 0 bad 0",
+		] {
+			assert!(DiagnosticCommand::parse(line).is_err(), "accepted {line}");
+		}
 		Ok(())
 	}
 }
