@@ -22,3 +22,31 @@ On each `Update` in `SpottingSystems::Observe`, the plugin:
 
 `clear_segment` is public so aiming and firing systems can use the same finite
 segment obstruction rule.
+
+`SpottingObserveLimits` separates discovery observers (`max_observers_per_tick`,
+default 8) from additional retained-contact observers
+(`max_retained_observers_per_tick`, default 8). Discovery merges its own due
+contacts into the usual executor. After discovery, a private priority-ordered
+service round grants bounded contact-only refreshes to additional observers;
+no observer is probed twice in one tick. Each grant still uses the observer's
+candidate and visibility-sample caps. Contact-only work cannot discover hints or
+broadphase subjects. Budget deferral leaves observation timestamps and failure
+state untouched; ordinary stale/invalid-contact cleanup runs independently.
+
+The retained round persists across ticks and does not depend on shared
+`IntelligenceLod.skips` resets. Despawned, no-longer-due, and discovery-serviced
+entries are discarded when popped. A drained round is refilled on the next tick,
+so a fixed priority prefix cannot re-enter ahead of already waiting observers.
+This bounds service work, not contact age: with the world's 125 ms observation
+cadence, a long round can still exceed the 200 ms firing freshness window.
+Unknown-actor discovery fairness and application cadence remain separate policy.
+
+Trace-level `spotting_discovery` and `spotting_retained_refresh` spans expose
+phase timings and entry-known due/queued observer counts in Tracy.
+`tracing-tracy` 0.12 formats fields when entering a span, so late-recorded
+observer grants and allocated visibility sample counts are available only to
+other subscribers that support field updates; they are not captured in Tracy
+0.12 zones. These counters are collected in existing execution loops without
+an additional diagnostic scan. Enable the coarse phases with
+`RUST_LOG=info,maybraid.spotting.profile=trace` during recordings; the dedicated
+target allocates no per-ray spans.
