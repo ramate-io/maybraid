@@ -55,6 +55,15 @@ impl Placement {
 		Quat::from_euler(EulerRot::YXZ, self.yaw, self.pitch, self.roll)
 	}
 
+	/// World-from-local affine for instanced kit draws.
+	pub fn affine(self) -> bevy_math::Mat4 {
+		bevy_math::Mat4::from_scale_rotation_translation(
+			self.scale,
+			self.rotation(),
+			self.translation,
+		)
+	}
+
 	/// Compose a child placement into this parent's space (translation scaled, rotations add).
 	pub fn compose_child(self, child: Placement) -> Placement {
 		Placement {
