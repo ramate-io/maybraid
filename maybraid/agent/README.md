@@ -177,6 +177,86 @@ published outside the repo (Traces releases) state the version they target.
 | 5 | `visual_style` adds `native` (direct window). `sharp` is now untreated 1080p offscreen (height-fit); v4 `sharp` was today's Native |
 | 6 | Menu playtests: Home boot ready (`detail: "menu"`), `confirm` / `back` / `start` aliases, `press.buttons` chords, `wait_for` / `expect` / `mash` (including `focus_row` / `focus_label`), and `screen` / `modal` / `focus` / `flow` / `invariant` events |
 | 7 | Inventory cycling: `wait_for` / `expect` also match `cycle_category` / `weapon` / `skill_map` / `lubikan`; `cycle` and `equipped` events; per-frame cycling invariants (Y vs category, D-pad vs item, queue membership). Also `tanz_mode`, `tanz`, and `screenshot` (GPU readback of the presented 3D surface); Tanz mode / active Tanz emit `kind: tanz` events |
+| 8 | Opt-in gameplay diagnostics: `--agent-diagnostics`, player vitals, accepted damage/death/actual-shot events, and agent-only `diagnostics on`, `off`, and `health AMOUNT` console utilities |
+| 9 | Agent-only `diagnostics view YAW PITCH` resets the selected player's follow camera once, records `fixture_view`, and adds optional player pitch telemetry |
+| 10 | One-shot `diagnostics npcs RADIUS` / `diagnostics npc DECIMAL_ENTITY_BITS` snapshots of at most eight nearby or one selected NPC, using cached support, ground, contact and weapon evidence |
+
+## Opt-in gameplay diagnostics
+
+Pass `--agent-diagnostics` (or `MAYBRAID_AGENT_DIAGNOSTICS=1`) together with
+`--agent-script` / `--agent-pipe` to diagnose short lives and support state.
+The diagnostics flag alone does not enable the agent. Ordinary gameplay does
+not install the diagnostic message readers; ordinary agent runs omit vitals.
+
+At the existing player sample cadence, the optional `player.vitals` object
+records opaque entity bits as a decimal string, current/max health, velocity,
+motor grounding, pending support, awaiting surface, gravity scale, and sleep.
+Fallback-player grounding is `null` because that controller's marker is private.
+Metadata comes from the already selected player, with no additional entity scan.
+
+`damage_applied` records target/source identity, accepted amount, actual HP lost,
+remaining health, and impact point. `died` preserves the source and entity before
+session retirement. `weapon_fired` observes authoritative shot emission, including
+shot age, rather than inferring fire from input; it does not prove that a projectile
+was realized or hit anything. Use `damage_applied` for accepted hit evidence.
+Names/positions may be absent if an entity
+has already retired. These JSONL events do not emit Tracy text messages.
+
+For an unmodified death investigation, leave the health pool unchanged. A
+separate protected diagnostic run can start with the explicit fixture command:
+
+```jsonl
+{"cmd":"console","line":"diagnostics health 1000000"}
+```
+
+This sets the live motor player's current and maximum health once, emits a
+`fixture_health` event with before/after values, and preserves damage, projectiles,
+and threat behavior. It rejects non-finite/non-positive values and dead players;
+it does not apply to a replacement life automatically. Mark such runs as modified
+health fixtures when comparing behavior or timing.
+
+`diagnostics off` / `diagnostics on` pause/resume gameplay observations within a
+flag-enabled run. Paused events are discarded rather than replayed on resume.
+Fixture mutations remain recorded even while observation is paused. Collect
+diagnostic evidence outside benchmark windows: event serialization and flushed
+disk writes have a cost. Nearby-NPC selection runs only for an explicit snapshot request, never at the
+player sample cadence. No visibility probes are added.
+
+For repeatable capture framing, `diagnostics view YAW_RADIANS PITCH_RADIANS`
+sets the selected player's single follow-camera yaw/pitch once. Both angles
+must be finite; yaw wraps and pitch uses the ordinary player aim clamp. The
+command rejects ambiguous cameras and cameras targeting another actor. It
+requires the startup diagnostics flag, records a `fixture_view` before/after
+event even while observations are paused, and changes only camera angles.
+The optional `player.pitch` field is emitted while diagnostics are enabled.
+Recoil and ordinary input continue after the reset; this utility does not aim,
+track targets, or continuously compensate recoil. Use the same explicit resets
+on both sides of a capture comparison and disclose them as view fixtures.
+
+For a visible floating or non-firing NPC, request a one-shot snapshot:
+
+```jsonl
+{"cmd":"console","line":"diagnostics npcs 30"}
+{"cmd":"console","line":"diagnostics npc 4294967295"}
+```
+
+Both require the startup diagnostics flag and enabled observations. Radius must
+be finite and in `(0, 100]` metres. Nearest selection includes at most eight mob
+character bodies by player XZ distance with stable entity ties; ignoring Y keeps
+floating actors selectable. Direct opaque decimal entity selection does not scan
+NPCs. One pending request is allowed per frame, consumed once in `Last` as an
+`npc_snapshot` event with its command `request_id`; a retired target produces an
+error in that event. The command acknowledgement means queued, not yet sampled.
+
+Snapshots read existing velocity/gravity, motor `Grounded`, shape-hit count and
+nearest hit, cached ground normal, pending-support failure/held/search data,
+engaged/player contact ages, spotting success/attempt ages, cached muzzle
+trajectory visibility/age, and held-weapon trigger/launch readiness. Missing
+components serialize as `null`. Cached ground normals and trajectories are not
+new geometry checks or a computed firing decision; pending support does not
+identify the private waiting-versus-settling phase. Snapshots do not mutate
+actors, acquire targets or fabricate sightings. Take them outside benchmark
+windows because request-time selection and JSONL writes have a cost.
 
 ## Events
 

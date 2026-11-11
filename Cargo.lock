@@ -7539,6 +7539,7 @@ dependencies = [
  "chico",
  "clap",
  "combat-hud",
+ "combat-targeting",
  "damage",
  "durham",
  "evasion-intelligence",

@@ -3,6 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::command::ScenarioMark;
+use crate::diagnostics::{
+	AgentDiagnosticActor, AgentNpcSelector, AgentNpcSnapshot, AgentPlayerVitals,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -33,6 +36,8 @@ pub enum AgentEventBody {
 		y: f32,
 		z: f32,
 		yaw: f32,
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		pitch: Option<f32>,
 		#[serde(rename = "move")]
 		r#move: [f32; 2],
 		/// Composed Durham height under the capsule, when that cell is published.
@@ -44,6 +49,53 @@ pub enum AgentEventBody {
 		/// Locked first-life / death spawn picker (`map.open && close_locked`).
 		#[serde(default, skip_serializing_if = "std::ops::Not::not")]
 		picker: bool,
+		/// Present only when explicitly enabled with --agent-diagnostics.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		vitals: Option<AgentPlayerVitals>,
+	},
+	/// Accepted damage, including zero-effect hits and overkill accounting.
+	DamageApplied {
+		target: AgentDiagnosticActor,
+		source: Option<AgentDiagnosticActor>,
+		amount: f32,
+		applied: f32,
+		remaining: f32,
+		point: [f32; 3],
+	},
+	Died {
+		actor: AgentDiagnosticActor,
+		source: Option<AgentDiagnosticActor>,
+		point: [f32; 3],
+	},
+	/// An actual shot, rather than a trigger request or AI intention.
+	WeaponFired {
+		shooter: AgentDiagnosticActor,
+		recoil: f32,
+		age: f32,
+	},
+	/// Explicit diagnostic fixture mutation. No invulnerability is installed.
+	FixtureHealth {
+		actor: AgentDiagnosticActor,
+		before: [f32; 2],
+		after: [f32; 2],
+	},
+	/// One-shot, explicitly requested camera reset; angles are yaw/pitch radians.
+	FixtureView {
+		actor: AgentDiagnosticActor,
+		camera: String,
+		before: [f32; 2],
+		after: [f32; 2],
+	},
+	Diagnostics {
+		enabled: bool,
+	},
+	/// Explicit one-shot NPC evidence, capped at eight actors. Missing state is null.
+	NpcSnapshot {
+		request_id: u32,
+		selector: AgentNpcSelector,
+		player: Option<String>,
+		actors: Vec<AgentNpcSnapshot>,
+		error: Option<String>,
 	},
 	Command {
 		id: u32,
@@ -169,8 +221,9 @@ impl AgentEvent {
 				max_y,
 				ground_at_min_y,
 			} => {
-				let mut message =
-					format!("agent.actors hosts={hosts} bodies={bodies} brains={brains} pending_support={pending_support}");
+				let mut message = format!(
+					"agent.actors hosts={hosts} bodies={bodies} brains={brains} pending_support={pending_support}"
+				);
 				if let Some(min_y) = min_y {
 					message.push_str(&format!(" min_y={min_y:.1}"));
 				}
@@ -225,10 +278,12 @@ mod tests {
 				y: 12.5,
 				z: -1.0,
 				yaw: 0.4,
+				pitch: Some(-0.12),
 				r#move: [0.0, 1.0],
 				ground: Some(11.4),
 				map_open: false,
 				picker: false,
+				vitals: None,
 			},
 		};
 		let line = event.to_line().map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -258,7 +313,9 @@ mod tests {
 		assert_eq!(AgentEvent::parse_line(&line).map_err(|e| anyhow::anyhow!("{e}"))?, event);
 		assert_eq!(
 			event.tracy_message().as_deref(),
-			Some("agent.actors hosts=4 bodies=61 brains=61 pending_support=2 min_y=-2.0 max_y=14.0 ground=0.5")
+			Some(
+				"agent.actors hosts=4 bodies=61 brains=61 pending_support=2 min_y=-2.0 max_y=14.0 ground=0.5"
+			)
 		);
 		Ok(())
 	}
@@ -287,6 +344,46 @@ mod tests {
 				..
 			}
 		));
+		Ok(())
+	}
+
+	#[test]
+	fn diagnostic_events_roundtrip_without_hot_path_tracy_messages() -> anyhow::Result<()> {
+		let actor = AgentDiagnosticActor {
+			entity: u64::MAX.to_string(),
+			player: true,
+			name: Some("player".into()),
+			position: Some([976.6, -192.2, 1819.9]),
+		};
+		for body in [
+			AgentEventBody::DamageApplied {
+				target: actor.clone(),
+				source: None,
+				amount: 250.0,
+				applied: 100.0,
+				remaining: 0.0,
+				point: [1.0, 2.0, 3.0],
+			},
+			AgentEventBody::Died { actor: actor.clone(), source: None, point: [1.0, 2.0, 3.0] },
+			AgentEventBody::WeaponFired { shooter: actor.clone(), recoil: 0.0, age: 0.1 },
+			AgentEventBody::FixtureHealth {
+				actor: actor.clone(),
+				before: [100.0, 100.0],
+				after: [1_000_000.0; 2],
+			},
+			AgentEventBody::FixtureView {
+				actor,
+				camera: "9007199254740993".into(),
+				before: [0.1, 0.2],
+				after: [0.0, -0.12],
+			},
+			AgentEventBody::Diagnostics { enabled: false },
+		] {
+			let event = AgentEvent { t: 4.0, frame: 240, body };
+			let line = event.to_line().map_err(anyhow::Error::msg)?;
+			assert_eq!(AgentEvent::parse_line(&line).map_err(anyhow::Error::msg)?, event);
+			assert_eq!(event.tracy_message(), None);
+		}
 		Ok(())
 	}
 
