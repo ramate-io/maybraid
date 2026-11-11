@@ -18,21 +18,17 @@ use characters::{
 	NeedsDuplicateScenePrune, NeedsSkinRemap, PartNode, PendingCharacterAssembly, SocketRefApplied,
 	SocketRefRoot,
 };
-use material_ref::MaterialRefRoot;
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
 use crate::obj_text::validate_obj_text;
 use crate::skin::SkinnedSurface;
-use crate::texture::{MaterialTextures, TextureSet};
 use crate::uv::UnwrappedMesh;
 use crate::validate::MeshAudit;
 
 #[derive(Debug, Clone)]
 pub struct MeshGroup {
 	pub name: String,
-	pub material_name: String,
-	pub diffuse: [f32; 3],
 	pub positions: Vec<Vec3>,
 	pub normals: Vec<Vec3>,
 	pub uvs: Vec<Vec2>,
@@ -64,7 +60,6 @@ pub struct ExportReport {
 	pub bounds_min: Vec3,
 	pub bounds_max: Vec3,
 	pub obj_bytes: u64,
-	pub mtl_bytes: u64,
 	pub validation_ok: bool,
 }
 
@@ -79,7 +74,6 @@ impl Default for ExportReport {
 			bounds_min: Vec3::splat(f32::MAX),
 			bounds_max: Vec3::splat(f32::MIN),
 			obj_bytes: 0,
-			mtl_bytes: 0,
 			validation_ok: false,
 		}
 	}
@@ -111,7 +105,6 @@ pub fn collect_groups(world: &mut bevy::prelude::World, root: Entity) -> Vec<Mes
 			continue;
 		};
 		let group_name = part_group_name(world, mesh_entity);
-		let (diffuse, material_name) = part_material(world, mesh_entity, &group_name);
 
 		let Some((positions, normals, uvs, faces)) =
 			extract_mesh_local(mesh, mesh_entity, world, &global_refs, root_inverse)
@@ -121,8 +114,6 @@ pub fn collect_groups(world: &mut bevy::prelude::World, root: Entity) -> Vec<Mes
 
 		let entry = groups.entry(group_name.clone()).or_insert_with(|| MeshGroup {
 			name: group_name,
-			material_name,
-			diffuse,
 			positions: Vec::new(),
 			normals: Vec::new(),
 			uvs: Vec::new(),
@@ -189,24 +180,6 @@ fn sanitize_ident(name: &str) -> String {
 	} else {
 		out
 	}
-}
-
-fn part_material(
-	world: &bevy::prelude::World,
-	entity: Entity,
-	fallback: &str,
-) -> ([f32; 3], String) {
-	let mut current = Some(entity);
-	while let Some(e) = current {
-		if let Some(root) = world.get::<MaterialRefRoot>(e) {
-			let color = root.0.palette.first().copied().unwrap_or_default();
-			let s = color.to_srgba();
-			let mat_name = format!("{}_mat", fallback.replace('/', "_"));
-			return ([s.red, s.green, s.blue], mat_name);
-		}
-		current = world.get::<ChildOf>(e).map(|c| c.parent());
-	}
-	([0.75, 0.75, 0.75], format!("{}_mat", fallback.replace('/', "_")))
 }
 
 /// One primary render mesh per [`CharacterPart`] host (largest `Mesh3d` under the host).
@@ -384,19 +357,17 @@ pub fn obj_f32(value: f32) -> anyhow::Result<String> {
 
 pub struct ObjDocument<'a> {
 	groups: &'a [MeshGroup],
-	mtl_name: &'a str,
 }
 
 impl<'a> ObjDocument<'a> {
-	pub fn new(groups: &'a [MeshGroup], mtl_name: &'a str) -> Self {
-		Self { groups, mtl_name }
+	pub fn new(groups: &'a [MeshGroup]) -> Self {
+		Self { groups }
 	}
 
-	/// Vertices first, then `s off` / `usemtl` / faces — Blender's working Procreate order.
+	/// Vertices first, then `s off` / faces — Blender's working mesh-only order.
 	pub fn to_string(&self) -> anyhow::Result<String> {
 		let mut obj = String::new();
 		obj.push_str("# Maybraid character mesh export\n");
-		obj.push_str(&format!("mtllib {}\n", self.mtl_name));
 
 		let mut v_base = 0u32;
 		let mut vt_base = 0u32;
@@ -424,7 +395,6 @@ impl<'a> ObjDocument<'a> {
 				));
 			}
 			obj.push_str("s off\n");
-			obj.push_str(&format!("usemtl {}\n", group.material_name));
 
 			let nverts = group.positions.len() as u32;
 			for [a, b, c] in &group.faces {
@@ -452,25 +422,6 @@ impl<'a> ObjDocument<'a> {
 	}
 }
 
-pub fn format_mtl(groups: &[MeshGroup], maps: &[MaterialTextures]) -> String {
-	let mut mtl = String::from("# Maybraid character mesh export\n");
-	for (group, map) in groups.iter().zip(maps) {
-		mtl.push_str(&format!("newmtl {}\n", group.material_name));
-		mtl.push_str("Ka 1.000000 1.000000 1.000000\n");
-		mtl.push_str(&format!(
-			"Kd {:.6} {:.6} {:.6}\n",
-			group.diffuse[0], group.diffuse[1], group.diffuse[2]
-		));
-		mtl.push_str("Ks 0.000000 0.000000 0.000000\n");
-		mtl.push_str("d 1.000000\n");
-		mtl.push_str("illum 1\n");
-		mtl.push_str(&format!("map_Kd {}\n", map.color_file));
-		mtl.push_str(&format!("map_metallic {}\n", map.metallic_file));
-		mtl.push_str(&format!("map_roughness {}\n", map.roughness_file));
-	}
-	mtl
-}
-
 pub fn apply_chart_uvs(groups: &mut [MeshGroup]) {
 	for group in groups {
 		group.unwrap_charts();
@@ -481,15 +432,13 @@ pub fn write_obj_bundle(obj_path: &Path, groups: &[MeshGroup]) -> anyhow::Result
 	let mut groups = groups.to_vec();
 	apply_chart_uvs(&mut groups);
 
-	let dir = obj_path.parent().unwrap_or(Path::new("."));
-	let stem = obj_path.file_stem().and_then(|s| s.to_str()).unwrap_or("character");
-	let mtl_path = obj_path.with_extension("mtl");
-	let mtl_name = mtl_path
-		.file_name()
-		.map(|f| f.to_string_lossy().to_string())
-		.unwrap_or_else(|| "materials.mtl".to_string());
-
-	let maps = TextureSet::write_for_groups(dir, stem, &groups)?;
+	if let Some(parent) = obj_path.parent() {
+		std::fs::create_dir_all(parent)?;
+	}
+	let leftover_mtl = obj_path.with_extension("mtl");
+	if leftover_mtl.exists() {
+		std::fs::remove_file(&leftover_mtl)?;
+	}
 
 	let mut vertices = 0usize;
 	let mut faces = 0usize;
@@ -525,7 +474,7 @@ pub fn write_obj_bundle(obj_path: &Path, groups: &[MeshGroup]) -> anyhow::Result
 		}
 	}
 
-	let obj_text = ObjDocument::new(&groups, &mtl_name).to_string()?;
+	let obj_text = ObjDocument::new(&groups).to_string()?;
 	let obj_audit = MeshAudit::obj_text(&obj_text);
 	if !obj_audit.ok() {
 		for error in &obj_audit.errors {
@@ -534,85 +483,53 @@ pub fn write_obj_bundle(obj_path: &Path, groups: &[MeshGroup]) -> anyhow::Result
 	}
 	std::fs::write(obj_path, &obj_text)?;
 
-	let mtl_text = format_mtl(&groups, &maps);
-	let mut mtl = BufWriter::new(File::create(&mtl_path)?);
-	write!(mtl, "{mtl_text}")?;
-	mtl.flush()?;
-
-	let tex_audit = MeshAudit::mtl_textures(&mtl_text, dir);
-	if !tex_audit.ok() {
-		for error in &tex_audit.errors {
-			eprintln!("mtl validation: {error}");
+	let companion = MeshAudit::companion_files(obj_path);
+	if !companion.ok() {
+		for error in &companion.errors {
+			eprintln!("companion validation: {error}");
 		}
 	}
 
 	report.validation_ok =
-		mesh_audit.ok() && obj_audit.ok() && tex_audit.ok() && validate_obj_text(&obj_text).is_ok();
+		mesh_audit.ok() && obj_audit.ok() && companion.ok() && validate_obj_text(&obj_text).is_ok();
 	report.obj_bytes = std::fs::metadata(obj_path).map(|m| m.len()).unwrap_or(0);
-	report.mtl_bytes = std::fs::metadata(&mtl_path).map(|m| m.len()).unwrap_or(0);
 	Ok(report)
 }
 
 pub fn write_import_zip(zip_path: &Path, obj_path: &Path) -> anyhow::Result<()> {
-	let dir = obj_path.parent().unwrap_or(Path::new("."));
 	let stem = obj_path.file_stem().and_then(|s| s.to_str()).unwrap_or("character");
-	let mtl_path = obj_path.with_extension("mtl");
-	let mtl_text = std::fs::read_to_string(&mtl_path)?;
-	let mut files = vec![
-		obj_path.file_name().map(|n| n.to_os_string()),
-		mtl_path.file_name().map(|n| n.to_os_string()),
-	];
-	for line in mtl_text.lines() {
-		for key in ["map_Kd ", "map_metallic ", "map_roughness "] {
-			if let Some(name) = line.trim().strip_prefix(key) {
-				let name = name.split_whitespace().next().unwrap_or("");
-				if !name.is_empty() {
-					files.push(Some(name.into()));
-				}
-			}
-		}
-	}
-	files.push(None);
+	let obj_name = obj_path
+		.file_name()
+		.map(|n| n.to_string_lossy().into_owned())
+		.unwrap_or_else(|| format!("{stem}.obj"));
 
 	let zip_file = File::create(zip_path)?;
 	let mut zip = ZipWriter::new(BufWriter::new(zip_file));
 	let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-	let mut seen = HashMap::<String, ()>::new();
-	for name in files.into_iter().flatten() {
-		let name = name.to_string_lossy().into_owned();
-		if seen.contains_key(&name) {
-			continue;
-		}
-		seen.insert(name.clone(), ());
-		let bytes = std::fs::read(dir.join(&name))?;
-		zip.start_file(&name, options)?;
-		zip.write_all(&bytes)?;
-	}
-	let instructions = import_instructions(stem);
-	zip.start_file("IMPORT.txt", options)?;
-	zip.write_all(instructions.as_bytes())?;
+	zip.start_file(&obj_name, options)?;
+	zip.write_all(&std::fs::read(obj_path)?)?;
+	zip.start_file("README.md", options)?;
+	zip.write_all(import_instructions(stem).as_bytes())?;
 	zip.finish()?;
 	Ok(())
 }
 
 pub fn import_instructions(stem: &str) -> String {
 	format!(
-		"Epiphant default-preview — Procreate import\n\
+		"# {stem} — mesh-only OBJ\n\
 		\n\
-		Extract this ZIP to a local (On My iPad) folder first. Do not import the ZIP itself.\n\
-		Procreate's Gallery → Import file picker often greys out .obj; that is a known Files UTI\n\
-		limitation, not a model error. Official import is drag-and-drop of the extracted folder.\n\
+		Extract this ZIP before importing. Do not import the ZIP itself.\n\
+		This package is the mesh only: `{stem}.obj` (UVs and normals included, no MTL, no textures).\n\
 		\n\
-		1. Unzip so `{stem}.obj`, `{stem}.mtl`, and the PNG maps sit in one folder.\n\
-		2. In the Files app, keep that folder On My iPad (not iCloud Drive).\n\
-		3. Split View Files + Procreate. Long-press the *folder* (not just the .obj),\n\
-		   drag it onto the Procreate Gallery until a green plus appears, then drop.\n\
-		4. Open the imported model and tap a mesh to paint.\n\
+		Procreate's Gallery → Import file picker often greys out `.obj`; that is a known Files UTI\n\
+		limitation. A lone OBJ can be dragged onto the Gallery\n\
+		([handbook](https://help.procreate.com/procreate/handbook/3d-painting/import)).\n\
 		\n\
-		Handbook: https://help.procreate.com/procreate/handbook/3d-painting/import\n\
-		Help: https://help.procreate.com/articles/Z0mATv-3d-painting\n\
-		MTL keys: map_Kd / map_metallic / map_roughness (all maps are {res}×{res}).\n",
-		res = crate::texture::TEXTURE_RESOLUTION
+		1. Unzip so `{stem}.obj` is a regular file (On My iPad, not iCloud).\n\
+		2. Split View Files + Procreate. Drag `{stem}.obj` onto the Gallery until a green plus appears.\n\
+		3. Open the model, tap a mesh, paint. Left/right parts should paint independently.\n\
+		\n\
+		Procreate requires a UV map. This file includes `vt` records from a chart unwrap.\n"
 	)
 }
 
@@ -678,8 +595,6 @@ mod tests {
 	fn tri(name: &str, z: f32) -> MeshGroup {
 		MeshGroup {
 			name: name.into(),
-			material_name: format!("{name}_mat"),
-			diffuse: [0.5, 0.5, 0.5],
 			positions: vec![Vec3::new(0.0, 0.0, z), Vec3::new(1.0, 0.0, z), Vec3::new(0.0, 1.0, z)],
 			normals: vec![Vec3::Z, Vec3::Z, Vec3::Z],
 			uvs: vec![Vec2::ZERO, Vec2::X, Vec2::Y],
@@ -691,22 +606,19 @@ mod tests {
 	fn writer_uses_independent_vt_streams_and_blender_record_order() -> anyhow::Result<()> {
 		let mut groups = vec![tri("body", 0.0), tri("head", 1.0)];
 		apply_chart_uvs(&mut groups);
-		let text = ObjDocument::new(&groups, "x.mtl").to_string()?;
-		if !text.contains("mtllib x.mtl") {
-			return Err(anyhow::anyhow!("missing mtllib"));
+		let text = ObjDocument::new(&groups).to_string()?;
+		if text.contains("mtllib") || text.contains("usemtl") {
+			return Err(anyhow::anyhow!("mesh-only OBJ must omit mtllib/usemtl: {text}"));
 		}
 		if text.contains("\ng ") {
 			return Err(anyhow::anyhow!("g declarations split Procreate into extra layers"));
 		}
 		let body = text.find("o body").ok_or_else(|| anyhow::anyhow!("missing o body"))?;
 		let first_v = text.find("\nv ").ok_or_else(|| anyhow::anyhow!("missing v"))?;
-		let usemtl = text.find("usemtl ").ok_or_else(|| anyhow::anyhow!("missing usemtl"))?;
+		let smoothing = text.find("s off").ok_or_else(|| anyhow::anyhow!("missing s off"))?;
 		let first_f = text.find("\nf ").ok_or_else(|| anyhow::anyhow!("missing f"))?;
-		if !(body < first_v && first_v < usemtl && usemtl < first_f) {
-			return Err(anyhow::anyhow!("expected o → v/vt/vn → usemtl → f, got {text}"));
-		}
-		if !text.contains("s off") {
-			return Err(anyhow::anyhow!("expected s off"));
+		if !(body < first_v && first_v < smoothing && smoothing < first_f) {
+			return Err(anyhow::anyhow!("expected o → v/vt/vn → s off → f, got {text}"));
 		}
 		let stats = validate_obj_text(&text).map_err(|e| anyhow::anyhow!("{e:?}"))?;
 		if stats.len() != 2 || stats.iter().any(|s| s.texcoords != s.vertices) {
@@ -753,11 +665,32 @@ mod tests {
 		if !audit.ok() {
 			return Err(anyhow::anyhow!("{:?}", audit.errors));
 		}
-		let mtl = std::fs::read_to_string(path.with_extension("mtl"))?;
-		let tex =
-			MeshAudit::mtl_textures(&mtl, path.parent().ok_or_else(|| anyhow::anyhow!("parent"))?);
-		if !tex.ok() {
-			return Err(anyhow::anyhow!("{:?}", tex.errors));
+		let companion = MeshAudit::companion_files(&path);
+		if !companion.ok() {
+			return Err(anyhow::anyhow!("{:?}", companion.errors));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn write_obj_bundle_does_not_emit_mtl() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let obj_path = dir.path().join("mesh.obj");
+		let leftover = dir.path().join("mesh.mtl");
+		std::fs::write(&leftover, "newmtl stale\n")?;
+		let report = write_obj_bundle(&obj_path, &[tri("body", 0.0)])?;
+		if !report.validation_ok {
+			return Err(anyhow::anyhow!("expected validation_ok"));
+		}
+		if leftover.exists() {
+			return Err(anyhow::anyhow!("leftover MTL was not removed"));
+		}
+		let text = std::fs::read_to_string(&obj_path)?;
+		if text.contains("mtllib") || text.contains("usemtl") {
+			return Err(anyhow::anyhow!("{text}"));
+		}
+		if dir.path().join("mesh.mtl").exists() {
+			return Err(anyhow::anyhow!("MTL was written"));
 		}
 		Ok(())
 	}
@@ -766,14 +699,12 @@ mod tests {
 	fn zero_faces_or_oob_indices_fail_validation() -> anyhow::Result<()> {
 		let empty_faces = MeshGroup {
 			name: "tail".into(),
-			material_name: "tail_mat".into(),
-			diffuse: [1.0, 1.0, 1.0],
 			positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
 			normals: vec![Vec3::Z, Vec3::Z, Vec3::Z],
 			uvs: vec![Vec2::ZERO, Vec2::X, Vec2::Y],
 			faces: Vec::new(),
 		};
-		let text = ObjDocument::new(&[empty_faces], "x.mtl").to_string()?;
+		let text = ObjDocument::new(&[empty_faces]).to_string()?;
 		let Err(err) = validate_obj_text(&text) else {
 			return Err(anyhow::anyhow!("expected zero-face error"));
 		};

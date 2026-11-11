@@ -29,11 +29,11 @@ struct Cli {
 	#[arg(long, value_enum, default_value_t = Species::Epiphant)]
 	species: Species,
 
-	/// Output `.obj` path (companion `.mtl` and PNG maps are written alongside).
+	/// Output `.obj` path (mesh only: no MTL or textures).
 	#[arg(long)]
 	output: PathBuf,
 
-	/// Optional zip of OBJ + MTL + textures + IMPORT.txt for handing to an iPad.
+	/// Optional zip of the OBJ plus a short README for handing to an iPad.
 	#[arg(long)]
 	zip: Option<PathBuf>,
 
@@ -144,7 +144,7 @@ fn tick_export(world: &mut World) {
 		match write_obj_bundle(&output, &groups) {
 			Ok(report) => {
 				if !report.validation_ok {
-					eprintln!("OBJ / UV / texture validation failed");
+					eprintln!("OBJ / UV validation failed");
 					exit = app_error(5);
 					finished = true;
 					return;
@@ -160,7 +160,7 @@ fn tick_export(world: &mut World) {
 				}
 				println!("Wrote {}", output.display());
 				println!(
-					"groups={} vertices={} faces={} uvs={} normals={} bbox_min=({:.3}, {:.3}, {:.3}) bbox_max=({:.3}, {:.3}, {:.3}) obj_bytes={} mtl_bytes={}",
+					"groups={} vertices={} faces={} uvs={} normals={} bbox_min=({:.3}, {:.3}, {:.3}) bbox_max=({:.3}, {:.3}, {:.3}) obj_bytes={}",
 					report.groups,
 					report.vertices,
 					report.faces,
@@ -173,7 +173,6 @@ fn tick_export(world: &mut World) {
 					report.bounds_max.y,
 					report.bounds_max.z,
 					report.obj_bytes,
-					report.mtl_bytes,
 				);
 				finished = true;
 			}

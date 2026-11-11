@@ -1,4 +1,4 @@
-//! Connected-chart UV unwrap packed into a padded unit square per texture set.
+//! Connected-chart UV unwrap packed into a padded unit square per object.
 
 use std::collections::{HashMap, VecDeque};
 use std::f32::consts::PI;
