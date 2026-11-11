@@ -1,4 +1,4 @@
-//! Export-time checks: finite values, UV coverage, collapsed UVs, overlaps, textures.
+//! Export-time checks: finite values, UV coverage, collapsed UVs, overlaps, mesh-only OBJ.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -16,7 +16,8 @@ pub enum ExportCheck {
 	CollapsedUv { group: String, face: usize },
 	UvOverlap { group: String, a: usize, b: usize },
 	IslandOutOfBounds { group: String },
-	MissingTexture { material: String, path: String },
+	MaterialDirective { kind: &'static str },
+	CompanionMtl { path: String },
 	Obj(ObjValidationError),
 }
 
@@ -32,8 +33,11 @@ impl std::fmt::Display for ExportCheck {
 				write!(f, "{group}: faces {a} and {b} overlap in UV")
 			}
 			Self::IslandOutOfBounds { group } => write!(f, "{group}: UVs leave 0..1"),
-			Self::MissingTexture { material, path } => {
-				write!(f, "material {material} references missing texture {path}")
+			Self::MaterialDirective { kind } => {
+				write!(f, "mesh-only OBJ must not contain {kind}")
+			}
+			Self::CompanionMtl { path } => {
+				write!(f, "companion MTL must not be written: {path}")
 			}
 			Self::Obj(error) => write!(f, "{error}"),
 		}
@@ -146,34 +150,23 @@ impl MeshAudit {
 		}
 		let (_stats, obj_errors) = parse_obj_groups(text);
 		errors.extend(obj_errors.into_iter().map(ExportCheck::Obj));
+		for line in text.lines() {
+			let line = line.trim();
+			if line.starts_with("mtllib ") || line == "mtllib" {
+				errors.push(ExportCheck::MaterialDirective { kind: "mtllib" });
+			}
+			if line.starts_with("usemtl ") || line == "usemtl" {
+				errors.push(ExportCheck::MaterialDirective { kind: "usemtl" });
+			}
+		}
 		Self { errors }
 	}
 
-	pub fn mtl_textures(mtl_text: &str, mtl_dir: &Path) -> Self {
+	pub fn companion_files(obj_path: &Path) -> Self {
 		let mut errors = Vec::new();
-		let mut material = String::from("unnamed");
-		for line in mtl_text.lines() {
-			let line = line.trim();
-			if let Some(name) = line.strip_prefix("newmtl ") {
-				material = name.trim().to_string();
-				continue;
-			}
-			for key in
-				["map_Kd ", "map_metallic ", "map_roughness ", "map_ao ", "map_tangentSpaceNormal "]
-			{
-				if let Some(path) = line.strip_prefix(key) {
-					let path = path.split_whitespace().next().unwrap_or(path).trim();
-					if path.is_empty() {
-						continue;
-					}
-					if !mtl_dir.join(path).is_file() {
-						errors.push(ExportCheck::MissingTexture {
-							material: material.clone(),
-							path: path.to_string(),
-						});
-					}
-				}
-			}
+		let mtl = obj_path.with_extension("mtl");
+		if mtl.exists() {
+			errors.push(ExportCheck::CompanionMtl { path: mtl.display().to_string() });
 		}
 		Self { errors }
 	}
@@ -268,8 +261,6 @@ mod tests {
 	fn tri_group(name: &str, uvs: [Vec2; 3]) -> MeshGroup {
 		MeshGroup {
 			name: name.into(),
-			material_name: format!("{name}_mat"),
-			diffuse: [0.5, 0.5, 0.5],
 			positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
 			normals: vec![Vec3::Z, Vec3::Z, Vec3::Z],
 			uvs: uvs.to_vec(),
@@ -294,8 +285,6 @@ mod tests {
 	fn overlapping_uv_faces_fail() -> anyhow::Result<()> {
 		let group = MeshGroup {
 			name: "body".into(),
-			material_name: "body_mat".into(),
-			diffuse: [0.5, 0.5, 0.5],
 			positions: vec![
 				Vec3::ZERO,
 				Vec3::X,
@@ -326,16 +315,35 @@ mod tests {
 	}
 
 	#[test]
-	fn missing_texture_is_reported() -> anyhow::Result<()> {
-		let dir = tempfile::tempdir()?;
-		let mtl = "newmtl body_mat\nmap_Kd missing.png\n";
-		let audit = MeshAudit::mtl_textures(mtl, dir.path());
-		if !audit
+	fn mtllib_and_usemtl_fail_mesh_only_audit() -> anyhow::Result<()> {
+		let text = "mtllib x.mtl\no body\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nvn 0 0 1\nvn 0 0 1\nusemtl body_mat\nf 1/1/1 2/2/2 3/3/3\n";
+		let audit = MeshAudit::obj_text(text);
+		let has_mtllib = audit
 			.errors
 			.iter()
-			.any(|e| matches!(e, ExportCheck::MissingTexture { path, .. } if path == "missing.png"))
-		{
-			return Err(anyhow::anyhow!("expected missing texture, got {:?}", audit.errors));
+			.any(|e| matches!(e, ExportCheck::MaterialDirective { kind: "mtllib" }));
+		let has_usemtl = audit
+			.errors
+			.iter()
+			.any(|e| matches!(e, ExportCheck::MaterialDirective { kind: "usemtl" }));
+		if !has_mtllib || !has_usemtl {
+			return Err(anyhow::anyhow!(
+				"expected mtllib and usemtl errors, got {:?}",
+				audit.errors
+			));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn companion_mtl_is_reported() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let obj = dir.path().join("mesh.obj");
+		std::fs::write(&obj, "o body\n")?;
+		std::fs::write(dir.path().join("mesh.mtl"), "newmtl x\n")?;
+		let audit = MeshAudit::companion_files(&obj);
+		if !audit.errors.iter().any(|e| matches!(e, ExportCheck::CompanionMtl { .. })) {
+			return Err(anyhow::anyhow!("expected companion MTL, got {:?}", audit.errors));
 		}
 		Ok(())
 	}
