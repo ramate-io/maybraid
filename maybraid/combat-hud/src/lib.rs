@@ -2,6 +2,7 @@
 
 mod continuous_health;
 mod cycle_cue;
+mod cycle_slots;
 mod lubikan_charge;
 mod lubikan_points;
 mod plate;
@@ -26,7 +27,8 @@ use vitals::{spawn_player_vitals, sync_player_vitals, vitals_fonts};
 
 pub use continuous_health::{HealthFill, HealthTrail};
 pub use cycle_cue::{
-	idle_cycle_outline, CombatHudCyclePanel, CombatHudInventoryCycleCategory, CYCLE_ACTIVE_TEAL,
+	idle_cycle_outline, CombatHudCyclePanel, CombatHudEquippedQueue, CombatHudEquippedSlot,
+	CombatHudInventoryCycleCategory, CYCLE_ACTIVE_TEAL,
 };
 pub use lubikan_charge::LubikanChargeFlyTarget;
 pub use score::{CombatScore, LiveEnemies};
@@ -100,7 +102,8 @@ impl Plugin for CombatHudPlugin {
 		}
 		app.insert_resource(CombatHudConfig(*self))
 			.init_resource::<CombatHudVisible>()
-			.init_resource::<CombatHudInventoryCycleCategory>();
+			.init_resource::<CombatHudInventoryCycleCategory>()
+			.init_resource::<CombatHudEquippedQueue>();
 
 		// Order inside PostUpdate only. A same-named set in Update does not
 		// constrain these systems relative to Heal / Award.
@@ -160,7 +163,11 @@ fn configure_lubikan_charge(app: &mut App) {
 	app.init_resource::<LubikanActivationFinishedHudPulse>();
 	app.add_systems(
 		PostUpdate,
-		(ingest_lubikan_activation_finished_pulse, sync_lubikan_charge)
+		(
+			ingest_lubikan_activation_finished_pulse,
+			sync_lubikan_charge,
+			cycle_slots::sync_cycle_slots,
+		)
 			.chain()
 			.in_set(CombatHudSystems::Health),
 	);
@@ -962,6 +969,199 @@ mod tests {
 			.copied()
 			.ok_or_else(|| anyhow::anyhow!("lubikan root"))?;
 		assert_eq!(hidden, Visibility::Hidden);
+		Ok(())
+	}
+
+	fn visible_cycle_slots(world: &mut World) -> Vec<(usize, u64, bool, bool)> {
+		world
+			.query::<(&cycle_slots::CombatHudCycleSlot, &BorderColor, &Outline, &Visibility)>()
+			.iter(world)
+			.filter(|(_, _, _, visibility)| **visibility != Visibility::Hidden)
+			.map(|(slot, border, outline, _)| {
+				(
+					slot.index,
+					slot.key,
+					slot.selected,
+					cycle_slots::cycle_slot_is_highlighted(border, outline),
+				)
+			})
+			.collect()
+	}
+
+	fn highlighted_slot_index(world: &mut World) -> anyhow::Result<usize> {
+		let visible = visible_cycle_slots(world);
+		let highlighted: Vec<_> = visible
+			.iter()
+			.filter(|(_, _, selected, highlighted)| *selected && *highlighted)
+			.collect();
+		anyhow::ensure!(
+			highlighted.len() == 1,
+			"expected exactly one highlighted slot, got {visible:?}"
+		);
+		Ok(highlighted[0].0)
+	}
+
+	fn unlock_cycle_accounts(app: &mut App, owner: Entity) -> anyhow::Result<(u64, u64)> {
+		use lubikans::{LubikanDefinition, LubikanDefinitionId};
+		let mid = lubikans::fixtures::unlock_on(
+			app.world_mut(),
+			owner,
+			LubikanDefinition::new(LubikanDefinitionId::from_raw(2), 40.0, 5.0),
+		)
+		.ok_or_else(|| anyhow::anyhow!("mid account"))?;
+		let last = lubikans::fixtures::unlock_on(
+			app.world_mut(),
+			owner,
+			LubikanDefinition::new(LubikanDefinitionId::from_raw(3), 40.0, 5.0),
+		)
+		.ok_or_else(|| anyhow::anyhow!("last account"))?;
+		Ok((mid.to_bits(), last.to_bits()))
+	}
+
+	#[test]
+	fn cycle_highlight_follows_owned_lubikan_selection() -> anyhow::Result<()> {
+		let mut app = lubikan_app();
+		app.update();
+		let owner = lubikans::fixtures::spawn_self_owner(app.world_mut());
+		app.world_mut().entity_mut(owner).insert((Player, Health::default()));
+		let (mid, last) = unlock_cycle_accounts(&mut app, owner)?;
+		app.world_mut().insert_resource(CombatHudInventoryCycleCategory::Lubikans);
+		app.world_mut().insert_resource(CombatHudVisible(true));
+		app.update();
+
+		let self_key = lubikans::LubikanAccountId::SELF.to_bits();
+		let first = highlighted_slot_index(app.world_mut())?;
+		assert_eq!(first, 0);
+		let visible = visible_cycle_slots(app.world_mut());
+		assert_eq!(visible.len(), 3, "{visible:?}");
+		assert_eq!(visible.iter().filter(|row| row.3).count(), 1);
+		assert_eq!(visible[0].1, self_key);
+
+		{
+			let mut ledger = app
+				.world_mut()
+				.get_mut::<lubikans::LubikanLedger>(owner)
+				.ok_or_else(|| anyhow::anyhow!("ledger"))?;
+			anyhow::ensure!(
+				ledger.select(Some(lubikans::LubikanAccountId::from_bits(mid))),
+				"select mid"
+			);
+		}
+		app.update();
+		assert_eq!(highlighted_slot_index(app.world_mut())?, 1);
+		assert_eq!(visible_cycle_slots(app.world_mut())[1].1, mid);
+
+		{
+			let mut ledger = app
+				.world_mut()
+				.get_mut::<lubikans::LubikanLedger>(owner)
+				.ok_or_else(|| anyhow::anyhow!("ledger"))?;
+			anyhow::ensure!(
+				ledger.select(Some(lubikans::LubikanAccountId::from_bits(last))),
+				"select last"
+			);
+		}
+		app.update();
+		assert_eq!(highlighted_slot_index(app.world_mut())?, 2);
+		assert_eq!(visible_cycle_slots(app.world_mut())[2].1, last);
+
+		{
+			let mut ledger = app
+				.world_mut()
+				.get_mut::<lubikans::LubikanLedger>(owner)
+				.ok_or_else(|| anyhow::anyhow!("ledger"))?;
+			anyhow::ensure!(ledger.select(None), "select Self");
+		}
+		app.update();
+		assert_eq!(highlighted_slot_index(app.world_mut())?, 0);
+
+		{
+			let mut ledger = app
+				.world_mut()
+				.get_mut::<lubikans::LubikanLedger>(owner)
+				.ok_or_else(|| anyhow::anyhow!("ledger"))?;
+			anyhow::ensure!(
+				ledger.select(Some(lubikans::LubikanAccountId::from_bits(last))),
+				"select last again"
+			);
+		}
+		app.update();
+		assert_eq!(highlighted_slot_index(app.world_mut())?, 2);
+		assert_eq!(visible_cycle_slots(app.world_mut())[2].1, last);
+		assert_eq!(visible_cycle_slots(app.world_mut()).iter().filter(|row| row.3).count(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn cycle_highlight_follows_equipped_item_queue() -> anyhow::Result<()> {
+		let mut app = lubikan_app();
+		app.update();
+		let owner = lubikans::fixtures::spawn_self_owner(app.world_mut());
+		app.world_mut().entity_mut(owner).insert((Player, Health::default()));
+		app.world_mut().insert_resource(CombatHudInventoryCycleCategory::Weapons);
+		app.world_mut().insert_resource(CombatHudEquippedQueue {
+			slots: vec![
+				CombatHudEquippedSlot { key: 0, label: "bullpup".into() },
+				CombatHudEquippedSlot { key: 1, label: "reltor".into() },
+				CombatHudEquippedSlot { key: 2, label: "snailer".into() },
+			],
+			selected: 0,
+		});
+		app.world_mut().insert_resource(CombatHudVisible(true));
+		app.update();
+		assert_eq!(highlighted_slot_index(app.world_mut())?, 0);
+		assert_eq!(visible_cycle_slots(app.world_mut()).len(), 3);
+
+		app.world_mut().resource_mut::<CombatHudEquippedQueue>().selected = 1;
+		app.update();
+		assert_eq!(highlighted_slot_index(app.world_mut())?, 1);
+
+		app.world_mut().resource_mut::<CombatHudEquippedQueue>().selected = 2;
+		app.update();
+		assert_eq!(highlighted_slot_index(app.world_mut())?, 2);
+
+		app.world_mut().resource_mut::<CombatHudEquippedQueue>().selected = 0;
+		app.update();
+		assert_eq!(highlighted_slot_index(app.world_mut())?, 0);
+
+		app.world_mut().resource_mut::<CombatHudEquippedQueue>().selected = 2;
+		app.update();
+		assert_eq!(highlighted_slot_index(app.world_mut())?, 2);
+		assert_eq!(visible_cycle_slots(app.world_mut()).iter().filter(|row| row.3).count(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn cycle_highlight_keeps_overflow_selection_visible() -> anyhow::Result<()> {
+		let mut app = lubikan_app();
+		app.update();
+		let owner = lubikans::fixtures::spawn_self_owner(app.world_mut());
+		app.world_mut().entity_mut(owner).insert((Player, Health::default()));
+		let slots: Vec<CombatHudEquippedSlot> = (0..10)
+			.map(|key| CombatHudEquippedSlot { key, label: format!("gun-{key}") })
+			.collect();
+		app.world_mut().insert_resource(CombatHudInventoryCycleCategory::Weapons);
+		app.world_mut().insert_resource(CombatHudEquippedQueue { slots, selected: 9 });
+		app.world_mut().insert_resource(CombatHudVisible(true));
+		app.update();
+
+		let visible = visible_cycle_slots(app.world_mut());
+		assert_eq!(visible.len(), cycle_slots::CYCLE_SLOT_POOL, "{visible:?}");
+		let highlighted = visible
+			.iter()
+			.find(|(_, _, selected, highlighted)| *selected && *highlighted)
+			.ok_or_else(|| anyhow::anyhow!("missing highlighted overflow slot: {visible:?}"))?;
+		assert_eq!(highlighted.1, 9, "selected tail item should render in the window");
+
+		app.world_mut().resource_mut::<CombatHudEquippedQueue>().selected = 0;
+		app.update();
+		let visible = visible_cycle_slots(app.world_mut());
+		assert_eq!(visible.len(), cycle_slots::CYCLE_SLOT_POOL);
+		let head = visible
+			.iter()
+			.find(|(_, key, selected, _)| *selected && *key == 0)
+			.ok_or_else(|| anyhow::anyhow!("head selection should be visible: {visible:?}"))?;
+		assert_eq!(head.0, 0);
 		Ok(())
 	}
 
