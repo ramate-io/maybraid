@@ -32,3 +32,10 @@ let observer = SpottingUser::new(
 Subjects used by the Avian backend also need a collider on
 `lod_avian::PhysicsInteractionLayer::Animated`. Static occluders need the
 `Fixed` layer.
+
+Backend scheduling is application-owned. `SpottingSystems::Observe` contains
+ordered `Prepare`, `Discover`, and `Refresh` subsets, allowing discovery to use a
+slower timer while bounded retained-contact refresh runs each Update.
+`SpottingObserveLimits` independently caps observers and allocated visibility
+samples for both phases; see the [Avian backend](../avian/README.md) for setup,
+service-round semantics, and the limits of contact freshness under overload.

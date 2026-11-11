@@ -15,3 +15,6 @@ pub use engagement::{FirearmEngagement, RulesOfEngagement};
 pub use movement::{FirearmMovementIntelligence, FirearmMovementIntelligenceSettings};
 pub use plugin::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
 pub use targeting::{AimTrajectory, FirearmTargeting};
+
+#[cfg(test)]
+mod cadence_tests;

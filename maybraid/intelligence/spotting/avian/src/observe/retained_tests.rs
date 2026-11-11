@@ -5,7 +5,7 @@ use spotting_intelligence::{
 	InterestLayers, SpotBounds, SpotDirective, SpottedContact, SpottingHint, SpottingSettings,
 };
 
-fn app(discovery: usize, retained: usize) -> App {
+pub(super) fn app(discovery: usize, retained: usize) -> App {
 	let mut app = App::new();
 	app.add_plugins((
 		MinimalPlugins,
@@ -18,13 +18,14 @@ fn app(discovery: usize, retained: usize) -> App {
 		.insert_resource(SpottingObserveLimits {
 			max_observers_per_tick: discovery,
 			max_retained_observers_per_tick: retained,
+			..default()
 		})
 		.add_plugins(crate::SpottingAvianPlugin);
 	app.finish();
 	app
 }
 
-fn subject(app: &mut App, at: Vec3) -> Entity {
+pub(super) fn subject(app: &mut App, at: Vec3) -> Entity {
 	app.world_mut()
 		.spawn((
 			Transform::from_translation(at),
@@ -33,7 +34,7 @@ fn subject(app: &mut App, at: Vec3) -> Entity {
 		.id()
 }
 
-fn user() -> SpottingUser {
+pub(super) fn user() -> SpottingUser {
 	let directive = SpotDirective {
 		discovery_interval_secs: 0.125,
 		respot_interval_secs: 0.0,
@@ -42,7 +43,7 @@ fn user() -> SpottingUser {
 	SpottingUser::new(Vec3::Y * 1.6, [directive]).with_settings(SpottingSettings::new(4, 4, 10.0))
 }
 
-fn observer(app: &mut App, subject: Option<Entity>, discovery_due: bool) -> Entity {
+pub(super) fn observer(app: &mut App, subject: Option<Entity>, discovery_due: bool) -> Entity {
 	let mut user = user();
 	user.next_discovery_at = if discovery_due { 0.0 } else { 10_000.0 };
 	if let Some(subject) = subject {
@@ -56,14 +57,18 @@ fn observer(app: &mut App, subject: Option<Entity>, discovery_due: bool) -> Enti
 		.id()
 }
 
-fn priority(app: &mut App, entities: &[Entity]) {
+pub(super) fn priority(app: &mut App, entities: &[Entity]) {
 	let mut priority = app.world_mut().resource_mut::<IntelligencePriority>();
 	for (rank, entity) in entities.iter().enumerate() {
 		priority.rank.insert(*entity, rank as u32);
 	}
 }
 
-fn contact(app: &App, observer: Entity, subject: Entity) -> anyhow::Result<SpottedContact> {
+pub(super) fn contact(
+	app: &App,
+	observer: Entity,
+	subject: Entity,
+) -> anyhow::Result<SpottedContact> {
 	app.world()
 		.get::<SpottingUser>(observer)
 		.and_then(|user| user.contacts.get(&subject))
