@@ -7,6 +7,7 @@
 //! [`Message`].
 
 pub mod controls;
+pub mod gameplay;
 pub mod icons;
 pub mod info;
 pub mod loading;
@@ -38,6 +39,7 @@ pub use controls::{
 	ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal, ShortTextModalRoot,
 	ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank, TileWrap,
 };
+pub use gameplay::GameplayHud;
 pub use icons::{spin_icons, Icon, SpinningIcon};
 pub use info::{
 	set_brand_mode_title, set_description_for_menu, set_hint_for_menu, set_info_box_for_menu,

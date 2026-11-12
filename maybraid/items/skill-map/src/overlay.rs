@@ -480,9 +480,15 @@ pub fn spawn_overlay_pane(
 mod tests {
 	use super::*;
 	use crate::feed_view::FeedArrow;
+	use crate::tunnel_vision::{
+		apply_tunnel_vision_material, hide_gameplay_hud, sync_tunnel_vision_target,
+		tick_tunnel_vision, SkillMapTunnelVision, SkillMapTunnelVisionMaterial,
+	};
 	use crate::user::spawn_skill_maps;
+	use crate::viewport::SkillMapCollapsedChrome;
 	use crate::SkillMapEnabled;
 	use bevy::ecs::system::RunSystemOnce;
+	use bevy::time::TimeUpdateStrategy;
 	use maybraid_character_controller::{
 		register_character_controller, ActorTarget, CharacterControlSystems, OrdinaryLocomotion,
 	};
@@ -490,6 +496,7 @@ mod tests {
 	use maybraid_virtual_pad_controller::{
 		PadButton, PadDevices, VirtualPad, VirtualPadController, VirtualPadEvent,
 	};
+	use menu_components::GameplayHud;
 
 	#[test]
 	fn overlay_layout_fills_the_window_only_when_expanded() {
@@ -524,6 +531,7 @@ mod tests {
 		register_character_controller(&mut app);
 		app.add_plugins(MinimalPlugins)
 			.init_resource::<SkillMapEnabled>()
+			.init_resource::<SkillMapTunnelVision>()
 			.add_message::<SkillMapOverlayCue>()
 			.add_systems(
 				Update,
@@ -532,11 +540,29 @@ mod tests {
 					crate::feed::start_feeds_on_steer_hold,
 					crate::feed::tick_feeds,
 					sync_skill_map_overlay,
+					sync_tunnel_vision_target,
 				)
 					.chain()
 					.after(CharacterControlSystems),
 			)
-			.add_systems(PostUpdate, crate::sound::play_overlay_activate_sounds);
+			.add_systems(
+				PostUpdate,
+				(
+					tick_tunnel_vision,
+					hide_gameplay_hud,
+					apply_tunnel_vision_material,
+					crate::sound::play_overlay_activate_sounds,
+				)
+					.chain(),
+			);
+		app
+	}
+
+	fn tunnel_app() -> App {
+		let mut app = overlay_app();
+		app.insert_resource(TimeUpdateStrategy::ManualDuration(
+			std::time::Duration::from_secs_f32(crate::TUNNEL_VISION_FADE_SECS),
+		));
 		app
 	}
 
@@ -674,6 +700,109 @@ mod tests {
 		send_pad(&mut app, source, 1, hold_rb(&[PadButton::BumperFocus, PadButton::BumperFire]));
 		app.update();
 		assert_eq!(overlay_of(&app, user), SkillMapOverlay::Collapsed);
+		Ok(())
+	}
+
+	struct TunnelProbe {
+		user: Entity,
+		gameplay: Entity,
+		firearm: Entity,
+		chrome: Entity,
+		camera: Entity,
+	}
+
+	fn spawn_tunnel_user(app: &mut App, ordinary: bool) -> TunnelProbe {
+		let (user, _) = spawn_overlay_user(app, ordinary);
+		let session = app.world().get::<SkillMapUser>(user).expect("user").maps;
+		let member = SkillMapMember { user, session };
+		let gameplay = app.world_mut().spawn((GameplayHud, Visibility::Inherited)).id();
+		let firearm = app
+			.world_mut()
+			.spawn((SkillMapFirearmHud, GameplayHud, member, Visibility::Inherited))
+			.id();
+		let chrome = app
+			.world_mut()
+			.spawn((SkillMapCollapsedChrome, member, Visibility::Inherited))
+			.id();
+		let camera = app.world_mut().spawn(Camera3d::default()).id();
+		TunnelProbe { user, gameplay, firearm, chrome, camera }
+	}
+
+	fn visibility_of(app: &App, entity: Entity) -> Visibility {
+		*app.world().get::<Visibility>(entity).expect("visibility")
+	}
+
+	fn tunnel_of(app: &App) -> SkillMapTunnelVision {
+		*app.world().resource::<SkillMapTunnelVision>()
+	}
+
+	fn blur_on(app: &App, camera: Entity) -> Option<SkillMapTunnelVisionMaterial> {
+		app.world().get::<SkillMapTunnelVisionMaterial>(camera).copied()
+	}
+
+	fn assert_tunnel_idle(app: &App, probe: &TunnelProbe) {
+		assert_eq!(overlay_of(app, probe.user), SkillMapOverlay::Collapsed);
+		assert!(!tunnel_of(app).hides_hud());
+		assert!(!tunnel_of(app).blur_enabled());
+		assert_eq!(visibility_of(app, probe.gameplay), Visibility::Inherited);
+		assert_eq!(visibility_of(app, probe.firearm), Visibility::Inherited);
+		assert_eq!(visibility_of(app, probe.chrome), Visibility::Inherited);
+		assert!(blur_on(app, probe.camera).is_none());
+	}
+
+	fn assert_tunnel_active(app: &App, probe: &TunnelProbe) {
+		assert_eq!(overlay_of(app, probe.user), SkillMapOverlay::Expanded);
+		assert!(tunnel_of(app).hides_hud());
+		assert!(tunnel_of(app).blur_enabled());
+		assert_eq!(visibility_of(app, probe.gameplay), Visibility::Hidden);
+		assert_eq!(visibility_of(app, probe.firearm), Visibility::Hidden);
+		assert_eq!(visibility_of(app, probe.chrome), Visibility::Hidden);
+		let blur = blur_on(app, probe.camera).expect("edge blur");
+		assert_eq!(blur.strength, crate::TUNNEL_VISION_STRENGTH);
+		assert_eq!(blur.radius, crate::TUNNEL_VISION_RADIUS);
+		assert_eq!(blur.darken, crate::TUNNEL_VISION_DARKEN);
+		assert!(blur.amount > 0.0);
+	}
+
+	fn assert_rb_hold_hides_hud_and_enables_blur(
+		app: &mut App,
+		probe: &TunnelProbe,
+		source: Entity,
+	) {
+		drive_rb(app, source, 1, false);
+		assert_tunnel_idle(app, probe);
+		drive_rb(app, source, 2, true);
+		assert_tunnel_active(app, probe);
+		drive_rb(app, source, 3, false);
+		assert_tunnel_idle(app, probe);
+	}
+
+	#[test]
+	fn laufer_rb_hold_hides_hud_and_enables_edge_blur() -> anyhow::Result<()> {
+		let mut app = tunnel_app();
+		let probe = spawn_tunnel_user(&mut app, true);
+		let source = assign_pad(&mut app, probe.user);
+		assert_rb_hold_hides_hud_and_enables_blur(&mut app, &probe, source);
+		Ok(())
+	}
+
+	#[test]
+	fn tanzer_rb_hold_hides_hud_and_enables_edge_blur() -> anyhow::Result<()> {
+		let mut app = tunnel_app();
+		let probe = spawn_tunnel_user(&mut app, false);
+		let source = assign_pad(&mut app, probe.user);
+		assert_rb_hold_hides_hud_and_enables_blur(&mut app, &probe, source);
+		Ok(())
+	}
+
+	#[test]
+	fn bumper_chord_does_not_hide_hud_or_enable_edge_blur() -> anyhow::Result<()> {
+		let mut app = tunnel_app();
+		let probe = spawn_tunnel_user(&mut app, true);
+		let source = assign_pad(&mut app, probe.user);
+		send_pad(&mut app, source, 1, hold_rb(&[PadButton::BumperFocus, PadButton::BumperFire]));
+		app.update();
+		assert_tunnel_idle(&app, &probe);
 		Ok(())
 	}
 
