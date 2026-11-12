@@ -28,17 +28,17 @@ const FIREARM_CARD_BORDER: f32 = 1.5;
 const FIREARM_CARD_RADIUS: f32 = 8.0;
 
 /// How strongly overlay mode warps the map (and the world seen through it).
-/// Was `0.85`; lowered so refraction does not hide the 3D world.
+/// Was `0.85`; left at `0.28` so refraction stays a hint, not opacity.
 pub const OVERLAY_WARP: f32 = 0.28;
 /// How much stained-glass color washes the warped map.
-/// Was `0.42`; lowered so pane tint stays a hint rather than a wash.
-pub const OVERLAY_GLASS: f32 = 0.12;
-/// Tile overlay uniform when expanded (`style.w`). Was `1.0`.
-pub const OVERLAY_TILE_AMOUNT: f32 = 0.50;
-/// Map-camera clear alpha while expanded. Was `0.14`.
-pub const OVERLAY_CLEAR_ALPHA: f32 = 0.04;
-/// Expanded frame fill alpha. Was `0.04`.
-pub const OVERLAY_FRAME_FILL_ALPHA: f32 = 0.018;
+/// Was `0.42`, then `0.12`; ~33% lighter so the world stays readable.
+pub const OVERLAY_GLASS: f32 = 0.08;
+/// Tile overlay uniform when expanded (`style.w`). Was `1.0`, then `0.50`.
+pub const OVERLAY_TILE_AMOUNT: f32 = 0.35;
+/// Map-camera clear alpha while expanded. Was `0.14`, then `0.04`.
+pub const OVERLAY_CLEAR_ALPHA: f32 = 0.028;
+/// Expanded frame fill alpha. Was `0.04`, then `0.018`.
+pub const OVERLAY_FRAME_FILL_ALPHA: f32 = 0.012;
 
 /// Collapsed corner HUD versus the full-screen stained-glass overlay.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -470,7 +470,12 @@ mod tests {
 			.add_message::<SkillMapOverlayCue>()
 			.add_systems(
 				Update,
-				(crate::cursor::sync_skill_map_held, sync_skill_map_overlay)
+				(
+					crate::cursor::sync_skill_map_held,
+					crate::feed::start_feeds_on_steer_hold,
+					crate::feed::tick_feeds,
+					sync_skill_map_overlay,
+				)
 					.chain()
 					.after(CharacterControlSystems),
 			)
@@ -506,6 +511,7 @@ mod tests {
 			.expect("spawn maps");
 		app.world_mut().flush();
 		let session = app.world().get::<SkillMapUser>(user).expect("user").maps;
+		app.world_mut().entity_mut(session).insert(crate::feed::FeedState::default());
 		let member = SkillMapMember { user, session };
 		let hud = app
 			.world_mut()
@@ -660,5 +666,81 @@ mod tests {
 		assert_eq!(overlay_of(&app, user), SkillMapOverlay::Collapsed);
 		assert_eq!(activations(&app), 0, "LB+RB chord must not play the overlay clip");
 		Ok(())
+	}
+
+	fn feed_of(app: &App, user: Entity) -> crate::feed::FeedState {
+		let session = app.world().get::<SkillMapUser>(user).expect("user").maps;
+		app.world().get::<crate::feed::FeedState>(session).expect("feed").clone()
+	}
+
+	fn assert_rb_hold_starts_the_feed(app: &mut App, user: Entity, source: Entity) {
+		drive_rb(app, source, 1, false);
+		assert!(!feed_of(app, user).started(), "idle maps must wait for RB");
+		drive_rb(app, source, 2, true);
+		let first = feed_of(app, user);
+		assert!(first.started(), "RB hold must start the feed without a flick");
+		app.world_mut()
+			.resource_mut::<Time>()
+			.advance_by(std::time::Duration::from_millis(400));
+		drive_rb(app, source, 3, true);
+		let held = feed_of(app, user);
+		assert!(held.started());
+		assert!(
+			held.elapsed() > first.elapsed(),
+			"held RB must keep the same phrase running, not restart it"
+		);
+		drive_rb(app, source, 4, false);
+		let paused = feed_of(app, user);
+		assert!(paused.started());
+		assert_eq!(paused.elapsed(), held.elapsed(), "release must pause the clock");
+		drive_rb(app, source, 5, true);
+		let restarted = feed_of(app, user);
+		assert!(restarted.started());
+		assert_eq!(restarted.hits(), 0);
+		assert!(
+			restarted.elapsed() < paused.elapsed(),
+			"re-holding RB must restart the phrase, got {} vs paused {}",
+			restarted.elapsed(),
+			paused.elapsed()
+		);
+	}
+
+	#[test]
+	fn laufer_rb_hold_starts_the_feed_immediately() -> anyhow::Result<()> {
+		let mut app = overlay_app();
+		let (user, _) = spawn_overlay_user(&mut app, true);
+		let source = assign_pad(&mut app, user);
+		assert_rb_hold_starts_the_feed(&mut app, user, source);
+		Ok(())
+	}
+
+	#[test]
+	fn tanzer_rb_hold_starts_the_feed_immediately() -> anyhow::Result<()> {
+		let mut app = overlay_app();
+		let (user, _) = spawn_overlay_user(&mut app, false);
+		let source = assign_pad(&mut app, user);
+		assert_rb_hold_starts_the_feed(&mut app, user, source);
+		Ok(())
+	}
+
+	#[test]
+	fn bumper_chord_does_not_start_the_feed() -> anyhow::Result<()> {
+		let mut app = overlay_app();
+		let (user, _) = spawn_overlay_user(&mut app, true);
+		let source = assign_pad(&mut app, user);
+		send_pad(&mut app, source, 1, hold_rb(&[PadButton::BumperFocus, PadButton::BumperFire]));
+		app.update();
+		assert_eq!(overlay_of(&app, user), SkillMapOverlay::Collapsed);
+		assert!(!feed_of(&app, user).started(), "LB+RB chord must not start the feed");
+		Ok(())
+	}
+
+	#[test]
+	fn overlay_veil_is_a_light_hint() {
+		assert!((OVERLAY_GLASS - 0.08).abs() < 1e-6);
+		assert!((OVERLAY_TILE_AMOUNT - 0.35).abs() < 1e-6);
+		assert!((OVERLAY_CLEAR_ALPHA - 0.028).abs() < 1e-6);
+		assert!((OVERLAY_FRAME_FILL_ALPHA - 0.012).abs() < 1e-6);
+		assert!((OVERLAY_WARP - 0.28).abs() < 1e-6);
 	}
 }

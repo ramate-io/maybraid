@@ -93,6 +93,11 @@ impl FeedState {
 		self.started
 	}
 
+	/// Begin (or restart) the phrase on the overlay expand edge.
+	pub fn activate(&mut self) {
+		*self = Self { started: true, ..Self::default() };
+	}
+
 	pub const fn elapsed(&self) -> f32 {
 		self.elapsed
 	}
@@ -159,12 +164,7 @@ impl FeedState {
 			return false;
 		}
 		if !self.started {
-			if !FEED_STEPS[0].matches(throw) {
-				return false;
-			}
-			self.started = true;
-			self.steps[0] = FeedStepStatus::Hit;
-			return true;
+			return false;
 		}
 		for (index, direction) in FEED_STEPS.iter().enumerate() {
 			if self.steps[index] == FeedStepStatus::Pending
@@ -176,6 +176,22 @@ impl FeedState {
 			}
 		}
 		false
+	}
+}
+
+/// Rising RB hold starts a fresh phrase. Release pauses via [`tick_feeds`];
+/// the LB+RB chord never sets [`SkillMapHeld`], so it does not start the clock.
+pub fn start_feeds_on_steer_hold(
+	users: Query<(&SkillMapUser, &SkillMapHeld), Changed<SkillMapHeld>>,
+	mut feeds: Query<&mut FeedState>,
+) {
+	for (user, held) in &users {
+		if !held.0 {
+			continue;
+		}
+		if let Ok(mut feed) = feeds.get_mut(user.maps) {
+			feed.activate();
+		}
 	}
 }
 
@@ -232,22 +248,30 @@ mod tests {
 	use crate::feed::*;
 
 	#[test]
-	fn first_matching_move_starts_and_only_counts_once() {
+	fn activate_starts_the_clock_without_a_flick() {
 		let mut feed = FeedState::default();
 		feed.advance(30.0);
 		assert!(!feed.strike(Vec2::X));
 		assert!(!feed.strike(Vec2::ZERO));
 		assert!(!feed.started());
 		assert_eq!(feed.elapsed(), 0.0);
-		assert!(feed.strike(Vec2::NEG_X));
+		feed.activate();
 		assert!(feed.started());
+		assert_eq!(feed.elapsed(), 0.0);
+		assert!(feed.strike(Vec2::NEG_X));
 		assert_eq!(feed.hits(), 1);
 		assert!(!feed.strike(Vec2::NEG_X));
+		feed.advance(0.4);
+		feed.activate();
+		assert_eq!(feed.elapsed(), 0.0);
+		assert_eq!(feed.hits(), 0);
+		assert!(feed.started());
 	}
 
 	#[test]
 	fn timing_and_direction_are_both_required() {
 		let mut feed = FeedState::default();
+		feed.activate();
 		assert!(feed.strike(Vec2::NEG_X));
 		feed.advance(FEED_STEP_SECS - FEED_WINDOW_SECS - 0.01);
 		assert!(!feed.strike(Vec2::Y));
@@ -263,6 +287,7 @@ mod tests {
 	#[test]
 	fn all_eight_hits_repeat_after_a_one_and_a_half_second_rest() {
 		let mut feed = FeedState::default();
+		feed.activate();
 		for (index, direction) in FEED_STEPS.iter().enumerate() {
 			if index > 0 {
 				feed.advance(FEED_STEP_SECS);
@@ -285,6 +310,7 @@ mod tests {
 	#[test]
 	fn repeat_opening_accepts_early_input_without_double_claiming() {
 		let mut feed = FeedState::default();
+		feed.activate();
 		assert!(feed.strike(Vec2::NEG_X));
 		feed.advance(FeedState::cycle_duration() - FEED_WINDOW_SECS - 0.01);
 		assert!(!feed.strike(Vec2::NEG_X));
@@ -305,6 +331,7 @@ mod tests {
 		world.init_resource::<SkillMapEnabled>();
 		world.resource_mut::<Time>().advance_by(std::time::Duration::from_millis(100));
 		let mut feed = FeedState::default();
+		feed.activate();
 		assert!(feed.strike(Vec2::NEG_X));
 		let session = world.spawn(feed).id();
 		let user = world
@@ -351,6 +378,7 @@ mod tests {
 	#[test]
 	fn missed_notes_do_not_stall_and_frozen_time_does_not_advance() {
 		let mut feed = FeedState::default();
+		feed.activate();
 		assert!(feed.strike(Vec2::NEG_X));
 		feed.frozen = true;
 		feed.advance(10.0);

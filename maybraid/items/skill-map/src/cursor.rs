@@ -35,10 +35,13 @@ pub fn sync_skill_map_held(
 	mut users: Query<(Entity, &mut SkillMapHeld, Option<&RoutedActorControl>), With<SkillMapUser>>,
 ) {
 	for (entity, mut slot, routed) in &mut users {
-		slot.0 = enabled.0
+		let held = enabled.0
 			&& routed.is_some_and(|routed| {
 				routed.addresses(entity) && routed.payload().is_some_and(skill_map_steer_held)
 			});
+		if slot.0 != held {
+			slot.0 = held;
+		}
 	}
 }
 
@@ -331,6 +334,10 @@ mod tests {
 			.next()
 			.is_none());
 		app.world_mut()
+			.get_mut::<FeedState>(session)
+			.ok_or_else(|| anyhow::anyhow!("missing feed"))?
+			.activate();
+		app.world_mut()
 			.write_message(SkillMapFlick::new(user, Some(session), Vec2::NEG_X));
 		app.world_mut()
 			.write_message(SkillMapFlick::new(user, Some(session), Vec2::NEG_X));
@@ -379,6 +386,10 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("missing feed"))?
 			.started());
 		app.world_mut().entity_mut(user).insert(SkillMapHeld(true));
+		app.world_mut()
+			.get_mut::<FeedState>(session)
+			.ok_or_else(|| anyhow::anyhow!("missing feed"))?
+			.activate();
 		app.world_mut().trigger(RoutedSkillMapFlickEvent { entity: user, input });
 		assert!(app
 			.world()

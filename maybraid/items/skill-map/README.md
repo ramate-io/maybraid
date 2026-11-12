@@ -11,9 +11,10 @@ It is included in the starter-map roll and uses Rockadder's mosaic materials
 and shockwave effect. Its inventory and thumbnail identity is separate from
 the spatial Rockadder map.
 
-Follow the directional prompts toward the hit line. The first matching flick
-starts the feed and counts as the first hit. Complete each flick by returning
-the stick to rest, using the same input rules as the spatial maps:
+Follow the directional prompts toward the hit line. Holding RB starts the
+phrase immediately; releasing pauses it, and holding again restarts from the
+first prompt. Complete each flick by returning the stick to rest, using the
+same input rules as the spatial maps:
 
 - **Laufer:** hold the skill-map modifier (RB / keyboard V) to expand the overlay, then flick either stick.
 - **Tanz:** hold the same modifier to expand the overlay, then use the existing Tanz stick gestures. Releasing RB collapses the map back to the corner. Tanz execution itself does not require the hold.
@@ -30,10 +31,11 @@ gentler sway) and a compositor warps the map camera image so the world stays
 readable through coloured, refracted glass. The expand edge plays the authored
 `change_item` clip on the UI bus; releasing RB is silent. The clock pauses when
 skill-map input is inactive or gameplay is suspended.
-Changing the equipped map starts a fresh feed, waiting for its first flick.
+Changing the equipped map starts a fresh feed on the next RB hold.
 Timing and sequence definitions live in `src/feed.rs`; presentation lives in
 `src/feed_view.rs`. Rhythm maps draw only the chevrons and the hit line — no
-lane slots — at [`TANZ_CALLOUT_ICON_PX`].
+lane slots — at [`TANZ_CALLOUT_ICON_PX`], with the four lanes occupying a
+third of the original overlay width.
 
 Run the focused checks with:
 

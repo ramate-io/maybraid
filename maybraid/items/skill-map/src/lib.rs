@@ -155,6 +155,7 @@ impl Plugin for SkillMapPlugin {
 					controller::detect_skill_map_flicks,
 					cursor::sync_skill_map_held,
 					cursor::tick_steer_lock,
+					feed::start_feeds_on_steer_hold,
 					feed::tick_feeds,
 					controller::dispatch_routed_flicks,
 					cursor::apply_flicks,

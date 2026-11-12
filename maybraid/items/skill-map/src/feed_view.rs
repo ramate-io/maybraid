@@ -19,6 +19,11 @@ const MISS: Color = Color::srgb(0.98, 0.32, 0.20);
 const OVERLAY_REFERENCE_HEIGHT_PX: f32 = 1080.0;
 /// Authored chevron height (stem + barbs) before [`FeedArrow::scale`].
 const FEED_ARROW_AUTHOR_HEIGHT: f32 = 7.25;
+/// Chart span versus the original overlay layout (outer lanes at ±27).
+const FEED_LANE_WIDTH: f32 = 1.0 / 3.0;
+const LANE_OUTER: f32 = 27.0 * FEED_LANE_WIDTH;
+const LANE_INNER: f32 = 9.0 * FEED_LANE_WIDTH;
+const HIT_LINE_WIDTH: f32 = 72.0 * FEED_LANE_WIDTH;
 
 #[derive(Component)]
 pub(crate) struct FeedPrompt {
@@ -49,6 +54,10 @@ impl FeedArrow {
 
 	pub fn scale() -> f32 {
 		Self::height() / FEED_ARROW_AUTHOR_HEIGHT
+	}
+
+	pub fn hit_line_width() -> f32 {
+		HIT_LINE_WIDTH
 	}
 
 	pub fn spawn_note(
@@ -88,16 +97,16 @@ impl FeedArrow {
 }
 
 impl FeedDirection {
-	fn lane_x(self) -> f32 {
+	pub(crate) fn lane_x(self) -> f32 {
 		let direction = self.vector();
 		if direction.x < 0.0 {
-			-27.0
+			-LANE_OUTER
 		} else if direction.y > 0.0 {
-			-9.0
+			-LANE_INNER
 		} else if direction.y < 0.0 {
-			9.0
+			LANE_INNER
 		} else {
-			27.0
+			LANE_OUTER
 		}
 	}
 
@@ -178,7 +187,10 @@ pub(crate) fn spawn_feed_scene(
 				});
 		}
 		board.spawn((
-			Sprite::from_color(Color::srgba(1.0, 0.78, 0.36, 0.45), Vec2::new(72.0, 0.6)),
+			Sprite::from_color(
+				Color::srgba(1.0, 0.78, 0.36, 0.45),
+				Vec2::new(FeedArrow::hit_line_width(), 0.6),
+			),
 			Transform::from_xyz(0.0, HIT_Y, 0.3),
 			layer.clone(),
 		));
@@ -221,7 +233,7 @@ pub(crate) fn spawn_feed_status(
 	parent.spawn((
 		FeedStatus,
 		member,
-		Text::new("Flick LEFT to start"),
+		Text::new("0 / 8"),
 		fonts.item(12.0),
 		TextColor(GOLD),
 		TextLayout::justify(Justify::Center),
@@ -262,7 +274,7 @@ pub(crate) fn sync_feed_view(
 		};
 		let held = users.get(member.user).is_ok_and(|held| held.0);
 		let (label, tint) = if !state.started() {
-			("Flick LEFT to start".to_owned(), GOLD)
+			("0 / 8".to_owned(), GOLD)
 		} else if !held {
 			(format!("Paused · {} / 8", state.hits()), GOLD)
 		} else if state.in_pause() {
@@ -290,7 +302,7 @@ mod tests {
 	use bevy::prelude::*;
 	use character_items::{SkillMapKind, SkillMapSpec};
 
-	use crate::feed::{FeedState, FEED_WINDOW_SECS};
+	use crate::feed::{FeedDirection, FeedState, FEED_WINDOW_SECS};
 	use crate::feed_view::{spawn_feed_scene, FeedArrow, FeedPrompt, HIT, HIT_Y};
 	use crate::map::authored_map_from_spec;
 	use crate::tile_material::SkillMapTileAssets;
@@ -301,6 +313,7 @@ mod tests {
 	#[test]
 	fn early_hit_flashes_at_receptor_including_repeat() {
 		let mut feed = FeedState::default();
+		feed.activate();
 		assert!(feed.strike(Vec2::NEG_X));
 		feed.advance(FeedState::step_time(1) - FEED_WINDOW_SECS * 0.5);
 		assert!(feed.strike(Vec2::Y));
@@ -356,6 +369,12 @@ mod tests {
 		}
 		assert!(!slot, "slot panels must not spawn behind rhythm arrows");
 		assert_eq!(sprites, 37, "hit line + 4 receptor chevrons + 8 notes");
+		assert!(
+			world.query::<&Sprite>().iter(&world).any(|sprite| {
+				sprite.custom_size == Some(Vec2::new(FeedArrow::hit_line_width(), 0.6))
+			}),
+			"hit line must use the compressed chart width"
+		);
 		world.despawn(host);
 		assert!(!world.entities().contains(host));
 		assert_eq!(world.query::<&FeedPrompt>().iter(&world).count(), 0);
@@ -376,5 +395,15 @@ mod tests {
 		);
 		assert_eq!(TANZ_CALLOUT_ICON_PX, 40.0);
 		assert!((FeedArrow::height() - 40.0 / 1080.0 * map_view_extent().y).abs() < 1e-4);
+	}
+
+	#[test]
+	fn feed_lanes_span_a_third_of_the_original_chart() {
+		assert!((FeedDirection::Left.lane_x() + 9.0).abs() < 1e-4);
+		assert!((FeedDirection::Up.lane_x() + 3.0).abs() < 1e-4);
+		assert!((FeedDirection::Down.lane_x() - 3.0).abs() < 1e-4);
+		assert!((FeedDirection::Right.lane_x() - 9.0).abs() < 1e-4);
+		assert!((FeedArrow::hit_line_width() - 24.0).abs() < 1e-4);
+		assert_eq!(TANZ_CALLOUT_ICON_PX, 40.0);
 	}
 }
