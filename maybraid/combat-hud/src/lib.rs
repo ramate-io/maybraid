@@ -20,6 +20,7 @@ use lubikan_charge::{
 };
 use lubikan_points::{ingest_lubikan_point_flyers, update_lubikan_point_flyers};
 use lubikans::LubikanSystems;
+use menu_components::GameplayHud;
 use player::Player;
 use score::{ingest_combat_score, spawn_combat_score, sync_combat_score};
 use vitals::{spawn_player_vitals, sync_player_vitals, vitals_fonts};
@@ -253,6 +254,7 @@ fn spawn_combat_hud(
 		.spawn((
 			Name::new("combat-hud"),
 			CombatHudRoot,
+			GameplayHud,
 			Node {
 				position_type: PositionType::Absolute,
 				left: Val::Px(0.0),

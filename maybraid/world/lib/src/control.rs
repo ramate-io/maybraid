@@ -6,12 +6,14 @@ use durham::{
 	TerrainTrimeshCollider,
 };
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
+use grenade_user::CookFuseHud;
 use maybraid_character_controller::{ActorControlStatus, ActorIntentEvent, CharacterIntent};
 use maybraid_controllers_core::{CaptureKind, InputRouting, InputSource, ScopeOwner};
 use maybraid_session::{SessionCapabilities, WorldGameplayEnabled, WorldPlaySessionEnded};
-use maybraid_skill_map::SkillMapEnabled;
+use maybraid_skill_map::{SkillMapEnabled, SkillMapTunnelVision};
 use maybraid_sky::{SkyDome, SKY_HORIZON};
 use maybraid_virtual_pad_controller::PrimaryVirtualPad;
+use menu_components::GameplayHud;
 use player::{
 	apply_character_controller, Buoyant, CharacterController, CharacterStance, JumpWish, Jumping,
 	LocomotionCapsule, MotorIntent, MotorTraction, MoveWish as PlayerMoveWish,
@@ -119,15 +121,26 @@ pub fn sync_lubikan_session(
 	));
 }
 
+pub(crate) fn stamp_gameplay_hud(
+	mut commands: Commands,
+	cooks: Query<Entity, (With<CookFuseHud>, Without<GameplayHud>)>,
+) {
+	for entity in &cooks {
+		commands.entity(entity).insert(GameplayHud);
+	}
+}
+
 pub(crate) fn sync_combat_hud_visible(
 	gameplay: Res<WorldGameplayEnabled>,
 	map: Option<Res<WorldMapView>>,
+	tunnel: Option<Res<SkillMapTunnelVision>>,
 	hud: Option<ResMut<combat_hud::CombatHudVisible>>,
 ) {
 	let Some(mut hud) = hud else {
 		return;
 	};
-	let next = gameplay.combat_hud_visible(map.is_some_and(|map| map.open));
+	let next = gameplay.combat_hud_visible(map.is_some_and(|map| map.open))
+		&& !tunnel.is_some_and(|tunnel| tunnel.hides_hud());
 	if hud.0 != next {
 		hud.0 = next;
 	}
@@ -381,6 +394,29 @@ mod tests {
 		assert!(WorldGameplayEnabled(true).accepts_character_input(false, false));
 		assert!(!WorldGameplayEnabled(false).accepts_character_input(false, false));
 		assert!(!WorldGameplayEnabled(true).accepts_character_input(true, false));
+	}
+
+	#[test]
+	fn tunnel_vision_hides_combat_hud() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(SkillMapTunnelVision::default());
+		world.insert_resource(combat_hud::CombatHudVisible(true));
+		world
+			.run_system_once(sync_combat_hud_visible)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<combat_hud::CombatHudVisible>().0);
+		world.resource_mut::<SkillMapTunnelVision>().set_target(true);
+		world
+			.run_system_once(sync_combat_hud_visible)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.resource::<combat_hud::CombatHudVisible>().0);
+		world.resource_mut::<SkillMapTunnelVision>().set_target(false);
+		world
+			.run_system_once(sync_combat_hud_visible)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<combat_hud::CombatHudVisible>().0);
+		Ok(())
 	}
 
 	#[test]

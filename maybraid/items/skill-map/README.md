@@ -28,9 +28,12 @@ pause leads into the same sequence automatically.
 Holding RB expands the map from the bottom-right corner into a full-screen
 stained-glass overlay: land/mosaic tiles drop to a light veil; power tiles,
 water (debraid), the cursor, and feed arrows keep full alpha through the
-compositor. Lowering `style.w` makes land tiles more opaque, not less. The
-expand edge plays the authored `change_item` clip on the UI bus; releasing
-RB is silent. The clock pauses when skill-map input is inactive or gameplay
+compositor. Lowering `style.w` makes land tiles more opaque, not less. While
+the overlay is up, the rest of the HUD hides and a vignette-style edge blur
+(`TUNNEL_VISION_STRENGTH` / `TUNNEL_VISION_RADIUS` / `TUNNEL_VISION_DARKEN`)
+fades in on the 3D camera so the centre stays sharp enough to navigate.
+Releasing RB restores the HUD and fades the blur out. The expand edge plays
+the authored `change_item` clip on the UI bus; releasing RB is silent. The clock pauses when skill-map input is inactive or gameplay
 is suspended. Changing the equipped map starts a fresh feed on the next RB
 hold.
 Timing and sequence definitions live in `src/feed.rs`; presentation lives in

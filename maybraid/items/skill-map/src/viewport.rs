@@ -9,7 +9,7 @@ use character_inventory_user::InventoryUser;
 use character_items::{Inventory, InventoryItem, SkillMapCategory};
 use item_icons::{ItemIconCache, FIREARM_SILHOUETTE_RESOLUTION};
 use menu_components::{
-	spawn_hud_text_card, spawn_hud_text_card_label, HudFonts, HUD_TEXT_CARD_FACE_PX,
+	spawn_hud_text_card, spawn_hud_text_card_label, GameplayHud, HudFonts, HUD_TEXT_CARD_FACE_PX,
 	PANEL_BLOCK_FONT_SIZE, TEXT_YELLOW,
 };
 
@@ -89,6 +89,10 @@ pub struct SkillMapLabel;
 
 #[derive(Component)]
 pub struct SkillMapFirearmHud;
+
+/// Caption, hold prompt, and feed status — hidden while the overlay is expanded.
+#[derive(Component)]
+pub struct SkillMapCollapsedChrome;
 
 #[derive(Component)]
 pub struct SkillMapFirearmName;
@@ -359,6 +363,7 @@ fn spawn_map_frame(
 			spawn_overlay_pane(frame, overlays, image, member);
 			frame
 				.spawn((
+					SkillMapCollapsedChrome,
 					Node {
 						position_type: PositionType::Absolute,
 						top: Val::Px(8.0),
@@ -377,6 +382,7 @@ fn spawn_map_frame(
 			}
 			frame
 				.spawn((
+					SkillMapCollapsedChrome,
 					Node {
 						position_type: PositionType::Absolute,
 						bottom: Val::Px(8.0),
@@ -404,6 +410,7 @@ fn spawn_firearm_hud(
 		.spawn((
 			Name::new("skill-map-firearm-hud"),
 			SkillMapFirearmHud,
+			GameplayHud,
 			member,
 			SkillMapOverlay::Collapsed.firearm_node(),
 			SkillMapOverlay::Collapsed.firearm_z(),

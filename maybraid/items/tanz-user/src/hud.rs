@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 use item_icons::ItemIconCache;
-use menu_components::{LoadingBarFill, TANZ_CALLOUT_ICON_PX, TEXT_YELLOW, TEXT_YELLOW_FAINT};
+use menu_components::{
+	GameplayHud, LoadingBarFill, TANZ_CALLOUT_ICON_PX, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+};
 use screen_capture::CaptureSubject;
 
 use crate::callout::TanzCallout;
@@ -40,6 +42,7 @@ pub fn spawn_tanz_mode_hud(mut commands: Commands) {
 		.spawn((
 			Name::new("tanz-mode-hud"),
 			TanzModeHud,
+			GameplayHud,
 			Node {
 				position_type: PositionType::Absolute,
 				top: Val::Px(18.0),
@@ -91,6 +94,7 @@ pub fn spawn_tanz_callout_hud(mut commands: Commands) {
 		.spawn((
 			Name::new("tanz-callout-hud"),
 			TanzCalloutHud,
+			GameplayHud,
 			Node {
 				position_type: PositionType::Absolute,
 				top: Val::Px(56.0),

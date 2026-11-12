@@ -23,6 +23,7 @@ mod preview;
 mod sound;
 mod tile_material;
 mod tiles;
+mod tunnel_vision;
 mod user;
 mod viewport;
 
@@ -66,6 +67,10 @@ pub use sound::{
 };
 pub use tile_material::{SkillMapTileAssets, SkillMapTileMaterialPlugin};
 pub use tiles::{classify_noise, TileKind};
+pub use tunnel_vision::{
+	SkillMapTunnelVision, SkillMapTunnelVisionMaterial, TUNNEL_VISION_DARKEN,
+	TUNNEL_VISION_FADE_SECS, TUNNEL_VISION_RADIUS, TUNNEL_VISION_STRENGTH,
+};
 pub use user::{
 	spawn_skill_maps, spawn_skill_maps_with, MappedBy, SkillMapEquip, SkillMapHeld, SkillMapMember,
 	SkillMapSession, SkillMapSteerLock, SkillMapUser, SkillMapUserSettings,
@@ -125,6 +130,7 @@ impl Plugin for SkillMapPlugin {
 		app.add_plugins(FireballMaterialPlugin)
 			.add_plugins(SkillMapTileMaterialPlugin)
 			.add_plugins(overlay::SkillMapOverlayPlugin)
+			.add_plugins(tunnel_vision::SkillMapTunnelVisionPlugin)
 			.add_systems(Startup, fireball_embers::setup_fireball_effects)
 			.add_systems(Startup, burst::setup_burst_assets)
 			.init_resource::<SkillMapEnabled>()
@@ -163,6 +169,7 @@ impl Plugin for SkillMapPlugin {
 					cursor::tick_flick_beads,
 					viewport::sync_viewport_chrome,
 					overlay::sync_skill_map_overlay,
+					tunnel_vision::sync_tunnel_vision_target,
 					viewport::sync_firearm_chrome,
 					viewport::sync_grenade_chrome,
 					viewport::track_cursors,

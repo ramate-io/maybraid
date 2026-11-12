@@ -7,7 +7,7 @@ use crate::feed::{FeedDirection, FeedState, FeedStepStatus, FEED_STEPS};
 use crate::map::{render_layer, AuthoredMap};
 use crate::tile_material::SkillMapTileAssets;
 use crate::user::{SkillMapHeld, SkillMapMember};
-use crate::viewport::map_view_extent;
+use crate::viewport::{map_view_extent, SkillMapCollapsedChrome};
 
 const HIT_Y: f32 = -20.0;
 const TOP_Y: f32 = 22.0;
@@ -236,6 +236,7 @@ pub(crate) fn spawn_feed_status(
 ) {
 	parent.spawn((
 		FeedStatus,
+		SkillMapCollapsedChrome,
 		member,
 		Text::new("0 / 8"),
 		fonts.item(12.0),

@@ -11,7 +11,7 @@ const BAR_WIDTH: f32 = 168.0;
 const BAR_HEIGHT: f32 = 8.0;
 
 #[derive(Component)]
-pub(crate) struct CookFuseHud;
+pub struct CookFuseHud;
 
 #[derive(Component)]
 pub(crate) struct CookFuseFill;
