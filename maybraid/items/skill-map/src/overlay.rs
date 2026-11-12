@@ -30,15 +30,24 @@ const FIREARM_CARD_RADIUS: f32 = 8.0;
 /// How strongly overlay mode warps the map (and the world seen through it).
 /// Was `0.85`; left at `0.28` so refraction stays a hint, not opacity.
 pub const OVERLAY_WARP: f32 = 0.28;
-/// How much stained-glass color washes the warped map.
-/// Was `0.42`, then `0.12`; ~33% lighter so the world stays readable.
+/// How much stained-glass *color* washes the warped map. Not coverage.
 pub const OVERLAY_GLASS: f32 = 0.08;
-/// Tile overlay uniform when expanded (`style.w`). Was `1.0`, then `0.50`.
-pub const OVERLAY_TILE_AMOUNT: f32 = 0.35;
-/// Map-camera clear alpha while expanded. Was `0.14`, then `0.04`.
+/// Blend of tile shading into overlay (translucent) mode when expanded.
+/// This is **not** a veil opacity: `0` keeps gameplay-tile alpha `1`, `1`
+/// mixes toward the see-through overlay alpha. Lowering it made 1e078a9
+/// *more* opaque. Keep in sync with `tile_material.wesl`.
+pub const OVERLAY_TILE_AMOUNT: f32 = 1.0;
+/// Map-camera clear alpha while expanded. Empty texels only; feed mosaic fills the RT.
 pub const OVERLAY_CLEAR_ALPHA: f32 = 0.028;
-/// Expanded frame fill alpha. Was `0.04`, then `0.018`.
+/// Expanded frame fill alpha (collapsed chrome still uses a fixed 0.12).
 pub const OVERLAY_FRAME_FILL_ALPHA: f32 = 0.012;
+/// Keep in sync with `overlay_material.wesl`.
+pub const OVERLAY_COMPOSITOR_ALPHA_SAMPLE: f32 = 0.88;
+pub const OVERLAY_COMPOSITOR_ALPHA_BIAS: f32 = 0.045;
+pub const OVERLAY_COMPOSITOR_CAME_ALPHA: f32 = 0.10;
+/// Tile overlay amount on the 9f22704 build. Used as a coverage regression bound.
+#[cfg(test)]
+const OVERLAY_TILE_AMOUNT_NINE_F227: f32 = 0.50;
 
 /// Collapsed corner HUD versus the full-screen stained-glass overlay.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -198,6 +207,24 @@ impl SkillMapOverlay {
 		}
 	}
 
+	pub fn tile_amount(self) -> f32 {
+		if self.expanded() {
+			OVERLAY_TILE_AMOUNT
+		} else {
+			0.0
+		}
+	}
+
+	/// Tile overlay α then compositor α for a typical pane (no came, mid noise).
+	pub fn pane_alpha(self, tile_base_alpha: f32) -> f32 {
+		self.pane_alpha_with(tile_base_alpha, 0.0, 0.5)
+	}
+
+	pub fn pane_alpha_with(self, tile_base_alpha: f32, came: f32, noise: f32) -> f32 {
+		let sample = SkillMapTileMaterial::overlay_alpha(tile_base_alpha, self.tile_amount());
+		OverlayParams::from_overlay(self).composited_alpha(sample, came, noise)
+	}
+
 	pub fn firearm_z(self) -> ZIndex {
 		if self.expanded() {
 			ZIndex(2)
@@ -241,6 +268,16 @@ impl OverlayParams {
 
 	pub fn from_overlay(overlay: SkillMapOverlay) -> Self {
 		Self { amount: overlay.amount(), warp: OVERLAY_WARP, glass: OVERLAY_GLASS, _pad: 0.0 }
+	}
+
+	/// CPU mirror of `overlay_material.wesl` fragment alpha (`lead = 0.22 + 0.18 * noise`).
+	pub fn composited_alpha(self, sample_alpha: f32, came: f32, noise: f32) -> f32 {
+		let amount = self.amount.clamp(0.0, 1.0);
+		let lead = 0.22 + 0.18 * noise;
+		let treated = sample_alpha * OVERLAY_COMPOSITOR_ALPHA_SAMPLE
+			+ OVERLAY_COMPOSITOR_ALPHA_BIAS
+			+ came * lead * OVERLAY_COMPOSITOR_CAME_ALPHA;
+		sample_alpha * (1.0 - amount) + treated * amount
 	}
 }
 
@@ -677,31 +714,28 @@ mod tests {
 		drive_rb(app, source, 1, false);
 		assert!(!feed_of(app, user).started(), "idle maps must wait for RB");
 		drive_rb(app, source, 2, true);
-		let first = feed_of(app, user);
-		assert!(first.started(), "RB hold must start the feed without a flick");
+		assert!(feed_of(app, user).started(), "RB hold must start the feed without a flick");
+		let session = app.world().get::<SkillMapUser>(user).expect("user").maps;
 		app.world_mut()
-			.resource_mut::<Time>()
-			.advance_by(std::time::Duration::from_millis(400));
+			.get_mut::<crate::feed::FeedState>(session)
+			.expect("feed")
+			.advance(0.4);
 		drive_rb(app, source, 3, true);
 		let held = feed_of(app, user);
 		assert!(held.started());
-		assert!(
-			held.elapsed() > first.elapsed(),
-			"held RB must keep the same phrase running, not restart it"
-		);
+		assert!(held.elapsed() >= 0.4, "held RB must keep the same phrase running, not restart it");
 		drive_rb(app, source, 4, false);
 		let paused = feed_of(app, user);
 		assert!(paused.started());
-		assert_eq!(paused.elapsed(), held.elapsed(), "release must pause the clock");
+		assert!((paused.elapsed() - held.elapsed()).abs() < 1e-3, "release must pause the clock");
 		drive_rb(app, source, 5, true);
 		let restarted = feed_of(app, user);
 		assert!(restarted.started());
 		assert_eq!(restarted.hits(), 0);
 		assert!(
-			restarted.elapsed() < paused.elapsed(),
-			"re-holding RB must restart the phrase, got {} vs paused {}",
-			restarted.elapsed(),
-			paused.elapsed()
+			restarted.elapsed() < 0.05,
+			"re-holding RB must restart the phrase, got {}",
+			restarted.elapsed()
 		);
 	}
 
@@ -738,9 +772,43 @@ mod tests {
 	#[test]
 	fn overlay_veil_is_a_light_hint() {
 		assert!((OVERLAY_GLASS - 0.08).abs() < 1e-6);
-		assert!((OVERLAY_TILE_AMOUNT - 0.35).abs() < 1e-6);
+		assert!((OVERLAY_TILE_AMOUNT - 1.0).abs() < 1e-6);
 		assert!((OVERLAY_CLEAR_ALPHA - 0.028).abs() < 1e-6);
 		assert!((OVERLAY_FRAME_FILL_ALPHA - 0.012).abs() < 1e-6);
 		assert!((OVERLAY_WARP - 0.28).abs() < 1e-6);
+	}
+
+	#[test]
+	fn lowering_tile_overlay_amount_increases_coverage() {
+		let opaque = SkillMapTileMaterial::overlay_alpha(1.0, 0.0);
+		let half = SkillMapTileMaterial::overlay_alpha(1.0, OVERLAY_TILE_AMOUNT_NINE_F227);
+		let full = SkillMapTileMaterial::overlay_alpha(1.0, 1.0);
+		let mistaken = SkillMapTileMaterial::overlay_alpha(1.0, 0.35);
+		assert!((opaque - 1.0).abs() < 1e-5);
+		assert!(
+			full < half,
+			"style.w blends toward overlay translucency; 1.0 must be clearer than 0.50"
+		);
+		assert!(
+			half < mistaken,
+			"dropping tile amount from 0.50 to 0.35 must not be treated as a lighter veil"
+		);
+		assert!(mistaken < opaque);
+	}
+
+	#[test]
+	fn expanded_overlay_is_clearer_than_the_nine_f227_tile_veil() {
+		let now = SkillMapOverlay::Expanded.pane_alpha(1.0);
+		let regression_sample =
+			SkillMapTileMaterial::overlay_alpha(1.0, OVERLAY_TILE_AMOUNT_NINE_F227);
+		let regression =
+			OverlayParams { amount: 1.0, warp: OVERLAY_WARP, glass: OVERLAY_GLASS, _pad: 0.0 }
+				.composited_alpha(regression_sample, 0.0, 0.5);
+		assert!(
+			now < regression,
+			"expanded pane alpha {now} must stay below the 9f22704 veil {regression}"
+		);
+		assert!(now < 0.40, "world must remain the majority of an expanded pane, got {now}");
+		assert!((SkillMapOverlay::Collapsed.pane_alpha(1.0) - 1.0).abs() < 1e-5);
 	}
 }

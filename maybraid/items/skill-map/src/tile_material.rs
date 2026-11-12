@@ -24,6 +24,10 @@ pub const TILE_KIND_LAND_COSMO: f32 = 7.0;
 pub const TILE_KIND_ROCK: f32 = 8.0;
 pub const TILE_KIND_COSMO: f32 = 9.0;
 const TILE_DIVISIONS: u32 = 12;
+/// Keep in sync with `tile_material.wesl` overlay alpha mix.
+pub const TILE_OVERLAY_ALPHA_SCALE: f32 = 0.28;
+pub const TILE_OVERLAY_ALPHA_BIAS: f32 = 0.05;
+pub const TILE_OVERLAY_ALPHA_MIX_GAIN: f32 = 1.85;
 
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct TileParams {
@@ -94,6 +98,15 @@ impl SkillMapTileMaterial {
 
 	pub fn set_overlay_amount(&mut self, amount: f32) {
 		self.params.style.w = amount.clamp(0.0, 1.0);
+	}
+
+	/// CPU mirror of `tile_material.wesl` overlay alpha. `amount` blends *toward*
+	/// translucency (`OVERLAY_ALPHA_SCALE` / `BIAS`); lowering it raises coverage.
+	pub fn overlay_alpha(base_alpha: f32, amount: f32) -> f32 {
+		let glass = amount.clamp(0.0, 1.0);
+		let glass_mix = (glass * TILE_OVERLAY_ALPHA_MIX_GAIN).clamp(0.0, 1.0);
+		let treated = base_alpha * TILE_OVERLAY_ALPHA_SCALE + TILE_OVERLAY_ALPHA_BIAS;
+		base_alpha * (1.0 - glass_mix) + treated * glass_mix
 	}
 }
 
@@ -271,5 +284,9 @@ mod tests {
 		land.set_overlay_amount(1.0);
 		assert_eq!(land.overlay_amount(), 1.0);
 		assert_eq!(land.alpha_mode(), AlphaMode2d::Blend);
+		assert!(
+			SkillMapTileMaterial::overlay_alpha(1.0, 1.0)
+				< SkillMapTileMaterial::overlay_alpha(1.0, 0.0)
+		);
 	}
 }

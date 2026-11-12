@@ -12,7 +12,7 @@ import bevy_sprite_render::mesh2d::view_bindings::globals;
 struct TileParams {
     // rgb + unused
     tint: vec4<f32>,
-    // x kind, y intensity, z seed, w overlay amount (0 corner, 1 stained glass)
+    // x kind, y intensity, z seed, w overlay blend (0 opaque tiles, 1 translucent glass)
     style: vec4<f32>,
 }
 
@@ -58,7 +58,8 @@ fn tile_kind() -> f32 { return material.style.x; }
 fn tile_seed() -> f32 { return material.style.z; }
 fn overlay_amount() -> f32 { return saturate(material.style.w); }
 
-// Overlay tile strengths. Previous sway 1.65 / tint 0.58 / alpha 0.40+0.16 / rim 0.12.
+// Overlay tile strengths. Mix *toward* translucency; lowering style.w raises coverage.
+// Keep SCALE/BIAS/MIX_GAIN in sync with tile_material.rs TILE_OVERLAY_ALPHA_*.
 const OVERLAY_SWAY_BOOST: f32 = 0.40;
 const OVERLAY_TINT_MIX: f32 = 0.22;
 const OVERLAY_ALPHA_SCALE: f32 = 0.28;

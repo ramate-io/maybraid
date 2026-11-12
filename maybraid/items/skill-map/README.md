@@ -26,9 +26,9 @@ count as repeated flicks. After the last timing window closes, a 1.5-second
 pause leads into the same sequence automatically.
 
 Holding RB expands the map from the bottom-right corner into a full-screen
-stained-glass overlay: tile shaders switch to overlay mode (lighter tint,
-gentler sway) and a compositor warps the map camera image so the world stays
-readable through coloured, refracted glass. The expand edge plays the authored
+stained-glass overlay: tile shaders switch to overlay mode (`style.w = 1`,
+which *lowers* tile alpha so the world shows through) and a compositor warps
+the map camera image. Lowering that blend makes tiles more opaque, not less. The expand edge plays the authored
 `change_item` clip on the UI bus; releasing RB is silent. The clock pauses when
 skill-map input is inactive or gameplay is suspended.
 Changing the equipped map starts a fresh feed on the next RB hold.
