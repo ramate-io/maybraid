@@ -1,7 +1,7 @@
 //! Corner viewports, map cameras, and the debraid overlay.
 
 use bevy::asset::RenderAssetUsages;
-use bevy::camera::{ClearColorConfig, RenderTarget};
+use bevy::camera::{ClearColorConfig, RenderTarget, ScalingMode};
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 use bevy::ui::widget::ViewportNode;
@@ -15,6 +15,9 @@ use menu_components::{
 
 use crate::cursor::SkillMapCursor;
 use crate::map::{authored_map_from_spec, render_layer, AuthoredMap, SkillMapId};
+use crate::overlay::{
+	spawn_overlay_pane, SkillMapBackdrop, SkillMapOverlay, SkillMapOverlayMaterial,
+};
 use crate::tile_material::SkillMapTileAssets;
 use crate::tiles::spawn_map_tiles;
 use crate::user::{SkillMapEquip, SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapUser};
@@ -27,22 +30,18 @@ pub(crate) const MAP_CAMERA_SCALE: f32 = 0.4;
 pub(crate) fn map_view_extent() -> Vec2 {
 	Vec2::splat(VIEWPORT_PX * MAP_CAMERA_SCALE)
 }
-const VIEWPORT_GAP: f32 = 12.0;
-const VIEWPORT_INSET: f32 = 16.0;
 const FRAME_BORDER: f32 = 2.0;
 const FRAME_RADIUS: f32 = 14.0;
 const FRAME_INNER_RADIUS: f32 = FRAME_RADIUS - FRAME_BORDER;
 const LIVE_BORDER: Color = Color::srgb(1.0, 0.48, 0.08);
 const IDLE_BORDER: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
 const PROMPT_ICON_PX: f32 = 18.0;
-const FIREARM_CARD_PAD_X: f32 = 8.0;
-const FIREARM_CARD_PAD_Y: f32 = 6.0;
-const FIREARM_CARD_BORDER: f32 = 1.5;
-const FIREARM_CARD_RADIUS: f32 = 8.0;
 const FIREARM_CARD_FILL: Color = Color::srgba(0.52, 0.52, 0.56, 0.82);
 const FIREARM_CARD_STROKE: Color = Color::srgba(0.78, 0.78, 0.82, 0.9);
 const GRENADE_SILHOUETTE_PX: f32 = 40.0;
 const GRENADE_SILHOUETTE_STROKE: f32 = 2.0;
+/// HUD flash when water locks steer. Stays on the frame, not the map RT.
+pub const DEBRAID_OVERLAY_ALPHA: f32 = 0.90;
 
 fn weapon_icon_slot() -> Node {
 	Node {
@@ -129,6 +128,12 @@ pub struct Debraid {
 	pub remaining: f32,
 }
 
+impl Debraid {
+	pub fn overlay_fill() -> Color {
+		Color::srgba(0.85, 0.08, 0.06, DEBRAID_OVERLAY_ALPHA)
+	}
+}
+
 #[derive(Component)]
 pub(crate) struct DebraidOverlay;
 
@@ -136,6 +141,7 @@ pub(crate) struct DebraidOverlay;
 pub fn present_skill_maps(
 	mut commands: Commands,
 	mut images: ResMut<Assets<Image>>,
+	mut overlays: ResMut<Assets<SkillMapOverlayMaterial>>,
 	asset_server: Res<AssetServer>,
 	tiles: Res<SkillMapTileAssets>,
 	users: Query<(Entity, &SkillMapUser, &SkillMapEquip)>,
@@ -161,6 +167,7 @@ pub fn present_skill_maps(
 		spawn_one_map(
 			&mut commands,
 			&mut images,
+			&mut overlays,
 			&HudFonts::load(asset_server.as_ref()),
 			asset_server.as_ref(),
 			&tiles,
@@ -242,6 +249,7 @@ pub fn spawn_skill_map_view(
 fn spawn_one_map(
 	commands: &mut Commands,
 	images: &mut Assets<Image>,
+	overlays: &mut Assets<SkillMapOverlayMaterial>,
 	fonts: &HudFonts,
 	asset_server: &AssetServer,
 	tiles: &SkillMapTileAssets,
@@ -253,7 +261,9 @@ fn spawn_one_map(
 ) {
 	let member = SkillMapMember { user, session };
 	let mut projection = OrthographicProjection::default_2d();
-	projection.scale = MAP_CAMERA_SCALE;
+	let extent = map_view_extent();
+	projection.scaling_mode = ScalingMode::Fixed { width: extent.x, height: extent.y };
+	projection.scale = 1.0;
 	let view = spawn_skill_map_view(
 		commands,
 		images,
@@ -262,12 +272,11 @@ fn spawn_one_map(
 		member,
 		-2 - stack_index as isize,
 		projection,
-		SkillMapViewportCamera,
+		(SkillMapViewportCamera, SkillMapBackdrop { kind: spec.kind }),
 	);
 	let camera = view.camera;
 	let layer = render_layer(spec.id);
 
-	let bottom = VIEWPORT_INSET + stack_index as f32 * (VIEWPORT_PX + VIEWPORT_GAP);
 	let caption = format!("{} {:04X}", spec.label, spec.seed as u16);
 	let mut node = Entity::PLACEHOLDER;
 	commands
@@ -276,22 +285,23 @@ fn spawn_one_map(
 			SkillMapHud,
 			spec.id,
 			member,
-			Node {
-				position_type: PositionType::Absolute,
-				bottom: Val::Px(bottom),
-				right: Val::Px(VIEWPORT_INSET),
-				width: Val::Px(VIEWPORT_PX),
-				flex_direction: FlexDirection::Column,
-				align_items: AlignItems::Stretch,
-				row_gap: Val::Px(8.0),
-				..default()
-			},
+			SkillMapOverlay::Collapsed.hud_node(),
 			Visibility::Hidden,
 			Pickable::IGNORE,
 		))
 		.with_children(|hud| {
 			spawn_firearm_hud(hud, fonts, asset_server, member);
-			node = spawn_map_frame(hud, fonts, asset_server, camera, spec, member, caption);
+			node = spawn_map_frame(
+				hud,
+				overlays,
+				fonts,
+				asset_server,
+				camera,
+				view.image.clone(),
+				spec,
+				member,
+				caption,
+			);
 		});
 
 	if spec.category == SkillMapCategory::Map {
@@ -312,9 +322,11 @@ fn spawn_one_map(
 
 fn spawn_map_frame(
 	parent: &mut ChildSpawnerCommands,
+	overlays: &mut Assets<SkillMapOverlayMaterial>,
 	fonts: &HudFonts,
 	asset_server: &AssetServer,
 	camera: Entity,
+	image: Handle<Image>,
 	spec: AuthoredMap,
 	member: SkillMapMember,
 	caption: String,
@@ -325,16 +337,9 @@ fn spawn_map_frame(
 			SkillMapViewport,
 			spec.id,
 			member,
-			Node {
-				width: Val::Px(VIEWPORT_PX),
-				height: Val::Px(VIEWPORT_PX),
-				border: UiRect::all(Val::Px(FRAME_BORDER)),
-				border_radius: BorderRadius::all(Val::Px(FRAME_RADIUS)),
-				overflow: Overflow::clip(),
-				..default()
-			},
-			BorderColor::all(IDLE_BORDER),
-			BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.12)),
+			SkillMapOverlay::Collapsed.map_frame_node(),
+			BorderColor::all(SkillMapOverlay::Collapsed.frame_border()),
+			BackgroundColor(SkillMapOverlay::Collapsed.frame_fill()),
 			Pickable::IGNORE,
 		))
 		.with_children(|frame| {
@@ -351,6 +356,7 @@ fn spawn_map_frame(
 				},
 				Pickable::IGNORE,
 			));
+			spawn_overlay_pane(frame, overlays, image, member);
 			frame
 				.spawn((
 					Node {
@@ -399,16 +405,8 @@ fn spawn_firearm_hud(
 			Name::new("skill-map-firearm-hud"),
 			SkillMapFirearmHud,
 			member,
-			Node {
-				flex_direction: FlexDirection::Column,
-				align_items: AlignItems::Center,
-				row_gap: Val::Px(6.0),
-				width: Val::Percent(100.0),
-				padding: UiRect::axes(Val::Px(FIREARM_CARD_PAD_X), Val::Px(FIREARM_CARD_PAD_Y)),
-				border: UiRect::all(Val::Px(FIREARM_CARD_BORDER)),
-				border_radius: BorderRadius::all(Val::Px(FIREARM_CARD_RADIUS)),
-				..default()
-			},
+			SkillMapOverlay::Collapsed.firearm_node(),
+			SkillMapOverlay::Collapsed.firearm_z(),
 			BackgroundColor(FIREARM_CARD_FILL),
 			BorderColor::all(FIREARM_CARD_STROKE),
 			Visibility::Hidden,
@@ -1011,7 +1009,7 @@ pub fn spawn_debraid(
 					overflow: Overflow::clip(),
 					..default()
 				},
-				BackgroundColor(Color::srgba(0.85, 0.08, 0.06, 0.55)),
+				BackgroundColor(Debraid::overlay_fill()),
 				Pickable::IGNORE,
 			))
 			.with_children(|overlay| {
@@ -1050,6 +1048,12 @@ mod tests {
 	use crate::SkillMapEnabled;
 
 	#[test]
+	fn debraid_flash_stays_strong() {
+		assert!(DEBRAID_OVERLAY_ALPHA >= 0.85);
+		assert!((Debraid::overlay_fill().to_srgba().alpha - DEBRAID_OVERLAY_ALPHA).abs() < 1e-5);
+	}
+
+	#[test]
 	fn unused_weapon_slot_leaves_the_layout() {
 		assert_eq!(weapon_slot_display(false), Display::None);
 		assert_eq!(weapon_slot_display(true), Display::Flex);
@@ -1065,16 +1069,20 @@ mod tests {
 	#[test]
 	fn chrome_and_track_queries_are_disjoint() {
 		let mut app = App::new();
-		app.add_plugins(MinimalPlugins).init_resource::<SkillMapEnabled>().add_systems(
-			Update,
-			(
-				sync_viewport_chrome,
-				sync_firearm_chrome,
-				sync_grenade_chrome,
-				track_cursors,
-				tick_debraid,
-			),
-		);
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<SkillMapEnabled>()
+			.add_message::<crate::SkillMapOverlayCue>()
+			.add_systems(
+				Update,
+				(
+					sync_viewport_chrome,
+					crate::overlay::sync_skill_map_overlay,
+					sync_firearm_chrome,
+					sync_grenade_chrome,
+					track_cursors,
+					tick_debraid,
+				),
+			);
 		app.update();
 	}
 

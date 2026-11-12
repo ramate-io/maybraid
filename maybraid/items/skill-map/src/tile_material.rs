@@ -24,11 +24,16 @@ pub const TILE_KIND_LAND_COSMO: f32 = 7.0;
 pub const TILE_KIND_ROCK: f32 = 8.0;
 pub const TILE_KIND_COSMO: f32 = 9.0;
 const TILE_DIVISIONS: u32 = 12;
+/// Keep in sync with `tile_material.wesl` overlay alpha mix (land/mosaic only).
+/// Was `0.28` / `0.05` on 913ff6fe4 (~0.33 tile α, ~0.34 pane).
+pub const TILE_OVERLAY_ALPHA_SCALE: f32 = 0.15;
+pub const TILE_OVERLAY_ALPHA_BIAS: f32 = 0.025;
+pub const TILE_OVERLAY_ALPHA_MIX_GAIN: f32 = 1.85;
 
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct TileParams {
 	pub tint: Vec4,
-	/// `x` kind, `y` intensity, `z` seed.
+	/// `x` kind, `y` intensity, `z` seed, `w` overlay amount.
 	pub style: Vec4,
 }
 
@@ -87,6 +92,36 @@ impl SkillMapTileMaterial {
 			},
 		}
 	}
+
+	pub fn overlay_amount(&self) -> f32 {
+		self.params.style.w
+	}
+
+	pub fn set_overlay_amount(&mut self, amount: f32) {
+		self.params.style.w = amount.clamp(0.0, 1.0);
+	}
+
+	/// CPU mirror of `tile_material.wesl` overlay alpha. `amount` blends *toward*
+	/// translucency (`OVERLAY_ALPHA_SCALE` / `BIAS`); lowering it raises coverage.
+	pub fn overlay_alpha(base_alpha: f32, amount: f32) -> f32 {
+		let glass = amount.clamp(0.0, 1.0);
+		let glass_mix = (glass * TILE_OVERLAY_ALPHA_MIX_GAIN).clamp(0.0, 1.0);
+		let treated = base_alpha * TILE_OVERLAY_ALPHA_SCALE + TILE_OVERLAY_ALPHA_BIAS;
+		base_alpha * (1.0 - glass_mix) + treated * glass_mix
+	}
+
+	/// Power marks, water (debraid), and the cursor keep full alpha in overlay mode.
+	pub fn overlay_veils_kind(kind: f32) -> bool {
+		kind < 0.5 || (kind > 4.5 && kind < 7.5)
+	}
+
+	pub fn overlay_alpha_for_kind(base_alpha: f32, amount: f32, kind: f32) -> f32 {
+		if Self::overlay_veils_kind(kind) {
+			Self::overlay_alpha(base_alpha, amount)
+		} else {
+			base_alpha
+		}
+	}
 }
 
 impl Material2d for SkillMapTileMaterial {
@@ -99,11 +134,7 @@ impl Material2d for SkillMapTileMaterial {
 	}
 
 	fn alpha_mode(&self) -> AlphaMode2d {
-		if (self.params.style.x - TILE_KIND_WATER).abs() < 0.1 {
-			AlphaMode2d::Blend
-		} else {
-			AlphaMode2d::Opaque
-		}
+		AlphaMode2d::Blend
 	}
 }
 
@@ -258,5 +289,20 @@ mod tests {
 		let cosmos = SkillMapTileMaterial::for_kind(TileKind::Power(SkillKind::Cosimo), 0);
 		assert_eq!(rock.params.style.x, TILE_KIND_ROCK);
 		assert_eq!(cosmos.params.style.x, TILE_KIND_COSMO);
+	}
+
+	#[test]
+	fn overlay_amount_lives_on_the_unused_style_channel() {
+		let mut land = SkillMapTileMaterial::land(SkillKind::Fireball);
+		assert_eq!(land.overlay_amount(), 0.0);
+		land.set_overlay_amount(1.0);
+		assert_eq!(land.overlay_amount(), 1.0);
+		assert_eq!(land.alpha_mode(), AlphaMode2d::Blend);
+		assert!(
+			SkillMapTileMaterial::overlay_alpha(1.0, 1.0)
+				< SkillMapTileMaterial::overlay_alpha(1.0, 0.0)
+		);
+		assert_eq!(SkillMapTileMaterial::overlay_alpha_for_kind(1.0, 1.0, TILE_KIND_FIRE), 1.0);
+		assert!(SkillMapTileMaterial::overlay_alpha_for_kind(1.0, 1.0, TILE_KIND_LAND_ROCK) < 0.20);
 	}
 }

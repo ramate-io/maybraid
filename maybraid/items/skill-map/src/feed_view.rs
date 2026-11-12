@@ -1,7 +1,7 @@
 //! Rockadder mosaic lanes and directional notes for timed skill maps.
 
 use bevy::prelude::*;
-use menu_components::HudFonts;
+use menu_components::{HudFonts, TANZ_CALLOUT_ICON_PX};
 
 use crate::feed::{FeedDirection, FeedState, FeedStepStatus, FEED_STEPS};
 use crate::map::{render_layer, AuthoredMap};
@@ -15,6 +15,15 @@ const SCROLL_SPEED: f32 = 24.0;
 const GOLD: Color = Color::srgb(0.98, 0.73, 0.27);
 const HIT: Color = Color::srgb(0.38, 0.96, 0.65);
 const MISS: Color = Color::srgb(0.98, 0.32, 0.20);
+/// Overlay height used to translate [`TANZ_CALLOUT_ICON_PX`] into map units.
+const OVERLAY_REFERENCE_HEIGHT_PX: f32 = 1080.0;
+/// Authored chevron height (stem + barbs) before [`FeedArrow::scale`].
+const FEED_ARROW_AUTHOR_HEIGHT: f32 = 7.25;
+/// Chart span versus the original overlay layout (outer lanes at ±27).
+const FEED_LANE_WIDTH: f32 = 1.0 / 3.0;
+const LANE_OUTER: f32 = 27.0 * FEED_LANE_WIDTH;
+const LANE_INNER: f32 = 9.0 * FEED_LANE_WIDTH;
+const HIT_LINE_WIDTH: f32 = 72.0 * FEED_LANE_WIDTH;
 
 #[derive(Component)]
 pub(crate) struct FeedPrompt {
@@ -25,17 +34,83 @@ pub(crate) struct FeedPrompt {
 #[derive(Component)]
 pub(crate) struct FeedStatus;
 
+#[derive(Component)]
+pub(crate) struct FeedNoteTint;
+
+/// Direction chevron shared by live notes and idle receptors.
+pub(crate) struct FeedArrow;
+
+impl FeedArrow {
+	const PIECES: [(Vec2, Vec2, f32); 3] = [
+		(Vec2::new(0.0, -0.5), Vec2::new(1.4, 6.0), 0.0),
+		(Vec2::new(-1.35, 1.5), Vec2::new(1.4, 4.5), -std::f32::consts::FRAC_PI_4),
+		(Vec2::new(1.35, 1.5), Vec2::new(1.4, 4.5), std::f32::consts::FRAC_PI_4),
+	];
+
+	/// Map-space height matching the Tanz callout icon on a 1080p overlay.
+	pub fn height() -> f32 {
+		TANZ_CALLOUT_ICON_PX / OVERLAY_REFERENCE_HEIGHT_PX * map_view_extent().y
+	}
+
+	pub fn scale() -> f32 {
+		Self::height() / FEED_ARROW_AUTHOR_HEIGHT
+	}
+
+	pub fn hit_line_width() -> f32 {
+		HIT_LINE_WIDTH
+	}
+
+	pub fn hit_line_color() -> Color {
+		Color::srgb(1.0, 0.78, 0.36)
+	}
+
+	pub fn spawn_note(
+		parent: &mut ChildSpawnerCommands,
+		color: Color,
+		layer: &bevy::camera::visibility::RenderLayers,
+	) {
+		Self::spawn(parent, color, layer, true);
+	}
+
+	pub fn spawn_receptor(
+		parent: &mut ChildSpawnerCommands,
+		color: Color,
+		layer: &bevy::camera::visibility::RenderLayers,
+	) {
+		Self::spawn(parent, color, layer, false);
+	}
+
+	fn spawn(
+		parent: &mut ChildSpawnerCommands,
+		color: Color,
+		layer: &bevy::camera::visibility::RenderLayers,
+		note: bool,
+	) {
+		for (position, size, angle) in Self::PIECES {
+			let mut glyph = parent.spawn((
+				Sprite::from_color(color, size),
+				Transform::from_translation(position.extend(0.0))
+					.with_rotation(Quat::from_rotation_z(angle)),
+				layer.clone(),
+			));
+			if note {
+				glyph.insert(FeedNoteTint);
+			}
+		}
+	}
+}
+
 impl FeedDirection {
-	fn lane_x(self) -> f32 {
+	pub(crate) fn lane_x(self) -> f32 {
 		let direction = self.vector();
 		if direction.x < 0.0 {
-			-27.0
+			-LANE_OUTER
 		} else if direction.y > 0.0 {
-			-9.0
+			-LANE_INNER
 		} else if direction.y < 0.0 {
-			9.0
+			LANE_INNER
 		} else {
-			27.0
+			LANE_OUTER
 		}
 	}
 
@@ -103,34 +178,23 @@ pub(crate) fn spawn_feed_scene(
 		for direction in
 			[FeedDirection::Left, FeedDirection::Up, FeedDirection::Down, FeedDirection::Right]
 		{
-			let x = direction.lane_x();
-			board.spawn((
-				Sprite::from_color(Color::srgba(0.04, 0.025, 0.015, 0.80), Vec2::new(16.0, 57.0)),
-				Transform::from_xyz(x, -2.0, 0.1),
-				layer.clone(),
-			));
-			board.spawn((
-				Sprite::from_color(Color::srgba(0.93, 0.65, 0.25, 0.24), Vec2::new(0.4, 57.0)),
-				Transform::from_xyz(x - 8.5, -2.0, 0.15),
-				layer.clone(),
-			));
 			board
 				.spawn((
-					Sprite::from_color(Color::srgb(0.48, 0.31, 0.12), Vec2::splat(12.0)),
-					Transform::from_xyz(x, HIT_Y, 0.2),
+					Transform::from_xyz(direction.lane_x(), HIT_Y, 0.2)
+						.with_rotation(direction.rotation())
+						.with_scale(Vec3::splat(FeedArrow::scale())),
+					Visibility::Inherited,
 					layer.clone(),
 				))
 				.with_children(|receptor| {
-					receptor.spawn((
-						Sprite::from_color(Color::srgb(0.10, 0.065, 0.035), Vec2::splat(10.5)),
-						Transform::from_xyz(0.0, 0.0, 0.01),
-						layer.clone(),
-					));
-					spawn_arrow(receptor, direction, Color::srgb(0.57, 0.43, 0.24), &layer);
+					FeedArrow::spawn_receptor(receptor, Color::srgb(0.57, 0.43, 0.24), &layer);
 				});
 		}
 		board.spawn((
-			Sprite::from_color(Color::srgba(1.0, 0.78, 0.36, 0.45), Vec2::new(72.0, 0.6)),
+			Sprite::from_color(
+				FeedArrow::hit_line_color(),
+				Vec2::new(FeedArrow::hit_line_width(), 0.6),
+			),
 			Transform::from_xyz(0.0, HIT_Y, 0.3),
 			layer.clone(),
 		));
@@ -146,8 +210,9 @@ pub(crate) fn spawn_feed_scene(
 		let mut note = commands.spawn((
 			Name::new(format!("skill-map-feed-step-{}", index + 1)),
 			prompt,
-			Sprite::from_color(color, Vec2::splat(12.0)),
-			Transform::from_xyz(origin.x + direction.lane_x(), origin.y + y, 0.5),
+			Transform::from_xyz(origin.x + direction.lane_x(), origin.y + y, 0.5)
+				.with_rotation(direction.rotation())
+				.with_scale(Vec3::splat(FeedArrow::scale())),
 			if visible { Visibility::Inherited } else { Visibility::Hidden },
 			layer.clone(),
 		));
@@ -156,51 +221,12 @@ pub(crate) fn spawn_feed_scene(
 		}
 		let note_id = note.id();
 		note.with_children(|face| {
-			face.spawn((
-				Mesh2d(assets.mesh.clone()),
-				MeshMaterial2d(assets.rockadder.clone()),
-				Transform::from_xyz(0.0, 0.0, 0.01).with_scale(Vec3::new(0.64, 0.64, 1.0)),
-				layer.clone(),
-			));
-			// Keep the directional cue legible over Rockadder's bright moving facets.
-			face.spawn((
-				Sprite::from_color(Color::srgb(0.075, 0.045, 0.02), Vec2::splat(8.8)),
-				Transform::from_xyz(0.0, 0.0, 0.02),
-				layer.clone(),
-			));
-			spawn_arrow(face, direction, Color::srgb(1.0, 0.96, 0.78), &layer);
+			FeedArrow::spawn_note(face, color, &layer);
 		});
 		if let Some(parent) = parent {
 			commands.entity(parent).add_child(note_id);
 		}
 	}
-}
-
-fn spawn_arrow(
-	parent: &mut ChildSpawnerCommands,
-	direction: FeedDirection,
-	color: Color,
-	layer: &bevy::camera::visibility::RenderLayers,
-) {
-	parent
-		.spawn((
-			Transform::from_xyz(0.0, 0.0, 0.03).with_rotation(direction.rotation()),
-			Visibility::Inherited,
-		))
-		.with_children(|arrow| {
-			for (position, size, angle) in [
-				(Vec2::new(0.0, -0.5), Vec2::new(1.4, 6.0), 0.0),
-				(Vec2::new(-1.35, 1.5), Vec2::new(1.4, 4.5), -std::f32::consts::FRAC_PI_4),
-				(Vec2::new(1.35, 1.5), Vec2::new(1.4, 4.5), std::f32::consts::FRAC_PI_4),
-			] {
-				arrow.spawn((
-					Sprite::from_color(color, size),
-					Transform::from_translation(position.extend(0.0))
-						.with_rotation(Quat::from_rotation_z(angle)),
-					layer.clone(),
-				));
-			}
-		});
 }
 
 pub(crate) fn spawn_feed_status(
@@ -211,7 +237,7 @@ pub(crate) fn spawn_feed_status(
 	parent.spawn((
 		FeedStatus,
 		member,
-		Text::new("Flick LEFT to start"),
+		Text::new("0 / 8"),
 		fonts.item(12.0),
 		TextColor(GOLD),
 		TextLayout::justify(Justify::Center),
@@ -229,23 +255,22 @@ pub(crate) fn spawn_feed_status(
 pub(crate) fn sync_feed_view(
 	states: Query<&FeedState>,
 	users: Query<&SkillMapHeld>,
-	mut prompts: Query<(
-		&FeedPrompt,
-		&SkillMapMember,
-		&mut Transform,
-		&mut Visibility,
-		&mut Sprite,
-	)>,
+	mut prompts: Query<(&FeedPrompt, &SkillMapMember, &mut Transform, &mut Visibility, &Children)>,
+	mut glyphs: Query<&mut Sprite, With<FeedNoteTint>>,
 	mut labels: Query<(&SkillMapMember, &mut Text, &mut TextColor), With<FeedStatus>>,
 ) {
-	for (prompt, member, mut transform, mut visibility, mut sprite) in &mut prompts {
+	for (prompt, member, mut transform, mut visibility, children) in &mut prompts {
 		let Ok(state) = states.get(member.session) else {
 			continue;
 		};
 		let (y, visible, color) = prompt.presentation(state);
 		transform.translation.y = prompt.origin.y + y;
 		*visibility = if visible { Visibility::Inherited } else { Visibility::Hidden };
-		sprite.color = color;
+		for child in children {
+			if let Ok(mut sprite) = glyphs.get_mut(*child) {
+				sprite.color = color;
+			}
+		}
 	}
 	for (member, mut text, mut color) in &mut labels {
 		let Ok(state) = states.get(member.session) else {
@@ -253,7 +278,7 @@ pub(crate) fn sync_feed_view(
 		};
 		let held = users.get(member.user).is_ok_and(|held| held.0);
 		let (label, tint) = if !state.started() {
-			("Flick LEFT to start".to_owned(), GOLD)
+			("0 / 8".to_owned(), GOLD)
 		} else if !held {
 			(format!("Paused · {} / 8", state.hits()), GOLD)
 		} else if state.in_pause() {
@@ -281,15 +306,18 @@ mod tests {
 	use bevy::prelude::*;
 	use character_items::{SkillMapKind, SkillMapSpec};
 
-	use crate::feed::{FeedState, FEED_WINDOW_SECS};
-	use crate::feed_view::{spawn_feed_scene, FeedPrompt, HIT, HIT_Y};
+	use crate::feed::{FeedDirection, FeedState, FEED_WINDOW_SECS};
+	use crate::feed_view::{spawn_feed_scene, FeedArrow, FeedPrompt, HIT, HIT_Y};
 	use crate::map::authored_map_from_spec;
 	use crate::tile_material::SkillMapTileAssets;
 	use crate::tiles::SkillMapTile;
+	use crate::viewport::map_view_extent;
+	use menu_components::TANZ_CALLOUT_ICON_PX;
 
 	#[test]
 	fn early_hit_flashes_at_receptor_including_repeat() {
 		let mut feed = FeedState::default();
+		feed.activate();
 		assert!(feed.strike(Vec2::NEG_X));
 		feed.advance(FeedState::step_time(1) - FEED_WINDOW_SECS * 0.5);
 		assert!(feed.strike(Vec2::Y));
@@ -326,11 +354,61 @@ mod tests {
 		assert_eq!(world.query::<&FeedPrompt>().iter(&world).count(), 8);
 		assert_eq!(world.query::<&SkillMapTile>().iter(&world).count(), 0);
 		assert_eq!(world.query::<&FeedState>().iter(&world).count(), 0);
+		assert_eq!(
+			world.query::<&Mesh2d>().iter(&world).count(),
+			1,
+			"rhythm maps keep the mosaic ground, not per-note tiles"
+		);
+		let mut slot = false;
+		let mut sprites = 0;
+		for sprite in world.query::<&Sprite>().iter(&world) {
+			sprites += 1;
+			slot |= matches!(
+				sprite.custom_size,
+				Some(size) if size == Vec2::new(16.0, 57.0)
+					|| size == Vec2::splat(12.0)
+					|| size == Vec2::splat(10.5)
+					|| size == Vec2::splat(8.8)
+			);
+		}
+		assert!(!slot, "slot panels must not spawn behind rhythm arrows");
+		assert_eq!(sprites, 37, "hit line + 4 receptor chevrons + 8 notes");
+		assert!(
+			world.query::<&Sprite>().iter(&world).any(|sprite| {
+				sprite.custom_size == Some(Vec2::new(FeedArrow::hit_line_width(), 0.6))
+			}),
+			"hit line must use the compressed chart width"
+		);
 		world.despawn(host);
 		assert!(!world.entities().contains(host));
 		assert_eq!(world.query::<&FeedPrompt>().iter(&world).count(), 0);
 		assert_eq!(world.query::<&Transform>().iter(&world).count(), 0);
 		assert_eq!(world.query::<&Sprite>().iter(&world).count(), 0);
 		assert_eq!(world.query::<&Mesh2d>().iter(&world).count(), 0);
+	}
+
+	#[test]
+	fn feed_arrows_match_the_tanz_callout_icon() {
+		let expected = TANZ_CALLOUT_ICON_PX / super::OVERLAY_REFERENCE_HEIGHT_PX
+			* map_view_extent().y
+			/ super::FEED_ARROW_AUTHOR_HEIGHT;
+		assert!((FeedArrow::scale() - expected).abs() < 1e-4);
+		assert!(
+			FeedArrow::scale() < 1.0,
+			"overlay arrows must be smaller than the authored chevron"
+		);
+		assert_eq!(TANZ_CALLOUT_ICON_PX, 40.0);
+		assert!((FeedArrow::height() - 40.0 / 1080.0 * map_view_extent().y).abs() < 1e-4);
+	}
+
+	#[test]
+	fn feed_lanes_span_a_third_of_the_original_chart() {
+		assert!((FeedDirection::Left.lane_x() + 9.0).abs() < 1e-4);
+		assert!((FeedDirection::Up.lane_x() + 3.0).abs() < 1e-4);
+		assert!((FeedDirection::Down.lane_x() - 3.0).abs() < 1e-4);
+		assert!((FeedDirection::Right.lane_x() - 9.0).abs() < 1e-4);
+		assert!((FeedArrow::hit_line_width() - 24.0).abs() < 1e-4);
+		assert_eq!(TANZ_CALLOUT_ICON_PX, 40.0);
+		assert!((FeedArrow::hit_line_color().to_srgba().alpha - 1.0).abs() < 1e-5);
 	}
 }

@@ -1,5 +1,5 @@
 //! Tanzer control mode: left-stick / A / B gestures become equipped Tanzes
-//! and always advance the Skill Map.
+//! and advance the Skill Map while **RB** holds the stained-glass overlay.
 
 mod actions;
 mod callout;
@@ -12,14 +12,17 @@ mod stack;
 use bevy::prelude::*;
 use characters::CharacterMotionSystems;
 use damage::Downed;
-#[cfg(test)]
-use maybraid_character_controller::RoutedActorControl;
-use maybraid_character_controller::{ActorControlEvent, CharacterBindSystems, OrdinaryLocomotion};
+use maybraid_character_controller::{
+	ActorControlEvent, CharacterBindSystems, OrdinaryLocomotion, RoutedActorControl,
+};
 use maybraid_controllers_core::{
 	ActorRoutingEvent, ActorTarget, ControllerPipeline, ControllersCorePlugin, PadDeliverySystems,
 	RoutingEvent,
 };
-use maybraid_skill_map::{RoutedSkillMapFlick, SkillMapFlick, SkillMapSystems, SkillMapUser};
+use maybraid_skill_map::{
+	skill_map_steer_held, RoutedSkillMapFlick, SkillMapFlick, SkillMapHeld, SkillMapSystems,
+	SkillMapUser,
+};
 use menu_components::sync_loading_bar_fill;
 #[cfg(test)]
 use player::Player;
@@ -181,7 +184,7 @@ pub enum TanzUserSystems {
 	Toggle,
 	/// Legacy stage marker; pad recognition now runs in [`ActorControlEvent`].
 	Recognize,
-	/// Committed inputs → [`SkillMapFlick`]. Independent of Tanz matching.
+	/// Committed inputs → [`SkillMapFlick`] while **RB** holds the overlay.
 	PublishMap,
 	/// Stack matching and executor submit.
 	Match,
@@ -358,12 +361,12 @@ fn release_tanz_participation(mut commands: Commands, mut removed: RemovedCompon
 /// both consumers here prevents a route change between recognition and use.
 fn dispatch_routed_tanz_input(
 	event: On<RoutedTanzInput>,
-	users: Query<(&TanzUser, Option<&SkillMapUser>)>,
+	users: Query<(&TanzUser, Option<&SkillMapUser>, Option<&RoutedActorControl>)>,
 	matchers: Query<(&TanzStack, &TanzExecution)>,
 	mut flicks: MessageWriter<RoutedSkillMapFlick>,
 	mut execute: MessageWriter<RoutedExecuteTanz>,
 ) {
-	let Ok((user, maps)) = users.get(event.entity) else {
+	let Ok((user, maps, control)) = users.get(event.entity) else {
 		return;
 	};
 	if !user.mode.is_tanzer() {
@@ -371,7 +374,9 @@ fn dispatch_routed_tanz_input(
 	}
 	let input = *event.input.payload();
 	let throw = input.stick();
-	if throw != Vec2::ZERO {
+	if throw != Vec2::ZERO
+		&& control.and_then(RoutedActorControl::payload).is_some_and(skill_map_steer_held)
+	{
 		let flick =
 			SkillMapFlick::new(ActorTarget::new(event.entity), maps.map(|maps| maps.maps), throw);
 		flicks.write(RoutedSkillMapFlick(event.input.clone().map(|_| flick)));
@@ -386,15 +391,15 @@ fn dispatch_routed_tanz_input(
 }
 
 fn publish_tanz_map_inputs(
-	users: Query<(&TanzUser, Option<&SkillMapUser>)>,
+	users: Query<(&TanzUser, Option<&SkillMapUser>, Option<&SkillMapHeld>)>,
 	mut inputs: MessageReader<TanzInput>,
 	mut flicks: MessageWriter<SkillMapFlick>,
 ) {
 	for input in inputs.read() {
-		let Ok((user, maps)) = users.get(input.user) else {
+		let Ok((user, maps, held)) = users.get(input.user) else {
 			continue;
 		};
-		if !user.mode.is_tanzer() {
+		if !user.mode.is_tanzer() || !held.is_some_and(|held| held.0) {
 			continue;
 		}
 		let throw = input.direction * input.magnitude;
@@ -591,7 +596,10 @@ mod tests {
 			.add_systems(Update, publish_tanz_map_inputs);
 		let user = app
 			.world_mut()
-			.spawn(TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() })
+			.spawn((
+				TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() },
+				SkillMapHeld(true),
+			))
 			.id();
 		app.world_mut().write_message(TanzInput {
 			user,
@@ -606,6 +614,34 @@ mod tests {
 		assert_eq!(flicks.len(), 1);
 		assert_eq!(flicks[0].throw(), Vec2::NEG_X * 0.9);
 		assert!(flicks[0].actor().matches(user));
+		Ok(())
+	}
+
+	#[test]
+	fn unmatched_directional_input_does_not_advance_a_collapsed_map() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.add_message::<TanzInput>()
+			.add_message::<SkillMapFlick>()
+			.add_systems(Update, publish_tanz_map_inputs);
+		let user = app
+			.world_mut()
+			.spawn(TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() })
+			.id();
+		app.world_mut().write_message(TanzInput {
+			user,
+			direction: Vec2::NEG_X,
+			magnitude: 0.9,
+			coherence: 1.0,
+			button: TanzButton::None,
+		});
+		app.update();
+		assert!(app
+			.world_mut()
+			.resource_mut::<Messages<SkillMapFlick>>()
+			.drain()
+			.next()
+			.is_none());
 		Ok(())
 	}
 
@@ -653,6 +689,7 @@ mod tests {
 				TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() },
 				TanzStack::default(),
 				TanzExecution::default(),
+				SkillMapHeld(true),
 			))
 			.id();
 		let mut cooling = TanzExecution::default();
@@ -663,6 +700,7 @@ mod tests {
 				TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() },
 				TanzStack::starter(),
 				cooling,
+				SkillMapHeld(true),
 			))
 			.id();
 		app.world_mut().write_message(TanzInput {
@@ -843,6 +881,53 @@ mod tests {
 	}
 
 	#[test]
+	fn tanzer_map_flicks_require_rb_hold() -> anyhow::Result<()> {
+		use maybraid_character_controller::ActorControlSample;
+
+		let mut app = pipeline_app();
+		let player = spawn_tanzer(&mut app, ControlMode::Tanzer);
+		assign_pad(&mut app, player);
+		set_local_sample(
+			&mut app,
+			player,
+			ActorControlSample::default().with_move_stick(Vec2::NEG_X),
+		);
+		let mut flicks_without_rb = 0;
+		for _ in 0..20 {
+			app.update();
+			flicks_without_rb +=
+				app.world_mut().resource_mut::<Messages<RoutedSkillMapFlick>>().drain().count();
+		}
+		assert_eq!(
+			app.world()
+				.get::<TanzExecution>(player)
+				.and_then(|ex| ex.active.map(|active| active.id)),
+			Some(TanzId::LeftStrafe),
+			"Tanzer execution must stay live without the overlay hold"
+		);
+		assert_eq!(flicks_without_rb, 0, "map flicks must wait for RB");
+		set_local_sample(&mut app, player, ActorControlSample::default());
+		app.update();
+		app.world_mut().resource_mut::<Messages<RoutedSkillMapFlick>>().drain().count();
+		set_local_sample(
+			&mut app,
+			player,
+			ActorControlSample::default().with_bumpers(false, true).with_move_stick(Vec2::X),
+		);
+		let mut flicks_with_rb = Vec::new();
+		for _ in 0..20 {
+			app.update();
+			flicks_with_rb
+				.extend(app.world_mut().resource_mut::<Messages<RoutedSkillMapFlick>>().drain());
+		}
+		assert!(
+			flicks_with_rb.iter().any(|flick| flick.0.payload().throw().x > 0.0),
+			"RB + a committed Tanzer throw must steer the map, got {flicks_with_rb:?}"
+		);
+		Ok(())
+	}
+
+	#[test]
 	fn unmatched_gesture_moves_only_its_own_map() -> anyhow::Result<()> {
 		use maybraid_skill_map::{
 			apply_flicks, spawn_skill_maps, SkillMapId, SkillMapMember, SkillMapViewportCamera,
@@ -874,6 +959,12 @@ mod tests {
 		let maps_a = spawn_skill_maps(&mut app.world_mut().commands(), user_a);
 		let maps_b = spawn_skill_maps(&mut app.world_mut().commands(), user_b);
 		app.world_mut().flush();
+		app.world_mut()
+			.entity_mut(user_a)
+			.insert(maybraid_skill_map::SkillMapHeld(true));
+		app.world_mut()
+			.entity_mut(user_b)
+			.insert(maybraid_skill_map::SkillMapHeld(true));
 		let cam_a = app
 			.world_mut()
 			.spawn((

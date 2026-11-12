@@ -98,7 +98,8 @@ impl SkillMapSteerLock {
 	}
 }
 
-/// True while this user is holding **RB** and the map is enabled.
+/// True while this user is holding **RB** (without the Tanzer bumper chord)
+/// and the map is enabled. Same rule in Laufer and Tanzer.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SkillMapHeld(pub bool);
 
@@ -123,6 +124,7 @@ pub fn spawn_skill_maps_with(
 		SkillMapEquip::default(),
 		SkillMapSteerLock::default(),
 		SkillMapHeld(false),
+		crate::overlay::SkillMapOverlay::Collapsed,
 	));
 	maps
 }
