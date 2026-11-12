@@ -26,12 +26,13 @@ count as repeated flicks. After the last timing window closes, a 1.5-second
 pause leads into the same sequence automatically.
 
 Holding RB expands the map from the bottom-right corner into a full-screen
-stained-glass overlay: tile shaders switch to overlay mode (`style.w = 1`,
-which *lowers* tile alpha so the world shows through) and a compositor warps
-the map camera image. Lowering that blend makes tiles more opaque, not less. The expand edge plays the authored
-`change_item` clip on the UI bus; releasing RB is silent. The clock pauses when
-skill-map input is inactive or gameplay is suspended.
-Changing the equipped map starts a fresh feed on the next RB hold.
+stained-glass overlay: land/mosaic tiles drop to a light veil; power tiles,
+water (debraid), the cursor, and feed arrows keep full alpha through the
+compositor. Lowering `style.w` makes land tiles more opaque, not less. The
+expand edge plays the authored `change_item` clip on the UI bus; releasing
+RB is silent. The clock pauses when skill-map input is inactive or gameplay
+is suspended. Changing the equipped map starts a fresh feed on the next RB
+hold.
 Timing and sequence definitions live in `src/feed.rs`; presentation lives in
 `src/feed_view.rs`. Rhythm maps draw only the chevrons and the hit line — no
 lane slots — at [`TANZ_CALLOUT_ICON_PX`], with the four lanes occupying a

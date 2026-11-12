@@ -31,20 +31,25 @@ const FIREARM_CARD_RADIUS: f32 = 8.0;
 /// Was `0.85`; left at `0.28` so refraction stays a hint, not opacity.
 pub const OVERLAY_WARP: f32 = 0.28;
 /// How much stained-glass *color* washes the warped map. Not coverage.
-pub const OVERLAY_GLASS: f32 = 0.08;
+/// Was `0.08`; ~30% lighter so mosaic stain stays a tint.
+pub const OVERLAY_GLASS: f32 = 0.056;
 /// Blend of tile shading into overlay (translucent) mode when expanded.
 /// This is **not** a veil opacity: `0` keeps gameplay-tile alpha `1`, `1`
-/// mixes toward the see-through overlay alpha. Lowering it made 1e078a9
-/// *more* opaque. Keep in sync with `tile_material.wesl`.
+/// mixes toward the see-through overlay alpha. Keep in sync with `tile_material.wesl`.
 pub const OVERLAY_TILE_AMOUNT: f32 = 1.0;
 /// Map-camera clear alpha while expanded. Empty texels only; feed mosaic fills the RT.
-pub const OVERLAY_CLEAR_ALPHA: f32 = 0.028;
-/// Expanded frame fill alpha (collapsed chrome still uses a fixed 0.12).
-pub const OVERLAY_FRAME_FILL_ALPHA: f32 = 0.012;
+/// Was `0.028`.
+pub const OVERLAY_CLEAR_ALPHA: f32 = 0.020;
+/// Expanded frame fill alpha (collapsed chrome still uses a fixed 0.12). Was `0.012`.
+pub const OVERLAY_FRAME_FILL_ALPHA: f32 = 0.008;
 /// Keep in sync with `overlay_material.wesl`.
 pub const OVERLAY_COMPOSITOR_ALPHA_SAMPLE: f32 = 0.88;
 pub const OVERLAY_COMPOSITOR_ALPHA_BIAS: f32 = 0.045;
-pub const OVERLAY_COMPOSITOR_CAME_ALPHA: f32 = 0.10;
+pub const OVERLAY_COMPOSITOR_CAME_ALPHA: f32 = 0.07;
+pub const OVERLAY_MARK_ALPHA_LO: f32 = 0.60;
+pub const OVERLAY_MARK_ALPHA_HI: f32 = 0.90;
+/// Minimum composited alpha for arrows, power tiles, and the cursor.
+pub const OVERLAY_MARK_ALPHA_MIN: f32 = 0.85;
 /// Tile overlay amount on the 9f22704 build. Used as a coverage regression bound.
 #[cfg(test)]
 const OVERLAY_TILE_AMOUNT_NINE_F227: f32 = 0.50;
@@ -225,6 +230,11 @@ impl SkillMapOverlay {
 		OverlayParams::from_overlay(self).composited_alpha(sample, came, noise)
 	}
 
+	/// Arrows, power tiles, and the cursor after the compositor (full map-RT alpha).
+	pub fn mark_alpha(self, sample_alpha: f32) -> f32 {
+		OverlayParams::from_overlay(self).composited_alpha(sample_alpha, 0.0, 0.5)
+	}
+
 	pub fn firearm_z(self) -> ZIndex {
 		if self.expanded() {
 			ZIndex(2)
@@ -271,13 +281,22 @@ impl OverlayParams {
 	}
 
 	/// CPU mirror of `overlay_material.wesl` fragment alpha (`lead = 0.22 + 0.18 * noise`).
+	/// High sample alpha (arrows / marks) is kept; low alpha is the land veil.
 	pub fn composited_alpha(self, sample_alpha: f32, came: f32, noise: f32) -> f32 {
 		let amount = self.amount.clamp(0.0, 1.0);
 		let lead = 0.22 + 0.18 * noise;
-		let treated = sample_alpha * OVERLAY_COMPOSITOR_ALPHA_SAMPLE
+		let veil = sample_alpha * OVERLAY_COMPOSITOR_ALPHA_SAMPLE
 			+ OVERLAY_COMPOSITOR_ALPHA_BIAS
 			+ came * lead * OVERLAY_COMPOSITOR_CAME_ALPHA;
+		let treated = veil * (1.0 - Self::mark_keep(sample_alpha))
+			+ sample_alpha * Self::mark_keep(sample_alpha);
 		sample_alpha * (1.0 - amount) + treated * amount
+	}
+
+	pub fn mark_keep(sample_alpha: f32) -> f32 {
+		let span = OVERLAY_MARK_ALPHA_HI - OVERLAY_MARK_ALPHA_LO;
+		let t = ((sample_alpha - OVERLAY_MARK_ALPHA_LO) / span).clamp(0.0, 1.0);
+		t * t * (3.0 - 2.0 * t)
 	}
 }
 
@@ -460,6 +479,7 @@ pub fn spawn_overlay_pane(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::feed_view::FeedArrow;
 	use crate::user::spawn_skill_maps;
 	use crate::SkillMapEnabled;
 	use bevy::ecs::system::RunSystemOnce;
@@ -771,10 +791,10 @@ mod tests {
 
 	#[test]
 	fn overlay_veil_is_a_light_hint() {
-		assert!((OVERLAY_GLASS - 0.08).abs() < 1e-6);
+		assert!((OVERLAY_GLASS - 0.056).abs() < 1e-6);
 		assert!((OVERLAY_TILE_AMOUNT - 1.0).abs() < 1e-6);
-		assert!((OVERLAY_CLEAR_ALPHA - 0.028).abs() < 1e-6);
-		assert!((OVERLAY_FRAME_FILL_ALPHA - 0.012).abs() < 1e-6);
+		assert!((OVERLAY_CLEAR_ALPHA - 0.020).abs() < 1e-6);
+		assert!((OVERLAY_FRAME_FILL_ALPHA - 0.008).abs() < 1e-6);
 		assert!((OVERLAY_WARP - 0.28).abs() < 1e-6);
 	}
 
@@ -799,16 +819,60 @@ mod tests {
 	#[test]
 	fn expanded_overlay_is_clearer_than_the_nine_f227_tile_veil() {
 		let now = SkillMapOverlay::Expanded.pane_alpha(1.0);
-		let regression_sample =
+		let nine_f227_sample =
 			SkillMapTileMaterial::overlay_alpha(1.0, OVERLAY_TILE_AMOUNT_NINE_F227);
-		let regression =
+		let nine_f227 =
 			OverlayParams { amount: 1.0, warp: OVERLAY_WARP, glass: OVERLAY_GLASS, _pad: 0.0 }
-				.composited_alpha(regression_sample, 0.0, 0.5);
+				.composited_alpha(nine_f227_sample, 0.0, 0.5);
+		let nine_13ff =
+			OverlayParams { amount: 1.0, warp: OVERLAY_WARP, glass: OVERLAY_GLASS, _pad: 0.0 }
+				.composited_alpha(1.0 * 0.28 + 0.05, 0.0, 0.5);
 		assert!(
-			now < regression,
-			"expanded pane alpha {now} must stay below the 9f22704 veil {regression}"
+			now < nine_f227,
+			"expanded pane alpha {now} must stay below the 9f22704 veil {nine_f227}"
 		);
-		assert!(now < 0.40, "world must remain the majority of an expanded pane, got {now}");
+		assert!(
+			now < nine_13ff,
+			"expanded pane alpha {now} must stay below the 913ff6fe4 veil {nine_13ff}"
+		);
+		assert!(now <= 0.21, "background pane must stay a light veil, got {now}");
+		assert!(now < 0.29, "must drop below the 913ff6fe4 ~0.29 pane, got {now}");
 		assert!((SkillMapOverlay::Collapsed.pane_alpha(1.0) - 1.0).abs() < 1e-5);
+	}
+
+	#[test]
+	fn overlay_marks_stay_strong() {
+		let expanded = SkillMapOverlay::Expanded;
+		assert!(
+			expanded.mark_alpha(1.0) >= OVERLAY_MARK_ALPHA_MIN,
+			"feed arrows / power tiles must stay readable, got {}",
+			expanded.mark_alpha(1.0)
+		);
+		assert!(
+			expanded.mark_alpha(1.0) > expanded.pane_alpha(1.0) + 0.5,
+			"marks must sit well above the land veil"
+		);
+		assert!(!SkillMapTileMaterial::overlay_veils_kind(crate::tile_material::TILE_KIND_FIRE));
+		assert!(!SkillMapTileMaterial::overlay_veils_kind(crate::tile_material::TILE_KIND_WAVE));
+		assert!(!SkillMapTileMaterial::overlay_veils_kind(crate::tile_material::TILE_KIND_WATER));
+		assert!(!SkillMapTileMaterial::overlay_veils_kind(crate::tile_material::TILE_KIND_CURSOR));
+		assert!(!SkillMapTileMaterial::overlay_veils_kind(crate::tile_material::TILE_KIND_ROCK));
+		assert!(!SkillMapTileMaterial::overlay_veils_kind(crate::tile_material::TILE_KIND_COSMO));
+		assert!(SkillMapTileMaterial::overlay_veils_kind(
+			crate::tile_material::TILE_KIND_LAND_ROCK
+		));
+		assert_eq!(
+			SkillMapTileMaterial::overlay_alpha_for_kind(
+				1.0,
+				1.0,
+				crate::tile_material::TILE_KIND_FIRE
+			),
+			1.0
+		);
+		assert!(
+			crate::viewport::DEBRAID_OVERLAY_ALPHA >= OVERLAY_MARK_ALPHA_MIN,
+			"debraid HUD is off the map RT and must stay strong"
+		);
+		assert!((FeedArrow::hit_line_color().to_srgba().alpha - 1.0).abs() < 1e-5);
 	}
 }

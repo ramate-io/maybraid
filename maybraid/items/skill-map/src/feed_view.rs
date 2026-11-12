@@ -60,6 +60,10 @@ impl FeedArrow {
 		HIT_LINE_WIDTH
 	}
 
+	pub fn hit_line_color() -> Color {
+		Color::srgb(1.0, 0.78, 0.36)
+	}
+
 	pub fn spawn_note(
 		parent: &mut ChildSpawnerCommands,
 		color: Color,
@@ -188,7 +192,7 @@ pub(crate) fn spawn_feed_scene(
 		}
 		board.spawn((
 			Sprite::from_color(
-				Color::srgba(1.0, 0.78, 0.36, 0.45),
+				FeedArrow::hit_line_color(),
 				Vec2::new(FeedArrow::hit_line_width(), 0.6),
 			),
 			Transform::from_xyz(0.0, HIT_Y, 0.3),
@@ -405,5 +409,6 @@ mod tests {
 		assert!((FeedDirection::Right.lane_x() - 9.0).abs() < 1e-4);
 		assert!((FeedArrow::hit_line_width() - 24.0).abs() < 1e-4);
 		assert_eq!(TANZ_CALLOUT_ICON_PX, 40.0);
+		assert!((FeedArrow::hit_line_color().to_srgba().alpha - 1.0).abs() < 1e-5);
 	}
 }

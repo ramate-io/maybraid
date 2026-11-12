@@ -40,6 +40,8 @@ const FIREARM_CARD_FILL: Color = Color::srgba(0.52, 0.52, 0.56, 0.82);
 const FIREARM_CARD_STROKE: Color = Color::srgba(0.78, 0.78, 0.82, 0.9);
 const GRENADE_SILHOUETTE_PX: f32 = 40.0;
 const GRENADE_SILHOUETTE_STROKE: f32 = 2.0;
+/// HUD flash when water locks steer. Stays on the frame, not the map RT.
+pub const DEBRAID_OVERLAY_ALPHA: f32 = 0.90;
 
 fn weapon_icon_slot() -> Node {
 	Node {
@@ -124,6 +126,12 @@ pub(crate) struct SkillMapWeaponAction;
 #[derive(Component)]
 pub struct Debraid {
 	pub remaining: f32,
+}
+
+impl Debraid {
+	pub fn overlay_fill() -> Color {
+		Color::srgba(0.85, 0.08, 0.06, DEBRAID_OVERLAY_ALPHA)
+	}
 }
 
 #[derive(Component)]
@@ -1001,7 +1009,7 @@ pub fn spawn_debraid(
 					overflow: Overflow::clip(),
 					..default()
 				},
-				BackgroundColor(Color::srgba(0.85, 0.08, 0.06, 0.55)),
+				BackgroundColor(Debraid::overlay_fill()),
 				Pickable::IGNORE,
 			))
 			.with_children(|overlay| {
@@ -1038,6 +1046,12 @@ pub fn tick_debraid(
 mod tests {
 	use super::*;
 	use crate::SkillMapEnabled;
+
+	#[test]
+	fn debraid_flash_stays_strong() {
+		assert!(DEBRAID_OVERLAY_ALPHA >= 0.85);
+		assert!((Debraid::overlay_fill().to_srgba().alpha - DEBRAID_OVERLAY_ALPHA).abs() < 1e-5);
+	}
 
 	#[test]
 	fn unused_weapon_slot_leaves_the_layout() {

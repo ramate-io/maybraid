@@ -24,9 +24,10 @@ pub const TILE_KIND_LAND_COSMO: f32 = 7.0;
 pub const TILE_KIND_ROCK: f32 = 8.0;
 pub const TILE_KIND_COSMO: f32 = 9.0;
 const TILE_DIVISIONS: u32 = 12;
-/// Keep in sync with `tile_material.wesl` overlay alpha mix.
-pub const TILE_OVERLAY_ALPHA_SCALE: f32 = 0.28;
-pub const TILE_OVERLAY_ALPHA_BIAS: f32 = 0.05;
+/// Keep in sync with `tile_material.wesl` overlay alpha mix (land/mosaic only).
+/// Was `0.28` / `0.05` on 913ff6fe4 (~0.33 tile α, ~0.34 pane).
+pub const TILE_OVERLAY_ALPHA_SCALE: f32 = 0.15;
+pub const TILE_OVERLAY_ALPHA_BIAS: f32 = 0.025;
 pub const TILE_OVERLAY_ALPHA_MIX_GAIN: f32 = 1.85;
 
 #[derive(Clone, Copy, Debug, ShaderType)]
@@ -107,6 +108,19 @@ impl SkillMapTileMaterial {
 		let glass_mix = (glass * TILE_OVERLAY_ALPHA_MIX_GAIN).clamp(0.0, 1.0);
 		let treated = base_alpha * TILE_OVERLAY_ALPHA_SCALE + TILE_OVERLAY_ALPHA_BIAS;
 		base_alpha * (1.0 - glass_mix) + treated * glass_mix
+	}
+
+	/// Power marks, water (debraid), and the cursor keep full alpha in overlay mode.
+	pub fn overlay_veils_kind(kind: f32) -> bool {
+		kind < 0.5 || (kind > 4.5 && kind < 7.5)
+	}
+
+	pub fn overlay_alpha_for_kind(base_alpha: f32, amount: f32, kind: f32) -> f32 {
+		if Self::overlay_veils_kind(kind) {
+			Self::overlay_alpha(base_alpha, amount)
+		} else {
+			base_alpha
+		}
 	}
 }
 
@@ -288,5 +302,7 @@ mod tests {
 			SkillMapTileMaterial::overlay_alpha(1.0, 1.0)
 				< SkillMapTileMaterial::overlay_alpha(1.0, 0.0)
 		);
+		assert_eq!(SkillMapTileMaterial::overlay_alpha_for_kind(1.0, 1.0, TILE_KIND_FIRE), 1.0);
+		assert!(SkillMapTileMaterial::overlay_alpha_for_kind(1.0, 1.0, TILE_KIND_LAND_ROCK) < 0.20);
 	}
 }

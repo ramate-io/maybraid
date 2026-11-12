@@ -60,10 +60,11 @@ fn overlay_amount() -> f32 { return saturate(material.style.w); }
 
 // Overlay tile strengths. Mix *toward* translucency; lowering style.w raises coverage.
 // Keep SCALE/BIAS/MIX_GAIN in sync with tile_material.rs TILE_OVERLAY_ALPHA_*.
+// Was SCALE 0.28 / BIAS 0.05; land veil is ~30% lighter, marks skip this mix.
 const OVERLAY_SWAY_BOOST: f32 = 0.40;
 const OVERLAY_TINT_MIX: f32 = 0.22;
-const OVERLAY_ALPHA_SCALE: f32 = 0.28;
-const OVERLAY_ALPHA_BIAS: f32 = 0.05;
+const OVERLAY_ALPHA_SCALE: f32 = 0.15;
+const OVERLAY_ALPHA_BIAS: f32 = 0.025;
 const OVERLAY_RIM: f32 = 0.05;
 const OVERLAY_ALPHA_MIX_GAIN: f32 = 1.85;
 
@@ -406,8 +407,12 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         color = mix(color, pane, glass * OVERLAY_TINT_MIX);
         let rim = pow(saturate(1.0 - abs(in.uv.x - 0.5) * abs(in.uv.y - 0.5) * 4.0), 2.0);
         color += vec3<f32>(0.85, 0.72, 0.40) * rim * glass * OVERLAY_RIM;
-        let glass_mix = saturate(glass * OVERLAY_ALPHA_MIX_GAIN);
-        alpha = mix(alpha, alpha * OVERLAY_ALPHA_SCALE + OVERLAY_ALPHA_BIAS, glass_mix);
+        // Land / mosaic only. Water, power marks, and the cursor stay solid.
+        let veils = kind < 0.5 || (kind > 4.5 && kind < 7.5);
+        if veils {
+            let glass_mix = saturate(glass * OVERLAY_ALPHA_MIX_GAIN);
+            alpha = mix(alpha, alpha * OVERLAY_ALPHA_SCALE + OVERLAY_ALPHA_BIAS, glass_mix);
+        }
     }
     return vec4<f32>(color, alpha);
 }

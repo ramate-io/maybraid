@@ -27,7 +27,9 @@ const OVERLAY_CAME_MIX: f32 = 0.28;
 // Keep SAMPLE/BIAS/CAME_ALPHA in sync with overlay.rs OVERLAY_COMPOSITOR_*.
 const OVERLAY_ALPHA_SAMPLE: f32 = 0.88;
 const OVERLAY_ALPHA_BIAS: f32 = 0.045;
-const OVERLAY_CAME_ALPHA: f32 = 0.10;
+const OVERLAY_CAME_ALPHA: f32 = 0.07;
+const OVERLAY_MARK_ALPHA_LO: f32 = 0.60;
+const OVERLAY_MARK_ALPHA_HI: f32 = 0.90;
 
 fn hash12(p: vec2<f32>) -> f32 {
     let p3 = fract(vec3<f32>(p.x, p.y, p.x) * vec3<f32>(0.1031, 0.1030, 0.0973));
@@ -117,10 +119,9 @@ fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
     color = mix(color, mix(color, pane, OVERLAY_PANE_MIX), amount * params.glass);
     color = mix(color, vec3<f32>(0.06, 0.04, 0.05), came * amount * OVERLAY_CAME_MIX);
     let lead = 0.22 + 0.18 * n;
-    let alpha = mix(
-        sample.a,
-        sample.a * OVERLAY_ALPHA_SAMPLE + OVERLAY_ALPHA_BIAS + came * lead * OVERLAY_CAME_ALPHA,
-        amount,
-    );
+    let veil = sample.a * OVERLAY_ALPHA_SAMPLE + OVERLAY_ALPHA_BIAS + came * lead * OVERLAY_CAME_ALPHA;
+    let keep = smoothstep(OVERLAY_MARK_ALPHA_LO, OVERLAY_MARK_ALPHA_HI, sample.a);
+    let treated = mix(veil, sample.a, keep);
+    let alpha = mix(sample.a, treated, amount);
     return vec4<f32>(color, alpha);
 }
