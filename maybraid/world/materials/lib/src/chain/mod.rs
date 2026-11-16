@@ -14,21 +14,33 @@ pub fn default_evidence_dir() -> PathBuf {
 }
 
 mod chain_material;
+mod collision;
+mod damage_coalesce;
 mod deteriorate;
 mod flow;
 mod halo;
 mod hash;
+#[cfg(test)]
+mod integration_tests;
 mod material_lib;
+mod motion;
 mod params;
 mod placeholder;
+mod plugin;
 mod runtime;
 mod skinned;
+mod spawn;
 mod string;
 
 pub use chain_material::{
 	claims_material_ref, claims_recipe, ChainMaterial, ChainMaterialKey, ChainMaterialPlugin,
 	ChainMaterialUniform, MAX_CHAIN_LINKS,
 };
+pub use collision::{
+	retire_chain_colliders, spawn_chain_colliders, sync_chain_colliders, ChainColliderConfig,
+	ChainLinkId,
+};
+pub use damage_coalesce::coalesce_chain_contacts;
 pub use deteriorate::{
 	bite_center, bite_radius, bite_threshold, chunk_threshold, global_severity, link_severity,
 	link_weakness, point_removed, region_removed, severity, LinkLook, BITES_PER_LINK,
@@ -44,6 +56,11 @@ pub use material_lib::{
 	init_chain_material_caches, ChainMaterialLib, ChainMaterialRefCache, ChainMaterialRefPlugin,
 	ChainStandaloneMaterialLib,
 };
+pub use motion::{
+	deactivate_released_chains, update_chain_joints, ChainAnchor, ChainEndpoint, ChainMotion,
+	ChainRoot, ChainTensionMode, ReleasedChain,
+};
+pub use plugin::ChainMotionPlugin;
 pub use params::{
 	is_mythical_chain_recipe, mythical_chain_noise, mythical_chain_palette, mythical_chain_ref,
 	mythical_chain_ref_for, mythical_chain_ref_with, MythicalChainScalars, MythicalChainState,
@@ -63,6 +80,9 @@ pub use runtime::{
 pub use skinned::{
 	generate_skinned_chain, spawn_skinned_chain, ChainSkinningStrategy, SkinnedChainConfig,
 	SkinnedChainData,
+};
+pub use spawn::{
+	spawn_anchored_chain, spawn_simple_chain, AnchoredChainConfig, AnchoredChainEntities,
 };
 pub use string::{
 	bent_centerline, continuous_tube_mesh, rest_centerline, skinned_tube_mesh, spawn_skinned_tube,

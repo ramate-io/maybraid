@@ -14516,6 +14516,7 @@ name = "world-materials"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "building-shaders",
  "character-shaders",
@@ -14523,8 +14524,10 @@ dependencies = [
  "chico",
  "firearms",
  "furniture-shaders",
+ "lod-avian",
  "material-ref",
  "procedural-common",
+ "projectiles",
  "vegetation-bumpout",
  "vegetation-shaders",
 ]
