@@ -4,11 +4,11 @@ use bevy::prelude::*;
 use damage::{DamageApplied, DamageSystems, Health};
 use player::Player;
 
+use crate::LubikanSystems;
 use crate::catalog::LubikanCatalog;
 use crate::change::{LubikanChargeChanged, LubikanChargeReason, LubikanChargeRequest};
 use crate::identity::LubikanDefinition;
 use crate::ledger::{LubikanBodyOf, LubikanLedger, LubikanOwner};
-use crate::LubikanSystems;
 
 type LiveLubikanOwner = Or<(With<Player>, With<LubikanOwner>)>;
 
@@ -62,15 +62,34 @@ impl LubikanCombatAward {
 	}
 }
 
+/// Credit producers run in [`Self::Credit`]; [`Self::Apply`] is the sole applier.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum LubikanAwardPhase {
+	/// Write [`LubikanChargeRequest`]s from combat, occupancy, and content rules.
+	Credit,
+	/// Apply requests once and emit [`LubikanChargeChanged`].
+	Apply,
+}
+
 pub(crate) fn configure(app: &mut App) {
 	if app.world().get_resource::<Messages<DamageApplied>>().is_none() {
 		app.add_message::<DamageApplied>();
 	}
-	app.init_resource::<LubikanCombatAward>()
-		.configure_sets(PostUpdate, LubikanSystems::Award.after(DamageSystems::Apply));
+	app.init_resource::<LubikanCombatAward>().configure_sets(
+		PostUpdate,
+		(
+			LubikanSystems::Award.after(DamageSystems::Apply),
+			(LubikanAwardPhase::Credit, LubikanAwardPhase::Apply)
+				.chain()
+				.in_set(LubikanSystems::Award),
+		),
+	);
 	app.add_systems(
 		PostUpdate,
-		(award_combat_hits, apply_charge_requests).chain().in_set(LubikanSystems::Award),
+		(
+			award_combat_hits.in_set(LubikanAwardPhase::Credit),
+			apply_charge_requests.in_set(LubikanAwardPhase::Apply),
+		),
 	);
 }
 
@@ -79,6 +98,8 @@ fn award_combat_hits(
 	mut requests: MessageWriter<LubikanChargeRequest>,
 	policy: Res<LubikanCombatAward>,
 	owners: Query<Entity, LiveLubikanOwner>,
+	ledgers: Query<&LubikanLedger>,
+	body_of: Query<&LubikanBodyOf>,
 	healths: Query<&Health>,
 ) {
 	for hit in hits.read() {
@@ -86,6 +107,10 @@ fn award_combat_hits(
 			continue;
 		};
 		if owners.get(source).is_err() {
+			continue;
+		}
+		let holder = body_of.get(source).map(LubikanBodyOf::character).unwrap_or(source);
+		if ledgers.get(holder).is_ok_and(|ledger| !ledger.selection().resolved().is_self()) {
 			continue;
 		}
 		if owners.get(hit.target).is_ok() {
@@ -176,7 +201,7 @@ mod tests {
 	use crate::identity::{LubikanAccountId, LubikanDefinitionId};
 	use crate::plugin::LubikansPlugin;
 	use crate::{LubikanActivationRequest, LubikanBodyOf, LubikanOwner};
-	use anyhow::{anyhow, Result};
+	use anyhow::{Result, anyhow};
 
 	fn gameplay() -> App {
 		let mut app = App::new();
@@ -237,6 +262,44 @@ mod tests {
 		assert_eq!(change.origin, Some(Vec3::X));
 		let ledger = LubikanBodyOf::ledger(app.world(), owner).ok_or_else(|| anyhow!("ledger"))?;
 		assert_eq!(ledger.equipped().charge().current(), 4.0);
+		Ok(())
+	}
+
+	#[test]
+	fn generic_combat_skips_non_self_equipped_account() -> Result<()> {
+		let mut app = gameplay();
+		let owner = app.world_mut().spawn(LubikanOwner).id();
+		app.update();
+		let definition = stocked(24, 10.0, 2);
+		let account = unlock(&mut app, owner, definition)?;
+		{
+			let mut ledger = LubikanBodyOf::ledger_mut(app.world_mut(), owner)
+				.ok_or_else(|| anyhow!("ledger"))?;
+			if !ledger.select(Some(account)) {
+				return Err(anyhow!("select stocked account"));
+			}
+		}
+		let victim = app
+			.world_mut()
+			.spawn((Health { current: 5.0, max: 5.0 }, GlobalTransform::default()))
+			.id();
+		app.update();
+		app.world_mut().write_message(DamageApplied {
+			target: victim,
+			source: Some(owner),
+			amount: 5.0,
+			applied: 5.0,
+			remaining: 0.0,
+			point: Vec3::ZERO,
+		});
+		app.update();
+		let charge = LubikanBodyOf::ledger(app.world(), owner)
+			.ok_or_else(|| anyhow!("ledger"))?
+			.account(account)
+			.ok_or_else(|| anyhow!("account"))?
+			.charge()
+			.current();
+		assert_eq!(charge, 0.0, "generic HP combat is Self-only");
 		Ok(())
 	}
 
