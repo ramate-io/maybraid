@@ -2326,6 +2326,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bikanwarda-encounter"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bikanwarda-lubikans",
+ "damage",
+ "encounters",
+ "lubikans",
+]
+
+[[package]]
 name = "bikanwarda-lubikan"
 version = "0.1.5"
 dependencies = [
@@ -2355,18 +2367,6 @@ dependencies = [
  "occupancy-rewards",
  "player",
  "threat-intelligence",
-]
-
-[[package]]
-name = "bikanwarda-encounter"
-version = "0.1.5"
-dependencies = [
- "anyhow",
- "bevy",
- "bikanwarda-lubikans",
- "damage",
- "encounters",
- "lubikans",
 ]
 
 [[package]]
@@ -4369,16 +4369,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "encounters"
-version = "0.1.5"
-dependencies = [
- "anyhow",
- "bevy",
- "attacks",
- "damage",
-]
-
-[[package]]
 name = "encase"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4436,6 +4426,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fba3fe847045ecff794b9c138293a80db914678c453ad63fbf0c6a9eb6e00b22"
 dependencies = [
  "encoding_rs",
+]
+
+[[package]]
+name = "encounters"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "attacks",
+ "bevy",
+ "damage",
 ]
 
 [[package]]
@@ -7598,8 +7598,8 @@ dependencies = [
  "combat-hud",
  "combat-targeting",
  "damage",
- "encounters",
  "durham",
+ "encounters",
  "evasion-intelligence",
  "firearm-intelligence",
  "firearm-user",
