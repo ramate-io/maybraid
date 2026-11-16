@@ -68,7 +68,7 @@ fn copy_runtime_onto_halo(dst: &mut ChainMaterial, src: &ChainMaterial) {
 }
 
 fn expand_aabb(mesh: &Mesh, pad: f32) -> Option<Aabb> {
-	let aabb = mesh.compute_aabb()?;
+	let aabb = mesh.get_aabb()?;
 	Some(Aabb { center: aabb.center, half_extents: aabb.half_extents + Vec3A::splat(pad.max(0.0)) })
 }
 
