@@ -5,6 +5,7 @@
 //! [#1120](https://github.com/ramate-io/maybraid/issues/1120) sleep phase.
 //! [#1117](https://github.com/ramate-io/maybraid/issues/1117) world placement (consumes generation contract).
 
+mod assembly;
 mod contract;
 mod generation;
 mod identity;
@@ -14,6 +15,7 @@ mod presentation;
 mod scripted;
 mod unlocks;
 
+pub use assembly::{spawn_boss_assemblies, BossAssemblyPlugin};
 pub use contract::{BossActorRecipe, BossAttackConfig, BossEncounterContract};
 pub use generation::BikanwardaBossEncounter;
 pub use identity::{
@@ -23,7 +25,7 @@ pub use identity::{
 };
 pub use outcomes::{BikanwardaDeparted, BikanwardaDeparture, EncounterUnlockAwarded};
 pub use plugin::BikanwardaEncounterPlugin;
-pub use presentation::{BossEncounterPresentationPlugin, BossEncounterRoot};
+pub use presentation::{BossEncounterPresentationPlugin, BossEncounterRoot, RequestBossAssembly};
 pub use scripted::Scripted;
 pub use unlocks::{register_unlocks, BikanwardaUnlockConfig};
 

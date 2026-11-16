@@ -6,6 +6,7 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
+use bikanwarda_character::BikanwardaSpec;
 use encounters::EncounterInstance;
 use lod::hcsg::PresentationPlugin;
 use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
@@ -17,6 +18,12 @@ use crate::identity::chained_encounter_id;
 /// Marks the root of a presented boss encounter.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct BossEncounterRoot;
+
+/// Marker requesting actual boss assembly spawn.
+#[derive(Component, Clone, Debug, Default)]
+pub struct RequestBossAssembly {
+	pub spec: BikanwardaSpec,
+}
 
 /// One LOD level: boss character with physics and presentation.
 ///
@@ -34,11 +41,13 @@ impl LodScene for BikanwardaBossEncounter {
 		));
 		let instance = EncounterInstance::new(chained_encounter_id());
 		let position = self.boss_position;
+		let spec = self.boss.value.actor.recipe.spec.clone();
 		
 		bsn! {
 			~{name}
 			BossEncounterRoot::default()
 			instance
+			RequestBossAssembly { spec }
 			Transform::from_translation(position)
 			Visibility::default()
 		}

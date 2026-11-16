@@ -2331,9 +2331,11 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
+ "bikanwarda-character",
  "bikanwarda-lubikans",
  "damage",
  "encounters",
+ "lod",
  "lubikans",
 ]
 

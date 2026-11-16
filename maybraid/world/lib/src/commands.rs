@@ -55,6 +55,7 @@ pub enum PlaygroundCommand {
 	#[command(subcommand)]
 	Mobs(Mobs),
 	/// Debug boss encounter generation and placement.
+	#[cfg(feature = "debug-commands")]
 	#[command(subcommand)]
 	Boss(Boss),
 	/// Capture the primary window to a PNG via GPU readback.
@@ -282,6 +283,7 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Sky(sky) => sky.react(commands, console),
 			PlaygroundCommand::Render(render) => render.react(commands, console),
 			PlaygroundCommand::Mobs(mobs) => mobs.react(commands, console),
+			#[cfg(feature = "debug-commands")]
 			PlaygroundCommand::Boss(boss) => boss.react(commands, console),
 			PlaygroundCommand::Screenshot { path } => {
 				commands.spawn(RequestGameplayScreenshot { path: path.clone(), command_id: None });
