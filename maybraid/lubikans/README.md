@@ -49,9 +49,12 @@ Damage history stays generic. [`lubikans-damage`](damage/) copies
 [`LubikansPlugin`](src/plugin.rs) is the only place that creates or restores
 a player's ledger, and the sole owner of [`LubikanActivationRequest`](src/activation.rs):
 it spends once, emits [`LubikanActivationSession`](src/activation.rs) or
-[`LubikanActivationRefused`](src/activation.rs), and applies
-[`LubikanActivationReport`](src/activation.rs) to the captured account.
-Consumers order after [`LubikanSystems::Owner`](src/lib.rs) (PreUpdate).
+[`LubikanActivationRefused`](src/activation.rs), and closes accepted sessions
+through one live-or-cached accessor ([`LubikanActivationAccess`](src/plugin.rs)).
+Heal mutates in the same frame and publishes [`LubikanActivationFinished`](src/activation.rs);
+[`LubikanActivationReport`](src/activation.rs) consumers call the same close and
+do not finish an already-closed session. Consumers order after
+[`LubikanSystems::Owner`](src/lib.rs) (PreUpdate).
 Self healing runs in [`LubikanSystems::Heal`](src/lib.rs) after Activate: it
 consumes Self [`LubikanActivationSession`](src/activation.rs)s, regenerates
 from `DamageApplied.applied` / [`DamageHistory`](../damage/src/history.rs),

@@ -12,9 +12,9 @@ use crate::activation::{
 	LubikanActivationReport, LubikanActivationSession, LubikanActivationSessionId,
 };
 use crate::identity::{LubikanAccountId, LubikanDefinitionId};
-use crate::ledger::{LubikanLedger, LubikanOwner};
+use crate::ledger::LubikanOwner;
 use crate::lifetime::{LubikanOwnerLifetime, LubikanOwnerLifetimeKind};
-use crate::plugin::LubikanSessionStore;
+use crate::plugin::LubikanActivationAccess;
 use crate::LubikanSystems;
 
 /// Default Self heal rate: 5% of maximum health per game-time second.
@@ -173,8 +173,7 @@ struct SelfHealClose<'w, 's> {
 	presentation: ResMut<'w, LubikanSelfHeal>,
 	reports: MessageWriter<'w, LubikanActivationReport>,
 	finished: MessageWriter<'w, LubikanActivationFinished>,
-	ledgers: Query<'w, 's, &'static mut LubikanLedger>,
-	store: ResMut<'w, LubikanSessionStore>,
+	activations: LubikanActivationAccess<'w, 's>,
 	commands: Commands<'w, 's>,
 }
 
@@ -193,20 +192,9 @@ impl SelfHealClose<'_, '_> {
 	}
 
 	fn close(&mut self, session: LubikanActivationSession, outcome: LubikanActivationOutcome) {
-		let mut applied = false;
-		for mut ledger in self.ledgers.iter_mut() {
-			if apply_close(&mut ledger, session, outcome) {
-				applied = true;
-				break;
-			}
-		}
-		if !applied {
-			if let Some(cached) = self.store.cached_ledger_mut() {
-				apply_close(cached, session, outcome);
-			}
-		}
-		self.reports.write(LubikanActivationReport { id: session.id, outcome });
-		self.finished.write(LubikanActivationFinished::from_session(session, outcome));
+		let finished = self.activations.close(session, outcome);
+		self.reports.write(session.report(outcome));
+		self.finished.write(finished);
 		clear_heal(&mut self.commands, &mut self.presentation, Some(session.owner));
 		self.runtime.live = None;
 	}
@@ -298,13 +286,21 @@ fn cancel_self_heal(
 	let Some(live) = close.runtime.live else {
 		return;
 	};
-	match session_phase(close.ledgers.iter(), &close.store, live.session.id) {
+	match close.activations.session_phase(live.session.id) {
 		Some(LubikanActivationPhase::Active) => {}
 		Some(LubikanActivationPhase::Completed) => {
 			close.drop_without_report(live.session.owner);
 			return;
 		}
 		Some(_) | None => {
+			// Self complete idles and clears the session id. If the account is
+			// still on a live or cached ledger, the close already ran.
+			if close.activations.session_phase(live.session.id).is_none()
+				&& close.activations.account_phase(live.session.account).is_some()
+			{
+				close.drop_without_report(live.session.owner);
+				return;
+			}
 			close.cancel(live.session);
 			return;
 		}
@@ -433,43 +429,6 @@ fn should_cancel(
 	})
 }
 
-fn session_phase<'a>(
-	ledgers: impl IntoIterator<Item = &'a LubikanLedger>,
-	store: &LubikanSessionStore,
-	id: LubikanActivationSessionId,
-) -> Option<LubikanActivationPhase> {
-	ledgers
-		.into_iter()
-		.find_map(|ledger| ledger_session_phase(ledger, id))
-		.or_else(|| store.cached_ledger().and_then(|ledger| ledger_session_phase(ledger, id)))
-}
-
-fn ledger_session_phase(
-	ledger: &LubikanLedger,
-	id: LubikanActivationSessionId,
-) -> Option<LubikanActivationPhase> {
-	ledger.iter().find_map(|account| {
-		(account.activation().session == Some(id)).then_some(account.activation().phase)
-	})
-}
-
-/// Close the captured account. A natural complete reports through
-/// [`LubikanActivationFinished`] and returns the account to Idle in this
-/// frame so a later activate in the same life can spend again.
-fn apply_close(
-	ledger: &mut LubikanLedger,
-	session: LubikanActivationSession,
-	outcome: LubikanActivationOutcome,
-) -> bool {
-	if !ledger.finish_activation(session.id, outcome) {
-		return false;
-	}
-	if outcome == LubikanActivationOutcome::Completed {
-		ledger.reset_activation(session.account);
-	}
-	true
-}
-
 fn publish_heal(
 	commands: &mut Commands,
 	presentation: &mut LubikanSelfHeal,
@@ -513,6 +472,7 @@ mod tests {
 	use super::*;
 	use crate::activation::{LubikanActivationDenied, LubikanActivationPhase};
 	use crate::identity::{LubikanAccountId, LubikanDefinition, LubikanDefinitionId};
+	use crate::ledger::LubikanLedger;
 	use crate::plugin::LubikansPlugin;
 	use crate::{
 		LubikanActivationFinished, LubikanActivationRefused, LubikanActivationRequest,
@@ -985,6 +945,47 @@ mod tests {
 		assert_eq!(phase(&app, owner, LubikanAccountId::SELF)?, LubikanActivationPhase::Active);
 		assert_eq!(health(&app, owner)?.current, 65.0);
 		assert!(app.world().resource::<LubikanSelfHeal>().active);
+		Ok(())
+	}
+
+	#[test]
+	fn repeated_report_after_same_frame_complete_does_not_reclose() -> Result<()> {
+		let mut app = heal_app();
+		let owner = spawn_owner(&mut app, 90.0, 100.0);
+		let first = fund_and_activate(&mut app, owner)?;
+		app.update();
+		assert_eq!(phase(&app, owner, LubikanAccountId::SELF)?, LubikanActivationPhase::Idle);
+		assert_eq!(charge(&app, owner, LubikanAccountId::SELF)?, 0.0);
+		let pulse = finished(&mut app);
+		assert_eq!(pulse.len(), 1);
+		assert_eq!(pulse[0].outcome, LubikanActivationOutcome::Completed);
+
+		app.world_mut().write_message(LubikanActivationReport::completed(first.id));
+		app.world_mut().write_message(LubikanActivationReport::completed(first.id));
+		app.update();
+		assert_eq!(phase(&app, owner, LubikanAccountId::SELF)?, LubikanActivationPhase::Idle);
+		assert_eq!(charge(&app, owner, LubikanAccountId::SELF)?, 0.0);
+		assert!(finished(&mut app).is_empty());
+		assert!(!app.world().resource::<LubikanSelfHeal>().active);
+		Ok(())
+	}
+
+	#[test]
+	fn completed_report_does_not_cancel_a_live_self_session() -> Result<()> {
+		let mut app = heal_app();
+		let owner = spawn_owner(&mut app, 40.0, 100.0);
+		let session = fund_and_activate(&mut app, owner)?;
+		assert_eq!(phase(&app, owner, LubikanAccountId::SELF)?, LubikanActivationPhase::Active);
+		app.world_mut().write_message(LubikanActivationReport::completed(session.id));
+		app.update();
+		assert_eq!(phase(&app, owner, LubikanAccountId::SELF)?, LubikanActivationPhase::Idle);
+		assert_eq!(charge(&app, owner, LubikanAccountId::SELF)?, 0.0);
+		assert!(!app.world().resource::<LubikanSelfHeal>().active);
+		let pulse = finished(&mut app);
+		assert!(
+			pulse.iter().all(|pulse| pulse.outcome == LubikanActivationOutcome::Completed),
+			"already-closed Self must not emit a later Cancelled pulse, got {pulse:?}"
+		);
 		Ok(())
 	}
 }
