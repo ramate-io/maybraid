@@ -1,7 +1,7 @@
 //! Bikanwarda outcomes on top of the generic progress owner.
 
 use bevy::prelude::*;
-use encounters::{EncounterLifetimePolicy, EncountersPlugin};
+use encounters::{EncounterLifetimePolicy, EncounterSleepPolicy, EncountersPlugin};
 use lubikans::{LubikanCatalog, LubikanInterfacePlugin, LubikansPlugin};
 
 use crate::outcomes;
@@ -25,7 +25,8 @@ impl Plugin for BikanwardaEncounterPlugin {
 		if !app.is_plugin_added::<LubikansPlugin>() {
 			app.add_plugins(LubikansPlugin);
 		}
-		app.insert_resource(EncounterLifetimePolicy::bikanwarda());
+		app.insert_resource(EncounterLifetimePolicy::bikanwarda())
+			.insert_resource(EncounterSleepPolicy::bikanwarda());
 		app.init_resource::<BikanwardaUnlockConfig>();
 		if app.world().get_resource::<LubikanCatalog>().is_none() {
 			app.init_resource::<LubikanCatalog>();

@@ -84,6 +84,8 @@ impl EncounterProgressStore {
 		record.phase = EncounterPhase::Combat;
 		record.outcome = None;
 		record.instance = Some(instance);
+		record.sleep_used = false;
+		record.last_health_fraction = None;
 	}
 
 	pub(crate) fn unbind_instance(&mut self, instance: Entity) -> Option<EncounterId> {
@@ -275,6 +277,8 @@ fn discard_live(record: &mut EncounterRecord) {
 	record.outcome = None;
 	record.instance = None;
 	record.finished_at_secs = None;
+	record.sleep_used = false;
+	record.last_health_fraction = None;
 }
 
 fn clear_progress(record: &mut EncounterRecord) {

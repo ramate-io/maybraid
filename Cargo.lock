@@ -4374,6 +4374,7 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
+ "attacks",
  "damage",
 ]
 
@@ -7588,6 +7589,7 @@ dependencies = [
  "building-physics",
  "character-inventory-user",
  "character-items",
+ "character-motion",
  "character-persist",
  "character-ragdoll",
  "characters",

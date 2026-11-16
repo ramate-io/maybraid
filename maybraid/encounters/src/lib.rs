@@ -11,6 +11,7 @@ mod lifetime;
 mod plugin;
 mod progress;
 mod signal;
+mod sleep;
 mod store;
 
 #[cfg(any(test, feature = "test-support"))]
@@ -31,6 +32,11 @@ pub use progress::{
 	EncounterSnapshot, EncounterSnapshotRecord,
 };
 pub use signal::{EncounterResolved, EncounterSignal, EncounterSignalKind};
+pub use sleep::{
+	EncounterEarlyWake, EncounterSleepPolicy, EncounterSleepRepeat, EncounterSleepRestore,
+	BIKANWARDA_SLEEP_DURATION_SECS, BIKANWARDA_SLEEP_ENTER_FRACTION,
+	BIKANWARDA_SLEEP_INTERRUPT_FRACTION, BIKANWARDA_SLEEP_RESTORE_FRACTION,
+};
 pub use store::{rare_regen_roll, EncounterProgressStore};
 
 /// Schedule sets content crates order against. Award unlocks after [`Self::Resolve`].
@@ -38,6 +44,8 @@ pub use store::{rare_regen_roll, EncounterProgressStore};
 pub enum EncounterSystems {
 	Ingest,
 	Resolve,
+	/// Sleep/recovery. Runs after outcomes so lethal damage cannot resurrect.
+	Phase,
 }
 
 #[cfg(test)]

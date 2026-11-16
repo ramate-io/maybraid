@@ -66,6 +66,11 @@ pub struct EncounterRecord {
 	/// True after the first terminal outcome. Rare regen may start a new
 	/// occurrence without forgetting that the identity has completed once.
 	pub completed_once: bool,
+	/// True after this occurrence has entered sleep (Once policy).
+	pub sleep_used: bool,
+	/// Last observed HP fraction. `None` until the first observe so spawn-at-threshold
+	/// is not a crossing.
+	pub last_health_fraction: Option<f32>,
 }
 
 impl EncounterRecord {
@@ -78,6 +83,8 @@ impl EncounterRecord {
 			instance: None,
 			finished_at_secs: None,
 			completed_once: false,
+			sleep_used: false,
+			last_health_fraction: None,
 		}
 	}
 
@@ -101,6 +108,7 @@ pub struct EncounterSnapshotRecord {
 	pub outcome: Option<EncounterOutcome>,
 	pub finished_at_secs: Option<f32>,
 	pub completed_once: bool,
+	pub sleep_used: bool,
 }
 
 impl EncounterSnapshotRecord {
@@ -112,6 +120,7 @@ impl EncounterSnapshotRecord {
 			outcome: record.outcome,
 			finished_at_secs: record.finished_at_secs,
 			completed_once: record.completed_once,
+			sleep_used: record.sleep_used,
 		}
 	}
 
@@ -124,6 +133,8 @@ impl EncounterSnapshotRecord {
 			instance: None,
 			finished_at_secs: self.finished_at_secs,
 			completed_once: self.completed_once,
+			sleep_used: self.sleep_used,
+			last_health_fraction: None,
 		}
 	}
 }

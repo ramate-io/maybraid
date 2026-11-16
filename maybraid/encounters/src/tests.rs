@@ -11,7 +11,9 @@ use crate::progress::{EncounterLifetime, EncounterOutcome, EncounterPhase};
 use crate::{
 	EncounterFinishedReentry, EncounterId, EncounterInstance, EncounterLifetimePolicy,
 	EncounterProgressStore, EncounterResolved, EncounterSignal, EncounterSignalKind,
+	EncounterSleepPolicy, EncounterTimeEnabled,
 };
+use attacks::AttackSuspended;
 
 const DT: f32 = 0.1;
 const ID: fn() -> EncounterId = || EncounterId::from_slug("fixture.encounter.v0");
@@ -258,5 +260,174 @@ fn session_reset_does_not_clear_finished_under_default_policy() -> Result<()> {
 	app.world_mut().write_message(EncounterSignal::session_reset());
 	app.update();
 	assert_eq!(record(&app)?.outcome, Some(EncounterOutcome::Killed));
+	Ok(())
+}
+
+fn sleep_app() -> App {
+	let mut app = app();
+	app.world_mut().insert_resource(EncounterSleepPolicy::bikanwarda());
+	app
+}
+
+fn set_current(app: &mut App, entity: Entity, current: f32) -> Result<()> {
+	app.world_mut()
+		.entity_mut(entity)
+		.get_mut::<Health>()
+		.ok_or_else(|| anyhow!("health"))?
+		.current = current;
+	Ok(())
+}
+
+fn is_sleeping(app: &App) -> Result<bool> {
+	Ok(matches!(record(app)?.phase, EncounterPhase::Sleep(_)))
+}
+
+#[test]
+fn spawn_already_below_twenty_does_not_enter_sleep() -> Result<()> {
+	let mut app = sleep_app();
+	let boss = spawn_instance(app.world_mut(), ID(), 100.0);
+	set_current(&mut app, boss, 15.0)?;
+	app.update();
+	assert!(!is_sleeping(&app)?);
+	assert_eq!(record(&app)?.phase, EncounterPhase::Combat);
+	assert!(!record(&app)?.sleep_used);
+	Ok(())
+}
+
+#[test]
+fn crossing_twenty_enters_sleep_once_and_suspends_attacks() -> Result<()> {
+	let mut app = sleep_app();
+	let boss = bind(&mut app, 100.0);
+	set_current(&mut app, boss, 20.0)?;
+	app.update();
+	assert!(is_sleeping(&app)?);
+	assert!(record(&app)?.sleep_used);
+	assert!(app.world().get::<AttackSuspended>(boss).is_some());
+	set_current(&mut app, boss, 50.0)?;
+	app.update();
+	assert!(is_sleeping(&app)?);
+	Ok(())
+}
+
+#[test]
+fn just_above_twenty_does_not_enter() -> Result<()> {
+	let mut app = sleep_app();
+	let boss = bind(&mut app, 100.0);
+	set_current(&mut app, boss, 20.1)?;
+	app.update();
+	assert!(!is_sleeping(&app)?);
+	Ok(())
+}
+
+#[test]
+fn sleep_completion_restores_to_fifty_and_returns_control() -> Result<()> {
+	let mut app = sleep_app();
+	app.world_mut().insert_resource(EncounterSleepPolicy {
+		duration_secs: 0.25,
+		..EncounterSleepPolicy::bikanwarda()
+	});
+	let boss = bind(&mut app, 100.0);
+	set_current(&mut app, boss, 18.0)?;
+	app.update();
+	assert!(is_sleeping(&app)?);
+	for _ in 0..8 {
+		app.update();
+	}
+	let health = app.world().get::<Health>(boss).ok_or_else(|| anyhow!("hp"))?;
+	assert!((health.current - 50.0).abs() < 1e-4);
+	assert_eq!(record(&app)?.phase, EncounterPhase::Combat);
+	assert!(app.world().get::<AttackSuspended>(boss).is_none());
+	Ok(())
+}
+
+#[test]
+fn ten_percent_wakes_without_remaining_restore() -> Result<()> {
+	let mut app = sleep_app();
+	let boss = bind(&mut app, 100.0);
+	set_current(&mut app, boss, 18.0)?;
+	app.update();
+	assert!(is_sleeping(&app)?);
+	set_current(&mut app, boss, 10.0)?;
+	app.update();
+	assert!(!is_sleeping(&app)?);
+	let health = app.world().get::<Health>(boss).ok_or_else(|| anyhow!("hp"))?;
+	assert!((health.current - 10.0).abs() < 1e-4);
+	assert!(app.world().get::<AttackSuspended>(boss).is_none());
+	Ok(())
+}
+
+#[test]
+fn hit_crossing_both_thresholds_wakes_the_same_frame() -> Result<()> {
+	let mut app = sleep_app();
+	let boss = bind(&mut app, 100.0);
+	set_current(&mut app, boss, 8.0)?;
+	app.update();
+	assert!(!is_sleeping(&app)?);
+	assert!(record(&app)?.sleep_used);
+	assert!(matches!(record(&app)?.phase, EncounterPhase::Waking | EncounterPhase::Combat));
+	let health = app.world().get::<Health>(boss).ok_or_else(|| anyhow!("hp"))?;
+	assert!((health.current - 8.0).abs() < 1e-4);
+	Ok(())
+}
+
+#[test]
+fn death_during_sleep_does_not_resurrect() -> Result<()> {
+	let mut app = sleep_app();
+	let boss = bind(&mut app, 100.0);
+	set_current(&mut app, boss, 18.0)?;
+	app.update();
+	assert!(is_sleeping(&app)?);
+	app.world_mut()
+		.write_message(Died { entity: boss, source: None, point: Vec3::ZERO });
+	set_current(&mut app, boss, 0.0)?;
+	app.update();
+	assert_eq!(record(&app)?.outcome, Some(EncounterOutcome::Killed));
+	let health = app.world().get::<Health>(boss).ok_or_else(|| anyhow!("hp"))?;
+	assert_eq!(health.current, 0.0);
+	assert!(app.world().get::<AttackSuspended>(boss).is_none());
+	Ok(())
+}
+
+#[test]
+fn pause_freezes_sleep_elapsed() -> Result<()> {
+	let mut app = sleep_app();
+	let boss = bind(&mut app, 100.0);
+	set_current(&mut app, boss, 18.0)?;
+	app.update();
+	let before = match record(&app)?.phase {
+		EncounterPhase::Sleep(sleep) => sleep.elapsed_secs,
+		_ => return Err(anyhow!("expected sleep")),
+	};
+	app.world_mut().insert_resource(EncounterTimeEnabled(false));
+	for _ in 0..10 {
+		app.update();
+	}
+	let after = match record(&app)?.phase {
+		EncounterPhase::Sleep(sleep) => sleep.elapsed_secs,
+		_ => return Err(anyhow!("still sleep")),
+	};
+	assert_eq!(before, after);
+	assert!(app.world().get::<AttackSuspended>(boss).is_some());
+	Ok(())
+}
+
+#[test]
+fn once_policy_does_not_sleep_again_after_restore() -> Result<()> {
+	let mut app = sleep_app();
+	app.world_mut().insert_resource(EncounterSleepPolicy {
+		duration_secs: 0.15,
+		..EncounterSleepPolicy::bikanwarda()
+	});
+	let boss = bind(&mut app, 100.0);
+	set_current(&mut app, boss, 18.0)?;
+	app.update();
+	for _ in 0..8 {
+		app.update();
+	}
+	assert_eq!(record(&app)?.phase, EncounterPhase::Combat);
+	set_current(&mut app, boss, 15.0)?;
+	app.update();
+	assert!(!is_sleeping(&app)?);
+	assert!(record(&app)?.sleep_used);
 	Ok(())
 }

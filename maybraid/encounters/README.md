@@ -29,7 +29,8 @@ or reward event.
 | [`EncounterSignal`](src/signal.rs) | Chain-break, player death, session reset, explicit stream-out. |
 | [`EncounterResolved`](src/signal.rs) | One terminal outcome per encounter. |
 | [`EncounterLifetimePolicy`](src/lifetime.rs) | Stream-out, death, session, disk — explicit, not silent. |
-| [`EncounterSystems`](src/lib.rs) | `Ingest` → `Resolve`. Content awards order after `Resolve`. |
+| [`EncounterSleepPolicy`](src/sleep.rs) | Explicit 20%/15s/50%/10% knobs. Disabled unless Bikanwarda enables it. |
+| [`EncounterSystems`](src/lib.rs) | `Ingest` → `Resolve` → `Phase`. Content awards order after `Resolve`. |
 
 [`EncountersPlugin`](src/plugin.rs) is the only place that mutates the store.
 Other lanes write [`EncounterSignal`](src/signal.rs) or spawn
@@ -47,3 +48,8 @@ Disk persistence is [`EncounterDiskPersistence::SessionOnly`](src/lifetime.rs):
 the store snapshots in memory. Character saves today cover appearance,
 inventory bags, and position, not world encounter flags. Do not claim a disk
 format here.
+
+Sleep ([#1120](https://github.com/ramate-io/maybraid/issues/1120)) stores phase
+on the progress owner. PLACEHOLDER Bikanwarda choices: one sleep per
+occurrence, restore at end of 15 s, early wake cancels remaining recovery.
+Phase is never inferred from current HP after a stream.
