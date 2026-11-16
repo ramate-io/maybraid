@@ -43,7 +43,10 @@ pub use heal::{
 	LubikanSelfHealConfig,
 };
 pub use identity::{LubikanAccountId, LubikanDefinition, LubikanDefinitionId};
-pub use ledger::{LubikanAccount, LubikanAccountBinding, LubikanLedger, LubikanOwner};
+pub use ledger::{
+	LubikanAccount, LubikanAccountBinding, LubikanBodies, LubikanBodyOf, LubikanCharacter,
+	LubikanLedger, LubikanOwner,
+};
 pub use lifetime::{
 	LubikanLifetimePolicy, LubikanOwnerLifetime, LubikanOwnerLifetimeKind, LubikanPersistence,
 };
@@ -55,7 +58,7 @@ pub use selection::LubikanSelection;
 /// run systems in these sets; gameplay plugins do.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum LubikanSystems {
-	/// Attach, snapshot, and restore owner ledgers.
+	/// Attach the session [`LubikanCharacter`] and re-point bodies at it.
 	Owner,
 	/// Sole owner of [`LubikanActivationRequest`]s: spend once and emit a
 	/// [`LubikanActivationSession`], or emit [`LubikanActivationRefused`].

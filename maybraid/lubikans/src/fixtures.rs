@@ -8,7 +8,7 @@ use crate::activation::LubikanActivationRequest;
 use crate::catalog::{LubikanCatalog, LubikanSelfConfig};
 use crate::change::LubikanChargeChanged;
 use crate::identity::LubikanDefinition;
-use crate::ledger::{LubikanLedger, LubikanOwner};
+use crate::ledger::{LubikanBodyOf, LubikanLedger, LubikanOwner};
 use crate::lifetime::LubikanOwnerLifetime;
 use crate::{LubikanInterfacePlugin, LubikansPlugin};
 
@@ -50,9 +50,7 @@ pub fn unlock_on(
 	if let Some(mut catalog) = world.get_resource_mut::<LubikanCatalog>() {
 		catalog.register(definition);
 	}
-	world
-		.get_mut::<LubikanLedger>(owner)
-		.map(|mut ledger| ledger.ensure_owned(definition))
+	LubikanBodyOf::ledger_mut(world, owner).map(|mut ledger| ledger.ensure_owned(definition))
 }
 
 /// Owner plus the ledger snapshot taken at spawn time.
@@ -73,11 +71,11 @@ impl LubikanFixture {
 	}
 
 	pub fn ledger<'a>(&self, world: &'a World) -> Option<&'a LubikanLedger> {
-		world.get::<LubikanLedger>(self.owner)
+		LubikanBodyOf::ledger(world, self.owner)
 	}
 
 	pub fn ledger_mut<'a>(&self, world: &'a mut World) -> Option<Mut<'a, LubikanLedger>> {
-		world.get_mut::<LubikanLedger>(self.owner)
+		LubikanBodyOf::ledger_mut(world, self.owner)
 	}
 
 	pub fn unlock(
