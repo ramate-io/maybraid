@@ -92,6 +92,12 @@ pub enum ChainCommand {
 	Reverse,
 	/// Freeze the standing wave (`speed = 0`).
 	Freeze,
+	/// Show the runtime skinned chain (A04 implementation).
+	Skinned {
+		/// Number of links (2-32).
+		#[arg(default_value = "14")]
+		links: u32,
+	},
 }
 
 impl PlaygroundCommand {
@@ -282,6 +288,34 @@ impl ChainCommand {
 					let mut preview = world.resource_mut::<ChainPreview>();
 					preview.flow.speed_mps = 0.0;
 					preview.restamp_glow_and_seed();
+				});
+			}
+			Self::Skinned { links } => {
+				let links = links.clamp(2, 32);
+				*console = format!("chain skinned (links: {links})");
+				commands.queue(move |world: &mut World| {
+					use world_materials::chain::{spawn_skinned_chain, SkinnedChainConfig};
+					enter_chain_host(world);
+					// Spawn a runtime skinned chain next to the placeholder chains
+					let config = SkinnedChainConfig {
+						link_count: links,
+						..Default::default()
+					};
+					let (root, _, _) = spawn_skinned_chain(
+						&mut world.commands(),
+						&mut world.resource_mut::<Assets<Mesh>>(),
+						&mut world.resource_mut::<Assets<SkinnedMeshInverseBindposes>>(),
+						config,
+						Transform::from_xyz(-2.0, 0.0, 0.0), // Position to the left
+						"runtime-skinned-chain",
+					);
+					// Apply the mythical chain material
+					let material_ref = mythical_chain_ref_for(MythicalChainState::Intact);
+					world.commands().entity(root).insert((
+						MaterialRefRoot(material_ref),
+						OwnedChainMaterial,
+						ChainHalo,
+					));
 				});
 			}
 		}
