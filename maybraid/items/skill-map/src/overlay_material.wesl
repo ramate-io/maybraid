@@ -22,12 +22,16 @@ var<uniform> params: OverlayParams;
 // came 0.82, sample 0.52, bias 0.20, came-alpha 0.25) veiling the world.
 const OVERLAY_WARP_SCALE: f32 = 0.028;
 const OVERLAY_FRINGE_SCALE: f32 = 0.0025;
-const OVERLAY_PANE_MIX: f32 = 0.32;
+const OVERLAY_PANE_MIX: f32 = 0.50;
 const OVERLAY_CAME_MIX: f32 = 0.28;
-// Keep SAMPLE/BIAS/CAME_ALPHA in sync with overlay.rs OVERLAY_COMPOSITOR_*.
-const OVERLAY_ALPHA_SAMPLE: f32 = 0.88;
-const OVERLAY_ALPHA_BIAS: f32 = 0.054;
+// Keep paint / came / mark constants in sync with overlay.rs OVERLAY_*.
 const OVERLAY_CAME_ALPHA: f32 = 0.084;
+const OVERLAY_PAINT_FLOOR: f32 = 0.08;
+const OVERLAY_PAINT_GAIN: f32 = 0.42;
+const OVERLAY_PAINT_CHROMA: f32 = 2.6;
+const OVERLAY_PAINT_LUMA: f32 = 0.18;
+const OVERLAY_PAINT_RECOVER: f32 = 0.08;
+const OVERLAY_PAINT_SATURATION: f32 = 1.45;
 const OVERLAY_MARK_ALPHA_LO: f32 = 0.60;
 const OVERLAY_MARK_ALPHA_HI: f32 = 0.90;
 
@@ -79,6 +83,16 @@ fn glass_cell(uv: vec2<f32>) -> vec3<f32> {
     return vec3<f32>(local.x, local.y, came);
 }
 
+fn unpremultiply(color: vec3<f32>, alpha: f32) -> vec3<f32> {
+    return color / max(alpha, OVERLAY_PAINT_RECOVER);
+}
+
+fn paint_ink(pigment: vec3<f32>) -> f32 {
+    let luma = dot(pigment, vec3<f32>(0.30, 0.59, 0.11));
+    let chroma = length(pigment - vec3<f32>(luma));
+    return saturate(chroma * OVERLAY_PAINT_CHROMA + luma * OVERLAY_PAINT_LUMA);
+}
+
 fn glass_tint(seed: f32) -> vec3<f32> {
     let ruby = vec3<f32>(0.62, 0.12, 0.16);
     let amber = vec3<f32>(0.78, 0.48, 0.12);
@@ -115,13 +129,18 @@ fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
     let g = sample.g;
     let b = textureSample(map_texture, map_sampler, uv - vec2<f32>(fringe, 0.0)).b;
     var color = mix(sample.xyz, vec3<f32>(r, g, b), amount);
+    let pigment = unpremultiply(color, sample.a);
+    let luma = dot(pigment, vec3<f32>(0.30, 0.59, 0.11));
+    color = mix(vec3<f32>(luma), pigment, OVERLAY_PAINT_SATURATION);
     let pane = glass_tint(seed);
     color = mix(color, mix(color, pane, OVERLAY_PANE_MIX), amount * params.glass);
     color = mix(color, vec3<f32>(0.06, 0.04, 0.05), came * amount * OVERLAY_CAME_MIX);
     let lead = 0.22 + 0.18 * n;
-    let veil = sample.a * OVERLAY_ALPHA_SAMPLE + OVERLAY_ALPHA_BIAS + came * lead * OVERLAY_CAME_ALPHA;
+    let paint = OVERLAY_PAINT_FLOOR
+        + paint_ink(pigment) * OVERLAY_PAINT_GAIN
+        + came * lead * OVERLAY_CAME_ALPHA;
     let keep = smoothstep(OVERLAY_MARK_ALPHA_LO, OVERLAY_MARK_ALPHA_HI, sample.a);
-    let treated = mix(veil, sample.a, keep);
+    let treated = mix(paint, sample.a, keep);
     let alpha = mix(sample.a, treated, amount);
     return vec4<f32>(color, alpha);
 }

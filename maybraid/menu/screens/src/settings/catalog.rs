@@ -103,6 +103,48 @@ impl Preference for Shadows {
 	}
 }
 
+/// Full-screen stained-glass skill map. Machine-scoped.
+pub struct MapOverlay;
+
+impl Preference for MapOverlay {
+	const KEY: &'static str = "map_overlay";
+	const PERSIST: PersistPolicy = PersistPolicy::Machine;
+	type Value = bool;
+
+	fn get(settings: &InGameSettings) -> Self::Value {
+		settings.map_overlay
+	}
+
+	fn set(settings: &mut InGameSettings, value: Self::Value) {
+		settings.map_overlay = value;
+	}
+
+	fn device_default(_class: DeviceClass) -> Self::Value {
+		true
+	}
+}
+
+/// Tunnel vision while the map overlay is up. Machine-scoped.
+pub struct MapFocus;
+
+impl Preference for MapFocus {
+	const KEY: &'static str = "map_focus";
+	const PERSIST: PersistPolicy = PersistPolicy::Machine;
+	type Value = bool;
+
+	fn get(settings: &InGameSettings) -> Self::Value {
+		settings.map_focus
+	}
+
+	fn set(settings: &mut InGameSettings, value: Self::Value) {
+		settings.map_focus = value;
+	}
+
+	fn device_default(_class: DeviceClass) -> Self::Value {
+		true
+	}
+}
+
 /// Mob HUD pins. Session chrome; omitted from load and save.
 pub struct MobHud;
 
@@ -173,6 +215,8 @@ impl InGameSettings {
 		Self {
 			shadows: Shadows::device_default(class),
 			mob_hud: MobHud::device_default(class),
+			map_overlay: MapOverlay::device_default(class),
+			map_focus: MapFocus::device_default(class),
 			visual_style: VisualStylePref::device_default(class),
 		}
 	}
@@ -182,6 +226,8 @@ impl InGameSettings {
 		let mut fields = BTreeMap::new();
 		write_machine_field::<Shadows>(&mut fields, self);
 		write_machine_field::<VisualStylePref>(&mut fields, self);
+		write_machine_field::<MapOverlay>(&mut fields, self);
+		write_machine_field::<MapFocus>(&mut fields, self);
 		write_machine_field::<MobHud>(&mut fields, self);
 		fields
 	}
@@ -193,6 +239,8 @@ pub(super) fn overlay_machine_fields(
 ) {
 	overlay_machine_field::<Shadows>(settings, fields);
 	overlay_machine_field::<VisualStylePref>(settings, fields);
+	overlay_machine_field::<MapOverlay>(settings, fields);
+	overlay_machine_field::<MapFocus>(settings, fields);
 	overlay_machine_field::<MobHud>(settings, fields);
 
 	// Migration: if visual_style is missing but render_scale exists, migrate.
@@ -260,8 +308,8 @@ fn overlay_machine_field<P: Preference>(
 mod tests {
 	use super::{
 		classify_host, seed_device_class, visual_style_choice_is_saved, DeviceClass, DeviceType,
-		HostProbe, InGameSettings, InGameShadowQuality, InGameVisualStyle, MobHud, Preference,
-		Shadows, VisualStylePref,
+		HostProbe, InGameSettings, InGameShadowQuality, InGameVisualStyle, MapFocus, MapOverlay,
+		MobHud, Preference, Shadows, VisualStylePref,
 	};
 
 	#[test]
@@ -293,13 +341,26 @@ mod tests {
 		let fields = InGameSettings {
 			shadows: InGameShadowQuality::Low,
 			mob_hud: true,
+			map_overlay: false,
+			map_focus: false,
 			visual_style: InGameVisualStyle::Native,
 		}
 		.persisted_fields();
 		assert_eq!(fields.get("shadows"), Some(&serde_json::json!("low")));
 		assert_eq!(fields.get("visual_style"), Some(&serde_json::json!("native")));
+		assert_eq!(fields.get("map_overlay"), Some(&serde_json::json!(false)));
+		assert_eq!(fields.get("map_focus"), Some(&serde_json::json!(false)));
 		assert!(!fields.contains_key("mob_hud"));
-		assert_eq!(fields.len(), 2);
+		assert_eq!(fields.len(), 4);
+	}
+
+	#[test]
+	fn map_overlay_and_focus_default_on() {
+		let settings = InGameSettings::from_device(DeviceClass::Modest);
+		assert!(settings.map_overlay);
+		assert!(settings.map_focus);
+		assert!(MapOverlay::device_default(DeviceClass::Modest));
+		assert!(MapFocus::device_default(DeviceClass::Modest));
 	}
 
 	#[test]

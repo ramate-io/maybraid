@@ -26,13 +26,16 @@ count as repeated flicks. After the last timing window closes, a 1.5-second
 pause leads into the same sequence automatically.
 
 Holding RB expands the map from the bottom-right corner into a full-screen
-stained-glass overlay: land/mosaic tiles drop to a light veil; power tiles,
+stained-glass overlay: land/mosaic tiles paint onto the world by mosaic ink
+(chroma stamps, low-chroma wash stays light so geometry reads); power tiles,
 water (debraid), the cursor, and feed arrows keep full alpha through the
-compositor. Lowering `style.w` makes land tiles more opaque, not less. While
-the overlay is up, the rest of the HUD hides and a vignette-style edge blur
-(`TUNNEL_VISION_STRENGTH` / `TUNNEL_VISION_RADIUS` / `TUNNEL_VISION_DARKEN`)
-fades in on the 3D camera so the centre stays sharp enough to navigate.
-Releasing RB restores the HUD and fades the blur out. The expand edge plays
+compositor. Lowering `style.w` makes land tiles more opaque, not less. Map
+Overlay and Map Focus are in-game Settings toggles (on by default). Overlay
+off keeps the map in the corner. Focus off skips tunnel vision and HUD hide.
+While focus is on and the overlay is up, the rest of the HUD hides and a
+vignette-style edge blur (`TUNNEL_VISION_STRENGTH` / `TUNNEL_VISION_RADIUS` /
+`TUNNEL_VISION_DARKEN`) fades in on the 3D camera so the centre stays sharp
+enough to navigate. Releasing RB restores the HUD and fades the blur out. The expand edge plays
 the authored `change_item` clip on the UI bus; releasing RB is silent. The clock pauses when skill-map input is inactive or gameplay
 is suspended. Changing the equipped map starts a fresh feed on the next RB
 hold.

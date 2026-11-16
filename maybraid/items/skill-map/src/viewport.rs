@@ -1078,6 +1078,7 @@ mod tests {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins)
 			.init_resource::<SkillMapEnabled>()
+			.init_resource::<crate::SkillMapOverlayEnabled>()
 			.add_message::<crate::SkillMapOverlayCue>()
 			.add_systems(
 				Update,

@@ -46,6 +46,7 @@ use maybraid_session::{
 	SessionCapabilities, SessionCapabilitySystems, WorldGameplayEnabled, WorldPlaySessionEnded,
 };
 use maybraid_sky::ShadowQuality;
+use maybraid_skill_map::{SkillMapFocusEnabled, SkillMapOverlayEnabled};
 use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 use maybraid_world::{
 	AdapterKind, AgentDrive, DEVICE_TIER_ENV, Durham, InventoryEditCameraFollow,
@@ -193,6 +194,7 @@ impl Plugin for GamePlugin {
 						.run_if(in_state(WorldPause::Menu)),
 					persist_changed_player_inventory,
 					sync_world_mob_hud,
+					sync_skill_map_overlay_settings,
 					sync_world_shadows,
 					(
 						apply_unsaved_visual_style_from_host,
@@ -425,6 +427,19 @@ fn sync_world_loadout_from_editor(
 fn sync_world_mob_hud(settings: Res<InGameSettings>, mut hud: ResMut<WorldMobHudEnabled>) {
 	if hud.0 != settings.mob_hud {
 		hud.0 = settings.mob_hud;
+	}
+}
+
+fn sync_skill_map_overlay_settings(
+	settings: Res<InGameSettings>,
+	mut overlay: ResMut<SkillMapOverlayEnabled>,
+	mut focus: ResMut<SkillMapFocusEnabled>,
+) {
+	if overlay.0 != settings.map_overlay {
+		overlay.0 = settings.map_overlay;
+	}
+	if focus.0 != settings.map_focus {
+		focus.0 = settings.map_focus;
 	}
 }
 
@@ -670,12 +685,13 @@ mod tests {
 	use crate::{
 		GameFlow, PlaySession, apply_settings_to_visual_style, assets_root, clear_play_session,
 		load_active_player_loadout, persist_changed_player_inventory, read_player_loadout,
-		route_home_choice, sync_world_loadout_from_editor, sync_world_shadows,
-		visual_style_readout,
+		route_home_choice, sync_skill_map_overlay_settings, sync_world_loadout_from_editor,
+		sync_world_shadows, visual_style_readout,
 	};
 	use maybraid_controllers_core::{InputRouter, RoutingEvent};
 	use maybraid_session::{SessionCapabilities, WorldPlaySessionEnded};
 	use maybraid_sky::ShadowQuality;
+	use maybraid_skill_map::{SkillMapFocusEnabled, SkillMapOverlayEnabled};
 	use maybraid_world::{VisualStyle, VisualStyleSetting, WorldPlayerLoadout, WorldSurfaceReady};
 	use menu_playground::{
 		CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState, EditingCharacter,
@@ -989,10 +1005,32 @@ mod tests {
 	}
 
 	#[test]
+	fn pause_settings_copy_onto_skill_map_overlay() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(InGameSettings {
+			mob_hud: false,
+			map_overlay: false,
+			map_focus: false,
+			shadows: InGameShadowQuality::Off,
+			visual_style: InGameVisualStyle::Native,
+		});
+		world.insert_resource(SkillMapOverlayEnabled(true));
+		world.insert_resource(SkillMapFocusEnabled(true));
+		world
+			.run_system_once(sync_skill_map_overlay_settings)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.resource::<SkillMapOverlayEnabled>().0);
+		assert!(!world.resource::<SkillMapFocusEnabled>().0);
+		Ok(())
+	}
+
+	#[test]
 	fn pause_settings_copy_onto_the_sky_sun() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.insert_resource(InGameSettings {
 			mob_hud: false,
+			map_overlay: true,
+			map_focus: true,
 			shadows: InGameShadowQuality::Low,
 			visual_style: InGameVisualStyle::Impressionist,
 		});
@@ -1062,6 +1100,8 @@ mod tests {
 
 		let mut settings = InGameSettings {
 			mob_hud: false,
+			map_overlay: true,
+			map_focus: true,
 			shadows: InGameShadowQuality::Off,
 			visual_style: InGameVisualStyle::Native,
 		};

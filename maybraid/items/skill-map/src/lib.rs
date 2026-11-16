@@ -52,9 +52,9 @@ pub use feed::{
 };
 pub use map::{authored_map, authored_map_from_spec, authored_maps, SkillKind, SkillMapId};
 pub use overlay::{
-	SkillMapBackdrop, SkillMapOverlay, SkillMapOverlayCue, SkillMapOverlayMaterial,
-	SkillMapOverlayPane, OVERLAY_CLEAR_ALPHA, OVERLAY_FRAME_FILL_ALPHA, OVERLAY_GLASS,
-	OVERLAY_TILE_AMOUNT, OVERLAY_WARP,
+	SkillMapBackdrop, SkillMapOverlay, SkillMapOverlayCue, SkillMapOverlayEnabled,
+	SkillMapOverlayMaterial, SkillMapOverlayPane, OVERLAY_CLEAR_ALPHA, OVERLAY_FRAME_FILL_ALPHA,
+	OVERLAY_GLASS, OVERLAY_TILE_AMOUNT, OVERLAY_WARP,
 };
 pub use preview::{
 	spawn_skill_map_catalog_preview, spawn_skill_map_spin_reveal_hud,
@@ -68,7 +68,7 @@ pub use sound::{
 pub use tile_material::{SkillMapTileAssets, SkillMapTileMaterialPlugin};
 pub use tiles::{classify_noise, TileKind};
 pub use tunnel_vision::{
-	SkillMapTunnelVision, SkillMapTunnelVisionMaterial, TUNNEL_VISION_DARKEN,
+	SkillMapFocusEnabled, SkillMapTunnelVision, SkillMapTunnelVisionMaterial, TUNNEL_VISION_DARKEN,
 	TUNNEL_VISION_FADE_SECS, TUNNEL_VISION_RADIUS, TUNNEL_VISION_STRENGTH,
 };
 pub use user::{

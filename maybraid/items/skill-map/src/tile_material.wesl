@@ -62,7 +62,7 @@ fn overlay_amount() -> f32 { return saturate(material.style.w); }
 // Keep SCALE/BIAS/MIX_GAIN in sync with tile_material.rs TILE_OVERLAY_ALPHA_*.
 // Was SCALE 0.28 / BIAS 0.05; marks skip this mix. ~1.2× vs 0.15/0.025 land veil.
 const OVERLAY_SWAY_BOOST: f32 = 0.40;
-const OVERLAY_TINT_MIX: f32 = 0.22;
+const OVERLAY_TINT_MIX: f32 = 0.40;
 const OVERLAY_ALPHA_SCALE: f32 = 0.18;
 const OVERLAY_ALPHA_BIAS: f32 = 0.03;
 const OVERLAY_RIM: f32 = 0.05;

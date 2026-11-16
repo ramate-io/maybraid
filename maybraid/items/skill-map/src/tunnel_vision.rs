@@ -14,6 +14,16 @@ use crate::overlay::SkillMapOverlay;
 use crate::user::SkillMapUser;
 use crate::viewport::SkillMapCollapsedChrome;
 
+/// When false, an expanded overlay does not apply tunnel vision or hide the HUD.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SkillMapFocusEnabled(pub bool);
+
+impl Default for SkillMapFocusEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
 const TUNNEL_SHADER: &str = concat!("embedded://", env!("CARGO_CRATE_NAME"), "/tunnel_vision.wesl");
 
 /// UV blur radius at the rim when [`Self::amount`] is 1.
@@ -118,6 +128,7 @@ impl Plugin for SkillMapTunnelVisionPlugin {
 	fn build(&self, app: &mut App) {
 		embedded_asset!(app, "tunnel_vision.wesl");
 		app.add_plugins(FullscreenMaterialPlugin::<SkillMapTunnelVisionMaterial>::default())
+			.init_resource::<SkillMapFocusEnabled>()
 			.init_resource::<SkillMapTunnelVision>()
 			.add_systems(
 				PostUpdate,
@@ -129,11 +140,12 @@ impl Plugin for SkillMapTunnelVisionPlugin {
 /// Snap the fade target to the overlay the same frame RB expands or collapses it.
 pub(crate) fn sync_tunnel_vision_target(
 	mut vision: ResMut<SkillMapTunnelVision>,
+	focus: Res<SkillMapFocusEnabled>,
 	overlays: Query<&SkillMapOverlay, With<SkillMapUser>>,
 	mut chrome: Query<&mut Visibility, With<SkillMapCollapsedChrome>>,
 ) {
 	let expanded = overlays.iter().any(|overlay| overlay.expanded());
-	vision.set_target(expanded);
+	vision.set_target(expanded && focus.0);
 	let chrome_vis = if expanded { Visibility::Hidden } else { Visibility::Inherited };
 	for mut visibility in &mut chrome {
 		if *visibility != chrome_vis {

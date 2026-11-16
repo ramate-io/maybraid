@@ -7227,6 +7227,7 @@ dependencies = [
  "maybraid-gameplay",
  "maybraid-menu-controller",
  "maybraid-session",
+ "maybraid-skill-map",
  "maybraid-sky",
  "maybraid-virtual-pad-controller",
  "maybraid-world",

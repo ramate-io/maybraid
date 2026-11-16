@@ -31,30 +31,45 @@ const FIREARM_CARD_RADIUS: f32 = 8.0;
 /// Was `0.85`; left at `0.28` so refraction stays a hint, not opacity.
 pub const OVERLAY_WARP: f32 = 0.28;
 /// How much stained-glass *color* washes the warped map. Not coverage.
-/// Was `0.056`; bumped ~1.2× so the veil reads a touch stronger.
-pub const OVERLAY_GLASS: f32 = 0.067;
+pub const OVERLAY_GLASS: f32 = 0.11;
 /// Blend of tile shading into overlay (translucent) mode when expanded.
 /// This is **not** a veil opacity: `0` keeps gameplay-tile alpha `1`, `1`
 /// mixes toward the see-through overlay alpha. Keep in sync with `tile_material.wesl`.
 pub const OVERLAY_TILE_AMOUNT: f32 = 1.0;
 /// Map-camera clear alpha while expanded. Empty texels only; feed mosaic fills the RT.
-/// Was `0.020`.
 pub const OVERLAY_CLEAR_ALPHA: f32 = 0.024;
-/// Expanded frame fill alpha (collapsed chrome still uses a fixed 0.12). Was `0.008`.
+/// Expanded frame fill alpha (collapsed chrome still uses a fixed 0.12).
 pub const OVERLAY_FRAME_FILL_ALPHA: f32 = 0.010;
-/// Keep in sync with `overlay_material.wesl`.
-pub const OVERLAY_COMPOSITOR_ALPHA_SAMPLE: f32 = 0.88;
-pub const OVERLAY_COMPOSITOR_ALPHA_BIAS: f32 = 0.054;
+/// Keep in sync with `overlay_material.wesl`. Land uses paint, not sample×bias coverage.
 pub const OVERLAY_COMPOSITOR_CAME_ALPHA: f32 = 0.084;
+pub const OVERLAY_PAINT_FLOOR: f32 = 0.08;
+pub const OVERLAY_PAINT_GAIN: f32 = 0.42;
+pub const OVERLAY_PAINT_CHROMA: f32 = 2.6;
+pub const OVERLAY_PAINT_LUMA: f32 = 0.18;
+pub const OVERLAY_PAINT_RECOVER: f32 = 0.08;
+pub const OVERLAY_PAINT_SATURATION: f32 = 1.45;
+/// Typical mosaic pigment for CPU paint regression (amber-ruby land).
+pub const OVERLAY_LAND_PIGMENT: Vec3 = Vec3::new(0.58, 0.28, 0.16);
 pub const OVERLAY_MARK_ALPHA_LO: f32 = 0.60;
 pub const OVERLAY_MARK_ALPHA_HI: f32 = 0.90;
 /// Minimum composited alpha for arrows, power tiles, and the cursor.
 pub const OVERLAY_MARK_ALPHA_MIN: f32 = 0.85;
 const _: () = assert!(OVERLAY_MARK_ALPHA_LO < OVERLAY_MARK_ALPHA_MIN);
 const _: () = assert!(OVERLAY_MARK_ALPHA_MIN <= OVERLAY_MARK_ALPHA_HI);
+const _: () = assert!(OVERLAY_PAINT_SATURATION > 1.0);
 /// Tile overlay amount on the 9f22704 build. Used as a coverage regression bound.
 #[cfg(test)]
 const OVERLAY_TILE_AMOUNT_NINE_F227: f32 = 0.50;
+
+/// When false, RB still steers the map but the stained-glass overlay stays collapsed.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SkillMapOverlayEnabled(pub bool);
+
+impl Default for SkillMapOverlayEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
 
 /// Collapsed corner HUD versus the full-screen stained-glass overlay.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -222,14 +237,18 @@ impl SkillMapOverlay {
 		}
 	}
 
-	/// Tile overlay α then compositor α for a typical pane (no came, mid noise).
+	/// Tile overlay α then compositor paint α for typical mosaic land.
 	pub fn pane_alpha(self, tile_base_alpha: f32) -> f32 {
-		self.pane_alpha_with(tile_base_alpha, 0.0, 0.5)
+		self.pane_alpha_for_pigment(OVERLAY_LAND_PIGMENT, tile_base_alpha)
 	}
 
-	pub fn pane_alpha_with(self, tile_base_alpha: f32, came: f32, noise: f32) -> f32 {
+	pub fn pane_alpha_for_pigment(self, pigment: Vec3, tile_base_alpha: f32) -> f32 {
+		self.pane_alpha_with(pigment, tile_base_alpha, 0.0, 0.5)
+	}
+
+	pub fn pane_alpha_with(self, pigment: Vec3, tile_base_alpha: f32, came: f32, noise: f32) -> f32 {
 		let sample = SkillMapTileMaterial::overlay_alpha(tile_base_alpha, self.tile_amount());
-		OverlayParams::from_overlay(self).composited_alpha(sample, came, noise)
+		OverlayParams::from_overlay(self).paint_alpha(pigment * sample, sample, came, noise)
 	}
 
 	/// Arrows, power tiles, and the cursor after the compositor (full map-RT alpha).
@@ -283,16 +302,33 @@ impl OverlayParams {
 	}
 
 	/// CPU mirror of `overlay_material.wesl` fragment alpha (`lead = 0.22 + 0.18 * noise`).
-	/// High sample alpha (arrows / marks) is kept; low alpha is the land veil.
+	/// High sample alpha (arrows / marks) is kept; land uses mosaic-ink paint, not a sheet.
 	pub fn composited_alpha(self, sample_alpha: f32, came: f32, noise: f32) -> f32 {
+		self.paint_alpha(
+			Vec3::splat(sample_alpha.max(OVERLAY_PAINT_RECOVER)),
+			sample_alpha,
+			came,
+			noise,
+		)
+	}
+
+	pub fn paint_alpha(self, sample_rgb: Vec3, sample_alpha: f32, came: f32, noise: f32) -> f32 {
 		let amount = self.amount.clamp(0.0, 1.0);
+		let pigment = sample_rgb / sample_alpha.max(OVERLAY_PAINT_RECOVER);
+		let ink = Self::paint_ink(pigment);
 		let lead = 0.22 + 0.18 * noise;
-		let veil = sample_alpha * OVERLAY_COMPOSITOR_ALPHA_SAMPLE
-			+ OVERLAY_COMPOSITOR_ALPHA_BIAS
+		let paint = OVERLAY_PAINT_FLOOR
+			+ ink * OVERLAY_PAINT_GAIN
 			+ came * lead * OVERLAY_COMPOSITOR_CAME_ALPHA;
-		let treated = veil * (1.0 - Self::mark_keep(sample_alpha))
-			+ sample_alpha * Self::mark_keep(sample_alpha);
+		let keep = Self::mark_keep(sample_alpha);
+		let treated = paint * (1.0 - keep) + sample_alpha * keep;
 		sample_alpha * (1.0 - amount) + treated * amount
+	}
+
+	pub fn paint_ink(pigment: Vec3) -> f32 {
+		let luma = pigment.dot(Vec3::new(0.30, 0.59, 0.11));
+		let chroma = (pigment - Vec3::splat(luma)).length();
+		(chroma * OVERLAY_PAINT_CHROMA + luma * OVERLAY_PAINT_LUMA).clamp(0.0, 1.0)
 	}
 
 	pub fn mark_keep(sample_alpha: f32) -> f32 {
@@ -334,6 +370,7 @@ impl Plugin for SkillMapOverlayPlugin {
 	fn build(&self, app: &mut App) {
 		embedded_asset!(app, "overlay_material.wesl");
 		app.add_plugins(UiMaterialPlugin::<SkillMapOverlayMaterial>::default())
+			.init_resource::<SkillMapOverlayEnabled>()
 			.add_message::<SkillMapOverlayCue>();
 		crate::sound::configure_overlay_audio(app);
 	}
@@ -342,6 +379,7 @@ impl Plugin for SkillMapOverlayPlugin {
 /// Mirror [`SkillMapHeld`] onto overlay layout, tile overlay uniforms, and the compositor.
 pub fn sync_skill_map_overlay(
 	enabled: Res<SkillMapEnabled>,
+	overlay_pref: Res<SkillMapOverlayEnabled>,
 	mut users: Query<(Entity, &SkillMapUser, &SkillMapHeld, &mut SkillMapOverlay)>,
 	mut cues: MessageWriter<SkillMapOverlayCue>,
 	mut huds: Query<(&SkillMapMember, &mut Node), With<SkillMapHud>>,
@@ -365,8 +403,11 @@ pub fn sync_skill_map_overlay(
 	mut tiles: Option<ResMut<Assets<SkillMapTileMaterial>>>,
 ) {
 	for (entity, user, held, mut overlay) in &mut users {
-		let next =
-			if enabled.0 { SkillMapOverlay::from_held(held.0) } else { SkillMapOverlay::Collapsed };
+		let next = if enabled.0 && overlay_pref.0 {
+			SkillMapOverlay::from_held(held.0)
+		} else {
+			SkillMapOverlay::Collapsed
+		};
 		if *overlay != next {
 			if next.expanded() {
 				cues.write(SkillMapOverlayCue { user: entity });
@@ -490,6 +531,7 @@ mod tests {
 	use crate::viewport::SkillMapCollapsedChrome;
 	use crate::SkillMapEnabled;
 	use bevy::ecs::system::RunSystemOnce;
+	use bevy::prelude::Vec3;
 	use bevy::time::TimeUpdateStrategy;
 	use maybraid_character_controller::{
 		register_character_controller, ActorTarget, CharacterControlSystems, OrdinaryLocomotion,
@@ -533,6 +575,8 @@ mod tests {
 		register_character_controller(&mut app);
 		app.add_plugins(MinimalPlugins)
 			.init_resource::<SkillMapEnabled>()
+			.init_resource::<SkillMapOverlayEnabled>()
+			.init_resource::<crate::SkillMapFocusEnabled>()
 			.init_resource::<SkillMapTunnelVision>()
 			.add_message::<SkillMapOverlayCue>()
 			.add_systems(
@@ -808,6 +852,34 @@ mod tests {
 		Ok(())
 	}
 
+	#[test]
+	fn overlay_pref_off_keeps_the_map_collapsed() -> anyhow::Result<()> {
+		let mut app = overlay_app();
+		app.insert_resource(SkillMapOverlayEnabled(false));
+		let (user, _) = spawn_overlay_user(&mut app, true);
+		let source = assign_pad(&mut app, user);
+		drive_rb(&mut app, source, 1, true);
+		assert_eq!(overlay_of(&app, user), SkillMapOverlay::Collapsed);
+		Ok(())
+	}
+
+	#[test]
+	fn focus_pref_off_expands_without_tunnel_vision() -> anyhow::Result<()> {
+		let mut app = tunnel_app();
+		app.insert_resource(crate::SkillMapFocusEnabled(false));
+		let probe = spawn_tunnel_user(&mut app, true);
+		let source = assign_pad(&mut app, probe.user);
+		drive_rb(&mut app, source, 1, false);
+		drive_rb(&mut app, source, 2, true);
+		assert_eq!(overlay_of(&app, probe.user), SkillMapOverlay::Expanded);
+		assert!(!tunnel_of(&app).hides_hud());
+		assert!(!tunnel_of(&app).blur_enabled());
+		assert_eq!(visibility_of(&app, probe.gameplay), Visibility::Inherited);
+		assert_eq!(visibility_of(&app, probe.chrome), Visibility::Hidden);
+		assert!(blur_on(&app, probe.camera).is_none());
+		Ok(())
+	}
+
 	fn assert_activate_once_per_hold(app: &mut App, user: Entity, source: Entity) {
 		drive_rb(app, source, 1, false);
 		assert_eq!(overlay_of(app, user), SkillMapOverlay::Collapsed);
@@ -922,11 +994,14 @@ mod tests {
 
 	#[test]
 	fn overlay_veil_is_a_light_hint() {
-		assert!((OVERLAY_GLASS - 0.067).abs() < 1e-6);
+		assert!((OVERLAY_GLASS - 0.11).abs() < 1e-6);
 		assert!((OVERLAY_TILE_AMOUNT - 1.0).abs() < 1e-6);
 		assert!((OVERLAY_CLEAR_ALPHA - 0.024).abs() < 1e-6);
 		assert!((OVERLAY_FRAME_FILL_ALPHA - 0.010).abs() < 1e-6);
 		assert!((OVERLAY_WARP - 0.28).abs() < 1e-6);
+		assert!((OVERLAY_PAINT_FLOOR - 0.08).abs() < 1e-6);
+		assert!((OVERLAY_PAINT_GAIN - 0.42).abs() < 1e-6);
+		assert!((OVERLAY_PAINT_SATURATION - 1.45).abs() < 1e-6);
 	}
 
 	#[test]
@@ -948,26 +1023,21 @@ mod tests {
 	}
 
 	#[test]
-	fn expanded_overlay_is_clearer_than_the_nine_f227_tile_veil() {
-		let now = SkillMapOverlay::Expanded.pane_alpha(1.0);
-		let nine_f227_sample =
-			SkillMapTileMaterial::overlay_alpha(1.0, OVERLAY_TILE_AMOUNT_NINE_F227);
-		let nine_f227 =
-			OverlayParams { amount: 1.0, warp: OVERLAY_WARP, glass: OVERLAY_GLASS, _pad: 0.0 }
-				.composited_alpha(nine_f227_sample, 0.0, 0.5);
-		let nine_13ff =
-			OverlayParams { amount: 1.0, warp: OVERLAY_WARP, glass: OVERLAY_GLASS, _pad: 0.0 }
-				.composited_alpha(1.0 * 0.28 + 0.05, 0.0, 0.5);
+	fn expanded_overlay_paints_mosaic_without_a_coverage_sheet() {
+		let mosaic = SkillMapOverlay::Expanded.pane_alpha(1.0);
+		let flat = SkillMapOverlay::Expanded.pane_alpha_for_pigment(Vec3::splat(0.42), 1.0);
 		assert!(
-			now < nine_f227,
-			"expanded pane alpha {now} must stay below the 9f22704 veil {nine_f227}"
+			flat <= 0.22,
+			"low-chroma land must stay a light wash so world geometry reads, got {flat}"
 		);
 		assert!(
-			now < nine_13ff,
-			"expanded pane alpha {now} must stay below the 913ff6fe4 veil {nine_13ff}"
+			mosaic > flat + 0.12,
+			"mosaic ink must paint harder than a flat wash ({mosaic} vs {flat})"
 		);
-		assert!(now <= 0.252, "background pane must stay a light veil, got {now}");
-		assert!(now < 0.29, "must drop below the 913ff6fe4 ~0.29 pane, got {now}");
+		assert!(
+			mosaic <= 0.55,
+			"even saturated land must leave the world in the majority, got {mosaic}"
+		);
 		assert!((SkillMapOverlay::Collapsed.pane_alpha(1.0) - 1.0).abs() < 1e-5);
 	}
 
