@@ -69,3 +69,20 @@ The source title MOV is 3840 × 2160, 60 fps, six seconds, encoded with Apple's
 Linux FFmpeg validates the HEVC color stream; macOS AVFoundation alpha playback
 and the live fullscreen swallow still require acceptance on the recording Mac.
 The title thumbnail samples the visible title card at 3.9 seconds.
+
+
+## Remote thumbnail compatibility — 2026-11-08
+
+The previous banana PNG was 265,536 bytes at 320 × 569, exceeding both Durop's
+160 KiB compressed preview limit and its 512-pixel dimension limit. Regenerated
+it from the original media at 256 × 455: 160,387 bytes (156.6 KiB), preserving
+aspect ratio and the same source frame. The other 27 previews, all media files,
+clip metadata, and stable IDs are unchanged. Refreshed the banana checksum.
+
+All 28 previews pass `generate_icons.py --check`: PNG header and size bounds
+match Durop's existing transport checks, and FFmpeg fully decodes each image.
+The generator now limits both dimensions and retries smaller frames to meet the
+byte budget before replacing an icon. Regression tests cover noisy images that
+need resizing, tall portraits, and preservation of the previous file on failure.
+All 56 SHA256SUMS entries verify. No controller or host update is needed; reload
+the updated catalog revision on the host. Live remote playback was not retested.
