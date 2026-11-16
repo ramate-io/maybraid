@@ -31,6 +31,45 @@ pub struct InventoryControl(pub InventoryControlAction);
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryFolderHeader(pub InventorySection);
 
+impl InventoryFolderHeader {
+	/// Stroke width of the folder focus ring. Matches other HUD tiles.
+	pub const FOCUS_OUTLINE_WIDTH: f32 = 2.0;
+	/// Gap between the folder bounds and the focus ring.
+	pub const FOCUS_OUTLINE_OFFSET: f32 = 2.0;
+
+	/// Extra space past the stroke so the ring is not clipped by AA or rounding.
+	pub const FOCUS_RING_SLACK: f32 = 2.0;
+
+	/// Space a parent must keep so the focus ring is not clipped.
+	pub const fn focus_ring_inset() -> f32 {
+		Self::FOCUS_OUTLINE_WIDTH + Self::FOCUS_OUTLINE_OFFSET
+	}
+
+	/// Padded gutter around folder rows, including anti-clip slack.
+	pub const fn focus_gutter() -> f32 {
+		Self::focus_ring_inset() + Self::FOCUS_RING_SLACK
+	}
+
+	/// Idle focus ring. Hover paint supplies the live color.
+	pub fn focus_outline() -> Outline {
+		Outline::new(
+			Val::Px(Self::FOCUS_OUTLINE_WIDTH),
+			Val::Px(Self::FOCUS_OUTLINE_OFFSET),
+			Color::NONE,
+		)
+	}
+
+	/// True when every edge of `padding` can hold [`Self::focus_gutter`].
+	pub fn outline_fits_in(padding: UiRect) -> bool {
+		[padding.left, padding.right, padding.top, padding.bottom].into_iter().all(
+			|edge| match edge {
+				Val::Px(px) => px + 1e-3 >= Self::focus_gutter(),
+				_ => false,
+			},
+		)
+	}
+}
+
 /// Stable selection in the left list; menu indices also include category headers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InventoryLeftFocus {
@@ -233,7 +272,11 @@ impl InventoryMenuSession {
 
 #[cfg(test)]
 mod tests {
-	use super::{InventoryInteraction, InventoryItemKey, InventoryMenuSession, InventoryRegion};
+	use super::{
+		InventoryFolderHeader, InventoryInteraction, InventoryItemKey, InventoryMenuSession,
+		InventoryRegion,
+	};
+	use bevy::prelude::{UiRect, Val};
 
 	#[test]
 	fn drop_remapping_updates_each_representation_and_clears_removed_focus() {
@@ -262,5 +305,17 @@ mod tests {
 		let key = InventoryItemKey { index: 13, equipped: true, region: InventoryRegion::Equipped };
 		assert_eq!(key.remap_after_drop(5), Some(InventoryItemKey { index: 12, ..key }));
 		assert_eq!(key.remap_after_drop(13), None);
+	}
+
+	#[test]
+	fn folder_focus_gutter_covers_the_outline_stroke() {
+		assert!(InventoryFolderHeader::focus_gutter() > InventoryFolderHeader::focus_ring_inset());
+		assert!(InventoryFolderHeader::outline_fits_in(UiRect::all(Val::Px(
+			InventoryFolderHeader::focus_gutter()
+		))));
+		assert!(!InventoryFolderHeader::outline_fits_in(UiRect::all(Val::Px(0.0))));
+		assert!(!InventoryFolderHeader::outline_fits_in(UiRect::all(Val::Px(
+			InventoryFolderHeader::focus_ring_inset()
+		))));
 	}
 }

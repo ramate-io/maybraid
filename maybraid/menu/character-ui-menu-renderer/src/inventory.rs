@@ -8,12 +8,11 @@ use character_ui_menu::{
 	MenuNode,
 };
 use menu_components::{
-	menu_region_wash, spawn_header_line, spawn_hud_text, spawn_inventory_action_prompts,
-	spawn_text_button, HoverTile, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, HudScrollManual,
-	HudScrollViewport, InputPromptDevice, InventoryHudMenu, TileWrap, MENU_CLEAR,
-	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PROMPT_PAD_NEXT_SECTION,
-	PROMPT_PAD_PREVIOUS_SECTION, PROMPT_PAD_TOGGLE_DRAWER, TEXT_DEEP_BLUE, TEXT_YELLOW,
-	TEXT_YELLOW_FAINT,
+	spawn_header_line, spawn_hud_text, spawn_inventory_action_prompts, spawn_text_button,
+	HoverTile, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, HudScrollManual, HudScrollViewport,
+	InputPromptDevice, InventoryHudMenu, TileWrap, MENU_CLEAR, PANEL_HEADER_FONT_SIZE,
+	PANEL_ITEM_FONT_SIZE, PROMPT_PAD_NEXT_SECTION, PROMPT_PAD_PREVIOUS_SECTION,
+	PROMPT_PAD_TOGGLE_DRAWER, TEXT_DEEP_BLUE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
 use crate::sink::MenuThumbnailContext;
@@ -26,6 +25,13 @@ use crate::widgets::{
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryScreenArea(pub InventoryRegion);
 
+impl InventoryScreenArea {
+	/// Backing wash used by the old AIOP / selection-drawer cards.
+	pub fn has_backing_fill(color: Option<&BackgroundColor>) -> bool {
+		color.is_some_and(|color| color.0.alpha() > 0.0)
+	}
+}
+
 /// Presentation-only inventory browsing, without a slot assignment transaction.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct InventoryScreenReadOnly;
@@ -33,6 +39,10 @@ pub struct InventoryScreenReadOnly;
 /// The drawer collapses out of the layout while the slot picker is closed.
 #[derive(Component)]
 pub(crate) struct InventoryDrawerPresentation;
+
+/// Left equipped-items column. Content only; no backing card.
+#[derive(Component)]
+pub(crate) struct InventoryAIOPPanel;
 
 /// Translucent wash over AIOP while the drawer owns input.
 #[derive(Component)]
@@ -63,6 +73,19 @@ pub struct InventoryCarouselCard {
 	pub menu: Entity,
 	pub ordinal: usize,
 	pub count: usize,
+}
+
+impl InventoryCarouselCard {
+	/// Fill previously used by the flattened rotary track ellipse.
+	pub const REMOVED_TRACK_FILL: Color = Color::srgba(0.35, 0.67, 0.88, 0.72);
+
+	pub fn is_removed_track_fill(color: Color) -> bool {
+		color == Self::REMOVED_TRACK_FILL
+	}
+
+	pub fn is_track_transform(transform: &UiTransform) -> bool {
+		transform.scale.y > 0.0 && transform.scale.y < 0.1
+	}
 }
 
 #[derive(Component, Clone, Copy, Debug)]
@@ -219,6 +242,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 			});
 			main.with_children(|main| {
 				let mut aiop = main.spawn((
+					InventoryAIOPPanel,
 					Node {
 						width: Val::Percent(26.0),
 						min_width: Val::Px(150.0),
@@ -226,11 +250,8 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 						flex_direction: FlexDirection::Column,
 						row_gap: Val::Px(8.0),
 						padding: UiRect::all(Val::Px(12.0)),
-						border_radius: BorderRadius::all(Val::Px(16.0)),
-						overflow: Overflow::clip(),
 						..default()
 					},
-					BackgroundColor(menu_region_wash()),
 					Pickable::IGNORE,
 				));
 				slots.item_count[1] = left_count;
@@ -260,6 +281,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 							flex_grow: 1.0,
 							flex_direction: FlexDirection::Column,
 							row_gap: Val::Px(6.0),
+							padding: UiRect::all(Val::Px(InventoryFolderHeader::focus_gutter())),
 							overflow: Overflow::scroll_y(),
 							..default()
 						},
@@ -336,7 +358,6 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 							top: Val::Px(0.0),
 							width: Val::Percent(100.0),
 							height: Val::Percent(100.0),
-							border_radius: BorderRadius::all(Val::Px(16.0)),
 							..default()
 						},
 						BackgroundColor(Color::srgba(0.10, 0.12, 0.14, 0.25)),
@@ -400,11 +421,8 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 							flex_direction: FlexDirection::Column,
 							row_gap: Val::Px(4.0),
 							padding: UiRect::all(Val::Px(6.0)),
-							border_radius: BorderRadius::all(Val::Px(16.0)),
-							overflow: Overflow::clip(),
 							..default()
 						},
-						BackgroundColor(menu_components::menu_region_wash()),
 						Pickable::IGNORE,
 					));
 					slots.item_count[0] = choices.len();
@@ -509,7 +527,7 @@ fn spawn_inventory_folder_header(
 			},
 			BorderColor::all(Color::NONE),
 			BackgroundColor(Color::NONE),
-			Outline::new(Val::Px(2.0), Val::Px(2.0), Color::NONE),
+			InventoryFolderHeader::focus_outline(),
 		))
 		.with_children(|header| {
 			header.spawn((
@@ -749,29 +767,6 @@ fn spawn_rotary_carousel<E: Copy + Send + Sync + 'static, C: MenuThumbnailContex
 	}
 	let carousel_id = carousel_entity.id();
 	carousel_entity.with_children(|carousel| {
-		carousel.spawn((
-			Node {
-				position_type: PositionType::Absolute,
-				left: Val::Percent(50.0),
-				top: Val::Percent(50.0),
-				width: Val::Px(560.0),
-				height: Val::Auto,
-				aspect_ratio: Some(1.0),
-				margin: UiRect { left: Val::Px(-280.0), top: Val::Px(-280.0), ..default() },
-				border: UiRect::all(Val::Px(1.0)),
-				border_radius: BorderRadius::MAX,
-				..default()
-			},
-			UiTransform {
-				translation: Val2::px(0.0, 58.0),
-				scale: Vec2::new(1.0, 30.0 / 560.0),
-				..default()
-			},
-			BackgroundColor(Color::srgba(0.35, 0.67, 0.88, 0.72)),
-			BorderColor::all(Color::srgb(0.74, 0.87, 0.96)),
-			ZIndex(1),
-			Pickable::IGNORE,
-		));
 		for (ordinal, choice) in choices.iter().enumerate() {
 			let key = choice.item_key.map(|index| InventoryItemKey {
 				index,
@@ -2284,6 +2279,19 @@ mod tests {
 			.filter(|(_, text, _)| text.0 == "+")
 			.map(|(entity, _, parent)| (entity, parent.parent()))
 			.collect::<Vec<_>>();
+		let folder_pluses = pluses
+			.iter()
+			.filter(|(_, row)| app.world().get::<InventoryFolderHeader>(*row).is_some())
+			.count();
+		let pluses = pluses
+			.into_iter()
+			.filter(|(_, row)| app.world().get::<InventoryFolderHeader>(*row).is_none())
+			.collect::<Vec<_>>();
+		assert_eq!(
+			folder_pluses,
+			InventorySection::ALL.len() - 1,
+			"collapsed folders keep a plus indicator"
+		);
 		assert_eq!(pluses.len(), 5, "every empty capacity slot retains its plus");
 		let (caption, reachable) = pluses
 			.iter()
@@ -2350,6 +2358,174 @@ mod tests {
 		);
 		assert_eq!(app.world().get::<TextColor>(caption).map(|color| color.0), Some(TEXT_YELLOW));
 		assert_ne!(app.world().get::<BorderColor>(reachable), Some(&BorderColor::all(Color::NONE)));
+		Ok(())
+	}
+
+	fn render_editable<E: Copy + Send + Sync + 'static>(
+		node: MenuNode<E>,
+		session: InventoryMenuSession,
+	) -> anyhow::Result<(App, InventoryScreenSlots)> {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+		app.init_asset::<Image>();
+		let viewport = app.world_mut().spawn(session).id();
+		let slots = app
+			.world_mut()
+			.run_system_once(move |mut commands: Commands, assets: Res<AssetServer>| {
+				let fonts = HudFonts {
+					black: Handle::default(),
+					semibold: Handle::default(),
+					regular: Handle::default(),
+					logo: Handle::default(),
+				};
+				fill_inventory_screen(
+					&mut commands,
+					viewport,
+					&fonts,
+					&assets,
+					InputPromptDevice::Keyboard,
+					&node,
+					true,
+					&session,
+					&mut crate::NoThumbnails,
+				)
+			})
+			.map_err(|error| anyhow::anyhow!("inventory render: {error}"))?;
+		app.world_mut().flush();
+		Ok((app, slots))
+	}
+
+	#[test]
+	fn top_folder_focus_ring_fits_inside_the_equipped_list_gutter() -> anyhow::Result<()> {
+		let (mut app, slots) = render_editable(
+			MenuNode::Fragment(
+				InventorySection::ALL
+					.into_iter()
+					.map(|section| grid_section(section, 2))
+					.collect(),
+			),
+			InventoryMenuSession { expanded_section: None, ..default() },
+		)?;
+		let list = app
+			.world()
+			.get::<Node>(slots.menus[1])
+			.ok_or_else(|| anyhow::anyhow!("equipped list"))?;
+		assert!(
+			InventoryFolderHeader::outline_fits_in(list.padding),
+			"equipped list padding must keep the folder focus ring unclipped"
+		);
+		assert_eq!(list.overflow, Overflow::scroll_y());
+		let header = app
+			.world_mut()
+			.query::<(Entity, &InventoryFolderHeader, &HudMenuItem)>()
+			.iter(app.world())
+			.find_map(|(entity, header, row)| {
+				(header.0 == InventorySection::Clothing && row.index == 0).then_some(entity)
+			})
+			.ok_or_else(|| anyhow::anyhow!("top Clothing folder"))?;
+		let outline = app
+			.world()
+			.get::<Outline>(header)
+			.ok_or_else(|| anyhow::anyhow!("folder focus outline"))?;
+		assert_eq!(outline.width, Val::Px(InventoryFolderHeader::FOCUS_OUTLINE_WIDTH));
+		assert_eq!(outline.offset, Val::Px(InventoryFolderHeader::FOCUS_OUTLINE_OFFSET));
+		let parent = app
+			.world()
+			.get::<ChildOf>(header)
+			.ok_or_else(|| anyhow::anyhow!("folder parent"))?
+			.parent();
+		assert_eq!(parent, slots.menus[1]);
+		Ok(())
+	}
+
+	#[test]
+	fn aiop_and_selection_drawer_omit_backing_panels() -> anyhow::Result<()> {
+		let (mut app, slots) = render_editable(
+			grid_section(InventorySection::Clothing, 6),
+			InventoryMenuSession {
+				picker_source: Some(crate::InventoryPickerSource {
+					ordinal: 0,
+					item: None,
+					attempted_item: None,
+				}),
+				region: InventoryRegion::Drawer,
+				..default()
+			},
+		)?;
+		let aiop = app
+			.world_mut()
+			.query_filtered::<Entity, With<InventoryAIOPPanel>>()
+			.single(app.world())?;
+		assert!(
+			!InventoryScreenArea::has_backing_fill(app.world().get::<BackgroundColor>(aiop)),
+			"AIOP must not paint a backing panel"
+		);
+		let drawer = app
+			.world()
+			.get::<ChildOf>(slots.menus[0])
+			.ok_or_else(|| anyhow::anyhow!("selection drawer"))?
+			.parent();
+		assert!(app.world().get::<InventoryDrawerPresentation>(drawer).is_some());
+		assert!(
+			!InventoryScreenArea::has_backing_fill(app.world().get::<BackgroundColor>(drawer)),
+			"selection drawer must not paint a backing panel"
+		);
+		assert!(!InventoryScreenArea::has_backing_fill(
+			app.world().get::<BackgroundColor>(slots.menus[1])
+		));
+		Ok(())
+	}
+
+	#[test]
+	fn rotary_selection_keeps_cards_and_omits_the_track_ring() -> anyhow::Result<()> {
+		let choices = (0..3)
+			.map(|index| GridCatalogChoice {
+				label: format!("item-{index}"),
+				detail: String::new(),
+				path: "",
+				thumbnail_camera: character_ui_menu::ThumbnailCamera::DEFAULT,
+				preview: character_ui_menu::PreviewColor::WHITE,
+				image_key: None,
+				selected: false,
+				rank: None,
+				item_key: Some(index),
+				event: Some(index as u8),
+			})
+			.collect();
+		let node = MenuNode::Section {
+			label: "Inventory",
+			children: vec![MenuNode::Section {
+				label: "Clothing",
+				children: vec![MenuNode::GridCatalog {
+					label: "Clothing",
+					max_selected: 6,
+					choices,
+				}],
+			}],
+		};
+		let (mut app, _slots) = render_editable(
+			node,
+			InventoryMenuSession {
+				drawer: InventoryDrawerMode::Rotary,
+				picker_source: Some(crate::InventoryPickerSource {
+					ordinal: 0,
+					item: None,
+					attempted_item: None,
+				}),
+				region: InventoryRegion::Drawer,
+				..default()
+			},
+		)?;
+		let cards = app.world_mut().query::<&InventoryCarouselCard>().iter(app.world()).count();
+		assert_eq!(cards, 3);
+		let mut fills = app.world_mut().query::<&BackgroundColor>();
+		assert!(!fills
+			.iter(app.world())
+			.any(|color| { InventoryCarouselCard::is_removed_track_fill(color.0) }));
+		let mut tracks = app.world_mut().query::<(&BackgroundColor, &UiTransform)>();
+		assert!(!tracks.iter(app.world()).any(|(color, transform)| {
+			InventoryCarouselCard::is_track_transform(transform) && color.0.alpha() > 0.0
+		}));
 		Ok(())
 	}
 }

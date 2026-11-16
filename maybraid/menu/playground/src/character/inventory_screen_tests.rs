@@ -10,10 +10,10 @@ use character_creation_menus::{CharacterMenu, InventoryLayout, MenuEvent};
 use character_items::{ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor};
 use character_ui_menu::MenuComponent;
 use maybraid_character_ui_menu_renderer::{
-	fill_inventory_screen, InventoryAIOPSlot, InventoryFocusHint, InventoryFolderHeader,
-	InventoryInteraction, InventoryItemKey, InventoryLeftFocus, InventoryMenuSession,
-	InventoryScreenArea, InventorySlotEvent, MaybraidCharacterMenuRendererPlugin, NoThumbnails,
-	OverlayClose, OverlaySelectViewport,
+	fill_inventory_screen, InventoryAIOPSlot, InventoryCarouselCard, InventoryFocusHint,
+	InventoryFolderHeader, InventoryInteraction, InventoryItemKey, InventoryLeftFocus,
+	InventoryMenuSession, InventoryScreenArea, InventorySlotEvent,
+	MaybraidCharacterMenuRendererPlugin, NoThumbnails, OverlayClose, OverlaySelectViewport,
 };
 use menu_components::{
 	HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, InventoryNavigation,
@@ -974,5 +974,53 @@ fn lubikan_slot_picker_swaps_owned_accounts_and_keeps_self_protected() -> Result
 	assert!(session.picker_source.is_none());
 	assert_eq!(session.active_memory().focused_ordinal, 1);
 	assert_eq!(focus_identity(app.world(), viewport)?.index, candidate);
+	Ok(())
+}
+
+#[test]
+fn host_inventory_keeps_folder_rings_unclipped_and_drops_aiop_sd_panels_and_rotary_track(
+) -> Result<()> {
+	let (mut app, viewport) = fixture()?;
+	render(&mut app, viewport, true)?;
+	app.world_mut()
+		.run_system_once(menu_components::sync_hover_tiles)
+		.map_err(|error| anyhow::anyhow!("folder focus paint: {error}"))?;
+	let [drawer, equipped] = screen_slots(app.world_mut())?;
+	let list = app.world().get::<Node>(equipped).context("AIOP list")?;
+	assert!(
+		InventoryFolderHeader::outline_fits_in(list.padding),
+		"host AIOP list must pad the Clothing folder focus ring"
+	);
+	let clothing = folder(app.world_mut(), character_ui_menu::InventorySection::Clothing)?;
+	let outline = app.world().get::<Outline>(clothing).context("Clothing focus outline")?;
+	assert_eq!(outline.width, Val::Px(InventoryFolderHeader::FOCUS_OUTLINE_WIDTH));
+	assert_eq!(outline.offset, Val::Px(InventoryFolderHeader::FOCUS_OUTLINE_OFFSET));
+	assert_eq!(app.world().get::<ChildOf>(clothing).context("folder parent")?.parent(), equipped);
+	let aiop = app.world().get::<ChildOf>(equipped).context("AIOP panel")?.parent();
+	assert!(
+		!InventoryScreenArea::has_backing_fill(app.world().get::<BackgroundColor>(aiop)),
+		"AIOP backing panel must be gone"
+	);
+	let drawer_panel = app.world().get::<ChildOf>(drawer).context("SD panel")?.parent();
+	assert!(
+		!InventoryScreenArea::has_backing_fill(app.world().get::<BackgroundColor>(drawer_panel)),
+		"selection drawer backing panel must be gone"
+	);
+	assert!(!app
+		.world_mut()
+		.query::<&BackgroundColor>()
+		.iter(app.world())
+		.any(|color| InventoryCarouselCard::is_removed_track_fill(color.0)));
+	start_picker(&mut app, viewport, 0)?;
+	render(&mut app, viewport, true)?;
+	let cards = app.world_mut().query::<&InventoryCarouselCard>().iter(app.world()).count();
+	assert!(cards > 0, "rotary cards stay after the track is removed");
+	assert!(!app
+		.world_mut()
+		.query::<(&BackgroundColor, &UiTransform)>()
+		.iter(app.world())
+		.any(|(color, transform)| {
+			InventoryCarouselCard::is_track_transform(transform) && color.0.alpha() > 0.0
+		}));
 	Ok(())
 }

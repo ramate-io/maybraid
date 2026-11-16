@@ -142,6 +142,7 @@ enum CaptureScene {
 	OverflowFixtureTop,
 	OverflowFixtureScrolled,
 	ModalInventory,
+	ModalFoldersGallery,
 	ModalFolders,
 	ModalReorder,
 	OverflowTanzEquipped,
@@ -158,7 +159,8 @@ impl CaptureScene {
 			Self::RealStarterKit => Self::OverflowFixtureTop,
 			Self::OverflowFixtureTop => Self::OverflowFixtureScrolled,
 			Self::OverflowFixtureScrolled => Self::ModalInventory,
-			Self::ModalInventory => Self::ModalFolders,
+			Self::ModalInventory => Self::ModalFoldersGallery,
+			Self::ModalFoldersGallery => Self::ModalFolders,
 			Self::ModalFolders => Self::ModalReorder,
 			Self::ModalReorder => Self::OverflowTanzEquipped,
 			Self::OverflowTanzEquipped => Self::ModalLubikan,
@@ -175,6 +177,7 @@ impl CaptureScene {
 			Self::OverflowFixtureTop => "overflow_fixture_top",
 			Self::OverflowFixtureScrolled => "overflow_fixture_scrolled",
 			Self::ModalInventory => "inventory_modal",
+			Self::ModalFoldersGallery => "inventory_folders_gallery",
 			Self::ModalFolders => "inventory_folders_preview",
 			Self::ModalReorder => "inventory_modal_reorder",
 			Self::OverflowTanzEquipped => "inventory_overflow_tanzes",
@@ -745,6 +748,23 @@ fn spawn_scene(
 				None,
 			);
 		}
+		CaptureScene::ModalFoldersGallery => {
+			spawn_modal_scene(
+				commands,
+				fonts,
+				assets,
+				icons,
+				tanz_modal_items(),
+				inventory_session(
+					InventorySection::Clothing,
+					InventoryDrawerMode::Gallery,
+					InventoryRegion::Drawer,
+					0,
+				),
+				true,
+				None,
+			);
+		}
 		CaptureScene::ModalReorder => {
 			let session = inventory_session(
 				InventorySection::Tools,
@@ -961,6 +981,7 @@ fn scene_needs_character_preview(scene: CaptureScene) -> bool {
 		CaptureScene::OverflowFixtureTop
 			| CaptureScene::OverflowFixtureScrolled
 			| CaptureScene::ModalInventory
+			| CaptureScene::ModalFoldersGallery
 			| CaptureScene::ModalFolders
 			| CaptureScene::ModalReorder
 			| CaptureScene::OverflowTanzEquipped
