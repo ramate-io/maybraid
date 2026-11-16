@@ -73,7 +73,7 @@ fn publish_lush_origin_forest() -> anyhow::Result<HcsgStorage> {
 		.get_or_generate::<ChicoForest>(ForestExtent::default_cell().id())
 		.ok_or_else(|| anyhow::anyhow!("forest"))?;
 	anyhow::ensure!(forest.layers.upper_canopy == Some(ForestGroveKind::TradeWinds));
-	let region = bevy::math::bounding::Aabb3d::from_min_max(
+	let region = bevy::shape::Aabb3d::from_min_max(
 		Vec3::new(1.0, 0.0, 1.0),
 		Vec3::new(99.0, 4.0, 99.0),
 	);
