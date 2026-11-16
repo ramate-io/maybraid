@@ -31,25 +31,27 @@ const FIREARM_CARD_RADIUS: f32 = 8.0;
 /// Was `0.85`; left at `0.28` so refraction stays a hint, not opacity.
 pub const OVERLAY_WARP: f32 = 0.28;
 /// How much stained-glass *color* washes the warped map. Not coverage.
-/// Was `0.08`; ~30% lighter so mosaic stain stays a tint.
-pub const OVERLAY_GLASS: f32 = 0.056;
+/// Was `0.056`; bumped ~1.2× so the veil reads a touch stronger.
+pub const OVERLAY_GLASS: f32 = 0.067;
 /// Blend of tile shading into overlay (translucent) mode when expanded.
 /// This is **not** a veil opacity: `0` keeps gameplay-tile alpha `1`, `1`
 /// mixes toward the see-through overlay alpha. Keep in sync with `tile_material.wesl`.
 pub const OVERLAY_TILE_AMOUNT: f32 = 1.0;
 /// Map-camera clear alpha while expanded. Empty texels only; feed mosaic fills the RT.
-/// Was `0.028`.
-pub const OVERLAY_CLEAR_ALPHA: f32 = 0.020;
-/// Expanded frame fill alpha (collapsed chrome still uses a fixed 0.12). Was `0.012`.
-pub const OVERLAY_FRAME_FILL_ALPHA: f32 = 0.008;
+/// Was `0.020`.
+pub const OVERLAY_CLEAR_ALPHA: f32 = 0.024;
+/// Expanded frame fill alpha (collapsed chrome still uses a fixed 0.12). Was `0.008`.
+pub const OVERLAY_FRAME_FILL_ALPHA: f32 = 0.010;
 /// Keep in sync with `overlay_material.wesl`.
 pub const OVERLAY_COMPOSITOR_ALPHA_SAMPLE: f32 = 0.88;
-pub const OVERLAY_COMPOSITOR_ALPHA_BIAS: f32 = 0.045;
-pub const OVERLAY_COMPOSITOR_CAME_ALPHA: f32 = 0.07;
+pub const OVERLAY_COMPOSITOR_ALPHA_BIAS: f32 = 0.054;
+pub const OVERLAY_COMPOSITOR_CAME_ALPHA: f32 = 0.084;
 pub const OVERLAY_MARK_ALPHA_LO: f32 = 0.60;
 pub const OVERLAY_MARK_ALPHA_HI: f32 = 0.90;
 /// Minimum composited alpha for arrows, power tiles, and the cursor.
 pub const OVERLAY_MARK_ALPHA_MIN: f32 = 0.85;
+const _: () = assert!(OVERLAY_MARK_ALPHA_LO < OVERLAY_MARK_ALPHA_MIN);
+const _: () = assert!(OVERLAY_MARK_ALPHA_MIN <= OVERLAY_MARK_ALPHA_HI);
 /// Tile overlay amount on the 9f22704 build. Used as a coverage regression bound.
 #[cfg(test)]
 const OVERLAY_TILE_AMOUNT_NINE_F227: f32 = 0.50;
@@ -920,10 +922,10 @@ mod tests {
 
 	#[test]
 	fn overlay_veil_is_a_light_hint() {
-		assert!((OVERLAY_GLASS - 0.056).abs() < 1e-6);
+		assert!((OVERLAY_GLASS - 0.067).abs() < 1e-6);
 		assert!((OVERLAY_TILE_AMOUNT - 1.0).abs() < 1e-6);
-		assert!((OVERLAY_CLEAR_ALPHA - 0.020).abs() < 1e-6);
-		assert!((OVERLAY_FRAME_FILL_ALPHA - 0.008).abs() < 1e-6);
+		assert!((OVERLAY_CLEAR_ALPHA - 0.024).abs() < 1e-6);
+		assert!((OVERLAY_FRAME_FILL_ALPHA - 0.010).abs() < 1e-6);
 		assert!((OVERLAY_WARP - 0.28).abs() < 1e-6);
 	}
 
@@ -964,7 +966,7 @@ mod tests {
 			now < nine_13ff,
 			"expanded pane alpha {now} must stay below the 913ff6fe4 veil {nine_13ff}"
 		);
-		assert!(now <= 0.21, "background pane must stay a light veil, got {now}");
+		assert!(now <= 0.252, "background pane must stay a light veil, got {now}");
 		assert!(now < 0.29, "must drop below the 913ff6fe4 ~0.29 pane, got {now}");
 		assert!((SkillMapOverlay::Collapsed.pane_alpha(1.0) - 1.0).abs() < 1e-5);
 	}

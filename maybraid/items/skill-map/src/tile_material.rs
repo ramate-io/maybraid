@@ -26,8 +26,8 @@ pub const TILE_KIND_COSMO: f32 = 9.0;
 const TILE_DIVISIONS: u32 = 12;
 /// Keep in sync with `tile_material.wesl` overlay alpha mix (land/mosaic only).
 /// Was `0.28` / `0.05` on 913ff6fe4 (~0.33 tile α, ~0.34 pane).
-pub const TILE_OVERLAY_ALPHA_SCALE: f32 = 0.15;
-pub const TILE_OVERLAY_ALPHA_BIAS: f32 = 0.025;
+pub const TILE_OVERLAY_ALPHA_SCALE: f32 = 0.18;
+pub const TILE_OVERLAY_ALPHA_BIAS: f32 = 0.03;
 pub const TILE_OVERLAY_ALPHA_MIX_GAIN: f32 = 1.85;
 
 #[derive(Clone, Copy, Debug, ShaderType)]
@@ -303,6 +303,6 @@ mod tests {
 				< SkillMapTileMaterial::overlay_alpha(1.0, 0.0)
 		);
 		assert_eq!(SkillMapTileMaterial::overlay_alpha_for_kind(1.0, 1.0, TILE_KIND_FIRE), 1.0);
-		assert!(SkillMapTileMaterial::overlay_alpha_for_kind(1.0, 1.0, TILE_KIND_LAND_ROCK) < 0.20);
+		assert!(SkillMapTileMaterial::overlay_alpha_for_kind(1.0, 1.0, TILE_KIND_LAND_ROCK) < 0.22);
 	}
 }
