@@ -27,11 +27,16 @@ mod tests {
 			.add_message::<ProjectileContact>()
 			.add_systems(
 				PostUpdate,
-				(update_chain_joints, sync_chain_colliders.after(update_chain_joints))
+				(
+					update_chain_joints,
+					sync_chain_colliders.after(update_chain_joints),
+				)
 					.after(TransformSystems::Propagate),
 			)
 			.add_systems(Update, (coalesce_chain_contacts, deactivate_released_chains));
 		app.finish();
+		// Run one update to initialize systems
+		app.update();
 		app
 	}
 
@@ -39,12 +44,12 @@ mod tests {
 	fn anchored_chain_follows_socket_transforms() -> Result<()> {
 		let mut app = test_app();
 
-		// Spawn chain root with joints
+		// Spawn chain root with joints in Taut mode
 		let root = app
 			.world_mut()
 			.spawn((
 				ChainRoot { link_count: 3, rest_length_m: 3.0 },
-				ChainMotion::default(),
+				ChainMotion { mode: ChainTensionMode::Taut, active: true },
 				Transform::default(),
 				Visibility::default(),
 			))
@@ -59,14 +64,12 @@ mod tests {
 
 		app.world_mut().entity_mut(root).add_children(&[joint0, joint1, joint2]);
 
-		// Spawn anchor entities with explicit GlobalTransform that matches Transform
-		let _start_anchor = app
+		// Spawn anchor entities (only set Transform, let propagation handle GlobalTransform)
+		let start_anchor = app
 			.world_mut()
 			.spawn((
 				ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
 				Transform::from_xyz(0.0, 0.0, 0.0),
-				GlobalTransform::from_xyz(0.0, 0.0, 0.0),
-				Visibility::default(),
 			))
 			.id();
 
@@ -75,13 +78,10 @@ mod tests {
 			.spawn((
 				ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
 				Transform::from_xyz(0.0, 3.0, 0.0),
-				GlobalTransform::from_xyz(0.0, 3.0, 0.0),
-				Visibility::default(),
 			))
 			.id();
 
-		// Update transforms and run motion system (run twice to ensure propagation)
-		app.update();
+		// Update to propagate transforms and run motion system
 		app.update();
 
 		// Check that joints are positioned along the chain
@@ -94,12 +94,9 @@ mod tests {
 		assert!((j1_pos.y - 1.5).abs() < 0.1, "Joint 1 should be at midpoint");
 		assert!((j2_pos.y - 3.0).abs() < 0.1, "Joint 2 should be near end");
 
-		// Move end anchor (update both Transform and GlobalTransform for test simplicity)
+		// Move end anchor (just update Transform, let propagation handle GlobalTransform)
 		if let Some(mut transform) = app.world_mut().get_mut::<Transform>(end_anchor) {
 			transform.translation = Vec3::new(2.0, 4.0, 0.0);
-		}
-		if let Some(mut gtransform) = app.world_mut().get_mut::<GlobalTransform>(end_anchor) {
-			*gtransform = GlobalTransform::from_xyz(2.0, 4.0, 0.0);
 		}
 
 		app.update();
@@ -122,6 +119,7 @@ mod tests {
 			.world_mut()
 			.spawn((
 				ChainRoot { link_count: 2, rest_length_m: 2.0 },
+				ChainMotion { mode: ChainTensionMode::Taut, active: false },
 				Transform::default(),
 				Visibility::default(),
 			))

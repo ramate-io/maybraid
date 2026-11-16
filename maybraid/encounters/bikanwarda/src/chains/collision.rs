@@ -85,7 +85,7 @@ pub fn spawn_chain_colliders(
 pub fn sync_chain_colliders(
 	chains: Query<(&ChainRoot, &Children)>,
 	joints: Query<(&Transform, Option<&Name>), Without<ChainLinkId>>,
-	mut colliders: Query<(&ChainLinkId, &mut Transform), Without<ChildOf>>,
+	mut colliders: Query<(&ChainLinkId, &mut Transform)>,
 ) {
 	for (_root, children) in &chains {
 		// Collect joints (children with Transform but no ChainLinkId)
