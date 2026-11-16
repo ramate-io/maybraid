@@ -7,6 +7,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use bevy::camera::primitives::Aabb;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
@@ -22,6 +23,9 @@ use crate::chain_preview::{ChainPreview, LightingMode, PendingChainHit, PreviewS
 
 #[derive(Component)]
 struct SkinnedChainCapture;
+
+#[derive(Component)]
+struct SkinnedChainCaptureCamera;
 
 pub const CAPTURE_CADENCE_HZ: f32 = 30.0;
 pub const CAPTURE_DT: f32 = 1.0 / CAPTURE_CADENCE_HZ;
@@ -199,7 +203,7 @@ fn apply_still(
 }
 
 fn spawn_skinned_chain_for_capture(world: &mut World, bent: bool, rigid: bool) {
-	// Despawn any existing skinned chain captures
+	// Despawn any existing skinned chain captures and restore camera
 	let to_despawn: Vec<Entity> = world
 		.query_filtered::<Entity, With<SkinnedChainCapture>>()
 		.iter(world)
@@ -215,22 +219,32 @@ fn spawn_skinned_chain_for_capture(world: &mut World, bent: bool, rigid: bool) {
 	};
 
 	let config = SkinnedChainConfig {
-		link_count: 10,
-		length_m: 2.5,
+		link_count: 12,
+		length_m: 2.8,
 		skinning_strategy: strategy,
 		..Default::default()
 	};
 
 	let data = generate_skinned_chain(config.clone());
+	
+	// Calculate bounding box for the chain (will be larger when bent)
+	let max_bend = if bent { 1.2 } else { 0.2 };
+	let aabb = Aabb::from_min_max(
+		Vec3::new(-max_bend, -0.3, -max_bend),
+		Vec3::new(max_bend, config.length_m + 0.3, max_bend),
+	);
+	
 	let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(data.mesh);
 	let inverse_handle = world
 		.resource_mut::<Assets<SkinnedMeshInverseBindposes>>()
 		.add(SkinnedMeshInverseBindposes::from(data.inverse_bindposes));
 
+	// Position root so chain is centered and visible
+	let root_y = 0.3;
 	let root = world
 		.spawn((
 			Name::new("skinned-chain-capture-root"),
-			Transform::IDENTITY,
+			Transform::from_xyz(0.0, root_y, 0.0),
 			Visibility::default(),
 			SkinnedChainCapture,
 		))
@@ -239,10 +253,10 @@ fn spawn_skinned_chain_for_capture(world: &mut World, bent: bool, rigid: bool) {
 	let mut joint_entities = Vec::new();
 	for (i, rest_pos) in data.rest_joint_positions.iter().enumerate() {
 		let pos = if bent {
-			// Apply S-curve bend
+			// Strong S-curve bend for visibility
 			let t = i as f32 / (data.rest_joint_positions.len() - 1) as f32;
-			let bend_x = 0.5 * (t * std::f32::consts::PI * 2.0).sin();
-			let bend_z = 0.3 * (t * std::f32::consts::PI).cos();
+			let bend_x = 0.9 * (t * std::f32::consts::PI * 2.5).sin();
+			let bend_z = 0.4 * (t * std::f32::consts::PI * 1.5).cos() - 0.2;
 			Vec3::new(bend_x, rest_pos.y, bend_z)
 		} else {
 			*rest_pos
@@ -265,7 +279,7 @@ fn spawn_skinned_chain_for_capture(world: &mut World, bent: bool, rigid: bool) {
 		.spawn((
 			Name::new("skinned-chain-capture-mesh"),
 			Mesh3d(mesh_handle),
-			Transform::from_xyz(0.0, 0.0, 0.0),
+			Transform::IDENTITY,
 			Visibility::default(),
 			bevy::mesh::skinning::SkinnedMesh {
 				inverse_bindposes: inverse_handle,
@@ -274,10 +288,28 @@ fn spawn_skinned_chain_for_capture(world: &mut World, bent: bool, rigid: bool) {
 			MaterialRefRoot(material_ref),
 			OwnedChainMaterial,
 			ChainHalo,
+			aabb,
 			SkinnedChainCapture,
 		))
 		.id();
 	world.entity_mut(root).add_child(mesh_entity);
+	
+	// Reposition camera to frame the skinned chain
+	let camera_pos = Vec3::new(0.0, root_y + config.length_m * 0.5, 5.5);
+	let look_at = Vec3::new(0.0, root_y + config.length_m * 0.5, 0.0);
+	
+	let cameras: Vec<Entity> = world
+		.query_filtered::<Entity, With<Camera3d>>()
+		.iter(world)
+		.collect();
+	
+	for camera_entity in cameras {
+		let mut entity_ref = world.entity_mut(camera_entity);
+		entity_ref.insert(SkinnedChainCaptureCamera);
+		if let Some(mut transform) = entity_ref.get_mut::<Transform>() {
+			*transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
+		}
+	}
 }
 
 pub fn tick_capture(
