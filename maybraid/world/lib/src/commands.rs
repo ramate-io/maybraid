@@ -248,6 +248,17 @@ pub enum DebugCommand {
 	},
 	/// Teleport the player to the specified XYZ world position.
 	Teleport { x: f32, y: f32, z: f32 },
+	/// Capture a timed sequence of screenshots.
+	Capture {
+		/// Output directory for frames
+		dir: std::path::PathBuf,
+		/// Seconds between frames
+		#[arg(long, default_value = "2.0")]
+		every: f32,
+		/// Number of frames to capture
+		#[arg(long, default_value = "10")]
+		count: u32,
+	},
 }
 
 #[cfg(feature = "debug-commands")]
@@ -418,6 +429,14 @@ pub struct RequestTakeDamage {
 pub struct RequestSpawnNpc;
 
 #[cfg(feature = "debug-commands")]
+#[derive(Component, Clone, Debug)]
+pub struct RequestCapture {
+	pub dir: std::path::PathBuf,
+	pub interval_secs: f32,
+	pub count: u32,
+}
+
+#[cfg(feature = "debug-commands")]
 #[derive(Component, Clone, Copy, Debug)]
 pub struct RequestActivate;
 
@@ -468,6 +487,10 @@ impl DebugCommand {
 			DebugCommand::Teleport { x, y, z } => {
 				commands.spawn(RequestTeleport { position: Vec3::new(x, y, z) });
 				*console = format!("debug teleport ({}, {}, {}): pending", x, y, z);
+			}
+			DebugCommand::Capture { dir, every, count } => {
+				commands.spawn(RequestCapture { dir, interval_secs: every, count });
+				*console = format!("debug capture: {} frames every {:.1}s", count, every);
 			}
 		}
 	}

@@ -11,7 +11,7 @@ use player::Npc;
 use world_player::Player as WorldPlayer;
 
 use crate::commands::{
-	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestPeaceful,
+	CameraMode, RequestActivate, RequestCamera, RequestCapture, RequestGrantPoints, RequestPeaceful,
 	RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
 };
 use crate::map_view::WorldMapView;
@@ -26,6 +26,7 @@ pub struct WorldDebugPlugin;
 impl Plugin for WorldDebugPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<DebugPeacefulMode>();
+		app.init_resource::<crate::capture::CaptureSession>();
 
 		app.add_systems(
 			Update,
@@ -38,6 +39,8 @@ impl Plugin for WorldDebugPlugin {
 				apply_debug_peaceful,
 				apply_debug_camera,
 				apply_debug_teleport,
+				crate::capture::apply_capture_requests,
+				crate::capture::tick_capture,
 			),
 		);
 
