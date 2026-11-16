@@ -2,12 +2,16 @@
 
 use std::path::PathBuf;
 
+use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use clap::{Parser, Subcommand};
 use firearms::{laser_hex_ref, laser_pulse_ref, laser_tail_ref, muzzle_flame_ref};
 use game_commands::command::{CommandScript, GameCommand};
-use material_ref::MaterialRef;
-use world_materials::chain::{default_evidence_dir, MythicalChainState};
+use material_ref::{MaterialRef, MaterialRefRoot};
+use world_materials::chain::{
+	default_evidence_dir, mythical_chain_ref_for, ChainHalo, MythicalChainState,
+	OwnedChainMaterial,
+};
 
 use crate::chain_capture::{CaptureSet, VideoCapture};
 use crate::chain_preview::{ChainPreview, LightingMode, PendingChainHit, PreviewStyle};
@@ -294,28 +298,62 @@ impl ChainCommand {
 				let links = links.clamp(2, 32);
 				*console = format!("chain skinned (links: {links})");
 				commands.queue(move |world: &mut World| {
-					use world_materials::chain::{spawn_skinned_chain, SkinnedChainConfig};
-					enter_chain_host(world);
-					// Spawn a runtime skinned chain next to the placeholder chains
-					let config = SkinnedChainConfig {
-						link_count: links,
-						..Default::default()
+					use world_materials::chain::{
+						generate_skinned_chain, SkinnedChainConfig, SkinnedChainData,
 					};
-					let (root, _, _) = spawn_skinned_chain(
-						&mut world.commands(),
-						&mut world.resource_mut::<Assets<Mesh>>(),
-						&mut world.resource_mut::<Assets<SkinnedMeshInverseBindposes>>(),
-						config,
-						Transform::from_xyz(-2.0, 0.0, 0.0), // Position to the left
-						"runtime-skinned-chain",
-					);
-					// Apply the mythical chain material
+					enter_chain_host(world);
+					// Generate a runtime skinned chain mesh
+					let config = SkinnedChainConfig { link_count: links, ..Default::default() };
+					let SkinnedChainData { mesh, inverse_bindposes, rest_joint_positions } =
+						generate_skinned_chain(config);
+
+					// Add mesh and bindposes to assets
+					let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(mesh);
+					let inverse_handle = world
+						.resource_mut::<Assets<SkinnedMeshInverseBindposes>>()
+						.add(SkinnedMeshInverseBindposes::from(inverse_bindposes));
+
+					// Create root entity
+					let root = world
+						.spawn((
+							Name::new("runtime-skinned-chain-root".to_string()),
+							Transform::IDENTITY,
+							Visibility::default(),
+						))
+						.id();
+
+					// Create joint entities
+					let mut joint_entities = Vec::new();
+					for (i, pos) in rest_joint_positions.iter().enumerate() {
+						let joint = world
+							.spawn((
+								Name::new(format!("runtime-skinned-chain-joint-{i}")),
+								Transform::from_translation(*pos),
+								Visibility::default(),
+							))
+							.id();
+						world.entity_mut(root).add_child(joint);
+						joint_entities.push(joint);
+					}
+
+					// Create mesh entity with skinning and material
 					let material_ref = mythical_chain_ref_for(MythicalChainState::Intact);
-					world.commands().entity(root).insert((
-						MaterialRefRoot(material_ref),
-						OwnedChainMaterial,
-						ChainHalo,
-					));
+					let mesh_entity = world
+						.spawn((
+							Name::new("runtime-skinned-chain-mesh".to_string()),
+							Mesh3d(mesh_handle),
+							Transform::from_xyz(-2.0, 0.0, 0.0),
+							Visibility::default(),
+							bevy::mesh::skinning::SkinnedMesh {
+								inverse_bindposes: inverse_handle,
+								joints: joint_entities,
+							},
+							MaterialRefRoot(material_ref),
+							OwnedChainMaterial,
+							ChainHalo,
+						))
+						.id();
+					world.entity_mut(root).add_child(mesh_entity);
 				});
 			}
 		}
