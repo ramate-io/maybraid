@@ -27,7 +27,8 @@ pub use hud_menu::{
 	HudMenuIgnoresLock, HudMenuItem, HudMenuNavLocked, HudOverlayMenu,
 };
 pub use prompt::{
-	spawn_inventory_action_prompts, sync_input_prompt_device, sync_inventory_prompt_glyphs,
+	gallery_action_prompts_scene, spawn_inventory_action_prompts, sync_input_prompt_device,
+	sync_inventory_prompt_glyphs, GalleryActionPrompts, GalleryPromptGlyph, GalleryPromptKind,
 	InputPromptDevice, InventoryActionPrompts, InventoryDropPromptChip, InventoryPromptGlyph,
 	InventoryPromptKind,
 };

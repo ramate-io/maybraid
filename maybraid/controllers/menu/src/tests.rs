@@ -186,6 +186,19 @@ fn context_edges_are_targeted_one_shot_and_lose_to_navigation() -> anyhow::Resul
 	assert_eq!(world.resource::<Hits>().actions.last(), Some(&(first_menu, MenuAction::Unequip)));
 	Ok(())
 }
+
+#[test]
+fn select_view_is_delete_and_loses_to_navigation() -> anyhow::Result<()> {
+	let mut world = world();
+	let (source, target, _) = menu(&mut world);
+	send(&mut world, source, target, 1, &buttons(&[PadButton::Select]), 0.0)?;
+	assert_eq!(world.resource::<Hits>().actions, [(target, MenuAction::Delete)]);
+	send(&mut world, source, target, 2, &buttons(&[PadButton::DpadDown, PadButton::Select]), 0.0)?;
+	assert_eq!(world.resource::<Hits>().actions.len(), 1);
+	assert_eq!(world.resource::<Hits>().nav.last(), Some(&(target, MenuNav::Down)));
+	Ok(())
+}
+
 #[test]
 fn replaced_capture_drops_queued_actions_and_old_holds_until_release() -> anyhow::Result<()> {
 	let mut world = world();

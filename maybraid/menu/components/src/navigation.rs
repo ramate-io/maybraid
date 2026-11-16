@@ -96,17 +96,35 @@ pub const MENU_SELECT_PAD: [PadButton; 2] = [PadButton::A, PadButton::Start];
 /// Menu-map keys that become [`PadButton::Start`], then [`MenuNav::Select`].
 pub const MENU_SELECT_KEYS: [KeyCode; 1] = [KeyCode::Enter];
 
+/// Pad face that fires [`MenuNav::Back`].
+pub const MENU_BACK_PAD: PadButton = PadButton::B;
+
+/// Menu-map key that becomes [`PadButton::B`], then [`MenuNav::Back`].
+pub const MENU_BACK_KEYS: [KeyCode; 1] = [KeyCode::Escape];
+
 /// Pad face that asks to drop the focused inventory tile (`#1297`).
 pub const INVENTORY_DROP_PAD: PadButton = PadButton::X;
 
 /// Keys that hold [`PadButton::X`] so drop matches world interact (E / X).
 pub const INVENTORY_DROP_KEYS: [KeyCode; 2] = [KeyCode::KeyE, KeyCode::KeyX];
 
+/// Gallery Edit uses the same west face as inventory drop.
+pub const GALLERY_EDIT_PAD: PadButton = INVENTORY_DROP_PAD;
+
+/// Gallery Edit uses the same keys as inventory drop.
+pub const GALLERY_EDIT_KEYS: [KeyCode; 2] = INVENTORY_DROP_KEYS;
+
 /// Pad face that unequips the focused inventory tile (`#1356`).
 pub const INVENTORY_UNEQUIP_PAD: PadButton = PadButton::Y;
 
 /// Keys that hold [`PadButton::Y`] so unequip matches world swap (Y).
 pub const INVENTORY_UNEQUIP_KEYS: [KeyCode; 1] = [KeyCode::KeyY];
+
+/// Pad View / Select — gallery Delete.
+pub const GALLERY_DELETE_PAD: PadButton = PadButton::Select;
+
+/// Menu-map key that becomes [`PadButton::Select`], then gallery Delete.
+pub const GALLERY_DELETE_KEYS: [KeyCode; 1] = [KeyCode::Delete];
 
 impl MenuNav {
 	pub fn from_cardinal(cardinal: Cardinal) -> Self {
@@ -168,7 +186,10 @@ impl MenuNavPad {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MenuAction {
 	Unequip,
+	/// West face (**X**). Inventory drop; gallery Edit.
 	Drop,
+	/// View / Select. Gallery Delete.
+	Delete,
 }
 #[derive(EntityEvent, Clone, Copy, Debug)]
 pub struct MenuActionImpulse {

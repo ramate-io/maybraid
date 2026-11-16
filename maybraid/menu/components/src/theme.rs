@@ -226,6 +226,9 @@ pub const COLUMN_BOTTOM: f32 = 120.0;
 /// Corner action (Back / Edit / Save) inset from the window bottom.
 pub const CORNER_BOTTOM: f32 = 40.0;
 
+/// Gallery description sits above the bottom keybind row.
+pub const GALLERY_DESCRIPTION_BOTTOM: f32 = 96.0;
+
 /// Gap between the last menu row and explainer copy stacked under the column.
 pub const DESCRIPTION_UNDER_COLUMN_GAP: f32 = 24.0;
 
@@ -333,6 +336,24 @@ pub const PROMPT_KEY_DROP: &str = "iconography/kenney/input-prompts/keyboard_e_o
 
 /// Kenney Double Xbox **Y** — [`maybraid_virtual_pad_controller::INVENTORY_UNEQUIP_PAD`].
 pub const PROMPT_PAD_UNEQUIP: &str = "iconography/kenney/input-prompts/xbox_button_y_outline.png";
+
+/// Kenney Double Xbox **B** — pad Back ([`PadButton::B`](maybraid_virtual_pad_controller::PadButton::B)).
+pub const PROMPT_PAD_BACK: &str = "iconography/kenney/input-prompts/xbox_button_b_outline.png";
+
+/// Kenney Double keyboard **Escape** — menu Back.
+pub const PROMPT_KEY_BACK: &str = "iconography/kenney/input-prompts/keyboard_escape_outline.png";
+
+/// Kenney Double Xbox **X** — gallery Edit, same west face as inventory drop.
+pub const PROMPT_PAD_EDIT: &str = PROMPT_PAD_DROP;
+
+/// Kenney Double keyboard **E** — gallery Edit, same keys as inventory drop.
+pub const PROMPT_KEY_EDIT: &str = PROMPT_KEY_DROP;
+
+/// Kenney Double Xbox **View** — pad Select / gallery Delete.
+pub const PROMPT_PAD_DELETE: &str = "iconography/kenney/input-prompts/xbox_button_view_outline.png";
+
+/// Kenney Double keyboard **Delete** — gallery Delete.
+pub const PROMPT_KEY_DELETE: &str = "iconography/kenney/input-prompts/keyboard_delete_outline.png";
 
 /// Kenney Xbox bumper prompts for inventory section paging.
 pub const PROMPT_PAD_PREVIOUS_SECTION: &str =

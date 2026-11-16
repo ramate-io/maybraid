@@ -291,6 +291,8 @@ pub fn interpret_menu_pad(
 					Some(menu_components::MenuAction::Unequip)
 				} else if frame.pad.just_pressed(PadButton::X) {
 					Some(menu_components::MenuAction::Drop)
+				} else if frame.pad.just_pressed(PadButton::Select) {
+					Some(menu_components::MenuAction::Delete)
 				} else {
 					None
 				};
