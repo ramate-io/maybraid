@@ -90,9 +90,9 @@ pub use render_scale::{
 	parse_render_scale_env, parse_visual_style_env, pick_default_visual_style,
 	target_physical_size, window_above_1080p, AdapterKind, DeviceTier, RenderScale,
 	RequestForceOffscreen, RequestRenderScale, RequestVisualStyle, VisualStyle,
-	VisualStyleAutoReason, VisualStyleIdentity, VisualStylePick, VisualStyleSetting,
-	VisualStyleSignals, DEVICE_TIER_ENV, FORCE_OFFSCREEN_ENV, PRESENTATION_TREATMENT_ENV,
-	RENDER_SCALE_ENV, UNIFIED_MEMORY_NATIVE_BYTES, VISUAL_STYLE_ENV,
+	VisualStyleAutoReason, VisualStyleIdentity, VisualStylePick, VisualStylePlugin,
+	VisualStyleSetting, VisualStyleSignals, DEVICE_TIER_ENV, FORCE_OFFSCREEN_ENV,
+	PRESENTATION_TREATMENT_ENV, RENDER_SCALE_ENV, UNIFIED_MEMORY_NATIVE_BYTES, VISUAL_STYLE_ENV,
 };
 pub use spawn_picker::{SpawnPickerCapture, SpawnPickerController, SpawnPickerSheet};
 pub use start::{
@@ -134,6 +134,7 @@ use player::{
 	register_motor_traction_physics, MotorRequestStage, PlayerPlugin, PlayerPresentationPlugin,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
+use world_materials::chain::ChainShadersPlugin;
 use world_player::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, MeshStatsPlugin,
 	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
@@ -212,6 +213,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(EnergyMaterialPlugin)
+			.add_plugins(ChainShadersPlugin)
 			.add_plugins(VfxPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,

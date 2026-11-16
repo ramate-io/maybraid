@@ -3,6 +3,9 @@ use std::f32::consts::PI;
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
 use game_commands::command::TextEntryFocus;
+use player_camera::FollowCamera;
+
+use crate::preview::PreviewHost;
 
 #[derive(Component)]
 pub(crate) struct CameraController {
@@ -30,6 +33,56 @@ pub fn setup_camera(mut commands: Commands) {
 		Projection::Perspective(PerspectiveProjection { near: 0.05, far: 400.0, ..default() }),
 		CameraController { speed: 6.0, sensitivity: 0.005, yaw, pitch },
 	));
+}
+
+fn yaw_pitch_from(transform: Transform) -> (f32, f32) {
+	let rotation = transform.rotation;
+	let (x, y, z, w) = (rotation.x, rotation.y, rotation.z, rotation.w);
+	let sin_yaw = 2.0 * (w * y + x * z);
+	let cos_yaw = 1.0 - 2.0 * (y * y + z * z);
+	let sin_pitch = 2.0 * (w * x - y * z);
+	(sin_yaw.atan2(cos_yaw), sin_pitch.asin())
+}
+
+/// Gameplay-distance chain frame: FollowCamera marker + 45° FOV.
+pub fn apply_host_camera_frame(
+	mut commands: Commands,
+	host: Res<PreviewHost>,
+	mut cameras: Query<
+		(Entity, &mut Transform, &mut Projection, &mut CameraController),
+		With<Camera3d>,
+	>,
+) {
+	if !host.is_changed() && !host.is_added() {
+		return;
+	}
+	let Ok((entity, mut transform, mut projection, mut controller)) = cameras.single_mut() else {
+		return;
+	};
+	let (pos, look, fov, follow) = match *host {
+		PreviewHost::Catalog => (Vec3::new(2.4, 1.6, 3.2), Vec3::new(0.0, 1.0, 0.0), None, false),
+		PreviewHost::Chain => (
+			Vec3::new(0.15, 1.85, 4.15),
+			Vec3::new(0.0, 1.45, 0.0),
+			Some(45.0_f32.to_radians()),
+			true,
+		),
+	};
+	*transform = Transform::from_translation(pos).looking_at(look, Vec3::Y);
+	let (yaw, pitch) = yaw_pitch_from(*transform);
+	controller.yaw = yaw;
+	controller.pitch = pitch;
+	*projection = Projection::Perspective(PerspectiveProjection {
+		fov: fov.unwrap_or(PerspectiveProjection::default().fov),
+		near: 0.05,
+		far: 400.0,
+		..default()
+	});
+	if follow {
+		commands.entity(entity).insert(FollowCamera::default());
+	} else {
+		commands.entity(entity).remove::<FollowCamera>();
+	}
 }
 
 /// macOS screenshot (⌘⇧3 / ⌘⇧4) steals modifier key-ups. Clear them on focus
