@@ -42,16 +42,33 @@ Damage history stays generic. [`lubikans-damage`](damage/) copies
 | [`LubikanSelection`](src/selection.rs) | Equipped account, or Self when none is equipped. |
 | [`LubikanLedger`](src/ledger.rs) / [`LubikanAccount`](src/ledger.rs) / [`LubikanOwner`](src/ledger.rs) / [`LubikanAccountBinding`](src/ledger.rs) | Per-owner owned accounts, plus a bind-time snapshot for attribution. Self cannot be removed. |
 | [`LubikanOwnerLifetime`](src/lifetime.rs) / [`LubikanLifetimePolicy`](src/lifetime.rs) | Equip, unequip, body replace, and session restart. |
-| [`LubikanSystems`](src/lib.rs) | Schedule sets other lanes order against (`Owner`, `Activate`, `Heal`, `Award`). |
+| [`LubikanSummon`](src/summon.rs) / [`LubikanSummonConfig`](src/summon.rs) / [`LubikanSummonDeparture`](src/summon.rs) | Summon consumer for non-Self sessions. Policies are labeled PLACEHOLDER defaults until [#1135](https://github.com/ramate-io/maybraid/issues/1135) agrees them. Ownership, admission, and session lifetime stay in the consumer; capsule meshes live in the fixture adapter. |
+| [`LubikanSystems`](src/lib.rs) | Schedule sets other lanes order against (`Owner`, `Activate`, `Heal`, `Summon`, `Award`). |
 | [`fixtures`](src/fixtures.rs) | Test helper (`test-support` feature or this crate's tests). |
 
 [`LubikanInterfacePlugin`](src/lib.rs) only registers the shared messages.
 [`LubikansPlugin`](src/plugin.rs) is the only place that creates or restores
 a player's ledger, and the sole owner of [`LubikanActivationRequest`](src/activation.rs):
 it spends once, emits [`LubikanActivationSession`](src/activation.rs) or
-[`LubikanActivationRefused`](src/activation.rs), and applies
-[`LubikanActivationReport`](src/activation.rs) to the captured account.
-Consumers order after [`LubikanSystems::Owner`](src/lib.rs) (PreUpdate).
+[`LubikanActivationRefused`](src/activation.rs), and closes accepted sessions
+through one accessor on the session [`LubikanCharacter`](src/ledger.rs). The
+live body points at that character with [`LubikanBodyOf`](src/ledger.rs); body
+replacement does not clone the ledger through a retiring cache.
+
+Inventory ownership continues through `InventoryUser` and the lower equipment
+contracts introduced by [#1491](https://github.com/ramate-io/maybraid/pull/1491).
+The `LiveCharacterInventory` world mirror from
+[#1402](https://github.com/ramate-io/maybraid/pull/1402) is displaced: equipment
+commits publish `EquipmentInventoryChanged`, world persists that inventory in
+`WorldPlayerLoadout`, and body replacement captures the current bag before
+retirement. Ordered weapon/skill selection and derived Tanz stacks therefore
+keep their existing owners; the stable character added here owns the Lubikan
+ledger only. Editor order changes resolve that ledger through the body link.
+
+Heal mutates in the same frame and publishes [`LubikanActivationFinished`](src/activation.rs);
+[`LubikanActivationReport`](src/activation.rs) consumers call the same close and
+do not finish an already-closed session. Consumers order after
+[`LubikanSystems::Owner`](src/lib.rs) (PreUpdate).
 Self healing runs in [`LubikanSystems::Heal`](src/lib.rs) after Activate: it
 consumes Self [`LubikanActivationSession`](src/activation.rs)s, regenerates
 from `DamageApplied.applied` / [`DamageHistory`](../damage/src/history.rs),
@@ -60,10 +77,26 @@ and reports [`LubikanActivationReport`](src/activation.rs) plus
 natural complete returns the captured account to Idle in the same frame so a
 later activate in the same life can spend again. HUD shows completed from
 `Finished`, not by holding `Completed`. It does not spend charge or call
-`try_activate`. World capsules get the owner marker from
+`try_activate`.
+Summon activation runs in [`LubikanSystems::Summon`](src/lib.rs) after
+Activate: it consumes **non-Self** sessions only, never spends, and never
+calls `try_activate`. A fixture recipe can be registered with
+[`install_fixture_summon`](src/summon.rs) for tests and examples; a normal
+Self-only game leaves the summon catalog empty. Timeout / owner retirement /
+world reset / cancel retire instances through [`LubikanSummonDeparture`](src/summon.rs),
+which is not [`Died`](../damage/src/lib.rs) and does not emit kill rewards.
+Invalid spawn (no transform, concurrent limit) refunds the **captured**
+activation spend through the existing Award path (`ACTIVATION_REFUND`) when
+the PLACEHOLDER policy says so — not a later catalog cost. Same-batch
+admissions count reserved spawns so deferred `commands.spawn` cannot exceed
+the owner's concurrent limit. Definitions without a summon recipe are left
+for other consumers. Self sessions stay with Heal: they do not spawn and
+they do not spend a second time.
+World capsules get the owner marker from
 `grant_world_player_lubikan_owner` (do not insert a fresh
 `LubikanLedger::with_self`). Pause copies `WorldGameplayEnabled` onto
-[`LubikanHealingEnabled`](src/heal.rs) and freezes healing without cancelling.
+[`LubikanHealingEnabled`](src/heal.rs) and [`LubikanSummonEnabled`](src/summon.rs)
+and freezes healing / summon lifetime without cancelling.
 `WorldPlaySessionEnded` is teardown. Input cycles through
 [`LubikanLedger::select`](src/ledger.rs) only (`None` / `Some(Self)` are the
 Self fallback) and writes [`LubikanActivationRequest`](src/activation.rs) from

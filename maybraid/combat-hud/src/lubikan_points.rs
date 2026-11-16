@@ -178,8 +178,7 @@ fn spawn_flyer(
 	});
 }
 
-type PlayerWithLedger<'w, 's> =
-	Query<'w, 's, (Entity, &'static lubikans::LubikanLedger), (With<Player>, With<LubikanOwner>)>;
+type PlayerWithLedger<'w, 's> = Query<'w, 's, Entity, (With<Player>, With<LubikanOwner>)>;
 
 pub(crate) fn update_lubikan_point_flyers(
 	time: Res<Time>,
@@ -326,9 +325,7 @@ mod tests {
 	}
 
 	fn emit_hit(app: &mut App, owner: Entity, origin: Option<Vec3>) -> Result<()> {
-		let account = app
-			.world()
-			.get::<lubikans::LubikanLedger>(owner)
+		let account = lubikans::LubikanBodyOf::ledger(app.world(), owner)
 			.ok_or_else(|| anyhow!("ledger"))?
 			.equipped()
 			.id();
@@ -343,9 +340,7 @@ mod tests {
 	}
 
 	fn emit_capped_hit(app: &mut App, owner: Entity, origin: Option<Vec3>) -> Result<()> {
-		let account = app
-			.world()
-			.get::<lubikans::LubikanLedger>(owner)
+		let account = lubikans::LubikanBodyOf::ledger(app.world(), owner)
 			.ok_or_else(|| anyhow!("ledger"))?
 			.equipped()
 			.id();
@@ -487,9 +482,7 @@ mod tests {
 	fn flyer_retains_credited_account_after_equipped_switch() -> Result<()> {
 		let (mut app, owner) = flyer_app();
 		app.update();
-		let self_account = app
-			.world()
-			.get::<lubikans::LubikanLedger>(owner)
+		let self_account = lubikans::LubikanBodyOf::ledger(app.world(), owner)
 			.ok_or_else(|| anyhow!("ledger"))?
 			.equipped()
 			.id();
@@ -500,9 +493,7 @@ mod tests {
 		);
 		app.world_mut().resource_mut::<lubikans::LubikanCatalog>().register(extra);
 		let other = {
-			let mut ledger = app
-				.world_mut()
-				.get_mut::<lubikans::LubikanLedger>(owner)
+			let mut ledger = lubikans::LubikanBodyOf::ledger_mut(app.world_mut(), owner)
 				.ok_or_else(|| anyhow!("ledger"))?;
 			let other = ledger.ensure_owned(extra);
 			if !ledger.select(Some(other)) {
