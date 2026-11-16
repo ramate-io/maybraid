@@ -55,18 +55,21 @@ impl ChainContactState {
 ///
 /// Runs in `DamageSystems::Collect`, before `contacts_to_hits`.
 pub fn coalesce_chain_contacts(
-	mut contacts: MessageReader<ProjectileContact>,
 	link_ids: Query<&ChainLinkId>,
-	mut coalesced: MessageWriter<ProjectileContact>,
+	mut messages: ResMut<Messages<ProjectileContact>>,
 ) {
+	// Collect all contacts and clear the original messages
+	let all_contacts: Vec<ProjectileContact> = messages.drain().collect();
+
 	// Group contacts by chain root
 	let mut chains: HashMap<Entity, ChainContactState> = HashMap::new();
+	let mut output_contacts = Vec::new();
 
-	for contact in contacts.read() {
+	for contact in all_contacts {
 		// Check if this contact is on a chain capsule
 		let Ok(link_id) = link_ids.get(contact.target) else {
 			// Not a chain collider - pass through unchanged
-			coalesced.write(*contact);
+			output_contacts.push(contact);
 			continue;
 		};
 
@@ -74,14 +77,17 @@ pub fn coalesce_chain_contacts(
 		let chain_root = link_id.chain_root;
 		let interaction_id = InteractionId::Projectile(contact.projectile);
 
-		chains.entry(chain_root).or_default().note_contact(interaction_id, *contact);
+		chains.entry(chain_root).or_default().note_contact(interaction_id, contact);
 	}
 
-	// Write out the coalesced contacts (one per interaction per chain)
+	// Coalesce chain contacts and add to output
 	for (_root, mut state) in chains {
-		for contact in state.drain_coalesced() {
-			coalesced.write(contact);
-		}
+		output_contacts.extend(state.drain_coalesced());
+	}
+
+	// Write all contacts back
+	for contact in output_contacts {
+		messages.write(contact);
 	}
 }
 

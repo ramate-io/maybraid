@@ -130,6 +130,8 @@ pub fn retire_chain_colliders(commands: &mut Commands, colliders: Vec<Entity>) {
 
 #[cfg(test)]
 mod tests {
+	use bevy::ecs::system::RunSystemOnce;
+
 	use super::*;
 
 	#[test]
@@ -154,7 +156,12 @@ mod tests {
 		];
 
 		let config = ChainColliderConfig::default();
-		let colliders = spawn_chain_colliders(app.world_mut(), root, &joints, config);
+		let colliders = app
+			.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				spawn_chain_colliders(&mut commands, root, &joints, config)
+			})
+			.unwrap();
 
 		assert_eq!(colliders.len(), 3);
 
