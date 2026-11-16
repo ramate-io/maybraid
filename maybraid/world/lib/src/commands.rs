@@ -54,6 +54,9 @@ pub enum PlaygroundCommand {
 	/// Debug mob placement (Tracy actor-density flights).
 	#[command(subcommand)]
 	Mobs(Mobs),
+	/// Debug boss encounter generation and placement.
+	#[command(subcommand)]
+	Boss(Boss),
 	/// Capture the primary window to a PNG via GPU readback.
 	Screenshot {
 		path: std::path::PathBuf,
@@ -85,6 +88,17 @@ pub enum Mobs {
 		spacing: f32,
 		#[arg(long, default_value_t = 1)]
 		seed: u32,
+	},
+}
+
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
+pub enum Boss {
+	/// Generate and present the Bikanwarda chained encounter.
+	Spawn {
+		/// Boss center position `X,Z`; defaults to player position.
+		#[arg(long, value_parser = parse_xz, allow_hyphen_values = true)]
+		at: Option<Vec2>,
 	},
 }
 
@@ -132,6 +146,17 @@ impl Mobs {
 					seed,
 				});
 				*console = format!("mobs spawn {kind:?} x{count}: pending");
+			}
+		}
+	}
+}
+
+impl Boss {
+	fn react(self, commands: &mut Commands, console: &mut String) {
+		match self {
+			Boss::Spawn { at } => {
+				commands.spawn(crate::boss_spawn::RequestSpawnBoss { at });
+				*console = "boss spawn: generating Bikanwarda encounter".to_string();
 			}
 		}
 	}
@@ -257,6 +282,7 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Sky(sky) => sky.react(commands, console),
 			PlaygroundCommand::Render(render) => render.react(commands, console),
 			PlaygroundCommand::Mobs(mobs) => mobs.react(commands, console),
+			PlaygroundCommand::Boss(boss) => boss.react(commands, console),
 			PlaygroundCommand::Screenshot { path } => {
 				commands.spawn(RequestGameplayScreenshot { path: path.clone(), command_id: None });
 				*console = format!("screenshot {}: pending", path.display());

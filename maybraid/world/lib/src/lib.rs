@@ -10,6 +10,7 @@
 //! flattened 50 m cell hosts in a neighborhood around the camera.
 
 mod agent;
+pub mod boss_spawn;
 mod agent_inventory;
 mod camera;
 pub mod commands;
