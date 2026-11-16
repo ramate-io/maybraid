@@ -14,10 +14,11 @@ mod tests {
 	use bevy::prelude::*;
 	use projectiles::ProjectileContact;
 
-	use super::{
+	use crate::chains::{
 		coalesce_chain_contacts, deactivate_released_chains, spawn_chain_colliders,
-		sync_chain_colliders, update_chain_joints, ChainAnchor, ChainColliderConfig,
-		ChainEndpoint, ChainLinkId, ChainMotion, ChainRoot, ChainTensionMode, ReleasedChain,
+		sync_chain_colliders, update_chain_joints, BikanwardaChainPhysicsPlugin, ChainAnchor,
+		ChainColliderConfig, ChainEndpoint, ChainLinkId, ChainMotion, ChainRoot,
+		ChainTensionMode, ReleasedChain,
 	};
 
 	fn test_app() -> App {
@@ -35,7 +36,6 @@ mod tests {
 	}
 
 	#[test]
-	#[ignore = "Transform propagation in minimal test setup needs investigation"]
 	fn anchored_chain_follows_socket_transforms() -> Result<()> {
 		let mut app = test_app();
 
@@ -114,7 +114,6 @@ mod tests {
 	}
 
 	#[test]
-	#[ignore = "Transform propagation in minimal test setup needs investigation"]
 	fn capsule_colliders_sync_to_joint_positions() -> Result<()> {
 		let mut app = test_app();
 
