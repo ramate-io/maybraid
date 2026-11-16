@@ -80,7 +80,8 @@ mod tests {
 			))
 			.id();
 
-		// Update transforms and run motion system
+		// Update transforms and run motion system (run twice to ensure propagation)
+		app.update();
 		app.update();
 
 		// Check that joints are positioned along the chain
