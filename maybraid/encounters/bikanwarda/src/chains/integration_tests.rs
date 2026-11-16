@@ -14,7 +14,7 @@ mod tests {
 	use bevy::prelude::*;
 	use projectiles::ProjectileContact;
 
-	use crate::{
+	use super::{
 		coalesce_chain_contacts, deactivate_released_chains, spawn_chain_colliders,
 		sync_chain_colliders, update_chain_joints, ChainAnchor, ChainColliderConfig,
 		ChainEndpoint, ChainLinkId, ChainMotion, ChainRoot, ChainTensionMode, ReleasedChain,

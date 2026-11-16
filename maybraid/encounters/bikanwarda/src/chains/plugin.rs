@@ -16,9 +16,9 @@ use super::motion::{deactivate_released_chains, update_chain_joints};
 /// - Motion systems update joint positions based on anchor transforms.
 /// - Collision sync follows motion to update capsule positions.
 /// - Contact coalescing runs in DamageSystems::Collect (before apply_hits).
-pub struct ChainPhysicsPlugin;
+pub struct BikanwardaChainPhysicsPlugin;
 
-impl Plugin for ChainPhysicsPlugin {
+impl Plugin for BikanwardaChainPhysicsPlugin {
 	fn build(&self, app: &mut App) {
 		// ProjectileContact message is added by DamagePlugin/ProjectilePlugin
 
@@ -60,6 +60,6 @@ mod tests {
 	#[test]
 	fn plugin_builds_successfully() {
 		let mut app = App::new();
-		app.add_plugins((MinimalPlugins, TransformPlugin, ChainPhysicsPlugin));
+		app.add_plugins((MinimalPlugins, TransformPlugin, BikanwardaChainPhysicsPlugin));
 	}
 }

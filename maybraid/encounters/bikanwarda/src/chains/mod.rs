@@ -1,8 +1,8 @@
-//! Chain physics and collision for anchored restraint chains.
+//! Bikanwarda's mythical chain physics and collision.
 //!
-//! Provides motion simulation, collision detection, and damage routing for chains used in
-//! encounters (e.g. Bikanwarda's mythical chains). This is a gameplay/physics crate parallel
-//! to `projectiles` and `attacks`.
+//! Anchored chain motion, per-link capsule collision, and contact deduplication for the
+//! Bikanwarda boss encounter. These are restraint chains that anchor between the boss/environment
+//! and respond to player attacks.
 
 mod collision;
 mod damage_coalesce;
@@ -20,4 +20,4 @@ pub use motion::{
 	deactivate_released_chains, update_chain_joints, ChainAnchor, ChainEndpoint, ChainMotion,
 	ChainRoot, ChainTensionMode, ReleasedChain,
 };
-pub use plugin::ChainPhysicsPlugin;
+pub use plugin::BikanwardaChainPhysicsPlugin;

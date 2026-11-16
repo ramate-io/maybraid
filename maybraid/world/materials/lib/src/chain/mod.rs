@@ -23,7 +23,6 @@ mod params;
 mod placeholder;
 mod runtime;
 mod skinned;
-mod spawn;
 mod string;
 
 pub use chain_material::{
@@ -64,9 +63,6 @@ pub use runtime::{
 pub use skinned::{
 	generate_skinned_chain, spawn_skinned_chain, ChainSkinningStrategy, SkinnedChainConfig,
 	SkinnedChainData,
-};
-pub use spawn::{
-	spawn_anchored_chain, spawn_simple_chain, AnchoredChainConfig, AnchoredChainEntities,
 };
 pub use string::{
 	bent_centerline, continuous_tube_mesh, rest_centerline, skinned_tube_mesh, spawn_skinned_tube,
