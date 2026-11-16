@@ -152,6 +152,7 @@ impl Mobs {
 	}
 }
 
+#[cfg(feature = "debug-commands")]
 impl Boss {
 	fn react(self, commands: &mut Commands, console: &mut String) {
 		match self {
