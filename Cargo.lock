@@ -2920,6 +2920,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "chains"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "damage",
+ "lod-avian",
+ "projectiles",
+]
+
+[[package]]
 name = "character-animations"
 version = "0.1.5"
 dependencies = [
@@ -14516,18 +14528,16 @@ name = "world-materials"
 version = "0.1.5"
 dependencies = [
  "anyhow",
- "avian3d",
  "bevy",
  "building-shaders",
+ "chains",
  "character-shaders",
  "characters",
  "chico",
  "firearms",
  "furniture-shaders",
- "lod-avian",
  "material-ref",
  "procedural-common",
- "projectiles",
  "vegetation-bumpout",
  "vegetation-shaders",
 ]

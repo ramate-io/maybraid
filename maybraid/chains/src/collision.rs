@@ -91,7 +91,7 @@ pub fn sync_chain_colliders(
 		// Collect joints (children with Transform but no ChainLinkId)
 		let mut joint_transforms: Vec<(Entity, Transform)> = children
 			.iter()
-			.filter_map(|&entity| {
+			.filter_map(|entity| {
 				joints.get(entity).ok().and_then(|(transform, name)| {
 					// Exclude non-joint children
 					if name.map_or(false, |n| n.as_str().contains("joint")) {

@@ -3,11 +3,12 @@
 //! Wires up anchored chain motion, capsule collision, and contact deduplication.
 
 use bevy::prelude::*;
-use projectiles::{ProjectileContact, ProjectileSystems};
+use damage::DamageSystems;
+use projectiles::ProjectileContact;
 
+use super::collision::sync_chain_colliders;
 use super::damage_coalesce::coalesce_chain_contacts;
 use super::motion::{deactivate_released_chains, update_chain_joints};
-use super::collision::sync_chain_colliders;
 
 /// Plugin that registers chain motion and collision systems.
 ///
@@ -15,14 +16,11 @@ use super::collision::sync_chain_colliders;
 /// - Motion systems update joint positions based on anchor transforms.
 /// - Collision sync follows motion to update capsule positions.
 /// - Contact coalescing runs in DamageSystems::Collect (before apply_hits).
-pub struct ChainMotionPlugin;
+pub struct ChainPhysicsPlugin;
 
-impl Plugin for ChainMotionPlugin {
+impl Plugin for ChainPhysicsPlugin {
 	fn build(&self, app: &mut App) {
-		// Add ProjectileContact message if not already present (may be added by DamagePlugin)
-		if !app.world().contains_resource::<Events<ProjectileContact>>() {
-			app.add_message::<ProjectileContact>();
-		}
+		// ProjectileContact message is added by DamagePlugin/ProjectilePlugin
 
 		app.add_systems(
 			PostUpdate,
@@ -62,6 +60,6 @@ mod tests {
 	#[test]
 	fn plugin_builds_successfully() {
 		let mut app = App::new();
-		app.add_plugins((MinimalPlugins, TransformPlugin, ChainMotionPlugin));
+		app.add_plugins((MinimalPlugins, TransformPlugin, ChainPhysicsPlugin));
 	}
 }

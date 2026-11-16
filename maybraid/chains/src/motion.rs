@@ -110,7 +110,6 @@ pub fn update_chain_joints(
 		// Collect joint entities (children of the root that have Transform)
 		let mut joint_entities: Vec<Entity> = children
 			.iter()
-			.copied()
 			.filter(|&entity| joints.contains(entity))
 			.collect();
 

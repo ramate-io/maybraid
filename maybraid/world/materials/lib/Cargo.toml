@@ -10,17 +10,15 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-avian3d = { workspace = true }
 bevy = { workspace = true }
 building-shaders = { workspace = true }
+chains = { workspace = true }
 characters = { workspace = true }
 chico = { workspace = true }
 firearms = { workspace = true }
 furniture-shaders = { workspace = true }
-lod-avian = { workspace = true }
 material-ref = { workspace = true }
 procedural-common = { workspace = true }
-projectiles = { workspace = true }
 vegetation-bumpout = { workspace = true }
 vegetation-shaders = { workspace = true }
 

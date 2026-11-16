@@ -66,7 +66,7 @@ pub fn coalesce_chain_contacts(
 		// Check if this contact is on a chain capsule
 		let Ok(link_id) = link_ids.get(contact.target) else {
 			// Not a chain collider - pass through unchanged
-			coalesced.write(contact);
+			coalesced.write(*contact);
 			continue;
 		};
 
@@ -74,7 +74,7 @@ pub fn coalesce_chain_contacts(
 		let chain_root = link_id.chain_root;
 		let interaction_id = InteractionId::Projectile(contact.projectile);
 
-		chains.entry(chain_root).or_default().note_contact(interaction_id, contact);
+		chains.entry(chain_root).or_default().note_contact(interaction_id, *contact);
 	}
 
 	// Write out the coalesced contacts (one per interaction per chain)

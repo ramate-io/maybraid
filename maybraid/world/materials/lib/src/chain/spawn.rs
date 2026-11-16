@@ -3,13 +3,14 @@
 //! Provides high-level spawn functions that create the full chain: root, joints, mesh,
 //! colliders, anchors, health, and material in one call.
 
-use avian3d::prelude::*;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
+use chains::{
+	spawn_chain_colliders, ChainAnchor, ChainColliderConfig, ChainEndpoint, ChainMotion,
+	ChainRoot, ChainTensionMode,
+};
 
-use super::collision::{spawn_chain_colliders, ChainColliderConfig, ChainLinkId};
-use super::motion::{ChainAnchor, ChainEndpoint, ChainMotion, ChainRoot, ChainTensionMode};
 use super::params::{mythical_chain_ref_for, MythicalChainState};
 use super::runtime::OwnedChainMaterial;
 use super::skinned::{generate_skinned_chain, ChainSkinningStrategy, SkinnedChainConfig};
@@ -38,7 +39,7 @@ impl Default for AnchoredChainConfig {
 			collider: ChainColliderConfig::default(),
 			tension: ChainTensionMode::default(),
 			health: 100.0,
-			material_state: MythicalChainState::default(),
+			material_state: MythicalChainState::Intact,
 			root_transform: Transform::default(),
 		}
 	}
