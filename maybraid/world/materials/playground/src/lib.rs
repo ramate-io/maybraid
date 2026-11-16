@@ -54,6 +54,7 @@ impl Plugin for WorldMaterialsPlaygroundPlugin {
 			.init_resource::<PendingChainHit>()
 			.init_resource::<CaptureSet>()
 			.init_resource::<VideoCapture>()
+			.add_plugins(bikanwarda_encounter::chains::BikanwardaChainPhysicsPlugin)
 			.add_plugins(WorldMaterialsPlugin)
 			.add_plugins(VisualStylePlugin)
 			.add_plugins(command_plugin);

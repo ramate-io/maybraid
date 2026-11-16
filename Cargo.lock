@@ -14537,6 +14537,7 @@ name = "world-materials-playground"
 version = "0.1.5"
 dependencies = [
  "bevy",
+ "bikanwarda-encounter",
  "building-shaders",
  "clap",
  "firearms",

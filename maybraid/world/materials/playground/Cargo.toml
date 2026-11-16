@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 bevy = { workspace = true }
+bikanwarda-encounter = { workspace = true }
 building-shaders = { workspace = true }
 clap = { workspace = true }
 firearms = { workspace = true }

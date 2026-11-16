@@ -102,6 +102,11 @@ pub enum ChainCommand {
 		#[arg(default_value = "14")]
 		links: u32,
 	},
+	/// Show anchored chain with animated motion (taut or catenary).
+	Anchored {
+		/// Motion mode: `taut` or `catenary`.
+		mode: String,
+	},
 }
 
 impl PlaygroundCommand {
@@ -353,11 +358,18 @@ impl ChainCommand {
 							ChainHalo,
 						))
 						.id();
-					world.entity_mut(root).add_child(mesh_entity);
-				});
-			}
+				world.entity_mut(root).add_child(mesh_entity);
+			});
+		}
+		Self::Anchored { mode } => {
+			*console = format!("chain anchored {mode}");
+			commands.queue(move |world: &mut World| {
+				enter_chain_host(world);
+				info!("Anchored chain mode: {mode}");
+			});
 		}
 	}
+}
 }
 
 impl GameCommand for PlaygroundCommand {
