@@ -12,13 +12,13 @@ use std::time::Duration;
 
 use bevy::audio::AudioPlugin;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
+use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
 use character_persist::{CharacterId, SaveRoot};
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_virtual_pad_controller::PadHidPolicy;
-use menu_components::{InputPromptDevice, MENU_CLEAR};
-use menu_playground::{save_editing_character, CharacterMenuState, CharacterSessionPlugin};
-use menu_screens::{request_show_gallery, GalleryChoice, GalleryScreen};
+use menu_components::{InputPromptDevice, MENU_CLEAR, MenuNav, MenuNavImpulse, TextMenu};
+use menu_playground::{CharacterMenuState, CharacterSessionPlugin, save_editing_character};
+use menu_screens::{GalleryChoice, GalleryScreen, request_show_gallery};
 
 fn assets_path() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -84,6 +84,9 @@ struct CaptureDir(PathBuf);
 struct CaptureShots {
 	keyboard: bool,
 	pad: bool,
+	wheel_nav: bool,
+	wheel: bool,
+	confirm_open: bool,
 	confirm: bool,
 }
 
@@ -100,6 +103,7 @@ fn capture_shots(
 	screens: Query<(), With<GalleryScreen>>,
 	mut device: ResMut<InputPromptDevice>,
 	mut shots: ResMut<CaptureShots>,
+	menus: Query<(Entity, &TextMenu)>,
 	mut choices: MessageWriter<GalleryChoice>,
 ) {
 	if screens.is_empty() {
@@ -122,10 +126,23 @@ fn capture_shots(
 			.observe(save_to_disk(dir.0.join("02-gallery-pad.png")));
 		shots.pad = true;
 	}
-	if shots.pad && !shots.confirm && elapsed >= 4.2 {
-		choices.write(GalleryChoice::Delete);
+	if shots.pad && !shots.wheel_nav && elapsed >= 4.2 {
+		if let Some((entity, _)) = menus.iter().next() {
+			commands.trigger(MenuNavImpulse::new(entity, MenuNav::Right));
+		}
+		shots.wheel_nav = true;
 	}
-	if shots.pad && !shots.confirm && elapsed >= 5.0 {
+	if shots.wheel_nav && !shots.wheel && elapsed >= 5.0 {
+		commands
+			.spawn(Screenshot::primary_window())
+			.observe(save_to_disk(dir.0.join("04-gallery-wheel.png")));
+		shots.wheel = true;
+	}
+	if shots.wheel && !shots.confirm_open && elapsed >= 5.2 {
+		choices.write(GalleryChoice::Delete);
+		shots.confirm_open = true;
+	}
+	if shots.confirm_open && !shots.confirm && elapsed >= 6.0 {
 		commands
 			.spawn(Screenshot::primary_window())
 			.observe(save_to_disk(dir.0.join("03-gallery-delete-confirm.png")));
@@ -149,6 +166,7 @@ fn quit_after_shots(
 		&& request_exists(dir.0.join("01-gallery-keyboard.png"))
 		&& request_exists(dir.0.join("02-gallery-pad.png"))
 		&& request_exists(dir.0.join("03-gallery-delete-confirm.png"))
+		&& request_exists(dir.0.join("04-gallery-wheel.png"))
 		&& capturing.is_empty();
 	if done && ready_at.is_none() {
 		*ready_at = Some(time.elapsed());

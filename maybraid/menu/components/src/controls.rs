@@ -9,6 +9,7 @@ pub mod focus;
 pub mod fonts;
 pub mod hud_menu;
 pub mod prompt;
+pub mod rotary;
 pub mod row;
 pub mod scroll;
 pub mod section;
@@ -31,6 +32,10 @@ pub use prompt::{
 	sync_inventory_prompt_glyphs, GalleryActionPrompts, GalleryPromptGlyph, GalleryPromptKind,
 	InputPromptDevice, InventoryActionPrompts, InventoryDropPromptChip, InventoryPromptGlyph,
 	InventoryPromptKind,
+};
+pub use rotary::{
+	animate_rotary_cards, RotaryCaption, RotaryCaptionGroup, RotaryCaptionText, RotaryCard,
+	RotaryLayout, RotaryMotion,
 };
 pub use row::spawn_labeled_row;
 pub use scroll::{

@@ -8,12 +8,12 @@ use character_ui_menu::{
 	MenuNode,
 };
 use menu_components::{
-	menu_region_wash, spawn_header_line, spawn_hud_text, spawn_inventory_action_prompts,
-	spawn_text_button, HoverTile, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, HudScrollManual,
-	HudScrollViewport, InputPromptDevice, InventoryHudMenu, TileWrap, MENU_CLEAR,
-	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PROMPT_PAD_NEXT_SECTION,
-	PROMPT_PAD_PREVIOUS_SECTION, PROMPT_PAD_TOGGLE_DRAWER, TEXT_DEEP_BLUE, TEXT_YELLOW,
-	TEXT_YELLOW_FAINT,
+	HoverTile, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, HudScrollManual, HudScrollViewport,
+	InputPromptDevice, InventoryHudMenu, MENU_CLEAR, PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE,
+	PROMPT_PAD_NEXT_SECTION, PROMPT_PAD_PREVIOUS_SECTION, PROMPT_PAD_TOGGLE_DRAWER, RotaryCaption,
+	RotaryCaptionGroup, RotaryCaptionText, RotaryCard, RotaryLayout, RotaryMotion, TEXT_YELLOW,
+	TEXT_YELLOW_FAINT, TileWrap, menu_region_wash, spawn_header_line, spawn_hud_text,
+	spawn_inventory_action_prompts, spawn_text_button,
 };
 
 use crate::sink::MenuThumbnailContext;
@@ -58,30 +58,7 @@ pub struct InventoryAIOPSlot {
 struct InventoryRankBadge(u8);
 
 /// Rotary item position. Cards remain alive while focus moves.
-#[derive(Component, Clone, Copy, Debug)]
-pub struct InventoryCarouselCard {
-	pub menu: Entity,
-	pub ordinal: usize,
-	pub count: usize,
-}
-
-#[derive(Component, Clone, Copy, Debug)]
-pub(crate) struct InventoryCarouselLabel {
-	menu: Entity,
-	ordinal: usize,
-}
-
-#[derive(Component)]
-pub(crate) struct InventoryCarouselCaption;
-
-#[derive(Component)]
-pub(crate) struct InventoryCarouselCaptionGroup;
-
-#[derive(Component, Clone, Copy, Debug)]
-pub(crate) struct InventoryCarouselMotion {
-	angle: f32,
-	scale: f32,
-}
+pub type InventoryCarouselCard = RotaryCard;
 
 /// Host attachment point for the existing live character preview camera.
 #[derive(Component, Clone, Copy, Debug, Default)]
@@ -105,10 +82,7 @@ const GALLERY_VIEWPORT_HEIGHT: f32 = INVENTORY_GALLERY_ROW_HEIGHT
 	+ GALLERY_ROW_GAP * (INVENTORY_GALLERY_VISIBLE_ROWS - 1) as f32;
 pub const INVENTORY_GALLERY_ROW_STEP: f32 = INVENTORY_GALLERY_ROW_HEIGHT + GALLERY_ROW_GAP;
 const GALLERY_PANEL_HEIGHT: f32 = 196.0;
-const ROTARY_CARD_WIDTH: f32 = 164.0;
-const ROTARY_CARD_HEIGHT: f32 = 110.0;
 const ROTARY_ART_SIZE: f32 = 56.0;
-const ROTARY_FRONT_OFFSET: f32 = 14.0;
 
 /// Rebuild the inventory shell and return its preview slot and two focus roots.
 pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
@@ -589,18 +563,13 @@ fn spawn_rotary_carousel<E: Copy + Send + Sync + 'static, C: MenuThumbnailContex
 	if choices.is_empty() {
 		return spawn_empty_drawer(parent, fonts, active);
 	}
+	let layout = RotaryLayout::INVENTORY;
 	let mut carousel_entity = parent.spawn((
 		InventoryScreenArea(InventoryRegion::Drawer),
 		InventoryHudMenu,
 		HudMenu { selected: focused.min(choices.len() - 1), item_count: choices.len() },
-		Node {
-			width: Val::Percent(100.0),
-			height: Val::Percent(100.0),
-			min_height: Val::Px(96.0),
-			position_type: PositionType::Relative,
-			overflow: Overflow::clip(),
-			..default()
-		},
+		layout,
+		layout.host_node(),
 		Pickable::IGNORE,
 	));
 	if active {
@@ -609,25 +578,10 @@ fn spawn_rotary_carousel<E: Copy + Send + Sync + 'static, C: MenuThumbnailContex
 	let carousel_id = carousel_entity.id();
 	carousel_entity.with_children(|carousel| {
 		carousel.spawn((
-			Node {
-				position_type: PositionType::Absolute,
-				left: Val::Percent(50.0),
-				top: Val::Percent(50.0),
-				width: Val::Px(560.0),
-				height: Val::Auto,
-				aspect_ratio: Some(1.0),
-				margin: UiRect { left: Val::Px(-280.0), top: Val::Px(-280.0), ..default() },
-				border: UiRect::all(Val::Px(1.0)),
-				border_radius: BorderRadius::MAX,
-				..default()
-			},
-			UiTransform {
-				translation: Val2::px(0.0, 58.0),
-				scale: Vec2::new(1.0, 30.0 / 560.0),
-				..default()
-			},
-			BackgroundColor(Color::srgba(0.35, 0.67, 0.88, 0.72)),
-			BorderColor::all(Color::srgb(0.74, 0.87, 0.96)),
+			layout.track_node(),
+			layout.track_transform(),
+			BackgroundColor(layout.track_fill()),
+			BorderColor::all(layout.track_border()),
 			ZIndex(1),
 			Pickable::IGNORE,
 		));
@@ -638,34 +592,13 @@ fn spawn_rotary_carousel<E: Copy + Send + Sync + 'static, C: MenuThumbnailContex
 				region: InventoryRegion::Drawer,
 			});
 			let image = catalog_image(choice, thumbnails);
+			let motion = RotaryMotion::at(layout, ordinal, focused, choices.len());
 			let mut card = carousel.spawn((
-				InventoryCarouselCard { menu: carousel_id, ordinal, count: choices.len() },
-				InventoryCarouselMotion {
-					angle: rotary_angle(ordinal, focused, choices.len()),
-					scale: rotary_scale(ordinal, focused, choices.len()),
-				},
-				Node {
-					position_type: PositionType::Absolute,
-					left: Val::Percent(50.0),
-					top: Val::Percent(50.0),
-					width: Val::Px(ROTARY_CARD_WIDTH),
-					height: Val::Px(ROTARY_CARD_HEIGHT),
-					margin: UiRect {
-						left: Val::Px(-ROTARY_CARD_WIDTH / 2.0),
-						top: Val::Px(-ROTARY_CARD_HEIGHT / 2.0),
-						..default()
-					},
-					..default()
-				},
-				UiTransform {
-					translation: Val2::px(
-						rotary_x(ordinal, focused, choices.len()),
-						rotary_y(ordinal, focused, choices.len()),
-					),
-					scale: Vec2::splat(rotary_scale(ordinal, focused, choices.len())),
-					..default()
-				},
-				ZIndex((100.0 + rotary_angle(ordinal, focused, choices.len()).cos() * 50.0) as i32),
+				RotaryCard { menu: carousel_id, ordinal, count: choices.len() },
+				motion,
+				layout.card_node(),
+				layout.card_transform(motion.angle, motion.scale),
+				layout.z_index(motion.angle),
 				Pickable::IGNORE,
 			));
 			card.with_children(|card| {
@@ -839,7 +772,7 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 			extra,
 			Node {
 				width: Val::Percent(100.0),
-				height: Val::Px(ROTARY_CARD_HEIGHT),
+				height: Val::Px(RotaryLayout::INVENTORY.card_height),
 				padding: UiRect::all(Val::Px(6.0)),
 				flex_direction: FlexDirection::Column,
 				justify_content: JustifyContent::Center,
@@ -891,7 +824,7 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 				art.insert(BackgroundColor(inventory_color(choice.preview)));
 			}
 			tile.spawn((
-				InventoryCarouselLabel { menu, ordinal },
+				RotaryCaption { menu, ordinal },
 				Node {
 					width: Val::Percent(100.0),
 					padding: UiRect::axes(Val::Px(8.0), Val::Px(3.0)),
@@ -908,7 +841,7 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 			.with_children(|label| {
 				label
 					.spawn((
-						InventoryCarouselCaptionGroup,
+						RotaryCaptionGroup,
 						Node {
 							width: Val::Percent(100.0),
 							flex_direction: FlexDirection::Column,
@@ -920,7 +853,7 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 					))
 					.with_children(|text| {
 						text.spawn((
-							InventoryCarouselCaption,
+							RotaryCaptionText,
 							TileWrap,
 							Text::new(choice.label.clone()),
 							fonts.item(14.0),
@@ -935,7 +868,7 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 						));
 						if !choice.detail.is_empty() {
 							text.spawn((
-								InventoryCarouselCaption,
+								RotaryCaptionText,
 								TileWrap,
 								Text::new(choice.detail.clone()),
 								fonts.item(11.0),
@@ -1474,80 +1407,11 @@ fn gallery_content_height(rows: usize) -> f32 {
 	rows as f32 * INVENTORY_GALLERY_ROW_HEIGHT + rows.saturating_sub(1) as f32 * GALLERY_ROW_GAP
 }
 
-fn rotary_angle(ordinal: usize, selected: usize, count: usize) -> f32 {
-	if count < 2 {
-		return 0.0;
-	}
-	(ordinal as f32 - selected as f32) * std::f32::consts::TAU / count as f32
-}
-
-fn rotary_x(ordinal: usize, selected: usize, count: usize) -> f32 {
-	rotary_angle(ordinal, selected, count).sin() * 228.0
-}
-
-fn rotary_y(ordinal: usize, selected: usize, count: usize) -> f32 {
-	(1.0 + rotary_angle(ordinal, selected, count).cos()) * ROTARY_FRONT_OFFSET / 2.0
-}
-
-fn rotary_scale(ordinal: usize, selected: usize, count: usize) -> f32 {
-	0.62 + (rotary_angle(ordinal, selected, count).cos() + 1.0) * 0.19
-}
-
-/// Ease rotary cards to their wrapped positions. No thumbnails or nodes are
-/// rebuilt while focus moves.
-pub(crate) fn animate_inventory_carousel(
-	time: Res<Time>,
-	mut cards: Query<(
-		&InventoryCarouselCard,
-		&mut InventoryCarouselMotion,
-		&mut UiTransform,
-		&mut ZIndex,
-	)>,
-	menus: Query<&HudMenu>,
-	mut labels: Query<(&InventoryCarouselLabel, &Children, &mut BackgroundColor)>,
-	caption_groups: Query<&Children, With<InventoryCarouselCaptionGroup>>,
-	mut captions: Query<&mut TextColor, With<InventoryCarouselCaption>>,
-) {
-	let alpha = (1.0 - (-14.0 * time.delta_secs()).exp()).clamp(0.0, 1.0);
-	for (card, mut motion, mut transform, mut z_index) in &mut cards {
-		let Ok(menu) = menus.get(card.menu) else { continue };
-		if card.count == 0 {
-			continue;
-		}
-		let selected = menu.selected.min(card.count - 1);
-		let target_angle = rotary_angle(card.ordinal, selected, card.count);
-		let delta = (target_angle - motion.angle + std::f32::consts::PI)
-			.rem_euclid(std::f32::consts::TAU)
-			- std::f32::consts::PI;
-		motion.angle += delta * alpha;
-		let x = motion.angle.sin() * 228.0;
-		let y = (1.0 + motion.angle.cos()) * ROTARY_FRONT_OFFSET / 2.0;
-		transform.translation = Val2::px(x, y);
-		let scale = rotary_scale(card.ordinal, selected, card.count);
-		motion.scale += (scale - motion.scale) * alpha;
-		transform.scale = Vec2::splat(motion.scale);
-		*z_index = ZIndex((100.0 + motion.angle.cos() * 50.0) as i32);
-	}
-	for (label, children, mut background) in &mut labels {
-		let selected = menus.get(label.menu).is_ok_and(|menu| menu.selected == label.ordinal);
-		background.0 = if selected { TEXT_YELLOW } else { Color::NONE };
-		for child in children.iter() {
-			if let Ok(text_children) = caption_groups.get(child) {
-				for text_child in text_children.iter() {
-					if let Ok(mut color) = captions.get_mut(text_child) {
-						color.0 = if selected { TEXT_DEEP_BLUE } else { TEXT_YELLOW_FAINT };
-					}
-				}
-			}
-		}
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use menu_components::HudFonts;
+	use menu_components::{HudFonts, TEXT_DEEP_BLUE};
 
 	fn grid_section(section: InventorySection, capacity: usize) -> MenuNode<()> {
 		MenuNode::Section {
@@ -1727,17 +1591,19 @@ mod tests {
 		let (drawer, ledger, capacity) = section_data(&node, InventorySection::Lubikan)
 			.ok_or_else(|| anyhow::anyhow!("missing Lubikan section"))?;
 		assert_eq!(drawer.len(), 3);
-		assert!(drawer
-			.iter()
-			.all(|choice| choice.selected && choice.item_key.is_some() && choice.event.is_none()));
+		assert!(
+			drawer.iter().all(|choice| choice.selected
+				&& choice.item_key.is_some()
+				&& choice.event.is_none())
+		);
 		assert_eq!(ledger.len(), 3);
 		assert_eq!(capacity, 3);
 		Ok(())
 	}
 
 	#[test]
-	fn inventory_drawer_collapses_and_preview_fills_available_space_until_picker_opens(
-	) -> anyhow::Result<()> {
+	fn inventory_drawer_collapses_and_preview_fills_available_space_until_picker_opens()
+	-> anyhow::Result<()> {
 		let mut app = App::new();
 		app.add_plugins((MinimalPlugins, AssetPlugin::default()));
 		app.init_asset::<Image>();
@@ -1855,8 +1721,8 @@ mod tests {
 	}
 
 	#[test]
-	fn gallery_shell_spawns_two_rows_and_only_the_next_empty_slot_is_focusable(
-	) -> anyhow::Result<()> {
+	fn gallery_shell_spawns_two_rows_and_only_the_next_empty_slot_is_focusable()
+	-> anyhow::Result<()> {
 		let choices = (0..15)
 			.map(|index| GridCatalogChoice {
 				label: format!("item-{index}"),

@@ -1,22 +1,20 @@
 //! Character gallery: pick a saved character or start a new one.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, Scene};
-use character_model_user::{list_summaries, CharacterSummary};
-use character_persist::{load_active, CharacterId, SaveRoot};
+use bevy::scene::prelude::{Scene, bsn};
+use character_model_user::{CharacterSummary, list_summaries};
+use character_persist::{CharacterId, SaveRoot, load_active};
 use maybraid_menu_controller::MenuController;
-use menu_components::info::description::TextMenuDescription;
 use menu_components::single_select::republish_menu_activate;
-use menu_components::theme::GALLERY_DESCRIPTION_BOTTOM;
 use menu_components::{
-	gallery_action_prompts_scene, GalleryPromptKind, InputPromptDevice, MenuBackRequested, MenuNav,
-	MenuNavImpulse, MenuObjectiveKind, ScreenBackPressed, ScreenEditPressed, TextCursorColumn,
-	TextCursorRow, TextMenu, TextMenuItem, TextMenuPlugin,
+	GalleryPromptKind, InputPromptDevice, MenuBackRequested, MenuNav, MenuNavImpulse,
+	MenuObjectiveKind, RotaryMenu, ScreenBackPressed, ScreenEditPressed, TextCursorRow, TextMenu,
+	TextMenuItem, TextMenuPlugin, gallery_action_prompts_scene,
 };
 
-use crate::input::add_menu_input;
-use crate::show::{add_menu_show_systems, MenuScreens, MenuShowRequest};
 use crate::MenuScreen;
+use crate::input::add_menu_input;
+use crate::show::{MenuScreens, MenuShowRequest, add_menu_show_systems};
 
 /// Queue a gallery spawn (despawns any existing menu screen first).
 #[derive(Component, Debug, Clone, Copy)]
@@ -89,11 +87,7 @@ fn gallery_selected_index(summaries: &[CharacterSummary], active: Option<Charact
 impl GalleryChoice {
 	pub fn create_row(empty_roster: bool) -> TextCursorRow<Self> {
 		let row = TextCursorRow::new("Create a Character", Self::New);
-		if empty_roster {
-			row.with_objective(MenuObjectiveKind::StartHere)
-		} else {
-			row
-		}
+		if empty_roster { row.with_objective(MenuObjectiveKind::StartHere) } else { row }
 	}
 }
 
@@ -145,13 +139,7 @@ fn gallery_scene(
 	let rows = gallery_rows(summaries, active);
 	let selected = gallery_selected_index(summaries, active);
 	let children: Vec<Box<dyn Scene>> = vec![
-		Box::new(
-			TextCursorColumn::rows("Characters", rows)
-				.with_selected(selected)
-				.scrollable()
-				.scene(),
-		),
-		Box::new(TextMenuDescription::scene_from_bottom(String::new(), GALLERY_DESCRIPTION_BOTTOM)),
+		Box::new(RotaryMenu::rows("Characters", rows).with_selected(selected).scene()),
 		Box::new(gallery_action_prompts_scene(device)),
 	];
 	bsn! {
@@ -241,10 +229,10 @@ fn sync_gallery_character_prompts(
 
 #[cfg(test)]
 mod tests {
-	use super::{gallery_rows, gallery_selected_index, GalleryChoice};
+	use super::{GalleryChoice, gallery_rows, gallery_selected_index};
 	use character_model_user::CharacterSummary;
 	use character_persist::CharacterId;
-	use menu_components::MenuObjectiveKind;
+	use menu_components::{MenuObjectiveKind, RotaryLayout, RotaryMenu};
 
 	#[test]
 	fn new_is_the_default_row() {
@@ -305,6 +293,20 @@ mod tests {
 		assert_eq!(GalleryChoice::Select(CharacterId(1)).saved_id(), Some(CharacterId(1)));
 		assert_eq!(GalleryChoice::New.saved_id(), None);
 		assert_eq!(GalleryChoice::Delete.saved_id(), None);
+	}
+
+	#[test]
+	fn roster_uses_the_gallery_rotary_layout() {
+		let summaries = [CharacterSummary {
+			id: CharacterId(1),
+			name: "Jeff".into(),
+			species_title: "Braidman",
+		}];
+		let menu = RotaryMenu::rows("Characters", gallery_rows(&summaries, Some(CharacterId(1))))
+			.with_selected(1);
+		assert_eq!(menu.layout, RotaryLayout::GALLERY);
+		assert_eq!(menu.items.len(), 2);
+		assert_eq!(menu.selected, 1);
 	}
 
 	#[test]

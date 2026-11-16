@@ -9,17 +9,18 @@ use character_persist::{CharacterId, SaveRoot};
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_virtual_pad_controller::PadHidPolicy;
 use menu_components::{
-	GalleryPromptKind, MenuModalId, MenuModalStack, ScreenBack, ScreenEdit, TextMenu,
+	GalleryPromptKind, MenuModalId, MenuModalStack, RotaryCard, RotaryLayout, ScreenBack,
+	ScreenEdit, TextCursorScroll, TextMenu,
 };
 use menu_screens::{
-	request_show_gallery, GalleryChoice, GalleryScreen, RequestShowCreateCharacter, RequestShowHome,
+	GalleryChoice, GalleryScreen, RequestShowCreateCharacter, RequestShowHome, request_show_gallery,
 };
 
+use crate::CharacterMenuState;
 use crate::character::RequestShowCharacter;
 use crate::session::{
-	save_editing_character, ActiveCharacter, CharacterSessionPlugin, EditingCharacter,
+	ActiveCharacter, CharacterSessionPlugin, EditingCharacter, save_editing_character,
 };
-use crate::CharacterMenuState;
 
 fn scratch_root() -> SaveRoot {
 	SaveRoot::at(std::env::temp_dir().join(format!(
@@ -127,6 +128,34 @@ fn active_id(app: &App) -> Option<CharacterId> {
 	app.world().get_resource::<ActiveCharacter>().map(|active| active.id)
 }
 
+fn highlighted_index(app: &mut App) -> Result<usize> {
+	app.world_mut()
+		.query::<&TextMenu>()
+		.iter(app.world())
+		.next()
+		.map(|menu| menu.selected)
+		.context("gallery text menu")
+}
+
+fn tap_stick(app: &mut App, x: f32, y: f32) -> Result<()> {
+	let gamepad = app.world().resource::<TestGamepad>().0;
+	{
+		let mut device = app.world_mut().get_mut::<Gamepad>(gamepad).context("gamepad")?;
+		device.analog_mut().set(GamepadAxis::LeftStickX, x);
+		device.analog_mut().set(GamepadAxis::LeftStickY, y);
+	}
+	app.update();
+	{
+		let mut device = app.world_mut().get_mut::<Gamepad>(gamepad).context("gamepad")?;
+		device.analog_mut().set(GamepadAxis::LeftStickX, 0.0);
+		device.analog_mut().set(GamepadAxis::LeftStickY, 0.0);
+	}
+	for _ in 0..3 {
+		app.update();
+	}
+	Ok(())
+}
+
 fn delete_open(app: &App) -> bool {
 	app.world().resource::<MenuModalStack>().contains(MenuModalId::CHARACTER_DELETE)
 }
@@ -154,6 +183,46 @@ fn gallery_replaces_live_buttons_with_prompt_chips() -> Result<()> {
 		.filter(|choice| **choice == GalleryChoice::Delete)
 		.count();
 	assert_eq!(delete_rows, 0);
+	std::fs::remove_dir_all(&root.path)?;
+	Ok(())
+}
+
+#[test]
+fn gallery_roster_is_a_full_screen_rotary_wheel() -> Result<()> {
+	let (mut app, root, _, _) = two_character_app()?;
+	assert_eq!(count::<TextCursorScroll>(&mut app), 0);
+	assert_eq!(count::<RotaryCard>(&mut app), 3);
+	assert_eq!(count::<RotaryLayout>(&mut app), 1);
+	let layout = *app
+		.world_mut()
+		.query::<&RotaryLayout>()
+		.iter(app.world())
+		.next()
+		.context("gallery rotary layout")?;
+	assert_eq!(layout, RotaryLayout::GALLERY);
+	assert_eq!(highlighted_index(&mut app)?, 1);
+	std::fs::remove_dir_all(&root.path)?;
+	Ok(())
+}
+
+#[test]
+fn pad_dpad_and_stick_wrap_the_character_wheel() -> Result<()> {
+	let (mut app, root, _, _) = two_character_app()?;
+	assert_eq!(highlighted_index(&mut app)?, 1);
+	tap_pad(&mut app, GamepadButton::DPadDown)?;
+	assert_eq!(highlighted_index(&mut app)?, 2);
+	tap_pad(&mut app, GamepadButton::DPadDown)?;
+	assert_eq!(highlighted_index(&mut app)?, 0, "down wraps past the last card");
+	tap_pad(&mut app, GamepadButton::DPadUp)?;
+	assert_eq!(highlighted_index(&mut app)?, 2);
+	tap_pad(&mut app, GamepadButton::DPadRight)?;
+	assert_eq!(highlighted_index(&mut app)?, 0);
+	tap_pad(&mut app, GamepadButton::DPadLeft)?;
+	assert_eq!(highlighted_index(&mut app)?, 2);
+	tap_stick(&mut app, 0.0, -1.0)?;
+	assert_eq!(highlighted_index(&mut app)?, 0, "left stick down advances the wheel");
+	tap_stick(&mut app, -1.0, 0.0)?;
+	assert_eq!(highlighted_index(&mut app)?, 2, "left stick left steps backward");
 	std::fs::remove_dir_all(&root.path)?;
 	Ok(())
 }

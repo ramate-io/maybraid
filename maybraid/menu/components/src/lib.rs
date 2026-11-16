@@ -36,7 +36,8 @@ pub use controls::{
 	HudMenu, HudMenuIgnoresLock, HudMenuItem, HudMenuNavLocked, HudOverlayMenu, HudScroll,
 	HudScrollManual, HudScrollStrip, HudScrollThumb, HudScrollTrack, HudScrollViewport,
 	InputPromptDevice, InventoryActionPrompts, InventoryDropPromptChip, InventoryPromptGlyph,
-	InventoryPromptKind, OverlayHeader, OverlayHeaderKey, ReorderMark, ShortTextChange,
+	InventoryPromptKind, OverlayHeader, OverlayHeaderKey, ReorderMark, RotaryCaption,
+	RotaryCaptionGroup, RotaryCaptionText, RotaryCard, RotaryLayout, RotaryMotion, ShortTextChange,
 	ShortTextField, ShortTextKey, ShortTextModal, ShortTextModalRoot, ShortTextPad,
 	ShortTextToggle, ShortTextValue, SlotRank, TileWrap,
 };
@@ -64,7 +65,7 @@ pub use single_select::{
 	screen_edit_scene, scroll_text_cursor_selection_into_view, select_text_menu_item_on_over,
 	sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav, MenuActivate, MenuFocus,
 	MenuItemLocked, MenuObjectiveKind, MenuObjectiveMarker, MenuStep, MenuStepRow, MenuStepper,
-	ScreenBack, ScreenBackPressed, ScreenEdit, ScreenEditPressed, TextColumnAlign,
+	RotaryMenu, ScreenBack, ScreenBackPressed, ScreenEdit, ScreenEditPressed, TextColumnAlign,
 	TextColumnAnchor, TextCursorColumn, TextCursorMenu, TextCursorRow, TextCursorScroll, TextMenu,
 	TextMenuColumn, TextMenuHeader, TextMenuInputLock, TextMenuItem, TextMenuItemLabel,
 };
@@ -192,6 +193,7 @@ impl Plugin for MenuComponentsPlugin {
 					sync_inventory_prompt_glyphs,
 				),
 			)
+			.add_systems(Last, controls::animate_rotary_cards)
 			.add_systems(
 				Update,
 				(
