@@ -7,13 +7,25 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use bevy::camera::primitives::Aabb;
+use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::time::TimeUpdateStrategy;
 use game_commands::ui::DebugHudRoot;
-use world_materials::chain::MythicalChainState;
+use material_ref::MaterialRefRoot;
+use world_materials::chain::{
+	generate_skinned_chain, mythical_chain_ref_for, ChainHalo, ChainSkinningStrategy,
+	MythicalChainState, OwnedChainMaterial, SkinnedChainConfig,
+};
 
 use crate::chain_preview::{ChainPreview, LightingMode, PendingChainHit, PreviewStyle};
+
+#[derive(Component)]
+struct SkinnedChainCapture;
+
+#[derive(Component)]
+struct SkinnedChainCaptureCamera;
 
 pub const CAPTURE_CADENCE_HZ: f32 = 30.0;
 pub const CAPTURE_DT: f32 = 1.0 / CAPTURE_CADENCE_HZ;
@@ -34,6 +46,10 @@ enum StillKind {
 		right: MythicalChainState,
 	},
 	Released,
+	SkinnedChain {
+		bent: bool,
+		rigid: bool,
+	},
 }
 
 struct StillShot {
@@ -104,6 +120,22 @@ const STILLS: &[StillShot] = &[
 		},
 	},
 	StillShot { file: "released_day.png", kind: StillKind::Released },
+	StillShot {
+		file: "skinned_rest_smooth.png",
+		kind: StillKind::SkinnedChain { bent: false, rigid: false },
+	},
+	StillShot {
+		file: "skinned_rest_rigid.png",
+		kind: StillKind::SkinnedChain { bent: false, rigid: true },
+	},
+	StillShot {
+		file: "skinned_bent_smooth.png",
+		kind: StillKind::SkinnedChain { bent: true, rigid: false },
+	},
+	StillShot {
+		file: "skinned_bent_rigid.png",
+		kind: StillKind::SkinnedChain { bent: true, rigid: true },
+	},
 ];
 
 #[derive(Resource, Default)]
@@ -122,7 +154,12 @@ impl CaptureSet {
 	}
 }
 
-fn apply_still(shot: &StillShot, preview: &mut ChainPreview, lighting: &mut LightingMode) {
+fn apply_still(
+	shot: &StillShot,
+	preview: &mut ChainPreview,
+	lighting: &mut LightingMode,
+	commands: &mut Commands,
+) {
 	match shot.kind {
 		StillKind::Damage { amount, emit } => {
 			*lighting = LightingMode::Day;
@@ -154,6 +191,124 @@ fn apply_still(shot: &StillShot, preview: &mut ChainPreview, lighting: &mut Ligh
 			preview.set_right_state(MythicalChainState::Intact);
 			preview.restamp_glow_and_seed();
 		}
+		StillKind::SkinnedChain { bent, rigid } => {
+			*lighting = LightingMode::Day;
+			preview.lighting = LightingMode::Day;
+			preview.style = PreviewStyle::Native;
+			commands.queue(move |world: &mut World| {
+				spawn_skinned_chain_for_capture(world, bent, rigid);
+			});
+		}
+	}
+}
+
+fn spawn_skinned_chain_for_capture(world: &mut World, bent: bool, rigid: bool) {
+	// Despawn any existing skinned chain captures and restore camera
+	let to_despawn: Vec<Entity> = world
+		.query_filtered::<Entity, With<SkinnedChainCapture>>()
+		.iter(world)
+		.collect();
+	for entity in to_despawn {
+		world.despawn(entity);
+	}
+
+	let strategy = if rigid {
+		ChainSkinningStrategy::RigidPerLink
+	} else {
+		ChainSkinningStrategy::SmoothBlend
+	};
+
+	let config = SkinnedChainConfig {
+		link_count: 12,
+		length_m: 2.8,
+		skinning_strategy: strategy,
+		..Default::default()
+	};
+
+	let data = generate_skinned_chain(config.clone());
+	
+	// Calculate bounding box for the chain (will be larger when bent)
+	let max_bend = if bent { 1.2 } else { 0.2 };
+	let aabb = Aabb::from_min_max(
+		Vec3::new(-max_bend, -0.3, -max_bend),
+		Vec3::new(max_bend, config.length_m + 0.3, max_bend),
+	);
+	
+	let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(data.mesh);
+	let inverse_handle = world
+		.resource_mut::<Assets<SkinnedMeshInverseBindposes>>()
+		.add(SkinnedMeshInverseBindposes::from(data.inverse_bindposes));
+
+	// Position root so chain is centered and visible
+	let root_y = 0.3;
+	let root = world
+		.spawn((
+			Name::new("skinned-chain-capture-root"),
+			Transform::from_xyz(0.0, root_y, 0.0),
+			Visibility::default(),
+			SkinnedChainCapture,
+		))
+		.id();
+
+	let mut joint_entities = Vec::new();
+	for (i, rest_pos) in data.rest_joint_positions.iter().enumerate() {
+		let pos = if bent {
+			// Strong S-curve bend for visibility
+			let t = i as f32 / (data.rest_joint_positions.len() - 1) as f32;
+			let bend_x = 0.9 * (t * std::f32::consts::PI * 2.5).sin();
+			let bend_z = 0.4 * (t * std::f32::consts::PI * 1.5).cos() - 0.2;
+			Vec3::new(bend_x, rest_pos.y, bend_z)
+		} else {
+			*rest_pos
+		};
+
+		let joint = world
+			.spawn((
+				Name::new(format!("skinned-joint-{i}")),
+				Transform::from_translation(pos),
+				Visibility::default(),
+				SkinnedChainCapture,
+			))
+			.id();
+		world.entity_mut(root).add_child(joint);
+		joint_entities.push(joint);
+	}
+
+	let material_ref = mythical_chain_ref_for(MythicalChainState::Intact);
+	let mesh_entity = world
+		.spawn((
+			Name::new("skinned-chain-capture-mesh"),
+			Mesh3d(mesh_handle),
+			Transform::IDENTITY,
+			Visibility::default(),
+			bevy::mesh::skinning::SkinnedMesh {
+				inverse_bindposes: inverse_handle,
+				joints: joint_entities,
+			},
+			MaterialRefRoot(material_ref),
+			OwnedChainMaterial,
+			ChainHalo,
+			aabb,
+			SkinnedChainCapture,
+		))
+		.id();
+	world.entity_mut(root).add_child(mesh_entity);
+	
+	// Reposition camera to frame the skinned chain
+	let camera_pos = Vec3::new(0.0, root_y + config.length_m * 0.5, 5.5);
+	let look_at = Vec3::new(0.0, root_y + config.length_m * 0.5, 0.0);
+	
+	let cameras: Vec<Entity> = world
+		.query_filtered::<Entity, With<Camera3d>>()
+		.iter(world)
+		.collect();
+	
+	for camera_entity in cameras {
+		let mut entity_ref = world.entity_mut(camera_entity);
+		entity_ref.insert(SkinnedChainCaptureCamera);
+		if let Some(mut transform) = entity_ref.get_mut::<Transform>() {
+			*transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
+		}
 	}
 }
 
@@ -182,7 +337,7 @@ pub fn tick_capture(
 			commands.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO));
 			capture.frozen = true;
 		}
-		apply_still(&STILLS[0], &mut preview, &mut lighting);
+		apply_still(&STILLS[0], &mut preview, &mut lighting, &mut commands);
 		capture.settle_from = Some(Instant::now());
 		capture.step = 1;
 		info!("chain stills applying {}", STILLS[0].file);
@@ -219,7 +374,7 @@ pub fn tick_capture(
 		capture.step += 1;
 		return;
 	}
-	apply_still(&STILLS[next], &mut preview, &mut lighting);
+	apply_still(&STILLS[next], &mut preview, &mut lighting, &mut commands);
 	capture.settle_from = Some(Instant::now());
 	capture.step += 1;
 }
