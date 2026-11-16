@@ -29,6 +29,11 @@ pub enum TileKind {
 	Power(SkillKind),
 }
 
+/// Chebyshev radius around the map centre that must stay land.
+/// Camera/cursor spawn at the origin, which sits on the corner of four tiles;
+/// a 5×5 pocket covers that 2×2 plus a first walking neighborhood.
+pub const SPAWN_CLEARING_RADIUS: u32 = 2;
+
 /// POC thresholds: water below −0.1, power above a rarer high band, else land.
 pub fn classify_noise(value: f32, kind: SkillKind) -> TileKind {
 	if value < -0.1 {
@@ -37,6 +42,28 @@ pub fn classify_noise(value: f32, kind: SkillKind) -> TileKind {
 		TileKind::Power(kind)
 	} else {
 		TileKind::Land
+	}
+}
+
+pub fn in_spawn_clearing(x: u32, y: u32, steps: u32) -> bool {
+	let mid = steps / 2;
+	x.abs_diff(mid) <= SPAWN_CLEARING_RADIUS && y.abs_diff(mid) <= SPAWN_CLEARING_RADIUS
+}
+
+pub fn tile_kind_at(
+	x: u32,
+	y: u32,
+	steps: u32,
+	kind: SkillKind,
+	raw: f32,
+	pins: &[(u32, u32)],
+) -> TileKind {
+	if in_spawn_clearing(x, y, steps) {
+		TileKind::Land
+	} else if pins.contains(&(x, y)) {
+		TileKind::Power(kind)
+	} else {
+		classify_noise(raw, kind)
 	}
 }
 
@@ -86,20 +113,13 @@ pub fn spawn_map_tiles_at(
 	let layer = render_layer(spec.id);
 	let noise = Fbm::<OpenSimplex>::new(spec.seed).set_frequency(spec.frequency);
 	let pins = pinned_power_cells(extents.steps);
-	let mid = extents.steps / 2;
 
 	for x in 0..extents.steps {
 		for y in 0..extents.steps {
 			let local = extents.tile_center(x, y);
 			let raw = noise.get([local.x as f64, local.y as f64]) as f32;
 			let center = local + origin;
-			let kind = if x == mid && y == mid {
-				TileKind::Land
-			} else if pins.contains(&(x, y)) {
-				TileKind::Power(spec.kind)
-			} else {
-				classify_noise(raw, spec.kind)
-			};
+			let kind = tile_kind_at(x, y, extents.steps, spec.kind, raw, &pins);
 			spawn_tile(
 				commands,
 				spec.id,
@@ -294,12 +314,43 @@ pub fn restore_spent_tiles(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::map::{pinned_power_cells, MapExtents};
 
 	#[test]
 	fn noise_bands_match_the_poc_water_cut() {
 		assert_eq!(classify_noise(-0.2, SkillKind::Fireball), TileKind::Water);
 		assert_eq!(classify_noise(0.0, SkillKind::Fireball), TileKind::Land);
 		assert_eq!(classify_noise(0.4, SkillKind::Dumbwave), TileKind::Power(SkillKind::Dumbwave));
+	}
+
+	#[test]
+	fn spawn_clearing_covers_the_origin_neighborhood() {
+		let steps = MapExtents::default().steps;
+		let mid = steps / 2;
+		let pins = pinned_power_cells(steps);
+		assert!(in_spawn_clearing(mid, mid, steps));
+		assert!(in_spawn_clearing(mid - 1, mid - 1, steps), "origin sits on the 2×2 around centre");
+		assert!(in_spawn_clearing(mid + 2, mid, steps));
+		assert!(!in_spawn_clearing(mid + 1, mid.saturating_sub(3), steps));
+		assert_eq!(
+			tile_kind_at(mid - 1, mid - 1, steps, SkillKind::Fireball, -0.5, &pins),
+			TileKind::Land,
+			"water under the cursor spawn must not Debraid on the first hold"
+		);
+		assert_eq!(
+			tile_kind_at(mid + 2, mid, steps, SkillKind::Fireball, 0.0, &pins),
+			TileKind::Land,
+			"pins inside the pocket stay land so spawn is not a claim"
+		);
+		assert_eq!(
+			tile_kind_at(mid + 1, mid.saturating_sub(3), steps, SkillKind::Fireball, 0.0, &pins),
+			TileKind::Power(SkillKind::Fireball),
+			"the opening claim stays just outside the pocket"
+		);
+		assert_eq!(
+			tile_kind_at(0, 0, steps, SkillKind::Fireball, -0.5, &pins),
+			TileKind::Water
+		);
 	}
 
 	#[test]

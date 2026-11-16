@@ -42,10 +42,10 @@ pub const OVERLAY_CLEAR_ALPHA: f32 = 0.024;
 pub const OVERLAY_FRAME_FILL_ALPHA: f32 = 0.010;
 /// Keep in sync with `overlay_material.wesl`. Land uses paint, not sample×bias coverage.
 pub const OVERLAY_COMPOSITOR_CAME_ALPHA: f32 = 0.084;
-pub const OVERLAY_PAINT_FLOOR: f32 = 0.08;
-pub const OVERLAY_PAINT_GAIN: f32 = 0.42;
+pub const OVERLAY_PAINT_FLOOR: f32 = 0.16;
+pub const OVERLAY_PAINT_GAIN: f32 = 0.36;
 pub const OVERLAY_PAINT_CHROMA: f32 = 2.6;
-pub const OVERLAY_PAINT_LUMA: f32 = 0.18;
+pub const OVERLAY_PAINT_LUMA: f32 = 0.45;
 pub const OVERLAY_PAINT_RECOVER: f32 = 0.08;
 pub const OVERLAY_PAINT_SATURATION: f32 = 1.45;
 /// Typical mosaic pigment for CPU paint regression (amber-ruby land).
@@ -999,8 +999,9 @@ mod tests {
 		assert!((OVERLAY_CLEAR_ALPHA - 0.024).abs() < 1e-6);
 		assert!((OVERLAY_FRAME_FILL_ALPHA - 0.010).abs() < 1e-6);
 		assert!((OVERLAY_WARP - 0.28).abs() < 1e-6);
-		assert!((OVERLAY_PAINT_FLOOR - 0.08).abs() < 1e-6);
-		assert!((OVERLAY_PAINT_GAIN - 0.42).abs() < 1e-6);
+		assert!((OVERLAY_PAINT_FLOOR - 0.16).abs() < 1e-6);
+		assert!((OVERLAY_PAINT_GAIN - 0.36).abs() < 1e-6);
+		assert!((OVERLAY_PAINT_LUMA - 0.45).abs() < 1e-6);
 		assert!((OVERLAY_PAINT_SATURATION - 1.45).abs() < 1e-6);
 	}
 
@@ -1027,16 +1028,20 @@ mod tests {
 		let mosaic = SkillMapOverlay::Expanded.pane_alpha(1.0);
 		let flat = SkillMapOverlay::Expanded.pane_alpha_for_pigment(Vec3::splat(0.42), 1.0);
 		assert!(
-			flat <= 0.22,
-			"low-chroma land must stay a light wash so world geometry reads, got {flat}"
+			flat >= 0.20,
+			"earthy land must still stamp, not vanish, got {flat}"
+		);
+		assert!(
+			flat <= 0.32,
+			"low-chroma land must leave world geometry readable, got {flat}"
 		);
 		assert!(
 			mosaic > flat + 0.12,
 			"mosaic ink must paint harder than a flat wash ({mosaic} vs {flat})"
 		);
 		assert!(
-			mosaic <= 0.55,
-			"even saturated land must leave the world in the majority, got {mosaic}"
+			mosaic <= 0.62,
+			"even saturated land must leave the world visible, got {mosaic}"
 		);
 		assert!((SkillMapOverlay::Collapsed.pane_alpha(1.0) - 1.0).abs() < 1e-5);
 	}
@@ -1050,8 +1055,8 @@ mod tests {
 			expanded.mark_alpha(1.0)
 		);
 		assert!(
-			expanded.mark_alpha(1.0) > expanded.pane_alpha(1.0) + 0.5,
-			"marks must sit well above the land veil"
+			expanded.mark_alpha(1.0) > expanded.pane_alpha(1.0) + 0.3,
+			"marks must sit well above the land paint"
 		);
 		assert!(!SkillMapTileMaterial::overlay_veils_kind(crate::tile_material::TILE_KIND_FIRE));
 		assert!(!SkillMapTileMaterial::overlay_veils_kind(crate::tile_material::TILE_KIND_WAVE));

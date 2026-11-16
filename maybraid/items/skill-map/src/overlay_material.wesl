@@ -26,10 +26,10 @@ const OVERLAY_PANE_MIX: f32 = 0.50;
 const OVERLAY_CAME_MIX: f32 = 0.28;
 // Keep paint / came / mark constants in sync with overlay.rs OVERLAY_*.
 const OVERLAY_CAME_ALPHA: f32 = 0.084;
-const OVERLAY_PAINT_FLOOR: f32 = 0.08;
-const OVERLAY_PAINT_GAIN: f32 = 0.42;
+const OVERLAY_PAINT_FLOOR: f32 = 0.16;
+const OVERLAY_PAINT_GAIN: f32 = 0.36;
 const OVERLAY_PAINT_CHROMA: f32 = 2.6;
-const OVERLAY_PAINT_LUMA: f32 = 0.18;
+const OVERLAY_PAINT_LUMA: f32 = 0.45;
 const OVERLAY_PAINT_RECOVER: f32 = 0.08;
 const OVERLAY_PAINT_SATURATION: f32 = 1.45;
 const OVERLAY_MARK_ALPHA_LO: f32 = 0.60;

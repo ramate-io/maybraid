@@ -27,9 +27,11 @@ pause leads into the same sequence automatically.
 
 Holding RB expands the map from the bottom-right corner into a full-screen
 stained-glass overlay: land/mosaic tiles paint onto the world by mosaic ink
-(chroma stamps, low-chroma wash stays light so geometry reads); power tiles,
+(chroma plus luma occupancy so earthy land still stamps); power tiles,
 water (debraid), the cursor, and feed arrows keep full alpha through the
-compositor. Lowering `style.w` makes land tiles more opaque, not less. Map
+compositor. Spatial maps keep a 5×5 land pocket around spawn so the origin
+2×2 is never water. Hitting water fades a black Debraid plate in over the
+steer lock instead of holding a red flash. Lowering `style.w` makes land tiles more opaque, not less. Map
 Overlay and Map Focus are in-game Settings toggles (on by default). Overlay
 off keeps the map in the corner. Focus off skips tunnel vision and HUD hide.
 While focus is on and the overlay is up, the rest of the HUD hides and a

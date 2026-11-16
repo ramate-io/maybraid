@@ -40,8 +40,8 @@ const FIREARM_CARD_FILL: Color = Color::srgba(0.52, 0.52, 0.56, 0.82);
 const FIREARM_CARD_STROKE: Color = Color::srgba(0.78, 0.78, 0.82, 0.9);
 const GRENADE_SILHOUETTE_PX: f32 = 40.0;
 const GRENADE_SILHOUETTE_STROKE: f32 = 2.0;
-/// HUD flash when water locks steer. Stays on the frame, not the map RT.
-pub const DEBRAID_OVERLAY_ALPHA: f32 = 0.90;
+/// Peak black of the Debraid fade. Stays on the frame, not the map RT.
+pub const DEBRAID_OVERLAY_ALPHA: f32 = 1.0;
 
 fn weapon_icon_slot() -> Node {
 	Node {
@@ -127,14 +127,24 @@ pub(crate) struct SkillMapGrenadeChargeGlyph;
 #[derive(Component)]
 pub(crate) struct SkillMapWeaponAction;
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Debug)]
 pub struct Debraid {
 	pub remaining: f32,
+	pub duration: f32,
 }
 
 impl Debraid {
-	pub fn overlay_fill() -> Color {
-		Color::srgba(0.85, 0.08, 0.06, DEBRAID_OVERLAY_ALPHA)
+	pub fn new(secs: f32) -> Self {
+		let duration = secs.max(1e-4);
+		Self { remaining: duration, duration }
+	}
+
+	pub fn overlay_fill(alpha: f32) -> Color {
+		Color::srgba(0.0, 0.0, 0.0, alpha.clamp(0.0, 1.0))
+	}
+
+	pub fn fade_alpha(&self) -> f32 {
+		(self.remaining / self.duration).clamp(0.0, 1.0)
 	}
 }
 
@@ -1002,7 +1012,7 @@ pub fn spawn_debraid(
 		parent
 			.spawn((
 				DebraidOverlay,
-				Debraid { remaining: secs },
+				Debraid::new(secs),
 				id,
 				Node {
 					position_type: PositionType::Absolute,
@@ -1016,7 +1026,7 @@ pub fn spawn_debraid(
 					overflow: Overflow::clip(),
 					..default()
 				},
-				BackgroundColor(Debraid::overlay_fill()),
+				BackgroundColor(Debraid::overlay_fill(DEBRAID_OVERLAY_ALPHA)),
 				Pickable::IGNORE,
 			))
 			.with_children(|overlay| {
@@ -1038,13 +1048,22 @@ pub fn spawn_debraid(
 pub fn tick_debraid(
 	time: Res<Time>,
 	mut commands: Commands,
-	mut overlays: Query<(Entity, &mut Debraid), With<DebraidOverlay>>,
+	mut overlays: Query<(Entity, &mut Debraid, &mut BackgroundColor, &Children), With<DebraidOverlay>>,
+	mut labels: Query<&mut TextColor>,
 ) {
 	let dt = time.delta_secs();
-	for (entity, mut debraid) in &mut overlays {
+	for (entity, mut debraid, mut fill, children) in &mut overlays {
 		debraid.remaining -= dt;
 		if debraid.remaining <= 0.0 {
 			commands.entity(entity).despawn();
+			continue;
+		}
+		let alpha = debraid.fade_alpha();
+		*fill = BackgroundColor(Debraid::overlay_fill(alpha));
+		for child in children {
+			if let Ok(mut color) = labels.get_mut(*child) {
+				color.0 = Color::srgba(1.0, 1.0, 1.0, alpha);
+			}
 		}
 	}
 }
@@ -1055,9 +1074,17 @@ mod tests {
 	use crate::SkillMapEnabled;
 
 	#[test]
-	fn debraid_flash_stays_strong() {
-		assert!(DEBRAID_OVERLAY_ALPHA >= 0.85);
-		assert!((Debraid::overlay_fill().to_srgba().alpha - DEBRAID_OVERLAY_ALPHA).abs() < 1e-5);
+	fn debraid_fades_in_from_black() {
+		assert!((DEBRAID_OVERLAY_ALPHA - 1.0).abs() < 1e-5);
+		let fill = Debraid::overlay_fill(DEBRAID_OVERLAY_ALPHA).to_srgba();
+		assert!(fill.red < 0.02 && fill.green < 0.02 && fill.blue < 0.02);
+		assert!((fill.alpha - 1.0).abs() < 1e-5);
+		let mut fade = Debraid::new(2.0);
+		assert!((fade.fade_alpha() - 1.0).abs() < 1e-5);
+		fade.remaining = 1.0;
+		assert!((fade.fade_alpha() - 0.5).abs() < 1e-5);
+		fade.remaining = 0.0;
+		assert_eq!(fade.fade_alpha(), 0.0);
 	}
 
 	#[test]
