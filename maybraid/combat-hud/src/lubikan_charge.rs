@@ -11,6 +11,7 @@ use player::Player;
 
 use crate::continuous_health::{spawn_ui_meter_row, ContinuousHealthConfig};
 use crate::cycle_cue::{idle_cycle_outline, CombatHudCyclePanel, CombatHudInventoryCycleCategory};
+use crate::cycle_slots::spawn_cycle_slot_row;
 use crate::plate::{spawn_hud_plate, HudPlateCorner, HudPlateLayout};
 use crate::vitals::VITALS_WIDTH;
 use crate::CombatHudVisible;
@@ -179,6 +180,7 @@ pub(crate) fn spawn_lubikan_charge(
 				},
 				Pickable::IGNORE,
 			));
+			spawn_cycle_slot_row(plate, fonts);
 			spawn_self_icon(plate);
 			spawn_ui_meter_row(plate, config, LubikanChargeFill, LubikanChargeAmount);
 			plate.spawn((
