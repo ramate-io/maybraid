@@ -13,7 +13,7 @@ use maybraid_session::{SessionCapabilities, WorldGameplayEnabled, WorldPlaySessi
 use maybraid_skill_map::{SkillMapEnabled, SkillMapTunnelVision};
 use maybraid_sky::{SkyDome, SKY_HORIZON};
 use maybraid_virtual_pad_controller::PrimaryVirtualPad;
-use menu_components::GameplayHud;
+use menu_components::{GameplayHud, GameplayHudVisible};
 use player::{
 	apply_character_controller, Buoyant, CharacterController, CharacterStance, JumpWish, Jumping,
 	LocomotionCapsule, MotorIntent, MotorTraction, MoveWish as PlayerMoveWish,
@@ -135,12 +135,18 @@ pub(crate) fn sync_combat_hud_visible(
 	map: Option<Res<WorldMapView>>,
 	tunnel: Option<Res<SkillMapTunnelVision>>,
 	hud: Option<ResMut<combat_hud::CombatHudVisible>>,
+	play: Option<ResMut<GameplayHudVisible>>,
 ) {
+	let play_next = gameplay.combat_hud_visible(map.is_some_and(|map| map.open));
+	if let Some(mut play) = play {
+		if play.0 != play_next {
+			play.0 = play_next;
+		}
+	}
 	let Some(mut hud) = hud else {
 		return;
 	};
-	let next = gameplay.combat_hud_visible(map.is_some_and(|map| map.open))
-		&& !tunnel.is_some_and(|tunnel| tunnel.hides_hud());
+	let next = play_next && !tunnel.is_some_and(|tunnel| tunnel.hides_hud());
 	if hud.0 != next {
 		hud.0 = next;
 	}
@@ -402,20 +408,41 @@ mod tests {
 		world.insert_resource(WorldGameplayEnabled(true));
 		world.insert_resource(SkillMapTunnelVision::default());
 		world.insert_resource(combat_hud::CombatHudVisible(true));
+		world.insert_resource(GameplayHudVisible(true));
 		world
 			.run_system_once(sync_combat_hud_visible)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(world.resource::<combat_hud::CombatHudVisible>().0);
+		assert!(world.resource::<GameplayHudVisible>().0);
 		world.resource_mut::<SkillMapTunnelVision>().set_target(true);
 		world
 			.run_system_once(sync_combat_hud_visible)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(!world.resource::<combat_hud::CombatHudVisible>().0);
+		assert!(
+			world.resource::<GameplayHudVisible>().0,
+			"the play HUD layer stays up so the skill-map overlay can remain"
+		);
 		world.resource_mut::<SkillMapTunnelVision>().set_target(false);
 		world
 			.run_system_once(sync_combat_hud_visible)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(world.resource::<combat_hud::CombatHudVisible>().0);
+		assert!(world.resource::<GameplayHudVisible>().0);
+		Ok(())
+	}
+
+	#[test]
+	fn menus_hide_the_shared_play_hud_layer() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(WorldGameplayEnabled(false));
+		world.insert_resource(combat_hud::CombatHudVisible(true));
+		world.insert_resource(GameplayHudVisible(true));
+		world
+			.run_system_once(sync_combat_hud_visible)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.resource::<GameplayHudVisible>().0);
+		assert!(!world.resource::<combat_hud::CombatHudVisible>().0);
 		Ok(())
 	}
 

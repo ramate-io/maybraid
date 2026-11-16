@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use bevy::ui::{ComputedNode, UiGlobalTransform};
 use lubikans::{LubikanAccountId, LubikanChargeChanged, LubikanChargeReason, LubikanOwner};
+use menu_components::gameplay_hud_visibility;
 use player::Player;
 
 use crate::lubikan_charge::{LubikanChargeFlyTarget, LubikanPointFeedDock};
@@ -227,7 +228,7 @@ pub(crate) fn update_lubikan_point_flyers(
 		node.left = Val::Px(pos.x);
 		node.top = Val::Px(pos.y);
 		color.0 = color.0.with_alpha(1.0);
-		*visibility = Visibility::Visible;
+		*visibility = gameplay_hud_visibility(true);
 	}
 }
 

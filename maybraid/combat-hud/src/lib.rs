@@ -20,7 +20,7 @@ use lubikan_charge::{
 };
 use lubikan_points::{ingest_lubikan_point_flyers, update_lubikan_point_flyers};
 use lubikans::LubikanSystems;
-use menu_components::GameplayHud;
+use menu_components::{gameplay_hud_visibility, GameplayHud};
 use player::Player;
 use score::{ingest_combat_score, spawn_combat_score, sync_combat_score};
 use vitals::{spawn_player_vitals, sync_player_vitals, vitals_fonts};
@@ -237,7 +237,7 @@ fn sync_combat_hud_root_visibility(
 	hud: Res<CombatHudVisible>,
 	mut roots: Query<&mut Visibility, With<CombatHudRoot>>,
 ) {
-	let next = if hud.0 { Visibility::Inherited } else { Visibility::Hidden };
+	let next = gameplay_hud_visibility(hud.0);
 	for mut visibility in &mut roots {
 		if *visibility != next {
 			*visibility = next;
@@ -383,7 +383,7 @@ fn update_directional_damage(
 		transform.rotation = Rot2::radians(yaw);
 		fill.0 = Color::srgba(1.0, 0.22, 0.16, alpha);
 		*border = BorderColor::all(Color::srgba(1.0, 0.9, 0.75, alpha * 0.9));
-		*visibility = Visibility::Visible;
+		*visibility = gameplay_hud_visibility(true);
 	}
 }
 
@@ -472,7 +472,7 @@ fn update_hit_markers(
 		node.left = Val::Px(screen.x - 16.0);
 		node.top = Val::Px(screen.y - 18.0 - rise);
 		color.0 = hit_marker_style(marker.points).0.with_alpha(marker_alpha(age));
-		*visibility = Visibility::Visible;
+		*visibility = gameplay_hud_visibility(true);
 	}
 }
 
@@ -655,7 +655,7 @@ mod tests {
 			.spawn((Player, Health { current: 40.0, max: 100.0 }, Name::new("Ada")));
 		app.world_mut().insert_resource(CombatHudVisible(true));
 		app.update();
-		assert_eq!(vitals_visibility(app.world_mut())?, Visibility::Visible);
+		assert_eq!(vitals_visibility(app.world_mut())?, gameplay_hud_visibility(true));
 		Ok(())
 	}
 
@@ -733,7 +733,7 @@ mod tests {
 			.spawn((Player, Health { current: 100.0, max: 100.0 }, Name::new("Ada")))
 			.id();
 		app.update();
-		assert_eq!(vitals_visibility(app.world_mut())?, Visibility::Visible);
+		assert_eq!(vitals_visibility(app.world_mut())?, gameplay_hud_visibility(true));
 		let rebound = {
 			let world = app.world_mut();
 			assert_eq!(world.query::<&ContinuousHealthBar>().iter(world).count(), 1);
@@ -807,7 +807,7 @@ mod tests {
 			.next()
 			.copied()
 			.ok_or_else(|| anyhow::anyhow!("score root"))?;
-		assert_eq!(shown, Visibility::Visible);
+		assert_eq!(shown, gameplay_hud_visibility(true));
 		assert!(world.query::<&Text>().iter(world).any(|text| text.0 == "Downs  1"));
 		Ok(())
 	}

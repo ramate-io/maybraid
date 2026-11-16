@@ -12,7 +12,7 @@ use menu_components::GameplayHud;
 
 use crate::overlay::SkillMapOverlay;
 use crate::user::SkillMapUser;
-use crate::viewport::SkillMapCollapsedChrome;
+use crate::viewport::{SkillMapCollapsedChrome, SkillMapHud};
 
 /// When false, an expanded overlay does not apply tunnel vision or hide the HUD.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -163,11 +163,15 @@ pub(crate) struct GameplayHudRest(Visibility);
 
 /// Hide stamped gameplay HUD after each HUD's own Update sync has run.
 /// Restores the pre-hide visibility on release so cook / Tanz / combat sync
-/// is not overwritten while the overlay is down.
+/// is not overwritten while the overlay is down. The map HUD itself is tagged
+/// [`GameplayHud`] for menu hiding, but stays up during tunnel vision.
 pub(crate) fn hide_gameplay_hud(
 	mut commands: Commands,
 	vision: Res<SkillMapTunnelVision>,
-	mut huds: Query<(Entity, &mut Visibility, Option<&GameplayHudRest>), With<GameplayHud>>,
+	mut huds: Query<
+		(Entity, &mut Visibility, Option<&GameplayHudRest>),
+		(With<GameplayHud>, Without<SkillMapHud>),
+	>,
 ) {
 	let hide = vision.hides_hud();
 	for (entity, mut visibility, rest) in &mut huds {

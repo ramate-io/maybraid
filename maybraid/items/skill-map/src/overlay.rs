@@ -7,6 +7,8 @@ use bevy::render::render_resource::{AsBindGroup, ShaderType};
 use bevy::shader::ShaderRef;
 use bevy::ui_render::prelude::{UiMaterial, UiMaterialPlugin};
 
+use menu_components::{HUD_GLASS_BORDER, HUD_GLASS_RADIUS, HUD_GLASS_STROKE};
+
 use crate::map::SkillKind;
 use crate::tile_material::SkillMapTileMaterial;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapUser};
@@ -24,8 +26,6 @@ const FRAME_RADIUS: f32 = 14.0;
 const FRAME_INNER_RADIUS: f32 = FRAME_RADIUS - FRAME_BORDER;
 const FIREARM_CARD_PAD_X: f32 = 8.0;
 const FIREARM_CARD_PAD_Y: f32 = 6.0;
-const FIREARM_CARD_BORDER: f32 = 1.5;
-const FIREARM_CARD_RADIUS: f32 = 8.0;
 
 /// How strongly overlay mode warps the map (and the world seen through it).
 /// Was `0.85`; left at `0.28` so refraction stays a hint, not opacity.
@@ -181,8 +181,8 @@ impl SkillMapOverlay {
 			align_items: AlignItems::Center,
 			row_gap: Val::Px(6.0),
 			padding: UiRect::axes(Val::Px(FIREARM_CARD_PAD_X), Val::Px(FIREARM_CARD_PAD_Y)),
-			border: UiRect::all(Val::Px(FIREARM_CARD_BORDER)),
-			border_radius: BorderRadius::all(Val::Px(FIREARM_CARD_RADIUS)),
+			border: UiRect::all(Val::Px(HUD_GLASS_BORDER)),
+			border_radius: BorderRadius::all(Val::Px(HUD_GLASS_RADIUS)),
 			..default()
 		};
 		match self {
@@ -209,7 +209,7 @@ impl SkillMapOverlay {
 		if self.expanded() {
 			Color::NONE
 		} else {
-			Color::srgba(1.0, 0.86, 0.22, 0.42)
+			HUD_GLASS_STROKE
 		}
 	}
 
@@ -246,7 +246,13 @@ impl SkillMapOverlay {
 		self.pane_alpha_with(pigment, tile_base_alpha, 0.0, 0.5)
 	}
 
-	pub fn pane_alpha_with(self, pigment: Vec3, tile_base_alpha: f32, came: f32, noise: f32) -> f32 {
+	pub fn pane_alpha_with(
+		self,
+		pigment: Vec3,
+		tile_base_alpha: f32,
+		came: f32,
+		noise: f32,
+	) -> f32 {
 		let sample = SkillMapTileMaterial::overlay_alpha(tile_base_alpha, self.tile_amount());
 		OverlayParams::from_overlay(self).paint_alpha(pigment * sample, sample, came, noise)
 	}
@@ -556,6 +562,8 @@ mod tests {
 		assert_eq!(SkillMapOverlay::Expanded.map_frame_node().width, Val::Percent(100.0));
 		assert_eq!(SkillMapOverlay::Collapsed.pane_node().display, Display::None);
 		assert_eq!(SkillMapOverlay::Expanded.pane_node().display, Display::Flex);
+		assert_eq!(SkillMapOverlay::Collapsed.frame_border(), HUD_GLASS_STROKE);
+		assert_eq!(SkillMapOverlay::Expanded.frame_border(), Color::NONE);
 	}
 
 	#[test]
@@ -644,7 +652,13 @@ mod tests {
 		let member = SkillMapMember { user, session };
 		let hud = app
 			.world_mut()
-			.spawn((SkillMapHud, member, SkillMapOverlay::Collapsed.hud_node()))
+			.spawn((
+				SkillMapHud,
+				GameplayHud,
+				member,
+				SkillMapOverlay::Collapsed.hud_node(),
+				Visibility::Inherited,
+			))
 			.id();
 		app.world_mut().spawn((
 			SkillMapViewport,
@@ -751,6 +765,7 @@ mod tests {
 
 	struct TunnelProbe {
 		user: Entity,
+		overlay: Entity,
 		gameplay: Entity,
 		firearm: Entity,
 		chrome: Entity,
@@ -758,7 +773,7 @@ mod tests {
 	}
 
 	fn spawn_tunnel_user(app: &mut App, ordinary: bool) -> TunnelProbe {
-		let (user, _) = spawn_overlay_user(app, ordinary);
+		let (user, overlay) = spawn_overlay_user(app, ordinary);
 		let session = app.world().get::<SkillMapUser>(user).expect("user").maps;
 		let member = SkillMapMember { user, session };
 		let gameplay = app.world_mut().spawn((GameplayHud, Visibility::Inherited)).id();
@@ -771,7 +786,7 @@ mod tests {
 			.spawn((SkillMapCollapsedChrome, member, Visibility::Inherited))
 			.id();
 		let camera = app.world_mut().spawn(Camera3d::default()).id();
-		TunnelProbe { user, gameplay, firearm, chrome, camera }
+		TunnelProbe { user, overlay, gameplay, firearm, chrome, camera }
 	}
 
 	fn visibility_of(app: &App, entity: Entity) -> Visibility {
@@ -790,6 +805,7 @@ mod tests {
 		assert_eq!(overlay_of(app, probe.user), SkillMapOverlay::Collapsed);
 		assert!(!tunnel_of(app).hides_hud());
 		assert!(!tunnel_of(app).blur_enabled());
+		assert_eq!(visibility_of(app, probe.overlay), Visibility::Inherited);
 		assert_eq!(visibility_of(app, probe.gameplay), Visibility::Inherited);
 		assert_eq!(visibility_of(app, probe.firearm), Visibility::Inherited);
 		assert_eq!(visibility_of(app, probe.chrome), Visibility::Inherited);
@@ -800,6 +816,11 @@ mod tests {
 		assert_eq!(overlay_of(app, probe.user), SkillMapOverlay::Expanded);
 		assert!(tunnel_of(app).hides_hud());
 		assert!(tunnel_of(app).blur_enabled());
+		assert_eq!(
+			visibility_of(app, probe.overlay),
+			Visibility::Inherited,
+			"the skill-map overlay stays up while the rest of the play HUD hides"
+		);
 		assert_eq!(visibility_of(app, probe.gameplay), Visibility::Hidden);
 		assert_eq!(visibility_of(app, probe.firearm), Visibility::Hidden);
 		assert_eq!(visibility_of(app, probe.chrome), Visibility::Hidden);
@@ -1027,22 +1048,13 @@ mod tests {
 	fn expanded_overlay_paints_mosaic_without_a_coverage_sheet() {
 		let mosaic = SkillMapOverlay::Expanded.pane_alpha(1.0);
 		let flat = SkillMapOverlay::Expanded.pane_alpha_for_pigment(Vec3::splat(0.42), 1.0);
-		assert!(
-			flat >= 0.20,
-			"earthy land must still stamp, not vanish, got {flat}"
-		);
-		assert!(
-			flat <= 0.32,
-			"low-chroma land must leave world geometry readable, got {flat}"
-		);
+		assert!(flat >= 0.20, "earthy land must still stamp, not vanish, got {flat}");
+		assert!(flat <= 0.32, "low-chroma land must leave world geometry readable, got {flat}");
 		assert!(
 			mosaic > flat + 0.12,
 			"mosaic ink must paint harder than a flat wash ({mosaic} vs {flat})"
 		);
-		assert!(
-			mosaic <= 0.62,
-			"even saturated land must leave the world visible, got {mosaic}"
-		);
+		assert!(mosaic <= 0.62, "even saturated land must leave the world visible, got {mosaic}");
 		assert!((SkillMapOverlay::Collapsed.pane_alpha(1.0) - 1.0).abs() < 1e-5);
 	}
 
