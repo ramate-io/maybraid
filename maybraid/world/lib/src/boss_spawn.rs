@@ -4,7 +4,8 @@
 
 use bevy::prelude::*;
 use bikanwarda_encounter::BikanwardaBossEncounter;
-use lod::hcsg::{HcsgStorage, request_hcsg_session_restart, HcsgSessionPlugin};
+use lod::hcsg::{HcsgStorage, HcsgRestartRequest};
+use player::Player;
 
 /// Request to spawn a boss encounter at a specific location.
 #[derive(Component, Clone, Debug)]
@@ -18,14 +19,15 @@ pub fn process_boss_spawn_requests(
 	mut commands: Commands,
 	requests: Query<(Entity, &RequestSpawnBoss)>,
 	storage: Res<HcsgStorage>,
-	player: Query<&Transform, With<crate::PlayerMarker>>,
+	player: Query<&Transform, With<Player>>,
+	mut restart: ResMut<HcsgRestartRequest>,
 ) {
 	for (entity, request) in &requests {
 		commands.entity(entity).despawn();
 		
 		let position = if let Some(xz) = request.at {
 			Vec3::new(xz.x, 0.0, xz.y)
-		} else if let Ok(transform) = player.get_single() {
+		} else if let Ok(transform) = player.single() {
 			transform.translation
 		} else {
 			Vec3::ZERO
@@ -40,7 +42,7 @@ pub fn process_boss_spawn_requests(
 		));
 		
 		// Restart HCSG session to regenerate with new seed
-		request_hcsg_session_restart(&mut commands);
+		restart.request();
 	}
 }
 
