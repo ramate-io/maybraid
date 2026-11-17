@@ -100,10 +100,10 @@ fn boss_stays_pending_without_terrain() {
 	app.update();
 	
 	// Request should be consumed, but boss should stay in PendingBossSpawn
-	let requests = app.world().query::<&RequestSpawnBoss>().iter(app.world()).count();
+	let requests = app.world_mut().query::<&RequestSpawnBoss>().iter(app.world()).count();
 	assert_eq!(requests, 0, "Request should be consumed");
 	
-	let pending = app.world().query::<&PendingBossSpawn>().iter(app.world()).count();
+	let pending = app.world_mut().query::<&PendingBossSpawn>().iter(app.world()).count();
 	assert_eq!(pending, 1, "Boss should be in PendingBossSpawn without terrain");
 	
 	// Config should not be active yet
@@ -121,7 +121,7 @@ fn boss_stays_pending_without_terrain() {
 		app.update();
 	}
 	
-	let pending_after = app.world().query::<&PendingBossSpawn>().iter(app.world()).count();
+	let pending_after = app.world_mut().query::<&PendingBossSpawn>().iter(app.world()).count();
 	assert_eq!(pending_after, 1, "Boss should still be pending after multiple updates");
 }
 

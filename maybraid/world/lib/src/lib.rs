@@ -18,7 +18,7 @@ pub mod capture;
 pub mod script_queue;
 #[cfg(feature = "debug-commands")]
 pub mod viewport_check;
-mod terrain_query;
+pub mod terrain_query;
 mod agent_inventory;
 mod camera;
 pub mod commands;

@@ -22,7 +22,6 @@ impl PublishedTerrainHeight {
 	}
 	
 	/// Create a test provider that returns a fixed height for all positions.
-	#[cfg(any(test, feature = "test-support"))]
 	pub fn test_fixed(height: f32) -> Self {
 		Self(Box::new(move |_| Some(height)))
 	}
