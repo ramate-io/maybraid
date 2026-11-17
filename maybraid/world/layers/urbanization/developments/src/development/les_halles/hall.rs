@@ -9,11 +9,9 @@ use bevy_math::{Vec2, Vec3};
 use bevy_shape::{Aabb2d, Aabb3d};
 use building_components::panels::PanelStyle;
 use buildings::{
-	Confines, ConnectingStairwell, FillableRegions, Fit, FitError, LesHallesArcadeUsage,
-	LesHallesCommercialUsage, LesHallesFloorPlan, LesHallesLivableUsage, LesHallesOpeningProgram,
-	LesHallesParameterized, LesHallesUsagePlan, MixedUseLesHallesMonotower,
-	MixedUseLesHallesStorey, Openings, Overhang, PitchedRoof, PitchedRoofParams, RectRingFloorSlab,
-	RoofHalf, StairwellKind, WellAabb, WellSide,
+	Confines, ConnectingStairwell, FillableRegions, Fit, FitError, LesHallesParameterized,
+	MixedUseLesHallesMonotower, MixedUseLesHallesStorey, Overhang, PitchedRoof, PitchedRoofParams,
+	RectRingFloorSlab, RoofHalf, StairwellKind, WellAabb, WellSide,
 };
 use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
@@ -32,8 +30,7 @@ const MAX_ROOF_DRIP_M: f32 = 2.4;
 /// Short-span ratio band used when the sampled drip is expressed as [`Overhang::Ratio`].
 const MIN_ROOF_DRIP_RATIO: f32 = 0.015;
 const MAX_ROOF_DRIP_RATIO: f32 = 0.07;
-/// Same salt as [`MixedUseLesHallesMonotower`] floor noise.
-const SALT_FLOOR: f32 = 11.0;
+/// Noise channel for the roof drip.
 const SALT_ROOF_DRIP: f32 = 19.0;
 
 /// Sibling LOD host emitted by [`MixedUseLesHallesDevelopment`].
@@ -100,29 +97,66 @@ impl Fit for MixedUseLesHallesDevelopment {
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
-		let (tower, _) = MixedUseLesHallesMonotower::fit_to_confines(confines, noise)?;
-		Self::assemble(tower, noise)
+		Self::fit_finalized(
+			confines,
+			noise,
+			LesHallesParameterized::sample_monotower,
+			RectRingFloorSlab::Solid,
+		)
 	}
 }
 
 impl MixedUseLesHallesDevelopment {
 	/// Fit with a deep gallery so the ring can carry corner keeps.
+	/// The top gallery stays open; the caller supplies its terrace deck.
 	pub fn fit_curtain(
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
-		let (tower, _) = MixedUseLesHallesMonotower::fit_curtain(confines, noise)?;
+		Self::fit_finalized(
+			confines,
+			noise,
+			LesHallesParameterized::sample_curtain,
+			RectRingFloorSlab::None,
+		)
+	}
+
+	// Density and the top slab belong to the shell plan. Finalize them before
+	// usage paint so rooms keep the original shaft requests and fitted bounds.
+	// This intentionally permits different layouts/fit outcomes from the old
+	// paint-then-reconstruct path; no second usage fit is performed.
+	fn fit_finalized(
+		confines: &Confines,
+		noise: NoiseParams,
+		sample_shell: fn(&Confines, NoiseParams) -> Result<LesHallesParameterized, FitError>,
+		top_ceiling: RectRingFloorSlab,
+	) -> Result<(Self, FillableRegions), FitError> {
+		#[cfg(test)]
+		if single_paint_tests::legacy_enabled() {
+			return single_paint_tests::legacy_fit(confines, noise, sample_shell);
+		}
+		let (tower, _) = MixedUseLesHallesMonotower::fit_sampled_with_ceiling(
+			confines,
+			noise,
+			|shell, noise| {
+				let mut params = sample_shell(shell, noise)?;
+				if params.opening_density < WINDOW_DENSITY_GATE {
+					params.opening_density = MIN_WINDOW_DENSITY;
+				}
+				Ok(params)
+			},
+			top_ceiling,
+		)?;
 		Self::assemble(tower, noise)
 	}
 
 	fn assemble(
-		mut tower: MixedUseLesHallesMonotower,
+		tower: MixedUseLesHallesMonotower,
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
 		if tower.floors.is_empty() {
 			return Err(FitError::TooSmall { reason: "storeys" });
 		}
-		finish_tower(&mut tower, noise)?;
 		let stairwells = stairwells_for(&tower);
 		let roof = roof_for(&tower, noise);
 		Ok((
@@ -145,77 +179,6 @@ pub fn courtyard_well_side(center_xz: Vec3, shaft: Aabb3d) -> WellSide {
 	} else {
 		z_side
 	}
-}
-
-fn finish_tower(
-	tower: &mut MixedUseLesHallesMonotower,
-	noise: NoiseParams,
-) -> Result<(), FitError> {
-	let rebuild_all = tower.parameterized.opening_density < WINDOW_DENSITY_GATE;
-	if rebuild_all {
-		tower.parameterized.opening_density = MIN_WINDOW_DENSITY;
-	}
-	let last_i = tower.floors.len().saturating_sub(1);
-	let start = if rebuild_all { 0 } else { last_i };
-	let slots = tower.shaft_slots.clone();
-	let params = tower.parameterized.clone();
-	for i in start..tower.floors.len() {
-		let arcade = tower.floors[i].is_arcade();
-		let commercial = tower.floors[i].is_commercial();
-		let confines = storey_confines(tower.floors[i].floor_plan(), &params, &slots);
-		let ceiling = if i == last_i { RectRingFloorSlab::Solid } else { RectRingFloorSlab::None };
-		let program = if arcade {
-			LesHallesOpeningProgram::GroundArcade
-		} else {
-			LesHallesOpeningProgram::CommercialGallery
-		};
-		let (floor_plan, regions) = LesHallesFloorPlan::from_parameterized_with(
-			params.clone(),
-			&confines,
-			ceiling,
-			program,
-		)?;
-		let floor_noise = floor_noise(noise, i);
-		tower.floors[i] = if arcade {
-			let keep_outs = LesHallesArcadeUsage::pillar_keep_outs_of(&floor_plan);
-			let (usage, _) =
-				LesHallesArcadeUsage::paint_avoiding(regions, floor_noise, &keep_outs)?;
-			MixedUseLesHallesStorey::Arcade { floor_plan, usage, wall_material: None }
-		} else if commercial {
-			let (usage, _) = LesHallesCommercialUsage::paint(regions, floor_noise)?;
-			MixedUseLesHallesStorey::Commercial { floor_plan, usage, wall_material: None }
-		} else {
-			let (usage, _) = LesHallesLivableUsage::paint(regions, floor_noise)?;
-			MixedUseLesHallesStorey::Livable { floor_plan, usage, wall_material: None }
-		};
-	}
-	Ok(())
-}
-
-fn storey_confines(
-	plan: &LesHallesFloorPlan,
-	params: &LesHallesParameterized,
-	slots: &[usize],
-) -> Confines {
-	let y0 = plan.center_xz.y;
-	let h = plan.storey_height;
-	let hx = plan.outer.x * 0.5;
-	let hz = plan.outer.y * 0.5;
-	let c = plan.center_xz;
-	let bounds = Aabb3d::from_min_max(
-		Vec3::new(c.x - hx, y0, c.z - hz),
-		Vec3::new(c.x + hx, y0 + h, c.z + hz),
-	);
-	let empty = Confines::new(bounds, plan.roll, Openings::new());
-	let openings = LesHallesFloorPlan::shaft_requests_for_slots(params, &empty, slots);
-	Confines::new(bounds, plan.roll, openings)
-}
-
-fn floor_noise(noise: NoiseParams, floor_i: usize) -> NoiseParams {
-	let mut n = noise;
-	n.seed = noise.seed.wrapping_add(floor_i as i32 * 97);
-	let _ = NoiseConfig::new(n).sample_unit_4d(0.0, floor_i as f32, 0.0, SALT_FLOOR);
-	n
 }
 
 fn stairwells_for(tower: &MixedUseLesHallesMonotower) -> Vec<ConnectingStairwell> {
@@ -502,3 +465,6 @@ mod tests {
 		));
 	}
 }
+
+#[cfg(test)]
+pub(crate) mod single_paint_tests;

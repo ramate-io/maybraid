@@ -294,7 +294,7 @@ impl Fit for RingFortBuilding {
 			return Err(FitError::TooSmall { reason: "ring_fort_ring" });
 		}
 
-		let (mut ring, _) = CurtainRing::fit(confines, noise)?;
+		let (ring, _) = CurtainRing::fit(confines, noise)?;
 		let last = ring
 			.last_plan()
 			.ok_or(FitError::TooSmall { reason: "ring_fort_storeys" })?
@@ -313,7 +313,10 @@ impl Fit for RingFortBuilding {
 		}
 		let (colonnade, roof) = gallery_colonnade_and_roof(&last, &keeps);
 		let shafts = terrace_shafts(&last);
-		open_last_storey_for_terrace(&mut ring);
+		#[cfg(test)]
+		let mut ring = ring;
+		#[cfg(test)]
+		crate::development::les_halles::legacy_open_top(&mut ring);
 		let terrace = gallery_terrace(&last, &shafts).with_chests(terrace_chests(
 			&last,
 			&keeps,
@@ -528,22 +531,6 @@ fn run_between(
 	let start = tower_start.max(inner_start);
 	let end = tower_end.min(inner_end);
 	(end - start > MIN_COLONNADE_RUN).then_some((start, end))
-}
-
-/// Drop the last gallery ceiling so [`GalleryTerrace`] is the ring’s only eave slab.
-///
-/// Les Halles only ceilings the gallery band, not the balcony. Rebuilding that
-/// shell with extra mid-side shafts fights the façade openings, so the terrace
-/// owns the stair holes and the last storey just stops enclosing the deck.
-fn open_last_storey_for_terrace(ring: &mut CurtainRing) {
-	let Some(last) = ring.halles.tower.floors.last_mut() else {
-		return;
-	};
-	let plan = last.floor_plan_mut();
-	let mut params = plan.gallery.params().clone();
-	params.ceiling = RectRingFloorSlab::None;
-	plan.gallery = params.build();
-	plan.ceiling = RectRingFloorSlab::None;
 }
 
 /// Last-storey shafts, lifted onto the terrace so the climb continues the wells below.
