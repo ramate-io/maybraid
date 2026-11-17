@@ -1,5 +1,0 @@
-error: unexpected argument 'boss_does_not_attack_occluded_player' found
-
-Usage: cargo test [OPTIONS] [TESTNAME] [-- [ARGS]...]
-
-For more information, try '--help'.
