@@ -18,6 +18,7 @@ use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 use crate::openings::{OpeningLabel, Openings};
+use crate::shells::rect_ring_floor::RectRingFloorSlab;
 use crate::storeys::les_halles::parameterized::{
 	footprint_extents, MAX_MONOTOWER_STOREY_HEIGHT, MIN_MONOTOWER_STOREY_HEIGHT,
 };
@@ -175,6 +176,17 @@ impl MixedUseLesHallesMonotower {
 		noise: NoiseParams,
 		sample_shell: fn(&Confines, NoiseParams) -> Result<LesHallesParameterized, FitError>,
 	) -> Result<(Self, FillableRegions), FitError> {
+		Self::fit_sampled_with_ceiling(confines, noise, sample_shell, RectRingFloorSlab::None)
+	}
+
+	/// Finalize the shell and top slab before painting each storey's usage once.
+	/// The sampler runs once against the representative single-storey slice.
+	pub fn fit_sampled_with_ceiling(
+		confines: &Confines,
+		noise: NoiseParams,
+		sample_shell: impl FnOnce(&Confines, NoiseParams) -> Result<LesHallesParameterized, FitError>,
+		top_ceiling: RectRingFloorSlab,
+	) -> Result<(Self, FillableRegions), FitError> {
 		let (_, _, total_h) = footprint_extents(confines)?;
 		let n_storeys = LesHallesParameterized::sample_monotower_storey_count(confines, noise);
 		let max_h_for_n = (total_h / n_storeys as f32).max(MIN_MONOTOWER_STOREY_HEIGHT);
@@ -219,10 +231,12 @@ impl MixedUseLesHallesMonotower {
 			let (floor_plan, regions) = LesHallesFloorPlan::from_parameterized_with(
 				params.clone(),
 				&storey_confines,
-				crate::shells::rect_ring_floor::RectRingFloorSlab::None,
+				if i + 1 == n_storeys { top_ceiling } else { RectRingFloorSlab::None },
 				program,
 			)?;
 			let floor_noise = floor_noise(noise, i);
+			#[cfg(test)]
+			single_pass_tests::record_paint();
 			let storey = if i == 0 {
 				let keep_outs = LesHallesArcadeUsage::pillar_keep_outs_of(&floor_plan);
 				let (usage, _) =
@@ -525,3 +539,6 @@ mod tests {
 		}
 	}
 }
+
+#[cfg(test)]
+mod single_pass_tests;

@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bikanwarda_character::{spawn_bikanwarda_encounter, BikanwardaRoot};
 
-use crate::presentation::RequestBossAssembly;
+use crate::presentation::{RequestBossAssembly, BossActor};
 
 /// System to spawn actual boss assemblies for HCSG hosts requesting them.
 pub fn spawn_boss_assemblies(
@@ -18,6 +18,12 @@ pub fn spawn_boss_assemblies(
 		
 		// Parent the spawned boss to the host (use ChildOf component)
 		commands.entity(boss_entity).insert(ChildOf(host_entity));
+		
+		// Add AttackUser so the attack runtime accepts this owner
+		commands.entity(boss_entity).insert(attacks::AttackUser::default());
+		
+		// Bind host to actor with relationship component
+		commands.entity(host_entity).insert(BossActor(boss_entity));
 		
 		// Remove the request marker
 		commands.entity(host_entity).remove::<RequestBossAssembly>();

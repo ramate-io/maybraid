@@ -95,3 +95,6 @@ mod tests {
 		assert!(off_grid, "expected at least one heading off the old π/4 lattice");
 	}
 }
+
+#[cfg(test)]
+pub(crate) use hall::single_paint_tests::legacy_open_top;

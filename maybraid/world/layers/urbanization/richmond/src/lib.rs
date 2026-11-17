@@ -44,7 +44,7 @@ pub use ground::{hydro_overlaps_xz, GroundCell, GroundCells, RichmondGround};
 pub use hcsg::{
 	BuiltPresentationPlugin, DevelopmentNeighborhood, RichmondPresentationPlugin, RichmondRoots,
 };
-pub use host::{DevelopmentHost, DevelopmentHosts};
+pub use host::{DevelopmentHost, DevelopmentHosts, InteriorStandPoints};
 pub use layer::Richmond;
 pub use layer_config::{
 	stream_radii_m, DevelopmentFocus, RichmondConfig, UrbanizationStreamSpec,

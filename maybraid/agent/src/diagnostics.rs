@@ -129,6 +129,7 @@ pub enum AgentCameraProjection {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DiagnosticCommand {
 	Enabled(bool),
+	Memory,
 	Health(f32),
 	View { yaw: f32, pitch: f32 },
 	Camera { pose: Option<[f32; 5]> },
@@ -143,6 +144,7 @@ impl DiagnosticCommand {
 		match words.as_slice() {
 			["diagnostics", "on"] => Ok(Self::Enabled(true)),
 			["diagnostics", "off"] => Ok(Self::Enabled(false)),
+			["diagnostics", "memory"] => Ok(Self::Memory),
 			["diagnostics", "health", amount] => {
 				let amount = amount.parse::<f32>().map_err(|_| "health must be a number")?;
 				if !amount.is_finite() || amount <= 0.0 {
@@ -181,7 +183,7 @@ impl DiagnosticCommand {
 				let entity = entity.parse::<u64>().map_err(|_| "invalid decimal entity bits")?;
 				Ok(Self::Npc { entity })
 			}
-			_ => Err("expected diagnostics on | off | health AMOUNT | view YAW PITCH | camera [X Y Z YAW PITCH] | npcs RADIUS | npc ENTITY".into()),
+			_ => Err("expected diagnostics on | off | memory | health AMOUNT | view YAW PITCH | camera [X Y Z YAW PITCH] | npcs RADIUS | npc ENTITY".into()),
 		}
 	}
 }
@@ -189,6 +191,16 @@ impl DiagnosticCommand {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn memory_snapshot_accepts_no_extra_arguments() -> anyhow::Result<()> {
+		assert_eq!(
+			DiagnosticCommand::parse("diagnostics memory").map_err(anyhow::Error::msg)?,
+			DiagnosticCommand::Memory
+		);
+		assert!(DiagnosticCommand::parse("diagnostics memory extra").is_err());
+		Ok(())
+	}
 
 	#[test]
 	fn fixture_health_rejects_non_finite_zero_negative_and_trailing_arguments() {

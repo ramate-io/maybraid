@@ -21,6 +21,12 @@ use lod::lod_ref::LodRef;
 use crate::generation::BikanwardaBossEncounter;
 use crate::identity::chained_encounter_id;
 
+/// **PLACEHOLDER**: Boss health for chained encounter.
+///
+/// TODO: Derive from combat tuning / boss recipe once encounter balancing is complete.
+/// Current value chosen to allow multiple player attack cycles for testing.
+pub const PLACEHOLDER_BOSS_HEALTH: f32 = 1000.0;
+
 /// Marks the root of a presented boss encounter.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct BossEncounterRoot;
@@ -30,6 +36,14 @@ pub struct BossEncounterRoot;
 pub struct RequestBossAssembly {
 	pub spec: BikanwardaSpec,
 }
+
+/// Relationship from encounter host to its spawned boss actor.
+///
+/// The host owns BossEncounterRoot, Health, and EncounterInstance.
+/// The actor (child entity) owns BikanwardaRoot, actor components, and attack systems.
+/// This relationship enables combat/attack/tether queries to find the actor from the host.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct BossActor(pub Entity);
 
 /// Invisible collision placeholder for chain tether column.
 ///
@@ -97,8 +111,8 @@ impl LodScene for BikanwardaBossEncounter {
 			}),
 		];
 		
-		// Boss health scaled to encounter (placeholder value, tuned later)
-		let boss_health = Health::from_max(1000.0);
+		// Boss health (placeholder - see PLACEHOLDER_BOSS_HEALTH doc)
+		let boss_health = Health::from_max(PLACEHOLDER_BOSS_HEALTH);
 		
 		// Root entity with boss assembly and children for column/pedestal
 		bsn! {

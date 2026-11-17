@@ -165,6 +165,7 @@ pub(in crate::hcsg) trait ErasedStore: Send + Sync {
 	/// under `cfg(debug_assertions)`; release builds clear without listing them.
 	fn clear_non_universal(&self, revision: u64) -> Vec<Id>;
 	fn len(&self) -> usize;
+	fn try_len(&self) -> Result<usize, Busy>;
 	fn type_name(&self) -> &'static str;
 }
 
@@ -216,6 +217,10 @@ impl<T: HcsgValue> ErasedStore for TypedStore<T> {
 		self.read().len()
 	}
 
+	fn try_len(&self) -> Result<usize, Busy> {
+		Ok(self.try_read()?.len())
+	}
+
 	fn type_name(&self) -> &'static str {
 		std::any::type_name::<T>()
 	}
@@ -254,7 +259,9 @@ impl HcsgStorage {
 		Self::downcast(store)
 	}
 
-	pub(super) fn try_store<T: HcsgValue>(&self) -> Result<Option<Arc<TypedStore<T>>>, Busy> {
+	pub(in crate::hcsg) fn try_store<T: HcsgValue>(
+		&self,
+	) -> Result<Option<Arc<TypedStore<T>>>, Busy> {
 		let store = self.0.try_read_stores()?.get(&TypeId::of::<T>()).cloned();
 		Ok(store.and_then(Self::downcast))
 	}

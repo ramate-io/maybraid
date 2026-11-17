@@ -4,6 +4,7 @@ use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::PoisonError;
+use std::time::Duration;
 
 use bevy::shape::Aabb3d;
 
@@ -59,6 +60,7 @@ impl HcsgDemand {
 			if state.shutdown {
 				return WorkerWait::Shutdown;
 			}
+			super::tickets::prune_cancelled(&mut state);
 			if let Some(plan) = take_sweep_plan(&mut state) {
 				self.0.sweeps.fetch_add(1, Ordering::Relaxed);
 				return WorkerWait::Sweep(plan);
@@ -69,7 +71,17 @@ impl HcsgDemand {
 				return WorkerWait::Job(job);
 			}
 			self.0.idle.notify_all();
-			state = self.0.wake.wait(state).unwrap_or_else(PoisonError::into_inner);
+			// Last-ticket release cannot take a blocking frame lock. A timed
+			// wait closes the atomic cancellation / Condvar lost-wakeup race.
+			state = if state.subscriptions.values().any(|s| s.ticket.is_some()) {
+				self.0
+					.wake
+					.wait_timeout(state, Duration::from_millis(50))
+					.unwrap_or_else(PoisonError::into_inner)
+					.0
+			} else {
+				self.0.wake.wait(state).unwrap_or_else(PoisonError::into_inner)
+			};
 		}
 	}
 
