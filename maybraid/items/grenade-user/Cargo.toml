@@ -26,6 +26,7 @@ maybraid-controllers-core = { workspace = true }
 maybraid-equipment = { workspace = true }
 maybraid-virtual-pad-controller = { workspace = true }
 maybraid-spatial-rumble = { workspace = true }
+menu-components = { workspace = true }
 player = { workspace = true }
 player-camera = { workspace = true }
 

@@ -3322,6 +3322,7 @@ dependencies = [
  "combat-hud",
  "damage",
  "lubikans",
+ "menu-components",
  "player",
 ]
 
@@ -5622,6 +5623,7 @@ dependencies = [
  "maybraid-spatial-rumble",
  "maybraid-spawns-grenades",
  "maybraid-virtual-pad-controller",
+ "menu-components",
  "player",
  "player-camera",
 ]
@@ -7200,6 +7202,7 @@ dependencies = [
  "maybraid-gpu-frame-capture",
  "maybraid-menu-controller",
  "maybraid-session",
+ "maybraid-skill-map",
  "maybraid-sky",
  "maybraid-virtual-pad-controller",
  "maybraid-world",
@@ -7439,8 +7442,10 @@ dependencies = [
  "evasion-intelligence",
  "item-icons",
  "lod-avian",
+ "maybraid-audio",
  "maybraid-character-controller",
  "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
  "menu-components",
  "noise",
  "player",

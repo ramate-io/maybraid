@@ -27,6 +27,62 @@ pub struct OverlaySelectViewport;
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryControl(pub InventoryControlAction);
 
+/// Navigable category header in the editable inventory's equipped list.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InventoryFolderHeader(pub InventorySection);
+
+impl InventoryFolderHeader {
+	/// Stroke width of the folder focus ring. Matches other HUD tiles.
+	pub const FOCUS_OUTLINE_WIDTH: f32 = 2.0;
+	/// Gap between the folder bounds and the focus ring.
+	pub const FOCUS_OUTLINE_OFFSET: f32 = 2.0;
+
+	/// Extra space past the stroke so the ring is not clipped by AA or rounding.
+	pub const FOCUS_RING_SLACK: f32 = 2.0;
+
+	/// Space a parent must keep so the focus ring is not clipped.
+	pub const fn focus_ring_inset() -> f32 {
+		Self::FOCUS_OUTLINE_WIDTH + Self::FOCUS_OUTLINE_OFFSET
+	}
+
+	/// Padded gutter around folder rows, including anti-clip slack.
+	pub const fn focus_gutter() -> f32 {
+		Self::focus_ring_inset() + Self::FOCUS_RING_SLACK
+	}
+
+	/// Idle focus ring. Hover paint supplies the live color.
+	pub fn focus_outline() -> Outline {
+		Outline::new(
+			Val::Px(Self::FOCUS_OUTLINE_WIDTH),
+			Val::Px(Self::FOCUS_OUTLINE_OFFSET),
+			Color::NONE,
+		)
+	}
+
+	/// True when every edge of `padding` can hold [`Self::focus_gutter`].
+	pub fn outline_fits_in(padding: UiRect) -> bool {
+		[padding.left, padding.right, padding.top, padding.bottom].into_iter().all(
+			|edge| match edge {
+				Val::Px(px) => px + 1e-3 >= Self::focus_gutter(),
+				_ => false,
+			},
+		)
+	}
+}
+
+/// Stable selection in the left list; menu indices also include category headers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InventoryLeftFocus {
+	Header(InventorySection),
+	Slot { section: InventorySection, ordinal: usize },
+}
+
+impl Default for InventoryLeftFocus {
+	fn default() -> Self {
+		Self::Header(InventorySection::Clothing)
+	}
+}
+
 /// Bag index stamped on inventory tiles so reorder/focus can follow identity.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryItemKey {
@@ -123,6 +179,10 @@ pub struct InventoryMenuSession {
 	pub interaction: InventoryInteraction,
 	pub focus: InventoryFocusHint,
 	pub section: InventorySection,
+	/// Editable inventory uses folders; direct read-only catalogs retain page navigation.
+	pub folder_navigation: bool,
+	pub expanded_section: Option<InventorySection>,
+	pub left_focus: InventoryLeftFocus,
 	pub drawer: InventoryDrawerMode,
 	pub region: InventoryRegion,
 	pub picker_source: Option<InventoryPickerSource>,
@@ -135,6 +195,9 @@ impl Default for InventoryMenuSession {
 			interaction: InventoryInteraction::default(),
 			focus: InventoryFocusHint::default(),
 			section: InventorySection::default(),
+			folder_navigation: true,
+			expanded_section: Some(InventorySection::Clothing),
+			left_focus: InventoryLeftFocus::default(),
 			drawer: InventoryDrawerMode::default(),
 			region: InventoryRegion::Equipped,
 			picker_source: None,
@@ -144,6 +207,37 @@ impl Default for InventoryMenuSession {
 }
 
 impl InventoryMenuSession {
+	/// Header focus never overwrites the remembered slot within its category.
+	pub fn focus_header(&mut self, section: InventorySection) {
+		self.left_focus = InventoryLeftFocus::Header(section);
+		self.focus.0 = None;
+	}
+
+	pub fn focus_slot(
+		&mut self,
+		section: InventorySection,
+		ordinal: usize,
+		item: Option<InventoryItemKey>,
+	) {
+		self.section = section;
+		self.left_focus = InventoryLeftFocus::Slot { section, ordinal };
+		let memory = &mut self.section_memory[section.index()][InventoryRegion::Equipped.index()];
+		memory.focused_ordinal = ordinal;
+		memory.focused_item = item;
+		self.focus.0 = item;
+	}
+
+	pub fn toggle_folder(&mut self, section: InventorySection) {
+		if self.picker_source.is_some() || self.interaction.reordering().is_some() {
+			return;
+		}
+		self.region = InventoryRegion::Equipped;
+		self.section = section;
+		self.focus_header(section);
+		self.expanded_section =
+			if self.expanded_section == Some(section) { None } else { Some(section) };
+	}
+
 	pub fn active_memory(&self) -> &InventorySectionMemory {
 		&self.section_memory[self.section.index()][self.region.index()]
 	}
@@ -178,7 +272,11 @@ impl InventoryMenuSession {
 
 #[cfg(test)]
 mod tests {
-	use super::{InventoryInteraction, InventoryItemKey, InventoryMenuSession, InventoryRegion};
+	use super::{
+		InventoryFolderHeader, InventoryInteraction, InventoryItemKey, InventoryMenuSession,
+		InventoryRegion,
+	};
+	use bevy::prelude::{UiRect, Val};
 
 	#[test]
 	fn drop_remapping_updates_each_representation_and_clears_removed_focus() {
@@ -207,5 +305,17 @@ mod tests {
 		let key = InventoryItemKey { index: 13, equipped: true, region: InventoryRegion::Equipped };
 		assert_eq!(key.remap_after_drop(5), Some(InventoryItemKey { index: 12, ..key }));
 		assert_eq!(key.remap_after_drop(13), None);
+	}
+
+	#[test]
+	fn folder_focus_gutter_covers_the_outline_stroke() {
+		assert!(InventoryFolderHeader::focus_gutter() > InventoryFolderHeader::focus_ring_inset());
+		assert!(InventoryFolderHeader::outline_fits_in(UiRect::all(Val::Px(
+			InventoryFolderHeader::focus_gutter()
+		))));
+		assert!(!InventoryFolderHeader::outline_fits_in(UiRect::all(Val::Px(0.0))));
+		assert!(!InventoryFolderHeader::outline_fits_in(UiRect::all(Val::Px(
+			InventoryFolderHeader::focus_ring_inset()
+		))));
 	}
 }

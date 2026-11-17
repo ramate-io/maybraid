@@ -3,6 +3,10 @@
 use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_items::{Inventory, InventoryItem};
+use menu_components::{
+	gameplay_hud_visibility, hud_glass_fill, hud_glass_stroke, GameplayHud, HUD_GLASS_BORDER,
+	HUD_GLASS_RADIUS,
+};
 use player::Player;
 
 use crate::throw::GrenadeThrow;
@@ -11,7 +15,7 @@ const BAR_WIDTH: f32 = 168.0;
 const BAR_HEIGHT: f32 = 8.0;
 
 #[derive(Component)]
-pub(crate) struct CookFuseHud;
+pub struct CookFuseHud;
 
 #[derive(Component)]
 pub(crate) struct CookFuseFill;
@@ -21,6 +25,7 @@ pub(crate) fn spawn_cook_fuse_hud(mut commands: Commands) {
 		.spawn((
 			Name::new("grenade-cook-hud"),
 			CookFuseHud,
+			GameplayHud,
 			Node {
 				position_type: PositionType::Absolute,
 				left: Val::Percent(50.0),
@@ -28,12 +33,13 @@ pub(crate) fn spawn_cook_fuse_hud(mut commands: Commands) {
 				width: Val::Px(BAR_WIDTH),
 				height: Val::Px(BAR_HEIGHT),
 				margin: UiRect::left(Val::Px(-BAR_WIDTH * 0.5)),
-				border: UiRect::all(Val::Px(1.0)),
+				border: UiRect::all(Val::Px(HUD_GLASS_BORDER)),
+				border_radius: BorderRadius::all(Val::Px(HUD_GLASS_RADIUS)),
 				overflow: Overflow::clip(),
 				..default()
 			},
-			BackgroundColor(Color::srgba(0.04, 0.05, 0.06, 0.62)),
-			BorderColor::all(Color::srgba(0.85, 0.9, 0.95, 0.35)),
+			hud_glass_fill(),
+			hud_glass_stroke(false),
 			Visibility::Hidden,
 			Pickable::IGNORE,
 		))
@@ -50,7 +56,7 @@ pub(crate) fn spawn_cook_fuse_hud(mut commands: Commands) {
 pub(crate) fn sync_cook_fuse_hud(
 	players: Query<(&GrenadeThrow, Option<&InventoryUser>), With<Player>>,
 	bags: Query<&Inventory>,
-	mut roots: Query<&mut Visibility, With<CookFuseHud>>,
+	mut roots: Query<(&mut Visibility, &mut BorderColor), With<CookFuseHud>>,
 	mut fills: Query<(&mut Node, &mut BackgroundColor), With<CookFuseFill>>,
 ) {
 	let cooking = players.iter().find_map(|(throw, carrier)| {
@@ -62,10 +68,15 @@ pub(crate) fn sync_cook_fuse_hud(
 			.unwrap_or(remaining.max(1e-3));
 		Some((remaining, total.max(1e-3)))
 	});
-	let visible = if cooking.is_some() { Visibility::Visible } else { Visibility::Hidden };
-	for mut visibility in &mut roots {
+	let shown = cooking.is_some();
+	let visible = gameplay_hud_visibility(shown);
+	let stroke = hud_glass_stroke(shown);
+	for (mut visibility, mut border) in &mut roots {
 		if *visibility != visible {
 			*visibility = visible;
+		}
+		if *border != stroke {
+			*border = stroke;
 		}
 	}
 	let Some((remaining, total)) = cooking else {
