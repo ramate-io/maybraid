@@ -5,7 +5,7 @@ use character_creation_menus::{CharacterMenu, MenuEvent};
 use character_inventory_user::{spawn_bag, InventoryUser, InventoryUserPlugin};
 use character_items::Inventory;
 use character_model_user::{
-	spawn_model, CharacterModel, CharacterModelUser, CharacterModelUserPlugin,
+	list_summaries, spawn_model, CharacterModel, CharacterModelUser, CharacterModelUserPlugin,
 };
 use character_persist::{CharacterId, PersistError, SaveRoot};
 use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
@@ -102,6 +102,7 @@ impl Plugin for CharacterSessionPlugin {
 					open_create_character_hud,
 					sync_gallery_active_caption,
 					sync_gallery_selected_tag,
+					sync_gallery_lineup_roster,
 				),
 			)
 			.add_systems(PostUpdate, finish_character_editor_exit.after(MenuScreenSystems::Show));
@@ -231,6 +232,43 @@ fn load_active_character(mut commands: Commands, save_root: Res<SaveRoot>) {
 		return;
 	};
 	set_active_character(&mut commands, &save_root, id);
+}
+
+fn sync_gallery_lineup_roster(
+	screens: Query<Entity, With<GalleryScreen>>,
+	save_root: Res<SaveRoot>,
+	figures: Query<(Entity, &crate::GalleryLineupFigure)>,
+	mut commands: Commands,
+) {
+	if screens.is_empty() {
+		for (entity, _) in &figures {
+			commands.entity(entity).try_despawn();
+		}
+		return;
+	}
+	let summaries = list_summaries(&save_root);
+	let desired: Vec<_> = summaries.iter().map(|summary| summary.id).collect();
+	let mut current: Vec<_> = figures
+		.iter()
+		.map(|(entity, figure)| (figure.ordinal, figure.id, entity))
+		.collect();
+	current.sort_by_key(|(ordinal, _, _)| *ordinal);
+	if current.len() == desired.len()
+		&& current.iter().zip(&desired).all(|((_, id, _), want)| *id == *want)
+	{
+		return;
+	}
+	for (entity, _) in &figures {
+		commands.entity(entity).try_despawn();
+	}
+	let count = desired.len();
+	for (ordinal, id) in desired.into_iter().enumerate() {
+		commands.spawn((
+			crate::GalleryLineupFigure { id, ordinal, count },
+			Transform::IDENTITY,
+			Visibility::Inherited,
+		));
+	}
 }
 
 fn sync_gallery_active_caption(

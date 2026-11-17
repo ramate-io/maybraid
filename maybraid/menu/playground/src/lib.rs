@@ -22,7 +22,9 @@ pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use drop_prompt::CharacterDropPrompt;
 pub use game_commands::command::PendingStartupCommand;
 pub use leave_prompt::CharacterLeavePrompt;
-pub use preview::{CharacterPreviewLight, CharacterPreviewPlugin, CharacterPreviewRoot};
+pub use preview::{
+	CharacterPreviewLight, CharacterPreviewPlugin, CharacterPreviewRoot, GalleryLineupFigure,
+};
 pub use session::{
 	end_character_editor, leave_character_editor, save_editing_character, ActiveCharacter,
 	CharacterEditorReturn, CharacterSession, CharacterSessionPlugin, EditingCharacter,

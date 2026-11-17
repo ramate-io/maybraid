@@ -12,13 +12,22 @@ use std::time::Duration;
 
 use bevy::audio::AudioPlugin;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
+use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
+use character_creation_menus::{ConceptSpecies, MenuEvent};
 use character_persist::{CharacterId, SaveRoot};
+use characters::{
+	CharacterHostsPlugin, HiddenUntilSceneReady, PendingCharacterAssembly,
+	StandaloneCharacterMaterialRefPlugin,
+};
+use lod::LodViewer;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_virtual_pad_controller::PadHidPolicy;
-use menu_components::{InputPromptDevice, MENU_CLEAR, MenuNav, MenuNavImpulse, TextMenu};
-use menu_playground::{CharacterMenuState, CharacterSessionPlugin, save_editing_character};
-use menu_screens::{GalleryChoice, GalleryScreen, request_show_gallery};
+use menu_components::{InputPromptDevice, MenuNav, MenuNavImpulse, TextMenu, MENU_CLEAR};
+use menu_playground::{
+	save_editing_character, CharacterMenuState, CharacterPreviewPlugin, CharacterPreviewRoot,
+	CharacterSessionPlugin, GalleryLineupFigure,
+};
+use menu_screens::{request_show_gallery, GalleryChoice, GalleryScreen};
 
 fn assets_path() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -42,15 +51,40 @@ fn main() {
 				.set(AssetPlugin { file_path: assets_path().to_string_lossy().into(), ..default() })
 				.disable::<AudioPlugin>(),
 		)
+		.add_plugins(CharacterHostsPlugin)
+		.add_plugins(StandaloneCharacterMaterialRefPlugin)
+		.add_plugins(maybraid_character_ui_menu_renderer::MaybraidCharacterMenuRendererPlugin::<
+			MenuEvent,
+		>::default())
+		.add_plugins(CharacterPreviewPlugin)
 		.insert_resource(ClearColor(MENU_CLEAR))
 		.insert_resource(root)
 		.init_resource::<CharacterMenuState>()
 		.insert_resource(CaptureDir(shot_dir()))
 		.init_resource::<CaptureShots>()
 		.add_plugins((MenuControllerPlugin, CharacterSessionPlugin))
-		.add_systems(Startup, setup)
+		.add_systems(
+			Startup,
+			(
+				setup,
+				(
+					characters_playground::camera::setup_camera,
+					add_lod_viewer_to_camera.after(characters_playground::camera::setup_camera),
+				)
+					.chain(),
+			),
+		)
 		.add_systems(Update, (capture_shots, quit_after_shots).chain())
 		.run();
+}
+
+fn add_lod_viewer_to_camera(
+	mut commands: Commands,
+	cameras: Query<Entity, (With<Camera3d>, Without<LodViewer>)>,
+) {
+	for entity in &cameras {
+		commands.entity(entity).insert(LodViewer);
+	}
 }
 
 fn scratch_root() -> SaveRoot {
@@ -62,9 +96,13 @@ fn scratch_root() -> SaveRoot {
 }
 
 fn seed_roster(root: &SaveRoot) -> anyhow::Result<()> {
-	for (id, name) in [(CharacterId(11), "Jeff"), (CharacterId(12), "Roamer")] {
+	for (id, name, species) in [
+		(CharacterId(11), "Jeff", ConceptSpecies::Braidman),
+		(CharacterId(12), "Roamer", ConceptSpecies::Brodler),
+	] {
 		let mut menu = CharacterMenuState::default();
 		menu.0.name = name.into();
+		let _ = menu.0.apply(MenuEvent::SetSpecies(species));
 		save_editing_character(root, id, &menu.0)?;
 	}
 	character_persist::save_active(root, CharacterId(11))?;
@@ -82,6 +120,7 @@ struct CaptureDir(PathBuf);
 
 #[derive(Resource, Default)]
 struct CaptureShots {
+	ready_at: Option<f32>,
 	keyboard: bool,
 	pad: bool,
 	wheel_nav: bool,
@@ -92,8 +131,21 @@ struct CaptureShots {
 
 fn setup(mut commands: Commands, dir: Res<CaptureDir>) {
 	let _ = std::fs::create_dir_all(&dir.0);
-	commands.spawn(Camera2d);
 	request_show_gallery(&mut commands);
+}
+
+fn lineup_ready(
+	figures: Query<(), With<GalleryLineupFigure>>,
+	roots: Query<(), With<CharacterPreviewRoot>>,
+	pending: Query<(), With<PendingCharacterAssembly>>,
+	hidden: Query<(), With<HiddenUntilSceneReady>>,
+	meshes: Query<(), With<Mesh3d>>,
+) -> bool {
+	figures.iter().len() >= 2
+		&& roots.iter().len() >= 2
+		&& pending.is_empty()
+		&& hidden.is_empty()
+		&& meshes.iter().len() >= 8
 }
 
 fn capture_shots(
@@ -105,28 +157,42 @@ fn capture_shots(
 	mut shots: ResMut<CaptureShots>,
 	menus: Query<(Entity, &TextMenu)>,
 	mut choices: MessageWriter<GalleryChoice>,
+	figures: Query<(), With<GalleryLineupFigure>>,
+	roots: Query<(), With<CharacterPreviewRoot>>,
+	pending: Query<(), With<PendingCharacterAssembly>>,
+	hidden: Query<(), With<HiddenUntilSceneReady>>,
+	meshes: Query<(), With<Mesh3d>>,
 ) {
 	if screens.is_empty() {
 		return;
 	}
-	let elapsed = time.elapsed_secs();
-	if !shots.keyboard && elapsed >= 2.5 {
+	if shots.ready_at.is_none() {
+		if lineup_ready(figures, roots, pending, hidden, meshes) {
+			shots.ready_at = Some(time.elapsed_secs());
+		}
+		return;
+	}
+	let Some(ready_at) = shots.ready_at else {
+		return;
+	};
+	let elapsed = time.elapsed_secs() - ready_at;
+	if !shots.keyboard && elapsed >= 2.4 {
 		*device = InputPromptDevice::Keyboard;
 		commands
 			.spawn(Screenshot::primary_window())
 			.observe(save_to_disk(dir.0.join("01-gallery-keyboard.png")));
 		shots.keyboard = true;
 	}
-	if shots.keyboard && !shots.pad && elapsed >= 3.1 {
+	if shots.keyboard && !shots.pad && elapsed >= 3.0 {
 		*device = InputPromptDevice::Pad;
 	}
-	if shots.keyboard && !shots.pad && elapsed >= 3.8 {
+	if shots.keyboard && !shots.pad && elapsed >= 3.7 {
 		commands
 			.spawn(Screenshot::primary_window())
 			.observe(save_to_disk(dir.0.join("02-gallery-pad.png")));
 		shots.pad = true;
 	}
-	if shots.pad && !shots.wheel_nav && elapsed >= 4.2 {
+	if shots.pad && !shots.wheel_nav && elapsed >= 4.1 {
 		if let Some((entity, _)) = menus.iter().next() {
 			commands.trigger(MenuNavImpulse::new(entity, MenuNav::Right));
 		}
@@ -160,7 +226,7 @@ fn quit_after_shots(
 	dir: Res<CaptureDir>,
 	capturing: Query<(), With<Capturing>>,
 	mut exit: MessageWriter<AppExit>,
-	mut ready_at: Local<Option<Duration>>,
+	mut done_at: Local<Option<Duration>>,
 ) {
 	let done = shots.confirm
 		&& request_exists(dir.0.join("01-gallery-keyboard.png"))
@@ -168,11 +234,11 @@ fn quit_after_shots(
 		&& request_exists(dir.0.join("03-gallery-delete-confirm.png"))
 		&& request_exists(dir.0.join("04-gallery-wheel.png"))
 		&& capturing.is_empty();
-	if done && ready_at.is_none() {
-		*ready_at = Some(time.elapsed());
+	if done && done_at.is_none() {
+		*done_at = Some(time.elapsed());
 	}
-	if ready_at.is_some_and(|at| time.elapsed() > at + Duration::from_millis(250))
-		|| time.elapsed() > Duration::from_secs(20)
+	if done_at.is_some_and(|at| time.elapsed() > at + Duration::from_millis(250))
+		|| time.elapsed() > Duration::from_secs(45)
 	{
 		exit.write(AppExit::Success);
 	}

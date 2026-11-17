@@ -295,7 +295,11 @@ impl RotaryCaption {
 	}
 
 	pub fn paint(self, selected: bool) -> (Color, Color) {
-		if selected { (TEXT_YELLOW, TEXT_DEEP_BLUE) } else { (Color::NONE, TEXT_YELLOW_FAINT) }
+		if selected {
+			(TEXT_YELLOW, TEXT_DEEP_BLUE)
+		} else {
+			(Color::NONE, TEXT_YELLOW_FAINT)
+		}
 	}
 }
 
@@ -331,6 +335,11 @@ pub fn animate_rotary_cards(
 			continue;
 		};
 		motion.ease_to(*layout, card.ordinal, selected, card.count, dt);
+		if *layout == RotaryLayout::GALLERY {
+			// Gallery names follow the 3D lineup in menu-playground; keep easing
+			// motion so those labels can reuse scale / depth.
+			continue;
+		}
 		layout.apply_transform(&mut transform, &mut z_index, motion.angle, motion.scale);
 	}
 	for (entity, mut label, children, mut background) in &mut labels {

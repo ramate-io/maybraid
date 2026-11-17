@@ -20,7 +20,7 @@ use crate::character::RequestShowCharacter;
 use crate::session::{
 	save_editing_character, ActiveCharacter, CharacterSessionPlugin, EditingCharacter,
 };
-use crate::CharacterMenuState;
+use crate::{CharacterMenuState, GalleryLineupFigure};
 
 fn scratch_root() -> SaveRoot {
 	SaveRoot::at(std::env::temp_dir().join(format!(
@@ -382,6 +382,25 @@ fn empty_roster_start_creates_and_hides_edit_delete() -> Result<()> {
 	let (mut app, root) = empty_gallery_app()?;
 	tap_key(&mut app, KeyCode::KeyN);
 	assert!(count::<RequestShowCreateCharacter>(&mut app) >= 1);
+	std::fs::remove_dir_all(&root.path)?;
+	Ok(())
+}
+
+#[test]
+fn gallery_wheel_spawns_one_figure_per_saved_character() -> Result<()> {
+	let (mut app, root, jeff, roamer) = two_character_app()?;
+	let mut figures: Vec<_> = app
+		.world_mut()
+		.query::<&GalleryLineupFigure>()
+		.iter(app.world())
+		.map(|figure| (figure.ordinal, figure.id))
+		.collect();
+	figures.sort_by_key(|(ordinal, _)| *ordinal);
+	assert_eq!(figures, vec![(0, jeff), (1, roamer)]);
+	std::fs::remove_dir_all(&root.path)?;
+
+	let (mut app, root) = empty_gallery_app()?;
+	assert_eq!(count::<GalleryLineupFigure>(&mut app), 0);
 	std::fs::remove_dir_all(&root.path)?;
 	Ok(())
 }
