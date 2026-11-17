@@ -99,9 +99,5 @@ where
 				.after(CharacterHudSystems::Sync),
 		)
 		.add_systems(Update, restore_short_text_editing.after(CharacterHudSystems::Sync));
-		app.add_systems(
-			Update,
-			crate::inventory::animate_inventory_carousel.after(CharacterHudSystems::Input),
-		);
 	}
 }

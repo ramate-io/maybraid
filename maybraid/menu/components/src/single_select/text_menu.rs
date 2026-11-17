@@ -73,6 +73,16 @@ impl TextMenu {
 			MenuNav::Select | MenuNav::Back => {}
 		}
 	}
+
+	/// Choice stamped on the focused row under this menu.
+	pub fn selected_action<E: Component + Copy>(
+		&self,
+		menu_entity: Entity,
+		items: &Query<(Entity, &TextMenuItem, &E, &ChildOf)>,
+		child_of: &Query<&ChildOf>,
+	) -> Option<E> {
+		selected_choice(menu_entity, self, items, child_of)
+	}
 }
 
 /// Chrome on a selectable row. The screen’s choice type is a separate component.

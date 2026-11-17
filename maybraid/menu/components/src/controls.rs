@@ -9,6 +9,7 @@ pub mod focus;
 pub mod fonts;
 pub mod hud_menu;
 pub mod prompt;
+pub mod rotary;
 pub mod row;
 pub mod scroll;
 pub mod section;
@@ -27,9 +28,14 @@ pub use hud_menu::{
 	HudMenuIgnoresLock, HudMenuItem, HudMenuNavLocked, HudOverlayMenu,
 };
 pub use prompt::{
-	spawn_inventory_action_prompts, sync_input_prompt_device, sync_inventory_prompt_glyphs,
+	gallery_action_prompts_scene, spawn_inventory_action_prompts, sync_input_prompt_device,
+	sync_inventory_prompt_glyphs, GalleryActionPrompts, GalleryPromptGlyph, GalleryPromptKind,
 	InputPromptDevice, InventoryActionPrompts, InventoryDropPromptChip, InventoryPromptGlyph,
 	InventoryPromptKind,
+};
+pub use rotary::{
+	animate_rotary_cards, RotaryCaption, RotaryCaptionGroup, RotaryCaptionText, RotaryCard,
+	RotaryLayout, RotaryMotion, RotaryPortrait,
 };
 pub use row::spawn_labeled_row;
 pub use scroll::{

@@ -9,7 +9,7 @@ use menu_components::theme::{
 use menu_components::{
 	spawn_hud_action, spawn_hud_text, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, MenuModal,
 	MenuModalDismiss, MenuModalId, MenuModalLayer, MenuModalStack, MenuModalSystems, MenuNav,
-	MenuNavImpulse, TextMenuSystems,
+	MenuNavImpulse, TextMenu, TextMenuItem, TextMenuSystems,
 };
 use menu_screens::{request_show_gallery, GalleryChoice, GalleryScreen};
 
@@ -55,9 +55,11 @@ impl Plugin for CharacterDeletePlugin {
 
 fn open(
 	mut choices: MessageReader<GalleryChoice>,
-	screens: Query<(), With<GalleryScreen>>,
+	screens: Query<Entity, With<GalleryScreen>>,
+	menus: Query<(Entity, &TextMenu)>,
+	items: Query<(Entity, &TextMenuItem, &GalleryChoice, &ChildOf)>,
+	child_of: Query<&ChildOf>,
 	root: Res<SaveRoot>,
-	active: Option<Res<ActiveCharacter>>,
 	mut prompt: ResMut<DeletePrompt>,
 	mut stack: ResMut<MenuModalStack>,
 ) -> Result {
@@ -68,11 +70,13 @@ fn open(
 	{
 		return Ok(());
 	}
-	let Some(active) = active else {
+	let Some(id) = GalleryScreen::highlighted_choice(&screens, &menus, &items, &child_of)
+		.and_then(GalleryChoice::saved_id)
+	else {
 		return Ok(());
 	};
-	let model = character_model_user::load(&root, active.id)?;
-	prompt.target = Some((active.id, model.name));
+	let model = character_model_user::load(&root, id)?;
+	prompt.target = Some((id, model.name));
 	prompt.error = None;
 	prompt.opened_this_frame = true;
 	stack.open(MenuModalLayer::new(MenuModalId::CHARACTER_DELETE, 30));
@@ -236,7 +240,7 @@ fn paint(
 					spawn_hud_text(
 						card,
 						fonts.header(HEADER_FONT_SIZE * 0.42),
-						&format!("Delete \"{name}\"?"),
+						&format!("Are you sure you want to delete {name}?"),
 						TEXT_YELLOW,
 						Justify::Left,
 					);
