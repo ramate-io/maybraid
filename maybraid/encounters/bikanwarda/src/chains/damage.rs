@@ -332,4 +332,269 @@ mod tests {
 		let zero_max = Health { current: 0.0, max: 0.0 };
 		assert_eq!(durability_fraction(&zero_max), 0.0);
 	}
+
+	#[test]
+	fn boss_not_damaged_when_chain_breaks() -> Result<()> {
+		let mut app = test_app();
+
+		// Spawn a boss with health
+		let boss = app
+			.world_mut()
+			.spawn((
+				Name::new("Bikanwarda"),
+				Health::from_max(500.0),
+			))
+			.id();
+
+		// Spawn a chain with its own health
+		let chain_root = app
+			.world_mut()
+			.spawn((
+				ChainRoot {
+					link_count: 3,
+					rest_length_m: 3.0,
+					joint_entities: vec![],
+				},
+				Health::from_max(10.0),
+			))
+			.id();
+
+		let link_collider = app
+			.world_mut()
+			.spawn((
+				ChainLinkId { link_id: 0, chain_root },
+				ChildOf(chain_root),
+			))
+			.id();
+
+		// Break the chain with lethal damage
+		app.world_mut().write_message(damage::Hit {
+			target: link_collider,
+			source: Some(boss),
+			amount: 10.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+
+		app.update();
+
+		// Chain should be broken
+		assert!(app.world().get::<BrokenChain>(chain_root).is_some());
+		assert!(app.world().get::<ReleasedChain>(chain_root).is_some());
+
+		// Boss health should be unchanged
+		let boss_health = app.world().get::<Health>(boss).unwrap();
+		assert_eq!(boss_health.current, 500.0, "Boss should not be damaged when chain breaks");
+
+		Ok(())
+	}
+
+	#[test]
+	fn boss_and_chain_dying_same_frame_produces_correct_signals() -> Result<()> {
+		let mut app = test_app();
+
+		// Spawn a boss with low health
+		let boss = app
+			.world_mut()
+			.spawn((
+				Name::new("Bikanwarda"),
+				Health::from_max(10.0),
+			))
+			.id();
+
+		// Spawn a chain with low health
+		let chain_root = app
+			.world_mut()
+			.spawn((
+				ChainRoot {
+					link_count: 3,
+					rest_length_m: 3.0,
+					joint_entities: vec![],
+				},
+				Health::from_max(10.0),
+			))
+			.id();
+
+		let chain_link = app
+			.world_mut()
+			.spawn((
+				ChainLinkId { link_id: 0, chain_root },
+				ChildOf(chain_root),
+			))
+			.id();
+
+		// Kill both in the same frame
+		app.world_mut().write_message(damage::Hit {
+			target: boss,
+			source: None,
+			amount: 10.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+		app.world_mut().write_message(damage::Hit {
+			target: chain_link,
+			source: None,
+			amount: 10.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+
+		app.update();
+
+		// Both should be dead
+		assert!(app.world().get::<BrokenChain>(chain_root).is_some());
+		assert_eq!(app.world().get::<Health>(boss).unwrap().current, 0.0);
+		assert_eq!(app.world().get::<Health>(chain_root).unwrap().current, 0.0);
+
+		// Exactly one ChainBroken signal
+		let signals: Vec<_> = app
+			.world_mut()
+			.resource_mut::<Messages<EncounterSignal>>()
+			.drain()
+			.collect();
+		let chain_broken_count = signals
+			.iter()
+			.filter(|s| matches!(s.kind, encounters::EncounterSignalKind::ChainBroken))
+			.count();
+		assert_eq!(chain_broken_count, 1, "Should emit exactly one ChainBroken signal");
+
+		// Exactly one Died for the boss (chain death doesn't emit Died)
+		let died: Vec<_> = app
+			.world_mut()
+			.resource_mut::<Messages<damage::Died>>()
+			.drain()
+			.collect();
+		assert_eq!(died.len(), 2, "Boss and chain should both emit Died");
+
+		Ok(())
+	}
+
+	#[test]
+	fn despawned_chain_root_during_damage_does_not_panic() -> Result<()> {
+		let mut app = test_app();
+
+		let chain_root = app
+			.world_mut()
+			.spawn((
+				ChainRoot {
+					link_count: 3,
+					rest_length_m: 3.0,
+					joint_entities: vec![],
+				},
+				Health::from_max(100.0),
+			))
+			.id();
+
+		let link_collider = app
+			.world_mut()
+			.spawn((
+				ChainLinkId { link_id: 0, chain_root },
+				ChildOf(chain_root),
+			))
+			.id();
+
+		// Send damage
+		app.world_mut().write_message(damage::Hit {
+			target: link_collider,
+			source: None,
+			amount: 10.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+
+		// Despawn the chain root before damage is applied (simulating streaming out)
+		app.world_mut().despawn(chain_root);
+
+		// Should not panic
+		app.update();
+
+		Ok(())
+	}
+
+	#[test]
+	fn penetrating_projectile_breaks_chain_exactly_once() -> Result<()> {
+		let mut app = test_app();
+
+		let chain_root = app
+			.world_mut()
+			.spawn((
+				ChainRoot {
+					link_count: 3,
+					rest_length_m: 3.0,
+					joint_entities: vec![],
+				},
+				Health::from_max(15.0),
+			))
+			.id();
+
+		let link_collider = app
+			.world_mut()
+			.spawn((
+				ChainLinkId { link_id: 0, chain_root },
+				ChildOf(chain_root),
+			))
+			.id();
+
+		// Simulate a penetrating projectile hitting over multiple frames
+		// Frame 1: 10 damage
+		app.world_mut().write_message(damage::Hit {
+			target: link_collider,
+			source: None,
+			amount: 10.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+		app.update();
+
+		// Chain should not be broken yet
+		assert!(app.world().get::<BrokenChain>(chain_root).is_none());
+
+		// Drain signals from frame 1
+		let _ = app
+			.world_mut()
+			.resource_mut::<Messages<EncounterSignal>>()
+			.drain()
+			.collect::<Vec<_>>();
+
+		// Frame 2: 10 more damage (lethal)
+		app.world_mut().write_message(damage::Hit {
+			target: link_collider,
+			source: None,
+			amount: 10.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+		app.update();
+
+		// Chain should be broken
+		assert!(app.world().get::<BrokenChain>(chain_root).is_some());
+
+		// Exactly one ChainBroken signal from frame 2
+		let signals: Vec<_> = app
+			.world_mut()
+			.resource_mut::<Messages<EncounterSignal>>()
+			.drain()
+			.collect();
+		assert_eq!(signals.len(), 1, "Should emit exactly one ChainBroken signal");
+
+		// Frame 3: another hit (should not emit another signal)
+		app.world_mut().write_message(damage::Hit {
+			target: link_collider,
+			source: None,
+			amount: 5.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+		app.update();
+
+		// No additional signals
+		let signals: Vec<_> = app
+			.world_mut()
+			.resource_mut::<Messages<EncounterSignal>>()
+			.drain()
+			.collect();
+		assert_eq!(signals.len(), 0, "Should not emit additional signals after break");
+
+		Ok(())
+	}
 }
