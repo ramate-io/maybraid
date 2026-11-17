@@ -2330,11 +2330,14 @@ name = "bikanwarda-encounter"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "bikanwarda-lubikans",
  "damage",
  "encounters",
+ "lod-avian",
  "lubikans",
+ "projectiles",
 ]
 
 [[package]]
@@ -3322,6 +3325,7 @@ dependencies = [
  "combat-hud",
  "damage",
  "lubikans",
+ "menu-components",
  "player",
 ]
 
@@ -5622,6 +5626,7 @@ dependencies = [
  "maybraid-spatial-rumble",
  "maybraid-spawns-grenades",
  "maybraid-virtual-pad-controller",
+ "menu-components",
  "player",
  "player-camera",
 ]
@@ -7200,6 +7205,7 @@ dependencies = [
  "maybraid-gpu-frame-capture",
  "maybraid-menu-controller",
  "maybraid-session",
+ "maybraid-skill-map",
  "maybraid-sky",
  "maybraid-virtual-pad-controller",
  "maybraid-world",
@@ -7439,8 +7445,10 @@ dependencies = [
  "evasion-intelligence",
  "item-icons",
  "lod-avian",
+ "maybraid-audio",
  "maybraid-character-controller",
  "maybraid-controllers-core",
+ "maybraid-virtual-pad-controller",
  "menu-components",
  "noise",
  "player",
@@ -7657,6 +7665,7 @@ dependencies = [
  "player",
  "player-camera",
  "poi-intelligence",
+ "projectiles",
  "richmond",
  "routing-intelligence",
  "screen-capture",
@@ -14533,14 +14542,19 @@ dependencies = [
 name = "world-materials-playground"
 version = "0.1.5"
 dependencies = [
+ "avian3d",
  "bevy",
+ "bikanwarda-encounter",
  "building-shaders",
  "clap",
+ "damage",
  "firearms",
  "game-commands",
+ "lod-avian",
  "material-ref",
  "maybraid-world",
  "player-camera",
+ "projectiles",
  "world-materials",
 ]
 

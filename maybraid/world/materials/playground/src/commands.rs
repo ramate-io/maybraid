@@ -4,7 +4,12 @@ use std::path::PathBuf;
 
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
+use bikanwarda_encounter::chains::{
+	spawn_chain_colliders, ChainAnchor, ChainColliderConfig, ChainEndpoint, ChainMotion, ChainRoot,
+	ChainTensionMode,
+};
 use clap::{Parser, Subcommand};
+use damage::Health;
 use firearms::{laser_hex_ref, laser_pulse_ref, laser_tail_ref, muzzle_flame_ref};
 use game_commands::command::{CommandScript, GameCommand};
 use material_ref::{MaterialRef, MaterialRefRoot};
@@ -101,6 +106,11 @@ pub enum ChainCommand {
 		/// Number of links (2-32).
 		#[arg(default_value = "14")]
 		links: u32,
+	},
+	/// Show anchored chain with animated motion (taut or catenary).
+	Anchored {
+		/// Motion mode: `taut` or `catenary`.
+		mode: String,
 	},
 }
 
@@ -353,11 +363,25 @@ impl ChainCommand {
 							ChainHalo,
 						))
 						.id();
-					world.entity_mut(root).add_child(mesh_entity);
-				});
-			}
+				world.entity_mut(root).add_child(mesh_entity);
+			});
+		}
+		Self::Anchored { mode } => {
+			*console = format!("chain anchored {mode}");
+			commands.queue(move |world: &mut World| {
+				enter_chain_host(world);
+				
+				let tension_mode = match mode.to_lowercase().as_str() {
+					"taut" => ChainTensionMode::Taut,
+					"catenary" | _ => ChainTensionMode::Catenary { sag_ratio: 10 },
+				};
+				info!("Spawning anchored chain with mode: {:?}", tension_mode);
+				
+				spawn_anchored_chain_fixture(world, tension_mode);
+			});
 		}
 	}
+}
 }
 
 impl GameCommand for PlaygroundCommand {
@@ -418,4 +442,70 @@ pub(crate) fn preview_label(material: &MaterialRef) -> String {
 		material_ref::MaterialId::Default => "standard".into(),
 		material_ref::MaterialId::Name(name) => name.clone(),
 	}
+}
+
+pub(crate) fn spawn_anchored_chain_fixture(world: &mut World, tension_mode: ChainTensionMode) {
+	let link_count = 12;
+	let length_m = 3.0;
+	
+	// Create joints first
+	let mut joint_entities = Vec::new();
+	for i in 0..link_count {
+		let joint = world
+			.spawn((
+				Name::new(format!("chain-joint-{i}")),
+				Transform::from_xyz(0.0, 0.0, 0.0),
+				GlobalTransform::default(),
+			))
+			.id();
+		joint_entities.push(joint);
+	}
+	
+	// Create root with joint_entities
+	let root = world
+		.spawn((
+			Name::new("anchored-chain-fixture"),
+			ChainRoot {
+				link_count,
+				rest_length_m: length_m,
+				joint_entities: joint_entities.clone(),
+			},
+			ChainMotion { mode: tension_mode, active: true },
+			Transform::from_xyz(0.0, 0.0, 0.0),
+			GlobalTransform::default(),
+			Visibility::default(),
+			Health { current: 100.0, max: 100.0 },
+		))
+		.id();
+	
+	// Add joints as children
+	for joint in &joint_entities {
+		world.entity_mut(root).add_child(*joint);
+	}
+	
+	let left_anchor = world
+		.spawn((
+			Name::new("left-anchor"),
+			ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
+			Transform::from_xyz(-1.5, 2.5, 0.0),
+			GlobalTransform::from_xyz(-1.5, 2.5, 0.0),
+		))
+		.id();
+	
+	let right_anchor = world
+		.spawn((
+			Name::new("right-anchor"),
+			ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
+			Transform::from_xyz(1.5, 2.5, 0.0),
+			GlobalTransform::from_xyz(1.5, 2.5, 0.0),
+		))
+		.id();
+	
+	let config = ChainColliderConfig::default();
+	let _colliders = spawn_chain_colliders(&mut world.commands(), root, &joint_entities, config);
+	
+	info!(
+		"Spawned anchored chain fixture: root={:?}, anchors=[{:?}, {:?}], joints={}, mode={:?}",
+		root, left_anchor, right_anchor, link_count, tension_mode
+	);
 }

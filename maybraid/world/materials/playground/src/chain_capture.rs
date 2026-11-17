@@ -12,6 +12,7 @@ use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::time::TimeUpdateStrategy;
+use bikanwarda_encounter::chains::{ChainAnchor, ChainEndpoint, ChainLinkId, ChainMotion, ChainRoot, ChainTensionMode};
 use game_commands::ui::DebugHudRoot;
 use material_ref::MaterialRefRoot;
 use world_materials::chain::{
@@ -50,6 +51,9 @@ enum StillKind {
 		bent: bool,
 		rigid: bool,
 	},
+	AnchoredTaut,
+	AnchoredCatenary,
+	AnchoredHit,
 }
 
 struct StillShot {
@@ -136,6 +140,9 @@ const STILLS: &[StillShot] = &[
 		file: "skinned_bent_rigid.png",
 		kind: StillKind::SkinnedChain { bent: true, rigid: true },
 	},
+	StillShot { file: "anchored_taut.png", kind: StillKind::AnchoredTaut },
+	StillShot { file: "anchored_catenary.png", kind: StillKind::AnchoredCatenary },
+	StillShot { file: "anchored_hit.png", kind: StillKind::AnchoredHit },
 ];
 
 #[derive(Resource, Default)]
@@ -197,6 +204,30 @@ fn apply_still(
 			preview.style = PreviewStyle::Native;
 			commands.queue(move |world: &mut World| {
 				spawn_skinned_chain_for_capture(world, bent, rigid);
+			});
+		}
+		StillKind::AnchoredTaut => {
+			*lighting = LightingMode::Day;
+			preview.lighting = LightingMode::Day;
+			preview.style = PreviewStyle::Native;
+			commands.queue(move |world: &mut World| {
+				spawn_anchored_chain_for_capture(world, false, false);
+			});
+		}
+		StillKind::AnchoredCatenary => {
+			*lighting = LightingMode::Day;
+			preview.lighting = LightingMode::Day;
+			preview.style = PreviewStyle::Native;
+			commands.queue(move |world: &mut World| {
+				spawn_anchored_chain_for_capture(world, true, false);
+			});
+		}
+		StillKind::AnchoredHit => {
+			*lighting = LightingMode::Day;
+			preview.lighting = LightingMode::Day;
+			preview.style = PreviewStyle::Native;
+			commands.queue(move |world: &mut World| {
+				spawn_anchored_chain_for_capture(world, true, true);
 			});
 		}
 	}
@@ -309,6 +340,197 @@ fn spawn_skinned_chain_for_capture(world: &mut World, bent: bool, rigid: bool) {
 	// Reposition camera to frame the skinned chain
 	let camera_pos = Vec3::new(0.0, root_y + config.length_m * 0.5, 5.5);
 	let look_at = Vec3::new(0.0, root_y + config.length_m * 0.5, 0.0);
+	
+	let cameras: Vec<Entity> = world
+		.query_filtered::<Entity, With<Camera3d>>()
+		.iter(world)
+		.collect();
+	
+	for camera_entity in cameras {
+		let mut entity_ref = world.entity_mut(camera_entity);
+		entity_ref.insert(SkinnedChainCaptureCamera);
+		if let Some(mut transform) = entity_ref.get_mut::<Transform>() {
+			*transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
+		}
+	}
+}
+
+fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool) {
+	// Despawn any existing skinned chain captures
+	let to_despawn: Vec<Entity> = world
+		.query_filtered::<Entity, With<SkinnedChainCapture>>()
+		.iter(world)
+		.collect();
+	for entity in to_despawn {
+		world.despawn(entity);
+	}
+
+	// Hide the ChainPreviewRoot (vertical playground tubes) so only the anchored chain is visible
+	use crate::chain_preview::ChainPreviewRoot;
+	let preview_roots: Vec<Entity> = world
+		.query_filtered::<Entity, With<ChainPreviewRoot>>()
+		.iter(world)
+		.collect();
+	for entity in preview_roots {
+		if let Some(mut visibility) = world.get_mut::<Visibility>(entity) {
+			*visibility = Visibility::Hidden;
+		}
+	}
+
+	let link_count = 12;
+	let length_m = 2.8;
+	
+	let config = SkinnedChainConfig {
+		link_count,
+		length_m,
+		skinning_strategy: ChainSkinningStrategy::SmoothBlend,
+		..Default::default()
+	};
+
+	let data = generate_skinned_chain(config.clone());
+	
+	let aabb = Aabb::from_min_max(
+		Vec3::new(-0.5, -0.3, -0.5),
+		Vec3::new(0.5, length_m + 0.3, 0.5),
+	);
+	
+	let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(data.mesh);
+	let inverse_handle = world
+		.resource_mut::<Assets<SkinnedMeshInverseBindposes>>()
+		.add(SkinnedMeshInverseBindposes::from(data.inverse_bindposes));
+
+	// Position anchors horizontally at same height, separated by chain length
+	// Catenary will sag down in the middle
+	let anchor_height = 2.5;
+	let anchor_separation = 3.0; // Horizontal distance between anchors
+	let left_anchor_pos = Vec3::new(-anchor_separation / 2.0, anchor_height, 0.0);
+	let right_anchor_pos = Vec3::new(anchor_separation / 2.0, anchor_height, 0.0);
+	
+	let mode = if catenary {
+		ChainTensionMode::Catenary { sag_ratio: 10 }
+	} else {
+		ChainTensionMode::Taut
+	};
+
+	// Compute joint positions directly based on tension mode
+	// (Motion system doesn't run reliably in capture spawn context)
+	let joint_positions = bikanwarda_encounter::chains::compute_joint_positions(
+		left_anchor_pos,
+		right_anchor_pos,
+		link_count,
+		mode,
+	);
+
+	// Create joints first (we'll need their entities for ChainRoot and later parenting)
+	let mut joint_entities = Vec::new();
+	for (i, position) in joint_positions.iter().enumerate() {
+		let joint = world
+			.spawn((
+				Name::new(format!("chain-joint-{i}")),
+				Transform::from_translation(*position),
+				GlobalTransform::default(),
+				Visibility::default(),
+				SkinnedChainCapture,
+			))
+			.id();
+		joint_entities.push(joint);
+	}
+
+	let root = world
+		.spawn((
+			Name::new("anchored-chain-capture-root"),
+			ChainRoot {
+				link_count,
+				rest_length_m: length_m,
+				joint_entities: joint_entities.clone(),
+			},
+			ChainMotion {
+				mode,
+				active: true,
+			},
+			Transform::from_xyz(0.0, 0.0, 0.0),
+			GlobalTransform::default(),
+			Visibility::default(),
+			SkinnedChainCapture,
+		))
+		.id();
+	
+	// Add ChainLinkId and parent joints to root
+	for (i, joint) in joint_entities.iter().enumerate() {
+		world.entity_mut(*joint).insert(ChainLinkId { link_id: i as u8, chain_root: root });
+		world.entity_mut(root).add_child(*joint);
+	}
+	
+	// Spawn anchors - left and right at same height
+	let _left_anchor = world.spawn((
+		Name::new("left-anchor"),
+		ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
+		Transform::from_translation(left_anchor_pos),
+		GlobalTransform::default(),
+		Visibility::default(),
+		SkinnedChainCapture,
+	)).id();
+	
+	let _right_anchor = world.spawn((
+		Name::new("right-anchor"),
+		ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
+		Transform::from_translation(right_anchor_pos),
+		GlobalTransform::default(),
+		Visibility::default(),
+		SkinnedChainCapture,
+	)).id();
+
+	// Use ChainMaterial for proper rendering (shader fixed in #1603)
+	let material_ref = mythical_chain_ref_for(MythicalChainState::Intact);
+
+	let mesh_entity = world
+		.spawn((
+			Name::new("anchored-chain-capture-mesh"),
+			Mesh3d(mesh_handle.clone()),
+			Transform::IDENTITY,
+			GlobalTransform::default(),
+			Visibility::default(),
+			bevy::mesh::skinning::SkinnedMesh {
+				inverse_bindposes: inverse_handle,
+				joints: joint_entities.clone(),
+			},
+			MaterialRefRoot(material_ref),
+			OwnedChainMaterial,
+			ChainHalo,
+			aabb,
+			SkinnedChainCapture,
+		))
+		.id();
+	world.entity_mut(root).add_child(mesh_entity);
+	
+	// Note: We compute joint positions directly above since the motion system doesn't run during capture.
+	// The motion_system_runs_with_app_update test verifies the system works correctly in real gameplay.
+	
+	// If hit variant, spawn a visible projectile sphere at the sagging midpoint
+	if hit {
+		// Create a small sphere mesh for the projectile
+		let projectile_mesh = world.resource_mut::<Assets<Mesh>>().add(Sphere::new(0.15));
+		let projectile_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
+			base_color: Color::srgb(1.0, 0.3, 0.1), // Bright orange/red
+			emissive: Color::srgb(0.8, 0.2, 0.05).into(),
+			..Default::default()
+		});
+		
+		// Position at the center of the chain (midpoint should be sagging)
+		let _projectile = world.spawn((
+			Name::new("test-projectile"),
+			Mesh3d(projectile_mesh),
+			MeshMaterial3d(projectile_material),
+			Transform::from_xyz(0.0, anchor_height - 0.3, 0.0), // Positioned below anchor height to show at sag
+			GlobalTransform::default(),
+			Visibility::default(),
+			SkinnedChainCapture,
+		)).id();
+	}
+	
+	// Frame camera to show entire horizontal chain and both anchors
+	let camera_pos = Vec3::new(0.0, anchor_height, 6.0);
+	let look_at = Vec3::new(0.0, anchor_height - 0.3, 0.0); // Look slightly below anchors to center on sag
 	
 	let cameras: Vec<Entity> = world
 		.query_filtered::<Entity, With<Camera3d>>()

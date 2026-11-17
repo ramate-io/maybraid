@@ -2,8 +2,8 @@
 
 pub mod character;
 pub mod commands;
-mod drop_prompt;
 mod delete_prompt;
+mod drop_prompt;
 mod leave_prompt;
 mod loading_demo;
 mod preview;
@@ -11,21 +11,26 @@ mod session;
 mod ui;
 mod weapon_gallery;
 
+#[cfg(test)]
+mod gallery_input_tests;
+
 pub use character::{
-	CharacterEditBaseline, CharacterMenuState, CharacterScreen, CharacterScreenPlugin,
-	RequestShowCharacter, request_show_character,
+	request_show_character, CharacterEditBaseline, CharacterMenuState, CharacterScreen,
+	CharacterScreenPlugin, RequestShowCharacter,
 };
-pub use commands::{PLAYGROUND_CLI_NAME, PlaygroundCommand};
+pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use drop_prompt::CharacterDropPrompt;
 pub use game_commands::command::PendingStartupCommand;
 pub use leave_prompt::CharacterLeavePrompt;
-pub use preview::{CharacterPreviewLight, CharacterPreviewPlugin, CharacterPreviewRoot};
-pub use session::{
-	ActiveCharacter, CharacterEditorReturn, CharacterSession, CharacterSessionPlugin,
-	EditingCharacter, RequestEditCharacter, end_character_editor, leave_character_editor,
-	save_editing_character,
+pub use preview::{
+	CharacterPreviewLight, CharacterPreviewPlugin, CharacterPreviewRoot, GalleryLineupFigure,
 };
-pub use weapon_gallery::{WeaponGalleryPlugin, WeaponGalleryScreen, request_show_weapons};
+pub use session::{
+	end_character_editor, leave_character_editor, save_editing_character, ActiveCharacter,
+	CharacterEditorReturn, CharacterSession, CharacterSessionPlugin, EditingCharacter,
+	RequestEditCharacter,
+};
+pub use weapon_gallery::{request_show_weapons, WeaponGalleryPlugin, WeaponGalleryScreen};
 
 use bevy::prelude::*;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
@@ -39,13 +44,13 @@ use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_virtual_pad_controller::VirtualPadPlugin;
 use menu_components::MenuNavPad;
-use menu_components::{MenuModalStack, ScreenBackPressed, TextMenuSystems, consume_screen_back};
+use menu_components::{consume_screen_back, MenuModalStack, ScreenBackPressed, TextMenuSystems};
 use menu_screens::{
-	CreateCharacterPlugin, GalleryChoice, GalleryScreen, HomeMenuChoice, HomeScreen,
-	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettingsChoice,
-	InGameSettingsScreen, LoadingScreenPlugin, LoadingScreenSystems, SpinRevealScreen,
 	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
-	request_show_in_game_settings,
+	request_show_in_game_settings, CreateCharacterPlugin, GalleryChoice, GalleryScreen,
+	HomeMenuChoice, HomeScreen, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin,
+	InGameSettingsChoice, InGameSettingsScreen, LoadingScreenPlugin, LoadingScreenSystems,
+	SpinRevealScreen,
 };
 
 pub struct MenuPlaygroundPlugin;
@@ -246,11 +251,11 @@ mod tests {
 	use bevy::input::{ButtonState, InputPlugin, InputSystems};
 	use bevy::prelude::*;
 	use maybraid_menu_controller::{
-		InputRouter, MenuController, MenuNavCapture, RoutingEvent, dispatch,
+		dispatch, InputRouter, MenuController, MenuNavCapture, RoutingEvent,
 	};
 	use maybraid_virtual_pad_controller::{
-		PadButton, PrimaryVirtualPad, VirtualPadController, VirtualPadEvent, VirtualPadSystems,
-		produce::keyboard::KeyboardPad,
+		produce::keyboard::KeyboardPad, PadButton, PrimaryVirtualPad, VirtualPadController,
+		VirtualPadEvent, VirtualPadSystems,
 	};
 	use menu_components::MenuNavPad;
 	use menu_components::{

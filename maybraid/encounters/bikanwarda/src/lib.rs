@@ -4,6 +4,7 @@
 //! [#1120](https://github.com/ramate-io/maybraid/issues/1120). Generation and
 //! world placement are out of scope.
 
+pub mod chains;
 mod identity;
 mod outcomes;
 mod plugin;

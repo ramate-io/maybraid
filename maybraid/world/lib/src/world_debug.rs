@@ -26,6 +26,8 @@ pub struct WorldDebugPlugin;
 impl Plugin for WorldDebugPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<DebugPeacefulMode>();
+		#[cfg(feature = "chain-review")]
+		crate::chain_review::configure(app);
 
 		app.add_systems(
 			Update,
