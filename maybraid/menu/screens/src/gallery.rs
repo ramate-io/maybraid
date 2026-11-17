@@ -133,7 +133,12 @@ fn gallery_scene(
 	let rows = gallery_rows(summaries, active);
 	let selected = gallery_selected_index(summaries, active);
 	let children: Vec<Box<dyn Scene>> = vec![
-		Box::new(RotaryMenu::rows("Characters", rows).with_selected(selected).scene()),
+		Box::new(
+			RotaryMenu::rows("Characters", rows)
+				.with_selected(selected)
+				.with_layout(menu_components::RotaryLayout::INVENTORY.with_standing_portraits())
+				.scene(),
+		),
 		Box::new(gallery_action_prompts_scene(device)),
 	];
 	bsn! {
@@ -141,7 +146,7 @@ fn gallery_scene(
 		GalleryHudMenu
 		MenuScreen
 		MenuController::default()
-		BackgroundColor(Color::NONE)
+		BackgroundColor(menu_components::MENU_CLEAR)
 		Node {
 			width: percent(100),
 			height: percent(100),
@@ -288,8 +293,11 @@ mod tests {
 			species_title: "Braidman",
 		}];
 		let menu = RotaryMenu::rows("Characters", gallery_rows(&summaries, Some(CharacterId(1))))
-			.with_selected(0);
-		assert_eq!(menu.layout, RotaryLayout::GALLERY);
+			.with_selected(0)
+			.with_layout(RotaryLayout::INVENTORY.with_standing_portraits());
+		assert_eq!(menu.layout.min_scale, RotaryLayout::INVENTORY.min_scale);
+		assert_eq!(menu.layout.ease, RotaryLayout::INVENTORY.ease);
+		assert!(menu.layout.card_height > RotaryLayout::INVENTORY.card_height);
 		assert_eq!(menu.items.len(), 1);
 		assert_eq!(menu.selected, 0);
 	}

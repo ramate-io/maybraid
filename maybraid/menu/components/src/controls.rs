@@ -35,7 +35,7 @@ pub use prompt::{
 };
 pub use rotary::{
 	animate_rotary_cards, RotaryCaption, RotaryCaptionGroup, RotaryCaptionText, RotaryCard,
-	RotaryLayout, RotaryMotion,
+	RotaryLayout, RotaryMotion, RotaryPortrait,
 };
 pub use row::spawn_labeled_row;
 pub use scroll::{

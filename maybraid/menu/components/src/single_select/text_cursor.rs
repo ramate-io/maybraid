@@ -1,7 +1,7 @@
 //! Text menu whose active row inverts to a navy-on-yellow tag.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn};
+use bevy::scene::prelude::{bsn, Scene};
 use bevy::text::{FontSourceTemplate, Justify};
 use bevy::ui_widgets::Button;
 
@@ -10,7 +10,10 @@ use super::text_menu::{
 	TextMenuItem, TextMenuItemLabel,
 };
 use crate::controls::focus::FocusTag;
-use crate::controls::rotary::{RotaryCard, RotaryLayout, RotaryMotion};
+use crate::controls::rotary::{
+	RotaryCaption, RotaryCaptionGroup, RotaryCaptionText, RotaryCard, RotaryLayout, RotaryMotion,
+	RotaryPortrait,
+};
 use crate::controls::scroll::{entity_is_under, reveal_item_in_viewport};
 use crate::controls::section::CursorRow;
 use crate::info::description::TextMenuDescription;
@@ -297,7 +300,7 @@ impl<E> RotaryMenu<E> {
 			header: Some(header.into()),
 			items: items.into_iter().collect(),
 			selected: 0,
-			layout: RotaryLayout::GALLERY,
+			layout: RotaryLayout::INVENTORY,
 		}
 	}
 
@@ -317,11 +320,10 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> RotaryMenu<E
 		let item_count = self.items.len();
 		let selected = if item_count == 0 { 0 } else { self.selected.min(item_count - 1) };
 		let layout = self.layout;
-		let mut children: Vec<Box<dyn Scene>> = Vec::with_capacity(item_count + 2);
+		let mut children: Vec<Box<dyn Scene>> = Vec::with_capacity(item_count + 1);
 		if let Some(header) = self.header {
 			children.push(Box::new(rotary_header_scene(header)));
 		}
-		children.push(Box::new(rotary_track_scene(layout)));
 		for (ordinal, row) in self.items.into_iter().enumerate() {
 			children.push(Box::new(rotary_card_scene(layout, ordinal, selected, item_count, row)));
 		}
@@ -350,19 +352,6 @@ fn rotary_header_scene(header: String) -> impl Scene + 'static {
 	}
 }
 
-fn rotary_track_scene(layout: RotaryLayout) -> impl Scene + 'static {
-	let fill = layout.track_fill();
-	let border = layout.track_border();
-	bsn! {
-		~{layout.track_node()}
-		~{layout.track_transform()}
-		BackgroundColor(fill)
-		BorderColor::all(border)
-		ZIndex(1)
-		Pickable::IGNORE
-	}
-}
-
 fn rotary_card_scene<E>(
 	layout: RotaryLayout,
 	ordinal: usize,
@@ -379,7 +368,7 @@ where
 	} else {
 		TextMenuItem::yellow(ordinal)
 	};
-	let children: Vec<Box<dyn Scene>> = vec![Box::new(rotary_row_scene(item, row, selected))];
+	let children: Vec<Box<dyn Scene>> = vec![rotary_tile_scene(item, row)];
 	bsn! {
 		~{RotaryCard::unresolved(ordinal, count)}
 		~{motion}
@@ -565,128 +554,132 @@ where
 	}
 }
 
-fn rotary_row_scene<E>(
-	item: TextMenuItem,
-	row: TextCursorRow<E>,
-	selected: usize,
-) -> impl Scene + 'static
+fn rotary_tile_scene<E>(item: TextMenuItem, row: TextCursorRow<E>) -> Box<dyn Scene>
 where
 	E: Component + Copy + Default + Unpin + Send + Sync + 'static,
 {
-	let mut children: Vec<Box<dyn Scene>> = vec![rotary_item_scene(
-		item,
-		row.label,
-		row.action,
-		selected,
-		row.locked,
-		row.objective,
-		row.objective_visible,
-	)];
-	if let Some(subtext) = row.subtext {
-		children.push(Box::new(rotary_subtext_scene(subtext)));
-	}
-	bsn! {
-		Node {
-			width: percent(100),
-			height: percent(100),
-			flex_direction: FlexDirection::Column,
-			justify_content: JustifyContent::Center,
-			align_items: AlignItems::Center,
-		}
-		Pickable::IGNORE
-		Children [ {children} ]
-	}
-}
-
-fn rotary_subtext_scene(subtext: String) -> impl Scene + 'static {
-	bsn! {
-		Node {
-			width: percent(100),
-		}
-		Pickable::IGNORE
-		Children [
-			~{Text::new(subtext)}
-			TextFont {
-				font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
-				font_size: px(RotaryLayout::GALLERY_SUBTEXT_PX),
-			}
-			TextColor(TEXT_YELLOW_FAINT)
-			TextLayout::new(Justify::Center, bevy::text::LineBreak::WordOrCharacter)
-			Pickable::IGNORE
-		]
-	}
-}
-
-fn rotary_item_scene<E>(
-	item: TextMenuItem,
-	label: String,
-	action: E,
-	selected: usize,
-	locked: bool,
-	objective: Option<MenuObjectiveKind>,
-	objective_visible: bool,
-) -> Box<dyn Scene>
-where
-	E: Component + Copy + Default + Unpin + Send + Sync + 'static,
-{
-	let focused = item.index == selected;
-	let face = FocusTag::text(focused, locked, item.idle);
-	let mut children: Vec<Box<dyn Scene>> = vec![Box::new(focus_tag_scene(
-		rotary_label_scene(label, face),
-		item.idle,
-		focused,
-		locked,
-	))];
-	if let Some(kind) = objective {
-		let marker_visibility =
-			if objective_visible { Visibility::Inherited } else { Visibility::Hidden };
-		children.push(Box::new(objective_marker_scene(kind, marker_visibility)));
-	}
-	let column_gap = Val::Px(FOCUS_TAG_GAP);
-	if locked {
+	let ordinal = item.index;
+	let children: Vec<Box<dyn Scene>> = vec![
+		Box::new(rotary_portrait_scene(ordinal)),
+		Box::new(rotary_caption_scene(
+			ordinal,
+			row.label,
+			row.subtext,
+			row.objective,
+			row.objective_visible,
+		)),
+	];
+	let action = row.action;
+	let node = Node {
+		width: Val::Percent(100.0),
+		height: Val::Percent(100.0),
+		padding: UiRect::all(Val::Px(6.0)),
+		flex_direction: FlexDirection::Column,
+		justify_content: JustifyContent::FlexEnd,
+		align_items: AlignItems::Center,
+		row_gap: Val::Px(6.0),
+		..default()
+	};
+	if row.locked {
 		Box::new(bsn! {
 			Button
 			~{bevy::picking::hover::Hovered::default()}
 			~{item}
 			~{action}
 			MenuItemLocked
-			Node {
-				flex_direction: FlexDirection::Row,
-				justify_content: JustifyContent::Center,
-				align_items: AlignItems::Center,
-				column_gap: column_gap,
-			}
+			~{node}
 			BackgroundColor(Color::NONE)
 			Children [ {children} ]
-		})
+		}) as Box<dyn Scene>
 	} else {
 		Box::new(bsn! {
 			Button
 			~{bevy::picking::hover::Hovered::default()}
 			~{item}
 			~{action}
-			Node {
-				flex_direction: FlexDirection::Row,
-				justify_content: JustifyContent::Center,
-				align_items: AlignItems::Center,
-				column_gap: column_gap,
-			}
+			~{node}
 			BackgroundColor(Color::NONE)
 			Children [ {children} ]
 		})
 	}
 }
 
-fn rotary_label_scene(label: String, color: Color) -> impl Scene {
+fn rotary_portrait_scene(ordinal: usize) -> impl Scene + 'static {
 	bsn! {
+		~{RotaryPortrait { ordinal }}
+		Node {
+			width: percent(100),
+			flex_grow: 1.0,
+			min_height: px(0.0),
+			justify_content: JustifyContent::Center,
+			align_items: AlignItems::Center,
+			overflow: Overflow::clip(),
+		}
+		Pickable::IGNORE
+	}
+}
+
+fn rotary_caption_scene(
+	ordinal: usize,
+	label: String,
+	subtext: Option<String>,
+	objective: Option<MenuObjectiveKind>,
+	objective_visible: bool,
+) -> impl Scene + 'static {
+	let mut texts: Vec<Box<dyn Scene>> =
+		vec![Box::new(rotary_caption_line_scene(label, RotaryLayout::LABEL_PX, TEXT_YELLOW))];
+	if let Some(subtext) = subtext {
+		texts.push(Box::new(rotary_caption_line_scene(
+			subtext,
+			RotaryLayout::SUBTEXT_PX,
+			TEXT_YELLOW_FAINT,
+		)));
+	}
+	let mut children: Vec<Box<dyn Scene>> = vec![Box::new(bsn! {
+		RotaryCaptionGroup
+		Node {
+			width: percent(100),
+			flex_direction: FlexDirection::Column,
+			justify_content: JustifyContent::Center,
+			align_items: AlignItems::Center,
+			row_gap: px(2.0),
+		}
+		Pickable::IGNORE
+		Children [ {texts} ]
+	})];
+	if let Some(kind) = objective {
+		let marker_visibility =
+			if objective_visible { Visibility::Inherited } else { Visibility::Hidden };
+		children.push(Box::new(objective_marker_scene(kind, marker_visibility)));
+	}
+	bsn! {
+		~{RotaryCaption { menu: Entity::PLACEHOLDER, ordinal }}
+		Node {
+			width: percent(100),
+			padding: UiRect::axes(px(8.0), px(4.0)),
+			border_radius: BorderRadius::all(px(4.0)),
+			flex_direction: FlexDirection::Column,
+			justify_content: JustifyContent::Center,
+			align_items: AlignItems::Center,
+			row_gap: px(4.0),
+			flex_shrink: 0.0,
+		}
+		BackgroundColor(Color::NONE)
+		Pickable::IGNORE
+		Children [ {children} ]
+	}
+}
+
+fn rotary_caption_line_scene(label: String, size: f32, color: Color) -> impl Scene + 'static {
+	bsn! {
+		RotaryCaptionText
 		~{Text::new(label)}
 		TextFont {
 			font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
-			font_size: px(RotaryLayout::GALLERY_LABEL_PX),
+			font_size: px(size),
 		}
 		TextColor(color)
 		TextLayout::new(Justify::Center, bevy::text::LineBreak::WordOrCharacter)
-		TextMenuItemLabel
 		Pickable::IGNORE
 	}
 }
@@ -907,10 +900,10 @@ pub fn scroll_text_cursor_selection_into_view(
 #[cfg(test)]
 mod tests {
 	use super::{MenuObjectiveKind, RotaryMenu, TextCursorColumn, TextCursorRow};
-	use crate::ITEM_FONT_SIZE;
 	use crate::controls::rotary::RotaryLayout;
 	use crate::single_select::{TextColumnAlign, TextColumnAnchor};
 	use crate::theme::{OBJECTIVE_MARKER_FONT_SIZE, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON};
+	use crate::ITEM_FONT_SIZE;
 
 	#[derive(Clone, Copy)]
 	enum RowAction {
@@ -992,10 +985,10 @@ mod tests {
 	}
 
 	#[test]
-	fn rotary_menu_uses_the_gallery_layout() {
+	fn rotary_menu_defaults_to_the_inventory_layout() {
 		let menu = RotaryMenu::rows("Characters", vec![TextCursorRow::new("Ada", RowAction::Go)])
 			.with_selected(0);
-		assert_eq!(menu.layout, RotaryLayout::GALLERY);
+		assert_eq!(menu.layout, RotaryLayout::INVENTORY);
 		assert_eq!(menu.header.as_deref(), Some("Characters"));
 		assert_eq!(menu.items.len(), 1);
 	}

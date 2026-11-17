@@ -37,9 +37,9 @@ pub use controls::{
 	HudScrollManual, HudScrollStrip, HudScrollThumb, HudScrollTrack, HudScrollViewport,
 	InputPromptDevice, InventoryActionPrompts, InventoryDropPromptChip, InventoryPromptGlyph,
 	InventoryPromptKind, OverlayHeader, OverlayHeaderKey, ReorderMark, RotaryCaption,
-	RotaryCaptionGroup, RotaryCaptionText, RotaryCard, RotaryLayout, RotaryMotion, ShortTextChange,
-	ShortTextField, ShortTextKey, ShortTextModal, ShortTextModalRoot, ShortTextPad,
-	ShortTextToggle, ShortTextValue, SlotRank, TileWrap,
+	RotaryCaptionGroup, RotaryCaptionText, RotaryCard, RotaryLayout, RotaryMotion, RotaryPortrait,
+	ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal, ShortTextModalRoot,
+	ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank, TileWrap,
 };
 pub use icons::{spin_icons, Icon, SpinningIcon};
 pub use info::{

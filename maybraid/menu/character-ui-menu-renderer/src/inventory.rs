@@ -8,12 +8,12 @@ use character_ui_menu::{
 	MenuNode,
 };
 use menu_components::{
+	spawn_header_line, spawn_hud_text, spawn_inventory_action_prompts, spawn_text_button,
 	HoverTile, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, HudScrollManual, HudScrollViewport,
-	InputPromptDevice, InventoryHudMenu, MENU_CLEAR, PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE,
-	PROMPT_PAD_NEXT_SECTION, PROMPT_PAD_PREVIOUS_SECTION, PROMPT_PAD_TOGGLE_DRAWER, RotaryCaption,
-	RotaryCaptionGroup, RotaryCaptionText, RotaryCard, RotaryLayout, RotaryMotion, TEXT_YELLOW,
-	TEXT_YELLOW_FAINT, TileWrap, menu_region_wash, spawn_header_line, spawn_hud_text,
-	spawn_inventory_action_prompts, spawn_text_button,
+	InputPromptDevice, InventoryHudMenu, RotaryCaption, RotaryCaptionGroup, RotaryCaptionText,
+	RotaryCard, RotaryLayout, RotaryMotion, TileWrap, MENU_CLEAR, PANEL_HEADER_FONT_SIZE,
+	PANEL_ITEM_FONT_SIZE, PROMPT_PAD_NEXT_SECTION, PROMPT_PAD_PREVIOUS_SECTION,
+	PROMPT_PAD_TOGGLE_DRAWER, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
 use crate::sink::MenuThumbnailContext;
@@ -1735,19 +1735,17 @@ mod tests {
 		let (drawer, ledger, capacity) = section_data(&node, InventorySection::Lubikan)
 			.ok_or_else(|| anyhow::anyhow!("missing Lubikan section"))?;
 		assert_eq!(drawer.len(), 3);
-		assert!(
-			drawer.iter().all(|choice| choice.selected
-				&& choice.item_key.is_some()
-				&& choice.event.is_none())
-		);
+		assert!(drawer
+			.iter()
+			.all(|choice| choice.selected && choice.item_key.is_some() && choice.event.is_none()));
 		assert_eq!(ledger.len(), 3);
 		assert_eq!(capacity, 3);
 		Ok(())
 	}
 
 	#[test]
-	fn inventory_drawer_collapses_and_preview_fills_available_space_until_picker_opens()
-	-> anyhow::Result<()> {
+	fn inventory_drawer_collapses_and_preview_fills_available_space_until_picker_opens(
+	) -> anyhow::Result<()> {
 		let mut app = App::new();
 		app.add_plugins((MinimalPlugins, AssetPlugin::default()));
 		app.init_asset::<Image>();
@@ -2023,8 +2021,8 @@ mod tests {
 	}
 
 	#[test]
-	fn gallery_shell_spawns_two_rows_and_only_the_next_empty_slot_is_focusable()
-	-> anyhow::Result<()> {
+	fn gallery_shell_spawns_two_rows_and_only_the_next_empty_slot_is_focusable(
+	) -> anyhow::Result<()> {
 		let choices = (0..15)
 			.map(|index| GridCatalogChoice {
 				label: format!("item-{index}"),

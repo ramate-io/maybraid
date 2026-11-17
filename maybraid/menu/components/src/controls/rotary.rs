@@ -1,4 +1,8 @@
 //! Shared rotary-wheel geometry used by inventory selection and the gallery.
+//!
+//! Motion matches the inventory carousel from [#1567](https://github.com/ramate-io/maybraid/pull/1567):
+//! a flattened ring with no track disc. Gallery cards reuse the same easing
+//! and caption treatment; they only swap the art slot for a standing portrait.
 
 use bevy::prelude::*;
 
@@ -6,8 +10,7 @@ use super::hud_menu::HudMenu;
 use crate::single_select::text_menu::TextMenu;
 use crate::theme::{TEXT_DEEP_BLUE, TEXT_YELLOW, TEXT_YELLOW_FAINT};
 
-/// Ring size and easing. Inventory uses a flattened carousel; the gallery
-/// uses a larger wheel over the live character.
+/// Ring size and easing. Inventory and the gallery share this flattened carousel.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct RotaryLayout {
 	pub radius: f32,
@@ -17,7 +20,6 @@ pub struct RotaryLayout {
 	pub ease: f32,
 	pub card_width: f32,
 	pub card_height: f32,
-	pub track_alpha: f32,
 }
 
 impl RotaryLayout {
@@ -30,28 +32,32 @@ impl RotaryLayout {
 		ease: 14.0,
 		card_width: 164.0,
 		card_height: 110.0,
-		track_alpha: 0.72,
 	};
 
-	/// Full-screen character wheel laid over the gallery preview.
-	pub const GALLERY: Self = Self {
-		radius: 360.0,
-		front_offset: 130.0,
-		min_scale: 0.58,
-		scale_span: 0.22,
-		ease: 14.0,
-		card_width: 280.0,
-		card_height: 108.0,
-		track_alpha: 0.18,
-	};
+	/// Name size on a rotary caption chip.
+	pub const LABEL_PX: f32 = 20.0;
 
-	/// Name size on a gallery wheel card.
-	pub const GALLERY_LABEL_PX: f32 = 32.0;
+	/// Species / detail size under a rotary name.
+	pub const SUBTEXT_PX: f32 = 13.0;
 
-	/// Species / caption size under a gallery wheel name.
-	pub const GALLERY_SUBTEXT_PX: f32 = 18.0;
+	/// Same inventory motion, with a standing portrait slot instead of a 56px icon.
+	pub fn with_standing_portraits(self) -> Self {
+		Self { card_width: 220.0, card_height: 360.0, radius: 340.0, front_offset: 16.0, ..self }
+	}
+
+	/// Portrait cards with fewer than three entries would otherwise stack.
+	pub fn ring_count(self, count: usize) -> usize {
+		if count == 0 {
+			0
+		} else if self.card_height > Self::INVENTORY.card_height {
+			count.max(3)
+		} else {
+			count
+		}
+	}
 
 	pub fn angle(self, ordinal: usize, selected: usize, count: usize) -> f32 {
+		let count = self.ring_count(count);
 		if count < 2 {
 			return 0.0;
 		}
@@ -117,39 +123,6 @@ impl RotaryLayout {
 		*z_index = self.z_index(angle);
 	}
 
-	pub fn track_diameter(self) -> f32 {
-		self.radius * 2.0 + 104.0
-	}
-
-	pub fn track_node(self) -> Node {
-		let diameter = self.track_diameter();
-		Node {
-			position_type: PositionType::Absolute,
-			left: Val::Percent(50.0),
-			top: Val::Percent(50.0),
-			width: Val::Px(diameter),
-			height: Val::Auto,
-			aspect_ratio: Some(1.0),
-			margin: UiRect {
-				left: Val::Px(-diameter / 2.0),
-				top: Val::Px(-diameter / 2.0),
-				..default()
-			},
-			border: UiRect::all(Val::Px(1.0)),
-			border_radius: BorderRadius::MAX,
-			..default()
-		}
-	}
-
-	pub fn track_transform(self) -> UiTransform {
-		let diameter = self.track_diameter();
-		UiTransform {
-			translation: Val2::px(0.0, self.card_height / 2.0 + 3.0),
-			scale: Vec2::new(1.0, (self.front_offset * 2.0 + 2.0) / diameter),
-			..default()
-		}
-	}
-
 	pub fn host_node(self) -> Node {
 		Node {
 			width: Val::Percent(100.0),
@@ -161,7 +134,7 @@ impl RotaryLayout {
 		}
 	}
 
-	/// Full-screen host that sits over a live character preview.
+	/// Full-screen host that sits over a menu wash.
 	pub fn overlay_node(self) -> Node {
 		Node {
 			position_type: PositionType::Absolute,
@@ -172,14 +145,6 @@ impl RotaryLayout {
 			overflow: Overflow::clip(),
 			..default()
 		}
-	}
-
-	pub fn track_fill(self) -> Color {
-		Color::srgba(0.35, 0.67, 0.88, self.track_alpha)
-	}
-
-	pub fn track_border(self) -> Color {
-		Color::srgb(0.74, 0.87, 0.96)
 	}
 }
 
@@ -274,6 +239,12 @@ impl RotaryMotion {
 	}
 }
 
+/// Art slot above a rotary caption. Hosts attach a portrait or item thumbnail.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RotaryPortrait {
+	pub ordinal: usize,
+}
+
 /// Caption chip whose fill follows the focused ordinal.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct RotaryCaption {
@@ -346,11 +317,6 @@ pub fn animate_rotary_cards(
 			continue;
 		};
 		motion.ease_to(*layout, card.ordinal, selected, card.count, dt);
-		if *layout == RotaryLayout::GALLERY {
-			// Gallery names follow the 3D lineup in menu-playground; keep easing
-			// motion so those labels can reuse scale / depth.
-			continue;
-		}
 		layout.apply_transform(&mut transform, &mut z_index, motion.angle, motion.scale);
 	}
 	for (entity, mut label, children, mut background) in &mut labels {
@@ -378,10 +344,8 @@ mod tests {
 	use super::RotaryMotion;
 
 	#[test]
-	fn inventory_track_matches_the_legacy_carousel() {
+	fn inventory_motion_matches_the_legacy_carousel() {
 		let layout = RotaryLayout::INVENTORY;
-		assert!((layout.track_diameter() - 560.0).abs() < f32::EPSILON);
-		assert!((layout.card_height / 2.0 + 3.0 - 58.0).abs() < f32::EPSILON);
 		assert!((layout.angle(0, 0, 4) - 0.0).abs() < f32::EPSILON);
 		assert!((layout.x(0.0) - 0.0).abs() < f32::EPSILON);
 		assert!((layout.y(0.0) - 14.0).abs() < f32::EPSILON);
@@ -390,7 +354,7 @@ mod tests {
 
 	#[test]
 	fn motion_takes_the_short_wrap() {
-		let layout = RotaryLayout::GALLERY;
+		let layout = RotaryLayout::INVENTORY;
 		let mut motion = RotaryMotion { angle: 0.1, scale: 1.0 };
 		motion.step_angle(std::f32::consts::TAU - 0.1, 1.0);
 		assert!(motion.angle < 0.0, "should wrap backward, got {}", motion.angle);
@@ -398,8 +362,20 @@ mod tests {
 	}
 
 	#[test]
-	fn gallery_wheel_is_larger_than_inventory() {
-		assert!(RotaryLayout::GALLERY.radius > RotaryLayout::INVENTORY.radius);
-		assert!(RotaryLayout::GALLERY.front_offset > RotaryLayout::INVENTORY.front_offset);
+	fn standing_portraits_keep_inventory_easing() {
+		let inventory = RotaryLayout::INVENTORY;
+		let portrait = inventory.with_standing_portraits();
+		assert_eq!(portrait.min_scale, inventory.min_scale);
+		assert_eq!(portrait.scale_span, inventory.scale_span);
+		assert_eq!(portrait.ease, inventory.ease);
+		assert!(portrait.card_height > inventory.card_height);
+		assert!(
+			portrait.x(portrait.angle(1, 0, 2)).abs() > 100.0,
+			"two portrait cards must not stack at the front"
+		);
+		assert!(
+			inventory.x(inventory.angle(1, 0, 2)).abs() < 1.0,
+			"inventory still stacks a two-item ring at the front"
+		);
 	}
 }

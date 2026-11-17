@@ -9,8 +9,8 @@ use character_persist::{CharacterId, SaveRoot};
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_virtual_pad_controller::PadHidPolicy;
 use menu_components::{
-	GalleryPromptKind, MenuModalId, MenuModalStack, RotaryCard, RotaryLayout, ScreenBack,
-	ScreenEdit, TextCursorScroll, TextMenu,
+	GalleryPromptKind, MenuModalId, MenuModalStack, RotaryCaption, RotaryCard, RotaryLayout,
+	RotaryPortrait, ScreenBack, ScreenEdit, TextCursorScroll, TextMenu,
 };
 use menu_screens::{
 	request_show_gallery, GalleryChoice, GalleryScreen, RequestShowCreateCharacter, RequestShowHome,
@@ -219,7 +219,9 @@ fn gallery_roster_is_a_full_screen_rotary_wheel() -> Result<()> {
 		.iter(app.world())
 		.next()
 		.context("gallery rotary layout")?;
-	assert_eq!(layout, RotaryLayout::GALLERY);
+	assert_eq!(layout, RotaryLayout::INVENTORY.with_standing_portraits());
+	assert_eq!(layout.min_scale, RotaryLayout::INVENTORY.min_scale);
+	assert_eq!(layout.ease, RotaryLayout::INVENTORY.ease);
 	assert_eq!(highlighted_index(&mut app)?, 0);
 	std::fs::remove_dir_all(&root.path)?;
 	Ok(())
@@ -397,10 +399,73 @@ fn gallery_wheel_spawns_one_figure_per_saved_character() -> Result<()> {
 		.collect();
 	figures.sort_by_key(|(ordinal, _)| *ordinal);
 	assert_eq!(figures, vec![(0, jeff), (1, roamer)]);
+	assert_eq!(count::<RotaryPortrait>(&mut app), 2);
 	std::fs::remove_dir_all(&root.path)?;
 
 	let (mut app, root) = empty_gallery_app()?;
 	assert_eq!(count::<GalleryLineupFigure>(&mut app), 0);
+	assert_eq!(count::<RotaryPortrait>(&mut app), 0);
+	std::fs::remove_dir_all(&root.path)?;
+	Ok(())
+}
+
+#[test]
+fn gallery_wheel_omits_the_track_disc() -> Result<()> {
+	let (mut app, root, _, _) = two_character_app()?;
+	let mut fills = app.world_mut().query::<&BackgroundColor>();
+	assert!(!fills.iter(app.world()).any(|color| RotaryCard::is_removed_track_fill(color.0)));
+	let mut tracks = app.world_mut().query::<(&BackgroundColor, &UiTransform)>();
+	assert!(!tracks.iter(app.world()).any(|(color, transform)| {
+		RotaryCard::is_track_transform(transform) && color.0.alpha() > 0.0
+	}));
+	std::fs::remove_dir_all(&root.path)?;
+	Ok(())
+}
+
+#[test]
+fn gallery_labels_sit_under_each_character() -> Result<()> {
+	let (mut app, root, _, _) = two_character_app()?;
+	let portraits: Vec<_> = app
+		.world_mut()
+		.query::<(Entity, &RotaryPortrait)>()
+		.iter(app.world())
+		.map(|(entity, portrait)| (portrait.ordinal, entity))
+		.collect();
+	let captions: Vec<_> = app
+		.world_mut()
+		.query::<(Entity, &RotaryCaption)>()
+		.iter(app.world())
+		.map(|(entity, caption)| (caption.ordinal, entity))
+		.collect();
+	assert_eq!(portraits.len(), 2);
+	assert_eq!(captions.len(), 2);
+	for ordinal in [0, 1] {
+		let portrait = portraits
+			.iter()
+			.find(|(slot, _)| *slot == ordinal)
+			.map(|(_, entity)| *entity)
+			.context("portrait")?;
+		let caption = captions
+			.iter()
+			.find(|(slot, _)| *slot == ordinal)
+			.map(|(_, entity)| *entity)
+			.context("caption")?;
+		let parent = app.world().get::<ChildOf>(portrait).context("portrait parent")?.parent();
+		assert_eq!(app.world().get::<ChildOf>(caption).context("caption parent")?.parent(), parent);
+		let node = app.world().get::<Node>(parent).context("card column")?;
+		assert_eq!(node.flex_direction, FlexDirection::Column);
+		assert_eq!(node.justify_content, JustifyContent::FlexEnd);
+		assert_eq!(node.align_items, AlignItems::Center);
+		let children = app.world().get::<Children>(parent).context("card children")?;
+		let portrait_at =
+			children.iter().position(|child| child == portrait).context("portrait idx")?;
+		let caption_at =
+			children.iter().position(|child| child == caption).context("caption idx")?;
+		assert!(
+			portrait_at < caption_at,
+			"portrait {portrait_at} must sit above the label {caption_at}"
+		);
+	}
 	std::fs::remove_dir_all(&root.path)?;
 	Ok(())
 }

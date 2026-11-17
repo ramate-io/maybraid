@@ -3,10 +3,14 @@
 use std::collections::HashMap;
 use std::f32::consts::{PI, TAU};
 
+use bevy::camera::visibility::RenderLayers;
+use bevy::camera::{ClearColorConfig, RenderTarget};
 use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
+use bevy::render::render_resource::TextureFormat;
 use bevy::scene::prelude::bsn;
+use bevy::ui::widget::ViewportNode;
 use bevy::window::PrimaryWindow;
 use character_creation_menus::{CharacterMenu, ConceptSpecies, MenuEvent};
 #[cfg(test)]
@@ -33,10 +37,9 @@ use lod::scene::LodSceneLevel;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
 use maybraid_character_ui_menu_renderer::InventoryCharacterPreviewSlot;
 use menu_components::{
-	MenuModalId, MenuModalStack, RotaryCard, RotaryLayout, RotaryMotion, TextMenu,
-	TextMenuInputLock,
+	MenuModalId, MenuModalStack, RotaryPortrait, TextMenuInputLock, CHARACTER_PANEL_WIDTH,
+	DESCRIPTION_PANE_LEFT_PERCENT, MENU_CLEAR,
 };
-use menu_components::{CHARACTER_PANEL_WIDTH, DESCRIPTION_PANE_LEFT_PERCENT};
 use menu_screens::{
 	GalleryScreen, HomeScreen, SpinRevealCurrent, SpinRevealScreen, SpinRevealSystems,
 };
@@ -58,8 +61,8 @@ struct GrenadePreview;
 #[derive(Component)]
 pub struct CharacterPreviewLight;
 
-/// One saved character standing on the gallery wheel. Session plugin keeps the
-/// roster in sync so tests can count figures without the 3D preview plugin.
+/// One saved character painted into a rotary portrait slot. Session plugin
+/// keeps the roster in sync so tests can count figures without the 3D plugin.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 #[require(Transform, Visibility)]
 pub struct GalleryLineupFigure {
@@ -69,69 +72,48 @@ pub struct GalleryLineupFigure {
 }
 
 #[derive(Component, Clone, Copy, Debug)]
-struct GalleryLineupMotion {
-	angle: f32,
+struct GalleryPortraitCamera {
+	ordinal: usize,
 }
 
-impl GalleryLineupMotion {
-	fn step_angle(&mut self, target: f32, alpha: f32) {
-		let delta = (target - self.angle + PI).rem_euclid(TAU) - PI;
-		self.angle += delta * alpha;
-	}
+#[derive(Component, Clone, Copy, Debug)]
+struct GalleryPortraitLight;
+
+/// Off-screen booth cameras must not participate in the live preview framing.
+const GALLERY_PORTRAIT_LAYER_BASE: usize = 24;
+const GALLERY_PORTRAIT_SPACING: f32 = 12.0;
+const GALLERY_PORTRAIT_ORIGIN_X: f32 = 80.0;
+/// Slightly side-on, chest-height, pulled back so the whole figure fits the slot.
+const GALLERY_PORTRAIT_EYE: Vec3 = Vec3::new(0.9, 1.1, 6.2);
+const GALLERY_PORTRAIT_LOOK: Vec3 = Vec3::new(0.0, 0.95, 0.0);
+const GALLERY_PORTRAIT_FOV: f32 = 0.48;
+/// Standing portrait slot is taller than it is wide (`card` 220×~280 after caption).
+const GALLERY_PORTRAIT_ASPECT: f32 = 220.0 / 280.0;
+
+fn gallery_portrait_layer(ordinal: usize) -> RenderLayers {
+	RenderLayers::layer(GALLERY_PORTRAIT_LAYER_BASE + ordinal)
 }
 
-/// World-space ring the saved characters stand on. Grows once the roster
-/// would pack tighter than about a meter of arc.
-fn gallery_lineup_radius(count: usize) -> f32 {
-	2.35_f32.max(0.9 * count.max(1) as f32 / TAU)
+fn gallery_portrait_origin(ordinal: usize) -> Vec3 {
+	Vec3::new(GALLERY_PORTRAIT_ORIGIN_X + ordinal as f32 * GALLERY_PORTRAIT_SPACING, 0.0, 0.0)
 }
 
-fn gallery_lineup_pose(angle: f32, radius: f32) -> Transform {
-	let position = Vec3::new(angle.sin() * radius, 0.0, angle.cos() * radius);
-	// Concept meshes face local +Z, opposite Bevy's -Z forward. Aiming -Z at the
-	// origin turns the painted face toward the camera outside the ring.
-	Transform::from_translation(position).looking_at(Vec3::ZERO, Vec3::Y)
+fn gallery_portrait_image() -> Image {
+	Image::new_target_texture(1, 1, TextureFormat::Bgra8UnormSrgb, None)
 }
 
-/// Lower, side-on framing: eye near chest height, looking at the front of the
-/// ring so the focused figure is closest and the rest recede.
-fn gallery_lineup_camera(count: usize) -> (Vec3, Vec3) {
-	let radius = gallery_lineup_radius(count);
-	let look_at = Vec3::new(0.2, 0.88, radius * 0.62);
-	let eye = Vec3::new(1.65, 0.98, radius + 2.9);
-	(eye, look_at)
-}
-
-fn apply_gallery_lineup_camera(
-	transform: &mut Transform,
-	controller: &mut CameraController,
-	count: usize,
-) {
-	let (eye, look_at) = gallery_lineup_camera(count);
-	*transform = Transform::from_translation(eye).looking_at(look_at, Vec3::Y);
-	sync_controller_from_transform(controller, transform);
-}
-
-fn apply_gallery_lineup_camera_view(
-	gallery: Query<(), With<GalleryScreen>>,
-	figures: Query<(), With<GalleryLineupFigure>>,
-	mut cameras: Query<
-		(&mut Transform, &mut CameraController, &mut Camera, &mut Projection),
-		With<Camera3d>,
-	>,
-) {
-	if gallery.is_empty() {
-		return;
-	}
-	let Ok((mut transform, mut controller, mut camera, mut projection)) = cameras.single_mut()
-	else {
-		return;
-	};
-	camera.viewport = None;
-	if let Projection::Perspective(perspective) = projection.as_mut() {
-		perspective.fov = PREVIEW_FOV;
-	}
-	apply_gallery_lineup_camera(&mut transform, &mut controller, figures.iter().len());
+/// Side-on, chest-height camera. Distance is at least [`GALLERY_PORTRAIT_EYE`].z
+/// so wide meshes (Brodler arms) stay inside the slot; taller species pull back.
+fn gallery_portrait_transform(origin: Vec3, min: Vec3, max: Vec3) -> Transform {
+	let height = (max.y - min.y).max(0.4);
+	let width = (max.x - min.x).max(max.z - min.z).max(0.4);
+	let look = GALLERY_PORTRAIT_LOOK;
+	let half_v = (GALLERY_PORTRAIT_FOV * 0.5).tan();
+	let dist_h = height * 1.2 / (2.0 * half_v);
+	let dist_w = width * 1.2 / (2.0 * half_v * GALLERY_PORTRAIT_ASPECT);
+	let dist = dist_h.max(dist_w).max(GALLERY_PORTRAIT_EYE.z);
+	let eye = look + Vec3::new(dist * 0.14, 0.0, dist);
+	Transform::from_translation(origin + eye).looking_at(origin + look, Vec3::Y)
 }
 
 fn is_lineup_preview(
@@ -143,9 +125,6 @@ fn is_lineup_preview(
 		.chain(child_of.iter_ancestors(entity))
 		.any(|ancestor| figures.get(ancestor).is_ok())
 }
-
-const LINEUP_LABEL_HEIGHT: f32 = 1.36;
-const LINEUP_LABEL_LIFT_PX: f32 = 0.0;
 
 #[derive(Resource, Default)]
 struct PreviewSyncState {
@@ -408,14 +387,12 @@ impl Plugin for CharacterPreviewPlugin {
 				Update,
 				(
 					sync_preview.after(SpinRevealSystems::Apply),
-					realize_gallery_lineup.after(sync_preview),
-					place_gallery_lineup.after(realize_gallery_lineup),
-					apply_gallery_lineup_camera_view.after(place_gallery_lineup),
-					sync_gallery_lineup_labels.after(apply_gallery_lineup_camera_view),
+					realize_gallery_portraits.after(sync_preview),
+					stamp_gallery_portrait_layers.after(realize_gallery_portraits),
 					realize_preview_grenades.after(sync_preview),
 					stamp_preview_animation
 						.after(sync_preview)
-						.after(realize_gallery_lineup)
+						.after(realize_gallery_portraits)
 						.after(CharacterHostSystems::Membership)
 						.before(characters::CharacterMotionSystems::Anim),
 					queue_preview_camera_focus,
@@ -704,15 +681,25 @@ where
 	entity
 }
 
-fn realize_gallery_lineup(
+fn realize_gallery_portraits(
 	mut commands: Commands,
+	mut images: ResMut<Assets<Image>>,
 	gallery: Query<(), With<GalleryScreen>>,
 	save_root: Option<Res<SaveRoot>>,
 	figures: Query<(Entity, &GalleryLineupFigure, Option<&Children>)>,
 	previews: Query<Entity, With<CharacterPreviewRoot>>,
+	cameras: Query<(Entity, &GalleryPortraitCamera)>,
+	lights: Query<Entity, With<GalleryPortraitLight>>,
+	slots: Query<(Entity, &RotaryPortrait, Option<&ViewportNode>)>,
 	child_of: Query<&ChildOf>,
 ) {
 	if gallery.is_empty() {
+		for (entity, _) in &cameras {
+			commands.entity(entity).try_despawn();
+		}
+		for entity in &lights {
+			commands.entity(entity).try_despawn();
+		}
 		return;
 	}
 	for entity in &previews {
@@ -724,77 +711,104 @@ fn realize_gallery_lineup(
 		return;
 	};
 	for (entity, figure, children) in &figures {
-		if children.is_some_and(|children| children.iter().any(|child| previews.contains(child))) {
-			continue;
-		}
 		let Some(menu) = menu_for_saved(&save_root, figure.id) else {
 			continue;
 		};
-		let preview = spawn_from_menu(&mut commands, &menu);
-		commands.entity(preview).insert(ChildOf(entity));
-	}
-}
-
-fn place_gallery_lineup(
-	time: Res<Time>,
-	gallery: Query<(), With<GalleryScreen>>,
-	menus: Query<&TextMenu>,
-	mut figures: Query<(Entity, &GalleryLineupFigure, &mut Transform)>,
-	mut motions: Query<&mut GalleryLineupMotion>,
-	mut commands: Commands,
-) {
-	if gallery.is_empty() {
-		return;
-	}
-	let selected = menus.iter().next().map(|menu| menu.selected).unwrap_or(0);
-	let dt = time.delta_secs();
-	let alpha = RotaryLayout::GALLERY.ease_alpha(dt);
-	for (entity, figure, mut transform) in &mut figures {
-		let count = figure.count.max(1);
-		let target = RotaryLayout::GALLERY.angle(figure.ordinal, selected, count);
-		let radius = gallery_lineup_radius(count);
-		if let Ok(mut motion) = motions.get_mut(entity) {
-			motion.step_angle(target, alpha);
-			*transform = gallery_lineup_pose(motion.angle, radius);
-		} else {
-			commands.entity(entity).insert(GalleryLineupMotion { angle: target });
-			*transform = gallery_lineup_pose(target, radius);
+		let origin = gallery_portrait_origin(figure.ordinal);
+		let layer = gallery_portrait_layer(figure.ordinal);
+		let has_preview =
+			children.is_some_and(|children| children.iter().any(|child| previews.contains(child)));
+		if !has_preview {
+			commands
+				.entity(entity)
+				.insert((Transform::from_translation(origin), layer.clone()));
+			let preview = spawn_from_menu(&mut commands, &menu);
+			commands.entity(preview).insert((ChildOf(entity), layer.clone()));
+		}
+		let camera = cameras
+			.iter()
+			.find_map(|(entity, camera)| (camera.ordinal == figure.ordinal).then_some(entity))
+			.unwrap_or_else(|| {
+				let image = images.add(gallery_portrait_image());
+				let bounds = menu.preview_aabb();
+				let pose = gallery_portrait_transform(
+					origin,
+					Vec3::from(bounds.min),
+					Vec3::from(bounds.max),
+				);
+				let camera = commands
+					.spawn((
+						GalleryPortraitCamera { ordinal: figure.ordinal },
+						Camera3d::default(),
+						Camera {
+							order: -40 - figure.ordinal as isize,
+							clear_color: ClearColorConfig::Custom(MENU_CLEAR),
+							..default()
+						},
+						RenderTarget::Image(image.into()),
+						Projection::Perspective(PerspectiveProjection {
+							fov: GALLERY_PORTRAIT_FOV,
+							near: 0.08,
+							far: 28.0,
+							..default()
+						}),
+						pose,
+						layer.clone(),
+					))
+					.id();
+				commands.spawn((
+					GalleryPortraitLight,
+					DirectionalLight {
+						illuminance: 10_000.0,
+						shadow_maps_enabled: false,
+						..default()
+					},
+					Transform::from_rotation(Quat::from_euler(
+						EulerRot::XYZ,
+						-PI / 4.0,
+						PI / 4.0,
+						0.0,
+					)),
+					layer.clone(),
+				));
+				commands.spawn((
+					GalleryPortraitLight,
+					PointLight {
+						intensity: 12_000.0,
+						range: 12.0,
+						shadow_maps_enabled: false,
+						..default()
+					},
+					Transform::from_translation(origin + Vec3::new(0.8, 2.6, 3.4)),
+					layer,
+				));
+				camera
+			});
+		for (slot, portrait, viewport) in &slots {
+			if portrait.ordinal != figure.ordinal || viewport.is_some() {
+				continue;
+			}
+			commands.entity(slot).insert(ViewportNode::new(camera));
 		}
 	}
 }
 
-fn sync_gallery_lineup_labels(
-	gallery: Query<(), With<GalleryScreen>>,
-	windows: Query<&Window, With<PrimaryWindow>>,
-	cameras: Query<(&Camera, &Transform), With<Camera3d>>,
-	figures: Query<(&GalleryLineupFigure, &Transform)>,
-	mut cards: Query<(&RotaryCard, &RotaryMotion, &mut UiTransform, &mut ZIndex)>,
+fn stamp_gallery_portrait_layers(
+	figures: Query<(Entity, &GalleryLineupFigure)>,
+	children: Query<&Children>,
+	mut commands: Commands,
 ) {
-	if gallery.is_empty() {
-		return;
-	}
-	let Ok(window) = windows.single() else {
-		return;
-	};
-	let Ok((camera, camera_transform)) = cameras.single() else {
-		return;
-	};
-	let camera_global = GlobalTransform::from(*camera_transform);
-	let center = Vec2::new(window.width(), window.height()) * 0.5;
-	for (card, motion, mut transform, mut z_index) in &mut cards {
-		let Some((_, figure_transform)) =
-			figures.iter().find(|(figure, _)| figure.ordinal == card.ordinal)
-		else {
-			continue;
-		};
-		let world = figure_transform.translation + Vec3::Y * LINEUP_LABEL_HEIGHT;
-		let Ok(screen) = camera.world_to_viewport(&camera_global, world) else {
-			continue;
-		};
-		transform.translation =
-			Val2::px(screen.x - center.x, screen.y - center.y - LINEUP_LABEL_LIFT_PX);
-		transform.scale = Vec2::splat(motion.scale);
-		*z_index = RotaryLayout::GALLERY.z_index(motion.angle);
+	for (entity, figure) in &figures {
+		let layer = gallery_portrait_layer(figure.ordinal);
+		commands.entity(entity).insert(layer.clone());
+		let mut pending: Vec<Entity> =
+			children.get(entity).map(|c| c.iter().collect()).unwrap_or_default();
+		while let Some(child) = pending.pop() {
+			commands.entity(child).insert(layer.clone());
+			if let Ok(kids) = children.get(child) {
+				pending.extend(kids.iter());
+			}
+		}
 	}
 }
 
@@ -951,12 +965,11 @@ fn apply_preview_camera_focus(
 	mut pending: ResMut<PendingCameraFocus>,
 	mut cameras: Query<
 		(&mut Transform, &mut CameraController, &mut Camera, &mut Projection),
-		With<Camera3d>,
+		(With<Camera3d>, Without<GalleryPortraitCamera>),
 	>,
 	windows: Query<&Window, With<PrimaryWindow>>,
 	home: Query<(), With<HomeScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
-	figures: Query<(), With<GalleryLineupFigure>>,
 	character: Query<(), With<CharacterScreen>>,
 	inventory_viewports: Query<(), With<crate::character::CharacterInventoryViewport>>,
 	inventory_slots: Query<
@@ -976,11 +989,6 @@ fn apply_preview_camera_focus(
 		return;
 	};
 	if !gallery.is_empty() {
-		camera.viewport = None;
-		if let Projection::Perspective(perspective) = projection.as_mut() {
-			perspective.fov = PREVIEW_FOV;
-		}
-		apply_gallery_lineup_camera(&mut transform, &mut controller, figures.iter().len());
 		return;
 	}
 	let pending = &mut *pending;
@@ -1557,14 +1565,20 @@ mod tests {
 	}
 
 	#[test]
-	fn gallery_lineup_camera_is_side_on_and_front_stands_closest() {
-		let (eye, look) = gallery_lineup_camera(2);
-		let forward = (look - eye).normalize();
-		assert!(eye.y < 1.15, "eye stays near chest height, not a bird's-eye");
-		assert!(forward.y.abs() < 0.12, "look is closer to horizontal than the 3/4 body preview");
-		assert!(eye.z > look.z);
-		let pose = gallery_lineup_pose(0.0, gallery_lineup_radius(2));
-		assert!(pose.translation.z > 0.0);
-		assert!(eye.z > pose.translation.z, "focused figure stands in front of the camera");
+	fn gallery_portrait_camera_is_side_on_and_shows_full_body() {
+		let forward = (GALLERY_PORTRAIT_LOOK - GALLERY_PORTRAIT_EYE).normalize();
+		assert!(GALLERY_PORTRAIT_EYE.y < 1.3, "eye stays near chest height, not a bird's-eye");
+		assert!(forward.y.abs() < 0.08, "look is closer to horizontal than a 3/4 top-down");
+		assert!(GALLERY_PORTRAIT_EYE.z > 5.0, "camera is pulled back far enough for head-to-toe");
+		assert!(GALLERY_PORTRAIT_LOOK.y > 0.7);
+		assert!(GALLERY_PORTRAIT_LOOK.y < 1.2);
+		let braidman = CharacterMenu::default();
+		let bounds = braidman.preview_aabb();
+		let pose =
+			gallery_portrait_transform(Vec3::ZERO, Vec3::from(bounds.min), Vec3::from(bounds.max));
+		let look = pose.forward();
+		assert!(pose.translation.y < 2.2, "fitted eye stays near chest height");
+		assert!(look.y.abs() < 0.12, "fitted look stays closer to horizontal than top-down");
+		assert!(pose.translation.z > 2.0, "fitted camera still shows head-to-toe");
 	}
 }
