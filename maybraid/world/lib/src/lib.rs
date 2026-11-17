@@ -293,7 +293,8 @@ impl Plugin for WorldPlugin {
 				(
 					control::update_world_surface_ready.in_set(control::WorldSurfaceSet),
 					control::sync_world_scenery,
-					control::sync_combat_hud_visible,
+					control::stamp_gameplay_hud,
+					control::sync_combat_hud_visible.after(SkillMapSystems::Steer),
 					control::sync_console_capture.in_set(CaptureResolveSystems),
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
 					control::apply_world_motor_filter

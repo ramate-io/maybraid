@@ -3,7 +3,9 @@
 
 use bevy::prelude::*;
 use damage::DamageApplied;
-use menu_components::{spawn_hud_text_card, HudFonts, HUD_TEXT_CARD_FACE_PX, TEXT_YELLOW};
+use menu_components::{
+	gameplay_hud_visibility, spawn_hud_text_card, HudFonts, HUD_TEXT_CARD_FACE_PX, TEXT_YELLOW,
+};
 use player::Player;
 
 use crate::plate::{spawn_hud_plate, HudPlateCorner, HudPlateLayout};
@@ -161,7 +163,7 @@ pub(crate) fn sync_combat_score(
 ) {
 	let shown = hud.0 && score.is_some();
 	for mut visibility in &mut roots {
-		let wanted = if shown { Visibility::Visible } else { Visibility::Hidden };
+		let wanted = gameplay_hud_visibility(shown);
 		if *visibility != wanted {
 			*visibility = wanted;
 		}

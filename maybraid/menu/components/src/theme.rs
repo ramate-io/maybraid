@@ -16,6 +16,9 @@ pub const BARLOW_REGULAR: &str = "fonts/barlow/BarlowSemiCondensed-Regular.ttf";
 /// Noto Sans Regular — IPA coverage for generated place names.
 pub const NOTO_SANS_REGULAR: &str = "fonts/noto/NotoSans-Regular.ttf";
 
+/// Pixel size of the Tanz trigger callout icon, and of rhythm-map direction arrows.
+pub const TANZ_CALLOUT_ICON_PX: f32 = 40.0;
+
 /// Largest face on a text menu (title / header).
 pub const HEADER_FONT_SIZE: f32 = 96.0;
 
@@ -107,6 +110,23 @@ pub const TEXT_YELLOW_FAINT: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
 
 /// Focused locked-row yellow: still dampened, a bit stronger than idle faint.
 pub const TEXT_YELLOW_FAINT_FOCUS: Color = Color::srgba(1.0, 0.86, 0.22, 0.68);
+
+/// Play-HUD stained-glass fill (skill-map overlay language).
+pub const HUD_GLASS_FILL: Color = Color::srgba(0.04, 0.03, 0.07, 0.28);
+/// Idle glass came. Same yellow as [`TEXT_YELLOW_FAINT`].
+pub const HUD_GLASS_STROKE: Color = TEXT_YELLOW_FAINT;
+/// In-use glass came (RB hold, Tanzer, cooking). Same as the skill-map live frame.
+pub const HUD_GLASS_STROKE_LIVE: Color = Color::srgb(1.0, 0.48, 0.08);
+pub const HUD_GLASS_RADIUS: f32 = 10.0;
+pub const HUD_GLASS_BORDER: f32 = 1.5;
+
+pub fn hud_glass_fill() -> BackgroundColor {
+	BackgroundColor(HUD_GLASS_FILL)
+}
+
+pub fn hud_glass_stroke(live: bool) -> BorderColor {
+	BorderColor::all(if live { HUD_GLASS_STROKE_LIVE } else { HUD_GLASS_STROKE })
+}
 
 /// Lime-adjacent violet for “Coming Soon” objective badges.
 pub const TEXT_PURPLE: Color = Color::srgb(0.72, 0.48, 0.92);

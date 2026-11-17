@@ -350,11 +350,13 @@ fn settings_info_copy(choice: InGameSettingsChoice, readout: RenderScaleReadout)
 
 /// Live pause-menu bag. Quality the player owns ([`Self::shadows`]) sits next to
 /// session chrome ([`Self::mob_hud`]). Persistence is a catalog projection, not
-/// this resource as-is. The game copies shadows onto the sky sun and HUD onto
-/// the world overlay.
+/// this resource as-is. The game copies shadows onto the sky sun, HUD onto
+/// the world overlay, and map overlay / focus onto the skill-map resources.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InGameSettings {
 	pub mob_hud: bool,
+	pub map_overlay: bool,
+	pub map_focus: bool,
 	pub shadows: InGameShadowQuality,
 	pub visual_style: InGameVisualStyle,
 }
@@ -366,18 +368,24 @@ impl Default for InGameSettings {
 }
 
 impl InGameSettings {
-	pub fn mob_hud_state_label(self) -> &'static str {
-		if self.mob_hud {
+	pub fn on_off_label(value: bool) -> &'static str {
+		if value {
 			"On"
 		} else {
 			"Off"
 		}
 	}
 
+	pub fn mob_hud_state_label(self) -> &'static str {
+		Self::on_off_label(self.mob_hud)
+	}
+
 	pub fn state_label(self, choice: InGameSettingsChoice) -> String {
 		match choice {
 			InGameSettingsChoice::Shadows => self.shadows.label().to_string(),
 			InGameSettingsChoice::VisualStyle => self.visual_style.subtext(),
+			InGameSettingsChoice::MapOverlay => Self::on_off_label(self.map_overlay).to_string(),
+			InGameSettingsChoice::MapFocus => Self::on_off_label(self.map_focus).to_string(),
 			InGameSettingsChoice::MobHud => self.mob_hud_state_label().to_string(),
 		}
 	}
@@ -410,16 +418,21 @@ pub enum InGameSettingsChoice {
 	#[default]
 	Shadows,
 	VisualStyle,
+	MapOverlay,
+	MapFocus,
 	MobHud,
 }
 
 impl InGameSettingsChoice {
-	pub const ALL: [Self; 3] = [Self::Shadows, Self::VisualStyle, Self::MobHud];
+	pub const ALL: [Self; 5] =
+		[Self::Shadows, Self::VisualStyle, Self::MapOverlay, Self::MapFocus, Self::MobHud];
 
 	pub fn label(self) -> &'static str {
 		match self {
 			Self::Shadows => "Shadows",
 			Self::VisualStyle => "Visual Style",
+			Self::MapOverlay => "Map Overlay",
+			Self::MapFocus => "Map Focus",
 			Self::MobHud => "Mob HUD",
 		}
 	}
@@ -431,6 +444,12 @@ impl InGameSettingsChoice {
 			}
 			Self::VisualStyle => {
 				"Presentation mode: native (window) or sharp (1080p offscreen, height-fit). First run auto-picks Sharp on weaker machines. Stylized modes are opt-in: impressionist / watercolor (painterly), retro / antediluvian (nearest-neighbor), or pre-post-modern (color-print)."
+			}
+			Self::MapOverlay => {
+				"Full-screen stained-glass skill map while holding RB. Off keeps the map in the corner."
+			}
+			Self::MapFocus => {
+				"Tunnel-vision blur and HUD hide while the map overlay is up."
 			}
 			Self::MobHud => {
 				"Pins and colored poles on presented mob hosts. Use this to find where groups should stand."
@@ -585,6 +604,24 @@ fn apply_in_game_settings_choice(
 				save_root.as_deref(),
 			);
 		}
+		InGameSettingsChoice::MapOverlay => {
+			settings.map_overlay = !settings.map_overlay;
+			persist::write_machine_preference::<catalog::MapOverlay>(
+				Some(&mut machine),
+				&mut provenance,
+				settings.map_overlay,
+				save_root.as_deref(),
+			);
+		}
+		InGameSettingsChoice::MapFocus => {
+			settings.map_focus = !settings.map_focus;
+			persist::write_machine_preference::<catalog::MapFocus>(
+				Some(&mut machine),
+				&mut provenance,
+				settings.map_focus,
+				save_root.as_deref(),
+			);
+		}
 		InGameSettingsChoice::MobHud => settings.mob_hud = !settings.mob_hud,
 	}
 	request_show_in_game_settings_at(&mut commands, choice);
@@ -702,7 +739,11 @@ mod tests {
 		assert!(!rows[0].stepper);
 		assert!(rows[1].stepper);
 		assert!(!rows[2].stepper);
+		assert!(!rows[3].stepper);
+		assert!(!rows[4].stepper);
 		assert_eq!(rows[1].action, InGameSettingsChoice::VisualStyle);
+		assert_eq!(rows[2].action, InGameSettingsChoice::MapOverlay);
+		assert_eq!(rows[3].action, InGameSettingsChoice::MapFocus);
 	}
 
 	#[test]
@@ -711,6 +752,8 @@ mod tests {
 		assert_eq!(
 			InGameSettings {
 				mob_hud: false,
+				map_overlay: true,
+				map_focus: true,
 				shadows: InGameShadowQuality::High,
 				visual_style: InGameVisualStyle::Impressionist,
 			}
@@ -720,6 +763,8 @@ mod tests {
 		assert_eq!(
 			InGameSettings {
 				mob_hud: true,
+				map_overlay: true,
+				map_focus: true,
 				shadows: InGameShadowQuality::High,
 				visual_style: InGameVisualStyle::Impressionist,
 			}
@@ -741,6 +786,8 @@ mod tests {
 	fn left_right_step_updates_the_preference() {
 		let mut settings = InGameSettings {
 			mob_hud: false,
+			map_overlay: true,
+			map_focus: true,
 			shadows: InGameShadowQuality::Off,
 			visual_style: InGameVisualStyle::Native,
 		};

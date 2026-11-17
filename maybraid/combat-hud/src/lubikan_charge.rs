@@ -6,7 +6,10 @@ use lubikans::{
 	LubikanActivationPhase, LubikanCatalog, LubikanCharge, LubikanLedger, LubikanOwner,
 	LubikanReadiness, LubikanSelfHeal, LubikanSelfHealChannel,
 };
-use menu_components::{spawn_hud_text_card, HudFonts, HUD_TEXT_CARD_FACE_PX, TEXT_YELLOW};
+use menu_components::{
+	gameplay_hud_visibility, hud_glass_stroke, spawn_hud_text_card, HudFonts,
+	HUD_TEXT_CARD_FACE_PX, TEXT_YELLOW,
+};
 use player::Player;
 
 use crate::continuous_health::{spawn_ui_meter_row, ContinuousHealthConfig};
@@ -22,7 +25,6 @@ const CHARGE_WIDTH: f32 = VITALS_WIDTH;
 const CHARGE_ROW_GAP: f32 = 6.0;
 const CROSS_PX: f32 = 22.0;
 const CROSS_ARM: f32 = 6.0;
-const READY_GLOW: Color = Color::srgba(0.45, 0.95, 0.72, 0.35);
 const CATEGORY_CUE: Color = Color::srgb(0.55, 0.82, 1.0);
 const BAR_READY: Color = Color::srgb(0.35, 0.92, 0.62);
 const BAR_LOW: Color = Color::srgb(0.86, 0.28, 0.22);
@@ -338,9 +340,8 @@ pub(crate) fn sync_lubikan_charge(
 	let fill_color = charge_bar_color(&row);
 	let ready = row.readiness.can_activate;
 	for (mut visibility, mut border) in widgets.p0().iter_mut() {
-		*visibility = Visibility::Visible;
-		*border =
-			BorderColor::all(if ready { READY_GLOW } else { Color::srgba(0.78, 0.78, 0.82, 0.9) });
+		*visibility = gameplay_hud_visibility(true);
+		*border = hud_glass_stroke(ready);
 	}
 	for mut text in widgets.p1().iter_mut() {
 		if text.0 != amount {
@@ -351,7 +352,7 @@ pub(crate) fn sync_lubikan_charge(
 		if text.0 != status {
 			text.0 = status.clone();
 		}
-		*visibility = if status.is_empty() { Visibility::Hidden } else { Visibility::Visible };
+		*visibility = gameplay_hud_visibility(!status.is_empty());
 	}
 	for (mut node, mut color) in widgets.p3().iter_mut() {
 		node.width = Val::Percent(fraction * 100.0);
@@ -359,7 +360,7 @@ pub(crate) fn sync_lubikan_charge(
 	}
 	let lubikan_selected = category.as_deref().is_some_and(|cat| cat.is_lubikans());
 	for mut visibility in widgets.p4().iter_mut() {
-		*visibility = if lubikan_selected { Visibility::Visible } else { Visibility::Hidden };
+		*visibility = gameplay_hud_visibility(lubikan_selected);
 	}
 	for mut text in widgets.p5().iter_mut() {
 		if text.0 != name {

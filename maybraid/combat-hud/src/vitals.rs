@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 use damage::Downed;
-use menu_components::{spawn_hud_text_card, HudFonts, HUD_TEXT_CARD_FACE_PX, TEXT_YELLOW};
+use menu_components::{
+	gameplay_hud_visibility, spawn_hud_text_card, HudFonts, HUD_TEXT_CARD_FACE_PX, TEXT_YELLOW,
+};
 use player::Player;
 
 use crate::continuous_health::{
@@ -84,8 +86,9 @@ pub(crate) fn sync_player_vitals(
 	};
 	let label = display_name(name.map(|name| name.as_str()));
 	for mut visibility in &mut roots {
-		if *visibility != Visibility::Visible {
-			*visibility = Visibility::Visible;
+		let shown = gameplay_hud_visibility(true);
+		if *visibility != shown {
+			*visibility = shown;
 		}
 	}
 	for mut text in &mut names {
@@ -158,7 +161,7 @@ mod tests {
 				.next()
 				.copied()
 				.expect("plate");
-			assert_eq!(visibility, Visibility::Visible);
+			assert_eq!(visibility, gameplay_hud_visibility(true));
 		}
 		app.world_mut().entity_mut(player).insert(Downed {
 			source: None,
@@ -246,17 +249,12 @@ mod tests {
 			.resource_mut::<Time<Virtual>>()
 			.set_max_delta(Duration::from_secs(1));
 		app.world_mut().insert_resource(CombatHudVisible(true));
-		let player = app
-			.world_mut()
-			.spawn((Player, Health::from_max(100.0), Name::new("Ada")))
-			.id();
+		let player =
+			app.world_mut().spawn((Player, Health::from_max(100.0), Name::new("Ada"))).id();
 		app.update();
 
 		let baseline = fill_percent(&mut app);
-		assert!(
-			(baseline - 100.0).abs() < 1.0,
-			"full health should fill the bar, got {baseline}"
-		);
+		assert!((baseline - 100.0).abs() < 1.0, "full health should fill the bar, got {baseline}");
 
 		app.world_mut().get_mut::<Health>(player).expect("health").current = 40.0;
 		app.update();
