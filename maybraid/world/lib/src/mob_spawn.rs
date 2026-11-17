@@ -10,11 +10,7 @@ use durham::DurhamSurface;
 use game_commands::command::CommandConsoleOutput;
 use mob_intelligence::MemberOf;
 use mob_scenes::{MobKind, MobScene};
-<<<<<<< HEAD
-use npc_intelligence::NpcIntelligence;
-=======
 use player::Npc;
->>>>>>> origin/cursor/mob-spawn-fix-441e
 use world_player::{surface_or_hold_at, Player};
 
 #[derive(Component, Clone, Debug, PartialEq)]
@@ -121,11 +117,7 @@ pub(crate) fn apply_mob_inspect(
 	requests: Query<Entity, With<RequestMobInspect>>,
 	hosts: Query<&MobScene>,
 	members: Query<&MemberOf>,
-<<<<<<< HEAD
-	brains: Query<&NpcIntelligence>,
-=======
 	npcs: Query<&Npc>,
->>>>>>> origin/cursor/mob-spawn-fix-441e
 	pending: Option<Res<PendingMobGroups>>,
 	players: Query<&GlobalTransform, With<Player>>,
 	mut console: Option<ResMut<CommandConsoleOutput>>,
@@ -139,11 +131,7 @@ pub(crate) fn apply_mob_inspect(
 
 	let host_count = hosts.iter().count();
 	let member_count = members.iter().count();
-<<<<<<< HEAD
-	let brain_count = brains.iter().count();
-=======
 	let npc_count = npcs.iter().count();
->>>>>>> origin/cursor/mob-spawn-fix-441e
 	let pending_count = pending.map_or(0, |p| if p.is_empty() { 0 } else { 1 });
 
 	let nearby_info = if let Ok(player_transform) = players.single() {
@@ -174,13 +162,8 @@ pub(crate) fn apply_mob_inspect(
 	};
 
 	let line = format!(
-<<<<<<< HEAD
-		"mobs: {} host(s), {} member(s), {} brain(s), {} pending group(s){}",
-		host_count, member_count, brain_count, pending_count, nearby_info
-=======
 		"mobs: {} host(s), {} member(s), {} npc(s), {} pending group(s){}",
 		host_count, member_count, npc_count, pending_count, nearby_info
->>>>>>> origin/cursor/mob-spawn-fix-441e
 	);
 	info!(target: "maybraid.mobs", "{line}");
 	if let Some(console) = console.as_mut() {

@@ -60,7 +60,7 @@ pub use commands::{
 	RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
 };
 #[cfg(any(test, feature = "debug-commands"))]
-pub use mob_spawn::RequestSpawnMobs;
+pub use mob_spawn::{RequestMobInspect, RequestSpawnMobs};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
 	InventoryEditCameraFollow, WorldMenuShell, WorldSceneryVisible, WorldSurfaceReady,
@@ -75,7 +75,6 @@ pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use item_icons::ItemIconPlugin;
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
-pub use mob_spawn::{RequestMobInspect, RequestSpawnMobs};
 pub use occupancy::{WorldOccupancyPlugin, WorldOccupancySystems};
 pub use player_lifecycle::{
 	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,

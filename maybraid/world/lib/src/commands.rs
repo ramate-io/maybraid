@@ -86,11 +86,7 @@ pub enum Mobs {
 		#[arg(long, default_value_t = 1)]
 		seed: u32,
 	},
-<<<<<<< HEAD
-	/// Inspect mob materialization state: host count, pending groups, body/brain counts.
-=======
 	/// Inspect mob materialization state: host count, pending groups, body/NPC counts.
->>>>>>> origin/cursor/mob-spawn-fix-441e
 	Inspect,
 }
 
