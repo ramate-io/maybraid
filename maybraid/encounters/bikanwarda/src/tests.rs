@@ -1070,6 +1070,7 @@ mod integration_regressions {
 			GlobalTransform::IDENTITY,
 			SpottingUser::new(Vec3::Y * 15.0, [spotting_intelligence::SpotDirective::new(spotting_intelligence::InterestLayers::CHARACTER, 50.0)]),
 			CombatTargeting::default(),
+			combat_targeting::SpottingTargetingSettings::default(),
 		)).id();
 		
 		app.world_mut().entity_mut(host).insert(BossActor(actor));
