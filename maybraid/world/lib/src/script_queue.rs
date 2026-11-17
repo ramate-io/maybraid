@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use bevy::prelude::*;
+use durham::{terrain_collider_covers_xz, CascadeChunk, TerrainTrimeshCollider};
 use game_commands::command::CommandConsoleOutput;
 use maybraid_spawns_support::PendingActorSupport;
 use player::{Grounded, Player as MaybraidPlayer};
@@ -58,18 +59,28 @@ pub fn process_script_queue(
 	time: Res<Time>,
 	mut queue: ResMut<ScriptQueue>,
 	player: Query<
-		(Has<Grounded>, Has<PendingActorSupport>),
+		(&Transform, Has<Grounded>, Has<PendingActorSupport>),
 		(With<MaybraidPlayer>, With<WorldPlayer>),
 	>,
+	terrain_colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
 	mut commands: Commands,
 	mut console: ResMut<CommandConsoleOutput>,
 ) {
-	// Check if we're waiting for world ready: player exists, is grounded, and not pending support
+	// Check if we're waiting for world ready: player exists, is grounded, not pending support,
+	// AND terrain colliders have streamed in at the player's position
 	if queue.wait_for_world_ready {
-		if let Ok((grounded, pending_support)) = player.single() {
+		if let Ok((player_transform, grounded, pending_support)) = player.single() {
 			if grounded && !pending_support {
-				info!("World ready: player spawned and grounded with settled support");
-				queue.wait_for_world_ready = false;
+				// Also check that terrain colliders exist near the player
+				let player_pos = player_transform.translation;
+				if terrain_collider_covers_xz(player_pos, &terrain_colliders) {
+					info!("World ready: player grounded with settled support and terrain colliders present at ({:.1}, {:.1}, {:.1})",
+						player_pos.x, player_pos.y, player_pos.z);
+					queue.wait_for_world_ready = false;
+				} else {
+					// Player is grounded but terrain colliders haven't streamed in yet
+					return;
+				}
 			} else {
 				return;
 			}
