@@ -48,7 +48,7 @@ impl RequestSpawnMobs {
 	}
 }
 
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(any(test, feature = "test-support", feature = "debug-commands"))]
 pub fn apply_spawn_mob_requests(
 	mut commands: Commands,
 	requests: Query<(Entity, &RequestSpawnMobs)>,
@@ -60,7 +60,7 @@ pub fn apply_spawn_mob_requests(
 	apply_spawn_mob_requests_impl(commands, requests, players, surface, pending, console)
 }
 
-#[cfg(not(any(test, feature = "test-support")))]
+#[cfg(not(any(test, feature = "test-support", feature = "debug-commands")))]
 pub(crate) fn apply_spawn_mob_requests(
 	mut commands: Commands,
 	requests: Query<(Entity, &RequestSpawnMobs)>,
