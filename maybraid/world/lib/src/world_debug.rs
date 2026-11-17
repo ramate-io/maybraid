@@ -208,15 +208,15 @@ fn apply_homeostatic_status(
 	config: Option<Res<barking::HomeostaticMobConfig>>,
 	active_mobs: Query<(&barking::HomeostaticMob, &GlobalTransform)>,
 	mut commands: Commands,
+	mut console: Option<ResMut<game_commands::command::CommandConsoleOutput>>,
 ) {
 	use barking::HomeostaticCellIndex;
-	use game_commands::command::CommandConsoleOutput;
 
 	for (entity, _) in &requests {
 		let mut output = String::new();
 
 		if let (Some(config), Some(player_cell)) = (config.as_ref(), player_cell.as_ref()) {
-			if let Ok(player_transform) = players.get_single() {
+            if let Ok(player_transform) = players.single() {
 				let current_cell = HomeostaticCellIndex::containing(
 					player_transform.translation,
 					config.cell_size,
@@ -266,7 +266,7 @@ fn apply_homeostatic_status(
 
 		log::info!("Homeostatic status:\n{}", output);
 		
-		if let Some(mut console) = commands.get_resource_mut::<CommandConsoleOutput>() {
+		if let Some(console) = console.as_mut() {
 			console.0 = output;
 		}
 		
