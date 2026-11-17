@@ -115,7 +115,10 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		return;
 	}
 
-	let mut clock = DrainClock::new();
+	// Collect and classify candidates BEFORE starting the clock.
+	// This ensures the time budget applies only to actual pull+spawn work,
+	// not to collection overhead. In busy worlds, collection can exceed
+	// the 2ms budget, starving new High roots that never get their first primitive.
 	let snapshots = collect_job_snapshots(world);
 	let mut buckets = JobBuckets::default();
 	for snap in snapshots {
@@ -152,6 +155,9 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		FulfillClass::Active => active_share,
 	};
 
+	// Start the clock AFTER collection and classification.
+	// This budgets only the pull+spawn work, preventing starvation of new roots.
+	let mut clock = DrainClock::new();
 	let mut remaining = 0u32;
 	for class in order {
 		remaining = remaining.saturating_add(share(class));
@@ -207,13 +213,20 @@ fn drain_tuple_bands(
 	budget: &LodChunkFulfillBudget,
 	clock: &mut DrainClock,
 ) {
+	// Guarantee forward progress: always process at least the first band,
+	// even if we're over budget. This prevents starvation when collection overhead
+	// alone exceeds the time budget.
+	let mut processed_first_band = false;
+	
 	for rank in 0..LOD_CHUNK_TUPLE_BAND_COUNT {
-		if *remaining == 0 || clock.time_up(world, budget) {
+		// After the first band, respect the budget
+		if processed_first_band && (*remaining == 0 || clock.time_up(world, budget)) {
 			return;
 		}
 		for_each_rr(&buckets.bands[rank], &mut cursors.bands[rank], |&entity| {
 			drain_one(world, entity, remaining, budget, clock)
 		});
+		processed_first_band = true;
 	}
 }
 
@@ -224,18 +237,29 @@ fn drain_one(
 	budget: &LodChunkFulfillBudget,
 	clock: &mut DrainClock,
 ) -> bool {
-	if *remaining == 0 || clock.time_up(world, budget) {
+	// Check fulfillment state
+	let Some(job) = world.get::<LodChunkFulfillment>(entity) else {
+		return true;
+	};
+	if job.queue.is_empty() {
+		return true;
+	}
+	
+	// Guarantee forward progress: allow at least one quantum for roots that have spawned nothing,
+	// even if we're over budget. This prevents starvation of new High roots in busy worlds.
+	let allow_first_quantum = job.spawned == 0;
+	
+	// Check budget (but allow first quantum for forward progress)
+	if !allow_first_quantum && (*remaining == 0 || clock.time_up(world, budget)) {
 		return false;
-	}
-	if world.get::<LodChunkFulfillment>(entity).is_none() {
-		return true;
-	}
-	if world.get::<LodChunkFulfillment>(entity).is_some_and(|j| j.queue.is_empty()) {
-		return true;
 	}
 
 	loop {
-		if *remaining == 0 || clock.time_up(world, budget) {
+		// Inside the loop, check if we should continue after the first quantum
+		let job = world.get::<LodChunkFulfillment>(entity).expect("job vanished mid-drain");
+		let is_first = job.spawned == 0;
+		
+		if !is_first && (*remaining == 0 || clock.time_up(world, budget)) {
 			break;
 		}
 		let quantum_start = Instant::now();
@@ -486,5 +510,52 @@ mod tests {
 		assert_eq!(diag.atomic_overruns[0].host, host);
 		assert_eq!(diag.atomic_overruns[0].level, LodSceneLevel::Low);
 		assert!(app.world().get::<LodLevelRootStreamed>(root).is_some());
+	}
+
+	#[test]
+	fn new_high_root_not_starved_in_busy_drain() {
+		// Regression test for mob spawn bug: in a busy world with many roots,
+		// collection overhead can exceed the 2ms budget. Before the fix, the time
+		// check would fire before any pull, starving new High roots permanently.
+		// After the fix: (1) clock starts after collection, and (2) first quantum
+		// is always allowed for forward progress.
+		let mut app = drain_app();
+		
+		// Set a very short time budget to simulate a busy world
+		app.world_mut().resource_mut::<LodChunkFulfillBudget>().spawn_time_per_frame =
+			Duration::from_micros(1); // Impossibly short - will expire during setup
+		app.world_mut().resource_mut::<LodChunkBudgetClock>().spawn_remaining = 100;
+
+		// Create many existing roots to make collection/classification expensive
+		for _ in 0..50 {
+			spawn_job(
+				app.world_mut(),
+				LodSceneLevel::Medium,
+				LodSceneLevel::Medium,
+				false,
+				Visibility::Inherited,
+				5,
+			);
+		}
+
+		// Now spawn a new High root (cold, presence class) - the critical case
+		let (_host, new_high_root) = spawn_job(
+			app.world_mut(),
+			LodSceneLevel::High,
+			LodSceneLevel::High,
+			true, // cold
+			Visibility::Inherited,
+			11, // 11 primitives, like the Raider from the bug report
+		);
+
+		// Before fix: new_high_root would have spawned=0 (starved by budget)
+		// After fix: new_high_root gets at least its first quantum
+		drain_chunk_lod_fulfill(app.world_mut());
+
+		let spawned = app.world().get::<LodChunkFulfillment>(new_high_root).unwrap().spawned;
+		assert!(
+			spawned >= 1,
+			"New High root must spawn at least one primitive for forward progress, got {spawned}"
+		);
 	}
 }
