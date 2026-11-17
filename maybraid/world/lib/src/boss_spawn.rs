@@ -26,7 +26,7 @@ use lod::gen::Bytes;
 use player::Player;
 use std::sync::Arc;
 
-use crate::terrain_query::TerrainHeightQuery;
+use crate::terrain_query::query_published_terrain_height;
 
 /// Request to spawn a boss encounter at a specific location.
 #[derive(Component, Clone, Debug)]
@@ -143,12 +143,12 @@ pub fn process_boss_spawn_requests(
 /// Poll pending boss spawns and finalize when terrain is ready.
 /// 
 /// This system implements the terrain readiness contract: wait for
-/// published terrain height (from `TerrainHeightQuery`) instead of consuming
-/// the holding elevation as final position.
+/// published terrain height instead of consuming the holding elevation as final position.
+/// Durham resources are queried optionally; if missing, bosses remain pending.
 pub fn poll_pending_boss_spawns(
 	mut commands: Commands,
 	mut pending: Query<(Entity, &mut PendingBossSpawn)>,
-	terrain: TerrainHeightQuery,
+	surface: Option<durham::DurhamSurface>,
 	storage: Option<Res<HcsgStorage>>,
 	mut config: ResMut<BossSpawnConfig>,
 ) {
@@ -156,7 +156,12 @@ pub fn poll_pending_boss_spawns(
 		pending_spawn.wait_ticks += 1;
 		
 		// Try to get published terrain height (terrain/pad with collider acceptance)
-		let terrain_height = terrain.height_at(pending_spawn.xz);
+		// If Durham resources are missing, boss remains pending until they're available
+		let terrain_height = query_published_terrain_height(
+			surface.as_ref(),
+			storage.as_deref(),
+			pending_spawn.xz,
+		);
 		
 		if let Some(terrain_y) = terrain_height {
 			// Terrain is ready! Apply boss hull spawn_height offset for ground fit
