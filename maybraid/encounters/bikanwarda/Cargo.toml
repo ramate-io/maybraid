@@ -23,6 +23,8 @@ characters = { workspace = true }
 combat-targeting = { workspace = true }
 damage = { workspace = true }
 encounters = { workspace = true }
+threat-intelligence = { workspace = true }
+threat-management-intelligence = { workspace = true }
 firearm-intelligence = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }

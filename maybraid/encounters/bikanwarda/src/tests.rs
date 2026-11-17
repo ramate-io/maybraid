@@ -1215,28 +1215,32 @@ mod integration_regressions {
 			.expect("Host should have BossActor")
 			.0;
 		
-		// Spawn player in range (within 40m attack range, within 50m spotting range) and visible
-		let player_pos = boss_position + Vec3::new(20.0, 0.0, 0.0); // 20m away horizontally
-		let player = app.world_mut().spawn((
-			Name::new("test-player"),
-			Transform::from_translation(player_pos),
-			GlobalTransform::from_translation(player_pos),
-			spotting_intelligence::SpotSubject::new(
-				spotting_intelligence::InterestLayers::CHARACTER,
-				spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
-			),
-			avian3d::prelude::RigidBody::Kinematic,
-			avian3d::prelude::Collider::capsule(0.4, 1.8),
-			// CRITICAL: Must have Animated collision layer for spotting discovery
-			lod_avian::PhysicsInteractionLayer::animated_layers(),
-		)).id();
-		
-		// Mark player as enemy (simulates threat intelligence marking them as hostile)
-		// Spotting will populate the contact info, but this marks them as a valid target
-		let mut actor_mut = app.world_mut().entity_mut(actor_entity);
-		if let Some(mut targeting) = actor_mut.get_mut::<CombatTargeting>() {
-			targeting.include(player, combat_targeting::TargetSource::ENEMYSHIP);
-		}
+	// Spawn player in range (within 40m attack range, within 50m spotting range) and visible
+	let player_pos = boss_position + Vec3::new(20.0, 0.0, 0.0); // 20m away horizontally
+	let player = app.world_mut().spawn((
+		Name::new("test-player"),
+		Transform::from_translation(player_pos),
+		GlobalTransform::from_translation(player_pos),
+		spotting_intelligence::SpotSubject::new(
+			spotting_intelligence::InterestLayers::CHARACTER,
+			spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
+		),
+		avian3d::prelude::RigidBody::Kinematic,
+		avian3d::prelude::Collider::capsule(0.4, 1.8),
+		// CRITICAL: Must have Animated collision layer for spotting discovery
+		lod_avian::PhysicsInteractionLayer::animated_layers(),
+		// ThreatSubject so threat intelligence can discover them as a threat
+		threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId::individual(1)),
+		// Player affiliations: member of PLAYER_GROUP
+		{
+			let mut affiliations = threat_intelligence::Affiliations::with_self(threat_intelligence::ThreatId::individual(1));
+			const PLAYER_GROUP: threat_intelligence::ThreatGroupId = threat_intelligence::ThreatGroupId::group(29);
+			affiliations.join(PLAYER_GROUP, threat_intelligence::AffiliationStrength::permanent(1.0));
+			affiliations
+		},
+	)).id();
+	
+	// No manual targeting insertion - threat intelligence will grant ENEMYSHIP sources
 		
 		// Run updates to allow spotting discovery and attack triggering
 		// Discovery interval is 0.2s = 12 frames at DT=1/60s
@@ -1326,17 +1330,22 @@ mod integration_regressions {
 				spotting_intelligence::InterestLayers::CHARACTER,
 				spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
 			),
-			avian3d::prelude::RigidBody::Kinematic,
-			avian3d::prelude::Collider::capsule(0.4, 1.8),
-			// CRITICAL: Must have Animated collision layer for spotting discovery
-			lod_avian::PhysicsInteractionLayer::animated_layers(),
-		)).id();
-		
-		// Mark player as enemy (but they should NOT be attacked because spotting won't see them)
-		let mut actor_mut = app.world_mut().entity_mut(actor_entity);
-		if let Some(mut targeting) = actor_mut.get_mut::<CombatTargeting>() {
-			targeting.include(player, combat_targeting::TargetSource::ENEMYSHIP);
-		}
+		avian3d::prelude::RigidBody::Kinematic,
+		avian3d::prelude::Collider::capsule(0.4, 1.8),
+		// CRITICAL: Must have Animated collision layer for spotting discovery
+		lod_avian::PhysicsInteractionLayer::animated_layers(),
+		// ThreatSubject so threat intelligence can discover them as a threat
+		threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId::individual(2)),
+		// Player affiliations: member of PLAYER_GROUP
+		{
+			let mut affiliations = threat_intelligence::Affiliations::with_self(threat_intelligence::ThreatId::individual(2));
+			const PLAYER_GROUP: threat_intelligence::ThreatGroupId = threat_intelligence::ThreatGroupId::group(29);
+			affiliations.join(PLAYER_GROUP, threat_intelligence::AffiliationStrength::permanent(1.0));
+			affiliations
+		},
+	)).id();
+	
+	// No manual targeting insertion - threat intelligence will grant ENEMYSHIP sources
 		
 		// Update a few times to let physics settle and transforms propagate
 		for _ in 0..3 {
@@ -1434,17 +1443,22 @@ mod integration_regressions {
 				spotting_intelligence::InterestLayers::CHARACTER,
 				spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
 			),
-			avian3d::prelude::RigidBody::Kinematic,
-			avian3d::prelude::Collider::capsule(0.4, 1.8),
-			// CRITICAL: Must have Animated collision layer for spotting discovery
-			lod_avian::PhysicsInteractionLayer::animated_layers(),
-		)).id();
-		
-		// Mark player as enemy (but they should NOT be attacked because they're out of spotting range)
-		let mut actor_mut = app.world_mut().entity_mut(actor_entity);
-		if let Some(mut targeting) = actor_mut.get_mut::<CombatTargeting>() {
-			targeting.include(player, combat_targeting::TargetSource::ENEMYSHIP);
-		}
+		avian3d::prelude::RigidBody::Kinematic,
+		avian3d::prelude::Collider::capsule(0.4, 1.8),
+		// CRITICAL: Must have Animated collision layer for spotting discovery
+		lod_avian::PhysicsInteractionLayer::animated_layers(),
+		// ThreatSubject so threat intelligence can discover them as a threat
+		threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId::individual(3)),
+		// Player affiliations: member of PLAYER_GROUP
+		{
+			let mut affiliations = threat_intelligence::Affiliations::with_self(threat_intelligence::ThreatId::individual(3));
+			const PLAYER_GROUP: threat_intelligence::ThreatGroupId = threat_intelligence::ThreatGroupId::group(29);
+			affiliations.join(PLAYER_GROUP, threat_intelligence::AffiliationStrength::permanent(1.0));
+			affiliations
+		},
+	)).id();
+	
+	// No manual targeting insertion - threat intelligence will grant ENEMYSHIP sources
 		
 		// Run updates - player should not be spotted (out of spotting range)
 		// and should not be attacked (out of attack range)

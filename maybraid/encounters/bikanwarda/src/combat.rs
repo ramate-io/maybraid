@@ -11,6 +11,11 @@ use bikanwarda_attacks::{BikanwardaMouthSocket, BRAY};
 use bikanwarda_character::BikanwardaRoot;
 use combat_targeting::{CombatTargeting, SpottingTargetingSettings};
 use damage::Health;
+use threat_intelligence::{
+	AffiliationStrength, Affiliations, ThreatDiscoveryPolicy, ThreatIntelligenceUser,
+	ThreatKnowledge, ThreatGroupId,
+};
+use threat_management_intelligence::ThreatManagementIntelligence;
 
 use crate::presentation::{BossActor, BossEncounterRoot};
 
@@ -127,8 +132,15 @@ pub fn initialize_boss_combat(
 	new_bindings: Query<(Entity, &BossActor), (Added<BossActor>, With<BossEncounterRoot>)>,
 ) {
 	for (host_entity, actor_ref) in &new_bindings {
+		// Setup threat intelligence: antagonize PLAYER_GROUP so players become actionable targets
+		let mut affiliations = Affiliations::default();
+		// PLAYER_GROUP is defined in mob-scenes (group 29)
+		const PLAYER_GROUP: ThreatGroupId = ThreatGroupId::group(29);
+		affiliations.antagonize(PLAYER_GROUP, AffiliationStrength::permanent(1.0));
+		
 		// Add combat/spotting/targeting to the ACTOR
 		// SpottingUser is added by assembly, and the shared bridge will sync it to targeting
+		// ThreatManagementIntelligence grants ENEMYSHIP sources for discovered hostile targets
 		commands.entity(actor_ref.0).insert((
 			BossInCombat,
 			CombatTargeting::default(),
@@ -136,6 +148,11 @@ pub fn initialize_boss_combat(
 				memory_secs: 3.0,
 				continuity: 0.0,
 			},
+			// Threat intelligence grants ENEMYSHIP sources for hostile targets
+			ThreatIntelligenceUser::new(ThreatDiscoveryPolicy::directional(60.0, 50.0)),
+			ThreatKnowledge::default(),
+			affiliations,
+			ThreatManagementIntelligence::combat_only(),
 		));
 		
 		// Add BossAttackCooldown to the HOST (checked alongside Health)
@@ -157,6 +174,13 @@ impl Plugin for BossEncounterCombatPlugin {
 		// Install AttacksPlugin if not already present (provides AttackCatalog)
 		if !app.is_plugin_added::<attacks::AttacksPlugin>() {
 			app.add_plugins(attacks::AttacksPlugin);
+		}
+		// Install ThreatIntelligencePlugin if not already present (grants ENEMYSHIP sources)
+		if !app.is_plugin_added::<threat_intelligence::ThreatIntelligencePlugin>() {
+			app.add_plugins(threat_intelligence::ThreatIntelligencePlugin);
+		}
+		if !app.is_plugin_added::<threat_management_intelligence::ThreatManagementPlugin>() {
+			app.add_plugins(threat_management_intelligence::ThreatManagementPlugin);
 		}
 		
 		app.add_systems(
