@@ -172,7 +172,6 @@ fn spawn_fixture(
 			},
 			ChainMotion::default(),
 			Health::from_max(100.0),
-			damage::NoCorpseCleanup,
 		));
 		commands.entity(mesh).insert((
 			ReviewOwned,

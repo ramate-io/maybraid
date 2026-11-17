@@ -16,7 +16,11 @@ use bevy::prelude::*;
 ///
 /// **Damage tracking:** Chain durability is tracked via the standard `Health` component.
 /// The chain breaks when `Health.current` reaches zero. Do not add a separate durability field.
+///
+/// **Corpse exemption:** Chains own their lifecycle and must not enter generic Died/corpse cleanup.
+/// NoCorpseCleanup is required automatically.
 #[derive(Component, Clone, Debug)]
+#[require(damage::NoCorpseCleanup)]
 pub struct ChainRoot {
 	/// How many links the chain has (determines joint count).
 	pub link_count: u32,

@@ -139,6 +139,7 @@ mod tests {
 	use super::super::collision::ChainLinkId;
 	use anyhow::Result;
 	use damage::{DamagePlugin, Health};
+	use std::time::Duration;
 
 	fn test_app() -> App {
 		let mut app = App::new();
@@ -474,6 +475,80 @@ mod tests {
 		Ok(())
 	}
 
+	/// Test that ChainRoot automatically requires NoCorpseCleanup at production boundary.
+	/// No manual NoCorpseCleanup insert should be needed.
+	/// This test would FAIL on 646c8434 (before #[require] was added).
+	#[test]
+	fn chain_root_auto_requires_no_corpse_cleanup() -> Result<()> {
+		let mut app = test_app();
+
+		// Spawn chain via public interface with NO manual NoCorpseCleanup
+		// (mimics production factories that just spawn ChainRoot + Health)
+		let chain_root = app
+			.world_mut()
+			.spawn((
+				ChainRoot {
+					link_count: 3,
+					rest_length_m: 3.0,
+					joint_entities: vec![],
+				},
+				Health::from_max(10.0),
+			))
+			.id();
+
+		// Verify NoCorpseCleanup was added automatically via #[require]
+		assert!(
+			app.world().get::<damage::NoCorpseCleanup>(chain_root).is_some(),
+			"ChainRoot must automatically require NoCorpseCleanup at production boundary"
+		);
+
+		let link_collider = app
+			.world_mut()
+			.spawn((
+				ChainLinkId { link_id: 0, chain_root },
+				ChildOf(chain_root),
+			))
+			.id();
+
+		// Apply lethal damage
+		app.world_mut().write_message(damage::Hit {
+			target: link_collider,
+			source: None,
+			amount: 10.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+
+		app.update();
+
+		// Chain should be broken
+		assert!(app.world().get::<BrokenChain>(chain_root).is_some());
+
+		// Wait 15+ seconds for corpse cleanup window
+		for _ in 0..16 {
+			app.world_mut().resource_mut::<Time>().advance_by(Duration::from_secs(1));
+			app.update();
+		}
+
+		// Chain should NOT have Downed or DespawnAfter (no corpse cleanup)
+		assert!(
+			app.world().get::<damage::Downed>(chain_root).is_none(),
+			"Broken chain should not have Downed component (no corpse flow)"
+		);
+		assert!(
+			app.world().get::<damage::DespawnAfter>(chain_root).is_none(),
+			"Broken chain should not have DespawnAfter component (no corpse flow)"
+		);
+
+		// Chain entity should still exist
+		assert!(
+			app.world().get_entity(chain_root).is_ok(),
+			"Broken chain should still exist after 15s (not despawned by corpse cleanup)"
+		);
+
+		Ok(())
+	}
+
 	#[test]
 	fn durability_fraction_works() {
 		let full = Health { current: 100.0, max: 100.0 };
@@ -670,13 +745,14 @@ mod tests {
 			.count();
 		assert_eq!(chain_broken_count, 1, "Should emit exactly one ChainBroken signal");
 
-		// Exactly one Died for the boss (chain death doesn't emit Died)
+		// Exactly one Died for the boss (chain death doesn't emit Died due to NoCorpseCleanup)
 		let died: Vec<_> = app
 			.world_mut()
 			.resource_mut::<Messages<damage::Died>>()
 			.drain()
 			.collect();
-		assert_eq!(died.len(), 2, "Boss and chain should both emit Died");
+		assert_eq!(died.len(), 1, "Only boss should emit Died (chain has NoCorpseCleanup)");
+		assert_eq!(died[0].entity, boss, "Died should be for boss, not chain");
 
 		Ok(())
 	}
@@ -727,7 +803,7 @@ mod tests {
 	fn end_to_end_real_projectile_breaks_chain_via_health() -> Result<()> {
 		let mut app = test_app();
 
-		// Spawn chain with Health and NoCorpseCleanup
+		// Spawn chain with Health (NoCorpseCleanup required automatically by ChainRoot)
 		let chain_root = app
 			.world_mut()
 			.spawn((
@@ -738,7 +814,6 @@ mod tests {
 				},
 				Health::from_max(10.0),
 				GlobalTransform::default(),
-				damage::NoCorpseCleanup,
 			))
 			.id();
 
@@ -800,7 +875,7 @@ mod tests {
 	fn broken_chain_not_despawned_by_corpse_cleanup_after_15s() -> Result<()> {
 		let mut app = test_app();
 
-		// Spawn chain with NoCorpseCleanup
+		// Spawn chain (NoCorpseCleanup required automatically by ChainRoot)
 		let chain_root = app
 			.world_mut()
 			.spawn((
@@ -810,7 +885,6 @@ mod tests {
 					joint_entities: vec![],
 				},
 				Health::from_max(10.0),
-				damage::NoCorpseCleanup,
 			))
 			.id();
 
