@@ -50,7 +50,20 @@ Damage history stays generic. [`lubikans-damage`](damage/) copies
 a player's ledger, and the sole owner of [`LubikanActivationRequest`](src/activation.rs):
 it spends once, emits [`LubikanActivationSession`](src/activation.rs) or
 [`LubikanActivationRefused`](src/activation.rs), and closes accepted sessions
-through one live-or-cached accessor ([`LubikanActivationAccess`](src/plugin.rs)).
+through one accessor on the session [`LubikanCharacter`](src/ledger.rs). The
+live body points at that character with [`LubikanBodyOf`](src/ledger.rs); body
+replacement does not clone the ledger through a retiring cache.
+
+Inventory ownership continues through `InventoryUser` and the lower equipment
+contracts introduced by [#1491](https://github.com/ramate-io/maybraid/pull/1491).
+The `LiveCharacterInventory` world mirror from
+[#1402](https://github.com/ramate-io/maybraid/pull/1402) is displaced: equipment
+commits publish `EquipmentInventoryChanged`, world persists that inventory in
+`WorldPlayerLoadout`, and body replacement captures the current bag before
+retirement. Ordered weapon/skill selection and derived Tanz stacks therefore
+keep their existing owners; the stable character added here owns the Lubikan
+ledger only. Editor order changes resolve that ledger through the body link.
+
 Heal mutates in the same frame and publishes [`LubikanActivationFinished`](src/activation.rs);
 [`LubikanActivationReport`](src/activation.rs) consumers call the same close and
 do not finish an already-closed session. Consumers order after

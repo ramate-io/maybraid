@@ -16,6 +16,56 @@ use crate::selection::LubikanSelection;
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LubikanOwner;
 
+/// Play-session / selected-character owner. Holds the [`LubikanLedger`] for
+/// the life of the session. Bodies point here through [`LubikanBodyOf`].
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LubikanCharacter;
+
+/// Body → session owner. The ledger lives on the target, not on the capsule.
+#[derive(Component, Debug, Clone, Copy)]
+#[relationship(relationship_target = LubikanBodies)]
+pub struct LubikanBodyOf(pub Entity);
+
+impl LubikanBodyOf {
+	pub fn character(&self) -> Entity {
+		self.0
+	}
+
+	/// Entity that holds [`LubikanLedger`] for `body`. Fixtures that still
+	/// stamp the ledger on the same entity fall back to `body`.
+	pub fn holder(world: &World, body: Entity) -> Entity {
+		world.get::<Self>(body).map(Self::character).unwrap_or(body)
+	}
+
+	pub fn ledger(world: &World, body: Entity) -> Option<&LubikanLedger> {
+		world.get::<LubikanLedger>(Self::holder(world, body))
+	}
+
+	pub fn ledger_mut(world: &mut World, body: Entity) -> Option<Mut<'_, LubikanLedger>> {
+		let holder = world.get::<Self>(body).map(Self::character).unwrap_or(body);
+		world.get_mut(holder)
+	}
+
+	pub fn binding(world: &World, body: Entity) -> Option<&LubikanAccountBinding> {
+		world.get::<LubikanAccountBinding>(Self::holder(world, body))
+	}
+}
+
+/// Bodies currently attached to a [`LubikanCharacter`].
+#[derive(Component, Debug)]
+#[relationship_target(relationship = LubikanBodyOf)]
+pub struct LubikanBodies(Vec<Entity>);
+
+impl LubikanBodies {
+	pub fn iter(&self) -> impl Iterator<Item = Entity> + '_ {
+		self.0.iter().copied()
+	}
+
+	pub fn current(&self) -> Option<Entity> {
+		self.0.last().copied()
+	}
+}
+
 /// Equipped account snapshotted at bind or event resolution.
 ///
 /// Damage history and summons stamp this so attribution can name a charge
@@ -111,7 +161,6 @@ impl LubikanAccount {
 /// Owned Lubikan accounts for one owner. Self is always present and cannot
 /// be removed or merged into another account.
 #[derive(Component, Clone, Debug, PartialEq)]
-#[component(on_remove = crate::plugin::capture_retiring_ledger)]
 pub struct LubikanLedger {
 	accounts: Vec<LubikanAccount>,
 	selection: LubikanSelection,
