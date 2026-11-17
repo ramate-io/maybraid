@@ -26,14 +26,18 @@ pub fn process_boss_spawn_requests(
 		commands.entity(entity).despawn();
 		
 		let position = if let Some(xz) = request.at {
+			// Absolute world position
 			Vec3::new(xz.x, 0.0, xz.y)
 		} else if let Ok(transform) = player.single() {
-			transform.translation
+			// Spawn 8m in front of player along camera forward (approximate)
+			let forward = transform.forward();
+			let offset = Vec3::new(forward.x * 8.0, 0.0, forward.z * 8.0);
+			transform.translation + offset
 		} else {
 			Vec3::ZERO
 		};
 		
-		info!("Boss spawn requested at {position}");
+		info!("[BOSS] Spawning at world position ({:.1}, {:.1}, {:.1})", position.x, position.y, position.z);
 		
 		// Seed the boss encounter in HCSG storage and request presentation
 		storage.seed(BikanwardaBossEncounter::chained(), bevy::shape::Aabb3d::new(
