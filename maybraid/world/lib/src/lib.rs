@@ -55,8 +55,8 @@ pub use character_items::{
 };
 #[cfg(feature = "debug-commands")]
 pub use commands::{
-	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestPeaceful,
-	RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
+	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestHomeostaticStatus,
+	RequestPeaceful, RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
 };
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{

@@ -2,7 +2,9 @@
 //! furnishing and language, generated on the shared HCSG runtime and presented around the
 //! viewer while Discovery streams.
 
-use barking::{BarkingPresentationPlugin, MobNeighborhood, MobScenePresentationPlugin};
+use barking::{
+	BarkingPresentationPlugin, HomeostaticMobsPlugin, MobNeighborhood, MobScenePresentationPlugin,
+};
 use bevy::prelude::*;
 use chico::{
 	BumpOutPresentationPlugin, BumpOutRing, CanopyBumpOut, ChicoPresentationPlugin,
@@ -90,6 +92,7 @@ impl Plugin for WorldLayersPlugin {
 			MaputoPresentationPlugin::<InDiscovery<FurnitureNeighborhood>, Urban>::default(),
 			BarkingPresentationPlugin::<InDiscovery<MobNeighborhood>, Urban>::default(),
 			MobScenePresentationPlugin,
+			HomeostaticMobsPlugin::<world_player::Player>::default(),
 			GenevaPlugin::<InDiscovery<LanguageNeighborhood>, Urban>::default(),
 		))
 		.add_systems(

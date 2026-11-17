@@ -6,6 +6,7 @@
 mod config;
 mod generation;
 pub mod hcsg;
+pub mod homeostatic;
 mod index;
 mod plugin;
 mod present;
@@ -19,9 +20,16 @@ pub use hcsg::{
 	BarkingPresentationPlugin, MobGround, MobNeighborhood, MobScenePresentationPlugin,
 	PlacedMobCell, MOB_PRESENT_RADIUS,
 };
+pub use homeostatic::{
+	HomeostaticMob, HomeostaticMobConfig, HomeostaticCellIndex, HomeostaticRetreat,
+	PlayerHomeostaticCell,
+};
 pub use index::{MobCell, MobCellExtent};
-pub use plugin::{MobGroupsPlugin, PendingMobGroups};
+pub use plugin::{HomeostaticMobsPlugin, MobGroupsPlugin, PendingMobGroups};
 pub use present::{MobCellRoot, MobGroupRoot};
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod homeostatic_tests;
