@@ -94,6 +94,8 @@ pub enum Mobs {
 		#[arg(long, default_value_t = 1)]
 		seed: u32,
 	},
+	/// Inspect mob materialization state: host count, pending groups, body/NPC counts.
+	Inspect,
 }
 
 #[derive(Clone, Subcommand)]
@@ -151,6 +153,10 @@ impl Mobs {
 					seed,
 				});
 				*console = format!("mobs spawn {kind:?} x{count}: pending");
+			}
+			Mobs::Inspect => {
+				commands.spawn(crate::mob_spawn::RequestMobInspect);
+				*console = "mobs inspect: pending".into();
 			}
 		}
 	}
