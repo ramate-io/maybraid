@@ -365,6 +365,18 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool
 		world.despawn(entity);
 	}
 
+	// Hide the ChainPreviewRoot (vertical playground tubes) so only the anchored chain is visible
+	use crate::chain_preview::ChainPreviewRoot;
+	let preview_roots: Vec<Entity> = world
+		.query_filtered::<Entity, With<ChainPreviewRoot>>()
+		.iter(world)
+		.collect();
+	for entity in preview_roots {
+		if let Some(mut visibility) = world.get_mut::<Visibility>(entity) {
+			*visibility = Visibility::Hidden;
+		}
+	}
+
 	let link_count = 12;
 	let length_m = 2.8;
 	
