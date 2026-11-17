@@ -17,7 +17,7 @@ pub use collision::{
 };
 pub use damage_coalesce::coalesce_chain_contacts;
 pub use motion::{
-	deactivate_released_chains, update_chain_joints, ChainAnchor, ChainEndpoint, ChainMotion,
-	ChainRoot, ChainTensionMode, ReleasedChain,
+	compute_joint_positions, deactivate_released_chains, update_chain_joints, ChainAnchor,
+	ChainEndpoint, ChainMotion, ChainRoot, ChainTensionMode, ReleasedChain,
 };
 pub use plugin::BikanwardaChainPhysicsPlugin;

@@ -136,7 +136,7 @@ pub fn update_chain_joints(
 /// Compute joint positions along the chain from start to end anchor.
 ///
 /// Returns a Vec of world-space positions for each joint.
-fn compute_joint_positions(
+pub fn compute_joint_positions(
 	start: Vec3,
 	end: Vec3,
 	joint_count: u32,
@@ -199,6 +199,7 @@ pub fn deactivate_released_chains(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::time::TimeUpdateStrategy;
 
 	#[test]
 	fn taut_mode_produces_linear_interpolation() {
@@ -259,5 +260,102 @@ mod tests {
 		for p in positions {
 			assert!((p - pos).length() < 1e-5);
 		}
+	}
+
+	#[test]
+	fn catenary_sags_below_taut_after_motion_update() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.add_plugins(TransformPlugin)
+			.insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_millis(16)))
+			.add_systems(PostUpdate, update_chain_joints.after(TransformSystems::Propagate));
+
+		let link_count = 12;
+		let length_m = 2.8;
+
+		// Create taut chain
+		let taut_root = app.world_mut().spawn((
+			ChainRoot { link_count, rest_length_m: length_m },
+			ChainMotion { mode: ChainTensionMode::Taut, active: true },
+			Transform::from_xyz(0.0, 0.0, 0.0),
+			GlobalTransform::default(),
+		)).id();
+
+		let _taut_start_anchor = app.world_mut().spawn((
+			ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: taut_root },
+			Transform::from_xyz(0.0, 0.0, 0.0),
+			GlobalTransform::default(),
+		)).id();
+
+		let _taut_end_anchor = app.world_mut().spawn((
+			ChainAnchor { endpoint: ChainEndpoint::End, chain_root: taut_root },
+			Transform::from_xyz(0.0, length_m, 0.0),
+			GlobalTransform::default(),
+		)).id();
+
+		let mut taut_joints = Vec::new();
+		for _i in 0..link_count {
+			let joint = app.world_mut().spawn((
+				Transform::from_xyz(0.0, 0.0, 0.0),
+				GlobalTransform::default(),
+			)).id();
+			app.world_mut().entity_mut(taut_root).add_child(joint);
+			taut_joints.push(joint);
+		}
+
+		// Create catenary chain
+		let catenary_root = app.world_mut().spawn((
+			ChainRoot { link_count, rest_length_m: length_m },
+			ChainMotion { mode: ChainTensionMode::Catenary { sag_ratio: 10 }, active: true },
+			Transform::from_xyz(5.0, 0.0, 0.0),
+			GlobalTransform::default(),
+		)).id();
+
+		let _catenary_start_anchor = app.world_mut().spawn((
+			ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: catenary_root },
+			Transform::from_xyz(5.0, 0.0, 0.0),
+			GlobalTransform::default(),
+		)).id();
+
+		let _catenary_end_anchor = app.world_mut().spawn((
+			ChainAnchor { endpoint: ChainEndpoint::End, chain_root: catenary_root },
+			Transform::from_xyz(5.0, length_m, 0.0),
+			GlobalTransform::default(),
+		)).id();
+
+		let mut catenary_joints = Vec::new();
+		for _i in 0..link_count {
+			let joint = app.world_mut().spawn((
+				Transform::from_xyz(5.0, 0.0, 0.0),
+				GlobalTransform::default(),
+			)).id();
+			app.world_mut().entity_mut(catenary_root).add_child(joint);
+			catenary_joints.push(joint);
+		}
+
+		// Run several frames to let transforms propagate and motion update
+		for _ in 0..5 {
+			app.update();
+		}
+
+		// Get midpoint joint positions (joint 6 out of 12)
+		let taut_midpoint_y = app.world().entity(taut_joints[6]).get::<Transform>().unwrap().translation.y;
+		let catenary_midpoint_y = app.world().entity(catenary_joints[6]).get::<Transform>().unwrap().translation.y;
+
+		// Catenary should sag below taut
+		// For sag_ratio=10, expected vertical compression is length_m / (sag_ratio + 1) = 2.8 / 11 ≈ 0.25m
+		// Taut midpoint should be at length_m / 2 = 1.4m
+		// Catenary midpoint should be compressed down by half the total compression: 1.4 - 0.25/2 ≈ 1.275m
+		assert!(
+			catenary_midpoint_y < taut_midpoint_y,
+			"Catenary midpoint ({catenary_midpoint_y}) should sag below taut midpoint ({taut_midpoint_y})"
+		);
+
+		let expected_sag = 0.1; // At least 10cm of sag
+		assert!(
+			taut_midpoint_y - catenary_midpoint_y > expected_sag,
+			"Catenary should sag by at least {expected_sag}m, got {:.3}m",
+			taut_midpoint_y - catenary_midpoint_y
+		);
 	}
 }

@@ -343,7 +343,7 @@ fn spawn_skinned_chain_for_capture(world: &mut World, bent: bool, rigid: bool) {
 	}
 }
 
-fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, _hit: bool) {
+fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool) {
 	// Despawn any existing skinned chain captures
 	let to_despawn: Vec<Entity> = world
 		.query_filtered::<Entity, With<SkinnedChainCapture>>()
@@ -393,35 +393,49 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, _hit: boo
 				active: true,
 			},
 			Transform::from_xyz(0.0, root_y, 0.0),
+			GlobalTransform::default(),
 			Visibility::default(),
 			SkinnedChainCapture,
 		))
 		.id();
 	
 	// Spawn anchors - bottom and top, referencing the chain root
-	let bottom_anchor = world.spawn((
+	let _bottom_anchor = world.spawn((
 		Name::new("bottom-anchor"),
 		ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
 		Transform::from_xyz(0.0, root_y, 0.0),
+		GlobalTransform::default(),
 		Visibility::default(),
 		SkinnedChainCapture,
 	)).id();
 	
-	let top_anchor = world.spawn((
+	let _top_anchor = world.spawn((
 		Name::new("top-anchor"),
 		ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
 		Transform::from_xyz(0.0, root_y + length_m, 0.0),
+		GlobalTransform::default(),
 		Visibility::default(),
 		SkinnedChainCapture,
 	)).id();
 
+	// Compute joint positions based on anchors and tension mode
+	let start_pos = Vec3::new(0.0, root_y, 0.0);
+	let end_pos = Vec3::new(0.0, root_y + length_m, 0.0);
+	let joint_positions = bikanwarda_encounter::chains::compute_joint_positions(
+		start_pos,
+		end_pos,
+		link_count,
+		mode,
+	);
+
 	let mut joint_entities = Vec::new();
-	for (i, rest_pos) in data.rest_joint_positions.iter().enumerate() {
+	for (i, position) in joint_positions.iter().enumerate() {
 		let joint = world
 			.spawn((
 				Name::new(format!("chain-joint-{i}")),
 				ChainLinkId { link_id: i as u8, chain_root: root },
-				Transform::from_translation(*rest_pos),
+				Transform::from_translation(*position),
+				GlobalTransform::default(),
 				Visibility::default(),
 				SkinnedChainCapture,
 			))
@@ -430,25 +444,63 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, _hit: boo
 		joint_entities.push(joint);
 	}
 
-	let material_ref = mythical_chain_ref_for(MythicalChainState::Intact);
+	// Use StandardMaterial temporarily to work around ChainMaterial shader loading bug
+	// TODO: Switch back to ChainMaterial once #1603 fixes the embedded asset path issue
+	let standard_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
+		base_color: Color::srgb(0.8, 0.6, 0.3), // Gold/bronze color for chain
+		metallic: 0.7,
+		perceptual_roughness: 0.4,
+		..Default::default()
+	});
+
 	let mesh_entity = world
 		.spawn((
 			Name::new("anchored-chain-capture-mesh"),
-			Mesh3d(mesh_handle),
+			Mesh3d(mesh_handle.clone()),
+			MeshMaterial3d(standard_material),
 			Transform::IDENTITY,
+			GlobalTransform::default(),
 			Visibility::default(),
 			bevy::mesh::skinning::SkinnedMesh {
 				inverse_bindposes: inverse_handle,
-				joints: joint_entities,
+				joints: joint_entities.clone(),
 			},
-			MaterialRefRoot(material_ref),
-			OwnedChainMaterial,
-			ChainHalo,
 			aabb,
 			SkinnedChainCapture,
 		))
 		.id();
 	world.entity_mut(root).add_child(mesh_entity);
+	
+	// Manually run PostUpdate to propagate transforms and execute motion system
+	// The capture system doesn't update the app during SETTLE wall-time wait,
+	// so we need to explicitly run PostUpdate to make the motion system update joints.
+	// Run it twice: once to propagate initial anchor transforms, once to update after motion.
+	world.run_schedule(PostUpdate);
+	world.run_schedule(PostUpdate);
+	
+	// If hit variant, spawn a visible projectile sphere intersecting the chain
+	if hit {
+		// Spawn projectile at midpoint, offset to intersect the chain
+		let midpoint_y = root_y + length_m * 0.5;
+		
+		// Create a small sphere mesh for the projectile
+		let projectile_mesh = world.resource_mut::<Assets<Mesh>>().add(Sphere::new(0.15));
+		let projectile_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
+			base_color: Color::srgb(1.0, 0.3, 0.1), // Bright orange/red
+			emissive: Color::srgb(0.8, 0.2, 0.05).into(),
+			..Default::default()
+		});
+		
+		let _projectile = world.spawn((
+			Name::new("test-projectile"),
+			Mesh3d(projectile_mesh),
+			MeshMaterial3d(projectile_material),
+			Transform::from_xyz(0.3, midpoint_y, 0.0), // Right at the chain, slightly offset
+			GlobalTransform::default(),
+			Visibility::default(),
+			SkinnedChainCapture,
+		)).id();
+	}
 	
 	// Reposition camera to frame the anchored chain
 	let camera_pos = Vec3::new(0.0, root_y + length_m * 0.5, 5.5);
