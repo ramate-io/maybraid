@@ -1,12 +1,11 @@
 //! Test that `mobs spawn` materializes bodies and brains in the full game configuration.
 
 use bevy::prelude::*;
-use bevy::scene::ScenePlugin;
-use bevy::state::app::StatesPlugin;
+use bevy::render::{RenderPlugin, settings::WgpuSettings};
 use maybraid_world::{RequestSpawnMobs, WorldPlugin};
-use mob_intelligence::{MemberOf, Mob};
+use mob_intelligence::MemberOf;
 use mob_scenes::MobKind;
-use npc_intelligence::Brain;
+use npc_intelligence::NpcIntelligence;
 
 #[test]
 fn mobs_spawn_materializes_in_full_game_config() -> anyhow::Result<()> {
@@ -15,11 +14,18 @@ fn mobs_spawn_materializes_in_full_game_config() -> anyhow::Result<()> {
 	// Set error handler to warn instead of panic for missing player stack
 	app.set_error_handler(bevy::ecs::error::warn);
 	
-	// Full game configuration: no debug chrome
-	app.add_plugins((MinimalPlugins, AssetPlugin::default(), StatesPlugin, ScenePlugin))
-		.init_asset::<Mesh>()
-		.init_asset::<StandardMaterial>()
-		.init_asset::<bevy::world_serialization::WorldAsset>();
+	// Full game configuration with headless rendering
+	app.add_plugins(DefaultPlugins.set(RenderPlugin {
+		synchronous_pipeline_compilation: true,
+		render_creation: bevy::render::settings::RenderCreation::Automatic(Box::new(WgpuSettings {
+			backends: None,
+			..default()
+		})),
+		..default()
+	}).set(WindowPlugin {
+		primary_window: None,
+		..default()
+	}));
 	app.add_plugins(WorldPlugin::game());
 	app.finish();
 	app.cleanup();
@@ -40,7 +46,7 @@ fn mobs_spawn_materializes_in_full_game_config() -> anyhow::Result<()> {
 
 	// Check that the spawn request was consumed
 	let remaining_requests = app
-		.world()
+		.world_mut()
 		.query::<&RequestSpawnMobs>()
 		.iter(app.world())
 		.count();
@@ -50,11 +56,11 @@ fn mobs_spawn_materializes_in_full_game_config() -> anyhow::Result<()> {
 	);
 
 	// Check that a host was created
-	let hosts = app.world().query::<&mob_scenes::MobScene>().iter(app.world()).count();
+	let hosts = app.world_mut().query::<&mob_scenes::MobScene>().iter(app.world()).count();
 	anyhow::ensure!(hosts > 0, "No MobScene hosts were created after spawn request");
 
 	// Check that members were materialized
-	let members = app.world().query::<&MemberOf>().iter(app.world()).count();
+	let members = app.world_mut().query::<&MemberOf>().iter(app.world()).count();
 	// Note: Members may take multiple frames to materialize depending on LOD state
 	// This test passes if at least the host is present; member materialization
 	// depends on LOD refresh and High fulfill which may be async.
@@ -67,7 +73,7 @@ fn mobs_spawn_materializes_in_full_game_config() -> anyhow::Result<()> {
 	}
 
 	// Check that brains were created for materialized members
-	let brains = app.world().query::<&Brain>().iter(app.world()).count();
+	let brains = app.world_mut().query::<&NpcIntelligence>().iter(app.world()).count();
 	anyhow::ensure!(
 		brains == members,
 		"Expected {members} brains to match {members} members, but found {brains}"
@@ -82,10 +88,17 @@ fn mobs_spawn_creates_pending_group_immediately() -> anyhow::Result<()> {
 	app.insert_resource(maybraid_virtual_pad_controller::PadHidPolicy::External);
 	app.set_error_handler(bevy::ecs::error::warn);
 	
-	app.add_plugins((MinimalPlugins, AssetPlugin::default(), StatesPlugin, ScenePlugin))
-		.init_asset::<Mesh>()
-		.init_asset::<StandardMaterial>()
-		.init_asset::<bevy::world_serialization::WorldAsset>();
+	app.add_plugins(DefaultPlugins.set(RenderPlugin {
+		synchronous_pipeline_compilation: true,
+		render_creation: bevy::render::settings::RenderCreation::Automatic(Box::new(WgpuSettings {
+			backends: None,
+			..default()
+		})),
+		..default()
+	}).set(WindowPlugin {
+		primary_window: None,
+		..default()
+	}));
 	app.add_plugins(WorldPlugin::game());
 	app.finish();
 	app.cleanup();
@@ -109,12 +122,12 @@ fn mobs_spawn_creates_pending_group_immediately() -> anyhow::Result<()> {
 	app.update();
 
 	// The request should be consumed
-	let remaining = app.world().query::<&RequestSpawnMobs>().iter(app.world()).count();
+	let remaining = app.world_mut().query::<&RequestSpawnMobs>().iter(app.world()).count();
 	anyhow::ensure!(remaining == 0, "RequestSpawnMobs should be consumed after one update");
 
 	// After the spawn system runs, pending groups are processed immediately,
 	// so the groups are spawned into hosts in the same frame
-	let hosts = app.world().query::<&mob_scenes::MobScene>().iter(app.world()).count();
+	let hosts = app.world_mut().query::<&mob_scenes::MobScene>().iter(app.world()).count();
 	anyhow::ensure!(
 		hosts >= 3,
 		"Expected at least 3 hosts after spawning 3 raiders, found {hosts}"
@@ -129,10 +142,17 @@ fn grid_placement_is_deterministic() -> anyhow::Result<()> {
 	app.insert_resource(maybraid_virtual_pad_controller::PadHidPolicy::External);
 	app.set_error_handler(bevy::ecs::error::warn);
 	
-	app.add_plugins((MinimalPlugins, AssetPlugin::default(), StatesPlugin, ScenePlugin))
-		.init_asset::<Mesh>()
-		.init_asset::<StandardMaterial>()
-		.init_asset::<bevy::world_serialization::WorldAsset>();
+	app.add_plugins(DefaultPlugins.set(RenderPlugin {
+		synchronous_pipeline_compilation: true,
+		render_creation: bevy::render::settings::RenderCreation::Automatic(Box::new(WgpuSettings {
+			backends: None,
+			..default()
+		})),
+		..default()
+	}).set(WindowPlugin {
+		primary_window: None,
+		..default()
+	}));
 	app.add_plugins(WorldPlugin::game());
 	app.finish();
 	app.cleanup();
@@ -151,7 +171,7 @@ fn grid_placement_is_deterministic() -> anyhow::Result<()> {
 
 	// Collect host positions
 	let mut positions: Vec<Vec3> = app
-		.world()
+		.world_mut()
 		.query::<&mob_scenes::MobScene>()
 		.iter(app.world())
 		.map(|scene| scene.center)

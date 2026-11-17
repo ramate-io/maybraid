@@ -59,6 +59,8 @@ pub use commands::{
 	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestPeaceful,
 	RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
 };
+#[cfg(any(test, feature = "debug-commands"))]
+pub use mob_spawn::RequestSpawnMobs;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
 	InventoryEditCameraFollow, WorldMenuShell, WorldSceneryVisible, WorldSurfaceReady,

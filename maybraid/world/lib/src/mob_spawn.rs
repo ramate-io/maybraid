@@ -8,9 +8,9 @@ use barking::{GroupKind, MobEnvironmentSample, MobGroup, PendingMobGroups, Place
 use bevy::prelude::*;
 use durham::DurhamSurface;
 use game_commands::command::CommandConsoleOutput;
-use mob_intelligence::{MemberOf, Mob};
+use mob_intelligence::MemberOf;
 use mob_scenes::{MobKind, MobScene};
-use npc_intelligence::Brain;
+use npc_intelligence::NpcIntelligence;
 use world_player::{surface_or_hold_at, Player};
 
 #[derive(Component, Clone, Debug, PartialEq)]
@@ -117,7 +117,7 @@ pub(crate) fn apply_mob_inspect(
 	requests: Query<Entity, With<RequestMobInspect>>,
 	hosts: Query<&MobScene>,
 	members: Query<&MemberOf>,
-	brains: Query<&Brain>,
+	brains: Query<&NpcIntelligence>,
 	pending: Option<Res<PendingMobGroups>>,
 	players: Query<&GlobalTransform, With<Player>>,
 	mut console: Option<ResMut<CommandConsoleOutput>>,
