@@ -11,6 +11,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 tracing = { workspace = true }
+bevy = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

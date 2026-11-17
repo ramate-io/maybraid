@@ -22,7 +22,6 @@ use bevy::scene::prelude::WorldSceneExt;
 use crate::scene::host::{lod_world_entity_is_shown, LodLevelRoot, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
-use super::diagnostics;
 use super::schedule::{class_order, for_each_rr, split_presence_desired_active, LevelBand};
 use super::types::{
 	FulfillClass, LodChunkAtomicOverrun, LodChunkBandCursors, LodChunkBudgetClock,
@@ -30,6 +29,9 @@ use super::types::{
 	LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
 	LOD_CHUNK_TUPLE_BAND_COUNT,
 };
+
+#[cfg(feature = "scene-tracing")]
+use lod_generation_diagnostics::scene_refresh as diagnostics;
 
 /// Test-only: treat the exclusive clock as expired after this many pull+spawn quanta.
 #[derive(Resource, Debug, Clone, Copy)]
@@ -132,32 +134,39 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		collect_job_snapshots(world)
 	};
 	let mut buckets = JobBuckets::default();
+	#[cfg(feature = "scene-tracing")]
 	let mut counters = diagnostics::ClassificationCounters::default();
 	
 	for snap in snapshots {
+		#[cfg(feature = "scene-tracing")]
 		if snap.spawned == 0 {
 			counters.count_new_root();
 		}
 		
 		if snap.queue_empty {
+			#[cfg(feature = "scene-tracing")]
 			counters.count_skipped_queue_empty();
 			continue;
 		}
 		let Some(desired) = world.get::<LodSceneLevel>(snap.host).copied() else {
+			#[cfg(feature = "scene-tracing")]
 			counters.count_skipped_no_host();
 			continue;
 		};
 		let shown = lod_world_entity_is_shown(world, snap.entity);
 		let class = if snap.cold {
 			if snap.self_level != desired {
-				counters.count_skipped_cold_mismatch();
-				if snap.spawned == 0 {
-					diagnostics::emit_cold_mismatch_skip(
-						snap.entity,
-						snap.host,
-						snap.self_level,
-						desired,
-					);
+				#[cfg(feature = "scene-tracing")]
+				{
+					counters.count_skipped_cold_mismatch();
+					if snap.spawned == 0 {
+						diagnostics::emit_cold_mismatch_skip(
+							snap.entity,
+							snap.host,
+							snap.self_level,
+							desired,
+						);
+					}
 				}
 				continue;
 			}
@@ -167,15 +176,18 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		} else if shown {
 			FulfillClass::Active
 		} else {
-			counters.count_skipped_not_shown();
-			if snap.spawned == 0 {
-				diagnostics::emit_warm_root_skip(
-					snap.entity,
-					snap.host,
-					snap.self_level,
-					desired,
-					shown,
-				);
+			#[cfg(feature = "scene-tracing")]
+			{
+				counters.count_skipped_not_shown();
+				if snap.spawned == 0 {
+					diagnostics::emit_warm_root_skip(
+						snap.entity,
+						snap.host,
+						snap.self_level,
+						desired,
+						shown,
+					);
+				}
 			}
 			continue;
 		};
@@ -185,9 +197,11 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 			.push(snap.entity, snap.parent_desired, snap.self_level, is_new);
 	}
 	
+	#[cfg(feature = "scene-tracing")]
 	if counters.has_new_roots() {
+		let frame = world.resource::<LodChunkDrainCursor>().frame;
 		diagnostics::emit_classification_summary(
-			world,
+			frame,
 			counters.new_roots_total,
 			counters.skipped_queue_empty,
 			counters.skipped_no_host,
@@ -318,12 +332,12 @@ fn drain_one(
 	}
 	
 	// Telemetry: log when a new root (spawned==0) is first visited
+	#[cfg(feature = "scene-tracing")]
 	if job.spawned == 0 && diagnostics::enabled() {
 		let root_level = world.get::<LodLevelRoot>(entity).map(|r| r.0);
 		let host_level = world.get::<LodSceneLevel>(job.host).copied();
 		let time_left = budget.spawn_time_per_frame.saturating_sub(clock.start.elapsed());
 		diagnostics::emit_new_root_visit(
-			world,
 			entity,
 			job.host,
 			job.parent_desired,
@@ -331,7 +345,7 @@ fn drain_one(
 			host_level,
 			job.cold,
 			*remaining,
-			time_left,
+			time_left.as_micros(),
 			clock.quanta,
 		);
 	}
@@ -391,22 +405,29 @@ fn drain_one(
 			.record_overrun(LodChunkAtomicOverrun { host, level, elapsed: quantum });
 	}
 	
-	let was_new = world.get::<LodChunkFulfillment>(entity).map_or(false, |job| job.spawned == 0);
-	
 	if let Some(mut job) = world.get_mut::<LodChunkFulfillment>(entity) {
+		#[cfg(feature = "scene-tracing")]
+		let telemetry = diagnostics::enabled().then(|| {
+			let was_new = job.spawned == 0;
+			let primitives_left = job.queue.len();
+			(was_new, primitives_left)
+		});
+		
 		job.spawned += 1;
-	}
-	
-	if was_new && diagnostics::enabled() {
-		let root_level = world.get::<LodLevelRoot>(entity).map(|r| r.0);
-		let primitives_left = world.get::<LodChunkFulfillment>(entity).map_or(0, |job| job.queue.len());
-		diagnostics::emit_first_spawn_complete(
-			entity,
-			host,
-			root_level,
-			primitives_left,
-			clock.quanta,
-		);
+		
+		#[cfg(feature = "scene-tracing")]
+		if let Some((was_new, primitives_left)) = telemetry {
+			if was_new {
+				let root_level = world.get::<LodLevelRoot>(entity).map(|r| r.0);
+				diagnostics::emit_first_spawn_complete(
+					entity,
+					host,
+					root_level,
+					primitives_left,
+					clock.quanta,
+				);
+			}
+		}
 	}
 		*remaining = remaining.saturating_sub(weight.max(1));
 	}

@@ -14,7 +14,7 @@ default = []
 # Opt-in structured Tracy phases and completion accounting; no default logging.
 generation-tracing = ["dep:lod-generation-diagnostics"]
 # Opt-in scene refresh text telemetry; default-off per CONTRIBUTING.md.
-scene-tracing = []
+scene-tracing = ["dep:lod-generation-diagnostics"]
 
 [dependencies]
 lod-generation-diagnostics = { workspace = true, optional = true }

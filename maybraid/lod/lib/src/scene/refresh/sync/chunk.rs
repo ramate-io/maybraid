@@ -26,9 +26,6 @@
 
 mod begin;
 mod complete;
-mod diagnostics;
-#[cfg(test)]
-mod diagnostics_test;
 mod drain;
 mod resume;
 mod schedule;
