@@ -2,7 +2,6 @@
 
 use bevy::prelude::*;
 use bikanwarda_character::{spawn_bikanwarda_encounter, BikanwardaRoot};
-use firearm_intelligence::FirearmIntelligence;
 use spotting_intelligence::{InterestLayers, SpotDirective, SpottingUser};
 
 use crate::presentation::{RequestBossAssembly, BossActor};
@@ -24,14 +23,13 @@ pub fn spawn_boss_assemblies(
 		// Add AttackUser so the attack runtime accepts this owner
 		commands.entity(boss_entity).insert(attacks::AttackUser::default());
 		
-		// Add spotting components for perception/visibility
+		// Add spotting component for perception/visibility
 		// Reuses existing spotting_intelligence system instead of hand-writing visibility checks
 		let eye_offset = Vec3::Y * 15.0; // Boss head height (~20m tall, eyes at ~15m)
 		let spotting_range = 50.0; // Match encounter arena size
-		commands.entity(boss_entity).insert((
-			SpottingUser::new(eye_offset, [SpotDirective::new(InterestLayers::CHARACTER, spotting_range)]),
-			FirearmIntelligence::default(), // Provides targeting settings even though boss uses attacks, not firearms
-		));
+		commands.entity(boss_entity).insert(
+			SpottingUser::new(eye_offset, [SpotDirective::new(InterestLayers::CHARACTER, spotting_range)])
+		);
 		
 		// Bind host to actor with relationship component
 		commands.entity(host_entity).insert(BossActor(boss_entity));

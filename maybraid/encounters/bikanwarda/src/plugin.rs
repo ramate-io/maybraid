@@ -25,6 +25,8 @@ impl Plugin for BikanwardaEncounterPlugin {
 		if !app.is_plugin_added::<LubikansPlugin>() {
 			app.add_plugins(LubikansPlugin);
 		}
+		// Note: SpottingAvianPlugin should be installed by the main game/world setup
+		// for boss perception to work. Not installed here to avoid test dependencies.
 		app.insert_resource(EncounterLifetimePolicy::bikanwarda())
 			.insert_resource(EncounterSleepPolicy::bikanwarda());
 		app.init_resource::<BikanwardaUnlockConfig>();

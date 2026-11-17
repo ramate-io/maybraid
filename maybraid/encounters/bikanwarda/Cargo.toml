@@ -28,6 +28,7 @@ lod-avian = { workspace = true }
 lubikans = { workspace = true }
 projectiles = { workspace = true }
 spotting-intelligence = { workspace = true }
+spotting-intelligence-avian = { workspace = true }
 world-player = { workspace = true }
 world-materials = { workspace = true }
 

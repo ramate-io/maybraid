@@ -1,18 +1,17 @@
 //! Boss encounter combat driver.
 //!
-//! Reuses the existing spotting→targeting pipeline from `firearm_combat::spotting`
-//! instead of hand-writing visibility checks. The boss gets `SpottingUser` and
-//! `FirearmIntelligence` components in assembly, and the standard
-//! `sync_spotted_combat_targets` system populates `CombatTargeting` from
-//! actual perception results.
+//! Reuses `SpottingUser` from `spotting_intelligence` for perception/visibility,
+//! then bridges spotted contacts to `CombatTargeting` via `sync_boss_spotting_to_targeting`.
+//! This avoids hand-writing visibility checks and reuses the existing perception system.
 
 use attacks::{AttackCatalog, BeginAttack};
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 use bikanwarda_attacks::{BikanwardaMouthSocket, BRAY};
 use bikanwarda_character::BikanwardaRoot;
-use combat_targeting::CombatTargeting;
+use combat_targeting::{CombatContact, CombatTargeting, TargetSource};
 use damage::Health;
+use spotting_intelligence::SpottingUser;
 
 use crate::presentation::{BossActor, BossEncounterRoot};
 
@@ -35,9 +34,74 @@ impl Default for BossAttackCooldown {
 	}
 }
 
-// Targeting is now handled by firearm_combat::sync_spotted_combat_targets,
-// which populates CombatTargeting from SpottingUser contacts (actual perception results).
-// No hand-written visibility checks needed.
+/// Bridges SpottingUser contacts to CombatTargeting for non-firearm attackers.
+///
+/// Simplified from `firearm_intelligence::sync_spotted_combat_targets` to not require
+/// FirearmIntelligence. Reads actual spotted contacts (with occlusion/visibility results)
+/// from SpottingUser and writes them to CombatTargeting for ranking.
+///
+/// This is the minimal bridge between spotting-intelligence and combat-targeting
+/// for attackers that don't use firearm AI.
+pub fn sync_boss_spotting_to_targeting(
+	mut bosses: Query<(&Transform, &SpottingUser, &mut CombatTargeting), With<BikanwardaRoot>>,
+) {
+	const MEMORY_SECS: f32 = 3.0; // How long to remember spotted targets
+	
+	for (transform, spotting, mut targeting) in &mut bosses {
+		// Configure targeting memory if needed
+		if targeting.memory_secs != MEMORY_SECS {
+			targeting.memory_secs = MEMORY_SECS;
+			targeting.dirty = true;
+		}
+		
+		// Remove forgotten contacts (no longer in spotting)
+		let forgotten: Vec<Entity> = targeting
+			.memory
+			.keys()
+			.filter(|entity| !spotting.contacts.contains_key(entity))
+			.copied()
+			.collect();
+		for entity in forgotten {
+			targeting.memory.remove(&entity);
+			targeting.remove_source(entity, TargetSource::SPOTTING);
+		}
+		
+		if !targeting.enabled {
+			targeting.clear_source(TargetSource::SPOTTING);
+			continue;
+		}
+		
+		// Transfer spotted contacts to targeting (with real visibility from spotting)
+		for contact in spotting.contacts.values() {
+			let observed = CombatContact {
+				subject: contact.subject,
+				position: contact.position,
+				movement_vector: contact.velocity,
+				visible_point: contact.visible_point,
+				visible_head: contact.visible_head,
+				last_spotted_at: contact.last_success_at,
+			};
+			
+			if targeting.contact(contact.subject) != Some(&observed) {
+				targeting.upsert_contact(observed);
+			} else {
+				targeting.include(contact.subject, TargetSource::SPOTTING);
+			}
+			
+			// Set distance-based factors
+			let delta = contact.position - transform.translation;
+			let distance = Vec2::new(delta.x, delta.z).length();
+			targeting.set_factors(
+				contact.subject,
+				combat_targeting::TargetFactors {
+					hostility: 1.0,
+					bias: -distance,
+					..Default::default()
+				},
+			);
+		}
+	}
+}
 
 /// System to manage boss combat state and trigger attacks.
 ///
@@ -160,18 +224,15 @@ impl Plugin for BossEncounterCombatPlugin {
 			app.add_plugins(combat_targeting::CombatTargetingPlugin);
 		}
 		
-		// Install firearm intelligence plugin for sync_spotted_combat_targets
-		// (reuses existing spotting→targeting bridge instead of hand-writing visibility)
-		if !app.is_plugin_added::<firearm_intelligence::FirearmIntelligencePlugin>() {
-			app.add_plugins(firearm_intelligence::FirearmIntelligencePlugin);
-		}
-		
 		app.add_systems(
 			Update,
 			(
 				initialize_boss_combat,
-				// Combat driver runs after targeting is ranked and transforms are propagated
-				// (targeting is populated by firearm_combat::sync_spotted_combat_targets)
+				// Bridge spotting to targeting before ranking
+				sync_boss_spotting_to_targeting
+					.after(TransformSystems::Propagate)
+					.before(combat_targeting::CombatTargetingSystems::Rank),
+				// Combat driver runs after targeting is ranked
 				boss_combat_driver
 					.after(TransformSystems::Propagate)
 					.after(combat_targeting::CombatTargetingSystems::Rank),
