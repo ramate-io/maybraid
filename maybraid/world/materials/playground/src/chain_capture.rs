@@ -459,22 +459,13 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool
 		joint_entities.push(joint);
 	}
 
-	// Note: ChainMaterial components (MaterialRefRoot, OwnedChainMaterial, ChainHalo) require
-	// additional resources and systems that aren't initialized in the capture app context.
-	// Using StandardMaterial for captures until the capture app is updated to support ChainMaterial.
-	// The skinned chain test (skinned_chain_with_rigid_joints) uses ChainMaterial successfully.
-	let standard_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
-		base_color: Color::srgb(0.8, 0.6, 0.3), // Gold/bronze color matching chain
-		metallic: 0.7,
-		perceptual_roughness: 0.4,
-		..Default::default()
-	});
+	// Use ChainMaterial for proper rendering (shader fixed in #1603)
+	let material_ref = mythical_chain_ref_for(MythicalChainState::Intact);
 
 	let mesh_entity = world
 		.spawn((
 			Name::new("anchored-chain-capture-mesh"),
 			Mesh3d(mesh_handle.clone()),
-			MeshMaterial3d(standard_material),
 			Transform::IDENTITY,
 			GlobalTransform::default(),
 			Visibility::default(),
@@ -482,6 +473,9 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool
 				inverse_bindposes: inverse_handle,
 				joints: joint_entities.clone(),
 			},
+			MaterialRefRoot(material_ref),
+			OwnedChainMaterial,
+			ChainHalo,
 			aabb,
 			SkinnedChainCapture,
 		))

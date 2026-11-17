@@ -47,17 +47,18 @@ impl Plugin for WorldMaterialsPlaygroundPlugin {
 				.with_drawer_config(GameCommandDrawerConfig { open_at_start: false, ..default() });
 		}
 		app.init_resource::<PreviewConfig>()
-			.init_resource::<PreviewHost>()
-			.init_resource::<ShootConfig>()
-			.init_resource::<ChainPreview>()
-			.init_resource::<LightingMode>()
-			.init_resource::<PendingChainHit>()
-			.init_resource::<CaptureSet>()
-			.init_resource::<VideoCapture>()
-			.add_plugins(bikanwarda_encounter::chains::BikanwardaChainPhysicsPlugin)
-			.add_plugins(WorldMaterialsPlugin)
-			.add_plugins(VisualStylePlugin)
-			.add_plugins(command_plugin);
+		.init_resource::<PreviewHost>()
+		.init_resource::<ShootConfig>()
+		.init_resource::<ChainPreview>()
+		.init_resource::<LightingMode>()
+		.init_resource::<PendingChainHit>()
+		.init_resource::<CaptureSet>()
+		.init_resource::<VideoCapture>()
+		// Note: BikanwardaChainPhysicsPlugin not needed - playground only captures visuals,
+		// doesn't run physics simulation. Chain geometry is spawned directly in chain_capture.rs.
+		.add_plugins(WorldMaterialsPlugin)
+		.add_plugins(VisualStylePlugin)
+		.add_plugins(command_plugin);
 		if let Some(session) = capturing {
 			app.insert_resource(session).add_systems(
 				Startup,
