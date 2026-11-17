@@ -17,6 +17,11 @@ pub struct TextMenuDescription;
 impl TextMenuDescription {
 	/// Right-hand pane: copy sits at the bottom of the remainder.
 	pub fn scene(initial: impl Into<String>) -> impl Scene + 'static {
+		Self::scene_from_bottom(initial, DESCRIPTION_BOTTOM)
+	}
+
+	/// Right-hand pane with a custom bottom inset so other chrome can sit below.
+	pub fn scene_from_bottom(initial: impl Into<String>, bottom: f32) -> impl Scene + 'static {
 		let initial = initial.into();
 		bsn! {
 			Node {
@@ -24,7 +29,7 @@ impl TextMenuDescription {
 				left: percent(DESCRIPTION_PANE_LEFT_PERCENT),
 				right: px(COLUMN_INSET),
 				top: px(COLUMN_INSET),
-				bottom: px(DESCRIPTION_BOTTOM),
+				bottom: px(bottom),
 				flex_direction: FlexDirection::Column,
 				align_items: AlignItems::Center,
 				justify_content: JustifyContent::FlexEnd,

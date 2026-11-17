@@ -59,6 +59,8 @@ pub use commands::{
 	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestPeaceful,
 	RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
 };
+#[cfg(any(test, feature = "debug-commands"))]
+pub use mob_spawn::{RequestMobInspect, RequestSpawnMobs};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
 	InventoryEditCameraFollow, WorldMenuShell, WorldSceneryVisible, WorldSurfaceReady,
@@ -226,8 +228,8 @@ impl Plugin for WorldPlugin {
 			.add_plugins(VegetationHostPlugin { register_camera: false })
 			.add_plugins(MeshStatsPlugin)
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
-			.add_plugins(CharacterRagdollPlugin)
-			.add_plugins(WorldLayersPlugin)
+			.add_plugins(CharacterRagdollPlugin);
+		app.add_plugins(WorldLayersPlugin)
 			.add_plugins(DiscoveryPlayerPlugin)
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(crate::spawn_surface::SpawnSurfacePlugin)
@@ -282,6 +284,7 @@ impl Plugin for WorldPlugin {
 				vsync::toggle_vsync,
 				commands::apply_sky_commands,
 				mob_spawn::apply_spawn_mob_requests,
+				mob_spawn::apply_mob_inspect,
 			),
 		);
 		render_scale::configure(app);
@@ -297,7 +300,8 @@ impl Plugin for WorldPlugin {
 				(
 					control::update_world_surface_ready.in_set(control::WorldSurfaceSet),
 					control::sync_world_scenery,
-					control::sync_combat_hud_visible,
+					control::stamp_gameplay_hud,
+					control::sync_combat_hud_visible.after(SkillMapSystems::Steer),
 					control::sync_console_capture.in_set(CaptureResolveSystems),
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
 					control::apply_world_motor_filter

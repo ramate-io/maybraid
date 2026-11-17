@@ -1,7 +1,7 @@
 //! Discover skill maps: spatial tile walks and timed directional feeds driven
-//! by a [`SkillMapUser`]'s Laufer/Tanz stick flicks. Laufer holds **RB**; either
-//! stick works and a hold is not a flick. Tile claims and correctly timed feed
-//! prompts dispatch world effects.
+//! by a [`SkillMapUser`]'s Laufer/Tanz stick flicks. Both modes hold **RB** to
+//! expand the stained-glass overlay; either stick works and a hold is not a
+//! flick. Tile claims and correctly timed feed prompts dispatch world effects.
 //!
 //! Stamp [`SkillMapUser`] on the live character (same install as
 //! [`firearm_user::FirearmUser`]). Pause / text-entry should clear
@@ -18,9 +18,12 @@ mod fireball_material;
 mod fireball_trail;
 mod icon;
 mod map;
+mod overlay;
 mod preview;
+mod sound;
 mod tile_material;
 mod tiles;
+mod tunnel_vision;
 mod user;
 mod viewport;
 
@@ -48,13 +51,26 @@ pub use feed::{
 	FEED_WINDOW_SECS,
 };
 pub use map::{authored_map, authored_map_from_spec, authored_maps, SkillKind, SkillMapId};
+pub use overlay::{
+	SkillMapBackdrop, SkillMapOverlay, SkillMapOverlayCue, SkillMapOverlayEnabled,
+	SkillMapOverlayMaterial, SkillMapOverlayPane, OVERLAY_CLEAR_ALPHA, OVERLAY_FRAME_FILL_ALPHA,
+	OVERLAY_GLASS, OVERLAY_TILE_AMOUNT, OVERLAY_WARP,
+};
 pub use preview::{
 	spawn_skill_map_catalog_preview, spawn_skill_map_spin_reveal_hud,
 	spawn_skill_map_spin_reveal_image, SkillMapCatalogPreview, SkillMapMenuPreview,
 	SkillMapSpinRevealHud, SkillMapSpinRevealHudView, CATALOG_PREVIEW_PX,
 };
+pub use sound::{
+	SkillMapOverlaySounds, OVERLAY_ACTIVATE_SOUND, OVERLAY_ACTIVATE_SOUND_NAME,
+	OVERLAY_ACTIVATE_SPATIAL_RADIUS, OVERLAY_ACTIVATE_VOLUME,
+};
 pub use tile_material::{SkillMapTileAssets, SkillMapTileMaterialPlugin};
 pub use tiles::{classify_noise, TileKind};
+pub use tunnel_vision::{
+	SkillMapFocusEnabled, SkillMapTunnelVision, SkillMapTunnelVisionMaterial, TUNNEL_VISION_DARKEN,
+	TUNNEL_VISION_FADE_SECS, TUNNEL_VISION_RADIUS, TUNNEL_VISION_STRENGTH,
+};
 pub use user::{
 	spawn_skill_maps, spawn_skill_maps_with, MappedBy, SkillMapEquip, SkillMapHeld, SkillMapMember,
 	SkillMapSession, SkillMapSteerLock, SkillMapUser, SkillMapUserSettings,
@@ -113,6 +129,8 @@ impl Plugin for SkillMapPlugin {
 		}
 		app.add_plugins(FireballMaterialPlugin)
 			.add_plugins(SkillMapTileMaterialPlugin)
+			.add_plugins(overlay::SkillMapOverlayPlugin)
+			.add_plugins(tunnel_vision::SkillMapTunnelVisionPlugin)
 			.add_systems(Startup, fireball_embers::setup_fireball_effects)
 			.add_systems(Startup, burst::setup_burst_assets)
 			.init_resource::<SkillMapEnabled>()
@@ -143,12 +161,15 @@ impl Plugin for SkillMapPlugin {
 					controller::detect_skill_map_flicks,
 					cursor::sync_skill_map_held,
 					cursor::tick_steer_lock,
+					feed::start_feeds_on_steer_hold,
 					feed::tick_feeds,
 					controller::dispatch_routed_flicks,
 					cursor::apply_flicks,
 					feed_view::sync_feed_view,
 					cursor::tick_flick_beads,
 					viewport::sync_viewport_chrome,
+					overlay::sync_skill_map_overlay,
+					tunnel_vision::sync_tunnel_vision_target,
 					viewport::sync_firearm_chrome,
 					viewport::sync_grenade_chrome,
 					viewport::track_cursors,
@@ -208,6 +229,10 @@ mod tests {
 		assert_eq!(maps[3].kind, SkillKind::Cosimo);
 		assert_ne!(SkillKind::Fireball.viewport_clear(), SkillKind::Dumbwave.viewport_clear());
 		assert_ne!(SkillKind::Rockadder.viewport_clear(), SkillKind::Cosimo.viewport_clear());
+		assert_eq!(
+			SkillKind::Fireball.overlay_clear(SkillMapOverlay::Expanded),
+			SkillKind::Fireball.viewport_clear().with_alpha(OVERLAY_CLEAR_ALPHA)
+		);
 		let seeded = authored_map(SkillKind::Fireball, 99);
 		assert_eq!(seeded.seed, 99);
 		assert_eq!(seeded.id, SkillMapId(0));

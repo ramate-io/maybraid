@@ -103,7 +103,9 @@ impl MobScene {
 	}
 
 	pub fn spawn(&self, commands: &mut Commands, transform: Transform) -> Entity {
-		commands.spawn_scene(self.scene(transform)).id()
+		let mut scene = self.clone();
+		scene.center = transform.translation;
+		commands.spawn_scene(scene.scene(transform)).id()
 	}
 
 	fn level_for(&self, transform: &Transform) -> LodSceneLevel {

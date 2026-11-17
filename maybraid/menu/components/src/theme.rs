@@ -16,6 +16,9 @@ pub const BARLOW_REGULAR: &str = "fonts/barlow/BarlowSemiCondensed-Regular.ttf";
 /// Noto Sans Regular — IPA coverage for generated place names.
 pub const NOTO_SANS_REGULAR: &str = "fonts/noto/NotoSans-Regular.ttf";
 
+/// Pixel size of the Tanz trigger callout icon, and of rhythm-map direction arrows.
+pub const TANZ_CALLOUT_ICON_PX: f32 = 40.0;
+
 /// Largest face on a text menu (title / header).
 pub const HEADER_FONT_SIZE: f32 = 96.0;
 
@@ -107,6 +110,23 @@ pub const TEXT_YELLOW_FAINT: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
 
 /// Focused locked-row yellow: still dampened, a bit stronger than idle faint.
 pub const TEXT_YELLOW_FAINT_FOCUS: Color = Color::srgba(1.0, 0.86, 0.22, 0.68);
+
+/// Play-HUD stained-glass fill (skill-map overlay language).
+pub const HUD_GLASS_FILL: Color = Color::srgba(0.04, 0.03, 0.07, 0.28);
+/// Idle glass came. Same yellow as [`TEXT_YELLOW_FAINT`].
+pub const HUD_GLASS_STROKE: Color = TEXT_YELLOW_FAINT;
+/// In-use glass came (RB hold, Tanzer, cooking). Same as the skill-map live frame.
+pub const HUD_GLASS_STROKE_LIVE: Color = Color::srgb(1.0, 0.48, 0.08);
+pub const HUD_GLASS_RADIUS: f32 = 10.0;
+pub const HUD_GLASS_BORDER: f32 = 1.5;
+
+pub fn hud_glass_fill() -> BackgroundColor {
+	BackgroundColor(HUD_GLASS_FILL)
+}
+
+pub fn hud_glass_stroke(live: bool) -> BorderColor {
+	BorderColor::all(if live { HUD_GLASS_STROKE_LIVE } else { HUD_GLASS_STROKE })
+}
 
 /// Lime-adjacent violet for “Coming Soon” objective badges.
 pub const TEXT_PURPLE: Color = Color::srgb(0.72, 0.48, 0.92);
@@ -226,6 +246,9 @@ pub const COLUMN_BOTTOM: f32 = 120.0;
 /// Corner action (Back / Edit / Save) inset from the window bottom.
 pub const CORNER_BOTTOM: f32 = 40.0;
 
+/// Gallery description sits above the bottom keybind row.
+pub const GALLERY_DESCRIPTION_BOTTOM: f32 = 96.0;
+
 /// Gap between the last menu row and explainer copy stacked under the column.
 pub const DESCRIPTION_UNDER_COLUMN_GAP: f32 = 24.0;
 
@@ -333,6 +356,30 @@ pub const PROMPT_KEY_DROP: &str = "iconography/kenney/input-prompts/keyboard_e_o
 
 /// Kenney Double Xbox **Y** — [`maybraid_virtual_pad_controller::INVENTORY_UNEQUIP_PAD`].
 pub const PROMPT_PAD_UNEQUIP: &str = "iconography/kenney/input-prompts/xbox_button_y_outline.png";
+
+/// Kenney Double Xbox **B** — pad Back ([`PadButton::B`](maybraid_virtual_pad_controller::PadButton::B)).
+pub const PROMPT_PAD_BACK: &str = "iconography/kenney/input-prompts/xbox_button_b_outline.png";
+
+/// Kenney Double keyboard **Escape** — menu Back.
+pub const PROMPT_KEY_BACK: &str = "iconography/kenney/input-prompts/keyboard_escape_outline.png";
+
+/// Kenney Double Xbox **X** — gallery Edit, same west face as inventory drop.
+pub const PROMPT_PAD_EDIT: &str = PROMPT_PAD_DROP;
+
+/// Kenney Double keyboard **E** — gallery Edit, same keys as inventory drop.
+pub const PROMPT_KEY_EDIT: &str = PROMPT_KEY_DROP;
+
+/// Kenney Double Xbox **View** — pad Select / gallery Delete.
+pub const PROMPT_PAD_DELETE: &str = "iconography/kenney/input-prompts/xbox_button_view_outline.png";
+
+/// Kenney Double keyboard **Delete** — gallery Delete.
+pub const PROMPT_KEY_DELETE: &str = "iconography/kenney/input-prompts/keyboard_delete_outline.png";
+
+/// Kenney Double Xbox **Menu** — [`PadButton::Start`](maybraid_virtual_pad_controller::PadButton::Start) / gallery Create.
+pub const PROMPT_PAD_CREATE: &str = "iconography/kenney/input-prompts/xbox_button_menu_outline.png";
+
+/// Kenney Double keyboard **N** — gallery Create (New).
+pub const PROMPT_KEY_CREATE: &str = "iconography/kenney/input-prompts/keyboard_n_outline.png";
 
 /// Kenney Xbox bumper prompts for inventory section paging.
 pub const PROMPT_PAD_PREVIOUS_SECTION: &str =

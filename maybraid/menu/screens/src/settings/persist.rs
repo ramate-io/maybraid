@@ -274,6 +274,8 @@ mod tests {
 		assert_eq!(settings.shadows, InGameShadowQuality::Off);
 		assert_eq!(settings.visual_style, InGameVisualStyle::Native);
 		assert!(!settings.mob_hud);
+		assert!(settings.map_overlay);
+		assert!(settings.map_focus);
 	}
 
 	#[test]
@@ -285,6 +287,8 @@ mod tests {
 			&InGameSettings {
 				shadows: InGameShadowQuality::Low,
 				mob_hud: true,
+				map_overlay: false,
+				map_focus: false,
 				visual_style: InGameVisualStyle::Retro,
 			},
 		)
@@ -293,11 +297,15 @@ mod tests {
 		assert_eq!(loaded.shadows, InGameShadowQuality::Low);
 		assert_eq!(loaded.visual_style, InGameVisualStyle::Retro);
 		assert!(!loaded.mob_hud);
+		assert!(!loaded.map_overlay);
+		assert!(!loaded.map_focus);
 
 		write_fields(&root, r#"{ "version": 1, "fields": { "shadows": "low", "mob_hud": true } }"#);
 		let loaded = load_machine_settings(&root, DeviceClass::Modest);
 		assert_eq!(loaded.shadows, InGameShadowQuality::Low);
 		assert!(!loaded.mob_hud);
+		assert!(loaded.map_overlay);
+		assert!(loaded.map_focus);
 	}
 
 	#[test]
@@ -319,6 +327,8 @@ mod tests {
 			&InGameSettings {
 				shadows: InGameShadowQuality::Off,
 				mob_hud: false,
+				map_overlay: true,
+				map_focus: true,
 				visual_style: InGameVisualStyle::Impressionist,
 			},
 		)
@@ -371,6 +381,8 @@ mod tests {
 			&InGameSettings {
 				shadows: InGameShadowQuality::Off,
 				mob_hud: false,
+				map_overlay: true,
+				map_focus: true,
 				visual_style: InGameVisualStyle::PrePostModern,
 			},
 		)?;
@@ -502,6 +514,8 @@ mod tests {
 			&InGameSettings {
 				shadows: InGameShadowQuality::Off,
 				mob_hud: false,
+				map_overlay: true,
+				map_focus: true,
 				visual_style: InGameVisualStyle::Sharp,
 			},
 			VisualStyleProvenance::PendingAuto,
@@ -525,6 +539,8 @@ mod tests {
 			&InGameSettings {
 				shadows: InGameShadowQuality::Off,
 				mob_hud: false,
+				map_overlay: true,
+				map_focus: true,
 				visual_style: InGameVisualStyle::Sharp,
 			},
 			VisualStyleProvenance::AutoPicked(VisualStyleAutoReason::UnifiedMemoryBelow24GiB),
@@ -596,6 +612,8 @@ mod tests {
 		let mut settings = InGameSettings {
 			shadows: InGameShadowQuality::Off,
 			mob_hud: false,
+			map_overlay: true,
+			map_focus: true,
 			visual_style: InGameVisualStyle::Native,
 		};
 		let mut signals = VisualStyleSignals {

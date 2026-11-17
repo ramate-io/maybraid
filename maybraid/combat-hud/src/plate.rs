@@ -1,15 +1,12 @@
 //! Frosted corner-plate chrome shared by combat HUD panels.
 
 use bevy::prelude::*;
+use menu_components::{hud_glass_fill, hud_glass_stroke, HUD_GLASS_BORDER, HUD_GLASS_RADIUS};
 
 pub(crate) const HUD_CORNER_INSET: f32 = 16.0;
 
 const PLATE_PAD_X: f32 = 8.0;
 const PLATE_PAD_Y: f32 = 6.0;
-const PLATE_BORDER: f32 = 1.5;
-const PLATE_RADIUS: f32 = 8.0;
-const PLATE_FILL: Color = Color::srgba(0.52, 0.52, 0.56, 0.82);
-const PLATE_STROKE: Color = Color::srgba(0.78, 0.78, 0.82, 0.9);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum HudPlateCorner {
@@ -35,8 +32,8 @@ impl HudPlateLayout {
 			align_items: AlignItems::Center,
 			row_gap: Val::Px(self.row_gap),
 			padding: UiRect::axes(Val::Px(PLATE_PAD_X), Val::Px(PLATE_PAD_Y)),
-			border: UiRect::all(Val::Px(PLATE_BORDER)),
-			border_radius: BorderRadius::all(Val::Px(PLATE_RADIUS)),
+			border: UiRect::all(Val::Px(HUD_GLASS_BORDER)),
+			border_radius: BorderRadius::all(Val::Px(HUD_GLASS_RADIUS)),
 			..default()
 		};
 		match self.corner {
@@ -66,8 +63,8 @@ pub(crate) fn spawn_hud_plate(
 			Name::new(name),
 			marker,
 			layout.node(),
-			BackgroundColor(PLATE_FILL),
-			BorderColor::all(PLATE_STROKE),
+			hud_glass_fill(),
+			hud_glass_stroke(false),
 			Visibility::Hidden,
 			Pickable::IGNORE,
 		))

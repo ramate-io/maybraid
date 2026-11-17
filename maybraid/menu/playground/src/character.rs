@@ -146,6 +146,7 @@ pub(crate) struct CharacterInventorySession {
 	pub(crate) state: InventoryMenuSession,
 	rendered_section: Option<character_ui_menu::InventorySection>,
 	rendered_drawer: Option<character_ui_menu::InventoryDrawerMode>,
+	rendered_expanded_section: Option<Option<character_ui_menu::InventorySection>>,
 }
 
 impl CharacterInventorySession {
@@ -160,8 +161,9 @@ struct CharacterPanelViewport;
 #[derive(Component)]
 struct CharacterPanelBody;
 
+/// Inventory host whose reserved preview rectangle frames the live character camera.
 #[derive(Component)]
-pub(crate) struct CharacterInventoryViewport;
+pub struct CharacterInventoryViewport;
 
 /// Left grid cell. Overlay pickers spawn here so they cannot cover the HUD.
 #[derive(Component)]
@@ -704,6 +706,7 @@ fn sync_inventory_overlay(
 		|| menu_state.is_changed()
 		|| remembered.rendered_section != Some(session.section)
 		|| remembered.rendered_drawer != Some(session.drawer)
+		|| remembered.rendered_expanded_section != Some(session.expanded_section)
 		|| overlay_sync.icon_progress != icon_progress;
 	let inventory_ready = inventory_overlay_ready(
 		&menu_state.0,
@@ -757,6 +760,7 @@ fn sync_inventory_overlay(
 		remembered.state = session;
 		remembered.rendered_section = Some(session.section);
 		remembered.rendered_drawer = Some(session.drawer);
+		remembered.rendered_expanded_section = Some(session.expanded_section);
 	} else {
 		commands.entity(viewport).despawn_related::<Children>();
 		fill_inventory_loading(&mut commands, viewport, &fonts);
