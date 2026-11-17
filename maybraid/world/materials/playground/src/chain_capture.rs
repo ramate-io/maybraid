@@ -459,10 +459,12 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool
 		joint_entities.push(joint);
 	}
 
-	// Use StandardMaterial temporarily to work around ChainMaterial shader loading bug
-	// TODO: Switch back to ChainMaterial once #1603 fixes the embedded asset path issue
+	// Note: ChainMaterial components (MaterialRefRoot, OwnedChainMaterial, ChainHalo) require
+	// additional resources and systems that aren't initialized in the capture app context.
+	// Using StandardMaterial for captures until the capture app is updated to support ChainMaterial.
+	// The skinned chain test (skinned_chain_with_rigid_joints) uses ChainMaterial successfully.
 	let standard_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
-		base_color: Color::srgb(0.8, 0.6, 0.3), // Gold/bronze color for chain
+		base_color: Color::srgb(0.8, 0.6, 0.3), // Gold/bronze color matching chain
 		metallic: 0.7,
 		perceptual_roughness: 0.4,
 		..Default::default()
@@ -486,10 +488,8 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool
 		.id();
 	world.entity_mut(root).add_child(mesh_entity);
 	
-	// Propagate transforms after setting joint positions
-	// Note: We compute positions directly above since motion system doesn't run reliably in capture spawn context
-	// The motion_system_runs_with_app_update test verifies the system works in real gameplay
-	world.run_schedule(PostUpdate);
+	// Note: We compute joint positions directly above since the motion system doesn't run during capture.
+	// The motion_system_runs_with_app_update test verifies the system works correctly in real gameplay.
 	
 	// If hit variant, spawn a visible projectile sphere at the sagging midpoint
 	if hit {
