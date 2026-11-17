@@ -781,6 +781,7 @@ mod integration_regressions {
 	use damage::{Health, Hit};
 	use encounters::EncounterInstance;
 	use attacks::{AttackInstance, BeginAttack};
+	use bevy::ecs::system::RunSystemOnce;
 	use bevy::scene::WorldSceneExt;
 	use lod::scene::LodScene;
 	use spotting_intelligence::SpottingUser;
@@ -792,8 +793,14 @@ mod integration_regressions {
 			TransformPlugin,
 			bevy::asset::AssetPlugin::default(),
 			bevy::scene::ScenePlugin,
+			avian3d::prelude::PhysicsPlugins::default(),
 		))
 		.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(DT)));
+		
+		// Install spotting with physics (required for real occlusion tests)
+		if !app.is_plugin_added::<spotting_intelligence_avian::SpottingAvianPlugin>() {
+			app.add_plugins(spotting_intelligence_avian::SpottingAvianPlugin);
+		}
 		
 		// Install core systems
 		install_encounters(&mut app);
@@ -1163,14 +1170,8 @@ mod integration_regressions {
 	/// Uses real LodScene, assembly, spotting, acquisition and attack driver.
 	/// No hand-written BeginAttack, no hand-filled CombatTargeting.
 	#[test]
-	#[ignore = "Pending spotting-intelligence physics integration"]
 	fn boss_attacks_visible_player_in_range() {
 		let mut app = full_encounter_app();
-		
-		// Install spotting systems (physics-based occlusion)
-		if !app.is_plugin_added::<spotting_intelligence_avian::SpottingAvianPlugin>() {
-			app.add_plugins(spotting_intelligence_avian::SpottingAvianPlugin);
-		}
 		
 		// Spawn encounter scene at nonzero world position
 		let boss_position = Vec3::new(1000.0, 110.15, 2000.0);
@@ -1211,6 +1212,8 @@ mod integration_regressions {
 				spotting_intelligence::InterestLayers::CHARACTER,
 				spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
 			),
+			avian3d::prelude::RigidBody::Kinematic,
+			avian3d::prelude::Collider::capsule(0.4, 1.8),
 		)).id();
 		
 		// Mark player as enemy in CombatTargeting
@@ -1226,7 +1229,7 @@ mod integration_regressions {
 		
 		// Verify attack was triggered (BeginAttack message written)
 		let attacks: Vec<BeginAttack> = app.world_mut()
-			.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+			.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| -> Vec<BeginAttack> {
 				messages.read().cloned().collect()
 			})
 			.expect("Failed to read BeginAttack messages");
@@ -1241,14 +1244,8 @@ mod integration_regressions {
 	///
 	/// Uses real LodScene, assembly, spotting with occlusion, acquisition and attack driver.
 	#[test]
-	#[ignore = "Pending spotting-intelligence physics integration"]
 	fn boss_does_not_attack_occluded_player() {
 		let mut app = full_encounter_app();
-		
-		// Install spotting systems (physics-based occlusion)
-		if !app.is_plugin_added::<spotting_intelligence_avian::SpottingAvianPlugin>() {
-			app.add_plugins(spotting_intelligence_avian::SpottingAvianPlugin);
-		}
 		
 		// Spawn encounter scene at nonzero world position
 		let boss_position = Vec3::new(1000.0, 110.15, 2000.0);
@@ -1289,15 +1286,18 @@ mod integration_regressions {
 				spotting_intelligence::InterestLayers::CHARACTER,
 				spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
 			),
+			avian3d::prelude::RigidBody::Kinematic,
+			avian3d::prelude::Collider::capsule(0.4, 1.8),
 		)).id();
 		
-		// Spawn occluder between boss and player
-		let occluder_pos = boss_position + Vec3::new(10.0, 0.0, 0.0);
+		// Spawn occluder between boss and player at boss eye level
+		// Boss eyes are at ~15m height (Vec3::Y * 15.0 from assembly)
+		let occluder_pos = boss_position + Vec3::new(10.0, 15.0, 0.0); // Midway, at eye level
 		app.world_mut().spawn((
 			Transform::from_translation(occluder_pos),
 			GlobalTransform::from_translation(occluder_pos),
 			avian3d::prelude::RigidBody::Static,
-			avian3d::prelude::Collider::cylinder(5.0, 10.0), // Large occluder
+			avian3d::prelude::Collider::cuboid(10.0, 10.0, 10.0), // Large wall blocking line of sight
 		));
 		
 		// Mark player as enemy in CombatTargeting
@@ -1307,13 +1307,14 @@ mod integration_regressions {
 		}
 		
 		// Run updates to allow spotting and combat systems to work
-		for _ in 0..10 {
+		// Need enough frames for: spotting discovery, targeting sync, attack cooldown
+		for _ in 0..30 {
 			app.update();
 		}
 		
 		// Verify no attack was triggered (player is occluded)
 		let attacks: Vec<BeginAttack> = app.world_mut()
-			.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+			.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| -> Vec<BeginAttack> {
 				messages.read().cloned().collect()
 			})
 			.expect("Failed to read BeginAttack messages");
@@ -1326,14 +1327,8 @@ mod integration_regressions {
 	///
 	/// Uses real LodScene, assembly, spotting, acquisition and attack driver.
 	#[test]
-	#[ignore = "Pending spotting-intelligence physics integration"]
 	fn boss_does_not_attack_out_of_range_player() {
 		let mut app = full_encounter_app();
-		
-		// Install spotting systems (physics-based occlusion)
-		if !app.is_plugin_added::<spotting_intelligence_avian::SpottingAvianPlugin>() {
-			app.add_plugins(spotting_intelligence_avian::SpottingAvianPlugin);
-		}
 		
 		// Spawn encounter scene at nonzero world position
 		let boss_position = Vec3::new(1000.0, 110.15, 2000.0);
@@ -1374,6 +1369,8 @@ mod integration_regressions {
 				spotting_intelligence::InterestLayers::CHARACTER,
 				spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
 			),
+			avian3d::prelude::RigidBody::Kinematic,
+			avian3d::prelude::Collider::capsule(0.4, 1.8),
 		)).id();
 		
 		// Mark player as enemy in CombatTargeting
@@ -1383,13 +1380,14 @@ mod integration_regressions {
 		}
 		
 		// Run updates to allow spotting and combat systems to work
-		for _ in 0..10 {
+		// Need enough frames for: spotting discovery, targeting sync, attack cooldown
+		for _ in 0..30 {
 			app.update();
 		}
 		
 		// Verify no attack was triggered (player is out of range)
 		let attacks: Vec<BeginAttack> = app.world_mut()
-			.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+			.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| -> Vec<BeginAttack> {
 				messages.read().cloned().collect()
 			})
 			.expect("Failed to read BeginAttack messages");

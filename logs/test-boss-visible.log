@@ -1,0 +1,140 @@
+warning: variable `invalidated` is assigned to, but never used
+   --> maybraid/lod/lib/src/hcsg/demand/registry.rs:320:7
+    |
+320 |         let mut invalidated = 0;
+    |             ^^^^^^^^^^^^^^^
+    |
+    = note: consider using `_invalidated` instead
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `total`
+   --> maybraid/lod/lib/src/hcsg/demand/registry.rs:321:7
+    |
+321 |         let total = state.subscriptions.len();
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+
+warning: value assigned to `invalidated` is never read
+   --> maybraid/lod/lib/src/hcsg/demand/registry.rs:330:5
+    |
+330 |                 invalidated += 1;
+    |                 ^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: `lod` (lib) generated 3 warnings (run `cargo fix --lib -p lod` to apply 1 suggestion)
+warning: type `CombatCredits` is more private than the item `BikanwardaCombatWeights::credits_for`
+  --> maybraid/lubikans/bikanwarda/src/combat.rs:46:2
+   |
+46 |     pub fn credits_for(self, class: BikanwardaVictimClass, hit: DamageApplied) -> CombatCredits {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `BikanwardaCombatWeights::credits_for` is reachable at visibility `pub`
+   |
+note: but type `CombatCredits` is only usable at visibility `pub(self)`
+  --> maybraid/lubikans/bikanwarda/src/combat.rs:40:1
+   |
+40 | struct CombatCredits {
+   | ^^^^^^^^^^^^^^^^^^^^
+   = note: `#[warn(private_interfaces)]` on by default
+
+warning: `bikanwarda-lubikans` (lib) generated 1 warning
+   Compiling bikanwarda-encounter v0.1.5 (/agent/repos/maybraid/maybraid/encounters/bikanwarda)
+warning: unused import: `avian3d::prelude::*`
+  --> maybraid/encounters/bikanwarda/src/chains/integration_tests.rs:12:6
+   |
+12 |     use avian3d::prelude::*;
+   |         ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `Health`
+  --> maybraid/encounters/bikanwarda/src/chains/integration_tests.rs:15:44
+   |
+15 |     use damage::{DamageApplied, DamagePlugin, Health};
+   |                                               ^^^^^^
+
+warning: unused import: `crate::generation::BikanwardaBossEncounter`
+   --> maybraid/encounters/bikanwarda/src/tests.rs:269:6
+    |
+269 |     use crate::generation::BikanwardaBossEncounter;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no method named `run_system_once` found for mutable reference `&mut bevy::bevy_ecs::world::World` in the current scope
+    --> maybraid/encounters/bikanwarda/src/tests.rs:1231:5
+     |
+1230 |           let attacks: Vec<BeginAttack> = app.world_mut()
+     |  _________________________________________-
+1231 | |             .run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+     | |_____________-^^^^^^^^^^^^^^^
+     |
+     = help: items from traits can only be used if the trait is in scope
+help: trait `RunSystemOnce` which provides `run_system_once` is implemented but not in scope; perhaps you want to import it
+     |
+ 775 +     use bevy::bevy_ecs::system::RunSystemOnce;
+     |
+help: there is a method `run_system` with a similar name
+     |
+1231 -             .run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+1231 +             .run_system(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+     |
+
+error[E0599]: no method named `run_system_once` found for mutable reference `&mut bevy::bevy_ecs::world::World` in the current scope
+    --> maybraid/encounters/bikanwarda/src/tests.rs:1316:5
+     |
+1315 |           let attacks: Vec<BeginAttack> = app.world_mut()
+     |  _________________________________________-
+1316 | |             .run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+     | |_____________-^^^^^^^^^^^^^^^
+     |
+     = help: items from traits can only be used if the trait is in scope
+help: trait `RunSystemOnce` which provides `run_system_once` is implemented but not in scope; perhaps you want to import it
+     |
+ 775 +     use bevy::bevy_ecs::system::RunSystemOnce;
+     |
+help: there is a method `run_system` with a similar name
+     |
+1316 -             .run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+1316 +             .run_system(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+     |
+
+error[E0599]: no method named `run_system_once` found for mutable reference `&mut bevy::bevy_ecs::world::World` in the current scope
+    --> maybraid/encounters/bikanwarda/src/tests.rs:1389:5
+     |
+1388 |           let attacks: Vec<BeginAttack> = app.world_mut()
+     |  _________________________________________-
+1389 | |             .run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+     | |_____________-^^^^^^^^^^^^^^^
+     |
+     = help: items from traits can only be used if the trait is in scope
+help: trait `RunSystemOnce` which provides `run_system_once` is implemented but not in scope; perhaps you want to import it
+     |
+ 775 +     use bevy::bevy_ecs::system::RunSystemOnce;
+     |
+help: there is a method `run_system` with a similar name
+     |
+1389 -             .run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+1389 +             .run_system(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+     |
+
+warning: unused variable: `start_anchor`
+  --> maybraid/encounters/bikanwarda/src/chains/integration_tests.rs:79:7
+   |
+79 |         let start_anchor = app
+   |             ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_start_anchor`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `chain_center_x`
+   --> maybraid/encounters/bikanwarda/src/chains/integration_tests.rs:735:7
+    |
+735 |         let chain_center_x = 0.0; // Midpoint between -1.5 and 1.5
+    |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_chain_center_x`
+
+warning: unused variable: `host`
+    --> maybraid/encounters/bikanwarda/src/tests.rs:1010:7
+     |
+1010 |         let host = app.world_mut().spawn((
+     |             ^^^^ help: if this is intentional, prefix it with an underscore: `_host`
+
+For more information about this error, try `rustc --explain E0599`.
+warning: `bikanwarda-encounter` (lib test) generated 6 warnings
+error: could not compile `bikanwarda-encounter` (lib test) due to 3 previous errors; 6 warnings emitted
