@@ -980,6 +980,207 @@ mod tests {
 	}
 
 	#[test]
+	fn translated_and_rotated_anchors_drive_chain_motion() -> Result<()> {
+		let mut app = test_app();
+
+		let link_count = 8;
+		let length_m = 2.5;
+
+		// Create joints
+		let mut joints = Vec::new();
+		for i in 0..link_count {
+			let joint = app
+				.world_mut()
+				.spawn((
+					Name::new(format!("chain-joint-{i}")),
+					Transform::from_xyz(0.0, 0.0, 0.0),
+					GlobalTransform::default(),
+				))
+				.id();
+			joints.push(joint);
+		}
+
+		// Spawn chain root
+		let root = app
+			.world_mut()
+			.spawn((
+				Name::new("test-chain-transformed-anchors"),
+				ChainRoot {
+					link_count,
+					rest_length_m: length_m,
+					joint_entities: joints.clone(),
+				},
+				ChainMotion {
+					mode: ChainTensionMode::Taut,
+					active: true,
+				},
+				Transform::from_xyz(0.0, 0.0, 0.0),
+				Visibility::default(),
+			))
+			.id();
+
+		for joint in &joints {
+			app.world_mut().entity_mut(root).add_child(*joint);
+		}
+
+		// Create TRANSLATED start anchor (offset from origin)
+		let start_translation = Vec3::new(2.0, 3.0, -1.0);
+		app.world_mut().spawn((
+			Name::new("translated-start-anchor"),
+			ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
+			Transform::from_translation(start_translation),
+			GlobalTransform::from_translation(start_translation),
+		));
+
+		// Create TRANSLATED and ROTATED end anchor (45 degree rotation + offset)
+		let end_translation = Vec3::new(4.0, 5.0, 1.0);
+		let end_rotation = Quat::from_rotation_y(std::f32::consts::PI / 4.0);
+		app.world_mut().spawn((
+			Name::new("rotated-end-anchor"),
+			ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
+			Transform::from_translation(end_translation).with_rotation(end_rotation),
+			GlobalTransform::from(Transform::from_translation(end_translation).with_rotation(end_rotation)),
+		));
+
+		// Run several updates to let transforms propagate and motion system work
+		for _ in 0..5 {
+			app.update();
+		}
+
+		// Verify joints moved to anchor positions
+		let first_joint_pos = app.world().get::<Transform>(joints[0]).unwrap().translation;
+		let last_joint_pos = app.world().get::<Transform>(joints[link_count as usize - 1]).unwrap().translation;
+
+		// First joint should be at start anchor
+		let start_dist = (first_joint_pos - start_translation).length();
+		if start_dist > 0.1 {
+			return Err(anyhow!(
+				"First joint should be at translated start anchor ({}), got {}, distance: {}",
+				start_translation,
+				first_joint_pos,
+				start_dist
+			));
+		}
+
+		// Last joint should be at end anchor
+		let end_dist = (last_joint_pos - end_translation).length();
+		if end_dist > 0.1 {
+			return Err(anyhow!(
+				"Last joint should be at translated+rotated end anchor ({}), got {}, distance: {}",
+				end_translation,
+				last_joint_pos,
+				end_dist
+			));
+		}
+
+		// Verify joints actually moved from origin
+		let moved_from_origin = joints.iter().any(|&joint| {
+			let pos = app.world().get::<Transform>(joint).unwrap().translation;
+			pos.length() > 1.0
+		});
+
+		if !moved_from_origin {
+			return Err(anyhow!("Joints should have moved from origin to follow anchors"));
+		}
+
+		Ok(())
+	}
+
+	#[test]
+	fn catenary_mode_with_transformed_anchors() -> Result<()> {
+		let mut app = test_app();
+
+		let link_count = 10;
+		let length_m = 3.0;
+
+		// Create joints
+		let mut joints = Vec::new();
+		for i in 0..link_count {
+			let joint = app
+				.world_mut()
+				.spawn((
+					Name::new(format!("chain-joint-{i}")),
+					Transform::from_xyz(0.0, 0.0, 0.0),
+					GlobalTransform::default(),
+				))
+				.id();
+			joints.push(joint);
+		}
+
+		// Spawn chain root with catenary mode
+		let root = app
+			.world_mut()
+			.spawn((
+				Name::new("test-chain-catenary-transformed"),
+				ChainRoot {
+					link_count,
+					rest_length_m: length_m,
+					joint_entities: joints.clone(),
+				},
+				ChainMotion {
+					mode: ChainTensionMode::Catenary { sag_ratio: 8 },
+					active: true,
+				},
+				Transform::from_xyz(0.0, 0.0, 0.0),
+				Visibility::default(),
+			))
+			.id();
+
+		for joint in &joints {
+			app.world_mut().entity_mut(root).add_child(*joint);
+		}
+
+		// Horizontal span with vertical offset
+		let left_pos = Vec3::new(-2.0, 5.0, 0.0);
+		let right_pos = Vec3::new(2.0, 5.0, 0.0);
+
+		app.world_mut().spawn((
+			Name::new("left-anchor"),
+			ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
+			Transform::from_translation(left_pos),
+			GlobalTransform::from_translation(left_pos),
+		));
+
+		app.world_mut().spawn((
+			Name::new("right-anchor"),
+			ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
+			Transform::from_translation(right_pos),
+			GlobalTransform::from_translation(right_pos),
+		));
+
+		// Run updates
+		for _ in 0..5 {
+			app.update();
+		}
+
+		// Verify catenary sag: middle joint should be below the anchor line
+		let mid_joint = joints[link_count as usize / 2];
+		let mid_pos = app.world().get::<Transform>(mid_joint).unwrap().translation;
+
+		if mid_pos.y >= left_pos.y {
+			return Err(anyhow!(
+				"Catenary middle joint should sag below horizontal anchor line (y < {}), got y={}",
+				left_pos.y,
+				mid_pos.y
+			));
+		}
+
+		// Verify endpoints are at anchors
+		let first_pos = app.world().get::<Transform>(joints[0]).unwrap().translation;
+		let last_pos = app.world().get::<Transform>(joints[link_count as usize - 1]).unwrap().translation;
+
+		if (first_pos - left_pos).length() > 0.1 {
+			return Err(anyhow!("Start joint should be at left anchor"));
+		}
+
+		if (last_pos - right_pos).length() > 0.1 {
+			return Err(anyhow!("End joint should be at right anchor"));
+		}
+
+		Ok(())
+	}
+
+	#[test]
 	fn catenary_mode_adds_sag() -> Result<()> {
 		let mut app = test_app();
 
