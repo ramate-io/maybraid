@@ -66,8 +66,9 @@ pub fn update_chain_durability_fraction(
 /// Checks for chains that have reached zero Health, marks them as broken,
 /// emits the signal, and inserts the ReleasedChain marker.
 ///
-/// **CRITICAL:** Also adds `damage::Downed` to prevent the generic corpse cleanup
-/// from despawning chains. Chains must persist after breaking for visual fade/release.
+/// **CRITICAL:** Chains MUST NOT go through the generic Died/corpse flow.
+/// The break path owns the chain's lifecycle: ChainBroken → release → chain-specific fade.
+/// No Died, no kill credit, no loot, no corpse cleanup.
 pub fn detect_and_signal_broken_chains(
 	mut commands: Commands,
 	chains: Query<(Entity, &Health), (With<ChainRoot>, Without<BrokenChain>, Without<ReleasedChain>)>,
@@ -91,18 +92,6 @@ pub fn detect_and_signal_broken_chains(
 			// Insert ReleasedChain to trigger collision cleanup and motion deactivation
 			commands.entity(entity).insert(ReleasedChain);
 
-			// Add Downed with a very long DespawnAfter to prevent corpse cleanup
-			// Chains persist for visual fade/release, not instant despawn
-			// Use effectively infinite duration (999999 seconds ~= 11.5 days)
-			commands.entity(entity).insert((
-				damage::Downed {
-					source: None,
-					point: Vec3::ZERO,
-					at: 0.0,
-				},
-				damage::DespawnAfter::seconds(999999.0),
-			));
-
 			// Emit the signal exactly once
 			let signal = EncounterSignal::chain_broken(
 				crate::chained_encounter_id(),
@@ -114,7 +103,7 @@ pub fn detect_and_signal_broken_chains(
 			history.emitted.insert(entity);
 
 			info!(
-				"[chain-damage] Chain {:?} broke! Health reached zero. Signal emitted. Downed added to prevent corpse despawn.",
+				"[chain-damage] Chain {:?} broke! Health reached zero. Signal emitted. Chain owns its lifecycle, no corpse flow.",
 				entity
 			);
 		}
@@ -561,7 +550,7 @@ mod tests {
 	fn end_to_end_real_projectile_breaks_chain_via_health() -> Result<()> {
 		let mut app = test_app();
 
-		// Spawn chain with Health
+		// Spawn chain with Health and NoCorpseCleanup
 		let chain_root = app
 			.world_mut()
 			.spawn((
@@ -572,6 +561,7 @@ mod tests {
 				},
 				Health::from_max(10.0),
 				GlobalTransform::default(),
+				damage::NoCorpseCleanup,
 			))
 			.id();
 
@@ -606,7 +596,6 @@ mod tests {
 		// Chain should be broken
 		assert!(app.world().entity(chain_root).contains::<BrokenChain>(), "Chain should have BrokenChain marker");
 		assert!(app.world().entity(chain_root).contains::<ReleasedChain>(), "Chain should have ReleasedChain marker");
-		assert!(app.world().entity(chain_root).contains::<damage::Downed>(), "Chain should have Downed to prevent corpse despawn");
 		
 		// Health should be zero
 		let health = app.world().get::<Health>(chain_root).unwrap();
@@ -621,9 +610,70 @@ mod tests {
 		assert_eq!(signals.len(), 1, "Should emit exactly one ChainBroken signal");
 		assert!(matches!(signals[0].kind, encounters::EncounterSignalKind::ChainBroken));
 
-		// Chain should have DespawnAfter with very long duration (not instant corpse cleanup)
-		assert!(app.world().entity(chain_root).contains::<damage::DespawnAfter>(), 
-			"Chain should have DespawnAfter to prevent immediate ensure_downed_have_despawn addition");
+		// Chain must NOT emit Died or get Downed (no corpse flow)
+		let died_msgs: Vec<_> = app.world_mut().resource_mut::<Messages<damage::Died>>().drain().collect();
+		assert_eq!(died_msgs.len(), 0, "Chain must NOT emit Died message");
+		assert!(!app.world().entity(chain_root).contains::<damage::Downed>(), "Chain must NOT have Downed");
+		assert!(!app.world().entity(chain_root).contains::<damage::DespawnAfter>(), "Chain must NOT have DespawnAfter");
+
+		Ok(())
+	}
+
+	#[test]
+	fn broken_chain_not_despawned_by_corpse_cleanup_after_15s() -> Result<()> {
+		let mut app = test_app();
+
+		// Spawn chain with NoCorpseCleanup
+		let chain_root = app
+			.world_mut()
+			.spawn((
+				ChainRoot {
+					link_count: 3,
+					rest_length_m: 3.0,
+					joint_entities: vec![],
+				},
+				Health::from_max(10.0),
+				damage::NoCorpseCleanup,
+			))
+			.id();
+
+		let link_collider = app
+			.world_mut()
+			.spawn((
+				ChainLinkId { link_id: 0, chain_root },
+				ChildOf(chain_root),
+			))
+			.id();
+
+		// Break the chain
+		app.world_mut().write_message(damage::Hit {
+			target: link_collider,
+			source: None,
+			amount: 10.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+
+		app.update();
+
+		// Verify chain is broken
+		assert!(app.world().entity(chain_root).contains::<BrokenChain>());
+		assert_eq!(app.world().get::<Health>(chain_root).unwrap().current, 0.0);
+
+		// Simulate 20 seconds (well past DEFAULT_CORPSE_SECS of 3.0)
+		for _ in 0..200 {
+			app.world_mut().resource_mut::<Time>().advance_by(std::time::Duration::from_millis(100));
+			app.update();
+		}
+
+		// Chain must still exist (not despawned by corpse cleanup)
+		assert!(app.world().get_entity(chain_root).is_ok(), "Chain must still exist after 20s");
+		assert!(!app.world().entity(chain_root).contains::<damage::Downed>(), "Chain must never have Downed");
+		assert!(!app.world().entity(chain_root).contains::<damage::DespawnAfter>(), "Chain must never have DespawnAfter");
+
+		// Verify no Died was ever emitted
+		let died: Vec<_> = app.world_mut().resource_mut::<Messages<damage::Died>>().drain().collect();
+		assert_eq!(died.len(), 0, "Chain must never emit Died");
 
 		Ok(())
 	}

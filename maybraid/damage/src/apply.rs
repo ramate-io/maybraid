@@ -7,6 +7,7 @@ pub fn apply_hits(
 	mut health: Query<&mut Health>,
 	parents: Query<&ChildOf>,
 	bands: Query<(&GlobalTransform, &HeadshotBand)>,
+	no_corpse: Query<(), With<crate::NoCorpseCleanup>>,
 	mut applied: MessageWriter<DamageApplied>,
 	mut died: MessageWriter<Died>,
 ) {
@@ -40,7 +41,9 @@ pub fn apply_hits(
 			remaining: pool.current,
 			point: hit.point,
 		});
-		if pool.is_dead() {
+		// Only emit Died for entities without NoCorpseCleanup
+		// (entities managing their own lifecycle, like breakable chains)
+		if pool.is_dead() && no_corpse.get(target).is_err() {
 			died.write(Died { entity: target, source: hit.source, point: hit.point });
 		}
 	}
