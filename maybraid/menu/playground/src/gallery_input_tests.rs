@@ -1,4 +1,4 @@
-//! Drive gallery Select / Back / Edit / Delete through the real pad and keyboard path.
+//! Drive gallery Select / Back / Edit / Delete / Create through the real pad and keyboard path.
 
 use anyhow::{Context as ContextExt, Result};
 use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
@@ -8,9 +8,7 @@ use bevy::scene::ScenePlugin;
 use character_persist::{CharacterId, SaveRoot};
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_virtual_pad_controller::PadHidPolicy;
-use menu_components::{
-	GalleryPromptKind, MenuModalId, MenuModalStack, ScreenBack, ScreenEdit, TextMenu,
-};
+use menu_components::{GalleryPromptKind, MenuModalId, MenuModalStack, ScreenBack, ScreenEdit};
 use menu_screens::{
 	request_show_gallery, GalleryChoice, GalleryScreen, RequestShowCreateCharacter, RequestShowHome,
 };
@@ -36,8 +34,7 @@ fn save_named(root: &SaveRoot, id: CharacterId, name: &str) -> Result<()> {
 	Ok(())
 }
 
-fn gallery_app(root: SaveRoot, active: CharacterId) -> Result<App> {
-	character_persist::save_active(&root, active)?;
+fn spawn_gallery_app(root: SaveRoot) -> Result<App> {
 	let mut app = App::new();
 	app.insert_resource(PadHidPolicy::External);
 	app.add_plugins((
@@ -73,6 +70,11 @@ fn gallery_app(root: SaveRoot, active: CharacterId) -> Result<App> {
 		"gallery screen should spawn"
 	);
 	Ok(app)
+}
+
+fn gallery_app(root: SaveRoot, active: CharacterId) -> Result<App> {
+	character_persist::save_active(&root, active)?;
+	spawn_gallery_app(root)
 }
 
 #[derive(Resource, Clone, Copy)]
@@ -141,19 +143,35 @@ fn two_character_app() -> Result<(App, SaveRoot, CharacterId, CharacterId)> {
 	Ok((app, root, jeff, roamer))
 }
 
+fn empty_gallery_app() -> Result<(App, SaveRoot)> {
+	let root = scratch_root();
+	std::fs::create_dir_all(&root.path)?;
+	let app = spawn_gallery_app(root.clone())?;
+	Ok((app, root))
+}
+
+fn prompt_visibility(app: &mut App, kind: GalleryPromptKind) -> Result<Visibility> {
+	app.world_mut()
+		.query::<(&GalleryPromptKind, &Visibility)>()
+		.iter(app.world())
+		.find(|(prompt, _)| **prompt == kind)
+		.map(|(_, visibility)| *visibility)
+		.context("gallery prompt")
+}
+
 #[test]
 fn gallery_replaces_live_buttons_with_prompt_chips() -> Result<()> {
 	let (mut app, root, _, _) = two_character_app()?;
-	assert_eq!(count::<GalleryPromptKind>(&mut app), 4);
+	assert_eq!(count::<GalleryPromptKind>(&mut app), 5);
 	assert_eq!(count::<ScreenBack>(&mut app), 0);
 	assert_eq!(count::<ScreenEdit>(&mut app), 0);
-	let delete_rows = app
+	let create_rows = app
 		.world_mut()
 		.query::<&GalleryChoice>()
 		.iter(app.world())
-		.filter(|choice| **choice == GalleryChoice::Delete)
+		.filter(|choice| **choice == GalleryChoice::New || **choice == GalleryChoice::Delete)
 		.count();
-	assert_eq!(delete_rows, 0);
+	assert_eq!(create_rows, 0);
 	std::fs::remove_dir_all(&root.path)?;
 	Ok(())
 }
@@ -251,21 +269,59 @@ fn keyboard_bindings_match_pad_select_back_edit_and_delete() -> Result<()> {
 }
 
 #[test]
-fn a_on_create_opens_create_and_select_does_not_delete() -> Result<()> {
+fn pad_start_creates_a_character_without_selecting() -> Result<()> {
 	let (mut app, root, jeff, _) = two_character_app()?;
-	let menu = app
-		.world_mut()
-		.query_filtered::<Entity, With<TextMenu>>()
-		.iter(app.world())
-		.next()
-		.context("gallery menu")?;
-	app.world_mut().get_mut::<TextMenu>(menu).context("text menu")?.selected = 0;
-	app.update();
+	tap_pad(&mut app, GamepadButton::Start)?;
+	assert!(count::<RequestShowCreateCharacter>(&mut app) >= 1);
+	assert_eq!(active_id(&app), Some(jeff));
+	assert!(!delete_open(&app));
+	std::fs::remove_dir_all(&root.path)?;
+	Ok(())
+}
+
+#[test]
+fn keyboard_n_creates_a_character_and_enter_still_selects() -> Result<()> {
+	let (mut app, root, jeff, _) = two_character_app()?;
+	tap_key(&mut app, KeyCode::KeyN);
+	assert!(count::<RequestShowCreateCharacter>(&mut app) >= 1);
+	assert_eq!(active_id(&app), Some(jeff));
+	std::fs::remove_dir_all(&root.path)?;
+
+	let (mut app, root, _, roamer) = two_character_app()?;
+	tap_key(&mut app, KeyCode::ArrowDown);
+	tap_key(&mut app, KeyCode::Enter);
+	assert_eq!(active_id(&app), Some(roamer));
+	assert_eq!(count::<RequestShowCreateCharacter>(&mut app), 0);
+	std::fs::remove_dir_all(&root.path)?;
+	Ok(())
+}
+
+#[test]
+fn empty_roster_start_creates_and_hides_edit_delete() -> Result<()> {
+	let (mut app, root) = empty_gallery_app()?;
+	assert_eq!(prompt_visibility(&mut app, GalleryPromptKind::Edit)?, Visibility::Hidden);
+	assert_eq!(prompt_visibility(&mut app, GalleryPromptKind::Delete)?, Visibility::Hidden);
+	assert_eq!(prompt_visibility(&mut app, GalleryPromptKind::Create)?, Visibility::Inherited);
+	assert_eq!(prompt_visibility(&mut app, GalleryPromptKind::Select)?, Visibility::Inherited);
+	tap_pad(&mut app, GamepadButton::Start)?;
+	assert!(count::<RequestShowCreateCharacter>(&mut app) >= 1);
+	assert!(!delete_open(&app));
+	std::fs::remove_dir_all(&root.path)?;
+
+	let (mut app, root) = empty_gallery_app()?;
+	tap_key(&mut app, KeyCode::KeyN);
+	assert!(count::<RequestShowCreateCharacter>(&mut app) >= 1);
+	std::fs::remove_dir_all(&root.path)?;
+	Ok(())
+}
+
+#[test]
+fn a_selects_and_view_does_not_delete_without_a_saved_row() -> Result<()> {
+	let (mut app, root) = empty_gallery_app()?;
 	tap_pad(&mut app, GamepadButton::Select)?;
 	assert!(!delete_open(&app));
-	assert!(root.character_path(jeff).is_file());
 	tap_pad(&mut app, GamepadButton::South)?;
-	assert!(count::<RequestShowCreateCharacter>(&mut app) >= 1);
+	assert_eq!(count::<RequestShowCreateCharacter>(&mut app), 0);
 	std::fs::remove_dir_all(&root.path)?;
 	Ok(())
 }
