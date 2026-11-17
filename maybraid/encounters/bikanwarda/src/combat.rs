@@ -12,8 +12,8 @@ use bikanwarda_character::BikanwardaRoot;
 use combat_targeting::{CombatTargeting, SpottingTargetingSettings};
 use damage::Health;
 use threat_intelligence::{
-	AffiliationStrength, Affiliations, ThreatDiscoveryPolicy, ThreatIntelligenceUser,
-	ThreatKnowledge, ThreatGroupId,
+	AffiliationStrength, Affiliations, ThreatId, ThreatIntelligenceUser,
+	ThreatKnowledge, ThreatGroupId, ThreatSubject,
 };
 use threat_management_intelligence::ThreatManagementIntelligence;
 
@@ -78,13 +78,14 @@ pub fn boss_combat_driver(
 		}
 
 		// Get best target from existing targeting system (reuses ranking)
-		let Some(ranked) = targeting.best() else {
-			// No target - stay idle (no cooldown-only firing)
+		// Use best_contact() to require spotting memory (real visibility), not just threat intelligence
+		let Some(contact) = targeting.best_contact() else {
+			// No visible target - stay idle (no cooldown-only firing)
 			continue;
 		};
 		
 		// Verify target is in range
-		let Ok(target_transform) = targets.get(ranked.entity) else {
+		let Ok(target_transform) = targets.get(contact.subject) else {
 			continue;
 		};
 		
@@ -106,7 +107,7 @@ pub fn boss_combat_driver(
 		attacks.write(BeginAttack {
 			owner: actor_ref.0,
 			definition: BRAY,
-			target: Some(ranked.entity),
+			target: Some(contact.subject),
 			allies: Vec::new(),
 			emission: None,
 			emission_socket: mouth_socket,
@@ -118,7 +119,7 @@ pub fn boss_combat_driver(
 
 		debug!(
 			"Boss actor {:?} triggered Bray attack on {:?} at {:.1}m with cooldown {:.1}s",
-			actor_ref.0, ranked.entity, distance, cooldown_secs
+			actor_ref.0, contact.subject, distance, cooldown_secs
 		);
 	}
 }
@@ -133,6 +134,7 @@ pub fn initialize_boss_combat(
 ) {
 	for (host_entity, actor_ref) in &new_bindings {
 		// Setup threat intelligence: antagonize PLAYER_GROUP so players become actionable targets
+		let actor_id = ThreatId(actor_ref.0.to_bits());
 		let mut affiliations = Affiliations::default();
 		// PLAYER_GROUP is defined in mob-scenes (group 29)
 		const PLAYER_GROUP: ThreatGroupId = ThreatGroupId::group(29);
@@ -148,11 +150,12 @@ pub fn initialize_boss_combat(
 				memory_secs: 3.0,
 				continuity: 0.0,
 			},
-			// Threat intelligence grants ENEMYSHIP sources for hostile targets
-			ThreatIntelligenceUser::new(ThreatDiscoveryPolicy::directional(60.0, 50.0)),
+			// Threat intelligence: boss is both a threat discoverer and a discoverable threat
+			ThreatSubject::new(actor_id),
+			ThreatIntelligenceUser::default(),
 			ThreatKnowledge::default(),
 			affiliations,
-			ThreatManagementIntelligence::combat_only(),
+			ThreatManagementIntelligence::ffa(),
 		));
 		
 		// Add BossAttackCooldown to the HOST (checked alongside Health)
