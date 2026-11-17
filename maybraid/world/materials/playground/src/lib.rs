@@ -17,7 +17,9 @@ pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 pub use preview::PreviewConfig;
 
+use avian3d::prelude::PhysicsPlugins;
 use bevy::prelude::*;
+use bikanwarda_encounter::chains::BikanwardaChainPhysicsPlugin;
 use chain_capture::{
 	tick_capture as tick_chain_capture, tick_video as tick_chain_video, CaptureSet, VideoCapture,
 };
@@ -26,11 +28,13 @@ use chain_preview::{
 	apply_pending_hit, pose_skinned_tube, sync_preview as sync_chain_preview, sync_visual_style,
 	tick_sweep, ChainPreview, LightingMode, PendingChainHit,
 };
+use damage::DamagePlugin;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::GameCommandDrawerConfig;
 use ground::setup_ground;
 use maybraid_world::VisualStylePlugin;
 use preview::{sync_preview, PreviewHost};
+use projectiles::ProjectilesPlugin;
 use shape::setup_meshes;
 use shoot::{fly_shots, tick_shoot, ShootConfig};
 use world_materials::WorldMaterialsPlugin;
@@ -54,8 +58,10 @@ impl Plugin for WorldMaterialsPlaygroundPlugin {
 		.init_resource::<PendingChainHit>()
 		.init_resource::<CaptureSet>()
 		.init_resource::<VideoCapture>()
-		// Note: BikanwardaChainPhysicsPlugin not needed - playground only captures visuals,
-		// doesn't run physics simulation. Chain geometry is spawned directly in chain_capture.rs.
+		.add_plugins(PhysicsPlugins::default())
+		.add_plugins(ProjectilesPlugin)
+		.add_plugins(DamagePlugin)
+		.add_plugins(BikanwardaChainPhysicsPlugin)
 		.add_plugins(WorldMaterialsPlugin)
 		.add_plugins(VisualStylePlugin)
 		.add_plugins(command_plugin);
@@ -103,9 +109,168 @@ impl Plugin for WorldMaterialsPlaygroundPlugin {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::time::TimeUpdateStrategy;
+	use bikanwarda_encounter::chains::{ChainAnchor, ChainRoot};
 	use clap::Parser;
+	use damage::Health;
 	use game_commands::command::GameCommand;
+	use projectiles::{Flight, ProjectileSource};
 	use world_materials::chain::MythicalChainState;
+
+	#[test]
+	fn playground_app_builds_with_chain_physics_plugin() {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			AssetPlugin::default(),
+			TransformPlugin,
+			bevy::mesh::MeshPlugin,
+			PhysicsPlugins::default(),
+			ProjectilesPlugin,
+			DamagePlugin,
+			BikanwardaChainPhysicsPlugin,
+		));
+		
+		for _ in 0..5 {
+			app.update();
+		}
+	}
+
+	#[test]
+	fn anchored_command_spawns_fixture_with_links_and_colliders() {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			AssetPlugin::default(),
+			TransformPlugin,
+			bevy::mesh::MeshPlugin,
+			PhysicsPlugins::default(),
+			ProjectilesPlugin,
+			DamagePlugin,
+			BikanwardaChainPhysicsPlugin,
+		));
+		app.finish();
+		
+		let tension_mode = bikanwarda_encounter::chains::ChainTensionMode::Taut;
+		commands::spawn_anchored_chain_fixture(&mut app.world_mut(), tension_mode);
+		
+		for _ in 0..3 {
+			app.update();
+		}
+		
+		let mut found_root = false;
+		let mut found_anchors = 0;
+		let mut found_joints = 0;
+		let mut found_colliders = 0;
+		
+		for archetype in app.world().archetypes().iter() {
+			for archetype_entity in archetype.entities() {
+				let entity = archetype_entity.id();
+				if app.world().get::<ChainRoot>(entity).is_some() {
+					found_root = true;
+				}
+				if app.world().get::<ChainAnchor>(entity).is_some() {
+					found_anchors += 1;
+				}
+				if let Some(name) = app.world().get::<Name>(entity) {
+					if name.as_str().contains("chain-joint") {
+						found_joints += 1;
+					}
+					if name.as_str().contains("chain-link") {
+						found_colliders += 1;
+					}
+				}
+			}
+		}
+		
+		assert!(found_root, "Should spawn chain root");
+		assert_eq!(found_anchors, 2, "Should spawn 2 anchors");
+		assert_eq!(found_joints, 12, "Should spawn 12 joints");
+		assert_eq!(found_colliders, 12, "Should spawn 12 colliders");
+	}
+
+	#[test]
+	fn live_projectile_contact_yields_one_coalesced_damage_event() {
+		use avian3d::prelude::*;
+		use damage::HitPayload;
+		use lod_avian::PhysicsInteractionLayer;
+		
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			AssetPlugin::default(),
+			TransformPlugin,
+			bevy::mesh::MeshPlugin,
+			PhysicsPlugins::default(),
+			ProjectilesPlugin,
+			DamagePlugin,
+			BikanwardaChainPhysicsPlugin,
+		))
+		.insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_millis(16)));
+		app.finish();
+		
+		let tension_mode = bikanwarda_encounter::chains::ChainTensionMode::Catenary { sag_ratio: 10 };
+		commands::spawn_anchored_chain_fixture(&mut app.world_mut(), tension_mode);
+		
+		for _ in 0..5 {
+			app.update();
+		}
+		
+		let mut chain_root = None;
+		for archetype in app.world().archetypes().iter() {
+			for archetype_entity in archetype.entities() {
+				let entity = archetype_entity.id();
+				if app.world().get::<ChainRoot>(entity).is_some() {
+					chain_root = Some(entity);
+					break;
+				}
+			}
+		}
+		
+		let root = chain_root.expect("Chain root should exist");
+		let initial_health = app.world().get::<Health>(root).unwrap().current;
+		
+		let damage_per_hit = 25.0;
+		let projectile_start = Vec3::new(-2.0, 2.0, 0.0);
+		let projectile_velocity = Vec3::new(15.0, 0.0, 0.0);
+		let source = app.world_mut().spawn(Name::new("weapon")).id();
+		
+		let _projectile = app
+			.world_mut()
+			.spawn((
+				Name::new("test-projectile"),
+				Flight::spawn(projectile_start, 100.0, 100.0, 10.0),
+				ProjectileSource(source),
+				HitPayload { amount: damage_per_hit },
+				Transform::from_translation(projectile_start),
+				LinearVelocity(projectile_velocity),
+				Collider::sphere(0.05),
+				Sensor,
+				PhysicsInteractionLayer::projectile_layers(),
+				RigidBody::Dynamic,
+				GravityScale(0.0),
+			))
+			.id();
+		
+		let mut damage_applied = false;
+		for _ in 0..60 {
+			app.update();
+			
+			if let Some(health) = app.world().entity(root).get::<Health>() {
+				if health.current < initial_health {
+					damage_applied = true;
+					let damage_taken = initial_health - health.current;
+					assert!(
+						(damage_taken - damage_per_hit).abs() < 5.0,
+						"Damage coalescing failed: expected ~{damage_per_hit}, got {damage_taken}"
+					);
+					break;
+				}
+			}
+		}
+		
+		assert!(damage_applied, "Projectile should hit chain and apply damage");
+	}
 
 	#[test]
 	fn parses_show_hex() -> Result<(), String> {

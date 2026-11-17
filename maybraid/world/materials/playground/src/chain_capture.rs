@@ -412,10 +412,38 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool
 		ChainTensionMode::Taut
 	};
 
+	// Compute joint positions directly based on tension mode
+	// (Motion system doesn't run reliably in capture spawn context)
+	let joint_positions = bikanwarda_encounter::chains::compute_joint_positions(
+		left_anchor_pos,
+		right_anchor_pos,
+		link_count,
+		mode,
+	);
+
+	// Create joints first (we'll need their entities for ChainRoot and later parenting)
+	let mut joint_entities = Vec::new();
+	for (i, position) in joint_positions.iter().enumerate() {
+		let joint = world
+			.spawn((
+				Name::new(format!("chain-joint-{i}")),
+				Transform::from_translation(*position),
+				GlobalTransform::default(),
+				Visibility::default(),
+				SkinnedChainCapture,
+			))
+			.id();
+		joint_entities.push(joint);
+	}
+
 	let root = world
 		.spawn((
 			Name::new("anchored-chain-capture-root"),
-			ChainRoot { link_count, rest_length_m: length_m },
+			ChainRoot {
+				link_count,
+				rest_length_m: length_m,
+				joint_entities: joint_entities.clone(),
+			},
 			ChainMotion {
 				mode,
 				active: true,
@@ -426,6 +454,12 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool
 			SkinnedChainCapture,
 		))
 		.id();
+	
+	// Add ChainLinkId and parent joints to root
+	for (i, joint) in joint_entities.iter().enumerate() {
+		world.entity_mut(*joint).insert(ChainLinkId { link_id: i as u8, chain_root: root });
+		world.entity_mut(root).add_child(*joint);
+	}
 	
 	// Spawn anchors - left and right at same height
 	let _left_anchor = world.spawn((
@@ -445,31 +479,6 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool
 		Visibility::default(),
 		SkinnedChainCapture,
 	)).id();
-
-	// Compute joint positions directly based on tension mode
-	// (Motion system doesn't run reliably in capture spawn context)
-	let joint_positions = bikanwarda_encounter::chains::compute_joint_positions(
-		left_anchor_pos,
-		right_anchor_pos,
-		link_count,
-		mode,
-	);
-
-	let mut joint_entities = Vec::new();
-	for (i, position) in joint_positions.iter().enumerate() {
-		let joint = world
-			.spawn((
-				Name::new(format!("chain-joint-{i}")),
-				ChainLinkId { link_id: i as u8, chain_root: root },
-				Transform::from_translation(*position),
-				GlobalTransform::default(),
-				Visibility::default(),
-				SkinnedChainCapture,
-			))
-			.id();
-		world.entity_mut(root).add_child(joint);
-		joint_entities.push(joint);
-	}
 
 	// Use ChainMaterial for proper rendering (shader fixed in #1603)
 	let material_ref = mythical_chain_ref_for(MythicalChainState::Intact);

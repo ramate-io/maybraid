@@ -10,14 +10,28 @@
 //! - **NOT** keyed by `(source, chain_root)` — multiple distinct projectiles or attacks
 //!   from the same source in one frame are separate interactions and must both apply.
 //!
+//! ## Cross-frame deduplication
+//!
+//! Penetrating projectiles stay in contact across multiple frames. To prevent applying
+//! damage every frame, we track (projectile, chain_root) pairs that have already applied
+//! damage. When a projectile despawns, we clean up its records.
+//!
 //! Runs in `DamageSystems::Collect`, before `contacts_to_hits` and `apply_hits`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 use projectiles::ProjectileContact;
 
 use super::collision::ChainLinkId;
+
+/// Tracks which (projectile, chain_root) pairs have already applied damage.
+///
+/// Prevents penetrating projectiles from applying damage every frame they remain in contact.
+#[derive(Resource, Default)]
+pub struct ChainDamageHistory {
+	applied: HashSet<(Entity, Entity)>,
+}
 
 /// Interaction identity for deduplication.
 ///
@@ -57,6 +71,7 @@ impl ChainContactState {
 pub fn coalesce_chain_contacts(
 	link_ids: Query<&ChainLinkId>,
 	mut messages: ResMut<Messages<ProjectileContact>>,
+	mut history: ResMut<ChainDamageHistory>,
 ) {
 	// Collect all contacts and clear the original messages
 	let all_contacts: Vec<ProjectileContact> = messages.drain().collect();
@@ -77,18 +92,43 @@ pub fn coalesce_chain_contacts(
 		let chain_root = link_id.chain_root;
 		let interaction_id = InteractionId::Projectile(contact.projectile);
 
+		// Check if this (projectile, chain_root) pair has already applied damage
+		let key = (contact.projectile, chain_root);
+		if history.applied.contains(&key) {
+			// Skip this contact - already applied damage
+			continue;
+		}
+
 		chains.entry(chain_root).or_default().note_contact(interaction_id, contact);
 	}
 
 	// Coalesce chain contacts and add to output
-	for (_root, mut state) in chains {
-		output_contacts.extend(state.drain_coalesced());
+	for (root, mut state) in chains {
+		for contact in state.drain_coalesced() {
+			// Mark this (projectile, chain_root) pair as applied
+			history.applied.insert((contact.projectile, root));
+			output_contacts.push(contact);
+		}
 	}
 
 	// Write all contacts back
 	for contact in output_contacts {
 		messages.write(contact);
 	}
+}
+
+/// Clean up damage history when projectiles despawn.
+///
+/// Runs after projectiles are despawned to free memory.
+pub fn cleanup_despawned_projectiles(
+	mut history: ResMut<ChainDamageHistory>,
+	projectiles: Query<Entity, With<projectiles::Flight>>,
+) {
+	// Collect all live projectile entities
+	let live_projectiles: HashSet<Entity> = projectiles.iter().collect();
+
+	// Remove history entries for despawned projectiles
+	history.applied.retain(|(projectile, _)| live_projectiles.contains(projectile));
 }
 
 #[cfg(test)]
@@ -98,7 +138,9 @@ mod tests {
 	#[test]
 	fn projectile_hitting_multiple_capsules_coalesces_to_one_contact() {
 		let mut app = App::new();
-		app.add_message::<ProjectileContact>().add_systems(Update, coalesce_chain_contacts);
+		app.init_resource::<ChainDamageHistory>()
+			.add_message::<ProjectileContact>()
+			.add_systems(Update, coalesce_chain_contacts);
 
 		let chain_root = app.world_mut().spawn_empty().id();
 		let capsule_a =
@@ -137,7 +179,9 @@ mod tests {
 	#[test]
 	fn different_projectiles_do_not_coalesce() {
 		let mut app = App::new();
-		app.add_message::<ProjectileContact>().add_systems(Update, coalesce_chain_contacts);
+		app.init_resource::<ChainDamageHistory>()
+			.add_message::<ProjectileContact>()
+			.add_systems(Update, coalesce_chain_contacts);
 
 		let chain_root = app.world_mut().spawn_empty().id();
 		let capsule = app.world_mut().spawn(ChainLinkId { link_id: 0, chain_root }).id();
@@ -173,7 +217,9 @@ mod tests {
 	#[test]
 	fn non_chain_contacts_pass_through_unchanged() {
 		let mut app = App::new();
-		app.add_message::<ProjectileContact>().add_systems(Update, coalesce_chain_contacts);
+		app.init_resource::<ChainDamageHistory>()
+			.add_message::<ProjectileContact>()
+			.add_systems(Update, coalesce_chain_contacts);
 
 		let regular_target = app.world_mut().spawn_empty().id();
 		let projectile = Entity::from_bits(999);
@@ -199,7 +245,9 @@ mod tests {
 	#[test]
 	fn multiple_chains_are_coalesced_independently() {
 		let mut app = App::new();
-		app.add_message::<ProjectileContact>().add_systems(Update, coalesce_chain_contacts);
+		app.init_resource::<ChainDamageHistory>()
+			.add_message::<ProjectileContact>()
+			.add_systems(Update, coalesce_chain_contacts);
 
 		let chain_a = app.world_mut().spawn_empty().id();
 		let chain_b = app.world_mut().spawn_empty().id();

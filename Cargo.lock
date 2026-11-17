@@ -14541,15 +14541,19 @@ dependencies = [
 name = "world-materials-playground"
 version = "0.1.5"
 dependencies = [
+ "avian3d",
  "bevy",
  "bikanwarda-encounter",
  "building-shaders",
  "clap",
+ "damage",
  "firearms",
  "game-commands",
+ "lod-avian",
  "material-ref",
  "maybraid-world",
  "player-camera",
+ "projectiles",
  "world-materials",
 ]
 

@@ -148,7 +148,11 @@ mod tests {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins);
 
-		let root = app.world_mut().spawn((ChainRoot { link_count: 3, rest_length_m: 2.0 },)).id();
+		let root = app.world_mut().spawn((ChainRoot {
+			link_count: 3,
+			rest_length_m: 2.0,
+			joint_entities: Vec::new(),
+		},)).id();
 		let joints = vec![
 			app.world_mut().spawn(Transform::default()).id(),
 			app.world_mut().spawn(Transform::default()).id(),

@@ -13,12 +13,14 @@ use bevy::prelude::*;
 ///
 /// The chain root owns joints, capsules, mesh, and health. Despawning this entity retires
 /// the entire chain.
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Debug)]
 pub struct ChainRoot {
 	/// How many links the chain has (determines joint count).
 	pub link_count: u32,
 	/// Total rest length in metres.
 	pub rest_length_m: f32,
+	/// Ordered joint entities for this chain.
+	pub joint_entities: Vec<Entity>,
 }
 
 /// Anchor attachment point for a chain endpoint (column or character socket).
@@ -78,11 +80,11 @@ impl Default for ChainMotion {
 /// positions from ChainAnchor entities and updates the child joint entities of each
 /// ChainRoot.
 pub fn update_chain_joints(
-	chains: Query<(Entity, &ChainRoot, &ChainMotion, &Children)>,
+	chains: Query<(Entity, &ChainRoot, &ChainMotion)>,
 	anchors: Query<(&ChainAnchor, &GlobalTransform)>,
 	mut joints: Query<&mut Transform, Without<ChainAnchor>>,
 ) {
-	for (root_entity, chain_root, motion, children) in &chains {
+	for (root_entity, chain_root, motion) in &chains {
 		if !motion.active {
 			continue;
 		}
@@ -107,16 +109,8 @@ pub fn update_chain_joints(
 			continue;
 		};
 
-		// Collect joint entities (children of the root that have Transform)
-		let mut joint_entities: Vec<Entity> = children
-			.iter()
-			.filter(|&entity| joints.contains(entity))
-			.collect();
-
-		// Sort by entity bits for deterministic ordering
-		joint_entities.sort_by_key(|e| e.index());
-
-		if joint_entities.len() != chain_root.link_count as usize {
+		// Use the stored joint entities from ChainRoot
+		if chain_root.joint_entities.len() != chain_root.link_count as usize {
 			// Joint count mismatch - likely still being set up
 			continue;
 		}
@@ -125,7 +119,7 @@ pub fn update_chain_joints(
 		let positions = compute_joint_positions(start, end, chain_root.link_count, motion.mode);
 
 		// Update joint transforms
-		for (joint_entity, position) in joint_entities.iter().zip(positions.iter()) {
+		for (joint_entity, position) in chain_root.joint_entities.iter().zip(positions.iter()) {
 			if let Ok(mut transform) = joints.get_mut(*joint_entity) {
 				transform.translation = *position;
 			}
@@ -273,13 +267,30 @@ mod tests {
 		let link_count = 12;
 		let length_m = 2.8;
 
-		// Create taut chain
+		// Create taut chain joints
+		let mut taut_joints = Vec::new();
+		for _i in 0..link_count {
+			let joint = app.world_mut().spawn((
+				Transform::from_xyz(0.0, 0.0, 0.0),
+				GlobalTransform::default(),
+			)).id();
+			taut_joints.push(joint);
+		}
+
 		let taut_root = app.world_mut().spawn((
-			ChainRoot { link_count, rest_length_m: length_m },
+			ChainRoot {
+				link_count,
+				rest_length_m: length_m,
+				joint_entities: taut_joints.clone(),
+			},
 			ChainMotion { mode: ChainTensionMode::Taut, active: true },
 			Transform::from_xyz(0.0, 0.0, 0.0),
 			GlobalTransform::default(),
 		)).id();
+
+		for joint in &taut_joints {
+			app.world_mut().entity_mut(taut_root).add_child(*joint);
+		}
 
 		let _taut_start_anchor = app.world_mut().spawn((
 			ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: taut_root },
@@ -293,23 +304,30 @@ mod tests {
 			GlobalTransform::default(),
 		)).id();
 
-		let mut taut_joints = Vec::new();
+		// Create catenary chain joints
+		let mut catenary_joints = Vec::new();
 		for _i in 0..link_count {
 			let joint = app.world_mut().spawn((
-				Transform::from_xyz(0.0, 0.0, 0.0),
+				Transform::from_xyz(5.0, 0.0, 0.0),
 				GlobalTransform::default(),
 			)).id();
-			app.world_mut().entity_mut(taut_root).add_child(joint);
-			taut_joints.push(joint);
+			catenary_joints.push(joint);
 		}
 
-		// Create catenary chain
 		let catenary_root = app.world_mut().spawn((
-			ChainRoot { link_count, rest_length_m: length_m },
+			ChainRoot {
+				link_count,
+				rest_length_m: length_m,
+				joint_entities: catenary_joints.clone(),
+			},
 			ChainMotion { mode: ChainTensionMode::Catenary { sag_ratio: 10 }, active: true },
 			Transform::from_xyz(5.0, 0.0, 0.0),
 			GlobalTransform::default(),
 		)).id();
+
+		for joint in &catenary_joints {
+			app.world_mut().entity_mut(catenary_root).add_child(*joint);
+		}
 
 		let _catenary_start_anchor = app.world_mut().spawn((
 			ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: catenary_root },
@@ -322,16 +340,6 @@ mod tests {
 			Transform::from_xyz(5.0, length_m, 0.0),
 			GlobalTransform::default(),
 		)).id();
-
-		let mut catenary_joints = Vec::new();
-		for _i in 0..link_count {
-			let joint = app.world_mut().spawn((
-				Transform::from_xyz(5.0, 0.0, 0.0),
-				GlobalTransform::default(),
-			)).id();
-			app.world_mut().entity_mut(catenary_root).add_child(joint);
-			catenary_joints.push(joint);
-		}
 
 		// Run several frames to let transforms propagate and motion update
 		for _ in 0..5 {

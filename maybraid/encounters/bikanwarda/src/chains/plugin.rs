@@ -4,10 +4,9 @@
 
 use bevy::prelude::*;
 use damage::DamageSystems;
-use projectiles::ProjectileContact;
 
 use super::collision::sync_chain_colliders;
-use super::damage_coalesce::coalesce_chain_contacts;
+use super::damage_coalesce::{cleanup_despawned_projectiles, coalesce_chain_contacts, ChainDamageHistory};
 use super::motion::{deactivate_released_chains, update_chain_joints};
 
 /// Plugin that registers chain motion and collision systems.
@@ -22,23 +21,26 @@ impl Plugin for BikanwardaChainPhysicsPlugin {
 	fn build(&self, app: &mut App) {
 		// ProjectileContact message is added by DamagePlugin/ProjectilePlugin
 
-		app.add_systems(
-			PostUpdate,
-			(
-				// Update chain joints based on anchor positions
-				update_chain_joints,
-				// Sync collider positions to joints
-				sync_chain_colliders.after(update_chain_joints),
-				// Deactivate motion for released chains
-				deactivate_released_chains,
+		app.init_resource::<ChainDamageHistory>()
+			.add_systems(
+				PostUpdate,
+				(
+					// Update chain joints based on anchor positions
+					update_chain_joints,
+					// Sync collider positions to joints
+					sync_chain_colliders.after(update_chain_joints),
+					// Deactivate motion for released chains
+					deactivate_released_chains,
+					// Clean up despawned projectiles from history
+					cleanup_despawned_projectiles,
+				)
+					.after(TransformSystems::Propagate),
 			)
-				.after(TransformSystems::Propagate),
-		)
-		.add_systems(
-			PostUpdate,
-			// Contact deduplication runs in Collect, BEFORE contacts_to_hits
-			coalesce_chain_contacts.in_set(DamageSystems::Collect),
-		);
+			.add_systems(
+				PostUpdate,
+				// Contact deduplication runs in Collect, BEFORE contacts_to_hits
+				coalesce_chain_contacts.in_set(DamageSystems::Collect),
+			);
 
 		// System ordering in DamageSystems::Collect:
 		//   1. coalesce_chain_contacts (this plugin)

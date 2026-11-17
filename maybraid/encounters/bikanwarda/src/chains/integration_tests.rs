@@ -24,6 +24,7 @@ mod tests {
 	fn test_app() -> App {
 		let mut app = App::new();
 		app.add_plugins((MinimalPlugins, TransformPlugin))
+			.init_resource::<crate::chains::ChainDamageHistory>()
 			.add_message::<ProjectileContact>()
 			.add_systems(
 				PostUpdate,
@@ -44,23 +45,27 @@ mod tests {
 	fn anchored_chain_follows_socket_transforms() -> Result<()> {
 		let mut app = test_app();
 
-		// Spawn chain root with joints in Taut mode
-		let root = app
-			.world_mut()
-			.spawn((
-				ChainRoot { link_count: 3, rest_length_m: 3.0 },
-				ChainMotion { mode: ChainTensionMode::Taut, active: true },
-				Transform::default(),
-				Visibility::default(),
-			))
-			.id();
-
 		let joint0 =
 			app.world_mut().spawn((Name::new("chain-joint-0"), Transform::default())).id();
 		let joint1 =
 			app.world_mut().spawn((Name::new("chain-joint-1"), Transform::default())).id();
 		let joint2 =
 			app.world_mut().spawn((Name::new("chain-joint-2"), Transform::default())).id();
+
+		// Spawn chain root with joints in Taut mode
+		let root = app
+			.world_mut()
+			.spawn((
+				ChainRoot {
+					link_count: 3,
+					rest_length_m: 3.0,
+					joint_entities: vec![joint0, joint1, joint2],
+				},
+				ChainMotion { mode: ChainTensionMode::Taut, active: true },
+				Transform::default(),
+				Visibility::default(),
+			))
+			.id();
 
 		app.world_mut().entity_mut(root).add_children(&[joint0, joint1, joint2]);
 
@@ -115,16 +120,6 @@ mod tests {
 	fn capsule_colliders_sync_to_joint_positions() -> Result<()> {
 		let mut app = test_app();
 
-		let root = app
-			.world_mut()
-			.spawn((
-				ChainRoot { link_count: 2, rest_length_m: 2.0 },
-				ChainMotion { mode: ChainTensionMode::Taut, active: false },
-				Transform::default(),
-				Visibility::default(),
-			))
-			.id();
-
 		let joint0 = app
 			.world_mut()
 			.spawn((Name::new("chain-joint-0"), Transform::from_xyz(0.0, 0.0, 0.0)))
@@ -132,6 +127,20 @@ mod tests {
 		let joint1 = app
 			.world_mut()
 			.spawn((Name::new("chain-joint-1"), Transform::from_xyz(0.0, 2.0, 0.0)))
+			.id();
+
+		let root = app
+			.world_mut()
+			.spawn((
+				ChainRoot {
+					link_count: 2,
+					rest_length_m: 2.0,
+					joint_entities: vec![joint0, joint1],
+				},
+				ChainMotion { mode: ChainTensionMode::Taut, active: false },
+				Transform::default(),
+				Visibility::default(),
+			))
 			.id();
 
 		app.world_mut().entity_mut(root).add_children(&[joint0, joint1]);
@@ -293,11 +302,25 @@ mod tests {
 		let link_count = 12;
 		let length_m = 3.0;
 
+		// Create joints at origin
+		let mut joints = Vec::new();
+		for _i in 0..link_count {
+			let joint = app
+				.world_mut()
+				.spawn((Transform::from_xyz(0.0, 0.0, 0.0), GlobalTransform::default()))
+				.id();
+			joints.push(joint);
+		}
+
 		// Create chain root
 		let root = app
 			.world_mut()
 			.spawn((
-				ChainRoot { link_count, rest_length_m: length_m },
+				ChainRoot {
+					link_count,
+					rest_length_m: length_m,
+					joint_entities: joints.clone(),
+				},
 				ChainMotion {
 					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
 					active: true,
@@ -306,6 +329,10 @@ mod tests {
 				GlobalTransform::default(),
 			))
 			.id();
+
+		for joint in &joints {
+			app.world_mut().entity_mut(root).add_child(*joint);
+		}
 
 		// Create horizontal anchors at same height
 		let _left_anchor = app
@@ -325,17 +352,6 @@ mod tests {
 				GlobalTransform::default(),
 			))
 			.id();
-
-		// Create joints at origin
-		let mut joints = Vec::new();
-		for _i in 0..link_count {
-			let joint = app
-				.world_mut()
-				.spawn((Transform::from_xyz(0.0, 0.0, 0.0), GlobalTransform::default()))
-				.id();
-			app.world_mut().entity_mut(root).add_child(joint);
-			joints.push(joint);
-		}
 
 		// Run several updates to let motion system work
 		for _ in 0..5 {
@@ -390,12 +406,30 @@ mod tests {
 		let initial_health = 50.0; // Low health so we can test death
 		let damage_per_hit = 25.0;
 
+		// Spawn joints
+		let mut joints = Vec::new();
+		for i in 0..link_count {
+			let joint = app
+				.world_mut()
+				.spawn((
+					Name::new(format!("chain-joint-{i}")),
+					Transform::from_xyz(0.0, 0.0, 0.0),
+					GlobalTransform::default(),
+				))
+				.id();
+			joints.push(joint);
+		}
+
 		// Spawn chain root with health
 		let root = app
 			.world_mut()
 			.spawn((
 				Name::new("test-chain"),
-				ChainRoot { link_count, rest_length_m: length_m },
+				ChainRoot {
+					link_count,
+					rest_length_m: length_m,
+					joint_entities: joints.clone(),
+				},
 				ChainMotion {
 					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
 					active: true,
@@ -405,6 +439,10 @@ mod tests {
 				Health { current: initial_health, max: initial_health },
 			))
 			.id();
+
+		for joint in &joints {
+			app.world_mut().entity_mut(root).add_child(*joint);
+		}
 
 		// Spawn horizontal anchors at same height, horizontally apart
 		let _left = app
@@ -426,21 +464,6 @@ mod tests {
 				GlobalTransform::default(),
 			))
 			.id();
-
-		// Spawn joints
-		let mut joints = Vec::new();
-		for i in 0..link_count {
-			let joint = app
-				.world_mut()
-				.spawn((
-					Name::new(format!("chain-joint-{i}")),
-					Transform::from_xyz(0.0, 0.0, 0.0),
-					GlobalTransform::default(),
-				))
-				.id();
-			app.world_mut().entity_mut(root).add_child(joint);
-			joints.push(joint);
-		}
 
 		// Run updates to let motion system position joints
 		app.update();
@@ -593,7 +616,11 @@ mod tests {
 		let root = app
 			.world_mut()
 			.spawn((
-				ChainRoot { link_count: 2, rest_length_m: 2.0 },
+				ChainRoot {
+					link_count: 2,
+					rest_length_m: 2.0,
+					joint_entities: Vec::new(),
+				},
 				ChainMotion { mode: ChainTensionMode::Taut, active: true },
 			))
 			.id();
@@ -615,10 +642,22 @@ mod tests {
 	fn catenary_mode_adds_sag() -> Result<()> {
 		let mut app = test_app();
 
+		let joints: Vec<_> = (0..5)
+			.map(|i| {
+				app.world_mut()
+					.spawn((Name::new(format!("chain-joint-{}", i)), Transform::default()))
+					.id()
+			})
+			.collect();
+
 		let root = app
 			.world_mut()
 			.spawn((
-				ChainRoot { link_count: 5, rest_length_m: 4.0 },
+				ChainRoot {
+					link_count: 5,
+					rest_length_m: 4.0,
+					joint_entities: joints.clone(),
+				},
 				ChainMotion {
 					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
 					active: true,
@@ -627,14 +666,6 @@ mod tests {
 				Visibility::default(),
 			))
 			.id();
-
-		let joints: Vec<_> = (0..5)
-			.map(|i| {
-				app.world_mut()
-					.spawn((Name::new(format!("chain-joint-{}", i)), Transform::default()))
-					.id()
-			})
-			.collect();
 
 		app.world_mut().entity_mut(root).add_children(&joints);
 
@@ -665,16 +696,6 @@ mod tests {
 	fn motion_stability_with_zero_distance_anchors() -> Result<()> {
 		let mut app = test_app();
 
-		let root = app
-			.world_mut()
-			.spawn((
-				ChainRoot { link_count: 3, rest_length_m: 3.0 },
-				ChainMotion::default(),
-				Transform::default(),
-				Visibility::default(),
-			))
-			.id();
-
 		let joints: Vec<_> = (0..3)
 			.map(|i| {
 				app.world_mut()
@@ -682,6 +703,20 @@ mod tests {
 					.id()
 			})
 			.collect();
+
+		let root = app
+			.world_mut()
+			.spawn((
+				ChainRoot {
+					link_count: 3,
+					rest_length_m: 3.0,
+					joint_entities: joints.clone(),
+				},
+				ChainMotion::default(),
+				Transform::default(),
+				Visibility::default(),
+			))
+			.id();
 
 		app.world_mut().entity_mut(root).add_children(&joints);
 

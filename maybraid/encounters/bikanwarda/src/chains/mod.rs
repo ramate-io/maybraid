@@ -15,7 +15,7 @@ pub use collision::{
 	retire_chain_colliders, spawn_chain_colliders, sync_chain_colliders, ChainColliderConfig,
 	ChainLinkId,
 };
-pub use damage_coalesce::coalesce_chain_contacts;
+pub use damage_coalesce::{cleanup_despawned_projectiles, coalesce_chain_contacts, ChainDamageHistory};
 pub use motion::{
 	compute_joint_positions, deactivate_released_chains, update_chain_joints, ChainAnchor,
 	ChainEndpoint, ChainMotion, ChainRoot, ChainTensionMode, ReleasedChain,
