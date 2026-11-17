@@ -126,16 +126,39 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 
 	let snapshots = collect_job_snapshots(world);
 	let mut buckets = JobBuckets::default();
+	let mut new_roots_total = 0;
+	let mut skipped_queue_empty = 0;
+	let mut skipped_no_host = 0;
+	let mut skipped_cold_mismatch = 0;
+	let mut skipped_not_shown = 0;
+	
 	for snap in snapshots {
+		if snap.spawned == 0 {
+			new_roots_total += 1;
+		}
+		
 		if snap.queue_empty {
+			skipped_queue_empty += 1;
 			continue;
 		}
 		let Some(desired) = world.get::<LodSceneLevel>(snap.host).copied() else {
+			skipped_no_host += 1;
 			continue;
 		};
 		let shown = lod_world_entity_is_shown(world, snap.entity);
 		let class = if snap.cold {
 			if snap.self_level != desired {
+				skipped_cold_mismatch += 1;
+				if snap.spawned == 0 {
+					info!(
+						target: "maybraid.lod.drain",
+						root = ?snap.entity,
+						host = ?snap.host,
+						self_level = ?snap.self_level,
+						desired = ?desired,
+						"TELEMETRY: new cold root skipped (cold but self_level != desired)"
+					);
+				}
 				continue;
 			}
 			FulfillClass::Presence
@@ -144,12 +167,38 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		} else if shown {
 			FulfillClass::Active
 		} else {
+			skipped_not_shown += 1;
+			if snap.spawned == 0 {
+				info!(
+					target: "maybraid.lod.drain",
+					root = ?snap.entity,
+					host = ?snap.host,
+					self_level = ?snap.self_level,
+					desired = ?desired,
+					shown = shown,
+					"TELEMETRY: new warm root skipped (not desired and not shown)"
+				);
+			}
 			continue;
 		};
 		let is_new = snap.spawned == 0;
 		buckets
 			.for_class_mut(class)
 			.push(snap.entity, snap.parent_desired, snap.self_level, is_new);
+	}
+	
+	if new_roots_total > 0 {
+		info!(
+			target: "maybraid.lod.drain",
+			frame = world.resource::<LodChunkDrainCursor>().frame,
+			new_roots_total,
+			skipped_queue_empty,
+			skipped_no_host,
+			skipped_cold_mismatch,
+			skipped_not_shown,
+			budget_total = total,
+			"TELEMETRY: drain frame classification summary"
+		);
 	}
 
 	// Start clock AFTER snapshot collection/classification, so budget measures
@@ -270,6 +319,27 @@ fn drain_one(
 		return true;
 	}
 	
+	// Telemetry: log when a new root (spawned==0) is first visited
+	let is_new_root = job.spawned == 0;
+	if is_new_root {
+		let root_level = world.get::<LodLevelRoot>(entity).map(|r| r.0);
+		let host_level = world.get::<LodSceneLevel>(job.host).copied();
+		let time_left = budget.spawn_time_per_frame.saturating_sub(clock.start.elapsed());
+		info!(
+			target: "maybraid.lod.drain",
+			root = ?entity,
+			host = ?job.host,
+			parent_desired = ?job.parent_desired,
+			self_level = ?root_level,
+			host_desired = ?host_level,
+			cold = job.cold,
+			budget_remaining = *remaining,
+			time_left_us = time_left.as_micros(),
+			quanta = clock.quanta,
+			"TELEMETRY: visiting new root (spawned=0)"
+		);
+	}
+	
 	// Guarantee forward progress: allow at least one quantum for roots that have spawned nothing,
 	// even if we're over budget. This prevents starvation of new High roots in busy worlds.
 	let allow_first_quantum = job.spawned == 0;
@@ -320,8 +390,22 @@ fn drain_one(
 				.resource_mut::<LodChunkDrainDiagnostics>()
 				.record_overrun(LodChunkAtomicOverrun { host, level, elapsed: quantum });
 		}
+		let was_new = world.get::<LodChunkFulfillment>(entity).map_or(false, |job| job.spawned == 0);
+		let root_level = world.get::<LodLevelRoot>(entity).map(|r| r.0);
+		
 		if let Some(mut job) = world.get_mut::<LodChunkFulfillment>(entity) {
 			job.spawned += 1;
+			if was_new {
+				info!(
+					target: "maybraid.lod.drain",
+					root = ?entity,
+					host = ?host,
+					self_level = ?root_level,
+					primitives_left = job.queue.len(),
+					quanta = clock.quanta,
+					"TELEMETRY: new root completed first spawn"
+				);
+			}
 		}
 		*remaining = remaining.saturating_sub(weight.max(1));
 	}
