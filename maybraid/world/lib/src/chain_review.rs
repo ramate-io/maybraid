@@ -169,8 +169,6 @@ fn spawn_fixture(
 				link_count: 12,
 				rest_length_m: 3.0,
 				joint_entities: joints.clone(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 			ChainMotion::default(),
 			Health::from_max(100.0),

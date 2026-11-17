@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use damage::{contacts_to_hits, DamageSystems};
 
 use super::collision::{retire_released_chain_colliders, sync_chain_colliders};
-use super::damage::{apply_chain_damage, detect_and_signal_broken_chains, ChainBrokenHistory};
+use super::damage::{detect_and_signal_broken_chains, ChainBrokenHistory};
 use super::damage_coalesce::{cleanup_despawned_projectiles, coalesce_chain_contacts, ChainDamageHistory};
 use super::motion::{deactivate_released_chains, update_chain_joints};
 
@@ -17,8 +17,7 @@ use super::motion::{deactivate_released_chains, update_chain_joints};
 /// - Motion systems update joint positions based on anchor transforms.
 /// - Collision sync follows motion to update capsule positions.
 /// - Contact coalescing runs in DamageSystems::Collect (before apply_hits).
-/// - Chain damage tracking runs after DamageSystems::Apply.
-/// - Break detection emits ChainBroken signals and inserts ReleasedChain markers.
+/// - Break detection runs after DamageSystems::Apply to check Health and emit ChainBroken signals.
 pub struct BikanwardaChainPhysicsPlugin;
 
 impl Plugin for BikanwardaChainPhysicsPlugin {
@@ -43,25 +42,24 @@ impl Plugin for BikanwardaChainPhysicsPlugin {
 				)
 					.after(TransformSystems::Propagate),
 			)
-			.add_systems(
-				PostUpdate,
-				// Contact deduplication runs in Collect, explicitly BEFORE contacts_to_hits
-				coalesce_chain_contacts
-					.in_set(DamageSystems::Collect)
-					.before(contacts_to_hits),
-			)
-			.add_systems(
-				PostUpdate,
-				// Chain damage tracking runs after damage is applied
-				(apply_chain_damage, detect_and_signal_broken_chains)
-					.chain()
-					.after(DamageSystems::Apply),
-			);
+		.add_systems(
+			PostUpdate,
+			// Contact deduplication runs in Collect, explicitly BEFORE contacts_to_hits
+			coalesce_chain_contacts
+				.in_set(DamageSystems::Collect)
+				.before(contacts_to_hits),
+		)
+		.add_systems(
+			PostUpdate,
+			// Break detection runs after damage is applied
+			detect_and_signal_broken_chains
+				.after(DamageSystems::Apply),
+		);
 
 		// System ordering:
-		//   DamageSystems::Collect: coalesce_chain_contacts (before contacts_to_hits)
-		//   DamageSystems::Apply: apply_hits (from damage plugin)
-		//   After DamageSystems::Apply: apply_chain_damage → detect_and_signal_broken_chains
+		//   DamageSystems::Collect: coalesce_chain_contacts → contacts_to_hits
+		//   DamageSystems::Apply: apply_hits (routes hits from ChildOf link colliders to chain roots)
+		//   After DamageSystems::Apply: detect_and_signal_broken_chains (checks Health)
 	}
 }
 

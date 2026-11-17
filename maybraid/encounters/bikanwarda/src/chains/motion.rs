@@ -13,6 +13,9 @@ use bevy::prelude::*;
 ///
 /// The chain root owns joints, capsules, mesh, and health. Despawning this entity retires
 /// the entire chain.
+///
+/// **Damage tracking:** Chain durability is tracked via the standard `Health` component.
+/// The chain breaks when `Health.current` reaches zero. Do not add a separate durability field.
 #[derive(Component, Clone, Debug)]
 pub struct ChainRoot {
 	/// How many links the chain has (determines joint count).
@@ -21,10 +24,6 @@ pub struct ChainRoot {
 	pub rest_length_m: f32,
 	/// Ordered joint entities for this chain.
 	pub joint_entities: Vec<Entity>,
-	/// Current durability (0.0 = broken). Initialized from Health.max on spawn.
-	pub durability: f32,
-	/// Maximum durability (never changes after spawn).
-	pub max_durability: f32,
 }
 
 /// Anchor attachment point for a chain endpoint (column or character socket).
@@ -294,8 +293,6 @@ mod tests {
 				link_count,
 				rest_length_m: length_m,
 				joint_entities: taut_joints.clone(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 			ChainMotion { mode: ChainTensionMode::Taut, active: true },
 			Transform::from_xyz(0.0, 0.0, 0.0),
@@ -333,8 +330,6 @@ mod tests {
 				link_count,
 				rest_length_m: length_m,
 				joint_entities: catenary_joints.clone(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 			ChainMotion { mode: ChainTensionMode::Catenary { sag_ratio: 10 }, active: true },
 			Transform::from_xyz(5.0, 0.0, 0.0),

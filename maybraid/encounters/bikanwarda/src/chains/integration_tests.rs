@@ -17,7 +17,7 @@ mod tests {
 	use projectiles::ProjectileContact;
 
 	use crate::chains::{
-		apply_chain_damage, coalesce_chain_contacts, deactivate_released_chains,
+		coalesce_chain_contacts, deactivate_released_chains,
 		detect_and_signal_broken_chains, spawn_chain_colliders, sync_chain_colliders,
 		update_chain_joints, BikanwardaChainPhysicsPlugin, ChainAnchor, ChainBrokenHistory,
 		ChainColliderConfig, ChainEndpoint, ChainLinkId, ChainMotion, ChainRoot,
@@ -35,7 +35,7 @@ mod tests {
 				(
 					update_chain_joints,
 					sync_chain_colliders.after(update_chain_joints),
-					(apply_chain_damage, detect_and_signal_broken_chains).chain(),
+					detect_and_signal_broken_chains.after(damage::DamageSystems::Apply),
 				)
 					.after(TransformSystems::Propagate),
 			)
@@ -65,8 +65,6 @@ mod tests {
 					link_count: 3,
 					rest_length_m: 3.0,
 					joint_entities: vec![joint0, joint1, joint2],
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 				ChainMotion { mode: ChainTensionMode::Taut, active: true },
 				Transform::default(),
@@ -158,8 +156,6 @@ mod tests {
 					link_count: 2,
 					rest_length_m: 2.0,
 					joint_entities: vec![joint0, joint1],
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 				ChainMotion { mode: ChainTensionMode::Taut, active: false },
 				Transform::default(),
@@ -344,8 +340,6 @@ mod tests {
 					link_count,
 					rest_length_m: length_m,
 					joint_entities: joints.clone(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 				ChainMotion {
 					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
@@ -456,8 +450,6 @@ mod tests {
 					link_count,
 					rest_length_m: length_m,
 					joint_entities: joints.clone(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 				ChainMotion {
 					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
@@ -689,8 +681,6 @@ mod tests {
 					link_count,
 					rest_length_m: length_m,
 					joint_entities: joints.clone(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 				ChainMotion {
 					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
@@ -873,8 +863,6 @@ mod tests {
 					link_count: 2,
 					rest_length_m: 2.0,
 					joint_entities: Vec::new(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 				ChainMotion { mode: ChainTensionMode::Taut, active: true },
 			))
@@ -944,8 +932,6 @@ mod tests {
 					link_count,
 					rest_length_m: length_m,
 					joint_entities: joints.clone(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 				ChainMotion {
 					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
@@ -1083,8 +1069,6 @@ mod tests {
 					link_count,
 					rest_length_m: length_m,
 					joint_entities: joints.clone(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 				ChainMotion {
 					mode: ChainTensionMode::Taut,
@@ -1193,8 +1177,6 @@ mod tests {
 					link_count,
 					rest_length_m: length_m,
 					joint_entities: joints.clone(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 				ChainMotion {
 					mode: ChainTensionMode::Taut,
@@ -1302,8 +1284,6 @@ mod tests {
 					link_count,
 					rest_length_m: length_m,
 					joint_entities: joints.clone(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 				ChainMotion {
 					mode: ChainTensionMode::Catenary { sag_ratio: 8 },
@@ -1387,8 +1367,6 @@ mod tests {
 					link_count: 5,
 					rest_length_m: 4.0,
 					joint_entities: joints.clone(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 				ChainMotion {
 					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
@@ -1443,8 +1421,6 @@ mod tests {
 					link_count: 3,
 					rest_length_m: 3.0,
 					joint_entities: joints.clone(),
-				durability: 100.0,
-				max_durability: 100.0,
 			},
 				ChainMotion::default(),
 				Transform::default(),
