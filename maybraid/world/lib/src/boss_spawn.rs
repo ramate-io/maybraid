@@ -21,12 +21,12 @@
 
 use bevy::prelude::*;
 use bikanwarda_encounter::{AuthoredBossSpawns, BikanwardaBossEncounter};
-use durham::DurhamSurface;
 use lod::hcsg::{register_session_seed, universal_bounds, HcsgStorage};
 use lod::gen::Bytes;
-use maybraid_spawns_support::terrain_height_at;
 use player::Player;
 use std::sync::Arc;
+
+use crate::terrain_query::TerrainHeightQuery;
 
 /// Request to spawn a boss encounter at a specific location.
 #[derive(Component, Clone, Debug)]
@@ -93,13 +93,19 @@ fn seed_boss_encounter(config: Res<BossSpawnConfig>, storage: Res<HcsgStorage>) 
 	}
 }
 
-/// Boss hull spawn height offset for ground clearance.
-/// 
-/// The encounter boss is scaled to ~20m height. With Epiphant proportions,
-/// the hull spawn_height offset (feet above origin) is approximately 10.15m.
-/// This value is used to lift the boss origin above the terrain so the
-/// feet/hull bottom rest on the ground.
-const BOSS_SPAWN_HEIGHT_OFFSET: f32 = 10.15;
+/// Get the boss hull spawn height offset for ground clearance.
+///
+/// Derives the offset from the actual Bikanwarda encounter boss recipe,
+/// ensuring the value stays synchronized with hull changes.
+fn boss_spawn_height_offset() -> f32 {
+	use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaSpec};
+	use characters::CharacterRecipe;
+	
+	let spec = BikanwardaSpec::encounter();
+	let recipe = BikanwardaActorRecipe::from_spec(spec);
+	let hull = recipe.components().scaled_locomotion_capsule();
+	hull.spawn_height()
+}
 
 /// System to handle boss spawn requests.
 /// 
@@ -137,12 +143,12 @@ pub fn process_boss_spawn_requests(
 /// Poll pending boss spawns and finalize when terrain is ready.
 /// 
 /// This system implements the terrain readiness contract: wait for
-/// `terrain_height_at` to return Some(height) instead of consuming
-/// the holding elevation from `surface_or_hold_at` as final position.
+/// published terrain height (from `TerrainHeightQuery`) instead of consuming
+/// the holding elevation as final position.
 pub fn poll_pending_boss_spawns(
 	mut commands: Commands,
 	mut pending: Query<(Entity, &mut PendingBossSpawn)>,
-	surface: DurhamSurface,
+	terrain: TerrainHeightQuery,
 	storage: Option<Res<HcsgStorage>>,
 	mut config: ResMut<BossSpawnConfig>,
 ) {
@@ -150,17 +156,14 @@ pub fn poll_pending_boss_spawns(
 		pending_spawn.wait_ticks += 1;
 		
 		// Try to get published terrain height (terrain/pad with collider acceptance)
-		let terrain_height = terrain_height_at(
-			&surface,
-			storage.as_deref(),
-			pending_spawn.xz,
-		);
+		let terrain_height = terrain.height_at(pending_spawn.xz);
 		
 		if let Some(terrain_y) = terrain_height {
 			// Terrain is ready! Apply boss hull spawn_height offset for ground fit
+			let spawn_height_offset = boss_spawn_height_offset();
 			let position = Vec3::new(
 				pending_spawn.xz.x,
-				terrain_y + BOSS_SPAWN_HEIGHT_OFFSET,
+				terrain_y + spawn_height_offset,
 				pending_spawn.xz.y,
 			);
 			
@@ -169,7 +172,7 @@ pub fn poll_pending_boss_spawns(
 				pending_spawn.wait_ticks,
 				position.x, position.y, position.z,
 				terrain_y,
-				BOSS_SPAWN_HEIGHT_OFFSET
+				spawn_height_offset
 			);
 			
 			config.position = position;
@@ -203,7 +206,13 @@ pub struct BossSpawnPlugin;
 impl Plugin for BossSpawnPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<BossSpawnConfig>()
-			.add_systems(Update, (process_boss_spawn_requests, poll_pending_boss_spawns).chain());
+			.add_systems(
+				Update,
+				(
+					process_boss_spawn_requests,
+					poll_pending_boss_spawns,
+				).chain(),
+			);
 		register_session_seed(app, seed_boss_encounter);
 	}
 }

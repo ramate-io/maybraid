@@ -18,6 +18,7 @@ pub mod capture;
 pub mod script_queue;
 #[cfg(feature = "debug-commands")]
 pub mod viewport_check;
+mod terrain_query;
 mod agent_inventory;
 mod camera;
 pub mod commands;
@@ -78,6 +79,7 @@ pub use control::{
 };
 pub use cycle_target::InventoryCycleTarget;
 pub use durham::Durham;
+pub use terrain_query::{query_terrain_height, TerrainHeightQuery};
 #[cfg(any(test, feature = "test-support"))]
 pub use first_wave::UnitXTile;
 pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};

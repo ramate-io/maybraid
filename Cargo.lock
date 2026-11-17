@@ -7594,6 +7594,7 @@ dependencies = [
  "avian3d",
  "barking",
  "bevy",
+ "bikanwarda-character",
  "bikanwarda-encounter",
  "building-physics",
  "character-inventory-user",
