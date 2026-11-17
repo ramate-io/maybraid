@@ -37,6 +37,14 @@ pub struct RequestBossAssembly {
 	pub spec: BikanwardaSpec,
 }
 
+/// Relationship from encounter host to its spawned boss actor.
+///
+/// The host owns BossEncounterRoot, Health, and EncounterInstance.
+/// The actor (child entity) owns BikanwardaRoot, actor components, and attack systems.
+/// This relationship enables combat/attack/tether queries to find the actor from the host.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct BossActor(pub Entity);
+
 /// Invisible collision placeholder for chain tether column.
 ///
 /// 15m tall cylinder (1m radius) grounded at terrain Y, on top of pedestal.

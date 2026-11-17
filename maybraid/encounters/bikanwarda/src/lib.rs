@@ -31,7 +31,7 @@ pub use identity::{
 pub use outcomes::{BikanwardaDeparted, BikanwardaDeparture, EncounterUnlockAwarded};
 pub use plugin::BikanwardaEncounterPlugin;
 pub use presentation::{
-	BossColumn, BossEncounterPresentationPlugin, BossEncounterRoot, BossPedestal,
+	BossActor, BossColumn, BossEncounterPresentationPlugin, BossEncounterRoot, BossPedestal,
 	RequestBossAssembly,
 };
 pub use scripted::Scripted;
