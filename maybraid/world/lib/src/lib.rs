@@ -73,6 +73,7 @@ pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use item_icons::ItemIconPlugin;
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
+pub use mob_spawn::{RequestMobInspect, RequestSpawnMobs};
 pub use occupancy::{WorldOccupancyPlugin, WorldOccupancySystems};
 pub use player_lifecycle::{
 	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
@@ -282,6 +283,7 @@ impl Plugin for WorldPlugin {
 				vsync::toggle_vsync,
 				commands::apply_sky_commands,
 				mob_spawn::apply_spawn_mob_requests,
+				mob_spawn::apply_mob_inspect,
 			),
 		);
 		render_scale::configure(app);
