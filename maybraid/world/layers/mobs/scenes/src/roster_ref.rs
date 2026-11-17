@@ -255,4 +255,62 @@ mod tests {
 		world.flush();
 		assert!(world.get_entity(body).is_err());
 	}
+	#[test]
+	fn hysteresis_keeps_the_same_damaged_body_until_the_outer_boundary() -> anyhow::Result<()> {
+		use damage::Health;
+		use lod::lod_ref::LodRef;
+		use lod::scene::LodScene;
+		use mob_intelligence::{MobRoster, RosterMember};
+		use npc_intelligence::Personality;
+
+		let mut world = World::new();
+		world.init_resource::<RosterStubBodies>();
+		let (host, stub) = host_and_stub(&mut world, Vec3::X);
+		world.entity_mut(host).insert((MobScene::default(), LodSceneLevel::High));
+		world
+			.run_system_once(fulfill_roster_refs)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.flush();
+		let body = world
+			.get::<RosterBinding>(stub)
+			.ok_or_else(|| anyhow::anyhow!("missing binding"))?
+			.body;
+		let health = Health { current: 37.0, max: 100.0 };
+		world.entity_mut(body).insert((MemberOf { mob: host, slot: 0 }, health));
+		let mut member = RosterMember::new(Personality::Predator, Vec3::ZERO);
+		member.entity = Some(body);
+		world.entity_mut(host).insert(MobRoster::new(vec![member]));
+		for distance in [299.0, 301.0, 399.0, 300.0, 401.0] {
+			world
+				.run_system_once(crate::plugin::snapshot_retained_mob_members)
+				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			let viewer = Transform::from_xyz(distance, 0.0, 0.0);
+			let bounds = bevy::shape::Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+			let reference = LodRef {
+				entity: Entity::PLACEHOLDER,
+				previous_transform: &viewer,
+				current_transform: &viewer,
+				bounds: &bounds,
+			};
+			let desired = world
+				.get::<MobScene>(host)
+				.ok_or_else(|| anyhow::anyhow!("missing scene"))?
+				.scene_lod_level(&reference);
+			world.entity_mut(host).insert(desired);
+			world
+				.run_system_once(cull_members_when_high_drops)
+				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			world.flush();
+			if distance <= 400.0 {
+				assert_eq!(world.get::<Health>(body), Some(&health));
+				assert_eq!(
+					world.get::<RosterBinding>(stub).map(|binding| binding.body),
+					Some(body)
+				);
+			} else {
+				assert!(world.get_entity(body).is_err());
+			}
+		}
+		Ok(())
+	}
 }

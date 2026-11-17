@@ -16,4 +16,4 @@ pub use mob_intelligence::{
 };
 pub use plugin::{MobLodRefreshMode, MobSceneSystems, MobScenesPlugin};
 pub use roster::{MobMemberRecipe, MobRosterRecipe};
-pub use scene::{Mob, MobScene, DEFAULT_MOB_HIGH_RADIUS};
+pub use scene::{Mob, MobScene, DEFAULT_MOB_HIGH_RADIUS, DEFAULT_MOB_RETAIN_RADIUS};

@@ -65,6 +65,7 @@ impl Plugin for MobScenesPlugin {
 			MobLodRefreshMode::FullScan => add_lod_refresh_chunk_full_for::<MobScene>(app),
 			MobLodRefreshMode::Indexed => add_lod_refresh_chunk_for::<MobScene>(app),
 		}
+		app.add_systems(PreUpdate, snapshot_retained_mob_members);
 		app.configure_sets(
 			Update,
 			(MobSceneSystems::Install, MobSceneSystems::Fulfill, MobSceneSystems::Respawn).chain(),
@@ -175,6 +176,26 @@ fn spawn_needed_members(
 	}
 }
 
+/// Snapshot once before every LOD producer. Use live bodies, not the initially
+/// optimistic pending High level: distant recipes must not acquire the outer ring.
+pub(crate) fn snapshot_retained_mob_members(
+	mut hosts: Query<(Entity, &mut MobScene, &mob_intelligence::MobRoster)>,
+	bodies: Query<&mob_intelligence::MemberOf>,
+) {
+	for (host, mut scene, roster) in &mut hosts {
+		let retained = roster.iter().any(|(slot, member)| {
+			member.entity.is_some_and(|entity| {
+				bodies
+					.get(entity)
+					.is_ok_and(|membership| membership.mob == host && membership.slot == slot)
+			})
+		});
+		if scene.retaining_members != retained {
+			scene.retaining_members = retained;
+		}
+	}
+}
+
 fn sync_mob_scene_centers(mut hosts: Query<(&Transform, &mut MobScene), Changed<Transform>>) {
 	for (transform, mut scene) in &mut hosts {
 		scene.center = transform.translation;
@@ -204,6 +225,108 @@ mod tests {
 		app.world_mut()
 			.schedule_scope(Update, |world, schedule| schedule.initialize(world))
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		Ok(())
+	}
+
+	#[test]
+	fn retention_snapshot_requires_a_current_bound_body() -> Result<()> {
+		use mob_intelligence::MemberOf;
+		let mut world = World::new();
+		let host = world.spawn(MobScene::default()).id();
+		let body = world.spawn(MemberOf { mob: host, slot: 0 }).id();
+		let mut member = RosterMember::new(Personality::Predator, Vec3::ZERO);
+		member.entity = Some(body);
+		world.entity_mut(host).insert(MobRoster::new(vec![member]));
+		for present in [true, false] {
+			if !present {
+				world.entity_mut(body).despawn();
+			}
+			world
+				.run_system_once(snapshot_retained_mob_members)
+				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			assert_eq!(
+				world.get::<MobScene>(host).map(|scene| scene.retaining_members),
+				Some(present)
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn indexed_cache_rechecks_retention_without_viewer_motion() -> Result<()> {
+		use bevy::ecs::system::SystemParam;
+		use bevy::shape::{Aabb3d, IntersectsVolume};
+		use lod::scene::region_index::LodSceneHostIndex;
+		use lod::{
+			LodHostBounds, LodRefreshDomain, LodRefreshSystems, LodSceneHost, LodSceneRefreshAabb,
+			LodSceneRefreshPlugin, LodViewer,
+		};
+		use mob_intelligence::MemberOf;
+		struct Chan;
+		#[derive(SystemParam)]
+		struct ScanIndex<'w, 's> {
+			hosts: Query<
+				'w,
+				's,
+				(Entity, &'static Transform, &'static LodHostBounds),
+				With<LodSceneHost>,
+			>,
+		}
+		impl LodSceneHostIndex for ScanIndex<'_, '_> {
+			fn hosts_in_region<'a>(
+				&'a mut self,
+				region: Aabb3d,
+			) -> impl Iterator<Item = Entity> + 'a {
+				self.hosts.iter().filter_map(move |(entity, transform, bounds)| {
+					let at = transform.translation;
+					let world = Aabb3d::from_min_max(
+						Vec3::from(bounds.0.min) + at,
+						Vec3::from(bounds.0.max) + at,
+					);
+					world.intersects(&region).then_some(entity)
+				})
+			}
+		}
+		fn pulse(mut bus: MessageWriter<LodSceneRefreshAabb>) {
+			bus.write(LodSceneRefreshAabb {
+				region: Aabb3d::from_min_max(Vec3::splat(-450.0), Vec3::splat(450.0)),
+				domain: LodRefreshDomain::of::<Chan>(),
+			});
+		}
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			bevy::asset::AssetPlugin::default(),
+			bevy::scene::ScenePlugin,
+		))
+		.add_plugins(LodSceneRefreshPlugin::<MobScene, Chan, ScanIndex<'_, '_>>::default())
+		.add_systems(PreUpdate, snapshot_retained_mob_members)
+		.add_systems(Update, pulse.in_set(LodRefreshSystems::ProduceRegions));
+		app.world_mut().spawn((LodViewer, Transform::default()));
+		let at = Vec3::new(350.0, 0.0, 0.0);
+		let host = app
+			.world_mut()
+			.spawn((
+				LodSceneHost,
+				MobScene::default().at(at),
+				LodSceneLevel::High,
+				LodHostBounds(Aabb3d::from_min_max(Vec3::splat(-1.0), Vec3::splat(1.0))),
+				Transform::from_translation(at),
+			))
+			.id();
+		let body = app.world_mut().spawn(MemberOf { mob: host, slot: 0 }).id();
+		let mut member = RosterMember::new(Personality::Predator, at);
+		member.entity = Some(body);
+		app.world_mut().entity_mut(host).insert(MobRoster::new(vec![member]));
+		for _ in 0..3 {
+			app.update();
+		}
+		assert_eq!(app.world().get::<LodSceneLevel>(host), Some(&LodSceneLevel::High));
+		app.world_mut().entity_mut(body).despawn();
+		for _ in 0..3 {
+			app.update();
+		}
+		assert_eq!(app.world().get::<LodSceneLevel>(host), Some(&LodSceneLevel::UltraLow));
 		Ok(())
 	}
 
