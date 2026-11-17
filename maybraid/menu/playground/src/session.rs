@@ -327,6 +327,9 @@ fn open_gallery_context_action(
 		MenuAction::Delete => {
 			choices.write(GalleryChoice::Delete);
 		}
+		MenuAction::Create => {
+			choices.write(GalleryChoice::New);
+		}
 		MenuAction::Unequip => {}
 	}
 }

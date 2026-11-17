@@ -9,9 +9,9 @@ use bevy::ui_widgets::Button;
 
 use crate::theme::{
 	BARLOW_SEMIBOLD, CORNER_BOTTOM, PANEL_BLOCK_FONT_SIZE, PANEL_GROUP_FONT_SIZE, PROMPT_KEY_BACK,
-	PROMPT_KEY_DELETE, PROMPT_KEY_DROP, PROMPT_KEY_EDIT, PROMPT_KEY_SELECT, PROMPT_KEY_UNEQUIP,
-	PROMPT_PAD_BACK, PROMPT_PAD_DELETE, PROMPT_PAD_DROP, PROMPT_PAD_EDIT, PROMPT_PAD_SELECT,
-	PROMPT_PAD_UNEQUIP, TEXT_YELLOW,
+	PROMPT_KEY_CREATE, PROMPT_KEY_DELETE, PROMPT_KEY_DROP, PROMPT_KEY_EDIT, PROMPT_KEY_SELECT,
+	PROMPT_KEY_UNEQUIP, PROMPT_PAD_BACK, PROMPT_PAD_CREATE, PROMPT_PAD_DELETE, PROMPT_PAD_DROP,
+	PROMPT_PAD_EDIT, PROMPT_PAD_SELECT, PROMPT_PAD_UNEQUIP, TEXT_YELLOW,
 };
 use crate::HudFonts;
 
@@ -59,6 +59,13 @@ impl InputPromptDevice {
 			Self::Keyboard => PROMPT_KEY_DELETE,
 		}
 	}
+
+	pub fn create_icon(self) -> &'static str {
+		match self {
+			Self::Pad => PROMPT_PAD_CREATE,
+			Self::Keyboard => PROMPT_KEY_CREATE,
+		}
+	}
 }
 
 /// Which inventory action a chip illustrates.
@@ -100,18 +107,19 @@ const INVENTORY_PROMPT_KINDS: [InventoryPromptKind; 3] =
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryPromptGlyph(pub InventoryPromptKind);
 
-/// Character-gallery footer actions. Select / Back always apply; Edit / Delete
-/// need a saved character under the cursor.
+/// Character-gallery footer actions. Select / Back / Create always apply;
+/// Edit / Delete need a saved character under the cursor.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GalleryPromptKind {
 	Select,
 	Back,
 	Edit,
 	Delete,
+	Create,
 }
 
 impl GalleryPromptKind {
-	pub const ALL: [Self; 4] = [Self::Select, Self::Back, Self::Edit, Self::Delete];
+	pub const ALL: [Self; 5] = [Self::Select, Self::Back, Self::Edit, Self::Delete, Self::Create];
 
 	pub fn label(self) -> &'static str {
 		match self {
@@ -119,6 +127,7 @@ impl GalleryPromptKind {
 			Self::Back => "Back",
 			Self::Edit => "Edit",
 			Self::Delete => "Delete",
+			Self::Create => "Create",
 		}
 	}
 
@@ -128,6 +137,7 @@ impl GalleryPromptKind {
 			Self::Back => device.back_icon(),
 			Self::Edit => device.edit_icon(),
 			Self::Delete => device.delete_icon(),
+			Self::Create => device.create_icon(),
 		}
 	}
 
@@ -140,7 +150,7 @@ impl GalleryPromptKind {
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GalleryPromptGlyph(pub GalleryPromptKind);
 
-/// Footer row of gallery Select / Back / Edit / Delete chips.
+/// Footer row of gallery Select / Back / Edit / Delete / Create chips.
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct GalleryActionPrompts;
 
@@ -345,14 +355,15 @@ mod tests {
 		GalleryPromptKind, InputPromptDevice, InventoryPromptKind, INVENTORY_PROMPT_KINDS,
 	};
 	use crate::theme::{
-		PROMPT_KEY_BACK, PROMPT_KEY_DELETE, PROMPT_KEY_DROP, PROMPT_KEY_EDIT, PROMPT_KEY_SELECT,
-		PROMPT_KEY_UNEQUIP, PROMPT_PAD_BACK, PROMPT_PAD_DELETE, PROMPT_PAD_DROP, PROMPT_PAD_EDIT,
-		PROMPT_PAD_SELECT, PROMPT_PAD_UNEQUIP,
+		PROMPT_KEY_BACK, PROMPT_KEY_CREATE, PROMPT_KEY_DELETE, PROMPT_KEY_DROP, PROMPT_KEY_EDIT,
+		PROMPT_KEY_SELECT, PROMPT_KEY_UNEQUIP, PROMPT_PAD_BACK, PROMPT_PAD_CREATE,
+		PROMPT_PAD_DELETE, PROMPT_PAD_DROP, PROMPT_PAD_EDIT, PROMPT_PAD_SELECT, PROMPT_PAD_UNEQUIP,
 	};
 	use crate::{
-		GALLERY_DELETE_KEYS, GALLERY_DELETE_PAD, GALLERY_EDIT_KEYS, GALLERY_EDIT_PAD,
-		INVENTORY_DROP_KEYS, INVENTORY_DROP_PAD, INVENTORY_UNEQUIP_KEYS, INVENTORY_UNEQUIP_PAD,
-		MENU_BACK_KEYS, MENU_BACK_PAD, MENU_SELECT_KEYS, MENU_SELECT_PAD,
+		GALLERY_CREATE_KEYS, GALLERY_CREATE_PAD, GALLERY_DELETE_KEYS, GALLERY_DELETE_PAD,
+		GALLERY_EDIT_KEYS, GALLERY_EDIT_PAD, INVENTORY_DROP_KEYS, INVENTORY_DROP_PAD,
+		INVENTORY_UNEQUIP_KEYS, INVENTORY_UNEQUIP_PAD, MENU_BACK_KEYS, MENU_BACK_PAD,
+		MENU_SELECT_KEYS, MENU_SELECT_PAD,
 	};
 	use bevy::prelude::KeyCode;
 	use maybraid_virtual_pad_controller::PadButton;
@@ -394,7 +405,7 @@ mod tests {
 	}
 
 	#[test]
-	fn gallery_glyphs_follow_select_back_edit_and_delete_bindings() {
+	fn gallery_glyphs_follow_select_back_edit_delete_and_create_bindings() {
 		assert_eq!(MENU_SELECT_PAD, [PadButton::A, PadButton::Start]);
 		assert_eq!(MENU_SELECT_KEYS, [KeyCode::Enter]);
 		assert_eq!(MENU_BACK_PAD, PadButton::B);
@@ -403,13 +414,16 @@ mod tests {
 		assert_eq!(GALLERY_EDIT_KEYS, [KeyCode::KeyE, KeyCode::KeyX]);
 		assert_eq!(GALLERY_DELETE_PAD, PadButton::Select);
 		assert_eq!(GALLERY_DELETE_KEYS, [KeyCode::Delete]);
+		assert_eq!(GALLERY_CREATE_PAD, PadButton::Start);
+		assert_eq!(GALLERY_CREATE_KEYS, [KeyCode::KeyN]);
 		assert_eq!(
 			GalleryPromptKind::ALL,
 			[
 				GalleryPromptKind::Select,
 				GalleryPromptKind::Back,
 				GalleryPromptKind::Edit,
-				GalleryPromptKind::Delete
+				GalleryPromptKind::Delete,
+				GalleryPromptKind::Create
 			]
 		);
 		assert_eq!(GalleryPromptKind::Select.icon(InputPromptDevice::Pad), PROMPT_PAD_SELECT);
@@ -420,9 +434,13 @@ mod tests {
 		assert_eq!(GalleryPromptKind::Edit.icon(InputPromptDevice::Keyboard), PROMPT_KEY_EDIT);
 		assert_eq!(GalleryPromptKind::Delete.icon(InputPromptDevice::Pad), PROMPT_PAD_DELETE);
 		assert_eq!(GalleryPromptKind::Delete.icon(InputPromptDevice::Keyboard), PROMPT_KEY_DELETE);
+		assert_eq!(GalleryPromptKind::Create.icon(InputPromptDevice::Pad), PROMPT_PAD_CREATE);
+		assert_eq!(GalleryPromptKind::Create.icon(InputPromptDevice::Keyboard), PROMPT_KEY_CREATE);
+		assert_eq!(GalleryPromptKind::Create.label(), "Create");
 		assert!(GalleryPromptKind::Edit.needs_character());
 		assert!(GalleryPromptKind::Delete.needs_character());
 		assert!(!GalleryPromptKind::Select.needs_character());
 		assert!(!GalleryPromptKind::Back.needs_character());
+		assert!(!GalleryPromptKind::Create.needs_character());
 	}
 }

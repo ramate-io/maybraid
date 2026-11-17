@@ -355,6 +355,12 @@ pub const PROMPT_PAD_DELETE: &str = "iconography/kenney/input-prompts/xbox_butto
 /// Kenney Double keyboard **Delete** — gallery Delete.
 pub const PROMPT_KEY_DELETE: &str = "iconography/kenney/input-prompts/keyboard_delete_outline.png";
 
+/// Kenney Double Xbox **Menu** — [`PadButton::Start`](maybraid_virtual_pad_controller::PadButton::Start) / gallery Create.
+pub const PROMPT_PAD_CREATE: &str = "iconography/kenney/input-prompts/xbox_button_menu_outline.png";
+
+/// Kenney Double keyboard **N** — gallery Create (New).
+pub const PROMPT_KEY_CREATE: &str = "iconography/kenney/input-prompts/keyboard_n_outline.png";
+
 /// Kenney Xbox bumper prompts for inventory section paging.
 pub const PROMPT_PAD_PREVIOUS_SECTION: &str =
 	"iconography/kenney/input-prompts/xbox_lb_outline.png";

@@ -188,6 +188,32 @@ fn context_edges_are_targeted_one_shot_and_lose_to_navigation() -> anyhow::Resul
 }
 
 #[test]
+fn gallery_start_creates_while_enter_still_selects() -> anyhow::Result<()> {
+	use menu_components::GalleryHudMenu;
+	let mut world = world();
+	let (source, target, _) = menu(&mut world);
+	world.entity_mut(target).insert(GalleryHudMenu);
+	send(&mut world, source, target, 1, &buttons(&[PadButton::Start]), 0.0)?;
+	assert_eq!(world.resource::<Hits>().actions, [(target, MenuAction::Create)]);
+	assert!(world.resource::<Hits>().nav.is_empty());
+	send(&mut world, source, target, 2, &buttons(&[PadButton::A]), 0.0)?;
+	assert_eq!(world.resource::<Hits>().nav.last(), Some(&(target, MenuNav::Select)));
+	let mut enter = VirtualPad::default();
+	enter.keys.press(KeyCode::Enter);
+	enter.begin_frame();
+	enter.hold_digital(PadButton::Start);
+	enter.finish_digital();
+	send(&mut world, source, target, 3, &enter, 0.0)?;
+	assert_eq!(world.resource::<Hits>().nav.last(), Some(&(target, MenuNav::Select)));
+	assert_eq!(world.resource::<Hits>().actions, [(target, MenuAction::Create)]);
+	let mut n = VirtualPad::default();
+	n.keys.press(KeyCode::KeyN);
+	send(&mut world, source, target, 4, &n, 0.0)?;
+	assert_eq!(world.resource::<Hits>().actions.last(), Some(&(target, MenuAction::Create)));
+	Ok(())
+}
+
+#[test]
 fn select_view_is_delete_and_loses_to_navigation() -> anyhow::Result<()> {
 	let mut world = world();
 	let (source, target, _) = menu(&mut world);

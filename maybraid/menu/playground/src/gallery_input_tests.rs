@@ -1,4 +1,4 @@
-//! Drive gallery Select / Back / Edit / Delete through the real pad and keyboard path.
+//! Drive gallery Select / Back / Edit / Delete / Create through the real pad and keyboard path.
 
 use anyhow::{Context as ContextExt, Result};
 use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
@@ -13,14 +13,14 @@ use menu_components::{
 	ScreenEdit, TextCursorScroll, TextMenu,
 };
 use menu_screens::{
-	GalleryChoice, GalleryScreen, RequestShowCreateCharacter, RequestShowHome, request_show_gallery,
+	request_show_gallery, GalleryChoice, GalleryScreen, RequestShowCreateCharacter, RequestShowHome,
 };
 
-use crate::CharacterMenuState;
 use crate::character::RequestShowCharacter;
 use crate::session::{
-	ActiveCharacter, CharacterSessionPlugin, EditingCharacter, save_editing_character,
+	save_editing_character, ActiveCharacter, CharacterSessionPlugin, EditingCharacter,
 };
+use crate::CharacterMenuState;
 
 fn scratch_root() -> SaveRoot {
 	SaveRoot::at(std::env::temp_dir().join(format!(
@@ -37,8 +37,7 @@ fn save_named(root: &SaveRoot, id: CharacterId, name: &str) -> Result<()> {
 	Ok(())
 }
 
-fn gallery_app(root: SaveRoot, active: CharacterId) -> Result<App> {
-	character_persist::save_active(&root, active)?;
+fn spawn_gallery_app(root: SaveRoot) -> Result<App> {
 	let mut app = App::new();
 	app.insert_resource(PadHidPolicy::External);
 	app.add_plugins((
@@ -74,6 +73,11 @@ fn gallery_app(root: SaveRoot, active: CharacterId) -> Result<App> {
 		"gallery screen should spawn"
 	);
 	Ok(app)
+}
+
+fn gallery_app(root: SaveRoot, active: CharacterId) -> Result<App> {
+	character_persist::save_active(&root, active)?;
+	spawn_gallery_app(root)
 }
 
 #[derive(Resource, Clone, Copy)]
@@ -170,19 +174,35 @@ fn two_character_app() -> Result<(App, SaveRoot, CharacterId, CharacterId)> {
 	Ok((app, root, jeff, roamer))
 }
 
+fn empty_gallery_app() -> Result<(App, SaveRoot)> {
+	let root = scratch_root();
+	std::fs::create_dir_all(&root.path)?;
+	let app = spawn_gallery_app(root.clone())?;
+	Ok((app, root))
+}
+
+fn prompt_visibility(app: &mut App, kind: GalleryPromptKind) -> Result<Visibility> {
+	app.world_mut()
+		.query::<(&GalleryPromptKind, &Visibility)>()
+		.iter(app.world())
+		.find(|(prompt, _)| **prompt == kind)
+		.map(|(_, visibility)| *visibility)
+		.context("gallery prompt")
+}
+
 #[test]
 fn gallery_replaces_live_buttons_with_prompt_chips() -> Result<()> {
 	let (mut app, root, _, _) = two_character_app()?;
-	assert_eq!(count::<GalleryPromptKind>(&mut app), 4);
+	assert_eq!(count::<GalleryPromptKind>(&mut app), 5);
 	assert_eq!(count::<ScreenBack>(&mut app), 0);
 	assert_eq!(count::<ScreenEdit>(&mut app), 0);
-	let delete_rows = app
+	let create_rows = app
 		.world_mut()
 		.query::<&GalleryChoice>()
 		.iter(app.world())
-		.filter(|choice| **choice == GalleryChoice::Delete)
+		.filter(|choice| **choice == GalleryChoice::New || **choice == GalleryChoice::Delete)
 		.count();
-	assert_eq!(delete_rows, 0);
+	assert_eq!(create_rows, 0);
 	std::fs::remove_dir_all(&root.path)?;
 	Ok(())
 }
@@ -191,7 +211,7 @@ fn gallery_replaces_live_buttons_with_prompt_chips() -> Result<()> {
 fn gallery_roster_is_a_full_screen_rotary_wheel() -> Result<()> {
 	let (mut app, root, _, _) = two_character_app()?;
 	assert_eq!(count::<TextCursorScroll>(&mut app), 0);
-	assert_eq!(count::<RotaryCard>(&mut app), 3);
+	assert_eq!(count::<RotaryCard>(&mut app), 2);
 	assert_eq!(count::<RotaryLayout>(&mut app), 1);
 	let layout = *app
 		.world_mut()
@@ -200,7 +220,7 @@ fn gallery_roster_is_a_full_screen_rotary_wheel() -> Result<()> {
 		.next()
 		.context("gallery rotary layout")?;
 	assert_eq!(layout, RotaryLayout::GALLERY);
-	assert_eq!(highlighted_index(&mut app)?, 1);
+	assert_eq!(highlighted_index(&mut app)?, 0);
 	std::fs::remove_dir_all(&root.path)?;
 	Ok(())
 }
@@ -208,21 +228,21 @@ fn gallery_roster_is_a_full_screen_rotary_wheel() -> Result<()> {
 #[test]
 fn pad_dpad_and_stick_wrap_the_character_wheel() -> Result<()> {
 	let (mut app, root, _, _) = two_character_app()?;
-	assert_eq!(highlighted_index(&mut app)?, 1);
+	assert_eq!(highlighted_index(&mut app)?, 0);
 	tap_pad(&mut app, GamepadButton::DPadDown)?;
-	assert_eq!(highlighted_index(&mut app)?, 2);
+	assert_eq!(highlighted_index(&mut app)?, 1);
 	tap_pad(&mut app, GamepadButton::DPadDown)?;
 	assert_eq!(highlighted_index(&mut app)?, 0, "down wraps past the last card");
 	tap_pad(&mut app, GamepadButton::DPadUp)?;
-	assert_eq!(highlighted_index(&mut app)?, 2);
+	assert_eq!(highlighted_index(&mut app)?, 1);
 	tap_pad(&mut app, GamepadButton::DPadRight)?;
 	assert_eq!(highlighted_index(&mut app)?, 0);
 	tap_pad(&mut app, GamepadButton::DPadLeft)?;
-	assert_eq!(highlighted_index(&mut app)?, 2);
+	assert_eq!(highlighted_index(&mut app)?, 1);
 	tap_stick(&mut app, 0.0, -1.0)?;
 	assert_eq!(highlighted_index(&mut app)?, 0, "left stick down advances the wheel");
 	tap_stick(&mut app, -1.0, 0.0)?;
-	assert_eq!(highlighted_index(&mut app)?, 2, "left stick left steps backward");
+	assert_eq!(highlighted_index(&mut app)?, 1, "left stick left steps backward");
 	std::fs::remove_dir_all(&root.path)?;
 	Ok(())
 }
@@ -320,21 +340,59 @@ fn keyboard_bindings_match_pad_select_back_edit_and_delete() -> Result<()> {
 }
 
 #[test]
-fn a_on_create_opens_create_and_select_does_not_delete() -> Result<()> {
+fn pad_start_creates_a_character_without_selecting() -> Result<()> {
 	let (mut app, root, jeff, _) = two_character_app()?;
-	let menu = app
-		.world_mut()
-		.query_filtered::<Entity, With<TextMenu>>()
-		.iter(app.world())
-		.next()
-		.context("gallery menu")?;
-	app.world_mut().get_mut::<TextMenu>(menu).context("text menu")?.selected = 0;
-	app.update();
+	tap_pad(&mut app, GamepadButton::Start)?;
+	assert!(count::<RequestShowCreateCharacter>(&mut app) >= 1);
+	assert_eq!(active_id(&app), Some(jeff));
+	assert!(!delete_open(&app));
+	std::fs::remove_dir_all(&root.path)?;
+	Ok(())
+}
+
+#[test]
+fn keyboard_n_creates_a_character_and_enter_still_selects() -> Result<()> {
+	let (mut app, root, jeff, _) = two_character_app()?;
+	tap_key(&mut app, KeyCode::KeyN);
+	assert!(count::<RequestShowCreateCharacter>(&mut app) >= 1);
+	assert_eq!(active_id(&app), Some(jeff));
+	std::fs::remove_dir_all(&root.path)?;
+
+	let (mut app, root, _, roamer) = two_character_app()?;
+	tap_key(&mut app, KeyCode::ArrowDown);
+	tap_key(&mut app, KeyCode::Enter);
+	assert_eq!(active_id(&app), Some(roamer));
+	assert_eq!(count::<RequestShowCreateCharacter>(&mut app), 0);
+	std::fs::remove_dir_all(&root.path)?;
+	Ok(())
+}
+
+#[test]
+fn empty_roster_start_creates_and_hides_edit_delete() -> Result<()> {
+	let (mut app, root) = empty_gallery_app()?;
+	assert_eq!(prompt_visibility(&mut app, GalleryPromptKind::Edit)?, Visibility::Hidden);
+	assert_eq!(prompt_visibility(&mut app, GalleryPromptKind::Delete)?, Visibility::Hidden);
+	assert_eq!(prompt_visibility(&mut app, GalleryPromptKind::Create)?, Visibility::Inherited);
+	assert_eq!(prompt_visibility(&mut app, GalleryPromptKind::Select)?, Visibility::Inherited);
+	tap_pad(&mut app, GamepadButton::Start)?;
+	assert!(count::<RequestShowCreateCharacter>(&mut app) >= 1);
+	assert!(!delete_open(&app));
+	std::fs::remove_dir_all(&root.path)?;
+
+	let (mut app, root) = empty_gallery_app()?;
+	tap_key(&mut app, KeyCode::KeyN);
+	assert!(count::<RequestShowCreateCharacter>(&mut app) >= 1);
+	std::fs::remove_dir_all(&root.path)?;
+	Ok(())
+}
+
+#[test]
+fn a_selects_and_view_does_not_delete_without_a_saved_row() -> Result<()> {
+	let (mut app, root) = empty_gallery_app()?;
 	tap_pad(&mut app, GamepadButton::Select)?;
 	assert!(!delete_open(&app));
-	assert!(root.character_path(jeff).is_file());
 	tap_pad(&mut app, GamepadButton::South)?;
-	assert!(count::<RequestShowCreateCharacter>(&mut app) >= 1);
+	assert_eq!(count::<RequestShowCreateCharacter>(&mut app), 0);
 	std::fs::remove_dir_all(&root.path)?;
 	Ok(())
 }
