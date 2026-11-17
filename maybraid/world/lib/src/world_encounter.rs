@@ -5,23 +5,23 @@
 //! awards do not require combat-hud. Does not own [`lubikans::LubikanSessionStore`].
 
 use bevy::prelude::*;
-use bikanwarda_encounter::{
-	BikanwardaEncounterPlugin, BossAssemblyPlugin, BossEncounterPresentationPlugin,
-};
+use bikanwarda_encounter::{BikanwardaEncounterPlugin, BossAssemblyPlugin};
 use character_motion::{AnimClip, AnimRef, AnimRefRoot};
 use damage::Died;
-use durham::NearStream;
 use encounters::{
 	EncounterInstance, EncounterPhase, EncounterProgressStore, EncounterSignal,
 	EncounterSignalKind, EncounterSystems, EncounterTimeEnabled,
 };
 use lubikans::{LubikanOwnerLifetime, LubikanOwnerLifetimeKind};
-use durham::StreamRing;
 use world_player::Player;
 
 use maybraid_session::{WorldGameplayEnabled, WorldPlaySessionEnded};
 
 /// Wires Bikanwarda outcomes into the world plugin graph.
+///
+/// Registers gameplay systems (pause, session forwarding, body-replace) and boss assembly.
+/// Boss presentation is registered separately in [`crate::world_layers::WorldLayersPlugin`]
+/// alongside other HCSG presentation plugins.
 pub struct WorldEncounterPlugin;
 
 impl Plugin for WorldEncounterPlugin {
@@ -29,8 +29,8 @@ impl Plugin for WorldEncounterPlugin {
 		if !app.is_plugin_added::<BikanwardaEncounterPlugin>() {
 			app.add_plugins(BikanwardaEncounterPlugin);
 		}
-		// Register boss presentation and assembly plugins
-		app.add_plugins(BossEncounterPresentationPlugin::<StreamRing<NearStream>>::default());
+		// Register boss assembly (gameplay logic)
+		// Boss presentation (HCSG generation) is in WorldLayersPlugin
 		app.add_plugins(BossAssemblyPlugin);
 		configure(app);
 	}

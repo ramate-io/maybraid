@@ -492,11 +492,8 @@ mod tests {
 		// Process the spawn request
 		app.update();
 		
-		// Verify both boss plugins are registered
-		assert!(
-			app.is_plugin_added::<bikanwarda_encounter::BossEncounterPresentationPlugin<durham::StreamRing<durham::NearStream>>>(),
-			"BossEncounterPresentationPlugin should be registered"
-		);
+		// Verify BossAssemblyPlugin is registered by WorldEncounterPlugin
+		// (BossEncounterPresentationPlugin is registered separately in WorldLayersPlugin)
 		assert!(
 			app.is_plugin_added::<bikanwarda_encounter::BossAssemblyPlugin>(),
 			"BossAssemblyPlugin should be registered"

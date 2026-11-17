@@ -4,6 +4,7 @@
 
 use barking::{BarkingPresentationPlugin, MobNeighborhood, MobScenePresentationPlugin};
 use bevy::prelude::*;
+use bikanwarda_encounter::BossEncounterPresentationPlugin;
 use chico::{
 	BumpOutPresentationPlugin, BumpOutRing, CanopyBumpOut, ChicoPresentationPlugin,
 	GroveNeighborhood, MediumCanopyBumpOut,
@@ -91,6 +92,8 @@ impl Plugin for WorldLayersPlugin {
 			BarkingPresentationPlugin::<InDiscovery<MobNeighborhood>, Urban>::default(),
 			MobScenePresentationPlugin,
 			GenevaPlugin::<InDiscovery<LanguageNeighborhood>, Urban>::default(),
+			// Boss encounter presentation on the near stream (HCSG generation and scene spawning)
+			BossEncounterPresentationPlugin::<Ring<NearStream>>::default(),
 		))
 		.add_systems(
 			OnEnter(ActiveGenerationMode::of::<Discovery>()),
