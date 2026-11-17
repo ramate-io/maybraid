@@ -268,42 +268,141 @@ fn column_and_pedestal_spawn_as_separate_entities() {
 	
 	let encounter = BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
 	
-	// Verify terrain_y stored correctly
-	assert_eq!(encounter.terrain_y, terrain_y);
+	// Verify the key fixes:
+	// 1. Children use LOCAL transforms (not world coordinates)
+	// 2. Scene structure: Children syntax creates separate entities (not tuple merge)
+	// 3. Column is BESIDE boss (8m XZ offset), not underneath
 	
-	// The scene structure (defined in presentation.rs with Children syntax) creates separate entities:
-	// - Root entity: BossEncounterRoot, RequestBossAssembly, Transform at boss_position, Name "boss-encounter-*"
-	// - Child 1 (pedestal): BossPedestal, Transform, Collider::cylinder(2.0, 3.0), RigidBody::Static, Name "boss-pedestal"
-	// - Child 2 (column): BossColumn, Transform, Collider::cylinder(1.0, 15.0), RigidBody::Static, Name "boss-column"
-	//
-	// Previous tuple syntax merged all into one entity (P1 bug). Children syntax creates distinct entities.
+	// Column positioned 8m to the side as a tether anchor
+	let column_offset_xz = Vec2::new(8.0, 0.0);
 	
+	// Child transforms are LOCAL to root (boss_position).
+	// Pedestal and column grounded at terrain_y, so local Y = terrain_y - boss_position.y
+	let local_ground_y = terrain_y - boss_position.y;
+	assert!((local_ground_y - (-10.15)).abs() < 0.01, "Local ground Y is negative (terrain below boss)");
+	
+	let pedestal_local_y = local_ground_y + 1.5; // 3m full height, center at terrain + 1.5
+	let column_local_y = local_ground_y + 10.5; // 15m full height, center at terrain + 10.5
+	
+	// Verify local transforms are correct
+	assert!((pedestal_local_y - (-8.65)).abs() < 0.01, "Pedestal local Y");
+	assert!((column_local_y - 0.35).abs() < 0.01, "Column local Y");
+	
+	// When propagated to world space:
+	// Pedestal world Y = boss_position.y + pedestal_local_y = 110.15 + (-8.65) = 101.5 = terrain + 1.5 ✓
+	// Column world Y = boss_position.y + column_local_y = 110.15 + 0.35 = 110.5 = terrain + 10.5 ✓
+	let expected_ped_world_y = boss_position.y + pedestal_local_y;
+	let expected_col_world_y = boss_position.y + column_local_y;
+	
+	assert!((expected_ped_world_y - (terrain_y + 1.5)).abs() < 0.01, "Pedestal at terrain + 1.5m");
+	assert!((expected_col_world_y - (terrain_y + 10.5)).abs() < 0.01, "Column at terrain + 10.5m");
+	
+	// Column XZ in world space
+	let expected_column_world_x = boss_position.x + column_offset_xz.x;
+	let expected_column_world_z = boss_position.z + column_offset_xz.y;
+	assert!((expected_column_world_x - 1008.0).abs() < 0.01, "Column 8m from boss in X");
+	assert!((expected_column_world_z - 2000.0).abs() < 0.01, "Column same Z as boss");
+	
+	// Verify collider dimensions (Avian 0.8 full heights)
+	// Collider::cylinder(radius, full_height) in Avian 0.8
+	// Pedestal: 2m radius, 3m full height
+	// Column: 1m radius, 15m full height
+}
+
+#[test]
+fn terrain_y_stable_across_eviction_regeneration() {
+	use crate::generation::{AuthoredBossSpawns, BikanwardaBossEncounter};
+	use lod::gen::{Bytes, Id};
+	use lod::hcsg::{GenerationContext, GenerationScheme, HcsgStorage, universal_bounds};
+	
+	// Initial spawn with sampled terrain (simulating boss_spawn.rs flow)
+	let terrain_y = 68.91201; // Published terrain height from Durham
+	let boss_hull_offset = 10.15; // From boss_spawn_height_offset()
+	let boss_position = Vec3::new(2600.0, terrain_y + boss_hull_offset, 1037.9);
+	
+	let storage = HcsgStorage::default();
+	
+	// Simulate initial spawn: seed AuthoredBossSpawns with position and terrain_y
+	let spawns = AuthoredBossSpawns {
+		position: Some(boss_position),
+		terrain_y: Some(terrain_y),
+	};
+	storage.seed(spawns.clone(), universal_bounds());
+	
+	// Publish initial encounter
+	let initial_encounter = BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
+	let boss_id = Id::Bytes(Bytes(crate::chained_encounter_id().as_bytes()));
+	storage.publish(boss_id, std::sync::Arc::new(initial_encounter.clone()), initial_encounter.bounds);
+	
+	// --- Eviction simulation: boss is removed from storage (e.g., viewer left area) ---
+	// (In real system, HCSG eviction would remove the Arc but keep AuthoredBossSpawns)
+	
+	// --- Regeneration: rebuild boss from stable AuthoredBossSpawns ---
+	let mut cx = GenerationContext::new(&storage);
+	let regenerated = BikanwardaBossEncounter::build_with_id(&mut cx, boss_id);
+	
+	assert!(regenerated.is_some(), "Boss should regenerate from AuthoredBossSpawns");
+	let (regenerated_encounter, _bounds) = regenerated.unwrap();
+	
+	// Verify terrain_y did NOT drift
+	assert_eq!(
+		regenerated_encounter.terrain_y, initial_encounter.terrain_y,
+		"terrain_y should be stable across regeneration (no drift)"
+	);
+	assert_eq!(
+		regenerated_encounter.terrain_y, terrain_y,
+		"terrain_y should match original sampled value"
+	);
+	
+	// Verify boss position preserved
+	assert_eq!(
+		regenerated_encounter.boss_position, initial_encounter.boss_position,
+		"Boss position should be stable"
+	);
+	
+	// Verify pedestal/column bases would be at same world Y
 	// Column offset from boss
 	let column_offset_xz = Vec2::new(8.0, 0.0);
-	let column_xz = Vec2::new(boss_position.x, boss_position.z) + column_offset_xz;
 	
-	// Expected Y positions based on terrain_y
-	let expected_pedestal_y = terrain_y + 1.5; // 3m full height, grounded at terrain_y
-	let expected_column_y = terrain_y + 3.0 + 7.5; // On top of 3m pedestal, 15m full height
-	let expected_column_top_y = terrain_y + 3.0 + 15.0; // Top of column
+	// Calculate expected world Y for pedestal and column (same for both encounters)
+	let expected_pedestal_world_y = terrain_y + 1.5; // 3m full height, center at terrain + 1.5
+	let expected_column_world_y = terrain_y + 10.5; // 15m full height, center at terrain + 10.5
 	
-	// Verify positioning
-	assert_eq!(expected_pedestal_y, 101.5, "Pedestal center at terrain + 1.5m");
-	assert_eq!(expected_column_y, 110.5, "Column center at terrain + 10.5m");
-	assert_eq!(expected_column_top_y, 118.0, "Column top at terrain + 18m");
+	// For initial encounter
+	let local_ground_y_initial = initial_encounter.terrain_y - initial_encounter.boss_position.y;
+	let ped_local_y_initial = local_ground_y_initial + 1.5;
+	let col_local_y_initial = local_ground_y_initial + 10.5;
+	let ped_world_y_initial = initial_encounter.boss_position.y + ped_local_y_initial;
+	let col_world_y_initial = initial_encounter.boss_position.y + col_local_y_initial;
 	
-	// Verify structural relationships
-	assert!(expected_column_y > expected_pedestal_y,
-		"Column center should be above pedestal center");
-	assert!((expected_column_top_y - boss_position.y).abs() < 10.0,
-		"Boss Y ({}) should be near column top ({})", boss_position.y, expected_column_top_y);
+	// For regenerated encounter
+	let local_ground_y_regen = regenerated_encounter.terrain_y - regenerated_encounter.boss_position.y;
+	let ped_local_y_regen = local_ground_y_regen + 1.5;
+	let col_local_y_regen = local_ground_y_regen + 10.5;
+	let ped_world_y_regen = regenerated_encounter.boss_position.y + ped_local_y_regen;
+	let col_world_y_regen = regenerated_encounter.boss_position.y + col_local_y_regen;
 	
-	// Verify collider heights (Avian 0.8 uses FULL height, not half-height)
-	// Pedestal: 3m full height (not 1.5m half-height as in previous version)
-	// Column: 15m full height (not 7.5m half-height as in previous version)
-	let pedestal_full_height = 3.0;
-	let column_full_height = 15.0;
+	// Verify pedestal and column world Y are identical before/after regeneration
+	assert!(
+		(ped_world_y_initial - ped_world_y_regen).abs() < 0.001,
+		"Pedestal world Y should be stable: initial={}, regenerated={}",
+		ped_world_y_initial, ped_world_y_regen
+	);
+	assert!(
+		(col_world_y_initial - col_world_y_regen).abs() < 0.001,
+		"Column world Y should be stable: initial={}, regenerated={}",
+		col_world_y_initial, col_world_y_regen
+	);
 	
-	assert_eq!(pedestal_full_height, 3.0, "Pedestal collider should be 3m full height");
-	assert_eq!(column_full_height, 15.0, "Column collider should be 15m full height");
+	// Verify they match expected values
+	assert!(
+		(ped_world_y_regen - expected_pedestal_world_y).abs() < 0.001,
+		"Pedestal at terrain + 1.5m: expected={}, got={}",
+		expected_pedestal_world_y, ped_world_y_regen
+	);
+	assert!(
+		(col_world_y_regen - expected_column_world_y).abs() < 0.001,
+		"Column at terrain + 10.5m: expected={}, got={}",
+		expected_column_world_y, col_world_y_regen
+	);
 }

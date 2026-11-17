@@ -30,7 +30,12 @@ const BOSS_SCALE: DVec3 = DVec3::new(1.0, 1.0, 1.0);
 #[derive(Clone, Debug, PartialEq)]
 pub struct AuthoredBossSpawns {
 	/// Active boss spawn position (None if no boss is spawned).
+	/// Includes hull spawn offset (terrain_y + boss_spawn_height_offset).
 	pub position: Option<Vec3>,
+	
+	/// Published terrain height sampled at boss XZ during initial spawn.
+	/// Stored to prevent drift on eviction/regeneration when deriving from position.
+	pub terrain_y: Option<f32>,
 }
 
 lod::seeded_root!(AuthoredBossSpawns);
@@ -138,11 +143,21 @@ impl GenerationScheme for BikanwardaBossEncounter {
 		let spawns = cx.get::<AuthoredBossSpawns>(Id::Universal)?;
 		let position = spawns.position?;
 		
-		// In generation context, terrain_y is unknown (HCSG generation runs off-thread).
-		// Use boss position Y as approximate terrain (will be overridden by actual terrain
-		// when published from boss_spawn.rs which has access to terrain provider).
-		let approximate_terrain_y = position.y - 10.0; // Approximate hull offset
-		let encounter = Self::chained_at_with_terrain(position, approximate_terrain_y);
+		// Use stored terrain_y if available (survives eviction/regeneration).
+		// If missing (legacy data), derive from position using exact hull offset.
+		let terrain_y = spawns.terrain_y.unwrap_or_else(|| {
+			// Derive from boss position using exact recipe hull offset
+			// (boss_spawn_height_offset is not available in generation context,
+			// but we can compute it inline from the recipe)
+			use characters::CharacterRecipe as _;
+			let spec = BikanwardaSpec::encounter();
+			let recipe = BikanwardaActorRecipe::from_spec(spec);
+			let hull = recipe.components().scaled_locomotion_capsule();
+			let offset = hull.spawn_height();
+			position.y - offset
+		});
+		
+		let encounter = Self::chained_at_with_terrain(position, terrain_y);
 		Some((encounter.clone(), encounter.bounds))
 	}
 }
@@ -167,7 +182,7 @@ mod tests {
 		
 		let spawn_pos = Vec3::new(100.0, 0.0, 200.0);
 		storage.seed(
-			AuthoredBossSpawns { position: Some(spawn_pos) },
+			AuthoredBossSpawns { position: Some(spawn_pos), terrain_y: Some(-10.0) },
 			lod::hcsg::universal_bounds(),
 		);
 		

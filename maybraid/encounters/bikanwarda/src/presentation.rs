@@ -63,23 +63,25 @@ impl LodScene for BikanwardaBossEncounter {
 		let terrain_y = self.terrain_y;
 		let spec = self.boss.value.actor.recipe.spec.clone();
 		
-		// Column offset: positioned to the side of the boss (within arena bounds)
-		// This creates a tether anchor point for future chain work (#1617)
+		// Column positioned 8m to the side as a tether anchor for future chain work (#1617).
+		// The column stands BESIDE the boss (not underneath), both grounded at terrain Y.
 		let column_offset_xz = Vec2::new(8.0, 0.0);
-		let column_xz = Vec2::new(position.x, position.z) + column_offset_xz;
 		
-		// Ground column and pedestal at published terrain Y (assume flat terrain over 8m distance)
-		// Pedestal: 3m full height, center at terrain_y + 1.5
-		// Column: 15m full height on top of pedestal, center at terrain_y + 3.0 + 7.5
-		let pedestal_y = terrain_y + 1.5;
-		let column_y = terrain_y + 3.0 + 7.5;
+		// Child transforms are LOCAL to root. Root is at boss position (terrain_y + hull_offset).
+		// Pedestal and column grounded at terrain_y, so their local Y = terrain_y - position.y
+		let local_ground_y = terrain_y - position.y;
+		
+		// Pedestal: 3m full height, center at terrain_y + 1.5 (local: local_ground_y + 1.5)
+		// Column: 15m full height on top of pedestal, center at terrain_y + 3.0 + 7.5 (local: local_ground_y + 10.5)
+		let pedestal_local_y = local_ground_y + 1.5;
+		let column_local_y = local_ground_y + 10.5;
 		
 		// Build child scenes for pedestal and column as separate entities
 		let children: Vec<Box<dyn Scene>> = vec![
 			Box::new(bsn! {
 				Name::new("boss-pedestal")
 				BossPedestal
-				Transform::from_translation(Vec3::new(column_xz.x, pedestal_y, column_xz.y))
+				Transform::from_translation(Vec3::new(column_offset_xz.x, pedestal_local_y, column_offset_xz.y))
 				Visibility::default()
 				Collider::cylinder(2.0, 3.0)
 				RigidBody::Static
@@ -87,7 +89,7 @@ impl LodScene for BikanwardaBossEncounter {
 			Box::new(bsn! {
 				Name::new("boss-column")
 				BossColumn
-				Transform::from_translation(Vec3::new(column_xz.x, column_y, column_xz.y))
+				Transform::from_translation(Vec3::new(column_offset_xz.x, column_local_y, column_offset_xz.y))
 				Visibility::default()
 				Collider::cylinder(1.0, 15.0)
 				RigidBody::Static

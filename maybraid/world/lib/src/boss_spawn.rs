@@ -85,7 +85,7 @@ fn seed_boss_encounter(config: Res<BossSpawnConfig>, storage: Res<HcsgStorage>) 
 		None
 	};
 	
-	let spawns = AuthoredBossSpawns { position };
+	let spawns = AuthoredBossSpawns { position, terrain_y: None };
 	storage.seed(spawns, universal_bounds());
 	
 	if position.is_some() {
@@ -179,8 +179,11 @@ pub fn poll_pending_boss_spawns(
 			config.position = position;
 			config.active = true;
 			
-			// Seed AuthoredBossSpawns (session root) with terrain-fit position
-			let spawns = AuthoredBossSpawns { position: Some(position) };
+			// Seed AuthoredBossSpawns (session root) with terrain-fit position and sampled terrain_y
+			let spawns = AuthoredBossSpawns {
+				position: Some(position),
+				terrain_y: Some(terrain_y),
+			};
 			storage.as_ref().unwrap().seed(spawns, universal_bounds());
 			
 			// Also publish the derived encounter for immediate presentation
