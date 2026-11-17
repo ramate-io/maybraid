@@ -12,6 +12,7 @@ mod tests {
 	use avian3d::prelude::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
+	use damage::DamageApplied;
 	use projectiles::ProjectileContact;
 
 	use crate::chains::{
@@ -46,11 +47,11 @@ mod tests {
 		let mut app = test_app();
 
 		let joint0 =
-			app.world_mut().spawn((Name::new("chain-joint-0"), Transform::default())).id();
+			app.world_mut().spawn((Name::new("chain-joint-0"), Transform::default(), GlobalTransform::default())).id();
 		let joint1 =
-			app.world_mut().spawn((Name::new("chain-joint-1"), Transform::default())).id();
+			app.world_mut().spawn((Name::new("chain-joint-1"), Transform::default(), GlobalTransform::default())).id();
 		let joint2 =
-			app.world_mut().spawn((Name::new("chain-joint-2"), Transform::default())).id();
+			app.world_mut().spawn((Name::new("chain-joint-2"), Transform::default(), GlobalTransform::default())).id();
 
 		// Spawn chain root with joints in Taut mode
 		let root = app
@@ -63,18 +64,20 @@ mod tests {
 				},
 				ChainMotion { mode: ChainTensionMode::Taut, active: true },
 				Transform::default(),
+				GlobalTransform::default(),
 				Visibility::default(),
 			))
 			.id();
 
 		app.world_mut().entity_mut(root).add_children(&[joint0, joint1, joint2]);
 
-		// Spawn anchor entities (only set Transform, let propagation handle GlobalTransform)
+		// Spawn anchor entities with both Transform and GlobalTransform
 		let start_anchor = app
 			.world_mut()
 			.spawn((
 				ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
 				Transform::from_xyz(0.0, 0.0, 0.0),
+				GlobalTransform::from_xyz(0.0, 0.0, 0.0),
 			))
 			.id();
 
@@ -83,34 +86,47 @@ mod tests {
 			.spawn((
 				ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
 				Transform::from_xyz(0.0, 3.0, 0.0),
+				GlobalTransform::from_xyz(0.0, 3.0, 0.0),
 			))
 			.id();
 
-		// Update to propagate transforms and run motion system
-		app.update();
+		// Update multiple times to propagate transforms and run motion system
+		for _ in 0..5 {
+			app.update();
+		}
 
-		// Check that joints are positioned along the chain
-		let j0_pos = app.world().get::<Transform>(joint0).unwrap().translation;
-		let j1_pos = app.world().get::<Transform>(joint1).unwrap().translation;
-		let j2_pos = app.world().get::<Transform>(joint2).unwrap().translation;
+		// Check that joints' WORLD positions (via GlobalTransform) match expected anchor positions
+		let j0_world = app.world().get::<GlobalTransform>(joint0).unwrap().translation();
+		let j1_world = app.world().get::<GlobalTransform>(joint1).unwrap().translation();
+		let j2_world = app.world().get::<GlobalTransform>(joint2).unwrap().translation();
 
-		// With taut mode, joints should be evenly spaced along Y
-		assert!((j0_pos.y - 0.0).abs() < 0.1, "Joint 0 should be near start");
-		assert!((j1_pos.y - 1.5).abs() < 0.1, "Joint 1 should be at midpoint");
-		assert!((j2_pos.y - 3.0).abs() < 0.1, "Joint 2 should be near end");
+		let epsilon = 0.1;
 
-		// Move end anchor (just update Transform, let propagation handle GlobalTransform)
+		// With taut mode, joints should be evenly spaced along Y in world space
+		assert!((j0_world.y - 0.0).abs() < epsilon, "Joint 0 world Y should be near start (0.0), got {}", j0_world.y);
+		assert!((j1_world.y - 1.5).abs() < epsilon, "Joint 1 world Y should be at midpoint (1.5), got {}", j1_world.y);
+		assert!((j2_world.y - 3.0).abs() < epsilon, "Joint 2 world Y should be near end (3.0), got {}", j2_world.y);
+
+		// Move end anchor (update both Transform and GlobalTransform since it has no parent)
 		if let Some(mut transform) = app.world_mut().get_mut::<Transform>(end_anchor) {
 			transform.translation = Vec3::new(2.0, 4.0, 0.0);
 		}
+		if let Some(mut global) = app.world_mut().get_mut::<GlobalTransform>(end_anchor) {
+			*global = GlobalTransform::from_xyz(2.0, 4.0, 0.0);
+		}
 
-		app.update();
+		for _ in 0..5 {
+			app.update();
+		}
 
-		// Joints should follow the new anchor position
-		let new_j2_pos = app.world().get::<Transform>(joint2).unwrap().translation;
+		// Joints should follow the new anchor position (check world position via GlobalTransform)
+		let new_j2_world = app.world().get::<GlobalTransform>(joint2).unwrap().translation();
+		let expected_world_pos = Vec3::new(2.0, 4.0, 0.0);
 		assert!(
-			(new_j2_pos - Vec3::new(2.0, 4.0, 0.0)).length() < 0.1,
-			"End joint should follow anchor"
+			(new_j2_world - expected_world_pos).length() < 0.1,
+			"End joint world position should follow anchor, expected {:?}, got {:?}",
+			expected_world_pos,
+			new_j2_world
 		);
 
 		Ok(())
@@ -1008,6 +1024,116 @@ mod tests {
 				"Released chain should not take damage, but health changed from {} to {}",
 				initial_health,
 				final_health
+			));
+		}
+
+		Ok(())
+	}
+
+	#[test]
+	fn translated_and_rotated_root_joints_match_anchor_world_positions() -> Result<()> {
+		let mut app = test_app();
+
+		let link_count = 8;
+		let length_m = 2.5;
+
+		// Create joints
+		let mut joints = Vec::new();
+		for i in 0..link_count {
+			let joint = app
+				.world_mut()
+				.spawn((
+					Name::new(format!("chain-joint-{i}")),
+					Transform::from_xyz(0.0, 0.0, 0.0),
+					GlobalTransform::default(),
+				))
+				.id();
+			joints.push(joint);
+		}
+
+		// Spawn chain root with BOTH translation AND rotation (non-identity transform)
+		let root_translation = Vec3::new(1744.55, -351.17, 1031.9);
+		let root_rotation = Quat::from_rotation_y(std::f32::consts::PI / 6.0) * Quat::from_rotation_x(std::f32::consts::PI / 12.0);
+		let root = app
+			.world_mut()
+			.spawn((
+				Name::new("test-chain-translated-rotated-root"),
+				ChainRoot {
+					link_count,
+					rest_length_m: length_m,
+					joint_entities: joints.clone(),
+				},
+				ChainMotion {
+					mode: ChainTensionMode::Taut,
+					active: true,
+				},
+				Transform::from_translation(root_translation).with_rotation(root_rotation),
+				GlobalTransform::default(),
+				Visibility::default(),
+			))
+			.id();
+
+		for joint in &joints {
+			app.world_mut().entity_mut(root).add_child(*joint);
+		}
+
+		// Create anchors with world-space positions (NOT relative to root)
+		let start_world = Vec3::new(2000.0, -300.0, 1000.0);
+		let end_world = Vec3::new(2000.0, -300.0 + length_m, 1000.0);
+
+		app.world_mut().spawn((
+			Name::new("world-space-start-anchor"),
+			ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
+			Transform::from_translation(start_world),
+			GlobalTransform::from_translation(start_world),
+		));
+
+		app.world_mut().spawn((
+			Name::new("world-space-end-anchor"),
+			ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
+			Transform::from_translation(end_world),
+			GlobalTransform::from_translation(end_world),
+		));
+
+		// Run several updates to let transforms propagate and motion system work
+		for _ in 0..10 {
+			app.update();
+		}
+
+		// Critical check: joint WORLD positions (via GlobalTransform) must match anchor world positions
+		let first_joint_world = app.world().get::<GlobalTransform>(joints[0]).unwrap().translation();
+		let last_joint_world = app.world().get::<GlobalTransform>(joints[link_count as usize - 1]).unwrap().translation();
+
+		let epsilon = 0.01; // 1cm tolerance
+
+		let start_error = (first_joint_world - start_world).length();
+		if start_error > epsilon {
+			return Err(anyhow!(
+				"First joint world position mismatch!\n\
+				 Expected: {:?}\n\
+				 Got:      {:?}\n\
+				 Error:    {:.4}m (epsilon: {:.4}m)\n\
+				 Root translation: {:?}, rotation: {:?}",
+				start_world,
+				first_joint_world,
+				start_error,
+				epsilon,
+				root_translation,
+				root_rotation
+			));
+		}
+
+		let end_error = (last_joint_world - end_world).length();
+		if end_error > epsilon {
+			return Err(anyhow!(
+				"Last joint world position mismatch!\n\
+				 Expected: {:?}\n\
+				 Got:      {:?}\n\
+				 Error:    {:.4}m (epsilon: {:.4}m)",
+				end_world,
+				last_joint_world,
+				end_error,
+				epsilon
 			));
 		}
 

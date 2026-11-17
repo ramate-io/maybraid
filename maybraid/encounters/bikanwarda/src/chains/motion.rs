@@ -80,11 +80,11 @@ impl Default for ChainMotion {
 /// positions from ChainAnchor entities and updates the child joint entities of each
 /// ChainRoot.
 pub fn update_chain_joints(
-	chains: Query<(Entity, &ChainRoot, &ChainMotion)>,
+	chains: Query<(Entity, &ChainRoot, &ChainMotion, Option<&GlobalTransform>)>,
 	anchors: Query<(&ChainAnchor, &GlobalTransform)>,
 	mut joints: Query<&mut Transform, Without<ChainAnchor>>,
 ) {
-	for (root_entity, chain_root, motion) in &chains {
+	for (root_entity, chain_root, motion, root_global_opt) in &chains {
 		if !motion.active {
 			continue;
 		}
@@ -115,13 +115,21 @@ pub fn update_chain_joints(
 			continue;
 		}
 
-		// Compute positions for all joints based on tension mode
-		let positions = compute_joint_positions(start, end, chain_root.link_count, motion.mode);
+		// Compute positions for all joints in world space based on tension mode
+		let world_positions = compute_joint_positions(start, end, chain_root.link_count, motion.mode);
 
-		// Update joint transforms
-		for (joint_entity, position) in chain_root.joint_entities.iter().zip(positions.iter()) {
+		// Convert world-space positions to local space via root's inverse transform
+		// This prevents double-offset when GlobalTransform propagates
+		// If GlobalTransform isn't present yet, treat root as identity (origin with no rotation)
+		let root_inverse = root_global_opt
+			.map(|gt| gt.affine().inverse())
+			.unwrap_or_else(|| bevy::math::Affine3A::IDENTITY);
+
+		// Update joint transforms with local-space positions
+		for (joint_entity, world_pos) in chain_root.joint_entities.iter().zip(world_positions.iter()) {
 			if let Ok(mut transform) = joints.get_mut(*joint_entity) {
-				transform.translation = *position;
+				// Transform world position to local space relative to root
+				transform.translation = root_inverse.transform_point3(*world_pos);
 			}
 		}
 	}
