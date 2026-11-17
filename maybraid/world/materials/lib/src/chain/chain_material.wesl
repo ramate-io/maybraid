@@ -12,16 +12,15 @@
 // Runtime: impact vec4 + packed per-link damage[32].
 //---------------------------------------------------------
 
-#import bevy_pbr::{
-    mesh_bindings::mesh,
-    mesh_functions,
-    skinning,
-    forward_io::Vertex,
-    view_transformations::position_world_to_clip,
-    mesh_view_bindings::{view, globals},
-    pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
-    pbr_functions as fns,
-}
+import bevy_pbr::render::mesh_bindings::mesh;
+import bevy_pbr::render::mesh_functions;
+import bevy_pbr::render::skinning;
+import bevy_pbr::render::forward_io::Vertex;
+import bevy_pbr::render::view_transformations::position_world_to_clip;
+import bevy_pbr::render::mesh_view_bindings::view;
+import bevy_pbr::render::mesh_view_bindings::globals;
+import bevy_pbr::render::pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT};
+import bevy_pbr::render::pbr_functions as fns;
 
 struct ChainMaterialUniform {
     colors: array<vec4<f32>, 8>,
@@ -33,26 +32,22 @@ struct ChainMaterialUniform {
     link_damage: array<vec4<f32>, 8>,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> material: ChainMaterialUniform;
 
 struct ChainVertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) world_position: vec4<f32>,
     @location(1) world_normal: vec3<f32>,
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     @location(2) uv: vec2<f32>,
-#endif
-#ifdef VERTEX_UVS_B
+    @if(VERTEX_UVS_B)
     @location(3) flow_s_m: f32,
     @location(7) rest_length_m: f32,
-#endif
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     @location(5) color: vec4<f32>,
-#endif
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     @location(6) @interpolate(flat) instance_index: u32,
-#endif
 }
 
 // Hash helpers are the shared bodies in hash.wgsl. Keep them verbatim.
@@ -246,11 +241,10 @@ fn vertex(vertex_no_morph: Vertex) -> ChainVertexOutput {
     let baseline = material.scalars[2].z;
     let peak = material.scalars[2].w;
     let halo_width = material.scalars[3].x;
-#ifdef VERTEX_UVS_B
+    @if(VERTEX_UVS_B)
     let flow_s = vertex.uv_b.x;
-#else
+    @if(!VERTEX_UVS_B)
     let flow_s = 0.0;
-#endif
     let energy = chain_flow(flow_s, globals.time, speed, wavelength, baseline, peak);
 
     if material.halo.x > 0.5 {
@@ -258,74 +252,62 @@ fn vertex(vertex_no_morph: Vertex) -> ChainVertexOutput {
         vertex.position = vertex.position + vertex.normal * expand;
     }
 
-#ifdef SKINNED
+    @if(SKINNED)
     var world_from_local = skinning::skin_model(
         vertex.joint_indices,
         vertex.joint_weights,
         vertex_no_morph.instance_index
     );
-#else
+    @if(!SKINNED)
     var world_from_local = mesh_world_from_local;
-#endif
 
-#ifdef VERTEX_NORMALS
-#ifdef SKINNED
+    @if(VERTEX_NORMALS && SKINNED)
     out.world_normal = skinning::skin_normals(world_from_local, vertex.normal);
-#else
+    @if(VERTEX_NORMALS && !SKINNED)
     out.world_normal = mesh_functions::mesh_normal_local_to_world(
         vertex.normal,
         vertex_no_morph.instance_index
     );
-#endif
-#endif
 
-#ifdef VERTEX_POSITIONS
+    @if(VERTEX_POSITIONS)
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
         vec4<f32>(vertex.position, 1.0),
     );
     out.position = position_world_to_clip(out.world_position.xyz);
-#endif
 
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     out.uv = vertex.uv;
-#endif
-#ifdef VERTEX_UVS_B
+    @if(VERTEX_UVS_B)
     out.flow_s_m = vertex.uv_b.x;
     out.rest_length_m = vertex.uv_b.y;
-#endif
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     out.color = vertex.color;
-#endif
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex_no_morph.instance_index;
-#endif
     return out;
 }
 
 fn chain_uv(mesh: ChainVertexOutput) -> vec2<f32> {
-#ifdef VERTEX_UVS_A
+    @if(VERTEX_UVS_A)
     return mesh.uv;
-#else
+    @if(!VERTEX_UVS_A)
     return vec2<f32>(0.5, 0.5);
-#endif
 }
 
 fn chain_color(mesh: ChainVertexOutput) -> vec4<f32> {
-#ifdef VERTEX_COLORS
+    @if(VERTEX_COLORS)
     return mesh.color;
-#else
+    @if(!VERTEX_COLORS)
     return vec4<f32>(-1.0, 0.0, 0.0, 1.0);
-#endif
 }
 
 fn chain_flow_s(mesh: ChainVertexOutput, id: f32, link_count: f32) -> f32 {
-#ifdef VERTEX_UVS_B
+    @if(VERTEX_UVS_B)
     return mesh.flow_s_m;
-#else
+    @if(!VERTEX_UVS_B)
     // Stepped per-link fallback. Not continuous along a bent string.
     return (id + 0.5) / max(link_count, 1.0) * 3.1;
-#endif
 }
 
 fn link_id(uv: vec2<f32>, color: vec4<f32>, link_count: f32) -> f32 {

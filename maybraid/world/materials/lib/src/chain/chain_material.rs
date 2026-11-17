@@ -27,12 +27,12 @@ const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 pub const MAX_CHAIN_LINKS: usize = 32;
 const LINK_DAMAGE_VEC4S: usize = MAX_CHAIN_LINKS / 4;
 
-/// Registers embedded **`chain_material.wgsl`** and [`MaterialPlugin`].
+/// Registers embedded **`chain_material.wesl`** and [`MaterialPlugin`].
 pub struct ChainMaterialPlugin;
 
 impl Plugin for ChainMaterialPlugin {
 	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "chain_material.wgsl");
+		embedded_asset!(app, "chain_material.wesl");
 		if !app.is_plugin_added::<MaterialPlugin<ChainMaterial>>() {
 			app.add_plugins(MaterialPlugin::<ChainMaterial>::default());
 		}
@@ -247,11 +247,11 @@ impl Default for ChainMaterial {
 
 impl Material for ChainMaterial {
 	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "chain_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/chain/chain_material.wesl").into()
 	}
 
 	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "chain_material.wgsl").into()
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/chain/chain_material.wesl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
