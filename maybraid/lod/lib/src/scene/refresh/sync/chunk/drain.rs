@@ -115,10 +115,6 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		return;
 	}
 
-	// Collect and classify candidates BEFORE starting the clock.
-	// This ensures the time budget applies only to actual pull+spawn work,
-	// not to collection overhead. In busy worlds, collection can exceed
-	// the 2ms budget, starving new High roots that never get their first primitive.
 	let snapshots = collect_job_snapshots(world);
 	let mut buckets = JobBuckets::default();
 	for snap in snapshots {
@@ -146,6 +142,11 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 			.push(snap.entity, snap.parent_desired, snap.self_level);
 	}
 
+	// Start clock AFTER snapshot collection/classification, so budget measures
+	// actual spawn work rather than bookkeeping overhead. This ensures the drain
+	// has time to pull primitives even when classification is expensive.
+	let mut clock = DrainClock::new();
+
 	let (presence_share, desired_share, active_share) = split_presence_desired_active(total);
 	let frame = world.resource::<LodChunkDrainCursor>().frame;
 	let order = class_order(frame);
@@ -155,9 +156,6 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		FulfillClass::Active => active_share,
 	};
 
-	// Start the clock AFTER collection and classification.
-	// This budgets only the pull+spawn work, preventing starvation of new roots.
-	let mut clock = DrainClock::new();
 	let mut remaining = 0u32;
 	for class in order {
 		remaining = remaining.saturating_add(share(class));

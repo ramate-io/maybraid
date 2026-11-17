@@ -48,7 +48,31 @@ impl RequestSpawnMobs {
 	}
 }
 
+#[cfg(any(test, feature = "test-support", feature = "debug-commands"))]
+pub fn apply_spawn_mob_requests(
+	mut commands: Commands,
+	requests: Query<(Entity, &RequestSpawnMobs)>,
+	players: Query<&Transform, With<Player>>,
+	surface: DurhamSurface,
+	pending: Option<ResMut<PendingMobGroups>>,
+	mut console: Option<ResMut<CommandConsoleOutput>>,
+) {
+	apply_spawn_mob_requests_impl(commands, requests, players, surface, pending, console)
+}
+
+#[cfg(not(any(test, feature = "test-support", feature = "debug-commands")))]
 pub(crate) fn apply_spawn_mob_requests(
+	mut commands: Commands,
+	requests: Query<(Entity, &RequestSpawnMobs)>,
+	players: Query<&Transform, With<Player>>,
+	surface: DurhamSurface,
+	pending: Option<ResMut<PendingMobGroups>>,
+	mut console: Option<ResMut<CommandConsoleOutput>>,
+) {
+	apply_spawn_mob_requests_impl(commands, requests, players, surface, pending, console)
+}
+
+fn apply_spawn_mob_requests_impl(
 	mut commands: Commands,
 	requests: Query<(Entity, &RequestSpawnMobs)>,
 	players: Query<&Transform, With<Player>>,
