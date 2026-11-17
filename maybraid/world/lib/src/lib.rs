@@ -63,6 +63,8 @@ pub use character_items::{
 	InventoryDropRefused, InventoryDropRequest, InventoryDropped, InventoryMenuDropped,
 };
 #[cfg(feature = "debug-commands")]
+pub use viewport_check::{BossMarker, LubikanMarker};
+#[cfg(feature = "debug-commands")]
 pub use commands::{
 	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestPeaceful,
 	RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
