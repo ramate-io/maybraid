@@ -1346,8 +1346,17 @@ mod integration_regressions {
 		// Run updates for multiple discovery cycles to confirm no spotting
 		// 30 frames at 60 FPS = 0.5s = 2.5 discovery cycles
 		let mut attacks_seen = Vec::new();
-		for _ in 0..30 {
+		let mut spotted_player = false;
+		for i in 0..30 {
 			app.update();
+			
+			// Check if player is being spotted
+			if let Some(spotting) = app.world().get::<SpottingUser>(actor_entity) {
+				if spotting.contacts.contains_key(&player) {
+					spotted_player = true;
+					eprintln!("DIAGNOSTIC: Frame {}: Player spotted despite occlusion!", i);
+				}
+			}
 			
 			// Check for attack messages after each update
 			let frame_attacks: Vec<BeginAttack> = app.world_mut()
@@ -1356,12 +1365,20 @@ mod integration_regressions {
 				})
 				.expect("Failed to read BeginAttack messages");
 			
+			if !frame_attacks.is_empty() {
+				eprintln!("DIAGNOSTIC: Frame {}: {} attacks", i, frame_attacks.len());
+			}
+			
 			attacks_seen.extend(frame_attacks);
+		}
+		
+		if spotted_player {
+			eprintln!("DIAGNOSTIC: Occluded player was spotted - occlusion check not working");
 		}
 		
 		// Verify no attack was targeted at the occluded player
 		assert!(attacks_seen.iter().all(|attack| attack.target != Some(player)),
-			"Boss should not attack occluded player");
+			"Boss should not attack occluded player (spotted: {})", spotted_player);
 	}
 
 	/// Test (c): Out-of-range player gets no attack.
