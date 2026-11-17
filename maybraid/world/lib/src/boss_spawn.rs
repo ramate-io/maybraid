@@ -97,7 +97,7 @@ fn seed_boss_encounter(config: Res<BossSpawnConfig>, storage: Res<HcsgStorage>) 
 ///
 /// Derives the offset from the actual Bikanwarda encounter boss recipe,
 /// ensuring the value stays synchronized with hull changes.
-fn boss_spawn_height_offset() -> f32 {
+pub fn boss_spawn_height_offset() -> f32 {
 	use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaSpec};
 	use characters::CharacterRecipe;
 	

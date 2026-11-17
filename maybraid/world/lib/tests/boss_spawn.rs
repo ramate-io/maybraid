@@ -29,7 +29,7 @@ fn minimal_app() -> App {
 /// The test provider returns a fixed ground height of 0.0 for all XZ positions,
 /// simulating published terrain without full Durham setup.
 fn app_with_terrain() -> App {
-	use durham::{BaseTerrainNoise, TerrainConfig, WorldBaseTerrain, TerrainCellLayout};
+	use durham::{BaseTerrainNoise, TerrainConfig, WorldBaseTerrain};
 	use durham::playable_world_cell_layout;
 	
 	let mut app = minimal_app();
@@ -304,7 +304,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 	
 	let boss_data = entry.unwrap();
 	anyhow::ensure!(
-		(boss_data.value.boss_position - SPAWN_POS).length() < 0.1,
+		(boss_data.value.boss_position - spawn_pos).length() < 0.1,
 		"Boss should be at requested position, got ({}, {}, {})",
 		boss_data.value.boss_position.x,
 		boss_data.value.boss_position.y,
@@ -329,7 +329,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 			);
 			
 			anyhow::ensure!(
-				boss_in_storage(&app.world().resource::<HcsgStorage>(), SPAWN_POS)?,
+				boss_in_storage(&app.world().resource::<HcsgStorage>(), spawn_pos)?,
 				"Boss disappeared from storage at update {}",
 				update_idx
 			);
@@ -352,7 +352,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 			"AuthoredBossSpawns should survive HCSG restart via session reseeder"
 		);
 		anyhow::ensure!(
-			spawns.as_ref().unwrap().position == Some(SPAWN_POS),
+			spawns.as_ref().unwrap().position == Some(spawn_pos),
 			"Boss position should be preserved in AuthoredBossSpawns after restart"
 		);
 		
@@ -366,7 +366,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 		
 		let (rebuilt_encounter, _) = rebuilt.unwrap();
 		anyhow::ensure!(
-			(rebuilt_encounter.boss_position - SPAWN_POS).length() < 0.1,
+			(rebuilt_encounter.boss_position - spawn_pos).length() < 0.1,
 			"Regenerated boss should have same position"
 		);
 	}
@@ -387,7 +387,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 			restart_idx
 		);
 		anyhow::ensure!(
-			spawns.as_ref().unwrap().position == Some(SPAWN_POS),
+			spawns.as_ref().unwrap().position == Some(spawn_pos),
 			"Boss position corrupted in AuthoredBossSpawns after restart {}",
 			restart_idx
 		);
@@ -402,7 +402,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 		
 		let (rebuilt_encounter, _) = rebuilt.unwrap();
 		anyhow::ensure!(
-			(rebuilt_encounter.boss_position - SPAWN_POS).length() < 0.1,
+			(rebuilt_encounter.boss_position - spawn_pos).length() < 0.1,
 			"Regenerated boss position wrong after restart {}",
 			restart_idx
 		);
@@ -421,7 +421,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 		let storage = app.world().resource::<HcsgStorage>();
 		let spawns = storage.get::<AuthoredBossSpawns>(lod::gen::Id::Universal);
 		anyhow::ensure!(
-			spawns.is_some() && spawns.as_ref().unwrap().position == Some(SPAWN_POS),
+			spawns.is_some() && spawns.as_ref().unwrap().position == Some(spawn_pos),
 			"AuthoredBossSpawns should still be correct at test end"
 		);
 		
