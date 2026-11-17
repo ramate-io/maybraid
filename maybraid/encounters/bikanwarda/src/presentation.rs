@@ -2,9 +2,14 @@
 //!
 //! Presents generated boss encounters within channel regions. Each boss gets
 //! a unique host with its own presentation lifecycle.
+//!
+//! Column and pedestal are invisible collision placeholders grounded at published
+//! terrain Y. They provide spatial structure for future chain tether attachment.
+//! Visual meshes are TODO. Chain attachment is deferred to #1617.
 
 use std::marker::PhantomData;
 
+use avian3d::prelude::{Collider, RigidBody};
 use bevy::prelude::*;
 use bikanwarda_character::BikanwardaSpec;
 use encounters::EncounterInstance;
@@ -25,10 +30,24 @@ pub struct RequestBossAssembly {
 	pub spec: BikanwardaSpec,
 }
 
+/// Invisible collision placeholder for chain tether column.
+///
+/// 15m tall cylinder (1m radius) grounded at terrain Y, on top of pedestal.
+/// Visual mesh TODO. Chain attachment depends on #1617.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct BossColumn;
+
+/// Invisible collision placeholder for pedestal at column base.
+///
+/// 3m tall cylinder (2m radius) grounded at terrain Y.
+/// Visual mesh TODO.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct BossPedestal;
+
 /// One LOD level: boss character with physics and presentation.
 ///
-/// Future work: integrate with bikanwarda-character spawn and presentation.
-/// Placeholder implementation demonstrates the generation contract.
+/// Includes boss assembly, placeholder column, and pedestal geometry.
+/// Column and pedestal are aligned to terrain; chain attachment is deferred to #1617.
 impl LodScene for BikanwardaBossEncounter {
 	fn scene_lod_status(&self, _lod_ref: &LodRef) -> LodSceneStatus {
 		LodSceneStatus::Unchanged
@@ -41,8 +60,43 @@ impl LodScene for BikanwardaBossEncounter {
 		));
 		let instance = EncounterInstance::new(chained_encounter_id());
 		let position = self.boss_position;
+		let terrain_y = self.terrain_y;
 		let spec = self.boss.value.actor.recipe.spec.clone();
 		
+		// Column positioned 8m to the side as a tether anchor for future chain work (#1617).
+		// The column stands BESIDE the boss (not underneath), both grounded at terrain Y.
+		let column_offset_xz = Vec2::new(8.0, 0.0);
+		
+		// Child transforms are LOCAL to root. Root is at boss position (terrain_y + hull_offset).
+		// Pedestal and column grounded at terrain_y, so their local Y = terrain_y - position.y
+		let local_ground_y = terrain_y - position.y;
+		
+		// Pedestal: 3m full height, center at terrain_y + 1.5 (local: local_ground_y + 1.5)
+		// Column: 15m full height on top of pedestal, center at terrain_y + 3.0 + 7.5 (local: local_ground_y + 10.5)
+		let pedestal_local_y = local_ground_y + 1.5;
+		let column_local_y = local_ground_y + 10.5;
+		
+		// Build child scenes for pedestal and column as separate entities
+		let children: Vec<Box<dyn Scene>> = vec![
+			Box::new(bsn! {
+				Name::new("boss-pedestal")
+				BossPedestal
+				Transform::from_translation(Vec3::new(column_offset_xz.x, pedestal_local_y, column_offset_xz.y))
+				Visibility::default()
+				Collider::cylinder(2.0, 3.0)
+				RigidBody::Static
+			}),
+			Box::new(bsn! {
+				Name::new("boss-column")
+				BossColumn
+				Transform::from_translation(Vec3::new(column_offset_xz.x, column_local_y, column_offset_xz.y))
+				Visibility::default()
+				Collider::cylinder(1.0, 15.0)
+				RigidBody::Static
+			}),
+		];
+		
+		// Root entity with boss assembly and children for column/pedestal
 		bsn! {
 			~{name}
 			BossEncounterRoot::default()
@@ -50,6 +104,7 @@ impl LodScene for BikanwardaBossEncounter {
 			RequestBossAssembly { spec }
 			Transform::from_translation(position)
 			Visibility::default()
+			Children [ {children} ]
 		}
 	}
 }

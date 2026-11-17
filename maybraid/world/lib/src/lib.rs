@@ -18,6 +18,7 @@ pub mod capture;
 pub mod script_queue;
 #[cfg(feature = "debug-commands")]
 pub mod viewport_check;
+pub mod terrain_query;
 mod agent_inventory;
 mod camera;
 pub mod commands;
@@ -78,6 +79,7 @@ pub use control::{
 };
 pub use cycle_target::InventoryCycleTarget;
 pub use durham::Durham;
+pub use terrain_query::PublishedTerrainHeight;
 #[cfg(any(test, feature = "test-support"))]
 pub use first_wave::UnitXTile;
 pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};
@@ -600,6 +602,7 @@ mod tests {
 	#[cfg(feature = "debug-commands")]
 	fn production_boss_spawn_plugin_wiring_survives_startup() -> anyhow::Result<()> {
 		use crate::boss_spawn::RequestSpawnBoss;
+		use crate::terrain_query::PublishedTerrainHeight;
 		use bikanwarda_encounter::{BikanwardaBossEncounter, chained_encounter_id};
 		use lod::gen::Bytes;
 		use lod::hcsg::{HcsgStorage, HcsgRestartRequest};
@@ -624,6 +627,9 @@ mod tests {
 		
 		// Production plugin (WorldEncounterPlugin owns boss spawn lifecycle)
 		app.add_plugins(crate::world_encounter::WorldEncounterPlugin);
+		
+		// Install test terrain provider (production would have Durham)
+		app.insert_resource(PublishedTerrainHeight::test_fixed(0.0));
 		
 		// Verify BossSpawnConfig is initialized (this resource was missing in the bug)
 		app.finish();

@@ -13,14 +13,29 @@ use bevy::prelude::*;
 use bikanwarda_encounter::{BikanwardaBossEncounter, chained_encounter_id};
 use lod::gen::Bytes;
 use lod::hcsg::{HcsgRestartRequest, HcsgStorage};
-use maybraid_world::boss_spawn::{BossSpawnConfig, BossSpawnPlugin, RequestSpawnBoss};
+use maybraid_world::boss_spawn::{BossSpawnConfig, BossSpawnPlugin, PendingBossSpawn, RequestSpawnBoss};
 
-/// Set up a minimal app with boss spawn plugin
+/// Set up a minimal app with boss spawn plugin (no terrain provider)
 fn minimal_app() -> App {
 	let mut app = App::new();
 	app.add_plugins(bevy::MinimalPlugins)
 		.add_plugins(BossSpawnPlugin);
 	app.update();
+	app
+}
+
+/// Set up app with boss spawn plugin and a test terrain provider.
+///
+/// The test provider returns a fixed ground height of 0.0 for all XZ positions,
+/// simulating published terrain without full Durham setup.
+fn app_with_terrain() -> App {
+	use maybraid_world::terrain_query::PublishedTerrainHeight;
+	
+	let mut app = minimal_app();
+	
+	// Install test terrain provider returning fixed height of 0.0
+	app.insert_resource(PublishedTerrainHeight::test_fixed(0.0));
+	
 	app
 }
 
@@ -67,46 +82,93 @@ fn boss_spawn_request_is_consumed() {
 	assert_eq!(after, 0, "Spawn request should be consumed");
 }
 
-/// Test that boss spawn publishes to storage with correct ID immediately
+/// Regression test: terrain readiness contract prevents immediate publish without terrain.
+///
+/// Before the fix: Boss spawn consumed the request and published immediately with Y=0
+/// or a hold elevation, even when terrain wasn't ready.
+///
+/// After the fix: Boss stays in PendingBossSpawn until Durham terrain resources provide
+/// a published height (not the hold elevation). Tests without terrain provider keep
+/// bosses pending indefinitely without panicking.
 #[test]
-fn boss_spawn_publishes_with_correct_id() -> anyhow::Result<()> {
+fn boss_stays_pending_without_terrain() {
 	let mut app = minimal_app();
 	
-	let spawn_pos = Vec3::new(1746.8, 0.0, 1025.9);
-	app.world_mut().spawn(RequestSpawnBoss {
-		at: Some(Vec2::new(spawn_pos.x, spawn_pos.z)),
-	});
+	let spawn_xz = Vec2::new(1746.8, 1025.9);
+	app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_xz) });
 	
 	app.update();
 	
-	// Check storage immediately
+	// Request should be consumed, but boss should stay in PendingBossSpawn
+	let requests = app.world_mut().query::<&RequestSpawnBoss>().iter(app.world()).count();
+	assert_eq!(requests, 0, "Request should be consumed");
+	
+	let pending = app.world_mut().query::<&PendingBossSpawn>().iter(app.world()).count();
+	assert_eq!(pending, 1, "Boss should be in PendingBossSpawn without terrain");
+	
+	// Config should not be active yet
+	let config = app.world().resource::<BossSpawnConfig>();
+	assert!(!config.active, "Config should not be active while boss is pending");
+	
+	// Boss should not be in storage
 	let storage = app.world().resource::<HcsgStorage>();
+	let boss_id = lod::gen::Id::Bytes(Bytes(chained_encounter_id().as_bytes()));
+	let entry = storage.try_entry::<BikanwardaBossEncounter>(boss_id).ok().flatten();
+	assert!(entry.is_none(), "Boss should not be published without terrain");
+	
+	// Multiple updates should keep boss pending (no panic, no accidental publish)
+	for _ in 0..10 {
+		app.update();
+	}
+	
+	let pending_after = app.world_mut().query::<&PendingBossSpawn>().iter(app.world()).count();
+	assert_eq!(pending_after, 1, "Boss should still be pending after multiple updates");
+}
+
+/// Test that boss spawn publishes to storage with correct ID when terrain is ready.
+///
+/// Exercises the terrain readiness contract: boss stays in PendingBossSpawn until
+/// terrain height is available, then finalizes with the correct offset.
+#[test]
+fn boss_spawn_publishes_with_correct_id() -> anyhow::Result<()> {
+	let mut app = app_with_terrain();
+	
+	let spawn_xz = Vec2::new(1746.8, 1025.9);
+	app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_xz) });
+	
+	app.update();
+	
+	// Boss should now be finalized with terrain height (0.0) + spawn offset
+	let storage = app.world().resource::<HcsgStorage>();
+	let offset = maybraid_world::boss_spawn::boss_spawn_height_offset();
+	let expected_pos = Vec3::new(spawn_xz.x, offset, spawn_xz.y);
 	anyhow::ensure!(
-		boss_in_storage(storage, spawn_pos)?,
-		"Boss should be published to storage with correct ID and position"
+		boss_in_storage(storage, expected_pos)?,
+		"Boss should be published to storage with correct ID and terrain-fit position"
 	);
 	
 	Ok(())
 }
 
-/// Test that boss spawn updates config resource
+/// Test that boss spawn updates config resource when terrain is ready
 #[test]
 fn boss_spawn_updates_config() -> anyhow::Result<()> {
-	let mut app = minimal_app();
+	let mut app = app_with_terrain();
 	
-	let spawn_pos = Vec3::new(1746.8, 0.0, 1025.9);
-	app.world_mut().spawn(RequestSpawnBoss {
-		at: Some(Vec2::new(spawn_pos.x, spawn_pos.z)),
-	});
+	let spawn_xz = Vec2::new(1746.8, 1025.9);
+	app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_xz) });
 	
 	app.update();
 	
-	// Verify config was updated
+	// Verify config was updated with terrain-fit position
 	let config = app.world().resource::<BossSpawnConfig>();
 	anyhow::ensure!(config.active, "Config should be active after spawn");
+	
+	let offset = maybraid_world::boss_spawn::boss_spawn_height_offset();
+	let expected_pos = Vec3::new(spawn_xz.x, offset, spawn_xz.y);
 	anyhow::ensure!(
-		(config.position - spawn_pos).length() < 0.1,
-		"Config position should match spawn position"
+		(config.position - expected_pos).length() < 0.1,
+		"Config position should match terrain-fit spawn position"
 	);
 	
 	Ok(())
@@ -121,14 +183,14 @@ fn boss_survives_session_restart() -> anyhow::Result<()> {
 	use bikanwarda_encounter::{AuthoredBossSpawns, BikanwardaBossEncounter};
 	use lod::hcsg::{GenerationContext, GenerationScheme};
 	
-	let mut app = minimal_app();
+	let mut app = app_with_terrain();
 	
-	let spawn_pos = Vec3::new(1746.8, 0.0, 1025.9);
+	let spawn_xz = Vec2::new(1746.8, 1025.9);
+	let offset = maybraid_world::boss_spawn::boss_spawn_height_offset();
+	let spawn_pos = Vec3::new(spawn_xz.x, offset, spawn_xz.y);
 	
 	// Spawn boss
-	app.world_mut().spawn(RequestSpawnBoss {
-		at: Some(Vec2::new(spawn_pos.x, spawn_pos.z)),
-	});
+	app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_xz) });
 	app.update();
 	
 	// Verify boss is in storage before restart
@@ -175,12 +237,15 @@ fn boss_survives_session_restart() -> anyhow::Result<()> {
 /// Test that second spawn replaces first
 #[test]
 fn second_spawn_replaces_first() -> anyhow::Result<()> {
-	let mut app = minimal_app();
+	let mut app = app_with_terrain();
 	
-	let first_pos = Vec3::new(100.0, 0.0, 200.0);
-	app.world_mut().spawn(RequestSpawnBoss {
-		at: Some(Vec2::new(first_pos.x, first_pos.z)),
-	});
+	let offset = maybraid_world::boss_spawn::boss_spawn_height_offset();
+	let first_xz = Vec2::new(100.0, 200.0);
+	let second_xz = Vec2::new(300.0, 400.0);
+	let first_pos = Vec3::new(first_xz.x, offset, first_xz.y);
+	let second_pos = Vec3::new(second_xz.x, offset, second_xz.y);
+	
+	app.world_mut().spawn(RequestSpawnBoss { at: Some(first_xz) });
 	app.update();
 	
 	let storage = app.world().resource::<HcsgStorage>();
@@ -190,10 +255,7 @@ fn second_spawn_replaces_first() -> anyhow::Result<()> {
 	);
 	
 	// Spawn at second position
-	let second_pos = Vec3::new(300.0, 0.0, 400.0);
-	app.world_mut().spawn(RequestSpawnBoss {
-		at: Some(Vec2::new(second_pos.x, second_pos.z)),
-	});
+	app.world_mut().spawn(RequestSpawnBoss { at: Some(second_xz) });
 	app.update();
 	
 	// Boss should now be at second position
@@ -216,12 +278,10 @@ fn second_spawn_replaces_first() -> anyhow::Result<()> {
 /// Test that boss has correct encounter ID
 #[test]
 fn boss_uses_chained_encounter_id() -> anyhow::Result<()> {
-	let mut app = minimal_app();
+	let mut app = app_with_terrain();
 	
-	let spawn_pos = Vec3::new(1746.8, 0.0, 1025.9);
-	app.world_mut().spawn(RequestSpawnBoss {
-		at: Some(Vec2::new(spawn_pos.x, spawn_pos.z)),
-	});
+	let spawn_xz = Vec2::new(1746.8, 1025.9);
+	app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_xz) });
 	app.update();
 	
 	let storage = app.world().resource::<HcsgStorage>();
@@ -241,7 +301,7 @@ fn boss_uses_chained_encounter_id() -> anyhow::Result<()> {
 /// World-level regression test: boss spawn with extended stability verification.
 ///
 /// This test verifies:
-/// - Boss publishes with correct ID and position
+/// - Boss publishes with correct ID and terrain-fit position
 /// - Boss survives HCSG session restart with position preserved
 /// - Config persists across 12+ seconds of simulation (exceeds ~7.5s failure from original bug)
 /// - Multiple restarts don't corrupt boss data
@@ -259,9 +319,10 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 	
 	const SPAWN_X: f32 = 1746.8;
 	const SPAWN_Z: f32 = 1025.9;
-	const SPAWN_POS: Vec3 = Vec3::new(SPAWN_X, 0.0, SPAWN_Z);
 	
-	let mut app = minimal_app();
+	let mut app = app_with_terrain();
+	let offset = maybraid_world::boss_spawn::boss_spawn_height_offset();
+	let spawn_pos = Vec3::new(SPAWN_X, offset, SPAWN_Z);
 	
 	// Request boss spawn at specific position
 	app.world_mut().spawn(RequestSpawnBoss {
@@ -282,7 +343,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 	
 	let boss_data = entry.unwrap();
 	anyhow::ensure!(
-		(boss_data.value.boss_position - SPAWN_POS).length() < 0.1,
+		(boss_data.value.boss_position - spawn_pos).length() < 0.1,
 		"Boss should be at requested position, got ({}, {}, {})",
 		boss_data.value.boss_position.x,
 		boss_data.value.boss_position.y,
@@ -307,7 +368,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 			);
 			
 			anyhow::ensure!(
-				boss_in_storage(&app.world().resource::<HcsgStorage>(), SPAWN_POS)?,
+				boss_in_storage(&app.world().resource::<HcsgStorage>(), spawn_pos)?,
 				"Boss disappeared from storage at update {}",
 				update_idx
 			);
@@ -330,7 +391,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 			"AuthoredBossSpawns should survive HCSG restart via session reseeder"
 		);
 		anyhow::ensure!(
-			spawns.as_ref().unwrap().position == Some(SPAWN_POS),
+			spawns.as_ref().unwrap().position == Some(spawn_pos),
 			"Boss position should be preserved in AuthoredBossSpawns after restart"
 		);
 		
@@ -344,7 +405,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 		
 		let (rebuilt_encounter, _) = rebuilt.unwrap();
 		anyhow::ensure!(
-			(rebuilt_encounter.boss_position - SPAWN_POS).length() < 0.1,
+			(rebuilt_encounter.boss_position - spawn_pos).length() < 0.1,
 			"Regenerated boss should have same position"
 		);
 	}
@@ -365,7 +426,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 			restart_idx
 		);
 		anyhow::ensure!(
-			spawns.as_ref().unwrap().position == Some(SPAWN_POS),
+			spawns.as_ref().unwrap().position == Some(spawn_pos),
 			"Boss position corrupted in AuthoredBossSpawns after restart {}",
 			restart_idx
 		);
@@ -380,7 +441,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 		
 		let (rebuilt_encounter, _) = rebuilt.unwrap();
 		anyhow::ensure!(
-			(rebuilt_encounter.boss_position - SPAWN_POS).length() < 0.1,
+			(rebuilt_encounter.boss_position - spawn_pos).length() < 0.1,
 			"Regenerated boss position wrong after restart {}",
 			restart_idx
 		);
@@ -399,7 +460,7 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 		let storage = app.world().resource::<HcsgStorage>();
 		let spawns = storage.get::<AuthoredBossSpawns>(lod::gen::Id::Universal);
 		anyhow::ensure!(
-			spawns.is_some() && spawns.as_ref().unwrap().position == Some(SPAWN_POS),
+			spawns.is_some() && spawns.as_ref().unwrap().position == Some(spawn_pos),
 			"AuthoredBossSpawns should still be correct at test end"
 		);
 		
@@ -425,13 +486,15 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 /// session root, so the boss regenerates with the same identity/pose on re-entry.
 #[test]
 fn boss_survives_eviction_and_rediscovery() -> anyhow::Result<()> {
-	let mut app = minimal_app();
+	use bikanwarda_encounter::BikanwardaBossEncounter;
 	
-	let spawn_pos = Vec3::new(2600.0, 0.0, 1037.9);
+	let mut app = app_with_terrain();
 	
-	app.world_mut().spawn(RequestSpawnBoss {
-		at: Some(Vec2::new(spawn_pos.x, spawn_pos.z)),
-	});
+	let spawn_xz = Vec2::new(2600.0, 1037.9);
+	let offset = maybraid_world::boss_spawn::boss_spawn_height_offset();
+	let spawn_pos = Vec3::new(spawn_xz.x, offset, spawn_xz.y);
+	
+	app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_xz) });
 	app.update();
 	
 	let storage = app.world().resource::<HcsgStorage>();

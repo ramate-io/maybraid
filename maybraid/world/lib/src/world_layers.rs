@@ -10,8 +10,8 @@ use chico::{
 	GroveNeighborhood, MediumCanopyBumpOut,
 };
 use durham::{
-	BackgroundStream, Durham, DurhamWorldPlugin, FarStream, NearStream, StreamPresentationPlugin,
-	StreamRing, Water,
+	BackgroundStream, Durham, DurhamSurface, DurhamWorldPlugin, FarStream, NearStream,
+	StreamPresentationPlugin, StreamRing, Water,
 };
 use geneva::{GenevaPlugin, LanguageNeighborhood};
 use layer_stack::{ActiveGenerationMode, GenerationModePlugin};
@@ -48,6 +48,7 @@ impl Plugin for WorldLayersPlugin {
 			seed: WORLD_SEED,
 		}))
 		.insert_resource(crate::poi::PaddedTerrainPoiGround)
+		.add_systems(Update, update_durham_terrain_provider)
 		.insert_resource(richmond.development_config())
 		.insert_resource(richmond.urbanization_selection())
 		.init_resource::<AuthoredDevelopments>()
@@ -100,4 +101,36 @@ impl Plugin for WorldLayersPlugin {
 			request_hcsg_session_restart,
 		);
 	}
+}
+
+/// Update Durham-backed published terrain height provider.
+///
+/// Runs each frame to keep the provider synchronized with Durham terrain state.
+/// The closure captures cloned terrain resources, avoiding any unsafe World access.
+fn update_durham_terrain_provider(
+	mut commands: Commands,
+	hcsg_storage: Res<lod::hcsg::HcsgStorage>,
+	layout: Res<durham::TerrainCellLayout>,
+) {
+	use crate::terrain_query::PublishedTerrainHeight;
+	use durham::SharedTerrainStorage;
+	
+	// Clone the resources (both are cheaply cloneable: HcsgStorage is Arc-wrapped)
+	let storage_clone = (*hcsg_storage).clone();
+	let layout_clone = (*layout).clone();
+	
+	// Create closure that captures cloned resources (no unsafe code needed)
+	let provider = PublishedTerrainHeight(Box::new(move |xz: Vec2| -> Option<f32> {
+		// Query published padded terrain first (same logic as terrain_height_at)
+		type Ground = terrain_layer_model::OnTerrain<durham::Durham>;
+		match richmond::PaddedTerrain::<Ground>::published_height_at(&storage_clone, xz.x, xz.y) {
+			Ok(Some(height)) => return Some(height),
+			Ok(None) => {}
+			Err(_) => return None,
+		}
+		// Fall back to Durham's composed surface (raw terrain without pads)
+		storage_clone.try_composed_height_at(&layout_clone, xz.x, xz.y).ok().flatten()
+	}));
+	
+	commands.insert_resource(provider);
 }

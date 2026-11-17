@@ -25,7 +25,10 @@ pub use identity::{
 };
 pub use outcomes::{BikanwardaDeparted, BikanwardaDeparture, EncounterUnlockAwarded};
 pub use plugin::BikanwardaEncounterPlugin;
-pub use presentation::{BossEncounterPresentationPlugin, BossEncounterRoot, RequestBossAssembly};
+pub use presentation::{
+	BossColumn, BossEncounterPresentationPlugin, BossEncounterRoot, BossPedestal,
+	RequestBossAssembly,
+};
 pub use scripted::Scripted;
 pub use unlocks::{register_unlocks, BikanwardaUnlockConfig};
 
