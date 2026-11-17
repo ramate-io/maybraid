@@ -12,8 +12,9 @@ use menu_components::{MenuNav, MenuNavImpulse, MenuNavPad};
 use crate::event::{OverlayClose, OverlayOpen};
 use crate::widgets::{
 	CloseOverlaySelect, EquippedOrderControls, InventoryControl, InventoryFocusHint,
-	InventoryInteraction, InventoryItemKey, InventoryMenuSession, InventorySlotEvent, MenuButton,
-	OpenSelectKey, OverlaySelectRoot, OverlaySelectViewport,
+	InventoryFolderHeader, InventoryInteraction, InventoryItemKey, InventoryLeftFocus,
+	InventoryMenuSession, InventorySlotEvent, MenuButton, OpenSelectKey, OverlaySelectRoot,
+	OverlaySelectViewport,
 };
 
 fn inventory_session_ancestor(
@@ -37,6 +38,8 @@ pub(crate) struct InventoryPresentationSnapshot {
 	section: character_ui_menu::InventorySection,
 	region: character_ui_menu::InventoryRegion,
 	drawer: character_ui_menu::InventoryDrawerMode,
+	expanded_section: Option<character_ui_menu::InventorySection>,
+	left_focus: InventoryLeftFocus,
 	gallery_scroll: usize,
 }
 
@@ -46,6 +49,8 @@ impl InventoryPresentationSnapshot {
 			section: session.section,
 			region: session.region,
 			drawer: session.drawer,
+			expanded_section: session.expanded_section,
+			left_focus: session.left_focus,
 			gallery_scroll: session.active_memory().gallery_scroll,
 		}
 	}
@@ -75,14 +80,14 @@ fn apply_inventory_navigation(
 		return;
 	}
 	match action {
-		menu_components::InventoryNavigation::PreviousSection => {
+		menu_components::InventoryNavigation::PreviousSection if !session.folder_navigation => {
 			let index = session.section.index();
 			session.section = character_ui_menu::InventorySection::ALL[(index
 				+ character_ui_menu::InventorySection::ALL.len()
 				- 1)
 				% character_ui_menu::InventorySection::ALL.len()];
 		}
-		menu_components::InventoryNavigation::NextSection => {
+		menu_components::InventoryNavigation::NextSection if !session.folder_navigation => {
 			let index = session.section.index();
 			session.section = character_ui_menu::InventorySection::ALL
 				[(index + 1) % character_ui_menu::InventorySection::ALL.len()];
@@ -97,9 +102,12 @@ fn apply_inventory_navigation(
 				}
 			};
 		}
+		// Editable categories are navigable folders; bumpers never change them.
+		menu_components::InventoryNavigation::PreviousSection
+		| menu_components::InventoryNavigation::NextSection
 		// AIOP activation is the sole entry to the selection drawer.
-		menu_components::InventoryNavigation::ToggleRegion
-		| menu_components::InventoryNavigation::FocusDrawer => {}
+		| menu_components::InventoryNavigation::ToggleRegion
+		| menu_components::InventoryNavigation::FocusDrawer => return,
 	}
 	session.focus.0 = session.active_memory().focused_item;
 }
@@ -108,7 +116,10 @@ fn apply_inventory_navigation(
 pub fn emit_inventory_control_on_click<E: Copy + Send + Sync + 'static>(
 	click: On<PointerClick>,
 	controls: Query<&InventoryControl>,
+	headers: Query<&InventoryFolderHeader>,
+	tiles: Query<&crate::inventory::InventoryTile>,
 	items: Query<&HudMenuItem>,
+	mut menus: Query<&mut HudMenu>,
 	parents: Query<&ChildOf>,
 	mut sessions: Query<&mut InventoryMenuSession>,
 	slot_events: Query<&InventorySlotEvent<E>>,
@@ -117,29 +128,54 @@ pub fn emit_inventory_control_on_click<E: Copy + Send + Sync + 'static>(
 	if inventory_modal_blocks_shell(&stack) {
 		return;
 	}
-	let Ok(control) = controls.get(click.entity) else { return };
-	let Some(session_entity) = std::iter::once(click.entity)
+	let target = std::iter::once(click.entity)
 		.chain(parents.iter_ancestors(click.entity))
+		.find(|entity| controls.contains(*entity) || headers.contains(*entity));
+	let Some(target) = target else { return };
+	let Some(session_entity) = std::iter::once(target)
+		.chain(parents.iter_ancestors(target))
 		.find(|entity| sessions.contains(*entity))
 	else {
 		return;
 	};
-	if let Ok(mut session) = sessions.get_mut(session_entity) {
-		if control.0 == character_ui_menu::InventoryControlAction::FocusDrawer {
-			if !slot_events.contains(session_entity) {
+	let Ok(mut session) = sessions.get_mut(session_entity) else { return };
+	if session.picker_source.is_some() || session.interaction.reordering().is_some() {
+		if controls.get(target).is_ok_and(|control| {
+			control.0 == character_ui_menu::InventoryControlAction::ToggleDrawer
+		}) {
+			apply_inventory_navigation(
+				&mut session,
+				menu_components::InventoryNavigation::ToggleDrawer,
+			);
+		}
+		return;
+	}
+	if let Ok(header) = headers.get(target) {
+		session.toggle_folder(header.0);
+		if let Ok(item) = items.get(target) {
+			if let Ok(mut menu) = menus.get_mut(item.menu) {
+				menu.selected = item.index;
+			}
+		}
+		return;
+	}
+	let Ok(control) = controls.get(target) else { return };
+	if control.0 == character_ui_menu::InventoryControlAction::FocusDrawer {
+		if !slot_events.contains(session_entity) {
+			return;
+		}
+		let tile = std::iter::once(target)
+			.chain(parents.iter_ancestors(target))
+			.find_map(|entity| tiles.get(entity).ok());
+		if let Some(tile) = tile {
+			if session.expanded_section != Some(tile.section) {
 				return;
 			}
-			let ordinal = items.get(click.entity).ok().map(|item| item.index).or_else(|| {
-				std::iter::once(click.entity)
-					.chain(parents.iter_ancestors(click.entity))
-					.find_map(|entity| items.get(entity).ok().map(|item| item.index))
-			});
-			if let Some(ordinal) = ordinal {
-				begin_inventory_picker(&mut session, ordinal, None);
-			}
-		} else {
-			apply_inventory_navigation(&mut session, control_navigation(control.0));
+			session.section = tile.section;
+			begin_inventory_picker(&mut session, tile.ordinal, None);
 		}
+	} else {
+		apply_inventory_navigation(&mut session, control_navigation(control.0));
 	}
 }
 
@@ -169,7 +205,12 @@ pub fn emit_inventory_control_on_nav<E: Copy + Send + Sync + 'static>(
 	mut impulse: On<MenuNavImpulse>,
 	areas: Query<&crate::inventory::InventoryScreenArea>,
 	menus: Query<&HudMenu>,
-	items: Query<(&HudMenuItem, &InventoryControl)>,
+	items: Query<(
+		&HudMenuItem,
+		Option<&InventoryControl>,
+		Option<&InventoryFolderHeader>,
+		Option<&crate::inventory::InventoryTile>,
+	)>,
 	parents: Query<&ChildOf>,
 	mut sessions: Query<&mut InventoryMenuSession>,
 	slot_events: Query<&InventorySlotEvent<E>>,
@@ -182,9 +223,9 @@ pub fn emit_inventory_control_on_nav<E: Copy + Send + Sync + 'static>(
 	if areas.get(impulse.entity).is_err() {
 		return;
 	}
-	let Some((_, control)) = items
+	let Some((_, control, header, tile)) = items
 		.iter()
-		.find(|(item, _)| item.menu == impulse.entity && item.index == menu.selected)
+		.find(|(item, _, _, _)| item.menu == impulse.entity && item.index == menu.selected)
 	else {
 		return;
 	};
@@ -193,13 +234,25 @@ pub fn emit_inventory_control_on_nav<E: Copy + Send + Sync + 'static>(
 		.find(|entity| sessions.contains(*entity));
 	let Some(session_entity) = session_entity else { return };
 	if let Ok(mut session) = sessions.get_mut(session_entity) {
-		if control.0 == character_ui_menu::InventoryControlAction::FocusDrawer {
-			if !slot_events.contains(session_entity) {
-				return;
+		if let Some(header) = header {
+			session.toggle_folder(header.0);
+		} else if let Some(control) = control {
+			if control.0 == character_ui_menu::InventoryControlAction::FocusDrawer {
+				if !slot_events.contains(session_entity) || session.picker_source.is_some() {
+					return;
+				}
+				if let Some(tile) = tile {
+					if session.expanded_section != Some(tile.section) {
+						return;
+					}
+					session.section = tile.section;
+					begin_inventory_picker(&mut session, tile.ordinal, None);
+				}
+			} else {
+				apply_inventory_navigation(&mut session, control_navigation(control.0));
 			}
-			begin_inventory_picker(&mut session, menu.selected, None);
 		} else {
-			apply_inventory_navigation(&mut session, control_navigation(control.0));
+			return;
 		}
 	}
 	impulse.propagate(false);
@@ -216,7 +269,12 @@ pub fn emit_inventory_control_on_enter<E: Copy + Send + Sync + 'static>(
 		(Entity, &HudMenu),
 		(With<menu_components::InventoryHudMenu>, With<HudOverlayMenu>, Without<ScopedMenuSession>),
 	>,
-	items: Query<(&HudMenuItem, &InventoryControl)>,
+	items: Query<(
+		&HudMenuItem,
+		Option<&InventoryControl>,
+		Option<&InventoryFolderHeader>,
+		Option<&crate::inventory::InventoryTile>,
+	)>,
 	mut sessions: Query<&mut InventoryMenuSession>,
 	slot_events: Query<&InventorySlotEvent<E>>,
 ) {
@@ -231,9 +289,9 @@ pub fn emit_inventory_control_on_enter<E: Copy + Send + Sync + 'static>(
 		if !menu_components::entity_under_nav_owner(menu_entity, &stack, &roots, &parents) {
 			continue;
 		}
-		let Some((_, control)) = items
+		let Some((_, control, header, tile)) = items
 			.iter()
-			.find(|(item, _)| item.menu == menu_entity && item.index == menu.selected)
+			.find(|(item, _, _, _)| item.menu == menu_entity && item.index == menu.selected)
 		else {
 			continue;
 		};
@@ -242,13 +300,24 @@ pub fn emit_inventory_control_on_enter<E: Copy + Send + Sync + 'static>(
 			.find(|entity| sessions.contains(*entity));
 		if let Some(session_entity) = session_entity {
 			if let Ok(mut session) = sessions.get_mut(session_entity) {
-				if control.0 == character_ui_menu::InventoryControlAction::FocusDrawer {
-					if !slot_events.contains(session_entity) {
-						return;
+				if let Some(header) = header {
+					session.toggle_folder(header.0);
+				} else if let Some(control) = control {
+					if control.0 == character_ui_menu::InventoryControlAction::FocusDrawer {
+						if !slot_events.contains(session_entity) || session.picker_source.is_some()
+						{
+							return;
+						}
+						if let Some(tile) = tile {
+							if session.expanded_section != Some(tile.section) {
+								return;
+							}
+							session.section = tile.section;
+							begin_inventory_picker(&mut session, tile.ordinal, None);
+						}
+					} else {
+						apply_inventory_navigation(&mut session, control_navigation(control.0));
 					}
-					begin_inventory_picker(&mut session, menu.selected, None);
-				} else {
-					apply_inventory_navigation(&mut session, control_navigation(control.0));
 				}
 			}
 		}
@@ -376,6 +445,7 @@ pub fn navigate_inventory_menu(
 		Option<&crate::inventory::InventoryTile>,
 		Option<&crate::inventory::InventoryAIOPSlot>,
 		Option<&InventoryItemKey>,
+		Option<&InventoryFolderHeader>,
 	)>,
 	mut sessions: Query<&mut InventoryMenuSession>,
 	stack: Res<menu_components::MenuModalStack>,
@@ -407,7 +477,7 @@ pub fn navigate_inventory_menu(
 	let count = match area.0 {
 		character_ui_menu::InventoryRegion::Drawer => items
 			.iter()
-			.filter(|(item, tile, _, _)| {
+			.filter(|(item, tile, _, _, _)| {
 				item.menu == impulse.entity
 					&& tile.is_some_and(|tile| {
 						tile.section == session.section
@@ -416,15 +486,7 @@ pub fn navigate_inventory_menu(
 			})
 			.count()
 			.max(menu.item_count),
-		character_ui_menu::InventoryRegion::Equipped => items
-			.iter()
-			.filter(|(item, _, slot, _)| {
-				item.menu == impulse.entity
-					&& slot.is_some_and(|slot| slot.section == session.section)
-			})
-			.map(|(_, _, slot, _)| slot.map_or(0, |slot| slot.capacity))
-			.max()
-			.unwrap_or(menu.item_count),
+		character_ui_menu::InventoryRegion::Equipped => menu.item_count,
 	};
 	if count == 0 {
 		return;
@@ -487,11 +549,22 @@ pub fn navigate_inventory_menu(
 		_ => return,
 	};
 	menu.selected = next;
-	let key = items.iter().find_map(|(item, _, _, key)| {
-		(item.menu == impulse.entity && item.index == next)
-			.then(|| key.copied())
-			.flatten()
-	});
+	let selected = items
+		.iter()
+		.find(|(item, _, _, _, _)| item.menu == impulse.entity && item.index == next);
+	let key = selected.and_then(|(_, _, _, key, _)| key.copied());
+	if area.0 == character_ui_menu::InventoryRegion::Equipped && session.folder_navigation {
+		if let Some((_, tile, slot, _, header)) = selected {
+			if let Some(header) = header {
+				session.focus_header(header.0);
+			} else if let Some(tile) = tile {
+				session.focus_slot(tile.section, tile.ordinal, key);
+			} else if let Some(slot) = slot {
+				session.focus_slot(slot.section, slot.ordinal, key);
+			}
+		}
+		return;
+	}
 	let drawer_mode = session.drawer;
 	let memory = session.active_memory_mut();
 	memory.focused_ordinal = next;
@@ -528,6 +601,7 @@ pub(crate) fn sync_inventory_focus_from_menu(
 		&HudMenuItem,
 		Option<&crate::inventory::InventoryTile>,
 		Option<&InventoryItemKey>,
+		Option<&InventoryFolderHeader>,
 	)>,
 	children: Query<&Children>,
 	scrolls: Query<
@@ -550,13 +624,38 @@ pub(crate) fn sync_inventory_focus_from_menu(
 		if session.region != area.0 {
 			continue;
 		}
-		let page_is_current = items.iter().any(|(item, tile, _)| {
+		if area.0 == character_ui_menu::InventoryRegion::Equipped && session.folder_navigation {
+			if let Some((_, tile, key, header)) = items
+				.iter()
+				.find(|(item, _, _, _)| item.menu == menu_entity && item.index == menu.selected)
+			{
+				if let Some(header) = header {
+					if session.left_focus != InventoryLeftFocus::Header(header.0) {
+						session.focus_header(header.0);
+					}
+				} else if let Some(tile) = tile {
+					if session.expanded_section == Some(tile.section) {
+						let desired = InventoryLeftFocus::Slot {
+							section: tile.section,
+							ordinal: tile.ordinal,
+						};
+						if session.left_focus != desired
+							|| session.active_memory().focused_item != key.copied()
+						{
+							session.focus_slot(tile.section, tile.ordinal, key.copied());
+						}
+					}
+				}
+			}
+			continue;
+		}
+		let page_is_current = items.iter().any(|(item, tile, _, _)| {
 			item.menu == menu_entity && tile.is_some_and(|tile| tile.section == session.section)
 		});
 		if !page_is_current {
 			continue;
 		}
-		let key = items.iter().find_map(|(item, tile, key)| {
+		let key = items.iter().find_map(|(item, tile, key, _)| {
 			(item.menu == menu_entity
 				&& item.index == menu.selected
 				&& tile.is_none_or(|tile| tile.section == session.section))
@@ -611,7 +710,12 @@ pub(crate) fn sync_inventory_region_focus(
 	>,
 	children: Query<&Children>,
 	areas: Query<(Entity, &crate::inventory::InventoryScreenArea, Option<&HudOverlayMenu>)>,
-	items: Query<(&HudMenuItem, &InventoryItemKey)>,
+	items: Query<(
+		&HudMenuItem,
+		Option<&InventoryItemKey>,
+		Option<&crate::inventory::InventoryTile>,
+		Option<&InventoryFolderHeader>,
+	)>,
 	mut menus: Query<&mut HudMenu>,
 	mut scrolls: Query<
 		(&mut ScrollPosition, &ComputedNode),
@@ -641,10 +745,34 @@ pub(crate) fn sync_inventory_region_focus(
 				continue;
 			}
 			if presentation_changed {
-				if let Some(focus) = focus {
-					if let Some((item, _)) =
-						items.iter().find(|(item, key)| item.menu == menu_entity && **key == focus)
-					{
+				let folder_list = area.0 == character_ui_menu::InventoryRegion::Equipped
+					&& session.folder_navigation
+					&& items
+						.iter()
+						.any(|(item, _, _, header)| item.menu == menu_entity && header.is_some());
+				if folder_list {
+					let selected = items.iter().find(|(item, _, tile, header)| {
+						item.menu == menu_entity
+							&& match session.left_focus {
+								InventoryLeftFocus::Header(section) => {
+									header.is_some_and(|header| header.0 == section)
+								}
+								InventoryLeftFocus::Slot { section, ordinal } => {
+									tile.is_some_and(|tile| {
+										tile.section == section && tile.ordinal == ordinal
+									})
+								}
+							}
+					});
+					if let Some((item, _, _, _)) = selected {
+						if let Ok(mut menu) = menus.get_mut(menu_entity) {
+							menu.selected = item.index;
+						}
+					}
+				} else if let Some(focus) = focus {
+					if let Some((item, _, _, _)) = items.iter().find(|(item, key, _, _)| {
+						item.menu == menu_entity && key.is_some_and(|key| *key == focus)
+					}) {
 						if let Ok(mut menu) = menus.get_mut(menu_entity) {
 							menu.selected = item.index;
 						}
@@ -731,7 +859,9 @@ pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
 	lock: Res<TextMenuInputLock>,
 	buttons: Query<&MenuButton<E>>,
 	keys: Query<&InventoryItemKey>,
+	tiles: Query<&crate::inventory::InventoryTile>,
 	slot_events: Query<&InventorySlotEvent<E>>,
+	stack: Option<Res<menu_components::MenuModalStack>>,
 	items: Query<&HudMenuItem>,
 	mut menus: Query<&mut HudMenu>,
 	parents: Query<&ChildOf>,
@@ -754,6 +884,9 @@ pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
 				.chain(parents.iter_ancestors(menu_entity))
 				.find(|entity| sessions.contains(*entity));
 			if let Some(session_entity) = session_entity {
+				if stack.as_ref().is_some_and(|stack| inventory_modal_blocks_shell(stack)) {
+					return;
+				}
 				if let Ok(mut session) = sessions.get_mut(session_entity) {
 					if session_entity != menu_entity
 						&& keys.get(click.entity).is_ok_and(|key| {
@@ -774,6 +907,7 @@ pub fn emit_hud_activate_on_click<E: Copy + Send + Sync + 'static>(
 							click.entity,
 							menu_entity,
 							&keys,
+							&tiles,
 							Some(button.0),
 							slot_events.get(session_entity).ok(),
 							None,
@@ -840,6 +974,7 @@ fn activate_inventory_item<E: Copy + Send + Sync + 'static>(
 	entity: Entity,
 	menu: Entity,
 	keys: &Query<&InventoryItemKey>,
+	tiles: &Query<&crate::inventory::InventoryTile>,
 	choice: Option<E>,
 	adapter: Option<&InventorySlotEvent<E>>,
 	impulse: Option<&MenuNavImpulse>,
@@ -875,6 +1010,18 @@ fn activate_inventory_item<E: Copy + Send + Sync + 'static>(
 		return true;
 	}
 	if key.equipped && key.region == character_ui_menu::InventoryRegion::Equipped {
+		if session.picker_source.is_some() {
+			return true;
+		}
+		let ordinal = if let Ok(tile) = tiles.get(entity) {
+			if session.folder_navigation && session.expanded_section != Some(tile.section) {
+				return true;
+			}
+			session.section = tile.section;
+			tile.ordinal
+		} else {
+			ordinal
+		};
 		if choice.is_some_and(|choice| {
 			adapter.is_some_and(|adapter| (adapter.0)(choice, session.section, ordinal).is_some())
 		}) && session.region == character_ui_menu::InventoryRegion::Equipped
@@ -897,10 +1044,10 @@ fn begin_inventory_picker(
 	{
 		return;
 	}
-	let memory = &mut session.section_memory[session.section.index()]
-		[character_ui_menu::InventoryRegion::Equipped.index()];
-	memory.focused_item = item;
-	memory.focused_ordinal = ordinal;
+	session.focus_slot(session.section, ordinal, item);
+	if session.folder_navigation {
+		session.expanded_section = Some(session.section);
+	}
 	session.picker_source =
 		Some(crate::widgets::InventoryPickerSource { ordinal, item, attempted_item: None });
 	session.region = character_ui_menu::InventoryRegion::Drawer;
@@ -911,12 +1058,8 @@ fn begin_inventory_picker(
 fn finish_inventory_picker(session: &mut InventoryMenuSession) {
 	let Some(source) = session.picker_source.take() else { return };
 	session.region = character_ui_menu::InventoryRegion::Equipped;
-	let memory = session.active_memory_mut();
-	// Slot position remains authoritative even if its old occupant moved while
-	// an assignment or another host edit was being applied.
-	memory.focused_item = None;
-	memory.focused_ordinal = source.ordinal;
-	session.focus.0 = None;
+	// Slot position remains authoritative even if its old occupant moved.
+	session.focus_slot(session.section, source.ordinal, None);
 	session.interaction = InventoryInteraction::Browse;
 }
 
@@ -991,7 +1134,9 @@ pub fn emit_hud_activate_on_enter<E: Copy + Send + Sync + 'static>(
 		Option<&CloseOverlaySelect>,
 	)>,
 	keys: Query<&InventoryItemKey>,
+	tiles: Query<&crate::inventory::InventoryTile>,
 	slot_events: Query<&InventorySlotEvent<E>>,
+	stack: Option<Res<menu_components::MenuModalStack>>,
 	parents: Query<&ChildOf>,
 	mut sessions: Query<&mut InventoryMenuSession>,
 	mut interaction: ResMut<InventoryInteraction>,
@@ -1010,6 +1155,9 @@ pub fn emit_hud_activate_on_enter<E: Copy + Send + Sync + 'static>(
 		.chain(parents.iter_ancestors(menu_entity))
 		.find(|entity| sessions.contains(*entity));
 	if let Some(session_entity) = session_entity {
+		if stack.as_ref().is_some_and(|stack| inventory_modal_blocks_shell(stack)) {
+			return;
+		}
 		if let Ok(mut session) = sessions.get_mut(session_entity) {
 			if let Some((entity, item, button, _, _)) = items
 				.iter()
@@ -1020,6 +1168,7 @@ pub fn emit_hud_activate_on_enter<E: Copy + Send + Sync + 'static>(
 						entity,
 						menu_entity,
 						&keys,
+						&tiles,
 						button.map(|button| button.0),
 						slot_events.get(session_entity).ok(),
 						None,
@@ -1070,7 +1219,9 @@ pub fn emit_hud_activate_on_nav<E: Copy + Send + Sync + 'static>(
 		Option<&CloseOverlaySelect>,
 	)>,
 	keys: Query<&InventoryItemKey>,
+	tiles: Query<&crate::inventory::InventoryTile>,
 	slot_events: Query<&InventorySlotEvent<E>>,
+	stack: Option<Res<menu_components::MenuModalStack>>,
 	mut interaction: ResMut<InventoryInteraction>,
 	mut focus: ResMut<InventoryFocusHint>,
 	mut commands: Commands,
@@ -1085,6 +1236,9 @@ pub fn emit_hud_activate_on_nav<E: Copy + Send + Sync + 'static>(
 		.chain(parents.iter_ancestors(impulse.entity))
 		.find(|entity| sessions.contains(*entity));
 	if let Some(session_entity) = session_entity {
+		if stack.as_ref().is_some_and(|stack| inventory_modal_blocks_shell(stack)) {
+			return;
+		}
 		if let Ok(mut state) = sessions.get_mut(session_entity) {
 			if let Some((entity, item, button, _, _)) = items.iter().find(|(_, item, _, _, _)| {
 				item.menu == impulse.entity && item.index == menu.selected
@@ -1094,6 +1248,7 @@ pub fn emit_hud_activate_on_nav<E: Copy + Send + Sync + 'static>(
 						entity,
 						impulse.entity,
 						&keys,
+						&tiles,
 						button.map(|button| button.0),
 						slot_events.get(session_entity).ok(),
 						Some(impulse.event()),
@@ -1964,8 +2119,8 @@ mod scoped_tests {
 	}
 
 	#[test]
-	fn page_and_drawer_actions_cycle_restore_memory_and_pause_during_reorder() {
-		let mut session = InventoryMenuSession::default();
+	fn legacy_page_and_drawer_actions_cycle_restore_memory_and_pause_during_reorder() {
+		let mut session = InventoryMenuSession { folder_navigation: false, ..default() };
 		let drawer_item =
 			InventoryItemKey { index: 2, equipped: false, region: InventoryRegion::Drawer };
 		session.active_memory_mut().focused_item = Some(drawer_item);
@@ -2003,6 +2158,177 @@ mod scoped_tests {
 			menu_components::InventoryNavigation::NextSection,
 		);
 		assert_eq!(session.section, before.section);
+	}
+
+	#[test]
+	fn editable_bumpers_do_not_change_folder_or_focus() {
+		let mut session = InventoryMenuSession::default();
+		session.focus_slot(character_ui_menu::InventorySection::Clothing, 2, None);
+		let before = session;
+		for action in [
+			menu_components::InventoryNavigation::PreviousSection,
+			menu_components::InventoryNavigation::NextSection,
+		] {
+			super::apply_inventory_navigation(&mut session, action);
+			assert_eq!(session, before);
+		}
+	}
+
+	#[test]
+	fn flattened_folder_rows_keep_true_slot_ordinals_and_return_after_back() -> anyhow::Result<()> {
+		use crate::inventory::{InventoryAIOPSlot, InventoryScreenArea, InventoryTile};
+		use crate::widgets::{InventoryControl, InventoryFolderHeader, InventoryLeftFocus};
+		use character_ui_menu::{InventoryControlAction, InventorySection};
+		use menu_components::{MenuModalBackHold, MenuModalStack, MenuNavPad};
+		let mut world = World::new();
+		world.init_resource::<InventoryInteraction>();
+		world.init_resource::<InventoryFocusHint>();
+		world.init_resource::<MenuModalStack>();
+		world.init_resource::<MenuModalBackHold>();
+		world.init_resource::<MenuNavPad>();
+		world.add_observer(super::navigate_inventory_menu);
+		world.add_observer(super::emit_inventory_control_on_nav::<u8>);
+		world.add_observer(super::emit_hud_activate_on_nav::<u8>);
+		world.add_observer(super::consume_scoped_inventory_reorder_back);
+		let mut initial = InventoryMenuSession::default();
+		initial.section_memory[InventorySection::Tools.index()]
+			[InventoryRegion::Equipped.index()]
+		.focused_ordinal = 4;
+		let viewport = world
+			.spawn((
+				OverlaySelectViewport,
+				initial,
+				InventorySlotEvent::<u8>(|event, _, ordinal| (ordinal == 1).then_some(event)),
+			))
+			.id();
+		let menu = world
+			.spawn((
+				InventoryScreenArea(InventoryRegion::Equipped),
+				InventoryHudMenu,
+				HudOverlayMenu,
+				HudMenu::new(7),
+			))
+			.id();
+		world.entity_mut(viewport).add_child(menu);
+		world.spawn((
+			HudMenuItem { menu, index: 0 },
+			InventoryFolderHeader(InventorySection::Clothing),
+		));
+		let key = InventoryItemKey { index: 8, equipped: true, region: InventoryRegion::Equipped };
+		world.spawn((
+			HudMenuItem { menu, index: 1 },
+			InventoryTile {
+				section: InventorySection::Clothing,
+				region: InventoryRegion::Equipped,
+				ordinal: 0,
+			},
+		));
+		world.spawn((
+			HudMenuItem { menu, index: 2 },
+			InventoryTile {
+				section: InventorySection::Clothing,
+				region: InventoryRegion::Equipped,
+				ordinal: 1,
+			},
+			key,
+			MenuButton(7u8),
+		));
+		for (index, section) in InventorySection::ALL.into_iter().enumerate().skip(1) {
+			world.spawn((HudMenuItem { menu, index: index + 2 }, InventoryFolderHeader(section)));
+		}
+		// An occupied slot opens the picker at ordinal 1, though its menu row is 2.
+		world.trigger(MenuNavImpulse::new(menu, MenuNav::Down));
+		world.trigger(MenuNavImpulse::new(menu, MenuNav::Down));
+		world.trigger(MenuNavImpulse::new(menu, MenuNav::Select));
+		world.flush();
+		let source = world
+			.get::<InventoryMenuSession>(viewport)
+			.and_then(|session| session.picker_source);
+		assert_eq!(source.map(|source| (source.ordinal, source.item)), Some((1, Some(key))));
+		world.trigger(MenuNavImpulse::new(menu, MenuNav::Back));
+		world.flush();
+		assert_eq!(
+			world.get::<InventoryMenuSession>(viewport).map(|session| session.left_focus),
+			Some(InventoryLeftFocus::Slot { section: InventorySection::Clothing, ordinal: 1 })
+		);
+		assert!(world.resource::<MenuModalBackHold>().0);
+		// Focusing another header preserves the current category and that folder's slot memory.
+		world.trigger(MenuNavImpulse::new(menu, MenuNav::Down));
+		world.flush();
+		let session = world
+			.get::<InventoryMenuSession>(viewport)
+			.ok_or_else(|| anyhow::anyhow!("folder session"))?;
+		assert_eq!(session.left_focus, InventoryLeftFocus::Header(InventorySection::Tools));
+		assert_eq!(session.section, InventorySection::Clothing);
+		assert_eq!(
+			session.section_memory[InventorySection::Tools.index()]
+				[InventoryRegion::Equipped.index()]
+			.focused_ordinal,
+			4
+		);
+		world.trigger(MenuNavImpulse::new(menu, MenuNav::Select));
+		world.flush();
+		assert_eq!(
+			world
+				.get::<InventoryMenuSession>(viewport)
+				.map(|session| session.expanded_section),
+			Some(Some(InventorySection::Tools))
+		);
+		world.trigger(MenuNavImpulse::new(menu, MenuNav::Select));
+		world.flush();
+		assert_eq!(
+			world
+				.get::<InventoryMenuSession>(viewport)
+				.map(|session| session.expanded_section),
+			Some(None)
+		);
+		// The next-empty plus row follows the same ordinal contract.
+		world
+			.get_mut::<InventoryMenuSession>(viewport)
+			.ok_or_else(|| anyhow::anyhow!("folder session"))?
+			.toggle_folder(InventorySection::Tools);
+		let plus_menu = world
+			.spawn((
+				InventoryScreenArea(InventoryRegion::Equipped),
+				InventoryHudMenu,
+				HudOverlayMenu,
+				HudMenu { selected: 4, item_count: 5 },
+			))
+			.id();
+		world.entity_mut(viewport).add_child(plus_menu);
+		world.spawn((
+			HudMenuItem { menu: plus_menu, index: 4 },
+			InventoryTile {
+				section: InventorySection::Tools,
+				region: InventoryRegion::Equipped,
+				ordinal: 0,
+			},
+			InventoryAIOPSlot { section: InventorySection::Tools, ordinal: 0, capacity: 1 },
+			InventoryControl(InventoryControlAction::FocusDrawer),
+		));
+		world.trigger(MenuNavImpulse::new(plus_menu, MenuNav::Select));
+		world.flush();
+		assert_eq!(
+			world
+				.get::<InventoryMenuSession>(viewport)
+				.and_then(|session| session.picker_source)
+				.map(|source| (source.ordinal, source.item)),
+			Some((0, None))
+		);
+		// Header activation cannot change folders while the picker owns focus.
+		world
+			.get_mut::<HudMenu>(menu)
+			.ok_or_else(|| anyhow::anyhow!("folder menu"))?
+			.selected = 0;
+		world.trigger(MenuNavImpulse::new(menu, MenuNav::Select));
+		world.flush();
+		assert_eq!(
+			world
+				.get::<InventoryMenuSession>(viewport)
+				.map(|session| session.expanded_section),
+			Some(Some(InventorySection::Tools))
+		);
+		Ok(())
 	}
 
 	#[test]

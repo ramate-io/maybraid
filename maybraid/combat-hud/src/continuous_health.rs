@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use damage::Health;
+use menu_components::gameplay_hud_visibility;
 
 use crate::CombatHudVisible;
 
@@ -480,7 +481,10 @@ pub fn update_continuous_health_bar_content(
 									anim_state.current_fraction * 100.0,
 								);
 								set_percent_width(&mut preview_node, preview_width * 100.0);
-								set_visibility(&mut preview_visibility, Visibility::Visible);
+								set_visibility(
+									&mut preview_visibility,
+									gameplay_hud_visibility(true),
+								);
 							}
 						} else {
 							set_visibility(&mut preview_visibility, Visibility::Hidden);
@@ -497,7 +501,10 @@ pub fn update_continuous_health_bar_content(
 										* (config.bar_width - config.frame_thickness * 2.0)
 										- config.cap_marker_width * 0.5,
 								);
-								set_visibility(&mut marker_visibility, Visibility::Visible);
+								set_visibility(
+									&mut marker_visibility,
+									gameplay_hud_visibility(true),
+								);
 							} else {
 								set_visibility(&mut marker_visibility, Visibility::Hidden);
 							}

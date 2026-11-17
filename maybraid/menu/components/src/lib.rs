@@ -7,6 +7,7 @@
 //! [`Message`].
 
 pub mod controls;
+pub mod gameplay;
 pub mod icons;
 pub mod info;
 pub mod loading;
@@ -21,23 +22,27 @@ pub mod theme;
 
 pub use controls::{
 	apply_hud_menu_nav, clear_short_text_dismissed, color_from_hex,
-	emit_short_text_submit_on_confirm, menu_display_name, navigate_hud_menus, on_hud_scroll,
-	restore_short_text_editing, scroll_hud_selection_into_strip, scroll_hud_selection_into_view,
-	scroll_hud_viewport_on_nav, select_hud_item_on_over, send_hud_scroll_events, spawn_asset_tile,
-	spawn_block_label, spawn_corner_action, spawn_focus_tag, spawn_grid_catalog_tile,
-	spawn_group_label, spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text,
-	spawn_inventory_action_prompts, spawn_labeled_row, spawn_panel_title, spawn_scroll_pane,
-	spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row,
-	spawn_text_button, spawn_tile_grid, spawn_tile_grid_columns, sync_hover_tiles,
-	sync_hud_focus_tags, sync_hud_item_focus, sync_hud_scrollbars, sync_input_prompt_device,
+	emit_short_text_submit_on_confirm, gallery_action_prompts_scene, menu_display_name,
+	navigate_hud_menus, on_hud_scroll, restore_short_text_editing, scroll_hud_selection_into_strip,
+	scroll_hud_selection_into_view, scroll_hud_viewport_on_nav, select_hud_item_on_over,
+	send_hud_scroll_events, spawn_asset_tile, spawn_block_label, spawn_corner_action,
+	spawn_focus_tag, spawn_grid_catalog_tile, spawn_group_label, spawn_header_line,
+	spawn_hud_action, spawn_hud_plain, spawn_hud_text, spawn_inventory_action_prompts,
+	spawn_labeled_row, spawn_panel_title, spawn_scroll_pane, spawn_section_header,
+	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_text_button,
+	spawn_tile_grid, spawn_tile_grid_columns, sync_hover_tiles, sync_hud_focus_tags,
+	sync_hud_item_focus, sync_hud_scrollbars, sync_input_prompt_device,
 	sync_inventory_prompt_glyphs, sync_tile_wrap, ActiveOverlayKey, ActiveShortText, CursorRow,
-	FocusTag, HoverTile, HudFonts, HudMenu, HudMenuIgnoresLock, HudMenuItem, HudMenuNavLocked,
-	HudOverlayMenu, HudScroll, HudScrollManual, HudScrollStrip, HudScrollThumb, HudScrollTrack,
-	HudScrollViewport, InputPromptDevice, InventoryActionPrompts, InventoryDropPromptChip,
-	InventoryPromptGlyph, InventoryPromptKind, OverlayHeader, OverlayHeaderKey, ReorderMark,
+	FocusTag, GalleryActionPrompts, GalleryPromptGlyph, GalleryPromptKind, HoverTile, HudFonts,
+	HudMenu, HudMenuIgnoresLock, HudMenuItem, HudMenuNavLocked, HudOverlayMenu, HudScroll,
+	HudScrollManual, HudScrollStrip, HudScrollThumb, HudScrollTrack, HudScrollViewport,
+	InputPromptDevice, InventoryActionPrompts, InventoryDropPromptChip, InventoryPromptGlyph,
+	InventoryPromptKind, OverlayHeader, OverlayHeaderKey, ReorderMark, RotaryCaption,
+	RotaryCaptionGroup, RotaryCaptionText, RotaryCard, RotaryLayout, RotaryMotion, RotaryPortrait,
 	ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal, ShortTextModalRoot,
 	ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank, TileWrap,
 };
+pub use gameplay::{gameplay_hud_visibility, GameplayHud, GameplayHudLayer, GameplayHudVisible};
 pub use icons::{spin_icons, Icon, SpinningIcon};
 pub use info::{
 	set_brand_mode_title, set_description_for_menu, set_hint_for_menu, set_info_box_for_menu,
@@ -62,7 +67,7 @@ pub use single_select::{
 	screen_edit_scene, scroll_text_cursor_selection_into_view, select_text_menu_item_on_over,
 	sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav, MenuActivate, MenuFocus,
 	MenuItemLocked, MenuObjectiveKind, MenuObjectiveMarker, MenuStep, MenuStepRow, MenuStepper,
-	ScreenBack, ScreenBackPressed, ScreenEdit, ScreenEditPressed, TextColumnAlign,
+	RotaryMenu, ScreenBack, ScreenBackPressed, ScreenEdit, ScreenEditPressed, TextColumnAlign,
 	TextColumnAnchor, TextCursorColumn, TextCursorMenu, TextCursorRow, TextCursorScroll, TextMenu,
 	TextMenuColumn, TextMenuHeader, TextMenuInputLock, TextMenuItem, TextMenuItemLabel,
 };
@@ -71,17 +76,19 @@ pub use spin_reveal::{
 	SPIN_REVEAL_SECS, SPIN_REVEAL_SLOT_SIZE, SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH,
 };
 pub use theme::{
-	character_screen_grid_node, equipped_pane_fill, menu_list_panel_node, menu_region_wash,
-	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, BONES_ICON, CATALOG_THUMB_PX,
-	CHARACTER_OVERLAY_GAP, CHARACTER_PANEL_INSET, CHARACTER_PANEL_WIDTH,
-	DESCRIPTION_PANE_LEFT_PERCENT, HEADER_FONT_SIZE, INVENTORY_THUMB_PX, INVENTORY_TILE_COLUMNS,
-	ITEM_FONT_SIZE, LOADING_ICON_SIZE, MAP_ARROW_ICON, MAP_GROVE_ICON, MAP_HOUSE_ICON,
-	MAP_MOUNTAIN_ICON, MAP_TOWN_ICON, MAP_TREE_ICON, MAP_WATER_ICON, MENU_CLEAR, MENU_LIST_PAD,
-	MENU_LIST_RADIUS, MENU_REGION_WASH_ALPHA, NOTO_SANS_REGULAR, OBJECTIVE_MARKER_FONT_SIZE,
-	PANEL_BLOCK_FONT_SIZE, PANEL_GROUP_FONT_SIZE, PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE,
-	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, PANEL_TILE_COLUMNS, PROMPT_PAD_NEXT_SECTION,
-	PROMPT_PAD_PREVIOUS_SECTION, PROMPT_PAD_TOGGLE_DRAWER, TEXT_DEEP_BLUE, TEXT_LIGHT_BLUE,
-	TEXT_LIME, TEXT_PURPLE, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS,
+	character_screen_grid_node, equipped_pane_fill, hud_glass_fill, hud_glass_stroke,
+	menu_list_panel_node, menu_region_wash, BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD,
+	BONES_ICON, CATALOG_THUMB_PX, CHARACTER_OVERLAY_GAP, CHARACTER_PANEL_INSET,
+	CHARACTER_PANEL_WIDTH, DESCRIPTION_PANE_LEFT_PERCENT, HEADER_FONT_SIZE, HUD_GLASS_BORDER,
+	HUD_GLASS_FILL, HUD_GLASS_RADIUS, HUD_GLASS_STROKE, HUD_GLASS_STROKE_LIVE, INVENTORY_THUMB_PX,
+	INVENTORY_TILE_COLUMNS, ITEM_FONT_SIZE, LOADING_ICON_SIZE, MAP_ARROW_ICON, MAP_GROVE_ICON,
+	MAP_HOUSE_ICON, MAP_MOUNTAIN_ICON, MAP_TOWN_ICON, MAP_TREE_ICON, MAP_WATER_ICON, MENU_CLEAR,
+	MENU_LIST_PAD, MENU_LIST_RADIUS, MENU_REGION_WASH_ALPHA, NOTO_SANS_REGULAR,
+	OBJECTIVE_MARKER_FONT_SIZE, PANEL_BLOCK_FONT_SIZE, PANEL_GROUP_FONT_SIZE,
+	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP,
+	PANEL_TILE_COLUMNS, PROMPT_PAD_NEXT_SECTION, PROMPT_PAD_PREVIOUS_SECTION,
+	PROMPT_PAD_TOGGLE_DRAWER, TANZ_CALLOUT_ICON_PX, TEXT_DEEP_BLUE, TEXT_LIGHT_BLUE, TEXT_LIME,
+	TEXT_PURPLE, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS,
 	TEXT_YELLOW_HOVER,
 };
 
@@ -103,6 +110,7 @@ pub struct MenuComponentsPlugin;
 
 impl Plugin for MenuComponentsPlugin {
 	fn build(&self, app: &mut App) {
+		gameplay::configure_gameplay_hud(app);
 		app.init_resource::<TextMenuInputLock>()
 			.init_resource::<KeyboardMenuNav>()
 			.init_resource::<MenuNavPad>()
@@ -190,6 +198,7 @@ impl Plugin for MenuComponentsPlugin {
 					sync_inventory_prompt_glyphs,
 				),
 			)
+			.add_systems(Last, controls::animate_rotary_cards)
 			.add_systems(
 				Update,
 				(

@@ -12,6 +12,7 @@ mod throw;
 
 use bevy::prelude::*;
 
+pub use cook_hud::CookFuseHud;
 pub use feel::{blast_presence, blast_rumble, rumble_presence, GrenadeBlastFeel};
 pub use hold::{spawn_held_grenade, HeldGrenade, HoldingGrenade};
 pub use presentation::register_grenade_user_presentation;
