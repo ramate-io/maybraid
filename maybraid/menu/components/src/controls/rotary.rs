@@ -192,6 +192,17 @@ pub struct RotaryCard {
 }
 
 impl RotaryCard {
+	/// Fill previously used by the flattened rotary track ellipse.
+	pub const REMOVED_TRACK_FILL: Color = Color::srgba(0.35, 0.67, 0.88, 0.72);
+
+	pub fn is_removed_track_fill(color: Color) -> bool {
+		color == Self::REMOVED_TRACK_FILL
+	}
+
+	pub fn is_track_transform(transform: &UiTransform) -> bool {
+		transform.scale.y > 0.0 && transform.scale.y < 0.1
+	}
+
 	pub fn unresolved(ordinal: usize, count: usize) -> Self {
 		Self { menu: Entity::PLACEHOLDER, ordinal, count }
 	}
