@@ -29,7 +29,6 @@ vegetation-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-bevy = { workspace = true, features = ["bevy_debug_stepping"] }
 durham = { workspace = true }
 mob-intelligence = { workspace = true }
 
