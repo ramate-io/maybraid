@@ -25,7 +25,7 @@ const HASH_WGSL: &str = include_str!("hash.wgsl");
 
 /// Fragment shader that must keep the same hash function bodies as [`HASH_WGSL`].
 #[cfg(test)]
-const CHAIN_MATERIAL_WGSL: &str = include_str!("chain_material.wgsl");
+const CHAIN_MATERIAL_WESL: &str = include_str!("chain_material.wesl");
 
 /// WGSL `fract`: always toward +∞ from `floor`, including for negatives.
 #[inline]
@@ -133,7 +133,7 @@ mod tests {
 		for name in ["hash13", "hash21", "link_weakness"] {
 			assert_eq!(
 				collapse_ws(wgsl_fn_body(HASH_WGSL, name)),
-				collapse_ws(wgsl_fn_body(CHAIN_MATERIAL_WGSL, name)),
+				collapse_ws(wgsl_fn_body(CHAIN_MATERIAL_WESL, name)),
 				"{name} in chain_material.wgsl drifted from hash.wgsl"
 			);
 		}
