@@ -34,7 +34,11 @@ impl Default for BossSpawnConfig {
 	}
 }
 
-/// Seeds the boss encounter during HCSG session restarts.
+/// Seeds the boss encounter session root during HCSG session restarts.
+///
+/// Only seeds `AuthoredBossSpawns` (the session root), not the boss encounter itself.
+/// The boss encounter is derived data that will be regenerated on-demand when presentation
+/// requests it via `original_ids_for` and `build_with_id`.
 fn seed_boss_encounter(config: Res<BossSpawnConfig>, storage: Res<HcsgStorage>) {
 	let position = if config.active {
 		Some(config.position)
@@ -45,15 +49,8 @@ fn seed_boss_encounter(config: Res<BossSpawnConfig>, storage: Res<HcsgStorage>) 
 	let spawns = AuthoredBossSpawns { position };
 	storage.seed(spawns, universal_bounds());
 	
-	if let Some(pos) = position {
-		info!("[BOSS] Reseeding encounter at ({:.1}, {:.1}, {:.1})", pos.x, pos.y, pos.z);
-		
-		let encounter = BikanwardaBossEncounter::chained_at(pos);
-		let id = lod::gen::Id::Bytes(Bytes(
-			bikanwarda_encounter::chained_encounter_id().as_bytes()
-		));
-		
-		storage.publish(id, Arc::new(encounter.clone()), encounter.bounds);
+	if position.is_some() {
+		info!("[BOSS] Reseeded AuthoredBossSpawns at session restart");
 	}
 }
 

@@ -112,9 +112,15 @@ fn boss_spawn_updates_config() -> anyhow::Result<()> {
 	Ok(())
 }
 
-/// Test that session reseeder restores boss after HCSG restart
+/// Test that session reseeder restores authored spawn position after HCSG restart.
+///
+/// After the fix: Session restart seeds `AuthoredBossSpawns` (session root), and the
+/// boss encounter is regenerated on-demand when requested.
 #[test]
 fn boss_survives_session_restart() -> anyhow::Result<()> {
+	use bikanwarda_encounter::{AuthoredBossSpawns, BikanwardaBossEncounter};
+	use lod::hcsg::{GenerationContext, GenerationScheme};
+	
 	let mut app = minimal_app();
 	
 	let spawn_pos = Vec3::new(1746.8, 0.0, 1025.9);
@@ -136,11 +142,31 @@ fn boss_survives_session_restart() -> anyhow::Result<()> {
 	app.world_mut().resource_mut::<HcsgRestartRequest>().request();
 	app.update();
 	
-	// Verify boss is reseeded after restart
+	// Verify AuthoredBossSpawns session root was reseeded
 	let storage = app.world().resource::<HcsgStorage>();
+	let spawns = storage.get::<AuthoredBossSpawns>(lod::gen::Id::Universal);
 	anyhow::ensure!(
-		boss_in_storage(storage, spawn_pos)?,
-		"Boss should be reseeded after restart"
+		spawns.is_some(),
+		"AuthoredBossSpawns session root should be reseeded after restart"
+	);
+	anyhow::ensure!(
+		spawns.as_ref().unwrap().position == Some(spawn_pos),
+		"AuthoredBossSpawns should preserve spawn position"
+	);
+	
+	// Verify boss can be regenerated from the session root
+	let mut cx = GenerationContext::new(storage);
+	let boss_id = lod::gen::Id::Bytes(Bytes(chained_encounter_id().as_bytes()));
+	let rebuilt = BikanwardaBossEncounter::build_with_id(&mut cx, boss_id);
+	anyhow::ensure!(
+		rebuilt.is_some(),
+		"Boss should be regenerable from AuthoredBossSpawns after restart"
+	);
+	
+	let (rebuilt_encounter, _) = rebuilt.unwrap();
+	anyhow::ensure!(
+		(rebuilt_encounter.boss_position - spawn_pos).length() < 0.1,
+		"Regenerated boss should have same position"
 	);
 	
 	Ok(())
@@ -292,39 +318,70 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 	app.world_mut().resource_mut::<HcsgRestartRequest>().request();
 	app.update();
 	
-	// Verify boss survives restart
-	let storage = app.world().resource::<HcsgStorage>();
-	let entry = storage.try_entry::<BikanwardaBossEncounter>(boss_id)
-		.map_err(|_| anyhow::anyhow!("storage busy after restart"))?;
-	anyhow::ensure!(
-		entry.is_some(),
-		"Boss should survive HCSG restart via session reseeder"
-	);
-	
-	let boss_data = entry.unwrap();
-	anyhow::ensure!(
-		(boss_data.value.boss_position - SPAWN_POS).length() < 0.1,
-		"Boss position should be preserved after restart"
-	);
+	// Verify AuthoredBossSpawns session root survives restart
+	{
+		use bikanwarda_encounter::{AuthoredBossSpawns, BikanwardaBossEncounter};
+		use lod::hcsg::{GenerationContext, GenerationScheme};
+		
+		let storage = app.world().resource::<HcsgStorage>();
+		let spawns = storage.get::<AuthoredBossSpawns>(lod::gen::Id::Universal);
+		anyhow::ensure!(
+			spawns.is_some(),
+			"AuthoredBossSpawns should survive HCSG restart via session reseeder"
+		);
+		anyhow::ensure!(
+			spawns.as_ref().unwrap().position == Some(SPAWN_POS),
+			"Boss position should be preserved in AuthoredBossSpawns after restart"
+		);
+		
+		// Verify boss can be regenerated
+		let mut cx = GenerationContext::new(storage);
+		let rebuilt = BikanwardaBossEncounter::build_with_id(&mut cx, boss_id);
+		anyhow::ensure!(
+			rebuilt.is_some(),
+			"Boss should be regenerable after restart"
+		);
+		
+		let (rebuilt_encounter, _) = rebuilt.unwrap();
+		anyhow::ensure!(
+			(rebuilt_encounter.boss_position - SPAWN_POS).length() < 0.1,
+			"Regenerated boss should have same position"
+		);
+	}
 	
 	// Test multiple restarts (simulates repeated HCSG restarts from other systems)
 	for restart_idx in 0..3 {
 		app.world_mut().resource_mut::<HcsgRestartRequest>().request();
 		app.update();
 		
+		use bikanwarda_encounter::{AuthoredBossSpawns, BikanwardaBossEncounter};
+		use lod::hcsg::{GenerationContext, GenerationScheme};
+		
 		let storage = app.world().resource::<HcsgStorage>();
-		let entry = storage.try_entry::<BikanwardaBossEncounter>(boss_id)
-			.map_err(|_| anyhow::anyhow!("storage busy after restart {}", restart_idx))?;
+		let spawns = storage.get::<AuthoredBossSpawns>(lod::gen::Id::Universal);
 		anyhow::ensure!(
-			entry.is_some(),
-			"Boss disappeared after restart {}",
+			spawns.is_some(),
+			"AuthoredBossSpawns disappeared after restart {}",
+			restart_idx
+		);
+		anyhow::ensure!(
+			spawns.as_ref().unwrap().position == Some(SPAWN_POS),
+			"Boss position corrupted in AuthoredBossSpawns after restart {}",
 			restart_idx
 		);
 		
-		let boss_data = entry.unwrap();
+		let mut cx = GenerationContext::new(storage);
+		let rebuilt = BikanwardaBossEncounter::build_with_id(&mut cx, boss_id);
 		anyhow::ensure!(
-			(boss_data.value.boss_position - SPAWN_POS).length() < 0.1,
-			"Boss position corrupted after restart {}",
+			rebuilt.is_some(),
+			"Boss not regenerable after restart {}",
+			restart_idx
+		);
+		
+		let (rebuilt_encounter, _) = rebuilt.unwrap();
+		anyhow::ensure!(
+			(rebuilt_encounter.boss_position - SPAWN_POS).length() < 0.1,
+			"Regenerated boss position wrong after restart {}",
 			restart_idx
 		);
 	}
@@ -335,13 +392,24 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 	}
 	
 	// Final verification
-	let storage = app.world().resource::<HcsgStorage>();
-	let entry = storage.try_entry::<BikanwardaBossEncounter>(boss_id)
-		.map_err(|_| anyhow::anyhow!("storage busy at end"))?;
-	anyhow::ensure!(
-		entry.is_some(),
-		"Boss should still be in storage at test end"
-	);
+	{
+		use bikanwarda_encounter::{AuthoredBossSpawns, BikanwardaBossEncounter};
+		use lod::hcsg::{GenerationContext, GenerationScheme};
+		
+		let storage = app.world().resource::<HcsgStorage>();
+		let spawns = storage.get::<AuthoredBossSpawns>(lod::gen::Id::Universal);
+		anyhow::ensure!(
+			spawns.is_some() && spawns.as_ref().unwrap().position == Some(SPAWN_POS),
+			"AuthoredBossSpawns should still be correct at test end"
+		);
+		
+		let mut cx = GenerationContext::new(storage);
+		let rebuilt = BikanwardaBossEncounter::build_with_id(&mut cx, boss_id);
+		anyhow::ensure!(
+			rebuilt.is_some(),
+			"Boss should still be regenerable at test end"
+		);
+	}
 	
 	Ok(())
 }
