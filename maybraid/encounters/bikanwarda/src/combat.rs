@@ -154,6 +154,10 @@ impl Plugin for BossEncounterCombatPlugin {
 		if !app.is_plugin_added::<combat_targeting::CombatTargetingPlugin>() {
 			app.add_plugins(combat_targeting::CombatTargetingPlugin);
 		}
+		// Install AttacksPlugin if not already present (provides AttackCatalog)
+		if !app.is_plugin_added::<attacks::AttacksPlugin>() {
+			app.add_plugins(attacks::AttacksPlugin);
+		}
 		
 		app.add_systems(
 			Update,
