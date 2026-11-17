@@ -795,7 +795,8 @@ mod integration_regressions {
 			bevy::scene::ScenePlugin,
 			avian3d::prelude::PhysicsPlugins::default(),
 		))
-		.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(DT)));
+		.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(DT)))
+		.add_message::<BeginAttack>();
 		
 		// Install spotting with physics (required for real occlusion tests)
 		if !app.is_plugin_added::<spotting_intelligence_avian::SpottingAvianPlugin>() {
