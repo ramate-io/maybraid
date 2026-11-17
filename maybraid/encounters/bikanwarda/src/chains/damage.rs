@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use damage::Health;
 use encounters::EncounterSignal;
 
-use super::motion::{ChainRoot, ReleasedChain};
+use super::motion::{ChainAnchor, ChainEndpoint, ChainMotion, ChainRoot, ReleasedChain};
 
 /// Tracks which chain roots have already emitted a ChainBroken signal.
 ///
@@ -381,7 +381,7 @@ mod tests {
 			))
 			.id();
 
-		// Spawn a chain with its own health
+		// Spawn a chain with its own health, anchored to the boss
 		let chain_root = app
 			.world_mut()
 			.spawn((
@@ -391,6 +391,32 @@ mod tests {
 					joint_entities: vec![],
 				},
 				Health::from_max(10.0),
+			))
+			.id();
+
+		// Create anchor entities that tie the chain to the boss
+		let anchor_start = app
+			.world_mut()
+			.spawn((
+				Name::new("Anchor-Start"),
+				ChainAnchor {
+					endpoint: ChainEndpoint::Start,
+					chain_root,
+				},
+				Transform::IDENTITY,
+				ChildOf(boss),
+			))
+			.id();
+
+		let anchor_end = app
+			.world_mut()
+			.spawn((
+				Name::new("Anchor-End"),
+				ChainAnchor {
+					endpoint: ChainEndpoint::End,
+					chain_root,
+				},
+				Transform::IDENTITY,
 			))
 			.id();
 
@@ -413,13 +439,43 @@ mod tests {
 
 		app.update();
 
-		// Chain should be broken
+		// Chain should be broken and released
 		assert!(app.world().get::<BrokenChain>(chain_root).is_some());
 		assert!(app.world().get::<ReleasedChain>(chain_root).is_some());
 
-		// Boss health should be unchanged
+		// Boss must be alive (Health > 0)
 		let boss_health = app.world().get::<Health>(boss).unwrap();
 		assert_eq!(boss_health.current, 500.0, "Boss should not be damaged when chain breaks");
+		assert!(boss_health.current > 0.0, "Boss must be alive after chain break");
+
+		// Boss must NOT have emitted Died message (not in corpse flow)
+		let died_messages: Vec<_> = app
+			.world_mut()
+			.resource_mut::<Messages<damage::Died>>()
+			.drain()
+			.filter(|d| d.entity == boss)
+			.collect();
+		assert!(
+			died_messages.is_empty(),
+			"Boss should not have Died message after chain break (got {} Died for boss)",
+			died_messages.len()
+		);
+
+		// Verify anchors exist but chain is released (constraint no longer active)
+		// NOTE: Current implementation does not auto-despawn ChainAnchor entities.
+		// The ReleasedChain marker deactivates motion, so anchors become inert.
+		assert!(
+			app.world().get_entity(anchor_start).is_ok(),
+			"Start anchor entity should still exist"
+		);
+		assert!(
+			app.world().get_entity(anchor_end).is_ok(),
+			"End anchor entity should still exist"
+		);
+
+		// Verify motion is deactivated (chain no longer constrains/restrains boss)
+		let motion = app.world().get::<ChainMotion>(chain_root);
+		assert!(motion.map_or(true, |m| !m.active), "Chain motion should be inactive after break");
 
 		Ok(())
 	}
