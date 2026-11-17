@@ -132,7 +132,7 @@ pub(crate) fn apply_mob_inspect(
 	let host_count = hosts.iter().count();
 	let member_count = members.iter().count();
 	let npc_count = npcs.iter().count();
-	let pending_count = pending.map_or(0, |p| if p.is_empty() { 0 } else { 1 });
+	let pending_count = pending.map_or(0, |p| p.len());
 
 	let nearby_info = if let Ok(player_transform) = players.single() {
 		let player_pos = player_transform.translation();

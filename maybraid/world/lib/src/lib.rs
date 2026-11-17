@@ -229,11 +229,6 @@ impl Plugin for WorldPlugin {
 			.add_plugins(MeshStatsPlugin)
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin);
-		// Ensure MobGroupsPlugin is available for debug commands before WorldLayersPlugin
-		// so `mobs spawn` can queue groups even if HCSG hasn't started yet.
-		if !app.is_plugin_added::<barking::MobGroupsPlugin>() {
-			app.add_plugins(barking::MobGroupsPlugin);
-		}
 		app.add_plugins(WorldLayersPlugin)
 			.add_plugins(DiscoveryPlayerPlugin)
 			.add_plugins(WorldIntelligencePlugin)
