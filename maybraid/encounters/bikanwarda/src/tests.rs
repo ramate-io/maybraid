@@ -1480,5 +1480,96 @@ mod integration_regressions {
 		assert!(attacks_seen.iter().all(|attack| attack.target != Some(player)),
 			"Boss should not attack out-of-range player");
 	}
+
+	/// Test (d): Neutral character (non-PLAYER_GROUP) in range and visible gets no attack.
+	///
+	/// Uses real LodScene, assembly, spotting, threat intelligence and attack driver.
+	/// Verifies the shared bridge doesn't attack every visible character - only hostile ones.
+	///
+	/// Frame timing at 60 FPS (DT = 1/60s):
+	/// - Threat intelligence scan: 0.5s = 30 frames (with jitter: 24-36)
+	/// - Spotting discovery: 0.2s = 12 frames
+	/// - Run 60 frames to ensure discovery cycles complete
+	#[test]
+	fn boss_does_not_attack_neutral_character() {
+		let mut app = full_encounter_app();
+		
+		// Spawn encounter scene at nonzero world position
+		let boss_position = Vec3::new(1000.0, 110.15, 2000.0);
+		let terrain_y = 100.0;
+		let encounter = crate::generation::BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
+		
+		let anchor_transform = Transform::from_translation(Vec3::ZERO);
+		let anchor = app.world_mut().spawn(anchor_transform).id();
+		
+		let scene = encounter.scene_with_level(
+			&lod::lod_ref::LodRef {
+				entity: anchor,
+				previous_transform: &anchor_transform,
+				current_transform: &anchor_transform,
+				bounds: &bevy::shape::Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0)),
+			},
+			lod::scene::LodSceneLevel::High,
+		);
+		let host_entity = app.world_mut().spawn_scene(scene).expect("spawn_scene should succeed").id();
+		
+		// Run assembly to create actor and initialize combat
+		for _ in 0..5 {
+			app.update();
+		}
+		
+		// Get actor entity from host
+		let actor_entity = app.world().entity(host_entity)
+			.get::<BossActor>()
+			.expect("Host should have BossActor")
+			.0;
+		
+		// Spawn neutral character in range and visible
+		// NO PLAYER_GROUP membership - boss antagonizes PLAYER_GROUP but this character isn't in it
+		let neutral_pos = boss_position + Vec3::new(20.0, 0.0, 0.0); // 20m away, well within range
+		let neutral = app.world_mut().spawn((
+			Name::new("neutral-character"),
+			Transform::from_translation(neutral_pos),
+			GlobalTransform::from_translation(neutral_pos),
+			spotting_intelligence::SpotSubject::new(
+				spotting_intelligence::InterestLayers::CHARACTER,
+				spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
+			),
+			avian3d::prelude::RigidBody::Kinematic,
+			avian3d::prelude::Collider::capsule(0.4, 1.8),
+			// CRITICAL: Must have Animated collision layer for spotting discovery
+			lod_avian::PhysicsInteractionLayer::animated_layers(),
+			// ThreatSubject so threat intelligence can see them
+			threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId(100)),
+			// Neutral affiliations: NOT a member of PLAYER_GROUP (no join call)
+			threat_intelligence::Affiliations::default(),
+		)).id();
+		
+		// Run updates to allow discovery cycles
+		// Threat intelligence will discover them, but ThreatManagement won't grant ENEMYSHIP
+		// because threat_weight (boss.antagonists vs neutral.memberships) will be 0
+		let mut attacks_seen = Vec::new();
+		for _ in 0..60 {
+			app.update();
+			
+			// Check for attack messages after each update
+			let frame_attacks: Vec<BeginAttack> = app.world_mut()
+				.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| -> Vec<BeginAttack> {
+					messages.read().cloned().collect()
+				})
+				.expect("Failed to read BeginAttack messages");
+			
+			attacks_seen.extend(frame_attacks);
+		}
+		
+		// Verify the neutral character was spotted (visible)
+		let actor_ref = app.world().entity(actor_entity);
+		let spotting = actor_ref.get::<SpottingUser>().expect("Actor should have SpottingUser");
+		let was_spotted = spotting.contacts.contains_key(&neutral);
+		
+		// Verify no attack was targeted at the neutral character
+		assert!(attacks_seen.iter().all(|attack| attack.target != Some(neutral)),
+			"Boss should not attack neutral character (was_spotted: {})", was_spotted);
+	}
 }
 
