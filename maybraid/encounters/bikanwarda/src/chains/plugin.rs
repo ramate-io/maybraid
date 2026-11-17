@@ -33,23 +33,20 @@ impl Plugin for BikanwardaChainPhysicsPlugin {
 				deactivate_released_chains,
 			)
 				.after(TransformSystems::Propagate),
+		)
+		.add_systems(
+			PostUpdate,
+			// Contact deduplication runs in Collect, BEFORE contacts_to_hits
+			coalesce_chain_contacts.in_set(DamageSystems::Collect),
 		);
 
-		// Contact deduplication runs in Collect, BEFORE contacts_to_hits
-		// This requires coordination with the damage plugin, which we'll handle
-		// by using a well-known system set.
-		//
-		// Note: The damage plugin defines DamageSystems::Collect.after(ProjectileSystems::Sweep).
-		// We run coalesce_chain_contacts at the start of Collect so it processes contacts
-		// before contacts_to_hits (which also runs in Collect).
-		//
-		// System ordering in Collect:
+		// System ordering in DamageSystems::Collect:
 		//   1. coalesce_chain_contacts (this plugin)
 		//   2. contacts_to_hits (damage plugin)
 		//
 		// We achieve this by not using any .after() on coalesce_chain_contacts within Collect.
-		// Since both are in the same set, and we register this plugin first, our system
-		// should run first by registration order.
+		// Since both are in the same set, and we register this plugin before DamagePlugin,
+		// our system runs first by registration order.
 	}
 }
 

@@ -364,30 +364,37 @@ mod tests {
 	}
 
 	#[test]
-	#[ignore = "Integration test needs message initialization debugging - structure correct but plugin wiring incomplete"]
 	fn projectile_collision_coalesces_to_single_damage() -> Result<()> {
 		use avian3d::prelude::*;
 		use bevy::time::TimeUpdateStrategy;
-		use damage::{DamagePlugin, Health};
+		use damage::{DamagePlugin, Health, HitPayload};
+		use lod_avian::PhysicsInteractionLayer;
 		use projectiles::{Flight, ProjectileSource, ProjectilesPlugin};
 
 		let mut app = App::new();
-		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
-			.add_plugins(TransformPlugin)
-			.add_plugins(PhysicsPlugins::default())
-			.add_plugins(ProjectilesPlugin)
-			.add_plugins(DamagePlugin)
-			.add_plugins(BikanwardaChainPhysicsPlugin)
-			.insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_millis(16)));
+		app.add_plugins((
+			MinimalPlugins,
+			AssetPlugin::default(),
+			TransformPlugin,
+			bevy::mesh::MeshPlugin,
+			PhysicsPlugins::default(),
+			ProjectilesPlugin,
+			DamagePlugin,
+			BikanwardaChainPhysicsPlugin,
+		))
+		.insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_millis(16)));
+		app.finish();
 
 		let link_count = 12;
 		let length_m = 3.0;
-		let initial_health = 100.0;
+		let initial_health = 50.0; // Low health so we can test death
+		let damage_per_hit = 25.0;
 
 		// Spawn chain root with health
 		let root = app
 			.world_mut()
 			.spawn((
+				Name::new("test-chain"),
 				ChainRoot { link_count, rest_length_m: length_m },
 				ChainMotion {
 					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
@@ -399,10 +406,11 @@ mod tests {
 			))
 			.id();
 
-		// Spawn horizontal anchors
+		// Spawn horizontal anchors at same height, horizontally apart
 		let _left = app
 			.world_mut()
 			.spawn((
+				Name::new("left-anchor"),
 				ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
 				Transform::from_xyz(-1.5, 2.5, 0.0),
 				GlobalTransform::default(),
@@ -412,19 +420,20 @@ mod tests {
 		let _right = app
 			.world_mut()
 			.spawn((
+				Name::new("right-anchor"),
 				ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
 				Transform::from_xyz(1.5, 2.5, 0.0),
 				GlobalTransform::default(),
 			))
 			.id();
 
-		// Spawn joints (motion system will position them)
+		// Spawn joints
 		let mut joints = Vec::new();
 		for i in 0..link_count {
 			let joint = app
 				.world_mut()
 				.spawn((
-					ChainLinkId { link_id: i as u8, chain_root: root },
+					Name::new(format!("chain-joint-{i}")),
 					Transform::from_xyz(0.0, 0.0, 0.0),
 					GlobalTransform::default(),
 				))
@@ -433,69 +442,146 @@ mod tests {
 			joints.push(joint);
 		}
 
-		// Run a few frames to let motion system position joints
-		for _ in 0..5 {
-			app.update();
-		}
+		// Run updates to let motion system position joints
+		app.update();
+		let _ = app.world_mut().run_system_once(update_chain_joints);
+		app.update();
 
 		// Spawn chain colliders
 		let config = ChainColliderConfig::default();
-		spawn_chain_colliders(&mut app.world_mut().commands(), root, &joints, config);
-		app.update(); // Apply spawned colliders
+		let colliders = app
+			.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				spawn_chain_colliders(&mut commands, root, &joints, config)
+			})
+			.unwrap();
 
-		// Spawn projectile aimed through the sag point where multiple capsules overlap
-		let projectile_start = Vec3::new(-2.0, 2.2, 0.0); // Left of chain, at sag height
-		let projectile_velocity = Vec3::new(10.0, 0.0, 0.0); // Moving right through chain
-		let source = app.world_mut().spawn(()).id();
+		app.update(); // Apply spawned colliders and sync positions
+
+		// Verify colliders are positioned (they should be spread along the catenary)
+		let collider_positions: Vec<Vec3> = colliders
+			.iter()
+			.filter_map(|&e| app.world().get::<Transform>(e).map(|t| t.translation))
+			.collect();
+		if collider_positions.len() < 3 {
+			return Err(anyhow!("Expected at least 3 positioned colliders"));
+		}
+
+		// Find the sag point (lowest y position, should be near the middle)
+		let min_y = collider_positions.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
+
+		// Spawn projectile aimed through the sag point where 2-3 capsules overlap
+		let projectile_start = Vec3::new(-2.0, min_y, 0.0); // Left of chain at sag height
+		let projectile_velocity = Vec3::new(15.0, 0.0, 0.0); // Moving right through chain
+		let source = app.world_mut().spawn(Name::new("weapon")).id();
 
 		let _projectile = app
 			.world_mut()
 			.spawn((
+				Name::new("test-projectile"),
 				Flight::spawn(projectile_start, 100.0, 100.0, 10.0),
 				ProjectileSource(source),
+				HitPayload { amount: damage_per_hit },
 				Transform::from_translation(projectile_start),
 				GlobalTransform::default(),
 				LinearVelocity(projectile_velocity),
 				Collider::sphere(0.05),
 				Sensor,
+				PhysicsInteractionLayer::projectile_layers(),
+				RigidBody::Dynamic,
+				GravityScale(0.0),
 			))
 			.id();
 
-		// Run until contact (max 100 frames) and let damage system process
-		let mut damage_applied = false;
-		for _ in 0..100 {
+		// Run until collision happens and damage is applied (max 60 frames = 1 second at 16ms)
+		let mut damage_frame = None;
+		for frame in 0..60 {
 			app.update();
-			
-			// Check if health changed (damage was applied)
+
+			// Check if health has changed (damage was applied)
 			if let Some(health) = app.world().entity(root).get::<Health>() {
 				if health.current < initial_health {
-					damage_applied = true;
+					damage_frame = Some(frame);
 					break;
 				}
 			}
 		}
 
-		if !damage_applied {
-			return Err(anyhow!("No damage applied to chain root after 100 frames"));
-		}
+		let damage_frame = damage_frame
+			.ok_or_else(|| anyhow!("No damage applied after 60 frames (1 second)"))?;
 
-		// Verify: damage was applied to chain root (contacts coalesced)
-		let health = app.world().entity(root).get::<Health>().unwrap();
-		let damage_taken = initial_health - health.current;
-		
-		// Just verify some damage occurred - exact amount depends on weapon/damage system
+		info!("Damage applied at frame {damage_frame}");
+
+		// Check health was reduced
+		let health_after = app.world().entity(root).get::<Health>().unwrap();
+		let damage_taken = initial_health - health_after.current;
+
 		if damage_taken <= 0.0 {
 			return Err(anyhow!(
 				"Expected damage to be applied, but health unchanged (initial: {}, current: {})",
 				initial_health,
-				health.current
+				health_after.current
 			));
 		}
 
-		info!(
-			"Projectile collision test passed: {} damage applied to chain root",
-			damage_taken
-		);
+		// Verify approximately one hit's worth of damage (allowing for slight variations)
+		if (damage_taken - damage_per_hit).abs() > 5.0 {
+			return Err(anyhow!(
+				"Expected ~{damage_per_hit} damage (one hit), but took {damage_taken} damage. \
+				 This suggests contacts were not properly coalesced."
+			));
+		}
+
+		info!("✓ Collision coalesced correctly: {damage_taken} damage applied (expected ~{damage_per_hit})");
+
+		// Test death scenario: spawn another projectile to finish off the chain
+		let _projectile2 = app
+			.world_mut()
+			.spawn((
+				Name::new("finishing-projectile"),
+				Flight::spawn(projectile_start, 100.0, 100.0, 10.0),
+				ProjectileSource(source),
+				HitPayload { amount: damage_per_hit },
+				Transform::from_translation(projectile_start),
+				GlobalTransform::default(),
+				LinearVelocity(projectile_velocity),
+				Collider::sphere(0.05),
+				Sensor,
+				PhysicsInteractionLayer::projectile_layers(),
+				RigidBody::Dynamic,
+				GravityScale(0.0),
+			))
+			.id();
+
+		// Run until second hit depletes health (max 60 frames)
+		let mut killed = false;
+		for _ in 0..60 {
+			app.update();
+			
+			// Check if chain is dead
+			if let Some(health) = app.world().entity(root).get::<Health>() {
+				if health.is_dead() {
+					killed = true;
+					break;
+				}
+			}
+		}
+
+		if !killed {
+			return Err(anyhow!("Second projectile did not kill chain"));
+		}
+
+		// Verify death
+		let final_health = app.world().entity(root).get::<Health>().unwrap();
+		if !final_health.is_dead() {
+			return Err(anyhow!(
+				"Expected chain to die after two hits, but health is {}",
+				final_health.current
+			));
+		}
+
+		// Check for Died message (it may have been processed already, so we check health.is_dead())
+		info!("✓ Chain died after taking lethal damage");
 
 		Ok(())
 	}
