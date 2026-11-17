@@ -28,13 +28,13 @@
 
 use attacks::{AttackCatalog, BeginAttack};
 use bevy::prelude::*;
-use bikanwarda_attacks::BRAY;
+use bikanwarda_attacks::{BikanwardaMouthSocket, BRAY};
 use bikanwarda_character::BikanwardaRoot;
-use combat_targeting::{CombatContact, CombatTargeting, TargetAlgebra, TargetSource};
+use combat_targeting::{CombatContact, CombatTargeting, TargetSource};
 use damage::Health;
 use world_player::Player as WorldPlayer;
 
-use crate::presentation::BossEncounterRoot;
+use crate::presentation::{BossActor, BossEncounterRoot};
 
 /// Marker for bosses currently in combat.
 #[derive(Component, Clone, Copy, Debug, Default)]
@@ -59,19 +59,24 @@ impl Default for BossAttackCooldown {
 ///
 /// Reuses existing CombatContact memory and TargetSource membership without
 /// requiring mobile-NPC perception or threat-intelligence systems.
+///
+/// Queries the host (BossEncounterRoot) to find the actor (BikanwardaRoot) via BossActor,
+/// then uses the actor's Transform for positioning and targeting.
 pub fn update_boss_targeting(
 	time: Res<Time>,
-	mut bosses: Query<
-		(&Transform, &mut CombatTargeting),
-		(With<BossEncounterRoot>, With<BikanwardaRoot>),
-	>,
+	hosts: Query<&BossActor, With<BossEncounterRoot>>,
+	mut actors: Query<(&Transform, &mut CombatTargeting), With<BikanwardaRoot>>,
 	players: Query<(Entity, &Transform), With<WorldPlayer>>,
 ) {
 	let now = time.elapsed_secs();
 	const DETECTION_RANGE: f32 = 50.0; // Match typical encounter arena size
 	
-	for (boss_transform, mut targeting) in &mut bosses {
-		let boss_pos = boss_transform.translation;
+	for actor_ref in &hosts {
+		let Ok((actor_transform, mut targeting)) = actors.get_mut(actor_ref.0) else {
+			continue;
+		};
+		
+		let boss_pos = actor_transform.translation;
 		
 		// Find nearby players and add them to targeting memory
 		for (player_entity, player_transform) in &players {
@@ -101,29 +106,35 @@ pub fn update_boss_targeting(
 ///
 /// Uses best-ranked target from CombatTargeting. Attacks only fire when a real
 /// target exists and is in range. Otherwise stays idle (no cooldown-only firing).
+///
+/// Queries the host (BossEncounterRoot with Health) to check death state, then
+/// uses BossActor to find the actor entity that owns the attack and targeting systems.
 pub fn boss_combat_driver(
 	time: Res<Time>,
 	catalog: Res<AttackCatalog>,
-	mut bosses: Query<
-		(
-			Entity,
-			&Transform,
-			&Health,
-			&mut BossAttackCooldown,
-			&CombatTargeting,
-		),
-		(With<BossEncounterRoot>, With<BikanwardaRoot>),
-	>,
+	hosts: Query<(&BossActor, &Health, &mut BossAttackCooldown), With<BossEncounterRoot>>,
+	actors: Query<(&Transform, &CombatTargeting, &Children), With<BikanwardaRoot>>,
+	mouth_sockets: Query<Entity, With<BikanwardaMouthSocket>>,
 	targets: Query<&Transform>,
 	mut attacks: MessageWriter<BeginAttack>,
 ) {
 	const ATTACK_RANGE: f32 = 40.0; // Bray range from attack definition
 	
-	for (boss_entity, boss_transform, health, mut cooldown, targeting) in &mut bosses {
-		// Gate: skip if dead
+	for (actor_ref, health, mut cooldown) in &hosts {
+		// Gate: skip if host health is dead
 		if health.is_dead() {
 			continue;
 		}
+
+		let Ok((actor_transform, targeting, children)) = actors.get(actor_ref.0) else {
+			continue;
+		};
+		
+		// Find the mouth socket among the actor's children
+		let mouth_socket = children
+			.iter()
+			.find(|child| mouth_sockets.contains(*child))
+			.copied();
 
 		// Tick cooldown
 		cooldown.timer.tick(time.delta());
@@ -142,7 +153,7 @@ pub fn boss_combat_driver(
 			continue;
 		};
 		
-		let distance = boss_transform.translation.distance(target_transform.translation);
+		let distance = actor_transform.translation.distance(target_transform.translation);
 		if distance > ATTACK_RANGE {
 			// Out of range - stay idle
 			continue;
@@ -155,13 +166,15 @@ pub fn boss_combat_driver(
 		};
 
 		// Trigger Bray attack with real target
+		// Owner is the ACTOR entity (BikanwardaRoot), which has AttackUser
+		// Emit from mouth socket if available
 		attacks.write(BeginAttack {
-			owner: boss_entity,
+			owner: actor_ref.0,
 			definition: BRAY,
 			target: Some(ranked.entity),
 			allies: Vec::new(),
 			emission: None,
-			emission_socket: None,
+			emission_socket: mouth_socket,
 		});
 
 		// Reset cooldown based on attack definition
@@ -169,25 +182,31 @@ pub fn boss_combat_driver(
 		cooldown.timer = Timer::from_seconds(cooldown_secs, TimerMode::Once);
 
 		debug!(
-			"Boss {:?} triggered Bray attack on {:?} at {:.1}m with cooldown {:.1}s",
-			boss_entity, ranked.entity, distance, cooldown_secs
+			"Boss actor {:?} triggered Bray attack on {:?} at {:.1}m with cooldown {:.1}s",
+			actor_ref.0, ranked.entity, distance, cooldown_secs
 		);
 	}
 }
 
 /// System to initialize combat state on boss spawn.
+///
+/// Adds CombatTargeting to the actor (BikanwardaRoot) when the host gets a BossActor binding.
+/// BossAttackCooldown goes on the host since it's checked against host Health.
 pub fn initialize_boss_combat(
 	mut commands: Commands,
-	new_bosses: Query<Entity, (Added<BossEncounterRoot>, With<BikanwardaRoot>)>,
+	new_bindings: Query<(Entity, &BossActor), (Added<BossActor>, With<BossEncounterRoot>)>,
 ) {
-	for boss_entity in &new_bosses {
-		// Initialize CombatTargeting with default configuration (reuses existing ranking system)
-		commands.entity(boss_entity).insert((
+	for (host_entity, actor_ref) in &new_bindings {
+		// Add CombatTargeting to the ACTOR (used by attack system and targeting adapter)
+		commands.entity(actor_ref.0).insert((
 			BossInCombat,
-			BossAttackCooldown::default(),
 			CombatTargeting::default(),
 		));
-		info!("Initialized combat state for boss {:?}", boss_entity);
+		
+		// Add BossAttackCooldown to the HOST (checked alongside Health)
+		commands.entity(host_entity).insert(BossAttackCooldown::default());
+		
+		info!("Initialized combat state: host {:?} → actor {:?}", host_entity, actor_ref.0);
 	}
 }
 

@@ -23,7 +23,11 @@ pub struct BikanwardaChainPhysicsPlugin;
 
 impl Plugin for BikanwardaChainPhysicsPlugin {
 	fn build(&self, app: &mut App) {
-		// ProjectileContact message is added by DamagePlugin/ProjectilePlugin
+		// Ensure DamagePlugin is installed (provides ProjectileContact message and contacts_to_hits system)
+		// The coalescer runs BEFORE contacts_to_hits in DamageSystems::Collect
+		if !app.is_plugin_added::<damage::DamagePlugin>() {
+			app.add_plugins(damage::DamagePlugin);
+		}
 
 		app.init_resource::<ChainDamageHistory>()
 			.init_resource::<ChainBrokenHistory>()

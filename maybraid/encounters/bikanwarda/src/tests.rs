@@ -196,9 +196,7 @@ fn chained_slug_is_the_fixture_key() {
 // Ground-fit and placement regression tests (#1117)
 mod placement {
 	use super::*;
-	use crate::generation::BikanwardaBossEncounter;
 	use bevy::shape::Aabb3d;
-	use characters::CharacterRecipe;
 	
 	#[test]
 	fn boss_position_is_preserved_in_generated_encounter() {
@@ -489,8 +487,6 @@ fn terrain_y_stable_across_eviction_regeneration() {
 	);
 	
 	// Verify pedestal/column bases would be at same world Y
-	// Column offset from boss
-	let column_offset_xz = Vec2::new(8.0, 0.0);
 	
 	// Calculate expected world Y for pedestal and column (same for both encounters)
 	let expected_pedestal_world_y = terrain_y + 1.5; // 3m full height, center at terrain + 1.5
@@ -540,7 +536,7 @@ mod combat_integration {
 	use super::*;
 	use crate::presentation::{BossEncounterRoot};
 	use crate::combat::{BossInCombat, BossAttackCooldown};
-	use damage::{Health, Hit, HitPayload, DamageApplied};
+	use damage::{Health, Hit};
 	use encounters::EncounterInstance;
 	use bikanwarda_character::BikanwardaRoot;
 
@@ -760,6 +756,338 @@ mod scene_spawn {
 		}
 		assert!(has_pedestal, "Should have pedestal child");
 		assert!(has_column, "Should have column child");
+	}
+}
+
+/// Full integration regression tests for real player-vs-Bikanwarda exchange.
+/// These tests verify the complete path from spawn → combat → attack → damage → outcome.
+mod integration_regressions {
+	use super::*;
+	use crate::presentation::{BossActor, BossColumn, BossPedestal, BossEncounterRoot};
+	use crate::combat::{BossInCombat, BossAttackCooldown};
+	use crate::{BossTetherChain, BossAssemblyPlugin};
+	use bikanwarda_character::BikanwardaRoot;
+	use damage::{Health, Hit};
+	use encounters::EncounterInstance;
+	use attacks::{AttackInstance, BeginAttack};
+	use bevy::scene::WorldSceneExt;
+	use lod::scene::LodScene;
+	
+	fn full_encounter_app() -> App {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			bevy::asset::AssetPlugin::default(),
+			bevy::scene::ScenePlugin,
+			bevy::time::TimePlugin,
+		))
+		.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(DT)));
+		
+		// Install core systems
+		install_encounters(&mut app);
+		
+		// Install attack systems
+		if !app.is_plugin_added::<attacks::AttacksPlugin>() {
+			app.add_plugins(attacks::AttacksPlugin);
+		}
+		
+		// Install damage systems
+		if !app.is_plugin_added::<damage::DamagePlugin>() {
+			app.add_plugins(damage::DamagePlugin);
+		}
+		
+		// Install bikanwarda encounter plugin (includes combat, chains, tether)
+		app.add_plugins(crate::BikanwardaEncounterPlugin);
+		
+		// Install assembly plugin to spawn actors
+		app.add_plugins(BossAssemblyPlugin);
+		
+		// Add damage application systems
+		app.add_systems(Update, (damage::apply_hits, damage::mark_downed, damage::down_zero_health));
+		
+		app.update();
+		app
+	}
+	
+	#[test]
+	fn real_assembly_creates_distinct_host_actor_pillar_pedestal() {
+		let mut app = full_encounter_app();
+		
+		// Spawn encounter scene at known position
+		let boss_position = Vec3::new(1000.0, 110.15, 2000.0);
+		let terrain_y = 100.0;
+		let encounter = crate::generation::BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
+		
+		let anchor_transform = Transform::from_translation(Vec3::ZERO);
+		let anchor = app.world_mut().spawn(anchor_transform).id();
+		
+		let scene = encounter.scene_with_level(
+			&lod::lod_ref::LodRef {
+				entity: anchor,
+				previous_transform: &anchor_transform,
+				current_transform: &anchor_transform,
+				bounds: &bevy::shape::Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0)),
+			},
+			lod::scene::LodSceneLevel::High,
+		);
+		let host_entity = app.world_mut().spawn_scene(scene).expect("spawn_scene should succeed").id();
+		
+		// Update multiple times to let assembly system run
+		for _ in 0..5 {
+			app.update();
+		}
+		
+		// Verify host has BossEncounterRoot, Health, EncounterInstance
+		let host = app.world().entity(host_entity);
+		assert!(host.contains::<BossEncounterRoot>(), "Host has BossEncounterRoot");
+		assert!(host.contains::<Health>(), "Host has Health");
+		assert!(host.contains::<EncounterInstance>(), "Host has EncounterInstance");
+		
+		// Verify host has BossActor binding
+		let actor_ref = host.get::<BossActor>().expect("Host should have BossActor binding");
+		let actor_entity = actor_ref.0;
+		
+		// Verify actor is distinct from host
+		assert_ne!(host_entity, actor_entity, "Actor and host are distinct entities");
+		
+		// Verify actor has BikanwardaRoot
+		let actor = app.world().entity(actor_entity);
+		assert!(actor.contains::<BikanwardaRoot>(), "Actor has BikanwardaRoot");
+		
+		// Verify actor has AttackUser (required for attack runtime)
+		assert!(actor.contains::<attacks::AttackUser>(), "Actor has AttackUser");
+		
+		// Verify host children include column and pedestal
+		let children = host.get::<Children>().expect("Host should have children");
+		let column_entity = *children.iter()
+			.find(|c| app.world().entity(*c).contains::<BossColumn>())
+			.expect("Host should have column child");
+		
+		let pedestal_entity = *children.iter()
+			.find(|c| app.world().entity(*c).contains::<BossPedestal>())
+			.expect("Host should have pedestal child");
+		
+		// Verify all four entities are distinct
+		assert_ne!(host_entity, actor_entity, "Host ≠ Actor");
+		assert_ne!(host_entity, column_entity, "Host ≠ Column");
+		assert_ne!(host_entity, pedestal_entity, "Host ≠ Pedestal");
+		assert_ne!(actor_entity, column_entity, "Actor ≠ Column");
+		assert_ne!(actor_entity, pedestal_entity, "Actor ≠ Pedestal");
+		assert_ne!(column_entity, pedestal_entity, "Column ≠ Pedestal");
+		
+		// Verify column and pedestal have colliders
+		let column = app.world().entity(column_entity);
+		assert!(column.contains::<avian3d::prelude::Collider>(), "Column has Collider");
+		
+		let pedestal = app.world().entity(pedestal_entity);
+		assert!(pedestal.contains::<avian3d::prelude::Collider>(), "Pedestal has Collider");
+		
+		// Verify global transforms are computed
+		app.update();
+		let host_global = host.get::<GlobalTransform>().expect("Host GlobalTransform");
+		let actor_global = app.world().entity(actor_entity).get::<GlobalTransform>().expect("Actor GlobalTransform");
+		
+		// Actor should be at approximately the same position as host (local identity)
+		let distance = (host_global.translation() - actor_global.translation()).length();
+		assert!(distance < 1.0, "Actor near host position (distance: {})", distance);
+	}
+	
+	#[test]
+	fn combat_initialization_adds_components_to_host_and_actor() {
+		let mut app = full_encounter_app();
+		
+		// Spawn a minimal host with BossActor binding
+		let actor = app.world_mut().spawn((
+			BikanwardaRoot,
+			Transform::default(),
+			GlobalTransform::default(),
+		)).id();
+		
+		let host = app.world_mut().spawn((
+			BossEncounterRoot::default(),
+			BossActor(actor),
+			Health::from_max(1000.0),
+			Transform::default(),
+			GlobalTransform::default(),
+		)).id();
+		
+		// Before update, combat state should not exist
+		assert!(!app.world().entity(host).contains::<BossAttackCooldown>(), "No cooldown yet");
+		assert!(!app.world().entity(actor).contains::<combat_targeting::CombatTargeting>(), "No targeting yet");
+		
+		app.update();
+		
+		// After update, combat state should be initialized
+		assert!(app.world().entity(host).contains::<BossAttackCooldown>(), "Host has cooldown");
+		assert!(app.world().entity(actor).contains::<combat_targeting::CombatTargeting>(), "Actor has targeting");
+		assert!(app.world().entity(actor).contains::<BossInCombat>(), "Actor has combat marker");
+	}
+	
+	#[test]
+	fn exactly_one_tether_spawns_after_many_updates() {
+		let mut app = full_encounter_app();
+		
+		// Spawn full encounter scene
+		let boss_position = Vec3::new(1000.0, 110.15, 2000.0);
+		let terrain_y = 100.0;
+		let encounter = crate::generation::BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
+		
+		let anchor_transform = Transform::from_translation(Vec3::ZERO);
+		let anchor = app.world_mut().spawn(anchor_transform).id();
+		
+		let scene = encounter.scene_with_level(
+			&lod::lod_ref::LodRef {
+				entity: anchor,
+				previous_transform: &anchor_transform,
+				current_transform: &anchor_transform,
+				bounds: &bevy::shape::Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0)),
+			},
+			lod::scene::LodSceneLevel::High,
+		);
+		app.world_mut().spawn_scene(scene).expect("spawn_scene should succeed");
+		
+		// Update many times to ensure tether system runs multiple times
+		for _ in 0..20 {
+			app.update();
+		}
+		
+		// Count tether chains
+		let tether_count = app.world_mut()
+			.query_filtered::<Entity, With<BossTetherChain>>()
+			.iter(app.world())
+			.count();
+		
+		// Should have exactly 1 tether (not 0, not >1)
+		assert_eq!(tether_count, 1, "Exactly one tether should exist after many updates");
+		
+		// Verify the host is marked with BossTetherChain to prevent repeat spawns
+		let hosts: Vec<_> = app.world_mut()
+			.query_filtered::<Entity, (With<BossEncounterRoot>, With<BossTetherChain>)>()
+			.iter(app.world())
+			.collect();
+		
+		assert_eq!(hosts.len(), 1, "Exactly one host should be marked with tether");
+	}
+	
+	#[test]
+	fn attack_request_creates_attack_instance_targeting_player() {
+		let mut app = full_encounter_app();
+		
+		// Spawn actor with AttackUser
+		let actor = app.world_mut().spawn((
+			BikanwardaRoot,
+			attacks::AttackUser::default(),
+			combat_targeting::CombatTargeting::default(),
+			Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+			GlobalTransform::default(),
+		)).id();
+		
+		// Spawn host
+		let host = app.world_mut().spawn((
+			BossEncounterRoot::default(),
+			BossActor(actor),
+			Health::from_max(1000.0),
+			crate::combat::BossAttackCooldown::default(),
+			Transform::default(),
+			GlobalTransform::default(),
+		)).id();
+		
+		// Spawn player nearby
+		let player = app.world_mut().spawn((
+			world_player::Player,
+			Transform::from_translation(Vec3::new(10.0, 0.0, 0.0)),
+			GlobalTransform::default(),
+		)).id();
+		
+		app.update();
+		
+		// Manually trigger attack (simulating what combat_driver would do)
+		app.world_mut().write_message(BeginAttack {
+			owner: actor,
+			definition: bikanwarda_attacks::BRAY,
+			target: Some(player),
+			allies: Vec::new(),
+			emission: None,
+			emission_socket: None,
+		});
+		
+		app.update();
+		
+		// Verify an AttackInstance was created
+		let instances: Vec<_> = app.world_mut()
+			.query::<&AttackInstance>()
+			.iter(app.world())
+			.collect();
+		
+		assert!(!instances.is_empty(), "At least one AttackInstance should exist");
+		
+		// Verify the instance targets the player
+		let has_player_target = instances.iter().any(|inst| {
+			inst.live_target == Some(player)
+		});
+		assert!(has_player_target, "AttackInstance should target the player");
+	}
+	
+	#[test]
+	fn projectile_damage_routes_to_host_health_and_encounter_outcome() {
+		let mut app = full_encounter_app();
+		
+		// Spawn full actor with child structure
+		let actor = app.world_mut().spawn((
+			BikanwardaRoot,
+			attacks::AttackUser::default(),
+			Transform::default(),
+			GlobalTransform::default(),
+		)).id();
+		
+		// Spawn a collider as child of actor (simulating actor's root collider)
+		let actor_collider = app.world_mut().spawn((
+			avian3d::prelude::Collider::cylinder(1.0, 2.0),
+			ChildOf(actor),
+			Transform::default(),
+			GlobalTransform::default(),
+		)).id();
+		
+		// Spawn host with Health and EncounterInstance
+		let host = app.world_mut().spawn((
+			BossEncounterRoot::default(),
+			BossActor(actor),
+			Health::from_max(100.0),
+			EncounterInstance::new(crate::chained_encounter_id()),
+			Transform::default(),
+			GlobalTransform::default(),
+		)).id();
+		
+		// Spawn owner
+		let owner = app.world_mut().spawn(lubikans::LubikanOwner).id();
+		
+		app.update();
+		
+		// Simulate projectile hitting actor's collider
+		// The damage system should remap ChildOf to route to host's Health
+		app.world_mut().write_message(Hit {
+			target: actor_collider,
+			source: Some(owner),
+			amount: 100.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+		
+		app.update();
+		
+		// Verify host health was damaged
+		let health = app.world().entity(host).get::<Health>().expect("Host should have Health");
+		assert!(health.is_dead(), "Host should be dead after lethal damage to actor collider");
+		
+		// Verify encounter outcome was recorded
+		let store = app.world().resource::<encounters::EncounterProgressStore>();
+		let record = store.get(crate::chained_encounter_id());
+		assert!(record.is_some(), "Encounter record should exist");
+		
+		let record = record.unwrap();
+		assert_eq!(record.outcome, Some(encounters::EncounterOutcome::Killed), 
+			"Encounter should be marked as Killed");
 	}
 }
 

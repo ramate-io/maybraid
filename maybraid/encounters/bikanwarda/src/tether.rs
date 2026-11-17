@@ -3,7 +3,7 @@
 //! Spawns and manages the chain connecting the pillar to the boss's rear leg.
 
 use bevy::prelude::*;
-use bikanwarda_character::{BikanwardaChainAnchor, BikanwardaRoot};
+use bikanwarda_character::BikanwardaChainAnchor;
 use damage::Health;
 
 use crate::chains::{
@@ -16,39 +16,51 @@ use crate::presentation::{BossColumn, BossEncounterRoot};
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct BossTetherChain;
 
+use crate::presentation::BossActor;
+
 /// System to spawn the chain tether when boss and pillar are present.
+///
+/// Queries the host (BossEncounterRoot) to get the actor via BossActor, then finds
+/// the column (BossColumn) child and rear leg anchor on the actor. Spawns exactly
+/// ONE tether per host, gated by Without<BossTetherChain> on the HOST.
 pub fn spawn_tether_chain(
 	mut commands: Commands,
-	boss_roots: Query<
-		Entity,
+	hosts: Query<
+		(Entity, &BossActor, &Children),
 		(
 			With<BossEncounterRoot>,
-			With<BikanwardaRoot>,
 			Without<BossTetherChain>,
 		),
 	>,
 	columns: Query<Entity, With<BossColumn>>,
 	boss_anchors: Query<(Entity, &BikanwardaChainAnchor)>,
 ) {
-	for boss_root in &boss_roots {
-		// Find the column (pillar) entity - may be zero or multiple
-		let column_entity = match columns.iter().next() {
-			Some(e) => e,
-			None => continue,
+	for (host_entity, actor_ref, children) in &hosts {
+		// Find the column (pillar) entity from host's children
+		let column_entity = children
+			.iter()
+			.find(|child| columns.contains(*child))
+			.copied();
+		
+		let Some(column_entity) = column_entity else {
+			warn!("Could not find column child for host {:?}", host_entity);
+			continue;
 		};
 
-		// Find the rear leg anchor (neg_z) on the boss
-		let rear_anchor = boss_anchors
+		// Find the rear leg anchor (neg_z) on the ACTOR (actor_ref.0)
+		// The anchor is a descendant of the actor entity
+		let rear_anchor_entity = boss_anchors
 			.iter()
-			.find(|(parent, anchor)| {
-				// Check if this anchor belongs to our boss
-				// anchor.name should be "chain_anchor_neg_z" for rear leg
-				anchor.name == "chain_anchor_neg_z"
-			})
-			.map(|(entity, _)| entity);
+			.find_map(|(entity, anchor)| {
+				if anchor.name == "chain_anchor_neg_z" {
+					Some(entity)
+				} else {
+					None
+				}
+			});
 
-		let Some(rear_anchor_entity) = rear_anchor else {
-			warn!("Could not find rear leg anchor for boss {:?}", boss_root);
+		let Some(rear_anchor_entity) = rear_anchor_entity else {
+			warn!("Could not find rear leg anchor for actor {:?}", actor_ref.0);
 			continue;
 		};
 
@@ -108,9 +120,12 @@ pub fn spawn_tether_chain(
 
 		spawn_chain_colliders(&mut commands, chain_root, &joint_entities, config);
 
+		// Mark the HOST with BossTetherChain to prevent repeat spawns
+		commands.entity(host_entity).insert(BossTetherChain);
+
 		info!(
-			"Spawned tether chain connecting pillar {:?} to boss rear anchor {:?}",
-			column_entity, rear_anchor_entity
+			"Spawned tether chain connecting pillar {:?} to boss rear anchor {:?} for host {:?}",
+			column_entity, rear_anchor_entity, host_entity
 		);
 	}
 }
