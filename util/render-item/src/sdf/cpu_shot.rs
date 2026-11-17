@@ -265,12 +265,17 @@ fn append_edge_height_walls(
 	}
 }
 
-pub trait CpuShotSdf: Sdf + Clone {
-	fn cpu_chunk_mesh(
+impl CpuShotOptions {
+	fn build_mesh<T: Sdf + Clone>(
 		&self,
+		sdf: &T,
 		cascade_chunk: &CascadeChunk,
-		options: &CpuShotOptions,
+		#[cfg(test)] legacy_allocations: bool,
 	) -> Option<Mesh> {
+		#[cfg(test)]
+		let compact = !legacy_allocations;
+		#[cfg(not(test))]
+		let compact = true;
 		// ---------- grid setup ---------------------------------------------------
 		let extent = cascade_chunk.extent_vec();
 		let res = cascade_chunk.resolution();
@@ -296,7 +301,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 		// ---------- sample SDF in world space (parallelized) --------------------
 		// Parallelize over Z slices for sparse sampling using sign_uniform_on_y
 		// Collect results per Z slice and merge sequentially
-		let sdf_clone = Arc::new(self.clone());
+		let sdf_clone = Arc::new(sdf.clone());
 		let z_slices: Vec<_> = (0..nz)
 			.into_par_iter()
 			.map(|z| {
@@ -551,6 +556,20 @@ pub trait CpuShotSdf: Sdf + Clone {
 		let start_time = std::time::Instant::now();
 		let mut vertices: Vec<[f32; 3]> = Vec::new();
 		let mut indices: Vec<u32> = Vec::new();
+		if compact && !self.wall_faces.any() {
+			// These outputs already exist; reserve their actual totals, not a
+			// resolution-derived worst case. Failed/overflowing reservations fall
+			// back to the original growth path rather than dropping valid geometry.
+			// Skirts change the final lengths, so retain their original growth path.
+			let totals =
+				cube_results.iter().try_fold((0_usize, 0_usize), |(vertices, indices), (v, i)| {
+					Some((vertices.checked_add(v.len())?, indices.checked_add(i.len())?))
+				});
+			if let Some((vertex_count, index_count)) = totals {
+				let _ = vertices.try_reserve_exact(vertex_count);
+				let _ = indices.try_reserve_exact(index_count);
+			}
+		}
 
 		for (cube_vertices, cube_indices) in cube_results {
 			let vertex_offset = vertices.len() as u32;
@@ -650,7 +669,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 		let duration = end_time.duration_since(start_time);
 		log::debug!("UVs time: {:?}", duration);
 
-		if options.wall_faces.any() {
+		if self.wall_faces.any() {
 			let start_time = std::time::Instant::now();
 			append_edge_height_walls(
 				grid_slice,
@@ -660,7 +679,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 				nz,
 				cube_cell,
 				extent,
-				options.wall_faces,
+				self.wall_faces,
 				&mut vertices,
 				&mut indices,
 				&mut normals,
@@ -677,6 +696,16 @@ pub trait CpuShotSdf: Sdf + Clone {
 			return None;
 		}
 
+		if compact {
+			// Skirts retain their original growth path. Publish only initialized
+			// element capacity; this may reallocate once per grown buffer. Exact
+			// no-skirt reservations normally make this a no-op, not an RSS promise.
+			vertices = vertices.into_boxed_slice().into_vec();
+			normals = normals.into_boxed_slice().into_vec();
+			uvs = uvs.into_boxed_slice().into_vec();
+			indices = indices.into_boxed_slice().into_vec();
+		}
+
 		// MAIN_WORLD keeps attributes readable for Avian `TrimeshFromMesh` after extract.
 		let mut mesh = Mesh::new(
 			bevy::mesh::PrimitiveTopology::TriangleList,
@@ -691,7 +720,25 @@ pub trait CpuShotSdf: Sdf + Clone {
 	}
 }
 
+pub trait CpuShotSdf: Sdf + Clone {
+	fn cpu_chunk_mesh(
+		&self,
+		cascade_chunk: &CascadeChunk,
+		options: &CpuShotOptions,
+	) -> Option<Mesh> {
+		options.build_mesh(
+			self,
+			cascade_chunk,
+			#[cfg(test)]
+			false,
+		)
+	}
+}
+
 impl<T: Sdf + Clone> CpuShotSdf for T {}
+
+#[cfg(test)]
+mod tests;
 
 impl<T: CpuShotSdf + NormalizeChunk> MeshBuilder for T {
 	fn build_mesh_impl(&self, cascade_chunk: &CascadeChunk) -> Option<Mesh> {
