@@ -211,6 +211,18 @@ fn spawn_skinned_chain_for_capture(world: &mut World, bent: bool, rigid: bool) {
 	for entity in to_despawn {
 		world.despawn(entity);
 	}
+	
+	// Hide the ChainPreviewRoot and all descendants (tube strands and ring stacks) so only the skinned chain is visible
+	use crate::chain_preview::ChainPreviewRoot;
+	let preview_roots: Vec<Entity> = world
+		.query_filtered::<Entity, With<ChainPreviewRoot>>()
+		.iter(world)
+		.collect();
+	for root in preview_roots {
+		if let Some(mut vis) = world.get_mut::<Visibility>(root) {
+			*vis = Visibility::Hidden;
+		}
+	}
 
 	let strategy = if rigid {
 		ChainSkinningStrategy::RigidPerLink
