@@ -3379,6 +3379,7 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
+ "spotting-intelligence",
 ]
 
 [[package]]

@@ -1,82 +1,23 @@
-//! Adapt generic visual contacts into combat target memory and factors.
+//! Adapt firearm-specific settings to the generic spotting→targeting bridge.
 
 use bevy::prelude::*;
-use combat_targeting::{CombatContact, CombatTargeting, TargetFactors, TargetSource};
-use spotting_intelligence::SpottingUser;
+use combat_targeting::SpottingTargetingSettings;
 
 use crate::combat::FirearmIntelligence;
 
-const ACTIONABLE_SOURCES: TargetSource = TargetSource::from_bits(
-	TargetSource::OBJECTIVE.bits()
-		| TargetSource::RECEIVED_FIRE.bits()
-		| TargetSource::ENEMYSHIP.bits()
-		| TargetSource::FIREARM.bits()
-		| TargetSource::SHARED.bits(),
-);
-
-/// Refresh combat memory from successful generic spotting contacts.
-pub(crate) fn sync_spotted_combat_targets(
-	mut combatants: Query<(&Transform, &SpottingUser, &FirearmIntelligence, &mut CombatTargeting)>,
+/// Updates SpottingTargetingSettings based on FirearmIntelligence.
+///
+/// Runs before the generic sync_spotted_to_combat_targeting (in combat-targeting)
+/// to convert firearm-specific settings into the generic settings component.
+pub(crate) fn update_firearm_spotting_settings(
+	mut combatants: Query<(&FirearmIntelligence, &mut SpottingTargetingSettings)>,
 ) {
-	for (transform, spotting, firearm, mut targeting) in &mut combatants {
+	for (firearm, mut settings) in &mut combatants {
 		let memory_secs = firearm.settings.target_spotting_memory.max(0.0);
 		let continuity = firearm.settings.focus.clamp(0.0, 1.0) * 8.0;
-		if targeting.memory_secs != memory_secs || targeting.algebra.continuity != continuity {
-			targeting.memory_secs = memory_secs;
-			targeting.algebra.continuity = continuity;
-			// Previously contact upserts implicitly dirtied these policy changes.
-			// Equal contact snapshots must still recompute rank/expiry when policy changes.
-			targeting.dirty = true;
-		}
-		let forgotten: Vec<Entity> = targeting
-			.memory
-			.keys()
-			.filter(|entity| !spotting.contacts.contains_key(entity))
-			.copied()
-			.collect();
-		for entity in forgotten {
-			targeting.memory.remove(&entity);
-			targeting.remove_source(entity, TargetSource::SPOTTING);
-		}
-
-		if !targeting.enabled {
-			targeting.clear_source(TargetSource::SPOTTING);
-			continue;
-		}
-
-		for contact in spotting.contacts.values() {
-			let actionable = targeting
-				.active_target(contact.subject)
-				.is_some_and(|target| target.active_sources().intersects(ACTIONABLE_SOURCES));
-			if !actionable {
-				targeting.memory.remove(&contact.subject);
-				targeting.remove_source(contact.subject, TargetSource::SPOTTING);
-				continue;
-			}
-			let observed = CombatContact {
-				subject: contact.subject,
-				position: contact.position,
-				movement_vector: contact.velocity,
-				visible_point: contact.visible_point,
-				visible_head: contact.visible_head,
-				last_spotted_at: contact.last_success_at,
-			};
-			if targeting.contact(contact.subject) != Some(&observed) {
-				targeting.upsert_contact(observed);
-			} else {
-				// Restore this adapter's membership if another tactic transition
-				// removed it, without dirtying an unchanged target every Update.
-				targeting.include(contact.subject, TargetSource::SPOTTING);
-			}
-			let delta = contact.position - transform.translation;
-			let distance = Vec2::new(delta.x, delta.z).length();
-			let previous = targeting
-				.active_target(contact.subject)
-				.map_or(TargetFactors::default(), |target| target.factors);
-			targeting.set_factors(
-				contact.subject,
-				TargetFactors { hostility: 1.0, bias: -distance, ..previous },
-			);
+		if settings.memory_secs != memory_secs || settings.continuity != continuity {
+			settings.memory_secs = memory_secs;
+			settings.continuity = continuity;
 		}
 	}
 }
