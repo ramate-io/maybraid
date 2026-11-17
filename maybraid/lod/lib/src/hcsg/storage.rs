@@ -43,3 +43,9 @@ pub struct Busy;
 /// through internal sweeps.
 #[derive(Resource, Clone, Default)]
 pub struct HcsgStorage(Arc<Registry>);
+
+impl HcsgStorage {
+	pub(in crate::hcsg) fn same_storage(&self, other: &Self) -> bool {
+		Arc::ptr_eq(&self.0, &other.0)
+	}
+}

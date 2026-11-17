@@ -39,11 +39,14 @@ menu-screens = { workspace = true }
 character-persist = { workspace = true }
 
 maybraid-gpu-frame-capture = { path = "../diagnostics/gpu-frame-capture", optional = true }
+maybraid-pipeline-profile = { path = "../diagnostics/pipeline-profile", optional = true }
 
 [features]
 generation-tracing = ["lod/generation-tracing"]
+pipeline-profile = ["dep:maybraid-pipeline-profile"]
 gpu-frame-capture = ["dep:maybraid-gpu-frame-capture"]
 debug-commands = ["maybraid-world/debug-commands"]
+memory-census = ["maybraid-world/memory-census"]
 
 [dev-dependencies]
 anyhow = { workspace = true }

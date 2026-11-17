@@ -190,12 +190,12 @@ struct Subscription {
 }
 ```
 
-The presentation side has three operations:
+The setup and read interfaces are illustrated below. Ordinary frame adapters synchronize subscriptions through one nonblocking transaction: it checks liveness, try-locks inherited reach, then replaces or removes the predecessor. `Busy` preserves the registry and the entire pending request state. The blocking setup subscription is not used by those adapters.
 
 ```rust
 impl HcsgDemand {
-    /// Removes `previous` (if any) and inserts a fresh subscription, under one lock.
-    /// Notifies the worker.
+    /// Blocking setup/offline subscription; not the frame synchronization path.
+    /// Removes `previous` and inserts a fresh subscription, then notifies the worker.
     pub fn subscribe<T: GenerationScheme>(
         &self,
         previous: Option<SubscriptionId>,
@@ -204,9 +204,9 @@ impl HcsgDemand {
         class: HcsgClass,
     ) -> SubscriptionId;
 
-    /// Ids published for `id` from `cursor` on, and whether the worker has
-    /// finished the subscription. `Err(Busy)` if the lock is held; `Ok(None)`
-    /// if the subscription no longer exists.
+    /// At most 32 IDs from `cursor`, in publication order. `done` requires
+    /// worker completion AND that this page reaches the tail. `Err(Busy)`
+    /// if the lock is held; `Ok(None)` if the subscription no longer exists.
     pub fn try_read(&self, id: SubscriptionId, cursor: usize) -> Result<Option<Published>, Busy>;
 
     /// Undiscovered subscriptions plus remaining discovered ids in `classes`.
@@ -215,18 +215,67 @@ impl HcsgDemand {
     /// do not hold it.
     pub fn try_outstanding(&self, classes: &[HcsgClass]) -> Result<Outstanding, Busy>;
 
-    pub fn unsubscribe(&self, id: SubscriptionId);
 }
 
 pub struct Published {
     pub ids: Vec<Id>,
-    pub done: bool, // `ids` reaches the end of what will be published
+    pub done: bool, // completed worker and final page
+    pub failed: bool, // partial output cannot certify retirement/empty
+    pub epoch: u64, // revalidated after storage reads
 }
 ```
 
-`try_read_published` is the same read without `done`.
+The unbounded `try_read_published` helper and legacy blocking unsubscribe/liveness helpers are test-only. Tickets and presentation share the bounded public `try_read` primitive.
 
 Subscription ids come from the `AtomicU64`. A presentation system holds exactly one subscription id at a time. Replacing it is a single locked operation, so subscriptions never leak.
+
+### Published readouts and bounded gameplay requests
+
+`PublishedRegion<T>` reads already-published immutable Arc values independently
+of generation admission or completion. It binds to a fixed storage/demand pair;
+consumers replacing either resource create a new readout (`is_for` checks this).
+Every successful `try_read` permits reading its available `entries`, including
+partial passes while the worker is busy. Epoch checks before and after storage
+reads reject snapshots crossing a session restart. Cache-read `complete` only
+means the current region membership revision was read completely; it says
+nothing about whether generation has finished.
+
+Each read clones at most 32 Arc entries. It reuses a sorted regional ID list
+through a pass, including during membership churn so later IDs are not starved.
+After the pass, a changed revision starts a refreshed pass, removes deleted IDs
+and updates replaced versions. Quiet complete reads neither repeat the overlap
+query nor clone entries. The overlap query uses the existing NodeStore spatial
+index; sparse/unindexed fallbacks may scan the typed store. The Arc limit does
+not bound that existing query's total CPU work.
+
+`HcsgDemand::try_request::<T>(region, class)` independently owns generation on the
+existing worker. At most 64 distinct live scheme/region/class tickets are admitted;
+duplicate consumers share one subscription. Admission distinguishes mutex Busy,
+pool Capacity and InvalidRegion. A ticket's successful Pending poll already
+exposes its published `values()`; Ready separately certifies request completion.
+Busy, failure, cancellation and missing publications never certify empty output.
+
+Last-consumer drop cancels atomically and wakes the worker without acquiring a
+frame mutex. The worker prunes cancelled subscriptions before admission and each
+scheduling pass. Its idle wait is capped at 50 ms while ticket subscriptions
+exist, closing the atomic cancellation/Condvar lost-notification race. A
+saturated multi-family admission releases partial leases to avoid pool deadlock.
+
+The production `DistantTilePois` trait exposes only asynchronous request/readout
+construction. Synchronous reference helpers are named
+`generate_matching_in_xz_tile_offline` and require explicit offline context.
+
+World journeying combines currently available cached/published entries from each
+interested family, even while other families are Pending or Busy. It may learn
+and select an available destination immediately; merely reading a partial result
+does not cancel ongoing work. Empty-tile proof requires both completed generation
+and a complete current cached read pass. Incomplete empty readouts preserve the
+same deterministic probe/selection step and consume no learning credit. Repeated
+known IDs consume no additional learning credit. Failed admission retries use the
+selection interval while cached reads and existing work continue. Pending reads
+run each frame, and each actor yields after one completed tile. Goal acquisition,
+departure and origin/config/interest/provider changes release selection ownership;
+small pose drift does not restart it. Selection runs after session reseeding.
 
 ### Worker
 
@@ -292,7 +341,7 @@ struct Generated<T> {
 }
 ```
 
-- **Request:** when channel `C`'s regions change, it replaces its subscription, exactly as presentation does. It also resubscribes when `HcsgDemand::try_is_live` reports its subscription gone, for example after an epoch change. That is all it does on this side. It never reads `published`, keeps no cursor, holds no hosts and creates no entities.
+- **Request:** when channel `C`'s regions change, it replaces its subscription, exactly as presentation does. The same transaction also resubscribes when its predecessor is gone, for example after an epoch change. That is all it does on this side. It never reads `published`, keeps no cursor, holds no hosts and creates no entities.
 
 Use it to keep values warm where nothing is presented yet, such as ahead of the camera or under a gameplay region. A type that is presented needs no separate generation system, because presentation requests its own generation.
 
@@ -355,10 +404,10 @@ struct Presented<T> {
 
 Each frame:
 
-1. **Request.** If the channel's regions changed, replace the subscription (`subscribe` with the previous id) and reset the cursor. The presentation system never calls discovery itself.
+1. **Request.** Transactionally try to align regions and subscription liveness, retaining the predecessor until replacement/removal succeeds. A busy demand or inherited reach lock preserves all request state. A successful replacement resets the cursor. The presentation system never calls discovery itself.
 2. **Read.** `try_read(subscription, cursor)`. On `Err(Busy)`, nothing changes this frame. On `Ok(None)`, the subscription is gone (for example after an epoch change), so subscribe again; this starts a new session of hosts.
-3. **Spawn.** For each new id, clone the entry's `Arc` under a short `try_read` of the store, then spawn a pending LOD host (`lod_host_scene_pending`, at the level `T` picks for the focus) carrying `HcsgNode<T>`. If the store is busy, the id is retried next frame and the cursor is not advanced past it. An id already hosted at the same version is skipped. One hosted at an older version, which only happens across sessions, has its host replaced.
-4. **Sweep.** Once a new session's subscription is read through to `done`, retire every host that session did not publish. A new session leaves no value behind, so this is the only time presentation retires by what was published.
+3. **Spawn.** Consume at most one 32-ID page per frame. Clone its entries under a nonblocking store read, revalidate the subscription and epoch, then spawn a pending LOD host (`lod_host_scene_pending`, at the level `T` picks for the focus) carrying `HcsgNode<T>`. If the store is busy, the id is retried next frame and the cursor is not advanced past it. A missing published value stops the page before consuming that ID and requests a replacement that cancels the retained predecessor; old hosts remain while it replays. An id already hosted at the same version is skipped. One hosted at an older version, which only happens across sessions, has its host replaced.
+4. **Sweep.** Once a new session's successful subscription is drained through its final `done` page, retire every host that session did not publish. Failed or incompletely consumed pages never certify that sweep. A new session leaves no value behind, so this is the only time presentation retires by what was published.
 5. **Retire.** Retire any host whose entry bounds intersect none of the regions, along with its owned scene subtree. Within a session, retirement depends only on bounds, never on what discovery returned. Hosts are only rechecked when the regions change or new hosts were spawned.
 
 Retiring marks the host `RetiredHost` and hides it (`Visibility::Hidden`) so leftover trees do not extract while they wait. The runtime recursive-despawns a budgeted prefix in `Last` — [`LodChunkFulfillBudget::retired_host_despawns_per_frame`] (the cull-root cap, at least one) and [`LodChunkFulfillBudget::retired_host_time_per_frame`] (the exclusive drain clock) — so commands other systems queue for the host through `PostUpdate` still land, and Leave cannot retire a whole cascade on one frame.

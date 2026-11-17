@@ -2,6 +2,8 @@
 //! NPC selection scans only on an explicit snapshot request; no visibility probes or AI mutations.
 
 pub(super) mod camera;
+#[cfg(feature = "memory-census")]
+pub(super) mod memory;
 mod npc;
 
 use avian3d::prelude::{GravityScale, LinearVelocity, Sleeping};

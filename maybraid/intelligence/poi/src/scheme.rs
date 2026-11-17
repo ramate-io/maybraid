@@ -1,9 +1,9 @@
 //! Generated POIs as an HCSG [`GenerationScheme`].
 //!
-//! Tile / xz lookups go through [`GenerationContext::get_or_generate_in`]: a
-//! source's `original_ids_for` is the discovery set for that region, and
-//! `build_with_id` resolves one source cell. [`HcsgStorage`] is the index;
-//! there is no side list or extra spatial structure for this path.
+//! Gameplay reads already-published values and requests missing work through
+//! [`crate::DistantTileRequest`]. Offline generation uses an explicit
+//! [`GenerationContext`]: a source's `original_ids_for` discovers that region,
+//! and `build_with_id` resolves one source cell. Shared HCSG storage is the index.
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use bevy::math::DVec3;
 use bevy::prelude::*;
 use bevy::shape::Aabb3d;
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::{self, GenerationContext, HcsgStorage};
+use lod::hcsg::{self, GenerationContext};
 
 use crate::{PoiId, PoiInterests, PoiKind, PoiObservation, PoiSource, PoiSupport};
 
@@ -87,11 +87,15 @@ impl<S: PoiOrigin> hcsg::GenerationScheme for PoiSet<S> {
 	}
 }
 
-/// Resolve POIs for xz tile `tile` through [`PoiSet<S>`].
+/// Synchronously generate POIs for an offline xz-tile query.
+///
+/// Never call this from frame systems. Gameplay reads published values through
+/// [`crate::DistantTileRequest`]; this explicit GenerationContext helper is for
+/// worker-side generation, parity fixtures and offline timing.
 ///
 /// Discovery is `S::original_ids_for` on the tile column — O(tile), not a
 /// walk of every generated or authored POI in the world.
-pub fn collect_matching_in_xz_tile<S: PoiOrigin>(
+pub fn generate_matching_in_xz_tile_offline<S: PoiOrigin>(
 	cx: &mut GenerationContext,
 	tile: IVec2,
 	tile_size: f32,
@@ -188,31 +192,24 @@ impl PoiOrigin for GridTiles {
 
 pub const GRID_KIND: PoiKind = PoiKind::new("test/grid-tile");
 
-/// Frame / test wiring: collect a tile through [`HcsgStorage`].
+/// Frame wiring exposes only nonblocking published-read/request construction.
 pub trait DistantTilePois: Send + Sync + 'static {
-	fn collect_matching_in_xz_tile(
+	/// Construct a nonblocking readout and worker request. Providers without
+	/// generated destinations may omit it; retained knowledge still works.
+	fn request_in_xz_tile(
 		&self,
-		storage: &HcsgStorage,
-		tile: IVec2,
-		tile_size: f32,
-		center_y: f32,
-		interests: &PoiInterests,
-		out: &mut Vec<PoiEntry>,
-	);
+		_query: crate::PoiTileQuery,
+	) -> Option<Box<dyn crate::DistantTileRequest>> {
+		None
+	}
 }
 
 impl DistantTilePois for Catalog {
-	fn collect_matching_in_xz_tile(
+	fn request_in_xz_tile(
 		&self,
-		storage: &HcsgStorage,
-		tile: IVec2,
-		tile_size: f32,
-		center_y: f32,
-		interests: &PoiInterests,
-		out: &mut Vec<PoiEntry>,
-	) {
-		let mut cx = GenerationContext::new(storage);
-		collect_matching_in_xz_tile::<Catalog>(&mut cx, tile, tile_size, center_y, interests, out);
+		query: crate::PoiTileQuery,
+	) -> Option<Box<dyn crate::DistantTileRequest>> {
+		Some(Box::new(crate::PoiTileRequest::<Catalog>::new(query)))
 	}
 }
 

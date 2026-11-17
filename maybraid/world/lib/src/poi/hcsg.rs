@@ -1,8 +1,8 @@
 //! World POIs as [`PoiOrigin`] schemes over existing HCSG grids.
 //!
-//! Distant-tile journeying calls [`DistantTilePois::collect_matching_in_xz_tile`],
-//! which resolves each family through `get_or_generate_in` — O(tile), not a
-//! walk of every global POI.
+//! Distant-tile journeying requests existing PoiSet schemes through the shared
+//! HCSG worker, then polls completed published values without generating in Update.
+//! Synchronous collectors remain available for parity tests and timing fixtures.
 
 use std::marker::PhantomData;
 
@@ -11,11 +11,12 @@ use bevy::shape::Aabb3d;
 use chico::ChicoGrove;
 use geneva::{DevelopmentPlaces, LanguageGround};
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::{GenerationContext, HcsgStorage};
+use lod::hcsg::{Busy, GenerationContext, HcsgDemand, HcsgStorage};
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
-	collect_matching_in_xz_tile, hashed_poi_id, DistantTilePois, PoiEntry, PoiInterests, PoiOrigin,
-	PoiSet, PoiSupport,
+	generate_matching_in_xz_tile_offline, hashed_poi_id, DistantTilePois, DistantTileRequest,
+	PoiEntry, PoiInterests, PoiOrigin, PoiSet, PoiSupport, PoiTilePoll, PoiTileQuery,
+	PoiTileRequest,
 };
 use richmond::{Built, PaddedTerrain, RichmondGround};
 
@@ -132,7 +133,27 @@ impl<W: LanguageGround> PoiOrigin for PlacePois<W> {
 pub struct WorldPoiTiles;
 
 impl DistantTilePois for WorldPoiTiles {
-	fn collect_matching_in_xz_tile(
+	fn request_in_xz_tile(&self, query: PoiTileQuery) -> Option<Box<dyn DistantTileRequest>> {
+		type Ground = terrain_layer_model::OnTerrain<durham::Durham>;
+		type Urban = urbanization_layer_model::Urbanization<richmond::Richmond<Ground>>;
+		let mut families: Vec<Box<dyn DistantTileRequest>> = Vec::new();
+		if query.interests.contains(VEGETATION_POI) {
+			families.push(Box::new(PoiTileRequest::<GrovePois>::new(query.clone())));
+		}
+		if query.interests.contains(URBAN_POI) {
+			families.push(Box::new(PoiTileRequest::<UrbanPois<Ground>>::new(query.clone())));
+		}
+		if query.interests.contains(LOCAL_POI) || query.interests.contains(SALOON_POI) {
+			families.push(Box::new(PoiTileRequest::<PlacePois<Urban>>::new(query)));
+		}
+		Some(Box::new(WorldPoiRequest { families }))
+	}
+}
+
+impl WorldPoiTiles {
+	/// Synchronous reference generation for offline fixtures and timing only.
+	/// Frame callers use the asynchronous DistantTilePois request interface.
+	pub fn generate_matching_in_xz_tile_offline(
 		&self,
 		storage: &HcsgStorage,
 		tile: IVec2,
@@ -157,7 +178,7 @@ impl DistantTilePois for WorldPoiTiles {
 				prior_matches = out.len(),
 			);
 			let _entered = span.enter();
-			collect_matching_in_xz_tile::<GrovePois>(
+			generate_matching_in_xz_tile_offline::<GrovePois>(
 				&mut cx,
 				tile,
 				tile_size,
@@ -177,7 +198,7 @@ impl DistantTilePois for WorldPoiTiles {
 				prior_matches = out.len(),
 			);
 			let _entered = span.enter();
-			collect_matching_in_xz_tile::<UrbanPois<Ground>>(
+			generate_matching_in_xz_tile_offline::<UrbanPois<Ground>>(
 				&mut cx,
 				tile,
 				tile_size,
@@ -198,7 +219,7 @@ impl DistantTilePois for WorldPoiTiles {
 				prior_matches = out.len(),
 			);
 			let _entered = span.enter();
-			collect_matching_in_xz_tile::<PlacePois<Urban>>(
+			generate_matching_in_xz_tile_offline::<PlacePois<Urban>>(
 				&mut cx,
 				tile,
 				tile_size,
@@ -210,6 +231,89 @@ impl DistantTilePois for WorldPoiTiles {
 		}
 		out.sort_unstable_by_key(|poi| poi.id);
 		out.dedup_by_key(|poi| poi.id);
+	}
+}
+
+/// Read each family independently. Available candidates never wait for another
+/// family or request; completion is separate and used only for empty proof.
+struct WorldPoiRequest {
+	families: Vec<Box<dyn DistantTileRequest>>,
+}
+
+impl DistantTileRequest for WorldPoiRequest {
+	fn release(&mut self) {
+		for family in &mut self.families {
+			family.release();
+		}
+	}
+
+	fn poll(
+		&mut self,
+		storage: &HcsgStorage,
+		demand: &HcsgDemand,
+		out: &mut Vec<PoiEntry>,
+		allow_request: bool,
+	) -> Result<PoiTilePoll, Busy> {
+		out.clear();
+		let epoch = demand.try_epoch()?;
+		let mut scratch = Vec::new();
+		let mut complete = true;
+		let mut capacity = false;
+		let mut failed = false;
+		let mut stale = false;
+		for family in &mut self.families {
+			scratch.clear();
+			let status = family.poll(storage, demand, &mut scratch, allow_request);
+			out.extend(scratch.iter().copied());
+			match status {
+				Ok(PoiTilePoll::Ready | PoiTilePoll::ReadyEmpty) => {}
+				Ok(PoiTilePoll::Capacity) => {
+					capacity = true;
+					complete = false;
+				}
+				Ok(PoiTilePoll::Failed) => {
+					failed = true;
+					complete = false;
+				}
+				Ok(PoiTilePoll::Stale) => {
+					stale = true;
+					complete = false;
+				}
+				Ok(PoiTilePoll::Pending) | Err(_) => complete = false,
+			}
+		}
+		match demand.try_epoch() {
+			Ok(current) if current == epoch => {}
+			Ok(_) => {
+				out.clear();
+				self.release();
+				return Ok(PoiTilePoll::Stale);
+			}
+			Err(busy) => {
+				out.clear();
+				return Err(busy);
+			}
+		}
+		if capacity {
+			self.release();
+		}
+		out.sort_unstable_by_key(|poi| poi.id);
+		out.dedup_by_key(|poi| poi.id);
+		Ok(if complete {
+			if out.is_empty() {
+				PoiTilePoll::ReadyEmpty
+			} else {
+				PoiTilePoll::Ready
+			}
+		} else if stale {
+			PoiTilePoll::Stale
+		} else if failed {
+			PoiTilePoll::Failed
+		} else if capacity {
+			PoiTilePoll::Capacity
+		} else {
+			PoiTilePoll::Pending
+		})
 	}
 }
 
@@ -304,3 +408,6 @@ mod tests {
 
 #[cfg(test)]
 mod interest_tests;
+
+#[cfg(test)]
+mod async_tests;

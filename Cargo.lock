@@ -1151,6 +1151,7 @@ dependencies = [
  "indexmap 2.14.2",
  "log",
  "nonmax",
+ "rand 0.10.2",
  "serde",
  "slotmap",
  "smallvec 1.15.1",
@@ -7170,6 +7171,7 @@ dependencies = [
  "maybraid-gameplay",
  "maybraid-gpu-frame-capture",
  "maybraid-menu-controller",
+ "maybraid-pipeline-profile",
  "maybraid-session",
  "maybraid-sky",
  "maybraid-virtual-pad-controller",
@@ -7375,6 +7377,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-memory-census"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "render-item",
+ "serde",
+]
+
+[[package]]
 name = "maybraid-menu-controller"
 version = "0.1.5"
 dependencies = [
@@ -7383,6 +7395,13 @@ dependencies = [
  "maybraid-controllers-core",
  "maybraid-virtual-pad-controller",
  "menu-components",
+]
+
+[[package]]
+name = "maybraid-pipeline-profile"
+version = "0.1.5"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]
@@ -7601,6 +7620,7 @@ dependencies = [
  "maybraid-game-mode-discover",
  "maybraid-gameplay",
  "maybraid-locomotion-controller",
+ "maybraid-memory-census",
  "maybraid-session",
  "maybraid-skill-map",
  "maybraid-sky",
@@ -7625,6 +7645,7 @@ dependencies = [
  "player",
  "player-camera",
  "poi-intelligence",
+ "render-item",
  "richmond",
  "routing-intelligence",
  "screen-capture",

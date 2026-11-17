@@ -2,8 +2,9 @@
 //!
 //! [`LocalPoi`] values are indexed through Gimme for bounded nearby scans.
 //! [`GlobalPoi`] values form a deliberately sparse whole-map set for those
-//! scans. Distant xz-tile lookups resolve through a [`PoiOrigin`]
-//! [`lod::hcsg::GenerationScheme`] (`get_or_generate_in`), not a global list.
+//! scans. Distant xz-tile readouts inspect published regional values without
+//! waiting for generation, and independently request [`PoiOrigin`] work from
+//! the shared HCSG worker. Synchronous generation helpers are explicitly offline.
 
 mod discovery;
 mod goal;
@@ -18,6 +19,7 @@ mod policy;
 mod registry;
 mod scheme;
 mod source;
+mod tile_request;
 mod visit;
 
 pub use discovery::{discover_pois, ingest_poi_observations, sync_poi_registry};
@@ -35,10 +37,11 @@ pub use plugin::{PoiDiscoverLimits, PoiIntelligencePlugin, PoiSystems};
 pub use policy::{PoiInterest, PoiInterests, PoiLearningPolicy, PoiVisitPolicy};
 pub use registry::{PoiRecord, PoiRegistry};
 pub use scheme::{
-	collect_matching_in_xz_tile, xz_tile, xz_tile_region, Catalog, DistantTilePoiLookup,
+	generate_matching_in_xz_tile_offline, xz_tile, xz_tile_region, Catalog, DistantTilePoiLookup,
 	DistantTilePois, GridTiles, PoiCatalog, PoiEntry, PoiOrigin, PoiSet, GRID_KIND,
 };
 pub use source::PoiSource;
+pub use tile_request::{DistantTileRequest, PoiTilePoll, PoiTileQuery, PoiTileRequest};
 pub use visit::{choose_poi, PoiVisitState};
 
 #[cfg(test)]

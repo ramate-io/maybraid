@@ -42,6 +42,8 @@ pub(crate) struct QuantumProgress {
 	pub cursor: usize,
 	pub cost: f64,
 	pub done: bool,
+	/// Discovery/build panicked; partial publication is not completion proof.
+	pub failed: bool,
 	pub reached: HashSet<TypeId>,
 	/// Ids whose values landed during this quantum, in generation order.
 	pub published: Vec<Id>,
@@ -121,6 +123,7 @@ impl HcsgDemand {
 			if let Some(trace) = &mut subscription.trace {
 				trace.requeue();
 			}
+			subscription.failed |= progress.failed;
 			if progress.done {
 				subscription.done = true;
 				if subscription.discovered_len.is_none() {

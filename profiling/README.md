@@ -104,3 +104,20 @@ profiling/tracy-flight.sh crowd-16 ab-after 1
 For a warm, one-render-update `.gputrace` document, use the default-off
 [`gpu-frame-capture` diagnostic feature and harness](gpu-frame-capture.md).
 Capture-enabled runs are for Xcode inspection and must not supply benchmark timings.
+
+## Pipeline and CPU memory attribution
+
+Two default-off diagnostic features support narrower follow-up investigations:
+
+- [`pipeline-profile`](../maybraid/diagnostics/pipeline-profile/README.md) records
+  pipeline descriptors and readiness transitions for correlation with Bevy's
+  pipeline queue zones. It does not measure individual compilation duration or
+  implement a loading barrier.
+- [`memory-census`](../maybraid/diagnostics/memory-census/README.md) adds an explicit
+  `diagnostics memory` agent command. It reports selected ECS, mesh/image payload
+  and terrain/water cache ownership counts. It is not a full heap or GPU census.
+
+Keep these diagnostic runs separate from clean timing comparisons. Memory
+snapshots can stall their frame; take them at a memory measurement boundary and
+allow settling afterward. Preserve plain-release OS footprint measurements as
+a separate control, since Tracy and other diagnostics also allocate memory.

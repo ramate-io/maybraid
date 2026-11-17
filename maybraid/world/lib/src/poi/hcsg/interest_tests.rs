@@ -12,10 +12,11 @@ use durham::{BaseTerrainNoise, Terrain, TerrainCellLayout, TerrainConfig};
 use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
 use mob_characters::{CHARACTER_POI, LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
-	collect_matching_in_xz_tile, DistantTilePois, PoiEntry, PoiInterest, PoiInterests,
+	generate_matching_in_xz_tile_offline, DistantTilePois, PoiEntry, PoiInterest, PoiInterests,
 };
 use richmond::{
-	AuthoredDevelopment, AuthoredDevelopments, DevelopmentConfig, DevelopmentKind, DevelopmentSites,
+	AuthoredDevelopment, AuthoredDevelopments, Built, DevelopmentConfig, DevelopmentKind,
+	DevelopmentSites,
 };
 use urbanization_cells::UrbanizationSelection;
 
@@ -90,12 +91,16 @@ impl Fixture {
 		}
 	}
 
-	fn collect(&self, lookup: &impl DistantTilePois, interests: &PoiInterests) -> Vec<PoiEntry> {
+	fn generate_offline(
+		&self,
+		lookup: &impl OfflineWorldTiles,
+		interests: &PoiInterests,
+	) -> Vec<PoiEntry> {
 		let mut result = Vec::new();
 		let mut tile_matches = Vec::new();
 		for z in 0..4 {
 			for x in 0..4 {
-				lookup.collect_matching_in_xz_tile(
+				lookup.generate_matching_in_xz_tile_offline(
 					&self.storage,
 					IVec2::new(x, z),
 					TILE_SIZE,
@@ -110,11 +115,41 @@ impl Fixture {
 	}
 }
 
+/// Test-only synchronous reference dispatch; production lookup traits expose no
+/// synchronous generation entry point.
+trait OfflineWorldTiles {
+	fn generate_matching_in_xz_tile_offline(
+		&self,
+		storage: &HcsgStorage,
+		tile: IVec2,
+		tile_size: f32,
+		center_y: f32,
+		interests: &PoiInterests,
+		out: &mut Vec<PoiEntry>,
+	);
+}
+
+impl OfflineWorldTiles for WorldPoiTiles {
+	fn generate_matching_in_xz_tile_offline(
+		&self,
+		storage: &HcsgStorage,
+		tile: IVec2,
+		tile_size: f32,
+		center_y: f32,
+		interests: &PoiInterests,
+		out: &mut Vec<PoiEntry>,
+	) {
+		WorldPoiTiles::generate_matching_in_xz_tile_offline(
+			self, storage, tile, tile_size, center_y, interests, out,
+		);
+	}
+}
+
 /// The exact pre-optimization dispatch, without the new interest guards.
 struct UnconditionalWorldPoiTiles;
 
-impl DistantTilePois for UnconditionalWorldPoiTiles {
-	fn collect_matching_in_xz_tile(
+impl OfflineWorldTiles for UnconditionalWorldPoiTiles {
+	fn generate_matching_in_xz_tile_offline(
 		&self,
 		storage: &HcsgStorage,
 		tile: IVec2,
@@ -126,7 +161,7 @@ impl DistantTilePois for UnconditionalWorldPoiTiles {
 		out.clear();
 		let mut cx = GenerationContext::new(storage);
 		let mut scratch = Vec::new();
-		collect_matching_in_xz_tile::<GrovePois>(
+		generate_matching_in_xz_tile_offline::<GrovePois>(
 			&mut cx,
 			tile,
 			tile_size,
@@ -135,7 +170,7 @@ impl DistantTilePois for UnconditionalWorldPoiTiles {
 			&mut scratch,
 		);
 		out.extend(scratch.iter().copied());
-		collect_matching_in_xz_tile::<UrbanPois<Ground>>(
+		generate_matching_in_xz_tile_offline::<UrbanPois<Ground>>(
 			&mut cx,
 			tile,
 			tile_size,
@@ -144,7 +179,7 @@ impl DistantTilePois for UnconditionalWorldPoiTiles {
 			&mut scratch,
 		);
 		out.extend(scratch.iter().copied());
-		collect_matching_in_xz_tile::<PlacePois<Urban>>(
+		generate_matching_in_xz_tile_offline::<PlacePois<Urban>>(
 			&mut cx,
 			tile,
 			tile_size,
@@ -225,16 +260,16 @@ fn interest_dispatch_preserves_cold_and_warm_world_pois_and_skips_unrequested_co
 	for (name, interests, families) in cases {
 		let reference = Fixture::new();
 		let optimized = Fixture::new();
-		let expected_cold = reference.collect(&UnconditionalWorldPoiTiles, &interests);
+		let expected_cold = reference.generate_offline(&UnconditionalWorldPoiTiles, &interests);
 		let calls = FamilyCalls::default();
 		let subscriber = bevy::log::tracing_subscriber::registry().with(calls.clone());
 		let (actual_cold, actual_warm) = tracing::subscriber::with_default(subscriber, || {
 			(
-				optimized.collect(&WorldPoiTiles, &interests),
-				optimized.collect(&WorldPoiTiles, &interests),
+				optimized.generate_offline(&WorldPoiTiles, &interests),
+				optimized.generate_offline(&WorldPoiTiles, &interests),
 			)
 		});
-		let expected_warm = reference.collect(&UnconditionalWorldPoiTiles, &interests);
+		let expected_warm = reference.generate_offline(&UnconditionalWorldPoiTiles, &interests);
 		assert_eq!(actual_cold, expected_cold, "cold case {name}");
 		assert_eq!(actual_warm, expected_warm, "warm case {name}");
 		assert_eq!(expected_cold, expected_warm, "reference remains stable: {name}");
@@ -258,6 +293,92 @@ fn interest_dispatch_preserves_cold_and_warm_world_pois_and_skips_unrequested_co
 				"real Richmond fixture must exercise interior floor arrivals"
 			);
 		}
+	}
+	Ok(())
+}
+
+#[test]
+fn worker_requests_preserve_exact_ordered_real_family_output() -> anyhow::Result<()> {
+	use lod::hcsg::{spawn_worker, HcsgDemand};
+	use poi_intelligence::{PoiTilePoll, PoiTileQuery};
+	use std::time::{Duration, Instant};
+
+	for interests in [
+		PoiInterests::one(VEGETATION_POI),
+		PoiInterests::one(URBAN_POI),
+		PoiInterests::new([PoiInterest::new(LOCAL_POI, 1.0), PoiInterest::new(SALOON_POI, 1.0)]),
+		PoiInterests::new([
+			PoiInterest::new(VEGETATION_POI, 1.0),
+			PoiInterest::new(URBAN_POI, 1.0),
+			PoiInterest::new(LOCAL_POI, 1.0),
+			PoiInterest::new(SALOON_POI, 1.0),
+		]),
+	] {
+		let tile = IVec2::ZERO;
+		let reference = Fixture::new();
+		let mut expected = Vec::new();
+		WorldPoiTiles.generate_matching_in_xz_tile_offline(
+			&reference.storage,
+			tile,
+			TILE_SIZE,
+			0.0,
+			&interests,
+			&mut expected,
+		);
+		let fixture = Fixture::new();
+		let demand = HcsgDemand::default();
+		// Match the live world's terrain subscription. The fixture publishes
+		// terrain directly rather than seeding its full generation roots, so
+		// retain that input across the worker's initial reach-based sweep.
+		let _terrain = demand.subscribe::<Terrain>(
+			None,
+			vec![poi_intelligence::xz_tile_region(tile, TILE_SIZE, 0.0)
+				.ok_or_else(|| anyhow::anyhow!("terrain retention region"))?],
+			None,
+			lod::hcsg::HcsgClass::Near,
+		);
+		let _worker = spawn_worker(fixture.storage.clone(), demand.clone())?;
+		assert!(demand.wait_idle(Duration::from_secs(30)));
+		let terrain_region = poi_intelligence::xz_tile_region(tile, TILE_SIZE, 0.0)
+			.ok_or_else(|| anyhow::anyhow!("terrain query region"))?;
+		assert!(
+			!fixture.storage.overlapping::<Terrain>(terrain_region).is_empty(),
+			"fixture terrain must survive the initial worker sweep"
+		);
+		assert!(fixture
+			.storage
+			.overlapping::<poi_intelligence::PoiSet<GrovePois>>(terrain_region)
+			.is_empty());
+		assert!(fixture.storage.overlapping::<Built<Ground>>(terrain_region).is_empty());
+		let mut request = WorldPoiTiles
+			.request_in_xz_tile(PoiTileQuery {
+				tile,
+				tile_size: TILE_SIZE,
+				center_y: 0.0,
+				interests,
+			})
+			.ok_or_else(|| anyhow::anyhow!("world request"))?;
+		let mut actual = Vec::new();
+		let deadline = Instant::now() + Duration::from_secs(30);
+		loop {
+			match request.poll(&fixture.storage, &demand, &mut actual, true) {
+				Ok(PoiTilePoll::Ready | PoiTilePoll::ReadyEmpty) => break,
+				Ok(PoiTilePoll::Failed | PoiTilePoll::Stale) => {
+					anyhow::bail!("request failed or went stale")
+				}
+				_ => anyhow::ensure!(Instant::now() < deadline, "request did not complete"),
+			}
+			assert!(demand.wait_idle(Duration::from_secs(30)));
+		}
+		assert_eq!(actual, expected, "cold worker output must match synchronous fixture exactly");
+		assert!(matches!(
+			request.poll(&fixture.storage, &demand, &mut actual, true),
+			Ok(PoiTilePoll::Ready | PoiTilePoll::ReadyEmpty)
+		));
+		assert_eq!(
+			actual, expected,
+			"warm output preserves IDs, ordering, support and destinations"
+		);
 	}
 	Ok(())
 }

@@ -726,6 +726,37 @@ fn agent_apply_world_ops(
 					let diagnostics =
 						diagnostics.as_deref_mut().ok_or("requires --agent-diagnostics")?;
 					match DiagnosticCommand::parse(&line)? {
+						DiagnosticCommand::Memory => {
+							if !diagnostics.enabled {
+								return Err("diagnostics are off".into());
+							}
+							#[cfg(feature = "memory-census")]
+							{
+								commands.queue(
+									move |world: &mut World| -> bevy::ecs::error::Result {
+										let census = serde_json::to_value(
+											diagnostics::memory::capture(world),
+										)?;
+										let runtime = world.resource::<AgentRuntime>();
+										emit(
+											&runtime.sink,
+											AgentEvent {
+												t: world.resource::<Time>().elapsed_secs(),
+												frame: runtime.frame,
+												body: AgentEventBody::MemoryCensus {
+													command_id: id,
+													census,
+												},
+											},
+										);
+										Ok(())
+									},
+								);
+								Ok("memory census queued for command application".into())
+							}
+							#[cfg(not(feature = "memory-census"))]
+							Err("requires the memory-census Cargo feature".into())
+						}
 						DiagnosticCommand::Enabled(enabled) => {
 							diagnostics.enabled = enabled;
 							emit(

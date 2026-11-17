@@ -3,7 +3,7 @@
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, Weak};
 
 use bevy::math::Vec3;
 use bevy::shape::Aabb3d;
@@ -53,6 +53,9 @@ pub(super) struct Subscription {
 	/// Every discovered id whose value is available, in the order it landed.
 	pub published: Vec<Id>,
 	pub done: bool,
+	pub failed: bool,
+	/// Present only for bounded, shared one-region gameplay requests.
+	pub ticket: Option<(TypeId, Weak<super::tickets::TicketLease>)>,
 	/// Set when the subscription is replaced, removed, or its epoch ends.
 	pub cancelled: Arc<AtomicBool>,
 	/// This scheme's type plus every type its fills have read. Shared with

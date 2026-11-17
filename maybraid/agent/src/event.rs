@@ -29,6 +29,11 @@ pub struct AgentEvent {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AgentEventBody {
+	/// Explicit feature-gated CPU ownership census; schema belongs to the diagnostic crate.
+	MemoryCensus {
+		command_id: u32,
+		census: serde_json::Value,
+	},
 	Ready {
 		detail: String,
 	},

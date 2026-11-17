@@ -14,8 +14,11 @@ rust-version = { workspace = true }
 test-support = []
 # Debug commands for preview evidence capture (grant-points, take-damage, spawn-npc).
 debug-commands = []
+memory-census = ["dep:maybraid-memory-census", "dep:render-item"]
 
 [dependencies]
+maybraid-memory-census = { path = "../../diagnostics/memory-census", optional = true }
+render-item = { workspace = true, optional = true }
 layer-stack = { workspace = true }
 avian3d = { workspace = true }
 bevy = { workspace = true }
