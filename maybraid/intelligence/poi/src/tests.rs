@@ -2,12 +2,11 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 
 use crate::{
-	choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi, KnownPoi, LocalPoi, Poi,
-	PoiDiscoverLimits, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId, PoiIntelligencePlugin,
-	PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
-	NearbyFallback, NearbyQuery, PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiSupport,
-	PoiVisitPolicy, PoiVisitState,
-	AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
+	choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi, KnownPoi, LocalPoi, NearbyFallback,
+	NearbyQuery, Poi, PoiDiscoverLimits, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId,
+	PoiIntelligencePlugin, PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge,
+	PoiLearningPolicy, PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiSupport,
+	PoiVisitPolicy, PoiVisitState, AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
 };
 use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};
 use movement_intelligence::MovementIntelligence;
@@ -665,7 +664,7 @@ fn local_query_clone_timing() {
 
 #[test]
 fn catalog_scheme_resolves_only_the_queried_tile() -> anyhow::Result<()> {
-	use crate::{collect_matching_in_xz_tile, Catalog, PoiCatalog, PoiEntry};
+	use crate::{generate_matching_in_xz_tile_offline, Catalog, PoiCatalog, PoiEntry};
 	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
 
 	let storage = HcsgStorage::default();
@@ -699,9 +698,16 @@ fn catalog_scheme_resolves_only_the_queried_tile() -> anyhow::Result<()> {
 	let mut cx = GenerationContext::new(&storage);
 	let interests = PoiInterests::one(CAMP);
 	let mut ids = Vec::new();
-	collect_matching_in_xz_tile::<Catalog>(&mut cx, IVec2::ZERO, 256.0, 0.0, &interests, &mut ids);
+	generate_matching_in_xz_tile_offline::<Catalog>(
+		&mut cx,
+		IVec2::ZERO,
+		256.0,
+		0.0,
+		&interests,
+		&mut ids,
+	);
 	assert_eq!(ids.iter().map(|poi| poi.id).collect::<Vec<_>>(), [PoiId(1)]);
-	collect_matching_in_xz_tile::<Catalog>(
+	generate_matching_in_xz_tile_offline::<Catalog>(
 		&mut cx,
 		IVec2::new(1, 1),
 		256.0,
@@ -715,7 +721,9 @@ fn catalog_scheme_resolves_only_the_queried_tile() -> anyhow::Result<()> {
 
 #[test]
 fn grid_scheme_tile_lookup_is_one_origin_id() -> anyhow::Result<()> {
-	use crate::{collect_matching_in_xz_tile, xz_tile_region, GridTiles, PoiOrigin, GRID_KIND};
+	use crate::{
+		generate_matching_in_xz_tile_offline, xz_tile_region, GridTiles, PoiOrigin, GRID_KIND,
+	};
 	use lod::hcsg::{GenerationContext, HcsgStorage};
 
 	let storage = HcsgStorage::default();
@@ -725,7 +733,7 @@ fn grid_scheme_tile_lookup_is_one_origin_id() -> anyhow::Result<()> {
 	assert_eq!(origins.len(), 1);
 	let interests = PoiInterests::one(GRID_KIND);
 	let mut pois = Vec::new();
-	collect_matching_in_xz_tile::<GridTiles>(
+	generate_matching_in_xz_tile_offline::<GridTiles>(
 		&mut cx,
 		IVec2::new(3, -2),
 		256.0,

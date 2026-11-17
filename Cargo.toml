@@ -3,6 +3,7 @@
 resolver = "2"
 
 members = [
+  "maybraid/diagnostics/pipeline-profile",
 
   # maybraid game crates, typically following rfcs  
   "maybraid/world/layers/urbanization/buildings/components",
@@ -117,6 +118,7 @@ members = [
   "maybraid/items/equipment",
   "maybraid/game",
   "maybraid/diagnostics/gpu-frame-capture",
+  "maybraid/diagnostics/memory-census",
   "maybraid/world/modes/discover",
   "maybraid/world/modes/reliquary",
   "maybraid/controllers/virtual-pad",

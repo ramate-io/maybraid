@@ -77,7 +77,7 @@ fn run(storage: &HcsgStorage, demand: &HcsgDemand) {
 						error!(
 							"hcsg worker: generation panicked; subscription {id:?} left partial"
 						);
-						QuantumProgress { done: true, ..QuantumProgress::default() }
+						QuantumProgress { done: true, failed: true, ..QuantumProgress::default() }
 					});
 				#[cfg(feature = "generation-tracing")]
 				if let (Some(trace), Some(started)) = (trace, trace_started) {
@@ -195,5 +195,13 @@ fn progress(
 	done: bool,
 	published: Vec<Id>,
 ) -> QuantumProgress {
-	QuantumProgress { discovered, cursor, cost, done, reached: cx.take_reached(), published }
+	QuantumProgress {
+		discovered,
+		cursor,
+		cost,
+		done,
+		reached: cx.take_reached(),
+		published,
+		failed: false,
+	}
 }

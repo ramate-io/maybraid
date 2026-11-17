@@ -16,9 +16,7 @@ use chico::{ForestSelection, LayeringKind};
 use durham::Durham;
 use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
-use poi_intelligence::{
-	collect_matching_in_xz_tile, DistantTilePois, PoiEntry, PoiId, PoiInterests,
-};
+use poi_intelligence::{generate_matching_in_xz_tile_offline, PoiEntry, PoiId, PoiInterests};
 use richmond::Richmond;
 use terrain_layer_model::OnTerrain;
 use urbanization_layer_model::Urbanization;
@@ -129,14 +127,15 @@ fn collect_world(
 	interests: &PoiInterests,
 	out: &mut Vec<PoiEntry>,
 ) {
-	WorldPoiTiles.collect_matching_in_xz_tile(storage, tile, TILE_SIZE, 0.0, interests, out);
+	WorldPoiTiles
+		.generate_matching_in_xz_tile_offline(storage, tile, TILE_SIZE, 0.0, interests, out);
 }
 
 fn collect_families(storage: &HcsgStorage, tile: IVec2, interests: &PoiInterests) -> Vec<PoiEntry> {
 	let mut cx = GenerationContext::new(storage);
 	let mut out = Vec::new();
 	let mut scratch = Vec::new();
-	collect_matching_in_xz_tile::<GrovePois>(
+	generate_matching_in_xz_tile_offline::<GrovePois>(
 		&mut cx,
 		tile,
 		TILE_SIZE,
@@ -145,7 +144,7 @@ fn collect_families(storage: &HcsgStorage, tile: IVec2, interests: &PoiInterests
 		&mut scratch,
 	);
 	out.extend(scratch.iter().copied());
-	collect_matching_in_xz_tile::<UrbanPois<Ground>>(
+	generate_matching_in_xz_tile_offline::<UrbanPois<Ground>>(
 		&mut cx,
 		tile,
 		TILE_SIZE,
@@ -154,7 +153,7 @@ fn collect_families(storage: &HcsgStorage, tile: IVec2, interests: &PoiInterests
 		&mut scratch,
 	);
 	out.extend(scratch.iter().copied());
-	collect_matching_in_xz_tile::<PlacePois<Urban>>(
+	generate_matching_in_xz_tile_offline::<PlacePois<Urban>>(
 		&mut cx,
 		tile,
 		TILE_SIZE,
@@ -174,7 +173,7 @@ fn collect_grove(
 	interests: &PoiInterests,
 	out: &mut Vec<PoiEntry>,
 ) {
-	collect_matching_in_xz_tile::<GrovePois>(cx, tile, TILE_SIZE, 0.0, interests, out);
+	generate_matching_in_xz_tile_offline::<GrovePois>(cx, tile, TILE_SIZE, 0.0, interests, out);
 }
 
 fn assert_world_paths_agree(tiles: &[IVec2], interests: &PoiInterests) {

@@ -50,10 +50,13 @@ fn log_store_diagnostics(storage: Res<HcsgStorage>, time: Res<Time>, mut last: L
 		return;
 	}
 	*last = 0.0;
+	let Ok(sizes) = storage.try_store_sizes() else {
+		return;
+	};
 	let (top, nested) = storage.rebuilds_after_eviction();
 	info!(
 		target: "hcsg",
 		"stores={:?} rebuilds_after_eviction=({top}, {nested})",
-		storage.store_sizes()
+		sizes
 	);
 }
