@@ -23,9 +23,11 @@ characters = { workspace = true }
 combat-targeting = { workspace = true }
 damage = { workspace = true }
 encounters = { workspace = true }
+firearm-intelligence = { workspace = true }
 lod-avian = { workspace = true }
 lubikans = { workspace = true }
 projectiles = { workspace = true }
+spotting-intelligence = { workspace = true }
 world-player = { workspace = true }
 world-materials = { workspace = true }
 

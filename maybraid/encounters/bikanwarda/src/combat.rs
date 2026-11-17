@@ -1,39 +1,18 @@
-//! Minimal encounter combat driver with stationary-boss targeting adapter.
+//! Boss encounter combat driver.
 //!
-//! ## Targeting Rationale
-//!
-//! The existing `CombatTargeting` component (combat-targeting crate) is designed
-//! for mobile NPCs with threat-intelligence, spotting systems, and navigation:
-//!
-//! - **Spotting**: Requires perception adapters that ray-cast for visibility
-//! - **Threat-intelligence**: Maintains enemy lists via faction/affiliation
-//! - **Mobile AI**: Updates targeting through patrol/search/chase behaviors
-//!
-//! A stationary chained boss has none of these:
-//! - No locomotion/navigation to drive spotting updates
-//! - No threat-intelligence for faction-based enemy tracking
-//! - Fixed position means no patrol/search state machine
-//!
-//! ## Smallest Adapter
-//!
-//! `update_boss_targeting` provides a minimal stationary-attacker policy that:
-//! 1. Finds nearby players via spatial query (reuses range check concept)
-//! 2. Creates `CombatContact` entries with position/visibility (reuses contact memory)
-//! 3. Adds them to `CombatTargeting` with `OBJECTIVE` source (reuses ranking)
-//! 4. Existing `rank_combat_targets` system ranks them by algebra
-//!
-//! This reuses all existing targeting contracts without forking them. The boss
-//! gets CombatTargeting just like mobile NPCs, but the contact population is
-//! simplified for stationary use.
+//! Reuses the existing spotting→targeting pipeline from `firearm_combat::spotting`
+//! instead of hand-writing visibility checks. The boss gets `SpottingUser` and
+//! `FirearmIntelligence` components in assembly, and the standard
+//! `sync_spotted_combat_targets` system populates `CombatTargeting` from
+//! actual perception results.
 
 use attacks::{AttackCatalog, BeginAttack};
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 use bikanwarda_attacks::{BikanwardaMouthSocket, BRAY};
 use bikanwarda_character::BikanwardaRoot;
-use combat_targeting::{CombatContact, CombatTargeting, TargetSource};
+use combat_targeting::CombatTargeting;
 use damage::Health;
-use world_player::Player as WorldPlayer;
 
 use crate::presentation::{BossActor, BossEncounterRoot};
 
@@ -56,55 +35,9 @@ impl Default for BossAttackCooldown {
 	}
 }
 
-/// Stationary-boss targeting adapter: populates CombatTargeting with nearby players.
-///
-/// Reuses existing CombatContact memory and TargetSource membership without
-/// requiring mobile-NPC perception or threat-intelligence systems.
-///
-/// Queries the host (BossEncounterRoot) to find the actor (BikanwardaRoot) via BossActor,
-/// then uses the actor's Transform for positioning and targeting.
-pub fn update_boss_targeting(
-	time: Res<Time>,
-	hosts: Query<&BossActor, With<BossEncounterRoot>>,
-	mut actors: Query<(&GlobalTransform, &mut CombatTargeting), With<BikanwardaRoot>>,
-	players: Query<(Entity, &GlobalTransform), With<WorldPlayer>>,
-) {
-	let now = time.elapsed_secs();
-	const DETECTION_RANGE: f32 = 50.0; // Match typical encounter arena size
-	
-	for actor_ref in &hosts {
-		let Ok((actor_transform, mut targeting)) = actors.get_mut(actor_ref.0) else {
-			continue;
-		};
-		
-		let boss_pos = actor_transform.translation();
-		
-		// Find nearby players and add them to targeting memory
-		for (player_entity, player_transform) in &players {
-			let player_pos = player_transform.translation();
-			let distance = boss_pos.distance(player_pos);
-			
-			if distance <= DETECTION_RANGE {
-				// TODO(visibility): This assumes all nearby players are visible without
-				// occlusion checks. A production implementation should query actual
-				// perception/visibility results from a spotting system.
-				// Create contact entry (reuses existing contact memory)
-				let contact = CombatContact {
-					subject: player_entity,
-					position: player_pos,
-					movement_vector: Vec3::ZERO, // Stationary boss doesn't track velocity
-					visible_point: player_pos,
-					visible_head: Some(player_pos + Vec3::Y * 1.7), // Approximate head height
-					last_spotted_at: now,
-				};
-				
-				targeting.upsert_contact(contact);
-				// Add to targeting membership with OBJECTIVE source (reuses existing ranking)
-				targeting.include(player_entity, TargetSource::OBJECTIVE);
-			}
-		}
-	}
-}
+// Targeting is now handled by firearm_combat::sync_spotted_combat_targets,
+// which populates CombatTargeting from SpottingUser contacts (actual perception results).
+// No hand-written visibility checks needed.
 
 /// System to manage boss combat state and trigger attacks.
 ///
@@ -193,17 +126,21 @@ pub fn boss_combat_driver(
 
 /// System to initialize combat state on boss spawn.
 ///
-/// Adds CombatTargeting to the actor (BikanwardaRoot) when the host gets a BossActor binding.
-/// BossAttackCooldown goes on the host since it's checked against host Health.
+/// Adds combat components to the actor when the host gets a BossActor binding.
+/// The actor gets spotting/targeting/combat systems; the host gets cooldown (checked with Health).
 pub fn initialize_boss_combat(
 	mut commands: Commands,
 	new_bindings: Query<(Entity, &BossActor), (Added<BossActor>, With<BossEncounterRoot>)>,
 ) {
 	for (host_entity, actor_ref) in &new_bindings {
-		// Add CombatTargeting to the ACTOR (used by attack system and targeting adapter)
+		// Add combat/spotting/targeting to the ACTOR
+		// SpottingUser will be populated by spotting systems, then sync_spotted_combat_targets
+		// will transfer spotted contacts to CombatTargeting for ranking/selection.
 		commands.entity(actor_ref.0).insert((
 			BossInCombat,
 			CombatTargeting::default(),
+			// SpottingUser and FirearmIntelligence will be added by assembly
+			// (they need sockets/positioning that assembly sets up)
 		));
 		
 		// Add BossAttackCooldown to the HOST (checked alongside Health)
@@ -223,15 +160,18 @@ impl Plugin for BossEncounterCombatPlugin {
 			app.add_plugins(combat_targeting::CombatTargetingPlugin);
 		}
 		
+		// Install firearm intelligence plugin for sync_spotted_combat_targets
+		// (reuses existing spotting→targeting bridge instead of hand-writing visibility)
+		if !app.is_plugin_added::<firearm_intelligence::FirearmIntelligencePlugin>() {
+			app.add_plugins(firearm_intelligence::FirearmIntelligencePlugin);
+		}
+		
 		app.add_systems(
 			Update,
 			(
 				initialize_boss_combat,
-				// Update targeting before ranking, after transform propagation
-				update_boss_targeting
-					.after(TransformSystems::Propagate)
-					.before(combat_targeting::CombatTargetingSystems::Rank),
 				// Combat driver runs after targeting is ranked and transforms are propagated
+				// (targeting is populated by firearm_combat::sync_spotted_combat_targets)
 				boss_combat_driver
 					.after(TransformSystems::Propagate)
 					.after(combat_targeting::CombatTargetingSystems::Rank),

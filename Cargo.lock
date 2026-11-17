@@ -2373,10 +2373,12 @@ dependencies = [
  "combat-targeting",
  "damage",
  "encounters",
+ "firearm-intelligence",
  "lod",
  "lod-avian",
  "lubikans",
  "projectiles",
+ "spotting-intelligence",
  "world-materials",
  "world-player",
 ]
