@@ -38,6 +38,7 @@ impl Plugin for WorldDebugPlugin {
 			Update,
 			(
 				crate::script_queue::process_script_queue,
+				crate::boss_spawn::process_boss_spawn_requests,
 				log_player_lifecycle.before(apply_debug_take_damage),
 				apply_debug_grant_points,
 				apply_debug_take_damage,
@@ -46,7 +47,7 @@ impl Plugin for WorldDebugPlugin {
 				apply_debug_peaceful,
 				apply_debug_camera,
 				apply_debug_teleport,
-				crate::capture::apply_capture_requests,
+				crate::capture::apply_capture_requests.after(apply_debug_teleport),
 				crate::capture::tick_capture,
 			),
 		);
