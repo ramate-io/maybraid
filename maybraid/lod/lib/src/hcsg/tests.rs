@@ -1,3 +1,5 @@
+mod publish_invalidation;
+
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

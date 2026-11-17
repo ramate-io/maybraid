@@ -13,14 +13,17 @@ rust-version = { workspace = true }
 test-support = ["encounters/test-support", "lubikans/test-support"]
 
 [dependencies]
+bikanwarda-character = { workspace = true }
 bikanwarda-lubikans = { workspace = true }
 bevy = { workspace = true }
 damage = { workspace = true }
 encounters = { workspace = true }
+lod = { workspace = true }
 lubikans = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+avian3d = { workspace = true }
 encounters = { workspace = true, features = ["test-support"] }
 lubikans = { workspace = true, features = ["test-support"] }
 

@@ -14,6 +14,11 @@ use super::{HcsgStorage, HcsgValue};
 
 impl HcsgStorage {
 	/// Publishes `value` and its spatial entry together under a fresh version.
+	/// 
+	/// Automatically invalidates subscriptions whose regions intersect the published bounds,
+	/// forcing them to re-discover and pick up the newly published data. This ensures that
+	/// late-published data (e.g., boss spawn after region discovery) is discovered without
+	/// requiring a full session restart or viewer movement.
 	pub fn publish<T: HcsgValue>(&self, id: Id, value: Arc<T>, bounds: Aabb3d) -> Version {
 		#[cfg(feature = "generation-tracing")]
 		let _phase = lod_generation_diagnostics::Phase::new("publish", std::any::type_name::<T>(), 0);
@@ -24,6 +29,12 @@ impl HcsgStorage {
 			#[cfg(feature = "generation-tracing")]
 			record_publish::<T>(stamp, id);
 		}
+		
+		// Invalidate subscriptions that intersect the published bounds
+		if let Some(demand) = self.0.demand.read().unwrap().as_ref() {
+			demand.invalidate_intersecting(bounds);
+		}
+		
 		version
 	}
 

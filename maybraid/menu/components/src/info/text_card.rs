@@ -3,15 +3,15 @@
 use bevy::prelude::*;
 
 use crate::theme::{
-	MENU_CLEAR, OBJECTIVE_MARKER_BORDER, OBJECTIVE_MARKER_PAD_X, OBJECTIVE_MARKER_PAD_Y,
-	OBJECTIVE_MARKER_RADIUS, TEXT_YELLOW,
+	hud_glass_fill, hud_glass_stroke, HUD_GLASS_BORDER, HUD_GLASS_RADIUS, OBJECTIVE_MARKER_PAD_X,
+	OBJECTIVE_MARKER_PAD_Y, TEXT_YELLOW,
 };
 use crate::HudFonts;
 
 /// Face size for play HUD cards (smaller than menu [`crate::OBJECTIVE_MARKER_FONT_SIZE`]).
 pub const HUD_TEXT_CARD_FACE_PX: f32 = 13.0;
 
-/// Opaque menu-clear card with a yellow stroke. Wraps a label or an icon+label.
+/// Stained-glass play HUD card. Wraps a label or an icon+label.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HudTextCard;
 
@@ -19,8 +19,8 @@ impl HudTextCard {
 	pub fn node() -> Node {
 		Node {
 			padding: UiRect::axes(Val::Px(OBJECTIVE_MARKER_PAD_X), Val::Px(OBJECTIVE_MARKER_PAD_Y)),
-			border: UiRect::all(Val::Px(OBJECTIVE_MARKER_BORDER)),
-			border_radius: BorderRadius::all(Val::Px(OBJECTIVE_MARKER_RADIUS)),
+			border: UiRect::all(Val::Px(HUD_GLASS_BORDER)),
+			border_radius: BorderRadius::all(Val::Px(HUD_GLASS_RADIUS)),
 			justify_content: JustifyContent::Center,
 			align_items: AlignItems::Center,
 			flex_direction: FlexDirection::Row,
@@ -31,11 +31,11 @@ impl HudTextCard {
 	}
 
 	pub fn fill() -> BackgroundColor {
-		BackgroundColor(MENU_CLEAR)
+		hud_glass_fill()
 	}
 
 	pub fn stroke() -> BorderColor {
-		BorderColor::all(TEXT_YELLOW)
+		hud_glass_stroke(false)
 	}
 }
 
@@ -79,11 +79,12 @@ pub fn spawn_hud_text_card_label(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::theme::{hud_glass_fill, hud_glass_stroke};
 
 	#[test]
-	fn card_is_opaque_menu_clear_with_a_yellow_stroke() {
-		assert_eq!(HudTextCard::fill().0, MENU_CLEAR);
-		assert_eq!(HudTextCard::stroke(), BorderColor::all(TEXT_YELLOW));
+	fn card_uses_idle_glass_chrome() {
+		assert_eq!(HudTextCard::fill(), hud_glass_fill());
+		assert_eq!(HudTextCard::stroke(), hud_glass_stroke(false));
 		assert_eq!(HUD_TEXT_CARD_FACE_PX, 13.0);
 	}
 }

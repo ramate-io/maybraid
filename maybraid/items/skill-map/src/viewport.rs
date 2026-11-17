@@ -1,7 +1,7 @@
 //! Corner viewports, map cameras, and the debraid overlay.
 
 use bevy::asset::RenderAssetUsages;
-use bevy::camera::{ClearColorConfig, RenderTarget};
+use bevy::camera::{ClearColorConfig, RenderTarget, ScalingMode};
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 use bevy::ui::widget::ViewportNode;
@@ -9,12 +9,16 @@ use character_inventory_user::InventoryUser;
 use character_items::{Inventory, InventoryItem, SkillMapCategory};
 use item_icons::{ItemIconCache, FIREARM_SILHOUETTE_RESOLUTION};
 use menu_components::{
-	spawn_hud_text_card, spawn_hud_text_card_label, HudFonts, HUD_TEXT_CARD_FACE_PX,
-	PANEL_BLOCK_FONT_SIZE, TEXT_YELLOW,
+	gameplay_hud_visibility, hud_glass_fill, hud_glass_stroke, spawn_hud_text_card,
+	spawn_hud_text_card_label, GameplayHud, HudFonts, HUD_TEXT_CARD_FACE_PX, PANEL_BLOCK_FONT_SIZE,
+	TEXT_YELLOW,
 };
 
 use crate::cursor::SkillMapCursor;
 use crate::map::{authored_map_from_spec, render_layer, AuthoredMap, SkillMapId};
+use crate::overlay::{
+	spawn_overlay_pane, SkillMapBackdrop, SkillMapOverlay, SkillMapOverlayMaterial,
+};
 use crate::tile_material::SkillMapTileAssets;
 use crate::tiles::spawn_map_tiles;
 use crate::user::{SkillMapEquip, SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapUser};
@@ -27,22 +31,14 @@ pub(crate) const MAP_CAMERA_SCALE: f32 = 0.4;
 pub(crate) fn map_view_extent() -> Vec2 {
 	Vec2::splat(VIEWPORT_PX * MAP_CAMERA_SCALE)
 }
-const VIEWPORT_GAP: f32 = 12.0;
-const VIEWPORT_INSET: f32 = 16.0;
 const FRAME_BORDER: f32 = 2.0;
 const FRAME_RADIUS: f32 = 14.0;
 const FRAME_INNER_RADIUS: f32 = FRAME_RADIUS - FRAME_BORDER;
-const LIVE_BORDER: Color = Color::srgb(1.0, 0.48, 0.08);
-const IDLE_BORDER: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
 const PROMPT_ICON_PX: f32 = 18.0;
-const FIREARM_CARD_PAD_X: f32 = 8.0;
-const FIREARM_CARD_PAD_Y: f32 = 6.0;
-const FIREARM_CARD_BORDER: f32 = 1.5;
-const FIREARM_CARD_RADIUS: f32 = 8.0;
-const FIREARM_CARD_FILL: Color = Color::srgba(0.52, 0.52, 0.56, 0.82);
-const FIREARM_CARD_STROKE: Color = Color::srgba(0.78, 0.78, 0.82, 0.9);
 const GRENADE_SILHOUETTE_PX: f32 = 40.0;
 const GRENADE_SILHOUETTE_STROKE: f32 = 2.0;
+/// Peak black of the Debraid fade. Stays on the frame, not the map RT.
+pub const DEBRAID_OVERLAY_ALPHA: f32 = 1.0;
 
 fn weapon_icon_slot() -> Node {
 	Node {
@@ -91,6 +87,10 @@ pub struct SkillMapLabel;
 #[derive(Component)]
 pub struct SkillMapFirearmHud;
 
+/// Caption, hold prompt, and feed status — hidden while the overlay is expanded.
+#[derive(Component)]
+pub struct SkillMapCollapsedChrome;
+
 #[derive(Component)]
 pub struct SkillMapFirearmName;
 
@@ -124,9 +124,25 @@ pub(crate) struct SkillMapGrenadeChargeGlyph;
 #[derive(Component)]
 pub(crate) struct SkillMapWeaponAction;
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Debug)]
 pub struct Debraid {
 	pub remaining: f32,
+	pub duration: f32,
+}
+
+impl Debraid {
+	pub fn new(secs: f32) -> Self {
+		let duration = secs.max(1e-4);
+		Self { remaining: duration, duration }
+	}
+
+	pub fn overlay_fill(alpha: f32) -> Color {
+		Color::srgba(0.0, 0.0, 0.0, alpha.clamp(0.0, 1.0))
+	}
+
+	pub fn fade_alpha(&self) -> f32 {
+		(self.remaining / self.duration).clamp(0.0, 1.0)
+	}
 }
 
 #[derive(Component)]
@@ -136,6 +152,7 @@ pub(crate) struct DebraidOverlay;
 pub fn present_skill_maps(
 	mut commands: Commands,
 	mut images: ResMut<Assets<Image>>,
+	mut overlays: ResMut<Assets<SkillMapOverlayMaterial>>,
 	asset_server: Res<AssetServer>,
 	tiles: Res<SkillMapTileAssets>,
 	users: Query<(Entity, &SkillMapUser, &SkillMapEquip)>,
@@ -161,6 +178,7 @@ pub fn present_skill_maps(
 		spawn_one_map(
 			&mut commands,
 			&mut images,
+			&mut overlays,
 			&HudFonts::load(asset_server.as_ref()),
 			asset_server.as_ref(),
 			&tiles,
@@ -242,6 +260,7 @@ pub fn spawn_skill_map_view(
 fn spawn_one_map(
 	commands: &mut Commands,
 	images: &mut Assets<Image>,
+	overlays: &mut Assets<SkillMapOverlayMaterial>,
 	fonts: &HudFonts,
 	asset_server: &AssetServer,
 	tiles: &SkillMapTileAssets,
@@ -253,7 +272,9 @@ fn spawn_one_map(
 ) {
 	let member = SkillMapMember { user, session };
 	let mut projection = OrthographicProjection::default_2d();
-	projection.scale = MAP_CAMERA_SCALE;
+	let extent = map_view_extent();
+	projection.scaling_mode = ScalingMode::Fixed { width: extent.x, height: extent.y };
+	projection.scale = 1.0;
 	let view = spawn_skill_map_view(
 		commands,
 		images,
@@ -262,36 +283,37 @@ fn spawn_one_map(
 		member,
 		-2 - stack_index as isize,
 		projection,
-		SkillMapViewportCamera,
+		(SkillMapViewportCamera, SkillMapBackdrop { kind: spec.kind }),
 	);
 	let camera = view.camera;
 	let layer = render_layer(spec.id);
 
-	let bottom = VIEWPORT_INSET + stack_index as f32 * (VIEWPORT_PX + VIEWPORT_GAP);
 	let caption = format!("{} {:04X}", spec.label, spec.seed as u16);
 	let mut node = Entity::PLACEHOLDER;
 	commands
 		.spawn((
 			Name::new(format!("skill-map-hud-{}", spec.label)),
 			SkillMapHud,
+			GameplayHud,
 			spec.id,
 			member,
-			Node {
-				position_type: PositionType::Absolute,
-				bottom: Val::Px(bottom),
-				right: Val::Px(VIEWPORT_INSET),
-				width: Val::Px(VIEWPORT_PX),
-				flex_direction: FlexDirection::Column,
-				align_items: AlignItems::Stretch,
-				row_gap: Val::Px(8.0),
-				..default()
-			},
+			SkillMapOverlay::Collapsed.hud_node(),
 			Visibility::Hidden,
 			Pickable::IGNORE,
 		))
 		.with_children(|hud| {
 			spawn_firearm_hud(hud, fonts, asset_server, member);
-			node = spawn_map_frame(hud, fonts, asset_server, camera, spec, member, caption);
+			node = spawn_map_frame(
+				hud,
+				overlays,
+				fonts,
+				asset_server,
+				camera,
+				view.image.clone(),
+				spec,
+				member,
+				caption,
+			);
 		});
 
 	if spec.category == SkillMapCategory::Map {
@@ -312,9 +334,11 @@ fn spawn_one_map(
 
 fn spawn_map_frame(
 	parent: &mut ChildSpawnerCommands,
+	overlays: &mut Assets<SkillMapOverlayMaterial>,
 	fonts: &HudFonts,
 	asset_server: &AssetServer,
 	camera: Entity,
+	image: Handle<Image>,
 	spec: AuthoredMap,
 	member: SkillMapMember,
 	caption: String,
@@ -325,16 +349,9 @@ fn spawn_map_frame(
 			SkillMapViewport,
 			spec.id,
 			member,
-			Node {
-				width: Val::Px(VIEWPORT_PX),
-				height: Val::Px(VIEWPORT_PX),
-				border: UiRect::all(Val::Px(FRAME_BORDER)),
-				border_radius: BorderRadius::all(Val::Px(FRAME_RADIUS)),
-				overflow: Overflow::clip(),
-				..default()
-			},
-			BorderColor::all(IDLE_BORDER),
-			BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.12)),
+			SkillMapOverlay::Collapsed.map_frame_node(),
+			BorderColor::all(SkillMapOverlay::Collapsed.frame_border()),
+			BackgroundColor(SkillMapOverlay::Collapsed.frame_fill()),
 			Pickable::IGNORE,
 		))
 		.with_children(|frame| {
@@ -351,8 +368,10 @@ fn spawn_map_frame(
 				},
 				Pickable::IGNORE,
 			));
+			spawn_overlay_pane(frame, overlays, image, member);
 			frame
 				.spawn((
+					SkillMapCollapsedChrome,
 					Node {
 						position_type: PositionType::Absolute,
 						top: Val::Px(8.0),
@@ -371,6 +390,7 @@ fn spawn_map_frame(
 			}
 			frame
 				.spawn((
+					SkillMapCollapsedChrome,
 					Node {
 						position_type: PositionType::Absolute,
 						bottom: Val::Px(8.0),
@@ -398,19 +418,12 @@ fn spawn_firearm_hud(
 		.spawn((
 			Name::new("skill-map-firearm-hud"),
 			SkillMapFirearmHud,
+			GameplayHud,
 			member,
-			Node {
-				flex_direction: FlexDirection::Column,
-				align_items: AlignItems::Center,
-				row_gap: Val::Px(6.0),
-				width: Val::Percent(100.0),
-				padding: UiRect::axes(Val::Px(FIREARM_CARD_PAD_X), Val::Px(FIREARM_CARD_PAD_Y)),
-				border: UiRect::all(Val::Px(FIREARM_CARD_BORDER)),
-				border_radius: BorderRadius::all(Val::Px(FIREARM_CARD_RADIUS)),
-				..default()
-			},
-			BackgroundColor(FIREARM_CARD_FILL),
-			BorderColor::all(FIREARM_CARD_STROKE),
+			SkillMapOverlay::Collapsed.firearm_node(),
+			SkillMapOverlay::Collapsed.firearm_z(),
+			hud_glass_fill(),
+			hud_glass_stroke(false),
 			Visibility::Hidden,
 			Pickable::IGNORE,
 		))
@@ -683,7 +696,7 @@ pub fn sync_viewport_chrome(
 	>,
 ) {
 	for (_, mut visibility) in &mut huds {
-		*visibility = if enabled.0 { Visibility::Inherited } else { Visibility::Hidden };
+		*visibility = gameplay_hud_visibility(enabled.0);
 	}
 	if !enabled.0 {
 		return;
@@ -691,10 +704,10 @@ pub fn sync_viewport_chrome(
 	for (member, mut border, mut background) in &mut nodes {
 		let held = users.iter().any(|(user, held)| user.maps == member.session && held.0);
 		if held {
-			*border = BorderColor::all(LIVE_BORDER);
+			*border = hud_glass_stroke(true);
 			background.0 = Color::srgba(0.0, 0.0, 0.0, 0.0);
 		} else {
-			*border = BorderColor::all(IDLE_BORDER);
+			*border = hud_glass_stroke(false);
 			background.0 = Color::srgba(0.06, 0.05, 0.04, 0.45);
 		}
 	}
@@ -702,11 +715,12 @@ pub fn sync_viewport_chrome(
 
 pub fn sync_firearm_chrome(
 	users: Query<(Entity, Option<&InventoryUser>), With<SkillMapUser>>,
+	held: Query<&SkillMapHeld>,
 	bags: Query<&Inventory>,
 	icons: Option<Res<ItemIconCache>>,
 	members: Query<&SkillMapMember, With<SkillMapFirearmHud>>,
 	mut blocks: Query<
-		(&SkillMapMember, &mut Visibility),
+		(&SkillMapMember, &mut Visibility, &mut BorderColor),
 		(
 			With<SkillMapFirearmHud>,
 			Without<SkillMapHud>,
@@ -756,9 +770,14 @@ pub fn sync_firearm_chrome(
 	>,
 	mut actions: Query<&mut Text, (With<SkillMapWeaponAction>, Without<SkillMapFirearmName>)>,
 ) {
-	for (member, mut visibility) in &mut blocks {
+	for (member, mut visibility, mut border) in &mut blocks {
 		let name = primary_weapon_name(member.user, &users, &bags);
-		*visibility = if name.is_some() { Visibility::Inherited } else { Visibility::Hidden };
+		*visibility = gameplay_hud_visibility(name.is_some());
+		let live = held.get(member.user).is_ok_and(|held| held.0);
+		let stroke = hud_glass_stroke(live);
+		if *border != stroke {
+			*border = stroke;
+		}
 	}
 	for (member, mut text) in &mut names {
 		text.0 = primary_weapon_name(member.user, &users, &bags).unwrap_or_default();
@@ -997,7 +1016,7 @@ pub fn spawn_debraid(
 		parent
 			.spawn((
 				DebraidOverlay,
-				Debraid { remaining: secs },
+				Debraid::new(secs),
 				id,
 				Node {
 					position_type: PositionType::Absolute,
@@ -1011,7 +1030,7 @@ pub fn spawn_debraid(
 					overflow: Overflow::clip(),
 					..default()
 				},
-				BackgroundColor(Color::srgba(0.85, 0.08, 0.06, 0.55)),
+				BackgroundColor(Debraid::overlay_fill(DEBRAID_OVERLAY_ALPHA)),
 				Pickable::IGNORE,
 			))
 			.with_children(|overlay| {
@@ -1033,13 +1052,25 @@ pub fn spawn_debraid(
 pub fn tick_debraid(
 	time: Res<Time>,
 	mut commands: Commands,
-	mut overlays: Query<(Entity, &mut Debraid), With<DebraidOverlay>>,
+	mut overlays: Query<
+		(Entity, &mut Debraid, &mut BackgroundColor, &Children),
+		With<DebraidOverlay>,
+	>,
+	mut labels: Query<&mut TextColor>,
 ) {
 	let dt = time.delta_secs();
-	for (entity, mut debraid) in &mut overlays {
+	for (entity, mut debraid, mut fill, children) in &mut overlays {
 		debraid.remaining -= dt;
 		if debraid.remaining <= 0.0 {
 			commands.entity(entity).despawn();
+			continue;
+		}
+		let alpha = debraid.fade_alpha();
+		*fill = BackgroundColor(Debraid::overlay_fill(alpha));
+		for child in children {
+			if let Ok(mut color) = labels.get_mut(*child) {
+				color.0 = Color::srgba(1.0, 1.0, 1.0, alpha);
+			}
 		}
 	}
 }
@@ -1048,6 +1079,20 @@ pub fn tick_debraid(
 mod tests {
 	use super::*;
 	use crate::SkillMapEnabled;
+
+	#[test]
+	fn debraid_fades_in_from_black() {
+		assert!((DEBRAID_OVERLAY_ALPHA - 1.0).abs() < 1e-5);
+		let fill = Debraid::overlay_fill(DEBRAID_OVERLAY_ALPHA).to_srgba();
+		assert!(fill.red < 0.02 && fill.green < 0.02 && fill.blue < 0.02);
+		assert!((fill.alpha - 1.0).abs() < 1e-5);
+		let mut fade = Debraid::new(2.0);
+		assert!((fade.fade_alpha() - 1.0).abs() < 1e-5);
+		fade.remaining = 1.0;
+		assert!((fade.fade_alpha() - 0.5).abs() < 1e-5);
+		fade.remaining = 0.0;
+		assert_eq!(fade.fade_alpha(), 0.0);
+	}
 
 	#[test]
 	fn unused_weapon_slot_leaves_the_layout() {
@@ -1065,16 +1110,21 @@ mod tests {
 	#[test]
 	fn chrome_and_track_queries_are_disjoint() {
 		let mut app = App::new();
-		app.add_plugins(MinimalPlugins).init_resource::<SkillMapEnabled>().add_systems(
-			Update,
-			(
-				sync_viewport_chrome,
-				sync_firearm_chrome,
-				sync_grenade_chrome,
-				track_cursors,
-				tick_debraid,
-			),
-		);
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<SkillMapEnabled>()
+			.init_resource::<crate::SkillMapOverlayEnabled>()
+			.add_message::<crate::SkillMapOverlayCue>()
+			.add_systems(
+				Update,
+				(
+					sync_viewport_chrome,
+					crate::overlay::sync_skill_map_overlay,
+					sync_firearm_chrome,
+					sync_grenade_chrome,
+					track_cursors,
+					tick_debraid,
+				),
+			);
 		app.update();
 	}
 

@@ -26,10 +26,22 @@ pub struct WorldDebugPlugin;
 impl Plugin for WorldDebugPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<DebugPeacefulMode>();
+		app.init_resource::<crate::capture::CaptureSession>();
+		app.init_resource::<crate::script_queue::ScriptQueue>();
+		
+		// Initialize resources needed by load_startup_script, even when GameCommandPlugin is not added
+		app.init_resource::<crate::PendingStartupCommand<crate::commands::PlaygroundCommand>>();
+		app.init_resource::<game_commands::command::CommandConsoleOutput>();
+
+		app.add_systems(
+			Startup,
+			crate::script_queue::load_startup_script,
+		);
 
 		app.add_systems(
 			Update,
 			(
+				crate::script_queue::process_script_queue,
 				log_player_lifecycle.before(apply_debug_take_damage),
 				apply_debug_grant_points,
 				apply_debug_take_damage,
@@ -38,6 +50,8 @@ impl Plugin for WorldDebugPlugin {
 				apply_debug_peaceful,
 				apply_debug_camera,
 				apply_debug_teleport,
+				crate::capture::apply_capture_requests.after(apply_debug_teleport),
+				crate::capture::tick_capture,
 			),
 		);
 

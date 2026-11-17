@@ -10,13 +10,17 @@ use super::text_menu::{
 	TextMenuItem, TextMenuItemLabel,
 };
 use crate::controls::focus::FocusTag;
+use crate::controls::rotary::{
+	RotaryCaption, RotaryCaptionGroup, RotaryCaptionText, RotaryCard, RotaryLayout, RotaryMotion,
+	RotaryPortrait,
+};
 use crate::controls::scroll::{entity_is_under, reveal_item_in_viewport};
 use crate::controls::section::CursorRow;
 use crate::info::description::TextMenuDescription;
 use crate::theme::{
-	BARLOW_SEMIBOLD, COLUMN_BOTTOM, CORNER_BOTTOM, CORNER_INSET, DESCRIPTION_FONT_SIZE,
-	DESCRIPTION_PANE_LEFT_PERCENT, FOCUS_TAG_GAP, FOCUS_TAG_PAD_X, FOCUS_TAG_PAD_Y,
-	FOCUS_TAG_RADIUS, ITEM_FONT_SIZE, ITEM_ROW_GAP, OBJECTIVE_MARKER_BORDER,
+	BARLOW_SEMIBOLD, COLUMN_BOTTOM, COLUMN_INSET, CORNER_BOTTOM, CORNER_INSET,
+	DESCRIPTION_FONT_SIZE, DESCRIPTION_PANE_LEFT_PERCENT, FOCUS_TAG_GAP, FOCUS_TAG_PAD_X,
+	FOCUS_TAG_PAD_Y, FOCUS_TAG_RADIUS, ITEM_FONT_SIZE, ITEM_ROW_GAP, OBJECTIVE_MARKER_BORDER,
 	OBJECTIVE_MARKER_FONT_SIZE, OBJECTIVE_MARKER_OFFSET_Y, OBJECTIVE_MARKER_PAD_X,
 	OBJECTIVE_MARKER_PAD_Y, OBJECTIVE_MARKER_RADIUS, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON,
 	TEXT_YELLOW, TEXT_YELLOW_FAINT, TILE_FOCUS_PAD,
@@ -279,6 +283,103 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 	}
 }
 
+/// Full-screen rotary wheel of [`TextCursorRow`]s. Stick / d-pad wrap the ring.
+pub struct RotaryMenu<E> {
+	pub header: Option<String>,
+	pub items: Vec<TextCursorRow<E>>,
+	pub selected: usize,
+	pub layout: RotaryLayout,
+}
+
+impl<E> RotaryMenu<E> {
+	pub fn rows(
+		header: impl Into<String>,
+		items: impl IntoIterator<Item = TextCursorRow<E>>,
+	) -> Self {
+		Self {
+			header: Some(header.into()),
+			items: items.into_iter().collect(),
+			selected: 0,
+			layout: RotaryLayout::INVENTORY,
+		}
+	}
+
+	pub fn with_selected(mut self, selected: usize) -> Self {
+		self.selected = selected;
+		self
+	}
+
+	pub fn with_layout(mut self, layout: RotaryLayout) -> Self {
+		self.layout = layout;
+		self
+	}
+}
+
+impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> RotaryMenu<E> {
+	pub fn scene(self) -> impl Scene + 'static {
+		let item_count = self.items.len();
+		let selected = if item_count == 0 { 0 } else { self.selected.min(item_count - 1) };
+		let layout = self.layout;
+		let mut children: Vec<Box<dyn Scene>> = Vec::with_capacity(item_count + 1);
+		if let Some(header) = self.header {
+			children.push(Box::new(rotary_header_scene(header)));
+		}
+		for (ordinal, row) in self.items.into_iter().enumerate() {
+			children.push(Box::new(rotary_card_scene(layout, ordinal, selected, item_count, row)));
+		}
+		bsn! {
+			TextCursorMenu
+			~{TextMenu::with_selected(item_count, selected)}
+			~{layout}
+			~{layout.overlay_node()}
+			Pickable::IGNORE
+			Children [ {children} ]
+		}
+	}
+}
+
+fn rotary_header_scene(header: String) -> impl Scene + 'static {
+	let children: Vec<Box<dyn Scene>> = vec![Box::new(TextMenuHeader::new(header).scene())];
+	bsn! {
+		Node {
+			position_type: PositionType::Absolute,
+			left: px(COLUMN_INSET),
+			top: px(COLUMN_INSET),
+		}
+		ZIndex(200)
+		Pickable::IGNORE
+		Children [ {children} ]
+	}
+}
+
+fn rotary_card_scene<E>(
+	layout: RotaryLayout,
+	ordinal: usize,
+	selected: usize,
+	count: usize,
+	row: TextCursorRow<E>,
+) -> impl Scene + 'static
+where
+	E: Component + Copy + Default + Unpin + Send + Sync + 'static,
+{
+	let motion = RotaryMotion::at(layout, ordinal, selected, count);
+	let item = if row.locked {
+		TextMenuItem::faint_yellow(ordinal)
+	} else {
+		TextMenuItem::yellow(ordinal)
+	};
+	let children: Vec<Box<dyn Scene>> = vec![rotary_tile_scene(item, row)];
+	bsn! {
+		~{RotaryCard::unresolved(ordinal, count)}
+		~{motion}
+		~{layout.card_node()}
+		~{layout.card_transform(motion.angle, motion.scale)}
+		~{layout.z_index(motion.angle)}
+		Pickable::IGNORE
+		Children [ {children} ]
+	}
+}
+
 /// Tagged action plus a separate caption under it (e.g. Next + progress).
 ///
 /// The tag lives on the label row only, same as [`TextCursorColumn`]. Subtext is
@@ -450,6 +551,136 @@ where
 		}
 		Pickable::IGNORE
 		Children [ {children} ]
+	}
+}
+
+fn rotary_tile_scene<E>(item: TextMenuItem, row: TextCursorRow<E>) -> Box<dyn Scene>
+where
+	E: Component + Copy + Default + Unpin + Send + Sync + 'static,
+{
+	let ordinal = item.index;
+	let children: Vec<Box<dyn Scene>> = vec![
+		Box::new(rotary_portrait_scene(ordinal)),
+		Box::new(rotary_caption_scene(
+			ordinal,
+			row.label,
+			row.subtext,
+			row.objective,
+			row.objective_visible,
+		)),
+	];
+	let action = row.action;
+	let node = Node {
+		width: Val::Percent(100.0),
+		height: Val::Percent(100.0),
+		padding: UiRect::all(Val::Px(6.0)),
+		flex_direction: FlexDirection::Column,
+		justify_content: JustifyContent::FlexEnd,
+		align_items: AlignItems::Center,
+		row_gap: Val::Px(6.0),
+		..default()
+	};
+	if row.locked {
+		Box::new(bsn! {
+			Button
+			~{bevy::picking::hover::Hovered::default()}
+			~{item}
+			~{action}
+			MenuItemLocked
+			~{node}
+			BackgroundColor(Color::NONE)
+			Children [ {children} ]
+		}) as Box<dyn Scene>
+	} else {
+		Box::new(bsn! {
+			Button
+			~{bevy::picking::hover::Hovered::default()}
+			~{item}
+			~{action}
+			~{node}
+			BackgroundColor(Color::NONE)
+			Children [ {children} ]
+		})
+	}
+}
+
+fn rotary_portrait_scene(ordinal: usize) -> impl Scene + 'static {
+	bsn! {
+		~{RotaryPortrait { ordinal }}
+		Node {
+			width: percent(100),
+			flex_grow: 1.0,
+			min_height: px(0.0),
+			justify_content: JustifyContent::Center,
+			align_items: AlignItems::Center,
+			overflow: Overflow::clip(),
+		}
+		Pickable::IGNORE
+	}
+}
+
+fn rotary_caption_scene(
+	ordinal: usize,
+	label: String,
+	subtext: Option<String>,
+	objective: Option<MenuObjectiveKind>,
+	objective_visible: bool,
+) -> impl Scene + 'static {
+	let mut texts: Vec<Box<dyn Scene>> =
+		vec![Box::new(rotary_caption_line_scene(label, RotaryLayout::LABEL_PX, TEXT_YELLOW))];
+	if let Some(subtext) = subtext {
+		texts.push(Box::new(rotary_caption_line_scene(
+			subtext,
+			RotaryLayout::SUBTEXT_PX,
+			TEXT_YELLOW_FAINT,
+		)));
+	}
+	let mut children: Vec<Box<dyn Scene>> = vec![Box::new(bsn! {
+		RotaryCaptionGroup
+		Node {
+			width: percent(100),
+			flex_direction: FlexDirection::Column,
+			justify_content: JustifyContent::Center,
+			align_items: AlignItems::Center,
+			row_gap: px(2.0),
+		}
+		Pickable::IGNORE
+		Children [ {texts} ]
+	})];
+	if let Some(kind) = objective {
+		let marker_visibility =
+			if objective_visible { Visibility::Inherited } else { Visibility::Hidden };
+		children.push(Box::new(objective_marker_scene(kind, marker_visibility)));
+	}
+	bsn! {
+		~{RotaryCaption { menu: Entity::PLACEHOLDER, ordinal }}
+		Node {
+			width: percent(100),
+			padding: UiRect::axes(px(8.0), px(4.0)),
+			border_radius: BorderRadius::all(px(4.0)),
+			flex_direction: FlexDirection::Column,
+			justify_content: JustifyContent::Center,
+			align_items: AlignItems::Center,
+			row_gap: px(4.0),
+			flex_shrink: 0.0,
+		}
+		BackgroundColor(Color::NONE)
+		Pickable::IGNORE
+		Children [ {children} ]
+	}
+}
+
+fn rotary_caption_line_scene(label: String, size: f32, color: Color) -> impl Scene + 'static {
+	bsn! {
+		RotaryCaptionText
+		~{Text::new(label)}
+		TextFont {
+			font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
+			font_size: px(size),
+		}
+		TextColor(color)
+		TextLayout::new(Justify::Center, bevy::text::LineBreak::WordOrCharacter)
+		Pickable::IGNORE
 	}
 }
 
@@ -668,7 +899,8 @@ pub fn scroll_text_cursor_selection_into_view(
 
 #[cfg(test)]
 mod tests {
-	use super::{MenuObjectiveKind, TextCursorColumn, TextCursorRow};
+	use super::{MenuObjectiveKind, RotaryMenu, TextCursorColumn, TextCursorRow};
+	use crate::controls::rotary::RotaryLayout;
 	use crate::single_select::{TextColumnAlign, TextColumnAnchor};
 	use crate::theme::{OBJECTIVE_MARKER_FONT_SIZE, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON};
 	use crate::ITEM_FONT_SIZE;
@@ -750,5 +982,14 @@ mod tests {
 		};
 		assert!(column.scrollable);
 		assert_eq!(column.header.as_deref(), Some("Characters"));
+	}
+
+	#[test]
+	fn rotary_menu_defaults_to_the_inventory_layout() {
+		let menu = RotaryMenu::rows("Characters", vec![TextCursorRow::new("Ada", RowAction::Go)])
+			.with_selected(0);
+		assert_eq!(menu.layout, RotaryLayout::INVENTORY);
+		assert_eq!(menu.header.as_deref(), Some("Characters"));
+		assert_eq!(menu.items.len(), 1);
 	}
 }

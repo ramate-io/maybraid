@@ -89,6 +89,9 @@ pub(super) struct Registry {
 	pub evicted: Mutex<HashSet<(TypeId, Id)>>,
 	pub top_rebuilds: AtomicU64,
 	pub nested_rebuilds: AtomicU64,
+	/// Demand for invalidating subscriptions when publishing intersecting data.
+	/// Set by runtime initialization, None in tests without demand.
+	pub demand: std::sync::RwLock<Option<super::super::demand::HcsgDemand>>,
 }
 
 impl Registry {

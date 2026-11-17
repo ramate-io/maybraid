@@ -43,3 +43,11 @@ pub struct Busy;
 /// through internal sweeps.
 #[derive(Resource, Clone, Default)]
 pub struct HcsgStorage(Arc<Registry>);
+
+impl HcsgStorage {
+	/// Sets the demand reference for invalidating subscriptions on publish.
+	/// Called by runtime initialization after both storage and demand are created.
+	pub(crate) fn set_demand(&self, demand: super::demand::HcsgDemand) {
+		*self.0.demand.write().unwrap() = Some(demand);
+	}
+}
