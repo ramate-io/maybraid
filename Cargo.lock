@@ -725,6 +725,7 @@ dependencies = [
  "mob-intelligence",
  "mob-layer-model",
  "mob-scenes",
+ "poi-intelligence",
  "procedural-common",
  "richmond",
  "terrain-layer-model",

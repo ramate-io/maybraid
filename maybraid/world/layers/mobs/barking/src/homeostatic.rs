@@ -268,15 +268,32 @@ pub fn trigger_homeostatic_retreat<P: Component>(
 	}
 }
 
-/// System to handle retreating mobs.
-/// The retreat marker signals that the mob should avoid following the player.
-/// Actual movement is handled by the existing mob AI systems.
-/// For now, this is a placeholder - retreat behavior is passive (mob stays put
-/// rather than actively following player) until it despawns outside the neighborhood.
-pub fn apply_homeostatic_retreat() {
-	// Placeholder: the retreat marker is checked by existing mob AI to avoid
-	// following the player. The mob will naturally despawn when the player
-	// leaves the 3×3 neighborhood via despawn_distant_homeostatic_mobs.
+/// System to handle retreating mobs by setting POI goals toward their home cell.
+/// Drives the mob through existing movement/AI systems.
+pub fn apply_homeostatic_retreat(
+	time: Res<Time>,
+	config: Res<HomeostaticMobConfig>,
+	retreating: Query<(Entity, &HomeostaticRetreat, &HomeostaticMob), Without<poi_intelligence::PoiGoal>>,
+	mut commands: Commands,
+) {
+	use poi_intelligence::{PoiGoal, PoiId};
+	
+	for (entity, retreat, mob) in &retreating {
+		// Create a POI goal to drive the mob back to its home cell
+		// The goal uses a dummy PoiId (0) since this is a transient retreat position
+		let goal = PoiGoal::new(
+			mob.generation, // Use mob generation as goal generation
+			PoiId(0), // Dummy ID for retreat goal
+			None, // No poi entity
+			poi_intelligence::PoiKind::new("homeostatic-retreat"), // Marker for retreat
+			retreat.target,
+			config.retreat_margin.max(5.0), // Arrival radius
+			time.elapsed_secs(), // selected_at
+			0.0, // No linger - just reach the position
+		);
+		
+		commands.entity(entity).insert(goal);
+	}
 }
 
 // Helper types for simplified mob generation
