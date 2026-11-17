@@ -793,6 +793,7 @@ mod integration_regressions {
 			TransformPlugin,
 			bevy::asset::AssetPlugin::default(),
 			bevy::scene::ScenePlugin,
+			bevy::mesh::MeshPlugin,  // Registers AssetEvent<Mesh>
 		))
 		.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(DT)));
 		
@@ -819,6 +820,7 @@ mod integration_regressions {
 		// Install assembly plugin to spawn actors
 		app.add_plugins(BossAssemblyPlugin);
 		
+		app.finish();
 		app.update();
 		app
 	}
