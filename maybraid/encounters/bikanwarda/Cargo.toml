@@ -24,6 +24,7 @@ combat-targeting = { workspace = true }
 damage = { workspace = true }
 encounters = { workspace = true }
 firearm-intelligence = { workspace = true }
+lod = { workspace = true }
 lod-avian = { workspace = true }
 lubikans = { workspace = true }
 projectiles = { workspace = true }
