@@ -115,7 +115,6 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		return;
 	}
 
-	let mut clock = DrainClock::new();
 	let snapshots = collect_job_snapshots(world);
 	let mut buckets = JobBuckets::default();
 	for snap in snapshots {
@@ -142,6 +141,11 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 			.for_class_mut(class)
 			.push(snap.entity, snap.parent_desired, snap.self_level);
 	}
+
+	// Start clock AFTER snapshot collection/classification, so budget measures
+	// actual spawn work rather than bookkeeping overhead. This ensures the drain
+	// has time to pull primitives even when classification is expensive.
+	let mut clock = DrainClock::new();
 
 	let (presence_share, desired_share, active_share) = split_presence_desired_active(total);
 	let frame = world.resource::<LodChunkDrainCursor>().frame;
