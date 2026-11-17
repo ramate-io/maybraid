@@ -165,7 +165,11 @@ fn spawn_fixture(
 		commands.entity(root).insert((
 			ReviewOwned,
 			Transform::from_translation(origin),
-			ChainRoot { link_count: 12, rest_length_m: 3.0, joint_entities: joints.clone() },
+			ChainRoot {
+				link_count: 12,
+				rest_length_m: 3.0,
+				joint_entities: joints.clone(),
+			},
 			ChainMotion::default(),
 			Health::from_max(100.0),
 		));
