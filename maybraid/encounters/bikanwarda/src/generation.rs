@@ -61,7 +61,22 @@ pub struct BikanwardaBossEncounter {
 impl BikanwardaBossEncounter {
 	/// The authored Bikanwarda chained encounter at the origin.
 	pub fn chained() -> Self {
-		Self::chained_at(Vec3::ZERO)
+		Self::chained_at_with_terrain(Vec3::ZERO, 0.0)
+	}
+	
+	/// The authored Bikanwarda chained encounter at a specific position.
+	/// 
+	/// **Note:** For tests only. Production code should use `chained_at_with_terrain`
+	/// with actual terrain height from world terrain query.
+	#[cfg(test)]
+	pub fn chained_at(boss_position: Vec3) -> Self {
+		use characters::CharacterRecipe;
+		let spec = BikanwardaSpec::encounter();
+		let recipe = BikanwardaActorRecipe::from_spec(spec);
+		let hull = recipe.components().scaled_locomotion_capsule();
+		let hull_offset = hull.spawn_height();
+		let terrain_y = boss_position.y - hull_offset;
+		Self::chained_at_with_terrain(boss_position, terrain_y)
 	}
 	
 	/// The authored Bikanwarda chained encounter at a specific position with terrain height.
@@ -90,19 +105,6 @@ impl BikanwardaBossEncounter {
 		);
 		
 		Self { id, bounds, boss_position, terrain_y, boss }
-	}
-	
-	/// The authored Bikanwarda chained encounter at a specific position.
-	/// 
-	/// Derives terrain_y by subtracting hull spawn offset from boss_position.y.
-	pub fn chained_at(boss_position: Vec3) -> Self {
-		use characters::CharacterRecipe;
-		let spec = BikanwardaSpec::encounter();
-		let recipe = BikanwardaActorRecipe::from_spec(spec);
-		let hull = recipe.components().scaled_locomotion_capsule();
-		let hull_offset = hull.spawn_height();
-		let terrain_y = boss_position.y - hull_offset;
-		Self::chained_at_with_terrain(boss_position, terrain_y)
 	}
 }
 
@@ -136,7 +138,11 @@ impl GenerationScheme for BikanwardaBossEncounter {
 		let spawns = cx.get::<AuthoredBossSpawns>(Id::Universal)?;
 		let position = spawns.position?;
 		
-		let encounter = Self::chained_at(position);
+		// In generation context, terrain_y is unknown (HCSG generation runs off-thread).
+		// Use boss position Y as approximate terrain (will be overridden by actual terrain
+		// when published from boss_spawn.rs which has access to terrain provider).
+		let approximate_terrain_y = position.y - 10.0; // Approximate hull offset
+		let encounter = Self::chained_at_with_terrain(position, approximate_terrain_y);
 		Some((encounter.clone(), encounter.bounds))
 	}
 }
