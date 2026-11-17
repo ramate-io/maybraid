@@ -1059,6 +1059,104 @@ mod tests {
 	}
 
 	#[test]
+	fn suspended_airborne_player_resumes_above_lower_support_then_falls() -> anyhow::Result<()> {
+		for initial_vertical_velocity in [3.0, -3.0] {
+			let mut app = shared_support_app();
+			app.add_plugins((
+				TransformPlugin,
+				PhysicsPlugins::default(),
+				bevy::asset::AssetPlugin::default(),
+				bevy::mesh::MeshPlugin,
+			));
+			app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+				std::time::Duration::from_secs_f64(1.0 / 30.0),
+			));
+			app.finish();
+			let hull = LocomotionCapsule::HUMANOID;
+			let player = app
+				.world_mut()
+				.spawn((
+					Player,
+					Transform::from_xyz(8.0, 6.0, 8.0),
+					RigidBody::Dynamic,
+					Collider::capsule(hull.radius, hull.length),
+					PhysicsInteractionLayer::animated_layers(),
+					GravityScale(0.65),
+					LinearVelocity(Vec3::Y * initial_vertical_velocity),
+				))
+				.id();
+			for _ in 0..3 {
+				app.update();
+			}
+			assert!(player_component::<LinearVelocity>(&app, player)?.0.y.abs() > 0.1);
+			assert!(app.world().get::<Grounded>(player).is_none());
+			assert!(app.world().get::<AwaitingTerrainSurface>(player).is_none());
+			app.world_mut().resource_mut::<PlayerPhysicsEnabled>().0 = false;
+			app.update();
+			let held = player_component::<Transform>(&app, player)?.translation;
+			assert!(held.y > 4.0);
+			for _ in 0..12 {
+				app.update();
+				assert_eq!(player_component::<Transform>(&app, player)?.translation, held);
+				assert_eq!(player_component::<GravityScale>(&app, player)?.0, 0.0);
+			}
+			app.world_mut().resource_mut::<PlayerPhysicsEnabled>().0 = true;
+			for _ in 0..6 {
+				app.update();
+				assert!(app.world().get::<PendingActorSupport>(player).is_some());
+				assert_eq!(player_component::<Transform>(&app, player)?.translation, held);
+			}
+			let mut base = app.world().resource::<WorldBaseTerrain>().0.clone();
+			base.height_scale = 0.0;
+			let terrain = durham::Terrain::base_cell_for_test(
+				app.world().resource::<TerrainCellLayout>(),
+				0,
+				0,
+				base,
+			);
+			let cell = terrain.cell;
+			app.world().resource::<HcsgStorage>().publish(
+				lod::gen::Id::from_cell(cell),
+				std::sync::Arc::new(terrain),
+				cell,
+			);
+			app.world_mut().spawn((
+				Transform::from_xyz(8.0, -0.1, 8.0),
+				RigidBody::Static,
+				Collider::cuboid(40.0, 0.2, 40.0),
+				PhysicsInteractionLayer::fixed_layers(),
+			));
+			for _ in 0..30 {
+				app.update();
+				if app.world().get::<PendingActorSupport>(player).is_none() {
+					break;
+				}
+			}
+			assert!(
+				app.world().get::<PendingActorSupport>(player).is_none(),
+				"a lower valid floor must release the suspended airborne body"
+			);
+			assert_eq!(player_component::<GravityScale>(&app, player)?.0, 0.65);
+			let released = player_component::<Transform>(&app, player)?.translation;
+			assert!(
+				released.y >= held.y - 0.05,
+				"release preserves the airborne pose rather than snapping down to the floor"
+			);
+			for _ in 0..6 {
+				app.update();
+			}
+			assert!(player_component::<Transform>(&app, player)?.translation.y < released.y - 0.01);
+			assert!(player_component::<LinearVelocity>(&app, player)?.0.y < 0.0);
+			for _ in 0..90 {
+				app.update();
+			}
+			let landed = player_component::<Transform>(&app, player)?.translation.y;
+			assert!(landed >= hull.half_height() - 0.05 && landed < hull.spawn_height() + 0.05);
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn disabled_player_keeps_authoritative_pending_destination_and_gravity() -> anyhow::Result<()> {
 		let mut app = shared_support_app();
 		app.world_mut().resource_mut::<PlayerPhysicsEnabled>().0 = false;
