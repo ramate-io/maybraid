@@ -49,6 +49,14 @@ impl HcsgStorage {
 	/// for that type, expanded by the type's retention margin. A type no live
 	/// subscription reaches is cleared, except `Id::Universal` entries.
 	pub(in crate::hcsg) fn retain_reached(&self, regions_by_type: &HashMap<TypeId, Vec<Aabb3d>>) {
+		#[cfg(feature = "generation-tracing")]
+		let _operation = lod_generation_diagnostics::Operation::new(
+			"maintenance.sweep",
+			"HcsgStorage",
+			Default::default(),
+		);
+		#[cfg(feature = "generation-tracing")]
+		let _scope = _operation.as_ref().and_then(lod_generation_diagnostics::Operation::enter);
 		if regions_by_type.is_empty() {
 			self.clear_evictions();
 		}

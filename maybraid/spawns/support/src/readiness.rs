@@ -62,7 +62,8 @@ pub fn column_volume(search: PlacementSearch) -> (Collider, Vec3) {
 	let half_height = ((search.max_surface_y - search.min_surface_y) * 0.5).max(0.05);
 	let center =
 		Vec3::new(search.xz.x, (search.min_surface_y + search.max_surface_y) * 0.5, search.xz.y);
-	(Collider::cuboid(radius, half_height, radius), center)
+	// Avian takes full lengths; radius and half_height are geometric half-extents.
+	(Collider::cuboid(radius * 2.0, half_height * 2.0, radius * 2.0), center)
 }
 
 /// True when a Fixed collider intersects the destination column. Terrain
@@ -80,3 +81,6 @@ pub fn column_presentation_ready(
 	!spatial.shape_intersections(&volume, center, Quat::IDENTITY, filter).is_empty()
 		|| !spatial.point_intersections(center, filter).is_empty()
 }
+
+#[cfg(test)]
+mod tests;

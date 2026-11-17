@@ -75,6 +75,7 @@ pub fn interpret_menu_pad(
 	mut text: crate::text::ScopedTextInput,
 	reorder: Query<(), With<menu_components::HudMenuNavLocked>>,
 	inventory_menus: Query<(), With<menu_components::InventoryHudMenu>>,
+	gallery_menus: Query<(), With<menu_components::GalleryHudMenu>>,
 	mut commands: Commands,
 ) {
 	let input = &event.input;
@@ -225,6 +226,11 @@ pub fn interpret_menu_pad(
 			{
 				events.retain(|nav| *nav != MenuNav::Select);
 			}
+			let gallery = menu_components::GalleryHudMenu::owns(target, &parents, &gallery_menus);
+			let create = gallery && menu_components::GalleryHudMenu::create_pressed(&frame.pad);
+			if gallery && menu_components::GalleryHudMenu::strips_start_select(&frame.pad) {
+				events.retain(|nav| *nav != MenuNav::Select);
+			}
 			if let Ok(mut session) = sessions.get_mut(entity) {
 				if text.apply(&mut session, target, input, &events, &mut commands) {
 					input.consume_frame(&mut commands);
@@ -291,6 +297,10 @@ pub fn interpret_menu_pad(
 					Some(menu_components::MenuAction::Unequip)
 				} else if frame.pad.just_pressed(PadButton::X) {
 					Some(menu_components::MenuAction::Drop)
+				} else if frame.pad.just_pressed(PadButton::Select) {
+					Some(menu_components::MenuAction::Delete)
+				} else if create {
+					Some(menu_components::MenuAction::Create)
 				} else {
 					None
 				};

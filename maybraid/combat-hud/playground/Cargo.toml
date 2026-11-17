@@ -18,6 +18,7 @@ bevy = { workspace = true }
 clap = { workspace = true }
 combat-hud = { workspace = true }
 damage = { workspace = true }
+menu-components = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
 player = { workspace = true }
 

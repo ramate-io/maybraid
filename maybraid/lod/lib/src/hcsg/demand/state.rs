@@ -3,7 +3,7 @@
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, Weak};
 
 use bevy::math::Vec3;
 use bevy::shape::Aabb3d;
@@ -21,13 +21,17 @@ impl SubscriptionId {
 	pub(super) fn new(raw: u64) -> Self {
 		Self(raw)
 	}
+	#[cfg(feature = "generation-tracing")]
+	pub(in crate::hcsg) fn trace_raw(self) -> u64 {
+		self.0
+	}
 }
 
 pub(super) type Discover = fn(&mut GenerationContext, Aabb3d) -> Vec<Id>;
 pub(super) type Generate = fn(&mut GenerationContext, Id) -> bool;
 
 pub(super) fn discover<T: GenerationScheme>(cx: &mut GenerationContext, region: Aabb3d) -> Vec<Id> {
-	T::original_ids_for(cx, region).into_iter().map(|OriginalId(id)| id).collect()
+	cx.original_ids_for::<T>(region).into_iter().map(|OriginalId(id)| id).collect()
 }
 
 pub(crate) fn generate<T: GenerationScheme>(cx: &mut GenerationContext, id: Id) -> bool {
@@ -49,11 +53,16 @@ pub(super) struct Subscription {
 	/// Every discovered id whose value is available, in the order it landed.
 	pub published: Vec<Id>,
 	pub done: bool,
+	pub failed: bool,
+	/// Present only for bounded, shared one-region gameplay requests.
+	pub ticket: Option<(TypeId, Weak<super::tickets::TicketLease>)>,
 	/// Set when the subscription is replaced, removed, or its epoch ends.
 	pub cancelled: Arc<AtomicBool>,
 	/// This scheme's type plus every type its fills have read. Shared with
 	/// replacements so a mid-quantum finish still lands on the live chain.
 	pub reach: Arc<Mutex<HashSet<TypeId>>>,
+	#[cfg(feature = "generation-tracing")]
+	pub trace: Option<super::super::trace::JobTrace>,
 }
 
 impl Subscription {

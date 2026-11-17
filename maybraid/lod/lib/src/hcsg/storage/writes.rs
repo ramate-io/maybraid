@@ -15,10 +15,14 @@ use super::{HcsgStorage, HcsgValue};
 impl HcsgStorage {
 	/// Publishes `value` and its spatial entry together under a fresh version.
 	pub fn publish<T: HcsgValue>(&self, id: Id, value: Arc<T>, bounds: Aabb3d) -> Version {
+		#[cfg(feature = "generation-tracing")]
+		let _phase = lod_generation_diagnostics::Phase::new("publish", std::any::type_name::<T>(), 0);
 		let stamp = self.stamp();
 		let version = Version(stamp);
 		if let Some(store) = self.store_or_create::<T>() {
 			store.write().put(id, StoredEntry { value, bounds, version }, stamp);
+			#[cfg(feature = "generation-tracing")]
+			record_publish::<T>(stamp, id);
 		}
 		version
 	}
@@ -34,13 +38,22 @@ impl HcsgStorage {
 		bounds: Aabb3d,
 		stale: impl Fn() -> bool,
 	) -> Option<Version> {
+		#[cfg(feature = "generation-tracing")]
+		let _phase = lod_generation_diagnostics::Phase::new("publish", std::any::type_name::<T>(), 0);
 		let stamp = self.stamp();
 		let store = self.store_or_create::<T>()?;
 		let mut nodes = store.write();
 		if stale() {
+			drop(nodes);
+			#[cfg(feature = "generation-tracing")]
+			lod_generation_diagnostics::update(|c| c.cancelled += 1);
 			return None;
 		}
 		nodes.put(id, StoredEntry { value, bounds, version: Version(stamp) }, stamp);
+		// Diagnostic formatting/IO must not extend the publication write lock.
+		drop(nodes);
+		#[cfg(feature = "generation-tracing")]
+		record_publish::<T>(stamp, id);
 		Some(Version(stamp))
 	}
 
@@ -68,6 +81,14 @@ impl HcsgStorage {
 	/// Drops every value in every store, roots included, and resets eviction
 	/// diagnostics. A session restart reseeds the roots afterward.
 	pub fn clear_derived(&self) {
+		#[cfg(feature = "generation-tracing")]
+		let _operation = lod_generation_diagnostics::Operation::new(
+			"maintenance.session_clear",
+			"HcsgStorage",
+			Default::default(),
+		);
+		#[cfg(feature = "generation-tracing")]
+		let _scope = _operation.as_ref().and_then(lod_generation_diagnostics::Operation::enter);
 		self.clear_evictions();
 		self.0.top_rebuilds.store(0, Ordering::Relaxed);
 		self.0.nested_rebuilds.store(0, Ordering::Relaxed);
@@ -76,4 +97,16 @@ impl HcsgStorage {
 			store.reset(self.stamp());
 		}
 	}
+}
+
+#[cfg(feature = "generation-tracing")]
+fn record_publish<T>(version: u64, id: Id) {
+	lod_generation_diagnostics::update(|c| {
+		c.published += 1;
+		if c.first_version == 0 {
+			c.first_version = version;
+		}
+		c.last_version = version;
+	});
+	lod_generation_diagnostics::publication(version, std::any::type_name::<T>(), &id);
 }

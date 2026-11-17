@@ -2,8 +2,8 @@
 
 This directory holds the podcast catalog for [Durop](https://github.com/ramate-io/durop).
 The loadable `pack/` contains all 28 podcast slots: 22 requested assets and six
-approved alternatives for blocked sources, each with a generated 320-pixel-wide PNG
-icon. [SOURCES.md](SOURCES.md) records creators, licenses, exact downloads and
+approved alternatives for blocked sources, each with a generated PNG
+icon up to 320 pixels wide. [SOURCES.md](SOURCES.md) records creators, licenses, exact downloads and
 substitutions; [VALIDATION.md](VALIDATION.md) records Durop acceptance checks.
 Media and icons are ordinary Git files without LFS.
 
@@ -42,11 +42,23 @@ their original names and IDs. See the substitution table before choosing a clip.
 ## Regenerate thumbnails
 
 Run `python3 durop/podcasts/generate_icons.py` with FFmpeg on PATH. Like Durop’s
-base reactions catalog, visual thumbnails are unframed source images at 320 pixels
-wide with their original aspect ratio. Audio thumbnails are 320 × 180 cyan
+base reactions catalog, visual thumbnails are unframed source images up to 320 pixels
+wide with their original aspect ratio. Every preview must fit the existing remote
+controller limits: **160 KiB** compressed and **512 pixels per side**. The generator
+uses PNG compression and progressively smaller frames when necessary; it replaces
+an icon only after validation succeeds. Audio thumbnails are 320 × 180 cyan
 waveforms on a transparent background. Thumbnails contain no titles; Durop displays the clip names.
 The title-swallow thumbnail uses its title-card frame at 3.9 seconds.
-Refresh `SHA256SUMS` after regenerating the icons.
+Regenerate a single preview or validate every existing preview (including full PNG decoding):
+
+```sh
+python3 durop/podcasts/generate_icons.py banana
+python3 durop/podcasts/generate_icons.py --check
+python3 -m unittest discover -s durop/podcasts -p 'test_*.py'
+```
+
+Refresh `SHA256SUMS` after regenerating the icons. These compatible previews work
+with existing Durop hosts and controllers; no application update is required.
 
 ## Load in Durop
 

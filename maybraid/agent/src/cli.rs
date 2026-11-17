@@ -10,6 +10,7 @@ pub const AGENT_EVENTS_ENV: &str = "MAYBRAID_AGENT_EVENTS";
 pub const AGENT_PIPE_ENV: &str = "MAYBRAID_AGENT_PIPE";
 pub const AGENT_QUIT_ENV: &str = "MAYBRAID_AGENT_QUIT";
 pub const AGENT_EXCLUSIVE_ENV: &str = "MAYBRAID_AGENT_EXCLUSIVE";
+pub const AGENT_DIAGNOSTICS_ENV: &str = "MAYBRAID_AGENT_DIAGNOSTICS";
 
 /// Flags the game / world playground accept. Empty means the agent is off.
 #[derive(Args, Debug, Clone, Default, PartialEq, Eq)]
@@ -30,6 +31,9 @@ pub struct AgentArgs {
 	/// Replace physical pad input with scripted input, including before readiness.
 	#[arg(long = "agent-exclusive")]
 	pub exclusive: bool,
+	/// Record gameplay vitals, damage, deaths, and actual shots (requires agent input).
+	#[arg(long = "agent-diagnostics")]
+	pub diagnostics: bool,
 }
 
 impl AgentArgs {
@@ -52,6 +56,9 @@ impl AgentArgs {
 		}
 		if !self.exclusive {
 			self.exclusive = env_flag(AGENT_EXCLUSIVE_ENV);
+		}
+		if !self.diagnostics {
+			self.diagnostics = env_flag(AGENT_DIAGNOSTICS_ENV);
 		}
 		self
 	}
@@ -117,6 +124,10 @@ pub fn take_agent_args(
 			agent.exclusive = true;
 			continue;
 		}
+		if text == "--agent-diagnostics" {
+			agent.diagnostics = true;
+			continue;
+		}
 		rest.push(arg);
 	}
 	Ok((agent, rest))
@@ -165,6 +176,31 @@ mod tests {
 	#[test]
 	fn disabled_when_empty() {
 		assert!(!AgentArgs::default().enabled());
+		assert!(!AgentArgs::default().diagnostics);
+	}
+
+	#[test]
+	fn diagnostics_requires_agent_input_and_preserves_other_arguments() -> anyhow::Result<()> {
+		let (agent, rest) =
+			take_agent_args([OsString::from("--agent-diagnostics"), OsString::from("stats")])
+				.map_err(anyhow::Error::msg)?;
+		assert!(agent.diagnostics);
+		assert!(!agent.enabled());
+		assert_eq!(rest, vec![OsString::from("stats")]);
+		Ok(())
+	}
+
+	#[test]
+	fn clap_accepts_diagnostics_with_pipe() -> anyhow::Result<()> {
+		use clap::Parser;
+		#[derive(Parser)]
+		struct TestArgs {
+			#[command(flatten)]
+			agent: AgentArgs,
+		}
+		let args = TestArgs::try_parse_from(["maybraid", "--agent-diagnostics", "--agent-pipe=-"])?;
+		assert!(args.agent.diagnostics && args.agent.enabled());
+		Ok(())
 	}
 
 	#[test]

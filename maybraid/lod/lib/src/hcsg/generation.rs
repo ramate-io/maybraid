@@ -32,7 +32,7 @@ pub fn generation<C: Send + Sync + 'static, T: GenerationScheme>(
 	if let Some(latest) = regions.read().last() {
 		state.request.apply_regions(latest);
 	}
-	if state.request.sync::<T>(&demand).is_err() {
+	if state.request.sync_with_origin::<T>(&demand, "preload").is_err() {
 		return;
 	}
 }

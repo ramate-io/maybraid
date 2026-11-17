@@ -31,6 +31,8 @@ pub(crate) struct Job {
 	pub discovered: Option<Vec<Id>>,
 	pub cursor: usize,
 	pub reach: Arc<Mutex<HashSet<TypeId>>>,
+	#[cfg(feature = "generation-tracing")]
+	pub(in crate::hcsg) trace: Option<super::super::trace::JobTrace>,
 }
 
 /// What the worker writes back after one quantum.
@@ -40,6 +42,8 @@ pub(crate) struct QuantumProgress {
 	pub cursor: usize,
 	pub cost: f64,
 	pub done: bool,
+	/// Discovery/build panicked; partial publication is not completion proof.
+	pub failed: bool,
 	pub reached: HashSet<TypeId>,
 	/// Ids whose values landed during this quantum, in generation order.
 	pub published: Vec<Id>,
@@ -72,6 +76,10 @@ pub(super) fn pick_job(state: &mut DemandState) -> Option<Job> {
 		.min_by(|(id_a, a), (id_b, b)| a.pass.total_cmp(&b.pass).then(id_b.cmp(id_a)))
 		.map(|(id, _)| *id)?;
 	let subscription = state.subscriptions.get_mut(&id)?;
+	#[cfg(feature = "generation-tracing")]
+	if let Some(trace) = &mut subscription.trace {
+		trace.pick();
+	}
 	Some(Job {
 		id,
 		regions: subscription.regions.clone(),
@@ -82,6 +90,8 @@ pub(super) fn pick_job(state: &mut DemandState) -> Option<Job> {
 		discovered: subscription.discovered.take(),
 		cursor: subscription.cursor,
 		reach: Arc::clone(&subscription.reach),
+		#[cfg(feature = "generation-tracing")]
+		trace: subscription.trace.clone(),
 	})
 }
 
@@ -109,6 +119,11 @@ impl HcsgDemand {
 			if !progress.published.is_empty() {
 				subscription.published.extend(progress.published);
 			}
+			#[cfg(feature = "generation-tracing")]
+			if let Some(trace) = &mut subscription.trace {
+				trace.requeue();
+			}
+			subscription.failed |= progress.failed;
 			if progress.done {
 				subscription.done = true;
 				if subscription.discovered_len.is_none() {

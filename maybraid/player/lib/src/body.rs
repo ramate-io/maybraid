@@ -31,9 +31,9 @@ pub struct MoveSpeedCap(pub f32);
 
 /// Last walkable contact plane. Default is world up (flat XZ heading).
 ///
-/// Used only while [`Grounded`]: if the down-cast misses for a snap frame, drive
-/// still follows this plane instead of ramming world XZ into the mesh. Off the
-/// ground, gravity owns Y.
+/// Retained for wish-plane queries during [`Grounded`] snap hysteresis. This
+/// history is not evidence of current support; physical velocity control uses
+/// only the latest walkable cast hit and otherwise leaves Y to gravity.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct WalkableGround {
 	pub normal: Vec3,
@@ -340,12 +340,13 @@ fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -
 	walkable_contact_normal(hits, max_slope.map(|angle| angle.0))
 }
 
-/// Contact plane used to turn a wish into capsule drive.
+/// Geometric wish plane, including remembered ground during snap hysteresis.
 ///
-/// Airborne jump (and true air) are XZ only (gravity owns Y). Takeoff and land
-/// stay on the walkable plane. A walkable hit this frame is the plane. Last
-/// plane is only for a [`Grounded`] snap when the caster missed — never after
-/// walking off a ridge.
+/// An airborne jump has no plane. Otherwise the latest walkable cast hit wins,
+/// with the remembered plane available while [`Grounded`] remains set. That
+/// flag can outlive support after walking off a ridge, so this helper must not
+/// select physical ground velocity control: projecting/braking velocity against
+/// an unsupported plane can erase gravity and induce horizontal motion.
 pub fn ground_plane_for_wish(
 	contact: Option<Vec3>,
 	last: Option<Vec3>,
@@ -458,11 +459,9 @@ pub(crate) fn apply_wish_movement(
 			&MoveWish,
 			&ShapeHits,
 			Option<&MaxSlopeAngle>,
-			Option<&WalkableGround>,
 			&MovementAcceleration,
 			Option<&MoveSpeedCap>,
 			&mut LinearVelocity,
-			Has<Grounded>,
 			Has<crate::buoyancy::Buoyant>,
 			Has<crate::buoyancy::Wading>,
 			Has<Sprinting>,
@@ -477,11 +476,9 @@ pub(crate) fn apply_wish_movement(
 		wish,
 		hits,
 		max_slope,
-		walkable,
 		accel,
 		speed_cap,
 		mut velocity,
-		grounded,
 		buoyant,
 		wading,
 		sprinting,
@@ -502,9 +499,10 @@ pub(crate) fn apply_wish_movement(
 		};
 		let contact = walkable_ground_normal(hits, max_slope);
 		let airborne = jumping.is_some_and(Jumping::airborne) || buoyant;
-		let ground =
-			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, airborne);
-		if let Some(normal) = ground {
+		// Grounded may survive a missed cast for jump/snap hysteresis, but a
+		// remembered plane is not physical support. Use air control on a miss
+		// so neither projection nor idle braking rotates or erases gravity.
+		if let Some(normal) = contact.filter(|_| !airborne) {
 			control_ground_velocity(&mut velocity, wish.0, drive_accel, dt, normal, max_speed);
 		} else {
 			control_air_velocity(&mut velocity, wish.0, drive_accel, dt, max_speed);
@@ -568,6 +566,201 @@ pub(crate) fn advance_jump_phases(
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	fn fixed_test_gravity(mut velocities: Query<&mut LinearVelocity, With<CharacterController>>) {
+		for mut velocity in &mut velocities {
+			velocity.y += -9.81 * 1.25 / 64.0;
+		}
+	}
+
+	#[test]
+	fn missing_contact_preserves_gravity_through_snap_exit_at_render_cadences() -> anyhow::Result<()>
+	{
+		// Exercise the real Update systems between synthetic 64 Hz gravity
+		// ticks in FixedPostUpdate. Empty hits model the latest cast missing,
+		// independently of the remembered plane and Grounded hysteresis.
+		for normal in [Vec3::new(-0.5, 3.0_f32.sqrt() / 2.0, 0.0), Vec3::Y] {
+			for wish in [Vec3::ZERO, Vec3::X] {
+				for update_hz in [30, 60, 120] {
+					let mut app = App::new();
+					app.insert_resource(Time::<()>::default());
+					app.add_systems(FixedPostUpdate, fixed_test_gravity);
+					app.add_systems(Update, (update_grounded, apply_wish_movement).chain());
+					let entity = app
+						.world_mut()
+						.spawn((
+							CharacterController,
+							MoveWish(wish),
+							ShapeHits::default(),
+							WalkableGround { normal },
+							Grounded,
+							MovementAcceleration(MOVE_ACCEL),
+							LinearVelocity(Vec3::ZERO),
+						))
+						.id();
+					let gravity = -9.81 * 1.25;
+					let mut fixed_steps = 0;
+					let mut updates = 0;
+					let mut retained_grounded = false;
+					let mut exited_grounded = false;
+					// LCM of 30/60/120 Update Hz and 64 physics Hz is 960.
+					for tick in 1..=960 {
+						if tick % 15 == 0 {
+							app.world_mut().run_schedule(FixedPostUpdate);
+							fixed_steps += 1;
+						}
+						if tick % (960 / update_hz) != 0 {
+							continue;
+						}
+						app.world_mut().resource_mut::<Time>().advance_by(
+							std::time::Duration::from_secs_f64(1.0 / f64::from(update_hz)),
+						);
+						app.update();
+						updates += 1;
+						let velocity = app
+							.world()
+							.get::<LinearVelocity>(entity)
+							.ok_or_else(|| anyhow::anyhow!("test capsule lost velocity"))?;
+						let expected_y = gravity * fixed_steps as f32 / 64.0;
+						assert!(
+							(velocity.y - expected_y).abs() < 1e-4,
+							"{update_hz} Hz, {normal:?}, {wish:?}, tick {tick}: gravity changed: {velocity:?}"
+						);
+						let expected_x = if wish == Vec3::ZERO {
+							0.0
+						} else {
+							(MOVE_ACCEL * AIR_CONTROL * updates as f32 / update_hz as f32)
+								.min(JOG_SPEED)
+						};
+						assert!(
+							(velocity.x - expected_x).abs() < 1e-4 && velocity.z.abs() < 1e-5,
+							"{update_hz} Hz, {normal:?}, {wish:?}, tick {tick}: unsupported plane changed XZ: {velocity:?}"
+						);
+						let grounded = app.world().get::<Grounded>(entity).is_some();
+						assert_eq!(
+							grounded,
+							expected_y > -GROUND_SNAP_SPEED,
+							"snap must depend on falling speed, not remembered plane or render cadence"
+						);
+						retained_grounded |= grounded;
+						exited_grounded |= !grounded;
+					}
+					assert!(
+						retained_grounded && exited_grounded,
+						"fixture must exercise both snap retention and support loss"
+					);
+				}
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn current_contact_keeps_ground_drive_and_airborne_overrides() -> anyhow::Result<()> {
+		let normal = Vec3::new(-0.5, 3.0_f32.sqrt() / 2.0, 0.0);
+		for wish in [Vec3::ZERO, Vec3::X] {
+			for phase in
+				[None, Some(JumpPhase::Takeoff), Some(JumpPhase::Land), Some(JumpPhase::Air)]
+			{
+				for buoyant in [false, true] {
+					let mut app = App::new();
+					let mut time = Time::<()>::default();
+					time.advance_by(std::time::Duration::from_secs(1));
+					app.insert_resource(time);
+					app.add_systems(Update, (update_grounded, apply_wish_movement).chain());
+					let entity = app
+						.world_mut()
+						.spawn((
+							CharacterController,
+							MoveWish(wish),
+							ShapeHits(vec![ShapeHitData {
+								entity: Entity::PLACEHOLDER,
+								distance: 0.1,
+								point1: Default::default(),
+								point2: Default::default(),
+								normal1: normal,
+								normal2: -normal,
+							}]),
+							WalkableGround { normal: Vec3::Y },
+							Grounded,
+							MovementAcceleration(MOVE_ACCEL),
+							LinearVelocity(Vec3::new(0.0, -0.2, 0.0)),
+						))
+						.id();
+					if let Some(phase) = phase {
+						let mut jumping = Jumping::start(0.0);
+						jumping.phase = phase;
+						app.world_mut().entity_mut(entity).insert(jumping);
+					}
+					if buoyant {
+						app.world_mut()
+							.entity_mut(entity)
+							.insert(crate::buoyancy::Buoyant::default());
+					}
+					app.update();
+					let velocity = app
+						.world()
+						.get::<LinearVelocity>(entity)
+						.ok_or_else(|| anyhow::anyhow!("test capsule lost velocity"))?;
+					let expected = if buoyant || phase == Some(JumpPhase::Air) {
+						let cap = if buoyant { crate::buoyancy::swim_speed() } else { JOG_SPEED };
+						wish * cap + Vec3::new(0.0, -0.2, 0.0)
+					} else {
+						// Uphill unit tangent is (sqrt(3)/2, 1/2, 0).
+						Vec3::new(3.0_f32.sqrt() / 2.0, 0.5, 0.0) * wish.x * JOG_SPEED
+					};
+					assert!(
+						(velocity.0 - expected).length() < 1e-5,
+						"wish={wish:?}, phase={phase:?}, buoyant={buoyant}: {velocity:?}"
+					);
+				}
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn nonwalkable_cast_preserves_air_velocity_and_snap_jump_eligibility() -> anyhow::Result<()> {
+		let mut app = App::new();
+		let mut time = Time::<()>::default();
+		time.advance_by(std::time::Duration::from_secs_f64(1.0 / 60.0));
+		app.insert_resource(time);
+		app.add_systems(Update, (update_grounded, apply_wish_movement, apply_wish_jump).chain());
+		let entity = app
+			.world_mut()
+			.spawn((
+				CharacterController,
+				MoveWish(Vec3::ZERO),
+				ShapeHits(vec![ShapeHitData {
+					entity: Entity::PLACEHOLDER,
+					distance: 0.1,
+					point1: Default::default(),
+					point2: Default::default(),
+					normal1: Vec3::X,
+					normal2: Vec3::NEG_X,
+				}]),
+				MaxSlopeAngle(std::f32::consts::FRAC_PI_4),
+				WalkableGround { normal: Vec3::new(-0.5, 3.0_f32.sqrt() / 2.0, 0.0) },
+				Grounded,
+				JumpWish,
+				MovementAcceleration(MOVE_ACCEL),
+				LinearVelocity(Vec3::new(0.0, -0.2, 0.0)),
+			))
+			.id();
+		app.update();
+		let velocity = app
+			.world()
+			.get::<LinearVelocity>(entity)
+			.ok_or_else(|| anyhow::anyhow!("test capsule lost velocity"))?;
+		assert_eq!(velocity.0, Vec3::new(0.0, -0.2, 0.0));
+		assert!(app.world().get::<Grounded>(entity).is_some(), "snap retains jump eligibility");
+		let jumping = app
+			.world()
+			.get::<Jumping>(entity)
+			.ok_or_else(|| anyhow::anyhow!("snap JumpWish should still start takeoff"))?;
+		assert_eq!(jumping.phase, JumpPhase::Takeoff);
+		Ok(())
+	}
 
 	#[test]
 	fn default_locomotion_keeps_legacy_slope() {

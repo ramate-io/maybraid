@@ -25,6 +25,10 @@ routing-intelligence = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+avian3d = { workspace = true }
+characters = { workspace = true }
+lod-avian = { workspace = true }
+maybraid-spawns-support = { workspace = true }
 spotting-intelligence = { workspace = true }
 threat-intelligence-damage = { workspace = true }
 

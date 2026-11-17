@@ -2,21 +2,24 @@
 
 use bevy::prelude::*;
 use character_creation_menus::{CharacterMenu, MenuEvent};
-use character_inventory_user::{InventoryUser, InventoryUserPlugin, spawn_bag};
+use character_inventory_user::{spawn_bag, InventoryUser, InventoryUserPlugin};
 use character_items::Inventory;
 use character_model_user::{
-	CharacterModel, CharacterModelUser, CharacterModelUserPlugin, spawn_model,
+	list_summaries, spawn_model, CharacterModel, CharacterModelUser, CharacterModelUserPlugin,
 };
 use character_persist::{CharacterId, PersistError, SaveRoot};
-use menu_components::info::description::{TextMenuDescription, set_description_for_menu};
-use menu_components::{MenuActivate, MenuObjectiveMarker, ScreenEditPressed};
+use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
+use menu_components::{
+	MenuAction, MenuActionImpulse, MenuActivate, MenuObjectiveMarker, ScreenEditPressed, TextMenu,
+	TextMenuItem,
+};
 use menu_screens::{
-	CreateCharacterReady, GalleryChoice, GalleryScreen, GalleryScreenPlugin, MenuScreenSystems,
 	request_show_create_character_id, request_show_gallery, request_show_in_game,
+	CreateCharacterReady, GalleryChoice, GalleryScreen, GalleryScreenPlugin, MenuScreenSystems,
 };
 
 use crate::character::{
-	CharacterEditBaseline, CharacterMenuState, CharacterScreen, request_show_character,
+	request_show_character, CharacterEditBaseline, CharacterMenuState, CharacterScreen,
 };
 
 /// Host entity for the character currently being created or edited.
@@ -86,7 +89,9 @@ impl Plugin for CharacterSessionPlugin {
 		}
 		app.add_plugins(crate::delete_prompt::CharacterDeletePlugin)
 			.add_message::<RequestEditCharacter>()
+			.add_message::<CreateCharacterReady>()
 			.add_observer(on_save_character)
+			.add_observer(open_gallery_context_action)
 			.add_systems(Startup, load_active_character)
 			.add_systems(
 				Update,
@@ -97,6 +102,7 @@ impl Plugin for CharacterSessionPlugin {
 					open_create_character_hud,
 					sync_gallery_active_caption,
 					sync_gallery_selected_tag,
+					sync_gallery_lineup_roster,
 				),
 			)
 			.add_systems(PostUpdate, finish_character_editor_exit.after(MenuScreenSystems::Show));
@@ -228,6 +234,43 @@ fn load_active_character(mut commands: Commands, save_root: Res<SaveRoot>) {
 	set_active_character(&mut commands, &save_root, id);
 }
 
+fn sync_gallery_lineup_roster(
+	screens: Query<Entity, With<GalleryScreen>>,
+	save_root: Res<SaveRoot>,
+	figures: Query<(Entity, &crate::GalleryLineupFigure)>,
+	mut commands: Commands,
+) {
+	if screens.is_empty() {
+		for (entity, _) in &figures {
+			commands.entity(entity).try_despawn();
+		}
+		return;
+	}
+	let summaries = list_summaries(&save_root);
+	let desired: Vec<_> = summaries.iter().map(|summary| summary.id).collect();
+	let mut current: Vec<_> = figures
+		.iter()
+		.map(|(entity, figure)| (figure.ordinal, figure.id, entity))
+		.collect();
+	current.sort_by_key(|(ordinal, _, _)| *ordinal);
+	if current.len() == desired.len()
+		&& current.iter().zip(&desired).all(|((_, id, _), want)| *id == *want)
+	{
+		return;
+	}
+	for (entity, _) in &figures {
+		commands.entity(entity).try_despawn();
+	}
+	let count = desired.len();
+	for (ordinal, id) in desired.into_iter().enumerate() {
+		commands.spawn((
+			crate::GalleryLineupFigure { id, ordinal, count },
+			Transform::IDENTITY,
+			Visibility::Inherited,
+		));
+	}
+}
+
 fn sync_gallery_active_caption(
 	active: Option<Res<ActiveCharacter>>,
 	save_root: Res<SaveRoot>,
@@ -283,9 +326,7 @@ fn sync_gallery_selected_tag(
 fn open_gallery_choice(
 	mut choices: MessageReader<GalleryChoice>,
 	save_root: Res<SaveRoot>,
-	active: Option<Res<ActiveCharacter>>,
 	mut commands: Commands,
-	mut edits: MessageWriter<ScreenEditPressed>,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
@@ -299,10 +340,6 @@ fn open_gallery_choice(
 			request_show_create_character_id(&mut commands, id);
 		}
 		GalleryChoice::Select(id) => {
-			if gallery_select_opens_edit(active.as_deref().map(|active| active.id), id) {
-				edits.write(ScreenEditPressed);
-				return;
-			}
 			if let Err(error) = character_model_user::load(&save_root, id) {
 				warn!("failed to load character {}: {error}", id.to_hex());
 				return;
@@ -312,11 +349,36 @@ fn open_gallery_choice(
 	}
 }
 
+fn open_gallery_context_action(
+	impulse: On<MenuActionImpulse>,
+	gallery: Query<(), With<GalleryScreen>>,
+	mut edits: MessageWriter<ScreenEditPressed>,
+	mut choices: MessageWriter<GalleryChoice>,
+) {
+	if gallery.is_empty() {
+		return;
+	}
+	match impulse.action {
+		MenuAction::Drop => {
+			edits.write(ScreenEditPressed);
+		}
+		MenuAction::Delete => {
+			choices.write(GalleryChoice::Delete);
+		}
+		MenuAction::Create => {
+			choices.write(GalleryChoice::New);
+		}
+		MenuAction::Unequip => {}
+	}
+}
+
 fn open_gallery_edit(
 	mut edits: MessageReader<ScreenEditPressed>,
-	gallery: Query<(), With<GalleryScreen>>,
+	gallery: Query<Entity, With<GalleryScreen>>,
+	menus: Query<(Entity, &TextMenu)>,
+	items: Query<(Entity, &TextMenuItem, &GalleryChoice, &ChildOf)>,
+	child_of: Query<&ChildOf>,
 	save_root: Res<SaveRoot>,
-	active: Option<Res<ActiveCharacter>>,
 	mut menu_state: ResMut<CharacterMenuState>,
 	mut commands: Commands,
 	sessions: SessionQuery,
@@ -324,7 +386,9 @@ fn open_gallery_edit(
 	if gallery.is_empty() || edits.read().next().is_none() {
 		return;
 	}
-	let Some(active) = active else {
+	let Some(id) = GalleryScreen::highlighted_choice(&gallery, &menus, &items, &child_of)
+		.and_then(GalleryChoice::saved_id)
+	else {
 		return;
 	};
 	open_saved_editor(
@@ -332,7 +396,7 @@ fn open_gallery_edit(
 		&sessions,
 		&mut menu_state,
 		&save_root,
-		active.id,
+		id,
 		None,
 		None,
 		CharacterEditorReturn::Gallery,
@@ -463,16 +527,12 @@ fn on_save_character(
 	}
 }
 
-fn gallery_select_opens_edit(active: Option<CharacterId>, picked: CharacterId) -> bool {
-	active == Some(picked)
-}
-
 #[cfg(test)]
 mod tests {
 	use super::{
+		finish_character_editor_exit, leave_character_editor, save_editing_character,
 		CharacterEditorExit, CharacterEditorReturn, CharacterSession, CharacterSessionPlugin,
-		SessionQuery, finish_character_editor_exit, gallery_select_opens_edit,
-		leave_character_editor, save_editing_character,
+		SessionQuery,
 	};
 	use crate::character::{CharacterEditBaseline, CharacterMenuState, CharacterScreen};
 	use bevy::ecs::system::RunSystemOnce;
@@ -516,8 +576,8 @@ mod tests {
 	}
 
 	#[test]
-	fn deleting_selected_other_and_last_characters_preserves_valid_selection()
-	-> Result<(), Box<dyn std::error::Error>> {
+	fn deleting_selected_other_and_last_characters_preserves_valid_selection(
+	) -> Result<(), Box<dyn std::error::Error>> {
 		let root = scratch_root();
 		let ids = [CharacterId(1), CharacterId(2), CharacterId(3)];
 		for (id, name) in ids.into_iter().zip(["First", "Second", "Third"]) {
@@ -538,14 +598,6 @@ mod tests {
 		assert_eq!(character_persist::load_active(&root), None);
 		std::fs::remove_dir_all(&root.path)?;
 		Ok(())
-	}
-
-	#[test]
-	fn second_select_on_the_active_row_is_edit() {
-		let id = CharacterId(7);
-		assert!(!gallery_select_opens_edit(None, id));
-		assert!(!gallery_select_opens_edit(Some(CharacterId(1)), id));
-		assert!(gallery_select_opens_edit(Some(id), id));
 	}
 
 	#[test]

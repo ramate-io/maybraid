@@ -19,8 +19,8 @@ use bevy::shape::Aabb3d;
 use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
 
 use crate::{
-	collect_matching_in_xz_tile, xz_tile, xz_tile_region, Catalog, GridTiles, PoiCatalog, PoiEntry,
-	PoiId, PoiInterests, PoiOrigin, PoiSet, GRID_KIND,
+	generate_matching_in_xz_tile_offline, xz_tile, xz_tile_region, Catalog, GridTiles, PoiCatalog,
+	PoiEntry, PoiId, PoiInterests, PoiOrigin, PoiSet, GRID_KIND,
 };
 
 const TILE_SIZE: f32 = 256.0;
@@ -123,7 +123,7 @@ fn grid_catalog(tiles: &[IVec2]) -> Vec<PoiEntry> {
 	let mut entries = Vec::with_capacity(tiles.len());
 	let mut scratch = Vec::new();
 	for &tile in tiles {
-		collect_matching_in_xz_tile::<GridTiles>(
+		generate_matching_in_xz_tile_offline::<GridTiles>(
 			&mut cx,
 			tile,
 			TILE_SIZE,
@@ -173,7 +173,7 @@ fn collect_query<S: PoiOrigin>(
 	out: &mut Vec<PoiEntry>,
 ) {
 	if query.span <= 1 {
-		collect_matching_in_xz_tile::<S>(cx, query.origin, TILE_SIZE, 0.0, interests, out);
+		generate_matching_in_xz_tile_offline::<S>(cx, query.origin, TILE_SIZE, 0.0, interests, out);
 		return;
 	}
 	out.clear();

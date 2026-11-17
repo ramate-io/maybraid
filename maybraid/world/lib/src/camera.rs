@@ -317,6 +317,15 @@ pub(crate) fn configure(app: &mut App) {
 		.add_systems(Update, fly_world_camera.after(PlayerCameraSystems::Apply));
 }
 
+/// Exercise the production free-fly system in the headless agent fixture.
+#[cfg(test)]
+pub(crate) fn add_free_camera_fixture(app: &mut App, camera: Entity) {
+	app.world_mut()
+		.entity_mut(camera)
+		.insert(WorldFreeCamera { speed: WORLD_FREE_CAMERA_SPEED });
+	app.add_systems(Update, fly_world_camera.after(PlayerCameraSystems::Apply));
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
