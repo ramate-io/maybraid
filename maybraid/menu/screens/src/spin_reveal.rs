@@ -803,6 +803,96 @@ mod tests {
 	}
 
 	#[test]
+	fn painted_starter_kit_uses_character_creation_item_scale() -> anyhow::Result<()> {
+		use bevy::asset::{AssetApp, AssetPlugin};
+		use character_ui_menu::InventoryDrawerMode;
+		use maybraid_character_ui_menu_renderer::{
+			InventoryItemArt, InventoryItemMetrics, InventoryScreenArea, InventoryScreenReadOnly,
+		};
+		use menu_components::{HudFonts, RotaryLayout};
+
+		let grant = InventoryItemMetrics::CHARACTER_CREATION;
+		for drawer_mode in [InventoryDrawerMode::Rotary, InventoryDrawerMode::Gallery] {
+			let mut app = App::new();
+			app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+			app.init_asset::<Image>();
+			let mut session = StarterKitViewport::initial_session();
+			session.drawer = drawer_mode;
+			let viewport = app.world_mut().spawn((StarterKitViewport, session)).id();
+			app.world_mut()
+				.run_system_once(
+					move |mut commands: Commands,
+					      assets: Res<AssetServer>,
+					      continues: Query<Entity, With<StarterKitContinue>>| {
+						let fonts = HudFonts {
+							black: Handle::default(),
+							semibold: Handle::default(),
+							regular: Handle::default(),
+							logo: Handle::default(),
+						};
+						super::paint_starter_kit_inventory(
+							&mut commands,
+							viewport,
+							&fonts,
+							&assets,
+							menu_components::InputPromptDevice::Keyboard,
+							&SpinRevealScreen::layout(&[pants()]),
+							&session,
+							None,
+							&continues,
+						);
+					},
+				)
+				.map_err(|error| anyhow::anyhow!("Starter Kit paint: {error}"))?;
+			app.world_mut().flush();
+			assert_eq!(app.world().get::<InventoryItemMetrics>(viewport), Some(&grant));
+			assert!(app.world().get::<InventoryScreenReadOnly>(viewport).is_some());
+			let expected_art = match drawer_mode {
+				InventoryDrawerMode::Rotary => grant.rotary_art_size,
+				InventoryDrawerMode::Gallery => grant.gallery_art_size,
+			};
+			let drawer = app
+				.world_mut()
+				.query::<(Entity, &InventoryScreenArea)>()
+				.iter(app.world())
+				.find_map(|(entity, area)| {
+					(area.0 == character_ui_menu::InventoryRegion::Drawer).then_some(entity)
+				})
+				.ok_or_else(|| anyhow::anyhow!("Starter Kit drawer"))?;
+			let mut pending = vec![drawer];
+			let mut arts = Vec::new();
+			while let Some(entity) = pending.pop() {
+				if let Some(art) = app.world().get::<InventoryItemArt>(entity) {
+					arts.push(art.px);
+				}
+				if let Some(children) = app.world().get::<Children>(entity) {
+					pending.extend(children.iter());
+				}
+			}
+			assert!(!arts.is_empty(), "Starter Kit {drawer_mode:?} must stamp item art");
+			assert!(
+				arts.iter().all(|px| *px == expected_art),
+				"Starter Kit {drawer_mode:?} art {arts:?} should be {expected_art}"
+			);
+			assert!(arts.iter().all(|px| *px > InventoryItemMetrics::PLAY.gallery_art_size));
+			if drawer_mode == InventoryDrawerMode::Rotary {
+				let layout =
+					app.world_mut().query::<&RotaryLayout>().iter(app.world()).next().copied();
+				assert_eq!(layout, Some(RotaryLayout::for_inventory(false)));
+			} else {
+				let mut grids = app.world_mut().query::<&Node>();
+				assert!(grids.iter(app.world()).any(|node| {
+					node.display == Display::Grid
+						&& node.grid_template_columns.len() == grant.gallery_columns
+						&& node.grid_auto_rows.first()
+							== Some(&GridTrack::px(grant.gallery_row_height))
+				}));
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn grant_uses_the_read_only_starter_kit_layout() {
 		use character_items::{ItemRng, BASE_STARTER_TANZES};
 
