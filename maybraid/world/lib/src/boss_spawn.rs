@@ -184,7 +184,7 @@ pub fn poll_pending_boss_spawns(
 			storage.as_ref().unwrap().seed(spawns, universal_bounds());
 			
 			// Also publish the derived encounter for immediate presentation
-			let encounter = BikanwardaBossEncounter::chained_at(position);
+			let encounter = BikanwardaBossEncounter::chained_at_with_terrain(position, terrain_y);
 			let id = lod::gen::Id::Bytes(Bytes(
 				bikanwarda_encounter::chained_encounter_id().as_bytes()
 			));

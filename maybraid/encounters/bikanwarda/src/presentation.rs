@@ -3,9 +3,9 @@
 //! Presents generated boss encounters within channel regions. Each boss gets
 //! a unique host with its own presentation lifecycle.
 //!
-//! Column and pedestal are marker components positioned for chain attachment
-//! anchors. Visual geometry (mesh/material) is not yet implemented; markers
-//! define the spatial layout only. Actual chain attachment is deferred to #1617.
+//! Column and pedestal are invisible collision placeholders grounded at published
+//! terrain Y. They provide spatial structure for future chain tether attachment.
+//! Visual meshes are TODO. Chain attachment is deferred to #1617.
 
 use std::marker::PhantomData;
 
@@ -30,14 +30,17 @@ pub struct RequestBossAssembly {
 	pub spec: BikanwardaSpec,
 }
 
-/// Placeholder column geometry for chain tether attachment.
+/// Invisible collision placeholder for chain tether column.
 ///
-/// The column provides a visual tethering structure aligned with the boss.
-/// Actual chain attachment depends on #1617 (cursor/chain-damage-breakable-3cbf).
+/// 15m tall cylinder (1m radius) grounded at terrain Y, on top of pedestal.
+/// Visual mesh TODO. Chain attachment depends on #1617.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct BossColumn;
 
-/// Placeholder pedestal geometry at the column base.
+/// Invisible collision placeholder for pedestal at column base.
+///
+/// 3m tall cylinder (2m radius) grounded at terrain Y.
+/// Visual mesh TODO.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct BossPedestal;
 
@@ -57,12 +60,19 @@ impl LodScene for BikanwardaBossEncounter {
 		));
 		let instance = EncounterInstance::new(chained_encounter_id());
 		let position = self.boss_position;
+		let terrain_y = self.terrain_y;
 		let spec = self.boss.value.actor.recipe.spec.clone();
 		
 		// Column offset: positioned to the side of the boss (within arena bounds)
 		// This creates a tether anchor point for future chain work (#1617)
-		let column_offset = Vec3::new(8.0, 0.0, 0.0);
-		let column_position = position + column_offset;
+		let column_offset_xz = Vec2::new(8.0, 0.0);
+		let column_xz = Vec2::new(position.x, position.z) + column_offset_xz;
+		
+		// Ground column and pedestal at published terrain Y (assume flat terrain over 8m distance)
+		// Pedestal: 3m full height, center at terrain_y + 1.5
+		// Column: 15m full height on top of pedestal, center at terrain_y + 3.0 + 7.5
+		let pedestal_y = terrain_y + 1.5;
+		let column_y = terrain_y + 3.0 + 7.5;
 		
 		(
 			bsn! {
@@ -73,28 +83,24 @@ impl LodScene for BikanwardaBossEncounter {
 				Transform::from_translation(position)
 				Visibility::default()
 			},
-			// Placeholder pedestal at column base (3m high, 2m radius)
-			// Grounded at published terrain Y with cylinder collider.
-			// TODO: Add visual mesh in a system (Scene trait doesn't have Assets access).
-			// Final implementation will use authored geometry; this is a labeled placeholder.
+			// Invisible collision placeholder: pedestal at column base (3m full height, 2m radius)
+			// Grounded at published terrain Y. Visual mesh TODO (#1617).
 			bsn! {
 				Name::new("boss-pedestal")
 				BossPedestal
-				Transform::from_translation(column_position + Vec3::Y * 1.5)
+				Transform::from_translation(Vec3::new(column_xz.x, pedestal_y, column_xz.y))
 				Visibility::default()
-				Collider::cylinder(2.0, 1.5)
+				Collider::cylinder(2.0, 3.0)
 				RigidBody::Static
 			},
-			// Placeholder column for chain attachment (15m high, 1m radius)
-			// Positioned above pedestal; chain anchors will attach at top (#1617).
-			// Grounded at published terrain Y (pedestal base) with cylinder collider.
-			// TODO: Add visual mesh in a system.
+			// Invisible collision placeholder: column for chain attachment (15m full height, 1m radius)
+			// Sits on pedestal top. Chain anchors attach at column top (#1617). Visual mesh TODO.
 			bsn! {
 				Name::new("boss-column")
 				BossColumn
-				Transform::from_translation(column_position + Vec3::Y * (3.0 + 7.5))
+				Transform::from_translation(Vec3::new(column_xz.x, column_y, column_xz.y))
 				Visibility::default()
-				Collider::cylinder(1.0, 7.5)
+				Collider::cylinder(1.0, 15.0)
 				RigidBody::Static
 			},
 		)

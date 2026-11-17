@@ -11,7 +11,8 @@
 use bevy::math::{DVec3, Vec3};
 use bevy::prelude::*;
 use bevy::shape::Aabb3d;
-use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaForm};
+use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaForm, BikanwardaSpec};
+use characters::CharacterRecipe;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{GenerationContext, GenerationScheme};
 
@@ -48,8 +49,11 @@ pub struct BikanwardaBossEncounter {
 	/// World-space bounds for the entire encounter (boss + arena).
 	pub bounds: Aabb3d,
 	
-	/// Boss center position in world space.
+	/// Boss center position in world space (includes hull spawn offset).
 	pub boss_position: Vec3,
+	
+	/// Published terrain height at boss XZ (ground level, no hull offset).
+	pub terrain_y: f32,
 	
 	/// Authored boss configuration.
 	pub boss: Scripted<BossEncounterContract>,
@@ -61,8 +65,8 @@ impl BikanwardaBossEncounter {
 		Self::chained_at(Vec3::ZERO)
 	}
 	
-	/// The authored Bikanwarda chained encounter at a specific position.
-	pub fn chained_at(boss_position: Vec3) -> Self {
+	/// The authored Bikanwarda chained encounter at a specific position with terrain height.
+	pub fn chained_at_with_terrain(boss_position: Vec3, terrain_y: f32) -> Self {
 		let id = chained_encounter_id();
 		
 		// Authored boss configuration
@@ -86,7 +90,20 @@ impl BikanwardaBossEncounter {
 			Vec3::new(20.0, 10.0, 20.0),
 		);
 		
-		Self { id, bounds, boss_position, boss }
+		Self { id, bounds, boss_position, terrain_y, boss }
+	}
+	
+	/// The authored Bikanwarda chained encounter at a specific position.
+	/// 
+	/// Derives terrain_y by subtracting hull spawn offset from boss_position.y.
+	pub fn chained_at(boss_position: Vec3) -> Self {
+		use characters::CharacterRecipe;
+		let spec = BikanwardaSpec::encounter();
+		let recipe = BikanwardaActorRecipe::from_spec(spec);
+		let hull = recipe.components().scaled_locomotion_capsule();
+		let hull_offset = hull.spawn_height();
+		let terrain_y = boss_position.y - hull_offset;
+		Self::chained_at_with_terrain(boss_position, terrain_y)
 	}
 }
 

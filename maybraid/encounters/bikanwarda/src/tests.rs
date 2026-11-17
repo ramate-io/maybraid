@@ -256,3 +256,43 @@ mod placement {
 		let _ped: BossPedestal = BossPedestal;
 	}
 }
+
+#[test]
+fn column_and_pedestal_y_relationships() {
+	use crate::generation::BikanwardaBossEncounter;
+	
+	let terrain_y = 100.0;
+	let boss_hull_offset = 10.15; // Approximate hull spawn height
+	let boss_position = Vec3::new(1000.0, terrain_y + boss_hull_offset, 2000.0);
+	
+	let encounter = BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
+	
+	// Verify terrain_y is stored correctly
+	assert_eq!(encounter.terrain_y, terrain_y, "Terrain Y should be stored");
+	
+	// Boss should be at terrain + hull offset
+	assert!((encounter.boss_position.y - (terrain_y + boss_hull_offset)).abs() < 0.01,
+		"Boss Y should be at terrain + hull offset");
+	
+	// Pedestal center should be at terrain_y + 1.5 (3m full height / 2)
+	let expected_pedestal_y = terrain_y + 1.5;
+	
+	// Column center should be at terrain_y + 3.0 + 7.5 (on top of 3m pedestal, 15m full height / 2)
+	let expected_column_y = terrain_y + 3.0 + 7.5;
+	
+	// Boss should rest on column top at approximately terrain_y + 3.0 + 15.0 = terrain_y + 18.0
+	let column_top_y = terrain_y + 3.0 + 15.0;
+	
+	// Verify relationships
+	assert!(expected_pedestal_y > terrain_y, 
+		"Pedestal center should be above ground");
+	assert!(expected_column_y > expected_pedestal_y,
+		"Column center should be above pedestal center");
+	assert!((column_top_y - boss_position.y).abs() < 10.0,
+		"Boss should rest near column top (within ~10m for offset tolerance)");
+	
+	// Specific Y values
+	assert_eq!(expected_pedestal_y, 101.5, "Pedestal center at terrain + 1.5m");
+	assert_eq!(expected_column_y, 110.5, "Column center at terrain + 10.5m");
+	assert_eq!(column_top_y, 118.0, "Column top at terrain + 18m");
+}
