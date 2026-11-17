@@ -473,13 +473,17 @@ mod tests {
 	#[cfg(feature = "debug-commands")]
 	fn boss_spawn_creates_encounter_root() {
 		use crate::boss_spawn::RequestSpawnBoss;
-		use bikanwarda_encounter::BossEncounterRoot;
 		use lod::hcsg::{HcsgStorage, HcsgRestartRequest};
+		use maybraid_session::WorldGameplayEnabled;
 		
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins);
 		app.init_resource::<HcsgStorage>();
 		app.init_resource::<HcsgRestartRequest>();
+		app.init_resource::<WorldGameplayEnabled>();
+		app.init_resource::<Messages<maybraid_session::WorldPlaySessionEnded>>();
+		app.init_resource::<Messages<lubikans::LubikanOwnerLifetime>>();
+		app.init_resource::<Messages<encounters::EncounterSignal>>();
 		app.add_plugins(crate::world_encounter::WorldEncounterPlugin);
 		
 		let spawn_pos = Vec2::new(1746.8, 1025.9);
@@ -488,14 +492,18 @@ mod tests {
 		// Process the spawn request
 		app.update();
 		
-		// Note: This test verifies the presentation plugin is registered.
-		// Actual actor spawning requires HCSG generation and presentation systems to run,
-		// which is tested in integration tests with full world setup.
-		let roots: Vec<_> = app.world().query::<&BossEncounterRoot>().iter(app.world()).collect();
-		// Presentation plugin registered means the system can create roots when HCSG runs
+		// Verify both boss plugins are registered
+		assert!(
+			app.is_plugin_added::<bikanwarda_encounter::BossEncounterPresentationPlugin<durham::StreamRing<durham::NearStream>>>(),
+			"BossEncounterPresentationPlugin should be registered"
+		);
 		assert!(
 			app.is_plugin_added::<bikanwarda_encounter::BossAssemblyPlugin>(),
 			"BossAssemblyPlugin should be registered"
 		);
+		
+		// Note: Actual BossEncounterRoot creation requires HCSG generation and presentation
+		// systems to run multiple update cycles with proper viewer bounds and terrain data.
+		// Full boss actor spawning is tested in integration tests with complete world setup.
 	}
 }

@@ -545,7 +545,7 @@ impl ScriptCommand {
 
 impl PlaygroundCommand {
 	#[cfg(feature = "debug-commands")]
-	pub fn run_script_with_queue(path: &std::path::Path, queue: &mut crate::script_queue::ScriptQueue, time: &Time, console: &mut String) {
+	pub fn run_script_with_queue(path: &std::path::Path, queue: &mut crate::script_queue::ScriptQueue, _time: &Time, console: &mut String) {
 		let lines = match game_commands::command::read_script_lines(path) {
 			Ok(l) => l,
 			Err(e) => {

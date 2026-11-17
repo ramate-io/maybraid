@@ -16,7 +16,7 @@ use encounters::{
 	EncounterSignalKind, EncounterSystems, EncounterTimeEnabled,
 };
 use lubikans::{LubikanOwnerLifetime, LubikanOwnerLifetimeKind};
-use lod::hcsg::StreamRing;
+use durham::StreamRing;
 use world_player::Player;
 
 use maybraid_session::{WorldGameplayEnabled, WorldPlaySessionEnded};

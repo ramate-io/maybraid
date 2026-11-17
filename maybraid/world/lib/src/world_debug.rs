@@ -11,7 +11,7 @@ use player::Npc;
 use world_player::Player as WorldPlayer;
 
 use crate::commands::{
-	CameraMode, RequestActivate, RequestCamera, RequestCapture, RequestGrantPoints, RequestPeaceful,
+	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestPeaceful,
 	RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
 };
 use crate::map_view::WorldMapView;

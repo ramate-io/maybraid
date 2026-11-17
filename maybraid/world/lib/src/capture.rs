@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
-use player::Player;
 use world_player;
 
 use crate::commands::RequestCapture;
