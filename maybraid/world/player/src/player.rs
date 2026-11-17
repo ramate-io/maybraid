@@ -67,7 +67,7 @@ pub struct Player;
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct AwaitingTerrainSurface;
 
-/// The legacy player arrival marker has entered the shared actor-support lifecycle.
+/// The player adapter owns an arrival or suspended-physics support handoff.
 #[derive(Component)]
 pub(crate) struct PlayerSupportQueued;
 
@@ -302,8 +302,10 @@ pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 	player_spawn_point_at(layout.region_center_xz().xz(), elevation)
 }
 
-/// Adapt player first-drop requests into the shared actor support lifecycle.
-/// The shared resolver owns geometry checks, retrying, placement, and physics holds.
+/// Adapt arrivals and suspended player physics into the shared support lifecycle.
+/// Settled bodies also need a hold when their session releases physics: removing
+/// the motor does not stop an Avian dynamic body after its floor is unloaded.
+/// The shared resolver owns gravity snapshots, holds, and readiness on reentry.
 pub(crate) fn snap_player_to_composed_surface(
 	mut commands: Commands,
 	physics: Res<PlayerPhysicsEnabled>,
@@ -313,7 +315,7 @@ pub(crate) fn snap_player_to_composed_surface(
 		(
 			Entity,
 			&Transform,
-			Ref<AwaitingTerrainSurface>,
+			Option<Ref<AwaitingTerrainSurface>>,
 			Option<&OffTerrainAnchor>,
 			Option<&LocomotionCapsule>,
 			Option<&GravityScale>,
@@ -324,6 +326,10 @@ pub(crate) fn snap_player_to_composed_surface(
 	>,
 ) {
 	for (entity, transform, awaiting, anchor, hull, gravity, pending, queued) in &mut players {
+		if physics.0 && awaiting.is_none() && !queued {
+			continue;
+		}
+		let enroll_settled = awaiting.is_none() && pending.is_none();
 		if anchor.is_some() && physics.0 {
 			let resume_gravity = pending
 				.as_deref()
@@ -341,12 +347,13 @@ pub(crate) fn snap_player_to_composed_surface(
 			}
 			continue;
 		}
-		if pending.is_none() && queued && !awaiting.is_changed() {
+		let arrival_changed = awaiting.as_ref().is_some_and(|awaiting| awaiting.is_changed());
+		if pending.is_none() && queued && !arrival_changed {
 			continue;
 		}
 		let mut support = if let Some(pending) = pending.as_deref() {
 			let mut support = pending.clone();
-			if awaiting.is_changed() {
+			if arrival_changed {
 				let hull = hull.copied().unwrap_or(support.hull());
 				support.retarget(transform.translation, hull, None);
 			}
@@ -355,7 +362,9 @@ pub(crate) fn snap_player_to_composed_surface(
 			PendingActorSupport::new(
 				transform.translation,
 				hull.copied().unwrap_or(LocomotionCapsule::HUMANOID),
-				None,
+				// Suspending an existing body must not become a new terrain-level
+				// spawn when it was standing on an elevated platform or airborne.
+				enroll_settled.then_some(transform.translation.y),
 			)
 		};
 		support.set_enabled(physics.0);
@@ -910,6 +919,178 @@ mod tests {
 				LinearVelocity(Vec3::new(4.0, -7.0, 2.0)),
 			))
 			.id()
+	}
+
+	fn player_component<T: Component>(app: &App, player: Entity) -> anyhow::Result<&T> {
+		app.world().get::<T>(player).ok_or_else(|| {
+			anyhow::anyhow!("player {player:?} missing {}", std::any::type_name::<T>())
+		})
+	}
+
+	#[test]
+	fn settled_player_physics_suspends_then_waits_for_real_support_on_reentry() -> anyhow::Result<()>
+	{
+		for floor_top in [0.0, 40.0] {
+			let mut app = shared_support_app();
+			app.add_plugins((
+				TransformPlugin,
+				PhysicsPlugins::default(),
+				bevy::asset::AssetPlugin::default(),
+				bevy::mesh::MeshPlugin,
+			));
+			app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+				std::time::Duration::from_secs_f64(1.0 / 30.0),
+			));
+			app.finish();
+			let hull = LocomotionCapsule::HUMANOID;
+			let floor = |app: &mut App| {
+				app.world_mut()
+					.spawn((
+						Transform::from_xyz(8.0, floor_top - 0.1, 8.0),
+						RigidBody::Static,
+						Collider::cuboid(40.0, 0.2, 40.0),
+						PhysicsInteractionLayer::fixed_layers(),
+					))
+					.id()
+			};
+			let support = floor(&mut app);
+			let player = app
+				.world_mut()
+				.spawn((
+					Player,
+					Transform::from_xyz(8.0, floor_top + hull.spawn_height(), 8.0),
+					RigidBody::Dynamic,
+					Collider::capsule(hull.radius, hull.length),
+					PhysicsInteractionLayer::animated_layers(),
+					GravityScale(0.65),
+					LinearVelocity::ZERO,
+				))
+				.id();
+			for _ in 0..12 {
+				app.update();
+			}
+			assert!(app.world().get::<AwaitingTerrainSurface>(player).is_none());
+			assert!(app.world().get::<PendingActorSupport>(player).is_none());
+
+			// The real resource gate must enroll a settled body; no arrival marker
+			// or expected PendingActorSupport is constructed by this test.
+			app.world_mut().resource_mut::<PlayerPhysicsEnabled>().0 = false;
+			app.update();
+			let held = player_component::<Transform>(&app, player)?.translation;
+			app.world_mut().despawn(support);
+			for _ in 0..12 {
+				app.update();
+				assert_eq!(player_component::<Transform>(&app, player)?.translation, held);
+				assert_eq!(player_component::<Position>(&app, player)?.0, held);
+				assert_eq!(player_component::<LinearVelocity>(&app, player)?.0, Vec3::ZERO);
+				assert_eq!(player_component::<GravityScale>(&app, player)?.0, 0.0);
+			}
+			assert_eq!(
+				player_component::<PendingActorSupport>(&app, player)?.resume_gravity(),
+				Some(Some(0.65))
+			);
+
+			// Reentry alone cannot restore gravity while published height/floor
+			// are absent. The shared support owner keeps the same pose/snapshot.
+			app.world_mut().resource_mut::<PlayerPhysicsEnabled>().0 = true;
+			for _ in 0..6 {
+				app.update();
+				assert!(app.world().get::<PendingActorSupport>(player).is_some());
+				assert_eq!(player_component::<Transform>(&app, player)?.translation, held);
+				assert_eq!(player_component::<GravityScale>(&app, player)?.0, 0.0);
+			}
+			let mut base = app.world().resource::<WorldBaseTerrain>().0.clone();
+			base.height_scale = 0.0;
+			let terrain = durham::Terrain::base_cell_for_test(
+				app.world().resource::<TerrainCellLayout>(),
+				0,
+				0,
+				base,
+			);
+			let cell = terrain.cell;
+			app.world().resource::<HcsgStorage>().publish(
+				lod::gen::Id::from_cell(cell),
+				std::sync::Arc::new(terrain),
+				cell,
+			);
+			floor(&mut app);
+			if floor_top > 0.0 {
+				// Published terrain exists below the original roof. Resuming must
+				// not move the same body down to that lower valid support.
+				app.world_mut().spawn((
+					Transform::from_xyz(8.0, -0.1, 8.0),
+					RigidBody::Static,
+					Collider::cuboid(40.0, 0.2, 40.0),
+					PhysicsInteractionLayer::fixed_layers(),
+				));
+			}
+			for _ in 0..12 {
+				app.update();
+			}
+			assert!(app.world().get::<PendingActorSupport>(player).is_none());
+			assert!(app.world().get::<AwaitingTerrainSurface>(player).is_none());
+			assert_eq!(player_component::<GravityScale>(&app, player)?.0, 0.65);
+			let standing_y = player_component::<Transform>(&app, player)?.translation.y;
+			assert!(standing_y >= floor_top + hull.half_height() - 0.05);
+			assert!(standing_y <= floor_top + hull.spawn_height() + 0.05);
+			if floor_top > 0.0 {
+				// A subsequent explicit arrival still owns its destination: the
+				// suspension's preservation minimum must not pin it to the old roof.
+				app.world_mut().resource_mut::<PlayerPhysicsEnabled>().0 = false;
+				app.update();
+				let destination = Vec3::new(8.0, hull.spawn_height(), 8.0);
+				app.world_mut()
+					.get_mut::<PendingActorSupport>(player)
+					.ok_or_else(|| anyhow::anyhow!("roof body missing suspension hold"))?
+					.retarget(destination, hull, None);
+				app.world_mut()
+					.entity_mut(player)
+					.insert((Transform::from_translation(destination), AwaitingTerrainSurface));
+				app.world_mut().resource_mut::<PlayerPhysicsEnabled>().0 = true;
+				for _ in 0..12 {
+					app.update();
+				}
+				assert!(app.world().get::<PendingActorSupport>(player).is_none());
+				assert!(player_component::<Transform>(&app, player)?.translation.y < 2.0);
+				assert_eq!(player_component::<GravityScale>(&app, player)?.0, 0.65);
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn disabled_player_keeps_authoritative_pending_destination_and_gravity() -> anyhow::Result<()> {
+		let mut app = shared_support_app();
+		app.world_mut().resource_mut::<PlayerPhysicsEnabled>().0 = false;
+		let target = Vec3::new(8.0, 700.0, 8.0);
+		let player = waiting_player(&mut app, Vec3::ZERO);
+		app.world_mut().entity_mut(player).insert(
+			PendingActorSupport::new(target, LocomotionCapsule::HUMANOID, None)
+				.with_resume_gravity(Some(0.65)),
+		);
+		// The pending owner is authoritative even before its destination has
+		// reached Transform, and does not need a legacy arrival marker.
+		app.world_mut().entity_mut(player).remove::<AwaitingTerrainSurface>();
+		for _ in 0..3 {
+			app.update();
+		}
+		let pending = player_component::<PendingActorSupport>(&app, player)?;
+		assert_eq!(pending.held_position(), target);
+		assert_eq!(pending.resume_gravity(), Some(Some(0.65)));
+
+		let next = Vec3::new(48.0, 900.0, 48.0);
+		app.world_mut()
+			.get_mut::<PendingActorSupport>(player)
+			.ok_or_else(|| anyhow::anyhow!("player lost authoritative pending support"))?
+			.retarget(next, LocomotionCapsule::HUMANOID, None);
+		app.world_mut()
+			.entity_mut(player)
+			.insert((Transform::from_translation(next), AwaitingTerrainSurface));
+		app.update();
+		let pending = player_component::<PendingActorSupport>(&app, player)?;
+		assert_eq!(pending.held_position(), next);
+		assert_eq!(pending.resume_gravity(), Some(Some(0.65)));
+		Ok(())
 	}
 
 	#[test]
