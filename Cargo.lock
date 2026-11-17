@@ -2338,6 +2338,7 @@ dependencies = [
  "lod-avian",
  "lubikans",
  "projectiles",
+ "world-materials",
 ]
 
 [[package]]

@@ -19,7 +19,7 @@ pub use history::{
 };
 pub use lifecycle::{
 	down_zero_health, ensure_downed_have_despawn, mark_downed, tick_queued_despawns, DespawnAfter,
-	Downed, DEFAULT_CORPSE_SECS,
+	Downed, NoCorpseCleanup, DEFAULT_CORPSE_SECS,
 };
 
 /// Default DPC used when a bolt is spawned without catalog stats.

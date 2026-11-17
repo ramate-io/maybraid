@@ -57,8 +57,8 @@ pub use params::{
 };
 pub use placeholder::{apply_localized_damage, placeholder_chain_mesh, PlaceholderChainSpec};
 pub use runtime::{
-	apply_chain_hit, copy_authored_onto, owned_chain_material, ChainRuntimeDamage,
-	OwnedChainHandle, OwnedChainMaterial,
+	apply_chain_hit, copy_authored_onto, owned_chain_material, ChainDurabilityFraction,
+	ChainRuntimeDamage, OwnedChainHandle, OwnedChainMaterial,
 };
 pub use skinned::{
 	generate_skinned_chain, spawn_skinned_chain, ChainSkinningStrategy, SkinnedChainConfig,
