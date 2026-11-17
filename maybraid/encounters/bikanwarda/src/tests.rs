@@ -16,7 +16,8 @@ use crate::identity::{ENRAGED_DEFINITION_ID, WARD_DEFINITION_ID, chained_encount
 use crate::outcomes::{BikanwardaDeparted, BikanwardaDeparture, EncounterUnlockAwarded};
 use crate::plugin::BikanwardaEncounterPlugin;
 
-const DT: f32 = 0.1;
+// Deterministic 60 FPS timestep for gameplay tests
+const DT: f32 = 1.0 / 60.0; // ~16.67ms per frame
 
 fn gameplay() -> App {
 	let mut app = App::new();
@@ -812,6 +813,11 @@ mod integration_regressions {
 			app.add_plugins(attacks::AttacksPlugin);
 		}
 		
+		// Install bikanwarda attacks plugin to register attack definitions
+		if !app.is_plugin_added::<bikanwarda_attacks::BikanwardaAttacksPlugin>() {
+			app.add_plugins(bikanwarda_attacks::BikanwardaAttacksPlugin::default());
+		}
+		
 		// Install bikanwarda encounter plugin
 		// This includes: EncountersPlugin, LubikansPlugin, BossEncounterCombatPlugin,
 		// BikanwardaChainPhysicsPlugin (which includes DamagePlugin), BossTetherPlugin
@@ -819,6 +825,10 @@ mod integration_regressions {
 		
 		// Install assembly plugin to spawn actors
 		app.add_plugins(BossAssemblyPlugin);
+		
+		// Configure spotting to run on schedule (discovery every 0.2s, which is 12 frames at 60 FPS)
+		// Don't gate it behind a timer - let it run every frame to pick up discovery_interval_secs
+		app.configure_sets(Update, spotting_intelligence::SpottingSystems::Discover);
 		
 		app.finish();
 		app.update();
@@ -1166,6 +1176,11 @@ mod integration_regressions {
 	///
 	/// Uses real LodScene, assembly, spotting, acquisition and attack driver.
 	/// No hand-written BeginAttack, no hand-filled CombatTargeting.
+	///
+	/// Frame timing at 60 FPS (DT = 1/60s):
+	/// - Spotting discovery runs every 0.2s (12 frames)
+	/// - Attack cooldown starts ready (0s)
+	/// - Need ~20 frames: 5 for assembly + 12 for discovery + 3 for targeting/attack
 	#[test]
 	fn boss_attacks_visible_player_in_range() {
 		let mut app = full_encounter_app();
@@ -1200,9 +1215,10 @@ mod integration_regressions {
 			.expect("Host should have BossActor")
 			.0;
 		
-		// Spawn player in range (within 40m) and visible (no occlusion)
-		let player_pos = boss_position + Vec3::new(20.0, 0.0, 0.0); // 20m away
+		// Spawn player in range (within 40m attack range, within 50m spotting range) and visible
+		let player_pos = boss_position + Vec3::new(20.0, 0.0, 0.0); // 20m away horizontally
 		let player = app.world_mut().spawn((
+			Name::new("test-player"),
 			Transform::from_translation(player_pos),
 			GlobalTransform::from_translation(player_pos),
 			spotting_intelligence::SpotSubject::new(
@@ -1211,35 +1227,47 @@ mod integration_regressions {
 			),
 			avian3d::prelude::RigidBody::Kinematic,
 			avian3d::prelude::Collider::capsule(0.4, 1.8),
+			// CRITICAL: Must have Animated collision layer for spotting discovery
+			lod_avian::PhysicsInteractionLayer::animated_layers(),
 		)).id();
 		
-		// Mark player as enemy in CombatTargeting
+		// Mark player as enemy (simulates threat intelligence marking them as hostile)
+		// Spotting will populate the contact info, but this marks them as a valid target
 		let mut actor_mut = app.world_mut().entity_mut(actor_entity);
 		if let Some(mut targeting) = actor_mut.get_mut::<CombatTargeting>() {
 			targeting.include(player, combat_targeting::TargetSource::ENEMYSHIP);
 		}
 		
-		// Run updates to allow spotting and combat systems to work
-		for _ in 0..10 {
+		// Run updates to allow spotting discovery and attack triggering
+		// Discovery interval is 0.2s = 12 frames at DT=1/60s
+		// Run 20 frames to ensure at least one full discovery cycle completes
+		let mut attacks_seen = Vec::new();
+		for _ in 0..20 {
 			app.update();
+			
+			// Check for attack messages after each update
+			let frame_attacks: Vec<BeginAttack> = app.world_mut()
+				.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| -> Vec<BeginAttack> {
+					messages.read().cloned().collect()
+				})
+				.expect("Failed to read BeginAttack messages");
+			
+			attacks_seen.extend(frame_attacks);
 		}
 		
-		// Verify attack was triggered (BeginAttack message written)
-		let attacks: Vec<BeginAttack> = app.world_mut()
-			.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| -> Vec<BeginAttack> {
-				messages.read().cloned().collect()
-			})
-			.expect("Failed to read BeginAttack messages");
-		
-		assert!(!attacks.is_empty(), 
+		assert!(!attacks_seen.is_empty(), 
 			"Boss should have triggered attack on visible player in range");
-		assert!(attacks.iter().any(|attack| attack.target == Some(player)),
+		assert!(attacks_seen.iter().any(|attack| attack.target == Some(player)),
 			"Attack should target the player entity");
 	}
 
 	/// Test (b): Player behind occluder gets no attack.
 	///
 	/// Uses real LodScene, assembly, spotting with occlusion, acquisition and attack driver.
+	///
+	/// Frame timing at 60 FPS (DT = 1/60s):
+	/// - Spotting discovery runs every 0.2s (12 frames)
+	/// - Need multiple discovery cycles to confirm no spotting: 30 frames = ~2.5 cycles
 	#[test]
 	fn boss_does_not_attack_occluded_player() {
 		let mut app = full_encounter_app();
@@ -1274,9 +1302,24 @@ mod integration_regressions {
 			.expect("Host should have BossActor")
 			.0;
 		
-		// Spawn player in range but behind an occluder
+		// Spawn occluder between boss and player position FIRST (before player spawns)
+		// Boss eyes are at ~15m height (Vec3::Y * 15.0 from assembly)
 		let player_pos = boss_position + Vec3::new(20.0, 0.0, 0.0);
+		let occluder_pos = boss_position + Vec3::new(10.0, 15.0, 0.0); // Midway, at eye level
+		app.world_mut().spawn((
+			Name::new("occluder-wall"),
+			Transform::from_translation(occluder_pos),
+			GlobalTransform::from_translation(occluder_pos),
+			avian3d::prelude::RigidBody::Static,
+			avian3d::prelude::Collider::cuboid(10.0, 10.0, 10.0), // Large wall blocking line of sight
+			// Occluders should be Fixed (terrain/buildings layer)
+			lod_avian::PhysicsInteractionLayer::fixed_layers(),
+		));
+		
+		// Now spawn player behind the occluder
+		// Player should NOT be spotted due to occlusion, so no attack should fire
 		let player = app.world_mut().spawn((
+			Name::new("occluded-player"),
 			Transform::from_translation(player_pos),
 			GlobalTransform::from_translation(player_pos),
 			spotting_intelligence::SpotSubject::new(
@@ -1285,44 +1328,50 @@ mod integration_regressions {
 			),
 			avian3d::prelude::RigidBody::Kinematic,
 			avian3d::prelude::Collider::capsule(0.4, 1.8),
+			// CRITICAL: Must have Animated collision layer for spotting discovery
+			lod_avian::PhysicsInteractionLayer::animated_layers(),
 		)).id();
 		
-		// Spawn occluder between boss and player at boss eye level
-		// Boss eyes are at ~15m height (Vec3::Y * 15.0 from assembly)
-		let occluder_pos = boss_position + Vec3::new(10.0, 15.0, 0.0); // Midway, at eye level
-		app.world_mut().spawn((
-			Transform::from_translation(occluder_pos),
-			GlobalTransform::from_translation(occluder_pos),
-			avian3d::prelude::RigidBody::Static,
-			avian3d::prelude::Collider::cuboid(10.0, 10.0, 10.0), // Large wall blocking line of sight
-		));
-		
-		// Mark player as enemy in CombatTargeting
+		// Mark player as enemy (but they should NOT be attacked because spotting won't see them)
 		let mut actor_mut = app.world_mut().entity_mut(actor_entity);
 		if let Some(mut targeting) = actor_mut.get_mut::<CombatTargeting>() {
 			targeting.include(player, combat_targeting::TargetSource::ENEMYSHIP);
 		}
 		
-		// Run updates to allow spotting and combat systems to work
-		// Need enough frames for: spotting discovery, targeting sync, attack cooldown
-		for _ in 0..30 {
+		// Update a few times to let physics settle and transforms propagate
+		for _ in 0..3 {
 			app.update();
 		}
 		
-		// Verify no attack was triggered (player is occluded)
-		let attacks: Vec<BeginAttack> = app.world_mut()
-			.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| -> Vec<BeginAttack> {
-				messages.read().cloned().collect()
-			})
-			.expect("Failed to read BeginAttack messages");
+		// Run updates for multiple discovery cycles to confirm no spotting
+		// 30 frames at 60 FPS = 0.5s = 2.5 discovery cycles
+		let mut attacks_seen = Vec::new();
+		for _ in 0..30 {
+			app.update();
+			
+			// Check for attack messages after each update
+			let frame_attacks: Vec<BeginAttack> = app.world_mut()
+				.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| -> Vec<BeginAttack> {
+					messages.read().cloned().collect()
+				})
+				.expect("Failed to read BeginAttack messages");
+			
+			attacks_seen.extend(frame_attacks);
+		}
 		
-		assert!(attacks.is_empty() || !attacks.iter().any(|attack| attack.target == Some(player)),
+		// Verify no attack was targeted at the occluded player
+		assert!(attacks_seen.iter().all(|attack| attack.target != Some(player)),
 			"Boss should not attack occluded player");
 	}
 
 	/// Test (c): Out-of-range player gets no attack.
 	///
 	/// Uses real LodScene, assembly, spotting, acquisition and attack driver.
+	///
+	/// Frame timing at 60 FPS (DT = 1/60s):
+	/// - Attack range is 40m, spotting range is 50m
+	/// - Player at 60m is outside both ranges
+	/// - Run 30 frames to confirm no attack (even if somehow spotted)
 	#[test]
 	fn boss_does_not_attack_out_of_range_player() {
 		let mut app = full_encounter_app();
@@ -1358,8 +1407,10 @@ mod integration_regressions {
 			.0;
 		
 		// Spawn player out of range (attack range is 40m, spotting range is 50m)
+		// Player at 60m should not be spotted (outside spotting range)
 		let player_pos = boss_position + Vec3::new(60.0, 0.0, 0.0); // 60m away, outside both ranges
 		let player = app.world_mut().spawn((
+			Name::new("distant-player"),
 			Transform::from_translation(player_pos),
 			GlobalTransform::from_translation(player_pos),
 			spotting_intelligence::SpotSubject::new(
@@ -1368,28 +1419,35 @@ mod integration_regressions {
 			),
 			avian3d::prelude::RigidBody::Kinematic,
 			avian3d::prelude::Collider::capsule(0.4, 1.8),
+			// CRITICAL: Must have Animated collision layer for spotting discovery
+			lod_avian::PhysicsInteractionLayer::animated_layers(),
 		)).id();
 		
-		// Mark player as enemy in CombatTargeting
+		// Mark player as enemy (but they should NOT be attacked because they're out of spotting range)
 		let mut actor_mut = app.world_mut().entity_mut(actor_entity);
 		if let Some(mut targeting) = actor_mut.get_mut::<CombatTargeting>() {
 			targeting.include(player, combat_targeting::TargetSource::ENEMYSHIP);
 		}
 		
-		// Run updates to allow spotting and combat systems to work
-		// Need enough frames for: spotting discovery, targeting sync, attack cooldown
+		// Run updates - player should not be spotted (out of spotting range)
+		// and should not be attacked (out of attack range)
+		// 30 frames at 60 FPS = 0.5s = 2.5 discovery cycles
+		let mut attacks_seen = Vec::new();
 		for _ in 0..30 {
 			app.update();
+			
+			// Check for attack messages after each update
+			let frame_attacks: Vec<BeginAttack> = app.world_mut()
+				.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| -> Vec<BeginAttack> {
+					messages.read().cloned().collect()
+				})
+				.expect("Failed to read BeginAttack messages");
+			
+			attacks_seen.extend(frame_attacks);
 		}
 		
-		// Verify no attack was triggered (player is out of range)
-		let attacks: Vec<BeginAttack> = app.world_mut()
-			.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| -> Vec<BeginAttack> {
-				messages.read().cloned().collect()
-			})
-			.expect("Failed to read BeginAttack messages");
-		
-		assert!(attacks.is_empty() || !attacks.iter().any(|attack| attack.target == Some(player)),
+		// Verify no attack was targeted at the out-of-range player
+		assert!(attacks_seen.iter().all(|attack| attack.target != Some(player)),
 			"Boss should not attack out-of-range player");
 	}
 }
