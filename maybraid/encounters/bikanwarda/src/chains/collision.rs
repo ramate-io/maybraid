@@ -83,36 +83,23 @@ pub fn spawn_chain_colliders(
 ///
 /// This runs after joint transforms have been updated by the motion system.
 pub fn sync_chain_colliders(
-	chains: Query<(&ChainRoot, &Children)>,
-	joints: Query<(&Transform, Option<&Name>), Without<ChainLinkId>>,
+	chains: Query<(Entity, &ChainRoot)>,
+	joints: Query<&Transform, Without<ChainLinkId>>,
 	mut colliders: Query<(&ChainLinkId, &mut Transform)>,
 ) {
-	for (_root, children) in &chains {
-		// Collect joints (children with Transform but no ChainLinkId)
-		let mut joint_transforms: Vec<(Entity, Transform)> = children
-			.iter()
-			.filter_map(|entity| {
-				joints.get(entity).ok().and_then(|(transform, name)| {
-					// Exclude non-joint children
-					if name.map_or(false, |n| n.as_str().contains("joint")) {
-						Some((entity, *transform))
-					} else {
-						None
-					}
-				})
-			})
-			.collect();
+	for (root_entity, root) in &chains {
+		// Use the ordered joint_entities from ChainRoot
+		for (link_id, &joint_entity) in root.joint_entities.iter().enumerate() {
+			let Ok(joint_transform) = joints.get(joint_entity) else {
+				continue;
+			};
 
-		// Sort by entity bits for deterministic ordering
-		joint_transforms.sort_by_key(|(e, _)| e.index());
-
-		// Update collider positions to match joints
-		for (link_id, (_, joint_transform)) in joint_transforms.iter().enumerate() {
-			// Find the collider for this link
+			// Find the collider for this link on this chain
 			for (collider_id, mut collider_transform) in &mut colliders {
-				if collider_id.link_id == link_id as u8 {
+				if collider_id.link_id == link_id as u8 && collider_id.chain_root == root_entity {
 					collider_transform.translation = joint_transform.translation;
 					collider_transform.rotation = joint_transform.rotation;
+					break;
 				}
 			}
 		}
@@ -125,6 +112,24 @@ pub fn sync_chain_colliders(
 pub fn retire_chain_colliders(commands: &mut Commands, colliders: Vec<Entity>) {
 	for entity in colliders {
 		commands.entity(entity).try_despawn();
+	}
+}
+
+/// Automatically retire colliders when chains are released.
+///
+/// Runs in PostUpdate to despawn colliders for any chain marked with `ReleasedChain`.
+pub fn retire_released_chain_colliders(
+	mut commands: Commands,
+	released_chains: Query<Entity, (With<super::motion::ChainRoot>, With<super::motion::ReleasedChain>)>,
+	colliders: Query<(Entity, &ChainLinkId)>,
+) {
+	for chain_root in &released_chains {
+		// Find and despawn all colliders for this chain
+		for (collider_entity, link_id) in &colliders {
+			if link_id.chain_root == chain_root {
+				commands.entity(collider_entity).try_despawn();
+			}
+		}
 	}
 }
 

@@ -610,6 +610,192 @@ mod tests {
 	}
 
 	#[test]
+	fn penetrating_projectile_applies_damage_only_once_across_frames() -> Result<()> {
+		use avian3d::prelude::*;
+		use bevy::time::TimeUpdateStrategy;
+		use damage::{DamagePlugin, Health, HitPayload};
+		use lod_avian::PhysicsInteractionLayer;
+		use projectiles::{Flight, ProjectileSource, ProjectilesPlugin};
+
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			AssetPlugin::default(),
+			TransformPlugin,
+			bevy::mesh::MeshPlugin,
+			PhysicsPlugins::default(),
+			ProjectilesPlugin,
+			DamagePlugin,
+			BikanwardaChainPhysicsPlugin,
+		))
+		.insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_millis(16)));
+		app.finish();
+
+		let link_count = 12;
+		let length_m = 3.0;
+		let initial_health = 100.0;
+		let damage_per_hit = 10.0;
+
+		// Spawn joints
+		let mut joints = Vec::new();
+		for i in 0..link_count {
+			let joint = app
+				.world_mut()
+				.spawn((
+					Name::new(format!("chain-joint-{i}")),
+					Transform::from_xyz(0.0, 0.0, 0.0),
+					GlobalTransform::default(),
+				))
+				.id();
+			joints.push(joint);
+		}
+
+		// Spawn chain root with health
+		let root = app
+			.world_mut()
+			.spawn((
+				Name::new("test-chain-multiframe"),
+				ChainRoot {
+					link_count,
+					rest_length_m: length_m,
+					joint_entities: joints.clone(),
+				},
+				ChainMotion {
+					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
+					active: true,
+				},
+				Transform::from_xyz(0.0, 0.0, 0.0),
+				GlobalTransform::default(),
+				Health { current: initial_health, max: initial_health },
+			))
+			.id();
+
+		for joint in &joints {
+			app.world_mut().entity_mut(root).add_child(*joint);
+		}
+
+		// Spawn horizontal anchors
+		app.world_mut().spawn((
+			Name::new("left-anchor"),
+			ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
+			Transform::from_xyz(-1.5, 2.5, 0.0),
+			GlobalTransform::default(),
+		));
+
+		app.world_mut().spawn((
+			Name::new("right-anchor"),
+			ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
+			Transform::from_xyz(1.5, 2.5, 0.0),
+			GlobalTransform::default(),
+		));
+
+		// Run updates to position joints
+		for _ in 0..3 {
+			app.update();
+		}
+
+		// Spawn chain colliders
+		let config = ChainColliderConfig::default();
+		app.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				spawn_chain_colliders(&mut commands, root, &joints, config)
+			})
+			.unwrap();
+
+		app.update();
+
+		// Find the lowest y position (sag point) where colliders overlap
+		let collider_positions: Vec<Vec3> = app
+			.world()
+			.iter_entities()
+			.filter_map(|entity| {
+				if entity.contains::<ChainLinkId>() {
+					entity.get::<Transform>().map(|t| t.translation)
+				} else {
+					None
+				}
+			})
+			.collect();
+
+		if collider_positions.len() < 3 {
+			return Err(anyhow!("Expected at least 3 positioned colliders"));
+		}
+
+		let min_y = collider_positions.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
+
+		// Spawn a SLOW-MOVING penetrating projectile that will overlap the chain for multiple frames
+		let projectile_start = Vec3::new(-2.0, min_y, 0.0);
+		let projectile_velocity = Vec3::new(2.0, 0.0, 0.0); // Slow: 2 m/s instead of 15
+		let source = app.world_mut().spawn(Name::new("weapon")).id();
+
+		let projectile = app
+			.world_mut()
+			.spawn((
+				Name::new("penetrating-projectile"),
+				Flight::spawn(projectile_start, 100.0, 100.0, 100.0), // Long penetration depth
+				ProjectileSource(source),
+				HitPayload { amount: damage_per_hit },
+				Transform::from_translation(projectile_start),
+				GlobalTransform::default(),
+				LinearVelocity(projectile_velocity),
+				Collider::sphere(0.05),
+				Sensor,
+				PhysicsInteractionLayer::projectile_layers(),
+				RigidBody::Dynamic,
+				GravityScale(0.0),
+			))
+			.id();
+
+		// Track health changes frame by frame
+		let mut health_history = Vec::new();
+		let mut projectile_alive = true;
+
+		// Run for at least 10 frames to ensure the projectile passes through
+		for frame in 0..15 {
+			app.update();
+
+			let current_health = app.world().entity(root).get::<Health>().map(|h| h.current).unwrap_or(0.0);
+			health_history.push(current_health);
+
+			// Check if projectile still exists
+			if app.world().get_entity(projectile).is_err() {
+				projectile_alive = false;
+			}
+
+			// Exit early if we've seen damage and projectile is gone
+			if !projectile_alive && current_health < initial_health {
+				info!("Projectile despawned at frame {frame}, health: {current_health}");
+				break;
+			}
+		}
+
+		// Check that damage was applied
+		let final_health = health_history.last().copied().unwrap_or(initial_health);
+		if final_health >= initial_health {
+			return Err(anyhow!("No damage was applied after 15 frames"));
+		}
+
+		// Critical check: damage should be applied EXACTLY ONCE
+		let total_damage = initial_health - final_health;
+		if (total_damage - damage_per_hit).abs() > 1.0 {
+			return Err(anyhow!(
+				"Penetrating projectile applied damage multiple times across frames!\n\
+				 Initial health: {initial_health}, Final health: {final_health}\n\
+				 Total damage: {total_damage} (expected {damage_per_hit})\n\
+				 Health history: {:?}",
+				health_history
+			));
+		}
+
+		info!(
+			"✓ Penetrating projectile correctly applied damage only once: {} → {} (lost {total_damage})",
+			initial_health, final_health
+		);
+
+		Ok(())
+	}
+
+	#[test]
 	fn released_chain_deactivates_motion() -> Result<()> {
 		let mut app = test_app();
 
@@ -633,6 +819,161 @@ mod tests {
 		let motion = app.world().get::<ChainMotion>(root).unwrap();
 		if motion.active {
 			return Err(anyhow!("Released chain motion should be deactivated"));
+		}
+
+		Ok(())
+	}
+
+	#[test]
+	fn released_chain_retires_colliders_and_blocks_damage() -> Result<()> {
+		use avian3d::prelude::*;
+		use bevy::time::TimeUpdateStrategy;
+		use damage::{DamagePlugin, Health, HitPayload};
+		use lod_avian::PhysicsInteractionLayer;
+		use projectiles::{Flight, ProjectileSource, ProjectilesPlugin};
+
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			AssetPlugin::default(),
+			TransformPlugin,
+			bevy::mesh::MeshPlugin,
+			PhysicsPlugins::default(),
+			ProjectilesPlugin,
+			DamagePlugin,
+			BikanwardaChainPhysicsPlugin,
+		))
+		.insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_millis(16)));
+		app.finish();
+
+		let link_count = 12;
+		let length_m = 3.0;
+		let initial_health = 100.0;
+		let damage_per_hit = 25.0;
+
+		// Spawn joints
+		let mut joints = Vec::new();
+		for i in 0..link_count {
+			let joint = app
+				.world_mut()
+				.spawn((
+					Name::new(format!("chain-joint-{i}")),
+					Transform::from_xyz(0.0, 0.0, 0.0),
+					GlobalTransform::default(),
+				))
+				.id();
+			joints.push(joint);
+		}
+
+		// Spawn chain root with health
+		let root = app
+			.world_mut()
+			.spawn((
+				Name::new("test-chain-release"),
+				ChainRoot {
+					link_count,
+					rest_length_m: length_m,
+					joint_entities: joints.clone(),
+				},
+				ChainMotion {
+					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
+					active: true,
+				},
+				Transform::from_xyz(0.0, 0.0, 0.0),
+				GlobalTransform::default(),
+				Health { current: initial_health, max: initial_health },
+			))
+			.id();
+
+		for joint in &joints {
+			app.world_mut().entity_mut(root).add_child(*joint);
+		}
+
+		// Spawn anchors
+		app.world_mut().spawn((
+			Name::new("left-anchor"),
+			ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
+			Transform::from_xyz(-1.5, 2.5, 0.0),
+			GlobalTransform::default(),
+		));
+
+		app.world_mut().spawn((
+			Name::new("right-anchor"),
+			ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
+			Transform::from_xyz(1.5, 2.5, 0.0),
+			GlobalTransform::default(),
+		));
+
+		// Run updates to position joints
+		for _ in 0..3 {
+			app.update();
+		}
+
+		// Spawn chain colliders
+		let config = ChainColliderConfig::default();
+		let colliders = app
+			.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				spawn_chain_colliders(&mut commands, root, &joints, config)
+			})
+			.unwrap();
+
+		app.update();
+
+		// Verify colliders exist
+		let collider_count = colliders.iter().filter(|&&e| app.world().get_entity(e).is_ok()).count();
+		if collider_count != link_count as usize {
+			return Err(anyhow!("Expected {} colliders, found {}", link_count, collider_count));
+		}
+
+		// Mark chain as released
+		app.world_mut().entity_mut(root).insert(ReleasedChain);
+
+		// Run update to retire colliders
+		app.update();
+
+		// Verify colliders are despawned
+		let remaining_colliders = colliders.iter().filter(|&&e| app.world().get_entity(e).is_ok()).count();
+		if remaining_colliders > 0 {
+			return Err(anyhow!(
+				"Released chain should retire colliders, but {} remain",
+				remaining_colliders
+			));
+		}
+
+		// Spawn projectile AFTER release
+		let projectile_start = Vec3::new(-2.0, 2.5, 0.0);
+		let projectile_velocity = Vec3::new(15.0, 0.0, 0.0);
+		let source = app.world_mut().spawn(Name::new("weapon")).id();
+
+		app.world_mut().spawn((
+			Name::new("post-release-projectile"),
+			Flight::spawn(projectile_start, 100.0, 100.0, 10.0),
+			ProjectileSource(source),
+			HitPayload { amount: damage_per_hit },
+			Transform::from_translation(projectile_start),
+			GlobalTransform::default(),
+			LinearVelocity(projectile_velocity),
+			Collider::sphere(0.05),
+			Sensor,
+			PhysicsInteractionLayer::projectile_layers(),
+			RigidBody::Dynamic,
+			GravityScale(0.0),
+		));
+
+		// Run for many frames - projectile should pass through without hitting
+		for _ in 0..30 {
+			app.update();
+		}
+
+		// Verify health unchanged
+		let final_health = app.world().entity(root).get::<Health>().unwrap().current;
+		if (final_health - initial_health).abs() > 0.1 {
+			return Err(anyhow!(
+				"Released chain should not take damage, but health changed from {} to {}",
+				initial_health,
+				final_health
+			));
 		}
 
 		Ok(())

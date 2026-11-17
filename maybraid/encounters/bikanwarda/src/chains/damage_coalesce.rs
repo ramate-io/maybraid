@@ -68,6 +68,10 @@ impl ChainContactState {
 /// System that coalesces chain capsule contacts before they become hits.
 ///
 /// Runs in `DamageSystems::Collect`, before `contacts_to_hits`.
+///
+/// Deduplicates in two ways:
+/// 1. Within a frame: multiple capsule hits from the same projectile → one contact
+/// 2. Cross-frame: once a (projectile, chain) pair hits, it never hits again
 pub fn coalesce_chain_contacts(
 	link_ids: Query<&ChainLinkId>,
 	mut messages: ResMut<Messages<ProjectileContact>>,
@@ -92,21 +96,34 @@ pub fn coalesce_chain_contacts(
 		let chain_root = link_id.chain_root;
 		let interaction_id = InteractionId::Projectile(contact.projectile);
 
-		// Check if this (projectile, chain_root) pair has already applied damage
+		// CROSS-FRAME CHECK: Skip if this (projectile, chain_root) pair has already applied damage
 		let key = (contact.projectile, chain_root);
 		if history.applied.contains(&key) {
-			// Skip this contact - already applied damage
+			// This projectile has already hit this chain in a previous frame - skip
+			trace!(
+				"Skipping repeat contact: projectile {:?} already hit chain {:?}",
+				contact.projectile,
+				chain_root
+			);
 			continue;
 		}
 
+		// WITHIN-FRAME CHECK: Note this contact for deduplication
 		chains.entry(chain_root).or_default().note_contact(interaction_id, contact);
 	}
 
 	// Coalesce chain contacts and add to output
 	for (root, mut state) in chains {
 		for contact in state.drain_coalesced() {
-			// Mark this (projectile, chain_root) pair as applied
-			history.applied.insert((contact.projectile, root));
+			// Mark this (projectile, chain_root) pair as applied for all future frames
+			let key = (contact.projectile, root);
+			let was_new = history.applied.insert(key);
+			if was_new {
+				debug!(
+					"Recording first hit: projectile {:?} → chain {:?}",
+					contact.projectile, root
+				);
+			}
 			output_contacts.push(contact);
 		}
 	}

@@ -5,7 +5,7 @@
 use bevy::prelude::*;
 use damage::DamageSystems;
 
-use super::collision::sync_chain_colliders;
+use super::collision::{retire_released_chain_colliders, sync_chain_colliders};
 use super::damage_coalesce::{cleanup_despawned_projectiles, coalesce_chain_contacts, ChainDamageHistory};
 use super::motion::{deactivate_released_chains, update_chain_joints};
 
@@ -31,6 +31,8 @@ impl Plugin for BikanwardaChainPhysicsPlugin {
 					sync_chain_colliders.after(update_chain_joints),
 					// Deactivate motion for released chains
 					deactivate_released_chains,
+					// Retire colliders for released chains
+					retire_released_chain_colliders.after(deactivate_released_chains),
 					// Clean up despawned projectiles from history
 					cleanup_despawned_projectiles,
 				)
