@@ -28,6 +28,7 @@ maybraid-virtual-pad-controller = { workspace = true }
 maybraid-agent = { workspace = true }
 maybraid-menu-controller = { workspace = true }
 maybraid-gameplay = { workspace = true }
+maybraid-skill-map = { workspace = true }
 maybraid-controllers-core = { workspace = true }
 maybraid-session = { workspace = true }
 maybraid-sky = { workspace = true }

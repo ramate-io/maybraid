@@ -89,6 +89,9 @@ impl KeyboardPad {
 		if keyboard.pressed(KeyCode::Tab) {
 			pad.hold_digital(PadButton::TriggerFocus);
 		}
+		if keyboard.pressed(KeyCode::Delete) {
+			pad.hold_digital(PadButton::Select);
+		}
 	}
 	fn hold_arrows(keyboard: &ButtonInput<KeyCode>, pad: &mut VirtualPad) {
 		let mut dpad = Vec2::ZERO;
@@ -195,5 +198,22 @@ mod tests {
 		assert!(
 			sample(&[KeyCode::Tab], PadInputPolicy::menu()).digital_held(PadButton::TriggerFocus)
 		);
+	}
+
+	#[test]
+	fn menu_map_delete_holds_select() {
+		assert!(sample(&[KeyCode::Delete], PadInputPolicy::menu()).digital_held(PadButton::Select));
+		assert!(!sample(&[KeyCode::Tab], PadInputPolicy::menu()).digital_held(PadButton::Select));
+	}
+
+	#[test]
+	fn menu_map_n_is_not_a_face_so_gallery_can_read_it() {
+		let pad = sample(&[KeyCode::KeyN], PadInputPolicy::menu());
+		assert!(!pad.digital_held(PadButton::A));
+		assert!(!pad.digital_held(PadButton::B));
+		assert!(!pad.digital_held(PadButton::Start));
+		assert!(!pad.digital_held(PadButton::Select));
+		assert!(!pad.digital_held(PadButton::X));
+		assert!(!pad.digital_held(PadButton::Y));
 	}
 }

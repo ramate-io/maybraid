@@ -18,6 +18,7 @@ use lubikans::{
 	LubikanChargeReason, LubikanHealingEnabled, LubikanInterfacePlugin, LubikanLedger,
 	LubikanOwner, LubikanSelfHeal,
 };
+use menu_components::{hud_glass_fill, hud_glass_stroke, HUD_GLASS_BORDER, HUD_GLASS_RADIUS};
 use player::Player;
 
 const CAPTURE_WIDTH: u32 = 800;
@@ -205,15 +206,15 @@ fn spawn_standin_plate(
 				width: Val::Px(228.0),
 				height: Val::Px(height),
 				padding: UiRect::axes(Val::Px(8.0), Val::Px(6.0)),
-				border: UiRect::all(Val::Px(1.5)),
-				border_radius: BorderRadius::all(Val::Px(8.0)),
+				border: UiRect::all(Val::Px(HUD_GLASS_BORDER)),
+				border_radius: BorderRadius::all(Val::Px(HUD_GLASS_RADIUS)),
 				justify_content: JustifyContent::Center,
 				align_items: AlignItems::Center,
 				..default()
 			},
-			BackgroundColor(Color::srgba(0.52, 0.52, 0.56, 0.82)),
-			BorderColor::all(Color::srgba(0.78, 0.78, 0.82, 0.9)),
-			Visibility::Visible,
+			hud_glass_fill(),
+			hud_glass_stroke(false),
+			Visibility::Inherited,
 			Pickable::IGNORE,
 			GlobalZIndex(i32::MAX - 7),
 		))
