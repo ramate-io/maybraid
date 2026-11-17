@@ -44,25 +44,51 @@ impl<P> Default for HomeostaticMobsPlugin<P> {
 	}
 }
 
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum HomeostaticMobSystems {
+	Lifecycle,
+	Assign,
+}
+
 impl<P: Component> Plugin for HomeostaticMobsPlugin<P> {
 	fn build(&self, app: &mut App) {
 		use crate::homeostatic::{
-			apply_homeostatic_retreat, despawn_distant_homeostatic_mobs,
-			trigger_homeostatic_retreat, track_player_homeostatic_cell, HomeostaticMobConfig,
+			apply_homeostatic_retreat, despawn_distant_homeostatic_mobs, homeostatic_mobs_enabled,
+			release_homeostatic_retreat, reset_homeostatic_mobs, track_player_homeostatic_cell,
+			trigger_homeostatic_retreat, HomeostaticMobConfig, HomeostaticMobLifecycle,
 			PlayerHomeostaticCell,
 		};
-
 		app.init_resource::<HomeostaticMobConfig>()
+			.init_resource::<HomeostaticMobLifecycle>()
 			.init_resource::<PlayerHomeostaticCell>()
+			.configure_sets(
+				Update,
+				(
+					HomeostaticMobSystems::Lifecycle.after(lod::hcsg::HcsgSessionRestarted),
+					HomeostaticMobSystems::Assign,
+				)
+					.chain(),
+			)
+			.configure_sets(
+				Update,
+				HomeostaticMobSystems::Assign
+					.after(poi_intelligence::PoiSystems::Select)
+					.before(mob_intelligence::MobSystems::Prey)
+					.before(poi_intelligence::PoiSystems::Drive),
+			)
+			.add_systems(Update, reset_homeostatic_mobs.in_set(HomeostaticMobSystems::Lifecycle))
 			.add_systems(
 				Update,
 				(
 					track_player_homeostatic_cell::<P>,
+					release_homeostatic_retreat::<P>,
 					trigger_homeostatic_retreat::<P>,
 					apply_homeostatic_retreat,
 					despawn_distant_homeostatic_mobs::<P>,
 				)
-					.chain(),
+					.chain()
+					.in_set(HomeostaticMobSystems::Assign)
+					.run_if(homeostatic_mobs_enabled),
 			);
 	}
 }

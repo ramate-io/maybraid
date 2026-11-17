@@ -11,8 +11,8 @@
 
 use bevy::prelude::*;
 use poi_intelligence::{
-	begin_poi_goal, mix_seed, KnownPoi, LocalPoi, Poi, PoiGoal, PoiGoalState, PoiId, PoiKind,
-	PoiKnowledge, PoiObservation, PoiSource,
+	begin_poi_goal, mix_seed, KnownPoi, LocalPoi, Poi, PoiGoal, PoiGoalHold, PoiGoalState, PoiId,
+	PoiKind, PoiKnowledge, PoiObservation, PoiSource,
 };
 use threat_intelligence::{ThreatRegistry, ThreatSource};
 
@@ -151,6 +151,7 @@ pub(crate) fn grant_prey_objective(
 			Option<&mut PoiKnowledge>,
 			Option<&mut PoiGoalState>,
 			Option<&PoiGoal>,
+			Option<&PoiGoalHold>,
 			&mut PreyTargetMemory,
 		),
 		With<Mob>,
@@ -161,7 +162,13 @@ pub(crate) fn grant_prey_objective(
 		.iter()
 		.next()
 		.map(|(entity, transform)| (entity, transform.translation()));
-	for (host, host_at, user, board, mut knowledge, mut state, goal, mut memory) in &mut hosts {
+	for (host, host_at, user, board, mut knowledge, mut state, goal, hold, mut memory) in &mut hosts
+	{
+		if goal.is_some_and(|goal| hold.is_some_and(|hold| hold.matches(goal))) {
+			memory.grant_until = 0.0;
+			memory.browse_until = 0.0;
+			continue;
+		}
 		let Some((prey, prey_at)) = prey else {
 			memory.grant_until = 0.0;
 			drop_kind_goal(&mut commands, host, user.kind, goal);
@@ -600,6 +607,76 @@ mod tests {
 			.get::<PoiGoal>(host)
 			.is_some_and(|goal| goal.kind == PoiKind::new("world/player")));
 		assert!(world.get::<PreyTargetMemory>(host).is_some_and(|memory| memory.granted(0.0)));
+		Ok(())
+	}
+
+	#[test]
+	fn held_objective_suspends_pursuit_without_forgetting_threats_and_drives_real_travel(
+	) -> Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		let start = Vec3::X * 60.0;
+		let host = spawn_chaser(
+			&mut world,
+			start,
+			PreyTargetingIntelligence::player(10.0, 250.0),
+			Some(8.0),
+		);
+		let prey = spawn_subject(&mut world, Vec3::X * 100.0);
+		let threat = ThreatId(90);
+		world.resource_mut::<ThreatRegistry>().upsert(
+			prey,
+			ThreatSubject::new(threat),
+			&Affiliations::with_self(threat),
+			Vec3::X * 100.0,
+		)?;
+		let mut board = MobKnowledge::default();
+		board.adopt_finding(threat, ThreatSource::RECEIVED_DAMAGE);
+		world.entity_mut(host).insert((board, RoutingIntelligenceUser::default()));
+		grant(&mut world)?;
+		let known = KnownPoi {
+			id: PoiId(91),
+			entity: None,
+			kind: CAMP,
+			position: Vec3::ZERO,
+			arrival_radius: 4.0,
+			salience: 1.0,
+			confidence: 1.0,
+			sources: PoiSource::EXTERNAL | PoiSource::OBJECTIVE,
+			first_observed_at: 0.0,
+			last_observed_at: 0.0,
+		};
+		let hold =
+			poi_intelligence::begin_held_poi_goal(&mut world.commands(), host, known, 0.0, None);
+		world.flush();
+		grant(&mut world)?;
+		assert!(world.get::<PoiGoal>(host).is_some_and(|goal| hold.matches(goal)));
+		assert!(world
+			.get::<PreyTargetMemory>(host)
+			.is_some_and(|memory| memory.grant_until == 0.0 && memory.browse_until == 0.0));
+		assert!(world.get::<MobKnowledge>(host).is_some_and(|board| board.alerts(
+			world.resource::<ThreatRegistry>(),
+			prey,
+			ThreatSource::RECEIVED_DAMAGE
+		)));
+		world
+			.run_system_once(drive_poi_goals)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		set_time(&mut world, 1.0);
+		world
+			.run_system_once(travel_mobs)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let at = world
+			.get::<Transform>(host)
+			.ok_or_else(|| anyhow::anyhow!("missing traveled host"))?
+			.translation;
+		assert!(at.x < start.x && at.x > 0.0, "host must move toward the held home goal");
+		assert_eq!(
+			world
+				.get::<RoutingIntelligenceUser>(host)
+				.and_then(|routing| routing.destination),
+			Some(Vec3::ZERO)
+		);
 		Ok(())
 	}
 

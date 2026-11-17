@@ -18,6 +18,8 @@ fn test_app() -> App {
 	let mut app = App::new();
 	app.add_plugins(MinimalPlugins)
 		.add_plugins(HomeostaticMobsPlugin::<TestPlayer>::default());
+	// Install the actual shared late-retirement runtime without assembling terrain.
+	lod::hcsg::register_session_seed(&mut app, || {});
 	app
 }
 
@@ -39,10 +41,7 @@ fn deterministic_flagging_hits_target_fraction() {
 	let actual_fraction = flagged_count as f64 / sample_size as f64;
 	let error = (actual_fraction - target_fraction).abs();
 
-	assert!(
-		error < 0.02,
-		"expected ~{target_fraction}, got {actual_fraction} (error {error})"
-	);
+	assert!(error < 0.02, "expected ~{target_fraction}, got {actual_fraction} (error {error})");
 }
 
 #[test]
@@ -56,7 +55,7 @@ fn deterministic_flagging_is_stable() {
 // NOTE: player_cell_resource_tracks_movement removed - needs full mob infrastructure
 
 #[test]
-fn mob_enters_retreat_near_boundary() {
+fn mob_enters_retreat_near_boundary() -> anyhow::Result<()> {
 	let mut app = test_app();
 	let config = app.world().resource::<HomeostaticMobConfig>().clone();
 
@@ -85,7 +84,7 @@ fn mob_enters_retreat_near_boundary() {
 	app.world_mut()
 		.entity_mut(mob)
 		.get_mut::<HomeostaticMob>()
-		.unwrap()
+		.ok_or_else(|| anyhow::anyhow!("missing test component"))?
 		.mob_entity = mob;
 
 	app.update();
@@ -101,7 +100,7 @@ fn mob_enters_retreat_near_boundary() {
 	app.world_mut()
 		.entity_mut(player)
 		.get_mut::<Transform>()
-		.unwrap()
+		.ok_or_else(|| anyhow::anyhow!("missing test component"))?
 		.translation = edge_position;
 
 	app.update();
@@ -110,10 +109,14 @@ fn mob_enters_retreat_near_boundary() {
 	let retreat = app
 		.world()
 		.get::<HomeostaticRetreat>(mob)
-		.expect("mob should be in retreat");
+		.ok_or_else(|| anyhow::anyhow!("mob should be in retreat"))?;
 
 	// Check retreat target is reasonable (toward home, away from player edge)
-	let mob_pos = app.world().get::<Transform>(mob).unwrap().translation;
+	let mob_pos = app
+		.world()
+		.get::<Transform>(mob)
+		.ok_or_else(|| anyhow::anyhow!("missing test component"))?
+		.translation;
 	let to_home = home_center - mob_pos;
 	let to_retreat = retreat.target - mob_pos;
 
@@ -130,14 +133,13 @@ fn mob_enters_retreat_near_boundary() {
 
 	// Check that a POI goal was set for retreat
 	let has_poi_goal = app.world().get::<poi_intelligence::PoiGoal>(mob).is_some();
-	assert!(
-		has_poi_goal,
-		"retreating mob should have POI goal to drive movement"
-	);
+	assert!(has_poi_goal, "retreating mob should have POI goal to drive movement");
+
+	Ok(())
 }
 
 #[test]
-fn mob_despawns_outside_neighborhood() {
+fn mob_despawns_outside_neighborhood() -> anyhow::Result<()> {
 	let mut app = test_app();
 	let config = app.world().resource::<HomeostaticMobConfig>().clone();
 
@@ -164,7 +166,7 @@ fn mob_despawns_outside_neighborhood() {
 	app.world_mut()
 		.entity_mut(mob)
 		.get_mut::<HomeostaticMob>()
-		.unwrap()
+		.ok_or_else(|| anyhow::anyhow!("missing test component"))?
 		.mob_entity = mob;
 
 	app.update();
@@ -177,7 +179,7 @@ fn mob_despawns_outside_neighborhood() {
 	app.world_mut()
 		.entity_mut(player)
 		.get_mut::<Transform>()
-		.unwrap()
+		.ok_or_else(|| anyhow::anyhow!("missing test component"))?
 		.translation = far_away;
 
 	app.update();
@@ -187,10 +189,12 @@ fn mob_despawns_outside_neighborhood() {
 		app.world().get_entity(mob).is_err(),
 		"mob should despawn when player leaves 3×3 neighborhood"
 	);
+
+	Ok(())
 }
 
 #[test]
-fn mob_persists_while_player_in_neighborhood() {
+fn mob_persists_while_player_in_neighborhood() -> anyhow::Result<()> {
 	let mut app = test_app();
 	let config = app.world().resource::<HomeostaticMobConfig>().clone();
 
@@ -217,7 +221,7 @@ fn mob_persists_while_player_in_neighborhood() {
 	app.world_mut()
 		.entity_mut(mob)
 		.get_mut::<HomeostaticMob>()
-		.unwrap()
+		.ok_or_else(|| anyhow::anyhow!("missing test component"))?
 		.mob_entity = mob;
 
 	app.update();
@@ -229,7 +233,7 @@ fn mob_persists_while_player_in_neighborhood() {
 	app.world_mut()
 		.entity_mut(player)
 		.get_mut::<Transform>()
-		.unwrap()
+		.ok_or_else(|| anyhow::anyhow!("missing test component"))?
 		.translation = neighbor_center;
 
 	app.update();
@@ -239,10 +243,12 @@ fn mob_persists_while_player_in_neighborhood() {
 		app.world().get_entity(mob).is_ok(),
 		"mob should persist when player moves within 3×3 neighborhood"
 	);
+
+	Ok(())
 }
 
 #[test]
-fn retreat_moves_toward_home_and_away_from_player() {
+fn retreat_moves_toward_home_and_away_from_player() -> anyhow::Result<()> {
 	let mut app = test_app();
 	let config = app.world().resource::<HomeostaticMobConfig>().clone();
 
@@ -251,8 +257,7 @@ fn retreat_moves_toward_home_and_away_from_player() {
 
 	// Spawn player approaching from the right (positive x)
 	let player_pos = home_center + Vec3::new(config.cell_size * 1.4, 0.0, 0.0);
-	app.world_mut()
-		.spawn((TestPlayer, Transform::from_translation(player_pos)));
+	app.world_mut().spawn((TestPlayer, Transform::from_translation(player_pos)));
 
 	// Spawn mob between home center and player
 	let generation = app.world().resource::<PlayerHomeostaticCell>().generation;
@@ -270,7 +275,7 @@ fn retreat_moves_toward_home_and_away_from_player() {
 	app.world_mut()
 		.entity_mut(mob)
 		.get_mut::<HomeostaticMob>()
-		.unwrap()
+		.ok_or_else(|| anyhow::anyhow!("missing test component"))?
 		.mob_entity = mob;
 
 	// Trigger retreat
@@ -279,7 +284,7 @@ fn retreat_moves_toward_home_and_away_from_player() {
 	let retreat = app
 		.world()
 		.get::<HomeostaticRetreat>(mob)
-		.expect("mob should be in retreat");
+		.ok_or_else(|| anyhow::anyhow!("mob should be in retreat"))?;
 
 	// Retreat target should be left of mob (toward home, away from player)
 	assert!(
@@ -294,10 +299,9 @@ fn retreat_moves_toward_home_and_away_from_player() {
 	let retreat_dir = (retreat.target - mob_start).normalize_or_zero();
 	let dot = home_dir.dot(retreat_dir);
 
-	assert!(
-		dot > 0.5,
-		"retreat should be strongly toward home (dot = {dot})"
-	);
+	assert!(dot > 0.5, "retreat should be strongly toward home (dot = {dot})");
+
+	Ok(())
 }
 
 // NOTE: generation_increments_when_changing_cells and generation_does_not_increment_within_same_cell

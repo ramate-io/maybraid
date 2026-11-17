@@ -21,11 +21,11 @@ pub use hcsg::{
 	PlacedMobCell, MOB_PRESENT_RADIUS,
 };
 pub use homeostatic::{
-	HomeostaticMob, HomeostaticMobConfig, HomeostaticCellIndex, HomeostaticRetreat,
-	PlayerHomeostaticCell,
+	HomeostaticCellIndex, HomeostaticMob, HomeostaticMobConfig, HomeostaticMobLifecycle,
+	HomeostaticRetreat, PlayerHomeostaticCell,
 };
 pub use index::{MobCell, MobCellExtent};
-pub use plugin::{HomeostaticMobsPlugin, MobGroupsPlugin, PendingMobGroups};
+pub use plugin::{HomeostaticMobSystems, HomeostaticMobsPlugin, MobGroupsPlugin, PendingMobGroups};
 pub use present::{MobCellRoot, MobGroupRoot};
 
 #[cfg(test)]

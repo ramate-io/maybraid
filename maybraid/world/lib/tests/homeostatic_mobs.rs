@@ -9,8 +9,6 @@ use world_player::Player as WorldPlayer;
 fn test_app() -> App {
 	let mut app = App::new();
 	app.insert_resource(maybraid_virtual_pad_controller::PadHidPolicy::External);
-	// Mob scenes run with the player stack, which this test does not fully install.
-	app.set_error_handler(bevy::ecs::error::warn);
 	app.add_plugins((
 		MinimalPlugins,
 		AssetPlugin::default(),
@@ -30,7 +28,7 @@ fn test_app() -> App {
 }
 
 #[test]
-fn entering_flagged_cell_activates_one_mob() {
+fn entering_flagged_cell_activates_one_mob() -> anyhow::Result<()> {
 	let mut app = test_app();
 
 	// Find a flagged cell by checking the deterministic flag function
@@ -51,7 +49,8 @@ fn entering_flagged_cell_activates_one_mob() {
 		}
 	}
 
-	let flagged_cell = flagged_cell.expect("should find at least one flagged cell");
+	let flagged_cell =
+		flagged_cell.ok_or_else(|| anyhow::anyhow!("should find at least one flagged cell"))?;
 	let cell_center = flagged_cell.center(cell_size);
 
 	// Move player to the flagged cell
@@ -66,20 +65,15 @@ fn entering_flagged_cell_activates_one_mob() {
 	}
 
 	// Check that exactly one homeostatic mob was activated
-	let active_mobs = app
-		.world_mut()
-		.query::<&barking::HomeostaticMob>()
-		.iter(app.world())
-		.count();
+	let active_mobs = app.world_mut().query::<&barking::HomeostaticMob>().iter(app.world()).count();
 
-	assert_eq!(
-		active_mobs, 1,
-		"entering flagged cell should activate exactly one homeostatic mob"
-	);
+	assert_eq!(active_mobs, 1, "entering flagged cell should activate exactly one homeostatic mob");
+
+	Ok(())
 }
 
 #[test]
-fn standing_in_neighbor_cell_does_not_activate() {
+fn standing_in_neighbor_cell_does_not_activate() -> anyhow::Result<()> {
 	let mut app = test_app();
 
 	let cell_size = 200.0;
@@ -103,8 +97,8 @@ fn standing_in_neighbor_cell_does_not_activate() {
 		}
 	}
 
-	let (_, unflagged_neighbor) =
-		test_cells.expect("should find flagged cell with unflagged neighbor");
+	let (_, unflagged_neighbor) = test_cells
+		.ok_or_else(|| anyhow::anyhow!("should find flagged cell with unflagged neighbor"))?;
 	let neighbor_center = unflagged_neighbor.center(cell_size);
 
 	// Move player to the UNFLAGGED neighbor cell
@@ -119,20 +113,18 @@ fn standing_in_neighbor_cell_does_not_activate() {
 	}
 
 	// Check that no homeostatic mob was activated
-	let active_mobs = app
-		.world_mut()
-		.query::<&barking::HomeostaticMob>()
-		.iter(app.world())
-		.count();
+	let active_mobs = app.world_mut().query::<&barking::HomeostaticMob>().iter(app.world()).count();
 
 	assert_eq!(
 		active_mobs, 0,
 		"standing in unflagged neighbor cell should not activate homeostatic mob"
 	);
+
+	Ok(())
 }
 
 #[test]
-fn reentering_cell_reactivates_mob_without_duplicates() {
+fn reentering_cell_reactivates_mob_without_duplicates() -> anyhow::Result<()> {
 	let mut app = test_app();
 
 	let cell_size = 200.0;
@@ -153,12 +145,14 @@ fn reentering_cell_reactivates_mob_without_duplicates() {
 		}
 	}
 
-	let flagged_cell = flagged_cell.expect("should find at least one flagged cell");
+	let flagged_cell =
+		flagged_cell.ok_or_else(|| anyhow::anyhow!("should find at least one flagged cell"))?;
 	let cell_center = flagged_cell.center(cell_size);
 
 	// First entry: activate mob
 	{
-		let mut player_query = app.world_mut().query_filtered::<&mut Transform, With<WorldPlayer>>();
+		let mut player_query =
+			app.world_mut().query_filtered::<&mut Transform, With<WorldPlayer>>();
 		if let Ok(mut transform) = player_query.single_mut(app.world_mut()) {
 			transform.translation = cell_center;
 		}
@@ -168,16 +162,14 @@ fn reentering_cell_reactivates_mob_without_duplicates() {
 		app.update();
 	}
 
-	let first_activation_count = app
-		.world_mut()
-		.query::<&barking::HomeostaticMob>()
-		.iter(app.world())
-		.count();
+	let first_activation_count =
+		app.world_mut().query::<&barking::HomeostaticMob>().iter(app.world()).count();
 	assert_eq!(first_activation_count, 1, "first entry should activate one mob");
 
 	// Leave the 3×3 neighborhood
 	{
-		let mut player_query = app.world_mut().query_filtered::<&mut Transform, With<WorldPlayer>>();
+		let mut player_query =
+			app.world_mut().query_filtered::<&mut Transform, With<WorldPlayer>>();
 		if let Ok(mut transform) = player_query.single_mut(app.world_mut()) {
 			transform.translation = cell_center + Vec3::new(1000.0, 0.0, 1000.0);
 		}
@@ -187,19 +179,14 @@ fn reentering_cell_reactivates_mob_without_duplicates() {
 		app.update();
 	}
 
-	let after_leaving_count = app
-		.world_mut()
-		.query::<&barking::HomeostaticMob>()
-		.iter(app.world())
-		.count();
-	assert_eq!(
-		after_leaving_count, 0,
-		"mob should despawn when player leaves neighborhood"
-	);
+	let after_leaving_count =
+		app.world_mut().query::<&barking::HomeostaticMob>().iter(app.world()).count();
+	assert_eq!(after_leaving_count, 0, "mob should despawn when player leaves neighborhood");
 
 	// Re-enter the same flagged cell
 	{
-		let mut player_query = app.world_mut().query_filtered::<&mut Transform, With<WorldPlayer>>();
+		let mut player_query =
+			app.world_mut().query_filtered::<&mut Transform, With<WorldPlayer>>();
 		if let Ok(mut transform) = player_query.single_mut(app.world_mut()) {
 			transform.translation = cell_center;
 		}
@@ -209,19 +196,18 @@ fn reentering_cell_reactivates_mob_without_duplicates() {
 		app.update();
 	}
 
-	let reactivation_count = app
-		.world_mut()
-		.query::<&barking::HomeostaticMob>()
-		.iter(app.world())
-		.count();
+	let reactivation_count =
+		app.world_mut().query::<&barking::HomeostaticMob>().iter(app.world()).count();
 	assert_eq!(
 		reactivation_count, 1,
 		"re-entering should reactivate exactly one mob (no duplicates)"
 	);
+
+	Ok(())
 }
 
 #[test]
-fn existing_mob_layers_unaffected() {
+fn world_layers_install_shared_and_homeostatic_owners() {
 	let mut app = test_app();
 
 	// Just verify the homeostatic plugin can coexist with other layers
@@ -230,7 +216,6 @@ fn existing_mob_layers_unaffected() {
 		app.update();
 	}
 
-	// The fact that we got here without panicking means homeostatic mobs
-	// don't interfere with other mob layers (HCSG, etc.)
-	assert!(true, "homeostatic plugin coexists with other mob layers");
+	assert!(app.world().contains_resource::<lod::hcsg::HcsgStorage>());
+	assert!(app.world().contains_resource::<barking::HomeostaticMobLifecycle>());
 }
