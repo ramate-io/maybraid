@@ -15,6 +15,7 @@ chico = { workspace = true }
 layer-stack = { workspace = true }
 lod = { workspace = true }
 lod-gimme = { workspace = true }
+maybraid-session = { workspace = true }
 mob-characters = { workspace = true }
 mob-intelligence = { workspace = true }
 mob-layer-model = { workspace = true }

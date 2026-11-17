@@ -25,6 +25,14 @@ const NEIGHBORHOOD_RADIUS: i32 = 1;
 /// neighborhood boundary.
 pub const DEFAULT_RETREAT_MARGIN: f32 = 40.0;
 
+/// Default arrival radius: consider retreat complete within this distance of home.
+pub const DEFAULT_ARRIVAL_RADIUS: f32 = 10.0;
+
+/// Default hysteresis margin: inner buffer to prevent boundary flips.
+/// Retreat starts at (boundary - retreat_margin), but once started,
+/// it continues until (boundary - retreat_margin - hysteresis_margin).
+pub const DEFAULT_HYSTERESIS_MARGIN: f32 = 20.0;
+
 /// Configuration for homeostatic mob spawning.
 #[derive(Resource, Clone, Debug)]
 pub struct HomeostaticMobConfig {
@@ -34,6 +42,12 @@ pub struct HomeostaticMobConfig {
 	pub cell_fraction: f64,
 	/// Distance from the neighborhood boundary where retreat begins.
 	pub retreat_margin: f32,
+	/// Distance from home center where retreat is considered complete.
+	/// PLACEHOLDER: tune based on routing precision and actor radius.
+	pub arrival_radius: f32,
+	/// Inner margin to prevent boundary flips once retreat starts.
+	/// PLACEHOLDER: tune based on player movement speed and update frequency.
+	pub hysteresis_margin: f32,
 }
 
 impl Default for HomeostaticMobConfig {
@@ -42,6 +56,8 @@ impl Default for HomeostaticMobConfig {
 			cell_size: DEFAULT_CELL_SIZE,
 			cell_fraction: DEFAULT_CELL_FRACTION,
 			retreat_margin: DEFAULT_RETREAT_MARGIN,
+			arrival_radius: DEFAULT_ARRIVAL_RADIUS,
+			hysteresis_margin: DEFAULT_HYSTERESIS_MARGIN,
 		}
 	}
 }
@@ -88,7 +104,9 @@ impl HomeostaticCellIndex {
 
 	/// Distance from position to the edge of the 3×3 neighborhood (negative = inside).
 	pub fn distance_to_neighborhood_edge(self, position: Vec3, cell_size: f32) -> f32 {
-		let neighborhood_half = (NEIGHBORHOOD_RADIUS as f32 + 1.0) * cell_size * 0.5;
+		// A 3×3 neighborhood has (2*radius + 1) cells in each dimension.
+		// For radius=1, that's 3 cells, with half-extent of 3*cell_size/2.
+		let neighborhood_half = (2 * NEIGHBORHOOD_RADIUS + 1) as f32 * cell_size * 0.5;
 		let center = self.center(cell_size);
 		
 		let dx = (position.x - center.x).abs() - neighborhood_half;
@@ -121,6 +139,12 @@ pub struct HomeostaticRetreat {
 pub struct PlayerHomeostaticCell {
 	pub current: Option<HomeostaticCellIndex>,
 	pub generation: u64,
+}
+
+/// Tracks the last known gameplay state for detecting teardown.
+#[derive(Resource, Default, Clone, Copy, Debug)]
+pub struct HomeostaticGameplayState {
+	pub was_enabled: bool,
 }
 
 /// System to track player's current homeostatic cell and activate its mob.
@@ -233,19 +257,58 @@ pub fn despawn_distant_homeostatic_mobs<P: Component>(
 	}
 }
 
+/// System to clean up all homeostatic state when gameplay is disabled or session ends.
+/// This is NOT pause - pause does not tear down gameplay state.
+/// This responds to actual gameplay/session teardown (e.g., returning to Home menu).
+pub fn cleanup_on_gameplay_disable(
+	gameplay_enabled: Option<Res<WorldGameplayEnabled>>,
+	mut gameplay_state: ResMut<HomeostaticGameplayState>,
+	mut player_cell: ResMut<PlayerHomeostaticCell>,
+	active_mobs: Query<Entity, With<HomeostaticMob>>,
+	mut commands: Commands,
+) {
+	let enabled = gameplay_enabled.map(|g| g.0).unwrap_or(true);
+	
+	// Detect transition from enabled to disabled
+	if gameplay_state.was_enabled && !enabled {
+		// Despawn all homeostatic hosts
+		for entity in &active_mobs {
+			commands.entity(entity).try_despawn();
+		}
+		
+		// Reset current cell state
+		player_cell.current = None;
+		
+		if !active_mobs.is_empty() {
+			info!(
+				target: "maybraid.homeostatic",
+				"cleaned up {} homeostatic mobs due to gameplay disable",
+				active_mobs.iter().count()
+			);
+		}
+	}
+	
+	gameplay_state.was_enabled = enabled;
+}
+
+// Re-export for optional use by external systems
+pub use maybraid_session::WorldGameplayEnabled;
+
 /// System to trigger retreat behavior when player nears neighborhood edge.
+/// Uses hysteresis: retreat starts at (boundary - retreat_margin), but once started
+/// it continues until (boundary - retreat_margin - hysteresis_margin).
 /// Generic over any player marker component P.
 pub fn trigger_homeostatic_retreat<P: Component>(
 	config: Res<HomeostaticMobConfig>,
 	players: Query<&Transform, With<P>>,
-	active_mobs: Query<(Entity, &HomeostaticMob, &GlobalTransform), Without<HomeostaticRetreat>>,
+	not_retreating: Query<(Entity, &HomeostaticMob, &GlobalTransform), Without<HomeostaticRetreat>>,
 	mut commands: Commands,
 ) {
 	let Ok(player_transform) = players.single() else {
 		return;
 	};
 
-	for (entity, mob, mob_transform) in &active_mobs {
+	for (entity, mob, mob_transform) in &not_retreating {
 		let distance_to_edge = mob.home_cell.distance_to_neighborhood_edge(
 			player_transform.translation,
 			config.cell_size,
@@ -268,26 +331,78 @@ pub fn trigger_homeostatic_retreat<P: Component>(
 	}
 }
 
+/// System to release retreat when mob arrives at home or player moves back.
+/// Retreat is released (HomeostaticRetreat removed) when:
+/// 1. The mob reaches its home cell center (within arrival_radius), OR
+/// 2. The player moves back inside the hysteresis margin.
+/// Generic over any player marker component P.
+pub fn release_homeostatic_retreat<P: Component>(
+	config: Res<HomeostaticMobConfig>,
+	players: Query<&Transform, With<P>>,
+	retreating: Query<(Entity, &HomeostaticMob, &GlobalTransform), With<HomeostaticRetreat>>,
+	mut commands: Commands,
+) {
+	let Ok(player_transform) = players.single() else {
+		return;
+	};
+
+	for (entity, mob, mob_transform) in &retreating {
+		// Check if mob has arrived at home
+		let home_center = mob.home_cell.center(config.cell_size);
+		let distance_to_home = mob_transform.translation().xz().distance(home_center.xz());
+		
+		if distance_to_home <= config.arrival_radius {
+			commands.entity(entity).remove::<HomeostaticRetreat>();
+			info!(
+				target: "maybraid.homeostatic",
+				"homeostatic mob at cell ({}, {}) completed retreat (arrived at home)",
+				mob.home_cell.0,
+				mob.home_cell.1
+			);
+			continue;
+		}
+
+		// Check if player moved back inside the hysteresis margin
+		let distance_to_edge = mob.home_cell.distance_to_neighborhood_edge(
+			player_transform.translation,
+			config.cell_size,
+		);
+		
+		// Release retreat if player is now well inside (hysteresis)
+		if distance_to_edge < -(config.retreat_margin + config.hysteresis_margin) {
+			commands.entity(entity).remove::<HomeostaticRetreat>();
+			info!(
+				target: "maybraid.homeostatic",
+				"homeostatic mob at cell ({}, {}) released retreat (player returned)",
+				mob.home_cell.0,
+				mob.home_cell.1
+			);
+		}
+	}
+}
+
 /// System to handle retreating mobs by setting POI goals toward their home cell.
 /// Drives the mob through existing movement/AI systems.
+/// Retreat has explicit priority and replaces any existing PoiGoal.
 pub fn apply_homeostatic_retreat(
 	time: Res<Time>,
 	config: Res<HomeostaticMobConfig>,
-	retreating: Query<(Entity, &HomeostaticRetreat, &HomeostaticMob), Without<poi_intelligence::PoiGoal>>,
+	retreating: Query<(Entity, &HomeostaticRetreat, &HomeostaticMob)>,
 	mut commands: Commands,
 ) {
 	use poi_intelligence::{PoiGoal, PoiId};
 	
 	for (entity, retreat, mob) in &retreating {
-		// Create a POI goal to drive the mob back to its home cell
-		// The goal uses a dummy PoiId (0) since this is a transient retreat position
+		// Create a POI goal to drive the mob back to its home cell.
+		// This REPLACES any existing PoiGoal (explicit retreat priority).
+		// The goal uses a dummy PoiId (0) since this is a transient retreat position.
 		let goal = PoiGoal::new(
 			mob.generation, // Use mob generation as goal generation
 			PoiId(0), // Dummy ID for retreat goal
 			None, // No poi entity
 			poi_intelligence::PoiKind::new("homeostatic-retreat"), // Marker for retreat
 			retreat.target,
-			config.retreat_margin.max(5.0), // Arrival radius
+			config.arrival_radius.max(5.0), // Arrival radius
 			time.elapsed_secs(), // selected_at
 			0.0, // No linger - just reach the position
 		);
@@ -402,6 +517,86 @@ mod tests {
 		
 		let distance = cell.distance_to_neighborhood_edge(far_away, 200.0);
 		assert!(distance > 0.0, "far position should be outside: {distance}");
+	}
+
+	#[test]
+	fn distance_at_40m_margin_from_true_boundary() {
+		// A 3x3 neighborhood of 200m cells has half-extent of 300m.
+		// Test that a position at X=259 (41m from true boundary at 300m) is still inside the retreat margin.
+		let cell = HomeostaticCellIndex(0, 0);
+		let pos_259 = Vec3::new(259.0, 0.0, 0.0);
+		let distance_259 = cell.distance_to_neighborhood_edge(pos_259, 200.0);
+		assert!(
+			distance_259 < -40.0,
+			"X=259 should be >40m inside the true 300m boundary (got {}m)",
+			-distance_259
+		);
+
+		// At X=260, should be exactly at the 40m margin
+		let pos_260 = Vec3::new(260.0, 0.0, 0.0);
+		let distance_260 = cell.distance_to_neighborhood_edge(pos_260, 200.0);
+		assert!(
+			(distance_260 + 40.0).abs() < 1.0,
+			"X=260 should be ~40m from the 300m boundary (got {}m)",
+			-distance_260
+		);
+	}
+
+	#[test]
+	fn distance_at_true_neighborhood_exit() {
+		// Exit at X=300 for a centered 3x3 of 200m cells
+		let cell = HomeostaticCellIndex(0, 0);
+		let pos_300 = Vec3::new(300.0, 0.0, 0.0);
+		let distance_300 = cell.distance_to_neighborhood_edge(pos_300, 200.0);
+		assert!(
+			distance_300.abs() < 1.0,
+			"X=300 should be at the neighborhood edge (got {}m)",
+			distance_300
+		);
+	}
+
+	#[test]
+	fn distance_with_negative_coordinates() {
+		let cell = HomeostaticCellIndex(0, 0);
+		// Test negative X at the 40m margin
+		let pos_neg_260 = Vec3::new(-260.0, 0.0, 0.0);
+		let distance = cell.distance_to_neighborhood_edge(pos_neg_260, 200.0);
+		assert!(
+			(distance + 40.0).abs() < 1.0,
+			"X=-260 should be ~40m from boundary (got {}m)",
+			-distance
+		);
+
+		// Test negative exit
+		let pos_neg_300 = Vec3::new(-300.0, 0.0, 0.0);
+		let distance_exit = cell.distance_to_neighborhood_edge(pos_neg_300, 200.0);
+		assert!(
+			distance_exit.abs() < 1.0,
+			"X=-300 should be at edge (got {}m)",
+			distance_exit
+		);
+	}
+
+	#[test]
+	fn distance_at_corner_cases() {
+		let cell = HomeostaticCellIndex(0, 0);
+		// Corner at (300, 300) should be at edge
+		let corner = Vec3::new(300.0, 0.0, 300.0);
+		let distance = cell.distance_to_neighborhood_edge(corner, 200.0);
+		assert!(
+			distance.abs() < 1.0,
+			"corner (300,300) should be at edge (got {}m)",
+			distance
+		);
+
+		// Diagonal just inside at (250, 250)
+		let inside_corner = Vec3::new(250.0, 0.0, 250.0);
+		let distance_inside = cell.distance_to_neighborhood_edge(inside_corner, 200.0);
+		assert!(
+			distance_inside < 0.0,
+			"(250,250) should be inside (got {}m)",
+			distance_inside
+		);
 	}
 }
 

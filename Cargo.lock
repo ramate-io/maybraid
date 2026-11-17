@@ -721,6 +721,7 @@ dependencies = [
  "layer-stack",
  "lod",
  "lod-gimme",
+ "maybraid-session",
  "mob-characters",
  "mob-intelligence",
  "mob-layer-model",

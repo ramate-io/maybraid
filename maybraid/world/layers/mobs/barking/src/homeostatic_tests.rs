@@ -17,6 +17,7 @@ struct TestPlayer;
 fn test_app() -> App {
 	let mut app = App::new();
 	app.add_plugins(MinimalPlugins)
+		.add_plugins(bevy::transform::TransformPlugin)
 		.add_plugins(HomeostaticMobsPlugin::<TestPlayer>::default());
 	app
 }
@@ -302,3 +303,209 @@ fn retreat_moves_toward_home_and_away_from_player() {
 
 // NOTE: generation_increments_when_changing_cells and generation_does_not_increment_within_same_cell
 // removed - need full mob infrastructure for track_player_homeostatic_cell system
+
+#[test]
+fn retreat_replaces_existing_poi_goal() {
+	let mut app = test_app();
+	let config = app.world().resource::<HomeostaticMobConfig>().clone();
+
+	let home_cell = HomeostaticCellIndex(0, 0);
+	let home_center = home_cell.center(config.cell_size);
+
+	// Spawn player near the edge to trigger retreat
+	let edge_position = home_center + Vec3::new(config.cell_size * 1.4, 0.0, 0.0);
+	app.world_mut()
+		.spawn((TestPlayer, Transform::from_translation(edge_position)));
+
+	// Spawn mob with an existing PoiGoal (simulating a journey)
+	let generation = app.world().resource::<PlayerHomeostaticCell>().generation;
+	let mob_start = home_center + Vec3::new(config.cell_size * 0.5, 0.0, 0.0);
+	
+	let original_goal = poi_intelligence::PoiGoal::new(
+		1,
+		poi_intelligence::PoiId(999),
+		None,
+		poi_intelligence::PoiKind::new("test-journey"),
+		Vec3::new(500.0, 0.0, 500.0),
+		10.0,
+		0.0,
+		0.0,
+	);
+	
+	let mob_entity = Entity::PLACEHOLDER;
+	let mob = app
+		.world_mut()
+		.spawn((
+			HomeostaticMob { home_cell, generation, mob_entity },
+			Transform::from_translation(mob_start),
+			GlobalTransform::from_translation(mob_start),
+			original_goal,
+		))
+		.id();
+
+	app.world_mut()
+		.entity_mut(mob)
+		.get_mut::<HomeostaticMob>()
+		.unwrap()
+		.mob_entity = mob;
+
+	app.update();
+
+	// Mob should now have HomeostaticRetreat
+	assert!(
+		app.world().get::<HomeostaticRetreat>(mob).is_some(),
+		"mob should be in retreat"
+	);
+
+	// The PoiGoal should be replaced with a retreat goal
+	let poi_goal = app
+		.world()
+		.get::<poi_intelligence::PoiGoal>(mob)
+		.expect("mob should have a POI goal");
+
+	assert_eq!(
+		poi_goal.kind,
+		poi_intelligence::PoiKind::new("homeostatic-retreat"),
+		"POI goal should be replaced with retreat goal"
+	);
+}
+
+#[test]
+fn retreat_can_be_triggered_and_marked() {
+	// Simplified test: verify retreat can be triggered and the marker added.
+	// Full automatic release is tested in integration tests with real routing.
+	let mut app = test_app();
+	let config = app.world().resource::<HomeostaticMobConfig>().clone();
+
+	let home_cell = HomeostaticCellIndex(0, 0);
+	let home_center = home_cell.center(config.cell_size);
+
+	// Spawn player near edge to trigger retreat
+	let edge_position = home_center + Vec3::new(config.cell_size * 1.4, 0.0, 0.0);
+	let _player = app
+		.world_mut()
+		.spawn((TestPlayer, Transform::from_translation(edge_position)))
+		.id();
+
+	// Spawn mob between player and home
+	let generation = app.world().resource::<PlayerHomeostaticCell>().generation;
+	let mob_start = home_center + Vec3::new(config.cell_size * 0.5, 0.0, 0.0);
+	let mob_entity = Entity::PLACEHOLDER;
+	let mob = app
+		.world_mut()
+		.spawn((
+			HomeostaticMob { home_cell, generation, mob_entity },
+			Transform::from_translation(mob_start),
+			GlobalTransform::from_translation(mob_start),
+		))
+		.id();
+
+	app.world_mut()
+		.entity_mut(mob)
+		.get_mut::<HomeostaticMob>()
+		.unwrap()
+		.mob_entity = mob;
+
+	// Before update, no retreat
+	assert!(
+		app.world().get::<HomeostaticRetreat>(mob).is_none(),
+		"mob should not be in retreat initially"
+	);
+
+	// Trigger retreat
+	app.update();
+	
+	// After update, should be in retreat
+	assert!(
+		app.world().get::<HomeostaticRetreat>(mob).is_some(),
+		"mob should enter retreat when player is near edge"
+	);
+
+	// Verify retreat target is toward home
+	let retreat = app.world().get::<HomeostaticRetreat>(mob).unwrap();
+	assert!(
+		retreat.target.xz().distance(home_center.xz()) < 10.0,
+		"retreat target should be near home center"
+	);
+}
+
+#[test]
+fn hysteresis_prevents_boundary_flips() {
+	let mut app = test_app();
+	let config = app.world().resource::<HomeostaticMobConfig>().clone();
+
+	let home_cell = HomeostaticCellIndex(0, 0);
+	let home_center = home_cell.center(config.cell_size);
+
+	// Spawn player just inside the retreat margin (should trigger retreat)
+	let retreat_boundary =
+		home_center + Vec3::new(config.cell_size * 1.5 - config.retreat_margin + 5.0, 0.0, 0.0);
+	let player = app
+		.world_mut()
+		.spawn((TestPlayer, Transform::from_translation(retreat_boundary)))
+		.id();
+
+	// Spawn mob
+	let generation = app.world().resource::<PlayerHomeostaticCell>().generation;
+	let mob_start = home_center + Vec3::new(config.cell_size * 0.5, 0.0, 0.0);
+	let mob_entity = Entity::PLACEHOLDER;
+	let mob = app
+		.world_mut()
+		.spawn((
+			HomeostaticMob { home_cell, generation, mob_entity },
+			Transform::from_translation(mob_start),
+			GlobalTransform::from_translation(mob_start),
+		))
+		.id();
+
+	app.world_mut()
+		.entity_mut(mob)
+		.get_mut::<HomeostaticMob>()
+		.unwrap()
+		.mob_entity = mob;
+
+	app.update();
+
+	// Should enter retreat
+	assert!(
+		app.world().get::<HomeostaticRetreat>(mob).is_some(),
+		"mob should enter retreat"
+	);
+
+	// Move player slightly back (but not past hysteresis)
+	let slightly_inside = home_center
+		+ Vec3::new(config.cell_size * 1.5 - config.retreat_margin - 5.0, 0.0, 0.0);
+	app.world_mut()
+		.entity_mut(player)
+		.get_mut::<Transform>()
+		.unwrap()
+		.translation = slightly_inside;
+
+	app.update();
+
+	// Should still be in retreat (hysteresis prevents flip)
+	assert!(
+		app.world().get::<HomeostaticRetreat>(mob).is_some(),
+		"mob should stay in retreat due to hysteresis"
+	);
+
+	// Move player well inside (past hysteresis margin)
+	let well_inside = home_center + Vec3::new(
+		config.cell_size * 1.5 - config.retreat_margin - config.hysteresis_margin - 5.0,
+		0.0,
+		0.0,
+	);
+	app.world_mut()
+		.entity_mut(player)
+		.get_mut::<Transform>()
+		.unwrap()
+		.translation = well_inside;
+
+	app.update();
+
+	// Now retreat should be released
+	assert!(
+		app.world().get::<HomeostaticRetreat>(mob).is_none(),
+		"retreat should be released when player moves well inside"
+	);
+}

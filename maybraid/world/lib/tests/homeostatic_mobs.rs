@@ -234,3 +234,93 @@ fn existing_mob_layers_unaffected() {
 	// don't interfere with other mob layers (HCSG, etc.)
 	assert!(true, "homeostatic plugin coexists with other mob layers");
 }
+
+#[test]
+fn gameplay_disable_cleans_up_all_homeostatic_state() {
+	let mut app = test_app();
+
+	let cell_size = 200.0;
+	let cell_fraction = 0.33;
+
+	// Find a flagged cell
+	let mut flagged_cell = None;
+	for ix in 0..20 {
+		for iz in 0..20 {
+			let cell = barking::HomeostaticCellIndex(ix, iz);
+			if cell.should_host_mob(cell_fraction) {
+				flagged_cell = Some(cell);
+				break;
+			}
+		}
+		if flagged_cell.is_some() {
+			break;
+		}
+	}
+
+	let flagged_cell = flagged_cell.expect("should find at least one flagged cell");
+	let cell_center = flagged_cell.center(cell_size);
+
+	// Activate a mob
+	{
+		let mut player_query = app.world_mut().query_filtered::<&mut Transform, With<WorldPlayer>>();
+		if let Ok(mut transform) = player_query.single_mut(app.world_mut()) {
+			transform.translation = cell_center;
+		}
+	}
+
+	for _ in 0..20 {
+		app.update();
+	}
+
+	let initial_mob_count = app
+		.world_mut()
+		.query::<&barking::HomeostaticMob>()
+		.iter(app.world())
+		.count();
+	assert_eq!(initial_mob_count, 1, "should have one active mob");
+
+	// Disable gameplay
+	app.world_mut()
+		.insert_resource(maybraid_session::WorldGameplayEnabled(false));
+
+	for _ in 0..5 {
+		app.update();
+	}
+
+	// All homeostatic mobs should be cleaned up
+	let after_disable_count = app
+		.world_mut()
+		.query::<&barking::HomeostaticMob>()
+		.iter(app.world())
+		.count();
+	assert_eq!(
+		after_disable_count, 0,
+		"all homeostatic mobs should be cleaned up when gameplay is disabled"
+	);
+
+	// Re-enable gameplay and re-enter the same cell
+	app.world_mut()
+		.insert_resource(maybraid_session::WorldGameplayEnabled(true));
+
+	{
+		let mut player_query = app.world_mut().query_filtered::<&mut Transform, With<WorldPlayer>>();
+		if let Ok(mut transform) = player_query.single_mut(app.world_mut()) {
+			transform.translation = cell_center;
+		}
+	}
+
+	for _ in 0..20 {
+		app.update();
+	}
+
+	// Should reactivate exactly once (no duplicates from the cleanup)
+	let reactivation_count = app
+		.world_mut()
+		.query::<&barking::HomeostaticMob>()
+		.iter(app.world())
+		.count();
+	assert_eq!(
+		reactivation_count, 1,
+		"should reactivate exactly one mob after re-enabling gameplay"
+	);
+}
