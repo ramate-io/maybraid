@@ -503,4 +503,82 @@ mod tests {
 		// systems to run multiple update cycles with proper viewer bounds and terrain data.
 		// Full boss actor spawning is tested in integration tests with complete world setup.
 	}
+
+	#[test]
+	#[cfg(feature = "debug-commands")]
+	fn player_maintains_support_through_boss_spawn() {
+		use crate::boss_spawn::RequestSpawnBoss;
+		use lod::hcsg::{HcsgStorage, HcsgRestartRequest};
+		use maybraid_spawns_support::PendingActorSupport;
+		use maybraid_session::WorldGameplayEnabled;
+		use player::{Grounded, Player as MaybraidPlayer};
+		use world_player::Player as WorldPlayer;
+		
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.init_resource::<HcsgStorage>();
+		app.init_resource::<HcsgRestartRequest>();
+		app.init_resource::<WorldGameplayEnabled>();
+		app.init_resource::<Messages<maybraid_session::WorldPlaySessionEnded>>();
+		app.init_resource::<Messages<lubikans::LubikanOwnerLifetime>>();
+		app.init_resource::<Messages<encounters::EncounterSignal>>();
+		app.add_plugins(crate::world_encounter::WorldEncounterPlugin);
+		
+		// Spawn a grounded player
+		let player = app.world_mut().spawn((
+			MaybraidPlayer,
+			WorldPlayer,
+			Transform::from_translation(Vec3::new(1746.8, 0.0, 1025.9)),
+			Grounded,
+		)).id();
+		
+		app.update();
+		
+		// Verify player is grounded
+		assert!(app.world().get::<Grounded>(player).is_some(), "Player should be grounded initially");
+		assert!(app.world().get::<PendingActorSupport>(player).is_none(), "Player should not have pending support");
+		
+		// Spawn boss which triggers HCSG restart
+		app.world_mut().spawn(RequestSpawnBoss { at: Some(Vec2::new(1760.0, 1025.9)) });
+		app.update();
+		
+		// Verify player maintains grounded state through HCSG restart
+		assert!(
+			app.world().get::<Grounded>(player).is_some(),
+			"Player should remain grounded through boss spawn HCSG restart"
+		);
+		
+		// Player should not suddenly have pending support (which would indicate falling)
+		let has_pending = app.world().get::<PendingActorSupport>(player).is_some();
+		assert!(
+			!has_pending,
+			"Player should not have pending support after boss spawn (would indicate loss of ground)"
+		);
+	}
+
+	#[test]
+	#[cfg(feature = "debug-commands")]
+	fn boss_spawn_requests_are_processed() {
+		use crate::boss_spawn::{BossSpawnPlugin, RequestSpawnBoss};
+		use lod::hcsg::{HcsgStorage, HcsgRestartRequest};
+		
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.init_resource::<HcsgStorage>();
+		app.init_resource::<HcsgRestartRequest>();
+		app.add_plugins(BossSpawnPlugin);
+		
+		let spawn_pos = Vec2::new(1746.8, 1025.9);
+		app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_pos) });
+		
+		// Count RequestSpawnBoss entities before processing
+		let request_count_before = app.world_mut().query::<&RequestSpawnBoss>().iter(app.world_mut()).count();
+		assert_eq!(request_count_before, 1, "Should have exactly one spawn request");
+		
+		app.update();
+		
+		// After processing, the request should be consumed (despawned by the system)
+		let request_count_after = app.world_mut().query::<&RequestSpawnBoss>().iter(app.world_mut()).count();
+		assert_eq!(request_count_after, 0, "Spawn request should be processed and removed");
+	}
 }
