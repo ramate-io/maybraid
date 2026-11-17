@@ -1239,29 +1239,14 @@ mod integration_regressions {
 			affiliations
 		},
 	)).id();
-	
-	// TEMPORARY: Manual ENEMYSHIP + enabled until threat intelligence discovery works
-	// The threat intelligence system is wired (boss antagonizes PLAYER_GROUP, player is member)
-	// but threat discovery isn't populating ThreatKnowledge, which causes threat management to
-	// select Ignore tactic, which sets targeting.enabled=false, preventing admission.
-	// Root cause needs investigation: player is in ThreatRegistry, within range, with correct affiliations.
 		
-		// Run updates to allow spotting discovery and attack triggering
+		// Run updates to allow threat intelligence discovery, spotting, and attack triggering
+		// Threat intelligence scan interval: 0.5s = 30 frames at DT=1/60s (with jitter: 24-36)
 		// Spotting discovery interval: 0.2s = 12 frames at DT=1/60s
-		// Run 20 frames: 5 for assembly + 12 for spotting + 3 for attack
+		// Run 60 frames to allow discovery cycles: 5 assembly + 36 threat scan + 19 buffer
 		let mut attacks_seen = Vec::new();
-		for _ in 0..20 {
+		for _ in 0..60 {
 			app.update();
-			
-			// Manual ENEMYSHIP + enabled after spotting discovers player
-			if let Some(mut targeting) = app.world_mut().get_mut::<combat_targeting::CombatTargeting>(actor_entity) {
-				if !targeting.active.is_empty() || targeting.enabled {
-					// Already set up
-				} else {
-					targeting.enabled = true;
-					targeting.include(player, combat_targeting::TargetSource::ENEMYSHIP);
-				}
-			}
 			
 			// Check for attack messages after each update
 			let frame_attacks: Vec<BeginAttack> = app.world_mut()
