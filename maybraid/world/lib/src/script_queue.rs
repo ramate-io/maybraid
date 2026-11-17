@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 use game_commands::command::CommandConsoleOutput;
-use player::Player as MaybraidPlayer;
+use maybraid_spawns_support::PendingActorSupport;
+use player::{Grounded, Player as MaybraidPlayer};
 use world_player::Player as WorldPlayer;
 
 use crate::commands::PlaygroundCommand;
@@ -56,15 +57,22 @@ pub fn load_startup_script(
 pub fn process_script_queue(
 	time: Res<Time>,
 	mut queue: ResMut<ScriptQueue>,
-	player: Query<Entity, (With<MaybraidPlayer>, With<WorldPlayer>)>,
+	player: Query<
+		(Has<Grounded>, Has<PendingActorSupport>),
+		(With<MaybraidPlayer>, With<WorldPlayer>),
+	>,
 	mut commands: Commands,
 	mut console: ResMut<CommandConsoleOutput>,
 ) {
-	// Check if we're waiting for world ready
+	// Check if we're waiting for world ready: player exists, is grounded, and not pending support
 	if queue.wait_for_world_ready {
-		if player.single().is_ok() {
-			info!("World ready: player spawned");
-			queue.wait_for_world_ready = false;
+		if let Ok((grounded, pending_support)) = player.single() {
+			if grounded && !pending_support {
+				info!("World ready: player spawned and grounded with settled support");
+				queue.wait_for_world_ready = false;
+			} else {
+				return;
+			}
 		} else {
 			return;
 		}

@@ -28,6 +28,10 @@ impl Plugin for WorldDebugPlugin {
 		app.init_resource::<DebugPeacefulMode>();
 		app.init_resource::<crate::capture::CaptureSession>();
 		app.init_resource::<crate::script_queue::ScriptQueue>();
+		
+		// Initialize resources needed by load_startup_script, even when GameCommandPlugin is not added
+		app.init_resource::<crate::PendingStartupCommand<crate::commands::PlaygroundCommand>>();
+		app.init_resource::<game_commands::command::CommandConsoleOutput>();
 
 		app.add_systems(
 			Startup,

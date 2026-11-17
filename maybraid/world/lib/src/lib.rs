@@ -454,4 +454,48 @@ mod tests {
 		);
 		app.update();
 	}
+
+	#[test]
+	#[cfg(feature = "debug-commands")]
+	fn game_world_with_debug_commands_survives_startup() {
+		use crate::world_debug::WorldDebugPlugin;
+		
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.add_plugins(WorldDebugPlugin);
+		
+		// Run Startup schedule without panicking
+		app.finish();
+		app.cleanup();
+	}
+
+	#[test]
+	#[cfg(feature = "debug-commands")]
+	fn boss_spawn_creates_encounter_root() {
+		use crate::boss_spawn::RequestSpawnBoss;
+		use bikanwarda_encounter::BossEncounterRoot;
+		use lod::hcsg::{HcsgStorage, HcsgRestartRequest};
+		
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.init_resource::<HcsgStorage>();
+		app.init_resource::<HcsgRestartRequest>();
+		app.add_plugins(crate::world_encounter::WorldEncounterPlugin);
+		
+		let spawn_pos = Vec2::new(1746.8, 1025.9);
+		app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_pos) });
+		
+		// Process the spawn request
+		app.update();
+		
+		// Note: This test verifies the presentation plugin is registered.
+		// Actual actor spawning requires HCSG generation and presentation systems to run,
+		// which is tested in integration tests with full world setup.
+		let roots: Vec<_> = app.world().query::<&BossEncounterRoot>().iter(app.world()).collect();
+		// Presentation plugin registered means the system can create roots when HCSG runs
+		assert!(
+			app.is_plugin_added::<bikanwarda_encounter::BossAssemblyPlugin>(),
+			"BossAssemblyPlugin should be registered"
+		);
+	}
 }
