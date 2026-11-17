@@ -793,37 +793,31 @@ mod integration_regressions {
 			TransformPlugin,
 			bevy::asset::AssetPlugin::default(),
 			bevy::scene::ScenePlugin,
-			avian3d::prelude::PhysicsPlugins::default(),
 		))
-		.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(DT)))
-		.add_message::<BeginAttack>();
+		.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(DT)));
+		
+		// Install physics before anything that needs it
+		// PhysicsPlugins is a PluginGroup, not a Plugin, so we can't check is_plugin_added
+		app.add_plugins(avian3d::prelude::PhysicsPlugins::default());
 		
 		// Install spotting with physics (required for real occlusion tests)
+		// Must come before BikanwardaEncounterPlugin which uses it
 		if !app.is_plugin_added::<spotting_intelligence_avian::SpottingAvianPlugin>() {
 			app.add_plugins(spotting_intelligence_avian::SpottingAvianPlugin);
 		}
 		
-		// Install core systems
-		install_encounters(&mut app);
-		
-		// Install attack systems
+		// Install attack systems (BikanwardaEncounterPlugin needs this)
 		if !app.is_plugin_added::<attacks::AttacksPlugin>() {
 			app.add_plugins(attacks::AttacksPlugin);
 		}
 		
-		// Install damage systems
-		if !app.is_plugin_added::<damage::DamagePlugin>() {
-			app.add_plugins(damage::DamagePlugin);
-		}
-		
-		// Install bikanwarda encounter plugin (includes combat, chains, tether)
+		// Install bikanwarda encounter plugin
+		// This includes: EncountersPlugin, LubikansPlugin, BossEncounterCombatPlugin,
+		// BikanwardaChainPhysicsPlugin (which includes DamagePlugin), BossTetherPlugin
 		app.add_plugins(crate::BikanwardaEncounterPlugin);
 		
 		// Install assembly plugin to spawn actors
 		app.add_plugins(BossAssemblyPlugin);
-		
-		// Add damage application systems
-		app.add_systems(Update, (damage::apply_hits, damage::mark_downed, damage::down_zero_health));
 		
 		app.update();
 		app
