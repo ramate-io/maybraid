@@ -28,6 +28,7 @@
 
 use attacks::{AttackCatalog, BeginAttack};
 use bevy::prelude::*;
+use bevy::transform::TransformSystems;
 use bikanwarda_attacks::{BikanwardaMouthSocket, BRAY};
 use bikanwarda_character::BikanwardaRoot;
 use combat_targeting::{CombatContact, CombatTargeting, TargetSource};
@@ -65,8 +66,8 @@ impl Default for BossAttackCooldown {
 pub fn update_boss_targeting(
 	time: Res<Time>,
 	hosts: Query<&BossActor, With<BossEncounterRoot>>,
-	mut actors: Query<(&Transform, &mut CombatTargeting), With<BikanwardaRoot>>,
-	players: Query<(Entity, &Transform), With<WorldPlayer>>,
+	mut actors: Query<(&GlobalTransform, &mut CombatTargeting), With<BikanwardaRoot>>,
+	players: Query<(Entity, &GlobalTransform), With<WorldPlayer>>,
 ) {
 	let now = time.elapsed_secs();
 	const DETECTION_RANGE: f32 = 50.0; // Match typical encounter arena size
@@ -76,14 +77,17 @@ pub fn update_boss_targeting(
 			continue;
 		};
 		
-		let boss_pos = actor_transform.translation;
+		let boss_pos = actor_transform.translation();
 		
 		// Find nearby players and add them to targeting memory
 		for (player_entity, player_transform) in &players {
-			let player_pos = player_transform.translation;
+			let player_pos = player_transform.translation();
 			let distance = boss_pos.distance(player_pos);
 			
 			if distance <= DETECTION_RANGE {
+				// TODO(visibility): This assumes all nearby players are visible without
+				// occlusion checks. A production implementation should query actual
+				// perception/visibility results from a spotting system.
 				// Create contact entry (reuses existing contact memory)
 				let contact = CombatContact {
 					subject: player_entity,
@@ -113,9 +117,9 @@ pub fn boss_combat_driver(
 	time: Res<Time>,
 	catalog: Res<AttackCatalog>,
 	mut hosts: Query<(&BossActor, &Health, &mut BossAttackCooldown), With<BossEncounterRoot>>,
-	actors: Query<(&Transform, &CombatTargeting, &Children), With<BikanwardaRoot>>,
+	actors: Query<(&GlobalTransform, &CombatTargeting, &Children), With<BikanwardaRoot>>,
 	mouth_sockets: Query<Entity, With<BikanwardaMouthSocket>>,
-	targets: Query<&Transform>,
+	targets: Query<&GlobalTransform>,
 	mut attacks: MessageWriter<BeginAttack>,
 ) {
 	const ATTACK_RANGE: f32 = 40.0; // Bray range from attack definition
@@ -152,7 +156,7 @@ pub fn boss_combat_driver(
 			continue;
 		};
 		
-		let distance = actor_transform.translation.distance(target_transform.translation);
+		let distance = actor_transform.translation().distance(target_transform.translation());
 		if distance > ATTACK_RANGE {
 			// Out of range - stay idle
 			continue;
@@ -223,10 +227,14 @@ impl Plugin for BossEncounterCombatPlugin {
 			Update,
 			(
 				initialize_boss_combat,
-				// Update targeting before ranking
-				update_boss_targeting.before(combat_targeting::CombatTargetingSystems::Rank),
-				// Combat driver runs after targeting is ranked
-				boss_combat_driver.after(combat_targeting::CombatTargetingSystems::Rank),
+				// Update targeting before ranking, after transform propagation
+				update_boss_targeting
+					.after(TransformSystems::Propagate)
+					.before(combat_targeting::CombatTargetingSystems::Rank),
+				// Combat driver runs after targeting is ranked and transforms are propagated
+				boss_combat_driver
+					.after(TransformSystems::Propagate)
+					.after(combat_targeting::CombatTargetingSystems::Rank),
 			),
 		);
 	}
