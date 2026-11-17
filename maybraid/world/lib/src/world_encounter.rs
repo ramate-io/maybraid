@@ -32,6 +32,13 @@ impl Plugin for WorldEncounterPlugin {
 		// Register boss assembly (gameplay logic)
 		// Boss presentation (HCSG generation) is in WorldLayersPlugin
 		app.add_plugins(BossAssemblyPlugin);
+		
+		// Register boss spawn debug command system (debug-commands feature only)
+		#[cfg(feature = "debug-commands")]
+		{
+			app.add_plugins(crate::boss_spawn::BossSpawnPlugin);
+		}
+		
 		configure(app);
 	}
 }

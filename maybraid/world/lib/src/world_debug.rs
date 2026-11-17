@@ -42,7 +42,6 @@ impl Plugin for WorldDebugPlugin {
 			Update,
 			(
 				crate::script_queue::process_script_queue,
-				crate::boss_spawn::process_boss_spawn_requests,
 				log_player_lifecycle.before(apply_debug_take_damage),
 				apply_debug_grant_points,
 				apply_debug_take_damage,

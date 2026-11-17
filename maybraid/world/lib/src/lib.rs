@@ -581,4 +581,74 @@ mod tests {
 		let request_count_after = app.world_mut().query::<&RequestSpawnBoss>().iter(app.world_mut()).count();
 		assert_eq!(request_count_after, 0, "Spawn request should be processed and removed");
 	}
+
+	/// Regression test for production boss spawn system registration ([#1116](https://github.com/ramate-io/maybraid/issues/1116)).
+	///
+	/// This test validates that the production plugin graph (WorldEncounterPlugin + WorldDebugPlugin,
+	/// without manually adding BossSpawnPlugin) correctly registers boss spawn lifecycle:
+	/// - BossSpawnConfig resource is initialized
+	/// - process_boss_spawn_requests system is registered
+	/// - No panic during startup or idle updates
+	/// - Boss spawn requests are processed and publish to HCSG storage
+	///
+	/// The original bug (PR #1601, head 15adc84e) had WorldDebugPlugin register process_boss_spawn_requests
+	/// directly without initializing BossSpawnConfig, causing exit 101 on game startup.
+	#[test]
+	#[cfg(feature = "debug-commands")]
+	fn production_boss_spawn_plugin_wiring_survives_startup() -> anyhow::Result<()> {
+		use crate::boss_spawn::RequestSpawnBoss;
+		use bikanwarda_encounter::{BikanwardaBossEncounter, chained_encounter_id};
+		use lod::gen::Bytes;
+		use lod::hcsg::{HcsgStorage, HcsgRestartRequest};
+		use maybraid_session::WorldGameplayEnabled;
+
+		// Set up production-like plugin composition:
+		// WorldEncounterPlugin (includes BossSpawnPlugin with debug-commands feature)
+		// WorldDebugPlugin (no longer registers process_boss_spawn_requests directly)
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.init_resource::<HcsgStorage>();
+		app.init_resource::<HcsgRestartRequest>();
+		app.init_resource::<WorldGameplayEnabled>();
+		app.init_resource::<Messages<maybraid_session::WorldPlaySessionEnded>>();
+		app.init_resource::<Messages<lubikans::LubikanOwnerLifetime>>();
+		app.init_resource::<Messages<encounters::EncounterSignal>>();
+		
+		// Production plugins (WorldEncounterPlugin owns boss spawn lifecycle)
+		app.add_plugins(crate::world_encounter::WorldEncounterPlugin);
+		app.add_plugins(crate::world_debug::WorldDebugPlugin);
+		
+		// Verify BossSpawnConfig is initialized (this resource was missing in the bug)
+		app.finish();
+		app.cleanup();
+		
+		let config = app.world().get_resource::<crate::boss_spawn::BossSpawnConfig>();
+		anyhow::ensure!(
+			config.is_some(),
+			"BossSpawnConfig should be initialized by production plugin graph"
+		);
+		
+		// Run several idle updates (no spawn request) without panicking
+		for _ in 0..10 {
+			app.update();
+		}
+		
+		// Issue boss spawn request
+		let spawn_pos = Vec2::new(1746.8, 1025.9);
+		app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_pos) });
+		
+		app.update();
+		
+		// Verify boss is published to HCSG storage
+		let storage = app.world().resource::<HcsgStorage>();
+		let boss_id = lod::gen::Id::Bytes(Bytes(chained_encounter_id().as_bytes()));
+		let entry = storage.try_entry::<BikanwardaBossEncounter>(boss_id)
+			.map_err(|_| anyhow::anyhow!("storage busy"))?;
+		anyhow::ensure!(
+			entry.is_some(),
+			"Boss should be published to storage after spawn request (production plugin wiring test)"
+		);
+		
+		Ok(())
+	}
 }
