@@ -21,6 +21,7 @@ use lod::gen::{Bytes, Id};
 use lod::hcsg::{GenerationPlugin, HcsgBoundsPlugin, HcsgClass, HcsgDemand, HcsgSessionPlugin, HcsgStorage, ViewerHcsgBounds};
 use lod::scene::LodViewer;
 use maybraid_world::boss_spawn::{BossSpawnPlugin, RequestSpawnBoss};
+use maybraid_world::terrain_query::PublishedTerrainHeight;
 use std::time::Duration;
 
 const DT: f32 = 1.0 / 60.0;
@@ -62,6 +63,9 @@ fn boss_spawn_after_region_fulfilled_creates_host() -> anyhow::Result<()> {
 	
 	// Add boss spawn plugin
 	app.add_plugins(BossSpawnPlugin);
+	
+	// Install test terrain provider (simulates published terrain)
+	app.insert_resource(PublishedTerrainHeight::test_fixed(0.0));
 	
 	// Add HCSG bounds plugin for test channel
 	app.add_plugins(HcsgBoundsPlugin::<TestChannel>::default());
