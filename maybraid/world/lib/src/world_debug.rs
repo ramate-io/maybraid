@@ -11,8 +11,8 @@ use player::Npc;
 use world_player::Player as WorldPlayer;
 
 use crate::commands::{
-	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestPeaceful,
-	RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
+	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestHomeostaticStatus,
+	RequestPeaceful, RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
 };
 use crate::map_view::WorldMapView;
 
@@ -38,6 +38,7 @@ impl Plugin for WorldDebugPlugin {
 				apply_debug_peaceful,
 				apply_debug_camera,
 				apply_debug_teleport,
+				apply_homeostatic_status,
 			),
 		);
 
@@ -196,6 +197,79 @@ fn apply_debug_teleport(
 			transform.translation = request.position;
 			**velocity = Vec3::ZERO;
 		}
+		commands.entity(entity).despawn();
+	}
+}
+
+fn apply_homeostatic_status(
+	requests: Query<(Entity, &RequestHomeostaticStatus)>,
+	players: Query<&Transform, With<WorldPlayer>>,
+	player_cell: Option<Res<barking::PlayerHomeostaticCell>>,
+	config: Option<Res<barking::HomeostaticMobConfig>>,
+	active_mobs: Query<(&barking::HomeostaticMob, &GlobalTransform)>,
+	mut commands: Commands,
+) {
+	use barking::HomeostaticCellIndex;
+	use game_commands::command::CommandConsoleOutput;
+
+	for (entity, _) in &requests {
+		let mut output = String::new();
+
+		if let (Some(config), Some(player_cell)) = (config.as_ref(), player_cell.as_ref()) {
+			if let Ok(player_transform) = players.get_single() {
+				let current_cell = HomeostaticCellIndex::containing(
+					player_transform.translation,
+					config.cell_size,
+				);
+				
+				output.push_str(&format!(
+					"Current cell: ({}, {})\n",
+					current_cell.0,
+					current_cell.1
+				));
+				output.push_str(&format!("Generation: {}\n", player_cell.generation));
+				
+				let neighborhood = current_cell.neighborhood_3x3();
+				let flagged: Vec<_> = neighborhood
+					.iter()
+					.filter(|cell| cell.should_host_mob(config.cell_fraction))
+					.collect();
+				
+				output.push_str(&format!(
+					"Flagged neighbors: {} of 9\n",
+					flagged.len()
+				));
+				
+				for cell in &flagged {
+					output.push_str(&format!("  ({}, {})\n", cell.0, cell.1));
+				}
+				
+				output.push_str(&format!("\nActive homeostatic mobs: {}\n", active_mobs.iter().count()));
+				
+				for (mob, mob_transform) in &active_mobs {
+					let pos = mob_transform.translation();
+					output.push_str(&format!(
+						"  Cell ({}, {}) at ({:.1}, {:.1}, {:.1})\n",
+						mob.home_cell.0,
+						mob.home_cell.1,
+						pos.x,
+						pos.y,
+						pos.z
+					));
+				}
+			} else {
+				output.push_str("No player found");
+			}
+		} else {
+			output.push_str("Homeostatic mobs not enabled");
+		}
+
+		log::info!("Homeostatic status:\n{}", output);
+		
+		if let Some(mut console) = commands.get_resource_mut::<CommandConsoleOutput>() {
+			console.0 = output;
+		}
+		
 		commands.entity(entity).despawn();
 	}
 }
