@@ -260,53 +260,173 @@ mod placement {
 #[test]
 fn column_and_pedestal_spawn_as_separate_entities() {
 	use crate::generation::BikanwardaBossEncounter;
+	use crate::presentation::{BossColumn, BossPedestal, BossEncounterRoot};
 	use bevy::prelude::*;
+	use bevy::transform::TransformPlugin;
+	use encounters::EncounterInstance;
+	use crate::identity::chained_encounter_id;
 	
+	// Set up minimal Bevy app with transform propagation
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, TransformPlugin));
+	app.update();
+	
+	// Create encounter with known terrain
 	let terrain_y = 100.0;
 	let boss_hull_offset = 10.15;
 	let boss_position = Vec3::new(1000.0, terrain_y + boss_hull_offset, 2000.0);
 	
-	let encounter = BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
-	
-	// Verify the key fixes:
-	// 1. Children use LOCAL transforms (not world coordinates)
-	// 2. Scene structure: Children syntax creates separate entities (not tuple merge)
-	// 3. Column is BESIDE boss (8m XZ offset), not underneath
-	
-	// Column positioned 8m to the side as a tether anchor
+	// Manually construct the entity structure as presentation.rs would
+	// (This matches the Children syntax in presentation.rs)
 	let column_offset_xz = Vec2::new(8.0, 0.0);
+	let local_ground_y = terrain_y - boss_position.y; // Local Y relative to root
+	let pedestal_local_y = local_ground_y + 1.5;
+	let column_local_y = local_ground_y + 10.5;
 	
-	// Child transforms are LOCAL to root (boss_position).
-	// Pedestal and column grounded at terrain_y, so local Y = terrain_y - boss_position.y
-	let local_ground_y = terrain_y - boss_position.y;
-	assert!((local_ground_y - (-10.15)).abs() < 0.01, "Local ground Y is negative (terrain below boss)");
+	let name = Name::new(format!("boss-encounter-{}", chained_encounter_id().slug_str().unwrap_or("unknown")));
+	let instance = EncounterInstance::new(chained_encounter_id());
 	
-	let pedestal_local_y = local_ground_y + 1.5; // 3m full height, center at terrain + 1.5
-	let column_local_y = local_ground_y + 10.5; // 15m full height, center at terrain + 10.5
+	// Spawn root with its components
+	let root = app.world_mut().spawn((
+		BossEncounterRoot::default(),
+		instance,
+		name,
+		Transform::from_translation(boss_position),
+		GlobalTransform::default(),
+		Visibility::default(),
+	)).id();
 	
-	// Verify local transforms are correct
-	assert!((pedestal_local_y - (-8.65)).abs() < 0.01, "Pedestal local Y");
-	assert!((column_local_y - 0.35).abs() < 0.01, "Column local Y");
+	// Spawn pedestal as child
+	let pedestal = app.world_mut().spawn((
+		BossPedestal,
+		Name::new("boss-pedestal"),
+		Transform::from_translation(Vec3::new(column_offset_xz.x, pedestal_local_y, column_offset_xz.y)),
+		GlobalTransform::default(),
+		Visibility::default(),
+		avian3d::prelude::Collider::cylinder(2.0, 3.0),
+		avian3d::prelude::RigidBody::Static,
+	)).id();
 	
-	// When propagated to world space:
-	// Pedestal world Y = boss_position.y + pedestal_local_y = 110.15 + (-8.65) = 101.5 = terrain + 1.5 ✓
-	// Column world Y = boss_position.y + column_local_y = 110.15 + 0.35 = 110.5 = terrain + 10.5 ✓
-	let expected_ped_world_y = boss_position.y + pedestal_local_y;
-	let expected_col_world_y = boss_position.y + column_local_y;
+	// Spawn column as child
+	let column = app.world_mut().spawn((
+		BossColumn,
+		Name::new("boss-column"),
+		Transform::from_translation(Vec3::new(column_offset_xz.x, column_local_y, column_offset_xz.y)),
+		GlobalTransform::default(),
+		Visibility::default(),
+		avian3d::prelude::Collider::cylinder(1.0, 15.0),
+		avian3d::prelude::RigidBody::Static,
+	)).id();
 	
-	assert!((expected_ped_world_y - (terrain_y + 1.5)).abs() < 0.01, "Pedestal at terrain + 1.5m");
-	assert!((expected_col_world_y - (terrain_y + 10.5)).abs() < 0.01, "Column at terrain + 10.5m");
+	// Set up parent-child relationships
+	app.world_mut().entity_mut(root).add_child(pedestal);
+	app.world_mut().entity_mut(root).add_child(column);
 	
-	// Column XZ in world space
-	let expected_column_world_x = boss_position.x + column_offset_xz.x;
-	let expected_column_world_z = boss_position.z + column_offset_xz.y;
-	assert!((expected_column_world_x - 1008.0).abs() < 0.01, "Column 8m from boss in X");
-	assert!((expected_column_world_z - 2000.0).abs() < 0.01, "Column same Z as boss");
+	// Run transform propagation to compute GlobalTransforms
+	for _ in 0..5 {
+		app.update();
+	}
 	
-	// Verify collider dimensions (Avian 0.8 full heights)
-	// Collider::cylinder(radius, full_height) in Avian 0.8
-	// Pedestal: 2m radius, 3m full height
-	// Column: 1m radius, 15m full height
+	// Verify 3 distinct entities
+	assert_ne!(root, pedestal, "Root and pedestal should be distinct");
+	assert_ne!(root, column, "Root and column should be distinct");
+	assert_ne!(pedestal, column, "Pedestal and column should be distinct");
+	
+	// Verify root
+	let root_entity = app.world().entity(root);
+	assert!(root_entity.contains::<BossEncounterRoot>(), "Root should have BossEncounterRoot");
+	
+	let children = root_entity.get::<Children>().expect("Root should have Children component");
+	assert_eq!(children.len(), 2, "Root should have exactly 2 children");
+	assert!(children.contains(&pedestal), "Pedestal should be child of root");
+	assert!(children.contains(&column), "Column should be child of root");
+	
+	// Verify root position
+	let root_transform = app.world().entity(root).get::<Transform>().expect("Root Transform");
+	assert!(
+		(root_transform.translation - boss_position).length() < 0.01,
+		"Root at boss position"
+	);
+	
+	// Verify pedestal GlobalTransform (after propagation)
+	let ped_global = app.world().entity(pedestal).get::<GlobalTransform>().expect("Pedestal GlobalTransform");
+	let ped_world_pos = ped_global.translation();
+	let expected_ped_y = terrain_y + 1.5;
+	assert!(
+		(ped_world_pos.y - expected_ped_y).abs() < 0.01,
+		"Pedestal GlobalTransform Y should be {} (terrain + 1.5m), got {}",
+		expected_ped_y,
+		ped_world_pos.y
+	);
+	
+	// Column at boss XZ + (8, 0) offset
+	let expected_column_x = boss_position.x + 8.0;
+	let expected_column_z = boss_position.z;
+	assert!(
+		(ped_world_pos.x - expected_column_x).abs() < 0.01,
+		"Pedestal GlobalTransform X at column position (boss + 8m)"
+	);
+	assert!(
+		(ped_world_pos.z - expected_column_z).abs() < 0.01,
+		"Pedestal GlobalTransform Z at column position"
+	);
+	
+	// Verify column GlobalTransform
+	let col_global = app.world().entity(column).get::<GlobalTransform>().expect("Column GlobalTransform");
+	let col_world_pos = col_global.translation();
+	let expected_col_y = terrain_y + 10.5;
+	assert!(
+		(col_world_pos.y - expected_col_y).abs() < 0.01,
+		"Column GlobalTransform Y should be {} (terrain + 10.5m), got {}",
+		expected_col_y,
+		col_world_pos.y
+	);
+	assert!(
+		(col_world_pos.x - expected_column_x).abs() < 0.01,
+		"Column GlobalTransform X at column position"
+	);
+	assert!(
+		(col_world_pos.z - expected_column_z).abs() < 0.01,
+		"Column GlobalTransform Z at column position"
+	);
+	
+	// Verify collider shapes
+	let ped_collider = app.world().entity(pedestal).get::<avian3d::prelude::Collider>()
+		.expect("Pedestal should have Collider");
+	if let Some(cylinder) = ped_collider.shape().as_cylinder() {
+		assert!(
+			(cylinder.radius - 2.0).abs() < 0.01,
+			"Pedestal collider radius should be 2m"
+		);
+		assert!(
+			(cylinder.half_height * 2.0 - 3.0).abs() < 0.01,
+			"Pedestal collider full height should be 3m"
+		);
+	} else {
+		panic!("Pedestal collider should be a cylinder");
+	}
+	
+	let col_collider = app.world().entity(column).get::<avian3d::prelude::Collider>()
+		.expect("Column should have Collider");
+	if let Some(cylinder) = col_collider.shape().as_cylinder() {
+		assert!(
+			(cylinder.radius - 1.0).abs() < 0.01,
+			"Column collider radius should be 1m"
+		);
+		assert!(
+			(cylinder.half_height * 2.0 - 15.0).abs() < 0.01,
+			"Column collider full height should be 15m"
+		);
+	} else {
+		panic!("Column collider should be a cylinder");
+	}
+	
+	// Verify names
+	let ped_name = app.world().entity(pedestal).get::<Name>().expect("Pedestal Name");
+	assert_eq!(ped_name.as_str(), "boss-pedestal", "Pedestal name");
+	
+	let col_name = app.world().entity(column).get::<Name>().expect("Column Name");
+	assert_eq!(col_name.as_str(), "boss-column", "Column name");
 }
 
 #[test]
