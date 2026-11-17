@@ -12,7 +12,6 @@ use bevy::math::{DVec3, Vec3};
 use bevy::prelude::*;
 use bevy::shape::Aabb3d;
 use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaForm, BikanwardaSpec};
-use characters::CharacterRecipe;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{GenerationContext, GenerationScheme};
 
