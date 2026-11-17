@@ -5,6 +5,7 @@
 
 use bevy::prelude::*;
 use damage::{contacts_to_hits, DamageSystems};
+use encounters::EncounterSignal;
 
 use super::collision::{retire_released_chain_colliders, sync_chain_colliders};
 use super::damage::{detect_and_signal_broken_chains, update_chain_durability_fraction, ChainBrokenHistory};
@@ -26,6 +27,7 @@ impl Plugin for BikanwardaChainPhysicsPlugin {
 
 		app.init_resource::<ChainDamageHistory>()
 			.init_resource::<ChainBrokenHistory>()
+			.add_message::<EncounterSignal>()
 			.add_systems(
 				PostUpdate,
 				(
