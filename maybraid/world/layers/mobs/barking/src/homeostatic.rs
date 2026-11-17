@@ -288,6 +288,7 @@ pub fn cleanup_on_gameplay_disable(
 		}
 	}
 	
+	// Always update tracking state
 	gameplay_state.was_enabled = enabled;
 }
 
