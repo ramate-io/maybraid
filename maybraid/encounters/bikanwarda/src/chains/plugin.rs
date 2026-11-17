@@ -3,7 +3,7 @@
 //! Wires up anchored chain motion, capsule collision, and contact deduplication.
 
 use bevy::prelude::*;
-use damage::DamageSystems;
+use damage::{contacts_to_hits, DamageSystems};
 
 use super::collision::{retire_released_chain_colliders, sync_chain_colliders};
 use super::damage_coalesce::{cleanup_despawned_projectiles, coalesce_chain_contacts, ChainDamageHistory};
@@ -38,19 +38,17 @@ impl Plugin for BikanwardaChainPhysicsPlugin {
 				)
 					.after(TransformSystems::Propagate),
 			)
-			.add_systems(
-				PostUpdate,
-				// Contact deduplication runs in Collect, BEFORE contacts_to_hits
-				coalesce_chain_contacts.in_set(DamageSystems::Collect),
-			);
+		.add_systems(
+			PostUpdate,
+			// Contact deduplication runs in Collect, explicitly BEFORE contacts_to_hits
+			coalesce_chain_contacts
+				.in_set(DamageSystems::Collect)
+				.before(contacts_to_hits),
+		);
 
-		// System ordering in DamageSystems::Collect:
-		//   1. coalesce_chain_contacts (this plugin)
-		//   2. contacts_to_hits (damage plugin)
-		//
-		// We achieve this by not using any .after() on coalesce_chain_contacts within Collect.
-		// Since both are in the same set, and we register this plugin before DamagePlugin,
-		// our system runs first by registration order.
+	// System ordering in DamageSystems::Collect:
+	//   1. coalesce_chain_contacts (this plugin) - explicitly ordered before contacts_to_hits
+	//   2. contacts_to_hits (damage plugin)
 	}
 }
 

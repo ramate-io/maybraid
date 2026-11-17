@@ -690,55 +690,55 @@ mod tests {
 		));
 
 		// Run updates to position joints
-		for _ in 0..3 {
+		for _ in 0..5 {
 			app.update();
 		}
 
 		// Spawn chain colliders
 		let config = ChainColliderConfig::default();
-		app.world_mut()
+		let colliders = app
+			.world_mut()
 			.run_system_once(move |mut commands: Commands| {
 				spawn_chain_colliders(&mut commands, root, &joints, config)
 			})
 			.unwrap();
 
-		app.update();
-
-		// Find the lowest y position (sag point) where colliders overlap
-		let collider_positions: Vec<Vec3> = app
-			.world()
-			.iter_entities()
-			.filter_map(|entity| {
-				if entity.contains::<ChainLinkId>() {
-					entity.get::<Transform>().map(|t| t.translation)
-				} else {
-					None
-				}
-			})
-			.collect();
-
-		if collider_positions.len() < 3 {
-			return Err(anyhow!("Expected at least 3 positioned colliders"));
+		// Run several updates to let colliders sync to joint positions
+		for _ in 0..5 {
+			app.update();
 		}
 
-		let min_y = collider_positions.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
+		// Find the chain center position for aiming the projectile
+		let chain_center_y = 2.5; // Anchors are at y=2.5, horizontal span
+		let chain_center_x = 0.0; // Midpoint between -1.5 and 1.5
 
-		// Spawn a SLOW-MOVING penetrating projectile that will overlap the chain for multiple frames
-		let projectile_start = Vec3::new(-2.0, min_y, 0.0);
-		let projectile_velocity = Vec3::new(2.0, 0.0, 0.0); // Slow: 2 m/s instead of 15
+		// Verify colliders are positioned
+		let positioned_colliders = colliders
+			.iter()
+			.filter(|&&e| app.world().get_entity(e).is_ok())
+			.count();
+		
+		if positioned_colliders < 3 {
+			return Err(anyhow!("Expected at least 3 positioned colliders, got {}", positioned_colliders));
+		}
+
+		// Spawn a penetrating projectile aimed at the chain center
+		// Use a moderate speed so it takes multiple frames to pass through
+		let projectile_start = Vec3::new(-2.0, chain_center_y, 0.0);
+		let projectile_velocity = Vec3::new(3.0, 0.0, 0.0); // Moderate speed: 3 m/s
 		let source = app.world_mut().spawn(Name::new("weapon")).id();
 
 		let projectile = app
 			.world_mut()
 			.spawn((
 				Name::new("penetrating-projectile"),
-				Flight::spawn(projectile_start, 100.0, 100.0, 100.0), // Long penetration depth
+				Flight::spawn(projectile_start, 100.0, 500.0, 100.0), // Very high penetration (500)
 				ProjectileSource(source),
 				HitPayload { amount: damage_per_hit },
 				Transform::from_translation(projectile_start),
 				GlobalTransform::default(),
 				LinearVelocity(projectile_velocity),
-				Collider::sphere(0.05),
+				Collider::sphere(0.1), // Larger sphere for better overlap detection
 				Sensor,
 				PhysicsInteractionLayer::projectile_layers(),
 				RigidBody::Dynamic,

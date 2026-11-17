@@ -33,6 +33,15 @@ pub struct ChainDamageHistory {
 	applied: HashSet<(Entity, Entity)>,
 }
 
+/// Component on chain roots tracking which projectiles have already hit this chain.
+///
+/// Used for cross-frame damage deduplication. Once a projectile hits a chain,
+/// it's recorded here and cannot hit again.
+#[derive(Component, Default, Clone, Debug)]
+pub struct ChainHitProjectiles {
+	pub hits: HashSet<Entity>,
+}
+
 /// Interaction identity for deduplication.
 ///
 /// One projectile or attack instance hitting multiple chain capsules is deduplicated to
@@ -79,6 +88,14 @@ pub fn coalesce_chain_contacts(
 ) {
 	// Collect all contacts and clear the original messages
 	let all_contacts: Vec<ProjectileContact> = messages.drain().collect();
+	
+	if !all_contacts.is_empty() {
+		error!(
+			"coalesce_chain_contacts: Processing {} contacts, history size: {}",
+			all_contacts.len(),
+			history.applied.len()
+		);
+	}
 
 	// Group contacts by chain root
 	let mut chains: HashMap<Entity, ChainContactState> = HashMap::new();
@@ -100,13 +117,21 @@ pub fn coalesce_chain_contacts(
 		let key = (contact.projectile, chain_root);
 		if history.applied.contains(&key) {
 			// This projectile has already hit this chain in a previous frame - skip
-			trace!(
+			warn!(
 				"Skipping repeat contact: projectile {:?} already hit chain {:?}",
 				contact.projectile,
 				chain_root
 			);
 			continue;
 		}
+		
+		// Log that this is a new contact
+		info!(
+			"New chain contact: projectile {:?} → chain {:?} (history size: {})",
+			contact.projectile,
+			chain_root,
+			history.applied.len()
+		);
 
 		// WITHIN-FRAME CHECK: Note this contact for deduplication
 		chains.entry(chain_root).or_default().note_contact(interaction_id, contact);
@@ -118,12 +143,13 @@ pub fn coalesce_chain_contacts(
 			// Mark this (projectile, chain_root) pair as applied for all future frames
 			let key = (contact.projectile, root);
 			let was_new = history.applied.insert(key);
-			if was_new {
-				debug!(
-					"Recording first hit: projectile {:?} → chain {:?}",
-					contact.projectile, root
-				);
-			}
+			error!(
+				"Recording hit (was_new={}): projectile {:?} → chain {:?}, history size now: {}",
+				was_new,
+				contact.projectile,
+				root,
+				history.applied.len()
+			);
 			output_contacts.push(contact);
 		}
 	}
