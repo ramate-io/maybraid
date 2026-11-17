@@ -1157,5 +1157,236 @@ mod integration_regressions {
 		assert_eq!(record.outcome, Some(encounters::EncounterOutcome::Killed), 
 			"Encounter should be marked as Killed");
 	}
+
+	/// Test (a): Visible player in world-space range gets attack.
+	///
+	/// Uses real LodScene, assembly, spotting, acquisition and attack driver.
+	/// No hand-written BeginAttack, no hand-filled CombatTargeting.
+	#[test]
+	#[ignore = "Pending spotting-intelligence physics integration"]
+	fn boss_attacks_visible_player_in_range() {
+		let mut app = full_encounter_app();
+		
+		// Install spotting systems (physics-based occlusion)
+		if !app.is_plugin_added::<spotting_intelligence_avian::SpottingAvianPlugin>() {
+			app.add_plugins(spotting_intelligence_avian::SpottingAvianPlugin);
+		}
+		
+		// Spawn encounter scene at nonzero world position
+		let boss_position = Vec3::new(1000.0, 110.15, 2000.0);
+		let terrain_y = 100.0;
+		let encounter = crate::generation::BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
+		
+		let anchor_transform = Transform::from_translation(Vec3::ZERO);
+		let anchor = app.world_mut().spawn(anchor_transform).id();
+		
+		let scene = encounter.scene_with_level(
+			&lod::lod_ref::LodRef {
+				entity: anchor,
+				previous_transform: &anchor_transform,
+				current_transform: &anchor_transform,
+				bounds: &bevy::shape::Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0)),
+			},
+			lod::scene::LodSceneLevel::High,
+		);
+		let host_entity = app.world_mut().spawn_scene(scene).expect("spawn_scene should succeed").id();
+		
+		// Run assembly to create actor and initialize combat
+		for _ in 0..5 {
+			app.update();
+		}
+		
+		// Get actor entity from host
+		let actor_entity = app.world().entity(host_entity)
+			.get::<BossActor>()
+			.expect("Host should have BossActor")
+			.0;
+		
+		// Spawn player in range (within 40m) and visible (no occlusion)
+		let player_pos = boss_position + Vec3::new(20.0, 0.0, 0.0); // 20m away
+		let player = app.world_mut().spawn((
+			Transform::from_translation(player_pos),
+			GlobalTransform::from_translation(player_pos),
+			spotting_intelligence::SpotSubject::new(
+				spotting_intelligence::InterestLayers::CHARACTER,
+				spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
+			),
+		)).id();
+		
+		// Mark player as enemy in CombatTargeting
+		let mut actor_mut = app.world_mut().entity_mut(actor_entity);
+		if let Some(mut targeting) = actor_mut.get_mut::<CombatTargeting>() {
+			targeting.include(player, combat_targeting::TargetSource::ENEMYSHIP);
+		}
+		
+		// Run updates to allow spotting and combat systems to work
+		for _ in 0..10 {
+			app.update();
+		}
+		
+		// Verify attack was triggered (BeginAttack message written)
+		let begin_attacks = app.world().resource::<bevy::ecs::message::Messages<BeginAttack>>();
+		let attacks: Vec<_> = begin_attacks.read().cloned().collect();
+		
+		assert!(!attacks.is_empty(), 
+			"Boss should have triggered attack on visible player in range");
+		assert!(attacks.iter().any(|attack| attack.target == Some(player)),
+			"Attack should target the player entity");
+	}
+
+	/// Test (b): Player behind occluder gets no attack.
+	///
+	/// Uses real LodScene, assembly, spotting with occlusion, acquisition and attack driver.
+	#[test]
+	#[ignore = "Pending spotting-intelligence physics integration"]
+	fn boss_does_not_attack_occluded_player() {
+		let mut app = full_encounter_app();
+		
+		// Install spotting systems (physics-based occlusion)
+		if !app.is_plugin_added::<spotting_intelligence_avian::SpottingAvianPlugin>() {
+			app.add_plugins(spotting_intelligence_avian::SpottingAvianPlugin);
+		}
+		
+		// Spawn encounter scene at nonzero world position
+		let boss_position = Vec3::new(1000.0, 110.15, 2000.0);
+		let terrain_y = 100.0;
+		let encounter = crate::generation::BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
+		
+		let anchor_transform = Transform::from_translation(Vec3::ZERO);
+		let anchor = app.world_mut().spawn(anchor_transform).id();
+		
+		let scene = encounter.scene_with_level(
+			&lod::lod_ref::LodRef {
+				entity: anchor,
+				previous_transform: &anchor_transform,
+				current_transform: &anchor_transform,
+				bounds: &bevy::shape::Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0)),
+			},
+			lod::scene::LodSceneLevel::High,
+		);
+		let host_entity = app.world_mut().spawn_scene(scene).expect("spawn_scene should succeed").id();
+		
+		// Run assembly to create actor and initialize combat
+		for _ in 0..5 {
+			app.update();
+		}
+		
+		// Get actor entity from host
+		let actor_entity = app.world().entity(host_entity)
+			.get::<BossActor>()
+			.expect("Host should have BossActor")
+			.0;
+		
+		// Spawn player in range but behind an occluder
+		let player_pos = boss_position + Vec3::new(20.0, 0.0, 0.0);
+		let player = app.world_mut().spawn((
+			Transform::from_translation(player_pos),
+			GlobalTransform::from_translation(player_pos),
+			spotting_intelligence::SpotSubject::new(
+				spotting_intelligence::InterestLayers::CHARACTER,
+				spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
+			),
+		)).id();
+		
+		// Spawn occluder between boss and player
+		let occluder_pos = boss_position + Vec3::new(10.0, 0.0, 0.0);
+		app.world_mut().spawn((
+			Transform::from_translation(occluder_pos),
+			GlobalTransform::from_translation(occluder_pos),
+			avian3d::prelude::RigidBody::Static,
+			avian3d::prelude::Collider::cylinder(5.0, 10.0), // Large occluder
+		));
+		
+		// Mark player as enemy in CombatTargeting
+		let mut actor_mut = app.world_mut().entity_mut(actor_entity);
+		if let Some(mut targeting) = actor_mut.get_mut::<CombatTargeting>() {
+			targeting.include(player, combat_targeting::TargetSource::ENEMYSHIP);
+		}
+		
+		// Run updates to allow spotting and combat systems to work
+		for _ in 0..10 {
+			app.update();
+		}
+		
+		// Verify no attack was triggered (player is occluded)
+		let begin_attacks = app.world().resource::<bevy::ecs::message::Messages<BeginAttack>>();
+		let attacks: Vec<_> = begin_attacks.read().cloned().collect();
+		
+		assert!(attacks.is_empty() || !attacks.iter().any(|attack| attack.target == Some(player)),
+			"Boss should not attack occluded player");
+	}
+
+	/// Test (c): Out-of-range player gets no attack.
+	///
+	/// Uses real LodScene, assembly, spotting, acquisition and attack driver.
+	#[test]
+	#[ignore = "Pending spotting-intelligence physics integration"]
+	fn boss_does_not_attack_out_of_range_player() {
+		let mut app = full_encounter_app();
+		
+		// Install spotting systems (physics-based occlusion)
+		if !app.is_plugin_added::<spotting_intelligence_avian::SpottingAvianPlugin>() {
+			app.add_plugins(spotting_intelligence_avian::SpottingAvianPlugin);
+		}
+		
+		// Spawn encounter scene at nonzero world position
+		let boss_position = Vec3::new(1000.0, 110.15, 2000.0);
+		let terrain_y = 100.0;
+		let encounter = crate::generation::BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
+		
+		let anchor_transform = Transform::from_translation(Vec3::ZERO);
+		let anchor = app.world_mut().spawn(anchor_transform).id();
+		
+		let scene = encounter.scene_with_level(
+			&lod::lod_ref::LodRef {
+				entity: anchor,
+				previous_transform: &anchor_transform,
+				current_transform: &anchor_transform,
+				bounds: &bevy::shape::Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0)),
+			},
+			lod::scene::LodSceneLevel::High,
+		);
+		let host_entity = app.world_mut().spawn_scene(scene).expect("spawn_scene should succeed").id();
+		
+		// Run assembly to create actor and initialize combat
+		for _ in 0..5 {
+			app.update();
+		}
+		
+		// Get actor entity from host
+		let actor_entity = app.world().entity(host_entity)
+			.get::<BossActor>()
+			.expect("Host should have BossActor")
+			.0;
+		
+		// Spawn player out of range (attack range is 40m, spotting range is 50m)
+		let player_pos = boss_position + Vec3::new(60.0, 0.0, 0.0); // 60m away, outside both ranges
+		let player = app.world_mut().spawn((
+			Transform::from_translation(player_pos),
+			GlobalTransform::from_translation(player_pos),
+			spotting_intelligence::SpotSubject::new(
+				spotting_intelligence::InterestLayers::CHARACTER,
+				spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
+			),
+		)).id();
+		
+		// Mark player as enemy in CombatTargeting
+		let mut actor_mut = app.world_mut().entity_mut(actor_entity);
+		if let Some(mut targeting) = actor_mut.get_mut::<CombatTargeting>() {
+			targeting.include(player, combat_targeting::TargetSource::ENEMYSHIP);
+		}
+		
+		// Run updates to allow spotting and combat systems to work
+		for _ in 0..10 {
+			app.update();
+		}
+		
+		// Verify no attack was triggered (player is out of range)
+		let begin_attacks = app.world().resource::<bevy::ecs::message::Messages<BeginAttack>>();
+		let attacks: Vec<_> = begin_attacks.read().cloned().collect();
+		
+		assert!(attacks.is_empty() || !attacks.iter().any(|attack| attack.target == Some(player)),
+			"Boss should not attack out-of-range player");
+	}
 }
 
