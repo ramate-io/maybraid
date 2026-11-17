@@ -29,6 +29,8 @@ const NEIGHBORHOOD_RADIUS: i32 = 1;
 /// Default retreat margin: start retreating this many meters from the
 /// neighborhood boundary.
 pub const DEFAULT_RETREAT_MARGIN: f32 = 40.0;
+/// Precision of the host's home destination; arrival does not release ownership.
+pub const DEFAULT_ARRIVAL_RADIUS: f32 = 10.0;
 
 /// Configuration for homeostatic mob spawning.
 #[derive(Resource, Clone, Debug)]
@@ -39,6 +41,7 @@ pub struct HomeostaticMobConfig {
 	pub cell_fraction: f64,
 	/// Distance from the neighborhood boundary where retreat begins.
 	pub retreat_margin: f32,
+	pub arrival_radius: f32,
 }
 
 impl Default for HomeostaticMobConfig {
@@ -47,6 +50,7 @@ impl Default for HomeostaticMobConfig {
 			cell_size: DEFAULT_CELL_SIZE,
 			cell_fraction: DEFAULT_CELL_FRACTION,
 			retreat_margin: DEFAULT_RETREAT_MARGIN,
+			arrival_radius: DEFAULT_ARRIVAL_RADIUS,
 		}
 	}
 }
@@ -131,7 +135,8 @@ impl HomeostaticCellIndex {
 
 	/// Distance from position to the edge of the 3×3 neighborhood (negative = inside).
 	pub fn distance_to_neighborhood_edge(self, position: Vec3, cell_size: f32) -> f32 {
-		let neighborhood_half = (NEIGHBORHOOD_RADIUS as f32 + 0.5) * cell_size;
+		// Three centered cells span 3 * cell_size, not 2 * cell_size.
+		let neighborhood_half = (2 * NEIGHBORHOOD_RADIUS + 1) as f32 * cell_size * 0.5;
 		let center = self.center(cell_size);
 
 		let dx = (position.x - center.x).abs() - neighborhood_half;
@@ -373,7 +378,7 @@ pub fn apply_homeostatic_retreat(
 			entity: None,
 			kind: RETREAT_KIND,
 			position: retreat.target,
-			arrival_radius: config.retreat_margin.max(5.0),
+			arrival_radius: config.arrival_radius.max(5.0),
 			salience: 1.0,
 			confidence: 1.0,
 			sources: PoiSource::EXTERNAL | PoiSource::OBJECTIVE,
@@ -486,6 +491,73 @@ mod tests {
 
 		let distance = cell.distance_to_neighborhood_edge(far_away, 200.0);
 		assert!(distance > 0.0, "far position should be outside: {distance}");
+	}
+	#[test]
+	fn distance_at_40m_margin_from_true_boundary() {
+		// A 3x3 neighborhood of 200m cells has half-extent of 300m.
+		// Test that a position at X=259 (41m from true boundary at 300m) is still inside the retreat margin.
+		let cell = HomeostaticCellIndex(0, 0);
+		let pos_259 = Vec3::new(259.0, 0.0, 0.0);
+		let distance_259 = cell.distance_to_neighborhood_edge(pos_259, 200.0);
+		assert!(
+			distance_259 < -40.0,
+			"X=259 should be >40m inside the true 300m boundary (got {}m)",
+			-distance_259
+		);
+
+		// At X=260, should be exactly at the 40m margin
+		let pos_260 = Vec3::new(260.0, 0.0, 0.0);
+		let distance_260 = cell.distance_to_neighborhood_edge(pos_260, 200.0);
+		assert!(
+			(distance_260 + 40.0).abs() < 1.0,
+			"X=260 should be ~40m from the 300m boundary (got {}m)",
+			-distance_260
+		);
+	}
+
+	#[test]
+	fn distance_at_true_neighborhood_exit() {
+		// Exit at X=300 for a centered 3x3 of 200m cells
+		let cell = HomeostaticCellIndex(0, 0);
+		let pos_300 = Vec3::new(300.0, 0.0, 0.0);
+		let distance_300 = cell.distance_to_neighborhood_edge(pos_300, 200.0);
+		assert!(
+			distance_300.abs() < 1.0,
+			"X=300 should be at the neighborhood edge (got {}m)",
+			distance_300
+		);
+	}
+
+	#[test]
+	fn distance_with_negative_coordinates() {
+		let cell = HomeostaticCellIndex(0, 0);
+		// Test negative X at the 40m margin
+		let pos_neg_260 = Vec3::new(-260.0, 0.0, 0.0);
+		let distance = cell.distance_to_neighborhood_edge(pos_neg_260, 200.0);
+		assert!(
+			(distance + 40.0).abs() < 1.0,
+			"X=-260 should be ~40m from boundary (got {}m)",
+			-distance
+		);
+
+		// Test negative exit
+		let pos_neg_300 = Vec3::new(-300.0, 0.0, 0.0);
+		let distance_exit = cell.distance_to_neighborhood_edge(pos_neg_300, 200.0);
+		assert!(distance_exit.abs() < 1.0, "X=-300 should be at edge (got {}m)", distance_exit);
+	}
+
+	#[test]
+	fn distance_at_corner_cases() {
+		let cell = HomeostaticCellIndex(0, 0);
+		// Corner at (300, 300) should be at edge
+		let corner = Vec3::new(300.0, 0.0, 300.0);
+		let distance = cell.distance_to_neighborhood_edge(corner, 200.0);
+		assert!(distance.abs() < 1.0, "corner (300,300) should be at edge (got {}m)", distance);
+
+		// Diagonal just inside at (250, 250)
+		let inside_corner = Vec3::new(250.0, 0.0, 250.0);
+		let distance_inside = cell.distance_to_neighborhood_edge(inside_corner, 200.0);
+		assert!(distance_inside < 0.0, "(250,250) should be inside (got {}m)", distance_inside);
 	}
 }
 

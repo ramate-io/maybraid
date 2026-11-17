@@ -21,8 +21,12 @@ fn test_app() -> App {
 	.add_plugins(WorldLayersPlugin);
 	app.finish();
 	app.cleanup();
-	app.world_mut()
-		.spawn((WorldPlayer, Transform::default(), GlobalTransform::default()));
+	app.world_mut().spawn((
+		WorldPlayer,
+		lod::LodViewer,
+		Transform::default(),
+		GlobalTransform::default(),
+	));
 
 	app
 }
@@ -218,4 +222,92 @@ fn world_layers_install_shared_and_homeostatic_owners() {
 
 	assert!(app.world().contains_resource::<lod::hcsg::HcsgStorage>());
 	assert!(app.world().contains_resource::<barking::HomeostaticMobLifecycle>());
+}
+
+#[test]
+fn home_session_teardown_cleans_hosts_and_members_without_destroying_the_player(
+) -> anyhow::Result<()> {
+	use damage::Health;
+	use maybraid_controllers_core::InputRouter;
+	use maybraid_session::{SessionCapabilities, WorldGameplayEnabled};
+	use mob_intelligence::MemberOf;
+	let mut app = test_app();
+	let mut session = SessionCapabilities::default();
+	session.install_play(true);
+	app.insert_resource(session);
+	let cell = (0..20)
+		.flat_map(|x| (0..20).map(move |z| barking::HomeostaticCellIndex(x, z)))
+		.find(|cell| cell.should_host_mob(0.33))
+		.ok_or_else(|| anyhow::anyhow!("missing flagged test cell"))?;
+	let player = app
+		.world_mut()
+		.query_filtered::<Entity, With<WorldPlayer>>()
+		.single(app.world())
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	app.world_mut()
+		.entity_mut(player)
+		.insert(Transform::from_translation(cell.center(200.0)));
+	for _ in 0..20 {
+		app.update();
+	}
+	let hosts: Vec<_> = app
+		.world_mut()
+		.query_filtered::<Entity, With<barking::HomeostaticMob>>()
+		.iter(app.world())
+		.collect();
+	assert_eq!(hosts.len(), 1);
+	let host = hosts[0];
+	let mut bodies: Vec<_> = app
+		.world_mut()
+		.query::<(Entity, &MemberOf, &Health)>()
+		.iter(app.world())
+		.filter(|(_, member, _)| member.mob == host)
+		.map(|(entity, _, health)| (entity, *health))
+		.collect();
+	assert!(!bodies.is_empty(), "fixture must materialize actual members before testing teardown");
+	{
+		let (entity, recorded) =
+			bodies.first_mut().ok_or_else(|| anyhow::anyhow!("no body to injure"))?;
+		let mut health = app
+			.world_mut()
+			.get_mut::<Health>(*entity)
+			.ok_or_else(|| anyhow::anyhow!("missing body health"))?;
+		health.take_damage(1.0);
+		*recorded = *health;
+	}
+
+	let mut router = InputRouter::default();
+	router.set_paused(true);
+	assert!(!session.gameplay_enabled(&router));
+	app.insert_resource(WorldGameplayEnabled(session.gameplay_enabled(&router)));
+	for _ in 0..3 {
+		app.update();
+	}
+	assert!(app.world().get_entity(host).is_ok(), "pause preserves the installed encounter");
+	for (entity, health) in &bodies {
+		assert_eq!(app.world().get::<Health>(*entity), Some(health));
+	}
+	router.set_paused(false);
+	app.insert_resource(WorldGameplayEnabled(session.gameplay_enabled(&router)));
+	app.update();
+	assert!(app.world().get_entity(host).is_ok());
+
+	app.world_mut().resource_mut::<SessionCapabilities>().install_menu_shell();
+	for _ in 0..20 {
+		app.update();
+	}
+	assert!(app.world().get_entity(player).is_ok());
+	assert!(app.world().get_entity(host).is_err());
+	for (entity, _) in bodies {
+		assert!(app.world().get_entity(entity).is_err());
+	}
+	assert_eq!(app.world().resource::<barking::PlayerHomeostaticCell>().current, None);
+	assert_eq!(app.world_mut().query::<&barking::HomeostaticMob>().iter(app.world()).count(), 0);
+
+	app.world_mut().resource_mut::<SessionCapabilities>().install_play(true);
+	for _ in 0..20 {
+		app.update();
+	}
+	assert_eq!(app.world_mut().query::<&barking::HomeostaticMob>().iter(app.world()).count(), 1);
+	Ok(())
 }
