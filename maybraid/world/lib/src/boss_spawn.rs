@@ -4,8 +4,10 @@
 
 use bevy::prelude::*;
 use bikanwarda_encounter::BikanwardaBossEncounter;
-use lod::hcsg::{HcsgStorage, HcsgRestartRequest};
+use lod::hcsg::{register_session_seed, HcsgStorage};
+use lod::gen::Bytes;
 use player::Player;
+use std::sync::Arc;
 
 /// Request to spawn a boss encounter at a specific location.
 #[derive(Component, Clone, Debug)]
@@ -14,22 +16,55 @@ pub struct RequestSpawnBoss {
 	pub at: Option<Vec2>,
 }
 
+/// Persistent boss spawn configuration that survives HCSG session restarts.
+#[derive(Resource, Clone, Debug)]
+pub struct BossSpawnConfig {
+	/// World-space XZ position where the boss should spawn.
+	pub position: Vec3,
+	/// Whether a boss spawn is active.
+	pub active: bool,
+}
+
+impl Default for BossSpawnConfig {
+	fn default() -> Self {
+		Self {
+			position: Vec3::ZERO,
+			active: false,
+		}
+	}
+}
+
+/// Seeds the boss encounter during HCSG session restarts.
+fn seed_boss_encounter(config: Res<BossSpawnConfig>, storage: Res<HcsgStorage>) {
+	if !config.active {
+		return;
+	}
+	
+	info!("[BOSS] Reseeding encounter at ({:.1}, {:.1}, {:.1})", 
+		config.position.x, config.position.y, config.position.z);
+	
+	let encounter = BikanwardaBossEncounter::chained_at(config.position);
+	let id = lod::gen::Id::Bytes(Bytes(
+		bikanwarda_encounter::chained_encounter_id().as_bytes()
+	));
+	
+	storage.publish(id, Arc::new(encounter.clone()), encounter.bounds);
+}
+
 /// System to handle boss spawn requests.
 pub fn process_boss_spawn_requests(
 	mut commands: Commands,
 	requests: Query<(Entity, &RequestSpawnBoss)>,
 	storage: Res<HcsgStorage>,
 	player: Query<&Transform, With<Player>>,
-	mut restart: ResMut<HcsgRestartRequest>,
+	mut config: ResMut<BossSpawnConfig>,
 ) {
 	for (entity, request) in &requests {
 		commands.entity(entity).despawn();
 		
 		let position = if let Some(xz) = request.at {
-			// Absolute world position
 			Vec3::new(xz.x, 0.0, xz.y)
 		} else if let Ok(transform) = player.single() {
-			// Spawn 8m in front of player along camera forward (approximate)
 			let forward = transform.forward();
 			let offset = Vec3::new(forward.x * 8.0, 0.0, forward.z * 8.0);
 			transform.translation + offset
@@ -39,14 +74,15 @@ pub fn process_boss_spawn_requests(
 		
 		info!("[BOSS] Spawning at world position ({:.1}, {:.1}, {:.1})", position.x, position.y, position.z);
 		
-		// Seed the boss encounter in HCSG storage and request presentation
-		storage.seed(BikanwardaBossEncounter::chained(), bevy::shape::Aabb3d::new(
-			position,
-			Vec3::splat(50.0),
+		config.position = position;
+		config.active = true;
+		
+		let encounter = BikanwardaBossEncounter::chained_at(position);
+		let id = lod::gen::Id::Bytes(Bytes(
+			bikanwarda_encounter::chained_encounter_id().as_bytes()
 		));
 		
-		// Restart HCSG session to regenerate with new seed
-		restart.request();
+		storage.publish(id, Arc::new(encounter.clone()), encounter.bounds);
 	}
 }
 
@@ -55,6 +91,8 @@ pub struct BossSpawnPlugin;
 
 impl Plugin for BossSpawnPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_systems(Update, process_boss_spawn_requests);
+		app.init_resource::<BossSpawnConfig>()
+			.add_systems(Update, process_boss_spawn_requests);
+		register_session_seed(app, seed_boss_encounter);
 	}
 }

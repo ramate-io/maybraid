@@ -39,8 +39,13 @@ pub struct BikanwardaBossEncounter {
 }
 
 impl BikanwardaBossEncounter {
-	/// The authored Bikanwarda chained encounter.
+	/// The authored Bikanwarda chained encounter at the origin.
 	pub fn chained() -> Self {
+		Self::chained_at(Vec3::ZERO)
+	}
+	
+	/// The authored Bikanwarda chained encounter at a specific position.
+	pub fn chained_at(boss_position: Vec3) -> Self {
 		let id = chained_encounter_id();
 		
 		// Authored boss configuration
@@ -58,9 +63,7 @@ impl BikanwardaBossEncounter {
 			attacks: attack_config,
 		});
 		
-		// Placeholder bounds (20m boss, ~40m arena)
-		// World placement (#1117) will anchor this near initial spawn
-		let boss_position = Vec3::ZERO;
+		// Bounds centered on boss position (20m boss, ~40m arena)
 		let bounds = Aabb3d::new(
 			boss_position,
 			Vec3::new(20.0, 10.0, 20.0),
@@ -73,23 +76,24 @@ impl BikanwardaBossEncounter {
 impl GenerationScheme for BikanwardaBossEncounter {
 	lod::hcsg_index_scale!(BOSS_SCALE);
 	
-	fn original_ids_for(_cx: &mut GenerationContext, _region: Aabb3d) -> Vec<OriginalId> {
-		// Authored encounter: single universal identity
-		// Discovery filters by region in presentation
-		vec![OriginalId::new(Id::Bytes(lod::gen::Bytes(
-			chained_encounter_id().as_bytes()
-		)))]
+	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		let id = Id::Bytes(lod::gen::Bytes(chained_encounter_id().as_bytes()));
+		
+		if let Some(entry) = cx.stored::<Self>(id) {
+			if entry.bounds.intersects(&region) {
+				return vec![OriginalId::new(id)];
+			}
+		}
+		
+		Vec::new()
 	}
 	
 	fn build_with_id(_cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
-		// Only build the authored chained encounter
 		if id != Id::Bytes(lod::gen::Bytes(chained_encounter_id().as_bytes())) {
 			return None;
 		}
 		
-		// Deterministic from session roots (no dependencies yet)
-		let encounter = Self::chained();
-		Some((encounter.clone(), encounter.bounds))
+		None
 	}
 }
 
