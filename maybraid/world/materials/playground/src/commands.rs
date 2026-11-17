@@ -455,6 +455,7 @@ pub(crate) fn spawn_anchored_chain_fixture(world: &mut World, tension_mode: Chai
 			.spawn((
 				Name::new(format!("chain-joint-{i}")),
 				Transform::from_xyz(0.0, 0.0, 0.0),
+				GlobalTransform::default(),
 			))
 			.id();
 		joint_entities.push(joint);
@@ -471,6 +472,7 @@ pub(crate) fn spawn_anchored_chain_fixture(world: &mut World, tension_mode: Chai
 			},
 			ChainMotion { mode: tension_mode, active: true },
 			Transform::from_xyz(0.0, 0.0, 0.0),
+			GlobalTransform::default(),
 			Visibility::default(),
 			Health { current: 100.0, max: 100.0 },
 		))
@@ -486,6 +488,7 @@ pub(crate) fn spawn_anchored_chain_fixture(world: &mut World, tension_mode: Chai
 			Name::new("left-anchor"),
 			ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
 			Transform::from_xyz(-1.5, 2.5, 0.0),
+			GlobalTransform::from_xyz(-1.5, 2.5, 0.0),
 		))
 		.id();
 	
@@ -494,6 +497,7 @@ pub(crate) fn spawn_anchored_chain_fixture(world: &mut World, tension_mode: Chai
 			Name::new("right-anchor"),
 			ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
 			Transform::from_xyz(1.5, 2.5, 0.0),
+			GlobalTransform::from_xyz(1.5, 2.5, 0.0),
 		))
 		.id();
 	

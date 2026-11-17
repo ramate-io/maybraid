@@ -212,7 +212,8 @@ mod tests {
 		let tension_mode = bikanwarda_encounter::chains::ChainTensionMode::Catenary { sag_ratio: 10 };
 		commands::spawn_anchored_chain_fixture(&mut app.world_mut(), tension_mode);
 		
-		for _ in 0..5 {
+		// Give plenty of time for transforms to propagate and colliders to sync
+		for _ in 0..20 {
 			app.update();
 		}
 		
@@ -231,7 +232,8 @@ mod tests {
 		let initial_health = app.world().get::<Health>(root).unwrap().current;
 		
 		let damage_per_hit = 25.0;
-		let projectile_start = Vec3::new(-2.0, 2.0, 0.0);
+		// Position projectile to hit the sagging chain (Y=2.2-2.5)
+		let projectile_start = Vec3::new(-2.0, 2.3, 0.0);
 		let projectile_velocity = Vec3::new(15.0, 0.0, 0.0);
 		let source = app.world_mut().spawn(Name::new("weapon")).id();
 		

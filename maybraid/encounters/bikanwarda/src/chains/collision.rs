@@ -59,6 +59,7 @@ pub fn spawn_chain_colliders(
 			.spawn((
 				Name::new(format!("chain-link-{link_id}")),
 				Transform::IDENTITY,
+				GlobalTransform::default(),
 				Visibility::default(),
 				RigidBody::Static,
 				collider,
