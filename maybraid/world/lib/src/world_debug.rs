@@ -27,10 +27,17 @@ impl Plugin for WorldDebugPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<DebugPeacefulMode>();
 		app.init_resource::<crate::capture::CaptureSession>();
+		app.init_resource::<crate::script_queue::ScriptQueue>();
+
+		app.add_systems(
+			Startup,
+			crate::script_queue::load_startup_script,
+		);
 
 		app.add_systems(
 			Update,
 			(
+				crate::script_queue::process_script_queue,
 				log_player_lifecycle.before(apply_debug_take_damage),
 				apply_debug_grant_points,
 				apply_debug_take_damage,

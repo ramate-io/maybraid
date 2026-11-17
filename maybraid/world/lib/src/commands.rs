@@ -73,6 +73,10 @@ pub enum PlaygroundCommand {
 		#[arg(long)]
 		script: PathBuf,
 	},
+	/// Script control commands (wait, wait-for-world-ready).
+	#[cfg(feature = "debug-commands")]
+	#[command(subcommand, hide = true)]
+	ScriptCtrl(ScriptCommand),
 }
 
 #[derive(Clone, Subcommand)]
@@ -261,6 +265,17 @@ pub enum DebugCommand {
 	},
 }
 
+/// Script-only commands for delays and readiness gates.
+#[cfg(feature = "debug-commands")]
+#[derive(Clone, Parser)]
+#[command(rename_all = "kebab-case")]
+pub enum ScriptCommand {
+	/// Wait for a duration before executing the next command.
+	Wait { seconds: f32 },
+	/// Wait until the world is ready (player spawned, camera active, terrain loaded).
+	WaitForWorldReady,
+}
+
 #[cfg(feature = "debug-commands")]
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
 pub enum CameraMode {
@@ -285,7 +300,17 @@ impl PlaygroundCommand {
 	pub fn react(self, commands: &mut Commands, console: &mut String) {
 		match self {
 			PlaygroundCommand::Help => *console = Self::long_help_string(),
-			PlaygroundCommand::Script(s) => s.run(commands, console),
+			PlaygroundCommand::Script(s) => {
+				#[cfg(feature = "debug-commands")]
+				{
+					// Scripts use the queue system if world_debug is active
+					*console = format!("script {}: use startup or queued mode", s.path.display());
+				}
+				#[cfg(not(feature = "debug-commands"))]
+				{
+					s.run(commands, console);
+				}
+			}
 			PlaygroundCommand::Mode(mode) => mode.react(commands, console),
 			PlaygroundCommand::SetCharacter { species } => {
 				commands.spawn(RequestSetCharacter { species });
@@ -306,6 +331,11 @@ impl PlaygroundCommand {
 			#[cfg(feature = "debug-commands")]
 			PlaygroundCommand::AutoCapture { script: _ } => {
 				*console = "Auto-capture removed: use Bevy Screenshot API instead".to_string();
+			}
+			#[cfg(feature = "debug-commands")]
+			PlaygroundCommand::ScriptCtrl(script_cmd) => {
+				// ScriptCtrl commands handled specially in script runner
+				*console = format!("script control: {:?}", script_cmd);
 			}
 		}
 	}
@@ -491,6 +521,47 @@ impl DebugCommand {
 			DebugCommand::Capture { dir, every, count } => {
 				commands.spawn(RequestCapture { dir, interval_secs: every, count });
 				*console = format!("debug capture: {} frames every {:.1}s", count, every);
+			}
+		}
+	}
+}
+
+#[cfg(feature = "debug-commands")]
+impl ScriptCommand {
+	pub fn react(self, queue: &mut crate::script_queue::ScriptQueue, time: &Time, console: &mut String) {
+		match self {
+			ScriptCommand::Wait { seconds } => {
+				let wait_until = time.elapsed() + std::time::Duration::from_secs_f32(seconds);
+				queue.wait_until = Some(wait_until);
+				*console = format!("script: waiting {:.1}s", seconds);
+			}
+			ScriptCommand::WaitForWorldReady => {
+				queue.wait_for_world_ready = true;
+				*console = "script: waiting for world ready".into();
+			}
+		}
+	}
+}
+
+impl PlaygroundCommand {
+	#[cfg(feature = "debug-commands")]
+	pub fn run_script_with_queue(path: &std::path::Path, queue: &mut crate::script_queue::ScriptQueue, time: &Time, console: &mut String) {
+		let lines = match game_commands::command::read_script_lines(path) {
+			Ok(l) => l,
+			Err(e) => {
+				*console = e;
+				return;
+			}
+		};
+		for (idx, line) in lines.iter().enumerate() {
+			match Self::parse_line(line) {
+				Ok(cmd) => {
+					// All commands get enqueued - ScriptCtrl will be handled by queue processor
+					queue.enqueue(cmd);
+				}
+				Err(e) => {
+					*console = format!("{} line {}: {e}", path.display(), idx + 1);
+				}
 			}
 		}
 	}

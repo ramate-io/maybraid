@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+use player::Player;
+use world_player;
 
 use crate::commands::RequestCapture;
 
@@ -47,12 +49,19 @@ impl CaptureSession {
 pub fn apply_capture_requests(
 	requests: Query<(Entity, &RequestCapture)>,
 	mut session: ResMut<CaptureSession>,
+	player: Query<Entity, (With<player::Player>, With<world_player::Player>)>,
 	mut commands: Commands,
 ) {
 	for (entity, request) in &requests {
 		if session.is_active() {
 			warn!("Capture already in progress, ignoring new request");
 			commands.entity(entity).despawn();
+			continue;
+		}
+
+		// Wait for world ready before starting capture
+		if player.get_single().is_err() {
+			warn!("Capture requested but world not ready (player not spawned), deferring");
 			continue;
 		}
 

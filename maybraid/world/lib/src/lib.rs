@@ -14,6 +14,8 @@ mod agent;
 pub mod boss_spawn;
 #[cfg(feature = "debug-commands")]
 pub mod capture;
+#[cfg(feature = "debug-commands")]
+pub mod script_queue;
 mod agent_inventory;
 mod camera;
 pub mod commands;
