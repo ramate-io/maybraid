@@ -112,7 +112,7 @@ pub fn update_boss_targeting(
 pub fn boss_combat_driver(
 	time: Res<Time>,
 	catalog: Res<AttackCatalog>,
-	hosts: Query<(&BossActor, &Health, &mut BossAttackCooldown), With<BossEncounterRoot>>,
+	mut hosts: Query<(&BossActor, &Health, &mut BossAttackCooldown), With<BossEncounterRoot>>,
 	actors: Query<(&Transform, &CombatTargeting, &Children), With<BikanwardaRoot>>,
 	mouth_sockets: Query<Entity, With<BikanwardaMouthSocket>>,
 	targets: Query<&Transform>,
@@ -120,7 +120,7 @@ pub fn boss_combat_driver(
 ) {
 	const ATTACK_RANGE: f32 = 40.0; // Bray range from attack definition
 	
-	for (actor_ref, health, mut cooldown) in &hosts {
+	for (actor_ref, health, mut cooldown) in &mut hosts {
 		// Gate: skip if host health is dead
 		if health.is_dead() {
 			continue;
@@ -133,8 +133,7 @@ pub fn boss_combat_driver(
 		// Find the mouth socket among the actor's children
 		let mouth_socket = children
 			.iter()
-			.find(|child| mouth_sockets.contains(*child))
-			.copied();
+			.find(|&child| mouth_sockets.contains(child));
 
 		// Tick cooldown
 		cooldown.timer.tick(time.delta());

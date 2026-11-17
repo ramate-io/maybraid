@@ -39,8 +39,7 @@ pub fn spawn_tether_chain(
 		// Find the column (pillar) entity from host's children
 		let column_entity = children
 			.iter()
-			.find(|child| columns.contains(*child))
-			.copied();
+			.find(|&child| columns.contains(child));
 		
 		let Some(column_entity) = column_entity else {
 			warn!("Could not find column child for host {:?}", host_entity);

@@ -196,6 +196,7 @@ fn chained_slug_is_the_fixture_key() {
 // Ground-fit and placement regression tests (#1117)
 mod placement {
 	use super::*;
+	use crate::generation::BikanwardaBossEncounter;
 	use bevy::shape::Aabb3d;
 	
 	#[test]
@@ -860,12 +861,12 @@ mod integration_regressions {
 		
 		// Verify host children include column and pedestal
 		let children = host.get::<Children>().expect("Host should have children");
-		let column_entity = *children.iter()
-			.find(|c| app.world().entity(*c).contains::<BossColumn>())
+		let column_entity = children.iter()
+			.find(|&c| app.world().entity(c).contains::<BossColumn>())
 			.expect("Host should have column child");
 		
-		let pedestal_entity = *children.iter()
-			.find(|c| app.world().entity(*c).contains::<BossPedestal>())
+		let pedestal_entity = children.iter()
+			.find(|&c| app.world().entity(c).contains::<BossPedestal>())
 			.expect("Host should have pedestal child");
 		
 		// Verify all four entities are distinct
@@ -883,10 +884,13 @@ mod integration_regressions {
 		let pedestal = app.world().entity(pedestal_entity);
 		assert!(pedestal.contains::<avian3d::prelude::Collider>(), "Pedestal has Collider");
 		
+		// Drop host reference before calling app.update()
+		drop(host);
+		
 		// Verify global transforms are computed
 		app.update();
-		let host_global = host.get::<GlobalTransform>().expect("Host GlobalTransform");
-		let actor_global = app.world().entity(actor_entity).get::<GlobalTransform>().expect("Actor GlobalTransform");
+		let host_global = app.world().entity(host_entity).get::<GlobalTransform>().expect("Host GlobalTransform").clone();
+		let actor_global = app.world().entity(actor_entity).get::<GlobalTransform>().expect("Actor GlobalTransform").clone();
 		
 		// Actor should be at approximately the same position as host (local identity)
 		let distance = (host_global.translation() - actor_global.translation()).length();
