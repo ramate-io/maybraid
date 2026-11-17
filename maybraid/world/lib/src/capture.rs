@@ -60,7 +60,7 @@ pub fn apply_capture_requests(
 		}
 
 		// Wait for world ready before starting capture
-		if player.get_single().is_err() {
+		if player.single().is_err() {
 			warn!("Capture requested but world not ready (player not spawned), deferring");
 			continue;
 		}

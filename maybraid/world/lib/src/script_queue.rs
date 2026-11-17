@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use bevy::prelude::*;
+use game_commands::command::CommandConsoleOutput;
 use player::Player as MaybraidPlayer;
 use world_player::Player as WorldPlayer;
 
@@ -29,10 +30,10 @@ impl ScriptQueue {
 
 /// Load startup script into queue if it's a Script command.
 pub fn load_startup_script(
-	mut pending: ResMut<crate::PendingStartupCommand>,
+	mut pending: ResMut<crate::PendingStartupCommand<PlaygroundCommand>>,
 	mut queue: ResMut<ScriptQueue>,
 	time: Res<Time>,
-	mut console: ResMut<crate::commands::CommandConsoleOutput>,
+	mut console: ResMut<CommandConsoleOutput>,
 	mut commands: Commands,
 ) {
 	if let Some(cmd) = pending.0.take() {
@@ -57,11 +58,11 @@ pub fn process_script_queue(
 	mut queue: ResMut<ScriptQueue>,
 	player: Query<Entity, (With<MaybraidPlayer>, With<WorldPlayer>)>,
 	mut commands: Commands,
-	mut console: ResMut<crate::commands::CommandConsoleOutput>,
+	mut console: ResMut<CommandConsoleOutput>,
 ) {
 	// Check if we're waiting for world ready
 	if queue.wait_for_world_ready {
-		if player.get_single().is_ok() {
+		if player.single().is_ok() {
 			info!("World ready: player spawned");
 			queue.wait_for_world_ready = false;
 		} else {
