@@ -71,6 +71,8 @@ fn main() {
 	.add_plugins(GamePlugin);
 	#[cfg(feature = "gpu-frame-capture")]
 	app.add_plugins(maybraid_gpu_frame_capture::GpuFrameCapturePlugin);
+	#[cfg(feature = "pipeline-profile")]
+	app.add_plugins(maybraid_pipeline_profile::PipelineProfilePlugin);
 	app.run();
 }
 

@@ -16,8 +16,11 @@ test-support = []
 debug-commands = []
 # Local visual review fixture; never installed in ordinary/debug-only gameplay.
 chain-review = ["debug-commands", "dep:projectiles"]
+memory-census = ["dep:maybraid-memory-census", "dep:render-item"]
 
 [dependencies]
+maybraid-memory-census = { path = "../../diagnostics/memory-census", optional = true }
+render-item = { workspace = true, optional = true }
 character-motion = { workspace = true }
 encounters = { workspace = true }
 bikanwarda-encounter = { workspace = true }

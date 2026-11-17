@@ -45,7 +45,11 @@ pub use bounds::{
 	LodViewers, ViewerHcsgBounds,
 };
 pub use context::{GenerationContext, GenerationScheme};
-pub use demand::{HcsgDemand, Outstanding, Published, SubscriptionId};
+pub use demand::{
+	HcsgDemand, HcsgTicket, Outstanding, Published, PublishedRead, PublishedReadError,
+	PublishedRegion, SubscriptionId, TicketPoll, TicketRequestError, MAX_TICKET_REQUESTS,
+	PUBLICATION_PAGE_IDS,
+};
 pub use generation::GenerationPlugin;
 pub use node::HcsgNode;
 pub use node_store::StoredEntry;

@@ -75,6 +75,59 @@ impl<W> DevelopmentPlaces<W> {
 			let transform = host.transform();
 			let building = host.discoverable_place().map(|place| {
 				let local = host.place_local_id();
+				let local_stand = place.arrival_local;
+				let pin = transform.transform_point(host.local_bounds().center().into());
+				let interior_arrival = local_stand.map(|point| transform.transform_point(point));
+				push(DevelopmentPlace {
+					key: NameKey::Place { host: development, local },
+					place: place.with_identity(development, local),
+					xz: pin.xz(),
+					y: pin.y,
+					interior_arrival,
+					building: None,
+				})
+			});
+			let mut room_stands = None;
+			for node in host_labels(host) {
+				let Some(place) = DiscoverablePlace::from_label_node(&node) else {
+					continue;
+				};
+				let local = local_place_id(&node);
+				let pin = transform.transform_point(node.placement.translation);
+				let interior_arrival = room_stands
+					.get_or_insert_with(|| host.interior_stand_points())
+					.nearest(Some(node.placement.translation))
+					.map(|point| transform.transform_point(point));
+				push(DevelopmentPlace {
+					key: NameKey::Place { host: development, local },
+					place: place.with_identity(development, local),
+					xz: pin.xz(),
+					y: pin.y,
+					interior_arrival,
+					building,
+				});
+			}
+		}
+		Self::new(places)
+	}
+
+	#[cfg(test)]
+	pub(crate) fn legacy_of(development: Id, built: &BuiltDevelopment) -> Self {
+		let mut places = Vec::<DevelopmentPlace>::new();
+		let mut push = |place: DevelopmentPlace| match places
+			.iter()
+			.position(|known| known.key == place.key)
+		{
+			Some(index) => index,
+			None => {
+				places.push(place);
+				places.len() - 1
+			}
+		};
+		for host in &built.hosts() {
+			let transform = host.transform();
+			let building = host.discoverable_place().map(|place| {
+				let local = host.place_local_id();
 				let local_stand = host.interior_stand_local(None);
 				let pin = transform.transform_point(host.local_bounds().center().into());
 				let interior_arrival = local_stand.map(|point| transform.transform_point(point));

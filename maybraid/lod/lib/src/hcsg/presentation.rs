@@ -152,14 +152,24 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 			Ok(entries) => entries,
 			Err(Busy) => return,
 		};
+		// A session/replacement can race the storage phase. Preserve the cursor
+		// and old hosts until a current page can be consumed.
+		if !matches!(demand.try_page_is_live(subscription, published.epoch), Ok(true)) {
+			return;
+		}
 		if entries.len() < published.ids.len() {
 			read_all = false;
 		}
 		for (id, entry) in published.ids.iter().zip(entries) {
-			self.cursor += 1;
 			let Some(entry) = entry else {
-				continue;
+				// A published value disappeared before consumption. Replay via
+				// replacement, preserving the predecessor for atomic cancellation.
+				// Never skip this ID or certify retirement from a partial replay.
+				self.request.retry_subscription();
+				read_all = false;
+				break;
 			};
+			self.cursor += 1;
 			if let Some(host) = self.hosts.get_mut(id).filter(|host| host.version == entry.version)
 			{
 				#[cfg(feature = "generation-tracing")]
@@ -175,7 +185,7 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 			self.hosts.insert(*id, Host { entity, bounds, version, session: self.session });
 			self.retired_against = None;
 		}
-		if read_all && published.done && self.sweep_pending {
+		if read_all && published.done && !published.failed && self.sweep_pending {
 			self.sweep_pending = false;
 			let session = self.session;
 			self.hosts.retain(|_, host| {
@@ -408,3 +418,6 @@ mod despawn_budget_tests {
 		Ok(())
 	}
 }
+
+#[cfg(test)]
+mod publication_tests;
