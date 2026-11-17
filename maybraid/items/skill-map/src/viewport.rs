@@ -9,8 +9,9 @@ use character_inventory_user::InventoryUser;
 use character_items::{Inventory, InventoryItem, SkillMapCategory};
 use item_icons::{ItemIconCache, FIREARM_SILHOUETTE_RESOLUTION};
 use menu_components::{
-	spawn_hud_text_card, spawn_hud_text_card_label, GameplayHud, HudFonts, HUD_TEXT_CARD_FACE_PX,
-	PANEL_BLOCK_FONT_SIZE, TEXT_YELLOW,
+	gameplay_hud_visibility, hud_glass_fill, hud_glass_stroke, spawn_hud_text_card,
+	spawn_hud_text_card_label, GameplayHud, HudFonts, HUD_TEXT_CARD_FACE_PX, PANEL_BLOCK_FONT_SIZE,
+	TEXT_YELLOW,
 };
 
 use crate::cursor::SkillMapCursor;
@@ -33,11 +34,7 @@ pub(crate) fn map_view_extent() -> Vec2 {
 const FRAME_BORDER: f32 = 2.0;
 const FRAME_RADIUS: f32 = 14.0;
 const FRAME_INNER_RADIUS: f32 = FRAME_RADIUS - FRAME_BORDER;
-const LIVE_BORDER: Color = Color::srgb(1.0, 0.48, 0.08);
-const IDLE_BORDER: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
 const PROMPT_ICON_PX: f32 = 18.0;
-const FIREARM_CARD_FILL: Color = Color::srgba(0.52, 0.52, 0.56, 0.82);
-const FIREARM_CARD_STROKE: Color = Color::srgba(0.78, 0.78, 0.82, 0.9);
 const GRENADE_SILHOUETTE_PX: f32 = 40.0;
 const GRENADE_SILHOUETTE_STROKE: f32 = 2.0;
 /// Peak black of the Debraid fade. Stays on the frame, not the map RT.
@@ -297,6 +294,7 @@ fn spawn_one_map(
 		.spawn((
 			Name::new(format!("skill-map-hud-{}", spec.label)),
 			SkillMapHud,
+			GameplayHud,
 			spec.id,
 			member,
 			SkillMapOverlay::Collapsed.hud_node(),
@@ -424,8 +422,8 @@ fn spawn_firearm_hud(
 			member,
 			SkillMapOverlay::Collapsed.firearm_node(),
 			SkillMapOverlay::Collapsed.firearm_z(),
-			BackgroundColor(FIREARM_CARD_FILL),
-			BorderColor::all(FIREARM_CARD_STROKE),
+			hud_glass_fill(),
+			hud_glass_stroke(false),
 			Visibility::Hidden,
 			Pickable::IGNORE,
 		))
@@ -698,7 +696,7 @@ pub fn sync_viewport_chrome(
 	>,
 ) {
 	for (_, mut visibility) in &mut huds {
-		*visibility = if enabled.0 { Visibility::Inherited } else { Visibility::Hidden };
+		*visibility = gameplay_hud_visibility(enabled.0);
 	}
 	if !enabled.0 {
 		return;
@@ -706,10 +704,10 @@ pub fn sync_viewport_chrome(
 	for (member, mut border, mut background) in &mut nodes {
 		let held = users.iter().any(|(user, held)| user.maps == member.session && held.0);
 		if held {
-			*border = BorderColor::all(LIVE_BORDER);
+			*border = hud_glass_stroke(true);
 			background.0 = Color::srgba(0.0, 0.0, 0.0, 0.0);
 		} else {
-			*border = BorderColor::all(IDLE_BORDER);
+			*border = hud_glass_stroke(false);
 			background.0 = Color::srgba(0.06, 0.05, 0.04, 0.45);
 		}
 	}
@@ -717,11 +715,12 @@ pub fn sync_viewport_chrome(
 
 pub fn sync_firearm_chrome(
 	users: Query<(Entity, Option<&InventoryUser>), With<SkillMapUser>>,
+	held: Query<&SkillMapHeld>,
 	bags: Query<&Inventory>,
 	icons: Option<Res<ItemIconCache>>,
 	members: Query<&SkillMapMember, With<SkillMapFirearmHud>>,
 	mut blocks: Query<
-		(&SkillMapMember, &mut Visibility),
+		(&SkillMapMember, &mut Visibility, &mut BorderColor),
 		(
 			With<SkillMapFirearmHud>,
 			Without<SkillMapHud>,
@@ -771,9 +770,14 @@ pub fn sync_firearm_chrome(
 	>,
 	mut actions: Query<&mut Text, (With<SkillMapWeaponAction>, Without<SkillMapFirearmName>)>,
 ) {
-	for (member, mut visibility) in &mut blocks {
+	for (member, mut visibility, mut border) in &mut blocks {
 		let name = primary_weapon_name(member.user, &users, &bags);
-		*visibility = if name.is_some() { Visibility::Inherited } else { Visibility::Hidden };
+		*visibility = gameplay_hud_visibility(name.is_some());
+		let live = held.get(member.user).is_ok_and(|held| held.0);
+		let stroke = hud_glass_stroke(live);
+		if *border != stroke {
+			*border = stroke;
+		}
 	}
 	for (member, mut text) in &mut names {
 		text.0 = primary_weapon_name(member.user, &users, &bags).unwrap_or_default();
@@ -1048,7 +1052,10 @@ pub fn spawn_debraid(
 pub fn tick_debraid(
 	time: Res<Time>,
 	mut commands: Commands,
-	mut overlays: Query<(Entity, &mut Debraid, &mut BackgroundColor, &Children), With<DebraidOverlay>>,
+	mut overlays: Query<
+		(Entity, &mut Debraid, &mut BackgroundColor, &Children),
+		With<DebraidOverlay>,
+	>,
 	mut labels: Query<&mut TextColor>,
 ) {
 	let dt = time.delta_secs();

@@ -3379,6 +3379,7 @@ dependencies = [
  "combat-hud",
  "damage",
  "lubikans",
+ "menu-components",
  "player",
 ]
 
@@ -5678,6 +5679,7 @@ dependencies = [
  "maybraid-spatial-rumble",
  "maybraid-spawns-grenades",
  "maybraid-virtual-pad-controller",
+ "menu-components",
  "player",
  "player-camera",
 ]

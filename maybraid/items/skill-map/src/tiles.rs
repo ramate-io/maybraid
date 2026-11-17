@@ -347,10 +347,7 @@ mod tests {
 			TileKind::Power(SkillKind::Fireball),
 			"the opening claim stays just outside the pocket"
 		);
-		assert_eq!(
-			tile_kind_at(0, 0, steps, SkillKind::Fireball, -0.5, &pins),
-			TileKind::Water
-		);
+		assert_eq!(tile_kind_at(0, 0, steps, SkillKind::Fireball, -0.5, &pins), TileKind::Water);
 	}
 
 	#[test]

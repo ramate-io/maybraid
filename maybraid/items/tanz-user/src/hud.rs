@@ -3,14 +3,15 @@
 use bevy::prelude::*;
 use item_icons::ItemIconCache;
 use menu_components::{
-	GameplayHud, LoadingBarFill, TANZ_CALLOUT_ICON_PX, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	gameplay_hud_visibility, hud_glass_fill, hud_glass_stroke, GameplayHud, GameplayHudVisible,
+	LoadingBarFill, HUD_GLASS_BORDER, HUD_GLASS_RADIUS, TANZ_CALLOUT_ICON_PX, TEXT_YELLOW,
+	TEXT_YELLOW_FAINT,
 };
 use screen_capture::CaptureSubject;
 
 use crate::callout::TanzCallout;
 use crate::{ControlMode, TanzUser};
 
-const PANEL: Color = Color::srgba(0.05, 0.05, 0.08, 0.55);
 const INK: Color = Color::srgb(0.92, 0.9, 0.82);
 /// Same proportions as the loading screen track, scaled for the corner HUD.
 const MODE_BAR_WIDTH: f32 = 168.0;
@@ -50,9 +51,12 @@ pub fn spawn_tanz_mode_hud(mut commands: Commands) {
 				flex_direction: FlexDirection::Column,
 				row_gap: Val::Px(6.0),
 				padding: UiRect::axes(Val::Px(10.0), Val::Px(8.0)),
+				border: UiRect::all(Val::Px(HUD_GLASS_BORDER)),
+				border_radius: BorderRadius::all(Val::Px(HUD_GLASS_RADIUS)),
 				..default()
 			},
-			BackgroundColor(PANEL),
+			hud_glass_fill(),
+			hud_glass_stroke(false),
 			GlobalZIndex(24),
 			Pickable::IGNORE,
 			Visibility::Hidden,
@@ -118,9 +122,12 @@ pub fn spawn_tanz_callout_hud(mut commands: Commands) {
 						align_items: AlignItems::Center,
 						column_gap: Val::Px(10.0),
 						padding: UiRect::axes(Val::Px(12.0), Val::Px(7.0)),
+						border: UiRect::all(Val::Px(HUD_GLASS_BORDER)),
+						border_radius: BorderRadius::all(Val::Px(HUD_GLASS_RADIUS)),
 						..default()
 					},
-					BackgroundColor(PANEL),
+					hud_glass_fill(),
+					hud_glass_stroke(false),
 					Pickable::IGNORE,
 				))
 				.with_children(|row| {
@@ -149,13 +156,23 @@ pub fn spawn_tanz_callout_hud(mut commands: Commands) {
 
 pub fn sync_tanz_mode_hud(
 	users: Query<&TanzUser>,
-	mut roots: Query<&mut Visibility, With<TanzModeHud>>,
+	hud_visible: Option<Res<GameplayHudVisible>>,
+	mut roots: Query<(&mut Visibility, &mut BorderColor), With<TanzModeHud>>,
 	mut labels: Query<&mut Text, With<TanzModeHudLabel>>,
 	mut fills: Query<&mut LoadingBarFill, With<TanzModeHudBarFill>>,
 ) {
+	let menus_up = hud_visible.is_some_and(|visible| !visible.0);
 	let user = users.iter().next();
-	for mut visibility in &mut roots {
-		*visibility = if user.is_some() { Visibility::Visible } else { Visibility::Hidden };
+	let live = user.is_some_and(|user| user.mode.is_tanzer() || user.toggle.is_partial());
+	let stroke = hud_glass_stroke(live);
+	for (mut visibility, mut border) in &mut roots {
+		let next = gameplay_hud_visibility(user.is_some() && !menus_up);
+		if *visibility != next {
+			*visibility = next;
+		}
+		if *border != stroke {
+			*border = stroke;
+		}
 	}
 	let Some(user) = user else {
 		return;
@@ -173,22 +190,33 @@ pub fn sync_tanz_mode_hud(
 
 pub fn sync_tanz_callout_hud(
 	callout: Res<TanzCallout>,
+	hud_visible: Option<Res<GameplayHudVisible>>,
 	icons: Option<Res<ItemIconCache>>,
 	mut roots: Query<&mut Visibility, With<TanzCalloutHud>>,
-	mut panels: Query<&mut BackgroundColor, With<TanzCalloutHudPanel>>,
+	mut panels: Query<(&mut BackgroundColor, &mut BorderColor), With<TanzCalloutHudPanel>>,
 	mut image_nodes: Query<(&mut ImageNode, &mut Node), With<TanzCalloutHudIcon>>,
 	mut labels: Query<(&mut Text, &mut TextColor), With<TanzCalloutHudLabel>>,
 ) {
-	let visible = callout.current.is_some();
+	let menus_up = hud_visible.is_some_and(|visible| !visible.0);
+	let visible = callout.current.is_some() && !menus_up;
 	for mut visibility in &mut roots {
-		*visibility = if visible { Visibility::Visible } else { Visibility::Hidden };
+		let next = gameplay_hud_visibility(visible);
+		if *visibility != next {
+			*visibility = next;
+		}
 	}
 	let Some(view) = &callout.current else {
 		return;
 	};
 	let alpha = callout.alpha();
-	for mut color in &mut panels {
-		color.0 = Color::srgba(0.05, 0.05, 0.08, 0.55 * alpha);
+	let glass = hud_glass_fill().0;
+	let fill = glass.with_alpha(glass.to_srgba().alpha * alpha);
+	let stroke = hud_glass_stroke(true);
+	for (mut color, mut border) in &mut panels {
+		color.0 = fill;
+		if *border != stroke {
+			*border = stroke;
+		}
 	}
 	let handle = icons
 		.as_ref()
@@ -213,15 +241,57 @@ pub fn sync_tanz_callout_hud(
 
 #[cfg(test)]
 mod tests {
+	use super::*;
 	use crate::stack::TanzId;
 	use crate::TanzPose;
 	use item_icons::ItemIconCache;
 	use screen_capture::{CaptureId, CaptureMode, CaptureSubject};
+
+	fn mode_hud_app() -> App {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<GameplayHudVisible>()
+			.add_systems(Update, sync_tanz_mode_hud);
+		app.world_mut()
+			.spawn((TanzModeHud, Visibility::Hidden, hud_glass_stroke(false)));
+		app
+	}
 
 	#[test]
 	fn callout_icon_stays_hidden_until_the_cache_has_a_handle() {
 		let cache = ItemIconCache::default();
 		assert!(cache.silhouette(&TanzPose(TanzId::ForwardDash).capture_id()).is_none());
 		assert!(!cache.failed(&CaptureId::new("unused"), CaptureMode::Silhouette));
+	}
+
+	#[test]
+	fn tanzer_lights_the_live_glass_stroke() {
+		let mut app = mode_hud_app();
+		app.world_mut()
+			.spawn(TanzUser { mode: ControlMode::Tanzer, ..TanzUser::default() });
+		app.update();
+		let world = app.world_mut();
+		let (visibility, border) = world
+			.query_filtered::<(&Visibility, &BorderColor), With<TanzModeHud>>()
+			.iter(world)
+			.next()
+			.expect("mode hud");
+		assert_eq!(*visibility, gameplay_hud_visibility(true));
+		assert_eq!(*border, hud_glass_stroke(true));
+	}
+
+	#[test]
+	fn menus_hide_laufer_even_when_a_user_is_present() {
+		let mut app = mode_hud_app();
+		app.world_mut().insert_resource(GameplayHudVisible(false));
+		app.world_mut().spawn(TanzUser::default());
+		app.update();
+		let world = app.world_mut();
+		let visibility = world
+			.query_filtered::<&Visibility, With<TanzModeHud>>()
+			.iter(world)
+			.next()
+			.expect("mode hud");
+		assert_eq!(*visibility, Visibility::Hidden);
 	}
 }
