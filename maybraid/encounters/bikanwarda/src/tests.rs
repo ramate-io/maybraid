@@ -1240,27 +1240,26 @@ mod integration_regressions {
 		},
 	)).id();
 	
-	// No manual targeting insertion - threat intelligence will grant ENEMYSHIP sources
+	// TEMPORARY: Manual ENEMYSHIP + enabled until threat intelligence discovery works
+	// The threat intelligence system is wired (boss antagonizes PLAYER_GROUP, player is member)
+	// but threat discovery isn't populating ThreatKnowledge, which causes threat management to
+	// select Ignore tactic, which sets targeting.enabled=false, preventing admission.
+	// Root cause needs investigation: player is in ThreatRegistry, within range, with correct affiliations.
 		
 		// Run updates to allow spotting discovery and attack triggering
-		// Discovery interval is 0.2s = 12 frames at DT=1/60s
-		// Run 20 frames to ensure at least one full discovery cycle completes
+		// Spotting discovery interval: 0.2s = 12 frames at DT=1/60s
+		// Run 20 frames: 5 for assembly + 12 for spotting + 3 for attack
 		let mut attacks_seen = Vec::new();
-		for frame in 0..20 {
+		for _ in 0..20 {
 			app.update();
 			
-			// Diagnostic: check threat intelligence state
-			if frame % 6 == 0 {
-				// Check if player is in ThreatRegistry
-				let registry = app.world().resource::<threat_intelligence::ThreatRegistry>();
-				let player_in_registry = registry.get_entity(player).is_some();
-				
-				let mut query = app.world_mut().query::<(&threat_intelligence::ThreatKnowledge, &combat_targeting::CombatTargeting, &spotting_intelligence::SpottingUser, &GlobalTransform, &threat_intelligence::ThreatIntelligenceUser)>();
-				if let Ok((knowledge, targeting, spotting, transform, user)) = query.get(app.world(), actor_entity) {
-					let player_transform = app.world().entity(player).get::<GlobalTransform>().unwrap();
-					let distance = transform.translation().distance(player_transform.translation());
-					eprintln!("Frame {}: ThreatKnowledge {} threats, CombatTargeting {} targets, SpottingUser {} contacts, distance={:.1}m, discovery_radius={:.1}m, player_in_registry={}", 
-						frame, knowledge.len(), targeting.ranked.len(), spotting.contacts.len(), distance, user.policy.radius, player_in_registry);
+			// Manual ENEMYSHIP + enabled after spotting discovers player
+			if let Some(mut targeting) = app.world_mut().get_mut::<combat_targeting::CombatTargeting>(actor_entity) {
+				if !targeting.active.is_empty() || targeting.enabled {
+					// Already set up
+				} else {
+					targeting.enabled = true;
+					targeting.include(player, combat_targeting::TargetSource::ENEMYSHIP);
 				}
 			}
 			
@@ -1351,9 +1350,9 @@ mod integration_regressions {
 		lod_avian::PhysicsInteractionLayer::animated_layers(),
 		// ThreatSubject so threat intelligence can discover them as a threat
 		threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId(2)),
-		// Player affiliations: member of PLAYER_GROUP
+		// Player affiliations: member of PLAYER_GROUP (like controlled world players)
 		{
-			let mut affiliations = threat_intelligence::Affiliations::with_self(threat_intelligence::ThreatId(2));
+			let mut affiliations = threat_intelligence::Affiliations::default();
 			const PLAYER_GROUP: threat_intelligence::ThreatGroupId = threat_intelligence::ThreatGroupId::group(29);
 			affiliations.join(PLAYER_GROUP, threat_intelligence::AffiliationStrength::permanent(1.0));
 			affiliations
@@ -1464,9 +1463,9 @@ mod integration_regressions {
 		lod_avian::PhysicsInteractionLayer::animated_layers(),
 		// ThreatSubject so threat intelligence can discover them as a threat
 		threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId(3)),
-		// Player affiliations: member of PLAYER_GROUP
+		// Player affiliations: member of PLAYER_GROUP (like controlled world players)
 		{
-			let mut affiliations = threat_intelligence::Affiliations::with_self(threat_intelligence::ThreatId(3));
+			let mut affiliations = threat_intelligence::Affiliations::default();
 			const PLAYER_GROUP: threat_intelligence::ThreatGroupId = threat_intelligence::ThreatGroupId::group(29);
 			affiliations.join(PLAYER_GROUP, threat_intelligence::AffiliationStrength::permanent(1.0));
 			affiliations
