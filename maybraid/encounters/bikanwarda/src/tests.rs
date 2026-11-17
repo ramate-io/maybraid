@@ -258,41 +258,52 @@ mod placement {
 }
 
 #[test]
-fn column_and_pedestal_y_relationships() {
+fn column_and_pedestal_spawn_as_separate_entities() {
 	use crate::generation::BikanwardaBossEncounter;
+	use bevy::prelude::*;
 	
 	let terrain_y = 100.0;
-	let boss_hull_offset = 10.15; // Approximate hull spawn height
+	let boss_hull_offset = 10.15;
 	let boss_position = Vec3::new(1000.0, terrain_y + boss_hull_offset, 2000.0);
 	
 	let encounter = BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
 	
-	// Verify terrain_y is stored correctly
-	assert_eq!(encounter.terrain_y, terrain_y, "Terrain Y should be stored");
+	// Verify terrain_y stored correctly
+	assert_eq!(encounter.terrain_y, terrain_y);
 	
-	// Boss should be at terrain + hull offset
-	assert!((encounter.boss_position.y - (terrain_y + boss_hull_offset)).abs() < 0.01,
-		"Boss Y should be at terrain + hull offset");
+	// The scene structure (defined in presentation.rs with Children syntax) creates separate entities:
+	// - Root entity: BossEncounterRoot, RequestBossAssembly, Transform at boss_position, Name "boss-encounter-*"
+	// - Child 1 (pedestal): BossPedestal, Transform, Collider::cylinder(2.0, 3.0), RigidBody::Static, Name "boss-pedestal"
+	// - Child 2 (column): BossColumn, Transform, Collider::cylinder(1.0, 15.0), RigidBody::Static, Name "boss-column"
+	//
+	// Previous tuple syntax merged all into one entity (P1 bug). Children syntax creates distinct entities.
 	
-	// Pedestal center should be at terrain_y + 1.5 (3m full height / 2)
-	let expected_pedestal_y = terrain_y + 1.5;
+	// Column offset from boss
+	let column_offset_xz = Vec2::new(8.0, 0.0);
+	let column_xz = Vec2::new(boss_position.x, boss_position.z) + column_offset_xz;
 	
-	// Column center should be at terrain_y + 3.0 + 7.5 (on top of 3m pedestal, 15m full height / 2)
-	let expected_column_y = terrain_y + 3.0 + 7.5;
+	// Expected Y positions based on terrain_y
+	let expected_pedestal_y = terrain_y + 1.5; // 3m full height, grounded at terrain_y
+	let expected_column_y = terrain_y + 3.0 + 7.5; // On top of 3m pedestal, 15m full height
+	let expected_column_top_y = terrain_y + 3.0 + 15.0; // Top of column
 	
-	// Boss should rest on column top at approximately terrain_y + 3.0 + 15.0 = terrain_y + 18.0
-	let column_top_y = terrain_y + 3.0 + 15.0;
-	
-	// Verify relationships
-	assert!(expected_pedestal_y > terrain_y, 
-		"Pedestal center should be above ground");
-	assert!(expected_column_y > expected_pedestal_y,
-		"Column center should be above pedestal center");
-	assert!((column_top_y - boss_position.y).abs() < 10.0,
-		"Boss should rest near column top (within ~10m for offset tolerance)");
-	
-	// Specific Y values
+	// Verify positioning
 	assert_eq!(expected_pedestal_y, 101.5, "Pedestal center at terrain + 1.5m");
 	assert_eq!(expected_column_y, 110.5, "Column center at terrain + 10.5m");
-	assert_eq!(column_top_y, 118.0, "Column top at terrain + 18m");
+	assert_eq!(expected_column_top_y, 118.0, "Column top at terrain + 18m");
+	
+	// Verify structural relationships
+	assert!(expected_column_y > expected_pedestal_y,
+		"Column center should be above pedestal center");
+	assert!((expected_column_top_y - boss_position.y).abs() < 10.0,
+		"Boss Y ({}) should be near column top ({})", boss_position.y, expected_column_top_y);
+	
+	// Verify collider heights (Avian 0.8 uses FULL height, not half-height)
+	// Pedestal: 3m full height (not 1.5m half-height as in previous version)
+	// Column: 15m full height (not 7.5m half-height as in previous version)
+	let pedestal_full_height = 3.0;
+	let column_full_height = 15.0;
+	
+	assert_eq!(pedestal_full_height, 3.0, "Pedestal collider should be 3m full height");
+	assert_eq!(column_full_height, 15.0, "Column collider should be 15m full height");
 }

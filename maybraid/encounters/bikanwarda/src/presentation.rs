@@ -74,36 +74,36 @@ impl LodScene for BikanwardaBossEncounter {
 		let pedestal_y = terrain_y + 1.5;
 		let column_y = terrain_y + 3.0 + 7.5;
 		
-		(
-			bsn! {
-				~{name}
-				BossEncounterRoot::default()
-				instance
-				RequestBossAssembly { spec }
-				Transform::from_translation(position)
-				Visibility::default()
-			},
-			// Invisible collision placeholder: pedestal at column base (3m full height, 2m radius)
-			// Grounded at published terrain Y. Visual mesh TODO (#1617).
-			bsn! {
+		// Build child scenes for pedestal and column as separate entities
+		let children: Vec<Box<dyn Scene>> = vec![
+			Box::new(bsn! {
 				Name::new("boss-pedestal")
 				BossPedestal
 				Transform::from_translation(Vec3::new(column_xz.x, pedestal_y, column_xz.y))
 				Visibility::default()
 				Collider::cylinder(2.0, 3.0)
 				RigidBody::Static
-			},
-			// Invisible collision placeholder: column for chain attachment (15m full height, 1m radius)
-			// Sits on pedestal top. Chain anchors attach at column top (#1617). Visual mesh TODO.
-			bsn! {
+			}),
+			Box::new(bsn! {
 				Name::new("boss-column")
 				BossColumn
 				Transform::from_translation(Vec3::new(column_xz.x, column_y, column_xz.y))
 				Visibility::default()
 				Collider::cylinder(1.0, 15.0)
 				RigidBody::Static
-			},
-		)
+			}),
+		];
+		
+		// Root entity with boss assembly and children for column/pedestal
+		bsn! {
+			~{name}
+			BossEncounterRoot::default()
+			instance
+			RequestBossAssembly { spec }
+			Transform::from_translation(position)
+			Visibility::default()
+			Children [ {children} ]
+		}
 	}
 }
 
