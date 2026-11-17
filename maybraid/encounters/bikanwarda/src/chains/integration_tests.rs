@@ -287,6 +287,83 @@ mod tests {
 	}
 
 	#[test]
+	fn motion_system_runs_with_app_update() -> Result<()> {
+		let mut app = test_app();
+
+		let link_count = 12;
+		let length_m = 3.0;
+
+		// Create chain root
+		let root = app
+			.world_mut()
+			.spawn((
+				ChainRoot { link_count, rest_length_m: length_m },
+				ChainMotion {
+					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
+					active: true,
+				},
+				Transform::from_xyz(0.0, 0.0, 0.0),
+				GlobalTransform::default(),
+			))
+			.id();
+
+		// Create horizontal anchors at same height
+		let _left_anchor = app
+			.world_mut()
+			.spawn((
+				ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
+				Transform::from_xyz(-1.5, 2.5, 0.0),
+				GlobalTransform::default(),
+			))
+			.id();
+
+		let _right_anchor = app
+			.world_mut()
+			.spawn((
+				ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
+				Transform::from_xyz(1.5, 2.5, 0.0),
+				GlobalTransform::default(),
+			))
+			.id();
+
+		// Create joints at origin
+		let mut joints = Vec::new();
+		for _i in 0..link_count {
+			let joint = app
+				.world_mut()
+				.spawn((Transform::from_xyz(0.0, 0.0, 0.0), GlobalTransform::default()))
+				.id();
+			app.world_mut().entity_mut(root).add_child(joint);
+			joints.push(joint);
+		}
+
+		// Run several updates to let motion system work
+		for _ in 0..5 {
+			app.update();
+		}
+
+		// Check that midpoint joint moved from origin
+		let midpoint_joint = joints[6];
+		let joint_transform = app.world().entity(midpoint_joint).get::<Transform>().unwrap();
+
+		// Joint should have moved from (0,0,0) to somewhere near the catenary midpoint
+		let moved_distance = joint_transform.translation.length();
+		assert!(
+			moved_distance > 1.0,
+			"Motion system should have moved joint from origin, moved only {moved_distance}m"
+		);
+
+		// Midpoint should be below anchor height (sagging)
+		assert!(
+			joint_transform.translation.y < 2.5,
+			"Catenary midpoint should sag below anchor height 2.5, got y={}",
+			joint_transform.translation.y
+		);
+
+		Ok(())
+	}
+
+	#[test]
 	fn released_chain_deactivates_motion() -> Result<()> {
 		let mut app = test_app();
 

@@ -375,8 +375,12 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool
 		.resource_mut::<Assets<SkinnedMeshInverseBindposes>>()
 		.add(SkinnedMeshInverseBindposes::from(data.inverse_bindposes));
 
-	// Position root so chain is centered and visible
-	let root_y = 0.3;
+	// Position anchors horizontally at same height, separated by chain length
+	// Catenary will sag down in the middle
+	let anchor_height = 2.5;
+	let anchor_separation = 3.0; // Horizontal distance between anchors
+	let left_anchor_pos = Vec3::new(-anchor_separation / 2.0, anchor_height, 0.0);
+	let right_anchor_pos = Vec3::new(anchor_separation / 2.0, anchor_height, 0.0);
 	
 	let mode = if catenary {
 		ChainTensionMode::Catenary { sag_ratio: 10 }
@@ -392,38 +396,37 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool
 				mode,
 				active: true,
 			},
-			Transform::from_xyz(0.0, root_y, 0.0),
+			Transform::from_xyz(0.0, 0.0, 0.0),
 			GlobalTransform::default(),
 			Visibility::default(),
 			SkinnedChainCapture,
 		))
 		.id();
 	
-	// Spawn anchors - bottom and top, referencing the chain root
-	let _bottom_anchor = world.spawn((
-		Name::new("bottom-anchor"),
+	// Spawn anchors - left and right at same height
+	let _left_anchor = world.spawn((
+		Name::new("left-anchor"),
 		ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
-		Transform::from_xyz(0.0, root_y, 0.0),
+		Transform::from_translation(left_anchor_pos),
 		GlobalTransform::default(),
 		Visibility::default(),
 		SkinnedChainCapture,
 	)).id();
 	
-	let _top_anchor = world.spawn((
-		Name::new("top-anchor"),
+	let _right_anchor = world.spawn((
+		Name::new("right-anchor"),
 		ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
-		Transform::from_xyz(0.0, root_y + length_m, 0.0),
+		Transform::from_translation(right_anchor_pos),
 		GlobalTransform::default(),
 		Visibility::default(),
 		SkinnedChainCapture,
 	)).id();
 
-	// Compute joint positions based on anchors and tension mode
-	let start_pos = Vec3::new(0.0, root_y, 0.0);
-	let end_pos = Vec3::new(0.0, root_y + length_m, 0.0);
+	// Compute joint positions directly based on tension mode
+	// (Motion system doesn't run reliably in capture spawn context)
 	let joint_positions = bikanwarda_encounter::chains::compute_joint_positions(
-		start_pos,
-		end_pos,
+		left_anchor_pos,
+		right_anchor_pos,
 		link_count,
 		mode,
 	);
@@ -471,18 +474,13 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool
 		.id();
 	world.entity_mut(root).add_child(mesh_entity);
 	
-	// Manually run PostUpdate to propagate transforms and execute motion system
-	// The capture system doesn't update the app during SETTLE wall-time wait,
-	// so we need to explicitly run PostUpdate to make the motion system update joints.
-	// Run it twice: once to propagate initial anchor transforms, once to update after motion.
-	world.run_schedule(PostUpdate);
+	// Propagate transforms after setting joint positions
+	// Note: We compute positions directly above since motion system doesn't run reliably in capture spawn context
+	// The motion_system_runs_with_app_update test verifies the system works in real gameplay
 	world.run_schedule(PostUpdate);
 	
-	// If hit variant, spawn a visible projectile sphere intersecting the chain
+	// If hit variant, spawn a visible projectile sphere at the sagging midpoint
 	if hit {
-		// Spawn projectile at midpoint, offset to intersect the chain
-		let midpoint_y = root_y + length_m * 0.5;
-		
 		// Create a small sphere mesh for the projectile
 		let projectile_mesh = world.resource_mut::<Assets<Mesh>>().add(Sphere::new(0.15));
 		let projectile_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
@@ -491,20 +489,21 @@ fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool
 			..Default::default()
 		});
 		
+		// Position at the center of the chain (midpoint should be sagging)
 		let _projectile = world.spawn((
 			Name::new("test-projectile"),
 			Mesh3d(projectile_mesh),
 			MeshMaterial3d(projectile_material),
-			Transform::from_xyz(0.3, midpoint_y, 0.0), // Right at the chain, slightly offset
+			Transform::from_xyz(0.0, anchor_height - 0.3, 0.0), // Positioned below anchor height to show at sag
 			GlobalTransform::default(),
 			Visibility::default(),
 			SkinnedChainCapture,
 		)).id();
 	}
 	
-	// Reposition camera to frame the anchored chain
-	let camera_pos = Vec3::new(0.0, root_y + length_m * 0.5, 5.5);
-	let look_at = Vec3::new(0.0, root_y + length_m * 0.5, 0.0);
+	// Frame camera to show entire horizontal chain and both anchors
+	let camera_pos = Vec3::new(0.0, anchor_height, 6.0);
+	let look_at = Vec3::new(0.0, anchor_height - 0.3, 0.0); // Look slightly below anchors to center on sag
 	
 	let cameras: Vec<Entity> = world
 		.query_filtered::<Entity, With<Camera3d>>()
