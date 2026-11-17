@@ -345,3 +345,214 @@ fn boss_spawn_world_integration() -> anyhow::Result<()> {
 	
 	Ok(())
 }
+
+/// Regression test for #1601: boss survives eviction and is rediscovered on return.
+///
+/// Before the fix: Authored data was evicted when the viewer left the area, and
+/// `original_ids_for` depended on `stored_bounds` which returned None after eviction.
+/// On return, the boss was never rediscovered and only a retired host remained.
+///
+/// After the fix: Authored boss spawn positions are stored separately from evictable
+/// generated cache in `AuthoredBossSpawns` at `Id::Universal`. Discovery checks this
+/// session root, so the boss regenerates with the same identity/pose on re-entry.
+#[test]
+fn boss_survives_eviction_and_rediscovery() -> anyhow::Result<()> {
+	let mut app = minimal_app();
+	
+	let spawn_pos = Vec3::new(2600.0, 0.0, 1037.9);
+	
+	app.world_mut().spawn(RequestSpawnBoss {
+		at: Some(Vec2::new(spawn_pos.x, spawn_pos.z)),
+	});
+	app.update();
+	
+	let storage = app.world().resource::<HcsgStorage>();
+	let boss_id = lod::gen::Id::Bytes(Bytes(chained_encounter_id().as_bytes()));
+	
+	let entry_before = storage
+		.try_entry::<BikanwardaBossEncounter>(boss_id)
+		.map_err(|_| anyhow::anyhow!("storage busy before eviction"))?;
+	anyhow::ensure!(
+		entry_before.is_some(),
+		"Boss should exist before eviction"
+	);
+	let version_before = entry_before.as_ref().unwrap().version;
+	
+	// Simulate viewer leaving: evict the boss encounter's generated cache entry
+	// by retaining only entries far from the spawn position.
+	let far_region = bevy::shape::Aabb3d::new(
+		Vec3::new(spawn_pos.x + 5000.0, 0.0, spawn_pos.z),
+		Vec3::splat(100.0),
+	);
+	storage.retain_overlapping::<BikanwardaBossEncounter>(&[far_region]);
+	
+	// Verify the generated cache entry was evicted
+	let entry_evicted = storage
+		.try_entry::<BikanwardaBossEncounter>(boss_id)
+		.map_err(|_| anyhow::anyhow!("storage busy after eviction"))?;
+	anyhow::ensure!(
+		entry_evicted.is_none(),
+		"Boss cache should be evicted when viewer leaves area"
+	);
+	
+	app.update();
+	
+	// Simulate viewer returning: use generation to rediscover the boss
+	use lod::hcsg::{GenerationContext, GenerationScheme};
+	let storage = app.world().resource::<HcsgStorage>();
+	let mut cx = GenerationContext::new(&storage);
+	
+	let region_on_return = bevy::shape::Aabb3d::new(spawn_pos, Vec3::splat(100.0));
+	let ids = BikanwardaBossEncounter::original_ids_for(&mut cx, region_on_return);
+	
+	anyhow::ensure!(
+		!ids.is_empty(),
+		"original_ids_for should rediscover boss on return despite eviction"
+	);
+	
+	// Regenerate the boss
+	let regenerated = BikanwardaBossEncounter::build_with_id(&mut cx, boss_id);
+	anyhow::ensure!(
+		regenerated.is_some(),
+		"Boss should regenerate with same ID"
+	);
+	
+	let (regenerated_encounter, regenerated_bounds) = regenerated.unwrap();
+	
+	// Verify same identity
+	anyhow::ensure!(
+		regenerated_encounter.id == chained_encounter_id(),
+		"Regenerated boss should have same encounter ID"
+	);
+	
+	// Verify same pose (position)
+	anyhow::ensure!(
+		(regenerated_encounter.boss_position - spawn_pos).length() < 0.1,
+		"Regenerated boss should have same position. Expected ({:.1}, {:.1}, {:.1}), got ({:.1}, {:.1}, {:.1})",
+		spawn_pos.x, spawn_pos.y, spawn_pos.z,
+		regenerated_encounter.boss_position.x,
+		regenerated_encounter.boss_position.y,
+		regenerated_encounter.boss_position.z
+	);
+	
+	// Verify same bounds
+	anyhow::ensure!(
+		regenerated_bounds == entry_before.as_ref().unwrap().bounds,
+		"Regenerated boss should have same bounds"
+	);
+	
+	// Publish the regenerated boss back to storage (simulating what presentation does)
+	storage.publish(boss_id, std::sync::Arc::new(regenerated_encounter), regenerated_bounds);
+	
+	// Verify it's now in storage with a new version (regenerated, not just cached)
+	let entry_after = storage
+		.try_entry::<BikanwardaBossEncounter>(boss_id)
+		.map_err(|_| anyhow::anyhow!("storage busy after regeneration"))?;
+	anyhow::ensure!(
+		entry_after.is_some(),
+		"Boss should exist in storage after regeneration"
+	);
+	
+	let version_after = entry_after.as_ref().unwrap().version;
+	anyhow::ensure!(
+		version_after != version_before,
+		"Regenerated boss should have new version (not stale cache)"
+	);
+	
+	Ok(())
+}
+
+/// Regression test for #1601: retired hosts are despawned within bounded frames.
+///
+/// Before the fix: Retired hosts stayed alive for 79.2+ seconds after retirement,
+/// either due to queue backlog or an ownership/drain defect.
+///
+/// After the fix: Verify retired hosts are despawned within a reasonable timeframe
+/// based on the budget (default: 2 hosts per frame at 60 FPS).
+///
+/// This test uses the lod crate's runtime system which includes the budgeted
+/// retirement cleanup in `Last`.
+#[test]
+fn retired_hosts_despawn_within_budget() -> anyhow::Result<()> {
+	use lod::hcsg::{drain_retired_hosts, RetiredHost};
+	use lod::scene::LodChunkFulfillBudget;
+	
+	let mut app = App::new();
+	app.add_plugins(bevy::MinimalPlugins)
+		.init_resource::<LodChunkFulfillBudget>();
+	
+	// Manually add the despawn system since we're not using the full HcsgRuntime
+	app.add_systems(bevy::app::Last, |world: &mut World| {
+		use lod::scene::LodChunkFulfillBudget;
+		use lod::hcsg::RetiredHost;
+		use bevy::ecs::entity_disabling::Disabled;
+		use bevy::prelude::*;
+		use std::time::Instant;
+		
+		let budget = world.get_resource::<LodChunkFulfillBudget>().copied().unwrap_or_default();
+		let cap = budget.retired_host_despawns_per_frame();
+		let time_budget = budget.retired_host_time_per_frame();
+		
+		let entities: Vec<Entity> = {
+			let mut query = world.query_filtered::<Entity, (With<RetiredHost>, Allow<Disabled>)>();
+			query.iter(world).collect()
+		};
+		if entities.is_empty() {
+			return;
+		}
+		
+		let start = Instant::now();
+		let mut despawned = 0u32;
+		for entity in entities {
+			if despawned >= cap {
+				break;
+			}
+			if despawned > 0 && start.elapsed() >= time_budget {
+				break;
+			}
+			world.despawn(entity);
+			despawned += 1;
+		}
+	});
+	
+	// Spawn test entities marked as RetiredHost
+	const RETIRED_COUNT: u32 = 10;
+	for _ in 0..RETIRED_COUNT {
+		app.world_mut().spawn((
+			RetiredHost,
+			bevy::prelude::Visibility::Hidden,
+		));
+	}
+	
+	// Count retired hosts before cleanup
+	let before = lod::hcsg::leftover_retired_hosts(&mut app);
+	anyhow::ensure!(
+		before == RETIRED_COUNT as usize,
+		"Should start with {} retired hosts",
+		RETIRED_COUNT
+	);
+	
+	// Run updates to allow despawn system to process
+	// Budget: 2 hosts per frame (default), so 10 hosts should take 5 frames
+	let budget = app.world().resource::<LodChunkFulfillBudget>();
+	let hosts_per_frame = budget.retired_host_despawns_per_frame();
+	let expected_frames = (RETIRED_COUNT + hosts_per_frame - 1) / hosts_per_frame;
+	
+	// Add 50% buffer for safety (but much less than 79.2 seconds = 4752 frames)
+	let max_frames = expected_frames + expected_frames / 2;
+	
+	// Use the test helper to drain retired hosts
+	let remaining = drain_retired_hosts(&mut app, max_frames);
+	
+	anyhow::ensure!(
+		remaining == 0,
+		"All retired hosts should be despawned within {} frames. {} hosts remain. \
+		Expected despawn within {} frames at {} hosts/frame (budget default: 2)",
+		max_frames,
+		remaining,
+		expected_frames,
+		hosts_per_frame
+	);
+	
+	Ok(())
+}

@@ -3,8 +3,8 @@
 //! Spawns the generated boss encounter via HCSG presentation for visual testing.
 
 use bevy::prelude::*;
-use bikanwarda_encounter::BikanwardaBossEncounter;
-use lod::hcsg::{register_session_seed, HcsgStorage};
+use bikanwarda_encounter::{AuthoredBossSpawns, BikanwardaBossEncounter};
+use lod::hcsg::{register_session_seed, universal_bounds, HcsgStorage};
 use lod::gen::Bytes;
 use player::Player;
 use std::sync::Arc;
@@ -36,19 +36,25 @@ impl Default for BossSpawnConfig {
 
 /// Seeds the boss encounter during HCSG session restarts.
 fn seed_boss_encounter(config: Res<BossSpawnConfig>, storage: Res<HcsgStorage>) {
-	if !config.active {
-		return;
+	let position = if config.active {
+		Some(config.position)
+	} else {
+		None
+	};
+	
+	let spawns = AuthoredBossSpawns { position };
+	storage.seed(spawns, universal_bounds());
+	
+	if let Some(pos) = position {
+		info!("[BOSS] Reseeding encounter at ({:.1}, {:.1}, {:.1})", pos.x, pos.y, pos.z);
+		
+		let encounter = BikanwardaBossEncounter::chained_at(pos);
+		let id = lod::gen::Id::Bytes(Bytes(
+			bikanwarda_encounter::chained_encounter_id().as_bytes()
+		));
+		
+		storage.publish(id, Arc::new(encounter.clone()), encounter.bounds);
 	}
-	
-	info!("[BOSS] Reseeding encounter at ({:.1}, {:.1}, {:.1})", 
-		config.position.x, config.position.y, config.position.z);
-	
-	let encounter = BikanwardaBossEncounter::chained_at(config.position);
-	let id = lod::gen::Id::Bytes(Bytes(
-		bikanwarda_encounter::chained_encounter_id().as_bytes()
-	));
-	
-	storage.publish(id, Arc::new(encounter.clone()), encounter.bounds);
 }
 
 /// System to handle boss spawn requests.
@@ -76,6 +82,9 @@ pub fn process_boss_spawn_requests(
 		
 		config.position = position;
 		config.active = true;
+		
+		let spawns = AuthoredBossSpawns { position: Some(position) };
+		storage.seed(spawns, universal_bounds());
 		
 		let encounter = BikanwardaBossEncounter::chained_at(position);
 		let id = lod::gen::Id::Bytes(Bytes(
