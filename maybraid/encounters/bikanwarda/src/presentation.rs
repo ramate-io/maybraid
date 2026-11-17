@@ -12,6 +12,7 @@ use std::marker::PhantomData;
 use avian3d::prelude::{Collider, RigidBody};
 use bevy::prelude::*;
 use bikanwarda_character::BikanwardaSpec;
+use damage::Health;
 use encounters::EncounterInstance;
 use lod::hcsg::PresentationPlugin;
 use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
@@ -96,11 +97,15 @@ impl LodScene for BikanwardaBossEncounter {
 			}),
 		];
 		
+		// Boss health scaled to encounter (placeholder value, tuned later)
+		let boss_health = Health::from_max(1000.0);
+		
 		// Root entity with boss assembly and children for column/pedestal
 		bsn! {
 			~{name}
 			BossEncounterRoot::default()
 			instance
+			boss_health
 			RequestBossAssembly { spec }
 			Transform::from_translation(position)
 			Visibility::default()

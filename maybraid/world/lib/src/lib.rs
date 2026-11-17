@@ -249,8 +249,15 @@ impl Plugin for WorldPlugin {
 			.add_plugins(crate::spawn_surface::SpawnSurfacePlugin)
 			.add_plugins(WeatherPlugin)
 			.add_plugins(world_lubikan::WorldLubikanPlugin)
-			.add_plugins(world_encounter::WorldEncounterPlugin)
-			.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
+			.add_plugins(world_encounter::WorldEncounterPlugin);
+		
+		// Install attacks plugin for boss combat
+		if !app.is_plugin_added::<attacks::AttacksPlugin>() {
+			app.add_plugins(attacks::AttacksPlugin);
+		}
+		app.add_plugins(bikanwarda_attacks::BikanwardaAttacksPlugin { placeholders: false });
+		
+		app.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
 			.add_plugins(WorldPoiPlugin)
 			.add_plugins(WorldOccupancyPlugin)
 			.add_plugins(WorldMapViewPlugin)

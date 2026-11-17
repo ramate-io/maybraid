@@ -7,6 +7,7 @@
 
 mod assembly;
 pub mod chains;
+mod combat;
 mod contract;
 mod generation;
 mod identity;
@@ -14,10 +15,13 @@ mod outcomes;
 mod plugin;
 mod presentation;
 mod scripted;
+mod tether;
 mod unlocks;
 
 pub use assembly::{spawn_boss_assemblies, BossAssemblyPlugin};
+pub use combat::{BossEncounterCombatPlugin, BossInCombat, BossAttackCooldown};
 pub use contract::{BossActorRecipe, BossAttackConfig, BossEncounterContract};
+pub use tether::{BossTetherChain, BossTetherPlugin};
 pub use generation::{AuthoredBossSpawns, BikanwardaBossEncounter};
 pub use identity::{
 	chained_encounter_id, enraged_definition, ward_definition, BIKANWARDA_CHAINED_SLUG,

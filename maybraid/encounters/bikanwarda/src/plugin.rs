@@ -36,5 +36,8 @@ impl Plugin for BikanwardaEncounterPlugin {
 			register_unlocks(&mut app.world_mut().resource_mut::<LubikanCatalog>(), &config);
 		}
 		outcomes::configure(app);
+		app.add_plugins(crate::BossEncounterCombatPlugin);
+		app.add_plugins(crate::chains::BikanwardaChainPhysicsPlugin);
+		app.add_plugins(crate::BossTetherPlugin);
 	}
 }

@@ -22,6 +22,8 @@ character-motion = { workspace = true }
 encounters = { workspace = true }
 bikanwarda-encounter = { workspace = true }
 bikanwarda-character = { workspace = true }
+bikanwarda-attacks = { workspace = true }
+attacks = { workspace = true }
 layer-stack = { workspace = true }
 avian3d = { workspace = true }
 bevy = { workspace = true }

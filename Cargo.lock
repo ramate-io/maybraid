@@ -2330,13 +2330,17 @@ name = "bikanwarda-encounter"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "attacks",
  "avian3d",
  "bevy",
+ "bikanwarda-attacks",
  "bikanwarda-character",
  "bikanwarda-lubikans",
  "characters",
+ "combat-targeting",
  "damage",
  "encounters",
+ "lod",
  "lod-avian",
  "lubikans",
  "projectiles",
@@ -7593,9 +7597,11 @@ name = "maybraid-world"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "attacks",
  "avian3d",
  "barking",
  "bevy",
+ "bikanwarda-attacks",
  "bikanwarda-character",
  "bikanwarda-encounter",
  "building-physics",
