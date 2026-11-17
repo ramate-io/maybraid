@@ -1225,8 +1225,11 @@ mod integration_regressions {
 		}
 		
 		// Verify attack was triggered (BeginAttack message written)
-		let begin_attacks = app.world().resource::<bevy::ecs::message::Messages<BeginAttack>>();
-		let attacks: Vec<_> = begin_attacks.read().cloned().collect();
+		let attacks: Vec<BeginAttack> = app.world_mut()
+			.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+				messages.read().cloned().collect()
+			})
+			.expect("Failed to read BeginAttack messages");
 		
 		assert!(!attacks.is_empty(), 
 			"Boss should have triggered attack on visible player in range");
@@ -1309,8 +1312,11 @@ mod integration_regressions {
 		}
 		
 		// Verify no attack was triggered (player is occluded)
-		let begin_attacks = app.world().resource::<bevy::ecs::message::Messages<BeginAttack>>();
-		let attacks: Vec<_> = begin_attacks.read().cloned().collect();
+		let attacks: Vec<BeginAttack> = app.world_mut()
+			.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+				messages.read().cloned().collect()
+			})
+			.expect("Failed to read BeginAttack messages");
 		
 		assert!(attacks.is_empty() || !attacks.iter().any(|attack| attack.target == Some(player)),
 			"Boss should not attack occluded player");
@@ -1382,8 +1388,11 @@ mod integration_regressions {
 		}
 		
 		// Verify no attack was triggered (player is out of range)
-		let begin_attacks = app.world().resource::<bevy::ecs::message::Messages<BeginAttack>>();
-		let attacks: Vec<_> = begin_attacks.read().cloned().collect();
+		let attacks: Vec<BeginAttack> = app.world_mut()
+			.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| {
+				messages.read().cloned().collect()
+			})
+			.expect("Failed to read BeginAttack messages");
 		
 		assert!(attacks.is_empty() || !attacks.iter().any(|attack| attack.target == Some(player)),
 			"Boss should not attack out-of-range player");

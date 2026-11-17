@@ -1,0 +1,23 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling spotting-intelligence v0.1.5 (/agent/repos/maybraid/maybraid/intelligence/spotting/lib)
+    Finished `test` profile [unoptimized] target(s) in 6.13s
+     Running unittests src/lib.rs (target/debug/deps/spotting_intelligence-e139914c30155e7d)
+
+running 11 tests
+test candidate::tests::sample_budget_caps_candidates_total_and_per_subject ... ok
+test candidate::tests::budget_order_prefers_priority_salience_distance_then_known ... ok
+test contact::tests::freshness_and_forgetting_use_last_success ... ok
+test contact::tests::predicted_aim_uses_latest_velocity ... ok
+test directive::tests::directive_satisfaction_counts_only_fresh_matching_contacts ... ok
+test user::tests::discovery_sample_cursor_advances_one_feature_per_pass ... ok
+test layers::tests::semantic_layers_compose_and_intersect ... ok
+test bounds::tests::capsule_samples_cover_center_head_and_body ... ok
+test user::tests::hint_from_skips_an_identical_source_priority ... ok
+test user::tests::user_forgets_only_contacts_beyond_memory ... ok
+test user::tests::removing_threat_hint_preserves_explicit_owner ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

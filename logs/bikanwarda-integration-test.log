@@ -1,0 +1,217 @@
+ Downloading crates ...
+  Downloaded bitflags v1.3.2
+  Downloaded basis-universal v0.3.1
+  Downloaded basis-universal-sys v0.3.1
+   Compiling basis-universal-sys v0.3.1
+   Compiling bitflags v1.3.2
+   Compiling procedural-common v0.1.5 (/agent/repos/maybraid/maybraid/procedural/common)
+   Compiling gimme-gen v0.1.5 (/agent/repos/maybraid/maybraid/gimme/gen)
+   Compiling terrain-stamps v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/terrain/stamps)
+   Compiling terrain-watersheds v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/terrain/watersheds)
+   Compiling basis-universal v0.3.1
+   Compiling bevy_image v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_window v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_text v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_camera v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_gizmos v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_picking v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_extract v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_render v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_light v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_world_serialization v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_sprite v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_input_focus v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_gltf v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_ui v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_winit v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_core_pipeline v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_sprite_render v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_pbr v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_ui_widgets v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_ui_render v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_post_process v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_anti_alias v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_gizmos_render v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy_internal v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling bevy v0.20.1 (https://github.com/ramate-io/bevy?rev=dda989e2b463e22f8c13dc86208be795177fe201#dda989e2)
+   Compiling lod-cascade-system v0.1.5 (/agent/repos/maybraid/maybraid/lod/cascade-system)
+   Compiling material-ref v0.1.5 (/agent/repos/maybraid/maybraid/material-ref)
+   Compiling scene-ref v0.1.5 (/agent/repos/maybraid/maybraid/scene-ref)
+   Compiling lod v0.1.5 (/agent/repos/maybraid/maybraid/lod/lib)
+warning: variable `invalidated` is assigned to, but never used
+   --> maybraid/lod/lib/src/hcsg/demand/registry.rs:320:7
+    |
+320 |         let mut invalidated = 0;
+    |             ^^^^^^^^^^^^^^^
+    |
+    = note: consider using `_invalidated` instead
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `total`
+   --> maybraid/lod/lib/src/hcsg/demand/registry.rs:321:7
+    |
+321 |         let total = state.subscriptions.len();
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+
+warning: value assigned to `invalidated` is never read
+   --> maybraid/lod/lib/src/hcsg/demand/registry.rs:330:5
+    |
+330 |                 invalidated += 1;
+    |                 ^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling bevy_transform_interpolation v0.6.0
+   Compiling chunk v0.1.5 (/agent/repos/maybraid/util/chunk)
+   Compiling avian3d v0.8.0
+   Compiling lod-gimme v0.1.5 (/agent/repos/maybraid/maybraid/lod/gimme)
+   Compiling sdf v0.1.5 (/agent/repos/maybraid/util/sdf)
+warning: `lod` (lib) generated 3 warnings (run `cargo fix --lib -p lod` to apply 1 suggestion)
+   Compiling rigs v0.1.5 (/agent/repos/maybraid/maybraid/rigs)
+   Compiling render-item v0.1.5 (/agent/repos/maybraid/util/render-item)
+   Compiling layer-stack v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/stack)
+   Compiling game-commands v0.1.5 (/agent/repos/maybraid/util/game-commands)
+   Compiling intelligence-lod v0.1.5 (/agent/repos/maybraid/maybraid/intelligence/lod)
+   Compiling terrain-layer-model v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/terrain/model)
+   Compiling terrain-chunk-ref v0.1.5 (/agent/repos/maybraid/maybraid/terrain-chunk-ref)
+   Compiling character-rigs v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/mobs/characters/rigs)
+   Compiling lod-lazy-refs v0.1.5 (/agent/repos/maybraid/maybraid/lod-lazy-refs)
+   Compiling ground v0.1.5 (/agent/repos/maybraid/maybraid/ground/lib)
+   Compiling character-items v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/mobs/characters/items)
+   Compiling visual-geometry-core v0.1.5 (/agent/repos/maybraid/maybraid/visual-geometry-core)
+   Compiling character-animations v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/mobs/characters/animations)
+   Compiling terrain-shaders v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/terrain/shaders)
+   Compiling character-shaders v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/mobs/characters/shaders)
+   Compiling character-motion v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/mobs/characters/motion)
+   Compiling maybraid-virtual-pad-controller v0.1.5 (/agent/repos/maybraid/maybraid/controllers/virtual-pad)
+   Compiling characters v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/mobs/characters/lib)
+   Compiling maybraid-audio v0.1.5 (/agent/repos/maybraid/maybraid/audio)
+   Compiling lod-avian v0.1.5 (/agent/repos/maybraid/maybraid/lod/avian)
+   Compiling projectiles v0.1.5 (/agent/repos/maybraid/maybraid/projectiles)
+   Compiling durham v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/terrain/durham)
+   Compiling damage v0.1.5 (/agent/repos/maybraid/maybraid/damage)
+   Compiling maybraid-controllers-core v0.1.5 (/agent/repos/maybraid/maybraid/controllers/core)
+   Compiling building-components v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/urbanization/buildings/components)
+   Compiling maybraid-character-controller v0.1.5 (/agent/repos/maybraid/maybraid/controllers/character)
+   Compiling player v0.1.5 (/agent/repos/maybraid/maybraid/player/lib)
+   Compiling spotting-intelligence v0.1.5 (/agent/repos/maybraid/maybraid/intelligence/spotting/lib)
+   Compiling vegetation-components v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/vegetation/components)
+   Compiling buildings v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/urbanization/buildings/lib)
+   Compiling building-shaders v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/urbanization/buildings/shaders)
+   Compiling bevy_hanabi v0.20.0-dev (https://github.com/djeedai/bevy_hanabi?rev=d277555d4a2350da6787245d15c56c62c739594d#d277555d)
+   Compiling lubikans v0.1.5 (/agent/repos/maybraid/maybraid/lubikans)
+   Compiling building-physics v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/urbanization/buildings/physics)
+   Compiling urbanization-developments v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/urbanization/developments)
+   Compiling maybraid-spatial-rumble v0.1.5 (/agent/repos/maybraid/maybraid/spatial-rumble/lib)
+   Compiling urbanization-layer-model v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/urbanization/model)
+   Compiling urbanization-cells v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/urbanization/cells)
+   Compiling vegetation-shaders v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/vegetation/shaders)
+   Compiling combat-targeting v0.1.5 (/agent/repos/maybraid/maybraid/intelligence/combat/targeting)
+   Compiling richmond v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/urbanization/richmond)
+   Compiling maybraid-spawns-projectiles v0.1.5 (/agent/repos/maybraid/maybraid/spawns/projectiles)
+   Compiling sbs-geometry v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/vegetation/sbs-geometry)
+   Compiling sdf-common v0.1.5 (/agent/repos/maybraid/maybraid/sdf/common)
+   Compiling firearms-components v0.1.5 (/agent/repos/maybraid/maybraid/items/firearms-components)
+   Compiling character-persist v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/mobs/characters/persist)
+   Compiling firearms v0.1.5 (/agent/repos/maybraid/maybraid/items/firearms)
+   Compiling sbs-trees v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/vegetation/sbs-trees)
+   Compiling character-inventory-user v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/mobs/characters/inventory-user)
+   Compiling player-camera v0.1.5 (/agent/repos/maybraid/maybraid/player/camera)
+   Compiling maybraid-equipment v0.1.5 (/agent/repos/maybraid/maybraid/items/equipment)
+   Compiling vegetation-groves v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/vegetation/groves)
+   Compiling vegetation-bumpout v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/vegetation/bumpout)
+   Compiling attacks v0.1.5 (/agent/repos/maybraid/maybraid/attacks)
+   Compiling vegetation-layer-model v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/vegetation/model)
+   Compiling firearm-user v0.1.5 (/agent/repos/maybraid/maybraid/items/firearm-user)
+   Compiling maybraid-spawns-support v0.1.5 (/agent/repos/maybraid/maybraid/spawns/support)
+   Compiling chico v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/vegetation/chico)
+   Compiling maybraid-vfx v0.1.5 (/agent/repos/maybraid/maybraid/vfx/lib)
+   Compiling occupancy-rewards v0.1.5 (/agent/repos/maybraid/maybraid/occupancy-rewards)
+   Compiling movement-intelligence v0.1.5 (/agent/repos/maybraid/maybraid/intelligence/movement/lib)
+   Compiling threat-intelligence v0.1.5 (/agent/repos/maybraid/maybraid/intelligence/threat)
+   Compiling spotting-intelligence-avian v0.1.5 (/agent/repos/maybraid/maybraid/intelligence/spotting/avian)
+   Compiling furniture-shaders v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/furnishing/shaders)
+   Compiling firearm-intelligence v0.1.5 (/agent/repos/maybraid/maybraid/intelligence/combat/firearm)
+   Compiling bikanwarda-lubikans v0.1.5 (/agent/repos/maybraid/maybraid/lubikans/bikanwarda)
+warning: type `CombatCredits` is more private than the item `BikanwardaCombatWeights::credits_for`
+  --> maybraid/lubikans/bikanwarda/src/combat.rs:46:2
+   |
+46 |     pub fn credits_for(self, class: BikanwardaVictimClass, hit: DamageApplied) -> CombatCredits {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `BikanwardaCombatWeights::credits_for` is reachable at visibility `pub`
+   |
+note: but type `CombatCredits` is only usable at visibility `pub(self)`
+  --> maybraid/lubikans/bikanwarda/src/combat.rs:40:1
+   |
+40 | struct CombatCredits {
+   | ^^^^^^^^^^^^^^^^^^^^
+   = note: `#[warn(private_interfaces)]` on by default
+
+warning: `bikanwarda-lubikans` (lib) generated 1 warning
+   Compiling world-materials v0.1.5 (/agent/repos/maybraid/maybraid/world/materials/lib)
+   Compiling bikanwarda-attacks v0.1.5 (/agent/repos/maybraid/maybraid/attacks/bikanwarda)
+   Compiling world-player v0.1.5 (/agent/repos/maybraid/maybraid/world/player)
+   Compiling encounters v0.1.5 (/agent/repos/maybraid/maybraid/encounters)
+   Compiling bikanwarda-character v0.1.5 (/agent/repos/maybraid/maybraid/world/layers/mobs/characters/bikanwarda)
+   Compiling bikanwarda-encounter v0.1.5 (/agent/repos/maybraid/maybraid/encounters/bikanwarda)
+warning: unused import: `avian3d::prelude::*`
+  --> maybraid/encounters/bikanwarda/src/chains/integration_tests.rs:12:6
+   |
+12 |     use avian3d::prelude::*;
+   |         ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `Health`
+  --> maybraid/encounters/bikanwarda/src/chains/integration_tests.rs:15:44
+   |
+15 |     use damage::{DamageApplied, DamagePlugin, Health};
+   |                                               ^^^^^^
+
+warning: unused import: `crate::generation::BikanwardaBossEncounter`
+   --> maybraid/encounters/bikanwarda/src/tests.rs:269:6
+    |
+269 |     use crate::generation::BikanwardaBossEncounter;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no method named `read` found for reference `&bevy::bevy_ecs::message::Messages<BeginAttack>` in the current scope
+    --> maybraid/encounters/bikanwarda/src/tests.rs:1229:39
+     |
+1229 |         let attacks: Vec<_> = begin_attacks.read().cloned().collect();
+     |                                             ^^^^ method not found in `&bevy::bevy_ecs::message::Messages<BeginAttack>`
+
+error[E0599]: no method named `read` found for reference `&bevy::bevy_ecs::message::Messages<BeginAttack>` in the current scope
+    --> maybraid/encounters/bikanwarda/src/tests.rs:1313:39
+     |
+1313 |         let attacks: Vec<_> = begin_attacks.read().cloned().collect();
+     |                                             ^^^^ method not found in `&bevy::bevy_ecs::message::Messages<BeginAttack>`
+
+error[E0599]: no method named `read` found for reference `&bevy::bevy_ecs::message::Messages<BeginAttack>` in the current scope
+    --> maybraid/encounters/bikanwarda/src/tests.rs:1386:39
+     |
+1386 |         let attacks: Vec<_> = begin_attacks.read().cloned().collect();
+     |                                             ^^^^ method not found in `&bevy::bevy_ecs::message::Messages<BeginAttack>`
+
+warning: unused variable: `start_anchor`
+  --> maybraid/encounters/bikanwarda/src/chains/integration_tests.rs:79:7
+   |
+79 |         let start_anchor = app
+   |             ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_start_anchor`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `chain_center_x`
+   --> maybraid/encounters/bikanwarda/src/chains/integration_tests.rs:735:7
+    |
+735 |         let chain_center_x = 0.0; // Midpoint between -1.5 and 1.5
+    |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_chain_center_x`
+
+warning: unused variable: `host`
+    --> maybraid/encounters/bikanwarda/src/tests.rs:1004:7
+     |
+1004 |         let host = app.world_mut().spawn((
+     |             ^^^^ help: if this is intentional, prefix it with an underscore: `_host`
+
+For more information about this error, try `rustc --explain E0599`.
+warning: `bikanwarda-encounter` (lib test) generated 6 warnings
+error: could not compile `bikanwarda-encounter` (lib test) due to 3 previous errors; 6 warnings emitted
