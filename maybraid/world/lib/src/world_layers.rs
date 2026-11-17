@@ -48,7 +48,7 @@ impl Plugin for WorldLayersPlugin {
 			seed: WORLD_SEED,
 		}))
 		.insert_resource(crate::poi::PaddedTerrainPoiGround)
-		.add_systems(Startup, install_durham_terrain_provider)
+		.add_systems(Update, update_durham_terrain_provider)
 		.insert_resource(richmond.development_config())
 		.insert_resource(richmond.urbanization_selection())
 		.init_resource::<AuthoredDevelopments>()
@@ -103,33 +103,34 @@ impl Plugin for WorldLayersPlugin {
 	}
 }
 
-/// Install Durham-backed published terrain height provider.
+/// Update Durham-backed published terrain height provider.
 ///
-/// The closure installed here will call back into Durham terrain integration
-/// to query published heights. This keeps Durham dependencies in world-level code only.
-fn install_durham_terrain_provider(world: &mut World) {
-	use crate::terrain_query::{PublishedTerrainHeight, query_durham_terrain_height};
-	use bevy::ecs::system::SystemState;
-	use lod::hcsg::HcsgStorage;
+/// Runs each frame to keep the provider synchronized with Durham terrain state.
+/// The closure captures cloned terrain resources, avoiding any unsafe World access.
+fn update_durham_terrain_provider(
+	mut commands: Commands,
+	hcsg_storage: Res<lod::hcsg::HcsgStorage>,
+	layout: Res<durham::TerrainCellLayout>,
+) {
+	use crate::terrain_query::PublishedTerrainHeight;
+	use durham::SharedTerrainStorage;
 	
-	// Store World pointer as usize to make it Send + Sync
-	// SAFETY: This is only safe because:
-	// 1. The closure is only called during Bevy system execution when World is valid
-	// 2. Bevy's ECS ensures no conflicting mutable access
-	// 3. The pointer remains valid for the lifetime of the World resource
-	let world_addr = world as *mut World as usize;
+	// Clone the resources (both are cheaply cloneable: HcsgStorage is Arc-wrapped)
+	let storage_clone = (*hcsg_storage).clone();
+	let layout_clone = (*layout).clone();
+	
+	// Create closure that captures cloned resources (no unsafe code needed)
 	let provider = PublishedTerrainHeight(Box::new(move |xz: Vec2| -> Option<f32> {
-		// SAFETY: Convert usize back to World pointer
-		unsafe {
-			let world_ref = &mut *(world_addr as *mut World);
-			let mut system_state: SystemState<(DurhamSurface, Option<Res<HcsgStorage>>)> = 
-				SystemState::new(world_ref);
-			let (surface, storage) = system_state.get(world_ref).ok()?;
-			let result = query_durham_terrain_height(&surface, storage.as_deref(), xz);
-			system_state.apply(world_ref);
-			result
+		// Query published padded terrain first (same logic as terrain_height_at)
+		type Ground = terrain_layer_model::OnTerrain<durham::Durham>;
+		match richmond::PaddedTerrain::<Ground>::published_height_at(&storage_clone, xz.x, xz.y) {
+			Ok(Some(height)) => return Some(height),
+			Ok(None) => {}
+			Err(_) => return None,
 		}
+		// Fall back to Durham's composed surface (raw terrain without pads)
+		storage_clone.try_composed_height_at(&layout_clone, xz.x, xz.y).ok().flatten()
 	}));
 	
-	world.insert_resource(provider);
+	commands.insert_resource(provider);
 }
