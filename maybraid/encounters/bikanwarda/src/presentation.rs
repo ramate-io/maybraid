@@ -9,6 +9,7 @@
 
 use std::marker::PhantomData;
 
+use avian3d::prelude::{Collider, RigidBody};
 use bevy::prelude::*;
 use bikanwarda_character::BikanwardaSpec;
 use encounters::EncounterInstance;
@@ -73,23 +74,28 @@ impl LodScene for BikanwardaBossEncounter {
 				Visibility::default()
 			},
 			// Placeholder pedestal at column base (3m high, 2m radius)
-			// VISUAL GEOMETRY NOT YET IMPLEMENTED: Currently marker-only.
-			// Final implementation will add mesh/material for a 2m radius, 3m high cylinder.
+			// Grounded at published terrain Y with cylinder collider.
+			// TODO: Add visual mesh in a system (Scene trait doesn't have Assets access).
+			// Final implementation will use authored geometry; this is a labeled placeholder.
 			bsn! {
 				Name::new("boss-pedestal")
 				BossPedestal
 				Transform::from_translation(column_position + Vec3::Y * 1.5)
 				Visibility::default()
+				Collider::cylinder(2.0, 1.5)
+				RigidBody::Static
 			},
 			// Placeholder column for chain attachment (15m high, 1m radius)
-			// VISUAL GEOMETRY NOT YET IMPLEMENTED: Currently marker-only.
 			// Positioned above pedestal; chain anchors will attach at top (#1617).
-			// Final implementation will add mesh/material for a 1m radius, 15m high cylinder.
+			// Grounded at published terrain Y (pedestal base) with cylinder collider.
+			// TODO: Add visual mesh in a system.
 			bsn! {
 				Name::new("boss-column")
 				BossColumn
 				Transform::from_translation(column_position + Vec3::Y * (3.0 + 7.5))
 				Visibility::default()
+				Collider::cylinder(1.0, 7.5)
+				RigidBody::Static
 			},
 		)
 	}
