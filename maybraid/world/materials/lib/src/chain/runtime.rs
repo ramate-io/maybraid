@@ -153,7 +153,55 @@ pub(crate) fn sync_owned_chain_materials(
 	}
 }
 
+/// Durability fraction component for chain deterioration.
+///
+/// Populated by encounter systems, read by material systems. Avoids circular dependency.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct ChainDurabilityFraction(pub f32);
+
+/// Update chain material appearance based on durability fraction.
+///
+/// Maps durability fraction to MythicalChainState intact thresholds:
+/// - 100-67%: Intact (1.0)
+/// - 67-36%: Damaged (0.5)
+/// - 36-11%: NearBreaking (0.22)
+/// - <11%: Released/Broken (0.0)
+fn sync_chain_durability_to_material(
+	mut materials: ResMut<Assets<ChainMaterial>>,
+	chains: Query<(&OwnedChainHandle, &ChainDurabilityFraction)>,
+) {
+	for (handle, frac) in &chains {
+		let Some(mut material) = materials.get_mut(&handle.0) else {
+			continue;
+		};
+
+		let durability = frac.0;
+		
+		// Map durability to intact scalar for visual deterioration
+		let intact = if durability >= 0.67 {
+			1.0 // Intact
+		} else if durability >= 0.36 {
+			0.5 // Damaged
+		} else if durability >= 0.11 {
+			0.22 // Near breaking
+		} else {
+			0.0 // Broken/Released
+		};
+
+		// Update the material's intact scalar if it changed
+		if (material.params.scalars[0].x - intact).abs() > 0.01 {
+			material.params.scalars[0].x = intact;
+		}
+	}
+}
+
 /// Install owned-handle sync after MaterialRef fulfill.
 pub(crate) fn register_runtime_systems(app: &mut App) {
-	app.add_systems(Update, sync_owned_chain_materials.after(MaterialRefSystems::Fulfill));
+	app.add_systems(
+		Update,
+		(
+			sync_owned_chain_materials.after(MaterialRefSystems::Fulfill),
+			sync_chain_durability_to_material.after(sync_owned_chain_materials),
+		),
+	);
 }

@@ -30,6 +30,19 @@ pub struct ChainBrokenHistory {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct BrokenChain;
 
+/// Update ChainDurabilityFraction component from Health.
+///
+/// ChainDurabilityFraction is defined in world_materials::chain to avoid circular deps.
+pub fn update_chain_durability_fraction(
+	mut chains: Query<(&Health, Option<&mut world_materials::chain::ChainDurabilityFraction>), With<ChainRoot>>,
+) {
+	for (health, frac_opt) in &mut chains {
+		if let Some(mut frac) = frac_opt {
+			frac.0 = durability_fraction(health);
+		}
+	}
+}
+
 /// Detect broken chains and emit exactly one ChainBroken signal per chain.
 ///
 /// Checks for chains that have reached zero Health, marks them as broken,

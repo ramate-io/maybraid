@@ -17,7 +17,8 @@ pub use collision::{
 	ChainLinkId,
 };
 pub use damage::{
-	detect_and_signal_broken_chains, durability_fraction, BrokenChain, ChainBrokenHistory,
+	detect_and_signal_broken_chains, durability_fraction, update_chain_durability_fraction,
+	BrokenChain, ChainBrokenHistory,
 };
 pub use damage_coalesce::{cleanup_despawned_projectiles, coalesce_chain_contacts, ChainDamageHistory, ChainHitProjectiles};
 pub use motion::{

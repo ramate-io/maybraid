@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use damage::{contacts_to_hits, DamageSystems};
 
 use super::collision::{retire_released_chain_colliders, sync_chain_colliders};
-use super::damage::{detect_and_signal_broken_chains, ChainBrokenHistory};
+use super::damage::{detect_and_signal_broken_chains, update_chain_durability_fraction, ChainBrokenHistory};
 use super::damage_coalesce::{cleanup_despawned_projectiles, coalesce_chain_contacts, ChainDamageHistory};
 use super::motion::{deactivate_released_chains, update_chain_joints};
 
@@ -51,8 +51,12 @@ impl Plugin for BikanwardaChainPhysicsPlugin {
 		)
 		.add_systems(
 			PostUpdate,
-			// Break detection runs after damage is applied
-			detect_and_signal_broken_chains
+			(
+				// Update durability fraction for material systems
+				update_chain_durability_fraction,
+				// Break detection runs after damage is applied
+				detect_and_signal_broken_chains,
+			)
 				.after(DamageSystems::Apply),
 		);
 
