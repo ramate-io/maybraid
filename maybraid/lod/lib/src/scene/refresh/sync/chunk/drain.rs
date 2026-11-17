@@ -22,6 +22,7 @@ use bevy::scene::prelude::WorldSceneExt;
 use crate::scene::host::{lod_world_entity_is_shown, LodLevelRoot, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
+use super::diagnostics;
 use super::schedule::{class_order, for_each_rr, split_presence_desired_active, LevelBand};
 use super::types::{
 	FulfillClass, LodChunkAtomicOverrun, LodChunkBandCursors, LodChunkBudgetClock,
@@ -117,6 +118,8 @@ impl DrainClock {
 
 /// Exclusive semantic drain. Times `Lazy::next` + `World::spawn_scene` as one quantum.
 pub fn drain_chunk_lod_fulfill(world: &mut World) {
+	let _span = tracing::trace_span!("lod.drain").entered();
+	
 	let budget = *world.resource::<LodChunkFulfillBudget>();
 	let total = world.resource::<LodChunkBudgetClock>().spawn_remaining;
 	if total == 0 {
@@ -124,39 +127,36 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		return;
 	}
 
-	let snapshots = collect_job_snapshots(world);
+	let snapshots = {
+		let _classify_span = tracing::trace_span!("lod.drain.classify").entered();
+		collect_job_snapshots(world)
+	};
 	let mut buckets = JobBuckets::default();
-	let mut new_roots_total = 0;
-	let mut skipped_queue_empty = 0;
-	let mut skipped_no_host = 0;
-	let mut skipped_cold_mismatch = 0;
-	let mut skipped_not_shown = 0;
+	let mut counters = diagnostics::ClassificationCounters::default();
 	
 	for snap in snapshots {
 		if snap.spawned == 0 {
-			new_roots_total += 1;
+			counters.count_new_root();
 		}
 		
 		if snap.queue_empty {
-			skipped_queue_empty += 1;
+			counters.count_skipped_queue_empty();
 			continue;
 		}
 		let Some(desired) = world.get::<LodSceneLevel>(snap.host).copied() else {
-			skipped_no_host += 1;
+			counters.count_skipped_no_host();
 			continue;
 		};
 		let shown = lod_world_entity_is_shown(world, snap.entity);
 		let class = if snap.cold {
 			if snap.self_level != desired {
-				skipped_cold_mismatch += 1;
+				counters.count_skipped_cold_mismatch();
 				if snap.spawned == 0 {
-					info!(
-						target: "maybraid.lod.drain",
-						root = ?snap.entity,
-						host = ?snap.host,
-						self_level = ?snap.self_level,
-						desired = ?desired,
-						"TELEMETRY: new cold root skipped (cold but self_level != desired)"
+					diagnostics::emit_cold_mismatch_skip(
+						snap.entity,
+						snap.host,
+						snap.self_level,
+						desired,
 					);
 				}
 				continue;
@@ -167,16 +167,14 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		} else if shown {
 			FulfillClass::Active
 		} else {
-			skipped_not_shown += 1;
+			counters.count_skipped_not_shown();
 			if snap.spawned == 0 {
-				info!(
-					target: "maybraid.lod.drain",
-					root = ?snap.entity,
-					host = ?snap.host,
-					self_level = ?snap.self_level,
-					desired = ?desired,
-					shown = shown,
-					"TELEMETRY: new warm root skipped (not desired and not shown)"
+				diagnostics::emit_warm_root_skip(
+					snap.entity,
+					snap.host,
+					snap.self_level,
+					desired,
+					shown,
 				);
 			}
 			continue;
@@ -187,17 +185,15 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 			.push(snap.entity, snap.parent_desired, snap.self_level, is_new);
 	}
 	
-	if new_roots_total > 0 {
-		info!(
-			target: "maybraid.lod.drain",
-			frame = world.resource::<LodChunkDrainCursor>().frame,
-			new_roots_total,
-			skipped_queue_empty,
-			skipped_no_host,
-			skipped_cold_mismatch,
-			skipped_not_shown,
-			budget_total = total,
-			"TELEMETRY: drain frame classification summary"
+	if counters.has_new_roots() {
+		diagnostics::emit_classification_summary(
+			world,
+			counters.new_roots_total,
+			counters.skipped_queue_empty,
+			counters.skipped_no_host,
+			counters.skipped_cold_mismatch,
+			counters.skipped_not_shown,
+			total,
 		);
 	}
 
@@ -217,6 +213,8 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 
 	let mut remaining = 0u32;
 	for class in order {
+		let _class_span = tracing::trace_span!("lod.drain.class", class = ?class).entered();
+		
 		remaining = remaining.saturating_add(share(class));
 		let mut cursors = match class {
 			FulfillClass::Presence => world.resource::<LodChunkDrainCursor>().presence,
@@ -320,23 +318,21 @@ fn drain_one(
 	}
 	
 	// Telemetry: log when a new root (spawned==0) is first visited
-	let is_new_root = job.spawned == 0;
-	if is_new_root {
+	if job.spawned == 0 && diagnostics::enabled() {
 		let root_level = world.get::<LodLevelRoot>(entity).map(|r| r.0);
 		let host_level = world.get::<LodSceneLevel>(job.host).copied();
 		let time_left = budget.spawn_time_per_frame.saturating_sub(clock.start.elapsed());
-		info!(
-			target: "maybraid.lod.drain",
-			root = ?entity,
-			host = ?job.host,
-			parent_desired = ?job.parent_desired,
-			self_level = ?root_level,
-			host_desired = ?host_level,
-			cold = job.cold,
-			budget_remaining = *remaining,
-			time_left_us = time_left.as_micros(),
-			quanta = clock.quanta,
-			"TELEMETRY: visiting new root (spawned=0)"
+		diagnostics::emit_new_root_visit(
+			world,
+			entity,
+			job.host,
+			job.parent_desired,
+			root_level,
+			host_level,
+			job.cold,
+			*remaining,
+			time_left,
+			clock.quanta,
 		);
 	}
 	
@@ -358,9 +354,13 @@ fn drain_one(
 			break;
 		}
 		let quantum_start = Instant::now();
-		let Some((weight, scene, host, level)) = pull_next(world, entity) else {
+		let Some((weight, scene, host, level)) = ({
+			let _pull_span = tracing::trace_span!("lod.drain.pull").entered();
+			pull_next(world, entity)
+		}) else {
 			break;
 		};
+		let _spawn_span = tracing::trace_span!("lod.drain.spawn", weight).entered();
 		match world.spawn_scene(scene) {
 			Ok(spawned) => {
 				let child = spawned.id();
@@ -387,26 +387,27 @@ fn drain_one(
 				"semantic LOD spawn quantum exceeded max_atomic_spawn_cost"
 			);
 			world
-				.resource_mut::<LodChunkDrainDiagnostics>()
-				.record_overrun(LodChunkAtomicOverrun { host, level, elapsed: quantum });
-		}
-		let was_new = world.get::<LodChunkFulfillment>(entity).map_or(false, |job| job.spawned == 0);
+			.resource_mut::<LodChunkDrainDiagnostics>()
+			.record_overrun(LodChunkAtomicOverrun { host, level, elapsed: quantum });
+	}
+	
+	let was_new = world.get::<LodChunkFulfillment>(entity).map_or(false, |job| job.spawned == 0);
+	
+	if let Some(mut job) = world.get_mut::<LodChunkFulfillment>(entity) {
+		job.spawned += 1;
+	}
+	
+	if was_new && diagnostics::enabled() {
 		let root_level = world.get::<LodLevelRoot>(entity).map(|r| r.0);
-		
-		if let Some(mut job) = world.get_mut::<LodChunkFulfillment>(entity) {
-			job.spawned += 1;
-			if was_new {
-				info!(
-					target: "maybraid.lod.drain",
-					root = ?entity,
-					host = ?host,
-					self_level = ?root_level,
-					primitives_left = job.queue.len(),
-					quanta = clock.quanta,
-					"TELEMETRY: new root completed first spawn"
-				);
-			}
-		}
+		let primitives_left = world.get::<LodChunkFulfillment>(entity).map_or(0, |job| job.queue.len());
+		diagnostics::emit_first_spawn_complete(
+			entity,
+			host,
+			root_level,
+			primitives_left,
+			clock.quanta,
+		);
+	}
 		*remaining = remaining.saturating_sub(weight.max(1));
 	}
 

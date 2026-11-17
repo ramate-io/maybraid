@@ -13,6 +13,8 @@ rust-version = { workspace = true }
 default = []
 # Opt-in structured Tracy phases and completion accounting; no default logging.
 generation-tracing = ["dep:lod-generation-diagnostics"]
+# Opt-in scene refresh text telemetry; default-off per CONTRIBUTING.md.
+scene-tracing = []
 
 [dependencies]
 lod-generation-diagnostics = { workspace = true, optional = true }
@@ -21,6 +23,7 @@ lod-cascade-system = { workspace = true }
 bevy = { workspace = true }
 gimme-core = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 tracing = { workspace = true }
