@@ -226,8 +226,13 @@ impl Plugin for WorldPlugin {
 			.add_plugins(VegetationHostPlugin { register_camera: false })
 			.add_plugins(MeshStatsPlugin)
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
-			.add_plugins(CharacterRagdollPlugin)
-			.add_plugins(WorldLayersPlugin)
+			.add_plugins(CharacterRagdollPlugin);
+		// Ensure MobGroupsPlugin is available for debug commands before WorldLayersPlugin
+		// so `mobs spawn` can queue groups even if HCSG hasn't started yet.
+		if !app.is_plugin_added::<barking::MobGroupsPlugin>() {
+			app.add_plugins(barking::MobGroupsPlugin);
+		}
+		app.add_plugins(WorldLayersPlugin)
 			.add_plugins(DiscoveryPlayerPlugin)
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(crate::spawn_surface::SpawnSurfacePlugin)
@@ -282,6 +287,7 @@ impl Plugin for WorldPlugin {
 				vsync::toggle_vsync,
 				commands::apply_sky_commands,
 				mob_spawn::apply_spawn_mob_requests,
+				mob_spawn::apply_mob_inspect,
 			),
 		);
 		render_scale::configure(app);
