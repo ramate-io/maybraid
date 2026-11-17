@@ -165,7 +165,7 @@ fn spawn_fixture(
 		commands.entity(root).insert((
 			ReviewOwned,
 			Transform::from_translation(origin),
-			ChainRoot { link_count: 12, rest_length_m: 3.0 },
+			ChainRoot { link_count: 12, rest_length_m: 3.0, joint_entities: joints.clone() },
 			ChainMotion::default(),
 			Health::from_max(100.0),
 		));
@@ -332,6 +332,67 @@ fn draw_actual_pose(
 				gizmos.sphere(Isometry3d::from_translation(at - axis), 0.052, color);
 				gizmos.sphere(Isometry3d::from_translation(at + axis), 0.052, color);
 			}
+		}
+	}
+}
+
+#[cfg(all(test, feature = "chain-review"))]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn chain_review_fixture_has_valid_joint_entities() {
+		use bevy::ecs::system::RunSystemOnce;
+
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<Assets<Mesh>>()
+			.init_resource::<Assets<SkinnedMeshInverseBindposes>>()
+			.init_resource::<Assets<StandardMaterial>>();
+		app.world_mut()
+			.spawn((world_player::Player, GlobalTransform::IDENTITY));
+
+		let assemblies = app
+			.world_mut()
+			.run_system_once(spawn_fixture)
+			.expect("spawn_fixture system should succeed");
+
+		assert_eq!(assemblies.len(), 2, "Should spawn two chain assemblies");
+
+		for (index, assembly) in assemblies.iter().enumerate() {
+			let label = if index == 0 { "review-A" } else { "review-B" };
+
+			assert_eq!(
+				assembly.joints.len(),
+				12,
+				"{label}: joints vector should have 12 entries"
+			);
+
+			let root = app.world().entity(assembly.root);
+			let chain_root = root
+				.get::<ChainRoot>()
+				.unwrap_or_else(|| panic!("{label}: ChainRoot component not found on root"));
+
+			assert_eq!(
+				chain_root.joint_entities.len(),
+				12,
+				"{label}: ChainRoot.joint_entities should have 12 entries"
+			);
+
+			assert_eq!(
+				chain_root.joint_entities, assembly.joints,
+				"{label}: ChainRoot.joint_entities should match the joints from spawn"
+			);
+
+			let root_transform = root
+				.get::<Transform>()
+				.unwrap_or_else(|| panic!("{label}: Transform not found on root"));
+
+			let expected_origin = assembly.origin;
+			assert_eq!(
+				root_transform.translation, expected_origin,
+				"{label}: Root translation should match the assembly origin"
+			);
 		}
 	}
 }
