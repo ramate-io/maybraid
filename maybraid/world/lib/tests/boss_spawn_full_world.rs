@@ -20,6 +20,7 @@ use bevy::time::TimeUpdateStrategy;
 use bikanwarda_encounter::chained_encounter_id;
 use lod::hcsg::HcsgRestartRequest;
 use maybraid_world::boss_spawn::{BossSpawnConfig, BossSpawnPlugin, RequestSpawnBoss};
+use maybraid_world::terrain_query::PublishedTerrainHeight;
 use std::time::Duration;
 
 const DT: f32 = 1.0 / 60.0; // 60 FPS
@@ -32,6 +33,8 @@ fn minimal_app() -> App {
 	app.add_plugins(bevy::MinimalPlugins)
 		.add_plugins(BossSpawnPlugin);
 	app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(DT)));
+	// Install test terrain provider (simulates published terrain)
+	app.insert_resource(PublishedTerrainHeight::test_fixed(0.0));
 	app.update();
 	app
 }
@@ -55,7 +58,8 @@ fn boss_spawn_provides_presentation_contract() -> anyhow::Result<()> {
 	
 	let mut app = minimal_app();
 	
-	let spawn_pos = Vec3::new(SPAWN_X, 0.0, SPAWN_Z);
+	let offset = maybraid_world::boss_spawn::boss_spawn_height_offset();
+	let spawn_pos = Vec3::new(SPAWN_X, offset, SPAWN_Z);
 	
 	// Request boss spawn at specific position
 	app.world_mut().spawn(RequestSpawnBoss {
