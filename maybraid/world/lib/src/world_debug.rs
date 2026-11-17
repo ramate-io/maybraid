@@ -38,6 +38,9 @@ impl Plugin for WorldDebugPlugin {
 			crate::script_queue::load_startup_script,
 		);
 
+		#[cfg(feature = "chain-review")]
+		crate::chain_review::configure(app);
+
 		app.add_systems(
 			Update,
 			(

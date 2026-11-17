@@ -22,6 +22,7 @@ mod material_lib;
 mod params;
 mod placeholder;
 mod runtime;
+mod skinned;
 mod string;
 
 pub use chain_material::{
@@ -58,6 +59,10 @@ pub use placeholder::{apply_localized_damage, placeholder_chain_mesh, Placeholde
 pub use runtime::{
 	apply_chain_hit, copy_authored_onto, owned_chain_material, ChainRuntimeDamage,
 	OwnedChainHandle, OwnedChainMaterial,
+};
+pub use skinned::{
+	generate_skinned_chain, spawn_skinned_chain, ChainSkinningStrategy, SkinnedChainConfig,
+	SkinnedChainData,
 };
 pub use string::{
 	bent_centerline, continuous_tube_mesh, rest_centerline, skinned_tube_mesh, spawn_skinned_tube,

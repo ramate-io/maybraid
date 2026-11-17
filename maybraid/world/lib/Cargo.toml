@@ -14,6 +14,8 @@ rust-version = { workspace = true }
 test-support = []
 # Debug commands for preview evidence capture (grant-points, take-damage, spawn-npc).
 debug-commands = []
+# Local visual review fixture; never installed in ordinary/debug-only gameplay.
+chain-review = ["debug-commands", "dep:projectiles"]
 
 [dependencies]
 character-motion = { workspace = true }
@@ -79,6 +81,7 @@ maybraid-vfx = { workspace = true }
 maybraid-sky = { workspace = true }
 maybraid-weather = { workspace = true }
 mob-scenes = { workspace = true }
+projectiles = { workspace = true, optional = true }
 player = { workspace = true }
 player-camera = { workspace = true }
 mob-characters = { workspace = true }

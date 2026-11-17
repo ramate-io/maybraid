@@ -20,8 +20,9 @@ bevy = { workspace = true }
 characters = { workspace = true }
 damage = { workspace = true }
 encounters = { workspace = true }
-lod = { workspace = true }
+lod-avian = { workspace = true }
 lubikans = { workspace = true }
+projectiles = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

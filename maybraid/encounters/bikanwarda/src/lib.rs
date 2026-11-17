@@ -6,6 +6,7 @@
 //! [#1117](https://github.com/ramate-io/maybraid/issues/1117) world placement (consumes generation contract).
 
 mod assembly;
+pub mod chains;
 mod contract;
 mod generation;
 mod identity;

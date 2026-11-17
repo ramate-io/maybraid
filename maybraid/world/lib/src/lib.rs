@@ -22,6 +22,8 @@ pub mod terrain_query;
 mod agent_inventory;
 mod camera;
 pub mod commands;
+#[cfg(feature = "chain-review")]
+mod chain_review;
 pub mod control;
 mod crate_loot;
 mod cycle_target;
