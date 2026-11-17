@@ -30,33 +30,45 @@ pub struct ChainBrokenHistory {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct BrokenChain;
 
-/// Update ChainDurabilityFraction component from Health.
+/// Update ChainDurabilityFraction component from Health on mesh children.
+///
+/// In the real assembly, Health + ChainRoot live on the root entity, while
+/// OwnedChainMaterial lives on the mesh child. This system bridges the gap by
+/// walking Children from root to mesh.
 ///
 /// ChainDurabilityFraction is defined in world_materials::chain to avoid circular deps.
-/// Chains without the component are skipped (material deterioration is optional).
 pub fn update_chain_durability_fraction(
 	mut commands: Commands,
-	chains: Query<
-		(Entity, &Health, Option<&world_materials::chain::ChainDurabilityFraction>),
-		(With<ChainRoot>, With<world_materials::chain::OwnedChainMaterial>),
+	chain_roots: Query<(&Health, &Children), With<ChainRoot>>,
+	mesh_children: Query<
+		(Entity, Option<&world_materials::chain::ChainDurabilityFraction>),
+		With<world_materials::chain::OwnedChainMaterial>,
 	>,
 ) {
-	for (entity, health, frac_opt) in &chains {
+	for (health, children) in &chain_roots {
 		let new_frac = durability_fraction(health);
-		match frac_opt {
-			Some(frac) if (frac.0 - new_frac).abs() > 0.01 => {
-				// Update existing component
-				commands
-					.entity(entity)
-					.insert(world_materials::chain::ChainDurabilityFraction(new_frac));
+		
+		// Find mesh child with OwnedChainMaterial
+		for child in children.iter() {
+			if let Ok((mesh_entity, frac_opt)) = mesh_children.get(child) {
+				match frac_opt {
+					Some(frac) if (frac.0 - new_frac).abs() > 0.01 => {
+						// Update existing component
+						commands
+							.entity(mesh_entity)
+							.insert(world_materials::chain::ChainDurabilityFraction(new_frac));
+					}
+					None => {
+						// Add component for mesh children with OwnedChainMaterial
+						commands
+							.entity(mesh_entity)
+							.insert(world_materials::chain::ChainDurabilityFraction(new_frac));
+					}
+					_ => {}
+				}
+				// Only update the first mesh child found
+				break;
 			}
-			None => {
-				// Add component for chains with OwnedChainMaterial
-				commands
-					.entity(entity)
-					.insert(world_materials::chain::ChainDurabilityFraction(new_frac));
-			}
-			_ => {}
 		}
 	}
 }
@@ -135,7 +147,10 @@ mod tests {
 			.add_message::<EncounterSignal>()
 			.add_systems(
 				PostUpdate,
-				detect_and_signal_broken_chains.after(damage::DamageSystems::Apply),
+				(
+					update_chain_durability_fraction,
+					detect_and_signal_broken_chains,
+				).after(damage::DamageSystems::Apply),
 			);
 		app
 	}
@@ -349,6 +364,112 @@ mod tests {
 			.drain()
 			.collect();
 		assert_eq!(signals.len(), 0, "No additional signals after break");
+
+		Ok(())
+	}
+
+	/// Test the real assembled hierarchy: root with Health+ChainRoot, child mesh with OwnedChainMaterial.
+	/// This test would FAIL on 176362b4 where the query required all three components on one entity.
+	#[test]
+	fn durability_fraction_syncs_to_mesh_child() -> Result<()> {
+		let mut app = test_app();
+
+		// Spawn the REAL hierarchy: root with Health+ChainRoot, mesh child with OwnedChainMaterial
+		let root = app.world_mut().spawn((
+			Name::new("ChainRoot"),
+			ChainRoot {
+				link_count: 3,
+				rest_length_m: 3.0,
+				joint_entities: vec![],
+			},
+			Health::from_max(100.0),
+		)).id();
+
+		let mesh = app.world_mut().spawn((
+			Name::new("ChainMesh"),
+			world_materials::chain::OwnedChainMaterial,
+		)).id();
+
+		// Make mesh a child of root (real assembly structure)
+		app.world_mut().entity_mut(root).add_child(mesh);
+
+		// Run one update cycle to let durability fraction sync
+		app.update();
+
+		// Mesh should now have ChainDurabilityFraction component with value 1.0 (100% health)
+		let frac = app.world().get::<world_materials::chain::ChainDurabilityFraction>(mesh);
+		assert!(frac.is_some(), "Mesh child should have ChainDurabilityFraction after sync");
+		assert!((frac.unwrap().0 - 1.0).abs() < 0.01, "Initial durability fraction should be 1.0 for full health");
+
+		// Damage the root's Health
+		app.world_mut().entity_mut(root).insert(Health { current: 50.0, max: 100.0 });
+		app.update();
+
+		// Mesh durability fraction should update to 0.5
+		let frac = app.world().get::<world_materials::chain::ChainDurabilityFraction>(mesh).unwrap();
+		assert!((frac.0 - 0.5).abs() < 0.01, "Durability fraction should be 0.5 for 50% health");
+
+		// Reduce health to near-breaking (10%)
+		app.world_mut().entity_mut(root).insert(Health { current: 10.0, max: 100.0 });
+		app.update();
+
+		// Durability fraction should be 0.1
+		let frac = app.world().get::<world_materials::chain::ChainDurabilityFraction>(mesh).unwrap();
+		assert!((frac.0 - 0.1).abs() < 0.01, "Durability fraction should be 0.1 for 10% health");
+
+		Ok(())
+	}
+
+	/// Test lethal damage updates mesh material to broken state (durability 0.0).
+	/// This test would FAIL on 176362b4 where material never updated.
+	#[test]
+	fn lethal_damage_updates_mesh_to_broken_state() -> Result<()> {
+		let mut app = test_app();
+
+		// Spawn the REAL hierarchy
+		let root = app.world_mut().spawn((
+			ChainRoot {
+				link_count: 3,
+				rest_length_m: 3.0,
+				joint_entities: vec![],
+			},
+			Health::from_max(10.0),
+		)).id();
+
+		let mesh = app.world_mut().spawn((
+			world_materials::chain::OwnedChainMaterial,
+		)).id();
+
+		app.world_mut().entity_mut(root).add_child(mesh);
+
+		let link_collider = app.world_mut().spawn((
+			ChainLinkId { link_id: 0, chain_root: root },
+			ChildOf(root),
+		)).id();
+
+		// Initial sync - mesh should get durability 1.0
+		app.update();
+		let frac = app.world().get::<world_materials::chain::ChainDurabilityFraction>(mesh).unwrap();
+		assert!((frac.0 - 1.0).abs() < 0.01, "Initial durability should be 1.0");
+
+		// Apply lethal damage
+		app.world_mut().write_message(damage::Hit {
+			target: link_collider,
+			source: None,
+			amount: 10.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+
+		app.update();
+
+		// Chain should be broken and released
+		assert!(app.world().get::<BrokenChain>(root).is_some());
+		assert!(app.world().get::<ReleasedChain>(root).is_some());
+
+		// Mesh durability fraction should be 0.0 (broken)
+		let frac = app.world().get::<world_materials::chain::ChainDurabilityFraction>(mesh).unwrap();
+		assert!(frac.0 < 0.01, "Durability fraction should be ~0.0 for broken chain, got {}", frac.0);
 
 		Ok(())
 	}
