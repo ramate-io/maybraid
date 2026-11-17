@@ -10,8 +10,8 @@ use chico::{
 	GroveNeighborhood, MediumCanopyBumpOut,
 };
 use durham::{
-	BackgroundStream, Durham, DurhamWorldPlugin, FarStream, NearStream, StreamPresentationPlugin,
-	StreamRing, Water,
+	BackgroundStream, Durham, DurhamSurface, DurhamWorldPlugin, FarStream, NearStream,
+	StreamPresentationPlugin, StreamRing, Water,
 };
 use geneva::{GenevaPlugin, LanguageNeighborhood};
 use layer_stack::{ActiveGenerationMode, GenerationModePlugin};
@@ -48,6 +48,7 @@ impl Plugin for WorldLayersPlugin {
 			seed: WORLD_SEED,
 		}))
 		.insert_resource(crate::poi::PaddedTerrainPoiGround)
+		.add_systems(Startup, install_durham_terrain_provider)
 		.insert_resource(richmond.development_config())
 		.insert_resource(richmond.urbanization_selection())
 		.init_resource::<AuthoredDevelopments>()
@@ -100,4 +101,35 @@ impl Plugin for WorldLayersPlugin {
 			request_hcsg_session_restart,
 		);
 	}
+}
+
+/// Install Durham-backed published terrain height provider.
+///
+/// The closure installed here will call back into Durham terrain integration
+/// to query published heights. This keeps Durham dependencies in world-level code only.
+fn install_durham_terrain_provider(world: &mut World) {
+	use crate::terrain_query::{PublishedTerrainHeight, query_durham_terrain_height};
+	use bevy::ecs::system::SystemState;
+	use lod::hcsg::HcsgStorage;
+	
+	// Store World pointer as usize to make it Send + Sync
+	// SAFETY: This is only safe because:
+	// 1. The closure is only called during Bevy system execution when World is valid
+	// 2. Bevy's ECS ensures no conflicting mutable access
+	// 3. The pointer remains valid for the lifetime of the World resource
+	let world_addr = world as *mut World as usize;
+	let provider = PublishedTerrainHeight(Box::new(move |xz: Vec2| -> Option<f32> {
+		// SAFETY: Convert usize back to World pointer
+		unsafe {
+			let world_ref = &mut *(world_addr as *mut World);
+			let mut system_state: SystemState<(DurhamSurface, Option<Res<HcsgStorage>>)> = 
+				SystemState::new(world_ref);
+			let (surface, storage) = system_state.get(world_ref).ok()?;
+			let result = query_durham_terrain_height(&surface, storage.as_deref(), xz);
+			system_state.apply(world_ref);
+			result
+		}
+	}));
+	
+	world.insert_resource(provider);
 }

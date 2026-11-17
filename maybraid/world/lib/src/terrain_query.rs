@@ -5,13 +5,11 @@
 
 use bevy::prelude::*;
 
-/// Test-friendly terrain height provider for published terrain and pads.
+/// Published terrain height provider for spawn systems.
 ///
-/// Production installs a Durham-backed implementation. Tests can install a simple
-/// closure returning fixed heights. Returns **published terrain height** only
-/// (never the temporary hold elevation).
-///
-/// The spawn system queries this optionally; if missing, bosses stay in `PendingBossSpawn`.
+/// Returns **published terrain height** (terrain/pad with validated collider) only,
+/// never the temporary hold elevation. The Durham/world integration installs this.
+/// Tests can install it with fixed heights.
 #[derive(Resource)]
 pub struct PublishedTerrainHeight(pub Box<dyn Fn(Vec2) -> Option<f32> + Send + Sync>);
 
@@ -25,4 +23,17 @@ impl PublishedTerrainHeight {
 	pub fn test_fixed(height: f32) -> Self {
 		Self(Box::new(move |_| Some(height)))
 	}
+}
+
+/// Query published terrain height using Durham (world-level integration only).
+///
+/// This function is called by world-level terrain integration to provide
+/// Durham-backed terrain height queries. Boss spawn and encounter code do NOT
+/// call this - they only query the PublishedTerrainHeight resource.
+pub fn query_durham_terrain_height(
+	surface: &durham::DurhamSurface,
+	storage: Option<&lod::hcsg::HcsgStorage>,
+	xz: Vec2,
+) -> Option<f32> {
+	maybraid_spawns_support::terrain_height_at(surface, storage, xz)
 }

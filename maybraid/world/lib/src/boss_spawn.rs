@@ -144,12 +144,11 @@ pub fn process_boss_spawn_requests(
 /// 
 /// This system implements the terrain readiness contract: wait for
 /// published terrain height instead of consuming the holding elevation as final position.
-/// Checks test provider first, then falls back to Durham. If neither available, bosses remain pending.
+/// If the provider is missing, bosses remain pending until it's installed.
 pub fn poll_pending_boss_spawns(
 	mut commands: Commands,
 	mut pending: Query<(Entity, &mut PendingBossSpawn)>,
-	test_provider: Option<Res<PublishedTerrainHeight>>,
-	surface: Option<durham::DurhamSurface>,
+	terrain_provider: Option<Res<PublishedTerrainHeight>>,
 	storage: Option<Res<HcsgStorage>>,
 	mut config: ResMut<BossSpawnConfig>,
 ) {
@@ -157,14 +156,8 @@ pub fn poll_pending_boss_spawns(
 		pending_spawn.wait_ticks += 1;
 		
 		// Try to get published terrain height (terrain/pad with collider acceptance)
-		// Check test provider first, then fall back to Durham
-		let terrain_height = if let Some(provider) = test_provider.as_ref() {
-			provider.height_at(pending_spawn.xz)
-		} else if let Some(ref surface) = surface {
-			maybraid_spawns_support::terrain_height_at(surface, storage.as_deref(), pending_spawn.xz)
-		} else {
-			None
-		};
+		// If provider is missing, boss remains pending until it's installed
+		let terrain_height = terrain_provider.as_ref().and_then(|p| p.height_at(pending_spawn.xz));
 		
 		if let Some(terrain_y) = terrain_height {
 			// Terrain is ready! Apply boss hull spawn_height offset for ground fit
