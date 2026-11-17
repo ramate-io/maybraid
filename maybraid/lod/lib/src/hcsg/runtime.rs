@@ -34,6 +34,10 @@ pub(super) fn ensure_runtime(app: &mut App) {
 	}
 	let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
 	let demand = app.world_mut().get_resource_or_init::<HcsgDemand>().clone();
+	
+	// Connect storage and demand so publish can invalidate intersecting subscriptions
+	storage.set_demand(demand.clone());
+	
 	match HcsgWorker::spawn(storage, demand) {
 		Ok(worker) => {
 			app.insert_resource(worker);

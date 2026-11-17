@@ -4,7 +4,7 @@
 
 use bevy::prelude::*;
 use bikanwarda_encounter::BikanwardaBossEncounter;
-use lod::hcsg::{register_session_seed, HcsgDemand, HcsgStorage};
+use lod::hcsg::{register_session_seed, HcsgStorage};
 use lod::gen::Bytes;
 use player::Player;
 use std::sync::Arc;
@@ -35,11 +35,7 @@ impl Default for BossSpawnConfig {
 }
 
 /// Seeds the boss encounter during HCSG session restarts.
-fn seed_boss_encounter(
-	config: Res<BossSpawnConfig>,
-	storage: Res<HcsgStorage>,
-	demand: Res<HcsgDemand>,
-) {
+fn seed_boss_encounter(config: Res<BossSpawnConfig>, storage: Res<HcsgStorage>) {
 	if !config.active {
 		return;
 	}
@@ -53,7 +49,6 @@ fn seed_boss_encounter(
 	));
 	
 	storage.publish(id, Arc::new(encounter.clone()), encounter.bounds);
-	demand.invalidate_intersecting(encounter.bounds);
 }
 
 /// System to handle boss spawn requests.
@@ -61,7 +56,6 @@ pub fn process_boss_spawn_requests(
 	mut commands: Commands,
 	requests: Query<(Entity, &RequestSpawnBoss)>,
 	storage: Res<HcsgStorage>,
-	demand: Res<HcsgDemand>,
 	player: Query<&Transform, With<Player>>,
 	mut config: ResMut<BossSpawnConfig>,
 ) {
@@ -89,7 +83,6 @@ pub fn process_boss_spawn_requests(
 		));
 		
 		storage.publish(id, Arc::new(encounter.clone()), encounter.bounds);
-		demand.invalidate_intersecting(encounter.bounds);
 	}
 }
 
