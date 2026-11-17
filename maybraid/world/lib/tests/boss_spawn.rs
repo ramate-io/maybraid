@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use bikanwarda_encounter::{BikanwardaBossEncounter, chained_encounter_id};
 use lod::gen::Bytes;
 use lod::hcsg::{HcsgRestartRequest, HcsgStorage};
-use maybraid_world::boss_spawn::{BossSpawnConfig, BossSpawnPlugin, RequestSpawnBoss};
+use maybraid_world::boss_spawn::{BossSpawnConfig, BossSpawnPlugin, PendingBossSpawn, RequestSpawnBoss};
 
 /// Set up a minimal app with boss spawn plugin (no terrain provider)
 fn minimal_app() -> App {
@@ -29,16 +29,12 @@ fn minimal_app() -> App {
 /// The test provider returns a fixed ground height of 0.0 for all XZ positions,
 /// simulating published terrain without full Durham setup.
 fn app_with_terrain() -> App {
-	use durham::{BaseTerrainNoise, TerrainConfig, WorldBaseTerrain};
-	use durham::playable_world_cell_layout;
+	use maybraid_world::terrain_query::PublishedTerrainHeight;
 	
 	let mut app = minimal_app();
 	
-	// Install minimal Durham resources needed for terrain height queries
-	let config = TerrainConfig::new(42);
-	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&config)))
-		.insert_resource(config)
-		.insert_resource(playable_world_cell_layout());
+	// Install test terrain provider returning fixed height of 0.0
+	app.insert_resource(PublishedTerrainHeight::test_fixed(0.0));
 	
 	app
 }
@@ -84,6 +80,49 @@ fn boss_spawn_request_is_consumed() {
 	// After processing, request should be despawned
 	let after = app.world_mut().query::<&RequestSpawnBoss>().iter(app.world()).count();
 	assert_eq!(after, 0, "Spawn request should be consumed");
+}
+
+/// Regression test: terrain readiness contract prevents immediate publish without terrain.
+///
+/// Before the fix: Boss spawn consumed the request and published immediately with Y=0
+/// or a hold elevation, even when terrain wasn't ready.
+///
+/// After the fix: Boss stays in PendingBossSpawn until Durham terrain resources provide
+/// a published height (not the hold elevation). Tests without terrain provider keep
+/// bosses pending indefinitely without panicking.
+#[test]
+fn boss_stays_pending_without_terrain() {
+	let mut app = minimal_app();
+	
+	let spawn_xz = Vec2::new(1746.8, 1025.9);
+	app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_xz) });
+	
+	app.update();
+	
+	// Request should be consumed, but boss should stay in PendingBossSpawn
+	let requests = app.world().query::<&RequestSpawnBoss>().iter(app.world()).count();
+	assert_eq!(requests, 0, "Request should be consumed");
+	
+	let pending = app.world().query::<&PendingBossSpawn>().iter(app.world()).count();
+	assert_eq!(pending, 1, "Boss should be in PendingBossSpawn without terrain");
+	
+	// Config should not be active yet
+	let config = app.world().resource::<BossSpawnConfig>();
+	assert!(!config.active, "Config should not be active while boss is pending");
+	
+	// Boss should not be in storage
+	let storage = app.world().resource::<HcsgStorage>();
+	let boss_id = lod::gen::Id::Bytes(Bytes(chained_encounter_id().as_bytes()));
+	let entry = storage.try_entry::<BikanwardaBossEncounter>(boss_id).ok().flatten();
+	assert!(entry.is_none(), "Boss should not be published without terrain");
+	
+	// Multiple updates should keep boss pending (no panic, no accidental publish)
+	for _ in 0..10 {
+		app.update();
+	}
+	
+	let pending_after = app.world().query::<&PendingBossSpawn>().iter(app.world()).count();
+	assert_eq!(pending_after, 1, "Boss should still be pending after multiple updates");
 }
 
 /// Test that boss spawn publishes to storage with correct ID when terrain is ready.

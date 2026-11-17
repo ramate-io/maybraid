@@ -26,7 +26,7 @@ use lod::gen::Bytes;
 use player::Player;
 use std::sync::Arc;
 
-use crate::terrain_query::query_published_terrain_height;
+use crate::terrain_query::PublishedTerrainHeight;
 
 /// Request to spawn a boss encounter at a specific location.
 #[derive(Component, Clone, Debug)]
@@ -144,10 +144,11 @@ pub fn process_boss_spawn_requests(
 /// 
 /// This system implements the terrain readiness contract: wait for
 /// published terrain height instead of consuming the holding elevation as final position.
-/// Durham resources are queried optionally; if missing, bosses remain pending.
+/// Checks test provider first, then falls back to Durham. If neither available, bosses remain pending.
 pub fn poll_pending_boss_spawns(
 	mut commands: Commands,
 	mut pending: Query<(Entity, &mut PendingBossSpawn)>,
+	test_provider: Option<Res<PublishedTerrainHeight>>,
 	surface: Option<durham::DurhamSurface>,
 	storage: Option<Res<HcsgStorage>>,
 	mut config: ResMut<BossSpawnConfig>,
@@ -156,12 +157,14 @@ pub fn poll_pending_boss_spawns(
 		pending_spawn.wait_ticks += 1;
 		
 		// Try to get published terrain height (terrain/pad with collider acceptance)
-		// If Durham resources are missing, boss remains pending until they're available
-		let terrain_height = query_published_terrain_height(
-			surface.as_ref(),
-			storage.as_deref(),
-			pending_spawn.xz,
-		);
+		// Check test provider first, then fall back to Durham
+		let terrain_height = if let Some(provider) = test_provider.as_ref() {
+			provider.height_at(pending_spawn.xz)
+		} else if let Some(ref surface) = surface {
+			maybraid_spawns_support::terrain_height_at(surface, storage.as_deref(), pending_spawn.xz)
+		} else {
+			None
+		};
 		
 		if let Some(terrain_y) = terrain_height {
 			// Terrain is ready! Apply boss hull spawn_height offset for ground fit

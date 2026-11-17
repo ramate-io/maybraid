@@ -79,7 +79,7 @@ pub use control::{
 };
 pub use cycle_target::InventoryCycleTarget;
 pub use durham::Durham;
-pub use terrain_query::query_published_terrain_height;
+pub use terrain_query::PublishedTerrainHeight;
 #[cfg(any(test, feature = "test-support"))]
 pub use first_wave::UnitXTile;
 pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};
