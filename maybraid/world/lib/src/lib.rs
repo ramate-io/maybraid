@@ -610,13 +610,17 @@ mod tests {
 		app.init_resource::<HcsgStorage>();
 		app.init_resource::<HcsgRestartRequest>();
 		app.init_resource::<WorldGameplayEnabled>();
+		app.init_resource::<Messages<damage::Hit>>();
+		app.init_resource::<Messages<damage::Died>>();
 		app.init_resource::<Messages<maybraid_session::WorldPlaySessionEnded>>();
 		app.init_resource::<Messages<lubikans::LubikanOwnerLifetime>>();
 		app.init_resource::<Messages<encounters::EncounterSignal>>();
+		app.init_resource::<Messages<encounters::EncounterResolved>>();
+		app.init_resource::<Messages<bikanwarda_encounter::EncounterUnlockAwarded>>();
+		app.init_resource::<Messages<bikanwarda_encounter::BikanwardaDeparted>>();
 		
-		// Production plugins (WorldEncounterPlugin owns boss spawn lifecycle)
+		// Production plugin (WorldEncounterPlugin owns boss spawn lifecycle)
 		app.add_plugins(crate::world_encounter::WorldEncounterPlugin);
-		app.add_plugins(crate::world_debug::WorldDebugPlugin);
 		
 		// Verify BossSpawnConfig is initialized (this resource was missing in the bug)
 		app.finish();
