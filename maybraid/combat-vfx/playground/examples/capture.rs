@@ -1,4 +1,4 @@
-//! Headless stills: braidman spiritual spawn-in and dissolve in two tint palettes.
+//! Headless stills: braidman spiritual spawn-in, dissolve, and ooze in two tints.
 //!
 //! ```bash
 //! COMBAT_VFX_CAPTURE_DIR=/tmp/combat-vfx \
@@ -20,15 +20,20 @@ use characters_playground::{
 	camera::orient_camera, AnimationMode, CameraController, CharacterConfig, CharacterSpecies,
 	CharactersPlaygroundPlugin, PlaygroundCharacter,
 };
-use combat_vfx::{CombatVfxPlugin, SpiritTint, DEFAULT_SPIRIT_TINT, SPIRIT_DISSOLVE_SECS, SPIRIT_SPAWN_SECS};
-use maybraid_vfx::SPIRIT_SPAWN;
+use combat_vfx::{
+	CombatVfxPlugin, SpiritTint, DEFAULT_OOZE_TINT, DEFAULT_SPIRIT_TINT, SPIRIT_SPAWN_REVEAL,
+};
 use damage::{DamagePlugin, Health};
 use game_commands::ui::GameCommandDrawerVisible;
-use maybraid_vfx::{EffectRecipe, ExplosionPalette, SpawnVfxExt, VfxInstance, VfxLibrary, VfxSpawn, VfxPlugin};
+use maybraid_vfx::{
+	EffectRecipe, ExplosionPalette, SpawnVfxExt, VfxInstance, VfxLibrary, VfxSpawn, VfxPlugin,
+	OOZE_BURST, SPIRIT_DISSOLVE, SPIRIT_SPAWN,
+};
 use player::Npc;
 
-const TIMEOUT: Duration = Duration::from_secs(120);
+const TIMEOUT: Duration = Duration::from_secs(180);
 const ASSEMBLY_SETTLE: Duration = Duration::from_secs(8);
+const AGE_SLACK: f32 = 0.35;
 
 fn capture_dir() -> PathBuf {
 	std::env::var_os("COMBAT_VFX_CAPTURE_DIR")
@@ -60,7 +65,7 @@ fn main() {
 				.disable::<AudioPlugin>(),
 		)
 		.add_plugins((DamagePlugin, VfxPlugin, CombatVfxPlugin, CharactersPlaygroundPlugin))
-		.insert_resource(ClearColor(Color::srgb(0.14, 0.16, 0.20)))
+		.insert_resource(ClearColor(Color::srgb(0.07, 0.08, 0.11)))
 		.insert_resource(CaptureDir(dir))
 		.init_resource::<CapturePlan>()
 		.insert_resource(CharacterConfig {
@@ -86,12 +91,9 @@ struct Shot {
 
 #[derive(Clone, Copy, Debug)]
 enum ShotKind {
-	SpiritSpawnStart,
-	SpiritSpawnMid,
-	SpiritSpawnComplete,
-	SpiritSettle,
-	SpiritMid,
-	SpiritComplete,
+	SpiritSpawn { at: f32 },
+	SpiritDissolve { at: f32 },
+	Ooze { at: f32 },
 }
 
 #[derive(Resource, Default)]
@@ -103,41 +105,35 @@ struct CapturePlan {
 	hold_frames: u8,
 	started: Duration,
 	phase_started: Duration,
-	hit_fired: bool,
-	spawn_in_fired: bool,
-	spawn_revealed: bool,
-	spirit_spawned: bool,
-	character_hidden: bool,
+	spawn_fired: bool,
+	dissolve_fired: bool,
+	ooze_fired: bool,
 }
 
 const ROSE_SPIRIT_TINT: Color = Color::srgb(1.0, 0.22, 0.55);
 
-fn spirit_palette(tint: Color) -> ExplosionPalette {
-	ExplosionPalette::spirit_burst(tint)
-}
-
 impl CapturePlan {
 	fn bootstrap(dir: &Path) -> Self {
-		let sequences = [
-			("cyan", DEFAULT_SPIRIT_TINT),
-			("magenta", ROSE_SPIRIT_TINT),
-		];
+		let sequences = [("cyan", DEFAULT_SPIRIT_TINT), ("magenta", ROSE_SPIRIT_TINT)];
 		let mut shots = Vec::new();
 		for (label, tint) in sequences {
-			for (stem, kind) in [
-				("spawn_start", ShotKind::SpiritSpawnStart),
-				("spawn_mid", ShotKind::SpiritSpawnMid),
-				("spawn_complete", ShotKind::SpiritSpawnComplete),
-				("settle", ShotKind::SpiritSettle),
-				("dissolve_mid", ShotKind::SpiritMid),
-				("dissolve_complete", ShotKind::SpiritComplete),
-			] {
+			for at in [0.5, 1.5, 2.5, 3.5] {
 				shots.push(Shot {
-					file: dir.join(format!("spirit_{label}_{stem}.png")),
-					kind,
+					file: dir.join(format!("spirit_{label}_spawn_{at:.1}s.png")),
+					kind: ShotKind::SpiritSpawn { at },
 					tint,
 				});
 			}
+			shots.push(Shot {
+				file: dir.join(format!("spirit_{label}_dissolve_mid.png")),
+				kind: ShotKind::SpiritDissolve { at: 1.4 },
+				tint,
+			});
+			shots.push(Shot {
+				file: dir.join(format!("spirit_{label}_ooze_mid.png")),
+				kind: ShotKind::Ooze { at: 0.08 },
+				tint,
+			});
 		}
 		Self { shots, ..default() }
 	}
@@ -154,7 +150,7 @@ fn add_ground(
 ) {
 	let mesh = meshes.add(Plane3d::default().mesh().size(12.0, 12.0));
 	let material = materials.add(StandardMaterial {
-		base_color: Color::srgb(0.22, 0.23, 0.26),
+		base_color: Color::srgb(0.16, 0.17, 0.19),
 		perceptual_roughness: 0.92,
 		..default()
 	});
@@ -179,7 +175,6 @@ fn character_ready(has_library: bool, has_subject: bool, rig_count: usize, mesh_
 	has_library && has_subject && rig_count > 0 && mesh_count > 6
 }
 
-/// Tighten framing on the torso so impact particles fill the still.
 fn frame_capture_camera(
 	plan: Res<CapturePlan>,
 	subject: Query<&GlobalTransform, With<CombatSubject>>,
@@ -194,33 +189,37 @@ fn frame_capture_camera(
 	let Ok((mut transform, mut controller)) = cameras.single_mut() else {
 		return;
 	};
-	let focus = subject.translation() + Vec3::new(0.0, 0.45, 0.0);
-	let offset = Vec3::new(0.4, 0.22, 1.55);
+	let focus = subject.translation() + Vec3::new(0.0, 0.5, 0.0);
+	let offset = Vec3::new(0.62, 0.42, 2.15);
 	orient_camera(&mut transform, &mut controller, focus + offset, focus);
 }
 
-fn active_spirit(instances: &Query<(Entity, &VfxInstance)>) -> Option<(Entity, f32)> {
+fn named_age(instances: &Query<(Entity, &VfxInstance)>, name: &str) -> Option<f32> {
 	instances
 		.iter()
-		.filter(|(_, instance)| instance.name.contains("dissolve") && instance.armed)
-		.map(|(entity, instance)| (entity, instance.age))
+		.filter(|(_, instance)| instance.name == name && instance.armed)
+		.map(|(_, instance)| instance.age)
 		.next()
 }
 
-fn active_spirit_spawn(instances: &Query<(Entity, &VfxInstance)>) -> Option<(Entity, f32)> {
-	instances
-		.iter()
-		.filter(|(_, instance)| instance.name == SPIRIT_SPAWN && instance.armed)
-		.map(|(entity, instance)| (entity, instance.age))
-		.next()
+fn age_reached(age: Option<f32>, at: f32) -> bool {
+	age.is_some_and(|age| age >= at)
 }
 
-fn spirit_spawn_age_in_window(
-	instances: &Query<(Entity, &VfxInstance)>,
-	min_age: f32,
-	max_age: f32,
-) -> bool {
-	active_spirit_spawn(instances).is_some_and(|(_, age)| age >= min_age && age <= max_age)
+fn despawn_vfx(commands: &mut Commands, instances: &Query<(Entity, &VfxInstance)>) {
+	for (entity, _) in instances {
+		commands.entity(entity).try_despawn();
+	}
+}
+
+fn set_character_visible(commands: &mut Commands, roots: &Query<Entity, With<PlaygroundCharacter>>, visible: bool) {
+	if let Ok(root) = roots.single() {
+		commands.entity(root).insert(if visible {
+			Visibility::Inherited
+		} else {
+			Visibility::Hidden
+		});
+	}
 }
 
 fn advance_capture(
@@ -261,33 +260,23 @@ fn advance_capture(
 
 	if plan.scene_ready && plan.requested && plan.shots[plan.index].file.is_file() {
 		info!("captured {}", plan.shots[plan.index].file.display());
+		let prev = plan.shots[plan.index].kind;
 		plan.index += 1;
 		plan.requested = false;
 		plan.hold_frames = 0;
-		let prev = plan.shots.get(plan.index.saturating_sub(1));
-		if matches!(prev.map(|s| s.kind), Some(ShotKind::SpiritSpawnComplete)) {
-			plan.spawn_in_fired = false;
-			plan.spawn_revealed = false;
-			plan.character_hidden = false;
-			if let Ok(root) = roots.single() {
-				commands.entity(root).insert(Visibility::Inherited);
-			}
-		}
-		if matches!(
-			plan.shots.get(plan.index).map(|s| s.kind),
-			Some(ShotKind::SpiritSpawnStart)
-		) {
-			plan.spawn_in_fired = false;
-			plan.spawn_revealed = false;
-			plan.spirit_spawned = false;
-			plan.character_hidden = false;
-			plan.hit_fired = false;
-			if let Ok(root) = roots.single() {
-				commands.entity(root).insert(Visibility::Inherited);
-			}
-		}
-		plan.spirit_spawned = false;
 		plan.phase_started = time.elapsed();
+		if plan.index >= plan.shots.len() {
+			return;
+		}
+		let next = plan.shots[plan.index].kind;
+		let switching_kind = std::mem::discriminant(&prev) != std::mem::discriminant(&next);
+		if switching_kind || matches!(next, ShotKind::SpiritSpawn { at: 0.5 }) {
+			despawn_vfx(&mut commands, &instances);
+			plan.spawn_fired = false;
+			plan.dissolve_fired = false;
+			plan.ooze_fired = false;
+			set_character_visible(&mut commands, &roots, true);
+		}
 		return;
 	}
 
@@ -308,117 +297,98 @@ fn advance_capture(
 	}
 
 	let shot = plan.shots[plan.index].clone();
+	let Ok((body, transform)) = subject.single() else {
+		return;
+	};
+	let library = library.as_ref().expect("library");
+	let origin = transform.translation() + Vec3::new(0.0, 0.4, 0.0);
 	let ready = match shot.kind {
-		ShotKind::SpiritSpawnStart => {
-			if !plan.spawn_in_fired {
-				let Ok((body, transform)) = subject.single() else {
-					return;
-				};
+		ShotKind::SpiritSpawn { at } => {
+			if !plan.spawn_fired {
 				commands.entity(body).insert(SpiritTint(shot.tint));
-				if let Ok(root) = roots.single() {
-					commands.entity(root).insert(Visibility::Hidden);
-				}
+				set_character_visible(&mut commands, &roots, false);
 				commands.spawn_vfx(
-					&library.as_ref().expect("library").spirit_spawn.effect_definition(),
+					&library.spirit_spawn.effect_definition(),
 					VfxSpawn {
-						transform: Transform::from_translation(
-							transform.translation() + Vec3::new(0.0, 0.35, 0.0),
-						),
-						scale: 1.35,
-						intensity: 1.65,
-						palette: Some(spirit_palette(shot.tint)),
+						transform: Transform::from_translation(origin),
+						scale: 1.0,
+						intensity: combat_vfx::spirit_intensity(),
+						palette: Some(ExplosionPalette::spirit_burst(shot.tint)),
 						..default()
 					},
 				);
-				plan.spawn_in_fired = true;
+				plan.spawn_fired = true;
 				plan.phase_started = time.elapsed();
 				return;
 			}
-			plan.spawn_in_fired
-				&& (spirit_spawn_age_in_window(&instances, 0.06, 0.32)
-					|| time.elapsed().saturating_sub(plan.phase_started)
-						>= Duration::from_millis(320))
+			if named_age(&instances, SPIRIT_SPAWN).is_some_and(|age| age >= SPIRIT_SPAWN_REVEAL) {
+				set_character_visible(&mut commands, &roots, true);
+			}
+			age_reached(named_age(&instances, SPIRIT_SPAWN), at)
+				|| time.elapsed().saturating_sub(plan.phase_started)
+					>= Duration::from_secs_f32(at + AGE_SLACK)
 		}
-		ShotKind::SpiritSpawnMid => {
-			plan.spawn_in_fired
-				&& !plan.spawn_revealed
-				&& (spirit_spawn_age_in_window(&instances, 0.45, 1.25)
-					|| active_spirit_spawn(&instances)
-						.is_some_and(|(_, age)| age >= 0.55)
+		ShotKind::SpiritDissolve { at } => {
+			if !plan.dissolve_fired {
+				despawn_vfx(&mut commands, &instances);
+				commands.entity(body).insert(SpiritTint(shot.tint));
+				set_character_visible(&mut commands, &roots, false);
+				commands.spawn_vfx(
+					&library.spirit_dissolve.effect_definition(),
+					VfxSpawn {
+						transform: Transform::from_translation(origin),
+						scale: 1.0,
+						intensity: combat_vfx::spirit_intensity(),
+						palette: Some(ExplosionPalette::spirit_burst(shot.tint)),
+						..default()
+					},
+				);
+				plan.dissolve_fired = true;
+				plan.phase_started = time.elapsed();
+				return;
+			}
+			age_reached(named_age(&instances, SPIRIT_DISSOLVE), at)
+				|| time.elapsed().saturating_sub(plan.phase_started)
+					>= Duration::from_secs_f32(at + AGE_SLACK)
+		}
+		ShotKind::Ooze { at } => {
+			if !plan.ooze_fired {
+				despawn_vfx(&mut commands, &instances);
+				set_character_visible(&mut commands, &roots, true);
+				let hit = origin + Vec3::new(0.10, 0.06, 0.08);
+				commands.spawn_vfx(
+					&library.ooze_burst.effect_definition(),
+					VfxSpawn {
+						transform: Transform::from_translation(hit)
+							.with_rotation(Quat::from_rotation_arc(Vec3::Z, Vec3::new(0.92, 0.18, 0.22).normalize())),
+						scale: 1.0,
+						intensity: combat_vfx::ooze_intensity(),
+						palette: Some(ExplosionPalette::combat_ooze(DEFAULT_OOZE_TINT)),
+						..default()
+					},
+				);
+				plan.ooze_fired = true;
+				plan.phase_started = time.elapsed();
+				return;
+			}
+			{
+				let age = named_age(&instances, OOZE_BURST);
+				age.is_some_and(|age| age >= at.max(0.06))
+					|| (age.is_some_and(|age| age > 0.04)
 						&& time.elapsed().saturating_sub(plan.phase_started)
-							>= Duration::from_millis(180))
-		}
-		ShotKind::SpiritSpawnComplete => {
-			if !plan.spawn_revealed {
-				if let Ok(root) = roots.single() {
-					commands.entity(root).insert(Visibility::Inherited);
-				}
-				plan.spawn_revealed = true;
-				plan.phase_started = time.elapsed();
+							>= Duration::from_secs_f32(at + 0.16))
 			}
-			let wisps_done = instances
-				.iter()
-				.all(|(_, i)| i.name != SPIRIT_SPAWN)
-				|| active_spirit_spawn(&instances)
-					.is_some_and(|(_, age)| age >= SPIRIT_SPAWN_SECS * 0.85)
-				|| time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(1400);
-			plan.spawn_revealed
-				&& wisps_done
-				&& time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(200)
-		}
-		ShotKind::SpiritSettle => {
-			// Clear prior spirit instances so the dissolve reads cleanly.
-			for (entity, _) in &instances {
-				commands.entity(entity).try_despawn();
-			}
-			time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(200)
-		}
-		ShotKind::SpiritMid => {
-			if !plan.spirit_spawned {
-				let Ok((body, transform)) = subject.single() else {
-					return;
-				};
-				commands.entity(body).insert(SpiritTint(shot.tint));
-				commands.spawn_vfx(
-					&library.as_ref().expect("library").spirit_dissolve.effect_definition(),
-					VfxSpawn {
-						transform: Transform::from_translation(
-							transform.translation() + Vec3::new(0.0, 0.35, 0.0),
-						),
-						scale: 1.35,
-						intensity: 1.65,
-						palette: Some(spirit_palette(shot.tint)),
-						..default()
-					},
-				);
-				plan.spirit_spawned = true;
-				plan.phase_started = time.elapsed();
-				return;
-			}
-			active_spirit(&instances)
-				.is_some_and(|(_, age)| age >= SPIRIT_DISSOLVE_SECS * 0.38)
-		}
-		ShotKind::SpiritComplete => {
-			if !plan.character_hidden {
-				if let Ok(root) = roots.single() {
-					commands.entity(root).insert(Visibility::Hidden);
-					plan.character_hidden = true;
-					plan.phase_started = time.elapsed();
-				}
-			}
-			let wisps_done = instances.is_empty()
-				|| active_spirit(&instances)
-					.is_some_and(|(_, age)| age >= SPIRIT_DISSOLVE_SECS * 0.92);
-			plan.character_hidden
-				&& wisps_done
-				&& time.elapsed().saturating_sub(plan.phase_started) >= Duration::from_millis(180)
 		}
 	};
 
 	if !ready || plan.requested {
 		return;
 	}
-	if plan.hold_frames < 2 {
+	let hold = match shot.kind {
+		ShotKind::Ooze { .. } => 1,
+		_ => 2,
+	};
+	if plan.hold_frames < hold {
 		plan.hold_frames += 1;
 		return;
 	}

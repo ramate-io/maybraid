@@ -255,6 +255,14 @@ pub fn update_palette_color(writer: &ExprWriter, props: &InstanceExprs) -> SetAt
 	SetAttributeModifier::new(Attribute::HDR_COLOR, (color * props.tint.clone()).expr())
 }
 
+pub fn init_scaled_size3(
+	writer: &ExprWriter,
+	scale: &WriterExpr,
+	start: Vec3,
+) -> SetAttributeModifier {
+	SetAttributeModifier::new(Attribute::SIZE3, (writer.lit(start) * scale.clone()).expr())
+}
+
 pub fn update_scaled_size3(
 	writer: &ExprWriter,
 	scale: &WriterExpr,

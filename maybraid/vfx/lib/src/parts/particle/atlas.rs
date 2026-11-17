@@ -39,14 +39,59 @@ pub fn paint_ooze_blob() -> Image {
 			let dx = (u - 0.5) * 2.0;
 			let dy = (v - 0.5) * 2.4;
 			let r = (dx * dx + dy * dy).sqrt();
-			let core = (1.0 - (r / 0.92).clamp(0.0, 1.0)).powf(2.2);
-			let tail = (1.0 - ((u - 0.72).max(0.0) * 3.4)).clamp(0.0, 1.0) * (1.0 - r * 0.5).max(0.0);
-			let alpha = (core * 0.85 + tail * 0.35).clamp(0.0, 1.0);
+			let core = (1.0 - (r / 0.86).clamp(0.0, 1.0)).powf(1.25);
+			let tail = (1.0 - ((u - 0.68).max(0.0) * 2.8)).clamp(0.0, 1.0) * (1.0 - r * 0.4).max(0.0);
+			let alpha = (core * 0.98 + tail * 0.22).clamp(0.0, 1.0);
 			let i = ((y * W + x) * 4) as usize;
-			data[i..i + 4].copy_from_slice(&value(0.95, alpha));
+			data[i..i + 4].copy_from_slice(&value(1.0, alpha));
 		}
 	}
 	atlas_image(W, H, data)
+}
+
+/// Soft irregular energy puff: one cloudy lobe with ragged edges, not a 4-dot cell.
+pub fn paint_energy_wisp() -> Image {
+	const W: u32 = 64;
+	const H: u32 = 64;
+	let mut data = vec![0u8; (W * H * 4) as usize];
+	for y in 0..H {
+		for x in 0..W {
+			let u = (x as f32 + 0.5) / W as f32;
+			let v = (y as f32 + 0.5) / H as f32;
+			let mut cover = 0.0_f32;
+			for (i, &(ox, oy, sx, sy, w)) in [
+				(0.00, 0.00, 0.46, 0.40, 1.00),
+				(0.16, -0.10, 0.28, 0.34, 0.72),
+				(-0.18, 0.08, 0.32, 0.26, 0.68),
+				(0.06, 0.18, 0.24, 0.22, 0.55),
+				(-0.08, -0.16, 0.22, 0.28, 0.50),
+			]
+			.iter()
+			.enumerate()
+			{
+				let n = hash2(u * 7.1 + i as f32, v * 6.3 + ox);
+				let cx = 0.5 + ox + (n - 0.5) * 0.04;
+				let cy = 0.5 + oy + (hash2(v * 5.7, u * 4.9 + i as f32) - 0.5) * 0.04;
+				let dx = (u - cx) / sx;
+				let dy = (v - cy) / sy;
+				let r = (dx * dx + dy * dy).sqrt();
+				let blob = (1.0 - r.clamp(0.0, 1.0)).powf(1.55) * w;
+				cover = cover.max(blob);
+			}
+			let grain = 0.78 + 0.22 * hash2(u * 18.0, v * 21.0);
+			let margin = edge_margin(u, v);
+			let alpha = (cover * grain * margin * 0.92).clamp(0.0, 1.0);
+			let heat = (cover * 0.85 + 0.15).clamp(0.0, 1.0);
+			let i = ((y * W + x) * 4) as usize;
+			data[i..i + 4].copy_from_slice(&value(heat, alpha));
+		}
+	}
+	atlas_image(W, H, data)
+}
+
+fn hash2(a: f32, b: f32) -> f32 {
+	let n = (a * 12.9898 + b * 78.233).sin() * 43758.5453;
+	n.fract().abs()
 }
 
 pub fn paint_spark_taper() -> Image {
@@ -167,6 +212,16 @@ mod tests {
 		assert_eq!(center[0], center[2]);
 		assert!(center[3] > 40, "{center:?}");
 		assert_eq!(smoke_cell(0.02, 0.02, 1.0)[3], 0);
+	}
+
+	#[test]
+	fn energy_wisp_is_a_soft_center_with_clear_edges() {
+		let image = paint_energy_wisp();
+		let data = image.data.as_ref().expect("wisp bytes");
+		let center = ((32u32 * 64 + 32) * 4) as usize;
+		let corner = 3;
+		assert!(data[center + 3] > 80, "center alpha {}", data[center + 3]);
+		assert_eq!(data[corner], 0);
 	}
 
 	#[test]

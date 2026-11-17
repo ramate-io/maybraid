@@ -16,7 +16,7 @@ use crate::names::{
 };
 use crate::parts::lobe::rounded_lobe_mesh;
 use crate::parts::particle::assets::{
-	fire_flipbook, ooze_blob, smoke_flipbook, spark_taper, VfxFlipbooks,
+	energy_wisp, fire_flipbook, ooze_blob, smoke_flipbook, spark_taper, VfxFlipbooks,
 };
 
 /// Shared definitions. Clone a handle out; never mutate the compiled assets.
@@ -80,6 +80,7 @@ pub fn setup_vfx_library(
 		smoke: smoke_flipbook(&mut images),
 		spark: spark_taper(&mut images),
 		ooze: ooze_blob(&mut images),
+		energy: energy_wisp(&mut images),
 	};
 	let flash_mesh = flash::compile_mesh(lobe_mesh.clone());
 	let fireball_mesh = fireball::compile_mesh(lobe_mesh.clone());
@@ -87,16 +88,19 @@ pub fn setup_vfx_library(
 	let smoke_mesh = smoke::compile_mesh(lobe_mesh.clone());
 	let smoke_wisps = smoke::compile_wisps(&mut effects, &flipbooks.smoke);
 	let sparks_part = sparks::compile(&mut effects, flipbooks.spark.clone());
-	let ooze_splat = ooze::compile_splat(lobe_mesh.clone());
 	let ooze_droplets = ooze::compile_droplets(&mut effects, flipbooks.ooze.clone());
 	let ooze_drips = ooze::compile_drips(&mut effects, flipbooks.ooze.clone());
-	let spirit_shell = spirit::compile_shell(lobe_mesh.clone());
-	let spirit_streaks = spirit::compile_streaks(&mut effects, flipbooks.spark.clone());
-	let spirit_motes = spirit::compile_motes(&mut effects, &flipbooks.smoke);
+	let ooze_mist = ooze::compile_mist(&mut effects, &flipbooks.smoke);
+	let spirit_wisps = spirit::compile_wisps_layer(&mut effects, flipbooks.energy.clone());
+	let spirit_crackle = spirit::compile_crackle_layer(&mut effects, flipbooks.spark.clone());
+	let spirit_streaks = spirit::compile_streaks_layer(&mut effects, flipbooks.spark.clone());
 	let spirit_embers = spirit::compile_embers_layer(&mut effects, flipbooks.spark.clone());
-	let spawn_shell = spirit_spawn::compile_shell(lobe_mesh.clone());
-	let spawn_streaks = spirit_spawn::compile_streaks(&mut effects, flipbooks.spark.clone());
-	let spawn_motes = spirit_spawn::compile_motes(&mut effects, &flipbooks.smoke);
+	let spawn_gather_wisps = spirit_spawn::compile_gather_wisps(&mut effects, flipbooks.energy.clone());
+	let spawn_gather_crackle =
+		spirit_spawn::compile_gather_crackle(&mut effects, flipbooks.spark.clone());
+	let spawn_peel_wisps = spirit_spawn::compile_peel_wisps(&mut effects, flipbooks.energy.clone());
+	let spawn_peel_crackle = spirit_spawn::compile_peel_crackle(&mut effects, flipbooks.spark.clone());
+	let spawn_streaks = spirit_spawn::compile_streaks_layer(&mut effects, flipbooks.spark.clone());
 	let spawn_embers = spirit_spawn::compile_embers_layer(&mut effects, flipbooks.spark.clone());
 	let library = VfxLibrary {
 		dust: Dust::rolling_wave(&server, &mut meshes),
@@ -104,17 +108,19 @@ pub fn setup_vfx_library(
 		fireball: fireball::definition(fireball_mesh.clone(), fireball_wisps.clone()),
 		smoke: smoke::definition(smoke_mesh.clone(), smoke_wisps.clone()),
 		sparks: sparks::definition(sparks_part.clone()),
-		ooze_burst: OozeBurst::new(ooze_splat, ooze_droplets.clone(), ooze_drips.clone()),
+		ooze_burst: OozeBurst::new(ooze_droplets.clone(), ooze_drips.clone(), ooze_mist.clone()),
 		spirit_dissolve: SpiritDissolve::new(
-			spirit_shell.clone(),
+			spirit_wisps.clone(),
+			spirit_crackle.clone(),
 			spirit_streaks.clone(),
-			spirit_motes.clone(),
 			spirit_embers.clone(),
 		),
 		spirit_spawn: SpiritSpawn::new(
-			spawn_shell.clone(),
+			spawn_gather_wisps.clone(),
+			spawn_gather_crackle.clone(),
+			spawn_peel_wisps.clone(),
+			spawn_peel_crackle.clone(),
 			spawn_streaks.clone(),
-			spawn_motes.clone(),
 			spawn_embers.clone(),
 		),
 		fiery_explosion: FieryExplosion::new(
@@ -133,11 +139,16 @@ pub fn setup_vfx_library(
 		&sparks_part,
 		&ooze_droplets,
 		&ooze_drips,
+		&ooze_mist,
+		&spirit_wisps,
+		&spirit_crackle,
 		&spirit_streaks,
-		&spirit_motes,
 		&spirit_embers,
+		&spawn_gather_wisps,
+		&spawn_gather_crackle,
+		&spawn_peel_wisps,
+		&spawn_peel_crackle,
 		&spawn_streaks,
-		&spawn_motes,
 		&spawn_embers,
 	] {
 		let mut warmup = commands.spawn((

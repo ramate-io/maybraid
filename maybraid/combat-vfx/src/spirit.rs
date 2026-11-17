@@ -13,8 +13,7 @@ pub struct SpiritDissolveStarted {
 	pub at: f32,
 }
 
-/// How long wisps rise after the body is hidden.
-pub const SPIRIT_DISSOLVE_SECS: f32 = 2.05;
+pub use maybraid_vfx::SPIRIT_DISSOLVE_SECS;
 
 /// Wait for ragdoll motion to settle (or this fallback without a solver).
 pub const CORPSE_SETTLE_SECS: f32 = 0.85;
@@ -82,9 +81,11 @@ pub(crate) fn begin_spirit_dissolve(
 		commands.spawn_vfx(
 			&library.spirit_dissolve.effect_definition(),
 			VfxSpawn {
-				transform: Transform::from_translation(transform.translation()),
-				scale: 1.35,
-				intensity: 1.65,
+				transform: Transform::from_translation(
+					transform.translation() + Vec3::new(0.0, 0.4, 0.0),
+				),
+				scale: 1.0,
+				intensity: crate::spirit_intensity(),
 				playback: 1.0,
 				palette: palette.or_else(|| {
 					parents.get(visual).ok().map(|p| resolve_spirit_palette(p.parent(), &tints))

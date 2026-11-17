@@ -1,35 +1,35 @@
-//! Corpse dissolution into an outward energy burst.
+//! Corpse dissolution into staggered additive energy shells.
 
 use bevy::prelude::*;
 
-use crate::composition::{EffectDefinition, EffectRecipe, MeshPart, ParticlePart};
+use crate::composition::{EffectDefinition, EffectRecipe, ParticlePart};
 use crate::layers::spirit;
 
 #[derive(Component, Clone, Debug)]
 pub struct SpiritDissolve {
-	pub shell: MeshPart,
+	pub wisps: ParticlePart,
+	pub crackle: ParticlePart,
 	pub streaks: ParticlePart,
-	pub motes: ParticlePart,
 	pub embers: ParticlePart,
 }
 
 impl SpiritDissolve {
 	pub fn new(
-		shell: MeshPart,
+		wisps: ParticlePart,
+		crackle: ParticlePart,
 		streaks: ParticlePart,
-		motes: ParticlePart,
 		embers: ParticlePart,
 	) -> Self {
-		Self { shell, streaks, motes, embers }
+		Self { wisps, crackle, streaks, embers }
 	}
 }
 
 impl EffectRecipe for SpiritDissolve {
 	fn effect_definition(&self) -> EffectDefinition {
 		spirit::definition(
-			self.shell.clone(),
+			self.wisps.clone(),
+			self.crackle.clone(),
 			self.streaks.clone(),
-			self.motes.clone(),
 			self.embers.clone(),
 		)
 	}
@@ -42,13 +42,6 @@ mod tests {
 
 	#[test]
 	fn recipe_matches_standalone_layer() {
-		let mesh = MeshPart {
-			name: SPIRIT_DISSOLVE.into(),
-			mesh: Handle::default(),
-			kind: crate::composition::LobeKind::Flash,
-			lobes: Vec::new(),
-			duration: 1.0,
-		};
 		let particle = ParticlePart {
 			name: SPIRIT_DISSOLVE.into(),
 			effect: Default::default(),
@@ -58,7 +51,7 @@ mod tests {
 			max_lifetime: 1.0,
 			shade: crate::composition::ParticleShade::Spirit,
 		};
-		let recipe = SpiritDissolve::new(mesh.clone(), particle.clone(), particle.clone(), particle);
+		let recipe = SpiritDissolve::new(particle.clone(), particle.clone(), particle.clone(), particle);
 		assert_eq!(recipe.effect_definition().name, SPIRIT_DISSOLVE);
 	}
 }

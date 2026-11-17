@@ -9,7 +9,7 @@ use player::{Npc, Player};
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct SpiritTint(pub Color);
 
-pub const DEFAULT_SPIRIT_TINT: Color = Color::srgba(0.12, 0.88, 1.05, 1.0);
+pub const DEFAULT_SPIRIT_TINT: Color = Color::srgb(0.16, 0.82, 0.96);
 
 impl Default for SpiritTint {
 	fn default() -> Self {

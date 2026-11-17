@@ -1,6 +1,7 @@
 //! Combat impact ooze and spiritual corpse dissolution wired through `maybraid-vfx`.
 
 mod impact;
+mod knobs;
 mod spawn_in;
 mod spirit;
 mod tint;
@@ -10,6 +11,7 @@ use character_ragdoll::CharacterRagdollSystems;
 use damage::{DamageSystems, tick_queued_despawns};
 
 pub use impact::{CombatOozeTint, DEFAULT_OOZE_TINT};
+pub use knobs::{ooze_intensity, spirit_intensity};
 pub use spawn_in::{SpiritMaterialize, SPIRIT_SPAWN_REVEAL, SPIRIT_SPAWN_SECS};
 pub use spirit::{SPIRIT_DISSOLVE_SECS, SpiritDissolveStarted};
 pub use tint::{SpiritTint, DEFAULT_SPIRIT_TINT};

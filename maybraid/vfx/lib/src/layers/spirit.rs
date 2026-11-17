@@ -1,77 +1,60 @@
-//! Outward spiritual burst: shell, streaks, motes, embers, and core flash.
+//! Outward spiritual dispersal: staggered wispy shells, crackle, streaks, core flash.
 
 use bevy::prelude::*;
 use bevy_hanabi::EffectAsset;
 
-use crate::composition::{EffectDefinition, EffectLayer, LightPulse, MeshPart, ParticlePart};
+use crate::composition::{EffectDefinition, EffectLayer, EffectPart, ParticlePart};
 use crate::layers::spirit_energy::{
-	self, compile_embers, compile_outward_streaks, compile_shell_motes,
-	BURST_LIGHT_FADE, BURST_LIGHT_PEAK, BURST_LIGHT_RANGE, CORE_FLASH_FADE, CORE_FLASH_PEAK,
-	CORE_FLASH_RANGE, MOTE_LIFE_MAX, SHELL_FADE, STREAK_LIFE_MAX,
+	self, compile_crackle, compile_embers, compile_streaks, compile_wisps,
 };
 use crate::names::SPIRIT_DISSOLVE;
-use crate::palette::ExplosionPalette;
-use crate::parts::particle::assets::FlipbookAsset;
 
-pub const SPIRIT_DISSOLVE_SECS: f32 = 2.05;
+pub use spirit_energy::SPIRIT_DISSOLVE_SECS;
 
-pub fn core_flash() -> LightPulse {
-	LightPulse {
-		color: ExplosionPalette::color(LinearRgba::rgb(1.35, 1.32, 1.42)),
-		peak_intensity: CORE_FLASH_PEAK,
-		range: CORE_FLASH_RANGE,
-		fade: CORE_FLASH_FADE,
-	}
+pub fn compile_wisps_layer(effects: &mut Assets<EffectAsset>, wisp: Handle<Image>) -> ParticlePart {
+	compile_wisps(effects, wisp, SPIRIT_DISSOLVE, false)
 }
 
-pub fn aura_light() -> LightPulse {
-	LightPulse {
-		color: ExplosionPalette::color(LinearRgba::rgb(0.65, 0.95, 1.25)),
-		peak_intensity: BURST_LIGHT_PEAK,
-		range: BURST_LIGHT_RANGE,
-		fade: BURST_LIGHT_FADE,
-	}
+pub fn compile_crackle_layer(effects: &mut Assets<EffectAsset>, spark: Handle<Image>) -> ParticlePart {
+	compile_crackle(effects, spark, SPIRIT_DISSOLVE, false)
 }
 
-pub fn compile_shell(mesh: Handle<Mesh>) -> MeshPart {
-	spirit_energy::compile_shell(mesh, SPIRIT_DISSOLVE, SHELL_FADE)
+pub fn compile_streaks_layer(effects: &mut Assets<EffectAsset>, spark: Handle<Image>) -> ParticlePart {
+	compile_streaks(effects, spark, SPIRIT_DISSOLVE)
 }
 
-pub fn compile_streaks(effects: &mut Assets<EffectAsset>, spark: Handle<Image>) -> ParticlePart {
-	compile_outward_streaks(effects, spark, SPIRIT_DISSOLVE)
-}
-
-pub fn compile_motes(
-	effects: &mut Assets<EffectAsset>,
-	smoke: &FlipbookAsset,
-) -> ParticlePart {
-	compile_shell_motes(effects, smoke, SPIRIT_DISSOLVE, true)
-}
-
-pub fn compile_embers_layer(
-	effects: &mut Assets<EffectAsset>,
-	spark: Handle<Image>,
-) -> ParticlePart {
+pub fn compile_embers_layer(effects: &mut Assets<EffectAsset>, spark: Handle<Image>) -> ParticlePart {
 	compile_embers(effects, spark, SPIRIT_DISSOLVE)
 }
 
 pub fn definition(
-	shell: MeshPart,
+	wisps: ParticlePart,
+	crackle: ParticlePart,
 	streaks: ParticlePart,
-	motes: ParticlePart,
 	embers: ParticlePart,
 ) -> EffectDefinition {
 	EffectDefinition::new(
 		SPIRIT_DISSOLVE,
 		[
-			EffectLayer::light(core_flash()),
-			EffectLayer::mesh(shell),
+			EffectLayer::light(spirit_energy::core_flash()),
 			EffectLayer::particle(streaks),
-			EffectLayer::particle(motes).with_delay(0.03),
-			EffectLayer::particle(embers).with_delay(0.06),
-			EffectLayer::light(aura_light()).with_delay(0.02),
+			EffectLayer::particle(embers).with_delay(0.04),
+			EffectLayer::particle(wisps.clone()).with_scale(0.82),
+			EffectLayer::particle(crackle.clone()).with_delay(0.08),
+			EffectLayer::light(spirit_energy::aura_light()).with_delay(0.05),
+			EffectLayer::particle(wisps.clone()).with_scale(1.02).with_delay(0.55),
+			EffectLayer::particle(crackle).with_scale(1.12).with_delay(0.7),
+			EffectLayer::particle(wisps.clone()).with_scale(1.22).with_delay(1.15),
+			EffectLayer::particle(wisps).with_scale(1.38).with_delay(1.55),
 		],
 	)
+}
+
+pub fn has_mesh_layer(definition: &EffectDefinition) -> bool {
+	definition
+		.layers
+		.iter()
+		.any(|layer| matches!(layer.part, EffectPart::Mesh(_)))
 }
 
 #[cfg(test)]
@@ -80,28 +63,22 @@ mod tests {
 	use bevy_hanabi::EffectAsset;
 
 	#[test]
-	fn dissolve_is_an_outward_burst() {
+	fn dissolve_is_a_staggered_particle_burst() {
 		let mut effects = Assets::<EffectAsset>::default();
-		let smoke = FlipbookAsset {
-			image: Handle::default(),
-			grid: UVec2::ONE,
-			frame_count: 1,
-			playback: 1.0,
-		};
 		let def = definition(
-			compile_shell(Handle::default()),
-			compile_streaks(&mut effects, Handle::default()),
-			compile_motes(&mut effects, &smoke),
+			compile_wisps_layer(&mut effects, Handle::default()),
+			compile_crackle_layer(&mut effects, Handle::default()),
+			compile_streaks_layer(&mut effects, Handle::default()),
 			compile_embers_layer(&mut effects, Handle::default()),
 		);
 		assert_eq!(def.name, SPIRIT_DISSOLVE);
-		assert!(def.layers.len() >= 5);
+		assert!(!has_mesh_layer(&def));
+		assert!(def.layers.len() >= 8);
 		assert!(
-			(def.duration() - MOTE_LIFE_MAX - 0.06).abs() < 0.2,
+			def.duration() >= 2.5 && def.duration() <= 4.0,
 			"duration {}",
 			def.duration()
 		);
-		let _ = STREAK_LIFE_MAX;
-		let _ = spirit_energy::SHELL_FADE;
+		assert!((def.duration() - (1.55 + crate::layers::spirit_energy::WISP_LIFE_MAX)).abs() < 0.05);
 	}
 }

@@ -19,9 +19,7 @@ pub struct SpiritMaterialize {
 #[derive(Component, Clone, Copy, Debug)]
 pub(crate) struct SpiritSpawnPlayed;
 
-/// Wisps and soft light duration; character reveals partway through.
-pub const SPIRIT_SPAWN_SECS: f32 = 1.65;
-pub const SPIRIT_SPAWN_REVEAL: f32 = 0.82;
+pub use maybraid_vfx::{SPIRIT_SPAWN_REVEAL, SPIRIT_SPAWN_SECS};
 
 pub(crate) fn begin_spirit_materialize(
 	time: Res<Time>,
@@ -53,10 +51,10 @@ pub(crate) fn begin_spirit_materialize(
 			&library.spirit_spawn.effect_definition(),
 			VfxSpawn {
 				transform: Transform::from_translation(
-					transform.translation() + Vec3::new(0.0, 0.35, 0.0),
+					transform.translation() + Vec3::new(0.0, 0.4, 0.0),
 				),
-				scale: 1.35,
-				intensity: 1.65,
+				scale: 1.0,
+				intensity: crate::spirit_intensity(),
 				palette: Some(resolve_spirit_palette(body, &tints)),
 				seed: Some(body.to_bits() ^ visual.to_bits() ^ 0x5a17_5ca4),
 				..default()
@@ -93,74 +91,7 @@ pub(crate) fn tick_spirit_materialize(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use maybraid_vfx::{
-		Dust, DustLayer, EffectDefinition, FieryExplosion, FlipbookAsset, FlipbookPart, LobeKind,
-		MeshPart, OozeBurst, ParticlePart, ParticleShade, SpiritDissolve, SpiritSpawn, VfxFlipbooks,
-		VfxInstance, VfxLibrary,
-	};
-
-	fn stub_library() -> VfxLibrary {
-		let particle = ParticlePart {
-			name: "stub".into(),
-			effect: Default::default(),
-			images: Vec::new(),
-			count: 1.0,
-			capacity: 1,
-			max_lifetime: SPIRIT_SPAWN_SECS,
-			shade: ParticleShade::Spirit,
-		};
-		let mesh = MeshPart {
-			name: "stub".into(),
-			mesh: Handle::default(),
-			kind: LobeKind::Flash,
-			lobes: Vec::new(),
-			duration: SPIRIT_SPAWN_SECS,
-		};
-		VfxLibrary {
-			dust: Dust::new(DustLayer::new(FlipbookPart::default())),
-			flipbooks: VfxFlipbooks {
-				fire: FlipbookAsset {
-					image: Handle::default(),
-					grid: UVec2::ONE,
-					frame_count: 1,
-					playback: 1.0,
-				},
-				smoke: FlipbookAsset {
-					image: Handle::default(),
-					grid: UVec2::ONE,
-					frame_count: 1,
-					playback: 1.0,
-				},
-				spark: Handle::default(),
-				ooze: Handle::default(),
-			},
-			flash: EffectDefinition::new("flash", []),
-			fireball: EffectDefinition::new("fireball", []),
-			smoke: EffectDefinition::new("smoke", []),
-			sparks: EffectDefinition::new("sparks", []),
-			ooze_burst: OozeBurst::new(mesh.clone(), particle.clone(), particle.clone()),
-			spirit_dissolve: SpiritDissolve::new(
-				mesh.clone(),
-				particle.clone(),
-				particle.clone(),
-				particle.clone(),
-			),
-			spirit_spawn: SpiritSpawn::new(
-				mesh.clone(),
-				particle.clone(),
-				particle.clone(),
-				particle.clone(),
-			),
-			fiery_explosion: FieryExplosion::new(
-				mesh.clone(),
-				mesh.clone(),
-				particle.clone(),
-				mesh.clone(),
-				particle.clone(),
-				particle,
-			),
-		}
-	}
+	use maybraid_vfx::VfxInstance;
 
 	#[test]
 	fn materialize_reveals_and_cleans_up() {

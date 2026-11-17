@@ -13,7 +13,7 @@ use player::{Npc, Player};
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct CombatOozeTint(pub Color);
 
-pub const DEFAULT_OOZE_TINT: Color = Color::srgb(0.42, 0.06, 0.12);
+pub const DEFAULT_OOZE_TINT: Color = Color::srgb(0.78, 0.07, 0.12);
 
 impl Default for CombatOozeTint {
 	fn default() -> Self {
@@ -56,18 +56,16 @@ pub(crate) fn spawn_ooze_on_damage(
 		let direction = impact_direction(hit, &transforms);
 		let strength = (hit.applied / 12.0).clamp(0.35, 2.0);
 		let tint = tints.get(hit.target).copied().unwrap_or_default().0;
-		let mut palette = ExplosionPalette::maybraid_ooze().with_tint(Some(tint));
-		palette.spark = palette.fire_hot;
+		let palette = ExplosionPalette::combat_ooze(tint);
 		let transform = Transform::from_translation(hit.point)
 			.with_rotation(Quat::from_rotation_arc(Vec3::Z, direction.normalize_or_zero()));
 		commands.spawn_vfx(
 			&library.ooze_burst.effect_definition(),
 			VfxSpawn {
 				transform,
-				scale: strength.sqrt().clamp(1.35, 2.6),
-				intensity: strength.clamp(1.05, 2.0),
+				scale: (strength.sqrt() * crate::ooze_intensity()).clamp(0.7, 1.35),
+				intensity: (strength * crate::ooze_intensity()).clamp(0.55, 1.4),
 				playback: 1.0,
-				tint: Some(tint),
 				palette: Some(palette),
 				seed: Some(
 					hit.target.to_bits()
@@ -136,20 +134,23 @@ mod tests {
 				},
 				spark: Handle::default(),
 				ooze: Handle::default(),
+				energy: Handle::default(),
 			},
 			flash: EffectDefinition::new("flash", []),
 			fireball: EffectDefinition::new("fireball", []),
 			smoke: EffectDefinition::new("smoke", []),
 			sparks: EffectDefinition::new("sparks", []),
-			ooze_burst: OozeBurst::new(blank_mesh.clone(), particle.clone(), particle.clone()),
+			ooze_burst: OozeBurst::new(particle.clone(), particle.clone(), particle.clone()),
 			spirit_dissolve: SpiritDissolve::new(
-				blank_mesh.clone(),
+				particle.clone(),
 				particle.clone(),
 				particle.clone(),
 				particle.clone(),
 			),
 			spirit_spawn: SpiritSpawn::new(
-				blank_mesh.clone(),
+				particle.clone(),
+				particle.clone(),
+				particle.clone(),
 				particle.clone(),
 				particle.clone(),
 				particle.clone(),

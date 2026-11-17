@@ -1,26 +1,26 @@
-//! Impact ooze: droplets plus delayed ground drips.
+//! Impact ooze: droplets, delayed drips, and a little mist. No mesh flash.
 
 use bevy::prelude::*;
 
-use crate::composition::{EffectDefinition, EffectRecipe, MeshPart, ParticlePart};
+use crate::composition::{EffectDefinition, EffectRecipe, ParticlePart};
 use crate::layers::ooze;
 
 #[derive(Component, Clone, Debug)]
 pub struct OozeBurst {
-	pub splat: MeshPart,
 	pub droplets: ParticlePart,
 	pub drips: ParticlePart,
+	pub mist: ParticlePart,
 }
 
 impl OozeBurst {
-	pub fn new(splat: MeshPart, droplets: ParticlePart, drips: ParticlePart) -> Self {
-		Self { splat, droplets, drips }
+	pub fn new(droplets: ParticlePart, drips: ParticlePart, mist: ParticlePart) -> Self {
+		Self { droplets, drips, mist }
 	}
 }
 
 impl EffectRecipe for OozeBurst {
 	fn effect_definition(&self) -> EffectDefinition {
-		ooze::definition(self.splat.clone(), self.droplets.clone(), self.drips.clone())
+		ooze::definition(self.droplets.clone(), self.drips.clone(), self.mist.clone())
 	}
 }
 
@@ -44,15 +44,8 @@ mod tests {
 
 	#[test]
 	fn recipe_names_the_composite() {
-		let mesh = crate::composition::MeshPart {
-			name: "stub".into(),
-			mesh: Handle::default(),
-			kind: crate::composition::LobeKind::Smoke,
-			lobes: Vec::new(),
-			duration: 0.5,
-		};
-		let recipe = OozeBurst::new(mesh, stub_particle(0.5), stub_particle(1.0));
+		let recipe = OozeBurst::new(stub_particle(0.5), stub_particle(1.0), stub_particle(0.7));
 		assert_eq!(recipe.effect_definition().name, OOZE_BURST);
-		assert_eq!(recipe.effect_definition().layers.len(), 4);
+		assert_eq!(recipe.effect_definition().layers.len(), 3);
 	}
 }

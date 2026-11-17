@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 
 use crate::parts::particle::atlas::{
-	fire_cell, paint_atlas, paint_ooze_blob, paint_spark_taper, smoke_cell,
+	fire_cell, paint_atlas, paint_energy_wisp, paint_ooze_blob, paint_spark_taper, smoke_cell,
 };
 
 /// Texture handle, atlas grid, frame count, and playback duration.
@@ -34,6 +34,7 @@ pub struct VfxFlipbooks {
 	pub smoke: FlipbookAsset,
 	pub spark: Handle<Image>,
 	pub ooze: Handle<Image>,
+	pub energy: Handle<Image>,
 }
 
 pub fn fire_flipbook(images: &mut Assets<Image>) -> FlipbookAsset {
@@ -56,6 +57,10 @@ pub fn smoke_flipbook(images: &mut Assets<Image>) -> FlipbookAsset {
 
 pub fn spark_taper(images: &mut Assets<Image>) -> Handle<Image> {
 	images.add(paint_spark_taper())
+}
+
+pub fn energy_wisp(images: &mut Assets<Image>) -> Handle<Image> {
+	images.add(paint_energy_wisp())
 }
 
 pub fn ooze_blob(images: &mut Assets<Image>) -> Handle<Image> {

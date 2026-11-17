@@ -30,6 +30,8 @@ pub use effects::ooze_burst::OozeBurst;
 pub use effects::spirit_dissolve::SpiritDissolve;
 pub use effects::spirit_spawn::SpiritSpawn;
 pub use layers::dust::DustLayer;
+pub use layers::spirit::SPIRIT_DISSOLVE_SECS;
+pub use layers::spirit_spawn::{SPIRIT_SPAWN_REVEAL, SPIRIT_SPAWN_SECS};
 pub use library::{canonicalize_effect_name, VfxLibrary};
 pub use names::{
 	DUST, FIERY_EXPLOSION, FIREBALL, FLASH, OOZE_BURST, SMOKE, SPARKS, SPIRIT_DISSOLVE, SPIRIT_SPAWN,
