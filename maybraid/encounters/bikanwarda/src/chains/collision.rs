@@ -158,6 +158,8 @@ mod tests {
 			link_count: 3,
 			rest_length_m: 2.0,
 			joint_entities: Vec::new(),
+			durability: 100.0,
+			max_durability: 100.0,
 		},)).id();
 		let joints = vec![
 			app.world_mut().spawn(Transform::default()).id(),

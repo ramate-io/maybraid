@@ -5,6 +5,7 @@
 //! and respond to player attacks.
 
 mod collision;
+mod damage;
 mod damage_coalesce;
 #[cfg(test)]
 mod integration_tests;
@@ -14,6 +15,9 @@ mod plugin;
 pub use collision::{
 	retire_chain_colliders, spawn_chain_colliders, sync_chain_colliders, ChainColliderConfig,
 	ChainLinkId,
+};
+pub use damage::{
+	apply_chain_damage, detect_and_signal_broken_chains, BrokenChain, ChainBrokenHistory,
 };
 pub use damage_coalesce::{cleanup_despawned_projectiles, coalesce_chain_contacts, ChainDamageHistory, ChainHitProjectiles};
 pub use motion::{

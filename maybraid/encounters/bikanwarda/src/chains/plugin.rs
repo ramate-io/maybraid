@@ -1,20 +1,24 @@
-//! Chain motion and collision plugin for [#1126](https://github.com/ramate-io/maybraid/issues/1126).
+//! Chain motion and collision plugin for [#1126](https://github.com/ramate-io/maybraid/issues/1126)
+//! and [#1127](https://github.com/ramate-io/maybraid/issues/1127).
 //!
-//! Wires up anchored chain motion, capsule collision, and contact deduplication.
+//! Wires up anchored chain motion, capsule collision, contact deduplication, and durability/break logic.
 
 use bevy::prelude::*;
 use damage::{contacts_to_hits, DamageSystems};
 
 use super::collision::{retire_released_chain_colliders, sync_chain_colliders};
+use super::damage::{apply_chain_damage, detect_and_signal_broken_chains, ChainBrokenHistory};
 use super::damage_coalesce::{cleanup_despawned_projectiles, coalesce_chain_contacts, ChainDamageHistory};
 use super::motion::{deactivate_released_chains, update_chain_joints};
 
-/// Plugin that registers chain motion and collision systems.
+/// Plugin that registers chain motion, collision, and damage systems.
 ///
 /// Systems run in PostUpdate:
 /// - Motion systems update joint positions based on anchor transforms.
 /// - Collision sync follows motion to update capsule positions.
 /// - Contact coalescing runs in DamageSystems::Collect (before apply_hits).
+/// - Chain damage tracking runs after DamageSystems::Apply.
+/// - Break detection emits ChainBroken signals and inserts ReleasedChain markers.
 pub struct BikanwardaChainPhysicsPlugin;
 
 impl Plugin for BikanwardaChainPhysicsPlugin {
@@ -22,6 +26,7 @@ impl Plugin for BikanwardaChainPhysicsPlugin {
 		// ProjectileContact message is added by DamagePlugin/ProjectilePlugin
 
 		app.init_resource::<ChainDamageHistory>()
+			.init_resource::<ChainBrokenHistory>()
 			.add_systems(
 				PostUpdate,
 				(
@@ -38,17 +43,25 @@ impl Plugin for BikanwardaChainPhysicsPlugin {
 				)
 					.after(TransformSystems::Propagate),
 			)
-		.add_systems(
-			PostUpdate,
-			// Contact deduplication runs in Collect, explicitly BEFORE contacts_to_hits
-			coalesce_chain_contacts
-				.in_set(DamageSystems::Collect)
-				.before(contacts_to_hits),
-		);
+			.add_systems(
+				PostUpdate,
+				// Contact deduplication runs in Collect, explicitly BEFORE contacts_to_hits
+				coalesce_chain_contacts
+					.in_set(DamageSystems::Collect)
+					.before(contacts_to_hits),
+			)
+			.add_systems(
+				PostUpdate,
+				// Chain damage tracking runs after damage is applied
+				(apply_chain_damage, detect_and_signal_broken_chains)
+					.chain()
+					.after(DamageSystems::Apply),
+			);
 
-	// System ordering in DamageSystems::Collect:
-	//   1. coalesce_chain_contacts (this plugin) - explicitly ordered before contacts_to_hits
-	//   2. contacts_to_hits (damage plugin)
+		// System ordering:
+		//   DamageSystems::Collect: coalesce_chain_contacts (before contacts_to_hits)
+		//   DamageSystems::Apply: apply_hits (from damage plugin)
+		//   After DamageSystems::Apply: apply_chain_damage → detect_and_signal_broken_chains
 	}
 }
 
