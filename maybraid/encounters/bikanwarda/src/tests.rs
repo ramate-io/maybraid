@@ -30,7 +30,11 @@ fn gameplay() -> App {
 	if !app.is_plugin_added::<attacks::AttacksPlugin>() {
 		app.add_plugins(attacks::AttacksPlugin);
 	}
+	// Add projectile messages for chain physics
+	app.add_message::<projectiles::ProjectileContact>();
 	app.add_plugins(BikanwardaEncounterPlugin);
+	// Add damage systems for health/death mechanics
+	app.add_systems(Update, (damage::apply_hits, damage::mark_downed, damage::down_zero_health));
 	app.world_mut()
 		.resource_mut::<Time<Virtual>>()
 		.set_max_delta(Duration::from_secs(30));
@@ -549,8 +553,11 @@ mod combat_integration {
 		if !app.is_plugin_added::<attacks::AttacksPlugin>() {
 			app.add_plugins(attacks::AttacksPlugin);
 		}
+		// Add projectile messages for chain physics
+		app.add_message::<projectiles::ProjectileContact>();
 		app.add_plugins(BikanwardaEncounterPlugin);
-		app.add_systems(Update, damage::apply_hits);
+		// Add damage systems for health/death mechanics
+		app.add_systems(Update, (damage::apply_hits, damage::mark_downed, damage::down_zero_health));
 		app.world_mut()
 			.resource_mut::<Time<Virtual>>()
 			.set_max_delta(Duration::from_secs(30));
@@ -567,7 +574,7 @@ mod combat_integration {
 			BossEncounterRoot::default(),
 			BikanwardaRoot,
 			EncounterInstance::new(chained_encounter_id()),
-			Health::from_max(1000.0),
+			Health::from_max(crate::presentation::PLACEHOLDER_BOSS_HEALTH),
 			Transform::default(),
 			GlobalTransform::default(),
 		)).id();
@@ -664,35 +671,44 @@ mod combat_integration {
 mod scene_spawn {
 	use super::*;
 	use damage::Health;
+	use bevy::scene::WorldSceneExt;
+	use crate::generation::BikanwardaBossEncounter;
+	use crate::presentation::{BossPedestal, BossColumn};
+	use lod::scene::LodScene;
 
 	#[test]
 	fn production_scene_spawns_with_correct_structure() {
-		// This test verifies the structure that presentation creates
+		// This test verifies the structure that presentation creates using REAL spawn_scene
 		// It should FAIL on 3b9f86e88 (before Health was added)
 		let mut app = App::new();
-		app.add_plugins((MinimalPlugins, TransformPlugin));
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			bevy::asset::AssetPlugin::default(),
+			bevy::scene::ScenePlugin,
+		));
 		app.update();
 
-		// Create encounter components
+		// Create encounter at non-identity position
+		let boss_position = Vec3::new(1000.0, 110.15, 2000.0);
 		let terrain_y = 100.0;
-		let boss_hull_offset = 10.15;
-		let boss_position = Vec3::new(1000.0, terrain_y + boss_hull_offset, 2000.0);
-
-		// Spawn the scene into the world
-		let root_entity = app.world_mut().spawn_empty().id();
+		let encounter = BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
 		
-		// Apply the scene's bundles manually (simulating Scene spawn)
-		// Note: This is a simplified version - real spawn_scene is more complex
-		// but we can test the structure that presentation.rs creates
-		let instance = encounters::EncounterInstance::new(crate::chained_encounter_id());
-		app.world_mut().entity_mut(root_entity).insert((
-			crate::presentation::BossEncounterRoot::default(),
-			instance,
-			Health::from_max(1000.0), // This is the key addition that 3b9f86e88 lacks
-			Transform::from_translation(boss_position),
-			GlobalTransform::default(),
-			Visibility::default(),
-		));
+		// Spawn under NON-identity anchor to verify distinct entities
+		let anchor_transform = Transform::from_translation(Vec3::new(50.0, 5.0, -30.0));
+		let anchor = app.world_mut().spawn(anchor_transform).id();
+		
+		// Spawn the scene using real spawn_scene
+		let scene = encounter.scene_with_level(
+			&lod::lod_ref::LodRef {
+				entity: anchor,
+				previous_transform: &anchor_transform,
+				current_transform: &anchor_transform,
+				bounds: &bevy::shape::Aabb3d::from_min_max(Vec3::splat(-50.0), Vec3::splat(50.0)),
+			},
+			lod::scene::LodSceneLevel::High,
+		);
+		let root_entity = app.world_mut().spawn_scene(scene).expect("spawn_scene should succeed").id();
 
 		app.update();
 
@@ -705,8 +721,8 @@ mod scene_spawn {
 
 		// Verify Health value
 		let health = root.get::<Health>().expect("Root should have Health");
-		assert_eq!(health.max, 1000.0, "Boss health max should be 1000");
-		assert_eq!(health.current, 1000.0, "Boss health should start at max");
+		assert_eq!(health.max, crate::presentation::PLACEHOLDER_BOSS_HEALTH, "Boss health max");
+		assert_eq!(health.current, crate::presentation::PLACEHOLDER_BOSS_HEALTH, "Boss health should start at max");
 
 		// Verify EncounterInstance and Health are on the SAME entity
 		// (This is critical for encounters::store::ingest_deaths to work)
@@ -716,6 +732,34 @@ mod scene_spawn {
 		// Verify position
 		let transform = root.get::<Transform>().expect("Root should have Transform");
 		assert!((transform.translation - boss_position).length() < 0.01, "Boss at correct position");
+
+		// Verify DISTINCT entities: anchor != root != children
+		assert_ne!(anchor, root_entity, "Anchor and root are distinct entities");
+		
+		// Verify children exist (column and pedestal)
+		let children = root.get::<Children>().expect("Root should have Children");
+		assert_eq!(children.len(), 2, "Root should have 2 children (pedestal and column)");
+		
+		// Verify children are distinct from root and anchor
+		for child in children.iter() {
+			assert_ne!(child, root_entity, "Child distinct from root");
+			assert_ne!(child, anchor, "Child distinct from anchor");
+		}
+		
+		// Verify one child has BossPedestal and one has BossColumn
+		let mut has_pedestal = false;
+		let mut has_column = false;
+		for child in children.iter() {
+			let child_entity = app.world().entity(child);
+			if child_entity.contains::<BossPedestal>() {
+				has_pedestal = true;
+			}
+			if child_entity.contains::<BossColumn>() {
+				has_column = true;
+			}
+		}
+		assert!(has_pedestal, "Should have pedestal child");
+		assert!(has_column, "Should have column child");
 	}
 }
 

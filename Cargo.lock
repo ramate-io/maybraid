@@ -2345,6 +2345,7 @@ dependencies = [
  "lubikans",
  "projectiles",
  "world-materials",
+ "world-player",
 ]
 
 [[package]]

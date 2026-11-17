@@ -26,6 +26,7 @@ encounters = { workspace = true }
 lod-avian = { workspace = true }
 lubikans = { workspace = true }
 projectiles = { workspace = true }
+world-player = { workspace = true }
 world-materials = { workspace = true }
 
 [dev-dependencies]
