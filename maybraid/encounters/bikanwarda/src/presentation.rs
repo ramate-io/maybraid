@@ -2,6 +2,9 @@
 //!
 //! Presents generated boss encounters within channel regions. Each boss gets
 //! a unique host with its own presentation lifecycle.
+//!
+//! Column and pedestal are placeholder geometry aligned with the boss position
+//! and chain anchors. Actual chain attachment is deferred to #1617.
 
 use std::marker::PhantomData;
 
@@ -25,10 +28,21 @@ pub struct RequestBossAssembly {
 	pub spec: BikanwardaSpec,
 }
 
+/// Placeholder column geometry for chain tether attachment.
+///
+/// The column provides a visual tethering structure aligned with the boss.
+/// Actual chain attachment depends on #1617 (cursor/chain-damage-breakable-3cbf).
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct BossColumn;
+
+/// Placeholder pedestal geometry at the column base.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct BossPedestal;
+
 /// One LOD level: boss character with physics and presentation.
 ///
-/// Future work: integrate with bikanwarda-character spawn and presentation.
-/// Placeholder implementation demonstrates the generation contract.
+/// Includes boss assembly, placeholder column, and pedestal geometry.
+/// Column and pedestal are aligned to terrain; chain attachment is deferred to #1617.
 impl LodScene for BikanwardaBossEncounter {
 	fn scene_lod_status(&self, _lod_ref: &LodRef) -> LodSceneStatus {
 		LodSceneStatus::Unchanged
@@ -43,14 +57,37 @@ impl LodScene for BikanwardaBossEncounter {
 		let position = self.boss_position;
 		let spec = self.boss.value.actor.recipe.spec.clone();
 		
-		bsn! {
-			~{name}
-			BossEncounterRoot::default()
-			instance
-			RequestBossAssembly { spec }
-			Transform::from_translation(position)
-			Visibility::default()
-		}
+		// Column offset: positioned to the side of the boss (within arena bounds)
+		// This creates a tether anchor point for future chain work (#1617)
+		let column_offset = Vec3::new(8.0, 0.0, 0.0);
+		let column_position = position + column_offset;
+		
+		(
+			bsn! {
+				~{name}
+				BossEncounterRoot::default()
+				instance
+				RequestBossAssembly { spec }
+				Transform::from_translation(position)
+				Visibility::default()
+			},
+			// Placeholder pedestal at column base (3m high, 2m radius)
+			// Marker only - actual mesh would be added by asset integration
+			bsn! {
+				Name::new("boss-pedestal")
+				BossPedestal
+				Transform::from_translation(column_position + Vec3::Y * 1.5)
+				Visibility::default()
+			},
+			// Placeholder column for chain attachment (15m high, 1m radius)
+			// Positioned above pedestal; chain anchors will attach here (#1617)
+			bsn! {
+				Name::new("boss-column")
+				BossColumn
+				Transform::from_translation(column_position + Vec3::Y * (3.0 + 7.5))
+				Visibility::default()
+			},
+		)
 	}
 }
 

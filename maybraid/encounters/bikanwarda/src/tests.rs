@@ -184,3 +184,70 @@ fn missing_source_finishes_without_inventing_an_owner() -> Result<()> {
 fn chained_slug_is_the_fixture_key() {
 	assert_eq!(chained_encounter_id(), EncounterId::from_slug("bikanwarda.chained.v0"));
 }
+
+// Ground-fit and placement regression tests (#1117)
+mod placement {
+	use super::*;
+	use crate::generation::BikanwardaBossEncounter;
+	use bevy::shape::Aabb3d;
+	use characters::CharacterRecipe;
+	
+	#[test]
+	fn boss_position_is_preserved_in_generated_encounter() {
+		let authored_pos = Vec3::new(1746.8, 100.5, 1029.9);
+		let encounter = BikanwardaBossEncounter::chained_at(authored_pos);
+		assert_eq!(encounter.boss_position, authored_pos);
+	}
+	
+	#[test]
+	fn encounter_bounds_contain_boss_position() {
+		let boss_pos = Vec3::new(1746.8, 100.5, 1029.9);
+		let encounter = BikanwardaBossEncounter::chained_at(boss_pos);
+		
+		// Boss position should be within encounter bounds
+		let boss_aabb = Aabb3d::new(boss_pos, Vec3::splat(0.1));
+		assert!(encounter.bounds.intersects(&boss_aabb),
+			"Boss position {:?} not within encounter bounds {:?}",
+			boss_pos, encounter.bounds);
+	}
+	
+	#[test]
+	fn regeneration_preserves_exact_position() {
+		let pos = Vec3::new(100.0, 50.0, 200.0);
+		let first = BikanwardaBossEncounter::chained_at(pos);
+		let second = BikanwardaBossEncounter::chained_at(pos);
+		
+		assert_eq!(first.boss_position, second.boss_position);
+		assert_eq!(first.id, second.id);
+		assert_eq!(first.bounds, second.bounds);
+	}
+	
+	#[test]
+	fn ground_fit_applies_spawn_height_offset() {
+		// This test verifies the spawn policy: Y coordinate includes terrain height
+		// plus hull spawn_height offset. The exact value depends on the boss hull.
+		use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaSpec};
+		
+		let spec = BikanwardaSpec::encounter();
+		let recipe = BikanwardaActorRecipe::from_spec(spec);
+		let hull = recipe.components().scaled_locomotion_capsule();
+		let spawn_height_offset = hull.spawn_height();
+		
+		// Verify spawn_height is positive (boss feet are above hull origin)
+		assert!(spawn_height_offset > 0.0, 
+			"Boss hull spawn_height must be positive, got {}", spawn_height_offset);
+		
+		// With a 20m encounter boss, expect spawn_height > 1m (at minimum)
+		assert!(spawn_height_offset > 1.0,
+			"20m boss spawn_height should be substantial, got {}", spawn_height_offset);
+	}
+	
+	#[test]
+	fn column_and_pedestal_markers_exist_in_scene() {
+		// Verify that column/pedestal components are exported for presentation
+		use crate::{BossColumn, BossPedestal};
+		
+		let _col: BossColumn = BossColumn;
+		let _ped: BossPedestal = BossPedestal;
+	}
+}

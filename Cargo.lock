@@ -2334,6 +2334,7 @@ dependencies = [
  "bevy",
  "bikanwarda-character",
  "bikanwarda-lubikans",
+ "characters",
  "damage",
  "encounters",
  "lod",

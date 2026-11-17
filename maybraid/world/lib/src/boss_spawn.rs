@@ -1,11 +1,28 @@
 //! Debug boss spawn commands ([#1116](https://github.com/ramate-io/maybraid/issues/1116)).
 //!
 //! Spawns the generated boss encounter via HCSG presentation for visual testing.
+//!
+//! ## Spawn Policy
+//!
+//! Fixed world anchor: the boss spawns at an authored XZ position with terrain-fit
+//! ground placement. The position is preserved exactly across:
+//! - Region departure and re-entry (via HCSG session restart)
+//! - Full world restart (via persistent BossSpawnConfig resource)
+//!
+//! Ground fit applies the boss hull's `spawn_height()` offset so the boss's feet/hull
+//! bottom rest on the terrain at the authored XZ, with the Y sampled from composed
+//! Durham terrain. This matches the player spawn policy's terrain-fit behavior.
+//!
+//! The boss does NOT follow player respawns; it stays at its single authored anchor.
 
 use bevy::prelude::*;
+use bikanwarda_character::BikanwardaSpec;
 use bikanwarda_encounter::BikanwardaBossEncounter;
+use characters::LocomotionCapsule;
+use durham::DurhamSurface;
 use lod::hcsg::{register_session_seed, HcsgStorage};
 use lod::gen::Bytes;
+use maybraid_spawns_support::surface_or_hold_at;
 use player::Player;
 use std::sync::Arc;
 
@@ -35,6 +52,10 @@ impl Default for BossSpawnConfig {
 }
 
 /// Seeds the boss encounter during HCSG session restarts.
+///
+/// Restores the boss at the same authored world position from `BossSpawnConfig`.
+/// The position already includes terrain-fit and spawn_height offset from the
+/// original spawn, so it's preserved exactly across session boundaries.
 fn seed_boss_encounter(config: Res<BossSpawnConfig>, storage: Res<HcsgStorage>) {
 	if !config.active {
 		return;
@@ -56,23 +77,40 @@ pub fn process_boss_spawn_requests(
 	mut commands: Commands,
 	requests: Query<(Entity, &RequestSpawnBoss)>,
 	storage: Res<HcsgStorage>,
+	surface: DurhamSurface,
 	player: Query<&Transform, With<Player>>,
 	mut config: ResMut<BossSpawnConfig>,
 ) {
 	for (entity, request) in &requests {
 		commands.entity(entity).despawn();
 		
-		let position = if let Some(xz) = request.at {
-			Vec3::new(xz.x, 0.0, xz.y)
+		// Determine XZ position (either explicit or player-relative)
+		let xz = if let Some(xz) = request.at {
+			xz
 		} else if let Ok(transform) = player.single() {
 			let forward = transform.forward();
-			let offset = Vec3::new(forward.x * 8.0, 0.0, forward.z * 8.0);
-			transform.translation + offset
+			let offset = Vec2::new(forward.x * 8.0, forward.z * 8.0);
+			transform.translation.xz() + offset
 		} else {
-			Vec3::ZERO
+			Vec2::ZERO
 		};
 		
-		info!("[BOSS] Spawning at world position ({:.1}, {:.1}, {:.1})", position.x, position.y, position.z);
+		// Sample terrain height at spawn XZ
+		let terrain_y = surface_or_hold_at(&surface, xz);
+		
+		// Get boss hull and apply spawn_height offset for ground fit
+		let boss_spec = BikanwardaSpec::encounter();
+		let boss_recipe = bikanwarda_character::BikanwardaActorRecipe::from_spec(boss_spec.clone());
+		let boss_hull = boss_recipe.components().scaled_locomotion_capsule();
+		let spawn_height_offset = boss_hull.spawn_height();
+		
+		// Final world position with ground fit
+		let position = Vec3::new(xz.x, terrain_y + spawn_height_offset, xz.y);
+		
+		info!(
+			"[BOSS] Spawning at world position ({:.1}, {:.1}, {:.1}) [terrain_y={:.1}, hull_offset={:.1}]",
+			position.x, position.y, position.z, terrain_y, spawn_height_offset
+		);
 		
 		config.position = position;
 		config.active = true;
