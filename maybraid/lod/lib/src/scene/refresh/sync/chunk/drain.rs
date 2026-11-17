@@ -38,19 +38,27 @@ pub(super) struct LodChunkDrainTimeScript {
 
 struct TupleBuckets {
 	bands: [Vec<Entity>; LOD_CHUNK_TUPLE_BAND_COUNT],
+	new_root_bands: [Vec<Entity>; LOD_CHUNK_TUPLE_BAND_COUNT],
 }
 
 impl Default for TupleBuckets {
 	fn default() -> Self {
-		Self { bands: std::array::from_fn(|_| Vec::new()) }
+		Self {
+			bands: std::array::from_fn(|_| Vec::new()),
+			new_root_bands: std::array::from_fn(|_| Vec::new()),
+		}
 	}
 }
 
 impl TupleBuckets {
-	fn push(&mut self, entity: Entity, parent: LodSceneLevel, self_level: LodSceneLevel) {
+	fn push(&mut self, entity: Entity, parent: LodSceneLevel, self_level: LodSceneLevel, is_new: bool) {
 		let rank =
 			LevelBand::tuple_rank(LevelBand::from_level(parent), LevelBand::from_level(self_level));
-		self.bands[rank].push(entity);
+		if is_new {
+			self.new_root_bands[rank].push(entity);
+		} else {
+			self.bands[rank].push(entity);
+		}
 	}
 }
 
@@ -86,6 +94,7 @@ struct JobSnapshot {
 	cold: bool,
 	parent_desired: LodSceneLevel,
 	queue_empty: bool,
+	spawned: usize,
 }
 
 struct DrainClock {
@@ -137,9 +146,10 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		} else {
 			continue;
 		};
+		let is_new = snap.spawned == 0;
 		buckets
 			.for_class_mut(class)
-			.push(snap.entity, snap.parent_desired, snap.self_level);
+			.push(snap.entity, snap.parent_desired, snap.self_level, is_new);
 	}
 
 	// Start clock AFTER snapshot collection/classification, so budget measures
@@ -199,6 +209,7 @@ fn collect_job_snapshots(world: &mut World) -> Vec<JobSnapshot> {
 			cold: job.cold,
 			parent_desired: job.parent_desired,
 			queue_empty: job.queue.is_empty(),
+			spawned: job.spawned,
 		})
 		.collect()
 }
@@ -221,6 +232,22 @@ fn drain_tuple_bands(
 		if processed_first_band && (*remaining == 0 || clock.time_up(world, budget)) {
 			return;
 		}
+		
+		// Priority: visit all new roots (spawned==0) first, regardless of cursor position.
+		// This ensures bounded arrival latency - new roots are visited in their first frame,
+		// preventing the unbounded scheduling delay that occurs when many ongoing roots
+		// are ahead of the new root in the round-robin order.
+		for &entity in &buckets.new_root_bands[rank] {
+			if !drain_one(world, entity, remaining, budget, clock) {
+				// Budget exhausted after visiting new roots. That's fine - we guaranteed
+				// they were visited. Ongoing work continues next frame.
+				if processed_first_band {
+					return;
+				}
+			}
+		}
+		
+		// Then visit ongoing roots (spawned>0) in round-robin order
 		for_each_rr(&buckets.bands[rank], &mut cursors.bands[rank], |&entity| {
 			drain_one(world, entity, remaining, budget, clock)
 		});
@@ -554,6 +581,91 @@ mod tests {
 		assert!(
 			spawned >= 1,
 			"New High root must spawn at least one primitive for forward progress, got {spawned}"
+		);
+	}
+
+	#[test]
+	fn new_high_root_visited_quickly_despite_many_busy_same_band_roots() {
+		// Regression test for PR #1616 reviewer comment: in a busy world with ~84 ambient
+		// bodies, a newly-requested cold High root (parent=High, self=High, tuple band 0)
+		// stayed pending with spawned=0 for >=10.5 sim seconds.
+		//
+		// Root cause: many roots in the SAME tuple band, with the round-robin cursor positioned
+		// such that the new root is far ahead in the iteration order. Even though each root gets
+		// its first quantum when visited, the new root isn't visited for many frames.
+		//
+		// Before fix: new root waits for round-robin to cycle through all preceding roots,
+		// taking unbounded frames proportional to the number of roots ahead of it.
+		//
+		// After fix: guaranteed bounded arrival latency - new roots (spawned==0) are visited
+		// within a small number of frames regardless of how many ongoing roots exist.
+		let mut app = drain_app();
+		
+		// Tight budget to simulate busy world
+		app.world_mut().resource_mut::<LodChunkFulfillBudget>().spawn_time_per_frame =
+			Duration::from_micros(1);
+		app.world_mut().resource_mut::<LodChunkBudgetClock>().spawn_remaining = 200;
+
+		// Create 80 existing High/High roots (same tuple band as the new root we'll add).
+		// These roots have already spawned at least one primitive, so they're "ongoing work".
+		let mut existing_roots = Vec::new();
+		for _ in 0..80 {
+			let (_, root) = spawn_job(
+				app.world_mut(),
+				LodSceneLevel::High,
+				LodSceneLevel::High,
+				false, // not cold, so classified as Desired
+				Visibility::Inherited,
+				20, // each has substantial work remaining
+			);
+			// Simulate that they've already started (spawned > 0)
+			app.world_mut().get_mut::<LodChunkFulfillment>(root).unwrap().spawned = 5;
+			existing_roots.push(root);
+		}
+
+		// Run drain a few times to advance the cursor well past position 0
+		for _ in 0..10 {
+			drain_chunk_lod_fulfill(app.world_mut());
+			app.world_mut().resource_mut::<LodChunkDrainCursor>().frame += 1;
+			app.world_mut().resource_mut::<LodChunkBudgetClock>().spawn_remaining = 200;
+		}
+
+		// NOW add a new High/High root. The snapshot will place it at the end of the band's list,
+		// far ahead of where the cursor currently is. If the cursor advances by only 1-2 positions
+		// per frame (because budget is tight and only a few roots get visited), it could take
+		// 40+ frames to reach this new root.
+		let (_new_host, new_root) = spawn_job(
+			app.world_mut(),
+			LodSceneLevel::High,
+			LodSceneLevel::High,
+			false, // Desired class (parent_desired = High = desired)
+			Visibility::Inherited,
+			11,
+		);
+		// Explicitly set spawned=0 to mark it as new
+		app.world_mut().get_mut::<LodChunkFulfillment>(new_root).unwrap().spawned = 0;
+
+		// The new root should be visited and begin spawning within a bounded number of frames.
+		// Before fix: could take 40-80 frames (proportional to roots ahead of it).
+		// After fix: should be visited within ~3 frames (bounded arrival guarantee).
+		let max_frames_to_visit = 3;
+		let mut spawned = 0;
+		for _frame in 0..max_frames_to_visit {
+			drain_chunk_lod_fulfill(app.world_mut());
+			spawned = app.world().get::<LodChunkFulfillment>(new_root).unwrap().spawned;
+			if spawned > 0 {
+				break;
+			}
+			// Advance frame and restore budget for next iteration
+			app.world_mut().resource_mut::<LodChunkDrainCursor>().frame += 1;
+			app.world_mut().resource_mut::<LodChunkBudgetClock>().spawn_remaining = 200;
+		}
+
+		assert!(
+			spawned >= 1,
+			"New High root must be visited and spawn within {max_frames_to_visit} frames, \
+			 but spawned={spawned} after {max_frames_to_visit} drain cycles. \
+			 This indicates unbounded scheduling delay."
 		);
 	}
 }
