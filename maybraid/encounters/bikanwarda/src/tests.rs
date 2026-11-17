@@ -1230,10 +1230,10 @@ mod integration_regressions {
 		// CRITICAL: Must have Animated collision layer for spotting discovery
 		lod_avian::PhysicsInteractionLayer::animated_layers(),
 		// ThreatSubject so threat intelligence can discover them as a threat
-		threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId::individual(1)),
-		// Player affiliations: member of PLAYER_GROUP
+		threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId(1)),
+		// Player affiliations: member of PLAYER_GROUP (like controlled world players)
 		{
-			let mut affiliations = threat_intelligence::Affiliations::with_self(threat_intelligence::ThreatId::individual(1));
+			let mut affiliations = threat_intelligence::Affiliations::default();
 			const PLAYER_GROUP: threat_intelligence::ThreatGroupId = threat_intelligence::ThreatGroupId::group(29);
 			affiliations.join(PLAYER_GROUP, threat_intelligence::AffiliationStrength::permanent(1.0));
 			affiliations
@@ -1246,8 +1246,23 @@ mod integration_regressions {
 		// Discovery interval is 0.2s = 12 frames at DT=1/60s
 		// Run 20 frames to ensure at least one full discovery cycle completes
 		let mut attacks_seen = Vec::new();
-		for _ in 0..20 {
+		for frame in 0..20 {
 			app.update();
+			
+			// Diagnostic: check threat intelligence state
+			if frame % 6 == 0 {
+				// Check if player is in ThreatRegistry
+				let registry = app.world().resource::<threat_intelligence::ThreatRegistry>();
+				let player_in_registry = registry.get_entity(player).is_some();
+				
+				let mut query = app.world_mut().query::<(&threat_intelligence::ThreatKnowledge, &combat_targeting::CombatTargeting, &spotting_intelligence::SpottingUser, &GlobalTransform, &threat_intelligence::ThreatIntelligenceUser)>();
+				if let Ok((knowledge, targeting, spotting, transform, user)) = query.get(app.world(), actor_entity) {
+					let player_transform = app.world().entity(player).get::<GlobalTransform>().unwrap();
+					let distance = transform.translation().distance(player_transform.translation());
+					eprintln!("Frame {}: ThreatKnowledge {} threats, CombatTargeting {} targets, SpottingUser {} contacts, distance={:.1}m, discovery_radius={:.1}m, player_in_registry={}", 
+						frame, knowledge.len(), targeting.ranked.len(), spotting.contacts.len(), distance, user.policy.radius, player_in_registry);
+				}
+			}
 			
 			// Check for attack messages after each update
 			let frame_attacks: Vec<BeginAttack> = app.world_mut()
@@ -1335,10 +1350,10 @@ mod integration_regressions {
 		// CRITICAL: Must have Animated collision layer for spotting discovery
 		lod_avian::PhysicsInteractionLayer::animated_layers(),
 		// ThreatSubject so threat intelligence can discover them as a threat
-		threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId::individual(2)),
+		threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId(2)),
 		// Player affiliations: member of PLAYER_GROUP
 		{
-			let mut affiliations = threat_intelligence::Affiliations::with_self(threat_intelligence::ThreatId::individual(2));
+			let mut affiliations = threat_intelligence::Affiliations::with_self(threat_intelligence::ThreatId(2));
 			const PLAYER_GROUP: threat_intelligence::ThreatGroupId = threat_intelligence::ThreatGroupId::group(29);
 			affiliations.join(PLAYER_GROUP, threat_intelligence::AffiliationStrength::permanent(1.0));
 			affiliations
@@ -1448,10 +1463,10 @@ mod integration_regressions {
 		// CRITICAL: Must have Animated collision layer for spotting discovery
 		lod_avian::PhysicsInteractionLayer::animated_layers(),
 		// ThreatSubject so threat intelligence can discover them as a threat
-		threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId::individual(3)),
+		threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId(3)),
 		// Player affiliations: member of PLAYER_GROUP
 		{
-			let mut affiliations = threat_intelligence::Affiliations::with_self(threat_intelligence::ThreatId::individual(3));
+			let mut affiliations = threat_intelligence::Affiliations::with_self(threat_intelligence::ThreatId(3));
 			const PLAYER_GROUP: threat_intelligence::ThreatGroupId = threat_intelligence::ThreatGroupId::group(29);
 			affiliations.join(PLAYER_GROUP, threat_intelligence::AffiliationStrength::permanent(1.0));
 			affiliations

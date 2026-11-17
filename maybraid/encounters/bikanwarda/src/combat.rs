@@ -149,10 +149,10 @@ pub fn initialize_boss_combat(
 				continuity: 0.0,
 			},
 			// Threat intelligence grants ENEMYSHIP sources for hostile targets
-			ThreatIntelligenceUser::new(ThreatDiscoveryPolicy::directional(60.0, 50.0)),
+			ThreatIntelligenceUser::default(),
 			ThreatKnowledge::default(),
 			affiliations,
-			ThreatManagementIntelligence::combat_only(),
+			ThreatManagementIntelligence::ffa(),
 		));
 		
 		// Add BossAttackCooldown to the HOST (checked alongside Health)

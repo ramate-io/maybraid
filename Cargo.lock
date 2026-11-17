@@ -2380,6 +2380,8 @@ dependencies = [
  "projectiles",
  "spotting-intelligence",
  "spotting-intelligence-avian",
+ "threat-intelligence",
+ "threat-management-intelligence",
  "world-materials",
  "world-player",
 ]
