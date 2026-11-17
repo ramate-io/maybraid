@@ -267,7 +267,7 @@ pub enum DebugCommand {
 
 /// Script-only commands for delays and readiness gates.
 #[cfg(feature = "debug-commands")]
-#[derive(Clone, Parser)]
+#[derive(Clone, Debug, Parser)]
 #[command(rename_all = "kebab-case")]
 pub enum ScriptCommand {
 	/// Wait for a duration before executing the next command.
