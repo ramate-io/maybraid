@@ -965,7 +965,7 @@ mod tests {
 	#[test]
 	fn live_lubikan_reorder_and_discard_preserve_charge_and_selected_identity() -> anyhow::Result<()>
 	{
-		use lubikans::{LubikanDefinition, LubikanDefinitionId, LubikanLedger, LubikanOrder};
+		use lubikans::{LubikanBodyOf, LubikanDefinition, LubikanDefinitionId, LubikanLedger, LubikanOrder};
 		use maybraid_controllers_core::{ActorTarget, InputSource};
 		let mut ledger = LubikanLedger::default();
 		let extra = ledger.ensure_owned(LubikanDefinition::new(
