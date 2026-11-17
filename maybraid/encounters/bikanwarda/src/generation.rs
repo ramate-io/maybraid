@@ -79,8 +79,8 @@ impl GenerationScheme for BikanwardaBossEncounter {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		let id = Id::Bytes(lod::gen::Bytes(chained_encounter_id().as_bytes()));
 		
-		if let Some(entry) = cx.stored::<Self>(id) {
-			if entry.bounds.intersects(&region) {
+		if let Some(bounds) = cx.stored_bounds::<Self>(id) {
+			if bounds.intersects(&region) {
 				return vec![OriginalId::new(id)];
 			}
 		}
@@ -93,7 +93,11 @@ impl GenerationScheme for BikanwardaBossEncounter {
 			return None;
 		}
 		
-		None
+		// Reconstruct the boss encounter from its ID.
+		// Note: procedural generation is controlled by original_ids_for, which only
+		// returns this ID if the boss was explicitly spawned and stored.
+		let encounter = Self::chained();
+		Some((encounter.clone(), encounter.bounds))
 	}
 }
 

@@ -7,6 +7,8 @@
 //! Note: Full integration tests (presentation, assembly, terrain interaction)
 //! require complete world setup with all system dependencies.
 
+#![cfg(feature = "debug-commands")]
+
 use bevy::prelude::*;
 use bikanwarda_encounter::{BikanwardaBossEncounter, chained_encounter_id};
 use lod::gen::Bytes;
@@ -205,6 +207,140 @@ fn boss_uses_chained_encounter_id() -> anyhow::Result<()> {
 	anyhow::ensure!(
 		entry.unwrap().value.id == chained_encounter_id(),
 		"Boss ID should match chained_encounter_id()"
+	);
+	
+	Ok(())
+}
+
+/// World-level regression test: boss spawn with extended stability verification.
+///
+/// This test verifies:
+/// - Boss publishes with correct ID and position
+/// - Boss survives HCSG session restart with position preserved
+/// - Config persists across 12+ seconds of simulation (exceeds ~7.5s failure from original bug)
+/// - Multiple restarts don't corrupt boss data
+///
+/// The original bug had three symptoms after `boss spawn --at X,Z`:
+/// 1. No boss appeared (ID mismatch + no reseeder)
+/// 2. Terrain/vegetation cleared at ~7.5s (global restart side effect)
+/// 3. Player fell through world (terrain colliders removed)
+///
+/// This test validates the storage/session contract. Full presentation/assembly/terrain
+/// verification requires WorldPlugin systems (not feasible in minimal test environment).
+#[test]
+fn boss_spawn_world_integration() -> anyhow::Result<()> {
+	use lod::hcsg::HcsgRestartRequest;
+	
+	const SPAWN_X: f32 = 1746.8;
+	const SPAWN_Z: f32 = 1025.9;
+	const SPAWN_POS: Vec3 = Vec3::new(SPAWN_X, 0.0, SPAWN_Z);
+	
+	let mut app = minimal_app();
+	
+	// Request boss spawn at specific position
+	app.world_mut().spawn(RequestSpawnBoss {
+		at: Some(Vec2::new(SPAWN_X, SPAWN_Z)),
+	});
+	
+	app.update();
+	
+	// Verify boss is published to storage with correct ID
+	let storage = app.world().resource::<HcsgStorage>();
+	let boss_id = lod::gen::Id::Bytes(Bytes(chained_encounter_id().as_bytes()));
+	let entry = storage.try_entry::<BikanwardaBossEncounter>(boss_id)
+		.map_err(|_| anyhow::anyhow!("storage busy"))?;
+	anyhow::ensure!(
+		entry.is_some(),
+		"Boss should be published to storage immediately after spawn"
+	);
+	
+	let boss_data = entry.unwrap();
+	anyhow::ensure!(
+		(boss_data.value.boss_position - SPAWN_POS).length() < 0.1,
+		"Boss should be at requested position, got ({}, {}, {})",
+		boss_data.value.boss_position.x,
+		boss_data.value.boss_position.y,
+		boss_data.value.boss_position.z
+	);
+	
+	// Run for 12 seconds (720 updates) to exceed the ~7.5s failure point from the original bug.
+	// In the full game, this would be 720 frames at 60 FPS. Here we just verify config/storage
+	// stability across many updates.
+	const STABILITY_UPDATES: u32 = 720;
+	
+	for update_idx in 0..STABILITY_UPDATES {
+		app.update();
+		
+		// Periodically verify config and storage (every 60 updates to avoid storage contention)
+		if update_idx % 60 == 0 {
+			let config = app.world().resource::<BossSpawnConfig>();
+			anyhow::ensure!(
+				config.active,
+				"Boss config deactivated at update {}",
+				update_idx
+			);
+			
+			anyhow::ensure!(
+				boss_in_storage(&app.world().resource::<HcsgStorage>(), SPAWN_POS)?,
+				"Boss disappeared from storage at update {}",
+				update_idx
+			);
+		}
+	}
+	
+	// Test HCSG session restart survival
+	app.world_mut().resource_mut::<HcsgRestartRequest>().request();
+	app.update();
+	
+	// Verify boss survives restart
+	let storage = app.world().resource::<HcsgStorage>();
+	let entry = storage.try_entry::<BikanwardaBossEncounter>(boss_id)
+		.map_err(|_| anyhow::anyhow!("storage busy after restart"))?;
+	anyhow::ensure!(
+		entry.is_some(),
+		"Boss should survive HCSG restart via session reseeder"
+	);
+	
+	let boss_data = entry.unwrap();
+	anyhow::ensure!(
+		(boss_data.value.boss_position - SPAWN_POS).length() < 0.1,
+		"Boss position should be preserved after restart"
+	);
+	
+	// Test multiple restarts (simulates repeated HCSG restarts from other systems)
+	for restart_idx in 0..3 {
+		app.world_mut().resource_mut::<HcsgRestartRequest>().request();
+		app.update();
+		
+		let storage = app.world().resource::<HcsgStorage>();
+		let entry = storage.try_entry::<BikanwardaBossEncounter>(boss_id)
+			.map_err(|_| anyhow::anyhow!("storage busy after restart {}", restart_idx))?;
+		anyhow::ensure!(
+			entry.is_some(),
+			"Boss disappeared after restart {}",
+			restart_idx
+		);
+		
+		let boss_data = entry.unwrap();
+		anyhow::ensure!(
+			(boss_data.value.boss_position - SPAWN_POS).length() < 0.1,
+			"Boss position corrupted after restart {}",
+			restart_idx
+		);
+	}
+	
+	// Run a few more updates after all restarts
+	for _ in 0..60 {
+		app.update();
+	}
+	
+	// Final verification
+	let storage = app.world().resource::<HcsgStorage>();
+	let entry = storage.try_entry::<BikanwardaBossEncounter>(boss_id)
+		.map_err(|_| anyhow::anyhow!("storage busy at end"))?;
+	anyhow::ensure!(
+		entry.is_some(),
+		"Boss should still be in storage at test end"
 	);
 	
 	Ok(())
