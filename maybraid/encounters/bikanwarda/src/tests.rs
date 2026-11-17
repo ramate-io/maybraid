@@ -225,8 +225,11 @@ mod placement {
 	#[test]
 	fn ground_fit_applies_spawn_height_offset() {
 		// This test verifies the spawn policy: Y coordinate includes terrain height
-		// plus hull spawn_height offset. The exact value depends on the boss hull.
+		// plus hull spawn_height offset. The encounter boss is scaled to ~20m height
+		// from ~2m Epiphant base (~10x scale). With Epiphant proportions, the hull
+		// spawn_height offset is approximately 10.15m.
 		use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaSpec};
+		use characters::CharacterRecipe;
 		
 		let spec = BikanwardaSpec::encounter();
 		let recipe = BikanwardaActorRecipe::from_spec(spec);
@@ -237,9 +240,11 @@ mod placement {
 		assert!(spawn_height_offset > 0.0, 
 			"Boss hull spawn_height must be positive, got {}", spawn_height_offset);
 		
-		// With a 20m encounter boss, expect spawn_height > 1m (at minimum)
-		assert!(spawn_height_offset > 1.0,
-			"20m boss spawn_height should be substantial, got {}", spawn_height_offset);
+		// With a 20m encounter boss (~10x Epiphant scale), expect spawn_height ~10.15m
+		assert!(spawn_height_offset > 8.0,
+			"20m boss spawn_height should be substantial (>8m), got {}", spawn_height_offset);
+		assert!(spawn_height_offset < 15.0,
+			"20m boss spawn_height should be reasonable (<15m), got {}", spawn_height_offset);
 	}
 	
 	#[test]

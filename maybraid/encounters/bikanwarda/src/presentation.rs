@@ -3,8 +3,9 @@
 //! Presents generated boss encounters within channel regions. Each boss gets
 //! a unique host with its own presentation lifecycle.
 //!
-//! Column and pedestal are placeholder geometry aligned with the boss position
-//! and chain anchors. Actual chain attachment is deferred to #1617.
+//! Column and pedestal are marker components positioned for chain attachment
+//! anchors. Visual geometry (mesh/material) is not yet implemented; markers
+//! define the spatial layout only. Actual chain attachment is deferred to #1617.
 
 use std::marker::PhantomData;
 
@@ -72,7 +73,8 @@ impl LodScene for BikanwardaBossEncounter {
 				Visibility::default()
 			},
 			// Placeholder pedestal at column base (3m high, 2m radius)
-			// Marker only - actual mesh would be added by asset integration
+			// VISUAL GEOMETRY NOT YET IMPLEMENTED: Currently marker-only.
+			// Final implementation will add mesh/material for a 2m radius, 3m high cylinder.
 			bsn! {
 				Name::new("boss-pedestal")
 				BossPedestal
@@ -80,7 +82,9 @@ impl LodScene for BikanwardaBossEncounter {
 				Visibility::default()
 			},
 			// Placeholder column for chain attachment (15m high, 1m radius)
-			// Positioned above pedestal; chain anchors will attach here (#1617)
+			// VISUAL GEOMETRY NOT YET IMPLEMENTED: Currently marker-only.
+			// Positioned above pedestal; chain anchors will attach at top (#1617).
+			// Final implementation will add mesh/material for a 1m radius, 15m high cylinder.
 			bsn! {
 				Name::new("boss-column")
 				BossColumn
