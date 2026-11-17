@@ -3,6 +3,10 @@
 //! Implements the generation contract for [#1117](https://github.com/ramate-io/maybraid/issues/1117).
 //! Boss position, bounds, attack configuration, and actor recipe are deterministic
 //! functions of identity and session roots.
+//!
+//! Authored boss spawn positions are stored separately from evictable generated cache
+//! to survive viewer leave/return cycles. The `AuthoredBossSpawns` session root stores
+//! active boss positions at `Id::Universal`, which is never evicted.
 
 use bevy::math::{DVec3, Vec3};
 use bevy::prelude::*;
@@ -17,6 +21,19 @@ use crate::scripted::Scripted;
 
 /// Generation index scale: boss encounters are not tiled.
 const BOSS_SCALE: DVec3 = DVec3::new(1.0, 1.0, 1.0);
+
+/// Authored boss spawn positions that survive eviction.
+///
+/// Stored at `Id::Universal` so it's never evicted. Regenerated on session restart
+/// by the session reseeder. This keeps stable scripted authoring/session inputs
+/// separate from the evictable generated cache.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AuthoredBossSpawns {
+	/// Active boss spawn position (None if no boss is spawned).
+	pub position: Option<Vec3>,
+}
+
+lod::seeded_root!(AuthoredBossSpawns);
 
 /// Authored Bikanwarda boss encounter.
 ///
@@ -77,26 +94,33 @@ impl GenerationScheme for BikanwardaBossEncounter {
 	lod::hcsg_index_scale!(BOSS_SCALE);
 	
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		let id = Id::Bytes(lod::gen::Bytes(chained_encounter_id().as_bytes()));
+		let Some(spawns) = cx.get::<AuthoredBossSpawns>(Id::Universal) else {
+			return Vec::new();
+		};
 		
-		if let Some(bounds) = cx.stored_bounds::<Self>(id) {
-			if bounds.intersects(&region) {
-				return vec![OriginalId::new(id)];
-			}
+		let Some(position) = spawns.position else {
+			return Vec::new();
+		};
+		
+		let bounds = Aabb3d::new(position, Vec3::new(20.0, 10.0, 20.0));
+		
+		if bounds.intersects(&region) {
+			let id = Id::Bytes(lod::gen::Bytes(chained_encounter_id().as_bytes()));
+			return vec![OriginalId::new(id)];
 		}
 		
 		Vec::new()
 	}
 	
-	fn build_with_id(_cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
 		if id != Id::Bytes(lod::gen::Bytes(chained_encounter_id().as_bytes())) {
 			return None;
 		}
 		
-		// Reconstruct the boss encounter from its ID.
-		// Note: procedural generation is controlled by original_ids_for, which only
-		// returns this ID if the boss was explicitly spawned and stored.
-		let encounter = Self::chained();
+		let spawns = cx.get::<AuthoredBossSpawns>(Id::Universal)?;
+		let position = spawns.position?;
+		
+		let encounter = Self::chained_at(position);
 		Some((encounter.clone(), encounter.bounds))
 	}
 }
@@ -118,11 +142,21 @@ mod tests {
 	#[test]
 	fn generation_builds_only_chained_id() {
 		let storage = HcsgStorage::default();
+		
+		let spawn_pos = Vec3::new(100.0, 0.0, 200.0);
+		storage.seed(
+			AuthoredBossSpawns { position: Some(spawn_pos) },
+			lod::hcsg::universal_bounds(),
+		);
+		
 		let mut cx = GenerationContext::new(&storage);
 		
 		let chained_id = Id::Bytes(lod::gen::Bytes(chained_encounter_id().as_bytes()));
 		let result = BikanwardaBossEncounter::build_with_id(&mut cx, chained_id);
 		assert!(result.is_some());
+		
+		let (encounter, _bounds) = result.unwrap();
+		assert_eq!(encounter.boss_position, spawn_pos);
 		
 		let other_id = Id::Universal;
 		let result = BikanwardaBossEncounter::build_with_id(&mut cx, other_id);

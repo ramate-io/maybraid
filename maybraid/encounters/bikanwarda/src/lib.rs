@@ -17,7 +17,7 @@ mod unlocks;
 
 pub use assembly::{spawn_boss_assemblies, BossAssemblyPlugin};
 pub use contract::{BossActorRecipe, BossAttackConfig, BossEncounterContract};
-pub use generation::BikanwardaBossEncounter;
+pub use generation::{AuthoredBossSpawns, BikanwardaBossEncounter};
 pub use identity::{
 	chained_encounter_id, enraged_definition, ward_definition, BIKANWARDA_CHAINED_SLUG,
 	ENRAGED_DEFINITION_ID, PLACEHOLDER_ENRAGED_CAPACITY, PLACEHOLDER_ENRAGED_COST,

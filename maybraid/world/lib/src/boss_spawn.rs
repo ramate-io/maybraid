@@ -20,9 +20,9 @@
 //! spawn policy, and within-session restart only.
 
 use bevy::prelude::*;
-use bikanwarda_encounter::BikanwardaBossEncounter;
+use bikanwarda_encounter::{AuthoredBossSpawns, BikanwardaBossEncounter};
 use durham::DurhamSurface;
-use lod::hcsg::{register_session_seed, HcsgStorage};
+use lod::hcsg::{register_session_seed, universal_bounds, HcsgStorage};
 use lod::gen::Bytes;
 use maybraid_spawns_support::terrain_height_at;
 use player::Player;
@@ -70,29 +70,27 @@ impl Default for BossSpawnConfig {
 	}
 }
 
-/// Seeds the boss encounter during HCSG session restarts.
+/// Seeds the boss encounter session root during HCSG session restarts.
 ///
-/// Restores the boss at the same authored world position from `BossSpawnConfig`.
-/// The position already includes terrain-fit from the original spawn, so it's
-/// preserved exactly across within-session restart boundaries.
+/// Only seeds `AuthoredBossSpawns` (the session root), not the boss encounter itself.
+/// The boss encounter is derived data that will be regenerated on-demand when presentation
+/// requests it via `original_ids_for` and `build_with_id`.
 ///
-/// Note: This reseeder handles within-session HCSG restarts only. Cross-session
-/// persistence (region departure/re-entry) depends on HCSG cache eviction/rediscovery
-/// work on #1601.
+/// The position in `BossSpawnConfig` already includes terrain-fit from the original spawn,
+/// so it's preserved exactly across session restart boundaries and region departure/re-entry.
 fn seed_boss_encounter(config: Res<BossSpawnConfig>, storage: Res<HcsgStorage>) {
-	if !config.active {
-		return;
+	let position = if config.active {
+		Some(config.position)
+	} else {
+		None
+	};
+	
+	let spawns = AuthoredBossSpawns { position };
+	storage.seed(spawns, universal_bounds());
+	
+	if position.is_some() {
+		info!("[BOSS] Reseeded AuthoredBossSpawns at session restart");
 	}
-	
-	info!("[BOSS] Reseeding encounter at ({:.1}, {:.1}, {:.1})", 
-		config.position.x, config.position.y, config.position.z);
-	
-	let encounter = BikanwardaBossEncounter::chained_at(config.position);
-	let id = lod::gen::Id::Bytes(Bytes(
-		bikanwarda_encounter::chained_encounter_id().as_bytes()
-	));
-	
-	storage.publish(id, Arc::new(encounter.clone()), encounter.bounds);
 }
 
 /// Boss hull spawn height offset for ground clearance.
@@ -177,11 +175,15 @@ pub fn poll_pending_boss_spawns(
 			config.position = position;
 			config.active = true;
 			
+			// Seed AuthoredBossSpawns (session root) with terrain-fit position
+			let spawns = AuthoredBossSpawns { position: Some(position) };
+			storage.as_ref().unwrap().seed(spawns, universal_bounds());
+			
+			// Also publish the derived encounter for immediate presentation
 			let encounter = BikanwardaBossEncounter::chained_at(position);
 			let id = lod::gen::Id::Bytes(Bytes(
 				bikanwarda_encounter::chained_encounter_id().as_bytes()
 			));
-			
 			storage.as_ref().unwrap().publish(id, Arc::new(encounter.clone()), encounter.bounds);
 			
 			commands.entity(entity).despawn();
