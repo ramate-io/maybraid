@@ -10,8 +10,8 @@ use clap::{Parser, Subcommand};
 use game_commands::command::{CommandConsoleOutput, CommandScript, GameCommand};
 
 use maybraid_sky::{
-	SkyClock, SkyCommand, SKY_PHASE_DAWN, SKY_PHASE_DUSK, SKY_PHASE_GOLDEN, SKY_PHASE_MORNING,
-	SKY_PHASE_NIGHT, SKY_PHASE_NOON,
+	SKY_PHASE_DAWN, SKY_PHASE_DUSK, SKY_PHASE_GOLDEN, SKY_PHASE_MORNING, SKY_PHASE_NIGHT,
+	SKY_PHASE_NOON, SkyClock, SkyCommand,
 };
 
 use mob_scenes::MobKind;
@@ -57,6 +57,11 @@ pub enum PlaygroundCommand {
 	/// Capture the primary window to a PNG via GPU readback.
 	Screenshot {
 		path: std::path::PathBuf,
+	},
+	/// Capture the final window composition, including HUD and menus.
+	#[cfg(feature = "debug-commands")]
+	ScreenshotWindow {
+		path: PathBuf,
 	},
 	/// Debug commands for testing (debug builds only).
 	#[cfg(feature = "debug-commands")]
@@ -204,6 +209,10 @@ pub enum Stats {
 #[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum DebugCommand {
+	/// In-world chain review fixture (requires chain-review).
+	#[cfg(feature = "chain-review")]
+	#[command(subcommand)]
+	Chain(crate::chain_review::ChainReviewCommand),
 	/// Grant Lubikan charge points (goes through LubikanChargeRequest).
 	GrantPoints { amount: f32 },
 	/// Apply damage to the player.
@@ -260,6 +269,13 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Screenshot { path } => {
 				commands.spawn(RequestGameplayScreenshot { path: path.clone(), command_id: None });
 				*console = format!("screenshot {}: pending", path.display());
+			}
+			#[cfg(feature = "debug-commands")]
+			PlaygroundCommand::ScreenshotWindow { path } => {
+				use bevy::render::view::screenshot::{Screenshot, save_to_disk};
+				commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path.clone()));
+				*console =
+					format!("screenshot-window {}: final composition queued", path.display());
 			}
 			#[cfg(feature = "debug-commands")]
 			PlaygroundCommand::Debug(debug) => debug.react(commands, console),
@@ -412,6 +428,11 @@ pub struct RequestTeleport {
 impl DebugCommand {
 	fn react(self, commands: &mut Commands, console: &mut String) {
 		match self {
+			#[cfg(feature = "chain-review")]
+			DebugCommand::Chain(action) => {
+				commands.spawn(crate::chain_review::RequestChainReview(action));
+				*console = "debug chain: pending (see [chain-review] log)".into();
+			}
 			DebugCommand::GrantPoints { amount } => {
 				commands.spawn(RequestGrantPoints { amount });
 				*console = format!("debug grant-points {amount}: pending");
@@ -455,6 +476,17 @@ impl GameCommand for PlaygroundCommand {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[cfg(feature = "debug-commands")]
+	#[test]
+	fn parse_final_window_screenshot() -> Result<(), String> {
+		let command = PlaygroundCommand::parse_line("screenshot-window /tmp/final-window.png")?;
+		let PlaygroundCommand::ScreenshotWindow { path } = command else {
+			return Err("expected final window capture".into());
+		};
+		assert_eq!(path, PathBuf::from("/tmp/final-window.png"));
+		Ok(())
+	}
 
 	#[test]
 	fn parse_stats_mesh() {

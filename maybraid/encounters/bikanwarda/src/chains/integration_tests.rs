@@ -746,9 +746,10 @@ mod tests {
 			))
 			.id();
 
-		// Track health changes frame by frame
+		// Track health changes frame by frame and verify damage source
 		let mut health_history = Vec::new();
 		let mut projectile_alive = true;
+		let mut damage_source_verified = false;
 
 		// Run for at least 10 frames to ensure the projectile passes through
 		for frame in 0..15 {
@@ -756,6 +757,35 @@ mod tests {
 
 			let current_health = app.world().entity(root).get::<Health>().map(|h| h.current).unwrap_or(0.0);
 			health_history.push(current_health);
+
+			// Check damage records to verify source is set
+			if !damage_source_verified {
+				let damage_records: Vec<_> = app
+					.world_mut()
+					.resource_mut::<Messages<DamageApplied>>()
+					.drain()
+					.collect();
+				
+				for record in &damage_records {
+					if record.target == root {
+						if record.source.is_none() {
+							return Err(anyhow!(
+								"Damage record has source=null! Expected source={:?}",
+								source
+							));
+						}
+						if record.source != Some(source) {
+							return Err(anyhow!(
+								"Damage record source mismatch: expected {:?}, got {:?}",
+								source,
+								record.source
+							));
+						}
+						damage_source_verified = true;
+						info!("✓ Damage source verified: {:?}", record.source);
+					}
+				}
+			}
 
 			// Check if projectile still exists
 			if app.world().get_entity(projectile).is_err() {
@@ -771,6 +801,11 @@ mod tests {
 
 		// Check that damage was applied
 		let final_health = health_history.last().copied().unwrap_or(initial_health);
+
+		// Verify we actually checked the source
+		if !damage_source_verified && final_health < initial_health {
+			return Err(anyhow!("Damage was applied but source was never verified in DamageApplied records"));
+		}
 		if final_health >= initial_health {
 			return Err(anyhow!("No damage was applied after 15 frames"));
 		}

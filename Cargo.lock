@@ -7665,6 +7665,7 @@ dependencies = [
  "player",
  "player-camera",
  "poi-intelligence",
+ "projectiles",
  "richmond",
  "routing-intelligence",
  "screen-capture",
