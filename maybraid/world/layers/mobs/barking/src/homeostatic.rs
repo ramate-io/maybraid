@@ -128,6 +128,21 @@ pub struct HomeostaticMob {
 }
 
 /// Marker for a mob in retreat mode.
+///
+/// **Pursuit Integration (#838)**: Pursuit grant systems MUST filter hosts with
+/// `Without<HomeostaticRetreat>` to suppress pursuit while retreat is active.
+/// Retreat has explicit priority over pursuit; only after retreat completes and
+/// this component is removed may pursuit resume via the population controller.
+///
+/// # Example
+/// ```ignore
+/// fn grant_pursuit_to_hosts(
+///     candidates: Query<Entity, (With<MobHost>, Without<HomeostaticRetreat>)>,
+///     // ... pursuit grant logic
+/// ) {
+///     // Hosts in retreat are excluded from this query
+/// }
+/// ```
 #[derive(Component, Clone, Copy, Debug)]
 pub struct HomeostaticRetreat {
 	/// World position to retreat toward (home cell center).

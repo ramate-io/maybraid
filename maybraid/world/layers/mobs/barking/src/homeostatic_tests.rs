@@ -305,6 +305,69 @@ fn retreat_moves_toward_home_and_away_from_player() {
 // removed - need full mob infrastructure for track_player_homeostatic_cell system
 
 #[test]
+fn pursuit_suppression_filter_excludes_retreating_hosts() {
+	// Integration contract for #838: pursuit grants MUST use Without<HomeostaticRetreat>
+	// to exclude hosts actively retreating. This test verifies the filter works correctly.
+	let mut app = test_app();
+
+	let home_cell = HomeostaticCellIndex(0, 0);
+	let home_center = home_cell.center(200.0);
+
+	// Spawn two mobs: one normal, one in retreat
+	let generation = 1;
+	let normal_mob = app
+		.world_mut()
+		.spawn((
+			HomeostaticMob {
+				home_cell,
+				generation,
+				mob_entity: Entity::PLACEHOLDER,
+			},
+			Transform::from_translation(home_center),
+			GlobalTransform::from_translation(home_center),
+		))
+		.id();
+
+	let retreating_mob = app
+		.world_mut()
+		.spawn((
+			HomeostaticMob {
+				home_cell,
+				generation,
+				mob_entity: Entity::PLACEHOLDER,
+			},
+			HomeostaticRetreat {
+				target: home_center,
+			},
+			Transform::from_translation(home_center + Vec3::X * 50.0),
+			GlobalTransform::from_translation(home_center + Vec3::X * 50.0),
+		))
+		.id();
+
+	// Simulate pursuit grant query: With<HomeostaticMob>, Without<HomeostaticRetreat>
+	let pursuit_candidates = app
+		.world_mut()
+		.query_filtered::<Entity, (With<HomeostaticMob>, Without<HomeostaticRetreat>)>()
+		.iter(app.world())
+		.collect::<Vec<_>>();
+
+	// Only the normal mob should be eligible for pursuit
+	assert_eq!(
+		pursuit_candidates.len(),
+		1,
+		"only non-retreating mobs should be pursuit candidates"
+	);
+	assert_eq!(
+		pursuit_candidates[0], normal_mob,
+		"normal mob should be eligible for pursuit"
+	);
+	assert!(
+		!pursuit_candidates.contains(&retreating_mob),
+		"retreating mob should be excluded from pursuit"
+	);
+}
+
+#[test]
 fn retreat_replaces_existing_poi_goal() {
 	let mut app = test_app();
 	let config = app.world().resource::<HomeostaticMobConfig>().clone();
