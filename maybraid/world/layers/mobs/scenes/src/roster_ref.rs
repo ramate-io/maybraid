@@ -108,18 +108,17 @@ fn despawn_roster_bodies_for_removed_stubs(
 }
 
 fn cull_members_when_high_drops(
-	hosts: Query<(Entity, &LodSceneLevel), With<Mob>>,
+	hosts: Query<&LodSceneLevel, With<Mob>>,
 	members: Query<(Entity, &MemberOf)>,
 	mut commands: Commands,
 ) {
-	for (host, level) in &hosts {
-		if *level == LodSceneLevel::High {
-			continue;
-		}
-		for (entity, membership) in &members {
-			if membership.mob == host {
-				commands.entity(entity).try_despawn();
-			}
+	// Preserve the all-High path without looking up every member's host.
+	if !hosts.iter().any(|level| *level != LodSceneLevel::High) {
+		return;
+	}
+	for (entity, membership) in &members {
+		if hosts.get(membership.mob).is_ok_and(|level| *level != LodSceneLevel::High) {
+			commands.entity(entity).try_despawn();
 		}
 	}
 }
@@ -310,6 +309,29 @@ mod tests {
 			} else {
 				assert!(world.get_entity(body).is_err());
 			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn high_drop_cull_preserves_bodies_without_an_eligible_low_host() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let low = world.spawn((Mob::new(12.0), LodSceneLevel::UltraLow)).id();
+		let high = world.spawn((Mob::new(12.0), LodSceneLevel::High)).id();
+		let unrelated = world.spawn(LodSceneLevel::UltraLow).id();
+		let unclassified = world.spawn(Mob::new(12.0)).id();
+		let dropped = world.spawn(MemberOf { mob: low, slot: 0 }).id();
+		let kept: Vec<_> = [high, unrelated, unclassified, Entity::PLACEHOLDER]
+			.into_iter()
+			.map(|mob| world.spawn(MemberOf { mob, slot: 0 }).id())
+			.collect();
+		world
+			.run_system_once(cull_members_when_high_drops)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.flush();
+		assert!(world.get_entity(dropped).is_err());
+		for entity in kept {
+			assert!(world.get_entity(entity).is_ok());
 		}
 		Ok(())
 	}
