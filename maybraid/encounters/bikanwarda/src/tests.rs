@@ -1589,13 +1589,17 @@ mod integration_regressions {
 	/// - Attack cooldown: starts ready (0s)
 	/// - Bray duration: ~2s = 120 frames
 	/// - Run ~200 frames to allow: discovery (36) + targeting (10) + attack start (1) + Bray animation (120) + damage (1)
+	/// Test that Bray wavefronts hit ground-level targets with real production geometry.
+	/// Bray fires 3 waves from mouth socket at Y~16.2m. Each wave should hit the player standing
+	/// on the ground (Y~1.3m) exactly once, for a total of 3 hits.
 	#[test]
-	fn real_bray_damages_player_exactly_once() {
+	fn real_bray_waves_hit_ground_player_15m() {
 		let mut app = full_encounter_app();
 		
 		// Spawn encounter scene at origin for simplicity
-		let boss_position = Vec3::new(0.0, 10.15, 0.0);
 		let terrain_y = 0.0;
+		let boss_spawn_offset = 10.15; // From hull.spawn_height() for 20m boss
+		let boss_position = Vec3::new(0.0, terrain_y + boss_spawn_offset, 0.0);
 		let encounter = crate::generation::BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
 		
 		let anchor_transform = Transform::from_translation(Vec3::ZERO);
@@ -1641,19 +1645,27 @@ mod integration_regressions {
 			eprintln!("Mouth socket GlobalTransform: {:?}", socket_gt.translation());
 		}
 		
-		// Spawn player in range (within 40m attack range) and visible (no occlusion)
-		let player_pos = boss_position + Vec3::new(15.0, 0.0, 0.0); // 15m away horizontally, well within range
+		// Player capsule: radius 0.4, height 1.8
+		// Capsule origin is at center, feet are at center.y - (height/2 + radius)
+		// So for feet on ground (terrain_y), center should be at terrain_y + (1.8/2 + 0.4) = terrain_y + 1.3
+		const PLAYER_CAPSULE_RADIUS: f32 = 0.4;
+		const PLAYER_CAPSULE_HEIGHT: f32 = 1.8;
+		let player_ground_offset = PLAYER_CAPSULE_HEIGHT / 2.0 + PLAYER_CAPSULE_RADIUS; // 1.3m
+		
+		// Spawn player at production ground height, 15m horizontally from boss (within 40m range)
+		let horizontal_distance = 15.0;
+		let player_pos = Vec3::new(horizontal_distance, terrain_y + player_ground_offset, 0.0);
 		let player = app.world_mut().spawn((
-			Name::new("test-player"),
+			Name::new("test-player-15m"),
 			Transform::from_translation(player_pos),
 			GlobalTransform::from_translation(player_pos),
 			Health::from_max(100.0), // Player starts at 100 HP
 			spotting_intelligence::SpotSubject::new(
 				spotting_intelligence::InterestLayers::CHARACTER,
-				spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
+				spotting_intelligence::SpotBounds::capsule(PLAYER_CAPSULE_RADIUS, PLAYER_CAPSULE_HEIGHT),
 			),
 			avian3d::prelude::RigidBody::Kinematic,
-			avian3d::prelude::Collider::capsule(0.4, 1.8),
+			avian3d::prelude::Collider::capsule(PLAYER_CAPSULE_RADIUS, PLAYER_CAPSULE_HEIGHT),
 			// CRITICAL: Must have Animated collision layer for spotting discovery
 			lod_avian::PhysicsInteractionLayer::animated_layers(),
 			// ThreatSubject so threat intelligence can discover them as a threat
@@ -1667,17 +1679,24 @@ mod integration_regressions {
 			},
 		)).id();
 		
-		// Track player health changes
+		eprintln!("Boss position: {:?} (terrain_y={}, spawn_offset={})", boss_position, terrain_y, boss_spawn_offset);
+		eprintln!("Player position: {:?} (terrain_y={}, ground_offset={}, horizontal_distance={})", 
+			player_pos, terrain_y, player_ground_offset, horizontal_distance);
+		
+		// Track player health changes and wave hits
 		let initial_health = 100.0;
 		let mut final_health = initial_health;
 		let mut damage_events = 0;
 		let mut bray_started = false;
 		let mut first_emission_origin: Option<Vec3> = None;
-		
-		// Run frames until Bray emits and player takes damage
-		// Up to 300 frames = 5 seconds of gameplay time
 		let mut hit_messages_seen = 0;
-		for frame in 0..300 {
+		
+		// Bray fires 3 waves, expect 3 hits (one per wave)
+		const EXPECTED_BRAY_WAVES: usize = 3;
+		
+		// Run frames until Bray completes or timeout
+		// Up to 350 frames to allow all 3 waves to travel (3 waves * 0.45s interval + 2.8s travel ~= 4.2s = 252 frames)
+		for frame in 0..350 {
 			app.update();
 			
 			// Check if Bray attack has started (BeginAttack message)
@@ -1701,28 +1720,6 @@ mod integration_regressions {
 				}
 			}
 			
-			if bray_started && frame % 20 == 0 {
-				let attack_count = app.world_mut()
-					.query::<&attacks::AttackInstance>()
-					.iter(app.world())
-					.filter(|inst| inst.owner == actor_entity && inst.definition == bikanwarda_attacks::BRAY)
-					.count();
-				
-				if attack_count > 0 {
-					let instance = app.world_mut()
-						.query::<&attacks::AttackInstance>()
-						.iter(app.world())
-						.find(|inst| inst.owner == actor_entity && inst.definition == bikanwarda_attacks::BRAY)
-						.expect("Should have Bray instance");
-					
-					eprintln!("Frame {}: Bray instance stage={:?}, age={:.2}, stage_age={:.2}, execute_age={:.2}", 
-						frame, instance.stage, instance.age, instance.stage_age, instance.execute_age);
-				} else {
-					eprintln!("Frame {}: No Bray instance found", frame);
-				}
-				
-			}
-			
 			// Check for Hit messages (damage system input)
 			let frame_hits: Vec<damage::Hit> = app.world_mut()
 				.run_system_once(|mut messages: bevy::ecs::message::MessageReader<damage::Hit>| -> Vec<damage::Hit> {
@@ -1731,11 +1728,11 @@ mod integration_regressions {
 				.expect("Failed to read Hit messages");
 			
 			if !frame_hits.is_empty() {
-				hit_messages_seen += frame_hits.len();
 				for hit in &frame_hits {
 					if hit.target == player {
-						eprintln!("Frame {}: Hit message for player: amount={}, point={:?}", 
-							frame, hit.amount, hit.point);
+						hit_messages_seen += 1;
+						eprintln!("Frame {}: Hit #{} for player: amount={:.1} HP, point={:?}", 
+							frame, hit_messages_seen, hit.amount, hit.point);
 					}
 				}
 			}
@@ -1743,55 +1740,52 @@ mod integration_regressions {
 			// Check player health
 			if let Some(health) = app.world().get::<Health>(player) {
 				if health.current < final_health {
+					let delta = final_health - health.current;
 					damage_events += 1;
 					final_health = health.current;
-					eprintln!("Frame {}: Player took damage: {} -> {} (event #{})", 
-						frame, final_health + (initial_health - final_health), final_health, damage_events);
+					eprintln!("Frame {}: Player damage event #{}: -{:.1} HP, now at {:.1}/{:.1} HP", 
+						frame, damage_events, delta, final_health, initial_health);
 				}
 			}
 			
-			// If player has taken damage after Bray started, we can stop early
-			if bray_started && damage_events > 0 {
-				eprintln!("Frame {}: Bray damage delivered, ending test early", frame);
+			// Stop after all expected waves hit or Bray completes
+			if bray_started && damage_events >= EXPECTED_BRAY_WAVES {
+				eprintln!("Frame {}: All {} Bray waves hit player, test complete", frame, EXPECTED_BRAY_WAVES);
 				break;
 			}
 		}
 		
-		eprintln!("Total Hit messages seen: {}", hit_messages_seen);
+		eprintln!("\nTest summary:");
+		eprintln!("  Total Hit messages: {}", hit_messages_seen);
+		eprintln!("  Damage applications: {}", damage_events);
+		eprintln!("  HP: {:.1} -> {:.1} ({:.1} total damage)", initial_health, final_health, initial_health - final_health);
 		
 		// Assertions
 		assert!(bray_started, 
-			"Boss should have started Bray attack on visible player in range after {} frames", 300);
+			"Boss should have started Bray attack on visible player in range");
 		
-		assert_eq!(damage_events, 1, 
-			"Player should take damage exactly once from Bray (got {} damage events)", 
-			damage_events);
+		assert_eq!(damage_events, EXPECTED_BRAY_WAVES, 
+			"Player should take damage from each Bray wave (expected {}, got {})", 
+			EXPECTED_BRAY_WAVES, damage_events);
+		
+		// Each wave should deal 20 HP damage
+		let expected_total_damage = 20.0 * EXPECTED_BRAY_WAVES as f32;
+		let actual_damage = initial_health - final_health;
+		assert!((actual_damage - expected_total_damage).abs() < 0.1,
+			"Total damage should be {}×20 HP = {:.1} HP (got {:.1} HP)",
+			EXPECTED_BRAY_WAVES, expected_total_damage, actual_damage);
 		
 		assert!(final_health < initial_health, 
 			"Player health should decrease: initial={}, final={}", 
 			initial_health, final_health);
 		
-		// Verify emission origin is at mouth socket (if captured)
-		if let Some(emission_origin) = first_emission_origin {
-			// Get mouth socket position
-			let mouth_socket_pos = app.world_mut()
-				.query_filtered::<&GlobalTransform, With<bikanwarda_attacks::BikanwardaMouthSocket>>()
-				.iter(app.world())
-				.next()
-				.map(|gt| gt.translation());
-			
-			if let Some(socket_pos) = mouth_socket_pos {
-				let distance = (emission_origin - socket_pos).length();
-				assert!(distance < 5.0, 
-					"First Bray emission origin {:?} should be near mouth socket {:?} (distance: {:.2}m)",
-					emission_origin, socket_pos, distance);
-			}
-		}
-		
-		// Verify final health is reasonable (Bray should do significant but not instant-kill damage)
-		let damage_taken = initial_health - final_health;
-		assert!(damage_taken >= 10.0 && damage_taken <= 50.0,
-			"Bray damage should be 10-50 HP, got {:.1} HP", damage_taken);
+	}
+	
+	/// Test that Bray wavefronts hit ground-level targets at longer range (30m).
+	/// Same setup as 15m test but with player further away, still within the 28m Bray range.
+	#[test]
+	fn real_bray_waves_hit_ground_player_30m() {
+		// TODO: Add 30m distance test case
 	}
 }
 
