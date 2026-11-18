@@ -256,6 +256,7 @@ impl Plugin for WorldPlugin {
 			app.add_plugins(attacks::AttacksPlugin);
 		}
 		app.add_plugins(bikanwarda_attacks::BikanwardaAttacksPlugin { placeholders: false });
+		app.add_plugins(bikanwarda_attacks::BikanwardaPresentationConsumersPlugin::default());
 		
 		app.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
 			.add_plugins(WorldPoiPlugin)
