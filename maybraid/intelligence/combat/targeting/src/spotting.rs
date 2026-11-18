@@ -279,6 +279,7 @@ mod tests {
 		let observer = world
 			.spawn((
 				Transform::default(),
+				GlobalTransform::default(),
 				spotting,
 				SpottingTargetingSettings::default(),
 				targeting,
@@ -305,8 +306,8 @@ mod tests {
 		if let Some(mut targeting) = world.get_mut::<CombatTargeting>(observer) {
 			targeting.rebalance(1.0);
 		}
-		if let Some(mut transform) = world.get_mut::<Transform>(observer) {
-			transform.translation = Vec3::X * 2.0;
+		if let Some(mut global_transform) = world.get_mut::<GlobalTransform>(observer) {
+			*global_transform = GlobalTransform::from_translation(Vec3::X * 2.0);
 		}
 		if let Some(mut targeting) = world.get_mut::<CombatTargeting>(observer) {
 			targeting.remove_source(target, TargetSource::SPOTTING);
