@@ -56,25 +56,35 @@ fn spawn_bikanwarda<M: Component>(
 	let actor = recipe.components();
 	let scale = spec.uniform_scale();
 	
-	// Root body: unit-scale transform, scaled physics collider
+	// Root: unit-scale body with physics/collider (strip any scale from input transform)
+	let root_transform = Transform::from_translation(transform.translation)
+		.with_rotation(transform.rotation);
 	let root = commands.spawn((
 		Name::new("bikanwarda"),
+		root_transform,
+		GlobalTransform::default(),
+		Visibility::default(),
 		BikanwardaRoot,
 		marker,
 		spec.clone(),
-		transform, // Unit scale, correct world position
-		GlobalTransform::default(),
-		Visibility::default(),
 	)).id();
 	
+	// Collider shape sized to match the visible scaled boss (body Transform stays unit-scale)
 	let scaled_capsule = actor.scaled_locomotion_capsule();
 	spawn_physics(commands, root, scaled_capsule);
+	
+	// Anchors use scaled offsets (children of unit-scale root, positions match scaled visual)
+	let scaled_capsule = actor.scaled_locomotion_capsule();
 	spawn_chain_anchors(commands, root, scaled_capsule);
 	
-	// Visual child: scaled transform, no physics
-	let visual_transform = Transform::from_scale(Vec3::splat(scale));
+	// Visual: scaled child with all meshes
+	let visual_facing = transform.rotation;
+	let visual_transform = Transform::from_rotation(visual_facing).with_scale(Vec3::splat(scale));
 	let visual = spawn_fixed_character_assembly(commands, &actor, visual_transform);
-	commands.entity(visual).insert(ChildOf(root));
+	commands.entity(visual).insert((
+		ChildOf(root),
+		Name::new("bikanwarda-visual"),
+	));
 	
 	root
 }
