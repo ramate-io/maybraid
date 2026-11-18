@@ -3,13 +3,13 @@
 use anyhow::Result;
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use bevy::time::{TimeUpdateStrategy, Virtual};
-use bikanwarda_character::{spawn_bikanwarda_encounter, BikanwardaRoot, BikanwardaSpec};
+use bevy::time::TimeUpdateStrategy;
+use bikanwarda_character::{spawn_bikanwarda_encounter, spawn_bikanwarda_ward, BikanwardaSpec, BikanwardaActorRecipe};
+use characters::CharacterRecipe;
 use damage::{Health, HitPayload};
 use lod_avian::PhysicsInteractionLayer;
 use projectiles::{BulletSpec, Flight, ProjectileSource};
 use std::time::Duration;
-use bevy::math::Dir3;
 
 const DT: f32 = 1.0 / 60.0;
 
@@ -164,6 +164,389 @@ fn player_projectile_damages_boss() -> Result<()> {
 		damage_taken >= 49.0 && damage_taken <= 51.0,
 		"Damage should be ~50.0 (one hit), got {}",
 		damage_taken
+	);
+	
+	Ok(())
+}
+
+/// Test 1a: Collider AABB regression for unparented spawn (Ward/Enraged).
+/// Spawns boss through production path at translated position with NO parent.
+/// Lets Avian settle, then reads live ColliderAabb. Asserts AABB world size is
+/// ~10.526× unscaled capsule (NOT ~110× double-scale, NOT ~1× unscaled).
+/// MUST FAIL:
+///   - Pre-fix (unscaled capsule): ~1.25×1.94×3.29m
+///   - 78042407d (scaled capsule + scaled transform): ~110× double-scale
+#[test]
+fn ward_collider_scales_correctly_unparented() -> Result<()> {
+	let mut app = projectile_damage_app();
+	
+	// Spawn Ward (unparented form) at nonzero world position
+	let world_position = Vec3::new(100.0, 50.0, 200.0);
+	let spec = BikanwardaSpec::ward();
+	let scale = spec.uniform_scale(); // ~10.526316
+	
+	let ward_root = {
+		let mut commands = app.world_mut().commands();
+		bikanwarda_character::spawn_bikanwarda_ward(&mut commands, &spec, Transform::from_translation(world_position))
+	};
+	
+	// Run multiple frames to let avian and transform propagation settle
+	for _ in 0..10 {
+		app.update();
+	}
+	
+	// Read live ColliderAabb from the ward root
+	let root_aabb = app
+		.world()
+		.get::<ColliderAabb>(ward_root)
+		.expect("Ward root should have ColliderAabb after physics update");
+	
+	// Get unscaled capsule dimensions for reference
+	let unscaled_capsule = BikanwardaActorRecipe::from_spec(spec.clone())
+		.locomotion_capsule();
+	let expected_radius = unscaled_capsule.radius * scale;
+	let expected_half_height = unscaled_capsule.half_height() * scale;
+	
+	// AABB size in world space
+	let aabb_size = root_aabb.max - root_aabb.min;
+	let aabb_width_x = aabb_size.x;
+	let aabb_height_y = aabb_size.y;
+	let aabb_width_z = aabb_size.z;
+	
+	// Expected dimensions: Compound collider includes both motor and pronograde hit capsule
+	// Motor capsule: vertical (Y-axis), radius ~3.13m
+	// Hit capsule: horizontal pronograde (Z-axis forward), extends body length
+	// X/Z widths vary: X ~2× motor radius, Z extends with hit capsule length
+	// We verify the collider is SCALED (NOT unscaled ~1-2m, NOT double-scaled ~60m+)
+	let expected_height = expected_half_height * 2.0;
+	let tolerance = 0.25; // 25% height tolerance
+	
+	// X width: approximately 2× motor radius (lateral)
+	let min_x = expected_radius * 2.0 * 0.8;
+	let max_x = expected_radius * 2.0 * 2.0;
+	
+	// Z width: motor radius + hit capsule length (pronograde body), can be ~5× motor radius
+	let min_z = expected_radius * 2.0;  // At least motor diameter
+	let max_z = expected_radius * 2.0 * 6.0;  // Up to 6× for long hit capsule
+	
+	// Assert X width is scaled correctly
+	anyhow::ensure!(
+		aabb_width_x >= min_x && aabb_width_x <= max_x,
+		"Ward AABB width X should be {:.2}m-{:.2}m (1× scaled), got {:.2}m. \
+		Pre-fix was ~1.25m (unscaled). 78042407d would be ~{:.2}m (double-scaled).",
+		min_x, max_x, aabb_width_x, expected_radius * 2.0 * scale
+	);
+	
+	// Assert Z width is scaled correctly (accounts for pronograde hit capsule)
+	anyhow::ensure!(
+		aabb_width_z >= min_z && aabb_width_z <= max_z,
+		"Ward AABB width Z should be {:.2}m-{:.2}m (1× scaled with hit capsule), got {:.2}m. \
+		Pre-fix was ~1.94m (unscaled). 78042407d would be ~{:.2}m (double-scaled).",
+		min_z, max_z, aabb_width_z, expected_radius * 2.0 * scale
+	);
+	
+	// Assert Y height is scaled correctly
+	anyhow::ensure!(
+		aabb_height_y >= expected_height * (1.0 - tolerance) && aabb_height_y <= expected_height * (1.0 + tolerance),
+		"Ward AABB height Y should be ~{:.2}m (1× scaled), got {:.2}m. \
+		Pre-fix was ~3.29m (unscaled). 78042407d would be ~{:.2}m (double-scaled).",
+		expected_height, aabb_height_y, expected_height * scale
+	);
+	
+	// Assert AABB is centered on root position (within tolerance)
+	let aabb_center = (root_aabb.min + root_aabb.max) / 2.0;
+	let root_world_pos = app
+		.world()
+		.get::<GlobalTransform>(ward_root)
+		.expect("Ward root should have GlobalTransform")
+		.translation();
+	
+	let center_offset = (aabb_center - root_world_pos).length();
+	anyhow::ensure!(
+		center_offset < expected_height * 0.4, // Allow 40% offset for hit capsule
+		"Ward AABB center should be near root position: offset={:.2}m, expected<{:.2}m",
+		center_offset, expected_height * 0.4
+	);
+	
+	Ok(())
+}
+
+/// Test 1b: Collider AABB regression for parented spawn (Encounter).
+/// Spawns boss through production path as child of translated host.
+/// Lets Avian settle, then reads live ColliderAabb. Asserts AABB world size is
+/// ~10.526× unscaled capsule (NOT ~110× double-scale, NOT ~1× unscaled).
+/// MUST FAIL:
+///   - Pre-fix (unscaled capsule): ~1.25×1.94×3.29m
+///   - 78042407d worked by accident for parented case only
+#[test]
+fn encounter_collider_scales_correctly_parented() -> Result<()> {
+	let mut app = projectile_damage_app();
+	
+	// Spawn encounter (parented to host) at nonzero world position
+	let host_position = Vec3::new(100.0, 50.0, 200.0);
+	let spec = BikanwardaSpec::encounter();
+	let scale = spec.uniform_scale(); // ~10.526316
+	
+	let encounter_root = {
+		let mut commands = app.world_mut().commands();
+		spawn_bikanwarda_encounter(&mut commands, &spec, Transform::from_translation(host_position))
+	};
+	
+	// Run multiple frames to let avian and transform propagation settle
+	for _ in 0..10 {
+		app.update();
+	}
+	
+	// Read live ColliderAabb from the encounter root
+	let root_aabb = app
+		.world()
+		.get::<ColliderAabb>(encounter_root)
+		.expect("Encounter root should have ColliderAabb after physics update");
+	
+	// Get unscaled capsule dimensions for reference
+	let unscaled_capsule = BikanwardaActorRecipe::from_spec(spec.clone())
+		.locomotion_capsule();
+	let expected_radius = unscaled_capsule.radius * scale;
+	let expected_half_height = unscaled_capsule.half_height() * scale;
+	
+	// AABB size in world space
+	let aabb_size = root_aabb.max - root_aabb.min;
+	let aabb_width_x = aabb_size.x;
+	let aabb_height_y = aabb_size.y;
+	let aabb_width_z = aabb_size.z;
+	
+	// Expected dimensions: Compound collider includes both motor and pronograde hit capsule
+	// Motor capsule: vertical (Y-axis), radius ~3.68m
+	// Hit capsule: horizontal pronograde (Z-axis forward), extends body length
+	let expected_height = expected_half_height * 2.0;
+	let tolerance = 0.25; // 25% height tolerance
+	
+	// X width: approximately 2× motor radius (lateral)
+	let min_x = expected_radius * 2.0 * 0.8;
+	let max_x = expected_radius * 2.0 * 2.0;
+	
+	// Z width: motor radius + hit capsule length (pronograde body), can be ~5× motor radius
+	let min_z = expected_radius * 2.0;  // At least motor diameter
+	let max_z = expected_radius * 2.0 * 6.0;  // Up to 6× for long hit capsule
+	
+	// Assert X width is scaled correctly
+	anyhow::ensure!(
+		aabb_width_x >= min_x && aabb_width_x <= max_x,
+		"Encounter AABB width X should be {:.2}m-{:.2}m (1× scaled), got {:.2}m. Pre-fix was ~1.25m (unscaled).",
+		min_x, max_x, aabb_width_x
+	);
+	
+	// Assert Z width is scaled correctly (accounts for pronograde hit capsule)
+	anyhow::ensure!(
+		aabb_width_z >= min_z && aabb_width_z <= max_z,
+		"Encounter AABB width Z should be {:.2}m-{:.2}m (1× scaled with hit capsule), got {:.2}m. Pre-fix was ~1.94m (unscaled).",
+		min_z, max_z, aabb_width_z
+	);
+	
+	// Assert Y height is scaled correctly
+	anyhow::ensure!(
+		aabb_height_y >= expected_height * (1.0 - tolerance) && aabb_height_y <= expected_height * (1.0 + tolerance),
+		"Encounter AABB height Y should be ~{:.2}m (1× scaled), got {:.2}m. Pre-fix was ~3.29m (unscaled).",
+		expected_height, aabb_height_y
+	);
+	
+	// Assert AABB is centered on root position (within tolerance)
+	let aabb_center = (root_aabb.min + root_aabb.max) / 2.0;
+	let root_world_pos = app
+		.world()
+		.get::<GlobalTransform>(encounter_root)
+		.expect("Encounter root should have GlobalTransform")
+		.translation();
+	
+	let center_offset = (aabb_center - root_world_pos).length();
+	anyhow::ensure!(
+		center_offset < expected_height * 0.4, // Allow 40% offset for hit capsule
+		"Encounter AABB center should be near root position: offset={:.2}m, expected<{:.2}m",
+		center_offset, expected_height * 0.4
+	);
+	
+	Ok(())
+}
+
+/// Test 2: Real shot at visible body (78042407d fix verification).
+/// Fires real projectile through production path at a point on visible body
+/// outside the old small box (~1.25×1.94×3.29m). Asserts real contact and
+/// host loses HP exactly once via damage/src/apply.rs.
+/// MUST FAIL pre-78042407d when collider was too small.
+#[test]
+fn projectile_hits_visible_body_outside_old_small_box() -> Result<()> {
+	let mut app = projectile_damage_app();
+	
+	// Spawn boss at origin for simplicity
+	let host_position = Vec3::ZERO;
+	let spec = BikanwardaSpec::encounter();
+	
+	let boss_actor = {
+		let mut commands = app.world_mut().commands();
+		spawn_bikanwarda_encounter(&mut commands, &spec, Transform::from_translation(host_position))
+	};
+	
+	app.update();
+	
+	// Spawn host with Health
+	let host_entity = app
+		.world_mut()
+		.spawn((
+			Name::new("boss-host"),
+			Health::from_max(1000.0),
+			Transform::default(),
+			GlobalTransform::default(),
+		))
+		.id();
+	
+	// Parent actor to host (production structure)
+	app.world_mut().entity_mut(boss_actor).insert(ChildOf(host_entity));
+	
+	// Spawn player as projectile source
+	let player = app
+		.world_mut()
+		.spawn((
+			Name::new("test-player"),
+			Transform::default(),
+			GlobalTransform::default(),
+		))
+		.id();
+	
+	// Update physics to settle colliders
+	for _ in 0..5 {
+		app.update();
+	}
+	
+	// Target point on visible body OUTSIDE old small box (1.25×1.94×3.29m)
+	// Old box extended from X=[-0.625, +0.625], Y=[0, 3.29], Z=[-0.97, +0.97]
+	// Shoot at X=+5.0, Y=+10.0 (well outside old box, inside new scaled box ~13×20m)
+	let target_pos = Vec3::new(5.0, 10.0, 0.0);
+	let start_pos = target_pos + Vec3::X * -20.0; // 20m away horizontally
+	let direction = (target_pos - start_pos).normalize();
+	
+	// Use BulletSpec
+	let bullet_spec = projectiles::BulletSpec::default();
+	let gravity = 0.0; // Straight shot
+	
+	// Spawn projectile with physics components
+	let collider = Collider::capsule(bullet_spec.radius, bullet_spec.length);
+	let velocity = direction * bullet_spec.speed;
+	let cap_transform = Transform::from_translation(start_pos).looking_to(direction, Vec3::Y);
+	
+	let _projectile = app
+		.world_mut()
+		.spawn((
+			Name::new("test-bullet-outside-old-box"),
+			cap_transform,
+			GlobalTransform::from(cap_transform),
+			RigidBody::Dynamic,
+			MassPropertiesBundle::from_shape(&collider, 1.0),
+			collider,
+			Sensor,
+			PhysicsInteractionLayer::projectile_layers(),
+			LockedAxes::ROTATION_LOCKED,
+			LinearVelocity(velocity),
+			GravityScale(gravity),
+			Restitution::ZERO,
+			Flight::spawn(start_pos, bullet_spec.max_range, bullet_spec.penetration, bullet_spec.max_age),
+			ProjectileSource(player),
+			HitPayload { amount: 25.0 },
+		))
+		.id();
+	
+	// Record initial host health
+	let initial_health = app
+		.world()
+		.get::<Health>(host_entity)
+		.expect("Host should have Health")
+		.current;
+	
+	// Run projectile sweep and damage application
+	// Projectile travels ~25m at 28 m/s = ~0.89s = ~54 frames at 60fps
+	let mut damage_applied_count = 0;
+	let mut final_health = initial_health;
+	
+	for _ in 0..60 {
+		app.update();
+		
+		let current_health = app
+			.world()
+			.get::<Health>(host_entity)
+			.expect("Host should have Health")
+			.current;
+		
+		if current_health < final_health {
+			damage_applied_count += 1;
+			final_health = current_health;
+		}
+	}
+	
+	// Assert host health decreased (projectile hit)
+	anyhow::ensure!(
+		final_health < initial_health,
+		"Host health should decrease after projectile hits visible body: initial={}, final={}. \
+		Pre-fix: projectile missed small collider.",
+		initial_health, final_health
+	);
+	
+	// Assert damage applied exactly once (not multiple hits)
+	let damage_taken = initial_health - final_health;
+	anyhow::ensure!(
+		damage_applied_count == 1,
+		"Damage should apply exactly once, got {} applications",
+		damage_applied_count
+	);
+	
+	anyhow::ensure!(
+		(damage_taken - 25.0).abs() < 1.0,
+		"Damage should be ~25.0 (one hit), got {:.1}",
+		damage_taken
+	);
+	
+	Ok(())
+}
+
+/// Test 3: Mouth socket scaling verification.
+/// Asserts mouth socket anchor's local transform is correctly scaled.
+/// The anchor position should scale with the locomotion capsule.
+#[test]
+fn mouth_socket_anchor_scales_with_capsule() -> Result<()> {
+	// Get scaled capsule to calculate expected mouth position
+	let spec = BikanwardaSpec::encounter();
+	let actor = BikanwardaActorRecipe::from_spec(spec.clone()).components();
+	let scaled_capsule = actor.scaled_locomotion_capsule();
+	let anchors = bikanwarda_character::anchors::BikanwardaAnchors::for_capsule(scaled_capsule);
+	let expected_mouth_local = anchors
+		.get("mouth_emit")
+		.expect("Anchors should have MOUTH_EMIT")
+		.translation;
+	
+	// Verify the anchor local position is scaled
+	use characters::CharacterComponents;
+	let unscaled_capsule = actor.locomotion_capsule();
+	let unscaled_anchors = bikanwarda_character::anchors::BikanwardaAnchors::for_capsule(unscaled_capsule);
+	let unscaled_mouth_local = unscaled_anchors
+		.get("mouth_emit")
+		.expect("Unscaled anchors should have MOUTH_EMIT")
+		.translation;
+	
+	// Assert scaled mouth position is ~10.526× unscaled
+	anyhow::ensure!(
+		expected_mouth_local.length() > unscaled_mouth_local.length() * 9.0,
+		"Mouth anchor should be scaled: unscaled={:.2}, scaled={:.2}, ratio={:.2}",
+		unscaled_mouth_local.length(),
+		expected_mouth_local.length(),
+		expected_mouth_local.length() / unscaled_mouth_local.length()
+	);
+	
+	// Assert mouth socket is at expected height (Y component)
+	// Expected: capsule.radius (scaled) + some vertical offset
+	let expected_mouth_y = scaled_capsule.radius * 0.65 + scaled_capsule.radius;
+	let mouth_y_local = expected_mouth_local.y;
+	anyhow::ensure!(
+		(mouth_y_local - expected_mouth_y).abs() < expected_mouth_y * 0.3,
+		"Mouth Y should be ~{:.2}m, got {:.2}m (tolerance 30%)",
+		expected_mouth_y, mouth_y_local
 	);
 	
 	Ok(())

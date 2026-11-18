@@ -62,6 +62,8 @@ fn spawn_bikanwarda<M: Component>(
 	let root = commands.spawn((
 		Name::new("bikanwarda"),
 		root_transform,
+		GlobalTransform::default(),
+		Visibility::default(),
 		BikanwardaRoot,
 		marker,
 		spec.clone(),
