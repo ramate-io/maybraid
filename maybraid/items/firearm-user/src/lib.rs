@@ -118,5 +118,6 @@ impl Plugin for FirearmUserPlugin {
 		add_firearm_components_host::<kit::GeneratedFirearm>(app);
 		register_firearm_user_runtime(app);
 		register_firearm_user_presentation(app);
+		firearms::register_firearm_presentation(app);
 	}
 }
