@@ -43,13 +43,13 @@ const ACTIONABLE_SOURCES: TargetSource = TargetSource::from_bits(
 /// Used by both firearm combatants and non-firearm attackers (e.g. boss encounters).
 pub fn sync_spotted_to_combat_targeting(
 	mut combatants: Query<(
-		&Transform,
+		&GlobalTransform,
 		&SpottingUser,
 		&SpottingTargetingSettings,
 		&mut CombatTargeting,
 	)>,
 ) {
-	for (transform, spotting, settings, mut targeting) in &mut combatants {
+	for (global_transform, spotting, settings, mut targeting) in &mut combatants {
 		// Configure targeting memory and continuity
 		if targeting.memory_secs != settings.memory_secs
 			|| targeting.algebra.continuity != settings.continuity
@@ -104,9 +104,9 @@ pub fn sync_spotted_to_combat_targeting(
 				targeting.include(contact.subject, TargetSource::SPOTTING);
 			}
 
-			// Set distance-based factors
-			let delta = contact.position - transform.translation;
-			let distance = Vec2::new(delta.x, delta.z).length();
+		// Set distance-based factors (use GlobalTransform for world-space distance)
+		let delta = contact.position - global_transform.translation();
+		let distance = Vec2::new(delta.x, delta.z).length();
 			let previous = targeting
 				.active_target(contact.subject)
 				.map_or(TargetFactors::default(), |target| target.factors);
@@ -325,6 +325,76 @@ mod tests {
 			active.has_source(TargetSource::SPOTTING) && active.factors.bias == -2.0
 		}));
 		assert!(targeting.dirty);
+		Ok(())
+	}
+
+	/// Regression: targeting distance must use GlobalTransform, not local Transform.
+	/// Before fix: actor parented to nonzero host calculates distance from (0,0,0).
+	/// After fix: distance calculated from world-space position.
+	#[test]
+	fn targeting_distance_uses_world_space_not_local() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let target = Entity::from_bits(7);
+		
+		// Spawn host at nonzero world position
+		let host_position = Vec3::new(100.0, 0.0, 200.0);
+		let host = world
+			.spawn((Transform::from_translation(host_position), GlobalTransform::from_translation(host_position)))
+			.id();
+
+		// Spawn actor as child of host (local transform is identity)
+		let mut spotting = SpottingUser::default();
+		let target_position = Vec3::new(110.0, 0.0, 200.0); // 10m away in world space
+		spotting.contacts.insert(
+			target,
+			SpottedContact::new(
+				target,
+				target_position,
+				Vec3::ZERO,
+				target_position,
+				None,
+				0.0,
+				0.1,
+			),
+		);
+		
+		let mut targeting = CombatTargeting::default();
+		// Pre-register target with actionable source so spotting admission works
+		targeting.include(target, TargetSource::RECEIVED_FIRE);
+		
+		let actor = world
+			.spawn((
+				Transform::IDENTITY,
+				GlobalTransform::from_translation(host_position), // World space after propagation
+				spotting,
+				SpottingTargetingSettings::default(),
+				targeting,
+				ChildOf(host),
+			))
+			.id();
+
+		// Run targeting sync system
+		world
+			.run_system_once(sync_spotted_to_combat_targeting)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		// Verify distance factor is based on world-space distance (~10m), not local (110m)
+		let targeting = world.get::<CombatTargeting>(actor).unwrap();
+		let target_factors = targeting.active_target(target).map(|t| t.factors);
+		
+		anyhow::ensure!(
+			target_factors.is_some(),
+			"Target should be registered in targeting system"
+		);
+		
+		let bias = target_factors.unwrap().bias;
+		// bias is -distance, so expect around -10.0, not -110.0
+		anyhow::ensure!(
+			bias > -15.0 && bias < -5.0,
+			"Distance bias should be ~-10.0 (world space), got {}",
+			bias
+		);
+
 		Ok(())
 	}
 }
