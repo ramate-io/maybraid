@@ -171,9 +171,8 @@ mod tests {
 		app.update();
 		
 		// Verify: the boss actor should have a child mouth socket
-		let boss_entity = app.world()
-			.query_filtered::<Entity, With<BikanwardaRoot>>()
-			.single(app.world());
+		let mut boss_query = app.world().query_filtered::<Entity, With<BikanwardaRoot>>();
+		let boss_entity = boss_query.single(app.world());
 		
 		let socket_count = app.world()
 			.query_filtered::<(&ChildOf, &BikanwardaMouthSocket), With<BikanwardaMouthSocket>>()
