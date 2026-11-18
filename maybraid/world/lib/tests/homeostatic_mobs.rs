@@ -201,13 +201,42 @@ fn reentering_cell_reactivates_mob_without_duplicates() -> anyhow::Result<()> {
 		}
 	}
 
-	for _ in 0..20 {
+	// Other layers share the budgeted retirement prefix. Record policy retirement
+	// separately from physical cleanup; 200 frames is a test bound, not a latency target.
+	let mut first_retired_frame = None;
+	let mut despawn_frame = None;
+	let mut retirement_backlog = None;
+	for frame in 1..=200 {
 		app.update();
+		if first_retired_frame.is_none()
+			&& app.world().get::<lod::hcsg::RetiredHost>(first_host).is_some()
+		{
+			first_retired_frame = Some(frame);
+			retirement_backlog = Some(
+				app.world_mut()
+					.query_filtered::<Entity, (
+						With<lod::hcsg::RetiredHost>,
+						bevy::ecs::query::Allow<bevy::ecs::entity_disabling::Disabled>,
+					)>()
+					.iter(app.world())
+					.count(),
+			);
+		}
+		if app.world().get_entity(first_host).is_err() {
+			despawn_frame = Some(frame);
+			break;
+		}
 	}
+	eprintln!("original encounter retirement: tagged_frame={first_retired_frame:?}, despawn_frame={despawn_frame:?}, backlog_at_tag={retirement_backlog:?}");
 
 	// The destination may legitimately activate its own encounter. Only the
 	// original host must retire after leaving its neighborhood.
-	assert!(app.world().get_entity(first_host).is_err(), "original encounter should retire");
+	assert!(
+		app.world().get_entity(first_host).is_err(),
+		"original encounter should retire; retired={}, current_cell={:?}",
+		app.world().get::<lod::hcsg::RetiredHost>(first_host).is_some(),
+		app.world().resource::<barking::PlayerHomeostaticCell>().current,
+	);
 
 	// Re-enter the same flagged cell
 	{
