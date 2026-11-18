@@ -2,7 +2,7 @@
 //! Tests the full plugin stack with real world player movement.
 
 use bevy::prelude::*;
-use maybraid_world::WorldLayersPlugin;
+use maybraid_world::{WorldLayersPlugin, WorldMaterialRefPlugin};
 use world_player::Player as WorldPlayer;
 
 /// Minimal test app with full world layers (including homeostatic mobs)
@@ -14,11 +14,16 @@ fn test_app() -> App {
 		AssetPlugin::default(),
 		bevy::state::app::StatesPlugin,
 		bevy::scene::ScenePlugin,
+		bevy::transform::TransformPlugin,
+		bevy::input::InputPlugin,
+		bevy::window::WindowPlugin { primary_window: None, ..default() },
 	))
 	.init_asset::<Mesh>()
 	.init_asset::<StandardMaterial>()
 	.init_asset::<bevy::world_serialization::WorldAsset>()
-	.add_plugins(WorldLayersPlugin);
+	// Match the documented WorldLayers prerequisites and the strict shared camera fixture.
+	// Input/window plugins supply their real resources without opening a native window.
+	.add_plugins((WorldMaterialRefPlugin, player_camera::PlayerCameraPlugin, WorldLayersPlugin));
 	app.finish();
 	app.cleanup();
 	app.world_mut().spawn((
