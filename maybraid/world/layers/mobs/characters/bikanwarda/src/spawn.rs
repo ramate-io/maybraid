@@ -63,9 +63,9 @@ fn spawn_bikanwarda<M: Component>(
 		marker,
 		spec.clone(),
 	));
-	let capsule = actor.locomotion_capsule();
-	spawn_physics(commands, visual, capsule);
-	spawn_chain_anchors(commands, visual, actor.scaled_locomotion_capsule());
+	let scaled_capsule = actor.scaled_locomotion_capsule();
+	spawn_physics(commands, visual, scaled_capsule);
+	spawn_chain_anchors(commands, visual, scaled_capsule);
 	visual
 }
 
