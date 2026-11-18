@@ -83,14 +83,13 @@ fn player_projectile_damages_boss() -> Result<()> {
 	// Use BulletSpec (has gravity, more realistic)
 	let spec = BulletSpec::default();
 	
-	// Spawn projectile
+	// Spawn projectile (projectiles use Transform-based movement, not a separate Velocity component)
 	let projectile = app
 		.world_mut()
 		.spawn((
 			Name::new("test-bullet"),
 			Transform::from_translation(start_pos),
 			GlobalTransform::from_translation(start_pos),
-			projectiles::Velocity::from(direction * spec.speed),
 			Collider::capsule(spec.length / 2.0, spec.radius),
 			Flight::spawn(start_pos, spec.max_range, spec.penetration, spec.max_age),
 			ProjectileSource(player),
@@ -177,7 +176,6 @@ fn projectile_sweeps_hit_fixed_colliders() -> Result<()> {
 			Name::new("bolt"),
 			Transform::from_translation(start_pos),
 			GlobalTransform::from_translation(start_pos),
-			projectiles::Velocity::from(*direction * spec.speed),
 			Collider::capsule(spec.length / 2.0, spec.radius),
 			Flight::spawn(start_pos, spec.max_range, spec.penetration, spec.max_age),
 			ProjectileSource(player),
