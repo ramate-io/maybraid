@@ -33,22 +33,22 @@ pub fn spawn_boss_assemblies(
 			SpottingUser::new(eye_offset, [SpotDirective::new(InterestLayers::CHARACTER, spotting_range)])
 		);
 		
-		// Spawn the mouth socket for Bray emission in unscaled actor-local coordinates
-		// (actor is already scaled, so anchors must be unscaled to avoid double-scaling)
-		let recipe = bikanwarda_character::BikanwardaActorRecipe::from_spec(request.spec.clone());
-		let capsule = recipe.locomotion_capsule(); // Unscaled
-		let anchors = BikanwardaAnchors::for_capsule(capsule);
-		let mouth_transform = anchors.get(bikanwarda_character::anchors::names::MOUTH_EMIT)
-			.copied()
-			.unwrap_or(Transform::from_translation(Vec3::Y * 1.5));
-		
-		commands.spawn((
-			Name::new("bikanwarda_mouth_socket"),
-			BikanwardaMouthSocket,
-			ChildOf(boss_entity),
-			mouth_transform,
-			GlobalTransform::default(),
-		));
+	// Spawn the mouth socket for Bray emission in world-scale coordinates
+	// Root now has unit-scale transform, so use scaled anchors for correct world position
+	let recipe = bikanwarda_character::BikanwardaActorRecipe::from_spec(request.spec.clone());
+	let scaled_capsule = recipe.components().scaled_locomotion_capsule();
+	let anchors = BikanwardaAnchors::for_capsule(scaled_capsule);
+	let mouth_transform = anchors.get(bikanwarda_character::anchors::names::MOUTH_EMIT)
+		.copied()
+		.unwrap_or(Transform::from_translation(Vec3::Y * 1.5));
+	
+	commands.spawn((
+		Name::new("bikanwarda_mouth_socket"),
+		BikanwardaMouthSocket,
+		ChildOf(boss_entity),
+		mouth_transform,
+		GlobalTransform::default(),
+	));
 		
 		// Bind host to actor with relationship component
 		commands.entity(host_entity).insert(BossActor(boss_entity));
@@ -220,18 +220,17 @@ mod tests {
 		
 		assert_eq!(socket_count, 1, "Boss actor should have exactly one BikanwardaMouthSocket child");
 		
-		// Verify: socket world-space position matches expected mouth location
-		// Default encounter spec has uniform_scale of ~10.5x, capsule height ~1.9m
-		// Mouth anchor is at top of capsule (~Y=0.95 unscaled, ~Y=10.0 scaled in world space)
-		let spec = BikanwardaSpec::encounter();
-		let scale = spec.uniform_scale();
-		let recipe = bikanwarda_character::BikanwardaActorRecipe::from_spec(spec);
-		let capsule = recipe.locomotion_capsule(); // Unscaled
-		let anchors = BikanwardaAnchors::for_capsule(capsule);
-		let expected_local = anchors.get(bikanwarda_character::anchors::names::MOUTH_EMIT)
-			.map(|t| t.translation)
-			.unwrap_or(Vec3::Y * 1.5);
-		let expected_world_y = expected_local.y * scale;
+	// Verify: socket world-space position matches expected mouth location
+	// Root now has unit-scale transform, socket uses scaled anchors
+	let spec = BikanwardaSpec::encounter();
+	let scale = spec.uniform_scale();
+	let recipe = bikanwarda_character::BikanwardaActorRecipe::from_spec(spec);
+	let scaled_capsule = recipe.components().scaled_locomotion_capsule();
+	let anchors = BikanwardaAnchors::for_capsule(scaled_capsule);
+	let expected_local = anchors.get(bikanwarda_character::anchors::names::MOUTH_EMIT)
+		.map(|t| t.translation)
+		.unwrap_or(Vec3::Y * 1.5);
+	let expected_world_y = expected_local.y; // Already scaled in anchor
 		
 		// Get socket's world-space transform
 		let socket_local = world
@@ -246,16 +245,15 @@ mod tests {
 			})
 			.expect("Socket should have a Transform");
 		
-		// Verify local position is in unscaled coordinates
-		let tolerance = 0.1;
-		assert!(
-			(socket_local.y - expected_local.y).abs() < tolerance,
-			"Mouth socket local Y {} should match unscaled anchor Y {} (within {}), not double-scaled ~{}",
-			socket_local.y,
-			expected_local.y,
-			tolerance,
-			expected_local.y * scale
-		);
+	// Verify local position matches scaled anchor (root has unit-scale)
+	let tolerance = 0.1;
+	assert!(
+		(socket_local.y - expected_local.y).abs() < tolerance,
+		"Mouth socket local Y {} should match scaled anchor Y {} (within {})",
+		socket_local.y,
+		expected_local.y,
+		tolerance
+	);
 		
 		// Verify world-space GlobalTransform after propagation
 		// Propagate transforms using the transform systems
@@ -271,14 +269,14 @@ mod tests {
 		let socket_global = world.get::<GlobalTransform>(socket_entity)
 			.expect("Socket should have GlobalTransform after propagation");
 		
-		// Since host is at origin with identity transform, world Y should equal scaled anchor Y
-		let expected_world_y = expected_local.y * scale;
-		assert!(
-			(socket_global.translation().y - expected_world_y).abs() < tolerance,
-			"Mouth socket world Y {:.6} should be ~{:.6} (scaled anchor), within {:.2}m tolerance",
-			socket_global.translation().y,
-			expected_world_y,
-			tolerance,
-		);
+	// Host at origin, root has unit-scale, socket uses scaled anchor
+	// World Y should match the scaled anchor Y directly
+	assert!(
+		(socket_global.translation().y - expected_world_y).abs() < tolerance,
+		"Mouth socket world Y {:.6} should be ~{:.6} (scaled anchor), within {:.2}m tolerance",
+		socket_global.translation().y,
+		expected_world_y,
+		tolerance,
+	);
 	}
 }
