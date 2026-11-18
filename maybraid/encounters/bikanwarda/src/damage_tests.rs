@@ -95,7 +95,7 @@ fn player_projectile_damages_boss() -> Result<()> {
 			Flight::spawn(start_pos, spec.max_range, spec.penetration, spec.max_age),
 			ProjectileSource(player),
 			// Add damage payload so ProjectileContact → Hit conversion works
-			HitPayload::new(50.0),
+			HitPayload { amount: 50.0 },
 		))
 		.id();
 	
@@ -191,9 +191,9 @@ fn projectile_sweeps_hit_fixed_colliders() -> Result<()> {
 	
 	// Check for ProjectileContact messages
 	let contacts: Vec<_> = app
-		.world()
-		.resource::<Messages<projectiles::ProjectileContact>>()
-		.iter()
+		.world_mut()
+		.resource_mut::<Messages<projectiles::ProjectileContact>>()
+		.drain()
 		.collect();
 	
 	anyhow::ensure!(!contacts.is_empty(), "Should have at least one ProjectileContact");
