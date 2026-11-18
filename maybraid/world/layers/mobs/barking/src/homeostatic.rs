@@ -365,7 +365,7 @@ pub fn apply_homeostatic_retreat(
 	>,
 	mut commands: Commands,
 ) {
-	for (entity, mut retreat, mob, goal, hold, state) in &mut retreating {
+	for (entity, mut retreat, mob, goal, hold, mut state) in &mut retreating {
 		if retreat.goal.is_some() {
 			continue;
 		}
@@ -385,7 +385,8 @@ pub fn apply_homeostatic_retreat(
 			first_observed_at: now,
 			last_observed_at: now,
 		};
-		retreat.goal = Some(begin_held_poi_goal(&mut commands, entity, known, now, state));
+		retreat.goal =
+			Some(begin_held_poi_goal(&mut commands, entity, known, now, state.as_deref_mut()));
 	}
 }
 
