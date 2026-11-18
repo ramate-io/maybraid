@@ -2374,6 +2374,7 @@ dependencies = [
  "damage",
  "encounters",
  "firearm-intelligence",
+ "firearms",
  "lod",
  "lod-avian",
  "lubikans",

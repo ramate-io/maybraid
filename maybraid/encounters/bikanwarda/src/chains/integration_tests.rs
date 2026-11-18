@@ -10,18 +10,18 @@
 mod tests {
 	use anyhow::{anyhow, Result};
 	use avian3d::prelude::*;
+	use bevy::ecs::message::MessageId;
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
-	use damage::{DamageApplied, DamagePlugin, Health};
+	use damage::{ChainSegment, DamageApplied, DamagePlugin, Health, Hit, HitPayload};
 	use encounters::EncounterSignal;
 	use projectiles::ProjectileContact;
 
 	use crate::chains::{
-		coalesce_chain_contacts, deactivate_released_chains,
-		detect_and_signal_broken_chains, spawn_chain_colliders, sync_chain_colliders,
-		update_chain_joints, BikanwardaChainPhysicsPlugin, ChainAnchor, ChainBrokenHistory,
-		ChainColliderConfig, ChainEndpoint, ChainLinkId, ChainMotion, ChainRoot,
-		ChainTensionMode, ReleasedChain,
+		coalesce_chain_contacts, deactivate_released_chains, detect_and_signal_broken_chains,
+		spawn_chain_colliders, sync_chain_colliders, update_chain_joints,
+		BikanwardaChainPhysicsPlugin, ChainAnchor, ChainBrokenHistory, ChainColliderConfig,
+		ChainEndpoint, ChainLinkId, ChainMotion, ChainRoot, ChainTensionMode, ReleasedChain,
 	};
 
 	fn test_app() -> App {
@@ -53,16 +53,55 @@ mod tests {
 		app
 	}
 
+	#[derive(Resource, Default)]
+	struct CollectedDamage {
+		events: Vec<DamageApplied>,
+	}
+
+	#[derive(Resource, Default)]
+	struct CollectedContactIds {
+		ids: Vec<MessageId<ProjectileContact>>,
+	}
+
+	fn collect_damage_applied(
+		mut reader: MessageReader<DamageApplied>,
+		mut collected: ResMut<CollectedDamage>,
+	) {
+		collected.events.extend(reader.read().copied());
+	}
+
+	fn collect_contact_ids(
+		mut reader: MessageReader<ProjectileContact>,
+		mut collected: ResMut<CollectedContactIds>,
+	) {
+		collected.ids.extend(reader.read_with_id().map(|(_, id)| id));
+	}
+
+	fn install_persistent_collectors(app: &mut App) {
+		app.init_resource::<CollectedDamage>()
+			.init_resource::<CollectedContactIds>()
+			.add_systems(
+				PostUpdate,
+				(collect_damage_applied.after(damage::DamageSystems::Apply), collect_contact_ids),
+			);
+	}
+
 	#[test]
 	fn anchored_chain_follows_socket_transforms() -> Result<()> {
 		let mut app = test_app();
 
-		let joint0 =
-			app.world_mut().spawn((Name::new("chain-joint-0"), Transform::default(), GlobalTransform::default())).id();
-		let joint1 =
-			app.world_mut().spawn((Name::new("chain-joint-1"), Transform::default(), GlobalTransform::default())).id();
-		let joint2 =
-			app.world_mut().spawn((Name::new("chain-joint-2"), Transform::default(), GlobalTransform::default())).id();
+		let joint0 = app
+			.world_mut()
+			.spawn((Name::new("chain-joint-0"), Transform::default(), GlobalTransform::default()))
+			.id();
+		let joint1 = app
+			.world_mut()
+			.spawn((Name::new("chain-joint-1"), Transform::default(), GlobalTransform::default()))
+			.id();
+		let joint2 = app
+			.world_mut()
+			.spawn((Name::new("chain-joint-2"), Transform::default(), GlobalTransform::default()))
+			.id();
 
 		// Spawn chain root with joints in Taut mode
 		let root = app
@@ -72,7 +111,7 @@ mod tests {
 					link_count: 3,
 					rest_length_m: 3.0,
 					joint_entities: vec![joint0, joint1, joint2],
-			},
+				},
 				ChainMotion { mode: ChainTensionMode::Taut, active: true },
 				Transform::default(),
 				GlobalTransform::default(),
@@ -114,9 +153,21 @@ mod tests {
 		let epsilon = 0.1;
 
 		// With taut mode, joints should be evenly spaced along Y in world space
-		assert!((j0_world.y - 0.0).abs() < epsilon, "Joint 0 world Y should be near start (0.0), got {}", j0_world.y);
-		assert!((j1_world.y - 1.5).abs() < epsilon, "Joint 1 world Y should be at midpoint (1.5), got {}", j1_world.y);
-		assert!((j2_world.y - 3.0).abs() < epsilon, "Joint 2 world Y should be near end (3.0), got {}", j2_world.y);
+		assert!(
+			(j0_world.y - 0.0).abs() < epsilon,
+			"Joint 0 world Y should be near start (0.0), got {}",
+			j0_world.y
+		);
+		assert!(
+			(j1_world.y - 1.5).abs() < epsilon,
+			"Joint 1 world Y should be at midpoint (1.5), got {}",
+			j1_world.y
+		);
+		assert!(
+			(j2_world.y - 3.0).abs() < epsilon,
+			"Joint 2 world Y should be near end (3.0), got {}",
+			j2_world.y
+		);
 
 		// Move end anchor (update both Transform and GlobalTransform since it has no parent)
 		if let Some(mut transform) = app.world_mut().get_mut::<Transform>(end_anchor) {
@@ -163,7 +214,7 @@ mod tests {
 					link_count: 2,
 					rest_length_m: 2.0,
 					joint_entities: vec![joint0, joint1],
-			},
+				},
 				ChainMotion { mode: ChainTensionMode::Taut, active: false },
 				Transform::default(),
 				Visibility::default(),
@@ -175,11 +226,11 @@ mod tests {
 		// Spawn colliders
 		let config = ChainColliderConfig::default();
 		let colliders = app
-		.world_mut()
-		.run_system_once(move |mut commands: Commands| {
-			spawn_chain_colliders(&mut commands, root, &[joint0, joint1], config)
-		})
-		.unwrap();
+			.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				spawn_chain_colliders(&mut commands, root, &[joint0, joint1], config)
+			})
+			.unwrap();
 
 		app.update();
 
@@ -224,11 +275,11 @@ mod tests {
 
 		let config = ChainColliderConfig::default();
 		let colliders = app
-		.world_mut()
-		.run_system_once(move |mut commands: Commands| {
-			spawn_chain_colliders(&mut commands, root, &joints, config)
-		})
-		.unwrap();
+			.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				spawn_chain_colliders(&mut commands, root, &joints, config)
+			})
+			.unwrap();
 
 		// Verify link IDs
 		for (i, collider) in colliders.iter().enumerate() {
@@ -245,10 +296,16 @@ mod tests {
 		let mut app = test_app();
 
 		let root = app.world_mut().spawn_empty().id();
-		let capsule0 = app.world_mut().spawn(ChainLinkId { link_id: 0, chain_root: root }).id();
-		let capsule1 = app.world_mut().spawn(ChainLinkId { link_id: 1, chain_root: root }).id();
+		let capsule0 = app
+			.world_mut()
+			.spawn((ChainLinkId { link_id: 0, chain_root: root }, ChainSegment))
+			.id();
+		let capsule1 = app
+			.world_mut()
+			.spawn((ChainLinkId { link_id: 1, chain_root: root }, ChainSegment))
+			.id();
 
-		let projectile = Entity::from_bits(999);
+		let projectile = app.world_mut().spawn(HitPayload { amount: 10.0 }).id();
 		let source = Entity::from_bits(100);
 
 		// Same projectile hits two adjacent capsules
@@ -269,15 +326,19 @@ mod tests {
 
 		app.update();
 
-		let contacts: Vec<_> =
-			app.world_mut().resource_mut::<Messages<ProjectileContact>>().drain().collect();
-
-		// Should coalesce to one contact
-		if contacts.len() != 1 {
-			return Err(anyhow!("Expected 1 coalesced contact, got {}", contacts.len()));
+		let hits: Vec<_> = app.world_mut().resource_mut::<Messages<Hit>>().drain().collect();
+		if hits.len() != 1 {
+			return Err(anyhow!("Expected 1 coalesced Hit, got {}", hits.len()));
 		}
 
-		assert_eq!(contacts[0].projectile, projectile);
+		let contacts: Vec<_> =
+			app.world_mut().resource_mut::<Messages<ProjectileContact>>().drain().collect();
+		if contacts.len() != 2 {
+			return Err(anyhow!(
+				"Shared contact queue must stay intact, got {} contacts",
+				contacts.len()
+			));
+		}
 
 		Ok(())
 	}
@@ -287,10 +348,13 @@ mod tests {
 		let mut app = test_app();
 
 		let root = app.world_mut().spawn_empty().id();
-		let capsule = app.world_mut().spawn(ChainLinkId { link_id: 0, chain_root: root }).id();
+		let capsule = app
+			.world_mut()
+			.spawn((ChainLinkId { link_id: 0, chain_root: root }, ChainSegment))
+			.id();
 
-		let projectile_a = Entity::from_bits(999);
-		let projectile_b = Entity::from_bits(1000);
+		let projectile_a = app.world_mut().spawn(HitPayload { amount: 10.0 }).id();
+		let projectile_b = app.world_mut().spawn(HitPayload { amount: 10.0 }).id();
 		let source = Entity::from_bits(100);
 
 		// Two different projectiles from the same source hit the chain
@@ -311,12 +375,9 @@ mod tests {
 
 		app.update();
 
-		let contacts: Vec<_> =
-			app.world_mut().resource_mut::<Messages<ProjectileContact>>().drain().collect();
-
-		// Should keep both contacts (different projectiles, even if same source)
-		if contacts.len() != 2 {
-			return Err(anyhow!("Expected 2 contacts (distinct projectiles), got {}", contacts.len()));
+		let hits: Vec<_> = app.world_mut().resource_mut::<Messages<Hit>>().drain().collect();
+		if hits.len() != 2 {
+			return Err(anyhow!("Expected 2 Hits (distinct projectiles), got {}", hits.len()));
 		}
 
 		Ok(())
@@ -343,15 +404,8 @@ mod tests {
 		let root = app
 			.world_mut()
 			.spawn((
-				ChainRoot {
-					link_count,
-					rest_length_m: length_m,
-					joint_entities: joints.clone(),
-			},
-				ChainMotion {
-					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
-					active: true,
-				},
+				ChainRoot { link_count, rest_length_m: length_m, joint_entities: joints.clone() },
+				ChainMotion { mode: ChainTensionMode::Catenary { sag_ratio: 10 }, active: true },
 				Transform::from_xyz(0.0, 0.0, 0.0),
 				GlobalTransform::default(),
 			))
@@ -453,15 +507,8 @@ mod tests {
 			.world_mut()
 			.spawn((
 				Name::new("test-chain"),
-				ChainRoot {
-					link_count,
-					rest_length_m: length_m,
-					joint_entities: joints.clone(),
-			},
-				ChainMotion {
-					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
-					active: true,
-				},
+				ChainRoot { link_count, rest_length_m: length_m, joint_entities: joints.clone() },
+				ChainMotion { mode: ChainTensionMode::Catenary { sag_ratio: 10 }, active: true },
 				Transform::from_xyz(0.0, 0.0, 0.0),
 				GlobalTransform::default(),
 				Health { current: initial_health, max: initial_health },
@@ -558,8 +605,8 @@ mod tests {
 			}
 		}
 
-		let damage_frame = damage_frame
-			.ok_or_else(|| anyhow!("No damage applied after 60 frames (1 second)"))?;
+		let damage_frame =
+			damage_frame.ok_or_else(|| anyhow!("No damage applied after 60 frames (1 second)"))?;
 
 		info!("Damage applied at frame {damage_frame}");
 
@@ -608,7 +655,7 @@ mod tests {
 		let mut killed = false;
 		for _ in 0..60 {
 			app.update();
-			
+
 			// Check if chain is dead
 			if let Some(health) = app.world().entity(root).get::<Health>() {
 				if health.is_dead() {
@@ -684,15 +731,8 @@ mod tests {
 			.world_mut()
 			.spawn((
 				Name::new("test-chain-multiframe"),
-				ChainRoot {
-					link_count,
-					rest_length_m: length_m,
-					joint_entities: joints.clone(),
-			},
-				ChainMotion {
-					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
-					active: true,
-				},
+				ChainRoot { link_count, rest_length_m: length_m, joint_entities: joints.clone() },
+				ChainMotion { mode: ChainTensionMode::Catenary { sag_ratio: 10 }, active: true },
 				Transform::from_xyz(0.0, 0.0, 0.0),
 				GlobalTransform::default(),
 				Health { current: initial_health, max: initial_health },
@@ -742,13 +782,14 @@ mod tests {
 		let chain_center_x = 0.0; // Midpoint between -1.5 and 1.5
 
 		// Verify colliders are positioned
-		let positioned_colliders = colliders
-			.iter()
-			.filter(|&&e| app.world().get_entity(e).is_ok())
-			.count();
-		
+		let positioned_colliders =
+			colliders.iter().filter(|&&e| app.world().get_entity(e).is_ok()).count();
+
 		if positioned_colliders < 3 {
-			return Err(anyhow!("Expected at least 3 positioned colliders, got {}", positioned_colliders));
+			return Err(anyhow!(
+				"Expected at least 3 positioned colliders, got {}",
+				positioned_colliders
+			));
 		}
 
 		// Spawn a penetrating projectile aimed at the chain center
@@ -784,17 +825,15 @@ mod tests {
 		for frame in 0..15 {
 			app.update();
 
-			let current_health = app.world().entity(root).get::<Health>().map(|h| h.current).unwrap_or(0.0);
+			let current_health =
+				app.world().entity(root).get::<Health>().map(|h| h.current).unwrap_or(0.0);
 			health_history.push(current_health);
 
 			// Check damage records to verify source is set
 			if !damage_source_verified {
-				let damage_records: Vec<_> = app
-					.world_mut()
-					.resource_mut::<Messages<DamageApplied>>()
-					.drain()
-					.collect();
-				
+				let damage_records: Vec<_> =
+					app.world_mut().resource_mut::<Messages<DamageApplied>>().drain().collect();
+
 				for record in &damage_records {
 					if record.target == root {
 						if record.source.is_none() {
@@ -833,7 +872,9 @@ mod tests {
 
 		// Verify we actually checked the source
 		if !damage_source_verified && final_health < initial_health {
-			return Err(anyhow!("Damage was applied but source was never verified in DamageApplied records"));
+			return Err(anyhow!(
+				"Damage was applied but source was never verified in DamageApplied records"
+			));
 		}
 		if final_health >= initial_health {
 			return Err(anyhow!("No damage was applied after 15 frames"));
@@ -866,11 +907,7 @@ mod tests {
 		let root = app
 			.world_mut()
 			.spawn((
-				ChainRoot {
-					link_count: 2,
-					rest_length_m: 2.0,
-					joint_entities: Vec::new(),
-			},
+				ChainRoot { link_count: 2, rest_length_m: 2.0, joint_entities: Vec::new() },
 				ChainMotion { mode: ChainTensionMode::Taut, active: true },
 			))
 			.id();
@@ -935,15 +972,8 @@ mod tests {
 			.world_mut()
 			.spawn((
 				Name::new("test-chain-release"),
-				ChainRoot {
-					link_count,
-					rest_length_m: length_m,
-					joint_entities: joints.clone(),
-			},
-				ChainMotion {
-					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
-					active: true,
-				},
+				ChainRoot { link_count, rest_length_m: length_m, joint_entities: joints.clone() },
+				ChainMotion { mode: ChainTensionMode::Catenary { sag_ratio: 10 }, active: true },
 				Transform::from_xyz(0.0, 0.0, 0.0),
 				GlobalTransform::default(),
 				Health { current: initial_health, max: initial_health },
@@ -986,7 +1016,8 @@ mod tests {
 		app.update();
 
 		// Verify colliders exist
-		let collider_count = colliders.iter().filter(|&&e| app.world().get_entity(e).is_ok()).count();
+		let collider_count =
+			colliders.iter().filter(|&&e| app.world().get_entity(e).is_ok()).count();
 		if collider_count != link_count as usize {
 			return Err(anyhow!("Expected {} colliders, found {}", link_count, collider_count));
 		}
@@ -998,7 +1029,8 @@ mod tests {
 		app.update();
 
 		// Verify colliders are despawned
-		let remaining_colliders = colliders.iter().filter(|&&e| app.world().get_entity(e).is_ok()).count();
+		let remaining_colliders =
+			colliders.iter().filter(|&&e| app.world().get_entity(e).is_ok()).count();
 		if remaining_colliders > 0 {
 			return Err(anyhow!(
 				"Released chain should retire colliders, but {} remain",
@@ -1067,20 +1099,14 @@ mod tests {
 
 		// Spawn chain root with BOTH translation AND rotation (non-identity transform)
 		let root_translation = Vec3::new(1744.55, -351.17, 1031.9);
-		let root_rotation = Quat::from_rotation_y(std::f32::consts::PI / 6.0) * Quat::from_rotation_x(std::f32::consts::PI / 12.0);
+		let root_rotation = Quat::from_rotation_y(std::f32::consts::PI / 6.0)
+			* Quat::from_rotation_x(std::f32::consts::PI / 12.0);
 		let root = app
 			.world_mut()
 			.spawn((
 				Name::new("test-chain-translated-rotated-root"),
-				ChainRoot {
-					link_count,
-					rest_length_m: length_m,
-					joint_entities: joints.clone(),
-			},
-				ChainMotion {
-					mode: ChainTensionMode::Taut,
-					active: true,
-				},
+				ChainRoot { link_count, rest_length_m: length_m, joint_entities: joints.clone() },
+				ChainMotion { mode: ChainTensionMode::Taut, active: true },
 				Transform::from_translation(root_translation).with_rotation(root_rotation),
 				GlobalTransform::default(),
 				Visibility::default(),
@@ -1115,8 +1141,13 @@ mod tests {
 		}
 
 		// Critical check: joint WORLD positions (via GlobalTransform) must match anchor world positions
-		let first_joint_world = app.world().get::<GlobalTransform>(joints[0]).unwrap().translation();
-		let last_joint_world = app.world().get::<GlobalTransform>(joints[link_count as usize - 1]).unwrap().translation();
+		let first_joint_world =
+			app.world().get::<GlobalTransform>(joints[0]).unwrap().translation();
+		let last_joint_world = app
+			.world()
+			.get::<GlobalTransform>(joints[link_count as usize - 1])
+			.unwrap()
+			.translation();
 
 		let epsilon = 0.01; // 1cm tolerance
 
@@ -1180,15 +1211,8 @@ mod tests {
 			.world_mut()
 			.spawn((
 				Name::new("test-chain-transformed-anchors"),
-				ChainRoot {
-					link_count,
-					rest_length_m: length_m,
-					joint_entities: joints.clone(),
-			},
-				ChainMotion {
-					mode: ChainTensionMode::Taut,
-					active: true,
-				},
+				ChainRoot { link_count, rest_length_m: length_m, joint_entities: joints.clone() },
+				ChainMotion { mode: ChainTensionMode::Taut, active: true },
 				Transform::from_xyz(0.0, 0.0, 0.0),
 				Visibility::default(),
 			))
@@ -1214,7 +1238,9 @@ mod tests {
 			Name::new("rotated-end-anchor"),
 			ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
 			Transform::from_translation(end_translation).with_rotation(end_rotation),
-			GlobalTransform::from(Transform::from_translation(end_translation).with_rotation(end_rotation)),
+			GlobalTransform::from(
+				Transform::from_translation(end_translation).with_rotation(end_rotation),
+			),
 		));
 
 		// Run several updates to let transforms propagate and motion system work
@@ -1224,7 +1250,11 @@ mod tests {
 
 		// Verify joints moved to anchor positions
 		let first_joint_pos = app.world().get::<Transform>(joints[0]).unwrap().translation;
-		let last_joint_pos = app.world().get::<Transform>(joints[link_count as usize - 1]).unwrap().translation;
+		let last_joint_pos = app
+			.world()
+			.get::<Transform>(joints[link_count as usize - 1])
+			.unwrap()
+			.translation;
 
 		// First joint should be at start anchor
 		let start_dist = (first_joint_pos - start_translation).length();
@@ -1287,15 +1317,8 @@ mod tests {
 			.world_mut()
 			.spawn((
 				Name::new("test-chain-catenary-transformed"),
-				ChainRoot {
-					link_count,
-					rest_length_m: length_m,
-					joint_entities: joints.clone(),
-			},
-				ChainMotion {
-					mode: ChainTensionMode::Catenary { sag_ratio: 8 },
-					active: true,
-				},
+				ChainRoot { link_count, rest_length_m: length_m, joint_entities: joints.clone() },
+				ChainMotion { mode: ChainTensionMode::Catenary { sag_ratio: 8 }, active: true },
 				Transform::from_xyz(0.0, 0.0, 0.0),
 				Visibility::default(),
 			))
@@ -1342,7 +1365,11 @@ mod tests {
 
 		// Verify endpoints are at anchors
 		let first_pos = app.world().get::<Transform>(joints[0]).unwrap().translation;
-		let last_pos = app.world().get::<Transform>(joints[link_count as usize - 1]).unwrap().translation;
+		let last_pos = app
+			.world()
+			.get::<Transform>(joints[link_count as usize - 1])
+			.unwrap()
+			.translation;
 
 		if (first_pos - left_pos).length() > 0.1 {
 			return Err(anyhow!("Start joint should be at left anchor"));
@@ -1370,15 +1397,8 @@ mod tests {
 		let root = app
 			.world_mut()
 			.spawn((
-				ChainRoot {
-					link_count: 5,
-					rest_length_m: 4.0,
-					joint_entities: joints.clone(),
-			},
-				ChainMotion {
-					mode: ChainTensionMode::Catenary { sag_ratio: 10 },
-					active: true,
-				},
+				ChainRoot { link_count: 5, rest_length_m: 4.0, joint_entities: joints.clone() },
+				ChainMotion { mode: ChainTensionMode::Catenary { sag_ratio: 10 }, active: true },
 				Transform::default(),
 				Visibility::default(),
 			))
@@ -1424,11 +1444,7 @@ mod tests {
 		let root = app
 			.world_mut()
 			.spawn((
-				ChainRoot {
-					link_count: 3,
-					rest_length_m: 3.0,
-					joint_entities: joints.clone(),
-			},
+				ChainRoot { link_count: 3, rest_length_m: 3.0, joint_entities: joints.clone() },
 				ChainMotion::default(),
 				Transform::default(),
 				Visibility::default(),
@@ -1456,14 +1472,16 @@ mod tests {
 		for joint in joints {
 			let j_pos = app.world().get::<Transform>(joint).unwrap().translation;
 			if (j_pos - pos).length() > 1e-4 {
-				return Err(anyhow!("Joint should collapse to anchor position when distance is zero"));
+				return Err(anyhow!(
+					"Joint should collapse to anchor position when distance is zero"
+				));
 			}
 		}
 
 		Ok(())
 	}
 
-	/// Regression test for #1619 comment 6985904990: non-chain projectile contacts
+	/// Regression test for #1619 comment 6986265628: non-chain projectile contacts
 	/// must not be re-emitted with fresh message IDs every frame.
 	///
 	/// Before the fix, ordinary projectile hits were drained and rewritten every update,
@@ -1472,6 +1490,7 @@ mod tests {
 	#[test]
 	fn non_chain_projectile_contact_applies_once() -> Result<()> {
 		let mut app = test_app();
+		install_persistent_collectors(&mut app);
 
 		// Boss entity with Health (not a chain capsule)
 		let boss = app
@@ -1490,7 +1509,7 @@ mod tests {
 			.spawn((
 				Name::new("projectile"),
 				projectiles::Flight::spawn(Vec3::ZERO, 100.0, 100.0, 10.0),
-				damage::HitPayload { amount: 25.0 },
+				HitPayload { amount: 25.0 },
 			))
 			.id();
 
@@ -1503,43 +1522,43 @@ mod tests {
 			normal: Vec3::Y,
 		});
 
-		// Run 10+ updates and collect all DamageApplied messages
-		let mut total_damage_applied = 0;
-		let mut damage_events = Vec::new();
-
-		for frame in 0..15 {
+		for _ in 0..15 {
 			app.update();
-
-			// Drain DamageApplied messages this frame
-			let applied: Vec<DamageApplied> = app
-				.world_mut()
-				.run_system_once(|mut messages: bevy::ecs::message::MessageReader<DamageApplied>| -> Vec<DamageApplied> {
-					messages.read().cloned().collect()
-				})
-				.map_err(|e| anyhow!("Failed to read DamageApplied: {:?}", e))?;
-
-			for event in &applied {
-				if event.target == boss {
-					total_damage_applied += 1;
-					damage_events.push((frame, event.clone()));
-				}
-			}
 		}
 
-		// Assert exactly ONE damage apply (1000 → 975 HP)
-		if total_damage_applied != 1 {
-			eprintln!("FAIL: Expected 1 damage apply, got {}", total_damage_applied);
-			eprintln!("Damage events:");
-			for (frame, event) in damage_events {
-				eprintln!("  Frame {}: {:?}", frame, event);
-			}
+		let ids_before_despawn = app.world().resource::<CollectedContactIds>().ids.len();
+		app.world_mut().entity_mut(projectile).despawn();
+		for _ in 0..5 {
+			app.update();
+		}
+
+		let applies: Vec<_> = app
+			.world()
+			.resource::<CollectedDamage>()
+			.events
+			.iter()
+			.copied()
+			.filter(|event| event.target == boss)
+			.collect();
+		if applies.len() != 1 {
 			return Err(anyhow!(
-				"Non-chain projectile contact was applied {} times instead of once",
-				total_damage_applied
+				"Non-chain projectile contact was applied {} times instead of once: {applies:?}",
+				applies.len()
 			));
 		}
 
-		// Verify final health
+		let ids_after_despawn = app.world().resource::<CollectedContactIds>().ids.len();
+		if ids_after_despawn != ids_before_despawn {
+			return Err(anyhow!(
+				"Ordinary shot emitted fresh contact IDs after later updates (before despawn {ids_before_despawn}, after {ids_after_despawn})"
+			));
+		}
+		if ids_before_despawn != 1 {
+			return Err(anyhow!(
+				"Ordinary shot should keep a single contact ID, got {ids_before_despawn}"
+			));
+		}
+
 		let health = app.world().get::<Health>(boss).unwrap();
 		let expected = 1000.0 - 25.0;
 		if (health.current - expected).abs() > 0.1 {
@@ -1558,6 +1577,7 @@ mod tests {
 	#[test]
 	fn chain_projectile_crosses_multiple_capsules_coalesces() -> Result<()> {
 		let mut app = test_app();
+		install_persistent_collectors(&mut app);
 
 		// Chain root with Health
 		let chain_root = app
@@ -1576,6 +1596,7 @@ mod tests {
 			.spawn((
 				Name::new("capsule-a"),
 				ChainLinkId { link_id: 0, chain_root },
+				ChainSegment,
 				ChildOf(chain_root),
 				Transform::default(),
 				GlobalTransform::default(),
@@ -1587,6 +1608,7 @@ mod tests {
 			.spawn((
 				Name::new("capsule-b"),
 				ChainLinkId { link_id: 1, chain_root },
+				ChainSegment,
 				ChildOf(chain_root),
 				Transform::default(),
 				GlobalTransform::default(),
@@ -1599,7 +1621,7 @@ mod tests {
 			.spawn((
 				Name::new("projectile"),
 				projectiles::Flight::spawn(Vec3::ZERO, 100.0, 100.0, 10.0),
-				damage::HitPayload { amount: 10.0 },
+				HitPayload { amount: 10.0 },
 			))
 			.id();
 
@@ -1619,42 +1641,25 @@ mod tests {
 			normal: Vec3::Y,
 		});
 
-		// Run several updates and count damage applies
-		let mut total_damage_applied = 0;
-		let mut damage_events = Vec::new();
-
-		for frame in 0..10 {
+		for _ in 0..10 {
 			app.update();
-
-			let applied: Vec<DamageApplied> = app
-				.world_mut()
-				.run_system_once(|mut messages: bevy::ecs::message::MessageReader<DamageApplied>| -> Vec<DamageApplied> {
-					messages.read().cloned().collect()
-				})
-				.map_err(|e| anyhow!("Failed to read DamageApplied: {:?}", e))?;
-
-			for event in &applied {
-				if event.target == chain_root {
-					total_damage_applied += 1;
-					damage_events.push((frame, event.clone()));
-				}
-			}
 		}
 
-		// Assert exactly ONE coalesced damage apply (not one per capsule)
-		if total_damage_applied != 1 {
-			eprintln!("FAIL: Expected 1 coalesced damage apply, got {}", total_damage_applied);
-			eprintln!("Damage events:");
-			for (frame, event) in damage_events {
-				eprintln!("  Frame {}: {:?}", frame, event);
-			}
+		let applies: Vec<_> = app
+			.world()
+			.resource::<CollectedDamage>()
+			.events
+			.iter()
+			.copied()
+			.filter(|event| event.target == chain_root)
+			.collect();
+		if applies.len() != 1 {
 			return Err(anyhow!(
-				"Chain contacts should coalesce to 1 damage apply, got {}",
-				total_damage_applied
+				"Chain contacts should coalesce to 1 damage apply, got {}: {applies:?}",
+				applies.len()
 			));
 		}
 
-		// Verify final health (100 - 10 = 90)
 		let health = app.world().get::<Health>(chain_root).unwrap();
 		let expected = 100.0 - 10.0;
 		if (health.current - expected).abs() > 0.1 {

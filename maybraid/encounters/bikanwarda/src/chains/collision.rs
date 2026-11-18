@@ -69,6 +69,8 @@ pub fn spawn_chain_colliders(
 				PhysicsInteractionLayer::fixed_layers(),
 				// Stable link identity for damage routing
 				ChainLinkId { link_id: link_id as u8, chain_root },
+				// Generic marker so contacts_to_hits leaves this for the coalescer
+				damage::ChainSegment,
 				// Parent to the root, not individual joints, for simpler cleanup
 				ChildOf(chain_root),
 			))
@@ -121,7 +123,10 @@ pub fn retire_chain_colliders(commands: &mut Commands, colliders: Vec<Entity>) {
 /// Runs in PostUpdate to despawn colliders for any chain marked with `ReleasedChain`.
 pub fn retire_released_chain_colliders(
 	mut commands: Commands,
-	released_chains: Query<Entity, (With<super::motion::ChainRoot>, With<super::motion::ReleasedChain>)>,
+	released_chains: Query<
+		Entity,
+		(With<super::motion::ChainRoot>, With<super::motion::ReleasedChain>),
+	>,
 	colliders: Query<(Entity, &ChainLinkId)>,
 ) {
 	for chain_root in &released_chains {
@@ -154,11 +159,10 @@ mod tests {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins);
 
-		let root = app.world_mut().spawn((ChainRoot {
-			link_count: 3,
-			rest_length_m: 2.0,
-			joint_entities: Vec::new(),
-		},)).id();
+		let root = app
+			.world_mut()
+			.spawn((ChainRoot { link_count: 3, rest_length_m: 2.0, joint_entities: Vec::new() },))
+			.id();
 		let joints = vec![
 			app.world_mut().spawn(Transform::default()).id(),
 			app.world_mut().spawn(Transform::default()).id(),
@@ -175,11 +179,15 @@ mod tests {
 
 		assert_eq!(colliders.len(), 3);
 
-		// Verify each collider has correct link id
+		// Verify each collider has correct link id and the generic chain marker
 		for (i, entity) in colliders.iter().enumerate() {
 			let link_id = app.world().get::<ChainLinkId>(*entity).unwrap();
 			assert_eq!(link_id.link_id, i as u8);
 			assert_eq!(link_id.chain_root, root);
+			assert!(
+				app.world().get::<damage::ChainSegment>(*entity).is_some(),
+				"chain capsules must carry ChainSegment so contacts_to_hits skips them"
+			);
 		}
 	}
 

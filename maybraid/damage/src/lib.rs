@@ -151,6 +151,14 @@ pub struct HitPayload {
 	pub amount: f32,
 }
 
+/// Marker on chain-capsule colliders.
+///
+/// [`contacts_to_hits`] skips these targets so a region coalescer can emit
+/// exactly one [`Hit`] per interaction through the generic apply path. This
+/// crate does not know about region chain types.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct ChainSegment;
+
 impl Default for HitPayload {
 	fn default() -> Self {
 		Self { amount: DEFAULT_HIT }

@@ -8,8 +8,12 @@ use damage::{contacts_to_hits, DamageSystems};
 use encounters::EncounterSignal;
 
 use super::collision::{retire_released_chain_colliders, sync_chain_colliders};
-use super::damage::{detect_and_signal_broken_chains, update_chain_durability_fraction, ChainBrokenHistory};
-use super::damage_coalesce::{cleanup_despawned_projectiles, coalesce_chain_contacts, ChainDamageHistory};
+use super::damage::{
+	detect_and_signal_broken_chains, update_chain_durability_fraction, ChainBrokenHistory,
+};
+use super::damage_coalesce::{
+	cleanup_despawned_projectiles, coalesce_chain_contacts, ChainDamageHistory,
+};
 use super::motion::{deactivate_released_chains, update_chain_joints};
 
 /// Plugin that registers chain motion, collision, and damage systems.
@@ -17,7 +21,7 @@ use super::motion::{deactivate_released_chains, update_chain_joints};
 /// Systems run in PostUpdate:
 /// - Motion systems update joint positions based on anchor transforms.
 /// - Collision sync follows motion to update capsule positions.
-/// - Contact coalescing runs in DamageSystems::Collect (before apply_hits).
+/// - Contact coalescing reads ProjectileContact and emits Hit in DamageSystems::Collect.
 /// - Break detection runs after DamageSystems::Apply to check Health and emit ChainBroken signals.
 pub struct BikanwardaChainPhysicsPlugin;
 
@@ -48,26 +52,24 @@ impl Plugin for BikanwardaChainPhysicsPlugin {
 				)
 					.after(TransformSystems::Propagate),
 			)
-		.add_systems(
-			PostUpdate,
-			// Contact deduplication runs in Collect, explicitly BEFORE contacts_to_hits
-			coalesce_chain_contacts
-				.in_set(DamageSystems::Collect)
-				.before(contacts_to_hits),
-		)
-		.add_systems(
-			PostUpdate,
-			(
-				// Update durability fraction for material systems
-				update_chain_durability_fraction,
-				// Break detection runs after damage is applied
-				detect_and_signal_broken_chains,
+			.add_systems(
+				PostUpdate,
+				// Contact deduplication runs in Collect, explicitly BEFORE contacts_to_hits
+				coalesce_chain_contacts.in_set(DamageSystems::Collect).before(contacts_to_hits),
 			)
-				.after(DamageSystems::Apply),
-		);
+			.add_systems(
+				PostUpdate,
+				(
+					// Update durability fraction for material systems
+					update_chain_durability_fraction,
+					// Break detection runs after damage is applied
+					detect_and_signal_broken_chains,
+				)
+					.after(DamageSystems::Apply),
+			);
 
 		// System ordering:
-		//   DamageSystems::Collect: coalesce_chain_contacts → contacts_to_hits
+		//   DamageSystems::Collect: coalesce_chain_contacts (Hit) → contacts_to_hits (skips ChainSegment)
 		//   DamageSystems::Apply: apply_hits (routes hits from ChildOf link colliders to chain roots)
 		//   After DamageSystems::Apply: detect_and_signal_broken_chains (checks Health)
 	}
