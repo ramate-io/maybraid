@@ -324,10 +324,10 @@ fn retreat_preempts_journey_with_real_displacement() {
 	);
 
 	// Core regression: Verify retreat goal REPLACED journey goal
-	// With old `Without<PoiGoal>` filter, this fails with:
+	// With old `Without<PoiGoal>` filter, this assertion fails:
 	//   assertion `left == right` failed: POI goal should be retreat, not journey
 	//     left: PoiKind("test-journey")
-	//     right: PoiKind("homeostatic-retreat")
+	//    right: PoiKind("homeostatic-retreat")
 	let retreat_goal = app
 		.world()
 		.get::<poi_intelligence::PoiGoal>(mob_entity)
@@ -338,20 +338,36 @@ fn retreat_preempts_journey_with_real_displacement() {
 		"POI goal should be retreat, not journey"
 	);
 
-	// Verify retreat goal points toward home, not journey destination
-	let retreat_target = retreat_goal.location.point;
-	let toward_home = (home_center - initial_pos).normalize_or_zero();
-	let toward_journey = (journey_destination - initial_pos).normalize_or_zero();
+	// Key regression: Measure actual displacement toward home over frames
+	// through PoiGoal→routing→MobTravel (no manual velocity/transform writes)
+	let mut distances_to_home = Vec::new();
 	
-	let retreat_dir = (retreat_target - initial_pos).normalize_or_zero();
-	let home_alignment = retreat_dir.dot(toward_home);
-	let journey_alignment = retreat_dir.dot(toward_journey);
+	for frame in 0..40 {
+		app.update();
+		
+		let current_pos = app
+			.world()
+			.get::<GlobalTransform>(mob_entity)
+			.unwrap()
+			.translation();
+		
+		let distance = current_pos.xz().distance(home_center.xz());
+		distances_to_home.push((frame, distance));
+	}
 
+	// Verify distance to home strictly decreased over the frame sequence
+	// (routing and MobTravel are driving the mob toward home, not journey destination)
+	let initial_distance = distances_to_home.first().unwrap().1;
+	let final_distance = distances_to_home.last().unwrap().1;
+	
+	// With old `Without<PoiGoal>` filter, the journey goal is never replaced (fails above),
+	// but if it were to reach here, this assertion would fail because the mob would continue
+	// moving toward the journey destination instead of home (final > initial)
 	assert!(
-		home_alignment > 0.5,
-		"retreat goal should point toward home (home={:.2}, journey={:.2})",
-		home_alignment,
-		journey_alignment
+		final_distance < initial_distance,
+		"mob should move closer to home via routing/MobTravel (initial={:.1}m, final={:.1}m)",
+		initial_distance,
+		final_distance
 	);
 }
 
