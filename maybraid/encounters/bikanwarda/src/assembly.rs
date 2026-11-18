@@ -186,13 +186,13 @@ mod tests {
 				commands.entity(boss_entity).insert(
 					SpottingUser::new(eye_offset, [SpotDirective::new(InterestLayers::CHARACTER, spotting_range)])
 				);
-				// Use unscaled capsule for anchors (actor is already scaled)
-				let recipe = bikanwarda_character::BikanwardaActorRecipe::from_spec(request.spec.clone());
-				let capsule = recipe.locomotion_capsule(); // Unscaled
-				let anchors = BikanwardaAnchors::for_capsule(capsule);
-				let mouth_transform = anchors.get(bikanwarda_character::anchors::names::MOUTH_EMIT)
-					.copied()
-					.unwrap_or(Transform::from_translation(Vec3::Y * 1.5));
+			// Use scaled capsule for anchors (root has unit-scale transform)
+			let recipe = bikanwarda_character::BikanwardaActorRecipe::from_spec(request.spec.clone());
+			let scaled_capsule = recipe.components().scaled_locomotion_capsule();
+			let anchors = BikanwardaAnchors::for_capsule(scaled_capsule);
+			let mouth_transform = anchors.get(bikanwarda_character::anchors::names::MOUTH_EMIT)
+				.copied()
+				.unwrap_or(Transform::from_translation(Vec3::Y * 1.5));
 				commands.spawn((
 					Name::new("bikanwarda_mouth_socket"),
 					BikanwardaMouthSocket,
