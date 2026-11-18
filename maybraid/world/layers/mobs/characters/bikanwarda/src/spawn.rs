@@ -55,18 +55,28 @@ fn spawn_bikanwarda<M: Component>(
 	let recipe = BikanwardaActorRecipe::from_spec(spec.clone());
 	let actor = recipe.components();
 	let scale = spec.uniform_scale();
-	let visual_transform = transform.with_scale(Vec3::splat(scale));
-	let visual = spawn_fixed_character_assembly(commands, &actor, visual_transform);
-	commands.entity(visual).insert((
+	
+	// Root body: unit-scale transform, scaled physics collider
+	let root = commands.spawn((
 		Name::new("bikanwarda"),
 		BikanwardaRoot,
 		marker,
 		spec.clone(),
-	));
+		transform, // Unit scale, correct world position
+		GlobalTransform::default(),
+		Visibility::default(),
+	)).id();
+	
 	let scaled_capsule = actor.scaled_locomotion_capsule();
-	spawn_physics(commands, visual, scaled_capsule);
-	spawn_chain_anchors(commands, visual, scaled_capsule);
-	visual
+	spawn_physics(commands, root, scaled_capsule);
+	spawn_chain_anchors(commands, root, scaled_capsule);
+	
+	// Visual child: scaled transform, no physics
+	let visual_transform = Transform::from_scale(Vec3::splat(scale));
+	let visual = spawn_fixed_character_assembly(commands, &actor, visual_transform);
+	commands.entity(visual).insert(ChildOf(root));
+	
+	root
 }
 
 fn spawn_physics(commands: &mut Commands, root: Entity, capsule: characters::LocomotionCapsule) {
