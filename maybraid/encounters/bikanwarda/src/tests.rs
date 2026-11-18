@@ -1701,7 +1701,6 @@ mod integration_regressions {
 				}
 			}
 			
-			// Check attack instance state and player components
 			if bray_started && frame % 20 == 0 {
 				let attack_count = app.world_mut()
 					.query::<&attacks::AttackInstance>()
@@ -1722,19 +1721,6 @@ mod integration_regressions {
 					eprintln!("Frame {}: No Bray instance found", frame);
 				}
 				
-				// Check player components
-				if let Ok(player_entity) = app.world().get_entity(player) {
-					let has_health = player_entity.contains::<Health>();
-					let has_collider = player_entity.contains::<avian3d::prelude::Collider>();
-					let has_global_transform = player_entity.contains::<GlobalTransform>();
-					let health_val = player_entity.get::<Health>().map(|h| h.current).unwrap_or(0.0);
-					let pos = player_entity.get::<GlobalTransform>().map(|gt| gt.translation()).unwrap_or(Vec3::ZERO);
-					
-					eprintln!("Frame {}: Player has Health={} ({:.1}HP), Collider={}, GlobalTransform={} at {:?}", 
-						frame, has_health, health_val, has_collider, has_global_transform, pos);
-				} else {
-					eprintln!("Frame {}: Player entity does not exist!", frame);
-				}
 			}
 			
 			// Check for Hit messages (damage system input)

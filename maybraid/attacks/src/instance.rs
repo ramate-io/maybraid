@@ -234,7 +234,15 @@ impl AttackInstance {
 
 	fn wave_spawn(&mut self, spec_index: usize, origin: HazardOrigin, wave: WavefrontSpec, wave_index: u8) -> (Vec3, Vec3) {
 		*self.wave_emissions.entry((spec_index, wave_index)).or_insert_with(|| {
-			(origin.resolve(self.snapshot), wave.heading(self.snapshot))
+			let emission = origin.resolve(self.snapshot);
+			let heading = if matches!(origin, HazardOrigin::Emission) {
+				// For emission origins (mouth sockets), use full 3D direction to aim point
+				wave.heading_from_emission(emission, self.snapshot)
+			} else {
+				// For other origins, use the flattened heading with pitch
+				wave.heading(self.snapshot)
+			};
+			(emission, heading)
 		})
 	}
 

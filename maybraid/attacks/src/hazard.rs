@@ -96,6 +96,18 @@ impl WavefrontSpec {
 	pub fn heading(self, snapshot: crate::AimSnapshot) -> Vec3 {
 		snapshot.travel_direction(self.pitch)
 	}
+	
+	/// Calculate heading for emission-origin wavefronts that need to angle toward the aim point.
+	/// Uses the full 3D direction from emission to aim_point, not the flattened horizontal.
+	pub fn heading_from_emission(self, emission: Vec3, snapshot: crate::AimSnapshot) -> Vec3 {
+		let to_target = snapshot.aim_point - emission;
+		if to_target.length_squared() <= 1e-8 {
+			// Fallback to flattened direction if emission == aim_point
+			return snapshot.travel_direction(self.pitch);
+		}
+		// Use full 3D direction, no flattening
+		to_target.normalize()
+	}
 
 	pub fn emit_age(self, wave_index: u8) -> f32 {
 		self.interval.max(0.0) * f32::from(wave_index)
