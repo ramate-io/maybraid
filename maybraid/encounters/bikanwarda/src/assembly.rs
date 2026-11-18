@@ -33,11 +33,12 @@ pub fn spawn_boss_assemblies(
 			SpottingUser::new(eye_offset, [SpotDirective::new(InterestLayers::CHARACTER, spotting_range)])
 		);
 		
-		// Spawn the mouth socket for Bray emission in unscaled actor-local coordinates
-		// (actor is already scaled, so anchors must be unscaled to avoid double-scaling)
+		// Spawn the mouth socket for Bray emission.
+		// Actor root is unit-scale with scaled visual child, so socket needs scaled offsets.
 		let recipe = bikanwarda_character::BikanwardaActorRecipe::from_spec(request.spec.clone());
-		let capsule = recipe.locomotion_capsule(); // Unscaled
-		let anchors = BikanwardaAnchors::for_capsule(capsule);
+		let actor = recipe.components();
+		let scaled_capsule = actor.scaled_locomotion_capsule();
+		let anchors = BikanwardaAnchors::for_capsule(scaled_capsule);
 		let mouth_transform = anchors.get(bikanwarda_character::anchors::names::MOUTH_EMIT)
 			.copied()
 			.unwrap_or(Transform::from_translation(Vec3::Y * 1.5));
@@ -186,10 +187,11 @@ mod tests {
 				commands.entity(boss_entity).insert(
 					SpottingUser::new(eye_offset, [SpotDirective::new(InterestLayers::CHARACTER, spotting_range)])
 				);
-				// Use unscaled capsule for anchors (actor is already scaled)
+				// Actor root is unit-scale with scaled visual child, so socket needs scaled offsets
 				let recipe = bikanwarda_character::BikanwardaActorRecipe::from_spec(request.spec.clone());
-				let capsule = recipe.locomotion_capsule(); // Unscaled
-				let anchors = BikanwardaAnchors::for_capsule(capsule);
+				let actor = recipe.components();
+				let scaled_capsule = actor.scaled_locomotion_capsule();
+				let anchors = BikanwardaAnchors::for_capsule(scaled_capsule);
 				let mouth_transform = anchors.get(bikanwarda_character::anchors::names::MOUTH_EMIT)
 					.copied()
 					.unwrap_or(Transform::from_translation(Vec3::Y * 1.5));
@@ -222,16 +224,16 @@ mod tests {
 		
 		// Verify: socket world-space position matches expected mouth location
 		// Default encounter spec has uniform_scale of ~10.5x, capsule height ~1.9m
-		// Mouth anchor is at top of capsule (~Y=0.95 unscaled, ~Y=10.0 scaled in world space)
+		// Root is unit-scale, so socket local coords are scaled to match the scaled visual
 		let spec = BikanwardaSpec::encounter();
-		let scale = spec.uniform_scale();
 		let recipe = bikanwarda_character::BikanwardaActorRecipe::from_spec(spec);
-		let capsule = recipe.locomotion_capsule(); // Unscaled
-		let anchors = BikanwardaAnchors::for_capsule(capsule);
+		let actor = recipe.components();
+		let scaled_capsule = actor.scaled_locomotion_capsule();
+		let anchors = BikanwardaAnchors::for_capsule(scaled_capsule);
 		let expected_local = anchors.get(bikanwarda_character::anchors::names::MOUTH_EMIT)
 			.map(|t| t.translation)
 			.unwrap_or(Vec3::Y * 1.5);
-		let expected_world_y = expected_local.y * scale;
+		let expected_world_y = expected_local.y; // Root is unit-scale, so local=world here
 		
 		// Get socket's world-space transform
 		let socket_local = world
@@ -246,15 +248,14 @@ mod tests {
 			})
 			.expect("Socket should have a Transform");
 		
-		// Verify local position is in unscaled coordinates
+		// Verify local position is in scaled coordinates (root is unit-scale)
 		let tolerance = 0.1;
 		assert!(
 			(socket_local.y - expected_local.y).abs() < tolerance,
-			"Mouth socket local Y {} should match unscaled anchor Y {} (within {}), not double-scaled ~{}",
+			"Mouth socket local Y {} should match scaled anchor Y {} (within {})",
 			socket_local.y,
 			expected_local.y,
-			tolerance,
-			expected_local.y * scale
+			tolerance
 		);
 		
 		// Verify world-space GlobalTransform after propagation
@@ -271,13 +272,12 @@ mod tests {
 		let socket_global = world.get::<GlobalTransform>(socket_entity)
 			.expect("Socket should have GlobalTransform after propagation");
 		
-		// Since host is at origin with identity transform, world Y should equal scaled anchor Y
-		let expected_world_y = expected_local.y * scale;
+		// Since host is at origin and root is unit-scale, world Y should equal local Y
 		assert!(
-			(socket_global.translation().y - expected_world_y).abs() < tolerance,
-			"Mouth socket world Y {:.6} should be ~{:.6} (scaled anchor), within {:.2}m tolerance",
+			(socket_global.translation().y - expected_local.y).abs() < tolerance,
+			"Mouth socket world Y {:.6} should be ~{:.6} (scaled anchor local position), within {:.2}m tolerance",
 			socket_global.translation().y,
-			expected_world_y,
+			expected_local.y,
 			tolerance,
 		);
 	}
