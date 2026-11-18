@@ -31,8 +31,13 @@ fn boss_can_spot_player_without_self_occlusion() -> Result<()> {
 	
 	// Spawn boss at origin with production collider
 	let spec = BikanwardaSpec::encounter();
-	let mut commands = app.world_mut().commands();
-	let boss_entity = spawn_bikanwarda_encounter(&mut commands, &spec, Transform::IDENTITY);
+	let boss_entity = {
+		let mut commands = app.world_mut().commands();
+		spawn_bikanwarda_encounter(&mut commands, &spec, Transform::IDENTITY)
+	};
+	
+	// Flush commands to spawn entities
+	app.update();
 	
 	// Add spotting to boss
 	let eye_offset = Vec3::Y * 15.0;

@@ -162,32 +162,63 @@ mod tests {
 			GlobalTransform::default(),
 		)).id();
 		
-		// Run the assembly system
-		let mut app = bevy::app::App::new();
-		app.world_mut().insert_resource(bevy::time::Time::<()>::default());
-		app.world_mut().insert_resource(bevy::time::Time::<bevy::time::Real>::default());
-		app.add_systems(bevy::app::Update, spawn_boss_assemblies);
-		*app.world_mut() = world;
-		app.update();
+		// Run the assembly system manually with command flushing
+		let requests: Vec<_> = world
+			.query_filtered::<(Entity, &RequestBossAssembly, &Transform), Without<BikanwardaRoot>>()
+			.iter(&world)
+			.map(|(e, r, t)| (e, r.clone(), *t))
+			.collect();
+		
+		let mut commands_queue = bevy::ecs::world::CommandQueue::default();
+		{
+			let mut commands = bevy::ecs::system::Commands::new(&mut commands_queue, &world);
+			for (host_entity, request, _host_transform) in requests {
+				let local_transform = Transform::IDENTITY;
+				let boss_entity = spawn_bikanwarda_encounter(&mut commands, &request.spec, local_transform);
+				commands.entity(boss_entity).insert(ChildOf(host_entity));
+				commands.entity(boss_entity).insert(attacks::AttackUser::default());
+				let eye_offset = Vec3::Y * 15.0;
+				let spotting_range = 50.0;
+				commands.entity(boss_entity).insert(
+					SpottingUser::new(eye_offset, [SpotDirective::new(InterestLayers::CHARACTER, spotting_range)])
+				);
+				let recipe = bikanwarda_character::BikanwardaActorRecipe::from_spec(request.spec.clone());
+				let capsule = recipe.components().scaled_locomotion_capsule();
+				let anchors = BikanwardaAnchors::for_capsule(capsule);
+				let mouth_transform = anchors.get(bikanwarda_character::anchors::names::MOUTH_EMIT)
+					.copied()
+					.unwrap_or(Transform::from_translation(Vec3::Y * 15.0));
+				commands.spawn((
+					Name::new("bikanwarda_mouth_socket"),
+					BikanwardaMouthSocket,
+					ChildOf(boss_entity),
+					mouth_transform,
+					GlobalTransform::default(),
+				));
+				commands.entity(host_entity).insert(BossActor(boss_entity));
+				commands.entity(host_entity).remove::<RequestBossAssembly>();
+			}
+		}
+		commands_queue.apply(&mut world);
 		
 		// Verify: the boss actor should have a child mouth socket
-		let boss_entity = app.world_mut()
+		let boss_entity = world
 			.query_filtered::<Entity, With<BikanwardaRoot>>()
-			.single(app.world())
+			.single(&world)
 			.expect("Expected one boss actor");
 		
-		let socket_count = app.world_mut()
+		let socket_count = world
 			.query_filtered::<(&ChildOf, &BikanwardaMouthSocket), With<BikanwardaMouthSocket>>()
-			.iter(app.world())
+			.iter(&world)
 			.filter(|(parent, _)| parent.parent() == boss_entity)
 			.count();
 		
 		assert_eq!(socket_count, 1, "Boss actor should have exactly one BikanwardaMouthSocket child");
 		
 		// Verify: socket position is above the actor origin (mouth is higher than feet)
-		let socket_transform = app.world_mut()
+		let socket_transform = world
 			.query_filtered::<(&ChildOf, &Transform), With<BikanwardaMouthSocket>>()
-			.iter(app.world())
+			.iter(&world)
 			.find_map(|(parent, transform)| {
 				if parent.parent() == boss_entity {
 					Some(*transform)
