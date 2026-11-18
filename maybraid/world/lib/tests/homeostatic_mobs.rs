@@ -21,9 +21,16 @@ fn test_app() -> App {
 	.init_asset::<Mesh>()
 	.init_asset::<StandardMaterial>()
 	.init_asset::<bevy::world_serialization::WorldAsset>()
+	// Player flinch/movement require the asset store; their audio backend remains optional.
+	.init_asset::<maybraid_audio::AudioClip>()
 	// Match the documented WorldLayers prerequisites and the strict shared camera fixture.
 	// Input/window plugins supply their real resources without opening a native window.
-	.add_plugins((WorldMaterialRefPlugin, player_camera::PlayerCameraPlugin, WorldLayersPlugin));
+	.add_plugins((
+		world_materials::WorldMaterialsShadersPlugin,
+		WorldMaterialRefPlugin,
+		player_camera::PlayerCameraPlugin,
+		WorldLayersPlugin,
+	));
 	app.finish();
 	app.cleanup();
 	app.world_mut().spawn((
