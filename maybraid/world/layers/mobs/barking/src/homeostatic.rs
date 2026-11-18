@@ -158,6 +158,10 @@ pub struct HomeostaticMob {
 }
 
 /// Marker for a mob in retreat mode.
+///
+/// The population controller owns a matching shared `PoiGoalHold`. Generic pursuit
+/// respects that objective without importing this population marker. Arrival keeps
+/// the hold until this controller releases it at the inner margin or teardown.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct HomeostaticRetreat {
 	/// World position to retreat toward (home cell center).

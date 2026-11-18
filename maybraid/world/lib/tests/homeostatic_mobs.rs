@@ -276,6 +276,135 @@ fn world_layers_install_shared_and_homeostatic_owners() {
 }
 
 #[test]
+fn retreat_replaces_journey_with_a_held_homeward_goal() -> anyhow::Result<()> {
+	// Exercise assignment in the real world stack. Shared mob tests separately
+	// assert actual routing displacement while the held objective suppresses pursuit.
+	let mut app = test_app();
+	let config = barking::HomeostaticMobConfig::default();
+
+	// Find a flagged cell
+	let mut flagged_cell = None;
+	for ix in 0..20 {
+		for iz in 0..20 {
+			let cell = barking::HomeostaticCellIndex(ix, iz);
+			if cell.should_host_mob(0.33) {
+				flagged_cell = Some(cell);
+				break;
+			}
+		}
+		if flagged_cell.is_some() {
+			break;
+		}
+	}
+
+	let flagged_cell = flagged_cell.ok_or_else(|| anyhow::anyhow!("should find flagged cell"))?;
+	let home_center = flagged_cell.center(config.cell_size);
+
+	// Position player at cell center to activate mob
+	{
+		let mut player_query =
+			app.world_mut().query_filtered::<&mut Transform, With<WorldPlayer>>();
+		if let Ok(mut transform) = player_query.single_mut(app.world_mut()) {
+			transform.translation = home_center;
+		}
+	}
+
+	// Activate the mob
+	for _ in 0..20 {
+		app.update();
+	}
+
+	// Verify mob activated
+	let mob_entity = app
+		.world_mut()
+		.query_filtered::<Entity, With<barking::HomeostaticMob>>()
+		.iter(app.world())
+		.next()
+		.ok_or_else(|| anyhow::anyhow!("mob should be activated"))?;
+
+	// Give mob a journey goal (simulating normal mob AI)
+	let journey_destination = home_center + Vec3::new(500.0, 0.0, 500.0);
+	let journey_goal = poi_intelligence::PoiGoal::new(
+		1,
+		poi_intelligence::PoiId(999),
+		None,
+		poi_intelligence::PoiKind::new("test-journey"),
+		journey_destination,
+		10.0,
+		0.0,
+		0.0,
+	);
+
+	app.world_mut().entity_mut(mob_entity).insert(journey_goal);
+
+	// Record initial mob position
+	let initial_pos = app
+		.world()
+		.get::<GlobalTransform>(mob_entity)
+		.ok_or_else(|| anyhow::anyhow!("mob transform missing"))?
+		.translation();
+
+	// Move player near neighborhood edge to trigger retreat
+	let edge_position = home_center + Vec3::new(config.cell_size * 1.4, 0.0, 0.0);
+	{
+		let mut player_query =
+			app.world_mut().query_filtered::<&mut Transform, With<WorldPlayer>>();
+		if let Ok(mut transform) = player_query.single_mut(app.world_mut()) {
+			transform.translation = edge_position;
+		}
+	}
+
+	// Run frames to trigger retreat
+	for _ in 0..10 {
+		app.update();
+	}
+
+	// Verify mob is in retreat
+	assert!(
+		app.world().get::<barking::HomeostaticRetreat>(mob_entity).is_some(),
+		"mob should be in retreat mode"
+	);
+
+	// Core regression: Verify retreat goal REPLACED journey goal
+	// With old `Without<PoiGoal>` filter, this fails with:
+	//   assertion `left == right` failed: POI goal should be retreat, not journey
+	//     left: PoiKind("test-journey")
+	//     right: PoiKind("homeostatic-retreat")
+	let retreat_goal = app
+		.world()
+		.get::<poi_intelligence::PoiGoal>(mob_entity)
+		.ok_or_else(|| anyhow::anyhow!("mob should have a POI goal"))?;
+	assert_eq!(
+		retreat_goal.kind,
+		poi_intelligence::PoiKind::new("homeostatic-retreat"),
+		"POI goal should be retreat, not journey"
+	);
+
+	// Verify retreat goal points toward home, not journey destination
+	let retreat_target = retreat_goal.location.point;
+	let toward_home = (home_center - initial_pos).normalize_or_zero();
+	let toward_journey = (journey_destination - initial_pos).normalize_or_zero();
+
+	let retreat_dir = (retreat_target - initial_pos).normalize_or_zero();
+	let home_alignment = retreat_dir.dot(toward_home);
+	let journey_alignment = retreat_dir.dot(toward_journey);
+
+	assert!(
+		home_alignment > 0.5,
+		"retreat goal should point toward home (home={:.2}, journey={:.2})",
+		home_alignment,
+		journey_alignment
+	);
+
+	let hold = app
+		.world()
+		.get::<poi_intelligence::PoiGoalHold>(mob_entity)
+		.ok_or_else(|| anyhow::anyhow!("retreat must retain its shared objective"))?;
+	assert!(hold.matches(retreat_goal));
+	Ok(())
+}
+
+#[test]
 fn home_session_teardown_cleans_hosts_and_members_without_destroying_the_player(
 ) -> anyhow::Result<()> {
 	use damage::Health;

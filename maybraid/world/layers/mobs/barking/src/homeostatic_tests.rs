@@ -309,6 +309,40 @@ fn retreat_moves_toward_home_and_away_from_player() -> anyhow::Result<()> {
 // removed - need full mob infrastructure for track_player_homeostatic_cell system
 
 #[test]
+fn retreat_assignment_owns_the_matching_shared_goal_hold() -> anyhow::Result<()> {
+	let mut app = test_app();
+	let home_cell = HomeostaticCellIndex(0, 0);
+	let generation = app.world().resource::<PlayerHomeostaticCell>().generation;
+	app.world_mut().spawn((TestPlayer, Transform::from_xyz(280.0, 0.0, 0.0)));
+	let host = app
+		.world_mut()
+		.spawn((
+			HomeostaticMob { home_cell, generation, mob_entity: Entity::PLACEHOLDER },
+			Transform::from_xyz(50.0, 0.0, 0.0),
+			GlobalTransform::from_translation(Vec3::X * 50.0),
+		))
+		.id();
+	app.update();
+	let goal = app
+		.world()
+		.get::<poi_intelligence::PoiGoal>(host)
+		.ok_or_else(|| anyhow::anyhow!("retreat did not assign a shared goal"))?;
+	let hold = app
+		.world()
+		.get::<poi_intelligence::PoiGoalHold>(host)
+		.ok_or_else(|| anyhow::anyhow!("retreat did not hold its objective"))?;
+	let retreat = app
+		.world()
+		.get::<HomeostaticRetreat>(host)
+		.ok_or_else(|| anyhow::anyhow!("retreat assignment missing"))?;
+	assert!(hold.matches(goal));
+	assert_eq!(retreat.goal, Some(*hold));
+	// Actual pursuit suppression and travel run in shared mob-intelligence tests,
+	// with no dependency from generic pursuit back to this population layer.
+	Ok(())
+}
+
+#[test]
 fn retreat_replaces_existing_poi_goal() -> anyhow::Result<()> {
 	let mut app = test_app();
 	let config = app.world().resource::<HomeostaticMobConfig>().clone();
