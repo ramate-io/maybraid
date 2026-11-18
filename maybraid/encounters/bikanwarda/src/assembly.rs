@@ -151,9 +151,14 @@ mod tests {
 	fn assembly_creates_mouth_socket() {
 		use bikanwarda_attacks::BikanwardaMouthSocket;
 		
-		let mut world = World::new();
-		world.init_resource::<bevy::time::Time>();
-		world.init_resource::<bevy::time::Time<bevy::time::Real>>();
+		// Use App for transform propagation support
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.add_plugins(TransformPlugin);
+		app.finish();
+		app.update();
+		
+		let mut world = app.world_mut();
 		
 		let spec = BikanwardaSpec::encounter();
 		let host = world.spawn((
@@ -165,13 +170,12 @@ mod tests {
 		// Run the assembly system manually with command flushing
 		let requests: Vec<_> = world
 			.query_filtered::<(Entity, &RequestBossAssembly, &Transform), Without<BikanwardaRoot>>()
-			.iter(&world)
+			.iter(world)
 			.map(|(e, r, t)| (e, r.clone(), *t))
 			.collect();
 		
-		let mut commands_queue = bevy::ecs::world::CommandQueue::default();
 		{
-			let mut commands = bevy::ecs::system::Commands::new(&mut commands_queue, &world);
+			let mut commands = world.commands();
 			for (host_entity, request, _host_transform) in requests {
 				let local_transform = Transform::IDENTITY;
 				let boss_entity = spawn_bikanwarda_encounter(&mut commands, &request.spec, local_transform);
@@ -200,17 +204,17 @@ mod tests {
 				commands.entity(host_entity).remove::<RequestBossAssembly>();
 			}
 		}
-		commands_queue.apply(&mut world);
+		world.flush();
 		
 		// Verify: the boss actor should have a child mouth socket
 		let boss_entity = world
 			.query_filtered::<Entity, With<BikanwardaRoot>>()
-			.single(&world)
+			.single(world)
 			.expect("Expected one boss actor");
 		
 		let socket_count = world
 			.query_filtered::<(&ChildOf, &BikanwardaMouthSocket), With<BikanwardaMouthSocket>>()
-			.iter(&world)
+			.iter(world)
 			.filter(|(parent, _)| parent.parent() == boss_entity)
 			.count();
 		
@@ -229,10 +233,10 @@ mod tests {
 			.unwrap_or(Vec3::Y * 1.5);
 		let expected_world_y = expected_local.y * scale;
 		
-		// Get socket's world-space transform (would need GlobalTransform propagation in production)
+		// Get socket's world-space transform
 		let socket_local = world
 			.query_filtered::<(&ChildOf, &Transform), With<BikanwardaMouthSocket>>()
-			.iter(&world)
+			.iter(world)
 			.find_map(|(parent, transform)| {
 				if parent.parent() == boss_entity {
 					Some(transform.translation)
@@ -242,7 +246,7 @@ mod tests {
 			})
 			.expect("Socket should have a Transform");
 		
-		// In test without full transform propagation, verify local position is in unscaled coordinates
+		// Verify local position is in unscaled coordinates
 		let tolerance = 0.1;
 		assert!(
 			(socket_local.y - expected_local.y).abs() < tolerance,
@@ -251,6 +255,30 @@ mod tests {
 			expected_local.y,
 			tolerance,
 			expected_local.y * scale
+		);
+		
+		// Verify world-space GlobalTransform after propagation
+		// Propagate transforms using the transform systems
+		app.update(); // Run PostUpdate schedule to propagate transforms
+		
+		// Get socket's world-space GlobalTransform
+		let world = app.world_mut();
+		let socket_entity = world
+			.query_filtered::<Entity, With<BikanwardaMouthSocket>>()
+			.single(world)
+			.expect("Should have exactly one mouth socket");
+		
+		let socket_global = world.get::<GlobalTransform>(socket_entity)
+			.expect("Socket should have GlobalTransform after propagation");
+		
+		// Since host is at origin with identity transform, world Y should equal scaled anchor Y
+		let expected_world_y = expected_local.y * scale;
+		assert!(
+			(socket_global.translation().y - expected_world_y).abs() < tolerance,
+			"Mouth socket world Y {:.6} should be ~{:.6} (scaled anchor), within {:.2}m tolerance",
+			socket_global.translation().y,
+			expected_world_y,
+			tolerance,
 		);
 	}
 }
