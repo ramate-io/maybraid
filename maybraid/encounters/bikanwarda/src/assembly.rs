@@ -174,7 +174,7 @@ mod tests {
 		let mut boss_query = app.world().query_filtered::<Entity, With<BikanwardaRoot>>();
 		let boss_entity = boss_query.single(app.world()).expect("Expected one boss actor");
 		
-		let socket_count = app.world()
+		let socket_count = app.world_mut()
 			.query_filtered::<(&ChildOf, &BikanwardaMouthSocket), With<BikanwardaMouthSocket>>()
 			.iter(app.world())
 			.filter(|(parent, _)| parent.parent() == boss_entity)
@@ -183,7 +183,7 @@ mod tests {
 		assert_eq!(socket_count, 1, "Boss actor should have exactly one BikanwardaMouthSocket child");
 		
 		// Verify: socket position is above the actor origin (mouth is higher than feet)
-		let socket_transform = app.world()
+		let socket_transform = app.world_mut()
 			.query_filtered::<(&ChildOf, &Transform), With<BikanwardaMouthSocket>>()
 			.iter(app.world())
 			.find_map(|(parent, transform)| {
