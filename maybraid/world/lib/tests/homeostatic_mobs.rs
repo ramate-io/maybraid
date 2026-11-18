@@ -1,5 +1,6 @@
 //! Integration tests for homeostatic mob activation and behavior.
-//! Tests the full plugin stack with real world player movement.
+//! Exercises automated player-transform transitions through the real plugin stack.
+//! Native locomotion and rendering remain separate runtime validation.
 
 use bevy::prelude::*;
 use maybraid_world::{WorldLayersPlugin, WorldMaterialRefPlugin};
@@ -181,6 +182,11 @@ fn reentering_cell_reactivates_mob_without_duplicates() -> anyhow::Result<()> {
 	let first_activation_count =
 		app.world_mut().query::<&barking::HomeostaticMob>().iter(app.world()).count();
 	assert_eq!(first_activation_count, 1, "first entry should activate one mob");
+	let first_host = app
+		.world_mut()
+		.query_filtered::<Entity, With<barking::HomeostaticMob>>()
+		.single(app.world())
+		.map_err(|error| anyhow::anyhow!("expected one first encounter: {error}"))?;
 
 	// Leave the 3×3 neighborhood
 	{
@@ -195,9 +201,9 @@ fn reentering_cell_reactivates_mob_without_duplicates() -> anyhow::Result<()> {
 		app.update();
 	}
 
-	let after_leaving_count =
-		app.world_mut().query::<&barking::HomeostaticMob>().iter(app.world()).count();
-	assert_eq!(after_leaving_count, 0, "mob should despawn when player leaves neighborhood");
+	// The destination may legitimately activate its own encounter. Only the
+	// original host must retire after leaving its neighborhood.
+	assert!(app.world().get_entity(first_host).is_err(), "original encounter should retire");
 
 	// Re-enter the same flagged cell
 	{
