@@ -10,6 +10,9 @@ use world_player::Player as WorldPlayer;
 fn test_app() -> App {
 	let mut app = App::new();
 	app.insert_resource(maybraid_virtual_pad_controller::PadHidPolicy::External);
+	app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+		std::time::Duration::from_millis(100),
+	));
 	app.add_plugins((
 		MinimalPlugins,
 		AssetPlugin::default(),
@@ -18,6 +21,7 @@ fn test_app() -> App {
 		bevy::world_serialization::WorldSerializationPlugin,
 		bevy::transform::TransformPlugin,
 		bevy::input::InputPlugin,
+		bevy::gizmos::GizmoPlugin,
 		bevy::window::WindowPlugin { primary_window: None, ..default() },
 	))
 	.init_asset::<Mesh>()
@@ -267,6 +271,17 @@ fn home_session_teardown_cleans_hosts_and_members_without_destroying_the_player(
 		.insert(Transform::from_translation(cell.center(200.0)));
 	for _ in 0..20 {
 		app.update();
+	}
+	// Drive real elapsed-time LOD pulses, bounded by simulated frames rather than wall-clock speed.
+	for _ in 0..200 {
+		app.update();
+		let mut members = app.world_mut().query::<(&mob_intelligence::MemberOf, &damage::Health)>();
+		if members
+			.iter(app.world())
+			.any(|(member, _)| app.world().get::<barking::HomeostaticMob>(member.mob).is_some())
+		{
+			break;
+		}
 	}
 	let hosts: Vec<_> = app
 		.world_mut()
