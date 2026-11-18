@@ -16,6 +16,7 @@ fn test_app() -> App {
 	app.add_plugins((
 		MinimalPlugins,
 		AssetPlugin::default(),
+		bevy::mesh::MeshPlugin,
 		bevy::state::app::StatesPlugin,
 		bevy::scene::ScenePlugin,
 		bevy::world_serialization::WorldSerializationPlugin,
@@ -24,7 +25,6 @@ fn test_app() -> App {
 		bevy::gizmos::GizmoPlugin,
 		bevy::window::WindowPlugin { primary_window: None, ..default() },
 	))
-	.init_asset::<Mesh>()
 	.init_asset::<StandardMaterial>()
 	// Player flinch/movement require the asset store; their audio backend remains optional.
 	.init_asset::<maybraid_audio::AudioClip>()
