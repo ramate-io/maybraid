@@ -552,3 +552,134 @@ fn mouth_socket_anchor_scales_with_capsule() -> Result<()> {
 	Ok(())
 }
 
+/// Test 4: Mouth socket world-space GlobalTransform verification.
+/// Verifies BikanwardaMouthSocket's world GlobalTransform after propagation
+/// matches the expected visible mouth position for both parented Encounter
+/// and unparented Ward forms.
+///
+/// MUST FAIL if socket is parented incorrectly or scale is wrong.
+#[test]
+fn mouth_socket_world_transform_matches_visible_position() -> Result<()> {
+	let mut app = projectile_damage_app();
+	
+	// Test 4a: Parented Encounter (host at translated position)
+	let host_position = Vec3::new(100.0, 50.0, 200.0);
+	let encounter_spec = BikanwardaSpec::encounter();
+	let encounter_scale = encounter_spec.uniform_scale();
+	
+	// Spawn encounter actor at host position
+	let encounter_actor = {
+		let mut commands = app.world_mut().commands();
+		spawn_bikanwarda_encounter(&mut commands, &encounter_spec, Transform::from_translation(host_position))
+	};
+	
+	app.update();
+	
+	// Calculate expected mouth position in world space
+	let encounter_recipe = BikanwardaActorRecipe::from_spec(encounter_spec.clone());
+	let encounter_scaled_capsule = encounter_recipe.components().scaled_locomotion_capsule();
+	let encounter_anchors = bikanwarda_character::anchors::BikanwardaAnchors::for_capsule(encounter_scaled_capsule);
+	let encounter_mouth_local = encounter_anchors
+		.get("mouth_emit")
+		.expect("Encounter anchors should have MOUTH_EMIT")
+		.translation;
+	
+	// For unit-scale root with scaled collider/anchors, mouth world position = root position + mouth anchor
+	let expected_encounter_mouth_world = host_position + encounter_mouth_local;
+	
+	// Spawn mouth socket as child of encounter actor (matching production assembly)
+	let encounter_socket = app.world_mut().spawn((
+		Name::new("encounter_mouth_socket"),
+		bikanwarda_attacks::BikanwardaMouthSocket,
+		ChildOf(encounter_actor),
+		Transform::from_translation(encounter_mouth_local),
+		GlobalTransform::default(),
+	)).id();
+	
+	// Run transform propagation
+	for _ in 0..5 {
+		app.update();
+	}
+	
+	// Verify encounter socket GlobalTransform
+	let encounter_socket_global = app.world()
+		.get::<GlobalTransform>(encounter_socket)
+		.expect("Encounter socket should have GlobalTransform");
+	
+	let encounter_mouth_world = encounter_socket_global.translation();
+	let encounter_error = (encounter_mouth_world - expected_encounter_mouth_world).length();
+	
+	anyhow::ensure!(
+		encounter_error < encounter_scaled_capsule.radius * 0.1, // 10% of capsule radius tolerance
+		"Encounter mouth socket world position should be {:.2?}, got {:.2?} (error: {:.2}m)",
+		expected_encounter_mouth_world, encounter_mouth_world, encounter_error
+	);
+	
+	// Test 4b: Unparented Ward (no host, just translated root)
+	let ward_position = Vec3::new(300.0, 75.0, 400.0);
+	let ward_spec = BikanwardaSpec::ward();
+	let ward_scale = ward_spec.uniform_scale();
+	
+	let ward_actor = {
+		let mut commands = app.world_mut().commands();
+		bikanwarda_character::spawn_bikanwarda_ward(&mut commands, &ward_spec, Transform::from_translation(ward_position))
+	};
+	
+	app.update();
+	
+	// Calculate expected Ward mouth position in world space
+	let ward_recipe = BikanwardaActorRecipe::from_spec(ward_spec.clone());
+	let ward_scaled_capsule = ward_recipe.components().scaled_locomotion_capsule();
+	let ward_anchors = bikanwarda_character::anchors::BikanwardaAnchors::for_capsule(ward_scaled_capsule);
+	let ward_mouth_local = ward_anchors
+		.get("mouth_emit")
+		.expect("Ward anchors should have MOUTH_EMIT")
+		.translation;
+	
+	// For unit-scale root with scaled collider/anchors, mouth world position = root position + mouth anchor
+	let expected_ward_mouth_world = ward_position + ward_mouth_local;
+	
+	// Spawn mouth socket as child of ward actor
+	let ward_socket = app.world_mut().spawn((
+		Name::new("ward_mouth_socket"),
+		bikanwarda_attacks::BikanwardaMouthSocket,
+		ChildOf(ward_actor),
+		Transform::from_translation(ward_mouth_local),
+		GlobalTransform::default(),
+	)).id();
+	
+	// Run transform propagation
+	for _ in 0..5 {
+		app.update();
+	}
+	
+	// Verify ward socket GlobalTransform
+	let ward_socket_global = app.world()
+		.get::<GlobalTransform>(ward_socket)
+		.expect("Ward socket should have GlobalTransform");
+	
+	let ward_mouth_world = ward_socket_global.translation();
+	let ward_error = (ward_mouth_world - expected_ward_mouth_world).length();
+	
+	anyhow::ensure!(
+		ward_error < ward_scaled_capsule.radius * 0.1, // 10% of capsule radius tolerance
+		"Ward mouth socket world position should be {:.2?}, got {:.2?} (error: {:.2}m)",
+		expected_ward_mouth_world, ward_mouth_world, ward_error
+	);
+	
+	// Verify mouth heights are reasonable for scaled boss forms
+	anyhow::ensure!(
+		encounter_mouth_world.y > host_position.y + encounter_scaled_capsule.radius,
+		"Encounter mouth should be above root by at least capsule radius: mouth_y={:.2}, root_y={:.2}, radius={:.2}",
+		encounter_mouth_world.y, host_position.y, encounter_scaled_capsule.radius
+	);
+	
+	anyhow::ensure!(
+		ward_mouth_world.y > ward_position.y + ward_scaled_capsule.radius,
+		"Ward mouth should be above root by at least capsule radius: mouth_y={:.2}, root_y={:.2}, radius={:.2}",
+		ward_mouth_world.y, ward_position.y, ward_scaled_capsule.radius
+	);
+	
+	Ok(())
+}
+

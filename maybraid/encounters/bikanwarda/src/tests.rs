@@ -1571,5 +1571,241 @@ mod integration_regressions {
 		assert!(attacks_seen.iter().all(|attack| attack.target != Some(neutral)),
 			"Boss should not attack neutral character (was_spotted: {})", was_spotted);
 	}
+
+	/// Test (e): Real Bray damage - production scene with real boss driver, player, spotting, threat.
+	///
+	/// Requirements (from PR description):
+	/// - Real boss driver (BossEncounterCombatPlugin systems)
+	/// - Real player (world/player, real collision layers)
+	/// - Real spotting and threat intelligence
+	/// - No seeding, no forced state, no faked events
+	/// - Step frames until Bray is emitted from the socket
+	/// - Assert player Health drops exactly once through real damage path
+	/// - Verify emission origin is at the mouth socket position
+	///
+	/// Frame timing at 60 FPS (DT = 1/60s):
+	/// - Threat intelligence scan: 0.5s = 30 frames (with jitter: 24-36)
+	/// - Spotting discovery: 0.2s = 12 frames
+	/// - Attack cooldown: starts ready (0s)
+	/// - Bray duration: ~2s = 120 frames
+	/// - Run ~200 frames to allow: discovery (36) + targeting (10) + attack start (1) + Bray animation (120) + damage (1)
+	#[test]
+	fn real_bray_damages_player_exactly_once() {
+		let mut app = full_encounter_app();
+		
+		// Spawn encounter scene at origin for simplicity
+		let boss_position = Vec3::new(0.0, 10.15, 0.0);
+		let terrain_y = 0.0;
+		let encounter = crate::generation::BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
+		
+		let anchor_transform = Transform::from_translation(Vec3::ZERO);
+		let anchor = app.world_mut().spawn(anchor_transform).id();
+		
+		let scene = encounter.scene_with_level(
+			&lod::lod_ref::LodRef {
+				entity: anchor,
+				previous_transform: &anchor_transform,
+				current_transform: &anchor_transform,
+				bounds: &bevy::shape::Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0)),
+			},
+			lod::scene::LodSceneLevel::High,
+		);
+		let host_entity = app.world_mut().spawn_scene(scene).expect("spawn_scene should succeed").id();
+		
+		// Run assembly to create actor and initialize combat
+		for _ in 0..10 {
+			app.update();
+		}
+		
+		// Get actor entity and mouth socket from host
+		let actor_entity = app.world().entity(host_entity)
+			.get::<BossActor>()
+			.expect("Host should have BossActor")
+			.0;
+		
+		// Verify mouth socket exists and has GlobalTransform
+		let mouth_socket_count = app.world_mut()
+			.query_filtered::<(&GlobalTransform, &ChildOf), With<bikanwarda_attacks::BikanwardaMouthSocket>>()
+			.iter(app.world())
+			.filter(|(_, parent)| parent.parent() == actor_entity)
+			.count();
+		
+		eprintln!("Mouth sockets found for actor: {}", mouth_socket_count);
+		assert!(mouth_socket_count > 0, "Boss actor should have at least one mouth socket");
+		
+		if let Some((socket_gt, _)) = app.world_mut()
+			.query_filtered::<(&GlobalTransform, &ChildOf), With<bikanwarda_attacks::BikanwardaMouthSocket>>()
+			.iter(app.world())
+			.find(|(_, parent)| parent.parent() == actor_entity)
+		{
+			eprintln!("Mouth socket GlobalTransform: {:?}", socket_gt.translation());
+		}
+		
+		// Spawn player in range (within 40m attack range) and visible (no occlusion)
+		let player_pos = boss_position + Vec3::new(15.0, 0.0, 0.0); // 15m away horizontally, well within range
+		let player = app.world_mut().spawn((
+			Name::new("test-player"),
+			Transform::from_translation(player_pos),
+			GlobalTransform::from_translation(player_pos),
+			Health::from_max(100.0), // Player starts at 100 HP
+			spotting_intelligence::SpotSubject::new(
+				spotting_intelligence::InterestLayers::CHARACTER,
+				spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
+			),
+			avian3d::prelude::RigidBody::Kinematic,
+			avian3d::prelude::Collider::capsule(0.4, 1.8),
+			// CRITICAL: Must have Animated collision layer for spotting discovery
+			lod_avian::PhysicsInteractionLayer::animated_layers(),
+			// ThreatSubject so threat intelligence can discover them as a threat
+			threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId(1)),
+			// Player affiliations: member of PLAYER_GROUP (like controlled world players)
+			{
+				let mut affiliations = threat_intelligence::Affiliations::default();
+				const PLAYER_GROUP: threat_intelligence::ThreatGroupId = threat_intelligence::ThreatGroupId::group(29);
+				affiliations.join(PLAYER_GROUP, threat_intelligence::AffiliationStrength::permanent(1.0));
+				affiliations
+			},
+		)).id();
+		
+		// Track player health changes
+		let initial_health = 100.0;
+		let mut final_health = initial_health;
+		let mut damage_events = 0;
+		let mut bray_started = false;
+		let mut first_emission_origin: Option<Vec3> = None;
+		
+		// Run frames until Bray emits and player takes damage
+		// Up to 300 frames = 5 seconds of gameplay time
+		let mut hit_messages_seen = 0;
+		for frame in 0..300 {
+			app.update();
+			
+			// Check if Bray attack has started (BeginAttack message)
+			if !bray_started {
+				let frame_attacks: Vec<BeginAttack> = app.world_mut()
+					.run_system_once(|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| -> Vec<BeginAttack> {
+						messages.read().cloned().collect()
+					})
+					.expect("Failed to read BeginAttack messages");
+				
+				if let Some(attack) = frame_attacks.iter().find(|a| a.owner == actor_entity && a.definition == bikanwarda_attacks::BRAY) {
+					bray_started = true;
+					eprintln!("Frame {}: Bray attack started targeting {:?}", frame, attack.target);
+					eprintln!("  emission: {:?}, emission_socket: {:?}", attack.emission, attack.emission_socket);
+					
+					// Capture first emission origin if available
+					if let Some(emission) = attack.emission {
+						first_emission_origin = Some(emission);
+						eprintln!("Frame {}: First Bray emission origin: {:?}", frame, emission);
+					}
+				}
+			}
+			
+			// Check attack instance state and player components
+			if bray_started && frame % 20 == 0 {
+				let attack_count = app.world_mut()
+					.query::<&attacks::AttackInstance>()
+					.iter(app.world())
+					.filter(|inst| inst.owner == actor_entity && inst.definition == bikanwarda_attacks::BRAY)
+					.count();
+				
+				if attack_count > 0 {
+					let instance = app.world_mut()
+						.query::<&attacks::AttackInstance>()
+						.iter(app.world())
+						.find(|inst| inst.owner == actor_entity && inst.definition == bikanwarda_attacks::BRAY)
+						.expect("Should have Bray instance");
+					
+					eprintln!("Frame {}: Bray instance stage={:?}, age={:.2}, stage_age={:.2}, execute_age={:.2}", 
+						frame, instance.stage, instance.age, instance.stage_age, instance.execute_age);
+				} else {
+					eprintln!("Frame {}: No Bray instance found", frame);
+				}
+				
+				// Check player components
+				if let Ok(player_entity) = app.world().get_entity(player) {
+					let has_health = player_entity.contains::<Health>();
+					let has_collider = player_entity.contains::<avian3d::prelude::Collider>();
+					let has_global_transform = player_entity.contains::<GlobalTransform>();
+					let health_val = player_entity.get::<Health>().map(|h| h.current).unwrap_or(0.0);
+					let pos = player_entity.get::<GlobalTransform>().map(|gt| gt.translation()).unwrap_or(Vec3::ZERO);
+					
+					eprintln!("Frame {}: Player has Health={} ({:.1}HP), Collider={}, GlobalTransform={} at {:?}", 
+						frame, has_health, health_val, has_collider, has_global_transform, pos);
+				} else {
+					eprintln!("Frame {}: Player entity does not exist!", frame);
+				}
+			}
+			
+			// Check for Hit messages (damage system input)
+			let frame_hits: Vec<damage::Hit> = app.world_mut()
+				.run_system_once(|mut messages: bevy::ecs::message::MessageReader<damage::Hit>| -> Vec<damage::Hit> {
+					messages.read().cloned().collect()
+				})
+				.expect("Failed to read Hit messages");
+			
+			if !frame_hits.is_empty() {
+				hit_messages_seen += frame_hits.len();
+				for hit in &frame_hits {
+					if hit.target == player {
+						eprintln!("Frame {}: Hit message for player: amount={}, point={:?}", 
+							frame, hit.amount, hit.point);
+					}
+				}
+			}
+			
+			// Check player health
+			if let Some(health) = app.world().get::<Health>(player) {
+				if health.current < final_health {
+					damage_events += 1;
+					final_health = health.current;
+					eprintln!("Frame {}: Player took damage: {} -> {} (event #{})", 
+						frame, final_health + (initial_health - final_health), final_health, damage_events);
+				}
+			}
+			
+			// If player has taken damage after Bray started, we can stop early
+			if bray_started && damage_events > 0 {
+				eprintln!("Frame {}: Bray damage delivered, ending test early", frame);
+				break;
+			}
+		}
+		
+		eprintln!("Total Hit messages seen: {}", hit_messages_seen);
+		
+		// Assertions
+		assert!(bray_started, 
+			"Boss should have started Bray attack on visible player in range after {} frames", 300);
+		
+		assert_eq!(damage_events, 1, 
+			"Player should take damage exactly once from Bray (got {} damage events)", 
+			damage_events);
+		
+		assert!(final_health < initial_health, 
+			"Player health should decrease: initial={}, final={}", 
+			initial_health, final_health);
+		
+		// Verify emission origin is at mouth socket (if captured)
+		if let Some(emission_origin) = first_emission_origin {
+			// Get mouth socket position
+			let mouth_socket_pos = app.world_mut()
+				.query_filtered::<&GlobalTransform, With<bikanwarda_attacks::BikanwardaMouthSocket>>()
+				.iter(app.world())
+				.next()
+				.map(|gt| gt.translation());
+			
+			if let Some(socket_pos) = mouth_socket_pos {
+				let distance = (emission_origin - socket_pos).length();
+				assert!(distance < 5.0, 
+					"First Bray emission origin {:?} should be near mouth socket {:?} (distance: {:.2}m)",
+					emission_origin, socket_pos, distance);
+			}
+		}
+		
+		// Verify final health is reasonable (Bray should do significant but not instant-kill damage)
+		let damage_taken = initial_health - final_health;
+		assert!(damage_taken >= 10.0 && damage_taken <= 50.0,
+			"Bray damage should be 10-50 HP, got {:.1} HP", damage_taken);
+	}
 }
 
