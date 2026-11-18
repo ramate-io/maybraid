@@ -39,3 +39,9 @@ pub use unlocks::{register_unlocks, BikanwardaUnlockConfig};
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod spotting_tests;
+
+#[cfg(test)]
+mod damage_tests;

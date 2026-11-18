@@ -1,7 +1,9 @@
 //! Boss assembly spawn system for HCSG hosts.
 
 use bevy::prelude::*;
-use bikanwarda_character::{spawn_bikanwarda_encounter, BikanwardaRoot};
+use bikanwarda_attacks::BikanwardaMouthSocket;
+use bikanwarda_character::{spawn_bikanwarda_encounter, BikanwardaRoot, BikanwardaAnchors};
+use characters::CharacterRecipe;
 use spotting_intelligence::{InterestLayers, SpotDirective, SpottingUser};
 
 use crate::presentation::{RequestBossAssembly, BossActor};
@@ -30,6 +32,23 @@ pub fn spawn_boss_assemblies(
 		commands.entity(boss_entity).insert(
 			SpottingUser::new(eye_offset, [SpotDirective::new(InterestLayers::CHARACTER, spotting_range)])
 		);
+		
+		// Spawn the mouth socket for Bray emission
+		// Use the same scaled capsule as the production boss collider and anchors
+		let recipe = bikanwarda_character::BikanwardaActorRecipe::from_spec(request.spec.clone());
+		let capsule = recipe.components().scaled_locomotion_capsule();
+		let anchors = BikanwardaAnchors::for_capsule(capsule);
+		let mouth_transform = anchors.get(bikanwarda_character::anchors::names::MOUTH_EMIT)
+			.copied()
+			.unwrap_or(Transform::from_translation(Vec3::Y * 15.0));
+		
+		commands.spawn((
+			Name::new("bikanwarda_mouth_socket"),
+			BikanwardaMouthSocket,
+			ChildOf(boss_entity),
+			mouth_transform,
+			GlobalTransform::default(),
+		));
 		
 		// Bind host to actor with relationship component
 		commands.entity(host_entity).insert(BossActor(boss_entity));
@@ -124,5 +143,63 @@ mod tests {
 		let local_transform = Transform::IDENTITY;
 		assert_eq!(local_transform.translation, Vec3::ZERO, 
 			"Assembly should pass identity translation to spawn function");
+	}
+	
+	/// Regression test: production assembly should create a BikanwardaMouthSocket
+	/// so Bray attacks emit from the correct mouth position rather than actor origin.
+	#[test]
+	fn assembly_creates_mouth_socket() {
+		use bikanwarda_attacks::BikanwardaMouthSocket;
+		
+		let mut world = World::new();
+		world.init_resource::<bevy::time::Time>();
+		world.init_resource::<bevy::time::Time<bevy::time::Real>>();
+		
+		let spec = BikanwardaSpec::encounter();
+		let host = world.spawn((
+			RequestBossAssembly { spec: spec.clone() },
+			Transform::default(),
+			GlobalTransform::default(),
+		)).id();
+		
+		// Run the assembly system
+		let mut app = bevy::app::App::new();
+		app.world_mut().insert_resource(bevy::time::Time::default());
+		app.world_mut().insert_resource(bevy::time::Time::<bevy::time::Real>::default());
+		app.add_systems(bevy::app::Update, spawn_boss_assemblies);
+		*app.world_mut() = world;
+		app.update();
+		
+		// Verify: the boss actor should have a child mouth socket
+		let boss_entity = app.world()
+			.query_filtered::<Entity, With<BikanwardaRoot>>()
+			.single(app.world());
+		
+		let socket_count = app.world()
+			.query_filtered::<(&ChildOf, &BikanwardaMouthSocket), With<BikanwardaMouthSocket>>()
+			.iter(app.world())
+			.filter(|(parent, _)| parent.parent() == boss_entity)
+			.count();
+		
+		assert_eq!(socket_count, 1, "Boss actor should have exactly one BikanwardaMouthSocket child");
+		
+		// Verify: socket position is above the actor origin (mouth is higher than feet)
+		let socket_transform = app.world()
+			.query_filtered::<(&ChildOf, &Transform), With<BikanwardaMouthSocket>>()
+			.iter(app.world())
+			.find_map(|(parent, transform)| {
+				if parent.parent() == boss_entity {
+					Some(*transform)
+				} else {
+					None
+				}
+			})
+			.expect("Socket should have a Transform");
+		
+		assert!(
+			socket_transform.translation.y > 5.0,
+			"Mouth socket Y position {} should be significantly above actor origin (boss is ~20m tall)",
+			socket_transform.translation.y
+		);
 	}
 }
