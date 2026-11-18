@@ -14,13 +14,13 @@ fn test_app() -> App {
 		AssetPlugin::default(),
 		bevy::state::app::StatesPlugin,
 		bevy::scene::ScenePlugin,
+		bevy::world_serialization::WorldSerializationPlugin,
 		bevy::transform::TransformPlugin,
 		bevy::input::InputPlugin,
 		bevy::window::WindowPlugin { primary_window: None, ..default() },
 	))
 	.init_asset::<Mesh>()
 	.init_asset::<StandardMaterial>()
-	.init_asset::<bevy::world_serialization::WorldAsset>()
 	// Player flinch/movement require the asset store; their audio backend remains optional.
 	.init_asset::<maybraid_audio::AudioClip>()
 	// Match the documented WorldLayers prerequisites and the strict shared camera fixture.
