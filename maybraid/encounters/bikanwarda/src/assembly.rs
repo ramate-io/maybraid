@@ -164,7 +164,7 @@ mod tests {
 		
 		// Run the assembly system
 		let mut app = bevy::app::App::new();
-		app.world_mut().insert_resource(bevy::time::Time::default());
+		app.world_mut().insert_resource(bevy::time::Time::<()>::default());
 		app.world_mut().insert_resource(bevy::time::Time::<bevy::time::Real>::default());
 		app.add_systems(bevy::app::Update, spawn_boss_assemblies);
 		*app.world_mut() = world;
