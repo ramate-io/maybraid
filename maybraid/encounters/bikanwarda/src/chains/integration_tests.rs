@@ -39,7 +39,14 @@ mod tests {
 				)
 					.after(TransformSystems::Propagate),
 			)
-			.add_systems(Update, (coalesce_chain_contacts, deactivate_released_chains));
+			.add_systems(
+				PostUpdate,
+				// Contact deduplication runs in Collect, explicitly BEFORE contacts_to_hits
+				coalesce_chain_contacts
+					.in_set(damage::DamageSystems::Collect)
+					.before(damage::contacts_to_hits),
+			)
+			.add_systems(Update, deactivate_released_chains);
 		app.finish();
 		// Run one update to initialize systems
 		app.update();
@@ -1451,6 +1458,211 @@ mod tests {
 			if (j_pos - pos).length() > 1e-4 {
 				return Err(anyhow!("Joint should collapse to anchor position when distance is zero"));
 			}
+		}
+
+		Ok(())
+	}
+
+	/// Regression test for #1619 comment 6985904990: non-chain projectile contacts
+	/// must not be re-emitted with fresh message IDs every frame.
+	///
+	/// Before the fix, ordinary projectile hits were drained and rewritten every update,
+	/// causing the same contact to appear with 256+ distinct message IDs while the
+	/// projectile remained alive, applying damage repeatedly (1000→975→950→925 HP).
+	#[test]
+	fn non_chain_projectile_contact_applies_once() -> Result<()> {
+		let mut app = test_app();
+
+		// Boss entity with Health (not a chain capsule)
+		let boss = app
+			.world_mut()
+			.spawn((
+				Name::new("boss"),
+				Health::from_max(1000.0),
+				Transform::default(),
+				GlobalTransform::default(),
+			))
+			.id();
+
+		// Projectile entity (mock, just needs to exist)
+		let projectile = app
+			.world_mut()
+			.spawn((
+				Name::new("projectile"),
+				projectiles::Flight::spawn(Vec3::ZERO, 100.0, 100.0, 10.0),
+				damage::HitPayload { amount: 25.0 },
+			))
+			.id();
+
+		// Write one ProjectileContact (ordinary, non-chain hit)
+		app.world_mut().write_message(ProjectileContact {
+			projectile,
+			source: Some(Entity::PLACEHOLDER),
+			target: boss,
+			point: Vec3::ZERO,
+			normal: Vec3::Y,
+		});
+
+		// Run 10+ updates and collect all DamageApplied messages
+		let mut total_damage_applied = 0;
+		let mut damage_events = Vec::new();
+
+		for frame in 0..15 {
+			app.update();
+
+			// Drain DamageApplied messages this frame
+			let applied: Vec<DamageApplied> = app
+				.world_mut()
+				.run_system_once(|mut messages: bevy::ecs::message::MessageReader<DamageApplied>| -> Vec<DamageApplied> {
+					messages.read().cloned().collect()
+				})
+				.map_err(|e| anyhow!("Failed to read DamageApplied: {:?}", e))?;
+
+			for event in &applied {
+				if event.target == boss {
+					total_damage_applied += 1;
+					damage_events.push((frame, event.clone()));
+				}
+			}
+		}
+
+		// Assert exactly ONE damage apply (1000 → 975 HP)
+		if total_damage_applied != 1 {
+			eprintln!("FAIL: Expected 1 damage apply, got {}", total_damage_applied);
+			eprintln!("Damage events:");
+			for (frame, event) in damage_events {
+				eprintln!("  Frame {}: {:?}", frame, event);
+			}
+			return Err(anyhow!(
+				"Non-chain projectile contact was applied {} times instead of once",
+				total_damage_applied
+			));
+		}
+
+		// Verify final health
+		let health = app.world().get::<Health>(boss).unwrap();
+		let expected = 1000.0 - 25.0;
+		if (health.current - expected).abs() > 0.1 {
+			return Err(anyhow!(
+				"Boss health should be {} (1000 - 25), got {}",
+				expected,
+				health.current
+			));
+		}
+
+		Ok(())
+	}
+
+	/// Regression test for #1619: projectile crossing multiple capsules of the same chain
+	/// should coalesce to one damage apply per interaction.
+	#[test]
+	fn chain_projectile_crosses_multiple_capsules_coalesces() -> Result<()> {
+		let mut app = test_app();
+
+		// Chain root with Health
+		let chain_root = app
+			.world_mut()
+			.spawn((
+				Name::new("chain-root"),
+				Health::from_max(100.0),
+				Transform::default(),
+				GlobalTransform::default(),
+			))
+			.id();
+
+		// Two adjacent capsules on the same chain
+		let capsule_a = app
+			.world_mut()
+			.spawn((
+				Name::new("capsule-a"),
+				ChainLinkId { link_id: 0, chain_root },
+				ChildOf(chain_root),
+				Transform::default(),
+				GlobalTransform::default(),
+			))
+			.id();
+
+		let capsule_b = app
+			.world_mut()
+			.spawn((
+				Name::new("capsule-b"),
+				ChainLinkId { link_id: 1, chain_root },
+				ChildOf(chain_root),
+				Transform::default(),
+				GlobalTransform::default(),
+			))
+			.id();
+
+		// Projectile entity
+		let projectile = app
+			.world_mut()
+			.spawn((
+				Name::new("projectile"),
+				projectiles::Flight::spawn(Vec3::ZERO, 100.0, 100.0, 10.0),
+				damage::HitPayload { amount: 10.0 },
+			))
+			.id();
+
+		// Projectile hits both capsules (same frame, multiple contacts)
+		app.world_mut().write_message(ProjectileContact {
+			projectile,
+			source: Some(Entity::PLACEHOLDER),
+			target: capsule_a,
+			point: Vec3::new(0.0, 0.0, 0.0),
+			normal: Vec3::Y,
+		});
+		app.world_mut().write_message(ProjectileContact {
+			projectile,
+			source: Some(Entity::PLACEHOLDER),
+			target: capsule_b,
+			point: Vec3::new(0.1, 0.0, 0.0),
+			normal: Vec3::Y,
+		});
+
+		// Run several updates and count damage applies
+		let mut total_damage_applied = 0;
+		let mut damage_events = Vec::new();
+
+		for frame in 0..10 {
+			app.update();
+
+			let applied: Vec<DamageApplied> = app
+				.world_mut()
+				.run_system_once(|mut messages: bevy::ecs::message::MessageReader<DamageApplied>| -> Vec<DamageApplied> {
+					messages.read().cloned().collect()
+				})
+				.map_err(|e| anyhow!("Failed to read DamageApplied: {:?}", e))?;
+
+			for event in &applied {
+				if event.target == chain_root {
+					total_damage_applied += 1;
+					damage_events.push((frame, event.clone()));
+				}
+			}
+		}
+
+		// Assert exactly ONE coalesced damage apply (not one per capsule)
+		if total_damage_applied != 1 {
+			eprintln!("FAIL: Expected 1 coalesced damage apply, got {}", total_damage_applied);
+			eprintln!("Damage events:");
+			for (frame, event) in damage_events {
+				eprintln!("  Frame {}: {:?}", frame, event);
+			}
+			return Err(anyhow!(
+				"Chain contacts should coalesce to 1 damage apply, got {}",
+				total_damage_applied
+			));
+		}
+
+		// Verify final health (100 - 10 = 90)
+		let health = app.world().get::<Health>(chain_root).unwrap();
+		let expected = 100.0 - 10.0;
+		if (health.current - expected).abs() > 0.1 {
+			return Err(anyhow!(
+				"Chain root health should be {} (100 - 10), got {}",
+				expected,
+				health.current
+			));
 		}
 
 		Ok(())

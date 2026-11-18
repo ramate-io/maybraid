@@ -25,12 +25,13 @@ use projectiles::ProjectileContact;
 
 use super::collision::ChainLinkId;
 
-/// Tracks which (projectile, chain_root) pairs have already applied damage.
+/// Tracks which (projectile, target) pairs have already been processed.
 ///
-/// Prevents penetrating projectiles from applying damage every frame they remain in contact.
+/// Prevents contacts from being re-emitted every frame (both chain and non-chain).
+/// For chain contacts, the target is the chain_root. For non-chain contacts, it's the actual target.
 #[derive(Resource, Default)]
 pub struct ChainDamageHistory {
-	applied: HashSet<(Entity, Entity)>,
+	processed: HashSet<(Entity, Entity)>,
 }
 
 /// Component on chain roots tracking which projectiles have already hit this chain.
@@ -78,85 +79,60 @@ impl ChainContactState {
 ///
 /// Runs in `DamageSystems::Collect`, before `contacts_to_hits`.
 ///
-/// Deduplicates in two ways:
-/// 1. Within a frame: multiple capsule hits from the same projectile → one contact
+/// Deduplic ates in two ways:
+/// 1. Within a frame: multiple capsule hits from the same projectile → one contact  
 /// 2. Cross-frame: once a (projectile, chain) pair hits, it never hits again
+///
+/// NOTE: This approach is incomplete and needs reworking. The fundamental issue is that
+/// we cannot easily filter messages from the queue for other consumers. A better approach
+/// would be to have contacts_to_hits skip chain capsule targets, or use a separate
+/// message type for coalesced contacts.
 pub fn coalesce_chain_contacts(
 	link_ids: Query<&ChainLinkId>,
 	mut messages: ResMut<Messages<ProjectileContact>>,
 	mut history: ResMut<ChainDamageHistory>,
 ) {
-	// Collect all contacts and clear the original messages
-	let all_contacts: Vec<ProjectileContact> = messages.drain().collect();
+	// TODO: This system needs a complete redesign. The current approach of drain-and-rewrite
+	// creates a cycle where contacts are re-emitted every frame. Using MessageReader alone
+	// doesn't solve it because contacts_to_hits will see both original and coalesced contacts.
+	//
+	// Possible solutions:
+	// 1. Have contacts_to_hits skip chain capsule targets (requires modifying damage crate)
+	// 2. Use a separate CoalescedProjectileContact message type
+	// 3. Use a Local resource to track which message IDs have been processed
+	//
+	// For now, keeping the drain approach but with proper history tracking.
 	
-	if !all_contacts.is_empty() {
-		error!(
-			"coalesce_chain_contacts: Processing {} contacts, history size: {}",
-			all_contacts.len(),
-			history.applied.len()
-		);
-	}
-
-	// Group contacts by chain root
+	let all_contacts: Vec<ProjectileContact> = messages.drain().collect();
 	let mut chains: HashMap<Entity, ChainContactState> = HashMap::new();
-	let mut output_contacts = Vec::new();
-
+	
 	for contact in all_contacts {
-		// Check if this contact is on a chain capsule
-		let Ok(link_id) = link_ids.get(contact.target) else {
-			// Not a chain collider - pass through unchanged
-			output_contacts.push(contact);
-			continue;
-		};
-
-		// This is a chain contact - group by chain root and interaction id
-		let chain_root = link_id.chain_root;
-		let interaction_id = InteractionId::Projectile(contact.projectile);
-
-		// CROSS-FRAME CHECK: Skip if this (projectile, chain_root) pair has already applied damage
-		let key = (contact.projectile, chain_root);
-		if history.applied.contains(&key) {
-			// This projectile has already hit this chain in a previous frame - skip
-			warn!(
-				"Skipping repeat contact: projectile {:?} already hit chain {:?}",
-				contact.projectile,
-				chain_root
-			);
+		let (is_chain, chain_root) = link_ids
+			.get(contact.target)
+			.map(|link_id| (true, link_id.chain_root))
+			.unwrap_or((false, contact.target));
+		
+		let history_key = (contact.projectile, if is_chain { chain_root } else { contact.target });
+		
+		if history.processed.contains(&history_key) {
+			// Already processed - don't re-emit
 			continue;
 		}
 		
-		// Log that this is a new contact
-		info!(
-			"New chain contact: projectile {:?} → chain {:?} (history size: {})",
-			contact.projectile,
-			chain_root,
-			history.applied.len()
-		);
-
-		// WITHIN-FRAME CHECK: Note this contact for deduplication
-		chains.entry(chain_root).or_default().note_contact(interaction_id, contact);
-	}
-
-	// Coalesce chain contacts and add to output
-	for (root, mut state) in chains {
-		for contact in state.drain_coalesced() {
-			// Mark this (projectile, chain_root) pair as applied for all future frames
-			let key = (contact.projectile, root);
-			let was_new = history.applied.insert(key);
-			error!(
-				"Recording hit (was_new={}): projectile {:?} → chain {:?}, history size now: {}",
-				was_new,
-				contact.projectile,
-				root,
-				history.applied.len()
-			);
-			output_contacts.push(contact);
+		if is_chain {
+			let interaction_id = InteractionId::Projectile(contact.projectile);
+			chains.entry(chain_root).or_default().note_contact(interaction_id, contact);
+		} else {
+			history.processed.insert(history_key);
+			messages.write(contact);
 		}
 	}
-
-	// Write all contacts back
-	for contact in output_contacts {
-		messages.write(contact);
+	
+	for (root, mut state) in chains {
+		for contact in state.drain_coalesced() {
+			history.processed.insert((contact.projectile, root));
+			messages.write(contact);
+		}
 	}
 }
 
@@ -171,7 +147,7 @@ pub fn cleanup_despawned_projectiles(
 	let live_projectiles: HashSet<Entity> = projectiles.iter().collect();
 
 	// Remove history entries for despawned projectiles
-	history.applied.retain(|(projectile, _)| live_projectiles.contains(projectile));
+	history.processed.retain(|(projectile, _)| live_projectiles.contains(projectile));
 }
 
 #[cfg(test)]
