@@ -10,24 +10,22 @@ use lod_avian::PhysicsInteractionLayer;
 
 #[test]
 fn boss_collider_uses_fixed_layers() {
-	let mut app = App::new();
-	app.add_plugins((MinimalPlugins, TransformPlugin, PhysicsPlugins::default()));
-	app.update();
+	let mut world = World::new();
 	
-	// Spawn boss actor
+	// Spawn boss actor directly (no app.update() needed to check components)
 	let spec = BikanwardaSpec::encounter();
 	let boss = {
-		let mut commands = app.world_mut().commands();
+		let mut commands = world.commands();
 		spawn_bikanwarda_encounter(&mut commands, &spec, Transform::IDENTITY)
 	};
-	app.update();
+	world.flush();
 	
 	// Check boss has collider
-	let collider = app.world().get::<Collider>(boss);
+	let collider = world.get::<Collider>(boss);
 	assert!(collider.is_some(), "Boss should have collider");
 	
 	// Check boss collision layers
-	let layers = app.world().get::<CollisionLayers>(boss);
+	let layers = world.get::<CollisionLayers>(boss);
 	assert!(layers.is_some(), "Boss should have CollisionLayers");
 	
 	let layers = layers.unwrap();

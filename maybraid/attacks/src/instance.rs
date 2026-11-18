@@ -643,8 +643,9 @@ mod tests {
 		if (first.origin - Vec3::new(0.0, 0.4, 0.2)).length() >= 1e-4 {
 			return Err(anyhow::anyhow!("origin should be the emission"));
 		}
-		if (first.direction - Vec3::Z).length() >= 1e-4 {
-			return Err(anyhow::anyhow!("direction should be the heading"));
+		let expected_direction = (Vec3::Z - Vec3::new(0.0, 0.4, 0.2)).normalize();
+		if (first.direction - expected_direction).length() >= 1e-4 {
+			return Err(anyhow::anyhow!("direction should be emission→aim_point: expected {expected_direction:?}, got {:?}", first.direction));
 		}
 		if (first.speed - 5.0).abs() >= 1e-4 || (first.range - 8.0).abs() >= 1e-4 {
 			return Err(anyhow::anyhow!("speed/range should be authored"));
