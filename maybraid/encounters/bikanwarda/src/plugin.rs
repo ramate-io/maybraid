@@ -5,7 +5,7 @@ use encounters::{EncounterLifetimePolicy, EncounterSleepPolicy, EncountersPlugin
 use lubikans::{LubikanCatalog, LubikanInterfacePlugin, LubikansPlugin};
 
 use crate::outcomes;
-use crate::unlocks::{register_unlocks, BikanwardaUnlockConfig};
+use crate::unlocks::{BikanwardaUnlockConfig, register_unlocks};
 
 /// Registers Ward/Enraged, awards from [`encounters::EncounterResolved`], and
 /// installs [`EncountersPlugin`] with the Bikanwarda lifetime policy.
@@ -39,6 +39,7 @@ impl Plugin for BikanwardaEncounterPlugin {
 		}
 		outcomes::configure(app);
 		app.add_plugins(crate::BossEncounterCombatPlugin);
+		app.add_plugins(crate::BossEncounterLocomotionPlugin);
 		app.add_plugins(crate::chains::BikanwardaChainPhysicsPlugin);
 		app.add_plugins(crate::BossTetherPlugin);
 	}

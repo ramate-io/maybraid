@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use damage::Downed;
+use firearm_intelligence::FirearmIntelligenceSystems;
 use meandering_intelligence::MeanderingIntelligenceUser;
 use poi_intelligence::{PoiGoal, PoiSystems};
 use tether_intelligence::{TetherIntelligenceUser, TetherMemory, TetherSystems};
@@ -41,6 +42,7 @@ impl Plugin for NpcIntelligencePlugin {
 				.before(PoiSystems::Select)
 				.before(TetherSystems::Write),
 		)
+		.configure_sets(Update, TetherSystems::Write.after(FirearmIntelligenceSystems::Movement))
 		.add_systems(Update, mix_npc_brains.in_set(NpcIntelligenceSystems::Mix));
 	}
 }
@@ -86,6 +88,12 @@ fn apply_tether(
 		ThreatTactic::Ignore => {
 			tether.enabled = true;
 			if let Some(objective) = npc.idle_tether {
+				tether.objective = objective;
+			}
+		}
+		ThreatTactic::Combat if npc.keep_tether_in_combat => {
+			tether.enabled = true;
+			if let Some(objective) = npc.engaged_tether.or(npc.idle_tether) {
 				tether.objective = objective;
 			}
 		}

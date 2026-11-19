@@ -9,7 +9,7 @@ use poi_intelligence::{PoiGoal, PoiId, PoiKind};
 use tether_intelligence::{TetherIntelligenceUser, TetherMemory, TetherObjective};
 use threat_management_intelligence::{ThreatManagementIntelligence, ThreatTactic};
 
-use crate::{mix_npc_brains, NpcInstall, NpcIntelligence, NpcIntelligencePlugin, Personality};
+use crate::{NpcInstall, NpcIntelligence, NpcIntelligencePlugin, Personality, mix_npc_brains};
 
 fn dummy_goal() -> PoiGoal {
 	PoiGoal::new(1, PoiId(1), None, PoiKind::new("test/place"), Vec3::X, 1.0, 0.0, 0.0)
@@ -24,16 +24,20 @@ fn grazer_is_unarmed_and_evade_capable() {
 	assert!(world.get::<FirearmIntelligence>(npc).is_none());
 	assert!(world.get::<CombatTargeting>(npc).is_none());
 	assert!(world.get::<NpcIntelligence>(npc).is_some());
-	assert!(world
-		.get::<MeanderingIntelligenceUser>(npc)
-		.is_some_and(|user| { (user.linger_secs - 6.0).abs() < 1e-4 }));
-	assert!(world.get::<ThreatManagementIntelligence>(npc).is_some_and(|threat| threat
-		.combat
-		.by_health
-		== 0.0 && threat
-		.evade
-		.by_distance
-		> 0.0));
+	assert!(
+		world
+			.get::<MeanderingIntelligenceUser>(npc)
+			.is_some_and(|user| { (user.linger_secs - 6.0).abs() < 1e-4 })
+	);
+	assert!(
+		world.get::<ThreatManagementIntelligence>(npc).is_some_and(|threat| threat
+			.combat
+			.by_health
+			== 0.0 && threat
+			.evade
+			.by_distance
+			> 0.0)
+	);
 }
 
 #[test]
@@ -64,9 +68,11 @@ fn predator_stores_an_inner_combat_tether() {
 	world.flush();
 	assert!(world.get::<FirearmIntelligence>(npc).is_some());
 	assert!(world.get::<CombatTargeting>(npc).is_some());
-	assert!(world
-		.get::<NpcIntelligence>(npc)
-		.is_some_and(|npc| npc.engaged_tether.is_some() && !npc.keep_tether_in_combat));
+	assert!(
+		world
+			.get::<NpcIntelligence>(npc)
+			.is_some_and(|npc| npc.engaged_tether.is_some() && !npc.keep_tether_in_combat)
+	);
 	assert!(matches!(
 		world.get::<TetherIntelligenceUser>(npc).map(|user| user.objective),
 		Some(TetherObjective::Stalk(_, _))
@@ -116,9 +122,11 @@ fn assassin_prefers_a_stalking_idle_tether() {
 	world.flush();
 	let objective = world.get::<TetherIntelligenceUser>(npc).map(|user| user.objective);
 	assert!(matches!(objective, Some(TetherObjective::Stalk(_, _))));
-	assert!(world
-		.get::<NpcIntelligence>(npc)
-		.is_some_and(|npc| npc.engaged_tether.is_some()));
+	assert!(
+		world
+			.get::<NpcIntelligence>(npc)
+			.is_some_and(|npc| npc.engaged_tether.is_some())
+	);
 	assert!(world.get::<FirearmIntelligence>(npc).is_some_and(|firearm| {
 		firearm.settings.accuracy >= 0.9
 			&& firearm.settings.tracking_rate >= 9.0
@@ -147,10 +155,11 @@ fn combat_retracts_meander_and_drops_the_poi_goal() {
 		))
 		.id();
 	app.update();
-	assert!(app
-		.world()
-		.get::<MeanderingIntelligenceUser>(npc)
-		.is_some_and(|user| !user.enabled));
+	assert!(
+		app.world()
+			.get::<MeanderingIntelligenceUser>(npc)
+			.is_some_and(|user| !user.enabled)
+	);
 	assert!(app.world().get::<PoiGoal>(npc).is_none());
 }
 
@@ -175,18 +184,47 @@ fn ignore_restores_meander_and_idle_tether() {
 		))
 		.id();
 	app.update();
-	assert!(app
-		.world()
-		.get::<MeanderingIntelligenceUser>(npc)
-		.is_some_and(|user| user.enabled));
-	assert!(app
-		.world()
-		.get::<TetherIntelligenceUser>(npc)
-		.is_some_and(|user| { user.enabled && user.objective == idle }));
+	assert!(
+		app.world()
+			.get::<MeanderingIntelligenceUser>(npc)
+			.is_some_and(|user| user.enabled)
+	);
+	assert!(
+		app.world()
+			.get::<TetherIntelligenceUser>(npc)
+			.is_some_and(|user| { user.enabled && user.objective == idle })
+	);
 }
 
 #[test]
-fn combat_always_disables_tether() {
+fn combat_disables_tether_unless_keep_flagged() {
+	let mut world = World::new();
+	let anchor = world.spawn_empty().id();
+	let idle = TetherObjective::Tether(anchor, 12.0);
+	let engaged = TetherObjective::Tether(anchor, 4.0);
+	let mut threat = ThreatManagementIntelligence::default();
+	threat.tactic = ThreatTactic::Combat;
+	let npc = world
+		.spawn((
+			NpcIntelligence {
+				idle_tether: Some(idle),
+				engaged_tether: Some(engaged),
+				keep_tether_in_combat: false,
+			},
+			threat,
+			TetherIntelligenceUser::new(idle).with_enabled(true),
+		))
+		.id();
+	world.run_system_once(mix_npc_brains).unwrap();
+	assert!(
+		world
+			.get::<TetherIntelligenceUser>(npc)
+			.is_some_and(|user| { !user.enabled && user.objective == idle })
+	);
+}
+
+#[test]
+fn combat_keeps_tether_when_flagged() {
 	let mut world = World::new();
 	let anchor = world.spawn_empty().id();
 	let idle = TetherObjective::Tether(anchor, 12.0);
@@ -205,9 +243,11 @@ fn combat_always_disables_tether() {
 		))
 		.id();
 	world.run_system_once(mix_npc_brains).unwrap();
-	assert!(world
-		.get::<TetherIntelligenceUser>(npc)
-		.is_some_and(|user| { !user.enabled && user.objective == idle }));
+	assert!(
+		world
+			.get::<TetherIntelligenceUser>(npc)
+			.is_some_and(|user| { user.enabled && user.objective == engaged })
+	);
 }
 
 #[test]
@@ -272,10 +312,11 @@ fn unsatisfied_tether_preempts_meander_on_ignore() {
 		))
 		.id();
 	app.update();
-	assert!(app
-		.world()
-		.get::<MeanderingIntelligenceUser>(npc)
-		.is_some_and(|user| !user.enabled));
+	assert!(
+		app.world()
+			.get::<MeanderingIntelligenceUser>(npc)
+			.is_some_and(|user| !user.enabled)
+	);
 	assert!(app.world().get::<PoiGoal>(npc).is_none());
 	assert!(app.world().get::<TetherIntelligenceUser>(npc).is_some_and(|user| user.enabled));
 }
@@ -298,9 +339,10 @@ fn satisfied_tether_allows_meander_on_ignore() {
 		))
 		.id();
 	app.update();
-	assert!(app
-		.world()
-		.get::<MeanderingIntelligenceUser>(npc)
-		.is_some_and(|user| user.enabled));
+	assert!(
+		app.world()
+			.get::<MeanderingIntelligenceUser>(npc)
+			.is_some_and(|user| user.enabled)
+	);
 	assert!(app.world().get::<PoiGoal>(npc).is_some());
 }

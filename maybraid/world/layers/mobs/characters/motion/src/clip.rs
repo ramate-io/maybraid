@@ -6,13 +6,13 @@
 use bevy::prelude::*;
 use character_animations::animations::quadruped_run_stop::DEFAULT_QUADRUPED_RUN_STOP_SPEED;
 use character_animations::animations::{
-	BallisticJump, DorsoventralUndulation, EpiphantBray, EpiphantSleepEnter, EpiphantSleepHold,
-	EpiphantWake, FixedTuck, Flapping, FlipDirection, Gallop, HandClap, Jab, LateralUndulation,
-	Leap, PowerDash, PowerStrafe, QuadrupedRun, QuadrupedRunStop, Run, Soaring, TuckProfile,
-	TuckedFlip, TwoFootedJump, VictoryWave, Walk, AIR_END, DEFAULT_BACKSWING,
-	DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT,
-	DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
-	THINK_AGAIN_DURATION, THINK_AGAIN_SPEED,
+	AIR_END, BallisticJump, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY,
+	DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
+	DEFAULT_SPRING_DURATION, DorsoventralUndulation, EpiphantBray, EpiphantSleepEnter,
+	EpiphantSleepHold, EpiphantWake, FixedTuck, Flapping, FlipDirection, Gallop, HandClap, Jab,
+	LateralUndulation, Leap, PowerDash, PowerStrafe, QuadrupedRun, QuadrupedRunStop, Run, Soaring,
+	TAKEOFF_END, THINK_AGAIN_DURATION, THINK_AGAIN_SPEED, TuckProfile, TuckedFlip, TwoFootedJump,
+	VictoryWave, Walk,
 };
 use character_animations::animations::{
 	Beckon, Bow, CrouchedWalk, FacePalm, FistPump, FlapFromGlide, GlideFromFlap, GroundedGait,
@@ -114,6 +114,17 @@ impl AnimId {
 	/// Callers apply this only after movement and airborne clip selection.
 	pub fn needs_quadruped_run_stop(self, progress: f32) -> bool {
 		self == Self::QuadrupedRun || (self == Self::QuadrupedRunStop && progress < 1.0)
+	}
+
+	/// Authored performance clips the locomotion driver must not overwrite.
+	pub const fn is_authored_performance(self) -> bool {
+		matches!(
+			self,
+			Self::EpiphantBray
+				| Self::EpiphantSleepEnter
+				| Self::EpiphantSleepHold
+				| Self::EpiphantWake
+		)
 	}
 
 	pub const fn default_speed(self) -> f32 {

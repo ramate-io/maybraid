@@ -29,9 +29,17 @@ firearm-intelligence = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
 lubikans = { workspace = true }
+meandering-intelligence = { workspace = true }
+movement-intelligence = { workspace = true }
+movement-intelligence-avian = { workspace = true }
+movement-realization = { workspace = true }
+npc-intelligence = { workspace = true }
+player = { workspace = true }
+poi-intelligence = { workspace = true }
 projectiles = { workspace = true }
 spotting-intelligence = { workspace = true }
 spotting-intelligence-avian = { workspace = true }
+tether-intelligence = { workspace = true }
 world-player = { workspace = true }
 world-materials = { workspace = true }
 
@@ -43,6 +51,7 @@ encounters = { workspace = true, features = ["test-support"] }
 firearms = { workspace = true }
 lod = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
+maybraid-audio = { workspace = true }
 maybraid-spatial-rumble = { workspace = true }
 
 [lints]

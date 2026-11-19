@@ -35,29 +35,35 @@ pub fn write_tether_objectives(
 	mut users: Query<(
 		Entity,
 		&Transform,
+		Option<&GlobalTransform>,
 		&mut TetherIntelligenceUser,
 		&mut TetherMemory,
 		&mut MovementIntelligence,
 		Option<&mut RoutingIntelligenceUser>,
 	)>,
-	anchors: Query<&Transform, With<Tether>>,
+	anchors: Query<(&Transform, Option<&GlobalTransform>), With<Tether>>,
 	mut commands: Commands,
 ) {
 	let now = time.elapsed_secs();
-	for (entity, transform, mut tether, mut memory, mut movement, routing) in &mut users {
+	for (entity, transform, global, mut tether, mut memory, mut movement, routing) in &mut users {
 		let dt = if memory.last_checked_at > 0.0 {
 			(now - memory.last_checked_at).max(0.0)
 		} else {
 			time.delta_secs()
 		};
 		let subject_id = tether.objective.subject();
-		let Ok(anchor) = anchors.get(subject_id) else {
+		let Ok((anchor, anchor_global)) = anchors.get(subject_id) else {
 			continue;
 		};
-		let action =
-			tether.evaluate(&mut memory, transform.translation, anchor.translation, dt, now);
-		apply_action(entity, transform.translation, action, &mut movement, routing, &mut commands);
+		let from = pose_translation(transform, global);
+		let subject = pose_translation(anchor, anchor_global);
+		let action = tether.evaluate(&mut memory, from, subject, dt, now);
+		apply_action(entity, from, action, &mut movement, routing, &mut commands);
 	}
+}
+
+fn pose_translation(transform: &Transform, global: Option<&GlobalTransform>) -> Vec3 {
+	global.map(|global| global.translation()).unwrap_or(transform.translation)
 }
 
 fn apply_action(

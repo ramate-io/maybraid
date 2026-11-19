@@ -7,11 +7,12 @@ use tether_intelligence::TetherObjective;
 pub struct NpcIntelligence {
 	/// Applied while the tactic is Ignore (and as the restore target after combat).
 	pub idle_tether: Option<TetherObjective>,
-	/// Stored inner leash for personalities that close a ring. The mixer does
-	/// not write tether during Combat; a mob lock swaps [`Self::idle_tether`]'s
-	/// subject instead.
+	/// Stored inner leash for personalities that close a ring. During Combat
+	/// the mixer writes this (or [`Self::idle_tether`]) when
+	/// [`Self::keep_tether_in_combat`] is set.
 	pub engaged_tether: Option<TetherObjective>,
-	/// Unused by the mixer. Pack lock/release is the mob-level stickiness.
+	/// Keep the tether grant on during [`ThreatTactic::Combat`] so a leashed
+	/// combatant cannot walk out of its radius while pursuing.
 	pub keep_tether_in_combat: bool,
 }
 

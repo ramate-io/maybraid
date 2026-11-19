@@ -786,6 +786,7 @@ mod integration_regressions {
 	use bevy::scene::WorldSceneExt;
 	use lod::scene::LodScene;
 	use spotting_intelligence::SpottingUser;
+	use bevy::prelude::*;
 	
 	fn full_encounter_app() -> App {
 		full_encounter_app_with(|_| {})
@@ -824,11 +825,15 @@ mod integration_regressions {
 		
 		// Install bikanwarda encounter plugin
 		// This includes: EncountersPlugin, LubikansPlugin, BossEncounterCombatPlugin,
-		// BikanwardaChainPhysicsPlugin (which includes DamagePlugin), BossTetherPlugin
+		// BossEncounterLocomotionPlugin, BikanwardaChainPhysicsPlugin, BossTetherPlugin
 		app.add_plugins(crate::BikanwardaEncounterPlugin);
 		
 		// Install assembly plugin to spawn actors
 		app.add_plugins(BossAssemblyPlugin);
+
+		crate::add_player_motor_plugins(&mut app);
+		app.init_asset::<maybraid_audio::AudioClip>();
+		app.add_systems(Update, spawn_test_support_ground);
 		
 		// Configure spotting to run on schedule (discovery every 0.2s, which is 12 frames at 60 FPS)
 		// Don't gate it behind a timer - let it run every frame to pick up discovery_interval_secs
@@ -839,6 +844,32 @@ mod integration_regressions {
 		app.finish();
 		app.update();
 		app
+	}
+
+	fn spawn_test_support_ground(
+		hosts: Query<&GlobalTransform, Added<BossEncounterRoot>>,
+		mut commands: Commands,
+	) {
+		use avian3d::prelude::{Collider, RigidBody};
+		use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaSpec};
+		use characters::CharacterRecipe;
+
+		for gt in &hosts {
+			let t = gt.translation();
+			let hull = BikanwardaActorRecipe::from_spec(BikanwardaSpec::encounter())
+				.components()
+				.scaled_locomotion_capsule();
+			let terrain_y = t.y - hull.spawn_height();
+			let center = Vec3::new(t.x, terrain_y - 1.0, t.z);
+			commands.spawn((
+				Name::new("test-encounter-ground"),
+				RigidBody::Static,
+				Collider::cuboid(400.0, 1.0, 400.0),
+				Transform::from_translation(center),
+				GlobalTransform::from_translation(center),
+				lod_avian::PhysicsInteractionLayer::fixed_layers(),
+			));
+		}
 	}
 	
 	#[test]
@@ -1965,6 +1996,396 @@ mod integration_regressions {
 		assert!(bray_started, "combat driver should fire a real Bray");
 		assert!(saw_bray_clip, "bound body rig should play AnimClip::epiphant_bray");
 		assert!(restored, "bound body rig should restore the prior clip after Bray");
+	}
+
+	fn spawn_production_encounter(
+		app: &mut App,
+		boss_position: Vec3,
+		terrain_y: f32,
+	) -> (Entity, Entity, Entity) {
+		let encounter =
+			crate::generation::BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
+		let anchor_transform = Transform::from_translation(Vec3::ZERO);
+		let anchor = app.world_mut().spawn(anchor_transform).id();
+		let scene = encounter.scene_with_level(
+			&lod::lod_ref::LodRef {
+				entity: anchor,
+				previous_transform: &anchor_transform,
+				current_transform: &anchor_transform,
+				bounds: &bevy::shape::Aabb3d::from_min_max(Vec3::splat(-200.0), Vec3::splat(200.0)),
+			},
+			lod::scene::LodSceneLevel::High,
+		);
+		let host_entity = app.world_mut().spawn_scene(scene).expect("spawn_scene should succeed").id();
+		for _ in 0..12 {
+			app.update();
+		}
+		let actor_entity = app
+			.world()
+			.entity(host_entity)
+			.get::<BossActor>()
+			.expect("Host should have BossActor")
+			.0;
+		let column_entity = app
+			.world()
+			.entity(host_entity)
+			.get::<Children>()
+			.expect("Host should have children")
+			.iter()
+			.find(|&child| app.world().entity(child).contains::<BossColumn>())
+			.expect("Host should have a pillar");
+		(host_entity, actor_entity, column_entity)
+	}
+
+	fn xz(a: Vec3, b: Vec3) -> f32 {
+		Vec2::new(a.x, a.z).distance(Vec2::new(b.x, b.z))
+	}
+
+	fn actor_translation(app: &App, actor: Entity) -> Vec3 {
+		app.world()
+			.get::<GlobalTransform>(actor)
+			.expect("actor GlobalTransform")
+			.translation()
+	}
+
+	fn visual_facing(app: &mut App, actor: Entity) -> Vec3 {
+		use characters::{CharacterHeading, CharacterRoot};
+		let visual = app
+			.world_mut()
+			.query_filtered::<(Entity, &ChildOf), With<CharacterRoot>>()
+			.iter(app.world())
+			.find(|(_, parent)| parent.parent() == actor)
+			.map(|(entity, _)| entity)
+			.expect("visual CharacterRoot");
+		let heading = app.world().get::<CharacterHeading>(visual).copied().unwrap_or_default();
+		let transform = app.world().get::<Transform>(visual).copied().unwrap_or_default();
+		heading.facing(&transform)
+	}
+
+	fn spawn_visible_player(app: &mut App, at: Vec3) -> Entity {
+		app.world_mut()
+			.spawn((
+				Name::new("test-player-locomotion"),
+				Transform::from_translation(at),
+				GlobalTransform::from_translation(at),
+				Health::from_max(100.0),
+				spotting_intelligence::SpotSubject::new(
+					spotting_intelligence::InterestLayers::CHARACTER,
+					spotting_intelligence::SpotBounds::capsule(0.4, 1.8),
+				),
+				avian3d::prelude::RigidBody::Kinematic,
+				avian3d::prelude::Collider::capsule(0.4, 1.8),
+				lod_avian::PhysicsInteractionLayer::animated_layers(),
+				threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId(1)),
+				{
+					let mut affiliations = threat_intelligence::Affiliations::default();
+					const PLAYER_GROUP: threat_intelligence::ThreatGroupId =
+						threat_intelligence::ThreatGroupId::group(29);
+					affiliations.join(
+						PLAYER_GROUP,
+						threat_intelligence::AffiliationStrength::permanent(1.0),
+					);
+					affiliations
+				},
+			))
+			.id()
+	}
+
+	/// Production assembly: the actor's GlobalTransform must translate and yaw
+	/// must change while the shared motor/tether stack patrols.
+	#[test]
+	fn real_boss_patrols_and_turns_within_tether() {
+		let mut app = full_encounter_app();
+		let terrain_y = 0.0;
+		let boss_position = Vec3::new(40.0, terrain_y + 10.15, -25.0);
+		let (_host, actor, column) = spawn_production_encounter(&mut app, boss_position, terrain_y);
+
+		let start = actor_translation(&app, actor);
+		let start_facing = visual_facing(&mut app, actor);
+		let pillar = app
+			.world()
+			.get::<GlobalTransform>(column)
+			.expect("pillar GlobalTransform")
+			.translation();
+
+		let mut max_move = 0.0_f32;
+		let mut max_turn = 0.0_f32;
+		let mut max_leash = 0.0_f32;
+		for _ in 0..360 {
+			app.update();
+			let now = actor_translation(&app, actor);
+			max_move = max_move.max(xz(start, now));
+			max_turn = max_turn.max(start_facing.angle_between(visual_facing(&mut app, actor)));
+			max_leash = max_leash.max(xz(now, pillar));
+			assert!(
+				xz(now, pillar) <= crate::BOSS_TETHER_RADIUS + 2.5,
+				"boss left the tether during patrol: xz={:.3} start={start:?} now={now:?} pillar={pillar:?}",
+				xz(now, pillar)
+			);
+		}
+
+		eprintln!("patrol start={start:?} move={max_move:.3} turn={max_turn:.3} leash={max_leash:.3}");
+		assert!(
+			max_move > 1.0,
+			"boss GlobalTransform should translate during patrol, moved {max_move:.3} m from {start:?}"
+		);
+		assert!(
+			max_turn > 0.15,
+			"boss yaw should change during patrol, max turn {max_turn:.3} rad"
+		);
+	}
+
+	/// Pillar stays a static physics actor while the boss patrols.
+	#[test]
+	fn real_pillar_stays_fixed_while_boss_patrols() {
+		let mut app = full_encounter_app();
+		let terrain_y = 0.0;
+		let boss_position = Vec3::new(-30.0, terrain_y + 10.15, 18.0);
+		let (_host, actor, column) = spawn_production_encounter(&mut app, boss_position, terrain_y);
+		let pillar_start = app
+			.world()
+			.get::<GlobalTransform>(column)
+			.expect("pillar GlobalTransform")
+			.translation();
+		let start = actor_translation(&app, actor);
+
+		let mut moved = 0.0_f32;
+		for _ in 0..240 {
+			app.update();
+			let pillar_now = app
+				.world()
+				.get::<GlobalTransform>(column)
+				.expect("pillar GlobalTransform")
+				.translation();
+			assert!(
+				(pillar_now - pillar_start).length() < 0.05,
+				"pillar must stay fixed, start={pillar_start:?} now={pillar_now:?}"
+			);
+			moved = moved.max(xz(start, actor_translation(&app, actor)));
+		}
+		eprintln!("pillar fixed at {pillar_start:?}; boss moved {moved:.3} m");
+		assert!(moved > 1.0, "boss should have patrolled while the pillar stayed put");
+	}
+
+	/// Push the actor past the leash; the shared tether objective pulls it back.
+	#[test]
+	fn real_boss_stays_within_tether_when_pushed() {
+		use avian3d::prelude::LinearVelocity;
+
+		let mut app = full_encounter_app();
+		let terrain_y = 0.0;
+		let boss_position = Vec3::new(12.0, terrain_y + 10.15, 8.0);
+		let (_host, actor, column) = spawn_production_encounter(&mut app, boss_position, terrain_y);
+		let pillar = app
+			.world()
+			.get::<GlobalTransform>(column)
+			.expect("pillar")
+			.translation();
+
+		let outside = Vec3::new(pillar.x + crate::BOSS_TETHER_RADIUS + 10.0, boss_position.y, pillar.z);
+		let world_now = actor_translation(&app, actor);
+		if let Some(mut transform) = app.world_mut().get_mut::<Transform>(actor) {
+			let parent_world = world_now - transform.translation;
+			transform.translation = outside - parent_world;
+		}
+		if let Some(mut velocity) = app.world_mut().get_mut::<LinearVelocity>(actor) {
+			velocity.0 = Vec3::X * 12.0;
+		}
+		app.world_mut().entity_mut(actor).insert(GlobalTransform::from_translation(outside));
+
+		let mut max_leash = xz(outside, pillar);
+		let mut min_leash_after = max_leash;
+		for frame in 0..300 {
+			app.update();
+			let now = actor_translation(&app, actor);
+			let leash = xz(now, pillar);
+			max_leash = max_leash.max(leash);
+			if frame > 90 {
+				min_leash_after = min_leash_after.min(leash);
+			}
+		}
+		let final_leash = xz(actor_translation(&app, actor), pillar);
+		eprintln!(
+			"pushed leash start={:.3} max={:.3} min_after={:.3} final={:.3}",
+			xz(outside, pillar),
+			max_leash,
+			min_leash_after,
+			final_leash
+		);
+		assert!(
+			final_leash <= crate::BOSS_TETHER_RADIUS + 2.5,
+			"boss should return inside the tether after a push, final leash {final_leash:.3}"
+		);
+		assert!(
+			min_leash_after < xz(outside, pillar) - 2.0,
+			"tether should pull the boss back toward the pillar"
+		);
+	}
+
+	/// Pursuing a spotted player at the edge must not leave the pillar radius.
+	#[test]
+	fn real_boss_stays_within_tether_when_pursuing_player_at_edge() {
+		let mut app = full_encounter_app();
+		let terrain_y = 0.0;
+		let boss_position = Vec3::new(0.0, terrain_y + 10.15, 0.0);
+		let (_host, actor, column) = spawn_production_encounter(&mut app, boss_position, terrain_y);
+		let pillar = app
+			.world()
+			.get::<GlobalTransform>(column)
+			.expect("pillar")
+			.translation();
+		let player_pos = Vec3::new(
+			pillar.x + crate::BOSS_TETHER_RADIUS + 18.0,
+			terrain_y + 1.3,
+			pillar.z,
+		);
+		let _player = spawn_visible_player(&mut app, player_pos);
+
+		let start = actor_translation(&app, actor);
+		let mut max_leash = 0.0_f32;
+		let mut saw_turn = false;
+		let mut max_toward_player = 0.0_f32;
+		let start_facing = visual_facing(&mut app, actor);
+		for _ in 0..360 {
+			app.update();
+			let now = actor_translation(&app, actor);
+			let leash = xz(now, pillar);
+			max_leash = max_leash.max(leash);
+			max_toward_player = max_toward_player.max(now.x - start.x);
+			assert!(
+				leash <= crate::BOSS_TETHER_RADIUS + 2.5,
+				"boss left the tether while pursuing: leash={leash:.3} pos={now:?} pillar={pillar:?}"
+			);
+			if start_facing.angle_between(visual_facing(&mut app, actor)) > 0.2 {
+				saw_turn = true;
+			}
+		}
+		eprintln!(
+			"pursue max leash={max_leash:.3} turned={saw_turn} toward_player={max_toward_player:.3} start={start:?}"
+		);
+		assert!(
+			saw_turn,
+			"boss should turn toward the spotted player at the tether edge"
+		);
+		assert!(
+			max_toward_player > 1.0,
+			"boss should walk toward the spotted player while remaining leashed, moved {max_toward_player:.3} m"
+		);
+		assert!(
+			max_leash <= crate::BOSS_TETHER_RADIUS + 2.5,
+			"pursuit must stay inside the tether radius"
+		);
+	}
+
+	/// Gait clip on the bound body rig follows actual XZ velocity, not a timer.
+	#[test]
+	fn real_gait_follows_velocity() {
+		use avian3d::prelude::LinearVelocity;
+		use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaSpec};
+		use characters::{
+			bind_actor_body_rigs, ActorBodyRig, AnimClip, AnimId, AnimRef, AnimRefRoot,
+			CharacterComponents, CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot,
+			MemberOf, RigId, RigSkeletonKind,
+		};
+		use lod::scene::LodSceneLevel;
+
+		let mut app = full_encounter_app_with(|app| {
+			app.add_systems(PreUpdate, bind_actor_body_rigs);
+		});
+		let terrain_y = 0.0;
+		let boss_position = Vec3::new(6.0, terrain_y + 10.15, -4.0);
+		let (_host, actor, _column) = spawn_production_encounter(&mut app, boss_position, terrain_y);
+
+		let visual = app
+			.world_mut()
+			.query_filtered::<(Entity, &ChildOf), With<CharacterRoot>>()
+			.iter(app.world())
+			.find(|(_, parent)| parent.parent() == actor)
+			.map(|(entity, _)| entity)
+			.expect("visual CharacterRoot");
+		let spec = BikanwardaSpec::encounter();
+		let recipe = BikanwardaActorRecipe::from_spec(spec);
+		let body_node = recipe
+			.components()
+			.rig_nodes_for_level(LodSceneLevel::High)
+			.flatten()
+			.into_iter()
+			.find(|node| node.id == RigId::Body)
+			.expect("body rig");
+		let prior = AnimRef::new(AnimClip::still());
+		let spawned = app.world_mut().spawn_scene(body_node.assembly_contents()).ok().map(|s| s.id());
+		let rig = spawned.unwrap_or_else(|| {
+			app.world_mut()
+				.spawn((
+					CharacterRig { role: CharacterRigRole::Body, skeleton: RigSkeletonKind::Quadruped },
+					AnimRefRoot(prior),
+					ChildOf(visual),
+				))
+				.id()
+		});
+		app.world_mut().entity_mut(rig).insert((
+			ChildOf(visual),
+			MemberOf(visual),
+			AnimRefRoot(prior),
+			CharacterRig { role: CharacterRigRole::Body, skeleton: RigSkeletonKind::Quadruped },
+		));
+		app.update();
+		assert!(app.world().get::<ActorBodyRig>(actor).is_some());
+
+		if let Some(mut velocity) = app.world_mut().get_mut::<LinearVelocity>(actor) {
+			velocity.0 = Vec3::ZERO;
+		}
+		let mut saw_still = false;
+		for _ in 0..20 {
+			if let Some(mut velocity) = app.world_mut().get_mut::<LinearVelocity>(actor) {
+				velocity.0 = Vec3::ZERO;
+			}
+			app.update();
+			if app.world().get::<AnimRefRoot>(rig).is_some_and(|anim| anim.0.clip.id() == AnimId::Still)
+			{
+				saw_still = true;
+				break;
+			}
+		}
+
+		if let Some(mut velocity) = app.world_mut().get_mut::<LinearVelocity>(actor) {
+			velocity.0 = Vec3::X * 4.0;
+		}
+		let mut saw_run = false;
+		for _ in 0..30 {
+			if let Some(mut velocity) = app.world_mut().get_mut::<LinearVelocity>(actor) {
+				velocity.0 = Vec3::X * 4.0;
+			}
+			app.update();
+			if app.world().get::<AnimRefRoot>(rig).is_some_and(|anim| {
+				matches!(anim.0.clip.id(), AnimId::QuadrupedRun | AnimId::QuadrupedRunStart)
+			}) {
+				saw_run = true;
+				break;
+			}
+		}
+
+		if let Some(mut velocity) = app.world_mut().get_mut::<LinearVelocity>(actor) {
+			velocity.0 = Vec3::ZERO;
+		}
+		let mut restored_still = false;
+		for _ in 0..40 {
+			if let Some(mut velocity) = app.world_mut().get_mut::<LinearVelocity>(actor) {
+				velocity.0 = Vec3::ZERO;
+			}
+			app.update();
+			if app.world().get::<AnimRefRoot>(rig).is_some_and(|anim| {
+				matches!(anim.0.clip.id(), AnimId::Still | AnimId::QuadrupedRunStop)
+			}) {
+				restored_still = true;
+				break;
+			}
+		}
+
+		eprintln!("gait still={saw_still} run={saw_run} restore={restored_still}");
+		assert!(saw_still, "stationary boss should idle (AnimClip::still)");
+		assert!(saw_run, "moving boss should play quadruped gait from LinearVelocity");
+		assert!(restored_still, "gait should return toward still once velocity drops");
 	}
 }
 

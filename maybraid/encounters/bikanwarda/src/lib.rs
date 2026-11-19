@@ -11,6 +11,7 @@ mod combat;
 mod contract;
 mod generation;
 mod identity;
+mod locomotion;
 mod outcomes;
 mod plugin;
 mod presentation;
@@ -21,6 +22,10 @@ mod unlocks;
 pub use assembly::{spawn_boss_assemblies, BossAssemblyPlugin};
 pub use combat::{BossEncounterCombatPlugin, BossInCombat, BossAttackCooldown};
 pub use contract::{BossActorRecipe, BossAttackConfig, BossEncounterContract};
+pub use locomotion::{
+	add_player_motor_plugins, initialize_boss_locomotion, BossEncounterLocomotionPlugin,
+	BOSS_TETHER_RADIUS,
+};
 pub use tether::{BossTetherChain, BossTetherPlugin};
 pub use generation::{AuthoredBossSpawns, BikanwardaBossEncounter};
 pub use identity::{

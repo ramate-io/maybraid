@@ -17,7 +17,7 @@ use poi_intelligence::{
 	PoiVisitState,
 };
 use spotting_intelligence::{InterestLayers, SpotDirective, SpottingSettings, SpottingUser};
-use tether_intelligence::{install_tether, StalkRadii, TetherIntelligenceUser, TetherObjective};
+use tether_intelligence::{StalkRadii, TetherIntelligenceUser, TetherObjective, install_tether};
 use threat_intelligence::{ThreatDiscoveryPolicy, ThreatIntelligenceUser, ThreatKnowledge};
 use threat_management_intelligence::{ThreatManagementElement, ThreatManagementIntelligence};
 
@@ -112,7 +112,7 @@ pub struct NpcInstall {
 	pub spotting_range: Option<f32>,
 	/// When false, skip combat brains even if the spec has them (unarmed civilian).
 	pub armed: bool,
-	/// Unused by the mixer. Pack lock/release is the mob-level stickiness.
+	/// Mixer keeps the tether grant on during Combat when set.
 	pub keep_tether_in_combat: Option<bool>,
 	/// Breaks identical meander scores across pack slots. Zero leaves ranking as-is.
 	pub selection_salt: u64,
