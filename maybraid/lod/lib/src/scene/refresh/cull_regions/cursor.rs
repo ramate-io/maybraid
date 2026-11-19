@@ -37,6 +37,39 @@ impl LodCullProduceCadence {
 	}
 }
 
+/// Shared cadence + this-tick OpenLattice batch for every cull channel.
+///
+/// Vegetation and buildings each add [`super::produce::LodSceneCullRegionPlugin`]
+/// with the same lattice and [`LodCullRegionCursor`]. A `Local` clock per
+/// system let both emit on the same frame and each advance the cursor, so
+/// [`super::cache::fill_lod_cull_produce_cache`] paid two tiles per cadence
+/// tick. One clock and one AABB batch restore the documented 1-tile step.
+#[derive(Resource, Debug, Default)]
+pub struct LodCullProduceClock {
+	frames_since: u32,
+	pub emit_this_frame: bool,
+}
+
+impl LodCullProduceClock {
+	pub fn tick(&mut self, cadence: LodCullProduceCadence) {
+		self.emit_this_frame = cadence.should_emit(&mut self.frames_since);
+	}
+}
+
+/// Regions computed by the first cull producer this frame; later channels reuse them.
+#[derive(Resource, Debug, Default)]
+pub struct LodCullAabbThisTick {
+	pub regions: Vec<bevy::math::bounding::Aabb3d>,
+	pub wrote_untyped: bool,
+}
+
+impl LodCullAabbThisTick {
+	pub fn clear(&mut self) {
+		self.regions.clear();
+		self.wrote_untyped = false;
+	}
+}
+
 /// Stable RR state for [`super::LodCullRegions`] producers (e.g. [`super::OpenLattice`]).
 ///
 /// - **`cells`** is replaced when the driver anchor cell changes.
@@ -116,5 +149,21 @@ mod tests {
 		assert!(cadence.should_emit(&mut frames));
 		assert!(cadence.should_emit(&mut frames));
 		assert!(cadence.should_emit(&mut frames));
+	}
+
+	#[test]
+	fn shared_clock_matches_cadence() {
+		let cadence = LodCullProduceCadence::every_n_frames(4);
+		let mut clock = LodCullProduceClock::default();
+		clock.tick(cadence);
+		assert!(clock.emit_this_frame);
+		clock.tick(cadence);
+		assert!(!clock.emit_this_frame);
+		clock.tick(cadence);
+		assert!(!clock.emit_this_frame);
+		clock.tick(cadence);
+		assert!(!clock.emit_this_frame);
+		clock.tick(cadence);
+		assert!(clock.emit_this_frame);
 	}
 }
