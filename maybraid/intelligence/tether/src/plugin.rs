@@ -6,6 +6,7 @@ use movement_intelligence::{
 use routing_intelligence::{RoutingIntelligenceUser, RoutingSystems};
 
 use crate::memory::TetherMemory;
+use crate::objective::TetherObjective;
 use crate::user::{Tether, TetherAction, TetherIntelligenceUser};
 
 const REPLAN_THRESHOLD: ReplanThreshold =
@@ -58,12 +59,60 @@ pub fn write_tether_objectives(
 		let from = pose_translation(transform, global);
 		let subject = pose_translation(anchor, anchor_global);
 		let action = tether.evaluate(&mut memory, from, subject, dt, now);
+		let action = reclaim_stolen_objective(
+			action,
+			memory.satisfied,
+			memory.remaining,
+			tether.horizon,
+			tether.objective,
+			from,
+			subject,
+			movement.objective,
+		);
 		apply_action(entity, from, action, &mut movement, routing, &mut commands);
 	}
 }
 
 fn pose_translation(transform: &Transform, global: Option<&GlobalTransform>) -> Vec3 {
 	global.map(|global| global.translation()).unwrap_or(transform.translation)
+}
+
+/// `evaluate` yields `None` while remaining work is shrinking so a lone tether
+/// does not replan every frame. Firearm (and other) brains write earlier in the
+/// same Update, so that yield would leave their vantage in force past the leash.
+/// Reclaim when unsatisfied remaining is still > 0 and the live objective is no
+/// longer the tether's.
+pub(crate) fn reclaim_stolen_objective(
+	action: TetherAction,
+	satisfied: bool,
+	remaining: f32,
+	horizon: f32,
+	objective: TetherObjective,
+	from: Vec3,
+	subject: Vec3,
+	current: MovementObjective,
+) -> TetherAction {
+	if !matches!(action, TetherAction::None) || satisfied || remaining <= 0.0 {
+		return action;
+	}
+	let next = if remaining <= horizon {
+		TetherAction::Local(objective.movement_objective(from, subject))
+	} else {
+		TetherAction::Route(objective.route_point(from, subject))
+	};
+	let candidate = match next {
+		TetherAction::Local(objective) => objective,
+		TetherAction::Route(point) => MovementObjective::Reach(MovementLocation::new(
+			point,
+			current.location().radius.max(0.4),
+		)),
+		TetherAction::None | TetherAction::Hold => return action,
+	};
+	if current.needs_replan(candidate, REPLAN_THRESHOLD) {
+		next
+	} else {
+		action
+	}
 }
 
 fn apply_action(

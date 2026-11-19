@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use movement_intelligence::MovementObjective;
+use movement_intelligence::{MovementLocation, MovementObjective};
 
 use crate::memory::TetherMemory;
 use crate::objective::{ring_point, StalkRadii, TetherObjective};
@@ -127,6 +127,60 @@ fn hysteresis_keeps_satisfied_until_added_radius() -> anyhow::Result<()> {
 	let pulled = user.evaluate(&mut memory, Vec3::ZERO, Vec3::X * 10.0, 0.25, 3.0);
 	assert!(!memory.satisfied);
 	assert!(matches!(pulled, TetherAction::Local(_) | TetherAction::Route(_)));
+	Ok(())
+}
+
+#[test]
+fn reclaim_stolen_objective_overwrites_firearm_vantage() -> anyhow::Result<()> {
+	use crate::plugin::reclaim_stolen_objective;
+
+	let subject = subject();
+	let objective = TetherObjective::Tether(subject, 24.0);
+	let from = Vec3::X * 26.0;
+	let anchor = Vec3::ZERO;
+	let stolen = MovementObjective::VantageOn {
+		location: MovementLocation::new(Vec3::X * 50.0, 14.0),
+		hide_weight: 0.0,
+		sightline_weight: 1.0,
+	};
+	let reclaimed = reclaim_stolen_objective(
+		TetherAction::None,
+		false,
+		2.0,
+		28.0,
+		objective,
+		from,
+		anchor,
+		stolen,
+	);
+	assert!(matches!(
+		reclaimed,
+		TetherAction::Local(MovementObjective::Reach(location))
+			if (location.radius - 24.0).abs() < 1e-4
+	));
+	let already_ours = MovementObjective::Reach(MovementLocation::new(anchor, 24.0));
+	let yielded = reclaim_stolen_objective(
+		TetherAction::None,
+		false,
+		2.0,
+		28.0,
+		objective,
+		from,
+		anchor,
+		already_ours,
+	);
+	assert!(matches!(yielded, TetherAction::None));
+	let satisfied = reclaim_stolen_objective(
+		TetherAction::None,
+		true,
+		0.0,
+		28.0,
+		objective,
+		from,
+		anchor,
+		stolen,
+	);
+	assert!(matches!(satisfied, TetherAction::None));
 	Ok(())
 }
 

@@ -26,15 +26,15 @@ use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use npc_intelligence::{NpcIntelligence, NpcIntelligencePlugin};
 use player::{
-	Npc, PlayerLook, PlayerPlugin, PlayerYawOwner, apply_character_controller,
-	apply_character_mobility,
+	apply_character_controller, apply_character_mobility, Npc, PlayerLook, PlayerPlugin,
+	PlayerYawOwner,
 };
 use poi_intelligence::{
 	PoiId, PoiIntelligencePlugin, PoiIntelligenceUser, PoiInterests, PoiKind, PoiKnowledge,
 	PoiObservation, PoiSource, PoiVisitState,
 };
 use tether_intelligence::{
-	Tether, TetherIntelligenceUser, TetherObjective, TetherPlugin, install_tether,
+	install_tether, Tether, TetherIntelligenceUser, TetherObjective, TetherPlugin,
 };
 
 use crate::presentation::{BossActor, BossColumn, BossEncounterRoot};
@@ -117,7 +117,12 @@ pub fn initialize_boss_locomotion(
 		commands.entity(column_entity).insert(Tether);
 
 		let objective = TetherObjective::Tether(column_entity, BOSS_TETHER_RADIUS);
-		let mut tether = TetherIntelligenceUser::new(objective).with_added_radius(2.0);
+		// Default added_radius/stuck_timeout let the motor walk ~2 m past the
+		// leash before the brain writes a pull. Zero both so pursuit at the rim
+		// cannot outrun the 24 m objective.
+		let mut tether = TetherIntelligenceUser::new(objective)
+			.with_added_radius(0.0)
+			.with_stuck_timeout(0.0);
 		tether.enabled = true;
 		install_tether(&mut commands, actor_ref.0, tether);
 

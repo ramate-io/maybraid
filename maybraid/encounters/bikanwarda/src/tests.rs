@@ -2222,9 +2222,29 @@ mod integration_regressions {
 		);
 	}
 
+	fn place_actor_at(app: &mut App, actor: Entity, world: Vec3) {
+		use avian3d::prelude::LinearVelocity;
+
+		let now = actor_translation(app, actor);
+		if let Some(mut transform) = app.world_mut().get_mut::<Transform>(actor) {
+			let parent_world = now - transform.translation;
+			transform.translation = world - parent_world;
+		}
+		if let Some(mut velocity) = app.world_mut().get_mut::<LinearVelocity>(actor) {
+			velocity.0 = Vec3::ZERO;
+		}
+		app.world_mut().entity_mut(actor).insert(GlobalTransform::from_translation(world));
+	}
+
 	/// Pursuing a spotted player at the edge must not leave the pillar radius.
+	///
+	/// Production spawn plants the actor on the 8 m patrol ring, so this test
+	/// then walks the live actor to the leash rim and lets spotting fill
+	/// `CombatTargeting` — no hand-seeded contact, no forced tactic.
 	#[test]
 	fn real_boss_stays_within_tether_when_pursuing_player_at_edge() {
+		use combat_targeting::CombatTargeting;
+
 		let mut app = full_encounter_app();
 		let terrain_y = 0.0;
 		let boss_position = Vec3::new(0.0, terrain_y + 10.15, 0.0);
@@ -2234,20 +2254,40 @@ mod integration_regressions {
 			.get::<GlobalTransform>(column)
 			.expect("pillar")
 			.translation();
+		let edge = Vec3::new(
+			pillar.x + crate::BOSS_TETHER_RADIUS - 4.0,
+			actor_translation(&app, actor).y,
+			pillar.z,
+		);
+		place_actor_at(&mut app, actor, edge);
 		let player_pos = Vec3::new(
 			pillar.x + crate::BOSS_TETHER_RADIUS + 18.0,
 			terrain_y + 1.3,
 			pillar.z,
 		);
-		let _player = spawn_visible_player(&mut app, player_pos);
+		let player = spawn_visible_player(&mut app, player_pos);
 
 		let start = actor_translation(&app, actor);
-		let mut max_leash = 0.0_f32;
+		assert!(
+			(xz(start, pillar) - (crate::BOSS_TETHER_RADIUS - 4.0)).abs() < 0.5,
+			"pursuit must start near the tether edge, start={start:?} pillar={pillar:?} leash={:.3}",
+			xz(start, pillar)
+		);
+		let mut max_leash = xz(start, pillar);
 		let mut saw_turn = false;
+		let mut saw_spotted_player = false;
 		let mut max_toward_player = 0.0_f32;
 		let start_facing = visual_facing(&mut app, actor);
 		for _ in 0..360 {
 			app.update();
+			if app
+				.world()
+				.get::<CombatTargeting>(actor)
+				.and_then(CombatTargeting::best_contact)
+				.is_some_and(|contact| contact.subject == player)
+			{
+				saw_spotted_player = true;
+			}
 			let now = actor_translation(&app, actor);
 			let leash = xz(now, pillar);
 			max_leash = max_leash.max(leash);
@@ -2261,7 +2301,11 @@ mod integration_regressions {
 			}
 		}
 		eprintln!(
-			"pursue max leash={max_leash:.3} turned={saw_turn} toward_player={max_toward_player:.3} start={start:?}"
+			"pursue max leash={max_leash:.3} turned={saw_turn} spotted={saw_spotted_player} toward_player={max_toward_player:.3} start={start:?}"
+		);
+		assert!(
+			saw_spotted_player,
+			"CombatTargeting contact must come from spotting the spawned player"
 		);
 		assert!(
 			saw_turn,
