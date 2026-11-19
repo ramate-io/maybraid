@@ -10,6 +10,11 @@ use bevy::{
 	render::render_resource::{AsBindGroup, ShaderType},
 	shader::ShaderRef,
 };
+use bevy::{
+	mesh::MeshVertexBufferLayoutRef,
+	pbr::{MaterialPipeline, MaterialPipelineKey},
+	render::render_resource::{RenderPipelineDescriptor, SpecializedMeshPipelineError},
+};
 use material_ref::{
 	MaterialId, MaterialRasters, MaterialRef, MATERIAL_PALETTE_SLOTS, MATERIAL_RASTER_CHANNELS,
 	MATERIAL_RASTER_WIDTH, MATERIAL_SCALAR_FLOATS,
@@ -172,6 +177,15 @@ impl Material for UrbanSurfaceMaterial {
 
 	fn alpha_mode(&self) -> AlphaMode {
 		AlphaMode::Opaque
+	}
+	fn specialize(
+		_pipeline: &MaterialPipeline,
+		descriptor: &mut RenderPipelineDescriptor,
+		_layout: &MeshVertexBufferLayoutRef,
+		_key: MaterialPipelineKey<Self>,
+	) -> Result<(), SpecializedMeshPipelineError> {
+		material_ref::OpaqueMaterialInputs::omit_unused_uv0(descriptor);
+		Ok(())
 	}
 }
 

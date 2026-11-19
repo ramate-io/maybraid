@@ -52,6 +52,7 @@ impl Material for StickMaterial {
 		// Cheap-ball trunk / column proxies are open cards; Back cull showed
 		// clear color from the far side.
 		descriptor.primitive.cull_mode = None;
+		material_ref::OpaqueMaterialInputs::omit_unused_uv0(descriptor);
 		Ok(())
 	}
 }
