@@ -14,6 +14,9 @@ use bevy::prelude::{
 };
 use bevy::shape::{Aabb3d, IntersectsVolume};
 
+#[cfg(feature = "generation-tracing")]
+pub(super) mod retirement_probe;
+
 use super::node_store::StoredEntry;
 use crate::gen::{Id, Version};
 use crate::lod_ref::LodRef;
@@ -178,7 +181,7 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 				continue;
 			}
 			if let Some(stale) = self.hosts.remove(id) {
-				retire_host(commands, stale.entity);
+				retire_host::<T>(commands, stale.entity);
 			}
 			let (bounds, version) = (entry.bounds, entry.version);
 			let entity = spawn_host(commands, *id, entry, self.request.focus());
@@ -191,7 +194,7 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 			self.hosts.retain(|_, host| {
 				let current = host.session == session;
 				if !current {
-					retire_host(commands, host.entity);
+					retire_host::<T>(commands, host.entity);
 				}
 				current
 			});
@@ -222,7 +225,7 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 		self.hosts.retain(|_, host| {
 			let keep = wanted.iter().any(|region| region.intersects(&host.bounds));
 			if !keep {
-				retire_host(commands, host.entity);
+				retire_host::<T>(commands, host.entity);
 			}
 			keep
 		});
@@ -241,10 +244,20 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct RetiredHost;
 
-fn retire_host(commands: &mut Commands, entity: Entity) {
+fn retire_host<T>(commands: &mut Commands, entity: Entity) {
 	#[cfg(feature = "generation-tracing")]
 	lod_generation_diagnostics::update(|c| c.retired += 1);
-	commands.entity(entity).try_insert((RetiredHost, Visibility::Hidden));
+	let mut entity = commands.entity(entity);
+	#[cfg(feature = "generation-tracing")]
+	if lod_generation_diagnostics::retired_host::enabled() {
+		entity.try_insert((
+			RetiredHost,
+			Visibility::Hidden,
+			retirement_probe::RetiredHostOrigin::of::<T>(),
+		));
+		return;
+	}
+	entity.try_insert((RetiredHost, Visibility::Hidden));
 }
 
 /// Recursive-despawn a budgeted prefix of [`RetiredHost`]s.
@@ -282,7 +295,13 @@ pub(super) fn despawn_retired_hosts(world: &mut World) {
 		if despawned > 0 && start.elapsed() >= time_budget {
 			break;
 		}
+		#[cfg(feature = "generation-tracing")]
+		let probe = retirement_probe::PendingSample::begin(world, entity);
 		world.despawn(entity);
+		#[cfg(feature = "generation-tracing")]
+		if let Some(probe) = probe {
+			probe.finish(world);
+		}
 		#[cfg(feature = "generation-tracing")]
 		lod_generation_diagnostics::update(|c| c.removed += 1);
 		despawned += 1;
