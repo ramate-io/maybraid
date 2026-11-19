@@ -221,22 +221,33 @@ impl MobGroup {
 		origin: Vec2,
 		world: &(impl MobWorldSample + MobWorldHosts),
 	) -> Self {
+		Self::generate_with_limits(kind, seed, origin, world, DEFAULT_GROUP_EXTENT, usize::MAX)
+	}
+
+	/// Generate through the same recipe path with a bounded footprint and count.
+	/// Default generation retains its original extent, RNG draws and output.
+	pub fn generate_with_limits(
+		kind: GroupKind,
+		seed: u64,
+		origin: Vec2,
+		world: &(impl MobWorldSample + MobWorldHosts),
+		extent: f32,
+		max_mobs: usize,
+	) -> Self {
+		let extent = if extent.is_finite() { extent.max(1.0) } else { DEFAULT_GROUP_EXTENT };
 		if kind == GroupKind::Placed {
-			return Self { kind, seed, origin, extent: DEFAULT_GROUP_EXTENT, mobs: Vec::new() };
+			return Self { kind, seed, origin, extent, mobs: Vec::new() };
 		}
 		let mut rng = GroupRng::new(seed);
 		let (min, max) = kind.count_range();
-		let wanted = rng.in_range(min, max);
-		let hosts = world.plant_hosts(origin, DEFAULT_GROUP_EXTENT);
+		let wanted = rng.in_range(min, max).min(max_mobs);
+		let hosts = world.plant_hosts(origin, extent);
 		let mut mobs = Vec::with_capacity(wanted);
 		let mut probes = 0;
 		while mobs.len() < wanted && probes < wanted.saturating_mul(16) {
 			probes += 1;
-			let mut xz = origin
-				+ Vec2::new(
-					(rng.unit() - 0.5) * DEFAULT_GROUP_EXTENT,
-					(rng.unit() - 0.5) * DEFAULT_GROUP_EXTENT,
-				);
+			let mut xz =
+				origin + Vec2::new((rng.unit() - 0.5) * extent, (rng.unit() - 0.5) * extent);
 			let mut environment = world.sample_mobs(xz);
 			let Some(mut elevation) = environment.elevation else {
 				continue;
@@ -261,7 +272,7 @@ impl MobGroup {
 				environment,
 			});
 		}
-		Self { kind, seed, origin, extent: DEFAULT_GROUP_EXTENT, mobs }
+		Self { kind, seed, origin, extent, mobs }
 	}
 
 	pub fn spawn(&self, commands: &mut Commands) -> Vec<Entity> {
@@ -333,6 +344,41 @@ mod tests {
 	impl MobWorldHosts for HostedWorld {
 		fn plant_hosts(&self, origin: Vec2, extent: f32) -> Vec<MobPlantHost> {
 			MobPlantHost::near(&self.hosts, origin, extent)
+		}
+	}
+
+	#[test]
+	fn bounded_generation_limits_placement_and_recipe_work() {
+		use std::cell::Cell;
+		struct CountedWorld(Cell<usize>);
+		impl MobWorldSample for CountedWorld {
+			fn sample_mobs(&self, _xz: Vec2) -> MobEnvironmentSample {
+				self.0.set(self.0.get() + 1);
+				MobEnvironmentSample { elevation: Some(3.0), urbanization: 0.3, vegetation: 0.3 }
+			}
+		}
+		impl MobWorldHosts for CountedWorld {
+			fn plant_hosts(&self, _origin: Vec2, _extent: f32) -> Vec<MobPlantHost> {
+				Vec::new()
+			}
+		}
+		for origin in [Vec2::ZERO, Vec2::new(-600.0, 400.0)] {
+			for seed in 1..32 {
+				let world = CountedWorld(Cell::new(0));
+				let group =
+					MobGroup::generate_with_limits(GroupKind::Wild, seed, origin, &world, 200.0, 1);
+				assert_eq!(group.extent, 200.0);
+				assert_eq!(group.mobs.len(), 1);
+				assert_eq!(
+					world.0.get(),
+					1,
+					"one accepted recipe must not build discarded siblings"
+				);
+				for placed in group.mobs {
+					let offset = placed.transform.translation.xz() - origin;
+					assert!(offset.abs().max_element() <= 100.0);
+				}
+			}
 		}
 	}
 

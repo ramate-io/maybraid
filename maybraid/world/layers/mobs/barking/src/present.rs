@@ -12,12 +12,13 @@ use lod::{
 	LodSceneRefreshAabb, LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodViewer,
 };
 use lod_gimme::GimmeLodSceneRefreshPlugin;
-use mob_scenes::{MobLodRefreshMode, MobScene};
+use mob_scenes::{MobLodRefreshMode, MobScene, DEFAULT_MOB_RETAIN_RADIUS};
 
 use crate::plugin::MobGroupsPlugin;
 
-/// Half-extent of the High produce cube. Sized a margin past the 200 m High sphere.
-pub const MOB_HIGH_LOD_REFRESH_RADIUS: f32 = 250.0;
+/// Half-extent of the High produce cube, including the default retention envelope.
+/// The margin covers host motion between the existing 250 ms pulses.
+pub const MOB_HIGH_LOD_REFRESH_RADIUS: f32 = DEFAULT_MOB_RETAIN_RADIUS + 50.0;
 pub const MOB_HIGH_LOD_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
 pub const MOB_HIGH_LOD_RECONCILE_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -86,4 +87,56 @@ pub(crate) fn install_mob_scenes(app: &mut App) {
 			.run_if(on_timer(MOB_HIGH_LOD_RECONCILE_INTERVAL))
 			.in_set(LodRefreshSystems::UpdateLevels),
 	);
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use lod::{LodHostBounds, LodSceneHost, LodSceneLevel};
+
+	#[test]
+	fn indexed_pulse_discovers_the_expanded_acquisition_band() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			bevy::asset::AssetPlugin::default(),
+			bevy::scene::ScenePlugin,
+		))
+        .add_plugins(
+            LodSceneRefreshRegionPlugin::<MobHighLodRegion, With<LodViewer>, MobHighLodChan>::default(),
+        )
+		.add_plugins(
+			GimmeLodSceneRefreshPlugin::<MobScene, MobHighLodChan, With<LodViewer>>::default(),
+		)
+		.add_systems(Update, pulse_mob_high_lod.in_set(LodRefreshSystems::ProduceRegions));
+		app.world_mut().spawn((LodViewer, Transform::default()));
+		let at = Vec3::new(299.0, 0.0, 0.0);
+		let host = app
+			.world_mut()
+			.spawn((
+				LodSceneHost,
+				MobScene::default().at(at),
+				LodSceneLevel::UltraLow,
+				LodHostBounds(Aabb3d::from_min_max(Vec3::splat(-1.0), Vec3::splat(1.0))),
+				Transform::from_translation(at),
+			))
+			.id();
+		// The production Gimme index publishes transforms in PostUpdate.
+		for _ in 0..4 {
+			app.update();
+		}
+		assert_eq!(app.world().get::<LodSceneLevel>(host), Some(&LodSceneLevel::High));
+		app.world_mut().entity_mut(host).insert((
+			MobScene::default().at(Vec3::new(350.0, 0.0, 0.0)),
+			Transform::from_xyz(350.0, 0.0, 0.0),
+		));
+		for _ in 0..4 {
+			app.update();
+		}
+		assert_eq!(app.world().get::<LodSceneLevel>(host), Some(&LodSceneLevel::UltraLow));
+		assert_eq!(MOB_HIGH_LOD_REFRESH_INTERVAL, Duration::from_millis(250));
+		assert_eq!(MOB_HIGH_LOD_RECONCILE_INTERVAL, Duration::from_secs(1));
+		Ok(())
+	}
 }

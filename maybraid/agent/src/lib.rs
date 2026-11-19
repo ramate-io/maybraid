@@ -23,8 +23,9 @@ pub use cli::{
 pub use command::{AgentButton, AgentCommand, ScenarioMark, SCRIPT_API_VERSION};
 pub use diagnostics::{
 	AgentCameraProjection, AgentCameraSnapshot, AgentDiagnosticActor, AgentNpcCombat,
-	AgentNpcGroundHit, AgentNpcGroundHits, AgentNpcSelector, AgentNpcSnapshot, AgentNpcSpotContact,
-	AgentNpcSupport, AgentNpcTrajectory, AgentNpcWeapon, AgentPlayerVitals, DiagnosticCommand,
+	AgentNpcGroundHit, AgentNpcGroundHits, AgentNpcMembership, AgentNpcSelector, AgentNpcSnapshot,
+	AgentNpcSpotContact, AgentNpcSupport, AgentNpcTrajectory, AgentNpcWeapon, AgentPlayerVitals,
+	DiagnosticCommand,
 };
 pub use event::{AgentEvent, AgentEventBody, CommandStatus};
 pub use inventory::{AgentMatcher, InventoryMatcher, InventoryObservation};

@@ -86,6 +86,9 @@ pub enum Mobs {
 		#[arg(long, default_value_t = 1)]
 		seed: u32,
 	},
+	/// Show homeostatic mob status: current cell, flagged neighbors, active mobs.
+	#[cfg(feature = "debug-commands")]
+	Homeostatic,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -133,9 +136,18 @@ impl Mobs {
 				});
 				*console = format!("mobs spawn {kind:?} x{count}: pending");
 			}
+			#[cfg(feature = "debug-commands")]
+			Mobs::Homeostatic => {
+				commands.spawn(RequestHomeostaticStatus);
+				*console = "mobs homeostatic: pending".into();
+			}
 		}
 	}
 }
+
+#[cfg(feature = "debug-commands")]
+#[derive(Component, Clone, Copy, Debug)]
+pub struct RequestHomeostaticStatus;
 
 #[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
