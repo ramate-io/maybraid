@@ -189,19 +189,21 @@ fn follow_wave(
 		}
 		if let Ok(handle) = handles.get(entity) {
 			if let Some(mut material) = materials.get_mut(&handle.0) {
-				material.follow(wave.origin, wave.direction, wave.radius, wave.thickness);
+				follow_soundwave_material(&mut material, wave);
 			}
 		}
 		return;
 	}
-	let material = materials.add(SoundwaveMaterial::new(
-		wave.origin,
+	let mut material = SoundwaveMaterial::new(
+		wave.position,
 		wave.direction,
 		wave.radius,
 		wave.thickness,
 		Color::srgb(0.72, 0.88, 1.0),
 		1.2,
-	));
+	);
+	follow_soundwave_material(&mut material, wave);
+	let material = materials.add(material);
 	let entity = commands
 		.spawn((
 			Name::new("vfx-soundwave-bray"),
@@ -218,4 +220,10 @@ fn follow_wave(
 		))
 		.id();
 	bindings.rings.insert(key, entity);
+}
+
+fn follow_soundwave_material(material: &mut SoundwaveMaterial, wave: WavefrontPresentation) {
+	material.follow(wave.position, wave.direction, wave.radius, wave.thickness);
+	material.set_age(wave.travel_age());
+	material.set_fade(wave.trailing_fade());
 }

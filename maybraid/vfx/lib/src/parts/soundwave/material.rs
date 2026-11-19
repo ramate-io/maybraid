@@ -1,5 +1,5 @@
 //! Per-instance directional soundwave material. Live uniforms follow the
-//! gameplay wave: origin, heading, position, radius, and thickness.
+//! gameplay wave: front center, heading, radius, thickness, age, and fade.
 
 use bevy::asset::embedded_asset;
 use bevy::mesh::MeshVertexBufferLayoutRef;
@@ -14,7 +14,7 @@ use bevy::shader::ShaderRef;
 /// Additive compression-edge ring. `wave` / `front` are world meters.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct SoundwaveMaterial {
-	/// `xyz` wave origin, `w` ring radius.
+	/// `xyz` live front center, `w` ring radius.
 	#[uniform(0)]
 	pub wave: Vec4,
 	/// `xyz` travel heading, `w` thickness along travel.
@@ -45,8 +45,9 @@ impl SoundwaveMaterial {
 		}
 	}
 
-	pub fn follow(&mut self, origin: Vec3, direction: Vec3, radius: f32, thickness: f32) {
-		self.wave = Vec4::new(origin.x, origin.y, origin.z, radius.max(0.05));
+	/// `center` is the live travelling front, not the mouth emission point.
+	pub fn follow(&mut self, center: Vec3, direction: Vec3, radius: f32, thickness: f32) {
+		self.wave = Vec4::new(center.x, center.y, center.z, radius.max(0.05));
 		self.front = Vec4::new(direction.x, direction.y, direction.z, thickness.max(0.05));
 	}
 

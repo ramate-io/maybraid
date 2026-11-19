@@ -6,7 +6,7 @@ use routing_intelligence::RoutingSystems;
 use crate::{
 	abandon_unreachable_poi_goals, complete_poi_goals, discover_pois, drive_poi_goals,
 	ingest_poi_observations, refresh_poi_goals, sync_poi_registry, DistantTilePoiLookup,
-	PoiGoalCompleted, PoiObservation, PoiRegistry,
+	PoiGoalCompleted, PoiGoalFailed, PoiObservation, PoiRegistry,
 };
 
 /// How many due learners may run a local / global scan on one Discover tick.
@@ -45,6 +45,7 @@ impl Plugin for PoiIntelligencePlugin {
 			.init_resource::<PoiDiscoverLimits>()
 			.add_message::<PoiObservation>()
 			.add_message::<PoiGoalCompleted>()
+			.add_message::<PoiGoalFailed>()
 			.configure_sets(
 				Update,
 				(

@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use poi_intelligence::{
-	begin_poi_goal, choose_poi, KnownPoi, PoiGoal, PoiGoalCompleted, PoiGoalState,
+	begin_poi_goal, choose_poi, KnownPoi, PoiGoal, PoiGoalCompleted, PoiGoalFailed, PoiGoalState,
 	PoiIntelligenceUser, PoiKnowledge, PoiSource, PoiSystems, PoiVisitPolicy, PoiVisitState,
 };
 
@@ -62,7 +62,7 @@ impl Plugin for MeanderingIntelligencePlugin {
 	fn build(&self, app: &mut App) {
 		app.add_systems(
 			Update,
-			(record_meandering_completions, select_meandering_goals)
+			(record_meandering_completions, record_meandering_failures, select_meandering_goals)
 				.chain()
 				.in_set(PoiSystems::Select),
 		);
@@ -78,6 +78,19 @@ pub fn record_meandering_completions(
 	for event in completed.read() {
 		if let Ok(mut visits) = users.get_mut(event.user) {
 			visits.complete(event.target, now);
+		}
+	}
+}
+
+pub fn record_meandering_failures(
+	time: Res<Time>,
+	mut failed: MessageReader<PoiGoalFailed>,
+	mut users: Query<&mut PoiVisitState, With<MeanderingIntelligenceUser>>,
+) {
+	let now = time.elapsed_secs();
+	for event in failed.read() {
+		if let Ok(mut visits) = users.get_mut(event.user) {
+			visits.note_failure(event.target, now);
 		}
 	}
 }
@@ -190,7 +203,7 @@ mod tests {
 		MovementIntelligence, MovementObjective, FAILED_PLAN_HANDOFF_ATTEMPTS,
 	};
 	use poi_intelligence::{
-		abandon_unreachable_poi_goals, PoiGoalCompleted, PoiId, PoiIntelligenceUser, PoiInterests,
+		abandon_unreachable_poi_goals, PoiGoalFailed, PoiId, PoiIntelligenceUser, PoiInterests,
 		PoiKind, PoiKnowledge, PoiObservation, PoiVisitState,
 	};
 
@@ -346,6 +359,7 @@ mod tests {
 		let mut world = World::new();
 		world.init_resource::<Time>();
 		world.init_resource::<Messages<PoiGoalCompleted>>();
+		world.init_resource::<Messages<PoiGoalFailed>>();
 		let actor = world
 			.spawn((
 				GlobalTransform::IDENTITY,
@@ -377,10 +391,16 @@ mod tests {
 		}
 
 		world.run_system_once(abandon_unreachable_poi_goals).expect("abandon");
-		world.run_system_once(record_meandering_completions).expect("record");
+		world.run_system_once(record_meandering_completions).expect("record arrivals");
+		world.run_system_once(record_meandering_failures).expect("record failures");
 		anyhow::ensure!(
 			world.get::<PoiGoal>(actor).is_none(),
 			"unreachable pin must leave selection free"
+		);
+		let visits = world.get::<PoiVisitState>(actor).expect("visits");
+		anyhow::ensure!(
+			visits.visit_count(first.expect("first pin")) == 0,
+			"failed pin must not be marked visited"
 		);
 
 		world
@@ -394,6 +414,15 @@ mod tests {
 			second != first,
 			"handoff must not reissue the failed pin, first={first:?} second={second:?}"
 		);
+		{
+			let goal = *world.get::<PoiGoal>(actor).expect("second goal");
+			let mut movement = world.get_mut::<MovementIntelligence>(actor).expect("movement");
+			movement.objective = MovementObjective::Reach(goal.location);
+			anyhow::ensure!(
+				!movement.plan_failures_exhausted(),
+				"the next pin must not spend the failed pin's retry budget"
+			);
+		}
 		Ok(())
 	}
 }

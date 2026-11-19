@@ -19,6 +19,7 @@ type CompletablePoiGoal<'a> = (
 pub enum PoiGoalStatus {
 	Active,
 	Completed,
+	Failed,
 }
 
 /// Persistent status of the newest POI goal, including completed goals.
@@ -125,6 +126,20 @@ impl PoiGoal {
 /// Emitted exactly once when the bound entity reaches its current POI goal.
 #[derive(Message, Clone, Copy, Debug, PartialEq)]
 pub struct PoiGoalCompleted {
+	pub user: Entity,
+	pub generation: u64,
+	pub target: PoiId,
+	pub poi_entity: Option<Entity>,
+	pub kind: PoiKind,
+	pub location: MovementLocation,
+}
+
+/// Emitted when movement exhausts retries on an unreachable pin.
+///
+/// This is not an arrival: visit history must not record it, so the pin stays
+/// eligible after a separate failure cooldown.
+#[derive(Message, Clone, Copy, Debug, PartialEq)]
+pub struct PoiGoalFailed {
 	pub user: Entity,
 	pub generation: u64,
 	pub target: PoiId,
@@ -262,7 +277,7 @@ pub fn abandon_unreachable_poi_goals(
 		Option<&mut PoiKnowledge>,
 		Option<&mut PoiGoalState>,
 	)>,
-	mut completed: MessageWriter<PoiGoalCompleted>,
+	mut failed: MessageWriter<PoiGoalFailed>,
 	mut commands: Commands,
 ) {
 	for (entity, goal, movement, mut routing, mut knowledge, mut state) in &mut users {
@@ -280,9 +295,9 @@ pub fn abandon_unreachable_poi_goals(
 			knowledge.remove_source(goal.target, PoiSource::OBJECTIVE);
 		}
 		if let Some(state) = state.as_deref_mut() {
-			state.status = PoiGoalStatus::Completed;
+			state.status = PoiGoalStatus::Failed;
 		}
-		completed.write(PoiGoalCompleted {
+		failed.write(PoiGoalFailed {
 			user: entity,
 			generation: goal.generation,
 			target: goal.target,

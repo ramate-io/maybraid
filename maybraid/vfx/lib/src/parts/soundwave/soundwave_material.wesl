@@ -90,7 +90,7 @@ fn vertex(packed_vertex: Vertex) -> VertexOutput {
 
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
-    let origin = wave.xyz;
+    let center = wave.xyz;
     let radius = max(wave.w, 1e-3);
     let heading = normalize(front.xyz + vec3<f32>(1e-5, 0.0, 0.0));
     let thickness = max(front.w, 1e-3);
@@ -99,7 +99,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let seed = extras.w;
 
     let world = mesh.world_position.xyz;
-    let rel = world - origin;
+    let rel = world - center;
     let along = dot(rel, heading);
     let radial = rel - heading * along;
     let ring = length(radial);

@@ -271,6 +271,7 @@ fn pending_request_is_polled_each_frame_before_the_next_selection_interval() {
 		.init_resource::<HcsgDemand>()
 		.insert_resource(DistantTilePoiLookup::new(control.clone()))
 		.add_message::<PoiGoalCompleted>()
+		.add_message::<PoiGoalFailed>()
 		.add_plugins(JourneyingIntelligencePlugin);
 	let user = app
 		.world_mut()

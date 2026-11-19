@@ -204,7 +204,76 @@ fn sonic_wave_torus_maps_y_axle_to_heading() -> anyhow::Result<()> {
 	if (got.translation - expected.translation).length() > 1e-3 {
 		return Err(anyhow!("ring center must follow the live wave position"));
 	}
+	let first = soundwave_material(&mut app)?;
+	let first_center = Vec3::new(first.wave.x, first.wave.y, first.wave.z);
+	if (first_center - Vec3::new(4.0, 2.0, 3.0)).length() > 1e-3 {
+		return Err(anyhow!(
+			"compression uniform must follow the live front, got {first_center} (origin was 1,2,3)"
+		));
+	}
+	if first.extras.x <= 0.0 {
+		return Err(anyhow!("spawned wave must carry travel age, got {}", first.extras.x));
+	}
+	if (first.extras.z - 1.0).abs() < 1e-4 {
+		return Err(anyhow!("spawned wave must already trail-fade, got {}", first.extras.z));
+	}
+	app.world_mut().write_message(crate::SonicWaveVfxCue {
+		instance: AttackInstanceId(3),
+		owner: Entity::from_bits(9),
+		phase: PresentationPhase::Updated,
+		hazard_index: 0,
+		kind: crate::SonicWaveVfxKind::Follow(WavefrontPresentation {
+			origin: Vec3::new(1.0, 2.0, 3.0),
+			direction: Vec3::X,
+			position: Vec3::new(7.0, 2.0, 3.0),
+			speed: 10.0,
+			range: 8.0,
+			radius: 2.0,
+			thickness: 0.7,
+			wave_index: 0,
+		}),
+	});
+	app.update();
+	let second = soundwave_material(&mut app)?;
+	let second_center = Vec3::new(second.wave.x, second.wave.y, second.wave.z);
+	if (second_center - Vec3::new(7.0, 2.0, 3.0)).length() > 1e-3 {
+		return Err(anyhow!(
+			"updated compression uniform must follow the front, got {second_center}"
+		));
+	}
+	if second.extras.x <= first.extras.x + 1e-4 {
+		return Err(anyhow!(
+			"travel age must advance on update, first={} second={}",
+			first.extras.x,
+			second.extras.x
+		));
+	}
+	if second.extras.z >= first.extras.z - 1e-4 {
+		return Err(anyhow!(
+			"trailing fade must drop as the wave travels, first={} second={}",
+			first.extras.z,
+			second.extras.z
+		));
+	}
 	Ok(())
+}
+
+fn soundwave_material(app: &mut App) -> anyhow::Result<maybraid_vfx::SoundwaveMaterial> {
+	use maybraid_vfx::SoundwaveMaterial;
+	let handle = app
+		.world_mut()
+		.query::<(&Name, &MeshMaterial3d<SoundwaveMaterial>)>()
+		.iter(app.world())
+		.find(|(name, _)| name.as_str() == "vfx-soundwave-bray")
+		.map(|(_, material)| material.0.clone());
+	let Some(handle) = handle else {
+		return Err(anyhow!("missing soundwave material handle"));
+	};
+	app.world()
+		.resource::<Assets<SoundwaveMaterial>>()
+		.get(&handle)
+		.cloned()
+		.ok_or_else(|| anyhow!("missing soundwave material asset"))
 }
 
 #[test]
