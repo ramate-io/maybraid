@@ -29,6 +29,7 @@ import bevy_pbr::render::mesh_view_bindings::globals;
 import bevy_pbr::prepass::utils::prepass_depth;
 import bevy_pbr::render::pbr_types::PbrInput;
 import bevy_pbr::render::pbr_types::pbr_input_new;
+import bevy_pbr::render::pbr_fragment::pbr_input_from_vertex_output;
 import bevy_pbr::render::pbr_types::STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT;
 import bevy_pbr::render::pbr_functions as fns;
 import bevy_core_pipeline::tonemapping::tone_mapping;
@@ -1244,6 +1245,9 @@ fn fragment(
 ) -> @location(0) vec4<f32> {
     var pbr_input: PbrInput =
         pbr_input_new();
+
+    // Preserve Bevy mesh receiver flags, including NotShadowReceiver.
+    pbr_input.flags = pbr_input_from_vertex_output(mesh, is_front, false).flags;
 
     let double_sided =
         (
