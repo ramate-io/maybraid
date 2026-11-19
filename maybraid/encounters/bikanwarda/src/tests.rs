@@ -2906,8 +2906,14 @@ mod integration_regressions {
 	/// still debits the production host once.
 	#[test]
 	fn real_player_shot_hits_only_pronograde_sensor_once() {
+		use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaSpec};
+		use characters::CharacterRecipe;
 		use player::HitVolume;
 
+		let hull = BikanwardaActorRecipe::from_spec(BikanwardaSpec::encounter())
+			.components()
+			.scaled_locomotion_capsule();
+		let hit = hull.hit_capsule().expect("encounter hull is pronograde");
 		let mut app = fire_path_app();
 		let terrain_y = 0.0;
 		let boss_position = Vec3::new(8.0, terrain_y + encounter_hull_offset(), -6.0);
@@ -2921,23 +2927,24 @@ mod integration_regressions {
 				hit_volume_of(&mut app, actor)
 			})
 			.expect("motorized boss should spawn a pronograde HitVolume");
-		let sensor_at = app
+		let volume_at = app
 			.world()
 			.get::<GlobalTransform>(sensor)
 			.expect("sensor GlobalTransform")
-			.translation();
+			.compute_transform();
 		let actor_at = actor_translation(&app, actor);
+		let aim = volume_at.transform_point(hit.local_transform().translation);
 		assert!(
 			app.world().get::<HitVolume>(sensor).is_some(),
 			"shot must be aimed at the pronograde sensor"
 		);
 		assert!(
-			xz(sensor_at, actor_at) > 1.0,
-			"sensor should sit off the motor origin so a side shot can miss the capsule, sensor={sensor_at:?} actor={actor_at:?}"
+			xz(aim, actor_at) > 1.0,
+			"body sample should sit off the motor origin so a side shot can miss the capsule, aim={aim:?} actor={actor_at:?}"
 		);
 
-		let start = Vec3::new(sensor_at.x + 16.0, sensor_at.y, sensor_at.z);
-		fire_player_bolt(&mut app, player, start, -Vec3::X);
+		let along_x = volume_at.rotation * Vec3::X;
+		fire_player_bolt(&mut app, player, aim + along_x * 16.0, -along_x);
 		for _ in 0..24 {
 			app.update();
 		}
@@ -2962,6 +2969,76 @@ mod integration_regressions {
 		);
 		assert_eq!(applies.len(), 1, "sensor shot should debit the host once, applies={applies:?}");
 		assert!((health - 975.0).abs() < 0.1, "host should lose exactly 25 HP, got {health}");
+	}
+
+	/// Native Metal play recorded two bolts with zero boss contacts on the
+	/// visual legs / outer body. Production fire at those samples must debit
+	/// the Health host once per projectile.
+	#[test]
+	fn real_player_shots_at_legs_and_outer_body_debit_once_each() {
+		use bikanwarda_character::{
+			leg_aim_point, outer_body_aim_point, BikanwardaActorRecipe, BikanwardaSpec,
+		};
+		use characters::CharacterRecipe;
+		use damage::HealthHurtboxes;
+
+		let hull = BikanwardaActorRecipe::from_spec(BikanwardaSpec::encounter())
+			.components()
+			.scaled_locomotion_capsule();
+		let mut app = fire_path_app();
+		let terrain_y = 0.0;
+		let boss_position = Vec3::new(6.0, terrain_y + encounter_hull_offset(), -4.0);
+		let (host, actor, _column) = spawn_production_encounter(&mut app, boss_position, terrain_y);
+		observe_host_damage(&mut app, host);
+		let player = spawn_visible_player(&mut app, boss_position + Vec3::new(-30.0, 1.3, 0.0));
+		let sensor = (0..12)
+			.find_map(|_| {
+				app.update();
+				hit_volume_of(&mut app, actor)
+			})
+			.expect("motorized boss should spawn a HitVolume");
+		assert!(
+			app.world().get::<HealthHurtboxes>(host).is_some(),
+			"hit complex must bind through HealthHurtboxes on the host"
+		);
+		assert!(
+			app.world().get::<player::HitVolumeCollider>(actor).is_some(),
+			"motorized boss should stamp a compound HitVolumeCollider"
+		);
+		let volume_at = app
+			.world()
+			.get::<GlobalTransform>(sensor)
+			.expect("sensor GlobalTransform")
+			.compute_transform();
+		let along_x = volume_at.rotation * Vec3::X;
+		let along_z = volume_at.rotation * Vec3::Z;
+		let leg = volume_at.transform_point(leg_aim_point(hull));
+		let outer = volume_at.transform_point(outer_body_aim_point(hull));
+		fire_player_bolt(&mut app, player, leg + along_x * 8.0, -along_x);
+		for _ in 0..12 {
+			app.update();
+		}
+		fire_player_bolt(&mut app, player, outer + along_z * 8.0, -along_z);
+		for _ in 0..12 {
+			app.update();
+		}
+		let applies = app.world().resource::<ObservedApplies>().events.clone();
+		let contacts = app.world().resource::<ObservedContacts>().events.clone();
+		let health = app.world().get::<Health>(host).expect("host Health").current;
+		eprintln!(
+			"leg+outer applies={} contacts={} health={health} leg={leg:?} outer={outer:?}",
+			applies.len(),
+			contacts.len()
+		);
+		assert_eq!(
+			applies.len(),
+			2,
+			"leg and outer-body shots should each debit once, applies={applies:?}"
+		);
+		assert!(
+			(health - 950.0).abs() < 0.1,
+			"host should lose 50 HP from two 25 HP shots, got {health}"
+		);
 	}
 
 	/// Ordinary fire path: a shot that crosses motor and sensor colliders

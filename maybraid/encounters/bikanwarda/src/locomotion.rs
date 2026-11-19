@@ -11,8 +11,8 @@ use std::f32::consts::TAU;
 use avian3d::prelude::CollisionLayers;
 use bevy::prelude::*;
 use bikanwarda_character::{
-	encounter_meters, BikanwardaActorRecipe, BikanwardaAnchors, BikanwardaChainAnchor,
-	BikanwardaRoot, BikanwardaSpec,
+	encounter_meters, hit_complex_collider, BikanwardaActorRecipe, BikanwardaAnchors,
+	BikanwardaChainAnchor, BikanwardaRoot, BikanwardaSpec,
 };
 use characters::{CharacterHeading, CharacterRecipe, CharacterRoot, LocomotionCapsule};
 use combat_targeting::CombatTargeting;
@@ -30,8 +30,8 @@ use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use npc_intelligence::{NpcIntelligence, NpcIntelligencePlugin};
 use player::{
-	apply_character_controller, apply_character_mobility, bind_hurtbox_host, Npc, PlayerLook,
-	PlayerPlugin, PlayerSystems, PlayerYawOwner,
+	apply_character_controller, apply_character_mobility, bind_hurtbox_host, HitVolumeCollider,
+	Npc, PlayerLook, PlayerPlugin, PlayerSystems, PlayerYawOwner,
 };
 use poi_intelligence::{
 	PoiId, PoiIntelligencePlugin, PoiIntelligenceUser, PoiInterests, PoiKind, PoiKnowledge,
@@ -110,6 +110,7 @@ pub fn initialize_boss_locomotion(
 		apply_character_mobility(&mut commands, actor_ref.0, 1.0, 1.0);
 		bind_hurtbox_host(&mut commands, actor_ref.0, host);
 		commands.entity(actor_ref.0).insert((
+			HitVolumeCollider(hit_complex_collider(hull)),
 			Npc,
 			PlayerLook::default(),
 			CollisionLayers::new(

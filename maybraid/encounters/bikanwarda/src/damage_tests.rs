@@ -5,7 +5,8 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::time::TimeUpdateStrategy;
 use bikanwarda_character::{
-	spawn_bikanwarda_encounter, spawn_bikanwarda_ward, BikanwardaActorRecipe, BikanwardaSpec,
+	hit_complex_collider, leg_aim_point, outer_body_aim_point, spawn_bikanwarda_encounter,
+	spawn_bikanwarda_ward, BikanwardaActorRecipe, BikanwardaSpec,
 };
 use characters::CharacterRecipe;
 use damage::{DamageApplied, Health, HitPayload};
@@ -230,6 +231,104 @@ fn projectile_through_pronograde_hit_hull_debits_host() -> Result<()> {
 	anyhow::ensure!(
 		(initial - final_health - 25.0).abs() < 0.1,
 		"pronograde hull shot should debit 25 HP once, initial={initial} final={final_health}"
+	);
+	Ok(())
+}
+
+fn fire_capsule_bolt(
+	app: &mut App,
+	player: Entity,
+	target: Vec3,
+	amount: f32,
+	name: &str,
+	approach: Vec3,
+) {
+	let start_pos = target - approach.normalize() * 12.0;
+	let direction = approach.normalize();
+	let bullet = BulletSpec::default();
+	let collider = Collider::capsule(bullet.radius, bullet.length);
+	let cap_transform = Transform::from_translation(start_pos).looking_to(direction, Vec3::Y);
+	app.world_mut().spawn((
+		Name::new(name.to_string()),
+		cap_transform,
+		GlobalTransform::from(cap_transform),
+		RigidBody::Dynamic,
+		MassPropertiesBundle::from_shape(&collider, 1.0),
+		collider,
+		Sensor,
+		PhysicsInteractionLayer::projectile_layers(),
+		LockedAxes::ROTATION_LOCKED,
+		LinearVelocity(direction * bullet.speed),
+		GravityScale(0.0),
+		Restitution::ZERO,
+		Flight::spawn(start_pos, bullet.max_range, bullet.penetration, bullet.max_age),
+		ProjectileSource(player),
+		HitPayload { amount },
+	));
+}
+
+/// Native play missed 2/3 bolts on the visual legs / outer body. Those points
+/// sit outside the single pronograde capsule; the spec-scaled compound must
+/// debit the Health host once per projectile.
+#[test]
+fn projectile_through_legs_and_outer_body_debits_host() -> Result<()> {
+	let mut app = projectile_damage_app();
+	let spec = BikanwardaSpec::encounter();
+	let hull = BikanwardaActorRecipe::from_spec(spec.clone())
+		.components()
+		.scaled_locomotion_capsule();
+	let boss_actor = {
+		let mut commands = app.world_mut().commands();
+		spawn_bikanwarda_encounter(&mut commands, &spec, Transform::IDENTITY)
+	};
+	app.update();
+	let host_entity = app
+		.world_mut()
+		.spawn((
+			Name::new("boss-host"),
+			Health::from_max(1000.0),
+			Transform::default(),
+			GlobalTransform::default(),
+		))
+		.id();
+	app.world_mut().entity_mut(boss_actor).insert(ChildOf(host_entity));
+	app.world_mut().entity_mut(boss_actor).insert(hit_complex_collider(hull));
+	let player = app
+		.world_mut()
+		.spawn((Name::new("test-player"), Transform::default(), GlobalTransform::default()))
+		.id();
+	for _ in 0..3 {
+		app.update();
+	}
+	let origin = app
+		.world()
+		.get::<GlobalTransform>(boss_actor)
+		.expect("Boss actor should have GlobalTransform")
+		.compute_transform();
+	fire_capsule_bolt(
+		&mut app,
+		player,
+		origin.transform_point(leg_aim_point(hull)),
+		25.0,
+		"leg-aimed-bullet",
+		origin.rotation * Vec3::X,
+	);
+	fire_capsule_bolt(
+		&mut app,
+		player,
+		origin.transform_point(outer_body_aim_point(hull)),
+		25.0,
+		"outer-aimed-bullet",
+		origin.rotation * Vec3::Z,
+	);
+	let initial = app.world().get::<Health>(host_entity).expect("host health").current;
+	for _ in 0..40 {
+		app.update();
+	}
+	let final_health = app.world().get::<Health>(host_entity).expect("host health").current;
+	anyhow::ensure!(
+		(initial - final_health - 50.0).abs() < 0.1,
+		"leg and outer-body shots should each debit 25 HP once, initial={initial} final={final_health}"
 	);
 	Ok(())
 }

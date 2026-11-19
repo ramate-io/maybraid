@@ -23,7 +23,10 @@ pub use animation::{
 	animated_bounds_envelope, AnimationBoundsSample, BIKANWARDA_ANIMATION_SAMPLES,
 };
 pub use bounds::visual_bounds_aabb;
-pub use colliders::{assembly_collider_shapes, motor_collider};
+pub use colliders::{
+	assembly_collider_shapes, hit_complex_collider, hit_complex_shapes, leg_aim_point,
+	motor_collider, outer_body_aim_point,
+};
 pub use measure::{
 	encounter_meters, encounter_uniform_scale, ordinary_standing_height_m, standing_height_m,
 	AUTHORED_ENCOUNTER_HEIGHT_M, ENCOUNTER_LINEAR_SCALE, ENCOUNTER_STANDING_HEIGHT_M,
