@@ -247,3 +247,49 @@ pub fn complete_poi_goals(
 		commands.entity(entity).remove::<PoiGoal>();
 	}
 }
+
+/// Drops a POI goal after movement has exhausted empty-replan retries, so
+/// meandering (and other selectors) can pick another pin the same frame.
+///
+/// Selection queries `Without<PoiGoal>`; without this handoff an unreachable
+/// pin keeps its goal forever while movement retries the same `Reach`.
+pub fn abandon_unreachable_poi_goals(
+	mut users: Query<(
+		Entity,
+		&PoiGoal,
+		&MovementIntelligence,
+		Option<&mut RoutingIntelligenceUser>,
+		Option<&mut PoiKnowledge>,
+		Option<&mut PoiGoalState>,
+	)>,
+	mut completed: MessageWriter<PoiGoalCompleted>,
+	mut commands: Commands,
+) {
+	for (entity, goal, movement, mut routing, mut knowledge, mut state) in &mut users {
+		if !movement.plan_failures_exhausted() {
+			continue;
+		}
+		let next = MovementObjective::Reach(goal.location);
+		if movement.objective != next {
+			continue;
+		}
+		if let Some(routing) = routing.as_deref_mut() {
+			routing.clear_destination();
+		}
+		if let Some(knowledge) = knowledge.as_deref_mut() {
+			knowledge.remove_source(goal.target, PoiSource::OBJECTIVE);
+		}
+		if let Some(state) = state.as_deref_mut() {
+			state.status = PoiGoalStatus::Completed;
+		}
+		completed.write(PoiGoalCompleted {
+			user: entity,
+			generation: goal.generation,
+			target: goal.target,
+			poi_entity: goal.poi_entity,
+			kind: goal.kind,
+			location: goal.location,
+		});
+		commands.entity(entity).remove::<PoiGoal>();
+	}
+}

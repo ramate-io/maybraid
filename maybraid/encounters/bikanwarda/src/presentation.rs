@@ -11,12 +11,12 @@ use std::marker::PhantomData;
 
 use avian3d::prelude::{Collider, RigidBody};
 use bevy::prelude::*;
-use bikanwarda_character::BikanwardaSpec;
+use bikanwarda_character::{encounter_meters, BikanwardaSpec};
 use damage::Health;
 use encounters::EncounterInstance;
 use lod::hcsg::PresentationPlugin;
-use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 
 use crate::generation::BikanwardaBossEncounter;
 use crate::identity::chained_encounter_id;
@@ -47,17 +47,24 @@ pub struct BossActor(pub Entity);
 
 /// Invisible collision placeholder for chain tether column.
 ///
-/// 15m tall cylinder (1m radius) grounded at terrain Y, on top of pedestal.
-/// Visual mesh TODO. Chain attachment depends on #1617.
+/// Scaled from the authored 15 m × 1 m cylinder, grounded at terrain Y on the
+/// pedestal. Visual mesh TODO. Chain attachment depends on #1617.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct BossColumn;
 
 /// Invisible collision placeholder for pedestal at column base.
 ///
-/// 3m tall cylinder (2m radius) grounded at terrain Y.
+/// Scaled from the authored 3 m × 2 m cylinder, grounded at terrain Y.
 /// Visual mesh TODO.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct BossPedestal;
+
+/// Authored 8 m XZ offset from boss to pillar, at live encounter scale.
+pub const COLUMN_OFFSET_XZ: Vec2 = Vec2::new(encounter_meters(8.0), 0.0);
+pub const PEDESTAL_RADIUS: f32 = encounter_meters(2.0);
+pub const PEDESTAL_HEIGHT: f32 = encounter_meters(3.0);
+pub const COLUMN_RADIUS: f32 = encounter_meters(1.0);
+pub const COLUMN_HEIGHT: f32 = encounter_meters(15.0);
 
 /// One LOD level: boss character with physics and presentation.
 ///
@@ -67,7 +74,7 @@ impl LodScene for BikanwardaBossEncounter {
 	fn scene_lod_status(&self, _lod_ref: &LodRef) -> LodSceneStatus {
 		LodSceneStatus::Unchanged
 	}
-	
+
 	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
 		let name = Name::new(format!(
 			"boss-encounter-{}",
@@ -77,20 +84,17 @@ impl LodScene for BikanwardaBossEncounter {
 		let position = self.boss_position;
 		let terrain_y = self.terrain_y;
 		let spec = self.boss.value.actor.recipe.spec.clone();
-		
-		// Column positioned 8m to the side as a tether anchor for future chain work (#1617).
-		// The column stands BESIDE the boss (not underneath), both grounded at terrain Y.
-		let column_offset_xz = Vec2::new(8.0, 0.0);
-		
+
+		// Column stands BESIDE the boss (not underneath), both grounded at terrain Y.
+		let column_offset_xz = COLUMN_OFFSET_XZ;
+
 		// Child transforms are LOCAL to root. Root is at boss position (terrain_y + hull_offset).
 		// Pedestal and column grounded at terrain_y, so their local Y = terrain_y - position.y
 		let local_ground_y = terrain_y - position.y;
-		
-		// Pedestal: 3m full height, center at terrain_y + 1.5 (local: local_ground_y + 1.5)
-		// Column: 15m full height on top of pedestal, center at terrain_y + 3.0 + 7.5 (local: local_ground_y + 10.5)
-		let pedestal_local_y = local_ground_y + 1.5;
-		let column_local_y = local_ground_y + 10.5;
-		
+
+		let pedestal_local_y = local_ground_y + PEDESTAL_HEIGHT * 0.5;
+		let column_local_y = local_ground_y + PEDESTAL_HEIGHT + COLUMN_HEIGHT * 0.5;
+
 		// Build child scenes for pedestal and column as separate entities
 		let children: Vec<Box<dyn Scene>> = vec![
 			Box::new(bsn! {
@@ -98,7 +102,7 @@ impl LodScene for BikanwardaBossEncounter {
 				BossPedestal
 				Transform::from_translation(Vec3::new(column_offset_xz.x, pedestal_local_y, column_offset_xz.y))
 				Visibility::default()
-				Collider::cylinder(2.0, 3.0)
+				Collider::cylinder(PEDESTAL_RADIUS, PEDESTAL_HEIGHT)
 				RigidBody::Static
 			}),
 			Box::new(bsn! {
@@ -106,14 +110,14 @@ impl LodScene for BikanwardaBossEncounter {
 				BossColumn
 				Transform::from_translation(Vec3::new(column_offset_xz.x, column_local_y, column_offset_xz.y))
 				Visibility::default()
-				Collider::cylinder(1.0, 15.0)
+				Collider::cylinder(COLUMN_RADIUS, COLUMN_HEIGHT)
 				RigidBody::Static
 			}),
 		];
-		
+
 		// Boss health (placeholder - see PLACEHOLDER_BOSS_HEALTH doc)
 		let boss_health = Health::from_max(PLACEHOLDER_BOSS_HEALTH);
-		
+
 		// Root entity with boss assembly and children for column/pedestal
 		bsn! {
 			~{name}
@@ -150,13 +154,13 @@ impl<C: Send + Sync + 'static> Plugin for BossEncounterPresentationPlugin<C> {
 mod tests {
 	use super::*;
 	use bevy::app::App;
-	use lod::hcsg::{ViewerHcsgBounds, HcsgClass, HcsgBoundsPlugin};
+	use lod::hcsg::{HcsgBoundsPlugin, HcsgClass, ViewerHcsgBounds};
 
 	struct TestChannel;
-	
+
 	impl ViewerHcsgBounds for TestChannel {
 		const CLASS: HcsgClass = HcsgClass::Near;
-		
+
 		fn regions_around(viewer: Vec3) -> Vec<bevy::shape::Aabb3d> {
 			vec![bevy::shape::Aabb3d::new(viewer, Vec3::splat(100.0))]
 		}

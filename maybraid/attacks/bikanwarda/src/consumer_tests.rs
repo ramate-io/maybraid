@@ -160,6 +160,54 @@ fn bray_animation_consumer_restores_after_real_bray_completes() -> anyhow::Resul
 }
 
 #[test]
+fn sonic_wave_torus_maps_y_axle_to_heading() -> anyhow::Result<()> {
+	use attacks::{AttackInstanceId, PresentationPhase, WavefrontPresentation};
+	use maybraid_vfx::soundwave_transform;
+
+	let mut app = consumer_app();
+	app.world_mut().write_message(crate::SonicWaveVfxCue {
+		instance: AttackInstanceId(3),
+		owner: Entity::from_bits(9),
+		phase: PresentationPhase::Spawned,
+		hazard_index: 0,
+		kind: crate::SonicWaveVfxKind::Follow(WavefrontPresentation {
+			origin: Vec3::new(1.0, 2.0, 3.0),
+			direction: Vec3::X,
+			position: Vec3::new(4.0, 2.0, 3.0),
+			speed: 10.0,
+			range: 8.0,
+			radius: 2.0,
+			thickness: 0.7,
+			wave_index: 0,
+		}),
+	});
+	app.update();
+	app.update();
+	let got = app
+		.world_mut()
+		.query::<(&Name, &Transform)>()
+		.iter(app.world())
+		.find(|(name, _)| name.as_str() == "vfx-soundwave-bray")
+		.map(|(_, transform)| *transform);
+	let Some(got) = got else {
+		return Err(anyhow!("Bray consumer must spawn a soundwave ring"));
+	};
+	let expected = soundwave_transform(Vec3::new(4.0, 2.0, 3.0), Vec3::X, 2.0, 0.7);
+	let axle = got.rotation * Vec3::Y;
+	if (axle - Vec3::X).length() > 1e-3 {
+		return Err(anyhow!("torus Y-axle must map onto the wave heading, got {axle}"));
+	}
+	let wrong = Quat::from_rotation_arc(Vec3::Z, Vec3::X) * Vec3::Y;
+	if (wrong - Vec3::X).length() < 0.5 {
+		return Err(anyhow!("regression would accept the Z-to-heading orientation bug"));
+	}
+	if (got.translation - expected.translation).length() > 1e-3 {
+		return Err(anyhow!("ring center must follow the live wave position"));
+	}
+	Ok(())
+}
+
+#[test]
 fn eye_glow_consumer_tracks_pending_owners() -> anyhow::Result<()> {
 	let mut app = consumer_app();
 	let owner = spawn_owner(&mut app, Vec3::ZERO);

@@ -39,7 +39,8 @@ mod tests {
 		let actor = BikanwardaActorRecipe::default().components();
 		let ordinary = actor.locomotion_capsule();
 		let encounter = actor.scaled_locomotion_capsule();
-		assert!(encounter.radius > ordinary.radius * 9.0);
+		assert!(encounter.radius > ordinary.radius * 3.0);
+		assert!(encounter.radius < ordinary.radius * 4.0);
 		let shapes = assembly_collider_shapes(encounter);
 		assert_eq!(shapes.len(), 2);
 	}

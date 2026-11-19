@@ -1,15 +1,18 @@
 //! [`GodBeamVfxCue`] and [`SonicWaveVfxCue`] consumers.
 //!
-//! With `vfx-driven` and landed [#1150](https://github.com/ramate-io/maybraid/pull/1150),
-//! map cues onto `maybraid-vfx` `god_beam` / `sonic_wave`. Until then, optional
-//! **PLACEHOLDER** meshes follow the same cue contract.
+//! Bray rings use [`maybraid_vfx::SoundwaveMaterial`] in the existing VFX crate.
+//! God Beam still draws a labeled PLACEHOLDER mesh until a driven column lands.
 
 use std::collections::HashMap;
 
 use attacks::{
 	AttackInstanceId, AttackPresentationBinding, AttackPresentationBindingKind, PresentationPhase,
+	WavefrontPresentation,
 };
 use bevy::prelude::*;
+use maybraid_vfx::{
+	soundwave_torus_mesh, soundwave_transform, SoundwaveMaterial, SoundwaveMaterialPlugin,
+};
 
 use crate::consumers::BikanwardaPresentationSystems;
 use crate::{GodBeamVfxCue, SonicWaveVfxCue, SonicWaveVfxKind};
@@ -17,9 +20,12 @@ use crate::{GodBeamVfxCue, SonicWaveVfxCue, SonicWaveVfxKind};
 #[derive(Resource, Default)]
 struct PlaceholderDrivenAssets {
 	beam: Option<Handle<Mesh>>,
-	ring: Option<Handle<Mesh>>,
 	beam_mat: Option<Handle<StandardMaterial>>,
-	ring_mat: Option<Handle<StandardMaterial>>,
+}
+
+#[derive(Resource, Default)]
+struct SoundwaveAssets {
+	ring: Option<Handle<Mesh>>,
 }
 
 #[derive(Resource, Default)]
@@ -30,16 +36,25 @@ struct DrivenBindings {
 }
 
 pub fn plugin(app: &mut App, placeholder: bool) {
+	if !app.is_plugin_added::<SoundwaveMaterialPlugin>() {
+		app.add_plugins(SoundwaveMaterialPlugin);
+	}
+	app.init_resource::<SoundwaveAssets>()
+		.init_resource::<DrivenBindings>()
+		.add_systems(Startup, seed_soundwave_assets)
+		.add_systems(Update, consume_sonic_wave.in_set(BikanwardaPresentationSystems::Consume));
 	if placeholder {
 		app.init_resource::<PlaceholderDrivenAssets>()
-			.init_resource::<DrivenBindings>()
 			.add_systems(Startup, seed_placeholder_driven_assets)
 			.add_systems(
 				Update,
-				(consume_god_beam_placeholder, consume_sonic_wave_placeholder)
-					.in_set(BikanwardaPresentationSystems::Consume),
+				consume_god_beam_placeholder.in_set(BikanwardaPresentationSystems::Consume),
 			);
 	}
+}
+
+fn seed_soundwave_assets(mut assets: ResMut<SoundwaveAssets>, mut meshes: ResMut<Assets<Mesh>>) {
+	assets.ring = Some(meshes.add(soundwave_torus_mesh()));
 }
 
 fn seed_placeholder_driven_assets(
@@ -48,17 +63,9 @@ fn seed_placeholder_driven_assets(
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
 	assets.beam = Some(meshes.add(Cylinder::new(0.5, 1.0)));
-	assets.ring = Some(meshes.add(Torus::new(0.55, 0.08)));
 	assets.beam_mat = Some(materials.add(StandardMaterial {
 		base_color: Color::srgba(1.0, 0.55, 0.12, 0.55),
 		emissive: LinearRgba::rgb(4.0, 1.2, 0.2),
-		alpha_mode: AlphaMode::Blend,
-		unlit: true,
-		..default()
-	}));
-	assets.ring_mat = Some(materials.add(StandardMaterial {
-		base_color: Color::srgba(0.55, 0.85, 1.0, 0.42),
-		emissive: LinearRgba::rgb(1.5, 3.0, 5.0),
 		alpha_mode: AlphaMode::Blend,
 		unlit: true,
 		..default()
@@ -115,14 +122,16 @@ fn consume_god_beam_placeholder(
 	}
 }
 
-fn consume_sonic_wave_placeholder(
+fn consume_sonic_wave(
 	mut cues: MessageReader<SonicWaveVfxCue>,
-	assets: Res<PlaceholderDrivenAssets>,
+	assets: Res<SoundwaveAssets>,
 	mut bindings: ResMut<DrivenBindings>,
 	mut transforms: Query<&mut Transform>,
+	mut materials: ResMut<Assets<SoundwaveMaterial>>,
+	handles: Query<&MeshMaterial3d<SoundwaveMaterial>>,
 	mut commands: Commands,
 ) {
-	let (Some(mesh), Some(material)) = (assets.ring.as_ref(), assets.ring_mat.as_ref()) else {
+	let Some(mesh) = assets.ring.as_ref() else {
 		return;
 	};
 	for cue in cues.read() {
@@ -131,38 +140,17 @@ fn consume_sonic_wave_placeholder(
 				SonicWaveVfxKind::Follow(wave),
 				PresentationPhase::Spawned | PresentationPhase::Updated,
 			) => {
-				let key = (cue.instance, wave.wave_index);
-				let heading = wave.direction.normalize_or(Vec3::Z);
-				let rotation = Quat::from_rotation_arc(Vec3::Z, heading);
-				let transform = Transform::from_translation(wave.position)
-					.with_rotation(rotation)
-					.with_scale(Vec3::new(
-						wave.radius.max(0.05) * 2.0,
-						wave.thickness.max(0.05),
-						wave.radius.max(0.05) * 2.0,
-					));
-				if let Some(entity) = bindings.rings.get(&key) {
-					if let Ok(mut tf) = transforms.get_mut(*entity) {
-						*tf = transform;
-					}
-				} else {
-					let entity = commands
-						.spawn((
-							Name::new("PLACEHOLDER-sonic-ring"),
-							Mesh3d(mesh.clone()),
-							MeshMaterial3d(material.clone()),
-							transform,
-							AttackPresentationBinding {
-								instance: cue.instance,
-								kind: AttackPresentationBindingKind::Hazard {
-									index: cue.hazard_index,
-									wave: wave.wave_index,
-								},
-							},
-						))
-						.id();
-					bindings.rings.insert(key, entity);
-				}
+				follow_wave(
+					&mut commands,
+					&mut bindings,
+					&mut transforms,
+					&mut materials,
+					&handles,
+					mesh,
+					cue.instance,
+					cue.hazard_index,
+					*wave,
+				);
 			}
 			(SonicWaveVfxKind::Despawn, _) | (_, PresentationPhase::Despawned) => {
 				bindings.rings.retain(|(instance, _), entity| {
@@ -180,4 +168,54 @@ fn consume_sonic_wave_placeholder(
 			_ => {}
 		}
 	}
+}
+
+fn follow_wave(
+	commands: &mut Commands,
+	bindings: &mut DrivenBindings,
+	transforms: &mut Query<&mut Transform>,
+	materials: &mut Assets<SoundwaveMaterial>,
+	handles: &Query<&MeshMaterial3d<SoundwaveMaterial>>,
+	mesh: &Handle<Mesh>,
+	instance: AttackInstanceId,
+	hazard_index: usize,
+	wave: WavefrontPresentation,
+) {
+	let key = (instance, wave.wave_index);
+	let transform = soundwave_transform(wave.position, wave.direction, wave.radius, wave.thickness);
+	if let Some(entity) = bindings.rings.get(&key).copied() {
+		if let Ok(mut tf) = transforms.get_mut(entity) {
+			*tf = transform;
+		}
+		if let Ok(handle) = handles.get(entity) {
+			if let Some(mut material) = materials.get_mut(&handle.0) {
+				material.follow(wave.origin, wave.direction, wave.radius, wave.thickness);
+			}
+		}
+		return;
+	}
+	let material = materials.add(SoundwaveMaterial::new(
+		wave.origin,
+		wave.direction,
+		wave.radius,
+		wave.thickness,
+		Color::srgb(0.72, 0.88, 1.0),
+		1.2,
+	));
+	let entity = commands
+		.spawn((
+			Name::new("vfx-soundwave-bray"),
+			Mesh3d(mesh.clone()),
+			MeshMaterial3d(material),
+			transform,
+			AttackPresentationBinding {
+				instance,
+				kind: AttackPresentationBindingKind::Hazard {
+					index: hazard_index,
+					wave: wave.wave_index,
+				},
+			},
+		))
+		.id();
+	bindings.rings.insert(key, entity);
 }

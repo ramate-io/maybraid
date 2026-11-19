@@ -15,6 +15,9 @@ const REPLAN_THRESHOLD: ReplanThreshold =
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TetherSystems {
 	Write,
+	/// Reclaim stolen movement without a full evaluate. Apps can run this on
+	/// the pursuit cadence so an intervening firearm tick cannot walk the leash.
+	Reclaim,
 }
 
 pub struct TetherPlugin;
@@ -23,11 +26,18 @@ impl Plugin for TetherPlugin {
 	fn build(&self, app: &mut App) {
 		app.configure_sets(
 			Update,
-			TetherSystems::Write
-				.before(RoutingSystems::Plan)
-				.before(MovementIntelligenceSystems::Replan),
+			(
+				TetherSystems::Write
+					.before(RoutingSystems::Plan)
+					.before(MovementIntelligenceSystems::Replan),
+				TetherSystems::Reclaim
+					.after(TetherSystems::Write)
+					.before(RoutingSystems::Plan)
+					.before(MovementIntelligenceSystems::Replan),
+			),
 		)
-		.add_systems(Update, write_tether_objectives.in_set(TetherSystems::Write));
+		.add_systems(Update, write_tether_objectives.in_set(TetherSystems::Write))
+		.add_systems(Update, reclaim_stolen_tether_objectives.in_set(TetherSystems::Reclaim));
 	}
 }
 
@@ -70,12 +80,80 @@ pub fn write_tether_objectives(
 			subject,
 			movement.objective,
 		);
-		apply_action(entity, from, action, &mut movement, routing, &mut commands);
+		apply_action(
+			entity,
+			from,
+			cleared_local(&tether, from, subject, action),
+			&mut movement,
+			routing,
+			&mut commands,
+		);
 	}
 }
 
 fn pose_translation(transform: &Transform, global: Option<&GlobalTransform>) -> Vec3 {
 	global.map(|global| global.translation()).unwrap_or(transform.translation)
+}
+
+fn cleared_local(
+	tether: &TetherIntelligenceUser,
+	from: Vec3,
+	subject: Vec3,
+	action: TetherAction,
+) -> TetherAction {
+	match action {
+		TetherAction::Local(_) => TetherAction::Local(tether.local_objective(from, subject)),
+		other => other,
+	}
+}
+
+/// Recompute remaining from live poses and reclaim a stolen objective.
+///
+/// `evaluate` is cadence-owned by the app. Firearm movement can run on a
+/// shorter timer; this system restores tether priority on those ticks without
+/// waiting for the next write.
+pub fn reclaim_stolen_tether_objectives(
+	mut users: Query<(
+		Entity,
+		&Transform,
+		Option<&GlobalTransform>,
+		&TetherIntelligenceUser,
+		&mut MovementIntelligence,
+		Option<&mut RoutingIntelligenceUser>,
+	)>,
+	anchors: Query<(&Transform, Option<&GlobalTransform>), With<Tether>>,
+	mut commands: Commands,
+) {
+	for (entity, transform, global, tether, mut movement, routing) in &mut users {
+		if !tether.enabled {
+			continue;
+		}
+		let Ok((anchor, anchor_global)) = anchors.get(tether.objective.subject()) else {
+			continue;
+		};
+		let from = pose_translation(transform, global);
+		let subject = pose_translation(anchor, anchor_global);
+		let remaining = tether.remaining_work(from, subject);
+		let action = reclaim_stolen_objective(
+			TetherAction::None,
+			tether.enabled,
+			remaining <= 0.0,
+			remaining,
+			tether.horizon,
+			tether.objective,
+			from,
+			subject,
+			movement.objective,
+		);
+		apply_action(
+			entity,
+			from,
+			cleared_local(tether, from, subject, action),
+			&mut movement,
+			routing,
+			&mut commands,
+		);
+	}
 }
 
 /// `evaluate` yields `None` while remaining work is shrinking so a lone tether

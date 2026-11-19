@@ -34,8 +34,8 @@ effect (named composite / recipe)
 | Module | Owns | Examples |
 | --- | --- | --- |
 | [`lib/src/effects.rs`](lib/src/effects.rs) | Named recipes that implement `EffectRecipe` | `Dust`, `FieryExplosion` |
-| [`lib/src/layers.rs`](lib/src/layers.rs) | Standalone visual layers that can spawn alone | `DustLayer`, flash, fireball, smoke, sparks |
-| [`lib/src/parts.rs`](lib/src/parts.rs) | Spawned primitives and their assets / renderers | flipbook card, packaged KTX, mesh lobe, Hanabi particle |
+| [`lib/src/layers.rs`](lib/src/layers.rs) | Standalone visual layers that can spawn alone | `DustLayer`, flash, fireball, smoke, sparks, soundwave |
+| [`lib/src/parts.rs`](lib/src/parts.rs) | Spawned primitives and their assets / renderers | flipbook card, packaged KTX, mesh lobe, Hanabi particle, soundwave torus |
 | [`lib/src/composition.rs`](lib/src/composition.rs) | Graph schema | `EffectDefinition`, `EffectLayer`, `EffectPart`, `EffectRecipe` |
 
 Spawn typed recipes with `commands.spawn_scene(Effect { recipe, spawn })`, or
@@ -56,6 +56,7 @@ the primitive:
 | `packaged` | assets for `FlipbookPart` | `.flipbook.json` / `.volume.json` loaders and manifests |
 | `lobe` | `MeshPart` | Overlapping mesh volumes and `LobeMaterial` |
 | `particle` | `ParticlePart` | Hanabi instance properties, procedural sprite atlases, and spawn |
+| `soundwave` | `SoundwavePart` | Y-axle torus + `SoundwaveMaterial` for directional Bray fronts |
 
 `particle/flipbook.rs` is Hanabi `SPRITE_INDEX` over lifetime for wisp cards.
 That pipeline is not packaged KTX. Never merge it with `flipbook_card`.

@@ -1,11 +1,13 @@
 //! Bikanwarda outcomes on top of the generic progress owner.
 
 use bevy::prelude::*;
+use bikanwarda_attacks::BikanwardaAttackParams;
+use bikanwarda_character::ENCOUNTER_LINEAR_SCALE;
 use encounters::{EncounterLifetimePolicy, EncounterSleepPolicy, EncountersPlugin};
 use lubikans::{LubikanCatalog, LubikanInterfacePlugin, LubikansPlugin};
 
 use crate::outcomes;
-use crate::unlocks::{BikanwardaUnlockConfig, register_unlocks};
+use crate::unlocks::{register_unlocks, BikanwardaUnlockConfig};
 
 /// Registers Ward/Enraged, awards from [`encounters::EncounterResolved`], and
 /// installs [`EncountersPlugin`] with the Bikanwarda lifetime policy.
@@ -28,7 +30,10 @@ impl Plugin for BikanwardaEncounterPlugin {
 		// Note: SpottingAvianPlugin should be installed by the main game/world setup
 		// for boss perception to work. Not installed here to avoid test dependencies.
 		app.insert_resource(EncounterLifetimePolicy::bikanwarda())
-			.insert_resource(EncounterSleepPolicy::bikanwarda());
+			.insert_resource(EncounterSleepPolicy::bikanwarda())
+			.insert_resource(
+				BikanwardaAttackParams::PLACEHOLDER.scaled_linear(ENCOUNTER_LINEAR_SCALE),
+			);
 		app.init_resource::<BikanwardaUnlockConfig>();
 		if app.world().get_resource::<LubikanCatalog>().is_none() {
 			app.init_resource::<LubikanCatalog>();

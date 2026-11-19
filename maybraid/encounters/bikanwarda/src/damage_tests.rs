@@ -90,9 +90,9 @@ fn player_projectile_damages_boss() -> Result<()> {
 		.get::<GlobalTransform>(boss_actor)
 		.expect("Boss actor should have GlobalTransform");
 
-	// Fire a projectile at the boss (aiming at center mass)
-	let target_pos = boss_transform.translation() + Vec3::Y * 10.0; // Aim at boss center
-	let start_pos = target_pos + Vec3::X * -15.0; // 15m away horizontally
+	// Fire a projectile at the boss (aiming at motor origin)
+	let target_pos = boss_transform.translation();
+	let start_pos = target_pos + Vec3::X * -15.0;
 	let direction = (target_pos - start_pos).normalize();
 
 	// Use BulletSpec
@@ -161,10 +161,83 @@ fn player_projectile_damages_boss() -> Result<()> {
 	Ok(())
 }
 
+/// Native Metal play at 20 m had two bolts with zero boss contacts. Those
+/// shots were aimed at the visual body, not the vertical motor. The
+/// pronograde hit hull must still debit the Health host.
+#[test]
+fn projectile_through_pronograde_hit_hull_debits_host() -> Result<()> {
+	let mut app = projectile_damage_app();
+	let spec = BikanwardaSpec::encounter();
+	let hull = BikanwardaActorRecipe::from_spec(spec.clone())
+		.components()
+		.scaled_locomotion_capsule();
+	let hit = hull.hit_capsule().expect("encounter hull is pronograde");
+	let boss_actor = {
+		let mut commands = app.world_mut().commands();
+		spawn_bikanwarda_encounter(&mut commands, &spec, Transform::IDENTITY)
+	};
+	app.update();
+	let host_entity = app
+		.world_mut()
+		.spawn((
+			Name::new("boss-host"),
+			Health::from_max(1000.0),
+			Transform::default(),
+			GlobalTransform::default(),
+		))
+		.id();
+	app.world_mut().entity_mut(boss_actor).insert(ChildOf(host_entity));
+	let player = app
+		.world_mut()
+		.spawn((Name::new("test-player"), Transform::default(), GlobalTransform::default()))
+		.id();
+	for _ in 0..3 {
+		app.update();
+	}
+	let origin = app
+		.world()
+		.get::<GlobalTransform>(boss_actor)
+		.expect("Boss actor should have GlobalTransform")
+		.translation();
+	let target_pos = origin + hit.local_transform().translation;
+	let start_pos = target_pos + Vec3::X * -12.0;
+	let direction = (target_pos - start_pos).normalize();
+	let bullet = BulletSpec::default();
+	let collider = Collider::capsule(bullet.radius, bullet.length);
+	let cap_transform = Transform::from_translation(start_pos).looking_to(direction, Vec3::Y);
+	app.world_mut().spawn((
+		Name::new("body-aimed-bullet"),
+		cap_transform,
+		GlobalTransform::from(cap_transform),
+		RigidBody::Dynamic,
+		MassPropertiesBundle::from_shape(&collider, 1.0),
+		collider,
+		Sensor,
+		PhysicsInteractionLayer::projectile_layers(),
+		LockedAxes::ROTATION_LOCKED,
+		LinearVelocity(direction * bullet.speed),
+		GravityScale(0.0),
+		Restitution::ZERO,
+		Flight::spawn(start_pos, bullet.max_range, bullet.penetration, bullet.max_age),
+		ProjectileSource(player),
+		HitPayload { amount: 25.0 },
+	));
+	let initial = app.world().get::<Health>(host_entity).expect("host health").current;
+	for _ in 0..40 {
+		app.update();
+	}
+	let final_health = app.world().get::<Health>(host_entity).expect("host health").current;
+	anyhow::ensure!(
+		(initial - final_health - 25.0).abs() < 0.1,
+		"pronograde hull shot should debit 25 HP once, initial={initial} final={final_health}"
+	);
+	Ok(())
+}
+
 /// Test 1a: Collider AABB regression for unparented spawn (Ward/Enraged).
 /// Spawns boss through production path at translated position with NO parent.
 /// Lets Avian settle, then reads live ColliderAabb. Asserts AABB world size is
-/// ~10.526× unscaled capsule (NOT ~110× double-scale, NOT ~1× unscaled).
+/// Live encounter scale × unscaled capsule (NOT double-scale, NOT unscaled).
 /// MUST FAIL:
 ///   - Pre-fix (unscaled capsule): ~1.25×1.94×3.29m
 ///   - 78042407d (scaled capsule + scaled transform): ~110× double-scale
@@ -175,7 +248,7 @@ fn ward_collider_scales_correctly_unparented() -> Result<()> {
 	// Spawn Ward (unparented form) at nonzero world position
 	let world_position = Vec3::new(100.0, 50.0, 200.0);
 	let spec = BikanwardaSpec::ward();
-	let scale = spec.uniform_scale(); // ~10.526316
+	let scale = spec.uniform_scale();
 
 	let ward_root = {
 		let mut commands = app.world_mut().commands();
@@ -279,7 +352,7 @@ fn ward_collider_scales_correctly_unparented() -> Result<()> {
 /// Test 1b: Collider AABB regression for parented spawn (Encounter).
 /// Spawns boss through production path as child of translated host.
 /// Lets Avian settle, then reads live ColliderAabb. Asserts AABB world size is
-/// ~10.526× unscaled capsule (NOT ~110× double-scale, NOT ~1× unscaled).
+/// Live encounter scale × unscaled capsule (NOT double-scale, NOT unscaled).
 /// MUST FAIL:
 ///   - Pre-fix (unscaled capsule): ~1.25×1.94×3.29m
 ///   - 78042407d worked by accident for parented case only
@@ -290,7 +363,7 @@ fn encounter_collider_scales_correctly_parented() -> Result<()> {
 	// Spawn encounter (parented to host) at nonzero world position
 	let host_position = Vec3::new(100.0, 50.0, 200.0);
 	let spec = BikanwardaSpec::encounter();
-	let scale = spec.uniform_scale(); // ~10.526316
+	let scale = spec.uniform_scale();
 
 	let encounter_root = {
 		let mut commands = app.world_mut().commands();
@@ -418,11 +491,13 @@ fn projectile_hits_visible_body_outside_old_small_box() -> Result<()> {
 		app.update();
 	}
 
-	// Target point on visible body OUTSIDE old small box (1.25×1.94×3.29m)
-	// Old box extended from X=[-0.625, +0.625], Y=[0, 3.29], Z=[-0.97, +0.97]
-	// Shoot at X=+5.0, Y=+10.0 (well outside old box, inside new scaled box ~13×20m)
-	let target_pos = Vec3::new(5.0, 10.0, 0.0);
-	let start_pos = target_pos + Vec3::X * -20.0; // 20m away horizontally
+	// Target point on the scaled body OUTSIDE the ordinary ~1.25×1.94×3.29 m box
+	// and inside the live encounter hull.
+	let scaled = BikanwardaActorRecipe::from_spec(spec.clone())
+		.components()
+		.scaled_locomotion_capsule();
+	let target_pos = Vec3::new(scaled.radius * 1.15, scaled.half_height() * 0.35, 0.0);
+	let start_pos = target_pos + Vec3::X * -12.0;
 	let direction = (target_pos - start_pos).normalize();
 
 	// Use BulletSpec
@@ -530,9 +605,9 @@ fn mouth_socket_anchor_scales_with_capsule() -> Result<()> {
 		.expect("Unscaled anchors should have MOUTH_EMIT")
 		.translation;
 
-	// Assert scaled mouth position is ~10.526× unscaled
+	// Assert scaled mouth position tracks spec.uniform_scale()
 	anyhow::ensure!(
-		expected_mouth_local.length() > unscaled_mouth_local.length() * 9.0,
+		expected_mouth_local.length() > unscaled_mouth_local.length() * 3.0,
 		"Mouth anchor should be scaled: unscaled={:.2}, scaled={:.2}, ratio={:.2}",
 		unscaled_mouth_local.length(),
 		expected_mouth_local.length(),
@@ -786,7 +861,7 @@ fn ordinary_player_fire_path_applies_once_to_boss() -> Result<()> {
 		.world()
 		.get::<GlobalTransform>(boss_actor)
 		.expect("Boss actor should have GlobalTransform");
-	let target_pos = boss_transform.translation() + Vec3::Y * 10.0;
+	let target_pos = boss_transform.translation();
 	let start_pos = target_pos + Vec3::X * -15.0;
 	let direction = (target_pos - start_pos).normalize();
 

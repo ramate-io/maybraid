@@ -8,12 +8,12 @@ use attacks::{AttackCatalog, BeginAttack};
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 use bikanwarda_attacks::{BikanwardaMouthSocket, BRAY};
-use bikanwarda_character::BikanwardaRoot;
+use bikanwarda_character::{encounter_meters, BikanwardaRoot};
 use combat_targeting::{CombatTargeting, SpottingTargetingSettings};
 use damage::Health;
 use threat_intelligence::{
-	AffiliationStrength, Affiliations, ThreatId, ThreatIntelligenceUser,
-	ThreatKnowledge, ThreatGroupId, ThreatSubject,
+	AffiliationStrength, Affiliations, ThreatGroupId, ThreatId, ThreatIntelligenceUser,
+	ThreatKnowledge, ThreatSubject,
 };
 use threat_management_intelligence::ThreatManagementIntelligence;
 
@@ -54,8 +54,8 @@ pub fn boss_combat_driver(
 	targets: Query<&GlobalTransform>,
 	mut attacks: MessageWriter<BeginAttack>,
 ) {
-	const ATTACK_RANGE: f32 = 40.0; // Bray range from attack definition
-	
+	const ATTACK_RANGE: f32 = encounter_meters(40.0);
+
 	for (actor_ref, health, mut cooldown) in &mut hosts {
 		// Gate: skip if host health is dead
 		if health.is_dead() {
@@ -65,15 +65,15 @@ pub fn boss_combat_driver(
 		let Ok((actor_transform, targeting, children)) = actors.get(actor_ref.0) else {
 			continue;
 		};
-		
+
 		// Find the mouth socket among the actor's children
-		let mouth_socket = children
-			.iter()
-			.find(|&child| mouth_sockets.contains(child));
+		let mouth_socket = children.iter().find(|&child| mouth_sockets.contains(child));
 
 		// Tick cooldown
 		cooldown.timer.tick(time.delta());
-		if !cooldown.timer.just_finished() && cooldown.timer.elapsed_secs() < cooldown.timer.duration().as_secs_f32() {
+		if !cooldown.timer.just_finished()
+			&& cooldown.timer.elapsed_secs() < cooldown.timer.duration().as_secs_f32()
+		{
 			continue;
 		}
 
@@ -83,12 +83,12 @@ pub fn boss_combat_driver(
 			// No visible target - stay idle (no cooldown-only firing)
 			continue;
 		};
-		
+
 		// Verify target is in range
 		let Ok(target_transform) = targets.get(contact.subject) else {
 			continue;
 		};
-		
+
 		let distance = actor_transform.translation().distance(target_transform.translation());
 		if distance > ATTACK_RANGE {
 			// Out of range - stay idle
@@ -139,17 +139,14 @@ pub fn initialize_boss_combat(
 		// PLAYER_GROUP is defined in mob-scenes (group 29)
 		const PLAYER_GROUP: ThreatGroupId = ThreatGroupId::group(29);
 		affiliations.antagonize(PLAYER_GROUP, AffiliationStrength::permanent(1.0));
-		
+
 		// Add combat/spotting/targeting to the ACTOR
 		// SpottingUser is added by assembly, and the shared bridge will sync it to targeting
 		// ThreatManagementIntelligence grants ENEMYSHIP sources for discovered hostile targets
 		commands.entity(actor_ref.0).insert((
 			BossInCombat,
 			CombatTargeting::default(),
-			SpottingTargetingSettings {
-				memory_secs: 3.0,
-				continuity: 0.0,
-			},
+			SpottingTargetingSettings { memory_secs: 3.0, continuity: 0.0 },
 			// Threat intelligence: boss is both a threat discoverer and a discoverable threat
 			ThreatSubject::new(actor_id),
 			ThreatIntelligenceUser::default(),
@@ -157,10 +154,10 @@ pub fn initialize_boss_combat(
 			affiliations,
 			ThreatManagementIntelligence::ffa(),
 		));
-		
+
 		// Add BossAttackCooldown to the HOST (checked alongside Health)
 		commands.entity(host_entity).insert(BossAttackCooldown::default());
-		
+
 		info!("Initialized combat state: host {:?} → actor {:?}", host_entity, actor_ref.0);
 	}
 }
@@ -185,7 +182,7 @@ impl Plugin for BossEncounterCombatPlugin {
 		if !app.is_plugin_added::<threat_management_intelligence::ThreatManagementPlugin>() {
 			app.add_plugins(threat_management_intelligence::ThreatManagementPlugin);
 		}
-		
+
 		app.add_systems(
 			Update,
 			(

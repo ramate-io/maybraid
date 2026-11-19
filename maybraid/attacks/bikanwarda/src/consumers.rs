@@ -6,7 +6,8 @@
 //! | [`SpatialRumbleCue`] | `maybraid-spatial-rumble` | wired |
 //! | [`BrayAnimationCue`] | `character-motion` `AnimClip::epiphant_bray` | wired ([#1141](https://github.com/ramate-io/maybraid/pull/1141)) |
 //! | mouth / [`BikanwardaMouthSocket`] | `character_motion::sample_bray_mouth_emit` | wired |
-//! | [`GodBeamVfxCue`] / [`SonicWaveVfxCue`] | `maybraid-vfx` `god_beam` / `sonic_wave` | **PLACEHOLDER** until [#1150](https://github.com/ramate-io/maybraid/pull/1150) (`vfx-driven` feature) |
+//! | [`GodBeamVfxCue`] | `maybraid-vfx` `god_beam` | **PLACEHOLDER** until a driven column lands |
+//! | [`SonicWaveVfxCue`] | `maybraid-vfx` `soundwave` | wired (directional compression-edge shader) |
 //! | [`EyeGlowCue`] | `characters::EyeGlowControl` | **pending** [#1152](https://github.com/ramate-io/maybraid/pull/1152) (`eye-glow` feature) |
 
 mod bray_animation;
@@ -26,8 +27,7 @@ pub use eye_glow::PendingEyeGlow;
 /// Requires `presentation-consumers` (default). Gameplay and the cue adapter stay
 /// available without this plugin — encounters can subscribe manually.
 pub struct BikanwardaPresentationConsumersPlugin {
-	/// When true, [`driven_vfx`] draws labeled PLACEHOLDER meshes for God Beam / sonic
-	/// waves until a driven VFX provider lands ([#1150](https://github.com/ramate-io/maybraid/pull/1150)).
+	/// When true, [`driven_vfx`] draws a labeled PLACEHOLDER mesh for God Beam.
 	pub placeholder_driven_vfx: bool,
 }
 

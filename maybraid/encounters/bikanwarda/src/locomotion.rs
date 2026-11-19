@@ -11,7 +11,8 @@ use std::f32::consts::TAU;
 use avian3d::prelude::CollisionLayers;
 use bevy::prelude::*;
 use bikanwarda_character::{
-	BikanwardaActorRecipe, BikanwardaAnchors, BikanwardaChainAnchor, BikanwardaRoot, BikanwardaSpec,
+	encounter_meters, BikanwardaActorRecipe, BikanwardaAnchors, BikanwardaChainAnchor,
+	BikanwardaRoot, BikanwardaSpec,
 };
 use characters::{CharacterHeading, CharacterRecipe, CharacterRoot, LocomotionCapsule};
 use combat_targeting::CombatTargeting;
@@ -42,13 +43,14 @@ use tether_intelligence::{
 
 use crate::presentation::{BossActor, BossColumn, BossEncounterRoot};
 
-/// Horizontal leash around the pillar. Patrol pins sit on the authored 8 m ring.
-pub const BOSS_TETHER_RADIUS: f32 = 24.0;
+/// Horizontal leash around the pillar. Patrol pins sit on the authored 8 m ring,
+/// scaled with the shared encounter form.
+pub const BOSS_TETHER_RADIUS: f32 = encounter_meters(24.0);
 
 const PATROL_KIND: PoiKind = PoiKind::new("bikanwarda/patrol");
-const PATROL_RING_M: f32 = 8.0;
+const PATROL_RING_M: f32 = encounter_meters(8.0);
 const PATROL_PIN_COUNT: u32 = 4;
-const PATROL_ARRIVAL_RADIUS: f32 = 5.0;
+const PATROL_ARRIVAL_RADIUS: f32 = encounter_meters(5.0);
 
 pub struct BossEncounterLocomotionPlugin;
 
@@ -125,10 +127,11 @@ pub fn initialize_boss_locomotion(
 		let objective = TetherObjective::Tether(column_entity, BOSS_TETHER_RADIUS);
 		// Default added_radius/stuck_timeout let the motor walk ~2 m past the
 		// leash before the brain writes a pull. Zero both so pursuit at the rim
-		// cannot outrun the 24 m objective.
+		// cannot outrun the scaled objective.
 		let mut tether = TetherIntelligenceUser::new(objective)
 			.with_added_radius(0.0)
-			.with_stuck_timeout(0.0);
+			.with_stuck_timeout(0.0)
+			.with_clearance(hull.radius.max(0.4));
 		tether.enabled = true;
 		install_tether(&mut commands, actor_ref.0, tether);
 
@@ -138,12 +141,16 @@ pub fn initialize_boss_locomotion(
 		movement.ability.agent_radius = hull.radius.max(0.4);
 		movement.ability.feet_below_origin = hull.half_height();
 		movement.ability.eye_height = (hull.length + 2.0 * hull.radius) * 0.8;
-		movement.ability.path_segment = (hull.radius * 2.0).max(4.0);
+		movement.ability.path_segment = (hull.radius * 2.0).max(encounter_meters(4.0));
 		movement.ability.max_step = hull.radius.max(0.4);
-		movement.ability.max_fall = hull.half_height().max(1.2);
+		movement.ability.max_fall = hull.half_height().max(encounter_meters(1.2));
 		movement.ability.candidate_budget.max_candidates = 8;
-		movement.ability.candidate_budget.horizon = 30.0;
-		movement.ability.vantage_standoffs = VantageStandoffs::from_radii(&[8.0, 12.0, 16.0]);
+		movement.ability.candidate_budget.horizon = encounter_meters(30.0);
+		movement.ability.vantage_standoffs = VantageStandoffs::from_radii(&[
+			encounter_meters(8.0),
+			encounter_meters(12.0),
+			encounter_meters(16.0),
+		]);
 		movement.ability.vantage_azimuths = 4;
 
 		let mut knowledge = PoiKnowledge::default();
@@ -173,9 +180,9 @@ pub fn initialize_boss_locomotion(
 
 		let mut firearm_movement = FirearmMovementIntelligence::new();
 		firearm_movement.settings = FirearmMovementIntelligenceSettings {
-			range: (14.0, 1.0),
+			range: (encounter_meters(14.0), encounter_meters(1.0)),
 			cover: 0.0,
-			flee: (0.0, 8.0),
+			flee: (0.0, encounter_meters(8.0)),
 			vantage: (0.0, 1.0),
 		};
 

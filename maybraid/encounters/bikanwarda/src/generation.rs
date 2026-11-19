@@ -11,7 +11,9 @@
 use bevy::math::{DVec3, Vec3};
 use bevy::prelude::*;
 use bevy::shape::Aabb3d;
-use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaForm, BikanwardaSpec};
+use bikanwarda_character::{
+	encounter_meters, BikanwardaActorRecipe, BikanwardaForm, BikanwardaSpec,
+};
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::{GenerationContext, GenerationScheme};
 
@@ -32,7 +34,7 @@ pub struct AuthoredBossSpawns {
 	/// Active boss spawn position (None if no boss is spawned).
 	/// Includes hull spawn offset (terrain_y + boss_spawn_height_offset).
 	pub position: Option<Vec3>,
-	
+
 	/// Published terrain height sampled at boss XZ during initial spawn.
 	/// Stored to prevent drift on eviction/regeneration when deriving from position.
 	pub terrain_y: Option<f32>,
@@ -49,16 +51,16 @@ lod::seeded_root!(AuthoredBossSpawns);
 pub struct BikanwardaBossEncounter {
 	/// Encounter identity (stable across regeneration).
 	pub id: encounters::EncounterId,
-	
+
 	/// World-space bounds for the entire encounter (boss + arena).
 	pub bounds: Aabb3d,
-	
+
 	/// Boss center position in world space (includes hull spawn offset).
 	pub boss_position: Vec3,
-	
+
 	/// Published terrain height at boss XZ (ground level, no hull offset).
 	pub terrain_y: f32,
-	
+
 	/// Authored boss configuration.
 	pub boss: Scripted<BossEncounterContract>,
 }
@@ -68,9 +70,9 @@ impl BikanwardaBossEncounter {
 	pub fn chained() -> Self {
 		Self::chained_at_with_terrain(Vec3::ZERO, 0.0)
 	}
-	
+
 	/// The authored Bikanwarda chained encounter at a specific position.
-	/// 
+	///
 	/// **Note:** For tests only. Production code should use `chained_at_with_terrain`
 	/// with actual terrain height from world terrain query.
 	#[cfg(test)]
@@ -83,66 +85,67 @@ impl BikanwardaBossEncounter {
 		let terrain_y = boss_position.y - hull_offset;
 		Self::chained_at_with_terrain(boss_position, terrain_y)
 	}
-	
+
 	/// The authored Bikanwarda chained encounter at a specific position with terrain height.
 	pub fn chained_at_with_terrain(boss_position: Vec3, terrain_y: f32) -> Self {
 		let id = chained_encounter_id();
-		
+
 		// Authored boss configuration
 		let actor_recipe = BossActorRecipe {
 			form: BikanwardaForm::Encounter,
 			recipe: BikanwardaActorRecipe::for_form(BikanwardaForm::Encounter),
 		};
-		
+
 		let attack_config = BossAttackConfig {
 			placeholder: "attacks defined in bikanwarda-attacks crate".to_string(),
 		};
-		
-		let boss = Scripted::new(BossEncounterContract {
-			actor: actor_recipe,
-			attacks: attack_config,
-		});
-		
-		// Bounds centered on boss position (20m boss, ~40m arena)
+
+		let boss =
+			Scripted::new(BossEncounterContract { actor: actor_recipe, attacks: attack_config });
+
+		// Bounds centered on boss position (scaled from the authored 20 m hull / ~40 m arena)
 		let bounds = Aabb3d::new(
 			boss_position,
-			Vec3::new(20.0, 10.0, 20.0),
+			Vec3::new(encounter_meters(20.0), encounter_meters(10.0), encounter_meters(20.0)),
 		);
-		
+
 		Self { id, bounds, boss_position, terrain_y, boss }
 	}
 }
 
 impl GenerationScheme for BikanwardaBossEncounter {
 	lod::hcsg_index_scale!(BOSS_SCALE);
-	
+
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		let Some(spawns) = cx.get::<AuthoredBossSpawns>(Id::Universal) else {
 			return Vec::new();
 		};
-		
+
 		let Some(position) = spawns.position else {
 			return Vec::new();
 		};
-		
-		let bounds = Aabb3d::new(position, Vec3::new(20.0, 10.0, 20.0));
-		
+
+		let bounds = Aabb3d::new(
+			position,
+			Vec3::new(encounter_meters(20.0), encounter_meters(10.0), encounter_meters(20.0)),
+		);
+
 		if bounds.intersects(&region) {
 			let id = Id::Bytes(lod::gen::Bytes(chained_encounter_id().as_bytes()));
 			return vec![OriginalId::new(id)];
 		}
-		
+
 		Vec::new()
 	}
-	
+
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
 		if id != Id::Bytes(lod::gen::Bytes(chained_encounter_id().as_bytes())) {
 			return None;
 		}
-		
+
 		let spawns = cx.get::<AuthoredBossSpawns>(Id::Universal)?;
 		let position = spawns.position?;
-		
+
 		// Use stored terrain_y if available (survives eviction/regeneration).
 		// If missing (legacy data), derive from position using exact hull offset.
 		let terrain_y = spawns.terrain_y.unwrap_or_else(|| {
@@ -156,7 +159,7 @@ impl GenerationScheme for BikanwardaBossEncounter {
 			let offset = hull.spawn_height();
 			position.y - offset
 		});
-		
+
 		let encounter = Self::chained_at_with_terrain(position, terrain_y);
 		Some((encounter.clone(), encounter.bounds))
 	}
@@ -179,22 +182,22 @@ mod tests {
 	#[test]
 	fn generation_builds_only_chained_id() {
 		let storage = HcsgStorage::default();
-		
+
 		let spawn_pos = Vec3::new(100.0, 0.0, 200.0);
 		storage.seed(
 			AuthoredBossSpawns { position: Some(spawn_pos), terrain_y: Some(-10.0) },
 			lod::hcsg::universal_bounds(),
 		);
-		
+
 		let mut cx = GenerationContext::new(&storage);
-		
+
 		let chained_id = Id::Bytes(lod::gen::Bytes(chained_encounter_id().as_bytes()));
 		let result = BikanwardaBossEncounter::build_with_id(&mut cx, chained_id);
 		assert!(result.is_some());
-		
+
 		let (encounter, _bounds) = result.unwrap();
 		assert_eq!(encounter.boss_position, spawn_pos);
-		
+
 		let other_id = Id::Universal;
 		let result = BikanwardaBossEncounter::build_with_id(&mut cx, other_id);
 		assert!(result.is_none());

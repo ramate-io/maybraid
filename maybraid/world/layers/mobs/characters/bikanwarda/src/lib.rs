@@ -19,12 +19,15 @@ pub mod spec;
 pub use anchors::{
 	BikanwardaAnchors, BikanwardaChainAnchor, CHAIN_ANCHOR_NAMES, CHAIN_SOCKET_NAMES,
 };
-pub use animation::{animated_bounds_envelope, AnimationBoundsSample, BIKANWARDA_ANIMATION_SAMPLES};
+pub use animation::{
+	animated_bounds_envelope, AnimationBoundsSample, BIKANWARDA_ANIMATION_SAMPLES,
+};
 pub use bounds::visual_bounds_aabb;
 pub use colliders::{assembly_collider_shapes, motor_collider};
 pub use measure::{
-	encounter_uniform_scale, ordinary_standing_height_m, standing_height_m,
-	ENCOUNTER_STANDING_HEIGHT_M, STANDING_HEIGHT_TOLERANCE_M,
+	encounter_meters, encounter_uniform_scale, ordinary_standing_height_m, standing_height_m,
+	AUTHORED_ENCOUNTER_HEIGHT_M, ENCOUNTER_LINEAR_SCALE, ENCOUNTER_STANDING_HEIGHT_M,
+	STANDING_HEIGHT_TOLERANCE_M,
 };
 pub use presentation::BikanwardaPresentation;
 pub use recipe::{BikanwardaActor, BikanwardaActorRecipe};

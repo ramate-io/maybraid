@@ -27,20 +27,15 @@ pub fn spawn_tether_chain(
 	mut commands: Commands,
 	hosts: Query<
 		(Entity, &BossActor, &Children),
-		(
-			With<BossEncounterRoot>,
-			Without<BossTetherChain>,
-		),
+		(With<BossEncounterRoot>, Without<BossTetherChain>),
 	>,
 	columns: Query<Entity, With<BossColumn>>,
 	boss_anchors: Query<(Entity, &BikanwardaChainAnchor)>,
 ) {
 	for (host_entity, actor_ref, children) in &hosts {
 		// Find the column (pillar) entity from host's children
-		let column_entity = children
-			.iter()
-			.find(|&child| columns.contains(child));
-		
+		let column_entity = children.iter().find(|&child| columns.contains(child));
+
 		let Some(column_entity) = column_entity else {
 			warn!("Could not find column child for host {:?}", host_entity);
 			continue;
@@ -48,24 +43,22 @@ pub fn spawn_tether_chain(
 
 		// Find the rear leg anchor (neg_z) on the ACTOR (actor_ref.0)
 		// The anchor is a descendant of the actor entity
-		let rear_anchor_entity = boss_anchors
-			.iter()
-			.find_map(|(entity, anchor)| {
-				if anchor.name == "chain_anchor_neg_z" {
-					Some(entity)
-				} else {
-					None
-				}
-			});
+		let rear_anchor_entity = boss_anchors.iter().find_map(|(entity, anchor)| {
+			if anchor.name == "chain_anchor_neg_z" {
+				Some(entity)
+			} else {
+				None
+			}
+		});
 
 		let Some(rear_anchor_entity) = rear_anchor_entity else {
 			warn!("Could not find rear leg anchor for actor {:?}", actor_ref.0);
 			continue;
 		};
 
-		// Create chain with 10 links, 8m rest length (pillar is 8m from boss center)
+		// Create chain with 10 links. Rest length matches the scaled pillar offset.
 		let link_count = 10;
-		let rest_length_m = 8.0;
+		let rest_length_m = bikanwarda_character::encounter_meters(8.0);
 
 		// Create joint entities
 		let mut joint_entities = Vec::new();
@@ -85,15 +78,8 @@ pub fn spawn_tether_chain(
 			.spawn((
 				Name::new("boss-tether-chain"),
 				BossTetherChain,
-				ChainRoot {
-					link_count,
-					rest_length_m,
-					joint_entities: joint_entities.clone(),
-				},
-				ChainMotion {
-					mode: ChainTensionMode::Catenary { sag_ratio: 15 },
-					active: true,
-				},
+				ChainRoot { link_count, rest_length_m, joint_entities: joint_entities.clone() },
+				ChainMotion { mode: ChainTensionMode::Catenary { sag_ratio: 15 }, active: true },
 				Health::from_max(500.0), // Chain durability
 				Transform::default(),
 				GlobalTransform::default(),
@@ -101,21 +87,16 @@ pub fn spawn_tether_chain(
 			.id();
 
 		// Spawn chain anchors
-		commands.entity(column_entity).insert(ChainAnchor {
-			endpoint: ChainEndpoint::Start,
-			chain_root,
-		});
+		commands
+			.entity(column_entity)
+			.insert(ChainAnchor { endpoint: ChainEndpoint::Start, chain_root });
 
-		commands.entity(rear_anchor_entity).insert(ChainAnchor {
-			endpoint: ChainEndpoint::End,
-			chain_root,
-		});
+		commands
+			.entity(rear_anchor_entity)
+			.insert(ChainAnchor { endpoint: ChainEndpoint::End, chain_root });
 
 		// Spawn colliders for the chain
-		let config = ChainColliderConfig {
-			radius: 0.15,
-			half_length: 0.4,
-		};
+		let config = ChainColliderConfig { radius: 0.15, half_length: 0.4 };
 
 		spawn_chain_colliders(&mut commands, chain_root, &joint_entities, config);
 

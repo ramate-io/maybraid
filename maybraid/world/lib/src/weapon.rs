@@ -1003,8 +1003,8 @@ mod tests {
 		use grenades::{GrenadeDetonated, GrenadeEffect};
 		use maybraid_vfx::{
 			Dust, DustLayer, EffectDefinition, FieryExplosion, FlipbookAsset, FlipbookPart,
-			LobeKind, MeshPart, ParticlePart, ParticleShade, VfxFlipbooks, VfxInstance, VfxLibrary,
-			FIERY_EXPLOSION,
+			LobeKind, MeshPart, ParticlePart, ParticleShade, Soundwave, VfxFlipbooks, VfxInstance,
+			VfxLibrary, FIERY_EXPLOSION,
 		};
 
 		let mut world = World::new();
@@ -1051,6 +1051,7 @@ mod tests {
 			fireball: blank.clone(),
 			smoke: blank.clone(),
 			sparks: blank,
+			soundwave: Soundwave::from_mesh(Handle::default()),
 			fiery_explosion: FieryExplosion::new(
 				blank_mesh(),
 				blank_mesh(),

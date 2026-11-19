@@ -43,6 +43,7 @@ impl Plugin for NpcIntelligencePlugin {
 				.before(TetherSystems::Write),
 		)
 		.configure_sets(Update, TetherSystems::Write.after(FirearmIntelligenceSystems::Movement))
+		.configure_sets(Update, TetherSystems::Reclaim.after(FirearmIntelligenceSystems::Movement))
 		.add_systems(Update, mix_npc_brains.in_set(NpcIntelligenceSystems::Mix));
 	}
 }

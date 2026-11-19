@@ -1,15 +1,19 @@
+use bevy::ecs::message::Messages;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 
 use crate::{
-	choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi, KnownPoi, LocalPoi, NearbyFallback,
-	NearbyQuery, Poi, PoiDiscoverLimits, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId,
-	PoiIntelligencePlugin, PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge,
-	PoiLearningPolicy, PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiSupport,
-	PoiVisitPolicy, PoiVisitState, AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
+	abandon_unreachable_poi_goals, choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi,
+	KnownPoi, LocalPoi, NearbyFallback, NearbyQuery, Poi, PoiDiscoverLimits, PoiGoal,
+	PoiGoalCompleted, PoiGoalState, PoiGoalStatus, PoiId, PoiIntelligencePlugin,
+	PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
+	PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiSupport, PoiVisitPolicy, PoiVisitState,
+	AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
 };
 use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};
-use movement_intelligence::MovementIntelligence;
+use movement_intelligence::{
+	MovementIntelligence, MovementLocation, MovementObjective, FAILED_PLAN_HANDOFF_ATTEMPTS,
+};
 use routing_intelligence::{RoutingIntelligenceUser, RoutingSettings};
 
 const CAMP: PoiKind = PoiKind::new("test/camp");
@@ -309,6 +313,36 @@ fn drive_sets_a_route_without_movement_intelligence() -> anyhow::Result<()> {
 	let routing = world.get::<RoutingIntelligenceUser>(user).expect("routing");
 	assert_eq!(routing.destination, Some(Vec3::X * 40.0));
 	assert!(world.get::<MovementIntelligence>(user).is_none());
+	Ok(())
+}
+
+#[test]
+fn exhausted_plan_failures_drop_the_poi_goal() -> anyhow::Result<()> {
+	let mut world = World::new();
+	world.init_resource::<Messages<PoiGoalCompleted>>();
+	let location = MovementLocation::new(Vec3::X * 40.0, 4.0);
+	let mut movement = MovementIntelligence::new(MovementObjective::Reach(location));
+	for _ in 0..FAILED_PLAN_HANDOFF_ATTEMPTS {
+		movement.note_replan_failed();
+	}
+	let user = world
+		.spawn((
+			PoiGoal::new(1, PoiId(1), None, CAMP, location.point, location.radius, 0.0, 1.0),
+			movement,
+			PoiGoalState::new(PoiId(1)),
+		))
+		.id();
+	world.run_system_once(abandon_unreachable_poi_goals).expect("abandon");
+	anyhow::ensure!(
+		world.get::<PoiGoal>(user).is_none(),
+		"unreachable pin must drop its PoiGoal after bounded plan failures"
+	);
+	anyhow::ensure!(
+		world
+			.get::<PoiGoalState>(user)
+			.is_some_and(|state| state.status == PoiGoalStatus::Completed),
+		"abandoned pin should complete so selection can pick another"
+	);
 	Ok(())
 }
 

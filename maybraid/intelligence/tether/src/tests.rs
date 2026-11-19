@@ -305,3 +305,65 @@ fn memory_is_independent_of_the_user() -> anyhow::Result<()> {
 	assert_eq!(memory.subject, subject());
 	Ok(())
 }
+
+#[test]
+fn clearance_pulls_before_the_geometric_rim() -> anyhow::Result<()> {
+	let user =
+		TetherIntelligenceUser::new(TetherObjective::Tether(subject(), 24.0)).with_clearance(4.0);
+	let remaining = user.remaining_work(Vec3::X * 22.0, Vec3::ZERO);
+	anyhow::ensure!(
+		(remaining - 2.0).abs() < 1e-4,
+		"origin 22 m from a 24 m leash with 4 m clearance should still have 2 m of work, got {remaining}"
+	);
+	let inside = user.remaining_work(Vec3::X * 19.0, Vec3::ZERO);
+	anyhow::ensure!(inside <= 1e-4, "origin inside the cleared leash should be done, got {inside}");
+	Ok(())
+}
+
+#[test]
+fn reclaim_system_restores_a_stolen_vantage_between_evaluate_ticks() -> anyhow::Result<()> {
+	use bevy::ecs::system::RunSystemOnce;
+
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, TransformPlugin, TetherPlugin));
+
+	let anchor = app
+		.world_mut()
+		.spawn((Tether, Transform::IDENTITY, GlobalTransform::IDENTITY))
+		.id();
+	let mut user = TetherIntelligenceUser::new(TetherObjective::Tether(anchor, 24.0))
+		.with_horizon(28.0)
+		.with_stuck_timeout(0.0)
+		.with_clearance(0.0);
+	user.enabled = true;
+	let outside = Transform::from_translation(Vec3::X * 28.0);
+	let actor = app
+		.world_mut()
+		.spawn((
+			outside,
+			GlobalTransform::from(outside),
+			user,
+			TetherMemory {
+				subject: anchor,
+				satisfied: false,
+				remaining: 4.0,
+				last_checked_at: 0.0,
+			},
+			MovementIntelligence::new(MovementObjective::VantageOn {
+				location: MovementLocation::new(Vec3::X * 50.0, 14.0),
+				hide_weight: 0.0,
+				sightline_weight: 1.0,
+			}),
+		))
+		.id();
+
+	app.world_mut()
+		.run_system_once(crate::plugin::reclaim_stolen_tether_objectives)
+		.map_err(|err| anyhow::anyhow!("{err}"))?;
+	let after = app.world().get::<MovementIntelligence>(actor).expect("movement").objective;
+	anyhow::ensure!(
+		matches!(after, MovementObjective::Reach(_)),
+		"reclaim set must restore the tether objective between evaluate ticks, got {after:?}"
+	);
+	Ok(())
+}

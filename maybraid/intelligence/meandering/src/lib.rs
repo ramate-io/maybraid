@@ -18,7 +18,7 @@ pub struct MeanderingIntelligenceUser {
 	pub enabled: bool,
 	/// Slot-derived tilt so pack-mates with the same table do not share a max.
 	pub selection_salt: u64,
-	next_selection_at: f32,
+	pub(crate) next_selection_at: f32,
 }
 
 impl Default for MeanderingIntelligenceUser {
@@ -182,12 +182,16 @@ fn not_already_there(at: Vec3, candidates: Vec<KnownPoi>) -> Vec<KnownPoi> {
 
 #[cfg(test)]
 mod tests {
+	use bevy::ecs::message::Messages;
 	use bevy::ecs::system::RunSystemOnce;
 
 	use super::*;
+	use movement_intelligence::{
+		MovementIntelligence, MovementObjective, FAILED_PLAN_HANDOFF_ATTEMPTS,
+	};
 	use poi_intelligence::{
-		PoiId, PoiIntelligenceUser, PoiInterests, PoiKind, PoiKnowledge, PoiObservation,
-		PoiVisitState,
+		abandon_unreachable_poi_goals, PoiGoalCompleted, PoiId, PoiIntelligenceUser, PoiInterests,
+		PoiKind, PoiKnowledge, PoiObservation, PoiVisitState,
 	};
 
 	#[test]
@@ -325,6 +329,71 @@ mod tests {
 			assert_ne!(point_a.xz(), point_b.xz());
 			assert_ne!(point_a.xz(), (Vec3::X * 40.0).xz());
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn exhausted_plan_failures_handoff_to_another_pin() -> anyhow::Result<()> {
+		let kind = PoiKind::new("test/place");
+		let interests = PoiInterests::one(kind);
+		let mut knowledge = PoiKnowledge::default();
+		let blocked = PoiObservation::external(Entity::PLACEHOLDER, PoiId(1), kind, Vec3::X * 40.0);
+		let other =
+			PoiObservation::external(Entity::PLACEHOLDER, PoiId(2), kind, Vec3::NEG_X * 40.0);
+		knowledge.observe(blocked, 0.0);
+		knowledge.observe(other, 0.0);
+
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.init_resource::<Messages<PoiGoalCompleted>>();
+		let actor = world
+			.spawn((
+				GlobalTransform::IDENTITY,
+				MeanderingIntelligenceUser {
+					linger_secs: 1.0,
+					..MeanderingIntelligenceUser::new(200.0)
+				},
+				PoiIntelligenceUser::new(interests),
+				knowledge,
+				PoiVisitState::default(),
+				MovementIntelligence::new(MovementObjective::Reach(
+					movement_intelligence::MovementLocation::new(Vec3::ZERO, 0.4),
+				)),
+			))
+			.id();
+
+		world.run_system_once(select_meandering_goals).expect("select");
+		let first = world.get::<PoiGoal>(actor).map(|goal| goal.target);
+		anyhow::ensure!(first.is_some(), "meandering should pick a pin");
+
+		{
+			let goal = *world.get::<PoiGoal>(actor).expect("goal");
+			let movement = world.get_mut::<MovementIntelligence>(actor).expect("movement");
+			let mut movement = movement;
+			movement.objective = MovementObjective::Reach(goal.location);
+			for _ in 0..FAILED_PLAN_HANDOFF_ATTEMPTS {
+				movement.note_replan_failed();
+			}
+		}
+
+		world.run_system_once(abandon_unreachable_poi_goals).expect("abandon");
+		world.run_system_once(record_meandering_completions).expect("record");
+		anyhow::ensure!(
+			world.get::<PoiGoal>(actor).is_none(),
+			"unreachable pin must leave selection free"
+		);
+
+		world
+			.get_mut::<MeanderingIntelligenceUser>(actor)
+			.expect("meandering")
+			.next_selection_at = 0.0;
+		world.run_system_once(select_meandering_goals).expect("reselect");
+		let second = world.get::<PoiGoal>(actor).map(|goal| goal.target);
+		anyhow::ensure!(second.is_some(), "selection should pick another pin");
+		anyhow::ensure!(
+			second != first,
+			"handoff must not reissue the failed pin, first={first:?} second={second:?}"
+		);
 		Ok(())
 	}
 }

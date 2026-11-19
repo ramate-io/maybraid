@@ -10,7 +10,9 @@ mod user;
 
 pub use memory::TetherMemory;
 pub use objective::{StalkRadii, TetherObjective};
-pub use plugin::{write_tether_objectives, TetherPlugin, TetherSystems};
+pub use plugin::{
+	reclaim_stolen_tether_objectives, write_tether_objectives, TetherPlugin, TetherSystems,
+};
 pub use user::{install_tether, Tether, TetherAction, TetherIntelligenceUser};
 
 #[cfg(test)]

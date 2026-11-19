@@ -4,4 +4,5 @@ pub mod dust;
 pub mod fireball;
 pub mod flash;
 pub mod smoke;
+pub mod soundwave;
 pub mod sparks;

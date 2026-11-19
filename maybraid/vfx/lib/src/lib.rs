@@ -21,19 +21,24 @@ pub mod spawn;
 
 pub use composition::{
 	EffectDefinition, EffectLayer, EffectPart, EffectRecipe, FlipbookPart, LightPulse, LobeKind,
-	LobeSpec, MeshPart, ParticlePart, ParticleShade, ScaleBounds, DEFAULT_SCALE_MAX,
+	LobeSpec, MeshPart, ParticlePart, ParticleShade, ScaleBounds, SoundwavePart, DEFAULT_SCALE_MAX,
 	DEFAULT_SCALE_MIN,
 };
 pub use effects::dust::Dust;
 pub use effects::fiery_explosion::FieryExplosion;
+pub use effects::soundwave::Soundwave;
 pub use layers::dust::DustLayer;
 pub use library::{canonicalize_effect_name, VfxLibrary};
-pub use names::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
+pub use names::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SOUNDWAVE, SPARKS};
 pub use palette::ExplosionPalette;
 pub use parts::flipbook_card::{DustMaterial, DustPlugin, VfxDust};
 pub use parts::lobe::{LobeMaterial, LobeMaterialPlugin};
 pub use parts::packaged::{PackagedFlipbook, PackagedVfxPlugin, StaticVolume};
 pub use parts::particle::{FlipbookAsset, VfxFlipbooks};
+pub use parts::soundwave::{
+	soundwave_torus_mesh, soundwave_transform, SoundwaveMaterial, SoundwaveMaterialPlugin,
+	SOUNDWAVE_MAJOR, SOUNDWAVE_MINOR,
+};
 pub use spawn::{
 	spawn_vfx, Effect, SpawnVfxExt, Vfx, VfxInstance, VfxSpawn, MAX_PLAYBACK, MIN_PLAYBACK,
 };
@@ -60,6 +65,9 @@ impl Plugin for VfxPlugin {
 		}
 		if !app.is_plugin_added::<LobeMaterialPlugin>() {
 			app.add_plugins(LobeMaterialPlugin);
+		}
+		if !app.is_plugin_added::<SoundwaveMaterialPlugin>() {
+			app.add_plugins(SoundwaveMaterialPlugin);
 		}
 		app.add_systems(Startup, setup_vfx_library);
 		vfx_lifecycle_plugin(app);
