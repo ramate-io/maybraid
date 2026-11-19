@@ -9,6 +9,7 @@
 //!
 //! This crate does **not** implement [`lod::LodScene`] or species recipes.
 
+pub mod actor_rig;
 pub mod clip;
 pub mod clip_cache;
 pub mod cue;
@@ -24,6 +25,7 @@ pub mod rig;
 pub mod shown;
 pub mod sync;
 
+pub use actor_rig::{bind_actor_body_rigs, ActorBodyRig, BodyRigOf};
 pub use clip::{
 	AnimClip, AnimId, AnimRef, AnimRefRoot, JabParams, JumpParams, PowerStrafeParams,
 	ThinkAgainParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams, JAB_CYCLE_SPEED,

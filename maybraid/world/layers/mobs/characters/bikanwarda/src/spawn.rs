@@ -180,4 +180,62 @@ mod tests {
 			"Root rotation should match the spawn rotation, got {root_angle} rad from expected"
 		);
 	}
+
+	/// Collider-scale spawn puts the clip host on the body rig under the visual,
+	/// not on the gameplay actor. Stamp [`characters::ActorBodyRig`] from that split.
+	#[test]
+	fn actor_binds_typed_body_rig_under_visual_child() {
+		use bevy::app::{App, Startup};
+		use bevy::prelude::*;
+		use character_motion::{
+			bind_actor_body_rigs, ActorBodyRig, AnimClip, AnimRef, AnimRefRoot, CharacterRig,
+			CharacterRigRole,
+		};
+		use characters::CharacterRoot;
+
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, TransformPlugin));
+		app.add_systems(PreUpdate, bind_actor_body_rigs);
+		app.add_systems(Startup, |mut commands: Commands| {
+			let spec = BikanwardaSpec::encounter();
+			spawn_bikanwarda_encounter(&mut commands, &spec, Transform::IDENTITY);
+		});
+		app.update();
+
+		let actor = app
+			.world_mut()
+			.query_filtered::<Entity, With<BikanwardaRoot>>()
+			.single(app.world())
+			.expect("expected one BikanwardaRoot");
+		let visual = app
+			.world_mut()
+			.query_filtered::<(Entity, &ChildOf), With<CharacterRoot>>()
+			.iter(app.world())
+			.find(|(_, parent)| parent.parent() == actor)
+			.map(|(entity, _)| entity)
+			.expect("expected the visual CharacterRoot child");
+		let prior = AnimRef::new(AnimClip::quadruped_run());
+		let rig = app
+			.world_mut()
+			.spawn((
+				CharacterRig { role: CharacterRigRole::Body, skeleton: Default::default() },
+				AnimRefRoot(prior),
+				ChildOf(visual),
+			))
+			.id();
+
+		app.update();
+
+		assert!(
+			app.world().get::<AnimRefRoot>(actor).is_none(),
+			"gameplay actor must not carry AnimRefRoot"
+		);
+		let binding = app
+			.world()
+			.get::<ActorBodyRig>(actor)
+			.expect("actor should bind the typed body rig");
+		assert_eq!(binding.rig, rig);
+		let anim = app.world().get::<AnimRefRoot>(rig).expect("clip stays on the body rig");
+		assert_eq!(anim.0.clip.id(), prior.clip.id());
+	}
 }

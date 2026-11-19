@@ -788,6 +788,10 @@ mod integration_regressions {
 	use spotting_intelligence::SpottingUser;
 	
 	fn full_encounter_app() -> App {
+		full_encounter_app_with(|_| {})
+	}
+
+	fn full_encounter_app_with(extra: impl FnOnce(&mut App)) -> App {
 		let mut app = App::new();
 		app.add_plugins((
 			MinimalPlugins,
@@ -829,6 +833,8 @@ mod integration_regressions {
 		// Configure spotting to run on schedule (discovery every 0.2s, which is 12 frames at 60 FPS)
 		// Don't gate it behind a timer - let it run every frame to pick up discovery_interval_secs
 		app.configure_sets(Update, spotting_intelligence::SpottingSystems::Discover);
+
+		extra(&mut app);
 		
 		app.finish();
 		app.update();
@@ -1786,6 +1792,179 @@ mod integration_regressions {
 	#[test]
 	fn real_bray_waves_hit_ground_player_30m() {
 		// TODO: Add 30m distance test case
+	}
+
+	/// Regression for [#1619](https://github.com/ramate-io/maybraid/pull/1619) comment
+	/// [6996063622](https://github.com/ramate-io/maybraid/pull/1619#issuecomment-6996063622):
+	/// Bray cues name the gameplay actor, but the clip host is the typed body rig
+	/// under the visual child. One real Bray must switch that rig's clip and restore it.
+	#[test]
+	fn real_bray_plays_and_restores_clip_on_bound_body_rig() {
+		use bikanwarda_attacks::BikanwardaPresentationConsumersPlugin;
+		use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaSpec};
+		use characters::{
+			bind_actor_body_rigs, ActorBodyRig, AnimClip, AnimRef, AnimRefRoot, CharacterComponents,
+			CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot, RigId,
+		};
+		use lod::scene::LodSceneLevel;
+		use maybraid_spatial_rumble::SpatialRumblePlugin;
+
+		let mut app = full_encounter_app_with(|app| {
+			app.add_systems(PreUpdate, bind_actor_body_rigs);
+			app.add_plugins(SpatialRumblePlugin);
+			app.add_plugins(BikanwardaPresentationConsumersPlugin { placeholder_driven_vfx: false });
+		});
+
+		let terrain_y = 0.0;
+		let boss_spawn_offset = 10.15;
+		let boss_position = Vec3::new(0.0, terrain_y + boss_spawn_offset, 0.0);
+		let encounter =
+			crate::generation::BikanwardaBossEncounter::chained_at_with_terrain(boss_position, terrain_y);
+
+		let anchor_transform = Transform::from_translation(Vec3::ZERO);
+		let anchor = app.world_mut().spawn(anchor_transform).id();
+		let scene = encounter.scene_with_level(
+			&lod::lod_ref::LodRef {
+				entity: anchor,
+				previous_transform: &anchor_transform,
+				current_transform: &anchor_transform,
+				bounds: &bevy::shape::Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0)),
+			},
+			lod::scene::LodSceneLevel::High,
+		);
+		let host_entity = app.world_mut().spawn_scene(scene).expect("spawn_scene should succeed").id();
+		for _ in 0..10 {
+			app.update();
+		}
+
+		let actor_entity = app
+			.world()
+			.entity(host_entity)
+			.get::<BossActor>()
+			.expect("Host should have BossActor")
+			.0;
+
+		let visual = app
+			.world_mut()
+			.query_filtered::<(Entity, &ChildOf), With<CharacterRoot>>()
+			.iter(app.world())
+			.find(|(_, parent)| parent.parent() == actor_entity)
+			.map(|(entity, _)| entity)
+			.expect("spawn.rs visual child should be a CharacterRoot");
+
+		let spec = BikanwardaSpec::encounter();
+		let recipe = BikanwardaActorRecipe::from_spec(spec);
+		let body_node = recipe
+			.components()
+			.rig_nodes_for_level(LodSceneLevel::High)
+			.flatten()
+			.into_iter()
+			.find(|node| node.id == RigId::Body)
+			.expect("encounter recipe should author a body rig");
+		let prior = AnimRef::new(AnimClip::quadruped_run());
+		let spawned_rig = app.world_mut().spawn_scene(body_node.assembly_contents()).ok().map(|s| s.id());
+		let rig = if let Some(rig) = spawned_rig {
+			rig
+		} else {
+			app.world_mut()
+				.spawn((
+					CharacterRig { role: CharacterRigRole::Body, skeleton: Default::default() },
+					AnimRefRoot(prior),
+					ChildOf(visual),
+				))
+				.id()
+		};
+		app.world_mut().entity_mut(rig).insert((ChildOf(visual), AnimRefRoot(prior)));
+		app.update();
+
+		assert!(
+			app.world().get::<AnimRefRoot>(actor_entity).is_none(),
+			"gameplay actor must not carry the clip component"
+		);
+		let binding = app
+			.world()
+			.get::<ActorBodyRig>(actor_entity)
+			.expect("actor should bind the typed body rig");
+		assert_eq!(binding.rig, rig, "binding must point at the recipe body rig");
+
+		const PLAYER_CAPSULE_RADIUS: f32 = 0.4;
+		const PLAYER_CAPSULE_HEIGHT: f32 = 1.8;
+		let player_ground_offset = PLAYER_CAPSULE_HEIGHT / 2.0 + PLAYER_CAPSULE_RADIUS;
+		let player_pos = Vec3::new(15.0, terrain_y + player_ground_offset, 0.0);
+		let _player = app
+			.world_mut()
+			.spawn((
+				Name::new("test-player-bray-clip"),
+				Transform::from_translation(player_pos),
+				GlobalTransform::from_translation(player_pos),
+				Health::from_max(100.0),
+				spotting_intelligence::SpotSubject::new(
+					spotting_intelligence::InterestLayers::CHARACTER,
+					spotting_intelligence::SpotBounds::capsule(PLAYER_CAPSULE_RADIUS, PLAYER_CAPSULE_HEIGHT),
+				),
+				avian3d::prelude::RigidBody::Kinematic,
+				avian3d::prelude::Collider::capsule(PLAYER_CAPSULE_RADIUS, PLAYER_CAPSULE_HEIGHT),
+				lod_avian::PhysicsInteractionLayer::animated_layers(),
+				threat_intelligence::ThreatSubject::new(threat_intelligence::ThreatId(1)),
+				{
+					let mut affiliations = threat_intelligence::Affiliations::default();
+					const PLAYER_GROUP: threat_intelligence::ThreatGroupId =
+						threat_intelligence::ThreatGroupId::group(29);
+					affiliations.join(
+						PLAYER_GROUP,
+						threat_intelligence::AffiliationStrength::permanent(1.0),
+					);
+					affiliations
+				},
+			))
+			.id();
+
+		let mut bray_started = false;
+		let mut saw_bray_clip = false;
+		let mut restored = false;
+		for frame in 0..400 {
+			app.update();
+			if !bray_started {
+				let frame_attacks: Vec<BeginAttack> = app
+					.world_mut()
+					.run_system_once(
+						|mut messages: bevy::ecs::message::MessageReader<BeginAttack>| -> Vec<BeginAttack> {
+							messages.read().cloned().collect()
+						},
+					)
+					.expect("Failed to read BeginAttack messages");
+				if frame_attacks
+					.iter()
+					.any(|attack| attack.owner == actor_entity && attack.definition == bikanwarda_attacks::BRAY)
+				{
+					bray_started = true;
+					eprintln!("Frame {frame}: Bray attack started");
+				}
+			}
+
+			let anim = app
+				.world()
+				.get::<AnimRefRoot>(rig)
+				.expect("body rig must keep AnimRefRoot");
+			if anim.0.clip.id() == AnimClip::epiphant_bray().id() {
+				if !saw_bray_clip {
+					eprintln!("Frame {frame}: body rig switched to Epiphant Bray");
+				}
+				saw_bray_clip = true;
+				assert!(
+					app.world().get::<AnimRefRoot>(actor_entity).is_none(),
+					"Bray must not copy AnimRefRoot onto the gameplay actor"
+				);
+			} else if saw_bray_clip && anim.0.clip.id() == prior.clip.id() {
+				eprintln!("Frame {frame}: body rig restored prior clip");
+				restored = true;
+				break;
+			}
+		}
+
+		assert!(bray_started, "combat driver should fire a real Bray");
+		assert!(saw_bray_clip, "bound body rig should play AnimClip::epiphant_bray");
+		assert!(restored, "bound body rig should restore the prior clip after Bray");
 	}
 }
 

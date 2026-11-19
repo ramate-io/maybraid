@@ -43,6 +43,7 @@ encounters = { workspace = true, features = ["test-support"] }
 firearms = { workspace = true }
 lod = { workspace = true }
 lubikans = { workspace = true, features = ["test-support"] }
+maybraid-spatial-rumble = { workspace = true }
 
 [lints]
 workspace = true

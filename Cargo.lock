@@ -2378,6 +2378,7 @@ dependencies = [
  "lod",
  "lod-avian",
  "lubikans",
+ "maybraid-spatial-rumble",
  "projectiles",
  "spotting-intelligence",
  "spotting-intelligence-avian",
