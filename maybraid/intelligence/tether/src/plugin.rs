@@ -61,6 +61,7 @@ pub fn write_tether_objectives(
 		let action = tether.evaluate(&mut memory, from, subject, dt, now);
 		let action = reclaim_stolen_objective(
 			action,
+			tether.enabled,
 			memory.satisfied,
 			memory.remaining,
 			tether.horizon,
@@ -80,10 +81,12 @@ fn pose_translation(transform: &Transform, global: Option<&GlobalTransform>) -> 
 /// `evaluate` yields `None` while remaining work is shrinking so a lone tether
 /// does not replan every frame. Firearm (and other) brains write earlier in the
 /// same Update, so that yield would leave their vantage in force past the leash.
-/// Reclaim when unsatisfied remaining is still > 0 and the live objective is no
-/// longer the tether's.
+/// Reclaim when the grant is on, unsatisfied remaining is still > 0, and the
+/// live objective is no longer the tether's. A retracted grant must not spend
+/// stale [`TetherMemory`] to overwrite flee or combat movement.
 pub(crate) fn reclaim_stolen_objective(
 	action: TetherAction,
+	enabled: bool,
 	satisfied: bool,
 	remaining: f32,
 	horizon: f32,
@@ -92,7 +95,7 @@ pub(crate) fn reclaim_stolen_objective(
 	subject: Vec3,
 	current: MovementObjective,
 ) -> TetherAction {
-	if !matches!(action, TetherAction::None) || satisfied || remaining <= 0.0 {
+	if !enabled || !matches!(action, TetherAction::None) || satisfied || remaining <= 0.0 {
 		return action;
 	}
 	let next = if remaining <= horizon {

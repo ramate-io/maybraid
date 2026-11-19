@@ -9711,6 +9711,7 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-controllers-core",
  "maybraid-virtual-pad-controller",
+ "projectiles",
 ]
 
 [[package]]

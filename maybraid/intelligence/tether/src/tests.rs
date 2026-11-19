@@ -1,9 +1,11 @@
 use bevy::prelude::*;
-use movement_intelligence::{MovementLocation, MovementObjective};
+use bevy::time::TimeUpdateStrategy;
+use movement_intelligence::{MovementIntelligence, MovementLocation, MovementObjective};
 
 use crate::memory::TetherMemory;
 use crate::objective::{ring_point, StalkRadii, TetherObjective};
-use crate::user::{TetherAction, TetherIntelligenceUser};
+use crate::plugin::TetherPlugin;
+use crate::user::{Tether, TetherAction, TetherIntelligenceUser};
 
 fn subject() -> Entity {
 	Entity::from_bits(7)
@@ -145,6 +147,7 @@ fn reclaim_stolen_objective_overwrites_firearm_vantage() -> anyhow::Result<()> {
 	};
 	let reclaimed = reclaim_stolen_objective(
 		TetherAction::None,
+		true,
 		false,
 		2.0,
 		28.0,
@@ -161,6 +164,7 @@ fn reclaim_stolen_objective_overwrites_firearm_vantage() -> anyhow::Result<()> {
 	let already_ours = MovementObjective::Reach(MovementLocation::new(anchor, 24.0));
 	let yielded = reclaim_stolen_objective(
 		TetherAction::None,
+		true,
 		false,
 		2.0,
 		28.0,
@@ -173,6 +177,7 @@ fn reclaim_stolen_objective_overwrites_firearm_vantage() -> anyhow::Result<()> {
 	let satisfied = reclaim_stolen_objective(
 		TetherAction::None,
 		true,
+		true,
 		0.0,
 		28.0,
 		objective,
@@ -181,6 +186,18 @@ fn reclaim_stolen_objective_overwrites_firearm_vantage() -> anyhow::Result<()> {
 		stolen,
 	);
 	assert!(matches!(satisfied, TetherAction::None));
+	let disabled = reclaim_stolen_objective(
+		TetherAction::None,
+		false,
+		false,
+		2.0,
+		28.0,
+		objective,
+		from,
+		anchor,
+		stolen,
+	);
+	assert!(matches!(disabled, TetherAction::None));
 	Ok(())
 }
 
@@ -210,6 +227,68 @@ fn disabled_grant_does_not_hold() -> anyhow::Result<()> {
 	assert!(matches!(release, TetherAction::None));
 	let idle = user.evaluate(&mut memory, Vec3::ZERO, Vec3::X * 40.0, 0.25, 3.0);
 	assert!(matches!(idle, TetherAction::None));
+	Ok(())
+}
+
+#[test]
+fn disabled_grant_writer_leaves_a_flee_objective() -> anyhow::Result<()> {
+	use std::time::Duration;
+
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, TransformPlugin, TetherPlugin))
+		.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(0.25)));
+
+	let anchor = app
+		.world_mut()
+		.spawn((Tether, Transform::IDENTITY, GlobalTransform::IDENTITY))
+		.id();
+	let mut user = TetherIntelligenceUser::new(TetherObjective::Tether(anchor, 4.0))
+		.with_horizon(20.0)
+		.with_stuck_timeout(0.0);
+	user.enabled = true;
+	let outside = Transform::from_translation(Vec3::X * 20.0);
+	let actor = app
+		.world_mut()
+		.spawn((
+			outside,
+			GlobalTransform::from(outside),
+			user,
+			TetherMemory {
+				subject: anchor,
+				satisfied: false,
+				remaining: 16.0,
+				last_checked_at: 0.0,
+			},
+			MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(
+				Vec3::ZERO,
+				0.4,
+			))),
+		))
+		.id();
+
+	app.update();
+	let pulled = app.world().get::<MovementIntelligence>(actor).expect("movement").objective;
+	anyhow::ensure!(
+		matches!(pulled, MovementObjective::Reach(_)),
+		"enabled tether should pull an actor outside its leash, got {pulled:?}"
+	);
+
+	app.world_mut()
+		.get_mut::<TetherIntelligenceUser>(actor)
+		.expect("tether user")
+		.enabled = false;
+	let flee = MovementObjective::FleeFrom(MovementLocation::new(Vec3::X * 50.0, 16.0));
+	app.world_mut()
+		.get_mut::<MovementIntelligence>(actor)
+		.expect("movement")
+		.objective = flee;
+
+	app.update();
+	let after = app.world().get::<MovementIntelligence>(actor).expect("movement").objective;
+	anyhow::ensure!(
+		matches!(after, MovementObjective::FleeFrom(_)),
+		"disabled tether must leave a fresh flee objective, got {after:?}"
+	);
 	Ok(())
 }
 

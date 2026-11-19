@@ -201,6 +201,9 @@ pub fn apply_locomotion_capsule(commands: &mut Commands, body: Entity, hull: Loc
 			.with_query_filter(SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)),
 	));
 	crate::hit::apply_hit_capsule(commands, body, hull);
+	// Query hulls spawned by [`crate::hit::maintain_hit_volumes`] debit Health
+	// through [`damage::HurtboxOf`]. Default host is `body`; callers whose Health
+	// lives elsewhere must [`crate::hit::bind_hurtbox_host`].
 }
 
 /// Stamp the dynamic character controller onto an existing scene plant.

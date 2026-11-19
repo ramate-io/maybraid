@@ -2431,5 +2431,304 @@ mod integration_regressions {
 		assert!(saw_run, "moving boss should play quadruped gait from LinearVelocity");
 		assert!(restored_still, "gait should return toward still once velocity drops");
 	}
-}
 
+	#[derive(Resource, Clone, Copy)]
+	struct ObservedHost(Entity);
+
+	#[derive(Resource, Default)]
+	struct ObservedApplies {
+		events: Vec<damage::DamageApplied>,
+	}
+
+	#[derive(Resource, Default)]
+	struct ObservedContacts {
+		events: Vec<projectiles::ProjectileContact>,
+	}
+
+	fn collect_host_applies(
+		mut reader: MessageReader<damage::DamageApplied>,
+		host: Res<ObservedHost>,
+		mut observed: ResMut<ObservedApplies>,
+	) {
+		for event in reader.read() {
+			if event.target == host.0 {
+				observed.events.push(*event);
+			}
+		}
+	}
+
+	fn collect_contacts(
+		mut reader: MessageReader<projectiles::ProjectileContact>,
+		mut observed: ResMut<ObservedContacts>,
+	) {
+		for event in reader.read() {
+			observed.events.push(*event);
+		}
+	}
+
+	fn fire_path_app() -> App {
+		full_encounter_app_with(|app| {
+			if !app.is_plugin_added::<projectiles::ProjectilesPlugin>() {
+				app.add_plugins(projectiles::ProjectilesPlugin);
+			}
+			firearms::register_firearm_runtime(app);
+		})
+	}
+
+	fn fire_player_bolt(app: &mut App, player: Entity, start: Vec3, direction: Vec3) {
+		app.world_mut().spawn((
+			Name::new("player-weapon"),
+			firearms::Weapon::bolt(),
+			firearms::WeaponTrigger(true),
+			firearms::FireOnTrigger,
+			firearms::FireControl::semi(),
+			firearms::WeaponLaunchPose::ready_at(start, direction),
+			damage::HitPayload { amount: 25.0 },
+			projectiles::ProjectileSource(player),
+		));
+	}
+
+	fn observe_host_damage(app: &mut App, host: Entity) {
+		app.insert_resource(ObservedHost(host));
+		app.init_resource::<ObservedApplies>();
+		app.init_resource::<ObservedContacts>();
+		app.add_systems(
+			PostUpdate,
+			(
+				collect_contacts.after(projectiles::ProjectileSystems::Sweep),
+				collect_host_applies.after(damage::DamageSystems::Apply),
+			),
+		);
+	}
+
+	fn hit_volume_of(app: &mut App, actor: Entity) -> Option<Entity> {
+		app.world_mut()
+			.query::<(Entity, &player::HitVolume, &ChildOf)>()
+			.iter(app.world())
+			.find(|(_, _, parent)| parent.parent() == actor)
+			.map(|(entity, _, _)| entity)
+	}
+
+	fn rear_anchor_offset(app: &mut App, actor: Entity) -> Vec3 {
+		use bikanwarda_character::BikanwardaChainAnchor;
+		let actor_at = actor_translation(app, actor);
+		let anchor_at = app
+			.world_mut()
+			.query::<(&BikanwardaChainAnchor, &ChildOf, &GlobalTransform)>()
+			.iter(app.world())
+			.find(|(anchor, parent, _)| {
+				anchor.name == "chain_anchor_neg_z" && parent.parent() == actor
+			})
+			.map(|(_, _, gt)| gt.translation())
+			.expect("rear chain_anchor_neg_z");
+		anchor_at - actor_at
+	}
+
+	/// Ordinary fire path: a shot that only strikes the pronograde sensor
+	/// still debits the production host once.
+	#[test]
+	fn real_player_shot_hits_only_pronograde_sensor_once() {
+		use player::HitVolume;
+
+		let mut app = fire_path_app();
+		let terrain_y = 0.0;
+		let boss_position = Vec3::new(8.0, terrain_y + 10.15, -6.0);
+		let (host, actor, _column) = spawn_production_encounter(&mut app, boss_position, terrain_y);
+		observe_host_damage(&mut app, host);
+		let player = spawn_visible_player(&mut app, boss_position + Vec3::new(-30.0, 1.3, 0.0));
+
+		let sensor = (0..12)
+			.find_map(|_| {
+				app.update();
+				hit_volume_of(&mut app, actor)
+			})
+			.expect("motorized boss should spawn a pronograde HitVolume");
+		let sensor_at = app
+			.world()
+			.get::<GlobalTransform>(sensor)
+			.expect("sensor GlobalTransform")
+			.translation();
+		let actor_at = actor_translation(&app, actor);
+		assert!(
+			app.world().get::<HitVolume>(sensor).is_some(),
+			"shot must be aimed at the pronograde sensor"
+		);
+		assert!(
+			xz(sensor_at, actor_at) > 1.0,
+			"sensor should sit off the motor origin so a side shot can miss the capsule, sensor={sensor_at:?} actor={actor_at:?}"
+		);
+
+		let start = Vec3::new(sensor_at.x + 16.0, sensor_at.y, sensor_at.z);
+		fire_player_bolt(&mut app, player, start, -Vec3::X);
+		for _ in 0..24 {
+			app.update();
+		}
+
+		let contacts = app.world().resource::<ObservedContacts>().events.clone();
+		let sensor_hits = contacts.iter().filter(|contact| contact.target == sensor).count();
+		let actor_hits = contacts.iter().filter(|contact| contact.target == actor).count();
+		let applies = app.world().resource::<ObservedApplies>().events.clone();
+		let health = app.world().get::<Health>(host).expect("host Health").current;
+		eprintln!(
+			"sensor-only contacts={} sensor_hits={sensor_hits} actor_hits={actor_hits} applies={} health={health}",
+			contacts.len(),
+			applies.len()
+		);
+		assert!(
+			sensor_hits >= 1,
+			"projectile must strike the pronograde sensor, contacts={contacts:?}"
+		);
+		assert_eq!(
+			actor_hits, 0,
+			"sensor-only shot must miss the motor capsule, contacts={contacts:?}"
+		);
+		assert_eq!(applies.len(), 1, "sensor shot should debit the host once, applies={applies:?}");
+		assert!((health - 975.0).abs() < 0.1, "host should lose exactly 25 HP, got {health}");
+	}
+
+	/// Ordinary fire path: a shot that crosses motor and sensor colliders
+	/// still debits the production host once.
+	#[test]
+	fn real_player_shot_crossing_boss_colliders_debits_once() {
+		let mut app = fire_path_app();
+		let terrain_y = 0.0;
+		let boss_position = Vec3::new(-4.0, terrain_y + 10.15, 10.0);
+		let (host, actor, _column) = spawn_production_encounter(&mut app, boss_position, terrain_y);
+		observe_host_damage(&mut app, host);
+		let player = spawn_visible_player(&mut app, boss_position + Vec3::new(-30.0, 1.3, 0.0));
+
+		let sensor = (0..12)
+			.find_map(|_| {
+				app.update();
+				hit_volume_of(&mut app, actor)
+			})
+			.expect("motorized boss should spawn a pronograde HitVolume");
+		let actor_at = actor_translation(&app, actor);
+		let sensor_at = app
+			.world()
+			.get::<GlobalTransform>(sensor)
+			.expect("sensor GlobalTransform")
+			.translation();
+		let away = {
+			let delta = sensor_at - actor_at;
+			let xz = Vec3::new(delta.x, 0.0, delta.z);
+			if xz.length_squared() > 1e-4 {
+				xz.normalize()
+			} else {
+				Vec3::NEG_Z
+			}
+		};
+		let start = sensor_at + away * 10.0;
+		fire_player_bolt(&mut app, player, start, -away);
+		for _ in 0..24 {
+			app.update();
+		}
+
+		let contacts = app.world().resource::<ObservedContacts>().events.clone();
+		let boss_hits: Vec<_> = contacts
+			.iter()
+			.filter(|contact| contact.target == actor || contact.target == sensor)
+			.copied()
+			.collect();
+		let unique: std::collections::HashSet<Entity> =
+			boss_hits.iter().map(|contact| contact.target).collect();
+		let applies = app.world().resource::<ObservedApplies>().events.clone();
+		let health = app.world().get::<Health>(host).expect("host Health").current;
+		eprintln!(
+			"multi-collider unique={} contacts={} applies={} health={health} targets={unique:?}",
+			unique.len(),
+			boss_hits.len(),
+			applies.len()
+		);
+		assert!(unique.len() >= 2, "shot should cross several boss colliders, hits={boss_hits:?}");
+		assert_eq!(
+			applies.len(),
+			1,
+			"crossing colliders should debit the host once, applies={applies:?}"
+		);
+		assert!((health - 975.0).abs() < 0.1, "host should lose exactly 25 HP, got {health}");
+	}
+
+	/// Spotted-facing owns visual yaw while the boss is moving; the rear
+	/// tether anchor stays behind that turn.
+	#[test]
+	fn real_boss_faces_off_axis_player_while_moving() {
+		use characters::CharacterRoot;
+		use combat_targeting::CombatTargeting;
+		use player::PlayerYawOwner;
+
+		let mut app = full_encounter_app();
+		let terrain_y = 0.0;
+		let boss_position = Vec3::new(0.0, terrain_y + 10.15, 0.0);
+		let (_host, actor, column) = spawn_production_encounter(&mut app, boss_position, terrain_y);
+		let pillar = app.world().get::<GlobalTransform>(column).expect("pillar").translation();
+		let rim = Vec3::new(
+			pillar.x + crate::BOSS_TETHER_RADIUS - 6.0,
+			actor_translation(&app, actor).y,
+			pillar.z,
+		);
+		place_actor_at(&mut app, actor, rim);
+		// Off the rest-pose −Z rear and off the tether radial (−X): facing and
+		// the rear anchor must follow this turn, not the motor-local sockets.
+		let player_pos = Vec3::new(rim.x + 18.0, terrain_y + 1.3, rim.z);
+		let player = spawn_visible_player(&mut app, player_pos);
+
+		let start = actor_translation(&app, actor);
+		let mut saw_spotted = false;
+		let mut saw_move = 0.0_f32;
+		let mut best_face_dot = -1.0_f32;
+		let mut faced_rear_dot = -1.0_f32;
+		let mut saw_look_owner = false;
+		for _ in 0..360 {
+			app.update();
+			if app
+				.world()
+				.get::<CombatTargeting>(actor)
+				.and_then(CombatTargeting::best_contact)
+				.is_some_and(|contact| contact.subject == player)
+			{
+				saw_spotted = true;
+			}
+			let now = actor_translation(&app, actor);
+			saw_move = saw_move.max(xz(start, now));
+			let facing = visual_facing(&mut app, actor);
+			let to_player = Vec3::new(player_pos.x - now.x, 0.0, player_pos.z - now.z);
+			let face_dot = if to_player.length_squared() > 1e-4 && facing.length_squared() > 1e-4 {
+				facing.normalize().dot(to_player.normalize())
+			} else {
+				-1.0
+			};
+			best_face_dot = best_face_dot.max(face_dot);
+			let rear = rear_anchor_offset(&mut app, actor);
+			let rear_xz = Vec3::new(rear.x, 0.0, rear.z);
+			if face_dot > 0.7 && rear_xz.length_squared() > 1e-4 && facing.length_squared() > 1e-4 {
+				faced_rear_dot = faced_rear_dot.max((-facing.normalize()).dot(rear_xz.normalize()));
+			}
+			let visual = app
+				.world_mut()
+				.query_filtered::<(Entity, &ChildOf), With<CharacterRoot>>()
+				.iter(app.world())
+				.find(|(_, parent)| parent.parent() == actor)
+				.map(|(entity, _)| entity)
+				.expect("visual");
+			if app.world().get::<PlayerYawOwner>(visual) == Some(&PlayerYawOwner::Look) {
+				saw_look_owner = true;
+			}
+		}
+
+		eprintln!(
+			"off-axis face_dot={best_face_dot:.3} faced_rear_dot={faced_rear_dot:.3} move={saw_move:.3} spotted={saw_spotted} look={saw_look_owner}"
+		);
+		assert!(saw_spotted, "CombatTargeting contact must come from spotting the spawned player");
+		assert!(saw_move > 0.5, "boss should keep moving while facing the player");
+		assert!(saw_look_owner, "spotted facing must set PlayerYawOwner::Look on the visual");
+		assert!(
+			best_face_dot > 0.7,
+			"boss should face the off-axis player, face_dot={best_face_dot:.3}"
+		);
+		assert!(
+			faced_rear_dot > 0.85,
+			"rear tether anchor should stay behind the turned facing, faced_rear_dot={faced_rear_dot:.3}"
+		);
+	}
+}

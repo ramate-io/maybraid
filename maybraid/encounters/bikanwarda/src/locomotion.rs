@@ -5,12 +5,15 @@
 //! that pillar, meandering patrol pins, and firearm movement toward spotted
 //! combat contacts. Gait comes from [`player::drive_player_locomotion`].
 
+use std::collections::HashMap;
 use std::f32::consts::TAU;
 
 use avian3d::prelude::CollisionLayers;
 use bevy::prelude::*;
-use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaRoot, BikanwardaSpec};
-use characters::{CharacterHeading, CharacterRecipe, CharacterRoot};
+use bikanwarda_character::{
+	BikanwardaActorRecipe, BikanwardaAnchors, BikanwardaChainAnchor, BikanwardaRoot, BikanwardaSpec,
+};
+use characters::{CharacterHeading, CharacterRecipe, CharacterRoot, LocomotionCapsule};
 use combat_targeting::CombatTargeting;
 use firearm_intelligence::{
 	FirearmEngagement, FirearmIntelligence, FirearmIntelligencePlugin, FirearmIntelligenceSystems,
@@ -26,8 +29,8 @@ use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use npc_intelligence::{NpcIntelligence, NpcIntelligencePlugin};
 use player::{
-	apply_character_controller, apply_character_mobility, Npc, PlayerLook, PlayerPlugin,
-	PlayerYawOwner,
+	apply_character_controller, apply_character_mobility, bind_hurtbox_host, Npc, PlayerLook,
+	PlayerPlugin, PlayerSystems, PlayerYawOwner,
 };
 use poi_intelligence::{
 	PoiId, PoiIntelligencePlugin, PoiIntelligenceUser, PoiInterests, PoiKind, PoiKnowledge,
@@ -69,7 +72,9 @@ impl Plugin for BossEncounterLocomotionPlugin {
 				initialize_boss_locomotion.after(crate::combat::initialize_boss_combat),
 				orient_boss_toward_spotted_target
 					.after(combat_targeting::CombatTargetingSystems::Rank)
-					.after(FirearmIntelligenceSystems::Orient),
+					.after(FirearmIntelligenceSystems::Orient)
+					.before(PlayerSystems::Locomotion),
+				align_boss_chain_anchors.after(PlayerSystems::Locomotion),
 			),
 		);
 	}
@@ -84,6 +89,7 @@ pub fn initialize_boss_locomotion(
 	columns: Query<(Entity, &GlobalTransform), With<BossColumn>>,
 	specs: Query<&BikanwardaSpec, With<BikanwardaRoot>>,
 	already_motor: Query<(), With<player::CharacterController>>,
+	visuals: Query<(Entity, &ChildOf), With<CharacterRoot>>,
 ) {
 	for (host, actor_ref, host_global, children) in &new_bindings {
 		if already_motor.contains(actor_ref.0) {
@@ -100,10 +106,10 @@ pub fn initialize_boss_locomotion(
 		let hull = BikanwardaActorRecipe::from_spec(spec).components().scaled_locomotion_capsule();
 		apply_character_controller(&mut commands, actor_ref.0, hull);
 		apply_character_mobility(&mut commands, actor_ref.0, 1.0, 1.0);
+		bind_hurtbox_host(&mut commands, actor_ref.0, host);
 		commands.entity(actor_ref.0).insert((
 			Npc,
 			PlayerLook::default(),
-			PlayerYawOwner::Wish,
 			CollisionLayers::new(
 				[PhysicsInteractionLayer::Fixed, PhysicsInteractionLayer::Animated],
 				[PhysicsInteractionLayer::Fixed, PhysicsInteractionLayer::Animated],
@@ -189,6 +195,13 @@ pub fn initialize_boss_locomotion(
 			FirearmTargeting::default(),
 			FirearmEngagement::hold(),
 		));
+
+		// Spotted-facing and wish-facing both read [`PlayerYawOwner`] on the visual.
+		for (visual, child_of) in &visuals {
+			if child_of.parent() == actor_ref.0 {
+				commands.entity(visual).insert(PlayerYawOwner::Wish);
+			}
+		}
 	}
 }
 
@@ -234,6 +247,31 @@ fn orient_boss_toward_spotted_target(
 		}
 		let current = heading.facing(&visual);
 		heading.set(&mut visual, current.slerp(forward.normalize(), amount));
+	}
+}
+
+/// Body rotation is locked; facing lives on the visual. Keep rear chain
+/// sockets on that yaw so the tether anchor stays behind the turned boss.
+fn align_boss_chain_anchors(
+	visuals: Query<(&Transform, &ChildOf), With<CharacterRoot>>,
+	hulls: Query<&LocomotionCapsule, With<BikanwardaRoot>>,
+	mut anchors: Query<(&BikanwardaChainAnchor, &ChildOf, &mut Transform), Without<CharacterRoot>>,
+) {
+	let mut facing: HashMap<Entity, Quat> = HashMap::new();
+	for (transform, child) in &visuals {
+		facing.entry(child.parent()).or_insert(transform.rotation);
+	}
+	for (anchor, child, mut transform) in &mut anchors {
+		let actor = child.parent();
+		let Ok(hull) = hulls.get(actor) else {
+			continue;
+		};
+		let Some(rest) = BikanwardaAnchors::for_capsule(*hull).get(anchor.name).copied() else {
+			continue;
+		};
+		let yaw = facing.get(&actor).copied().unwrap_or(Quat::IDENTITY);
+		transform.rotation = yaw * rest.rotation;
+		transform.translation = yaw * rest.translation;
 	}
 }
 
