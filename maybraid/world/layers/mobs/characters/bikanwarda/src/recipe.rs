@@ -94,7 +94,12 @@ impl CharacterComponents for BikanwardaActor {
 	}
 
 	fn part_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
-		self.epiphant.part_nodes_for_level(level)
+		self.epiphant.part_nodes_for_level(level).map(|part| {
+			match crate::textures::material_ref_for_slot(part.slot, &self.presentation) {
+				Some(material) => part.with_material(material),
+				None => part,
+			}
+		})
 	}
 
 	fn preview_aabb(&self) -> Aabb3d {

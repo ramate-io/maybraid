@@ -2353,9 +2353,11 @@ dependencies = [
  "character-animations",
  "character-motion",
  "character-rigs",
+ "character-shaders",
  "characters",
  "lod",
  "lod-avian",
+ "material-ref",
  "rigs",
 ]
 
