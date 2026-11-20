@@ -20,10 +20,17 @@ infer shader compilation from Rust compilation: native image acceptance must
 exercise both materials. The explicit camera read request with diagnostics on
 and `MAYBRAID_SHADOW_ADMISSION=1` reports actual nearest sphere/cascade membership;
 its scan and screenshots are observer work outside timing windows. The same
-request inspects at most three nearest live building hosts anchored by actual
-`building-walk-collider` children, traversing at most 48 hierarchy nodes per
-host. It reports real mesh load/visibility/caster/receiver/layer/cascade fields;
-truncation and absent custom-material/GPU information stay explicit. This is an
+request associates actual `building-walk-collider` children with their building
+hosts, then reads realized mesh Aabbs and transforms their eight corners to
+world bounds. Geometry ownership follows at most 32 ancestors. Hosts are ranked
+by the nearest observed world-AABB surface, reporting the nearest three hosts
+and up to 48 mesh records each. It reports actual bounds, mesh load/visibility,
+caster/receiver/layer/cascade fields, omitted records, missing/invalid bounds and
+ancestry limits. Host/collider and mesh transform origins are metadata only:
+Richmond can encode rotation compensation there with world-authored geometry,
+so origins are not physical distances or spawn targets. Current Aabbs remain
+conservative component observations, not exact surfaces or GPU completion.
+Absent custom-material/GPU information stays explicit. This is an
 observation, not a synthetic building or a GPU completion stamp.
 
 Each arm uses the same ordinary supported HP100 player route and two fixed

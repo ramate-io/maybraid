@@ -182,13 +182,14 @@ index 469208194..91c5b9e72 100644
  	let frame = runtime.frame;
 diff --git a/maybraid/world/lib/src/agent/diagnostics/shadow_admission.rs b/maybraid/world/lib/src/agent/diagnostics/shadow_admission.rs
 new file mode 100644
-index 000000000..ee18bc0e7
+index 000000000..c2e38d951
 --- /dev/null
 +++ b/maybraid/world/lib/src/agent/diagnostics/shadow_admission.rs
-@@ -0,0 +1,357 @@
+@@ -0,0 +1,518 @@
 +//! Explicit, read-only shadow fixture evidence. Never installed as a scan system.
 +
 +use bevy::{
++	camera::primitives::Aabb,
 +	camera::visibility::{
 +		CascadesVisibleEntities, RenderLayers, VisibleEntities, VisibleMeshEntities,
 +	},
@@ -199,45 +200,158 @@ index 000000000..ee18bc0e7
 +	prelude::*,
 +};
 +use maybraid_agent::AgentCameraSnapshot;
-+use std::collections::VecDeque;
-+use vegetation_components::{CanopyShadowProxy, shadow_proxy::proxy_render_layers};
++use std::collections::HashMap;
++use vegetation_components::{shadow_proxy::proxy_render_layers, CanopyShadowProxy};
 +
 +const LIMIT: usize = 8;
 +const BUILDING_LIMIT: usize = 3;
-+const BUILDING_NODE_LIMIT: usize = 48;
++const BUILDING_MESH_LIMIT: usize = 48;
++const BUILDING_ANCESTOR_LIMIT: usize = 32;
 +
-+fn nearest_buildings(world: &mut World, camera_position: Vec3) -> Vec<(f32, Entity, Entity)> {
-+	let mut result = Vec::with_capacity(BUILDING_LIMIT + 1);
-+	let mut named = world.query::<(Entity, &Name, &ChildOf, &GlobalTransform)>();
-+	for (collider, name, parent, pose) in named.iter(world) {
-+		// The production walk-collider attachment stamps this exact name on a
-+		// fixed compound child of the building's actual LOD scene host.
-+		let host = parent.parent();
-+		if name.as_str() != "building-walk-collider"
-+			|| world.get::<lod::LodSceneHost>(host).is_none()
++#[derive(Clone, Copy)]
++struct MeshBounds {
++	entity: Entity,
++	min: Vec3,
++	max: Vec3,
++	distance_squared: f32,
++}
++
++impl MeshBounds {
++	fn observe(
++		entity: Entity,
++		bounds: &Aabb,
++		pose: &GlobalTransform,
++		camera: Vec3,
++	) -> Option<Self> {
++		let center = Vec3::from(bounds.center);
++		let half = Vec3::from(bounds.half_extents);
++		if !center.is_finite()
++			|| !half.is_finite()
++			|| half.cmplt(Vec3::ZERO).any()
++			|| !camera.is_finite()
 +		{
-+			continue;
++			return None;
 +		}
-+		let distance = pose.translation().distance_squared(camera_position);
-+		if !distance.is_finite() {
-+			continue;
++		let mut min = Vec3::splat(f32::INFINITY);
++		let mut max = Vec3::splat(f32::NEG_INFINITY);
++		// Eight transformed corners also handle rotation, nonuniform scale and reflection.
++		for x in [-1.0, 1.0] {
++			for y in [-1.0, 1.0] {
++				for z in [-1.0, 1.0] {
++					let point = pose.transform_point(center + half * Vec3::new(x, y, z));
++					if !point.is_finite() {
++						return None;
++					}
++					min = min.min(point);
++					max = max.max(point);
++				}
++			}
 +		}
-+		let index = result.partition_point(|(d, e, _): &(f32, Entity, Entity)| {
-+			*d < distance || (*d == distance && e.to_bits() < host.to_bits())
-+		});
-+		if index < BUILDING_LIMIT && !result.iter().any(|(_, owner, _)| *owner == host) {
-+			result.insert(index, (distance, host, collider));
-+			result.truncate(BUILDING_LIMIT);
++		let distance_squared = camera.distance_squared(camera.clamp(min, max));
++		distance_squared
++			.is_finite()
++			.then_some(Self { entity, min, max, distance_squared })
++	}
++}
++
++struct BuildingObservation {
++	host: Entity,
++	collider: Entity,
++	observed_meshes: usize,
++	missing_or_invalid_bounds: usize,
++	meshes: Vec<MeshBounds>,
++}
++
++fn nearest_buildings(
++	world: &mut World,
++	camera_position: Vec3,
++) -> (Vec<BuildingObservation>, serde_json::Value) {
++	// A collider locates ownership only. Its transform is often yaw compensation,
++	// while the actual geometry contains authored world-space positions.
++	let mut hosts = HashMap::new();
++	let mut named = world.query::<(Entity, &Name, &ChildOf)>();
++	for (collider, name, parent) in named.iter(world) {
++		let host = parent.parent();
++		if name.as_str() == "building-walk-collider"
++			&& world.get::<lod::LodSceneHost>(host).is_some()
++			&& world.get::<bevy::ecs::entity_disabling::Disabled>(host).is_none()
++		{
++			hosts.entry(host).or_insert_with(|| BuildingObservation {
++				host,
++				collider,
++				observed_meshes: 0,
++				missing_or_invalid_bounds: 0,
++				meshes: Vec::new(),
++			});
 +		}
 +	}
-+	result
++	let mut inspected_meshes = 0;
++	let mut ancestor_limit_reached = 0;
++	// Explicit request only: no recurring scan, subtree recursion, worker or lock.
++	// Read real mesh bounds, not a host origin or an inferred building center.
++	let mut meshes = world.query::<(Entity, &Mesh3d, Option<&Aabb>, Option<&GlobalTransform>)>();
++	for (entity, _, bounds, pose) in meshes.iter(world) {
++		inspected_meshes += 1;
++		let mut ancestor = Some(entity);
++		let mut owner = None;
++		for _ in 0..BUILDING_ANCESTOR_LIMIT {
++			let Some(current) = ancestor else { break };
++			if hosts.contains_key(&current) {
++				owner = Some(current);
++				break;
++			}
++			ancestor = world.get::<ChildOf>(current).map(ChildOf::parent);
++		}
++		let Some(host) = owner else {
++			ancestor_limit_reached += usize::from(ancestor.is_some());
++			continue;
++		};
++		let Some(record) = hosts.get_mut(&host) else {
++			continue;
++		};
++		record.observed_meshes += 1;
++		let Some(geometry) = bounds
++			.zip(pose)
++			.and_then(|(bounds, pose)| MeshBounds::observe(entity, bounds, pose, camera_position))
++		else {
++			record.missing_or_invalid_bounds += 1;
++			continue;
++		};
++		let index = record.meshes.partition_point(|old| {
++			old.distance_squared < geometry.distance_squared
++				|| (old.distance_squared == geometry.distance_squared
++					&& old.entity.to_bits() < entity.to_bits())
++		});
++		if index < BUILDING_MESH_LIMIT {
++			record.meshes.insert(index, geometry);
++			record.meshes.truncate(BUILDING_MESH_LIMIT);
++		}
++	}
++	let host_count = hosts.len();
++	let missing = hosts.values().map(|host| host.missing_or_invalid_bounds).sum::<usize>();
++	let mut observed: Vec<_> = hosts.into_values().filter(|host| !host.meshes.is_empty()).collect();
++	let hosts_with_bounds = observed.len();
++	observed.sort_by(|a, b| {
++		a.meshes[0]
++			.distance_squared
++			.total_cmp(&b.meshes[0].distance_squared)
++			.then_with(|| a.host.to_bits().cmp(&b.host.to_bits()))
++	});
++	observed.truncate(BUILDING_LIMIT);
++	(
++		observed,
++		serde_json::json!({"inspected_mesh3d":inspected_meshes,
++        "host_count":host_count,"hosts_with_observed_bounds":hosts_with_bounds,
++        "hosts_without_observed_bounds":host_count-hosts_with_bounds,
++        "missing_or_invalid_building_mesh_bounds":missing,
++        "mesh_ancestry_limit_reached":ancestor_limit_reached,
++        "scope":"enabled main-world Mesh3d; bounded32 ancestry; GPU submission unobserved"}),
++	)
 +}
 +
 +fn building_snapshot(
 +	world: &World,
-+	host: Entity,
-+	collider: Entity,
-+	distance: f32,
++	building: &BuildingObservation,
 +	cascades: Option<&[VisibleMeshEntities]>,
 +	camera_layers: &RenderLayers,
 +	light_layers: &RenderLayers,
@@ -245,54 +359,39 @@ index 000000000..ee18bc0e7
 +) -> serde_json::Value {
 +	let meshes = world.get_resource::<Assets<Mesh>>();
 +	let materials = world.get_resource::<Assets<StandardMaterial>>();
-+	let mut frontier = VecDeque::from([host]);
-+	let mut observed_meshes = Vec::new();
-+	let mut visited = 0;
-+	let mut truncated = false;
-+	while let Some(entity) = frontier.pop_front() {
-+		visited += 1;
-+		if let Some(children) = world.get::<Children>(entity) {
-+			let remaining = BUILDING_NODE_LIMIT - visited - frontier.len();
-+			truncated |= children.len() > remaining;
-+			frontier.extend(children[..remaining.min(children.len())].iter().copied());
-+		}
-+		let Some(mesh) = world.get::<Mesh3d>(entity) else {
-+			continue;
-+		};
-+		let material = world.get::<MeshMaterial3d<StandardMaterial>>(entity);
-+		let layers = world.get::<RenderLayers>(entity).cloned().unwrap_or_default();
-+		let cascade_indices = cascades.map(|lists| {
-+			lists
-+				.iter()
-+				.enumerate()
-+				.filter_map(|(index, list)| list.entities.contains(&entity).then_some(index))
-+				.collect::<Vec<_>>()
-+		});
-+		observed_meshes.push(serde_json::json!({
-+			"entity": entity.to_bits().to_string(),
-+			"name": world.get::<Name>(entity).map(Name::as_str),
-+			"translation": world.get::<GlobalTransform>(entity).map(|p| p.translation().to_array()),
-+			"mesh_path": mesh.0.path().map(ToString::to_string),
-+			"mesh_asset_loaded": meshes.map(|assets| assets.contains(mesh.id())),
-+			"standard_material_asset_loaded": material.zip(materials).map(|(material, assets)| assets.contains(material.id())),
-+			"inherited_visible": world.get::<InheritedVisibility>(entity).map(|v| v.get()),
-+			"camera_listed": camera_meshes.map(|list| list.contains(&entity)),
-+			"not_shadow_caster": world.get::<NotShadowCaster>(entity).is_some(),
-+			"not_shadow_receiver": world.get::<NotShadowReceiver>(entity).is_some(),
-+			"camera_layer_intersection": layers.intersects(camera_layers),
-+			"light_layer_intersection": layers.intersects(light_layers),
-+			"listed_cascade_indices": cascade_indices,
-+		}));
-+	}
-+	serde_json::json!({
-+		"host": host.to_bits().to_string(),
-+		"walk_collider": collider.to_bits().to_string(),
-+		"anchor_translation": world.get::<GlobalTransform>(collider).map(|p| p.translation().to_array()),
-+		"anchor_distance_m": distance.sqrt(),
-+		"visited_nodes": visited,
-+		"truncated": truncated,
-+		"meshes": observed_meshes,
-+	})
++	let observed_meshes: Vec<_> = building.meshes.iter().filter_map(|geometry| {
++        let entity = geometry.entity;
++        let mesh = world.get::<Mesh3d>(entity)?;
++        let material = world.get::<MeshMaterial3d<StandardMaterial>>(entity);
++        let layers = world.get::<RenderLayers>(entity).cloned().unwrap_or_default();
++        let cascade_indices = cascades.map(|lists| lists.iter().enumerate()
++            .filter_map(|(index,list)| list.entities.contains(&entity).then_some(index)).collect::<Vec<_>>());
++        Some(serde_json::json!({
++            "entity":entity.to_bits().to_string(),"name":world.get::<Name>(entity).map(Name::as_str),
++            "translation":world.get::<GlobalTransform>(entity).map(|p|p.translation().to_array()),
++            "translation_scope":"transform origin only, not geometry location",
++            "world_aabb_min":geometry.min.to_array(),"world_aabb_max":geometry.max.to_array(),
++            "world_aabb_center":(geometry.min*0.5+geometry.max*0.5).to_array(),
++            "camera_distance_m":geometry.distance_squared.sqrt(),
++            "mesh_path":mesh.0.path().map(ToString::to_string),
++            "mesh_asset_loaded":meshes.map(|assets|assets.contains(mesh.id())),
++            "standard_material_asset_loaded":material.zip(materials).map(|(material,assets)|assets.contains(material.id())),
++            "inherited_visible":world.get::<InheritedVisibility>(entity).map(|v|v.get()),
++            "camera_listed":camera_meshes.map(|list|list.contains(&entity)),
++            "not_shadow_caster":world.get::<NotShadowCaster>(entity).is_some(),
++            "not_shadow_receiver":world.get::<NotShadowReceiver>(entity).is_some(),
++            "camera_layer_intersection":layers.intersects(camera_layers),
++            "light_layer_intersection":layers.intersects(light_layers),"listed_cascade_indices":cascade_indices,
++        }))
++    }).collect();
++	serde_json::json!({"host":building.host.to_bits().to_string(),"walk_collider":building.collider.to_bits().to_string(),
++        "anchor_translation":world.get::<GlobalTransform>(building.collider).map(|p|p.translation().to_array()),
++        "anchor_scope":"ownership transform only; not a position, distance or spawn target",
++        "physical_camera_distance_m":building.meshes.first().map(|g|g.distance_squared.sqrt()),
++        "observed_meshes":building.observed_meshes,"missing_or_invalid_bounds":building.missing_or_invalid_bounds,
++        "omitted_mesh_records":building.observed_meshes-building.missing_or_invalid_bounds-building.meshes.len(),
++        "truncated":building.observed_meshes>building.meshes.len(),"meshes":observed_meshes,
++        "bounds_scope":"current component Aabb transformed to world axis-aligned bounds; conservative, not exact surface or GPU proof"})
 +}
 +
 +pub(super) fn capture(world: &mut World, camera: &AgentCameraSnapshot, request: u32) {
@@ -340,7 +439,7 @@ index 000000000..ee18bc0e7
 +			nearest.truncate(LIMIT);
 +		}
 +	}
-+	let buildings = nearest_buildings(world, camera_position);
++	let (buildings, building_scan) = nearest_buildings(world, camera_position);
 +	let mut suns = world.query_filtered::<Entity, With<maybraid_sky::SkySun>>();
 +	let sun_ids: Vec<_> = suns.iter(world).take(2).collect();
 +	let sun = (sun_ids.len() == 1).then(|| sun_ids[0]);
@@ -399,12 +498,10 @@ index 000000000..ee18bc0e7
 +		.map(|entities| entities.get(core::any::TypeId::of::<Mesh3d>()));
 +	let buildings: Vec<_> = buildings
 +		.into_iter()
-+		.map(|(distance, host, collider)| {
++		.map(|building| {
 +			building_snapshot(
 +				world,
-+				host,
-+				collider,
-+				distance,
++				&building,
 +				visible.map(Vec::as_slice),
 +				&camera_layers,
 +				&light_layers,
@@ -429,7 +526,8 @@ index 000000000..ee18bc0e7
 +        "gpu_shadow_submission":"not-observed",
 +        "total_markers":total,"unrealized":unrealized,"missing_or_invalid_pose":missing_pose,
 +        "selection":"nearest-realized-limit8", "spheres":spheres,
-+        "building_selection":"nearest-live-walk-collider-hosts-limit3; descendant inspection limited to 48 nodes per host",
++        "building_selection":"nearest observed world-AABB surface per host; top3/top48mesh records; bounded32 ancestry",
++        "building_scan":building_scan,
 +        "buildings":buildings});
 +	result
 +}
@@ -439,6 +537,23 @@ index 000000000..ee18bc0e7
 +	use super::*;
 +	use bevy::camera::visibility::VisibleMeshEntities;
 +	use maybraid_agent::AgentCameraProjection;
++
++	#[test]
++	fn physical_bounds_handle_nonuniform_reflection_and_reject_invalid_geometry() {
++		let entity = World::new().spawn_empty().id();
++		let bounds = Aabb { center: Vec3::ZERO.into(), half_extents: Vec3::ONE.into() };
++		let pose = GlobalTransform::from(
++			Transform::from_translation(Vec3::X * 10.).with_scale(Vec3::new(-2., 3., 4.)),
++		);
++		let observed = MeshBounds::observe(entity, &bounds, &pose, Vec3::ZERO);
++		assert!(observed.is_some_and(|g| g.min == Vec3::new(8., -3., -4.)
++			&& g.max == Vec3::new(12., 3., 4.)
++			&& g.distance_squared == 64.));
++		let invalid = Aabb { center: Vec3::splat(f32::NAN).into(), ..bounds };
++		assert!(MeshBounds::observe(entity, &invalid, &pose, Vec3::ZERO).is_none());
++		let invalid = Aabb { half_extents: (-Vec3::ONE).into(), ..bounds };
++		assert!(MeshBounds::observe(entity, &invalid, &pose, Vec3::ZERO).is_none());
++	}
 +
 +	#[test]
 +	fn snapshot_bounds_real_spheres_and_joins_only_selected_camera_cascades() -> anyhow::Result<()>
@@ -487,11 +602,19 @@ index 000000000..ee18bc0e7
 +		world.spawn((
 +			Name::new("building-walk-collider"),
 +			ChildOf(host),
-+			GlobalTransform::from_translation(Vec3::X * 2.),
++			GlobalTransform::from_translation(Vec3::X * 1000.),
 +		));
 +		let wall = world
 +			.spawn((
 +				Name::new("visible-wall"),
++				Aabb {
++					center: Vec3::new(0., 0., -999.).into(),
++					half_extents: Vec3::new(1., 2., 3.).into(),
++				},
++				GlobalTransform::from(
++					Transform::from_translation(Vec3::X * 1000.)
++						.with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
++				),
 +				ChildOf(host),
 +				Mesh3d(mesh.clone()),
 +				MeshMaterial3d(material),
@@ -499,9 +622,40 @@ index 000000000..ee18bc0e7
 +				NotShadowReceiver,
 +			))
 +			.id();
-+		for _ in 0..BUILDING_NODE_LIMIT {
-+			world.spawn(ChildOf(host));
++		for i in 0..BUILDING_MESH_LIMIT {
++			world.spawn((
++				ChildOf(host),
++				Mesh3d(mesh.clone()),
++				Aabb::default(),
++				GlobalTransform::from_translation(Vec3::X * (100. + i as f32)),
++			));
 +		}
++
++		// An apparently nearer origin owns physically farther geometry. Ranking
++		// by origin would pick this host first; real world bounds must not.
++		let decoy = world.spawn(lod::LodSceneHost).id();
++		world.spawn((
++			Name::new("building-walk-collider"),
++			ChildOf(decoy),
++			GlobalTransform::IDENTITY,
++		));
++		world.spawn((
++			ChildOf(decoy),
++			Mesh3d(mesh.clone()),
++			Aabb::default(),
++			GlobalTransform::from_translation(Vec3::X * 10.),
++		));
++		world.spawn((ChildOf(host), Mesh3d(mesh.clone()))); // bounds unavailable, never zero distance
++		let mut parent = host;
++		for _ in 0..BUILDING_ANCESTOR_LIMIT {
++			parent = world.spawn(ChildOf(parent)).id();
++		}
++		world.spawn((
++			ChildOf(parent),
++			Mesh3d(mesh.clone()),
++			Aabb::default(),
++			GlobalTransform::IDENTITY,
++		));
 +		let mut cascades = Cascades::default();
 +		cascades.cascades.insert(camera_entity, vec![Default::default()]);
 +		let mut visible = CascadesVisibleEntities::default();
@@ -529,10 +683,17 @@ index 000000000..ee18bc0e7
 +		assert_eq!(data["spheres"][0]["mesh_asset_loaded"], true);
 +		assert_eq!(data["spheres"][0]["camera_layer_intersection"], false);
 +		assert_eq!(data["spheres"][0]["light_layer_intersection"], true);
-+		assert_eq!(data["buildings"].as_array().map(Vec::len), Some(1));
++		assert_eq!(data["buildings"].as_array().map(Vec::len), Some(2));
++		assert_eq!(data["building_scan"]["mesh_ancestry_limit_reached"], 1);
++		assert_eq!(data["building_scan"]["missing_or_invalid_building_mesh_bounds"], 1);
 +		let building = &data["buildings"][0];
 +		assert_eq!(building["host"], host.to_bits().to_string());
-+		assert_eq!(building["visited_nodes"], BUILDING_NODE_LIMIT);
++		assert_eq!(building["observed_meshes"], BUILDING_MESH_LIMIT + 2);
++		assert_eq!(building["omitted_mesh_records"], 1);
++		assert_eq!(building["physical_camera_distance_m"], 0.0);
++		assert!(building["meshes"][0]["world_aabb_center"][0]
++			.as_f64()
++			.is_some_and(|x| (x - 1.).abs() < 0.001));
 +		assert_eq!(building["truncated"], true);
 +		assert_eq!(building["meshes"][0]["entity"], wall.to_bits().to_string());
 +		assert_eq!(building["meshes"][0]["standard_material_asset_loaded"], true);
