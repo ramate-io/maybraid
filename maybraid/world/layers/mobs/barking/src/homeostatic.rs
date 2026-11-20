@@ -89,7 +89,7 @@ pub fn reset_homeostatic_mobs(
 		*player_cell = PlayerHomeostaticCell::default();
 	}
 	for entity in &hosts {
-		commands.entity(entity).try_insert((RetiredHost, Visibility::Hidden));
+		RetiredHost::queue_for::<HomeostaticMob>(&mut commands, entity, "mob_reset");
 	}
 }
 
@@ -274,7 +274,7 @@ pub fn despawn_distant_homeostatic_mobs<P: Component>(
 	for (entity, mob) in &active_mobs {
 		if !neighborhood.contains(&mob.home_cell) {
 			// Outside neighborhood: despawn
-			commands.entity(entity).try_insert((RetiredHost, Visibility::Hidden));
+			RetiredHost::queue_for::<HomeostaticMob>(&mut commands, entity, "mob_boundary");
 			info!(
 				target: "maybraid.homeostatic",
 				"despawned homeostatic mob from cell ({}, {})",

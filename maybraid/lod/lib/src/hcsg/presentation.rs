@@ -180,21 +180,44 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 				host.session = self.session;
 				continue;
 			}
-			if let Some(stale) = self.hosts.remove(id) {
-				retire_host::<T>(commands, stale.entity);
+			let stale = self.hosts.remove(id);
+			if let Some(stale) = &stale {
+				retire_host(commands, stale.entity);
 			}
 			let (bounds, version) = (entry.bounds, entry.version);
 			let entity = spawn_host(commands, *id, entry, self.request.focus());
+			#[cfg(feature = "generation-tracing")]
+			if let Some(stale) = &stale {
+				retirement_probe::stamp::<T>(
+					commands,
+					stale.entity,
+					"version",
+					Some(entity),
+					self.request.focus(),
+					Some(stale.bounds),
+				);
+			}
 			self.hosts.insert(*id, Host { entity, bounds, version, session: self.session });
 			self.retired_against = None;
 		}
 		if read_all && published.done && !published.failed && self.sweep_pending {
 			self.sweep_pending = false;
 			let session = self.session;
+			#[cfg(feature = "generation-tracing")]
+			let focus = self.request.focus();
 			self.hosts.retain(|_, host| {
 				let current = host.session == session;
 				if !current {
-					retire_host::<T>(commands, host.entity);
+					retire_host(commands, host.entity);
+					#[cfg(feature = "generation-tracing")]
+					retirement_probe::stamp::<T>(
+						commands,
+						host.entity,
+						"epoch",
+						None,
+						focus,
+						Some(host.bounds),
+					);
 				}
 				current
 			});
@@ -222,10 +245,21 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 		let _scope = _operation.as_ref().and_then(lod_generation_diagnostics::Operation::enter);
 		self.retired_against = Some(self.request.wanted().to_vec());
 		let wanted = self.request.wanted();
+		#[cfg(feature = "generation-tracing")]
+		let focus = self.request.focus();
 		self.hosts.retain(|_, host| {
 			let keep = wanted.iter().any(|region| region.intersects(&host.bounds));
 			if !keep {
-				retire_host::<T>(commands, host.entity);
+				retire_host(commands, host.entity);
+				#[cfg(feature = "generation-tracing")]
+				retirement_probe::stamp::<T>(
+					commands,
+					host.entity,
+					"bounds",
+					None,
+					focus,
+					Some(host.bounds),
+				);
 			}
 			keep
 		});
@@ -244,20 +278,21 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct RetiredHost;
 
-fn retire_host<T>(commands: &mut Commands, entity: Entity) {
+impl RetiredHost {
+	/// Hide a direct owner and queue it for the shared retirement drain.
+	///
+	/// The type and reason are only observed when retirement tracing is enabled.
+	pub fn queue_for<T>(commands: &mut Commands, entity: Entity, _reason: &'static str) {
+		commands.entity(entity).try_insert((Self, Visibility::Hidden));
+		#[cfg(feature = "generation-tracing")]
+		retirement_probe::stamp::<T>(commands, entity, _reason, None, None, None);
+	}
+}
+
+fn retire_host(commands: &mut Commands, entity: Entity) {
 	#[cfg(feature = "generation-tracing")]
 	lod_generation_diagnostics::update(|c| c.retired += 1);
-	let mut entity = commands.entity(entity);
-	#[cfg(feature = "generation-tracing")]
-	if lod_generation_diagnostics::retired_host::enabled() {
-		entity.try_insert((
-			RetiredHost,
-			Visibility::Hidden,
-			retirement_probe::RetiredHostOrigin::of::<T>(),
-		));
-		return;
-	}
-	entity.try_insert((RetiredHost, Visibility::Hidden));
+	commands.entity(entity).try_insert((RetiredHost, Visibility::Hidden));
 }
 
 /// Recursive-despawn a budgeted prefix of [`RetiredHost`]s.
