@@ -315,6 +315,16 @@ pub fn realize_layer(
 		scale: Vec3::splat(layer.scale),
 	};
 	match &layer.part {
+		EffectPart::CartoonExplosion(part) => part.spawn(commands, parent, transform, spawn),
+		EffectPart::CombinedExplosion(part) => part.spawn(commands, parent, transform, spawn),
+		EffectPart::CartoonLanding(part) => part.spawn(commands, parent, transform, spawn),
+		EffectPart::Herd(part) => part.spawn(commands, parent, transform, spawn),
+		EffectPart::CartoonWave(part) => part.spawn(commands, parent, transform, spawn),
+		EffectPart::CartoonFlow(part) => {
+			part.spawn(commands, parent, transform, spawn);
+		}
+		EffectPart::CombinedChoreography(part) => part.spawn(commands, parent, transform, spawn),
+		EffectPart::Combined(part) => part.spawn(commands, parent, transform, spawn),
 		EffectPart::Flipbook(part) => part.spawn(commands, parent, transform, spawn),
 		EffectPart::Particle(part) => part.spawn(commands, parent, transform, spawn, layer.scale),
 		EffectPart::Light(pulse) => {

@@ -12,7 +12,8 @@ the root [CONTRIBUTING.md](../../CONTRIBUTING.md). This file is the VFX layout.
 Pack newly authored assets from local exports before committing the runtime
 results. The packaging workflow is documented in
 [`bin/vfx/README.md`](../../bin/vfx/README.md): no initial GitHub push or previous
-commit is required. Runtime files live in [`maybraid/assets/vfx/dust`](../assets/vfx/dust);
+commit is required. Runtime files live under [`maybraid/assets/vfx`](../assets/vfx),
+including dust and the separate Cartoon/Combined explosion bundles;
 large authoring projects and offline recordings are archived separately, never
 fetched by an ordinary build.
 
@@ -55,6 +56,11 @@ the primitive:
 | `flipbook_card` | `FlipbookPart` | Capture-plane renderer for packaged KTX |
 | `packaged` | assets for `FlipbookPart` | `.flipbook.json` / `.volume.json` loaders and manifests |
 | `lobe` | `MeshPart` | Overlapping mesh volumes and `LobeMaterial` |
+| `cartoon_landing`, `cartoon_wave` | `CartoonLandingPart`, `CartoonWavePart` | Opaque authored dust choreography |
+| `cartoon_flow`, `combined_choreography` | `CartoonFlowPart`, `CombinedChoreographyPart` | Shared contact motion, separate surface/volume rendering |
+| `combined` | `CombinedPart` | Density composition, fine clouds and grains |
+| `herd` | `HerdPart` | Moving world-space emitters, terrain and bounded flow |
+| `smoke_explosion` | `CartoonExplosionPart`, `CombinedExplosionPart` | Shared track evaluation and independent surface/volume rendering |
 | `particle` | `ParticlePart` | Hanabi instance properties, procedural sprite atlases, and spawn |
 
 `particle/flipbook.rs` is Hanabi `SPRITE_INDEX` over lifetime for wisp cards.
@@ -123,3 +129,9 @@ cargo test -p maybraid-vfx
 cargo test -p vfx-playground
 cargo run -p vfx-playground -- show dust
 ```
+
+## Runtime integration
+
+The client API and supported placements are documented in [README.md](README.md).
+Keep game event adapters and terrain acquisition in the host; the playground supplies
+demonstration inputs only. Preserve independent style selection and bounded ownership.

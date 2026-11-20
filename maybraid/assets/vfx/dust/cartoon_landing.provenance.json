@@ -1,0 +1,17 @@
+{
+  "schema": "maybraid.cartoon-landing.provenance.v1",
+  "source": "Maybraid-Dust-Delivery/Cartoon",
+  "inputs": {
+    "Assets/MotionRules.json": "0fa1a926801ef4b285251c205d2c06ede71b0b47066458f6f64464b246a2f669",
+    "Assets/Verification.json": "a9db9f209ee913250d7cdbb2b1b9ce703675bc1c0eccce2e8d1ae5b629a331a8",
+    "Source/landing_motion.py": "0f05ead3f573014442d71c699a9cad408bc14a4d5f348a63095388b2b7b6ad5c",
+    "Source/dissolution.py": "e5e0b211e0caf913ee7a9ad4a4a47486e881b44280eb949602f5eccde806cfff",
+    "Source/Shaders/LandingSurface.vfl": "aa4d8740bbcd0848664d2e01c9f511eea1bc40fdce2e4fd2dbb676992e63c59f"
+  },
+  "runtime_meshes": "Existing bodies/Shoulder.glb, Column.glb, Swept.glb reused byte-identically",
+  "deformation": false,
+  "interior_density": false,
+  "duration_s": 1.05,
+  "completion_tail_s": 0.15,
+  "depth": "Opaque retained-fragment hardware depth. Material prepass disabled; no volume or prepass occluder for other effects."
+}

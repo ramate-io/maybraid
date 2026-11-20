@@ -38,3 +38,9 @@ warm the effect before comparing a precise authored timestamp.
 See [asset metadata and provenance](../../assets/vfx/dust/README.md),
 [offline export tools](../../../bin/vfx/README.md), and
 [playground controls](../playground/README.md).
+
+## Dust and smoke effects
+
+See the [usage specification](../README.md) for Landing, RollingWave, fixed contact
+regions, moving Herd terrain inputs, and both smoke explosions. Recipes use the
+same `Effect` / `VfxSpawn` API; continuous effects additionally require host inputs.

@@ -1,0 +1,21 @@
+{
+  "schema": "maybraid.cartoon-wave.provenance.v1",
+  "controller": "Delivered analytic smoothstep authoring keys, one shot 0..3s; existing 48Hz stream retained unchanged but not sampled.",
+  "source_sha256": {
+    "Source/wave_motion.py": "a8a2c9c9d2c157f422251e073c10a16fbbe4c1add691ed8747b81b2db7e4ce43",
+    "Source/local_deformation.py": "69e5c641e8642063798f61817224dc7fa91d7d426830550ccc2452b9222f4ec2",
+    "Assets/MotionRules.json": "0fa1a926801ef4b285251c205d2c06ede71b0b47066458f6f64464b246a2f669",
+    "Assets/Verification.json": "a9db9f209ee913250d7cdbb2b1b9ce703675bc1c0eccce2e8d1ae5b629a331a8",
+    "Assets/Body/BodyAssets.json": "aa3098c7b94957098fa52879f9937fbe51387d690e807158b56cb4dd3d7b9099",
+    "Assets/Body/LocalDeformation.f32": "2246cd4afdde5293a2877bbc633f7f4c6cc53ded089b780e43690ae1e188f99f"
+  },
+  "reused_meshes": {
+    "Shoulder": "52f1c1a45169266ea21716cf88170909bad753545fb10d441023825723b3e8c6",
+    "Column": "640f58bb7a7dbdbbea356ecbe4b27204477ac41fc2bfca4c8c9d31c5ba1b0532",
+    "Swept": "fc2ad6c2fa123323858b38a74cae2e0b47ab3bf20c82e43b6d3e16fdb8223c4e"
+  },
+  "runtime": "12 parents + 3 children, +X advance/+Y up/+Z lateral; CPU exact vertex-min support; shared shader deforms vertices and inverse-transpose normals; per-part uniforms.",
+  "lifetime": "4.0 seconds then host cutoff, no fade/dissolve or seamless loop",
+  "limits": "Exterior only, no shadows/prepass contribution, same landing material limitations; 16 admitted waves (240 parts), no eviction",
+  "metadata_comparison": "Mesh identity/bounds/axis/pivot/winding, local_deformation and surface_shading match packaged body_assets.json. Existing density metadata differs only for its KTX packaging paths/encoding/source hashes; no density is loaded by this surface effect."
+}

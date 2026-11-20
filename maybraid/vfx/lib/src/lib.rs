@@ -20,12 +20,20 @@ pub mod seed;
 pub mod spawn;
 
 pub use composition::{
+	CombinedLayers, CombinedMotion, CombinedOptions, CombinedQuality, CombinedScenario,
+};
+pub use composition::{
 	EffectDefinition, EffectLayer, EffectPart, EffectRecipe, FlipbookPart, LightPulse, LobeKind,
 	LobeSpec, MeshPart, ParticlePart, ParticleShade, ScaleBounds, DEFAULT_SCALE_MAX,
 	DEFAULT_SCALE_MIN,
 };
+pub use effects::cartoon_landing::CartoonLanding;
+pub use effects::cartoon_wave::CartoonWave;
+pub use effects::combined::CombinedDust;
 pub use effects::dust::Dust;
 pub use effects::fiery_explosion::FieryExplosion;
+pub use layers::cartoon_landing::CartoonLandingLayer;
+pub use layers::cartoon_wave::CartoonWaveLayer;
 pub use layers::dust::DustLayer;
 pub use library::{canonicalize_effect_name, VfxLibrary};
 pub use names::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
@@ -61,7 +69,29 @@ impl Plugin for VfxPlugin {
 		if !app.is_plugin_added::<LobeMaterialPlugin>() {
 			app.add_plugins(LobeMaterialPlugin);
 		}
+		app.add_plugins((
+			crate::parts::cartoon_landing::LandingPlugin,
+			crate::parts::cartoon_wave::WavePlugin,
+			crate::parts::cartoon_flow::CartoonFlowPlugin,
+			crate::parts::herd::material::HerdMaterialPlugin,
+			crate::parts::herd::HerdPlugin,
+			crate::parts::smoke_explosion::SmokeExplosionPlugin,
+			crate::parts::combined::CombinedPlugin,
+		));
 		app.add_systems(Startup, setup_vfx_library);
 		vfx_lifecycle_plugin(app);
 	}
 }
+
+pub use effects::{cartoon_explosion::CartoonExplosion, combined_explosion::CombinedExplosion};
+
+pub use composition::ChoreographyOptions;
+pub use effects::combined_choreography::{CombinedLanding, CombinedWaveContact};
+
+pub use effects::cartoon_contact::CartoonContact;
+pub use effects::combined::CombinedDust as CombinedWave;
+
+/// Fixed-frame contact input API; root Entity returned by typed spawn is its identity.
+pub use crate::parts::cartoon_flow::region::{
+	ContactFrame, ContactInputs, ContactRegionBudget, WorldContactSnapshot,
+};

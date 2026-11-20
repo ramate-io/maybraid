@@ -40,6 +40,7 @@ pub fn setup_ground(
 		MeshMaterial3d(plaster.clone()),
 		Transform::from_xyz(-1.15, 1.3, 0.15),
 		Name::new("vfx-occluder-wall"),
+		crate::interaction::ReferenceObstacle,
 	));
 
 	let crate_mesh = meshes.add(Cuboid::new(0.7, 0.7, 0.7));
@@ -48,5 +49,6 @@ pub fn setup_ground(
 		MeshMaterial3d(plaster),
 		Transform::from_xyz(1.35, 0.35, 0.8),
 		Name::new("vfx-occluder-box"),
+		crate::interaction::ReferenceObstacle,
 	));
 }

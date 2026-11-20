@@ -1,0 +1,72 @@
+{
+  "schema": "maybraid.combined.provenance.v1",
+  "source_sha256": {
+    "Source/dynamic_dust.py": "983ea9fc1b515ae3fb2b5aafe57ced6f4c07896c4da732ec6e152c2183a96c97",
+    "Source/offline_emission.py": "4eda1e6e33e6d7f820c66d07972de948fc4edd6f702d06dd45d7cafd75e0c5f2",
+    "Source/body_density.py": "42b661251ac0e96accf6f0021c21fe1bd365915d6871e3e6fb01c1fba9f00cdd",
+    "Source/particle_fields.py": "8ef2d8c40c00d0fd9d40dbb54353be6cb93969d77851599a984c3defa130fe6c",
+    "Source/wave_motion.py": "a8a2c9c9d2c157f422251e073c10a16fbbe4c1add691ed8747b81b2db7e4ce43",
+    "Source/local_deformation.py": "69e5c641e8642063798f61817224dc7fa91d7d426830550ccc2452b9222f4ec2",
+    "Assets/Verification.json": "3ad7f6d2ef283cc4eaa7a6a39c84e80b58bea66b7f056f110a1944b3cd16f796",
+    "Assets/DynamicDust/DynamicRules.json": "fc15a43f1e1a9f1980005ba6d0694840f4657363c4eb9009dabb1644209fbce8",
+    "Assets/DynamicDust/SmallClouds/CloudLibrary.json": "4e865047306e6a85ce51dfb0656750887858e275d2b2d33bf1eb02467313b6fa",
+    "Assets/Body/BodyAssets.json": "aa3098c7b94957098fa52879f9937fbe51387d690e807158b56cb4dd3d7b9099",
+    "Assets/MotionRules.json": "0fa1a926801ef4b285251c205d2c06ede71b0b47066458f6f64464b246a2f669"
+  },
+  "new_runtime_inputs": "Only combined.combined.json: derived rest emission anchors, occupied rest support and manifest-relative typed dependency paths. No density payload duplication or recorded trajectories.",
+  "target": "Portable dynamic120Hz approximation; offline Pyro is comparison only.",
+  "runtime_contract": {
+    "tick_hz": 120,
+    "cloud_capacity_per_event": 96,
+    "grain_capacity_per_event": 96,
+    "event_capacity": 4,
+    "saturation": "reject newest; never evict live particles",
+    "maximum_steps_per_rendered_frame": 32,
+    "backlog": "retained until processed",
+    "emission_end_s": 2.82,
+    "body_motion_end_s": 4.0,
+    "host_retirement_s": 4.7,
+    "terminal_behavior": "hold authored body pose; no invented fade"
+  },
+  "renderer_approximation": {
+    "source": "unchanged original rest densities through inverse live body/cloud transforms",
+    "composition": "sum body and cloud concentrations, then supplied soft cap, shared across events",
+    "current_field": "GPU current-state composition, not temporal recording",
+    "default_dimensions": [
+      192,
+      96,
+      160
+    ],
+    "low_dimensions": [
+      128,
+      64,
+      96
+    ],
+    "storage": "one fixed RGBA16Float 192x96x160 image, reused across quality/layer changes",
+    "lighting": "per-sample short directional optical probes; no cast shadow or multiple scattering",
+    "grains": "opaque analytic ellipsoids with foreground volume attenuation"
+  },
+  "source_group": "Maybraid-Dust-Delivery/Combined",
+  "reused_runtime_sha256": {
+    "bodies/Column.glb": "640f58bb7a7dbdbbea356ecbe4b27204477ac41fc2bfca4c8c9d31c5ba1b0532",
+    "bodies/Shoulder.glb": "52f1c1a45169266ea21716cf88170909bad753545fb10d441023825723b3e8c6",
+    "bodies/Swept.glb": "fc2ad6c2fa123323858b38a74cae2e0b47ab3bf20c82e43b6d3e16fdb8223c4e",
+    "bodies/body_assets.json": "b4171e0dc4dfa2b8ed72cbac26b26e8b7d82c4f8fcaa702050a97583a5728ac8",
+    "bodies/column.ktx2": "7142d39c30bb2960f094a879b28087f9d0f8e455bdf1d5a0e1341b1e0879bcf3",
+    "bodies/column.volume.json": "040165982a94ef54e49f5c19acc7e16106daf8c0010feebf318d6e11088a3d93",
+    "bodies/shoulder.ktx2": "102414449c081e869e57c8fbae00220b244afa49249cc0111e9ef17d1ab98df5",
+    "bodies/shoulder.volume.json": "270c9b04b414dd1ef3611153fd58c1e4e18bd318c9dc69cc37cd40d3583a1674",
+    "bodies/swept.ktx2": "7e05461d523fd16ca0689489e13957e1cd498a08b47156bf8c16e11bb39bf550",
+    "bodies/swept.volume.json": "eba4d6319b47d3d8b66afca7d9c9af81e0cf429825abbfb99ad9274642bedca2",
+    "clouds/billow.ktx2": "e2f1bd954d80412967d27c560856782f3bb065d97dc61341f145336d136eb958",
+    "clouds/billow.volume.json": "854c5cfa9784da234f9cae625f33422447d728995f5120b6b96129808d222fdc",
+    "clouds/cloud_library.json": "ae68c20d27ac6301993c9d1111a6a257704b7e1a9474cae89b32acd2cff3a747",
+    "clouds/cluster.ktx2": "6d75b8c2393a5577296cd40d58f235811db7086bb390d422e75b760b54862fb2",
+    "clouds/cluster.volume.json": "2a29d000eeed1d339afb8c58ba88058562f03c178717c4dd88432df37687843b",
+    "clouds/curl.ktx2": "f32f4c3e11378c2dfb946e46f392cd4ca93478398105e01b44bda3e41ab97d9e",
+    "clouds/curl.volume.json": "e8de8f2c5776dbe21eff2f31fd02dbd0f443a31c746c8de1107a77191f6ef988",
+    "clouds/dynamic_rules.json": "fc15a43f1e1a9f1980005ba6d0694840f4657363c4eb9009dabb1644209fbce8",
+    "clouds/trail.ktx2": "53c973f36c22bc9b961295ba66dce2bb25c0d66d6b6c346557d3722b545ddd24",
+    "clouds/trail.volume.json": "1c6b6a7193cac5b65df1e6058cf3f6d8a46975b5c36794f38505e3f5535d8868"
+  }
+}

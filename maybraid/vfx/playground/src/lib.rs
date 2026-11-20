@@ -2,7 +2,15 @@
 
 mod camera;
 pub mod commands;
+mod contact_regions;
+mod dust_comparison;
+mod explosion_preview;
+mod flow_inspection;
 mod ground;
+mod herd;
+mod interaction;
+mod profiling;
+mod recording;
 mod show;
 mod ui;
 
@@ -23,28 +31,72 @@ pub struct VfxPlaygroundPlugin;
 
 impl Plugin for VfxPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<PendingVfxShows>()
+		profiling::install(app);
+		dust_comparison::profiling::install(app);
+		explosion_preview::profiling::install(app);
+		herd::install(app);
+		contact_regions::install(app);
+		app.init_resource::<flow_inspection::FlowInspection>()
+			.add_systems(Update, flow_inspection::draw)
+			.init_resource::<PendingVfxShows>()
 			.init_resource::<LastVfxShow>()
 			.init_resource::<RepeatingVfxShow>()
 			.init_resource::<PreviewFreeze>()
 			.init_resource::<LoopEnabled>()
 			.init_resource::<CameraOrbit>()
 			.init_resource::<SpreadOnce>()
+			.init_resource::<commands::PendingControls>()
 			.add_plugins(VfxPlugin)
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()));
-		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
-			.add_systems(
-				Update,
-				(
-					camera::release_modifiers_on_focus_change.before(camera::camera_controller),
-					camera::camera_controller,
-					camera::orbit_camera.after(camera::camera_controller),
-					apply_pending_shows,
-					repeat_shown_effect.after(apply_pending_shows),
-					pause_at_frozen_age.after(repeat_shown_effect),
-					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-				),
-			);
+		app.add_systems(
+			Startup,
+			(camera::setup_camera, setup_lighting, setup_ground, interaction::setup),
+		)
+		.add_systems(
+			Update,
+			(
+				camera::release_modifiers_on_focus_change.before(camera::camera_controller),
+				camera::camera_controller,
+				explosion_preview::readback,
+				explosion_preview::enforce_scene.after(interaction::visuals),
+				show::clamp_frozen_age
+					.after(maybraid_vfx::lifecycle::tick_vfx_instances)
+					.before(maybraid_vfx::parts::smoke_explosion::SmokeExplosionTick)
+					.before(maybraid_vfx::parts::combined::tick)
+					.before(maybraid_vfx::parts::herd::HerdTick)
+					.before(maybraid_vfx::parts::cartoon_flow::CartoonFlowTick),
+				interaction::manual_input
+					.before(maybraid_vfx::parts::combined::tick)
+					.before(maybraid_vfx::parts::cartoon_flow::CartoonFlowTick),
+				interaction::visuals
+					.after(maybraid_vfx::parts::combined::tick)
+					.after(maybraid_vfx::parts::cartoon_flow::CartoonFlowTick),
+				commands::capture.after(maybraid_vfx::parts::herd::HerdTick),
+				recording::pending,
+				recording::capture
+					.after(maybraid_vfx::parts::herd::HerdTick)
+					.after(maybraid_vfx::parts::cartoon_flow::CartoonFlowTick)
+					.after(maybraid_vfx::parts::combined::tick),
+				commands::apply_pending_controls
+					.before(apply_pending_shows)
+					.before(interaction::manual_input),
+				commands::inspect_pending
+					.after(camera::camera_controller)
+					.after(apply_pending_shows),
+				commands::replay,
+				camera::orbit_camera.after(camera::camera_controller),
+				apply_pending_shows,
+				dust_comparison::tick.after(apply_pending_shows),
+				repeat_shown_effect.after(apply_pending_shows),
+				pause_at_frozen_age
+					.after(maybraid_vfx::parts::smoke_explosion::SmokeExplosionTick)
+					.after(maybraid_vfx::parts::herd::HerdTick)
+					.after(repeat_shown_effect)
+					.after(maybraid_vfx::parts::combined::tick)
+					.after(maybraid_vfx::parts::cartoon_flow::CartoonFlowTick),
+				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
+			),
+		);
 	}
 }
 
@@ -73,6 +125,33 @@ mod tests {
 	use maybraid_vfx::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
 
 	#[test]
+	fn parses_landing_inspection() -> Result<(), String> {
+		for line in [
+			"show cartoon-landing --seed 13",
+			"show cartoon-wave --seed 13",
+			"show combined-dust --seed 9271",
+			"interaction --scenario fast --wake off --enabled on --wind 0.4 0 0",
+			"interaction --emission continuous --strength 0.8",
+			"interaction --place 0.2 0.7 -1 --proxy-reset",
+			"interaction --emission off",
+			"combined --layer body --scenario wind-turn --quality low",
+			"combined --layer clouds",
+			"combined --layer grains",
+			"inspect boundary",
+			"inspect inside",
+			"inspect main",
+			"inspect side",
+			"inspect top",
+			"inspect close",
+			"replay-at 0.3 --after 3",
+			"screenshot /tmp/landing.png --after 6",
+		] {
+			<PlaygroundCommand as GameCommand>::parse_line(line)?;
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn parses_playback_controls() -> Result<(), String> {
 		for line in ["pause", "play", "reset", "cancel", "spread"] {
 			<PlaygroundCommand as GameCommand>::parse_line(line)?;
@@ -90,7 +169,7 @@ mod tests {
 	#[test]
 	fn parses_show_default() -> Result<(), String> {
 		let command = <PlaygroundCommand as GameCommand>::parse_line("show")?;
-		let PlaygroundCommand::Show { effect, scale, intensity, distance, seed, playback } =
+		let PlaygroundCommand::Show { effect, scale, intensity, distance, seed, playback, .. } =
 			command
 		else {
 			return Err("expected show".into());

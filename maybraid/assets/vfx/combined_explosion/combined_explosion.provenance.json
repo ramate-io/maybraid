@@ -1,0 +1,236 @@
+{
+ "schema": "maybraid.combined_explosion.provenance.v1",
+ "exported": "2026-11-19 23:14:34",
+ "authoring": "~/Desktop/VFX_1/houdini/combined_explosion_01 (Checkpoint A: REVIEW.md, renders/prev_c1)",
+ "inputs": {
+  "cartoon": {
+   "cex_motion.py": "d56d604d3bc2dff93e47acdb2793d8baa6e7bd28f97c279bac023cd0adab9577",
+   "cex_plume.py": "bd541417557d89e97157646415f53f00aa129c6a4ff9926bb2140be78e8e37d5",
+   "build_cartoon_explosion.py": "012ca9e4c19df15390510d36be6b5e9a9a4d4e22d662cf1b930737a2f586264e",
+   "karma_setup.py": "70935aea19ed26ad0a332f5cc2abe4dd0c5354aff89680a826cbfb182d86d2b7",
+   "render_farm.py": "547d14645436b90461d9a0f59572d3a93a66e438259839b06c0d6c6da71c2596",
+   "meshes_metadata.json": "47e541c9dd0289f95a71062351961fe0a42571d0683b7bff83a76700d8768370",
+   "logs/mesh_points.json": "391b76931861877bfc89752d26482ef095c324d32826d6626a2943c85e2108c9",
+   "logs/mesh_stats.json": "756946df32ff6da304d3fe8b29e8eca103d7a9c4f10f2117def9c1cfe6e3826a",
+   "logs/v3_variants.json": "45aa91a47c2853f8a8ddcf069fcdaf380b583aa4e7d982bdf45e44ec2496697f",
+   "logs/sparse/cartoon_explosion.track.bin": "1dd6f7bd1b76061eab99613616b71198d53d9f474ecc16ff1040ef89aefe914c",
+   "logs/sparse/track_index.json": "a72ad4a7cb0317fd7e5aed7c2fea56677e3b177416d1d21e0eec214258fb578d",
+   "logs/sparse/reference.json": "fcf29e1033c02170f91e77e3086ac28323c7b0c10e4884c85eb24fcc869c1650",
+   "logs/sparse/validation.json": "5bc5a5bbe23ef99374261cd7c6508124beed21f9bd4d48623d509d476d62a555",
+   "DUST_COMBINED_METHOD_SPEC.md": "40ea35f8388634df6214aa4d2419055c4f23dbdaaf0332d90d94257e871c885c",
+   "shader/cex_smoke.vfl": "dd52de263dd4c22b6f90e6c4d4afec91408271d0224a9ec8a37a92d711157565",
+   "shader/cex_smoke_karma.vfl": "7219410e6251ae67fd60312c889dbb61f3204e401059bbabd5c26ce2171ea47c"
+  },
+  "dust": {
+   "scripts/semistyle_model.py": "4b1de192dfbb3524e8b70630a76e0c4e9e938984569890a12b9d10d3a4b9e7a0",
+   "scripts/semistyle_geometry.py": "b6c37e525a8952ccb900361f3f3ba89a726a867541a1b581b1813cfcbf72f5fd",
+   "scripts/grains_flowgrain.py": "a433b14179ce99d363af2074ca08edbf988385d42053a1862f2f6a2703bb8f7d",
+   "scripts/flowgrain_model.py": "60751769a78886ff16fd656710ff5fb9579e4207ce498765267a11d5d0dda4f4",
+   "scripts/landing_model.py": "0c113d668505f45688be908ce7951c440fea34f565fdf76bc02fabb415d1e73f",
+   "houdini/shaders/semistyle_volume.vfl": "4aa717dd322ce71dca8c00eeac0302c8ec72173a06ee7468a2eb04dca029b28e",
+   "runtime_checkpoint_B/semistyle_rules.json": "92627f9019662834b96fc5e4b3952cff1d8c8fb19333b74a422637be01aff952"
+  },
+  "recorded": "2026-11-19 20:36:17"
+ },
+ "sources": {
+  "scripts/bounds_summary.py": "6fccac69d3473726cb1ff56112be3c5951d6fa77a593a3866e95782cc195b1a7",
+  "scripts/build_combined.py": "2f418b2082d09f97b95803d9639c915c308ab238df491d70d7474ce68aadc181",
+  "scripts/build_rest_fields.py": "315393320b7bf16bd6b41237f8af91ac51793c9828b419ac03934e7562070147",
+  "scripts/build_rules.py": "b1ee9b77efa4539c8390c911f4b770385c1a79e2f6dd9a55824aecd3a280d75c",
+  "scripts/cex_in.py": "e5b2afc6b2a60fd7375beb6517b16ac3ad0365d3bdc1432c5123f5eecf5e1ba5",
+  "scripts/colour_calib.py": "465e111f8805a88d2f2135b04ea92f98fee28904aa4b57dc9765dd95fe17127f",
+  "scripts/colour_stats.py": "baf64d994f9b255fe0aa5d143fe539680c4630ba49218f8969edf00458a8ad1b",
+  "scripts/cxm.py": "927f59dc8f15159ddf238f126ffa92ce4bc2b31faaaf6418329c554a13a9abe2",
+  "scripts/export_b.py": "908c60880a158d0008a1bccfba0f7ec9c3d2a153d901cc4f044a23ebf9b2547a",
+  "scripts/farm.py": "22d9b8b1a62bb18e531112e4131a9da6652edffa6fd70504ee635999fb370e8e",
+  "scripts/motion_export.py": "1928f9b318128e280548c8a54e6e8aae8a10854e1470e88bfeb7badc90779025",
+  "scripts/perf_summary.py": "f641c378fd2fe45d91d79bedccb2802e64ed9b68cd6076d7ed9c2719f31d218a",
+  "scripts/plot_sections.py": "d893cac15b376677651992c214fb08bc9007dca043d2820501820741fcc1a782",
+  "scripts/swap_gain.py": "243b1f81f6d7d88bb5a63c5de4ee95dc4523bc05c2b5e187577994beb4ae5fc5",
+  "scripts/swap_probe.py": "d93ad9bee4328134137ecf9ce260ca04646d8d1396810274213a1c8c20f19683",
+  "scripts/test_cache.py": "fa4d230fad343cce8194c2b8198d53fe40f30b1f108fd6548d6c6d14bfd49d7f",
+  "scripts/test_cook.py": "a6ad091039b8061a31e428aeadfdeb4467ad2d7fe648317831b5e1336b886b20",
+  "scripts/test_render.py": "297945877e9774bc06c339689228adb61b98006e5e00ea41b3df833f4f8a6a3c",
+  "scripts/val_images.py": "537e8c9920e889a75e4f26100d820724c5124ee35cda3db9a7cb54662fd1504f",
+  "scripts/val_native.py": "1debf1e94b41697f1dff04826b4e3ebe3b96657f289a311e19af03813f0ca946",
+  "scripts/val_native_parity.py": "3a93b477ed3a52e4070eff786109fb4c6734d73ad480369202bef631ef7e0a1a",
+  "scripts/val_numpy.py": "a067f2e171df7943535d8cfe2edb9999f0cd6aa09c95cd5ddd7f5d02135df004",
+  "scripts/write_review.py": "8c21240959c8638f96bf0b2120982e26e25a4d65f704c4e062514abe7be30774",
+  "scripts/rederive.sh": "a3c5effb8246afc0ddba7996655e8e390a0919d98ce1e1eeffc15db651aaddc1",
+  "scripts/run_all.sh": "ac2eba965727d204040247b63e3b6b96afdc4a80b8e0a663ccbc5d8e156810b7",
+  "rules/combined_rules.json": "4e88c7ae7a18e7a01e54246738731d998c0efc158b5d2ff2b114f1119ab2b215",
+  "rules/colour_calibration.json": "17a4a1771e77865c9ab1bdc17740f47e1334c746281e6aef89a75506c1e46256"
+ },
+ "cartoon_reference": {
+  "directory": "../cartoon_explosion",
+  "manifest": "cartoon_explosion.explosion.json",
+  "track": "cartoon_explosion.track.bin",
+  "track_sha256": "1dd6f7bd1b76061eab99613616b71198d53d9f474ecc16ff1040ef89aefe914c",
+  "meshes": "meshes/<mesh_table name>.glb (manifest meshes[].index = mesh index)",
+  "manifest_schema": "maybraid.cartoon-explosion.v1",
+  "manifest_track_sha256": "1dd6f7bd1b76061eab99613616b71198d53d9f474ecc16ff1040ef89aefe914c",
+  "verified_against_export": true
+ },
+ "outputs": {
+  "fields/puff_0.ktx2": {
+   "sha256": "c8bfb390fe4a8f9b8c2bf492bb2b07c76af6241a7d6e9da8112a252977fc1822",
+   "bytes": 132392,
+   "decoded_bytes": 524288,
+   "source_sha256": "00c26377317d83bf627d1665a41575504772c601446f44e33c98de28fefd4655"
+  },
+  "fields/puff_0.volume.json": {
+   "sha256": "b8ef62e59ab5baaa9e9806b97f9dd261715f859359373040ef9ae8d0215f8e96"
+  },
+  "fields/puff_1.ktx2": {
+   "sha256": "7f0027dbea1dfe91de11263672b13209aa35f9166a87aee5b369aeebe1b34ec1",
+   "bytes": 107796,
+   "decoded_bytes": 524288,
+   "source_sha256": "fa784aa50a1d0d3419b7037a9bf21241a93e517f5ca9437e4b6964ef43a8cdb5"
+  },
+  "fields/puff_1.volume.json": {
+   "sha256": "9bba88dc55e06ba18797db6406fb25ca226aeeec5686bc6f835f58b638f274f1"
+  },
+  "fields/puff_2.ktx2": {
+   "sha256": "4ff29ddbe307b175f72b24a8d12976e803dcd0571913666d3245a0ce31500b18",
+   "bytes": 147866,
+   "decoded_bytes": 524288,
+   "source_sha256": "0f3e644f09a50a7f778bed80f9865b9609aa883680f50528f7e9d72d2a42eabe"
+  },
+  "fields/puff_2.volume.json": {
+   "sha256": "5b68076a5d16ebc7f54d12a9a41f130255b466938d775f353d264e366da40608"
+  },
+  "fields/puff_3.ktx2": {
+   "sha256": "8e3a3618786e1db7ad17d8787b4bbbbfc676a1b208e8df48536a8be1ee952da4",
+   "bytes": 138417,
+   "decoded_bytes": 524288,
+   "source_sha256": "1ea84c23ed4803bf9fd1f6e095f0c087f704ba09bf88ae8110e9fb02ff47c4d7"
+  },
+  "fields/puff_3.volume.json": {
+   "sha256": "1ce290e171a9189148f6ec721b89d222a612da423caf3ffcdebb5ec5c5f31a1f"
+  },
+  "fields/puff_4.ktx2": {
+   "sha256": "924818db54d2c63356edb5f925a093635546644a7425914ff0f91471fc51dc32",
+   "bytes": 144131,
+   "decoded_bytes": 524288,
+   "source_sha256": "a8fcf31c9595ca58a5605a020b6949ebf5952c4585d3f99c0e67bb5dba528934"
+  },
+  "fields/puff_4.volume.json": {
+   "sha256": "4443578bb1cc9524785d716f7d53f068403b726fa8595173bc2c2e800ef2612e"
+  },
+  "fields/puff_5.ktx2": {
+   "sha256": "c1c08cc442001cb63f2793e260ca3e68f1656d43e96110a91ee14ad29910d2d4",
+   "bytes": 113203,
+   "decoded_bytes": 524288,
+   "source_sha256": "3cf6d72d79799be21f26b20940b94740c748c5b090ab9d5343336bc4c6d5b167"
+  },
+  "fields/puff_5.volume.json": {
+   "sha256": "60ea1ad9e55377e8d2d9becbbe4cc23068903a1718e4fb297218de2a5c627e7b"
+  },
+  "fields/puff_6.ktx2": {
+   "sha256": "3b48fd34a8fd9e1d13bf645370c3fe3927983c69f5c5012c2277cf8f6c626c09",
+   "bytes": 152318,
+   "decoded_bytes": 524288,
+   "source_sha256": "51bf5ac3246870df10dd132e254d48cc46ecb06dae515b26c26b27277657be33"
+  },
+  "fields/puff_6.volume.json": {
+   "sha256": "bad1bf1c895a3405c482077faf626901d0ae8cf4a0295a5b30f093e4626ab1b1"
+  },
+  "fields/puff_7.ktx2": {
+   "sha256": "9d1a2868ff754d949f6f5fa5b5a731cac75c75f4339ddbadfd121170c1be0bac",
+   "bytes": 120100,
+   "decoded_bytes": 524288,
+   "source_sha256": "3b1437907dec7ef4f9a0296c34195d534089586ecb05ebdcd5a7e53ca4c966bc"
+  },
+  "fields/puff_7.volume.json": {
+   "sha256": "5147781afc256dbafcf6fd3c4dbc23dd7cd0b0b05ca799aa78e988a124d5afb0"
+  },
+  "fields/puff_8.ktx2": {
+   "sha256": "fd72dddd91f3544c7cd2f37bf932eb63c60e4208d345240e6a0714e2a101dbe8",
+   "bytes": 131930,
+   "decoded_bytes": 524288,
+   "source_sha256": "7b3bba514b6b2ac7de76e7a42ec02ae6445bd4509294fd98bae47cdc6dcb230d"
+  },
+  "fields/puff_8.volume.json": {
+   "sha256": "95d4fc1a94dbc0461243b5a32ef31d6288ab8d811212cff1766394dc7e73d087"
+  },
+  "fields/puff_9.ktx2": {
+   "sha256": "d7c09d85f2cdff0358e549117da80dda42462fe4c6d9640d28a2c7096ca46700",
+   "bytes": 110222,
+   "decoded_bytes": 524288,
+   "source_sha256": "0f78a0d24a23340e9a29a4b4dd10162390cf5e416830b693e0bf10ae5ae64000"
+  },
+  "fields/puff_9.volume.json": {
+   "sha256": "199b4b1e0aa411d2c774b91760eff151648d738a71cbdb6550d4a9dffe013709"
+  },
+  "fields/puff_small_0.ktx2": {
+   "sha256": "f2ce441049216e9958a4ec204cbdb77490c518c2114b49074dc74686ee464ea0",
+   "bytes": 15026,
+   "decoded_bytes": 65536,
+   "source_sha256": "21de58c5aa7314a6d171b2975a71c799883a27cbcfd0f602e9043314fc89753e"
+  },
+  "fields/puff_small_0.volume.json": {
+   "sha256": "0b650f0119807a950c65e6ba60095d8087b1101ac834cd66348852018d6bf8ed"
+  },
+  "fields/puff_small_1.ktx2": {
+   "sha256": "f0dd6ab6bbf554bdf59ec678e56e637afe8f598af3660e26f83ad3652ce87492",
+   "bytes": 14176,
+   "decoded_bytes": 65536,
+   "source_sha256": "dcab8601b01df97182c77d93d4bcc2f1c291e2e17201c10944f68a8cfbc71b4e"
+  },
+  "fields/puff_small_1.volume.json": {
+   "sha256": "5e0adaada46c05242a6b36344ce3cd50a9441e4e695307472963744f1df3cbd6"
+  },
+  "fields/puff_small_2.ktx2": {
+   "sha256": "e640405a8f264d04c36812b035dddfaef33757fe60d7956fa64597a31f19ecf2",
+   "bytes": 15326,
+   "decoded_bytes": 65536,
+   "source_sha256": "b9573dacefb5f9e5df98dc0baa80a3ad11ac579d9f15880eccdcf84ae52c0580"
+  },
+  "fields/puff_small_2.volume.json": {
+   "sha256": "a0ad09cd22c1a0bb90089932cb52a0ce279a9434507c0edee5b81707842a67f8"
+  },
+  "fields/puff_small_3.ktx2": {
+   "sha256": "d6c103ee60845e64e721381455e300b5abd7ee4cec9b54f004c62a5e1a93aa6a",
+   "bytes": 16114,
+   "decoded_bytes": 65536,
+   "source_sha256": "32357e1652fc216b0ff4e4ac0d016bfbf79d70e5d9dae7aada39b5be521e7b39"
+  },
+  "fields/puff_small_3.volume.json": {
+   "sha256": "c6ee8925fadb918037d0b8e2aa27ece26c9baa0397e58d41314951d6b2b145d7"
+  },
+  "fields/puff_small_4.ktx2": {
+   "sha256": "17d25af2850a5ca1f00f7ced86560996b2341badadb51e72e70546a8fbd94487",
+   "bytes": 15221,
+   "decoded_bytes": 65536,
+   "source_sha256": "ecd4d741a055d1e79b6f284624962d0fddc7c9def17fc8d9123db6fa6f2c03ee"
+  },
+  "fields/puff_small_4.volume.json": {
+   "sha256": "baccb5649e26dcc8daf8b9084673a3ba030158156c1b267d1297c7ac6ff4ee95"
+  },
+  "fields/puff_small_5.ktx2": {
+   "sha256": "8b975cb43baa697e26b97a29465378c4e804724ba9c8cdbceddd7e4fbaa4c19d",
+   "bytes": 13924,
+   "decoded_bytes": 65536,
+   "source_sha256": "e73ee567f84730ff47cca09f7d8e30ac25a2c56d9b8bc8c35efa52a02a610d5d"
+  },
+  "fields/puff_small_5.volume.json": {
+   "sha256": "2c6ab60d2179d30645037aa4f7bc5894179ca45fefa978be5df556106bf0a6c2"
+  },
+  "combined_explosion.combined.json": {
+   "sha256": "2c2f2b8862b8b7d5c780658a1ec4f0fc38ce7b9c2e071af22af688fb8d4da9de"
+  },
+  "combined_explosion.grains.json": {
+   "sha256": "d81b5e326282ef5821715d32881eaec39e8dc126922793d68ff6a431924bbe1d"
+  },
+  "reference.json": {
+   "sha256": "fced700d37523650bc614c399d16703a384b2173178e080d1a3db8fbc2cfd3e2"
+  }
+ },
+ "encoder": {
+  "writer": "combined_explosion export_b.py (KTX2 R16_SFLOAT 3D, zstd 9)",
+  "vk_format": "R16_SFLOAT (76)",
+  "supercompression": "Zstandard level 9",
+  "levels": 1,
+  "verification": "decoded level 0 == source float16 bytes (exact)"
+ }
+}

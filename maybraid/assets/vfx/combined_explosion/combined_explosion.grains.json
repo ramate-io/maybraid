@@ -1,0 +1,3092 @@
+{
+ "schema": "maybraid.combined_explosion.grains.v1",
+ "rules": {
+  "gravity": 9.81,
+  "rate_hz": 120,
+  "restitution": 0.15,
+  "contact_horizontal_damping": 0.6,
+  "forced_shrink_start": 2.0,
+  "retire_by": 3.95,
+  "aspect": [
+   1.0,
+   0.66,
+   1.23
+  ],
+  "integrator": "target=(0,-g/k,0); vNew=target+(vOld-target)*exp(-k dt); P+=.5(vOld+vNew)dt; contact: P.y=max(P.y,r) -> v.y=max(0,-v.y*e), v.xz*=damping",
+  "shrink": "radius*(1-S((t-t0)/T)), t0=min(first ground contact, forced_shrink_start), T=min(shrink_T, retire_by-t0)"
+ },
+ "births": [
+  {
+   "id": 0,
+   "birth": 0.203312,
+   "source": "spike_root",
+   "source_element": 327,
+   "rest_origin": [
+    0.161901,
+    0.005425,
+    0.113741
+   ],
+   "world_origin": [
+    0.006324,
+    0.123409,
+    -0.004836
+   ],
+   "material_velocity": [
+    -0.065617,
+    -0.011207,
+    -0.026225
+   ],
+   "initial_velocity": [
+    0.543505,
+    2.495253,
+    -0.893195
+   ],
+   "radius": 0.011486,
+   "drag": 2.254707,
+   "shrink_T": 1.288288,
+   "shade": 0.650276,
+   "orient_seed": 63330811,
+   "seed": 1173320645
+  },
+  {
+   "id": 1,
+   "birth": 0.070236,
+   "source": "spike_root",
+   "source_element": 330,
+   "rest_origin": [
+    0.260928,
+    0.001352,
+    0.098164
+   ],
+   "world_origin": [
+    -0.038969,
+    0.132258,
+    0.045463
+   ],
+   "material_velocity": [
+    0.009182,
+    0.023658,
+    -0.016006
+   ],
+   "initial_velocity": [
+    0.427558,
+    5.425948,
+    0.863134
+   ],
+   "radius": 0.019699,
+   "drag": 2.815011,
+   "shrink_T": 1.185029,
+   "shade": 0.248117,
+   "orient_seed": 2255919455,
+   "seed": 3742494744
+  },
+  {
+   "id": 2,
+   "birth": 0.192516,
+   "source": "spike_root",
+   "source_element": 323,
+   "rest_origin": [
+    -0.130821,
+    0.014642,
+    -0.057685
+   ],
+   "world_origin": [
+    0.037181,
+    0.138332,
+    0.014198
+   ],
+   "material_velocity": [
+    -0.007452,
+    0.008282,
+    -0.023953
+   ],
+   "initial_velocity": [
+    2.649209,
+    2.725514,
+    1.474851
+   ],
+   "radius": 0.025256,
+   "drag": 1.952776,
+   "shrink_T": 1.742413,
+   "shade": 0.256813,
+   "orient_seed": 1792658375,
+   "seed": 3486260592
+  },
+  {
+   "id": 3,
+   "birth": 0.119997,
+   "source": "spike_root",
+   "source_element": 332,
+   "rest_origin": [
+    0.119973,
+    0.000964,
+    -0.065307
+   ],
+   "world_origin": [
+    0.007287,
+    0.106347,
+    0.043698
+   ],
+   "material_velocity": [
+    2.4e-05,
+    0.000392,
+    -0.000179
+   ],
+   "initial_velocity": [
+    0.332202,
+    4.553142,
+    1.221634
+   ],
+   "radius": 0.02852,
+   "drag": 2.142001,
+   "shrink_T": 1.656099,
+   "shade": 0.286692,
+   "orient_seed": 1955478837,
+   "seed": 4142393649
+  },
+  {
+   "id": 4,
+   "birth": 0.292146,
+   "source": "spike_root",
+   "source_element": 340,
+   "rest_origin": [
+    -0.135581,
+    0.003212,
+    -0.115537
+   ],
+   "world_origin": [
+    -0.026048,
+    0.117259,
+    0.030325
+   ],
+   "material_velocity": [
+    0.071875,
+    -0.035236,
+    -0.098099
+   ],
+   "initial_velocity": [
+    -0.40027,
+    2.250792,
+    -0.225701
+   ],
+   "radius": 0.019387,
+   "drag": 1.140039,
+   "shrink_T": 1.241739,
+   "shade": 0.363435,
+   "orient_seed": 1926507837,
+   "seed": 1269123302
+  },
+  {
+   "id": 5,
+   "birth": 0.124942,
+   "source": "spike_root",
+   "source_element": 331,
+   "rest_origin": [
+    -0.209895,
+    0.019926,
+    -0.008294
+   ],
+   "world_origin": [
+    -0.015859,
+    0.174611,
+    -0.028713
+   ],
+   "material_velocity": [
+    -0.008008,
+    0.055006,
+    -0.011387
+   ],
+   "initial_velocity": [
+    -0.644571,
+    2.313627,
+    -1.182931
+   ],
+   "radius": 0.014314,
+   "drag": 1.167776,
+   "shrink_T": 1.856411,
+   "shade": 0.373826,
+   "orient_seed": 2703062037,
+   "seed": 927274494
+  },
+  {
+   "id": 6,
+   "birth": 0.106699,
+   "source": "spike_root",
+   "source_element": 322,
+   "rest_origin": [
+    0.037395,
+    0.014328,
+    0.066243
+   ],
+   "world_origin": [
+    -0.000971,
+    0.154654,
+    -0.022262
+   ],
+   "material_velocity": [
+    0.019333,
+    0.166877,
+    -0.021021
+   ],
+   "initial_velocity": [
+    -0.038395,
+    2.009221,
+    -1.041562
+   ],
+   "radius": 0.02794,
+   "drag": 2.584435,
+   "shrink_T": 1.380103,
+   "shade": 0.71049,
+   "orient_seed": 779834241,
+   "seed": 1656395412
+  },
+  {
+   "id": 7,
+   "birth": 0.218601,
+   "source": "spike_root",
+   "source_element": 337,
+   "rest_origin": [
+    0.015881,
+    0.016088,
+    -0.057025
+   ],
+   "world_origin": [
+    -0.025233,
+    0.143389,
+    0.044502
+   ],
+   "material_velocity": [
+    0.011044,
+    0.001483,
+    0.00338
+   ],
+   "initial_velocity": [
+    -0.890563,
+    3.393493,
+    0.369504
+   ],
+   "radius": 0.012607,
+   "drag": 2.655904,
+   "shrink_T": 1.580367,
+   "shade": 0.480912,
+   "orient_seed": 3390901999,
+   "seed": 2232046375
+  },
+  {
+   "id": 8,
+   "birth": 0.155354,
+   "source": "spike_root",
+   "source_element": 336,
+   "rest_origin": [
+    -0.148849,
+    0.001905,
+    -0.161356
+   ],
+   "world_origin": [
+    -0.017394,
+    0.105238,
+    -0.061205
+   ],
+   "material_velocity": [
+    -0.002925,
+    0.000161,
+    0.002762
+   ],
+   "initial_velocity": [
+    -1.318342,
+    3.98271,
+    -2.427579
+   ],
+   "radius": 0.013499,
+   "drag": 2.804846,
+   "shrink_T": 1.192614,
+   "shade": 0.158663,
+   "orient_seed": 3654990117,
+   "seed": 2956093667
+  },
+  {
+   "id": 9,
+   "birth": 0.096912,
+   "source": "spike_root",
+   "source_element": 325,
+   "rest_origin": [
+    0.061484,
+    0.000644,
+    0.250243
+   ],
+   "world_origin": [
+    -0.014033,
+    0.101822,
+    -0.002667
+   ],
+   "material_velocity": [
+    0.000454,
+    0.00573,
+    -0.000143
+   ],
+   "initial_velocity": [
+    -0.819221,
+    3.181781,
+    0.142805
+   ],
+   "radius": 0.022357,
+   "drag": 2.105129,
+   "shrink_T": 1.832337,
+   "shade": 0.798359,
+   "orient_seed": 1593469636,
+   "seed": 1250778503
+  },
+  {
+   "id": 10,
+   "birth": 0.273848,
+   "source": "spike_root",
+   "source_element": 345,
+   "rest_origin": [
+    0.113578,
+    0.009581,
+    -0.153624
+   ],
+   "world_origin": [
+    -0.029374,
+    0.112806,
+    0.020841
+   ],
+   "material_velocity": [
+    -0.00082,
+    0.050175,
+    -0.104856
+   ],
+   "initial_velocity": [
+    -2.138327,
+    3.069325,
+    1.403375
+   ],
+   "radius": 0.014794,
+   "drag": 2.133479,
+   "shrink_T": 1.812879,
+   "shade": 0.452024,
+   "orient_seed": 1275800399,
+   "seed": 3375498258
+  },
+  {
+   "id": 11,
+   "birth": 0.250002,
+   "source": "spike_root",
+   "source_element": 331,
+   "rest_origin": [
+    -0.113824,
+    0.01872,
+    0.049769
+   ],
+   "world_origin": [
+    -0.043073,
+    0.166784,
+    -0.026176
+   ],
+   "material_velocity": [
+    -0.045361,
+    0.00503,
+    0.056199
+   ],
+   "initial_velocity": [
+    -1.122421,
+    2.035527,
+    -1.096955
+   ],
+   "radius": 0.015417,
+   "drag": 2.010735,
+   "shrink_T": 1.342324,
+   "shade": 0.401131,
+   "orient_seed": 3990947569,
+   "seed": 2144572608
+  },
+  {
+   "id": 12,
+   "birth": 0.049393,
+   "source": "spike_root",
+   "source_element": 340,
+   "rest_origin": [
+    -0.185358,
+    0.003223,
+    0.022468
+   ],
+   "world_origin": [
+    0.00427,
+    0.120689,
+    0.044432
+   ],
+   "material_velocity": [
+    -0.003785,
+    0.088446,
+    -0.034542
+   ],
+   "initial_velocity": [
+    0.000252,
+    4.165529,
+    1.874449
+   ],
+   "radius": 0.016872,
+   "drag": 2.340681,
+   "shrink_T": 1.958488,
+   "shade": 0.385172,
+   "orient_seed": 3695967637,
+   "seed": 2444512659
+  },
+  {
+   "id": 13,
+   "birth": 0.267522,
+   "source": "spike_root",
+   "source_element": 324,
+   "rest_origin": [
+    0.055659,
+    0.021538,
+    0.012828
+   ],
+   "world_origin": [
+    -0.005399,
+    0.186286,
+    -0.033732
+   ],
+   "material_velocity": [
+    0.000913,
+    -0.009615,
+    0.034746
+   ],
+   "initial_velocity": [
+    0.708024,
+    5.556971,
+    -0.76808
+   ],
+   "radius": 0.027349,
+   "drag": 2.456894,
+   "shrink_T": 1.076305,
+   "shade": 0.051969,
+   "orient_seed": 1553287455,
+   "seed": 1082784557
+  },
+  {
+   "id": 14,
+   "birth": 0.076974,
+   "source": "spike_root",
+   "source_element": 322,
+   "rest_origin": [
+    -0.255573,
+    0.005006,
+    0.09539
+   ],
+   "world_origin": [
+    0.034793,
+    0.11267,
+    0.000892
+   ],
+   "material_velocity": [
+    0.018103,
+    0.156263,
+    -0.019684
+   ],
+   "initial_velocity": [
+    1.798611,
+    4.219219,
+    -0.193843
+   ],
+   "radius": 0.013657,
+   "drag": 2.927381,
+   "shrink_T": 1.366467,
+   "shade": 0.928723,
+   "orient_seed": 4133769215,
+   "seed": 41621214
+  },
+  {
+   "id": 15,
+   "birth": 0.108524,
+   "source": "spike_root",
+   "source_element": 340,
+   "rest_origin": [
+    -0.170872,
+    0.022304,
+    -0.048193
+   ],
+   "world_origin": [
+    -0.014927,
+    0.16484,
+    0.025317
+   ],
+   "material_velocity": [
+    -0.004108,
+    0.095984,
+    -0.037485
+   ],
+   "initial_velocity": [
+    -0.785991,
+    1.955066,
+    0.549767
+   ],
+   "radius": 0.019586,
+   "drag": 1.201561,
+   "shrink_T": 1.058437,
+   "shade": 0.497953,
+   "orient_seed": 3650938414,
+   "seed": 1487919326
+  },
+  {
+   "id": 16,
+   "birth": 0.137372,
+   "source": "spike_root",
+   "source_element": 341,
+   "rest_origin": [
+    -0.031129,
+    0.017052,
+    -0.204482
+   ],
+   "world_origin": [
+    -0.008332,
+    0.150607,
+    0.045845
+   ],
+   "material_velocity": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "initial_velocity": [
+    -0.787059,
+    3.433245,
+    0.08223
+   ],
+   "radius": 0.02673,
+   "drag": 2.219268,
+   "shrink_T": 1.05816,
+   "shade": 0.700064,
+   "orient_seed": 1730819773,
+   "seed": 1351780330
+  },
+  {
+   "id": 17,
+   "birth": 0.183399,
+   "source": "spike_root",
+   "source_element": 320,
+   "rest_origin": [
+    -0.025848,
+    0.01548,
+    0.184308
+   ],
+   "world_origin": [
+    0.047917,
+    0.124637,
+    -0.089015
+   ],
+   "material_velocity": [
+    -0.009896,
+    0.004201,
+    0.05478
+   ],
+   "initial_velocity": [
+    1.160507,
+    2.957373,
+    -0.983832
+   ],
+   "radius": 0.027861,
+   "drag": 1.65326,
+   "shrink_T": 1.318486,
+   "shade": 0.164116,
+   "orient_seed": 2832676599,
+   "seed": 408923337
+  },
+  {
+   "id": 18,
+   "birth": 0.10316,
+   "source": "spike_root",
+   "source_element": 348,
+   "rest_origin": [
+    -0.148407,
+    0.023483,
+    -0.023321
+   ],
+   "world_origin": [
+    0.114059,
+    0.14939,
+    -0.016154
+   ],
+   "material_velocity": [
+    0.129127,
+    0.058993,
+    -0.01116
+   ],
+   "initial_velocity": [
+    2.718477,
+    1.416452,
+    -0.24371
+   ],
+   "radius": 0.018402,
+   "drag": 2.934425,
+   "shrink_T": 1.27908,
+   "shade": 0.811512,
+   "orient_seed": 3632842793,
+   "seed": 1737016919
+  },
+  {
+   "id": 19,
+   "birth": 0.149714,
+   "source": "spike_root",
+   "source_element": 328,
+   "rest_origin": [
+    0.119744,
+    0.0037,
+    -0.250077
+   ],
+   "world_origin": [
+    -0.083272,
+    0.122723,
+    0.083189
+   ],
+   "material_velocity": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "initial_velocity": [
+    -0.821769,
+    3.078474,
+    -0.184473
+   ],
+   "radius": 0.025657,
+   "drag": 2.120677,
+   "shrink_T": 1.230317,
+   "shade": 0.571138,
+   "orient_seed": 2878305970,
+   "seed": 946127408
+  },
+  {
+   "id": 20,
+   "birth": 0.23973,
+   "source": "spike_root",
+   "source_element": 328,
+   "rest_origin": [
+    -0.05621,
+    0.009694,
+    0.050051
+   ],
+   "world_origin": [
+    -0.039895,
+    0.129391,
+    0.042869
+   ],
+   "material_velocity": [
+    -0.018411,
+    0.002422,
+    0.006615
+   ],
+   "initial_velocity": [
+    -2.064919,
+    4.028715,
+    1.014138
+   ],
+   "radius": 0.021715,
+   "drag": 2.288486,
+   "shrink_T": 1.101018,
+   "shade": 0.963726,
+   "orient_seed": 2950738771,
+   "seed": 1520340488
+  },
+  {
+   "id": 21,
+   "birth": 0.126756,
+   "source": "spike_root",
+   "source_element": 328,
+   "rest_origin": [
+    0.092487,
+    0.010927,
+    0.238398
+   ],
+   "world_origin": [
+    -0.051259,
+    0.119871,
+    0.00665
+   ],
+   "material_velocity": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "initial_velocity": [
+    -2.685145,
+    5.017277,
+    -1.778201
+   ],
+   "radius": 0.013364,
+   "drag": 2.499075,
+   "shrink_T": 1.293466,
+   "shade": 0.896882,
+   "orient_seed": 3371351086,
+   "seed": 4217080502
+  },
+  {
+   "id": 22,
+   "birth": 0.15938,
+   "source": "spike_root",
+   "source_element": 344,
+   "rest_origin": [
+    0.241339,
+    0.008595,
+    -0.099064
+   ],
+   "world_origin": [
+    0.083547,
+    0.101883,
+    0.048101
+   ],
+   "material_velocity": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "initial_velocity": [
+    3.317641,
+    2.441623,
+    -0.515741
+   ],
+   "radius": 0.010471,
+   "drag": 1.273256,
+   "shrink_T": 1.869205,
+   "shade": 0.068514,
+   "orient_seed": 3372055383,
+   "seed": 1490652584
+  },
+  {
+   "id": 23,
+   "birth": 0.26216,
+   "source": "spike_root",
+   "source_element": 323,
+   "rest_origin": [
+    0.140258,
+    0.006887,
+    0.090726
+   ],
+   "world_origin": [
+    0.016554,
+    0.128085,
+    -0.036768
+   ],
+   "material_velocity": [
+    0.014869,
+    -0.028233,
+    0.102059
+   ],
+   "initial_velocity": [
+    2.690006,
+    4.402778,
+    -1.750854
+   ],
+   "radius": 0.027987,
+   "drag": 2.070639,
+   "shrink_T": 1.998649,
+   "shade": 0.726215,
+   "orient_seed": 3547312589,
+   "seed": 3096707214
+  },
+  {
+   "id": 24,
+   "birth": 0.108418,
+   "source": "spike_root",
+   "source_element": 324,
+   "rest_origin": [
+    0.167882,
+    0.007729,
+    0.229974
+   ],
+   "world_origin": [
+    0.022548,
+    0.137693,
+    -0.079624
+   ],
+   "material_velocity": [
+    0.004246,
+    0.0522,
+    0.014334
+   ],
+   "initial_velocity": [
+    0.798009,
+    2.449745,
+    -0.871483
+   ],
+   "radius": 0.014103,
+   "drag": 2.669586,
+   "shrink_T": 1.012204,
+   "shade": 0.774076,
+   "orient_seed": 3872663979,
+   "seed": 2155139792
+  },
+  {
+   "id": 25,
+   "birth": 0.183114,
+   "source": "spike_root",
+   "source_element": 333,
+   "rest_origin": [
+    -0.229858,
+    0.007447,
+    0.05743
+   ],
+   "world_origin": [
+    0.081439,
+    0.099616,
+    -0.027699
+   ],
+   "material_velocity": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "initial_velocity": [
+    2.744573,
+    3.553212,
+    -1.48742
+   ],
+   "radius": 0.023005,
+   "drag": 1.157542,
+   "shrink_T": 1.316175,
+   "shade": 0.817381,
+   "orient_seed": 1966105533,
+   "seed": 375220090
+  },
+  {
+   "id": 26,
+   "birth": 0.164864,
+   "source": "spike_root",
+   "source_element": 339,
+   "rest_origin": [
+    0.118514,
+    0.001456,
+    0.146564
+   ],
+   "world_origin": [
+    -0.000597,
+    0.1168,
+    -0.033548
+   ],
+   "material_velocity": [
+    0.000825,
+    -0.005358,
+    0.014831
+   ],
+   "initial_velocity": [
+    -0.017363,
+    3.392315,
+    -1.328488
+   ],
+   "radius": 0.013351,
+   "drag": 2.651549,
+   "shrink_T": 1.429583,
+   "shade": 0.60695,
+   "orient_seed": 2843405279,
+   "seed": 3133983166
+  },
+  {
+   "id": 27,
+   "birth": 0.101654,
+   "source": "spike_root",
+   "source_element": 338,
+   "rest_origin": [
+    0.043935,
+    0.014453,
+    0.11413
+   ],
+   "world_origin": [
+    0.002991,
+    0.157899,
+    -0.00015
+   ],
+   "material_velocity": [
+    -0.01809,
+    0.08788,
+    0.009701
+   ],
+   "initial_velocity": [
+    1.386413,
+    5.468758,
+    1.369114
+   ],
+   "radius": 0.013131,
+   "drag": 1.006279,
+   "shrink_T": 1.93897,
+   "shade": 0.742072,
+   "orient_seed": 114411212,
+   "seed": 3669065361
+  },
+  {
+   "id": 28,
+   "birth": 0.223547,
+   "source": "spike_root",
+   "source_element": 346,
+   "rest_origin": [
+    -0.053919,
+    0.006587,
+    0.276796
+   ],
+   "world_origin": [
+    -0.067516,
+    0.080278,
+    -0.008772
+   ],
+   "material_velocity": [
+    0.084582,
+    0.0494,
+    -0.008444
+   ],
+   "initial_velocity": [
+    -2.193989,
+    2.268431,
+    1.339468
+   ],
+   "radius": 0.010165,
+   "drag": 1.634855,
+   "shrink_T": 1.03999,
+   "shade": 0.300414,
+   "orient_seed": 3623784055,
+   "seed": 1273575292
+  },
+  {
+   "id": 29,
+   "birth": 0.088287,
+   "source": "spike_root",
+   "source_element": 328,
+   "rest_origin": [
+    0.280561,
+    0.001667,
+    -0.035597
+   ],
+   "world_origin": [
+    -0.095283,
+    0.100914,
+    0.046869
+   ],
+   "material_velocity": [
+    -0.000128,
+    0.018755,
+    -0.007221
+   ],
+   "initial_velocity": [
+    -1.226987,
+    4.234074,
+    -0.737765
+   ],
+   "radius": 0.023372,
+   "drag": 1.047443,
+   "shrink_T": 1.948558,
+   "shade": 0.280576,
+   "orient_seed": 1735148204,
+   "seed": 3594288365
+  },
+  {
+   "id": 30,
+   "birth": 0.136665,
+   "source": "spike_root",
+   "source_element": 342,
+   "rest_origin": [
+    -0.137527,
+    0.023965,
+    0.113904
+   ],
+   "world_origin": [
+    0.025712,
+    0.17721,
+    -0.010285
+   ],
+   "material_velocity": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "initial_velocity": [
+    2.940031,
+    3.127724,
+    -2.309201
+   ],
+   "radius": 0.025882,
+   "drag": 2.438983,
+   "shrink_T": 1.929254,
+   "shade": 0.42433,
+   "orient_seed": 3460298088,
+   "seed": 1723817267
+  },
+  {
+   "id": 31,
+   "birth": 0.19744,
+   "source": "spike_root",
+   "source_element": 336,
+   "rest_origin": [
+    0.003607,
+    0.002611,
+    -0.072495
+   ],
+   "world_origin": [
+    -0.03423,
+    0.109258,
+    -0.032482
+   ],
+   "material_velocity": [
+    -0.022297,
+    0.000305,
+    -0.000846
+   ],
+   "initial_velocity": [
+    -1.473803,
+    3.826609,
+    -1.490792
+   ],
+   "radius": 0.025001,
+   "drag": 2.752167,
+   "shrink_T": 1.751544,
+   "shade": 0.755629,
+   "orient_seed": 2879817572,
+   "seed": 3456728190
+  },
+  {
+   "id": 32,
+   "birth": 0.259732,
+   "source": "spike_root",
+   "source_element": 325,
+   "rest_origin": [
+    0.232829,
+    0.001639,
+    0.072084
+   ],
+   "world_origin": [
+    0.004953,
+    0.103383,
+    -0.044831
+   ],
+   "material_velocity": [
+    -0.128411,
+    0.009979,
+    -0.007909
+   ],
+   "initial_velocity": [
+    0.543022,
+    4.746858,
+    -2.994314
+   ],
+   "radius": 0.010253,
+   "drag": 1.154433,
+   "shrink_T": 1.758656,
+   "shade": 0.530942,
+   "orient_seed": 3577390151,
+   "seed": 2734379072
+  },
+  {
+   "id": 33,
+   "birth": 0.082804,
+   "source": "spike_root",
+   "source_element": 323,
+   "rest_origin": [
+    0.073387,
+    0.000902,
+    -0.233853
+   ],
+   "world_origin": [
+    -0.024722,
+    0.11338,
+    0.002563
+   ],
+   "material_velocity": [
+    0.007006,
+    0.016762,
+    0.003616
+   ],
+   "initial_velocity": [
+    -0.9031,
+    3.520238,
+    1.470735
+   ],
+   "radius": 0.023499,
+   "drag": 1.210223,
+   "shrink_T": 1.458429,
+   "shade": 0.870061,
+   "orient_seed": 992415122,
+   "seed": 3132116744
+  },
+  {
+   "id": 34,
+   "birth": 0.10705,
+   "source": "spike_root",
+   "source_element": 342,
+   "rest_origin": [
+    0.176655,
+    0.000509,
+    -0.206683
+   ],
+   "world_origin": [
+    -0.029346,
+    0.08444,
+    -0.014995
+   ],
+   "material_velocity": [
+    0.000191,
+    0.001105,
+    -0.000819
+   ],
+   "initial_velocity": [
+    -0.980009,
+    4.7498,
+    -2.788454
+   ],
+   "radius": 0.021865,
+   "drag": 1.381569,
+   "shrink_T": 1.272366,
+   "shade": 0.537141,
+   "orient_seed": 177675667,
+   "seed": 1450188454
+  },
+  {
+   "id": 35,
+   "birth": 0.156855,
+   "source": "spike_root",
+   "source_element": 336,
+   "rest_origin": [
+    0.192861,
+    0.015703,
+    -0.060787
+   ],
+   "world_origin": [
+    -0.034754,
+    0.158086,
+    0.001141
+   ],
+   "material_velocity": [
+    -0.001889,
+    -0.000212,
+    -0.005742
+   ],
+   "initial_velocity": [
+    -2.446969,
+    4.983674,
+    -0.852628
+   ],
+   "radius": 0.025158,
+   "drag": 2.191277,
+   "shrink_T": 1.419404,
+   "shade": 0.811871,
+   "orient_seed": 1417970998,
+   "seed": 647285449
+  },
+  {
+   "id": 1036,
+   "birth": 0.173259,
+   "source": "puff_source",
+   "source_element": 27,
+   "rest_origin": [
+    0.197126,
+    -0.205883,
+    0.139794
+   ],
+   "world_origin": [
+    0.005802,
+    0.382715,
+    -0.075621
+   ],
+   "material_velocity": [
+    1.067293,
+    10.359698,
+    -2.43634
+   ],
+   "initial_velocity": [
+    1.478749,
+    13.918041,
+    -3.134844
+   ],
+   "radius": 0.029419,
+   "drag": 2.260152,
+   "shrink_T": 1.916324,
+   "shade": 0.00472,
+   "orient_seed": 1781862069,
+   "seed": 3402643673
+  },
+  {
+   "id": 1037,
+   "birth": 0.163782,
+   "source": "puff_source",
+   "source_element": 37,
+   "rest_origin": [
+    -0.001746,
+    -0.022868,
+    0.114342
+   ],
+   "world_origin": [
+    0.11468,
+    0.686084,
+    -0.05743
+   ],
+   "material_velocity": [
+    2.208634,
+    6.596582,
+    -1.340048
+   ],
+   "initial_velocity": [
+    3.123127,
+    10.505634,
+    -1.846361
+   ],
+   "radius": 0.01137,
+   "drag": 2.637744,
+   "shrink_T": 1.294196,
+   "shade": 0.385371,
+   "orient_seed": 329625121,
+   "seed": 174464588
+  },
+  {
+   "id": 1038,
+   "birth": 0.277498,
+   "source": "puff_source",
+   "source_element": 126,
+   "rest_origin": [
+    -0.146707,
+    0.126523,
+    -0.065791
+   ],
+   "world_origin": [
+    0.009936,
+    0.396601,
+    0.919006
+   ],
+   "material_velocity": [
+    1.134699,
+    1.421028,
+    3.34116
+   ],
+   "initial_velocity": [
+    0.88031,
+    3.977534,
+    6.936987
+   ],
+   "radius": 0.014948,
+   "drag": 2.811204,
+   "shrink_T": 1.260126,
+   "shade": 0.897798,
+   "orient_seed": 3687101595,
+   "seed": 728354586
+  },
+  {
+   "id": 1039,
+   "birth": 0.235889,
+   "source": "puff_source",
+   "source_element": 119,
+   "rest_origin": [
+    0.040653,
+    -0.233163,
+    -0.000865
+   ],
+   "world_origin": [
+    -0.093617,
+    0.908982,
+    -0.332113
+   ],
+   "material_velocity": [
+    -0.684095,
+    4.007666,
+    -2.647208
+   ],
+   "initial_velocity": [
+    -1.170582,
+    7.966281,
+    -3.235833
+   ],
+   "radius": 0.027732,
+   "drag": 2.488991,
+   "shrink_T": 1.317345,
+   "shade": 0.856539,
+   "orient_seed": 1056956128,
+   "seed": 2478506784
+  },
+  {
+   "id": 1040,
+   "birth": 0.124865,
+   "source": "puff_source",
+   "source_element": 99,
+   "rest_origin": [
+    -0.229357,
+    0.045673,
+    -0.040383
+   ],
+   "world_origin": [
+    0.178547,
+    0.82153,
+    -0.083789
+   ],
+   "material_velocity": [
+    3.385406,
+    9.34487,
+    -1.412037
+   ],
+   "initial_velocity": [
+    3.695321,
+    15.301363,
+    -2.010859
+   ],
+   "radius": 0.029299,
+   "drag": 1.920093,
+   "shrink_T": 1.615853,
+   "shade": 0.60904,
+   "orient_seed": 4277242816,
+   "seed": 1453919019
+  },
+  {
+   "id": 1041,
+   "birth": 0.29887,
+   "source": "puff_source",
+   "source_element": 128,
+   "rest_origin": [
+    -0.22197,
+    -0.199861,
+    -0.011162
+   ],
+   "world_origin": [
+    0.095428,
+    0.298904,
+    -0.991871
+   ],
+   "material_velocity": [
+    -0.226211,
+    0.679309,
+    -3.202982
+   ],
+   "initial_velocity": [
+    0.453129,
+    2.917129,
+    -5.68895
+   ],
+   "radius": 0.02507,
+   "drag": 2.036556,
+   "shrink_T": 1.124911,
+   "shade": 0.217834,
+   "orient_seed": 2927657548,
+   "seed": 3448068065
+  },
+  {
+   "id": 1042,
+   "birth": 0.150435,
+   "source": "puff_source",
+   "source_element": 33,
+   "rest_origin": [
+    0.130117,
+    0.220159,
+    0.013623
+   ],
+   "world_origin": [
+    0.138992,
+    0.802986,
+    -0.124018
+   ],
+   "material_velocity": [
+    2.724129,
+    12.023257,
+    -2.217022
+   ],
+   "initial_velocity": [
+    3.452094,
+    15.097413,
+    -2.851091
+   ],
+   "radius": 0.027235,
+   "drag": 1.843798,
+   "shrink_T": 1.744125,
+   "shade": 0.840735,
+   "orient_seed": 2619716751,
+   "seed": 2463269111
+  },
+  {
+   "id": 1043,
+   "birth": 0.18675,
+   "source": "puff_source",
+   "source_element": 95,
+   "rest_origin": [
+    -0.122217,
+    -0.14107,
+    0.261376
+   ],
+   "world_origin": [
+    0.211647,
+    1.293787,
+    -0.18169
+   ],
+   "material_velocity": [
+    1.51555,
+    8.312131,
+    -1.820882
+   ],
+   "initial_velocity": [
+    2.244557,
+    12.089697,
+    -2.223348
+   ],
+   "radius": 0.014055,
+   "drag": 2.113422,
+   "shrink_T": 1.382589,
+   "shade": 0.571207,
+   "orient_seed": 305926686,
+   "seed": 2337991668
+  },
+  {
+   "id": 1044,
+   "birth": 0.268469,
+   "source": "puff_source",
+   "source_element": 36,
+   "rest_origin": [
+    -0.045065,
+    0.082009,
+    -0.20552
+   ],
+   "world_origin": [
+    0.576018,
+    1.281886,
+    -0.020821
+   ],
+   "material_velocity": [
+    3.895525,
+    7.754679,
+    0.134984
+   ],
+   "initial_velocity": [
+    5.053847,
+    11.892827,
+    -0.319174
+   ],
+   "radius": 0.020849,
+   "drag": 2.113542,
+   "shrink_T": 1.496319,
+   "shade": 0.64071,
+   "orient_seed": 86552442,
+   "seed": 552615952
+  },
+  {
+   "id": 1045,
+   "birth": 0.129759,
+   "source": "puff_source",
+   "source_element": 93,
+   "rest_origin": [
+    -0.048475,
+    -0.069241,
+    -0.132941
+   ],
+   "world_origin": [
+    0.05643,
+    0.445891,
+    -0.079262
+   ],
+   "material_velocity": [
+    1.983242,
+    5.758816,
+    -2.020337
+   ],
+   "initial_velocity": [
+    2.337818,
+    11.039917,
+    -3.333593
+   ],
+   "radius": 0.014903,
+   "drag": 2.038121,
+   "shrink_T": 1.290033,
+   "shade": 0.277008,
+   "orient_seed": 2057413196,
+   "seed": 22000348
+  },
+  {
+   "id": 1046,
+   "birth": 0.165973,
+   "source": "puff_source",
+   "source_element": 37,
+   "rest_origin": [
+    -0.022442,
+    -0.167171,
+    -0.313789
+   ],
+   "world_origin": [
+    0.100992,
+    0.580913,
+    -0.198027
+   ],
+   "material_velocity": [
+    2.159963,
+    6.132744,
+    -1.85523
+   ],
+   "initial_velocity": [
+    2.741484,
+    8.496194,
+    -2.549924
+   ],
+   "radius": 0.028555,
+   "drag": 1.088004,
+   "shrink_T": 1.440451,
+   "shade": 0.573838,
+   "orient_seed": 1579816663,
+   "seed": 136376287
+  },
+  {
+   "id": 1047,
+   "birth": 0.295924,
+   "source": "puff_source",
+   "source_element": 124,
+   "rest_origin": [
+    -0.114027,
+    -0.271347,
+    0.11962
+   ],
+   "world_origin": [
+    -0.880941,
+    0.333705,
+    0.377566
+   ],
+   "material_velocity": [
+    -2.613969,
+    0.864629,
+    1.395376
+   ],
+   "initial_velocity": [
+    -5.447643,
+    3.36614,
+    2.675137
+   ],
+   "radius": 0.018257,
+   "drag": 2.61574,
+   "shrink_T": 1.01023,
+   "shade": 0.2812,
+   "orient_seed": 3653157343,
+   "seed": 2690375215
+  },
+  {
+   "id": 1048,
+   "birth": 0.186546,
+   "source": "puff_source",
+   "source_element": 14,
+   "rest_origin": [
+    -0.167515,
+    0.134699,
+    0.301742
+   ],
+   "world_origin": [
+    -0.064328,
+    0.218777,
+    -0.018022
+   ],
+   "material_velocity": [
+    -6.131404,
+    3.595912,
+    -3.612831
+   ],
+   "initial_velocity": [
+    -9.925759,
+    4.365255,
+    -3.888546
+   ],
+   "radius": 0.02643,
+   "drag": 1.719026,
+   "shrink_T": 1.628898,
+   "shade": 0.531936,
+   "orient_seed": 2983897564,
+   "seed": 3251321813
+  },
+  {
+   "id": 1049,
+   "birth": 0.131675,
+   "source": "puff_source",
+   "source_element": 95,
+   "rest_origin": [
+    0.065129,
+    -0.036866,
+    0.12562
+   ],
+   "world_origin": [
+    0.113003,
+    0.759836,
+    -0.101598
+   ],
+   "material_velocity": [
+    1.505007,
+    8.986877,
+    -1.900331
+   ],
+   "initial_velocity": [
+    1.764805,
+    12.277418,
+    -2.403547
+   ],
+   "radius": 0.01741,
+   "drag": 1.086797,
+   "shrink_T": 1.322276,
+   "shade": 1.1e-05,
+   "orient_seed": 739075098,
+   "seed": 1332012249
+  },
+  {
+   "id": 1050,
+   "birth": 0.266214,
+   "source": "puff_source",
+   "source_element": 11,
+   "rest_origin": [
+    0.027326,
+    -0.212634,
+    -0.111167
+   ],
+   "world_origin": [
+    0.428766,
+    0.32388,
+    0.646561
+   ],
+   "material_velocity": [
+    1.226375,
+    1.133701,
+    1.978964
+   ],
+   "initial_velocity": [
+    3.499892,
+    3.561899,
+    5.219772
+   ],
+   "radius": 0.018248,
+   "drag": 2.763203,
+   "shrink_T": 1.923496,
+   "shade": 0.396393,
+   "orient_seed": 756988586,
+   "seed": 3518896710
+  },
+  {
+   "id": 1051,
+   "birth": 0.142254,
+   "source": "puff_source",
+   "source_element": 47,
+   "rest_origin": [
+    0.016827,
+    -0.083018,
+    -0.014869
+   ],
+   "world_origin": [
+    -0.002673,
+    0.287612,
+    -0.015147
+   ],
+   "material_velocity": [
+    -1.033745,
+    6.498766,
+    -2.093645
+   ],
+   "initial_velocity": [
+    -1.825205,
+    12.289529,
+    -3.39344
+   ],
+   "radius": 0.011677,
+   "drag": 1.09574,
+   "shrink_T": 1.173642,
+   "shade": 0.309856,
+   "orient_seed": 3014464502,
+   "seed": 3472065897
+  },
+  {
+   "id": 1052,
+   "birth": 0.171571,
+   "source": "puff_source",
+   "source_element": 33,
+   "rest_origin": [
+    -0.110996,
+    0.294065,
+    -0.195808
+   ],
+   "world_origin": [
+    0.129962,
+    0.967723,
+    -0.302038
+   ],
+   "material_velocity": [
+    2.216536,
+    10.789712,
+    -2.506264
+   ],
+   "initial_velocity": [
+    2.587895,
+    14.99691,
+    -3.593094
+   ],
+   "radius": 0.028823,
+   "drag": 1.823996,
+   "shrink_T": 1.932654,
+   "shade": 0.946817,
+   "orient_seed": 1181573097,
+   "seed": 3650734390
+  },
+  {
+   "id": 1053,
+   "birth": 0.20056,
+   "source": "puff_source",
+   "source_element": 76,
+   "rest_origin": [
+    0.079921,
+    -0.188395,
+    -0.250903
+   ],
+   "world_origin": [
+    0.211669,
+    0.832532,
+    -0.082203
+   ],
+   "material_velocity": [
+    3.554267,
+    8.476695,
+    -1.56701
+   ],
+   "initial_velocity": [
+    4.382637,
+    11.67029,
+    -1.979123
+   ],
+   "radius": 0.02227,
+   "drag": 2.527516,
+   "shrink_T": 1.602732,
+   "shade": 0.341868,
+   "orient_seed": 149745555,
+   "seed": 3873671908
+  },
+  {
+   "id": 1054,
+   "birth": 0.247656,
+   "source": "puff_source",
+   "source_element": 71,
+   "rest_origin": [
+    -0.074305,
+    0.057916,
+    0.304795
+   ],
+   "world_origin": [
+    0.49847,
+    0.411624,
+    0.667611
+   ],
+   "material_velocity": [
+    1.708237,
+    1.981968,
+    4.339369
+   ],
+   "initial_velocity": [
+    3.129312,
+    4.266719,
+    7.014622
+   ],
+   "radius": 0.015125,
+   "drag": 1.859734,
+   "shrink_T": 1.328405,
+   "shade": 0.736787,
+   "orient_seed": 1356810751,
+   "seed": 4093396158
+  },
+  {
+   "id": 1055,
+   "birth": 0.140195,
+   "source": "puff_source",
+   "source_element": 0,
+   "rest_origin": [
+    0.062445,
+    0.081228,
+    -0.347654
+   ],
+   "world_origin": [
+    0.20752,
+    0.302978,
+    0.004323
+   ],
+   "material_velocity": [
+    8.564339,
+    7.565266,
+    0.015338
+   ],
+   "initial_velocity": [
+    10.160495,
+    9.496995,
+    0.027603
+   ],
+   "radius": 0.022998,
+   "drag": 1.479159,
+   "shrink_T": 1.537403,
+   "shade": 0.673151,
+   "orient_seed": 3478696281,
+   "seed": 3978439787
+  },
+  {
+   "id": 1056,
+   "birth": 0.196046,
+   "source": "puff_source",
+   "source_element": 76,
+   "rest_origin": [
+    0.014803,
+    -0.027666,
+    0.039502
+   ],
+   "world_origin": [
+    0.171428,
+    0.708785,
+    -0.077302
+   ],
+   "material_velocity": [
+    3.48325,
+    8.343279,
+    -1.567283
+   ],
+   "initial_velocity": [
+    4.133504,
+    10.423819,
+    -1.503264
+   ],
+   "radius": 0.014981,
+   "drag": 1.564102,
+   "shrink_T": 1.269117,
+   "shade": 0.086994,
+   "orient_seed": 2379111990,
+   "seed": 902870949
+  },
+  {
+   "id": 1057,
+   "birth": 0.222044,
+   "source": "puff_source",
+   "source_element": 116,
+   "rest_origin": [
+    0.193477,
+    0.198334,
+    0.171983
+   ],
+   "world_origin": [
+    0.384622,
+    1.492851,
+    -0.296576
+   ],
+   "material_velocity": [
+    2.904296,
+    8.854869,
+    -1.721357
+   ],
+   "initial_velocity": [
+    3.179279,
+    13.551318,
+    -2.324103
+   ],
+   "radius": 0.024381,
+   "drag": 1.230378,
+   "shrink_T": 1.883366,
+   "shade": 0.202073,
+   "orient_seed": 2599351385,
+   "seed": 1312441988
+  },
+  {
+   "id": 1058,
+   "birth": 0.155416,
+   "source": "puff_source",
+   "source_element": 26,
+   "rest_origin": [
+    0.195072,
+    0.010078,
+    -0.128266
+   ],
+   "world_origin": [
+    0.107436,
+    0.544407,
+    -0.139669
+   ],
+   "material_velocity": [
+    1.960348,
+    8.140806,
+    -2.334385
+   ],
+   "initial_velocity": [
+    2.712326,
+    12.943463,
+    -3.482928
+   ],
+   "radius": 0.017055,
+   "drag": 1.2547,
+   "shrink_T": 1.604316,
+   "shade": 0.773447,
+   "orient_seed": 529654955,
+   "seed": 756612308
+  },
+  {
+   "id": 1059,
+   "birth": 0.18784,
+   "source": "puff_source",
+   "source_element": 134,
+   "rest_origin": [
+    -0.063273,
+    0.038032,
+    -0.077735
+   ],
+   "world_origin": [
+    -0.076619,
+    0.622457,
+    -0.015121
+   ],
+   "material_velocity": [
+    -1.190257,
+    6.76257,
+    -0.10978
+   ],
+   "initial_velocity": [
+    -1.3529,
+    10.807724,
+    -0.337063
+   ],
+   "radius": 0.025958,
+   "drag": 1.349825,
+   "shrink_T": 1.250188,
+   "shade": 0.780911,
+   "orient_seed": 2738906373,
+   "seed": 1750553168
+  },
+  {
+   "id": 1060,
+   "birth": 0.259151,
+   "source": "puff_source",
+   "source_element": 53,
+   "rest_origin": [
+    -0.196386,
+    0.021199,
+    0.015502
+   ],
+   "world_origin": [
+    0.810023,
+    0.480543,
+    -0.006428
+   ],
+   "material_velocity": [
+    2.603665,
+    1.73378,
+    0.57919
+   ],
+   "initial_velocity": [
+    6.129128,
+    5.277289,
+    0.690806
+   ],
+   "radius": 0.012655,
+   "drag": 1.0695,
+   "shrink_T": 1.951953,
+   "shade": 0.564051,
+   "orient_seed": 963189772,
+   "seed": 1813290362
+  },
+  {
+   "id": 1061,
+   "birth": 0.149737,
+   "source": "puff_source",
+   "source_element": 127,
+   "rest_origin": [
+    0.068818,
+    -0.310787,
+    0.089272
+   ],
+   "world_origin": [
+    0.016278,
+    0.37153,
+    -0.041135
+   ],
+   "material_velocity": [
+    0.039136,
+    6.63238,
+    -1.000624
+   ],
+   "initial_velocity": [
+    0.122374,
+    11.346566,
+    -1.734058
+   ],
+   "radius": 0.014999,
+   "drag": 1.07261,
+   "shrink_T": 1.463535,
+   "shade": 0.508517,
+   "orient_seed": 1792758181,
+   "seed": 3393923307
+  },
+  {
+   "id": 1062,
+   "birth": 0.16325,
+   "source": "puff_source",
+   "source_element": 6,
+   "rest_origin": [
+    0.237793,
+    0.194531,
+    0.166951
+   ],
+   "world_origin": [
+    -0.392237,
+    0.693773,
+    -0.295588
+   ],
+   "material_velocity": [
+    -3.232277,
+    7.753073,
+    -2.883123
+   ],
+   "initial_velocity": [
+    -4.79142,
+    11.795777,
+    -4.295391
+   ],
+   "radius": 0.016793,
+   "drag": 2.198909,
+   "shrink_T": 1.918533,
+   "shade": 0.813846,
+   "orient_seed": 3571293973,
+   "seed": 1567215440
+  },
+  {
+   "id": 1063,
+   "birth": 0.168909,
+   "source": "puff_source",
+   "source_element": 89,
+   "rest_origin": [
+    0.099818,
+    0.144767,
+    -0.28815
+   ],
+   "world_origin": [
+    -0.51415,
+    0.364135,
+    0.080841
+   ],
+   "material_velocity": [
+    -3.949714,
+    1.79532,
+    3.577498
+   ],
+   "initial_velocity": [
+    -8.670791,
+    5.160059,
+    4.526774
+   ],
+   "radius": 0.01795,
+   "drag": 2.226593,
+   "shrink_T": 1.082192,
+   "shade": 0.80483,
+   "orient_seed": 2176945569,
+   "seed": 345182958
+  },
+  {
+   "id": 1064,
+   "birth": 0.140071,
+   "source": "puff_source",
+   "source_element": 45,
+   "rest_origin": [
+    0.052925,
+    -0.248273,
+    -0.248104
+   ],
+   "world_origin": [
+    0.121142,
+    0.721477,
+    -0.111605
+   ],
+   "material_velocity": [
+    2.130398,
+    11.450112,
+    -1.3595
+   ],
+   "initial_velocity": [
+    2.641973,
+    13.423799,
+    -1.774191
+   ],
+   "radius": 0.011384,
+   "drag": 1.497879,
+   "shrink_T": 1.503855,
+   "shade": 0.250839,
+   "orient_seed": 2820474401,
+   "seed": 3083216394
+  },
+  {
+   "id": 1065,
+   "birth": 0.225628,
+   "source": "puff_source",
+   "source_element": 0,
+   "rest_origin": [
+    0.003109,
+    -0.025865,
+    0.101104
+   ],
+   "world_origin": [
+    0.209582,
+    1.299918,
+    -0.007751
+   ],
+   "material_velocity": [
+    3.149079,
+    9.559232,
+    -0.223708
+   ],
+   "initial_velocity": [
+    3.705982,
+    13.135101,
+    -0.401667
+   ],
+   "radius": 0.018293,
+   "drag": 2.045021,
+   "shrink_T": 1.779867,
+   "shade": 0.247835,
+   "orient_seed": 1632910544,
+   "seed": 3660628922
+  },
+  {
+   "id": 1066,
+   "birth": 0.228384,
+   "source": "puff_source",
+   "source_element": 41,
+   "rest_origin": [
+    -0.247403,
+    -0.228865,
+    -0.145653
+   ],
+   "world_origin": [
+    -0.217028,
+    0.243055,
+    0.800851
+   ],
+   "material_velocity": [
+    -3.425799,
+    0.590545,
+    2.925932
+   ],
+   "initial_velocity": [
+    -4.72918,
+    3.249039,
+    7.87176
+   ],
+   "radius": 0.026084,
+   "drag": 2.232213,
+   "shrink_T": 1.154504,
+   "shade": 0.002757,
+   "orient_seed": 3809165397,
+   "seed": 2304554599
+  },
+  {
+   "id": 1067,
+   "birth": 0.141368,
+   "source": "puff_source",
+   "source_element": 88,
+   "rest_origin": [
+    -0.014967,
+    0.125918,
+    0.250436
+   ],
+   "world_origin": [
+    -0.122869,
+    0.481548,
+    -0.142966
+   ],
+   "material_velocity": [
+    -2.374291,
+    5.380172,
+    -2.233306
+   ],
+   "initial_velocity": [
+    -3.726722,
+    9.859546,
+    -3.010942
+   ],
+   "radius": 0.026538,
+   "drag": 2.560091,
+   "shrink_T": 1.625184,
+   "shade": 0.572415,
+   "orient_seed": 437228467,
+   "seed": 1020124485
+  },
+  {
+   "id": 1068,
+   "birth": 0.271553,
+   "source": "puff_source",
+   "source_element": 115,
+   "rest_origin": [
+    -0.056079,
+    0.08989,
+    0.11472
+   ],
+   "world_origin": [
+    -0.588531,
+    0.351049,
+    -0.887463
+   ],
+   "material_velocity": [
+    -1.749919,
+    0.772844,
+    -3.828771
+   ],
+   "initial_velocity": [
+    -3.780605,
+    3.726763,
+    -5.757829
+   ],
+   "radius": 0.02162,
+   "drag": 2.056534,
+   "shrink_T": 1.13285,
+   "shade": 0.965005,
+   "orient_seed": 2794452328,
+   "seed": 1167676443
+  },
+  {
+   "id": 1069,
+   "birth": 0.201212,
+   "source": "puff_source",
+   "source_element": 45,
+   "rest_origin": [
+    0.035716,
+    0.131982,
+    -0.170838
+   ],
+   "world_origin": [
+    0.208733,
+    1.577845,
+    -0.185208
+   ],
+   "material_velocity": [
+    1.98796,
+    10.869591,
+    -1.02354
+   ],
+   "initial_velocity": [
+    1.994248,
+    13.235124,
+    -1.049361
+   ],
+   "radius": 0.026178,
+   "drag": 2.480289,
+   "shrink_T": 1.670424,
+   "shade": 0.568785,
+   "orient_seed": 2985488573,
+   "seed": 1154715018
+  },
+  {
+   "id": 1070,
+   "birth": 0.242259,
+   "source": "puff_source",
+   "source_element": 43,
+   "rest_origin": [
+    0.021694,
+    0.050068,
+    -0.001355
+   ],
+   "world_origin": [
+    0.226305,
+    0.857801,
+    -0.493657
+   ],
+   "material_velocity": [
+    2.595857,
+    1.689049,
+    -3.41909
+   ],
+   "initial_velocity": [
+    3.703908,
+    6.577459,
+    -5.902979
+   ],
+   "radius": 0.02338,
+   "drag": 2.089455,
+   "shrink_T": 1.208666,
+   "shade": 0.915701,
+   "orient_seed": 4294180834,
+   "seed": 2117172532
+  },
+  {
+   "id": 1071,
+   "birth": 0.243074,
+   "source": "puff_source",
+   "source_element": 103,
+   "rest_origin": [
+    0.337306,
+    -0.012032,
+    0.069764
+   ],
+   "world_origin": [
+    -0.099632,
+    0.622852,
+    -0.109063
+   ],
+   "material_velocity": [
+    -1.009103,
+    8.543471,
+    -1.57161
+   ],
+   "initial_velocity": [
+    -1.96223,
+    12.516791,
+    -2.287214
+   ],
+   "radius": 0.022695,
+   "drag": 1.013193,
+   "shrink_T": 1.643842,
+   "shade": 0.256193,
+   "orient_seed": 3598456650,
+   "seed": 1556402322
+  },
+  {
+   "id": 1072,
+   "birth": 0.181331,
+   "source": "puff_source",
+   "source_element": 108,
+   "rest_origin": [
+    0.29536,
+    -0.070342,
+    0.114284
+   ],
+   "world_origin": [
+    0.367229,
+    1.117914,
+    0.022448
+   ],
+   "material_velocity": [
+    3.48823,
+    8.636697,
+    0.759127
+   ],
+   "initial_velocity": [
+    4.258857,
+    13.296171,
+    1.040945
+   ],
+   "radius": 0.018545,
+   "drag": 1.878931,
+   "shrink_T": 1.533731,
+   "shade": 0.013733,
+   "orient_seed": 2636245713,
+   "seed": 2117722746
+  },
+  {
+   "id": 1073,
+   "birth": 0.297363,
+   "source": "puff_source",
+   "source_element": 53,
+   "rest_origin": [
+    -0.149595,
+    -0.28116,
+    0.161299
+   ],
+   "world_origin": [
+    0.921893,
+    0.368015,
+    0.026848
+   ],
+   "material_velocity": [
+    2.44376,
+    0.673541,
+    0.438675
+   ],
+   "initial_velocity": [
+    6.658855,
+    4.193458,
+    1.223251
+   ],
+   "radius": 0.01301,
+   "drag": 2.199789,
+   "shrink_T": 1.324211,
+   "shade": 0.14684,
+   "orient_seed": 2755112268,
+   "seed": 904908532
+  },
+  {
+   "id": 1074,
+   "birth": 0.276496,
+   "source": "puff_source",
+   "source_element": 49,
+   "rest_origin": [
+    0.06533,
+    -0.239681,
+    0.176295
+   ],
+   "world_origin": [
+    0.725199,
+    0.251361,
+    0.357839
+   ],
+   "material_velocity": [
+    2.416438,
+    0.198777,
+    -0.241722
+   ],
+   "initial_velocity": [
+    3.86808,
+    1.799783,
+    1.047473
+   ],
+   "radius": 0.028567,
+   "drag": 1.787513,
+   "shrink_T": 1.373363,
+   "shade": 0.371835,
+   "orient_seed": 863597929,
+   "seed": 4164274763
+  },
+  {
+   "id": 1075,
+   "birth": 0.275964,
+   "source": "puff_source",
+   "source_element": 103,
+   "rest_origin": [
+    0.007895,
+    0.118445,
+    -0.030228
+   ],
+   "world_origin": [
+    0.005687,
+    0.888353,
+    -0.02116
+   ],
+   "material_velocity": [
+    0.159396,
+    7.94964,
+    -0.563049
+   ],
+   "initial_velocity": [
+    -0.142892,
+    10.771933,
+    -0.395894
+   ],
+   "radius": 0.018594,
+   "drag": 1.935231,
+   "shrink_T": 1.922774,
+   "shade": 0.577314,
+   "orient_seed": 3773298232,
+   "seed": 2388203213
+  },
+  {
+   "id": 1076,
+   "birth": 0.233704,
+   "source": "puff_source",
+   "source_element": 34,
+   "rest_origin": [
+    -0.276423,
+    0.11332,
+    0.192266
+   ],
+   "world_origin": [
+    -0.714865,
+    0.427682,
+    -0.141979
+   ],
+   "material_velocity": [
+    -3.692388,
+    2.389331,
+    2.164754
+   ],
+   "initial_velocity": [
+    -5.979674,
+    4.360487,
+    1.82411
+   ],
+   "radius": 0.0148,
+   "drag": 2.285609,
+   "shrink_T": 1.040106,
+   "shade": 0.748432,
+   "orient_seed": 3073030471,
+   "seed": 3032344972
+  },
+  {
+   "id": 1077,
+   "birth": 0.242508,
+   "source": "puff_source",
+   "source_element": 11,
+   "rest_origin": [
+    0.092538,
+    -0.135294,
+    0.2088
+   ],
+   "world_origin": [
+    0.402057,
+    0.139303,
+    0.651388
+   ],
+   "material_velocity": [
+    1.504169,
+    -1.76895,
+    2.776523
+   ],
+   "initial_velocity": [
+    3.016926,
+    -0.462491,
+    4.617135
+   ],
+   "radius": 0.018449,
+   "drag": 2.276175,
+   "shrink_T": 1.593781,
+   "shade": 0.337294,
+   "orient_seed": 2279232260,
+   "seed": 853938747
+  },
+  {
+   "id": 1078,
+   "birth": 0.245455,
+   "source": "puff_source",
+   "source_element": 98,
+   "rest_origin": [
+    -0.127293,
+    -0.318422,
+    0.045413
+   ],
+   "world_origin": [
+    0.638573,
+    0.18535,
+    -0.485944
+   ],
+   "material_velocity": [
+    1.819853,
+    0.081549,
+    -2.46631
+   ],
+   "initial_velocity": [
+    5.411065,
+    3.079469,
+    -5.273272
+   ],
+   "radius": 0.012026,
+   "drag": 1.095473,
+   "shrink_T": 1.210425,
+   "shade": 0.910654,
+   "orient_seed": 4270542562,
+   "seed": 1421268438
+  },
+  {
+   "id": 1079,
+   "birth": 0.171345,
+   "source": "puff_source",
+   "source_element": 82,
+   "rest_origin": [
+    -0.031455,
+    0.171732,
+    -0.329819
+   ],
+   "world_origin": [
+    -0.2962,
+    0.534114,
+    -0.063251
+   ],
+   "material_velocity": [
+    -2.705659,
+    5.606325,
+    -0.521163
+   ],
+   "initial_velocity": [
+    -5.433232,
+    10.221077,
+    -0.808621
+   ],
+   "radius": 0.013216,
+   "drag": 2.206231,
+   "shrink_T": 1.845637,
+   "shade": 0.468543,
+   "orient_seed": 3631025241,
+   "seed": 2204900367
+  },
+  {
+   "id": 1080,
+   "birth": 0.182139,
+   "source": "puff_source",
+   "source_element": 101,
+   "rest_origin": [
+    0.12182,
+    -0.033156,
+    0.1987
+   ],
+   "world_origin": [
+    -0.399464,
+    0.393078,
+    0.14615
+   ],
+   "material_velocity": [
+    -2.706955,
+    1.420665,
+    0.926675
+   ],
+   "initial_velocity": [
+    -4.837282,
+    4.540677,
+    1.249771
+   ],
+   "radius": 0.029649,
+   "drag": 1.54487,
+   "shrink_T": 1.045334,
+   "shade": 0.39611,
+   "orient_seed": 1803159315,
+   "seed": 3598403252
+  },
+  {
+   "id": 1081,
+   "birth": 0.271071,
+   "source": "puff_source",
+   "source_element": 134,
+   "rest_origin": [
+    -0.009447,
+    0.088998,
+    0.259229
+   ],
+   "world_origin": [
+    -0.149481,
+    1.06785,
+    0.045072
+   ],
+   "material_velocity": [
+    -1.03132,
+    5.758243,
+    -0.10647
+   ],
+   "initial_velocity": [
+    -1.499449,
+    8.045293,
+    -0.251842
+   ],
+   "radius": 0.018978,
+   "drag": 2.865031,
+   "shrink_T": 1.024298,
+   "shade": 0.484846,
+   "orient_seed": 2978206904,
+   "seed": 4226629729
+  },
+  {
+   "id": 1082,
+   "birth": 0.139672,
+   "source": "puff_source",
+   "source_element": 63,
+   "rest_origin": [
+    0.134956,
+    0.09927,
+    -0.094077
+   ],
+   "world_origin": [
+    0.195216,
+    0.894246,
+    0.092655
+   ],
+   "material_velocity": [
+    3.326051,
+    9.452022,
+    0.972605
+   ],
+   "initial_velocity": [
+    4.382162,
+    14.854033,
+    1.320051
+   ],
+   "radius": 0.020126,
+   "drag": 1.434863,
+   "shrink_T": 1.817831,
+   "shade": 0.907779,
+   "orient_seed": 3984082650,
+   "seed": 2670474734
+  },
+  {
+   "id": 1083,
+   "birth": 0.178346,
+   "source": "puff_source",
+   "source_element": 63,
+   "rest_origin": [
+    -0.340824,
+    -0.128412,
+    -0.034379
+   ],
+   "world_origin": [
+    0.328826,
+    1.125233,
+    0.044223
+   ],
+   "material_velocity": [
+    3.319592,
+    8.678682,
+    0.736621
+   ],
+   "initial_velocity": [
+    4.098388,
+    13.630889,
+    1.317505
+   ],
+   "radius": 0.014916,
+   "drag": 2.522072,
+   "shrink_T": 1.088864,
+   "shade": 0.925424,
+   "orient_seed": 621980069,
+   "seed": 1608085960
+  },
+  {
+   "id": 1084,
+   "birth": 0.20397,
+   "source": "puff_source",
+   "source_element": 51,
+   "rest_origin": [
+    -0.273604,
+    0.102071,
+    -0.162612
+   ],
+   "world_origin": [
+    0.175187,
+    0.991439,
+    0.067036
+   ],
+   "material_velocity": [
+    1.559756,
+    6.647763,
+    -0.333237
+   ],
+   "initial_velocity": [
+    1.850631,
+    10.970239,
+    -0.232432
+   ],
+   "radius": 0.011205,
+   "drag": 2.932162,
+   "shrink_T": 1.070963,
+   "shade": 0.873093,
+   "orient_seed": 2206906164,
+   "seed": 3609753824
+  },
+  {
+   "id": 1085,
+   "birth": 0.152615,
+   "source": "puff_source",
+   "source_element": 47,
+   "rest_origin": [
+    -0.090238,
+    0.007466,
+    -0.098505
+   ],
+   "world_origin": [
+    -0.031057,
+    0.321009,
+    -0.047358
+   ],
+   "material_velocity": [
+    -1.724011,
+    5.432074,
+    -2.506847
+   ],
+   "initial_velocity": [
+    -2.420711,
+    8.019456,
+    -3.311035
+   ],
+   "radius": 0.023568,
+   "drag": 2.167921,
+   "shrink_T": 1.414356,
+   "shade": 0.811588,
+   "orient_seed": 1460092167,
+   "seed": 2306159331
+  },
+  {
+   "id": 1086,
+   "birth": 0.249281,
+   "source": "puff_source",
+   "source_element": 81,
+   "rest_origin": [
+    -0.144505,
+    0.177584,
+    0.086476
+   ],
+   "world_origin": [
+    0.129422,
+    0.976855,
+    -0.173313
+   ],
+   "material_velocity": [
+    1.818722,
+    10.166119,
+    -2.230826
+   ],
+   "initial_velocity": [
+    2.286825,
+    14.029014,
+    -2.35096
+   ],
+   "radius": 0.019548,
+   "drag": 2.729084,
+   "shrink_T": 1.677901,
+   "shade": 0.390078,
+   "orient_seed": 3811911714,
+   "seed": 4161233696
+  },
+  {
+   "id": 1087,
+   "birth": 0.246637,
+   "source": "puff_source",
+   "source_element": 42,
+   "rest_origin": [
+    -0.137683,
+    0.281828,
+    0.10094
+   ],
+   "world_origin": [
+    -0.26176,
+    0.660775,
+    -0.073597
+   ],
+   "material_velocity": [
+    -2.971456,
+    5.886404,
+    -1.22097
+   ],
+   "initial_velocity": [
+    -4.223264,
+    9.298326,
+    -1.455011
+   ],
+   "radius": 0.023228,
+   "drag": 1.699243,
+   "shrink_T": 1.488441,
+   "shade": 0.256855,
+   "orient_seed": 4269485248,
+   "seed": 2247285205
+  },
+  {
+   "id": 1088,
+   "birth": 0.168145,
+   "source": "puff_source",
+   "source_element": 85,
+   "rest_origin": [
+    -0.018456,
+    0.146183,
+    -0.123056
+   ],
+   "world_origin": [
+    0.194225,
+    1.099184,
+    0.123352
+   ],
+   "material_velocity": [
+    2.505245,
+    9.695812,
+    1.143389
+   ],
+   "initial_velocity": [
+    3.40759,
+    14.05205,
+    1.990641
+   ],
+   "radius": 0.023953,
+   "drag": 1.104758,
+   "shrink_T": 1.404848,
+   "shade": 0.593487,
+   "orient_seed": 395414602,
+   "seed": 2991809221
+  },
+  {
+   "id": 1089,
+   "birth": 0.294934,
+   "source": "puff_source",
+   "source_element": 36,
+   "rest_origin": [
+    -0.080007,
+    -0.365516,
+    -0.004827
+   ],
+   "world_origin": [
+    0.369894,
+    1.575593,
+    -0.058975
+   ],
+   "material_velocity": [
+    3.522866,
+    7.502658,
+    0.080762
+   ],
+   "initial_velocity": [
+    4.104328,
+    9.764951,
+    -0.222911
+   ],
+   "radius": 0.028523,
+   "drag": 1.947433,
+   "shrink_T": 1.27204,
+   "shade": 0.126369,
+   "orient_seed": 1241471646,
+   "seed": 2489202982
+  },
+  {
+   "id": 1090,
+   "birth": 0.298941,
+   "source": "puff_source",
+   "source_element": 14,
+   "rest_origin": [
+    -0.007716,
+    0.196549,
+    0.285508
+   ],
+   "world_origin": [
+    -0.341406,
+    0.880716,
+    -0.45479
+   ],
+   "material_velocity": [
+    -1.01874,
+    5.203809,
+    -3.127971
+   ],
+   "initial_velocity": [
+    -1.936247,
+    7.729153,
+    -3.81461
+   ],
+   "radius": 0.014699,
+   "drag": 1.841499,
+   "shrink_T": 1.709085,
+   "shade": 0.591107,
+   "orient_seed": 3214411374,
+   "seed": 1290620060
+  },
+  {
+   "id": 1091,
+   "birth": 0.228029,
+   "source": "puff_source",
+   "source_element": 40,
+   "rest_origin": [
+    -0.008526,
+    -0.142144,
+    -0.146981
+   ],
+   "world_origin": [
+    0.061204,
+    0.74643,
+    -0.028556
+   ],
+   "material_velocity": [
+    1.347658,
+    9.046921,
+    -1.434207
+   ],
+   "initial_velocity": [
+    1.664287,
+    12.365489,
+    -1.361365
+   ],
+   "radius": 0.010449,
+   "drag": 1.756129,
+   "shrink_T": 1.962346,
+   "shade": 0.988021,
+   "orient_seed": 1478735789,
+   "seed": 480001886
+  },
+  {
+   "id": 1092,
+   "birth": 0.165711,
+   "source": "puff_source",
+   "source_element": 72,
+   "rest_origin": [
+    -0.188356,
+    -0.153653,
+    -0.262198
+   ],
+   "world_origin": [
+    0.119334,
+    0.6896,
+    0.070889
+   ],
+   "material_velocity": [
+    2.337547,
+    11.920376,
+    0.504507
+   ],
+   "initial_velocity": [
+    2.815048,
+    16.037039,
+    0.995163
+   ],
+   "radius": 0.027819,
+   "drag": 1.265033,
+   "shrink_T": 1.276553,
+   "shade": 0.428964,
+   "orient_seed": 2429251579,
+   "seed": 2010465433
+  },
+  {
+   "id": 1093,
+   "birth": 0.187596,
+   "source": "puff_source",
+   "source_element": 14,
+   "rest_origin": [
+    -0.064471,
+    -0.125241,
+    0.305822
+   ],
+   "world_origin": [
+    -0.055493,
+    0.248614,
+    0.028471
+   ],
+   "material_velocity": [
+    -4.828585,
+    5.688236,
+    0.341776
+   ],
+   "initial_velocity": [
+    -7.526401,
+    8.166241,
+    1.255477
+   ],
+   "radius": 0.021887,
+   "drag": 1.194283,
+   "shrink_T": 1.555671,
+   "shade": 0.281689,
+   "orient_seed": 3780311924,
+   "seed": 246427503
+  },
+  {
+   "id": 1094,
+   "birth": 0.111736,
+   "source": "puff_source",
+   "source_element": 99,
+   "rest_origin": [
+    -0.126294,
+    -0.00778,
+    -0.133484
+   ],
+   "world_origin": [
+    0.120292,
+    0.674258,
+    -0.072047
+   ],
+   "material_velocity": [
+    3.123413,
+    9.400556,
+    -1.479342
+   ],
+   "initial_velocity": [
+    4.125376,
+    13.734197,
+    -1.782723
+   ],
+   "radius": 0.019058,
+   "drag": 1.94819,
+   "shrink_T": 1.85417,
+   "shade": 0.89861,
+   "orient_seed": 3738845223,
+   "seed": 198038142
+  },
+  {
+   "id": 1095,
+   "birth": 0.092624,
+   "source": "puff_source",
+   "source_element": 123,
+   "rest_origin": [
+    -0.002806,
+    -0.030833,
+    -0.304328
+   ],
+   "world_origin": [
+    -0.013319,
+    0.367073,
+    0.000313
+   ],
+   "material_velocity": [
+    0.511949,
+    8.012457,
+    -0.639594
+   ],
+   "initial_velocity": [
+    0.209765,
+    12.107154,
+    -0.78955
+   ],
+   "radius": 0.012735,
+   "drag": 2.233329,
+   "shrink_T": 1.250742,
+   "shade": 0.380216,
+   "orient_seed": 2534014224,
+   "seed": 1869630544
+  }
+ ]
+}

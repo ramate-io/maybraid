@@ -11,6 +11,7 @@ use crate::show::SHOW_ORIGIN;
 #[derive(Component)]
 pub struct CameraController {
 	pub speed: f32,
+	pub inspection: bool,
 	pub sensitivity: f32,
 	pub yaw: f32,
 	pub pitch: f32,
@@ -33,7 +34,7 @@ pub fn setup_camera(mut commands: Commands) {
 		DepthPrepass,
 		transform,
 		Projection::Perspective(PerspectiveProjection { near: 0.05, far: 400.0, ..default() }),
-		CameraController { speed: 6.0, sensitivity: 0.005, yaw, pitch },
+		CameraController { inspection: false, speed: 6.0, sensitivity: 0.005, yaw, pitch },
 	));
 }
 
@@ -75,6 +76,27 @@ pub fn camera_controller(
 		return;
 	};
 
+	if text_focus.0 {
+		mouse_motion.clear();
+		return;
+	}
+	if controller.inspection {
+		mouse_motion.clear();
+		if ![
+			KeyCode::KeyW,
+			KeyCode::KeyA,
+			KeyCode::KeyS,
+			KeyCode::KeyD,
+			KeyCode::Space,
+			KeyCode::ShiftLeft,
+		]
+		.into_iter()
+		.any(|k| keyboard_input.pressed(k))
+		{
+			return;
+		}
+		controller.inspection = false;
+	}
 	if command_held(&keyboard_input) {
 		mouse_motion.clear();
 		return;
@@ -128,6 +150,7 @@ pub fn camera_controller(
 pub fn orbit_camera(
 	real_time: Res<Time<Real>>,
 	mut orbit: ResMut<CameraOrbit>,
+	last: Res<crate::show::LastVfxShow>,
 	mut query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	if !orbit.enabled {
@@ -141,7 +164,19 @@ pub fn orbit_camera(
 	let Ok((mut transform, mut controller)) = query.single_mut() else {
 		return;
 	};
-	let target = SHOW_ORIGIN;
+	let target = if last.request.as_ref().is_some_and(|r| {
+		(r.effect == "cartoon-wave"
+			|| r.effect == "cartoon-wave-contact"
+			|| r.effect == "cartoon-landing-contact"
+			|| r.effect == "cartoon-wave-interactive"
+			|| r.effect == "cartoon-landing-interactive")
+			|| r.effect == "combined-dust"
+			|| (r.effect == "interactive-dust" || r.effect == "flow-guided-dust")
+	}) {
+		Vec3::new(0.6, 0.45, 0.)
+	} else {
+		SHOW_ORIGIN
+	};
 	let offset =
 		Vec3::new(orbit.yaw.cos() * orbit.radius, orbit.height, orbit.yaw.sin() * orbit.radius);
 	transform.translation = target + offset;

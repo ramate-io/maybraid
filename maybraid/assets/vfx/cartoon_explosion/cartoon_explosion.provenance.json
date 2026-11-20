@@ -1,0 +1,594 @@
+{
+ "schema": "maybraid.cartoon-explosion.provenance.v1",
+ "houdini": "22.0.466",
+ "build_platform": "macOS-27.0.1-arm64-arm-64bit",
+ "build_script_sha256": "012ca9e4c19df15390510d36be6b5e9a9a4d4e22d662cf1b930737a2f586264e",
+ "script_sha256": {
+  "build_cartoon_explosion.py": "012ca9e4c19df15390510d36be6b5e9a9a4d4e22d662cf1b930737a2f586264e",
+  "cex_motion.py": "d56d604d3bc2dff93e47acdb2793d8baa6e7bd28f97c279bac023cd0adab9577",
+  "cex_plume.py": "bd541417557d89e97157646415f53f00aa129c6a4ff9926bb2140be78e8e37d5",
+  "karma_setup.py": "70935aea19ed26ad0a332f5cc2abe4dd0c5354aff89680a826cbfb182d86d2b7",
+  "export_meshes_houdini.py": "967f90098c3dacf364f68ac7a8e94a78c20398579896b96574573136796a7ac9",
+  "export_runtime.py": "9e62540d602c4ae442b7c9f795bc3688022604263b9581f0acd71661049e458a",
+  "validate_export.py": "8f1672c9c66f222c80a6d0ad464f7d0528434afb66a5d4484f257527f5be24e1"
+ },
+ "authoring_folder": "~/Desktop/VFX_1/houdini/cartoon_explosion_01",
+ "revision": "Revision 04 (Checkpoint A approved)",
+ "seed": 6,
+ "parameters": {
+  "seed": 1,
+  "height_min": 4.0,
+  "height_max": 4.9,
+  "lean_min_deg": 5.0,
+  "lean_max_deg": 15.0,
+  "n_lobes_min": 4,
+  "n_lobes_max": 8,
+  "lobe_r_min": 0.8,
+  "lobe_r_max": 1.6,
+  "body_radius": 1.25,
+  "n_mounds_min": 3,
+  "n_mounds_max": 6,
+  "mound_thick_min": 0.6,
+  "mound_thick_max": 1.2,
+  "footprint_min": 2.0,
+  "footprint_max": 3.0,
+  "n_elements": 104,
+  "elem_d_min": 0.3,
+  "elem_d_max": 1.6,
+  "size_tail": 2.6,
+  "big_per_lobe": 2,
+  "width_tolerance": 0.35,
+  "base_core": 1,
+  "force_attempt": -1,
+  "duration": 14.0,
+  "sample_rate": 30,
+  "sim_rate": 120,
+  "n_spike": 30,
+  "n_streak": 0,
+  "n_wisp": 0,
+  "n_puff_variants": 10,
+  "puff_fill": 1.3,
+  "lump_ratio": 0.8,
+  "spike_len_min": 1.6,
+  "spike_len_max": 4.8,
+  "spike_w_min": 0.15,
+  "spike_w_max": 0.25,
+  "spike_extend": 0.12,
+  "spike_thin_start": 0.15,
+  "spike_thin_end": 0.6,
+  "grow_a": 0.8912,
+  "grow_b": 0.4626,
+  "grow_tau": 0.47,
+  "grow_c": 0.035,
+  "eject_tau": 0.27,
+  "eject_T": 0.8,
+  "head_size0": 1.0,
+  "init_pop": 0.6,
+  "shell_size": 0.0,
+  "col_birth0": 0.08,
+  "col_birth_span": 0.5,
+  "head_w0": 0.55,
+  "head_creep": 0.03,
+  "shell_tau": 0.35,
+  "shell_w0": 0.6,
+  "shell_h0": 0.75,
+  "mound_tau": 0.15,
+  "mound_creep": 0.07,
+  "churn_speed": 0.2,
+  "surface_vmax": 0.3,
+  "churn_ramp0": 0.3,
+  "churn_ramp1": 1.0,
+  "spot_drift": 0.1,
+  "relax": 2.5,
+  "birth_rate": 10.0,
+  "birth_rate_dissolve": 4.0,
+  "newborn_scale": 0.2,
+  "puff_target": 104,
+  "sink_cap_deg": 9.0,
+  "bury_depth": 0.7,
+  "swell_min": 0.08,
+  "swell_max": 0.1,
+  "swell_t_min": 1.5,
+  "swell_t_max": 3.0,
+  "tone_start": 0.1,
+  "tone_end": 1.2,
+  "dissolve_start": 4.8,
+  "phase1_end": 7.3,
+  "phase2_end": 9.8,
+  "dissolve_end": 10.0,
+  "phase1_shrink": 0.15,
+  "erode_min": 1.2,
+  "erode_max": 1.8,
+  "arrival_span": 3.2,
+  "wind_dx": 1.0,
+  "wind_dz": 0.0,
+  "wind_ground": 0.1,
+  "wind_top": 0.35,
+  "wind_rise": 0.2,
+  "wind_ramp0": 4.8,
+  "wind_ramp1": 5.5,
+  "rise_ramp1": 6.8,
+  "bite_up": 0.7,
+  "churn_end_frac": 0.5,
+  "arr_grad": 0.9,
+  "arr_noise": 0.04,
+  "arr_bias": 0.18,
+  "arr_base": 1.2,
+  "arr_gamma": 1.8,
+  "arr_jitter": 0.15,
+  "phase2_frac": 0.19,
+  "span1": 1.6,
+  "dd1_min": 0.7,
+  "dd1_max": 1.5,
+  "late_ds0": 5.8,
+  "late_ds1": 6.6,
+  "dd2_min": 2.1,
+  "dd2_max": 2.8,
+  "sub_min_dia": 0.35,
+  "sub2_min_dia": 99.0,
+  "child_shrink": 0.5,
+  "child_dis_max": 0.75,
+  "child_n_big": 9.0,
+  "child_n3": 0.8,
+  "child_n4": 1.4,
+  "sub_delay_median": 0.78,
+  "sub_delay_sigma": 0.8,
+  "child_scale_min": 0.45,
+  "child_scale_max": 0.6,
+  "child_spread_min": 0.05,
+  "child_spread_max": 0.06,
+  "child_life_min": 0.6,
+  "child_life_max": 0.9,
+  "phase2_vmax": 0.45,
+  "frag_min": 0.15,
+  "frag_min2": 0.12,
+  "frag_ramp": 0.1,
+  "frag_exp": 0.75,
+  "births_end": 6.0,
+  "churn_frac_9": 0.3,
+  "churn_off": 14.0,
+  "loose_ramp1": 5.8,
+  "rise_base": 0.1,
+  "rise_top": 0.24,
+  "spread": 0.035,
+  "drift_top": 0.08,
+  "mound_lift": 0.12,
+  "mound_lift0": 6.0,
+  "mound_lift1": 7.5,
+  "small_rise": 0.05,
+  "g1_t0": 6.5,
+  "g1_t1": 10.0,
+  "g1_min": 0.7,
+  "g1_delay_med": 0.25,
+  "g1_delay_sig": 0.7,
+  "g2_t0": 8.5,
+  "g2_t1": 12.5,
+  "g2_min": 0.35,
+  "g2_child_min": 0.55,
+  "g2_hold": 0.7,
+  "g2_delay_med": 0.3,
+  "g2_delay_sig": 0.7,
+  "child_frac_min": 0.5,
+  "child_frac_max": 0.6,
+  "child_out_min": 0.03,
+  "child_out_max": 0.04,
+  "child_large_min": 0.75,
+  "shrink_t0": 4.6,
+  "shrink_t1": 10.4,
+  "shrink_T_min": 2.0,
+  "shrink_T_max": 2.6,
+  "shrink_end": 13.8,
+  "shrink_end_slope": 0.35,
+  "shrink_gamma": 0.6,
+  "shrink_top_slope": 9.0,
+  "shrink_hold_med": 0.6,
+  "tri_budget": 120000,
+  "split_one_per_frame": 1,
+  "alive_puff_max": 200,
+  "n_small_variants": 6,
+  "alive_max": 120,
+  "puff_alive_cap": 105,
+  "spike_max": 32,
+  "elements_max": 900,
+  "max_turn_deg": 20.0
+ },
+ "files": {
+  "README.md": {
+   "sha256": "8d0bff543edcd10a198f031db4c3a0cf85c088cb21b98e332b9814f20d61ff27",
+   "bytes": 8792
+  },
+  "cartoon_explosion.explosion.json": {
+   "sha256": "86b0e2301c961816957286e0e329a5e793e4f677cc6d2ed80da530b4484604e6",
+   "bytes": 258746
+  },
+  "cartoon_explosion.track.bin": {
+   "sha256": "1dd6f7bd1b76061eab99613616b71198d53d9f474ecc16ff1040ef89aefe914c",
+   "bytes": 2970304
+  },
+  "meshes/puff_0.glb": {
+   "sha256": "f5c686fd9d74a81da464987f5486c74e33395c99057f1c721e29627cfe255677",
+   "bytes": 37020
+  },
+  "meshes/puff_1.glb": {
+   "sha256": "8f51c5b1d904d62a2da401a4129b832f974f76c0b85e9c103d8c5dfc6324d257",
+   "bytes": 36960
+  },
+  "meshes/puff_2.glb": {
+   "sha256": "6f1558ffbebeebcf922fe9bcc1bda78bdfdd7200310ea524f5155a44b98a57f7",
+   "bytes": 37216
+  },
+  "meshes/puff_3.glb": {
+   "sha256": "72b7b17d66d671a29489589ea498cf7f07aa38b2f2fd093840a9acc9923db808",
+   "bytes": 37088
+  },
+  "meshes/puff_4.glb": {
+   "sha256": "7b8d7e271692012c4c97280d3d058d778296c7be1a1b0d3e480a5cdd2958fab5",
+   "bytes": 37024
+  },
+  "meshes/puff_5.glb": {
+   "sha256": "a7136869ca4a0029f3111135f8c3de5b401b1fdaa4580c342425723bedc5cb59",
+   "bytes": 37212
+  },
+  "meshes/puff_6.glb": {
+   "sha256": "15c36e95d002a12acc14860a7c5ed1c3d01a79b25a000e076f54a995e365e114",
+   "bytes": 37148
+  },
+  "meshes/puff_7.glb": {
+   "sha256": "f6e98e912e4e6e680136a41b79a871aea9c6c4623e9641ce501e43232942e860",
+   "bytes": 36832
+  },
+  "meshes/puff_8.glb": {
+   "sha256": "7ffe26ddda151dd517d216b7c3bd7bce40884b7f98720ab78c0c3c0af1e91468",
+   "bytes": 36896
+  },
+  "meshes/puff_9.glb": {
+   "sha256": "ebf66b7c8c5107a39548e10363487307f1732b04bba6ab0d5baf954ff69f3cf4",
+   "bytes": 36896
+  },
+  "meshes/puff_small_0.glb": {
+   "sha256": "7bb309206c9bebef09709bc03af7eec90068be9e768d737ea9985d1fadc27815",
+   "bytes": 10528
+  },
+  "meshes/puff_small_1.glb": {
+   "sha256": "245063c5fb0b0b9933bee7ba18e12aa710b455971a69d1542bd9ae935ea13836",
+   "bytes": 10528
+  },
+  "meshes/puff_small_2.glb": {
+   "sha256": "0c40c049d800773f216a721ba117ac2e6d21af1c9df174be7f3b906d4840a427",
+   "bytes": 10592
+  },
+  "meshes/puff_small_3.glb": {
+   "sha256": "584515f9c931e38b2995d5cf6c8b2ffb2d6bdb2701304fbca3fbf8bd7b99e426",
+   "bytes": 10528
+  },
+  "meshes/puff_small_4.glb": {
+   "sha256": "54ddfaa0f705c0a34bc6adcb2e349ca2f928871b3be6db22c0e579a54f0cddb7",
+   "bytes": 10528
+  },
+  "meshes/puff_small_5.glb": {
+   "sha256": "a3469761b29dc69b83b21f01b1eb4580dcf7065daedcdb835f5f7750dbc452dc",
+   "bytes": 10464
+  },
+  "meshes/spike_0.glb": {
+   "sha256": "fff90fd52070677721ba9e249fcb9eac88ba604073baa5d10d5162a175820a0c",
+   "bytes": 3456
+  },
+  "reference.json": {
+   "sha256": "66aa9ddd3f29dc297af67c8c18865f4ed648f051de4129ac23c1cc21e9573ca2",
+   "bytes": 1352842
+  }
+ },
+ "triangles": {
+  "per_mesh": {
+   "puff_0": 1110,
+   "puff_1": 1108,
+   "puff_2": 1116,
+   "puff_3": 1112,
+   "puff_4": 1110,
+   "puff_5": 1116,
+   "puff_6": 1114,
+   "puff_7": 1104,
+   "puff_8": 1106,
+   "puff_9": 1106,
+   "spike_0": 62,
+   "puff_small_0": 282,
+   "puff_small_1": 282,
+   "puff_small_2": 284,
+   "puff_small_3": 282,
+   "puff_small_4": 282,
+   "puff_small_5": 280
+  },
+  "peak_visible": 118452,
+  "peak_visible_sample": 227
+ },
+ "validation": {
+  "validate_export": {
+   "checks": [
+    {
+     "name": "manifest: schema id",
+     "pass_": true,
+     "detail": "maybraid.cartoon-explosion.v1"
+    },
+    {
+     "name": "manifest: required keys present",
+     "pass_": true,
+     "detail": "all 20"
+    },
+    {
+     "name": "manifest: fully populated (no empty / null except lobe, parent)",
+     "pass_": true,
+     "detail": "ok"
+    },
+    {
+     "name": "manifest: sample_count = duration x rate + 1",
+     "pass_": true,
+     "detail": "421 samples, 14.0 s @ 30 Hz"
+    },
+    {
+     "name": "manifest: track fields (16)",
+     "pass_": true,
+     "detail": "16"
+    },
+    {
+     "name": "manifest: sample_bounds / lobe_centroids per sample",
+     "pass_": true,
+     "detail": "421 / 421"
+    },
+    {
+     "name": "manifest: wind rotates about +Y only",
+     "pass_": true,
+     "detail": "[1.0, 0.0, 0.0]"
+    },
+    {
+     "name": "track: byte_length = sum(sample_count) x 64",
+     "pass_": true,
+     "detail": "2970304 bytes, manifest 2970304"
+    },
+    {
+     "name": "track: sha256",
+     "pass_": true,
+     "detail": "1dd6f7bd1b76061e"
+    },
+    {
+     "name": "elements: ids 0..E-1 in file order",
+     "pass_": true,
+     "detail": "349"
+    },
+    {
+     "name": "track: byte_offset contiguous in id order",
+     "pass_": true,
+     "detail": ""
+    },
+    {
+     "name": "track: every element has >= 2 samples",
+     "pass_": true,
+     "detail": "17"
+    },
+    {
+     "name": "track: sample ranges inside the timeline",
+     "pass_": true,
+     "detail": ""
+    },
+    {
+     "name": "track: no NaN / Inf",
+     "pass_": true,
+     "detail": ""
+    },
+    {
+     "name": "track: unit quaternions (+-1e-4)",
+     "pass_": true,
+     "detail": "max dev 4.81e-08"
+    },
+    {
+     "name": "track: quaternion hemisphere continuity (dot >= 0)",
+     "pass_": true,
+     "detail": "min dot 0.0196"
+    },
+    {
+     "name": "track: scale >= 0",
+     "pass_": true,
+     "detail": "min 0"
+    },
+    {
+     "name": "convention: dead samples have scale 0 and dissolve 1",
+     "pass_": true,
+     "detail": "698 pad samples"
+    },
+    {
+     "name": "convention: one contiguous visible run per element",
+     "pass_": true,
+     "detail": ""
+    },
+    {
+     "name": "convention: no puff erosion (dissolve = 0 while visible)",
+     "pass_": true,
+     "detail": "max 0"
+    },
+    {
+     "name": "end state: nothing visible at t = duration",
+     "pass_": true,
+     "detail": ""
+    },
+    {
+     "name": "lod_rank: unique and contiguous over generation-0 puffs",
+     "pass_": true,
+     "detail": "136 puffs"
+    },
+    {
+     "name": "subdivision: parent earlier generation, born at the parent's death, shares lod_rank",
+     "pass_": true,
+     "detail": ""
+    },
+    {
+     "name": "lod_scale: present and >= 1",
+     "pass_": true,
+     "detail": ""
+    },
+    {
+     "name": "mesh puff_0       ",
+     "pass_": true,
+     "detail": "1110 tris (<= 1200), bound r 0.5000, vol +0.2442, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_1       ",
+     "pass_": true,
+     "detail": "1108 tris (<= 1200), bound r 0.5000, vol +0.2644, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_2       ",
+     "pass_": true,
+     "detail": "1116 tris (<= 1200), bound r 0.5000, vol +0.2382, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_3       ",
+     "pass_": true,
+     "detail": "1112 tris (<= 1200), bound r 0.5000, vol +0.2579, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_4       ",
+     "pass_": true,
+     "detail": "1110 tris (<= 1200), bound r 0.5000, vol +0.2535, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_5       ",
+     "pass_": true,
+     "detail": "1116 tris (<= 1200), bound r 0.5000, vol +0.2734, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_6       ",
+     "pass_": true,
+     "detail": "1114 tris (<= 1200), bound r 0.5000, vol +0.2635, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_7       ",
+     "pass_": true,
+     "detail": "1104 tris (<= 1200), bound r 0.5000, vol +0.2369, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_8       ",
+     "pass_": true,
+     "detail": "1106 tris (<= 1200), bound r 0.5000, vol +0.2110, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_9       ",
+     "pass_": true,
+     "detail": "1106 tris (<= 1200), bound r 0.5000, vol +0.2239, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh spike_0      ",
+     "pass_": true,
+     "detail": "62 tris (<= 128), y 0.000..1.000, vol +0.0005, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_small_0 ",
+     "pass_": true,
+     "detail": "282 tris (<= 300), bound r 0.5000, vol +0.2253, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_small_1 ",
+     "pass_": true,
+     "detail": "282 tris (<= 300), bound r 0.5000, vol +0.2215, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_small_2 ",
+     "pass_": true,
+     "detail": "284 tris (<= 300), bound r 0.5000, vol +0.1995, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_small_3 ",
+     "pass_": true,
+     "detail": "282 tris (<= 300), bound r 0.5000, vol +0.2085, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_small_4 ",
+     "pass_": true,
+     "detail": "282 tris (<= 300), bound r 0.5000, vol +0.2034, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "mesh puff_small_5 ",
+     "pass_": true,
+     "detail": "280 tris (<= 300), bound r 0.5000, vol +0.2386, attrs COLOR_0,NORMAL,POSITION, sha ok"
+    },
+    {
+     "name": "sample_bounds contain every visible element",
+     "pass_": true,
+     "detail": "worst excess 0.00e+00 m"
+    },
+    {
+     "name": "budget: peak visible triangles <= 120k",
+     "pass_": true,
+     "detail": "118452 at sample 227 (manifest 118452)"
+    },
+    {
+     "name": "budget: alive puffs <= 200, spikes <= 32",
+     "pass_": true,
+     "detail": "172 puffs, 30 spikes"
+    },
+    {
+     "name": "budget: elements <= 900",
+     "pass_": true,
+     "detail": "349"
+    },
+    {
+     "name": "reference.json: presence matches the sample ranges",
+     "pass_": true,
+     "detail": "37 times"
+    },
+    {
+     "name": "reference.json: reproduces from the binary (<= 1e-6)",
+     "pass_": true,
+     "detail": "max err 0.00e+00 over 3487 states"
+    }
+   ],
+   "failed": 0,
+   "pass_": true
+  },
+  "houdini_parity": {
+   "samples": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    9,
+    15,
+    30,
+    60,
+    90,
+    120,
+    141,
+    144,
+    150,
+    165,
+    180,
+    201,
+    210,
+    225,
+    240,
+    255,
+    270,
+    285,
+    300,
+    315,
+    330,
+    345,
+    360,
+    375,
+    390,
+    400,
+    405,
+    410,
+    413,
+    416,
+    420
+   ],
+   "comparisons": 3501,
+   "max_abs_error": 0.0,
+   "worst": null,
+   "pass_": true
+  },
+  "authoring_checks": "see REVIEW.md and logs/track_check_v4.json, logs/dissolve_check_v4.json in the authoring folder"
+ }
+}
