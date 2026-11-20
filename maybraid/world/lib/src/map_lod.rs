@@ -159,13 +159,14 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use game_commands::command::TextEntryFocus;
-	use lod::{track_lod_nodes, LodNode};
+	use lod::{track_lod_nodes, LodNode, LodNodePlugin, LodNodeSystems};
 	use maybraid_character_controller::{ActorIntentEvent, CharacterIntent};
 	use maybraid_controllers_core::{ActorTarget, InputSource, Routed};
 	use maybraid_session::WorldGameplayEnabled;
 	use maybraid_spawns_player::PendingPlayerRespawn;
 	use maybraid_virtual_pad_controller::PrimaryVirtualPad;
-	use player_camera::CameraPov;
+	use player::{CameraFollow, PlayerCameraAim, PlayerLook};
+	use player_camera::{CameraPov, PlayerCameraPlugin, PlayerCameraSystems};
 	use world_player::PlaygroundMode;
 
 	use crate::map_view::toggle_map_view;
@@ -530,6 +531,110 @@ mod tests {
 			lod_viewers(&world).into_iter().filter(|(_, _, ground)| *ground).collect();
 		anyhow::ensure!(anchors.len() == 1, "one death anchor");
 		assert_eq!(anchors[0].1, death, "picker highlight must not move the death LodRef");
+		Ok(())
+	}
+
+	fn scheduled_handoff_app() -> App {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, TransformPlugin, LodNodePlugin, PlayerCameraPlugin))
+			.init_resource::<ButtonInput<KeyCode>>()
+			.add_message::<bevy::window::WindowFocused>()
+			.configure_sets(Update, LodNodeSystems::Track.after(PlayerCameraSystems::Apply))
+			.init_resource::<WorldMapView>()
+			.add_systems(Update, spawn_ground_lod_anchors.before(PlayerCameraSystems::Follow))
+			.add_systems(
+				Update,
+				despawn_ground_lod_anchors
+					.after(PlayerCameraSystems::Apply)
+					.after(LodNodeSystems::Track),
+			);
+		app
+	}
+
+	fn spawn_scheduled_follow(
+		world: &mut World,
+		player_at: Vec3,
+		pov: CameraPov,
+	) -> (Entity, Entity) {
+		let player = world
+			.spawn((
+				VegetationPlayer,
+				CameraFollow,
+				PlayerLook::default(),
+				PlayerCameraAim::default(),
+				Transform::from_translation(player_at),
+			))
+			.id();
+		let map_at = map_pose(player_at.xz(), 0.0, 420.0).translation;
+		let camera_at = if pov.is_map() { map_at } else { player_at };
+		let transform = Transform::from_translation(camera_at);
+		let mut controller = CameraController { pov, map_height: 420.0, ..default() };
+		controller.map_focus = player_at.xz();
+		controller.map_ground_y = 0.0;
+		let camera = world
+			.spawn((
+				Camera3d::default(),
+				FollowCamera::default(),
+				LodViewer,
+				CameraTarget(Some(player)),
+				controller,
+				transform,
+				LodNodePose::settled(transform),
+			))
+			.id();
+		(player, camera)
+	}
+
+	#[test]
+	fn follow_apply_and_track_clear_the_anchor_after_map_close() -> anyhow::Result<()> {
+		let mut app = scheduled_handoff_app();
+		let player_at = Vec3::new(12.0, 3.0, -8.0);
+		app.world_mut().insert_resource(WorldMapView {
+			open: true,
+			focus: player_at.xz(),
+			..default()
+		});
+		let (player, camera) = spawn_scheduled_follow(app.world_mut(), player_at, CameraPov::Map);
+		app.update();
+		assert_eq!(lod_viewers(app.world()).len(), 2, "ground anchor beside the map camera");
+
+		app.world_mut().resource_mut::<WorldMapView>().close();
+		app.world_mut().entity_mut(camera).insert(CameraTarget(None));
+		app.world_mut().entity_mut(camera).insert(CameraController {
+			pov: CameraPov::ThirdPerson,
+			map_focus: player_at.xz(),
+			map_ground_y: 0.0,
+			map_height: 420.0,
+			..default()
+		});
+		app.update();
+		assert_eq!(
+			lod_viewers(app.world()).len(),
+			2,
+			"missing follow target keeps the ground anchor"
+		);
+
+		app.world_mut().entity_mut(camera).insert(CameraTarget(Some(player)));
+		app.update();
+		let viewers = lod_viewers(app.world());
+		assert_eq!(viewers.len(), 1, "Apply + Track then drop the extra viewer");
+		assert!(!viewers[0].2);
+		let Some(camera_at) = app.world().get::<Transform>(camera).map(|t| t.translation) else {
+			return Err(anyhow::anyhow!("camera transform"));
+		};
+		assert!(camera_at.y < 50.0, "follow pose must leave map height, y={camera_at:?}");
+
+		let walked = player_at + Vec3::X * 8.0;
+		app.world_mut().entity_mut(player).insert(Transform::from_translation(walked));
+		app.update();
+		assert_eq!(lod_viewers(app.world()).len(), 1);
+		let Some(followed) = app.world().get::<Transform>(camera).map(|t| t.translation) else {
+			return Err(anyhow::anyhow!("followed transform"));
+		};
+		assert!(
+			(followed.xz() - walked.xz()).length() < 8.0,
+			"live follow should track the walked actor, camera={followed:?} player={walked:?}"
+		);
 		Ok(())
 	}
 
