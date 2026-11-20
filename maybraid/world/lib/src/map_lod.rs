@@ -78,17 +78,17 @@ impl GroundLodAnchor {
 		pose.current.translation == transform.translation
 	}
 
-	/// Camera Apply writes the follow pose, LOD Track copies it, then the extra
-	/// viewer can drop. Shared by production and the scheduled handoff test so
-	/// a moving follow camera is not one update behind tracking.
+	/// Track copies last frame's camera transform, then the extra viewer can
+	/// drop, then Follow writes this frame's pose. Shared by production and the
+	/// scheduled handoff test. Do not order Track after Apply: LOD refresh
+	/// already leads back into Anim and that edge cycles the full schedule.
 	pub fn configure_handoff(app: &mut App) {
-		app.configure_sets(Update, LodNodeSystems::Track.after(PlayerCameraSystems::Apply))
-			.add_systems(
-				Update,
-				despawn_ground_lod_anchors
-					.after(PlayerCameraSystems::Apply)
-					.after(LodNodeSystems::Track),
-			);
+		app.add_systems(
+			Update,
+			despawn_ground_lod_anchors
+				.after(LodNodeSystems::Track)
+				.before(PlayerCameraSystems::Follow),
+		);
 	}
 }
 
@@ -129,8 +129,9 @@ pub(crate) fn spawn_ground_lod_anchors(
 	}
 }
 
-/// Drop the extra viewer once the follow camera has actually left the map pose
-/// and [`lod::track_lod_nodes`] has observed that transform.
+/// Drop the extra viewer once last frame's follow pose has left map height and
+/// [`lod::track_lod_nodes`] has copied that transform. Runs after Track and
+/// before Follow so a moving camera is not one write ahead of the pose.
 pub(crate) fn despawn_ground_lod_anchors(
 	map: Res<WorldMapView>,
 	cameras: Query<
@@ -593,7 +594,7 @@ mod tests {
 	}
 
 	#[test]
-	fn follow_apply_and_track_clear_the_anchor_after_map_close() -> anyhow::Result<()> {
+	fn follow_then_track_clears_the_anchor_after_map_close() -> anyhow::Result<()> {
 		let mut app = scheduled_handoff_app();
 		let player_at = Vec3::new(12.0, 3.0, -8.0);
 		app.world_mut().insert_resource(WorldMapView {
@@ -627,27 +628,26 @@ mod tests {
 			.entity_mut(player)
 			.insert(Transform::from_translation(first_walk));
 		app.update();
-		let viewers = lod_viewers(app.world());
 		assert_eq!(
-			viewers.len(),
-			1,
-			"Apply then Track must drop the extra viewer on a moving follow"
+			lod_viewers(app.world()).len(),
+			2,
+			"this frame's Follow write is not tracked yet"
 		);
-		assert!(!viewers[0].2);
-		let Some(camera_at) = app.world().get::<Transform>(camera).map(|t| t.translation) else {
+		let Some(first_camera) = app.world().get::<Transform>(camera).map(|t| t.translation) else {
 			return Err(anyhow::anyhow!("camera transform"));
 		};
 		let Some(pose) = app.world().get::<LodNodePose>(camera) else {
 			return Err(anyhow::anyhow!("camera LodNodePose"));
 		};
-		assert_eq!(
-			pose.current.translation, camera_at,
-			"Track must observe the freshly applied follow pose"
-		);
-		assert!(camera_at.y < 50.0, "follow pose must leave map height, y={camera_at:?}");
+		assert!(first_camera.y < 50.0, "Follow must write the ground camera, y={first_camera:?}");
 		assert!(
-			(camera_at.xz() - first_walk.xz()).length() < 8.0,
-			"live follow should track the walked actor, camera={camera_at:?} player={first_walk:?}"
+			pose.current.translation.y > 100.0,
+			"Track still holds the map pose, pose={:?}",
+			pose.current.translation
+		);
+		assert!(
+			(first_camera.xz() - first_walk.xz()).length() < 8.0,
+			"live follow should track the walked actor, camera={first_camera:?} player={first_walk:?}"
 		);
 
 		let second_walk = first_walk + Vec3::Z * 6.0;
@@ -655,17 +655,30 @@ mod tests {
 			.entity_mut(player)
 			.insert(Transform::from_translation(second_walk));
 		app.update();
-		assert_eq!(lod_viewers(app.world()).len(), 1);
+		let viewers = lod_viewers(app.world());
+		assert_eq!(viewers.len(), 1, "next Track retires using the prior ground pose");
+		assert!(!viewers[0].2);
 		let Some(followed) = app.world().get::<Transform>(camera).map(|t| t.translation) else {
 			return Err(anyhow::anyhow!("followed transform"));
 		};
 		let Some(pose) = app.world().get::<LodNodePose>(camera) else {
 			return Err(anyhow::anyhow!("followed LodNodePose"));
 		};
-		assert_eq!(pose.current.translation, followed);
+		let Some(player_now) = app.world().get::<Transform>(player).map(|t| t.translation) else {
+			return Err(anyhow::anyhow!("player transform"));
+		};
+		assert_eq!(
+			pose.current.translation, first_camera,
+			"retirement must use the prior tracked ground pose"
+		);
+		assert_eq!(player_now, second_walk);
 		assert!(
 			(followed.xz() - second_walk.xz()).length() < 8.0,
-			"live follow should keep tracking, camera={followed:?} player={second_walk:?}"
+			"camera keeps following, camera={followed:?} player={second_walk:?}"
+		);
+		assert!(
+			(followed.xz() - first_camera.xz()).length() > 1.0,
+			"camera must keep moving, first={first_camera:?} next={followed:?}"
 		);
 		Ok(())
 	}
