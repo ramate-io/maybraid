@@ -2436,6 +2436,108 @@ mod integration_regressions {
 		);
 	}
 
+	/// Idle patrol on the production assembly at the live Area 1746 site.
+	///
+	/// Pins must sit on the propagated pillar ring (not the child's local
+	/// offset near the origin). After Y settling, the actor must walk a
+	/// meaningful XZ distance with no player and no combat contact.
+	#[test]
+	fn idle_patrol_walks_the_live_pillar_ring_without_a_combat_target() {
+		use crate::locomotion::{patrol_pin_world, PATROL_PIN_COUNT, PATROL_RING_M};
+		use poi_intelligence::PoiKnowledge;
+
+		let mut app = full_encounter_app();
+		let terrain_y = 0.0;
+		let spawn_xz = Vec2::new(1746.8, 1025.9);
+		let boss_position = Vec3::new(spawn_xz.x, terrain_y + encounter_hull_offset(), spawn_xz.y);
+		let (_host, actor, column) = spawn_production_encounter(&mut app, boss_position, terrain_y);
+
+		assert!(
+			app.world()
+				.get::<CombatTargeting>(actor)
+				.is_none_or(|targeting| targeting.best_contact().is_none()),
+			"idle patrol must not start with a combat target"
+		);
+
+		let pillar = app
+			.world()
+			.get::<GlobalTransform>(column)
+			.expect("pillar GlobalTransform")
+			.translation();
+		assert!(
+			(pillar.x - (spawn_xz.x + COLUMN_OFFSET_XZ.x)).abs() < 0.05
+				&& (pillar.z - spawn_xz.y).abs() < 0.05,
+			"live pillar should sit at the authored offset from Area 1746, got {pillar:?}"
+		);
+
+		let knowledge = app
+			.world()
+			.get::<PoiKnowledge>(actor)
+			.expect("production spawn should plant patrol knowledge");
+		let pins: Vec<Vec3> = knowledge.iter().map(|known| known.position).collect();
+		assert_eq!(pins.len(), PATROL_PIN_COUNT as usize, "expected the authored patrol ring");
+		let actor_y = actor_translation(&app, actor).y;
+		for (index, pin) in pins.iter().enumerate() {
+			let expected = patrol_pin_world(pillar, actor_y, index as u32);
+			assert!(
+				xz(*pin, expected) < 0.15,
+				"pin {index} {pin:?} should sit on the live pillar ring, expected {expected:?} pillar={pillar:?}"
+			);
+			assert!(
+				(pin.x - spawn_xz.x).abs() < 20.0 && (pin.z - spawn_xz.y).abs() < 20.0,
+				"pin {index} {pin:?} must be around Area 1746, not world origin"
+			);
+			assert!(
+				(xz(*pin, pillar) - PATROL_RING_M).abs() < 0.15,
+				"pin {index} radial {:.3} should match the scaled 8 m ring",
+				xz(*pin, pillar)
+			);
+		}
+
+		let mut settled = actor_translation(&app, actor);
+		for _ in 0..90 {
+			let before = settled;
+			app.update();
+			settled = actor_translation(&app, actor);
+			let y_step = (settled.y - before.y).abs();
+			if y_step < 0.01 && xz(before, settled) < 0.05 {
+				break;
+			}
+		}
+		let settle_xz = settled;
+
+		let mut max_horizontal = 0.0_f32;
+		let mut saw_combat = false;
+		for _ in 0..360 {
+			app.update();
+			let now = actor_translation(&app, actor);
+			max_horizontal = max_horizontal.max(xz(settle_xz, now));
+			assert!(
+				xz(now, pillar)
+					<= crate::BOSS_TETHER_RADIUS + bikanwarda_character::encounter_meters(2.5),
+				"boss left the tether during idle patrol: xz={:.3} now={now:?} pillar={pillar:?}",
+				xz(now, pillar)
+			);
+			if app
+				.world()
+				.get::<CombatTargeting>(actor)
+				.is_some_and(|targeting| targeting.best_contact().is_some())
+			{
+				saw_combat = true;
+			}
+		}
+
+		eprintln!(
+			"idle-patrol site=({:.1},{:.1}) pillar={pillar:?} settle={settle_xz:?} horizontal={max_horizontal:.3}",
+			spawn_xz.x, spawn_xz.y
+		);
+		assert!(!saw_combat, "idle patrol must not acquire a combat target");
+		assert!(
+			max_horizontal > 1.5,
+			"idle patrol should walk horizontally after settling, moved {max_horizontal:.3} m from {settle_xz:?}"
+		);
+	}
+
 	/// Pillar stays a static physics actor while the boss patrols.
 	#[test]
 	fn real_pillar_stays_fixed_while_boss_patrols() {

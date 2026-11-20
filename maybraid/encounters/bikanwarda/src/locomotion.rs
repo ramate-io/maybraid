@@ -8,8 +8,9 @@
 use std::collections::HashMap;
 use std::f32::consts::TAU;
 
-use avian3d::prelude::CollisionLayers;
+use avian3d::prelude::{CollisionLayers, SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
+use bevy::transform::TransformSystems;
 use bikanwarda_character::{
 	encounter_meters, hit_complex_collider, BikanwardaActorRecipe, BikanwardaAnchors,
 	BikanwardaChainAnchor, BikanwardaRoot, BikanwardaSpec,
@@ -34,23 +35,35 @@ use player::{
 	Npc, PlayerLook, PlayerPlugin, PlayerSystems, PlayerYawOwner,
 };
 use poi_intelligence::{
-	PoiId, PoiIntelligencePlugin, PoiIntelligenceUser, PoiInterests, PoiKind, PoiKnowledge,
-	PoiObservation, PoiSource, PoiVisitState,
+	PoiGoal, PoiId, PoiIntelligencePlugin, PoiIntelligenceUser, PoiInterests, PoiKind,
+	PoiKnowledge, PoiObservation, PoiSource, PoiSystems, PoiVisitState,
 };
 use tether_intelligence::{
 	install_tether, Tether, TetherIntelligenceUser, TetherObjective, TetherPlugin,
 };
 
-use crate::presentation::{BossActor, BossColumn, BossEncounterRoot};
+use crate::presentation::{
+	BossActor, BossColumn, BossEncounterRoot, BossPedestal, PEDESTAL_RADIUS,
+};
 
 /// Horizontal leash around the pillar. Patrol pins sit on the authored 8 m ring,
 /// scaled with the shared encounter form.
 pub const BOSS_TETHER_RADIUS: f32 = encounter_meters(24.0);
 
 const PATROL_KIND: PoiKind = PoiKind::new("bikanwarda/patrol");
-const PATROL_RING_M: f32 = encounter_meters(8.0);
-const PATROL_PIN_COUNT: u32 = 4;
+pub(crate) const PATROL_RING_M: f32 = encounter_meters(8.0);
+pub(crate) const PATROL_PIN_COUNT: u32 = 4;
 const PATROL_ARRIVAL_RADIUS: f32 = encounter_meters(5.0);
+
+/// World-space patrol pin on the scaled ring around the live pillar.
+///
+/// Half-step rotation keeps the spawn pose (column offset along +X) off the
+/// pins so `not_already_there` does not skip the first reachable goal.
+pub(crate) fn patrol_pin_world(column_world: Vec3, actor_y: f32, index: u32) -> Vec3 {
+	let angle = TAU * (index as f32 + 0.5) / PATROL_PIN_COUNT as f32;
+	Vec3::new(column_world.x, actor_y, column_world.z)
+		+ Vec3::new(angle.cos(), 0.0, angle.sin()) * PATROL_RING_M
+}
 
 pub struct BossEncounterLocomotionPlugin;
 
@@ -71,7 +84,6 @@ impl Plugin for BossEncounterLocomotionPlugin {
 		app.add_systems(
 			Update,
 			(
-				initialize_boss_locomotion.after(crate::combat::initialize_boss_combat),
 				orient_boss_toward_spotted_target
 					.after(combat_targeting::CombatTargetingSystems::Rank)
 					.after(FirearmIntelligenceSystems::Orient)
@@ -79,6 +91,163 @@ impl Plugin for BossEncounterLocomotionPlugin {
 				align_boss_chain_anchors.after(PlayerSystems::Locomotion),
 			),
 		);
+		// Plant pins from the live pillar's propagated world pose. `Added<BossActor>`
+		// is written at the end of Update (assembly commands); reading column
+		// GlobalTransform in that same Update sees the child's local offset and
+		// plants goals around the origin instead of Area 1746.
+		app.add_systems(PostUpdate, initialize_boss_locomotion.after(TransformSystems::Propagate));
+		app.add_systems(Update, snap_boss_patrol_pins_to_fixed_ground.before(PoiSystems::Select));
+	}
+}
+
+/// Marks patrol knowledge that has been snapped onto Fixed ground around the
+/// live pillar. Geometric ring seeds are not walkable until this runs.
+#[derive(Component, Clone, Copy, Debug, Default)]
+struct PatrolPinsSnapped;
+
+fn patrol_pin_id(index: u32) -> PoiId {
+	PoiId(0xB1A1_0001 + u64::from(index))
+}
+
+fn xz_distance(a: Vec3, b: Vec3) -> f32 {
+	Vec2::new(a.x, a.z).distance(Vec2::new(b.x, b.z))
+}
+
+fn snap_xz_to_fixed(
+	spatial: &SpatialQuery,
+	filter: &SpatialQueryFilter,
+	xz: Vec2,
+	actor_y: f32,
+	feet_below_origin: f32,
+	max_fall: f32,
+) -> Option<Vec3> {
+	let lift = feet_below_origin.max(0.4) + 2.0;
+	let origin = Vec3::new(xz.x, actor_y + lift, xz.y);
+	let hit = spatial.cast_ray(origin, Dir3::NEG_Y, lift + max_fall + 2.0, true, filter)?;
+	if hit.distance < 0.02 {
+		return None;
+	}
+	Some(Vec3::new(xz.x, origin.y - hit.distance + feet_below_origin, xz.y))
+}
+
+fn reachable_patrol_pin(
+	spatial: &SpatialQuery,
+	filter: &SpatialQueryFilter,
+	column: Vec3,
+	actor_y: f32,
+	hull: &LocomotionCapsule,
+	index: u32,
+	blocked: &[Entity],
+) -> Option<Vec3> {
+	let min_radial = PEDESTAL_RADIUS + hull.radius.max(0.4) + 0.15;
+	let max_radial = (BOSS_TETHER_RADIUS - hull.radius.max(0.4)).max(min_radial + 0.35);
+	let rings = [PATROL_RING_M, (PATROL_RING_M * 1.5).min(max_radial), max_radial];
+	let mut angles = vec![TAU * (index as f32 + 0.5) / PATROL_PIN_COUNT as f32];
+	for extra in 0..4u32 {
+		angles.push(angles[0] + TAU * extra as f32 / 8.0);
+	}
+	for radius in rings {
+		if radius < min_radial || radius > max_radial {
+			continue;
+		}
+		for angle in &angles {
+			let xz = Vec2::new(column.x + angle.cos() * radius, column.z + angle.sin() * radius);
+			let Some(snapped) = snap_xz_to_fixed(
+				spatial,
+				filter,
+				xz,
+				actor_y,
+				hull.half_height(),
+				hull.radius.max(0.4) + encounter_meters(1.2),
+			) else {
+				continue;
+			};
+			if blocked.iter().any(|&entity| {
+				spatial
+					.cast_ray(
+						Vec3::new(xz.x, actor_y + hull.half_height() + 2.0, xz.y),
+						Dir3::NEG_Y,
+						hull.half_height() + 4.0,
+						true,
+						filter,
+					)
+					.is_some_and(|hit| hit.entity == entity)
+			}) {
+				continue;
+			}
+			if xz_distance(snapped, column) < min_radial {
+				continue;
+			}
+			return Some(snapped);
+		}
+	}
+	None
+}
+
+fn snap_boss_patrol_pins_to_fixed_ground(
+	time: Res<Time>,
+	spatial: Option<SpatialQuery>,
+	mut bosses: Query<
+		(Entity, &GlobalTransform, &mut PoiKnowledge, &LocomotionCapsule),
+		(With<BikanwardaRoot>, Without<PoiGoal>, Without<PatrolPinsSnapped>),
+	>,
+	hosts: Query<(&BossActor, &Children), With<BossEncounterRoot>>,
+	columns: Query<(Entity, &GlobalTransform), With<BossColumn>>,
+	pedestals: Query<Entity, With<BossPedestal>>,
+	mut commands: Commands,
+) {
+	let Some(spatial) = spatial else {
+		return;
+	};
+	let filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
+	let now = time.elapsed_secs();
+	for (entity, actor_gt, mut knowledge, hull) in &mut bosses {
+		let Some((_, children)) = hosts.iter().find(|(actor, _)| actor.0 == entity) else {
+			continue;
+		};
+		let Some((column_entity, column_gt)) =
+			children.iter().find_map(|child| columns.get(child).ok())
+		else {
+			continue;
+		};
+		let pedestal = children.iter().find(|&child| pedestals.contains(child));
+		let mut blocked = vec![column_entity, entity];
+		if let Some(pedestal) = pedestal {
+			blocked.push(pedestal);
+		}
+		let column = column_gt.translation();
+		let actor_y = actor_gt.translation().y;
+		let mut snapped = Vec::with_capacity(PATROL_PIN_COUNT as usize);
+		for i in 0..PATROL_PIN_COUNT {
+			let Some(position) =
+				reachable_patrol_pin(&spatial, &filter, column, actor_y, hull, i, &blocked)
+			else {
+				break;
+			};
+			snapped.push((i, position));
+		}
+		if snapped.len() != PATROL_PIN_COUNT as usize {
+			continue;
+		}
+		for (i, position) in snapped {
+			let mut source = PoiSource::OBJECTIVE;
+			source.insert(PoiSource::EXTERNAL);
+			knowledge.observe(
+				PoiObservation {
+					user: entity,
+					id: patrol_pin_id(i),
+					entity: None,
+					kind: PATROL_KIND,
+					position,
+					arrival_radius: PATROL_ARRIVAL_RADIUS,
+					salience: 1.0,
+					confidence: 1.0,
+					source,
+				},
+				now,
+			);
+		}
+		commands.entity(entity).insert(PatrolPinsSnapped);
 	}
 }
 
@@ -121,8 +290,8 @@ pub fn initialize_boss_locomotion(
 		));
 
 		let actor_y = host_global.translation().y;
-		let column_xz =
-			Vec3::new(column_global.translation().x, actor_y, column_global.translation().z);
+		let column_world = column_global.translation();
+		let column_xz = Vec3::new(column_world.x, actor_y, column_world.z);
 		commands.entity(column_entity).insert(Tether);
 
 		let objective = TetherObjective::Tether(column_entity, BOSS_TETHER_RADIUS);
@@ -156,13 +325,12 @@ pub fn initialize_boss_locomotion(
 
 		let mut knowledge = PoiKnowledge::default();
 		for i in 0..PATROL_PIN_COUNT {
-			let angle = TAU * i as f32 / PATROL_PIN_COUNT as f32;
-			let position = column_xz + Vec3::new(angle.cos(), 0.0, angle.sin()) * PATROL_RING_M;
+			let position = patrol_pin_world(column_xz, actor_y, i);
 			let mut source = PoiSource::OBJECTIVE;
 			source.insert(PoiSource::EXTERNAL);
 			let observation = PoiObservation {
 				user: actor_ref.0,
-				id: PoiId(0xB1A1_0001 + u64::from(i)),
+				id: patrol_pin_id(i),
 				entity: None,
 				kind: PATROL_KIND,
 				position,

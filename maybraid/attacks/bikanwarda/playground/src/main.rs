@@ -55,10 +55,7 @@ fn main() {
 		.add_message::<Died>()
 		.add_systems(PostUpdate, apply_hits)
 		.add_systems(Startup, setup)
-		.add_systems(
-			Update,
-			(retrigger, capture_sequence, tint_target, update_hud, track_hits),
-		)
+		.add_systems(Update, (retrigger, capture_sequence, tint_target, update_hud, track_hits))
 		.run();
 }
 
@@ -294,7 +291,7 @@ fn camera_for(kind: CaptureCamera) -> Transform {
 			Transform::from_xyz(24.0, 11.0, 10.0).looking_at(Vec3::new(0.0, 5.0, 0.0), Vec3::Y)
 		}
 		CaptureCamera::Bray => {
-			Transform::from_xyz(16.0, 12.4, 8.0).looking_at(Vec3::new(0.0, 12.4, 4.0), Vec3::Y)
+			Transform::from_xyz(34.0, 18.0, 16.0).looking_at(Vec3::new(0.0, 8.0, 2.0), Vec3::Y)
 		}
 	}
 }
