@@ -6,6 +6,7 @@ import bevy_pbr::render::forward_io::VertexOutput;
 import bevy_pbr::render::mesh_view_bindings::view;
 import bevy_pbr::render::pbr_types::PbrInput;
 import bevy_pbr::render::pbr_types::pbr_input_new;
+import bevy_pbr::render::pbr_fragment::pbr_input_from_vertex_output;
 import bevy_pbr::render::pbr_functions as fns;
 import bevy_pbr::render::pbr_bindings;
 import bevy_core_pipeline::tonemapping::tone_mapping;
@@ -36,6 +37,8 @@ fn fragment(
 ) -> @location(0) vec4<f32> {
 
     var pbr_input: PbrInput = pbr_input_new();
+    // Preserve receiver flags, including explicit NotShadowReceiver opt-outs.
+    pbr_input.flags = pbr_input_from_vertex_output(mesh, is_front, false).flags;
 
     pbr_input.material.base_color = base_color;
 

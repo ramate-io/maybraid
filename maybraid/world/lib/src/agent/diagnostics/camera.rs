@@ -66,8 +66,8 @@ fn complete_request(world: &mut World) {
 pub(super) struct CameraFixture;
 impl CameraFixture {
 	pub fn apply(world: &mut World, pose: Option<[f32; 5]>) -> Result<AgentCameraSnapshot, String> {
-		if world.get_resource::<PlaygroundMode>() != Some(&PlaygroundMode::Free) {
-			return Err("camera diagnostics require mode free".into());
+		if pose.is_some() && world.get_resource::<PlaygroundMode>() != Some(&PlaygroundMode::Free) {
+			return Err("camera pose diagnostics require mode free".into());
 		}
 		if world
 			.get_resource::<crate::map_view::WorldMapView>()
@@ -169,7 +169,7 @@ mod tests {
 	use player_camera::{CameraController, FollowCamera};
 	use world_player::PlaygroundMode;
 	#[test]
-	fn actual_shared_camera_requires_free_and_propagates_before_readback() -> Result<(), String> {
+	fn actual_shared_camera_reads_in_character_and_sets_only_in_free() -> Result<(), String> {
 		let mut app = App::new();
 		app.add_plugins((
 			MinimalPlugins,
@@ -213,7 +213,13 @@ mod tests {
 			.id();
 		crate::camera::add_free_camera_fixture(&mut app, camera);
 		app.update();
+		let before = *app.world().get::<Transform>(camera).ok_or("missing transform")?;
+		let read = CameraFixture::apply(app.world_mut(), None)?;
+		assert_eq!(read.local_translation, before.translation.to_array());
+		assert_eq!(app.world().get::<Transform>(camera), Some(&before));
+		assert_eq!(app.world().resource::<PlaygroundMode>(), &PlaygroundMode::Character);
 		assert!(CameraFixture::apply(app.world_mut(), Some([1., 2., 3., 0.4, -0.2])).is_err());
+		assert_eq!(app.world().get::<Transform>(camera), Some(&before));
 		app.insert_resource(PlaygroundMode::Free);
 		{
 			let mut controller = app
