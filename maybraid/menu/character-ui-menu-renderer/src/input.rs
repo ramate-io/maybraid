@@ -448,6 +448,7 @@ pub fn navigate_inventory_menu(
 		Option<&InventoryFolderHeader>,
 	)>,
 	mut sessions: Query<&mut InventoryMenuSession>,
+	metrics: Query<&crate::inventory::InventoryItemMetrics>,
 	stack: Res<menu_components::MenuModalStack>,
 	mut commands: Commands,
 ) {
@@ -460,6 +461,10 @@ pub fn navigate_inventory_menu(
 		.find(|entity| sessions.contains(*entity));
 	let Some(session_entity) = session_entity else { return };
 	let Ok(mut session) = sessions.get_mut(session_entity) else { return };
+	let gallery = metrics
+		.get(session_entity)
+		.copied()
+		.unwrap_or(crate::inventory::InventoryItemMetrics::PLAY);
 	if inventory_modal_blocks_shell(&stack)
 		|| session.interaction.reordering().is_some()
 		|| session.region != area.0
@@ -523,7 +528,7 @@ pub fn navigate_inventory_menu(
 			character_ui_menu::InventoryDrawerMode::Gallery,
 			MenuNav::Up,
 		) => {
-			let columns = crate::inventory::INVENTORY_GALLERY_COLUMNS;
+			let columns = gallery.gallery_columns;
 			let rows = count.div_ceil(columns);
 			let row = current / columns;
 			let column = current % columns;
@@ -535,7 +540,7 @@ pub fn navigate_inventory_menu(
 			character_ui_menu::InventoryDrawerMode::Gallery,
 			MenuNav::Down,
 		) => {
-			let columns = crate::inventory::INVENTORY_GALLERY_COLUMNS;
+			let columns = gallery.gallery_columns;
 			let rows = count.div_ceil(columns);
 			let row = current / columns;
 			let column = current % columns;
@@ -572,9 +577,9 @@ pub fn navigate_inventory_menu(
 	if area.0 == character_ui_menu::InventoryRegion::Drawer
 		&& drawer_mode == character_ui_menu::InventoryDrawerMode::Gallery
 	{
-		let rows = count.div_ceil(crate::inventory::INVENTORY_GALLERY_COLUMNS);
-		let selected_row = next / crate::inventory::INVENTORY_GALLERY_COLUMNS;
-		let visible_rows = crate::inventory::INVENTORY_GALLERY_VISIBLE_ROWS;
+		let rows = count.div_ceil(gallery.gallery_columns);
+		let selected_row = next / gallery.gallery_columns;
+		let visible_rows = gallery.gallery_visible_rows;
 		let max_scroll = rows.saturating_sub(visible_rows);
 		if selected_row < memory.gallery_scroll {
 			memory.gallery_scroll = selected_row;
@@ -610,6 +615,7 @@ pub(crate) fn sync_inventory_focus_from_menu(
 	>,
 	keyboard_scroll: Query<&InventoryKeyboardScrollIntent>,
 	mut sessions: Query<&mut InventoryMenuSession>,
+	metrics: Query<&crate::inventory::InventoryItemMetrics>,
 ) {
 	for (menu_entity, menu, area, overlay) in &menus {
 		if overlay.is_none() {
@@ -682,9 +688,12 @@ pub(crate) fn sync_inventory_focus_from_menu(
 				.find(|entity| scrolls.contains(*entity))
 			{
 				if let Ok(scroll) = scrolls.get(scroll_entity) {
-					let row = (scroll.y / crate::inventory::INVENTORY_GALLERY_ROW_STEP)
-						.floor()
-						.max(0.0) as usize;
+					let step = metrics
+						.get(session_entity)
+						.copied()
+						.unwrap_or(crate::inventory::InventoryItemMetrics::PLAY)
+						.gallery_row_step();
+					let row = (scroll.y / step).floor().max(0.0) as usize;
 					if session.active_memory().gallery_scroll != row {
 						session.active_memory_mut().gallery_scroll = row;
 					}
@@ -721,9 +730,14 @@ pub(crate) fn sync_inventory_region_focus(
 		(&mut ScrollPosition, &ComputedNode),
 		With<menu_components::HudScrollViewport>,
 	>,
+	metrics: Query<&crate::inventory::InventoryItemMetrics>,
 	mut commands: Commands,
 ) {
 	for (viewport, session, previous, keyboard_scroll) in &viewports {
+		let gallery = metrics
+			.get(viewport)
+			.copied()
+			.unwrap_or(crate::inventory::InventoryItemMetrics::PLAY);
 		let current = InventoryPresentationSnapshot::from_session(session);
 		let presentation_changed = previous.is_none_or(|previous| *previous != current);
 		let focus = session.active_memory().focused_item;
@@ -805,8 +819,7 @@ pub(crate) fn sync_inventory_region_focus(
 							.map(|intent| intent.0)
 							.unwrap_or_else(|| session.active_memory().gallery_scroll);
 						if !pointer_or_host_scrolled || keyboard_scroll.is_some() {
-							scroll.y = (row as f32 * crate::inventory::INVENTORY_GALLERY_ROW_STEP)
-								.min(max_scroll);
+							scroll.y = (row as f32 * gallery.gallery_row_step()).min(max_scroll);
 							keyboard_scroll_applied = keyboard_scroll.is_some();
 						}
 					}

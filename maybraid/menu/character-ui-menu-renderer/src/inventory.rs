@@ -84,16 +84,193 @@ pub struct InventoryScreenSlots {
 	pub focused_index: [Option<usize>; 2],
 }
 
-pub const INVENTORY_GALLERY_COLUMNS: usize = 5;
-pub const INVENTORY_GALLERY_ROW_HEIGHT: f32 = 74.0;
-const GALLERY_ROW_GAP: f32 = 4.0;
-pub const INVENTORY_GALLERY_VISIBLE_ROWS: usize = 2;
-const GALLERY_VIEWPORT_HEIGHT: f32 = INVENTORY_GALLERY_ROW_HEIGHT
-	* INVENTORY_GALLERY_VISIBLE_ROWS as f32
-	+ GALLERY_ROW_GAP * (INVENTORY_GALLERY_VISIBLE_ROWS - 1) as f32;
-pub const INVENTORY_GALLERY_ROW_STEP: f32 = INVENTORY_GALLERY_ROW_HEIGHT + GALLERY_ROW_GAP;
-const GALLERY_PANEL_HEIGHT: f32 = 196.0;
-const ROTARY_ART_SIZE: f32 = 56.0;
+/// Pixel size of an inventory thumbnail or live item viewport.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct InventoryItemArt {
+	pub px: f32,
+}
+
+/// Item-tile metrics for one inventory screen.
+///
+/// Play inventory keeps compact tiles so the live character preview can occupy
+/// the center pane. Character creation has no character there, so it uses a
+/// larger scale that fills the reclaimed space.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct InventoryItemMetrics {
+	pub gallery_columns: usize,
+	pub gallery_row_height: f32,
+	pub gallery_row_gap: f32,
+	pub gallery_visible_rows: usize,
+	pub gallery_art_size: f32,
+	pub gallery_label_px: f32,
+	pub gallery_rank_size: f32,
+	pub gallery_drawer_height: f32,
+	pub rotary_art_size: f32,
+	pub rotary_label_px: f32,
+	pub rotary_detail_px: f32,
+	pub rotary_rank_size: f32,
+	pub rotary_drawer_height: f32,
+	pub equipped_row_height: f32,
+	pub equipped_art_size: f32,
+	pub equipped_label_px: f32,
+	pub equipped_rank_size: f32,
+	pub equipped_empty_min_height: f32,
+	pub equipped_min_width: f32,
+	pub equipped_panel_percent: f32,
+	pub equipped_rank_floats: bool,
+	pub drawer_grows: bool,
+}
+
+impl InventoryItemMetrics {
+	/// In-game inventory overlay: compact tiles beside a live character.
+	pub const PLAY: Self = Self {
+		gallery_columns: 5,
+		gallery_row_height: 74.0,
+		gallery_row_gap: 4.0,
+		gallery_visible_rows: 2,
+		gallery_art_size: 40.0,
+		gallery_label_px: 11.0,
+		gallery_rank_size: 24.0,
+		gallery_drawer_height: 196.0,
+		rotary_art_size: 56.0,
+		rotary_label_px: 14.0,
+		rotary_detail_px: 11.0,
+		rotary_rank_size: 26.0,
+		rotary_drawer_height: 190.0,
+		equipped_row_height: 58.0,
+		equipped_art_size: 38.0,
+		equipped_label_px: 12.0,
+		equipped_rank_size: 40.0,
+		equipped_empty_min_height: 48.0,
+		equipped_min_width: 150.0,
+		equipped_panel_percent: 26.0,
+		equipped_rank_floats: false,
+		drawer_grows: false,
+	};
+
+	/// Character-creation Starter Kit: no live character, so item art and
+	/// slots scale up (~2× gallery/rotary art) and the drawer grows into the
+	/// unused preview pane.
+	pub const CHARACTER_CREATION: Self = Self {
+		gallery_columns: 3,
+		gallery_row_height: 148.0,
+		gallery_row_gap: 8.0,
+		gallery_visible_rows: 3,
+		gallery_art_size: 96.0,
+		gallery_label_px: 16.0,
+		gallery_rank_size: 36.0,
+		gallery_drawer_height: 420.0,
+		rotary_art_size: 96.0,
+		rotary_label_px: 16.0,
+		rotary_detail_px: 13.0,
+		rotary_rank_size: 32.0,
+		rotary_drawer_height: 340.0,
+		equipped_row_height: 72.0,
+		equipped_art_size: 52.0,
+		equipped_label_px: 12.0,
+		equipped_rank_size: 40.0,
+		equipped_empty_min_height: 48.0,
+		equipped_min_width: 240.0,
+		equipped_panel_percent: 32.0,
+		equipped_rank_floats: true,
+		drawer_grows: true,
+	};
+
+	pub const fn for_interactive(interactive: bool) -> Self {
+		if interactive {
+			Self::PLAY
+		} else {
+			Self::CHARACTER_CREATION
+		}
+	}
+
+	pub const fn gallery_row_step(self) -> f32 {
+		self.gallery_row_height + self.gallery_row_gap
+	}
+
+	pub const fn gallery_viewport_height(self) -> f32 {
+		self.gallery_row_height * self.gallery_visible_rows as f32
+			+ self.gallery_row_gap * self.gallery_visible_rows.saturating_sub(1) as f32
+	}
+
+	pub const fn drawer_height(self, drawer: InventoryDrawerMode) -> f32 {
+		match drawer {
+			InventoryDrawerMode::Rotary => self.rotary_drawer_height,
+			InventoryDrawerMode::Gallery => self.gallery_drawer_height,
+		}
+	}
+
+	pub fn gallery_content_height(self, rows: usize) -> f32 {
+		rows as f32 * self.gallery_row_height + rows.saturating_sub(1) as f32 * self.gallery_row_gap
+	}
+
+	pub const fn rotary_layout(self) -> RotaryLayout {
+		RotaryLayout::for_inventory(!self.drawer_grows)
+	}
+
+	pub fn drawer_node(self, drawer: InventoryDrawerMode, visible: bool) -> Node {
+		let height = self.drawer_height(drawer);
+		Node {
+			display: if visible { Display::Flex } else { Display::None },
+			width: Val::Percent(100.0),
+			height: if self.drawer_grows { Val::Auto } else { Val::Px(height) },
+			min_height: Val::Px(height),
+			flex_grow: if self.drawer_grows { 1.0 } else { 0.0 },
+			flex_shrink: if self.drawer_grows { 1.0 } else { 0.0 },
+			flex_direction: FlexDirection::Column,
+			row_gap: Val::Px(4.0),
+			padding: UiRect::all(Val::Px(6.0)),
+			..default()
+		}
+	}
+
+	pub fn gallery_viewport_node(self) -> Node {
+		let height = self.gallery_viewport_height();
+		Node {
+			width: Val::Percent(100.0),
+			height: if self.drawer_grows { Val::Auto } else { Val::Px(height) },
+			min_height: Val::Px(height),
+			flex_grow: if self.drawer_grows { 1.0 } else { 0.0 },
+			flex_shrink: if self.drawer_grows { 1.0 } else { 0.0 },
+			overflow: Overflow::scroll_y(),
+			scrollbar_width: 6.0,
+			..default()
+		}
+	}
+
+	pub fn equipped_panel_node(self) -> Node {
+		Node {
+			width: Val::Percent(self.equipped_panel_percent),
+			min_width: Val::Px(self.equipped_min_width),
+			min_height: Val::Px(0.0),
+			flex_direction: FlexDirection::Column,
+			row_gap: Val::Px(8.0),
+			padding: UiRect::all(Val::Px(12.0)),
+			..default()
+		}
+	}
+
+	pub fn footer_back_node(self) -> Node {
+		Node {
+			width: Val::Percent(self.equipped_panel_percent),
+			min_width: Val::Px(self.equipped_min_width),
+			height: Val::Percent(100.0),
+			align_items: AlignItems::Center,
+			..default()
+		}
+	}
+}
+
+impl Default for InventoryItemMetrics {
+	fn default() -> Self {
+		Self::PLAY
+	}
+}
+
+pub const INVENTORY_GALLERY_COLUMNS: usize = InventoryItemMetrics::PLAY.gallery_columns;
+pub const INVENTORY_GALLERY_ROW_HEIGHT: f32 = InventoryItemMetrics::PLAY.gallery_row_height;
+pub const INVENTORY_GALLERY_VISIBLE_ROWS: usize = InventoryItemMetrics::PLAY.gallery_visible_rows;
+pub const INVENTORY_GALLERY_ROW_STEP: f32 = InventoryItemMetrics::PLAY.gallery_row_step();
 
 /// Rebuild the inventory shell and return its preview slot and two focus roots.
 pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
@@ -118,6 +295,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 		let (_, equipment, capacity) = section_data(node, section).unwrap_or_default();
 		(section, equipment, capacity)
 	});
+	let metrics = InventoryItemMetrics::for_interactive(interactive);
 	let Ok(mut root) = commands.get_entity(viewport) else {
 		return slots;
 	};
@@ -125,6 +303,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 	root.insert((
 		crate::widgets::OverlaySelectViewport,
 		InventoryMenuSession { folder_navigation: interactive, ..*session },
+		metrics,
 	));
 	if interactive {
 		root.insert(menu_components::MenuModal::OVERLAY_SELECT);
@@ -205,15 +384,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 			main.with_children(|main| {
 				let mut aiop = main.spawn((
 					InventoryAIOPPanel,
-					Node {
-						width: Val::Percent(26.0),
-						min_width: Val::Px(150.0),
-						min_height: Val::Px(0.0),
-						flex_direction: FlexDirection::Column,
-						row_gap: Val::Px(8.0),
-						padding: UiRect::all(Val::Px(12.0)),
-						..default()
-					},
+					metrics.equipped_panel_node(),
 					Pickable::IGNORE,
 				));
 				slots.item_count[1] = left_count;
@@ -290,6 +461,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 										*capacity,
 										menu_index,
 										interactive,
+										metrics,
 										thumbnails,
 										slots.menus[1],
 									);
@@ -304,6 +476,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 										menu_index,
 										slots.menus[1],
 										interactive && ordinal < focus_capacity,
+										metrics,
 									);
 								}
 								if ordinal < focus_capacity {
@@ -358,8 +531,9 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 							..default()
 						}
 					} else {
-						// Starter Kit has no live character to preview. Reclaim this
-						// space so the fixed two-row drawer and Continue footer fit.
+						// Starter Kit has no live character to preview. Hide the
+						// pane so the drawer can grow into that space with larger
+						// item tiles.
 						Node { display: Display::None, ..default() }
 					};
 					slots.preview = right
@@ -368,23 +542,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 					let mut drawer = right.spawn((
 						InventoryDrawerPresentation,
 						if drawer_visible { Visibility::Inherited } else { Visibility::Hidden },
-						Node {
-							display: if drawer_visible { Display::Flex } else { Display::None },
-							width: Val::Percent(100.0),
-							height: Val::Px(match session.drawer {
-								InventoryDrawerMode::Rotary => 190.0,
-								InventoryDrawerMode::Gallery => GALLERY_PANEL_HEIGHT,
-							}),
-							min_height: Val::Px(match session.drawer {
-								InventoryDrawerMode::Rotary => 190.0,
-								InventoryDrawerMode::Gallery => GALLERY_PANEL_HEIGHT,
-							}),
-							flex_shrink: 0.0,
-							flex_direction: FlexDirection::Column,
-							row_gap: Val::Px(4.0),
-							padding: UiRect::all(Val::Px(6.0)),
-							..default()
-						},
+						metrics.drawer_node(session.drawer, drawer_visible),
 						Pickable::IGNORE,
 					));
 					slots.item_count[0] = choices.len();
@@ -406,6 +564,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 								session.section,
 								drawer_focus,
 								interactive,
+								metrics,
 								thumbnails,
 								session.region == InventoryRegion::Drawer,
 							),
@@ -416,6 +575,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 								session.section,
 								drawer_focus,
 								interactive,
+								metrics,
 								thumbnails,
 								session.region == InventoryRegion::Drawer,
 								drawer_memory.gallery_scroll,
@@ -424,7 +584,7 @@ pub fn fill_inventory_screen<E: Copy + Send + Sync + 'static, C: MenuThumbnailCo
 					});
 				});
 			});
-			spawn_inventory_footer_row(screen, fonts, assets, device, interactive);
+			spawn_inventory_footer_row(screen, fonts, assets, device, interactive, metrics);
 		});
 	});
 	slots
@@ -656,6 +816,7 @@ fn spawn_inventory_footer_row(
 	assets: &AssetServer,
 	device: InputPromptDevice,
 	interactive: bool,
+	metrics: InventoryItemMetrics,
 ) {
 	parent
 		.spawn((
@@ -672,13 +833,7 @@ fn spawn_inventory_footer_row(
 			Pickable::IGNORE,
 		))
 		.with_children(|footer| {
-			let mut back = footer.spawn(Node {
-				width: Val::Percent(26.0),
-				min_width: Val::Px(150.0),
-				height: Val::Percent(100.0),
-				align_items: AlignItems::Center,
-				..default()
-			});
+			let mut back = footer.spawn(metrics.footer_back_node());
 			back.with_children(|back| spawn_text_button(back, fonts, "Back", CloseOverlaySelect));
 			let mut actions = footer.spawn(Node {
 				width: Val::Percent(74.0),
@@ -704,13 +859,14 @@ fn spawn_rotary_carousel<E: Copy + Send + Sync + 'static, C: MenuThumbnailContex
 	section: InventorySection,
 	focused: usize,
 	interactive: bool,
+	metrics: InventoryItemMetrics,
 	thumbnails: &mut C,
 	active: bool,
 ) -> Entity {
 	if choices.is_empty() {
 		return spawn_empty_drawer(parent, fonts, active);
 	}
-	let layout = RotaryLayout::INVENTORY;
+	let layout = metrics.rotary_layout();
 	let mut carousel_entity = parent.spawn((
 		InventoryScreenArea(InventoryRegion::Drawer),
 		InventoryHudMenu,
@@ -755,6 +911,8 @@ fn spawn_rotary_carousel<E: Copy + Send + Sync + 'static, C: MenuThumbnailContex
 					choice.event.filter(|_| interactive),
 					carousel_id,
 					ordinal,
+					metrics,
+					layout,
 				);
 			});
 		}
@@ -769,6 +927,7 @@ fn spawn_gallery<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 	section: InventorySection,
 	focused: usize,
 	interactive: bool,
+	metrics: InventoryItemMetrics,
 	thumbnails: &mut C,
 	active: bool,
 	saved_scroll_rows: usize,
@@ -782,24 +941,16 @@ fn spawn_gallery<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 		HudMenu { selected: focused.min(choices.len() - 1), item_count: choices.len() },
 		HudScrollManual,
 		HudScrollViewport,
-		ScrollPosition(Vec2::new(0.0, saved_scroll_rows as f32 * INVENTORY_GALLERY_ROW_STEP)),
-		Node {
-			width: Val::Percent(100.0),
-			height: Val::Px(GALLERY_VIEWPORT_HEIGHT),
-			min_height: Val::Px(GALLERY_VIEWPORT_HEIGHT),
-			flex_shrink: 0.0,
-			overflow: Overflow::scroll_y(),
-			scrollbar_width: 6.0,
-			..default()
-		},
+		ScrollPosition(Vec2::new(0.0, saved_scroll_rows as f32 * metrics.gallery_row_step())),
+		metrics.gallery_viewport_node(),
 		Pickable::default(),
 	));
 	if active {
 		scroll.insert(HudOverlayMenu);
 	}
 	let menu = scroll.id();
-	let rows = choices.len().div_ceil(INVENTORY_GALLERY_COLUMNS);
-	let content_height = gallery_content_height(rows);
+	let rows = choices.len().div_ceil(metrics.gallery_columns);
+	let content_height = metrics.gallery_content_height(rows);
 	scroll.with_children(|viewport| {
 		viewport
 			.spawn(Node {
@@ -807,10 +958,10 @@ fn spawn_gallery<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 				min_height: Val::Px(content_height),
 				flex_shrink: 0.0,
 				display: Display::Grid,
-				grid_template_columns: vec![GridTrack::flex(1.0); INVENTORY_GALLERY_COLUMNS],
-				grid_auto_rows: vec![GridTrack::px(INVENTORY_GALLERY_ROW_HEIGHT)],
+				grid_template_columns: vec![GridTrack::flex(1.0); metrics.gallery_columns],
+				grid_auto_rows: vec![GridTrack::px(metrics.gallery_row_height)],
 				column_gap: Val::Px(8.0),
-				row_gap: Val::Px(GALLERY_ROW_GAP),
+				row_gap: Val::Px(metrics.gallery_row_gap),
 				..default()
 			})
 			.with_children(|grid| {
@@ -833,6 +984,7 @@ fn spawn_gallery<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 						base,
 						key,
 						choice.event.filter(|_| interactive),
+						metrics,
 					);
 				}
 			});
@@ -850,6 +1002,8 @@ fn spawn_rotary_tile<E: Copy + Send + Sync + 'static>(
 	event: Option<E>,
 	menu: Entity,
 	ordinal: usize,
+	metrics: InventoryItemMetrics,
+	layout: RotaryLayout,
 ) {
 	let (thumbnail, viewport, tint) = image;
 	match (key, event) {
@@ -862,6 +1016,8 @@ fn spawn_rotary_tile<E: Copy + Send + Sync + 'static>(
 			tint,
 			menu,
 			ordinal,
+			metrics,
+			layout,
 			(base, key, MenuButton(event)),
 		),
 		(Some(key), None) => spawn_rotary_button(
@@ -873,6 +1029,8 @@ fn spawn_rotary_tile<E: Copy + Send + Sync + 'static>(
 			tint,
 			menu,
 			ordinal,
+			metrics,
+			layout,
 			(base, key),
 		),
 		(None, Some(event)) => spawn_rotary_button(
@@ -884,10 +1042,12 @@ fn spawn_rotary_tile<E: Copy + Send + Sync + 'static>(
 			tint,
 			menu,
 			ordinal,
+			metrics,
+			layout,
 			(base, MenuButton(event)),
 		),
 		(None, None) => spawn_rotary_button(
-			parent, fonts, choice, thumbnail, viewport, tint, menu, ordinal, base,
+			parent, fonts, choice, thumbnail, viewport, tint, menu, ordinal, metrics, layout, base,
 		),
 	}
 }
@@ -901,6 +1061,8 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 	tint: Color,
 	menu: Entity,
 	ordinal: usize,
+	metrics: InventoryItemMetrics,
+	layout: RotaryLayout,
 	extra: impl Bundle,
 ) {
 	let face = if choice.selected { TEXT_YELLOW } else { TEXT_YELLOW_FAINT };
@@ -911,7 +1073,7 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 			extra,
 			Node {
 				width: Val::Percent(100.0),
-				height: Val::Px(RotaryLayout::INVENTORY.card_height),
+				height: Val::Px(layout.card_height),
 				padding: UiRect::all(Val::Px(6.0)),
 				flex_direction: FlexDirection::Column,
 				justify_content: JustifyContent::Center,
@@ -922,12 +1084,14 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 		))
 		.with_children(|tile| {
 			if let Some(rank) = current_equipped_rank(choice) {
-				spawn_inventory_rank_badge(tile, fonts, rank, 26.0, true);
+				spawn_inventory_rank_badge(tile, fonts, rank, metrics.rotary_rank_size, true);
 			}
 			let mut art = tile.spawn((
+				InventoryItemArt { px: metrics.rotary_art_size },
 				Node {
-					width: Val::Px(ROTARY_ART_SIZE),
-					height: Val::Px(ROTARY_ART_SIZE),
+					width: Val::Px(metrics.rotary_art_size),
+					height: Val::Px(metrics.rotary_art_size),
+					flex_shrink: 0.0,
 					justify_content: JustifyContent::Center,
 					align_items: AlignItems::Center,
 					position_type: PositionType::Relative,
@@ -995,7 +1159,7 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 							RotaryCaptionText,
 							TileWrap,
 							Text::new(choice.label.clone()),
-							fonts.item(14.0),
+							fonts.item(metrics.rotary_label_px),
 							TextColor(face),
 							TextLayout::new(
 								bevy::text::Justify::Center,
@@ -1010,7 +1174,7 @@ fn spawn_rotary_button<E: Copy + Send + Sync + 'static>(
 								RotaryCaptionText,
 								TileWrap,
 								Text::new(choice.detail.clone()),
-								fonts.item(11.0),
+								fonts.item(metrics.rotary_detail_px),
 								TextColor(TEXT_YELLOW_FAINT),
 								TextLayout::new(
 									bevy::text::Justify::Center,
@@ -1034,6 +1198,7 @@ fn spawn_compact_gallery_tile<E: Copy + Send + Sync + 'static>(
 	base: impl Bundle,
 	key: Option<InventoryItemKey>,
 	event: Option<E>,
+	metrics: InventoryItemMetrics,
 ) {
 	let (thumbnail, viewport, tint) = image;
 	match (key, event) {
@@ -1044,6 +1209,7 @@ fn spawn_compact_gallery_tile<E: Copy + Send + Sync + 'static>(
 			thumbnail,
 			viewport,
 			tint,
+			metrics,
 			(base, key, MenuButton(event)),
 		),
 		(Some(key), None) => spawn_compact_gallery_button(
@@ -1053,6 +1219,7 @@ fn spawn_compact_gallery_tile<E: Copy + Send + Sync + 'static>(
 			thumbnail,
 			viewport,
 			tint,
+			metrics,
 			(base, key),
 		),
 		(None, Some(event)) => spawn_compact_gallery_button(
@@ -1062,11 +1229,12 @@ fn spawn_compact_gallery_tile<E: Copy + Send + Sync + 'static>(
 			thumbnail,
 			viewport,
 			tint,
+			metrics,
 			(base, MenuButton(event)),
 		),
-		(None, None) => {
-			spawn_compact_gallery_button(parent, fonts, choice, thumbnail, viewport, tint, base)
-		}
+		(None, None) => spawn_compact_gallery_button(
+			parent, fonts, choice, thumbnail, viewport, tint, metrics, base,
+		),
 	}
 }
 
@@ -1077,6 +1245,7 @@ fn spawn_compact_gallery_button<E: Copy + Send + Sync + 'static>(
 	thumbnail: Option<Handle<Image>>,
 	viewport: Option<Entity>,
 	tint: Color,
+	metrics: InventoryItemMetrics,
 	extra: impl Bundle,
 ) {
 	let face = if choice.selected { TEXT_YELLOW } else { TEXT_YELLOW_FAINT };
@@ -1088,8 +1257,8 @@ fn spawn_compact_gallery_button<E: Copy + Send + Sync + 'static>(
 			extra,
 			Node {
 				width: Val::Percent(100.0),
-				height: Val::Px(INVENTORY_GALLERY_ROW_HEIGHT),
-				min_height: Val::Px(INVENTORY_GALLERY_ROW_HEIGHT),
+				height: Val::Px(metrics.gallery_row_height),
+				min_height: Val::Px(metrics.gallery_row_height),
 				flex_shrink: 0.0,
 				min_width: Val::Px(0.0),
 				padding: UiRect::axes(Val::Px(2.0), Val::Px(1.0)),
@@ -1098,6 +1267,7 @@ fn spawn_compact_gallery_button<E: Copy + Send + Sync + 'static>(
 				align_items: AlignItems::Center,
 				row_gap: Val::Px(1.0),
 				border: UiRect::all(Val::Px(1.0)),
+				overflow: Overflow::clip(),
 				..default()
 			},
 			BorderColor::all(if choice.selected { TEXT_YELLOW } else { Color::NONE }),
@@ -1106,12 +1276,13 @@ fn spawn_compact_gallery_button<E: Copy + Send + Sync + 'static>(
 		))
 		.with_children(|tile| {
 			if let Some(rank) = current_equipped_rank(choice) {
-				spawn_inventory_rank_badge(tile, fonts, rank, 24.0, true);
+				spawn_inventory_rank_badge(tile, fonts, rank, metrics.gallery_rank_size, true);
 			}
 			let mut image_slot = tile.spawn((
+				InventoryItemArt { px: metrics.gallery_art_size },
 				Node {
-					width: Val::Px(40.0),
-					height: Val::Px(40.0),
+					width: Val::Px(metrics.gallery_art_size),
+					height: Val::Px(metrics.gallery_art_size),
 					flex_shrink: 0.0,
 					justify_content: JustifyContent::Center,
 					align_items: AlignItems::Center,
@@ -1150,7 +1321,7 @@ fn spawn_compact_gallery_button<E: Copy + Send + Sync + 'static>(
 			tile.spawn((
 				TileWrap,
 				Text::new(choice.label.clone()),
-				fonts.item(11.0),
+				fonts.item(metrics.gallery_label_px),
 				TextColor(face),
 				TextLayout::new(
 					bevy::text::Justify::Center,
@@ -1178,6 +1349,7 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 	capacity: usize,
 	menu_index: usize,
 	interactive: bool,
+	metrics: InventoryItemMetrics,
 	thumbnails: &mut C,
 	menu: Entity,
 ) {
@@ -1208,8 +1380,8 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 		base,
 		Node {
 			width: Val::Percent(100.0),
-			height: Val::Px(58.0),
-			min_height: Val::Px(58.0),
+			height: Val::Px(metrics.equipped_row_height),
+			min_height: Val::Px(metrics.equipped_row_height),
 			flex_shrink: 0.0,
 			padding: UiRect::axes(Val::Px(6.0), Val::Px(4.0)),
 			flex_direction: FlexDirection::Row,
@@ -1217,6 +1389,7 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 			column_gap: Val::Px(8.0),
 			border: UiRect::all(Val::Px(1.0)),
 			overflow: Overflow::clip(),
+			position_type: PositionType::Relative,
 			..default()
 		},
 		BorderColor::all(if tile.selected { TEXT_YELLOW } else { Color::NONE }),
@@ -1230,14 +1403,22 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 	}
 	row.with_children(|row| {
 		if let Some(rank) = tile.rank {
-			spawn_inventory_rank_badge(row, fonts, rank, 40.0, false);
+			spawn_inventory_rank_badge(
+				row,
+				fonts,
+				rank,
+				metrics.equipped_rank_size,
+				metrics.equipped_rank_floats,
+			);
 		}
 		let mut image_slot = row.spawn((
+			InventoryItemArt { px: metrics.equipped_art_size },
 			Node {
-				width: Val::Px(38.0),
-				height: Val::Px(38.0),
-				min_width: Val::Px(38.0),
-				min_height: Val::Px(38.0),
+				width: Val::Px(metrics.equipped_art_size),
+				height: Val::Px(metrics.equipped_art_size),
+				min_width: Val::Px(metrics.equipped_art_size),
+				min_height: Val::Px(metrics.equipped_art_size),
+				flex_shrink: 0.0,
 				position_type: PositionType::Relative,
 				justify_content: JustifyContent::Center,
 				align_items: AlignItems::Center,
@@ -1272,7 +1453,7 @@ fn spawn_equipped_slot<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>
 		row.spawn((
 			TileWrap,
 			Text::new(label),
-			fonts.item(12.0),
+			fonts.item(metrics.equipped_label_px),
 			TextColor(face),
 			TextLayout::new(bevy::text::Justify::Left, bevy::text::LineBreak::WordOrCharacter),
 			bevy::text::TextBounds::UNBOUNDED,
@@ -1347,13 +1528,14 @@ fn spawn_empty_slot(
 	menu_index: usize,
 	menu: Entity,
 	interactive: bool,
+	metrics: InventoryItemMetrics,
 ) {
 	// Match the dim idle text used by locked TemporarilyRemoved menu rows.
 	let face = if interactive { TEXT_YELLOW } else { TEXT_YELLOW_FAINT };
 	let mut slot = parent.spawn((
 		Node {
 			width: Val::Percent(100.0),
-			min_height: Val::Px(48.0),
+			min_height: Val::Px(metrics.equipped_empty_min_height),
 			flex_shrink: 0.0,
 			flex_direction: FlexDirection::Row,
 			justify_content: JustifyContent::Center,
@@ -1547,10 +1729,6 @@ fn current_equipped_rank<E>(choice: &GridCatalogChoice<E>) -> Option<u8> {
 	choice.selected.then_some(choice.rank).flatten()
 }
 
-fn gallery_content_height(rows: usize) -> f32 {
-	rows as f32 * INVENTORY_GALLERY_ROW_HEIGHT + rows.saturating_sub(1) as f32 * GALLERY_ROW_GAP
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -1587,9 +1765,268 @@ mod tests {
 		assert_eq!(bounded_focus(0, 0), None);
 		assert_eq!(bounded_focus(99, 3), Some(2));
 		assert_eq!(
-			INVENTORY_GALLERY_ROW_HEIGHT * INVENTORY_GALLERY_VISIBLE_ROWS as f32 + GALLERY_ROW_GAP,
-			GALLERY_VIEWPORT_HEIGHT
+			InventoryItemMetrics::PLAY.gallery_row_height
+				* InventoryItemMetrics::PLAY.gallery_visible_rows as f32
+				+ InventoryItemMetrics::PLAY.gallery_row_gap,
+			InventoryItemMetrics::PLAY.gallery_viewport_height()
 		);
+		Ok(())
+	}
+
+	fn clothing_choices(count: usize) -> Vec<GridCatalogChoice<u8>> {
+		(0..count)
+			.map(|index| GridCatalogChoice {
+				label: format!("item-{index}"),
+				detail: "W10".into(),
+				path: "",
+				thumbnail_camera: character_ui_menu::ThumbnailCamera::DEFAULT,
+				preview: character_ui_menu::PreviewColor::WHITE,
+				image_key: None,
+				selected: index == 0,
+				rank: (index == 0).then_some(1),
+				item_key: Some(index),
+				event: Some(index as u8),
+			})
+			.collect()
+	}
+
+	fn clothing_inventory_node(count: usize) -> anyhow::Result<MenuNode<u8>> {
+		let choices = clothing_choices(count);
+		let tile = choices
+			.first()
+			.cloned()
+			.ok_or_else(|| anyhow::anyhow!("clothing fixture needs at least one tile"))?;
+		let equipped = EquipmentChoice {
+			item_key: 0,
+			tile,
+			unequip: Some(0),
+			move_left: None,
+			move_right: None,
+		};
+		Ok(MenuNode::Section {
+			label: "Inventory",
+			children: vec![MenuNode::Section {
+				label: "Clothing",
+				children: vec![
+					MenuNode::OrderedEquipment {
+						rows: vec![character_ui_menu::OrderedEquipmentRow {
+							label: "Clothing",
+							capacity: 6,
+							choices: vec![equipped],
+						}],
+					},
+					MenuNode::GridCatalog { label: "Clothing", max_selected: 6, choices },
+				],
+			}],
+		})
+	}
+
+	fn render_inventory(
+		interactive: bool,
+		drawer: InventoryDrawerMode,
+	) -> anyhow::Result<(App, InventoryScreenSlots)> {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+		app.init_asset::<Image>();
+		let session = InventoryMenuSession { drawer, ..default() };
+		let viewport = app.world_mut().spawn(session).id();
+		let node = clothing_inventory_node(3)?;
+		let slots = app
+			.world_mut()
+			.run_system_once(move |mut commands: Commands, assets: Res<AssetServer>| {
+				let fonts = HudFonts {
+					black: Handle::default(),
+					semibold: Handle::default(),
+					regular: Handle::default(),
+					logo: Handle::default(),
+				};
+				fill_inventory_screen(
+					&mut commands,
+					viewport,
+					&fonts,
+					&assets,
+					InputPromptDevice::Keyboard,
+					&node,
+					interactive,
+					&session,
+					&mut crate::NoThumbnails,
+				)
+			})
+			.map_err(|error| anyhow::anyhow!("inventory render: {error}"))?;
+		app.world_mut().flush();
+		Ok((app, slots))
+	}
+
+	fn drawer_art_sizes(world: &mut World, slots: &InventoryScreenSlots) -> Vec<f32> {
+		let mut pending = vec![slots.menus[0]];
+		let mut sizes = Vec::new();
+		while let Some(entity) = pending.pop() {
+			if let Some(art) = world.get::<InventoryItemArt>(entity) {
+				sizes.push(art.px);
+			}
+			if let Some(children) = world.get::<Children>(entity) {
+				pending.extend(children.iter());
+			}
+		}
+		sizes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+		sizes
+	}
+
+	fn equipped_art_sizes(world: &mut World, slots: &InventoryScreenSlots) -> Vec<f32> {
+		let mut pending = vec![slots.menus[1]];
+		let mut sizes = Vec::new();
+		while let Some(entity) = pending.pop() {
+			if let Some(art) = world.get::<InventoryItemArt>(entity) {
+				sizes.push(art.px);
+			}
+			if let Some(children) = world.get::<Children>(entity) {
+				pending.extend(children.iter());
+			}
+		}
+		sizes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+		sizes
+	}
+
+	#[test]
+	fn character_creation_inventory_scales_item_art_and_slots() -> anyhow::Result<()> {
+		let play = InventoryItemMetrics::PLAY;
+		let grant = InventoryItemMetrics::CHARACTER_CREATION;
+		assert_eq!(InventoryItemMetrics::for_interactive(true), play);
+		assert_eq!(InventoryItemMetrics::for_interactive(false), grant);
+		assert_eq!(grant.gallery_art_size, 96.0);
+		assert_eq!(play.gallery_art_size, 40.0);
+		assert_eq!(grant.rotary_art_size, 96.0);
+		assert_eq!(play.rotary_art_size, 56.0);
+		assert_eq!(grant.equipped_art_size, 52.0);
+		assert_eq!(play.equipped_art_size, 38.0);
+		assert!(grant.gallery_row_height > play.gallery_row_height);
+		assert!(grant.equipped_row_height > play.equipped_row_height);
+		assert!(grant.equipped_panel_percent > play.equipped_panel_percent);
+		assert!(grant.equipped_rank_floats);
+		assert!(!play.equipped_rank_floats);
+		assert!(grant.drawer_grows);
+		assert!(!play.drawer_grows);
+
+		for drawer in [InventoryDrawerMode::Rotary, InventoryDrawerMode::Gallery] {
+			let (mut play_app, play_slots) = render_inventory(true, drawer)?;
+			let (mut grant_app, grant_slots) = render_inventory(false, drawer)?;
+			let play_viewport = play_app
+				.world_mut()
+				.query_filtered::<Entity, With<InventoryItemMetrics>>()
+				.single(play_app.world())?;
+			let grant_viewport = grant_app
+				.world_mut()
+				.query_filtered::<Entity, With<InventoryItemMetrics>>()
+				.single(grant_app.world())?;
+			assert_eq!(play_app.world().get::<InventoryItemMetrics>(play_viewport), Some(&play));
+			assert_eq!(grant_app.world().get::<InventoryItemMetrics>(grant_viewport), Some(&grant));
+			assert!(grant_app.world().get::<InventoryScreenReadOnly>(grant_viewport).is_some());
+			assert!(play_app.world().get::<InventoryScreenReadOnly>(play_viewport).is_none());
+
+			let play_drawer_art = drawer_art_sizes(play_app.world_mut(), &play_slots);
+			let grant_drawer_art = drawer_art_sizes(grant_app.world_mut(), &grant_slots);
+			let expected_play_art = match drawer {
+				InventoryDrawerMode::Rotary => play.rotary_art_size,
+				InventoryDrawerMode::Gallery => play.gallery_art_size,
+			};
+			let expected_grant_art = match drawer {
+				InventoryDrawerMode::Rotary => grant.rotary_art_size,
+				InventoryDrawerMode::Gallery => grant.gallery_art_size,
+			};
+			assert!(!play_drawer_art.is_empty(), "play {drawer:?} must stamp item art");
+			assert_eq!(play_drawer_art, vec![expected_play_art; play_drawer_art.len()]);
+			assert_eq!(grant_drawer_art, vec![expected_grant_art; grant_drawer_art.len()]);
+			assert!(expected_grant_art > expected_play_art);
+
+			assert_eq!(
+				equipped_art_sizes(play_app.world_mut(), &play_slots),
+				vec![play.equipped_art_size]
+			);
+			assert_eq!(
+				equipped_art_sizes(grant_app.world_mut(), &grant_slots),
+				vec![grant.equipped_art_size]
+			);
+
+			let play_equipped = play_app
+				.world_mut()
+				.query::<(&InventoryAIOPSlot, &Node, Option<&InventoryItemKey>)>()
+				.iter(play_app.world())
+				.filter(|(_, _, key)| key.is_some())
+				.map(|(_, node, _)| node.height)
+				.collect::<Vec<_>>();
+			let grant_equipped = grant_app
+				.world_mut()
+				.query::<(&InventoryAIOPSlot, &Node, Option<&InventoryItemKey>)>()
+				.iter(grant_app.world())
+				.filter(|(_, _, key)| key.is_some())
+				.map(|(_, node, _)| node.height)
+				.collect::<Vec<_>>();
+			assert_eq!(play_equipped, vec![Val::Px(play.equipped_row_height)]);
+			assert_eq!(grant_equipped, vec![Val::Px(grant.equipped_row_height)]);
+
+			let grant_preview = grant_app
+				.world()
+				.get::<Node>(grant_slots.preview)
+				.ok_or_else(|| anyhow::anyhow!("grant preview"))?;
+			assert_eq!(grant_preview.display, Display::None);
+			let grant_drawer = grant_app
+				.world()
+				.get::<ChildOf>(grant_slots.menus[0])
+				.map(ChildOf::parent)
+				.ok_or_else(|| anyhow::anyhow!("grant drawer"))?;
+			let grant_drawer_node = grant_app
+				.world()
+				.get::<Node>(grant_drawer)
+				.ok_or_else(|| anyhow::anyhow!("grant drawer node"))?;
+			assert_eq!(grant_drawer_node.flex_grow, 1.0);
+			assert_eq!(grant_drawer_node.height, Val::Auto);
+			assert_eq!(grant_drawer_node.min_height, Val::Px(grant.drawer_height(drawer)));
+
+			let grant_aiop = grant_app
+				.world_mut()
+				.query_filtered::<&Node, With<InventoryAIOPPanel>>()
+				.single(grant_app.world())?;
+			assert_eq!(grant_aiop.width, Val::Percent(grant.equipped_panel_percent));
+			assert_eq!(grant_aiop.min_width, Val::Px(grant.equipped_min_width));
+			let play_aiop = play_app
+				.world_mut()
+				.query_filtered::<&Node, With<InventoryAIOPPanel>>()
+				.single(play_app.world())?;
+			assert_eq!(play_aiop.width, Val::Percent(play.equipped_panel_percent));
+			assert_eq!(play_aiop.min_width, Val::Px(play.equipped_min_width));
+
+			if drawer == InventoryDrawerMode::Gallery {
+				let mut grids = grant_app.world_mut().query::<&Node>();
+				assert!(grids.iter(grant_app.world()).any(|node| {
+					node.display == Display::Grid
+						&& node.grid_template_columns.len() == grant.gallery_columns
+						&& node.grid_auto_rows.first()
+							== Some(&GridTrack::px(grant.gallery_row_height))
+				}));
+				let mut play_grids = play_app.world_mut().query::<&Node>();
+				assert!(play_grids.iter(play_app.world()).any(|node| {
+					node.display == Display::Grid
+						&& node.grid_template_columns.len() == play.gallery_columns
+						&& node.grid_auto_rows.first()
+							== Some(&GridTrack::px(play.gallery_row_height))
+				}));
+			} else {
+				let play_layout = play_app
+					.world_mut()
+					.query::<&RotaryLayout>()
+					.iter(play_app.world())
+					.next()
+					.copied();
+				let grant_layout = grant_app
+					.world_mut()
+					.query::<&RotaryLayout>()
+					.iter(grant_app.world())
+					.next()
+					.copied();
+				assert_eq!(play_layout, Some(RotaryLayout::INVENTORY));
+				assert_eq!(grant_layout, Some(RotaryLayout::for_inventory(false)));
+			}
+		}
 		Ok(())
 	}
 
@@ -1783,7 +2220,7 @@ mod tests {
 		};
 		for (mode, expected_height) in [
 			(InventoryDrawerMode::Rotary, 190.0),
-			(InventoryDrawerMode::Gallery, GALLERY_PANEL_HEIGHT),
+			(InventoryDrawerMode::Gallery, InventoryItemMetrics::PLAY.gallery_drawer_height),
 		] {
 			app.world_mut()
 				.get_mut::<InventoryMenuSession>(viewport)
@@ -2126,14 +2563,17 @@ mod tests {
 			.iter(app.world())
 			.find_map(|(area, node)| (area.0 == InventoryRegion::Drawer).then_some(node))
 			.ok_or_else(|| anyhow::anyhow!("missing gallery viewport"))?;
-		assert_eq!(viewport_node.height, Val::Px(GALLERY_VIEWPORT_HEIGHT));
+		assert_eq!(
+			viewport_node.height,
+			Val::Px(InventoryItemMetrics::PLAY.gallery_viewport_height())
+		);
 		let mut grids = app.world_mut().query::<&Node>();
 		assert!(grids.iter(app.world()).any(|node| {
 			node.display == Display::Grid
 				&& node.grid_template_columns.len() == INVENTORY_GALLERY_COLUMNS
 				&& node.grid_auto_rows.len() == 1
 				&& node.grid_auto_rows[0] == GridTrack::px(INVENTORY_GALLERY_ROW_HEIGHT)
-				&& node.min_height == Val::Px(gallery_content_height(3))
+				&& node.min_height == Val::Px(InventoryItemMetrics::PLAY.gallery_content_height(3))
 				&& node.flex_shrink == 0.0
 		}));
 		let mut tiles = app.world_mut().query::<&InventoryTile>();
