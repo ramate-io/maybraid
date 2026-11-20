@@ -7,6 +7,7 @@ use bevy::text::FontSize;
 use durham::DurhamSurface;
 use game_commands::command::TextEntryFocus;
 use geneva::{LanguageOverlay, NameKey, NamedOverlay};
+use lod::LodNodeSystems;
 use maybraid_character_controller::{
 	ActorControlStatus, ActorIntentEvent, CharacterControlSystems, CharacterIntent,
 };
@@ -305,7 +306,9 @@ impl Plugin for WorldMapViewPlugin {
 			)
 			.add_systems(
 				Update,
-				crate::map_lod::despawn_ground_lod_anchors.after(PlayerCameraSystems::Apply),
+				crate::map_lod::despawn_ground_lod_anchors
+					.after(PlayerCameraSystems::Apply)
+					.after(LodNodeSystems::Track),
 			)
 			.add_systems(
 				Update,
