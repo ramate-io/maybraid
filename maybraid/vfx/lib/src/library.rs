@@ -76,13 +76,16 @@ pub fn setup_vfx_library(
 	let smoke_wisps = smoke::compile_wisps(&mut effects, &flipbooks.smoke);
 	let sparks_part = sparks::compile(&mut effects, flipbooks.spark.clone());
 	let soundwave_mesh = soundwave::compile_mesh(meshes.add(soundwave_torus_mesh()));
+	let soundwave_wisps = soundwave::compile_wisps(&mut effects, flipbooks.spark.clone());
+	let soundwave_streaks = soundwave::compile_streaks(&mut effects, flipbooks.spark.clone());
 	let library = VfxLibrary {
 		dust: Dust::rolling_wave(&server, &mut meshes),
 		flash: flash::definition(flash_mesh.clone()),
 		fireball: fireball::definition(fireball_mesh.clone(), fireball_wisps.clone()),
 		smoke: smoke::definition(smoke_mesh.clone(), smoke_wisps.clone()),
 		sparks: sparks::definition(sparks_part.clone()),
-		soundwave: Soundwave::new(soundwave_mesh),
+		soundwave: Soundwave::new(soundwave_mesh)
+			.with_trail(soundwave_wisps.clone(), soundwave_streaks.clone()),
 		fiery_explosion: FieryExplosion::new(
 			flash_mesh,
 			fireball_mesh,
@@ -93,7 +96,8 @@ pub fn setup_vfx_library(
 		),
 		flipbooks,
 	};
-	for part in [&fireball_wisps, &smoke_wisps, &sparks_part] {
+	for part in [&fireball_wisps, &smoke_wisps, &sparks_part, &soundwave_wisps, &soundwave_streaks]
+	{
 		let mut warmup = commands.spawn((
 			Name::new(format!("vfx-warmup-{}", part.name)),
 			ParticleEffect::new(part.effect.clone()),

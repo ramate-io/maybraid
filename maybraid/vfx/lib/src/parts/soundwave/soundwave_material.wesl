@@ -116,8 +116,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let n = normalize(mesh.world_normal);
     let facing = saturate(abs(dot(n, view_dir)));
 
-    // Keep energy on a thin ring. hole*rim filled the disc into an oval.
-    let radial_band = exp(-pow(abs(ring - radius) / max(thickness * 0.32, 0.05), 2.0));
+    // Keep energy on a thin broken ring. hole*rim filled the disc into an oval.
+    let radial_band = exp(-pow(abs(ring - radius) / max(thickness * 0.18, 0.04), 2.0));
 
     // Discrete spirit filaments around the heading (PR 1585 streak language).
     let turns = around * 0.15915494;
@@ -151,14 +151,16 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let trail_falloff = exp(-behind * 2.4) * (1.0 - leading);
 
     let grown = smoothstep(0.06, 0.28, extras.x);
-    let compress = front_band * leading * radial_band * (0.12 + 0.88 * filament);
-    let trail = radial_band * max(filament, 0.35) * spirit * trail_falloff * grown * 1.7;
-    let wispy_shell = radial_band * filament * spirit * 0.12 * grown * (1.0 - saturate(abs(along) / max(thickness * 2.2, 0.2)));
-    let alpha = saturate((compress * 0.55 + trail * 0.9 + wispy_shell) * facing * fade);
+    // Filament ticks only — a filled compress body reads as a translucent oval.
+    let compress = front_band * leading * radial_band * filament;
+    let trail = radial_band * filament * spirit * trail_falloff * grown * 1.35;
+    let alpha = saturate((compress * 0.9 + trail * 0.55) * facing * fade);
+    if (alpha < 0.04) {
+        discard;
+    }
 
-    var rgb = tint.xyz * compress * (0.85 + streaks * 0.7) * intensity;
-    rgb += tint.xyz * trail * (0.45 + directional * 1.8) * intensity;
-    rgb += tint.xyz * wispy_shell * streaks * intensity;
+    var rgb = tint.xyz * compress * (0.7 + streaks * 0.9) * intensity;
+    rgb += tint.xyz * trail * (0.35 + directional * 1.6) * intensity;
     let mapped = tone_mapping(vec4<f32>(rgb, 1.0), view.color_grading);
     return vec4<f32>(mapped.rgb, alpha);
 }

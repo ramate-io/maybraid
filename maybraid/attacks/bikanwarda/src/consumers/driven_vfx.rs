@@ -11,8 +11,9 @@ use attacks::{
 };
 use bevy::prelude::*;
 use maybraid_vfx::{
-	soundwave_torus_mesh, soundwave_transform, soundwave_wake_mesh, soundwave_wake_transform,
-	SoundwaveMaterial, SoundwaveMaterialPlugin,
+	attach_soundwave_trail, fade_trail, soundwave_torus_mesh, soundwave_trail_transform,
+	soundwave_transform, soundwave_wake_mesh, soundwave_wake_transform, EffectProperties,
+	SoundwaveMaterial, SoundwaveMaterialPlugin, VfxLibrary,
 };
 
 use crate::consumers::BikanwardaPresentationSystems;
@@ -33,6 +34,9 @@ struct SoundwaveAssets {
 struct SoundwaveRing {
 	ring: Entity,
 	wake: Entity,
+	trail: Entity,
+	wisps: Entity,
+	streaks: Entity,
 }
 
 #[derive(Resource, Default)]
@@ -133,10 +137,12 @@ fn consume_god_beam_placeholder(
 fn consume_sonic_wave(
 	mut cues: MessageReader<SonicWaveVfxCue>,
 	assets: Res<SoundwaveAssets>,
+	library: Option<Res<VfxLibrary>>,
 	mut bindings: ResMut<DrivenBindings>,
 	mut transforms: Query<&mut Transform>,
 	mut materials: ResMut<Assets<SoundwaveMaterial>>,
 	handles: Query<&MeshMaterial3d<SoundwaveMaterial>>,
+	mut properties: Query<&mut EffectProperties>,
 	mut commands: Commands,
 ) {
 	let (Some(mesh), Some(wake)) = (assets.ring.as_ref(), assets.wake.as_ref()) else {
@@ -154,6 +160,8 @@ fn consume_sonic_wave(
 					&mut transforms,
 					&mut materials,
 					&handles,
+					&mut properties,
+					library.as_deref(),
 					mesh,
 					wake,
 					cue.instance,
@@ -166,6 +174,7 @@ fn consume_sonic_wave(
 					if *instance == cue.instance {
 						commands.entity(ring.ring).try_despawn();
 						commands.entity(ring.wake).try_despawn();
+						commands.entity(ring.trail).try_despawn();
 						false
 					} else {
 						true
@@ -186,6 +195,8 @@ fn follow_wave(
 	transforms: &mut Query<&mut Transform>,
 	materials: &mut Assets<SoundwaveMaterial>,
 	handles: &Query<&MeshMaterial3d<SoundwaveMaterial>>,
+	properties: &mut Query<&mut EffectProperties>,
+	library: Option<&VfxLibrary>,
 	mesh: &Handle<Mesh>,
 	wake_mesh: &Handle<Mesh>,
 	instance: AttackInstanceId,
@@ -196,6 +207,7 @@ fn follow_wave(
 	let transform = soundwave_transform(wave.position, wave.direction, wave.radius, wave.thickness);
 	let wake_transform =
 		soundwave_wake_transform(wave.position, wave.direction, wave.radius, wave.thickness);
+	let trail_transform = soundwave_trail_transform(wave.position, wave.direction, wave.radius);
 	if let Some(ring) = bindings.rings.get(&key) {
 		if let Ok(mut tf) = transforms.get_mut(ring.ring) {
 			*tf = transform;
@@ -203,11 +215,16 @@ fn follow_wave(
 		if let Ok(mut tf) = transforms.get_mut(ring.wake) {
 			*tf = wake_transform;
 		}
+		if let Ok(mut tf) = transforms.get_mut(ring.trail) {
+			*tf = trail_transform;
+		}
 		if let Ok(handle) = handles.get(ring.ring) {
 			if let Some(mut material) = materials.get_mut(&handle.0) {
 				follow_soundwave_material(&mut material, wave);
 			}
 		}
+		fade_trail_entity(properties, ring.wisps, wave.trailing_fade());
+		fade_trail_entity(properties, ring.streaks, wave.trailing_fade());
 		return;
 	}
 	let mut material = SoundwaveMaterial::new(
@@ -230,6 +247,9 @@ fn follow_wave(
 			Mesh3d(mesh.clone()),
 			MeshMaterial3d(material.clone()),
 			transform,
+			// Torus and ribbon meshes read as filled ovals from the player.
+			// Keep the entities for live uniforms / heading tests; draw particles.
+			Visibility::Hidden,
 			binding,
 		))
 		.id();
@@ -239,10 +259,31 @@ fn follow_wave(
 			Mesh3d(wake_mesh.clone()),
 			MeshMaterial3d(material),
 			wake_transform,
+			Visibility::Hidden,
 			binding,
 		))
 		.id();
-	bindings.rings.insert(key, SoundwaveRing { ring, wake });
+	let trail = commands
+		.spawn((
+			Name::new("vfx-soundwave-bray-trail"),
+			trail_transform,
+			Visibility::Inherited,
+			binding,
+		))
+		.id();
+	let (wisps, streaks) = attach_soundwave_trail(
+		commands,
+		trail,
+		library.and_then(|lib| lib.soundwave.wisps.as_ref()),
+		library.and_then(|lib| lib.soundwave.streaks.as_ref()),
+	);
+	bindings.rings.insert(key, SoundwaveRing { ring, wake, trail, wisps, streaks });
+}
+
+fn fade_trail_entity(properties: &mut Query<&mut EffectProperties>, entity: Entity, fade: f32) {
+	if let Ok(mut props) = properties.get_mut(entity) {
+		fade_trail(&mut props, fade);
+	}
 }
 
 fn follow_soundwave_material(material: &mut SoundwaveMaterial, wave: WavefrontPresentation) {

@@ -161,6 +161,10 @@ mod tests {
 			"trailing spirit filaments must sit on a thin ring, not a filled oval"
 		);
 		assert!(
+			src.contains("discard"),
+			"faint disc fill must discard instead of reading as a translucent oval"
+		);
+		assert!(
 			src.contains("front_band") && src.contains("leading") && src.contains("fade"),
 			"front must stay tied to attack heading, position, and fade"
 		);

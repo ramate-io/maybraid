@@ -221,6 +221,18 @@ fn sonic_wave_torus_maps_y_axle_to_heading() -> anyhow::Result<()> {
 			expected_wake.translation
 		));
 	}
+	let names: Vec<String> = app
+		.world_mut()
+		.query::<&Name>()
+		.iter(app.world())
+		.map(|name| name.as_str().to_string())
+		.collect();
+	if !names.iter().any(|name| name == maybraid_vfx::SOUNDWAVE_WISP_NAME) {
+		return Err(anyhow!("Bray consumer must emit trailing spirit wisps behind the front"));
+	}
+	if !names.iter().any(|name| name == maybraid_vfx::SOUNDWAVE_STREAK_NAME) {
+		return Err(anyhow!("Bray consumer must emit directional spirit streaks behind the front"));
+	}
 	let first = soundwave_material(&mut app)?;
 	let first_center = Vec3::new(first.wave.x, first.wave.y, first.wave.z);
 	if (first_center - Vec3::new(4.0, 2.0, 3.0)).length() > 1e-3 {

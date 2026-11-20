@@ -1,7 +1,9 @@
 //! Repeatable Parade / God Beam / Bray preview.
 //!
-//! Gameplay is `bikanwarda-attacks` + `attacks`. Presentation is placeholders
-//! plus existing `fiery_explosion`. Self / `maybraid-world` are not loaded.
+//! Gameplay is `bikanwarda-attacks` + `attacks`. Presentation is the driven
+//! consumers (`fiery_explosion`, directional soundwave, God Beam cylinder).
+//! Hazard-volume placeholders are omitted so Bray frames show the VFX, not
+//! the red wavefront cylinders. Self / `maybraid-world` are not loaded.
 //!
 //! `bikanwarda-attacks-playground --capture` walks each move, then cancels
 //! God Beam so xvfb can GPU-readback stills.
@@ -9,8 +11,8 @@
 use std::path::PathBuf;
 
 use attacks::{
-	AttackEnded, AttackId, AttackInstance, AttackPlaceholderPresentationPlugin, AttackStage,
-	AttackUser, AttacksPlugin, BeginAttack, CancelAttacks,
+	AttackEnded, AttackId, AttackInstance, AttackStage, AttackUser, AttacksPlugin, BeginAttack,
+	CancelAttacks,
 };
 use avian3d::prelude::{Collider, PhysicsPlugins, Sensor};
 use bevy::app::AppExit;
@@ -48,7 +50,6 @@ fn main() {
 		.add_plugins(AttacksPlugin)
 		.add_plugins(BikanwardaAttacksPlugin { placeholders: true })
 		.add_plugins(BikanwardaPresentationConsumersPlugin::default())
-		.add_plugins(AttackPlaceholderPresentationPlugin)
 		.add_plugins(VfxPlugin)
 		.add_plugins(SpatialRumblePlugin)
 		.add_message::<DamageApplied>()
@@ -110,6 +111,8 @@ enum CaptureCamera {
 	Parade,
 	Beam,
 	Bray,
+	BrayClose,
+	BrayMid,
 }
 
 #[derive(Component)]
@@ -269,6 +272,10 @@ fn setup(
 				CaptureStep::Shot("bray-windup.png"),
 				CaptureStep::Wait(1.15),
 				CaptureStep::Shot("bray-execute.png"),
+				CaptureStep::Aim(CaptureCamera::BrayClose),
+				CaptureStep::Shot("bray-execute-close.png"),
+				CaptureStep::Aim(CaptureCamera::BrayMid),
+				CaptureStep::Shot("bray-execute-mid.png"),
 				CaptureStep::Cancel,
 				CaptureStep::Wait(0.8),
 				CaptureStep::Shot("cancelled.png"),
@@ -292,6 +299,13 @@ fn camera_for(kind: CaptureCamera) -> Transform {
 		}
 		CaptureCamera::Bray => {
 			Transform::from_xyz(34.0, 18.0, 16.0).looking_at(Vec3::new(0.0, 8.0, 2.0), Vec3::Y)
+		}
+		// Player-like: capsule sits at (0, 1.1, -8), waves travel mouth → player.
+		CaptureCamera::BrayClose => {
+			Transform::from_xyz(0.55, 1.65, -7.2).looking_at(Vec3::new(0.0, 4.2, -5.2), Vec3::Y)
+		}
+		CaptureCamera::BrayMid => {
+			Transform::from_xyz(1.8, 2.4, -13.5).looking_at(Vec3::new(0.0, 4.5, -4.5), Vec3::Y)
 		}
 	}
 }

@@ -19,6 +19,7 @@ pub mod parts;
 pub mod seed;
 pub mod spawn;
 
+pub use bevy_hanabi::prelude::EffectProperties;
 pub use composition::{
 	EffectDefinition, EffectLayer, EffectPart, EffectRecipe, FlipbookPart, LightPulse, LobeKind,
 	LobeSpec, MeshPart, ParticlePart, ParticleShade, ScaleBounds, SoundwavePart, DEFAULT_SCALE_MAX,
@@ -28,6 +29,9 @@ pub use effects::dust::Dust;
 pub use effects::fiery_explosion::FieryExplosion;
 pub use effects::soundwave::Soundwave;
 pub use layers::dust::DustLayer;
+pub use layers::soundwave::{
+	attach_soundwave_trail, fade_trail, SOUNDWAVE_STREAK_NAME, SOUNDWAVE_WISP_NAME,
+};
 pub use library::{canonicalize_effect_name, VfxLibrary};
 pub use names::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SOUNDWAVE, SPARKS};
 pub use palette::ExplosionPalette;
@@ -36,9 +40,9 @@ pub use parts::lobe::{LobeMaterial, LobeMaterialPlugin};
 pub use parts::packaged::{PackagedFlipbook, PackagedVfxPlugin, StaticVolume};
 pub use parts::particle::{FlipbookAsset, VfxFlipbooks};
 pub use parts::soundwave::{
-	soundwave_torus_mesh, soundwave_transform, soundwave_wake_mesh, soundwave_wake_transform,
-	SoundwaveMaterial, SoundwaveMaterialPlugin, SOUNDWAVE_MAJOR, SOUNDWAVE_MINOR,
-	SOUNDWAVE_WAKE_ALONG,
+	soundwave_torus_mesh, soundwave_trail_transform, soundwave_transform, soundwave_wake_mesh,
+	soundwave_wake_transform, SoundwaveMaterial, SoundwaveMaterialPlugin, SOUNDWAVE_MAJOR,
+	SOUNDWAVE_MINOR, SOUNDWAVE_WAKE_ALONG,
 };
 pub use spawn::{
 	spawn_vfx, Effect, SpawnVfxExt, Vfx, VfxInstance, VfxSpawn, MAX_PLAYBACK, MIN_PLAYBACK,

@@ -2,19 +2,28 @@
 
 use bevy::prelude::*;
 
-use crate::composition::{EffectDefinition, EffectRecipe, SoundwavePart};
+use crate::composition::{EffectDefinition, EffectRecipe, ParticlePart, SoundwavePart};
 use crate::layers::soundwave::{self, SOUNDWAVE_DURATION};
 
 /// Authored directional soundwave. Mutating this after spawn does not rebuild
-/// the instance. Live Bray rings update [`crate::SoundwaveMaterial`] directly.
+/// the instance. Live Bray rings update [`crate::SoundwaveMaterial`] directly
+/// and attach the compiled wisp / streak trail.
 #[derive(Component, Clone, Debug)]
 pub struct Soundwave {
 	pub part: SoundwavePart,
+	pub wisps: Option<ParticlePart>,
+	pub streaks: Option<ParticlePart>,
 }
 
 impl Soundwave {
 	pub fn new(part: SoundwavePart) -> Self {
-		Self { part }
+		Self { part, wisps: None, streaks: None }
+	}
+
+	pub fn with_trail(mut self, wisps: ParticlePart, streaks: ParticlePart) -> Self {
+		self.wisps = Some(wisps);
+		self.streaks = Some(streaks);
+		self
 	}
 
 	pub fn from_mesh(mesh: Handle<Mesh>) -> Self {
@@ -28,7 +37,12 @@ impl Soundwave {
 
 impl EffectRecipe for Soundwave {
 	fn effect_definition(&self) -> EffectDefinition {
-		soundwave::definition(self.part.clone())
+		match (&self.wisps, &self.streaks) {
+			(Some(wisps), Some(streaks)) => {
+				soundwave::definition_with_trail(self.part.clone(), wisps.clone(), streaks.clone())
+			}
+			_ => soundwave::definition(self.part.clone()),
+		}
 	}
 }
 

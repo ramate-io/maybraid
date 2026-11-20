@@ -71,6 +71,19 @@ pub fn soundwave_transform(
 	}
 }
 
+/// Pose the Hanabi trail so a unit circle sits on the live ring.
+///
+/// Y maps onto the heading; XZ scale is gameplay radius. Y scale stays 1 so
+/// behind-the-front velocity is not stretched by the wake length.
+pub fn soundwave_trail_transform(position: Vec3, direction: Vec3, radius: f32) -> Transform {
+	let heading = direction.normalize_or(Vec3::Z);
+	Transform {
+		translation: position,
+		rotation: Quat::from_rotation_arc(Vec3::Y, heading),
+		scale: Vec3::new(radius.max(0.05), 1.0, radius.max(0.05)),
+	}
+}
+
 /// Pose a Y-axle cylinder so it extends behind the travelling front.
 pub fn soundwave_wake_transform(
 	position: Vec3,
@@ -248,5 +261,16 @@ mod tests {
 		assert!((pose.scale.x - 2.0).abs() < 1e-4);
 		assert!((pose.scale.y - length).abs() < 1e-4);
 		assert!(pose.translation.x < front.x, "wake center must trail the front");
+	}
+
+	#[test]
+	fn trail_emitter_sits_on_the_live_ring() {
+		let front = Vec3::new(4.0, 2.0, 3.0);
+		let heading = Vec3::X;
+		let pose = soundwave_trail_transform(front, heading, 2.0);
+		let axle = pose.rotation * Vec3::Y;
+		assert!((axle - heading).length() < 1e-4);
+		assert!((pose.translation - front).length() < 1e-4);
+		assert!((pose.scale - Vec3::new(2.0, 1.0, 2.0)).length() < 1e-4);
 	}
 }
