@@ -30,8 +30,24 @@ impl GrassBounds {
 		wind_strength_m: f32,
 		stiffness: f32,
 	) -> Self {
+		Self::from_samples_with_parting(samples, height_m, wind_strength_m, 0.0, stiffness)
+	}
+
+	pub fn from_samples_with_parting(
+		samples: &[SurfaceSample],
+		height_m: f32,
+		wind_strength_m: f32,
+		parting_strength_m: f32,
+		stiffness: f32,
+	) -> Self {
 		let mut bounds = Self::empty();
-		let pad = max_wind_displacement_m(height_m, wind_strength_m, stiffness) + height_m + 0.08;
+		let pad = max_wind_displacement_m(height_m, wind_strength_m, stiffness)
+			+ vegetation_shaders::wesl::max_parting_displacement_m(
+				height_m,
+				parting_strength_m,
+				stiffness,
+			) + height_m
+			+ 0.08;
 		for sample in samples {
 			bounds.include_point(sample.root, pad, height_m);
 		}

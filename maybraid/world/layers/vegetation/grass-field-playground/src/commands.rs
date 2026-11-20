@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use clap::{Parser, Subcommand, ValueEnum};
 use game_commands::command::{CommandScript, GameCommand};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::{GrassFieldSettings, GrassPatch, GrassPatchLod};
+use vegetation_grass_field::{GrassFieldSettings, GrassPartingMode, GrassPatch, GrassPatchLod};
 
 use crate::camera::{yaw_pitch, CameraController};
 use crate::ground::TurfPlane;
@@ -36,6 +36,8 @@ pub enum PlaygroundCommand {
 	Shadows(ShadowCommand),
 	#[command(subcommand)]
 	Compare(CompareCommand),
+	#[command(subcommand)]
+	Parting(PartingCommand),
 }
 
 #[derive(Clone, Subcommand)]
@@ -46,6 +48,7 @@ pub enum SpawnCommand {
 	Meadow,
 	Slope,
 	Crest,
+	Parting,
 	Clear,
 }
 
@@ -95,6 +98,23 @@ pub enum ShadowCommand {
 
 #[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
+pub enum PartingCommand {
+	Off,
+	Depth,
+	Raster,
+	World,
+	Set {
+		#[arg(long)]
+		strength: Option<f32>,
+		#[arg(long)]
+		radius: Option<f32>,
+		#[arg(long)]
+		falloff: Option<f32>,
+	},
+}
+
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
 pub enum CompareCommand {
 	Turf { visible: VisibilityChoice },
 	Grass { visible: VisibilityChoice },
@@ -126,6 +146,7 @@ impl PlaygroundCommand {
 			Self::Lod(command) => command.react(commands, console),
 			Self::Shadows(command) => command.react(commands, console),
 			Self::Compare(command) => command.react(commands, console),
+			Self::Parting(command) => command.react(commands, console),
 		}
 	}
 }
@@ -135,14 +156,24 @@ impl SpawnCommand {
 		match self {
 			Self::Default => {
 				commands.queue(|world: &mut World| {
+					scene::clear_parting_props(world);
 					scene::clear_patches(world);
 					scene::spawn_default_scene_in_world(world);
 				});
 				*console = "spawned default meadow + clump + slope + crest".into();
 			}
 			Self::Clear => {
-				commands.queue(|world: &mut World| scene::clear_patches(world));
+				commands.queue(|world: &mut World| {
+					scene::clear_parting_props(world);
+					scene::clear_patches(world);
+				});
 				*console = "cleared grass patches".into();
+			}
+			Self::Parting => {
+				commands.queue(|world: &mut World| {
+					scene::spawn_parting_scene_in_world(world, 1.35, 0.95);
+				});
+				*console = "spawned parting corridor (capsule + rock)".into();
 			}
 			other => {
 				let kind = match other {
@@ -150,7 +181,7 @@ impl SpawnCommand {
 					Self::Meadow => PatchKind::Meadow,
 					Self::Slope => PatchKind::Slope,
 					Self::Crest => PatchKind::Crest,
-					Self::Default | Self::Clear => unreachable!(),
+					Self::Default | Self::Clear | Self::Parting => unreachable!(),
 				};
 				commands.queue(move |world: &mut World| {
 					scene::spawn_kind(world, kind);
@@ -249,6 +280,41 @@ impl ShadowCommand {
 	}
 }
 
+impl PartingCommand {
+	fn react(self, commands: &mut Commands, console: &mut String) {
+		match self {
+			Self::Off | Self::Depth | Self::Raster | Self::World => {
+				let mode = match self {
+					Self::Off => GrassPartingMode::Off,
+					Self::Depth => GrassPartingMode::Depth,
+					Self::Raster => GrassPartingMode::Raster,
+					Self::World => GrassPartingMode::World,
+					Self::Set { .. } => unreachable!(),
+				};
+				commands.queue(move |world: &mut World| {
+					world.resource_mut::<GrassFieldSettings>().parting.mode = mode;
+				});
+				*console = format!("parting {}", mode.label());
+			}
+			Self::Set { strength, radius, falloff } => {
+				commands.queue(move |world: &mut World| {
+					let mut settings = world.resource_mut::<GrassFieldSettings>();
+					if let Some(strength) = strength {
+						settings.parting.strength = strength.max(0.0);
+					}
+					if let Some(radius) = radius {
+						settings.parting.radius = radius.max(0.0);
+					}
+					if let Some(falloff) = falloff {
+						settings.parting.depth_falloff = falloff.max(0.05);
+					}
+				});
+				*console = "parting settings updated".into();
+			}
+		}
+	}
+}
+
 impl CompareCommand {
 	fn react(self, commands: &mut Commands, console: &mut String) {
 		match self {
@@ -305,6 +371,10 @@ mod tests {
 		assert!(matches!(command, PlaygroundCommand::Camera(CameraCommand::Ground)));
 		let command = <PlaygroundCommand as GameCommand>::parse_line("wind set --strength 0.3")?;
 		assert!(matches!(command, PlaygroundCommand::Wind(WindCommand::Set { .. })));
+		let command = <PlaygroundCommand as GameCommand>::parse_line("parting depth")?;
+		assert!(matches!(command, PlaygroundCommand::Parting(PartingCommand::Depth)));
+		let command = <PlaygroundCommand as GameCommand>::parse_line("spawn parting")?;
+		assert!(matches!(command, PlaygroundCommand::Spawn(SpawnCommand::Parting)));
 		Ok(())
 	}
 }

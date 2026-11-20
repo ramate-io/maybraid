@@ -47,6 +47,7 @@ Imported as `vegetation_shaders::wesl::<stem>`:
 | `lod` | projected height at actual resolution | same budgets |
 | `shading` | painterly wrap + root darkening | wood/foliage palettes |
 | `layout` | `BladeDescriptor`, view uniform, indirect | extra branch fields in the bush crate |
+| `parting` | view-dependent tip swath (world default; depth / raster settings) | bushes reuse the same envelope |
 
 Do not copy these functions into grass/bush entry points.
 
@@ -58,7 +59,7 @@ nix develop --command cargo run -p vegetation-grass-field-playground --release -
 
 In-game `/` commands: `spawn meadow|clump|slope|crest`, `camera orbit|overhead|ground`,
 `wind still|gentle|set`, `lod host high|medium|low|ultra-low`, `shadows proxy|full|off`,
-`compare turf on|off`.
+`compare turf on|off`, `spawn parting`, `parting off|depth|raster|world`.
 
 Captures (BotW meadow lighting):
 

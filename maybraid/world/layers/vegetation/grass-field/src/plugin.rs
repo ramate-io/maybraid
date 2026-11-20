@@ -16,6 +16,7 @@ use crate::capability::GrassGpuCapability;
 use crate::diagnostics::GrassFieldStats;
 use crate::field::{GrassField, GrassFieldSettings};
 use crate::gpu::GrassGpuPlugin;
+use crate::parting::{ExtractedPartingOccluder, GrassPartingOccluder};
 use crate::patch::GrassPatch;
 use crate::shaders::GrassShadersPlugin;
 
@@ -36,6 +37,7 @@ pub struct ExtractedGrassField {
 	pub prev_time_s: f32,
 	pub light_direction: Vec3,
 	pub shadow_mode: CanopyShadowMode,
+	pub occluders: Vec<ExtractedPartingOccluder>,
 }
 
 /// Registers grass field rendering. Existing turf/frond materials are untouched.
@@ -125,6 +127,7 @@ fn snapshot_extracted_field(
 	mut prev: ResMut<PrevGrassTime>,
 	lights: Query<&GlobalTransform, With<DirectionalLight>>,
 	shadow_mode: Option<Res<CanopyShadowMode>>,
+	occluders: Query<(&GrassPartingOccluder, &GlobalTransform)>,
 ) {
 	let time_s = settings.freeze_time_s.unwrap_or(time.elapsed_secs());
 	let prev_time_s = settings.freeze_time_s.unwrap_or(prev.0);
@@ -141,6 +144,12 @@ fn snapshot_extracted_field(
 		prev_time_s,
 		light_direction: light_direction.normalize_or(Vec3::Y),
 		shadow_mode: shadow_mode.map(|mode| *mode).unwrap_or_default(),
+		occluders: occluders
+			.iter()
+			.map(|(occluder, transform)| {
+				ExtractedPartingOccluder::from_transform(*occluder, *transform)
+			})
+			.collect(),
 	});
 }
 

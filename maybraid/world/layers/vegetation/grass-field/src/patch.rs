@@ -113,10 +113,11 @@ impl GrassPatch {
 	}
 
 	pub fn bounds(&self, settings: &GrassFieldSettings) -> GrassBounds {
-		GrassBounds::from_samples(
+		GrassBounds::from_samples_with_parting(
 			&self.samples,
 			self.species.height_m * (1.0 + self.species.height_jitter),
 			settings.wind.strength_m,
+			settings.parting.strength,
 			self.species.stiffness,
 		)
 	}

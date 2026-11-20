@@ -16,6 +16,7 @@ are `vegetation_shaders::wesl::<stem>`:
 | `lod` | Projected height (actual render resolution), nested keep, buckets |
 | `shading` | Painterly two-sided lighting, root darkening, backlight |
 | `layout` | Compact Rust/WESL buffer contracts |
+| `parting` | View-dependent tip swath (depth / raster / world field) |
 
 Grass GPU entry points (and the [#1638](https://github.com/ramate-io/maybraid/issues/1638)
 bush follow-up) must import these functions instead of copying them. Species

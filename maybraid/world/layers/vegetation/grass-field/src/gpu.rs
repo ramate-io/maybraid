@@ -5,6 +5,7 @@ use std::borrow::Cow;
 use bevy::core_pipeline::core_3d::{
 	Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey, CORE_3D_DEPTH_FORMAT,
 };
+use bevy::core_pipeline::prepass::ViewPrepassTextures;
 use bevy::core_pipeline::schedule::camera_driver;
 use bevy::ecs::system::{lifetimeless::SRes, SystemParamItem};
 use bevy::mesh::VertexBufferLayout;
@@ -16,16 +17,19 @@ use bevy::render::render_phase::{
 	RenderCommand, RenderCommandResult, SetItemPipeline, TrackedRenderPass, ViewBinnedRenderPhases,
 };
 use bevy::render::render_resource::binding_types::{
-	storage_buffer_read_only_sized, storage_buffer_sized, uniform_buffer,
+	sampler, storage_buffer_read_only_sized, storage_buffer_sized, texture_2d, texture_depth_2d,
+	uniform_buffer,
 };
 use bevy::render::render_resource::{
-	BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries, Buffer,
-	BufferDescriptor, BufferInitDescriptor, BufferUsages, CachedComputePipelineId,
+	AddressMode, BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries,
+	Buffer, BufferDescriptor, BufferInitDescriptor, BufferUsages, CachedComputePipelineId,
 	CachedPipelineState, Canonical, ColorTargetState, ColorWrites, CompareFunction,
-	ComputePassDescriptor, ComputePipelineDescriptor, DepthStencilState, FragmentState,
-	IndexFormat, PipelineCache, PrimitiveState, RenderPipeline, RenderPipelineDescriptor,
-	ShaderStages, Specializer, SpecializerKey, TextureFormat, Variants, VertexAttribute,
-	VertexFormat, VertexState, VertexStepMode,
+	ComputePassDescriptor, ComputePipelineDescriptor, DepthStencilState, Extent3d, FilterMode,
+	FragmentState, IndexFormat, MipmapFilterMode, Origin3d, PipelineCache, PrimitiveState,
+	RenderPipeline, RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor,
+	ShaderStages, Specializer, SpecializerKey, TexelCopyBufferLayout, TexelCopyTextureInfo,
+	Texture, TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType, TextureUsages,
+	TextureView, Variants, VertexAttribute, VertexFormat, VertexState, VertexStepMode,
 };
 use bevy::render::renderer::{
 	RenderAdapter, RenderContext, RenderDevice, RenderGraph, RenderQueue,
@@ -35,12 +39,14 @@ use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntit
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
 use vegetation_shaders::wesl::{
-	GeometryLod, GrassDrawParams, GrassViewUniform, LodThresholds, BLADE_DESCRIPTOR_STRIDE,
-	DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_COUNT, GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW,
+	GeometryLod, GrassDrawParams, GrassPartingUniform, GrassViewUniform, LodThresholds,
+	BLADE_DESCRIPTOR_STRIDE, DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_COUNT, GRASS_VIEW_KIND_CAMERA,
+	GRASS_VIEW_KIND_SHADOW,
 };
 
 use crate::capability::{GrassGpuCapability, GrassGpuMode};
 use crate::diagnostics::GrassFieldStats;
+use crate::parting::{GrassPartingMode, PartingMask, PARTING_MASK_HEIGHT, PARTING_MASK_WIDTH};
 use crate::plugin::{ExtractedGrassField, GrassFieldPresenter};
 use crate::select::GrassSelector;
 use crate::shaders::{BLADE_SHADER, FINALIZE_SHADER, SELECT_SHADER};
@@ -58,11 +64,15 @@ impl Plugin for GrassGpuPlugin {
 			.init_resource::<PendingGrassQueues>()
 			.init_resource::<GrassGpuState>()
 			.add_render_command::<Opaque3d, DrawGrass>()
-			.add_systems(RenderStartup, (detect_capability, init_grass_pipelines, init_templates))
+			.add_systems(
+				RenderStartup,
+				(detect_capability, init_grass_pipelines, init_templates, init_parting_gpu),
+			)
 			.add_systems(
 				Render,
 				(
 					prepare_grass_buffers.in_set(RenderSystems::PrepareResources),
+					prepare_parting_bind_group.in_set(RenderSystems::PrepareBindGroups),
 					queue_grass.in_set(RenderSystems::Queue),
 				),
 			)
@@ -82,6 +92,7 @@ struct GrassPipelines {
 	select_layout: BindGroupLayoutDescriptor,
 	finalize_layout: BindGroupLayoutDescriptor,
 	draw_layout: BindGroupLayoutDescriptor,
+	parting_layout: BindGroupLayoutDescriptor,
 	select_pipeline: CachedComputePipelineId,
 	finalize_pipeline: CachedComputePipelineId,
 	draw_variants: Variants<RenderPipeline, GrassDrawSpecializer>,
@@ -155,6 +166,18 @@ fn init_grass_pipelines(
 			),
 		),
 	);
+	let parting_layout = BindGroupLayoutDescriptor::new(
+		"grass_parting_layout",
+		&BindGroupLayoutEntries::sequential(
+			ShaderStages::VERTEX,
+			(
+				uniform_buffer::<GrassPartingUniform>(false),
+				texture_depth_2d(),
+				texture_2d(TextureSampleType::Float { filterable: true }),
+				sampler(SamplerBindingType::Filtering),
+			),
+		),
+	);
 
 	let select_shader = asset_server.load(SELECT_SHADER);
 	let finalize_shader = asset_server.load(FINALIZE_SHADER);
@@ -176,9 +199,10 @@ fn init_grass_pipelines(
 	});
 
 	let draw_layout_for_pipeline = draw_layout.clone();
+	let parting_layout_for_pipeline = parting_layout.clone();
 	let base_descriptor = RenderPipelineDescriptor {
 		label: Some("grass_blade".into()),
-		layout: vec![draw_layout_for_pipeline],
+		layout: vec![draw_layout_for_pipeline, parting_layout_for_pipeline],
 		vertex: VertexState {
 			shader: blade_shader.clone(),
 			buffers: vec![VertexBufferLayout {
@@ -216,6 +240,7 @@ fn init_grass_pipelines(
 		select_layout,
 		finalize_layout,
 		draw_layout,
+		parting_layout,
 		select_pipeline,
 		finalize_pipeline,
 		draw_variants: Variants::new(GrassDrawSpecializer, base_descriptor),
@@ -254,12 +279,73 @@ fn init_templates(mut commands: Commands, device: Res<RenderDevice>) {
 	commands.insert_resource(GrassTemplates { meshes });
 }
 
+fn init_parting_gpu(mut commands: Commands, device: Res<RenderDevice>) {
+	let dummy_depth_tex = device.create_texture(&TextureDescriptor {
+		label: Some("grass_parting_dummy_depth"),
+		size: Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+		mip_level_count: 1,
+		sample_count: 1,
+		dimension: TextureDimension::D2,
+		format: TextureFormat::Depth32Float,
+		usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+		view_formats: &[],
+	});
+	let dummy_depth = dummy_depth_tex.create_view(&Default::default());
+	let raster = device.create_texture(&TextureDescriptor {
+		label: Some("grass_parting_raster"),
+		size: Extent3d {
+			width: PARTING_MASK_WIDTH,
+			height: PARTING_MASK_HEIGHT,
+			depth_or_array_layers: 1,
+		},
+		mip_level_count: 1,
+		sample_count: 1,
+		dimension: TextureDimension::D2,
+		format: TextureFormat::Rgba32Float,
+		usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+		view_formats: &[],
+	});
+	let raster_view = raster.create_view(&Default::default());
+	let raster_sampler = device.create_sampler(&SamplerDescriptor {
+		label: Some("grass_parting_raster_sampler"),
+		address_mode_u: AddressMode::ClampToEdge,
+		address_mode_v: AddressMode::ClampToEdge,
+		address_mode_w: AddressMode::ClampToEdge,
+		mag_filter: FilterMode::Linear,
+		min_filter: FilterMode::Linear,
+		mipmap_filter: MipmapFilterMode::Nearest,
+		lod_min_clamp: 0.0,
+		lod_max_clamp: 32.0,
+		compare: None,
+		anisotropy_clamp: 1,
+		border_color: None,
+	});
+	commands.insert_resource(GrassPartingGpu {
+		dummy_depth,
+		raster,
+		raster_view,
+		raster_sampler,
+		mask: PartingMask::default_size(),
+	});
+}
+
 #[derive(Resource, Default)]
 struct GrassGpuState {
 	blades: Option<Buffer>,
 	blade_count: u32,
 	generation: u64,
 	views: std::collections::HashMap<RetainedViewEntity, ViewWork>,
+	parting_uniform: Option<Buffer>,
+	parting_bind_group: Option<BindGroup>,
+}
+
+#[derive(Resource)]
+struct GrassPartingGpu {
+	dummy_depth: TextureView,
+	raster: Texture,
+	raster_view: TextureView,
+	raster_sampler: Sampler,
+	mask: PartingMask,
 }
 
 struct ViewWork {
@@ -404,7 +490,7 @@ fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedGrassField) -> G
 		counts: Vec4::new(
 			extracted.field.blades.len() as f32,
 			extracted.settings.max_per_lod as f32,
-			0.0,
+			extracted.settings.parting.strength,
 			0.0,
 		),
 		light_direction: extracted.light_direction.extend(0.0),
@@ -522,6 +608,104 @@ fn create_view_work(
 
 fn write_view_uniform(queue: &RenderQueue, buffer: &Buffer, uniform: &GrassViewUniform) {
 	queue.write_buffer(buffer, 0, &uniform.to_std140_bytes());
+}
+
+fn prepare_parting_bind_group(
+	extracted: Option<Res<ExtractedGrassField>>,
+	pipelines: Option<Res<GrassPipelines>>,
+	pipeline_cache: Res<PipelineCache>,
+	device: Res<RenderDevice>,
+	queue: Res<RenderQueue>,
+	views: Query<(&ExtractedView, Option<&ViewPrepassTextures>)>,
+	mut parting_gpu: Option<ResMut<GrassPartingGpu>>,
+	mut state: ResMut<GrassGpuState>,
+) {
+	let Some(extracted) = extracted else {
+		return;
+	};
+	let Some(pipelines) = pipelines else {
+		return;
+	};
+	let Some(parting_gpu) = parting_gpu.as_mut() else {
+		return;
+	};
+
+	let camera = views
+		.iter()
+		.find(|(view, prepass)| view.retained_view_entity.subview_index == 0 && prepass.is_some())
+		.or_else(|| views.iter().find(|(view, _)| view.retained_view_entity.subview_index == 0));
+	let (clip_from_world, camera_pos, camera_right, camera_forward, depth_view) =
+		if let Some((view, prepass)) = camera {
+			let world_from_view = view.world_from_view.to_matrix();
+			let view_from_world = world_from_view.inverse();
+			let clip = view.clip_from_world.unwrap_or(view.clip_from_view * view_from_world);
+			let right = world_from_view.x_axis.truncate().normalize_or(Vec3::X);
+			let forward = (-world_from_view.z_axis.truncate()).normalize_or(Vec3::NEG_Z);
+			let depth = prepass
+				.and_then(ViewPrepassTextures::depth_only_view)
+				.cloned()
+				.unwrap_or_else(|| parting_gpu.dummy_depth.clone());
+			(clip, view.world_from_view.translation(), right, forward, depth)
+		} else {
+			(Mat4::IDENTITY, Vec3::ZERO, Vec3::X, Vec3::Z, parting_gpu.dummy_depth.clone())
+		};
+
+	if extracted.settings.parting.mode == GrassPartingMode::Raster {
+		parting_gpu.mask.splat(
+			&extracted.occluders,
+			clip_from_world,
+			camera_pos,
+			camera_right,
+			camera_forward,
+			extracted.settings.parting,
+		);
+		queue.write_texture(
+			TexelCopyTextureInfo {
+				texture: &parting_gpu.raster,
+				mip_level: 0,
+				origin: Origin3d::ZERO,
+				aspect: bevy::render::render_resource::TextureAspect::All,
+			},
+			&parting_gpu.mask.pixel_bytes_rgba32(),
+			TexelCopyBufferLayout {
+				offset: 0,
+				bytes_per_row: Some(PARTING_MASK_WIDTH * 16),
+				rows_per_image: Some(PARTING_MASK_HEIGHT),
+			},
+			Extent3d {
+				width: PARTING_MASK_WIDTH,
+				height: PARTING_MASK_HEIGHT,
+				depth_or_array_layers: 1,
+			},
+		);
+	}
+
+	let uniform = extracted.settings.parting.pack(
+		clip_from_world,
+		camera_pos,
+		camera_right,
+		camera_forward,
+		&extracted.occluders,
+	);
+	let parting_uniform = state.parting_uniform.get_or_insert_with(|| {
+		device.create_buffer(&BufferDescriptor {
+			label: Some("grass_parting_uniform"),
+			size: GrassPartingUniform::STRIDE,
+			usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+			mapped_at_creation: false,
+		})
+	});
+	queue.write_buffer(parting_uniform, 0, &uniform.to_std140_bytes());
+	state.parting_bind_group = Some(device.create_bind_group(
+		Some("grass_parting_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.parting_layout),
+		&BindGroupEntries::sequential((
+			parting_uniform.as_entire_buffer_binding(),
+			&depth_view,
+			&parting_gpu.raster_view,
+			&parting_gpu.raster_sampler,
+		)),
+	));
 }
 
 fn cpu_fill_lists<'a>(
@@ -735,8 +919,12 @@ impl<P: PhaseItem> RenderCommand<P> for DrawGrassCommand {
 		let Some(work) = state.views.get(&view.retained_view_entity) else {
 			return RenderCommandResult::Skip;
 		};
+		let Some(parting_bg) = state.parting_bind_group.as_ref() else {
+			return RenderCommandResult::Skip;
+		};
 		for lod in 0..GRASS_LOD_COUNT {
 			pass.set_bind_group(0, &work.draw_bind_groups[lod], &[]);
+			pass.set_bind_group(1, parting_bg, &[]);
 			pass.set_vertex_buffer(0, templates.meshes[lod].vertices.slice(..));
 			pass.set_index_buffer(templates.meshes[lod].indices.slice(..), IndexFormat::Uint32);
 			match capability.mode {

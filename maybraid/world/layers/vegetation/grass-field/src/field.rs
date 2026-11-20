@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use vegetation_shaders::wesl::{BladeDescriptor, GrassPatchHeader, WindInputs};
 
 use crate::bounds::GrassBounds;
+use crate::parting::GrassPartingSettings;
 use crate::patch::GrassPatch;
 
 /// Tunables for GPU list capacities and wind. Authoring budgets live here, not in WESL.
@@ -15,6 +16,7 @@ pub struct GrassFieldSettings {
 	pub diagnostics: bool,
 	/// When set, select/draw use this time instead of `Time` (deterministic captures).
 	pub freeze_time_s: Option<f32>,
+	pub parting: GrassPartingSettings,
 }
 
 impl GrassFieldSettings {
@@ -40,6 +42,7 @@ impl Default for GrassFieldSettings {
 			wind: WindInputs::gentle_botw(0.0),
 			diagnostics: false,
 			freeze_time_s: None,
+			parting: GrassPartingSettings::default(),
 		}
 	}
 }

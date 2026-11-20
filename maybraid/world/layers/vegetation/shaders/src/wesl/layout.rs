@@ -101,12 +101,25 @@ impl BladeDescriptor {
 	}
 
 	pub fn conservative_extent_m(self, wind_strength_m: f32) -> f32 {
+		self.conservative_extent_with_parting_m(wind_strength_m, 0.0)
+	}
+
+	pub fn conservative_extent_with_parting_m(
+		self,
+		wind_strength_m: f32,
+		parting_strength_m: f32,
+	) -> f32 {
 		let wind = crate::wesl::wind::max_wind_displacement_m(
 			self.height_m,
 			wind_strength_m,
 			self.stiffness(),
 		);
-		self.height_m + wind + self.width_m * GeometryLod::Card.width_scale()
+		let parting = crate::wesl::parting::max_parting_displacement_m(
+			self.height_m,
+			parting_strength_m,
+			self.stiffness(),
+		);
+		self.height_m + wind + parting + self.width_m * GeometryLod::Card.width_scale()
 	}
 
 	/// Tight std430 packing matching `layout.wesl` (no runtime-array length prefix).
@@ -280,6 +293,77 @@ impl DrawIndexedIndirect {
 	}
 }
 
+/// Maximum capsules packed into [`GrassPartingUniform`].
+pub const MAX_PARTING_OCCLUDERS: usize = 16;
+
+/// Per-view parting uniforms. std140. Camera matrices are always the *game*
+/// camera so shadow draws use the same deflected silhouettes.
+#[derive(Clone, Copy, Debug, ShaderType, PartialEq)]
+pub struct GrassPartingUniform {
+	pub camera_clip_from_world: Mat4,
+	pub camera_world_from_clip: Mat4,
+	/// x = strength (m), y = radius (m), z = depth falloff (m), w = mode.
+	pub params: Vec4,
+	/// x = lod skip (m), y = ground reject (m), z = kernel (px), w = occluder count.
+	pub extras: Vec4,
+	pub camera_right: Vec4,
+	pub camera_forward: Vec4,
+	/// xyz = game-camera world position so shadow draws match the camera swath.
+	pub camera_position: Vec4,
+	pub occluders: [Vec4; MAX_PARTING_OCCLUDERS],
+	pub occluder_meta: [Vec4; MAX_PARTING_OCCLUDERS],
+}
+
+impl Default for GrassPartingUniform {
+	fn default() -> Self {
+		Self {
+			camera_clip_from_world: Mat4::IDENTITY,
+			camera_world_from_clip: Mat4::IDENTITY,
+			params: Vec4::ZERO,
+			extras: Vec4::new(28.0, 0.22, 3.0, 0.0),
+			camera_right: Vec4::X,
+			camera_forward: Vec4::Z,
+			camera_position: Vec4::ZERO,
+			occluders: [Vec4::ZERO; MAX_PARTING_OCCLUDERS],
+			occluder_meta: [Vec4::ZERO; MAX_PARTING_OCCLUDERS],
+		}
+	}
+}
+
+impl GrassPartingUniform {
+	pub const STRIDE: u64 = 720;
+
+	pub fn mode(self) -> u32 {
+		self.params.w as u32
+	}
+
+	pub fn occluder_count(self) -> u32 {
+		self.extras.w as u32
+	}
+
+	pub fn camera_world(self) -> Vec3 {
+		self.camera_position.truncate()
+	}
+
+	pub fn to_std140_bytes(self) -> [u8; Self::STRIDE as usize] {
+		let mut bytes = [0u8; Self::STRIDE as usize];
+		pack_mat4(&mut bytes, 0, self.camera_clip_from_world);
+		pack_mat4(&mut bytes, 64, self.camera_world_from_clip);
+		pack_vec4(&mut bytes, 128, self.params);
+		pack_vec4(&mut bytes, 144, self.extras);
+		pack_vec4(&mut bytes, 160, self.camera_right);
+		pack_vec4(&mut bytes, 176, self.camera_forward);
+		pack_vec4(&mut bytes, 192, self.camera_position);
+		for (i, occluder) in self.occluders.iter().enumerate() {
+			pack_vec4(&mut bytes, 208 + i * 16, *occluder);
+		}
+		for (i, meta) in self.occluder_meta.iter().enumerate() {
+			pack_vec4(&mut bytes, 464 + i * 16, *meta);
+		}
+		bytes
+	}
+}
+
 pub const BLADE_DESCRIPTOR_STRIDE: u64 = 80;
 pub const PATCH_HEADER_STRIDE: u64 = 48;
 pub const DRAW_INDEXED_INDIRECT_STRIDE: u64 = 20;
@@ -299,6 +383,11 @@ mod tests {
 		);
 		assert_eq!(GrassViewUniform::SHADER_SIZE.get(), 256);
 		assert_eq!(GrassDrawParams::SHADER_SIZE.get(), 16);
+		assert_eq!(GrassPartingUniform::SHADER_SIZE.get(), GrassPartingUniform::STRIDE);
+		assert_eq!(
+			GrassPartingUniform::default().to_std140_bytes().len() as u64,
+			GrassPartingUniform::STRIDE
+		);
 		Ok(())
 	}
 

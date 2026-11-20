@@ -7,13 +7,14 @@ use std::path::PathBuf;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
-use vegetation_grass_field::GrassFieldSettings;
+use vegetation_grass_field::{GrassFieldSettings, GrassPartingMode};
 use vegetation_shaders::wesl::WindInputs;
 
 use crate::camera::{yaw_pitch, CameraController};
 use crate::scene;
 
 pub const CAPTURE_DIR_ENV: &str = "MAYBRAID_CAPTURE_DIR";
+pub const CAPTURE_SET_ENV: &str = "MAYBRAID_CAPTURE_SET";
 pub const CAPTURE_WIDTH: u32 = 960;
 pub const CAPTURE_HEIGHT: u32 = 540;
 const WARMUP_FRAMES: u32 = 160;
@@ -35,6 +36,12 @@ pub struct KeySun;
 #[derive(Component)]
 pub struct FillSky;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaptureScene {
+	Meadow,
+	Parting,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct CaptureShot {
 	pub name: &'static str,
@@ -42,15 +49,58 @@ pub struct CaptureShot {
 	pub look_at: Vec3,
 	pub grass: bool,
 	pub gust: bool,
+	pub scene: CaptureScene,
+	pub parting_mode: GrassPartingMode,
+	pub capsule_distance_m: f32,
+	pub rock_distance_m: f32,
 }
 
 impl CaptureShot {
 	pub const fn grass(name: &'static str, pose: (Vec3, Vec3)) -> Self {
-		Self { name, camera: pose.0, look_at: pose.1, grass: true, gust: false }
+		Self {
+			name,
+			camera: pose.0,
+			look_at: pose.1,
+			grass: true,
+			gust: false,
+			scene: CaptureScene::Meadow,
+			parting_mode: GrassPartingMode::Off,
+			capsule_distance_m: 1.35,
+			rock_distance_m: 0.95,
+		}
 	}
 
 	pub const fn turf(name: &'static str, pose: (Vec3, Vec3)) -> Self {
-		Self { name, camera: pose.0, look_at: pose.1, grass: false, gust: false }
+		Self {
+			name,
+			camera: pose.0,
+			look_at: pose.1,
+			grass: false,
+			gust: false,
+			scene: CaptureScene::Meadow,
+			parting_mode: GrassPartingMode::Off,
+			capsule_distance_m: 1.35,
+			rock_distance_m: 0.95,
+		}
+	}
+
+	pub const fn parting(
+		name: &'static str,
+		pose: (Vec3, Vec3),
+		mode: GrassPartingMode,
+		capsule_distance_m: f32,
+	) -> Self {
+		Self {
+			name,
+			camera: pose.0,
+			look_at: pose.1,
+			grass: true,
+			gust: false,
+			scene: CaptureScene::Parting,
+			parting_mode: mode,
+			capsule_distance_m,
+			rock_distance_m: 0.95,
+		}
 	}
 
 	pub const fn with_gust(mut self) -> Self {
@@ -59,17 +109,30 @@ impl CaptureShot {
 	}
 
 	pub fn apply_world(self, world: &mut World) {
-		if self.grass {
-			if !scene::has_patches(world) {
-				scene::spawn_default_scene_in_world(world);
+		match self.scene {
+			CaptureScene::Parting => {
+				scene::spawn_parting_scene_in_world(
+					world,
+					self.capsule_distance_m,
+					self.rock_distance_m,
+				);
 			}
-		} else {
-			scene::clear_patches(world);
+			CaptureScene::Meadow if self.grass => {
+				scene::clear_parting_props(world);
+				if !scene::has_patches(world) {
+					scene::spawn_default_scene_in_world(world);
+				}
+			}
+			CaptureScene::Meadow => {
+				scene::clear_parting_props(world);
+				scene::clear_patches(world);
+			}
 		}
 		let mut settings = world.resource_mut::<GrassFieldSettings>();
 		settings.wind =
 			if self.gust { WindInputs::botw_gust(1.85) } else { WindInputs::gentle_botw(0.85) };
 		settings.freeze_time_s = Some(if self.gust { 1.85 } else { 0.85 });
+		settings.parting.mode = self.parting_mode;
 	}
 }
 
@@ -89,6 +152,101 @@ pub const GRASS_CAPTURE_SHOTS: &[CaptureShot] = &[
 	CaptureShot::grass("crest-skyline", CREST),
 	CaptureShot::grass("clump-close", CLUMP),
 ];
+
+const PARTING_NEAR: f32 = 0.85;
+const PARTING_MID: f32 = 1.35;
+const PARTING_FAR: f32 = 3.15;
+
+pub const PARTING_CAPTURE_SHOTS: &[CaptureShot] = &[
+	CaptureShot::parting(
+		"parting-off-ground",
+		scene::PARTING_GROUND,
+		GrassPartingMode::Off,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-depth-ground",
+		scene::PARTING_GROUND,
+		GrassPartingMode::Depth,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-raster-ground",
+		scene::PARTING_GROUND,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-world-ground",
+		scene::PARTING_GROUND,
+		GrassPartingMode::World,
+		PARTING_MID,
+	),
+	CaptureShot::parting("parting-off-ots", scene::PARTING_OTS, GrassPartingMode::Off, PARTING_MID),
+	CaptureShot::parting(
+		"parting-depth-ots",
+		scene::PARTING_OTS,
+		GrassPartingMode::Depth,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-raster-ots",
+		scene::PARTING_OTS,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-world-ots",
+		scene::PARTING_OTS,
+		GrassPartingMode::World,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-depth-near",
+		scene::PARTING_GROUND,
+		GrassPartingMode::Depth,
+		PARTING_NEAR,
+	),
+	CaptureShot::parting(
+		"parting-depth-far",
+		scene::PARTING_GROUND,
+		GrassPartingMode::Depth,
+		PARTING_FAR,
+	),
+	CaptureShot::parting(
+		"parting-world-near",
+		scene::PARTING_GROUND,
+		GrassPartingMode::World,
+		PARTING_NEAR,
+	),
+	CaptureShot::parting(
+		"parting-world-far",
+		scene::PARTING_GROUND,
+		GrassPartingMode::World,
+		PARTING_FAR,
+	),
+	CaptureShot::parting(
+		"parting-depth-wind",
+		scene::PARTING_GROUND,
+		GrassPartingMode::Depth,
+		PARTING_MID,
+	)
+	.with_gust(),
+	CaptureShot::parting(
+		"parting-world-wind",
+		scene::PARTING_GROUND,
+		GrassPartingMode::World,
+		PARTING_MID,
+	)
+	.with_gust(),
+];
+
+pub fn active_capture_shots() -> &'static [CaptureShot] {
+	match std::env::var(CAPTURE_SET_ENV).as_deref() {
+		Ok("parting") => PARTING_CAPTURE_SHOTS,
+		_ => GRASS_CAPTURE_SHOTS,
+	}
+}
 
 #[derive(Resource, Debug)]
 pub struct CaptureSession {
@@ -133,8 +291,9 @@ pub(crate) fn tick_capture(
 	match session.phase {
 		CapturePhase::Warmup { frames } => {
 			if frames == 0 {
-				view.apply_camera(&GRASS_CAPTURE_SHOTS[0]);
-				let shot = GRASS_CAPTURE_SHOTS[0];
+				let shots = active_capture_shots();
+				view.apply_camera(&shots[0]);
+				let shot = shots[0];
 				commands.queue(move |world: &mut World| shot.apply_world(world));
 			}
 			if frames + 1 >= WARMUP_FRAMES {
@@ -145,7 +304,7 @@ pub(crate) fn tick_capture(
 		}
 		CapturePhase::Settle { index, frames } => {
 			if frames == 0 {
-				if let Some(shot) = GRASS_CAPTURE_SHOTS.get(index).copied() {
+				if let Some(shot) = active_capture_shots().get(index).copied() {
 					view.apply_camera(&shot);
 					commands.queue(move |world: &mut World| shot.apply_world(world));
 				}
@@ -157,7 +316,7 @@ pub(crate) fn tick_capture(
 			}
 		}
 		CapturePhase::Snap { index } => {
-			let Some(shot) = GRASS_CAPTURE_SHOTS.get(index) else {
+			let Some(shot) = active_capture_shots().get(index) else {
 				exit.write(AppExit::Success);
 				return;
 			};
@@ -174,7 +333,7 @@ pub(crate) fn tick_capture(
 		CapturePhase::WaitSave { index, frames } => {
 			if (capturing.iter().next().is_none() && frames >= 2) || frames + 1 >= SAVE_FRAMES {
 				let next = index + 1;
-				if next >= GRASS_CAPTURE_SHOTS.len() {
+				if next >= active_capture_shots().len() {
 					exit.write(AppExit::Success);
 				} else {
 					session.phase = CapturePhase::Settle { index: next, frames: 0 };
@@ -232,6 +391,31 @@ mod tests {
 		assert_eq!(ground.look_at, turf.look_at);
 		assert!(ground.grass && !turf.grass);
 		assert!(GRASS_CAPTURE_SHOTS.iter().any(|shot| shot.gust));
+		for name in [
+			"parting-off-ground",
+			"parting-depth-ground",
+			"parting-raster-ground",
+			"parting-world-ground",
+			"parting-off-ots",
+			"parting-depth-ots",
+			"parting-world-near",
+			"parting-world-far",
+			"parting-depth-wind",
+			"parting-world-wind",
+		] {
+			assert!(PARTING_CAPTURE_SHOTS.iter().any(|shot| shot.name == name), "missing {name}");
+		}
+		let off = PARTING_CAPTURE_SHOTS
+			.iter()
+			.find(|shot| shot.name == "parting-off-ground")
+			.unwrap();
+		let on = PARTING_CAPTURE_SHOTS
+			.iter()
+			.find(|shot| shot.name == "parting-depth-ground")
+			.unwrap();
+		assert_eq!(off.camera, on.camera);
+		assert_eq!(off.look_at, on.look_at);
+		assert_ne!(off.parting_mode, on.parting_mode);
 		Ok(())
 	}
 }

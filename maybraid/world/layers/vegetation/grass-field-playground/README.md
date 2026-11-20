@@ -13,12 +13,14 @@ WASD + mouse look (`L` toggles look). `/` opens commands. `F1` toggles the drawe
 
 | Command | What it does |
 | --- | --- |
-| `spawn default\|meadow\|clump\|slope\|crest\|clear` | Patch ownership (not per-blade entities) |
+| `spawn default\|meadow\|clump\|slope\|crest\|parting\|clear` | Patch ownership (not per-blade entities) |
 | `camera orbit\|overhead\|ground` | Reproducible routes |
 | `wind still\|gentle\|set --strength --speed` | Anchored travelling waves |
 | `lod host high\|medium\|low\|ultra-low` | Existing LOD host density scale |
 | `shadows proxy\|full\|off` | Production default is proxy (no grass casters) |
 | `compare turf on\|off` / `compare grass on\|off` | Terrain mat vs generated ribbons |
+| `parting off\|depth\|raster\|world` | View-dependent tip swath. Default is **world** |
+| `parting set --strength --radius --falloff` | Metres of deflection, influence, behind-window |
 
 ## Captures
 
@@ -49,6 +51,29 @@ MAYBRAID_CAPTURE_DIR=maybraid/world/layers/vegetation/grass-field-playground/cap
 | `clump-close.png` | Isolated clump vs dense field |
 
 Refresh these PNGs whenever the look changes.
+
+## Parting / swathing stills
+
+Character-sized capsule and a rock sit a little behind a tall grass wall. Same
+camera for off vs on. `world` is the default (tagged capsules, view-perpendicular
+swath). `depth` (Bevy prepass) and `raster` (CPU footprint) stay as settings.
+
+```bash
+MAYBRAID_CAPTURE_SET=parting \
+MAYBRAID_CAPTURE_DIR=maybraid/world/layers/vegetation/grass-field-playground/captures \
+  nix develop --command cargo run -p vegetation-grass-field-playground --release --locked
+```
+
+| File | What it shows |
+| --- | --- |
+| `parting-off-ground.png` | Ground view, parting off — capsule buried |
+| `parting-depth-ground.png` | Same camera, depth-prepass parting |
+| `parting-raster-ground.png` | Same camera, screen-space footprint |
+| `parting-world-ground.png` | Same camera, world-space capsules |
+| `parting-off-ots.png` / `parting-*-ots.png` | Over-the-shoulder, off vs each mode |
+| `parting-depth-near.png` / `parting-depth-far.png` | Falloff vs occluder distance |
+| `parting-world-near.png` / `parting-world-far.png` | World-field falloff |
+| `parting-depth-wind.png` / `parting-world-wind.png` | Parting composed with a frozen gust |
 
 ## Honest measurements
 

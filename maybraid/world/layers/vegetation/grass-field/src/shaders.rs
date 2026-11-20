@@ -47,9 +47,11 @@ mod tests {
 		let finalize = include_str!("shaders/finalize.wesl");
 		assert!(select.contains("import vegetation_shaders::wesl::lod"));
 		assert!(select.contains("import vegetation_shaders::wesl::layout"));
+		assert!(select.contains("import vegetation_shaders::wesl::parting"));
 		assert!(blade.contains("import vegetation_shaders::wesl::curve"));
 		assert!(blade.contains("import vegetation_shaders::wesl::wind"));
 		assert!(blade.contains("import vegetation_shaders::wesl::shading"));
+		assert!(blade.contains("import vegetation_shaders::wesl::parting"));
 		assert!(!blade.contains("fn vertex(template:"), "WESL reserves `template` as a keyword");
 		assert!(finalize.contains("DrawIndexedIndirect"));
 		Ok(())
