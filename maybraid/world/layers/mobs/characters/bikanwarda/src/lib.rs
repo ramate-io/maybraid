@@ -15,6 +15,7 @@ pub mod presentation;
 pub mod recipe;
 pub mod spawn;
 pub mod spec;
+pub mod textures;
 
 pub use anchors::{
 	BikanwardaAnchors, BikanwardaChainAnchor, CHAIN_ANCHOR_NAMES, CHAIN_SOCKET_NAMES,
@@ -39,3 +40,7 @@ pub use spawn::{
 	BikanwardaEncounter, BikanwardaEnraged, BikanwardaRoot, BikanwardaWard,
 };
 pub use spec::{BikanwardaForm, BikanwardaSpec};
+pub use textures::{
+	material_ref_for_slot, BikanwardaCharacterPlugin, EpiphantTextureSlot,
+	EPIPHANT_DEFAULT_TEXTURE_DIR, PREVIEW_GLB,
+};

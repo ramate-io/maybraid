@@ -7,6 +7,7 @@
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
+use bikanwarda_character::BikanwardaActor;
 use character_items::ClothingMesh;
 use characters::{
 	assembly::CharacterPartSlot,
@@ -711,6 +712,14 @@ pub fn sync_preview(
 }
 
 fn spawn_lod_character_preview(commands: &mut Commands, config: &ConceptPreviewConfig) {
+	// Encounter-scale Epiphant preview is Bikanwarda: painted #1589 export as the
+	// visual, existing rigs underneath. Ordinary (1×) Epiphant stays the skinned recipe.
+	if matches!(config.species(), ConceptSpecies::Epiphant)
+		&& (crate::preview_capture::encounter_scale_from_env() - 1.0).abs() > f32::EPSILON
+	{
+		spawn_clothed_character(commands, &BikanwardaActor::default());
+		return;
+	}
 	with_clothed_recipe!(config, recipe => {
 		spawn_clothed_character(commands, &recipe);
 	});

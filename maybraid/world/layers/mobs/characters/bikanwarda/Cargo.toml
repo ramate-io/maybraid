@@ -15,13 +15,16 @@ bevy = { workspace = true }
 character-animations = { workspace = true }
 character-motion = { workspace = true }
 character-rigs = { workspace = true }
+character-shaders = { workspace = true }
 characters = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
+material-ref = { workspace = true }
 rigs = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+serde_json = { workspace = true }
 
 [[example]]
 name = "scale"
