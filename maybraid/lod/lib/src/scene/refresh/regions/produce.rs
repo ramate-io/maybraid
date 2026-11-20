@@ -75,11 +75,39 @@ pub trait LodRefreshRegions: Send + Sync + 'static {
 			.reduce(union_aabb)
 	}
 
+	/// Threshold-check only the `changed` drivers, then union coverage of every current driver.
+	///
+	/// Resting drivers keep a stale previous/current pair that may still look
+	/// like a Bullseye cell cross. Those must not retrigger when another driver
+	/// moves inside a cell. Coverage still unions every current ref.
+	fn lod_refresh_from_changed(
+		&self,
+		lod_refs: &[LodRef],
+		mut changed: impl FnMut(Entity) -> bool,
+	) -> Option<Aabb3d> {
+		let mut any_changed = false;
+		for lod_ref in lod_refs {
+			if !changed(lod_ref.entity) {
+				continue;
+			}
+			if matches!(self.lod_refresh_regions(lod_ref), LodRefreshRegionsStatus::Changed(_)) {
+				any_changed = true;
+				break;
+			}
+		}
+		if any_changed {
+			self.lod_coverage_union(lod_refs)
+		} else {
+			None
+		}
+	}
+
 	/// Fold many drivers into one max-extent AABB (or [`Unchanged`] / [`Empty`]).
 	///
 	/// A moving driver still unions [`Self::lod_coverage`] of every resting
 	/// driver, so a ground [`LodRef`] keeps its neighborhood while a map camera
-	/// climbs away.
+	/// climbs away. Region production uses [`Self::lod_refresh_from_changed`] so
+	/// a resting driver's stored previous/current does not retrigger.
 	fn lod_refresh_regions_for(
 		&self,
 		lod_refs: &[LodRef],
@@ -161,15 +189,18 @@ pub fn produce_lod_refresh_regions<P, F, M>(
 
 	let snapshots = collect_node_snapshots(&nodes);
 	let refs = lod_refs_from_snapshots(&snapshots);
-	let region = match producer.lod_refresh_regions_for(&refs) {
-		Ok(LodRefreshRegionsStatus::Changed(region)) => region,
-		Ok(LodRefreshRegionsStatus::Unchanged) if membership_changed => {
-			let Some(region) = producer.lod_coverage_union(&refs) else {
-				return;
-			};
-			region
-		}
-		_ => return,
+	let region = if membership_changed {
+		let Some(region) = producer.lod_coverage_union(&refs) else {
+			return;
+		};
+		region
+	} else {
+		let Some(region) = producer.lod_refresh_from_changed(&refs, |entity| {
+			changed_pose.get(entity).is_ok() || changed_bounds.get(entity).is_ok()
+		}) else {
+			return;
+		};
+		region
 	};
 
 	writer.write(LodSceneRefreshRegion::<M>::new(region));

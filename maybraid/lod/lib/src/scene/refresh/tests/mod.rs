@@ -138,6 +138,45 @@ fn bullseye_emits_outer_cube_on_cell_cross() -> anyhow::Result<()> {
 }
 
 #[test]
+fn bullseye_resting_driver_does_not_replay_when_another_moves_inside_its_cell() -> anyhow::Result<()>
+{
+	let mut app = app_bullseye_regions();
+	let rest = spawn_viewer(app.world_mut(), Vec3::new(-25.0, 0.0, 0.0));
+	app.update();
+	move_viewer(&mut app, rest, Vec3::new(10.0, 10.0, 10.0));
+	app.update();
+	app.world_mut().resource_mut::<NewRegions<BullChan>>().regions.clear();
+
+	let moving = spawn_viewer(app.world_mut(), Vec3::new(10.0, 10.0, 10.0));
+	app.update();
+	app.world_mut().resource_mut::<NewRegions<BullChan>>().regions.clear();
+
+	move_viewer(&mut app, moving, Vec3::new(20.0, 20.0, 20.0));
+	app.update();
+	assert!(
+		app.world().resource::<NewRegions<BullChan>>().regions.is_empty(),
+		"resting driver's stored cell-cross must not retrigger"
+	);
+	Ok(())
+}
+
+#[test]
+fn bullseye_removing_a_settled_driver_emits_remaining_coverage() -> anyhow::Result<()> {
+	let mut app = app_bullseye_regions();
+	spawn_viewer(app.world_mut(), Vec3::new(10.0, 10.0, 10.0));
+	let extra = spawn_viewer(app.world_mut(), Vec3::new(80.0, 10.0, 10.0));
+	app.update();
+	app.world_mut().resource_mut::<NewRegions<BullChan>>().regions.clear();
+
+	app.world_mut().despawn(extra);
+	app.update();
+	assert_eq!(app.world().resource::<NewRegions<BullChan>>().regions.len(), 1);
+	app.update();
+	assert!(app.world().resource::<NewRegions<BullChan>>().regions.is_empty());
+	Ok(())
+}
+
+#[test]
 fn spotlight_writes_level_for_host_in_region() -> anyhow::Result<()> {
 	let mut app = app_spotlight_levels();
 	let viewer = spawn_viewer(app.world_mut(), Vec3::ZERO);
@@ -380,6 +419,8 @@ fn world_cull_aabb() -> LodSceneCullAabb {
 
 #[test]
 fn two_hosts_pick_the_nearer_ref_independently() -> anyhow::Result<()> {
+	// Probe keeps the default XZ selector: the map host at (80, 0, 0) is nearer
+	// in XZ to the overhead camera than to the ground camera.
 	let mut app = app_spotlight_levels();
 	spawn_viewer(app.world_mut(), Vec3::ZERO);
 	spawn_viewer(app.world_mut(), Vec3::new(80.0, 420.0, 0.0));

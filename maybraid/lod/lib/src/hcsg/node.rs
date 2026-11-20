@@ -44,6 +44,14 @@ impl<T: HcsgValue + SemanticLodScene> SemanticLodScene for HcsgNode<T> {
 		self.value.scene_lod_level(lod_ref)
 	}
 
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		self.value.scene_lod_nearest(lod_refs, to)
+	}
+
 	fn scene_lod_level_from_nearest(&self, lod_refs: &[LodRef], to: Vec3) -> LodSceneLevel {
 		self.value.scene_lod_level_from_nearest(lod_refs, to)
 	}

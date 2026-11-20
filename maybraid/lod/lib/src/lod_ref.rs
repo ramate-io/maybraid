@@ -56,10 +56,26 @@ impl LodRef<'_> {
 		delta.x * delta.x + delta.z * delta.z
 	}
 
+	/// Nearest driver by the caller's `distance_squared` reduction.
+	///
+	/// Empty input is `None` — callers must not invent a viewer at the origin.
+	pub fn nearest_by<'a>(
+		refs: &'a [LodRef<'a>],
+		distance_squared: impl Fn(&LodRef<'_>) -> f32,
+	) -> Option<&'a LodRef<'a>> {
+		refs.iter().min_by(|a, b| distance_squared(a).total_cmp(&distance_squared(b)))
+	}
+
+	/// Nearest driver to `to` in 3D.
+	pub fn nearest_3d<'a>(refs: &'a [LodRef<'a>], to: Vec3) -> Option<&'a LodRef<'a>> {
+		Self::nearest_by(refs, |lod_ref| lod_ref.current_transform.translation.distance_squared(to))
+	}
+
 	/// Nearest driver to `to`: min XZ, then min 3D for ties.
 	///
-	/// Scenes pick this ref and then evaluate [`crate::SemanticLodScene::scene_lod_level`]
-	/// on it. Empty input is `None` — callers must not invent a viewer at the origin.
+	/// Use this where XZ already defines the consumer's rule (chunk admission,
+	/// terrain XZ). 3D probes should call [`Self::nearest_3d`] or [`Self::nearest_by`].
+	/// Empty input is `None` — callers must not invent a viewer at the origin.
 	pub fn nearest<'a>(refs: &'a [LodRef<'a>], to: Vec3) -> Option<&'a LodRef<'a>> {
 		refs.iter().min_by(|a, b| {
 			compare_driver_distance(
@@ -126,5 +142,25 @@ mod nearest_tests {
 	#[test]
 	fn nearest_is_none_without_refs() {
 		assert!(LodRef::nearest(&[], Vec3::ONE).is_none());
+		assert!(LodRef::nearest_by(&[], |_| 0.0).is_none());
+	}
+
+	#[test]
+	fn nearest_by_3d_picks_the_closer_driver_when_xz_would_not() {
+		let ground = Transform::from_translation(Vec3::new(5.0, 0.0, 0.0));
+		let map = Transform::from_translation(Vec3::new(0.0, 420.0, 0.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let refs = [lod_ref_at(&ground, &bounds), lod_ref_at(&map, &bounds)];
+		let host = Vec3::ZERO;
+		assert_eq!(
+			LodRef::nearest(&refs, host).map(|r| r.current_transform.translation),
+			Some(map.translation),
+			"XZ still prefers the overhead map ref"
+		);
+		assert_eq!(
+			LodRef::nearest_3d(&refs, host).map(|r| r.current_transform.translation),
+			Some(ground.translation),
+			"3D prefers the 5 m ground ref over the 420 m map ref"
+		);
 	}
 }

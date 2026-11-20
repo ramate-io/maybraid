@@ -37,12 +37,25 @@ pub trait SemanticLodScene {
 		LodSceneLevel::High
 	}
 
+	/// Driver this scene uses for level, status, and fulfillment.
+	///
+	/// Default is [`LodRef::nearest`] (min XZ, then min 3D). 3D consumers
+	/// override with [`LodRef::nearest_3d`] or [`LodRef::nearest_by`].
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		let _ = self;
+		LodRef::nearest(lod_refs, to)
+	}
+
 	/// Desired level from the driver nearest `to` (host world position).
 	///
-	/// Picks [`LodRef::nearest`], then [`Self::scene_lod_level`] of that one ref.
+	/// Picks [`Self::scene_lod_nearest`], then [`Self::scene_lod_level`] of that one ref.
 	/// Empty input is [`LodSceneLevel::UltraLow`] — no invented viewer at the origin.
 	fn scene_lod_level_from_nearest(&self, lod_refs: &[LodRef], to: Vec3) -> LodSceneLevel {
-		LodRef::nearest(lod_refs, to)
+		self.scene_lod_nearest(lod_refs, to)
 			.map(|lod_ref| self.scene_lod_level(lod_ref))
 			.unwrap_or(LodSceneLevel::UltraLow)
 	}
@@ -172,6 +185,14 @@ pub use SemanticLodScene as LodScene;
 impl<T: SemanticLodScene + Send + Sync + 'static> SemanticLodScene for std::sync::Arc<T> {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		(**self).scene_lod_level(lod_ref)
+	}
+
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		(**self).scene_lod_nearest(lod_refs, to)
 	}
 
 	fn scene_lod_level_from_nearest(&self, lod_refs: &[LodRef], to: Vec3) -> LodSceneLevel {
@@ -322,6 +343,15 @@ mod tests {
 	}
 
 	impl SemanticLodScene for DistanceScene {
+		fn scene_lod_nearest<'a>(
+			&self,
+			lod_refs: &'a [LodRef<'a>],
+			to: Vec3,
+		) -> Option<&'a LodRef<'a>> {
+			let _ = self;
+			LodRef::nearest_3d(lod_refs, to)
+		}
+
 		fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 			let distance = lod_ref.current_transform.translation.distance(self.host);
 			if distance < 50.0 {
@@ -351,5 +381,39 @@ mod tests {
 			Some(closer.translation)
 		);
 		assert_eq!(scene.scene_lod_level_from_nearest(&refs, host), LodSceneLevel::High);
+	}
+
+	#[test]
+	fn xz_default_picks_the_overhead_map_ref() {
+		let ground = Transform::from_translation(Vec3::new(5.0, 0.0, 0.0));
+		let map = Transform::from_translation(Vec3::new(0.0, 420.0, 0.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let refs = [lod_ref_at(&ground, &ground, &bounds), lod_ref_at(&map, &map, &bounds)];
+		assert_eq!(
+			HeightScene
+				.scene_lod_nearest(&refs, Vec3::ZERO)
+				.map(|r| r.current_transform.translation),
+			Some(map.translation)
+		);
+		assert_eq!(
+			HeightScene.scene_lod_level_from_nearest(&refs, Vec3::ZERO),
+			LodSceneLevel::UltraLow
+		);
+	}
+
+	#[test]
+	fn three_d_scene_keeps_the_five_meter_ground_ref() {
+		let ground = Transform::from_translation(Vec3::new(5.0, 0.0, 0.0));
+		let map = Transform::from_translation(Vec3::new(0.0, 420.0, 0.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let refs = [lod_ref_at(&ground, &ground, &bounds), lod_ref_at(&map, &map, &bounds)];
+		let scene = DistanceScene { host: Vec3::ZERO };
+		assert_eq!(
+			scene
+				.scene_lod_nearest(&refs, Vec3::ZERO)
+				.map(|r| r.current_transform.translation),
+			Some(ground.translation)
+		);
+		assert_eq!(scene.scene_lod_level_from_nearest(&refs, Vec3::ZERO), LodSceneLevel::High);
 	}
 }

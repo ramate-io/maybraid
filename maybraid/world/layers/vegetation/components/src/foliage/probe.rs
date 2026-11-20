@@ -128,6 +128,14 @@ impl FoliageLodProbe {
 		))
 	}
 
+	/// Nearest viewer pose in 3D (the same metric as [`Self::level_for`]).
+	pub fn nearest_pose<'a>(
+		&self,
+		poses: impl IntoIterator<Item = &'a lod::LodNodePose>,
+	) -> Option<&'a lod::LodNodePose> {
+		lod::LodNodePose::nearest_3d(poses, self.center)
+	}
+
 	pub fn status_for_lod_ref(self, lod_ref: &LodRef) -> LodSceneStatus {
 		let prev = self.band_to_level(DistanceLodBand::from_factors(
 			self.band_metric(lod_ref.previous_transform.translation),
@@ -157,7 +165,7 @@ pub fn update_foliage_host_levels(
 		return;
 	}
 	for (probe, mut level) in &mut hosts {
-		let Some(pose) = lod::LodNodePose::nearest(viewer.iter(), probe.center) else {
+		let Some(pose) = probe.nearest_pose(viewer.iter()) else {
 			continue;
 		};
 		let next = probe.level_for(&pose.current);
@@ -240,9 +248,26 @@ mod tests {
 		let ground = Transform::from_translation(Vec3::new(4.0, 2.0, 0.0));
 		let map = Transform::from_translation(Vec3::new(80.0, 420.0, 0.0));
 		let poses = [lod::LodNodePose::settled(ground), lod::LodNodePose::settled(map)];
-		let nearest = lod::LodNodePose::nearest(poses.iter(), probe.center);
+		let nearest = probe.nearest_pose(poses.iter());
 		assert!(nearest.is_some_and(|pose| probe.level_for(&pose.current) == LodSceneLevel::High));
 		let near_map = lod::LodNodePose::nearest(poses.iter(), Vec3::new(80.0, 0.0, 0.0));
 		assert!(near_map.is_some_and(|pose| probe.level_for(&pose.current) != LodSceneLevel::High));
+	}
+
+	#[test]
+	fn three_d_nearest_keeps_the_five_meter_ground_ref() -> anyhow::Result<()> {
+		let probe = FoliageLodProbe { center: Vec3::ZERO, extent: 2.0, ..Default::default() };
+		let ground = lod::LodNodePose::settled(Transform::from_xyz(5.0, 0.0, 0.0));
+		let map = lod::LodNodePose::settled(Transform::from_xyz(0.0, 420.0, 0.0));
+		let Some(pose) = probe.nearest_pose([&ground, &map]) else {
+			return Err(anyhow::anyhow!("3D nearest pose"));
+		};
+		assert_eq!(pose.current.translation, ground.current.translation);
+		assert_eq!(probe.level_for(&pose.current), LodSceneLevel::High);
+		let Some(xz) = lod::LodNodePose::nearest([&ground, &map], probe.center) else {
+			return Err(anyhow::anyhow!("XZ nearest pose"));
+		};
+		assert_eq!(xz.current.translation, map.current.translation);
+		Ok(())
 	}
 }

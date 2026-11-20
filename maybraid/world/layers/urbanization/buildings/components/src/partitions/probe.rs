@@ -93,6 +93,14 @@ impl PartitionLodProbe {
 		placement_center(placement)
 	}
 
+	/// Nearest viewer pose in 3D (the same metric as [`Self::band_for`]).
+	pub fn nearest_pose<'a>(
+		&self,
+		poses: impl IntoIterator<Item = &'a lod::LodNodePose>,
+	) -> Option<&'a lod::LodNodePose> {
+		lod::LodNodePose::nearest_3d(poses, self.center)
+	}
+
 	pub fn band_for(&self, viewer: &Transform) -> PartitionLodBand {
 		let factor = viewer.translation.distance(self.center) / self.extent.max(1e-4);
 		PartitionLodBand::from_distance_factor(factor)
@@ -114,6 +122,15 @@ impl PartitionLodProbe {
 
 /// Probe writes [`LodSceneLevel`]; mesh hosts fulfill via chunk sync on domain nodes.
 impl LodScene for PartitionLodProbe {
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		let _ = self;
+		LodRef::nearest_3d(lod_refs, to)
+	}
+
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.level_for(lod_ref.current_transform)
 	}
@@ -150,7 +167,7 @@ pub fn update_partition_host_levels(
 	let mut changed = 0u32;
 	for (probe, mut level) in &mut hosts {
 		n += 1;
-		let Some(pose) = lod::LodNodePose::nearest(viewer.iter(), probe.center) else {
+		let Some(pose) = probe.nearest_pose(viewer.iter()) else {
 			continue;
 		};
 		let desired = probe.level_for(&pose.current);

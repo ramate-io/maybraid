@@ -38,6 +38,21 @@ impl LodNodePose {
 		Self { previous: transform, current: transform }
 	}
 
+	/// Nearest pose by the caller's `distance_squared` reduction.
+	pub fn nearest_by<'a>(
+		poses: impl IntoIterator<Item = &'a Self>,
+		distance_squared: impl Fn(&Self) -> f32,
+	) -> Option<&'a Self> {
+		poses
+			.into_iter()
+			.min_by(|a, b| distance_squared(a).total_cmp(&distance_squared(b)))
+	}
+
+	/// Nearest pose to `to` in 3D.
+	pub fn nearest_3d<'a>(poses: impl IntoIterator<Item = &'a Self>, to: Vec3) -> Option<&'a Self> {
+		Self::nearest_by(poses, |pose| pose.current.translation.distance_squared(to))
+	}
+
 	/// Nearest pose to `to`: min XZ, then min 3D for ties.
 	pub fn nearest<'a>(poses: impl IntoIterator<Item = &'a Self>, to: Vec3) -> Option<&'a Self> {
 		poses.into_iter().min_by(|a, b| {

@@ -11,7 +11,7 @@ use bevy::shape::Aabb3d;
 
 use crate::lod_ref::{
 	collect_node_snapshots_into, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose,
-	LodNodeSnapshot, LodRef,
+	LodNodeSnapshot,
 };
 use crate::scene::host::{
 	nested_host_parent_allows_refresh, nested_host_parent_allows_refresh_world, LodLevelRoot,
@@ -34,6 +34,11 @@ pub struct LodSceneRefreshLevel {
 
 type ProduceLevelFn =
 	for<'a> fn(&World, Entity, &[crate::lod_ref::LodRef<'a>]) -> Option<LodSceneLevel>;
+type ProduceNearestFn = for<'a> fn(
+	&World,
+	Entity,
+	&'a [crate::lod_ref::LodRef<'a>],
+) -> Option<&'a crate::lod_ref::LodRef<'a>>;
 type ProduceOneLevelFn =
 	for<'a> fn(&World, Entity, &crate::lod_ref::LodRef<'a>) -> Option<LodSceneLevel>;
 type ProduceCullsFn =
@@ -48,6 +53,7 @@ type ProduceChunkFn =
 #[derive(Component, Clone, Copy)]
 pub struct LodLevelProducer {
 	level_from_all: ProduceLevelFn,
+	nearest: ProduceNearestFn,
 	level: ProduceOneLevelFn,
 	culls: ProduceCullsFn,
 	chunk: ProduceChunkFn,
@@ -64,6 +70,12 @@ impl LodLevelProducer {
 				let transform = world.get::<Transform>(entity)?;
 				let to = LodHostBounds::world_center(transform, world.get::<LodHostBounds>(entity));
 				Some(scene.scene_lod_level_from_nearest(refs, to))
+			},
+			nearest: |world, entity, refs| {
+				let scene = world.get::<T>(entity)?;
+				let transform = world.get::<Transform>(entity)?;
+				let to = LodHostBounds::world_center(transform, world.get::<LodHostBounds>(entity));
+				scene.scene_lod_nearest(refs, to)
 			},
 			level: |world, entity, lod_ref| {
 				world.get::<T>(entity).map(|scene| scene.scene_lod_level(lod_ref))
@@ -143,9 +155,7 @@ impl LodLevelProducer {
 		entity: Entity,
 		refs: &'a [crate::lod_ref::LodRef<'a>],
 	) -> Option<&'a crate::lod_ref::LodRef<'a>> {
-		let transform = world.get::<Transform>(entity)?;
-		let to = LodHostBounds::world_center(transform, world.get::<LodHostBounds>(entity));
-		LodRef::nearest(refs, to)
+		(self.nearest)(world, entity, refs)
 	}
 
 	pub(crate) fn chunk_for(

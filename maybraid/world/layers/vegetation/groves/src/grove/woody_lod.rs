@@ -197,6 +197,15 @@ macro_rules! impl_woody_grove_lod {
 		}
 
 		impl lod::scene::LodScene for $Grove {
+			fn scene_lod_nearest<'a>(
+				&self,
+				lod_refs: &'a [lod::lod_ref::LodRef<'a>],
+				to: bevy::prelude::Vec3,
+			) -> Option<&'a lod::lod_ref::LodRef<'a>> {
+				let _ = self;
+				lod::lod_ref::LodRef::nearest_3d(lod_refs, to)
+			}
+
 			fn scene_lod_level(&self, lod_ref: &lod::lod_ref::LodRef) -> lod::scene::LodSceneLevel {
 				self.structural_lod()
 					.map(|band| $crate::grove::grove_lod_level(band, lod_ref))
