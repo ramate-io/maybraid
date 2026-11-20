@@ -35,6 +35,29 @@ matching PID receipts, monotonic timestamps and an observed median cadence of
 coverage reject the summary. Phase alignment uses actual UTC log markers,
 not simulation time interpreted as wall time.
 
+## Explicit closed settled/walk scope
+
+The default remains strict whole-run analysis. If a harness fails only after a
+completed, separately admitted walk, use `--scope settled-walk` with the exact
+accepted binding digest and the existing capture-bound termination receipt:
+
+```sh
+python3 profiling/summarize-map-memory.py ./partial-run ./new-partial-summary \
+  --scope settled-walk --binding-sha256 ACCEPTED_BINDING_SHA256 \
+  --termination-receipt ./deadline-receipt.json
+```
+
+This mode requires closed UTC/event markers for both settled and walk, clean
+owned-group termination, the distance goal with one healthy actor, and fresh
+same-actor HP100 readbacks with unchanged positive gravity and final support.
+Transient individual ungrounded readbacks do not invalidate the whole walk.
+It checks five-second memory coverage only through the closed epochs. It never
+creates or edits `completed.json`, and it does not admit later lifecycle data.
+The table is explicitly partial: map, respawn and whole-process metrics are
+unavailable; the additional epoch row covers only settled start through walk
+end. Source/artifact binding, raw distance and original termination hashes are
+retained. A successful partial summary is not whole-run acceptance.
+
 ## Output and limits
 
 The table separates initial settled state, walking, moving windows within

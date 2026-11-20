@@ -39,6 +39,32 @@ def fixture(root):
         for t in range(0,201,5):w.writerow([stamp(t),t,1234,777,50000+t,100000+t])
 
 
+def partial_fixture(root):
+    (root/'completed.json').unlink()
+    binding={'binary_sha256':'b'*64,'manifest_sha256':'c'*64,
+             'deadline_receipt':str(root/'termination.json')}
+    (root/'binding.json').write_text(json.dumps(binding)+'\n')
+    (root/'termination.json').write_text(json.dumps(dict(start_utc='2026-01-01T00:00:00+00:00',
+        end_utc='2026-01-01T00:03:20+00:00',exit_status=1,owned_group_remaining=False))+'\n')
+    (root/'distance.json').write_text(json.dumps(dict(goal_reached=True,active_xz_m=2500,
+        minimum_health=100,lives=['42'],accepted_edges=500,rejected_edges=6))+'\n')
+    life=[json.loads(l) for l in (root/'lifecycle.jsonl').read_text().splitlines()]
+    (root/'lifecycle.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in life if e['kind']!='game_exited'))
+    events=[json.loads(l) for l in (root/'events.jsonl').read_text().splitlines()]
+    events=[e for e in events if e['name'] in ('settled','hitch-walk')]
+    for t2 in range(20,341):
+        t=t2/2
+        events.append(dict(kind='player',t=t,frame=t*60,x=1,y=0,z=1,
+            vitals=dict(entity='42',health=100,gravity_scale=1.25,grounded=True,
+                        pending_support=False,awaiting_surface=False)))
+    events.sort(key=lambda e:(e['frame'],e['kind']!='scenario'))
+    (root/'events.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in events))
+    log=[l for l in (root/'game.log').read_text().splitlines() if 'living-map' not in l and 'respawn' not in l]
+    (root/'game.log').write_text('\n'.join(log)+'\n')
+    return dict(scope='settled-walk',binding_sha256=m.sha(root/'binding.json'),
+                termination_receipt=root/'termination.json')
+
+
 class MemorySummary(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.run=Path(self.tmp.name);fixture(self.run)
@@ -67,6 +93,43 @@ class MemorySummary(unittest.TestCase):
         phase=r['windows']['respawn'];self.assertEqual(phase['coverage_status'],'unavailable')
         self.assertEqual(phase['sample_count'],0);self.assertIsNone(phase['phys_footprint_bytes'])
         self.assertIn('unavailable (no coverage)',m.table(r))
+    def test_partial_closed_phases_without_completion_or_game_exit(self):
+        args=partial_fixture(self.run);r=m.summarize(self.run,**args)
+        self.assertTrue(r['partial_run']);self.assertTrue(r['windows']['hitch-walk']['metrics_available'])
+        self.assertFalse(r['windows']['whole-process']['metrics_available'])
+        self.assertIn('outside scope',m.table(r));self.assertFalse((self.run/'completed.json').exists())
+        with self.assertRaises(FileNotFoundError):m.summarize(self.run)
+    def test_partial_allows_unrelated_npc_death(self):
+        args=partial_fixture(self.run);p=self.run/'events.jsonl'
+        with p.open('a') as f:f.write(json.dumps(dict(kind='died',frame=6000,t=100,actor={'entity':'other'}))+'\n')
+        r=m.summarize(self.run,**args)
+        self.assertEqual(r['phase_readbacks']['hitch-walk']['unrelated_death_events'],1)
+    def test_partial_rejects_player_death(self):
+        args=partial_fixture(self.run);p=self.run/'events.jsonl'
+        with p.open('a') as f:f.write(json.dumps(dict(kind='died',frame=6000,t=100,actor={'entity':'42'}))+'\n')
+        with self.assertRaisesRegex(ValueError,'player death'):m.summarize(self.run,**args)
+    def test_partial_rejects_unbound_source(self):
+        args=partial_fixture(self.run);args['binding_sha256']='d'*64
+        with self.assertRaisesRegex(ValueError,'binding digest mismatch'):m.summarize(self.run,**args)
+    def test_partial_rejects_open_walk(self):
+        args=partial_fixture(self.run);p=self.run/'game.log';p.write_text(p.read_text().replace('agent.scenario hitch-walk End','open'))
+        with self.assertRaisesRegex(ValueError,'missing UTC phase'):m.summarize(self.run,**args)
+    def test_partial_rejects_health_change(self):
+        args=partial_fixture(self.run);p=self.run/'events.jsonl';es=[json.loads(l) for l in p.read_text().splitlines()]
+        next(e for e in es if e['kind']=='player' and e['t']==100)['vitals']['health']=99
+        p.write_text(''.join(json.dumps(e)+'\n' for e in es))
+        with self.assertRaisesRegex(ValueError,'unhealthy'):m.summarize(self.run,**args)
+    def test_partial_rejects_stale_readbacks(self):
+        args=partial_fixture(self.run);p=self.run/'events.jsonl';es=[json.loads(l) for l in p.read_text().splitlines()]
+        es=[e for e in es if not(e['kind']=='player' and 99<=e['t']<=102)]
+        p.write_text(''.join(json.dumps(e)+'\n' for e in es))
+        with self.assertRaisesRegex(ValueError,'fresh phase'):m.summarize(self.run,**args)
+    def test_partial_rejects_failed_distance_goal(self):
+        args=partial_fixture(self.run);p=self.run/'distance.json';d=json.loads(p.read_text());d['goal_reached']=False;p.write_text(json.dumps(d))
+        with self.assertRaisesRegex(ValueError,'distance/healthy'):m.summarize(self.run,**args)
+    def test_partial_rejects_unclean_termination(self):
+        args=partial_fixture(self.run);p=self.run/'termination.json';d=json.loads(p.read_text());d['owned_group_remaining']=True;p.write_text(json.dumps(d))
+        with self.assertRaisesRegex(ValueError,'cleanup unverified'):m.summarize(self.run,**args)
     def test_reject_wrong_pid(self):
         self.edit_rows(lambda r:r[5].__setitem__(2,'4321'))
         with self.assertRaisesRegex(ValueError,'PID mismatch'):m.summarize(self.run)
