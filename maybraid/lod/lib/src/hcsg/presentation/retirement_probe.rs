@@ -83,14 +83,14 @@ impl PendingSample {
 			queued_for: origin.map(|origin| origin.queued.elapsed()),
 			direct_children: world.get::<Children>(root).map_or(0, |children| children.len()),
 			root_disabled: world.get::<Disabled>(root).is_some(),
-			live_before: world.entities().len(),
+			live_before: world.entity_count(),
 			started: Instant::now(),
 		})
 	}
 
 	pub(super) fn finish(self, world: &mut World) {
 		let elapsed = self.started.elapsed();
-		let live_after = world.entities().len();
+		let live_after = world.entity_count();
 		if let Some(mut probe) = world.get_resource_mut::<RetirementProbe>() {
 			probe.0.record(RetiredHostCompletion {
 				root_bits: self.root.to_bits(),
@@ -155,7 +155,7 @@ mod tests {
 		despawn_retired_hosts(&mut world);
 		assert!(world.get_entity(root).is_err());
 		assert!(world.get_entity(child).is_err());
-		assert_eq!(i64::from(world.entities().len()) - i64::from(probe.live_before), -2);
+		assert_eq!(i64::from(world.entity_count()) - i64::from(probe.live_before), -2);
 		Ok(())
 	}
 
