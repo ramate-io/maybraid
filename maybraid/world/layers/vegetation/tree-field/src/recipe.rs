@@ -61,7 +61,7 @@ impl TreeRecipe {
 			stalk_height_fraction: 0.78,
 			stalk_radius_m: tree.stalk_radius.start..=tree.stalk_radius.end,
 			canopy_spread_m: tree.canopy_spread.start..=tree.canopy_spread.end,
-			leaf_size_m: 0.52..=0.98,
+			leaf_size_m: 1.45..=2.45,
 			foliage_density: foliage_density.clamp(0.0, 1.0),
 			wood_stiffness: 0.82,
 			wood: VegetationPalette::botw_wood(),

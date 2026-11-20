@@ -59,6 +59,17 @@ sample.
 Resident memory is `plants × 96 B + branches × 80 B + leaves × 64 B` plus six
 LOD lists (`max_per_lod × 4 B`) and 120 B of indirect args per view.
 
+CPU-mirrored 36 m grove at 12 m spacing, 720p, looking from ~22 m:
+
+| | Count |
+| --- | --- |
+| Resident plants / branches / leaves | 9 / 216 / 4414 |
+| Submitted wood / foliage instances | 199 / 3986 |
+| Submitted triangles | 45 414 |
+| Descriptor bytes | 300 640 |
+
 Do not read triangle reduction as a raster-cost win by itself: far foliage
 uses fewer leaves but larger size scale. Apple Silicon / M1-class GPU timers:
-**not measured here**.
+**not measured here**. Leaf count approaches `MAX_LEAVES_PER_PLANT` (512) per
+tree; outer canopy shells are packed across every limb first so a clamp keeps
+the crown.

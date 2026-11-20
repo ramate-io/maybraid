@@ -72,16 +72,24 @@ pub struct LeafTemplate {
 }
 
 impl LeafTemplate {
-	/// Folded diamond: base, left, right, tip. `t` is `v` (base→tip), `radial` is `u`.
-	pub fn folded() -> Self {
+	/// Rounded teardrop card. `t` is `v` (base→tip), `radial` is `u` in `[-1, 1]`.
+	/// Width comes from shared [`vegetation_shaders::wesl::leaf_teardrop_width`].
+	pub const TEARDROP_INDEX_COUNT: u32 = 21;
+
+	pub fn teardrop() -> Self {
 		Self {
 			vertices: vec![
 				TemplateVertex { t: 0.0, radial: 0.0 },
-				TemplateVertex { t: 0.42, radial: -1.0 },
-				TemplateVertex { t: 0.42, radial: 1.0 },
-				TemplateVertex { t: 1.0, radial: 0.0 },
+				TemplateVertex { t: 0.12, radial: -1.0 },
+				TemplateVertex { t: 0.38, radial: -1.0 },
+				TemplateVertex { t: 0.68, radial: -1.0 },
+				TemplateVertex { t: 0.96, radial: -1.0 },
+				TemplateVertex { t: 0.96, radial: 1.0 },
+				TemplateVertex { t: 0.68, radial: 1.0 },
+				TemplateVertex { t: 0.38, radial: 1.0 },
+				TemplateVertex { t: 0.12, radial: 1.0 },
 			],
-			indices: vec![0, 1, 3, 0, 3, 2],
+			indices: vec![0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5, 0, 5, 6, 0, 6, 7, 0, 7, 8],
 		}
 	}
 
@@ -119,10 +127,17 @@ mod tests {
 	}
 
 	#[test]
-	fn leaf_template_is_two_sided_diamond() -> anyhow::Result<()> {
-		let leaf = LeafTemplate::folded();
-		assert_eq!(leaf.index_count(), 6);
-		assert_eq!(leaf.vertices.len(), 4);
+	fn leaf_template_is_a_rounded_teardrop() -> anyhow::Result<()> {
+		let leaf = LeafTemplate::teardrop();
+		assert_eq!(leaf.index_count(), LeafTemplate::TEARDROP_INDEX_COUNT);
+		assert_eq!(leaf.vertices.len(), 9);
+		let tip_u = leaf
+			.vertices
+			.iter()
+			.filter(|vertex| vertex.t > 0.9)
+			.map(|vertex| vertex.radial.abs())
+			.fold(0.0_f32, f32::max);
+		assert!(tip_u > 0.5, "two-sided tip, not a spike");
 		Ok(())
 	}
 }

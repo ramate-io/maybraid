@@ -300,7 +300,7 @@ struct GpuTemplate {
 fn init_templates(mut commands: Commands, device: Res<RenderDevice>) {
 	let lods = [WoodLod::Near, WoodLod::Mid, WoodLod::Far];
 	let wood = lods.map(|lod| gpu_template(&device, &WoodTemplate::for_lod(lod).vertex_bytes(), &WoodTemplate::for_lod(lod).index_bytes(), WoodTemplate::for_lod(lod).indices.len() as u32, "tree_wood_template"));
-	let leaf = LeafTemplate::folded();
+	let leaf = LeafTemplate::teardrop();
 	commands.insert_resource(TreeTemplates {
 		wood,
 		leaf: gpu_template(
@@ -577,7 +577,9 @@ fn create_view_work(
 			WoodLod::from_bucket(lod).map(|w| w.vertex_count()).unwrap_or(0),
 		)
 	});
-	let foliage_params = [0u32, 1, 2].map(|lod| params_buffer(device, lod, 6, 4));
+	let foliage_params = [0u32, 1, 2].map(|lod| {
+		params_buffer(device, lod, LeafTemplate::TEARDROP_INDEX_COUNT, 9)
+	});
 
 	let uniform = make_view_uniform(view, extracted);
 	write_view_uniform(queue, &view_uniform, &uniform);

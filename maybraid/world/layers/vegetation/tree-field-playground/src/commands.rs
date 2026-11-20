@@ -180,7 +180,7 @@ impl CameraCommand {
 			Self::Orbit => (Vec3::new(16.5, 8.2, 18.0), Vec3::new(0.0, 7.0, 0.0)),
 			Self::Overhead => (Vec3::new(1.4, 28.0, 1.1), Vec3::new(0.0, 0.0, 0.0)),
 			Self::Underside => (Vec3::new(3.2, 1.55, 4.6), Vec3::new(0.2, 10.4, 0.0)),
-			Self::Ground => (Vec3::new(6.0, 7.5, 32.0), Vec3::new(20.0, 7.0, 20.0)),
+			Self::Ground => (Vec3::new(2.0, 9.5, 48.0), Vec3::new(22.0, 8.0, 22.0)),
 		};
 		commands.queue(move |world: &mut World| {
 			let mut cameras =

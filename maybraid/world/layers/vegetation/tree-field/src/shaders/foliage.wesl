@@ -5,7 +5,9 @@ import vegetation_shaders::wesl::curve::{
     CurveSample, LocalFrame,
 };
 import vegetation_shaders::wesl::wind::{deform_along_curve, wind_field, WindInputs};
-import vegetation_shaders::wesl::shading::{canopy_clump_albedo, leaf_painterly_lit};
+import vegetation_shaders::wesl::shading::{
+    canopy_clump_albedo, crown_layer_albedo, grass_variation_palette, leaf_painterly_lit,
+};
 import vegetation_shaders::wesl::layout::{GrassDrawParams, GrassViewUniform};
 import vegetation_tree_field::shaders::layout::{BranchDescriptor, LeafDescriptor, PlantDescriptor};
 
@@ -125,7 +127,12 @@ fn vertex(vert: TemplateVertex, @builtin(instance_index) instance_index: u32) ->
     );
     let sample = world_sample(parent, leaf.attach_t, wind_now);
     let attach = attachment_frame(sample, leaf.twist);
-    let outward = normalize(leaf.facing + attach.along * 0.22 + vec3<f32>(0.0, 0.28, 0.0));
+    let shell = saturate(leaf.shape);
+    let along_mix = mix(0.48, 0.08, shell);
+    let up_mix = mix(0.42, 0.18, shell);
+    let outward = normalize(
+        leaf.facing * mix(0.62, 1.0, shell) + attach.along * along_mix + vec3<f32>(0.0, up_mix, 0.0),
+    );
     let across = normalize(cross(outward, attach.facing));
     let facing = cross(across, outward);
     let frame = LocalFrame(across, outward, facing);
@@ -133,17 +140,16 @@ fn vertex(vert: TemplateVertex, @builtin(instance_index) instance_index: u32) ->
     let u = vert.v_u.y;
     let size_scale = select(select(1.0, 1.28, draw.lod_bucket == 1u), 1.72, draw.lod_bucket == 2u);
     var world = leaf_surface_vertex(sample.position, frame, leaf.size_m * size_scale, u, v, leaf.fold);
+    // Push outer shells into the crown volume so cards form clumps, not bark ivy.
+    world = world + outward * (leaf.size_m * size_scale * mix(0.18, 0.62, shell));
     let flutter = sin(view.world_position.w * 2.6 + f32(leaf.leaf_id) * 0.011) * leaf.flutter * v;
-    world = world + frame.across * flutter + frame.facing * (flutter * 0.35);
+    world = world + frame.across * flutter + frame.facing * (flutter * 0.22);
     let n = leaf_surface_normal(frame, u, leaf.fold);
     let height_frac = saturate((world.y - plant.root.y) / max(plant.height_m, 1e-3));
-    let albedo = canopy_clump_albedo(
-        leaf.palette,
-        vec3<f32>(0.04, 0.18, 0.09),
-        height_frac,
-        n,
-        leaf.density_rank,
-    );
+    let radial = saturate(length(world.xz - plant.root.xz) / max(plant.crown_radius_m, 1e-3));
+    let pal = grass_variation_palette(leaf.palette, plant.root.xz, leaf.leaf_id >> 3u);
+    let layered = crown_layer_albedo(pal, height_frac, radial, shell, leaf.density_rank);
+    let albedo = canopy_clump_albedo(layered, pal.root_rgb, height_frac, n, leaf.density_rank);
     out.position = view.clip_from_world * vec4<f32>(world, 1.0);
     out.world_normal = n;
     out.v = v;

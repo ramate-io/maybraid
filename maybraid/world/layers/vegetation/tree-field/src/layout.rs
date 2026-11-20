@@ -179,6 +179,11 @@ pub struct LeafDescriptor {
 }
 
 impl LeafDescriptor {
+	/// Packed `CanopyLayer::shell_unit`: `0` inner, `0.5` mid, `1` outer.
+	pub fn layer_shell(self) -> u32 {
+		(self.shape * 2.0).round().clamp(0.0, 2.0) as u32
+	}
+
 	pub fn to_std430_bytes(self) -> [u8; LEAF_DESCRIPTOR_STRIDE as usize] {
 		let mut out = [0u8; LEAF_DESCRIPTOR_STRIDE as usize];
 		pack_u32(&mut out, 0, self.plant_index);
@@ -316,6 +321,30 @@ mod tests {
 			major_parent: PARENT_NONE,
 		};
 		assert_eq!(branch.to_std430_bytes().len(), 80);
+		Ok(())
+	}
+
+	#[test]
+	fn leaf_shape_encodes_layer_shell() -> anyhow::Result<()> {
+		let mut leaf = LeafDescriptor {
+			plant_index: 0,
+			parent_branch: 0,
+			attach_t: 0.5,
+			size_m: 0.4,
+			twist: 0.0,
+			fold: 0.4,
+			flutter: 0.03,
+			density_rank: 0.1,
+			facing: Vec3::Y,
+			leaf_id: 1,
+			palette: Vec3::ONE,
+			shape: 0.0,
+		};
+		assert_eq!(leaf.layer_shell(), 0);
+		leaf.shape = 0.5;
+		assert_eq!(leaf.layer_shell(), 1);
+		leaf.shape = 1.0;
+		assert_eq!(leaf.layer_shell(), 2);
 		Ok(())
 	}
 }

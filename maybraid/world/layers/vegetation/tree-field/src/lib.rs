@@ -1,8 +1,8 @@
 //! GPU-driven tree canopies: trunk, limbs, branch skeleton, and layered foliage.
 //!
 //! CPU patches own compact plant / branch / leaf descriptors. Compute selects
-//! stable LOD subsets (topology-preserving prune), then wood tubes and folded
-//! leaves are generated in the vertex shader.
+//! stable LOD subsets (topology-preserving prune), then wood tubes and layered
+//! teardrop canopy cards are generated in the vertex shader.
 //!
 //! Shared math lives in [`vegetation_shaders::wesl`]. Patch lifecycle, buffers,
 //! and visibility follow [`vegetation_grass_field`]. Recipes stay in this crate.
@@ -36,7 +36,9 @@ pub use plugin::TreeFieldPlugin;
 pub use recipe::TreeRecipe;
 pub use select::{TreeSelector, CompactedTreeLists};
 pub use template::{LeafTemplate, WoodTemplate};
-pub use topology::{TreePlant, MAX_BRANCH_DEPTH, MAX_BRANCHES_PER_PLANT, MAX_LEAVES_PER_PLANT};
+pub use topology::{
+	CanopyLayer, TreePlant, MAX_BRANCH_DEPTH, MAX_BRANCHES_PER_PLANT, MAX_LEAVES_PER_PLANT,
+};
 pub use vegetation_grass_field::{GrassGpuCapability, GrassGpuMode, WorldFrustum};
 pub use vegetation_shaders::wesl::{GrassViewUniform, VegetationPalette};
 

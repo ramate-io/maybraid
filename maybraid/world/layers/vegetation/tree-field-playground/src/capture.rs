@@ -24,11 +24,11 @@ const SAVE_FRAMES: u32 = 28;
 const ORBIT: (Vec3, Vec3) = (Vec3::new(16.5, 8.2, 18.0), Vec3::new(0.0, 7.0, 0.0));
 const OVERHEAD: (Vec3, Vec3) = (Vec3::new(1.4, 28.0, 1.1), Vec3::new(0.0, 0.0, 0.0));
 const UNDERSIDE: (Vec3, Vec3) = (Vec3::new(3.2, 1.55, 4.6), Vec3::new(0.2, 10.4, 0.0));
-const CLOSE: (Vec3, Vec3) = (Vec3::new(7.4, 10.2, 6.6), Vec3::new(1.6, 9.8, 0.3));
-const LEAFLESS: (Vec3, Vec3) = (Vec3::new(28.0, 8.0, 4.0), Vec3::new(16.0, 7.0, -8.0));
-const GROVE: (Vec3, Vec3) = (Vec3::new(6.0, 7.5, 32.0), Vec3::new(20.0, 7.0, 20.0));
-const SLOPE: (Vec3, Vec3) = (Vec3::new(18.0, 9.5, 14.0), Vec3::new(32.0, 6.5, 6.0));
-const LOD: (Vec3, Vec3) = (Vec3::new(-6.0, 8.0, 10.0), Vec3::new(48.0, 8.0, 12.0));
+const CLOSE: (Vec3, Vec3) = (Vec3::new(8.2, 9.4, 7.4), Vec3::new(0.4, 8.6, 0.2));
+const LEAFLESS: (Vec3, Vec3) = (Vec3::new(22.5, 9.0, -1.5), Vec3::new(16.0, 7.2, -8.0));
+const GROVE: (Vec3, Vec3) = (Vec3::new(2.0, 9.5, 48.0), Vec3::new(22.0, 8.0, 22.0));
+const SLOPE: (Vec3, Vec3) = (Vec3::new(8.0, 8.5, 22.0), Vec3::new(32.0, 7.0, 6.0));
+const LOD: (Vec3, Vec3) = (Vec3::new(-10.0, 14.0, 40.0), Vec3::new(44.0, 10.0, 10.0));
 const GUST: (Vec3, Vec3) = (Vec3::new(15.8, 8.0, 17.2), Vec3::new(0.0, 7.0, 0.0));
 
 #[derive(Component)]
@@ -46,6 +46,7 @@ pub enum CaptureMode {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CaptureScene {
+	#[allow(dead_code)]
 	Default,
 	Close,
 	Grove,

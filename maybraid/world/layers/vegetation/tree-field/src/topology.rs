@@ -1,6 +1,6 @@
 //! Bounded connected skeleton + layered canopy descriptors. CPU-authored; GPU expands surfaces.
 
-use bevy::math::Vec3;
+use bevy::math::{Vec3, Vec3Swizzles};
 use vegetation_shaders::wesl::{hash_u32, hash_u32_to_unit, plant_id};
 
 use crate::layout::{BranchDescriptor, LeafDescriptor, PlantDescriptor, PARENT_NONE};
@@ -8,8 +8,148 @@ use crate::recipe::TreeRecipe;
 
 /// Explicit capacity so shaders never walk an unbounded graph.
 pub const MAX_BRANCHES_PER_PLANT: u32 = 40;
-pub const MAX_LEAVES_PER_PLANT: u32 = 256;
+pub const MAX_LEAVES_PER_PLANT: u32 = 512;
 pub const MAX_BRANCH_DEPTH: u32 = 3;
+
+/// Overlapping canopy shells. Inner hugs wood; outer fans into billowy clumps.
+/// Tree-scale counts; bush `LeafLayer` stays in the bush crate.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CanopyLayer {
+	/// `0` inner, `1` mid, `2` outer.
+	pub shell: u32,
+	pub height_lo: f32,
+	pub height_hi: f32,
+	pub clumps: u32,
+	pub cards_per_clump: u32,
+	pub size_scale: f32,
+	pub radial_splay: f32,
+	/// `1` follows the limb; `0` fans toward the sky dome.
+	pub lift: f32,
+}
+
+impl CanopyLayer {
+	pub const SHELL_COUNT: u32 = 3;
+
+	pub fn inner() -> Self {
+		Self {
+			shell: 0,
+			height_lo: 0.28,
+			height_hi: 0.68,
+			clumps: 2,
+			cards_per_clump: 2,
+			size_scale: 0.85,
+			radial_splay: 0.38,
+			lift: 0.58,
+		}
+	}
+
+	pub fn mid() -> Self {
+		Self {
+			shell: 1,
+			height_lo: 0.42,
+			height_hi: 0.90,
+			clumps: 3,
+			cards_per_clump: 3,
+			size_scale: 1.28,
+			radial_splay: 0.78,
+			lift: 0.30,
+		}
+	}
+
+	pub fn outer() -> Self {
+		Self {
+			shell: 2,
+			height_lo: 0.55,
+			height_hi: 0.98,
+			clumps: 4,
+			cards_per_clump: 4,
+			size_scale: 1.48,
+			radial_splay: 1.12,
+			lift: 0.12,
+		}
+	}
+
+	/// Outer first so a capacity clamp keeps the crown silhouette.
+	pub fn shells() -> [Self; 3] {
+		[Self::outer(), Self::mid(), Self::inner()]
+	}
+
+	pub fn rim_shells() -> [Self; 2] {
+		[Self::outer(), Self::mid()]
+	}
+
+	pub fn shell_unit(self) -> f32 {
+		self.shell as f32 / (Self::SHELL_COUNT - 1) as f32
+	}
+
+	/// Outer shells keep first under LOD (lower `density_rank` is submitted).
+	pub fn density_rank(self, hash: f32) -> f32 {
+		hash * (1.0 - 0.38 * self.shell_unit())
+	}
+
+	pub fn attach_t(self, clump_i: u32, jitter: f32) -> f32 {
+		let span = (self.height_hi - self.height_lo).max(0.04);
+		let along = (clump_i as f32 + 0.5) / self.clumps.max(1) as f32;
+		(self.height_lo + span * along + (jitter - 0.5) * 0.08).clamp(0.08, 0.98)
+	}
+
+	pub fn size_m(self, card: f32, jitter: f32) -> f32 {
+		(card * self.size_scale * (0.82 + 0.32 * jitter)).max(0.55)
+	}
+
+	pub fn facing(self, up: Vec3, outward: Vec3, yaw: f32) -> Vec3 {
+		let side = tangent_on(up, yaw);
+		(outward * self.radial_splay + up * self.lift + side * 0.22).normalize_or(up)
+	}
+
+	pub fn push_cards(
+		self,
+		leaves: &mut Vec<LeafDescriptor>,
+		branch_index: u32,
+		branch_id: u32,
+		up: Vec3,
+		outward: Vec3,
+		root: Vec3,
+		card: f32,
+		recipe: &TreeRecipe,
+	) {
+		for clump_i in 0..self.clumps {
+			if leaves.len() as u32 >= MAX_LEAVES_PER_PLANT {
+				return;
+			}
+			let clump_id = hash_u32(branch_id ^ (0x300 + self.shell * 19 + clump_i));
+			let pal = recipe.foliage.varied(root.xz(), clump_id);
+			let base_yaw = (clump_i as f32 + hash_u32_to_unit(clump_id)) * std::f32::consts::TAU
+				/ self.clumps.max(1) as f32;
+			for card_i in 0..self.cards_per_clump {
+				if leaves.len() as u32 >= MAX_LEAVES_PER_PLANT {
+					return;
+				}
+				let leaf_id = clump_id.wrapping_mul(5).wrapping_add(card_i);
+				let rank_hash = hash_u32_to_unit(leaf_id ^ 0x85ebca6b);
+				if rank_hash >= recipe.foliage_density {
+					continue;
+				}
+				let jitter = hash_u32_to_unit(leaf_id ^ 0x91);
+				let yaw = base_yaw + (card_i as f32 - 0.45) * 0.42;
+				leaves.push(LeafDescriptor {
+					plant_index: 0,
+					parent_branch: branch_index,
+					attach_t: self.attach_t(clump_i, jitter),
+					size_m: self.size_m(card, jitter),
+					twist: (hash_u32_to_unit(leaf_id ^ 0xb1) - 0.5) * 1.35,
+					fold: 0.55 + 0.32 * hash_u32_to_unit(leaf_id ^ 0xc1),
+					flutter: 0.028 + 0.048 * hash_u32_to_unit(leaf_id ^ 0xd1),
+					density_rank: self.density_rank(rank_hash),
+					facing: self.facing(up, outward, yaw),
+					leaf_id,
+					palette: pal.tip_rgb,
+					shape: self.shell_unit(),
+				});
+			}
+		}
+	}
+}
 
 /// Compact topology for one tree. Branch parent indices are local to this plant.
 #[derive(Clone, Debug, PartialEq)]
@@ -39,6 +179,9 @@ impl TreePlant {
 
 		let mut branches = Vec::new();
 		let mut leaves = Vec::new();
+		let mut limb_sites = Vec::new();
+		let mut fork_sites = Vec::new();
+		let mut twig_sites = Vec::new();
 
 		let trunk_len = height * recipe.stalk_height_fraction.clamp(0.62, 0.88);
 		let lean = tangent_on(upn, hash_u32_to_unit(id ^ 0x7) * std::f32::consts::TAU)
@@ -96,32 +239,7 @@ impl TreePlant {
 				major_parent: 0,
 			});
 
-			if recipe.foliage_density > 0.0 {
-				emit_clump(
-					&mut leaves,
-					limb_index,
-					limb_id,
-					0.78,
-					leaf_size,
-					upn,
-					dir,
-					14,
-					recipe,
-					true,
-				);
-				emit_clump(
-					&mut leaves,
-					limb_index,
-					limb_id ^ 0x9a,
-					0.52,
-					leaf_size * 0.82,
-					upn,
-					dir,
-					8,
-					recipe,
-					false,
-				);
-			}
+			limb_sites.push((limb_index, limb_id, dir, leaf_size));
 
 			if depth_budget < 2 {
 				continue;
@@ -159,20 +277,7 @@ impl TreePlant {
 					branch_id: fork_id,
 					major_parent: limb_index,
 				});
-				if recipe.foliage_density > 0.0 {
-					emit_clump(
-						&mut leaves,
-						fork_index,
-						fork_id,
-						0.82,
-						leaf_size * 0.88,
-						upn,
-						fork_dir,
-						10,
-						recipe,
-						true,
-					);
-				}
+				fork_sites.push((fork_index, fork_id, fork_dir, leaf_size * 0.92));
 
 				if depth_budget < 3 || hash_u32_to_unit(fork_id ^ 0x71) < 0.38 {
 					continue;
@@ -206,20 +311,24 @@ impl TreePlant {
 					branch_id: twig_id,
 					major_parent: limb_index,
 				});
-				if recipe.foliage_density > 0.0 {
-					emit_clump(
-						&mut leaves,
-						twig_index,
-						twig_id,
-						0.72,
-						leaf_size * 0.72,
-						upn,
-						twig_dir,
-						7,
-						recipe,
-						true,
-					);
+				twig_sites.push((twig_index, twig_id, twig_dir, leaf_size * 0.82));
+			}
+		}
+
+		if recipe.foliage_density > 0.0 {
+			// Outer shells on every limb first so a capacity clamp keeps the crown.
+			for layer in CanopyLayer::shells() {
+				for &(index, id, dir, size) in &limb_sites {
+					layer.push_cards(&mut leaves, index, id, upn, dir, root, size, recipe);
 				}
+			}
+			for layer in CanopyLayer::rim_shells() {
+				for &(index, id, dir, size) in &fork_sites {
+					layer.push_cards(&mut leaves, index, id, upn, dir, root, size, recipe);
+				}
+			}
+			for &(index, id, dir, size) in &twig_sites {
+				CanopyLayer::outer().push_cards(&mut leaves, index, id, upn, dir, root, size, recipe);
 			}
 		}
 
@@ -252,58 +361,6 @@ impl TreePlant {
 			&& self.branches.iter().all(|branch| {
 				branch.is_trunk() || (branch.parent_index as usize) < self.branches.len()
 			})
-	}
-}
-
-fn emit_clump(
-	leaves: &mut Vec<LeafDescriptor>,
-	parent_branch: u32,
-	clump_id: u32,
-	attach_t: f32,
-	size_m: f32,
-	up: Vec3,
-	outward: Vec3,
-	count: u32,
-	recipe: &TreeRecipe,
-	sunlit: bool,
-) {
-	for leaf_i in 0..count {
-		if leaves.len() as u32 >= MAX_LEAVES_PER_PLANT {
-			return;
-		}
-		let leaf_id = hash_u32(clump_id ^ (0x200 + leaf_i));
-		let rank = hash_u32_to_unit(leaf_id ^ 0x85ebca6b);
-		if rank >= recipe.foliage_density {
-			continue;
-		}
-		let yaw = (leaf_i as f32 + 0.18) * std::f32::consts::TAU / count.max(1) as f32
-			+ hash_u32_to_unit(leaf_id ^ 0xa1) * 0.7;
-		let pitch = 0.22 + 0.95 * hash_u32_to_unit(leaf_id ^ 0xb1);
-		let side = tangent_on(up, yaw);
-		let facing = if sunlit {
-			(outward * 0.55 + up * (0.35 + 0.45 * pitch) + side * 0.55).normalize_or(up)
-		} else {
-			(-outward * 0.22 + up * 0.12 - Vec3::Y * 0.55 + side * 0.35).normalize_or(-Vec3::Y)
-		};
-		let hue = hash_u32_to_unit(clump_id ^ 0xc1);
-		let palette = recipe.foliage.tip_rgb.lerp(
-			Vec3::new(0.58, 0.62, 0.14).lerp(Vec3::new(0.22, 0.48, 0.12), hue),
-			0.28,
-		);
-		leaves.push(LeafDescriptor {
-			plant_index: 0,
-			parent_branch,
-			attach_t: (attach_t + 0.08 * (hash_u32_to_unit(leaf_id ^ 0xd1) - 0.5)).clamp(0.12, 0.98),
-			size_m: (size_m * (0.78 + 0.38 * hash_u32_to_unit(leaf_id ^ 0xe1))).max(0.28),
-			twist: (hash_u32_to_unit(leaf_id ^ 0xf1) - 0.5) * 1.6,
-			fold: 0.62 + 0.32 * hash_u32_to_unit(leaf_id ^ 0x12),
-			flutter: 0.035 + 0.055 * hash_u32_to_unit(leaf_id ^ 0x13),
-			density_rank: rank,
-			facing,
-			leaf_id,
-			palette,
-			shape: hash_u32_to_unit(leaf_id ^ 0x14),
-		});
 	}
 }
 
@@ -403,6 +460,38 @@ mod tests {
 				let major = plant.branches[branch.major_parent as usize];
 				assert_eq!(major.depth, 1);
 			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn canopy_layers_cover_inner_mid_and_outer_shells() -> anyhow::Result<()> {
+		let plant = TreePlant::generate(8, 0, Vec3::ZERO, Vec3::Y, 1.0, &TreeRecipe::storybook());
+		let mut shells = [0u32; 3];
+		for leaf in &plant.leaves {
+			shells[leaf.layer_shell() as usize] += 1;
+		}
+		assert!(shells[0] > 0 && shells[1] > 0 && shells[2] > 0, "shells {shells:?}");
+		let inner = plant.leaves.iter().filter(|leaf| leaf.layer_shell() == 0).count();
+		let outer = plant.leaves.iter().filter(|leaf| leaf.layer_shell() == 2).count();
+		assert!(outer >= inner);
+		assert_eq!(CanopyLayer::inner().shell, 0);
+		assert_eq!(CanopyLayer::mid().shell, 1);
+		assert_eq!(CanopyLayer::outer().shell, 2);
+		Ok(())
+	}
+
+	#[test]
+	fn every_limb_keeps_outer_canopy() -> anyhow::Result<()> {
+		let plant = TreePlant::generate(8, 0, Vec3::ZERO, Vec3::Y, 1.0, &TreeRecipe::storybook());
+		for (index, branch) in plant.branches.iter().enumerate() {
+			if branch.depth != 1 {
+				continue;
+			}
+			assert!(
+				plant.leaves.iter().any(|leaf| leaf.parent_branch == index as u32),
+				"limb {index} has no canopy cards"
+			);
 		}
 		Ok(())
 	}

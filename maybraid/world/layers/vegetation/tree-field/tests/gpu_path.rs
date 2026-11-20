@@ -6,7 +6,8 @@ use bevy::prelude::{PerspectiveProjection, Transform};
 use vegetation_groves::temperate_lower_massives;
 use vegetation_shaders::wesl::{GrassViewUniform, LodThresholds};
 use vegetation_tree_field::{
-	TreeField, TreeFieldSettings, TreePatch, TreePatchLod, TreeRecipe, TreeSelector, WoodLod,
+	CanopyLayer, LeafTemplate, TreeField, TreeFieldSettings, TreePatch, TreePatchLod, TreeRecipe,
+	TreeSelector, WoodLod,
 };
 
 fn look_view(origin: Vec3, target: Vec3, height_px: f32) -> GrassViewUniform {
@@ -54,7 +55,7 @@ fn wood_and_foliage_draw_together() -> anyhow::Result<()> {
 	let wood = lists.wood_indirect_args();
 	let foliage = lists.foliage_indirect_args();
 	assert_eq!(wood[0].index_count, WoodLod::Near.index_count());
-	assert_eq!(foliage[0].index_count, 6);
+	assert_eq!(foliage[0].index_count, LeafTemplate::TEARDROP_INDEX_COUNT);
 	assert_eq!(wood[0].to_bytes().len(), 20);
 	Ok(())
 }
@@ -169,5 +170,20 @@ fn cpu_select_reports_grove_work() -> anyhow::Result<()> {
 	assert!(!field.plants.is_empty());
 	assert!(lists.submitted_wood > 0);
 	assert!(lists.submitted_foliage > 0);
+	Ok(())
+}
+
+#[test]
+fn layered_canopy_keeps_all_three_shells() -> anyhow::Result<()> {
+	let patch = TreePatch::isolated(5, Vec3::ZERO, TreeRecipe::storybook());
+	let field = TreeField::rebuild([&patch], &TreeFieldSettings::default());
+	let mut shells = [0u32; CanopyLayer::SHELL_COUNT as usize];
+	for leaf in &field.leaves {
+		shells[leaf.layer_shell() as usize] += 1;
+	}
+	assert!(
+		shells.iter().all(|count| *count > 0),
+		"expected all three canopy shells, got {shells:?}"
+	);
 	Ok(())
 }
