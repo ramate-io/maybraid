@@ -16,6 +16,8 @@ The highest-order model is [`chico`](./chico/) (`chico`). Lower-order crates are
 | [`shaders/`](shaders/) | **`vegetation-shaders`** | Leaf / frond / stick / bump-out materials plus reusable WESL vegetation math. |
 | [`grass-field/`](grass-field/) | **`vegetation-grass-field`** | GPU-driven moderate-height grass fields ([#1637](https://github.com/ramate-io/maybraid/issues/1637)). |
 | [`grass-field-playground/`](grass-field-playground/) | **`vegetation-grass-field-playground`** | BotW meadow playground + captures. |
+| [`bush-field/`](bush-field/) | **`vegetation-bush-field`** | GPU-driven small woody bushes ([#1638](https://github.com/ramate-io/maybraid/issues/1638)). |
+| [`bush-field-playground/`](bush-field-playground/) | **`vegetation-bush-field-playground`** | BotW shrub playground + captures. |
 | [`bumpout/`](bumpout/) | **`vegetation-bumpout`** | Canopy bump-outs. |
 
 ## Dependency direction

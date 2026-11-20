@@ -27,6 +27,19 @@ impl LodThresholds {
 		}
 	}
 
+	/// Small bushes keep a crown silhouette farther than grass turf.
+	pub fn bush_default() -> Self {
+		Self {
+			near_m: 12.0,
+			mid_m: 32.0,
+			card_m: 110.0,
+			near_density: 1.0,
+			mid_density: 0.60,
+			card_density: 0.28,
+			min_height_px: 2.0,
+		}
+	}
+
 	pub fn nested_ok(self) -> bool {
 		self.near_density >= self.mid_density && self.mid_density >= self.card_density
 	}

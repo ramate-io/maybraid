@@ -75,3 +75,49 @@ fn painterly_lit(
     let root_dark = mix(0.52, 1.0, smoothstep(0.0, 0.38, saturate(t)));
     return albedo * (band1 * root_dark + back + sky);
 }
+
+fn wood_albedo(palette: VegetationPalette, t: f32, variation: f32) -> vec3<f32> {
+    let along = mix(palette.root_rgb, palette.tip_rgb, saturate(t * 0.55 + 0.12));
+    return along * (0.78 + 0.28 * saturate(variation));
+}
+
+/// Soft wrap + stronger backlight so leaves read translucent without a scatter model.
+fn leaf_painterly_lit(
+    albedo: vec3<f32>,
+    normal: vec3<f32>,
+    light_dir: vec3<f32>,
+    t: f32,
+) -> vec3<f32> {
+    let wrap = two_sided_wrap(normal, light_dir, 0.62);
+    let n = normalize(normal);
+    let l = normalize(light_dir);
+    let back = saturate(-dot(n, l)) * 0.34;
+    let sky = saturate(n.y * 0.55 + 0.50) * 0.34;
+    let band0 = mix(0.38, 1.05, smoothstep(0.10, 0.32, wrap));
+    let band1 = mix(band0, 1.18, smoothstep(0.55, 0.82, wrap));
+    let tip_lift = mix(0.78, 1.0, smoothstep(0.0, 0.45, saturate(t)));
+    return albedo * (band1 * tip_lift + back + sky);
+}
+
+/// Warm sunlit rim → cool interior across a crown (`height_frac` in `0..=1`).
+fn crown_albedo(warm_rgb: vec3<f32>, cool_rgb: vec3<f32>, height_frac: f32, variation: f32) -> vec3<f32> {
+    let h = saturate(height_frac);
+    let along = mix(cool_rgb, warm_rgb, smoothstep(0.18, 0.88, h));
+    return along * (0.88 + 0.22 * saturate(variation));
+}
+
+/// Inner/lower shells stay cooler and darker; outer/top shells go warm and light.
+/// `shell` is `0` inner → `1` outer. Compose with `grass_variation_palette` for hue.
+fn crown_layer_albedo(
+    palette: VegetationPalette,
+    height_frac: f32,
+    radial_frac: f32,
+    shell: f32,
+    variation: f32,
+) -> vec3<f32> {
+    let cool = palette.root_rgb * vec3<f32>(0.52, 0.78, 1.38);
+    let warm = palette.tip_rgb * vec3<f32>(1.28, 1.10, 0.68);
+    let along = saturate(height_frac * 0.42 + saturate(radial_frac) * 0.28 + saturate(shell) * 0.38);
+    let mixed = mix(cool, warm, smoothstep(0.10, 0.88, along));
+    return mixed * (0.84 + 0.28 * saturate(variation));
+}

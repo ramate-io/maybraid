@@ -91,3 +91,64 @@ fn ribbon_normal(sample: CurveSample, side: f32) -> vec3<f32> {
         sample.frame.facing * 0.45 + sample.frame.across * (side * 0.10) + vec3<f32>(0.0, 0.85, 0.0),
     );
 }
+
+/// Linear taper, metres. Used by woody tubes; grass keeps `blade_width_at`.
+fn branch_radius_at(root_radius_m: f32, tip_radius_m: f32, t: f32) -> f32 {
+    return max(mix(root_radius_m, tip_radius_m, saturate(t)), 1e-4);
+}
+
+/// Quadratic Bézier rest curve. Control points are metres in the curve's local space
+/// (world for a trunk, parent attachment frame for a child).
+fn branch_rest_sample(p0: vec3<f32>, p1: vec3<f32>, p2: vec3<f32>, t: f32) -> CurveSample {
+    let tt = saturate(t);
+    let u = 1.0 - tt;
+    let position = u * u * p0 + 2.0 * u * tt * p1 + tt * tt * p2;
+    var tangent = 2.0 * u * (p1 - p0) + 2.0 * tt * (p2 - p1);
+    if (length(tangent) < 1e-5) {
+        tangent = p2 - p0;
+    }
+    let frame = stable_frame(tangent, vec3<f32>(0.0, 1.0, 0.0));
+    return CurveSample(position, frame.along, frame);
+}
+
+/// Radial `0..=1` around the tube. Collar overlap is authored by starting `t` slightly
+/// negative in the parent frame, not by a second mesh.
+fn woody_surface_vertex(sample: CurveSample, radius_m: f32, radial: f32) -> vec3<f32> {
+    let angle = radial * 6.28318530718;
+    let dir = sample.frame.across * cos(angle) + sample.frame.facing * sin(angle);
+    return sample.position + dir * radius_m;
+}
+
+fn woody_surface_normal(sample: CurveSample, radial: f32) -> vec3<f32> {
+    let angle = radial * 6.28318530718;
+    return normalize(sample.frame.across * cos(angle) + sample.frame.facing * sin(angle));
+}
+
+/// Ovate / teardrop width: narrow petiole, fullest near `v = 0.38`, rounded tip.
+fn leaf_teardrop_width(v: f32) -> f32 {
+    let vv = saturate(v);
+    let lower = smoothstep(0.0, 0.18, vv);
+    let upper = 1.0 - 0.70 * smoothstep(0.48, 0.98, vv);
+    return max(lower * upper, 0.16 * smoothstep(0.90, 0.98, vv));
+}
+
+/// Folded leaf in an attachment frame. `u` is across `[-1, 1]`, `v` is base→tip `[0, 1]`.
+fn leaf_surface_vertex(
+    origin: vec3<f32>,
+    frame: LocalFrame,
+    size_m: f32,
+    u: f32,
+    v: f32,
+    fold: f32,
+) -> vec3<f32> {
+    let vv = saturate(v);
+    let half = size_m * 0.50 * leaf_teardrop_width(vv);
+    let across = frame.across * (u * half);
+    let along = frame.along * (vv * size_m);
+    let cup = frame.facing * (fold * u * u * size_m * 0.14 + fold * vv * (1.0 - vv) * size_m * 0.26);
+    return origin + across + along + cup;
+}
+
+fn leaf_surface_normal(frame: LocalFrame, u: f32, fold: f32) -> vec3<f32> {
+    return normalize(frame.facing + frame.across * (u * 0.18) + frame.along * (fold * 0.12) + vec3<f32>(0.0, 0.35, 0.0));
+}

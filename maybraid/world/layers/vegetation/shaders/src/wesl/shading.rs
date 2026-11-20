@@ -17,6 +17,16 @@ impl VegetationPalette {
 		Self { root_rgb: Vec3::new(0.045, 0.16, 0.07), tip_rgb: Vec3::new(0.42, 0.68, 0.18) }
 	}
 
+	/// Warm bark for small woody stems.
+	pub fn botw_wood() -> Self {
+		Self { root_rgb: Vec3::new(0.22, 0.12, 0.07), tip_rgb: Vec3::new(0.46, 0.30, 0.16) }
+	}
+
+	/// Cool interior / warm rim foliage for BotW-like scrub crowns.
+	pub fn botw_scrub_crown() -> Self {
+		Self { root_rgb: Vec3::new(0.07, 0.26, 0.11), tip_rgb: Vec3::new(0.40, 0.64, 0.16) }
+	}
+
 	pub fn albedo(self, t: f32, variation: f32) -> Vec3 {
 		grass_albedo(self, t, variation)
 	}
@@ -84,6 +94,44 @@ pub fn painterly_lit(albedo: Vec3, normal: Vec3, light_dir: Vec3, t: f32) -> Vec
 	albedo * (band1 * root_dark + back + sky)
 }
 
+pub fn wood_albedo(palette: VegetationPalette, t: f32, variation: f32) -> Vec3 {
+	let along = palette.root_rgb.lerp(palette.tip_rgb, (t * 0.55 + 0.12).clamp(0.0, 1.0));
+	along * (0.78 + 0.28 * variation.clamp(0.0, 1.0))
+}
+
+pub fn leaf_painterly_lit(albedo: Vec3, normal: Vec3, light_dir: Vec3, t: f32) -> Vec3 {
+	let wrap = two_sided_wrap(normal, light_dir, 0.62);
+	let n = normal.normalize_or_zero();
+	let l = light_dir.normalize_or_zero();
+	let back = (-n.dot(l)).max(0.0) * 0.34;
+	let sky = (n.y * 0.55 + 0.50).clamp(0.0, 1.0) * 0.34;
+	let band0 = lerp(0.38, 1.05, smoothstep(0.10, 0.32, wrap));
+	let band1 = lerp(band0, 1.18, smoothstep(0.55, 0.82, wrap));
+	let tip_lift = lerp(0.78, 1.0, smoothstep(0.0, 0.45, t.clamp(0.0, 1.0)));
+	albedo * (band1 * tip_lift + back + sky)
+}
+
+pub fn crown_albedo(warm_rgb: Vec3, cool_rgb: Vec3, height_frac: f32, variation: f32) -> Vec3 {
+	let along = cool_rgb.lerp(warm_rgb, smoothstep(0.18, 0.88, height_frac.clamp(0.0, 1.0)));
+	along * (0.88 + 0.22 * variation.clamp(0.0, 1.0))
+}
+
+/// Inner/lower shells stay cooler and darker; outer/top shells go warm and light.
+pub fn crown_layer_albedo(
+	palette: VegetationPalette,
+	height_frac: f32,
+	radial_frac: f32,
+	shell: f32,
+	variation: f32,
+) -> Vec3 {
+	let cool = palette.root_rgb * Vec3::new(0.52, 0.78, 1.38);
+	let warm = palette.tip_rgb * Vec3::new(1.28, 1.10, 0.68);
+	let along = (height_frac * 0.42 + radial_frac.clamp(0.0, 1.0) * 0.28 + shell.clamp(0.0, 1.0) * 0.38)
+		.clamp(0.0, 1.0);
+	let mixed = cool.lerp(warm, smoothstep(0.10, 0.88, along));
+	mixed * (0.84 + 0.28 * variation.clamp(0.0, 1.0))
+}
+
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
 	a + (b - a) * t
 }
@@ -138,6 +186,36 @@ mod tests {
 			max_r = max_r.max(pal.tip_rgb.x);
 		}
 		assert!(max_r - min_g > 0.04 || max_r > 0.35);
+		Ok(())
+	}
+
+	#[test]
+	fn crown_gradient_is_warmer_at_the_top() -> anyhow::Result<()> {
+		let cool = Vec3::new(0.08, 0.30, 0.14);
+		let warm = Vec3::new(0.52, 0.78, 0.16);
+		let low = crown_albedo(warm, cool, 0.1, 0.4);
+		let high = crown_albedo(warm, cool, 0.9, 0.4);
+		assert!(high.x + high.y > low.x + low.y);
+		Ok(())
+	}
+
+	#[test]
+	fn leaf_lit_keeps_backlight() -> anyhow::Result<()> {
+		let albedo = Vec3::new(0.3, 0.5, 0.15);
+		let n = Vec3::new(0.0, 0.1, 1.0);
+		let l = Vec3::new(0.0, 0.1, -1.0);
+		let lit = leaf_painterly_lit(albedo, n, l, 0.7);
+		assert!(lit.length() > 0.05);
+		Ok(())
+	}
+
+	#[test]
+	fn crown_layer_is_cooler_inside_and_warmer_outside() -> anyhow::Result<()> {
+		let pal = VegetationPalette::botw_scrub_crown();
+		let inner = crown_layer_albedo(pal, 0.15, 0.10, 0.0, 0.4);
+		let outer = crown_layer_albedo(pal, 0.88, 0.85, 1.0, 0.4);
+		assert!(outer.x + outer.y > inner.x + inner.y);
+		assert!(inner.z / (inner.x + 1e-4) > outer.z / (outer.x + 1e-4) * 0.85);
 		Ok(())
 	}
 }

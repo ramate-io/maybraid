@@ -10,6 +10,7 @@
 //! import vegetation_shaders::wesl::hash::{hash_u32, density_rank, plant_id};
 //! import vegetation_shaders::wesl::curve::{
 //!     blade_rest_sample, ribbon_vertex, stable_frame, attachment_frame,
+//!     branch_rest_sample, branch_radius_at, woody_surface_vertex,
 //! };
 //! import vegetation_shaders::wesl::wind::{wind_field, deform_along_curve};
 //! import vegetation_shaders::wesl::lod::{projected_height_px, lod_bucket, nested_keep};
@@ -21,10 +22,11 @@
 //!
 //! ## Bush follow-up ([#1638](https://github.com/ramate-io/maybraid/issues/1638))
 //!
-//! Reuse `curve` (including `stable_frame` / `attachment_frame`), `wind` (pass a
-//! higher `stiffness` for wood), `shading`, `lod`, `hash`, and `layout`. Add a
-//! branch-radius helper in the bush crate only if grass does not need it.
-//! Keep wood/foliage entry points distinct from grass.
+//! Reuse `curve` (including `stable_frame` / `attachment_frame` / `branch_rest_sample`
+//! / woody and leaf surfaces), `wind` (pass a higher `stiffness` for wood),
+//! `shading` (`wood_albedo`, `leaf_painterly_lit`, `crown_albedo`), `lod`, `hash`,
+//! and `layout`. Keep wood/foliage entry points distinct from grass. Extra
+//! branch/leaf GPU structs stay in the bush crate.
 
 use bevy::prelude::*;
 use bevy::shader::{load_shader_library, Shader};
@@ -37,8 +39,10 @@ pub mod shading;
 pub mod wind;
 
 pub use curve::{
-	attachment_frame, blade_rest_sample, blade_width_at, ribbon_normal, ribbon_vertex,
-	stable_frame, CurveSample, LocalFrame,
+	attachment_frame, blade_rest_sample, blade_width_at, branch_radius_at, branch_rest_sample,
+	leaf_surface_normal, leaf_surface_vertex, leaf_teardrop_width, ribbon_normal, ribbon_vertex,
+	stable_frame,
+	woody_surface_normal, woody_surface_vertex, CurveSample, LocalFrame,
 };
 pub use hash::{
 	density_rank, hash_lattice, hash_u32, hash_u32_to_unit, plant_id, value_noise_2, VegetationHash,
@@ -54,8 +58,9 @@ pub use lod::{
 	ProjectedSize,
 };
 pub use shading::{
-	grass_albedo, grass_variation_palette, meadow_color_field, painterly_lit, two_sided_wrap,
-	VegetationPalette,
+	crown_albedo, crown_layer_albedo, grass_albedo, grass_variation_palette, leaf_painterly_lit,
+	meadow_color_field,
+	painterly_lit, two_sided_wrap, wood_albedo, VegetationPalette,
 };
 pub use wind::{
 	deform_along_curve, max_wind_displacement_m, wind_field, WindDeform, WindField, WindInputs,

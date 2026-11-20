@@ -107,6 +107,70 @@ pub fn ribbon_normal(sample: CurveSample, side: f32) -> Vec3 {
 		.normalize_or_zero()
 }
 
+pub fn branch_radius_at(root_radius_m: f32, tip_radius_m: f32, t: f32) -> f32 {
+	let tt = t.clamp(0.0, 1.0);
+	(root_radius_m + (tip_radius_m - root_radius_m) * tt).max(1e-4)
+}
+
+pub fn branch_rest_sample(p0: Vec3, p1: Vec3, p2: Vec3, t: f32) -> CurveSample {
+	let tt = t.clamp(0.0, 1.0);
+	let u = 1.0 - tt;
+	let position = p0 * (u * u) + p1 * (2.0 * u * tt) + p2 * (tt * tt);
+	let mut tangent = (p1 - p0) * (2.0 * u) + (p2 - p1) * (2.0 * tt);
+	if tangent.length() < 1e-5 {
+		tangent = p2 - p0;
+	}
+	let frame = stable_frame(tangent, Vec3::Y);
+	CurveSample { position, tangent: frame.along, frame }
+}
+
+pub fn woody_surface_vertex(sample: CurveSample, radius_m: f32, radial: f32) -> Vec3 {
+	let angle = radial * std::f32::consts::TAU;
+	let (sin_a, cos_a) = angle.sin_cos();
+	let dir = sample.frame.across * cos_a + sample.frame.facing * sin_a;
+	sample.position + dir * radius_m
+}
+
+pub fn woody_surface_normal(sample: CurveSample, radial: f32) -> Vec3 {
+	let angle = radial * std::f32::consts::TAU;
+	let (sin_a, cos_a) = angle.sin_cos();
+	(sample.frame.across * cos_a + sample.frame.facing * sin_a).normalize_or_zero()
+}
+
+/// Ovate / teardrop width: narrow petiole, fullest near `v = 0.38`, rounded tip.
+pub fn leaf_teardrop_width(v: f32) -> f32 {
+	let vv = v.clamp(0.0, 1.0);
+	let lower = smoothstep(0.0, 0.18, vv);
+	let upper = 1.0 - 0.70 * smoothstep(0.48, 0.98, vv);
+	(lower * upper).max(0.16 * smoothstep(0.90, 0.98, vv))
+}
+
+pub fn leaf_surface_vertex(
+	origin: Vec3,
+	frame: LocalFrame,
+	size_m: f32,
+	u: f32,
+	v: f32,
+	fold: f32,
+) -> Vec3 {
+	let vv = v.clamp(0.0, 1.0);
+	let half = size_m * 0.50 * leaf_teardrop_width(vv);
+	let across = frame.across * (u * half);
+	let along = frame.along * (vv * size_m);
+	let cup = frame.facing * (fold * u * u * size_m * 0.14 + fold * vv * (1.0 - vv) * size_m * 0.26);
+	origin + across + along + cup
+}
+
+pub fn leaf_surface_normal(frame: LocalFrame, u: f32, fold: f32) -> Vec3 {
+	(frame.facing + frame.across * (u * 0.18) + frame.along * (fold * 0.12) + Vec3::Y * 0.35)
+		.normalize_or_zero()
+}
+
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+	let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+	t * t * (3.0 - 2.0 * t)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -162,6 +226,64 @@ mod tests {
 	fn rest_tangent_at_root_follows_up() -> anyhow::Result<()> {
 		let sample = blade_rest_sample(Vec3::ZERO, Vec3::Y, Vec3::X, 0.6, 0.9, 0.0);
 		assert!(sample.frame.along.dot(Vec3::Y) > 0.95);
+		Ok(())
+	}
+
+	#[test]
+	fn branch_radius_tapers_toward_the_tip() -> anyhow::Result<()> {
+		let root = branch_radius_at(0.04, 0.01, 0.0);
+		let tip = branch_radius_at(0.04, 0.01, 1.0);
+		assert!((root - 0.04).abs() < 1e-5);
+		assert!((tip - 0.01).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn branch_rest_sample_is_rooted_and_reaches_the_tip() -> anyhow::Result<()> {
+		let p0 = Vec3::new(1.0, 0.0, 2.0);
+		let p2 = Vec3::new(1.2, 0.8, 2.1);
+		let p1 = (p0 + p2) * 0.5 + Vec3::X * 0.1;
+		let root = branch_rest_sample(p0, p1, p2, 0.0);
+		let tip = branch_rest_sample(p0, p1, p2, 1.0);
+		assert!((root.position - p0).length() < 1e-4);
+		assert!((tip.position - p2).length() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn woody_tube_sits_on_the_curve() -> anyhow::Result<()> {
+		let sample = branch_rest_sample(Vec3::ZERO, Vec3::new(0.0, 0.5, 0.1), Vec3::Y, 0.4);
+		let a = woody_surface_vertex(sample, 0.05, 0.0);
+		let b = woody_surface_vertex(sample, 0.05, 0.5);
+		assert!(((a - sample.position).length() - 0.05).abs() < 1e-3);
+		assert!(((b - sample.position).length() - 0.05).abs() < 1e-3);
+		assert!(woody_surface_normal(sample, 0.0).length() > 0.5);
+		Ok(())
+	}
+
+	#[test]
+	fn leaf_base_stays_on_the_attachment() -> anyhow::Result<()> {
+		let sample = branch_rest_sample(Vec3::ZERO, Vec3::Y * 0.5, Vec3::Y, 0.6);
+		let frame = attachment_frame(sample, 0.3);
+		let base = leaf_surface_vertex(sample.position, frame, 0.08, 0.0, 0.0, 0.4);
+		assert!((base - sample.position).length() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn teardrop_is_widest_in_the_middle_and_rounded_at_the_tip() -> anyhow::Result<()> {
+		assert!(leaf_teardrop_width(0.38) > leaf_teardrop_width(0.08));
+		assert!(leaf_teardrop_width(0.38) > leaf_teardrop_width(0.92));
+		assert!(leaf_teardrop_width(1.0) > 0.10);
+		let sample = branch_rest_sample(Vec3::ZERO, Vec3::Y * 0.5, Vec3::Y, 0.5);
+		let frame = sample.frame;
+		let across = |u: f32, v: f32| {
+			leaf_surface_vertex(sample.position, frame, 1.0, u, v, 0.0)
+				.dot(frame.across)
+				.abs()
+		};
+		assert!(across(1.0, 0.38) > across(1.0, 0.12));
+		assert!(across(1.0, 0.38) > across(1.0, 0.95));
 		Ok(())
 	}
 }

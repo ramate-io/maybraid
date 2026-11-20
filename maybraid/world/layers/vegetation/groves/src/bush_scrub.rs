@@ -111,6 +111,18 @@ const GREEN_TUFT: BushScrubTuft = BushScrubTuft {
 	max_tilt_radians: MAX_TILT_RADIANS,
 };
 
+impl BushScrubBush {
+	/// Authored small-bush ranges used by Bush Scrub `SmallBush` cells.
+	pub fn small() -> Self {
+		SMALL_BUSH
+	}
+
+	/// Authored sapling ranges used by Bush Scrub `SaplingBush` cells.
+	pub fn sapling() -> Self {
+		SAPLING_BUSH
+	}
+}
+
 const SMALL_BUSH: BushScrubBush = BushScrubBush {
 	height: UnitRange::new(0.35, 0.80),
 	shoot_count: 4..=7,
