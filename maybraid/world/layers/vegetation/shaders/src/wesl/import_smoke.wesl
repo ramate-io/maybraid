@@ -23,15 +23,18 @@ import vegetation_shaders::wesl::curve::{
     woody_surface_normal,
     leaf_surface_vertex,
     leaf_surface_normal,
+    leaf_teardrop_width,
 };
 import vegetation_shaders::wesl::wind::{wind_field, deform_along_curve, WindInputs};
 import vegetation_shaders::wesl::lod::{projected_height_px, lod_bucket, nested_keep, LodThresholds};
 import vegetation_shaders::wesl::shading::{
     grass_albedo,
+    grass_variation_palette,
     painterly_lit,
     wood_albedo,
     leaf_painterly_lit,
     crown_albedo,
+    crown_layer_albedo,
     VegetationPalette,
 };
 import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform};
@@ -89,6 +92,9 @@ fn smoke_eval(blade: BladeDescriptor, view: GrassViewUniform, t: f32, side: f32)
     color = color + wood_albedo(pal, t, rank) * 0.0;
     color = color + leaf_painterly_lit(albedo, n, view.light_direction.xyz, t) * 0.0;
     color = color + crown_albedo(pal.tip_rgb, pal.root_rgb, t, rank) * 0.0;
+    let varied = grass_variation_palette(pal.tip_rgb, blade.root.xz, blade.plant_id);
+    color = color + crown_layer_albedo(varied, t, 0.4, 0.7, rank) * 0.0;
+    let _teardrop = leaf_teardrop_width(t);
     if (!keep || bucket > 2u) {
         color = color * 0.0;
     }

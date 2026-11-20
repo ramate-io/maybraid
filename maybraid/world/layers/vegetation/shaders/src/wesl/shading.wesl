@@ -105,3 +105,19 @@ fn crown_albedo(warm_rgb: vec3<f32>, cool_rgb: vec3<f32>, height_frac: f32, vari
     let along = mix(cool_rgb, warm_rgb, smoothstep(0.18, 0.88, h));
     return along * (0.88 + 0.22 * saturate(variation));
 }
+
+/// Inner/lower shells stay cooler and darker; outer/top shells go warm and light.
+/// `shell` is `0` inner → `1` outer. Compose with `grass_variation_palette` for hue.
+fn crown_layer_albedo(
+    palette: VegetationPalette,
+    height_frac: f32,
+    radial_frac: f32,
+    shell: f32,
+    variation: f32,
+) -> vec3<f32> {
+    let cool = palette.root_rgb * vec3<f32>(0.52, 0.78, 1.38);
+    let warm = palette.tip_rgb * vec3<f32>(1.28, 1.10, 0.68);
+    let along = saturate(height_frac * 0.42 + saturate(radial_frac) * 0.28 + saturate(shell) * 0.38);
+    let mixed = mix(cool, warm, smoothstep(0.10, 0.88, along));
+    return mixed * (0.84 + 0.28 * saturate(variation));
+}

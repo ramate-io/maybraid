@@ -21,6 +21,7 @@ game-commands = { workspace = true }
 terrain-shaders = { workspace = true }
 vegetation-bush-field = { workspace = true }
 vegetation-components = { workspace = true }
+vegetation-grass-field = { workspace = true }
 vegetation-shaders = { workspace = true }
 
 [dev-dependencies]

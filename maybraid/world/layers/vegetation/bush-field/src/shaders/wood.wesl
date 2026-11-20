@@ -28,11 +28,11 @@ struct WoodVertexOutput {
     @location(2) albedo: vec3<f32>,
 }
 
-fn deform_trunk(branch: BranchDescriptor, root: vec3<f32>, t: f32, wind_xz: vec2<f32>) -> CurveSample {
+fn deform_trunk(branch: BranchDescriptor, t: f32, wind_xz: vec2<f32>) -> CurveSample {
     let rest = branch_rest_sample(branch.p0, branch.p1, branch.p2, t);
-    let position = deform_along_curve(rest.position, root, t, wind_xz, branch.stiffness);
+    let position = deform_along_curve(rest.position, branch.p0, t, wind_xz, branch.stiffness);
     let rest_hi = branch_rest_sample(branch.p0, branch.p1, branch.p2, saturate(t + 0.02));
-    let hi = deform_along_curve(rest_hi.position, root, saturate(t + 0.02), wind_xz, branch.stiffness);
+    let hi = deform_along_curve(rest_hi.position, branch.p0, saturate(t + 0.02), wind_xz, branch.stiffness);
     let frame = stable_frame(hi - position, vec3<f32>(0.0, 1.0, 0.0));
     return CurveSample(position, frame.along, frame);
 }
@@ -59,17 +59,16 @@ fn deform_child(
 }
 
 fn world_sample(branch: BranchDescriptor, t: f32, wind_xz: vec2<f32>) -> CurveSample {
-    let plant = plants[branch.plant_index];
     if (branch.parent_index == PARENT_NONE) {
-        return deform_trunk(branch, plant.root, t, wind_xz);
+        return deform_trunk(branch, t, wind_xz);
     }
     let parent = branches[branch.parent_index];
     var parent_sample: CurveSample;
     if (parent.parent_index == PARENT_NONE) {
-        parent_sample = deform_trunk(parent, plant.root, branch.parent_t, wind_xz);
+        parent_sample = deform_trunk(parent, branch.parent_t, wind_xz);
     } else {
         let grand = branches[parent.parent_index];
-        let grand_sample = deform_trunk(grand, plant.root, parent.parent_t, wind_xz);
+        let grand_sample = deform_trunk(grand, parent.parent_t, wind_xz);
         parent_sample = deform_child(parent, branch.parent_t, grand_sample, wind_xz);
     }
     return deform_child(branch, t, parent_sample, wind_xz);

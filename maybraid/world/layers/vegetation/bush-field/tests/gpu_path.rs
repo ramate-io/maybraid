@@ -4,7 +4,8 @@ use bevy::camera::CameraProjection;
 use bevy::math::{Vec2, Vec3, Vec4};
 use bevy::prelude::{PerspectiveProjection, Transform};
 use vegetation_bush_field::{
-	BushField, BushFieldSettings, BushPatch, BushPatchLod, BushRecipe, BushSelector, WoodLod,
+	BushField, BushFieldSettings, BushPatch, BushPatchLod, BushRecipe, BushSelector, LeafLayer,
+	LeafTemplate, WoodLod,
 };
 use vegetation_groves::bush_scrub;
 use vegetation_shaders::wesl::{GrassViewUniform, LodThresholds};
@@ -54,7 +55,7 @@ fn wood_and_foliage_draw_together() -> anyhow::Result<()> {
 	let wood = lists.wood_indirect_args();
 	let foliage = lists.foliage_indirect_args();
 	assert_eq!(wood[0].index_count, WoodLod::Near.index_count());
-	assert_eq!(foliage[0].index_count, 6);
+	assert_eq!(foliage[0].index_count, LeafTemplate::TEARDROP_INDEX_COUNT);
 	assert_eq!(wood[0].to_bytes().len(), 20);
 	Ok(())
 }
@@ -168,5 +169,24 @@ fn cpu_select_reports_10m_scrub_work() -> anyhow::Result<()> {
 	assert!(!field.plants.is_empty());
 	assert!(lists.submitted_wood > 0);
 	assert!(lists.submitted_foliage > 0);
+	Ok(())
+}
+
+#[test]
+fn layered_leaves_survive_select() -> anyhow::Result<()> {
+	let settings = BushFieldSettings::default();
+	let patch = BushPatch::isolated(3, Vec3::ZERO, BushRecipe::small_scrub());
+	let field = BushField::rebuild([&patch], &settings);
+	let mut shells = [0u32; LeafLayer::SHELL_COUNT as usize];
+	for leaf in &field.leaves {
+		shells[leaf.layer_shell() as usize] += 1;
+	}
+	assert!(shells.iter().all(|count| *count > 0), "expected all three shells, got {shells:?}");
+	let lists = BushSelector::from_view(
+		look_view(Vec3::new(0.0, 1.0, 3.0), Vec3::ZERO, 720.0),
+		&settings,
+	)
+	.compact(&field.plants, &field.branches, &field.leaves);
+	assert!(lists.submitted_foliage > 8);
 	Ok(())
 }

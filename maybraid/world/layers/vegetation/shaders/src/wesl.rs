@@ -40,7 +40,8 @@ pub mod wind;
 
 pub use curve::{
 	attachment_frame, blade_rest_sample, blade_width_at, branch_radius_at, branch_rest_sample,
-	leaf_surface_normal, leaf_surface_vertex, ribbon_normal, ribbon_vertex, stable_frame,
+	leaf_surface_normal, leaf_surface_vertex, leaf_teardrop_width, ribbon_normal, ribbon_vertex,
+	stable_frame,
 	woody_surface_normal, woody_surface_vertex, CurveSample, LocalFrame,
 };
 pub use hash::{
@@ -57,7 +58,8 @@ pub use lod::{
 	ProjectedSize,
 };
 pub use shading::{
-	crown_albedo, grass_albedo, grass_variation_palette, leaf_painterly_lit, meadow_color_field,
+	crown_albedo, crown_layer_albedo, grass_albedo, grass_variation_palette, leaf_painterly_lit,
+	meadow_color_field,
 	painterly_lit, two_sided_wrap, wood_albedo, VegetationPalette,
 };
 pub use wind::{

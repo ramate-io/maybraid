@@ -13246,6 +13246,7 @@ dependencies = [
  "terrain-shaders",
  "vegetation-bush-field",
  "vegetation-components",
+ "vegetation-grass-field",
  "vegetation-shaders",
 ]
 

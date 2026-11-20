@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use game_commands::command::{CommandScript, GameCommand};
 use vegetation_bush_field::{BushFieldSettings, BushPatch, BushPatchLod};
 use vegetation_components::CanopyShadowMode;
+use vegetation_grass_field::GrassFieldSettings;
 
 use crate::camera::{yaw_pitch, CameraController};
 use crate::ground::TurfPlane;
@@ -205,24 +206,36 @@ impl WindCommand {
 			Self::Still => {
 				commands.queue(|world: &mut World| {
 					world.resource_mut::<BushFieldSettings>().wind.strength_m = 0.0;
+					if let Some(mut grass) = world.get_resource_mut::<GrassFieldSettings>() {
+						grass.wind.strength_m = 0.0;
+					}
 				});
 				*console = "wind still".into();
 			}
 			Self::Gentle => {
 				commands.queue(|world: &mut World| {
-					world.resource_mut::<BushFieldSettings>().wind =
-						vegetation_shaders::wesl::WindInputs::gentle_botw(0.0);
+					let wind = vegetation_shaders::wesl::WindInputs::gentle_botw(0.0);
+					world.resource_mut::<BushFieldSettings>().wind = wind;
+					if let Some(mut grass) = world.get_resource_mut::<GrassFieldSettings>() {
+						grass.wind = wind;
+					}
 				});
 				*console = "wind gentle BotW".into();
 			}
 			Self::Set { strength, speed } => {
 				commands.queue(move |world: &mut World| {
-					let mut settings = world.resource_mut::<BushFieldSettings>();
-					if let Some(strength) = strength {
-						settings.wind.strength_m = strength.max(0.0);
-					}
-					if let Some(speed) = speed {
-						settings.wind.speed = speed.max(0.0);
+					let wind = {
+						let mut settings = world.resource_mut::<BushFieldSettings>();
+						if let Some(strength) = strength {
+							settings.wind.strength_m = strength.max(0.0);
+						}
+						if let Some(speed) = speed {
+							settings.wind.speed = speed.max(0.0);
+						}
+						settings.wind
+					};
+					if let Some(mut grass) = world.get_resource_mut::<GrassFieldSettings>() {
+						grass.wind = wind;
 					}
 				});
 				*console = "wind updated".into();

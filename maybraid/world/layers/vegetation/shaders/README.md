@@ -11,7 +11,7 @@ are `vegetation_shaders::wesl::<stem>`:
 | Module | Responsibility |
 | --- | --- |
 | `hash` | Stable plant IDs and nested density ranks |
-| `curve` | Rest curves, taper, `stable_frame`, `attachment_frame`, ribbons, woody tubes, folded leaves |
+| `curve` | Rest curves, taper, `stable_frame`, `attachment_frame`, ribbons, woody tubes, teardrop leaves |
 | `wind` | Root-anchored field + stiffness-aware deformation |
 | `lod` | Projected height (actual render resolution), nested keep, buckets |
 | `shading` | Painterly two-sided lighting, wood albedo, leaf wrap / crown gradient |

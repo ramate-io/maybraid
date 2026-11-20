@@ -116,6 +116,22 @@ pub fn crown_albedo(warm_rgb: Vec3, cool_rgb: Vec3, height_frac: f32, variation:
 	along * (0.88 + 0.22 * variation.clamp(0.0, 1.0))
 }
 
+/// Inner/lower shells stay cooler and darker; outer/top shells go warm and light.
+pub fn crown_layer_albedo(
+	palette: VegetationPalette,
+	height_frac: f32,
+	radial_frac: f32,
+	shell: f32,
+	variation: f32,
+) -> Vec3 {
+	let cool = palette.root_rgb * Vec3::new(0.52, 0.78, 1.38);
+	let warm = palette.tip_rgb * Vec3::new(1.28, 1.10, 0.68);
+	let along = (height_frac * 0.42 + radial_frac.clamp(0.0, 1.0) * 0.28 + shell.clamp(0.0, 1.0) * 0.38)
+		.clamp(0.0, 1.0);
+	let mixed = cool.lerp(warm, smoothstep(0.10, 0.88, along));
+	mixed * (0.84 + 0.28 * variation.clamp(0.0, 1.0))
+}
+
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
 	a + (b - a) * t
 }
@@ -190,6 +206,16 @@ mod tests {
 		let l = Vec3::new(0.0, 0.1, -1.0);
 		let lit = leaf_painterly_lit(albedo, n, l, 0.7);
 		assert!(lit.length() > 0.05);
+		Ok(())
+	}
+
+	#[test]
+	fn crown_layer_is_cooler_inside_and_warmer_outside() -> anyhow::Result<()> {
+		let pal = VegetationPalette::botw_scrub_crown();
+		let inner = crown_layer_albedo(pal, 0.15, 0.10, 0.0, 0.4);
+		let outer = crown_layer_albedo(pal, 0.88, 0.85, 1.0, 0.4);
+		assert!(outer.x + outer.y > inner.x + inner.y);
+		assert!(inner.z / (inner.x + 1e-4) > outer.z / (outer.x + 1e-4) * 0.85);
 		Ok(())
 	}
 }
