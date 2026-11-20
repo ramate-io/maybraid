@@ -110,6 +110,8 @@ members = [
   "maybraid/world/layers/vegetation/sbs-trees",
   "maybraid/world/layers/vegetation/bumpout",
   "maybraid/world/layers/vegetation/bumpout-playground",
+  "maybraid/world/layers/vegetation/grass-field",
+  "maybraid/world/layers/vegetation/grass-field-playground",
   "maybraid/world/player",
   "maybraid/sky/lib",
   "maybraid/world/lib",
@@ -397,6 +399,8 @@ sbs-geometry = { path = "maybraid/world/layers/vegetation/sbs-geometry" }
 vegetation-groves = { path = "maybraid/world/layers/vegetation/groves" }
 chico = { path = "maybraid/world/layers/vegetation/chico" }
 vegetation-shaders = { path = "maybraid/world/layers/vegetation/shaders" }
+vegetation-grass-field = { path = "maybraid/world/layers/vegetation/grass-field" }
+vegetation-grass-field-playground = { path = "maybraid/world/layers/vegetation/grass-field-playground" }
 world-player = { path = "maybraid/world/player" }
 maybraid-sky = { path = "maybraid/sky/lib" }
 maybraid-world = { path = "maybraid/world/lib" }

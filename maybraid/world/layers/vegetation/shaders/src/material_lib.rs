@@ -191,8 +191,8 @@ impl Plugin for VegetationMaterialRefPlugin {
 mod tests {
 	use bevy::prelude::*;
 	use material_ref::{
-		MaterialRef, MaterialRefApplied, MaterialRefPlugin, MaterialRefRoot,
-		StandardMaterialRefCache, material_ref_plugin_installed,
+		material_ref_plugin_installed, MaterialRef, MaterialRefApplied, MaterialRefPlugin,
+		MaterialRefRoot, StandardMaterialRefCache,
 	};
 	use vegetation_components::LEAF_MATERIAL;
 

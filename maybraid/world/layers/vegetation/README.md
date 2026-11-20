@@ -13,7 +13,9 @@ The highest-order model is [`chico`](./chico/) (`chico`). Lower-order crates are
 | [`components/`](components/) | **`vegetation-components`** | Domain IR (`StickNode` / `FoliageNode`) + `VegetationComponents` / `LodScene`. |
 | [`sbs-trees/`](sbs-trees/) | **`sbs-trees`** | VegetationComponents plants for stalk and ball-stick trees ([§3.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation#31-stalk-and-ball-stick-trees)). Tracks [#186](https://github.com/ramate-io/maybraid/issues/186). |
 | [`groves/`](groves/) | **`vegetation-groves`** | Grove recipes. |
-| [`shaders/`](shaders/) | **`vegetation-shaders`** | Leaf / frond / stick / bump-out materials. |
+| [`shaders/`](shaders/) | **`vegetation-shaders`** | Leaf / frond / stick / bump-out materials plus reusable WESL vegetation math. |
+| [`grass-field/`](grass-field/) | **`vegetation-grass-field`** | GPU-driven moderate-height grass fields ([#1637](https://github.com/ramate-io/maybraid/issues/1637)). |
+| [`grass-field-playground/`](grass-field-playground/) | **`vegetation-grass-field-playground`** | BotW meadow playground + captures. |
 | [`bumpout/`](bumpout/) | **`vegetation-bumpout`** | Canopy bump-outs. |
 
 ## Dependency direction

@@ -13235,6 +13235,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "vegetation-grass-field"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "lod",
+ "vegetation-components",
+ "vegetation-shaders",
+]
+
+[[package]]
+name = "vegetation-grass-field-playground"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "camera-controls",
+ "clap",
+ "game-commands",
+ "terrain-shaders",
+ "vegetation-components",
+ "vegetation-grass-field",
+ "vegetation-shaders",
+]
+
+[[package]]
 name = "vegetation-groves"
 version = "0.1.5"
 dependencies = [
@@ -13269,6 +13295,7 @@ dependencies = [
 name = "vegetation-shaders"
 version = "0.1.5"
 dependencies = [
+ "anyhow",
  "bevy",
  "material-ref",
  "vegetation-components",
