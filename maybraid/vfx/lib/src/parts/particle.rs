@@ -116,6 +116,11 @@ pub fn shade_colors(shade: ParticleShade, palette: &ExplosionPalette) -> [Vec4; 
 			ExplosionPalette::vec4(palette.fire_mid),
 			ExplosionPalette::vec4(palette.fire_cool),
 		],
+		ParticleShade::Ooze => [
+			ExplosionPalette::vec4(palette.spark),
+			ExplosionPalette::vec4(palette.fire_mid),
+			ExplosionPalette::vec4(palette.fire_cool),
+		],
 		ParticleShade::Smoke => [
 			ExplosionPalette::vec4(palette.smoke_lit),
 			ExplosionPalette::vec4(mix_lin(palette.smoke_lit, palette.smoke_shadow, 0.45)),
@@ -123,6 +128,11 @@ pub fn shade_colors(shade: ParticleShade, palette: &ExplosionPalette) -> [Vec4; 
 		],
 		ParticleShade::Spark => [
 			ExplosionPalette::vec4(palette.spark),
+			ExplosionPalette::vec4(palette.fire_mid),
+			ExplosionPalette::vec4(palette.fire_cool),
+		],
+		ParticleShade::Spirit => [
+			ExplosionPalette::vec4(palette.fire_hot),
 			ExplosionPalette::vec4(palette.fire_mid),
 			ExplosionPalette::vec4(palette.fire_cool),
 		],
@@ -243,6 +253,14 @@ pub fn update_palette_color(writer: &ExprWriter, props: &InstanceExprs) -> SetAt
 	let color =
 		early.mix(props.color2.clone(), (t * writer.lit(2.0) + writer.lit(-1.0)).saturate());
 	SetAttributeModifier::new(Attribute::HDR_COLOR, (color * props.tint.clone()).expr())
+}
+
+pub fn init_scaled_size3(
+	writer: &ExprWriter,
+	scale: &WriterExpr,
+	start: Vec3,
+) -> SetAttributeModifier {
+	SetAttributeModifier::new(Attribute::SIZE3, (writer.lit(start) * scale.clone()).expr())
 }
 
 pub fn update_scaled_size3(

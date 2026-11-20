@@ -115,6 +115,7 @@ use bevy::prelude::*;
 use character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
 use characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use combat_hud::CombatHudPlugin;
+use combat_vfx::CombatVfxPlugin;
 use durham::TerrainFrictionConfig;
 use firearms::EnergyMaterialPlugin;
 use fisticuffs_user::FisticuffsSensorDebug;
@@ -212,6 +213,7 @@ impl Plugin for WorldPlugin {
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(EnergyMaterialPlugin)
 			.add_plugins(VfxPlugin)
+			.add_plugins(CombatVfxPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,
 				..default()
