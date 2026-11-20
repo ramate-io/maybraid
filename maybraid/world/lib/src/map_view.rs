@@ -7,7 +7,6 @@ use bevy::text::FontSize;
 use durham::DurhamSurface;
 use game_commands::command::TextEntryFocus;
 use geneva::{LanguageOverlay, NameKey, NamedOverlay};
-use lod::LodNodeSystems;
 use maybraid_character_controller::{
 	ActorControlStatus, ActorIntentEvent, CharacterControlSystems, CharacterIntent,
 };
@@ -303,31 +302,26 @@ impl Plugin for WorldMapViewPlugin {
 					.after(PlayerLifeSet::Resolve)
 					.after(stamp_map_camera)
 					.before(PlayerCameraSystems::Look),
-			)
-			.add_systems(
-				Update,
-				crate::map_lod::despawn_ground_lod_anchors
-					.after(PlayerCameraSystems::Apply)
-					.after(LodNodeSystems::Track),
-			)
-			.add_systems(
-				Update,
-				(
-					prepare_map_presentation,
-					sync_map_name_pins,
-					sync_map_type_marks,
-					sync_map_edge_arrows,
-					sync_map_player_marker,
-					sync_map_death_bones,
-					sync_respawn_picker_title,
-					sync_respawn_spawn_knobs.run_if(respawn_picker_prompt_visible),
-					despawn_leftover_respawn_spawn_knobs.run_if(leftover_respawn_spawn_knobs),
-					sync_respawn_selection_marker,
-					draw_highlighted_poi,
-				)
-					.chain()
-					.after(PlayerCameraSystems::Apply),
 			);
+		crate::map_lod::GroundLodAnchor::configure_handoff(app);
+		app.add_systems(
+			Update,
+			(
+				prepare_map_presentation,
+				sync_map_name_pins,
+				sync_map_type_marks,
+				sync_map_edge_arrows,
+				sync_map_player_marker,
+				sync_map_death_bones,
+				sync_respawn_picker_title,
+				sync_respawn_spawn_knobs.run_if(respawn_picker_prompt_visible),
+				despawn_leftover_respawn_spawn_knobs.run_if(leftover_respawn_spawn_knobs),
+				sync_respawn_selection_marker,
+				draw_highlighted_poi,
+			)
+				.chain()
+				.after(PlayerCameraSystems::Apply),
+		);
 	}
 }
 

@@ -5,8 +5,8 @@
 //! there is not dropped or evicted.
 
 use bevy::prelude::*;
-use lod::{LodNodePose, LodViewer};
-use player_camera::{map_pose, CameraController, CameraTarget, FollowCamera};
+use lod::{LodNodePose, LodNodeSystems, LodViewer};
+use player_camera::{map_pose, CameraController, CameraTarget, FollowCamera, PlayerCameraSystems};
 use world_player::Player as VegetationPlayer;
 
 use crate::map_view::WorldMapView;
@@ -76,6 +76,19 @@ impl GroundLodAnchor {
 			return false;
 		}
 		pose.current.translation == transform.translation
+	}
+
+	/// Camera Apply writes the follow pose, LOD Track copies it, then the extra
+	/// viewer can drop. Shared by production and the scheduled handoff test so
+	/// a moving follow camera is not one update behind tracking.
+	pub fn configure_handoff(app: &mut App) {
+		app.configure_sets(Update, LodNodeSystems::Track.after(PlayerCameraSystems::Apply))
+			.add_systems(
+				Update,
+				despawn_ground_lod_anchors
+					.after(PlayerCameraSystems::Apply)
+					.after(LodNodeSystems::Track),
+			);
 	}
 }
 
@@ -159,7 +172,7 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use game_commands::command::TextEntryFocus;
-	use lod::{track_lod_nodes, LodNode, LodNodePlugin, LodNodeSystems};
+	use lod::{track_lod_nodes, LodNode, LodNodePlugin};
 	use maybraid_character_controller::{ActorIntentEvent, CharacterIntent};
 	use maybraid_controllers_core::{ActorTarget, InputSource, Routed};
 	use maybraid_session::WorldGameplayEnabled;
@@ -539,15 +552,9 @@ mod tests {
 		app.add_plugins((MinimalPlugins, TransformPlugin, LodNodePlugin, PlayerCameraPlugin))
 			.init_resource::<ButtonInput<KeyCode>>()
 			.add_message::<bevy::window::WindowFocused>()
-			.configure_sets(Update, LodNodeSystems::Track.after(PlayerCameraSystems::Apply))
 			.init_resource::<WorldMapView>()
-			.add_systems(Update, spawn_ground_lod_anchors.before(PlayerCameraSystems::Follow))
-			.add_systems(
-				Update,
-				despawn_ground_lod_anchors
-					.after(PlayerCameraSystems::Apply)
-					.after(LodNodeSystems::Track),
-			);
+			.add_systems(Update, spawn_ground_lod_anchors.before(PlayerCameraSystems::Follow));
+		GroundLodAnchor::configure_handoff(&mut app);
 		app
 	}
 
@@ -615,25 +622,50 @@ mod tests {
 		);
 
 		app.world_mut().entity_mut(camera).insert(CameraTarget(Some(player)));
+		let first_walk = player_at + Vec3::X * 8.0;
+		app.world_mut()
+			.entity_mut(player)
+			.insert(Transform::from_translation(first_walk));
 		app.update();
 		let viewers = lod_viewers(app.world());
-		assert_eq!(viewers.len(), 1, "Apply + Track then drop the extra viewer");
+		assert_eq!(
+			viewers.len(),
+			1,
+			"Apply then Track must drop the extra viewer on a moving follow"
+		);
 		assert!(!viewers[0].2);
 		let Some(camera_at) = app.world().get::<Transform>(camera).map(|t| t.translation) else {
 			return Err(anyhow::anyhow!("camera transform"));
 		};
+		let Some(pose) = app.world().get::<LodNodePose>(camera) else {
+			return Err(anyhow::anyhow!("camera LodNodePose"));
+		};
+		assert_eq!(
+			pose.current.translation, camera_at,
+			"Track must observe the freshly applied follow pose"
+		);
 		assert!(camera_at.y < 50.0, "follow pose must leave map height, y={camera_at:?}");
+		assert!(
+			(camera_at.xz() - first_walk.xz()).length() < 8.0,
+			"live follow should track the walked actor, camera={camera_at:?} player={first_walk:?}"
+		);
 
-		let walked = player_at + Vec3::X * 8.0;
-		app.world_mut().entity_mut(player).insert(Transform::from_translation(walked));
+		let second_walk = first_walk + Vec3::Z * 6.0;
+		app.world_mut()
+			.entity_mut(player)
+			.insert(Transform::from_translation(second_walk));
 		app.update();
 		assert_eq!(lod_viewers(app.world()).len(), 1);
 		let Some(followed) = app.world().get::<Transform>(camera).map(|t| t.translation) else {
 			return Err(anyhow::anyhow!("followed transform"));
 		};
+		let Some(pose) = app.world().get::<LodNodePose>(camera) else {
+			return Err(anyhow::anyhow!("followed LodNodePose"));
+		};
+		assert_eq!(pose.current.translation, followed);
 		assert!(
-			(followed.xz() - walked.xz()).length() < 8.0,
-			"live follow should track the walked actor, camera={followed:?} player={walked:?}"
+			(followed.xz() - second_walk.xz()).length() < 8.0,
+			"live follow should keep tracking, camera={followed:?} player={second_walk:?}"
 		);
 		Ok(())
 	}
