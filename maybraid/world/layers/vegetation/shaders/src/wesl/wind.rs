@@ -15,6 +15,11 @@ impl WindInputs {
 	pub fn gentle_botw(time_s: f32) -> Self {
 		Self { direction_xz: Vec2::new(0.92, 0.38), speed: 0.85, strength_m: 0.22, time_s }
 	}
+
+	/// Stronger travelling gust for a still-frame capture.
+	pub fn botw_gust(time_s: f32) -> Self {
+		Self { direction_xz: Vec2::new(0.92, 0.38), speed: 1.15, strength_m: 0.58, time_s }
+	}
 }
 
 /// Sampled XZ displacement in metres (pre-stiffness).

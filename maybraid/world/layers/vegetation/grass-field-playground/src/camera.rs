@@ -1,5 +1,6 @@
 use std::f32::consts::PI;
 
+use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use camera_controls::look::{look_input_active, CameraLookEnabled};
 use game_commands::command::TextEntryFocus;
@@ -25,6 +26,8 @@ pub fn setup_camera(mut commands: Commands) {
 			fov: 55.0_f32.to_radians(),
 			..default()
 		}),
+		Msaa::Off,
+		DepthPrepass,
 		CameraController { speed: 8.0, sensitivity: 0.003, yaw, pitch },
 	));
 }

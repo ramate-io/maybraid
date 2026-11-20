@@ -18,22 +18,37 @@ WASD + mouse look (`L` toggles look). `/` opens commands. `F1` toggles the drawe
 | `wind still\|gentle\|set --strength --speed` | Anchored travelling waves |
 | `lod host high\|medium\|low\|ultra-low` | Existing LOD host density scale |
 | `shadows proxy\|full\|off` | Production default is proxy (no grass casters) |
-| `compare turf on\|off` / `compare grass on\|off` | Stand-in terrain mat vs generated ribbons |
+| `compare turf on\|off` / `compare grass on\|off` | Terrain mat vs generated ribbons |
 
 ## Captures
 
-Set `MAYBRAID_CAPTURE_DIR` and run the playground. Shots:
+960×540 stills in [`captures/`](captures/). `turf-*` shots use the same camera as
+the matching grass shot, with GPU blades removed so only the terrain POM turf
+mat remains.
+
+```bash
+MAYBRAID_CAPTURE_DIR=maybraid/world/layers/vegetation/grass-field-playground/captures \
+  nix develop --command cargo run -p vegetation-grass-field-playground --release --locked
+```
 
 | File | View |
 | --- | --- |
-| `meadow-orbit.png` | Orbiting lush field, root-to-tip gradient |
-| `meadow-ground.png` | Ground-level silhouettes + wind |
+| `meadow-ground.png` | Eye-height, looking across the field |
+| `turf-meadow-ground.png` | Same camera, terrain-mat only |
+| `blade-close.png` | Low-angle close-up of tapered blades |
 | `meadow-overhead.png` | Coverage from above |
-| `slope-rake.png` | SDF/slope samples, not a height map |
+| `turf-meadow-overhead.png` | Same camera, terrain-mat only |
+| `slope-rake.png` | SDF/slope samples |
+| `turf-slope-rake.png` | Same camera, terrain-mat only |
+| `lod-transition.png` | Near / mid / far in one view |
+| `turf-lod-transition.png` | Same camera, terrain-mat only |
+| `wind-gust.png` | Frozen travelling gust, ground camera |
+| `meadow-orbit.png` | Orbiting lush field |
+| `turf-meadow-orbit.png` | Same camera, terrain-mat only |
 | `crest-skyline.png` | Hill crest; height kept at the skyline |
 | `clump-close.png` | Isolated clump vs dense field |
 
-Place PNGs in `captures/` next to this README when a GPU is available.
+Refresh these PNGs whenever the look changes.
 
 ## Honest measurements
 

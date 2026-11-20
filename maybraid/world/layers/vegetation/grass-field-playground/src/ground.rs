@@ -1,5 +1,6 @@
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
+use terrain_shaders::TerrainShader;
 
 #[derive(Component)]
 pub struct TurfPlane;
@@ -7,15 +8,10 @@ pub struct TurfPlane;
 pub fn setup_ground(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
+	mut materials: ResMut<Assets<TerrainShader>>,
 ) {
 	let mesh = meshes.add(Plane3d::default().mesh().size(48.0, 48.0));
-	let material = materials.add(StandardMaterial {
-		base_color: Color::srgb(0.18, 0.38, 0.08),
-		perceptual_roughness: 0.95,
-		metallic: 0.0,
-		..default()
-	});
+	let material = materials.add(TerrainShader::default());
 	commands.spawn((
 		Name::new("turf-stand-in"),
 		TurfPlane,

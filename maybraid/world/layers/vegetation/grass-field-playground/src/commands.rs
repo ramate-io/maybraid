@@ -135,16 +135,13 @@ impl SpawnCommand {
 		match self {
 			Self::Default => {
 				commands.queue(|world: &mut World| {
-					despawn_patches(world);
-					scene::spawn_kind(world, PatchKind::Meadow);
-					scene::spawn_kind(world, PatchKind::Clump);
-					scene::spawn_kind(world, PatchKind::Slope);
-					scene::spawn_kind(world, PatchKind::Crest);
+					scene::clear_patches(world);
+					scene::spawn_default_scene_in_world(world);
 				});
 				*console = "spawned default meadow + clump + slope + crest".into();
 			}
 			Self::Clear => {
-				commands.queue(|world: &mut World| despawn_patches(world));
+				commands.queue(|world: &mut World| scene::clear_patches(world));
 				*console = "cleared grass patches".into();
 			}
 			other => {
@@ -267,21 +264,13 @@ impl CompareCommand {
 			}
 			Self::Grass { visible } => {
 				if matches!(visible, VisibilityChoice::Off) {
-					commands.queue(|world: &mut World| despawn_patches(world));
+					commands.queue(|world: &mut World| scene::clear_patches(world));
 					*console = "grass off".into();
 				} else {
 					SpawnCommand::Default.react(commands, console);
 				}
 			}
 		}
-	}
-}
-
-fn despawn_patches(world: &mut World) {
-	let mut patches = world.query_filtered::<Entity, With<GrassPatch>>();
-	let ids: Vec<_> = patches.iter(world).collect();
-	for entity in ids {
-		world.entity_mut(entity).despawn();
 	}
 }
 

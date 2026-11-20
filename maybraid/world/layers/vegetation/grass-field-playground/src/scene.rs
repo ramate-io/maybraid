@@ -17,6 +17,23 @@ pub fn spawn_default_scene(mut commands: Commands) {
 	}
 }
 
+pub fn spawn_default_scene_in_world(world: &mut World) {
+	for kind in [PatchKind::Meadow, PatchKind::Clump, PatchKind::Slope, PatchKind::Crest] {
+		spawn_kind(world, kind);
+	}
+}
+
+pub fn clear_patches(world: &mut World) {
+	let ids: Vec<_> = world.query_filtered::<Entity, With<GrassPatch>>().iter(world).collect();
+	for id in ids {
+		world.entity_mut(id).despawn();
+	}
+}
+
+pub fn has_patches(world: &mut World) -> bool {
+	world.query_filtered::<Entity, With<GrassPatch>>().iter(world).next().is_some()
+}
+
 pub fn spawn_kind(world: &mut World, kind: PatchKind) {
 	world.spawn((Name::new(kind.label()), kind, patch_for(kind)));
 }

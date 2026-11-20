@@ -15,16 +15,23 @@ use bevy::window::{PresentMode, Window, WindowResolution};
 use camera_controls::look::CameraLookPlugin;
 use capture::CaptureSession;
 use game_commands::command::GameCommandPlugin;
+use terrain_shaders::TerrainShaderPlugin;
 use vegetation_components::CanopyShadowMode;
 use vegetation_grass_field::GrassFieldPlugin;
 
 pub fn run() {
 	let capturing = CaptureSession::from_env();
+	let resolution = if capturing.is_some() {
+		let (w, h) = CaptureSession::window_resolution();
+		WindowResolution::new(w, h).with_scale_factor_override(1.0)
+	} else {
+		WindowResolution::new(1280, 720)
+	};
 	let mut app = App::new();
 	app.add_plugins(DefaultPlugins.set(WindowPlugin {
 		primary_window: Some(Window {
 			title: "vegetation-grass-field-playground".into(),
-			resolution: WindowResolution::new(1280, 720),
+			resolution,
 			present_mode: PresentMode::AutoNoVsync,
 			..default()
 		}),
@@ -32,6 +39,7 @@ pub fn run() {
 	}))
 	.insert_resource(ClearColor(Color::srgb(0.62, 0.78, 0.92)))
 	.insert_resource(CanopyShadowMode::Full)
+	.add_plugins(TerrainShaderPlugin)
 	.add_plugins(GrassFieldPlugin)
 	.add_plugins(CameraLookPlugin::default())
 	.add_plugins(

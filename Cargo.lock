@@ -13254,6 +13254,7 @@ dependencies = [
  "camera-controls",
  "clap",
  "game-commands",
+ "terrain-shaders",
  "vegetation-components",
  "vegetation-grass-field",
  "vegetation-shaders",

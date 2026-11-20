@@ -126,8 +126,8 @@ fn snapshot_extracted_field(
 	lights: Query<&GlobalTransform, With<DirectionalLight>>,
 	shadow_mode: Option<Res<CanopyShadowMode>>,
 ) {
-	let time_s = time.elapsed_secs();
-	let prev_time_s = prev.0;
+	let time_s = settings.freeze_time_s.unwrap_or(time.elapsed_secs());
+	let prev_time_s = settings.freeze_time_s.unwrap_or(prev.0);
 	prev.0 = time_s;
 	let light_direction = lights
 		.iter()

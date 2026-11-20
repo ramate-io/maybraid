@@ -18,6 +18,7 @@ bevy = { workspace = true }
 camera-controls = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
+terrain-shaders = { workspace = true }
 vegetation-components = { workspace = true }
 vegetation-grass-field = { workspace = true }
 vegetation-shaders = { workspace = true }

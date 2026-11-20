@@ -13,6 +13,8 @@ pub struct GrassFieldSettings {
 	pub max_per_lod: u32,
 	pub wind: WindInputs,
 	pub diagnostics: bool,
+	/// When set, select/draw use this time instead of `Time` (deterministic captures).
+	pub freeze_time_s: Option<f32>,
 }
 
 impl GrassFieldSettings {
@@ -37,6 +39,7 @@ impl Default for GrassFieldSettings {
 			max_per_lod: 65_536,
 			wind: WindInputs::gentle_botw(0.0),
 			diagnostics: false,
+			freeze_time_s: None,
 		}
 	}
 }
