@@ -1,7 +1,7 @@
 //! Importable WESL vegetation library plus CPU mirrors of the same contracts.
 //!
-//! Entry-point shaders (grass compute/vertex/fragment, and later bush wood/foliage)
-//! should `import vegetation_shaders::wesl::…` rather than copy these functions.
+//! Entry-point shaders (grass, bush, and tree wood/foliage) should
+//! `import vegetation_shaders::wesl::…` rather than copy these functions.
 //! Recipes and species appearance stay outside this math layer.
 //!
 //! ## Import-and-call example
@@ -20,13 +20,14 @@
 //!
 //! [`import_smoke.wesl`](wesl/import_smoke.wesl) compiles this pattern.
 //!
-//! ## Bush follow-up ([#1638](https://github.com/ramate-io/maybraid/issues/1638))
+//! ## Bush / tree follow-up ([#1638](https://github.com/ramate-io/maybraid/issues/1638), trees)
 //!
 //! Reuse `curve` (including `stable_frame` / `attachment_frame` / `branch_rest_sample`
-//! / woody and leaf surfaces), `wind` (pass a higher `stiffness` for wood),
-//! `shading` (`wood_albedo`, `leaf_painterly_lit`, `crown_albedo`), `lod`, `hash`,
-//! and `layout`. Keep wood/foliage entry points distinct from grass. Extra
-//! branch/leaf GPU structs stay in the bush crate.
+//! / woody and teardrop leaf surfaces), `wind` (higher `stiffness` for wood),
+//! `shading` (`wood_albedo`, `leaf_painterly_lit`, `crown_albedo`, `crown_layer_albedo`,
+//! `canopy_clump_albedo`), `lod` (`tree_default` farther than bush), `hash`, and
+//! `layout`. Keep wood/foliage entry points distinct from grass. Extra branch/leaf
+//! GPU structs and species recipes stay in the bush or tree crate.
 
 use bevy::prelude::*;
 use bevy::shader::{load_shader_library, Shader};
@@ -58,9 +59,9 @@ pub use lod::{
 	ProjectedSize,
 };
 pub use shading::{
-	crown_albedo, crown_layer_albedo, grass_albedo, grass_variation_palette, leaf_painterly_lit,
-	meadow_color_field,
-	painterly_lit, two_sided_wrap, wood_albedo, VegetationPalette,
+	canopy_clump_albedo, crown_albedo, crown_layer_albedo, grass_albedo, grass_variation_palette,
+	leaf_painterly_lit, meadow_color_field, painterly_lit, two_sided_wrap, wood_albedo,
+	VegetationPalette,
 };
 pub use wind::{
 	deform_along_curve, max_wind_displacement_m, wind_field, WindDeform, WindField, WindInputs,

@@ -40,6 +40,19 @@ impl LodThresholds {
 		}
 	}
 
+	/// Trees keep height and crown silhouette well past bush card distance.
+	pub fn tree_default() -> Self {
+		Self {
+			near_m: 28.0,
+			mid_m: 72.0,
+			card_m: 220.0,
+			near_density: 1.0,
+			mid_density: 0.48,
+			card_density: 0.16,
+			min_height_px: 3.2,
+		}
+	}
+
 	pub fn nested_ok(self) -> bool {
 		self.near_density >= self.mid_density && self.mid_density >= self.card_density
 	}
@@ -126,6 +139,8 @@ mod tests {
 	fn nested_density_is_stable_across_distance() -> anyhow::Result<()> {
 		let t = LodThresholds::field_default();
 		assert!(t.nested_ok());
+		assert!(LodThresholds::bush_default().nested_ok());
+		assert!(LodThresholds::tree_default().nested_ok());
 		let mut far_ids = Vec::new();
 		for i in 0..64u32 {
 			let rank = VegetationHash::density_rank(VegetationHash::plant_id(11, i));

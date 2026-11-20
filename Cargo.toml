@@ -114,6 +114,8 @@ members = [
   "maybraid/world/layers/vegetation/grass-field-playground",
   "maybraid/world/layers/vegetation/bush-field",
   "maybraid/world/layers/vegetation/bush-field-playground",
+  "maybraid/world/layers/vegetation/tree-field",
+  "maybraid/world/layers/vegetation/tree-field-playground",
   "maybraid/world/player",
   "maybraid/sky/lib",
   "maybraid/world/lib",
@@ -405,6 +407,8 @@ vegetation-grass-field = { path = "maybraid/world/layers/vegetation/grass-field"
 vegetation-grass-field-playground = { path = "maybraid/world/layers/vegetation/grass-field-playground" }
 vegetation-bush-field = { path = "maybraid/world/layers/vegetation/bush-field" }
 vegetation-bush-field-playground = { path = "maybraid/world/layers/vegetation/bush-field-playground" }
+vegetation-tree-field = { path = "maybraid/world/layers/vegetation/tree-field" }
+vegetation-tree-field-playground = { path = "maybraid/world/layers/vegetation/tree-field-playground" }
 world-player = { path = "maybraid/world/player" }
 maybraid-sky = { path = "maybraid/sky/lib" }
 maybraid-world = { path = "maybraid/world/lib" }

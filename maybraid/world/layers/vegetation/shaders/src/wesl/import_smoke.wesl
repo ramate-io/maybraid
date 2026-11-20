@@ -34,6 +34,7 @@ import vegetation_shaders::wesl::shading::{
     wood_albedo,
     leaf_painterly_lit,
     crown_albedo,
+    canopy_clump_albedo,
     crown_layer_albedo,
     VegetationPalette,
 };
@@ -92,6 +93,7 @@ fn smoke_eval(blade: BladeDescriptor, view: GrassViewUniform, t: f32, side: f32)
     color = color + wood_albedo(pal, t, rank) * 0.0;
     color = color + leaf_painterly_lit(albedo, n, view.light_direction.xyz, t) * 0.0;
     color = color + crown_albedo(pal.tip_rgb, pal.root_rgb, t, rank) * 0.0;
+    color = color + canopy_clump_albedo(pal.tip_rgb, pal.root_rgb, t, n, rank) * 0.0;
     let varied = grass_variation_palette(pal.tip_rgb, blade.root.xz, blade.plant_id);
     color = color + crown_layer_albedo(varied, t, 0.4, 0.7, rank) * 0.0;
     let _teardrop = leaf_teardrop_width(t);

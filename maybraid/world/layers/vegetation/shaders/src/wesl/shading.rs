@@ -27,6 +27,11 @@ impl VegetationPalette {
 		Self { root_rgb: Vec3::new(0.07, 0.26, 0.11), tip_rgb: Vec3::new(0.40, 0.64, 0.16) }
 	}
 
+	/// Layered tree canopy: dark cool interior, warm sunlit rim.
+	pub fn botw_canopy_crown() -> Self {
+		Self { root_rgb: Vec3::new(0.045, 0.20, 0.10), tip_rgb: Vec3::new(0.46, 0.72, 0.16) }
+	}
+
 	pub fn albedo(self, t: f32, variation: f32) -> Vec3 {
 		grass_albedo(self, t, variation)
 	}
@@ -132,6 +137,19 @@ pub fn crown_layer_albedo(
 	mixed * (0.84 + 0.28 * variation.clamp(0.0, 1.0))
 }
 
+/// Billowy canopy clump: height warmth plus a cooler, darker underside.
+pub fn canopy_clump_albedo(
+	warm_rgb: Vec3,
+	cool_rgb: Vec3,
+	height_frac: f32,
+	normal: Vec3,
+	clump_variation: f32,
+) -> Vec3 {
+	let sunlit = crown_albedo(warm_rgb, cool_rgb, height_frac, clump_variation);
+	let lift = smoothstep(-0.38, 0.52, normal.normalize_or_zero().y);
+	sunlit * Vec3::new(0.42, 0.55, 0.70).lerp(Vec3::ONE, lift)
+}
+
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
 	a + (b - a) * t
 }
@@ -206,6 +224,15 @@ mod tests {
 		let l = Vec3::new(0.0, 0.1, -1.0);
 		let lit = leaf_painterly_lit(albedo, n, l, 0.7);
 		assert!(lit.length() > 0.05);
+		Ok(())
+	}
+
+	#[test]
+	fn canopy_clump_underside_is_cooler_than_the_lit_rim() -> anyhow::Result<()> {
+		let pal = VegetationPalette::botw_canopy_crown();
+		let top = canopy_clump_albedo(pal.tip_rgb, pal.root_rgb, 0.92, Vec3::Y, 0.4);
+		let under = canopy_clump_albedo(pal.tip_rgb, pal.root_rgb, 0.92, -Vec3::Y, 0.4);
+		assert!(top.x + top.y > under.x + under.y);
 		Ok(())
 	}
 
