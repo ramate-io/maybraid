@@ -17,10 +17,23 @@ import vegetation_shaders::wesl::curve::{
     stable_frame,
     attachment_frame,
     blade_width_at,
+    branch_rest_sample,
+    branch_radius_at,
+    woody_surface_vertex,
+    woody_surface_normal,
+    leaf_surface_vertex,
+    leaf_surface_normal,
 };
 import vegetation_shaders::wesl::wind::{wind_field, deform_along_curve, WindInputs};
 import vegetation_shaders::wesl::lod::{projected_height_px, lod_bucket, nested_keep, LodThresholds};
-import vegetation_shaders::wesl::shading::{grass_albedo, painterly_lit, VegetationPalette};
+import vegetation_shaders::wesl::shading::{
+    grass_albedo,
+    painterly_lit,
+    wood_albedo,
+    leaf_painterly_lit,
+    crown_albedo,
+    VegetationPalette,
+};
 import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform};
 
 fn smoke_eval(blade: BladeDescriptor, view: GrassViewUniform, t: f32, side: f32) -> vec4<f32> {
@@ -67,6 +80,15 @@ fn smoke_eval(blade: BladeDescriptor, view: GrassViewUniform, t: f32, side: f32)
     let pal = VegetationPalette(blade.palette.xyz, blade.palette.xyz * 1.4);
     let albedo = grass_albedo(pal, t, rank);
     var color = painterly_lit(albedo, n, view.light_direction.xyz, t);
+    let wood = branch_rest_sample(blade.root, blade.root + blade.normal * 0.3, blade.root + blade.normal * blade.height_m, t);
+    let _wood_n = woody_surface_normal(wood, 0.25);
+    let _wood_p = woody_surface_vertex(wood, branch_radius_at(0.03, 0.01, t), 0.25);
+    let leaf_frame = attachment_frame(wood, 0.2);
+    let _leaf_p = leaf_surface_vertex(wood.position, leaf_frame, 0.08, 0.5, 0.6, 0.4);
+    let _leaf_n = leaf_surface_normal(leaf_frame, 0.5, 0.4);
+    color = color + wood_albedo(pal, t, rank) * 0.0;
+    color = color + leaf_painterly_lit(albedo, n, view.light_direction.xyz, t) * 0.0;
+    color = color + crown_albedo(pal.tip_rgb, pal.root_rgb, t, rank) * 0.0;
     if (!keep || bucket > 2u) {
         color = color * 0.0;
     }

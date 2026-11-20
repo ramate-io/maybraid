@@ -13222,6 +13222,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "vegetation-bush-field"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "lod",
+ "vegetation-components",
+ "vegetation-grass-field",
+ "vegetation-groves",
+ "vegetation-shaders",
+]
+
+[[package]]
+name = "vegetation-bush-field-playground"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "camera-controls",
+ "clap",
+ "game-commands",
+ "terrain-shaders",
+ "vegetation-bush-field",
+ "vegetation-components",
+ "vegetation-shaders",
+]
+
+[[package]]
 name = "vegetation-components"
 version = "0.1.5"
 dependencies = [
