@@ -162,7 +162,7 @@ fn bray_animation_consumer_restores_after_real_bray_completes() -> anyhow::Resul
 #[test]
 fn sonic_wave_torus_maps_y_axle_to_heading() -> anyhow::Result<()> {
 	use attacks::{AttackInstanceId, PresentationPhase, WavefrontPresentation};
-	use maybraid_vfx::soundwave_transform;
+	use maybraid_vfx::{soundwave_transform, soundwave_wake_transform};
 
 	let mut app = consumer_app();
 	app.world_mut().write_message(crate::SonicWaveVfxCue {
@@ -203,6 +203,23 @@ fn sonic_wave_torus_maps_y_axle_to_heading() -> anyhow::Result<()> {
 	}
 	if (got.translation - expected.translation).length() > 1e-3 {
 		return Err(anyhow!("ring center must follow the live wave position"));
+	}
+	let wake = app
+		.world_mut()
+		.query::<(&Name, &Transform)>()
+		.iter(app.world())
+		.find(|(name, _)| name.as_str() == "vfx-soundwave-bray-wake")
+		.map(|(_, transform)| *transform);
+	let Some(wake) = wake else {
+		return Err(anyhow!("Bray consumer must spawn a trailing spirit wake"));
+	};
+	let expected_wake = soundwave_wake_transform(Vec3::new(4.0, 2.0, 3.0), Vec3::X, 2.0, 0.7);
+	if (wake.translation - expected_wake.translation).length() > 1e-3 {
+		return Err(anyhow!(
+			"wake must trail behind the live front, got {} expected {}",
+			wake.translation,
+			expected_wake.translation
+		));
 	}
 	let first = soundwave_material(&mut app)?;
 	let first_center = Vec3::new(first.wave.x, first.wave.y, first.wave.z);

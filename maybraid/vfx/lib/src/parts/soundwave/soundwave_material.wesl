@@ -116,10 +116,17 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let n = normalize(mesh.world_normal);
     let facing = saturate(abs(dot(n, view_dir)));
 
-    let front_band = 1.0 - smoothstep(0.0, thickness, abs(along - thickness * 0.15));
-    let leading = smoothstep(-thickness, thickness * 0.35, along);
-    let rim = 1.0 - smoothstep(radius * 0.72, radius, ring);
-    let hole = smoothstep(radius * 0.18, radius * 0.42, ring);
+    // Keep energy on a thin ring. hole*rim filled the disc into an oval.
+    let radial_band = exp(-pow(abs(ring - radius) / max(thickness * 0.32, 0.05), 2.0));
+
+    // Discrete spirit filaments around the heading (PR 1585 streak language).
+    let turns = around * 0.15915494;
+    let lobe_a = fract(turns * 7.0 + seed * 2.7 + extras.x * 0.31);
+    let lobe_b = fract(turns * 5.0 - seed * 1.9 + extras.x * 0.17);
+    let filament = saturate(
+        pow(1.0 - abs(lobe_a * 2.0 - 1.0), 14.0)
+            + 0.55 * pow(1.0 - abs(lobe_b * 2.0 - 1.0), 10.0),
+    );
 
     let streak_uv = vec3<f32>(
         ring * 0.55 + around * 1.8 + seed,
@@ -131,19 +138,27 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         along * 3.2 + extras.x * 2.1,
         across * 2.1 + ring * 0.4,
     );
-    let streaks = mix(0.28, 1.2, value_noise(streak_uv));
-    let wisps = mix(0.08, 1.45, value_noise(wisp_uv * 1.7));
+    let streaks = mix(0.35, 1.35, value_noise(streak_uv));
+    let wisps = mix(0.05, 1.55, value_noise(wisp_uv * 1.7));
     let jets = mix(0.0, 1.0, value_noise(wisp_uv * 3.1 + vec3<f32>(around * 4.0, along * 5.0, seed)));
-    let directional = pow(saturate(wisps), 1.25) * (0.4 + 0.95 * jets);
+    let crackle = mix(0.2, 1.0, value_noise(vec3<f32>(around * 9.0, along * 6.0, extras.x * 4.0 + seed)));
+    let spirit = pow(saturate(wisps), 1.15) * (0.25 + 0.85 * jets) * crackle;
+    let directional = filament * spirit;
 
-    let compress = front_band * leading * hole * rim;
-    let body = hole * rim * 0.18 * (1.0 - leading * 0.35);
-    let trail = hole * rim * (1.0 - leading) * directional * 0.55;
-    let alpha = saturate((compress * 1.2 + body + trail) * facing * fade);
+    let front_band = 1.0 - smoothstep(0.0, thickness * 0.55, abs(along - thickness * 0.08));
+    let leading = smoothstep(-thickness * 0.25, thickness * 0.4, along);
+    let behind = saturate(-along / max(thickness * 4.0, 0.25));
+    let trail_falloff = exp(-behind * 2.4) * (1.0 - leading);
 
-    var rgb = tint.xyz * (0.22 + compress * 1.75) * streaks * (0.35 + directional) * intensity;
-    rgb += tint.xyz * leading * compress * (0.65 + directional * 1.25);
-    rgb += tint.xyz * trail * 1.15;
+    let grown = smoothstep(0.06, 0.28, extras.x);
+    let compress = front_band * leading * radial_band * (0.12 + 0.88 * filament);
+    let trail = radial_band * max(filament, 0.35) * spirit * trail_falloff * grown * 1.7;
+    let wispy_shell = radial_band * filament * spirit * 0.12 * grown * (1.0 - saturate(abs(along) / max(thickness * 2.2, 0.2)));
+    let alpha = saturate((compress * 0.55 + trail * 0.9 + wispy_shell) * facing * fade);
+
+    var rgb = tint.xyz * compress * (0.85 + streaks * 0.7) * intensity;
+    rgb += tint.xyz * trail * (0.45 + directional * 1.8) * intensity;
+    rgb += tint.xyz * wispy_shell * streaks * intensity;
     let mapped = tone_mapping(vec4<f32>(rgb, 1.0), view.color_grading);
     return vec4<f32>(mapped.rgb, alpha);
 }

@@ -157,8 +157,16 @@ mod tests {
 			"brighter directional wisps must break up the face and trailing edge"
 		);
 		assert!(
+			src.contains("filament") && src.contains("radial_band") && src.contains("spirit"),
+			"trailing spirit filaments must sit on a thin ring, not a filled oval"
+		);
+		assert!(
 			src.contains("front_band") && src.contains("leading") && src.contains("fade"),
 			"front must stay tied to attack heading, position, and fade"
+		);
+		assert!(
+			!src.contains("hole * rim * 0.18"),
+			"filled disc body is the translucent oval the native recheck rejected"
 		);
 	}
 }

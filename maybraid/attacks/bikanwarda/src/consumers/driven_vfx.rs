@@ -11,7 +11,8 @@ use attacks::{
 };
 use bevy::prelude::*;
 use maybraid_vfx::{
-	soundwave_torus_mesh, soundwave_transform, SoundwaveMaterial, SoundwaveMaterialPlugin,
+	soundwave_torus_mesh, soundwave_transform, soundwave_wake_mesh, soundwave_wake_transform,
+	SoundwaveMaterial, SoundwaveMaterialPlugin,
 };
 
 use crate::consumers::BikanwardaPresentationSystems;
@@ -26,13 +27,19 @@ struct PlaceholderDrivenAssets {
 #[derive(Resource, Default)]
 struct SoundwaveAssets {
 	ring: Option<Handle<Mesh>>,
+	wake: Option<Handle<Mesh>>,
+}
+
+struct SoundwaveRing {
+	ring: Entity,
+	wake: Entity,
 }
 
 #[derive(Resource, Default)]
 struct DrivenBindings {
 	beam: HashMap<AttackInstanceId, Entity>,
 	sonic_root: HashMap<AttackInstanceId, Entity>,
-	rings: HashMap<(AttackInstanceId, u8), Entity>,
+	rings: HashMap<(AttackInstanceId, u8), SoundwaveRing>,
 }
 
 pub fn plugin(app: &mut App, placeholder: bool) {
@@ -55,6 +62,7 @@ pub fn plugin(app: &mut App, placeholder: bool) {
 
 fn seed_soundwave_assets(mut assets: ResMut<SoundwaveAssets>, mut meshes: ResMut<Assets<Mesh>>) {
 	assets.ring = Some(meshes.add(soundwave_torus_mesh()));
+	assets.wake = Some(meshes.add(soundwave_wake_mesh()));
 }
 
 fn seed_placeholder_driven_assets(
@@ -131,7 +139,7 @@ fn consume_sonic_wave(
 	handles: Query<&MeshMaterial3d<SoundwaveMaterial>>,
 	mut commands: Commands,
 ) {
-	let Some(mesh) = assets.ring.as_ref() else {
+	let (Some(mesh), Some(wake)) = (assets.ring.as_ref(), assets.wake.as_ref()) else {
 		return;
 	};
 	for cue in cues.read() {
@@ -147,15 +155,17 @@ fn consume_sonic_wave(
 					&mut materials,
 					&handles,
 					mesh,
+					wake,
 					cue.instance,
 					cue.hazard_index,
 					*wave,
 				);
 			}
 			(SonicWaveVfxKind::Despawn, _) | (_, PresentationPhase::Despawned) => {
-				bindings.rings.retain(|(instance, _), entity| {
+				bindings.rings.retain(|(instance, _), ring| {
 					if *instance == cue.instance {
-						commands.entity(*entity).try_despawn();
+						commands.entity(ring.ring).try_despawn();
+						commands.entity(ring.wake).try_despawn();
 						false
 					} else {
 						true
@@ -177,17 +187,23 @@ fn follow_wave(
 	materials: &mut Assets<SoundwaveMaterial>,
 	handles: &Query<&MeshMaterial3d<SoundwaveMaterial>>,
 	mesh: &Handle<Mesh>,
+	wake_mesh: &Handle<Mesh>,
 	instance: AttackInstanceId,
 	hazard_index: usize,
 	wave: WavefrontPresentation,
 ) {
 	let key = (instance, wave.wave_index);
 	let transform = soundwave_transform(wave.position, wave.direction, wave.radius, wave.thickness);
-	if let Some(entity) = bindings.rings.get(&key).copied() {
-		if let Ok(mut tf) = transforms.get_mut(entity) {
+	let wake_transform =
+		soundwave_wake_transform(wave.position, wave.direction, wave.radius, wave.thickness);
+	if let Some(ring) = bindings.rings.get(&key) {
+		if let Ok(mut tf) = transforms.get_mut(ring.ring) {
 			*tf = transform;
 		}
-		if let Ok(handle) = handles.get(entity) {
+		if let Ok(mut tf) = transforms.get_mut(ring.wake) {
+			*tf = wake_transform;
+		}
+		if let Ok(handle) = handles.get(ring.ring) {
 			if let Some(mut material) = materials.get_mut(&handle.0) {
 				follow_soundwave_material(&mut material, wave);
 			}
@@ -204,22 +220,29 @@ fn follow_wave(
 	);
 	follow_soundwave_material(&mut material, wave);
 	let material = materials.add(material);
-	let entity = commands
+	let binding = AttackPresentationBinding {
+		instance,
+		kind: AttackPresentationBindingKind::Hazard { index: hazard_index, wave: wave.wave_index },
+	};
+	let ring = commands
 		.spawn((
 			Name::new("vfx-soundwave-bray"),
 			Mesh3d(mesh.clone()),
-			MeshMaterial3d(material),
+			MeshMaterial3d(material.clone()),
 			transform,
-			AttackPresentationBinding {
-				instance,
-				kind: AttackPresentationBindingKind::Hazard {
-					index: hazard_index,
-					wave: wave.wave_index,
-				},
-			},
+			binding,
 		))
 		.id();
-	bindings.rings.insert(key, entity);
+	let wake = commands
+		.spawn((
+			Name::new("vfx-soundwave-bray-wake"),
+			Mesh3d(wake_mesh.clone()),
+			MeshMaterial3d(material),
+			wake_transform,
+			binding,
+		))
+		.id();
+	bindings.rings.insert(key, SoundwaveRing { ring, wake });
 }
 
 fn follow_soundwave_material(material: &mut SoundwaveMaterial, wave: WavefrontPresentation) {

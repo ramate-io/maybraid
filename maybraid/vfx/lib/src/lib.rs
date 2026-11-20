@@ -36,8 +36,9 @@ pub use parts::lobe::{LobeMaterial, LobeMaterialPlugin};
 pub use parts::packaged::{PackagedFlipbook, PackagedVfxPlugin, StaticVolume};
 pub use parts::particle::{FlipbookAsset, VfxFlipbooks};
 pub use parts::soundwave::{
-	soundwave_torus_mesh, soundwave_transform, SoundwaveMaterial, SoundwaveMaterialPlugin,
-	SOUNDWAVE_MAJOR, SOUNDWAVE_MINOR,
+	soundwave_torus_mesh, soundwave_transform, soundwave_wake_mesh, soundwave_wake_transform,
+	SoundwaveMaterial, SoundwaveMaterialPlugin, SOUNDWAVE_MAJOR, SOUNDWAVE_MINOR,
+	SOUNDWAVE_WAKE_ALONG,
 };
 pub use spawn::{
 	spawn_vfx, Effect, SpawnVfxExt, Vfx, VfxInstance, VfxSpawn, MAX_PLAYBACK, MIN_PLAYBACK,

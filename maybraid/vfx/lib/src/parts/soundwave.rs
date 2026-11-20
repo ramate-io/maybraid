@@ -17,10 +17,35 @@ use crate::spawn::{VfxLayerLife, VfxSpawn};
 pub const SOUNDWAVE_MAJOR: f32 = 0.55;
 /// Authored torus minor radius. Scale Y so this matches gameplay thickness.
 pub const SOUNDWAVE_MINOR: f32 = 0.08;
+/// Trailing wake length along heading, in gameplay thicknesses.
+pub const SOUNDWAVE_WAKE_ALONG: f32 = 4.0;
 
 /// Unit torus used by the Bray consumer and the named recipe.
 pub fn soundwave_torus_mesh() -> Mesh {
 	Torus::new(SOUNDWAVE_MAJOR, SOUNDWAVE_MINOR).mesh().into()
+}
+
+/// Discrete trailing ribbons around local Y. Pose maps that axle onto the
+/// heading so the wisps sit on the ring and extend behind the front.
+pub fn soundwave_wake_mesh() -> Mesh {
+	let mut combined: Option<Mesh> = None;
+	let count = 7u32;
+	for i in 0..count {
+		let angle = i as f32 * std::f32::consts::TAU / count as f32;
+		let mut piece = Mesh::from(Cuboid::new(0.14, 1.0, 0.028));
+		piece.transform_by(Transform {
+			translation: Vec3::new(angle.cos(), 0.0, angle.sin()),
+			rotation: Quat::from_rotation_y(-angle),
+			scale: Vec3::ONE,
+		});
+		match &mut combined {
+			None => combined = Some(piece),
+			Some(mesh) => {
+				mesh.merge(&piece).expect("soundwave wake ribbons share vertex layout");
+			}
+		}
+	}
+	combined.expect("wake mesh has ribbons")
 }
 
 /// Pose a Y-axle torus onto a traveling disc.
@@ -43,6 +68,22 @@ pub fn soundwave_transform(
 			(thickness.max(0.05) / (SOUNDWAVE_MINOR * 2.0)).max(0.2),
 			(radius.max(0.05) / SOUNDWAVE_MAJOR).max(1e-3),
 		),
+	}
+}
+
+/// Pose a Y-axle cylinder so it extends behind the travelling front.
+pub fn soundwave_wake_transform(
+	position: Vec3,
+	direction: Vec3,
+	radius: f32,
+	thickness: f32,
+) -> Transform {
+	let heading = direction.normalize_or(Vec3::Z);
+	let length = thickness.max(0.05) * SOUNDWAVE_WAKE_ALONG;
+	Transform {
+		translation: position - heading * (length * 0.5),
+		rotation: Quat::from_rotation_arc(Vec3::Y, heading),
+		scale: Vec3::new(radius.max(0.05), length.max(0.05), radius.max(0.05)),
 	}
 }
 
@@ -184,5 +225,28 @@ mod tests {
 		assert!((pose.scale.x * SOUNDWAVE_MAJOR - 4.0).abs() < 1e-4);
 		assert!((pose.scale.z * SOUNDWAVE_MAJOR - 4.0).abs() < 1e-4);
 		assert!((pose.scale.y * SOUNDWAVE_MINOR * 2.0 - 0.7).abs() < 1e-4);
+	}
+
+	#[test]
+	fn wake_extends_behind_the_live_front() {
+		let front = Vec3::new(4.0, 2.0, 3.0);
+		let heading = Vec3::X;
+		let thickness = 0.7;
+		let pose = soundwave_wake_transform(front, heading, 2.0, thickness);
+		let axle = pose.rotation * Vec3::Y;
+		assert!(
+			(axle - heading).length() < 1e-4,
+			"wake cylinder axle must map onto the heading, got {axle}"
+		);
+		let length = thickness * SOUNDWAVE_WAKE_ALONG;
+		let expected = front - heading * (length * 0.5);
+		assert!(
+			(pose.translation - expected).length() < 1e-4,
+			"wake must sit behind the front, got {}",
+			pose.translation
+		);
+		assert!((pose.scale.x - 2.0).abs() < 1e-4);
+		assert!((pose.scale.y - length).abs() < 1e-4);
+		assert!(pose.translation.x < front.x, "wake center must trail the front");
 	}
 }
