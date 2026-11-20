@@ -121,3 +121,11 @@ Keep these diagnostic runs separate from clean timing comparisons. Memory
 snapshots can stall their frame; take them at a memory measurement boundary and
 allow settling afterward. Preserve plain-release OS footprint measurements as
 a separate control, since Tracy and other diagnostics also allocate memory.
+
+## Offline map-run process memory
+
+[`summarize-map-memory.py`](summarize-map-memory.py) reads completed map-run
+records without launching a game, sampling a process or exporting a trace.
+It checks process identity and five-second coverage, separates walking from
+map/respawn phases, and writes a small JSON/Markdown table. See
+[inputs, limitations and the gameplay ownership follow-up](map-memory.md).
