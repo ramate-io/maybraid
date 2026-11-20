@@ -104,6 +104,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let radial = rel - heading * along;
     let ring = length(radial);
 
+    // Off-axis basis around the travel heading. Radius+along noise is
+    // rotationally symmetric; around/across break the pale disc.
+    let up = select(vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), abs(heading.y) > 0.9);
+    let side = normalize(cross(heading, up));
+    let lift = cross(side, heading);
+    let around = atan2(dot(radial, lift), dot(radial, side));
+    let across = dot(radial, side);
+
     let view_dir = normalize(view.world_position.xyz - world);
     let n = normalize(mesh.world_normal);
     let facing = saturate(abs(dot(n, view_dir)));
@@ -114,19 +122,28 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let hole = smoothstep(radius * 0.18, radius * 0.42, ring);
 
     let streak_uv = vec3<f32>(
-        ring * 0.55 + seed,
+        ring * 0.55 + around * 1.8 + seed,
         along * 2.4 + extras.x * 3.1,
-        seed * 0.7,
+        across * 1.35 + seed * 0.7,
     );
-    let streaks = mix(0.55, 1.0, value_noise(streak_uv));
-    let wisps = mix(0.35, 1.0, value_noise(streak_uv * 2.3 + heading * 1.7));
+    let wisp_uv = vec3<f32>(
+        around * 2.6 + seed * 1.3,
+        along * 3.2 + extras.x * 2.1,
+        across * 2.1 + ring * 0.4,
+    );
+    let streaks = mix(0.28, 1.2, value_noise(streak_uv));
+    let wisps = mix(0.08, 1.45, value_noise(wisp_uv * 1.7));
+    let jets = mix(0.0, 1.0, value_noise(wisp_uv * 3.1 + vec3<f32>(around * 4.0, along * 5.0, seed)));
+    let directional = pow(saturate(wisps), 1.25) * (0.4 + 0.95 * jets);
 
     let compress = front_band * leading * hole * rim;
-    let body = hole * rim * 0.22 * (1.0 - leading * 0.35);
-    let alpha = saturate((compress * 1.15 + body) * facing * fade * mix(0.7, 1.0, wisps));
+    let body = hole * rim * 0.18 * (1.0 - leading * 0.35);
+    let trail = hole * rim * (1.0 - leading) * directional * 0.55;
+    let alpha = saturate((compress * 1.2 + body + trail) * facing * fade);
 
-    var rgb = tint.xyz * (0.35 + compress * 1.55) * streaks * wisps * intensity;
-    rgb += tint.xyz * leading * compress * 0.85;
+    var rgb = tint.xyz * (0.22 + compress * 1.75) * streaks * (0.35 + directional) * intensity;
+    rgb += tint.xyz * leading * compress * (0.65 + directional * 1.25);
+    rgb += tint.xyz * trail * 1.15;
     let mapped = tone_mapping(vec4<f32>(rgb, 1.0), view.color_grading);
     return vec4<f32>(mapped.rgb, alpha);
 }

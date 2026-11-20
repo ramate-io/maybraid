@@ -140,4 +140,25 @@ mod tests {
 		assert!((material.front.w - 0.8).abs() < 1e-5);
 		assert_eq!(material.alpha_mode(), AlphaMode::Add);
 	}
+
+	#[test]
+	fn shader_breaks_rotational_symmetry_around_the_travel_axis() {
+		let src = include_str!("soundwave_material.wesl");
+		assert!(
+			src.contains("around") && src.contains("across"),
+			"streak/wisp noise must use off-axis around/across, not only radius and along"
+		);
+		assert!(
+			src.contains("atan2"),
+			"off-axis angle around the heading must vary across the disc face"
+		);
+		assert!(
+			src.contains("directional") && src.contains("jets"),
+			"brighter directional wisps must break up the face and trailing edge"
+		);
+		assert!(
+			src.contains("front_band") && src.contains("leading") && src.contains("fade"),
+			"front must stay tied to attack heading, position, and fade"
+		);
+	}
 }

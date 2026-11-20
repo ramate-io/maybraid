@@ -2578,6 +2578,122 @@ mod integration_regressions {
 		);
 	}
 
+	/// Native Metal play at Area 1746 had a 100 HP player at XZ (1746.8, 1002.9),
+	/// 23 m south of the encounter. FFA Combat from that distant threat froze
+	/// meander even though spotting never made a combat contact.
+	#[test]
+	fn idle_patrol_walks_with_a_distant_player_and_no_combat_contact() {
+		use crate::locomotion::PATROL_PIN_COUNT;
+		use meandering_intelligence::MeanderingIntelligenceUser;
+		use poi_intelligence::PoiKnowledge;
+		use threat_intelligence::ThreatKnowledge;
+		use threat_management_intelligence::{ThreatManagementIntelligence, ThreatTactic};
+
+		let mut app = full_encounter_app();
+		let terrain_y = 0.0;
+		let spawn_xz = Vec2::new(1746.8, 1025.9);
+		let player_xz = Vec2::new(1746.8, 1002.9);
+		let boss_position = Vec3::new(spawn_xz.x, terrain_y + encounter_hull_offset(), spawn_xz.y);
+		let (_host, actor, column) = spawn_production_encounter(&mut app, boss_position, terrain_y);
+		let player =
+			spawn_visible_player(&mut app, Vec3::new(player_xz.x, terrain_y + 1.0, player_xz.y));
+		let player_range = xz(
+			actor_translation(&app, actor),
+			app.world().get::<GlobalTransform>(player).unwrap().translation(),
+		);
+		assert!(
+			player_range > crate::boss_spotting_range(),
+			"player must start outside spotting range, got {player_range:.3} m"
+		);
+
+		let mut pins = 0usize;
+		for _ in 0..90 {
+			pins = app
+				.world()
+				.get::<PoiKnowledge>(actor)
+				.map(|knowledge| knowledge.len())
+				.unwrap_or(0);
+			if pins == PATROL_PIN_COUNT as usize {
+				break;
+			}
+			app.update();
+		}
+		assert_eq!(pins, PATROL_PIN_COUNT as usize, "live pillar ring must still snap");
+
+		let mut settled = actor_translation(&app, actor);
+		for _ in 0..90 {
+			let before = settled;
+			app.update();
+			settled = actor_translation(&app, actor);
+			if (settled.y - before.y).abs() < 0.01 && xz(before, settled) < 0.05 {
+				break;
+			}
+		}
+		let settle_xz = settled;
+		let pillar = app
+			.world()
+			.get::<GlobalTransform>(column)
+			.expect("pillar GlobalTransform")
+			.translation();
+
+		let mut max_horizontal = 0.0_f32;
+		let mut saw_contact = false;
+		let mut known_threats = 0usize;
+		let mut tactic = ThreatTactic::Ignore;
+		let mut meander_enabled = false;
+		for _ in 0..360 {
+			app.update();
+			let now = actor_translation(&app, actor);
+			max_horizontal = max_horizontal.max(xz(settle_xz, now));
+			assert!(
+				xz(now, pillar)
+					<= crate::BOSS_TETHER_RADIUS + bikanwarda_character::encounter_meters(2.5),
+				"boss left the tether during idle patrol with a distant player"
+			);
+			if app
+				.world()
+				.get::<CombatTargeting>(actor)
+				.is_some_and(|targeting| targeting.best_contact().is_some())
+			{
+				saw_contact = true;
+			}
+			known_threats = app
+				.world()
+				.get::<ThreatKnowledge>(actor)
+				.map(|knowledge| knowledge.len())
+				.unwrap_or(0);
+			tactic = app
+				.world()
+				.get::<ThreatManagementIntelligence>(actor)
+				.map(|management| management.tactic)
+				.unwrap_or(ThreatTactic::Ignore);
+			meander_enabled = app
+				.world()
+				.get::<MeanderingIntelligenceUser>(actor)
+				.is_some_and(|user| user.enabled);
+		}
+
+		eprintln!(
+			"idle-patrol distant-player site=({:.1},{:.1}) player=({:.1},{:.1}) threats={known_threats} tactic={tactic:?} meander={meander_enabled} contact={saw_contact} horizontal={max_horizontal:.3}",
+			spawn_xz.x, spawn_xz.y, player_xz.x, player_xz.y
+		);
+		assert!(!saw_contact, "distant player must not become a combat contact");
+		assert!(
+			known_threats > 0,
+			"production FFA discovery should retain the distant player as a threat"
+		);
+		assert_eq!(
+			tactic,
+			ThreatTactic::Combat,
+			"FFA should select Combat while the distant threat remains"
+		);
+		assert!(meander_enabled, "meander must stay on until a combat contact exists");
+		assert!(
+			max_horizontal > 1.5,
+			"idle patrol should walk a useful route with a distant player and no contact, moved {max_horizontal:.3} m from {settle_xz:?}"
+		);
+	}
+
 	fn wait_for_snap_attempts(app: &mut App, actor: Entity, frames: u32) -> u32 {
 		use crate::locomotion::PatrolPinSnapState;
 		for _ in 0..frames {
