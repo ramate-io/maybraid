@@ -35,8 +35,8 @@ use player::{
 	Npc, PlayerLook, PlayerPlugin, PlayerSystems, PlayerYawOwner,
 };
 use poi_intelligence::{
-	PoiGoal, PoiId, PoiIntelligencePlugin, PoiIntelligenceUser, PoiInterests, PoiKind,
-	PoiKnowledge, PoiObservation, PoiSource, PoiSystems, PoiVisitState,
+	PoiId, PoiIntelligencePlugin, PoiIntelligenceUser, PoiInterests, PoiKind, PoiKnowledge,
+	PoiObservation, PoiSource, PoiSystems, PoiVisitState,
 };
 use tether_intelligence::{
 	install_tether, Tether, TetherIntelligenceUser, TetherObjective, TetherPlugin,
@@ -54,11 +54,16 @@ const PATROL_KIND: PoiKind = PoiKind::new("bikanwarda/patrol");
 pub(crate) const PATROL_RING_M: f32 = encounter_meters(8.0);
 pub(crate) const PATROL_PIN_COUNT: u32 = 4;
 const PATROL_ARRIVAL_RADIUS: f32 = encounter_meters(5.0);
+/// Retry cadence once SpatialQuery is present but some pins still lack Fixed support.
+pub(crate) const PATROL_SNAP_RETRY_SECS: f32 = 0.25;
 
 /// World-space patrol pin on the scaled ring around the live pillar.
 ///
 /// Half-step rotation keeps the spawn pose (column offset along +X) off the
 /// pins so `not_already_there` does not skip the first reachable goal.
+/// Production observes snapped ground, not these geometric seeds; tests still
+/// place pads and assert the live ring from this helper.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn patrol_pin_world(column_world: Vec3, actor_y: f32, index: u32) -> Vec3 {
 	let angle = TAU * (index as f32 + 0.5) / PATROL_PIN_COUNT as f32;
 	Vec3::new(column_world.x, actor_y, column_world.z)
@@ -105,7 +110,35 @@ impl Plugin for BossEncounterLocomotionPlugin {
 #[derive(Component, Clone, Copy, Debug, Default)]
 struct PatrolPinsSnapped;
 
-fn patrol_pin_id(index: u32) -> PoiId {
+/// Pending Fixed-ground snaps. Selection only sees pins this state has observed.
+#[derive(Component, Clone, Debug)]
+pub(crate) struct PatrolPinSnapState {
+	pending: u8,
+	next_attempt_at: f32,
+	pub(crate) attempts: u32,
+}
+
+impl PatrolPinSnapState {
+	fn new() -> Self {
+		Self { pending: (1u8 << PATROL_PIN_COUNT) - 1, next_attempt_at: 0.0, attempts: 0 }
+	}
+
+	fn is_pending(&self, index: u32) -> bool {
+		index < PATROL_PIN_COUNT && self.pending & (1 << index) != 0
+	}
+
+	fn mark_snapped(&mut self, index: u32) {
+		if index < PATROL_PIN_COUNT {
+			self.pending &= !(1 << index);
+		}
+	}
+
+	pub(crate) fn pending_count(&self) -> u32 {
+		u32::from(self.pending.count_ones())
+	}
+}
+
+pub(crate) fn patrol_pin_id(index: u32) -> PoiId {
 	PoiId(0xB1A1_0001 + u64::from(index))
 }
 
@@ -120,14 +153,14 @@ fn snap_xz_to_fixed(
 	actor_y: f32,
 	feet_below_origin: f32,
 	max_fall: f32,
-) -> Option<Vec3> {
+) -> Option<(Vec3, Entity)> {
 	let lift = feet_below_origin.max(0.4) + 2.0;
 	let origin = Vec3::new(xz.x, actor_y + lift, xz.y);
 	let hit = spatial.cast_ray(origin, Dir3::NEG_Y, lift + max_fall + 2.0, true, filter)?;
 	if hit.distance < 0.02 {
 		return None;
 	}
-	Some(Vec3::new(xz.x, origin.y - hit.distance + feet_below_origin, xz.y))
+	Some((Vec3::new(xz.x, origin.y - hit.distance + feet_below_origin, xz.y), hit.entity))
 }
 
 fn reachable_patrol_pin(
@@ -152,7 +185,7 @@ fn reachable_patrol_pin(
 		}
 		for angle in &angles {
 			let xz = Vec2::new(column.x + angle.cos() * radius, column.z + angle.sin() * radius);
-			let Some(snapped) = snap_xz_to_fixed(
+			let Some((snapped, hit)) = snap_xz_to_fixed(
 				spatial,
 				filter,
 				xz,
@@ -162,17 +195,7 @@ fn reachable_patrol_pin(
 			) else {
 				continue;
 			};
-			if blocked.iter().any(|&entity| {
-				spatial
-					.cast_ray(
-						Vec3::new(xz.x, actor_y + hull.half_height() + 2.0, xz.y),
-						Dir3::NEG_Y,
-						hull.half_height() + 4.0,
-						true,
-						filter,
-					)
-					.is_some_and(|hit| hit.entity == entity)
-			}) {
+			if blocked.contains(&hit) {
 				continue;
 			}
 			if xz_distance(snapped, column) < min_radial {
@@ -188,8 +211,8 @@ fn snap_boss_patrol_pins_to_fixed_ground(
 	time: Res<Time>,
 	spatial: Option<SpatialQuery>,
 	mut bosses: Query<
-		(Entity, &GlobalTransform, &mut PoiKnowledge, &LocomotionCapsule),
-		(With<BikanwardaRoot>, Without<PoiGoal>, Without<PatrolPinsSnapped>),
+		(Entity, &GlobalTransform, &mut PoiKnowledge, &LocomotionCapsule, &mut PatrolPinSnapState),
+		(With<BikanwardaRoot>, Without<PatrolPinsSnapped>),
 	>,
 	hosts: Query<(&BossActor, &Children), With<BossEncounterRoot>>,
 	columns: Query<(Entity, &GlobalTransform), With<BossColumn>>,
@@ -201,7 +224,10 @@ fn snap_boss_patrol_pins_to_fixed_ground(
 	};
 	let filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
 	let now = time.elapsed_secs();
-	for (entity, actor_gt, mut knowledge, hull) in &mut bosses {
+	for (entity, actor_gt, mut knowledge, hull, mut snap) in &mut bosses {
+		if now < snap.next_attempt_at {
+			continue;
+		}
 		let Some((_, children)) = hosts.iter().find(|(actor, _)| actor.0 == entity) else {
 			continue;
 		};
@@ -217,19 +243,17 @@ fn snap_boss_patrol_pins_to_fixed_ground(
 		}
 		let column = column_gt.translation();
 		let actor_y = actor_gt.translation().y;
-		let mut snapped = Vec::with_capacity(PATROL_PIN_COUNT as usize);
+		snap.attempts = snap.attempts.saturating_add(1);
+		snap.next_attempt_at = now + PATROL_SNAP_RETRY_SECS;
 		for i in 0..PATROL_PIN_COUNT {
+			if !snap.is_pending(i) {
+				continue;
+			}
 			let Some(position) =
 				reachable_patrol_pin(&spatial, &filter, column, actor_y, hull, i, &blocked)
 			else {
-				break;
+				continue;
 			};
-			snapped.push((i, position));
-		}
-		if snapped.len() != PATROL_PIN_COUNT as usize {
-			continue;
-		}
-		for (i, position) in snapped {
 			let mut source = PoiSource::OBJECTIVE;
 			source.insert(PoiSource::EXTERNAL);
 			knowledge.observe(
@@ -246,8 +270,11 @@ fn snap_boss_patrol_pins_to_fixed_ground(
 				},
 				now,
 			);
+			snap.mark_snapped(i);
 		}
-		commands.entity(entity).insert(PatrolPinsSnapped);
+		if snap.pending_count() == 0 {
+			commands.entity(entity).insert(PatrolPinsSnapped);
+		}
 	}
 }
 
@@ -266,7 +293,7 @@ pub fn initialize_boss_locomotion(
 		if already_motor.contains(actor_ref.0) {
 			continue;
 		}
-		let Some((column_entity, column_global)) =
+		let Some((column_entity, _column_global)) =
 			children.iter().find_map(|child| columns.get(child).ok())
 		else {
 			warn!("Could not find column child for locomotion host {:?}", host);
@@ -289,9 +316,6 @@ pub fn initialize_boss_locomotion(
 			ReplanMovement,
 		));
 
-		let actor_y = host_global.translation().y;
-		let column_world = column_global.translation();
-		let column_xz = Vec3::new(column_world.x, actor_y, column_world.z);
 		commands.entity(column_entity).insert(Tether);
 
 		let objective = TetherObjective::Tether(column_entity, BOSS_TETHER_RADIUS);
@@ -323,24 +347,7 @@ pub fn initialize_boss_locomotion(
 		]);
 		movement.ability.vantage_azimuths = 4;
 
-		let mut knowledge = PoiKnowledge::default();
-		for i in 0..PATROL_PIN_COUNT {
-			let position = patrol_pin_world(column_xz, actor_y, i);
-			let mut source = PoiSource::OBJECTIVE;
-			source.insert(PoiSource::EXTERNAL);
-			let observation = PoiObservation {
-				user: actor_ref.0,
-				id: patrol_pin_id(i),
-				entity: None,
-				kind: PATROL_KIND,
-				position,
-				arrival_radius: PATROL_ARRIVAL_RADIUS,
-				salience: 1.0,
-				confidence: 1.0,
-				source,
-			};
-			knowledge.observe(observation, 0.0);
-		}
+		let knowledge = PoiKnowledge::default();
 
 		let mut meandering = MeanderingIntelligenceUser::new(BOSS_TETHER_RADIUS);
 		meandering.linger_secs = 1.5;
@@ -365,6 +372,7 @@ pub fn initialize_boss_locomotion(
 			meandering,
 			PoiIntelligenceUser::new(PoiInterests::one(PATROL_KIND)),
 			knowledge,
+			PatrolPinSnapState::new(),
 			PoiVisitState::default(),
 			FirearmIntelligence::new(),
 			firearm_movement,

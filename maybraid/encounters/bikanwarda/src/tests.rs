@@ -894,6 +894,14 @@ mod integration_regressions {
 	use lod::scene::LodScene;
 	use spotting_intelligence::SpottingUser;
 
+	#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+	enum TestEncounterGround {
+		#[default]
+		Full,
+		None,
+		OnlyPin(u32),
+	}
+
 	fn full_encounter_app() -> App {
 		full_encounter_app_with(|_| {})
 	}
@@ -954,27 +962,48 @@ mod integration_regressions {
 
 	fn spawn_test_support_ground(
 		hosts: Query<&GlobalTransform, Added<BossEncounterRoot>>,
+		kind: Option<Res<TestEncounterGround>>,
 		mut commands: Commands,
 	) {
+		use crate::locomotion::patrol_pin_world;
 		use avian3d::prelude::{Collider, RigidBody};
 		use bikanwarda_character::{BikanwardaActorRecipe, BikanwardaSpec};
 		use characters::CharacterRecipe;
 
+		let kind = kind.map(|kind| *kind).unwrap_or_default();
 		for gt in &hosts {
 			let t = gt.translation();
 			let hull = BikanwardaActorRecipe::from_spec(BikanwardaSpec::encounter())
 				.components()
 				.scaled_locomotion_capsule();
 			let terrain_y = t.y - hull.spawn_height();
-			let center = Vec3::new(t.x, terrain_y - 1.0, t.z);
-			commands.spawn((
-				Name::new("test-encounter-ground"),
-				RigidBody::Static,
-				Collider::cuboid(400.0, 1.0, 400.0),
-				Transform::from_translation(center),
-				GlobalTransform::from_translation(center),
-				lod_avian::PhysicsInteractionLayer::fixed_layers(),
-			));
+			match kind {
+				TestEncounterGround::None => {}
+				TestEncounterGround::Full => {
+					let center = Vec3::new(t.x, terrain_y - 1.0, t.z);
+					commands.spawn((
+						Name::new("test-encounter-ground"),
+						RigidBody::Static,
+						Collider::cuboid(400.0, 1.0, 400.0),
+						Transform::from_translation(center),
+						GlobalTransform::from_translation(center),
+						lod_avian::PhysicsInteractionLayer::fixed_layers(),
+					));
+				}
+				TestEncounterGround::OnlyPin(keep) => {
+					let column = Vec3::new(t.x + COLUMN_OFFSET_XZ.x, t.y, t.z + COLUMN_OFFSET_XZ.y);
+					let pin = patrol_pin_world(column, t.y, keep);
+					let center = Vec3::new(pin.x, terrain_y - 1.0, pin.z);
+					commands.spawn((
+						Name::new(format!("test-encounter-ground-pin-{keep}")),
+						RigidBody::Static,
+						Collider::cuboid(0.5, 1.0, 0.5),
+						Transform::from_translation(center),
+						GlobalTransform::from_translation(center),
+						lod_avian::PhysicsInteractionLayer::fixed_layers(),
+					));
+				}
+			}
 		}
 	}
 
@@ -2470,12 +2499,23 @@ mod integration_regressions {
 			"live pillar should sit at the authored offset from Area 1746, got {pillar:?}"
 		);
 
-		let knowledge = app
-			.world()
-			.get::<PoiKnowledge>(actor)
-			.expect("production spawn should plant patrol knowledge");
-		let pins: Vec<Vec3> = knowledge.iter().map(|known| known.position).collect();
-		assert_eq!(pins.len(), PATROL_PIN_COUNT as usize, "expected the authored patrol ring");
+		let mut pins = Vec::new();
+		for _ in 0..90 {
+			pins = app
+				.world()
+				.get::<PoiKnowledge>(actor)
+				.map(|knowledge| knowledge.iter().map(|known| known.position).collect())
+				.unwrap_or_default();
+			if pins.len() == PATROL_PIN_COUNT as usize {
+				break;
+			}
+			app.update();
+		}
+		assert_eq!(
+			pins.len(),
+			PATROL_PIN_COUNT as usize,
+			"expected support-validated patrol pins on the live pillar ring"
+		);
 		let actor_y = actor_translation(&app, actor).y;
 		for (index, pin) in pins.iter().enumerate() {
 			let expected = patrol_pin_world(pillar, actor_y, index as u32);
@@ -2535,6 +2575,112 @@ mod integration_regressions {
 		assert!(
 			max_horizontal > 1.5,
 			"idle patrol should walk horizontally after settling, moved {max_horizontal:.3} m from {settle_xz:?}"
+		);
+	}
+
+	fn wait_for_snap_attempts(app: &mut App, actor: Entity, frames: u32) -> u32 {
+		use crate::locomotion::PatrolPinSnapState;
+		for _ in 0..frames {
+			app.update();
+		}
+		app.world()
+			.get::<PatrolPinSnapState>(actor)
+			.map(|state| state.attempts)
+			.unwrap_or(0)
+	}
+
+	/// Unsnapped geometric seeds must not become goals, and missing Fixed
+	/// support must not recast every idle frame.
+	#[test]
+	fn idle_patrol_skips_unsnapped_pins_and_paces_missing_support() {
+		use crate::locomotion::{PatrolPinSnapState, PATROL_PIN_COUNT};
+		use poi_intelligence::{PoiGoal, PoiKnowledge};
+
+		let mut app = full_encounter_app_with(|app| {
+			app.insert_resource(TestEncounterGround::None);
+		});
+		let terrain_y = 0.0;
+		let spawn_xz = Vec2::new(1746.8, 1025.9);
+		let boss_position = Vec3::new(spawn_xz.x, terrain_y + encounter_hull_offset(), spawn_xz.y);
+		let (_host, actor, _column) =
+			spawn_production_encounter(&mut app, boss_position, terrain_y);
+
+		let frames = 90u32;
+		let attempts = wait_for_snap_attempts(&mut app, actor, frames);
+		let known = app
+			.world()
+			.get::<PoiKnowledge>(actor)
+			.map(|knowledge| knowledge.len())
+			.unwrap_or(0);
+		let goal = app.world().get::<PoiGoal>(actor).map(|goal| goal.target);
+		eprintln!(
+			"unavailable-support frames={frames} attempts={attempts} known={known} goal={goal:?}"
+		);
+		assert_eq!(known, 0, "unsnapped pins must not enter patrol knowledge");
+		assert!(goal.is_none(), "unsnapped pin must not start a PoiGoal, got {goal:?}");
+		assert!(
+			attempts >= 1,
+			"snap should attempt once SpatialQuery is present, attempts={attempts}"
+		);
+		assert!(
+			attempts < frames / 2,
+			"idle actor must not recast every frame without support, attempts={attempts} frames={frames}"
+		);
+
+		let mut app = full_encounter_app_with(|app| {
+			app.insert_resource(TestEncounterGround::OnlyPin(0));
+		});
+		let (_host, actor, _column) =
+			spawn_production_encounter(&mut app, boss_position, terrain_y);
+		let mut known_ids = Vec::new();
+		for _ in 0..90 {
+			known_ids = app
+				.world()
+				.get::<PoiKnowledge>(actor)
+				.map(|knowledge| knowledge.iter().map(|known| known.id).collect())
+				.unwrap_or_default();
+			if !known_ids.is_empty() && known_ids.len() < PATROL_PIN_COUNT as usize {
+				break;
+			}
+			app.update();
+		}
+		assert!(
+			!known_ids.is_empty(),
+			"usable pins should stay when another candidate has no support, known={known_ids:?}"
+		);
+		assert!(
+			known_ids.len() < PATROL_PIN_COUNT as usize,
+			"pins without Fixed support must not be observed, known={known_ids:?}"
+		);
+		let attempts_after = app
+			.world()
+			.get::<PatrolPinSnapState>(actor)
+			.map(|state| state.attempts)
+			.unwrap_or(0);
+		let extra_frames = 60u32;
+		for _ in 0..extra_frames {
+			app.update();
+			if let Some(goal) = app.world().get::<PoiGoal>(actor) {
+				assert!(
+					known_ids.contains(&goal.target),
+					"unsnapped pin must not start a goal, target={:?} known={known_ids:?}",
+					goal.target
+				);
+			}
+		}
+		let attempts_later = app
+			.world()
+			.get::<PatrolPinSnapState>(actor)
+			.map(|state| state.attempts)
+			.unwrap_or(0);
+		let recasts = attempts_later.saturating_sub(attempts_after);
+		eprintln!(
+			"partial-support known={} attempts={attempts_after}->{attempts_later} recasts={recasts}",
+			known_ids.len()
+		);
+		assert!(
+			recasts < extra_frames / 2,
+			"pending pins must pace retries, recasts={recasts} frames={extra_frames}"
 		);
 	}
 
