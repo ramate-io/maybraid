@@ -105,3 +105,16 @@ fn crown_albedo(warm_rgb: vec3<f32>, cool_rgb: vec3<f32>, height_frac: f32, vari
     let along = mix(cool_rgb, warm_rgb, smoothstep(0.18, 0.88, h));
     return along * (0.88 + 0.22 * saturate(variation));
 }
+
+/// Billowy canopy clump: height warmth plus a cooler, darker underside.
+fn canopy_clump_albedo(
+    warm_rgb: vec3<f32>,
+    cool_rgb: vec3<f32>,
+    height_frac: f32,
+    normal: vec3<f32>,
+    clump_variation: f32,
+) -> vec3<f32> {
+    let sunlit = crown_albedo(warm_rgb, cool_rgb, height_frac, clump_variation);
+    let lift = smoothstep(-0.38, 0.52, normalize(normal).y);
+    return sunlit * mix(vec3<f32>(0.42, 0.55, 0.70), vec3<f32>(1.0, 1.0, 1.0), lift);
+}

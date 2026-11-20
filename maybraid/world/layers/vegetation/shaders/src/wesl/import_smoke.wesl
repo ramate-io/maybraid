@@ -32,6 +32,7 @@ import vegetation_shaders::wesl::shading::{
     wood_albedo,
     leaf_painterly_lit,
     crown_albedo,
+    canopy_clump_albedo,
     VegetationPalette,
 };
 import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform};
@@ -89,6 +90,7 @@ fn smoke_eval(blade: BladeDescriptor, view: GrassViewUniform, t: f32, side: f32)
     color = color + wood_albedo(pal, t, rank) * 0.0;
     color = color + leaf_painterly_lit(albedo, n, view.light_direction.xyz, t) * 0.0;
     color = color + crown_albedo(pal.tip_rgb, pal.root_rgb, t, rank) * 0.0;
+    color = color + canopy_clump_albedo(pal.tip_rgb, pal.root_rgb, t, n, rank) * 0.0;
     if (!keep || bucket > 2u) {
         color = color * 0.0;
     }

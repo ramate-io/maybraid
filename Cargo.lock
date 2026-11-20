@@ -13330,6 +13330,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "vegetation-tree-field"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "lod",
+ "vegetation-components",
+ "vegetation-grass-field",
+ "vegetation-groves",
+ "vegetation-shaders",
+]
+
+[[package]]
+name = "vegetation-tree-field-playground"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "camera-controls",
+ "clap",
+ "game-commands",
+ "lod",
+ "sbs-geometry",
+ "sbs-trees",
+ "terrain-shaders",
+ "vegetation-components",
+ "vegetation-grass-field",
+ "vegetation-shaders",
+ "vegetation-tree-field",
+]
+
+[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,7 +1,7 @@
 //! Importable WESL vegetation library plus CPU mirrors of the same contracts.
 //!
-//! Entry-point shaders (grass compute/vertex/fragment, and later bush wood/foliage)
-//! should `import vegetation_shaders::wesl::…` rather than copy these functions.
+//! Entry-point shaders (grass, bush, and tree wood/foliage) should
+//! `import vegetation_shaders::wesl::…` rather than copy these functions.
 //! Recipes and species appearance stay outside this math layer.
 //!
 //! ## Import-and-call example
@@ -57,8 +57,8 @@ pub use lod::{
 	ProjectedSize,
 };
 pub use shading::{
-	crown_albedo, grass_albedo, grass_variation_palette, leaf_painterly_lit, meadow_color_field,
-	painterly_lit, two_sided_wrap, wood_albedo, VegetationPalette,
+	canopy_clump_albedo, crown_albedo, grass_albedo, grass_variation_palette, leaf_painterly_lit,
+	meadow_color_field, painterly_lit, two_sided_wrap, wood_albedo, VegetationPalette,
 };
 pub use wind::{
 	deform_along_curve, max_wind_displacement_m, wind_field, WindDeform, WindField, WindInputs,
