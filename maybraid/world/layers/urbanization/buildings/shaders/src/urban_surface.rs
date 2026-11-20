@@ -44,6 +44,9 @@ impl Plugin for UrbanSurfaceMaterialPlugin {
 	fn build(&self, app: &mut App) {
 		embedded_asset!(app, "urban_surface.wesl");
 		app.add_plugins(MaterialPlugin::<UrbanSurfaceMaterial>::default());
+		if std::env::var("MAYBRAID_EXPERIMENT_URBAN_COMPANION").is_ok_and(|value| value == "1") {
+			bevy::pbr::prepare_position_normal_pipeline_companion::<UrbanSurfaceMaterial>(app);
+		}
 	}
 }
 
