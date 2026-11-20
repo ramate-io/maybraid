@@ -260,6 +260,8 @@ mod tests {
 		settle(&mut app)?;
 
 		let id = authored(12.0).id();
+		wait_built_development(&mut app, id)?;
+
 		let built: Vec<Id> =
 			hcsg_hosts::<Built<Ground>>(&mut app).into_iter().map(|(id, _)| id).collect();
 		assert_eq!(built, vec![id]);
@@ -273,6 +275,15 @@ mod tests {
 		assert_eq!(settings[0].id, id);
 		wait_building_walk_colliders(&mut app, 64)?;
 		assert!(count::<BuildingWalkCollider>(&mut app) > 0, "buildings bear weight");
+		Ok(())
+	}
+
+	/// Presentation can defer a busy read, and the host's LOD scene spawns the setting later.
+	fn wait_built_development(app: &mut App, id: Id) -> anyhow::Result<()> {
+		SettlePresentation::layer_integration(IDLE).wait_until(app, 64, |app| {
+			hcsg_hosts::<Built<Ground>>(app).iter().any(|(host_id, _)| *host_id == id)
+				&& count::<UrbanSetting>(app) > 0
+		})?;
 		Ok(())
 	}
 
@@ -328,6 +339,7 @@ mod tests {
 	fn a_restart_replaces_padded_and_built_hosts() -> anyhow::Result<()> {
 		let mut app = app(12.0);
 		settle(&mut app)?;
+		wait_built_development(&mut app, authored(12.0).id())?;
 		let padded = hcsg_hosts::<PaddedTerrain<Ground>>(&mut app);
 		let built = hcsg_hosts::<Built<Ground>>(&mut app);
 

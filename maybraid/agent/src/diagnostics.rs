@@ -93,8 +93,25 @@ pub struct AgentNpcWeapon {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentNpcMembership {
+	/// Host identity remains meaningful even when its entity has retired.
+	pub host: String,
+	pub slot: u16,
+	/// Cached semantic LOD center, not a nearest-member position.
+	pub host_center: Option<[f32; 3]>,
+	/// Debug name of the host's selected semantic LodSceneLevel.
+	pub selected_level: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentNpcSnapshot {
 	pub actor: AgentDiagnosticActor,
+	#[serde(default)]
+	pub health: Option<f32>,
+	#[serde(default)]
+	pub max_health: Option<f32>,
+	#[serde(default)]
+	pub membership: Option<AgentNpcMembership>,
 	pub velocity: Option<[f32; 3]>,
 	pub gravity_scale: Option<f32>,
 	/// None when this actor has no shared character motor.
@@ -295,6 +312,9 @@ mod npc_tests {
 				name: None,
 				position: None,
 			},
+			health: None,
+			max_health: None,
+			membership: None,
 			velocity: None,
 			gravity_scale: None,
 			grounded: None,
@@ -317,6 +337,9 @@ mod npc_tests {
 		};
 		let line = event.to_line().map_err(anyhow::Error::msg)?;
 		let json: serde_json::Value = serde_json::from_str(&line)?;
+		assert!(json["actors"][0]["health"].is_null());
+		assert!(json["actors"][0]["max_health"].is_null());
+		assert!(json["actors"][0]["membership"].is_null());
 		assert!(json["actors"][0]["grounded"].is_null());
 		assert!(json["actors"][0]["pending_support"].is_null());
 		assert!(json["actors"][0]["combat"].is_null());
@@ -324,6 +347,31 @@ mod npc_tests {
 		assert_eq!(json["actors"][0]["actor"]["entity"], u64::MAX.to_string());
 		assert_eq!(AgentEvent::parse_line(&line).map_err(anyhow::Error::msg)?, event);
 		assert_eq!(event.tracy_message(), None);
+		Ok(())
+	}
+	#[test]
+	fn npc_lifetime_evidence_is_optional_in_older_snapshot_records() -> anyhow::Result<()> {
+		let legacy = serde_json::json!({
+			"actor": {"entity": "18446744073709551615", "player": false},
+			"velocity": null, "gravity_scale": null, "grounded": null,
+			"shape_hits": null, "cached_ground_normal": null, "pending_support": null,
+			"combat": null, "weapon": null
+		});
+		let mut snapshot: AgentNpcSnapshot = serde_json::from_value(legacy)?;
+		assert_eq!(snapshot.health, None);
+		assert_eq!(snapshot.membership, None);
+		snapshot.health = Some(37.0);
+		snapshot.max_health = Some(100.0);
+		snapshot.membership = Some(AgentNpcMembership {
+			host: u64::MAX.to_string(),
+			slot: 65535,
+			host_center: None,
+			selected_level: None,
+		});
+		let wire = serde_json::to_value(&snapshot)?;
+		assert_eq!(wire["membership"]["host"], u64::MAX.to_string());
+		assert!(wire["membership"]["host_center"].is_null());
+		assert_eq!(serde_json::from_value::<AgentNpcSnapshot>(wire)?, snapshot);
 		Ok(())
 	}
 }

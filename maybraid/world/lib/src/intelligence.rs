@@ -17,6 +17,7 @@ use intelligence_lod::{
 };
 use lod::LodViewer;
 use meandering_intelligence::MeanderingIntelligencePlugin;
+use mob_intelligence::PreySubject;
 use mob_scenes::player_affiliations;
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
@@ -71,6 +72,7 @@ type WorldPlayers<'w, 's> = Query<
 		Option<&'static SpotSubject>,
 		Option<&'static ThreatSubject>,
 		Option<&'static Affiliations>,
+		Has<PreySubject>,
 		Option<&'static LocomotionCapsule>,
 	),
 	With<VegetationPlayer>,
@@ -299,7 +301,7 @@ fn bake_intelligence_lod(
 }
 
 fn sync_world_player_threat_actor(mut commands: Commands, players: WorldPlayers) {
-	for (entity, current_spot, current_subject, current_affiliations, hull) in &players {
+	for (entity, current_spot, current_subject, current_affiliations, is_prey, hull) in &players {
 		let hull = hull.copied().unwrap_or(LocomotionCapsule::HUMANOID);
 		let spot = SpotSubject::new(
 			InterestLayers::CHARACTER,
@@ -316,6 +318,9 @@ fn sync_world_player_threat_actor(mut commands: Commands, players: WorldPlayers)
 		}
 		if current_affiliations.is_none() {
 			entity_commands.insert(player_affiliations(id));
+		}
+		if !is_prey {
+			entity_commands.insert(PreySubject);
 		}
 	}
 }
@@ -535,6 +540,7 @@ mod tests {
 
 		let entity = app.world().entity(player);
 		assert!(entity.get::<SpotSubject>().is_some());
+		assert!(entity.get::<PreySubject>().is_some());
 		assert_eq!(
 			entity.get::<ThreatSubject>().map(|subject| subject.id),
 			Some(ThreatId(player.to_bits()))

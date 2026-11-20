@@ -10,8 +10,8 @@ use clap::{Parser, Subcommand};
 use game_commands::command::{CommandConsoleOutput, CommandScript, GameCommand};
 
 use maybraid_sky::{
-	SKY_PHASE_DAWN, SKY_PHASE_DUSK, SKY_PHASE_GOLDEN, SKY_PHASE_MORNING, SKY_PHASE_NIGHT,
-	SKY_PHASE_NOON, SkyClock, SkyCommand,
+	SkyClock, SkyCommand, SKY_PHASE_DAWN, SKY_PHASE_DUSK, SKY_PHASE_GOLDEN, SKY_PHASE_MORNING,
+	SKY_PHASE_NIGHT, SKY_PHASE_NOON,
 };
 
 use mob_scenes::MobKind;
@@ -101,6 +101,9 @@ pub enum Mobs {
 	},
 	/// Inspect mob materialization state: host count, pending groups, body/NPC counts.
 	Inspect,
+	/// Show homeostatic mob status: current cell, flagged neighbors, active mobs.
+	#[cfg(feature = "debug-commands")]
+	Homeostatic,
 }
 
 #[derive(Clone, Subcommand)]
@@ -163,6 +166,11 @@ impl Mobs {
 				commands.spawn(crate::mob_spawn::RequestMobInspect);
 				*console = "mobs inspect: pending".into();
 			}
+			#[cfg(feature = "debug-commands")]
+			Mobs::Homeostatic => {
+				commands.spawn(RequestHomeostaticStatus);
+				*console = "mobs homeostatic: pending".into();
+			}
 		}
 	}
 }
@@ -178,6 +186,10 @@ impl Boss {
 		}
 	}
 }
+
+#[cfg(feature = "debug-commands")]
+#[derive(Component, Clone, Copy, Debug)]
+pub struct RequestHomeostaticStatus;
 
 #[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
@@ -343,7 +355,7 @@ impl PlaygroundCommand {
 			}
 			#[cfg(feature = "debug-commands")]
 			PlaygroundCommand::ScreenshotWindow { path } => {
-				use bevy::render::view::screenshot::{Screenshot, save_to_disk};
+				use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 				commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path.clone()));
 				*console =
 					format!("screenshot-window {}: final composition queued", path.display());
@@ -555,7 +567,12 @@ impl DebugCommand {
 
 #[cfg(feature = "debug-commands")]
 impl ScriptCommand {
-	pub fn react(self, queue: &mut crate::script_queue::ScriptQueue, time: &Time, console: &mut String) {
+	pub fn react(
+		self,
+		queue: &mut crate::script_queue::ScriptQueue,
+		time: &Time,
+		console: &mut String,
+	) {
 		match self {
 			ScriptCommand::Wait { seconds } => {
 				let wait_until = time.elapsed() + std::time::Duration::from_secs_f32(seconds);
@@ -572,7 +589,12 @@ impl ScriptCommand {
 
 impl PlaygroundCommand {
 	#[cfg(feature = "debug-commands")]
-	pub fn run_script_with_queue(path: &std::path::Path, queue: &mut crate::script_queue::ScriptQueue, _time: &Time, console: &mut String) {
+	pub fn run_script_with_queue(
+		path: &std::path::Path,
+		queue: &mut crate::script_queue::ScriptQueue,
+		_time: &Time,
+		console: &mut String,
+	) {
 		let lines = match game_commands::command::read_script_lines(path) {
 			Ok(l) => l,
 			Err(e) => {
