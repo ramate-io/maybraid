@@ -81,8 +81,11 @@ impl Plugin for CharacterConceptsPlaygroundPlugin {
 				enabled_at_start: false,
 				..CameraLookConfig::default()
 			}))
-			.add_plugins(StandaloneCharacterMaterialRefPlugin)
-			.add_plugins(CharacterLodPlugin)
+			.add_plugins(StandaloneCharacterMaterialRefPlugin);
+		if !app.is_plugin_added::<bikanwarda_character::BikanwardaCharacterPlugin>() {
+			app.add_plugins(bikanwarda_character::BikanwardaCharacterPlugin);
+		}
+		app.add_plugins(CharacterLodPlugin)
 			.add_plugins(
 				GameCommandPlugin::<ConceptsCommand>::with_config(ui::ui_config())
 					.with_drawer_config(ui::drawer_config()),
@@ -92,13 +95,15 @@ impl Plugin for CharacterConceptsPlaygroundPlugin {
 				Startup,
 				(
 					preview_capture::load_preview_capture_settings,
-					preview_capture::setup_capture_ground.after(preview_capture::load_preview_capture_settings),
+					preview_capture::setup_capture_ground
+						.after(preview_capture::load_preview_capture_settings),
 					camera::setup_camera,
 					add_lod_viewer_to_camera.after(camera::setup_camera),
 					setup_lighting,
 					scale_reference::setup_scale_reference
 						.run_if(not(preview_capture::capture_hides_creator_ui)),
-					init_character_menu_state.run_if(not(preview_capture::capture_hides_creator_ui)),
+					init_character_menu_state
+						.run_if(not(preview_capture::capture_hides_creator_ui)),
 					ui::setup_creator_ui.run_if(not(preview_capture::capture_hides_creator_ui)),
 				),
 			)
@@ -162,6 +167,8 @@ impl Plugin for CharacterConceptsPlaygroundPlugin {
 						.after(TransformSystems::Propagate)
 						.after(CharacterHostSystems::Pose)
 						.after(preview_capture::align_capture_ground_to_contact),
+					preview_capture::preview_capture_request_screenshot
+						.after(apply_camera_suggestion),
 				),
 			);
 	}

@@ -7,6 +7,7 @@
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
+use bikanwarda_character::{material_ref_for_slot, BikanwardaPresentation};
 use character_items::ClothingMesh;
 use characters::{
 	assembly::CharacterPartSlot,
@@ -764,6 +765,13 @@ pub fn stamp_lod_character_preview(
 						socket: node.socket.map(|socket| socket.local),
 					},
 				));
+				if matches!(config.species(), ConceptSpecies::Epiphant) {
+					if let Some(material) =
+						material_ref_for_slot(node.slot, &BikanwardaPresentation::encounter())
+					{
+						commands.entity(member).insert(MaterialRefRoot(material));
+					}
+				}
 			}
 			if rigs.get(member).is_ok_and(|rig| rig.role == CharacterRigRole::Body) {
 				let needs_clip = match anims.get(member) {
