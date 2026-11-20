@@ -32,6 +32,19 @@ use super::request::HcsgRequest;
 use super::runtime::{ensure_runtime, HcsgSystems};
 use super::storage::{Busy, HcsgStorage};
 
+/// Explicit diagnostic observation only: content-streamed does not mean desired
+/// LOD, visible, support-ready or GPU-ready. Missing provenance stays unknown.
+pub fn retired_successor_status(_world: &World, _root: Entity) -> &'static str {
+	#[cfg(feature = "generation-tracing")]
+	{
+		retirement_probe::successor_status(_world, _root)
+	}
+	#[cfg(not(feature = "generation-tracing"))]
+	{
+		"unknown"
+	}
+}
+
 struct Host {
 	entity: Entity,
 	bounds: Aabb3d,
