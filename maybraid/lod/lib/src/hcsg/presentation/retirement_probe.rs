@@ -17,6 +17,22 @@ pub(super) struct RetiredHostOrigin {
 	queued: Instant,
 }
 
+pub(super) fn successor_status(world: &World, root: Entity) -> &'static str {
+	match world.get::<RetiredHostOrigin>(root) {
+		None => "unknown",
+		Some(origin) => match origin.successor {
+			None => "not_applicable",
+			Some(successor) => match world.get_entity(successor) {
+				Err(_) => "missing",
+				Ok(entity) if entity.contains::<crate::LodSceneHostStreamed>() => {
+					"content_streamed"
+				}
+				Ok(_) => "present_not_content_streamed",
+			},
+		},
+	}
+}
+
 pub(super) fn stamp<T>(
 	commands: &mut Commands,
 	entity: Entity,
@@ -168,6 +184,38 @@ mod tests {
 		assert_eq!(probe.scheme, "unknown");
 		despawn_retired_hosts(&mut world);
 		assert!(world.get_entity(root).is_err());
+		Ok(())
+	}
+}
+
+#[cfg(test)]
+mod successor_readout_tests {
+	use super::*;
+
+	#[test]
+	fn successor_readout_keeps_unknown_missing_and_streamed_distinct() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let root = world.spawn_empty().id();
+		assert_eq!(successor_status(&world, root), "unknown");
+		let successor = world.spawn_empty().id();
+		world.entity_mut(root).insert(RetiredHostOrigin {
+			scheme: "fixture",
+			reason: "version",
+			successor: Some(successor),
+			last_focus_xz_distance_m: None,
+			queued: Instant::now(),
+		});
+		assert_eq!(successor_status(&world, root), "present_not_content_streamed");
+		world.entity_mut(successor).insert(crate::LodSceneHostStreamed);
+		assert_eq!(successor_status(&world, root), "content_streamed");
+		world.despawn(successor);
+		assert_eq!(successor_status(&world, root), "missing");
+		world
+			.entity_mut(root)
+			.get_mut::<RetiredHostOrigin>()
+			.ok_or_else(|| anyhow::anyhow!("missing origin"))?
+			.successor = None;
+		assert_eq!(successor_status(&world, root), "not_applicable");
 		Ok(())
 	}
 }

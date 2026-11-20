@@ -53,7 +53,7 @@ pub use demand::{
 pub use generation::GenerationPlugin;
 pub use node::HcsgNode;
 pub use node_store::StoredEntry;
-pub use presentation::{PresentationPlugin, RetiredHost};
+pub use presentation::{retired_successor_status, PresentationPlugin, RetiredHost};
 pub use runtime::HcsgSystems;
 pub use session::{
 	register_session_seed, request_hcsg_session_restart, HcsgRestartRequest, HcsgSessionPlugin,

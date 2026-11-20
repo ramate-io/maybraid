@@ -3,8 +3,12 @@
 //! Counts selected owned Vec payloads, not allocator overhead, GPU data or RSS.
 
 use bevy::asset::AssetId;
+use bevy::ecs::entity_disabling::Disabled;
+
+mod dense_tables;
 use bevy::mesh::{Indices, VertexAttributeValues};
 use bevy::prelude::*;
+pub use dense_tables::*;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 
@@ -119,6 +123,10 @@ pub struct ComponentCensus {
 
 #[derive(Debug, Default, Serialize)]
 pub struct MeshCensus {
+	/// Overlapping unique-asset subsets, never additive. Enabled is local Disabled absence,
+	/// not ancestor visibility. ViewVisibility is main-world observation, not GPU submission.
+	pub enabled_mesh3d: MeshSubsetCensus,
+	pub view_visible_mesh3d: MeshSubsetCensus,
 	/// Unique AssetIds in main-world Assets<Mesh>, including assets without live Mesh3d.
 	pub assets: usize,
 	pub attribute_and_index_payload: PayloadBytes,
@@ -126,6 +134,14 @@ pub struct MeshCensus {
 	pub unique_mesh3d_ids: usize,
 	pub mesh3d_ids_with_cpu_asset: usize,
 	pub mesh3d_referenced_payload: PayloadBytes,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct MeshSubsetCensus {
+	pub references: usize,
+	pub unique_ids: usize,
+	pub ids_with_cpu_asset: usize,
+	pub cpu_payload: PayloadBytes,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -140,10 +156,54 @@ pub struct MemoryCensus {
 	pub schema_version: u32,
 	pub scope: &'static str,
 	pub ecs: EcsCensus,
+	pub dense_tables: DenseTableCensus,
 	/// None means the Assets resource is absent, rather than zero assets.
 	pub meshes: Option<MeshCensus>,
 	pub images: Option<ImageCensus>,
 	pub handle_caches: Vec<HandleCacheCensus>,
+	pub streaming: Option<StreamingCensus>,
+}
+
+/// Marker counts overlap and cannot be summed as unique entities or bytes.
+/// Missing resources and contended generation readouts stay unknown, not zero.
+#[derive(Debug, Default, Serialize)]
+pub struct StreamingCensus {
+	pub scene_hosts: usize,
+	pub content_streamed_hosts: usize,
+	pub disabled_scene_hosts: usize,
+	pub retired_roots: usize,
+	pub disabled_retired_roots: usize,
+	pub successor_status_counts: std::collections::BTreeMap<&'static str, usize>,
+	pub pending_level_roots: usize,
+	pub lazy_pending: usize,
+	pub culls_queued: usize,
+	pub culls_started: usize,
+	pub visibility_queue: Option<VisibilityBacklogCensus>,
+	pub generation: GenerationCensus,
+	/// No safe aggregate readout of worker demand/backlog exists in this observer.
+	pub worker_backlog_status: &'static str,
+	/// Main-world visibility is not render-world or GPU residency.
+	pub gpu_residency_status: &'static str,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct GenerationCensus {
+	pub status: &'static str,
+	/// All type counts only when the entire nonblocking sample succeeds.
+	pub store_entries: Option<Vec<(String, usize)>>,
+	pub total_stores: Option<usize>,
+	pub total_entries: Option<usize>,
+	pub omitted_stores: usize,
+	pub rebuilds_after_eviction_top: Option<u64>,
+	pub rebuilds_after_eviction_nested: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VisibilityBacklogCensus {
+	pub show_jobs: usize,
+	pub hide_jobs: usize,
+	/// Frontier entries, not all descendants, and not necessarily unique.
+	pub stack_entries: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -249,18 +309,38 @@ impl MemoryCensus {
 		let meshes = world.get_resource::<Assets<Mesh>>().map(|assets| {
 			let mut census = MeshCensus::default();
 			let mut live_ids = HashSet::<AssetId<Mesh>>::new();
+			let mut enabled_ids = HashSet::new();
+			let mut visible_ids = HashSet::new();
 			for entity in world.iter_entities() {
 				if let Some(mesh) = entity.get::<Mesh3d>() {
 					census.mesh3d_references += 1;
 					live_ids.insert(mesh.0.id());
+					if !entity.contains::<Disabled>() {
+						census.enabled_mesh3d.references += 1;
+						enabled_ids.insert(mesh.0.id());
+					}
+					if entity.get::<ViewVisibility>().is_some_and(|visibility| visibility.get()) {
+						census.view_visible_mesh3d.references += 1;
+						visible_ids.insert(mesh.0.id());
+					}
 				}
 			}
 			census.unique_mesh3d_ids = live_ids.len();
+			census.enabled_mesh3d.unique_ids = enabled_ids.len();
+			census.view_visible_mesh3d.unique_ids = visible_ids.len();
 			// Assets::iter visits each AssetId once, regardless of strong-handle aliases.
 			for (id, mesh) in assets.iter() {
 				let bytes = PayloadBytes::of_mesh(mesh);
 				census.assets += 1;
 				census.attribute_and_index_payload.add(bytes);
+				if enabled_ids.contains(&id) {
+					census.enabled_mesh3d.ids_with_cpu_asset += 1;
+					census.enabled_mesh3d.cpu_payload.add(bytes);
+				}
+				if visible_ids.contains(&id) {
+					census.view_visible_mesh3d.ids_with_cpu_asset += 1;
+					census.view_visible_mesh3d.cpu_payload.add(bytes);
+				}
 				if live_ids.contains(&id) {
 					census.mesh3d_ids_with_cpu_asset += 1;
 					census.mesh3d_referenced_payload.add(bytes);
@@ -280,13 +360,15 @@ impl MemoryCensus {
 			census
 		});
 		Self {
-			schema_version: 1,
+			schema_version: 2,
 			scope:
 				"selected main-world CPU Vec payloads; not heap totals, GPU bytes, RSS or footprint",
 			ecs,
+			dense_tables: DenseTableCensus::capture(world),
 			meshes,
 			images,
 			handle_caches: Vec::new(),
+			streaming: None,
 		}
 	}
 }
@@ -337,6 +419,32 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("Mesh3d component census missing"))?;
 		assert_eq!(mesh_component.instances, 2);
 		assert_eq!(mesh_component.logical_inline_bytes, 2 * size_of::<Mesh3d>());
+		Ok(())
+	}
+
+	#[test]
+	fn mesh_subsets_deduplicate_shared_assets_without_claiming_gpu_visibility() -> anyhow::Result<()>
+	{
+		let mut world = World::new();
+		let mut meshes = Assets::<Mesh>::default();
+		let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::MAIN_WORLD);
+		mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0_f32; 3]; 3]);
+		let handle = meshes.add(mesh);
+		world.insert_resource(meshes);
+		let visible = ViewVisibility::VISIBLE;
+		world.spawn((Mesh3d(handle.clone()), visible));
+		world.spawn((Mesh3d(handle.clone()), Disabled));
+		world.spawn((Mesh3d(handle), ViewVisibility::default()));
+		let census = MemoryCensus::capture(&world)
+			.meshes
+			.ok_or_else(|| anyhow::anyhow!("missing meshes"))?;
+		assert_eq!(census.mesh3d_references, 3);
+		assert_eq!(census.enabled_mesh3d.references, 2);
+		assert_eq!(census.view_visible_mesh3d.references, 1);
+		assert_eq!(census.enabled_mesh3d.unique_ids, 1);
+		assert_eq!(census.view_visible_mesh3d.unique_ids, 1);
+		assert_eq!(census.enabled_mesh3d.cpu_payload, census.mesh3d_referenced_payload);
+		assert_eq!(census.view_visible_mesh3d.cpu_payload, census.mesh3d_referenced_payload);
 		Ok(())
 	}
 
