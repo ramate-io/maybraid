@@ -7,7 +7,7 @@
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
-use bikanwarda_character::{material_ref_for_slot, BikanwardaPresentation};
+use bikanwarda_character::BikanwardaActor;
 use character_items::ClothingMesh;
 use characters::{
 	assembly::CharacterPartSlot,
@@ -712,6 +712,14 @@ pub fn sync_preview(
 }
 
 fn spawn_lod_character_preview(commands: &mut Commands, config: &ConceptPreviewConfig) {
+	// Encounter-scale Epiphant preview is Bikanwarda: painted #1589 export as the
+	// visual, existing rigs underneath. Ordinary (1×) Epiphant stays the skinned recipe.
+	if matches!(config.species(), ConceptSpecies::Epiphant)
+		&& (crate::preview_capture::encounter_scale_from_env() - 1.0).abs() > f32::EPSILON
+	{
+		spawn_clothed_character(commands, &BikanwardaActor::default());
+		return;
+	}
 	with_clothed_recipe!(config, recipe => {
 		spawn_clothed_character(commands, &recipe);
 	});
@@ -765,13 +773,6 @@ pub fn stamp_lod_character_preview(
 						socket: node.socket.map(|socket| socket.local),
 					},
 				));
-				if matches!(config.species(), ConceptSpecies::Epiphant) {
-					if let Some(material) =
-						material_ref_for_slot(node.slot, &BikanwardaPresentation::encounter())
-					{
-						commands.entity(member).insert(MaterialRefRoot(material));
-					}
-				}
 			}
 			if rigs.get(member).is_ok_and(|rig| rig.role == CharacterRigRole::Body) {
 				let needs_clip = match anims.get(member) {

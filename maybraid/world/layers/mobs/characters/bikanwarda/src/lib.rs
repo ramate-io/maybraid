@@ -42,5 +42,5 @@ pub use spawn::{
 pub use spec::{BikanwardaForm, BikanwardaSpec};
 pub use textures::{
 	material_ref_for_slot, BikanwardaCharacterPlugin, EpiphantTextureSlot,
-	EPIPHANT_DEFAULT_TEXTURE_DIR,
+	EPIPHANT_DEFAULT_TEXTURE_DIR, PREVIEW_GLB,
 };

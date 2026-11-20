@@ -23,6 +23,12 @@ pub struct BikanwardaActor {
 	pub uniform_scale: f32,
 }
 
+impl Default for BikanwardaActor {
+	fn default() -> Self {
+		BikanwardaActorRecipe::default().components()
+	}
+}
+
 /// Config → components for all Bikanwarda forms.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BikanwardaActorRecipe {
@@ -93,13 +99,41 @@ impl CharacterComponents for BikanwardaActor {
 		self.epiphant.rig_nodes_for_level(level)
 	}
 
-	fn part_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
-		self.epiphant.part_nodes_for_level(level).map(|part| {
-			match crate::textures::material_ref_for_slot(part.slot, &self.presentation) {
-				Some(material) => part.with_material(material),
-				None => part,
+	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
+		use crate::textures::{material_ref_for_slot, EpiphantTextureSlot};
+		use characters::assets::AssetNormalization;
+
+		// Painted #1589 export is already assembled in character space. Do not
+		// socket or skin it — that would double-apply rest placement. Rigs stay
+		// on [`Self::rig_nodes_for_level`] for colliders, sockets, and Bray origin.
+		let part = |slot: EpiphantTextureSlot| {
+			let mut node = PartNode::glb(
+				slot.part_slot(),
+				slot.object_name(),
+				slot.preview_scene_path(),
+				AssetNormalization::IDENTITY,
+			);
+			if let Some(material) = material_ref_for_slot(slot.part_slot(), &self.presentation) {
+				node = node.with_material(material);
 			}
-		})
+			node
+		};
+		let mut out = Layers::from_labeled(
+			"body",
+			vec![part(EpiphantTextureSlot::Body), part(EpiphantTextureSlot::Tail)],
+		);
+		out.extend_labeled("head", vec![part(EpiphantTextureSlot::Head)]);
+		out.extend_labeled(
+			"features",
+			vec![
+				part(EpiphantTextureSlot::EyeLeft),
+				part(EpiphantTextureSlot::EyeRight),
+				part(EpiphantTextureSlot::Nose),
+				part(EpiphantTextureSlot::EarLeft),
+				part(EpiphantTextureSlot::EarRight),
+			],
+		);
+		out
 	}
 
 	fn preview_aabb(&self) -> Aabb3d {
@@ -115,13 +149,19 @@ mod tests {
 	use lod::scene::LodSceneLevel;
 
 	#[test]
-	fn bikanwarda_reuses_epiphant_nose_socket_for_bray() {
+	fn bikanwarda_keeps_head_rig_for_bray_while_visual_nose_is_unskinned() {
 		let actor = BikanwardaActorRecipe::default().components();
 		let parts = actor.part_nodes_for_level(LodSceneLevel::High).flatten();
 		let nose = parts
 			.iter()
 			.find(|part| part.slot == CharacterPartSlot::Nose)
 			.expect("epiphant nose part");
-		assert_eq!(nose.socket.as_ref().and_then(|s| s.bone), Some(MOUTH_EMIT_SOCKET));
+		assert!(nose.socket.is_none(), "assembled export must not re-socket");
+		assert!(nose.skin.is_none(), "assembled export is unskinned");
+		let rigs = actor.rig_nodes_for_level(LodSceneLevel::High).flatten();
+		assert!(
+			rigs.iter().any(|rig| rig.id == characters::socket::RigId::Head),
+			"pronograde head rig still supplies {MOUTH_EMIT_SOCKET} for Bray origin"
+		);
 	}
 }

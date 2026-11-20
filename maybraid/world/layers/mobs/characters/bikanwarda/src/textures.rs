@@ -3,9 +3,10 @@
 //! Liam’s Color / Roughness / Metallic PNGs are bound by material slot name
 //! (`body_mat`, `head_mat`, …) onto [`StandardMaterial`]. Bevy’s metallic-roughness
 //! sampler is packed at import: **G = roughness, B = metallic**, linear. Color is
-//! sRGB. The current assembly GLBs mostly lack `TEXCOORD_0` and none of them
-//! declare these slot names, so the maps wait on a matching export — they still
-//! load and stamp by name so they apply automatically when that GLB arrives.
+//! sRGB. Visuals load the [#1589](https://github.com/ramate-io/maybraid/pull/1589)
+//! OBJ converted to [`PREVIEW_GLB`] (one glTF scene per component, UVs preserved).
+//! That mesh is static / unskinned — a visual over the existing quadruped + head
+//! rig, which still drives colliders, sockets, and Bray origin.
 
 use bevy::image::ImageLoaderSettings;
 use bevy::pbr::StandardMaterial;
@@ -21,7 +22,10 @@ use crate::presentation::BikanwardaPresentation;
 /// Authored preview maps, relative to `maybraid/assets`.
 pub const EPIPHANT_DEFAULT_TEXTURE_DIR: &str = "characters/epiphant/default";
 
-/// One painted material slot on the forthcoming matching Epiphant GLB.
+/// Converted [#1589](https://github.com/ramate-io/maybraid/pull/1589) OBJ (Y-up, metres).
+pub const PREVIEW_GLB: &str = "characters/epiphant/default/epiphant_default_preview.glb";
+
+/// One painted material slot on the converted #1589 preview GLB.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EpiphantTextureSlot {
 	Body,
@@ -74,6 +78,48 @@ impl EpiphantTextureSlot {
 
 	pub const fn is_eye(self) -> bool {
 		matches!(self, Self::EyeLeft | Self::EyeRight)
+	}
+
+	/// `o` name in the #1589 OBJ / glTF node and scene name.
+	pub const fn object_name(self) -> &'static str {
+		match self {
+			Self::Body => "body",
+			Self::Head => "head",
+			Self::EarLeft => "ear_left",
+			Self::EarRight => "ear_right",
+			Self::EyeLeft => "eye_left",
+			Self::EyeRight => "eye_right",
+			Self::Nose => "nose",
+			Self::Tail => "tail",
+		}
+	}
+
+	/// glTF scene index in [`PREVIEW_GLB`] (stable; not OBJ file order).
+	pub const fn gltf_scene_index(self) -> usize {
+		match self {
+			Self::Body => 0,
+			Self::Head => 1,
+			Self::EarLeft => 2,
+			Self::EarRight => 3,
+			Self::EyeLeft => 4,
+			Self::EyeRight => 5,
+			Self::Nose => 6,
+			Self::Tail => 7,
+		}
+	}
+
+	/// `SceneRef` path (`#SceneN`) for this painted component.
+	pub const fn preview_scene_path(self) -> &'static str {
+		match self {
+			Self::Body => "characters/epiphant/default/epiphant_default_preview.glb#Scene0",
+			Self::Head => "characters/epiphant/default/epiphant_default_preview.glb#Scene1",
+			Self::EarLeft => "characters/epiphant/default/epiphant_default_preview.glb#Scene2",
+			Self::EarRight => "characters/epiphant/default/epiphant_default_preview.glb#Scene3",
+			Self::EyeLeft => "characters/epiphant/default/epiphant_default_preview.glb#Scene4",
+			Self::EyeRight => "characters/epiphant/default/epiphant_default_preview.glb#Scene5",
+			Self::Nose => "characters/epiphant/default/epiphant_default_preview.glb#Scene6",
+			Self::Tail => "characters/epiphant/default/epiphant_default_preview.glb#Scene7",
+		}
 	}
 
 	pub const fn color_path(self) -> &'static str {
@@ -268,6 +314,9 @@ mod tests {
 			assert!(slot.metallic_roughness_path().ends_with("-MetallicRoughness.png"));
 			assert!(!names.contains(&slot.recipe_name()));
 			assert!(!parts.contains(&slot.part_slot()));
+			assert!(slot
+				.preview_scene_path()
+				.contains(&format!("#Scene{}", slot.gltf_scene_index())));
 			names.push(slot.recipe_name());
 			parts.push(slot.part_slot());
 		}
@@ -305,7 +354,78 @@ mod tests {
 				format!("{:?}", slot.part_slot()),
 				slot.recipe_name()
 			);
+			assert_eq!(
+				part.scene.path,
+				slot.preview_scene_path(),
+				"{} must load the #1589 export scene",
+				slot.object_name()
+			);
+			assert!(part.skin.is_none(), "{} export is unskinned", slot.object_name());
+			assert!(part.socket.is_none(), "{} export is pre-assembled", slot.object_name());
 		}
+	}
+
+	#[test]
+	fn preview_glb_matches_obj_slots_and_uvs() {
+		let glb = assets_root().join(PREVIEW_GLB);
+		assert!(glb.is_file(), "missing converted GLB {}", glb.display());
+		let gltf = glb_json(&glb);
+		let scenes = gltf["scenes"].as_array().expect("scenes");
+		let materials = gltf["materials"].as_array().expect("materials");
+		assert_eq!(scenes.len(), 8);
+		assert_eq!(materials.len(), 8);
+		for slot in EpiphantTextureSlot::ALL {
+			let index = slot.gltf_scene_index();
+			assert_eq!(scenes[index]["name"], slot.object_name());
+			assert_eq!(materials[index]["name"], slot.recipe_name());
+			assert_eq!(slot.preview_scene_path(), format!("{PREVIEW_GLB}#Scene{index}"));
+		}
+		let obj = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+			.join("../../../../../art/characters/exports/epiphant/epiphant_default_preview.obj");
+		let obj_faces = obj_face_counts(&obj);
+		let glb_tris = gltf_triangle_counts(&gltf);
+		for slot in EpiphantTextureSlot::ALL {
+			let faces = obj_faces.get(slot.object_name()).copied().unwrap_or(0);
+			let tris = glb_tris.get(slot.object_name()).copied().unwrap_or(0);
+			assert!(faces > 0, "{} OBJ has no faces", slot.object_name());
+			assert_eq!(tris, faces, "{} triangles OBJ={faces} GLB={tris}", slot.object_name());
+		}
+	}
+
+	fn glb_json(path: &Path) -> serde_json::Value {
+		let bytes = std::fs::read(path).expect("read GLB");
+		assert!(bytes.len() > 20, "GLB too small");
+		assert_eq!(&bytes[0..4], b"glTF");
+		let json_len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+		serde_json::from_slice(&bytes[20..20 + json_len]).expect("GLB JSON")
+	}
+
+	fn obj_face_counts(path: &Path) -> std::collections::BTreeMap<String, usize> {
+		let text = std::fs::read_to_string(path).expect("read OBJ");
+		let mut current = String::new();
+		let mut counts = std::collections::BTreeMap::new();
+		for line in text.lines() {
+			if let Some(name) = line.strip_prefix("o ") {
+				current = name.trim().to_string();
+			} else if line.starts_with("f ") {
+				*counts.entry(current.clone()).or_insert(0) += 1;
+			}
+		}
+		counts
+	}
+
+	fn gltf_triangle_counts(gltf: &serde_json::Value) -> std::collections::BTreeMap<String, usize> {
+		let meshes = gltf["meshes"].as_array().expect("meshes");
+		let accessors = gltf["accessors"].as_array().expect("accessors");
+		let mut counts = std::collections::BTreeMap::new();
+		for mesh in meshes {
+			let name = mesh["name"].as_str().unwrap().to_string();
+			let indices = mesh["primitives"][0]["indices"].as_u64().unwrap() as usize;
+			let uv = mesh["primitives"][0]["attributes"]["TEXCOORD_0"].as_u64().unwrap() as usize;
+			assert!(accessors[uv]["count"].as_u64().unwrap() > 0, "{name} missing TEXCOORD_0");
+			counts.insert(name, accessors[indices]["count"].as_u64().unwrap() as usize / 3);
+		}
+		counts
 	}
 
 	#[test]

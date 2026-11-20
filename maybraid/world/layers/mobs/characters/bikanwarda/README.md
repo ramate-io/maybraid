@@ -4,63 +4,57 @@ Boss-scale Epiphant assembly for Bikanwarda ([#1134](https://github.com/ramate-i
 
 No NPC/world health bars and no `combat-hud` dependency — gameplay hooks are spawn markers + physics hulls only.
 
-## Epiphant default maps
+## Painted default-preview visual
 
-Liam’s `epiphant_default_preview` Color / Roughness / Metallic PNGs live at
-`maybraid/assets/characters/epiphant/default/` as:
+Liam painted Color / Roughness / Metallic maps on the [#1589](https://github.com/ramate-io/maybraid/pull/1589) OBJ
+(`maybraid/art/characters/exports/epiphant/epiphant_default_preview.obj`): one `o` /
+`{part}_mat` per component, chart-unwrapped UVs. Bevy does not load OBJ. A
+format-conversion script writes a GLB that keeps those names and UVs:
 
-- `{slot}-Color.png` — sRGB albedo (`ImageLoaderSettings.is_srgb = true`)
+```bash
+python3 maybraid/art/characters/exports/epiphant/obj_to_glb.py
+```
+
+Output: `maybraid/assets/characters/epiphant/default/epiphant_default_preview.glb`
+(one glTF scene per part: Scene0 body … Scene7 tail). No new crate; no Blender
+re-authoring. V is flipped for glTF’s top-left TEXCOORD origin.
+
+Runtime maps (git LFS is not used for `maybraid/assets`):
+
+- `{slot}-Color.png` — sRGB albedo
 - `{slot}-MetallicRoughness.png` — linear packed map, **G = roughness, B = metallic**
 
-Slots: `body_mat`, `head_mat`, `ear_left_mat`, `ear_right_mat`, `eye_left_mat`,
-`eye_right_mat`, `nose_mat`, `tail_mat`. [`BikanwardaActor`] stamps those names on
-[`PartNode`] materials; [`BikanwardaCharacterPlugin`] loads [`StandardMaterial`] by
-slot name. Git LFS is not used for `maybraid/assets` (same as the existing GLBs).
+[`BikanwardaActor`] loads those scenes as unsocketed, unskinned [`PartNode`]s and
+stamps `{part}_mat`. [`BikanwardaCharacterPlugin`] binds [`StandardMaterial`] by
+slot name.
 
-The maps were painted for a specific UV layout. **The matching GLB is not in this
-repo.** Do not treat the current assembly as that mesh:
+### Animation / gait tradeoff
 
-| Part | Current asset | UVs | Material slots |
-|------|----------------|-----|----------------|
-| Body | `characters/bodies/quadruped/epiphant.glb` (`BézierCurve`, skinned) | none | none |
-| Head | `characters/heads/meerkat_head_pronograde.glb` (`MeerkatHead`) | `TEXCOORD_0` | none (`head_mat` missing) |
-| Ear L/R | `characters/ears/epiphant_ear_left.glb` (right = reflected left) | none | none |
-| Nose | `characters/noses/trunkish_nose.glb` | none | none |
-| Tail | `characters/tails/cat_tail.glb` | `TEXCOORD_0` | none (`tail_mat` missing) |
-| Eyes | `characters/eyes/humanoid_eye_left.glb` | `TEXCOORD_0` | none (`eye_*_mat` missing) |
+The #1589 export is a **static rest-pose** mesh (CPU-skinned once at export, then
+OBJ). It is not a skinned GLB. Binding it as the visible body means **the painted
+mesh does not deform** with Bray, sleep, or locomotion clips. That is not faked.
 
-Until a matching export lands, the maps bind by slot name so they apply
-automatically; they cannot read as painted on the current hulls.
+What still runs on the existing rig:
 
-### Matching GLB requirements
+- Quadruped + pronograde head **rigs** (clips, bone maps)
+- Motor collider / hurtboxes from [`BikanwardaSpec::uniform_scale()`] (6.7 m)
+- Chain anchors and Bray origin (`nose_socket` on the head rig)
 
-Do not author a second encounter-scale export. Keep ordinary Epiphant authored
-size; encounter still uses [`BikanwardaSpec::uniform_scale()`] to 6.7 m.
-
-- **Material slot names** exactly: `body_mat`, `head_mat`, `ear_left_mat`,
-  `ear_right_mat`, `eye_left_mat`, `eye_right_mat`, `nose_mat`, `tail_mat`.
-- **UVs:** every painted primitive needs `TEXCOORD_0` authored to those 2048×2048
-  maps. Do not unwrap a new layout.
-- **Part / mesh names** should match the slots (body, head, ears, eyes, nose, tail).
-  Right ear must be its own mesh with `ear_right_mat` UVs — not a UV-mirrored left
-  ear — so the painted right map lands.
-- **Sockets / anchors** (keep names): `head_socket`, `ear_socket.L` / `.R`,
-  `eye_socket.L` / `.R`, `nose_socket`, `tailbone`, `mouth_emit`. Chain anchors stay
-  on [`BikanwardaAnchors`] (motor-local, pre-root-scale).
-- **Origin / axes:** +Y up, +Z forward, origin at the quadruped motor root (same
-  as today’s `epiphant.glb` / quadruped rig). Body AABB today is about
-  `[-0.74, -1.09, -0.98]` … `[0.73, 0.52, 1.02]` before recipe normalization.
-- **Skin:** body skinned to the quadruped armature (`back_ridge` root). Head
-  skinned to the pronograde head rig.
+The textured mesh is a visual over that rig. Ordinary player Epiphants keep the
+skinned palette assembly.
 
 **Preview stills** (Lavapipe + `character-concepts-playground`):
 
 ```bash
-./maybraid/world/layers/mobs/characters/bikanwarda/previews/1134/capture.sh
+CROZON_PREVIEW_ENCOUNTER_SCALE=$(cargo run -q --example scale -p bikanwarda-character) \
+CROZON_PREVIEW_CAMERA_DISTANCE=0.42 \
+CROZON_PREVIEW_CAPTURE_PNG=/tmp/bikanwarda-close.png \
+  cargo run -p character-concepts-playground -- epiphant preview --animation still
 ```
 
 Close / mid cameras: `CROZON_PREVIEW_CAMERA_DISTANCE=0.42` or `1.0`. GPU stills:
-`CROZON_PREVIEW_CAPTURE_PNG=/tmp/bikanwarda.png` (lavapipe `scrot` stays black).
+`CROZON_PREVIEW_CAPTURE_PNG` (lavapipe `scrot` stays black). Encounter-scale
+Epiphant preview spawns [`BikanwardaActorRecipe`].
 
 **Tests:**
 

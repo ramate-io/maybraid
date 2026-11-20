@@ -6,9 +6,7 @@ use crate::recipe::BikanwardaActorRecipe;
 use crate::spec::BikanwardaSpec;
 use avian3d::prelude::RigidBody;
 use bevy::prelude::*;
-use characters::{
-	components::CharacterComponents, spawn_fixed_character_assembly, CharacterRecipe,
-};
+use characters::{spawn_fixed_character_assembly, CharacterRecipe};
 use lod_avian::PhysicsInteractionLayer;
 
 /// Domain marker on the boss assembly root.
