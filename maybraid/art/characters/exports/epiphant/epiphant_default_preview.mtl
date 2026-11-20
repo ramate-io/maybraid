@@ -1,0 +1,33 @@
+# Maybraid character mesh export
+newmtl body_mat
+Kd 1.000000 1.000000 1.000000
+d 1.000000
+map_Kd body_color.png
+newmtl ear_left_mat
+Kd 1.000000 1.000000 1.000000
+d 1.000000
+map_Kd ear_left_color.png
+newmtl ear_right_mat
+Kd 1.000000 1.000000 1.000000
+d 1.000000
+map_Kd ear_right_color.png
+newmtl eye_left_mat
+Kd 1.000000 1.000000 1.000000
+d 1.000000
+map_Kd eye_left_color.png
+newmtl eye_right_mat
+Kd 1.000000 1.000000 1.000000
+d 1.000000
+map_Kd eye_right_color.png
+newmtl head_mat
+Kd 1.000000 1.000000 1.000000
+d 1.000000
+map_Kd head_color.png
+newmtl nose_mat
+Kd 1.000000 1.000000 1.000000
+d 1.000000
+map_Kd nose_color.png
+newmtl tail_mat
+Kd 1.000000 1.000000 1.000000
+d 1.000000
+map_Kd tail_color.png
