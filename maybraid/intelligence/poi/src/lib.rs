@@ -24,8 +24,9 @@ mod visit;
 
 pub use discovery::{discover_pois, ingest_poi_observations, sync_poi_registry};
 pub use goal::{
-	begin_held_poi_goal, begin_poi_goal, complete_poi_goals, drive_poi_goals, refresh_poi_goals,
-	PoiGoal, PoiGoalCompleted, PoiGoalHold, PoiGoalState, PoiGoalStatus,
+	abandon_unreachable_poi_goals, begin_held_poi_goal, begin_poi_goal, complete_poi_goals,
+	drive_poi_goals, refresh_poi_goals, PoiGoal, PoiGoalCompleted, PoiGoalFailed, PoiGoalHold,
+	PoiGoalState, PoiGoalStatus,
 };
 pub use hash::{hashed_poi_id, mix as mix_seed};
 pub use kind::{PoiId, PoiKind};
@@ -42,7 +43,7 @@ pub use scheme::{
 };
 pub use source::PoiSource;
 pub use tile_request::{DistantTileRequest, PoiTilePoll, PoiTileQuery, PoiTileRequest};
-pub use visit::{choose_poi, PoiVisitState};
+pub use visit::{choose_poi, PoiVisitState, FAILED_POI_RETRY_SECS};
 
 #[cfg(test)]
 mod scheme_timing;

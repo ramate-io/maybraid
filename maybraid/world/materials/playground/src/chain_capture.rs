@@ -1,0 +1,744 @@
+//! Validation captures. Video uses deterministic 30 Hz simulation time.
+//!
+//! Stills apply a look, wait for `sync_preview` + a GPU frame, then shoot.
+//! They never change state in the same arm as the screenshot, and they wait
+//! after the last shot so Bevy can write the file before `AppExit`.
+
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
+use bevy::camera::primitives::Aabb;
+use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
+use bevy::prelude::*;
+use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+use bevy::time::TimeUpdateStrategy;
+use bikanwarda_encounter::chains::{ChainAnchor, ChainEndpoint, ChainLinkId, ChainMotion, ChainRoot, ChainTensionMode};
+use game_commands::ui::DebugHudRoot;
+use material_ref::MaterialRefRoot;
+use world_materials::chain::{
+	generate_skinned_chain, mythical_chain_ref_for, ChainHalo, ChainSkinningStrategy,
+	MythicalChainState, OwnedChainMaterial, SkinnedChainConfig,
+};
+
+use crate::chain_preview::{ChainPreview, LightingMode, PendingChainHit, PreviewStyle};
+
+#[derive(Component)]
+struct SkinnedChainCapture;
+
+#[derive(Component)]
+struct SkinnedChainCaptureCamera;
+
+pub const CAPTURE_CADENCE_HZ: f32 = 30.0;
+pub const CAPTURE_DT: f32 = 1.0 / CAPTURE_CADENCE_HZ;
+
+const WARMUP: Duration = Duration::from_millis(12_000);
+const SETTLE: Duration = Duration::from_millis(700);
+
+#[derive(Clone, Copy)]
+enum StillKind {
+	Damage {
+		amount: f32,
+		emit: bool,
+	},
+	Pair {
+		lighting: LightingMode,
+		style: PreviewStyle,
+		left: MythicalChainState,
+		right: MythicalChainState,
+	},
+	Released,
+	SkinnedChain {
+		bent: bool,
+		rigid: bool,
+	},
+	AnchoredTaut,
+	AnchoredCatenary,
+	AnchoredHit,
+}
+
+struct StillShot {
+	file: &'static str,
+	kind: StillKind,
+}
+
+const STILLS: &[StillShot] = &[
+	StillShot { file: "damage_00_day.png", kind: StillKind::Damage { amount: 0.0, emit: true } },
+	StillShot { file: "damage_25_day.png", kind: StillKind::Damage { amount: 0.25, emit: true } },
+	StillShot { file: "damage_50_day.png", kind: StillKind::Damage { amount: 0.50, emit: true } },
+	StillShot { file: "damage_75_day.png", kind: StillKind::Damage { amount: 0.75, emit: true } },
+	StillShot { file: "damage_100_day.png", kind: StillKind::Damage { amount: 1.0, emit: true } },
+	StillShot {
+		file: "damage_00_day_no_emit.png",
+		kind: StillKind::Damage { amount: 0.0, emit: false },
+	},
+	StillShot {
+		file: "damage_25_day_no_emit.png",
+		kind: StillKind::Damage { amount: 0.25, emit: false },
+	},
+	StillShot {
+		file: "damage_50_day_no_emit.png",
+		kind: StillKind::Damage { amount: 0.50, emit: false },
+	},
+	StillShot {
+		file: "damage_75_day_no_emit.png",
+		kind: StillKind::Damage { amount: 0.75, emit: false },
+	},
+	StillShot {
+		file: "damage_100_day_no_emit.png",
+		kind: StillKind::Damage { amount: 1.0, emit: false },
+	},
+	StillShot {
+		file: "pair_night.png",
+		kind: StillKind::Pair {
+			lighting: LightingMode::Night,
+			style: PreviewStyle::Native,
+			left: MythicalChainState::Intact,
+			right: MythicalChainState::Damaged,
+		},
+	},
+	StillShot {
+		file: "pair_day_sharp.png",
+		kind: StillKind::Pair {
+			lighting: LightingMode::Day,
+			style: PreviewStyle::Sharp,
+			left: MythicalChainState::Intact,
+			right: MythicalChainState::Damaged,
+		},
+	},
+	StillShot {
+		file: "pair_day_retro.png",
+		kind: StillKind::Pair {
+			lighting: LightingMode::Day,
+			style: PreviewStyle::Retro,
+			left: MythicalChainState::Intact,
+			right: MythicalChainState::Damaged,
+		},
+	},
+	StillShot {
+		file: "pair_day_antediluvian.png",
+		kind: StillKind::Pair {
+			lighting: LightingMode::Day,
+			style: PreviewStyle::Antediluvian,
+			left: MythicalChainState::Intact,
+			right: MythicalChainState::Damaged,
+		},
+	},
+	StillShot { file: "released_day.png", kind: StillKind::Released },
+	StillShot {
+		file: "skinned_rest_smooth.png",
+		kind: StillKind::SkinnedChain { bent: false, rigid: false },
+	},
+	StillShot {
+		file: "skinned_rest_rigid.png",
+		kind: StillKind::SkinnedChain { bent: false, rigid: true },
+	},
+	StillShot {
+		file: "skinned_bent_smooth.png",
+		kind: StillKind::SkinnedChain { bent: true, rigid: false },
+	},
+	StillShot {
+		file: "skinned_bent_rigid.png",
+		kind: StillKind::SkinnedChain { bent: true, rigid: true },
+	},
+	StillShot { file: "anchored_taut.png", kind: StillKind::AnchoredTaut },
+	StillShot { file: "anchored_catenary.png", kind: StillKind::AnchoredCatenary },
+	StillShot { file: "anchored_hit.png", kind: StillKind::AnchoredHit },
+];
+
+#[derive(Resource, Default)]
+pub struct CaptureSet {
+	pub dir: Option<PathBuf>,
+	/// 0 = warmup, then `2*i+1` apply, `2*i+2` shoot, last extra wait.
+	step: u32,
+	age: f32,
+	frozen: bool,
+	settle_from: Option<Instant>,
+}
+
+impl CaptureSet {
+	pub fn start(dir: PathBuf) -> Self {
+		Self { dir: Some(dir), step: 0, age: 0.0, frozen: false, settle_from: None }
+	}
+}
+
+fn apply_still(
+	shot: &StillShot,
+	preview: &mut ChainPreview,
+	lighting: &mut LightingMode,
+	commands: &mut Commands,
+) {
+	match shot.kind {
+		StillKind::Damage { amount, emit } => {
+			*lighting = LightingMode::Day;
+			preview.lighting = LightingMode::Day;
+			preview.style = PreviewStyle::Native;
+			preview.halo = emit;
+			preview.emission = emit;
+			preview.set_left_damage(amount);
+			preview.set_right_state(MythicalChainState::Intact);
+			preview.restamp_glow_and_seed();
+		}
+		StillKind::Pair { lighting: mode, style, left, right } => {
+			*lighting = mode;
+			preview.lighting = mode;
+			preview.style = style;
+			preview.halo = true;
+			preview.emission = true;
+			preview.set_left_state(left);
+			preview.set_right_state(right);
+			preview.restamp_glow_and_seed();
+		}
+		StillKind::Released => {
+			*lighting = LightingMode::Day;
+			preview.lighting = LightingMode::Day;
+			preview.style = PreviewStyle::Native;
+			preview.halo = true;
+			preview.emission = true;
+			preview.set_left_state(MythicalChainState::Released);
+			preview.set_right_state(MythicalChainState::Intact);
+			preview.restamp_glow_and_seed();
+		}
+		StillKind::SkinnedChain { bent, rigid } => {
+			*lighting = LightingMode::Day;
+			preview.lighting = LightingMode::Day;
+			preview.style = PreviewStyle::Native;
+			commands.queue(move |world: &mut World| {
+				spawn_skinned_chain_for_capture(world, bent, rigid);
+			});
+		}
+		StillKind::AnchoredTaut => {
+			*lighting = LightingMode::Day;
+			preview.lighting = LightingMode::Day;
+			preview.style = PreviewStyle::Native;
+			commands.queue(move |world: &mut World| {
+				spawn_anchored_chain_for_capture(world, false, false);
+			});
+		}
+		StillKind::AnchoredCatenary => {
+			*lighting = LightingMode::Day;
+			preview.lighting = LightingMode::Day;
+			preview.style = PreviewStyle::Native;
+			commands.queue(move |world: &mut World| {
+				spawn_anchored_chain_for_capture(world, true, false);
+			});
+		}
+		StillKind::AnchoredHit => {
+			*lighting = LightingMode::Day;
+			preview.lighting = LightingMode::Day;
+			preview.style = PreviewStyle::Native;
+			commands.queue(move |world: &mut World| {
+				spawn_anchored_chain_for_capture(world, true, true);
+			});
+		}
+	}
+}
+
+fn spawn_skinned_chain_for_capture(world: &mut World, bent: bool, rigid: bool) {
+	// Despawn any existing skinned chain captures and restore camera
+	let to_despawn: Vec<Entity> = world
+		.query_filtered::<Entity, With<SkinnedChainCapture>>()
+		.iter(world)
+		.collect();
+	for entity in to_despawn {
+		world.despawn(entity);
+	}
+	
+	// Hide the ChainPreviewRoot and all descendants (tube strands and ring stacks) so only the skinned chain is visible
+	use crate::chain_preview::ChainPreviewRoot;
+	let preview_roots: Vec<Entity> = world
+		.query_filtered::<Entity, With<ChainPreviewRoot>>()
+		.iter(world)
+		.collect();
+	for root in preview_roots {
+		if let Some(mut vis) = world.get_mut::<Visibility>(root) {
+			*vis = Visibility::Hidden;
+		}
+	}
+
+	let strategy = if rigid {
+		ChainSkinningStrategy::RigidPerLink
+	} else {
+		ChainSkinningStrategy::SmoothBlend
+	};
+
+	let config = SkinnedChainConfig {
+		link_count: 12,
+		length_m: 2.8,
+		skinning_strategy: strategy,
+		..Default::default()
+	};
+
+	let data = generate_skinned_chain(config.clone());
+	
+	// Calculate bounding box for the chain (will be larger when bent)
+	let max_bend = if bent { 1.2 } else { 0.2 };
+	let aabb = Aabb::from_min_max(
+		Vec3::new(-max_bend, -0.3, -max_bend),
+		Vec3::new(max_bend, config.length_m + 0.3, max_bend),
+	);
+	
+	let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(data.mesh);
+	let inverse_handle = world
+		.resource_mut::<Assets<SkinnedMeshInverseBindposes>>()
+		.add(SkinnedMeshInverseBindposes::from(data.inverse_bindposes));
+
+	// Position root so chain is centered and visible
+	let root_y = 0.3;
+	let root = world
+		.spawn((
+			Name::new("skinned-chain-capture-root"),
+			Transform::from_xyz(0.0, root_y, 0.0),
+			Visibility::default(),
+			SkinnedChainCapture,
+		))
+		.id();
+
+	let mut joint_entities = Vec::new();
+	for (i, rest_pos) in data.rest_joint_positions.iter().enumerate() {
+		let pos = if bent {
+			// Strong S-curve bend for visibility
+			let t = i as f32 / (data.rest_joint_positions.len() - 1) as f32;
+			let bend_x = 0.9 * (t * std::f32::consts::PI * 2.5).sin();
+			let bend_z = 0.4 * (t * std::f32::consts::PI * 1.5).cos() - 0.2;
+			Vec3::new(bend_x, rest_pos.y, bend_z)
+		} else {
+			*rest_pos
+		};
+
+		let joint = world
+			.spawn((
+				Name::new(format!("skinned-joint-{i}")),
+				Transform::from_translation(pos),
+				Visibility::default(),
+				SkinnedChainCapture,
+			))
+			.id();
+		world.entity_mut(root).add_child(joint);
+		joint_entities.push(joint);
+	}
+
+	let material_ref = mythical_chain_ref_for(MythicalChainState::Intact);
+	let mesh_entity = world
+		.spawn((
+			Name::new("skinned-chain-capture-mesh"),
+			Mesh3d(mesh_handle),
+			Transform::IDENTITY,
+			Visibility::default(),
+			bevy::mesh::skinning::SkinnedMesh {
+				inverse_bindposes: inverse_handle,
+				joints: joint_entities,
+			},
+			MaterialRefRoot(material_ref),
+			OwnedChainMaterial,
+			ChainHalo,
+			aabb,
+			SkinnedChainCapture,
+		))
+		.id();
+	world.entity_mut(root).add_child(mesh_entity);
+	
+	// Reposition camera to frame the skinned chain
+	let camera_pos = Vec3::new(0.0, root_y + config.length_m * 0.5, 5.5);
+	let look_at = Vec3::new(0.0, root_y + config.length_m * 0.5, 0.0);
+	
+	let cameras: Vec<Entity> = world
+		.query_filtered::<Entity, With<Camera3d>>()
+		.iter(world)
+		.collect();
+	
+	for camera_entity in cameras {
+		let mut entity_ref = world.entity_mut(camera_entity);
+		entity_ref.insert(SkinnedChainCaptureCamera);
+		if let Some(mut transform) = entity_ref.get_mut::<Transform>() {
+			*transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
+		}
+	}
+}
+
+fn spawn_anchored_chain_for_capture(world: &mut World, catenary: bool, hit: bool) {
+	// Despawn any existing skinned chain captures
+	let to_despawn: Vec<Entity> = world
+		.query_filtered::<Entity, With<SkinnedChainCapture>>()
+		.iter(world)
+		.collect();
+	for entity in to_despawn {
+		world.despawn(entity);
+	}
+
+	// Hide the ChainPreviewRoot (vertical playground tubes) so only the anchored chain is visible
+	use crate::chain_preview::ChainPreviewRoot;
+	let preview_roots: Vec<Entity> = world
+		.query_filtered::<Entity, With<ChainPreviewRoot>>()
+		.iter(world)
+		.collect();
+	for entity in preview_roots {
+		if let Some(mut visibility) = world.get_mut::<Visibility>(entity) {
+			*visibility = Visibility::Hidden;
+		}
+	}
+
+	let link_count = 12;
+	let length_m = 2.8;
+	
+	let config = SkinnedChainConfig {
+		link_count,
+		length_m,
+		skinning_strategy: ChainSkinningStrategy::SmoothBlend,
+		..Default::default()
+	};
+
+	let data = generate_skinned_chain(config.clone());
+	
+	let aabb = Aabb::from_min_max(
+		Vec3::new(-0.5, -0.3, -0.5),
+		Vec3::new(0.5, length_m + 0.3, 0.5),
+	);
+	
+	let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(data.mesh);
+	let inverse_handle = world
+		.resource_mut::<Assets<SkinnedMeshInverseBindposes>>()
+		.add(SkinnedMeshInverseBindposes::from(data.inverse_bindposes));
+
+	// Position anchors horizontally at same height, separated by chain length
+	// Catenary will sag down in the middle
+	let anchor_height = 2.5;
+	let anchor_separation = 3.0; // Horizontal distance between anchors
+	let left_anchor_pos = Vec3::new(-anchor_separation / 2.0, anchor_height, 0.0);
+	let right_anchor_pos = Vec3::new(anchor_separation / 2.0, anchor_height, 0.0);
+	
+	let mode = if catenary {
+		ChainTensionMode::Catenary { sag_ratio: 10 }
+	} else {
+		ChainTensionMode::Taut
+	};
+
+	// Compute joint positions directly based on tension mode
+	// (Motion system doesn't run reliably in capture spawn context)
+	let joint_positions = bikanwarda_encounter::chains::compute_joint_positions(
+		left_anchor_pos,
+		right_anchor_pos,
+		link_count,
+		mode,
+	);
+
+	// Create joints first (we'll need their entities for ChainRoot and later parenting)
+	let mut joint_entities = Vec::new();
+	for (i, position) in joint_positions.iter().enumerate() {
+		let joint = world
+			.spawn((
+				Name::new(format!("chain-joint-{i}")),
+				Transform::from_translation(*position),
+				GlobalTransform::default(),
+				Visibility::default(),
+				SkinnedChainCapture,
+			))
+			.id();
+		joint_entities.push(joint);
+	}
+
+	let root = world
+		.spawn((
+			Name::new("anchored-chain-capture-root"),
+			ChainRoot {
+				link_count,
+				rest_length_m: length_m,
+				joint_entities: joint_entities.clone(),
+			},
+			ChainMotion {
+				mode,
+				active: true,
+			},
+			Transform::from_xyz(0.0, 0.0, 0.0),
+			GlobalTransform::default(),
+			Visibility::default(),
+			SkinnedChainCapture,
+		))
+		.id();
+	
+	// Add ChainLinkId and parent joints to root
+	for (i, joint) in joint_entities.iter().enumerate() {
+		world.entity_mut(*joint).insert(ChainLinkId { link_id: i as u8, chain_root: root });
+		world.entity_mut(root).add_child(*joint);
+	}
+	
+	// Spawn anchors - left and right at same height
+	let _left_anchor = world.spawn((
+		Name::new("left-anchor"),
+		ChainAnchor { endpoint: ChainEndpoint::Start, chain_root: root },
+		Transform::from_translation(left_anchor_pos),
+		GlobalTransform::default(),
+		Visibility::default(),
+		SkinnedChainCapture,
+	)).id();
+	
+	let _right_anchor = world.spawn((
+		Name::new("right-anchor"),
+		ChainAnchor { endpoint: ChainEndpoint::End, chain_root: root },
+		Transform::from_translation(right_anchor_pos),
+		GlobalTransform::default(),
+		Visibility::default(),
+		SkinnedChainCapture,
+	)).id();
+
+	// Use ChainMaterial for proper rendering (shader fixed in #1603)
+	let material_ref = mythical_chain_ref_for(MythicalChainState::Intact);
+
+	let mesh_entity = world
+		.spawn((
+			Name::new("anchored-chain-capture-mesh"),
+			Mesh3d(mesh_handle.clone()),
+			Transform::IDENTITY,
+			GlobalTransform::default(),
+			Visibility::default(),
+			bevy::mesh::skinning::SkinnedMesh {
+				inverse_bindposes: inverse_handle,
+				joints: joint_entities.clone(),
+			},
+			MaterialRefRoot(material_ref),
+			OwnedChainMaterial,
+			ChainHalo,
+			aabb,
+			SkinnedChainCapture,
+		))
+		.id();
+	world.entity_mut(root).add_child(mesh_entity);
+	
+	// Note: We compute joint positions directly above since the motion system doesn't run during capture.
+	// The motion_system_runs_with_app_update test verifies the system works correctly in real gameplay.
+	
+	// If hit variant, spawn a visible projectile sphere at the sagging midpoint
+	if hit {
+		// Create a small sphere mesh for the projectile
+		let projectile_mesh = world.resource_mut::<Assets<Mesh>>().add(Sphere::new(0.15));
+		let projectile_material = world.resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
+			base_color: Color::srgb(1.0, 0.3, 0.1), // Bright orange/red
+			emissive: Color::srgb(0.8, 0.2, 0.05).into(),
+			..Default::default()
+		});
+		
+		// Position at the center of the chain (midpoint should be sagging)
+		let _projectile = world.spawn((
+			Name::new("test-projectile"),
+			Mesh3d(projectile_mesh),
+			MeshMaterial3d(projectile_material),
+			Transform::from_xyz(0.0, anchor_height - 0.3, 0.0), // Positioned below anchor height to show at sag
+			GlobalTransform::default(),
+			Visibility::default(),
+			SkinnedChainCapture,
+		)).id();
+	}
+	
+	// Frame camera to show entire horizontal chain and both anchors
+	let camera_pos = Vec3::new(0.0, anchor_height, 6.0);
+	let look_at = Vec3::new(0.0, anchor_height - 0.3, 0.0); // Look slightly below anchors to center on sag
+	
+	let cameras: Vec<Entity> = world
+		.query_filtered::<Entity, With<Camera3d>>()
+		.iter(world)
+		.collect();
+	
+	for camera_entity in cameras {
+		let mut entity_ref = world.entity_mut(camera_entity);
+		entity_ref.insert(SkinnedChainCaptureCamera);
+		if let Some(mut transform) = entity_ref.get_mut::<Transform>() {
+			*transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
+		}
+	}
+}
+
+pub fn tick_capture(
+	time: Res<Time>,
+	mut capture: ResMut<CaptureSet>,
+	mut preview: ResMut<ChainPreview>,
+	mut lighting: ResMut<LightingMode>,
+	mut commands: Commands,
+	mut exits: MessageWriter<AppExit>,
+) {
+	let Some(dir) = capture.dir.clone() else {
+		return;
+	};
+
+	if capture.step == 0 {
+		capture.age += time.delta_secs();
+		if capture.age < 0.05 {
+			info!("chain stills warmup started");
+		}
+		if capture.age < WARMUP.as_secs_f32() {
+			return;
+		}
+		let _ = std::fs::create_dir_all(&dir);
+		if !capture.frozen {
+			commands.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO));
+			capture.frozen = true;
+		}
+		apply_still(&STILLS[0], &mut preview, &mut lighting, &mut commands);
+		capture.settle_from = Some(Instant::now());
+		capture.step = 1;
+		info!("chain stills applying {}", STILLS[0].file);
+		return;
+	}
+
+	// Virtual time is frozen after warmup; settle uses wall time.
+	if let Some(from) = capture.settle_from {
+		if from.elapsed() < SETTLE {
+			return;
+		}
+		capture.settle_from = None;
+	}
+
+	let shot_i = ((capture.step - 1) / 2) as usize;
+	let apply_phase = capture.step % 2 == 1;
+
+	if shot_i >= STILLS.len() {
+		exits.write(AppExit::Success);
+		capture.dir = None;
+		return;
+	}
+
+	if apply_phase {
+		shoot(&mut commands, dir.join(STILLS[shot_i].file));
+		capture.settle_from = Some(Instant::now());
+		capture.step += 1;
+		return;
+	}
+
+	let next = shot_i + 1;
+	if next >= STILLS.len() {
+		capture.settle_from = Some(Instant::now());
+		capture.step += 1;
+		return;
+	}
+	apply_still(&STILLS[next], &mut preview, &mut lighting, &mut commands);
+	capture.settle_from = Some(Instant::now());
+	capture.step += 1;
+}
+
+/// Gameplay-distance traveling energy, hits, and style stills. Frames are
+/// written at [`CAPTURE_CADENCE_HZ`] with matching simulation `dt`.
+#[derive(Resource, Default)]
+pub struct VideoCapture {
+	pub dir: Option<PathBuf>,
+	age: f32,
+	warmed: bool,
+	manual: bool,
+	frame: i32,
+	hit_step: u32,
+	last_hit_sim: f32,
+	done: bool,
+}
+
+impl VideoCapture {
+	pub fn start(dir: PathBuf) -> Self {
+		Self { dir: Some(dir), ..default() }
+	}
+}
+
+pub fn hide_hud_during_evidence(
+	video: Res<VideoCapture>,
+	capture: Res<CaptureSet>,
+	mut hud: Query<&mut Visibility, With<DebugHudRoot>>,
+) {
+	if video.dir.is_none() && capture.dir.is_none() {
+		return;
+	}
+	for mut vis in &mut hud {
+		*vis = Visibility::Hidden;
+	}
+}
+
+pub fn tick_video(
+	time: Res<Time>,
+	mut video: ResMut<VideoCapture>,
+	mut preview: ResMut<ChainPreview>,
+	mut lighting: ResMut<LightingMode>,
+	mut pending: ResMut<PendingChainHit>,
+	mut commands: Commands,
+	mut exits: MessageWriter<AppExit>,
+) {
+	let Some(dir) = video.dir.clone() else {
+		return;
+	};
+	if !video.warmed {
+		if video.age == 0.0 {
+			let _ = std::fs::create_dir_all(dir.join("frames"));
+			*lighting = LightingMode::Day;
+			preview.lighting = LightingMode::Day;
+			preview.style = PreviewStyle::Native;
+			preview.halo = true;
+			preview.emission = true;
+			preview.deform = true;
+			preview.set_left_state(MythicalChainState::Intact);
+			preview.set_right_state(MythicalChainState::Damaged);
+		}
+		video.age += time.delta_secs();
+		if video.age < WARMUP.as_secs_f32() {
+			return;
+		}
+		video.warmed = true;
+		video.age = 0.0;
+		commands.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+			CAPTURE_DT,
+		)));
+		video.manual = true;
+		info!(
+			"chain video capture cadence {} Hz dt={CAPTURE_DT:.4}s (deterministic virtual time)",
+			CAPTURE_CADENCE_HZ
+		);
+		return;
+	}
+
+	video.age += CAPTURE_DT;
+	let sim = video.age;
+
+	// 0..10.2 s is the no-hit flow reel. Hits start after that so the
+	// 30 Hz mp4 is a fixed-damage transit, not a flash sequence.
+	if video.hit_step < 3 {
+		let due = 10.35 + video.hit_step as f32 * 0.85;
+		if sim >= due && sim - video.last_hit_sim > 0.80 {
+			*pending = PendingChainHit { link: Some(6), amount: 0.22 };
+			video.last_hit_sim = sim;
+			video.hit_step += 1;
+		}
+	} else if video.hit_step == 3 && sim >= 13.0 {
+		*pending = PendingChainHit { link: Some(3), amount: 0.35 };
+		video.hit_step = 4;
+	} else if video.hit_step == 4 && sim >= 13.9 {
+		*pending = PendingChainHit { link: Some(10), amount: 0.35 };
+		video.hit_step = 5;
+	}
+
+	if (10.15..10.25).contains(&sim) {
+		shoot(&mut commands, dir.join("flow_transit.png"));
+	}
+	if (12.05..12.15).contains(&sim) {
+		shoot(&mut commands, dir.join("hit_link6.png"));
+	}
+	if (13.55..13.65).contains(&sim) {
+		preview.style = PreviewStyle::Retro;
+	}
+	if (13.95..14.05).contains(&sim) {
+		shoot(&mut commands, dir.join("flow_retro.png"));
+	}
+	if (14.35..14.45).contains(&sim) {
+		preview.style = PreviewStyle::Antediluvian;
+	}
+	if (14.75..14.85).contains(&sim) {
+		shoot(&mut commands, dir.join("flow_antediluvian.png"));
+	}
+
+	if (0.0..10.2).contains(&sim) && !video.done {
+		shoot(&mut commands, dir.join("frames").join(format!("f{:04}.png", video.frame)));
+		video.frame += 1;
+	}
+
+	if sim > 16.0 && !video.done {
+		video.done = true;
+		exits.write(AppExit::Success);
+		video.dir = None;
+	}
+}
+
+fn shoot(commands: &mut Commands, path: PathBuf) {
+	info!("capturing {}", path.display());
+	commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
+}

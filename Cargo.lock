@@ -2360,6 +2360,77 @@ dependencies = [
 ]
 
 [[package]]
+name = "bikanwarda-encounter"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "attacks",
+ "avian3d",
+ "bevy",
+ "bikanwarda-attacks",
+ "bikanwarda-character",
+ "bikanwarda-lubikans",
+ "characters",
+ "combat-targeting",
+ "damage",
+ "encounters",
+ "firearm-intelligence",
+ "firearms",
+ "lod",
+ "lod-avian",
+ "lubikans",
+ "maybraid-audio",
+ "maybraid-spatial-rumble",
+ "meandering-intelligence",
+ "movement-intelligence",
+ "movement-intelligence-avian",
+ "movement-realization",
+ "npc-intelligence",
+ "player",
+ "poi-intelligence",
+ "projectiles",
+ "spotting-intelligence",
+ "spotting-intelligence-avian",
+ "tether-intelligence",
+ "threat-intelligence",
+ "threat-management-intelligence",
+ "world-materials",
+ "world-player",
+]
+
+[[package]]
+name = "bikanwarda-lubikan"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "attacks",
+ "avian3d",
+ "bevy",
+ "bikanwarda-attacks",
+ "bikanwarda-lubikans",
+ "combat-targeting",
+ "damage",
+ "lod-avian",
+ "lubikans",
+ "threat-intelligence",
+]
+
+[[package]]
+name = "bikanwarda-lubikans"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chico",
+ "damage",
+ "lod",
+ "lubikans",
+ "occupancy-rewards",
+ "player",
+ "threat-intelligence",
+]
+
+[[package]]
 name = "bincode"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3322,6 +3393,7 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
+ "spotting-intelligence",
 ]
 
 [[package]]
@@ -4416,6 +4488,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fba3fe847045ecff794b9c138293a80db914678c453ad63fbf0c6a9eb6e00b22"
 dependencies = [
  "encoding_rs",
+]
+
+[[package]]
+name = "encounters"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "attacks",
+ "bevy",
+ "damage",
 ]
 
 [[package]]
@@ -7578,12 +7660,17 @@ name = "maybraid-world"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "attacks",
  "avian3d",
  "barking",
  "bevy",
+ "bikanwarda-attacks",
+ "bikanwarda-character",
+ "bikanwarda-encounter",
  "building-physics",
  "character-inventory-user",
  "character-items",
+ "character-motion",
  "character-persist",
  "character-ragdoll",
  "characters",
@@ -7593,6 +7680,7 @@ dependencies = [
  "combat-targeting",
  "damage",
  "durham",
+ "encounters",
  "evasion-intelligence",
  "firearm-intelligence",
  "firearm-user",
@@ -7651,6 +7739,7 @@ dependencies = [
  "player",
  "player-camera",
  "poi-intelligence",
+ "projectiles",
  "render-item",
  "richmond",
  "routing-intelligence",
@@ -7697,6 +7786,7 @@ version = "0.1.5"
 dependencies = [
  "anyhow",
  "bevy",
+ "movement-intelligence",
  "poi-intelligence",
 ]
 
@@ -9623,6 +9713,7 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-controllers-core",
  "maybraid-virtual-pad-controller",
+ "projectiles",
 ]
 
 [[package]]
@@ -14537,6 +14628,7 @@ checksum = "99cdc77ac580700f64d314e2c30d2e8ec1c93ce981f66a62a894a671d1036af3"
 name = "world-materials"
 version = "0.1.5"
 dependencies = [
+ "anyhow",
  "bevy",
  "building-shaders",
  "character-shaders",
@@ -14545,6 +14637,7 @@ dependencies = [
  "firearms",
  "furniture-shaders",
  "material-ref",
+ "procedural-common",
  "vegetation-bumpout",
  "vegetation-shaders",
 ]
@@ -14553,12 +14646,19 @@ dependencies = [
 name = "world-materials-playground"
 version = "0.1.5"
 dependencies = [
+ "avian3d",
  "bevy",
+ "bikanwarda-encounter",
  "building-shaders",
  "clap",
+ "damage",
  "firearms",
  "game-commands",
+ "lod-avian",
  "material-ref",
+ "maybraid-world",
+ "player-camera",
+ "projectiles",
  "world-materials",
 ]
 

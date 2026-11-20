@@ -343,6 +343,7 @@ pub fn realize_layer(
 			));
 		}
 		EffectPart::Mesh(part) => part.spawn(commands, parent, transform, spawn),
+		EffectPart::Soundwave(part) => part.spawn(commands, parent, transform, spawn),
 	}
 }
 

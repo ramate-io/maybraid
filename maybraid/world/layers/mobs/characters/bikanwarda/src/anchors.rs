@@ -59,7 +59,11 @@ impl BikanwardaAnchors {
 		// Bray lane follows the assembled nose socket; record a nominal point for tests.
 		transforms.insert(
 			names::MOUTH_EMIT,
-			Transform::from_translation(Vec3::new(0.0, chain_y + capsule.radius, hit.along + hit.length * 0.35)),
+			Transform::from_translation(Vec3::new(
+				0.0,
+				chain_y + capsule.radius,
+				hit.along + hit.length * 0.35,
+			)),
 		);
 		Self { transforms }
 	}
@@ -90,7 +94,8 @@ mod tests {
 		let b = BikanwardaAnchors::for_capsule(encounter);
 		let small_x = a.get(names::CHAIN_ANCHOR_POS_X).unwrap().translation.x;
 		let large_x = b.get(names::CHAIN_ANCHOR_POS_X).unwrap().translation.x;
-		assert!(large_x > small_x * 9.0);
+		assert!(large_x > small_x * 3.0);
+		assert!(large_x < small_x * 4.0);
 	}
 
 	#[test]

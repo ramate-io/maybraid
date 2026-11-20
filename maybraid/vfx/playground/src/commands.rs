@@ -138,7 +138,7 @@ impl PlaygroundCommand {
 			Self::Show { effect, scale, intensity, distance, seed, playback } => {
 				let Some(name) = canonicalize_effect_name(&effect) else {
 					*console = format!(
-						"unknown effect `{effect}` — try fiery-explosion, flash, fireball, smoke, sparks, dust"
+						"unknown effect `{effect}` — try fiery-explosion, flash, fireball, smoke, sparks, dust, soundwave"
 					);
 					return;
 				};

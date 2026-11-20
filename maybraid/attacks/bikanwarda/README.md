@@ -19,10 +19,13 @@ attacks runtime          this crate
    damage::Hit            VFX / animation / rumble subscribers
 ```
 
-Summoned Ward / Enraged forms ([#1106](https://github.com/ramate-io/maybraid/issues/1106))
-invoke the same `AttackId`s. Victim policy is `BeginAttack::allies` plus the
-authored `FriendlyFire::ExcludeOwnerAndAllies`. Copy a definition only if a
-summon needs a different `FriendlyFire`.
+Summoned Ward / Enraged forms ([#1106](https://github.com/ramate-io/maybraid/issues/1106),
+[#1137](https://github.com/ramate-io/maybraid/issues/1137)) invoke the same
+`AttackId`s. Victim policy is `BeginAttack::allies` plus the authored
+`FriendlyFire::ExcludeOwnerAndAllies`. Copy a definition only if a summon
+needs a different `FriendlyFire`. Form selection / ally lists live in
+[`bikanwarda-lubikan`](../../lubikans/bikanwarda/README.md); this crate stays
+Self-free.
 
 ## Agreed vs placeholder
 

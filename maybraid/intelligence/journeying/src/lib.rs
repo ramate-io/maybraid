@@ -7,8 +7,8 @@ use lod::hcsg::{HcsgDemand, HcsgStorage};
 use meandering_intelligence::MeanderingIntelligenceUser;
 use poi_intelligence::{
 	begin_poi_goal, choose_poi, DistantTilePoiLookup, DistantTileRequest, KnownPoi, PoiEntry,
-	PoiGoal, PoiGoalCompleted, PoiGoalState, PoiIntelligenceUser, PoiInterests, PoiKnowledge,
-	PoiSource, PoiSystems, PoiTilePoll, PoiTileQuery, PoiVisitPolicy, PoiVisitState,
+	PoiGoal, PoiGoalCompleted, PoiGoalFailed, PoiGoalState, PoiIntelligenceUser, PoiInterests,
+	PoiKnowledge, PoiSource, PoiSystems, PoiTilePoll, PoiTileQuery, PoiVisitPolicy, PoiVisitState,
 };
 
 const DEFAULT_TILE_SIZE: f32 = 256.0;
@@ -316,7 +316,7 @@ impl Plugin for JourneyingIntelligencePlugin {
 	fn build(&self, app: &mut App) {
 		app.add_systems(
 			Update,
-			(record_journeying_completions, select_journeying_goals)
+			(record_journeying_completions, record_journeying_failures, select_journeying_goals)
 				.chain()
 				.in_set(PoiSystems::Select)
 				.after(lod::hcsg::HcsgSessionRestarted),
@@ -336,6 +336,22 @@ pub fn record_journeying_completions(
 	for event in completed.read() {
 		if let Ok(mut visits) = users.get_mut(event.user) {
 			visits.complete(event.target, now);
+		}
+	}
+}
+
+pub fn record_journeying_failures(
+	time: Res<Time>,
+	mut failed: MessageReader<PoiGoalFailed>,
+	mut users: Query<
+		&mut PoiVisitState,
+		(With<JourneyingIntelligenceUser>, Without<MeanderingIntelligenceUser>),
+	>,
+) {
+	let now = time.elapsed_secs();
+	for event in failed.read() {
+		if let Ok(mut visits) = users.get_mut(event.user) {
+			visits.note_failure(event.target, now);
 		}
 	}
 }

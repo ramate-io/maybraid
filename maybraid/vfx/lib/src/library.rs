@@ -7,10 +7,12 @@ use bevy_hanabi::EffectAsset;
 use crate::composition::{EffectDefinition, EffectRecipe};
 use crate::effects::dust::Dust;
 use crate::effects::fiery_explosion::FieryExplosion;
-use crate::layers::{fireball, flash, smoke, sparks};
-use crate::names::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
+use crate::effects::soundwave::Soundwave;
+use crate::layers::{fireball, flash, smoke, soundwave, sparks};
+use crate::names::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SOUNDWAVE, SPARKS};
 use crate::parts::lobe::rounded_lobe_mesh;
 use crate::parts::particle::assets::{fire_flipbook, smoke_flipbook, spark_taper, VfxFlipbooks};
+use crate::parts::soundwave::soundwave_torus_mesh;
 
 /// Shared definitions. Clone a handle out; never mutate the compiled assets.
 #[derive(Resource, Clone, Debug)]
@@ -21,6 +23,7 @@ pub struct VfxLibrary {
 	pub fireball: EffectDefinition,
 	pub smoke: EffectDefinition,
 	pub sparks: EffectDefinition,
+	pub soundwave: Soundwave,
 	pub fiery_explosion: FieryExplosion,
 }
 
@@ -32,6 +35,7 @@ impl VfxLibrary {
 			FIREBALL => self.fireball.clone(),
 			SMOKE => self.smoke.clone(),
 			SPARKS => self.sparks.clone(),
+			SOUNDWAVE => self.soundwave.effect_definition(),
 			FIERY_EXPLOSION => self.fiery_explosion.effect_definition(),
 			_ => return None,
 		})
@@ -46,6 +50,7 @@ pub fn canonicalize_effect_name(name: &str) -> Option<&'static str> {
 		"fireball" | "fire" => Some(FIREBALL),
 		"smoke" => Some(SMOKE),
 		"sparks" | "spark" => Some(SPARKS),
+		"soundwave" | "sonic-wave" | "sonicwave" => Some(SOUNDWAVE),
 		"fiery-explosion" | "explosion" => Some(FIERY_EXPLOSION),
 		_ => None,
 	}
@@ -70,12 +75,17 @@ pub fn setup_vfx_library(
 	let smoke_mesh = smoke::compile_mesh(lobe_mesh);
 	let smoke_wisps = smoke::compile_wisps(&mut effects, &flipbooks.smoke);
 	let sparks_part = sparks::compile(&mut effects, flipbooks.spark.clone());
+	let soundwave_mesh = soundwave::compile_mesh(meshes.add(soundwave_torus_mesh()));
+	let soundwave_wisps = soundwave::compile_wisps(&mut effects, flipbooks.spark.clone());
+	let soundwave_streaks = soundwave::compile_streaks(&mut effects, flipbooks.spark.clone());
 	let library = VfxLibrary {
 		dust: Dust::rolling_wave(&server, &mut meshes),
 		flash: flash::definition(flash_mesh.clone()),
 		fireball: fireball::definition(fireball_mesh.clone(), fireball_wisps.clone()),
 		smoke: smoke::definition(smoke_mesh.clone(), smoke_wisps.clone()),
 		sparks: sparks::definition(sparks_part.clone()),
+		soundwave: Soundwave::new(soundwave_mesh)
+			.with_trail(soundwave_wisps.clone(), soundwave_streaks.clone()),
 		fiery_explosion: FieryExplosion::new(
 			flash_mesh,
 			fireball_mesh,
@@ -86,7 +96,8 @@ pub fn setup_vfx_library(
 		),
 		flipbooks,
 	};
-	for part in [&fireball_wisps, &smoke_wisps, &sparks_part] {
+	for part in [&fireball_wisps, &smoke_wisps, &sparks_part, &soundwave_wisps, &soundwave_streaks]
+	{
 		let mut warmup = commands.spawn((
 			Name::new(format!("vfx-warmup-{}", part.name)),
 			ParticleEffect::new(part.effect.clone()),
@@ -109,6 +120,7 @@ mod tests {
 		assert_eq!(canonicalize_effect_name("fiery_explosion"), Some(FIERY_EXPLOSION));
 		assert_eq!(canonicalize_effect_name("fiery-explosion"), Some(FIERY_EXPLOSION));
 		assert_eq!(canonicalize_effect_name("Fire"), Some(FIREBALL));
+		assert_eq!(canonicalize_effect_name("sonic-wave"), Some(SOUNDWAVE));
 		assert_eq!(canonicalize_effect_name("nope"), None);
 	}
 }

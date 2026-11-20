@@ -26,10 +26,22 @@ pub struct WorldDebugPlugin;
 impl Plugin for WorldDebugPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<DebugPeacefulMode>();
+		app.init_resource::<crate::capture::CaptureSession>();
+		app.init_resource::<crate::script_queue::ScriptQueue>();
+
+		// Initialize resources needed by load_startup_script, even when GameCommandPlugin is not added
+		app.init_resource::<crate::PendingStartupCommand<crate::commands::PlaygroundCommand>>();
+		app.init_resource::<game_commands::command::CommandConsoleOutput>();
+
+		app.add_systems(Startup, crate::script_queue::load_startup_script);
+
+		#[cfg(feature = "chain-review")]
+		crate::chain_review::configure(app);
 
 		app.add_systems(
 			Update,
 			(
+				crate::script_queue::process_script_queue,
 				log_player_lifecycle.before(apply_debug_take_damage),
 				apply_debug_grant_points,
 				apply_debug_take_damage,
@@ -38,6 +50,8 @@ impl Plugin for WorldDebugPlugin {
 				apply_debug_peaceful,
 				apply_debug_camera,
 				apply_debug_teleport,
+				crate::capture::apply_capture_requests.after(apply_debug_teleport),
+				crate::capture::tick_capture,
 				apply_homeostatic_status,
 			),
 		);
@@ -216,45 +230,38 @@ fn apply_homeostatic_status(
 		let mut output = String::new();
 
 		if let (Some(config), Some(player_cell)) = (config.as_ref(), player_cell.as_ref()) {
-            if let Ok(player_transform) = players.single() {
+			if let Ok(player_transform) = players.single() {
 				let current_cell = HomeostaticCellIndex::containing(
 					player_transform.translation,
 					config.cell_size,
 				);
-				
-				output.push_str(&format!(
-					"Current cell: ({}, {})\n",
-					current_cell.0,
-					current_cell.1
-				));
+
+				output
+					.push_str(&format!("Current cell: ({}, {})\n", current_cell.0, current_cell.1));
 				output.push_str(&format!("Generation: {}\n", player_cell.generation));
-				
+
 				let neighborhood = current_cell.neighborhood_3x3();
 				let flagged: Vec<_> = neighborhood
 					.iter()
 					.filter(|cell| cell.should_host_mob(config.cell_fraction))
 					.collect();
-				
-				output.push_str(&format!(
-					"Flagged neighbors: {} of 9\n",
-					flagged.len()
-				));
-				
+
+				output.push_str(&format!("Flagged neighbors: {} of 9\n", flagged.len()));
+
 				for cell in &flagged {
 					output.push_str(&format!("  ({}, {})\n", cell.0, cell.1));
 				}
-				
-				output.push_str(&format!("\nActive homeostatic mobs: {}\n", active_mobs.iter().count()));
-				
+
+				output.push_str(&format!(
+					"\nActive homeostatic mobs: {}\n",
+					active_mobs.iter().count()
+				));
+
 				for (mob, mob_transform) in &active_mobs {
 					let pos = mob_transform.translation();
 					output.push_str(&format!(
 						"  Cell ({}, {}) at ({:.1}, {:.1}, {:.1})\n",
-						mob.home_cell.0,
-						mob.home_cell.1,
-						pos.x,
-						pos.y,
-						pos.z
+						mob.home_cell.0, mob.home_cell.1, pos.x, pos.y, pos.z
 					));
 				}
 			} else {
@@ -265,11 +272,11 @@ fn apply_homeostatic_status(
 		}
 
 		log::info!("Homeostatic status:\n{}", output);
-		
+
 		if let Some(console) = console.as_mut() {
 			console.0 = output;
 		}
-		
+
 		commands.entity(entity).despawn();
 	}
 }

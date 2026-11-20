@@ -4,8 +4,9 @@ use movement_intelligence::MovementIntelligenceSystems;
 use routing_intelligence::RoutingSystems;
 
 use crate::{
-	complete_poi_goals, discover_pois, drive_poi_goals, ingest_poi_observations, refresh_poi_goals,
-	sync_poi_registry, DistantTilePoiLookup, PoiGoalCompleted, PoiObservation, PoiRegistry,
+	abandon_unreachable_poi_goals, complete_poi_goals, discover_pois, drive_poi_goals,
+	ingest_poi_observations, refresh_poi_goals, sync_poi_registry, DistantTilePoiLookup,
+	PoiGoalCompleted, PoiGoalFailed, PoiObservation, PoiRegistry,
 };
 
 /// How many due learners may run a local / global scan on one Discover tick.
@@ -44,6 +45,7 @@ impl Plugin for PoiIntelligencePlugin {
 			.init_resource::<PoiDiscoverLimits>()
 			.add_message::<PoiObservation>()
 			.add_message::<PoiGoalCompleted>()
+			.add_message::<PoiGoalFailed>()
 			.configure_sets(
 				Update,
 				(
@@ -67,7 +69,12 @@ impl Plugin for PoiIntelligencePlugin {
 			.add_systems(Update, ingest_poi_observations.in_set(PoiSystems::Ingest))
 			.add_systems(Update, discover_pois.in_set(PoiSystems::Discover))
 			.add_systems(Update, refresh_poi_goals.in_set(PoiSystems::RefreshGoal))
-			.add_systems(Update, complete_poi_goals.in_set(PoiSystems::Complete))
+			.add_systems(
+				Update,
+				(complete_poi_goals, abandon_unreachable_poi_goals)
+					.chain()
+					.in_set(PoiSystems::Complete),
+			)
 			.add_systems(Update, drive_poi_goals.in_set(PoiSystems::Drive));
 	}
 }

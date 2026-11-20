@@ -1,15 +1,19 @@
+use bevy::ecs::message::Messages;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 
 use crate::{
-	choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi, KnownPoi, LocalPoi, NearbyFallback,
-	NearbyQuery, Poi, PoiDiscoverLimits, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId,
-	PoiIntelligencePlugin, PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge,
-	PoiLearningPolicy, PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiSupport,
-	PoiVisitPolicy, PoiVisitState, AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
+	abandon_unreachable_poi_goals, choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi,
+	KnownPoi, LocalPoi, NearbyFallback, NearbyQuery, Poi, PoiDiscoverLimits, PoiGoal,
+	PoiGoalCompleted, PoiGoalFailed, PoiGoalState, PoiGoalStatus, PoiId, PoiIntelligencePlugin,
+	PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
+	PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiSupport, PoiVisitPolicy, PoiVisitState,
+	AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
 };
 use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};
-use movement_intelligence::MovementIntelligence;
+use movement_intelligence::{
+	MovementIntelligence, MovementLocation, MovementObjective, FAILED_PLAN_HANDOFF_ATTEMPTS,
+};
 use routing_intelligence::{RoutingIntelligenceUser, RoutingSettings};
 
 const CAMP: PoiKind = PoiKind::new("test/camp");
@@ -251,6 +255,45 @@ fn weighted_policy_prefers_novelty_then_keeps_circulating() -> anyhow::Result<()
 }
 
 #[test]
+fn failed_pin_cools_without_counting_as_a_visit() -> anyhow::Result<()> {
+	let poi = |id, x| KnownPoi {
+		id: PoiId(id),
+		entity: None,
+		kind: CAMP,
+		position: Vec3::X * x,
+		arrival_radius: 1.0,
+		salience: 1.0,
+		confidence: 1.0,
+		sources: PoiSource::LOCAL_SCAN,
+		first_observed_at: 0.0,
+		last_observed_at: 0.0,
+	};
+	let blocked = poi(4, 0.0);
+	let other = poi(7, 8.0);
+	let policy = PoiVisitPolicy::Weighted {
+		novelty_weight: 2.0,
+		revisit_cooldown_secs: 10.0,
+		repeat_weight: 1.0,
+	};
+	let mut visits = PoiVisitState::default();
+	visits.note_failure(blocked.id, 5.0);
+	assert_eq!(visits.visit_count(blocked.id), 0);
+	assert_eq!(choose_poi(&mut visits, policy, &[blocked, other], 5.0, |_| 1.0), Some(other.id));
+	assert_eq!(
+		choose_poi(
+			&mut visits,
+			policy,
+			&[blocked, other],
+			5.0 + crate::FAILED_POI_RETRY_SECS,
+			|_| { 1.0 }
+		),
+		Some(blocked.id),
+		"blocked pin must be eligible again after the failure cooldown"
+	);
+	Ok(())
+}
+
+#[test]
 fn goal_state_advances_generation_when_replaced() -> anyhow::Result<()> {
 	let mut state = PoiGoalState::new(PoiId(1));
 	state.status = PoiGoalStatus::Completed;
@@ -309,6 +352,39 @@ fn drive_sets_a_route_without_movement_intelligence() -> anyhow::Result<()> {
 	let routing = world.get::<RoutingIntelligenceUser>(user).expect("routing");
 	assert_eq!(routing.destination, Some(Vec3::X * 40.0));
 	assert!(world.get::<MovementIntelligence>(user).is_none());
+	Ok(())
+}
+
+#[test]
+fn exhausted_plan_failures_drop_the_poi_goal() -> anyhow::Result<()> {
+	let mut world = World::new();
+	world.init_resource::<Messages<PoiGoalCompleted>>();
+	world.init_resource::<Messages<PoiGoalFailed>>();
+	let location = MovementLocation::new(Vec3::X * 40.0, 4.0);
+	let mut movement = MovementIntelligence::new(MovementObjective::Reach(location));
+	for _ in 0..FAILED_PLAN_HANDOFF_ATTEMPTS {
+		movement.note_replan_failed();
+	}
+	let user = world
+		.spawn((
+			PoiGoal::new(1, PoiId(1), None, CAMP, location.point, location.radius, 0.0, 1.0),
+			movement,
+			PoiGoalState::new(PoiId(1)),
+		))
+		.id();
+	world.run_system_once(abandon_unreachable_poi_goals).expect("abandon");
+	anyhow::ensure!(
+		world.get::<PoiGoal>(user).is_none(),
+		"unreachable pin must drop its PoiGoal after bounded plan failures"
+	);
+	anyhow::ensure!(
+		world
+			.get::<PoiGoalState>(user)
+			.is_some_and(|state| state.status == PoiGoalStatus::Failed),
+		"abandoned pin should fail so selection can pick another without marking a visit"
+	);
+	let failed: Vec<_> = world.resource_mut::<Messages<PoiGoalFailed>>().drain().collect();
+	anyhow::ensure!(failed.len() == 1, "abandonment must emit PoiGoalFailed, got {failed:?}");
 	Ok(())
 }
 

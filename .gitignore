@@ -30,4 +30,4 @@ packaging/identity.local.md
 maybraid/promo/title/durop-pack/*.mov
 *.logicx
 *.gguf
-*.udpipe
+*.udpipecaptures/

@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 
+use crate::hazard::WavefrontSpec;
 use crate::{
 	AimSnapshot, AttackEndReason, AttackId, AttackInstanceId, AttackStage, HazardPose, HazardShape,
 };
-use crate::hazard::WavefrontSpec;
 
 /// Gameplay announcement. VFX crates subscribe; they do not own timing or Hits.
 ///
@@ -20,8 +20,16 @@ pub struct AttackPresentationEvent {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AttackPresentationKind {
-	Stage { from: AttackStage, to: AttackStage, snapshot: AimSnapshot },
-	Telegraph { phase: PresentationPhase, pose: HazardPose, shape: HazardShape },
+	Stage {
+		from: AttackStage,
+		to: AttackStage,
+		snapshot: AimSnapshot,
+	},
+	Telegraph {
+		phase: PresentationPhase,
+		pose: HazardPose,
+		shape: HazardShape,
+	},
 	Hazard {
 		index: usize,
 		phase: PresentationPhase,
@@ -29,7 +37,9 @@ pub enum AttackPresentationKind {
 		shape: HazardShape,
 		wave: Option<WavefrontPresentation>,
 	},
-	Ended { reason: AttackEndReason },
+	Ended {
+		reason: AttackEndReason,
+	},
 }
 
 /// Authoritative per-wave state. Presenters follow this; they do not simulate motion.
@@ -67,6 +77,31 @@ impl WavefrontPresentation {
 			radius: wave.radius,
 			thickness: wave.half_depth.max(0.0) * 2.0,
 			wave_index,
+		}
+	}
+
+	/// Distance the front has travelled along [`Self::direction`].
+	pub fn traveled(self) -> f32 {
+		let heading = self.direction.normalize_or(Vec3::Z);
+		(self.position - self.origin).dot(heading).max(0.0)
+	}
+
+	/// Seconds since emit, from travelled distance / speed.
+	pub fn travel_age(self) -> f32 {
+		if self.speed <= 1e-4 {
+			0.0
+		} else {
+			self.traveled() / self.speed
+		}
+	}
+
+	/// 1 at emit, 0 at [`Self::range`]. The compression edge stays readable
+	/// while the trail fades.
+	pub fn trailing_fade(self) -> f32 {
+		if self.range <= 1e-4 {
+			1.0
+		} else {
+			(1.0 - self.traveled() / self.range).clamp(0.0, 1.0)
 		}
 	}
 }

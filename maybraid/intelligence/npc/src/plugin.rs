@@ -1,5 +1,7 @@
 use bevy::prelude::*;
+use combat_targeting::CombatTargeting;
 use damage::Downed;
+use firearm_intelligence::FirearmIntelligenceSystems;
 use meandering_intelligence::MeanderingIntelligenceUser;
 use poi_intelligence::{PoiGoal, PoiSystems};
 use tether_intelligence::{TetherIntelligenceUser, TetherMemory, TetherSystems};
@@ -16,6 +18,7 @@ type NpcMixers<'w, 's> = Query<
 		Entity,
 		&'static NpcIntelligence,
 		&'static ThreatManagementIntelligence,
+		Option<&'static CombatTargeting>,
 		Option<&'static mut MeanderingIntelligenceUser>,
 		Option<&'static mut TetherIntelligenceUser>,
 		Option<&'static TetherMemory>,
@@ -41,17 +44,34 @@ impl Plugin for NpcIntelligencePlugin {
 				.before(PoiSystems::Select)
 				.before(TetherSystems::Write),
 		)
+		.configure_sets(Update, TetherSystems::Write.after(FirearmIntelligenceSystems::Movement))
+		.configure_sets(Update, TetherSystems::Reclaim.after(FirearmIntelligenceSystems::Movement))
 		.add_systems(Update, mix_npc_brains.in_set(NpcIntelligenceSystems::Mix));
 	}
 }
 
-/// Priority mixer: Combat/Evade/Downed own movement. Ignore restores tether; meander
-/// only while that tether is satisfied (or absent).
+/// Priority mixer: Evade/Downed own movement. Combat owns it only once a
+/// spotted contact exists. Ignore restores tether; meander only while that
+/// tether is satisfied (or absent).
+///
+/// FFA still selects Combat from distant threat knowledge. Firearm movement
+/// writes only for [`CombatTargeting::best_contact`], so meander must keep
+/// walking until that contact exists.
 pub fn mix_npc_brains(mut commands: Commands, mut npcs: NpcMixers) {
-	for (entity, npc, management, mut meandering, mut tether, memory, has_goal, downed) in &mut npcs
+	for (
+		entity,
+		npc,
+		management,
+		targeting,
+		mut meandering,
+		mut tether,
+		memory,
+		has_goal,
+		downed,
+	) in &mut npcs
 	{
 		let tactic = management.tactic;
-		let acting = downed || tactic != ThreatTactic::Ignore;
+		let acting = downed || combat_owns_locomotion(tactic, targeting);
 		if let Some(tether) = tether.as_deref_mut() {
 			apply_tether(npc, tactic, downed, tether);
 		}
@@ -61,6 +81,16 @@ pub fn mix_npc_brains(mut commands: Commands, mut npcs: NpcMixers) {
 		}
 		if (acting || pulling) && has_goal {
 			commands.entity(entity).remove::<PoiGoal>();
+		}
+	}
+}
+
+fn combat_owns_locomotion(tactic: ThreatTactic, targeting: Option<&CombatTargeting>) -> bool {
+	match tactic {
+		ThreatTactic::Ignore => false,
+		ThreatTactic::Evade => true,
+		ThreatTactic::Combat => {
+			targeting.is_some_and(|targeting| targeting.best_contact().is_some())
 		}
 	}
 }
@@ -86,6 +116,12 @@ fn apply_tether(
 		ThreatTactic::Ignore => {
 			tether.enabled = true;
 			if let Some(objective) = npc.idle_tether {
+				tether.objective = objective;
+			}
+		}
+		ThreatTactic::Combat if npc.keep_tether_in_combat => {
+			tether.enabled = true;
+			if let Some(objective) = npc.engaged_tether.or(npc.idle_tether) {
 				tether.objective = objective;
 			}
 		}

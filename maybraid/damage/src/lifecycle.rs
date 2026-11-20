@@ -53,15 +53,25 @@ pub fn mark_downed(
 	}
 }
 
+/// Marker to exempt entities from the generic corpse cleanup flow.
+///
+/// Entities with this component that reach zero Health will NOT emit `Died`,
+/// will NOT get `Downed`, and will NOT be scheduled for corpse despawn.
+/// Use this for entities that manage their own lifecycle (e.g. breakable chains).
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct NoCorpseCleanup;
+
 /// Zero-HP bodies that never emitted [`Died`] still become [`Downed`].
 ///
 /// [`crate::apply_hits`] ignores further hits once `Health` is already dead, so a
 /// missed death message would otherwise leave a visible, un-injurable body.
+///
+/// Entities with [`NoCorpseCleanup`] are skipped - they manage their own lifecycle.
 pub fn down_zero_health(
 	time: Res<Time>,
 	mut commands: Commands,
 	mut died: MessageWriter<Died>,
-	living: Query<(Entity, &Health), Without<Downed>>,
+	living: Query<(Entity, &Health), (Without<Downed>, Without<NoCorpseCleanup>)>,
 	queued: Query<(), With<DespawnAfter>>,
 ) {
 	let now = time.elapsed_secs();

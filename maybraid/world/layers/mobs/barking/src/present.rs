@@ -66,11 +66,11 @@ pub fn pulse_mob_high_lod(
 
 /// Mob scenes, with their High band refreshed around the [`LodViewer`].
 pub(crate) fn install_mob_scenes(app: &mut App) {
-	// Indexed must be visible when MobScenesPlugin builds. Guarding
-	// MobGroupsPlugin would hide an assembler that already added groups
-	// under FullScan.
+	// Indexed must be visible when MobScenesPlugin builds.
 	app.insert_resource(MobLodRefreshMode::Indexed);
-	app.add_plugins(MobGroupsPlugin);
+	if !app.is_plugin_added::<MobGroupsPlugin>() {
+		app.add_plugins(MobGroupsPlugin);
+	}
 	app.add_plugins(
 		LodSceneRefreshRegionPlugin::<MobHighLodRegion, With<LodViewer>, MobHighLodChan>::default(),
 	)

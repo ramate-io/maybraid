@@ -14,12 +14,19 @@ name = "world-materials-playground"
 path = "src/main.rs"
 
 [dependencies]
+avian3d = { workspace = true }
 bevy = { workspace = true }
+bikanwarda-encounter = { workspace = true }
 building-shaders = { workspace = true }
 clap = { workspace = true }
+damage = { workspace = true }
 firearms = { workspace = true }
 game-commands = { workspace = true }
+lod-avian = { workspace = true }
 material-ref = { workspace = true }
+maybraid-world = { workspace = true }
+player-camera = { workspace = true }
+projectiles = { workspace = true }
 world-materials = { workspace = true }
 
 [lints]

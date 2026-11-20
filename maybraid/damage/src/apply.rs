@@ -1,21 +1,26 @@
 use bevy::prelude::*;
 
-use crate::{DamageApplied, Died, HeadshotBand, Health, Hit};
+use crate::{DamageApplied, Died, HeadshotBand, Health, Hit, HurtboxOf};
 
 pub fn apply_hits(
 	mut hits: MessageReader<Hit>,
 	mut health: Query<&mut Health>,
+	hurtboxes: Query<&HurtboxOf>,
 	parents: Query<&ChildOf>,
 	bands: Query<(&GlobalTransform, &HeadshotBand)>,
+	no_corpse: Query<(), With<crate::NoCorpseCleanup>>,
 	mut applied: MessageWriter<DamageApplied>,
 	mut died: MessageWriter<Died>,
 ) {
 	for hit in hits.read() {
+		let hurtbox = hurtboxes.get(hit.target).ok().map(HurtboxOf::host);
 		let parent = parents.get(hit.target).ok().map(|child| child.parent());
-		let target = Health::entity_or_parent(
+		let target = Health::entity_or_hurtbox_or_parent(
 			hit.target,
+			hurtbox,
 			parent,
 			health.contains(hit.target),
+			hurtbox.is_some_and(|host| health.contains(host)),
 			parent.is_some_and(|parent| health.contains(parent)),
 		);
 		if hit.source == Some(target) && !hit.allow_self {
@@ -40,7 +45,9 @@ pub fn apply_hits(
 			remaining: pool.current,
 			point: hit.point,
 		});
-		if pool.is_dead() {
+		// Only emit Died for entities without NoCorpseCleanup
+		// (entities managing their own lifecycle, like breakable chains)
+		if pool.is_dead() && no_corpse.get(target).is_err() {
 			died.write(Died { entity: target, source: hit.source, point: hit.point });
 		}
 	}
@@ -193,6 +200,52 @@ mod tests {
 		let died: Vec<_> = app.world_mut().resource_mut::<Messages<Died>>().drain().collect();
 		if died.len() != 1 {
 			return Err(anyhow!("one killing blow should emit one Died, got {}", died.len()));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn remounts_hurtbox_onto_health_host() -> Result<()> {
+		let mut app = App::new();
+		app.add_message::<Hit>().add_message::<DamageApplied>().add_message::<Died>();
+		app.add_systems(Update, apply_hits);
+		let host = app.world_mut().spawn(Health::from_max(100.0)).id();
+		let actor = app.world_mut().spawn_empty().id();
+		let sensor = app.world_mut().spawn((ChildOf(actor), HurtboxOf(host))).id();
+		app.world_mut().write_message(Hit {
+			target: sensor,
+			source: None,
+			amount: 25.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+		app.update();
+		let remaining = app.world().get::<Health>(host).map(|health| health.current);
+		if remaining != Some(75.0) {
+			return Err(anyhow!("hurtbox should debit the health host, got {remaining:?}"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn ignores_self_hit_on_own_hurtbox() -> Result<()> {
+		let mut app = App::new();
+		app.add_message::<Hit>().add_message::<DamageApplied>().add_message::<Died>();
+		app.add_systems(Update, apply_hits);
+		let host = app.world_mut().spawn(Health::from_max(100.0)).id();
+		let actor = app.world_mut().spawn_empty().id();
+		let sensor = app.world_mut().spawn((ChildOf(actor), HurtboxOf(host))).id();
+		app.world_mut().write_message(Hit {
+			target: sensor,
+			source: Some(host),
+			amount: 25.0,
+			point: Vec3::ZERO,
+			allow_self: false,
+		});
+		app.update();
+		let remaining = app.world().get::<Health>(host).map(|health| health.current);
+		if remaining != Some(100.0) {
+			return Err(anyhow!("self-hit on a hurtbox should not injure, got {remaining:?}"));
 		}
 		Ok(())
 	}

@@ -45,6 +45,12 @@ pub struct Busy;
 pub struct HcsgStorage(Arc<Registry>);
 
 impl HcsgStorage {
+	/// Sets the demand reference for invalidating subscriptions on publish.
+	/// Called by runtime initialization after both storage and demand are created.
+	pub(crate) fn set_demand(&self, demand: super::demand::HcsgDemand) {
+		*self.0.demand.write().unwrap() = Some(demand);
+	}
+
 	pub(in crate::hcsg) fn same_storage(&self, other: &Self) -> bool {
 		Arc::ptr_eq(&self.0, &other.0)
 	}

@@ -466,8 +466,8 @@ mod tests {
 	use chico::{ForestExtent, ForestSelection, LayeringKind};
 	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
 	use lubikans::{
-		LubikanAccountId, LubikanChargeChanged, LubikanChargeReason, LubikanChargeRequest,
-		LubikanLedger, LubikanSelfConfig, LubikansPlugin,
+		LubikanAccountId, LubikanBodyOf, LubikanChargeChanged, LubikanChargeReason,
+		LubikanChargeRequest, LubikanLedger, LubikanSelfConfig, LubikansPlugin,
 	};
 	use occupancy_rewards::{
 		evaluate_occupancy_rewards, OccupancyIdentity, OccupancyRewardsPaused, RewardRule,
@@ -661,8 +661,7 @@ mod tests {
 		anyhow::ensure!(view.constructions_grove.contains(&ConstructionTag::SOPES_BANYAN));
 		let entity = app.world().entity(player);
 		anyhow::ensure!(entity.contains::<OccupancyRewardsUser>());
-		let ledger = entity
-			.get::<LubikanLedger>()
+		let ledger = LubikanBodyOf::ledger(app.world(), player)
 			.ok_or_else(|| anyhow::anyhow!("#1149 runtime should attach Self"))?;
 		anyhow::ensure!(ledger.selection().resolved() == LubikanAccountId::SELF);
 		Ok(())
@@ -684,9 +683,7 @@ mod tests {
 		let _ = drain_requests(app.world_mut());
 		let _ = drain_changes(app.world_mut());
 		let expected = RewardRule::self_demonstration().amount;
-		let charge_before = app
-			.world()
-			.get::<LubikanLedger>(player)
+		let charge_before = LubikanBodyOf::ledger(app.world(), player)
 			.ok_or_else(|| anyhow::anyhow!("#1149 runtime should attach Self"))?
 			.equipped()
 			.charge()
@@ -699,9 +696,7 @@ mod tests {
 			drain_changes(app.world_mut()).is_empty(),
 			"Self demonstration is 5 s; 4 s must not emit LubikanChargeChanged"
 		);
-		let charge_at_four = app
-			.world()
-			.get::<LubikanLedger>(player)
+		let charge_at_four = LubikanBodyOf::ledger(app.world(), player)
 			.ok_or_else(|| anyhow::anyhow!("ledger"))?
 			.equipped()
 			.charge()
@@ -720,9 +715,7 @@ mod tests {
 		assert_eq!(change.reason, LubikanChargeReason::OCCUPANCY);
 		assert_eq!(change.origin, Some(STAND));
 		assert!(!change.discarded_at_stock_cap());
-		let charge_after = app
-			.world()
-			.get::<LubikanLedger>(player)
+		let charge_after = LubikanBodyOf::ledger(app.world(), player)
 			.ok_or_else(|| anyhow::anyhow!("ledger"))?
 			.equipped()
 			.charge()
@@ -770,9 +763,7 @@ mod tests {
 		assert_eq!(overflow[0].amount, 0.0);
 		assert_eq!(overflow[0].points_earned, requested);
 		assert!(overflow[0].discarded_at_stock_cap());
-		let charge = app
-			.world()
-			.get::<LubikanLedger>(player)
+		let charge = LubikanBodyOf::ledger(app.world(), player)
 			.ok_or_else(|| anyhow::anyhow!("ledger"))?
 			.equipped()
 			.charge()

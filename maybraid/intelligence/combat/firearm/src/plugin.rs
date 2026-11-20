@@ -15,7 +15,7 @@ use crate::combat::{
 };
 use crate::engagement::authorize_return_fire_from_damage;
 use crate::movement::write_firearm_movement_objectives;
-use crate::spotting::sync_spotted_combat_targets;
+use crate::spotting::update_firearm_spotting_settings;
 use crate::targeting::validate_firearm_aim_trajectories;
 
 /// Perception, movement policy, desired aim, then actual-bore fire control.
@@ -70,7 +70,12 @@ impl Plugin for FirearmIntelligencePlugin {
 		)
 		.add_systems(
 			Update,
-			sync_spotted_combat_targets.in_set(FirearmIntelligenceSystems::Spotting),
+			(
+				update_firearm_spotting_settings,
+				combat_targeting::sync_spotted_to_combat_targeting,
+			)
+				.chain()
+				.in_set(FirearmIntelligenceSystems::Spotting),
 		)
 		.add_systems(
 			Update,

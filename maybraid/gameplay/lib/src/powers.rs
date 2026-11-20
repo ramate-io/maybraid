@@ -2,7 +2,10 @@
 //! without either depending on world.
 
 use bevy::prelude::*;
-use lubikans::{LubikanActivationRequest, LubikanHealingEnabled, LubikanOwner, LubikanSystems};
+use lubikans::{
+	LubikanActivationRequest, LubikanHealingEnabled, LubikanOwner, LubikanSummonEnabled,
+	LubikanSystems,
+};
 use maybraid_equipment::EquippedPowerUse;
 use maybraid_session::WorldGameplayEnabled;
 
@@ -10,19 +13,24 @@ use maybraid_session::WorldGameplayEnabled;
 /// gate healing with the session gameplay projection.
 pub fn configure(app: &mut App) {
 	app.add_observer(request_lubikan_activation)
-		.add_systems(Update, sync_lubikan_healing_enabled.before(LubikanSystems::Activate));
+		.add_systems(Update, sync_lubikan_gameplay_enabled.before(LubikanSystems::Activate));
 }
 
 /// Pause gates healing. Capture (console / map overlay) is not needed here.
-fn sync_lubikan_healing_enabled(
+fn sync_lubikan_gameplay_enabled(
 	gameplay: Res<WorldGameplayEnabled>,
 	healing: Option<ResMut<LubikanHealingEnabled>>,
+	summon: Option<ResMut<LubikanSummonEnabled>>,
 ) {
-	let Some(mut healing) = healing else {
-		return;
-	};
-	if healing.0 != gameplay.0 {
-		healing.0 = gameplay.0;
+	if let Some(mut healing) = healing {
+		if healing.0 != gameplay.0 {
+			healing.0 = gameplay.0;
+		}
+	}
+	if let Some(mut summon) = summon {
+		if summon.0 != gameplay.0 {
+			summon.0 = gameplay.0;
+		}
 	}
 }
 
@@ -68,10 +76,12 @@ mod tests {
 		let mut world = World::new();
 		world.insert_resource(WorldGameplayEnabled(false));
 		world.insert_resource(LubikanHealingEnabled(true));
+		world.insert_resource(LubikanSummonEnabled(true));
 		world
-			.run_system_once(sync_lubikan_healing_enabled)
+			.run_system_once(sync_lubikan_gameplay_enabled)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(!world.resource::<LubikanHealingEnabled>().0);
+		assert!(!world.resource::<LubikanSummonEnabled>().0);
 		Ok(())
 	}
 }

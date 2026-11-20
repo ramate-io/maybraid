@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, TryLockError};
 
 use bevy::math::Vec3;
-use bevy::shape::Aabb3d;
+use bevy::shape::{Aabb3d, IntersectsVolume};
 
 use crate::gen::Id;
 
@@ -307,6 +307,30 @@ impl HcsgDemand {
 	#[cfg(test)]
 	pub(crate) fn try_is_live(&self, id: SubscriptionId) -> Result<bool, Busy> {
 		Ok(self.try_lock()?.subscriptions.contains_key(&id))
+	}
+
+	/// Invalidates cached discoveries for subscriptions whose regions intersect
+	/// the given bounds. This forces those subscriptions to rediscover on their
+	/// next quantum, picking up newly published data.
+	///
+	/// Call this after publishing new data to HCSG storage that should be
+	/// discovered by already-running subscriptions.
+	pub fn invalidate_intersecting(&self, bounds: Aabb3d) {
+		let mut state = self.lock();
+		let mut invalidated = 0;
+		let total = state.subscriptions.len();
+		for subscription in state.subscriptions.values_mut() {
+			let intersects = subscription.regions.iter().any(|region| region.intersects(&bounds));
+			if intersects && (subscription.discovered.is_some() || subscription.done) {
+				subscription.discovered = None;
+				subscription.discovered_len = None;
+				subscription.cursor = 0;
+				subscription.published.clear();
+				subscription.done = false;
+				invalidated += 1;
+			}
+		}
+		self.0.wake.notify_all();
 	}
 
 	/// Ends the session: cancels and drops every subscription. Values the

@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_items::Inventory;
-use lubikans::{LubikanAccountId, LubikanLedger, LubikanOwner};
+use lubikans::{LubikanAccountId, LubikanBodyOf, LubikanLedger, LubikanOwner};
 use maybraid_character_controller::{
 	CharacterIntent, CharacterIntentFrame, InventoryCyclingCategory,
 };
@@ -152,7 +152,7 @@ pub fn cycle_equipped_inventory_queues(
 					if world.get::<LubikanOwner>(actor).is_none() {
 						return;
 					}
-					if let Some(mut ledger) = world.get_mut::<LubikanLedger>(actor) {
+					if let Some(mut ledger) = LubikanBodyOf::ledger_mut(world, actor) {
 						EquippedLubikanQueue::cycle(&mut ledger, dir);
 					}
 				}
@@ -417,6 +417,33 @@ mod tests {
 		}
 		assert!(EquippedLubikanQueue::cycle(&mut ledger, -1));
 		assert_eq!(ledger.selection().resolved(), third);
+	}
+
+	#[test]
+	fn addressed_cycle_resolves_the_stable_character_ledger() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let mut ledger = LubikanLedger::default();
+		let account = ledger.ensure_owned(LubikanDefinition::new(
+			LubikanDefinitionId::from_raw(3),
+			20.0,
+			5.0,
+		));
+		ledger.apply_to(account, 9.0);
+		let character = world.spawn((lubikans::LubikanCharacter, ledger)).id();
+		let body = assign_actor(&mut world, (LubikanOwner, LubikanBodyOf(character)));
+		world
+			.entity_mut(body)
+			.insert(InventoryCycling::new(InventoryCyclingCategory::Lubikans));
+		set_frame(&mut world, body, vec![CharacterIntent::CycleEquippedQueue(1)])?;
+		world
+			.run_system_once(cycle_equipped_inventory_queues)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let ledger =
+			LubikanBodyOf::ledger(&world, body).ok_or_else(|| anyhow::anyhow!("ledger"))?;
+		assert_eq!(ledger.selection().resolved(), account);
+		assert_eq!(ledger.equipped().charge().current(), 9.0);
+		assert!(world.get::<LubikanLedger>(body).is_none());
+		Ok(())
 	}
 
 	#[test]
