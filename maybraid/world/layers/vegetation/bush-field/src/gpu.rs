@@ -300,7 +300,7 @@ struct GpuTemplate {
 fn init_templates(mut commands: Commands, device: Res<RenderDevice>) {
 	let lods = [WoodLod::Near, WoodLod::Mid, WoodLod::Far];
 	let wood = lods.map(|lod| gpu_template(&device, &WoodTemplate::for_lod(lod).vertex_bytes(), &WoodTemplate::for_lod(lod).index_bytes(), WoodTemplate::for_lod(lod).indices.len() as u32, "bush_wood_template"));
-	let leaf = LeafTemplate::folded();
+	let leaf = LeafTemplate::teardrop();
 	commands.insert_resource(BushTemplates {
 		wood,
 		leaf: gpu_template(

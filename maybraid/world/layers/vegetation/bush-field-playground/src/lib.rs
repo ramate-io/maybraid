@@ -19,6 +19,7 @@ use game_commands::command::GameCommandPlugin;
 use terrain_shaders::TerrainShaderPlugin;
 use vegetation_bush_field::BushFieldPlugin;
 use vegetation_components::CanopyShadowMode;
+use vegetation_grass_field::GrassFieldPlugin;
 
 pub fn run() {
 	let capturing = CaptureSession::from_env();
@@ -41,6 +42,7 @@ pub fn run() {
 	.insert_resource(ClearColor(Color::srgb(0.62, 0.78, 0.92)))
 	.insert_resource(CanopyShadowMode::Full)
 	.add_plugins(TerrainShaderPlugin)
+	.add_plugins(GrassFieldPlugin)
 	.add_plugins(BushFieldPlugin)
 	.add_plugins(CameraLookPlugin::default())
 	.add_plugins(
@@ -53,7 +55,13 @@ pub fn run() {
 	)
 	.add_systems(
 		Startup,
-		(setup_lighting, camera::setup_camera, ground::setup_ground, scene::spawn_default_scene),
+		(
+			setup_lighting,
+			camera::setup_camera,
+			ground::setup_ground,
+			ground::setup_meadow,
+			scene::spawn_default_scene,
+		),
 	)
 	.add_systems(
 		Update,

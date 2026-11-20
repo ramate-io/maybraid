@@ -54,6 +54,8 @@ mod tests {
 		assert!(wood.contains("import vegetation_shaders::wesl::shading"));
 		assert!(foliage.contains("import vegetation_shaders::wesl::curve"));
 		assert!(foliage.contains("leaf_surface_vertex"));
+		assert!(foliage.contains("grass_variation_palette"));
+		assert!(foliage.contains("crown_layer_albedo"));
 		assert!(select_wood.contains("import vegetation_shaders::wesl::lod"));
 		assert!(select_foliage.contains("import vegetation_shaders::wesl::lod"));
 		assert!(!wood.contains("fn vertex(template:"), "WESL reserves `template` as a keyword");

@@ -1,7 +1,9 @@
 # Small-bush playground
 
 Deterministic viewer for GPU-driven BotW-like woody bushes
-([#1638](https://github.com/ramate-io/maybraid/issues/1638)).
+([#1638](https://github.com/ramate-io/maybraid/issues/1638)). Ground cover is the
+[#1641](https://github.com/ramate-io/maybraid/pull/1641) GPU grass field. Crowns are
+layered teardrop shells on a multi-stem shrub, not a single-trunk sapling.
 
 ```bash
 nix develop --command cargo run -p vegetation-bush-field-playground --release --locked
@@ -61,10 +63,10 @@ CPU-mirrored 10 m scrub at 1.35 m spacing, 720p, looking from ~8 m:
 
 | | Count |
 | --- | --- |
-| Resident plants / branches / leaves | 64 / 578 / 2888 |
-| Submitted wood / foliage instances | 308 / 1558 |
-| Submitted triangles | 19 748 |
-| Descriptor bytes | 237 216 |
+| Resident plants / branches / leaves | 64 / 676 / 8148 |
+| Submitted wood / foliage instances | 375 / 4452 |
+| Submitted triangles | 51 414 |
+| Descriptor bytes | 581 696 |
 
 Do not read triangle reduction as a raster-cost win by itself: far foliage
 uses fewer leaves but larger size scale. Apple Silicon / M1-class GPU timers:

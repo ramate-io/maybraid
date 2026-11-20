@@ -5,7 +5,9 @@ import vegetation_shaders::wesl::curve::{
     CurveSample, LocalFrame,
 };
 import vegetation_shaders::wesl::wind::{deform_along_curve, wind_field, WindInputs};
-import vegetation_shaders::wesl::shading::{crown_albedo, leaf_painterly_lit};
+import vegetation_shaders::wesl::shading::{
+    crown_layer_albedo, grass_variation_palette, leaf_painterly_lit,
+};
 import vegetation_shaders::wesl::layout::{GrassDrawParams, GrassViewUniform};
 import vegetation_bush_field::shaders::layout::{BranchDescriptor, LeafDescriptor, PlantDescriptor};
 
@@ -29,11 +31,11 @@ struct LeafVertexOutput {
     @location(2) albedo: vec3<f32>,
 }
 
-fn deform_trunk(branch: BranchDescriptor, root: vec3<f32>, t: f32, wind_xz: vec2<f32>) -> CurveSample {
+fn deform_trunk(branch: BranchDescriptor, t: f32, wind_xz: vec2<f32>) -> CurveSample {
     let rest = branch_rest_sample(branch.p0, branch.p1, branch.p2, t);
-    let position = deform_along_curve(rest.position, root, t, wind_xz, branch.stiffness);
+    let position = deform_along_curve(rest.position, branch.p0, t, wind_xz, branch.stiffness);
     let rest_hi = branch_rest_sample(branch.p0, branch.p1, branch.p2, saturate(t + 0.02));
-    let hi = deform_along_curve(rest_hi.position, root, saturate(t + 0.02), wind_xz, branch.stiffness);
+    let hi = deform_along_curve(rest_hi.position, branch.p0, saturate(t + 0.02), wind_xz, branch.stiffness);
     let frame = stable_frame(hi - position, vec3<f32>(0.0, 1.0, 0.0));
     return CurveSample(position, frame.along, frame);
 }
@@ -60,17 +62,16 @@ fn deform_child(
 }
 
 fn world_sample(branch: BranchDescriptor, t: f32, wind_xz: vec2<f32>) -> CurveSample {
-    let plant = plants[branch.plant_index];
     if (branch.parent_index == PARENT_NONE) {
-        return deform_trunk(branch, plant.root, t, wind_xz);
+        return deform_trunk(branch, t, wind_xz);
     }
     let parent = branches[branch.parent_index];
     var parent_sample: CurveSample;
     if (parent.parent_index == PARENT_NONE) {
-        parent_sample = deform_trunk(parent, plant.root, branch.parent_t, wind_xz);
+        parent_sample = deform_trunk(parent, branch.parent_t, wind_xz);
     } else {
         let grand = branches[parent.parent_index];
-        let grand_sample = deform_trunk(grand, plant.root, parent.parent_t, wind_xz);
+        let grand_sample = deform_trunk(grand, parent.parent_t, wind_xz);
         parent_sample = deform_child(parent, branch.parent_t, grand_sample, wind_xz);
     }
     return deform_child(branch, t, parent_sample, wind_xz);
@@ -95,24 +96,26 @@ fn vertex(vert: TemplateVertex, @builtin(instance_index) instance_index: u32) ->
     );
     let sample = world_sample(parent, leaf.attach_t, wind_now);
     let attach = attachment_frame(sample, leaf.twist);
-    let outward = normalize(leaf.facing + attach.along * 0.28 + vec3<f32>(0.0, 0.22, 0.0));
+    let shell = saturate(leaf.shape);
+    let along_mix = mix(0.62, 0.10, shell);
+    let up_mix = mix(0.36, 0.14, shell);
+    let outward = normalize(
+        leaf.facing * mix(0.55, 1.0, shell) + attach.along * along_mix + vec3<f32>(0.0, up_mix, 0.0),
+    );
     let across = normalize(cross(outward, attach.facing));
     let facing = cross(across, outward);
     let frame = LocalFrame(across, outward, facing);
     let v = vert.v_u.x;
     let u = vert.v_u.y;
-    let size_scale = select(select(1.0, 1.22, draw.lod_bucket == 1u), 1.55, draw.lod_bucket == 2u);
+    let size_scale = select(select(1.0, 1.18, draw.lod_bucket == 1u), 1.42, draw.lod_bucket == 2u);
     var world = leaf_surface_vertex(sample.position, frame, leaf.size_m * size_scale, u, v, leaf.fold);
     let flutter = sin(view.world_position.w * 4.2 + f32(leaf.leaf_id) * 0.013) * leaf.flutter * v;
     world = world + frame.across * flutter;
     let n = leaf_surface_normal(frame, u, leaf.fold);
     let height_frac = saturate((world.y - plant.root.y) / max(plant.height_m, 1e-3));
-    let albedo = crown_albedo(
-        leaf.palette,
-        vec3<f32>(0.05, 0.22, 0.10),
-        height_frac,
-        leaf.density_rank,
-    );
+    let radial = saturate(length(world.xz - plant.root.xz) / max(plant.crown_radius_m, 1e-3));
+    let pal = grass_variation_palette(leaf.palette, plant.root.xz, leaf.leaf_id >> 2u);
+    let albedo = crown_layer_albedo(pal, height_frac, radial, shell, leaf.density_rank);
     out.position = view.clip_from_world * vec4<f32>(world, 1.0);
     out.world_normal = n;
     out.v = v;

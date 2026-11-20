@@ -9,6 +9,7 @@ use crate::field::BushFieldSettings;
 use crate::layout::{
 	BranchDescriptor, LeafDescriptor, PlantDescriptor, WoodLod, BUSH_LOD_COUNT, PARENT_NONE,
 };
+use crate::template::LeafTemplate;
 
 /// Compacted wood + foliage instance lists plus overflow counts.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -37,7 +38,7 @@ impl CompactedBushLists {
 		for lod in 0..BUSH_LOD_COUNT {
 			let wood = WoodLod::from_bucket(lod as u32).map(|w| w.index_count() / 3).unwrap_or(0);
 			tris += wood * self.wood_count(lod);
-			tris += 2 * self.foliage_count(lod);
+			tris += (LeafTemplate::TEARDROP_INDEX_COUNT / 3) * self.foliage_count(lod);
 		}
 		tris
 	}
@@ -56,9 +57,12 @@ impl CompactedBushLists {
 
 	pub fn foliage_indirect_args(&self) -> [DrawIndexedIndirect; BUSH_LOD_COUNT] {
 		[
-			DrawIndexedIndirect::empty(6).with_instances(self.foliage_count(0)),
-			DrawIndexedIndirect::empty(6).with_instances(self.foliage_count(1)),
-			DrawIndexedIndirect::empty(6).with_instances(self.foliage_count(2)),
+			DrawIndexedIndirect::empty(LeafTemplate::TEARDROP_INDEX_COUNT)
+				.with_instances(self.foliage_count(0)),
+			DrawIndexedIndirect::empty(LeafTemplate::TEARDROP_INDEX_COUNT)
+				.with_instances(self.foliage_count(1)),
+			DrawIndexedIndirect::empty(LeafTemplate::TEARDROP_INDEX_COUNT)
+				.with_instances(self.foliage_count(2)),
 		]
 	}
 }

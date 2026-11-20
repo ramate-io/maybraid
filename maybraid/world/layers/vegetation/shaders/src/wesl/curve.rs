@@ -137,6 +137,14 @@ pub fn woody_surface_normal(sample: CurveSample, radial: f32) -> Vec3 {
 	(sample.frame.across * cos_a + sample.frame.facing * sin_a).normalize_or_zero()
 }
 
+/// Ovate / teardrop width: narrow petiole, fullest near `v = 0.38`, rounded tip.
+pub fn leaf_teardrop_width(v: f32) -> f32 {
+	let vv = v.clamp(0.0, 1.0);
+	let lower = smoothstep(0.0, 0.18, vv);
+	let upper = 1.0 - 0.70 * smoothstep(0.48, 0.98, vv);
+	(lower * upper).max(0.16 * smoothstep(0.90, 0.98, vv))
+}
+
 pub fn leaf_surface_vertex(
 	origin: Vec3,
 	frame: LocalFrame,
@@ -146,15 +154,21 @@ pub fn leaf_surface_vertex(
 	fold: f32,
 ) -> Vec3 {
 	let vv = v.clamp(0.0, 1.0);
-	let across = frame.across * (u * size_m * 0.46 * (1.0 - vv * 0.38));
+	let half = size_m * 0.50 * leaf_teardrop_width(vv);
+	let across = frame.across * (u * half);
 	let along = frame.along * (vv * size_m);
-	let cup = frame.facing * (fold * u * u * size_m * 0.16 + fold * vv * (1.0 - vv) * size_m * 0.22);
+	let cup = frame.facing * (fold * u * u * size_m * 0.14 + fold * vv * (1.0 - vv) * size_m * 0.26);
 	origin + across + along + cup
 }
 
 pub fn leaf_surface_normal(frame: LocalFrame, u: f32, fold: f32) -> Vec3 {
 	(frame.facing + frame.across * (u * 0.18) + frame.along * (fold * 0.12) + Vec3::Y * 0.35)
 		.normalize_or_zero()
+}
+
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+	let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+	t * t * (3.0 - 2.0 * t)
 }
 
 #[cfg(test)]
@@ -253,6 +267,23 @@ mod tests {
 		let frame = attachment_frame(sample, 0.3);
 		let base = leaf_surface_vertex(sample.position, frame, 0.08, 0.0, 0.0, 0.4);
 		assert!((base - sample.position).length() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn teardrop_is_widest_in_the_middle_and_rounded_at_the_tip() -> anyhow::Result<()> {
+		assert!(leaf_teardrop_width(0.38) > leaf_teardrop_width(0.08));
+		assert!(leaf_teardrop_width(0.38) > leaf_teardrop_width(0.92));
+		assert!(leaf_teardrop_width(1.0) > 0.10);
+		let sample = branch_rest_sample(Vec3::ZERO, Vec3::Y * 0.5, Vec3::Y, 0.5);
+		let frame = sample.frame;
+		let across = |u: f32, v: f32| {
+			leaf_surface_vertex(sample.position, frame, 1.0, u, v, 0.0)
+				.dot(frame.across)
+				.abs()
+		};
+		assert!(across(1.0, 0.38) > across(1.0, 0.12));
+		assert!(across(1.0, 0.38) > across(1.0, 0.95));
 		Ok(())
 	}
 }

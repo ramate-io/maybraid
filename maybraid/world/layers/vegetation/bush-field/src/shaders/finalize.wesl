@@ -10,7 +10,7 @@ import vegetation_shaders::wesl::layout::{DrawIndexedIndirect, GrassViewUniform}
 fn finalize() {
     let capacity = u32(view.counts.y);
     var wood_indices = array<u32, 3>(162u, 60u, 27u);
-    var foliage_indices = array<u32, 3>(6u, 6u, 6u);
+    var foliage_indices = array<u32, 3>(21u, 21u, 21u);
     for (var lod = 0u; lod < 3u; lod++) {
         var wood: DrawIndexedIndirect;
         wood.index_count = wood_indices[lod];

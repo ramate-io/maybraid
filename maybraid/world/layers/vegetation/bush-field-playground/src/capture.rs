@@ -8,6 +8,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use vegetation_bush_field::BushFieldSettings;
+use vegetation_grass_field::GrassFieldSettings;
 use vegetation_shaders::wesl::WindInputs;
 
 use crate::camera::{yaw_pitch, CameraController};
@@ -121,10 +122,15 @@ impl CaptureShot {
 				scene::spawn_leafless_only(world);
 			}
 		}
+		let wind = if self.gust { WindInputs::botw_gust(1.85) } else { WindInputs::gentle_botw(0.85) };
+		let freeze = Some(if self.gust { 1.85 } else { 0.85 });
 		let mut settings = world.resource_mut::<BushFieldSettings>();
-		settings.wind =
-			if self.gust { WindInputs::botw_gust(1.85) } else { WindInputs::gentle_botw(0.85) };
-		settings.freeze_time_s = Some(if self.gust { 1.85 } else { 0.85 });
+		settings.wind = wind;
+		settings.freeze_time_s = freeze;
+		if let Some(mut grass) = world.get_resource_mut::<GrassFieldSettings>() {
+			grass.wind = wind;
+			grass.freeze_time_s = freeze;
+		}
 	}
 }
 

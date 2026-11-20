@@ -21,7 +21,7 @@ impl BranchDescriptor {
 	pub fn world_sample(
 		self,
 		branches: &[BranchDescriptor],
-		plant: &PlantDescriptor,
+		_plant: &PlantDescriptor,
 		t: f32,
 		wind_xz: Vec2,
 	) -> CurveSample {
@@ -38,7 +38,7 @@ impl BranchDescriptor {
 		}
 		let trunk = chain[(hops - 1) as usize];
 		let trunk_t = if hops == 1 { t } else { chain[(hops - 2) as usize].parent_t };
-		let mut sample = deform_trunk(trunk, plant.root, trunk_t, wind_xz);
+		let mut sample = deform_trunk(trunk, trunk_t, wind_xz);
 		if hops == 1 {
 			return sample;
 		}
@@ -78,11 +78,11 @@ impl LeafDescriptor {
 	}
 }
 
-fn deform_trunk(branch: BranchDescriptor, root: Vec3, t: f32, wind_xz: Vec2) -> CurveSample {
+fn deform_trunk(branch: BranchDescriptor, t: f32, wind_xz: Vec2) -> CurveSample {
 	let rest = branch.rest_sample(t);
-	let position = deform_along_curve(rest.position, root, t, wind_xz, branch.stiffness);
+	let position = deform_along_curve(rest.position, branch.p0, t, wind_xz, branch.stiffness);
 	let rest_hi = branch.rest_sample((t + 0.02).min(1.0));
-	let hi = deform_along_curve(rest_hi.position, root, (t + 0.02).min(1.0), wind_xz, branch.stiffness);
+	let hi = deform_along_curve(rest_hi.position, branch.p0, (t + 0.02).min(1.0), wind_xz, branch.stiffness);
 	let tangent = hi - position;
 	let frame = vegetation_shaders::wesl::stable_frame(tangent, Vec3::Y);
 	CurveSample { position, tangent: frame.along, frame }

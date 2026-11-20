@@ -16,7 +16,7 @@ CPU BushPatch (seed, recipe, surface samples)
         ▼
 persistent GPU storage  ──►  compute select wood + foliage (frustum, LOD, prune)
                             ──►  compute finalize (draw_indexed_indirect × 6)
-                            ──►  Opaque3d tubes (wood) + folded leaves (foliage)
+                            ──►  Opaque3d tubes (wood) + layered teardrop leaves (foliage)
 ```
 
 | Piece | Role |
@@ -24,7 +24,7 @@ persistent GPU storage  ──►  compute select wood + foliage (frustum, LOD, 
 | `BushPatch` | CPU ownership. Compact topology from a Bush Scrub small-bush recipe. |
 | `BushField` | Persistent plant / branch / leaf buffers. Generation bumps on change. |
 | `BushSelector` | CPU mirror of `select_wood.wesl` / `select_foliage.wesl`. |
-| `wood.wesl` / `foliage.wesl` | Vertex-generated tubes and folded leaves importing shared WESL. |
+| `wood.wesl` / `foliage.wesl` | Vertex-generated tubes and layered teardrop leaves importing shared WESL. |
 
 Parent/child junctions stay welded through wind: children evaluate in the
 deformed parent `attachment_frame`. Pruning a branch also drops or reattaches

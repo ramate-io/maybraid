@@ -124,6 +124,14 @@ fn woody_surface_normal(sample: CurveSample, radial: f32) -> vec3<f32> {
     return normalize(sample.frame.across * cos(angle) + sample.frame.facing * sin(angle));
 }
 
+/// Ovate / teardrop width: narrow petiole, fullest near `v = 0.38`, rounded tip.
+fn leaf_teardrop_width(v: f32) -> f32 {
+    let vv = saturate(v);
+    let lower = smoothstep(0.0, 0.18, vv);
+    let upper = 1.0 - 0.70 * smoothstep(0.48, 0.98, vv);
+    return max(lower * upper, 0.16 * smoothstep(0.90, 0.98, vv));
+}
+
 /// Folded leaf in an attachment frame. `u` is across `[-1, 1]`, `v` is base→tip `[0, 1]`.
 fn leaf_surface_vertex(
     origin: vec3<f32>,
@@ -134,9 +142,10 @@ fn leaf_surface_vertex(
     fold: f32,
 ) -> vec3<f32> {
     let vv = saturate(v);
-    let across = frame.across * (u * size_m * 0.46 * (1.0 - vv * 0.38));
+    let half = size_m * 0.50 * leaf_teardrop_width(vv);
+    let across = frame.across * (u * half);
     let along = frame.along * (vv * size_m);
-    let cup = frame.facing * (fold * u * u * size_m * 0.16 + fold * vv * (1.0 - vv) * size_m * 0.22);
+    let cup = frame.facing * (fold * u * u * size_m * 0.14 + fold * vv * (1.0 - vv) * size_m * 0.26);
     return origin + across + along + cup;
 }
 
