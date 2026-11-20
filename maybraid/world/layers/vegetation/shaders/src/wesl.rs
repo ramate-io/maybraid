@@ -13,7 +13,7 @@
 //! };
 //! import vegetation_shaders::wesl::wind::{wind_field, deform_along_curve};
 //! import vegetation_shaders::wesl::lod::{projected_height_px, lod_bucket, nested_keep};
-//! import vegetation_shaders::wesl::shading::{grass_albedo, painterly_lit};
+//! import vegetation_shaders::wesl::shading::{grass_albedo, grass_variation_palette, painterly_lit};
 //! import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform};
 //! ```
 //!
@@ -40,7 +40,9 @@ pub use curve::{
 	attachment_frame, blade_rest_sample, blade_width_at, ribbon_normal, ribbon_vertex,
 	stable_frame, CurveSample, LocalFrame,
 };
-pub use hash::{density_rank, hash_u32, hash_u32_to_unit, plant_id, VegetationHash};
+pub use hash::{
+	density_rank, hash_lattice, hash_u32, hash_u32_to_unit, plant_id, value_noise_2, VegetationHash,
+};
 pub use layout::{
 	BladeDescriptor, DrawIndexedIndirect, GeometryLod, GrassDrawParams, GrassPatchHeader,
 	GrassViewUniform, BLADE_DESCRIPTOR_STRIDE, DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_CARD,
@@ -51,7 +53,10 @@ pub use lod::{
 	lod_bucket, lod_fade, nested_keep, projected_height_px, LodDecision, LodThresholds,
 	ProjectedSize,
 };
-pub use shading::{grass_albedo, painterly_lit, two_sided_wrap, VegetationPalette};
+pub use shading::{
+	grass_albedo, grass_variation_palette, meadow_color_field, painterly_lit, two_sided_wrap,
+	VegetationPalette,
+};
 pub use wind::{
 	deform_along_curve, max_wind_displacement_m, wind_field, WindDeform, WindField, WindInputs,
 };

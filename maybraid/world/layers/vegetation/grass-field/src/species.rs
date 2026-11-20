@@ -17,15 +17,15 @@ pub struct GrassSpecies {
 }
 
 impl GrassSpecies {
-	/// Lush painterly meadow blade, BotW-like: ~58 cm, soft taper, gentle bow.
+	/// Lush painterly meadow blade, BotW-like: ~58 cm, arched rest pose, soft taper.
 	pub fn meadow() -> Self {
 		Self {
 			height_m: 0.58,
-			width_m: 0.062,
-			bend: 0.32,
-			taper: 0.82,
+			width_m: 0.078,
+			bend: 0.78,
+			taper: 0.72,
 			stiffness: 0.05,
-			height_jitter: 0.18,
+			height_jitter: 0.22,
 			palette: VegetationPalette::botw_meadow(),
 		}
 	}
@@ -34,14 +34,14 @@ impl GrassSpecies {
 	pub fn shade() -> Self {
 		Self {
 			height_m: 0.70,
-			width_m: 0.052,
-			bend: 0.38,
-			taper: 0.88,
+			width_m: 0.068,
+			bend: 0.92,
+			taper: 0.78,
 			stiffness: 0.08,
-			height_jitter: 0.22,
+			height_jitter: 0.26,
 			palette: VegetationPalette {
-				root_rgb: Vec3::new(0.05, 0.24, 0.05),
-				tip_rgb: Vec3::new(0.32, 0.62, 0.16),
+				root_rgb: Vec3::new(0.04, 0.18, 0.07),
+				tip_rgb: Vec3::new(0.28, 0.54, 0.16),
 			},
 		}
 	}

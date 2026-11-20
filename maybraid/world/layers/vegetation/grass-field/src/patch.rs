@@ -2,6 +2,7 @@
 //!
 //! One entity per patch. Blades are compact descriptors, never ECS entities.
 
+use bevy::math::Vec3Swizzles;
 use bevy::prelude::*;
 use vegetation_shaders::wesl::{hash_u32, plant_id, BladeDescriptor, GrassPatchHeader};
 
@@ -56,7 +57,7 @@ impl GrassPatch {
 	}
 
 	pub fn isolated_clump(seed: u32, center: Vec3, count: u32) -> Self {
-		Self::new(seed, GrassSpecies::meadow(), 1.0, clump_samples(center, count, 0.45, seed))
+		Self::new(seed, GrassSpecies::meadow(), 1.0, clump_samples(center, count, 0.52, seed))
 	}
 
 	pub fn dense_field(seed: u32, origin: Vec3, extent_xz: Vec2, spacing_m: f32) -> Self {
@@ -173,17 +174,20 @@ impl GrassPatch {
 		let (sin_y, cos_y) = yaw.sin_cos();
 		let tangent = sample.normal.any_orthonormal_vector();
 		let facing = (tangent * cos_y + sample.normal.cross(tangent) * sin_y).normalize_or(Vec3::X);
-		let variation = vegetation_shaders::wesl::hash_u32_to_unit(id ^ 0x7feb352d);
-		let pal = self.species.palette.albedo(0.5, variation);
+		let bend_u = vegetation_shaders::wesl::hash_u32_to_unit(id ^ 0x3c6ef372);
+		let bend = self.species.bend * (0.48 + 1.22 * bend_u);
+		let width_u = vegetation_shaders::wesl::hash_u32_to_unit(id ^ 0xa0761d65);
+		let width = self.species.width_m * (0.82 + 0.36 * width_u);
+		let pal = self.species.palette.varied(sample.root.xz(), id);
 		BladeDescriptor {
 			root: sample.root,
 			height_m: height.max(0.05),
 			normal: sample.normal.normalize_or(Vec3::Y),
-			width_m: self.species.width_m,
+			width_m: width,
 			facing,
 			plant_id: id,
-			shape: Vec4::new(self.species.bend, self.species.taper, self.species.stiffness, rank),
-			palette: Vec4::new(pal.x, pal.y, pal.z, index as f32),
+			shape: Vec4::new(bend, self.species.taper, self.species.stiffness, rank),
+			palette: Vec4::new(pal.tip_rgb.x, pal.tip_rgb.y, pal.tip_rgb.z, index as f32),
 		}
 	}
 }

@@ -53,7 +53,7 @@ Refresh these PNGs whenever the look changes.
 ## Honest measurements
 
 Taken from the CPU-mirrored select path (same math as `select.wesl`) on a
-16 m meadow at 0.22 m spacing, 720p, 55° FOV. **Not** a GPU timer capture —
+16 m meadow at 0.10 m spacing, 720p, 55° FOV. **Not** a GPU timer capture —
 this environment has no M1-class Apple Silicon sample.
 
 | View | Submitted instances | Triangles | Notes |

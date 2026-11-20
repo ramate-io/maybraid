@@ -69,10 +69,14 @@ fn blade_rest_sample(
         }
     }
     sideways = normalize(sideways);
-    let bow = bend * tt * tt * (1.0 - 0.35 * tt);
-    let position = root + upn * (height_m * tt) + sideways * (bow * height_m);
-    let d_bow = bend * (2.0 * tt - 1.05 * tt * tt);
-    let tangent = upn * height_m + sideways * (d_bow * height_m);
+    // Roots stay vertical; lean and tip-droop increase with `bend` so some blades arch over.
+    let sag_k = 0.16 + 0.58 * saturate(bend * 0.72);
+    let rise = tt - sag_k * tt * tt * tt;
+    let sweep = tt * tt * (0.42 + 0.58 * tt);
+    let position = root + upn * (height_m * rise) + sideways * (bend * height_m * sweep);
+    let d_rise = 1.0 - 3.0 * sag_k * tt * tt;
+    let d_sweep = 2.0 * 0.42 * tt + 3.0 * 0.58 * tt * tt;
+    let tangent = upn * (height_m * d_rise) + sideways * (bend * height_m * d_sweep);
     let frame = stable_frame(tangent, upn);
     return CurveSample(position, frame.along, frame);
 }

@@ -27,3 +27,21 @@ fn plant_id(patch_seed: u32, local_index: u32) -> u32 {
 fn density_rank(id: u32) -> f32 {
     return hash_u32_to_unit(id ^ 0x85ebca6bu);
 }
+
+fn hash_lattice(cell: vec2<i32>) -> f32 {
+    let x = u32(cell.x) * 374761393u;
+    let y = u32(cell.y) * 668265263u;
+    return hash_u32_to_unit(x ^ y ^ 0x9e3779b9u);
+}
+
+/// Smooth value noise in `[0, 1)` for low-frequency meadow colour patches.
+fn value_noise_2(p: vec2<f32>) -> f32 {
+    let cell = vec2<i32>(floor(p));
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let a = hash_lattice(cell);
+    let b = hash_lattice(cell + vec2<i32>(1, 0));
+    let c = hash_lattice(cell + vec2<i32>(0, 1));
+    let d = hash_lattice(cell + vec2<i32>(1, 1));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}

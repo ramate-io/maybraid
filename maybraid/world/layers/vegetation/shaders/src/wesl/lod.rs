@@ -21,9 +21,9 @@ impl LodThresholds {
 			mid_m: 48.0,
 			card_m: 90.0,
 			near_density: 1.0,
-			mid_density: 0.45,
-			card_density: 0.18,
-			min_height_px: 1.25,
+			mid_density: 0.72,
+			card_density: 0.38,
+			min_height_px: 1.15,
 		}
 	}
 

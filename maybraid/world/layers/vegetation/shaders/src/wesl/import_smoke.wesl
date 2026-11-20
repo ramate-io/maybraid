@@ -107,7 +107,7 @@ fn fragment() -> @location(0) vec4<f32> {
     view.resolution = vec4<f32>(1280.0, 720.0, 1.0, 0.0);
     view.wind = vec4<f32>(0.92, 0.38, 0.0, 0.2);
     view.lod_distances = vec4<f32>(0.85, 18.0, 48.0, 90.0);
-    view.lod_density = vec4<f32>(1.0, 0.45, 0.18, 1.25);
+    view.lod_density = vec4<f32>(1.0, 0.72, 0.38, 1.15);
     view.counts = vec4<f32>(1.0, 1.0, 0.0, 0.0);
     view.light_direction = vec4<f32>(0.4, 0.8, 0.3, 0.0);
     return smoke_eval(blade, view, 0.5, 1.0);

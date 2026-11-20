@@ -6,7 +6,7 @@ use bevy::prelude::{PerspectiveProjection, Transform};
 use vegetation_grass_field::{
 	GrassField, GrassFieldSettings, GrassPatch, GrassPatchLod, GrassSelector, SurfaceSample,
 };
-use vegetation_shaders::wesl::{DrawIndexedIndirect, GeometryLod, GrassViewUniform};
+use vegetation_shaders::wesl::{DrawIndexedIndirect, GeometryLod, GrassViewUniform, LodThresholds};
 
 fn look_view(origin: Vec3, target: Vec3, height_px: f32) -> GrassViewUniform {
 	let view_from_world = Transform::from_translation(origin)
@@ -28,8 +28,14 @@ fn look_view(origin: Vec3, target: Vec3, height_px: f32) -> GrassViewUniform {
 		prev_world_position: origin.extend(0.0),
 		resolution: bevy::math::Vec4::new(1280.0, height_px, 1.0, 0.0),
 		wind: bevy::math::Vec4::new(0.92, 0.38, 0.0, 0.22),
-		lod_distances: bevy::math::Vec4::new(0.85, 18.0, 48.0, 90.0),
-		lod_density: bevy::math::Vec4::new(1.0, 0.45, 0.18, 1.25),
+		lod_distances: {
+			let t = LodThresholds::field_default();
+			bevy::math::Vec4::new(0.85, t.near_m, t.mid_m, t.card_m)
+		},
+		lod_density: {
+			let t = LodThresholds::field_default();
+			bevy::math::Vec4::new(t.near_density, t.mid_density, t.card_density, t.min_height_px)
+		},
 		counts: bevy::math::Vec4::new(0.0, 65536.0, 0.0, 0.0),
 		light_direction: bevy::math::Vec4::new(0.4, 0.8, 0.3, 0.0),
 	}

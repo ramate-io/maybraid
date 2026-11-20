@@ -44,8 +44,8 @@ impl GeometryLod {
 	/// Segment count along the blade. Cards are a single quad.
 	pub fn segments(self) -> u32 {
 		match self {
-			Self::Near => 5,
-			Self::Mid => 2,
+			Self::Near => 8,
+			Self::Mid => 4,
 			Self::Card => 1,
 		}
 	}
@@ -62,8 +62,8 @@ impl GeometryLod {
 	pub fn width_scale(self) -> f32 {
 		match self {
 			Self::Near => 1.0,
-			Self::Mid => 1.85,
-			Self::Card => 3.6,
+			Self::Mid => 2.35,
+			Self::Card => 5.8,
 		}
 	}
 }
@@ -304,10 +304,10 @@ mod tests {
 
 	#[test]
 	fn lod_templates_are_small() -> anyhow::Result<()> {
-		assert_eq!(GeometryLod::Near.vertex_count(), 12);
-		assert_eq!(GeometryLod::Mid.vertex_count(), 6);
+		assert_eq!(GeometryLod::Near.vertex_count(), 18);
+		assert_eq!(GeometryLod::Mid.vertex_count(), 10);
 		assert_eq!(GeometryLod::Card.vertex_count(), 4);
-		assert_eq!(GeometryLod::Near.index_count(), 30);
+		assert_eq!(GeometryLod::Near.index_count(), 48);
 		Ok(())
 	}
 }

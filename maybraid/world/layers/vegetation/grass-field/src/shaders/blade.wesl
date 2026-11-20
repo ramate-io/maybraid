@@ -4,7 +4,9 @@ import vegetation_shaders::wesl::curve::{
     blade_rest_sample, blade_width_at, ribbon_normal, ribbon_vertex,
 };
 import vegetation_shaders::wesl::wind::{deform_along_curve, wind_field, WindInputs};
-import vegetation_shaders::wesl::shading::{grass_albedo, painterly_lit, VegetationPalette};
+import vegetation_shaders::wesl::shading::{
+    grass_albedo, grass_variation_palette, painterly_lit,
+};
 import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassDrawParams, GrassViewUniform};
 
 @group(0) @binding(0) var<uniform> view: GrassViewUniform;
@@ -40,7 +42,7 @@ fn vertex(vert: TemplateVertex, @builtin(instance_index) instance_index: u32) ->
         blade.shape.x,
         t,
     );
-    let width_scale = select(select(1.0, 1.85, draw.lod_bucket == 1u), 3.6, draw.lod_bucket == 2u);
+    let width_scale = select(select(1.0, 2.35, draw.lod_bucket == 1u), 5.8, draw.lod_bucket == 2u);
     let half_w = 0.5 * blade_width_at(blade.width_m, blade.shape.y, t) * width_scale;
     let rest_pos = ribbon_vertex(rest, side, half_w);
     let wind_now = wind_field(
@@ -54,12 +56,12 @@ fn vertex(vert: TemplateVertex, @builtin(instance_index) instance_index: u32) ->
     let world = deform_along_curve(rest_pos, blade.root, t, wind_now, blade.shape.z);
     let prev = deform_along_curve(rest_pos, blade.root, t, wind_prev, blade.shape.z);
     let n = ribbon_normal(rest, side);
-    let pal = VegetationPalette(blade.palette.xyz * 0.55, blade.palette.xyz * 1.35);
+    let pal = grass_variation_palette(blade.palette.xyz, blade.root.xz, blade.plant_id);
     out.position = view.clip_from_world * vec4<f32>(world, 1.0);
     out.world_position = world;
     out.world_normal = n;
     out.t = t;
-    out.albedo = grass_albedo(pal, t, blade.shape.w);
+    out.albedo = grass_albedo(pal, t, 0.55);
     out.prev_position = prev;
     return out;
 }

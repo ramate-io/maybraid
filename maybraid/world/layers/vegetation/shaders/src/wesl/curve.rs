@@ -87,10 +87,13 @@ pub fn blade_rest_sample(
 		}
 	}
 	let sideways = sideways.normalize_or_zero();
-	let bow = bend * tt * tt * (1.0 - 0.35 * tt);
-	let position = root + upn * (height_m * tt) + sideways * (bow * height_m);
-	let d_bow = bend * (2.0 * tt - 1.05 * tt * tt);
-	let tangent = upn * height_m + sideways * (d_bow * height_m);
+	let sag_k = 0.16 + 0.58 * (bend * 0.72).clamp(0.0, 1.0);
+	let rise = tt - sag_k * tt * tt * tt;
+	let sweep = tt * tt * (0.42 + 0.58 * tt);
+	let position = root + upn * (height_m * rise) + sideways * (bend * height_m * sweep);
+	let d_rise = 1.0 - 3.0 * sag_k * tt * tt;
+	let d_sweep = 2.0 * 0.42 * tt + 3.0 * 0.58 * tt * tt;
+	let tangent = upn * (height_m * d_rise) + sideways * (bend * height_m * d_sweep);
 	let frame = stable_frame(tangent, upn);
 	CurveSample { position, tangent: frame.along, frame }
 }
@@ -142,6 +145,23 @@ mod tests {
 		let sample = blade_rest_sample(Vec3::ZERO, Vec3::Y, Vec3::X, 1.0, 0.2, 0.4);
 		let twisted = attachment_frame(sample, 0.7);
 		assert!((twisted.along - sample.frame.along).length() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn high_bend_arches_the_tip_over() -> anyhow::Result<()> {
+		let mid = blade_rest_sample(Vec3::ZERO, Vec3::Y, Vec3::X, 1.0, 1.15, 0.62);
+		let tip = blade_rest_sample(Vec3::ZERO, Vec3::Y, Vec3::X, 1.0, 1.15, 1.0);
+		assert!(tip.position.y < mid.position.y);
+		assert!(tip.position.x > mid.position.x);
+		assert!(tip.frame.along.y < 0.15);
+		Ok(())
+	}
+
+	#[test]
+	fn rest_tangent_at_root_follows_up() -> anyhow::Result<()> {
+		let sample = blade_rest_sample(Vec3::ZERO, Vec3::Y, Vec3::X, 0.6, 0.9, 0.0);
+		assert!(sample.frame.along.dot(Vec3::Y) > 0.95);
 		Ok(())
 	}
 }
