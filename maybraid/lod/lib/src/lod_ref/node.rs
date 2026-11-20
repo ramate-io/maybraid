@@ -38,6 +38,13 @@ impl LodNodePose {
 		Self { previous: transform, current: transform }
 	}
 
+	/// Nearest pose to `to`: min XZ, then min 3D for ties.
+	pub fn nearest<'a>(poses: impl IntoIterator<Item = &'a Self>, to: Vec3) -> Option<&'a Self> {
+		poses.into_iter().min_by(|a, b| {
+			super::compare_driver_distance(a.current.translation, b.current.translation, to)
+		})
+	}
+
 	/// Borrowed [`LodRef`] for this pose + driver `bounds`.
 	pub fn as_lod_ref<'a>(&'a self, entity: Entity, bounds: &'a Aabb3d) -> LodRef<'a> {
 		LodRef {

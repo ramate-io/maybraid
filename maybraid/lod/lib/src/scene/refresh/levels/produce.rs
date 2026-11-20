@@ -11,7 +11,7 @@ use bevy::shape::Aabb3d;
 
 use crate::lod_ref::{
 	collect_node_snapshots_into, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose,
-	LodNodeSnapshot,
+	LodNodeSnapshot, LodRef,
 };
 use crate::scene::host::{
 	nested_host_parent_allows_refresh, nested_host_parent_allows_refresh_world, LodLevelRoot,
@@ -20,6 +20,8 @@ use crate::scene::host::{
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::{LodSceneCulls, SceneChunk, SemanticLodScene};
+
+use super::super::LodHostBounds;
 
 use super::super::{ensure_refresh_core, LodLevelProduceSystems};
 
@@ -58,7 +60,10 @@ impl LodLevelProducer {
 	{
 		Self {
 			level_from_all: |world, entity, refs| {
-				world.get::<T>(entity).map(|scene| scene.scene_lod_level_from_levels(refs))
+				let scene = world.get::<T>(entity)?;
+				let transform = world.get::<Transform>(entity)?;
+				let to = LodHostBounds::world_center(transform, world.get::<LodHostBounds>(entity));
+				Some(scene.scene_lod_level_from_nearest(refs, to))
 			},
 			level: |world, entity, lod_ref| {
 				world.get::<T>(entity).map(|scene| scene.scene_lod_level(lod_ref))
@@ -74,6 +79,8 @@ impl LodLevelProducer {
 		}
 	}
 
+	/// Single-ref level for a host that already chose a driver.
+	#[allow(dead_code)]
 	pub(crate) fn level_for(
 		self,
 		world: &World,
@@ -136,9 +143,9 @@ impl LodLevelProducer {
 		entity: Entity,
 		refs: &'a [crate::lod_ref::LodRef<'a>],
 	) -> Option<&'a crate::lod_ref::LodRef<'a>> {
-		refs.iter().max_by_key(|lod_ref| {
-			self.level_for(world, entity, lod_ref).unwrap_or(LodSceneLevel::UltraLow)
-		})
+		let transform = world.get::<Transform>(entity)?;
+		let to = LodHostBounds::world_center(transform, world.get::<LodHostBounds>(entity));
+		LodRef::nearest(refs, to)
 	}
 
 	pub(crate) fn chunk_for(
@@ -298,7 +305,7 @@ pub fn fill_lod_produce_cache<I>(
 /// Emit [`LodSceneRefreshLevel`] for hosts `T` overlapping this frame's regions.
 pub fn produce_lod_refresh_levels<T>(
 	cache: Res<LodProduceCache>,
-	hosts: Query<&T, With<LodSceneHost>>,
+	hosts: Query<(&T, &Transform, Option<&LodHostBounds>), With<LodSceneHost>>,
 	membership: Query<&LodRefreshMembership>,
 	mut levels: MessageWriter<LodSceneRefreshLevel>,
 	child_of: Query<&ChildOf, Allow<Disabled>>,
@@ -319,7 +326,7 @@ pub fn produce_lod_refresh_levels<T>(
 			if !membership_allows(membership.get(entity).ok(), *domain) {
 				continue;
 			}
-			let Ok(scene) = hosts.get(entity) else {
+			let Ok((scene, transform, bounds)) = hosts.get(entity) else {
 				continue;
 			};
 			if !nested_host_parent_allows_refresh(
@@ -333,7 +340,8 @@ pub fn produce_lod_refresh_levels<T>(
 			) {
 				continue;
 			}
-			let level = scene.scene_lod_level_from_levels(&refs);
+			let to = LodHostBounds::world_center(transform, bounds);
+			let level = scene.scene_lod_level_from_nearest(&refs, to);
 			levels.write(LodSceneRefreshLevel { entity, level });
 		}
 	}

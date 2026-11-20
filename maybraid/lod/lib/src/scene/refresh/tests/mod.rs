@@ -19,10 +19,10 @@ use crate::scene::refresh::{
 };
 
 use test_utils::{
-	BullChan, CullChan, NewCullRegions, NewRegions, Probe, ScanHostIndex, SpotChan,
 	app_bullseye_regions, app_core, app_cull_enqueue, app_dual_channel_levels, app_entities_only,
 	app_open_lattice, app_spotlight_levels, app_spotlight_regions, host_level, move_viewer, pose,
-	spawn_host, spawn_host_with_roots, spawn_nested_pair, spawn_viewer,
+	spawn_host, spawn_host_with_roots, spawn_nested_pair, spawn_viewer, BullChan, CullChan,
+	NewCullRegions, NewRegions, Probe, ScanHostIndex, SpotChan,
 };
 
 #[test]
@@ -51,8 +51,44 @@ fn spotlight_silent_until_translation_changes() -> anyhow::Result<()> {
 	let mut app = app_spotlight_regions();
 	spawn_viewer(app.world_mut(), Vec3::ZERO);
 	app.update();
+	app.update();
 	assert!(app.world().resource::<NewRegions<SpotChan>>().regions.is_empty());
+	Ok(())
+}
 
+#[test]
+fn spotlight_rest_after_one_move_does_not_reemit() -> anyhow::Result<()> {
+	let mut app = app_spotlight_regions();
+	let viewer = spawn_viewer(app.world_mut(), Vec3::ZERO);
+	app.update();
+	move_viewer(&mut app, viewer, Vec3::new(10.0, 0.0, 0.0));
+	app.update();
+	assert_eq!(app.world().resource::<NewRegions<SpotChan>>().regions.len(), 1);
+	app.update();
+	app.update();
+	app.update();
+	assert!(
+		app.world().resource::<NewRegions<SpotChan>>().regions.is_empty(),
+		"resting previous!=current must not keep emitting"
+	);
+	Ok(())
+}
+
+#[test]
+fn adding_a_settled_second_ref_emits_union_once() -> anyhow::Result<()> {
+	let mut app = app_spotlight_regions();
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	app.update();
+	app.world_mut().resource_mut::<NewRegions<SpotChan>>().regions.clear();
+	let second = spawn_viewer(app.world_mut(), Vec3::new(0.0, 420.0, 0.0));
+	app.world_mut()
+		.entity_mut(second)
+		.insert(LodNodePose::settled(Transform::from_xyz(0.0, 420.0, 0.0)));
+	app.update();
+	let regions = &app.world().resource::<NewRegions<SpotChan>>().regions;
+	assert_eq!(regions.len(), 1, "membership change emits coverage");
+	assert!(regions[0].min.y <= -25.0, "ground coverage stays in the union");
+	assert!(regions[0].max.y >= 420.0, "map coverage joins the union");
 	app.update();
 	assert!(app.world().resource::<NewRegions<SpotChan>>().regions.is_empty());
 	Ok(())
@@ -107,7 +143,7 @@ fn spotlight_writes_level_for_host_in_region() -> anyhow::Result<()> {
 	let viewer = spawn_viewer(app.world_mut(), Vec3::ZERO);
 	let host = spawn_host(app.world_mut(), Vec3::ZERO, LodSceneLevel::UltraLow);
 	app.update();
-	assert_eq!(host_level(&app, host), LodSceneLevel::UltraLow);
+	assert_eq!(host_level(&app, host), LodSceneLevel::High);
 
 	move_viewer(&mut app, viewer, Vec3::new(10.0, 0.0, 0.0));
 	app.update();
@@ -194,16 +230,12 @@ fn stamped_hosts_only_follow_their_domain_aabb() -> anyhow::Result<()> {
 		.entity_mut(mob)
 		.insert(LodRefreshMembership(LodRefreshDomain::of::<BullChan>()));
 	app.update();
+	assert_eq!(host_level(&app, vegetation), LodSceneLevel::High);
+	assert_eq!(host_level(&app, mob), LodSceneLevel::UltraLow);
 
 	let region = Aabb3d::from_min_max(Vec3::splat(-50.0), Vec3::splat(50.0));
 	app.world_mut()
 		.write_message(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<BullChan>() });
-	app.update();
-	assert_eq!(host_level(&app, vegetation), LodSceneLevel::UltraLow);
-	assert_eq!(host_level(&app, mob), LodSceneLevel::High);
-
-	app.world_mut()
-		.write_message(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<SpotChan>() });
 	app.update();
 	assert_eq!(host_level(&app, vegetation), LodSceneLevel::High);
 	assert_eq!(host_level(&app, mob), LodSceneLevel::High);
@@ -347,6 +379,19 @@ fn world_cull_aabb() -> LodSceneCullAabb {
 }
 
 #[test]
+fn two_hosts_pick_the_nearer_ref_independently() -> anyhow::Result<()> {
+	let mut app = app_spotlight_levels();
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	spawn_viewer(app.world_mut(), Vec3::new(80.0, 420.0, 0.0));
+	let ground_host = spawn_host(app.world_mut(), Vec3::ZERO, LodSceneLevel::Low);
+	let map_host = spawn_host(app.world_mut(), Vec3::new(80.0, 0.0, 0.0), LodSceneLevel::High);
+	app.update();
+	assert_eq!(host_level(&app, ground_host), LodSceneLevel::High);
+	assert_eq!(host_level(&app, map_host), LodSceneLevel::Low);
+	Ok(())
+}
+
+#[test]
 fn two_viewers_keep_high_at_the_ground_ref() -> anyhow::Result<()> {
 	let mut app = app_cull_enqueue();
 	spawn_viewer(app.world_mut(), Vec3::new(100.0, 420.0, 0.0));
@@ -371,6 +416,7 @@ fn spotlight_union_covers_ground_when_map_viewer_climbs() -> anyhow::Result<()> 
 	let mut app = app_spotlight_regions();
 	let ground = spawn_viewer(app.world_mut(), Vec3::ZERO);
 	let map = spawn_viewer(app.world_mut(), Vec3::ZERO);
+	app.update();
 	app.update();
 	assert!(app.world().resource::<NewRegions<SpotChan>>().regions.is_empty());
 

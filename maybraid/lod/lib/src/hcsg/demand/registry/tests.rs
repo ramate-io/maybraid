@@ -22,7 +22,7 @@ fn span(x: f32) -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::new(x, 0.0, 0.0), Vec3::new(x + 1.0, 1.0, 1.0))
 }
 fn wanted(request: &mut HcsgRequest, regions: Vec<Aabb3d>) {
-	request.apply_regions(&HcsgRegions::<()>::new(regions, None, HcsgClass::Near));
+	request.apply_regions(&HcsgRegions::<()>::new(regions, Vec::new(), HcsgClass::Near));
 }
 fn sync(request: &mut HcsgRequest, demand: &HcsgDemand) -> anyhow::Result<()> {
 	request.sync::<Probe>(demand).map_err(|_| anyhow::anyhow!("demand busy"))?;
@@ -114,7 +114,7 @@ fn frame_transaction_detects_epoch_drop_and_reuses_shared_reach() -> anyhow::Res
 #[test]
 fn publication_pages_bound_completed_backlogs_and_preserve_metadata() -> anyhow::Result<()> {
 	let demand = HcsgDemand::default();
-	let id = demand.subscribe::<Probe>(None, vec![span(0.0)], None, HcsgClass::Near);
+	let id = demand.subscribe::<Probe>(None, vec![span(0.0)], Vec::new(), HcsgClass::Near);
 	let ids: Vec<_> = (0..70).map(|x| Id::from_cell(span(x as f32))).collect();
 	demand.finish_quantum(
 		id,

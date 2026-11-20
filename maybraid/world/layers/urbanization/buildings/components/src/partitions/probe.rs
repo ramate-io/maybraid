@@ -150,11 +150,10 @@ pub fn update_partition_host_levels(
 	let mut changed = 0u32;
 	for (probe, mut level) in &mut hosts {
 		n += 1;
-		let Some(desired) =
-			LodSceneLevel::highest(viewer.iter().map(|pose| probe.level_for(&pose.current)))
-		else {
+		let Some(pose) = lod::LodNodePose::nearest(viewer.iter(), probe.center) else {
 			continue;
 		};
+		let desired = probe.level_for(&pose.current);
 		if *level != desired {
 			*level = desired;
 			changed += 1;

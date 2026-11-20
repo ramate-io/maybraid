@@ -42,8 +42,8 @@ impl HcsgBounds for DurhamWindow {
 		vec![layout.request_region()]
 	}
 
-	fn focus(layout: &SystemParamItem<Self::Param>) -> Option<Vec3> {
-		Some(layout.region_center_xz())
+	fn foci(layout: &SystemParamItem<Self::Param>) -> Vec<Vec3> {
+		vec![layout.region_center_xz()]
 	}
 }
 
@@ -151,10 +151,10 @@ fn prefer_meshes_near_the_viewer(
 	viewers: Query<&Transform, With<LodViewer>>,
 	mut budget: ResMut<MeshFulfillBudget<TerrainMeshBuilder>>,
 ) {
-	if let Some(viewer) = viewers.iter().min_by(|a, b| a.translation.y.total_cmp(&b.translation.y))
-	{
-		budget.prefer_xz = Some(Vec3::new(viewer.translation.x, 0.0, viewer.translation.z));
-	}
+	budget.prefer_xz = viewers
+		.iter()
+		.map(|viewer| Vec3::new(viewer.translation.x, 0.0, viewer.translation.z))
+		.collect();
 }
 
 /// Frame-side terrain reads over the shared storage. [`Busy`] while the

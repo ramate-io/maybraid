@@ -40,7 +40,7 @@ pub(crate) fn generate<T: GenerationScheme>(cx: &mut GenerationContext, id: Id) 
 
 pub(super) struct Subscription {
 	pub regions: Vec<Aabb3d>,
-	pub focus: Option<Vec3>,
+	pub foci: Vec<Vec3>,
 	pub class: HcsgClass,
 	pub pass: f64,
 	pub discover: Discover,

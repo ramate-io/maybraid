@@ -85,6 +85,10 @@ impl<R: TerrainStream, T: SemanticLodScene + HcsgValue> SemanticLodScene for Str
 		self.value.scene_lod_level(lod_ref)
 	}
 
+	fn scene_lod_level_from_nearest(&self, lod_refs: &[LodRef], to: Vec3) -> LodSceneLevel {
+		self.value.scene_lod_level_from_nearest(lod_refs, to)
+	}
+
 	fn scene_lod_level_from_levels(&self, lod_refs: &[LodRef]) -> LodSceneLevel {
 		self.value.scene_lod_level_from_levels(lod_refs)
 	}

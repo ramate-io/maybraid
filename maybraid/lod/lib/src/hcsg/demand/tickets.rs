@@ -129,7 +129,7 @@ impl HcsgDemand {
 			id,
 			Subscription {
 				regions: vec![region],
-				focus: None,
+				foci: Vec::new(),
 				class,
 				pass,
 				discover: discover::<T>,

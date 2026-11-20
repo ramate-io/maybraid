@@ -67,6 +67,14 @@ pub trait LodRefreshRegions: Send + Sync + 'static {
 		}
 	}
 
+	/// Union of [`Self::lod_coverage`] over every driver.
+	fn lod_coverage_union(&self, lod_refs: &[LodRef]) -> Option<Aabb3d> {
+		lod_refs
+			.iter()
+			.filter_map(|lod_ref| self.lod_coverage(lod_ref))
+			.reduce(union_aabb)
+	}
+
 	/// Fold many drivers into one max-extent AABB (or [`Unchanged`] / [`Empty`]).
 	///
 	/// A moving driver still unions [`Self::lod_coverage`] of every resting
@@ -120,28 +128,48 @@ fn union_aabb(a: Aabb3d, b: Aabb3d) -> Aabb3d {
 /// Read `F`-filtered [`LodNode`]s, compute a region via `P`, write
 /// [`LodSceneRefreshRegion<M>`].
 ///
-/// Every matching driver participates so a resting [`LodRef`] keeps its
-/// coverage while another one moves. Strategies still return
-/// [`LodRefreshRegionsStatus::Unchanged`] for sub-threshold motion.
+/// Pose / bounds / membership changes trigger a refresh. Coverage then
+/// unions every current driver, so a resting [`LodRef`] keeps its neighborhood
+/// while another one moves. Strategies still return
+/// [`LodRefreshRegionsStatus::Unchanged`] for sub-threshold motion; adding or
+/// removing a settled driver still emits the current union.
 pub fn produce_lod_refresh_regions<P, F, M>(
 	producer: Res<P>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
+	changed_pose: Query<Entity, (With<LodNode>, F, Changed<LodNodePose>)>,
+	changed_bounds: Query<Entity, (With<LodNode>, F, Changed<LodNodeBounds>)>,
 	mut writer: MessageWriter<LodSceneRefreshRegion<M>>,
 	mut bus: MessageWriter<LodSceneRefreshAabb>,
+	mut members: Local<Vec<Entity>>,
 ) where
 	P: Resource + LodRefreshRegions,
 	F: QueryFilter + 'static,
 	M: Send + Sync + 'static,
 {
 	if nodes.is_empty() {
+		members.clear();
 		return;
 	}
+	let mut current: Vec<Entity> = nodes.iter().map(|(entity, _, _)| entity).collect();
+	current.sort_unstable();
+	let membership_changed = *members != current;
+	let drivers_changed = !changed_pose.is_empty() || !changed_bounds.is_empty();
+	if !membership_changed && !drivers_changed {
+		return;
+	}
+	members.clone_from(&current);
+
 	let snapshots = collect_node_snapshots(&nodes);
 	let refs = lod_refs_from_snapshots(&snapshots);
-
-	let Ok(LodRefreshRegionsStatus::Changed(region)) = producer.lod_refresh_regions_for(&refs)
-	else {
-		return;
+	let region = match producer.lod_refresh_regions_for(&refs) {
+		Ok(LodRefreshRegionsStatus::Changed(region)) => region,
+		Ok(LodRefreshRegionsStatus::Unchanged) if membership_changed => {
+			let Some(region) = producer.lod_coverage_union(&refs) else {
+				return;
+			};
+			region
+		}
+		_ => return,
 	};
 
 	writer.write(LodSceneRefreshRegion::<M>::new(region));

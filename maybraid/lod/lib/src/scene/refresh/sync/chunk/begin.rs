@@ -13,20 +13,20 @@
 use bevy::prelude::*;
 
 use crate::lod_ref::{
-	LodNode, LodNodeBounds, LodNodePose, LodNodeSnapshot, LodRef, lod_refs_from_snapshots,
-	point_bounds,
+	lod_refs_from_snapshots, point_bounds, LodNode, LodNodeBounds, LodNodePose, LodNodeSnapshot,
+	LodRef,
 };
-use crate::scene::LodLevelProducer;
 use crate::scene::chunk::materialize_front;
 use crate::scene::host::{
-	LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
-	nested_host_parent_allows_refresh_world,
+	nested_host_parent_allows_refresh_world, LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest,
+	LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::refresh::LodHostBounds;
+use crate::scene::LodLevelProducer;
 
 use super::super::super::viewer::LodViewer;
-use super::schedule::{LevelBand, admit_begin, begin_scan_limit, charge_begin_weight};
+use super::schedule::{admit_begin, begin_scan_limit, charge_begin_weight, LevelBand};
 use super::types::{
 	FulfillClass, LodChunkBeginClock, LodChunkBeginScanCursor, LodChunkFulfillBudget,
 	LodChunkFulfillment, LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
@@ -451,10 +451,7 @@ fn push_begin_candidate(
 /// Forest grove hosts sit at [`Transform::IDENTITY`] with a world-space
 /// [`LodHostBounds`]; translation alone would collapse them all to the origin.
 fn host_xz_distance2(origin: Vec3, transform: &Transform, bounds: Option<&LodHostBounds>) -> f32 {
-	let center = match bounds {
-		Some(b) => transform.transform_point((Vec3::from(b.0.min) + Vec3::from(b.0.max)) * 0.5),
-		None => transform.translation,
-	};
+	let center = LodHostBounds::world_center(transform, bounds);
 	let dx = center.x - origin.x;
 	let dz = center.z - origin.z;
 	dx * dx + dz * dz

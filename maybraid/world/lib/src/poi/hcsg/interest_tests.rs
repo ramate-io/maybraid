@@ -334,7 +334,7 @@ fn worker_requests_preserve_exact_ordered_real_family_output() -> anyhow::Result
 			None,
 			vec![poi_intelligence::xz_tile_region(tile, TILE_SIZE, 0.0)
 				.ok_or_else(|| anyhow::anyhow!("terrain retention region"))?],
-			None,
+			Vec::new(),
 			lod::hcsg::HcsgClass::Near,
 		);
 		let _worker = spawn_worker(fixture.storage.clone(), demand.clone())?;

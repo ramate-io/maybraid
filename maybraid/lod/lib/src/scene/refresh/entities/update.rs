@@ -13,12 +13,11 @@ use crate::scene::host::{
 use crate::scene::level::LodSceneLevel;
 use crate::scene::SemanticLodScene;
 
-/// Pick the driver ref that votes for the highest [`LodSceneLevel`].
-pub fn dominant_lod_ref<'a, T: SemanticLodScene>(
-	scene: &T,
-	refs: &'a [LodRef<'a>],
-) -> Option<&'a LodRef<'a>> {
-	refs.iter().max_by_key(|lod_ref| scene.scene_lod_level(lod_ref))
+use super::super::LodHostBounds;
+
+/// Pick the driver nearest `to` in XZ (then 3D for ties).
+pub fn dominant_lod_ref<'a>(refs: &'a [LodRef<'a>], to: Vec3) -> Option<&'a LodRef<'a>> {
+	LodRef::nearest(refs, to)
 }
 
 /// Set host [`LodSceneLevel`] from `FNode`-filtered [`LodNode`]s.
@@ -36,7 +35,10 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 	mut sets: ParamSet<(
 		(
 			Query<&'static LodSceneLevel, (With<LodSceneHost>, Allow<Disabled>)>,
-			Query<(Entity, &'static T), (With<LodSceneHost>, FHost)>,
+			Query<
+				(Entity, &'static T, &'static Transform, Option<&'static LodHostBounds>),
+				(With<LodSceneHost>, FHost),
+			>,
 		),
 		Query<(Entity, &'static mut LodSceneLevel), (With<LodSceneHost>, With<T>, FHost)>,
 	)>,
@@ -52,7 +54,7 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 		let (host_levels, hosts) = sets.p0();
 		hosts
 			.iter()
-			.filter(|(entity, _)| {
+			.filter(|(entity, _, _, _)| {
 				nested_host_parent_allows_refresh(
 					*entity,
 					&child_of,
@@ -63,7 +65,10 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 					&visibilities,
 				)
 			})
-			.map(|(entity, scene)| (entity, scene.scene_lod_level_from_levels(&refs)))
+			.map(|(entity, scene, transform, bounds)| {
+				let to = LodHostBounds::world_center(transform, bounds);
+				(entity, scene.scene_lod_level_from_nearest(&refs, to))
+			})
 			.collect()
 	};
 

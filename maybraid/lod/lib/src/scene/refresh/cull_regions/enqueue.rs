@@ -26,6 +26,8 @@ use super::markers::{LodCullMarkerPlugin, LodHostHasCullableRoots, LodNestedRefr
 use super::produce::LodSceneCullRegion;
 use crate::scene::LodLevelProducer;
 
+use super::super::LodHostBounds;
+
 /// Enqueue culls for hosts overlapping this frame's cull AABBs.
 ///
 /// Reuses [`LodCullProduceCache`] (one untyped spatial query). Lowers a stale
@@ -36,7 +38,10 @@ pub fn produce_lod_cull_for_region<T>(
 	mut commands: Commands,
 	mut cull_writer: MessageWriter<LodCullRequest>,
 	cache: Res<LodCullProduceCache>,
-	hosts: Query<&T, (With<LodSceneHost>, With<LodNestedRefreshAllowed>)>,
+	hosts: Query<
+		(&T, &Transform, Option<&LodHostBounds>),
+		(With<LodSceneHost>, With<LodNestedRefreshAllowed>),
+	>,
 	all_hosts: Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
 	cullable: Query<(), With<LodHostHasCullableRoots>>,
 	mut host_levels: Query<&mut LodSceneLevel, With<LodSceneHost>>,
@@ -66,14 +71,15 @@ pub fn produce_lod_cull_for_region<T>(
 		if lod_scene_host_or_ancestor_hidden(entity, &child_of, &all_hosts, &visibilities) {
 			continue;
 		}
-		let Ok(scene) = hosts.get(entity) else {
+		let Ok((scene, transform, bounds)) = hosts.get(entity) else {
 			continue;
 		};
 
 		let Ok(mut current) = host_levels.get_mut(entity) else {
 			continue;
 		};
-		let distance_level = scene.scene_lod_level_from_levels(&refs);
+		let to = LodHostBounds::world_center(transform, bounds);
+		let distance_level = scene.scene_lod_level_from_nearest(&refs, to);
 		let lowered = distance_level < *current;
 		if lowered {
 			*current = distance_level;

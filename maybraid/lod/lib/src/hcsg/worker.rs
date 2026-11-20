@@ -126,11 +126,14 @@ fn fill_quantum(storage: &HcsgStorage, job: Job) -> QuantumProgress {
 				job.regions.iter().flat_map(|region| (job.discover)(&mut cx, *region)).collect();
 			ids.sort();
 			ids.dedup();
-			if let Some(focus) = job.focus {
-				let focus = Vec3A::from(focus);
+			if !job.foci.is_empty() {
+				let foci: Vec<Vec3A> = job.foci.iter().copied().map(Vec3A::from).collect();
 				let distance = |id: &Id| {
 					id.origin_cell_bounds().map_or(f32::INFINITY, |cell| {
-						((cell.min + cell.max) * 0.5).distance_squared(focus)
+						let center = (cell.min + cell.max) * 0.5;
+						foci.iter()
+							.map(|focus| center.distance_squared(*focus))
+							.fold(f32::INFINITY, f32::min)
 					})
 				};
 				ids.sort_by(|a, b| distance(a).total_cmp(&distance(b)));
