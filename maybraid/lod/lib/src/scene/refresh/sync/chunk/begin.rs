@@ -11,20 +11,22 @@
 //! ([`LodChunkFulfillBudget::begin_prefill_weights_per_job`]); lazy tails drain later.
 
 use bevy::prelude::*;
-use bevy::shape::Aabb3d;
 
-use crate::lod_ref::{point_bounds, LodNode, LodNodeBounds, LodNodePose, LodRef};
+use crate::lod_ref::{
+	LodNode, LodNodeBounds, LodNodePose, LodNodeSnapshot, LodRef, lod_refs_from_snapshots,
+	point_bounds,
+};
+use crate::scene::LodLevelProducer;
 use crate::scene::chunk::materialize_front;
 use crate::scene::host::{
-	nested_host_parent_allows_refresh_world, LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest,
-	LodSceneHost,
+	LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
+	nested_host_parent_allows_refresh_world,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::refresh::LodHostBounds;
-use crate::scene::LodLevelProducer;
 
 use super::super::super::viewer::LodViewer;
-use super::schedule::{admit_begin, begin_scan_limit, charge_begin_weight, LevelBand};
+use super::schedule::{LevelBand, admit_begin, begin_scan_limit, charge_begin_weight};
 use super::types::{
 	FulfillClass, LodChunkBeginClock, LodChunkBeginScanCursor, LodChunkFulfillBudget,
 	LodChunkFulfillment, LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
@@ -75,12 +77,11 @@ fn roll_desired_into_presence(clock: &mut LodChunkBeginClock) {
 /// candidate scanning, distance ordering, and admission consume one shared
 /// cursor and budget.
 pub fn begin_chunk_lod_fulfill_erased(world: &mut World) {
-	let Some((viewer_entity, pose, viewer_bounds)) = single_viewer(world) else {
+	let snapshots = viewer_snapshots(world);
+	if snapshots.is_empty() {
 		return;
-	};
-	let driver_bounds = viewer_bounds.unwrap_or_else(|| point_bounds(pose.current.translation));
-	let lod_ref = pose.as_lod_ref(viewer_entity, &driver_bounds);
-	let viewer_xz = pose.current.translation;
+	}
+	let refs = lod_refs_from_snapshots(&snapshots);
 
 	{
 		let mut clock = world.resource_mut::<LodChunkBeginClock>();
@@ -102,7 +103,7 @@ pub fn begin_chunk_lod_fulfill_erased(world: &mut World) {
 		scratch.removals.clear();
 		scratch.scan_batch.clear();
 		let (scanned, next_cursor) =
-			scan_erased_begin_hosts(world, viewer_xz, scan_limit, &mut scratch);
+			scan_erased_begin_hosts(world, &snapshots, scan_limit, &mut scratch);
 		if scanned {
 			sort_begin_near_first(&mut scratch.presence_near);
 			sort_begin_near_first(&mut scratch.presence_far);
@@ -139,23 +140,23 @@ pub fn begin_chunk_lod_fulfill_erased(world: &mut World) {
 	let presence_first =
 		matches!(world.resource::<LodChunkBeginClock>().first_class, FulfillClass::Presence);
 	if presence_first {
-		admit_candidates_world(world, &presence_near, FulfillClass::Presence, &lod_ref, &budget);
-		admit_candidates_world(world, &presence_far, FulfillClass::Presence, &lod_ref, &budget);
+		admit_candidates_world(world, &presence_near, FulfillClass::Presence, &refs, &budget);
+		admit_candidates_world(world, &presence_far, FulfillClass::Presence, &refs, &budget);
 		{
 			let mut clock = world.resource_mut::<LodChunkBeginClock>();
 			roll_presence_into_desired(&mut clock);
 		}
-		admit_candidates_world(world, &desired_near, FulfillClass::Desired, &lod_ref, &budget);
-		admit_candidates_world(world, &desired_far, FulfillClass::Desired, &lod_ref, &budget);
+		admit_candidates_world(world, &desired_near, FulfillClass::Desired, &refs, &budget);
+		admit_candidates_world(world, &desired_far, FulfillClass::Desired, &refs, &budget);
 	} else {
-		admit_candidates_world(world, &desired_near, FulfillClass::Desired, &lod_ref, &budget);
-		admit_candidates_world(world, &desired_far, FulfillClass::Desired, &lod_ref, &budget);
+		admit_candidates_world(world, &desired_near, FulfillClass::Desired, &refs, &budget);
+		admit_candidates_world(world, &desired_far, FulfillClass::Desired, &refs, &budget);
 		{
 			let mut clock = world.resource_mut::<LodChunkBeginClock>();
 			roll_desired_into_presence(&mut clock);
 		}
-		admit_candidates_world(world, &presence_near, FulfillClass::Presence, &lod_ref, &budget);
-		admit_candidates_world(world, &presence_far, FulfillClass::Presence, &lod_ref, &budget);
+		admit_candidates_world(world, &presence_near, FulfillClass::Presence, &refs, &budget);
+		admit_candidates_world(world, &presence_far, FulfillClass::Presence, &refs, &budget);
 	}
 }
 
@@ -164,7 +165,7 @@ pub fn begin_chunk_lod_fulfill_erased(world: &mut World) {
 /// Returns `(false, 0)` when no hosts hold a spawn request.
 fn scan_erased_begin_hosts(
 	world: &mut World,
-	viewer_xz: Vec3,
+	viewers: &[LodNodeSnapshot],
 	scan_limit: u32,
 	scratch: &mut LodChunkBeginCandidateScratch,
 ) -> (bool, u32) {
@@ -225,7 +226,7 @@ fn scan_erased_begin_hosts(
 
 	for index in 0..scratch.scan_batch.len() {
 		let (host, request) = scratch.scan_batch[index];
-		classify_and_push_erased_begin(world, host, request, viewer_xz, scratch);
+		classify_and_push_erased_begin(world, host, request, viewers, scratch);
 	}
 
 	(true, next_cursor)
@@ -235,12 +236,12 @@ fn classify_and_push_erased_begin(
 	world: &mut World,
 	host: Entity,
 	request: LodLevelSpawnRequest,
-	viewer_xz: Vec3,
+	viewers: &[LodNodeSnapshot],
 	scratch: &mut LodChunkBeginCandidateScratch,
 ) {
 	match classify_begin_candidate_world(world, host, request) {
 		BeginClassification::Candidate(candidate) => push_begin_candidate(
-			with_host_xz_distance_world(candidate, viewer_xz, world),
+			with_host_xz_distance_world(candidate, viewers, world),
 			&mut scratch.presence_near,
 			&mut scratch.presence_far,
 			&mut scratch.desired_near,
@@ -251,18 +252,22 @@ fn classify_and_push_erased_begin(
 	}
 }
 
-fn single_viewer(world: &mut World) -> Option<(Entity, LodNodePose, Option<Aabb3d>)> {
+fn viewer_snapshots(world: &mut World) -> Vec<LodNodeSnapshot> {
 	let mut query = world.query_filtered::<
 		(Entity, &LodNodePose, Option<&LodNodeBounds>),
 		(With<LodNode>, With<LodViewer>),
 	>();
-	let mut iter = query.iter(world);
-	let (entity, pose, bounds) = iter.next()?;
-	let result = (entity, *pose, bounds.map(|bounds| bounds.0));
-	if iter.next().is_some() {
-		return None;
-	}
-	Some(result)
+	query
+		.iter(world)
+		.map(|(entity, pose, bounds)| LodNodeSnapshot {
+			entity,
+			previous: pose.previous,
+			current: pose.current,
+			bounds: bounds
+				.map(|bounds| bounds.0)
+				.unwrap_or_else(|| point_bounds(pose.current.translation)),
+		})
+		.collect()
 }
 
 enum BeginClassification {
@@ -337,12 +342,15 @@ fn parent_host_desired_or_high_world(world: &World, host: Entity) -> LodSceneLev
 
 fn with_host_xz_distance_world(
 	mut candidate: BeginCandidate,
-	origin: Vec3,
+	viewers: &[LodNodeSnapshot],
 	world: &World,
 ) -> BeginCandidate {
 	if let Some(transform) = world.get::<Transform>(candidate.host) {
-		candidate.dist_xz =
-			host_xz_distance2(origin, transform, world.get::<LodHostBounds>(candidate.host));
+		let bounds = world.get::<LodHostBounds>(candidate.host);
+		candidate.dist_xz = viewers
+			.iter()
+			.map(|viewer| host_xz_distance2(viewer.current.translation, transform, bounds))
+			.fold(f32::MAX, f32::min);
 	}
 	candidate
 }
@@ -351,14 +359,14 @@ fn admit_candidates_world(
 	world: &mut World,
 	candidates: &[BeginCandidate],
 	class: FulfillClass,
-	lod_ref: &LodRef,
+	lod_refs: &[LodRef],
 	budget: &LodChunkFulfillBudget,
 ) {
 	for candidate in candidates {
 		let Some(producer) = world.get::<LodLevelProducer>(candidate.host).copied() else {
 			continue;
 		};
-		let Some(actual) = producer.level_for(world, candidate.host, lod_ref) else {
+		let Some(actual) = producer.desired_from_all(world, candidate.host, lod_refs) else {
 			continue;
 		};
 		if actual != candidate.level {
@@ -374,6 +382,9 @@ fn admit_candidates_world(
 		if !admitted {
 			break;
 		}
+		let Some(lod_ref) = producer.dominant_ref(world, candidate.host, lod_refs) else {
+			continue;
+		};
 		let Some(chunk) = producer.chunk_for(world, candidate.host, lod_ref, candidate.level)
 		else {
 			continue;

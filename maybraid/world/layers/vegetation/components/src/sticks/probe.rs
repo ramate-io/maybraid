@@ -83,12 +83,15 @@ pub fn update_stick_host_levels(
 	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<(&StickLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
 ) {
-	let Ok(pose) = viewer.single() else {
+	if viewer.is_empty() {
 		return;
-	};
-	let viewer = pose.current;
+	}
 	for (probe, mut level) in &mut hosts {
-		let next = probe.level_for(&viewer);
+		let Some(next) =
+			LodSceneLevel::highest(viewer.iter().map(|pose| probe.level_for(&pose.current)))
+		else {
+			continue;
+		};
 		if *level != next {
 			*level = next;
 		}

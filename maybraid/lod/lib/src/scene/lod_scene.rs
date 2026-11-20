@@ -6,7 +6,7 @@
 
 use bevy::ecs::component::Component;
 use bevy::math::Vec3;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::{Scene, bsn};
 use bevy::shape::Aabb3d;
 
 use crate::lod_ref::LodRef;
@@ -78,6 +78,21 @@ pub trait SemanticLodScene {
 	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
 		let _ = (lod_ref, current);
 		LodSceneCulls::None
+	}
+
+	/// Whether every driver would despawn `root` at `current`.
+	///
+	/// Union of interest: a root stays if any [`LodRef`] still wants it.
+	fn scene_culls_root_from_levels(
+		&self,
+		lod_refs: &[LodRef],
+		current: LodSceneLevel,
+		root: LodSceneLevel,
+	) -> bool {
+		LodSceneCulls::all_cull(
+			lod_refs.iter().map(|lod_ref| self.scene_lod_culls(lod_ref, current)),
+			root,
+		)
 	}
 
 	/// Scene for one LOD level root (primary implementation target).
@@ -165,6 +180,15 @@ impl<T: SemanticLodScene + Send + Sync + 'static> SemanticLodScene for std::sync
 		(**self).scene_lod_culls(lod_ref, current)
 	}
 
+	fn scene_culls_root_from_levels(
+		&self,
+		lod_refs: &[LodRef],
+		current: LodSceneLevel,
+		root: LodSceneLevel,
+	) -> bool {
+		(**self).scene_culls_root_from_levels(lod_refs, current, root)
+	}
+
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
 		(**self).scene_with_level(lod_ref, level)
 	}
@@ -227,5 +251,47 @@ mod tests {
 		assert_eq!(chunk.total_primitives(), 1);
 		let prims = chunk.into_primitives();
 		assert_eq!(prims[0].1.level, LodSceneLevel::Medium);
+	}
+
+	struct HeightScene;
+
+	impl SemanticLodScene for HeightScene {
+		fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+			if lod_ref.current_transform.translation.y < 10.0 {
+				LodSceneLevel::High
+			} else {
+				LodSceneLevel::UltraLow
+			}
+		}
+
+		fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+			let _ = current;
+			crate::cull_non_adjacent_bands(self.scene_lod_level(lod_ref))
+		}
+
+		fn scene_with_level(&self, _: &LodRef, _: LodSceneLevel) -> impl Scene + 'static {}
+	}
+
+	fn lod_ref_at<'a>(prev: &'a Transform, curr: &'a Transform, bounds: &'a Aabb3d) -> LodRef<'a> {
+		LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: prev,
+			current_transform: curr,
+			bounds,
+		}
+	}
+
+	#[test]
+	fn scene_lod_level_from_levels_keeps_the_nearer_ref() {
+		let ground = Transform::from_translation(Vec3::new(4.0, 2.0, 0.0));
+		let map = Transform::from_translation(Vec3::new(4.0, 420.0, 0.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let refs = [lod_ref_at(&ground, &ground, &bounds), lod_ref_at(&map, &map, &bounds)];
+		assert_eq!(HeightScene.scene_lod_level_from_levels(&refs), LodSceneLevel::High);
+		assert!(!HeightScene.scene_culls_root_from_levels(
+			&refs,
+			LodSceneLevel::High,
+			LodSceneLevel::High
+		));
 	}
 }

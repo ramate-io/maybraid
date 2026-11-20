@@ -83,6 +83,15 @@ impl LodLevelProducer {
 		(self.level)(world, entity, lod_ref)
 	}
 
+	pub(crate) fn desired_from_all(
+		self,
+		world: &World,
+		entity: Entity,
+		refs: &[crate::lod_ref::LodRef],
+	) -> Option<LodSceneLevel> {
+		(self.level_from_all)(world, entity, refs)
+	}
+
 	pub(crate) fn culls_for(
 		self,
 		world: &World,
@@ -91,6 +100,45 @@ impl LodLevelProducer {
 		current: LodSceneLevel,
 	) -> Option<LodSceneCulls> {
 		(self.culls)(world, entity, lod_ref, current)
+	}
+
+	pub(crate) fn any_culls(
+		self,
+		world: &World,
+		entity: Entity,
+		refs: &[crate::lod_ref::LodRef],
+		current: LodSceneLevel,
+	) -> bool {
+		refs.iter().any(|lod_ref| {
+			self.culls_for(world, entity, lod_ref, current)
+				.is_some_and(|culls| !matches!(culls, LodSceneCulls::None))
+		})
+	}
+
+	pub(crate) fn culls_root_from_all(
+		self,
+		world: &World,
+		entity: Entity,
+		refs: &[crate::lod_ref::LodRef],
+		current: LodSceneLevel,
+		root: LodSceneLevel,
+	) -> bool {
+		LodSceneCulls::all_cull(
+			refs.iter()
+				.filter_map(|lod_ref| self.culls_for(world, entity, lod_ref, current)),
+			root,
+		)
+	}
+
+	pub(crate) fn dominant_ref<'a>(
+		self,
+		world: &World,
+		entity: Entity,
+		refs: &'a [crate::lod_ref::LodRef<'a>],
+	) -> Option<&'a crate::lod_ref::LodRef<'a>> {
+		refs.iter().max_by_key(|lod_ref| {
+			self.level_for(world, entity, lod_ref).unwrap_or(LodSceneLevel::UltraLow)
+		})
 	}
 
 	pub(crate) fn chunk_for(

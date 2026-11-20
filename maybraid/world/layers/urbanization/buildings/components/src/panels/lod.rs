@@ -177,11 +177,15 @@ pub fn update_panel_host_levels(
 	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<(&PanelLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
 ) {
-	let Ok(pose) = viewer.single() else {
+	if viewer.is_empty() {
 		return;
-	};
+	}
 	for (probe, mut level) in &mut hosts {
-		let desired = probe.level_for(&pose.current);
+		let Some(desired) =
+			LodSceneLevel::highest(viewer.iter().map(|pose| probe.level_for(&pose.current)))
+		else {
+			continue;
+		};
 		if *level != desired {
 			*level = desired;
 		}

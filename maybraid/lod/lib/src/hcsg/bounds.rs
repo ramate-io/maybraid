@@ -17,12 +17,18 @@ use super::runtime::HcsgSystems;
 /// [`LodViewer`] transforms for viewer-centered bounds producers.
 pub type LodViewers = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
-/// World position of the first [`LodViewer`], if any.
+/// World position of the lowest [`LodViewer`], if any.
+///
+/// A high map camera and a ground/death anchor both count; generation prefers
+/// the ground pose so collision near the player stays first.
 pub fn viewer_focus<'w, 's>(viewers: &Query<'w, 's, &Transform, With<LodViewer>>) -> Option<Vec3> {
-	viewers.iter().next().map(|viewer| viewer.translation)
+	viewers
+		.iter()
+		.min_by(|a, b| a.translation.y.total_cmp(&b.translation.y))
+		.map(|viewer| viewer.translation)
 }
 
-/// Viewer-centered [`HcsgBounds`] channel: regions from the first viewer only.
+/// Viewer-centered [`HcsgBounds`] channel: union of regions around every viewer.
 ///
 /// A blanket [`HcsgBounds`] impl supplies [`LodViewers`] as [`HcsgBounds::Param`]
 /// and [`viewer_focus`] as [`HcsgBounds::focus`].
@@ -30,6 +36,11 @@ pub trait ViewerHcsgBounds: Send + Sync + 'static {
 	const CLASS: HcsgClass;
 
 	fn regions_around(viewer: Vec3) -> Vec<Aabb3d>;
+
+	/// Interest boxes around every active viewer (map + ground, …).
+	fn regions_around_viewers(viewers: impl IntoIterator<Item = Vec3>) -> Vec<Aabb3d> {
+		viewers.into_iter().flat_map(Self::regions_around).collect()
+	}
 }
 
 impl<B: ViewerHcsgBounds> HcsgBounds for B {
@@ -38,7 +49,7 @@ impl<B: ViewerHcsgBounds> HcsgBounds for B {
 	type Param = LodViewers;
 
 	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
-		viewer_focus(viewers).map(B::regions_around).unwrap_or_default()
+		B::regions_around_viewers(viewers.iter().map(|viewer| viewer.translation))
 	}
 
 	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
@@ -208,12 +219,13 @@ mod viewer_bounds_tests {
 	}
 
 	#[test]
-	fn viewer_focus_matches_first_viewer() {
+	fn viewer_focus_matches_lowest_viewer() {
 		const AT: Vec3 = Vec3::new(3.0, 0.0, 7.0);
 		fn probe(viewers: Query<&Transform, With<LodViewer>>) {
 			assert_eq!(viewer_focus(&viewers), Some(AT));
-			let regions =
-				viewer_focus(&viewers).map(ProbeBounds::regions_around).unwrap_or_default();
+			let regions = ProbeBounds::regions_around_viewers(
+				viewers.iter().map(|viewer| viewer.translation),
+			);
 			assert_eq!(regions.len(), 1);
 			assert_eq!(regions[0].min, AT.into());
 		}
@@ -222,6 +234,26 @@ mod viewer_bounds_tests {
 			.add_systems(Update, probe)
 			.world_mut()
 			.spawn((LodViewer, Transform::from_translation(AT)));
+		app.update();
+	}
+
+	#[test]
+	fn viewer_regions_union_ground_and_high_map() {
+		const GROUND: Vec3 = Vec3::new(12.0, 2.0, -8.0);
+		const MAP: Vec3 = Vec3::new(12.0, 420.0, -8.0);
+		fn probe(viewers: Query<&Transform, With<LodViewer>>) {
+			assert_eq!(viewer_focus(&viewers), Some(GROUND));
+			let regions = ProbeBounds::regions_around_viewers(
+				viewers.iter().map(|viewer| viewer.translation),
+			);
+			assert_eq!(regions.len(), 2);
+			assert!(regions.iter().any(|region| region.min == GROUND.into()));
+			assert!(regions.iter().any(|region| region.min == MAP.into()));
+		}
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_systems(Update, probe);
+		app.world_mut().spawn((LodViewer, Transform::from_translation(MAP)));
+		app.world_mut().spawn((LodViewer, Transform::from_translation(GROUND)));
 		app.update();
 	}
 }

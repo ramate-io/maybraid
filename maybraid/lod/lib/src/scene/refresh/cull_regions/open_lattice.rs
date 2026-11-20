@@ -97,11 +97,27 @@ impl LodCullRegions for OpenLattice {
 		lod_refs: &[LodRef],
 		cursor: &mut LodCullRegionCursor,
 	) -> LodCullRegionsStatus {
-		let Some(driver) = lod_refs.first() else {
+		if lod_refs.is_empty() {
 			return LodCullRegionsStatus::Unchanged;
-		};
-		let anchor = self.cell_index(driver.current_transform.translation);
-		cursor.ensure_cells(anchor, || self.enumerate_cells(anchor));
+		}
+		let mut anchors: Vec<IVec3> = lod_refs
+			.iter()
+			.map(|driver| self.cell_index(driver.current_transform.translation))
+			.collect();
+		anchors.sort_by_key(|cell| (cell.x, cell.y, cell.z));
+		anchors.dedup();
+		let listed = anchors.clone();
+		cursor.ensure_cells_for(&anchors, || {
+			let mut cells = Vec::new();
+			for anchor in listed {
+				for cell in self.enumerate_cells(anchor) {
+					if !cells.contains(&cell) {
+						cells.push(cell);
+					}
+				}
+			}
+			cells
+		});
 		let batch = cursor.take_cells();
 		if batch.is_empty() {
 			return LodCullRegionsStatus::Unchanged;
@@ -238,5 +254,19 @@ mod tests {
 		let _ = lattice.lod_cull_regions(&[r1], &mut cursor);
 		assert_eq!(cursor.anchor_cell, Some(IVec3::ZERO));
 		assert_eq!(cursor.next, 2);
+	}
+
+	#[test]
+	fn two_xz_anchors_union_their_cells() {
+		let lattice = OpenLattice::new(1000.0, 3000.0, 500.0);
+		let mut cursor = LodCullRegionCursor::default().with_regions_per_tick(1);
+		let ground = Transform::from_translation(Vec3::ZERO);
+		let map = Transform::from_translation(Vec3::new(2500.0, 420.0, 0.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let refs = [lod_ref_at(&ground, &ground, &bounds), lod_ref_at(&map, &map, &bounds)];
+		let _ = lattice.lod_cull_regions(&refs, &mut cursor);
+		assert_eq!(cursor.anchor_cells.len(), 2);
+		let one = lattice.enumerate_cells(IVec3::ZERO);
+		assert!(cursor.cells.len() > one.len(), "union of two rings is larger than one");
 	}
 }

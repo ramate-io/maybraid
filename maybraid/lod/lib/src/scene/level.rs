@@ -36,6 +36,13 @@ pub enum LodSceneLevel {
 	Resolution(u32),
 }
 
+impl LodSceneLevel {
+	/// Highest-detail level in `levels`, if any.
+	pub fn highest(levels: impl IntoIterator<Item = Self>) -> Option<Self> {
+		levels.into_iter().max()
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

@@ -33,6 +33,11 @@ impl Default for LodNodePose {
 }
 
 impl LodNodePose {
+	/// Pose that is already at `transform` (no synthetic arrival from the origin).
+	pub fn settled(transform: Transform) -> Self {
+		Self { previous: transform, current: transform }
+	}
+
 	/// Borrowed [`LodRef`] for this pose + driver `bounds`.
 	pub fn as_lod_ref<'a>(&'a self, entity: Entity, bounds: &'a Aabb3d) -> LodRef<'a> {
 		LodRef {

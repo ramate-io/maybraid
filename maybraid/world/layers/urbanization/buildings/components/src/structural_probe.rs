@@ -284,12 +284,17 @@ pub fn update_building_structural_host_levels(
 		With<LodSceneHost>,
 	>,
 ) {
-	let Ok(pose) = viewer.single() else {
+	if viewer.is_empty() {
 		return;
-	};
-	let viewer_world = pose.current.translation;
+	}
 	for (probe, global, mut level) in &mut hosts {
-		let next = probe.level_for_world(viewer_world, global);
+		let Some(next) = LodSceneLevel::highest(
+			viewer
+				.iter()
+				.map(|pose| probe.level_for_world(pose.current.translation, global)),
+		) else {
+			continue;
+		};
 		if *level != next {
 			*level = next;
 		}

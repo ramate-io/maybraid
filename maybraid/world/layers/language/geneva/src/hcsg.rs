@@ -227,7 +227,7 @@ fn track_language<C: Send + Sync + 'static>(
 		window.boxes = latest.boxes.clone();
 		window.focus = latest.focus;
 	}
-	let viewer = viewers.iter().next().map(|viewer| viewer.translation).or(window.focus);
+	let viewer = lod::hcsg::viewer_focus(&viewers).or(window.focus);
 	let center = match viewer {
 		Some(at) if !window.boxes.is_empty() => Some(match window.naming {
 			Some(center) if (at.xz() - center).abs().max_element() <= LANGUAGE_NAME_HYSTERESIS => {

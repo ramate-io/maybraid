@@ -151,7 +151,8 @@ fn prefer_meshes_near_the_viewer(
 	viewers: Query<&Transform, With<LodViewer>>,
 	mut budget: ResMut<MeshFulfillBudget<TerrainMeshBuilder>>,
 ) {
-	if let Some(viewer) = viewers.iter().next() {
+	if let Some(viewer) = viewers.iter().min_by(|a, b| a.translation.y.total_cmp(&b.translation.y))
+	{
 		budget.prefer_xz = Some(Vec3::new(viewer.translation.x, 0.0, viewer.translation.z));
 	}
 }

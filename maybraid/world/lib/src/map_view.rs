@@ -297,6 +297,18 @@ impl Plugin for WorldMapViewPlugin {
 			)
 			.add_systems(
 				Update,
+				crate::map_lod::spawn_ground_lod_anchors
+					.after(WorldMapSet::Toggle)
+					.after(PlayerLifeSet::Resolve)
+					.after(stamp_map_camera)
+					.before(PlayerCameraSystems::Look),
+			)
+			.add_systems(
+				Update,
+				crate::map_lod::despawn_ground_lod_anchors.after(PlayerCameraSystems::Apply),
+			)
+			.add_systems(
+				Update,
 				(
 					prepare_map_presentation,
 					sync_map_name_pins,
@@ -939,11 +951,7 @@ fn inset_rect(rect: Rect, fraction: f32) -> Rect {
 	let pad = rect.size() * fraction.clamp(0.0, 0.4);
 	let min = rect.min + pad;
 	let max = rect.max - pad;
-	if min.x < max.x && min.y < max.y {
-		Rect { min, max }
-	} else {
-		rect
-	}
+	if min.x < max.x && min.y < max.y { Rect { min, max } } else { rect }
 }
 
 fn rect_empty(rect: Rect) -> bool {
@@ -1022,11 +1030,7 @@ fn allowed_label_rect(pin: &MapPinWanted, view: Rect, sep: f32) -> Rect {
 		}
 		MapLabelKind::Region | MapLabelKind::Feature => {
 			let hit = view.intersect(pin.extent);
-			if rect_empty(hit) {
-				view
-			} else {
-				hit
-			}
+			if rect_empty(hit) { view } else { hit }
 		}
 	}
 }
@@ -1059,11 +1063,7 @@ fn map_name_label(surface: &str, english: &[String]) -> String {
 			.collect::<Vec<_>>()
 			.join(" "),
 	);
-	if gloss.is_empty() {
-		native
-	} else {
-		format!("{native}\n{gloss}")
-	}
+	if gloss.is_empty() { native } else { format!("{native}\n{gloss}") }
 }
 
 fn name_visible(key: NameKey, height: f32) -> bool {
@@ -2170,7 +2170,7 @@ mod tests {
 	fn select_closes_captured_map_without_reopening_through_actor_shell() -> anyhow::Result<()> {
 		use maybraid_character_controller::produce::produce_character_intents;
 		use maybraid_controllers_core::{
-			register_controllers_core, ActorTarget, CaptureKind, InputRouter, PadDeliverySystems,
+			ActorTarget, CaptureKind, InputRouter, PadDeliverySystems, register_controllers_core,
 		};
 		use maybraid_virtual_pad_controller::{
 			PadButton, PadDevices, PrimaryVirtualPad, VirtualPad, VirtualPadController,
@@ -2571,15 +2571,17 @@ mod tests {
 	#[test]
 	fn far_off_screen_pois_do_not_crowd_the_rim() {
 		let viewport = Rect::from_corners(Vec2::ZERO, Vec2::new(800.0, 600.0));
-		assert!(comfortable_label_screen(
-			Vec2::new(2_000.0, 300.0),
-			false,
-			viewport,
-			Vec2::new(40.0, 16.0),
-			true,
-			false,
-		)
-		.is_none());
+		assert!(
+			comfortable_label_screen(
+				Vec2::new(2_000.0, 300.0),
+				false,
+				viewport,
+				Vec2::new(40.0, 16.0),
+				true,
+				false,
+			)
+			.is_none()
+		);
 		let (screen, dir) = comfortable_label_screen(
 			Vec2::new(2_000.0, 300.0),
 			false,

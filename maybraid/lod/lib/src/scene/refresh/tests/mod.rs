@@ -19,10 +19,10 @@ use crate::scene::refresh::{
 };
 
 use test_utils::{
+	BullChan, CullChan, NewCullRegions, NewRegions, Probe, ScanHostIndex, SpotChan,
 	app_bullseye_regions, app_core, app_cull_enqueue, app_dual_channel_levels, app_entities_only,
 	app_open_lattice, app_spotlight_levels, app_spotlight_regions, host_level, move_viewer, pose,
-	spawn_host, spawn_host_with_roots, spawn_nested_pair, spawn_viewer, BullChan, CullChan,
-	NewCullRegions, NewRegions, Probe, ScanHostIndex, SpotChan,
+	spawn_host, spawn_host_with_roots, spawn_nested_pair, spawn_viewer,
 };
 
 #[test]
@@ -344,6 +344,46 @@ fn nested_host_under_hidden_root_is_not_refreshed() -> anyhow::Result<()> {
 
 fn world_cull_aabb() -> LodSceneCullAabb {
 	LodSceneCullAabb { region: Aabb3d::from_min_max(Vec3::splat(-50.0), Vec3::splat(50.0)) }
+}
+
+#[test]
+fn two_viewers_keep_high_at_the_ground_ref() -> anyhow::Result<()> {
+	let mut app = app_cull_enqueue();
+	spawn_viewer(app.world_mut(), Vec3::new(100.0, 420.0, 0.0));
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	let (host, roots) = spawn_host_with_roots(
+		app.world_mut(),
+		Vec3::ZERO,
+		LodSceneLevel::High,
+		&[LodSceneLevel::High, LodSceneLevel::Medium],
+	);
+	app.update();
+	app.world_mut().write_message(world_cull_aabb());
+	app.update();
+
+	assert_eq!(host_level(&app, host), LodSceneLevel::High);
+	assert!(app.world().get_entity(roots[0]).is_ok(), "ground LodRef must keep the High root");
+	Ok(())
+}
+
+#[test]
+fn spotlight_union_covers_ground_when_map_viewer_climbs() -> anyhow::Result<()> {
+	let mut app = app_spotlight_regions();
+	let ground = spawn_viewer(app.world_mut(), Vec3::ZERO);
+	let map = spawn_viewer(app.world_mut(), Vec3::ZERO);
+	app.update();
+	assert!(app.world().resource::<NewRegions<SpotChan>>().regions.is_empty());
+
+	move_viewer(&mut app, map, Vec3::new(0.0, 420.0, 0.0));
+	app.update();
+	let regions = &app.world().resource::<NewRegions<SpotChan>>().regions;
+	assert_eq!(regions.len(), 1);
+	assert!(
+		regions[0].min.y <= pose(&app, ground).1.y,
+		"resting ground coverage must stay in the union"
+	);
+	assert!(regions[0].max.y >= 420.0);
+	Ok(())
 }
 
 #[test]

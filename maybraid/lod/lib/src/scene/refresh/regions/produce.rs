@@ -68,6 +68,10 @@ pub trait LodRefreshRegions: Send + Sync + 'static {
 	}
 
 	/// Fold many drivers into one max-extent AABB (or [`Unchanged`] / [`Empty`]).
+	///
+	/// A moving driver still unions [`Self::lod_coverage`] of every resting
+	/// driver, so a ground [`LodRef`] keeps its neighborhood while a map camera
+	/// climbs away.
 	fn lod_refresh_regions_for(
 		&self,
 		lod_refs: &[LodRef],
@@ -76,11 +80,20 @@ pub trait LodRefreshRegions: Send + Sync + 'static {
 			return Err(LodRefreshRegionsError::Empty);
 		}
 
+		let mut any_changed = false;
 		let mut union: Option<Aabb3d> = None;
 		for lod_ref in lod_refs {
 			match self.lod_refresh_regions(lod_ref) {
-				LodRefreshRegionsStatus::Unchanged => {}
+				LodRefreshRegionsStatus::Unchanged => {
+					if let Some(aabb) = self.lod_coverage(lod_ref) {
+						union = Some(match union {
+							None => aabb,
+							Some(prev) => union_aabb(prev, aabb),
+						});
+					}
+				}
 				LodRefreshRegionsStatus::Changed(aabb) => {
+					any_changed = true;
 					union = Some(match union {
 						None => aabb,
 						Some(prev) => union_aabb(prev, aabb),
@@ -89,9 +102,13 @@ pub trait LodRefreshRegions: Send + Sync + 'static {
 			}
 		}
 
-		Ok(match union {
-			Some(region) => LodRefreshRegionsStatus::Changed(region),
-			None => LodRefreshRegionsStatus::Unchanged,
+		Ok(if any_changed {
+			match union {
+				Some(region) => LodRefreshRegionsStatus::Changed(region),
+				None => LodRefreshRegionsStatus::Unchanged,
+			}
+		} else {
+			LodRefreshRegionsStatus::Unchanged
 		})
 	}
 }
@@ -100,18 +117,15 @@ fn union_aabb(a: Aabb3d, b: Aabb3d) -> Aabb3d {
 	Aabb3d::from_min_max(a.min.min(b.min), a.max.max(b.max))
 }
 
-/// Read `F`-filtered [`LodNode`]s whose pose changed, compute a region via `P`,
-/// write [`LodSceneRefreshRegion<M>`].
+/// Read `F`-filtered [`LodNode`]s, compute a region via `P`, write
+/// [`LodSceneRefreshRegion<M>`].
 ///
-/// Only drivers with [`Changed<LodNodePose>`] (after [`crate::track_lod_nodes`])
-/// participate. Strategies may still return [`LodRefreshRegionsStatus::Unchanged`]
-/// for sub-threshold motion (e.g. same lattice cell).
+/// Every matching driver participates so a resting [`LodRef`] keeps its
+/// coverage while another one moves. Strategies still return
+/// [`LodRefreshRegionsStatus::Unchanged`] for sub-threshold motion.
 pub fn produce_lod_refresh_regions<P, F, M>(
 	producer: Res<P>,
-	nodes: Query<
-		(Entity, &LodNodePose, Option<&LodNodeBounds>),
-		(With<LodNode>, Changed<LodNodePose>, F),
-	>,
+	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 	mut writer: MessageWriter<LodSceneRefreshRegion<M>>,
 	mut bus: MessageWriter<LodSceneRefreshAabb>,
 ) where

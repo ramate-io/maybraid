@@ -7,11 +7,11 @@ use lod::lod_scene_host::LodSceneHost;
 use lod::scene::{LodSceneLevel, LodSceneStatus};
 
 use crate::foliage::collection::{
-	CheapBallCollection, FrondCollection, CHEAP_BALL_COLLECTION_HIGH_METERS,
-	CHEAP_BALL_COLLECTION_LOW_METERS, CHEAP_BALL_COLLECTION_MEDIUM_METERS,
-	FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_MEDIUM_FACTOR,
+	CHEAP_BALL_COLLECTION_HIGH_METERS, CHEAP_BALL_COLLECTION_LOW_METERS,
+	CHEAP_BALL_COLLECTION_MEDIUM_METERS, CheapBallCollection, FROND_COLLECTION_HIGH_FACTOR,
+	FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_MEDIUM_FACTOR, FrondCollection,
 };
-use crate::lod_band::{characteristic_extent_abs, DistanceLodBand};
+use crate::lod_band::{DistanceLodBand, characteristic_extent_abs};
 use crate::placed::Placement;
 
 pub const FOLIAGE_HIGH_FACTOR: f32 = 5.0;
@@ -141,11 +141,7 @@ impl FoliageLodProbe {
 			self.medium_factor,
 			self.low_factor,
 		));
-		if prev == curr {
-			LodSceneStatus::Unchanged
-		} else {
-			LodSceneStatus::Changed(curr)
-		}
+		if prev == curr { LodSceneStatus::Unchanged } else { LodSceneStatus::Changed(curr) }
 	}
 }
 
@@ -153,12 +149,15 @@ pub fn update_foliage_host_levels(
 	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<(&FoliageLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
 ) {
-	let Ok(pose) = viewer.single() else {
+	if viewer.is_empty() {
 		return;
-	};
-	let viewer = pose.current;
+	}
 	for (probe, mut level) in &mut hosts {
-		let next = probe.level_for(&viewer);
+		let Some(next) =
+			LodSceneLevel::highest(viewer.iter().map(|pose| probe.level_for(&pose.current)))
+		else {
+			continue;
+		};
 		if *level != next {
 			*level = next;
 		}
@@ -169,8 +168,8 @@ pub fn update_foliage_host_levels(
 mod tests {
 	use super::*;
 	use crate::foliage::collection::{
-		FrondCollection, FrondMember, FrondRun, FROND_COLLECTION_HIGH_FACTOR,
-		FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_MEDIUM_FACTOR,
+		FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_MEDIUM_FACTOR,
+		FrondCollection, FrondMember, FrondRun,
 	};
 	use crate::placed::Placement;
 
@@ -229,6 +228,19 @@ mod tests {
 		assert_eq!(
 			probe.level_for(&Transform::from_translation(Vec3::new(600.0, 2.0, 0.0))),
 			LodSceneLevel::Medium
+		);
+	}
+
+	#[test]
+	fn highest_keeps_high_when_a_map_camera_climbs() {
+		let probe = FoliageLodProbe { center: Vec3::ZERO, extent: 2.0, ..Default::default() };
+		let ground = Transform::from_translation(Vec3::new(4.0, 2.0, 0.0));
+		let map = Transform::from_translation(Vec3::new(4.0, 420.0, 0.0));
+		assert_eq!(probe.level_for(&ground), LodSceneLevel::High);
+		assert_ne!(probe.level_for(&map), LodSceneLevel::High);
+		assert_eq!(
+			LodSceneLevel::highest([probe.level_for(&ground), probe.level_for(&map)]),
+			Some(LodSceneLevel::High)
 		);
 	}
 }
