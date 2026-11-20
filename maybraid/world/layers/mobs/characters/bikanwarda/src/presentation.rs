@@ -1,8 +1,8 @@
 //! Form-specific material intent.
 //!
-//! Slot-named Color / metallic-roughness maps live in [`crate::textures`]. The
-//! current Epiphant GLBs mostly lack UVs and none declare `body_mat` / `head_mat`
-//! slots, so palette colors remain the fallback until a matching export arrives.
+//! Slot-named Color / metallic-roughness maps live in [`crate::textures`].
+//! Bikanwarda visuals use the #1589 export GLB; palette colors remain a fallback
+//! for slots without a bound map.
 
 use bevy::prelude::Color;
 use characters::species::epiphant::{EpiphantColor, EpiphantColors};

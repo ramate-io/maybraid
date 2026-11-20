@@ -2373,6 +2373,7 @@ dependencies = [
  "lod-avian",
  "material-ref",
  "rigs",
+ "serde_json",
 ]
 
 [[package]]

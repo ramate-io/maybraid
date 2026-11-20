@@ -27,6 +27,18 @@ nix develop --command cargo run -p character-mesh-export --release -- \
 
 See [`mesh-export/README.md`](../../../../world/layers/mobs/characters/mesh-export/README.md).
 
+## Runtime GLB (Bevy)
+
+Bevy does not load OBJ. Convert without re-authoring (keeps `o` names, `{part}_mat`,
+UVs; flips V for glTF):
+
+```bash
+python3 maybraid/art/characters/exports/epiphant/obj_to_glb.py
+```
+
+Writes `maybraid/assets/characters/epiphant/default/epiphant_default_preview.glb`
+(Scene0 body … Scene7 tail). Bikanwarda loads those scenes as the visible body.
+
 ## Import in Procreate (manual)
 
 Actual Procreate import is the acceptance check and is **not** verified in CI.
