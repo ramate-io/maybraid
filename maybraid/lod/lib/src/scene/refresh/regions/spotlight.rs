@@ -88,4 +88,20 @@ mod tests {
 		assert_eq!(region.min.y, -10.0);
 		assert_eq!(region.max.y, 10.0);
 	}
+
+	#[test]
+	fn union_keeps_resting_ground_coverage_when_a_map_ref_climbs() {
+		let spot = Spotlight::new(50.0);
+		let ground = Transform::from_translation(Vec3::ZERO);
+		let high = Transform::from_translation(Vec3::new(0.0, 420.0, 0.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ZERO);
+		let refs = [lod_ref_at(&ground, &ground, &bounds), lod_ref_at(&ground, &high, &bounds)];
+		let LodRefreshRegionsStatus::Changed(region) =
+			spot.lod_refresh_regions_for(&refs).expect("two refs")
+		else {
+			panic!("expected Changed");
+		};
+		assert!(region.min.y <= -25.0, "ground cube must stay in the union, got {region:?}");
+		assert!(region.max.y >= 445.0, "map cube must stay in the union, got {region:?}");
+	}
 }

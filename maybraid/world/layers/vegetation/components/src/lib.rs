@@ -55,7 +55,7 @@ pub use structural_lod::{
 };
 
 use bevy::ecs::template::template;
-use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Visibility};
+use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Vec3, Visibility};
 use bevy::scene::prelude::{bsn, Scene};
 use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
@@ -145,6 +145,15 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for C
 }
 
 impl<T: VegetationComponents + Send + Sync + 'static> LodScene for ComponentsOnly<T> {
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		let _ = self;
+		LodRef::nearest_3d(lod_refs, to)
+	}
+
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.0
 			.structural_lod()
@@ -243,6 +252,15 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents
 }
 
 impl<T: VegetationComponents + Send + Sync + 'static> LodScene for FlattenedComponentsOnly<T> {
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		let _ = self;
+		LodRef::nearest_3d(lod_refs, to)
+	}
+
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.0
 			.structural_lod()

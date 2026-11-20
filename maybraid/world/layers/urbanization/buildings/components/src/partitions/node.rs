@@ -138,6 +138,15 @@ pub(crate) fn partition_tile_scene(tile: PartitionTile, level: LodSceneLevel) ->
 }
 
 impl LodScene for PartitionNode {
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		let _ = self;
+		LodRef::nearest_3d(lod_refs, to)
+	}
+
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.placement.partition_lod_level(lod_ref)
 	}
@@ -167,6 +176,15 @@ impl LodScene for PartitionNode {
 macro_rules! impl_partition_mesh_lod_scene {
 	($ty:ty, $meshes:expr) => {
 		impl ::lod::scene::LodScene for $ty {
+			fn scene_lod_nearest<'a>(
+				&self,
+				lod_refs: &'a [::lod::lod_ref::LodRef<'a>],
+				to: ::bevy::prelude::Vec3,
+			) -> Option<&'a ::lod::lod_ref::LodRef<'a>> {
+				let _ = self;
+				::lod::lod_ref::LodRef::nearest_3d(lod_refs, to)
+			}
+
 			fn scene_lod_level(
 				&self,
 				lod_ref: &::lod::lod_ref::LodRef,

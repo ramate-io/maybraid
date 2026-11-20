@@ -46,13 +46,21 @@ pub struct LodCullRegionCursor {
 	pub cells: Vec<IVec3>,
 	pub next: u32,
 	pub anchor_cell: Option<IVec3>,
+	/// Distinct driver cells last enumerated (union of every [`crate::LodRef`]).
+	pub anchor_cells: Vec<IVec3>,
 	/// How many cell AABBs to emit per production tick (default 1).
 	pub regions_per_tick: u32,
 }
 
 impl Default for LodCullRegionCursor {
 	fn default() -> Self {
-		Self { cells: Vec::new(), next: 0, anchor_cell: None, regions_per_tick: 1 }
+		Self {
+			cells: Vec::new(),
+			next: 0,
+			anchor_cell: None,
+			anchor_cells: Vec::new(),
+			regions_per_tick: 1,
+		}
 	}
 }
 
@@ -65,14 +73,21 @@ impl LodCullRegionCursor {
 	/// Drop the cached cell list so the next produce rebuilds (e.g. lattice params changed).
 	pub fn invalidate_cells(&mut self) {
 		self.anchor_cell = None;
+		self.anchor_cells.clear();
 	}
 
 	/// Rebuild the cell list when `anchor` changes; otherwise keep the round-robin cursor.
 	pub fn ensure_cells(&mut self, anchor: IVec3, enumerate: impl FnOnce() -> Vec<IVec3>) {
-		if self.anchor_cell == Some(anchor) {
+		self.ensure_cells_for(&[anchor], enumerate);
+	}
+
+	/// Rebuild when the set of driver cells changes; otherwise keep the round-robin cursor.
+	pub fn ensure_cells_for(&mut self, anchors: &[IVec3], enumerate: impl FnOnce() -> Vec<IVec3>) {
+		if self.anchor_cells == anchors {
 			return;
 		}
-		self.anchor_cell = Some(anchor);
+		self.anchor_cells = anchors.to_vec();
+		self.anchor_cell = anchors.first().copied();
 		self.cells = enumerate();
 		self.next = 0;
 	}

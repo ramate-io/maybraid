@@ -16,7 +16,7 @@ use super::storage::Busy;
 #[derive(Debug)]
 pub(crate) struct HcsgRequest {
 	wanted: Vec<Aabb3d>,
-	focus: Option<Vec3>,
+	foci: Vec<Vec3>,
 	class: HcsgClass,
 	subscription: Option<SubscriptionId>,
 	requested: Vec<Aabb3d>,
@@ -27,7 +27,7 @@ impl Default for HcsgRequest {
 	fn default() -> Self {
 		Self {
 			wanted: Vec::new(),
-			focus: None,
+			foci: Vec::new(),
 			class: HcsgClass::Near,
 			subscription: None,
 			requested: Vec::new(),
@@ -48,7 +48,7 @@ impl HcsgRequest {
 	/// keys off boxes only, matching [`HcsgRegions`] producers.
 	pub(crate) fn apply_regions<C>(&mut self, latest: &HcsgRegions<C>) {
 		self.wanted = latest.boxes.clone();
-		self.focus = latest.focus;
+		self.foci = latest.foci.clone();
 		self.class = latest.class;
 	}
 
@@ -56,8 +56,8 @@ impl HcsgRequest {
 		&self.wanted
 	}
 
-	pub(crate) fn focus(&self) -> Option<Vec3> {
-		self.focus
+	pub(crate) fn foci(&self) -> &[Vec3] {
+		&self.foci
 	}
 
 	pub(crate) fn subscription(&self) -> Option<SubscriptionId> {
@@ -96,7 +96,7 @@ impl HcsgRequest {
 			self.subscription,
 			self.wanted == self.requested && !self.retry,
 			&self.wanted,
-			self.focus,
+			&self.foci,
 			self.class,
 			origin,
 		)?
@@ -146,7 +146,7 @@ mod tests {
 	}
 
 	fn regions(boxes: Vec<Aabb3d>) -> HcsgRegions<()> {
-		HcsgRegions::new(boxes, None, HcsgClass::Near)
+		HcsgRegions::new(boxes, Vec::new(), HcsgClass::Near)
 	}
 
 	#[test]

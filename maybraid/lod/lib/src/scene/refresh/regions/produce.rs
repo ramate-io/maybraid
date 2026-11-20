@@ -67,7 +67,47 @@ pub trait LodRefreshRegions: Send + Sync + 'static {
 		}
 	}
 
+	/// Union of [`Self::lod_coverage`] over every driver.
+	fn lod_coverage_union(&self, lod_refs: &[LodRef]) -> Option<Aabb3d> {
+		lod_refs
+			.iter()
+			.filter_map(|lod_ref| self.lod_coverage(lod_ref))
+			.reduce(union_aabb)
+	}
+
+	/// Threshold-check only the `changed` drivers, then union coverage of every current driver.
+	///
+	/// Resting drivers keep a stale previous/current pair that may still look
+	/// like a Bullseye cell cross. Those must not retrigger when another driver
+	/// moves inside a cell. Coverage still unions every current ref.
+	fn lod_refresh_from_changed(
+		&self,
+		lod_refs: &[LodRef],
+		mut changed: impl FnMut(Entity) -> bool,
+	) -> Option<Aabb3d> {
+		let mut any_changed = false;
+		for lod_ref in lod_refs {
+			if !changed(lod_ref.entity) {
+				continue;
+			}
+			if matches!(self.lod_refresh_regions(lod_ref), LodRefreshRegionsStatus::Changed(_)) {
+				any_changed = true;
+				break;
+			}
+		}
+		if any_changed {
+			self.lod_coverage_union(lod_refs)
+		} else {
+			None
+		}
+	}
+
 	/// Fold many drivers into one max-extent AABB (or [`Unchanged`] / [`Empty`]).
+	///
+	/// A moving driver still unions [`Self::lod_coverage`] of every resting
+	/// driver, so a ground [`LodRef`] keeps its neighborhood while a map camera
+	/// climbs away. Region production uses [`Self::lod_refresh_from_changed`] so
+	/// a resting driver's stored previous/current does not retrigger.
 	fn lod_refresh_regions_for(
 		&self,
 		lod_refs: &[LodRef],
@@ -76,11 +116,20 @@ pub trait LodRefreshRegions: Send + Sync + 'static {
 			return Err(LodRefreshRegionsError::Empty);
 		}
 
+		let mut any_changed = false;
 		let mut union: Option<Aabb3d> = None;
 		for lod_ref in lod_refs {
 			match self.lod_refresh_regions(lod_ref) {
-				LodRefreshRegionsStatus::Unchanged => {}
+				LodRefreshRegionsStatus::Unchanged => {
+					if let Some(aabb) = self.lod_coverage(lod_ref) {
+						union = Some(match union {
+							None => aabb,
+							Some(prev) => union_aabb(prev, aabb),
+						});
+					}
+				}
 				LodRefreshRegionsStatus::Changed(aabb) => {
+					any_changed = true;
 					union = Some(match union {
 						None => aabb,
 						Some(prev) => union_aabb(prev, aabb),
@@ -89,9 +138,13 @@ pub trait LodRefreshRegions: Send + Sync + 'static {
 			}
 		}
 
-		Ok(match union {
-			Some(region) => LodRefreshRegionsStatus::Changed(region),
-			None => LodRefreshRegionsStatus::Unchanged,
+		Ok(if any_changed {
+			match union {
+				Some(region) => LodRefreshRegionsStatus::Changed(region),
+				None => LodRefreshRegionsStatus::Unchanged,
+			}
+		} else {
+			LodRefreshRegionsStatus::Unchanged
 		})
 	}
 }
@@ -100,34 +153,54 @@ fn union_aabb(a: Aabb3d, b: Aabb3d) -> Aabb3d {
 	Aabb3d::from_min_max(a.min.min(b.min), a.max.max(b.max))
 }
 
-/// Read `F`-filtered [`LodNode`]s whose pose changed, compute a region via `P`,
-/// write [`LodSceneRefreshRegion<M>`].
+/// Read `F`-filtered [`LodNode`]s, compute a region via `P`, write
+/// [`LodSceneRefreshRegion<M>`].
 ///
-/// Only drivers with [`Changed<LodNodePose>`] (after [`crate::track_lod_nodes`])
-/// participate. Strategies may still return [`LodRefreshRegionsStatus::Unchanged`]
-/// for sub-threshold motion (e.g. same lattice cell).
+/// Pose / bounds / membership changes trigger a refresh. Coverage then
+/// unions every current driver, so a resting [`LodRef`] keeps its neighborhood
+/// while another one moves. Strategies still return
+/// [`LodRefreshRegionsStatus::Unchanged`] for sub-threshold motion; adding or
+/// removing a settled driver still emits the current union.
 pub fn produce_lod_refresh_regions<P, F, M>(
 	producer: Res<P>,
-	nodes: Query<
-		(Entity, &LodNodePose, Option<&LodNodeBounds>),
-		(With<LodNode>, Changed<LodNodePose>, F),
-	>,
+	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
+	changed_pose: Query<Entity, (With<LodNode>, F, Changed<LodNodePose>)>,
+	changed_bounds: Query<Entity, (With<LodNode>, F, Changed<LodNodeBounds>)>,
 	mut writer: MessageWriter<LodSceneRefreshRegion<M>>,
 	mut bus: MessageWriter<LodSceneRefreshAabb>,
+	mut members: Local<Vec<Entity>>,
 ) where
 	P: Resource + LodRefreshRegions,
 	F: QueryFilter + 'static,
 	M: Send + Sync + 'static,
 {
 	if nodes.is_empty() {
+		members.clear();
 		return;
 	}
+	let mut current: Vec<Entity> = nodes.iter().map(|(entity, _, _)| entity).collect();
+	current.sort_unstable();
+	let membership_changed = *members != current;
+	let drivers_changed = !changed_pose.is_empty() || !changed_bounds.is_empty();
+	if !membership_changed && !drivers_changed {
+		return;
+	}
+	members.clone_from(&current);
+
 	let snapshots = collect_node_snapshots(&nodes);
 	let refs = lod_refs_from_snapshots(&snapshots);
-
-	let Ok(LodRefreshRegionsStatus::Changed(region)) = producer.lod_refresh_regions_for(&refs)
-	else {
-		return;
+	let region = if membership_changed {
+		let Some(region) = producer.lod_coverage_union(&refs) else {
+			return;
+		};
+		region
+	} else {
+		let Some(region) = producer.lod_refresh_from_changed(&refs, |entity| {
+			changed_pose.get(entity).is_ok() || changed_bounds.get(entity).is_ok()
+		}) else {
+			return;
+		};
+		region
 	};
 
 	writer.write(LodSceneRefreshRegion::<M>::new(region));

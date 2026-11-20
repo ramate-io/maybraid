@@ -39,7 +39,7 @@ fn state(demand: &HcsgDemand) -> anyhow::Result<Presented<Pin>> {
 	let mut state = Presented::default();
 	state.request.apply_regions(&HcsgRegions::<()>::new(
 		vec![Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(1000.0, 1.0, 1.0))],
-		None,
+		Vec::new(),
 		HcsgClass::Near,
 	));
 	anyhow::ensure!(state.request(demand), "request should subscribe");

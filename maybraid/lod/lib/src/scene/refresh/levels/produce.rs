@@ -21,6 +21,8 @@ use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::{LodSceneCulls, SceneChunk, SemanticLodScene};
 
+use super::super::LodHostBounds;
+
 use super::super::{ensure_refresh_core, LodLevelProduceSystems};
 
 /// Impulse: set host `entity` toward `level` (folded by max in entity refresh).
@@ -32,6 +34,11 @@ pub struct LodSceneRefreshLevel {
 
 type ProduceLevelFn =
 	for<'a> fn(&World, Entity, &[crate::lod_ref::LodRef<'a>]) -> Option<LodSceneLevel>;
+type ProduceNearestFn = for<'a> fn(
+	&World,
+	Entity,
+	&'a [crate::lod_ref::LodRef<'a>],
+) -> Option<&'a crate::lod_ref::LodRef<'a>>;
 type ProduceOneLevelFn =
 	for<'a> fn(&World, Entity, &crate::lod_ref::LodRef<'a>) -> Option<LodSceneLevel>;
 type ProduceCullsFn =
@@ -46,6 +53,7 @@ type ProduceChunkFn =
 #[derive(Component, Clone, Copy)]
 pub struct LodLevelProducer {
 	level_from_all: ProduceLevelFn,
+	nearest: ProduceNearestFn,
 	level: ProduceOneLevelFn,
 	culls: ProduceCullsFn,
 	chunk: ProduceChunkFn,
@@ -58,7 +66,16 @@ impl LodLevelProducer {
 	{
 		Self {
 			level_from_all: |world, entity, refs| {
-				world.get::<T>(entity).map(|scene| scene.scene_lod_level_from_levels(refs))
+				let scene = world.get::<T>(entity)?;
+				let transform = world.get::<Transform>(entity)?;
+				let to = LodHostBounds::world_center(transform, world.get::<LodHostBounds>(entity));
+				Some(scene.scene_lod_level_from_nearest(refs, to))
+			},
+			nearest: |world, entity, refs| {
+				let scene = world.get::<T>(entity)?;
+				let transform = world.get::<Transform>(entity)?;
+				let to = LodHostBounds::world_center(transform, world.get::<LodHostBounds>(entity));
+				scene.scene_lod_nearest(refs, to)
 			},
 			level: |world, entity, lod_ref| {
 				world.get::<T>(entity).map(|scene| scene.scene_lod_level(lod_ref))
@@ -74,6 +91,8 @@ impl LodLevelProducer {
 		}
 	}
 
+	/// Single-ref level for a host that already chose a driver.
+	#[allow(dead_code)]
 	pub(crate) fn level_for(
 		self,
 		world: &World,
@@ -81,6 +100,15 @@ impl LodLevelProducer {
 		lod_ref: &crate::lod_ref::LodRef,
 	) -> Option<LodSceneLevel> {
 		(self.level)(world, entity, lod_ref)
+	}
+
+	pub(crate) fn desired_from_all(
+		self,
+		world: &World,
+		entity: Entity,
+		refs: &[crate::lod_ref::LodRef],
+	) -> Option<LodSceneLevel> {
+		(self.level_from_all)(world, entity, refs)
 	}
 
 	pub(crate) fn culls_for(
@@ -91,6 +119,43 @@ impl LodLevelProducer {
 		current: LodSceneLevel,
 	) -> Option<LodSceneCulls> {
 		(self.culls)(world, entity, lod_ref, current)
+	}
+
+	pub(crate) fn any_culls(
+		self,
+		world: &World,
+		entity: Entity,
+		refs: &[crate::lod_ref::LodRef],
+		current: LodSceneLevel,
+	) -> bool {
+		refs.iter().any(|lod_ref| {
+			self.culls_for(world, entity, lod_ref, current)
+				.is_some_and(|culls| !matches!(culls, LodSceneCulls::None))
+		})
+	}
+
+	pub(crate) fn culls_root_from_all(
+		self,
+		world: &World,
+		entity: Entity,
+		refs: &[crate::lod_ref::LodRef],
+		current: LodSceneLevel,
+		root: LodSceneLevel,
+	) -> bool {
+		LodSceneCulls::all_cull(
+			refs.iter()
+				.filter_map(|lod_ref| self.culls_for(world, entity, lod_ref, current)),
+			root,
+		)
+	}
+
+	pub(crate) fn dominant_ref<'a>(
+		self,
+		world: &World,
+		entity: Entity,
+		refs: &'a [crate::lod_ref::LodRef<'a>],
+	) -> Option<&'a crate::lod_ref::LodRef<'a>> {
+		(self.nearest)(world, entity, refs)
 	}
 
 	pub(crate) fn chunk_for(
@@ -250,7 +315,7 @@ pub fn fill_lod_produce_cache<I>(
 /// Emit [`LodSceneRefreshLevel`] for hosts `T` overlapping this frame's regions.
 pub fn produce_lod_refresh_levels<T>(
 	cache: Res<LodProduceCache>,
-	hosts: Query<&T, With<LodSceneHost>>,
+	hosts: Query<(&T, &Transform, Option<&LodHostBounds>), With<LodSceneHost>>,
 	membership: Query<&LodRefreshMembership>,
 	mut levels: MessageWriter<LodSceneRefreshLevel>,
 	child_of: Query<&ChildOf, Allow<Disabled>>,
@@ -271,7 +336,7 @@ pub fn produce_lod_refresh_levels<T>(
 			if !membership_allows(membership.get(entity).ok(), *domain) {
 				continue;
 			}
-			let Ok(scene) = hosts.get(entity) else {
+			let Ok((scene, transform, bounds)) = hosts.get(entity) else {
 				continue;
 			};
 			if !nested_host_parent_allows_refresh(
@@ -285,7 +350,8 @@ pub fn produce_lod_refresh_levels<T>(
 			) {
 				continue;
 			}
-			let level = scene.scene_lod_level_from_levels(&refs);
+			let to = LodHostBounds::world_center(transform, bounds);
+			let level = scene.scene_lod_level_from_nearest(&refs, to);
 			levels.write(LodSceneRefreshLevel { entity, level });
 		}
 	}

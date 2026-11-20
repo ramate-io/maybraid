@@ -89,6 +89,14 @@ impl ChicoGroveHost {
 }
 
 impl LodScene for ChicoGroveHost {
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		self.tile.scene_lod_nearest(lod_refs, to)
+	}
+
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.tile.scene_lod_level(lod_ref)
 	}

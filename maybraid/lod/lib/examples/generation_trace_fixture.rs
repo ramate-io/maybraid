@@ -48,8 +48,9 @@ fn main() -> anyhow::Result<()> {
 		drop(second);
 	}
 	let demand = HcsgDemand::default();
-	let old = demand.subscribe::<Fixture>(None, vec![universal_bounds()], None, HcsgClass::Near);
-	demand.subscribe::<Fixture>(Some(old), vec![universal_bounds()], None, HcsgClass::Near);
+	let old =
+		demand.subscribe::<Fixture>(None, vec![universal_bounds()], Vec::new(), HcsgClass::Near);
+	demand.subscribe::<Fixture>(Some(old), vec![universal_bounds()], Vec::new(), HcsgClass::Near);
 	std::thread::sleep(Duration::from_millis(10));
 	let worker = spawn_worker(storage.clone(), demand.clone())?;
 	assert!(demand.wait_idle(Duration::from_secs(10)));

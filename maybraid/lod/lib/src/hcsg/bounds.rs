@@ -17,19 +17,27 @@ use super::runtime::HcsgSystems;
 /// [`LodViewer`] transforms for viewer-centered bounds producers.
 pub type LodViewers = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
-/// World position of the first [`LodViewer`], if any.
-pub fn viewer_focus<'w, 's>(viewers: &Query<'w, 's, &Transform, With<LodViewer>>) -> Option<Vec3> {
-	viewers.iter().next().map(|viewer| viewer.translation)
+/// World positions of every [`LodViewer`]. Empty when none are live.
+///
+/// Do not invent a viewer at the origin. Generation sorts each item by min
+/// distance to this set.
+pub fn viewer_foci<'w, 's>(viewers: &Query<'w, 's, &Transform, With<LodViewer>>) -> Vec<Vec3> {
+	viewers.iter().map(|viewer| viewer.translation).collect()
 }
 
-/// Viewer-centered [`HcsgBounds`] channel: regions from the first viewer only.
+/// Viewer-centered [`HcsgBounds`] channel: union of regions around every viewer.
 ///
 /// A blanket [`HcsgBounds`] impl supplies [`LodViewers`] as [`HcsgBounds::Param`]
-/// and [`viewer_focus`] as [`HcsgBounds::focus`].
+/// and [`viewer_foci`] as [`HcsgBounds::foci`].
 pub trait ViewerHcsgBounds: Send + Sync + 'static {
 	const CLASS: HcsgClass;
 
 	fn regions_around(viewer: Vec3) -> Vec<Aabb3d>;
+
+	/// Interest boxes around every active viewer (map + ground, …).
+	fn regions_around_viewers(viewers: impl IntoIterator<Item = Vec3>) -> Vec<Aabb3d> {
+		viewers.into_iter().flat_map(Self::regions_around).collect()
+	}
 }
 
 impl<B: ViewerHcsgBounds> HcsgBounds for B {
@@ -38,11 +46,11 @@ impl<B: ViewerHcsgBounds> HcsgBounds for B {
 	type Param = LodViewers;
 
 	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
-		viewer_focus(viewers).map(B::regions_around).unwrap_or_default()
+		B::regions_around_viewers(viewers.iter().map(|viewer| viewer.translation))
 	}
 
-	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
-		viewer_focus(viewers)
+	fn foci(viewers: &SystemParamItem<Self::Param>) -> Vec<Vec3> {
+		viewer_foci(viewers)
 	}
 }
 
@@ -74,30 +82,30 @@ impl HcsgClass {
 /// Where channel `C` wants values, as its producer last sent them.
 ///
 /// Generation and presentation on `C` fill and present every value in
-/// `boxes`, nearest `focus` first, and retire hosts that touch none of them.
-/// An empty set requests nothing and retires everything. A channel has one
-/// producer; sources that should share hosts combine into one.
+/// `boxes`, nearest any of `foci` first, and retire hosts that touch none of
+/// them. An empty set requests nothing and retires everything. A channel has
+/// one producer; sources that should share hosts combine into one.
 ///
-/// `focus` only orders ids inside one subscription. `class` is the channel's
+/// `foci` only order ids inside one subscription. `class` is the channel's
 /// scheduling weight. Neither participates in change detection: producers
 /// resend only when the boxes change.
 #[derive(Message, Debug)]
 pub struct HcsgRegions<C> {
 	pub boxes: Vec<Aabb3d>,
-	pub focus: Option<Vec3>,
+	pub foci: Vec<Vec3>,
 	pub class: HcsgClass,
 	_channel: PhantomData<fn() -> C>,
 }
 
 impl<C> HcsgRegions<C> {
-	pub fn new(boxes: Vec<Aabb3d>, focus: Option<Vec3>, class: HcsgClass) -> Self {
-		Self { boxes, focus, class, _channel: PhantomData }
+	pub fn new(boxes: Vec<Aabb3d>, foci: Vec<Vec3>, class: HcsgClass) -> Self {
+		Self { boxes, foci, class, _channel: PhantomData }
 	}
 }
 
 impl<C> Clone for HcsgRegions<C> {
 	fn clone(&self) -> Self {
-		Self::new(self.boxes.clone(), self.focus, self.class)
+		Self::new(self.boxes.clone(), self.foci.clone(), self.class)
 	}
 }
 
@@ -115,9 +123,9 @@ pub trait HcsgBounds: Send + Sync + 'static {
 
 	fn regions(param: &SystemParamItem<Self::Param>) -> Vec<Aabb3d>;
 
-	fn focus(param: &SystemParamItem<Self::Param>) -> Option<Vec3> {
+	fn foci(param: &SystemParamItem<Self::Param>) -> Vec<Vec3> {
 		let _ = param;
-		None
+		Vec::new()
 	}
 }
 
@@ -145,8 +153,8 @@ impl<G: HcsgGate, B: HcsgBounds> HcsgBounds for Gated<G, B> {
 		}
 	}
 
-	fn focus(param: &SystemParamItem<Self::Param>) -> Option<Vec3> {
-		B::focus(&param.1)
+	fn foci(param: &SystemParamItem<Self::Param>) -> Vec<Vec3> {
+		B::foci(&param.1)
 	}
 }
 
@@ -157,7 +165,7 @@ fn produce<B: HcsgBounds>(
 ) {
 	let boxes = B::regions(&param);
 	if sent.as_ref() != Some(&boxes) {
-		regions.write(HcsgRegions::new(boxes.clone(), B::focus(&param), B::CLASS));
+		regions.write(HcsgRegions::new(boxes.clone(), B::foci(&param), B::CLASS));
 		*sent = Some(boxes);
 	}
 }
@@ -195,11 +203,10 @@ mod viewer_bounds_tests {
 	}
 
 	#[test]
-	fn viewer_focus_is_none_without_viewers() {
+	fn viewer_foci_are_empty_without_viewers() {
 		fn probe(viewers: Query<&Transform, With<LodViewer>>) {
-			assert_eq!(viewer_focus(&viewers), None);
-			let regions =
-				viewer_focus(&viewers).map(ProbeBounds::regions_around).unwrap_or_default();
+			assert!(viewer_foci(&viewers).is_empty());
+			let regions = ProbeBounds::regions_around_viewers(viewer_foci(&viewers));
 			assert!(regions.is_empty());
 		}
 		let mut app = App::new();
@@ -208,12 +215,13 @@ mod viewer_bounds_tests {
 	}
 
 	#[test]
-	fn viewer_focus_matches_first_viewer() {
+	fn viewer_foci_collect_every_viewer() {
 		const AT: Vec3 = Vec3::new(3.0, 0.0, 7.0);
 		fn probe(viewers: Query<&Transform, With<LodViewer>>) {
-			assert_eq!(viewer_focus(&viewers), Some(AT));
-			let regions =
-				viewer_focus(&viewers).map(ProbeBounds::regions_around).unwrap_or_default();
+			assert_eq!(viewer_foci(&viewers), vec![AT]);
+			let regions = ProbeBounds::regions_around_viewers(
+				viewers.iter().map(|viewer| viewer.translation),
+			);
 			assert_eq!(regions.len(), 1);
 			assert_eq!(regions[0].min, AT.into());
 		}
@@ -222,6 +230,27 @@ mod viewer_bounds_tests {
 			.add_systems(Update, probe)
 			.world_mut()
 			.spawn((LodViewer, Transform::from_translation(AT)));
+		app.update();
+	}
+
+	#[test]
+	fn viewer_regions_union_ground_and_high_map() {
+		const GROUND: Vec3 = Vec3::new(12.0, 2.0, -8.0);
+		const MAP: Vec3 = Vec3::new(12.0, 420.0, -8.0);
+		fn probe(viewers: Query<&Transform, With<LodViewer>>) {
+			let foci = viewer_foci(&viewers);
+			assert_eq!(foci.len(), 2);
+			assert!(foci.contains(&GROUND));
+			assert!(foci.contains(&MAP));
+			let regions = ProbeBounds::regions_around_viewers(foci);
+			assert_eq!(regions.len(), 2);
+			assert!(regions.iter().any(|region| region.min == GROUND.into()));
+			assert!(regions.iter().any(|region| region.min == MAP.into()));
+		}
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_systems(Update, probe);
+		app.world_mut().spawn((LodViewer, Transform::from_translation(MAP)));
+		app.world_mut().spawn((LodViewer, Transform::from_translation(GROUND)));
 		app.update();
 	}
 }

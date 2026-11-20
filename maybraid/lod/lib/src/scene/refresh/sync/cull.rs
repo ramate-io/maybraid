@@ -128,12 +128,10 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 		) {
 			continue;
 		}
-		// Viewer-only ref (no per-host dominant level vote).
-		let Some(lod_ref) = refs.first() else {
-			continue;
-		};
-		let culls = scene.scene_lod_culls(lod_ref, *current);
-		if matches!(culls, LodSceneCulls::None) {
+		if refs
+			.iter()
+			.all(|lod_ref| matches!(scene.scene_lod_culls(lod_ref, *current), LodSceneCulls::None))
+		{
 			continue;
 		}
 
@@ -157,7 +155,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 			if wants_cull.contains(child) {
 				continue;
 			}
-			if culls.should_cull(root.0) {
+			if scene.scene_culls_root_from_levels(&refs, *current, root.0) {
 				enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull, &pending);
 			}
 		}

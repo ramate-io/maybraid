@@ -181,7 +181,7 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 				retire_host(commands, stale.entity);
 			}
 			let (bounds, version) = (entry.bounds, entry.version);
-			let entity = spawn_host(commands, *id, entry, self.request.focus());
+			let entity = spawn_host(commands, *id, entry, self.request.foci());
 			self.hosts.insert(*id, Host { entity, bounds, version, session: self.session });
 			self.retired_against = None;
 		}
@@ -293,16 +293,21 @@ fn spawn_host<T: GenerationScheme + SemanticLodScene>(
 	commands: &mut Commands,
 	id: Id,
 	entry: StoredEntry<Arc<T>>,
-	focus: Option<Vec3>,
+	foci: &[Vec3],
 ) -> Entity {
-	let viewer = focus.map_or(Transform::IDENTITY, Transform::from_translation);
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &viewer,
-		current_transform: &viewer,
-		bounds: &entry.bounds,
-	};
-	let level = entry.value.scene_lod_level(&lod_ref);
+	let host = (Vec3::from(entry.bounds.min) + Vec3::from(entry.bounds.max)) * 0.5;
+	let transforms: Vec<Transform> =
+		foci.iter().copied().map(Transform::from_translation).collect();
+	let refs: Vec<LodRef> = transforms
+		.iter()
+		.map(|viewer| LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: viewer,
+			current_transform: viewer,
+			bounds: &entry.bounds,
+		})
+		.collect();
+	let level = entry.value.scene_lod_level_from_nearest(&refs, host);
 	let node = HcsgNode { id, version: entry.version, bounds: entry.bounds, value: entry.value };
 	let entity = commands.spawn_scene(lod_host_scene_pending(level, node.bounds)).id();
 	#[cfg(feature = "generation-tracing")]

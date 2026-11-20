@@ -181,8 +181,8 @@ pub struct MeshFulfillBudget<T> {
 	pub starts_per_frame: usize,
 	pub max_in_flight: usize,
 	pub max_queued: usize,
-	/// When set, chunks covering this XZ are queued ahead of the rest.
-	pub prefer_xz: Option<Vec3>,
+	/// Chunks covering any of these XZ points are queued ahead of the rest.
+	pub prefer_xz: Vec<Vec3>,
 	/// Unqueued dispatches to classify and look up this frame.
 	pub enqueue_per_frame: usize,
 	/// Handle-cache hits that may spawn a mesh child this frame.
@@ -205,7 +205,7 @@ impl<T> MeshFulfillBudget<T> {
 			starts_per_frame,
 			max_in_flight,
 			max_queued,
-			prefer_xz: None,
+			prefer_xz: Vec::new(),
 			enqueue_per_frame: DEFAULT_ENQUEUE_PER_FRAME,
 			enqueue_spawns_per_frame: DEFAULT_ENQUEUE_SPAWNS_PER_FRAME,
 			apply_per_frame: DEFAULT_APPLY_PER_FRAME,
@@ -215,7 +215,7 @@ impl<T> MeshFulfillBudget<T> {
 	}
 
 	pub fn with_prefer_xz(mut self, point: Vec3) -> Self {
-		self.prefer_xz = Some(point);
+		self.prefer_xz.push(point);
 		self
 	}
 }
@@ -331,14 +331,14 @@ fn enqueue_mesh_fulfillment<
 		Without<MeshFulfillmentQueued>,
 	>,
 ) {
-	let prefer = budget.prefer_xz;
+	let prefer = &budget.prefer_xz;
 	let pending = take_preferred_batch(
 		query.iter().map(|(entity, dispatch, chunk, material)| {
-			let preferred = prefer.is_some_and(|point| chunk.column_contains_point(point));
+			let preferred = prefer.iter().any(|point| chunk.column_contains_point(*point));
 			(preferred, (entity, dispatch, chunk, material))
 		}),
 		budget.enqueue_per_frame,
-		prefer.is_some(),
+		!prefer.is_empty(),
 	);
 
 	let started = Instant::now();
@@ -521,13 +521,13 @@ mod tests {
 		assert_eq!(budget.enqueue_spawns_per_frame, 8);
 		assert_eq!(budget.apply_per_frame, 2);
 		assert_eq!(budget.main_thread_budget, Duration::from_millis(2));
-		assert!(budget.prefer_xz.is_none());
+		assert!(budget.prefer_xz.is_empty());
 	}
 
 	#[test]
 	fn prefer_xz_is_optional() {
 		let budget = MeshFulfillBudget::<()>::new(8, 16, 256).with_prefer_xz(Vec3::ZERO);
-		assert_eq!(budget.prefer_xz, Some(Vec3::ZERO));
+		assert_eq!(budget.prefer_xz, vec![Vec3::ZERO]);
 	}
 
 	#[test]

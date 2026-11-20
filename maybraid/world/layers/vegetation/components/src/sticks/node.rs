@@ -198,6 +198,15 @@ impl StickNode {
 }
 
 impl LodScene for StickNode {
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		let _ = self;
+		LodRef::nearest_3d(lod_refs, to)
+	}
+
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.probe().level_for(lod_ref.current_transform)
 	}

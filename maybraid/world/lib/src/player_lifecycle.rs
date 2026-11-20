@@ -2386,7 +2386,7 @@ mod tests {
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
 		mark_primary(&mut world, player);
 		let region = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 1.0, 1.0));
-		demand.subscribe::<UnitXTile>(None, vec![region], None, HcsgClass::Near);
+		demand.subscribe::<UnitXTile>(None, vec![region], Vec::new(), HcsgClass::Near);
 
 		world
 			.run_system_once(queue_first_spawn_picker)
@@ -2413,7 +2413,7 @@ mod tests {
 		let demand = HcsgDemand::default();
 		world.insert_resource(demand.clone());
 		let region = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 1.0, 1.0));
-		demand.subscribe::<UnitXTile>(None, vec![region], None, HcsgClass::Near);
+		demand.subscribe::<UnitXTile>(None, vec![region], Vec::new(), HcsgClass::Near);
 		world.insert_resource(FirstWave { undiscovered: 1, remaining: 40, passed: true });
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
 		mark_primary(&mut world, player);

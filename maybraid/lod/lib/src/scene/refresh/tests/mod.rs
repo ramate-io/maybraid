@@ -51,8 +51,44 @@ fn spotlight_silent_until_translation_changes() -> anyhow::Result<()> {
 	let mut app = app_spotlight_regions();
 	spawn_viewer(app.world_mut(), Vec3::ZERO);
 	app.update();
+	app.update();
 	assert!(app.world().resource::<NewRegions<SpotChan>>().regions.is_empty());
+	Ok(())
+}
 
+#[test]
+fn spotlight_rest_after_one_move_does_not_reemit() -> anyhow::Result<()> {
+	let mut app = app_spotlight_regions();
+	let viewer = spawn_viewer(app.world_mut(), Vec3::ZERO);
+	app.update();
+	move_viewer(&mut app, viewer, Vec3::new(10.0, 0.0, 0.0));
+	app.update();
+	assert_eq!(app.world().resource::<NewRegions<SpotChan>>().regions.len(), 1);
+	app.update();
+	app.update();
+	app.update();
+	assert!(
+		app.world().resource::<NewRegions<SpotChan>>().regions.is_empty(),
+		"resting previous!=current must not keep emitting"
+	);
+	Ok(())
+}
+
+#[test]
+fn adding_a_settled_second_ref_emits_union_once() -> anyhow::Result<()> {
+	let mut app = app_spotlight_regions();
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	app.update();
+	app.world_mut().resource_mut::<NewRegions<SpotChan>>().regions.clear();
+	let second = spawn_viewer(app.world_mut(), Vec3::new(0.0, 420.0, 0.0));
+	app.world_mut()
+		.entity_mut(second)
+		.insert(LodNodePose::settled(Transform::from_xyz(0.0, 420.0, 0.0)));
+	app.update();
+	let regions = &app.world().resource::<NewRegions<SpotChan>>().regions;
+	assert_eq!(regions.len(), 1, "membership change emits coverage");
+	assert!(regions[0].min.y <= -25.0, "ground coverage stays in the union");
+	assert!(regions[0].max.y >= 420.0, "map coverage joins the union");
 	app.update();
 	assert!(app.world().resource::<NewRegions<SpotChan>>().regions.is_empty());
 	Ok(())
@@ -102,12 +138,51 @@ fn bullseye_emits_outer_cube_on_cell_cross() -> anyhow::Result<()> {
 }
 
 #[test]
+fn bullseye_resting_driver_does_not_replay_when_another_moves_inside_its_cell() -> anyhow::Result<()>
+{
+	let mut app = app_bullseye_regions();
+	let rest = spawn_viewer(app.world_mut(), Vec3::new(-25.0, 0.0, 0.0));
+	app.update();
+	move_viewer(&mut app, rest, Vec3::new(10.0, 10.0, 10.0));
+	app.update();
+	app.world_mut().resource_mut::<NewRegions<BullChan>>().regions.clear();
+
+	let moving = spawn_viewer(app.world_mut(), Vec3::new(10.0, 10.0, 10.0));
+	app.update();
+	app.world_mut().resource_mut::<NewRegions<BullChan>>().regions.clear();
+
+	move_viewer(&mut app, moving, Vec3::new(20.0, 20.0, 20.0));
+	app.update();
+	assert!(
+		app.world().resource::<NewRegions<BullChan>>().regions.is_empty(),
+		"resting driver's stored cell-cross must not retrigger"
+	);
+	Ok(())
+}
+
+#[test]
+fn bullseye_removing_a_settled_driver_emits_remaining_coverage() -> anyhow::Result<()> {
+	let mut app = app_bullseye_regions();
+	spawn_viewer(app.world_mut(), Vec3::new(10.0, 10.0, 10.0));
+	let extra = spawn_viewer(app.world_mut(), Vec3::new(80.0, 10.0, 10.0));
+	app.update();
+	app.world_mut().resource_mut::<NewRegions<BullChan>>().regions.clear();
+
+	app.world_mut().despawn(extra);
+	app.update();
+	assert_eq!(app.world().resource::<NewRegions<BullChan>>().regions.len(), 1);
+	app.update();
+	assert!(app.world().resource::<NewRegions<BullChan>>().regions.is_empty());
+	Ok(())
+}
+
+#[test]
 fn spotlight_writes_level_for_host_in_region() -> anyhow::Result<()> {
 	let mut app = app_spotlight_levels();
 	let viewer = spawn_viewer(app.world_mut(), Vec3::ZERO);
 	let host = spawn_host(app.world_mut(), Vec3::ZERO, LodSceneLevel::UltraLow);
 	app.update();
-	assert_eq!(host_level(&app, host), LodSceneLevel::UltraLow);
+	assert_eq!(host_level(&app, host), LodSceneLevel::High);
 
 	move_viewer(&mut app, viewer, Vec3::new(10.0, 0.0, 0.0));
 	app.update();
@@ -194,16 +269,12 @@ fn stamped_hosts_only_follow_their_domain_aabb() -> anyhow::Result<()> {
 		.entity_mut(mob)
 		.insert(LodRefreshMembership(LodRefreshDomain::of::<BullChan>()));
 	app.update();
+	assert_eq!(host_level(&app, vegetation), LodSceneLevel::High);
+	assert_eq!(host_level(&app, mob), LodSceneLevel::UltraLow);
 
 	let region = Aabb3d::from_min_max(Vec3::splat(-50.0), Vec3::splat(50.0));
 	app.world_mut()
 		.write_message(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<BullChan>() });
-	app.update();
-	assert_eq!(host_level(&app, vegetation), LodSceneLevel::UltraLow);
-	assert_eq!(host_level(&app, mob), LodSceneLevel::High);
-
-	app.world_mut()
-		.write_message(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<SpotChan>() });
 	app.update();
 	assert_eq!(host_level(&app, vegetation), LodSceneLevel::High);
 	assert_eq!(host_level(&app, mob), LodSceneLevel::High);
@@ -344,6 +415,62 @@ fn nested_host_under_hidden_root_is_not_refreshed() -> anyhow::Result<()> {
 
 fn world_cull_aabb() -> LodSceneCullAabb {
 	LodSceneCullAabb { region: Aabb3d::from_min_max(Vec3::splat(-50.0), Vec3::splat(50.0)) }
+}
+
+#[test]
+fn two_hosts_pick_the_nearer_ref_independently() -> anyhow::Result<()> {
+	// Probe keeps the default XZ selector: the map host at (80, 0, 0) is nearer
+	// in XZ to the overhead camera than to the ground camera.
+	let mut app = app_spotlight_levels();
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	spawn_viewer(app.world_mut(), Vec3::new(80.0, 420.0, 0.0));
+	let ground_host = spawn_host(app.world_mut(), Vec3::ZERO, LodSceneLevel::Low);
+	let map_host = spawn_host(app.world_mut(), Vec3::new(80.0, 0.0, 0.0), LodSceneLevel::High);
+	app.update();
+	assert_eq!(host_level(&app, ground_host), LodSceneLevel::High);
+	assert_eq!(host_level(&app, map_host), LodSceneLevel::Low);
+	Ok(())
+}
+
+#[test]
+fn two_viewers_keep_high_at_the_ground_ref() -> anyhow::Result<()> {
+	let mut app = app_cull_enqueue();
+	spawn_viewer(app.world_mut(), Vec3::new(100.0, 420.0, 0.0));
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	let (host, roots) = spawn_host_with_roots(
+		app.world_mut(),
+		Vec3::ZERO,
+		LodSceneLevel::High,
+		&[LodSceneLevel::High, LodSceneLevel::Medium],
+	);
+	app.update();
+	app.world_mut().write_message(world_cull_aabb());
+	app.update();
+
+	assert_eq!(host_level(&app, host), LodSceneLevel::High);
+	assert!(app.world().get_entity(roots[0]).is_ok(), "ground LodRef must keep the High root");
+	Ok(())
+}
+
+#[test]
+fn spotlight_union_covers_ground_when_map_viewer_climbs() -> anyhow::Result<()> {
+	let mut app = app_spotlight_regions();
+	let ground = spawn_viewer(app.world_mut(), Vec3::ZERO);
+	let map = spawn_viewer(app.world_mut(), Vec3::ZERO);
+	app.update();
+	app.update();
+	assert!(app.world().resource::<NewRegions<SpotChan>>().regions.is_empty());
+
+	move_viewer(&mut app, map, Vec3::new(0.0, 420.0, 0.0));
+	app.update();
+	let regions = &app.world().resource::<NewRegions<SpotChan>>().regions;
+	assert_eq!(regions.len(), 1);
+	assert!(
+		regions[0].min.y <= pose(&app, ground).1.y,
+		"resting ground coverage must stay in the union"
+	);
+	assert!(regions[0].max.y >= 420.0);
+	Ok(())
 }
 
 #[test]

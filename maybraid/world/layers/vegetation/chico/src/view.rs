@@ -11,8 +11,8 @@ use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullProduceCadence, LodCullRegionCursor,
-	LodRefreshCorePlugin, LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice,
-	Spotlight,
+	LodRefreshCorePlugin, LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, LodViewer,
+	OpenLattice, Spotlight,
 };
 use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
 use lod_lazy_refs::LodLazyRefsPlugin;
@@ -34,7 +34,7 @@ use vegetation_groves::{
 	TropicalUndergrowth, UnendingJungle, Vineyard, WanderingAcacia, WildGrass,
 };
 
-use crate::stick_physics::{register_vegetation_stick_colliders, StickPhysicsPlugin};
+use crate::stick_physics::{StickPhysicsPlugin, register_vegetation_stick_colliders};
 
 /// Shared produce domain for bullseye and spotlight vegetation refresh.
 #[derive(Debug, Clone, Copy, Default)]
@@ -58,8 +58,8 @@ type FlattenedPlant<T> = FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc
 macro_rules! avian_host {
 	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-							lod_avian::AvianLodSceneRefreshPlugin::<$ty, VegetationRefresh, With<Camera>>::without_full_scan_cull(),
-							lod_avian::AvianLodSceneCullPlugin::<$ty, VegetationCull, With<Camera>>::default(),
+							lod_avian::AvianLodSceneRefreshPlugin::<$ty, VegetationRefresh, With<LodViewer>>::without_full_scan_cull(),
+							lod_avian::AvianLodSceneCullPlugin::<$ty, VegetationCull, With<LodViewer>>::default(),
 						));
 	}};
 }
@@ -68,8 +68,8 @@ macro_rules! avian_host {
 macro_rules! gimme_host {
 	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-							GimmeLodSceneRefreshPlugin::<$ty, VegetationRefresh, With<Camera>>::without_full_scan_cull(),
-							GimmeLodSceneCullPlugin::<$ty, VegetationCull, With<Camera>>::default(),
+							GimmeLodSceneRefreshPlugin::<$ty, VegetationRefresh, With<LodViewer>>::without_full_scan_cull(),
+							GimmeLodSceneCullPlugin::<$ty, VegetationCull, With<LodViewer>>::default(),
 						));
 	}};
 }
@@ -84,7 +84,7 @@ macro_rules! flattened_plant_host {
 
 /// Full modern refresh stack for structural + fine-phase vegetation hosts.
 ///
-/// 1. Camera → [`Bullseye`] / [`Spotlight`] region messages
+/// 1. [`LodViewer`]s → [`Bullseye`] / [`Spotlight`] region messages
 /// 2. [`PatchSceneBounds`](lod::PatchSceneBounds) stamps host bounds from
 ///    [`LodScene::scene_bounds`](lod::LodScene::scene_bounds)
 /// 3. Gimme region index → level messages for structural and child component hosts
@@ -136,9 +136,10 @@ impl Plugin for VegetationLodRefreshPlugin {
 			inspect_per_frame: 256,
 		})
 		.add_plugins((
-			LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, VegetationBullseye>::default(),
-			LodSceneRefreshRegionPlugin::<Spotlight, With<Camera>, VegetationSpotlight>::default(),
-			LodSceneCullRegionPlugin::<OpenLattice, With<Camera>, VegetationCull>::default(),
+			LodSceneRefreshRegionPlugin::<Bullseye, With<LodViewer>, VegetationBullseye>::default(),
+			LodSceneRefreshRegionPlugin::<Spotlight, With<LodViewer>, VegetationSpotlight>::default(
+			),
+			LodSceneCullRegionPlugin::<OpenLattice, With<LodViewer>, VegetationCull>::default(),
 		));
 
 		// Fine-phase domain hosts nested under grove LodScene roots.

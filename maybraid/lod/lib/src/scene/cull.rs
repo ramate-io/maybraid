@@ -83,11 +83,7 @@ impl LodSceneCulls {
 				entries.push(c);
 			}
 		}
-		if entries.is_empty() {
-			Self::None
-		} else {
-			Self::AllOf(entries)
-		}
+		if entries.is_empty() { Self::None } else { Self::AllOf(entries) }
 	}
 
 	/// Append a concrete level cull.
@@ -98,6 +94,20 @@ impl LodSceneCulls {
 	/// Append [`LodSceneCull::AllDistance`] and [`LodSceneCull::AllResolution`].
 	pub fn with_customs(self) -> Self {
 		self.and([LodSceneCull::AllDistance, LodSceneCull::AllResolution])
+	}
+
+	/// Whether every policy lists `level` for despawn.
+	///
+	/// Empty input does not cull: no driver means no eviction this pass.
+	pub fn all_cull(policies: impl IntoIterator<Item = Self>, level: LodSceneLevel) -> bool {
+		let mut any = false;
+		for policy in policies {
+			any = true;
+			if !policy.should_cull(level) {
+				return false;
+			}
+		}
+		any
 	}
 }
 
@@ -180,11 +190,7 @@ pub fn cull_non_adjacent_bands(current: LodSceneLevel) -> LodSceneCulls {
 		.filter(|(j, _)| j.abs_diff(i) > 1)
 		.map(|(_, level)| LodSceneCull::Level(level))
 		.collect();
-	if entries.is_empty() {
-		LodSceneCulls::None
-	} else {
-		LodSceneCulls::AllOf(entries)
-	}
+	if entries.is_empty() { LodSceneCulls::None } else { LodSceneCulls::AllOf(entries) }
 }
 
 /// Default depth for [`cull_offset_bands`]: halfway into the current band.
@@ -423,5 +429,16 @@ mod tests {
 			),
 			Some(LodSceneLevel::High)
 		);
+	}
+
+	#[test]
+	fn all_cull_keeps_a_root_if_any_ref_still_wants_it() {
+		let ground = cull_non_adjacent_bands(LodSceneLevel::High);
+		let map = cull_non_adjacent_bands(LodSceneLevel::UltraLow);
+		assert!(ground.should_cull(LodSceneLevel::UltraLow));
+		assert!(map.should_cull(LodSceneLevel::High));
+		assert!(!LodSceneCulls::all_cull([ground.clone(), map.clone()], LodSceneLevel::High));
+		assert!(LodSceneCulls::all_cull([map.clone(), map], LodSceneLevel::High));
+		assert!(!LodSceneCulls::all_cull(std::iter::empty::<LodSceneCulls>(), LodSceneLevel::High));
 	}
 }

@@ -37,16 +37,35 @@ pub trait SemanticLodScene {
 		LodSceneLevel::High
 	}
 
-	/// Desired level from multiple driver [`LodRef`]s (e.g. several [`crate::lod_ref::LodNode`]s).
+	/// Driver this scene uses for level, status, and fulfillment.
 	///
-	/// Default: max of [`Self::scene_lod_level`] over `lod_refs`. Empty input means
-	/// no driver this frame → [`LodSceneLevel::UltraLow`].
-	fn scene_lod_level_from_levels(&self, lod_refs: &[LodRef]) -> LodSceneLevel {
-		lod_refs
-			.iter()
+	/// Default is [`LodRef::nearest`] (min XZ, then min 3D). 3D consumers
+	/// override with [`LodRef::nearest_3d`] or [`LodRef::nearest_by`].
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		let _ = self;
+		LodRef::nearest(lod_refs, to)
+	}
+
+	/// Desired level from the driver nearest `to` (host world position).
+	///
+	/// Picks [`Self::scene_lod_nearest`], then [`Self::scene_lod_level`] of that one ref.
+	/// Empty input is [`LodSceneLevel::UltraLow`] — no invented viewer at the origin.
+	fn scene_lod_level_from_nearest(&self, lod_refs: &[LodRef], to: Vec3) -> LodSceneLevel {
+		self.scene_lod_nearest(lod_refs, to)
 			.map(|lod_ref| self.scene_lod_level(lod_ref))
-			.max()
 			.unwrap_or(LodSceneLevel::UltraLow)
+	}
+
+	/// Desired level from multiple driver [`LodRef`]s without a host point.
+	///
+	/// Prefer [`Self::scene_lod_level_from_nearest`] at call sites that have a
+	/// host. Default nearest-to-origin is only for tests without a footprint.
+	fn scene_lod_level_from_levels(&self, lod_refs: &[LodRef]) -> LodSceneLevel {
+		self.scene_lod_level_from_nearest(lod_refs, Vec3::ZERO)
 	}
 
 	/// Whether the presented LOD selection should change for this [`LodRef`].
@@ -78,6 +97,21 @@ pub trait SemanticLodScene {
 	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
 		let _ = (lod_ref, current);
 		LodSceneCulls::None
+	}
+
+	/// Whether every driver would despawn `root` at `current`.
+	///
+	/// Union of interest: a root stays if any [`LodRef`] still wants it.
+	fn scene_culls_root_from_levels(
+		&self,
+		lod_refs: &[LodRef],
+		current: LodSceneLevel,
+		root: LodSceneLevel,
+	) -> bool {
+		LodSceneCulls::all_cull(
+			lod_refs.iter().map(|lod_ref| self.scene_lod_culls(lod_ref, current)),
+			root,
+		)
 	}
 
 	/// Scene for one LOD level root (primary implementation target).
@@ -153,6 +187,18 @@ impl<T: SemanticLodScene + Send + Sync + 'static> SemanticLodScene for std::sync
 		(**self).scene_lod_level(lod_ref)
 	}
 
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		(**self).scene_lod_nearest(lod_refs, to)
+	}
+
+	fn scene_lod_level_from_nearest(&self, lod_refs: &[LodRef], to: Vec3) -> LodSceneLevel {
+		(**self).scene_lod_level_from_nearest(lod_refs, to)
+	}
+
 	fn scene_lod_level_from_levels(&self, lod_refs: &[LodRef]) -> LodSceneLevel {
 		(**self).scene_lod_level_from_levels(lod_refs)
 	}
@@ -163,6 +209,15 @@ impl<T: SemanticLodScene + Send + Sync + 'static> SemanticLodScene for std::sync
 
 	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
 		(**self).scene_lod_culls(lod_ref, current)
+	}
+
+	fn scene_culls_root_from_levels(
+		&self,
+		lod_refs: &[LodRef],
+		current: LodSceneLevel,
+		root: LodSceneLevel,
+	) -> bool {
+		(**self).scene_culls_root_from_levels(lod_refs, current, root)
 	}
 
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
@@ -227,5 +282,138 @@ mod tests {
 		assert_eq!(chunk.total_primitives(), 1);
 		let prims = chunk.into_primitives();
 		assert_eq!(prims[0].1.level, LodSceneLevel::Medium);
+	}
+
+	struct HeightScene;
+
+	impl SemanticLodScene for HeightScene {
+		fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+			if lod_ref.current_transform.translation.y < 10.0 {
+				LodSceneLevel::High
+			} else {
+				LodSceneLevel::UltraLow
+			}
+		}
+
+		fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+			let _ = current;
+			crate::cull_non_adjacent_bands(self.scene_lod_level(lod_ref))
+		}
+
+		fn scene_with_level(&self, _: &LodRef, _: LodSceneLevel) -> impl Scene + 'static {}
+	}
+
+	fn lod_ref_at<'a>(prev: &'a Transform, curr: &'a Transform, bounds: &'a Aabb3d) -> LodRef<'a> {
+		LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: prev,
+			current_transform: curr,
+			bounds,
+		}
+	}
+
+	#[test]
+	fn scene_lod_level_from_nearest_picks_the_closer_ref_per_host() {
+		let ground = Transform::from_translation(Vec3::new(0.0, 2.0, 0.0));
+		let map = Transform::from_translation(Vec3::new(80.0, 420.0, 0.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let refs = [lod_ref_at(&ground, &ground, &bounds), lod_ref_at(&map, &map, &bounds)];
+		assert_eq!(
+			HeightScene.scene_lod_level_from_nearest(&refs, Vec3::new(1.0, 0.0, 0.0)),
+			LodSceneLevel::High
+		);
+		assert_eq!(
+			HeightScene.scene_lod_level_from_nearest(&refs, Vec3::new(80.0, 0.0, 0.0)),
+			LodSceneLevel::UltraLow
+		);
+		assert!(!HeightScene.scene_culls_root_from_levels(
+			&refs,
+			LodSceneLevel::High,
+			LodSceneLevel::High
+		));
+		assert_eq!(
+			HeightScene.scene_lod_level_from_nearest(&[], Vec3::ONE),
+			LodSceneLevel::UltraLow,
+			"empty refs must not invent a viewer at the origin"
+		);
+	}
+
+	struct DistanceScene {
+		host: Vec3,
+	}
+
+	impl SemanticLodScene for DistanceScene {
+		fn scene_lod_nearest<'a>(
+			&self,
+			lod_refs: &'a [LodRef<'a>],
+			to: Vec3,
+		) -> Option<&'a LodRef<'a>> {
+			let _ = self;
+			LodRef::nearest_3d(lod_refs, to)
+		}
+
+		fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+			let distance = lod_ref.current_transform.translation.distance(self.host);
+			if distance < 50.0 {
+				LodSceneLevel::High
+			} else if distance < 200.0 {
+				LodSceneLevel::Medium
+			} else {
+				LodSceneLevel::Low
+			}
+		}
+
+		fn scene_with_level(&self, _: &LodRef, _: LodSceneLevel) -> impl Scene + 'static {}
+	}
+
+	#[test]
+	fn nearest_breaks_same_band_ties_with_the_closer_driver() {
+		let closer = Transform::from_translation(Vec3::new(8.0, 2.0, 0.0));
+		let farther = Transform::from_translation(Vec3::new(30.0, 2.0, 0.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let refs = [lod_ref_at(&farther, &farther, &bounds), lod_ref_at(&closer, &closer, &bounds)];
+		let host = Vec3::ZERO;
+		let scene = DistanceScene { host };
+		assert_eq!(scene.scene_lod_level(&refs[0]), LodSceneLevel::High);
+		assert_eq!(scene.scene_lod_level(&refs[1]), LodSceneLevel::High);
+		assert_eq!(
+			LodRef::nearest(&refs, host).map(|r| r.current_transform.translation),
+			Some(closer.translation)
+		);
+		assert_eq!(scene.scene_lod_level_from_nearest(&refs, host), LodSceneLevel::High);
+	}
+
+	#[test]
+	fn xz_default_picks_the_overhead_map_ref() {
+		let ground = Transform::from_translation(Vec3::new(5.0, 0.0, 0.0));
+		let map = Transform::from_translation(Vec3::new(0.0, 420.0, 0.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let refs = [lod_ref_at(&ground, &ground, &bounds), lod_ref_at(&map, &map, &bounds)];
+		assert_eq!(
+			HeightScene
+				.scene_lod_nearest(&refs, Vec3::ZERO)
+				.map(|r| r.current_transform.translation),
+			Some(map.translation)
+		);
+		assert_eq!(
+			HeightScene.scene_lod_level_from_nearest(&refs, Vec3::ZERO),
+			LodSceneLevel::UltraLow
+		);
+	}
+
+	#[test]
+	fn three_d_scene_keeps_the_five_meter_ground_ref() {
+		let ground = Transform::from_translation(Vec3::new(5.0, 0.0, 0.0));
+		let map = Transform::from_translation(Vec3::new(0.0, 420.0, 0.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let refs = [lod_ref_at(&ground, &ground, &bounds), lod_ref_at(&map, &map, &bounds)];
+		let scene = DistanceScene { host: Vec3::ZERO };
+		assert_eq!(
+			scene
+				.scene_lod_nearest(&refs, Vec3::ZERO)
+				.map(|r| r.current_transform.translation),
+			Some(ground.translation)
+		);
+		assert_eq!(scene.scene_lod_level_from_nearest(&refs, Vec3::ZERO), LodSceneLevel::High);
 	}
 }

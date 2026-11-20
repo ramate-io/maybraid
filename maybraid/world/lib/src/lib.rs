@@ -21,6 +21,7 @@ mod intelligence;
 mod inventory_cycling;
 mod inventory_drop;
 mod item_icons;
+mod map_lod;
 mod map_view;
 mod occupancy;
 pub mod world_lubikan;

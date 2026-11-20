@@ -198,20 +198,45 @@ struct Naming<C>(PhantomData<fn() -> C>);
 #[derive(Resource, Default)]
 pub(crate) struct LanguageWindow {
 	pub(crate) boxes: Vec<Aabb3d>,
-	focus: Option<Vec3>,
-	naming: Option<Vec2>,
+	foci: Vec<Vec3>,
+	naming: Vec<Vec2>,
 }
 
 impl LanguageWindow {
-	/// What the naming window covers: the name radius, plus the hysteresis
-	/// the viewer may move before it recenters.
-	pub(crate) fn naming_box(&self) -> Option<Aabb3d> {
-		let center = self.naming?;
+	fn naming_box_at(center: Vec2) -> Aabb3d {
 		let r = LANGUAGE_NAME_RADIUS + LANGUAGE_NAME_HYSTERESIS;
-		Some(Aabb3d::from_min_max(
+		Aabb3d::from_min_max(
 			Vec3::new(center.x - r, -NAMING_COLUMN_Y, center.y - r),
 			Vec3::new(center.x + r, NAMING_COLUMN_Y, center.y + r),
-		))
+		)
+	}
+
+	fn naming_boxes(&self) -> Vec<Aabb3d> {
+		self.naming.iter().copied().map(Self::naming_box_at).collect()
+	}
+
+	/// What the naming window covers: union of name radii around every focus.
+	pub(crate) fn naming_box(&self) -> Option<Aabb3d> {
+		self.naming_boxes()
+			.into_iter()
+			.reduce(|a, b| Aabb3d::from_min_max(a.min.min(b.min), a.max.max(b.max)))
+	}
+
+	fn recenter_naming(foci: &[Vec3], previous: &[Vec2]) -> Vec<Vec2> {
+		let mut next: Vec<Vec2> = foci
+			.iter()
+			.map(|at| {
+				let xz = at.xz();
+				previous
+					.iter()
+					.copied()
+					.find(|center| (xz - *center).abs().max_element() <= LANGUAGE_NAME_HYSTERESIS)
+					.unwrap_or_else(|| (xz / NAME_WINDOW_QUANT_M).round() * NAME_WINDOW_QUANT_M)
+			})
+			.collect();
+		next.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+		next.dedup();
+		next
 	}
 }
 
@@ -225,25 +250,21 @@ fn track_language<C: Send + Sync + 'static>(
 ) {
 	if let Some(latest) = regions.read().last() {
 		window.boxes = latest.boxes.clone();
-		window.focus = latest.focus;
+		window.foci = latest.foci.clone();
 	}
-	let viewer = viewers.iter().next().map(|viewer| viewer.translation).or(window.focus);
-	let center = match viewer {
-		Some(at) if !window.boxes.is_empty() => Some(match window.naming {
-			Some(center) if (at.xz() - center).abs().max_element() <= LANGUAGE_NAME_HYSTERESIS => {
-				center
-			}
-			_ => (at.xz() / NAME_WINDOW_QUANT_M).round() * NAME_WINDOW_QUANT_M,
-		}),
-		_ => None,
+	let foci = if viewers.iter().next().is_some() {
+		lod::hcsg::viewer_foci(&viewers)
+	} else {
+		window.foci.clone()
 	};
-	if center != window.naming {
-		window.naming = center;
-		naming.write(HcsgRegions::new(
-			window.naming_box().into_iter().collect(),
-			viewer,
-			HcsgClass::Ambient,
-		));
+	let centers = if foci.is_empty() || window.boxes.is_empty() {
+		Vec::new()
+	} else {
+		LanguageWindow::recenter_naming(&foci, &window.naming)
+	};
+	if centers != window.naming {
+		window.naming = centers;
+		naming.write(HcsgRegions::new(window.naming_boxes(), foci, HcsgClass::Ambient));
 	}
 }
 
@@ -488,8 +509,8 @@ mod tests {
 	fn the_naming_window_recenters_past_the_hysteresis() -> anyhow::Result<()> {
 		let mut app = language_app(Vec3::ZERO);
 		settle(&mut app)?;
-		let first = app.world().resource::<LanguageWindow>().naming;
-		assert_eq!(first, Some(Vec2::ZERO));
+		let first = app.world().resource::<LanguageWindow>().naming.clone();
+		assert_eq!(first, vec![Vec2::ZERO]);
 
 		let mut viewers = app.world_mut().query_filtered::<&mut Transform, With<LodViewer>>();
 		*viewers.single_mut(app.world_mut())? =
@@ -500,7 +521,22 @@ mod tests {
 		*viewers.single_mut(app.world_mut())? = Transform::from_xyz(200.0, 0.0, 0.0);
 		app.update();
 		let moved = (200.0 / NAME_WINDOW_QUANT_M).round() * NAME_WINDOW_QUANT_M;
-		assert_eq!(app.world().resource::<LanguageWindow>().naming, Some(Vec2::new(moved, 0.0)));
+		assert_eq!(app.world().resource::<LanguageWindow>().naming, vec![Vec2::new(moved, 0.0)]);
+		Ok(())
+	}
+
+	#[test]
+	fn naming_covers_every_focus_and_skips_an_empty_set() -> anyhow::Result<()> {
+		assert!(LanguageWindow::recenter_naming(&[], &[]).is_empty());
+		let foci = [Vec3::ZERO, Vec3::new(10_000.0, 420.0, 0.0)];
+		let naming = LanguageWindow::recenter_naming(&foci, &[]);
+		assert_eq!(naming.len(), 2);
+		let window = LanguageWindow { boxes: Vec::new(), foci: foci.to_vec(), naming };
+		let Some(region) = window.naming_box() else {
+			return Err(anyhow::anyhow!("union of two naming windows"));
+		};
+		assert!(region.min.x < 0.0);
+		assert!(region.max.x > 10_000.0);
 		Ok(())
 	}
 
