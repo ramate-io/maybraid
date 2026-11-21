@@ -198,7 +198,10 @@ const WOODY_LOD: WoodyGroveLod = WoodyGroveLod::rory_trunk(
 );
 
 #[cfg(feature = "render")]
-pub use vc::{TemperateLowerMassives, TemperateLowerMassivesParams, TemperateLowerMassivesPlant};
+pub use vc::{
+	configure_storybook_field_tile, StorybookFieldSample, TemperateLowerMassives,
+	TemperateLowerMassivesParams, TemperateLowerMassivesPlant, MAX_STORYBOOK_FIELD_TREES,
+};
 
 #[cfg(test)]
 mod tests;

@@ -1,6 +1,7 @@
 //! Render-world compute compaction, indirect args, and opaque wood/foliage draws.
 
 use std::borrow::Cow;
+use std::sync::OnceLock;
 
 use bevy::core_pipeline::core_3d::{
 	Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey, CORE_3D_DEPTH_FORMAT,
@@ -22,12 +23,14 @@ use bevy::render::render_resource::{
 	BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries, Buffer,
 	BufferDescriptor, BufferInitDescriptor, BufferUsages, CachedComputePipelineId,
 	CachedPipelineState, Canonical, ColorTargetState, ColorWrites, CompareFunction,
-	ComputePassDescriptor, ComputePipelineDescriptor, DepthStencilState, FragmentState,
-	IndexFormat, MultisampleState, PipelineCache, PrimitiveState, RenderPipeline,
+	ComputePassDescriptor, ComputePipelineDescriptor, DepthStencilState, DownlevelFlags,
+	FragmentState, IndexFormat, MultisampleState, PipelineCache, PrimitiveState, RenderPipeline,
 	RenderPipelineDescriptor, ShaderStages, Specializer, SpecializerKey, TextureFormat, Variants,
 	VertexAttribute, VertexFormat, VertexState, VertexStepMode,
 };
-use bevy::render::renderer::{RenderAdapter, RenderContext, RenderDevice, RenderGraph, RenderQueue};
+use bevy::render::renderer::{
+	RenderAdapter, RenderContext, RenderDevice, RenderGraph, RenderQueue,
+};
 use bevy::render::sync_world::MainEntityHashSet;
 use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntity};
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
@@ -40,10 +43,10 @@ use vegetation_shaders::wesl::{
 
 use crate::diagnostics::TreeFieldStats;
 use crate::layout::{
-	WoodLod, BRANCH_DESCRIPTOR_STRIDE, TREE_LOD_COUNT, LEAF_DESCRIPTOR_STRIDE,
-	PLANT_DESCRIPTOR_STRIDE,
+	WoodLod, BRANCH_DESCRIPTOR_STRIDE, LEAF_DESCRIPTOR_STRIDE, PLANT_DESCRIPTOR_STRIDE,
+	TREE_LOD_COUNT,
 };
-use crate::plugin::{TreeFieldPresenter, ExtractedTreeField};
+use crate::plugin::{ExtractedTreeField, TreeFieldPresenter};
 use crate::select::TreeSelector;
 use crate::shaders::{
 	FINALIZE_SHADER, FOLIAGE_SHADER, SELECT_FOLIAGE_SHADER, SELECT_WOOD_SHADER, WOOD_SHADER,
@@ -63,7 +66,14 @@ impl Plugin for TreeGpuPlugin {
 			.init_resource::<TreeGpuState>()
 			.add_render_command::<Opaque3d, DrawTreeWood>()
 			.add_render_command::<Opaque3d, DrawTreeFoliage>()
-			.add_systems(RenderStartup, (detect_capability, init_tree_pipelines, init_templates))
+			.add_systems(
+				RenderStartup,
+				(
+					detect_capability,
+					(init_tree_pipelines, init_templates).run_if(tree_backend_available),
+				)
+					.chain(),
+			)
 			.add_systems(
 				Render,
 				(
@@ -78,8 +88,47 @@ impl Plugin for TreeGpuPlugin {
 #[derive(Default, Deref, DerefMut, Resource)]
 struct PendingTreeQueues(PendingQueues);
 
-fn detect_capability(mut commands: Commands, adapter: Res<RenderAdapter>) {
-	commands.insert_resource(GrassGpuCapability::detect(&adapter));
+/// Device requirements for the bounded natural tile experiment.
+pub fn supports_world_tree_field(adapter: &RenderAdapter, device: &RenderDevice) -> bool {
+	let flags = adapter.get_downlevel_capabilities().flags;
+	let limits = device.limits();
+	flags.contains(
+		DownlevelFlags::VERTEX_STORAGE
+			| DownlevelFlags::INDIRECT_EXECUTION
+			| DownlevelFlags::COMPUTE_SHADERS,
+	) && limits.max_storage_buffers_per_shader_stage >= 7
+		&& limits.max_storage_buffer_binding_size >= 65_536 * LEAF_DESCRIPTOR_STRIDE as u64
+		&& limits.max_compute_workgroup_size_x >= SELECT_WORKGROUP
+		&& limits.max_compute_invocations_per_workgroup >= SELECT_WORKGROUP
+}
+
+pub fn requested_world_tree_mode() -> Option<GrassGpuMode> {
+	match std::env::var("MAYBRAID_EXPERIMENT_TREE_FIELD").as_deref() {
+		Ok("gpu") => Some(GrassGpuMode::GpuDriven),
+		Ok("cpu") => Some(GrassGpuMode::CpuSelect),
+		_ => None,
+	}
+}
+
+fn detect_capability(
+	mut commands: Commands,
+	adapter: Res<RenderAdapter>,
+	device: Res<RenderDevice>,
+) {
+	let mut capability = GrassGpuCapability::detect(&adapter);
+	if let Some(mode) = requested_world_tree_mode() {
+		capability.mode = if supports_world_tree_field(&adapter, &device) {
+			mode
+		} else {
+			GrassGpuMode::Unsupported
+		};
+		info!(target: "maybraid.tree_field", ?mode, actual = ?capability.mode, "render backend selection");
+	}
+	commands.insert_resource(capability);
+}
+
+fn tree_backend_available(capability: Res<GrassGpuCapability>) -> bool {
+	capability.submits()
 }
 
 #[derive(Resource)]
@@ -235,7 +284,8 @@ fn init_tree_pipelines(
 
 	let wood_shader = asset_server.load(WOOD_SHADER);
 	let foliage_shader = asset_server.load(FOLIAGE_SHADER);
-	let wood_descriptor = opaque_descriptor("tree_wood", wood_shader, vec![wood_draw_layout.clone()]);
+	let wood_descriptor =
+		opaque_descriptor("tree_wood", wood_shader, vec![wood_draw_layout.clone()]);
 	let foliage_descriptor = foliage_pipeline_descriptor(
 		"tree_foliage",
 		foliage_shader,
@@ -264,11 +314,7 @@ fn opaque_descriptor(
 	RenderPipelineDescriptor {
 		label: Some(label.into()),
 		layout,
-		vertex: VertexState {
-			shader: shader.clone(),
-			buffers: vec![vertex_layout()],
-			..default()
-		},
+		vertex: VertexState { shader: shader.clone(), buffers: vec![vertex_layout()], ..default() },
 		fragment: Some(FragmentState {
 			shader,
 			targets: vec![Some(ColorTargetState {
@@ -296,10 +342,7 @@ fn foliage_pipeline_descriptor(
 	layout: Vec<BindGroupLayoutDescriptor>,
 ) -> RenderPipelineDescriptor {
 	let mut descriptor = opaque_descriptor(label, shader, layout);
-	descriptor.multisample = MultisampleState {
-		alpha_to_coverage_enabled: true,
-		..default()
-	};
+	descriptor.multisample = MultisampleState { alpha_to_coverage_enabled: true, ..default() };
 	descriptor
 }
 
@@ -317,7 +360,15 @@ struct GpuTemplate {
 
 fn init_templates(mut commands: Commands, device: Res<RenderDevice>) {
 	let lods = [WoodLod::Near, WoodLod::Mid, WoodLod::Far];
-	let wood = lods.map(|lod| gpu_template(&device, &WoodTemplate::for_lod(lod).vertex_bytes(), &WoodTemplate::for_lod(lod).index_bytes(), WoodTemplate::for_lod(lod).indices.len() as u32, "tree_wood_template"));
+	let wood = lods.map(|lod| {
+		gpu_template(
+			&device,
+			&WoodTemplate::for_lod(lod).vertex_bytes(),
+			&WoodTemplate::for_lod(lod).index_bytes(),
+			WoodTemplate::for_lod(lod).indices.len() as u32,
+			"tree_wood_template",
+		)
+	});
 	let leaf = LeafTemplate::teardrop();
 	commands.insert_resource(TreeTemplates {
 		wood,
@@ -359,6 +410,7 @@ struct TreeGpuState {
 	branches: Option<Buffer>,
 	leaves: Option<Buffer>,
 	generation: u64,
+	plant_count: usize,
 	views: std::collections::HashMap<RetainedViewEntity, ViewWork>,
 }
 
@@ -425,6 +477,7 @@ fn prepare_tree_buffers(
 			LEAF_DESCRIPTOR_STRIDE,
 		));
 		state.generation = extracted.field.generation;
+		state.plant_count = extracted.field.plants.len();
 		state.views.clear();
 	}
 
@@ -595,9 +648,8 @@ fn create_view_work(
 			WoodLod::from_bucket(lod).map(|w| w.vertex_count()).unwrap_or(0),
 		)
 	});
-	let foliage_params = [0u32, 1, 2].map(|lod| {
-		params_buffer(device, lod, LeafTemplate::TEARDROP_INDEX_COUNT, 9)
-	});
+	let foliage_params =
+		[0u32, 1, 2].map(|lod| params_buffer(device, lod, LeafTemplate::TEARDROP_INDEX_COUNT, 9));
 
 	let uniform = make_view_uniform(view, extracted);
 	write_view_uniform(queue, &view_uniform, &uniform);
@@ -720,8 +772,7 @@ fn cpu_fill_lists<'a>(
 		);
 		for lod in 0..TREE_LOD_COUNT {
 			if !lists.wood[lod].is_empty() {
-				let bytes: Vec<u8> =
-					lists.wood[lod].iter().flat_map(|i| i.to_le_bytes()).collect();
+				let bytes: Vec<u8> = lists.wood[lod].iter().flat_map(|i| i.to_le_bytes()).collect();
 				queue.write_buffer(&work.wood_lists[lod], 0, &bytes);
 			}
 			if !lists.foliage[lod].is_empty() {
@@ -786,6 +837,7 @@ fn tree_compute(
 	state: Option<Res<TreeGpuState>>,
 	capability: Option<Res<GrassGpuCapability>>,
 	extracted: Option<Res<ExtractedTreeField>>,
+	mut reported_dispatch: Local<bool>,
 ) {
 	let Some(pipelines) = pipelines else {
 		return;
@@ -816,8 +868,19 @@ fn tree_compute(
 		return;
 	};
 
-	let wood_groups = extracted.field.branches.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
-	let leaf_groups = extracted.field.leaves.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
+	let wood_groups =
+		extracted.field.branches.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
+	let leaf_groups =
+		extracted.field.leaves.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
+	if !*reported_dispatch && !state.views.is_empty() && requested_world_tree_mode().is_some() {
+		info!(
+			target: "maybraid.tree_field",
+			plants = extracted.field.plants.len(), branches = extracted.field.branches.len(),
+			leaves = extracted.field.leaves.len(),
+			"GPU selection dispatched"
+		);
+		*reported_dispatch = true;
+	}
 	for work in state.views.values() {
 		render_context.command_encoder().clear_buffer(&work.counters, 0, None);
 		{
@@ -845,6 +908,7 @@ fn queue_tree(
 	mut opaque_phases: ResMut<ViewBinnedRenderPhases<Opaque3d>>,
 	opaque_draw_functions: Res<DrawFunctions<Opaque3d>>,
 	views: Query<(&ExtractedView, &RenderVisibleEntities, &Msaa)>,
+	presenters: Query<&TreeFieldPresenter>,
 	dirty: Res<DirtySpecializations>,
 	mut pending: ResMut<PendingTreeQueues>,
 	mut queued: Local<MainEntityHashSet>,
@@ -885,49 +949,38 @@ fn queue_tree(
 			&pending_queues.prev_frame,
 			&mut queued,
 		) {
-			let msaa_samples = msaa.samples();
-			let wood_key = TreeDrawKey {
-				msaa: msaa_samples,
-				format: view.target_format,
-				alpha_to_coverage: false,
-			};
-			let foliage_key = TreeDrawKey {
-				msaa: msaa_samples,
-				format: view.target_format,
-				alpha_to_coverage: true,
-			};
-			let Ok(wood_id) = pipelines.wood_variants.specialize(&pipeline_cache, wood_key) else {
+			let Ok(presenter) = presenters.get(*render_entity) else {
 				continue;
 			};
-			let Ok(foliage_id) =
-				pipelines.foliage_variants.specialize(&pipeline_cache, foliage_key)
-			else {
+			let (variants, draw_function, asset_id, alpha_to_coverage) = match presenter {
+				TreeFieldPresenter::Wood => (
+					&mut pipelines.wood_variants,
+					draw_wood,
+					AssetId::<Mesh>::default().untyped(),
+					false,
+				),
+				TreeFieldPresenter::Foliage => (
+					&mut pipelines.foliage_variants,
+					draw_foliage,
+					AssetId::<StandardMaterial>::default().untyped(),
+					true,
+				),
+			};
+			let key =
+				TreeDrawKey { msaa: msaa.samples(), format: view.target_format, alpha_to_coverage };
+			let Ok(pipeline) = variants.specialize(&pipeline_cache, key) else {
 				continue;
 			};
-			let entities = (*render_entity, *main_entity);
 			phase.add(
 				Opaque3dBatchSetKey {
-					draw_function: draw_wood,
-					pipeline: wood_id,
+					draw_function,
+					pipeline,
 					material_bind_group_index: None,
 					lightmap_slab: None,
 					slabs: MeshSlabs::default(),
 				},
-				Opaque3dBinKey { asset_id: AssetId::<Mesh>::default().untyped() },
-				entities,
-				InputUniformIndex::default(),
-				BinnedRenderPhaseType::NonMesh,
-			);
-			phase.add(
-				Opaque3dBatchSetKey {
-					draw_function: draw_foliage,
-					pipeline: foliage_id,
-					material_bind_group_index: None,
-					lightmap_slab: None,
-					slabs: MeshSlabs::default(),
-				},
-				Opaque3dBinKey { asset_id: AssetId::<StandardMaterial>::default().untyped() },
-				entities,
+				Opaque3dBinKey { asset_id },
+				(*render_entity, *main_entity),
 				InputUniformIndex::default(),
 				BinnedRenderPhaseType::NonMesh,
 			);
@@ -963,8 +1016,17 @@ impl<P: PhaseItem> RenderCommand<P> for DrawTreeWoodCommand {
 			pass.set_bind_group(0, &work.wood_draw_bgs[lod], &[]);
 			pass.set_vertex_buffer(0, templates.wood[lod].vertices.slice(..));
 			pass.set_index_buffer(templates.wood[lod].indices.slice(..), IndexFormat::Uint32);
-			draw_lod(pass, capability, work, templates.wood[lod].index_count, work.cpu_wood_counts[lod], lod);
+			draw_lod(
+				pass,
+				capability,
+				work,
+				templates.wood[lod].index_count,
+				work.cpu_wood_counts[lod],
+				lod,
+			);
 		}
+		static REPORTED: OnceLock<()> = OnceLock::new();
+		report_world_draw(&REPORTED, "wood", state, capability, &work.cpu_wood_counts);
 		RenderCommandResult::Success
 	}
 }
@@ -1000,8 +1062,35 @@ impl<P: PhaseItem> RenderCommand<P> for DrawTreeFoliageCommand {
 				lod + TREE_LOD_COUNT,
 			);
 		}
+		static REPORTED: OnceLock<()> = OnceLock::new();
+		report_world_draw(&REPORTED, "foliage", state, capability, &work.cpu_foliage_counts);
 		RenderCommandResult::Success
 	}
+}
+
+fn report_world_draw(
+	reported: &OnceLock<()>,
+	kind: &'static str,
+	state: &TreeGpuState,
+	capability: &GrassGpuCapability,
+	cpu_counts: &[u32; TREE_LOD_COUNT],
+) {
+	if reported.get().is_some()
+		|| state.plant_count == 0
+		|| !capability.submits()
+		|| (capability.mode == GrassGpuMode::CpuSelect
+			&& !cpu_counts.iter().any(|&count| count > 0))
+		|| requested_world_tree_mode().is_none()
+	{
+		return;
+	}
+	reported.get_or_init(|| {
+		info!(
+			target: "maybraid.tree_field",
+			kind, mode = ?capability.mode, generation = state.generation, plants = state.plant_count,
+			"camera draw encoded"
+		);
+	});
 }
 
 fn draw_lod<'a>(

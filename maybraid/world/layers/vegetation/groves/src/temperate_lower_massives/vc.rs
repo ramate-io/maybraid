@@ -1,7 +1,9 @@
 use super::WOODY_LOD;
-use std::sync::Arc;
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::{Arc, OnceLock};
 
 use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, Scene};
 #[cfg(test)]
 use bevy::shape::Aabb3d;
 use clap::Args;
@@ -16,7 +18,12 @@ use sbs_trees::{
 	BraidOakTree, QuantizedPlant, RorysHeadTrained, RorysHeadTrainedParams, StorybookTree,
 	StorybookTreeParams,
 };
-use vegetation_components::{Placement, StickNode, VegetationComponents};
+use vegetation_components::{
+	scene_children, structural_shadow_proxy_scene, FlattenedComponentsOnly, PlacedVegetation,
+	Placement, StickNode, VegetationComponents, FLATTENED_KIT_CHUNK_WEIGHT,
+};
+
+use crate::grove::vc_compose::flattened_plant_metadata;
 
 use super::{
 	definition, TemperateLowerMassivesCell, TemperateLowerMassivesItem, LOWER_MASSIVE_STORYBOOK,
@@ -78,6 +85,24 @@ remixed_sbs_plant!(
 	RARE_LOWER_MASSIVE_RORY
 );
 
+/// Upper bound for an explicitly selected grove tile in the native rendering trial.
+pub const MAX_STORYBOOK_FIELD_TREES: usize = 64;
+static STORYBOOK_FIELD_TILE: OnceLock<(Vec2, bool)> = OnceLock::new();
+
+/// Select one tile for a placement comparison. The renderer admits replacement separately.
+pub fn configure_storybook_field_tile(xz: Vec2, replace_kits: bool) -> bool {
+	xz.is_finite() && STORYBOOK_FIELD_TILE.set((xz, replace_kits)).is_ok()
+}
+
+/// Exact inputs from the existing world generator; the rendering adapter owns its recipe.
+#[derive(Component, Clone, Copy, Default)]
+pub struct StorybookFieldSample {
+	pub root: Vec3,
+	pub up: Vec3,
+	pub height: f32,
+	pub seed: u32,
+}
+
 #[derive(Clone)]
 enum TemperateLowerMassivesKind {
 	Oak(Arc<BraidOakTree>),
@@ -118,7 +143,37 @@ impl TemperateLowerMassives {
 		Self { plants, structural_center, footprint_radius, extent: *extent }
 	}
 
+	fn uses_tree_field(&self, level: LodSceneLevel) -> bool {
+		let Some(&(tile, replace_kits)) = STORYBOOK_FIELD_TILE.get() else { return false };
+		if !self.extent.owns_center_xz(Vec3::new(tile.x, 0., tile.y)) {
+			return false;
+		}
+		let mut placements = Vec::new();
+		for plant in self.plants.iter() {
+			if let TemperateLowerMassivesKind::Storybook(tree) = &plant.kind {
+				let sample = storybook_field_sample(tree, plant);
+				placements.push((
+					sample.root.to_array().map(f32::to_bits),
+					sample.up.to_array().map(f32::to_bits),
+					sample.height.to_bits(),
+					sample.seed,
+				));
+			}
+		}
+		let eligible = (1..=MAX_STORYBOOK_FIELD_TREES).contains(&placements.len());
+		placements.sort_unstable();
+		let mut digest = DefaultHasher::new();
+		placements.hash(&mut digest);
+		info!(
+			target: "maybraid.tree_field",
+			?level, ?tile, plants = placements.len(), placement_digest = digest.finish(),
+			field = eligible && replace_kits, "natural Storybook tile inventory"
+		);
+		eligible && replace_kits
+	}
+
 	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<SceneChunk> {
+		let use_tree_field = self.uses_tree_field(level);
 		FlattenedPlantList::capture(&self.plants, lod_ref).nest_chunks(move |plant, plant_lod| {
 			match &plant.kind {
 				TemperateLowerMassivesKind::Oak(t) => nest_flattened_plant_chunk(
@@ -130,6 +185,9 @@ impl TemperateLowerMassives {
 					plant_lod,
 					level,
 				),
+				TemperateLowerMassivesKind::Storybook(t) if use_tree_field => {
+					SceneChunk::weighted(FLATTENED_KIT_CHUNK_WEIGHT, storybook_field_host(t, plant))
+				}
 				TemperateLowerMassivesKind::Storybook(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
 					plant.placement,
@@ -189,6 +247,38 @@ impl TemperateLowerMassives {
 				_ => None,
 			})
 			.collect()
+	}
+}
+
+fn storybook_field_host(
+	tree: &Arc<StorybookTree>,
+	plant: &TemperateLowerMassivesPlant,
+) -> impl Scene + 'static {
+	let host = FlattenedComponentsOnly(PlacedVegetation::new(
+		Arc::clone(tree),
+		plant.placement,
+		plant.stick_material.clone(),
+		plant.ball_material.clone(),
+		plant.frond_material.clone(),
+	));
+	let canopy = structural_shadow_proxy_scene(&host);
+	let sample = storybook_field_sample(tree, plant);
+	(
+		flattened_plant_metadata(host),
+		bsn! { ~{sample} },
+		scene_children(canopy.into_iter().collect()),
+	)
+}
+
+fn storybook_field_sample(
+	tree: &StorybookTree,
+	plant: &TemperateLowerMassivesPlant,
+) -> StorybookFieldSample {
+	StorybookFieldSample {
+		root: plant.placement.translation,
+		up: plant.placement.rotation() * Vec3::Y,
+		height: tree.geometry.height() * plant.placement.scale.y,
+		seed: tree.geometry.canopy_noise.seed as u32,
 	}
 }
 

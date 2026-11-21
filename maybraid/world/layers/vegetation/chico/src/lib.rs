@@ -24,6 +24,7 @@ mod plugin;
 mod recipe;
 mod stick_physics;
 mod stream;
+mod tree_field;
 mod view;
 
 pub use assemble::{
