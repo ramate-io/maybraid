@@ -183,6 +183,14 @@ impl LeafCluster {
 		leaf_cluster_keep_for_style(alpha, pixel, seed, detail, style)
 	}
 
+	pub fn drape_mask(uv: Vec2, seed: u32, detail: f32, style: u32) -> f32 {
+		drape_strand_mask(uv, seed, detail, style)
+	}
+
+	pub fn drape_tint(uv: Vec2, seed: u32) -> f32 {
+		drape_strand_tint(uv, seed)
+	}
+
 	pub fn outward_normal(geometric: Vec3, clump_out: Vec3, uv: Vec2, detail: f32) -> Vec3 {
 		leaf_cluster_outward_normal(geometric, clump_out, uv, detail)
 	}
@@ -279,6 +287,49 @@ pub fn leaf_cluster_keep_for_style(
 		return alpha >= 0.48;
 	}
 	leaf_cluster_keep(alpha, pixel, seed, detail)
+}
+
+fn drape_leaf_blob(uv: Vec2, cell: i32, seed: u32, cells: f32, crisp: bool) -> f32 {
+	let packed = (cell.wrapping_add(31) as u32).wrapping_mul(374_761_393);
+	let h0 = hash_u32(seed ^ hash_u32(packed));
+	let h1 = hash_u32(h0 ^ 0x85ebca6b);
+	let along = (cell as f32 + 0.16 + 0.68 * hash_u32_to_unit(h1)) / cells.max(1.0);
+	let side = if (cell as u32) & 1 == 0 { 1.0 } else { -1.0 };
+	let reach = 0.32 + 0.30 * hash_u32_to_unit(h1 ^ 0xc2b2ae35);
+	let center = Vec2::new(side * reach, along);
+	let leaf_w = 0.14 + 0.11 * hash_u32_to_unit(h1 ^ 0x27d4eb2d);
+	let leaf_h = 0.048 + 0.032 * hash_u32_to_unit(h1 ^ 0xa0761d65);
+	let delta = uv - center;
+	let v = (delta.y / leaf_h.max(1e-4) * 0.5 + 0.5).clamp(0.0, 1.0);
+	let petiole = smoothstep(0.0, 0.26, v);
+	let tip = 1.0 - 0.52 * smoothstep(0.42, 1.0, v);
+	let q = Vec2::new(delta.x / (leaf_w * (petiole * tip).max(0.12)), delta.y / leaf_h);
+	let (lo, hi) = if crisp { (0.80, 0.96) } else { (0.55, 1.0) };
+	1.0 - smoothstep(lo, hi, q.length())
+}
+
+pub fn drape_strand_mask(uv: Vec2, seed: u32, detail: f32, style: u32) -> f32 {
+	let d = detail.clamp(0.0, 1.0);
+	let envelope = 1.0 - smoothstep(0.80, 1.0, uv.x.abs());
+	if d < 0.08 {
+		return envelope;
+	}
+	let stem = 1.0 - smoothstep(0.040, 0.095, uv.x.abs());
+	let cells = lerp(5.5, 12.0, d);
+	let base = (uv.y.clamp(0.0, 1.0) * cells).floor() as i32;
+	let crisp = style == LEAF_CLOSE_CRISP;
+	let mut leaves = 0.0_f32;
+	for delta in -1..=1 {
+		leaves = leaves.max(drape_leaf_blob(uv, base + delta, seed, cells, crisp));
+	}
+	let occ = stem.max(leaves) * envelope;
+	lerp(envelope, occ, d)
+}
+
+pub fn drape_strand_tint(uv: Vec2, seed: u32) -> f32 {
+	let cell = (uv.y.clamp(0.0, 1.0) * 10.0).floor() as i32;
+	let packed = (cell.wrapping_add(11) as u32).wrapping_mul(668_265_263);
+	hash_u32_to_unit(seed ^ hash_u32(packed) ^ 0x165667b1)
 }
 
 pub fn leaf_cluster_outward_normal(geometric: Vec3, clump_out: Vec3, uv: Vec2, detail: f32) -> Vec3 {
@@ -379,6 +430,30 @@ mod tests {
 		let rim = canopy_interior_shade(0.9, 0.9, 1.0, Vec3::Y);
 		let core = canopy_interior_shade(0.2, 0.1, 0.0, -Vec3::Y);
 		assert!(rim > core + 0.2);
+		Ok(())
+	}
+
+	#[test]
+	fn drape_strands_are_stem_and_leaves_near_and_filled_far() -> anyhow::Result<()> {
+		let seed = 23u32;
+		let far = LeafCluster::drape_mask(Vec2::new(0.0, 0.4), seed, 0.0, LEAF_CLOSE_SMOOTH);
+		assert!(far > 0.9, "far drape should stay a filled silhouette, got {far}");
+		let mut min_near = 1.0_f32;
+		let mut max_near = 0.0_f32;
+		for i in 0..40u32 {
+			let u = (i % 8) as f32 / 7.0 * 2.0 - 1.0;
+			let v = (i / 8) as f32 / 4.0;
+			let a = LeafCluster::drape_mask(Vec2::new(u, v), seed, 1.0, LEAF_CLOSE_CRISP);
+			min_near = min_near.min(a);
+			max_near = max_near.max(a);
+		}
+		assert!(max_near > 0.7, "near drape should keep a stem or leaves, got {max_near}");
+		assert!(min_near < 0.2, "near drape should punch between strands, got {min_near}");
+		assert!(!LeafCluster::keep_for_style(0.2, Vec2::new(3.0, 5.0), seed, 1.0, LEAF_CLOSE_CRISP));
+		assert!(LeafCluster::keep_for_style(0.8, Vec2::new(3.0, 5.0), seed, 1.0, LEAF_CLOSE_CRISP));
+		let a = LeafCluster::drape_tint(Vec2::new(0.1, 0.12), 8);
+		let b = LeafCluster::drape_tint(Vec2::new(0.1, 0.82), 8);
+		assert!((a - b).abs() > 0.02);
 		Ok(())
 	}
 

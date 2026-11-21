@@ -111,7 +111,7 @@ impl TreeRecipe {
 			wood: VegetationPalette::botw_wood(),
 			foliage: VegetationPalette::botw_canopy_crown(),
 			form: TreeForm::Willow,
-			drape_count: 3..=4,
+			drape_count: 5..=7,
 			drape_length_m: 3.8..=6.4,
 			leaf_close_style: LeafCloseStyle::Smooth,
 		}
@@ -171,7 +171,7 @@ mod tests {
 	fn willow_is_a_distinct_recipe() -> anyhow::Result<()> {
 		let willow = TreeRecipe::willow();
 		assert!(willow.is_willow());
-		assert!(*willow.drape_count.end() >= 3);
+		assert!(*willow.drape_count.end() >= 5);
 		assert!(*willow.drape_length_m.end() > 4.0);
 		assert!(willow.wood_stiffness < TreeRecipe::storybook().wood_stiffness);
 		Ok(())

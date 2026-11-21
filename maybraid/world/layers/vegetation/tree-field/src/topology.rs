@@ -513,7 +513,7 @@ impl TreePlant {
 					palette: pal.tip_rgb,
 					shape: 2.0,
 				});
-				// Extra overlapping curtain slightly inward so the drape reads as a mass.
+				// A second thin strand, slightly offset, so the hanging mass stays dense from afar.
 				if leaves.len() as u32 >= MAX_LEAVES_PER_PLANT {
 					return;
 				}
@@ -522,12 +522,13 @@ impl TreePlant {
 					plant_index: 0,
 					parent_branch: index,
 					attach_t: (0.50 + 0.38 * hash_u32_to_unit(mate)).clamp(0.38, 0.94),
-					size_m: (length * 0.78).max(1.8),
+					size_m: (length * 0.88).max(2.0),
 					twist: (hash_u32_to_unit(mate ^ 1) - 0.5) * 0.9,
 					fold: 0.28,
 					flutter: 0.048,
 					density_rank: rank_hash * 0.50,
-					facing: (facing + tangent_on(up, 0.7) * 0.22).normalize_or(facing),
+					facing: (facing + tangent_on(up, 0.55 + drape_i as f32 * 0.31) * 0.28)
+						.normalize_or(facing),
 					leaf_id: mate,
 					palette: pal.tip_rgb,
 					shape: 2.0,

@@ -179,6 +179,10 @@ pub const TREE_CAPTURE_SHOTS: &[CaptureShot] = &[
 	CaptureShot::gpu("wind-gust", GUST, CaptureScene::Close).with_gust(),
 	CaptureShot::gpu("willow-full", WILLOW_FULL, CaptureScene::Willow),
 	CaptureShot::gpu("willow-drape-close", WILLOW_DRAPE, CaptureScene::Willow),
+	CaptureShot::gpu("willow-drape-close-dither", WILLOW_DRAPE, CaptureScene::Willow)
+		.with_leaves(LeafCloseStyle::Dither),
+	CaptureShot::gpu("willow-drape-close-crisp", WILLOW_DRAPE, CaptureScene::Willow)
+		.with_leaves(LeafCloseStyle::Crisp),
 	CaptureShot::gpu("willow-wind", WILLOW_FULL, CaptureScene::Willow).with_gust(),
 ];
 
@@ -316,6 +320,8 @@ mod tests {
 			"kit-close",
 			"willow-full",
 			"willow-drape-close",
+			"willow-drape-close-dither",
+			"willow-drape-close-crisp",
 			"willow-wind",
 		] {
 			assert!(TREE_CAPTURE_SHOTS.iter().any(|shot| shot.name == name), "missing {name}");
@@ -326,6 +332,18 @@ mod tests {
 		let kit = kit.ok_or_else(|| anyhow::anyhow!("missing kit close"))?;
 		assert_eq!(gpu.camera, kit.camera);
 		assert_eq!(gpu.look_at, kit.look_at);
+		let drape = TREE_CAPTURE_SHOTS
+			.iter()
+			.find(|shot| shot.name == "willow-drape-close")
+			.ok_or_else(|| anyhow::anyhow!("missing willow drape close"))?;
+		for name in ["willow-drape-close-dither", "willow-drape-close-crisp"] {
+			let shot = TREE_CAPTURE_SHOTS
+				.iter()
+				.find(|shot| shot.name == name)
+				.ok_or_else(|| anyhow::anyhow!("missing {name}"))?;
+			assert_eq!(shot.camera, drape.camera);
+			assert_eq!(shot.look_at, drape.look_at);
+		}
 		assert!(TREE_CAPTURE_SHOTS.iter().any(|shot| shot.gust));
 		Ok(())
 	}

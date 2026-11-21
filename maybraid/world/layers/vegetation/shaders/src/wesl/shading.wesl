@@ -246,6 +246,51 @@ fn leaf_cluster_keep_for_style(
     return leaf_cluster_keep(alpha, pixel, seed, detail);
 }
 
+fn drape_leaf_blob(uv: vec2<f32>, cell: i32, seed: u32, cells: f32, crisp: bool) -> f32 {
+    let packed = u32(cell + 31) * 374761393u;
+    let h0 = hash_u32(seed ^ hash_u32(packed));
+    let h1 = hash_u32(h0 ^ 0x85ebca6bu);
+    let along = (f32(cell) + 0.16 + 0.68 * hash_u32_to_unit(h1)) / max(cells, 1.0);
+    let side = select(-1.0, 1.0, (u32(cell) & 1u) == 0u);
+    let reach = 0.32 + 0.30 * hash_u32_to_unit(h1 ^ 0xc2b2ae35u);
+    let center = vec2<f32>(side * reach, along);
+    let leaf_w = 0.14 + 0.11 * hash_u32_to_unit(h1 ^ 0x27d4eb2du);
+    let leaf_h = 0.048 + 0.032 * hash_u32_to_unit(h1 ^ 0xa0761d65u);
+    let delta = uv - center;
+    let v = saturate(delta.y / max(leaf_h, 1e-4) * 0.5 + 0.5);
+    let petiole = smoothstep(0.0, 0.26, v);
+    let tip = 1.0 - 0.52 * smoothstep(0.42, 1.0, v);
+    let q = vec2<f32>(delta.x / (leaf_w * max(petiole * tip, 0.12)), delta.y / leaf_h);
+    let lo = select(0.55, 0.80, crisp);
+    let hi = select(1.0, 0.96, crisp);
+    return 1.0 - smoothstep(lo, hi, length(q));
+}
+
+/// Thin hanging stem + alternating small leaves. `detail` 0 keeps a filled curtain silhouette.
+fn drape_strand_mask(uv: vec2<f32>, seed: u32, detail: f32, style: u32) -> f32 {
+    let d = saturate(detail);
+    let envelope = 1.0 - smoothstep(0.80, 1.0, abs(uv.x));
+    if (d < 0.08) {
+        return envelope;
+    }
+    let stem = 1.0 - smoothstep(0.040, 0.095, abs(uv.x));
+    let cells = mix(5.5, 12.0, d);
+    let base = i32(floor(saturate(uv.y) * cells));
+    let crisp = style == LEAF_CLOSE_CRISP;
+    var leaves = 0.0;
+    leaves = max(leaves, drape_leaf_blob(uv, base - 1, seed, cells, crisp));
+    leaves = max(leaves, drape_leaf_blob(uv, base, seed, cells, crisp));
+    leaves = max(leaves, drape_leaf_blob(uv, base + 1, seed, cells, crisp));
+    let occ = max(stem, leaves) * envelope;
+    return mix(envelope, occ, d);
+}
+
+fn drape_strand_tint(uv: vec2<f32>, seed: u32) -> f32 {
+    let cell = i32(floor(saturate(uv.y) * 10.0));
+    let packed = u32(cell + 11) * 668265263u;
+    return hash_u32_to_unit((seed ^ hash_u32(packed)) ^ 0x165667b1u);
+}
+
 /// Bend the card normal toward the clump outward so overlapping shells read as a mass.
 fn leaf_cluster_outward_normal(
     geometric: vec3<f32>,

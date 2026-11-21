@@ -7,9 +7,10 @@ import vegetation_shaders::wesl::curve::{
 };
 import vegetation_shaders::wesl::wind::{deform_along_curve, wind_field, WindInputs};
 import vegetation_shaders::wesl::shading::{
-    canopy_clump_albedo, canopy_interior_shade, crown_layer_albedo, grass_variation_palette,
-    leaf_close_uses_cluster, leaf_cluster_alpha_for_style, leaf_cluster_keep_for_style,
-    leaf_cluster_outward_normal, leaf_cluster_tint, leaf_painterly_lit,
+    canopy_clump_albedo, canopy_interior_shade, crown_layer_albedo, drape_strand_mask,
+    drape_strand_tint, grass_variation_palette, leaf_close_uses_cluster,
+    leaf_cluster_alpha_for_style, leaf_cluster_keep_for_style, leaf_cluster_outward_normal,
+    leaf_cluster_tint, leaf_painterly_lit,
 };
 import vegetation_shaders::wesl::layout::{GrassDrawParams, GrassViewUniform};
 import vegetation_tree_field::shaders::layout::{BranchDescriptor, LeafDescriptor, PlantDescriptor};
@@ -163,7 +164,8 @@ fn vertex(vert: TemplateVertex, @builtin(instance_index) instance_index: u32) ->
     let card = leaf.size_m * size_scale;
     var world: vec3<f32>;
     if (is_drape) {
-        let width = card * 0.14;
+        // Near: thin strand (~22 cm). Far: a bit wider so the hanging mass still reads.
+        let width = mix(0.46, 0.22, lod_detail(draw.lod_bucket));
         let hang = v * card;
         let sag = hang * (0.42 + 0.58 * v);
         let sway = wind_now * (v * v) * (1.0 - parent.stiffness) * 0.55;
@@ -181,14 +183,21 @@ fn vertex(vert: TemplateVertex, @builtin(instance_index) instance_index: u32) ->
     }
     var n = leaf_surface_normal(frame, u, leaf.fold);
     let style = (plant.flags >> 1u) & 3u;
-    let cluster_detail = select(0.0, lod_detail(draw.lod_bucket), leaf_close_uses_cluster(style));
+    let cluster_detail = select(
+        0.0,
+        lod_detail(draw.lod_bucket),
+        leaf_close_uses_cluster(style) && !is_drape,
+    );
     n = leaf_cluster_outward_normal(n, outward, vec2<f32>(u, v), cluster_detail);
     let height_frac = saturate((world.y - plant.root.y) / max(plant.height_m, 1e-3));
     let radial = saturate(length(world.xz - plant.root.xz) / max(plant.crown_radius_m, 1e-3));
     let pal = grass_variation_palette(leaf.palette, plant.root.xz, leaf.leaf_id >> 3u);
     let layered = crown_layer_albedo(pal, height_frac, radial, shell, leaf.density_rank);
     var albedo = canopy_clump_albedo(layered, pal.root_rgb, height_frac, n, leaf.density_rank);
-    if (leaf_close_uses_cluster(style)) {
+    if (is_drape) {
+        let tint = drape_strand_tint(vec2<f32>(u, v), leaf.leaf_id);
+        albedo = albedo * mix(vec3<f32>(0.84, 0.92, 0.88), vec3<f32>(1.16, 1.08, 0.86), tint);
+    } else if (leaf_close_uses_cluster(style)) {
         let tint = leaf_cluster_tint(vec2<f32>(u, v), leaf.leaf_id);
         albedo = albedo * mix(vec3<f32>(0.82, 0.90, 0.88), vec3<f32>(1.14, 1.06, 0.90), tint);
     }
@@ -215,11 +224,9 @@ fn fragment(in: LeafVertexOutput) -> @location(0) vec4<f32> {
     let style = u32(in.pack.w + 0.5);
     var alpha = leaf_cluster_alpha_for_style(in.uv, seed, detail, style);
     if (in.pack.z > 0.5) {
-        // Drapes: hashed leaves when the style uses clusters; always a soft side falloff.
-        let drape_uv = vec2<f32>(in.uv.x * 1.35, in.uv.y);
-        let drape_detail = max(detail, select(0.0, 0.55, leaf_close_uses_cluster(style)));
-        alpha = leaf_cluster_alpha_for_style(drape_uv, seed ^ 0x9e3779b9u, drape_detail, style);
-        alpha = alpha * (1.0 - smoothstep(0.78, 1.0, abs(in.uv.x)));
+        // Drapes always use the strand mask: far fills the curtain, near is stem + leaves.
+        // Smooth/dither/crisp only change how those small leaves are cut.
+        alpha = drape_strand_mask(in.uv, seed, detail, style);
     }
     if (!leaf_cluster_keep_for_style(alpha, in.position.xy, seed, detail, style)) {
         discard;
