@@ -27,9 +27,9 @@ pub use diagnostics::TreeFieldStats;
 pub use field::{TreeField, TreeFieldSettings};
 pub use host::TreePatchLod;
 pub use layout::{
-	BranchDescriptor, TreePatchHeader, LeafDescriptor, PlantDescriptor, WoodLod, BRANCH_DESCRIPTOR_STRIDE,
-	TREE_LOD_COUNT, TREE_LOD_FAR, TREE_LOD_MID, TREE_LOD_NEAR, LEAF_DESCRIPTOR_STRIDE, PARENT_NONE,
-	PLANT_DESCRIPTOR_STRIDE,
+	BranchDescriptor, LeafCloseStyle, TreePatchHeader, LeafDescriptor, PlantDescriptor, WoodLod,
+	BRANCH_DESCRIPTOR_STRIDE, TREE_LOD_COUNT, TREE_LOD_FAR, TREE_LOD_MID, TREE_LOD_NEAR,
+	LEAF_DESCRIPTOR_STRIDE, PARENT_NONE, PLANT_DESCRIPTOR_STRIDE,
 };
 pub use patch::{TreePatch, TreeSample};
 pub use plugin::TreeFieldPlugin;

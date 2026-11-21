@@ -40,6 +40,8 @@ import vegetation_shaders::wesl::shading::{
     leaf_cluster_mask,
     leaf_cluster_tint,
     leaf_cluster_keep,
+    leaf_cluster_keep_for_style,
+    leaf_cluster_alpha_for_style,
     leaf_cluster_outward_normal,
     VegetationPalette,
 };
@@ -105,8 +107,10 @@ fn smoke_eval(blade: BladeDescriptor, view: GrassViewUniform, t: f32, side: f32)
     let _mask = leaf_cluster_mask(vec2<f32>(side, t), blade.plant_id, 1.0);
     let _tint = leaf_cluster_tint(vec2<f32>(side, t), blade.plant_id);
     let _keep = leaf_cluster_keep(_mask, vec2<f32>(1.0, 2.0), blade.plant_id, 1.0);
+    let _styled = leaf_cluster_alpha_for_style(vec2<f32>(side, t), blade.plant_id, 1.0, 2u);
+    let _keep_s = leaf_cluster_keep_for_style(_styled, vec2<f32>(1.0, 2.0), blade.plant_id, 1.0, 2u);
     let _n2 = leaf_cluster_outward_normal(n, blade.normal, vec2<f32>(side, t), 1.0);
-    color = color + _n2 * 0.0 * select(0.0, 1.0, _keep) * _interior * _tint;
+    color = color + _n2 * 0.0 * select(0.0, 1.0, _keep) * select(0.0, 1.0, _keep_s) * _interior * _tint;
     let _teardrop = leaf_teardrop_width(t);
     if (!keep || bucket > 2u) {
         color = color * 0.0;

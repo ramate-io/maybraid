@@ -5,6 +5,8 @@ use vegetation_groves::temperate_lower_massives::{
 };
 use vegetation_shaders::wesl::VegetationPalette;
 
+use crate::layout::LeafCloseStyle;
+
 /// Tree silhouette family. Recipes stay in this crate, not shared WESL.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TreeForm {
@@ -39,6 +41,8 @@ pub struct TreeRecipe {
 	pub form: TreeForm,
 	pub drape_count: std::ops::RangeInclusive<u32>,
 	pub drape_length_m: std::ops::RangeInclusive<f32>,
+	/// Close-up card treatment. Far LOD still reads as solid clumps.
+	pub leaf_close_style: LeafCloseStyle,
 }
 
 impl TreeRecipe {
@@ -88,6 +92,7 @@ impl TreeRecipe {
 			form: TreeForm::Storybook,
 			drape_count: 0..=0,
 			drape_length_m: 0.0..=0.0,
+			leaf_close_style: LeafCloseStyle::Smooth,
 		}
 	}
 
@@ -108,11 +113,17 @@ impl TreeRecipe {
 			form: TreeForm::Willow,
 			drape_count: 3..=4,
 			drape_length_m: 3.8..=6.4,
+			leaf_close_style: LeafCloseStyle::Smooth,
 		}
 	}
 
 	pub fn with_foliage_density(mut self, density: f32) -> Self {
 		self.foliage_density = density.clamp(0.0, 1.0);
+		self
+	}
+
+	pub fn with_leaf_close_style(mut self, style: LeafCloseStyle) -> Self {
+		self.leaf_close_style = style;
 		self
 	}
 
@@ -144,6 +155,15 @@ mod tests {
 		assert_eq!(*recipe.canopy_spread_m.start(), authored.canopy_spread.start);
 		assert_eq!(*recipe.stalk_radius_m.end(), authored.stalk_radius.end);
 		assert_eq!(recipe.form, TreeForm::Storybook);
+		assert_eq!(recipe.leaf_close_style, LeafCloseStyle::Smooth);
+		Ok(())
+	}
+
+	#[test]
+	fn leaf_close_style_is_per_recipe() -> anyhow::Result<()> {
+		let dithered = TreeRecipe::storybook().with_leaf_close_style(LeafCloseStyle::Dither);
+		assert_eq!(dithered.leaf_close_style, LeafCloseStyle::Dither);
+		assert_eq!(TreeRecipe::willow().leaf_close_style, LeafCloseStyle::Smooth);
 		Ok(())
 	}
 

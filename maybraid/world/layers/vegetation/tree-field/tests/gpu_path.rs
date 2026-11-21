@@ -6,8 +6,8 @@ use bevy::prelude::{PerspectiveProjection, Transform};
 use vegetation_groves::temperate_lower_massives;
 use vegetation_shaders::wesl::{GrassViewUniform, LodThresholds};
 use vegetation_tree_field::{
-	CanopyLayer, LeafTemplate, TreeField, TreeFieldSettings, TreePatch, TreePatchLod, TreeRecipe,
-	TreeSelector, WoodLod,
+	CanopyLayer, LeafCloseStyle, LeafTemplate, TreeField, TreeFieldSettings, TreePatch, TreePatchLod,
+	TreeRecipe, TreeSelector, WoodLod,
 };
 
 fn look_view(origin: Vec3, target: Vec3, height_px: f32) -> GrassViewUniform {
@@ -45,6 +45,7 @@ fn wood_and_foliage_draw_together() -> anyhow::Result<()> {
 	let field = TreeField::rebuild([&patch], &settings);
 	assert!(!field.branches.is_empty());
 	assert!(!field.leaves.is_empty());
+	assert_eq!(field.plants[0].leaf_close_style(), LeafCloseStyle::Smooth);
 	let lists = TreeSelector::from_view(
 		look_view(Vec3::new(0.0, 8.0, 16.0), Vec3::new(0.0, 7.0, 0.0), 720.0),
 		&settings,
@@ -187,6 +188,19 @@ fn willow_draws_wood_and_hanging_foliage() -> anyhow::Result<()> {
 	.compact(&field.plants, &field.branches, &field.leaves);
 	assert!(lists.submitted_wood > 0);
 	assert!(lists.submitted_foliage > 0);
+	Ok(())
+}
+
+#[test]
+fn leaf_close_style_override_packs_into_plant_flags() -> anyhow::Result<()> {
+	let recipe = TreeRecipe::storybook().with_leaf_close_style(LeafCloseStyle::Dither);
+	let patch = TreePatch::isolated(7, Vec3::ZERO, recipe);
+	let field = TreeField::rebuild([&patch], &TreeFieldSettings::default());
+	assert_eq!(field.plants[0].leaf_close_style(), LeafCloseStyle::Dither);
+	let mut settings = TreeFieldSettings::default();
+	settings.leaf_close_style = Some(LeafCloseStyle::Crisp);
+	let overridden = TreeField::rebuild([&patch], &settings);
+	assert_eq!(overridden.plants[0].leaf_close_style(), LeafCloseStyle::Crisp);
 	Ok(())
 }
 

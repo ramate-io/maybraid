@@ -175,6 +175,14 @@ impl LeafCluster {
 		leaf_cluster_keep(alpha, pixel, seed, detail)
 	}
 
+	pub fn alpha_for_style(uv: Vec2, seed: u32, detail: f32, style: u32) -> f32 {
+		leaf_cluster_alpha_for_style(uv, seed, detail, style)
+	}
+
+	pub fn keep_for_style(alpha: f32, pixel: Vec2, seed: u32, detail: f32, style: u32) -> bool {
+		leaf_cluster_keep_for_style(alpha, pixel, seed, detail, style)
+	}
+
 	pub fn outward_normal(geometric: Vec3, clump_out: Vec3, uv: Vec2, detail: f32) -> Vec3 {
 		leaf_cluster_outward_normal(geometric, clump_out, uv, detail)
 	}
@@ -236,6 +244,41 @@ pub fn leaf_cluster_keep(alpha: f32, pixel: Vec2, seed: u32, detail: f32) -> boo
 	}
 	let hx = hash_u32(seed ^ (pixel.x as u32).wrapping_mul(1973) ^ (pixel.y as u32).wrapping_mul(9277));
 	alpha > hash_u32_to_unit(hx) * 0.78 + 0.08
+}
+
+pub const LEAF_CLOSE_SMOOTH: u32 = 0;
+pub const LEAF_CLOSE_DITHER: u32 = 1;
+pub const LEAF_CLOSE_CRISP: u32 = 2;
+
+pub fn leaf_close_uses_cluster(style: u32) -> bool {
+	style != LEAF_CLOSE_SMOOTH
+}
+
+pub fn leaf_cluster_alpha_for_style(uv: Vec2, seed: u32, detail: f32, style: u32) -> f32 {
+	if style == LEAF_CLOSE_SMOOTH {
+		1.0
+	} else {
+		leaf_cluster_mask(uv, seed, detail)
+	}
+}
+
+pub fn leaf_cluster_keep_for_style(
+	alpha: f32,
+	pixel: Vec2,
+	seed: u32,
+	detail: f32,
+	style: u32,
+) -> bool {
+	if style == LEAF_CLOSE_SMOOTH {
+		return alpha >= 0.04;
+	}
+	if style == LEAF_CLOSE_CRISP {
+		if detail < 0.08 {
+			return true;
+		}
+		return alpha >= 0.48;
+	}
+	leaf_cluster_keep(alpha, pixel, seed, detail)
 }
 
 pub fn leaf_cluster_outward_normal(geometric: Vec3, clump_out: Vec3, uv: Vec2, detail: f32) -> Vec3 {
@@ -336,6 +379,21 @@ mod tests {
 		let rim = canopy_interior_shade(0.9, 0.9, 1.0, Vec3::Y);
 		let core = canopy_interior_shade(0.2, 0.1, 0.0, -Vec3::Y);
 		assert!(rim > core + 0.2);
+		Ok(())
+	}
+
+	#[test]
+	fn leaf_close_styles_keep_or_cut_as_authored() -> anyhow::Result<()> {
+		let uv = Vec2::new(-0.7, 0.15);
+		let pixel = Vec2::new(12.0, 9.0);
+		let seed = 19u32;
+		assert!((LeafCluster::alpha_for_style(uv, seed, 1.0, LEAF_CLOSE_SMOOTH) - 1.0).abs() < 1e-4);
+		assert!(LeafCluster::keep_for_style(0.2, pixel, seed, 1.0, LEAF_CLOSE_SMOOTH));
+		let dither_a = LeafCluster::alpha_for_style(uv, seed, 1.0, LEAF_CLOSE_DITHER);
+		let crisp_a = LeafCluster::alpha_for_style(uv, seed, 1.0, LEAF_CLOSE_CRISP);
+		assert!((dither_a - crisp_a).abs() < 1e-5);
+		assert!(!LeafCluster::keep_for_style(0.2, pixel, seed, 1.0, LEAF_CLOSE_CRISP));
+		assert!(LeafCluster::keep_for_style(0.8, pixel, seed, 1.0, LEAF_CLOSE_CRISP));
 		Ok(())
 	}
 

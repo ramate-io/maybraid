@@ -61,9 +61,10 @@ pub use lod::{
 };
 pub use shading::{
 	canopy_clump_albedo, canopy_interior_shade, crown_albedo, crown_layer_albedo, grass_albedo,
-	grass_variation_palette, leaf_cluster_keep, leaf_cluster_mask, leaf_cluster_outward_normal,
-	leaf_cluster_tint, leaf_painterly_lit, meadow_color_field, painterly_lit, two_sided_wrap,
-	wood_albedo, LeafCluster, VegetationPalette,
+	grass_variation_palette, leaf_close_uses_cluster, leaf_cluster_alpha_for_style, leaf_cluster_keep,
+	leaf_cluster_keep_for_style, leaf_cluster_mask, leaf_cluster_outward_normal, leaf_cluster_tint,
+	leaf_painterly_lit, meadow_color_field, painterly_lit, two_sided_wrap, wood_albedo, LeafCluster,
+	VegetationPalette, LEAF_CLOSE_CRISP, LEAF_CLOSE_DITHER, LEAF_CLOSE_SMOOTH,
 };
 pub use wind::{
 	deform_along_curve, max_wind_displacement_m, wind_field, WindDeform, WindField, WindInputs,

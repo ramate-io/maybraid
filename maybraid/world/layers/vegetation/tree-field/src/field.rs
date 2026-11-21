@@ -4,7 +4,9 @@ use bevy::prelude::*;
 use vegetation_shaders::wesl::WindInputs;
 
 use crate::bounds::TreeBounds;
-use crate::layout::{BranchDescriptor, TreePatchHeader, LeafDescriptor, PlantDescriptor, PARENT_NONE};
+use crate::layout::{
+	BranchDescriptor, LeafCloseStyle, LeafDescriptor, PlantDescriptor, TreePatchHeader, PARENT_NONE,
+};
 use crate::patch::TreePatch;
 use crate::topology::{MAX_BRANCHES_PER_PLANT, MAX_LEAVES_PER_PLANT};
 
@@ -18,6 +20,8 @@ pub struct TreeFieldSettings {
 	pub wind: WindInputs,
 	pub diagnostics: bool,
 	pub freeze_time_s: Option<f32>,
+	/// When set, every plant uses this close-up leaf style instead of the recipe.
+	pub leaf_close_style: Option<LeafCloseStyle>,
 }
 
 impl TreeFieldSettings {
@@ -38,6 +42,7 @@ impl Default for TreeFieldSettings {
 			wind: WindInputs::gentle_botw(0.0),
 			diagnostics: false,
 			freeze_time_s: None,
+			leaf_close_style: None,
 		}
 	}
 }
@@ -108,6 +113,9 @@ impl TreeField {
 				plant.descriptor.branch_count = branches.len() as u32 - branch_offset;
 				plant.descriptor.leaf_offset = leaf_offset;
 				plant.descriptor.leaf_count = leaves.len() as u32 - leaf_offset;
+				if let Some(style) = settings.leaf_close_style {
+					plant.descriptor = plant.descriptor.with_leaf_close_style(style);
+				}
 				bounds = bounds.union(TreeBounds::from_plant(
 					&plant.descriptor,
 					settings.wind.strength_m,

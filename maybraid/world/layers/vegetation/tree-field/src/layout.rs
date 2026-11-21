@@ -7,6 +7,60 @@ use bevy::render::render_resource::ShaderType;
 /// Sentinel parent index: this branch is rooted on the plant, not another branch.
 pub const PARENT_NONE: u32 = u32::MAX;
 
+/// Close-up foliage treatment packed into [`PlantDescriptor::flags`] bits 1–2.
+///
+/// Far LOD still fades hashed cutouts to solid clumps in every style.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+#[repr(u32)]
+pub enum LeafCloseStyle {
+	/// Solid painterly clump cards (the pre-hashed look).
+	#[default]
+	Smooth = 0,
+	/// Hashed small-leaf silhouettes with dithered cutout.
+	Dither = 1,
+	/// Same hashed leaf shapes, hard alpha cutoff, clean edges.
+	Crisp = 2,
+}
+
+impl LeafCloseStyle {
+	pub const FLAG_SHIFT: u32 = 1;
+	pub const FLAG_MASK: u32 = 0b11 << Self::FLAG_SHIFT;
+
+	pub fn as_u32(self) -> u32 {
+		self as u32
+	}
+
+	pub fn from_u32(value: u32) -> Self {
+		match value {
+			1 => Self::Dither,
+			2 => Self::Crisp,
+			_ => Self::Smooth,
+		}
+	}
+
+	pub fn parse_name(name: &str) -> Option<Self> {
+		match name {
+			"smooth" => Some(Self::Smooth),
+			"dither" => Some(Self::Dither),
+			"crisp" => Some(Self::Crisp),
+			_ => None,
+		}
+	}
+
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::Smooth => "smooth",
+			Self::Dither => "dither",
+			Self::Crisp => "crisp",
+		}
+	}
+
+	/// Hashed in-card silhouettes (dither or crisp). Smooth cards skip this.
+	pub fn uses_cluster(self) -> bool {
+		self != Self::Smooth
+	}
+}
+
 pub const TREE_LOD_NEAR: u32 = 0;
 pub const TREE_LOD_MID: u32 = 1;
 pub const TREE_LOD_FAR: u32 = 2;
@@ -67,6 +121,16 @@ impl PlantDescriptor {
 
 	pub fn is_active(self) -> bool {
 		self.flags & Self::FLAG_ACTIVE != 0
+	}
+
+	pub fn with_leaf_close_style(mut self, style: LeafCloseStyle) -> Self {
+		self.flags = (self.flags & !LeafCloseStyle::FLAG_MASK)
+			| (style.as_u32() << LeafCloseStyle::FLAG_SHIFT);
+		self
+	}
+
+	pub fn leaf_close_style(self) -> LeafCloseStyle {
+		LeafCloseStyle::from_u32((self.flags & LeafCloseStyle::FLAG_MASK) >> LeafCloseStyle::FLAG_SHIFT)
 	}
 
 	pub fn branch_range(self) -> std::ops::Range<u32> {
@@ -356,6 +420,36 @@ mod tests {
 		leaf.shape = 2.0;
 		assert!(leaf.is_drape());
 		assert_eq!(leaf.layer_shell(), 2);
+		Ok(())
+	}
+
+	#[test]
+	fn plant_flags_pack_leaf_close_style() -> anyhow::Result<()> {
+		let plant = PlantDescriptor {
+			root: Vec3::ZERO,
+			height_m: 10.0,
+			up: Vec3::Y,
+			plant_id: 1,
+			aabb_min: Vec3::ZERO,
+			branch_offset: 0,
+			aabb_max: Vec3::ONE,
+			branch_count: 1,
+			leaf_offset: 0,
+			leaf_count: 0,
+			seed: 1,
+			flags: PlantDescriptor::FLAG_ACTIVE,
+			crown_radius_m: 4.0,
+			wood_stiffness: 0.8,
+			foliage_density: 1.0,
+			species: 2.0,
+		};
+		assert_eq!(plant.leaf_close_style(), LeafCloseStyle::Smooth);
+		let dithered = plant.with_leaf_close_style(LeafCloseStyle::Dither);
+		assert!(dithered.is_active());
+		assert_eq!(dithered.leaf_close_style(), LeafCloseStyle::Dither);
+		assert_eq!(dithered.with_leaf_close_style(LeafCloseStyle::Crisp).leaf_close_style(), LeafCloseStyle::Crisp);
+		assert_eq!(LeafCloseStyle::parse_name("dither"), Some(LeafCloseStyle::Dither));
+		assert_eq!(LeafCloseStyle::default(), LeafCloseStyle::Smooth);
 		Ok(())
 	}
 }

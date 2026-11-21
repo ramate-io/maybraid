@@ -210,6 +210,42 @@ fn leaf_cluster_keep(alpha: f32, pixel: vec2<f32>, seed: u32, detail: f32) -> bo
     return alpha > hash_u32_to_unit(hx) * 0.78 + 0.08;
 }
 
+const LEAF_CLOSE_SMOOTH: u32 = 0u;
+const LEAF_CLOSE_DITHER: u32 = 1u;
+const LEAF_CLOSE_CRISP: u32 = 2u;
+
+fn leaf_close_uses_cluster(style: u32) -> bool {
+    return style != LEAF_CLOSE_SMOOTH;
+}
+
+/// Occupancy for a close-up style. Smooth is a filled card; dither/crisp share the hashed mask.
+fn leaf_cluster_alpha_for_style(uv: vec2<f32>, seed: u32, detail: f32, style: u32) -> f32 {
+    if (style == LEAF_CLOSE_SMOOTH) {
+        return 1.0;
+    }
+    return leaf_cluster_mask(uv, seed, detail);
+}
+
+/// Smooth never discards. Crisp hard-cuts hashed leaves. Dither keeps the speckle path.
+fn leaf_cluster_keep_for_style(
+    alpha: f32,
+    pixel: vec2<f32>,
+    seed: u32,
+    detail: f32,
+    style: u32,
+) -> bool {
+    if (style == LEAF_CLOSE_SMOOTH) {
+        return alpha >= 0.04;
+    }
+    if (style == LEAF_CLOSE_CRISP) {
+        if (detail < 0.08) {
+            return true;
+        }
+        return alpha >= 0.48;
+    }
+    return leaf_cluster_keep(alpha, pixel, seed, detail);
+}
+
 /// Bend the card normal toward the clump outward so overlapping shells read as a mass.
 fn leaf_cluster_outward_normal(
     geometric: vec3<f32>,

@@ -425,7 +425,8 @@ impl TreePlant {
 			wood_stiffness: recipe.wood_stiffness,
 			foliage_density: recipe.foliage_density,
 			species: recipe.form.species_id(),
-		};
+		}
+		.with_leaf_close_style(recipe.leaf_close_style);
 
 		Self { descriptor, branches, leaves }
 	}

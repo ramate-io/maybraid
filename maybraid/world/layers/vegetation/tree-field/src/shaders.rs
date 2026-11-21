@@ -57,6 +57,8 @@ mod tests {
 		assert!(foliage.contains("canopy_clump_albedo"));
 		assert!(foliage.contains("crown_layer_albedo"));
 		assert!(foliage.contains("grass_variation_palette"));
+		assert!(foliage.contains("leaf_cluster_keep_for_style"));
+		assert!(foliage.contains("leaf_cluster_alpha_for_style"));
 		assert!(foliage.contains("import vegetation_shaders::wesl::shading"));
 		assert!(select_wood.contains("import vegetation_shaders::wesl::lod"));
 		assert!(select_foliage.contains("import vegetation_shaders::wesl::lod"));

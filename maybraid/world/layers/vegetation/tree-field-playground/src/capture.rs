@@ -8,7 +8,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use vegetation_shaders::wesl::WindInputs;
-use vegetation_tree_field::TreeFieldSettings;
+use vegetation_tree_field::{LeafCloseStyle, TreeFieldSettings};
 
 use crate::camera::{yaw_pitch, CameraController};
 use crate::kit;
@@ -67,11 +67,20 @@ pub struct CaptureShot {
 	pub mode: CaptureMode,
 	pub scene: CaptureScene,
 	pub gust: bool,
+	pub leaf_style: Option<LeafCloseStyle>,
 }
 
 impl CaptureShot {
 	pub const fn gpu(name: &'static str, pose: (Vec3, Vec3), scene: CaptureScene) -> Self {
-		Self { name, camera: pose.0, look_at: pose.1, mode: CaptureMode::Gpu, scene, gust: false }
+		Self {
+			name,
+			camera: pose.0,
+			look_at: pose.1,
+			mode: CaptureMode::Gpu,
+			scene,
+			gust: false,
+			leaf_style: None,
+		}
 	}
 
 	pub const fn kit(name: &'static str, pose: (Vec3, Vec3)) -> Self {
@@ -82,6 +91,7 @@ impl CaptureShot {
 			mode: CaptureMode::Kit,
 			scene: CaptureScene::Close,
 			gust: false,
+			leaf_style: None,
 		}
 	}
 
@@ -93,11 +103,17 @@ impl CaptureShot {
 			mode: CaptureMode::Leafless,
 			scene: CaptureScene::Close,
 			gust: false,
+			leaf_style: None,
 		}
 	}
 
 	pub const fn with_gust(mut self) -> Self {
 		self.gust = true;
+		self
+	}
+
+	pub const fn with_leaves(mut self, style: LeafCloseStyle) -> Self {
+		self.leaf_style = Some(style);
 		self
 	}
 
@@ -137,6 +153,7 @@ impl CaptureShot {
 		settings.wind =
 			if self.gust { WindInputs::botw_gust(1.85) } else { WindInputs::gentle_botw(0.85) };
 		settings.freeze_time_s = Some(if self.gust { 1.85 } else { 0.85 });
+		settings.leaf_close_style = self.leaf_style;
 	}
 }
 
@@ -149,6 +166,12 @@ pub const TREE_CAPTURE_SHOTS: &[CaptureShot] = &[
 	CaptureShot::gpu("canopy-close", CLOSE, CaptureScene::Close),
 	CaptureShot::kit("kit-close", CLOSE),
 	CaptureShot::gpu("canopy-leaf-close", LEAF_CLOSE, CaptureScene::Close),
+	CaptureShot::gpu("canopy-leaf-close-dither", LEAF_CLOSE, CaptureScene::Close)
+		.with_leaves(LeafCloseStyle::Dither),
+	CaptureShot::gpu("canopy-leaf-close-smooth", LEAF_CLOSE, CaptureScene::Close)
+		.with_leaves(LeafCloseStyle::Smooth),
+	CaptureShot::gpu("canopy-leaf-close-crisp", LEAF_CLOSE, CaptureScene::Close)
+		.with_leaves(LeafCloseStyle::Crisp),
 	CaptureShot::gpu("grove-edge", GROVE, CaptureScene::Grove),
 	CaptureShot::gpu("grove", GROVE_FULL, CaptureScene::Grove),
 	CaptureShot::gpu("slope-rake", SLOPE, CaptureScene::Slope),
@@ -281,6 +304,9 @@ mod tests {
 			"wood-leafless",
 			"canopy-close",
 			"canopy-leaf-close",
+			"canopy-leaf-close-dither",
+			"canopy-leaf-close-smooth",
+			"canopy-leaf-close-crisp",
 			"grove-edge",
 			"grove",
 			"slope-rake",

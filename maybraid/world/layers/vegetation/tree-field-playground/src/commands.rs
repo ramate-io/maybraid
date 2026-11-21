@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use clap::{Parser, Subcommand, ValueEnum};
 use game_commands::command::{CommandScript, GameCommand};
-use vegetation_tree_field::{TreeFieldSettings, TreePatch, TreePatchLod};
+use vegetation_tree_field::{LeafCloseStyle, TreeFieldSettings, TreePatch, TreePatchLod};
 use vegetation_components::CanopyShadowMode;
 
 use crate::camera::{yaw_pitch, CameraController};
@@ -37,6 +37,10 @@ pub enum PlaygroundCommand {
 	Shadows(ShadowCommand),
 	#[command(subcommand)]
 	Compare(CompareCommand),
+	Leaves {
+		#[arg(value_enum)]
+		style: LeavesStyle,
+	},
 }
 
 #[derive(Clone, Subcommand)]
@@ -113,6 +117,24 @@ pub enum VisibilityChoice {
 	Off,
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+#[clap(rename_all = "kebab-case")]
+pub enum LeavesStyle {
+	Smooth,
+	Dither,
+	Crisp,
+}
+
+impl LeavesStyle {
+	fn close_style(self) -> LeafCloseStyle {
+		match self {
+			Self::Smooth => LeafCloseStyle::Smooth,
+			Self::Dither => LeafCloseStyle::Dither,
+			Self::Crisp => LeafCloseStyle::Crisp,
+		}
+	}
+}
+
 impl PlaygroundCommand {
 	pub fn long_help_string() -> String {
 		<Self as GameCommand>::long_help_string()
@@ -132,6 +154,17 @@ impl PlaygroundCommand {
 			Self::Lod(command) => command.react(commands, console),
 			Self::Shadows(command) => command.react(commands, console),
 			Self::Compare(command) => command.react(commands, console),
+			Self::Leaves { style } => {
+				let close = style.close_style();
+				commands.queue(move |world: &mut World| {
+					world.resource_mut::<TreeFieldSettings>().leaf_close_style = Some(close);
+					let mut patches = world.query::<&mut TreePatch>();
+					for mut patch in patches.iter_mut(world) {
+						patch.recipe.leaf_close_style = close;
+					}
+				});
+				*console = format!("leaves {}", close.label());
+			}
 		}
 	}
 }
@@ -331,6 +364,21 @@ mod tests {
 		assert!(matches!(command, PlaygroundCommand::Camera(CameraCommand::Underside)));
 		let command = <PlaygroundCommand as GameCommand>::parse_line("wind set --strength 0.4")?;
 		assert!(matches!(command, PlaygroundCommand::Wind(WindCommand::Set { .. })));
+		let command = <PlaygroundCommand as GameCommand>::parse_line("leaves dither")?;
+		assert!(matches!(
+			command,
+			PlaygroundCommand::Leaves { style: LeavesStyle::Dither }
+		));
+		let command = <PlaygroundCommand as GameCommand>::parse_line("leaves smooth")?;
+		assert!(matches!(
+			command,
+			PlaygroundCommand::Leaves { style: LeavesStyle::Smooth }
+		));
+		let command = <PlaygroundCommand as GameCommand>::parse_line("leaves crisp")?;
+		assert!(matches!(
+			command,
+			PlaygroundCommand::Leaves { style: LeavesStyle::Crisp }
+		));
 		Ok(())
 	}
 }
