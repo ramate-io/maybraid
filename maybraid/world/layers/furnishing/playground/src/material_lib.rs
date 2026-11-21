@@ -14,13 +14,13 @@ use vegetation_shaders::{
 
 /// Isolated catalog lib: furniture surfaces, then leaf / stick / frond.
 #[derive(SystemParam)]
-pub struct PlaygroundMaterialLib<'w> {
+pub struct PlaygroundMaterialLib<'w, 's> {
 	pub furniture: FurnitureMaterialLib<'w>,
-	pub chico: VegetationMaterialLib<'w>,
+	pub chico: VegetationMaterialLib<'w, 's>,
 	pub standard: StandardMaterialLib<'w>,
 }
 
-impl MaterialLib for PlaygroundMaterialLib<'_> {
+impl MaterialLib for PlaygroundMaterialLib<'_, '_> {
 	fn try_fulfill(
 		&mut self,
 		entity: Entity,
@@ -47,7 +47,7 @@ impl Plugin for PlaygroundMaterialRefPlugin {
 		init_furniture_material_caches(app);
 		init_vegetation_material_caches(app);
 		app.init_resource::<StandardMaterialRefCache>();
-		app.add_plugins(MaterialRefPlugin::<PlaygroundMaterialLib<'_>>::default());
+		app.add_plugins(MaterialRefPlugin::<PlaygroundMaterialLib<'_, '_>>::default());
 	}
 }
 
@@ -82,7 +82,7 @@ mod tests {
 			.init_resource::<LeafMaterialRefCache>()
 			.init_resource::<StickMaterialRefCache>()
 			.init_resource::<FrondMaterialRefCache>()
-			.add_plugins(MaterialRefPlugin::<PlaygroundMaterialLib<'_>>::default());
+			.add_plugins(MaterialRefPlugin::<PlaygroundMaterialLib<'_, '_>>::default());
 
 		let furniture = app
 			.world_mut()

@@ -41,9 +41,9 @@ pub use procedural::{
 };
 pub use scene_children::{pose, posed_mesh, posed_mesh_material_ref, scene_children, with_pose};
 pub use shadow_proxy::{
-	posed_shadow_proxy, shadow_proxy_scenes_from_foliage, structural_shadow_proxy_scene,
-	with_shadow_proxy_children, CanopyShadowMode, CanopyShadowProxy, CanopyShadowProxyPlugin,
-	ENV_CANOPY_SHADOWS, SHADOW_PROXY_RENDER_LAYER,
+	fitted_canopy_bounds, posed_shadow_proxy, shadow_proxy_scenes_from_foliage,
+	structural_shadow_proxy_scene, with_shadow_proxy_children, CanopyShadowMode, CanopyShadowProxy,
+	CanopyShadowProxyPlugin, ENV_CANOPY_SHADOWS, SHADOW_PROXY_RENDER_LAYER,
 };
 pub use sticks::{
 	update_stick_host_levels, StickCollection, StickGeometry, StickLodProbe, StickMember,

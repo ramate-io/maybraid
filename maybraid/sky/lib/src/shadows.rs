@@ -49,6 +49,8 @@ impl SkySun {
 }
 
 /// User-facing sun shadow quality.
+/// The explicit process-start `MAYBRAID_EXPERIMENT_SHADOW_MAP_SIZE=1024`
+/// override changes only High map resolution; its four cascades still reach 150 m.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ShadowQuality {
 	Off,
@@ -81,10 +83,15 @@ impl ShadowQuality {
 	}
 
 	pub fn shadow_map_size(self) -> usize {
+		let requested = std::env::var("MAYBRAID_EXPERIMENT_SHADOW_MAP_SIZE").ok();
+		self.map_size_with_override(requested.as_deref())
+	}
+
+	fn map_size_with_override(self, requested: Option<&str>) -> usize {
 		match self {
-			Self::High => 2048,
+			Self::High if requested == Some("1024") => 1024,
+			Self::High | Self::Off => 2048,
 			Self::Low => 512,
-			Self::Off => 2048,
 		}
 	}
 
@@ -129,6 +136,18 @@ pub(crate) fn apply_shadow_quality(
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn experimental_1024_changes_only_high_resolution() {
+		assert_eq!(ShadowQuality::High.map_size_with_override(None), 2048);
+		assert_eq!(ShadowQuality::High.map_size_with_override(Some("1024")), 1024);
+		assert_eq!(ShadowQuality::High.map_size_with_override(Some("512")), 2048);
+		assert_eq!(ShadowQuality::Low.map_size_with_override(Some("1024")), 512);
+		assert_eq!(ShadowQuality::Off.map_size_with_override(Some("1024")), 2048);
+		let config = ShadowQuality::High.cascade_config();
+		assert_eq!(config.bounds.len(), 4);
+		assert!((config.bounds[3] - 150.0).abs() < 1e-3);
+	}
 
 	#[test]
 	fn cycle_visits_every_preset() {
