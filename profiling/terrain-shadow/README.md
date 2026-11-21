@@ -57,3 +57,10 @@ The earlier terrain-only `af86a12d` results do not validate the combined stick
 patch or near-building casting. Combined compilation, fixtures, native image
 acceptance and CPU/GPU overhead remain pending. Raw images, traces, metadata and
 machine-specific build receipts are deliberately excluded from this checkpoint.
+
+## Validation results
+
+[Combined receiver validation](VALIDATION.md) records the accepted vegetation and
+building observations, short ordered-pair timing limits, the rejected reverse
+attempt and the missing comparative GPU result. The diagnostic arms share an
+added uniform layout; the seven-line shipping shader fix adds no toggle/uniform.
