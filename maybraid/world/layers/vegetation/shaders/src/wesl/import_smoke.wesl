@@ -6,7 +6,8 @@
 //! import vegetation_shaders::wesl::wind::{wind_field, deform_along_curve};
 //! import vegetation_shaders::wesl::lod::{projected_height_px, lod_bucket, nested_keep};
 //! import vegetation_shaders::wesl::shading::{grass_albedo, painterly_lit};
-//! import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform};
+//! import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform, GrassPartingUniform};
+//! import vegetation_shaders::wesl::parting::{part_along_curve, part_along_length, depth_gap_weight};
 //! ```
 
 import vegetation_shaders::wesl::hash::{hash_u32, density_rank, plant_id};
@@ -21,9 +22,23 @@ import vegetation_shaders::wesl::curve::{
 import vegetation_shaders::wesl::wind::{wind_field, deform_along_curve, WindInputs};
 import vegetation_shaders::wesl::lod::{projected_height_px, lod_bucket, nested_keep, LodThresholds};
 import vegetation_shaders::wesl::shading::{grass_albedo, painterly_lit, VegetationPalette};
-import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform};
+import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform, GrassPartingUniform};
+import vegetation_shaders::wesl::parting::{
+    part_along_curve,
+    part_along_length,
+    depth_gap_weight,
+    parting_along,
+    PARTING_MODE_DEPTH,
+    PARTING_MODE_RASTER,
+};
 
-fn smoke_eval(blade: BladeDescriptor, view: GrassViewUniform, t: f32, side: f32) -> vec4<f32> {
+fn smoke_eval(
+    blade: BladeDescriptor,
+    view: GrassViewUniform,
+    parting: GrassPartingUniform,
+    t: f32,
+    side: f32,
+) -> vec4<f32> {
     let id = plant_id(blade.plant_id, 0u);
     let rank = density_rank(id);
     let _h = hash_u32(id);
@@ -45,7 +60,16 @@ fn smoke_eval(blade: BladeDescriptor, view: GrassViewUniform, t: f32, side: f32)
         blade.root.xz,
         WindInputs(view.wind.xy, view.lod_distances.x, view.wind.w, view.world_position.w),
     );
-    let deformed = deform_along_curve(pos, blade.root, t, wind, blade.shape.z);
+    let winded = deform_along_curve(pos, blade.root, t, wind, blade.shape.z);
+    let gap = depth_gap_weight(2.0, 2.4, parting.params.z);
+    let part_xz = vec2<f32>(parting.params.x, 0.0) * gap * parting_along(t, blade.shape.z);
+    var deformed = part_along_curve(winded, blade.root, t, part_xz, blade.shape.z);
+    if (u32(parting.params.w) == PARTING_MODE_RASTER) {
+        deformed = part_along_length(winded, blade.root, t, part_xz, blade.shape.z);
+    }
+    if (u32(parting.params.w) == PARTING_MODE_DEPTH) {
+        deformed = deformed;
+    }
     let thresholds = LodThresholds(
         view.lod_distances.y,
         view.lod_distances.z,
@@ -110,5 +134,13 @@ fn fragment() -> @location(0) vec4<f32> {
     view.lod_density = vec4<f32>(1.0, 0.72, 0.38, 1.15);
     view.counts = vec4<f32>(1.0, 1.0, 0.0, 0.0);
     view.light_direction = vec4<f32>(0.4, 0.8, 0.3, 0.0);
-    return smoke_eval(blade, view, 0.5, 1.0);
+    var parting: GrassPartingUniform;
+    parting.camera_clip_from_world = view.clip_from_world;
+    parting.camera_world_from_clip = view.world_from_clip;
+    parting.params = vec4<f32>(0.35, 0.85, 1.6, 1.0);
+    parting.extras = vec4<f32>(28.0, 0.22, 3.0, 0.0);
+    parting.camera_right = vec4<f32>(1.0, 0.0, 0.0, 0.0);
+    parting.camera_forward = vec4<f32>(0.0, 0.0, 1.0, 0.0);
+    parting.camera_position = view.world_position;
+    return smoke_eval(blade, view, parting, 0.5, 1.0);
 }

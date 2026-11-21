@@ -4,7 +4,9 @@ use bevy::prelude::*;
 use clap::{Parser, Subcommand, ValueEnum};
 use game_commands::command::{CommandScript, GameCommand};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::{GrassFieldSettings, GrassPatch, GrassPatchLod};
+use vegetation_grass_field::{
+	GrassFieldSettings, GrassPartingDebug, GrassPartingMode, GrassPatch, GrassPatchLod,
+};
 
 use crate::camera::{yaw_pitch, CameraController};
 use crate::ground::TurfPlane;
@@ -36,6 +38,8 @@ pub enum PlaygroundCommand {
 	Shadows(ShadowCommand),
 	#[command(subcommand)]
 	Compare(CompareCommand),
+	#[command(subcommand)]
+	Parting(PartingCommand),
 }
 
 #[derive(Clone, Subcommand)]
@@ -46,6 +50,7 @@ pub enum SpawnCommand {
 	Meadow,
 	Slope,
 	Crest,
+	Parting,
 	Clear,
 }
 
@@ -55,6 +60,7 @@ pub enum CameraCommand {
 	Orbit,
 	Overhead,
 	Ground,
+	Topdown,
 }
 
 #[derive(Clone, Subcommand)]
@@ -95,6 +101,35 @@ pub enum ShadowCommand {
 
 #[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
+pub enum PartingCommand {
+	Off,
+	Depth,
+	Raster,
+	World,
+	Set {
+		#[arg(long)]
+		strength: Option<f32>,
+		#[arg(long)]
+		radius: Option<f32>,
+		#[arg(long)]
+		falloff: Option<f32>,
+		#[arg(long)]
+		stamp_scale: Option<f32>,
+	},
+	#[command(subcommand)]
+	Debug(PartingDebugCommand),
+}
+
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
+pub enum PartingDebugCommand {
+	/// Tint a ground quad with raster occupancy (magenta disc, 2.5× radius).
+	Mask,
+	Off,
+}
+
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
 pub enum CompareCommand {
 	Turf { visible: VisibilityChoice },
 	Grass { visible: VisibilityChoice },
@@ -126,6 +161,7 @@ impl PlaygroundCommand {
 			Self::Lod(command) => command.react(commands, console),
 			Self::Shadows(command) => command.react(commands, console),
 			Self::Compare(command) => command.react(commands, console),
+			Self::Parting(command) => command.react(commands, console),
 		}
 	}
 }
@@ -135,14 +171,24 @@ impl SpawnCommand {
 		match self {
 			Self::Default => {
 				commands.queue(|world: &mut World| {
+					scene::clear_parting_props(world);
 					scene::clear_patches(world);
 					scene::spawn_default_scene_in_world(world);
 				});
 				*console = "spawned default meadow + clump + slope + crest".into();
 			}
 			Self::Clear => {
-				commands.queue(|world: &mut World| scene::clear_patches(world));
+				commands.queue(|world: &mut World| {
+					scene::clear_parting_props(world);
+					scene::clear_patches(world);
+				});
 				*console = "cleared grass patches".into();
+			}
+			Self::Parting => {
+				commands.queue(|world: &mut World| {
+					scene::spawn_parting_scene_in_world(world, 1.35, 0.95);
+				});
+				*console = "spawned parting corridor (capsule + rock)".into();
 			}
 			other => {
 				let kind = match other {
@@ -150,7 +196,7 @@ impl SpawnCommand {
 					Self::Meadow => PatchKind::Meadow,
 					Self::Slope => PatchKind::Slope,
 					Self::Crest => PatchKind::Crest,
-					Self::Default | Self::Clear => unreachable!(),
+					Self::Default | Self::Clear | Self::Parting => unreachable!(),
 				};
 				commands.queue(move |world: &mut World| {
 					scene::spawn_kind(world, kind);
@@ -167,12 +213,15 @@ impl CameraCommand {
 			Self::Orbit => (Vec3::new(10.0, 3.2, 16.0), Vec3::new(8.0, 0.3, 8.0)),
 			Self::Overhead => (Vec3::new(12.0, 22.0, 12.0), Vec3::new(12.0, 0.0, 12.0)),
 			Self::Ground => (Vec3::new(6.0, 0.55, 7.5), Vec3::new(10.0, 0.35, 12.0)),
+			Self::Topdown => scene::PARTING_TOPDOWN,
 		};
 		commands.queue(move |world: &mut World| {
 			let mut cameras =
 				world.query_filtered::<(&mut Transform, &mut CameraController), With<Camera3d>>();
 			if let Ok((mut transform, mut controller)) = cameras.single_mut(world) {
-				*transform = Transform::from_translation(from).looking_at(look, Vec3::Y);
+				let dir = (look - from).normalize_or(Vec3::NEG_Y);
+				let up = if dir.dot(Vec3::Y).abs() > 0.95 { Vec3::NEG_Z } else { Vec3::Y };
+				*transform = Transform::from_translation(from).looking_at(look, up);
 				let (yaw, pitch) = yaw_pitch(transform.rotation);
 				controller.yaw = yaw;
 				controller.pitch = pitch;
@@ -182,6 +231,7 @@ impl CameraCommand {
 			Self::Orbit => "camera orbit".into(),
 			Self::Overhead => "camera overhead".into(),
 			Self::Ground => "camera ground".into(),
+			Self::Topdown => "camera topdown".into(),
 		};
 	}
 }
@@ -249,6 +299,56 @@ impl ShadowCommand {
 	}
 }
 
+impl PartingCommand {
+	fn react(self, commands: &mut Commands, console: &mut String) {
+		match self {
+			Self::Off | Self::Depth | Self::Raster | Self::World => {
+				let mode = match self {
+					Self::Off => GrassPartingMode::Off,
+					Self::Depth => GrassPartingMode::Depth,
+					Self::Raster => GrassPartingMode::Raster,
+					Self::World => GrassPartingMode::World,
+					Self::Set { .. } | Self::Debug(_) => unreachable!(),
+				};
+				commands.queue(move |world: &mut World| {
+					world.resource_mut::<GrassFieldSettings>().parting.mode = mode;
+				});
+				*console = format!("parting {}", mode.label());
+			}
+			Self::Set { strength, radius, falloff, stamp_scale } => {
+				commands.queue(move |world: &mut World| {
+					let mut settings = world.resource_mut::<GrassFieldSettings>();
+					if let Some(strength) = strength {
+						settings.parting.strength = strength.max(0.0);
+					}
+					if let Some(radius) = radius {
+						settings.parting.radius = radius.max(0.0);
+					}
+					if let Some(falloff) = falloff {
+						settings.parting.depth_falloff = falloff.max(0.05);
+					}
+					if let Some(stamp_scale) = stamp_scale {
+						settings.parting.stamp_scale = stamp_scale.max(0.05);
+					}
+				});
+				*console = "parting settings updated".into();
+			}
+			Self::Debug(PartingDebugCommand::Mask) => {
+				commands.queue(|world: &mut World| {
+					world.resource_mut::<GrassPartingDebug>().mask_overlay = true;
+				});
+				*console = "parting debug mask overlay on".into();
+			}
+			Self::Debug(PartingDebugCommand::Off) => {
+				commands.queue(|world: &mut World| {
+					world.resource_mut::<GrassPartingDebug>().mask_overlay = false;
+				});
+				*console = "parting debug overlay off".into();
+			}
+		}
+	}
+}
+
 impl CompareCommand {
 	fn react(self, commands: &mut Commands, console: &mut String) {
 		match self {
@@ -303,8 +403,26 @@ mod tests {
 		assert!(matches!(command, PlaygroundCommand::Spawn(SpawnCommand::Meadow)));
 		let command = <PlaygroundCommand as GameCommand>::parse_line("camera ground")?;
 		assert!(matches!(command, PlaygroundCommand::Camera(CameraCommand::Ground)));
+		let command = <PlaygroundCommand as GameCommand>::parse_line("camera topdown")?;
+		assert!(matches!(command, PlaygroundCommand::Camera(CameraCommand::Topdown)));
 		let command = <PlaygroundCommand as GameCommand>::parse_line("wind set --strength 0.3")?;
 		assert!(matches!(command, PlaygroundCommand::Wind(WindCommand::Set { .. })));
+		let command = <PlaygroundCommand as GameCommand>::parse_line("parting depth")?;
+		assert!(matches!(command, PlaygroundCommand::Parting(PartingCommand::Depth)));
+		let command = <PlaygroundCommand as GameCommand>::parse_line("spawn parting")?;
+		assert!(matches!(command, PlaygroundCommand::Spawn(SpawnCommand::Parting)));
+		let command =
+			<PlaygroundCommand as GameCommand>::parse_line("parting set --stamp-scale 2.5")?;
+		assert!(matches!(
+			command,
+			PlaygroundCommand::Parting(PartingCommand::Set { stamp_scale: Some(scale), .. })
+				if (scale - 2.5).abs() < 1e-5
+		));
+		let command = <PlaygroundCommand as GameCommand>::parse_line("parting debug mask")?;
+		assert!(matches!(
+			command,
+			PlaygroundCommand::Parting(PartingCommand::Debug(PartingDebugCommand::Mask))
+		));
 		Ok(())
 	}
 }

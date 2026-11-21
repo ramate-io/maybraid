@@ -87,6 +87,7 @@ pub struct GrassSelector {
 	pub view: GrassViewUniform,
 	pub thresholds: LodThresholds,
 	pub capacities: [u32; GRASS_LOD_COUNT],
+	pub parting_strength_m: f32,
 }
 
 impl GrassSelector {
@@ -103,12 +104,14 @@ impl GrassSelector {
 			},
 			view,
 			capacities: [settings.max_per_lod; GRASS_LOD_COUNT],
+			parting_strength_m: settings.parting.strength,
 		}
 	}
 
 	pub fn classify(&self, blade: &BladeDescriptor) -> Option<u32> {
 		let camera = self.view.world_position.truncate();
-		let radius = blade.conservative_extent_m(self.view.wind.w);
+		let radius =
+			blade.conservative_extent_with_parting_m(self.view.wind.w, self.parting_strength_m);
 		let frustum = WorldFrustum::from_clip(self.view.clip_from_world);
 		if !frustum.contains_sphere(blade.root + blade.normal * (blade.height_m * 0.5), radius) {
 			return None;
@@ -170,7 +173,7 @@ mod tests {
 	use crate::field::{GrassField, GrassFieldSettings};
 	use crate::patch::GrassPatch;
 	use bevy::camera::CameraProjection;
-	use bevy::math::{Vec2, Vec4};
+	use bevy::math::{Vec2, Vec3Swizzles, Vec4};
 	use bevy::prelude::{PerspectiveProjection, Transform};
 
 	fn look_view(origin: Vec3, target: Vec3, height_px: f32) -> GrassViewUniform {
@@ -216,6 +219,26 @@ mod tests {
 		let lists = selector.compact(&[], &[]);
 		assert_eq!(lists.submitted, 0);
 		assert_eq!(lists.triangle_count(), 0);
+		Ok(())
+	}
+
+	#[test]
+	fn wind_then_parting_keeps_roots_and_does_not_reapply_arch() -> anyhow::Result<()> {
+		use vegetation_shaders::wesl::{
+			deform_along_curve, part_along_curve, PartingCapsule, WindInputs,
+		};
+		let root = Vec3::new(0.18, 0.0, 2.4);
+		let rest = root + Vec3::Y * 0.6;
+		let wind = vegetation_shaders::wesl::wind_field(root.xz(), WindInputs::gentle_botw(0.85));
+		let winded = deform_along_curve(rest, root, 1.0, wind, 0.05);
+		let capsule = PartingCapsule::character(Vec3::new(0.0, 0.9, 3.15));
+		let part =
+			capsule.sample_world(root, Vec3::new(0.0, 0.6, 0.0), Vec3::Z, Vec3::X, 0.85, 1.6, 0.22);
+		let composed = part_along_curve(winded, root, 1.0, part, 0.05);
+		let rooted = part_along_curve(winded, root, 0.0, part, 0.05);
+		assert_eq!(rooted, root);
+		assert!(composed.distance(winded) > 0.02, "tip should swath on top of wind");
+		assert!((composed.y - winded.y).abs() < 0.08, "parting must not re-arch the rest curve");
 		Ok(())
 	}
 

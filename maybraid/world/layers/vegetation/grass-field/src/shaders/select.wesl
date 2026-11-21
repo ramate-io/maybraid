@@ -3,6 +3,7 @@
 import vegetation_shaders::wesl::lod::{lod_bucket, LodThresholds};
 import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform};
 import vegetation_shaders::wesl::wind::max_wind_displacement_m;
+import vegetation_shaders::wesl::parting::max_parting_displacement_m;
 
 @group(0) @binding(0) var<uniform> view: GrassViewUniform;
 @group(0) @binding(1) var<storage, read> blades: array<BladeDescriptor>;
@@ -48,6 +49,7 @@ fn select(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let radius = max_wind_displacement_m(blade.height_m, view.wind.w, blade.shape.z)
+        + max_parting_displacement_m(blade.height_m, view.counts.z, blade.shape.z)
         + blade.height_m
         + blade.width_m * 2.4;
     let center = blade.root + blade.normal * (blade.height_m * 0.5);

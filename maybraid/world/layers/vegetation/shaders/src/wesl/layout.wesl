@@ -53,6 +53,23 @@ struct GrassViewUniform {
     light_direction: vec4<f32>,
 }
 
+struct GrassPartingUniform {
+    camera_clip_from_world: mat4x4<f32>,
+    camera_world_from_clip: mat4x4<f32>,
+    /// x = strength (m), y = radius (m), z = depth falloff (m), w = mode.
+    params: vec4<f32>,
+    /// x = lod skip (m), y = ground reject (m), z = kernel (px), w = occluder count.
+    extras: vec4<f32>,
+    camera_right: vec4<f32>,
+    camera_forward: vec4<f32>,
+    /// xyz = game-camera world position (metres). Shared by shadow draws.
+    camera_position: vec4<f32>,
+    /// xyz = world centre (m), w = radius (m).
+    occluders: array<vec4<f32>, 16>,
+    /// x = height (m), y = active, zw unused.
+    occluder_meta: array<vec4<f32>, 16>,
+}
+
 struct GrassDrawParams {
     /// 0 near, 1 mid, 2 card.
     lod_bucket: u32,
