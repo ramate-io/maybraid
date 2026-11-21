@@ -1,6 +1,8 @@
 //! A bounded, explicit world-rendering trial for one natural Storybook grove tile.
 
 use bevy::camera::visibility::VisibilitySystems;
+use bevy::ecs::entity_disabling::Disabled;
+use bevy::ecs::query::Allow;
 use bevy::prelude::*;
 use bevy::render::renderer::{RenderAdapter, RenderDevice};
 use bevy::render::RenderApp;
@@ -73,11 +75,14 @@ fn publish_placed_trees(
 	mut commands: Commands,
 	sources: Query<
 		(Entity, &StorybookFieldSample, &InheritedVisibility, Has<TreePatch>),
-		Or<(Added<StorybookFieldSample>, Changed<InheritedVisibility>)>,
+		Allow<Disabled>,
 	>,
+	hierarchy: Query<(Option<&ChildOf>, Option<&Visibility>, Has<Disabled>), Allow<Disabled>>,
 ) {
-	for (entity, sample, visible, patched) in &sources {
-		if visible.get() && !patched {
+	for (entity, sample, inherited, patched) in &sources {
+		// A warm LOD hide disables the ancestor before its queued child walk.
+		let visible = inherited.get() && lod_ancestry_is_visible(entity, &hierarchy);
+		if visible && !patched {
 			let mut recipe = TreeRecipe::storybook();
 			recipe.height_m = sample.height..=sample.height;
 			commands.entity(entity).insert(TreePatch::new(
@@ -86,10 +91,25 @@ fn publish_placed_trees(
 				1.0,
 				vec![TreeSample { root: sample.root, up: sample.up, scale: 1.0 }],
 			));
-		} else if patched && !visible.get() {
+		} else if patched && !visible {
 			commands.entity(entity).remove::<TreePatch>();
 		}
 	}
+}
+
+fn lod_ancestry_is_visible(
+	mut entity: Entity,
+	hierarchy: &Query<(Option<&ChildOf>, Option<&Visibility>, Has<Disabled>), Allow<Disabled>>,
+) -> bool {
+	for _ in 0..32 {
+		let Ok((parent, visibility, disabled)) = hierarchy.get(entity) else { return false };
+		if disabled || visibility == Some(&Visibility::Hidden) {
+			return false;
+		}
+		let Some(parent) = parent else { return true };
+		entity = parent.parent();
+	}
+	false
 }
 
 #[cfg(test)]
@@ -114,7 +134,8 @@ mod tests {
 			height: 15.,
 			seed: 72,
 		};
-		let tree = world.spawn((sample, InheritedVisibility::VISIBLE)).id();
+		let grove = world.spawn(Visibility::Inherited).id();
+		let tree = world.spawn((sample, InheritedVisibility::VISIBLE, ChildOf(grove))).id();
 		app.update();
 		let patch = app
 			.world()
@@ -123,6 +144,19 @@ mod tests {
 		assert_eq!(patch.seed, sample.seed);
 		assert_eq!(patch.samples[0].root, sample.root);
 		assert_eq!(patch.recipe.height_m, 15.0..=15.0);
+		app.world_mut().entity_mut(grove).insert((Visibility::Hidden, Disabled));
+		app.update();
+		assert!(app.world().get::<TreePatch>(tree).is_none());
+		app.world_mut().entity_mut(tree).insert(Disabled);
+		app.world_mut()
+			.entity_mut(grove)
+			.insert(Visibility::Inherited)
+			.remove::<Disabled>();
+		app.update();
+		assert!(app.world().get::<TreePatch>(tree).is_none());
+		app.world_mut().entity_mut(tree).remove::<Disabled>();
+		app.update();
+		assert!(app.world().get::<TreePatch>(tree).is_some());
 		app.world_mut().entity_mut(tree).insert(InheritedVisibility::HIDDEN);
 		app.update();
 		assert!(app.world().get::<TreePatch>(tree).is_none());
