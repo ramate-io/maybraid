@@ -64,6 +64,8 @@ fn admit_tree_field(
 		return;
 	}
 	settings.max_per_lod = MAX_STORYBOOK_FIELD_TREES as u32 * MAX_LEAVES_PER_PLANT;
+	// Exclude the standalone playground's CPU mirror from both measured field modes.
+	settings.diagnostics = false;
 	info!(target: "maybraid.tree_field", tile = ?trial.0, "world trial admitted");
 }
 
