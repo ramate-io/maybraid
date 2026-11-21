@@ -111,7 +111,7 @@ pub fn posed_foliage_multi_scene_merge(
 }
 
 /// Provenance only for actual StickNode geometry, not bark-colored canopy proxies.
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, Default)]
 pub struct StickGeometryRoot;
 
 /// Copy ancestor [`NotShadowCaster`] onto newly spawned `Mesh3d` children.
