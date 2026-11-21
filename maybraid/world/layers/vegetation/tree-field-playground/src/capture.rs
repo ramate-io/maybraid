@@ -25,11 +25,15 @@ const ORBIT: (Vec3, Vec3) = (Vec3::new(16.5, 8.2, 18.0), Vec3::new(0.0, 7.0, 0.0
 const OVERHEAD: (Vec3, Vec3) = (Vec3::new(1.4, 28.0, 1.1), Vec3::new(0.0, 0.0, 0.0));
 const UNDERSIDE: (Vec3, Vec3) = (Vec3::new(3.2, 1.55, 4.6), Vec3::new(0.2, 10.4, 0.0));
 const CLOSE: (Vec3, Vec3) = (Vec3::new(8.2, 9.4, 7.4), Vec3::new(0.4, 8.6, 0.2));
+const LEAF_CLOSE: (Vec3, Vec3) = (Vec3::new(4.9, 8.85, 4.5), Vec3::new(3.3, 8.45, 2.9));
 const LEAFLESS: (Vec3, Vec3) = (Vec3::new(22.5, 9.0, -1.5), Vec3::new(16.0, 7.2, -8.0));
 const GROVE: (Vec3, Vec3) = (Vec3::new(2.0, 9.5, 48.0), Vec3::new(22.0, 8.0, 22.0));
+const GROVE_FULL: (Vec3, Vec3) = (Vec3::new(20.0, 11.0, 46.0), Vec3::new(22.0, 8.0, 22.0));
 const SLOPE: (Vec3, Vec3) = (Vec3::new(8.0, 8.5, 22.0), Vec3::new(32.0, 7.0, 6.0));
 const LOD: (Vec3, Vec3) = (Vec3::new(-10.0, 14.0, 40.0), Vec3::new(44.0, 10.0, 10.0));
 const GUST: (Vec3, Vec3) = (Vec3::new(15.8, 8.0, 17.2), Vec3::new(0.0, 7.0, 0.0));
+const WILLOW_FULL: (Vec3, Vec3) = (Vec3::new(17.2, 6.0, 15.8), Vec3::new(0.0, 5.4, 0.0));
+const WILLOW_DRAPE: (Vec3, Vec3) = (Vec3::new(4.7, 5.15, 4.1), Vec3::new(2.1, 4.55, 1.7));
 
 #[derive(Component)]
 pub struct KeySun;
@@ -52,6 +56,7 @@ pub enum CaptureScene {
 	Grove,
 	Slope,
 	Lod,
+	Willow,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -113,6 +118,7 @@ impl CaptureShot {
 					scene::clear_patches(world);
 					scene::spawn_kind(world, scene::PatchKind::Lod);
 				}
+				CaptureScene::Willow => scene::spawn_willow_only(world),
 				CaptureScene::Default => {
 					scene::clear_patches(world);
 					scene::spawn_default_scene_in_world(world);
@@ -142,10 +148,15 @@ pub const TREE_CAPTURE_SHOTS: &[CaptureShot] = &[
 	CaptureShot::leafless("wood-leafless", LEAFLESS),
 	CaptureShot::gpu("canopy-close", CLOSE, CaptureScene::Close),
 	CaptureShot::kit("kit-close", CLOSE),
+	CaptureShot::gpu("canopy-leaf-close", LEAF_CLOSE, CaptureScene::Close),
 	CaptureShot::gpu("grove-edge", GROVE, CaptureScene::Grove),
+	CaptureShot::gpu("grove", GROVE_FULL, CaptureScene::Grove),
 	CaptureShot::gpu("slope-rake", SLOPE, CaptureScene::Slope),
 	CaptureShot::gpu("lod-transition", LOD, CaptureScene::Lod),
 	CaptureShot::gpu("wind-gust", GUST, CaptureScene::Close).with_gust(),
+	CaptureShot::gpu("willow-full", WILLOW_FULL, CaptureScene::Willow),
+	CaptureShot::gpu("willow-drape-close", WILLOW_DRAPE, CaptureScene::Willow),
+	CaptureShot::gpu("willow-wind", WILLOW_FULL, CaptureScene::Willow).with_gust(),
 ];
 
 #[derive(Resource, Debug)]
@@ -269,12 +280,17 @@ mod tests {
 			"canopy-underside",
 			"wood-leafless",
 			"canopy-close",
+			"canopy-leaf-close",
 			"grove-edge",
+			"grove",
 			"slope-rake",
 			"lod-transition",
 			"wind-gust",
 			"kit-orbit",
 			"kit-close",
+			"willow-full",
+			"willow-drape-close",
+			"willow-wind",
 		] {
 			assert!(TREE_CAPTURE_SHOTS.iter().any(|shot| shot.name == name), "missing {name}");
 		}

@@ -1,4 +1,5 @@
 //! Layered canopy cards attached to the same deformed parent frame as the wood.
+//! Near LOD punches hashed small-leaf silhouettes inside each card; far stays solid.
 
 import vegetation_shaders::wesl::curve::{
     attachment_frame, branch_rest_sample, leaf_surface_normal, leaf_surface_vertex, stable_frame,
@@ -6,7 +7,9 @@ import vegetation_shaders::wesl::curve::{
 };
 import vegetation_shaders::wesl::wind::{deform_along_curve, wind_field, WindInputs};
 import vegetation_shaders::wesl::shading::{
-    canopy_clump_albedo, crown_layer_albedo, grass_variation_palette, leaf_painterly_lit,
+    canopy_clump_albedo, canopy_interior_shade, crown_layer_albedo, grass_variation_palette,
+    leaf_cluster_keep, leaf_cluster_mask, leaf_cluster_outward_normal, leaf_cluster_tint,
+    leaf_painterly_lit,
 };
 import vegetation_shaders::wesl::layout::{GrassDrawParams, GrassViewUniform};
 import vegetation_tree_field::shaders::layout::{BranchDescriptor, LeafDescriptor, PlantDescriptor};
@@ -19,6 +22,7 @@ import vegetation_tree_field::shaders::layout::{BranchDescriptor, LeafDescriptor
 @group(0) @binding(5) var<uniform> draw: GrassDrawParams;
 
 const PARENT_NONE: u32 = 0xFFFFFFFFu;
+const DRAPE_SHAPE: f32 = 1.5;
 
 struct TemplateVertex {
     @location(0) v_u: vec2<f32>,
@@ -27,8 +31,11 @@ struct TemplateVertex {
 struct LeafVertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) world_normal: vec3<f32>,
-    @location(1) v: f32,
+    @location(1) uv: vec2<f32>,
     @location(2) albedo: vec3<f32>,
+    @location(3) clump_out: vec3<f32>,
+    @location(4) pack: vec3<f32>,
+    @location(5) interior: vec3<f32>,
 }
 
 fn deform_trunk(branch: BranchDescriptor, root: vec3<f32>, t: f32, wind_xz: vec2<f32>) -> CurveSample {
@@ -102,6 +109,16 @@ fn max_depth_for(lod: u32) -> u32 {
     return 1u;
 }
 
+fn lod_detail(lod: u32) -> f32 {
+    if (lod == 0u) {
+        return 1.0;
+    }
+    if (lod == 1u) {
+        return 0.42;
+    }
+    return 0.0;
+}
+
 @vertex
 fn vertex(vert: TemplateVertex, @builtin(instance_index) instance_index: u32) -> LeafVertexOutput {
     var out: LeafVertexOutput;
@@ -127,38 +144,75 @@ fn vertex(vert: TemplateVertex, @builtin(instance_index) instance_index: u32) ->
     );
     let sample = world_sample(parent, leaf.attach_t, wind_now);
     let attach = attachment_frame(sample, leaf.twist);
-    let shell = saturate(leaf.shape);
+    let is_drape = leaf.shape >= DRAPE_SHAPE;
+    let shell = select(saturate(leaf.shape), 0.85, is_drape);
     let along_mix = mix(0.48, 0.08, shell);
     let up_mix = mix(0.42, 0.18, shell);
-    let outward = normalize(
+    var outward = normalize(
         leaf.facing * mix(0.62, 1.0, shell) + attach.along * along_mix + vec3<f32>(0.0, up_mix, 0.0),
     );
+    if (is_drape) {
+        outward = normalize(mix(-vec3<f32>(0.0, 1.0, 0.0), leaf.facing, 0.18) + attach.across * 0.08);
+    }
     let across = normalize(cross(outward, attach.facing));
     let facing = cross(across, outward);
     let frame = LocalFrame(across, outward, facing);
     let v = vert.v_u.x;
     let u = vert.v_u.y;
     let size_scale = select(select(1.0, 1.28, draw.lod_bucket == 1u), 1.72, draw.lod_bucket == 2u);
-    var world = leaf_surface_vertex(sample.position, frame, leaf.size_m * size_scale, u, v, leaf.fold);
-    // Push outer shells into the crown volume so cards form clumps, not bark ivy.
-    world = world + outward * (leaf.size_m * size_scale * mix(0.18, 0.62, shell));
-    let flutter = sin(view.world_position.w * 2.6 + f32(leaf.leaf_id) * 0.011) * leaf.flutter * v;
-    world = world + frame.across * flutter + frame.facing * (flutter * 0.22);
-    let n = leaf_surface_normal(frame, u, leaf.fold);
+    let card = leaf.size_m * size_scale;
+    var world: vec3<f32>;
+    if (is_drape) {
+        let width = card * 0.14;
+        let hang = v * card;
+        let sag = hang * (0.42 + 0.58 * v);
+        let sway = wind_now * (v * v) * (1.0 - parent.stiffness) * 0.55;
+        world = sample.position
+            + across * (u * width)
+            + outward * sag
+            + vec3<f32>(sway.x, 0.0, sway.y);
+        let flutter = sin(view.world_position.w * 3.4 + f32(leaf.leaf_id) * 0.017) * leaf.flutter * v;
+        world = world + across * flutter * 1.6;
+    } else {
+        world = leaf_surface_vertex(sample.position, frame, card, u, v, leaf.fold);
+        world = world + outward * (card * mix(0.22, 0.78, shell));
+        let flutter = sin(view.world_position.w * 2.6 + f32(leaf.leaf_id) * 0.011) * leaf.flutter * v;
+        world = world + frame.across * flutter + frame.facing * (flutter * 0.22);
+    }
+    var n = leaf_surface_normal(frame, u, leaf.fold);
+    n = leaf_cluster_outward_normal(n, outward, vec2<f32>(u, v), lod_detail(draw.lod_bucket));
     let height_frac = saturate((world.y - plant.root.y) / max(plant.height_m, 1e-3));
     let radial = saturate(length(world.xz - plant.root.xz) / max(plant.crown_radius_m, 1e-3));
     let pal = grass_variation_palette(leaf.palette, plant.root.xz, leaf.leaf_id >> 3u);
     let layered = crown_layer_albedo(pal, height_frac, radial, shell, leaf.density_rank);
-    let albedo = canopy_clump_albedo(layered, pal.root_rgb, height_frac, n, leaf.density_rank);
+    var albedo = canopy_clump_albedo(layered, pal.root_rgb, height_frac, n, leaf.density_rank);
+    let tint = leaf_cluster_tint(vec2<f32>(u, v), leaf.leaf_id);
+    albedo = albedo * mix(vec3<f32>(0.82, 0.90, 0.88), vec3<f32>(1.14, 1.06, 0.90), tint);
+    albedo = albedo * canopy_interior_shade(height_frac, radial, shell, n);
     out.position = view.clip_from_world * vec4<f32>(world, 1.0);
     out.world_normal = n;
-    out.v = v;
+    out.uv = vec2<f32>(u, v);
     out.albedo = albedo;
+    out.clump_out = outward;
+    out.pack = vec3<f32>(lod_detail(draw.lod_bucket), f32(leaf.leaf_id), select(0.0, 1.0, is_drape));
+    out.interior = vec3<f32>(height_frac, radial, shell);
     return out;
 }
 
 @fragment
 fn fragment(in: LeafVertexOutput) -> @location(0) vec4<f32> {
-    let color = leaf_painterly_lit(in.albedo, in.world_normal, view.light_direction.xyz, in.v);
-    return vec4<f32>(color, 1.0);
+    let detail = in.pack.x;
+    let seed = u32(in.pack.y);
+    var alpha = leaf_cluster_mask(in.uv, seed, detail);
+    if (in.pack.z > 0.5) {
+        // Drapes are long curtains: denser hashed leaves along v, more holes across.
+        let drape_uv = vec2<f32>(in.uv.x * 1.35, in.uv.y);
+        alpha = leaf_cluster_mask(drape_uv, seed ^ 0x9e3779b9u, max(detail, 0.55));
+        alpha = alpha * (1.0 - smoothstep(0.78, 1.0, abs(in.uv.x)));
+    }
+    if (!leaf_cluster_keep(alpha, in.position.xy, seed, detail)) {
+        discard;
+    }
+    let color = leaf_painterly_lit(in.albedo, in.world_normal, view.light_direction.xyz, in.uv.y);
+    return vec4<f32>(color, alpha);
 }

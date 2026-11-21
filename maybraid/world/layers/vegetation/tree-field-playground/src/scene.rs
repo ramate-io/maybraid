@@ -11,6 +11,7 @@ pub enum PatchKind {
 	Leafless,
 	Lod,
 	Sparse,
+	Willow,
 }
 
 pub fn spawn_default_scene(mut commands: Commands) {
@@ -46,6 +47,11 @@ pub fn spawn_leafless_only(world: &mut World) {
 	spawn_kind(world, PatchKind::Leafless);
 }
 
+pub fn spawn_willow_only(world: &mut World) {
+	clear_patches(world);
+	spawn_kind(world, PatchKind::Willow);
+}
+
 fn patch_for(kind: PatchKind) -> TreePatch {
 	match kind {
 		PatchKind::Close => TreePatch::isolated(11, Vec3::ZERO, TreeRecipe::young_storybook()),
@@ -68,6 +74,7 @@ fn patch_for(kind: PatchKind) -> TreePatch {
 			TreeRecipe::storybook(),
 		),
 		PatchKind::Sparse => TreePatch::sparse_wood(17, Vec3::new(8.0, 0.0, 8.0), Vec2::splat(28.0), 16.0),
+		PatchKind::Willow => TreePatch::willow(29, Vec3::ZERO),
 	}
 }
 
@@ -80,6 +87,7 @@ impl PatchKind {
 			Self::Leafless => "leafless",
 			Self::Lod => "lod",
 			Self::Sparse => "sparse",
+			Self::Willow => "willow",
 		}
 	}
 }

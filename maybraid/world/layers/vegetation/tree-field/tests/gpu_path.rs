@@ -174,6 +174,23 @@ fn cpu_select_reports_grove_work() -> anyhow::Result<()> {
 }
 
 #[test]
+fn willow_draws_wood_and_hanging_foliage() -> anyhow::Result<()> {
+	let settings = TreeFieldSettings::default();
+	let patch = TreePatch::willow(4, Vec3::ZERO);
+	let field = TreeField::rebuild([&patch], &settings);
+	assert!(!field.branches.is_empty());
+	assert!(field.leaves.iter().any(|leaf| leaf.is_drape()));
+	let lists = TreeSelector::from_view(
+		look_view(Vec3::new(12.0, 6.0, 14.0), Vec3::new(0.0, 5.0, 0.0), 720.0),
+		&settings,
+	)
+	.compact(&field.plants, &field.branches, &field.leaves);
+	assert!(lists.submitted_wood > 0);
+	assert!(lists.submitted_foliage > 0);
+	Ok(())
+}
+
+#[test]
 fn layered_canopy_keeps_all_three_shells() -> anyhow::Result<()> {
 	let patch = TreePatch::isolated(5, Vec3::ZERO, TreeRecipe::storybook());
 	let field = TreeField::rebuild([&patch], &TreeFieldSettings::default());

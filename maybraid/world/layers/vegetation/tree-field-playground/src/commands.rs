@@ -49,6 +49,7 @@ pub enum SpawnCommand {
 	Leafless,
 	Sparse,
 	Lod,
+	Willow,
 	Clear,
 }
 
@@ -161,6 +162,7 @@ impl SpawnCommand {
 					Self::Leafless => PatchKind::Leafless,
 					Self::Sparse => PatchKind::Sparse,
 					Self::Lod => PatchKind::Lod,
+					Self::Willow => PatchKind::Willow,
 					Self::Default | Self::Clear => unreachable!(),
 				};
 				commands.queue(move |world: &mut World| {

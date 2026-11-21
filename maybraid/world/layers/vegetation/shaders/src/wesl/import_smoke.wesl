@@ -35,7 +35,12 @@ import vegetation_shaders::wesl::shading::{
     leaf_painterly_lit,
     crown_albedo,
     canopy_clump_albedo,
+    canopy_interior_shade,
     crown_layer_albedo,
+    leaf_cluster_mask,
+    leaf_cluster_tint,
+    leaf_cluster_keep,
+    leaf_cluster_outward_normal,
     VegetationPalette,
 };
 import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform};
@@ -96,6 +101,12 @@ fn smoke_eval(blade: BladeDescriptor, view: GrassViewUniform, t: f32, side: f32)
     color = color + canopy_clump_albedo(pal.tip_rgb, pal.root_rgb, t, n, rank) * 0.0;
     let varied = grass_variation_palette(pal.tip_rgb, blade.root.xz, blade.plant_id);
     color = color + crown_layer_albedo(varied, t, 0.4, 0.7, rank) * 0.0;
+    let _interior = canopy_interior_shade(t, 0.4, 0.7, n);
+    let _mask = leaf_cluster_mask(vec2<f32>(side, t), blade.plant_id, 1.0);
+    let _tint = leaf_cluster_tint(vec2<f32>(side, t), blade.plant_id);
+    let _keep = leaf_cluster_keep(_mask, vec2<f32>(1.0, 2.0), blade.plant_id, 1.0);
+    let _n2 = leaf_cluster_outward_normal(n, blade.normal, vec2<f32>(side, t), 1.0);
+    color = color + _n2 * 0.0 * select(0.0, 1.0, _keep) * _interior * _tint;
     let _teardrop = leaf_teardrop_width(t);
     if (!keep || bucket > 2u) {
         color = color * 0.0;

@@ -33,39 +33,65 @@ impl CanopyLayer {
 	pub fn inner() -> Self {
 		Self {
 			shell: 0,
-			height_lo: 0.28,
-			height_hi: 0.68,
-			clumps: 2,
-			cards_per_clump: 2,
-			size_scale: 0.85,
-			radial_splay: 0.38,
-			lift: 0.58,
+			height_lo: 0.22,
+			height_hi: 0.72,
+			clumps: 3,
+			cards_per_clump: 3,
+			size_scale: 1.18,
+			radial_splay: 0.28,
+			lift: 0.62,
 		}
 	}
 
 	pub fn mid() -> Self {
 		Self {
 			shell: 1,
-			height_lo: 0.42,
-			height_hi: 0.90,
-			clumps: 3,
+			height_lo: 0.38,
+			height_hi: 0.92,
+			clumps: 4,
 			cards_per_clump: 3,
-			size_scale: 1.28,
-			radial_splay: 0.78,
-			lift: 0.30,
+			size_scale: 1.38,
+			radial_splay: 0.70,
+			lift: 0.32,
 		}
 	}
 
 	pub fn outer() -> Self {
 		Self {
 			shell: 2,
-			height_lo: 0.55,
+			height_lo: 0.48,
 			height_hi: 0.98,
 			clumps: 4,
 			cards_per_clump: 4,
-			size_scale: 1.48,
-			radial_splay: 1.12,
-			lift: 0.12,
+			size_scale: 1.62,
+			radial_splay: 1.02,
+			lift: 0.14,
+		}
+	}
+
+	pub fn willow_outer() -> Self {
+		Self {
+			shell: 2,
+			height_lo: 0.52,
+			height_hi: 0.96,
+			clumps: 3,
+			cards_per_clump: 3,
+			size_scale: 1.22,
+			radial_splay: 0.88,
+			lift: 0.22,
+		}
+	}
+
+	pub fn fork_outer() -> Self {
+		Self {
+			shell: 2,
+			height_lo: 0.50,
+			height_hi: 0.96,
+			clumps: 3,
+			cards_per_clump: 3,
+			size_scale: 1.32,
+			radial_splay: 0.92,
+			lift: 0.16,
 		}
 	}
 
@@ -147,6 +173,19 @@ impl CanopyLayer {
 					shape: self.shell_unit(),
 				});
 			}
+		}
+	}
+
+	pub fn push_cards_on(
+		self,
+		leaves: &mut Vec<LeafDescriptor>,
+		sites: &[(u32, u32, Vec3, f32)],
+		up: Vec3,
+		root: Vec3,
+		recipe: &TreeRecipe,
+	) {
+		for &(index, id, dir, size) in sites {
+			self.push_cards(leaves, index, id, up, dir, root, size, recipe);
 		}
 	}
 }
@@ -241,6 +280,19 @@ impl TreePlant {
 
 			limb_sites.push((limb_index, limb_id, dir, leaf_size));
 
+			if recipe.is_willow() {
+				Self::push_willow_twig(
+					&mut branches,
+					limb_index,
+					limb_id,
+					limb_len,
+					dir,
+					upn,
+					limb_root_r,
+					recipe,
+				);
+			}
+
 			if depth_budget < 2 {
 				continue;
 			}
@@ -316,30 +368,52 @@ impl TreePlant {
 		}
 
 		if recipe.foliage_density > 0.0 {
-			// Outer shells on every limb first so a capacity clamp keeps the crown.
-			for layer in CanopyLayer::shells() {
-				for &(index, id, dir, size) in &limb_sites {
-					layer.push_cards(&mut leaves, index, id, upn, dir, root, size, recipe);
+			if recipe.is_willow() {
+				CanopyLayer::willow_outer().push_cards_on(
+					&mut leaves,
+					&limb_sites,
+					upn,
+					root,
+					recipe,
+				);
+				CanopyLayer::inner().push_cards_on(&mut leaves, &limb_sites, upn, root, recipe);
+				Self::push_willow_drapes(&mut leaves, &limb_sites, upn, root, spread, recipe);
+			} else {
+				// Outer shells on every limb first so a capacity clamp keeps the crown.
+				for layer in CanopyLayer::shells() {
+					layer.push_cards_on(&mut leaves, &limb_sites, upn, root, recipe);
 				}
-			}
-			for layer in CanopyLayer::rim_shells() {
-				for &(index, id, dir, size) in &fork_sites {
-					layer.push_cards(&mut leaves, index, id, upn, dir, root, size, recipe);
+				CanopyLayer::fork_outer().push_cards_on(&mut leaves, &fork_sites, upn, root, recipe);
+				CanopyLayer::mid().push_cards_on(&mut leaves, &fork_sites, upn, root, recipe);
+				for &(index, id, dir, size) in &twig_sites {
+					CanopyLayer::fork_outer().push_cards(
+						&mut leaves,
+						index,
+						id,
+						upn,
+						dir,
+						root,
+						size,
+						recipe,
+					);
 				}
-			}
-			for &(index, id, dir, size) in &twig_sites {
-				CanopyLayer::outer().push_cards(&mut leaves, index, id, upn, dir, root, size, recipe);
+				Self::push_crown_fill(&mut leaves, id, upn, root, height, spread, recipe);
 			}
 		}
 
 		let crown = spread.max(height * 0.32);
 		let pad = crown.max(height * 0.12);
+		let hang = if recipe.is_willow() {
+			(*recipe.drape_length_m.end()).max(0.4)
+		} else {
+			0.08
+		};
 		let descriptor = PlantDescriptor {
 			root,
 			height_m: height,
 			up: upn,
 			plant_id: id,
-			aabb_min: root - Vec3::new(pad, 0.08, pad),
+			aabb_min: root - Vec3::new(pad, hang, pad),
 			branch_offset: 0,
 			aabb_max: root + Vec3::new(pad, height + pad * 0.22, pad),
 			branch_count: branches.len() as u32,
@@ -350,10 +424,155 @@ impl TreePlant {
 			crown_radius_m: crown,
 			wood_stiffness: recipe.wood_stiffness,
 			foliage_density: recipe.foliage_density,
-			species: 2.0,
+			species: recipe.form.species_id(),
 		};
 
 		Self { descriptor, branches, leaves }
+	}
+
+	fn push_crown_fill(
+		leaves: &mut Vec<LeafDescriptor>,
+		plant_id: u32,
+		up: Vec3,
+		root: Vec3,
+		height: f32,
+		spread: f32,
+		recipe: &TreeRecipe,
+	) {
+		let fill = 18u32;
+		for i in 0..fill {
+			if leaves.len() as u32 >= MAX_LEAVES_PER_PLANT {
+				return;
+			}
+			let leaf_id = hash_u32(plant_id ^ (0x500 + i));
+			let rank_hash = hash_u32_to_unit(leaf_id ^ 0x85ebca6b);
+			if rank_hash >= recipe.foliage_density {
+				continue;
+			}
+			let yaw = (i as f32 + hash_u32_to_unit(leaf_id)) * std::f32::consts::TAU / fill as f32;
+			let lift = 0.42 + 0.48 * hash_u32_to_unit(leaf_id ^ 0x11);
+			let facing = shoot_direction(up, yaw, (1.0 - lift * 0.35).max(0.35), lift);
+			let pal = recipe.foliage.varied(root.xz(), leaf_id);
+			let size = (spread * 0.62 + height * 0.08) * (0.88 + 0.22 * hash_u32_to_unit(leaf_id ^ 0x21));
+			leaves.push(LeafDescriptor {
+				plant_index: 0,
+				parent_branch: 0,
+				attach_t: (0.68 + 0.26 * hash_u32_to_unit(leaf_id ^ 0x31)).clamp(0.55, 0.96),
+				size_m: size.max(1.1),
+				twist: (hash_u32_to_unit(leaf_id ^ 0x41) - 0.5) * 1.1,
+				fold: 0.48 + 0.28 * hash_u32_to_unit(leaf_id ^ 0x51),
+				flutter: 0.022 + 0.036 * hash_u32_to_unit(leaf_id ^ 0x61),
+				density_rank: rank_hash * 0.55,
+				facing,
+				leaf_id,
+				palette: pal.tip_rgb,
+				shape: if i % 3 == 0 { 0.0 } else { 0.5 },
+			});
+		}
+	}
+
+	fn push_willow_drapes(
+		leaves: &mut Vec<LeafDescriptor>,
+		limb_sites: &[(u32, u32, Vec3, f32)],
+		up: Vec3,
+		root: Vec3,
+		spread: f32,
+		recipe: &TreeRecipe,
+	) {
+		for &(index, id, dir, _) in limb_sites {
+			let count = sample_u32(&recipe.drape_count, hash_u32(id ^ 0x901));
+			let radial = (dir - up * dir.dot(up)).normalize_or(dir);
+			for drape_i in 0..count {
+				if leaves.len() as u32 >= MAX_LEAVES_PER_PLANT {
+					return;
+				}
+				let drape_id = hash_u32(id ^ (0x911 + drape_i));
+				let rank_hash = hash_u32_to_unit(drape_id ^ 0x85ebca6b);
+				if rank_hash >= recipe.foliage_density {
+					continue;
+				}
+				let length = sample_range(&recipe.drape_length_m, hash_u32_to_unit(drape_id))
+					* (0.78 + 0.42 * radial.length().min(1.0));
+				let yaw_jit = (drape_i as f32 - 0.4) * 0.38;
+				let facing = (radial * 0.22 - up * 0.96
+					+ tangent_on(up, yaw_jit) * 0.18)
+					.normalize_or(-up);
+				let pal = recipe.foliage.varied(root.xz(), drape_id);
+				leaves.push(LeafDescriptor {
+					plant_index: 0,
+					parent_branch: index,
+					attach_t: (0.58 + 0.36 * hash_u32_to_unit(drape_id ^ 1)).clamp(0.42, 0.96),
+					size_m: length.max(2.2),
+					twist: (hash_u32_to_unit(drape_id ^ 2) - 0.5) * 0.7,
+					fold: 0.22 + 0.18 * hash_u32_to_unit(drape_id ^ 3),
+					flutter: 0.055 + 0.05 * hash_u32_to_unit(drape_id ^ 4),
+					density_rank: rank_hash * 0.42,
+					facing,
+					leaf_id: drape_id,
+					palette: pal.tip_rgb,
+					shape: 2.0,
+				});
+				// Extra overlapping curtain slightly inward so the drape reads as a mass.
+				if leaves.len() as u32 >= MAX_LEAVES_PER_PLANT {
+					return;
+				}
+				let mate = hash_u32(drape_id ^ 0x77);
+				leaves.push(LeafDescriptor {
+					plant_index: 0,
+					parent_branch: index,
+					attach_t: (0.50 + 0.38 * hash_u32_to_unit(mate)).clamp(0.38, 0.94),
+					size_m: (length * 0.78).max(1.8),
+					twist: (hash_u32_to_unit(mate ^ 1) - 0.5) * 0.9,
+					fold: 0.28,
+					flutter: 0.048,
+					density_rank: rank_hash * 0.50,
+					facing: (facing + tangent_on(up, 0.7) * 0.22).normalize_or(facing),
+					leaf_id: mate,
+					palette: pal.tip_rgb,
+					shape: 2.0,
+				});
+			}
+		}
+		let _ = spread;
+	}
+
+	fn push_willow_twig(
+		branches: &mut Vec<BranchDescriptor>,
+		limb_index: u32,
+		limb_id: u32,
+		limb_len: f32,
+		dir: Vec3,
+		up: Vec3,
+		limb_root_r: f32,
+		recipe: &TreeRecipe,
+	) {
+		if branches.len() as u32 >= MAX_BRANCHES_PER_PLANT {
+			return;
+		}
+		let twig_id = hash_u32(limb_id ^ 0x931);
+		let hang = sample_range(&recipe.drape_length_m, hash_u32_to_unit(twig_id)) * 0.72;
+		let down = (-up * 0.88 + dir * 0.22).normalize_or(-up);
+		let local = [
+			Vec3::ZERO,
+			down * (hang * 0.38) + dir.cross(up).normalize_or(Vec3::X) * (limb_len * 0.08),
+			down * hang,
+		];
+		branches.push(BranchDescriptor {
+			p0: local[0],
+			parent_index: limb_index,
+			p1: local[1],
+			parent_t: 0.78,
+			p2: local[2],
+			plant_index: 0,
+			root_radius_m: limb_root_r * 0.18,
+			tip_radius_m: limb_root_r * 0.07,
+			stiffness: (recipe.wood_stiffness - 0.22).max(0.32),
+			keep_rank: 0.62,
+			twist: (hash_u32_to_unit(twig_id) - 0.5) * 0.5,
+			depth: 2,
+			branch_id: twig_id,
+			major_parent: limb_index,
+		});
 	}
 
 	pub fn is_connected(&self) -> bool {
@@ -478,6 +697,22 @@ mod tests {
 		assert_eq!(CanopyLayer::inner().shell, 0);
 		assert_eq!(CanopyLayer::mid().shell, 1);
 		assert_eq!(CanopyLayer::outer().shell, 2);
+		Ok(())
+	}
+
+	#[test]
+	fn willow_emits_hanging_drapes_from_limbs() -> anyhow::Result<()> {
+		let plant = TreePlant::generate(4, 0, Vec3::ZERO, Vec3::Y, 1.0, &TreeRecipe::willow());
+		assert!(plant.is_connected());
+		let drapes = plant.leaves.iter().filter(|leaf| leaf.is_drape()).count();
+		assert!(drapes >= 8, "expected hanging curtains, got {drapes}");
+		assert!(plant.leaves.iter().any(|leaf| !leaf.is_drape()));
+		assert!(
+			plant.branches.iter().any(|branch| branch.depth == 2 && branch.p2.y < -0.5),
+			"willow should keep hanging wood twigs"
+		);
+		let hang = plant.descriptor.aabb_min.y;
+		assert!(hang < -1.0, "conservative bounds include drapes, got {hang}");
 		Ok(())
 	}
 

@@ -179,8 +179,16 @@ pub struct LeafDescriptor {
 }
 
 impl LeafDescriptor {
+	/// Willow hanging strips use `shape >= 1.5`.
+	pub fn is_drape(self) -> bool {
+		self.shape >= 1.5
+	}
+
 	/// Packed `CanopyLayer::shell_unit`: `0` inner, `0.5` mid, `1` outer.
 	pub fn layer_shell(self) -> u32 {
+		if self.is_drape() {
+			return 2;
+		}
 		(self.shape * 2.0).round().clamp(0.0, 2.0) as u32
 	}
 
@@ -344,6 +352,9 @@ mod tests {
 		leaf.shape = 0.5;
 		assert_eq!(leaf.layer_shell(), 1);
 		leaf.shape = 1.0;
+		assert_eq!(leaf.layer_shell(), 2);
+		leaf.shape = 2.0;
+		assert!(leaf.is_drape());
 		assert_eq!(leaf.layer_shell(), 2);
 		Ok(())
 	}

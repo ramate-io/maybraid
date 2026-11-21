@@ -3,7 +3,7 @@
 //! Painterly BotW-like: root darkening, wrap lighting, controlled backlight.
 //! No photoreal noise. Opaque by default — callers decide alpha.
 
-import vegetation_shaders::wesl::hash::{hash_u32_to_unit, value_noise_2};
+import vegetation_shaders::wesl::hash::{hash_u32, hash_u32_to_unit, value_noise_2};
 
 struct VegetationPalette {
     root_rgb: vec3<f32>,
@@ -131,6 +131,94 @@ fn canopy_clump_albedo(
     clump_variation: f32,
 ) -> vec3<f32> {
     let sunlit = crown_albedo(warm_rgb, cool_rgb, height_frac, clump_variation);
-    let lift = smoothstep(-0.38, 0.52, normalize(normal).y);
-    return sunlit * mix(vec3<f32>(0.42, 0.55, 0.70), vec3<f32>(1.0, 1.0, 1.0), lift);
+    let lift = smoothstep(-0.22, 0.48, normalize(normal).y);
+    return sunlit * mix(vec3<f32>(0.28, 0.40, 0.58), vec3<f32>(1.0, 1.0, 1.0), lift);
+}
+
+/// Ambient-occlusion-like darkening for the crown core and downward faces.
+fn canopy_interior_shade(
+    height_frac: f32,
+    radial_frac: f32,
+    shell: f32,
+    normal: vec3<f32>,
+) -> f32 {
+    let n = normalize(normal);
+    let under = 1.0 - smoothstep(-0.12, 0.40, n.y);
+    let core = (1.0 - saturate(shell)) * (1.0 - saturate(radial_frac) * 0.52);
+    let low = 1.0 - saturate(height_frac);
+    return mix(0.26, 1.0, 1.0 - saturate(under * 0.58 + core * 0.64 + low * 0.20));
+}
+
+fn hashed_leaf_blob(p: vec2<f32>, cell: vec2<i32>, seed: u32) -> f32 {
+    let packed = (u32(cell.x + 173) * 374761393u) ^ (u32(cell.y + 91) * 668265263u);
+    let h0 = hash_u32(seed ^ hash_u32(packed));
+    let h1 = hash_u32(h0 ^ 0x85ebca6bu);
+    let ox = hash_u32_to_unit(h1);
+    let oy = hash_u32_to_unit(h1 ^ 0xc2b2ae35u);
+    let stretch = 0.70 + 0.24 * hash_u32_to_unit(h1 ^ 0x27d4eb2du);
+    let center = vec2<f32>(f32(cell.x) + ox * 0.74, f32(cell.y) + oy * 0.74);
+    let delta = p - center;
+    let v = saturate(delta.y * 0.55 + 0.5);
+    let petiole = smoothstep(0.0, 0.22, v);
+    let tip = 1.0 - 0.55 * smoothstep(0.48, 1.0, v);
+    let width = max(petiole * tip, 0.16);
+    let q = vec2<f32>(delta.x / (0.38 * stretch * width), delta.y / (0.52 * stretch));
+    return 1.0 - smoothstep(0.58, 1.0, length(q));
+}
+
+/// Hashed small-leaf occupancy inside a card. `uv` is `(u in [-1,1], v in [0,1])`.
+/// `detail` 1 = near shaggy cutout, 0 = far solid clump (no holes).
+fn leaf_cluster_mask(uv: vec2<f32>, seed: u32, detail: f32) -> f32 {
+    let d = saturate(detail);
+    let cells_v = mix(2.2, 6.4, d);
+    let cells_u = mix(1.8, 5.2, d);
+    let p = vec2<f32>((uv.x * 0.5 + 0.5) * cells_u, saturate(uv.y) * cells_v);
+    let base = vec2<i32>(i32(floor(p.x)), i32(floor(p.y)));
+    var occ = 0.0;
+    occ = max(occ, hashed_leaf_blob(p, base + vec2<i32>(-1, -1), seed));
+    occ = max(occ, hashed_leaf_blob(p, base + vec2<i32>(0, -1), seed));
+    occ = max(occ, hashed_leaf_blob(p, base + vec2<i32>(1, -1), seed));
+    occ = max(occ, hashed_leaf_blob(p, base + vec2<i32>(-1, 0), seed));
+    occ = max(occ, hashed_leaf_blob(p, base + vec2<i32>(0, 0), seed));
+    occ = max(occ, hashed_leaf_blob(p, base + vec2<i32>(1, 0), seed));
+    occ = max(occ, hashed_leaf_blob(p, base + vec2<i32>(-1, 1), seed));
+    occ = max(occ, hashed_leaf_blob(p, base + vec2<i32>(0, 1), seed));
+    occ = max(occ, hashed_leaf_blob(p, base + vec2<i32>(1, 1), seed));
+    let filled = saturate(occ * mix(1.55, 1.12, d));
+    return mix(1.0, filled, d);
+}
+
+/// Per-mini-leaf hue wobble. Cheap; not photoreal noise.
+fn leaf_cluster_tint(uv: vec2<f32>, seed: u32) -> f32 {
+    let cell = vec2<i32>(i32(floor((uv.x * 0.5 + 0.5) * 5.0)), i32(floor(saturate(uv.y) * 6.0)));
+    let packed = (u32(cell.x + 19) * 374761393u) ^ (u32(cell.y + 7) * 668265263u);
+    return hash_u32_to_unit((seed ^ hash_u32(packed)) ^ 0xa0761d65u);
+}
+
+/// Dithered keep/discard for when MSAA / alpha-to-coverage is off. `true` = keep.
+fn leaf_cluster_keep(alpha: f32, pixel: vec2<f32>, seed: u32, detail: f32) -> bool {
+    if (detail < 0.08) {
+        return true;
+    }
+    if (alpha < 0.06) {
+        return false;
+    }
+    if (alpha > 0.92) {
+        return true;
+    }
+    let hx = hash_u32((seed ^ (u32(pixel.x) * 1973u)) ^ (u32(pixel.y) * 9277u));
+    return alpha > hash_u32_to_unit(hx) * 0.78 + 0.08;
+}
+
+/// Bend the card normal toward the clump outward so overlapping shells read as a mass.
+fn leaf_cluster_outward_normal(
+    geometric: vec3<f32>,
+    clump_out: vec3<f32>,
+    uv: vec2<f32>,
+    detail: f32,
+) -> vec3<f32> {
+    let toward = normalize(clump_out + vec3<f32>(0.0, 0.12, 0.0));
+    let edge = saturate(abs(uv.x));
+    let amt = saturate(detail) * mix(0.48, 0.18, edge);
+    return normalize(mix(normalize(geometric), toward, amt));
 }

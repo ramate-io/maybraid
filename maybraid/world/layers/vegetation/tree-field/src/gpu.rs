@@ -23,9 +23,9 @@ use bevy::render::render_resource::{
 	BufferDescriptor, BufferInitDescriptor, BufferUsages, CachedComputePipelineId,
 	CachedPipelineState, Canonical, ColorTargetState, ColorWrites, CompareFunction,
 	ComputePassDescriptor, ComputePipelineDescriptor, DepthStencilState, FragmentState,
-	IndexFormat, PipelineCache, PrimitiveState, RenderPipeline, RenderPipelineDescriptor,
-	ShaderStages, Specializer, SpecializerKey, TextureFormat, Variants, VertexAttribute,
-	VertexFormat, VertexState, VertexStepMode,
+	IndexFormat, MultisampleState, PipelineCache, PrimitiveState, RenderPipeline,
+	RenderPipelineDescriptor, ShaderStages, Specializer, SpecializerKey, TextureFormat, Variants,
+	VertexAttribute, VertexFormat, VertexState, VertexStepMode,
 };
 use bevy::render::renderer::{RenderAdapter, RenderContext, RenderDevice, RenderGraph, RenderQueue};
 use bevy::render::sync_world::MainEntityHashSet;
@@ -100,6 +100,7 @@ struct TreePipelines {
 struct TreeDrawKey {
 	msaa: u32,
 	format: TextureFormat,
+	alpha_to_coverage: bool,
 }
 
 struct TreeDrawSpecializer;
@@ -113,6 +114,7 @@ impl Specializer<RenderPipeline> for TreeDrawSpecializer {
 		descriptor: &mut RenderPipelineDescriptor,
 	) -> Result<Canonical<Self::Key>, BevyError> {
 		descriptor.multisample.count = key.msaa;
+		descriptor.multisample.alpha_to_coverage_enabled = key.alpha_to_coverage && key.msaa > 1;
 		if let Some(fragment) = descriptor.fragment.as_mut() {
 			if let Some(Some(target)) = fragment.targets.first_mut() {
 				target.format = key.format;
@@ -234,8 +236,11 @@ fn init_tree_pipelines(
 	let wood_shader = asset_server.load(WOOD_SHADER);
 	let foliage_shader = asset_server.load(FOLIAGE_SHADER);
 	let wood_descriptor = opaque_descriptor("tree_wood", wood_shader, vec![wood_draw_layout.clone()]);
-	let foliage_descriptor =
-		opaque_descriptor("tree_foliage", foliage_shader, vec![foliage_draw_layout.clone()]);
+	let foliage_descriptor = foliage_pipeline_descriptor(
+		"tree_foliage",
+		foliage_shader,
+		vec![foliage_draw_layout.clone()],
+	);
 
 	commands.insert_resource(TreePipelines {
 		select_wood_layout,
@@ -283,6 +288,19 @@ fn opaque_descriptor(
 		}),
 		..default()
 	}
+}
+
+fn foliage_pipeline_descriptor(
+	label: &'static str,
+	shader: Handle<Shader>,
+	layout: Vec<BindGroupLayoutDescriptor>,
+) -> RenderPipelineDescriptor {
+	let mut descriptor = opaque_descriptor(label, shader, layout);
+	descriptor.multisample = MultisampleState {
+		alpha_to_coverage_enabled: true,
+		..default()
+	};
+	descriptor
 }
 
 #[derive(Resource)]
@@ -867,11 +885,23 @@ fn queue_tree(
 			&pending_queues.prev_frame,
 			&mut queued,
 		) {
-			let key = TreeDrawKey { msaa: msaa.samples(), format: view.target_format };
-			let Ok(wood_id) = pipelines.wood_variants.specialize(&pipeline_cache, key) else {
+			let msaa_samples = msaa.samples();
+			let wood_key = TreeDrawKey {
+				msaa: msaa_samples,
+				format: view.target_format,
+				alpha_to_coverage: false,
+			};
+			let foliage_key = TreeDrawKey {
+				msaa: msaa_samples,
+				format: view.target_format,
+				alpha_to_coverage: true,
+			};
+			let Ok(wood_id) = pipelines.wood_variants.specialize(&pipeline_cache, wood_key) else {
 				continue;
 			};
-			let Ok(foliage_id) = pipelines.foliage_variants.specialize(&pipeline_cache, key) else {
+			let Ok(foliage_id) =
+				pipelines.foliage_variants.specialize(&pipeline_cache, foliage_key)
+			else {
 				continue;
 			};
 			let entities = (*render_entity, *main_entity);

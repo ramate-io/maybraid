@@ -2,7 +2,7 @@
 
 use bevy::math::{Vec2, Vec3};
 
-use super::hash::{hash_u32_to_unit, value_noise_2};
+use super::hash::{hash_u32, hash_u32_to_unit, value_noise_2};
 
 /// Linear RGB root-to-tip palette.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -146,8 +146,103 @@ pub fn canopy_clump_albedo(
 	clump_variation: f32,
 ) -> Vec3 {
 	let sunlit = crown_albedo(warm_rgb, cool_rgb, height_frac, clump_variation);
-	let lift = smoothstep(-0.38, 0.52, normal.normalize_or_zero().y);
-	sunlit * Vec3::new(0.42, 0.55, 0.70).lerp(Vec3::ONE, lift)
+	let lift = smoothstep(-0.22, 0.48, normal.normalize_or_zero().y);
+	sunlit * Vec3::new(0.28, 0.40, 0.58).lerp(Vec3::ONE, lift)
+}
+
+/// Ambient-occlusion-like darkening for the crown core and downward faces.
+pub fn canopy_interior_shade(height_frac: f32, radial_frac: f32, shell: f32, normal: Vec3) -> f32 {
+	let n = normal.normalize_or_zero();
+	let under = 1.0 - smoothstep(-0.12, 0.40, n.y);
+	let core = (1.0 - shell.clamp(0.0, 1.0)) * (1.0 - radial_frac.clamp(0.0, 1.0) * 0.52);
+	let low = 1.0 - height_frac.clamp(0.0, 1.0);
+	lerp(0.26, 1.0, 1.0 - (under * 0.58 + core * 0.64 + low * 0.20).clamp(0.0, 1.0))
+}
+
+/// CPU mirror of hashed in-card leaf silhouettes.
+pub struct LeafCluster;
+
+impl LeafCluster {
+	pub fn mask(uv: Vec2, seed: u32, detail: f32) -> f32 {
+		leaf_cluster_mask(uv, seed, detail)
+	}
+
+	pub fn tint(uv: Vec2, seed: u32) -> f32 {
+		leaf_cluster_tint(uv, seed)
+	}
+
+	pub fn keep(alpha: f32, pixel: Vec2, seed: u32, detail: f32) -> bool {
+		leaf_cluster_keep(alpha, pixel, seed, detail)
+	}
+
+	pub fn outward_normal(geometric: Vec3, clump_out: Vec3, uv: Vec2, detail: f32) -> Vec3 {
+		leaf_cluster_outward_normal(geometric, clump_out, uv, detail)
+	}
+}
+
+fn hashed_leaf_blob(p: Vec2, cell: bevy::math::IVec2, seed: u32) -> f32 {
+	let packed = (cell.x.wrapping_add(173) as u32).wrapping_mul(374_761_393)
+		^ (cell.y.wrapping_add(91) as u32).wrapping_mul(668_265_263);
+	let h0 = hash_u32(seed ^ hash_u32(packed));
+	let h1 = hash_u32(h0 ^ 0x85ebca6b);
+	let ox = hash_u32_to_unit(h1);
+	let oy = hash_u32_to_unit(h1 ^ 0xc2b2ae35);
+	let stretch = 0.70 + 0.24 * hash_u32_to_unit(h1 ^ 0x27d4eb2d);
+	let center = Vec2::new(cell.x as f32 + ox * 0.74, cell.y as f32 + oy * 0.74);
+	let delta = p - center;
+	let v = (delta.y * 0.55 + 0.5).clamp(0.0, 1.0);
+	let petiole = smoothstep(0.0, 0.22, v);
+	let tip = 1.0 - 0.55 * smoothstep(0.48, 1.0, v);
+	let width = (petiole * tip).max(0.16);
+	let q = Vec2::new(delta.x / (0.38 * stretch * width), delta.y / (0.52 * stretch));
+	1.0 - smoothstep(0.58, 1.0, q.length())
+}
+
+pub fn leaf_cluster_mask(uv: Vec2, seed: u32, detail: f32) -> f32 {
+	let d = detail.clamp(0.0, 1.0);
+	let cells_v = lerp(2.2, 6.4, d);
+	let cells_u = lerp(1.8, 5.2, d);
+	let p = Vec2::new((uv.x * 0.5 + 0.5) * cells_u, uv.y.clamp(0.0, 1.0) * cells_v);
+	let base = bevy::math::IVec2::new(p.x.floor() as i32, p.y.floor() as i32);
+	let mut occ = 0.0_f32;
+	for y in -1..=1 {
+		for x in -1..=1 {
+			occ = occ.max(hashed_leaf_blob(p, base + bevy::math::IVec2::new(x, y), seed));
+		}
+	}
+	let filled = (occ * lerp(1.55, 1.12, d)).clamp(0.0, 1.0);
+	lerp(1.0, filled, d)
+}
+
+pub fn leaf_cluster_tint(uv: Vec2, seed: u32) -> f32 {
+	let cell = bevy::math::IVec2::new(
+		((uv.x * 0.5 + 0.5) * 5.0).floor() as i32,
+		(uv.y.clamp(0.0, 1.0) * 6.0).floor() as i32,
+	);
+	let packed = (cell.x.wrapping_add(19) as u32).wrapping_mul(374_761_393)
+		^ (cell.y.wrapping_add(7) as u32).wrapping_mul(668_265_263);
+	hash_u32_to_unit(seed ^ hash_u32(packed) ^ 0xa0761d65)
+}
+
+pub fn leaf_cluster_keep(alpha: f32, pixel: Vec2, seed: u32, detail: f32) -> bool {
+	if detail < 0.08 {
+		return true;
+	}
+	if alpha < 0.06 {
+		return false;
+	}
+	if alpha > 0.92 {
+		return true;
+	}
+	let hx = hash_u32(seed ^ (pixel.x as u32).wrapping_mul(1973) ^ (pixel.y as u32).wrapping_mul(9277));
+	alpha > hash_u32_to_unit(hx) * 0.78 + 0.08
+}
+
+pub fn leaf_cluster_outward_normal(geometric: Vec3, clump_out: Vec3, uv: Vec2, detail: f32) -> Vec3 {
+	let toward = (clump_out + Vec3::new(0.0, 0.12, 0.0)).normalize_or(Vec3::Y);
+	let edge = uv.x.abs().clamp(0.0, 1.0);
+	let amt = detail.clamp(0.0, 1.0) * lerp(0.48, 0.18, edge);
+	geometric.normalize_or(Vec3::Y).lerp(toward, amt).normalize_or(Vec3::Y)
 }
 
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
@@ -233,6 +328,40 @@ mod tests {
 		let top = canopy_clump_albedo(pal.tip_rgb, pal.root_rgb, 0.92, Vec3::Y, 0.4);
 		let under = canopy_clump_albedo(pal.tip_rgb, pal.root_rgb, 0.92, -Vec3::Y, 0.4);
 		assert!(top.x + top.y > under.x + under.y);
+		Ok(())
+	}
+
+	#[test]
+	fn canopy_interior_is_darker_under_and_inside() -> anyhow::Result<()> {
+		let rim = canopy_interior_shade(0.9, 0.9, 1.0, Vec3::Y);
+		let core = canopy_interior_shade(0.2, 0.1, 0.0, -Vec3::Y);
+		assert!(rim > core + 0.2);
+		Ok(())
+	}
+
+	#[test]
+	fn leaf_cluster_near_has_holes_far_is_solid() -> anyhow::Result<()> {
+		let seed = 11u32;
+		let mut min_near = 1.0_f32;
+		let mut max_near = 0.0_f32;
+		for i in 0..48u32 {
+			let u = (i % 8) as f32 / 7.0 * 2.0 - 1.0;
+			let v = (i / 8) as f32 / 5.0;
+			let a = LeafCluster::mask(Vec2::new(u, v), seed, 1.0);
+			min_near = min_near.min(a);
+			max_near = max_near.max(a);
+			assert!((LeafCluster::mask(Vec2::new(u, v), seed, 0.0) - 1.0).abs() < 1e-4);
+		}
+		assert!(max_near > 0.7, "near occupancy {max_near}");
+		assert!(min_near < 0.45, "near should punch holes, got min {min_near}");
+		Ok(())
+	}
+
+	#[test]
+	fn leaf_cluster_tint_varies_across_the_card() -> anyhow::Result<()> {
+		let a = LeafCluster::tint(Vec2::new(-0.8, 0.1), 4);
+		let b = LeafCluster::tint(Vec2::new(0.7, 0.8), 4);
+		assert!((a - b).abs() > 0.02);
 		Ok(())
 	}
 

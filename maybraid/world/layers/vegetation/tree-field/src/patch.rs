@@ -83,6 +83,10 @@ impl TreePatch {
 		Self::isolated(seed, center, TreeRecipe::leafless_storybook())
 	}
 
+	pub fn willow(seed: u32, center: Vec3) -> Self {
+		Self::isolated(seed, center, TreeRecipe::willow())
+	}
+
 	/// Grove-style placements: world root + scale, same recipe as Temperate Lower Massives storybook.
 	pub fn from_grove_placements(seed: u32, placements: &[(Vec3, f32)], recipe: TreeRecipe) -> Self {
 		let samples = placements

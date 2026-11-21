@@ -25,7 +25,8 @@
 //! Reuse `curve` (including `stable_frame` / `attachment_frame` / `branch_rest_sample`
 //! / woody and teardrop leaf surfaces), `wind` (higher `stiffness` for wood),
 //! `shading` (`wood_albedo`, `leaf_painterly_lit`, `crown_albedo`, `crown_layer_albedo`,
-//! `canopy_clump_albedo`), `lod` (`tree_default` farther than bush), `hash`, and
+//! `canopy_clump_albedo`, `leaf_cluster_mask`, `canopy_interior_shade`), `lod`
+//! (`tree_default` farther than bush), `hash`, and
 //! `layout`. Keep wood/foliage entry points distinct from grass. Extra branch/leaf
 //! GPU structs and species recipes stay in the bush or tree crate.
 
@@ -59,9 +60,10 @@ pub use lod::{
 	ProjectedSize,
 };
 pub use shading::{
-	canopy_clump_albedo, crown_albedo, crown_layer_albedo, grass_albedo, grass_variation_palette,
-	leaf_painterly_lit, meadow_color_field, painterly_lit, two_sided_wrap, wood_albedo,
-	VegetationPalette,
+	canopy_clump_albedo, canopy_interior_shade, crown_albedo, crown_layer_albedo, grass_albedo,
+	grass_variation_palette, leaf_cluster_keep, leaf_cluster_mask, leaf_cluster_outward_normal,
+	leaf_cluster_tint, leaf_painterly_lit, meadow_color_field, painterly_lit, two_sided_wrap,
+	wood_albedo, LeafCluster, VegetationPalette,
 };
 pub use wind::{
 	deform_along_curve, max_wind_displacement_m, wind_field, WindDeform, WindField, WindInputs,
@@ -77,7 +79,10 @@ pub struct VegetationWeslPlugin;
 impl Plugin for VegetationWeslPlugin {
 	fn build(&self, app: &mut App) {
 		// Headless HCSG / presentation tests add AssetPlugin without RenderPlugin.
-		app.init_asset::<Shader>();
+		// Playgrounds already have Shader via DefaultPlugins; re-init races Handles.
+		if app.world().get_resource::<Assets<Shader>>().is_none() {
+			app.init_asset::<Shader>();
+		}
 		load_shader_library!(app, "wesl/hash.wesl");
 		load_shader_library!(app, "wesl/curve.wesl");
 		load_shader_library!(app, "wesl/wind.wesl");

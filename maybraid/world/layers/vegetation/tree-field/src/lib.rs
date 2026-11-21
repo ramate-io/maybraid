@@ -33,7 +33,7 @@ pub use layout::{
 };
 pub use patch::{TreePatch, TreeSample};
 pub use plugin::TreeFieldPlugin;
-pub use recipe::TreeRecipe;
+pub use recipe::{TreeForm, TreeRecipe};
 pub use select::{TreeSelector, CompactedTreeLists};
 pub use template::{LeafTemplate, WoodTemplate};
 pub use topology::{
