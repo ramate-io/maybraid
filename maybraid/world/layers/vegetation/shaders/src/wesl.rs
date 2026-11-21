@@ -29,7 +29,7 @@
 //! branch/leaf GPU structs stay in the bush crate.
 
 use bevy::prelude::*;
-use bevy::shader::load_shader_library;
+use bevy::shader::{load_shader_library, Shader};
 
 pub mod curve;
 pub mod hash;
@@ -75,6 +75,8 @@ pub struct VegetationWeslPlugin;
 
 impl Plugin for VegetationWeslPlugin {
 	fn build(&self, app: &mut App) {
+		// Headless HCSG / presentation tests add AssetPlugin without RenderPlugin.
+		app.init_asset::<Shader>();
 		load_shader_library!(app, "wesl/hash.wesl");
 		load_shader_library!(app, "wesl/curve.wesl");
 		load_shader_library!(app, "wesl/wind.wesl");
@@ -112,7 +114,6 @@ mod tests {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins);
 		app.add_plugins(AssetPlugin::default());
-		app.init_asset::<Shader>();
 		app.add_plugins(VegetationWeslPlugin);
 		app.update();
 		assert!(app.world().get_resource::<Assets<Shader>>().is_some());
