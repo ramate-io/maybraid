@@ -215,25 +215,6 @@ fn fitted_foliage_transform(node: &FoliageNode) -> Option<Transform> {
 	)
 }
 
-/// Union of the authored canopy envelopes, for the existing generic Low canopy site.
-pub fn fitted_canopy_bounds(vegetation: &impl VegetationComponents) -> Option<(Vec3, Vec3)> {
-	let mut min = Vec3::splat(f32::INFINITY);
-	let mut max = Vec3::splat(f32::NEG_INFINITY);
-	let mut any = false;
-	for t in fitted_canopy_transforms(vegetation) {
-		if !t.translation.is_finite() || !t.scale.is_finite() {
-			continue;
-		}
-		// A rotated ellipsoid's axis-aligned half extents: row lengths of R * scale.
-		let m = Mat3::from_quat(t.rotation) * Mat3::from_diagonal(t.scale);
-		let half = Vec3::new(m.row(0).length(), m.row(1).length(), m.row(2).length());
-		min = min.min(t.translation - half);
-		max = max.max(t.translation + half);
-		any = true;
-	}
-	any.then_some((min, max))
-}
-
 /// Proxies that match Low / UltraLow cheap-ball canopy sites (one per ball).
 pub fn shadow_proxy_scenes_from_foliage(
 	nodes: &[FoliageNode],

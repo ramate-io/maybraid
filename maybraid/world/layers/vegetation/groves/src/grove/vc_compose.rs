@@ -13,10 +13,10 @@ use lod::{cull_offset_bands_from_factor, SceneChunk};
 use material_ref::MaterialRef;
 use sbs_trees::RorysHeadTrained;
 use vegetation_components::{
-	fitted_canopy_bounds, flattened_component_scene, frond_material_ref, leaf_material_ref,
-	stick_material_ref, CanopyShadowMode, FlattenedComponentsOnly, FoliageGeometry, FoliageNode,
-	Layers, PlacedVegetation, Placement, StickGeometry, StickNode, StructuralLod,
-	VegetationComponents, VegetationInstance, FLATTENED_KIT_CHUNK_WEIGHT,
+	flattened_component_scene, frond_material_ref, leaf_material_ref, stick_material_ref,
+	FlattenedComponentsOnly, FoliageGeometry, FoliageNode, Layers, PlacedVegetation, Placement,
+	StickGeometry, StickNode, StructuralLod, VegetationComponents, VegetationInstance,
+	FLATTENED_KIT_CHUNK_WEIGHT,
 };
 
 use super::{GroveExtent, PaletteMix};
@@ -224,19 +224,6 @@ pub fn canopy_proxy_site(
 	plant_placement: Placement,
 	material: &MaterialRef,
 ) -> Option<CanopyProxySite> {
-	if CanopyShadowMode::configured() == CanopyShadowMode::Fitted {
-		let (min, max) = fitted_canopy_bounds(plant)?;
-		let center = min * 0.5 + max * 0.5;
-		let half = (max - min) * 0.5;
-		let transform = vegetation_components::scene_children::pose(plant_placement);
-		let m = bevy::math::Mat3::from_quat(transform.rotation)
-			* bevy::math::Mat3::from_diagonal(transform.scale * half);
-		return Some(CanopyProxySite {
-			center: transform.transform_point(center),
-			half_extents: m.x_axis.abs() + m.y_axis.abs() + m.z_axis.abs(),
-			material: material.clone(),
-		});
-	}
 	let lod = plant.structural_lod()?;
 	let (center, scale) = composed_lod_center(lod.center, plant_placement);
 	Some(CanopyProxySite::from_radius(
