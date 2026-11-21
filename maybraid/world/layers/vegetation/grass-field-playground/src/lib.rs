@@ -4,6 +4,7 @@ mod camera;
 mod capture;
 mod commands;
 mod ground;
+mod overlay;
 mod scene;
 mod ui;
 
@@ -41,6 +42,7 @@ pub fn run() {
 	.insert_resource(CanopyShadowMode::Full)
 	.add_plugins(TerrainShaderPlugin)
 	.add_plugins(GrassFieldPlugin)
+	.add_plugins(overlay::MaskOverlayPlugin)
 	.add_plugins(CameraLookPlugin::default())
 	.add_plugins(
 		GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()).with_drawer_config(

@@ -58,9 +58,9 @@ pub use lod::{
 pub use parting::{
 	capsule_away_xz, capsule_behind_weight, capsule_lateral_xz, capsule_radial_weight, clip_to_uv,
 	depth_gap_weight, ground_occluder_weight, max_parting_displacement_m, part_along_curve,
-	part_along_length, parting_along, reconstruct_world, screen_part_direction, stronger_part_xz,
-	world_part_from_screen, PartingCapsule, PartingEnvelope, PARTING_MODE_DEPTH, PARTING_MODE_OFF,
-	PARTING_MODE_RASTER, PARTING_MODE_WORLD,
+	part_along_length, parting_along, raster_disc_away, raster_disc_weight, reconstruct_world,
+	screen_part_direction, stronger_part_xz, world_part_from_screen, PartingCapsule,
+	PartingEnvelope, PARTING_MODE_DEPTH, PARTING_MODE_OFF, PARTING_MODE_RASTER, PARTING_MODE_WORLD,
 };
 pub use shading::{
 	grass_albedo, grass_variation_palette, meadow_color_field, painterly_lit, two_sided_wrap,

@@ -21,6 +21,7 @@ WASD + mouse look (`L` toggles look). `/` opens commands. `F1` toggles the drawe
 | `compare turf on\|off` / `compare grass on\|off` | Terrain mat vs generated ribbons |
 | `parting off\|depth\|raster\|world` | View-dependent tip swath. Default is **world** |
 | `parting set --strength --radius --falloff --stamp-scale` | Metres of deflection, world influence, behind-window, raster stamp multiple |
+| `parting debug mask\|off` | Magenta occupancy overlay on a ground quad (raster stamp, 2.5× radius) |
 
 ## Captures
 
@@ -75,6 +76,8 @@ MAYBRAID_CAPTURE_DIR=maybraid/world/layers/vegetation/grass-field-playground/cap
 | `parting-world-near.png` / `parting-world-far.png` | World-field falloff |
 | `parting-depth-wind.png` / `parting-world-wind.png` | Parting composed with a frozen gust |
 | `parting-{off,depth,raster,world}-topdown.png` | Straight-down, same capsule — swath vs surrounding grass |
+| `parting-raster-mask-overlay-topdown.png` | Magenta occupancy disc over the capsule (`/parting debug mask`) |
+| `parting-raster-topdown-nocapsule.png` | Raster stamp with the capsule mesh hidden (occluder still stamps) |
 | `parting-raster-topdown-scale{1,2,3}.png` | Raster top-down at stamp_scale 1× / 2× / 3× the capsule radius |
 | `parting-raster-topdown-trail.png` | Raster top-down with extra capsules along the walk line |
 | `parting-raster-ots-oversized.png` | OTS raster at 3× stamp — length-preserving lean, no slab smear |
@@ -85,6 +88,14 @@ envelope while preserving blade length. `/parting set --stamp-scale 2.5`.
 
 ```bash
 MAYBRAID_CAPTURE_SET=parting-raster-stamp \
+MAYBRAID_CAPTURE_DIR=maybraid/world/layers/vegetation/grass-field-playground/captures \
+  nix develop --command cargo run -p vegetation-grass-field-playground --release --locked
+```
+
+Mask overlay, hidden-capsule, default raster, trail, and oversized OTS:
+
+```bash
+MAYBRAID_CAPTURE_SET=parting-raster-debug \
 MAYBRAID_CAPTURE_DIR=maybraid/world/layers/vegetation/grass-field-playground/captures \
   nix develop --command cargo run -p vegetation-grass-field-playground --release --locked
 ```

@@ -16,7 +16,7 @@ use crate::capability::GrassGpuCapability;
 use crate::diagnostics::GrassFieldStats;
 use crate::field::{GrassField, GrassFieldSettings};
 use crate::gpu::GrassGpuPlugin;
-use crate::parting::{ExtractedPartingOccluder, GrassPartingOccluder};
+use crate::parting::{ExtractedPartingOccluder, GrassPartingDebug, GrassPartingOccluder};
 use crate::patch::GrassPatch;
 use crate::shaders::GrassShadersPlugin;
 
@@ -55,6 +55,7 @@ impl Plugin for GrassFieldPlugin {
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevGrassTime>();
 		app.init_resource::<ExtractedGrassField>();
+		app.init_resource::<GrassPartingDebug>();
 		app.add_plugins(ExtractResourcePlugin::<ExtractedGrassField>::default());
 		app.add_plugins(ExtractComponentPlugin::<GrassFieldPresenter>::default());
 		app.add_systems(Startup, spawn_presenter);

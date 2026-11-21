@@ -136,6 +136,22 @@ fn capsule_away_xz(
     return away / dist;
 }
 
+/// Raster stamp occupancy in world XZ. `1` at the occluder, `0` at `radius_m`.
+fn raster_disc_weight(root_xz: vec2<f32>, occluder_xz: vec2<f32>, radius_m: f32) -> f32 {
+    let dist = length(root_xz - occluder_xz);
+    let influence = max(radius_m, 1e-3);
+    return 1.0 - smoothstep(influence * 0.25, influence, dist);
+}
+
+fn raster_disc_away(root_xz: vec2<f32>, occluder_xz: vec2<f32>) -> vec2<f32> {
+    let delta = root_xz - occluder_xz;
+    let dist = length(delta);
+    if (dist < 1e-4) {
+        return vec2<f32>(1.0, 0.0);
+    }
+    return delta / dist;
+}
+
 fn capsule_radial_weight(
     root_xz: vec2<f32>,
     occluder_xz: vec2<f32>,

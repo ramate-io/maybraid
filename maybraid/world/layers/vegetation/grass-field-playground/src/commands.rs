@@ -4,7 +4,9 @@ use bevy::prelude::*;
 use clap::{Parser, Subcommand, ValueEnum};
 use game_commands::command::{CommandScript, GameCommand};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::{GrassFieldSettings, GrassPartingMode, GrassPatch, GrassPatchLod};
+use vegetation_grass_field::{
+	GrassFieldSettings, GrassPartingDebug, GrassPartingMode, GrassPatch, GrassPatchLod,
+};
 
 use crate::camera::{yaw_pitch, CameraController};
 use crate::ground::TurfPlane;
@@ -114,6 +116,16 @@ pub enum PartingCommand {
 		#[arg(long)]
 		stamp_scale: Option<f32>,
 	},
+	#[command(subcommand)]
+	Debug(PartingDebugCommand),
+}
+
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
+pub enum PartingDebugCommand {
+	/// Tint a ground quad with raster occupancy (magenta disc, 2.5× radius).
+	Mask,
+	Off,
 }
 
 #[derive(Clone, Subcommand)]
@@ -296,7 +308,7 @@ impl PartingCommand {
 					Self::Depth => GrassPartingMode::Depth,
 					Self::Raster => GrassPartingMode::Raster,
 					Self::World => GrassPartingMode::World,
-					Self::Set { .. } => unreachable!(),
+					Self::Set { .. } | Self::Debug(_) => unreachable!(),
 				};
 				commands.queue(move |world: &mut World| {
 					world.resource_mut::<GrassFieldSettings>().parting.mode = mode;
@@ -320,6 +332,18 @@ impl PartingCommand {
 					}
 				});
 				*console = "parting settings updated".into();
+			}
+			Self::Debug(PartingDebugCommand::Mask) => {
+				commands.queue(|world: &mut World| {
+					world.resource_mut::<GrassPartingDebug>().mask_overlay = true;
+				});
+				*console = "parting debug mask overlay on".into();
+			}
+			Self::Debug(PartingDebugCommand::Off) => {
+				commands.queue(|world: &mut World| {
+					world.resource_mut::<GrassPartingDebug>().mask_overlay = false;
+				});
+				*console = "parting debug overlay off".into();
 			}
 		}
 	}
@@ -393,6 +417,11 @@ mod tests {
 			command,
 			PlaygroundCommand::Parting(PartingCommand::Set { stamp_scale: Some(scale), .. })
 				if (scale - 2.5).abs() < 1e-5
+		));
+		let command = <PlaygroundCommand as GameCommand>::parse_line("parting debug mask")?;
+		assert!(matches!(
+			command,
+			PlaygroundCommand::Parting(PartingCommand::Debug(PartingDebugCommand::Mask))
 		));
 		Ok(())
 	}

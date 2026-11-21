@@ -28,8 +28,9 @@ pub use diagnostics::GrassFieldStats;
 pub use field::{GrassField, GrassFieldSettings};
 pub use host::GrassPatchLod;
 pub use parting::{
-	ExtractedPartingOccluder, GrassPartingMode, GrassPartingOccluder, GrassPartingSettings,
-	PartingMask,
+	ExtractedPartingOccluder, GrassPartingDebug, GrassPartingMode, GrassPartingOccluder,
+	GrassPartingSettings, PartingMask, PARTING_MASK_EXTENT_M, PARTING_MASK_HEIGHT,
+	PARTING_MASK_WIDTH,
 };
 pub use patch::{GrassPatch, SurfaceSample};
 pub use plugin::GrassFieldPlugin;

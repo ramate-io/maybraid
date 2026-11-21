@@ -3,8 +3,8 @@
 use bevy::math::{Mat4, Vec2, Vec3, Vec3Swizzles, Vec4};
 use bevy::prelude::*;
 use vegetation_shaders::wesl::{
-	clip_to_uv, world_part_from_screen, GrassPartingUniform, MAX_PARTING_OCCLUDERS,
-	PARTING_MODE_DEPTH, PARTING_MODE_OFF, PARTING_MODE_RASTER, PARTING_MODE_WORLD,
+	GrassPartingUniform, MAX_PARTING_OCCLUDERS, PARTING_MODE_DEPTH, PARTING_MODE_OFF,
+	PARTING_MODE_RASTER, PARTING_MODE_WORLD,
 };
 
 /// How blades sample occluders. World is the production default.
@@ -13,7 +13,7 @@ pub enum GrassPartingMode {
 	Off,
 	/// Sample the camera depth prepass at the projected tip (arbitrary opaque geometry).
 	Depth,
-	/// Low-res screen-space parting-vector footprint, CPU-splatted and blurred.
+	/// World-XZ occupancy disc around tagged occluders (stamp_scale × radius).
 	Raster,
 	/// World-space capsule field around tagged actors / props.
 	#[default]
@@ -120,7 +120,11 @@ impl GrassPartingSettings {
 			extras: Vec4::new(
 				self.lod_skip_m.max(1.0),
 				self.ground_reject_m.max(0.0),
-				self.kernel_px.max(1.0),
+				if self.mode == GrassPartingMode::Raster {
+					self.stamp_scale.max(0.05)
+				} else {
+					self.kernel_px.max(1.0)
+				},
 				occluders.len().min(MAX_PARTING_OCCLUDERS) as f32,
 			),
 			camera_right: camera_right.extend(0.0),
@@ -134,6 +138,13 @@ impl GrassPartingSettings {
 		}
 		uniform
 	}
+}
+
+/// Playground / capture toggles. Raster displacement does not read this.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GrassPartingDebug {
+	/// Draw the world-XZ occupancy disc as a magenta ground overlay.
+	pub mask_overlay: bool,
 }
 
 /// Tag an opaque actor / prop so world and raster modes can find it.
@@ -177,10 +188,13 @@ impl ExtractedPartingOccluder {
 }
 
 pub const PARTING_MASK_WIDTH: u32 = 256;
-pub const PARTING_MASK_HEIGHT: u32 = 144;
+pub const PARTING_MASK_HEIGHT: u32 = 256;
+/// Square world-XZ footprint around the camera (metres on a side).
+pub const PARTING_MASK_EXTENT_M: f32 = 16.0;
 
-/// Screen-space RG16 parting mask. RG = world XZ direction * weight, B = weight,
-/// A = occluder distance from camera.
+/// World-XZ occupancy disc. RG = away direction × weight, B = occupancy,
+/// A unused. The vertex shader evaluates the same disc from packed occluders;
+/// this texture is the debug overlay / CPU alignment source.
 #[derive(Clone, Debug)]
 pub struct PartingMask {
 	pub width: u32,
@@ -211,96 +225,92 @@ impl PartingMask {
 		bytes
 	}
 
-	/// Splat projected occluder discs, then box-blur for temporal stability.
+	/// Magenta occupancy preview (straight alpha) for the debug ground overlay.
+	pub fn occupancy_preview_rgba8(&self) -> Vec<u8> {
+		let mut bytes = Vec::with_capacity(self.pixels.len() * 4);
+		for pixel in &self.pixels {
+			let occupancy = pixel[2].clamp(0.0, 1.0);
+			let alpha = (occupancy * 210.0) as u8;
+			bytes.extend_from_slice(&[220, 36, 255, alpha]);
+		}
+		bytes
+	}
+
+	/// Splat circular occupancy discs in world XZ around `origin_xz`.
 	pub fn splat(
 		&mut self,
 		occluders: &[ExtractedPartingOccluder],
-		clip_from_world: Mat4,
-		camera: Vec3,
-		camera_right: Vec3,
-		camera_forward: Vec3,
+		origin_xz: Vec2,
 		settings: GrassPartingSettings,
 	) {
 		self.clear();
 		for occluder in occluders.iter().take(MAX_PARTING_OCCLUDERS) {
-			self.splat_one(
-				occluder,
-				clip_from_world,
-				camera,
-				camera_right,
-				camera_forward,
-				settings,
-			);
+			self.splat_one(occluder, origin_xz, settings);
 		}
-		self.blur();
 	}
 
 	fn splat_one(
 		&mut self,
 		occluder: &ExtractedPartingOccluder,
-		clip_from_world: Mat4,
-		camera: Vec3,
-		camera_right: Vec3,
-		camera_forward: Vec3,
+		origin_xz: Vec2,
 		settings: GrassPartingSettings,
 	) {
-		let foot = Vec3::new(
-			occluder.center.x,
-			occluder.center.y - occluder.height_m * 0.5,
-			occluder.center.z,
-		);
-		let clip = clip_from_world * foot.extend(1.0);
-		if clip.w <= 1e-4 {
-			return;
-		}
-		let uv = clip_to_uv(clip);
+		let centre = occluder.center.xz();
+		let radius_m = settings.stamp_radius_m(occluder.radius_m);
+		let uv = world_xz_to_mask_uv(centre, origin_xz);
 		if !(0.0..=1.0).contains(&uv.x) || !(0.0..=1.0).contains(&uv.y) {
 			return;
 		}
-		let dist = foot.distance(camera);
-		let radius_m = settings.stamp_radius_m(occluder.radius_m);
-		let radius_px = projected_stamp_radius_px(
-			foot,
-			radius_m,
-			clip_from_world,
-			camera_right,
-			self.width as f32,
-			self.height as f32,
-			dist,
-		);
+		let texel_m = PARTING_MASK_EXTENT_M / self.width.max(1) as f32;
+		let radius_px = (radius_m / texel_m.max(1e-4)).max(1.0);
 		let cx = uv.x * self.width as f32;
 		let cy = uv.y * self.height as f32;
 		let min_x = (cx - radius_px).floor().max(0.0) as u32;
 		let max_x = (cx + radius_px).ceil().min(self.width as f32 - 1.0) as u32;
 		let min_y = (cy - radius_px).floor().max(0.0) as u32;
 		let max_y = (cy + radius_px).ceil().min(self.height as f32 - 1.0) as u32;
-		let camera_up = camera_right.cross(camera_forward).normalize_or(Vec3::Y);
 		for y in min_y..=max_y {
 			for x in min_x..=max_x {
-				let dx = x as f32 + 0.5 - cx;
-				let dy = y as f32 + 0.5 - cy;
-				let r = Vec2::new(dx, dy).length() / radius_px.max(1e-3);
+				let world = self.texel_world_xz(x, y, origin_xz);
+				let delta = world - centre;
+				let r = delta.length() / radius_m.max(1e-3);
 				if r >= 1.0 {
 					continue;
 				}
 				let weight = stamp_falloff(r);
-				let mut dir_ss = Vec2::new(dx, dy);
-				if dir_ss.length_squared() < 1e-4 {
-					dir_ss = Vec2::X;
-				} else {
-					dir_ss = dir_ss.normalize();
-				}
-				let world_xz =
-					world_part_from_screen(dir_ss, camera_right, camera_up, camera_forward).xz();
+				let away = if delta.length_squared() < 1e-8 { Vec2::X } else { delta.normalize() };
 				let i = (y * self.width + x) as usize;
-				self.pixels[i][0] += world_xz.x * weight;
-				self.pixels[i][1] += world_xz.y * weight;
+				self.pixels[i][0] += away.x * weight;
+				self.pixels[i][1] += away.y * weight;
 				self.pixels[i][2] += weight;
-				if self.pixels[i][3] <= 1e-5 || dist < self.pixels[i][3] {
-					self.pixels[i][3] = dist;
-				}
 			}
 		}
+	}
+
+	pub fn texel_world_xz(&self, x: u32, y: u32, origin_xz: Vec2) -> Vec2 {
+		let uv = Vec2::new(
+			(x as f32 + 0.5) / self.width.max(1) as f32,
+			(y as f32 + 0.5) / self.height.max(1) as f32,
+		);
+		origin_xz + (uv - Vec2::splat(0.5)) * PARTING_MASK_EXTENT_M
+	}
+
+	/// Occupancy-weighted world XZ (mask-centre regression). A flat inner core
+	/// makes a raw peak texel wander; the centroid stays on the occluder.
+	pub fn occupancy_centroid_world_xz(&self, origin_xz: Vec2) -> Option<Vec2> {
+		let mut acc = Vec2::ZERO;
+		let mut weight = 0.0f32;
+		for y in 0..self.height {
+			for x in 0..self.width {
+				let occupancy = self.pixels[(y * self.width + x) as usize][2];
+				if occupancy <= 0.05 {
+					continue;
+				}
+				acc += self.texel_world_xz(x, y, origin_xz) * occupancy;
+				weight += occupancy;
+			}
+		}
+		(weight > 1e-4).then_some(acc / weight)
 	}
 
 	#[cfg(test)]
@@ -308,29 +318,15 @@ impl PartingMask {
 		self.pixels.iter().filter(|pixel| pixel[2] > min_weight).count()
 	}
 
-	fn blur(&mut self) {
-		let src = self.pixels.clone();
-		let w = self.width as i32;
-		let h = self.height as i32;
-		for y in 0..h {
-			for x in 0..w {
-				let mut acc = [0.0f32; 4];
-				let mut n = 0.0;
-				for oy in -1..=1 {
-					for ox in -1..=1 {
-						let sx = (x + ox).clamp(0, w - 1) as u32;
-						let sy = (y + oy).clamp(0, h - 1) as u32;
-						let p = src[(sy * self.width + sx) as usize];
-						for c in 0..4 {
-							acc[c] += p[c];
-						}
-						n += 1.0;
-					}
-				}
-				self.pixels[(y as u32 * self.width + x as u32) as usize] =
-					[acc[0] / n, acc[1] / n, acc[2] / n, acc[3] / n];
-			}
+	#[cfg(test)]
+	fn occupancy_at_world(&self, world_xz: Vec2, origin_xz: Vec2) -> f32 {
+		let uv = world_xz_to_mask_uv(world_xz, origin_xz);
+		if !(0.0..1.0).contains(&uv.x) || !(0.0..1.0).contains(&uv.y) {
+			return 0.0;
 		}
+		let x = (uv.x * self.width as f32).floor() as u32;
+		let y = (uv.y * self.height as f32).floor() as u32;
+		self.pixels[(y.min(self.height - 1) * self.width + x.min(self.width - 1)) as usize][2]
 	}
 }
 
@@ -339,27 +335,8 @@ fn stamp_falloff(r: f32) -> f32 {
 	1.0 - smoothstep(0.25, 1.0, r)
 }
 
-fn projected_stamp_radius_px(
-	foot: Vec3,
-	radius_m: f32,
-	clip_from_world: Mat4,
-	camera_right: Vec3,
-	width: f32,
-	height: f32,
-	dist: f32,
-) -> f32 {
-	let mut right = camera_right;
-	right.y = 0.0;
-	let right = right.normalize_or(Vec3::X);
-	let edge = foot + right * radius_m;
-	let uv_c = clip_to_uv(clip_from_world * foot.extend(1.0));
-	let uv_e = clip_to_uv(clip_from_world * edge.extend(1.0));
-	let projected = ((uv_e - uv_c) * Vec2::new(width, height)).length();
-	if projected.is_finite() && projected > 1.5 {
-		projected.clamp(2.0, 160.0)
-	} else {
-		((radius_m / dist.max(0.2)) * height * 1.25).clamp(2.0, 160.0)
-	}
+pub fn world_xz_to_mask_uv(world_xz: Vec2, origin_xz: Vec2) -> Vec2 {
+	(world_xz - origin_xz) / PARTING_MASK_EXTENT_M + Vec2::splat(0.5)
 }
 
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
@@ -372,11 +349,9 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn raster_splat_points_away_from_projected_centre() -> anyhow::Result<()> {
-		let mut mask = PartingMask::new(64, 36);
-		let camera = Vec3::new(0.0, 0.6, 0.0);
-		let clip = Mat4::perspective_rh(1.0, 16.0 / 9.0, 0.1, 80.0)
-			* Mat4::look_at_rh(camera, Vec3::new(0.0, 0.6, 4.0), Vec3::Y);
+	fn raster_splat_points_away_from_the_disc_centre() -> anyhow::Result<()> {
+		let mut mask = PartingMask::new(64, 64);
+		let origin = Vec2::new(0.0, 4.0);
 		let occluder = ExtractedPartingOccluder {
 			center: Vec3::new(0.0, 0.9, 4.0),
 			radius_m: 0.4,
@@ -384,26 +359,23 @@ mod tests {
 		};
 		mask.splat(
 			&[occluder],
-			clip,
-			camera,
-			Vec3::X,
-			Vec3::Z,
+			origin,
 			GrassPartingSettings::default().with_mode(GrassPartingMode::Raster),
 		);
-		let foot = Vec3::new(
-			occluder.center.x,
-			occluder.center.y - occluder.height_m * 0.5,
-			occluder.center.z,
-		);
-		let mid = clip_to_uv(clip * foot.extend(1.0));
-		let mx = (mid.x * 64.0) as u32;
-		let my = (mid.y * 36.0) as u32;
-		let left = mask.pixels[(my * 64 + mx.saturating_sub(4)) as usize];
-		let right = mask.pixels[(my * 64 + (mx + 4).min(63)) as usize];
-		assert!(left[2] > 0.0 || right[2] > 0.0, "expected a footprint around the capsule");
+		let left = mask.occupancy_at_world(origin + Vec2::new(-0.4, 0.0), origin);
+		let right = mask.occupancy_at_world(origin + Vec2::new(0.4, 0.0), origin);
+		assert!(left > 0.2 && right > 0.2, "expected occupancy both sides, L {left} R {right}");
+		let left_uv = world_xz_to_mask_uv(origin + Vec2::new(-0.4, 0.0), origin);
+		let right_uv = world_xz_to_mask_uv(origin + Vec2::new(0.4, 0.0), origin);
+		let lx = (left_uv.x * 64.0).floor() as u32;
+		let ly = (left_uv.y * 64.0).floor() as u32;
+		let rx = (right_uv.x * 64.0).floor() as u32;
+		let ry = (right_uv.y * 64.0).floor() as u32;
+		let left_px = mask.pixels[(ly * 64 + lx) as usize];
+		let right_px = mask.pixels[(ry * 64 + rx) as usize];
 		assert!(
-			left[0] <= right[0],
-			"left pixel should peel more left than right, {left:?} vs {right:?}"
+			left_px[0] < 0.0 && right_px[0] > 0.0,
+			"stamp should peel away in X, left {left_px:?} right {right_px:?}"
 		);
 		Ok(())
 	}
@@ -419,22 +391,17 @@ mod tests {
 
 	#[test]
 	fn oversized_stamp_covers_beyond_the_capsule() -> anyhow::Result<()> {
-		let camera = Vec3::new(0.0, 6.0, 0.0);
-		let clip = Mat4::perspective_rh(1.0, 16.0 / 9.0, 0.1, 80.0)
-			* Mat4::look_at_rh(camera, Vec3::new(0.0, 0.0, 0.05), Vec3::NEG_Z);
+		let origin = Vec2::ZERO;
 		let occluder = ExtractedPartingOccluder {
 			center: Vec3::new(0.0, 0.9, 0.0),
 			radius_m: 0.4,
 			height_m: 1.8,
 		};
 		let splat = |scale: f32| {
-			let mut mask = PartingMask::new(64, 36);
+			let mut mask = PartingMask::new(64, 64);
 			mask.splat(
 				&[occluder],
-				clip,
-				camera,
-				Vec3::X,
-				Vec3::NEG_Y,
+				origin,
 				GrassPartingSettings::default()
 					.with_mode(GrassPartingMode::Raster)
 					.with_stamp_scale(scale),
@@ -474,6 +441,47 @@ mod tests {
 		assert_eq!(uniform.occluder_count(), 1);
 		assert_eq!(uniform.mode(), PARTING_MODE_WORLD);
 		assert_eq!(uniform.camera_world(), camera);
+		Ok(())
+	}
+
+	#[test]
+	fn raster_pack_puts_stamp_scale_in_extras_z() -> anyhow::Result<()> {
+		let uniform = GrassPartingSettings::default()
+			.with_mode(GrassPartingMode::Raster)
+			.with_stamp_scale(2.5)
+			.pack(Mat4::IDENTITY, Vec3::ZERO, Vec3::X, Vec3::Z, &[]);
+		assert!((uniform.extras.z - 2.5).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn raster_mask_centre_maps_to_occluder_world_xz() -> anyhow::Result<()> {
+		let camera = Vec3::new(9.62, 5.9, 10.00);
+		let occluder = ExtractedPartingOccluder {
+			center: Vec3::new(9.62, 0.9, 10.54),
+			radius_m: 0.4,
+			height_m: 1.8,
+		};
+		let settings = GrassPartingSettings::default()
+			.with_mode(GrassPartingMode::Raster)
+			.with_stamp_scale(2.5);
+		let mut mask = PartingMask::default_size();
+		mask.splat(&[occluder], camera.xz(), settings);
+		let at_centre = mask.occupancy_at_world(occluder.center.xz(), camera.xz());
+		assert!(at_centre > 0.9, "occupancy at the occluder XZ should be ~1, got {at_centre}");
+		let centre = mask
+			.occupancy_centroid_world_xz(camera.xz())
+			.expect("stamp should write occupancy");
+		let dist = centre.distance(occluder.center.xz());
+		assert!(
+			dist < 0.12,
+			"occupancy centroid {centre:?} should sit on occluder {:?} (dist {dist})",
+			occluder.center.xz()
+		);
+		let radius_m = settings.stamp_radius_m(occluder.radius_m);
+		assert!((radius_m - 1.0).abs() < 1e-5);
+		let outside = mask.occupancy_at_world(occluder.center.xz() + Vec2::X * 1.15, camera.xz());
+		assert!(outside < 0.05, "occupancy past 2.5× radius should be ~0, got {outside}");
 		Ok(())
 	}
 }

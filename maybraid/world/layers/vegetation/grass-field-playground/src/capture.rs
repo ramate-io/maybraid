@@ -7,7 +7,9 @@ use std::path::PathBuf;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
-use vegetation_grass_field::{GrassFieldSettings, GrassPartingMode, GrassPartingSettings};
+use vegetation_grass_field::{
+	GrassFieldSettings, GrassPartingDebug, GrassPartingMode, GrassPartingSettings,
+};
 use vegetation_shaders::wesl::WindInputs;
 
 use crate::camera::{yaw_pitch, CameraController};
@@ -56,6 +58,8 @@ pub struct CaptureShot {
 	pub trail: bool,
 	/// `0` keeps the settings default. Raster scale stills set 1/2/3.
 	pub stamp_scale: f32,
+	pub mask_overlay: bool,
+	pub hide_occluders: bool,
 }
 
 impl CaptureShot {
@@ -72,6 +76,8 @@ impl CaptureShot {
 			rock_distance_m: 0.95,
 			trail: false,
 			stamp_scale: 0.0,
+			mask_overlay: false,
+			hide_occluders: false,
 		}
 	}
 
@@ -88,6 +94,8 @@ impl CaptureShot {
 			rock_distance_m: 0.95,
 			trail: false,
 			stamp_scale: 0.0,
+			mask_overlay: false,
+			hide_occluders: false,
 		}
 	}
 
@@ -109,6 +117,8 @@ impl CaptureShot {
 			rock_distance_m: 0.95,
 			trail: false,
 			stamp_scale: 0.0,
+			mask_overlay: false,
+			hide_occluders: false,
 		}
 	}
 
@@ -124,6 +134,16 @@ impl CaptureShot {
 
 	pub const fn with_stamp_scale(mut self, stamp_scale: f32) -> Self {
 		self.stamp_scale = stamp_scale;
+		self
+	}
+
+	pub const fn with_mask_overlay(mut self) -> Self {
+		self.mask_overlay = true;
+		self
+	}
+
+	pub const fn hide_occluders(mut self) -> Self {
+		self.hide_occluders = true;
 		self
 	}
 
@@ -158,6 +178,18 @@ impl CaptureShot {
 		} else {
 			GrassPartingSettings::default().stamp_scale
 		};
+		if let Some(mut debug) = world.get_resource_mut::<GrassPartingDebug>() {
+			debug.mask_overlay = self.mask_overlay;
+		}
+		if self.hide_occluders {
+			let ids: Vec<_> =
+				world.query_filtered::<Entity, With<scene::PartingProp>>().iter(world).collect();
+			for id in ids {
+				if let Some(mut visibility) = world.get_mut::<Visibility>(id) {
+					*visibility = Visibility::Hidden;
+				}
+			}
+		}
 	}
 }
 
@@ -283,6 +315,20 @@ pub const PARTING_CAPTURE_SHOTS: &[CaptureShot] = &[
 		PARTING_MID,
 	),
 	CaptureShot::parting(
+		"parting-raster-mask-overlay-topdown",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_mask_overlay(),
+	CaptureShot::parting(
+		"parting-raster-topdown-nocapsule",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.hide_occluders(),
+	CaptureShot::parting(
 		"parting-world-topdown",
 		scene::PARTING_TOPDOWN,
 		GrassPartingMode::World,
@@ -373,12 +419,70 @@ pub const RASTER_STAMP_CAPTURE_SHOTS: &[CaptureShot] = &[
 		GrassPartingMode::Raster,
 		PARTING_MID,
 	),
+	CaptureShot::parting(
+		"parting-raster-mask-overlay-topdown",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_mask_overlay(),
+	CaptureShot::parting(
+		"parting-raster-topdown-nocapsule",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.hide_occluders(),
+];
+
+pub const RASTER_DEBUG_CAPTURE_SHOTS: &[CaptureShot] = &[
+	CaptureShot::parting(
+		"parting-off-topdown",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Off,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-raster-mask-overlay-topdown",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_mask_overlay(),
+	CaptureShot::parting(
+		"parting-raster-topdown",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-raster-topdown-nocapsule",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.hide_occluders(),
+	CaptureShot::parting(
+		"parting-raster-topdown-trail",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_trail(),
+	CaptureShot::parting(
+		"parting-raster-ots-oversized",
+		scene::PARTING_OTS,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_stamp_scale(3.0),
 ];
 
 pub fn active_capture_shots() -> &'static [CaptureShot] {
 	match std::env::var(CAPTURE_SET_ENV).as_deref() {
 		Ok("parting") => PARTING_CAPTURE_SHOTS,
 		Ok("parting-raster-stamp") => RASTER_STAMP_CAPTURE_SHOTS,
+		Ok("parting-raster-debug") => RASTER_DEBUG_CAPTURE_SHOTS,
 		_ => GRASS_CAPTURE_SHOTS,
 	}
 }
@@ -570,7 +674,7 @@ mod tests {
 			.iter()
 			.filter(|shot| shot.name.ends_with("-topdown") || shot.name.ends_with("-topdown-trail"))
 			.collect();
-		assert_eq!(topdown.len(), 5);
+		assert_eq!(topdown.len(), 6);
 		for shot in &topdown {
 			assert_eq!(shot.camera, scene::PARTING_TOPDOWN.0);
 			assert_eq!(shot.look_at, scene::PARTING_TOPDOWN.1);
@@ -605,8 +709,21 @@ mod tests {
 		assert_eq!(oversized.camera, scene::PARTING_OTS.0);
 		assert_eq!(oversized.parting_mode, GrassPartingMode::Raster);
 		assert!((oversized.stamp_scale - 3.0).abs() < 1e-5);
-		assert_eq!(RASTER_STAMP_CAPTURE_SHOTS.len(), 7);
+		assert_eq!(RASTER_STAMP_CAPTURE_SHOTS.len(), 9);
 		assert_eq!(RASTER_STAMP_CAPTURE_SHOTS[0].parting_mode, GrassPartingMode::Off);
+		let overlay = RASTER_DEBUG_CAPTURE_SHOTS
+			.iter()
+			.find(|shot| shot.name == "parting-raster-mask-overlay-topdown")
+			.unwrap();
+		assert!(overlay.mask_overlay);
+		assert!(!overlay.hide_occluders);
+		let nocapsule = RASTER_DEBUG_CAPTURE_SHOTS
+			.iter()
+			.find(|shot| shot.name == "parting-raster-topdown-nocapsule")
+			.unwrap();
+		assert!(nocapsule.hide_occluders);
+		assert!(!nocapsule.mask_overlay);
+		assert_eq!(RASTER_DEBUG_CAPTURE_SHOTS.len(), 6);
 		let pose = camera_looking_at(scene::PARTING_TOPDOWN.0, scene::PARTING_TOPDOWN.1);
 		assert!(pose.translation.is_finite());
 		let dir = (scene::PARTING_TOPDOWN.1 - scene::PARTING_TOPDOWN.0).normalize();

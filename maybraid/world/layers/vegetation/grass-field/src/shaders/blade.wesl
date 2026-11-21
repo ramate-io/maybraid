@@ -16,8 +16,9 @@ import vegetation_shaders::wesl::layout::{
 import vegetation_shaders::wesl::parting::{
     capsule_away_xz, capsule_behind_weight, capsule_radial_weight, clip_to_uv,
     depth_gap_weight, ground_occluder_weight, part_along_curve, part_along_length,
-    reconstruct_world, screen_part_direction, world_part_from_screen, PARTING_MODE_DEPTH,
-    PARTING_MODE_OFF, PARTING_MODE_RASTER, PARTING_MODE_WORLD,
+    raster_disc_away, raster_disc_weight, reconstruct_world, screen_part_direction,
+    stronger_part_xz, world_part_from_screen, PARTING_MODE_DEPTH, PARTING_MODE_OFF,
+    PARTING_MODE_RASTER, PARTING_MODE_WORLD,
 };
 
 @group(0) @binding(0) var<uniform> view: GrassViewUniform;
@@ -106,22 +107,29 @@ fn depth_part_xz(tip: vec3<f32>, root: vec3<f32>, plant_id: u32) -> vec2<f32> {
 }
 
 fn raster_part_xz(root: vec3<f32>) -> vec2<f32> {
-    let clip = parting.camera_clip_from_world * vec4<f32>(root, 1.0);
-    if (clip.w <= 1e-4) {
-        return vec2<f32>(0.0);
+    // Analytical world-XZ discs from packed occluders. The CPU raster texture is
+    // the debug overlay only — lavapipe VS textureSample of RGBA32Float was 0.
+    let count = u32(parting.extras.w);
+    let stamp_scale = max(parting.extras.z, 0.05);
+    var acc = vec2<f32>(0.0);
+    for (var i = 0u; i < 16u; i++) {
+        if (i >= count) {
+            break;
+        }
+        if (parting.occluder_meta[i].y < 0.5) {
+            continue;
+        }
+        let center = parting.occluders[i].xyz;
+        let radius = max(parting.occluders[i].w, 0.05) * stamp_scale;
+        let occupancy = raster_disc_weight(root.xz, center.xz, radius);
+        if (occupancy <= 1e-4) {
+            continue;
+        }
+        let away = raster_disc_away(root.xz, center.xz);
+        acc = stronger_part_xz(acc, away * occupancy);
     }
-    let uv = clip_to_uv(clip);
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-        return vec2<f32>(0.0);
-    }
-    let sample = textureSampleLevel(raster_mask, raster_sampler, uv, 0.0);
-    if (sample.b <= 1e-4) {
-        return vec2<f32>(0.0);
-    }
-    let dir_len = length(sample.rg);
-    let away = select(sample.rg, sample.rg / dir_len, dir_len > 1e-4);
-    // Occupancy is 0–1 after the CPU blur; extra lean so a 2–3× stamp reads from above.
-    return away * (sample.b * parting.params.x * 1.65);
+    // Strength × 6 so 1.12 m shade tips lie down in a readable top-down ring.
+    return acc * (parting.params.x * 6.0);
 }
 
 fn world_part_xz(root: vec3<f32>) -> vec2<f32> {

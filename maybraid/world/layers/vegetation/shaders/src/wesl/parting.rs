@@ -120,6 +120,21 @@ pub fn capsule_away_xz(
 	away / dist
 }
 
+pub fn raster_disc_weight(root_xz: Vec2, occluder_xz: Vec2, radius_m: f32) -> f32 {
+	let dist = root_xz.distance(occluder_xz);
+	let influence = radius_m.max(1e-3);
+	1.0 - smoothstep(influence * 0.25, influence, dist)
+}
+
+pub fn raster_disc_away(root_xz: Vec2, occluder_xz: Vec2) -> Vec2 {
+	let delta = root_xz - occluder_xz;
+	let dist = delta.length();
+	if dist < 1e-4 {
+		return Vec2::X;
+	}
+	delta / dist
+}
+
 pub fn capsule_radial_weight(
 	root_xz: Vec2,
 	occluder_xz: Vec2,
@@ -295,6 +310,17 @@ mod tests {
 				"t={t} rest_len={rest_len} parted_len={parted_len}"
 			);
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn raster_disc_is_full_at_the_centre_and_zero_past_the_radius() -> anyhow::Result<()> {
+		let centre = Vec2::new(4.0, -1.0);
+		assert!(raster_disc_weight(centre, centre, 1.0) > 0.99);
+		assert!(raster_disc_weight(centre + Vec2::X * 0.2, centre, 1.0) > 0.95);
+		assert!(raster_disc_weight(centre + Vec2::X * 1.05, centre, 1.0) < 0.02);
+		let away = raster_disc_away(centre + Vec2::new(0.3, -0.1), centre);
+		assert!(away.x > 0.0);
 		Ok(())
 	}
 

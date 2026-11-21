@@ -8,6 +8,7 @@ use bevy::core_pipeline::core_3d::{
 use bevy::core_pipeline::prepass::ViewPrepassTextures;
 use bevy::core_pipeline::schedule::camera_driver;
 use bevy::ecs::system::{lifetimeless::SRes, SystemParamItem};
+use bevy::math::Vec3Swizzles;
 use bevy::mesh::VertexBufferLayout;
 use bevy::prelude::*;
 use bevy::render::camera::{DirtySpecializations, PendingQueues};
@@ -651,14 +652,9 @@ fn prepare_parting_bind_group(
 		};
 
 	if extracted.settings.parting.mode == GrassPartingMode::Raster {
-		parting_gpu.mask.splat(
-			&extracted.occluders,
-			clip_from_world,
-			camera_pos,
-			camera_right,
-			camera_forward,
-			extracted.settings.parting,
-		);
+		parting_gpu
+			.mask
+			.splat(&extracted.occluders, camera_pos.xz(), extracted.settings.parting);
 		queue.write_texture(
 			TexelCopyTextureInfo {
 				texture: &parting_gpu.raster,
