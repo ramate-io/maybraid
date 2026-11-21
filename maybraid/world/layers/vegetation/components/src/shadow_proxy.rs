@@ -118,54 +118,44 @@ pub fn posed_shadow_proxy(transform: Transform) -> impl Scene + 'static {
 pub fn structural_shadow_proxy_scene(
 	vegetation: &impl VegetationComponents,
 ) -> Option<Box<dyn Scene>> {
-	if CanopyShadowMode::configured() == CanopyShadowMode::Fitted {
-		let transforms = fitted_canopy_transforms(vegetation);
-		return (!transforms.is_empty()).then(|| {
-			Box::new(scene_children(
-				transforms
-					.into_iter()
-					.map(|t| Box::new(posed_shadow_proxy(t)) as Box<dyn Scene>)
-					.collect(),
-			)) as Box<dyn Scene>
-		});
-	}
-	let lod = vegetation.structural_lod()?;
-	Some(Box::new(posed_shadow_proxy(transform_from_structural(lod))))
+	shadow_proxy_scene_for_mode(vegetation, CanopyShadowMode::configured())
 }
 
-/// Canopy-only bounds in plant-local space, from authored High foliage, never tree radius.
-/// Collections collapse to one envelope each; no leaf/frond meshes become casters.
-pub fn fitted_canopy_transforms(vegetation: &impl VegetationComponents) -> Vec<Transform> {
-	let mut fits = Vec::new();
-	let mut blade_min = Vec3::splat(f32::INFINITY);
-	let mut blade_max = Vec3::splat(f32::NEG_INFINITY);
-	let mut any_blade = false;
+fn shadow_proxy_scene_for_mode(
+	vegetation: &impl VegetationComponents,
+	mode: CanopyShadowMode,
+) -> Option<Box<dyn Scene>> {
+	// Preserve legacy eligibility: authored foliage alone must not add new plant populations.
+	let lod = vegetation.structural_lod()?;
+	let transform = if mode == CanopyShadowMode::Fitted {
+		fitted_canopy_transform(vegetation)?
+	} else {
+		transform_from_structural(lod)
+	};
+	Some(Box::new(posed_shadow_proxy(transform)))
+}
+
+/// One plant-local ellipsoid fitted to the union of valid authored High canopy bounds.
+/// Ball nodes may be dense leaf samples, not independent crowns: never emit per sample.
+/// This coarse approximation fills crown gaps; no leaf/frond meshes become casters.
+fn fitted_canopy_transform(vegetation: &impl VegetationComponents) -> Option<Transform> {
+	let mut min = Vec3::splat(f32::INFINITY);
+	let mut max = Vec3::splat(f32::NEG_INFINITY);
+	let mut any = false;
 	for node in vegetation.foliage_nodes_for_level(LodSceneLevel::High).flatten() {
 		let Some(fit) = fitted_foliage_transform(&node) else {
 			continue;
 		};
-		if matches!(
-			node.geometry,
-			FoliageGeometry::StraightFrond | FoliageGeometry::StraightFrondSegment
-		) {
-			// Standalone blade nodes form one coarse canopy envelope, not one caster per card.
-			let m = Mat3::from_quat(fit.rotation) * Mat3::from_diagonal(fit.scale);
-			let half = m.x_axis.abs() + m.y_axis.abs() + m.z_axis.abs();
-			blade_min = blade_min.min(fit.translation - half);
-			blade_max = blade_max.max(fit.translation + half);
-			any_blade = true;
-		} else {
-			// A collection is already one authored crown; separate balls retain distinct puffs.
-			fits.push(fit);
+		let m = Mat3::from_quat(fit.rotation) * Mat3::from_diagonal(fit.scale);
+		let half = Vec3::new(m.row(0).length(), m.row(1).length(), m.row(2).length());
+		if !fit.translation.is_finite() || !half.is_finite() || half.min_element() <= 0.0 {
+			continue;
 		}
+		min = min.min(fit.translation - half);
+		max = max.max(fit.translation + half);
+		any = true;
 	}
-	if any_blade {
-		fits.push(
-			Transform::from_translation(blade_min * 0.5 + blade_max * 0.5)
-				.with_scale((blade_max - blade_min) * 0.5),
-		);
-	}
-	fits
+	any.then(|| Transform::from_translation(min * 0.5 + max * 0.5).with_scale((max - min) * 0.5))
 }
 
 fn fitted_foliage_transform(node: &FoliageNode) -> Option<Transform> {
@@ -346,7 +336,7 @@ mod tests {
 	}
 
 	#[test]
-	fn fitted_small_bush_uses_canopy_not_whole_plant_radius() {
+	fn fitted_small_bush_uses_canopy_not_whole_plant_radius() -> anyhow::Result<()> {
 		struct Bush;
 		impl VegetationComponents for Bush {
 			fn structural_lod(&self) -> Option<StructuralLod> {
@@ -358,14 +348,14 @@ mod tests {
 				)])
 			}
 		}
-		let fits = fitted_canopy_transforms(&Bush);
-		assert_eq!(fits.len(), 1);
-		assert_eq!(fits[0].translation, Vec3::Y);
-		assert_eq!(fits[0].scale, Vec3::new(0.5, 0.25, 0.75));
+		let fit = fitted_canopy_transform(&Bush).ok_or_else(|| anyhow::anyhow!("missing fit"))?;
+		assert_eq!(fit.translation, Vec3::Y);
+		assert_eq!(fit.scale, Vec3::new(0.5, 0.25, 0.75));
+		Ok(())
 	}
 
 	#[test]
-	fn many_blades_are_one_coarse_envelope_not_one_caster_per_card() {
+	fn many_blades_are_one_coarse_envelope_not_one_caster_per_card() -> anyhow::Result<()> {
 		struct Blades;
 		impl VegetationComponents for Blades {
 			fn foliage_nodes_for_level(&self, _: LodSceneLevel) -> crate::Layers<FoliageNode> {
@@ -381,10 +371,60 @@ mod tests {
 				)
 			}
 		}
-		let fits = fitted_canopy_transforms(&Blades);
-		assert_eq!(fits.len(), 1);
-		assert!(fits[0].translation.y > 2.0);
-		assert!(fits[0].scale.max_element() < 1.0);
+		let fit = fitted_canopy_transform(&Blades).ok_or_else(|| anyhow::anyhow!("missing fit"))?;
+		assert!(fit.translation.y > 2.0);
+		assert!(fit.scale.max_element() < 1.0);
+		Ok(())
+	}
+
+	#[test]
+	fn many_puffs_spawn_one_marker_and_preserve_legacy_eligibility() -> anyhow::Result<()> {
+		use bevy::scene::{ScenePlugin, WorldSceneExt};
+		struct Plant {
+			eligible: bool,
+			nodes: Vec<FoliageNode>,
+		}
+		impl VegetationComponents for Plant {
+			fn structural_lod(&self) -> Option<StructuralLod> {
+				self.eligible.then_some(StructuralLod::new(Vec3::Y * 5.0, 10.0))
+			}
+			fn foliage_nodes_for_level(&self, _: LodSceneLevel) -> crate::Layers<FoliageNode> {
+				crate::Layers::from_free(self.nodes.clone())
+			}
+		}
+		let mut plant = Plant {
+			eligible: true,
+			nodes: (0..100)
+				.map(|i| {
+					FoliageNode::layered_ball(
+						Placement::new(Vec3::new(i as f32 * 0.01, 2.0, 0.0), 0.0)
+							.with_scale(Vec3::splat(0.05)),
+					)
+				})
+				.collect(),
+		};
+		let scene = shadow_proxy_scene_for_mode(&plant, CanopyShadowMode::Fitted)
+			.ok_or_else(|| anyhow::anyhow!("missing eligible canopy"))?;
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin::default()));
+		let entity = app.world_mut().spawn_scene(scene).map_err(|e| anyhow::anyhow!("{e:?}"))?.id();
+		let mut proxies = app.world_mut().query::<&CanopyShadowProxy>();
+		assert_eq!(proxies.iter(app.world()).count(), 1);
+		let fit = app
+			.world()
+			.get::<Transform>(entity)
+			.ok_or_else(|| anyhow::anyhow!("missing pose"))?;
+		assert!(fit.translation.distance(Vec3::new(0.495, 2.0, 0.0)) < 1e-5);
+		assert!(fit.scale.distance(Vec3::new(0.545, 0.05, 0.05)) < 1e-5);
+		plant.eligible = false;
+		for mode in [CanopyShadowMode::Proxy, CanopyShadowMode::Fitted] {
+			assert!(shadow_proxy_scene_for_mode(&plant, mode).is_none());
+		}
+		plant.eligible = true;
+		plant.nodes.clear();
+		assert!(shadow_proxy_scene_for_mode(&plant, CanopyShadowMode::Fitted).is_none());
+		assert!(shadow_proxy_scene_for_mode(&plant, CanopyShadowMode::Proxy).is_some());
+		Ok(())
 	}
 
 	#[test]
