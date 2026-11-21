@@ -111,6 +111,8 @@ pub enum PartingCommand {
 		radius: Option<f32>,
 		#[arg(long)]
 		falloff: Option<f32>,
+		#[arg(long)]
+		stamp_scale: Option<f32>,
 	},
 }
 
@@ -301,7 +303,7 @@ impl PartingCommand {
 				});
 				*console = format!("parting {}", mode.label());
 			}
-			Self::Set { strength, radius, falloff } => {
+			Self::Set { strength, radius, falloff, stamp_scale } => {
 				commands.queue(move |world: &mut World| {
 					let mut settings = world.resource_mut::<GrassFieldSettings>();
 					if let Some(strength) = strength {
@@ -312,6 +314,9 @@ impl PartingCommand {
 					}
 					if let Some(falloff) = falloff {
 						settings.parting.depth_falloff = falloff.max(0.05);
+					}
+					if let Some(stamp_scale) = stamp_scale {
+						settings.parting.stamp_scale = stamp_scale.max(0.05);
 					}
 				});
 				*console = "parting settings updated".into();
@@ -382,6 +387,13 @@ mod tests {
 		assert!(matches!(command, PlaygroundCommand::Parting(PartingCommand::Depth)));
 		let command = <PlaygroundCommand as GameCommand>::parse_line("spawn parting")?;
 		assert!(matches!(command, PlaygroundCommand::Spawn(SpawnCommand::Parting)));
+		let command =
+			<PlaygroundCommand as GameCommand>::parse_line("parting set --stamp-scale 2.5")?;
+		assert!(matches!(
+			command,
+			PlaygroundCommand::Parting(PartingCommand::Set { stamp_scale: Some(scale), .. })
+				if (scale - 2.5).abs() < 1e-5
+		));
 		Ok(())
 	}
 }

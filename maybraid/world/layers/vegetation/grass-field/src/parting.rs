@@ -3,8 +3,8 @@
 use bevy::math::{Mat4, Vec2, Vec3, Vec3Swizzles, Vec4};
 use bevy::prelude::*;
 use vegetation_shaders::wesl::{
-	clip_to_uv, GrassPartingUniform, MAX_PARTING_OCCLUDERS, PARTING_MODE_DEPTH, PARTING_MODE_OFF,
-	PARTING_MODE_RASTER, PARTING_MODE_WORLD,
+	clip_to_uv, world_part_from_screen, GrassPartingUniform, MAX_PARTING_OCCLUDERS,
+	PARTING_MODE_DEPTH, PARTING_MODE_OFF, PARTING_MODE_RASTER, PARTING_MODE_WORLD,
 };
 
 /// How blades sample occluders. World is the production default.
@@ -46,7 +46,7 @@ pub struct GrassPartingSettings {
 	pub mode: GrassPartingMode,
 	/// Tip deflection at full weight (metres).
 	pub strength: f32,
-	/// Extra influence around an occluder (metres).
+	/// Extra influence around an occluder (metres). World mode only.
 	pub radius: f32,
 	/// Behind-the-blade window (metres) before the effect fades.
 	pub depth_falloff: f32,
@@ -56,6 +56,8 @@ pub struct GrassPartingSettings {
 	pub ground_reject_m: f32,
 	/// Depth-gradient kernel in pixels.
 	pub kernel_px: f32,
+	/// Raster stamp radius as a multiple of the occluder's real radius.
+	pub stamp_scale: f32,
 }
 
 impl Default for GrassPartingSettings {
@@ -68,6 +70,7 @@ impl Default for GrassPartingSettings {
 			lod_skip_m: 28.0,
 			ground_reject_m: 0.18,
 			kernel_px: 5.0,
+			stamp_scale: 2.5,
 		}
 	}
 }
@@ -82,8 +85,18 @@ impl GrassPartingSettings {
 		self
 	}
 
+	pub fn with_stamp_scale(mut self, stamp_scale: f32) -> Self {
+		self.stamp_scale = stamp_scale.max(0.05);
+		self
+	}
+
 	pub fn enabled(self) -> bool {
 		self.mode != GrassPartingMode::Off && self.strength > 1e-5
+	}
+
+	/// World-space stamp radius for raster occupancy (metres).
+	pub fn stamp_radius_m(self, occluder_radius_m: f32) -> f32 {
+		occluder_radius_m.max(0.05) * self.stamp_scale.max(0.05)
 	}
 
 	/// Build the GPU uniform from the game camera and extracted occluders.
@@ -231,7 +244,12 @@ impl PartingMask {
 		camera_forward: Vec3,
 		settings: GrassPartingSettings,
 	) {
-		let clip = clip_from_world * occluder.center.extend(1.0);
+		let foot = Vec3::new(
+			occluder.center.x,
+			occluder.center.y - occluder.height_m * 0.5,
+			occluder.center.z,
+		);
+		let clip = clip_from_world * foot.extend(1.0);
 		if clip.w <= 1e-4 {
 			return;
 		}
@@ -239,46 +257,41 @@ impl PartingMask {
 		if !(0.0..=1.0).contains(&uv.x) || !(0.0..=1.0).contains(&uv.y) {
 			return;
 		}
-		let dist = occluder.center.distance(camera);
-		let radius_m = occluder.radius_m + settings.radius;
-		let radius_px = ((radius_m / dist.max(0.2)) * self.height as f32 * 1.25).clamp(2.0, 96.0);
-		let aspect = (occluder.height_m / occluder.radius_m.max(0.05)).clamp(1.0, 4.0);
-		let radius_py = (radius_px * aspect * 0.55).clamp(2.0, 120.0);
+		let dist = foot.distance(camera);
+		let radius_m = settings.stamp_radius_m(occluder.radius_m);
+		let radius_px = projected_stamp_radius_px(
+			foot,
+			radius_m,
+			clip_from_world,
+			camera_right,
+			self.width as f32,
+			self.height as f32,
+			dist,
+		);
 		let cx = uv.x * self.width as f32;
 		let cy = uv.y * self.height as f32;
 		let min_x = (cx - radius_px).floor().max(0.0) as u32;
 		let max_x = (cx + radius_px).ceil().min(self.width as f32 - 1.0) as u32;
-		let min_y = (cy - radius_py).floor().max(0.0) as u32;
-		let max_y = (cy + radius_py).ceil().min(self.height as f32 - 1.0) as u32;
-		let right_xz = {
-			let mut r = camera_right;
-			r.y = 0.0;
-			r.normalize_or(Vec3::X).xz()
-		};
+		let min_y = (cy - radius_px).floor().max(0.0) as u32;
+		let max_y = (cy + radius_px).ceil().min(self.height as f32 - 1.0) as u32;
+		let camera_up = camera_right.cross(camera_forward).normalize_or(Vec3::Y);
 		for y in min_y..=max_y {
 			for x in min_x..=max_x {
 				let dx = x as f32 + 0.5 - cx;
 				let dy = y as f32 + 0.5 - cy;
-				let r = ((dx / radius_px.max(1e-3)).powi(2) + (dy / radius_py.max(1e-3)).powi(2))
-					.sqrt();
+				let r = Vec2::new(dx, dy).length() / radius_px.max(1e-3);
 				if r >= 1.0 {
 					continue;
 				}
-				let weight = (1.0 - r) * (1.0 - r);
+				let weight = stamp_falloff(r);
 				let mut dir_ss = Vec2::new(dx, dy);
 				if dir_ss.length_squared() < 1e-4 {
 					dir_ss = Vec2::X;
 				} else {
 					dir_ss = dir_ss.normalize();
 				}
-				let mut world = camera_right * dir_ss.x + Vec3::Y * (-dir_ss.y);
-				world -= camera_forward * world.dot(camera_forward);
-				world.y = 0.0;
-				let world_xz = if world.length_squared() < 1e-6 {
-					right_xz
-				} else {
-					world.xz().normalize_or(right_xz)
-				};
+				let world_xz =
+					world_part_from_screen(dir_ss, camera_right, camera_up, camera_forward).xz();
 				let i = (y * self.width + x) as usize;
 				self.pixels[i][0] += world_xz.x * weight;
 				self.pixels[i][1] += world_xz.y * weight;
@@ -288,6 +301,11 @@ impl PartingMask {
 				}
 			}
 		}
+	}
+
+	#[cfg(test)]
+	fn occupancy_count(&self, min_weight: f32) -> usize {
+		self.pixels.iter().filter(|pixel| pixel[2] > min_weight).count()
 	}
 
 	fn blur(&mut self) {
@@ -316,6 +334,39 @@ impl PartingMask {
 	}
 }
 
+/// Soft occupancy: full in the inner ~25% of the stamp, fading to the edge.
+fn stamp_falloff(r: f32) -> f32 {
+	1.0 - smoothstep(0.25, 1.0, r)
+}
+
+fn projected_stamp_radius_px(
+	foot: Vec3,
+	radius_m: f32,
+	clip_from_world: Mat4,
+	camera_right: Vec3,
+	width: f32,
+	height: f32,
+	dist: f32,
+) -> f32 {
+	let mut right = camera_right;
+	right.y = 0.0;
+	let right = right.normalize_or(Vec3::X);
+	let edge = foot + right * radius_m;
+	let uv_c = clip_to_uv(clip_from_world * foot.extend(1.0));
+	let uv_e = clip_to_uv(clip_from_world * edge.extend(1.0));
+	let projected = ((uv_e - uv_c) * Vec2::new(width, height)).length();
+	if projected.is_finite() && projected > 1.5 {
+		projected.clamp(2.0, 160.0)
+	} else {
+		((radius_m / dist.max(0.2)) * height * 1.25).clamp(2.0, 160.0)
+	}
+}
+
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+	let t = ((x - edge0) / (edge1 - edge0).max(1e-6)).clamp(0.0, 1.0);
+	t * t * (3.0 - 2.0 * t)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -339,7 +390,12 @@ mod tests {
 			Vec3::Z,
 			GrassPartingSettings::default().with_mode(GrassPartingMode::Raster),
 		);
-		let mid = clip_to_uv(clip * occluder.center.extend(1.0));
+		let foot = Vec3::new(
+			occluder.center.x,
+			occluder.center.y - occluder.height_m * 0.5,
+			occluder.center.z,
+		);
+		let mid = clip_to_uv(clip * foot.extend(1.0));
 		let mx = (mid.x * 64.0) as u32;
 		let my = (mid.y * 36.0) as u32;
 		let left = mask.pixels[(my * 64 + mx.saturating_sub(4)) as usize];
@@ -349,6 +405,59 @@ mod tests {
 			left[0] <= right[0],
 			"left pixel should peel more left than right, {left:?} vs {right:?}"
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn stamp_scale_multiplies_the_occluder_radius() -> anyhow::Result<()> {
+		let settings = GrassPartingSettings::default().with_stamp_scale(2.5);
+		assert!((settings.stamp_radius_m(0.4) - 1.0).abs() < 1e-5);
+		let tight = GrassPartingSettings::default().with_stamp_scale(1.0);
+		assert!((tight.stamp_radius_m(0.4) - 0.4).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn oversized_stamp_covers_beyond_the_capsule() -> anyhow::Result<()> {
+		let camera = Vec3::new(0.0, 6.0, 0.0);
+		let clip = Mat4::perspective_rh(1.0, 16.0 / 9.0, 0.1, 80.0)
+			* Mat4::look_at_rh(camera, Vec3::new(0.0, 0.0, 0.05), Vec3::NEG_Z);
+		let occluder = ExtractedPartingOccluder {
+			center: Vec3::new(0.0, 0.9, 0.0),
+			radius_m: 0.4,
+			height_m: 1.8,
+		};
+		let splat = |scale: f32| {
+			let mut mask = PartingMask::new(64, 36);
+			mask.splat(
+				&[occluder],
+				clip,
+				camera,
+				Vec3::X,
+				Vec3::NEG_Y,
+				GrassPartingSettings::default()
+					.with_mode(GrassPartingMode::Raster)
+					.with_stamp_scale(scale),
+			);
+			mask
+		};
+		let tight = splat(1.0);
+		let oversized = splat(3.0);
+		assert!(
+			oversized.occupancy_count(0.05) > tight.occupancy_count(0.05),
+			"scale 3 should cover more texels than scale 1 ({} vs {})",
+			oversized.occupancy_count(0.05),
+			tight.occupancy_count(0.05)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn stamp_falloff_is_full_in_the_core_and_soft_at_the_edge() -> anyhow::Result<()> {
+		assert!((stamp_falloff(0.0) - 1.0).abs() < 1e-5);
+		assert!(stamp_falloff(0.2) > 0.95);
+		assert!(stamp_falloff(0.6) > 0.15 && stamp_falloff(0.6) < 0.85);
+		assert!(stamp_falloff(1.0) < 1e-5);
 		Ok(())
 	}
 

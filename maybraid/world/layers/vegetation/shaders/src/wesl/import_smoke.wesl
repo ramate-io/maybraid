@@ -7,7 +7,7 @@
 //! import vegetation_shaders::wesl::lod::{projected_height_px, lod_bucket, nested_keep};
 //! import vegetation_shaders::wesl::shading::{grass_albedo, painterly_lit};
 //! import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform, GrassPartingUniform};
-//! import vegetation_shaders::wesl::parting::{part_along_curve, depth_gap_weight};
+//! import vegetation_shaders::wesl::parting::{part_along_curve, part_along_length, depth_gap_weight};
 //! ```
 
 import vegetation_shaders::wesl::hash::{hash_u32, density_rank, plant_id};
@@ -25,9 +25,11 @@ import vegetation_shaders::wesl::shading::{grass_albedo, painterly_lit, Vegetati
 import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform, GrassPartingUniform};
 import vegetation_shaders::wesl::parting::{
     part_along_curve,
+    part_along_length,
     depth_gap_weight,
     parting_along,
     PARTING_MODE_DEPTH,
+    PARTING_MODE_RASTER,
 };
 
 fn smoke_eval(
@@ -62,6 +64,9 @@ fn smoke_eval(
     let gap = depth_gap_weight(2.0, 2.4, parting.params.z);
     let part_xz = vec2<f32>(parting.params.x, 0.0) * gap * parting_along(t, blade.shape.z);
     var deformed = part_along_curve(winded, blade.root, t, part_xz, blade.shape.z);
+    if (u32(parting.params.w) == PARTING_MODE_RASTER) {
+        deformed = part_along_length(winded, blade.root, t, part_xz, blade.shape.z);
+    }
     if (u32(parting.params.w) == PARTING_MODE_DEPTH) {
         deformed = deformed;
     }

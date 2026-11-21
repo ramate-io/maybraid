@@ -15,9 +15,9 @@ import vegetation_shaders::wesl::layout::{
 };
 import vegetation_shaders::wesl::parting::{
     capsule_away_xz, capsule_behind_weight, capsule_radial_weight, clip_to_uv,
-    depth_gap_weight, ground_occluder_weight, part_along_curve, reconstruct_world,
-    screen_part_direction, world_part_from_screen, PARTING_MODE_DEPTH, PARTING_MODE_OFF,
-    PARTING_MODE_RASTER, PARTING_MODE_WORLD,
+    depth_gap_weight, ground_occluder_weight, part_along_curve, part_along_length,
+    reconstruct_world, screen_part_direction, world_part_from_screen, PARTING_MODE_DEPTH,
+    PARTING_MODE_OFF, PARTING_MODE_RASTER, PARTING_MODE_WORLD,
 };
 
 @group(0) @binding(0) var<uniform> view: GrassViewUniform;
@@ -105,8 +105,8 @@ fn depth_part_xz(tip: vec3<f32>, root: vec3<f32>, plant_id: u32) -> vec2<f32> {
     return world.xz * (w_c * parting.params.x);
 }
 
-fn raster_part_xz(tip: vec3<f32>, root: vec3<f32>) -> vec2<f32> {
-    let clip = parting.camera_clip_from_world * vec4<f32>(tip, 1.0);
+fn raster_part_xz(root: vec3<f32>) -> vec2<f32> {
+    let clip = parting.camera_clip_from_world * vec4<f32>(root, 1.0);
     if (clip.w <= 1e-4) {
         return vec2<f32>(0.0);
     }
@@ -118,13 +118,10 @@ fn raster_part_xz(tip: vec3<f32>, root: vec3<f32>) -> vec2<f32> {
     if (sample.b <= 1e-4) {
         return vec2<f32>(0.0);
     }
-    let camera = camera_world();
-    let blade_dist = length(tip - camera);
-    let gap = depth_gap_weight(blade_dist, sample.a, parting.params.z);
-    let ground = ground_occluder_weight(root.y + parting.extras.y + 0.4, root.y, parting.extras.y);
     let dir_len = length(sample.rg);
     let away = select(sample.rg, sample.rg / dir_len, dir_len > 1e-4);
-    return away * (sample.b * gap * ground * parting.params.x);
+    // Occupancy is 0–1 after the CPU blur; extra lean so a 2–3× stamp reads from above.
+    return away * (sample.b * parting.params.x * 1.65);
 }
 
 fn world_part_xz(root: vec3<f32>) -> vec2<f32> {
@@ -181,7 +178,7 @@ fn parting_offset_xz(tip: vec3<f32>, root: vec3<f32>, plant_id: u32, distance_m:
         return depth_part_xz(tip, root, plant_id);
     }
     if (mode == PARTING_MODE_RASTER) {
-        return raster_part_xz(tip, root);
+        return raster_part_xz(root);
     }
     if (mode == PARTING_MODE_WORLD) {
         return world_part_xz(root);
@@ -219,8 +216,13 @@ fn vertex(vert: TemplateVertex, @builtin(instance_index) instance_index: u32) ->
     var prev = deform_along_curve(rest_pos, blade.root, t, wind_prev, blade.shape.z);
     let distance_m = length(view.world_position.xyz - blade.root);
     let part_xz = parting_offset_xz(world, blade.root, blade.plant_id, distance_m);
-    world = part_along_curve(world, blade.root, t, part_xz, blade.shape.z);
-    prev = part_along_curve(prev, blade.root, t, part_xz, blade.shape.z);
+    if (u32(parting.params.w) == PARTING_MODE_RASTER) {
+        world = part_along_length(world, blade.root, t, part_xz, blade.shape.z);
+        prev = part_along_length(prev, blade.root, t, part_xz, blade.shape.z);
+    } else {
+        world = part_along_curve(world, blade.root, t, part_xz, blade.shape.z);
+        prev = part_along_curve(prev, blade.root, t, part_xz, blade.shape.z);
+    }
     let n = ribbon_normal(rest, side);
     let pal = grass_variation_palette(blade.palette.xyz, blade.root.xz, blade.plant_id);
     out.position = view.clip_from_world * vec4<f32>(world, 1.0);

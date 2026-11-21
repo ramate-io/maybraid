@@ -15,7 +15,7 @@
 //! import vegetation_shaders::wesl::lod::{projected_height_px, lod_bucket, nested_keep};
 //! import vegetation_shaders::wesl::shading::{grass_albedo, grass_variation_palette, painterly_lit};
 //! import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform, GrassPartingUniform};
-//! import vegetation_shaders::wesl::parting::{part_along_curve, depth_gap_weight};
+//! import vegetation_shaders::wesl::parting::{part_along_curve, part_along_length, depth_gap_weight};
 //! ```
 //!
 //! [`import_smoke.wesl`](wesl/import_smoke.wesl) compiles this pattern.
@@ -58,7 +58,7 @@ pub use lod::{
 pub use parting::{
 	capsule_away_xz, capsule_behind_weight, capsule_lateral_xz, capsule_radial_weight, clip_to_uv,
 	depth_gap_weight, ground_occluder_weight, max_parting_displacement_m, part_along_curve,
-	parting_along, reconstruct_world, screen_part_direction, stronger_part_xz,
+	part_along_length, parting_along, reconstruct_world, screen_part_direction, stronger_part_xz,
 	world_part_from_screen, PartingCapsule, PartingEnvelope, PARTING_MODE_DEPTH, PARTING_MODE_OFF,
 	PARTING_MODE_RASTER, PARTING_MODE_WORLD,
 };

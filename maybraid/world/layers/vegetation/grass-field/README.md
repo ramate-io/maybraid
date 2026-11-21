@@ -59,7 +59,8 @@ nix develop --command cargo run -p vegetation-grass-field-playground --release -
 
 In-game `/` commands: `spawn meadow|clump|slope|crest`, `camera orbit|overhead|ground`,
 `wind still|gentle|set`, `lod host high|medium|low|ultra-low`, `shadows proxy|full|off`,
-`compare turf on|off`, `spawn parting`, `parting off|depth|raster|world`.
+`compare turf on|off`, `spawn parting`, `parting off|depth|raster|world`,
+`parting set --stamp-scale`.
 
 Captures (BotW meadow lighting):
 

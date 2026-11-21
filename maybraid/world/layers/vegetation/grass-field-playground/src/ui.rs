@@ -18,7 +18,7 @@ pub(crate) fn sync_command_status_text(
 ) {
 	status.0 = format!(
 		"blades {} | patches {} | wind {:.2} m @ {:.2}\n\
-		 parting {} str {:.2} r {:.2} falloff {:.2}",
+		 parting {} str {:.2} r {:.2} falloff {:.2} stamp {:.2}",
 		field.blades.len(),
 		field.patches.len(),
 		settings.wind.strength_m,
@@ -27,5 +27,6 @@ pub(crate) fn sync_command_status_text(
 		settings.parting.strength,
 		settings.parting.radius,
 		settings.parting.depth_falloff,
+		settings.parting.stamp_scale,
 	);
 }

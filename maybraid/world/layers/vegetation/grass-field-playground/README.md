@@ -20,7 +20,7 @@ WASD + mouse look (`L` toggles look). `/` opens commands. `F1` toggles the drawe
 | `shadows proxy\|full\|off` | Production default is proxy (no grass casters) |
 | `compare turf on\|off` / `compare grass on\|off` | Terrain mat vs generated ribbons |
 | `parting off\|depth\|raster\|world` | View-dependent tip swath. Default is **world** |
-| `parting set --strength --radius --falloff` | Metres of deflection, influence, behind-window |
+| `parting set --strength --radius --falloff --stamp-scale` | Metres of deflection, world influence, behind-window, raster stamp multiple |
 
 ## Captures
 
@@ -75,7 +75,19 @@ MAYBRAID_CAPTURE_DIR=maybraid/world/layers/vegetation/grass-field-playground/cap
 | `parting-world-near.png` / `parting-world-far.png` | World-field falloff |
 | `parting-depth-wind.png` / `parting-world-wind.png` | Parting composed with a frozen gust |
 | `parting-{off,depth,raster,world}-topdown.png` | Straight-down, same capsule — swath vs surrounding grass |
+| `parting-raster-topdown-scale{1,2,3}.png` | Raster top-down at stamp_scale 1× / 2× / 3× the capsule radius |
 | `parting-raster-topdown-trail.png` | Raster top-down with extra capsules along the walk line |
+| `parting-raster-ots-oversized.png` | OTS raster at 3× stamp — length-preserving lean, no slab smear |
+
+Raster stamps a ground disc of `occluder.radius × stamp_scale` (default **2.5**)
+with a soft falloff, then leans each stem away from the disc centre with a `t²`
+envelope while preserving blade length. `/parting set --stamp-scale 2.5`.
+
+```bash
+MAYBRAID_CAPTURE_SET=parting-raster-stamp \
+MAYBRAID_CAPTURE_DIR=maybraid/world/layers/vegetation/grass-field-playground/captures \
+  nix develop --command cargo run -p vegetation-grass-field-playground --release --locked
+```
 
 ## Honest measurements
 

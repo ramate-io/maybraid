@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
-use vegetation_grass_field::{GrassFieldSettings, GrassPartingMode};
+use vegetation_grass_field::{GrassFieldSettings, GrassPartingMode, GrassPartingSettings};
 use vegetation_shaders::wesl::WindInputs;
 
 use crate::camera::{yaw_pitch, CameraController};
@@ -54,6 +54,8 @@ pub struct CaptureShot {
 	pub capsule_distance_m: f32,
 	pub rock_distance_m: f32,
 	pub trail: bool,
+	/// `0` keeps the settings default. Raster scale stills set 1/2/3.
+	pub stamp_scale: f32,
 }
 
 impl CaptureShot {
@@ -69,6 +71,7 @@ impl CaptureShot {
 			capsule_distance_m: 1.35,
 			rock_distance_m: 0.95,
 			trail: false,
+			stamp_scale: 0.0,
 		}
 	}
 
@@ -84,6 +87,7 @@ impl CaptureShot {
 			capsule_distance_m: 1.35,
 			rock_distance_m: 0.95,
 			trail: false,
+			stamp_scale: 0.0,
 		}
 	}
 
@@ -104,6 +108,7 @@ impl CaptureShot {
 			capsule_distance_m,
 			rock_distance_m: 0.95,
 			trail: false,
+			stamp_scale: 0.0,
 		}
 	}
 
@@ -114,6 +119,11 @@ impl CaptureShot {
 
 	pub const fn with_trail(mut self) -> Self {
 		self.trail = true;
+		self
+	}
+
+	pub const fn with_stamp_scale(mut self, stamp_scale: f32) -> Self {
+		self.stamp_scale = stamp_scale;
 		self
 	}
 
@@ -143,6 +153,11 @@ impl CaptureShot {
 			if self.gust { WindInputs::botw_gust(1.85) } else { WindInputs::gentle_botw(0.85) };
 		settings.freeze_time_s = Some(if self.gust { 1.85 } else { 0.85 });
 		settings.parting.mode = self.parting_mode;
+		settings.parting.stamp_scale = if self.stamp_scale > 0.0 {
+			self.stamp_scale
+		} else {
+			GrassPartingSettings::default().stamp_scale
+		};
 	}
 }
 
@@ -280,11 +295,90 @@ pub const PARTING_CAPTURE_SHOTS: &[CaptureShot] = &[
 		PARTING_MID,
 	)
 	.with_trail(),
+	CaptureShot::parting(
+		"parting-raster-topdown-scale1",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_stamp_scale(1.0),
+	CaptureShot::parting(
+		"parting-raster-topdown-scale2",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_stamp_scale(2.0),
+	CaptureShot::parting(
+		"parting-raster-topdown-scale3",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_stamp_scale(3.0),
+	CaptureShot::parting(
+		"parting-raster-ots-oversized",
+		scene::PARTING_OTS,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_stamp_scale(3.0),
+];
+
+pub const RASTER_STAMP_CAPTURE_SHOTS: &[CaptureShot] = &[
+	CaptureShot::parting(
+		"parting-off-topdown",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Off,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-raster-topdown-scale1",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_stamp_scale(1.0),
+	CaptureShot::parting(
+		"parting-raster-topdown-scale2",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_stamp_scale(2.0),
+	CaptureShot::parting(
+		"parting-raster-topdown-scale3",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_stamp_scale(3.0),
+	CaptureShot::parting(
+		"parting-raster-topdown-trail",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_trail(),
+	CaptureShot::parting(
+		"parting-raster-ots-oversized",
+		scene::PARTING_OTS,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_stamp_scale(3.0),
+	CaptureShot::parting(
+		"parting-raster-topdown",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	),
 ];
 
 pub fn active_capture_shots() -> &'static [CaptureShot] {
 	match std::env::var(CAPTURE_SET_ENV).as_deref() {
 		Ok("parting") => PARTING_CAPTURE_SHOTS,
+		Ok("parting-raster-stamp") => RASTER_STAMP_CAPTURE_SHOTS,
 		_ => GRASS_CAPTURE_SHOTS,
 	}
 }
@@ -493,6 +587,26 @@ mod tests {
 			.find(|shot| shot.name == "parting-raster-topdown")
 			.unwrap();
 		assert!(!raster.trail);
+		for (name, scale) in [
+			("parting-raster-topdown-scale1", 1.0),
+			("parting-raster-topdown-scale2", 2.0),
+			("parting-raster-topdown-scale3", 3.0),
+		] {
+			let shot = PARTING_CAPTURE_SHOTS.iter().find(|shot| shot.name == name).unwrap();
+			assert_eq!(shot.camera, scene::PARTING_TOPDOWN.0);
+			assert_eq!(shot.look_at, scene::PARTING_TOPDOWN.1);
+			assert_eq!(shot.parting_mode, GrassPartingMode::Raster);
+			assert!((shot.stamp_scale - scale).abs() < 1e-5);
+		}
+		let oversized = PARTING_CAPTURE_SHOTS
+			.iter()
+			.find(|shot| shot.name == "parting-raster-ots-oversized")
+			.unwrap();
+		assert_eq!(oversized.camera, scene::PARTING_OTS.0);
+		assert_eq!(oversized.parting_mode, GrassPartingMode::Raster);
+		assert!((oversized.stamp_scale - 3.0).abs() < 1e-5);
+		assert_eq!(RASTER_STAMP_CAPTURE_SHOTS.len(), 7);
+		assert_eq!(RASTER_STAMP_CAPTURE_SHOTS[0].parting_mode, GrassPartingMode::Off);
 		let pose = camera_looking_at(scene::PARTING_TOPDOWN.0, scene::PARTING_TOPDOWN.1);
 		assert!(pose.translation.is_finite());
 		let dir = (scene::PARTING_TOPDOWN.1 - scene::PARTING_TOPDOWN.0).normalize();

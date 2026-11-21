@@ -149,6 +149,30 @@ pub fn part_along_curve(rest: Vec3, root: Vec3, t: f32, part_xz: Vec2, stiffness
 	rest + Vec3::new(part_xz.x * weight, -part_xz.length() * weight * 0.06, part_xz.y * weight)
 }
 
+/// Raster stamp lean: `t²` along the blade, length-preserving, away from centre.
+pub fn part_along_length(rest: Vec3, root: Vec3, t: f32, part_xz: Vec2, stiffness: f32) -> Vec3 {
+	let along = t.clamp(0.0, 1.0);
+	if along <= 1e-4 {
+		return root;
+	}
+	let from_root = rest - root;
+	let rest_len = from_root.length();
+	if rest_len < 1e-5 {
+		return root;
+	}
+	let lean_m = part_xz.length() * parting_along(along, stiffness);
+	if lean_m < 1e-6 {
+		return rest;
+	}
+	let away = part_xz.normalize_or(Vec2::X);
+	let bent = from_root + Vec3::new(away.x, 0.0, away.y) * lean_m;
+	let bent_len = bent.length();
+	if bent_len < 1e-5 {
+		return rest;
+	}
+	root + bent * (rest_len / bent_len)
+}
+
 /// One world-space capsule used by the CPU mirror and playground tests.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PartingCapsule {
@@ -225,6 +249,64 @@ mod tests {
 		let mid = part_along_curve(rest_mid, root, 0.5, part, 0.0);
 		let tip = part_along_curve(rest_tip, root, 1.0, part, 0.0);
 		assert!((tip.x - rest_tip.x).abs() > (mid.x - rest_mid.x).abs());
+		Ok(())
+	}
+
+	#[test]
+	fn raster_length_bend_pins_the_root() -> anyhow::Result<()> {
+		let root = Vec3::new(1.2, 0.05, -0.4);
+		let rest = root + Vec3::Y * 0.02;
+		let parted = part_along_length(rest, root, 0.0, Vec2::new(1.4, 0.3), 0.0);
+		assert_eq!(parted, root);
+		Ok(())
+	}
+
+	#[test]
+	fn raster_length_bend_grows_monotonically_along_the_blade() -> anyhow::Result<()> {
+		let root = Vec3::ZERO;
+		let part = Vec2::new(0.85, 0.0);
+		let mut previous = 0.0;
+		for step in 1..=8 {
+			let t = step as f32 / 8.0;
+			let rest = root + Vec3::Y * (1.12 * t);
+			let parted = part_along_length(rest, root, t, part, 0.0);
+			let lateral = (parted.x - rest.x).abs();
+			assert!(
+				lateral + 1e-5 >= previous,
+				"lean must not shrink along the blade: t={t} lateral={lateral} prev={previous}"
+			);
+			previous = lateral;
+		}
+		assert!(previous > 0.2, "tip lean should be obvious, got {previous}");
+		Ok(())
+	}
+
+	#[test]
+	fn raster_length_bend_preserves_stem_length() -> anyhow::Result<()> {
+		let root = Vec3::new(0.4, 0.0, 1.1);
+		let part = Vec2::new(-0.7, 0.25);
+		for t in [0.15_f32, 0.4, 0.7, 1.0] {
+			let rest = root + Vec3::new(0.02 * t, 1.12 * t, 0.01 * t);
+			let parted = part_along_length(rest, root, t, part, 0.05);
+			let rest_len = rest.distance(root);
+			let parted_len = parted.distance(root);
+			assert!(
+				(parted_len - rest_len).abs() < 1e-4,
+				"t={t} rest_len={rest_len} parted_len={parted_len}"
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn raster_length_bend_points_away_from_the_stamp_centre() -> anyhow::Result<()> {
+		let root = Vec3::ZERO;
+		let rest = Vec3::Y * 1.12;
+		let left = part_along_length(rest, root, 1.0, Vec2::new(-0.6, 0.0), 0.0);
+		let right = part_along_length(rest, root, 1.0, Vec2::new(0.6, 0.0), 0.0);
+		assert!(left.x < rest.x, "left stamp should peel −X, got {left:?}");
+		assert!(right.x > rest.x, "right stamp should peel +X, got {right:?}");
+		assert!(left.y < rest.y && right.y < rest.y, "tips should lie down, not stretch");
 		Ok(())
 	}
 

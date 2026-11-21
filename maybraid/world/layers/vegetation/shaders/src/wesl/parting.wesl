@@ -169,3 +169,34 @@ fn part_along_curve(
     }
     return parted;
 }
+
+/// Raster stamp lean: push along the blade normal from the root, preserve length.
+/// `part_xz` is the pre-envelope metres of tip lean (mask weight × strength).
+fn part_along_length(
+    rest: vec3<f32>,
+    root: vec3<f32>,
+    t: f32,
+    part_xz: vec2<f32>,
+    stiffness: f32,
+) -> vec3<f32> {
+    let along = saturate(t);
+    if (along <= 1e-4) {
+        return root;
+    }
+    let from_root = rest - root;
+    let rest_len = length(from_root);
+    if (rest_len < 1e-5) {
+        return root;
+    }
+    let lean_m = length(part_xz) * parting_along(along, stiffness);
+    if (lean_m < 1e-6) {
+        return rest;
+    }
+    let away = part_xz / max(length(part_xz), 1e-5);
+    let bent = from_root + vec3<f32>(away.x, 0.0, away.y) * lean_m;
+    let bent_len = length(bent);
+    if (bent_len < 1e-5) {
+        return rest;
+    }
+    return root + bent * (rest_len / bent_len);
+}
