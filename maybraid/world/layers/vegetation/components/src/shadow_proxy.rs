@@ -25,7 +25,7 @@ use crate::VegetationComponents;
 /// Layer reserved for canopy shadow proxies. Isolated capture cameras use 31.
 pub const SHADOW_PROXY_RENDER_LAYER: usize = 30;
 
-/// `MAYBRAID_CANOPY_SHADOWS` overlay: proxy (default), full leaf casters, or none.
+/// `MAYBRAID_CANOPY_SHADOWS` process-start caster policy (proxy by default).
 pub const ENV_CANOPY_SHADOWS: &str = "MAYBRAID_CANOPY_SHADOWS";
 
 /// How canopy participates in sun shadow maps.
@@ -38,6 +38,8 @@ pub enum CanopyShadowMode {
 	Full,
 	/// Actual StickNode geometry plus balls fitted to authored foliage; no leaf cards.
 	Fitted,
+	/// The same fitted canopy balls, with actual sticks still excluded.
+	CanopyFit,
 	/// No canopy casters and no realized proxies (current main + shadows).
 	Off,
 }
@@ -52,9 +54,10 @@ impl CanopyShadowMode {
 			"proxy" => Some(Self::Proxy),
 			"full" => Some(Self::Full),
 			"fitted" => Some(Self::Fitted),
+			"canopy-fit" => Some(Self::CanopyFit),
 			"off" => Some(Self::Off),
 			other => {
-				eprintln!("[{ENV_CANOPY_SHADOWS}] unknown {other:?} (use proxy|full|fitted|off)");
+				eprintln!("[{ENV_CANOPY_SHADOWS}] unknown {other:?} (use proxy|full|fitted|canopy-fit|off)");
 				None
 			}
 		}
@@ -75,7 +78,16 @@ impl CanopyShadowMode {
 	}
 
 	pub fn emit_proxies(self) -> bool {
-		matches!(self, Self::Proxy | Self::Fitted)
+		matches!(self, Self::Proxy | Self::Fitted | Self::CanopyFit)
+	}
+
+	/// Shared proxy geometry for the full-stick and canopy-only experiments.
+	pub fn fits_canopy(self) -> bool {
+		matches!(self, Self::Fitted | Self::CanopyFit)
+	}
+
+	pub fn actual_sticks_cast(self) -> bool {
+		matches!(self, Self::Fitted)
 	}
 
 	pub fn canopy_casts(self) -> bool {
@@ -87,6 +99,7 @@ impl CanopyShadowMode {
 			Self::Proxy => "proxy",
 			Self::Full => "full",
 			Self::Fitted => "fitted",
+			Self::CanopyFit => "canopy-fit",
 			Self::Off => "off",
 		}
 	}
@@ -127,7 +140,7 @@ fn shadow_proxy_scene_for_mode(
 ) -> Option<Box<dyn Scene>> {
 	// Preserve legacy eligibility: authored foliage alone must not add new plant populations.
 	let lod = vegetation.structural_lod()?;
-	let transform = if mode == CanopyShadowMode::Fitted {
+	let transform = if mode.fits_canopy() {
 		fitted_canopy_transform(vegetation)?
 	} else {
 		transform_from_structural(lod)
@@ -212,7 +225,7 @@ pub fn shadow_proxy_scenes_from_foliage(
 ) -> Vec<Box<dyn Scene>> {
 	let mut scenes = Vec::new();
 	for node in nodes {
-		if CanopyShadowMode::configured() == CanopyShadowMode::Fitted
+		if CanopyShadowMode::configured().fits_canopy()
 			&& matches!(&node.material.name, MaterialId::Name(name) if name == crate::STICK_MATERIAL)
 		{
 			continue;
@@ -336,6 +349,18 @@ mod tests {
 	}
 
 	#[test]
+	fn canopy_fit_shares_proxy_geometry_but_keeps_actual_sticks_excluded() {
+		let mode = CanopyShadowMode::CanopyFit;
+		assert_eq!(CanopyShadowMode::parse_env("canopy-fit"), Some(mode));
+		assert_eq!(mode.label(), "canopy-fit");
+		assert!(mode.emit_proxies() && mode.fits_canopy());
+		assert!(!mode.canopy_casts() && !mode.actual_sticks_cast());
+		assert!(CanopyShadowMode::Fitted.fits_canopy());
+		assert!(CanopyShadowMode::Fitted.actual_sticks_cast());
+		assert_eq!(CanopyShadowMode::default(), CanopyShadowMode::Proxy);
+	}
+
+	#[test]
 	fn fitted_small_bush_uses_canopy_not_whole_plant_radius() -> anyhow::Result<()> {
 		struct Bush;
 		impl VegetationComponents for Bush {
@@ -403,26 +428,32 @@ mod tests {
 				})
 				.collect(),
 		};
-		let scene = shadow_proxy_scene_for_mode(&plant, CanopyShadowMode::Fitted)
-			.ok_or_else(|| anyhow::anyhow!("missing eligible canopy"))?;
-		let mut app = App::new();
-		app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin::default()));
-		let entity = app.world_mut().spawn_scene(scene).map_err(|e| anyhow::anyhow!("{e:?}"))?.id();
-		let mut proxies = app.world_mut().query::<&CanopyShadowProxy>();
-		assert_eq!(proxies.iter(app.world()).count(), 1);
-		let fit = app
-			.world()
-			.get::<Transform>(entity)
-			.ok_or_else(|| anyhow::anyhow!("missing pose"))?;
-		assert!(fit.translation.distance(Vec3::new(0.495, 2.0, 0.0)) < 1e-5);
-		assert!(fit.scale.distance(Vec3::new(0.545, 0.05, 0.05)) < 1e-5);
+		for mode in [CanopyShadowMode::Fitted, CanopyShadowMode::CanopyFit] {
+			let scene = shadow_proxy_scene_for_mode(&plant, mode)
+				.ok_or_else(|| anyhow::anyhow!("missing eligible canopy"))?;
+			let mut app = App::new();
+			app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin::default()));
+			let entity =
+				app.world_mut().spawn_scene(scene).map_err(|e| anyhow::anyhow!("{e:?}"))?.id();
+			let mut proxies = app.world_mut().query::<&CanopyShadowProxy>();
+			assert_eq!(proxies.iter(app.world()).count(), 1);
+			let fit = app
+				.world()
+				.get::<Transform>(entity)
+				.ok_or_else(|| anyhow::anyhow!("missing pose"))?;
+			assert!(fit.translation.distance(Vec3::new(0.495, 2.0, 0.0)) < 1e-5);
+			assert!(fit.scale.distance(Vec3::new(0.545, 0.05, 0.05)) < 1e-5);
+		}
 		plant.eligible = false;
-		for mode in [CanopyShadowMode::Proxy, CanopyShadowMode::Fitted] {
+		for mode in [CanopyShadowMode::Proxy, CanopyShadowMode::Fitted, CanopyShadowMode::CanopyFit]
+		{
 			assert!(shadow_proxy_scene_for_mode(&plant, mode).is_none());
 		}
 		plant.eligible = true;
 		plant.nodes.clear();
-		assert!(shadow_proxy_scene_for_mode(&plant, CanopyShadowMode::Fitted).is_none());
+		for mode in [CanopyShadowMode::Fitted, CanopyShadowMode::CanopyFit] {
+			assert!(shadow_proxy_scene_for_mode(&plant, mode).is_none());
+		}
 		assert!(shadow_proxy_scene_for_mode(&plant, CanopyShadowMode::Proxy).is_some());
 		Ok(())
 	}

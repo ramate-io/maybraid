@@ -138,7 +138,7 @@ pub fn inherit_not_shadow_caster_on_meshes(
 			cursor = child_of.parent();
 			if marked.contains(cursor)
 				|| (sticks.contains(cursor)
-					&& !mode.as_ref().is_some_and(|m| **m == CanopyShadowMode::Fitted))
+					&& !mode.as_ref().is_some_and(|m| m.actual_sticks_cast()))
 			{
 				commands.entity(entity).insert(NotShadowCaster);
 				break;

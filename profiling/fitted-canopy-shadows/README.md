@@ -8,6 +8,14 @@ Canopy balls use authored High foliage placements and composed collection bounds
 
 Individual-plant fitted scene generation reads authored High foliage and fits collections on construction, not per frame. This adds generation work and can change caster count. The native admission request must report actual realized proxy/stick counts and exclusions; inspect representative bush, broadleaf and palm/conifer geometry before performance acceptance. No cache, new shadow LOD policy, or automatic quality change is included.
 
+## Canopy-fit-only arm (source staged)
+
+`MAYBRAID_CANOPY_SHADOWS=canopy-fit` uses exactly the bounded authored canopy envelope and coarse bark-column proxy exclusion of `fitted`, while retaining the existing real-stick casting exclusions. It never enables visual leaf/frond cards. This isolates the canopy-fit change from actual trunk/branch casting; the old `fitted` token still means fitted canopy plus actual sticks. Proxy remains the default, and Full/Off behavior is unchanged.
+
+The new mode shares the same construction-time fit, with at most one marker per legacy-eligible normal individual plant and no marker for empty/invalid authored foliage. Generic coarse-site placements remain unchanged; aggregate sphere counts may be lower than Proxy. No per-frame scan, near-stick distance policy or new LOD framework is added.
+
+The focused policy regression and actual-stick material/ancestor fixture now cover canopy-fit; the many-puff scene fixture checks identical one-envelope transforms in both fitted modes. These source changes have formatting/diff checks only; new Rust tests and native performance are pending. The [existing validation report](VALIDATION.md) covers the earlier full-stick revision, not this new arm. Next comparison: fresh same-binary Proxy versus canopy-fit at 2048, receiving ON, followed by the same ordinary long walk. Only after those data should near-only sticks be considered.
+
 ## Independent map-resolution control
 
 `MAYBRAID_EXPERIMENT_SHADOW_MAP_SIZE=1024` changes only the High shadow-map resolution. It keeps four cascades and the normal High 150 m range. It does not select the Low preset (512 pixels / 60 m). Unset is the existing 2048 High setting. The override accepts only the explicit `1024` token and has no effect on Low or Off.

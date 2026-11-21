@@ -4,6 +4,8 @@ Keep [#1649](https://github.com/ramate-io/maybraid/pull/1649) draft and opt-in. 
 
 The separate receiving fix is [#1632](https://github.com/ramate-io/maybraid/pull/1632). All arms here have receiving ON. This experiment preserves Proxy as the default; `MAYBRAID_CANOPY_SHADOWS=fitted` opts in. The independent `MAYBRAID_EXPERIMENT_SHADOW_MAP_SIZE=1024` changes High resolution alone, preserving four cascades and 150 m range.
 
+The later `canopy-fit` source arm is described in [README](README.md); none of the measurements below include it.
+
 ## Short comparison
 
 One ordered, approximately 15-second proxy-2048 → fitted-2048 → fitted-1024 comparison:
@@ -64,4 +66,4 @@ The initial per-puff prototype produced 66,939 versus 5,367 spheres (12.47×) an
 
 Generic coarse-site visual placement is preserved; fitted mode still excludes bark-colored coarse-column shadow candidates. Independent `NotShadowCaster` opt-outs stay authoritative; optional Full is unchanged. Fitting traverses authored High data once per scene/chunk emission, not per frame; its generation cost has not been separately attributed.
 
-The next useful experiment is canopy fitting alone, then near-only actual sticks with canopy proxies farther away if profiling supports it. Neither is implemented here. The visual improvement is real in the recorded views; the measured long-walk cost keeps this candidate opt-in.
+The next useful experiment is canopy fitting alone, then near-only actual sticks with canopy proxies farther away if profiling supports it. Neither was implemented in the captured revision. The visual improvement is real in the recorded views; the measured long-walk cost keeps this candidate opt-in.

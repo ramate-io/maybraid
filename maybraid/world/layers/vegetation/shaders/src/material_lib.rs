@@ -92,9 +92,9 @@ impl MaterialLib for VegetationMaterialLib<'_, '_> {
 			}
 			MaterialId::Name(name) if name == STICK_MATERIAL => {
 				let handle = self.resolve_stick(material_ref);
-				let fitted =
-					self.canopy_shadows.as_ref().is_some_and(|m| **m == CanopyShadowMode::Fitted);
-				let actual_stick = fitted && {
+				let cast_sticks =
+					self.canopy_shadows.as_ref().is_some_and(|m| m.actual_sticks_cast());
+				let actual_stick = cast_sticks && {
 					let mut actual_stick = false;
 					let mut independent_exclusion = false;
 					let mut reached_root = false;
@@ -255,7 +255,8 @@ mod tests {
 	}
 	#[test]
 	fn fitted_casts_actual_sticks_only_and_honors_ancestor_opt_out() {
-		for mode in [CanopyShadowMode::Proxy, CanopyShadowMode::Fitted] {
+		for mode in [CanopyShadowMode::Proxy, CanopyShadowMode::Fitted, CanopyShadowMode::CanopyFit]
+		{
 			let mut app = App::new();
 			app.add_plugins((MinimalPlugins, AssetPlugin::default()))
 				.init_asset::<StandardMaterial>()
