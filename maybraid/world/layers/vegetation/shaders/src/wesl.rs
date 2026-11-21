@@ -28,7 +28,7 @@
 //! if grass does not need it. Keep wood/foliage entry points distinct from grass.
 
 use bevy::prelude::*;
-use bevy::shader::load_shader_library;
+use bevy::shader::{load_shader_library, Shader};
 
 pub mod curve;
 pub mod hash;
@@ -79,6 +79,13 @@ pub struct VegetationWeslPlugin;
 
 impl Plugin for VegetationWeslPlugin {
 	fn build(&self, app: &mut App) {
+		// Headless HCSG tests add this plugin through `VegetationViewPlugin` without
+		// `RenderPlugin`. `load_shader_library!` allocates `Shader` handles immediately.
+		// `init_asset` is not idempotent — calling it after `RenderPlugin` replaces
+		// `Assets<Shader>` and panics on insert (`len is 26, index is 26`).
+		if !app.world().contains_resource::<Assets<Shader>>() {
+			app.init_asset::<Shader>();
+		}
 		load_shader_library!(app, "wesl/hash.wesl");
 		load_shader_library!(app, "wesl/curve.wesl");
 		load_shader_library!(app, "wesl/wind.wesl");
@@ -118,6 +125,16 @@ mod tests {
 
 	#[test]
 	fn embedded_wesl_library_registers_with_asset_plugin() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.add_plugins(AssetPlugin::default());
+		app.add_plugins(VegetationWeslPlugin);
+		app.update();
+		assert!(app.world().get_resource::<Assets<Shader>>().is_some());
+	}
+
+	#[test]
+	fn does_not_reinitialize_shader_assets_after_render_like_hosts() {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins);
 		app.add_plugins(AssetPlugin::default());
