@@ -7,7 +7,8 @@ use bevy::prelude::*;
 use bevy::render::renderer::{RenderAdapter, RenderDevice};
 use bevy::render::RenderApp;
 use vegetation_groves::temperate_lower_massives::{
-	configure_storybook_field_tile, StorybookFieldSample, MAX_STORYBOOK_FIELD_TREES,
+	configure_storybook_field_tile, scout_storybook_field_tile, StorybookFieldSample,
+	MAX_STORYBOOK_FIELD_TREES,
 };
 use vegetation_tree_field::{
 	requested_world_tree_mode, supports_world_tree_field, TreeFieldPlugin, TreeFieldSettings,
@@ -19,6 +20,11 @@ struct StorybookFieldTrial(Vec2);
 
 pub(super) fn register_world_tree_field(app: &mut App) {
 	let mode = requested_world_tree_mode();
+	if mode.is_none() && std::env::var("MAYBRAID_EXPERIMENT_TREE_FIELD_SCOUT").as_deref() == Ok("1")
+	{
+		scout_storybook_field_tile();
+		return;
+	}
 	let tile = std::env::var("MAYBRAID_EXPERIMENT_TREE_FIELD_TILE").ok();
 	let Some(tile) = tile.as_deref().and_then(parse_tile) else {
 		if mode.is_some() {

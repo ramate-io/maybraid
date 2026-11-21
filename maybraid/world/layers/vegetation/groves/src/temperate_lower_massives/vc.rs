@@ -87,11 +87,24 @@ remixed_sbs_plant!(
 
 /// Upper bound for an explicitly selected grove tile in the native rendering trial.
 pub const MAX_STORYBOOK_FIELD_TREES: usize = 64;
-static STORYBOOK_FIELD_TILE: OnceLock<(Vec2, bool)> = OnceLock::new();
+enum StorybookFieldTrial {
+	Tile { xz: Vec2, replace_kits: bool },
+	Scout,
+}
+
+static STORYBOOK_FIELD_TRIAL: OnceLock<StorybookFieldTrial> = OnceLock::new();
 
 /// Select one tile for a placement comparison. The renderer admits replacement separately.
 pub fn configure_storybook_field_tile(xz: Vec2, replace_kits: bool) -> bool {
-	xz.is_finite() && STORYBOOK_FIELD_TILE.set((xz, replace_kits)).is_ok()
+	xz.is_finite()
+		&& STORYBOOK_FIELD_TRIAL
+			.set(StorybookFieldTrial::Tile { xz, replace_kits })
+			.is_ok()
+}
+
+/// Report one eligible High LOD tile while retaining the normal grove kits.
+pub fn scout_storybook_field_tile() {
+	let _ = STORYBOOK_FIELD_TRIAL.set(StorybookFieldTrial::Scout);
 }
 
 /// Exact inputs from the existing world generator; the rendering adapter owns its recipe.
@@ -144,7 +157,14 @@ impl TemperateLowerMassives {
 	}
 
 	fn uses_tree_field(&self, level: LodSceneLevel) -> bool {
-		let Some(&(tile, replace_kits)) = STORYBOOK_FIELD_TILE.get() else { return false };
+		let Some(trial) = STORYBOOK_FIELD_TRIAL.get() else { return false };
+		let (tile, replace_kits) = match *trial {
+			StorybookFieldTrial::Scout => {
+				self.report_scout_tile(level);
+				return false;
+			}
+			StorybookFieldTrial::Tile { xz, replace_kits } => (xz, replace_kits),
+		};
 		if !self.extent.owns_center_xz(Vec3::new(tile.x, 0., tile.y)) {
 			return false;
 		}
@@ -170,6 +190,31 @@ impl TemperateLowerMassives {
 			field = eligible && replace_kits, "natural Storybook tile inventory"
 		);
 		eligible && replace_kits
+	}
+
+	fn report_scout_tile(&self, level: LodSceneLevel) {
+		static REPORTED: OnceLock<()> = OnceLock::new();
+		if level != LodSceneLevel::High || REPORTED.get().is_some() {
+			return;
+		}
+		let storybooks = self
+			.plants
+			.iter()
+			.filter(|plant| matches!(&plant.kind, TemperateLowerMassivesKind::Storybook(_)))
+			.count();
+		if (4..=MAX_STORYBOOK_FIELD_TREES).contains(&storybooks) {
+			REPORTED.get_or_init(|| {
+				let min = self.extent.min();
+				let max = self.extent.max();
+				let center = (min + max) * 0.5;
+				info!(
+					target: "maybraid.tree_field",
+					min_x = min.x, min_z = min.z, max_x = max.x, max_z = max.z,
+					center_x = center.x, center_z = center.z, storybooks, woody_plants = self.plants.len(),
+					"natural Storybook scout tile"
+				);
+			});
+		}
 	}
 
 	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<SceneChunk> {
