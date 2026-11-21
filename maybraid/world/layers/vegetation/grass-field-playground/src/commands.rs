@@ -58,6 +58,7 @@ pub enum CameraCommand {
 	Orbit,
 	Overhead,
 	Ground,
+	Topdown,
 }
 
 #[derive(Clone, Subcommand)]
@@ -198,12 +199,15 @@ impl CameraCommand {
 			Self::Orbit => (Vec3::new(10.0, 3.2, 16.0), Vec3::new(8.0, 0.3, 8.0)),
 			Self::Overhead => (Vec3::new(12.0, 22.0, 12.0), Vec3::new(12.0, 0.0, 12.0)),
 			Self::Ground => (Vec3::new(6.0, 0.55, 7.5), Vec3::new(10.0, 0.35, 12.0)),
+			Self::Topdown => scene::PARTING_TOPDOWN,
 		};
 		commands.queue(move |world: &mut World| {
 			let mut cameras =
 				world.query_filtered::<(&mut Transform, &mut CameraController), With<Camera3d>>();
 			if let Ok((mut transform, mut controller)) = cameras.single_mut(world) {
-				*transform = Transform::from_translation(from).looking_at(look, Vec3::Y);
+				let dir = (look - from).normalize_or(Vec3::NEG_Y);
+				let up = if dir.dot(Vec3::Y).abs() > 0.95 { Vec3::NEG_Z } else { Vec3::Y };
+				*transform = Transform::from_translation(from).looking_at(look, up);
 				let (yaw, pitch) = yaw_pitch(transform.rotation);
 				controller.yaw = yaw;
 				controller.pitch = pitch;
@@ -213,6 +217,7 @@ impl CameraCommand {
 			Self::Orbit => "camera orbit".into(),
 			Self::Overhead => "camera overhead".into(),
 			Self::Ground => "camera ground".into(),
+			Self::Topdown => "camera topdown".into(),
 		};
 	}
 }
@@ -369,6 +374,8 @@ mod tests {
 		assert!(matches!(command, PlaygroundCommand::Spawn(SpawnCommand::Meadow)));
 		let command = <PlaygroundCommand as GameCommand>::parse_line("camera ground")?;
 		assert!(matches!(command, PlaygroundCommand::Camera(CameraCommand::Ground)));
+		let command = <PlaygroundCommand as GameCommand>::parse_line("camera topdown")?;
+		assert!(matches!(command, PlaygroundCommand::Camera(CameraCommand::Topdown)));
 		let command = <PlaygroundCommand as GameCommand>::parse_line("wind set --strength 0.3")?;
 		assert!(matches!(command, PlaygroundCommand::Wind(WindCommand::Set { .. })));
 		let command = <PlaygroundCommand as GameCommand>::parse_line("parting depth")?;

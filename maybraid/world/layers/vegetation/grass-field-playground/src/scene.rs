@@ -20,6 +20,10 @@ pub const PARTING_GROUND: (Vec3, Vec3) =
 	(Vec3::new(8.05, 0.38, 8.85), Vec3::new(10.4, 0.55, 11.35));
 /// Over-the-shoulder, same subject.
 pub const PARTING_OTS: (Vec3, Vec3) = (Vec3::new(7.15, 1.28, 8.05), Vec3::new(10.35, 0.85, 11.4));
+/// Top-down over the mid-distance capsule (~5.9 m up, ~85° pitch).
+/// Small −Z offset keeps `looking_at` well-defined; 55° FOV frames ~6 m of ground.
+pub const PARTING_TOPDOWN: (Vec3, Vec3) =
+	(Vec3::new(9.62, 5.9, 10.00), Vec3::new(9.62, 0.05, 10.54));
 
 pub fn parting_capsule_at(distance_behind_m: f32) -> Vec3 {
 	let grass = Vec3::new(8.7, 0.0, 9.55);
@@ -72,6 +76,16 @@ pub fn spawn_parting_scene_in_world(
 	capsule_distance_m: f32,
 	rock_distance_m: f32,
 ) {
+	spawn_parting_scene_with_trail(world, capsule_distance_m, rock_distance_m, 0);
+}
+
+/// Extra character capsules along the approach, for raster trail stills.
+pub fn spawn_parting_scene_with_trail(
+	world: &mut World,
+	capsule_distance_m: f32,
+	rock_distance_m: f32,
+	trail_steps: u32,
+) {
 	clear_patches(world);
 	clear_parting_props(world);
 	spawn_kind(world, PatchKind::Parting);
@@ -89,14 +103,14 @@ pub fn spawn_parting_scene_in_world(
 		perceptual_roughness: 0.9,
 		..default()
 	});
-	world.spawn((
-		Name::new("parting-capsule"),
-		PartingProp,
-		GrassPartingOccluder::character(),
-		Mesh3d(capsule_mesh),
-		MeshMaterial3d(skin),
-		Transform::from_translation(capsule),
-	));
+	spawn_parting_capsule(world, capsule, capsule_mesh.clone(), skin.clone());
+	for step in 1..=trail_steps {
+		let along = capsule_distance_m + trail_step_offset_m(step);
+		if along < 0.15 {
+			continue;
+		}
+		spawn_parting_capsule(world, parting_capsule_at(along), capsule_mesh.clone(), skin.clone());
+	}
 	world.spawn((
 		Name::new("parting-rock"),
 		PartingProp,
@@ -104,6 +118,28 @@ pub fn spawn_parting_scene_in_world(
 		Mesh3d(rock_mesh),
 		MeshMaterial3d(stone),
 		Transform::from_translation(rock),
+	));
+}
+
+fn trail_step_offset_m(step: u32) -> f32 {
+	let pair = ((step + 1) / 2) as f32;
+	let sign = if step % 2 == 1 { -1.0 } else { 1.0 };
+	sign * pair * 0.55
+}
+
+fn spawn_parting_capsule(
+	world: &mut World,
+	translation: Vec3,
+	mesh: Handle<Mesh>,
+	material: Handle<StandardMaterial>,
+) {
+	world.spawn((
+		Name::new("parting-capsule"),
+		PartingProp,
+		GrassPartingOccluder::character(),
+		Mesh3d(mesh),
+		MeshMaterial3d(material),
+		Transform::from_translation(translation),
 	));
 }
 

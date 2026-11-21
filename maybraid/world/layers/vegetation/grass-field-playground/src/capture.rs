@@ -53,6 +53,7 @@ pub struct CaptureShot {
 	pub parting_mode: GrassPartingMode,
 	pub capsule_distance_m: f32,
 	pub rock_distance_m: f32,
+	pub trail: bool,
 }
 
 impl CaptureShot {
@@ -67,6 +68,7 @@ impl CaptureShot {
 			parting_mode: GrassPartingMode::Off,
 			capsule_distance_m: 1.35,
 			rock_distance_m: 0.95,
+			trail: false,
 		}
 	}
 
@@ -81,6 +83,7 @@ impl CaptureShot {
 			parting_mode: GrassPartingMode::Off,
 			capsule_distance_m: 1.35,
 			rock_distance_m: 0.95,
+			trail: false,
 		}
 	}
 
@@ -100,6 +103,7 @@ impl CaptureShot {
 			parting_mode: mode,
 			capsule_distance_m,
 			rock_distance_m: 0.95,
+			trail: false,
 		}
 	}
 
@@ -108,13 +112,19 @@ impl CaptureShot {
 		self
 	}
 
+	pub const fn with_trail(mut self) -> Self {
+		self.trail = true;
+		self
+	}
+
 	pub fn apply_world(self, world: &mut World) {
 		match self.scene {
 			CaptureScene::Parting => {
-				scene::spawn_parting_scene_in_world(
+				scene::spawn_parting_scene_with_trail(
 					world,
 					self.capsule_distance_m,
 					self.rock_distance_m,
+					if self.trail { 4 } else { 0 },
 				);
 			}
 			CaptureScene::Meadow if self.grass => {
@@ -239,6 +249,37 @@ pub const PARTING_CAPTURE_SHOTS: &[CaptureShot] = &[
 		PARTING_MID,
 	)
 	.with_gust(),
+	CaptureShot::parting(
+		"parting-off-topdown",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Off,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-depth-topdown",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Depth,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-raster-topdown",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-world-topdown",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::World,
+		PARTING_MID,
+	),
+	CaptureShot::parting(
+		"parting-raster-topdown-trail",
+		scene::PARTING_TOPDOWN,
+		GrassPartingMode::Raster,
+		PARTING_MID,
+	)
+	.with_trail(),
 ];
 
 pub fn active_capture_shots() -> &'static [CaptureShot] {
@@ -348,12 +389,18 @@ pub(crate) fn tick_capture(
 impl CaptureView<'_, '_> {
 	fn apply_camera(&mut self, shot: &CaptureShot) {
 		if let Ok((mut transform, mut controller)) = self.cameras.single_mut() {
-			*transform = Transform::from_translation(shot.camera).looking_at(shot.look_at, Vec3::Y);
+			*transform = camera_looking_at(shot.camera, shot.look_at);
 			let (yaw, pitch) = yaw_pitch(transform.rotation);
 			controller.yaw = yaw;
 			controller.pitch = pitch;
 		}
 	}
+}
+
+fn camera_looking_at(from: Vec3, look_at: Vec3) -> Transform {
+	let dir = (look_at - from).normalize_or(Vec3::NEG_Y);
+	let up = if dir.dot(Vec3::Y).abs() > 0.95 { Vec3::NEG_Z } else { Vec3::Y };
+	Transform::from_translation(from).looking_at(look_at, up)
 }
 
 #[cfg(test)]
@@ -416,6 +463,40 @@ mod tests {
 		assert_eq!(off.camera, on.camera);
 		assert_eq!(off.look_at, on.look_at);
 		assert_ne!(off.parting_mode, on.parting_mode);
+		for name in [
+			"parting-off-topdown",
+			"parting-depth-topdown",
+			"parting-raster-topdown",
+			"parting-world-topdown",
+			"parting-raster-topdown-trail",
+		] {
+			assert!(PARTING_CAPTURE_SHOTS.iter().any(|shot| shot.name == name), "missing {name}");
+		}
+		let topdown: Vec<_> = PARTING_CAPTURE_SHOTS
+			.iter()
+			.filter(|shot| shot.name.ends_with("-topdown") || shot.name.ends_with("-topdown-trail"))
+			.collect();
+		assert_eq!(topdown.len(), 5);
+		for shot in &topdown {
+			assert_eq!(shot.camera, scene::PARTING_TOPDOWN.0);
+			assert_eq!(shot.look_at, scene::PARTING_TOPDOWN.1);
+			assert_eq!(shot.capsule_distance_m, PARTING_MID);
+		}
+		let trail = PARTING_CAPTURE_SHOTS
+			.iter()
+			.find(|shot| shot.name == "parting-raster-topdown-trail")
+			.unwrap();
+		assert!(trail.trail);
+		assert_eq!(trail.parting_mode, GrassPartingMode::Raster);
+		let raster = PARTING_CAPTURE_SHOTS
+			.iter()
+			.find(|shot| shot.name == "parting-raster-topdown")
+			.unwrap();
+		assert!(!raster.trail);
+		let pose = camera_looking_at(scene::PARTING_TOPDOWN.0, scene::PARTING_TOPDOWN.1);
+		assert!(pose.translation.is_finite());
+		let dir = (scene::PARTING_TOPDOWN.1 - scene::PARTING_TOPDOWN.0).normalize();
+		assert!(dir.dot(Vec3::NEG_Y) > 0.95, "expected a near-vertical look, dir {dir:?}");
 		Ok(())
 	}
 }

@@ -14,7 +14,7 @@ WASD + mouse look (`L` toggles look). `/` opens commands. `F1` toggles the drawe
 | Command | What it does |
 | --- | --- |
 | `spawn default\|meadow\|clump\|slope\|crest\|parting\|clear` | Patch ownership (not per-blade entities) |
-| `camera orbit\|overhead\|ground` | Reproducible routes |
+| `camera orbit\|overhead\|ground\|topdown` | Reproducible routes (`topdown` is the parting-capsule overhead) |
 | `wind still\|gentle\|set --strength --speed` | Anchored travelling waves |
 | `lod host high\|medium\|low\|ultra-low` | Existing LOD host density scale |
 | `shadows proxy\|full\|off` | Production default is proxy (no grass casters) |
@@ -74,6 +74,8 @@ MAYBRAID_CAPTURE_DIR=maybraid/world/layers/vegetation/grass-field-playground/cap
 | `parting-depth-near.png` / `parting-depth-far.png` | Falloff vs occluder distance |
 | `parting-world-near.png` / `parting-world-far.png` | World-field falloff |
 | `parting-depth-wind.png` / `parting-world-wind.png` | Parting composed with a frozen gust |
+| `parting-{off,depth,raster,world}-topdown.png` | Straight-down, same capsule — swath vs surrounding grass |
+| `parting-raster-topdown-trail.png` | Raster top-down with extra capsules along the walk line |
 
 ## Honest measurements
 
