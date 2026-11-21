@@ -64,3 +64,7 @@ machine-specific build receipts are deliberately excluded from this checkpoint.
 building observations, short ordered-pair timing limits, the rejected reverse
 attempt and the missing comparative GPU result. The diagnostic arms share an
 added uniform layout; the seven-line shipping shader fix adds no toggle/uniform.
+
+[Long-walk validation](LONGWALK.md) adds the accepted approximately 2.4 km
+OFF/ON traversals, whole-walk CPU tails, route/workload qualifications and
+five-second sampled gameplay memory growth.
