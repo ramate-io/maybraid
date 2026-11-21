@@ -1002,9 +1002,15 @@ mod tests {
 		use character_items::GrenadeStats;
 		use grenades::{GrenadeDetonated, GrenadeEffect};
 		use maybraid_vfx::{
-			Dust, DustLayer, EffectDefinition, FieryExplosion, FlipbookAsset, FlipbookPart,
-			LobeKind, MeshPart, ParticlePart, ParticleShade, VfxFlipbooks, VfxInstance, VfxLibrary,
-			FIERY_EXPLOSION,
+			composition::{
+				CartoonExplosionPart, CartoonLandingPart, CartoonWavePart,
+				CombinedChoreographyPart, CombinedExplosionPart,
+			},
+			layers::combined_choreography::CombinedChoreographyLayer,
+			CartoonExplosion, CartoonLanding, CartoonLandingLayer, CartoonWave, CartoonWaveLayer,
+			CombinedDust, CombinedExplosion, CombinedLanding, CombinedWaveContact, Dust, DustLayer,
+			EffectDefinition, FieryExplosion, FlipbookAsset, FlipbookPart, LobeKind, MeshPart,
+			ParticlePart, ParticleShade, VfxFlipbooks, VfxInstance, VfxLibrary, FIERY_EXPLOSION,
 		};
 
 		let mut world = World::new();
@@ -1030,7 +1036,39 @@ mod tests {
 				shade: ParticleShade::Fire,
 			}
 		}
+		// These recipes are unused by the detonation under test; keep asset loading out
+		// of this isolated fixture while supplying the complete library resource.
+		let choreography = |landing, contact| CombinedChoreographyLayer {
+			part: CombinedChoreographyPart {
+				assets: Handle::default(),
+				meshes: default(),
+				landing,
+				contact,
+				options: default(),
+			},
+		};
 		world.insert_resource(VfxLibrary {
+			cartoon_explosion: CartoonExplosion {
+				part: CartoonExplosionPart { track: default(), heading: None, lod: default() },
+			},
+			combined_explosion: CombinedExplosion {
+				part: CombinedExplosionPart {
+					asset: default(),
+					heading: None,
+					quality: default(),
+					diagnostic: default(),
+				},
+			},
+			cartoon_landing: CartoonLanding {
+				layer: CartoonLandingLayer { part: CartoonLandingPart { meshes: default() } },
+			},
+			cartoon_wave: CartoonWave {
+				layer: CartoonWaveLayer { part: CartoonWavePart { meshes: default() } },
+			},
+			combined: CombinedDust { assets: default(), options: default() },
+			combined_landing: CombinedLanding { layer: choreography(true, false) },
+			combined_landing_contact: CombinedLanding { layer: choreography(true, true) },
+			combined_wave_contact: CombinedWaveContact { layer: choreography(false, true) },
 			dust: Dust::new(DustLayer::new(FlipbookPart::default())),
 			flipbooks: VfxFlipbooks {
 				fire: FlipbookAsset {
