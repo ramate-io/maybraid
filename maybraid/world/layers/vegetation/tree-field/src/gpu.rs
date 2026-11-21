@@ -36,6 +36,7 @@ use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntit
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
 use vegetation_grass_field::{GrassGpuCapability, GrassGpuMode};
+use vegetation_groves::temperate_lower_massives::StorybookFieldArea;
 use vegetation_shaders::wesl::{
 	GrassDrawParams, GrassViewUniform, LodThresholds, DRAW_INDEXED_INDIRECT_STRIDE,
 	GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW,
@@ -52,6 +53,7 @@ use crate::shaders::{
 	FINALIZE_SHADER, FOLIAGE_SHADER, SELECT_FOLIAGE_SHADER, SELECT_WOOD_SHADER, WOOD_SHADER,
 };
 use crate::template::{LeafTemplate, WoodTemplate};
+use crate::topology::MAX_LEAVES_PER_PLANT;
 use crate::SELECT_WORKGROUP;
 
 pub struct TreeGpuPlugin;
@@ -89,15 +91,24 @@ impl Plugin for TreeGpuPlugin {
 struct PendingTreeQueues(PendingQueues);
 
 /// Device requirements for the bounded natural tile experiment.
-pub fn supports_world_tree_field(adapter: &RenderAdapter, device: &RenderDevice) -> bool {
+pub fn supports_world_tree_field(
+	adapter: &RenderAdapter,
+	device: &RenderDevice,
+	area: StorybookFieldArea,
+) -> bool {
 	let flags = adapter.get_downlevel_capabilities().flags;
 	let limits = device.limits();
+	let leaf_count = area.max_plants() * MAX_LEAVES_PER_PLANT;
+	// The leaf descriptor buffer is larger than the plant/branch buffers and a compact list.
+	let largest_buffer = u64::from(leaf_count) * LEAF_DESCRIPTOR_STRIDE;
 	flags.contains(
 		DownlevelFlags::VERTEX_STORAGE
 			| DownlevelFlags::INDIRECT_EXECUTION
 			| DownlevelFlags::COMPUTE_SHADERS,
 	) && limits.max_storage_buffers_per_shader_stage >= 7
-		&& limits.max_storage_buffer_binding_size >= 65_536 * LEAF_DESCRIPTOR_STRIDE as u64
+		&& limits.max_storage_buffer_binding_size >= largest_buffer
+		&& limits.max_buffer_size >= largest_buffer
+		&& limits.max_compute_workgroups_per_dimension >= leaf_count.div_ceil(SELECT_WORKGROUP)
 		&& limits.max_compute_workgroup_size_x >= SELECT_WORKGROUP
 		&& limits.max_compute_invocations_per_workgroup >= SELECT_WORKGROUP
 }
@@ -117,7 +128,9 @@ fn detect_capability(
 ) {
 	let mut capability = GrassGpuCapability::detect(&adapter);
 	if let Some(mode) = requested_world_tree_mode() {
-		capability.mode = if supports_world_tree_field(&adapter, &device) {
+		capability.mode = if StorybookFieldArea::from_env()
+			.is_some_and(|area| supports_world_tree_field(&adapter, &device, area))
+		{
 			mode
 		} else {
 			GrassGpuMode::Unsupported
