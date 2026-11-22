@@ -117,6 +117,23 @@ impl TreeRecipe {
 		}
 	}
 
+	pub fn mid_height_m(&self) -> f32 {
+		0.5 * (*self.height_m.start() + *self.height_m.end())
+	}
+
+	pub fn mid_canopy_spread_m(&self) -> f32 {
+		0.5 * (*self.canopy_spread_m.start() + *self.canopy_spread_m.end())
+	}
+
+	/// Collapse height and canopy ranges to their midpoints so site scales map 1:1 onto size.
+	pub fn pin_authored_size(mut self) -> Self {
+		let height = self.mid_height_m();
+		let spread = self.mid_canopy_spread_m();
+		self.height_m = height..=height;
+		self.canopy_spread_m = spread..=spread;
+		self
+	}
+
 	pub fn with_foliage_density(mut self, density: f32) -> Self {
 		self.foliage_density = density.clamp(0.0, 1.0);
 		self
@@ -156,6 +173,7 @@ mod tests {
 		assert_eq!(*recipe.stalk_radius_m.end(), authored.stalk_radius.end);
 		assert_eq!(recipe.form, TreeForm::Storybook);
 		assert_eq!(recipe.leaf_close_style, LeafCloseStyle::Smooth);
+		assert!((recipe.mid_height_m() - 0.5 * (authored.height.start + authored.height.end)).abs() < 1e-4);
 		Ok(())
 	}
 
@@ -174,6 +192,17 @@ mod tests {
 		assert!(*willow.drape_count.end() >= 5);
 		assert!(*willow.drape_length_m.end() > 4.0);
 		assert!(willow.wood_stiffness < TreeRecipe::storybook().wood_stiffness);
+		Ok(())
+	}
+
+	#[test]
+	fn pin_authored_size_collapses_height_and_canopy_to_mid() -> anyhow::Result<()> {
+		let recipe = TreeRecipe::storybook();
+		let pinned = recipe.clone().pin_authored_size();
+		assert_eq!(*pinned.height_m.start(), recipe.mid_height_m());
+		assert_eq!(*pinned.height_m.end(), recipe.mid_height_m());
+		assert_eq!(*pinned.canopy_spread_m.start(), recipe.mid_canopy_spread_m());
+		assert_eq!(*pinned.canopy_spread_m.end(), recipe.mid_canopy_spread_m());
 		Ok(())
 	}
 }

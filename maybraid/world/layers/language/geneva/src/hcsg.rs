@@ -281,6 +281,7 @@ impl<C: Send + Sync + 'static, W: LanguageGround> Plugin for GenevaPlugin<C, W> 
 
 #[cfg(test)]
 mod tests {
+	use std::sync::{Mutex, MutexGuard};
 	use std::time::Duration;
 
 	use bevy::ecs::system::SystemParamItem;
@@ -293,7 +294,7 @@ mod tests {
 	};
 	use lod::hcsg::{
 		settle_presentation, Gated, HcsgBoundsPlugin, HcsgGate, HcsgRestartRequest,
-		SettlePresentation,
+		SettlePresentation, WaitReplacedHosts,
 	};
 	use lod::lod_ref::LodNodePose;
 	use richmond::{
@@ -312,6 +313,14 @@ mod tests {
 	type Urban = Urbanization<Richmond<Ground>>;
 
 	const IDLE: Duration = Duration::from_secs(300);
+
+	/// `forested_app` starts Chico + Geneva workers; parallel tests can idle
+	/// the shared demand before grove names publish.
+	static FORESTED_APP: Mutex<()> = Mutex::new(());
+
+	fn lock_forested_app() -> MutexGuard<'static, ()> {
+		FORESTED_APP.lock().unwrap_or_else(|poison| poison.into_inner())
+	}
 
 	/// Whether the test's language channel is open.
 	#[derive(Resource)]
@@ -570,10 +579,66 @@ mod tests {
 		window.naming_box().ok_or_else(|| anyhow::anyhow!("naming is idle"))
 	}
 
+	fn named_grove_ids(app: &App) -> Vec<Id> {
+		app.world()
+			.resource::<LanguageOverlay>()
+			.names
+			.iter()
+			.filter_map(|name| match name.key {
+				NameKey::Grove(id) => Some(id),
+				_ => None,
+			})
+			.collect()
+	}
+
+	fn named_groves_are_grown(app: &App) -> bool {
+		let ids = named_grove_ids(app);
+		if ids.is_empty() {
+			return false;
+		}
+		let storage = app.world().resource::<HcsgStorage>().clone();
+		ids.iter()
+			.all(|id| storage.try_entry::<chico::GrownGrove<Urban>>(*id).ok().flatten().is_some())
+	}
+
+	/// Overlay Forest names can land a round before GrownGrove names. Count vs
+	/// overlapping AABBs also misses plants just inside a ChicoGrove extent.
+	fn wait_named_grown_groves(app: &mut App) -> anyhow::Result<()> {
+		match SettlePresentation::geneva_integration(IDLE)
+			.wait_until(app, 64, |app| named_groves_are_grown(app))
+		{
+			Ok(()) => return Ok(()),
+			Err(WaitReplacedHosts::Idle(timeout)) => return Err(timeout.into()),
+			Err(_) => {}
+		}
+		let ids = named_grove_ids(app);
+		let storage = app.world().resource::<HcsgStorage>().clone();
+		let grown = match naming_window(app) {
+			Ok(window) => storage
+				.try_overlapping::<chico::GrownGrove<Urban>>(window)
+				.map_err(storage_busy)?,
+			Err(_) => Vec::new(),
+		};
+		let missing: Vec<_> = ids
+			.iter()
+			.filter(|id| {
+				storage.try_entry::<chico::GrownGrove<Urban>>(**id).ok().flatten().is_none()
+			})
+			.copied()
+			.collect();
+		anyhow::bail!(
+			"only grown groves are named: named={} overlapping={} missing={missing:?} named_ids={ids:?}",
+			ids.len(),
+			grown.len(),
+		);
+	}
+
 	#[test]
 	fn nearby_groves_are_named_in_their_tiles_languages() -> anyhow::Result<()> {
+		let _lock = lock_forested_app();
 		let mut app = forested_app();
 		settle(&mut app)?;
+		wait_named_grown_groves(&mut app)?;
 
 		let overlay = app.world().resource::<LanguageOverlay>().clone();
 		let groves: Vec<_> = overlay
@@ -591,14 +656,6 @@ mod tests {
 			assert!(!name.surface.is_empty());
 			assert!(!reach.intersect(name.extent).is_empty(), "{:?} named outside", name.key);
 		}
-
-		let storage = app.world().resource::<HcsgStorage>().clone();
-		let grown = storage
-			.try_overlapping::<chico::GrownGrove<Urban>>(window)
-			.map_err(storage_busy)?;
-		let named_groves =
-			groves.iter().filter(|name| matches!(name.key, NameKey::Grove(_))).count();
-		assert!(named_groves > 0 && named_groves <= grown.len(), "only grown groves are named");
 		Ok(())
 	}
 
@@ -607,6 +664,7 @@ mod tests {
 	#[test]
 	#[ignore = "headless DevelopmentPlaces derivation benchmark"]
 	fn cached_built_place_derivation_benchmark() -> anyhow::Result<()> {
+		let _lock = lock_forested_app();
 		let mut app = forested_app();
 		let cold = std::time::Instant::now();
 		settle(&mut app)?;
@@ -654,6 +712,7 @@ mod tests {
 
 	#[test]
 	fn built_places_are_named_and_rooms_speak_their_buildings_language() -> anyhow::Result<()> {
+		let _lock = lock_forested_app();
 		let mut app = forested_app();
 		settle(&mut app)?;
 

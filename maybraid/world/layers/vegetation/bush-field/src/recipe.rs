@@ -56,6 +56,23 @@ impl BushRecipe {
 		}
 	}
 
+	pub fn mid_height_m(&self) -> f32 {
+		0.5 * (*self.height_m.start() + *self.height_m.end())
+	}
+
+	pub fn mid_leaf_radius_m(&self) -> f32 {
+		0.5 * (*self.leaf_radius_m.start() + *self.leaf_radius_m.end())
+	}
+
+	/// Collapse height and leaf radius to their midpoints so site scales map 1:1 onto size.
+	pub fn pin_authored_size(mut self) -> Self {
+		let height = self.mid_height_m();
+		let radius = self.mid_leaf_radius_m();
+		self.height_m = height..=height;
+		self.leaf_radius_m = radius..=radius;
+		self
+	}
+
 	pub fn with_foliage_density(mut self, density: f32) -> Self {
 		self.foliage_density = density.clamp(0.0, 1.0);
 		self
@@ -80,6 +97,17 @@ mod tests {
 		assert_eq!(*recipe.height_m.end(), authored.height.end);
 		assert_eq!(recipe.shoot_count, authored.shoot_count);
 		assert_eq!(recipe.branch_depth, authored.branch_depth);
+		Ok(())
+	}
+
+	#[test]
+	fn pin_authored_size_collapses_height_and_leaf_radius_to_mid() -> anyhow::Result<()> {
+		let recipe = BushRecipe::small_scrub();
+		let pinned = recipe.clone().pin_authored_size();
+		assert_eq!(*pinned.height_m.start(), recipe.mid_height_m());
+		assert_eq!(*pinned.height_m.end(), recipe.mid_height_m());
+		assert_eq!(*pinned.leaf_radius_m.start(), recipe.mid_leaf_radius_m());
+		assert_eq!(*pinned.leaf_radius_m.end(), recipe.mid_leaf_radius_m());
 		Ok(())
 	}
 }

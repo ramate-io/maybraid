@@ -1,7 +1,7 @@
 //! Persistent field: compact descriptors, not expanded meshes.
 
 use bevy::prelude::*;
-use vegetation_shaders::wesl::{BladeDescriptor, GrassPatchHeader, WindInputs};
+use vegetation_shaders::wesl::{BladeDescriptor, GrassPatchHeader, LodThresholds, WindInputs};
 
 use crate::bounds::GrassBounds;
 use crate::patch::GrassPatch;
@@ -12,6 +12,7 @@ pub struct GrassFieldSettings {
 	pub max_blades: u32,
 	pub max_per_lod: u32,
 	pub wind: WindInputs,
+	pub lod: LodThresholds,
 	pub diagnostics: bool,
 	/// When set, select/draw use this time instead of `Time` (deterministic captures).
 	pub freeze_time_s: Option<f32>,
@@ -35,9 +36,10 @@ impl GrassFieldSettings {
 impl Default for GrassFieldSettings {
 	fn default() -> Self {
 		Self {
-			max_blades: 131_072,
-			max_per_lod: 65_536,
+			max_blades: 1_048_576,
+			max_per_lod: 1_048_576,
 			wind: WindInputs::gentle_botw(0.0),
+			lod: LodThresholds::field_default(),
 			diagnostics: false,
 			freeze_time_s: None,
 		}
@@ -51,6 +53,7 @@ pub struct GrassField {
 	pub patches: Vec<GrassPatchHeader>,
 	pub bounds: GrassBounds,
 	pub generation: u64,
+	pub grove_residency: bool,
 }
 
 impl GrassField {
@@ -58,6 +61,8 @@ impl GrassField {
 		patches: impl IntoIterator<Item = &'a GrassPatch>,
 		settings: &GrassFieldSettings,
 	) -> Self {
+		let patches: Vec<_> = patches.into_iter().collect();
+		let grove_residency = patches.iter().any(|patch| patch.grove_residency);
 		let mut blades = Vec::new();
 		let mut headers = Vec::new();
 		let mut bounds = GrassBounds::empty();
@@ -75,7 +80,7 @@ impl GrassField {
 			blades.extend(desc);
 			headers.push(header);
 		}
-		Self { blades, patches: headers, bounds, generation: 0 }
+		Self { blades, patches: headers, bounds, generation: 0, grove_residency }
 	}
 
 	pub fn with_generation(mut self, generation: u64) -> Self {

@@ -176,6 +176,16 @@ macro_rules! impl_woody_grove_lod {
 		$crate::impl_woody_grove_lod!(@emit $Grove, $lod, trunks, low_nodes);
 	};
 	(@emit $Grove:ty, $lod:expr, $trunks:ident, $low:ident) => {
+		impl $Grove {
+			/// Existing plant roots and world heights for GPU field recomposition.
+			pub fn plant_sites(&self) -> Vec<$crate::grove::GrovePlantSite> {
+				self.plants
+					.iter()
+					.map(|plant| $crate::grove::GrovePlantSite::from_placement(plant.placement))
+					.collect()
+			}
+		}
+
 		impl vegetation_components::VegetationComponents for $Grove {
 			fn stick_nodes_for_level(
 				&self,

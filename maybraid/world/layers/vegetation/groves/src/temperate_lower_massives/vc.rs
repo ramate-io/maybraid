@@ -3,7 +3,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, OnceLock};
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::Scene;
 #[cfg(test)]
 use bevy::shape::Aabb3d;
 use clap::Args;
@@ -19,8 +19,8 @@ use sbs_trees::{
 	StorybookTreeParams,
 };
 use vegetation_components::{
-	scene_children, structural_shadow_proxy_scene, FlattenedComponentsOnly, PlacedVegetation,
-	Placement, StickNode, VegetationComponents, FLATTENED_KIT_CHUNK_WEIGHT,
+	FlattenedComponentsOnly, PlacedVegetation, Placement, StickNode, VegetationComponents,
+	FLATTENED_KIT_CHUNK_WEIGHT,
 };
 
 use crate::grove::vc_compose::flattened_plant_metadata;
@@ -109,15 +109,12 @@ pub fn scout_storybook_field_tile() {
 	let _ = STORYBOOK_FIELD_TRIAL.set(StorybookFieldTrial::Scout);
 }
 
-/// Exact inputs from the existing world generator; the rendering adapter owns its recipe.
-#[derive(Component, Clone, Copy, Default)]
-pub struct StorybookFieldSample {
-	/// Canonical tile X/Z origin bits and the stable index in its grown plant list.
-	pub slot: [u32; 3],
-	pub root: Vec3,
-	pub up: Vec3,
-	pub height: f32,
-	pub seed: u32,
+/// Shared authored Storybook data; visual descriptors and physics read the same chain.
+#[derive(Clone)]
+pub struct StorybookFieldSource {
+	pub tree: Arc<StorybookTree>,
+	pub placement: Placement,
+	pub canopy_material: MaterialRef,
 }
 
 #[derive(Clone)]
@@ -142,6 +139,7 @@ pub struct TemperateLowerMassives {
 	pub structural_center: Vec3,
 	pub footprint_radius: f32,
 	pub extent: GroveExtent,
+	field_owned: bool,
 }
 
 impl TemperateLowerMassives {
@@ -157,45 +155,64 @@ impl TemperateLowerMassives {
 			.collect::<Vec<_>>()
 			.into();
 		let (structural_center, footprint_radius) = grove_structural_footprint(extent);
-		Self { plants, structural_center, footprint_radius, extent: *extent }
+		Self { plants, structural_center, footprint_radius, extent: *extent, field_owned: false }
 	}
 
-	fn uses_tree_field(&self, level: LodSceneLevel) -> bool {
-		let Some(trial) = STORYBOOK_FIELD_TRIAL.get() else { return false };
+	/// Candidate source only. The presenter claims visuals after complete descriptor admission.
+	pub fn storybook_field_sources(&self) -> Option<Vec<StorybookFieldSource>> {
+		let Some(trial) = STORYBOOK_FIELD_TRIAL.get() else { return None };
 		let (anchor, area, replace_kits) = match *trial {
 			StorybookFieldTrial::Scout => {
-				self.report_scout_tile(level);
-				return false;
+				self.report_scout_tile(LodSceneLevel::High);
+				return None;
 			}
 			StorybookFieldTrial::Tile { xz, area, replace_kits } => (xz, area, replace_kits),
 		};
 		if !area.contains_tile(anchor, self.extent) {
-			return false;
+			return None;
 		}
-		let mut placements = Vec::new();
-		for plant in self.plants.iter() {
-			if let TemperateLowerMassivesKind::Storybook(tree) = &plant.kind {
-				let sample = storybook_field_sample(tree, plant, [0; 3]);
-				placements.push((
-					sample.root.to_array().map(f32::to_bits),
-					sample.up.to_array().map(f32::to_bits),
-					sample.height.to_bits(),
-					sample.seed,
-				));
-			}
-		}
-		let eligible = (1..=area.plants_per_tile() as usize).contains(&placements.len());
-		let center = (self.extent.min() + self.extent.max()) * 0.5;
-		let tile = Vec2::new(center.x, center.z);
+		let sources = self.authored_storybooks();
+		let eligible = (1..=area.plants_per_tile() as usize).contains(&sources.len());
+		let mut placements: Vec<_> = sources
+			.iter()
+			.map(|source| {
+				(
+					source.placement.translation.to_array().map(f32::to_bits),
+					(source.placement.rotation() * Vec3::Y).to_array().map(f32::to_bits),
+					(source.tree.geometry.height() * source.placement.scale.y).to_bits(),
+					source.tree.geometry.canopy_noise.seed as u32,
+				)
+			})
+			.collect();
 		placements.sort_unstable();
 		let mut digest = DefaultHasher::new();
 		placements.hash(&mut digest);
-		info!(
-			target: "maybraid.tree_field",
-			?level, ?tile, ?area, plants = placements.len(), woody_plants = self.plants.len(), placement_digest = digest.finish(),
-			eligible, field = eligible && replace_kits, "natural Storybook tile inventory"
-		);
-		eligible && replace_kits
+		let center = (self.extent.min() + self.extent.max()) * 0.5;
+		let tile = Vec2::new(center.x, center.z);
+		info!(target: "maybraid.tree_field", ?tile, ?area, plants = sources.len(),
+			woody_plants = self.plants.len(), placement_digest = digest.finish(),
+			eligible, field = eligible && replace_kits, "natural Storybook tile inventory");
+		(eligible && replace_kits).then_some(sources)
+	}
+
+	/// Exact shared source for descriptor import and read-only placement verification.
+	pub fn authored_storybooks(&self) -> Vec<StorybookFieldSource> {
+		self.plants
+			.iter()
+			.filter_map(|plant| {
+				let TemperateLowerMassivesKind::Storybook(tree) = &plant.kind else { return None };
+				Some(StorybookFieldSource {
+					tree: Arc::clone(tree),
+					placement: plant.placement,
+					canopy_material: plant.ball_material.clone(),
+				})
+			})
+			.collect()
+	}
+
+	/// Only the presenting host's clone is claimed; rejected owners retain all legacy visuals.
+	pub fn claim_storybook_field_visuals(&mut self) {
+		self.field_owned = true;
 	}
 
 	fn report_scout_tile(&self, level: LodSceneLevel) {
@@ -224,12 +241,8 @@ impl TemperateLowerMassives {
 	}
 
 	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<SceneChunk> {
-		let use_tree_field = self.uses_tree_field(level);
-		let min = self.extent.min();
-		let mut slot = [min.x.to_bits(), min.z.to_bits(), 0];
+		let field_owned = self.field_owned;
 		FlattenedPlantList::capture(&self.plants, lod_ref).nest_chunks(move |plant, plant_lod| {
-			let plant_slot = slot;
-			slot[2] += 1;
 			match &plant.kind {
 				TemperateLowerMassivesKind::Oak(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -240,9 +253,9 @@ impl TemperateLowerMassives {
 					plant_lod,
 					level,
 				),
-				TemperateLowerMassivesKind::Storybook(t) if use_tree_field => SceneChunk::weighted(
+				TemperateLowerMassivesKind::Storybook(t) if field_owned => SceneChunk::weighted(
 					FLATTENED_KIT_CHUNK_WEIGHT,
-					storybook_field_host(t, plant, plant_slot),
+					storybook_physics_metadata(t, plant),
 				),
 				TemperateLowerMassivesKind::Storybook(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -275,6 +288,7 @@ impl TemperateLowerMassives {
 					TemperateLowerMassivesKind::Oak(t) => {
 						canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 					}
+					TemperateLowerMassivesKind::Storybook(_) if self.field_owned => Vec::new(),
 					TemperateLowerMassivesKind::Storybook(t) => {
 						canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 					}
@@ -306,39 +320,18 @@ impl TemperateLowerMassives {
 	}
 }
 
-fn storybook_field_host(
+/// Retain legacy physics activation and culling under High/Medium roots, without visual kits.
+fn storybook_physics_metadata(
 	tree: &Arc<StorybookTree>,
 	plant: &TemperateLowerMassivesPlant,
-	slot: [u32; 3],
 ) -> impl Scene + 'static {
-	let host = FlattenedComponentsOnly(PlacedVegetation::new(
+	flattened_plant_metadata(FlattenedComponentsOnly(PlacedVegetation::new(
 		Arc::clone(tree),
 		plant.placement,
 		plant.stick_material.clone(),
 		plant.ball_material.clone(),
 		plant.frond_material.clone(),
-	));
-	let canopy = structural_shadow_proxy_scene(&host);
-	let sample = storybook_field_sample(tree, plant, slot);
-	(
-		flattened_plant_metadata(host),
-		bsn! { ~{sample} },
-		scene_children(canopy.into_iter().collect()),
-	)
-}
-
-fn storybook_field_sample(
-	tree: &StorybookTree,
-	plant: &TemperateLowerMassivesPlant,
-	slot: [u32; 3],
-) -> StorybookFieldSample {
-	StorybookFieldSample {
-		slot,
-		root: plant.placement.translation,
-		up: plant.placement.rotation() * Vec3::Y,
-		height: tree.geometry.height() * plant.placement.scale.y,
-		seed: tree.geometry.canopy_noise.seed as u32,
-	}
+	)))
 }
 
 fn grow_plant(

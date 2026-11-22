@@ -21,7 +21,7 @@ use bevy::prelude::*;
 use lod::LodSceneLevel;
 use lod_avian::PhysicsInteractionLayer;
 use vegetation_components::{
-	Placement, StickMember, StickNode, VegetationComponents, STICK_KIT_HALF,
+	Placement, STICK_KIT_HALF, StickMember, StickNode, VegetationComponents,
 };
 
 /// Four inches. Gate and floor use world-space girth after plant [`Placement`] scale.
@@ -551,5 +551,37 @@ mod tests {
 		for host in hosts {
 			assert!(has_compound(app.world(), host));
 		}
+	}
+
+	#[test]
+	fn metadata_storybook_host_keeps_collider_world_pose() {
+		use sbs_trees::StorybookTree;
+		use vegetation_components::{FlattenedComponentsOnly, PlacedVegetation};
+		type Host = FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<StorybookTree>>>;
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, TransformPlugin, StickPhysicsPlugin));
+		register_vegetation_stick_colliders::<Host>(&mut app);
+		let host = app
+			.world_mut()
+			.spawn((
+				FlattenedComponentsOnly(PlacedVegetation::identity(std::sync::Arc::new(
+					StorybookTree::unit_from_num(7),
+				))),
+				Transform::IDENTITY,
+				Visibility::Inherited,
+				LodSceneHost,
+				LodSceneLevel::High,
+			))
+			.id();
+		app.update();
+		assert!(has_compound(app.world(), host));
+		assert!(app.world().get::<GlobalTransform>(host).is_some());
+		let children = app.world().get::<Children>(host).map(|c| c.to_vec()).unwrap_or_default();
+		let compound = children
+			.into_iter()
+			.find(|child| app.world().get::<StickPhysicsCompound>(*child).is_some())
+			.expect("compound child");
+		let pose = app.world().get::<GlobalTransform>(compound).expect("compound GlobalTransform");
+		assert!(pose.translation().length() < 1e-3);
 	}
 }

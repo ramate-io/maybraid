@@ -35,11 +35,20 @@ pub struct BushPatch {
 	pub coverage: f32,
 	pub samples: Vec<BushSample>,
 	pub lod: BushPatchLod,
+	/// Grove-owned patches keep presence to the 1 km present ring.
+	pub grove_residency: bool,
 }
 
 impl BushPatch {
 	pub fn new(seed: u32, recipe: BushRecipe, coverage: f32, samples: Vec<BushSample>) -> Self {
-		Self { seed, recipe, coverage: coverage.clamp(0.0, 1.0), samples, lod: BushPatchLod::High }
+		Self {
+			seed,
+			recipe,
+			coverage: coverage.clamp(0.0, 1.0),
+			samples,
+			lod: BushPatchLod::High,
+			grove_residency: false,
+		}
 	}
 
 	pub fn isolated(seed: u32, center: Vec3, recipe: BushRecipe) -> Self {
@@ -84,7 +93,11 @@ impl BushPatch {
 	}
 
 	/// Grove-style placements: world root + scale, same recipe as Bush Scrub small bushes.
-	pub fn from_scrub_placements(seed: u32, placements: &[(Vec3, f32)], recipe: BushRecipe) -> Self {
+	pub fn from_scrub_placements(
+		seed: u32,
+		placements: &[(Vec3, f32)],
+		recipe: BushRecipe,
+	) -> Self {
 		let samples = placements
 			.iter()
 			.map(|(root, scale)| BushSample::planar(*root).with_scale(*scale))
@@ -92,8 +105,33 @@ impl BushPatch {
 		Self::new(seed, recipe, 1.0, samples)
 	}
 
+	/// One recipe, one seed, samples at the given world roots (unit scale).
+	pub fn from_roots(
+		seed: u32,
+		roots: impl IntoIterator<Item = Vec3>,
+		recipe: BushRecipe,
+	) -> Self {
+		let placements: Vec<_> = roots.into_iter().map(|root| (root, 1.0)).collect();
+		Self::from_scrub_placements(seed, &placements, recipe)
+	}
+
+	/// Existing grove plants: world roots with scales relative to the recipe mid-height.
+	pub fn from_height_sites(seed: u32, sites: &[(Vec3, f32)], recipe: BushRecipe) -> Self {
+		let mid = recipe.mid_height_m();
+		let placements: Vec<_> = sites
+			.iter()
+			.map(|(root, height_m)| (*root, (*height_m / mid).max(1e-4)))
+			.collect();
+		Self::from_scrub_placements(seed, &placements, recipe)
+	}
+
 	pub fn with_lod(mut self, lod: BushPatchLod) -> Self {
 		self.lod = lod;
+		self
+	}
+
+	pub fn with_grove_residency(mut self) -> Self {
+		self.grove_residency = true;
 		self
 	}
 
@@ -122,10 +160,9 @@ impl BushPatch {
 			.iter()
 			.enumerate()
 			.filter_map(|(i, sample)| {
-				let rank = vegetation_shaders::wesl::density_rank(vegetation_shaders::wesl::plant_id(
-					self.seed,
-					i as u32,
-				));
+				let rank = vegetation_shaders::wesl::density_rank(
+					vegetation_shaders::wesl::plant_id(self.seed, i as u32),
+				);
 				if rank >= density && density < 1.0 && self.samples.len() > 1 {
 					return None;
 				}
@@ -144,13 +181,10 @@ impl BushPatch {
 	pub fn bounds(&self, settings: &BushFieldSettings) -> BushBounds {
 		let mut bounds = BushBounds::empty();
 		for plant in self.plants() {
-			bounds = bounds.union(BushBounds::from_plant(&plant.descriptor, settings.wind.strength_m));
+			bounds =
+				bounds.union(BushBounds::from_plant(&plant.descriptor, settings.wind.strength_m));
 		}
-		if bounds.is_empty() {
-			BushBounds { min: Vec3::ZERO, max: Vec3::ZERO }
-		} else {
-			bounds
-		}
+		if bounds.is_empty() { BushBounds { min: Vec3::ZERO, max: Vec3::ZERO } } else { bounds }
 	}
 
 	pub fn header(
@@ -231,6 +265,23 @@ mod tests {
 		assert_eq!(plants.len(), 2);
 		assert!((plants[0].descriptor.root - placements[0].0).length() < 1e-4);
 		assert!((plants[1].descriptor.root - placements[1].0).length() < 1e-4);
+		let roots = BushPatch::from_roots(
+			4,
+			placements.iter().map(|(root, _)| *root),
+			BushRecipe::small_scrub(),
+		);
+		assert_eq!(roots.samples.len(), 2);
+		assert_eq!(roots.samples[0].root, placements[0].0);
+		Ok(())
+	}
+
+	#[test]
+	fn height_sites_scale_from_recipe_mid() -> anyhow::Result<()> {
+		let recipe = BushRecipe::small_scrub();
+		let mid = recipe.mid_height_m();
+		let patch = BushPatch::from_height_sites(3, &[(Vec3::ZERO, mid * 2.0)], recipe);
+		assert_eq!(patch.samples.len(), 1);
+		assert!((patch.samples[0].scale - 2.0).abs() < 1e-4);
 		Ok(())
 	}
 }

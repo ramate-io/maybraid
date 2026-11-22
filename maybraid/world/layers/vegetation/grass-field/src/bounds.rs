@@ -31,9 +31,10 @@ impl GrassBounds {
 		stiffness: f32,
 	) -> Self {
 		let mut bounds = Self::empty();
-		let pad = max_wind_displacement_m(height_m, wind_strength_m, stiffness) + height_m + 0.08;
 		for sample in samples {
-			bounds.include_point(sample.root, pad, height_m);
+			let blade = sample.blade_height_m(height_m);
+			let pad = max_wind_displacement_m(blade, wind_strength_m, stiffness) + blade + 0.08;
+			bounds.include_point(sample.root, pad, blade);
 		}
 		if samples.is_empty() {
 			Self { min: Vec3::ZERO, max: Vec3::ZERO }

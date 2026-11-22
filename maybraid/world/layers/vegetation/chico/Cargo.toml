@@ -19,6 +19,8 @@ sbs-trees = { workspace = true }
 vegetation-components = { workspace = true }
 vegetation-shaders = { workspace = true }
 vegetation-tree-field = { workspace = true }
+vegetation-bush-field = { workspace = true }
+vegetation-grass-field = { workspace = true }
 durham = { workspace = true }
 gimme-gen = { workspace = true }
 layer-stack = { workspace = true }

@@ -54,6 +54,8 @@ impl AgentDiagnostics {
 }
 
 pub(super) fn install(app: &mut App) {
+	#[cfg(feature = "memory-census")]
+	memory::install(app);
 	app.insert_resource(AgentDiagnostics { enabled: true, player: None, pending_npc: None })
 		.add_systems(
 			PostUpdate,

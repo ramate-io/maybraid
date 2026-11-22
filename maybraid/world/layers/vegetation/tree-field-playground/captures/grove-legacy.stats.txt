@@ -1,0 +1,1 @@
+shot=grove-legacy mode=Kit samples=36 dt_ms_mean=210.140 dt_ms_p95=220.699 dt_ms_max=221.262 entities=5679 kit_meshes=5186 mesh3d=5188 plants=0 branches=0 leaves=0 upload_B=0

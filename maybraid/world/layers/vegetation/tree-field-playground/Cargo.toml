@@ -16,14 +16,17 @@ path = "src/main.rs"
 [dependencies]
 bevy = { workspace = true }
 camera-controls = { workspace = true }
+chico = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
 lod = { workspace = true }
 sbs-geometry = { workspace = true, features = ["clap", "render"] }
 sbs-trees = { workspace = true }
 terrain-shaders = { workspace = true }
+vegetation-bush-field = { workspace = true }
 vegetation-components = { workspace = true }
 vegetation-grass-field = { workspace = true }
+vegetation-groves = { workspace = true, features = ["render"] }
 vegetation-shaders = { workspace = true }
 vegetation-tree-field = { workspace = true }
 

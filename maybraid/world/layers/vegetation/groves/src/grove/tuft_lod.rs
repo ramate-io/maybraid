@@ -40,6 +40,11 @@ macro_rules! impl_tuft_grove_lod_emit {
 			pub fn tuft_body(&self) -> &$crate::grove::vc_tuft::TuftGroveBody {
 				&self.body
 			}
+
+			/// Existing tuft roots and blade heights for GPU grass recomposition.
+			pub fn plant_sites(&self) -> Vec<$crate::grove::GrovePlantSite> {
+				self.body.plant_sites()
+			}
 		}
 		impl lod::scene::LodScene for $Grove {
 			fn scene_lod_level(&self, lod_ref: &lod::lod_ref::LodRef) -> lod::scene::LodSceneLevel {

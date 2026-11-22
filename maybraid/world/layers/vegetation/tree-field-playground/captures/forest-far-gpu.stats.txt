@@ -1,0 +1,1 @@
+shot=forest-far-gpu mode=Gpu samples=36 dt_ms_mean=140.984 dt_ms_p95=153.692 dt_ms_max=155.267 entities=518 kit_meshes=0 mesh3d=3 plants=51 branches=1394 leaves=29252 bushes=832 grass=33266 upload_B=1988544

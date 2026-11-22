@@ -2,7 +2,7 @@ use std::f32::consts::PI;
 
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
-use camera_controls::look::{look_input_active, CameraLookEnabled};
+use camera_controls::look::{CameraLookEnabled, look_input_active};
 use game_commands::command::TextEntryFocus;
 
 #[derive(Component)]
@@ -22,7 +22,7 @@ pub fn setup_camera(mut commands: Commands) {
 		transform,
 		Projection::Perspective(PerspectiveProjection {
 			near: 0.1,
-			far: 600.0,
+			far: 2000.0,
 			fov: 55.0_f32.to_radians(),
 			..default()
 		}),

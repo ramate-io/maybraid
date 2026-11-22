@@ -10,9 +10,11 @@
 
 mod bounds;
 mod capability;
+mod catalog;
 mod diagnostics;
 mod field;
 mod gpu;
+mod grove_catalog;
 mod host;
 mod patch;
 mod plugin;
@@ -22,12 +24,16 @@ mod species;
 mod template;
 
 pub use bounds::GrassBounds;
-pub use capability::{GrassGpuCapability, GrassGpuMode};
+pub use capability::{requested_vegetation_gpu_mode, GrassGpuCapability, GrassGpuMode};
+pub use catalog::{
+	CatalogOpQueue, GroveEncodeStats, GroveId, RangeArena, RangeSpan, ADMISSION_BUDGET,
+};
 pub use diagnostics::GrassFieldStats;
 pub use field::{GrassField, GrassFieldSettings};
+pub use grove_catalog::{GrassCatalogOp, GrassCatalogOps, GrassGroveCatalog};
 pub use host::GrassPatchLod;
 pub use patch::{GrassPatch, SurfaceSample};
-pub use plugin::GrassFieldPlugin;
+pub use plugin::{collect_catalog_ops, GrassFieldPlugin};
 pub use select::{frustum_planes, CompactedLists, GrassSelector, WorldFrustum};
 pub use species::GrassSpecies;
 pub use template::BladeTemplate;
