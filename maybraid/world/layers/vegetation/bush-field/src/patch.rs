@@ -35,11 +35,20 @@ pub struct BushPatch {
 	pub coverage: f32,
 	pub samples: Vec<BushSample>,
 	pub lod: BushPatchLod,
+	/// Grove-owned patches keep presence to the 1 km present ring.
+	pub grove_residency: bool,
 }
 
 impl BushPatch {
 	pub fn new(seed: u32, recipe: BushRecipe, coverage: f32, samples: Vec<BushSample>) -> Self {
-		Self { seed, recipe, coverage: coverage.clamp(0.0, 1.0), samples, lod: BushPatchLod::High }
+		Self {
+			seed,
+			recipe,
+			coverage: coverage.clamp(0.0, 1.0),
+			samples,
+			lod: BushPatchLod::High,
+			grove_residency: false,
+		}
 	}
 
 	pub fn isolated(seed: u32, center: Vec3, recipe: BushRecipe) -> Self {
@@ -121,6 +130,11 @@ impl BushPatch {
 		self
 	}
 
+	pub fn with_grove_residency(mut self) -> Self {
+		self.grove_residency = true;
+		self
+	}
+
 	pub fn with_coverage(mut self, coverage: f32) -> Self {
 		self.coverage = coverage.clamp(0.0, 1.0);
 		self
@@ -170,11 +184,7 @@ impl BushPatch {
 			bounds =
 				bounds.union(BushBounds::from_plant(&plant.descriptor, settings.wind.strength_m));
 		}
-		if bounds.is_empty() {
-			BushBounds { min: Vec3::ZERO, max: Vec3::ZERO }
-		} else {
-			bounds
-		}
+		if bounds.is_empty() { BushBounds { min: Vec3::ZERO, max: Vec3::ZERO } } else { bounds }
 	}
 
 	pub fn header(

@@ -19,20 +19,22 @@
 
 mod authored;
 #[cfg(test)]
+mod far_bands;
+#[cfg(test)]
 mod parity;
 mod visuals;
 
 use bevy::prelude::*;
-use bevy::render::renderer::{RenderAdapter, RenderDevice};
 use bevy::render::RenderApp;
+use bevy::render::renderer::{RenderAdapter, RenderDevice};
 use vegetation_bush_field::BushFieldPlugin;
 use vegetation_grass_field::GrassFieldPlugin;
 use vegetation_groves::temperate_lower_massives::{
-	configure_storybook_field_area, scout_storybook_field_tile, StorybookFieldArea,
+	StorybookFieldArea, configure_storybook_field_area, scout_storybook_field_tile,
 };
 use vegetation_tree_field::{
-	requested_world_tree_mode, supports_world_tree_field, TreeFieldPlugin, TreeFieldSettings,
-	BRANCH_DESCRIPTOR_STRIDE,
+	BRANCH_DESCRIPTOR_STRIDE, TreeFieldPlugin, TreeFieldSettings, requested_world_tree_mode,
+	supports_world_tree_field,
 };
 
 use crate::{ForestGroveTile, ForestLayer};
@@ -47,6 +49,7 @@ fn owner_settings() -> TreeFieldSettings {
 		max_branches: OWNER_DESCRIPTOR_CAPACITY,
 		max_leaves: OWNER_DESCRIPTOR_CAPACITY,
 		max_per_lod: OWNER_DESCRIPTOR_CAPACITY,
+		lod: vegetation_shaders::wesl::LodThresholds::grove_tree(),
 		diagnostics: false,
 		..default()
 	}
@@ -205,12 +208,15 @@ mod tests {
 		});
 		with_lod(Vec3::new(0.0, 20.0, crate::GROVE_PRESENT_RADIUS_M + 500.0), |lod_ref| {
 			assert_eq!(host.scene_lod_level(lod_ref), LodSceneLevel::High);
-			assert!(!host
-				.scene_lod_culls(lod_ref, LodSceneLevel::High)
-				.should_cull(LodSceneLevel::High));
-			assert!(host
-				.scene_lod_culls(lod_ref, LodSceneLevel::High)
-				.should_cull(LodSceneLevel::UltraLow));
+			assert!(
+				!host
+					.scene_lod_culls(lod_ref, LodSceneLevel::High)
+					.should_cull(LodSceneLevel::High)
+			);
+			assert!(
+				host.scene_lod_culls(lod_ref, LodSceneLevel::High)
+					.should_cull(LodSceneLevel::UltraLow)
+			);
 		});
 	}
 
@@ -285,8 +291,10 @@ mod tests {
 		);
 
 		GroveGpuVisuals::admit(false);
-		assert!(!GroveGpuVisuals::claim(&trees, ForestLayer::LowerCanopy, &owner_settings())
-			.replaces_kits());
+		assert!(
+			!GroveGpuVisuals::claim(&trees, ForestLayer::LowerCanopy, &owner_settings())
+				.replaces_kits()
+		);
 		with_lod(Vec3::new(0.0, 20.0, 40.0), |lod_ref| {
 			assert!(trees.scene_chunks_with_level(lod_ref, LodSceneLevel::High).total_weight() > 1);
 		});

@@ -1,13 +1,11 @@
 //! CPU selection matching the wood/foliage compute shaders.
 
 use vegetation_grass_field::WorldFrustum;
-use vegetation_shaders::wesl::{
-	lod_bucket, DrawIndexedIndirect, GrassViewUniform, LodThresholds,
-};
+use vegetation_shaders::wesl::{DrawIndexedIndirect, GrassViewUniform, LodThresholds, lod_bucket};
 
 use crate::field::BushFieldSettings;
 use crate::layout::{
-	BranchDescriptor, LeafDescriptor, PlantDescriptor, WoodLod, BUSH_LOD_COUNT, PARENT_NONE,
+	BUSH_LOD_COUNT, BranchDescriptor, LeafDescriptor, PARENT_NONE, PlantDescriptor, WoodLod,
 };
 use crate::template::LeafTemplate;
 
@@ -49,9 +47,12 @@ impl CompactedBushLists {
 
 	pub fn wood_indirect_args(&self) -> [DrawIndexedIndirect; BUSH_LOD_COUNT] {
 		[
-			DrawIndexedIndirect::empty(WoodLod::Near.index_count()).with_instances(self.wood_count(0)),
-			DrawIndexedIndirect::empty(WoodLod::Mid.index_count()).with_instances(self.wood_count(1)),
-			DrawIndexedIndirect::empty(WoodLod::Far.index_count()).with_instances(self.wood_count(2)),
+			DrawIndexedIndirect::empty(WoodLod::Near.index_count())
+				.with_instances(self.wood_count(0)),
+			DrawIndexedIndirect::empty(WoodLod::Mid.index_count())
+				.with_instances(self.wood_count(1)),
+			DrawIndexedIndirect::empty(WoodLod::Far.index_count())
+				.with_instances(self.wood_count(2)),
 		]
 	}
 
@@ -77,7 +78,15 @@ pub struct BushSelector {
 impl BushSelector {
 	pub fn from_view(view: GrassViewUniform, settings: &BushFieldSettings) -> Self {
 		Self {
-			thresholds: LodThresholds::bush_default(),
+			thresholds: LodThresholds {
+				near_m: view.lod_distances.y,
+				mid_m: view.lod_distances.z,
+				card_m: view.lod_distances.w,
+				near_density: view.lod_density.x,
+				mid_density: view.lod_density.y,
+				card_density: view.lod_density.z,
+				min_height_px: view.lod_density.w,
+			},
 			view,
 			capacities: [settings.max_per_lod; BUSH_LOD_COUNT],
 		}
@@ -207,11 +216,7 @@ impl BushSelector {
 }
 
 fn keep_fraction(capacity: u32, total: u32) -> f32 {
-	if total == 0 {
-		1.0
-	} else {
-		(capacity as f32 / total as f32).min(1.0)
-	}
+	if total == 0 { 1.0 } else { (capacity as f32 / total as f32).min(1.0) }
 }
 
 #[cfg(test)]
@@ -288,7 +293,11 @@ mod tests {
 	#[test]
 	fn off_camera_shadow_view_keeps_casters() -> anyhow::Result<()> {
 		let settings = BushFieldSettings::default();
-		let patch = BushPatch::isolated(2, Vec3::new(40.0, 0.0, 0.0), crate::recipe::BushRecipe::small_scrub());
+		let patch = BushPatch::isolated(
+			2,
+			Vec3::new(40.0, 0.0, 0.0),
+			crate::recipe::BushRecipe::small_scrub(),
+		);
 		let field = BushField::rebuild([&patch], &settings);
 		let camera = BushSelector::from_view(
 			look_view(Vec3::new(-20.0, 2.0, 0.0), Vec3::new(-40.0, 0.0, 0.0), 720.0),

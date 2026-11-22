@@ -1,10 +1,12 @@
 //! Persistent field: compact plant / branch / leaf descriptors, not expanded meshes.
 
 use bevy::prelude::*;
-use vegetation_shaders::wesl::WindInputs;
+use vegetation_shaders::wesl::{LodThresholds, WindInputs};
 
 use crate::bounds::BushBounds;
-use crate::layout::{BranchDescriptor, BushPatchHeader, LeafDescriptor, PlantDescriptor, PARENT_NONE};
+use crate::layout::{
+	BranchDescriptor, BushPatchHeader, LeafDescriptor, PARENT_NONE, PlantDescriptor,
+};
 use crate::patch::BushPatch;
 use crate::topology::{MAX_BRANCHES_PER_PLANT, MAX_LEAVES_PER_PLANT};
 
@@ -16,6 +18,7 @@ pub struct BushFieldSettings {
 	pub max_leaves: u32,
 	pub max_per_lod: u32,
 	pub wind: WindInputs,
+	pub lod: LodThresholds,
 	pub diagnostics: bool,
 	pub freeze_time_s: Option<f32>,
 }
@@ -36,6 +39,7 @@ impl Default for BushFieldSettings {
 			max_leaves: 65_536,
 			max_per_lod: 16_384,
 			wind: WindInputs::gentle_botw(0.0),
+			lod: LodThresholds::bush_default(),
 			diagnostics: false,
 			freeze_time_s: None,
 		}
@@ -51,6 +55,7 @@ pub struct BushField {
 	pub patches: Vec<BushPatchHeader>,
 	pub bounds: BushBounds,
 	pub generation: u64,
+	pub grove_residency: bool,
 }
 
 impl BushField {
@@ -58,6 +63,8 @@ impl BushField {
 		patches: impl IntoIterator<Item = &'a BushPatch>,
 		settings: &BushFieldSettings,
 	) -> Self {
+		let patches: Vec<_> = patches.into_iter().collect();
+		let grove_residency = patches.iter().any(|patch| patch.grove_residency);
 		let mut plants = Vec::new();
 		let mut branches = Vec::new();
 		let mut leaves = Vec::new();
@@ -108,16 +115,14 @@ impl BushField {
 				plant.descriptor.branch_count = branches.len() as u32 - branch_offset;
 				plant.descriptor.leaf_offset = leaf_offset;
 				plant.descriptor.leaf_count = leaves.len() as u32 - leaf_offset;
-				bounds = bounds.union(BushBounds::from_plant(
-					&plant.descriptor,
-					settings.wind.strength_m,
-				));
+				bounds = bounds
+					.union(BushBounds::from_plant(&plant.descriptor, settings.wind.strength_m));
 				plants.push(plant.descriptor);
 				kept += 1;
 			}
 			headers.push(patch.header(plant_offset, kept, settings));
 		}
-		Self { plants, branches, leaves, patches: headers, bounds, generation: 0 }
+		Self { plants, branches, leaves, patches: headers, bounds, generation: 0, grove_residency }
 	}
 
 	pub fn with_generation(mut self, generation: u64) -> Self {

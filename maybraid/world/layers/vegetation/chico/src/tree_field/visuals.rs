@@ -1,7 +1,7 @@
 //! GPU forest recomposition: trees, bushes, and grass at existing grove roots.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(test)]
 use std::sync::{Mutex, MutexGuard};
 
@@ -86,10 +86,13 @@ impl GroveGpuVisuals {
 				Self { bushes: Some(Self::bush_patch(&sites, seed)), ..Self::default() }
 			}
 			GpuFieldKind::Grass => Self {
-				grass: Some(GrassPatch::from_height_sites(
-					seed,
-					sites.iter().map(|site| (site.root, site.height_m)),
-				)),
+				grass: Some(
+					GrassPatch::from_height_sites(
+						seed,
+						sites.iter().map(|site| (site.root, site.height_m)),
+					)
+					.with_grove_residency(),
+				),
 				..Self::default()
 			},
 		}
@@ -127,7 +130,7 @@ impl GroveGpuVisuals {
 	fn bush_patch(sites: &[GrovePlantSite], seed: u32) -> BushPatch {
 		let recipe = BushRecipe::small_scrub().pin_authored_size();
 		let capped = Self::capped_sites(sites, 4_096);
-		BushPatch::from_height_sites(seed, &capped, recipe)
+		BushPatch::from_height_sites(seed, &capped, recipe).with_grove_residency()
 	}
 
 	fn capped_sites(sites: &[GrovePlantSite], max_plants: u32) -> Vec<(Vec3, f32)> {

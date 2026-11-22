@@ -12,12 +12,21 @@ import math
 from pathlib import Path
 
 
-ANCHOR = (-4950, 3150)
-START = (-4950, 3750)
+# Area 1746 / published longwalk-checkpoints-r2 start. The previous native
+# route held x=-4950, about 7 km west of this neighborhood.
+AREA_1746 = (1746.8, 1037.9)
+START = AREA_1746
+X = START[0]
+Z0 = START[1]
+BANDS_M = (50, 200, 450, 900)
+
+
+def z_at(delta_m):
+    return Z0 + delta_m
 
 
 def route(census=False):
-    rows = [dict(cmd="start", xz=START),
+    rows = [dict(cmd="start", xz=list(START)),
             dict(cmd="console", line="diagnostics on"),
             dict(cmd="wait_for", flow="world", pause="playing", timeout=90),
             dict(cmd="console", line="sky noon")]
@@ -33,21 +42,28 @@ def route(census=False):
             rows.append(dict(cmd="console", line="diagnostics memory"))
             rows.append(dict(cmd="wait", secs=2))
 
-    def walk(name, zs):
+    def maybe_band_census(delta_m):
+        if census and delta_m in BANDS_M:
+            rows.append(dict(cmd="console",
+                             line="diagnostics memory"))
+            rows.append(dict(cmd="wait", secs=2))
+
+    def walk(name, deltas):
         mark(name, "start")
-        for z in zs:
-            rows.append(dict(cmd="goto", xz=[ANCHOR[0], z], timeout=100,
+        for delta_m in deltas:
+            rows.append(dict(cmd="goto", xz=[X, z_at(delta_m)], timeout=100,
                              radius=3, sprint=False))
+            maybe_band_census(delta_m)
         mark(name, "end")
 
     wait("loaded", 8)
-    walk("approach", [3550, 3350, 3150])
+    walk("approach", [50, 200, 450, 600])
     rows.append(dict(cmd="console", line="diagnostics view 2.094395 0.47"))
     wait("steady-warmup", 3)
     wait("steady", 15)
-    walk("cull", [3350, 3550, 3750, 3950, 4150, 4350])
+    walk("cull", [900, 1100, 1300, 1500, 1700, 1800])
     wait("culled", 8)
-    walk("reentry", [4150, 3950, 3750, 3550, 3350, 3150])
+    walk("reentry", [1600, 1400, 1200, 1000, 800, 600])
     rows.append(dict(cmd="console", line="diagnostics view 2.094395 0.47"))
     wait("returned-warmup", 3)
     wait("returned", 15)
@@ -115,7 +131,10 @@ def main():
     args = parser.parse_args()
     if args.command == "prepare":
         with args.output.open("x") as stream:
-            stream.write("# Agent API 10+: proposed 3 km ordinary walking route; scout before pairing.\n")
+            stream.write(
+                "# Agent API 10+: Area 1746 (1746.8, 1037.9) 3 km walk along +Z; "
+                "overlay longwalk-checkpoints-r2 if the native checker has that script.\n"
+            )
             for row in route(args.census):
                 stream.write(json.dumps(row, separators=(",", ":")) + "\n")
     else:

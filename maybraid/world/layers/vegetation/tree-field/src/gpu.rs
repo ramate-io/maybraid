@@ -1,13 +1,14 @@
 //! Render-world compute compaction, indirect args, and opaque wood/foliage draws.
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
 use bevy::core_pipeline::core_3d::{
-	Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey, CORE_3D_DEPTH_FORMAT,
+	CORE_3D_DEPTH_FORMAT, Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey,
 };
 use bevy::core_pipeline::schedule::camera_driver;
-use bevy::ecs::system::{lifetimeless::SRes, SystemParamItem};
+use bevy::ecs::system::{SystemParamItem, lifetimeless::SRes};
 use bevy::mesh::VertexBufferLayout;
 use bevy::prelude::*;
 use bevy::render::camera::{DirtySpecializations, PendingQueues};
@@ -32,20 +33,21 @@ use bevy::render::renderer::{
 	RenderAdapter, RenderContext, RenderDevice, RenderGraph, RenderQueue,
 };
 use bevy::render::sync_world::MainEntityHashSet;
-use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntity};
+use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntity, ViewTarget};
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
 use vegetation_grass_field::{GrassGpuCapability, GrassGpuMode};
 use vegetation_groves::temperate_lower_massives::StorybookFieldArea;
 use vegetation_shaders::wesl::{
-	GrassDrawParams, GrassViewUniform, DRAW_INDEXED_INDIRECT_STRIDE, GRASS_VIEW_KIND_CAMERA,
-	GRASS_VIEW_KIND_SHADOW,
+	DRAW_INDEXED_INDIRECT_STRIDE, GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW, GrassDrawParams,
+	GrassViewUniform,
 };
 
+use crate::SELECT_WORKGROUP;
 use crate::diagnostics::TreeFieldStats;
 use crate::layout::{
-	WoodLod, BRANCH_DESCRIPTOR_STRIDE, LEAF_DESCRIPTOR_STRIDE, PLANT_DESCRIPTOR_STRIDE,
-	TREE_LOD_COUNT,
+	BRANCH_DESCRIPTOR_STRIDE, LEAF_DESCRIPTOR_STRIDE, PLANT_DESCRIPTOR_STRIDE, TREE_LOD_COUNT,
+	WoodLod,
 };
 use crate::plugin::{ExtractedTreeField, ExtractedTreeGroves, TreeFieldPresenter, TreeGroveId};
 use crate::select::TreeSelector;
@@ -54,7 +56,6 @@ use crate::shaders::{
 };
 use crate::template::{LeafTemplate, WoodTemplate};
 use crate::topology::MAX_LEAVES_PER_PLANT;
-use crate::SELECT_WORKGROUP;
 
 pub struct TreeGpuPlugin;
 
@@ -114,11 +115,7 @@ pub fn supports_world_tree_field(
 }
 
 pub fn requested_world_tree_mode() -> Option<GrassGpuMode> {
-	match std::env::var("MAYBRAID_EXPERIMENT_TREE_FIELD").as_deref() {
-		Ok("gpu") => Some(GrassGpuMode::GpuDriven),
-		Ok("cpu") => Some(GrassGpuMode::CpuSelect),
-		_ => None,
-	}
+	vegetation_grass_field::requested_vegetation_gpu_mode()
 }
 
 fn detect_capability(
@@ -128,13 +125,15 @@ fn detect_capability(
 ) {
 	let mut capability = GrassGpuCapability::detect(&adapter);
 	if let Some(mode) = requested_world_tree_mode() {
-		capability.mode = if StorybookFieldArea::from_env()
-			.is_some_and(|area| supports_world_tree_field(&adapter, &device, area))
-		{
-			mode
-		} else {
-			GrassGpuMode::Unsupported
-		};
+		if mode == GrassGpuMode::GpuDriven {
+			capability.mode = if StorybookFieldArea::from_env()
+				.is_some_and(|area| supports_world_tree_field(&adapter, &device, area))
+			{
+				GrassGpuMode::GpuDriven
+			} else {
+				GrassGpuMode::Unsupported
+			};
+		}
 		info!(target: "maybraid.tree_field", ?mode, actual = ?capability.mode, "render backend selection");
 	}
 	commands.insert_resource(capability);
@@ -511,9 +510,8 @@ fn prepare_tree_buffers(
 		let mut inputs = (*extracted).clone();
 		inputs.field = field.clone();
 		if owner != Entity::PLACEHOLDER {
-			// Coarse grove residency owns distance culling. Keep the far canopy band
-			// throughout that lifetime, including the former Low/UltraLow proxy range.
-			inputs.settings.lod.card_m = f32::MAX;
+			// Coarse grove residency owns presence. Shader LOD replaces High/Medium/Low.
+			inputs.settings.lod = vegetation_shaders::wesl::LodThresholds::grove_tree();
 		}
 		// Each independent owner sizes its lists to admit all descriptors in any band.
 		inputs.settings.max_per_lod = field.branches.len().max(field.leaves.len()).max(1) as u32;
@@ -1015,16 +1013,21 @@ fn tree_compute(
 	}
 }
 
+fn tree_color_format(view: &ExtractedView, target: Option<&ViewTarget>) -> TextureFormat {
+	target.map(ViewTarget::main_texture_format).unwrap_or(view.target_format)
+}
+
 fn queue_tree(
 	pipeline_cache: Res<PipelineCache>,
 	mut pipelines: Option<ResMut<TreePipelines>>,
 	mut opaque_phases: ResMut<ViewBinnedRenderPhases<Opaque3d>>,
 	opaque_draw_functions: Res<DrawFunctions<Opaque3d>>,
-	views: Query<(&ExtractedView, &RenderVisibleEntities, &Msaa)>,
+	views: Query<(&ExtractedView, &RenderVisibleEntities, &Msaa, Option<&ViewTarget>)>,
 	presenters: Query<&TreeFieldPresenter>,
 	dirty: Res<DirtySpecializations>,
 	mut pending: ResMut<PendingTreeQueues>,
 	mut queued: Local<MainEntityHashSet>,
+	mut queued_format: Local<HashMap<RetainedViewEntity, TextureFormat>>,
 	extracted: Option<Res<ExtractedTreeField>>,
 	capability: Option<Res<GrassGpuCapability>>,
 ) {
@@ -1042,7 +1045,7 @@ fn queue_tree(
 	}
 	let draw_wood = opaque_draw_functions.read().id::<DrawTreeWood>();
 	let draw_foliage = opaque_draw_functions.read().id::<DrawTreeFoliage>();
-	for (view, visible, msaa) in &views {
+	for (view, visible, msaa, view_target) in &views {
 		if !view_submits_tree(view, extracted.shadow_mode) {
 			continue;
 		}
@@ -1052,16 +1055,32 @@ fn queue_tree(
 		let Some(visible_entities) = visible.get::<TreeFieldPresenter>() else {
 			continue;
 		};
+		let format = tree_color_format(view, view_target);
+		let format_changed =
+			queued_format.insert(view.retained_view_entity, format) != Some(format);
 		let pending_queues = pending.prepare_for_new_frame(view.retained_view_entity);
 		for &main_entity in dirty.iter_to_dequeue(view.retained_view_entity, visible_entities) {
 			phase.remove(main_entity);
 		}
-		for (render_entity, main_entity) in dirty.iter_to_queue(
-			view.retained_view_entity,
-			visible_entities,
-			&pending_queues.prev_frame,
-			&mut queued,
-		) {
+		if format_changed {
+			for (_render_entity, main_entity) in visible_entities.iter_visible() {
+				phase.remove(*main_entity);
+			}
+		}
+		let queue_targets: Vec<_> = if format_changed {
+			visible_entities.iter_visible().map(|(render, main)| (*render, *main)).collect()
+		} else {
+			dirty
+				.iter_to_queue(
+					view.retained_view_entity,
+					visible_entities,
+					&pending_queues.prev_frame,
+					&mut queued,
+				)
+				.map(|(render, main)| (*render, *main))
+				.collect()
+		};
+		for (render_entity, main_entity) in &queue_targets {
 			let Ok(presenter) = presenters.get(*render_entity) else {
 				continue;
 			};
@@ -1079,8 +1098,7 @@ fn queue_tree(
 					true,
 				),
 			};
-			let key =
-				TreeDrawKey { msaa: msaa.samples(), format: view.target_format, alpha_to_coverage };
+			let key = TreeDrawKey { msaa: msaa.samples(), format, alpha_to_coverage };
 			let Ok(pipeline) = variants.specialize(&pipeline_cache, key) else {
 				continue;
 			};
@@ -1250,5 +1268,23 @@ fn draw_lod<'a>(
 			}
 		}
 		GrassGpuMode::Unsupported => {}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn cpu_experiment_keeps_cpu_select_when_compute_is_available() {
+		// Shared `GrassGpuCapability` is overwritten by later vegetation
+		// plugins. Env `cpu` must still win, or draw kinds encode as GpuDriven.
+		let first = GrassGpuCapability::from_compute(true)
+			.with_requested_mode(Some(GrassGpuMode::CpuSelect));
+		let last_writer = GrassGpuCapability::from_compute(true)
+			.with_requested_mode(Some(GrassGpuMode::CpuSelect));
+		assert_eq!(first.mode, GrassGpuMode::CpuSelect);
+		assert_eq!(last_writer.mode, GrassGpuMode::CpuSelect);
+		assert_ne!(last_writer.mode, GrassGpuMode::GpuDriven);
 	}
 }

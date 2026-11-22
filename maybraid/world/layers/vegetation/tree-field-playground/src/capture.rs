@@ -6,13 +6,13 @@ use std::path::PathBuf;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
+use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
 use vegetation_bush_field::BushField;
 use vegetation_grass_field::GrassField;
 use vegetation_shaders::wesl::WindInputs;
 use vegetation_tree_field::{LeafCloseStyle, TreeField, TreeFieldSettings, TreeGrove};
 
-use crate::camera::{yaw_pitch, CameraController};
+use crate::camera::{CameraController, yaw_pitch};
 use crate::kit;
 use crate::scene;
 use crate::world;
@@ -63,6 +63,7 @@ pub enum CaptureScene {
 	Willow,
 	WorldForest,
 	WorldWalk,
+	WorldFar,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -154,6 +155,10 @@ impl CaptureShot {
 					scene::clear_patches(world);
 					world::spawn_world_walk(world, true);
 				}
+				CaptureScene::WorldFar => {
+					scene::clear_patches(world);
+					world::spawn_world_far(world, true);
+				}
 				CaptureScene::Default => {
 					scene::clear_patches(world);
 					scene::spawn_default_scene_in_world(world);
@@ -173,6 +178,10 @@ impl CaptureShot {
 				CaptureScene::WorldWalk => {
 					scene::clear_patches(world);
 					world::spawn_world_walk(world, false);
+				}
+				CaptureScene::WorldFar => {
+					scene::clear_patches(world);
+					world::spawn_world_far(world, false);
 				}
 				_ => {
 					scene::spawn_close_only(world);
@@ -230,6 +239,8 @@ pub const TREE_CAPTURE_SHOTS: &[CaptureShot] = &[
 	CaptureShot::gpu("forest-edge-gpu", world::EDGE, CaptureScene::WorldForest),
 	CaptureShot::kit("forest-floor-legacy", world::FLOOR).with_scene(CaptureScene::WorldForest),
 	CaptureShot::gpu("forest-floor-gpu", world::FLOOR, CaptureScene::WorldForest),
+	CaptureShot::kit("forest-far-legacy", world::FAR).with_scene(CaptureScene::WorldFar),
+	CaptureShot::gpu("forest-far-gpu", world::FAR, CaptureScene::WorldFar),
 	CaptureShot::kit("walk-start-legacy", world::WALK_START).with_scene(CaptureScene::WorldWalk),
 	CaptureShot::gpu("walk-start-gpu", world::WALK_START, CaptureScene::WorldWalk),
 	CaptureShot::kit("walk-mid-legacy", world::WALK_MID).with_scene(CaptureScene::WorldWalk),
@@ -301,7 +312,12 @@ impl CaptureSession {
 
 #[derive(SystemParam)]
 pub(crate) struct CaptureView<'w, 's> {
-	cameras: Query<'w, 's, (&'static mut Transform, &'static mut CameraController), With<Camera3d>>,
+	cameras: Query<
+		'w,
+		's,
+		(&'static mut Transform, &'static mut CameraController, &'static mut Projection),
+		With<Camera3d>,
+	>,
 }
 
 pub(crate) fn tick_capture(
@@ -423,11 +439,15 @@ fn selected_shots() -> Vec<CaptureShot> {
 
 impl CaptureView<'_, '_> {
 	fn apply_camera(&mut self, shot: &CaptureShot) {
-		if let Ok((mut transform, mut controller)) = self.cameras.single_mut() {
+		if let Ok((mut transform, mut controller, mut projection)) = self.cameras.single_mut() {
 			*transform = Transform::from_translation(shot.camera).looking_at(shot.look_at, Vec3::Y);
 			let (yaw, pitch) = yaw_pitch(transform.rotation);
 			controller.yaw = yaw;
 			controller.pitch = pitch;
+			if let Projection::Perspective(perspective) = projection.as_mut() {
+				perspective.far =
+					if shot.scene == CaptureScene::WorldFar { world::FAR_CLIP_M } else { 600.0 };
+			}
 		}
 	}
 }
@@ -472,6 +492,8 @@ mod tests {
 			"forest-edge-gpu",
 			"forest-floor-legacy",
 			"forest-floor-gpu",
+			"forest-far-legacy",
+			"forest-far-gpu",
 		] {
 			assert!(TREE_CAPTURE_SHOTS.iter().any(|shot| shot.name == name), "missing {name}");
 		}
@@ -505,6 +527,7 @@ mod tests {
 			("forest-vista-gpu", "forest-vista-legacy"),
 			("forest-edge-gpu", "forest-edge-legacy"),
 			("forest-floor-gpu", "forest-floor-legacy"),
+			("forest-far-gpu", "forest-far-legacy"),
 			("walk-start-gpu", "walk-start-legacy"),
 			("walk-mid-gpu", "walk-mid-legacy"),
 			("walk-end-gpu", "walk-end-legacy"),
@@ -521,6 +544,8 @@ mod tests {
 			assert_eq!(gpu.look_at, legacy.look_at, "{gpu_name}");
 			let scene = if gpu_name.starts_with("walk-") {
 				CaptureScene::WorldWalk
+			} else if gpu_name.contains("-far-") {
+				CaptureScene::WorldFar
 			} else {
 				CaptureScene::WorldForest
 			};

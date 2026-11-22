@@ -1,12 +1,13 @@
 //! Render-world compute compaction, indirect args, and opaque wood/foliage draws.
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 use bevy::core_pipeline::core_3d::{
-	Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey, CORE_3D_DEPTH_FORMAT,
+	CORE_3D_DEPTH_FORMAT, Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey,
 };
 use bevy::core_pipeline::schedule::camera_driver;
-use bevy::ecs::system::{lifetimeless::SRes, SystemParamItem};
+use bevy::ecs::system::{SystemParamItem, lifetimeless::SRes};
 use bevy::mesh::VertexBufferLayout;
 use bevy::prelude::*;
 use bevy::render::camera::{DirtySpecializations, PendingQueues};
@@ -27,21 +28,24 @@ use bevy::render::render_resource::{
 	ShaderStages, Specializer, SpecializerKey, TextureFormat, Variants, VertexAttribute,
 	VertexFormat, VertexState, VertexStepMode,
 };
-use bevy::render::renderer::{RenderAdapter, RenderContext, RenderDevice, RenderGraph, RenderQueue};
+use bevy::render::renderer::{
+	RenderAdapter, RenderContext, RenderDevice, RenderGraph, RenderQueue,
+};
 use bevy::render::sync_world::MainEntityHashSet;
-use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntity};
+use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntity, ViewTarget};
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
 use vegetation_grass_field::{GrassGpuCapability, GrassGpuMode};
 use vegetation_shaders::wesl::{
-	GrassDrawParams, GrassViewUniform, LodThresholds, DRAW_INDEXED_INDIRECT_STRIDE,
-	GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW,
+	DRAW_INDEXED_INDIRECT_STRIDE, GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW, GrassDrawParams,
+	GrassViewUniform, LodThresholds,
 };
 
+use crate::SELECT_WORKGROUP;
 use crate::diagnostics::BushFieldStats;
 use crate::layout::{
-	WoodLod, BRANCH_DESCRIPTOR_STRIDE, BUSH_LOD_COUNT, LEAF_DESCRIPTOR_STRIDE,
-	PLANT_DESCRIPTOR_STRIDE,
+	BRANCH_DESCRIPTOR_STRIDE, BUSH_LOD_COUNT, LEAF_DESCRIPTOR_STRIDE, PLANT_DESCRIPTOR_STRIDE,
+	WoodLod,
 };
 use crate::plugin::{BushFieldPresenter, ExtractedBushField};
 use crate::select::BushSelector;
@@ -49,7 +53,6 @@ use crate::shaders::{
 	FINALIZE_SHADER, FOLIAGE_SHADER, SELECT_FOLIAGE_SHADER, SELECT_WOOD_SHADER, WOOD_SHADER,
 };
 use crate::template::{LeafTemplate, WoodTemplate};
-use crate::SELECT_WORKGROUP;
 
 pub struct BushGpuPlugin;
 
@@ -100,6 +103,7 @@ struct BushPipelines {
 struct BushDrawKey {
 	msaa: u32,
 	format: TextureFormat,
+	hdr: bool,
 }
 
 struct BushDrawSpecializer;
@@ -233,7 +237,8 @@ fn init_bush_pipelines(
 
 	let wood_shader = asset_server.load(WOOD_SHADER);
 	let foliage_shader = asset_server.load(FOLIAGE_SHADER);
-	let wood_descriptor = opaque_descriptor("bush_wood", wood_shader, vec![wood_draw_layout.clone()]);
+	let wood_descriptor =
+		opaque_descriptor("bush_wood", wood_shader, vec![wood_draw_layout.clone()]);
 	let foliage_descriptor =
 		opaque_descriptor("bush_foliage", foliage_shader, vec![foliage_draw_layout.clone()]);
 
@@ -259,11 +264,7 @@ fn opaque_descriptor(
 	RenderPipelineDescriptor {
 		label: Some(label.into()),
 		layout,
-		vertex: VertexState {
-			shader: shader.clone(),
-			buffers: vec![vertex_layout()],
-			..default()
-		},
+		vertex: VertexState { shader: shader.clone(), buffers: vec![vertex_layout()], ..default() },
 		fragment: Some(FragmentState {
 			shader,
 			targets: vec![Some(ColorTargetState {
@@ -299,7 +300,15 @@ struct GpuTemplate {
 
 fn init_templates(mut commands: Commands, device: Res<RenderDevice>) {
 	let lods = [WoodLod::Near, WoodLod::Mid, WoodLod::Far];
-	let wood = lods.map(|lod| gpu_template(&device, &WoodTemplate::for_lod(lod).vertex_bytes(), &WoodTemplate::for_lod(lod).index_bytes(), WoodTemplate::for_lod(lod).indices.len() as u32, "bush_wood_template"));
+	let wood = lods.map(|lod| {
+		gpu_template(
+			&device,
+			&WoodTemplate::for_lod(lod).vertex_bytes(),
+			&WoodTemplate::for_lod(lod).index_bytes(),
+			WoodTemplate::for_lod(lod).indices.len() as u32,
+			"bush_wood_template",
+		)
+	});
 	let leaf = LeafTemplate::teardrop();
 	commands.insert_resource(BushTemplates {
 		wood,
@@ -474,7 +483,11 @@ fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedBushField) -> Gr
 	} else {
 		GRASS_VIEW_KIND_SHADOW
 	};
-	let thresholds = LodThresholds::bush_default();
+	let thresholds = if extracted.field.grove_residency {
+		LodThresholds::grove_bush()
+	} else {
+		extracted.settings.lod
+	};
 	GrassViewUniform {
 		clip_from_world,
 		world_from_clip,
@@ -700,8 +713,7 @@ fn cpu_fill_lists<'a>(
 		);
 		for lod in 0..BUSH_LOD_COUNT {
 			if !lists.wood[lod].is_empty() {
-				let bytes: Vec<u8> =
-					lists.wood[lod].iter().flat_map(|i| i.to_le_bytes()).collect();
+				let bytes: Vec<u8> = lists.wood[lod].iter().flat_map(|i| i.to_le_bytes()).collect();
 				queue.write_buffer(&work.wood_lists[lod], 0, &bytes);
 			}
 			if !lists.foliage[lod].is_empty() {
@@ -796,8 +808,10 @@ fn bush_compute(
 		return;
 	};
 
-	let wood_groups = extracted.field.branches.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
-	let leaf_groups = extracted.field.leaves.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
+	let wood_groups =
+		extracted.field.branches.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
+	let leaf_groups =
+		extracted.field.leaves.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
 	for work in state.views.values() {
 		render_context.command_encoder().clear_buffer(&work.counters, 0, None);
 		{
@@ -819,15 +833,20 @@ fn bush_compute(
 	}
 }
 
+fn bush_color_format(view: &ExtractedView, target: Option<&ViewTarget>) -> TextureFormat {
+	target.map(ViewTarget::main_texture_format).unwrap_or(view.target_format)
+}
+
 fn queue_bush(
 	pipeline_cache: Res<PipelineCache>,
 	mut pipelines: Option<ResMut<BushPipelines>>,
 	mut opaque_phases: ResMut<ViewBinnedRenderPhases<Opaque3d>>,
 	opaque_draw_functions: Res<DrawFunctions<Opaque3d>>,
-	views: Query<(&ExtractedView, &RenderVisibleEntities, &Msaa)>,
+	views: Query<(&ExtractedView, &RenderVisibleEntities, &Msaa, Option<&ViewTarget>)>,
 	dirty: Res<DirtySpecializations>,
 	mut pending: ResMut<PendingBushQueues>,
 	mut queued: Local<MainEntityHashSet>,
+	mut queued_format: Local<HashMap<RetainedViewEntity, TextureFormat>>,
 	extracted: Option<Res<ExtractedBushField>>,
 	capability: Option<Res<GrassGpuCapability>>,
 ) {
@@ -845,7 +864,7 @@ fn queue_bush(
 	}
 	let draw_wood = opaque_draw_functions.read().id::<DrawBushWood>();
 	let draw_foliage = opaque_draw_functions.read().id::<DrawBushFoliage>();
-	for (view, visible, msaa) in &views {
+	for (view, visible, msaa, view_target) in &views {
 		if !view_submits_bush(view, extracted.shadow_mode) {
 			continue;
 		}
@@ -855,17 +874,43 @@ fn queue_bush(
 		let Some(visible_entities) = visible.get::<BushFieldPresenter>() else {
 			continue;
 		};
+		let format = bush_color_format(view, view_target);
+		let hdr = format == TextureFormat::Rgba16Float;
+		let format_changed =
+			queued_format.insert(view.retained_view_entity, format) != Some(format);
 		let pending_queues = pending.prepare_for_new_frame(view.retained_view_entity);
 		for &main_entity in dirty.iter_to_dequeue(view.retained_view_entity, visible_entities) {
 			phase.remove(main_entity);
 		}
-		for (render_entity, main_entity) in dirty.iter_to_queue(
-			view.retained_view_entity,
-			visible_entities,
-			&pending_queues.prev_frame,
-			&mut queued,
-		) {
-			let key = BushDrawKey { msaa: msaa.samples(), format: view.target_format };
+		if format_changed {
+			for (_render_entity, main_entity) in visible_entities.iter_visible() {
+				phase.remove(*main_entity);
+			}
+		}
+		// Offscreen screenshots reuse the retained view with a new color format
+		// (HDR `Rgba16Float` vs Sharp/force-offscreen `Bgra8UnormSrgb`). Dirty
+		// specializations do not requeue those presenters, so force every
+		// visible entity through the new key.
+		let force_queue: Vec<_> = if format_changed {
+			visible_entities.iter_visible().map(|(render, main)| (*render, *main)).collect()
+		} else {
+			Vec::new()
+		};
+		let queue_targets: Vec<(Entity, bevy::render::sync_world::MainEntity)> = if format_changed {
+			force_queue
+		} else {
+			dirty
+				.iter_to_queue(
+					view.retained_view_entity,
+					visible_entities,
+					&pending_queues.prev_frame,
+					&mut queued,
+				)
+				.map(|(render, main)| (*render, *main))
+				.collect()
+		};
+		for (render_entity, main_entity) in &queue_targets {
+			let key = BushDrawKey { msaa: msaa.samples(), format, hdr };
 			let Ok(wood_id) = pipelines.wood_variants.specialize(&pipeline_cache, key) else {
 				continue;
 			};
@@ -931,7 +976,14 @@ impl<P: PhaseItem> RenderCommand<P> for DrawBushWoodCommand {
 			pass.set_bind_group(0, &work.wood_draw_bgs[lod], &[]);
 			pass.set_vertex_buffer(0, templates.wood[lod].vertices.slice(..));
 			pass.set_index_buffer(templates.wood[lod].indices.slice(..), IndexFormat::Uint32);
-			draw_lod(pass, capability, work, templates.wood[lod].index_count, work.cpu_wood_counts[lod], lod);
+			draw_lod(
+				pass,
+				capability,
+				work,
+				templates.wood[lod].index_count,
+				work.cpu_wood_counts[lod],
+				lod,
+			);
 		}
 		RenderCommandResult::Success
 	}
@@ -993,5 +1045,38 @@ fn draw_lod<'a>(
 			}
 		}
 		GrassGpuMode::Unsupported => {}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn specialize_format(format: TextureFormat) -> TextureFormat {
+		let mut descriptor = opaque_descriptor("bush_format_test", Handle::default(), Vec::new());
+		let key = BushDrawKey { msaa: 1, format, hdr: format == TextureFormat::Rgba16Float };
+		BushDrawSpecializer.specialize(key, &mut descriptor).expect("specialize");
+		descriptor.fragment.unwrap().targets[0].as_ref().unwrap().format
+	}
+
+	#[test]
+	fn bush_pipeline_matches_offscreen_and_hdr_formats() {
+		assert_eq!(specialize_format(TextureFormat::Rgba16Float), TextureFormat::Rgba16Float);
+		assert_eq!(specialize_format(TextureFormat::Bgra8UnormSrgb), TextureFormat::Bgra8UnormSrgb);
+		assert_eq!(specialize_format(TextureFormat::Rgba8UnormSrgb), TextureFormat::Rgba8UnormSrgb);
+		assert_eq!(
+			bush_color_format_preference(
+				TextureFormat::Rgba16Float,
+				Some(TextureFormat::Bgra8UnormSrgb)
+			),
+			TextureFormat::Bgra8UnormSrgb
+		);
+	}
+
+	fn bush_color_format_preference(
+		view_format: TextureFormat,
+		target_format: Option<TextureFormat>,
+	) -> TextureFormat {
+		target_format.unwrap_or(view_format)
 	}
 }

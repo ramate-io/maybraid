@@ -22,7 +22,17 @@ Use Nix, native Metal, fullscreen 1920×1080, render scale 1, VSync off, and ver
 
 Immediate verification is bound to the [published fork's surface configuration](https://github.com/ramate-io/bevy/blob/dfbb7d045b15879232dde2efc9bc66f499413ef6/crates/bevy_render/src/view/window/mod.rs#L489-L529): an explicit Immediate request selects Immediate when available, otherwise Fifo and an INFO message `PresentMode Immediate requested but not available. Falling back to Fifo`. The chosen value is passed into surface configuration. Require the game's `MAYBRAID_VSYNC=off (Immediate)` receipt, active native rendering, and absence of that fallback prefix throughout the complete log. `RUST_LOG=info,wgpu=error` preserves these `bevy_render` INFO messages. Foreground and fullscreen coverage remain separate checks.
 
-`profiling/grove-lifecycle.py prepare PATH` emits a proposed 3 km ordinary walking route: loading at `(-4950,3750)`, 600 m approach, standing, 1.2 km departure, then 1.2 km return and standing. Scout the route before admitting paired results. Retain failures, deaths, unsupported motion and incomplete phase records. Report launch-to-supported readiness separately from script windows. The selected area covers only part of the route.
+`profiling/grove-lifecycle.py prepare PATH` emits a proposed 3 km ordinary walking route starting at Area 1746 `(1746.8, 1037.9)` (the published longwalk-checkpoints-r2 origin; see [area-1746-performance.md](area-1746-performance.md)). Loading is at that xz, then a 600 m +Z approach (waypoints at 50 / 200 / 450 / 600 m), standing, 1.2 km departure through 900 m, then 1.2 km return and standing. The previous native route held `x=-4950`, about 7 km west of this neighborhood, and is no longer the default. Overlay the published longwalk-checkpoints-r2 script if the native checker has that asset. Scout the route before admitting paired results. Retain failures, deaths, unsupported motion and incomplete phase records. Report launch-to-supported readiness separately from script windows.
+
+## Native rerun spec (grove-owned GPU vs legacy)
+
+Run both arms on the same machine, same binary SHA, shadows off, 1920×1080 Metal Immediate, VSync off. Do not admit a pair if Immediate falls back to Fifo. Hold NPC activity fixed or mask it in the receipts (the first native pair on `f192490` had different NPC counts along the same path).
+
+1. **Checkpoint census before timing.** `profiling/grove-lifecycle.py prepare --census PATH` stops at ~50 / 200 / 450 / 900 m. Record per-band instance counts (trees / bushes / grass, layers, sizes) versus legacy. GPU far bands must stay within about 20% of legacy High / Medium / Low; understory and grass must still be present at 200 m+ (not the old 90–110 m shader cutoff).
+2. **Order pair.** One pass legacy then GPU, then a reversed pass GPU then legacy. Same shadows (`MAYBRAID_SHADOWS=off`), same window, same route script.
+3. **Tracy.** Capture main-app, render-app, extract and `prepare_windows` p95s next to the application interval. Upload `.tracy` files and summaries to the Traces release and link them on the PR.
+4. **Metal GPU-busy.** One `profiling/metal-flight.sh` run per arm; do not mix observer-heavy GPU traces into the CPU interval comparison.
+5. **Env.** Legacy omits `MAYBRAID_EXPERIMENT_TREE_FIELD`. GPU uses `MAYBRAID_EXPERIMENT_TREE_FIELD=gpu`. A `=cpu` arm must log and encode `CpuSelect` (not `GpuDriven`).
 
 CPU captures report application interval tails, visibility/LOD and command-application scopes, changed owner publications and upload bytes. Exact-process memory is sampled at one-second intervals from launch through exit; its maximum is a sampled process footprint, not instantaneous peak or GPU residency. Separate feature-gated census runs report component membership churn and retained archetypes. GPU execution is measured in separate Metal System Trace runs, with observer-heavy timings excluded from CPU comparisons.
 
@@ -137,6 +147,19 @@ Intentionally out of scope (not grove tiles): 1–5 km `CanopyBumpOut` / `Medium
 | WestMaui | -25700,-8100 | 4/4 | 7/7 | 0/0 | 322/322 | 4.58 | 0 | 0.74 | ok |
 
 GPU CPU `LodScene` is a single High band: no Mid/Low/UltraLow vegetation spawn or swap. `scene_lod_status` stays `Unchanged` when the viewer walks from the tile into the far ring; leftover non-High roots are culled. Stream in/out is still the 1 km present ring (`GROVE_PRESENT_RADIUS_M`). Legacy kits keep High/Mid/Low/UltraLow banding.
+
+### Far-band instance counts (native-feedback coverage)
+
+`grove_gpu_far_bands_match_legacy_instance_counts` drives the real `ChicoGroveHost` path (stacked Temperate Lower Massives + LowBush + TallGrass) and compares plants that survive GPU `lod_bucket` against legacy High (≤400 m) / Medium (≤520 m) / Low (to 1 km). Grove-owned `card_m` is unbounded so residency, not the shader, decides presence. GPU LOD still thins wood/leaves (`wood`/`leaves` below). Old cutoffs are `tree_default` / `bush_default` / `field_default` (bushes gone by ~110 m, grass by ~90 m, trees CARD after 72 m).
+
+| Distance | Legacy T/B/G | GPU T/B/G | Old cutoff T/B/G | GPU wood / leaves |
+|---|---:|---:|---:|---:|
+| 50 m | 13 / 168 / 2271 | 12 / 158 / 2151 | 12 / 157 / 889 | 271 / 5979 |
+| 200 m | 13 / 168 / 2271 | 13 / 168 / 2271 | 9 / 0 / 0 | 303 / 6491 |
+| 450 m | 13 / 168 / 0 | 13 / 168 / 1614 | 0 / 0 / 0 | 260 / 6491 |
+| 900 m | 13 / 168 / 0 | 13 / 168 / 871 | 0 / 0 / 0 | 114 / 1959 |
+
+Woody plants stay within 20% of legacy at every band. Legacy tufts omit Medium+; GPU grass remains through 1 km with density falloff. This is a CPU-mirrored select of the real spawn path, not a live Metal census.
 
 `hopscotch_world_walk_streams_gpu_hosts_without_kit_chunks` walks ten 1600 m cells along x=-4950 (LushJungle, SteppeDown, OldSteppe, Riparian, TemperateHoly, OwlsDesert). No leftover kit chunks, no CPU band churn, tiles stream in/out, no panics. This is the real `presenting_recipes` → `ChicoGroveHost` spawn path on flat ground, not a live HCSG terrain session.
 

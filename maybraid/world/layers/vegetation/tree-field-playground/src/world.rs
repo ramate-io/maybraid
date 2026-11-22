@@ -7,8 +7,8 @@
 use crate::kit;
 use bevy::prelude::*;
 use chico::{
-	select_layering, ChicoGroveHost, ForestExtent, ForestGroveKind, ForestGroveRecipe, ForestLayer,
-	ForestSelection, GpuFieldKind, GroveGpuVisuals, LayeringKind, SelectedLayers,
+	ChicoGroveHost, ForestExtent, ForestGroveKind, ForestGroveRecipe, ForestLayer, ForestSelection,
+	GpuFieldKind, GroveGpuVisuals, LayeringKind, SelectedLayers, select_layering,
 };
 use vegetation_groves::{FlatTerrainSample, GroveExtent};
 
@@ -26,6 +26,13 @@ pub fn spawn_world_forest(world: &mut World, gpu: bool) {
 /// Hopscotch-selected stacked tiles from the world walk, translated to a playground strip.
 pub fn spawn_world_walk(world: &mut World, gpu: bool) {
 	spawn_hosts(world, gpu, walk_hosts);
+}
+
+/// Canopy / understory / tufts at 0, 200, 450 and 900 m so a far camera can
+/// show GPU coverage through the 1 km present ring.
+pub fn spawn_world_far(world: &mut World, gpu: bool) {
+	spawn_hosts(world, gpu, far_hosts);
+	replace_forest_ground(world, Vec2::new(520.0, 1400.0), Vec3::new(100.0, -0.05, 450.0));
 }
 
 fn spawn_hosts(world: &mut World, gpu: bool, hosts: fn() -> Vec<ChicoGroveHost>) {
@@ -73,6 +80,28 @@ fn grown_hosts() -> Vec<ChicoGroveHost> {
 		ForestLayer::Tufts,
 		Vec3::new(2.0 * TILE_M, 0.0, TILE_M),
 	));
+	hosts
+}
+
+fn far_hosts() -> Vec<ChicoGroveHost> {
+	let mut hosts = Vec::new();
+	for z in [0.0, 200.0, 450.0, 900.0] {
+		hosts.push(grow_host(
+			ForestGroveKind::TemperateLowerMassives,
+			ForestLayer::LowerCanopy,
+			Vec3::new(0.0, 0.0, z),
+		));
+		hosts.push(grow_host(
+			ForestGroveKind::LowBush,
+			ForestLayer::Understory,
+			Vec3::new(100.0, 0.0, z),
+		));
+		hosts.push(grow_host(
+			ForestGroveKind::TallGrass,
+			ForestLayer::Tufts,
+			Vec3::new(200.0, 0.0, z),
+		));
+	}
 	hosts
 }
 
@@ -173,14 +202,26 @@ fn hide_default_cover(world: &mut World, hide: bool) {
 	}
 }
 
+fn replace_forest_ground(world: &mut World, size: Vec2, center: Vec3) {
+	let ids: Vec<_> = world.query_filtered::<Entity, With<ForestGround>>().iter(world).collect();
+	for id in ids {
+		world.entity_mut(id).despawn();
+	}
+	ensure_forest_ground_sized(world, size, center);
+}
+
 fn ensure_forest_ground(world: &mut World) {
+	ensure_forest_ground_sized(world, Vec2::new(520.0, 860.0), Vec3::new(50.0, -0.05, 240.0));
+}
+
+fn ensure_forest_ground_sized(world: &mut World, size: Vec2, center: Vec3) {
 	let existing = world.query_filtered::<Entity, With<ForestGround>>().iter(world).next();
 	if existing.is_some() {
 		return;
 	}
 	let mesh = {
 		let mut meshes = world.resource_mut::<Assets<Mesh>>();
-		meshes.add(Plane3d::default().mesh().size(520.0, 860.0))
+		meshes.add(Plane3d::default().mesh().size(size.x, size.y))
 	};
 	let material = {
 		let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
@@ -196,7 +237,7 @@ fn ensure_forest_ground(world: &mut World) {
 		Name::new("world-forest-ground"),
 		Mesh3d(mesh),
 		MeshMaterial3d(material),
-		Transform::from_xyz(50.0, -0.05, 240.0),
+		Transform::from_translation(center),
 		bevy::light::NotShadowCaster,
 	));
 }
@@ -208,6 +249,9 @@ struct ForestGround;
 pub const VISTA: (Vec3, Vec3) = (Vec3::new(-48.0, 26.0, -56.0), Vec3::new(90.0, 10.0, 90.0));
 pub const EDGE: (Vec3, Vec3) = (Vec3::new(50.0, 12.0, 228.0), Vec3::new(70.0, 8.0, 90.0));
 pub const FLOOR: (Vec3, Vec3) = (Vec3::new(248.0, 2.2, 12.0), Vec3::new(220.0, 0.6, 70.0));
+/// Southwest of the 0 m tile, looking through 200 m–1 km of stacked groves.
+pub const FAR: (Vec3, Vec3) = (Vec3::new(-90.0, 48.0, -180.0), Vec3::new(80.0, 6.0, 520.0));
+pub const FAR_CLIP_M: f32 = 2000.0;
 
 /// Hopscotch walk strip: start / mid / end, looking into each 100 m tile from the south edge.
 pub const WALK_START: (Vec3, Vec3) = (Vec3::new(50.0, 2.8, -8.0), Vec3::new(50.0, 1.0, 48.0));
@@ -223,6 +267,8 @@ mod tests {
 		assert!(VISTA.0.x < 0.0 && VISTA.0.z < 0.0);
 		assert!(EDGE.0.z > 200.0);
 		assert!(FLOOR.0.x > 200.0 && FLOOR.0.z < 20.0);
+		assert!(FAR.0.z < 0.0 && FAR.0.y > 30.0);
+		assert!((FAR.1.z - FAR.0.z) > 600.0);
 		assert!(WALK_START.0.z < 0.0 && WALK_START.0.y < 5.0);
 		assert!(WALK_MID.0.z > 220.0 && WALK_MID.0.z < 240.0);
 		assert!(WALK_END.0.z > 460.0 && WALK_END.0.z < 480.0);
@@ -235,6 +281,22 @@ mod tests {
 		let unique: std::collections::HashSet<_> =
 			layerings.iter().map(|(kind, _)| *kind).collect();
 		assert_eq!(unique.len(), layerings.len());
+	}
+
+	#[test]
+	fn far_hosts_cover_the_one_km_present_ring() {
+		GroveGpuVisuals::admit(true);
+		let hosts = far_hosts();
+		let max_z = hosts.iter().fold(0.0_f32, |max_z, host| {
+			host.tile
+				.plant_sites()
+				.iter()
+				.map(|site| site.root.z)
+				.fold(max_z, f32::max)
+		});
+		GroveGpuVisuals::admit(false);
+		assert_eq!(hosts.len(), 12);
+		assert!(max_z >= 900.0, "need a 900 m tile, max_z={max_z}");
 	}
 
 	#[test]

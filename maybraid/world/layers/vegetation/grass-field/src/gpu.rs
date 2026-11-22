@@ -1,12 +1,13 @@
 //! Render-world compute compaction, indirect args, and opaque draws.
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 use bevy::core_pipeline::core_3d::{
-	Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey, CORE_3D_DEPTH_FORMAT,
+	CORE_3D_DEPTH_FORMAT, Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey,
 };
 use bevy::core_pipeline::schedule::camera_driver;
-use bevy::ecs::system::{lifetimeless::SRes, SystemParamItem};
+use bevy::ecs::system::{SystemParamItem, lifetimeless::SRes};
 use bevy::mesh::VertexBufferLayout;
 use bevy::prelude::*;
 use bevy::render::camera::{DirtySpecializations, PendingQueues};
@@ -31,21 +32,21 @@ use bevy::render::renderer::{
 	RenderAdapter, RenderContext, RenderDevice, RenderGraph, RenderQueue,
 };
 use bevy::render::sync_world::MainEntityHashSet;
-use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntity};
+use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntity, ViewTarget};
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
 use vegetation_shaders::wesl::{
-	GeometryLod, GrassDrawParams, GrassViewUniform, LodThresholds, BLADE_DESCRIPTOR_STRIDE,
-	DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_COUNT, GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW,
+	BLADE_DESCRIPTOR_STRIDE, DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_COUNT, GRASS_VIEW_KIND_CAMERA,
+	GRASS_VIEW_KIND_SHADOW, GeometryLod, GrassDrawParams, GrassViewUniform, LodThresholds,
 };
 
+use crate::SELECT_WORKGROUP;
 use crate::capability::{GrassGpuCapability, GrassGpuMode};
 use crate::diagnostics::GrassFieldStats;
 use crate::plugin::{ExtractedGrassField, GrassFieldPresenter};
 use crate::select::GrassSelector;
 use crate::shaders::{BLADE_SHADER, FINALIZE_SHADER, SELECT_SHADER};
 use crate::template::BladeTemplate;
-use crate::SELECT_WORKGROUP;
 
 pub struct GrassGpuPlugin;
 
@@ -371,7 +372,11 @@ fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedGrassField) -> G
 	} else {
 		GRASS_VIEW_KIND_SHADOW
 	};
-	let thresholds = LodThresholds::field_default();
+	let thresholds = if extracted.field.grove_residency {
+		LodThresholds::grove_grass()
+	} else {
+		extracted.settings.lod
+	};
 	GrassViewUniform {
 		clip_from_world,
 		world_from_clip,
@@ -645,15 +650,20 @@ fn grass_compute(
 	}
 }
 
+fn grass_color_format(view: &ExtractedView, target: Option<&ViewTarget>) -> TextureFormat {
+	target.map(ViewTarget::main_texture_format).unwrap_or(view.target_format)
+}
+
 fn queue_grass(
 	pipeline_cache: Res<PipelineCache>,
 	mut pipelines: Option<ResMut<GrassPipelines>>,
 	mut opaque_phases: ResMut<ViewBinnedRenderPhases<Opaque3d>>,
 	opaque_draw_functions: Res<DrawFunctions<Opaque3d>>,
-	views: Query<(&ExtractedView, &RenderVisibleEntities, &Msaa)>,
+	views: Query<(&ExtractedView, &RenderVisibleEntities, &Msaa, Option<&ViewTarget>)>,
 	dirty: Res<DirtySpecializations>,
 	mut pending: ResMut<PendingGrassQueues>,
 	mut queued: Local<MainEntityHashSet>,
+	mut queued_format: Local<HashMap<RetainedViewEntity, TextureFormat>>,
 	extracted: Option<Res<ExtractedGrassField>>,
 	capability: Option<Res<GrassGpuCapability>>,
 ) {
@@ -670,7 +680,7 @@ fn queue_grass(
 		return;
 	}
 	let draw_grass = opaque_draw_functions.read().id::<DrawGrass>();
-	for (view, visible, msaa) in &views {
+	for (view, visible, msaa, view_target) in &views {
 		if !view_submits_grass(view, extracted.shadow_mode) {
 			continue;
 		}
@@ -680,20 +690,36 @@ fn queue_grass(
 		let Some(visible_entities) = visible.get::<GrassFieldPresenter>() else {
 			continue;
 		};
+		let format = grass_color_format(view, view_target);
+		let format_changed =
+			queued_format.insert(view.retained_view_entity, format) != Some(format);
 		let pending_queues = pending.prepare_for_new_frame(view.retained_view_entity);
 		for &main_entity in dirty.iter_to_dequeue(view.retained_view_entity, visible_entities) {
 			phase.remove(main_entity);
 		}
-		for (render_entity, main_entity) in dirty.iter_to_queue(
-			view.retained_view_entity,
-			visible_entities,
-			&pending_queues.prev_frame,
-			&mut queued,
-		) {
-			let Ok(pipeline_id) = pipelines.draw_variants.specialize(
-				&pipeline_cache,
-				GrassDrawKey { msaa: msaa.samples(), format: view.target_format },
-			) else {
+		if format_changed {
+			for (_render_entity, main_entity) in visible_entities.iter_visible() {
+				phase.remove(*main_entity);
+			}
+		}
+		let queue_targets: Vec<_> = if format_changed {
+			visible_entities.iter_visible().map(|(render, main)| (*render, *main)).collect()
+		} else {
+			dirty
+				.iter_to_queue(
+					view.retained_view_entity,
+					visible_entities,
+					&pending_queues.prev_frame,
+					&mut queued,
+				)
+				.map(|(render, main)| (*render, *main))
+				.collect()
+		};
+		for (render_entity, main_entity) in &queue_targets {
+			let Ok(pipeline_id) = pipelines
+				.draw_variants
+				.specialize(&pipeline_cache, GrassDrawKey { msaa: msaa.samples(), format })
+			else {
 				continue;
 			};
 			phase.add(

@@ -4,7 +4,7 @@
 
 use bevy::math::Vec3Swizzles;
 use bevy::prelude::*;
-use vegetation_shaders::wesl::{hash_u32, plant_id, BladeDescriptor, GrassPatchHeader};
+use vegetation_shaders::wesl::{BladeDescriptor, GrassPatchHeader, hash_u32, plant_id};
 
 use crate::bounds::GrassBounds;
 use crate::field::GrassFieldSettings;
@@ -28,11 +28,7 @@ impl SurfaceSample {
 	}
 
 	pub fn on_slope(root: Vec3, normal: Vec3) -> Self {
-		Self {
-			root,
-			normal: normal.normalize_or_zero().normalize_or(Vec3::Y),
-			height_m: None,
-		}
+		Self { root, normal: normal.normalize_or_zero().normalize_or(Vec3::Y), height_m: None }
 	}
 
 	pub fn with_height(mut self, height_m: f32) -> Self {
@@ -53,6 +49,8 @@ pub struct GrassPatch {
 	pub coverage: f32,
 	pub samples: Vec<SurfaceSample>,
 	pub lod: GrassPatchLod,
+	/// Grove-owned patches keep presence to the 1 km present ring.
+	pub grove_residency: bool,
 }
 
 impl GrassPatch {
@@ -68,6 +66,7 @@ impl GrassPatch {
 			coverage: coverage.clamp(0.0, 1.0),
 			samples,
 			lod: GrassPatchLod::High,
+			grove_residency: false,
 		}
 	}
 
@@ -136,6 +135,11 @@ impl GrassPatch {
 
 	pub fn with_lod(mut self, lod: GrassPatchLod) -> Self {
 		self.lod = lod;
+		self
+	}
+
+	pub fn with_grove_residency(mut self) -> Self {
+		self.grove_residency = true;
 		self
 	}
 
@@ -299,10 +303,8 @@ mod tests {
 
 	#[test]
 	fn from_height_sites_keeps_authored_blade_heights() -> anyhow::Result<()> {
-		let patch = GrassPatch::from_height_sites(
-			3,
-			[(Vec3::ZERO, 0.4), (Vec3::new(1.0, 0.0, 0.0), 1.6)],
-		);
+		let patch =
+			GrassPatch::from_height_sites(3, [(Vec3::ZERO, 0.4), (Vec3::new(1.0, 0.0, 0.0), 1.6)]);
 		let heights: Vec<_> = patch.descriptors().iter().map(|d| d.height_m).collect();
 		assert_eq!(heights.len(), 2);
 		assert!(heights.iter().any(|h| (*h - 0.4).abs() < 1e-4), "{heights:?}");
