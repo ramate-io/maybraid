@@ -9,6 +9,7 @@ use bevy::ui_render::prelude::{UiMaterial, UiMaterialPlugin};
 
 use menu_components::{HUD_GLASS_BORDER, HUD_GLASS_RADIUS, HUD_GLASS_STROKE};
 
+use crate::cursor::SkillMapCursor;
 use crate::lens::{
 	apply_overlay_lens_events, apply_overlay_lens_material, tick_overlay_lens, SkillMapOverlayLens,
 };
@@ -178,6 +179,25 @@ impl SkillMapOverlay {
 		}
 	}
 
+	/// The raw map `ViewportNode` sits under the compositor. Hide it while
+	/// expanded so the lens hole shows the 3D world, not the map RT — but keep
+	/// it in layout so the camera target still resizes to the overlay.
+	pub fn live_map_visibility(self) -> Visibility {
+		if self.expanded() {
+			Visibility::Hidden
+		} else {
+			Visibility::Inherited
+		}
+	}
+
+	pub fn cursor_visibility(self) -> Visibility {
+		if self.expanded() {
+			Visibility::Hidden
+		} else {
+			Visibility::Inherited
+		}
+	}
+
 	pub fn firearm_node(self) -> Node {
 		let card = Node {
 			flex_direction: FlexDirection::Column,
@@ -305,6 +325,10 @@ pub struct SkillMapOverlayPane {
 	pub material: Handle<SkillMapOverlayMaterial>,
 }
 
+/// Raw map `ViewportNode` under the compositor. Hidden while the overlay is expanded.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct SkillMapLiveMap;
+
 /// Authored kind on the map camera, so overlay can swap the clear color.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct SkillMapBackdrop {
@@ -322,6 +346,10 @@ pub struct OverlayParams {
 	pub flash: f32,
 	pub film: f32,
 	pub braid_turns: f32,
+	pub flare: f32,
+	pub _pad0: f32,
+	pub _pad1: f32,
+	pub _pad2: f32,
 }
 
 impl OverlayParams {
@@ -373,8 +401,7 @@ impl OverlayParams {
 		let lens = self.lens_mask(uv, size);
 		let glass_amt = amount * (1.0 - lens);
 		let field = sample_alpha * (1.0 - glass_amt) + treated * glass_amt;
-		let interior = sample_alpha * keep;
-		field * (1.0 - lens) + interior * lens
+		field * (1.0 - lens)
 	}
 
 	pub fn paint_ink(pigment: Vec3) -> f32 {
@@ -428,6 +455,7 @@ impl Plugin for SkillMapOverlayPlugin {
 		app.add_plugins(UiMaterialPlugin::<SkillMapOverlayMaterial>::default())
 			.init_resource::<SkillMapOverlayEnabled>()
 			.add_message::<SkillMapOverlayCue>()
+			.add_message::<crate::SkillMapEvent>()
 			.add_systems(
 				PostUpdate,
 				(apply_overlay_lens_events, tick_overlay_lens, apply_overlay_lens_material).chain(),
@@ -456,6 +484,21 @@ pub fn sync_skill_map_overlay(
 	mut panes: Query<
 		(&SkillMapMember, &SkillMapOverlayPane, &mut Node),
 		(Without<SkillMapHud>, Without<SkillMapViewport>, Without<SkillMapFirearmHud>),
+	>,
+	mut live_maps: Query<
+		(&SkillMapMember, &mut Visibility),
+		(
+			With<SkillMapLiveMap>,
+			Without<SkillMapHud>,
+			Without<SkillMapViewport>,
+			Without<SkillMapFirearmHud>,
+			Without<SkillMapOverlayPane>,
+			Without<SkillMapCursor>,
+		),
+	>,
+	mut cursors: Query<
+		(&SkillMapMember, &mut Visibility),
+		(With<SkillMapCursor>, Without<SkillMapLiveMap>),
 	>,
 	mut firearms: Query<
 		(&SkillMapMember, &mut Node, &mut ZIndex),
@@ -489,6 +532,8 @@ pub fn sync_skill_map_overlay(
 			&mut huds,
 			&mut frames,
 			&mut panes,
+			&mut live_maps,
+			&mut cursors,
 			&mut firearms,
 			&mut cameras,
 			overlay_materials.as_deref_mut(),
@@ -516,6 +561,21 @@ fn apply_overlay_layout(
 	panes: &mut Query<
 		(&SkillMapMember, &SkillMapOverlayPane, &mut Node),
 		(Without<SkillMapHud>, Without<SkillMapViewport>, Without<SkillMapFirearmHud>),
+	>,
+	live_maps: &mut Query<
+		(&SkillMapMember, &mut Visibility),
+		(
+			With<SkillMapLiveMap>,
+			Without<SkillMapHud>,
+			Without<SkillMapViewport>,
+			Without<SkillMapFirearmHud>,
+			Without<SkillMapOverlayPane>,
+			Without<SkillMapCursor>,
+		),
+	>,
+	cursors: &mut Query<
+		(&SkillMapMember, &mut Visibility),
+		(With<SkillMapCursor>, Without<SkillMapLiveMap>),
 	>,
 	firearms: &mut Query<
 		(&SkillMapMember, &mut Node, &mut ZIndex),
@@ -549,6 +609,16 @@ fn apply_overlay_layout(
 			if let Some(mut material) = materials.get_mut(&pane.material) {
 				material.set_overlay_lens(overlay, lens);
 			}
+		}
+	}
+	for (member, mut visibility) in live_maps.iter_mut() {
+		if member.session == session {
+			*visibility = overlay.live_map_visibility();
+		}
+	}
+	for (member, mut visibility) in cursors.iter_mut() {
+		if member.session == session {
+			*visibility = overlay.cursor_visibility();
 		}
 	}
 	for (member, mut node, mut z) in firearms.iter_mut() {
@@ -626,6 +696,10 @@ mod tests {
 		assert_eq!(SkillMapOverlay::Expanded.map_frame_node().width, Val::Percent(100.0));
 		assert_eq!(SkillMapOverlay::Collapsed.pane_node().display, Display::None);
 		assert_eq!(SkillMapOverlay::Expanded.pane_node().display, Display::Flex);
+		assert_eq!(SkillMapOverlay::Collapsed.live_map_visibility(), Visibility::Inherited);
+		assert_eq!(SkillMapOverlay::Expanded.live_map_visibility(), Visibility::Hidden);
+		assert_eq!(SkillMapOverlay::Collapsed.cursor_visibility(), Visibility::Inherited);
+		assert_eq!(SkillMapOverlay::Expanded.cursor_visibility(), Visibility::Hidden);
 		assert_eq!(SkillMapOverlay::Collapsed.frame_border(), HUD_GLASS_STROKE);
 		assert_eq!(SkillMapOverlay::Expanded.frame_border(), Color::NONE);
 	}
@@ -1179,7 +1253,19 @@ mod tests {
 			0.0,
 			0.5,
 		);
-		assert!(marks >= OVERLAY_MARK_ALPHA_MIN, "marks stay readable inside the lens");
+		assert!(marks < 0.08, "the lens is a world window, not a map disc, got {marks}");
+		let field_marks = OverlayParams::from_overlay(expanded).paint_alpha_at(
+			Vec2::ZERO,
+			size,
+			Vec3::ONE,
+			1.0,
+			0.0,
+			0.5,
+		);
+		assert!(
+			field_marks >= OVERLAY_MARK_ALPHA_MIN,
+			"marks stay readable on the skill map outside the ring, got {field_marks}"
+		);
 	}
 
 	fn lens_app() -> App {
@@ -1281,12 +1367,20 @@ mod tests {
 		let mid = lens_of(&app, user);
 		assert!(mid.is_uncurling(), "still uncurling at ~0.2s");
 		assert!(mid.curl() > 0.25 && mid.curl() < 0.75, "mid-uncurl curl, got {}", mid.curl());
-		for seq in 15..55 {
+		let mut seq = 15_u64;
+		while seq < 40 && !lens_of(&app, user).is_recurling() {
 			drive_rb(&mut app, source, seq, true);
+			seq += 1;
+		}
+		assert!(lens_of(&app, user).is_recurling(), "unravel must hand off to re-plait");
+		let replait = lens_of(&app, user);
+		assert!(replait.curl() < 0.55, "mid re-plait still filling in, got {}", replait.curl());
+		for later in seq..70 {
+			drive_rb(&mut app, source, later, true);
 		}
 		let done = lens_of(&app, user);
 		assert!(done.is_idle() || done.is_recurling());
-		assert!(done.curl() > 0.85, "braid must recurl around the rim, got {}", done.curl());
+		assert!(done.curl() > 0.85, "braid must re-plait around the rim, got {}", done.curl());
 		Ok(())
 	}
 }

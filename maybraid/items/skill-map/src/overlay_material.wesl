@@ -13,6 +13,10 @@ struct OverlayParams {
     flash: f32,
     film: f32,
     braid_turns: f32,
+    flare: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 }
 
 @group(1) @binding(0)
@@ -163,58 +167,92 @@ fn sphere_ring(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
     return vec4<f32>(col, band * amount * 0.94);
 }
 
+fn wrap_pi(a: f32) -> f32 {
+    return atan2(sin(a), cos(a));
+}
+
+/// 12 o'clock in overlay pixel space (Y grows down).
+fn braid_break() -> f32 {
+    return -1.57079632679;
+}
+
+fn braid_strand_radial(theta: f32, i: i32, radius: f32, amp: f32, braid_radius: f32) -> f32 {
+    let offset = 6.28318530718 * f32(i) / f32(BRAID_STRANDS);
+    let phase = params.braid_turns * theta + offset;
+    let woven = amp * sin(phase);
+    let park = (f32(i) - 1.0) * amp * 2.35;
+    let loosen = 1.0 - saturate(params.curl);
+    let from_break = abs(wrap_pi(theta - braid_break()));
+    let peel_width = loosen * 3.14159265359 + 1e-4;
+    let peel = pow(saturate(1.0 - from_break / peel_width), 1.35) * loosen;
+    let base = mix(woven, park, peel);
+    let flare = peel * (park * 2.0 + radius * (0.08 + 0.18 * loosen)) * params.flare;
+    return braid_radius + base + flare;
+}
+
 fn braid_color(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
-    if params.curl <= 0.001 {
+    if amount <= 0.0 {
         return vec4<f32>(0.0);
     }
     let p = pixel_from_center(uv, size);
     let r = length(p);
-    var theta = atan2(p.y, p.x);
-    if theta < 0.0 {
-        theta += 6.28318530718;
-    }
+    let theta = atan2(p.y, p.x);
     let radius = lens_radius_px(size);
     let ring_thick = max(radius * LENS_RING_THICKNESS_FRAC, 1.0);
     let amp = radius * BRAID_AMP_FRAC;
     let stroke = max(radius * BRAID_STROKE_FRAC, 1.0);
     let braid_radius = radius + ring_thick * 0.65;
-    let coverage = saturate(params.curl) * 6.28318530718;
-    if theta > coverage + 0.12 {
-        return vec4<f32>(0.0);
-    }
-    let tip = saturate(1.0 - saturate((coverage - theta) / 0.45));
-    let peel = tip * (1.0 - params.curl) * amp * 1.6;
-    let along = 1.0 - smoothstep(coverage - 0.10, coverage, theta);
-    var best = vec4<f32>(0.0);
-    var best_front = -2.0;
+    var alphas = array<f32, 3>(0.0, 0.0, 0.0);
+    var colors = array<vec3<f32>, 3>(vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0));
+    var depths = array<f32, 3>(-2.0, -2.0, -2.0);
     for (var i = 0; i < BRAID_STRANDS; i++) {
         let offset = 6.28318530718 * f32(i) / f32(BRAID_STRANDS);
         let phase = params.braid_turns * theta + offset;
-        let radial = braid_radius + amp * sin(phase) + peel;
+        let radial = braid_strand_radial(theta, i, radius, amp, braid_radius);
         let dist = abs(r - radial);
-        let body = 1.0 - smoothstep(stroke * 0.45, stroke, dist);
-        let alpha = body * along * amount;
+        let body = 1.0 - smoothstep(stroke * 0.42, stroke, dist);
+        let tube = 0.62 + 0.38 * (1.0 - saturate(dist / max(stroke, 1e-4)));
+        let alpha = body * amount;
         if alpha > 0.01 {
-            let front = cos(phase);
-            let color = braid_strand_color(i) * (1.0 + params.flash * 1.55);
-            if alpha > best.a && (front >= best_front || best.a < 0.05) {
-                best = vec4<f32>(color, alpha);
-                best_front = front;
+            alphas[i] = alpha;
+            colors[i] = braid_strand_color(i) * tube * (1.0 + params.flash * 1.55);
+            depths[i] = cos(phase);
+        }
+    }
+    // Back-to-front so each strand's over/under (cos phase) actually stacks.
+    for (var a = 0; a < 2; a++) {
+        for (var b = 0; b < 2 - a; b++) {
+            if depths[b] > depths[b + 1] {
+                let da = depths[b];
+                depths[b] = depths[b + 1];
+                depths[b + 1] = da;
+                let aa = alphas[b];
+                alphas[b] = alphas[b + 1];
+                alphas[b + 1] = aa;
+                let ca = colors[b];
+                colors[b] = colors[b + 1];
+                colors[b + 1] = ca;
             }
         }
     }
-    return best;
+    var out_rgb = vec3<f32>(0.0);
+    var out_a = 0.0;
+    for (var i = 0; i < BRAID_STRANDS; i++) {
+        let src_a = alphas[i];
+        if src_a > 0.01 {
+            out_rgb = mix(out_rgb, colors[i], src_a);
+            out_a = src_a + out_a * (1.0 - src_a);
+        }
+    }
+    return vec4<f32>(out_rgb, out_a);
 }
 
 fn film_sheen(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> f32 {
     if params.film <= 0.0 {
         return 0.0;
     }
-    let p = pixel_from_center(uv, size);
-    let dir = normalize(vec2<f32>(0.62, 0.38));
-    let n = normalize(p + vec2<f32>(0.001, 0.001));
-    let sheen = pow(saturate(dot(n, dir) * 0.5 + 0.5), 6.0);
-    return params.film * amount * (0.16 + 0.58 * sheen);
+    let lens = lens_mask(uv, size);
+    return params.film * amount * lens * 0.62;
 }
 
 @fragment
@@ -250,8 +288,8 @@ fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
     let keep = smoothstep(OVERLAY_MARK_ALPHA_LO, OVERLAY_MARK_ALPHA_HI, sample.a);
     let treated = mix(paint, sample.a, keep);
     let field = mix(sample.a, treated, amount * (1.0 - lens));
-    let interior = mix(0.0, sample.a, keep);
-    var alpha = mix(field, interior, lens);
+    // Interior is a hole: the 3D world shows through. Map marks stay outside.
+    var alpha = field * (1.0 - lens);
     let ring = sphere_ring(in.uv, size, amount);
     color = mix(color, ring.xyz, ring.a);
     alpha = max(alpha, ring.a);

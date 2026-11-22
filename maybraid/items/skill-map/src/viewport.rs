@@ -17,7 +17,7 @@ use menu_components::{
 use crate::cursor::SkillMapCursor;
 use crate::map::{authored_map_from_spec, render_layer, AuthoredMap, SkillMapId};
 use crate::overlay::{
-	spawn_overlay_pane, SkillMapBackdrop, SkillMapOverlay, SkillMapOverlayMaterial,
+	spawn_overlay_pane, SkillMapBackdrop, SkillMapLiveMap, SkillMapOverlay, SkillMapOverlayMaterial,
 };
 use crate::tile_material::SkillMapTileAssets;
 use crate::tiles::spawn_map_tiles;
@@ -28,7 +28,7 @@ pub(crate) const VIEWPORT_PX: f32 = 228.0;
 /// `WindowSize` area is viewport pixels times this. 1.0 showed almost the whole 256 map.
 pub(crate) const MAP_CAMERA_SCALE: f32 = 0.4;
 
-pub(crate) fn map_view_extent() -> Vec2 {
+pub fn map_view_extent() -> Vec2 {
 	Vec2::splat(VIEWPORT_PX * MAP_CAMERA_SCALE)
 }
 const FRAME_BORDER: f32 = 2.0;
@@ -357,6 +357,9 @@ fn spawn_map_frame(
 		.with_children(|frame| {
 			frame.spawn((
 				ViewportNode::new(camera),
+				SkillMapLiveMap,
+				spec.id,
+				member,
 				Node {
 					position_type: PositionType::Absolute,
 					left: Val::Px(FRAME_BORDER),
