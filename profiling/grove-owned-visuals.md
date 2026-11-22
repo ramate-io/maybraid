@@ -33,3 +33,16 @@ The frozen legacy arm completed all 15 walking waypoints and the full lifecycle 
 The nine selected tiles contained 32 Storybooks among 62 woody plants. All repeated tile inventories retained identical counts and placement digests. Foreground/fullscreen verification admitted 287 samples with no loss after the first valid sample; startup had ten pre-window retries. The published-fork Immediate check passed. The game and collector both exited successfully, retaining a 1,838,783,595-byte Tracy capture.
 
 At one-second cadence, 597 gameplay process samples reached a maximum physical footprint of 5,509.94 MiB and RSS of 4,649.70 MiB. These are sampled peaks in an instrumented run, not instantaneous or GPU-memory peaks. CPU frame statistics and candidate comparisons remain pending; this validation establishes the baseline workload only.
+
+## Simple TreePatch swap (this continuation)
+
+Admission no longer imports authored wood/canopy topology. Each eligible grove becomes one `TreePatch` with one seed, the storybook recipe, and samples at the existing Storybook roots. Oak and Rory kits stay on the legacy path. Physics metadata keeps an identity `Transform` so collider children inherit `GlobalTransform` (Bevy B0004). Toggle remains `MAYBRAID_EXPERIMENT_TREE_FIELD=gpu|cpu` versus omitted for kits. Both GPU presenters stay `NotShadowCaster`; the world trial still requires `MAYBRAID_SHADOWS=off`.
+
+A release `--locked` nine-tile CPU path on this Linux VM (`TemperateLowerMassivesParams` 3×3, not the native Metal standing scene) reported:
+
+| Arm | Plants | Kit High nodes (stick/foliage) | GPU branches | GPU leaves | Upload | CPU select |
+|---|---:|---:|---:|---:|---:|---:|
+| Legacy kits | 35 Storybooks among 73 woody | 35 / 35 | — | — | per-kit meshes | not timed here |
+| GPU TreePatch | 35 at the same roots | — | 804 | 17,146 | 1,165,024 B | 0.336 ms one-shot compact |
+
+Kit node counts are High `VegetationComponents` lists (one collection per tree), not expanded GLB entities. CPU select is a single `TreeSelector::compact` over the nine generated fields, not an application-interval tail. GPU execution, upload counts during a live world session, entity/archetype churn, peak gameplay memory, and Metal frame times were not measured on this machine. Shadows were identical (`off` / `NotShadowCaster`) in both arms of this check. Bush world groves are not swapped; `BushPatch::from_roots` is available for the same placement pattern.

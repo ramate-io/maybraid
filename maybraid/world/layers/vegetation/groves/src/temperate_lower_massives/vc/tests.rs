@@ -102,15 +102,40 @@ fn claiming_visuals_preserves_sources_and_retains_only_physics_for_storybooks() 
 		anyhow::bail!("wrong species")
 	};
 	use bevy::scene::{ScenePlugin, WorldSceneExt};
+	use bevy::transform::TransformPlugin;
 	let mut app = App::new();
-	app.add_plugins(MinimalPlugins)
-		.add_plugins((AssetPlugin::default(), ScenePlugin));
-	let world = app.world_mut();
-	let entity = world.spawn_scene(storybook_physics_metadata(tree, plant))?.id();
-	assert!(world
-		.get::<FlattenedComponentsOnly<PlacedVegetation<Arc<StorybookTree>>>>(entity)
-		.is_some());
-	assert!(world.get::<Children>(entity).is_none());
+	app.add_plugins(MinimalPlugins).add_plugins((
+		TransformPlugin,
+		AssetPlugin::default(),
+		ScenePlugin,
+	));
+	let (entity, child) = {
+		let world = app.world_mut();
+		let entity = world.spawn_scene(storybook_physics_metadata(tree, plant))?.id();
+		assert!(
+			world
+				.get::<FlattenedComponentsOnly<PlacedVegetation<Arc<StorybookTree>>>>(entity)
+				.is_some()
+		);
+		assert!(world.get::<Transform>(entity).is_some());
+		assert!(world.get::<GlobalTransform>(entity).is_some());
+		assert!(world.get::<Children>(entity).is_none());
+		let child = world
+			.spawn((Transform::from_translation(Vec3::new(4.0, 1.5, -2.0)), ChildOf(entity)))
+			.id();
+		(entity, child)
+	};
+	let _ = entity;
+	app.update();
+	let child_translation = app
+		.world()
+		.get::<GlobalTransform>(child)
+		.ok_or_else(|| anyhow::anyhow!("collider child missing GlobalTransform"))?
+		.translation();
+	assert!(
+		(child_translation - Vec3::new(4.0, 1.5, -2.0)).length() < 1e-4,
+		"physics child drifted to {child_translation:?}"
+	);
 	for (before, after) in original.iter().zip(grove.plants.iter()) {
 		assert_eq!(before.placement, after.placement);
 		if let (

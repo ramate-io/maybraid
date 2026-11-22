@@ -6,11 +6,11 @@ use std::path::PathBuf;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
+use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
 use vegetation_shaders::wesl::WindInputs;
 use vegetation_tree_field::{LeafCloseStyle, TreeFieldSettings};
 
-use crate::camera::{yaw_pitch, CameraController};
+use crate::camera::{CameraController, yaw_pitch};
 use crate::kit;
 use crate::scene;
 
@@ -117,6 +117,11 @@ impl CaptureShot {
 		self
 	}
 
+	pub const fn with_scene(mut self, scene: CaptureScene) -> Self {
+		self.scene = scene;
+		self
+	}
+
 	pub fn apply_world(self, world: &mut World) {
 		kit::clear_kit(world);
 		match self.mode {
@@ -141,7 +146,13 @@ impl CaptureShot {
 				}
 			},
 			CaptureMode::Kit => {
-				scene::spawn_close_only(world);
+				match self.scene {
+					CaptureScene::Grove => {
+						scene::clear_patches(world);
+						scene::spawn_kind(world, scene::PatchKind::Grove);
+					}
+					_ => scene::spawn_close_only(world),
+				}
 				kit::spawn_kit_from_patches(world);
 				scene::clear_patches(world);
 			}
@@ -174,6 +185,8 @@ pub const TREE_CAPTURE_SHOTS: &[CaptureShot] = &[
 		.with_leaves(LeafCloseStyle::Crisp),
 	CaptureShot::gpu("grove-edge", GROVE, CaptureScene::Grove),
 	CaptureShot::gpu("grove", GROVE_FULL, CaptureScene::Grove),
+	CaptureShot::kit("grove-legacy", GROVE_FULL).with_scene(CaptureScene::Grove),
+	CaptureShot::gpu("grove-gpu", GROVE_FULL, CaptureScene::Grove),
 	CaptureShot::gpu("slope-rake", SLOPE, CaptureScene::Slope),
 	CaptureShot::gpu("lod-transition", LOD, CaptureScene::Lod),
 	CaptureShot::gpu("wind-gust", GUST, CaptureScene::Close).with_gust(),
@@ -189,6 +202,7 @@ pub const TREE_CAPTURE_SHOTS: &[CaptureShot] = &[
 #[derive(Resource, Debug)]
 pub struct CaptureSession {
 	pub dir: PathBuf,
+	shots: Vec<CaptureShot>,
 	phase: CapturePhase,
 }
 
@@ -206,7 +220,11 @@ impl CaptureSession {
 		if dir.is_empty() {
 			return None;
 		}
-		Some(Self { dir: PathBuf::from(dir), phase: CapturePhase::Warmup { frames: 0 } })
+		let shots = selected_shots();
+		if shots.is_empty() {
+			return None;
+		}
+		Some(Self { dir: PathBuf::from(dir), shots, phase: CapturePhase::Warmup { frames: 0 } })
 	}
 
 	pub fn window_resolution() -> (u32, u32) {
@@ -229,8 +247,8 @@ pub(crate) fn tick_capture(
 	match session.phase {
 		CapturePhase::Warmup { frames } => {
 			if frames == 0 {
-				view.apply_camera(&TREE_CAPTURE_SHOTS[0]);
-				let shot = TREE_CAPTURE_SHOTS[0];
+				view.apply_camera(&session.shots[0]);
+				let shot = session.shots[0];
 				commands.queue(move |world: &mut World| shot.apply_world(world));
 			}
 			if frames + 1 >= WARMUP_FRAMES {
@@ -241,7 +259,7 @@ pub(crate) fn tick_capture(
 		}
 		CapturePhase::Settle { index, frames } => {
 			if frames == 0 {
-				if let Some(shot) = TREE_CAPTURE_SHOTS.get(index).copied() {
+				if let Some(shot) = session.shots.get(index).copied() {
 					view.apply_camera(&shot);
 					commands.queue(move |world: &mut World| shot.apply_world(world));
 				}
@@ -253,7 +271,7 @@ pub(crate) fn tick_capture(
 			}
 		}
 		CapturePhase::Snap { index } => {
-			let Some(shot) = TREE_CAPTURE_SHOTS.get(index) else {
+			let Some(shot) = session.shots.get(index) else {
 				exit.write(AppExit::Success);
 				return;
 			};
@@ -270,7 +288,7 @@ pub(crate) fn tick_capture(
 		CapturePhase::WaitSave { index, frames } => {
 			if (capturing.iter().next().is_none() && frames >= 2) || frames + 1 >= SAVE_FRAMES {
 				let next = index + 1;
-				if next >= TREE_CAPTURE_SHOTS.len() {
+				if next >= session.shots.len() {
 					exit.write(AppExit::Success);
 				} else {
 					session.phase = CapturePhase::Settle { index: next, frames: 0 };
@@ -280,6 +298,21 @@ pub(crate) fn tick_capture(
 			}
 		}
 	}
+}
+
+fn selected_shots() -> Vec<CaptureShot> {
+	let all = TREE_CAPTURE_SHOTS;
+	let Ok(filter) = std::env::var("MAYBRAID_CAPTURE_FILTER") else {
+		return all.to_vec();
+	};
+	let names: Vec<_> = filter.split(',').map(str::trim).filter(|name| !name.is_empty()).collect();
+	if names.is_empty() {
+		return all.to_vec();
+	}
+	all.iter()
+		.copied()
+		.filter(|shot| names.iter().any(|name| shot.name == *name))
+		.collect()
 }
 
 impl CaptureView<'_, '_> {
@@ -313,6 +346,8 @@ mod tests {
 			"canopy-leaf-close-crisp",
 			"grove-edge",
 			"grove",
+			"grove-legacy",
+			"grove-gpu",
 			"slope-rake",
 			"lod-transition",
 			"wind-gust",
@@ -332,6 +367,16 @@ mod tests {
 		let kit = kit.ok_or_else(|| anyhow::anyhow!("missing kit close"))?;
 		assert_eq!(gpu.camera, kit.camera);
 		assert_eq!(gpu.look_at, kit.look_at);
+		let grove_gpu = TREE_CAPTURE_SHOTS
+			.iter()
+			.find(|shot| shot.name == "grove-gpu")
+			.ok_or_else(|| anyhow::anyhow!("missing grove gpu"))?;
+		let grove_legacy = TREE_CAPTURE_SHOTS
+			.iter()
+			.find(|shot| shot.name == "grove-legacy")
+			.ok_or_else(|| anyhow::anyhow!("missing grove legacy"))?;
+		assert_eq!(grove_gpu.camera, grove_legacy.camera);
+		assert_eq!(grove_gpu.look_at, grove_legacy.look_at);
 		let drape = TREE_CAPTURE_SHOTS
 			.iter()
 			.find(|shot| shot.name == "willow-drape-close")

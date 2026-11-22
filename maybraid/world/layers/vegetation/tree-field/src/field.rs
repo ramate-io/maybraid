@@ -5,10 +5,10 @@ use vegetation_shaders::wesl::{LodThresholds, WindInputs};
 
 use crate::bounds::TreeBounds;
 use crate::layout::{
-	BranchDescriptor, LeafCloseStyle, LeafDescriptor, PlantDescriptor, TreePatchHeader, PARENT_NONE,
+	BranchDescriptor, LeafCloseStyle, LeafDescriptor, PARENT_NONE, PlantDescriptor, TreePatchHeader,
 };
 use crate::patch::TreePatch;
-use crate::topology::{MAX_BRANCHES_PER_PLANT, MAX_LEAVES_PER_PLANT};
+use crate::topology::{MAX_BRANCH_DEPTH, MAX_BRANCHES_PER_PLANT, MAX_LEAVES_PER_PLANT};
 
 /// Tunables for GPU list capacities and wind. Authoring budgets live here, not in WESL.
 #[derive(Resource, Clone, Debug)]
@@ -61,6 +61,13 @@ pub struct TreeField {
 }
 
 impl TreeField {
+	/// Bytes written for one owner snapshot (plants + branches + leaves).
+	pub fn upload_bytes(&self) -> u64 {
+		self.plants.len() as u64 * crate::layout::PLANT_DESCRIPTOR_STRIDE
+			+ self.branches.len() as u64 * crate::layout::BRANCH_DESCRIPTOR_STRIDE
+			+ self.leaves.len() as u64 * crate::layout::LEAF_DESCRIPTOR_STRIDE
+	}
+
 	/// Same-build parity receipt over the exact bytes uploaded for this owner.
 	pub fn descriptor_digest(&self) -> u64 {
 		use std::hash::{Hash, Hasher};
@@ -95,10 +102,19 @@ impl TreeField {
 		let mut field = Self::default();
 		for mut plant in plants {
 			for (index, branch) in plant.branches.iter().enumerate() {
+				if branch.depth > MAX_BRANCH_DEPTH {
+					return Err("branch exceeds bounded attachment depth");
+				}
 				if (branch.parent_index != PARENT_NONE && branch.parent_index as usize >= index)
 					|| (branch.major_parent != PARENT_NONE && branch.major_parent as usize > index)
 				{
 					return Err("authored branch references invalid parent");
+				}
+				let parent = (branch.parent_index != PARENT_NONE)
+					.then(|| plant.branches.get(branch.parent_index as usize).copied())
+					.flatten();
+				if !branch.follows_parent_depth(parent) {
+					return Err("branch depth does not follow its parent");
 				}
 			}
 			if plant
@@ -250,5 +266,15 @@ mod authored_tests {
 		let limited = TreeFieldSettings { max_leaves: 1, ..settings };
 		assert!(TreeField::from_plants(vec![source], &limited).is_err());
 		Ok(())
+	}
+
+	#[test]
+	fn rejects_branch_deeper_than_the_attachment_budget() {
+		let mut source =
+			TreePlant::generate(1, 0, Vec3::ZERO, Vec3::Y, 1., &TreeRecipe::storybook());
+		if let Some(branch) = source.branches.last_mut() {
+			branch.depth = MAX_BRANCH_DEPTH + 1;
+		}
+		assert!(TreeField::from_plants(vec![source], &TreeFieldSettings::default()).is_err());
 	}
 }

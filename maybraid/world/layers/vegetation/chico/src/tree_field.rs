@@ -3,15 +3,15 @@
 mod authored;
 
 use bevy::prelude::*;
-use bevy::render::renderer::{RenderAdapter, RenderDevice};
 use bevy::render::RenderApp;
+use bevy::render::renderer::{RenderAdapter, RenderDevice};
 use std::sync::Arc;
 use vegetation_groves::temperate_lower_massives::{
-	configure_storybook_field_area, scout_storybook_field_tile, StorybookFieldArea,
+	StorybookFieldArea, configure_storybook_field_area, scout_storybook_field_tile,
 };
 use vegetation_tree_field::{
-	requested_world_tree_mode, supports_world_tree_field, TreeField, TreeFieldPlugin,
-	TreeFieldSettings, TreeGrove, BRANCH_DESCRIPTOR_STRIDE,
+	BRANCH_DESCRIPTOR_STRIDE, TreeField, TreeFieldPlugin, TreeFieldSettings, TreeGrove, TreePatch,
+	requested_world_tree_mode, supports_world_tree_field,
 };
 
 use crate::ForestGroveTile;
@@ -33,14 +33,11 @@ fn owner_settings() -> TreeFieldSettings {
 pub(crate) fn claim_grove_field(tile: &mut ForestGroveTile) -> Option<TreeGrove> {
 	let ForestGroveTile::TemperateLowerMassives(grove) = tile else { return None };
 	let sources = grove.storybook_field_sources()?;
-	let plants = match sources.iter().map(authored::from_source).collect::<Result<Vec<_>, _>>() {
-		Ok(plants) => plants,
-		Err(reason) => {
-			warn!(target: "maybraid.tree_field", reason, "grove retained legacy visuals");
-			return None;
-		}
-	};
-	let field = match TreeField::from_plants(plants, &owner_settings()) {
+	let patch = authored::StorybookGrovePatch::from_sources(
+		TreePatch::seed_from_origin(grove.extent.min()),
+		&sources,
+	);
+	let field = match TreeField::from_plants(patch.plants(), &owner_settings()) {
 		Ok(field) => field,
 		Err(reason) => {
 			warn!(target: "maybraid.tree_field", reason, "grove retained legacy visuals");
@@ -51,7 +48,8 @@ pub(crate) fn claim_grove_field(tile: &mut ForestGroveTile) -> Option<TreeGrove>
 		plants = field.plants.len(), woody_plants = grove.plants.len(),
 		unsupported_plants = grove.plants.len() - field.plants.len(),
 		branches = field.branches.len(), leaves = field.leaves.len(),
-		"persistent authored grove admitted; Oak and Rory retain legacy visuals");
+		upload_bytes = field.upload_bytes(),
+		"persistent grove patch admitted; Oak and Rory retain legacy visuals");
 	grove.claim_storybook_field_visuals();
 	Some(TreeGrove(Arc::new(field)))
 }

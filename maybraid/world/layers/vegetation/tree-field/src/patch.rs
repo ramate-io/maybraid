@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use crate::bounds::TreeBounds;
 use crate::field::TreeFieldSettings;
 use crate::host::TreePatchLod;
-use crate::layout::{TreePatchHeader, PARENT_NONE};
+use crate::layout::{PARENT_NONE, TreePatchHeader};
 use crate::recipe::TreeRecipe;
 use crate::topology::TreePlant;
 
@@ -88,12 +88,31 @@ impl TreePatch {
 	}
 
 	/// Grove-style placements: world root + scale, same recipe as Temperate Lower Massives storybook.
-	pub fn from_grove_placements(seed: u32, placements: &[(Vec3, f32)], recipe: TreeRecipe) -> Self {
+	pub fn from_grove_placements(
+		seed: u32,
+		placements: &[(Vec3, f32)],
+		recipe: TreeRecipe,
+	) -> Self {
 		let samples = placements
 			.iter()
 			.map(|(root, scale)| TreeSample::planar(*root).with_scale(*scale))
 			.collect();
 		Self::new(seed, recipe, 1.0, samples)
+	}
+
+	/// One recipe, one seed, samples at the given world roots (unit scale).
+	pub fn from_roots(
+		seed: u32,
+		roots: impl IntoIterator<Item = Vec3>,
+		recipe: TreeRecipe,
+	) -> Self {
+		let placements: Vec<_> = roots.into_iter().map(|root| (root, 1.0)).collect();
+		Self::from_grove_placements(seed, &placements, recipe)
+	}
+
+	/// Stable per-tile seed so neighboring groves do not share the same skeleton.
+	pub fn seed_from_origin(origin: Vec3) -> u32 {
+		vegetation_shaders::wesl::hash_u32(origin.x.to_bits() ^ origin.z.to_bits().rotate_left(16))
 	}
 
 	pub fn with_lod(mut self, lod: TreePatchLod) -> Self {
@@ -126,10 +145,9 @@ impl TreePatch {
 			.iter()
 			.enumerate()
 			.filter_map(|(i, sample)| {
-				let rank = vegetation_shaders::wesl::density_rank(vegetation_shaders::wesl::plant_id(
-					self.seed,
-					i as u32,
-				));
+				let rank = vegetation_shaders::wesl::density_rank(
+					vegetation_shaders::wesl::plant_id(self.seed, i as u32),
+				);
 				if rank >= density && density < 1.0 && self.samples.len() > 1 {
 					return None;
 				}
@@ -148,13 +166,10 @@ impl TreePatch {
 	pub fn bounds(&self, settings: &TreeFieldSettings) -> TreeBounds {
 		let mut bounds = TreeBounds::empty();
 		for plant in self.plants() {
-			bounds = bounds.union(TreeBounds::from_plant(&plant.descriptor, settings.wind.strength_m));
+			bounds =
+				bounds.union(TreeBounds::from_plant(&plant.descriptor, settings.wind.strength_m));
 		}
-		if bounds.is_empty() {
-			TreeBounds { min: Vec3::ZERO, max: Vec3::ZERO }
-		} else {
-			bounds
-		}
+		if bounds.is_empty() { TreeBounds { min: Vec3::ZERO, max: Vec3::ZERO } } else { bounds }
 	}
 
 	pub fn header(

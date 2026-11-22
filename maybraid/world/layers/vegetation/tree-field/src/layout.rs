@@ -130,7 +130,9 @@ impl PlantDescriptor {
 	}
 
 	pub fn leaf_close_style(self) -> LeafCloseStyle {
-		LeafCloseStyle::from_u32((self.flags & LeafCloseStyle::FLAG_MASK) >> LeafCloseStyle::FLAG_SHIFT)
+		LeafCloseStyle::from_u32(
+			(self.flags & LeafCloseStyle::FLAG_MASK) >> LeafCloseStyle::FLAG_SHIFT,
+		)
 	}
 
 	pub fn branch_range(self) -> std::ops::Range<u32> {
@@ -199,6 +201,14 @@ impl BranchDescriptor {
 
 	pub fn parent_is_resolvable(self, count: u32) -> bool {
 		self.parent_index == PARENT_NONE || self.parent_index < count
+	}
+
+	/// Trunks are depth 0; every child is exactly one deeper than its parent.
+	pub fn follows_parent_depth(self, parent: Option<Self>) -> bool {
+		match parent {
+			None => self.is_trunk() && self.depth == 0,
+			Some(parent) => !self.is_trunk() && self.depth == parent.depth.saturating_add(1),
+		}
 	}
 
 	pub fn max_radius_m(self) -> f32 {
@@ -447,7 +457,10 @@ mod tests {
 		let dithered = plant.with_leaf_close_style(LeafCloseStyle::Dither);
 		assert!(dithered.is_active());
 		assert_eq!(dithered.leaf_close_style(), LeafCloseStyle::Dither);
-		assert_eq!(dithered.with_leaf_close_style(LeafCloseStyle::Crisp).leaf_close_style(), LeafCloseStyle::Crisp);
+		assert_eq!(
+			dithered.with_leaf_close_style(LeafCloseStyle::Crisp).leaf_close_style(),
+			LeafCloseStyle::Crisp
+		);
 		assert_eq!(LeafCloseStyle::parse_name("dither"), Some(LeafCloseStyle::Dither));
 		assert_eq!(LeafCloseStyle::default(), LeafCloseStyle::Smooth);
 		Ok(())

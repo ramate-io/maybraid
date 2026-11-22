@@ -2,8 +2,8 @@
 
 use bevy::math::{Vec2, Vec3};
 use vegetation_shaders::wesl::{
-	attachment_frame, branch_rest_sample, deform_along_curve, leaf_surface_vertex, CurveSample,
-	LocalFrame,
+	CurveSample, LocalFrame, attachment_frame, branch_rest_sample, deform_along_curve,
+	leaf_surface_vertex,
 };
 
 use crate::layout::{BranchDescriptor, LeafDescriptor, PlantDescriptor};
@@ -48,6 +48,20 @@ impl BranchDescriptor {
 			sample = deform_child(child, child_t, sample, wind_xz);
 		}
 		sample
+	}
+
+	/// Count the parent walk this branch takes, including itself. Capped at [`MAX_ATTACH_HOPS`].
+	pub fn attachment_hops(self, branches: &[BranchDescriptor]) -> u32 {
+		let mut hops = 1u32;
+		let mut current = self;
+		while !current.is_trunk() && hops < MAX_ATTACH_HOPS {
+			let Some(parent) = branches.get(current.parent_index as usize).copied() else {
+				break;
+			};
+			hops += 1;
+			current = parent;
+		}
+		hops
 	}
 }
 
@@ -125,7 +139,7 @@ mod tests {
 	use crate::recipe::TreeRecipe;
 	use crate::topology::TreePlant;
 	use bevy::math::Vec3Swizzles;
-	use vegetation_shaders::wesl::{wind_field, WindInputs};
+	use vegetation_shaders::wesl::{WindInputs, wind_field};
 
 	#[test]
 	fn imported_root_branch_keeps_its_authored_anchor() {
@@ -196,6 +210,20 @@ mod tests {
 		let wind = Vec2::new(3.0, 1.0);
 		let root = trunk.world_sample(&plant.branches, &plant.descriptor, 0.0, wind);
 		assert!((root.position - plant.descriptor.root).length() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn grove_patch_attachment_stays_within_hop_budget() -> anyhow::Result<()> {
+		use crate::patch::TreePatch;
+		let patch = TreePatch::grove(9, Vec3::ZERO, Vec2::splat(36.0), 12.0);
+		for plant in patch.plants() {
+			assert!(plant.attachment_is_bounded());
+			for branch in &plant.branches {
+				assert!(branch.attachment_hops(&plant.branches) <= MAX_ATTACH_HOPS);
+				assert!(branch.depth <= crate::topology::MAX_BRANCH_DEPTH);
+			}
+		}
 		Ok(())
 	}
 

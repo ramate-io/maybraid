@@ -23,14 +23,15 @@ mod template;
 mod topology;
 
 pub use bounds::TreeBounds;
+pub use deform::MAX_ATTACH_HOPS;
 pub use diagnostics::TreeFieldStats;
 pub use field::{TreeField, TreeFieldSettings};
 pub use gpu::{requested_world_tree_mode, supports_world_tree_field};
 pub use host::TreePatchLod;
 pub use layout::{
-	BranchDescriptor, LeafCloseStyle, LeafDescriptor, PlantDescriptor, TreePatchHeader, WoodLod,
-	BRANCH_DESCRIPTOR_STRIDE, LEAF_DESCRIPTOR_STRIDE, PARENT_NONE, PLANT_DESCRIPTOR_STRIDE,
-	TREE_LOD_COUNT, TREE_LOD_FAR, TREE_LOD_MID, TREE_LOD_NEAR,
+	BRANCH_DESCRIPTOR_STRIDE, BranchDescriptor, LEAF_DESCRIPTOR_STRIDE, LeafCloseStyle,
+	LeafDescriptor, PARENT_NONE, PLANT_DESCRIPTOR_STRIDE, PlantDescriptor, TREE_LOD_COUNT,
+	TREE_LOD_FAR, TREE_LOD_MID, TREE_LOD_NEAR, TreePatchHeader, WoodLod,
 };
 pub use patch::{TreePatch, TreeSample};
 pub use plugin::{TreeFieldPlugin, TreeGrove};
@@ -38,7 +39,7 @@ pub use recipe::{TreeForm, TreeRecipe};
 pub use select::{CompactedTreeLists, TreeSelector};
 pub use template::{LeafTemplate, WoodTemplate};
 pub use topology::{
-	CanopyLayer, TreePlant, MAX_BRANCHES_PER_PLANT, MAX_BRANCH_DEPTH, MAX_LEAVES_PER_PLANT,
+	CanopyLayer, MAX_BRANCH_DEPTH, MAX_BRANCHES_PER_PLANT, MAX_LEAVES_PER_PLANT, TreePlant,
 };
 pub use vegetation_grass_field::{GrassGpuCapability, GrassGpuMode, WorldFrustum};
 pub use vegetation_shaders::wesl::{GrassViewUniform, VegetationPalette};

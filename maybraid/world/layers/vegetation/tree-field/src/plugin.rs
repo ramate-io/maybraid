@@ -8,18 +8,18 @@ use bevy::camera::primitives::Aabb;
 use bevy::camera::visibility::{self, VisibilityClass};
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
+use bevy::render::RenderApp;
 use bevy::render::extract_component::ExtractComponent;
 use bevy::render::extract_component::ExtractComponentPlugin;
 use bevy::render::extract_resource::ExtractResource;
 use bevy::render::extract_resource::ExtractResourcePlugin;
-use bevy::render::RenderApp;
 use vegetation_components::CanopyShadowMode;
 use vegetation_grass_field::GrassGpuCapability;
 use vegetation_shaders::VegetationWeslPlugin;
 
 use crate::diagnostics::TreeFieldStats;
 use crate::field::{TreeField, TreeFieldSettings};
-use crate::gpu::{requested_world_tree_mode, TreeGpuPlugin};
+use crate::gpu::{TreeGpuPlugin, requested_world_tree_mode};
 use crate::patch::TreePatch;
 use crate::shaders::TreeShadersPlugin;
 
@@ -121,7 +121,7 @@ fn publish_groves(
 	mut removed: RemovedComponents<TreeGrove>,
 	mut extracted: ResMut<ExtractedTreeGroves>,
 	mut presenters: Local<HashMap<Entity, [Entity; 2]>>,
-	mut bounds: Query<&mut Aabb, With<TreeFieldPresenter>>,
+	mut bounds: Query<&mut Aabb, (With<TreeFieldPresenter>, Allow<Disabled>)>,
 ) {
 	for owner in removed.read() {
 		if Arc::make_mut(&mut extracted.0).remove(&owner).is_some() {
@@ -332,6 +332,43 @@ mod tests {
 		assert!(!Arc::ptr_eq(&initial, next));
 		assert_eq!(initial.generation, 0);
 		assert_eq!(next.generation, 1);
+	}
+
+	#[test]
+	fn disabled_grove_presenters_keep_updated_bounds() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.init_resource::<ExtractedTreeGroves>().add_systems(Update, publish_groves);
+		let origin = TreePatch::isolated(1, Vec3::ZERO, TreeRecipe::storybook());
+		let field = Arc::new(
+			TreeField::rebuild([&origin], &TreeFieldSettings::default()).with_generation(1),
+		);
+		let owner = app.world_mut().spawn(TreeGrove(field)).id();
+		app.update();
+		let children = app
+			.world()
+			.get::<Children>(owner)
+			.ok_or_else(|| anyhow::anyhow!("grove presenters absent"))?
+			.to_vec();
+		for child in &children {
+			app.world_mut().entity_mut(*child).insert(Disabled);
+		}
+		let moved = TreePatch::isolated(1, Vec3::new(40.0, 0.0, 0.0), TreeRecipe::storybook());
+		let next = Arc::new(
+			TreeField::rebuild([&moved], &TreeFieldSettings::default()).with_generation(2),
+		);
+		app.world_mut().entity_mut(owner).insert(TreeGrove(next));
+		app.update();
+		let mut bounds = app
+			.world_mut()
+			.query_filtered::<&Aabb, (With<TreeFieldPresenter>, Allow<Disabled>)>();
+		for aabb in bounds.iter(app.world()) {
+			assert!(
+				aabb.center.x > 10.0,
+				"disabled presenter kept stale AABB center {:?}",
+				aabb.center
+			);
+		}
+		Ok(())
 	}
 
 	#[test]

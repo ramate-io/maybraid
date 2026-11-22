@@ -3,7 +3,7 @@
 use bevy::math::{Vec3, Vec3Swizzles};
 use vegetation_shaders::wesl::{hash_u32, hash_u32_to_unit, plant_id};
 
-use crate::layout::{BranchDescriptor, LeafDescriptor, PlantDescriptor, PARENT_NONE};
+use crate::layout::{BranchDescriptor, LeafDescriptor, PARENT_NONE, PlantDescriptor};
 use crate::recipe::TreeRecipe;
 
 /// Explicit capacity so shaders never walk an unbounded graph.
@@ -210,7 +210,8 @@ impl TreePlant {
 		let id = plant_id(seed, local_index);
 		let height = sample_range(&recipe.height_m, hash_u32_to_unit(id ^ 0x1)) * scale.max(1e-4);
 		let limb_count = sample_u32(&recipe.limb_count, hash_u32(id ^ 0x2));
-		let depth_budget = sample_u32(&recipe.branch_depth, hash_u32(id ^ 0x3)).min(MAX_BRANCH_DEPTH);
+		let depth_budget =
+			sample_u32(&recipe.branch_depth, hash_u32(id ^ 0x3)).min(MAX_BRANCH_DEPTH);
 		let spread = sample_range(&recipe.canopy_spread_m, hash_u32_to_unit(id ^ 0x4)) * scale;
 		let stalk_radius = sample_range(&recipe.stalk_radius_m, hash_u32_to_unit(id ^ 0x5)) * scale;
 		let leaf_size = sample_range(&recipe.leaf_size_m, hash_u32_to_unit(id ^ 0x6)) * scale;
@@ -223,8 +224,8 @@ impl TreePlant {
 		let mut twig_sites = Vec::new();
 
 		let trunk_len = height * recipe.stalk_height_fraction.clamp(0.62, 0.88);
-		let lean = tangent_on(upn, hash_u32_to_unit(id ^ 0x7) * std::f32::consts::TAU)
-			* (height * 0.035);
+		let lean =
+			tangent_on(upn, hash_u32_to_unit(id ^ 0x7) * std::f32::consts::TAU) * (height * 0.035);
 		let trunk_tip = root + upn * trunk_len + lean;
 		let trunk_mid = root + upn * (trunk_len * 0.48) + lean * 0.42;
 		branches.push(BranchDescriptor {
@@ -257,7 +258,8 @@ impl TreePlant {
 			let limb_len = spread * (0.55 + 0.42 * dome)
 				+ height * (0.06 + 0.08 * hash_u32_to_unit(limb_id ^ 0x11));
 			let up_bias = (ring_u - 0.42) * 0.55;
-			let dir = shoot_direction(upn, yaw, 0.82 + 0.14 * dome, (0.28 + up_bias).clamp(0.12, 0.78));
+			let dir =
+				shoot_direction(upn, yaw, 0.82 + 0.14 * dome, (0.28 + up_bias).clamp(0.12, 0.78));
 			let limb_index = branches.len() as u32;
 			let local = child_bezier(limb_len, dir, upn, hash_u32_to_unit(limb_id ^ 0x21));
 			let limb_root_r = stalk_radius * 0.34;
@@ -303,15 +305,13 @@ impl TreePlant {
 				}
 				let fork_id = hash_u32(limb_id ^ (0x61 + fork_i));
 				let fork_len = limb_len * (0.42 + 0.22 * hash_u32_to_unit(fork_id));
-				let fork_yaw = yaw + (0.55 + 0.7 * hash_u32_to_unit(fork_id ^ 1))
-					* if fork_i == 0 { 1.0 } else { -1.0 };
-				let fork_dir = shoot_direction(
-					upn,
-					fork_yaw,
-					0.88,
-					(0.18 + 0.42 * ring_u).clamp(0.12, 0.7),
-				);
-				let fork_local = child_bezier(fork_len, fork_dir, upn, hash_u32_to_unit(fork_id ^ 2));
+				let fork_yaw = yaw
+					+ (0.55 + 0.7 * hash_u32_to_unit(fork_id ^ 1))
+						* if fork_i == 0 { 1.0 } else { -1.0 };
+				let fork_dir =
+					shoot_direction(upn, fork_yaw, 0.88, (0.18 + 0.42 * ring_u).clamp(0.12, 0.7));
+				let fork_local =
+					child_bezier(fork_len, fork_dir, upn, hash_u32_to_unit(fork_id ^ 2));
 				let fork_index = branches.len() as u32;
 				branches.push(BranchDescriptor {
 					p0: fork_local[0],
@@ -345,7 +345,8 @@ impl TreePlant {
 					0.95,
 					0.22,
 				);
-				let twig_local = child_bezier(twig_len, twig_dir, upn, hash_u32_to_unit(twig_id ^ 1));
+				let twig_local =
+					child_bezier(twig_len, twig_dir, upn, hash_u32_to_unit(twig_id ^ 1));
 				let twig_index = branches.len() as u32;
 				branches.push(BranchDescriptor {
 					p0: twig_local[0],
@@ -383,7 +384,13 @@ impl TreePlant {
 				for layer in CanopyLayer::shells() {
 					layer.push_cards_on(&mut leaves, &limb_sites, upn, root, recipe);
 				}
-				CanopyLayer::fork_outer().push_cards_on(&mut leaves, &fork_sites, upn, root, recipe);
+				CanopyLayer::fork_outer().push_cards_on(
+					&mut leaves,
+					&fork_sites,
+					upn,
+					root,
+					recipe,
+				);
 				CanopyLayer::mid().push_cards_on(&mut leaves, &fork_sites, upn, root, recipe);
 				for &(index, id, dir, size) in &twig_sites {
 					CanopyLayer::fork_outer().push_cards(
@@ -403,11 +410,7 @@ impl TreePlant {
 
 		let crown = spread.max(height * 0.32);
 		let pad = crown.max(height * 0.12);
-		let hang = if recipe.is_willow() {
-			(*recipe.drape_length_m.end()).max(0.4)
-		} else {
-			0.08
-		};
+		let hang = if recipe.is_willow() { (*recipe.drape_length_m.end()).max(0.4) } else { 0.08 };
 		let descriptor = PlantDescriptor {
 			root,
 			height_m: height,
@@ -454,7 +457,8 @@ impl TreePlant {
 			let lift = 0.42 + 0.48 * hash_u32_to_unit(leaf_id ^ 0x11);
 			let facing = shoot_direction(up, yaw, (1.0 - lift * 0.35).max(0.35), lift);
 			let pal = recipe.foliage.varied(root.xz(), leaf_id);
-			let size = (spread * 0.62 + height * 0.08) * (0.88 + 0.22 * hash_u32_to_unit(leaf_id ^ 0x21));
+			let size =
+				(spread * 0.62 + height * 0.08) * (0.88 + 0.22 * hash_u32_to_unit(leaf_id ^ 0x21));
 			leaves.push(LeafDescriptor {
 				plant_index: 0,
 				parent_branch: 0,
@@ -495,9 +499,8 @@ impl TreePlant {
 				let length = sample_range(&recipe.drape_length_m, hash_u32_to_unit(drape_id))
 					* (0.78 + 0.42 * radial.length().min(1.0));
 				let yaw_jit = (drape_i as f32 - 0.4) * 0.38;
-				let facing = (radial * 0.22 - up * 0.96
-					+ tangent_on(up, yaw_jit) * 0.18)
-					.normalize_or(-up);
+				let facing =
+					(radial * 0.22 - up * 0.96 + tangent_on(up, yaw_jit) * 0.18).normalize_or(-up);
 				let pal = recipe.foliage.varied(root.xz(), drape_id);
 				leaves.push(LeafDescriptor {
 					plant_index: 0,
@@ -583,6 +586,25 @@ impl TreePlant {
 				branch.is_trunk() || (branch.parent_index as usize) < self.branches.len()
 			})
 	}
+
+	/// Parent walk stays inside the shader hop budget and recorded depths.
+	pub fn attachment_is_bounded(&self) -> bool {
+		self.branches.iter().enumerate().all(|(index, branch)| {
+			if branch.depth > MAX_BRANCH_DEPTH {
+				return false;
+			}
+			let parent = (branch.parent_index != PARENT_NONE)
+				.then(|| self.branches.get(branch.parent_index as usize).copied())
+				.flatten();
+			if !branch.follows_parent_depth(parent) {
+				return false;
+			}
+			if !branch.is_trunk() && (branch.parent_index as usize) >= index {
+				return false;
+			}
+			true
+		})
+	}
 }
 
 fn sample_range(range: &std::ops::RangeInclusive<f32>, unit: f32) -> f32 {
@@ -628,14 +650,7 @@ mod tests {
 
 	#[test]
 	fn generated_plant_stays_within_capacity() -> anyhow::Result<()> {
-		let plant = TreePlant::generate(
-			11,
-			0,
-			Vec3::ZERO,
-			Vec3::Y,
-			1.0,
-			&TreeRecipe::storybook(),
-		);
+		let plant = TreePlant::generate(11, 0, Vec3::ZERO, Vec3::Y, 1.0, &TreeRecipe::storybook());
 		assert!(plant.branches.len() as u32 <= MAX_BRANCHES_PER_PLANT);
 		assert!(plant.leaves.len() as u32 <= MAX_LEAVES_PER_PLANT);
 		assert!(plant.branches.iter().all(|b| b.depth <= MAX_BRANCH_DEPTH));

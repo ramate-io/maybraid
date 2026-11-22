@@ -5,18 +5,18 @@ use std::sync::Arc;
 
 use bevy::ecs::template::template;
 use bevy::prelude::{Color, Entity, Transform, Vec3, Visibility};
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::{Scene, bsn};
 use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
-use lod::{cull_offset_bands_from_factor, SceneChunk};
+use lod::{SceneChunk, cull_offset_bands_from_factor};
 use material_ref::MaterialRef;
 use sbs_trees::RorysHeadTrained;
 use vegetation_components::{
-	flattened_component_scene, frond_material_ref, leaf_material_ref, stick_material_ref,
-	FlattenedComponentsOnly, FoliageGeometry, FoliageNode, Layers, PlacedVegetation, Placement,
-	StickGeometry, StickNode, StructuralLod, VegetationComponents, VegetationInstance,
-	FLATTENED_KIT_CHUNK_WEIGHT,
+	FLATTENED_KIT_CHUNK_WEIGHT, FlattenedComponentsOnly, FoliageGeometry, FoliageNode, Layers,
+	PlacedVegetation, Placement, StickGeometry, StickNode, StructuralLod, VegetationComponents,
+	VegetationInstance, flattened_component_scene, frond_material_ref, leaf_material_ref,
+	stick_material_ref,
 };
 
 use super::{GroveExtent, PaletteMix};
@@ -533,9 +533,12 @@ where
 	let anchor = (bounds.min + bounds.max) * 0.5;
 	let radius = ((bounds.max.x - bounds.min.x).max(bounds.max.z - bounds.min.z) * 0.5).max(0.05);
 	let instance = VegetationInstance::new(anchor.into(), radius);
+	// Identity pose: kit placements are already world-space. Collider children
+	// carry Transform, so this parent must too (Bevy B0004 / GlobalTransform).
 	bsn! {
 		~{instance}
 		template(move |_ctx| Ok(host.clone()))
+		Transform::IDENTITY
 		Visibility::Inherited
 	}
 }
