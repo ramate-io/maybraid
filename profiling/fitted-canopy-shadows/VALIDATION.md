@@ -4,7 +4,7 @@ Keep [#1649](https://github.com/ramate-io/maybraid/pull/1649) draft and opt-in. 
 
 The separate receiving fix is [#1632](https://github.com/ramate-io/maybraid/pull/1632). All arms here have receiving ON. This experiment preserves Proxy as the default; `MAYBRAID_CANOPY_SHADOWS=fitted` opts in. The independent `MAYBRAID_EXPERIMENT_SHADOW_MAP_SIZE=1024` changes High resolution alone, preserving four cascades and 150 m range.
 
-The later `canopy-fit` source arm is described in [README](README.md); none of the measurements below include it.
+The short trio and full walks below use the earlier `fitted` mode with actual sticks. The later [canopy-fit-only pair](#canopy-fit-only) has its own source, binary, and proxy control.
 
 ## Short comparison
 
@@ -66,4 +66,21 @@ The initial per-puff prototype produced 66,939 versus 5,367 spheres (12.47×) an
 
 Generic coarse-site visual placement is preserved; fitted mode still excludes bark-colored coarse-column shadow candidates. Independent `NotShadowCaster` opt-outs stay authoritative; optional Full is unchanged. Fitting traverses authored High data once per scene/chunk emission, not per frame; its generation cost has not been separately attributed.
 
-The next useful experiment is canopy fitting alone, then near-only actual sticks with canopy proxies farther away if profiling supports it. Neither was implemented in the captured revision. The visual improvement is real in the recorded views; the measured long-walk cost keeps this candidate opt-in.
+## Canopy-fit only
+
+The later [source revision](https://github.com/ramate-io/maybraid/commit/f5587085efbe04a783fd120e9ff0e6cc7cf4e9d2) adds `MAYBRAID_CANOPY_SHADOWS=canopy-fit`. It shares the fitted shadow-only canopy envelope and coarse bark-column exclusion while retaining the stick and leaf/frond casting exclusions. Both arms use the same immutable native executable (`99ab36f2…`), the read-only admission observer, receivers ON, High 2048 with four cascades to 150 m, and fullscreen 1920×1080 Metal Immediate. Linux CI passed all eight focused fixtures for this revision.
+
+| Window and arm | Mean ms | p50 / p95 / p99 ms | Maximum ms | >33.33 / >50 / >100 ms |
+|---|---:|---|---:|---|
+| Short Proxy | 11.075 | 11.066 / 11.633 / 11.905 | 12.379 | 0 / 0 / 0 |
+| Short canopy-fit | 11.121 | 11.108 / 11.759 / 12.111 | 14.632 | 0 / 0 / 0 |
+| Walking prefix Proxy | 16.066 | 15.236 / 22.984 / 27.383 | 165.995 | 35 / 7 / 3 |
+| Walking prefix canopy-fit | 15.927 | 15.079 / 23.015 / 27.236 | 160.950 | 35 / 7 / 3 |
+
+Both short windows lasted 15 seconds. Camera-visible mesh counts were 1,461/1,456 and realized spheres 5,367/5,331. Both observed 1,040 typed stick and 34,660 leaf/frond recipe meshes, with zero eligible casters in both classes. The foreground bushes cast tighter shadows. A large shadow entering from the left is visible in the candidate. The eight observed spheres and their recorded transforms do not account for it, so its caster is unknown.
+
+Both full-route Proxy attempts ended in combat deaths, after 1,859 m and 1,582 m of supported XZ movement. The comparison uses the retry only through the checkpoint-65 screenshot marker, before its first damage event. Proxy and canopy-fit covered 1,421 m and 1,411 m respectively through that cutoff at HP100 with no observed player combat. Canopy-fit exited normally after the agreed prefix. The full-route Proxy attempts remain rejected.
+
+The common observer and detour mask kept 19,449/19,343 app-entry gaps. Masked p95 was 22.963/23.011 ms, with identical tail counts of 33/6/3 above the three thresholds. Render-app p95 was 20.019/19.906 ms. The largest gaps were dominated by main-app overlap. Checkpoint position differences had a 0.161 m median and 15.945 m maximum, and both runs recorded 153 terrain additions. Median body counts were 39/38 and maxima 77/93, so realized workloads varied.
+
+The prefix had 64/63 five-second process samples. Median footprint was 7.477/7.448 GiB and median RSS 6.440/6.436 GiB. These ordered runs showed similar CPU frame pacing through checkpoint 65. They do not establish a causal memory change, whole-route parity, or GPU time. Canopy-fit remains opt-in.
