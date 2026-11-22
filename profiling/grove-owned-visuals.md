@@ -91,14 +91,18 @@ The playground grows the same stacked kinds, translated to the origin so cameras
 
 GPU tree descriptors for this scene: 34 plants / 767 branches / 16,639 leaves, 1,129,520 B upload, plus 149 bushes and 2,220 grove grass samples. The grass-field resource also still holds 24,336 blades from the playground turf cover (`gpu-grass-cover`), so the capture receipt's `grass=26556` is cover + grove tufts, not grove-only.
 
+Refreshed after lifting grove `card_m` so shaders keep High/Medium/Low through 1 km. GPU application intervals rose versus the earlier ~25 ms p95 because far plants now submit instead of vanishing at 90–110 m. Kit p95/max of 250.000 ms is still Bevy's max-delta clamp (a lower bound). Floor shots were not retaken.
+
 | Shot | Camera | mean ms | p95 ms | max ms | entities | kit meshes | Mesh3d |
 |---|---|---:|---:|---:|---:|---:|---:|
 | forest-vista-legacy | VISTA | 250.000 | 250.000 | 250.000 | 22,034 | 21,533 | 21,536 |
-| forest-vista-gpu | VISTA | 23.723 | 25.025 | 26.306 | 515 | 0 | 3 |
+| forest-vista-gpu | VISTA | 91.615 | 93.041 | 93.871 | 515 | 0 | 3 |
 | forest-edge-legacy | EDGE | 250.000 | 250.000 | 250.000 | 22,034 | 21,533 | 21,536 |
-| forest-edge-gpu | EDGE | 24.212 | 26.596 | 28.578 | 515 | 0 | 3 |
+| forest-edge-gpu | EDGE | 80.365 | 81.764 | 86.678 | 515 | 0 | 3 |
 | forest-floor-legacy | FLOOR | 250.000 | 250.000 | 250.000 | 22,034 | 21,533 | 21,536 |
 | forest-floor-gpu | FLOOR | 24.643 | 27.328 | 28.550 | 515 | 0 | 3 |
+| forest-far-legacy | FAR | 250.000 | 250.000 | 250.000 | 32,536 | 32,035 | 32,038 |
+| forest-far-gpu | FAR | 120.287 | 122.024 | 124.777 | 521 | 0 | 3 |
 
 GPU `kit_meshes=0` is `KitPreview` count. `Mesh3d=3` is the forest ground plane plus two hidden turf stand-ins, not vegetation kits.
 
@@ -110,6 +114,8 @@ Screenshots (960×540) and receipts, committed with this revision:
 - [`maybraid/world/layers/vegetation/tree-field-playground/captures/forest-edge-gpu.png`](maybraid/world/layers/vegetation/tree-field-playground/captures/forest-edge-gpu.png)
 - [`maybraid/world/layers/vegetation/tree-field-playground/captures/forest-floor-legacy.png`](maybraid/world/layers/vegetation/tree-field-playground/captures/forest-floor-legacy.png)
 - [`maybraid/world/layers/vegetation/tree-field-playground/captures/forest-floor-gpu.png`](maybraid/world/layers/vegetation/tree-field-playground/captures/forest-floor-gpu.png)
+- [`maybraid/world/layers/vegetation/tree-field-playground/captures/forest-far-legacy.png`](maybraid/world/layers/vegetation/tree-field-playground/captures/forest-far-legacy.png)
+- [`maybraid/world/layers/vegetation/tree-field-playground/captures/forest-far-gpu.png`](maybraid/world/layers/vegetation/tree-field-playground/captures/forest-far-gpu.png)
 
 Not measured: native Metal world-route frame times, Tracy, GPU pass duration, live re-upload counts, entity/archetype churn, peak gameplay memory, oak/rory *appearance* (they use the storybook recipe on purpose), collider parity for non-Storybook GPU groves, or shadows-on appearance. Nix was not available; tests used `cargo --locked --release`.
 
