@@ -41,6 +41,9 @@ pub const LENS_FILM_SECS: f32 = 0.08;
 pub const LENS_UNCURL_SECS: f32 = 0.40;
 /// Fail / Debraid: braid coverage 0 → 1.
 pub const LENS_RECURL_SECS: f32 = 0.46;
+/// Overlay lens radius as a fraction of the spawn-clearing (no-debraid) pocket.
+/// `1.0` fills the pocket; `0.75` is the owner scale for the held overlay.
+pub const LENS_POCKET_SCALE: f32 = 0.75;
 const BRAID_STRANDS: u32 = 3;
 const BRAID_COLORS: [Vec3; 3] =
 	[Vec3::new(0.82, 0.22, 0.18), Vec3::new(0.86, 0.68, 0.18), Vec3::new(0.22, 0.52, 0.86)];
@@ -129,11 +132,11 @@ impl SkillMapOverlayLens {
 		}
 	}
 
-	/// Overlay UV radius (`length(uv - 0.5)` on a square) matching the
-	/// spawn-clearing pocket in the map camera.
+	/// Overlay UV radius (`length(uv - 0.5)` on a square) from the
+	/// spawn-clearing pocket in the map camera, scaled by [`LENS_POCKET_SCALE`].
 	pub fn uv_radius() -> f32 {
 		let world = MapExtents::default().spawn_clearing_half_extent();
-		world / map_view_extent().x.max(1e-5)
+		world / map_view_extent().x.max(1e-5) * LENS_POCKET_SCALE
 	}
 
 	/// Lens radius as a fraction of the overlay's short axis (height on 16:9).
@@ -569,15 +572,17 @@ mod tests {
 			(world - (SPAWN_CLEARING_RADIUS as f32 + 0.5) * extents.tile_size().x).abs() < 1e-5
 		);
 		let uv = SkillMapOverlayLens::uv_radius();
-		assert!((uv - world / map_view_extent().x).abs() < 1e-6);
+		let pocket = world / map_view_extent().x;
+		assert!((LENS_POCKET_SCALE - 0.75).abs() < 1e-6);
+		assert!((uv - pocket * LENS_POCKET_SCALE).abs() < 1e-6);
 		assert!((SkillMapOverlayLens::min_axis_radius_frac() - uv).abs() < 1e-6);
-		assert!(uv > 0.30, "pocket should fill a large central disk, got {uv}");
-		assert!(uv < 0.50, "ring must sit inside the mid-edge, got {uv}");
+		assert!(uv > 0.30, "scaled pocket should still fill a central disk, got {uv}");
+		assert!(uv < 0.40, "0.75× pocket must sit inside the mid-edge, got {uv}");
 		// 16:9 overlay: short axis is height. 1080p radius is this fraction of 1080.
 		let radius_1080 = SkillMapOverlayLens::min_axis_radius_frac() * 1080.0;
 		assert!(
-			(radius_1080 - 473.684_2).abs() < 0.05,
-			"1080p pocket radius should be ~473.7px, got {radius_1080}"
+			(radius_1080 - 355.263_16).abs() < 0.05,
+			"1080p scaled pocket radius should be ~355.3px, got {radius_1080}"
 		);
 		Ok(())
 	}

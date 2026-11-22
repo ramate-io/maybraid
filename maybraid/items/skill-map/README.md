@@ -38,8 +38,9 @@ While focus is on and the overlay is up, the rest of the HUD hides and a
 vignette-style edge blur (`TUNNEL_VISION_STRENGTH` / `TUNNEL_VISION_RADIUS` /
 `TUNNEL_VISION_DARKEN`) fades in on the 3D camera so the centre stays sharp
 enough to navigate. The stained-glass field leaves a circular lens in the
-centre — sized from the spawn-clearing (no-debraid) pocket, not a magic UV
-number — with a 2D braid around the rim (apa-kan tile-rim weave: opposite
+centre — sized from the spawn-clearing (no-debraid) pocket times
+`LENS_POCKET_SCALE` (0.75), not a magic UV number — with a 2D braid around
+the rim (apa-kan tile-rim weave: opposite
 sines, integer twists, true over/under stacking). Inside the ring is a clear
 window onto the live 3D world (the little centre cursor is replaced); outside
 is the skill map as before. Feed arrows and the hit line stay drawn on top of
@@ -61,7 +62,8 @@ GPU stills of the held overlay (idle, fire flash, mid-unravel, mid re-plait)
 for each authored skill map, including the DDR-style Rockadder Feed, live in
 [`captures/`](captures/). They are 1920×1080 window screenshots of the real
 compositor with a 3D world behind the hole. The lens radius is the spawn-clearing
-pocket: about 43.9% of the short overlay axis (~474px at 1080p).
+pocket times `LENS_POCKET_SCALE` (0.75): about 32.9% of the short overlay axis
+(~355px at 1080p).
 
 Run the focused checks with:
 
