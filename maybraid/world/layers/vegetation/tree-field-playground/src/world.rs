@@ -158,7 +158,7 @@ struct ForestGround;
 /// Cameras sit outside the 2×2 canopy: southwest vista, south edge, east floor.
 pub const VISTA: (Vec3, Vec3) = (Vec3::new(-48.0, 26.0, -56.0), Vec3::new(90.0, 10.0, 90.0));
 pub const EDGE: (Vec3, Vec3) = (Vec3::new(50.0, 12.0, 228.0), Vec3::new(70.0, 8.0, 90.0));
-pub const FLOOR: (Vec3, Vec3) = (Vec3::new(318.0, 3.6, 80.0), Vec3::new(230.0, 1.4, 90.0));
+pub const FLOOR: (Vec3, Vec3) = (Vec3::new(248.0, 2.2, 12.0), Vec3::new(220.0, 0.6, 70.0));
 
 #[cfg(test)]
 mod tests {
@@ -168,6 +168,6 @@ mod tests {
 	fn cameras_sit_outside_the_canopy_footprint() {
 		assert!(VISTA.0.x < 0.0 && VISTA.0.z < 0.0);
 		assert!(EDGE.0.z > 200.0);
-		assert!(FLOOR.0.x > 300.0);
+		assert!(FLOOR.0.x > 200.0 && FLOOR.0.z < 20.0);
 	}
 }

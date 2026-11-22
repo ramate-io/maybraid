@@ -1,0 +1,1 @@
+shot=forest-edge-gpu mode=Gpu samples=36 dt_ms_mean=24.212 dt_ms_p95=26.596 dt_ms_max=28.578 entities=515 kit_meshes=0 mesh3d=3 plants=34 branches=767 leaves=16639 bushes=149 grass=26556 upload_B=1129520
