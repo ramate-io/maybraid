@@ -34,8 +34,8 @@ const OVERLAY_PANE_MIX: f32 = 0.50;
 const OVERLAY_CAME_MIX: f32 = 0.28;
 // Keep paint / came / mark constants in sync with overlay.rs OVERLAY_*.
 const OVERLAY_CAME_ALPHA: f32 = 0.084;
-const OVERLAY_PAINT_FLOOR: f32 = 0.16;
-const OVERLAY_PAINT_GAIN: f32 = 0.36;
+const OVERLAY_PAINT_FLOOR: f32 = 0.24;
+const OVERLAY_PAINT_GAIN: f32 = 0.42;
 const OVERLAY_PAINT_CHROMA: f32 = 2.6;
 const OVERLAY_PAINT_LUMA: f32 = 0.45;
 const OVERLAY_PAINT_RECOVER: f32 = 0.08;
@@ -166,7 +166,8 @@ fn sphere_ring(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
     let spec = pow(light, 24.0);
     var col = mix(vec3<f32>(0.14, 0.11, 0.16), vec3<f32>(0.78, 0.86, 0.95), light * 0.70);
     col += vec3<f32>(0.95, 0.97, 1.0) * spec * 0.50;
-    return vec4<f32>(col, band * amount * 0.94);
+    let plait = pow(saturate(params.curl), 1.6);
+    return vec4<f32>(col, band * amount * 0.94 * plait);
 }
 
 fn wrap_pi(a: f32) -> f32 {

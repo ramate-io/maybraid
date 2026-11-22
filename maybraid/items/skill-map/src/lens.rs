@@ -348,7 +348,7 @@ impl OverlayParams {
 		let d = (r - radius).abs();
 		let span = (thick * 0.65).max(1e-4);
 		let t = ((d - thick * 0.35) / span).clamp(0.0, 1.0);
-		(1.0 - t * t * (3.0 - 2.0 * t)) * self.amount
+		(1.0 - t * t * (3.0 - 2.0 * t)) * self.amount * self.curl.clamp(0.0, 1.0).powf(1.6)
 	}
 
 	pub fn braid_sample(self, uv: Vec2, size: Vec2) -> OverlayBraidSample {
@@ -850,6 +850,34 @@ mod tests {
 		assert!(
 			flash_c.max_element() > idle_c.max_element() + 0.25,
 			"braid must flash brighter, idle={idle_c} flash={flash_c}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn ring_fades_while_the_braid_unravels() -> anyhow::Result<()> {
+		let size = square();
+		let idle = idle_params();
+		let open = OverlayParams::from_overlay_lens(
+			SkillMapOverlay::Expanded,
+			SkillMapOverlayLens::mid_uncurl(),
+		);
+		let shut = OverlayParams::from_overlay_lens(
+			SkillMapOverlay::Expanded,
+			SkillMapOverlayLens::mid_replait(),
+		);
+		let rim = Vec2::new(0.5 + idle.lens_radius, 0.5);
+		let idle_ring = idle.ring_alpha(rim, size);
+		let open_ring = open.ring_alpha(rim, size);
+		let shut_ring = shut.ring_alpha(rim, size);
+		assert!(idle_ring > 0.4, "idle ring stays on, got {idle_ring}");
+		assert!(
+			open_ring < idle_ring * 0.35,
+			"uncurl must hide the grey rim, idle={idle_ring} open={open_ring}"
+		);
+		assert!(
+			shut_ring > open_ring + 0.15,
+			"re-plait must bring the rim back, open={open_ring} shut={shut_ring}"
 		);
 		Ok(())
 	}

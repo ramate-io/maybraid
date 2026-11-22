@@ -46,8 +46,8 @@ pub const OVERLAY_CLEAR_ALPHA: f32 = 0.024;
 pub const OVERLAY_FRAME_FILL_ALPHA: f32 = 0.010;
 /// Keep in sync with `overlay_material.wesl`. Land uses paint, not sample×bias coverage.
 pub const OVERLAY_COMPOSITOR_CAME_ALPHA: f32 = 0.084;
-pub const OVERLAY_PAINT_FLOOR: f32 = 0.16;
-pub const OVERLAY_PAINT_GAIN: f32 = 0.36;
+pub const OVERLAY_PAINT_FLOOR: f32 = 0.24;
+pub const OVERLAY_PAINT_GAIN: f32 = 0.42;
 pub const OVERLAY_PAINT_CHROMA: f32 = 2.6;
 pub const OVERLAY_PAINT_LUMA: f32 = 0.45;
 pub const OVERLAY_PAINT_RECOVER: f32 = 0.08;
@@ -56,7 +56,7 @@ pub const OVERLAY_PAINT_SATURATION: f32 = 1.45;
 pub const OVERLAY_LAND_PIGMENT: Vec3 = Vec3::new(0.58, 0.28, 0.16);
 pub const OVERLAY_MARK_ALPHA_LO: f32 = 0.60;
 pub const OVERLAY_MARK_ALPHA_HI: f32 = 0.90;
-/// Stricter keep on the lens interior so land veil (~0.21) cannot fill the hole.
+/// Stricter keep on the lens interior so land veil (~0.27) cannot fill the hole.
 /// Keep in sync with `overlay_material.wesl`.
 pub const OVERLAY_MARK_LENS_ALPHA_LO: f32 = 0.72;
 pub const OVERLAY_MARK_LENS_ALPHA_HI: f32 = 0.92;
@@ -1179,8 +1179,8 @@ mod tests {
 		assert!((OVERLAY_CLEAR_ALPHA - 0.024).abs() < 1e-6);
 		assert!((OVERLAY_FRAME_FILL_ALPHA - 0.010).abs() < 1e-6);
 		assert!((OVERLAY_WARP - 0.28).abs() < 1e-6);
-		assert!((OVERLAY_PAINT_FLOOR - 0.16).abs() < 1e-6);
-		assert!((OVERLAY_PAINT_GAIN - 0.36).abs() < 1e-6);
+		assert!((OVERLAY_PAINT_FLOOR - 0.24).abs() < 1e-6);
+		assert!((OVERLAY_PAINT_GAIN - 0.42).abs() < 1e-6);
 		assert!((OVERLAY_PAINT_LUMA - 0.45).abs() < 1e-6);
 		assert!((OVERLAY_PAINT_SATURATION - 1.45).abs() < 1e-6);
 	}
@@ -1207,13 +1207,13 @@ mod tests {
 	fn expanded_overlay_paints_mosaic_without_a_coverage_sheet() {
 		let mosaic = SkillMapOverlay::Expanded.pane_alpha(1.0);
 		let flat = SkillMapOverlay::Expanded.pane_alpha_for_pigment(Vec3::splat(0.42), 1.0);
-		assert!(flat >= 0.20, "earthy land must still stamp, not vanish, got {flat}");
-		assert!(flat <= 0.32, "low-chroma land must leave world geometry readable, got {flat}");
+		assert!(flat >= 0.28, "earthy land must still stamp, not vanish, got {flat}");
+		assert!(flat <= 0.40, "low-chroma land must leave world geometry readable, got {flat}");
 		assert!(
 			mosaic > flat + 0.12,
 			"mosaic ink must paint harder than a flat wash ({mosaic} vs {flat})"
 		);
-		assert!(mosaic <= 0.62, "even saturated land must leave the world visible, got {mosaic}");
+		assert!(mosaic <= 0.72, "even saturated land must leave the world visible, got {mosaic}");
 		assert!((SkillMapOverlay::Collapsed.pane_alpha(1.0) - 1.0).abs() < 1e-5);
 	}
 
