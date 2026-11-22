@@ -42,9 +42,12 @@ centre — sized from the spawn-clearing (no-debraid) pocket, not a magic UV
 number — with a 2D braid around the rim (apa-kan tile-rim weave: opposite
 sines, integer twists, true over/under stacking). Inside the ring is a clear
 window onto the live 3D world (the little centre cursor is replaced); outside
-is the skill map as before. Skill activation flashes the braid and sends a
+is the skill map as before. Feed arrows and the hit line stay drawn on top of
+that window, with a dark outline so they read against the world; the lens
+itself is not tinted. Skill activation flashes the braid and sends a
 bright sheen sweeping across the lens glass; a water Debraid unravels the
-strands from the top of the ring (kept on-screen, outside the lens) and then
+strands from the top of the ring into loose curling ribbons (kept on-screen,
+outside the lens — not flattened dashed bands hugging the rim) and then
 re-plaits them. Releasing RB restores the HUD and fades the blur out. The expand edge plays
 the authored `change_item` clip on the UI bus; releasing RB is silent. The clock pauses when skill-map input is inactive or gameplay
 is suspended. Changing the equipped map starts a fresh feed on the next RB

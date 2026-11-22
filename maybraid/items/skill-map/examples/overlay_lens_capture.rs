@@ -12,16 +12,17 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use bevy::audio::AudioPlugin;
-use bevy::camera::ScalingMode;
+use bevy::camera::{ClearColorConfig, ScalingMode};
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
+use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use bevy::ui::widget::ViewportNode;
 use bevy::window::WindowResolution;
 use character_items::{SkillMapKind, SkillMapSpec};
 use maybraid_skill_map::{
-	OVERLAY_TILE_AMOUNT, OverlayParams, SkillMapMember, SkillMapOverlay, SkillMapOverlayLens,
-	SkillMapOverlayMaterial, SkillMapOverlayPlugin, SkillMapTileAssets, SkillMapTileMaterial,
-	SkillMapTileMaterialPlugin, authored_map_from_spec, map_view_extent, spawn_skill_map_view,
+	authored_map_from_spec, map_view_extent, spawn_skill_map_view, OverlayParams, SkillMapBackdrop,
+	SkillMapMember, SkillMapOverlay, SkillMapOverlayLens, SkillMapOverlayMaterial,
+	SkillMapOverlayPlugin, SkillMapTileAssets, SkillMapTileMaterial, SkillMapTileMaterialPlugin,
+	OVERLAY_TILE_AMOUNT,
 };
 
 const CAPTURE_WIDTH: u32 = 1920;
@@ -69,7 +70,11 @@ fn main() {
 		.insert_resource(CaptureDir(dir))
 		.init_resource::<CaptureShots>()
 		.add_systems(PostStartup, setup)
-		.add_systems(Update, (rebuild_map, drive_lens, capture_scene, advance_after_shot).chain())
+		.add_systems(
+			Update,
+			(rebuild_map, capture_map_overlay_clear, drive_lens, capture_scene, advance_after_shot)
+				.chain(),
+		)
 		.run();
 }
 
@@ -135,7 +140,7 @@ impl CapturePose {
 
 	fn warmup(self, first_of_map: bool) -> Duration {
 		if first_of_map && self == Self::Idle {
-			Duration::from_millis(1600)
+			Duration::from_millis(2800)
 		} else {
 			Duration::from_millis(400)
 		}
@@ -214,17 +219,30 @@ fn spawn_capture_map(
 	let extent = map_view_extent();
 	projection.scaling_mode = ScalingMode::Fixed { width: extent.x, height: extent.y };
 	projection.scale = 1.0;
+	let authored = authored_map_from_spec(SkillMapSpec::new(kind, 11));
+	let backdrop = SkillMapBackdrop { kind: authored.kind };
 	let view = spawn_skill_map_view(
 		commands,
 		images,
 		tile_assets,
-		authored_map_from_spec(SkillMapSpec::new(kind, 11)),
+		authored,
 		member,
 		-2,
 		projection,
-		CaptureMapCamera,
+		(CaptureMapCamera, backdrop),
 	);
 	(view.camera, view.image)
+}
+
+/// Match live play: expanded overlay clear is translucent, so land veil stays
+/// ~0.21 and only opaque arrows / hit line / power marks ride the world window.
+fn capture_map_overlay_clear(
+	mut cameras: Query<(&mut Camera, &SkillMapBackdrop), With<CaptureMapCamera>>,
+) {
+	for (mut camera, backdrop) in &mut cameras {
+		camera.clear_color =
+			ClearColorConfig::Custom(backdrop.kind.overlay_clear(SkillMapOverlay::Expanded));
+	}
 }
 
 fn despawn_capture_map(

@@ -9,7 +9,6 @@
 
 use bevy::prelude::*;
 
-use crate::SkillMapEvent;
 use crate::map::MapExtents;
 use crate::overlay::{
 	OverlayParams, SkillMapOverlay, SkillMapOverlayMaterial, SkillMapOverlayPane,
@@ -17,6 +16,7 @@ use crate::overlay::{
 use crate::tiles::SPAWN_CLEARING_RADIUS;
 use crate::user::{SkillMapMember, SkillMapUser};
 use crate::viewport::map_view_extent;
+use crate::SkillMapEvent;
 
 /// apa-kan `TILE_BRAID_TURN_UNITS` (0.21), interpreted in overlay UV so a
 /// closed rim meets itself after an integer number of twists.
@@ -288,16 +288,20 @@ impl OverlayParams {
 		}
 		let ring_thick = (radius * LENS_RING_THICKNESS_FRAC).max(1.0);
 		let stroke = (radius * BRAID_STROKE_FRAC).max(1.0);
-		let inner = (radius + ring_thick * 0.20).max(braid_radius);
+		// Just outside the glass, not glued to the idle braid (that looked like
+		// three dashed bands hugging the rim).
+		let inner = radius + ring_thick * 0.40;
 		let half = size.min_element() * 0.5;
-		let outer = (half - stroke - 2.0).max(inner);
-		let t = (0.16 + i as f32 * 0.34).clamp(0.0, 1.0);
-		let parked = inner * (1.0 - t) + outer * t;
-		let flare = peel * (outer - inner) * 0.12 * self.flare;
-		let loose_r = (parked + flare).clamp(inner, outer);
+		let outer = (half - stroke - 2.0).max(inner + stroke);
+		let span = (outer - inner).max(1.0);
+		// Slow spiral + one hook: high-frequency sines read as dashed rim ticks.
+		let mean = 0.10 + i as f32 * 0.40;
+		let spiral = peel * (0.50 * (1.0 - (from_break / 1.15).clamp(0.0, 1.0)));
+		let hook = peel * 0.28 * (from_break * 2.15 + i as f32 * 2.094 + 0.35).sin();
+		let t = (mean + spiral + hook).clamp(0.08, 0.96);
+		let loose_r = inner + span * t;
 		let park_amt = (unplait / 0.35).clamp(0.0, 1.0);
-		let radial = idle_r * (1.0 - park_amt) + loose_r * park_amt;
-		radial.clamp(inner, outer)
+		idle_r * (1.0 - park_amt) + loose_r * park_amt
 	}
 
 	/// Strand in front at `theta` by apa-kan `phase.cos()` (true over/under).
@@ -352,7 +356,8 @@ impl OverlayParams {
 		let radius = self.lens_radius_px(size);
 		let ring_thick = (radius * LENS_RING_THICKNESS_FRAC).max(1.0);
 		let amp = radius * BRAID_AMP_FRAC;
-		let stroke = (radius * BRAID_STROKE_FRAC).max(1.0);
+		let loosen = 1.0 - self.curl.clamp(0.0, 1.0);
+		let stroke = (radius * BRAID_STROKE_FRAC).max(1.0) * (1.0 + 0.22 * loosen);
 		let braid_radius = radius + ring_thick * 0.65;
 		let mut hits = [(0.0_f32, Vec3::ZERO, -2.0_f32); 3];
 		for i in 0..BRAID_STRANDS {
@@ -701,13 +706,19 @@ mod tests {
 		assert!(bottom.alpha > 0.15, "the far arc stays plaited, got {}", bottom.alpha);
 		let radius = params.lens_radius_px(size);
 		let amp = radius * BRAID_AMP_FRAC;
-		let braid_radius = radius + (radius * LENS_RING_THICKNESS_FRAC).max(1.0) * 0.65;
+		let stroke = (radius * BRAID_STROKE_FRAC).max(1.0);
+		let ring_thick = (radius * LENS_RING_THICKNESS_FRAC).max(1.0);
+		let braid_radius = radius + ring_thick * 0.65;
 		let mut tip_hits = 0;
 		for i in 0..BRAID_STRANDS {
 			let r = params.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius, size);
 			assert!(
 				r >= radius,
 				"unravelled strand {i} must stay outside the lens, r={r} radius={radius}"
+			);
+			assert!(
+				r > radius + ring_thick * 0.25,
+				"unravelled strand {i} must lift off the glass, not hug it, r={r} radius={radius}"
 			);
 			assert!(
 				r < size.min_element() * 0.5 - 1.0,
@@ -720,7 +731,6 @@ mod tests {
 			}
 		}
 		assert!(tip_hits >= 2, "unravelled tips stay visible at the break, hits={tip_hits}");
-		let stroke = (radius * BRAID_STROKE_FRAC).max(1.0);
 		let spread = (0..BRAID_STRANDS)
 			.map(|i| params.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius, size))
 			.fold(0.0_f32, |acc, r| acc.max(r))
@@ -730,6 +740,18 @@ mod tests {
 		assert!(
 			spread > stroke * 0.7,
 			"unravelled strands occupy distinct radii in the annulus, spread={spread} stroke={stroke}"
+		);
+		let shoulder = BRAID_BREAK + 0.28;
+		let curl_travel = (0..BRAID_STRANDS)
+			.map(|i| {
+				(params.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius, size)
+					- params.strand_radial(shoulder, i, radius, amp, braid_radius, size))
+				.abs()
+			})
+			.fold(0.0_f32, f32::max);
+		assert!(
+			curl_travel > stroke * 0.35,
+			"unravelled tips must curl, not sit on a constant-r band, travel={curl_travel} stroke={stroke}"
 		);
 		Ok(())
 	}
@@ -755,23 +777,46 @@ mod tests {
 		let radius = open.lens_radius_px(size);
 		let ring_thick = (radius * LENS_RING_THICKNESS_FRAC).max(1.0);
 		let stroke = (radius * BRAID_STROKE_FRAC).max(1.0);
+		let amp = radius * BRAID_AMP_FRAC;
 		let braid_radius = radius + ring_thick * 0.65;
-		let inner = (radius + ring_thick * 0.20).max(braid_radius);
-		let outer = (size.min_element() * 0.5 - stroke - 2.0).max(inner);
-		let mid_annulus = inner * 0.35 + outer * 0.65;
-		let open_loose = open.braid_sample(open.uv_at_polar(BRAID_BREAK, mid_annulus, size), size);
-		let shut_loose = shut.braid_sample(shut.uv_at_polar(BRAID_BREAK, mid_annulus, size), size);
+		let idle = idle_params();
+		let leave = |params: OverlayParams| {
+			(0..BRAID_STRANDS)
+				.map(|i| {
+					(params.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius, size)
+						- idle.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius, size))
+					.abs()
+				})
+				.fold(0.0_f32, f32::max)
+		};
+		let open_leave = leave(open);
+		let shut_leave = leave(shut);
 		assert!(
-			open_loose.alpha > 0.12,
-			"unravel must occupy the annulus outside the rim, got {}",
-			open_loose.alpha
+			open_leave > stroke * 0.5,
+			"unravel tips must leave the idle rim, leave={open_leave} stroke={stroke}"
 		);
 		assert!(
-			open_loose.alpha > shut_loose.alpha + 0.08,
-			"re-plait must draw strands back in from the annulus, open={} shut={}",
-			open_loose.alpha,
-			shut_loose.alpha
+			open_leave > shut_leave + stroke * 0.25,
+			"re-plait must draw strands back toward the idle weave, open={open_leave} shut={shut_leave}"
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn lens_keeps_high_alpha_marks_over_the_world_window() -> anyhow::Result<()> {
+		let params = idle_params();
+		let size = square();
+		let land = params.paint_alpha_at(
+			Vec2::splat(0.5),
+			size,
+			crate::overlay::OVERLAY_LAND_PIGMENT,
+			0.20,
+			0.0,
+			0.5,
+		);
+		let marks = params.paint_alpha_at(Vec2::splat(0.5), size, Vec3::ONE, 1.0, 0.0, 0.5);
+		assert!(land < 0.08, "land paint must not tint the lens, got {land}");
+		assert!(marks > 0.80, "arrows and the hit line stay on the glass, got {marks}");
 		Ok(())
 	}
 

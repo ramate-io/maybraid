@@ -42,6 +42,8 @@ const OVERLAY_PAINT_RECOVER: f32 = 0.08;
 const OVERLAY_PAINT_SATURATION: f32 = 1.45;
 const OVERLAY_MARK_ALPHA_LO: f32 = 0.60;
 const OVERLAY_MARK_ALPHA_HI: f32 = 0.90;
+const OVERLAY_MARK_LENS_ALPHA_LO: f32 = 0.72;
+const OVERLAY_MARK_LENS_ALPHA_HI: f32 = 0.92;
 // Keep in sync with lens.rs. Amp is apa-kan TILE_BRAID_AMP / 22.
 const BRAID_AMP_FRAC: f32 = 0.07272727;
 const BRAID_STROKE_FRAC: f32 = 0.038;
@@ -199,16 +201,17 @@ fn braid_strand_radial(
         return idle_r;
     }
     let ring_thick = max(radius * LENS_RING_THICKNESS_FRAC, 1.0);
-    let inner = max(radius + ring_thick * 0.20, braid_radius);
+    let inner = radius + ring_thick * 0.40;
     let half = min(size.x, size.y) * 0.5;
-    let outer = max(half - stroke - 2.0, inner);
-    let t = saturate(0.16 + f32(i) * 0.34);
-    let parked = mix(inner, outer, t);
-    let flare = peel * (outer - inner) * 0.12 * params.flare;
-    let loose_r = clamp(parked + flare, inner, outer);
+    let outer = max(half - stroke - 2.0, inner + stroke);
+    let span = max(outer - inner, 1.0);
+    let mean = 0.10 + f32(i) * 0.40;
+    let spiral = peel * (0.50 * (1.0 - saturate(from_break / 1.15)));
+    let hook = peel * 0.28 * sin(from_break * 2.15 + f32(i) * 2.094 + 0.35);
+    let t = clamp(mean + spiral + hook, 0.08, 0.96);
+    let loose_r = inner + span * t;
     let park_amt = saturate(unplait / 0.35);
-    let radial = mix(idle_r, loose_r, park_amt);
-    return clamp(radial, inner, outer);
+    return mix(idle_r, loose_r, park_amt);
 }
 
 fn braid_color(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
@@ -221,7 +224,8 @@ fn braid_color(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
     let radius = lens_radius_px(size);
     let ring_thick = max(radius * LENS_RING_THICKNESS_FRAC, 1.0);
     let amp = radius * BRAID_AMP_FRAC;
-    let stroke = max(radius * BRAID_STROKE_FRAC, 1.0);
+    let loosen = 1.0 - saturate(params.curl);
+    let stroke = max(radius * BRAID_STROKE_FRAC, 1.0) * (1.0 + 0.22 * loosen);
     let braid_radius = radius + ring_thick * 0.65;
     var alphas = array<f32, 3>(0.0, 0.0, 0.0);
     var colors = array<vec3<f32>, 3>(vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0));
@@ -271,6 +275,12 @@ fn braid_color(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
     return vec4<f32>(out_rgb, out_a);
 }
 
+fn mark_keep_at(uv: vec2<f32>) -> f32 {
+    let s = textureSample(map_texture, map_sampler, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)));
+    // Stricter than field `keep`: land veil (~0.21) must not fill the world window.
+    return smoothstep(OVERLAY_MARK_LENS_ALPHA_LO, OVERLAY_MARK_LENS_ALPHA_HI, s.a);
+}
+
 fn film_sheen(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
     if params.film <= 0.0 {
         return vec4<f32>(0.0);
@@ -318,18 +328,36 @@ fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
     let keep = smoothstep(OVERLAY_MARK_ALPHA_LO, OVERLAY_MARK_ALPHA_HI, sample.a);
     let treated = mix(paint, sample.a, keep);
     let field = mix(sample.a, treated, amount * (1.0 - lens));
-    // Interior is a hole: the 3D world shows through. Map marks stay outside.
+    // Interior is a hole: the 3D world shows through. Land stays outside.
     var alpha = field * (1.0 - lens);
     // Drop map RGB in the hole so film sheen composites over the world, not the RT.
     color = mix(color, vec3<f32>(0.0, 0.0, 0.0), lens);
+    let film = film_sheen(in.uv, size, amount);
+    color = min(color + film.xyz, vec3<f32>(1.0, 1.0, 1.0));
+    alpha = max(alpha, film.a);
+    // Feed arrows / hit line / other high-alpha marks ride on top of the window.
+    let mark_uv = in.uv;
+    let mark_sample = textureSample(map_texture, map_sampler, mark_uv);
+    let mk = mark_keep_at(mark_uv);
+    let px = vec2<f32>(2.4, 2.4) / max(size, vec2<f32>(1.0, 1.0));
+    let dilated = max(
+        mk,
+        max(
+            max(mark_keep_at(mark_uv + vec2<f32>(px.x, 0.0)), mark_keep_at(mark_uv - vec2<f32>(px.x, 0.0))),
+            max(mark_keep_at(mark_uv + vec2<f32>(0.0, px.y)), mark_keep_at(mark_uv - vec2<f32>(0.0, px.y))),
+        ),
+    );
+    let outline_amt = saturate(dilated - mk) * amount * lens;
+    let mark_amt = mk * amount * lens;
+    color = mix(color, vec3<f32>(0.05, 0.04, 0.07), outline_amt);
+    alpha = max(alpha, outline_amt * 0.92);
+    color = mix(color, unpremultiply(mark_sample.xyz, mark_sample.a), mark_amt);
+    alpha = max(alpha, mark_amt * mark_sample.a);
     let ring = sphere_ring(in.uv, size, amount);
     color = mix(color, ring.xyz, ring.a);
     alpha = max(alpha, ring.a);
     let braid = braid_color(in.uv, size, amount);
     color = mix(color, braid.xyz, braid.a);
     alpha = max(alpha, braid.a);
-    let film = film_sheen(in.uv, size, amount);
-    color = min(color + film.xyz, vec3<f32>(1.0, 1.0, 1.0));
-    alpha = max(alpha, film.a);
     return vec4<f32>(color, alpha);
 }

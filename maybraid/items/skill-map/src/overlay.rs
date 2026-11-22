@@ -56,10 +56,17 @@ pub const OVERLAY_PAINT_SATURATION: f32 = 1.45;
 pub const OVERLAY_LAND_PIGMENT: Vec3 = Vec3::new(0.58, 0.28, 0.16);
 pub const OVERLAY_MARK_ALPHA_LO: f32 = 0.60;
 pub const OVERLAY_MARK_ALPHA_HI: f32 = 0.90;
+/// Stricter keep on the lens interior so land veil (~0.21) cannot fill the hole.
+/// Keep in sync with `overlay_material.wesl`.
+pub const OVERLAY_MARK_LENS_ALPHA_LO: f32 = 0.72;
+pub const OVERLAY_MARK_LENS_ALPHA_HI: f32 = 0.92;
 /// Minimum composited alpha for arrows, power tiles, and the cursor.
 pub const OVERLAY_MARK_ALPHA_MIN: f32 = 0.85;
 const _: () = assert!(OVERLAY_MARK_ALPHA_LO < OVERLAY_MARK_ALPHA_MIN);
 const _: () = assert!(OVERLAY_MARK_ALPHA_MIN <= OVERLAY_MARK_ALPHA_HI);
+const _: () = assert!(OVERLAY_MARK_LENS_ALPHA_LO > OVERLAY_MARK_ALPHA_LO);
+const _: () = assert!(OVERLAY_MARK_LENS_ALPHA_LO < OVERLAY_MARK_ALPHA_MIN);
+const _: () = assert!(OVERLAY_MARK_ALPHA_MIN <= OVERLAY_MARK_LENS_ALPHA_HI);
 const _: () = assert!(OVERLAY_PAINT_SATURATION > 1.0);
 /// Tile overlay amount on the 9f22704 build. Used as a coverage regression bound.
 #[cfg(test)]
@@ -380,6 +387,7 @@ impl OverlayParams {
 	}
 
 	/// `uv` / `size` select the clear lens interior vs the stained-glass field.
+	/// High-alpha marks (feed arrows, hit line, power icons) stay on the window.
 	pub fn paint_alpha_at(
 		self,
 		uv: Vec2,
@@ -401,7 +409,8 @@ impl OverlayParams {
 		let lens = self.lens_mask(uv, size);
 		let glass_amt = amount * (1.0 - lens);
 		let field = sample_alpha * (1.0 - glass_amt) + treated * glass_amt;
-		field * (1.0 - lens)
+		let marks = Self::lens_mark_keep(sample_alpha) * sample_alpha * amount * lens;
+		field * (1.0 - lens) + marks
 	}
 
 	pub fn paint_ink(pigment: Vec3) -> f32 {
@@ -411,8 +420,16 @@ impl OverlayParams {
 	}
 
 	pub fn mark_keep(sample_alpha: f32) -> f32 {
-		let span = OVERLAY_MARK_ALPHA_HI - OVERLAY_MARK_ALPHA_LO;
-		let t = ((sample_alpha - OVERLAY_MARK_ALPHA_LO) / span).clamp(0.0, 1.0);
+		Self::smooth_keep(sample_alpha, OVERLAY_MARK_ALPHA_LO, OVERLAY_MARK_ALPHA_HI)
+	}
+
+	pub fn lens_mark_keep(sample_alpha: f32) -> f32 {
+		Self::smooth_keep(sample_alpha, OVERLAY_MARK_LENS_ALPHA_LO, OVERLAY_MARK_LENS_ALPHA_HI)
+	}
+
+	fn smooth_keep(sample_alpha: f32, lo: f32, hi: f32) -> f32 {
+		let span = (hi - lo).max(1e-4);
+		let t = ((sample_alpha - lo) / span).clamp(0.0, 1.0);
 		t * t * (3.0 - 2.0 * t)
 	}
 }
@@ -1253,7 +1270,15 @@ mod tests {
 			0.0,
 			0.5,
 		);
-		assert!(marks < 0.08, "the lens is a world window, not a map disc, got {marks}");
+		assert!(
+			marks >= OVERLAY_MARK_ALPHA_MIN,
+			"feed arrows / hit line ride on top of the world window, got {marks}"
+		);
+		assert!(
+			OverlayParams::lens_mark_keep(0.23) < 0.02,
+			"veiled land must not count as a lens mark"
+		);
+		assert!(OverlayParams::lens_mark_keep(1.0) > 0.99);
 		let field_marks = OverlayParams::from_overlay(expanded).paint_alpha_at(
 			Vec2::ZERO,
 			size,
