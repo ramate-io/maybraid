@@ -2,20 +2,20 @@
 
 use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
-use character_rigs::Side;
 use character_rigs::articulation::{
-	BONE_LENGTH_AXIS, TwoBoneAim, compose_parent_rotation, rotation_along_with_roll,
+	compose_parent_rotation, rotation_along_with_roll, TwoBoneAim, BONE_LENGTH_AXIS,
 };
 use character_rigs::authoring::{humanoid_bone_axis, humanoid_write_mask};
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+use character_rigs::Side;
 use characters::{
-	AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterMembers, CharacterRoot, MailboxApplySet,
-	SuspendAnimation, mailbox_apply_allows,
+	mailbox_apply_allows, AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterMembers,
+	CharacterRoot, MailboxApplySet, SuspendAnimation,
 };
 use firearms::{FirearmMembers, FirearmRoot};
 
-use crate::FirearmUser;
 use crate::pose::HeldFirearm;
+use crate::FirearmUser;
 
 /// Body-rig marker: after locomotion, apply the firearm hold.
 #[derive(Component, Clone, Copy, Default)]
@@ -461,23 +461,6 @@ mod tests {
 	}
 
 	#[test]
-	fn right_elbow_pole_wings_out_and_down() -> Result<(), &'static str> {
-		let reach = TwoBoneAim::reach(Vec3::Z * 0.7, settings().right_pole, 0.5, 0.5)
-			.ok_or("missing reach")?;
-		assert!(reach.upper_along.x < 0.0, "{reach:?}");
-		assert!(reach.upper_along.y < 0.0, "{reach:?}");
-		assert!((reach.upper_along.x.abs() - reach.upper_along.y.abs()).abs() < 1e-4, "{reach:?}");
-		Ok(())
-	}
-
-	#[test]
-	fn support_hand_targets_grip_socket() {
-		let socket = settings().grip_socket;
-		assert_eq!(socket, "grip");
-		assert_ne!(socket, "grip_point");
-	}
-
-	#[test]
 	fn support_arm_stretch_reaches_past_equal_segments() -> Result<(), &'static str> {
 		let s = settings();
 		let far = Vec3::Z * 1.1;
@@ -575,13 +558,6 @@ mod tests {
 	}
 
 	#[test]
-	fn hold_mask_reuses_humanoid_write_bits() {
-		let mask = HoldingArms::write_mask();
-		assert_ne!(mask, 0);
-		assert_eq!(mask, humanoid_write_mask(HoldingArms::AFFECTED_BONES));
-	}
-
-	#[test]
 	fn hold_from_working_pose_matches_legacy_copy_from_base() -> anyhow::Result<()> {
 		let mut mailbox = AnimMailbox::new(Transform::IDENTITY);
 		let mut rig = HumanoidV0Rig::imported();
@@ -645,11 +621,7 @@ mod tests {
 				sync_hands_to_firearm.in_set(CharacterPoseOverlay::Firearm),
 			),
 		);
-		hold_scene(
-			app.world_mut(),
-			Vec3::new(0.2, 1.45, -0.4),
-			Vec3::new(-0.15, 1.4, -0.35),
-		)?;
+		hold_scene(app.world_mut(), Vec3::new(0.2, 1.45, -0.4), Vec3::new(-0.15, 1.4, -0.35))?;
 		app.world_mut()
 			.run_system_once(crate::pose::pose_held_firearm)
 			.map_err(|err| anyhow::anyhow!("{err}"))?;

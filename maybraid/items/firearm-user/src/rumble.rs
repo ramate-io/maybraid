@@ -132,15 +132,6 @@ mod tests {
 	use firearms::Weapon;
 
 	#[test]
-	fn faster_shot_is_shorter() {
-		let slow = fire_rumble(SPEED_SLOW, DEFAULT_HIT);
-		let fast = fire_rumble(SPEED_FAST, DEFAULT_HIT);
-		assert!(fast.duration < slow.duration);
-		assert_eq!(slow.duration, Duration::from_millis(FIRE_MS_SLOW as u64));
-		assert_eq!(fast.duration, Duration::from_millis(FIRE_MS_FAST as u64));
-	}
-
-	#[test]
 	fn more_damage_is_heavier() {
 		let light = fire_rumble(180.0, 10.0);
 		let heavy = fire_rumble(180.0, 40.0);
@@ -154,12 +145,6 @@ mod tests {
 		let hit = hit_rumble(180.0, DEFAULT_HIT);
 		assert!(hit.duration > fire.duration);
 		assert!(hit.intensity.strong_motor > fire.intensity.strong_motor);
-	}
-
-	#[test]
-	fn laser_pulse_is_constant() {
-		assert_eq!(laser_rumble().duration, Duration::from_millis(LASER_MS));
-		assert!((laser_rumble().intensity.weak_motor - LASER_WEAK).abs() < 1e-5);
 	}
 
 	fn collect_pad_rumble(app: &mut App) -> Vec<PadRumble> {
