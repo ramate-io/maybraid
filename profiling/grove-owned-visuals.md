@@ -2,6 +2,8 @@
 
 This continues [#1647](https://github.com/ramate-io/maybraid/pull/1647) and the partial replacement in [#1650](https://github.com/ramate-io/maybraid/pull/1650), following [#1651's investigation guides](https://github.com/ramate-io/maybraid/pull/1651). Implementation and native validation are in progress; no performance improvement is established by this document.
 
+See the [later whole-grove native benchmark at f192490](grove-f192-native-benchmark.md) for the matched route, standing Metal and checkpoint census results.
+
 ## Frozen comparison
 
 Latest main was fetched and audited at `05885cd3056c8e4724d2bbd6265ac41255c1a962`. The experiment head `3c8e6fec904365557e9a034cd870f35111627e09` already includes that main revision. Its only difference from measured executable source `aacc5c07f2f26286456067e383a5384a1e26d17a` is the benchmark report. The frozen baseline executable SHA-256 is `1bdb82448dad1633dbc33e68c1c5131e54926f5afd8276a575feaaf6e0299908`; Cargo.lock SHA-256 is `ca4dc755ca2bd3ca053345a0cb3b5cfc8864b22619420296103194b02e49cf74`. The published Bevy fork stays pinned to `dfbb7d045b15879232dde2efc9bc66f499413ef6`.
