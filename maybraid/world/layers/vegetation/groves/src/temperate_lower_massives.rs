@@ -240,7 +240,7 @@ const WOODY_LOD: WoodyGroveLod = WoodyGroveLod::rory_trunk(
 
 #[cfg(feature = "render")]
 pub use vc::{
-	configure_storybook_field_area, scout_storybook_field_tile, StorybookFieldSample,
+	configure_storybook_field_area, scout_storybook_field_tile, StorybookFieldSource,
 	TemperateLowerMassives, TemperateLowerMassivesParams, TemperateLowerMassivesPlant,
 };
 

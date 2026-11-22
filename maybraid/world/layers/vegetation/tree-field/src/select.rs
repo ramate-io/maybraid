@@ -7,7 +7,7 @@ use vegetation_shaders::wesl::{
 
 use crate::field::TreeFieldSettings;
 use crate::layout::{
-	BranchDescriptor, LeafDescriptor, PlantDescriptor, WoodLod, TREE_LOD_COUNT, PARENT_NONE,
+	BranchDescriptor, LeafDescriptor, PlantDescriptor, WoodLod, PARENT_NONE, TREE_LOD_COUNT,
 };
 use crate::template::LeafTemplate;
 
@@ -49,9 +49,12 @@ impl CompactedTreeLists {
 
 	pub fn wood_indirect_args(&self) -> [DrawIndexedIndirect; TREE_LOD_COUNT] {
 		[
-			DrawIndexedIndirect::empty(WoodLod::Near.index_count()).with_instances(self.wood_count(0)),
-			DrawIndexedIndirect::empty(WoodLod::Mid.index_count()).with_instances(self.wood_count(1)),
-			DrawIndexedIndirect::empty(WoodLod::Far.index_count()).with_instances(self.wood_count(2)),
+			DrawIndexedIndirect::empty(WoodLod::Near.index_count())
+				.with_instances(self.wood_count(0)),
+			DrawIndexedIndirect::empty(WoodLod::Mid.index_count())
+				.with_instances(self.wood_count(1)),
+			DrawIndexedIndirect::empty(WoodLod::Far.index_count())
+				.with_instances(self.wood_count(2)),
 		]
 	}
 
@@ -77,7 +80,15 @@ pub struct TreeSelector {
 impl TreeSelector {
 	pub fn from_view(view: GrassViewUniform, settings: &TreeFieldSettings) -> Self {
 		Self {
-			thresholds: LodThresholds::tree_default(),
+			thresholds: LodThresholds {
+				near_m: view.lod_distances.y,
+				mid_m: view.lod_distances.z,
+				card_m: view.lod_distances.w,
+				near_density: view.lod_density.x,
+				mid_density: view.lod_density.y,
+				card_density: view.lod_density.z,
+				min_height_px: view.lod_density.w,
+			},
 			view,
 			capacities: [settings.max_per_lod; TREE_LOD_COUNT],
 		}
@@ -258,6 +269,27 @@ mod tests {
 	}
 
 	#[test]
+	fn resident_grove_keeps_wood_and_canopy_beyond_playground_range() {
+		let settings = TreeFieldSettings::default();
+		let patch = TreePatch::isolated(42, Vec3::ZERO, crate::TreeRecipe::storybook());
+		let field = TreeField::rebuild([&patch], &settings);
+		let camera = Vec3::new(0., 10., 600.);
+		let mut view = look_view(camera, Vec3::new(0., 8., 0.), 720.);
+		let transform =
+			Transform::from_translation(camera).looking_at(Vec3::new(0., 8., 0.), Vec3::Y);
+		view.clip_from_world = bevy::math::Mat4::perspective_rh(1., 16. / 9., 0.1, 10000.)
+			* transform.to_matrix().inverse();
+		view.world_from_clip = view.clip_from_world.inverse();
+		assert_eq!(TreeSelector::from_view(view, &settings).plant_bucket(&field.plants[0]), None);
+		view.lod_distances.w = f32::MAX;
+		let selector = TreeSelector::from_view(view, &settings);
+		assert_eq!(selector.plant_bucket(&field.plants[0]), Some(2));
+		let lists = selector.compact(&field.plants, &field.branches, &field.leaves);
+		assert!(lists.submitted_wood > 0);
+		assert!(lists.submitted_foliage > 0);
+	}
+
+	#[test]
 	fn pruning_does_not_leave_floating_children() -> anyhow::Result<()> {
 		let settings = TreeFieldSettings::default();
 		let patch = TreePatch::grove(4, Vec3::ZERO, Vec2::splat(24.0), 12.0);
@@ -296,7 +328,11 @@ mod tests {
 	#[test]
 	fn off_camera_shadow_view_keeps_casters() -> anyhow::Result<()> {
 		let settings = TreeFieldSettings::default();
-		let patch = TreePatch::isolated(2, Vec3::new(40.0, 0.0, 0.0), crate::recipe::TreeRecipe::storybook());
+		let patch = TreePatch::isolated(
+			2,
+			Vec3::new(40.0, 0.0, 0.0),
+			crate::recipe::TreeRecipe::storybook(),
+		);
 		let field = TreeField::rebuild([&patch], &settings);
 		let camera = TreeSelector::from_view(
 			look_view(Vec3::new(-40.0, 6.0, 0.0), Vec3::new(-80.0, 0.0, 0.0), 720.0),

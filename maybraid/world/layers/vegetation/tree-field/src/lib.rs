@@ -33,7 +33,7 @@ pub use layout::{
 	TREE_LOD_COUNT, TREE_LOD_FAR, TREE_LOD_MID, TREE_LOD_NEAR,
 };
 pub use patch::{TreePatch, TreeSample};
-pub use plugin::TreeFieldPlugin;
+pub use plugin::{TreeFieldPlugin, TreeGrove};
 pub use recipe::{TreeForm, TreeRecipe};
 pub use select::{CompactedTreeLists, TreeSelector};
 pub use template::{LeafTemplate, WoodTemplate};

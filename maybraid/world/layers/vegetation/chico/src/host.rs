@@ -18,11 +18,13 @@ use crate::{ForestGroveTile, ForestLayer, LayerDropOut};
 pub struct ChicoGroveHost {
 	pub tile: ForestGroveTile,
 	pub layer: ForestLayer,
+	field: Option<vegetation_tree_field::TreeGrove>,
 }
 
 impl ChicoGroveHost {
-	pub fn new(tile: ForestGroveTile, layer: ForestLayer) -> Self {
-		Self { tile, layer }
+	pub fn new(mut tile: ForestGroveTile, layer: ForestLayer) -> Self {
+		let field = crate::tree_field::claim_grove_field(&mut tile);
+		Self { tile, layer, field }
 	}
 
 	pub fn drop_out(&self) -> LayerDropOut {
@@ -33,6 +35,13 @@ impl ChicoGroveHost {
 	/// viewer) sees it.
 	pub fn scene(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let host = self.clone();
+		let field_scene: Box<dyn Scene> = match &self.field {
+			Some(field) => {
+				let field = field.clone();
+				Box::new(bsn! { ~{field} })
+			}
+			_ => Box::new(Self::empty_scene()),
+		};
 		(
 			lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds()),
 			bsn! {
@@ -40,6 +49,7 @@ impl ChicoGroveHost {
 				Visibility::default()
 				template(move |_ctx| Ok(host.clone()))
 			},
+			field_scene,
 		)
 	}
 

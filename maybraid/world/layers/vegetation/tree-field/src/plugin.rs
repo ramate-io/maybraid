@@ -1,5 +1,7 @@
 //! Main-world plugin: patch upload, presenter AABB, and render-app wiring.
 
+use bevy::ecs::{entity_disabling::Disabled, query::Allow};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use bevy::camera::primitives::Aabb;
@@ -31,6 +33,19 @@ pub(crate) enum TreeFieldPresenter {
 	Foliage,
 }
 
+/// A grove owns this immutable snapshot independently of its CPU visual LOD roots.
+/// Descriptors use world coordinates; attach to an identity-transform grove host.
+#[derive(Component, Clone, Debug)]
+pub struct TreeGrove(pub Arc<TreeField>);
+
+#[derive(Component, Clone, Copy, ExtractComponent)]
+#[extract_app(RenderApp)]
+pub(crate) struct TreeGroveId(pub Entity);
+
+#[derive(Resource, Clone, Default, ExtractResource)]
+#[extract_app(RenderApp)]
+pub(crate) struct ExtractedTreeGroves(pub Arc<HashMap<Entity, Arc<TreeField>>>);
+
 /// Frame inputs plus an immutable descriptor snapshot shared with the render world.
 #[derive(Resource, Clone, ExtractResource, Default)]
 #[extract_app(RenderApp)]
@@ -58,12 +73,16 @@ impl Plugin for TreeFieldPlugin {
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevTreeTime>();
 		app.init_resource::<ExtractedTreeField>();
+		app.init_resource::<ExtractedTreeGroves>();
+		app.add_plugins(ExtractResourcePlugin::<ExtractedTreeGroves>::default());
+		app.add_plugins(ExtractComponentPlugin::<TreeGroveId>::default());
 		app.add_plugins(ExtractResourcePlugin::<ExtractedTreeField>::default());
 		app.add_plugins(ExtractComponentPlugin::<TreeFieldPresenter>::default());
 		app.add_systems(Startup, spawn_presenter);
 		app.add_systems(
 			Update,
 			(
+				publish_groves,
 				rebuild_field,
 				snapshot_extracted_field,
 				sync_presenter_bounds,
@@ -87,11 +106,66 @@ fn spawn_presenter(mut commands: Commands) {
 		commands.spawn((
 			Name::new(name),
 			kind,
+			TreeGroveId(Entity::PLACEHOLDER),
 			Visibility::default(),
 			Transform::default(),
 			Aabb::default(),
 			NotShadowCaster,
 		));
+	}
+}
+
+fn publish_groves(
+	mut commands: Commands,
+	changed: Query<(Entity, &TreeGrove), (Changed<TreeGrove>, Allow<Disabled>)>,
+	mut removed: RemovedComponents<TreeGrove>,
+	mut extracted: ResMut<ExtractedTreeGroves>,
+	mut presenters: Local<HashMap<Entity, [Entity; 2]>>,
+	mut bounds: Query<&mut Aabb, With<TreeFieldPresenter>>,
+) {
+	for owner in removed.read() {
+		if Arc::make_mut(&mut extracted.0).remove(&owner).is_some() {
+			info!(target: "maybraid.tree_field", ?owner, "grove descriptors retired");
+		}
+		if let Some(children) = presenters.remove(&owner) {
+			for child in children {
+				commands.entity(child).try_despawn();
+			}
+		}
+	}
+	for (owner, grove) in &changed {
+		if extracted.0.get(&owner).is_some_and(|old| Arc::ptr_eq(old, &grove.0)) {
+			continue;
+		}
+		Arc::make_mut(&mut extracted.0).insert(owner, grove.0.clone());
+		let aabb = if grove.0.is_empty() { Aabb::default() } else { grove.0.bounds.aabb() };
+		if let Some(children) = presenters.get(&owner) {
+			for child in children {
+				if let Ok(mut bound) = bounds.get_mut(*child) {
+					*bound = aabb;
+				}
+			}
+		} else {
+			let children = [TreeFieldPresenter::Wood, TreeFieldPresenter::Foliage].map(|kind| {
+				commands
+					.spawn((
+						Name::new("TreeGrovePresenter"),
+						kind,
+						TreeGroveId(owner),
+						ChildOf(owner),
+						Visibility::Inherited,
+						Transform::default(),
+						aabb,
+						NotShadowCaster,
+					))
+					.id()
+			});
+			presenters.insert(owner, children);
+		}
+		info!(target: "maybraid.tree_field", ?owner, generation = grove.0.generation,
+			descriptor_digest = grove.0.descriptor_digest(),
+			plants = grove.0.plants.len(), branches = grove.0.branches.len(), leaves = grove.0.leaves.len(),
+			"grove descriptors published");
 	}
 }
 
@@ -167,14 +241,16 @@ fn snapshot_extracted_field(
 
 fn sync_presenter_bounds(
 	field: Res<TreeField>,
-	mut presenters: Query<&mut Aabb, With<TreeFieldPresenter>>,
+	mut presenters: Query<(&mut Aabb, &TreeGroveId), With<TreeFieldPresenter>>,
 ) {
 	if !field.is_changed() || field.is_empty() {
 		return;
 	}
 	let aabb = field.bounds.aabb();
-	for mut existing in &mut presenters {
-		*existing = aabb;
+	for (mut existing, owner) in &mut presenters {
+		if owner.0 == Entity::PLACEHOLDER {
+			*existing = aabb;
+		}
 	}
 }
 
@@ -183,6 +259,35 @@ mod tests {
 	use super::*;
 	use crate::patch::TreePatch;
 	use crate::recipe::TreeRecipe;
+
+	#[test]
+	fn grove_publication_keeps_unrelated_snapshots_and_presenters() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.init_resource::<ExtractedTreeGroves>().add_systems(Update, publish_groves);
+		let first = Arc::new(TreeField::default().with_generation(1));
+		let second = Arc::new(TreeField::default().with_generation(1));
+		let a = app.world_mut().spawn(TreeGrove(first.clone())).id();
+		let b = app.world_mut().spawn(TreeGrove(second.clone())).id();
+		app.update();
+		let children = app
+			.world()
+			.get::<Children>(b)
+			.ok_or_else(|| anyhow::anyhow!("grove presenters absent"))?
+			.to_vec();
+		app.update();
+		assert!(Arc::ptr_eq(&app.world().resource::<ExtractedTreeGroves>().0[&a], &first));
+		app.world_mut()
+			.entity_mut(a)
+			.insert(TreeGrove(Arc::new(TreeField::default().with_generation(2))));
+		app.update();
+		assert!(Arc::ptr_eq(&app.world().resource::<ExtractedTreeGroves>().0[&b], &second));
+		assert_eq!(app.world().get::<Children>(b).map(|c| c.to_vec()), Some(children));
+		app.world_mut().despawn(a);
+		app.update();
+		assert!(!app.world().resource::<ExtractedTreeGroves>().0.contains_key(&a));
+		assert!(Arc::ptr_eq(&app.world().resource::<ExtractedTreeGroves>().0[&b], &second));
+		Ok(())
+	}
 
 	#[test]
 	fn wood_and_foliage_have_separate_presenter_entities() -> anyhow::Result<()> {

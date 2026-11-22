@@ -1,7 +1,7 @@
 //! Render-world compute compaction, indirect args, and opaque wood/foliage draws.
 
 use std::borrow::Cow;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use bevy::core_pipeline::core_3d::{
 	Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey, CORE_3D_DEPTH_FORMAT,
@@ -38,8 +38,8 @@ use vegetation_components::CanopyShadowMode;
 use vegetation_grass_field::{GrassGpuCapability, GrassGpuMode};
 use vegetation_groves::temperate_lower_massives::StorybookFieldArea;
 use vegetation_shaders::wesl::{
-	GrassDrawParams, GrassViewUniform, LodThresholds, DRAW_INDEXED_INDIRECT_STRIDE,
-	GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW,
+	GrassDrawParams, GrassViewUniform, DRAW_INDEXED_INDIRECT_STRIDE, GRASS_VIEW_KIND_CAMERA,
+	GRASS_VIEW_KIND_SHADOW,
 };
 
 use crate::diagnostics::TreeFieldStats;
@@ -47,7 +47,7 @@ use crate::layout::{
 	WoodLod, BRANCH_DESCRIPTOR_STRIDE, LEAF_DESCRIPTOR_STRIDE, PLANT_DESCRIPTOR_STRIDE,
 	TREE_LOD_COUNT,
 };
-use crate::plugin::{ExtractedTreeField, TreeFieldPresenter};
+use crate::plugin::{ExtractedTreeField, ExtractedTreeGroves, TreeFieldPresenter, TreeGroveId};
 use crate::select::TreeSelector;
 use crate::shaders::{
 	FINALIZE_SHADER, FOLIAGE_SHADER, SELECT_FOLIAGE_SHADER, SELECT_WOOD_SHADER, WOOD_SHADER,
@@ -419,6 +419,15 @@ fn gpu_template(
 
 #[derive(Resource, Default)]
 struct TreeGpuState {
+	owners: std::collections::HashMap<Entity, OwnerGpuState>,
+}
+
+#[derive(Default)]
+struct OwnerGpuState {
+	draw_reported: [OnceLock<()>; 2],
+	compute_reported: OnceLock<()>,
+	snapshot: Option<Arc<crate::field::TreeField>>,
+	active_views: std::collections::HashSet<RetainedViewEntity>,
 	plants: Option<Buffer>,
 	branches: Option<Buffer>,
 	leaves: Option<Buffer>,
@@ -448,29 +457,103 @@ struct ViewWork {
 
 fn prepare_tree_buffers(
 	extracted: Option<Res<ExtractedTreeField>>,
+	groves: Res<ExtractedTreeGroves>,
 	capability: Option<Res<GrassGpuCapability>>,
 	pipelines: Option<Res<TreePipelines>>,
 	pipeline_cache: Res<PipelineCache>,
 	device: Res<RenderDevice>,
 	queue: Res<RenderQueue>,
-	views: Query<&ExtractedView>,
+	views: Query<(&ExtractedView, &RenderVisibleEntities)>,
+	presenters: Query<&TreeGroveId, With<TreeFieldPresenter>>,
 	mut stats: Option<ResMut<TreeFieldStats>>,
 	mut state: ResMut<TreeGpuState>,
 ) {
-	let Some(extracted) = extracted else {
-		return;
-	};
-	let Some(pipelines) = pipelines else {
-		return;
-	};
-	let Some(capability) = capability else {
+	let (Some(extracted), Some(pipelines), Some(capability)) = (extracted, pipelines, capability)
+	else {
 		return;
 	};
 	if !capability.submits() {
 		return;
 	}
+	state
+		.owners
+		.retain(|owner, _| *owner == Entity::PLACEHOLDER || groves.0.contains_key(owner));
+	if extracted.settings.diagnostics {
+		if let Some(stats) = stats.as_deref_mut() {
+			*stats = TreeFieldStats::default();
+			for field in std::iter::once(&extracted.field).chain(groves.0.values()) {
+				stats.plants_resident += field.plants.len() as u32;
+				stats.branches_resident += field.branches.len() as u32;
+				stats.leaves_resident += field.leaves.len() as u32;
+				stats.generation = stats.generation.max(field.generation);
+			}
+		}
+	}
+	let visible_owners: Vec<_> = views
+		.iter()
+		.map(|(view, visible)| {
+			let owners: std::collections::HashSet<_> = visible
+				.get::<TreeFieldPresenter>()
+				.into_iter()
+				.flat_map(|class| class.entities_cpu_culling.iter())
+				.filter_map(|(render, _)| presenters.get(*render).ok().map(|id| id.0))
+				.collect();
+			(view, owners)
+		})
+		.collect();
+	for (owner, field) in std::iter::once((Entity::PLACEHOLDER, &extracted.field))
+		.chain(groves.0.iter().map(|(id, field)| (*id, field)))
+	{
+		if field.is_empty() {
+			state.owners.remove(&owner);
+			continue;
+		}
+		let mut inputs = (*extracted).clone();
+		inputs.field = field.clone();
+		if owner != Entity::PLACEHOLDER {
+			// Coarse grove residency owns distance culling. Keep the far canopy band
+			// throughout that lifetime, including the former Low/UltraLow proxy range.
+			inputs.settings.lod.card_m = f32::MAX;
+		}
+		// Each independent owner sizes its lists to admit all descriptors in any band.
+		inputs.settings.max_per_lod = field.branches.len().max(field.leaves.len()).max(1) as u32;
+		let visible_views: Vec<_> = visible_owners
+			.iter()
+			.filter_map(|(view, owners)| owners.contains(&owner).then_some(*view))
+			.collect();
+		let owner_state = state.owners.entry(owner).or_default();
+		prepare_owner_buffers(
+			owner,
+			owner_state,
+			&inputs,
+			&capability,
+			&pipelines,
+			&pipeline_cache,
+			&device,
+			&queue,
+			&visible_views,
+			stats.as_deref_mut(),
+		);
+	}
+}
 
-	if state.generation != extracted.field.generation || state.branches.is_none() {
+fn prepare_owner_buffers(
+	owner: Entity,
+	state: &mut OwnerGpuState,
+	extracted: &ExtractedTreeField,
+	capability: &GrassGpuCapability,
+	pipelines: &TreePipelines,
+	pipeline_cache: &PipelineCache,
+	device: &RenderDevice,
+	queue: &RenderQueue,
+	views: &[&ExtractedView],
+	mut stats: Option<&mut TreeFieldStats>,
+) {
+	if state
+		.snapshot
+		.as_ref()
+		.is_none_or(|snapshot| !Arc::ptr_eq(snapshot, &extracted.field))
+	{
 		state.plants = Some(pack_buffer(
 			&device,
 			"tree_plants",
@@ -490,6 +573,13 @@ fn prepare_tree_buffers(
 			LEAF_DESCRIPTOR_STRIDE,
 		));
 		state.generation = extracted.field.generation;
+		state.snapshot = Some(extracted.field.clone());
+		state.draw_reported = Default::default();
+		state.compute_reported = OnceLock::new();
+		info!(target: "maybraid.tree_field", ?owner, generation = state.generation,
+			plants = extracted.field.plants.len(), branches = extracted.field.branches.len(), leaves = extracted.field.leaves.len(),
+			bytes = extracted.field.plants.len() as u64 * PLANT_DESCRIPTOR_STRIDE + extracted.field.branches.len() as u64 * BRANCH_DESCRIPTOR_STRIDE + extracted.field.leaves.len() as u64 * LEAF_DESCRIPTOR_STRIDE,
+			"grove descriptors uploaded");
 		state.plant_count = extracted.field.plants.len();
 		state.views.clear();
 	}
@@ -502,7 +592,7 @@ fn prepare_tree_buffers(
 	let capacity = extracted.settings.max_per_lod;
 	let mut live = std::collections::HashSet::new();
 	let mut missing = Vec::new();
-	for view in &views {
+	for view in views.iter().copied() {
 		if !view_submits_tree(view, extracted.shadow_mode) {
 			continue;
 		}
@@ -514,7 +604,8 @@ fn prepare_tree_buffers(
 		}
 	}
 	for retained in missing {
-		if let Some(view) = views.iter().find(|view| view.retained_view_entity == retained) {
+		if let Some(view) = views.iter().copied().find(|view| view.retained_view_entity == retained)
+		{
 			let work = create_view_work(
 				&device,
 				&queue,
@@ -530,12 +621,12 @@ fn prepare_tree_buffers(
 			state.views.insert(retained, work);
 		}
 	}
-	state.views.retain(|key, _| live.contains(key));
+	state.active_views = live;
 
 	if capability.mode == GrassGpuMode::CpuSelect {
-		cpu_fill_lists(&queue, &mut state, &extracted, views.iter(), stats.as_deref_mut());
+		cpu_fill_lists(&queue, state, &extracted, views.iter().copied(), stats.as_deref_mut());
 	} else if extracted.settings.diagnostics {
-		record_cpu_stats(&extracted, views.iter(), stats.as_deref_mut());
+		record_cpu_stats(&extracted, views.iter().copied(), stats.as_deref_mut());
 	}
 }
 
@@ -558,7 +649,7 @@ fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedTreeField) -> Gr
 	} else {
 		GRASS_VIEW_KIND_SHADOW
 	};
-	let thresholds = LodThresholds::tree_default();
+	let thresholds = extracted.settings.lod;
 	GrassViewUniform {
 		clip_from_world,
 		world_from_clip,
@@ -764,11 +855,12 @@ fn write_view_uniform(queue: &RenderQueue, buffer: &Buffer, uniform: &GrassViewU
 
 fn cpu_fill_lists<'a>(
 	queue: &RenderQueue,
-	state: &mut TreeGpuState,
+	state: &mut OwnerGpuState,
 	extracted: &ExtractedTreeField,
 	views: impl Iterator<Item = &'a ExtractedView>,
 	mut stats: Option<&mut TreeFieldStats>,
 ) {
+	let mut recorded = false;
 	for view in views {
 		if !view_submits_tree(view, extracted.shadow_mode) {
 			continue;
@@ -796,8 +888,12 @@ fn cpu_fill_lists<'a>(
 			work.cpu_wood_counts[lod] = lists.wood[lod].len() as u32;
 			work.cpu_foliage_counts[lod] = lists.foliage[lod].len() as u32;
 		}
-		if extracted.settings.diagnostics {
-			record_lists(extracted, &lists, stats.as_deref_mut());
+		if extracted.settings.diagnostics
+			&& !recorded
+			&& view.retained_view_entity.subview_index == 0
+		{
+			record_lists(&lists, stats.as_deref_mut());
+			recorded = true;
 		}
 	}
 }
@@ -808,7 +904,7 @@ fn record_cpu_stats<'a>(
 	mut stats: Option<&mut TreeFieldStats>,
 ) {
 	for view in views {
-		if !view_submits_tree(view, extracted.shadow_mode) {
+		if view.retained_view_entity.subview_index != 0 {
 			continue;
 		}
 		let uniform = make_view_uniform(view, extracted);
@@ -818,24 +914,24 @@ fn record_cpu_stats<'a>(
 			&extracted.field.branches,
 			&extracted.field.leaves,
 		);
-		record_lists(extracted, &lists, stats.as_deref_mut());
+		record_lists(&lists, stats.as_deref_mut());
 		break;
 	}
 }
 
-fn record_lists(
-	extracted: &ExtractedTreeField,
-	lists: &crate::select::CompactedTreeLists,
-	stats: Option<&mut TreeFieldStats>,
-) {
+fn record_lists(lists: &crate::select::CompactedTreeLists, stats: Option<&mut TreeFieldStats>) {
 	if let Some(stats) = stats {
-		*stats = TreeFieldStats::from_lists(
-			extracted.field.plants.len() as u32,
-			extracted.field.branches.len() as u32,
-			extracted.field.leaves.len() as u32,
-			extracted.field.generation,
-			lists,
-		);
+		stats.considered_wood += lists.considered_wood;
+		stats.considered_foliage += lists.considered_foliage;
+		stats.submitted_wood += lists.submitted_wood;
+		stats.submitted_foliage += lists.submitted_foliage;
+		stats.overflow += lists
+			.wood_overflow
+			.iter()
+			.chain(lists.foliage_overflow.iter())
+			.copied()
+			.sum::<u32>();
+		stats.triangles += lists.triangle_count();
 	}
 }
 
@@ -849,8 +945,6 @@ fn tree_compute(
 	pipeline_cache: Res<PipelineCache>,
 	state: Option<Res<TreeGpuState>>,
 	capability: Option<Res<GrassGpuCapability>>,
-	extracted: Option<Res<ExtractedTreeField>>,
-	mut reported_dispatch: Local<bool>,
 ) {
 	let Some(pipelines) = pipelines else {
 		return;
@@ -861,10 +955,7 @@ fn tree_compute(
 	let Some(capability) = capability else {
 		return;
 	};
-	let Some(extracted) = extracted else {
-		return;
-	};
-	if capability.mode != GrassGpuMode::GpuDriven || extracted.field.is_empty() {
+	if capability.mode != GrassGpuMode::GpuDriven {
 		return;
 	}
 	match pipeline_cache.get_compute_pipeline_state(pipelines.select_wood) {
@@ -881,36 +972,45 @@ fn tree_compute(
 		return;
 	};
 
-	let wood_groups =
-		extracted.field.branches.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
-	let leaf_groups =
-		extracted.field.leaves.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
-	if !*reported_dispatch && !state.views.is_empty() && requested_world_tree_mode().is_some() {
-		info!(
-			target: "maybraid.tree_field",
-			plants = extracted.field.plants.len(), branches = extracted.field.branches.len(),
-			leaves = extracted.field.leaves.len(),
-			"GPU selection dispatched"
-		);
-		*reported_dispatch = true;
-	}
-	for work in state.views.values() {
-		render_context.command_encoder().clear_buffer(&work.counters, 0, None);
+	for (owner, state) in &state.owners {
+		let Some(field) = state.snapshot.as_ref() else {
+			continue;
+		};
+		let wood_groups = field.branches.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
+		let leaf_groups = field.leaves.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
+		if state.compute_reported.get().is_none()
+			&& !state.active_views.is_empty()
+			&& requested_world_tree_mode().is_some()
 		{
-			let mut pass =
-				render_context.command_encoder().begin_compute_pass(&ComputePassDescriptor {
-					label: Some("tree_select"),
-					..default()
-				});
-			pass.set_bind_group(0, &work.select_wood_bg, &[]);
-			pass.set_pipeline(select_wood);
-			pass.dispatch_workgroups(wood_groups, 1, 1);
-			pass.set_bind_group(0, &work.select_foliage_bg, &[]);
-			pass.set_pipeline(select_foliage);
-			pass.dispatch_workgroups(leaf_groups, 1, 1);
-			pass.set_bind_group(0, &work.finalize_bg, &[]);
-			pass.set_pipeline(finalize);
-			pass.dispatch_workgroups(1, 1, 1);
+			info!(
+				target: "maybraid.tree_field",
+				?owner, plants = field.plants.len(), branches = field.branches.len(),
+				leaves = field.leaves.len(),
+				"GPU selection dispatched"
+			);
+			let _ = state.compute_reported.set(());
+		}
+		for (view, work) in &state.views {
+			if !state.active_views.contains(view) {
+				continue;
+			}
+			render_context.command_encoder().clear_buffer(&work.counters, 0, None);
+			{
+				let mut pass =
+					render_context.command_encoder().begin_compute_pass(&ComputePassDescriptor {
+						label: Some("tree_select"),
+						..default()
+					});
+				pass.set_bind_group(0, &work.select_wood_bg, &[]);
+				pass.set_pipeline(select_wood);
+				pass.dispatch_workgroups(wood_groups, 1, 1);
+				pass.set_bind_group(0, &work.select_foliage_bg, &[]);
+				pass.set_pipeline(select_foliage);
+				pass.dispatch_workgroups(leaf_groups, 1, 1);
+				pass.set_bind_group(0, &work.finalize_bg, &[]);
+				pass.set_pipeline(finalize);
+				pass.dispatch_workgroups(1, 1, 1);
+			}
 		}
 	}
 }
@@ -937,7 +1037,7 @@ fn queue_tree(
 	let Some(pipelines) = pipelines.as_mut() else {
 		return;
 	};
-	if !capability.submits() || extracted.field.is_empty() {
+	if !capability.submits() {
 		return;
 	}
 	let draw_wood = opaque_draw_functions.read().id::<DrawTreeWood>();
@@ -1010,16 +1110,21 @@ struct DrawTreeFoliageCommand;
 impl<P: PhaseItem> RenderCommand<P> for DrawTreeWoodCommand {
 	type Param = (SRes<TreeGpuState>, SRes<TreeTemplates>, SRes<GrassGpuCapability>);
 	type ViewQuery = &'static ExtractedView;
-	type ItemQuery = ();
+	type ItemQuery = &'static TreeGroveId;
 
 	fn render<'w>(
 		_item: &P,
 		view: bevy::ecs::query::ROQueryItem<'w, '_, Self::ViewQuery>,
-		_entity: Option<bevy::ecs::query::ROQueryItem<'w, '_, Self::ItemQuery>>,
+		entity: Option<bevy::ecs::query::ROQueryItem<'w, '_, Self::ItemQuery>>,
 		(state, templates, capability): SystemParamItem<'w, '_, Self::Param>,
 		pass: &mut TrackedRenderPass<'w>,
 	) -> RenderCommandResult {
-		let state = state.into_inner();
+		let Some(owner) = entity else {
+			return RenderCommandResult::Skip;
+		};
+		let Some(state) = state.into_inner().owners.get(&owner.0) else {
+			return RenderCommandResult::Skip;
+		};
 		let templates = templates.into_inner();
 		let capability = capability.into_inner();
 		let Some(work) = state.views.get(&view.retained_view_entity) else {
@@ -1038,8 +1143,14 @@ impl<P: PhaseItem> RenderCommand<P> for DrawTreeWoodCommand {
 				lod,
 			);
 		}
-		static REPORTED: OnceLock<()> = OnceLock::new();
-		report_world_draw(&REPORTED, "wood", state, capability, &work.cpu_wood_counts);
+		report_world_draw(
+			&state.draw_reported[0],
+			owner.0,
+			"wood",
+			state,
+			capability,
+			&work.cpu_wood_counts,
+		);
 		RenderCommandResult::Success
 	}
 }
@@ -1047,16 +1158,21 @@ impl<P: PhaseItem> RenderCommand<P> for DrawTreeWoodCommand {
 impl<P: PhaseItem> RenderCommand<P> for DrawTreeFoliageCommand {
 	type Param = (SRes<TreeGpuState>, SRes<TreeTemplates>, SRes<GrassGpuCapability>);
 	type ViewQuery = &'static ExtractedView;
-	type ItemQuery = ();
+	type ItemQuery = &'static TreeGroveId;
 
 	fn render<'w>(
 		_item: &P,
 		view: bevy::ecs::query::ROQueryItem<'w, '_, Self::ViewQuery>,
-		_entity: Option<bevy::ecs::query::ROQueryItem<'w, '_, Self::ItemQuery>>,
+		entity: Option<bevy::ecs::query::ROQueryItem<'w, '_, Self::ItemQuery>>,
 		(state, templates, capability): SystemParamItem<'w, '_, Self::Param>,
 		pass: &mut TrackedRenderPass<'w>,
 	) -> RenderCommandResult {
-		let state = state.into_inner();
+		let Some(owner) = entity else {
+			return RenderCommandResult::Skip;
+		};
+		let Some(state) = state.into_inner().owners.get(&owner.0) else {
+			return RenderCommandResult::Skip;
+		};
 		let templates = templates.into_inner();
 		let capability = capability.into_inner();
 		let Some(work) = state.views.get(&view.retained_view_entity) else {
@@ -1075,16 +1191,23 @@ impl<P: PhaseItem> RenderCommand<P> for DrawTreeFoliageCommand {
 				lod + TREE_LOD_COUNT,
 			);
 		}
-		static REPORTED: OnceLock<()> = OnceLock::new();
-		report_world_draw(&REPORTED, "foliage", state, capability, &work.cpu_foliage_counts);
+		report_world_draw(
+			&state.draw_reported[1],
+			owner.0,
+			"foliage",
+			state,
+			capability,
+			&work.cpu_foliage_counts,
+		);
 		RenderCommandResult::Success
 	}
 }
 
 fn report_world_draw(
 	reported: &OnceLock<()>,
+	owner: Entity,
 	kind: &'static str,
-	state: &TreeGpuState,
+	state: &OwnerGpuState,
 	capability: &GrassGpuCapability,
 	cpu_counts: &[u32; TREE_LOD_COUNT],
 ) {
@@ -1100,7 +1223,7 @@ fn report_world_draw(
 	reported.get_or_init(|| {
 		info!(
 			target: "maybraid.tree_field",
-			kind, mode = ?capability.mode, generation = state.generation, plants = state.plant_count,
+			?owner, kind, mode = ?capability.mode, generation = state.generation, plants = state.plant_count,
 			"camera draw encoded"
 		);
 	});

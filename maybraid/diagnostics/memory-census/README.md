@@ -49,3 +49,18 @@ payload figures describe different selected scopes, not a complete heap total.
 Nonblocking cache lock acquisition only avoids waiting for a current writer;
 walking a successfully locked map can delay a writer. Every explicit census can
 hitch. Capture at a memory measurement boundary outside CPU timing windows.
+
+In the game, `memory-census` plus `--agent-diagnostics` also installs observers
+for `ChicoGroveHost`, `LodLevelRoot`, `WorldAssetRoot`, and `Mesh3d` membership.
+The additive `component_membership_transitions` field in each agent census
+reports cumulative additions/removals since observer installation. Replacing a
+component value does not count as an addition; despawning its entity counts as
+a removal. These are exact transitions for the named components, not total
+entity spawn/despawn counts or archetype migrations. No per-frame scan is used.
+Missing observer data is `null`; a missing map entry means no recorded transition.
+
+For a grove lifecycle diagnostic run, snapshot after loading, after approach,
+after culling, and after re-entry. Subtract counters between those checkpoints.
+The `archetypes` count includes retained empty archetypes, so its increase
+measures new archetypes retained by the World, not migration events. Keep this
+observer build and its snapshot stalls separate from ordinary timing captures.
