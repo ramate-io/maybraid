@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
-use vegetation_grass_field::{GrassField, GrassFieldSettings};
+use vegetation_grass_field::{GrassFieldSettings, GrassGroveCatalog};
 
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
@@ -12,15 +12,15 @@ pub fn ui_config() -> GameCommandUiConfig {
 }
 
 pub(crate) fn sync_command_status_text(
-	field: Res<GrassField>,
+	catalog: Res<GrassGroveCatalog>,
 	settings: Res<GrassFieldSettings>,
 	mut status: ResMut<GameCommandStatusText>,
 ) {
 	status.0 = format!(
 		"blades {} | patches {} | wind {:.2} m @ {:.2}\n\
 		 GPU select+indirect | nested LOD | BotW meadow palette",
-		field.blades.len(),
-		field.patches.len(),
+		catalog.blades.iter().filter(|blade| blade.height_m > 0.0).count(),
+		catalog.live_grove_count(),
 		settings.wind.strength_m,
 		settings.wind.speed,
 	);

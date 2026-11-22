@@ -118,9 +118,46 @@ pub struct PlantDescriptor {
 
 impl PlantDescriptor {
 	pub const FLAG_ACTIVE: u32 = 1 << 0;
+	/// Packed into `flags` bits 8..=31 so layout stride stays 96 bytes.
+	pub const GROVE_SHIFT: u32 = 8;
 
 	pub fn is_active(self) -> bool {
 		self.flags & Self::FLAG_ACTIVE != 0
+	}
+
+	pub fn grove_id(self) -> u32 {
+		self.flags >> Self::GROVE_SHIFT
+	}
+
+	pub fn with_grove_slot(mut self, slot: u32) -> Self {
+		self.flags = (self.flags & ((1 << Self::GROVE_SHIFT) - 1)) | (slot << Self::GROVE_SHIFT);
+		self
+	}
+
+	pub fn with_active(mut self) -> Self {
+		self.flags |= Self::FLAG_ACTIVE;
+		self
+	}
+
+	pub fn inactive() -> Self {
+		Self {
+			root: Vec3::ZERO,
+			height_m: 0.0,
+			up: Vec3::Y,
+			plant_id: 0,
+			aabb_min: Vec3::ZERO,
+			branch_offset: 0,
+			aabb_max: Vec3::ZERO,
+			branch_count: 0,
+			leaf_offset: 0,
+			leaf_count: 0,
+			seed: 0,
+			flags: 0,
+			crown_radius_m: 0.0,
+			wood_stiffness: 0.0,
+			foliage_density: 0.0,
+			species: 0.0,
+		}
 	}
 
 	pub fn with_leaf_close_style(mut self, style: LeafCloseStyle) -> Self {
@@ -194,6 +231,27 @@ pub struct BranchDescriptor {
 	pub major_parent: u32,
 }
 
+impl Default for BranchDescriptor {
+	fn default() -> Self {
+		Self {
+			p0: Vec3::ZERO,
+			parent_index: PARENT_NONE,
+			p1: Vec3::ZERO,
+			parent_t: 0.0,
+			p2: Vec3::ZERO,
+			plant_index: 0,
+			root_radius_m: 0.0,
+			tip_radius_m: 0.0,
+			stiffness: 0.0,
+			keep_rank: 0.0,
+			twist: 0.0,
+			depth: 0,
+			branch_id: 0,
+			major_parent: PARENT_NONE,
+		}
+	}
+}
+
 impl BranchDescriptor {
 	pub fn is_trunk(self) -> bool {
 		self.parent_index == PARENT_NONE
@@ -250,6 +308,25 @@ pub struct LeafDescriptor {
 	pub leaf_id: u32,
 	pub palette: Vec3,
 	pub shape: f32,
+}
+
+impl Default for LeafDescriptor {
+	fn default() -> Self {
+		Self {
+			plant_index: 0,
+			parent_branch: 0,
+			attach_t: 0.0,
+			size_m: 0.0,
+			twist: 0.0,
+			fold: 0.0,
+			flutter: 0.0,
+			density_rank: 0.0,
+			facing: Vec3::Y,
+			leaf_id: 0,
+			palette: Vec3::ZERO,
+			shape: 0.0,
+		}
+	}
 }
 
 impl LeafDescriptor {

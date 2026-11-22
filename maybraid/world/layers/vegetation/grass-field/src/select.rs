@@ -145,6 +145,9 @@ impl GrassSelector {
 					continue;
 				};
 				lists.considered += 1;
+				if blade.height_m <= 0.0 {
+					continue;
+				}
 				if blade.density_rank() >= keep_fraction {
 					continue;
 				}

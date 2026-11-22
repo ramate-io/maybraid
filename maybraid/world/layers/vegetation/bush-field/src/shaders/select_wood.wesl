@@ -23,6 +23,9 @@ fn sphere_in_frustum(center: vec3<f32>, radius: f32, clip: mat4x4<f32>) -> bool 
 }
 
 fn plant_bucket(plant: PlantDescriptor) -> u32 {
+    if ((plant.flags & 1u) == 0u) {
+        return 3u;
+    }
     let radius = max_wind_displacement_m(plant.height_m, view.wind.w, plant.wood_stiffness)
         + max(plant.height_m, plant.crown_radius_m)
         + plant.crown_radius_m * 0.35;

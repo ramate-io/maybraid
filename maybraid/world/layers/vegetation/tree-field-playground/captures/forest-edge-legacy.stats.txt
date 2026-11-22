@@ -1,1 +1,1 @@
-shot=forest-edge-legacy mode=Kit samples=36 dt_ms_mean=250.000 dt_ms_p95=250.000 dt_ms_max=250.000 entities=22034 kit_meshes=21533 mesh3d=21536 plants=0 branches=0 leaves=0 bushes=0 grass=24336 upload_B=0
+shot=forest-edge-legacy mode=Kit samples=36 dt_ms_mean=250.000 dt_ms_p95=250.000 dt_ms_max=250.000 entities=22039 kit_meshes=21533 mesh3d=21536 plants=40 branches=952 leaves=19324 bushes=149 grass=26556 upload_B=1316736

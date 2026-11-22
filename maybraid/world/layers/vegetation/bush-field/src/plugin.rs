@@ -1,41 +1,48 @@
-//! Main-world plugin: patch upload, presenter AABB, and render-app wiring.
+//! Main-world plugin: catalog admits, two kind presenters, render-app wiring.
 
 use bevy::camera::primitives::Aabb;
-use bevy::camera::visibility::{self, VisibilityClass};
+use bevy::camera::visibility::{self, NoFrustumCulling, VisibilityClass};
 use bevy::light::NotShadowCaster;
+use bevy::math::Vec3A;
 use bevy::prelude::*;
-use bevy::render::extract_component::ExtractComponent;
-use bevy::render::extract_component::ExtractComponentPlugin;
-use bevy::render::extract_resource::ExtractResource;
-use bevy::render::extract_resource::ExtractResourcePlugin;
-use bevy::render::RenderApp;
+use bevy::render::extract_component::{ExtractComponent, ExtractComponentPlugin};
+use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
+use bevy::render::{ExtractSchedule, MainWorld, RenderApp};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::GrassGpuCapability;
+use vegetation_grass_field::{GrassGpuCapability, GroveId, ADMISSION_BUDGET};
 use vegetation_shaders::VegetationWeslPlugin;
 
+use crate::bounds::BushBounds;
+use crate::catalog::{BushCatalogOp, BushCatalogOps, BushGroveCatalog};
 use crate::diagnostics::BushFieldStats;
 use crate::field::{BushField, BushFieldSettings};
 use crate::gpu::BushGpuPlugin;
 use crate::patch::BushPatch;
 use crate::shaders::BushShadersPlugin;
 
-/// Marker extracted into the render world. CPU frustum cull uses the conservative AABB.
-#[derive(Component, Clone, ExtractComponent)]
+/// Marker extracted into the render world. CPU frustum cull uses the catalog AABB.
+#[derive(Component, Clone, Copy, Debug, Eq, ExtractComponent, PartialEq)]
 #[require(VisibilityClass)]
 #[component(on_add = visibility::add_visibility_class::<BushFieldPresenter>)]
 #[extract_app(RenderApp)]
-pub struct BushFieldPresenter;
+pub(crate) enum BushFieldPresenter {
+	Wood,
+	Foliage,
+}
 
-/// Snapshot copied into the render world each frame.
+/// Frame inputs. Descriptor arenas stay in [`BushGroveCatalog`].
 #[derive(Resource, Clone, ExtractResource, Default)]
 #[extract_app(RenderApp)]
 pub struct ExtractedBushField {
-	pub field: BushField,
 	pub settings: BushFieldSettings,
 	pub time_s: f32,
 	pub prev_time_s: f32,
 	pub light_direction: Vec3,
 	pub shadow_mode: CanopyShadowMode,
+	pub plant_count: u32,
+	pub branch_count: u32,
+	pub leaf_count: u32,
+	pub grove_residency: bool,
 }
 
 /// Registers GPU bush field rendering. Existing kit bushes stay available.
@@ -50,6 +57,8 @@ impl Plugin for BushFieldPlugin {
 		app.insert_resource(BushFieldSettings::from_env());
 		app.init_resource::<BushField>();
 		app.init_resource::<BushFieldStats>();
+		app.init_resource::<BushGroveCatalog>();
+		app.init_resource::<BushCatalogOps>();
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevBushTime>();
 		app.init_resource::<ExtractedBushField>();
@@ -59,14 +68,19 @@ impl Plugin for BushFieldPlugin {
 		app.add_systems(
 			Update,
 			(
-				rebuild_field,
-				snapshot_extracted_field,
+				collect_catalog_ops,
+				snapshot_extracted_frame,
 				sync_presenter_bounds,
 				sync_presenter_shadows,
 			)
 				.chain(),
 		);
 		app.add_plugins(BushGpuPlugin);
+		if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+			render_app
+				.init_resource::<BushCatalogOps>()
+				.add_systems(ExtractSchedule, extract_catalog_ops);
+		}
 	}
 }
 
@@ -74,14 +88,79 @@ impl Plugin for BushFieldPlugin {
 struct PrevBushTime(f32);
 
 fn spawn_presenter(mut commands: Commands) {
-	commands.spawn((
-		Name::new("BushFieldPresenter"),
-		BushFieldPresenter,
-		Visibility::default(),
-		Transform::default(),
-		Aabb::default(),
-		NotShadowCaster,
-	));
+	for (name, kind) in [
+		("BushFieldWood", BushFieldPresenter::Wood),
+		("BushFieldFoliage", BushFieldPresenter::Foliage),
+	] {
+		commands.spawn((
+			Name::new(name),
+			kind,
+			Visibility::default(),
+			Transform::default(),
+			Aabb::default(),
+			NoFrustumCulling,
+			NotShadowCaster,
+		));
+	}
+}
+
+fn collect_catalog_ops(
+	patches: Query<(Entity, &BushPatch), Changed<BushPatch>>,
+	mut removed: RemovedComponents<BushPatch>,
+	settings: Res<BushFieldSettings>,
+	mut ops: ResMut<BushCatalogOps>,
+	mut catalog: ResMut<BushGroveCatalog>,
+) {
+	let mut fresh = Vec::new();
+	for id in removed.read() {
+		fresh.push(BushCatalogOp::Retire { id: GroveId::from_entity(id) });
+	}
+	for (entity, patch) in &patches {
+		if patch.grove_residency {
+			catalog.grove_residency = true;
+		}
+		fresh.push(admit_from_field(
+			GroveId::from_entity(entity),
+			BushField::rebuild([patch], &settings),
+			patch.samples.len(),
+		));
+	}
+	if fresh.is_empty() && catalog.pending.is_empty() {
+		catalog.last_writes = 0;
+		catalog.last_write_bytes = 0;
+		catalog.last_uploads.clear();
+		return;
+	}
+	let mut batch = std::mem::take(&mut catalog.pending);
+	batch.extend(fresh);
+	let leftover = catalog.apply(batch.iter().cloned(), ADMISSION_BUDGET);
+	let applied = batch.len().saturating_sub(leftover.len());
+	ops.ops.extend(batch.into_iter().take(applied));
+	catalog.pending = leftover;
+}
+
+fn admit_from_field(id: GroveId, field: BushField, requested: usize) -> BushCatalogOp {
+	let truncated = requested.saturating_sub(field.plants.len()) as u32;
+	let (aabb_min, aabb_max) = if field.bounds.is_empty() {
+		(Vec3::ZERO, Vec3::ZERO)
+	} else {
+		(field.bounds.min, field.bounds.max)
+	};
+	BushCatalogOp::Admit {
+		id,
+		plants: field.plants,
+		branches: field.branches,
+		leaves: field.leaves,
+		aabb_min,
+		aabb_max,
+		seed: 0,
+		truncated_plants: truncated,
+	}
+}
+
+fn extract_catalog_ops(mut main_world: ResMut<MainWorld>, mut render: ResMut<BushCatalogOps>) {
+	let mut main = main_world.resource_mut::<BushCatalogOps>();
+	render.ops.extend(main.take());
 }
 
 fn sync_presenter_shadows(
@@ -102,24 +181,9 @@ fn sync_presenter_shadows(
 	}
 }
 
-fn rebuild_field(
-	changed: Query<(), Changed<BushPatch>>,
-	added: Query<(), Added<BushPatch>>,
-	removed: RemovedComponents<BushPatch>,
-	all_patches: Query<&BushPatch>,
-	settings: Res<BushFieldSettings>,
-	mut field: ResMut<BushField>,
-) {
-	if changed.is_empty() && added.is_empty() && removed.is_empty() && !settings.is_changed() {
-		return;
-	}
-	let generation = field.generation.wrapping_add(1);
-	*field = BushField::rebuild(all_patches.iter(), &settings).with_generation(generation);
-}
-
-fn snapshot_extracted_field(
-	mut commands: Commands,
-	field: Res<BushField>,
+fn snapshot_extracted_frame(
+	mut extracted: ResMut<ExtractedBushField>,
+	catalog: Res<BushGroveCatalog>,
 	settings: Res<BushFieldSettings>,
 	time: Res<Time>,
 	mut prev: ResMut<PrevBushTime>,
@@ -134,24 +198,36 @@ fn snapshot_extracted_field(
 		.next()
 		.map(|transform| *transform.back())
 		.unwrap_or(Vec3::new(0.4, 0.8, 0.3));
-	commands.insert_resource(ExtractedBushField {
-		field: field.clone(),
-		settings: settings.clone(),
-		time_s,
-		prev_time_s,
-		light_direction: light_direction.normalize_or(Vec3::Y),
-		shadow_mode: shadow_mode.map(|mode| *mode).unwrap_or_default(),
-	});
+	extracted.settings = settings.clone();
+	extracted.time_s = time_s;
+	extracted.prev_time_s = prev_time_s;
+	extracted.light_direction = light_direction.normalize_or(Vec3::Y);
+	extracted.shadow_mode = shadow_mode.map(|mode| *mode).unwrap_or_default();
+	extracted.plant_count = catalog.plants.len() as u32;
+	extracted.branch_count = catalog.branches.len() as u32;
+	extracted.leaf_count = catalog.leaves.len() as u32;
+	extracted.grove_residency = catalog.grove_residency;
 }
 
 fn sync_presenter_bounds(
-	field: Res<BushField>,
+	catalog: Res<BushGroveCatalog>,
+	settings: Res<BushFieldSettings>,
 	mut presenters: Query<&mut Aabb, With<BushFieldPresenter>>,
 ) {
-	if field.is_empty() {
+	if catalog.is_empty() {
 		return;
 	}
-	let aabb = field.bounds.aabb();
+	let mut bounds = BushBounds::empty();
+	for plant in catalog.plants.iter().filter(|plant| plant.is_active()) {
+		bounds = bounds.union(BushBounds::from_plant(plant, settings.wind.strength_m));
+	}
+	if bounds.is_empty() {
+		return;
+	}
+	let aabb = Aabb {
+		center: Vec3A::from((bounds.min + bounds.max) * 0.5),
+		half_extents: Vec3A::from((bounds.max - bounds.min) * 0.5),
+	};
 	for mut existing in &mut presenters {
 		*existing = aabb;
 	}
@@ -162,6 +238,21 @@ mod tests {
 	use super::*;
 	use crate::patch::BushPatch;
 	use crate::recipe::BushRecipe;
+
+	#[test]
+	fn wood_and_foliage_have_separate_presenter_entities() {
+		let mut app = App::new();
+		app.add_systems(Startup, spawn_presenter);
+		app.update();
+		let world = app.world_mut();
+		let mut query = world.query::<&BushFieldPresenter>();
+		let kinds: Vec<_> = query.iter(world).copied().collect();
+		assert_eq!(kinds.len(), 2);
+		assert!(kinds.contains(&BushFieldPresenter::Wood));
+		assert!(kinds.contains(&BushFieldPresenter::Foliage));
+		let mut no_frustum = world.query::<&NoFrustumCulling>();
+		assert_eq!(no_frustum.iter(world).count(), 2);
+	}
 
 	#[test]
 	fn rebuild_uploads_compact_descriptors_not_meshes() -> anyhow::Result<()> {

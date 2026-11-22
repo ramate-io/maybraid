@@ -4,6 +4,31 @@ This continues [#1647](https://github.com/ramate-io/maybraid/pull/1647) and the 
 
 See the [later whole-grove native benchmark at f192490](grove-f192-native-benchmark.md) for the matched route, standing Metal and checkpoint census results.
 
+## Catalog GPU encode (this continuation)
+
+Per-grove `OwnerGpuState` is gone. Each vegetation kind keeps one catalog of grove records plus concatenated plant/branch/leaf (or blade) arenas. Extract drains `CatalogOp::{Admit,Retire}` with `mem::take` and never clones the field. Prepare grows on admission (phase A CPU growth of that grove only) and `write_buffer`s those ranges. Retire clears `FLAG_ACTIVE` without rebuilding.
+
+Per view, per kind, encode is independent of grove count:
+
+| Kind | passes | dispatches | draws | uniform writes |
+|---|---:|---:|---:|---:|
+| tree | 1 | 3 | 6 | 1 |
+| bush | 1 | 3 | 6 | 1 |
+| grass | 1 | 2 | 3 | 1 |
+
+Five presenters (tree wood, tree foliage, bush wood, bush foliage, grass) each own a bin and carry `NoFrustumCulling` so CPU AABB does not hide GPU instances. GPU `ChicoGroveHost`s emit no `lod_host_scene_pending` and are not LodScene-indexed; the 1 km present ring only admits and retires. Bands still come from `lod.wesl` grove thresholds (High ~400 m, Medium ~520 m, Low 1 km). Compact lists grow to the admitted branch/leaf counts so one High band cannot overflow 8192 slots and drop foliage. `MAYBRAID_EXPERIMENT_TREE_FIELD=cpu` still uses CPU select. Bush/grass global caps are 262144 plants and 1048576 blades so admitted content is not silently truncated.
+
+`--release` tests: catalog idle/admit/retire, encode counts identical for 10 and 1000 groves, `grove_gpu_far_bands_match_legacy_instance_counts`, `gpu_host_is_not_lod_scene_indexed`, `cpu_experiment_keeps_cpu_select_when_compute_is_available`.
+
+### Native gates for the checker
+
+On the Area 1746 walking windows, compared to the f192490 per-grove encode (N = 295–548 tree groves → N compute passes):
+
+- Grove compute command-buffer finish must stay **under 0.3 ms** (was ~13.5 µs × N ≈ 2.3 ms walking / 6 ms standing).
+- `queue_submit` count must be **at most legacy + 3** (one extra submit family per vegetation kind, not per grove).
+
+Do not admit a GPU win if those gates fail, even if application interval looks better. Re-run the [native rerun spec](#native-rerun-spec-grove-owned-gpu-vs-legacy) on this catalog head.
+
 ## Frozen comparison
 
 Latest main was fetched and audited at `05885cd3056c8e4724d2bbd6265ac41255c1a962`. The experiment head `3c8e6fec904365557e9a034cd870f35111627e09` already includes that main revision. Its only difference from measured executable source `aacc5c07f2f26286456067e383a5384a1e26d17a` is the benchmark report. The frozen baseline executable SHA-256 is `1bdb82448dad1633dbc33e68c1c5131e54926f5afd8276a575feaaf6e0299908`; Cargo.lock SHA-256 is `ca4dc755ca2bd3ca053345a0cb3b5cfc8864b22619420296103194b02e49cf74`. The published Bevy fork stays pinned to `dfbb7d045b15879232dde2efc9bc66f499413ef6`.
@@ -91,20 +116,20 @@ A release `--locked` census of the world-route 3×3 around `(-4950, 3150)` (nine
 
 The playground grows the same stacked kinds, translated to the origin so cameras can stand outside the canopies: 2×2 Temperate Lower Massives, one LowBush tile, one TallGrass tile. Shadows stay matched off (`CanopyShadowMode::Off`, key sun shadow maps disabled). The adapter is still llvmpipe (Mesa 25.2.8, Vulkan) on this Ubuntu VM — a software rasterizer, not a discrete GPU and not native Metal. Window 960×540. Frame times are Bevy `Time::delta` over 36 settle frames; kit p95/max of 250.000 ms is Bevy's max-delta clamp (a lower bound).
 
-GPU tree descriptors for this scene: 34 plants / 767 branches / 16,639 leaves, 1,129,520 B upload, plus 149 bushes and 2,220 grove grass samples. The grass-field resource also still holds 24,336 blades from the playground turf cover (`gpu-grass-cover`), so the capture receipt's `grass=26556` is cover + grove tufts, not grove-only.
+GPU tree descriptors for this scene: 40 plants / 952 branches / 19,324 leaves, 1,316,736 B upload, plus 149 bushes and 2,220 grove grass samples. The grass catalog also still holds 24,336 blades from the playground turf cover (`gpu-grass-cover`), so the capture receipt's `grass=26556` is cover + grove tufts, not grove-only.
 
-Refreshed after lifting grove `card_m` so shaders keep High/Medium/Low through 1 km. GPU application intervals rose versus the earlier ~25 ms p95 because far plants now submit instead of vanishing at 90–110 m. Kit p95/max of 250.000 ms is still Bevy's max-delta clamp (a lower bound). Floor shots were not retaken.
+Refreshed after catalog encode (one pass per kind, grove_tree bands, lists sized to admitted leaves). Far GPU keeps the ridge instead of culling at the playground 220 m card. Far p95 rose on llvmpipe because High-band foliage now submits. Kit p95/max of 250.000 ms is still Bevy's max-delta clamp (a lower bound). Floor shots were not retaken.
 
 | Shot | Camera | mean ms | p95 ms | max ms | entities | kit meshes | Mesh3d |
 |---|---|---:|---:|---:|---:|---:|---:|
-| forest-vista-legacy | VISTA | 250.000 | 250.000 | 250.000 | 22,034 | 21,533 | 21,536 |
-| forest-vista-gpu | VISTA | 91.615 | 93.041 | 93.871 | 515 | 0 | 3 |
-| forest-edge-legacy | EDGE | 250.000 | 250.000 | 250.000 | 22,034 | 21,533 | 21,536 |
-| forest-edge-gpu | EDGE | 80.365 | 81.764 | 86.678 | 515 | 0 | 3 |
+| forest-vista-legacy | VISTA | 250.000 | 250.000 | 250.000 | 22,039 | 21,533 | 21,536 |
+| forest-vista-gpu | VISTA | 94.623 | 95.523 | 95.839 | 512 | 0 | 3 |
+| forest-edge-legacy | EDGE | 250.000 | 250.000 | 250.000 | 22,039 | 21,533 | 21,536 |
+| forest-edge-gpu | EDGE | 80.077 | 80.900 | 81.906 | 512 | 0 | 3 |
 | forest-floor-legacy | FLOOR | 250.000 | 250.000 | 250.000 | 22,034 | 21,533 | 21,536 |
 | forest-floor-gpu | FLOOR | 24.643 | 27.328 | 28.550 | 515 | 0 | 3 |
-| forest-far-legacy | FAR | 250.000 | 250.000 | 250.000 | 32,536 | 32,035 | 32,038 |
-| forest-far-gpu | FAR | 120.287 | 122.024 | 124.777 | 521 | 0 | 3 |
+| forest-far-legacy | FAR | 250.000 | 250.000 | 250.000 | 32,541 | 32,035 | 32,038 |
+| forest-far-gpu | FAR | 140.984 | 153.692 | 155.267 | 518 | 0 | 3 |
 
 GPU `kit_meshes=0` is `KitPreview` count. `Mesh3d=3` is the forest ground plane plus two hidden turf stand-ins, not vegetation kits.
 

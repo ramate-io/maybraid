@@ -6,13 +6,13 @@ use std::path::PathBuf;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
-use vegetation_bush_field::BushField;
-use vegetation_grass_field::GrassField;
+use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
+use vegetation_bush_field::BushGroveCatalog;
+use vegetation_grass_field::GrassGroveCatalog;
 use vegetation_shaders::wesl::WindInputs;
-use vegetation_tree_field::{LeafCloseStyle, TreeField, TreeFieldSettings, TreeGrove};
+use vegetation_tree_field::{LeafCloseStyle, TreeFieldSettings, TreeGroveCatalog};
 
-use crate::camera::{CameraController, yaw_pitch};
+use crate::camera::{yaw_pitch, CameraController};
 use crate::kit;
 use crate::scene;
 use crate::world;
@@ -328,10 +328,9 @@ pub(crate) fn tick_capture(
 	entities: Query<Entity>,
 	kits: Query<Entity, With<kit::KitPreview>>,
 	meshes: Query<Entity, With<Mesh3d>>,
-	field: Res<TreeField>,
-	bush_field: Res<BushField>,
-	grass_field: Res<GrassField>,
-	groves: Query<&'static TreeGrove>,
+	trees: Res<TreeGroveCatalog>,
+	bushes: Res<BushGroveCatalog>,
+	grass: Res<GrassGroveCatalog>,
 	time: Res<Time>,
 	mut exit: MessageWriter<AppExit>,
 ) {
@@ -378,23 +377,17 @@ pub(crate) fn tick_capture(
 			let entities = entities.iter().count();
 			let kits = kits.iter().count();
 			let meshes = meshes.iter().count();
-			let mut plants = field.plants.len();
-			let mut branches = field.branches.len();
-			let mut leaves = field.leaves.len();
-			let mut upload = field.upload_bytes();
-			for grove in &groves {
-				plants += grove.0.plants.len();
-				branches += grove.0.branches.len();
-				leaves += grove.0.leaves.len();
-				upload += grove.0.upload_bytes();
-			}
+			let plants = trees.plants.len();
+			let branches = trees.branches.len();
+			let leaves = trees.leaves.len();
+			let upload = trees.upload_bytes();
 			let stats = format!(
 				"shot={} mode={:?} samples={} dt_ms_mean={mean:.3} dt_ms_p95={p95:.3} dt_ms_max={max:.3} entities={entities} kit_meshes={kits} mesh3d={meshes} plants={plants} branches={branches} leaves={leaves} bushes={} grass={} upload_B={upload}\n",
 				shot.name,
 				shot.mode,
 				samples,
-				bush_field.plants.len(),
-				grass_field.blades.len(),
+				bushes.plants.len(),
+				grass.blades.len(),
 			);
 			info!(target: "maybraid.tree_field", stats = stats.trim(), "tree capture stats");
 			if let Err(error) =

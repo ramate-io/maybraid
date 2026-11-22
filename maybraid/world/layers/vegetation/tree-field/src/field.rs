@@ -5,10 +5,10 @@ use vegetation_shaders::wesl::{LodThresholds, WindInputs};
 
 use crate::bounds::TreeBounds;
 use crate::layout::{
-	BranchDescriptor, LeafCloseStyle, LeafDescriptor, PARENT_NONE, PlantDescriptor, TreePatchHeader,
+	BranchDescriptor, LeafCloseStyle, LeafDescriptor, PlantDescriptor, TreePatchHeader, PARENT_NONE,
 };
 use crate::patch::TreePatch;
-use crate::topology::{MAX_BRANCH_DEPTH, MAX_BRANCHES_PER_PLANT, MAX_LEAVES_PER_PLANT};
+use crate::topology::{MAX_BRANCHES_PER_PLANT, MAX_BRANCH_DEPTH, MAX_LEAVES_PER_PLANT};
 
 /// Tunables for GPU list capacities and wind. Authoring budgets live here, not in WESL.
 #[derive(Resource, Clone, Debug)]
@@ -39,7 +39,7 @@ impl Default for TreeFieldSettings {
 			max_plants: 512,
 			max_branches: 16_384,
 			max_leaves: 65_536,
-			max_per_lod: 8_192,
+			max_per_lod: 65_536,
 			wind: WindInputs::gentle_botw(0.0),
 			lod: LodThresholds::tree_default(),
 			diagnostics: false,

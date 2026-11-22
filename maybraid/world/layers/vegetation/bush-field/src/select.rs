@@ -1,11 +1,11 @@
 //! CPU selection matching the wood/foliage compute shaders.
 
 use vegetation_grass_field::WorldFrustum;
-use vegetation_shaders::wesl::{DrawIndexedIndirect, GrassViewUniform, LodThresholds, lod_bucket};
+use vegetation_shaders::wesl::{lod_bucket, DrawIndexedIndirect, GrassViewUniform, LodThresholds};
 
 use crate::field::BushFieldSettings;
 use crate::layout::{
-	BUSH_LOD_COUNT, BranchDescriptor, LeafDescriptor, PARENT_NONE, PlantDescriptor, WoodLod,
+	BranchDescriptor, LeafDescriptor, PlantDescriptor, WoodLod, BUSH_LOD_COUNT, PARENT_NONE,
 };
 use crate::template::LeafTemplate;
 
@@ -93,6 +93,9 @@ impl BushSelector {
 	}
 
 	pub fn plant_bucket(&self, plant: &PlantDescriptor) -> Option<u32> {
+		if !plant.is_active() {
+			return None;
+		}
 		let camera = self.view.world_position.truncate();
 		let radius = plant.conservative_extent_m(self.view.wind.w);
 		let frustum = WorldFrustum::from_clip(self.view.clip_from_world);
@@ -216,7 +219,11 @@ impl BushSelector {
 }
 
 fn keep_fraction(capacity: u32, total: u32) -> f32 {
-	if total == 0 { 1.0 } else { (capacity as f32 / total as f32).min(1.0) }
+	if total == 0 {
+		1.0
+	} else {
+		(capacity as f32 / total as f32).min(1.0)
+	}
 }
 
 #[cfg(test)]

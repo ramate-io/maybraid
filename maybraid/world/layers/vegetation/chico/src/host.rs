@@ -36,42 +36,75 @@ impl ChicoGroveHost {
 		&self.visuals
 	}
 
+	/// GPU catalogs own visuals. The 1 km present ring only admits/retires;
+	/// grove entities are not LodScene indexed and carry no Transform/Visibility.
+	pub fn stamps_lod_scene_host(&self) -> bool {
+		!self.visuals.replaces_kits()
+	}
+
 	/// This tile as a nested host, pending at the level `lod_ref` (the
-	/// viewer) sees it.
+	/// viewer) sees it. GPU groves skip LOD scaffolding.
 	pub fn scene(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		self.scene_boxed(lod_ref)
+	}
+
+	fn scene_boxed(&self, lod_ref: &LodRef) -> Box<dyn Scene> {
+		let trees = self.tree_scene();
+		let bushes = self.bush_scene();
+		let grass = self.grass_scene();
 		let host = self.clone();
-		let trees: Box<dyn Scene> = match &self.visuals.trees {
+		if self.visuals.replaces_kits() {
+			Box::new((
+				bsn! {
+					template(move |_ctx| Ok(host.clone()))
+				},
+				trees,
+				bushes,
+				grass,
+			))
+		} else {
+			Box::new((
+				lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds()),
+				bsn! {
+					~{Transform::IDENTITY}
+					Visibility::default()
+					template(move |_ctx| Ok(host.clone()))
+				},
+				trees,
+				bushes,
+				grass,
+			))
+		}
+	}
+
+	fn tree_scene(&self) -> Box<dyn Scene> {
+		match &self.visuals.trees {
 			Some(field) => {
 				let field = field.clone();
 				Box::new(bsn! { ~{field} })
 			}
 			_ => Box::new(Self::empty_scene()),
-		};
-		let bushes: Box<dyn Scene> = match &self.visuals.bushes {
+		}
+	}
+
+	fn bush_scene(&self) -> Box<dyn Scene> {
+		match &self.visuals.bushes {
 			Some(patch) => {
 				let patch = patch.clone();
 				Box::new(bsn! { ~{patch} })
 			}
 			_ => Box::new(Self::empty_scene()),
-		};
-		let grass: Box<dyn Scene> = match &self.visuals.grass {
+		}
+	}
+
+	fn grass_scene(&self) -> Box<dyn Scene> {
+		match &self.visuals.grass {
 			Some(patch) => {
 				let patch = patch.clone();
 				Box::new(bsn! { ~{patch} })
 			}
 			_ => Box::new(Self::empty_scene()),
-		};
-		(
-			lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds()),
-			bsn! {
-				~{Transform::IDENTITY}
-				Visibility::default()
-				template(move |_ctx| Ok(host.clone()))
-			},
-			trees,
-			bushes,
-			grass,
-		)
+		}
 	}
 
 	fn empty_scene() -> impl Scene + 'static {
@@ -178,7 +211,7 @@ impl LodScene for ChicoGroveHost {
 	}
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
+		self.scene_boxed(lod_ref)
 	}
 }
 
@@ -292,6 +325,23 @@ mod tests {
 					"{kind:?} High kit chunks"
 				);
 			});
+		}
+		crate::GroveGpuVisuals::admit(false);
+	}
+
+	#[test]
+	fn gpu_host_is_not_lod_scene_indexed() {
+		let _lock = crate::GroveGpuVisuals::lock_admission();
+		crate::GroveGpuVisuals::admit(true);
+		let stacked = [
+			(ForestGroveKind::TemperateLowerMassives, ForestLayer::LowerCanopy),
+			(ForestGroveKind::LowBush, ForestLayer::Understory),
+			(ForestGroveKind::TallGrass, ForestLayer::Tufts),
+		];
+		for (kind, layer) in stacked {
+			let host = grow_host(kind, layer);
+			assert!(host.gpu_visuals().replaces_kits(), "{kind:?}");
+			assert!(!host.stamps_lod_scene_host(), "{kind:?}");
 		}
 		crate::GroveGpuVisuals::admit(false);
 	}

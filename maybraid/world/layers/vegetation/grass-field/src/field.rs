@@ -36,8 +36,8 @@ impl GrassFieldSettings {
 impl Default for GrassFieldSettings {
 	fn default() -> Self {
 		Self {
-			max_blades: 131_072,
-			max_per_lod: 65_536,
+			max_blades: 1_048_576,
+			max_per_lod: 1_048_576,
 			wind: WindInputs::gentle_botw(0.0),
 			lod: LodThresholds::field_default(),
 			diagnostics: false,

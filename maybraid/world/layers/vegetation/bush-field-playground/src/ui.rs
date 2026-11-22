@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
-use vegetation_bush_field::{BushField, BushFieldSettings};
+use vegetation_bush_field::{BushFieldSettings, BushGroveCatalog};
 
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
@@ -12,16 +12,16 @@ pub fn ui_config() -> GameCommandUiConfig {
 }
 
 pub(crate) fn sync_command_status_text(
-	field: Res<BushField>,
+	catalog: Res<BushGroveCatalog>,
 	settings: Res<BushFieldSettings>,
 	mut status: ResMut<GameCommandStatusText>,
 ) {
 	status.0 = format!(
 		"plants {} | wood {} | leaves {} | wind {:.2} m\n\
 		 GPU wood+foliage | nested LOD | BotW scrub palette",
-		field.plants.len(),
-		field.branches.len(),
-		field.leaves.len(),
+		catalog.plants.iter().filter(|plant| plant.is_active()).count(),
+		catalog.branches.len(),
+		catalog.leaves.len(),
 		settings.wind.strength_m,
 	);
 }

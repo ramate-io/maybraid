@@ -42,6 +42,9 @@ fn select(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let blade = blades[blade_index];
+    if (blade.height_m <= 0.0) {
+        return;
+    }
     let capacity = u32(view.counts.y);
     let keep_fraction = min(1.0, f32(capacity) / max(f32(blade_count), 1.0));
     if (blade.shape.w >= keep_fraction) {

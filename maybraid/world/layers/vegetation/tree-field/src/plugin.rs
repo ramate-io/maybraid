@@ -1,29 +1,29 @@
-//! Main-world plugin: patch upload, presenter AABB, and render-app wiring.
+//! Main-world plugin: catalog admits, two kind presenters, render-app wiring.
 
-use bevy::ecs::{entity_disabling::Disabled, query::Allow};
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use bevy::camera::primitives::Aabb;
-use bevy::camera::visibility::{self, VisibilityClass};
+use bevy::camera::visibility::{self, NoFrustumCulling, VisibilityClass};
+use bevy::ecs::{entity_disabling::Disabled, query::Allow};
 use bevy::light::NotShadowCaster;
+use bevy::math::Vec3A;
 use bevy::prelude::*;
-use bevy::render::RenderApp;
-use bevy::render::extract_component::ExtractComponent;
-use bevy::render::extract_component::ExtractComponentPlugin;
-use bevy::render::extract_resource::ExtractResource;
-use bevy::render::extract_resource::ExtractResourcePlugin;
+use bevy::render::extract_component::{ExtractComponent, ExtractComponentPlugin};
+use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
+use bevy::render::{ExtractSchedule, MainWorld, RenderApp};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::GrassGpuCapability;
+use vegetation_grass_field::{GrassGpuCapability, GroveId, ADMISSION_BUDGET};
 use vegetation_shaders::VegetationWeslPlugin;
 
+use crate::bounds::TreeBounds;
+use crate::catalog::{TreeCatalogOp, TreeCatalogOps, TreeGroveCatalog};
 use crate::diagnostics::TreeFieldStats;
 use crate::field::{TreeField, TreeFieldSettings};
-use crate::gpu::{TreeGpuPlugin, requested_world_tree_mode};
+use crate::gpu::{requested_world_tree_mode, TreeGpuPlugin};
 use crate::patch::TreePatch;
 use crate::shaders::TreeShadersPlugin;
 
-/// Marker extracted into the render world. CPU frustum cull uses the conservative AABB.
+/// Marker extracted into the render world. CPU frustum cull uses the catalog AABB.
 #[derive(Component, Clone, Copy, Debug, Eq, ExtractComponent, PartialEq)]
 #[require(VisibilityClass)]
 #[component(on_add = visibility::add_visibility_class::<TreeFieldPresenter>)]
@@ -33,29 +33,23 @@ pub(crate) enum TreeFieldPresenter {
 	Foliage,
 }
 
-/// A grove owns this immutable snapshot independently of its CPU visual LOD roots.
-/// Descriptors use world coordinates; attach to an identity-transform grove host.
+/// Immutable snapshot used as an admit source. Presenters are not parented here.
 #[derive(Component, Clone, Debug)]
 pub struct TreeGrove(pub Arc<TreeField>);
 
-#[derive(Component, Clone, Copy, ExtractComponent)]
-#[extract_app(RenderApp)]
-pub(crate) struct TreeGroveId(pub Entity);
-
-#[derive(Resource, Clone, Default, ExtractResource)]
-#[extract_app(RenderApp)]
-pub(crate) struct ExtractedTreeGroves(pub Arc<HashMap<Entity, Arc<TreeField>>>);
-
-/// Frame inputs plus an immutable descriptor snapshot shared with the render world.
+/// Frame inputs. Descriptor arenas stay in [`TreeGroveCatalog`]; extract never clones them.
 #[derive(Resource, Clone, ExtractResource, Default)]
 #[extract_app(RenderApp)]
 pub struct ExtractedTreeField {
-	pub field: Arc<TreeField>,
 	pub settings: TreeFieldSettings,
 	pub time_s: f32,
 	pub prev_time_s: f32,
 	pub light_direction: Vec3,
 	pub shadow_mode: CanopyShadowMode,
+	pub plant_count: u32,
+	pub branch_count: u32,
+	pub leaf_count: u32,
+	pub grove_residency: bool,
 }
 
 /// Registers GPU tree-canopy field rendering. Existing kit trees stay available.
@@ -70,27 +64,30 @@ impl Plugin for TreeFieldPlugin {
 		app.insert_resource(TreeFieldSettings::from_env());
 		app.init_resource::<TreeField>();
 		app.init_resource::<TreeFieldStats>();
+		app.init_resource::<TreeGroveCatalog>();
+		app.init_resource::<TreeCatalogOps>();
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevTreeTime>();
 		app.init_resource::<ExtractedTreeField>();
-		app.init_resource::<ExtractedTreeGroves>();
-		app.add_plugins(ExtractResourcePlugin::<ExtractedTreeGroves>::default());
-		app.add_plugins(ExtractComponentPlugin::<TreeGroveId>::default());
 		app.add_plugins(ExtractResourcePlugin::<ExtractedTreeField>::default());
 		app.add_plugins(ExtractComponentPlugin::<TreeFieldPresenter>::default());
 		app.add_systems(Startup, spawn_presenter);
 		app.add_systems(
 			Update,
 			(
-				publish_groves,
-				rebuild_field,
-				snapshot_extracted_field,
+				collect_catalog_ops,
+				snapshot_extracted_frame,
 				sync_presenter_bounds,
 				sync_presenter_shadows,
 			)
 				.chain(),
 		);
 		app.add_plugins(TreeGpuPlugin);
+		if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+			render_app
+				.init_resource::<TreeCatalogOps>()
+				.add_systems(ExtractSchedule, extract_catalog_ops);
+		}
 	}
 }
 
@@ -98,7 +95,6 @@ impl Plugin for TreeFieldPlugin {
 struct PrevTreeTime(f32);
 
 fn spawn_presenter(mut commands: Commands) {
-	// The retained opaque phase has one cached bin per MainEntity.
 	for (name, kind) in [
 		("TreeFieldWood", TreeFieldPresenter::Wood),
 		("TreeFieldFoliage", TreeFieldPresenter::Foliage),
@@ -106,67 +102,79 @@ fn spawn_presenter(mut commands: Commands) {
 		commands.spawn((
 			Name::new(name),
 			kind,
-			TreeGroveId(Entity::PLACEHOLDER),
 			Visibility::default(),
 			Transform::default(),
 			Aabb::default(),
+			NoFrustumCulling,
 			NotShadowCaster,
 		));
 	}
 }
 
-fn publish_groves(
-	mut commands: Commands,
-	changed: Query<(Entity, &TreeGrove), (Changed<TreeGrove>, Allow<Disabled>)>,
-	mut removed: RemovedComponents<TreeGrove>,
-	mut extracted: ResMut<ExtractedTreeGroves>,
-	mut presenters: Local<HashMap<Entity, [Entity; 2]>>,
-	mut bounds: Query<&mut Aabb, (With<TreeFieldPresenter>, Allow<Disabled>)>,
+fn collect_catalog_ops(
+	patches: Query<(Entity, &TreePatch), Changed<TreePatch>>,
+	mut removed_patches: RemovedComponents<TreePatch>,
+	groves: Query<(Entity, &TreeGrove), (Changed<TreeGrove>, Allow<Disabled>)>,
+	mut removed_groves: RemovedComponents<TreeGrove>,
+	settings: Res<TreeFieldSettings>,
+	mut ops: ResMut<TreeCatalogOps>,
+	mut catalog: ResMut<TreeGroveCatalog>,
 ) {
-	for owner in removed.read() {
-		if Arc::make_mut(&mut extracted.0).remove(&owner).is_some() {
-			info!(target: "maybraid.tree_field", ?owner, "grove descriptors retired");
-		}
-		if let Some(children) = presenters.remove(&owner) {
-			for child in children {
-				commands.entity(child).try_despawn();
-			}
-		}
+	let mut fresh = Vec::new();
+	for id in removed_patches.read() {
+		fresh.push(TreeCatalogOp::Retire { id: GroveId::from_entity(id) });
 	}
-	for (owner, grove) in &changed {
-		if extracted.0.get(&owner).is_some_and(|old| Arc::ptr_eq(old, &grove.0)) {
-			continue;
-		}
-		Arc::make_mut(&mut extracted.0).insert(owner, grove.0.clone());
-		let aabb = if grove.0.is_empty() { Aabb::default() } else { grove.0.bounds.aabb() };
-		if let Some(children) = presenters.get(&owner) {
-			for child in children {
-				if let Ok(mut bound) = bounds.get_mut(*child) {
-					*bound = aabb;
-				}
-			}
-		} else {
-			let children = [TreeFieldPresenter::Wood, TreeFieldPresenter::Foliage].map(|kind| {
-				commands
-					.spawn((
-						Name::new("TreeGrovePresenter"),
-						kind,
-						TreeGroveId(owner),
-						ChildOf(owner),
-						Visibility::Inherited,
-						Transform::default(),
-						aabb,
-						NotShadowCaster,
-					))
-					.id()
-			});
-			presenters.insert(owner, children);
-		}
-		info!(target: "maybraid.tree_field", ?owner, generation = grove.0.generation,
-			descriptor_digest = grove.0.descriptor_digest(),
-			plants = grove.0.plants.len(), branches = grove.0.branches.len(), leaves = grove.0.leaves.len(),
-			"grove descriptors published");
+	for id in removed_groves.read() {
+		fresh.push(TreeCatalogOp::Retire { id: GroveId::from_entity(id) });
 	}
+	for (entity, patch) in &patches {
+		fresh.push(admit_from_field(
+			GroveId::from_entity(entity),
+			TreeField::rebuild([patch], &settings),
+			patch.samples.len(),
+		));
+	}
+	for (entity, grove) in &groves {
+		catalog.grove_residency = true;
+		let requested = grove.0.plants.len();
+		fresh.push(admit_from_field(GroveId::from_entity(entity), (*grove.0).clone(), requested));
+	}
+	if fresh.is_empty() && catalog.pending.is_empty() {
+		catalog.last_writes = 0;
+		catalog.last_write_bytes = 0;
+		catalog.last_uploads.clear();
+		return;
+	}
+	let mut batch = std::mem::take(&mut catalog.pending);
+	batch.extend(fresh);
+	let leftover = catalog.apply(batch.iter().cloned(), ADMISSION_BUDGET);
+	let applied = batch.len().saturating_sub(leftover.len());
+	ops.ops.extend(batch.into_iter().take(applied));
+	catalog.pending = leftover;
+}
+
+fn admit_from_field(id: GroveId, field: TreeField, requested: usize) -> TreeCatalogOp {
+	let truncated = requested.saturating_sub(field.plants.len()) as u32;
+	let (aabb_min, aabb_max) = if field.bounds.is_empty() {
+		(Vec3::ZERO, Vec3::ZERO)
+	} else {
+		(field.bounds.min, field.bounds.max)
+	};
+	TreeCatalogOp::Admit {
+		id,
+		plants: field.plants,
+		branches: field.branches,
+		leaves: field.leaves,
+		aabb_min,
+		aabb_max,
+		seed: 0,
+		truncated_plants: truncated,
+	}
+}
+
+fn extract_catalog_ops(mut main_world: ResMut<MainWorld>, mut render: ResMut<TreeCatalogOps>) {
+	let mut main = main_world.resource_mut::<TreeCatalogOps>();
+	render.ops.extend(main.take());
 }
 
 fn sync_presenter_shadows(
@@ -187,34 +195,9 @@ fn sync_presenter_shadows(
 	}
 }
 
-fn rebuild_field(
-	changed: Query<(), Changed<TreePatch>>,
-	mut removed: RemovedComponents<TreePatch>,
-	all_patches: Query<&TreePatch>,
-	settings: Res<TreeFieldSettings>,
-	mut field: ResMut<TreeField>,
-) {
-	let patch_removed = removed.read().count() != 0;
-	if changed.is_empty() && !patch_removed && !settings.is_changed() {
-		return;
-	}
-	let generation = field.generation.wrapping_add(1);
-	*field = TreeField::rebuild(all_patches.iter(), &settings).with_generation(generation);
-	if requested_world_tree_mode().is_some() {
-		let requested = all_patches.iter().map(|patch| patch.samples.len()).sum::<usize>();
-		let leafy_plants = field.plants.iter().filter(|plant| plant.leaf_count > 0).count();
-		info!(
-			target: "maybraid.tree_field",
-			generation, requested, plants = field.plants.len(), leafy_plants,
-			branches = field.branches.len(), leaves = field.leaves.len(),
-			"world descriptor inventory"
-		);
-	}
-}
-
-fn snapshot_extracted_field(
+fn snapshot_extracted_frame(
 	mut extracted: ResMut<ExtractedTreeField>,
-	field: Res<TreeField>,
+	catalog: Res<TreeGroveCatalog>,
 	settings: Res<TreeFieldSettings>,
 	time: Res<Time>,
 	mut prev: ResMut<PrevTreeTime>,
@@ -229,28 +212,50 @@ fn snapshot_extracted_field(
 		.next()
 		.map(|transform| *transform.back())
 		.unwrap_or(Vec3::new(0.4, 0.8, 0.3));
-	if extracted.field.generation != field.generation {
-		extracted.field = Arc::new(field.clone());
-	}
 	extracted.settings = settings.clone();
 	extracted.time_s = time_s;
 	extracted.prev_time_s = prev_time_s;
 	extracted.light_direction = light_direction.normalize_or(Vec3::Y);
 	extracted.shadow_mode = shadow_mode.map(|mode| *mode).unwrap_or_default();
+	extracted.plant_count = catalog.plants.len() as u32;
+	extracted.branch_count = catalog.branches.len() as u32;
+	extracted.leaf_count = catalog.leaves.len() as u32;
+	extracted.grove_residency = catalog.grove_residency;
+	if requested_world_tree_mode().is_some() && catalog.is_changed() {
+		info!(
+			target: "maybraid.tree_field",
+			generation = catalog.generation,
+			groves = catalog.live_grove_count(),
+			plants = catalog.plants.len(),
+			branches = catalog.branches.len(),
+			leaves = catalog.leaves.len(),
+			truncated = catalog.truncated_plants,
+			"world catalog inventory"
+		);
+	}
 }
 
 fn sync_presenter_bounds(
-	field: Res<TreeField>,
-	mut presenters: Query<(&mut Aabb, &TreeGroveId), With<TreeFieldPresenter>>,
+	catalog: Res<TreeGroveCatalog>,
+	settings: Res<TreeFieldSettings>,
+	mut presenters: Query<&mut Aabb, With<TreeFieldPresenter>>,
 ) {
-	if !field.is_changed() || field.is_empty() {
+	if catalog.is_empty() {
 		return;
 	}
-	let aabb = field.bounds.aabb();
-	for (mut existing, owner) in &mut presenters {
-		if owner.0 == Entity::PLACEHOLDER {
-			*existing = aabb;
-		}
+	let mut bounds = TreeBounds::empty();
+	for plant in catalog.plants.iter().filter(|plant| plant.is_active()) {
+		bounds = bounds.union(TreeBounds::from_plant(plant, settings.wind.strength_m));
+	}
+	if bounds.is_empty() {
+		return;
+	}
+	let aabb = Aabb {
+		center: Vec3A::from((bounds.min + bounds.max) * 0.5),
+		half_extents: Vec3A::from((bounds.max - bounds.min) * 0.5),
+	};
+	for mut existing in &mut presenters {
+		*existing = aabb;
 	}
 }
 
@@ -261,35 +266,6 @@ mod tests {
 	use crate::recipe::TreeRecipe;
 
 	#[test]
-	fn grove_publication_keeps_unrelated_snapshots_and_presenters() -> anyhow::Result<()> {
-		let mut app = App::new();
-		app.init_resource::<ExtractedTreeGroves>().add_systems(Update, publish_groves);
-		let first = Arc::new(TreeField::default().with_generation(1));
-		let second = Arc::new(TreeField::default().with_generation(1));
-		let a = app.world_mut().spawn(TreeGrove(first.clone())).id();
-		let b = app.world_mut().spawn(TreeGrove(second.clone())).id();
-		app.update();
-		let children = app
-			.world()
-			.get::<Children>(b)
-			.ok_or_else(|| anyhow::anyhow!("grove presenters absent"))?
-			.to_vec();
-		app.update();
-		assert!(Arc::ptr_eq(&app.world().resource::<ExtractedTreeGroves>().0[&a], &first));
-		app.world_mut()
-			.entity_mut(a)
-			.insert(TreeGrove(Arc::new(TreeField::default().with_generation(2))));
-		app.update();
-		assert!(Arc::ptr_eq(&app.world().resource::<ExtractedTreeGroves>().0[&b], &second));
-		assert_eq!(app.world().get::<Children>(b).map(|c| c.to_vec()), Some(children));
-		app.world_mut().despawn(a);
-		app.update();
-		assert!(!app.world().resource::<ExtractedTreeGroves>().0.contains_key(&a));
-		assert!(Arc::ptr_eq(&app.world().resource::<ExtractedTreeGroves>().0[&b], &second));
-		Ok(())
-	}
-
-	#[test]
 	fn wood_and_foliage_have_separate_presenter_entities() -> anyhow::Result<()> {
 		let mut app = App::new();
 		app.add_systems(Startup, spawn_presenter);
@@ -298,6 +274,8 @@ mod tests {
 		let mut query = world.query::<(Entity, &TreeFieldPresenter)>();
 		let presenters: Vec<_> = query.iter(world).map(|(id, kind)| (id, *kind)).collect();
 		assert_eq!(presenters.len(), 2);
+		let mut no_frustum = world.query::<&NoFrustumCulling>();
+		assert_eq!(no_frustum.iter(world).count(), 2);
 		let (wood, _) = presenters
 			.iter()
 			.find(|(_, kind)| *kind == TreeFieldPresenter::Wood)
@@ -311,64 +289,52 @@ mod tests {
 	}
 
 	#[test]
-	fn extraction_reuses_descriptors_until_generation_changes() {
+	fn idle_frame_does_not_enqueue_catalog_ops() {
 		let mut app = App::new();
-		app.init_resource::<TreeField>()
-			.init_resource::<TreeFieldSettings>()
-			.init_resource::<Time>()
-			.init_resource::<PrevTreeTime>()
-			.init_resource::<ExtractedTreeField>()
-			.add_systems(Update, snapshot_extracted_field);
+		app.init_resource::<TreeFieldSettings>()
+			.init_resource::<TreeGroveCatalog>()
+			.init_resource::<TreeCatalogOps>()
+			.add_systems(Update, collect_catalog_ops);
 		app.update();
-		let initial = app.world().resource::<ExtractedTreeField>().field.clone();
-		app.update();
-		assert!(Arc::ptr_eq(&initial, &app.world().resource::<ExtractedTreeField>().field));
-		app.world_mut().resource_mut::<TreeField>().set_changed();
-		app.update();
-		assert!(Arc::ptr_eq(&initial, &app.world().resource::<ExtractedTreeField>().field));
-		app.world_mut().resource_mut::<TreeField>().generation = 1;
-		app.update();
-		let next = &app.world().resource::<ExtractedTreeField>().field;
-		assert!(!Arc::ptr_eq(&initial, next));
-		assert_eq!(initial.generation, 0);
-		assert_eq!(next.generation, 1);
+		assert!(app.world().resource::<TreeCatalogOps>().is_empty());
+		assert_eq!(app.world().resource::<TreeGroveCatalog>().last_writes, 0);
+		assert_eq!(app.world().resource::<TreeGroveCatalog>().clones, 0);
 	}
 
 	#[test]
-	fn disabled_grove_presenters_keep_updated_bounds() -> anyhow::Result<()> {
+	fn admitting_one_patch_writes_only_that_grove() {
 		let mut app = App::new();
-		app.init_resource::<ExtractedTreeGroves>().add_systems(Update, publish_groves);
-		let origin = TreePatch::isolated(1, Vec3::ZERO, TreeRecipe::storybook());
-		let field = Arc::new(
-			TreeField::rebuild([&origin], &TreeFieldSettings::default()).with_generation(1),
-		);
-		let owner = app.world_mut().spawn(TreeGrove(field)).id();
+		app.init_resource::<TreeFieldSettings>()
+			.init_resource::<TreeGroveCatalog>()
+			.init_resource::<TreeCatalogOps>()
+			.add_systems(Update, collect_catalog_ops);
+		app.world_mut()
+			.spawn(TreePatch::isolated(1, Vec3::ZERO, TreeRecipe::storybook()));
 		app.update();
-		let children = app
-			.world()
-			.get::<Children>(owner)
-			.ok_or_else(|| anyhow::anyhow!("grove presenters absent"))?
-			.to_vec();
-		for child in &children {
-			app.world_mut().entity_mut(*child).insert(Disabled);
-		}
-		let moved = TreePatch::isolated(1, Vec3::new(40.0, 0.0, 0.0), TreeRecipe::storybook());
-		let next = Arc::new(
-			TreeField::rebuild([&moved], &TreeFieldSettings::default()).with_generation(2),
-		);
-		app.world_mut().entity_mut(owner).insert(TreeGrove(next));
+		let catalog = app.world().resource::<TreeGroveCatalog>();
+		assert_eq!(catalog.live_grove_count(), 1);
+		assert_eq!(catalog.last_writes, 1);
+		assert!(catalog.last_write_bytes > 0);
+		assert_eq!(catalog.clones, 0);
 		app.update();
-		let mut bounds = app
-			.world_mut()
-			.query_filtered::<&Aabb, (With<TreeFieldPresenter>, Allow<Disabled>)>();
-		for aabb in bounds.iter(app.world()) {
-			assert!(
-				aabb.center.x > 10.0,
-				"disabled presenter kept stale AABB center {:?}",
-				aabb.center
-			);
-		}
-		Ok(())
+		let catalog = app.world().resource::<TreeGroveCatalog>();
+		assert_eq!(catalog.last_writes, 0);
+	}
+
+	#[test]
+	fn tree_grove_admit_marks_grove_residency() {
+		let mut app = App::new();
+		app.init_resource::<TreeFieldSettings>()
+			.init_resource::<TreeGroveCatalog>()
+			.init_resource::<TreeCatalogOps>()
+			.add_systems(Update, collect_catalog_ops);
+		let patch = TreePatch::isolated(1, Vec3::ZERO, TreeRecipe::storybook());
+		let field = TreeField::rebuild([&patch], &TreeFieldSettings::default());
+		app.world_mut().spawn(TreeGrove(std::sync::Arc::new(field)));
+		app.update();
+		let catalog = app.world().resource::<TreeGroveCatalog>();
+		assert!(catalog.grove_residency);
+		assert_eq!(catalog.live_grove_count(), 1);
 	}
 
 	#[test]

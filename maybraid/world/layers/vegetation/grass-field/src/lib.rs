@@ -10,9 +10,11 @@
 
 mod bounds;
 mod capability;
+mod catalog;
 mod diagnostics;
 mod field;
 mod gpu;
+mod grove_catalog;
 mod host;
 mod patch;
 mod plugin;
@@ -22,18 +24,22 @@ mod species;
 mod template;
 
 pub use bounds::GrassBounds;
-pub use capability::{GrassGpuCapability, GrassGpuMode, requested_vegetation_gpu_mode};
+pub use capability::{requested_vegetation_gpu_mode, GrassGpuCapability, GrassGpuMode};
+pub use catalog::{
+	CatalogOpQueue, GroveEncodeStats, GroveId, RangeArena, RangeSpan, ADMISSION_BUDGET,
+};
 pub use diagnostics::GrassFieldStats;
 pub use field::{GrassField, GrassFieldSettings};
+pub use grove_catalog::{GrassCatalogOp, GrassCatalogOps, GrassGroveCatalog};
 pub use host::GrassPatchLod;
 pub use patch::{GrassPatch, SurfaceSample};
 pub use plugin::GrassFieldPlugin;
-pub use select::{CompactedLists, GrassSelector, WorldFrustum, frustum_planes};
+pub use select::{frustum_planes, CompactedLists, GrassSelector, WorldFrustum};
 pub use species::GrassSpecies;
 pub use template::BladeTemplate;
 pub use vegetation_shaders::wesl::{
-	BladeDescriptor, DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_CARD, GRASS_LOD_COUNT, GRASS_LOD_MID,
-	GRASS_LOD_NEAR, GeometryLod, GrassPatchHeader, GrassViewUniform, VegetationPalette,
+	BladeDescriptor, GeometryLod, GrassPatchHeader, GrassViewUniform, VegetationPalette,
+	DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_CARD, GRASS_LOD_COUNT, GRASS_LOD_MID, GRASS_LOD_NEAR,
 };
 
 /// Workgroup size for the selection compute pass.

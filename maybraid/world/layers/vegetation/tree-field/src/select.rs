@@ -90,11 +90,14 @@ impl TreeSelector {
 				min_height_px: view.lod_density.w,
 			},
 			view,
-			capacities: [settings.max_per_lod; TREE_LOD_COUNT],
+			capacities: [settings.max_per_lod.max(view.counts.y as u32); TREE_LOD_COUNT],
 		}
 	}
 
 	pub fn plant_bucket(&self, plant: &PlantDescriptor) -> Option<u32> {
+		if !plant.is_active() {
+			return None;
+		}
 		let camera = self.view.world_position.truncate();
 		let radius = plant.conservative_extent_m(self.view.wind.w);
 		let frustum = WorldFrustum::from_clip(self.view.clip_from_world);

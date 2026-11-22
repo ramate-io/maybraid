@@ -5,7 +5,7 @@ use vegetation_shaders::wesl::{LodThresholds, WindInputs};
 
 use crate::bounds::BushBounds;
 use crate::layout::{
-	BranchDescriptor, BushPatchHeader, LeafDescriptor, PARENT_NONE, PlantDescriptor,
+	BranchDescriptor, BushPatchHeader, LeafDescriptor, PlantDescriptor, PARENT_NONE,
 };
 use crate::patch::BushPatch;
 use crate::topology::{MAX_BRANCHES_PER_PLANT, MAX_LEAVES_PER_PLANT};
@@ -34,10 +34,10 @@ impl BushFieldSettings {
 impl Default for BushFieldSettings {
 	fn default() -> Self {
 		Self {
-			max_plants: 4_096,
-			max_branches: 32_768,
-			max_leaves: 65_536,
-			max_per_lod: 16_384,
+			max_plants: 262_144,
+			max_branches: 262_144,
+			max_leaves: 262_144,
+			max_per_lod: 262_144,
 			wind: WindInputs::gentle_botw(0.0),
 			lod: LodThresholds::bush_default(),
 			diagnostics: false,
