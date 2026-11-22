@@ -18,27 +18,46 @@ use crate::{ForestGroveTile, ForestLayer, LayerDropOut};
 pub struct ChicoGroveHost {
 	pub tile: ForestGroveTile,
 	pub layer: ForestLayer,
-	field: Option<vegetation_tree_field::TreeGrove>,
+	visuals: crate::tree_field::GroveGpuVisuals,
 }
 
 impl ChicoGroveHost {
-	pub fn new(mut tile: ForestGroveTile, layer: ForestLayer) -> Self {
-		let field = crate::tree_field::claim_grove_field(&mut tile);
-		Self { tile, layer, field }
+	pub fn new(tile: ForestGroveTile, layer: ForestLayer) -> Self {
+		let visuals = crate::tree_field::claim_grove_visuals(&tile, layer);
+		Self { tile, layer, visuals }
 	}
 
 	pub fn drop_out(&self) -> LayerDropOut {
 		LayerDropOut::for_stacked(self.layer, self.tile.is_tuft())
 	}
 
+	/// GPU field snapshot that replaces kit meshes when the experiment is on.
+	pub fn gpu_visuals(&self) -> &crate::tree_field::GroveGpuVisuals {
+		&self.visuals
+	}
+
 	/// This tile as a nested host, pending at the level `lod_ref` (the
 	/// viewer) sees it.
 	pub fn scene(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let host = self.clone();
-		let field_scene: Box<dyn Scene> = match &self.field {
+		let trees: Box<dyn Scene> = match &self.visuals.trees {
 			Some(field) => {
 				let field = field.clone();
 				Box::new(bsn! { ~{field} })
+			}
+			_ => Box::new(Self::empty_scene()),
+		};
+		let bushes: Box<dyn Scene> = match &self.visuals.bushes {
+			Some(patch) => {
+				let patch = patch.clone();
+				Box::new(bsn! { ~{patch} })
+			}
+			_ => Box::new(Self::empty_scene()),
+		};
+		let grass: Box<dyn Scene> = match &self.visuals.grass {
+			Some(patch) => {
+				let patch = patch.clone();
+				Box::new(bsn! { ~{patch} })
 			}
 			_ => Box::new(Self::empty_scene()),
 		};
@@ -49,7 +68,9 @@ impl ChicoGroveHost {
 				Visibility::default()
 				template(move |_ctx| Ok(host.clone()))
 			},
-			field_scene,
+			trees,
+			bushes,
+			grass,
 		)
 	}
 
@@ -116,6 +137,9 @@ impl LodScene for ChicoGroveHost {
 	}
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		if self.visuals.replaces_kits() {
+			return Self::empty_chunks();
+		}
 		let drop = self.drop_out();
 		if drop.omits(level) {
 			return Self::empty_chunks();
@@ -172,6 +196,8 @@ mod tests {
 
 	#[test]
 	fn tufts_host_medium_is_empty_high_is_not() {
+		let _lock = crate::GroveGpuVisuals::lock_admission();
+		crate::GroveGpuVisuals::admit(false);
 		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
 		let grove = ChicoGrove::selected(
 			extent,
@@ -187,5 +213,30 @@ mod tests {
 			);
 			assert!(host.scene_chunks_with_level(lod_ref, LodSceneLevel::High).total_weight() > 1);
 		});
+	}
+
+	#[test]
+	fn gpu_host_suppresses_kit_chunks_for_trees_bushes_and_grass() {
+		let _lock = crate::GroveGpuVisuals::lock_admission();
+		crate::GroveGpuVisuals::admit(true);
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let stacked = [
+			(ForestGroveKind::TemperateLowerMassives, ForestLayer::LowerCanopy),
+			(ForestGroveKind::LowBush, ForestLayer::Understory),
+			(ForestGroveKind::TallGrass, ForestLayer::Tufts),
+		];
+		for (kind, layer) in stacked {
+			let tile = ForestGroveRecipe::uniform(kind, extent).grow(&forest_world_sample());
+			let host = ChicoGroveHost::new(tile, layer);
+			assert!(host.gpu_visuals().replaces_kits(), "{kind:?}");
+			with_lod(Vec3::new(0.0, 20.0, 40.0), |lod_ref| {
+				assert_eq!(
+					host.scene_chunks_with_level(lod_ref, LodSceneLevel::High).total_primitives(),
+					1,
+					"{kind:?} High kit chunks"
+				);
+			});
+		}
+		crate::GroveGpuVisuals::admit(false);
 	}
 }

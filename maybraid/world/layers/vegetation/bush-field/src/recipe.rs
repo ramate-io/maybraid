@@ -56,6 +56,10 @@ impl BushRecipe {
 		}
 	}
 
+	pub fn mid_height_m(&self) -> f32 {
+		0.5 * (*self.height_m.start() + *self.height_m.end())
+	}
+
 	pub fn with_foliage_density(mut self, density: f32) -> Self {
 		self.foliage_density = density.clamp(0.0, 1.0);
 		self

@@ -64,6 +64,21 @@ impl TuftGrovePlant {
 	}
 }
 
+impl TuftGroveBody {
+	/// Existing tuft roots and blade heights for GPU grass recomposition.
+	pub fn plant_sites(&self) -> Vec<crate::grove::GrovePlantSite> {
+		self.plants
+			.iter()
+			.map(|plant| {
+				crate::grove::GrovePlantSite::from_root_height(
+					plant.placement.translation,
+					plant.world_blade_height_m(),
+				)
+			})
+			.collect()
+	}
+}
+
 /// Built tuft/grass grove shared by VegetationComponents hosts.
 #[derive(Clone, Debug)]
 pub struct TuftGroveBody {

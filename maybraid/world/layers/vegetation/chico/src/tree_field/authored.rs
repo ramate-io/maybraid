@@ -3,9 +3,12 @@
 //! This trial does not import authored wood or canopy topology. Physics still
 //! reads the original Storybook chain through the metadata-only host.
 
+#[cfg(test)]
 use vegetation_groves::temperate_lower_massives::StorybookFieldSource;
+#[cfg(test)]
 use vegetation_tree_field::{TreePatch, TreeRecipe};
 
+#[cfg(test)]
 impl StorybookGrovePatch {
 	pub(super) fn from_sources(seed: u32, sources: &[StorybookFieldSource]) -> TreePatch {
 		TreePatch::from_roots(
@@ -17,6 +20,7 @@ impl StorybookGrovePatch {
 }
 
 /// Adapter so groves can build a [`TreePatch`] without depending on tree-field types.
+#[cfg(test)]
 pub(super) struct StorybookGrovePatch;
 
 #[cfg(test)]
@@ -25,7 +29,7 @@ mod tests {
 	use bevy::prelude::*;
 	use sbs_trees::StorybookTree;
 	use std::sync::Arc;
-	use vegetation_components::{Placement, leaf_material_ref};
+	use vegetation_components::{leaf_material_ref, Placement};
 
 	#[test]
 	fn patch_keeps_authored_roots_and_one_recipe() -> anyhow::Result<()> {
@@ -101,8 +105,8 @@ mod tests {
 		use vegetation_components::VegetationComponents;
 		use vegetation_groves::{GroveExtent, TemperateLowerMassivesParams};
 		use vegetation_tree_field::{
-			BRANCH_DESCRIPTOR_STRIDE, LEAF_DESCRIPTOR_STRIDE, PLANT_DESCRIPTOR_STRIDE, TreeField,
-			TreeFieldSettings, TreeSelector,
+			TreeField, TreeFieldSettings, TreeSelector, BRANCH_DESCRIPTOR_STRIDE,
+			LEAF_DESCRIPTOR_STRIDE, PLANT_DESCRIPTOR_STRIDE,
 		};
 		let mut storybooks = 0usize;
 		let mut woody = 0usize;

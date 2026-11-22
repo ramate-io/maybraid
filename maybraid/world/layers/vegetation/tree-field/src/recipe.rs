@@ -117,6 +117,10 @@ impl TreeRecipe {
 		}
 	}
 
+	pub fn mid_height_m(&self) -> f32 {
+		0.5 * (*self.height_m.start() + *self.height_m.end())
+	}
+
 	pub fn with_foliage_density(mut self, density: f32) -> Self {
 		self.foliage_density = density.clamp(0.0, 1.0);
 		self
@@ -156,6 +160,7 @@ mod tests {
 		assert_eq!(*recipe.stalk_radius_m.end(), authored.stalk_radius.end);
 		assert_eq!(recipe.form, TreeForm::Storybook);
 		assert_eq!(recipe.leaf_close_style, LeafCloseStyle::Smooth);
+		assert!((recipe.mid_height_m() - 0.5 * (authored.height.start + authored.height.end)).abs() < 1e-4);
 		Ok(())
 	}
 

@@ -202,6 +202,15 @@ impl ForestGroveTile {
 	pub fn scene_bounds(&self) -> Aabb3d {
 		match_forest_grove_tile!(self, g => g.scene_bounds())
 	}
+
+	/// Existing plant roots and world heights for GPU field recomposition.
+	pub fn plant_sites(&self) -> Vec<vegetation_groves::GrovePlantSite> {
+		let mut sites = match_forest_grove_tile!(self, g => g.plant_sites());
+		if let Self::TropicalTufts(grove) = self {
+			sites.extend(grove.palm_plant_sites());
+		}
+		sites
+	}
 }
 
 #[cfg(test)]

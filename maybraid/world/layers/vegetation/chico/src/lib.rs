@@ -67,6 +67,7 @@ pub use material::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRe
 pub use plugin::{register_vegetation_view, VegetationViewPlugin};
 pub use recipe::{ForestGroveRecipe, WORLD_FOREST_TREE_VARIANTS};
 pub use stream::parse_layering_kind;
+pub use tree_field::{claim_grove_visuals, GpuFieldKind, GroveGpuVisuals};
 pub use view::{
 	VegetationBullseye, VegetationCull, VegetationLodRefreshPlugin, VegetationRefresh,
 	VegetationSpotlight,

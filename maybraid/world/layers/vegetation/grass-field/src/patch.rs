@@ -69,6 +69,12 @@ impl GrassPatch {
 		)
 	}
 
+	/// One sample per existing plant root.
+	pub fn from_roots(seed: u32, roots: impl IntoIterator<Item = Vec3>) -> Self {
+		let samples = roots.into_iter().map(SurfaceSample::planar).collect();
+		Self::new(seed, GrassSpecies::meadow(), 1.0, samples)
+	}
+
 	/// Same grid as [`Self::dense_field`] but with a constant surface normal (slopes / SDF).
 	pub fn sloped_field(
 		seed: u32,

@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use crate::bounds::TreeBounds;
 use crate::field::TreeFieldSettings;
 use crate::host::TreePatchLod;
-use crate::layout::{PARENT_NONE, TreePatchHeader};
+use crate::layout::{TreePatchHeader, PARENT_NONE};
 use crate::recipe::TreeRecipe;
 use crate::topology::TreePlant;
 
@@ -110,6 +110,16 @@ impl TreePatch {
 		Self::from_grove_placements(seed, &placements, recipe)
 	}
 
+	/// Existing grove plants: world roots with scales relative to the recipe mid-height.
+	pub fn from_height_sites(seed: u32, sites: &[(Vec3, f32)], recipe: TreeRecipe) -> Self {
+		let mid = recipe.mid_height_m();
+		let placements: Vec<_> = sites
+			.iter()
+			.map(|(root, height_m)| (*root, (*height_m / mid).max(1e-4)))
+			.collect();
+		Self::from_grove_placements(seed, &placements, recipe)
+	}
+
 	/// Stable per-tile seed so neighboring groves do not share the same skeleton.
 	pub fn seed_from_origin(origin: Vec3) -> u32 {
 		vegetation_shaders::wesl::hash_u32(origin.x.to_bits() ^ origin.z.to_bits().rotate_left(16))
@@ -169,7 +179,11 @@ impl TreePatch {
 			bounds =
 				bounds.union(TreeBounds::from_plant(&plant.descriptor, settings.wind.strength_m));
 		}
-		if bounds.is_empty() { TreeBounds { min: Vec3::ZERO, max: Vec3::ZERO } } else { bounds }
+		if bounds.is_empty() {
+			TreeBounds { min: Vec3::ZERO, max: Vec3::ZERO }
+		} else {
+			bounds
+		}
 	}
 
 	pub fn header(
@@ -250,6 +264,16 @@ mod tests {
 		assert_eq!(plants.len(), 2);
 		assert!((plants[0].descriptor.root - placements[0].0).length() < 1e-4);
 		assert!((plants[1].descriptor.root - placements[1].0).length() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn height_sites_scale_from_recipe_mid() -> anyhow::Result<()> {
+		let recipe = TreeRecipe::storybook();
+		let mid = recipe.mid_height_m();
+		let patch = TreePatch::from_height_sites(3, &[(Vec3::ZERO, mid * 2.0)], recipe);
+		assert_eq!(patch.samples.len(), 1);
+		assert!((patch.samples[0].scale - 2.0).abs() < 1e-4);
 		Ok(())
 	}
 }

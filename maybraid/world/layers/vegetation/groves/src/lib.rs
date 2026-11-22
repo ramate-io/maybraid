@@ -61,8 +61,8 @@ pub use grove::{
 
 #[cfg(feature = "render")]
 pub use grove::{
-	patch_spawned_leaf_material, resolve_palette_color, GrovePreviewParams, WithPalette,
-	WoodyCanopyPolicy, WoodyGroveLod,
+	patch_spawned_leaf_material, resolve_palette_color, GrovePlantSite, GrovePreviewParams,
+	WithPalette, WoodyCanopyPolicy, WoodyGroveLod,
 };
 
 #[cfg(feature = "render")]
