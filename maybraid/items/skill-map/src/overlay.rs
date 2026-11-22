@@ -1342,8 +1342,8 @@ mod tests {
 			lens.flash(),
 			lens.film()
 		);
-		assert!(lens.flash() > 0.85);
-		assert!(lens.film() > 0.80);
+		assert!(lens.flash() > 0.80);
+		assert!(lens.film() > 0.75);
 		assert_eq!(overlay_of(&app, user), SkillMapOverlay::Expanded);
 		Ok(())
 	}

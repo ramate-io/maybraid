@@ -9,6 +9,7 @@
 
 use bevy::prelude::*;
 
+use crate::SkillMapEvent;
 use crate::map::MapExtents;
 use crate::overlay::{
 	OverlayParams, SkillMapOverlay, SkillMapOverlayMaterial, SkillMapOverlayPane,
@@ -16,7 +17,6 @@ use crate::overlay::{
 use crate::tiles::SPAWN_CLEARING_RADIUS;
 use crate::user::{SkillMapMember, SkillMapUser};
 use crate::viewport::map_view_extent;
-use crate::SkillMapEvent;
 
 /// apa-kan `TILE_BRAID_TURN_UNITS` (0.21), interpreted in overlay UV so a
 /// closed rim meets itself after an integer number of twists.
@@ -34,9 +34,9 @@ pub const LENS_RING_THICKNESS_FRAC: f32 = 0.055;
 /// Smoothstep width into the clear interior.
 pub const LENS_EDGE_FRAC: f32 = 0.012;
 /// Skill-activation braid flash envelope.
-pub const LENS_FLASH_SECS: f32 = 0.22;
-/// Full-view film sheen on the lens.
-pub const LENS_FILM_SECS: f32 = 0.16;
+pub const LENS_FLASH_SECS: f32 = 0.10;
+/// Sweeping film sheen on the lens glass.
+pub const LENS_FILM_SECS: f32 = 0.08;
 /// Fail / Debraid: braid coverage 1 → 0.
 pub const LENS_UNCURL_SECS: f32 = 0.40;
 /// Fail / Debraid: braid coverage 0 → 1.
@@ -46,12 +46,12 @@ const BRAID_COLORS: [Vec3; 3] =
 	[Vec3::new(0.82, 0.22, 0.18), Vec3::new(0.86, 0.68, 0.18), Vec3::new(0.22, 0.52, 0.86)];
 const RING_BASE: Vec3 = Vec3::new(0.14, 0.11, 0.16);
 const RING_LIT: Vec3 = Vec3::new(0.78, 0.86, 0.95);
-const FILM_TINT: Vec3 = Vec3::new(1.0, 0.82, 0.45);
+const FILM_TINT: Vec3 = Vec3::new(1.0, 0.95, 0.78);
 /// 12 o'clock in overlay pixel space (Y grows down). Unravel starts here.
 const BRAID_BREAK: f32 = -std::f32::consts::FRAC_PI_2;
 const FLARE_IDLE: f32 = 1.0;
-const FLARE_UNCURL: f32 = 1.28;
-const FLARE_RECURL: f32 = 0.72;
+const FLARE_UNCURL: f32 = 1.0;
+const FLARE_RECURL: f32 = 0.42;
 
 /// How the rim braid is travelling.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -136,6 +136,11 @@ impl SkillMapOverlayLens {
 		world / map_view_extent().x.max(1e-5)
 	}
 
+	/// Lens radius as a fraction of the overlay's short axis (height on 16:9).
+	pub fn min_axis_radius_frac() -> f32 {
+		Self::uv_radius()
+	}
+
 	/// Integer twists so a closed weave meets itself (apa-kan `tile_braid_turns`).
 	pub fn braid_turns() -> f32 {
 		let circ = std::f32::consts::TAU * Self::uv_radius();
@@ -183,16 +188,21 @@ impl SkillMapOverlayLens {
 
 	/// Mid-unravel snapshot used by captures and tests.
 	pub fn mid_uncurl() -> Self {
-		Self { curl: 0.5, flash: 0.0, film: 0.0, motion: OverlayBraidMotion::Uncurling }
+		Self { curl: 0.32, flash: 0.0, film: 0.0, motion: OverlayBraidMotion::Uncurling }
 	}
 
 	/// Mid re-plait snapshot used by captures and tests.
 	pub fn mid_replait() -> Self {
-		Self { curl: 0.5, flash: 0.0, film: 0.0, motion: OverlayBraidMotion::Recurling }
+		Self { curl: 0.78, flash: 0.0, film: 0.0, motion: OverlayBraidMotion::Recurling }
 	}
 
 	pub fn peak_flash() -> Self {
 		Self { curl: 1.0, flash: 1.0, film: 1.0, motion: OverlayBraidMotion::Idle }
+	}
+
+	/// Flash pose with the sheen band across the lens (film mid-sweep).
+	pub fn sweep_flash() -> Self {
+		Self { curl: 1.0, flash: 1.0, film: 0.50, motion: OverlayBraidMotion::Idle }
 	}
 }
 
@@ -254,18 +264,40 @@ impl OverlayParams {
 		p / size.max(Vec2::ONE) + Vec2::splat(0.5)
 	}
 
-	fn strand_radial(self, theta: f32, i: u32, radius: f32, amp: f32, braid_radius: f32) -> f32 {
+	fn strand_radial(
+		self,
+		theta: f32,
+		i: u32,
+		radius: f32,
+		amp: f32,
+		braid_radius: f32,
+		size: Vec2,
+	) -> f32 {
 		let offset = std::f32::consts::TAU * i as f32 / BRAID_STRANDS as f32;
 		let phase = self.braid_turns * theta + offset;
 		let woven = amp * phase.sin();
-		let park = (i as f32 - 1.0) * amp * 2.35;
 		let loosen = 1.0 - self.curl.clamp(0.0, 1.0);
 		let from_break = Self::wrap_pi(theta - BRAID_BREAK).abs();
 		let peel_width = loosen * std::f32::consts::PI + 1e-4;
 		let peel = (1.0 - (from_break / peel_width).clamp(0.0, 1.0)).powf(1.35) * loosen;
-		let base = woven * (1.0 - peel) + park * peel;
-		let flare = peel * (park * 2.0 + radius * (0.08 + 0.18 * loosen)) * self.flare;
-		braid_radius + base + flare
+		let recurl = self.flare < 0.85;
+		let unplait = peel * if recurl { 0.22 } else { 1.0 };
+		let idle_r = braid_radius + woven;
+		if unplait <= 0.01 {
+			return idle_r;
+		}
+		let ring_thick = (radius * LENS_RING_THICKNESS_FRAC).max(1.0);
+		let stroke = (radius * BRAID_STROKE_FRAC).max(1.0);
+		let inner = (radius + ring_thick * 0.20).max(braid_radius);
+		let half = size.min_element() * 0.5;
+		let outer = (half - stroke - 2.0).max(inner);
+		let t = (0.16 + i as f32 * 0.34).clamp(0.0, 1.0);
+		let parked = inner * (1.0 - t) + outer * t;
+		let flare = peel * (outer - inner) * 0.12 * self.flare;
+		let loose_r = (parked + flare).clamp(inner, outer);
+		let park_amt = (unplait / 0.35).clamp(0.0, 1.0);
+		let radial = idle_r * (1.0 - park_amt) + loose_r * park_amt;
+		radial.clamp(inner, outer)
 	}
 
 	/// Strand in front at `theta` by apa-kan `phase.cos()` (true over/under).
@@ -326,14 +358,16 @@ impl OverlayParams {
 		for i in 0..BRAID_STRANDS {
 			let offset = std::f32::consts::TAU * i as f32 / BRAID_STRANDS as f32;
 			let phase = self.braid_turns * theta + offset;
-			let radial = self.strand_radial(theta, i, radius, amp, braid_radius);
+			let radial = self.strand_radial(theta, i, radius, amp, braid_radius, size);
 			let dist = (r - radial).abs();
 			let body = 1.0 - Self::smoothstep(stroke * 0.42, stroke, dist);
 			let tube = 0.62 + 0.38 * (1.0 - (dist / stroke.max(1e-4)).clamp(0.0, 1.0));
 			let alpha = body * self.amount;
 			if alpha > 0.01 {
-				let gain = 1.0 + self.flash * 1.55;
-				hits[i as usize] = (alpha, BRAID_COLORS[i as usize] * tube * gain, phase.cos());
+				let core = BRAID_COLORS[i as usize];
+				let body_col = core * tube;
+				let flash_add = (core * 1.20 + FILM_TINT) * self.flash * 0.90;
+				hits[i as usize] = (alpha, body_col + flash_add, phase.cos());
 			}
 		}
 		hits.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
@@ -351,10 +385,25 @@ impl OverlayParams {
 	}
 
 	pub fn film_alpha(self, uv: Vec2, size: Vec2) -> f32 {
+		self.film_sweep(uv, size)
+	}
+
+	/// Additive sheen weight. A bright band sweeps left→right as `film` decays.
+	pub fn film_sweep(self, uv: Vec2, size: Vec2) -> f32 {
 		if self.film <= 0.0 || self.amount <= 0.0 {
 			return 0.0;
 		}
-		self.film * self.amount * self.lens_mask(uv, size) * 0.62
+		let lens = self.lens_mask(uv, size);
+		let p = Self::pixel_from_center(uv, size);
+		let radius = self.lens_radius_px(size).max(1.0);
+		let sweep = -0.82 + 1.64 * (1.0 - self.film);
+		let nx = p.x / radius;
+		let band = (-((nx - sweep) * 3.4).powi(2)).exp();
+		(0.22 + 0.95 * band) * self.film * self.amount * lens
+	}
+
+	pub fn film_rgb(self, uv: Vec2, size: Vec2) -> Vec3 {
+		FILM_TINT * self.film_sweep(uv, size)
 	}
 
 	fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
@@ -400,11 +449,8 @@ impl OverlayParams {
 		if braid.alpha > 0.01 {
 			rgb = rgb.lerp(braid.color, braid.alpha.clamp(0.0, 1.0));
 		}
-		let film = self.film_alpha(uv, size);
-		if film > 0.0 {
-			rgb = rgb.lerp(FILM_TINT, film);
-		}
-		rgb
+		let film = self.film_rgb(uv, size);
+		(rgb + film).min(Vec3::ONE)
 	}
 
 	fn preview_world(uv: Vec2) -> Vec3 {
@@ -519,8 +565,15 @@ mod tests {
 		);
 		let uv = SkillMapOverlayLens::uv_radius();
 		assert!((uv - world / map_view_extent().x).abs() < 1e-6);
+		assert!((SkillMapOverlayLens::min_axis_radius_frac() - uv).abs() < 1e-6);
 		assert!(uv > 0.30, "pocket should fill a large central disk, got {uv}");
 		assert!(uv < 0.50, "ring must sit inside the mid-edge, got {uv}");
+		// 16:9 overlay: short axis is height. 1080p radius is this fraction of 1080.
+		let radius_1080 = SkillMapOverlayLens::min_axis_radius_frac() * 1080.0;
+		assert!(
+			(radius_1080 - 473.684_2).abs() < 0.05,
+			"1080p pocket radius should be ~473.7px, got {radius_1080}"
+		);
 		Ok(())
 	}
 
@@ -625,7 +678,7 @@ mod tests {
 		let radius = params.lens_radius_px(size);
 		let amp = radius * BRAID_AMP_FRAC;
 		let braid_radius = radius + (radius * LENS_RING_THICKNESS_FRAC).max(1.0) * 0.65;
-		let r = params.strand_radial(theta, 1, radius, amp, braid_radius);
+		let r = params.strand_radial(theta, 1, radius, amp, braid_radius, size);
 		let sample = params.braid_sample(params.uv_at_polar(theta, r, size), size);
 		assert!(sample.alpha > 0.2, "crossing at {theta} should hit the braid");
 		assert!(
@@ -646,34 +699,37 @@ mod tests {
 		let bottom =
 			params.braid_sample(params.rim_uv(BRAID_BREAK + std::f32::consts::PI, size), size);
 		assert!(bottom.alpha > 0.15, "the far arc stays plaited, got {}", bottom.alpha);
-		let idle = idle_params();
 		let radius = params.lens_radius_px(size);
 		let amp = radius * BRAID_AMP_FRAC;
 		let braid_radius = radius + (radius * LENS_RING_THICKNESS_FRAC).max(1.0) * 0.65;
 		let mut tip_hits = 0;
 		for i in 0..BRAID_STRANDS {
-			let r = params.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius);
+			let r = params.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius, size);
+			assert!(
+				r >= radius,
+				"unravelled strand {i} must stay outside the lens, r={r} radius={radius}"
+			);
+			assert!(
+				r < size.min_element() * 0.5 - 1.0,
+				"unravelled strand {i} must stay on-screen, r={r} half={}",
+				size.min_element() * 0.5
+			);
 			let sample = params.braid_sample(params.uv_at_polar(BRAID_BREAK, r, size), size);
 			if sample.alpha > 0.05 {
 				tip_hits += 1;
 			}
 		}
 		assert!(tip_hits >= 2, "unravelled tips stay visible at the break, hits={tip_hits}");
+		let stroke = (radius * BRAID_STROKE_FRAC).max(1.0);
 		let spread = (0..BRAID_STRANDS)
-			.map(|i| params.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius))
+			.map(|i| params.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius, size))
 			.fold(0.0_f32, |acc, r| acc.max(r))
 			- (0..BRAID_STRANDS)
-				.map(|i| params.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius))
-				.fold(f32::MAX, |acc, r| acc.min(r));
-		let idle_spread = (0..BRAID_STRANDS)
-			.map(|i| idle.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius))
-			.fold(0.0_f32, |acc, r| acc.max(r))
-			- (0..BRAID_STRANDS)
-				.map(|i| idle.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius))
+				.map(|i| params.strand_radial(BRAID_BREAK, i, radius, amp, braid_radius, size))
 				.fold(f32::MAX, |acc, r| acc.min(r));
 		assert!(
-			spread > idle_spread + amp * 0.8,
-			"strands must separate at the break, spread={spread} idle={idle_spread} amp={amp}"
+			spread > stroke * 0.7,
+			"unravelled strands occupy distinct radii in the annulus, spread={spread} stroke={stroke}"
 		);
 		Ok(())
 	}
@@ -689,26 +745,62 @@ mod tests {
 			SkillMapOverlayLens::mid_replait(),
 		);
 		assert!(open.flare > shut.flare);
-		assert!((open.curl - shut.curl).abs() < 1e-5);
+		assert!(
+			open.curl + 0.30 < shut.curl,
+			"re-plait must be a later pose than unravel, open={} shut={}",
+			open.curl,
+			shut.curl
+		);
+		let size = square();
+		let radius = open.lens_radius_px(size);
+		let ring_thick = (radius * LENS_RING_THICKNESS_FRAC).max(1.0);
+		let stroke = (radius * BRAID_STROKE_FRAC).max(1.0);
+		let braid_radius = radius + ring_thick * 0.65;
+		let inner = (radius + ring_thick * 0.20).max(braid_radius);
+		let outer = (size.min_element() * 0.5 - stroke - 2.0).max(inner);
+		let mid_annulus = inner * 0.35 + outer * 0.65;
+		let open_loose = open.braid_sample(open.uv_at_polar(BRAID_BREAK, mid_annulus, size), size);
+		let shut_loose = shut.braid_sample(shut.uv_at_polar(BRAID_BREAK, mid_annulus, size), size);
+		assert!(
+			open_loose.alpha > 0.12,
+			"unravel must occupy the annulus outside the rim, got {}",
+			open_loose.alpha
+		);
+		assert!(
+			open_loose.alpha > shut_loose.alpha + 0.08,
+			"re-plait must draw strands back in from the annulus, open={} shut={}",
+			open_loose.alpha,
+			shut_loose.alpha
+		);
 		Ok(())
 	}
 
 	#[test]
-	fn fire_film_is_an_even_lens_sheen() -> anyhow::Result<()> {
+	fn fire_film_sweeps_a_bright_sheen() -> anyhow::Result<()> {
 		let params = OverlayParams::from_overlay_lens(
 			SkillMapOverlay::Expanded,
-			SkillMapOverlayLens::peak_flash(),
+			SkillMapOverlayLens::sweep_flash(),
 		);
 		let size = square();
 		let centre = params.film_alpha(Vec2::splat(0.5), size);
-		let east = params.film_alpha(Vec2::new(0.5 + params.lens_radius * 0.4, 0.5), size);
-		let north = params.film_alpha(Vec2::new(0.5, 0.5 - params.lens_radius * 0.4), size);
-		assert!(centre > 0.3, "lens glass flashes, got {centre}");
-		assert!((centre - east).abs() < 0.05, "no conic wedge: centre={centre} east={east}");
-		assert!((east - north).abs() < 0.05, "azimuth-even: east={east} north={north}");
+		let west = params.film_alpha(Vec2::new(0.5 - params.lens_radius * 0.45, 0.5), size);
+		let east = params.film_alpha(Vec2::new(0.5 + params.lens_radius * 0.45, 0.5), size);
+		assert!(centre > west + 0.15, "sweep band sits on the glass, centre={centre} west={west}");
+		assert!(centre > east + 0.15, "not a full-view fade, centre={centre} east={east}");
 		assert!(params.film_alpha(Vec2::new(0.04, 0.04), size) < 0.02, "film stays on the glass");
 		let idle = idle_params();
 		assert!(idle.film_alpha(Vec2::splat(0.5), size) < 1e-5);
+		let flash = OverlayParams::from_overlay_lens(
+			SkillMapOverlay::Expanded,
+			SkillMapOverlayLens::peak_flash(),
+		);
+		let rim = flash.rim_uv(0.0, size);
+		let idle_c = idle.braid_sample(rim, size).color;
+		let flash_c = flash.braid_sample(rim, size).color;
+		assert!(
+			flash_c.max_element() > idle_c.max_element() + 0.25,
+			"braid must flash brighter, idle={idle_c} flash={flash_c}"
+		);
 		Ok(())
 	}
 

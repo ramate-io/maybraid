@@ -176,18 +176,39 @@ fn braid_break() -> f32 {
     return -1.57079632679;
 }
 
-fn braid_strand_radial(theta: f32, i: i32, radius: f32, amp: f32, braid_radius: f32) -> f32 {
+fn braid_strand_radial(
+    theta: f32,
+    i: i32,
+    radius: f32,
+    amp: f32,
+    braid_radius: f32,
+    size: vec2<f32>,
+    stroke: f32,
+) -> f32 {
     let offset = 6.28318530718 * f32(i) / f32(BRAID_STRANDS);
     let phase = params.braid_turns * theta + offset;
     let woven = amp * sin(phase);
-    let park = (f32(i) - 1.0) * amp * 2.35;
     let loosen = 1.0 - saturate(params.curl);
     let from_break = abs(wrap_pi(theta - braid_break()));
     let peel_width = loosen * 3.14159265359 + 1e-4;
     let peel = pow(saturate(1.0 - from_break / peel_width), 1.35) * loosen;
-    let base = mix(woven, park, peel);
-    let flare = peel * (park * 2.0 + radius * (0.08 + 0.18 * loosen)) * params.flare;
-    return braid_radius + base + flare;
+    let recurl = params.flare < 0.85;
+    let unplait = peel * select(1.0, 0.22, recurl);
+    let idle_r = braid_radius + woven;
+    if unplait <= 0.01 {
+        return idle_r;
+    }
+    let ring_thick = max(radius * LENS_RING_THICKNESS_FRAC, 1.0);
+    let inner = max(radius + ring_thick * 0.20, braid_radius);
+    let half = min(size.x, size.y) * 0.5;
+    let outer = max(half - stroke - 2.0, inner);
+    let t = saturate(0.16 + f32(i) * 0.34);
+    let parked = mix(inner, outer, t);
+    let flare = peel * (outer - inner) * 0.12 * params.flare;
+    let loose_r = clamp(parked + flare, inner, outer);
+    let park_amt = saturate(unplait / 0.35);
+    let radial = mix(idle_r, loose_r, park_amt);
+    return clamp(radial, inner, outer);
 }
 
 fn braid_color(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
@@ -208,14 +229,17 @@ fn braid_color(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
     for (var i = 0; i < BRAID_STRANDS; i++) {
         let offset = 6.28318530718 * f32(i) / f32(BRAID_STRANDS);
         let phase = params.braid_turns * theta + offset;
-        let radial = braid_strand_radial(theta, i, radius, amp, braid_radius);
+        let radial = braid_strand_radial(theta, i, radius, amp, braid_radius, size, stroke);
         let dist = abs(r - radial);
         let body = 1.0 - smoothstep(stroke * 0.42, stroke, dist);
         let tube = 0.62 + 0.38 * (1.0 - saturate(dist / max(stroke, 1e-4)));
         let alpha = body * amount;
         if alpha > 0.01 {
+            let core = braid_strand_color(i);
+            let body_col = core * tube;
+            let flash_add = (core * 1.20 + vec3<f32>(1.0, 0.95, 0.78)) * params.flash * 0.90;
             alphas[i] = alpha;
-            colors[i] = braid_strand_color(i) * tube * (1.0 + params.flash * 1.55);
+            colors[i] = body_col + flash_add;
             depths[i] = cos(phase);
         }
     }
@@ -247,12 +271,18 @@ fn braid_color(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
     return vec4<f32>(out_rgb, out_a);
 }
 
-fn film_sheen(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> f32 {
+fn film_sheen(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
     if params.film <= 0.0 {
-        return 0.0;
+        return vec4<f32>(0.0);
     }
     let lens = lens_mask(uv, size);
-    return params.film * amount * lens * 0.62;
+    let p = pixel_from_center(uv, size);
+    let radius = max(lens_radius_px(size), 1.0);
+    let sweep = -0.82 + 1.64 * (1.0 - params.film);
+    let nx = p.x / radius;
+    let band = exp(-pow((nx - sweep) * 3.4, 2.0));
+    let weight = (0.22 + 0.95 * band) * params.film * amount * lens;
+    return vec4<f32>(vec3<f32>(1.0, 0.95, 0.78) * weight, weight * 0.55);
 }
 
 @fragment
@@ -290,6 +320,8 @@ fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
     let field = mix(sample.a, treated, amount * (1.0 - lens));
     // Interior is a hole: the 3D world shows through. Map marks stay outside.
     var alpha = field * (1.0 - lens);
+    // Drop map RGB in the hole so film sheen composites over the world, not the RT.
+    color = mix(color, vec3<f32>(0.0, 0.0, 0.0), lens);
     let ring = sphere_ring(in.uv, size, amount);
     color = mix(color, ring.xyz, ring.a);
     alpha = max(alpha, ring.a);
@@ -297,7 +329,7 @@ fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
     color = mix(color, braid.xyz, braid.a);
     alpha = max(alpha, braid.a);
     let film = film_sheen(in.uv, size, amount);
-    color = mix(color, vec3<f32>(1.0, 0.82, 0.45), film);
-    alpha = max(alpha, film * 0.40);
+    color = min(color + film.xyz, vec3<f32>(1.0, 1.0, 1.0));
+    alpha = max(alpha, film.a);
     return vec4<f32>(color, alpha);
 }
