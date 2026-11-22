@@ -1,0 +1,1 @@
+shot=grove-edge-gpu mode=Gpu samples=36 dt_ms_mean=51.848 dt_ms_p95=54.349 dt_ms_max=56.204 entities=494 kit_meshes=0 mesh3d=2 plants=9 branches=216 leaves=4487 upload_B=305312

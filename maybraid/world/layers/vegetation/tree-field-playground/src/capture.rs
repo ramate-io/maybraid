@@ -6,11 +6,11 @@ use std::path::PathBuf;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
+use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use vegetation_shaders::wesl::WindInputs;
-use vegetation_tree_field::{LeafCloseStyle, TreeFieldSettings};
+use vegetation_tree_field::{LeafCloseStyle, TreeField, TreeFieldSettings};
 
-use crate::camera::{CameraController, yaw_pitch};
+use crate::camera::{yaw_pitch, CameraController};
 use crate::kit;
 use crate::scene;
 
@@ -18,7 +18,8 @@ pub const CAPTURE_DIR_ENV: &str = "MAYBRAID_CAPTURE_DIR";
 pub const CAPTURE_WIDTH: u32 = 960;
 pub const CAPTURE_HEIGHT: u32 = 540;
 const WARMUP_FRAMES: u32 = 160;
-const SETTLE_FRAMES: u32 = 36;
+const SETTLE_FRAMES: u32 = 48;
+const SETTLE_SKIP_FRAMES: u32 = 12;
 const SAVE_FRAMES: u32 = 28;
 
 const ORBIT: (Vec3, Vec3) = (Vec3::new(16.5, 8.2, 18.0), Vec3::new(0.0, 7.0, 0.0));
@@ -165,6 +166,7 @@ impl CaptureShot {
 			if self.gust { WindInputs::botw_gust(1.85) } else { WindInputs::gentle_botw(0.85) };
 		settings.freeze_time_s = Some(if self.gust { 1.85 } else { 0.85 });
 		settings.leaf_close_style = self.leaf_style;
+		settings.diagnostics = true;
 	}
 }
 
@@ -184,6 +186,8 @@ pub const TREE_CAPTURE_SHOTS: &[CaptureShot] = &[
 	CaptureShot::gpu("canopy-leaf-close-crisp", LEAF_CLOSE, CaptureScene::Close)
 		.with_leaves(LeafCloseStyle::Crisp),
 	CaptureShot::gpu("grove-edge", GROVE, CaptureScene::Grove),
+	CaptureShot::kit("grove-edge-legacy", GROVE).with_scene(CaptureScene::Grove),
+	CaptureShot::gpu("grove-edge-gpu", GROVE, CaptureScene::Grove),
 	CaptureShot::gpu("grove", GROVE_FULL, CaptureScene::Grove),
 	CaptureShot::kit("grove-legacy", GROVE_FULL).with_scene(CaptureScene::Grove),
 	CaptureShot::gpu("grove-gpu", GROVE_FULL, CaptureScene::Grove),
@@ -204,6 +208,29 @@ pub struct CaptureSession {
 	pub dir: PathBuf,
 	shots: Vec<CaptureShot>,
 	phase: CapturePhase,
+	dt_ms: Vec<f32>,
+}
+
+impl CaptureSession {
+	fn record_frame(&mut self, dt_secs: f32) {
+		self.dt_ms.push(dt_secs * 1000.0);
+	}
+
+	fn reset_frames(&mut self) {
+		self.dt_ms.clear();
+	}
+
+	fn frame_summary(&self) -> (u32, f32, f32, f32) {
+		if self.dt_ms.is_empty() {
+			return (0, 0.0, 0.0, 0.0);
+		}
+		let mut sorted = self.dt_ms.clone();
+		sorted.sort_by(|a, b| a.total_cmp(b));
+		let n = sorted.len();
+		let mean = sorted.iter().sum::<f32>() / n as f32;
+		let p95 = sorted[((n as f32 - 1.0) * 0.95).round() as usize];
+		(n as u32, mean, p95, sorted[n - 1])
+	}
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -224,7 +251,12 @@ impl CaptureSession {
 		if shots.is_empty() {
 			return None;
 		}
-		Some(Self { dir: PathBuf::from(dir), shots, phase: CapturePhase::Warmup { frames: 0 } })
+		Some(Self {
+			dir: PathBuf::from(dir),
+			shots,
+			phase: CapturePhase::Warmup { frames: 0 },
+			dt_ms: Vec::new(),
+		})
 	}
 
 	pub fn window_resolution() -> (u32, u32) {
@@ -242,6 +274,11 @@ pub(crate) fn tick_capture(
 	mut session: ResMut<CaptureSession>,
 	mut view: CaptureView,
 	capturing: Query<Entity, With<Capturing>>,
+	entities: Query<Entity>,
+	kits: Query<Entity, With<kit::KitPreview>>,
+	meshes: Query<Entity, With<Mesh3d>>,
+	field: Res<TreeField>,
+	time: Res<Time>,
 	mut exit: MessageWriter<AppExit>,
 ) {
 	match session.phase {
@@ -259,10 +296,13 @@ pub(crate) fn tick_capture(
 		}
 		CapturePhase::Settle { index, frames } => {
 			if frames == 0 {
+				session.reset_frames();
 				if let Some(shot) = session.shots.get(index).copied() {
 					view.apply_camera(&shot);
 					commands.queue(move |world: &mut World| shot.apply_world(world));
 				}
+			} else if frames >= SETTLE_SKIP_FRAMES {
+				session.record_frame(time.delta_secs());
 			}
 			if frames + 1 >= SETTLE_FRAMES {
 				session.phase = CapturePhase::Snap { index };
@@ -271,7 +311,7 @@ pub(crate) fn tick_capture(
 			}
 		}
 		CapturePhase::Snap { index } => {
-			let Some(shot) = session.shots.get(index) else {
+			let Some(shot) = session.shots.get(index).copied() else {
 				exit.write(AppExit::Success);
 				return;
 			};
@@ -279,6 +319,26 @@ pub(crate) fn tick_capture(
 				error!("tree capture: cannot create {}: {error}", session.dir.display());
 				exit.write(AppExit::from_code(2));
 				return;
+			}
+			let (samples, mean, p95, max) = session.frame_summary();
+			let entities = entities.iter().count();
+			let kits = kits.iter().count();
+			let meshes = meshes.iter().count();
+			let stats = format!(
+				"shot={} mode={:?} samples={} dt_ms_mean={mean:.3} dt_ms_p95={p95:.3} dt_ms_max={max:.3} entities={entities} kit_meshes={kits} mesh3d={meshes} plants={} branches={} leaves={} upload_B={}\n",
+				shot.name,
+				shot.mode,
+				samples,
+				field.plants.len(),
+				field.branches.len(),
+				field.leaves.len(),
+				field.upload_bytes(),
+			);
+			info!(target: "maybraid.tree_field", stats = stats.trim(), "tree capture stats");
+			if let Err(error) =
+				std::fs::write(session.dir.join(format!("{}.stats.txt", shot.name)), &stats)
+			{
+				error!("tree capture: cannot write stats: {error}");
 			}
 			let path = session.dir.join(format!("{}.png", shot.name));
 			info!("tree capture: {}", path.display());
@@ -345,6 +405,8 @@ mod tests {
 			"canopy-leaf-close-smooth",
 			"canopy-leaf-close-crisp",
 			"grove-edge",
+			"grove-edge-legacy",
+			"grove-edge-gpu",
 			"grove",
 			"grove-legacy",
 			"grove-gpu",
@@ -377,6 +439,16 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("missing grove legacy"))?;
 		assert_eq!(grove_gpu.camera, grove_legacy.camera);
 		assert_eq!(grove_gpu.look_at, grove_legacy.look_at);
+		let grove_edge_gpu = TREE_CAPTURE_SHOTS
+			.iter()
+			.find(|shot| shot.name == "grove-edge-gpu")
+			.ok_or_else(|| anyhow::anyhow!("missing grove edge gpu"))?;
+		let grove_edge_legacy = TREE_CAPTURE_SHOTS
+			.iter()
+			.find(|shot| shot.name == "grove-edge-legacy")
+			.ok_or_else(|| anyhow::anyhow!("missing grove edge legacy"))?;
+		assert_eq!(grove_edge_gpu.camera, grove_edge_legacy.camera);
+		assert_eq!(grove_edge_gpu.look_at, grove_edge_legacy.look_at);
 		let drape = TREE_CAPTURE_SHOTS
 			.iter()
 			.find(|shot| shot.name == "willow-drape-close")
@@ -391,5 +463,26 @@ mod tests {
 		}
 		assert!(TREE_CAPTURE_SHOTS.iter().any(|shot| shot.gust));
 		Ok(())
+	}
+
+	#[test]
+	fn frame_summary_reports_mean_p95_and_max() {
+		let mut session = CaptureSession {
+			dir: PathBuf::from("."),
+			shots: Vec::new(),
+			phase: CapturePhase::Warmup { frames: 0 },
+			dt_ms: Vec::new(),
+		};
+		assert_eq!(session.frame_summary(), (0, 0.0, 0.0, 0.0));
+		for dt in [0.010, 0.012, 0.011, 0.020] {
+			session.record_frame(dt);
+		}
+		let (n, mean, p95, max) = session.frame_summary();
+		assert_eq!(n, 4);
+		assert!((mean - 13.25).abs() < 1e-3);
+		assert!((p95 - 20.0).abs() < 1e-3);
+		assert!((max - 20.0).abs() < 1e-3);
+		session.reset_frames();
+		assert_eq!(session.frame_summary(), (0, 0.0, 0.0, 0.0));
 	}
 }

@@ -46,3 +46,25 @@ A release `--locked` nine-tile CPU path on this Linux VM (`TemperateLowerMassive
 | GPU TreePatch | 35 at the same roots | — | 804 | 17,146 | 1,165,024 B | 0.336 ms one-shot compact |
 
 Kit node counts are High `VegetationComponents` lists (one collection per tree), not expanded GLB entities. CPU select is a single `TreeSelector::compact` over the nine generated fields, not an application-interval tail. GPU execution, upload counts during a live world session, entity/archetype churn, peak gameplay memory, and Metal frame times were not measured on this machine. Shadows were identical (`off` / `NotShadowCaster`) in both arms of this check. Bush world groves are not swapped; `BushPatch::from_roots` is available for the same placement pattern.
+
+## Matched playground standing scene
+
+The tree-field playground captured kit and GPU groves from the same cameras with identical shadow settings: `CanopyShadowMode::Off` and the key sun's shadow maps disabled. This is a synthetic `TreePatch::grove` (9 plants, 216 branches, 4,487 leaves, 305,312 B one-shot upload), not the world nine-tile neighborhood. The adapter was llvmpipe (Mesa 25.2.8, Vulkan). Window 960×540, `PresentMode::AutoNoVsync`. Frame times are Bevy `Time::delta` over 36 settle frames after skipping 12 post-swap frames. They are application intervals on a software rasterizer, not GPU execution and not a native Metal world route.
+
+| Shot | Camera | mean ms | p95 ms | max ms | entities | kit meshes | Mesh3d |
+|---|---|---:|---:|---:|---:|---:|---:|
+| grove-edge-legacy | GROVE | 249.059 | 250.000 | 250.000 | 5,679 | 5,186 | 5,188 |
+| grove-edge-gpu | GROVE | 51.848 | 54.349 | 56.204 | 494 | 0 | 2 |
+| grove-legacy | GROVE_FULL | 210.140 | 220.699 | 221.262 | 5,679 | 5,186 | 5,188 |
+| grove-gpu | GROVE_FULL | 61.086 | 63.910 | 66.169 | 494 | 0 | 2 |
+
+Kit `grove-edge` p95/max of 250.000 ms is Bevy's default `Time` max-delta clamp, so those kit intervals are a lower bound. GPU samples stayed under the clamp. Kit GROVE_FULL sits inside cheap-ball canopy; GROVE (edge) is the readable pair.
+
+Screenshots and per-shot receipts:
+
+- [`maybraid/world/layers/vegetation/tree-field-playground/captures/grove-edge-legacy.png`](maybraid/world/layers/vegetation/tree-field-playground/captures/grove-edge-legacy.png)
+- [`maybraid/world/layers/vegetation/tree-field-playground/captures/grove-edge-gpu.png`](maybraid/world/layers/vegetation/tree-field-playground/captures/grove-edge-gpu.png)
+- [`maybraid/world/layers/vegetation/tree-field-playground/captures/grove-legacy.png`](maybraid/world/layers/vegetation/tree-field-playground/captures/grove-legacy.png)
+- [`maybraid/world/layers/vegetation/tree-field-playground/captures/grove-gpu.png`](maybraid/world/layers/vegetation/tree-field-playground/captures/grove-gpu.png)
+
+Not measured here: native Metal/world frame times, Tracy, GPU pass duration, live descriptor re-upload counts, entity/archetype churn, peak gameplay memory, bush-field world swap, Oak/Rory GPU admission, or appearance/shadow parity with ordinary shadows enabled. Nix was not available on this Ubuntu VM; tests and the playground used `cargo --locked --release`.

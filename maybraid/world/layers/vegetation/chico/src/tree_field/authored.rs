@@ -3,7 +3,6 @@
 //! This trial does not import authored wood or canopy topology. Physics still
 //! reads the original Storybook chain through the metadata-only host.
 
-use bevy::prelude::*;
 use vegetation_groves::temperate_lower_massives::StorybookFieldSource;
 use vegetation_tree_field::{TreePatch, TreeRecipe};
 
@@ -23,6 +22,7 @@ pub(super) struct StorybookGrovePatch;
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::prelude::*;
 	use sbs_trees::StorybookTree;
 	use std::sync::Arc;
 	use vegetation_components::{Placement, leaf_material_ref};
@@ -156,7 +156,7 @@ mod tests {
 			}
 		}
 		assert!(storybooks > 0);
-		eprintln!(
+		println!(
 			"legacy-vs-gpu nine-tile: woody={woody} storybooks={storybooks} kit_stick_nodes={kit_sticks} kit_foliage_nodes={kit_foliage} gpu_plants={gpu_plants} gpu_branches={gpu_branches} gpu_leaves={gpu_leaves} upload_B={upload} plant_stride={PLANT_DESCRIPTOR_STRIDE} branch_stride={BRANCH_DESCRIPTOR_STRIDE} leaf_stride={LEAF_DESCRIPTOR_STRIDE} cpu_select_ns={select_ns} submitted_wood={compact_wood} submitted_foliage={compact_foliage}"
 		);
 		assert_eq!(gpu_plants, storybooks);

@@ -40,7 +40,11 @@ pub fn run() {
 		..default()
 	}))
 	.insert_resource(ClearColor(Color::srgb(0.62, 0.78, 0.92)))
-	.insert_resource(CanopyShadowMode::Full)
+	.insert_resource(if capturing.is_some() {
+		CanopyShadowMode::Off
+	} else {
+		CanopyShadowMode::Full
+	})
 	.add_plugins(TerrainShaderPlugin)
 	.add_plugins(GrassFieldPlugin)
 	.add_plugins(TreeFieldPlugin)
@@ -70,8 +74,9 @@ pub fn run() {
 	app.run();
 }
 
-fn setup_lighting(mut commands: Commands) {
+fn setup_lighting(mut commands: Commands, capturing: Option<Res<CaptureSession>>) {
 	use std::f32::consts::PI;
+	let shadow_maps = capturing.is_none();
 	commands.insert_resource(GlobalAmbientLight {
 		color: Color::srgb(0.72, 0.82, 0.95),
 		brightness: 280.0,
@@ -81,7 +86,7 @@ fn setup_lighting(mut commands: Commands) {
 		DirectionalLight {
 			illuminance: 12_000.0,
 			color: Color::srgb(1.0, 0.94, 0.82),
-			shadow_maps_enabled: true,
+			shadow_maps_enabled: shadow_maps,
 			..default()
 		},
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 3.2, PI / 5.0, 0.0)),
