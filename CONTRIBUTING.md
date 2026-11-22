@@ -3,6 +3,7 @@
 ## Contributor guides
 
 - [Performance investigations](contributing/performance-investigations.md) covers native benchmark setup, evidence, and reporting.
+- [Metal GPU profiling](contributing/metal-gpu-profiling.md) explains Instruments, Tracy and Xcode evidence and the provenance of earlier GPU timings.
 - [GPU vegetation](contributing/gpu-vegetation.md) covers the current experiments and how to test the next architecture.
 
 | Task | Description |

@@ -32,6 +32,8 @@ read-only probe, or analysis change scoped to what the existing tools cannot see
   execution separately before claiming GPU cost or headroom. For process memory,
   label the counter, sample interval, process identity, and phase. A sampled
   footprint maximum is distinct from an instantaneous peak or GPU residency.
+  On Metal, follow the [GPU measurement provenance guide](metal-gpu-profiling.md):
+  our earlier GPU durations came from Instruments, not Tracy GPU zones.
 - Preserve deaths, obstructions, and incomplete lifecycles in the run record.
   A verified common prefix can answer a narrower question if its cutoff is
   fixed before the paired run. Label that scope and keep the original failure.
