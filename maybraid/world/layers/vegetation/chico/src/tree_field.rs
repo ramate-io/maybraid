@@ -1,7 +1,24 @@
 //! GPU forest visuals: every grove kind becomes trees, bushes, or grass.
+//!
+//! World-route kit spawners (grep, 2026-11-22):
+//!
+//! Converted — `GrownGrove` → [`crate::ChicoGroveHost`] (`hcsg.rs`) is the only forest
+//! present path. Every [`crate::ForestGroveKind`] claims a GPU field from existing
+//! roots; High through UltraLow kit chunks go empty. Nested `StickNode` /
+//! `FoliageNode` kit meshes therefore never spawn on the GPU arm.
+//!
+//! Intentionally out of scope — not grove tiles, so they keep their own meshes:
+//! - `BumpOutPresentationPlugin` `CanopyBumpOut` / `MediumCanopyBumpOut`
+//!   (1–5 km cheap-ball proxies in the grove-fill hole)
+//! - Isolated `/show` `flattened_plant_host!` plants
+//! - Typed grove `LodScene` hosts (`gimme_host!(Orchard)` and siblings) used by
+//!   `/show orchard`, not hopscotch streaming
+//! - Terrain turf / POM ground cover
 
 mod authored;
 mod visuals;
+#[cfg(test)]
+mod parity;
 
 use bevy::prelude::*;
 use bevy::render::renderer::{RenderAdapter, RenderDevice};
@@ -20,11 +37,11 @@ use crate::{ForestGroveTile, ForestLayer};
 
 pub use visuals::{GpuFieldKind, GroveGpuVisuals};
 
-const OWNER_DESCRIPTOR_CAPACITY: u32 = 131_072;
+const OWNER_DESCRIPTOR_CAPACITY: u32 = 262_144;
 
 fn owner_settings() -> TreeFieldSettings {
 	TreeFieldSettings {
-		max_plants: 256,
+		max_plants: 512,
 		max_branches: OWNER_DESCRIPTOR_CAPACITY,
 		max_leaves: OWNER_DESCRIPTOR_CAPACITY,
 		max_per_lod: OWNER_DESCRIPTOR_CAPACITY,

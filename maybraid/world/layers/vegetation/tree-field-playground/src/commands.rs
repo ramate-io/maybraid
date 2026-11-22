@@ -55,6 +55,7 @@ pub enum SpawnCommand {
 	Lod,
 	Willow,
 	Forest,
+	Walk,
 	Clear,
 }
 
@@ -198,6 +199,7 @@ impl SpawnCommand {
 					Self::Lod => PatchKind::Lod,
 					Self::Willow => PatchKind::Willow,
 					Self::Forest => PatchKind::WorldForest,
+					Self::Walk => PatchKind::WorldWalk,
 					Self::Default | Self::Clear => unreachable!(),
 				};
 				commands.queue(move |world: &mut World| {

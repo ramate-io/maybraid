@@ -61,7 +61,10 @@ impl GroveGpuVisuals {
 				Self { bushes: Some(Self::bush_patch(&sites, seed)), ..Self::default() }
 			}
 			GpuFieldKind::Grass => Self {
-				grass: Some(GrassPatch::from_roots(seed, sites.iter().map(|site| site.root))),
+				grass: Some(GrassPatch::from_height_sites(
+					seed,
+					sites.iter().map(|site| (site.root, site.height_m)),
+				)),
 				..Self::default()
 			},
 		}
@@ -84,7 +87,7 @@ impl GroveGpuVisuals {
 		seed: u32,
 		settings: &TreeFieldSettings,
 	) -> Option<TreeGrove> {
-		let recipe = TreeRecipe::storybook();
+		let recipe = TreeRecipe::storybook().pin_authored_size();
 		let capped = Self::capped_sites(sites, settings.max_plants);
 		let patch = TreePatch::from_height_sites(seed, &capped, recipe);
 		match TreeField::from_plants(patch.plants(), settings) {
@@ -97,7 +100,7 @@ impl GroveGpuVisuals {
 	}
 
 	fn bush_patch(sites: &[GrovePlantSite], seed: u32) -> BushPatch {
-		let recipe = BushRecipe::small_scrub();
+		let recipe = BushRecipe::small_scrub().pin_authored_size();
 		let capped = Self::capped_sites(sites, 4_096);
 		BushPatch::from_height_sites(seed, &capped, recipe)
 	}

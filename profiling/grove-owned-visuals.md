@@ -102,3 +102,51 @@ Screenshots (960×540) and receipts, committed with this revision:
 - [`maybraid/world/layers/vegetation/tree-field-playground/captures/forest-floor-gpu.png`](maybraid/world/layers/vegetation/tree-field-playground/captures/forest-floor-gpu.png)
 
 Not measured: native Metal world-route frame times, Tracy, GPU pass duration, live re-upload counts, entity/archetype churn, peak gameplay memory, oak/rory *appearance* (they use the storybook recipe on purpose), collider parity for non-Storybook GPU groves, or shadows-on appearance. Nix was not available; tests used `cargo --locked --release`.
+
+## Whole-world count / layer / size parity (Liam bar)
+
+The GPU swap is the world forest present path: `GrownGrove` → `ChicoGroveHost` for every hopscotch layering. High through UltraLow kit chunks go empty. Nested `StickNode` / `FoliageNode` kit meshes therefore never spawn on the GPU arm.
+
+Intentionally out of scope (not grove tiles): 1–5 km `CanopyBumpOut` / `MediumCanopyBumpOut` cheap-ball proxies, isolated `/show` flattened plants, typed `/show orchard` grove `LodScene` hosts, and terrain turf / POM ground cover.
+
+`--release` `hopscotch_biome_tiles_keep_counts_layers_and_sizes` grows the center 100 m tile of one forest cell per hopscotch layering found in ±16 cells (22 of 24 `LayeringKind` values; DamasEdge and TrapThicket did not appear in that window). GPU vs legacy instance counts, stacked layer occupancy, and height mean/range stayed within 20% after raising the per-grove cap to 512 plants / 262144 descriptors and pinning recipe height/canopy to authored mids so site scales map 1:1. Tuft blades now keep authored heights.
+
+| Layering | origin xz | layers L/G | trees L/G | bushes L/G | grass L/G | tree-h mean | bush-h mean | grass-h mean | flags |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| AgTown | -22500,15900 | 2/2 | 384/384 | 0/0 | 249/249 | 2.20 | 0 | 0.74 | ok |
+| Bush | -25700,4700 | 2/2 | 0/0 | 483/483 | 0/0 | 0 | 1.19 | 0 | ok |
+| FruitPlains | -14500,7900 | 2/2 | 64/64 | 0/0 | 176/176 | 7.30 | 0 | 0.93 | ok |
+| Kumulipo | -22500,-3300 | 2/2 | 55/55 | 0/0 | 0/0 | 5.82 | 0 | 0 | ok |
+| LiamsSummer | -24100,-22500 | 3/3 | 0/0 | 111/111 | 3545/3545 | 0 | 1.12 | 1.63 | ok |
+| LushJungle | -25700,-25700 | 1/1 | 4/4 | 0/0 | 0/0 | 5.38 | 0 | 0 | ok |
+| Meadowland | -25700,-11300 | 1/1 | 1/1 | 0/0 | 0/0 | 2.51 | 0 | 0 | ok |
+| MiRobles | -25700,-12900 | 2/2 | 1/1 | 61/61 | 0/0 | 3.18 | 0.99 | 0 | ok |
+| OldNevada | -25700,-14500 | 2/2 | 4/4 | 0/0 | 0/0 | 5.79 | 0 | 0 | ok |
+| OldSteppe | -25700,-20900 | 1/1 | 0/0 | 10/10 | 0/0 | 0 | 0.85 | 0 | ok |
+| OpenTropics | -24100,-25700 | 2/2 | 1/1 | 0/0 | 308/308 | 11.40 | 0 | 0.73 | ok |
+| OwlsDesert | -24100,17500 | 3/3 | 2/2 | 0/0 | 30/30 | 10.97 | 0 | 0.31 | ok |
+| Riparian | -25700,-4900 | 4/4 | 5/5 | 1/1 | 17/17 | 10.30 | 0.96 | 0.64 | ok |
+| Seceda | -25700,9500 | 1/1 | 0/0 | 0/0 | 255/255 | 0 | 0 | 0.74 | ok |
+| SteppeDown | -25700,-1700 | 2/2 | 4/4 | 410/410 | 0/0 | 4.91 | 1.03 | 0 | ok |
+| Storybook | -25700,-24100 | 3/3 | 18/18 | 47/47 | 2628/2628 | 15.45 | 1.53 | 0.74 | ok |
+| SunsBarren | -25700,-3300 | 1/1 | 0/0 | 31/31 | 0/0 | 0 | 1.12 | 0 | ok |
+| Taiga | -25700,-9700 | 3/3 | 40/40 | 0/0 | 578/578 | 4.48 | 0 | 0.36 | ok |
+| TemperateHoly | -25700,-16100 | 1/1 | 6/6 | 0/0 | 0/0 | 16.19 | 0 | 0 | ok |
+| UpperPark | -25700,-22500 | 5/5 | 3/3 | 382/382 | 235/235 | 13.86 | 1.04 | 0.74 | ok |
+| Waiguo | -14500,9500 | 3/3 | 425/425 | 0/0 | 1448/1448 | 2.45 | 0 | 1.78 | ok |
+| WestMaui | -25700,-8100 | 4/4 | 7/7 | 0/0 | 322/322 | 4.58 | 0 | 0.74 | ok |
+
+`hopscotch_world_walk_streams_gpu_hosts_without_kit_chunks` walks ten 1600 m cells along x=-4950 (LushJungle, SteppeDown, OldSteppe, Riparian, TemperateHoly, OwlsDesert). No leftover kit chunks, tiles stream in/out, no panics. This is the real `presenting_recipes` → `ChicoGroveHost` spawn path on flat ground, not a live HCSG terrain session.
+
+Playground hopscotch walk captures (llvmpipe Mesa 25.2.8, 960×540, shadows off). GPU `kit_meshes=0`. Kit start/mid p95 250 ms is Bevy's max-delta clamp. Grass receipt includes 24,336 playground turf blades.
+
+| Shot | mean ms | p95 ms | entities | kit meshes | GPU plants / bushes / grass |
+|---|---:|---:|---:|---:|---|
+| walk-start-legacy | 250.000 | 250.000 | 66,086 | 65,585 | — |
+| walk-start-gpu | 59.707 | 60.797 | 522 | 0 | 116 / 482 / 25,334 |
+| walk-mid-legacy | 250.000 | 250.000 | 66,086 | 65,585 | — |
+| walk-mid-gpu | 58.241 | 60.354 | 522 | 0 | 116 / 482 / 25,334 |
+| walk-end-legacy | 64.028 | 66.874 | 66,086 | 65,585 | — |
+| walk-end-gpu | 13.214 | 14.583 | 522 | 0 | 116 / 482 / 25,334 |
+
+No B0004 in the capture log. Remaining gaps: far bump-out proxies, `/show` kit plants, shadows-on admission, collider parity, two hopscotch layerings not seen in the ±16 cell window, and a live `maybraid` game walk on Metal.

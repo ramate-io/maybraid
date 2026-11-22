@@ -62,6 +62,7 @@ pub enum CaptureScene {
 	Lod,
 	Willow,
 	WorldForest,
+	WorldWalk,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -149,6 +150,10 @@ impl CaptureShot {
 					scene::clear_patches(world);
 					world::spawn_world_forest(world, true);
 				}
+				CaptureScene::WorldWalk => {
+					scene::clear_patches(world);
+					world::spawn_world_walk(world, true);
+				}
 				CaptureScene::Default => {
 					scene::clear_patches(world);
 					scene::spawn_default_scene_in_world(world);
@@ -164,6 +169,10 @@ impl CaptureShot {
 				CaptureScene::WorldForest => {
 					scene::clear_patches(world);
 					world::spawn_world_forest(world, false);
+				}
+				CaptureScene::WorldWalk => {
+					scene::clear_patches(world);
+					world::spawn_world_walk(world, false);
 				}
 				_ => {
 					scene::spawn_close_only(world);
@@ -221,6 +230,12 @@ pub const TREE_CAPTURE_SHOTS: &[CaptureShot] = &[
 	CaptureShot::gpu("forest-edge-gpu", world::EDGE, CaptureScene::WorldForest),
 	CaptureShot::kit("forest-floor-legacy", world::FLOOR).with_scene(CaptureScene::WorldForest),
 	CaptureShot::gpu("forest-floor-gpu", world::FLOOR, CaptureScene::WorldForest),
+	CaptureShot::kit("walk-start-legacy", world::WALK_START).with_scene(CaptureScene::WorldWalk),
+	CaptureShot::gpu("walk-start-gpu", world::WALK_START, CaptureScene::WorldWalk),
+	CaptureShot::kit("walk-mid-legacy", world::WALK_MID).with_scene(CaptureScene::WorldWalk),
+	CaptureShot::gpu("walk-mid-gpu", world::WALK_MID, CaptureScene::WorldWalk),
+	CaptureShot::kit("walk-end-legacy", world::WALK_END).with_scene(CaptureScene::WorldWalk),
+	CaptureShot::gpu("walk-end-gpu", world::WALK_END, CaptureScene::WorldWalk),
 ];
 
 #[derive(Resource, Debug)]
@@ -490,6 +505,9 @@ mod tests {
 			("forest-vista-gpu", "forest-vista-legacy"),
 			("forest-edge-gpu", "forest-edge-legacy"),
 			("forest-floor-gpu", "forest-floor-legacy"),
+			("walk-start-gpu", "walk-start-legacy"),
+			("walk-mid-gpu", "walk-mid-legacy"),
+			("walk-end-gpu", "walk-end-legacy"),
 		] {
 			let gpu = TREE_CAPTURE_SHOTS
 				.iter()
@@ -501,8 +519,13 @@ mod tests {
 				.ok_or_else(|| anyhow::anyhow!("missing {legacy_name}"))?;
 			assert_eq!(gpu.camera, legacy.camera, "{gpu_name}");
 			assert_eq!(gpu.look_at, legacy.look_at, "{gpu_name}");
-			assert_eq!(gpu.scene, CaptureScene::WorldForest);
-			assert_eq!(legacy.scene, CaptureScene::WorldForest);
+			let scene = if gpu_name.starts_with("walk-") {
+				CaptureScene::WorldWalk
+			} else {
+				CaptureScene::WorldForest
+			};
+			assert_eq!(gpu.scene, scene, "{gpu_name}");
+			assert_eq!(legacy.scene, scene, "{legacy_name}");
 		}
 		let drape = TREE_CAPTURE_SHOTS
 			.iter()

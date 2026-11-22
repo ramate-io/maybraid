@@ -1,0 +1,1 @@
+shot=walk-mid-gpu mode=Gpu samples=36 dt_ms_mean=58.241 dt_ms_p95=60.354 dt_ms_max=62.627 entities=522 kit_meshes=0 mesh3d=3 plants=116 branches=2639 leaves=57187 bushes=482 grass=25334 upload_B=3882224

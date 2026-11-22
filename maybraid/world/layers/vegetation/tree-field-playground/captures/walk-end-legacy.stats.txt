@@ -1,0 +1,1 @@
+shot=walk-end-legacy mode=Kit samples=36 dt_ms_mean=64.028 dt_ms_p95=66.874 dt_ms_max=68.254 entities=66086 kit_meshes=65585 mesh3d=65588 plants=0 branches=0 leaves=0 bushes=0 grass=24336 upload_B=0

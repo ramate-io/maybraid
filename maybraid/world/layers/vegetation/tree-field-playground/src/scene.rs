@@ -13,6 +13,7 @@ pub enum PatchKind {
 	Sparse,
 	Willow,
 	WorldForest,
+	WorldWalk,
 }
 
 pub fn spawn_default_scene(mut commands: Commands) {
@@ -38,6 +39,10 @@ pub fn clear_patches(world: &mut World) {
 pub fn spawn_kind(world: &mut World, kind: PatchKind) {
 	if kind == PatchKind::WorldForest {
 		crate::world::spawn_world_forest(world, true);
+		return;
+	}
+	if kind == PatchKind::WorldWalk {
+		crate::world::spawn_world_walk(world, true);
 		return;
 	}
 	world.spawn((Name::new(kind.label()), kind, patch_for(kind)));
@@ -83,7 +88,9 @@ fn patch_for(kind: PatchKind) -> TreePatch {
 			TreePatch::sparse_wood(17, Vec3::new(8.0, 0.0, 8.0), Vec2::splat(28.0), 16.0)
 		}
 		PatchKind::Willow => TreePatch::willow(29, Vec3::ZERO),
-		PatchKind::WorldForest => unreachable!("world forest spawns Chico groves, not a TreePatch"),
+		PatchKind::WorldForest | PatchKind::WorldWalk => {
+			unreachable!("world forest/walk spawn Chico groves, not a TreePatch")
+		}
 	}
 }
 
@@ -98,6 +105,7 @@ impl PatchKind {
 			Self::Sparse => "sparse",
 			Self::Willow => "willow",
 			Self::WorldForest => "world-forest",
+			Self::WorldWalk => "world-walk",
 		}
 	}
 }
