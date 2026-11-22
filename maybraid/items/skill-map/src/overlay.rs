@@ -9,6 +9,9 @@ use bevy::ui_render::prelude::{UiMaterial, UiMaterialPlugin};
 
 use menu_components::{HUD_GLASS_BORDER, HUD_GLASS_RADIUS, HUD_GLASS_STROKE};
 
+use crate::lens::{
+	apply_overlay_lens_events, apply_overlay_lens_material, tick_overlay_lens, SkillMapOverlayLens,
+};
 use crate::map::SkillKind;
 use crate::tile_material::SkillMapTileMaterial;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapUser};
@@ -253,8 +256,27 @@ impl SkillMapOverlay {
 		came: f32,
 		noise: f32,
 	) -> f32 {
+		self.pane_alpha_at(Vec2::ZERO, Vec2::ONE, pigment, tile_base_alpha, came, noise)
+	}
+
+	pub fn pane_alpha_at(
+		self,
+		uv: Vec2,
+		size: Vec2,
+		pigment: Vec3,
+		tile_base_alpha: f32,
+		came: f32,
+		noise: f32,
+	) -> f32 {
 		let sample = SkillMapTileMaterial::overlay_alpha(tile_base_alpha, self.tile_amount());
-		OverlayParams::from_overlay(self).paint_alpha(pigment * sample, sample, came, noise)
+		OverlayParams::from_overlay(self).paint_alpha_at(
+			uv,
+			size,
+			pigment * sample,
+			sample,
+			came,
+			noise,
+		)
 	}
 
 	/// Arrows, power tiles, and the cursor after the compositor (full map-RT alpha).
@@ -289,28 +311,35 @@ pub struct SkillMapBackdrop {
 	pub kind: SkillKind,
 }
 
-/// Parameters for the stained-glass compositor. `w` is unused padding.
+/// Parameters for the stained-glass compositor plus the circular lens / braid.
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct OverlayParams {
 	pub amount: f32,
 	pub warp: f32,
 	pub glass: f32,
-	pub _pad: f32,
+	pub lens_radius: f32,
+	pub curl: f32,
+	pub flash: f32,
+	pub film: f32,
+	pub braid_turns: f32,
 }
 
 impl OverlayParams {
 	pub fn collapsed() -> Self {
-		Self { amount: 0.0, warp: OVERLAY_WARP, glass: OVERLAY_GLASS, _pad: 0.0 }
+		Self::from_overlay(SkillMapOverlay::Collapsed)
 	}
 
 	pub fn from_overlay(overlay: SkillMapOverlay) -> Self {
-		Self { amount: overlay.amount(), warp: OVERLAY_WARP, glass: OVERLAY_GLASS, _pad: 0.0 }
+		Self::from_overlay_lens(overlay, SkillMapOverlayLens::default())
 	}
 
 	/// CPU mirror of `overlay_material.wesl` fragment alpha (`lead = 0.22 + 0.18 * noise`).
 	/// High sample alpha (arrows / marks) is kept; land uses mosaic-ink paint, not a sheet.
+	/// Corner UV (outside the lens) — stained-glass field.
 	pub fn composited_alpha(self, sample_alpha: f32, came: f32, noise: f32) -> f32 {
-		self.paint_alpha(
+		self.paint_alpha_at(
+			Vec2::ZERO,
+			Vec2::ONE,
 			Vec3::splat(sample_alpha.max(OVERLAY_PAINT_RECOVER)),
 			sample_alpha,
 			came,
@@ -319,6 +348,19 @@ impl OverlayParams {
 	}
 
 	pub fn paint_alpha(self, sample_rgb: Vec3, sample_alpha: f32, came: f32, noise: f32) -> f32 {
+		self.paint_alpha_at(Vec2::ZERO, Vec2::ONE, sample_rgb, sample_alpha, came, noise)
+	}
+
+	/// `uv` / `size` select the clear lens interior vs the stained-glass field.
+	pub fn paint_alpha_at(
+		self,
+		uv: Vec2,
+		size: Vec2,
+		sample_rgb: Vec3,
+		sample_alpha: f32,
+		came: f32,
+		noise: f32,
+	) -> f32 {
 		let amount = self.amount.clamp(0.0, 1.0);
 		let pigment = sample_rgb / sample_alpha.max(OVERLAY_PAINT_RECOVER);
 		let ink = Self::paint_ink(pigment);
@@ -328,7 +370,11 @@ impl OverlayParams {
 			+ came * lead * OVERLAY_COMPOSITOR_CAME_ALPHA;
 		let keep = Self::mark_keep(sample_alpha);
 		let treated = paint * (1.0 - keep) + sample_alpha * keep;
-		sample_alpha * (1.0 - amount) + treated * amount
+		let lens = self.lens_mask(uv, size);
+		let glass_amt = amount * (1.0 - lens);
+		let field = sample_alpha * (1.0 - glass_amt) + treated * glass_amt;
+		let interior = sample_alpha * keep;
+		field * (1.0 - lens) + interior * lens
 	}
 
 	pub fn paint_ink(pigment: Vec3) -> f32 {
@@ -360,7 +406,11 @@ impl SkillMapOverlayMaterial {
 	}
 
 	pub fn set_overlay(&mut self, overlay: SkillMapOverlay) {
-		self.params = OverlayParams::from_overlay(overlay);
+		self.set_overlay_lens(overlay, SkillMapOverlayLens::default());
+	}
+
+	pub fn set_overlay_lens(&mut self, overlay: SkillMapOverlay, lens: SkillMapOverlayLens) {
+		self.params = OverlayParams::from_overlay_lens(overlay, lens);
 	}
 }
 
@@ -377,7 +427,11 @@ impl Plugin for SkillMapOverlayPlugin {
 		embedded_asset!(app, "overlay_material.wesl");
 		app.add_plugins(UiMaterialPlugin::<SkillMapOverlayMaterial>::default())
 			.init_resource::<SkillMapOverlayEnabled>()
-			.add_message::<SkillMapOverlayCue>();
+			.add_message::<SkillMapOverlayCue>()
+			.add_systems(
+				PostUpdate,
+				(apply_overlay_lens_events, tick_overlay_lens, apply_overlay_lens_material).chain(),
+			);
 		crate::sound::configure_overlay_audio(app);
 	}
 }
@@ -386,7 +440,13 @@ impl Plugin for SkillMapOverlayPlugin {
 pub fn sync_skill_map_overlay(
 	enabled: Res<SkillMapEnabled>,
 	overlay_pref: Res<SkillMapOverlayEnabled>,
-	mut users: Query<(Entity, &SkillMapUser, &SkillMapHeld, &mut SkillMapOverlay)>,
+	mut users: Query<(
+		Entity,
+		&SkillMapUser,
+		&SkillMapHeld,
+		&mut SkillMapOverlay,
+		&mut SkillMapOverlayLens,
+	)>,
 	mut cues: MessageWriter<SkillMapOverlayCue>,
 	mut huds: Query<(&SkillMapMember, &mut Node), With<SkillMapHud>>,
 	mut frames: Query<
@@ -408,7 +468,7 @@ pub fn sync_skill_map_overlay(
 	mut overlay_materials: Option<ResMut<Assets<SkillMapOverlayMaterial>>>,
 	mut tiles: Option<ResMut<Assets<SkillMapTileMaterial>>>,
 ) {
-	for (entity, user, held, mut overlay) in &mut users {
+	for (entity, user, held, mut overlay, mut lens) in &mut users {
 		let next = if enabled.0 && overlay_pref.0 {
 			SkillMapOverlay::from_held(held.0)
 		} else {
@@ -417,12 +477,15 @@ pub fn sync_skill_map_overlay(
 		if *overlay != next {
 			if next.expanded() {
 				cues.write(SkillMapOverlayCue { user: entity });
+			} else {
+				lens.reset_idle();
 			}
 			*overlay = next;
 		}
 		apply_overlay_layout(
 			user.maps,
 			next,
+			*lens,
 			&mut huds,
 			&mut frames,
 			&mut panes,
@@ -432,7 +495,7 @@ pub fn sync_skill_map_overlay(
 		);
 	}
 	if let Some(tiles) = tiles.as_deref_mut() {
-		let amount = if users.iter().any(|(_, _, _, overlay)| overlay.expanded()) {
+		let amount = if users.iter().any(|(_, _, _, overlay, _)| overlay.expanded()) {
 			OVERLAY_TILE_AMOUNT
 		} else {
 			0.0
@@ -444,6 +507,7 @@ pub fn sync_skill_map_overlay(
 fn apply_overlay_layout(
 	session: Entity,
 	overlay: SkillMapOverlay,
+	lens: SkillMapOverlayLens,
 	huds: &mut Query<(&SkillMapMember, &mut Node), With<SkillMapHud>>,
 	frames: &mut Query<
 		(&SkillMapMember, &mut Node, &mut BorderColor, &mut BackgroundColor),
@@ -483,7 +547,7 @@ fn apply_overlay_layout(
 		*node = overlay.pane_node();
 		if let Some(materials) = overlay_materials.as_mut() {
 			if let Some(mut material) = materials.get_mut(&pane.material) {
-				material.set_overlay(overlay);
+				material.set_overlay_lens(overlay, lens);
 			}
 		}
 	}
@@ -587,6 +651,7 @@ mod tests {
 			.init_resource::<crate::SkillMapFocusEnabled>()
 			.init_resource::<SkillMapTunnelVision>()
 			.add_message::<SkillMapOverlayCue>()
+			.add_message::<crate::SkillMapEvent>()
 			.add_systems(
 				Update,
 				(
@@ -595,6 +660,7 @@ mod tests {
 					crate::feed::tick_feeds,
 					sync_skill_map_overlay,
 					sync_tunnel_vision_target,
+					crate::tiles::collide_tiles,
 				)
 					.chain()
 					.after(CharacterControlSystems),
@@ -606,6 +672,8 @@ mod tests {
 					hide_gameplay_hud,
 					apply_tunnel_vision_material,
 					crate::sound::play_overlay_activate_sounds,
+					crate::lens::apply_overlay_lens_events,
+					crate::lens::tick_overlay_lens,
 				)
 					.chain(),
 			);
@@ -1092,5 +1160,133 @@ mod tests {
 			"debraid HUD is off the map RT and must stay strong"
 		);
 		assert!((FeedArrow::hit_line_color().to_srgba().alpha - 1.0).abs() < 1e-5);
+	}
+
+	#[test]
+	fn expanded_lens_interior_is_not_tinted() {
+		let expanded = SkillMapOverlay::Expanded;
+		let size = Vec2::ONE;
+		let interior =
+			expanded.pane_alpha_at(Vec2::splat(0.5), size, OVERLAY_LAND_PIGMENT, 1.0, 0.0, 0.5);
+		let field = expanded.pane_alpha(1.0);
+		assert!(interior < 0.08, "clear lens must not keep mosaic paint, got {interior}");
+		assert!(field > interior + 0.15, "stained glass stays outside the ring");
+		let marks = OverlayParams::from_overlay(expanded).paint_alpha_at(
+			Vec2::splat(0.5),
+			size,
+			Vec3::ONE,
+			1.0,
+			0.0,
+			0.5,
+		);
+		assert!(marks >= OVERLAY_MARK_ALPHA_MIN, "marks stay readable inside the lens");
+	}
+
+	fn lens_app() -> App {
+		let mut app = overlay_app();
+		app.insert_resource(TimeUpdateStrategy::ManualDuration(
+			std::time::Duration::from_secs_f32(1.0 / 60.0),
+		));
+		app
+	}
+
+	fn lens_of(app: &App, user: Entity) -> crate::SkillMapOverlayLens {
+		*app.world().get::<crate::SkillMapOverlayLens>(user).expect("lens")
+	}
+
+	fn spawn_claim_tile(app: &mut App, user: Entity, water: bool) {
+		use crate::cursor::SkillMapCursor;
+		use crate::map::SkillMapId;
+		use crate::tiles::{SkillMapTile, TileBounds, TileKind};
+		use crate::viewport::SkillMapViewportCamera;
+		let session = app.world().get::<SkillMapUser>(user).expect("user").maps;
+		let member = SkillMapMember { user, session };
+		app.world_mut()
+			.spawn((SkillMapCursor, SkillMapId(0), member, Transform::default()));
+		app.world_mut().spawn((
+			SkillMapTile {
+				map: SkillMapId(0),
+				kind: if water { TileKind::Water } else { TileKind::Power(SkillKind::Fireball) },
+			},
+			member,
+			Transform::default(),
+			TileBounds { half: Vec2::splat(8.0) },
+		));
+		app.world_mut().spawn((
+			SkillMapId(0),
+			member,
+			SkillMapViewportCamera,
+			Transform::default(),
+		));
+	}
+
+	#[test]
+	fn tanzer_rb_hold_curls_the_idle_braid() -> anyhow::Result<()> {
+		let mut app = lens_app();
+		let (user, _) = spawn_overlay_user(&mut app, false);
+		let source = assign_pad(&mut app, user);
+		drive_rb(&mut app, source, 1, false);
+		assert!(lens_of(&app, user).is_idle());
+		assert_eq!(overlay_of(&app, user), SkillMapOverlay::Collapsed);
+		drive_rb(&mut app, source, 2, true);
+		assert_eq!(overlay_of(&app, user), SkillMapOverlay::Expanded);
+		let lens = lens_of(&app, user);
+		assert!(lens.is_idle(), "RB hold must show a curled braid, not a flash or uncurl");
+		assert!((lens.curl() - 1.0).abs() < 1e-4);
+		assert!(
+			(OverlayParams::from_overlay_lens(SkillMapOverlay::Expanded, lens).lens_radius
+				- crate::SkillMapOverlayLens::uv_radius())
+			.abs() < 1e-6
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn tanzer_rb_hold_claim_flashes_braid_and_lens_film() -> anyhow::Result<()> {
+		let mut app = lens_app();
+		let (user, _) = spawn_overlay_user(&mut app, false);
+		spawn_claim_tile(&mut app, user, false);
+		let source = assign_pad(&mut app, user);
+		drive_rb(&mut app, source, 1, false);
+		drive_rb(&mut app, source, 2, true);
+		let lens = lens_of(&app, user);
+		assert!(
+			lens.is_flashing(),
+			"claiming a power tile must flash the braid and film, flash={} film={}",
+			lens.flash(),
+			lens.film()
+		);
+		assert!(lens.flash() > 0.85);
+		assert!(lens.film() > 0.80);
+		assert_eq!(overlay_of(&app, user), SkillMapOverlay::Expanded);
+		Ok(())
+	}
+
+	#[test]
+	fn tanzer_rb_hold_debraid_uncurls_then_recurls() -> anyhow::Result<()> {
+		let mut app = lens_app();
+		let (user, _) = spawn_overlay_user(&mut app, false);
+		spawn_claim_tile(&mut app, user, true);
+		let source = assign_pad(&mut app, user);
+		drive_rb(&mut app, source, 1, false);
+		drive_rb(&mut app, source, 2, true);
+		assert!(
+			lens_of(&app, user).is_uncurling(),
+			"water / Debraid must start the uncurl, motion={:?}",
+			lens_of(&app, user).motion()
+		);
+		for seq in 3..15 {
+			drive_rb(&mut app, source, seq, true);
+		}
+		let mid = lens_of(&app, user);
+		assert!(mid.is_uncurling(), "still uncurling at ~0.2s");
+		assert!(mid.curl() > 0.25 && mid.curl() < 0.75, "mid-uncurl curl, got {}", mid.curl());
+		for seq in 15..55 {
+			drive_rb(&mut app, source, seq, true);
+		}
+		let done = lens_of(&app, user);
+		assert!(done.is_idle() || done.is_recurling());
+		assert!(done.curl() > 0.85, "braid must recurl around the rim, got {}", done.curl());
+		Ok(())
 	}
 }

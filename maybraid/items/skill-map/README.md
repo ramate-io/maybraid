@@ -37,7 +37,12 @@ off keeps the map in the corner. Focus off skips tunnel vision and HUD hide.
 While focus is on and the overlay is up, the rest of the HUD hides and a
 vignette-style edge blur (`TUNNEL_VISION_STRENGTH` / `TUNNEL_VISION_RADIUS` /
 `TUNNEL_VISION_DARKEN`) fades in on the 3D camera so the centre stays sharp
-enough to navigate. Releasing RB restores the HUD and fades the blur out. The expand edge plays
+enough to navigate. The stained-glass field leaves a circular lens in the
+centre — sized from the spawn-clearing (no-debraid) pocket, not a magic UV
+number — with a 2D braid around the rim (apa-kan tile-rim weave: opposite
+sines, integer twists, over/under). Skill activation flashes the braid and a
+film sheen over the lens; a water Debraid uncurls the braid and then recurls
+it. Releasing RB restores the HUD and fades the blur out. The expand edge plays
 the authored `change_item` clip on the UI bus; releasing RB is silent. The clock pauses when skill-map input is inactive or gameplay
 is suspended. Changing the equipped map starts a fresh feed on the next RB
 hold.
@@ -46,9 +51,13 @@ Timing and sequence definitions live in `src/feed.rs`; presentation lives in
 lane slots — at [`TANZ_CALLOUT_ICON_PX`], with the four lanes occupying a
 third of the original overlay width.
 
+CPU previews of the held overlay (idle ring + braid, fire film, mid-uncurl)
+live in [`captures/`](captures/). They are compositor-constant rasters, not GPU
+readbacks of a live session.
+
 Run the focused checks with:
 
 ```sh
-cargo test -p maybraid-skill-map --lib
-cargo test -p character-items --lib
+cargo test -p maybraid-skill-map --lib --release --locked
+cargo test -p character-items --lib --release --locked
 ```

@@ -125,6 +125,7 @@ pub fn spawn_skill_maps_with(
 		SkillMapSteerLock::default(),
 		SkillMapHeld(false),
 		crate::overlay::SkillMapOverlay::Collapsed,
+		crate::lens::SkillMapOverlayLens::default(),
 	));
 	maps
 }
@@ -167,6 +168,10 @@ mod tests {
 		assert_eq!(stamped.maps, maps);
 		assert!(world.get::<SkillMapSession>(maps).is_some());
 		assert_eq!(world.get::<SkillMapEquip>(user).copied(), Some(SkillMapEquip::default()));
+		assert_eq!(
+			world.get::<crate::lens::SkillMapOverlayLens>(user).copied(),
+			Some(crate::lens::SkillMapOverlayLens::default())
+		);
 	}
 
 	#[test]

@@ -8,7 +8,11 @@ struct OverlayParams {
     amount: f32,
     warp: f32,
     glass: f32,
-    _pad: f32,
+    lens_radius: f32,
+    curl: f32,
+    flash: f32,
+    film: f32,
+    braid_turns: f32,
 }
 
 @group(1) @binding(0)
@@ -34,6 +38,12 @@ const OVERLAY_PAINT_RECOVER: f32 = 0.08;
 const OVERLAY_PAINT_SATURATION: f32 = 1.45;
 const OVERLAY_MARK_ALPHA_LO: f32 = 0.60;
 const OVERLAY_MARK_ALPHA_HI: f32 = 0.90;
+// Keep in sync with lens.rs. Amp is apa-kan TILE_BRAID_AMP / 22.
+const BRAID_AMP_FRAC: f32 = 0.07272727;
+const BRAID_STROKE_FRAC: f32 = 0.038;
+const LENS_RING_THICKNESS_FRAC: f32 = 0.055;
+const LENS_EDGE_FRAC: f32 = 0.012;
+const BRAID_STRANDS: i32 = 3;
 
 fn hash12(p: vec2<f32>) -> f32 {
     let p3 = fract(vec3<f32>(p.x, p.y, p.x) * vec3<f32>(0.1031, 0.1030, 0.0973));
@@ -112,35 +122,144 @@ fn glass_tint(seed: f32) -> vec3<f32> {
     return violet;
 }
 
+fn braid_strand_color(i: i32) -> vec3<f32> {
+    if i == 0 {
+        return vec3<f32>(0.82, 0.22, 0.18);
+    } else if i == 1 {
+        return vec3<f32>(0.86, 0.68, 0.18);
+    }
+    return vec3<f32>(0.22, 0.52, 0.86);
+}
+
+fn pixel_from_center(uv: vec2<f32>, size: vec2<f32>) -> vec2<f32> {
+    return (uv - vec2<f32>(0.5, 0.5)) * max(size, vec2<f32>(1.0, 1.0));
+}
+
+fn lens_radius_px(size: vec2<f32>) -> f32 {
+    return params.lens_radius * min(max(size.x, 1.0), max(size.y, 1.0));
+}
+
+fn lens_mask(uv: vec2<f32>, size: vec2<f32>) -> f32 {
+    let r = length(pixel_from_center(uv, size));
+    let radius = lens_radius_px(size);
+    let edge = max(radius * LENS_EDGE_FRAC, 1e-4);
+    return 1.0 - smoothstep(radius - edge, radius, r);
+}
+
+fn sphere_ring(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
+    let p = pixel_from_center(uv, size);
+    let r = length(p);
+    let radius = lens_radius_px(size);
+    let thick = max(radius * LENS_RING_THICKNESS_FRAC, 1.0);
+    let d = abs(r - radius);
+    let band = 1.0 - smoothstep(thick * 0.35, thick, d);
+    let x = clamp((r - radius) / thick, -1.0, 1.0);
+    let nz = sqrt(max(0.0, 1.0 - x * x));
+    let nxy = select(vec2<f32>(0.0, 0.0), normalize(p) * x, r > 1e-4);
+    let light = saturate(dot(vec3<f32>(nxy.x, nxy.y, nz), normalize(vec3<f32>(-0.35, 0.70, 0.55))));
+    let spec = pow(light, 24.0);
+    var col = mix(vec3<f32>(0.14, 0.11, 0.16), vec3<f32>(0.78, 0.86, 0.95), light * 0.70);
+    col += vec3<f32>(0.95, 0.97, 1.0) * spec * 0.50;
+    return vec4<f32>(col, band * amount * 0.94);
+}
+
+fn braid_color(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> vec4<f32> {
+    if params.curl <= 0.001 {
+        return vec4<f32>(0.0);
+    }
+    let p = pixel_from_center(uv, size);
+    let r = length(p);
+    var theta = atan2(p.y, p.x);
+    if theta < 0.0 {
+        theta += 6.28318530718;
+    }
+    let radius = lens_radius_px(size);
+    let ring_thick = max(radius * LENS_RING_THICKNESS_FRAC, 1.0);
+    let amp = radius * BRAID_AMP_FRAC;
+    let stroke = max(radius * BRAID_STROKE_FRAC, 1.0);
+    let braid_radius = radius + ring_thick * 0.65;
+    let coverage = saturate(params.curl) * 6.28318530718;
+    if theta > coverage + 0.12 {
+        return vec4<f32>(0.0);
+    }
+    let tip = saturate(1.0 - saturate((coverage - theta) / 0.45));
+    let peel = tip * (1.0 - params.curl) * amp * 1.6;
+    let along = 1.0 - smoothstep(coverage - 0.10, coverage, theta);
+    var best = vec4<f32>(0.0);
+    var best_front = -2.0;
+    for (var i = 0; i < BRAID_STRANDS; i++) {
+        let offset = 6.28318530718 * f32(i) / f32(BRAID_STRANDS);
+        let phase = params.braid_turns * theta + offset;
+        let radial = braid_radius + amp * sin(phase) + peel;
+        let dist = abs(r - radial);
+        let body = 1.0 - smoothstep(stroke * 0.45, stroke, dist);
+        let alpha = body * along * amount;
+        if alpha > 0.01 {
+            let front = cos(phase);
+            let color = braid_strand_color(i) * (1.0 + params.flash * 1.55);
+            if alpha > best.a && (front >= best_front || best.a < 0.05) {
+                best = vec4<f32>(color, alpha);
+                best_front = front;
+            }
+        }
+    }
+    return best;
+}
+
+fn film_sheen(uv: vec2<f32>, size: vec2<f32>, amount: f32) -> f32 {
+    if params.film <= 0.0 {
+        return 0.0;
+    }
+    let p = pixel_from_center(uv, size);
+    let dir = normalize(vec2<f32>(0.62, 0.38));
+    let n = normalize(p + vec2<f32>(0.001, 0.001));
+    let sheen = pow(saturate(dot(n, dir) * 0.5 + 0.5), 6.0);
+    return params.film * amount * (0.16 + 0.58 * sheen);
+}
+
 @fragment
 fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
     let amount = saturate(params.amount);
+    let size = in.size;
+    let lens = lens_mask(in.uv, size);
     let cell = glass_cell(in.uv);
     let came = cell.z;
     let local = cell.xy;
     let seed = hash12(floor(in.uv * vec2<f32>(7.0, 5.5)));
     let n = value_noise(in.uv * 18.0 + local * 3.0);
     let normal = normalize(vec2<f32>(local.x, local.y) + vec2<f32>(n - 0.5, 0.5 - n) * 0.35);
-    let warp = normal * (OVERLAY_WARP_SCALE * params.warp * amount);
+    let warp = normal * (OVERLAY_WARP_SCALE * params.warp * amount * (1.0 - lens));
     let uv = clamp(in.uv + warp, vec2<f32>(0.0), vec2<f32>(1.0));
-    let fringe = OVERLAY_FRINGE_SCALE * amount * params.warp;
+    let fringe = OVERLAY_FRINGE_SCALE * amount * params.warp * (1.0 - lens);
     let sample = textureSample(map_texture, map_sampler, uv);
     let r = textureSample(map_texture, map_sampler, uv + vec2<f32>(fringe, 0.0)).r;
     let g = sample.g;
     let b = textureSample(map_texture, map_sampler, uv - vec2<f32>(fringe, 0.0)).b;
-    var color = mix(sample.xyz, vec3<f32>(r, g, b), amount);
+    var color = mix(sample.xyz, vec3<f32>(r, g, b), amount * (1.0 - lens));
     let pigment = unpremultiply(color, sample.a);
     let luma = dot(pigment, vec3<f32>(0.30, 0.59, 0.11));
     color = mix(vec3<f32>(luma), pigment, OVERLAY_PAINT_SATURATION);
     let pane = glass_tint(seed);
-    color = mix(color, mix(color, pane, OVERLAY_PANE_MIX), amount * params.glass);
-    color = mix(color, vec3<f32>(0.06, 0.04, 0.05), came * amount * OVERLAY_CAME_MIX);
+    let glass_amt = amount * params.glass * (1.0 - lens);
+    color = mix(color, mix(color, pane, OVERLAY_PANE_MIX), glass_amt);
+    color = mix(color, vec3<f32>(0.06, 0.04, 0.05), came * glass_amt * OVERLAY_CAME_MIX);
     let lead = 0.22 + 0.18 * n;
     let paint = OVERLAY_PAINT_FLOOR
         + paint_ink(pigment) * OVERLAY_PAINT_GAIN
         + came * lead * OVERLAY_CAME_ALPHA;
     let keep = smoothstep(OVERLAY_MARK_ALPHA_LO, OVERLAY_MARK_ALPHA_HI, sample.a);
     let treated = mix(paint, sample.a, keep);
-    let alpha = mix(sample.a, treated, amount);
+    let field = mix(sample.a, treated, amount * (1.0 - lens));
+    let interior = mix(0.0, sample.a, keep);
+    var alpha = mix(field, interior, lens);
+    let ring = sphere_ring(in.uv, size, amount);
+    color = mix(color, ring.xyz, ring.a);
+    alpha = max(alpha, ring.a);
+    let braid = braid_color(in.uv, size, amount);
+    color = mix(color, braid.xyz, braid.a);
+    alpha = max(alpha, braid.a);
+    let film = film_sheen(in.uv, size, amount);
+    color = mix(color, vec3<f32>(1.0, 0.82, 0.45), film);
+    alpha = max(alpha, film * 0.40);
     return vec4<f32>(color, alpha);
 }
