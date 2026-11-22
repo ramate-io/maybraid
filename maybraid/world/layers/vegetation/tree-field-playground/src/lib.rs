@@ -7,6 +7,7 @@ mod ground;
 mod kit;
 mod scene;
 mod ui;
+mod world;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
@@ -17,6 +18,7 @@ use camera_controls::look::CameraLookPlugin;
 use capture::CaptureSession;
 use game_commands::command::GameCommandPlugin;
 use terrain_shaders::TerrainShaderPlugin;
+use vegetation_bush_field::BushFieldPlugin;
 use vegetation_components::CanopyShadowMode;
 use vegetation_grass_field::GrassFieldPlugin;
 use vegetation_tree_field::TreeFieldPlugin;
@@ -47,6 +49,7 @@ pub fn run() {
 	})
 	.add_plugins(TerrainShaderPlugin)
 	.add_plugins(GrassFieldPlugin)
+	.add_plugins(BushFieldPlugin)
 	.add_plugins(TreeFieldPlugin)
 	.add_plugins(CameraLookPlugin::default())
 	.add_plugins(

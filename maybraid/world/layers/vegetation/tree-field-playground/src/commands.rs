@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 use clap::{Parser, Subcommand, ValueEnum};
 use game_commands::command::{CommandScript, GameCommand};
-use vegetation_tree_field::{LeafCloseStyle, TreeFieldSettings, TreePatch, TreePatchLod};
 use vegetation_components::CanopyShadowMode;
+use vegetation_tree_field::{LeafCloseStyle, TreeFieldSettings, TreePatch, TreePatchLod};
 
 use crate::camera::{yaw_pitch, CameraController};
 use crate::ground::TurfPlane;
@@ -54,6 +54,7 @@ pub enum SpawnCommand {
 	Sparse,
 	Lod,
 	Willow,
+	Forest,
 	Clear,
 }
 
@@ -196,6 +197,7 @@ impl SpawnCommand {
 					Self::Sparse => PatchKind::Sparse,
 					Self::Lod => PatchKind::Lod,
 					Self::Willow => PatchKind::Willow,
+					Self::Forest => PatchKind::WorldForest,
 					Self::Default | Self::Clear => unreachable!(),
 				};
 				commands.queue(move |world: &mut World| {
@@ -365,20 +367,11 @@ mod tests {
 		let command = <PlaygroundCommand as GameCommand>::parse_line("wind set --strength 0.4")?;
 		assert!(matches!(command, PlaygroundCommand::Wind(WindCommand::Set { .. })));
 		let command = <PlaygroundCommand as GameCommand>::parse_line("leaves dither")?;
-		assert!(matches!(
-			command,
-			PlaygroundCommand::Leaves { style: LeavesStyle::Dither }
-		));
+		assert!(matches!(command, PlaygroundCommand::Leaves { style: LeavesStyle::Dither }));
 		let command = <PlaygroundCommand as GameCommand>::parse_line("leaves smooth")?;
-		assert!(matches!(
-			command,
-			PlaygroundCommand::Leaves { style: LeavesStyle::Smooth }
-		));
+		assert!(matches!(command, PlaygroundCommand::Leaves { style: LeavesStyle::Smooth }));
 		let command = <PlaygroundCommand as GameCommand>::parse_line("leaves crisp")?;
-		assert!(matches!(
-			command,
-			PlaygroundCommand::Leaves { style: LeavesStyle::Crisp }
-		));
+		assert!(matches!(command, PlaygroundCommand::Leaves { style: LeavesStyle::Crisp }));
 		Ok(())
 	}
 }

@@ -7,12 +7,15 @@ use std::path::PathBuf;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
+use vegetation_bush_field::BushField;
+use vegetation_grass_field::GrassField;
 use vegetation_shaders::wesl::WindInputs;
-use vegetation_tree_field::{LeafCloseStyle, TreeField, TreeFieldSettings};
+use vegetation_tree_field::{LeafCloseStyle, TreeField, TreeFieldSettings, TreeGrove};
 
 use crate::camera::{yaw_pitch, CameraController};
 use crate::kit;
 use crate::scene;
+use crate::world;
 
 pub const CAPTURE_DIR_ENV: &str = "MAYBRAID_CAPTURE_DIR";
 pub const CAPTURE_WIDTH: u32 = 960;
@@ -58,6 +61,7 @@ pub enum CaptureScene {
 	Slope,
 	Lod,
 	Willow,
+	WorldForest,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -141,22 +145,32 @@ impl CaptureShot {
 					scene::spawn_kind(world, scene::PatchKind::Lod);
 				}
 				CaptureScene::Willow => scene::spawn_willow_only(world),
+				CaptureScene::WorldForest => {
+					scene::clear_patches(world);
+					world::spawn_world_forest(world, true);
+				}
 				CaptureScene::Default => {
 					scene::clear_patches(world);
 					scene::spawn_default_scene_in_world(world);
 				}
 			},
-			CaptureMode::Kit => {
-				match self.scene {
-					CaptureScene::Grove => {
-						scene::clear_patches(world);
-						scene::spawn_kind(world, scene::PatchKind::Grove);
-					}
-					_ => scene::spawn_close_only(world),
+			CaptureMode::Kit => match self.scene {
+				CaptureScene::Grove => {
+					scene::clear_patches(world);
+					scene::spawn_kind(world, scene::PatchKind::Grove);
+					kit::spawn_kit_from_patches(world);
+					scene::clear_patches(world);
 				}
-				kit::spawn_kit_from_patches(world);
-				scene::clear_patches(world);
-			}
+				CaptureScene::WorldForest => {
+					scene::clear_patches(world);
+					world::spawn_world_forest(world, false);
+				}
+				_ => {
+					scene::spawn_close_only(world);
+					kit::spawn_kit_from_patches(world);
+					scene::clear_patches(world);
+				}
+			},
 			CaptureMode::Leafless => {
 				scene::spawn_leafless_only(world);
 			}
@@ -201,6 +215,12 @@ pub const TREE_CAPTURE_SHOTS: &[CaptureShot] = &[
 	CaptureShot::gpu("willow-drape-close-crisp", WILLOW_DRAPE, CaptureScene::Willow)
 		.with_leaves(LeafCloseStyle::Crisp),
 	CaptureShot::gpu("willow-wind", WILLOW_FULL, CaptureScene::Willow).with_gust(),
+	CaptureShot::kit("forest-vista-legacy", world::VISTA).with_scene(CaptureScene::WorldForest),
+	CaptureShot::gpu("forest-vista-gpu", world::VISTA, CaptureScene::WorldForest),
+	CaptureShot::kit("forest-edge-legacy", world::EDGE).with_scene(CaptureScene::WorldForest),
+	CaptureShot::gpu("forest-edge-gpu", world::EDGE, CaptureScene::WorldForest),
+	CaptureShot::kit("forest-floor-legacy", world::FLOOR).with_scene(CaptureScene::WorldForest),
+	CaptureShot::gpu("forest-floor-gpu", world::FLOOR, CaptureScene::WorldForest),
 ];
 
 #[derive(Resource, Debug)]
@@ -278,6 +298,9 @@ pub(crate) fn tick_capture(
 	kits: Query<Entity, With<kit::KitPreview>>,
 	meshes: Query<Entity, With<Mesh3d>>,
 	field: Res<TreeField>,
+	bush_field: Res<BushField>,
+	grass_field: Res<GrassField>,
+	groves: Query<&'static TreeGrove>,
 	time: Res<Time>,
 	mut exit: MessageWriter<AppExit>,
 ) {
@@ -324,15 +347,23 @@ pub(crate) fn tick_capture(
 			let entities = entities.iter().count();
 			let kits = kits.iter().count();
 			let meshes = meshes.iter().count();
+			let mut plants = field.plants.len();
+			let mut branches = field.branches.len();
+			let mut leaves = field.leaves.len();
+			let mut upload = field.upload_bytes();
+			for grove in &groves {
+				plants += grove.0.plants.len();
+				branches += grove.0.branches.len();
+				leaves += grove.0.leaves.len();
+				upload += grove.0.upload_bytes();
+			}
 			let stats = format!(
-				"shot={} mode={:?} samples={} dt_ms_mean={mean:.3} dt_ms_p95={p95:.3} dt_ms_max={max:.3} entities={entities} kit_meshes={kits} mesh3d={meshes} plants={} branches={} leaves={} upload_B={}\n",
+				"shot={} mode={:?} samples={} dt_ms_mean={mean:.3} dt_ms_p95={p95:.3} dt_ms_max={max:.3} entities={entities} kit_meshes={kits} mesh3d={meshes} plants={plants} branches={branches} leaves={leaves} bushes={} grass={} upload_B={upload}\n",
 				shot.name,
 				shot.mode,
 				samples,
-				field.plants.len(),
-				field.branches.len(),
-				field.leaves.len(),
-				field.upload_bytes(),
+				bush_field.plants.len(),
+				grass_field.blades.len(),
 			);
 			info!(target: "maybraid.tree_field", stats = stats.trim(), "tree capture stats");
 			if let Err(error) =
@@ -420,6 +451,12 @@ mod tests {
 			"willow-drape-close-dither",
 			"willow-drape-close-crisp",
 			"willow-wind",
+			"forest-vista-legacy",
+			"forest-vista-gpu",
+			"forest-edge-legacy",
+			"forest-edge-gpu",
+			"forest-floor-legacy",
+			"forest-floor-gpu",
 		] {
 			assert!(TREE_CAPTURE_SHOTS.iter().any(|shot| shot.name == name), "missing {name}");
 		}
@@ -449,6 +486,24 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("missing grove edge legacy"))?;
 		assert_eq!(grove_edge_gpu.camera, grove_edge_legacy.camera);
 		assert_eq!(grove_edge_gpu.look_at, grove_edge_legacy.look_at);
+		for (gpu_name, legacy_name) in [
+			("forest-vista-gpu", "forest-vista-legacy"),
+			("forest-edge-gpu", "forest-edge-legacy"),
+			("forest-floor-gpu", "forest-floor-legacy"),
+		] {
+			let gpu = TREE_CAPTURE_SHOTS
+				.iter()
+				.find(|shot| shot.name == gpu_name)
+				.ok_or_else(|| anyhow::anyhow!("missing {gpu_name}"))?;
+			let legacy = TREE_CAPTURE_SHOTS
+				.iter()
+				.find(|shot| shot.name == legacy_name)
+				.ok_or_else(|| anyhow::anyhow!("missing {legacy_name}"))?;
+			assert_eq!(gpu.camera, legacy.camera, "{gpu_name}");
+			assert_eq!(gpu.look_at, legacy.look_at, "{gpu_name}");
+			assert_eq!(gpu.scene, CaptureScene::WorldForest);
+			assert_eq!(legacy.scene, CaptureScene::WorldForest);
+		}
 		let drape = TREE_CAPTURE_SHOTS
 			.iter()
 			.find(|shot| shot.name == "willow-drape-close")

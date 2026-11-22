@@ -12,6 +12,7 @@ pub enum PatchKind {
 	Lod,
 	Sparse,
 	Willow,
+	WorldForest,
 }
 
 pub fn spawn_default_scene(mut commands: Commands) {
@@ -31,9 +32,14 @@ pub fn clear_patches(world: &mut World) {
 	for id in ids {
 		world.entity_mut(id).despawn();
 	}
+	crate::world::clear_world_forest(world);
 }
 
 pub fn spawn_kind(world: &mut World, kind: PatchKind) {
+	if kind == PatchKind::WorldForest {
+		crate::world::spawn_world_forest(world, true);
+		return;
+	}
 	world.spawn((Name::new(kind.label()), kind, patch_for(kind)));
 }
 
@@ -73,8 +79,11 @@ fn patch_for(kind: PatchKind) -> TreePatch {
 			],
 			TreeRecipe::storybook(),
 		),
-		PatchKind::Sparse => TreePatch::sparse_wood(17, Vec3::new(8.0, 0.0, 8.0), Vec2::splat(28.0), 16.0),
+		PatchKind::Sparse => {
+			TreePatch::sparse_wood(17, Vec3::new(8.0, 0.0, 8.0), Vec2::splat(28.0), 16.0)
+		}
 		PatchKind::Willow => TreePatch::willow(29, Vec3::ZERO),
+		PatchKind::WorldForest => unreachable!("world forest spawns Chico groves, not a TreePatch"),
 	}
 }
 
@@ -88,6 +97,7 @@ impl PatchKind {
 			Self::Lod => "lod",
 			Self::Sparse => "sparse",
 			Self::Willow => "willow",
+			Self::WorldForest => "world-forest",
 		}
 	}
 }
