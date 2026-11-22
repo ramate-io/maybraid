@@ -101,8 +101,11 @@ fn claiming_visuals_preserves_sources_and_retains_only_physics_for_storybooks() 
 	let TemperateLowerMassivesKind::Storybook(tree) = &plant.kind else {
 		anyhow::bail!("wrong species")
 	};
-	use bevy::scene::WorldSceneExt;
-	let mut world = World::new();
+	use bevy::scene::{ScenePlugin, WorldSceneExt};
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.add_plugins((AssetPlugin::default(), ScenePlugin));
+	let world = app.world_mut();
 	let entity = world.spawn_scene(storybook_physics_metadata(tree, plant))?.id();
 	assert!(world
 		.get::<FlattenedComponentsOnly<PlacedVegetation<Arc<StorybookTree>>>>(entity)

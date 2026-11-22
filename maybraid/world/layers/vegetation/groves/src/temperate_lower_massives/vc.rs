@@ -19,8 +19,8 @@ use sbs_trees::{
 	StorybookTreeParams,
 };
 use vegetation_components::{
-	scene_children, FlattenedComponentsOnly, PlacedVegetation, Placement, StickNode,
-	VegetationComponents, FLATTENED_KIT_CHUNK_WEIGHT,
+	FlattenedComponentsOnly, PlacedVegetation, Placement, StickNode, VegetationComponents,
+	FLATTENED_KIT_CHUNK_WEIGHT,
 };
 
 use crate::grove::vc_compose::flattened_plant_metadata;

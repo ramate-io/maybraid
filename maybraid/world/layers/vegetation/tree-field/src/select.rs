@@ -277,8 +277,14 @@ mod tests {
 		let mut view = look_view(camera, Vec3::new(0., 8., 0.), 720.);
 		let transform =
 			Transform::from_translation(camera).looking_at(Vec3::new(0., 8., 0.), Vec3::Y);
-		view.clip_from_world = bevy::math::Mat4::perspective_rh(1., 16. / 9., 0.1, 10000.)
-			* transform.to_matrix().inverse();
+		let projection = PerspectiveProjection {
+			fov: 1.,
+			aspect_ratio: 16. / 9.,
+			near: 0.1,
+			far: 10000.,
+			..Default::default()
+		};
+		view.clip_from_world = projection.get_clip_from_view() * transform.to_matrix().inverse();
 		view.world_from_clip = view.clip_from_world.inverse();
 		assert_eq!(TreeSelector::from_view(view, &settings).plant_bucket(&field.plants[0]), None);
 		view.lod_distances.w = f32::MAX;
