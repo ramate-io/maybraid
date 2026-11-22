@@ -4,8 +4,10 @@
 //!
 //! Converted — `GrownGrove` → [`crate::ChicoGroveHost`] (`hcsg.rs`) is the only forest
 //! present path. Every [`crate::ForestGroveKind`] claims a GPU field from existing
-//! roots; High through UltraLow kit chunks go empty. Nested `StickNode` /
-//! `FoliageNode` kit meshes therefore never spawn on the GPU arm.
+//! roots. GPU CPU [`lod::scene::LodScene`] is a single High band that only culls
+//! leftover Mid/Low/far roots; kit chunks stay empty. Nested `StickNode` /
+//! `FoliageNode` kit meshes therefore never spawn on the GPU arm. Stream in/out
+//! is still the 1 km [`crate::GROVE_PRESENT_RADIUS_M`] present ring.
 //!
 //! Intentionally out of scope — not grove tiles, so they keep their own meshes:
 //! - `BumpOutPresentationPlugin` `CanopyBumpOut` / `MediumCanopyBumpOut`
@@ -16,9 +18,9 @@
 //! - Terrain turf / POM ground cover
 
 mod authored;
-mod visuals;
 #[cfg(test)]
 mod parity;
+mod visuals;
 
 use bevy::prelude::*;
 use bevy::render::renderer::{RenderAdapter, RenderDevice};
@@ -198,6 +200,17 @@ mod tests {
 					"GPU host must not emit kit chunks at {level:?}"
 				);
 			}
+			assert_eq!(host.scene_lod_level(lod_ref), LodSceneLevel::High);
+			assert_eq!(host.scene_lod_level_from_levels(&[]), LodSceneLevel::High);
+		});
+		with_lod(Vec3::new(0.0, 20.0, crate::GROVE_PRESENT_RADIUS_M + 500.0), |lod_ref| {
+			assert_eq!(host.scene_lod_level(lod_ref), LodSceneLevel::High);
+			assert!(!host
+				.scene_lod_culls(lod_ref, LodSceneLevel::High)
+				.should_cull(LodSceneLevel::High));
+			assert!(host
+				.scene_lod_culls(lod_ref, LodSceneLevel::High)
+				.should_cull(LodSceneLevel::UltraLow));
 		});
 	}
 

@@ -84,6 +84,10 @@ impl ChicoGroveHost {
 		SceneChunk::primitive(Self::empty_scene())
 	}
 
+	fn gpu_cpu_lod_high_only(&self) -> bool {
+		self.visuals.replaces_kits()
+	}
+
 	fn tuft_high_chunks(&self, lod_ref: &LodRef, min_height_m: f32) -> Option<SceneChunk> {
 		use ForestGroveTile::*;
 		let chunks = match &self.tile {
@@ -121,15 +125,32 @@ impl ChicoGroveHost {
 
 impl LodScene for ChicoGroveHost {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
-		self.tile.scene_lod_level(lod_ref)
+		self.visuals
+			.cpu_scene_lod_level()
+			.unwrap_or_else(|| self.tile.scene_lod_level(lod_ref))
+	}
+
+	fn scene_lod_level_from_levels(&self, lod_refs: &[LodRef]) -> LodSceneLevel {
+		if self.gpu_cpu_lod_high_only() {
+			return LodSceneLevel::High;
+		}
+		lod_refs
+			.iter()
+			.map(|lod_ref| self.scene_lod_level(lod_ref))
+			.max()
+			.unwrap_or(LodSceneLevel::UltraLow)
 	}
 
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
-		self.tile.scene_lod_status(lod_ref)
+		self.visuals
+			.cpu_scene_lod_status()
+			.unwrap_or_else(|| self.tile.scene_lod_status(lod_ref))
 	}
 
 	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
-		self.tile.scene_lod_culls(lod_ref, current)
+		self.visuals
+			.cpu_scene_lod_culls()
+			.unwrap_or_else(|| self.tile.scene_lod_culls(lod_ref, current))
 	}
 
 	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
@@ -175,14 +196,49 @@ mod tests {
 	}
 
 	fn with_lod<R>(translation: Vec3, f: impl FnOnce(&LodRef<'_>) -> R) -> R {
-		let (xf, bounds) = lod_at(translation);
+		with_lod_move(translation, translation, f)
+	}
+
+	fn with_lod_move<R>(previous: Vec3, current: Vec3, f: impl FnOnce(&LodRef<'_>) -> R) -> R {
+		let (prev, bounds) = lod_at(previous);
+		let curr = Transform::from_translation(current);
 		let lod_ref = LodRef {
 			entity: Entity::PLACEHOLDER,
-			previous_transform: &xf,
-			current_transform: &xf,
+			previous_transform: &prev,
+			current_transform: &curr,
 			bounds: &bounds,
 		};
 		f(&lod_ref)
+	}
+
+	fn grow_host(kind: ForestGroveKind, layer: ForestLayer) -> ChicoGroveHost {
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let tile = ForestGroveRecipe::uniform(kind, extent).grow(&forest_world_sample());
+		ChicoGroveHost::new(tile, layer)
+	}
+
+	fn assert_gpu_cpu_lod_high_only(host: &ChicoGroveHost) {
+		use crate::GROVE_PRESENT_RADIUS_M;
+		let near = Vec3::new(50.0, 20.0, 80.0);
+		let far = Vec3::new(50.0, 20.0, GROVE_PRESENT_RADIUS_M + 500.0);
+		assert!(near.length() < GROVE_PRESENT_RADIUS_M);
+		assert!(far.z > GROVE_PRESENT_RADIUS_M);
+		with_lod(near, |lod_ref| {
+			assert_eq!(host.scene_lod_level(lod_ref), LodSceneLevel::High);
+		});
+		with_lod(far, |lod_ref| {
+			assert_eq!(host.scene_lod_level(lod_ref), LodSceneLevel::High);
+			assert_eq!(host.scene_lod_level_from_levels(&[lod_ref.clone()]), LodSceneLevel::High);
+			let culls = host.scene_lod_culls(lod_ref, LodSceneLevel::High);
+			assert!(!culls.should_cull(LodSceneLevel::High));
+			assert!(culls.should_cull(LodSceneLevel::Medium));
+			assert!(culls.should_cull(LodSceneLevel::Low));
+			assert!(culls.should_cull(LodSceneLevel::UltraLow));
+		});
+		with_lod_move(near, far, |lod_ref| {
+			assert_eq!(host.scene_lod_status(lod_ref), LodSceneStatus::Unchanged);
+		});
+		assert_eq!(host.scene_lod_level_from_levels(&[]), LodSceneLevel::High);
 	}
 
 	#[test]
@@ -238,5 +294,41 @@ mod tests {
 			});
 		}
 		crate::GroveGpuVisuals::admit(false);
+	}
+
+	#[test]
+	fn gpu_host_cpu_lod_is_high_only_and_culls_far_bands() {
+		let _lock = crate::GroveGpuVisuals::lock_admission();
+		crate::GroveGpuVisuals::admit(true);
+		let stacked = [
+			(ForestGroveKind::TemperateLowerMassives, ForestLayer::LowerCanopy),
+			(ForestGroveKind::LowBush, ForestLayer::Understory),
+			(ForestGroveKind::TallGrass, ForestLayer::Tufts),
+		];
+		for (kind, layer) in stacked {
+			let host = grow_host(kind, layer);
+			assert!(host.gpu_visuals().replaces_kits(), "{kind:?}");
+			assert_gpu_cpu_lod_high_only(&host);
+		}
+		crate::GroveGpuVisuals::admit(false);
+	}
+
+	#[test]
+	fn legacy_host_still_swaps_cpu_lod_bands() {
+		use crate::GROVE_PRESENT_RADIUS_M;
+		let _lock = crate::GroveGpuVisuals::lock_admission();
+		crate::GroveGpuVisuals::admit(false);
+		let host = grow_host(ForestGroveKind::TemperateLowerMassives, ForestLayer::LowerCanopy);
+		assert!(!host.gpu_visuals().replaces_kits());
+		let near = Vec3::new(50.0, 20.0, 80.0);
+		let far = Vec3::new(50.0, 20.0, GROVE_PRESENT_RADIUS_M + 500.0);
+		let near_level = with_lod(near, |lod_ref| host.scene_lod_level(lod_ref));
+		let far_level = with_lod(far, |lod_ref| host.scene_lod_level(lod_ref));
+		assert_eq!(near_level, LodSceneLevel::High);
+		assert_ne!(far_level, LodSceneLevel::High);
+		with_lod_move(near, far, |lod_ref| {
+			assert_eq!(host.scene_lod_status(lod_ref), LodSceneStatus::Changed(far_level));
+		});
+		assert_eq!(host.scene_lod_level_from_levels(&[]), LodSceneLevel::UltraLow);
 	}
 }

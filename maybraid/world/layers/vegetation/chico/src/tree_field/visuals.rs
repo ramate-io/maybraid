@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};
 
 use bevy::prelude::*;
+use lod::scene::{LodSceneCull, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use vegetation_bush_field::{BushPatch, BushRecipe};
 use vegetation_grass_field::GrassPatch;
 use vegetation_groves::GrovePlantSite;
@@ -42,6 +43,30 @@ impl GroveGpuVisuals {
 
 	pub fn replaces_kits(&self) -> bool {
 		self.trees.is_some() || self.bushes.is_some() || self.grass.is_some()
+	}
+
+	/// GPU shaders own vegetation LOD. CPU presentation is a single High band.
+	pub fn cpu_scene_lod_level(&self) -> Option<LodSceneLevel> {
+		self.replaces_kits().then_some(LodSceneLevel::High)
+	}
+
+	/// No Mid/Low/far CPU band swaps while GPU fields stay nested at High.
+	pub fn cpu_scene_lod_status(&self) -> Option<LodSceneStatus> {
+		self.replaces_kits().then_some(LodSceneStatus::Unchanged)
+	}
+
+	/// Cull leftover non-High roots. Host stream-out is the 1 km present ring.
+	pub fn cpu_scene_lod_culls(&self) -> Option<LodSceneCulls> {
+		self.replaces_kits().then_some(Self::cpu_high_only_culls())
+	}
+
+	pub fn cpu_high_only_culls() -> LodSceneCulls {
+		LodSceneCulls::AllOf(vec![
+			LodSceneCull::Level(LodSceneLevel::Medium),
+			LodSceneCull::Level(LodSceneLevel::Low),
+			LodSceneCull::Level(LodSceneLevel::UltraLow),
+		])
+		.with_customs()
 	}
 
 	pub fn claim(tile: &ForestGroveTile, layer: ForestLayer, settings: &TreeFieldSettings) -> Self {

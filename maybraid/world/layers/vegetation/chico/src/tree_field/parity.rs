@@ -6,7 +6,7 @@ use std::time::Instant;
 use bevy::prelude::*;
 use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
-use lod::scene::{LodScene, LodSceneLevel};
+use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 use vegetation_groves::GroveExtent;
 
 use super::{owner_settings, GpuFieldKind, GroveGpuVisuals};
@@ -14,6 +14,7 @@ use crate::grove::forest_world_sample;
 use crate::{
 	neighbor_layers, presenting_recipes, select_layering, ChicoGroveHost, ForestExtent,
 	ForestLayer, ForestSelection, LayeringKind, DEFAULT_FOREST_GROVE_TILE_XZ,
+	GROVE_PRESENT_RADIUS_M,
 };
 
 const PARITY_REL: f32 = 0.20;
@@ -221,14 +222,45 @@ fn lod_at(translation: Vec3) -> (Transform, Aabb3d) {
 }
 
 fn with_lod<R>(translation: Vec3, f: impl FnOnce(&LodRef<'_>) -> R) -> R {
-	let (xf, bounds) = lod_at(translation);
+	with_lod_move(translation, translation, f)
+}
+
+fn with_lod_move<R>(previous: Vec3, current: Vec3, f: impl FnOnce(&LodRef<'_>) -> R) -> R {
+	let (prev, bounds) = lod_at(previous);
+	let curr = Transform::from_translation(current);
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
-		previous_transform: &xf,
-		current_transform: &xf,
+		previous_transform: &prev,
+		current_transform: &curr,
 		bounds: &bounds,
 	};
 	f(&lod_ref)
+}
+
+fn assert_gpu_cpu_lod_high_only(host: &ChicoGroveHost, origin: Vec3) {
+	let near = origin + Vec3::new(50.0, 20.0, 80.0);
+	let far = origin + Vec3::new(50.0, 20.0, GROVE_PRESENT_RADIUS_M + 500.0);
+	assert!(near.distance(origin) < GROVE_PRESENT_RADIUS_M);
+	assert!(far.distance(origin) > GROVE_PRESENT_RADIUS_M);
+	with_lod(near, |lod_ref| {
+		assert_eq!(host.scene_lod_level(lod_ref), LodSceneLevel::High);
+		assert_eq!(
+			host.scene_chunks_with_level(lod_ref, LodSceneLevel::High).total_primitives(),
+			1
+		);
+	});
+	with_lod(far, |lod_ref| {
+		assert_eq!(host.scene_lod_level(lod_ref), LodSceneLevel::High);
+		assert_eq!(host.scene_lod_level_from_levels(&[]), LodSceneLevel::High);
+		let culls = host.scene_lod_culls(lod_ref, LodSceneLevel::High);
+		assert!(!culls.should_cull(LodSceneLevel::High));
+		assert!(culls.should_cull(LodSceneLevel::Medium));
+		assert!(culls.should_cull(LodSceneLevel::Low));
+		assert!(culls.should_cull(LodSceneLevel::UltraLow));
+	});
+	with_lod_move(near, far, |lod_ref| {
+		assert_eq!(host.scene_lod_status(lod_ref), LodSceneStatus::Unchanged);
+	});
 }
 
 fn center_grove_tile(forest: ForestExtent) -> GroveExtent {
@@ -241,8 +273,16 @@ fn center_grove_tile(forest: ForestExtent) -> GroveExtent {
 	.next()
 	.unwrap_or_else(|| {
 		GroveExtent::new(
-			c - Vec3::new(DEFAULT_FOREST_GROVE_TILE_XZ * 0.5, 0.0, DEFAULT_FOREST_GROVE_TILE_XZ * 0.5),
-			c + Vec3::new(DEFAULT_FOREST_GROVE_TILE_XZ * 0.5, 1.0, DEFAULT_FOREST_GROVE_TILE_XZ * 0.5),
+			c - Vec3::new(
+				DEFAULT_FOREST_GROVE_TILE_XZ * 0.5,
+				0.0,
+				DEFAULT_FOREST_GROVE_TILE_XZ * 0.5,
+			),
+			c + Vec3::new(
+				DEFAULT_FOREST_GROVE_TILE_XZ * 0.5,
+				1.0,
+				DEFAULT_FOREST_GROVE_TILE_XZ * 0.5,
+			),
 		)
 	})
 }
@@ -346,20 +386,7 @@ fn hopscotch_biome_tiles_keep_counts_layers_and_sizes() {
 		}
 		for host in &hosts {
 			if host.gpu_visuals().replaces_kits() {
-				with_lod(tile.min() + Vec3::new(50.0, 20.0, 80.0), |lod_ref| {
-					for level in [
-						LodSceneLevel::High,
-						LodSceneLevel::Medium,
-						LodSceneLevel::Low,
-						LodSceneLevel::UltraLow,
-					] {
-						assert_eq!(
-							host.scene_chunks_with_level(lod_ref, level).total_primitives(),
-							1,
-							"{layering:?} kit chunks at {level:?}"
-						);
-					}
-				});
+				assert_gpu_cpu_lod_high_only(host, tile.min());
 			}
 		}
 		rows.push(TileParity::from_hosts(*layering, tile.min(), &hosts));
@@ -372,10 +399,7 @@ fn hopscotch_biome_tiles_keep_counts_layers_and_sizes() {
 		.map(|row| (row.layering, row.flags()))
 		.collect();
 	GroveGpuVisuals::admit(false);
-	assert!(
-		flagged.is_empty(),
-		"GPU vs legacy off by >20% on hopscotch tiles: {flagged:?}"
-	);
+	assert!(flagged.is_empty(), "GPU vs legacy off by >20% on hopscotch tiles: {flagged:?}");
 }
 
 #[test]
@@ -405,30 +429,14 @@ fn hopscotch_world_walk_streams_gpu_hosts_without_kit_chunks() {
 				"walk {i} {layering:?} leftover kits"
 			);
 			if host.gpu_visuals().replaces_kits() {
-				with_lod(tile.min() + Vec3::new(50.0, 20.0, 80.0), |lod_ref| {
-					assert_eq!(
-						host.scene_chunks_with_level(lod_ref, LodSceneLevel::High).total_primitives(),
-						1
-					);
-					assert_eq!(
-						host.scene_chunks_with_level(lod_ref, LodSceneLevel::Low).total_primitives(),
-						1
-					);
-				});
+				assert_gpu_cpu_lod_high_only(host, tile.min());
 			}
-			trees += host.gpu_visuals().trees.as_ref().map(|grove| grove.0.plants.len()).unwrap_or(0);
-			bushes += host
-				.gpu_visuals()
-				.bushes
-				.as_ref()
-				.map(|patch| patch.samples.len())
-				.unwrap_or(0);
-			grass += host
-				.gpu_visuals()
-				.grass
-				.as_ref()
-				.map(|patch| patch.samples.len())
-				.unwrap_or(0);
+			trees +=
+				host.gpu_visuals().trees.as_ref().map(|grove| grove.0.plants.len()).unwrap_or(0);
+			bushes +=
+				host.gpu_visuals().bushes.as_ref().map(|patch| patch.samples.len()).unwrap_or(0);
+			grass +=
+				host.gpu_visuals().grass.as_ref().map(|patch| patch.samples.len()).unwrap_or(0);
 		}
 		let origin = tile.min();
 		if let Some(prev) = previous {

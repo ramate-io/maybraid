@@ -20,7 +20,7 @@ use lod::hcsg::{
 	self, register_session_seed, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
-use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
+use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use procedural_common::union_aabb3_iter;
 use render_item::mesh::{IdentifiedMesh, MeshBuilder};
 use render_item::NormalizeChunk;
@@ -35,7 +35,7 @@ use crate::grove::{grove_from_id, grove_id};
 use crate::plugin::register_vegetation_view;
 use crate::{
 	presenting_recipes, ChicoForest, ChicoGrove, ChicoGroveHost, ForestExtent, ForestGroveTile,
-	ForestLayer, ForestSelection, NeighborLayers, DEFAULT_FOREST_EXTENT_XZ,
+	ForestLayer, ForestSelection, GroveGpuVisuals, NeighborLayers, DEFAULT_FOREST_EXTENT_XZ,
 	DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_PRESENT_RADIUS_M,
 };
 
@@ -320,11 +320,36 @@ impl<G: ForestGround> hcsg::GenerationScheme for GrownGrove<G> {
 	}
 }
 
-/// One level holding a nested [`ChicoGroveHost`] per tile; each tile keeps
-/// its own levels.
+impl<G> GrownGrove<G> {
+	fn gpu_cpu_lod_high_only() -> bool {
+		GroveGpuVisuals::admitted()
+	}
+}
+
+/// One level holding a nested [`ChicoGroveHost`] per tile. GPU presentation is
+/// High-only; each legacy tile still keeps its own Mid/Low bands.
 impl<G: ForestGround> LodScene for GrownGrove<G> {
+	fn scene_lod_level_from_levels(&self, lod_refs: &[LodRef]) -> LodSceneLevel {
+		if Self::gpu_cpu_lod_high_only() {
+			return LodSceneLevel::High;
+		}
+		lod_refs
+			.iter()
+			.map(|lod_ref| self.scene_lod_level(lod_ref))
+			.max()
+			.unwrap_or(LodSceneLevel::UltraLow)
+	}
+
 	fn scene_lod_status(&self, _lod_ref: &LodRef) -> LodSceneStatus {
 		LodSceneStatus::Unchanged
+	}
+
+	fn scene_lod_culls(&self, _lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+		if Self::gpu_cpu_lod_high_only() {
+			GroveGpuVisuals::cpu_high_only_culls()
+		} else {
+			LodSceneCulls::None
+		}
 	}
 
 	fn scene_with_level(&self, lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
@@ -955,6 +980,17 @@ mod tests {
 			push_grove_ids_for_tile(&mut ids, tile, &forest, &neighbors);
 		}
 		ids
+	}
+
+	#[test]
+	fn grove_neighborhood_streams_origin_tile_out_beyond_present_radius() {
+		let origin = Vec3::new(50.0, 0.0, 50.0);
+		let far = Vec3::new(50.0, 0.0, GROVE_PRESENT_RADIUS_M + 500.0);
+		let near_region = GroveNeighborhood::around(origin, GROVE_PRESENT_RADIUS_M);
+		let far_region = GroveNeighborhood::around(far, GROVE_PRESENT_RADIUS_M);
+		assert!(origin.x >= near_region.min.x && origin.x <= near_region.max.x);
+		assert!(origin.z >= near_region.min.z && origin.z <= near_region.max.z);
+		assert!(origin.z < far_region.min.z || origin.z > far_region.max.z);
 	}
 
 	#[test]

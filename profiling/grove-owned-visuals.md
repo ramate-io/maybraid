@@ -136,7 +136,9 @@ Intentionally out of scope (not grove tiles): 1–5 km `CanopyBumpOut` / `Medium
 | Waiguo | -14500,9500 | 3/3 | 425/425 | 0/0 | 1448/1448 | 2.45 | 0 | 1.78 | ok |
 | WestMaui | -25700,-8100 | 4/4 | 7/7 | 0/0 | 322/322 | 4.58 | 0 | 0.74 | ok |
 
-`hopscotch_world_walk_streams_gpu_hosts_without_kit_chunks` walks ten 1600 m cells along x=-4950 (LushJungle, SteppeDown, OldSteppe, Riparian, TemperateHoly, OwlsDesert). No leftover kit chunks, tiles stream in/out, no panics. This is the real `presenting_recipes` → `ChicoGroveHost` spawn path on flat ground, not a live HCSG terrain session.
+GPU CPU `LodScene` is a single High band: no Mid/Low/UltraLow vegetation spawn or swap. `scene_lod_status` stays `Unchanged` when the viewer walks from the tile into the far ring; leftover non-High roots are culled. Stream in/out is still the 1 km present ring (`GROVE_PRESENT_RADIUS_M`). Legacy kits keep High/Mid/Low/UltraLow banding.
+
+`hopscotch_world_walk_streams_gpu_hosts_without_kit_chunks` walks ten 1600 m cells along x=-4950 (LushJungle, SteppeDown, OldSteppe, Riparian, TemperateHoly, OwlsDesert). No leftover kit chunks, no CPU band churn, tiles stream in/out, no panics. This is the real `presenting_recipes` → `ChicoGroveHost` spawn path on flat ground, not a live HCSG terrain session.
 
 Playground hopscotch walk captures (llvmpipe Mesa 25.2.8, 960×540, shadows off). GPU `kit_meshes=0`. Kit start/mid p95 250 ms is Bevy's max-delta clamp. Grass receipt includes 24,336 playground turf blades.
 
