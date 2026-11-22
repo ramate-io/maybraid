@@ -49,6 +49,74 @@ pub enum ForestGroveKind {
 	WildGrass,
 }
 
+impl ForestGroveKind {
+	/// Every grove identity the forest owner can select.
+	pub const ALL: &[Self] = &[
+		Self::Alpine,
+		Self::AridConiferSapling,
+		Self::BraidGrass,
+		Self::BushScrub,
+		Self::ChristmasTaiga,
+		Self::CommonTufts,
+		Self::ConiferMassives,
+		Self::ConiferSapling,
+		Self::DateGrove,
+		Self::Dryland,
+		Self::ForlornSavanna,
+		Self::GoettingenFollow,
+		Self::HighBush,
+		Self::JerrysChaparral,
+		Self::JungleLowerMassives,
+		Self::JungleMassives,
+		Self::Leeward,
+		Self::LevantineScrub,
+		Self::LowBush,
+		Self::MonsterGrass,
+		Self::Orchard,
+		Self::PalmShade,
+		Self::RiparianGeneral,
+		Self::RiparianMix,
+		Self::RiverineGreen,
+		Self::RollingOaks,
+		Self::Shamanhome,
+		Self::SpottyBushes,
+		Self::Storytellers,
+		Self::StrangeOasis,
+		Self::TallGrass,
+		Self::TemperateLowerMassives,
+		Self::TemperateMassives,
+		Self::TradeWinds,
+		Self::TropicalThicket,
+		Self::TropicalTufts,
+		Self::TropicalUndergrowth,
+		Self::UnendingJungle,
+		Self::Vineyard,
+		Self::WanderingAcacia,
+		Self::WildGrass,
+	];
+
+	/// Isolated-grow layer for GPU recomposition: tufts, smaller woody, or canopy.
+	pub fn gpu_layer(self) -> ForestLayer {
+		match self {
+			Self::BraidGrass
+			| Self::CommonTufts
+			| Self::MonsterGrass
+			| Self::TallGrass
+			| Self::TropicalTufts
+			| Self::WildGrass => ForestLayer::Tufts,
+			Self::BushScrub
+			| Self::HighBush
+			| Self::JerrysChaparral
+			| Self::LevantineScrub
+			| Self::LowBush
+			| Self::SpottyBushes
+			| Self::TropicalUndergrowth
+			| Self::Vineyard => ForestLayer::Understory,
+			_ => ForestLayer::LowerCanopy,
+		}
+	}
+}
+
 /// Well-known forest layering ([RFC-183 §3.5.4]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LayeringKind {
@@ -280,6 +348,7 @@ mod tests {
 
 	#[test]
 	fn kebab_round_trips_every_layering() -> Result<()> {
+		assert_eq!(ForestGroveKind::ALL.len(), 41);
 		assert_eq!(LayeringKind::ALL.len(), 24);
 		for kind in LayeringKind::ALL {
 			let name = kind.as_kebab();

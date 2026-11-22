@@ -2,8 +2,8 @@
 
 use bevy::math::{Vec2, Vec3};
 use vegetation_shaders::wesl::{
-	attachment_frame, branch_rest_sample, deform_along_curve, leaf_surface_vertex, CurveSample,
-	LocalFrame,
+	CurveSample, LocalFrame, attachment_frame, branch_rest_sample, deform_along_curve,
+	leaf_surface_vertex,
 };
 
 use crate::layout::{BranchDescriptor, LeafDescriptor, PlantDescriptor};
@@ -21,7 +21,7 @@ impl BranchDescriptor {
 	pub fn world_sample(
 		self,
 		branches: &[BranchDescriptor],
-		plant: &PlantDescriptor,
+		_plant: &PlantDescriptor,
 		t: f32,
 		wind_xz: Vec2,
 	) -> CurveSample {
@@ -38,7 +38,7 @@ impl BranchDescriptor {
 		}
 		let trunk = chain[(hops - 1) as usize];
 		let trunk_t = if hops == 1 { t } else { chain[(hops - 2) as usize].parent_t };
-		let mut sample = deform_trunk(trunk, plant.root, trunk_t, wind_xz);
+		let mut sample = deform_trunk(trunk, trunk.p0, trunk_t, wind_xz);
 		if hops == 1 {
 			return sample;
 		}
@@ -48,6 +48,20 @@ impl BranchDescriptor {
 			sample = deform_child(child, child_t, sample, wind_xz);
 		}
 		sample
+	}
+
+	/// Count the parent walk this branch takes, including itself. Capped at [`MAX_ATTACH_HOPS`].
+	pub fn attachment_hops(self, branches: &[BranchDescriptor]) -> u32 {
+		let mut hops = 1u32;
+		let mut current = self;
+		while !current.is_trunk() && hops < MAX_ATTACH_HOPS {
+			let Some(parent) = branches.get(current.parent_index as usize).copied() else {
+				break;
+			};
+			hops += 1;
+			current = parent;
+		}
+		hops
 	}
 }
 
@@ -82,7 +96,8 @@ fn deform_trunk(branch: BranchDescriptor, root: Vec3, t: f32, wind_xz: Vec2) -> 
 	let rest = branch.rest_sample(t);
 	let position = deform_along_curve(rest.position, root, t, wind_xz, branch.stiffness);
 	let rest_hi = branch.rest_sample((t + 0.02).min(1.0));
-	let hi = deform_along_curve(rest_hi.position, root, (t + 0.02).min(1.0), wind_xz, branch.stiffness);
+	let hi =
+		deform_along_curve(rest_hi.position, root, (t + 0.02).min(1.0), wind_xz, branch.stiffness);
 	let tangent = hi - position;
 	let frame = vegetation_shaders::wesl::stable_frame(tangent, Vec3::Y);
 	CurveSample { position, tangent: frame.along, frame }
@@ -124,25 +139,39 @@ mod tests {
 	use crate::recipe::TreeRecipe;
 	use crate::topology::TreePlant;
 	use bevy::math::Vec3Swizzles;
-	use vegetation_shaders::wesl::{wind_field, WindInputs};
+	use vegetation_shaders::wesl::{WindInputs, wind_field};
+
+	#[test]
+	fn imported_root_branch_keeps_its_authored_anchor() {
+		let plant = TreePlant::generate(1, 0, Vec3::ZERO, Vec3::Y, 1., &TreeRecipe::storybook());
+		let mut branch = plant.branches[0];
+		branch.p0 += Vec3::new(4., 9., -2.);
+		branch.p1 += Vec3::new(4., 9., -2.);
+		branch.p2 += Vec3::new(4., 9., -2.);
+		branch.stiffness = 1.;
+		let sample = branch.world_sample(&[branch], &plant.descriptor, 0., Vec2::new(3., 1.));
+		assert!((sample.position - branch.p0).length() < 1e-4);
+	}
 
 	#[test]
 	fn child_stays_welded_through_gusts() -> anyhow::Result<()> {
-		let plant = TreePlant::generate(5, 0, Vec3::new(3.0, 0.0, -2.0), Vec3::Y, 1.0, &TreeRecipe::storybook());
+		let plant = TreePlant::generate(
+			5,
+			0,
+			Vec3::new(3.0, 0.0, -2.0),
+			Vec3::Y,
+			1.0,
+			&TreeRecipe::storybook(),
+		);
 		let wind = wind_field(plant.descriptor.root.xz(), WindInputs::botw_gust(1.85));
 		for branch in &plant.branches {
 			if branch.is_trunk() {
 				continue;
 			}
 			let parent = plant.branches[branch.parent_index as usize];
-			let attach = parent.world_sample(
-				&plant.branches,
-				&plant.descriptor,
-				branch.parent_t,
-				wind,
-			);
-			let child_root =
-				branch.world_sample(&plant.branches, &plant.descriptor, 0.0, wind);
+			let attach =
+				parent.world_sample(&plant.branches, &plant.descriptor, branch.parent_t, wind);
+			let child_root = branch.world_sample(&plant.branches, &plant.descriptor, 0.0, wind);
 			assert!(
 				(child_root.position - attach.position).length() < 0.12,
 				"child detached {} from parent {}",
@@ -160,7 +189,8 @@ mod tests {
 		for leaf in &plant.leaves {
 			let (origin, _) = leaf.world_base(&plant.branches, &plant.descriptor, wind);
 			let parent = plant.branches[leaf.parent_branch as usize];
-			let sample = parent.world_sample(&plant.branches, &plant.descriptor, leaf.attach_t, wind);
+			let sample =
+				parent.world_sample(&plant.branches, &plant.descriptor, leaf.attach_t, wind);
 			assert!((origin - sample.position).length() < 1e-3);
 		}
 		Ok(())
@@ -168,7 +198,14 @@ mod tests {
 
 	#[test]
 	fn trunk_root_stays_pinned() -> anyhow::Result<()> {
-		let plant = TreePlant::generate(1, 0, Vec3::new(-4.0, 1.0, 6.0), Vec3::Y, 1.0, &TreeRecipe::leafless_storybook());
+		let plant = TreePlant::generate(
+			1,
+			0,
+			Vec3::new(-4.0, 1.0, 6.0),
+			Vec3::Y,
+			1.0,
+			&TreeRecipe::leafless_storybook(),
+		);
 		let trunk = plant.branches[0];
 		let wind = Vec2::new(3.0, 1.0);
 		let root = trunk.world_sample(&plant.branches, &plant.descriptor, 0.0, wind);
@@ -177,8 +214,23 @@ mod tests {
 	}
 
 	#[test]
+	fn grove_patch_attachment_stays_within_hop_budget() -> anyhow::Result<()> {
+		use crate::patch::TreePatch;
+		let patch = TreePatch::grove(9, Vec3::ZERO, Vec2::splat(36.0), 12.0);
+		for plant in patch.plants() {
+			assert!(plant.attachment_is_bounded());
+			for branch in &plant.branches {
+				assert!(branch.attachment_hops(&plant.branches) <= MAX_ATTACH_HOPS);
+				assert!(branch.depth <= crate::topology::MAX_BRANCH_DEPTH);
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn degenerate_frames_stay_unit_and_welded() -> anyhow::Result<()> {
-		let plant = TreePlant::generate(2, 0, Vec3::ZERO, Vec3::Y, 1.0, &TreeRecipe::leafless_storybook());
+		let plant =
+			TreePlant::generate(2, 0, Vec3::ZERO, Vec3::Y, 1.0, &TreeRecipe::leafless_storybook());
 		let wind = Vec2::ZERO;
 		for branch in &plant.branches {
 			let sample = branch.world_sample(&plant.branches, &plant.descriptor, 0.5, wind);

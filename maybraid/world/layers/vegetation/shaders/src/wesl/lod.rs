@@ -53,6 +53,46 @@ impl LodThresholds {
 		}
 	}
 
+	/// Grove-owned tree fields replace High (~400 m), Medium (~500 m), and Low
+	/// (to the 1 km present ring). `card_m` is unbounded so residency culls.
+	pub fn grove_tree() -> Self {
+		Self {
+			near_m: 400.0,
+			mid_m: 520.0,
+			card_m: f32::MAX,
+			near_density: 1.0,
+			mid_density: 1.0,
+			card_density: 0.22,
+			min_height_px: 1.0,
+		}
+	}
+
+	/// Grove-owned bushes: same High/Medium/Low distances as the grove tile.
+	pub fn grove_bush() -> Self {
+		Self {
+			near_m: 400.0,
+			mid_m: 520.0,
+			card_m: f32::MAX,
+			near_density: 1.0,
+			mid_density: 0.85,
+			card_density: 0.28,
+			min_height_px: 1.0,
+		}
+	}
+
+	/// Grove-owned grass: density falloff across the 1 km present ring.
+	pub fn grove_grass() -> Self {
+		Self {
+			near_m: 400.0,
+			mid_m: 520.0,
+			card_m: f32::MAX,
+			near_density: 1.0,
+			mid_density: 0.72,
+			card_density: 0.38,
+			min_height_px: 1.0,
+		}
+	}
+
 	pub fn nested_ok(self) -> bool {
 		self.near_density >= self.mid_density && self.mid_density >= self.card_density
 	}
@@ -141,6 +181,14 @@ mod tests {
 		assert!(t.nested_ok());
 		assert!(LodThresholds::bush_default().nested_ok());
 		assert!(LodThresholds::tree_default().nested_ok());
+		assert!(LodThresholds::grove_tree().nested_ok());
+		assert!(LodThresholds::grove_bush().nested_ok());
+		assert!(LodThresholds::grove_grass().nested_ok());
+		let grove = LodThresholds::grove_tree();
+		assert_eq!(lod_bucket(50.0, 12.0, 0.0, 1080.0, 1.0, grove), GRASS_LOD_NEAR);
+		assert_eq!(lod_bucket(200.0, 12.0, 0.0, 1080.0, 1.0, grove), GRASS_LOD_NEAR);
+		assert_eq!(lod_bucket(450.0, 12.0, 0.0, 1080.0, 1.0, grove), GRASS_LOD_MID);
+		assert_eq!(lod_bucket(900.0, 12.0, 0.0, 1080.0, 1.0, grove), GRASS_LOD_CARD);
 		let mut far_ids = Vec::new();
 		for i in 0..64u32 {
 			let rank = VegetationHash::density_rank(VegetationHash::plant_id(11, i));

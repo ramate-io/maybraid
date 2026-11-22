@@ -321,7 +321,7 @@ impl<G: ForestGround> hcsg::GenerationScheme for GrownGrove<G> {
 }
 
 /// One level holding a nested [`ChicoGroveHost`] per tile; each tile keeps
-/// its own levels.
+/// its own levels. GPU hosts are High-only inside that nested wrapper.
 impl<G: ForestGround> LodScene for GrownGrove<G> {
 	fn scene_lod_status(&self, _lod_ref: &LodRef) -> LodSceneStatus {
 		LodSceneStatus::Unchanged
@@ -465,6 +465,7 @@ mod tests {
 
 	/// Groves on a 2×2 fine patch at the origin, viewed from `at`.
 	fn app(at: Vec3) -> App {
+		crate::GroveGpuVisuals::admit(false);
 		let mut app = App::new();
 		app.add_plugins((MinimalPlugins, StatesPlugin))
 			.add_plugins((AssetPlugin::default(), ScenePlugin))
@@ -955,6 +956,17 @@ mod tests {
 			push_grove_ids_for_tile(&mut ids, tile, &forest, &neighbors);
 		}
 		ids
+	}
+
+	#[test]
+	fn grove_neighborhood_streams_origin_tile_out_beyond_present_radius() {
+		let origin = Vec3::new(50.0, 0.0, 50.0);
+		let far = Vec3::new(50.0, 0.0, GROVE_PRESENT_RADIUS_M + 500.0);
+		let near_region = GroveNeighborhood::around(origin, GROVE_PRESENT_RADIUS_M);
+		let far_region = GroveNeighborhood::around(far, GROVE_PRESENT_RADIUS_M);
+		assert!(origin.x >= near_region.min.x && origin.x <= near_region.max.x);
+		assert!(origin.z >= near_region.min.z && origin.z <= near_region.max.z);
+		assert!(origin.z < far_region.min.z || origin.z > far_region.max.z);
 	}
 
 	#[test]

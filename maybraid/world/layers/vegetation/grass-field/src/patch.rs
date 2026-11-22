@@ -18,15 +18,26 @@ pub struct SurfaceSample {
 	pub root: Vec3,
 	/// Unit surface normal.
 	pub normal: Vec3,
+	/// Blade height override in metres. `None` uses the patch species height.
+	pub height_m: Option<f32>,
 }
 
 impl SurfaceSample {
 	pub fn planar(root: Vec3) -> Self {
-		Self { root, normal: Vec3::Y }
+		Self { root, normal: Vec3::Y, height_m: None }
 	}
 
 	pub fn on_slope(root: Vec3, normal: Vec3) -> Self {
-		Self { root, normal: normal.normalize_or_zero().normalize_or(Vec3::Y) }
+		Self { root, normal: normal.normalize_or_zero().normalize_or(Vec3::Y), height_m: None }
+	}
+
+	pub fn with_height(mut self, height_m: f32) -> Self {
+		self.height_m = Some(height_m.max(1e-4));
+		self
+	}
+
+	pub fn blade_height_m(self, species_height_m: f32) -> f32 {
+		self.height_m.unwrap_or(species_height_m).max(0.05)
 	}
 }
 
@@ -38,6 +49,8 @@ pub struct GrassPatch {
 	pub coverage: f32,
 	pub samples: Vec<SurfaceSample>,
 	pub lod: GrassPatchLod,
+	/// Grove-owned patches keep presence to the 1 km present ring.
+	pub grove_residency: bool,
 }
 
 impl GrassPatch {
@@ -53,6 +66,7 @@ impl GrassPatch {
 			coverage: coverage.clamp(0.0, 1.0),
 			samples,
 			lod: GrassPatchLod::High,
+			grove_residency: false,
 		}
 	}
 
@@ -67,6 +81,40 @@ impl GrassPatch {
 			1.0,
 			grid_samples(origin, extent_xz, spacing_m, seed, Vec3::Y),
 		)
+	}
+
+	/// One sample per existing plant root.
+	pub fn from_roots(seed: u32, roots: impl IntoIterator<Item = Vec3>) -> Self {
+		let samples = roots.into_iter().map(SurfaceSample::planar).collect();
+		Self::new(seed, GrassSpecies::meadow(), 1.0, samples)
+	}
+
+	/// Existing grove tufts: one blade per root, height taken from the authored plant.
+	pub fn from_height_sites(seed: u32, sites: impl IntoIterator<Item = (Vec3, f32)>) -> Self {
+		Self::from_oriented_height_sites(
+			seed,
+			sites.into_iter().map(|(root, height_m)| (root, Vec3::Y, height_m)),
+		)
+	}
+
+	/// Existing grove tufts: world roots, surface normals, and authored blade heights.
+	pub fn from_oriented_height_sites(
+		seed: u32,
+		sites: impl IntoIterator<Item = (Vec3, Vec3, f32)>,
+	) -> Self {
+		let samples: Vec<_> = sites
+			.into_iter()
+			.map(|(root, normal, height_m)| {
+				SurfaceSample::on_slope(root, normal).with_height(height_m)
+			})
+			.collect();
+		let mean = if samples.is_empty() {
+			GrassSpecies::meadow().height_m
+		} else {
+			samples.iter().map(|sample| sample.blade_height_m(0.0)).sum::<f32>()
+				/ samples.len() as f32
+		};
+		Self::new(seed, GrassSpecies::meadow().with_coverage_height(mean), 1.0, samples)
 	}
 
 	/// Same grid as [`Self::dense_field`] but with a constant surface normal (slopes / SDF).
@@ -103,6 +151,11 @@ impl GrassPatch {
 		self
 	}
 
+	pub fn with_grove_residency(mut self) -> Self {
+		self.grove_residency = true;
+		self
+	}
+
 	pub fn with_species(mut self, species: GrassSpecies) -> Self {
 		self.species = species;
 		self
@@ -113,9 +166,10 @@ impl GrassPatch {
 	}
 
 	pub fn bounds(&self, settings: &GrassFieldSettings) -> GrassBounds {
+		let fallback = self.species.height_m * (1.0 + self.species.height_jitter);
 		GrassBounds::from_samples(
 			&self.samples,
-			self.species.height_m * (1.0 + self.species.height_jitter),
+			fallback,
 			settings.wind.strength_m,
 			self.species.stiffness,
 		)
@@ -168,8 +222,9 @@ impl GrassPatch {
 		rank: f32,
 	) -> BladeDescriptor {
 		let jitter = 0.65 + 0.35 * vegetation_shaders::wesl::hash_u32_to_unit(id ^ 0x27d4eb2d);
-		let height =
-			self.species.height_m * (1.0 + self.species.height_jitter * (jitter - 0.5) * 2.0);
+		let height = sample.height_m.unwrap_or_else(|| {
+			self.species.height_m * (1.0 + self.species.height_jitter * (jitter - 0.5) * 2.0)
+		});
 		let yaw = hash_u32(id ^ 0x165667b1) as f32 * (core::f32::consts::TAU / 4_294_967_295.0);
 		let (sin_y, cos_y) = yaw.sin_cos();
 		let tangent = sample.normal.any_orthonormal_vector();
@@ -256,6 +311,27 @@ mod tests {
 		let ids_a: Vec<_> = a.descriptors().iter().map(|d| d.plant_id).collect();
 		let ids_b: Vec<_> = b.descriptors().iter().map(|d| d.plant_id).collect();
 		assert_eq!(ids_a, ids_b);
+		Ok(())
+	}
+
+	#[test]
+	fn from_height_sites_keeps_authored_blade_heights() -> anyhow::Result<()> {
+		let patch =
+			GrassPatch::from_height_sites(3, [(Vec3::ZERO, 0.4), (Vec3::new(1.0, 0.0, 0.0), 1.6)]);
+		let heights: Vec<_> = patch.descriptors().iter().map(|d| d.height_m).collect();
+		assert_eq!(heights.len(), 2);
+		assert!(heights.iter().any(|h| (*h - 0.4).abs() < 1e-4), "{heights:?}");
+		assert!(heights.iter().any(|h| (*h - 1.6).abs() < 1e-4), "{heights:?}");
+		Ok(())
+	}
+
+	#[test]
+	fn oriented_height_sites_keep_normals() -> anyhow::Result<()> {
+		let up = Vec3::new(0.1, 1.0, 0.0).normalize();
+		let patch = GrassPatch::from_oriented_height_sites(3, [(Vec3::ZERO, up, 0.8)]);
+		assert_eq!(patch.samples.len(), 1);
+		assert!((patch.samples[0].normal - up).length() < 1e-4);
+		assert_eq!(patch.samples[0].height_m, Some(0.8));
 		Ok(())
 	}
 }

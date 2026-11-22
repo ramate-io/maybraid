@@ -9,7 +9,7 @@ use lod::scene::LodSceneLevel;
 use sbs_geometry::StorybookTreeSbs;
 use sbs_trees::{StorybookTree, StorybookTreeParams};
 use vegetation_components::{FoliageGeometry, VegetationComponents};
-use vegetation_tree_field::TreePatch;
+use vegetation_tree_field::{TreePatch, TreeRecipe};
 
 #[derive(Component)]
 pub struct KitPreview;
@@ -21,12 +21,66 @@ pub fn clear_kit(world: &mut World) {
 	}
 }
 
+pub fn spawn_kit_from_height_sites(world: &mut World, sites: &[vegetation_groves::GrovePlantSite]) {
+	if sites.is_empty() {
+		return;
+	}
+	let placements: Vec<(Vec3, f32)> =
+		sites.iter().map(|site| (site.root, site.height_m)).collect();
+	let patch = TreePatch::from_height_sites(
+		TreePatch::seed_from_origin(placements[0].0),
+		&placements,
+		TreeRecipe::storybook(),
+	);
+	spawn_kit_plants(world, std::slice::from_ref(&patch));
+}
+
+pub fn spawn_kit_bushes(world: &mut World, sites: &[vegetation_groves::GrovePlantSite]) {
+	let meshes = kit_meshes(world);
+	for site in sites {
+		spawn_ball(
+			world,
+			meshes.sphere.clone(),
+			meshes.leaf.clone(),
+			Vec3::ZERO,
+			vegetation_components::Placement::new(site.root, 0.0)
+				.with_scale(Vec3::splat(site.height_m.max(0.4) * 0.45)),
+		);
+	}
+}
+
+pub fn spawn_kit_grass(world: &mut World, sites: &[vegetation_groves::GrovePlantSite]) {
+	let meshes = kit_meshes(world);
+	for site in sites {
+		let height = site.height_m.max(0.15);
+		spawn_stick(
+			world,
+			meshes.cylinder.clone(),
+			meshes.leaf.clone(),
+			Vec3::ZERO,
+			vegetation_components::Placement::new(site.root, 0.0)
+				.with_scale(Vec3::new(0.03, height, 0.03)),
+		);
+	}
+}
+
 pub fn spawn_kit_from_patches(world: &mut World) {
 	clear_kit(world);
 	let patches: Vec<TreePatch> = world.query::<&TreePatch>().iter(world).cloned().collect();
 	if patches.is_empty() {
 		return;
 	}
+	spawn_kit_plants(world, &patches);
+}
+
+struct KitMeshes {
+	cylinder: Handle<Mesh>,
+	sphere: Handle<Mesh>,
+	wood: Handle<StandardMaterial>,
+	leaf: Handle<StandardMaterial>,
+}
+
+fn kit_meshes(world: &mut World) -> KitMeshes {
 	let mut meshes = world.resource_mut::<Assets<Mesh>>();
 	let cylinder = meshes.add(Mesh::from(Cylinder::new(1.0, 1.0)));
 	let sphere = meshes.add(Mesh::from(Sphere::new(1.0)));
@@ -44,9 +98,12 @@ pub fn spawn_kit_from_patches(world: &mut World) {
 		double_sided: true,
 		..default()
 	});
-	drop(materials);
+	KitMeshes { cylinder, sphere, wood, leaf }
+}
 
-	for patch in &patches {
+fn spawn_kit_plants(world: &mut World, patches: &[TreePatch]) {
+	let meshes = kit_meshes(world);
+	for patch in patches {
 		for plant in patch.plants() {
 			let mut geometry = StorybookTreeSbs::default();
 			geometry.scale.tree_height = plant.descriptor.height_m.max(1.0);
@@ -56,23 +113,53 @@ pub fn spawn_kit_from_patches(world: &mut World) {
 			for node in tree.stick_nodes_for_level(LodSceneLevel::High).flatten() {
 				if let Some(collection) = node.collection {
 					for member in collection.members {
-						spawn_stick(world, cylinder.clone(), wood.clone(), root, member.placement);
+						spawn_stick(
+							world,
+							meshes.cylinder.clone(),
+							meshes.wood.clone(),
+							root,
+							member.placement,
+						);
 					}
 				} else {
-					spawn_stick(world, cylinder.clone(), wood.clone(), root, node.placement);
+					spawn_stick(
+						world,
+						meshes.cylinder.clone(),
+						meshes.wood.clone(),
+						root,
+						node.placement,
+					);
 				}
 			}
 			for node in tree.foliage_nodes_for_level(LodSceneLevel::High).flatten() {
 				match node.geometry {
 					FoliageGeometry::CheapBall | FoliageGeometry::LayeredBall => {
-						spawn_ball(world, sphere.clone(), leaf.clone(), root, node.placement);
+						spawn_ball(
+							world,
+							meshes.sphere.clone(),
+							meshes.leaf.clone(),
+							root,
+							node.placement,
+						);
 					}
 					FoliageGeometry::CheapBallCollection(collection) => {
 						for placement in collection.placements {
-							spawn_ball(world, sphere.clone(), leaf.clone(), root, placement);
+							spawn_ball(
+								world,
+								meshes.sphere.clone(),
+								meshes.leaf.clone(),
+								root,
+								placement,
+							);
 						}
 					}
-					_ => spawn_ball(world, sphere.clone(), leaf.clone(), root, node.placement),
+					_ => spawn_ball(
+						world,
+						meshes.sphere.clone(),
+						meshes.leaf.clone(),
+						root,
+						node.placement,
+					),
 				}
 			}
 		}

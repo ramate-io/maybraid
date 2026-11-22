@@ -88,12 +88,54 @@ impl TreePatch {
 	}
 
 	/// Grove-style placements: world root + scale, same recipe as Temperate Lower Massives storybook.
-	pub fn from_grove_placements(seed: u32, placements: &[(Vec3, f32)], recipe: TreeRecipe) -> Self {
+	pub fn from_grove_placements(
+		seed: u32,
+		placements: &[(Vec3, f32)],
+		recipe: TreeRecipe,
+	) -> Self {
 		let samples = placements
 			.iter()
 			.map(|(root, scale)| TreeSample::planar(*root).with_scale(*scale))
 			.collect();
 		Self::new(seed, recipe, 1.0, samples)
+	}
+
+	/// One recipe, one seed, samples at the given world roots (unit scale).
+	pub fn from_roots(
+		seed: u32,
+		roots: impl IntoIterator<Item = Vec3>,
+		recipe: TreeRecipe,
+	) -> Self {
+		let placements: Vec<_> = roots.into_iter().map(|root| (root, 1.0)).collect();
+		Self::from_grove_placements(seed, &placements, recipe)
+	}
+
+	/// Existing grove plants: world roots with scales relative to the recipe mid-height.
+	pub fn from_height_sites(seed: u32, sites: &[(Vec3, f32)], recipe: TreeRecipe) -> Self {
+		let oriented: Vec<_> =
+			sites.iter().map(|(root, height_m)| (*root, Vec3::Y, *height_m)).collect();
+		Self::from_oriented_height_sites(seed, &oriented, recipe)
+	}
+
+	/// Existing grove plants: world roots, surface normals, and authored heights.
+	pub fn from_oriented_height_sites(
+		seed: u32,
+		sites: &[(Vec3, Vec3, f32)],
+		recipe: TreeRecipe,
+	) -> Self {
+		let mid = recipe.mid_height_m();
+		let samples = sites
+			.iter()
+			.map(|(root, up, height_m)| {
+				TreeSample::on_slope(*root, *up, (*height_m / mid).max(1e-4))
+			})
+			.collect();
+		Self::new(seed, recipe, 1.0, samples)
+	}
+
+	/// Stable per-tile seed so neighboring groves do not share the same skeleton.
+	pub fn seed_from_origin(origin: Vec3) -> u32 {
+		vegetation_shaders::wesl::hash_u32(origin.x.to_bits() ^ origin.z.to_bits().rotate_left(16))
 	}
 
 	pub fn with_lod(mut self, lod: TreePatchLod) -> Self {
@@ -126,10 +168,9 @@ impl TreePatch {
 			.iter()
 			.enumerate()
 			.filter_map(|(i, sample)| {
-				let rank = vegetation_shaders::wesl::density_rank(vegetation_shaders::wesl::plant_id(
-					self.seed,
-					i as u32,
-				));
+				let rank = vegetation_shaders::wesl::density_rank(
+					vegetation_shaders::wesl::plant_id(self.seed, i as u32),
+				);
 				if rank >= density && density < 1.0 && self.samples.len() > 1 {
 					return None;
 				}
@@ -148,7 +189,8 @@ impl TreePatch {
 	pub fn bounds(&self, settings: &TreeFieldSettings) -> TreeBounds {
 		let mut bounds = TreeBounds::empty();
 		for plant in self.plants() {
-			bounds = bounds.union(TreeBounds::from_plant(&plant.descriptor, settings.wind.strength_m));
+			bounds =
+				bounds.union(TreeBounds::from_plant(&plant.descriptor, settings.wind.strength_m));
 		}
 		if bounds.is_empty() {
 			TreeBounds { min: Vec3::ZERO, max: Vec3::ZERO }
@@ -235,6 +277,33 @@ mod tests {
 		assert_eq!(plants.len(), 2);
 		assert!((plants[0].descriptor.root - placements[0].0).length() < 1e-4);
 		assert!((plants[1].descriptor.root - placements[1].0).length() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn height_sites_scale_from_recipe_mid() -> anyhow::Result<()> {
+		let recipe = TreeRecipe::storybook();
+		let mid = recipe.mid_height_m();
+		let patch = TreePatch::from_height_sites(3, &[(Vec3::ZERO, mid * 2.0)], recipe);
+		assert_eq!(patch.samples.len(), 1);
+		assert!((patch.samples[0].scale - 2.0).abs() < 1e-4);
+		assert_eq!(patch.samples[0].up, Vec3::Y);
+		Ok(())
+	}
+
+	#[test]
+	fn oriented_height_sites_keep_up() -> anyhow::Result<()> {
+		let recipe = TreeRecipe::storybook();
+		let mid = recipe.mid_height_m();
+		let up = Vec3::new(0.2, 1.0, 0.0).normalize();
+		let patch = TreePatch::from_oriented_height_sites(
+			3,
+			&[(Vec3::new(1.0, 0.0, 2.0), up, mid)],
+			recipe,
+		);
+		assert_eq!(patch.samples.len(), 1);
+		assert!((patch.samples[0].up - up).length() < 1e-4);
+		assert!((patch.samples[0].scale - 1.0).abs() < 1e-4);
 		Ok(())
 	}
 }

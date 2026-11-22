@@ -1,9 +1,7 @@
 //! CPU selection matching the wood/foliage compute shaders.
 
 use vegetation_grass_field::WorldFrustum;
-use vegetation_shaders::wesl::{
-	lod_bucket, DrawIndexedIndirect, GrassViewUniform, LodThresholds,
-};
+use vegetation_shaders::wesl::{lod_bucket, DrawIndexedIndirect, GrassViewUniform, LodThresholds};
 
 use crate::field::BushFieldSettings;
 use crate::layout::{
@@ -49,9 +47,12 @@ impl CompactedBushLists {
 
 	pub fn wood_indirect_args(&self) -> [DrawIndexedIndirect; BUSH_LOD_COUNT] {
 		[
-			DrawIndexedIndirect::empty(WoodLod::Near.index_count()).with_instances(self.wood_count(0)),
-			DrawIndexedIndirect::empty(WoodLod::Mid.index_count()).with_instances(self.wood_count(1)),
-			DrawIndexedIndirect::empty(WoodLod::Far.index_count()).with_instances(self.wood_count(2)),
+			DrawIndexedIndirect::empty(WoodLod::Near.index_count())
+				.with_instances(self.wood_count(0)),
+			DrawIndexedIndirect::empty(WoodLod::Mid.index_count())
+				.with_instances(self.wood_count(1)),
+			DrawIndexedIndirect::empty(WoodLod::Far.index_count())
+				.with_instances(self.wood_count(2)),
 		]
 	}
 
@@ -77,13 +78,24 @@ pub struct BushSelector {
 impl BushSelector {
 	pub fn from_view(view: GrassViewUniform, settings: &BushFieldSettings) -> Self {
 		Self {
-			thresholds: LodThresholds::bush_default(),
+			thresholds: LodThresholds {
+				near_m: view.lod_distances.y,
+				mid_m: view.lod_distances.z,
+				card_m: view.lod_distances.w,
+				near_density: view.lod_density.x,
+				mid_density: view.lod_density.y,
+				card_density: view.lod_density.z,
+				min_height_px: view.lod_density.w,
+			},
 			view,
 			capacities: [settings.max_per_lod; BUSH_LOD_COUNT],
 		}
 	}
 
 	pub fn plant_bucket(&self, plant: &PlantDescriptor) -> Option<u32> {
+		if !plant.is_active() {
+			return None;
+		}
 		let camera = self.view.world_position.truncate();
 		let radius = plant.conservative_extent_m(self.view.wind.w);
 		let frustum = WorldFrustum::from_clip(self.view.clip_from_world);
@@ -288,7 +300,11 @@ mod tests {
 	#[test]
 	fn off_camera_shadow_view_keeps_casters() -> anyhow::Result<()> {
 		let settings = BushFieldSettings::default();
-		let patch = BushPatch::isolated(2, Vec3::new(40.0, 0.0, 0.0), crate::recipe::BushRecipe::small_scrub());
+		let patch = BushPatch::isolated(
+			2,
+			Vec3::new(40.0, 0.0, 0.0),
+			crate::recipe::BushRecipe::small_scrub(),
+		);
 		let field = BushField::rebuild([&patch], &settings);
 		let camera = BushSelector::from_view(
 			look_view(Vec3::new(-20.0, 2.0, 0.0), Vec3::new(-40.0, 0.0, 0.0), 720.0),

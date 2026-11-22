@@ -169,6 +169,14 @@ impl TropicalTufts {
 		self.palms.len()
 	}
 
+	/// Palm bushes that sit beside the tuft body.
+	pub fn palm_plant_sites(&self) -> Vec<crate::grove::GrovePlantSite> {
+		self.palms
+			.iter()
+			.map(|palm| crate::grove::GrovePlantSite::from_placement(palm.placement))
+			.collect()
+	}
+
 	/// High tuft kits with a height floor, plus authored palms (forest present dropout).
 	pub fn high_chunks_dropping_shorter_than(
 		&self,

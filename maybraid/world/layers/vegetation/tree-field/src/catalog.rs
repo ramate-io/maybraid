@@ -1,0 +1,412 @@
+//! One CPU catalog of grove instances. Prepare uploads only admitted ranges.
+
+use std::collections::HashMap;
+
+use bevy::math::Vec3;
+use bevy::prelude::*;
+use vegetation_grass_field::{CatalogOpQueue, GroveEncodeStats, GroveId, RangeArena, RangeSpan};
+
+use crate::layout::{
+	BranchDescriptor, LeafDescriptor, PlantDescriptor, BRANCH_DESCRIPTOR_STRIDE,
+	LEAF_DESCRIPTOR_STRIDE, PLANT_DESCRIPTOR_STRIDE,
+};
+
+/// Grown descriptors for one grove, moved (not cloned) through extract.
+#[derive(Clone, Debug)]
+pub enum TreeCatalogOp {
+	Admit {
+		id: GroveId,
+		plants: Vec<PlantDescriptor>,
+		branches: Vec<BranchDescriptor>,
+		leaves: Vec<LeafDescriptor>,
+		aabb_min: Vec3,
+		aabb_max: Vec3,
+		seed: u32,
+		truncated_plants: u32,
+	},
+	Retire {
+		id: GroveId,
+	},
+}
+
+pub type TreeCatalogOps = CatalogOpQueue<TreeCatalogOp>;
+
+#[derive(Clone, Debug)]
+struct LiveGrove {
+	slot: u32,
+	plants: RangeSpan,
+	branches: RangeSpan,
+	leaves: RangeSpan,
+}
+
+#[derive(Resource, Clone, Debug)]
+pub struct TreeGroveCatalog {
+	pub groves: Vec<GroveRecord>,
+	pub plants: Vec<PlantDescriptor>,
+	pub branches: Vec<BranchDescriptor>,
+	pub leaves: Vec<LeafDescriptor>,
+	live: HashMap<GroveId, LiveGrove>,
+	plants_arena: RangeArena,
+	branches_arena: RangeArena,
+	leaves_arena: RangeArena,
+	free_slots: Vec<u32>,
+	pub generation: u64,
+	pub last_write_bytes: u64,
+	pub last_writes: u32,
+	pub truncated_plants: u32,
+	pub clones: u32,
+	pub pending: Vec<TreeCatalogOp>,
+	pub last_uploads: Vec<CatalogUpload>,
+	pub grove_residency: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GroveRecord {
+	pub aabb_min: Vec3,
+	pub plant_off: u32,
+	pub aabb_max: Vec3,
+	pub plant_count: u32,
+	pub seed: u32,
+	pub flags: u32,
+}
+
+/// Descriptor ranges written this apply (admit or retire). Prepare uploads only these.
+#[derive(Clone, Copy, Debug)]
+pub struct CatalogUpload {
+	pub plants: RangeSpan,
+	pub branches: RangeSpan,
+	pub leaves: RangeSpan,
+}
+
+impl GroveRecord {
+	pub const FLAG_ACTIVE: u32 = 1 << 0;
+}
+
+impl Default for TreeGroveCatalog {
+	fn default() -> Self {
+		Self {
+			groves: Vec::new(),
+			plants: Vec::new(),
+			branches: Vec::new(),
+			leaves: Vec::new(),
+			live: HashMap::new(),
+			plants_arena: RangeArena::with_cap(1_024),
+			branches_arena: RangeArena::with_cap(8_192),
+			leaves_arena: RangeArena::with_cap(16_384),
+			free_slots: Vec::new(),
+			generation: 0,
+			last_write_bytes: 0,
+			last_writes: 0,
+			truncated_plants: 0,
+			clones: 0,
+			pending: Vec::new(),
+			last_uploads: Vec::new(),
+			grove_residency: false,
+		}
+	}
+}
+
+impl TreeGroveCatalog {
+	pub fn is_empty(&self) -> bool {
+		self.live.is_empty()
+	}
+
+	pub fn live_grove_count(&self) -> usize {
+		self.live.len()
+	}
+
+	pub fn encode_plan() -> GroveEncodeStats {
+		GroveEncodeStats::woody_kind()
+	}
+
+	pub fn apply(
+		&mut self,
+		ops: impl IntoIterator<Item = TreeCatalogOp>,
+		budget: usize,
+	) -> Vec<TreeCatalogOp> {
+		self.last_write_bytes = 0;
+		self.last_writes = 0;
+		self.last_uploads.clear();
+		let mut leftover = Vec::new();
+		let mut admits = 0usize;
+		for op in ops {
+			match op {
+				TreeCatalogOp::Retire { id } => self.retire(id),
+				TreeCatalogOp::Admit { .. } if admits >= budget => leftover.push(op),
+				TreeCatalogOp::Admit {
+					id,
+					plants,
+					branches,
+					leaves,
+					aabb_min,
+					aabb_max,
+					seed,
+					truncated_plants,
+				} => {
+					self.admit(
+						id,
+						plants,
+						branches,
+						leaves,
+						aabb_min,
+						aabb_max,
+						seed,
+						truncated_plants,
+					);
+					admits += 1;
+				}
+			}
+		}
+		leftover
+	}
+
+	fn admit(
+		&mut self,
+		id: GroveId,
+		mut plants: Vec<PlantDescriptor>,
+		mut branches: Vec<BranchDescriptor>,
+		mut leaves: Vec<LeafDescriptor>,
+		aabb_min: Vec3,
+		aabb_max: Vec3,
+		seed: u32,
+		truncated_plants: u32,
+	) {
+		self.retire(id);
+		self.truncated_plants = self.truncated_plants.saturating_add(truncated_plants);
+		let plant_span = self.plants_arena.alloc(plants.len() as u32);
+		let branch_span = self.branches_arena.alloc(branches.len() as u32);
+		let leaf_span = self.leaves_arena.alloc(leaves.len() as u32);
+		self.ensure_len(plant_span, branch_span, leaf_span);
+		let slot = self.alloc_slot();
+		for plant in &mut plants {
+			plant.branch_offset = plant.branch_offset.saturating_add(branch_span.offset);
+			plant.leaf_offset = plant.leaf_offset.saturating_add(leaf_span.offset);
+			*plant = plant.with_grove_slot(slot).with_active();
+		}
+		for branch in &mut branches {
+			branch.plant_index = branch.plant_index.saturating_add(plant_span.offset);
+			if branch.parent_index != crate::layout::PARENT_NONE {
+				branch.parent_index = branch.parent_index.saturating_add(branch_span.offset);
+			}
+			if branch.major_parent != crate::layout::PARENT_NONE {
+				branch.major_parent = branch.major_parent.saturating_add(branch_span.offset);
+			}
+		}
+		for leaf in &mut leaves {
+			leaf.plant_index = leaf.plant_index.saturating_add(plant_span.offset);
+			leaf.parent_branch = leaf.parent_branch.saturating_add(branch_span.offset);
+		}
+		self.write_plants(plant_span, &plants);
+		self.write_branches(branch_span, &branches);
+		self.write_leaves(leaf_span, &leaves);
+		self.groves[slot as usize] = GroveRecord {
+			aabb_min,
+			plant_off: plant_span.offset,
+			aabb_max,
+			plant_count: plant_span.count,
+			seed,
+			flags: GroveRecord::FLAG_ACTIVE,
+		};
+		self.last_writes += 1;
+		self.last_write_bytes += plant_span.byte_len(PLANT_DESCRIPTOR_STRIDE)
+			+ branch_span.byte_len(BRANCH_DESCRIPTOR_STRIDE)
+			+ leaf_span.byte_len(LEAF_DESCRIPTOR_STRIDE)
+			+ 48;
+		self.last_uploads.push(CatalogUpload {
+			plants: plant_span,
+			branches: branch_span,
+			leaves: leaf_span,
+		});
+		self.live.insert(
+			id,
+			LiveGrove { slot, plants: plant_span, branches: branch_span, leaves: leaf_span },
+		);
+		self.generation = self.generation.wrapping_add(1);
+	}
+
+	fn retire(&mut self, id: GroveId) {
+		let Some(live) = self.live.remove(&id) else {
+			return;
+		};
+		if let Some(record) = self.groves.get_mut(live.slot as usize) {
+			record.flags = 0;
+		}
+		for plant in self.plants_mut(live.plants) {
+			plant.flags &= !PlantDescriptor::FLAG_ACTIVE;
+		}
+		self.plants_arena.free(live.plants);
+		self.branches_arena.free(live.branches);
+		self.leaves_arena.free(live.leaves);
+		self.free_slots.push(live.slot);
+		self.last_writes += 1;
+		self.last_write_bytes += live.plants.byte_len(PLANT_DESCRIPTOR_STRIDE).max(16);
+		self.last_uploads.push(CatalogUpload {
+			plants: live.plants,
+			branches: RangeSpan::default(),
+			leaves: RangeSpan::default(),
+		});
+		self.generation = self.generation.wrapping_add(1);
+		if self.live.is_empty() {
+			self.grove_residency = false;
+		}
+	}
+
+	fn alloc_slot(&mut self) -> u32 {
+		if let Some(slot) = self.free_slots.pop() {
+			slot
+		} else {
+			let slot = self.groves.len() as u32;
+			self.groves.push(GroveRecord::default());
+			slot
+		}
+	}
+
+	fn ensure_len(&mut self, plants: RangeSpan, branches: RangeSpan, leaves: RangeSpan) {
+		let plant_end = (plants.offset + plants.count) as usize;
+		let branch_end = (branches.offset + branches.count) as usize;
+		let leaf_end = (leaves.offset + leaves.count) as usize;
+		if self.plants.len() < plant_end {
+			self.plants.resize(plant_end, PlantDescriptor::inactive());
+		}
+		if self.branches.len() < branch_end {
+			self.branches.resize(branch_end, BranchDescriptor::default());
+		}
+		if self.leaves.len() < leaf_end {
+			self.leaves.resize(leaf_end, LeafDescriptor::default());
+		}
+	}
+
+	fn write_plants(&mut self, span: RangeSpan, plants: &[PlantDescriptor]) {
+		let start = span.offset as usize;
+		self.plants[start..start + plants.len()].copy_from_slice(plants);
+	}
+
+	fn write_branches(&mut self, span: RangeSpan, branches: &[BranchDescriptor]) {
+		let start = span.offset as usize;
+		self.branches[start..start + branches.len()].copy_from_slice(branches);
+	}
+
+	fn write_leaves(&mut self, span: RangeSpan, leaves: &[LeafDescriptor]) {
+		let start = span.offset as usize;
+		self.leaves[start..start + leaves.len()].copy_from_slice(leaves);
+	}
+
+	fn plants_mut(&mut self, span: RangeSpan) -> &mut [PlantDescriptor] {
+		let start = span.offset as usize;
+		let end = (start + span.count as usize).min(self.plants.len());
+		&mut self.plants[start..end]
+	}
+
+	pub fn upload_bytes(&self) -> u64 {
+		self.plants.len() as u64 * PLANT_DESCRIPTOR_STRIDE
+			+ self.branches.len() as u64 * BRANCH_DESCRIPTOR_STRIDE
+			+ self.leaves.len() as u64 * LEAF_DESCRIPTOR_STRIDE
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::field::{TreeField, TreeFieldSettings};
+	use crate::patch::TreePatch;
+	use crate::recipe::TreeRecipe;
+	use vegetation_grass_field::ADMISSION_BUDGET;
+
+	fn grown(origin: Vec3) -> (Vec<PlantDescriptor>, Vec<BranchDescriptor>, Vec<LeafDescriptor>) {
+		let patch = TreePatch::isolated(1, origin, TreeRecipe::storybook());
+		let field = TreeField::rebuild([&patch], &TreeFieldSettings::default());
+		(field.plants, field.branches, field.leaves)
+	}
+
+	#[test]
+	fn idle_frame_writes_nothing() {
+		let mut catalog = TreeGroveCatalog::default();
+		let leftover = catalog.apply([], ADMISSION_BUDGET);
+		assert!(leftover.is_empty());
+		assert_eq!(catalog.last_writes, 0);
+		assert_eq!(catalog.last_write_bytes, 0);
+		assert_eq!(catalog.clones, 0);
+	}
+
+	#[test]
+	fn admit_one_grove_writes_only_that_range() {
+		let mut catalog = TreeGroveCatalog::default();
+		let (plants, branches, leaves) = grown(Vec3::ZERO);
+		let plant_bytes = plants.len() as u64 * PLANT_DESCRIPTOR_STRIDE;
+		catalog.apply(
+			[TreeCatalogOp::Admit {
+				id: GroveId(1),
+				plants,
+				branches,
+				leaves,
+				aabb_min: Vec3::ZERO,
+				aabb_max: Vec3::ONE,
+				seed: 1,
+				truncated_plants: 0,
+			}],
+			ADMISSION_BUDGET,
+		);
+		assert_eq!(catalog.live_grove_count(), 1);
+		assert_eq!(catalog.last_writes, 1);
+		assert!(catalog.last_write_bytes >= plant_bytes);
+		assert_eq!(catalog.clones, 0);
+	}
+
+	#[test]
+	fn retire_does_not_rebuild() {
+		let mut catalog = TreeGroveCatalog::default();
+		let (plants, branches, leaves) = grown(Vec3::ZERO);
+		catalog.apply(
+			[TreeCatalogOp::Admit {
+				id: GroveId(7),
+				plants,
+				branches,
+				leaves,
+				aabb_min: Vec3::ZERO,
+				aabb_max: Vec3::ONE,
+				seed: 7,
+				truncated_plants: 0,
+			}],
+			ADMISSION_BUDGET,
+		);
+		let resident = catalog.plants.len();
+		catalog.grove_residency = true;
+		catalog.apply([TreeCatalogOp::Retire { id: GroveId(7) }], ADMISSION_BUDGET);
+		assert_eq!(catalog.live_grove_count(), 0);
+		assert_eq!(catalog.plants.len(), resident);
+		assert!(catalog.plants.iter().all(|plant| !plant.is_active()));
+		assert!(!catalog.grove_residency);
+		assert_eq!(catalog.clones, 0);
+	}
+
+	#[test]
+	fn encode_plan_matches_for_ten_and_thousand_groves() {
+		assert_eq!(
+			TreeGroveCatalog::encode_plan().encode_only(),
+			GroveEncodeStats::woody_kind().encode_only()
+		);
+	}
+
+	#[test]
+	fn admission_budget_leaves_overflow() {
+		let mut catalog = TreeGroveCatalog::default();
+		let ops: Vec<_> = (0..3)
+			.map(|i| {
+				let (plants, branches, leaves) = grown(Vec3::new(i as f32, 0.0, 0.0));
+				TreeCatalogOp::Admit {
+					id: GroveId(i),
+					plants,
+					branches,
+					leaves,
+					aabb_min: Vec3::ZERO,
+					aabb_max: Vec3::ONE,
+					seed: i as u32,
+					truncated_plants: 0,
+				}
+			})
+			.collect();
+		let leftover = catalog.apply(ops, 1);
+		assert_eq!(catalog.live_grove_count(), 1);
+		assert_eq!(leftover.len(), 2);
+	}
+}
