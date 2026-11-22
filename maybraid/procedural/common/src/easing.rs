@@ -16,19 +16,11 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn endpoints() {
+	fn smoothstep01_on_unit_interval() {
 		assert!(Smoothstep01::eval(0.0).abs() < 1e-5);
 		assert!((Smoothstep01::eval(1.0) - 1.0).abs() < 1e-5);
-	}
-
-	#[test]
-	fn clamps_out_of_range() {
 		assert!(Smoothstep01::eval(-0.5).abs() < 1e-5);
 		assert!((Smoothstep01::eval(1.5) - 1.0).abs() < 1e-5);
-	}
-
-	#[test]
-	fn midpoint() {
 		assert!((Smoothstep01::eval(0.5) - 0.5).abs() < 1e-5);
 	}
 }

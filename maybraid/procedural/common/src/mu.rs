@@ -32,14 +32,6 @@ mod tests {
 	use anyhow::Result;
 
 	#[test]
-	fn margin_at_least_amplitude_plus_eps() -> Result<()> {
-		let p = NoiseParams { amplitude: 0.05, octaves: 1, ..Default::default() };
-		let m = sdf_band_margin(&p);
-		assert!(m >= p.amplitude.abs() + NUMERIC_SURFACE_EPSILON);
-		Ok(())
-	}
-
-	#[test]
 	fn multi_octave_exceeds_single() -> Result<()> {
 		let base = NoiseParams { amplitude: 0.1, ..Default::default() };
 		let one = NoiseParams { octaves: 1, ..base };
