@@ -58,3 +58,9 @@ fn lod_bucket(
     }
     return 3u;
 }
+
+/// Catalog selection uses `@workgroup_size(64, 1, 1)`. Extra workgroups tile
+/// onto Y when `ceil(count / 64)` would exceed the 65535-per-axis device limit.
+fn catalog_select_index(gid: vec3<u32>, num_workgroups: vec3<u32>) -> u32 {
+    return gid.x + gid.y * num_workgroups.x * 64u;
+}

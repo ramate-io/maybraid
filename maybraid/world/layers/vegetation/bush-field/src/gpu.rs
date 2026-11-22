@@ -35,7 +35,9 @@ use bevy::render::sync_world::MainEntityHashSet;
 use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntity, ViewTarget};
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::{CatalogApply, GrassGpuCapability, GrassGpuMode, GroveEncodeStats};
+use vegetation_grass_field::{
+	select_dispatch_size, CatalogApply, GrassGpuCapability, GrassGpuMode, GroveEncodeStats,
+};
 use vegetation_shaders::wesl::{
 	GrassDrawParams, GrassViewUniform, LodThresholds, DRAW_INDEXED_INDIRECT_STRIDE,
 	GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW,
@@ -871,6 +873,7 @@ fn bush_compute(
 	state: Option<Res<BushGpuState>>,
 	capability: Option<Res<GrassGpuCapability>>,
 	extracted: Option<Res<ExtractedBushField>>,
+	device: Res<RenderDevice>,
 	mut encode: Option<ResMut<GroveEncodeStats>>,
 ) {
 	let Some(pipelines) = pipelines else {
@@ -902,8 +905,9 @@ fn bush_compute(
 		return;
 	};
 
-	let wood_groups = extracted.branch_count.div_ceil(SELECT_WORKGROUP).max(1);
-	let leaf_groups = extracted.leaf_count.div_ceil(SELECT_WORKGROUP).max(1);
+	let max_dim = device.limits().max_compute_workgroups_per_dimension.max(1);
+	let wood = select_dispatch_size(extracted.branch_count, SELECT_WORKGROUP, max_dim);
+	let leaf = select_dispatch_size(extracted.leaf_count, SELECT_WORKGROUP, max_dim);
 	for work in state.views.values() {
 		render_context.command_encoder().clear_buffer(&work.counters, 0, None);
 		{
@@ -914,10 +918,10 @@ fn bush_compute(
 				});
 			pass.set_bind_group(0, &work.select_wood_bg, &[]);
 			pass.set_pipeline(select_wood);
-			pass.dispatch_workgroups(wood_groups, 1, 1);
+			pass.dispatch_workgroups(wood.x, wood.y, wood.z);
 			pass.set_bind_group(0, &work.select_foliage_bg, &[]);
 			pass.set_pipeline(select_foliage);
-			pass.dispatch_workgroups(leaf_groups, 1, 1);
+			pass.dispatch_workgroups(leaf.x, leaf.y, leaf.z);
 			pass.set_bind_group(0, &work.finalize_bg, &[]);
 			pass.set_pipeline(finalize);
 			pass.dispatch_workgroups(1, 1, 1);
@@ -1146,6 +1150,7 @@ fn draw_lod<'a>(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use vegetation_grass_field::MAX_COMPUTE_WORKGROUPS_PER_DIM;
 
 	fn specialize_format(format: TextureFormat) -> TextureFormat {
 		let mut descriptor = opaque_descriptor("bush_format_test", Handle::default(), Vec::new());
@@ -1173,5 +1178,22 @@ mod tests {
 		target_format: Option<TextureFormat>,
 	) -> TextureFormat {
 		target_format.unwrap_or(view_format)
+	}
+
+	#[test]
+	fn catalog_select_dispatch_fits_native_bush_leaf_overflow() {
+		// Area 1746 Metal smoke: foliage 1D groups were 66744 > 65535.
+		let leaf_count = 66_744 * SELECT_WORKGROUP;
+		let one_d = leaf_count.div_ceil(SELECT_WORKGROUP);
+		assert!(one_d > MAX_COMPUTE_WORKGROUPS_PER_DIM);
+		let size =
+			select_dispatch_size(leaf_count, SELECT_WORKGROUP, MAX_COMPUTE_WORKGROUPS_PER_DIM);
+		assert!(size.x <= MAX_COMPUTE_WORKGROUPS_PER_DIM);
+		assert!(size.y <= MAX_COMPUTE_WORKGROUPS_PER_DIM);
+		assert_eq!(size.z, 1);
+		assert!(
+			u64::from(size.x) * u64::from(size.y) * u64::from(SELECT_WORKGROUP)
+				>= u64::from(leaf_count)
+		);
 	}
 }

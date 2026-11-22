@@ -26,8 +26,9 @@ mod template;
 pub use bounds::GrassBounds;
 pub use capability::{requested_vegetation_gpu_mode, GrassGpuCapability, GrassGpuMode};
 pub use catalog::{
-	CatalogApply, CatalogOpQueue, GroveCatalogOp, GroveEncodeStats, GroveId, RangeArena,
-	RangeSpan, ADMISSION_BUDGET,
+	select_dispatch_size, select_item_index, CatalogApply, CatalogOpQueue, GroveCatalogOp,
+	GroveEncodeStats, GroveId, RangeArena, RangeSpan, ADMISSION_BUDGET,
+	MAX_COMPUTE_WORKGROUPS_PER_DIM,
 };
 pub use diagnostics::GrassFieldStats;
 pub use field::{GrassField, GrassFieldSettings};

@@ -19,6 +19,32 @@ impl GroveId {
 /// How many admits prepare will grow in one frame. Remaining ops stay queued.
 pub const ADMISSION_BUDGET: usize = 16;
 
+/// wgpu / Metal maximum workgroups on one dispatch axis.
+pub const MAX_COMPUTE_WORKGROUPS_PER_DIM: u32 = 65535;
+
+/// One `dispatch_workgroups` covering `item_count` invocations of `workgroup_size`.
+///
+/// A 1D X dispatch of `ceil(count / 64)` overflows the device limit once the
+/// catalog grows past `65535 * 64` descriptors. Tile extra groups onto Y so
+/// every admitted item still runs, while encode stays one dispatch per stage.
+pub fn select_dispatch_size(item_count: u32, workgroup_size: u32, max_workgroups: u32) -> UVec3 {
+	let workgroup_size = workgroup_size.max(1);
+	let max_workgroups = max_workgroups.max(1);
+	let groups = item_count.div_ceil(workgroup_size).max(1);
+	if groups <= max_workgroups {
+		return UVec3::new(groups, 1, 1);
+	}
+	let y = groups.div_ceil(max_workgroups).max(1);
+	let x = groups.div_ceil(y).min(max_workgroups).max(1);
+	UVec3::new(x, y, 1)
+}
+
+/// Linear catalog index matching `@workgroup_size(workgroup_size, 1, 1)` plus a
+/// possibly 2D workgroup grid. `gid.x` already includes the local invocation.
+pub fn select_item_index(gid: UVec3, num_workgroups: UVec3, workgroup_size: u32) -> u32 {
+	gid.x + gid.y * num_workgroups.x * workgroup_size.max(1)
+}
+
 /// Per-view, per-kind GPU encode. Independent of grove count.
 #[derive(Resource, Clone, Debug, Default, PartialEq, Eq)]
 pub struct GroveEncodeStats {
@@ -240,6 +266,34 @@ mod tests {
 		assert_eq!(taken, vec![1, 2, 3]);
 		assert!(queue.is_empty());
 		assert!(queue.take().is_empty());
+	}
+
+	#[test]
+	fn select_dispatch_keeps_1d_under_the_device_limit() {
+		let size = select_dispatch_size(64 * 100, 64, MAX_COMPUTE_WORKGROUPS_PER_DIM);
+		assert_eq!(size, UVec3::new(100, 1, 1));
+		assert_eq!(select_item_index(UVec3::new(63, 0, 0), size, 64), 63);
+	}
+
+	#[test]
+	fn select_dispatch_tiles_the_native_bush_overflow() {
+		// Metal smoke on f2e9822: ceil(leaf_count / 64) = 66744 > 65535.
+		let groups = 66_744u32;
+		let items = groups * 64;
+		let size = select_dispatch_size(items, 64, MAX_COMPUTE_WORKGROUPS_PER_DIM);
+		assert!(size.x <= MAX_COMPUTE_WORKGROUPS_PER_DIM, "{}", size.x);
+		assert!(size.y <= MAX_COMPUTE_WORKGROUPS_PER_DIM, "{}", size.y);
+		assert_eq!(size.z, 1);
+		assert!(size.y > 1, "1D X would still overflow");
+		let covered = u64::from(size.x) * u64::from(size.y) * 64;
+		assert!(covered >= u64::from(items), "{covered} < {items}");
+		let last = select_item_index(UVec3::new(size.x * 64 - 1, size.y - 1, 0), size, 64);
+		assert!(last >= items - 1, "{last}");
+		assert_eq!(
+			select_item_index(UVec3::new(0, 1, 0), size, 64),
+			size.x * 64,
+			"Y tile must continue the catalog without gaps"
+		);
 	}
 
 	#[derive(Clone, Debug, PartialEq, Eq)]

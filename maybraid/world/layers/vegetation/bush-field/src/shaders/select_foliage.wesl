@@ -1,6 +1,6 @@
 //! Per-leaf visibility. Dropped twigs reattach foliage to `major_parent`.
 
-import vegetation_shaders::wesl::lod::{lod_bucket, nested_keep, LodThresholds};
+import vegetation_shaders::wesl::lod::{catalog_select_index, lod_bucket, nested_keep, LodThresholds};
 import vegetation_shaders::wesl::layout::GrassViewUniform;
 import vegetation_shaders::wesl::wind::max_wind_displacement_m;
 import vegetation_bush_field::shaders::layout::{PlantDescriptor, BranchDescriptor, LeafDescriptor};
@@ -90,8 +90,11 @@ fn append_list(lod: u32, index: u32, capacity: u32) {
 }
 
 @compute @workgroup_size(64, 1, 1)
-fn select(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let leaf_index = gid.x;
+fn select(
+    @builtin(global_invocation_id) gid: vec3<u32>,
+    @builtin(num_workgroups) nwg: vec3<u32>,
+) {
+    let leaf_index = catalog_select_index(gid, nwg);
     let leaf_count = u32(view.counts.z);
     if (leaf_index >= leaf_count) {
         return;

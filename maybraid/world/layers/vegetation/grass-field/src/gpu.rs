@@ -41,7 +41,7 @@ use vegetation_shaders::wesl::{
 };
 
 use crate::capability::{GrassGpuCapability, GrassGpuMode};
-use crate::catalog::{CatalogApply, GroveEncodeStats};
+use crate::catalog::{select_dispatch_size, CatalogApply, GroveEncodeStats};
 use crate::diagnostics::GrassFieldStats;
 use crate::grove_catalog::{GrassCatalogOps, GrassGroveCatalog};
 use crate::plugin::{ExtractedGrassField, GrassFieldPresenter};
@@ -656,6 +656,7 @@ fn grass_compute(
 	state: Option<Res<GrassGpuState>>,
 	capability: Option<Res<GrassGpuCapability>>,
 	extracted: Option<Res<ExtractedGrassField>>,
+	device: Res<RenderDevice>,
 	mut encode: Option<ResMut<GroveEncodeStats>>,
 ) {
 	let Some(pipelines) = pipelines else {
@@ -686,7 +687,8 @@ fn grass_compute(
 		return;
 	};
 
-	let groups = extracted.blade_count.div_ceil(SELECT_WORKGROUP).max(1);
+	let max_dim = device.limits().max_compute_workgroups_per_dimension.max(1);
+	let groups = select_dispatch_size(extracted.blade_count, SELECT_WORKGROUP, max_dim);
 	for work in state.views.values() {
 		render_context.command_encoder().clear_buffer(&work.counters, 0, None);
 		{
@@ -697,7 +699,7 @@ fn grass_compute(
 				});
 			pass.set_bind_group(0, &work.select_bind_group, &[]);
 			pass.set_pipeline(select_pipeline);
-			pass.dispatch_workgroups(groups, 1, 1);
+			pass.dispatch_workgroups(groups.x, groups.y, groups.z);
 			pass.set_bind_group(0, &work.finalize_bind_group, &[]);
 			pass.set_pipeline(finalize_pipeline);
 			pass.dispatch_workgroups(1, 1, 1);

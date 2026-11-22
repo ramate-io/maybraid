@@ -1,6 +1,6 @@
 //! Per-branch visibility, plant LOD, and topology-preserving prune.
 
-import vegetation_shaders::wesl::lod::{lod_bucket, LodThresholds};
+import vegetation_shaders::wesl::lod::{catalog_select_index, lod_bucket, LodThresholds};
 import vegetation_shaders::wesl::layout::GrassViewUniform;
 import vegetation_shaders::wesl::wind::max_wind_displacement_m;
 import vegetation_tree_field::shaders::layout::{PlantDescriptor, BranchDescriptor};
@@ -79,8 +79,11 @@ fn append_list(lod: u32, index: u32, capacity: u32) {
 }
 
 @compute @workgroup_size(64, 1, 1)
-fn select(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let branch_index = gid.x;
+fn select(
+    @builtin(global_invocation_id) gid: vec3<u32>,
+    @builtin(num_workgroups) nwg: vec3<u32>,
+) {
+    let branch_index = catalog_select_index(gid, nwg);
     let branch_count = u32(view.counts.x);
     if (branch_index >= branch_count) {
         return;

@@ -36,7 +36,9 @@ use bevy::render::sync_world::MainEntityHashSet;
 use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntity, ViewTarget};
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::{CatalogApply, GrassGpuCapability, GrassGpuMode, GroveEncodeStats};
+use vegetation_grass_field::{
+	select_dispatch_size, CatalogApply, GrassGpuCapability, GrassGpuMode, GroveEncodeStats,
+};
 use vegetation_groves::temperate_lower_massives::StorybookFieldArea;
 use vegetation_shaders::wesl::{
 	GrassDrawParams, GrassViewUniform, LodThresholds, DRAW_INDEXED_INDIRECT_STRIDE,
@@ -112,8 +114,15 @@ pub fn supports_world_tree_field(
 	) && limits.max_storage_buffers_per_shader_stage >= 7
 		&& limits.max_storage_buffer_binding_size >= largest_buffer
 		&& limits.max_buffer_size >= largest_buffer
-		&& limits.max_compute_workgroups_per_dimension >= leaf_count.div_ceil(SELECT_WORKGROUP)
-		&& limits.max_compute_workgroup_size_x >= SELECT_WORKGROUP
+		&& {
+			let dispatch = select_dispatch_size(
+				leaf_count,
+				SELECT_WORKGROUP,
+				limits.max_compute_workgroups_per_dimension,
+			);
+			dispatch.x <= limits.max_compute_workgroups_per_dimension
+				&& dispatch.y <= limits.max_compute_workgroups_per_dimension
+		} && limits.max_compute_workgroup_size_x >= SELECT_WORKGROUP
 		&& limits.max_compute_invocations_per_workgroup >= SELECT_WORKGROUP
 }
 
@@ -995,6 +1004,7 @@ fn tree_compute(
 	pipeline_cache: Res<PipelineCache>,
 	state: Option<Res<TreeGpuState>>,
 	capability: Option<Res<GrassGpuCapability>>,
+	device: Res<RenderDevice>,
 	mut encode: Option<ResMut<GroveEncodeStats>>,
 ) {
 	let Some(pipelines) = pipelines else {
@@ -1023,8 +1033,9 @@ fn tree_compute(
 		return;
 	};
 
-	let wood_groups = state.branch_count.div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
-	let leaf_groups = state.leaf_count.div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
+	let max_dim = device.limits().max_compute_workgroups_per_dimension.max(1);
+	let wood = select_dispatch_size(state.branch_count as u32, SELECT_WORKGROUP, max_dim);
+	let leaf = select_dispatch_size(state.leaf_count as u32, SELECT_WORKGROUP, max_dim);
 	if state.compute_reported.get().is_none()
 		&& !state.active_views.is_empty()
 		&& requested_world_tree_mode().is_some()
@@ -1050,10 +1061,10 @@ fn tree_compute(
 				});
 			pass.set_bind_group(0, &work.select_wood_bg, &[]);
 			pass.set_pipeline(select_wood);
-			pass.dispatch_workgroups(wood_groups, 1, 1);
+			pass.dispatch_workgroups(wood.x, wood.y, wood.z);
 			pass.set_bind_group(0, &work.select_foliage_bg, &[]);
 			pass.set_pipeline(select_foliage);
-			pass.dispatch_workgroups(leaf_groups, 1, 1);
+			pass.dispatch_workgroups(leaf.x, leaf.y, leaf.z);
 			pass.set_bind_group(0, &work.finalize_bg, &[]);
 			pass.set_pipeline(finalize);
 			pass.dispatch_workgroups(1, 1, 1);
