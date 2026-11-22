@@ -7670,8 +7670,12 @@ dependencies = [
  "threat-management-intelligence",
  "urbanization-cells",
  "urbanization-layer-model",
+ "vegetation-bush-field",
  "vegetation-components",
+ "vegetation-grass-field",
+ "vegetation-groves",
  "vegetation-layer-model",
+ "vegetation-tree-field",
  "world-materials",
  "world-player",
 ]

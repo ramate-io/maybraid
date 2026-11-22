@@ -28,17 +28,12 @@ mod parity;
 mod visuals;
 
 use bevy::prelude::*;
-use bevy::render::renderer::{RenderAdapter, RenderDevice};
-use bevy::render::RenderApp;
 use vegetation_bush_field::BushFieldPlugin;
 use vegetation_grass_field::GrassFieldPlugin;
 use vegetation_groves::temperate_lower_massives::{
-	configure_storybook_field_area, scout_storybook_field_tile, StorybookFieldArea,
+	StorybookFieldArea, configure_storybook_field_area, scout_storybook_field_tile,
 };
-use vegetation_tree_field::{
-	requested_world_tree_mode, supports_world_tree_field, TreeFieldPlugin, TreeFieldSettings,
-	BRANCH_DESCRIPTOR_STRIDE,
-};
+use vegetation_tree_field::{TreeFieldPlugin, TreeFieldSettings, requested_world_tree_mode};
 
 use crate::{ForestGroveTile, ForestLayer};
 
@@ -102,17 +97,22 @@ pub(super) fn register_world_tree_field(app: &mut App) {
 		}
 		return;
 	}
-	if std::env::var("MAYBRAID_SHADOWS").as_deref() != Ok("off")
-		|| app.get_sub_app(RenderApp).is_none()
-	{
-		warn!("GPU forest trial requires a renderer and shadows off; keeping grove kits");
+	if std::env::var("MAYBRAID_SHADOWS").as_deref() != Ok("off") {
+		warn!("GPU forest trial requires shadows off; keeping grove kits");
 		return;
+	}
+	// Catalogs, presenters, and High Admit live on the main world. GPU encode
+	// plugins no-op without RenderApp; kit replacement must not wait for a
+	// main-world RenderAdapter at Startup (that resource lives in RenderApp).
+	GroveGpuVisuals::admit(true);
+	if let Some(tile) = tile {
+		let _ = configure_storybook_field_area(tile, area, true);
 	}
 	app.add_plugins(TreeFieldPlugin)
 		.add_plugins(BushFieldPlugin)
 		.add_plugins(GrassFieldPlugin)
 		.insert_resource(GpuForestTrial { tile, area })
-		.add_systems(Startup, admit_gpu_forest);
+		.add_systems(Startup, apply_owner_forest_settings);
 }
 
 fn parse_tile(raw: &str) -> Option<Vec2> {
@@ -121,35 +121,15 @@ fn parse_tile(raw: &str) -> Option<Vec2> {
 	tile.is_finite().then_some(tile)
 }
 
-fn admit_gpu_forest(
+fn apply_owner_forest_settings(
 	trial: Res<GpuForestTrial>,
-	adapter: Option<Res<RenderAdapter>>,
-	device: Option<Res<RenderDevice>>,
 	mut settings: ResMut<TreeFieldSettings>,
 ) {
-	let supported = adapter.zip(device).is_some_and(|(adapter, device)| {
-		supports_world_tree_field(&adapter, &device, trial.area)
-			&& device.limits().max_storage_buffer_binding_size
-				>= u64::from(OWNER_DESCRIPTOR_CAPACITY) * BRANCH_DESCRIPTOR_STRIDE
-			&& device.limits().max_buffer_size
-				>= u64::from(OWNER_DESCRIPTOR_CAPACITY) * BRANCH_DESCRIPTOR_STRIDE
-			&& device.limits().max_compute_workgroups_per_dimension
-				>= OWNER_DESCRIPTOR_CAPACITY.div_ceil(64)
-	});
-	if !supported {
-		warn!("GPU forest trial is unavailable; keeping grove kits");
-		GroveGpuVisuals::admit(false);
-		return;
-	}
-	if let Some(tile) = trial.tile {
-		let _ = configure_storybook_field_area(tile, trial.area, true);
-	}
-	GroveGpuVisuals::admit(true);
 	*settings = owner_settings();
 	info!(
 		target: "maybraid.tree_field",
 		tile = ?trial.tile, area = ?trial.area, capacity = settings.max_plants,
-		"GPU forest visuals admitted for every grove kind"
+		"GPU forest catalogs admitted for every grove kind"
 	);
 }
 
@@ -165,6 +145,66 @@ mod tests {
 		assert_eq!(parse_tile("1746.8, 1037.9"), Some(Vec2::new(1746.8, 1037.9)));
 		assert!(parse_tile("1,2,3").is_none());
 		assert!(parse_tile("1,inf").is_none());
+	}
+
+	#[test]
+	fn omitted_env_keeps_legacy_kits() {
+		let _lock = GroveGpuVisuals::lock_admission();
+		let previous_mode = std::env::var("MAYBRAID_EXPERIMENT_TREE_FIELD").ok();
+		let previous_shadows = std::env::var("MAYBRAID_SHADOWS").ok();
+		unsafe {
+			std::env::remove_var("MAYBRAID_EXPERIMENT_TREE_FIELD");
+			std::env::remove_var("MAYBRAID_SHADOWS");
+		}
+		GroveGpuVisuals::admit(false);
+		let mut app = App::new();
+		register_world_tree_field(&mut app);
+		assert!(!GroveGpuVisuals::admitted());
+		assert!(app.world().get_resource::<vegetation_tree_field::TreeGroveCatalog>().is_none());
+		assert!(app.world().get_resource::<vegetation_bush_field::BushGroveCatalog>().is_none());
+		assert!(
+			app.world()
+				.get_resource::<vegetation_grass_field::GrassGroveCatalog>()
+				.is_none()
+		);
+		unsafe {
+			match previous_mode {
+				Some(value) => std::env::set_var("MAYBRAID_EXPERIMENT_TREE_FIELD", value),
+				None => std::env::remove_var("MAYBRAID_EXPERIMENT_TREE_FIELD"),
+			}
+			match previous_shadows {
+				Some(value) => std::env::set_var("MAYBRAID_SHADOWS", value),
+				None => std::env::remove_var("MAYBRAID_SHADOWS"),
+			}
+		}
+	}
+
+	#[test]
+	fn area_1746_present_ring_selects_tree_bush_and_grass() {
+		use crate::{ForestExtent, ForestLayer, ForestSelection, GROVE_PRESENT_RADIUS_M};
+
+		let selection = ForestSelection::default();
+		let at = Vec3::new(1746.8, 0.0, 1037.9);
+		let region = ForestExtent::xz_radius_aabb(at, GROVE_PRESENT_RADIUS_M);
+		let mut trees = 0usize;
+		let mut bushes = 0usize;
+		let mut grass = 0usize;
+		for forest in ForestExtent::cells_overlapping(region) {
+			let layers = selection.layers_for(forest);
+			for layer in ForestLayer::ALL {
+				if layer.kind(layers).is_none() {
+					continue;
+				}
+				match layer {
+					ForestLayer::Tufts => grass += 1,
+					ForestLayer::Understory => bushes += 1,
+					ForestLayer::LowerCanopy | ForestLayer::UpperCanopy => trees += 1,
+				}
+			}
+		}
+		assert!(trees > 0, "Area 1746 present ring must include canopy");
+		assert!(bushes > 0, "Area 1746 present ring must include understory");
+		assert!(grass > 0, "Area 1746 present ring must include tufts");
 	}
 
 	fn grow(kind: ForestGroveKind) -> ForestGroveTile {
@@ -213,12 +253,15 @@ mod tests {
 		});
 		with_lod(Vec3::new(0.0, 20.0, crate::GROVE_PRESENT_RADIUS_M + 500.0), |lod_ref| {
 			assert_eq!(host.scene_lod_level(lod_ref), LodSceneLevel::High);
-			assert!(!host
-				.scene_lod_culls(lod_ref, LodSceneLevel::High)
-				.should_cull(LodSceneLevel::High));
-			assert!(host
-				.scene_lod_culls(lod_ref, LodSceneLevel::High)
-				.should_cull(LodSceneLevel::UltraLow));
+			assert!(
+				!host
+					.scene_lod_culls(lod_ref, LodSceneLevel::High)
+					.should_cull(LodSceneLevel::High)
+			);
+			assert!(
+				host.scene_lod_culls(lod_ref, LodSceneLevel::High)
+					.should_cull(LodSceneLevel::UltraLow)
+			);
 		});
 	}
 
@@ -293,8 +336,10 @@ mod tests {
 		);
 
 		GroveGpuVisuals::admit(false);
-		assert!(!GroveGpuVisuals::claim(&trees, ForestLayer::LowerCanopy, &owner_settings())
-			.replaces_kits());
+		assert!(
+			!GroveGpuVisuals::claim(&trees, ForestLayer::LowerCanopy, &owner_settings())
+				.replaces_kits()
+		);
 		with_lod(Vec3::new(0.0, 20.0, 40.0), |lod_ref| {
 			assert!(trees.scene_chunks_with_level(lod_ref, LodSceneLevel::High).total_weight() > 1);
 		});
