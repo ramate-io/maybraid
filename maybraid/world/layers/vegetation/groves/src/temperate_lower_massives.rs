@@ -13,9 +13,50 @@ pub mod variants;
 mod vc;
 
 use crate::grove::{
-	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
-	PlacementConstraints,
+	GroveBucket, GroveDefinition, GroveDistribution, GroveExtent, GrovePlacementRanges, PaletteMix,
+	PaletteSlot, PlacementConstraints, DEFAULT_GROVE_EXTENT_XZ,
 };
+
+/// Fixed selection and worst-case plant admission for the world tree-field trial.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StorybookFieldArea {
+	Tile,
+	Neighborhood,
+}
+
+impl StorybookFieldArea {
+	pub fn from_env() -> Option<Self> {
+		match std::env::var("MAYBRAID_EXPERIMENT_TREE_FIELD_AREA") {
+			Err(std::env::VarError::NotPresent) => Some(Self::Tile),
+			Ok(value) if value == "3x3" => Some(Self::Neighborhood),
+			_ => None,
+		}
+	}
+
+	pub fn plants_per_tile(self) -> u32 {
+		match self {
+			Self::Tile => 64,
+			Self::Neighborhood => 36,
+		}
+	}
+
+	pub fn max_plants(self) -> u32 {
+		match self {
+			Self::Tile => self.plants_per_tile(),
+			Self::Neighborhood => 9 * self.plants_per_tile(),
+		}
+	}
+
+	fn contains_tile(self, anchor: Vec2, extent: GroveExtent) -> bool {
+		let radius: i32 = if self == Self::Neighborhood { 1 } else { 0 };
+		(-radius..=radius).any(|x| {
+			(-radius..=radius).any(|z| {
+				let point = anchor + Vec2::new(x as f32, z as f32) * DEFAULT_GROVE_EXTENT_XZ;
+				extent.owns_center_xz(bevy_math::Vec3::new(point.x, 0.0, point.y))
+			})
+		})
+	}
+}
 
 /// Moderate sampled canopy-density band ([`0.35`, `0.65`]).
 const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
@@ -198,7 +239,30 @@ const WOODY_LOD: WoodyGroveLod = WoodyGroveLod::rory_trunk(
 );
 
 #[cfg(feature = "render")]
-pub use vc::{TemperateLowerMassives, TemperateLowerMassivesParams, TemperateLowerMassivesPlant};
+pub use vc::{
+	configure_storybook_field_area, scout_storybook_field_tile, StorybookFieldSample,
+	TemperateLowerMassives, TemperateLowerMassivesParams, TemperateLowerMassivesPlant,
+};
 
 #[cfg(test)]
 mod tests;
+
+#[test]
+fn tree_field_area_selects_exactly_one_or_nine_canonical_tiles() {
+	use bevy_math::Vec3;
+	let anchor = Vec2::new(-4950.0, 3150.0);
+	let mut single = 0;
+	let mut neighborhood = 0;
+	for x in -2..=2 {
+		for z in -2..=2 {
+			let min = Vec3::new(-5000.0 + x as f32 * 100.0, 0.0, 3100.0 + z as f32 * 100.0);
+			let extent = GroveExtent::new(min, min + Vec3::new(100.0, 1.0, 100.0));
+			single += usize::from(StorybookFieldArea::Tile.contains_tile(anchor, extent));
+			neighborhood +=
+				usize::from(StorybookFieldArea::Neighborhood.contains_tile(anchor, extent));
+		}
+	}
+	assert_eq!(single, 1);
+	assert_eq!(neighborhood, 9);
+	assert_eq!(StorybookFieldArea::Neighborhood.max_plants(), 324);
+}

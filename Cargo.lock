@@ -3142,6 +3142,7 @@ dependencies = [
  "vegetation-groves",
  "vegetation-layer-model",
  "vegetation-shaders",
+ "vegetation-tree-field",
 ]
 
 [[package]]

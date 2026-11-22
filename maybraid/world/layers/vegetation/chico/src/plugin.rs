@@ -30,6 +30,7 @@ impl Plugin for VegetationViewPlugin {
 			app.add_plugins(VegetationMaterialRefPlugin);
 		}
 		init_vegetation_material_caches(app);
+		crate::tree_field::register_world_tree_field(app);
 		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
 			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
 		}
