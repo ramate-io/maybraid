@@ -41,7 +41,7 @@ use vegetation_shaders::wesl::{
 };
 
 use crate::capability::{GrassGpuCapability, GrassGpuMode};
-use crate::catalog::GroveEncodeStats;
+use crate::catalog::{CatalogApply, GroveEncodeStats};
 use crate::diagnostics::GrassFieldStats;
 use crate::grove_catalog::{GrassCatalogOps, GrassGroveCatalog};
 use crate::plugin::{ExtractedGrassField, GrassFieldPresenter};
@@ -307,7 +307,7 @@ fn prepare_grass_buffers(
 	if !capability.submits() {
 		return;
 	}
-	let leftover = catalog.apply(ops.take(), crate::ADMISSION_BUDGET);
+	let CatalogApply { leftover, .. } = catalog.apply(ops.take(), crate::ADMISSION_BUDGET);
 	ops.ops.extend(leftover);
 	encode.catalog_writes = catalog.last_writes;
 	encode.catalog_bytes = catalog.last_write_bytes;

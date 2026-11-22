@@ -4,11 +4,13 @@ use std::collections::HashMap;
 
 use bevy::math::Vec3;
 use bevy::prelude::*;
-use vegetation_grass_field::{CatalogOpQueue, GroveEncodeStats, GroveId, RangeArena, RangeSpan};
+use vegetation_grass_field::{
+	CatalogApply, CatalogOpQueue, GroveCatalogOp, GroveEncodeStats, GroveId, RangeArena, RangeSpan,
+};
 
 use crate::layout::{
-	BranchDescriptor, LeafDescriptor, PlantDescriptor, BRANCH_DESCRIPTOR_STRIDE,
-	LEAF_DESCRIPTOR_STRIDE, PLANT_DESCRIPTOR_STRIDE,
+	BRANCH_DESCRIPTOR_STRIDE, BranchDescriptor, LEAF_DESCRIPTOR_STRIDE, LeafDescriptor,
+	PLANT_DESCRIPTOR_STRIDE, PlantDescriptor,
 };
 
 /// Grown descriptors for one grove, moved (not cloned) through extract.
@@ -30,6 +32,18 @@ pub enum TreeCatalogOp {
 }
 
 pub type TreeCatalogOps = CatalogOpQueue<TreeCatalogOp>;
+
+impl GroveCatalogOp for TreeCatalogOp {
+	fn grove_id(&self) -> GroveId {
+		match *self {
+			Self::Admit { id, .. } | Self::Retire { id } => id,
+		}
+	}
+
+	fn is_retire(&self) -> bool {
+		matches!(self, Self::Retire { .. })
+	}
+}
 
 #[derive(Clone, Debug)]
 struct LiveGrove {
@@ -115,6 +129,10 @@ impl TreeGroveCatalog {
 		self.live.len()
 	}
 
+	pub fn contains(&self, id: GroveId) -> bool {
+		self.live.contains_key(&id)
+	}
+
 	pub fn encode_plan() -> GroveEncodeStats {
 		GroveEncodeStats::woody_kind()
 	}
@@ -123,41 +141,32 @@ impl TreeGroveCatalog {
 		&mut self,
 		ops: impl IntoIterator<Item = TreeCatalogOp>,
 		budget: usize,
-	) -> Vec<TreeCatalogOp> {
+	) -> CatalogApply<TreeCatalogOp> {
 		self.last_write_bytes = 0;
 		self.last_writes = 0;
 		self.last_uploads.clear();
-		let mut leftover = Vec::new();
-		let mut admits = 0usize;
-		for op in ops {
-			match op {
-				TreeCatalogOp::Retire { id } => self.retire(id),
-				TreeCatalogOp::Admit { .. } if admits >= budget => leftover.push(op),
-				TreeCatalogOp::Admit {
-					id,
-					plants,
-					branches,
-					leaves,
-					aabb_min,
-					aabb_max,
-					seed,
-					truncated_plants,
-				} => {
-					self.admit(
-						id,
-						plants,
-						branches,
-						leaves,
-						aabb_min,
-						aabb_max,
-						seed,
-						truncated_plants,
-					);
-					admits += 1;
-				}
-			}
-		}
-		leftover
+		CatalogApply::budgeted(ops, budget, |op| match op {
+			TreeCatalogOp::Retire { id } => self.retire(*id),
+			TreeCatalogOp::Admit {
+				id,
+				plants,
+				branches,
+				leaves,
+				aabb_min,
+				aabb_max,
+				seed,
+				truncated_plants,
+			} => self.admit(
+				*id,
+				plants.clone(),
+				branches.clone(),
+				leaves.clone(),
+				*aabb_min,
+				*aabb_max,
+				*seed,
+				*truncated_plants,
+			),
+		})
 	}
 
 	fn admit(
@@ -321,7 +330,7 @@ mod tests {
 	#[test]
 	fn idle_frame_writes_nothing() {
 		let mut catalog = TreeGroveCatalog::default();
-		let leftover = catalog.apply([], ADMISSION_BUDGET);
+		let leftover = catalog.apply([], ADMISSION_BUDGET).leftover;
 		assert!(leftover.is_empty());
 		assert_eq!(catalog.last_writes, 0);
 		assert_eq!(catalog.last_write_bytes, 0);
@@ -405,8 +414,87 @@ mod tests {
 				}
 			})
 			.collect();
-		let leftover = catalog.apply(ops, 1);
+		let leftover = catalog.apply(ops, 1).leftover;
 		assert_eq!(catalog.live_grove_count(), 1);
 		assert_eq!(leftover.len(), 2);
+	}
+
+	fn admit(id: u64) -> TreeCatalogOp {
+		let (plants, branches, leaves) = grown(Vec3::new(id as f32, 0.0, 0.0));
+		TreeCatalogOp::Admit {
+			id: GroveId(id),
+			plants,
+			branches,
+			leaves,
+			aabb_min: Vec3::ZERO,
+			aabb_max: Vec3::ONE,
+			seed: id as u32,
+			truncated_plants: 0,
+		}
+	}
+
+	fn assert_same_live(
+		main: &TreeGroveCatalog,
+		render: &TreeGroveCatalog,
+		ids: impl IntoIterator<Item = u64>,
+	) {
+		for id in ids {
+			assert_eq!(main.contains(GroveId(id)), render.contains(GroveId(id)), "grove {id}");
+		}
+	}
+
+	#[test]
+	fn mixed_batch_applies_retire_after_budgeted_admits() {
+		let mut main = TreeGroveCatalog::default();
+		main.apply([admit(99)], ADMISSION_BUDGET);
+		let mut render = TreeGroveCatalog::default();
+		render.apply([admit(99)], ADMISSION_BUDGET);
+		assert!(main.contains(GroveId(99)));
+
+		let mut batch: Vec<_> = (1..=ADMISSION_BUDGET as u64).map(admit).collect();
+		batch.push(admit(100));
+		batch.push(TreeCatalogOp::Retire { id: GroveId(99) });
+		let CatalogApply { applied, leftover } = main.apply(batch, ADMISSION_BUDGET);
+
+		assert_eq!(leftover.len(), 1);
+		assert_eq!(leftover[0].grove_id(), GroveId(100));
+		assert!(!leftover[0].is_retire());
+		assert!(applied.iter().any(|op| op.is_retire() && op.grove_id() == GroveId(99)));
+		assert!(applied.iter().all(|op| op.grove_id() != GroveId(100)));
+		assert_eq!(applied.len(), ADMISSION_BUDGET + 1);
+		for id in 1..=ADMISSION_BUDGET as u64 {
+			assert!(main.contains(GroveId(id)), "{id}");
+		}
+		assert!(!main.contains(GroveId(99)));
+		assert!(!main.contains(GroveId(100)));
+
+		let CatalogApply { leftover: render_leftover, .. } =
+			render.apply(applied, ADMISSION_BUDGET);
+		assert!(render_leftover.is_empty());
+		assert_same_live(&main, &render, (1..=ADMISSION_BUDGET as u64).chain([99, 100]));
+	}
+
+	#[test]
+	fn mixed_batch_cancels_pending_admit_on_retire() {
+		let mut main = TreeGroveCatalog::default();
+		let mut batch: Vec<_> = (1..=ADMISSION_BUDGET as u64).map(admit).collect();
+		batch.push(admit(100));
+		batch.push(TreeCatalogOp::Retire { id: GroveId(100) });
+		let CatalogApply { applied, leftover } = main.apply(batch, ADMISSION_BUDGET);
+
+		assert!(leftover.is_empty());
+		assert!(applied.iter().any(|op| op.is_retire() && op.grove_id() == GroveId(100)));
+		assert!(
+			applied
+				.iter()
+				.all(|op| !(matches!(op, TreeCatalogOp::Admit { id, .. } if *id == GroveId(100))))
+		);
+		assert!(!main.contains(GroveId(100)));
+
+		let mut render = TreeGroveCatalog::default();
+		let CatalogApply { leftover: render_leftover, .. } =
+			render.apply(applied, ADMISSION_BUDGET);
+		assert!(render_leftover.is_empty());
+		assert_same_live(&main, &render, (1..=ADMISSION_BUDGET as u64).chain([100]));
 	}
 }

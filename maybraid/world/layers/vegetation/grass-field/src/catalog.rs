@@ -119,6 +119,53 @@ impl RangeArena {
 	}
 }
 
+/// One catalog op that can be admitted or retired under [`ADMISSION_BUDGET`].
+pub trait GroveCatalogOp {
+	fn grove_id(&self) -> GroveId;
+	fn is_retire(&self) -> bool;
+}
+
+/// Applied vs deferred ops from one budgeted catalog pass.
+///
+/// Retires always apply, even after the admission budget is exhausted. Deferred
+/// admits stay in [`Self::leftover`] unless a later retire of the same grove
+/// cancels them. [`Self::applied`] keeps the original relative order so extract
+/// can replay the same sequence on the render catalog.
+#[derive(Debug)]
+pub struct CatalogApply<T> {
+	pub applied: Vec<T>,
+	pub leftover: Vec<T>,
+}
+
+impl<T: GroveCatalogOp> CatalogApply<T> {
+	pub fn budgeted(
+		ops: impl IntoIterator<Item = T>,
+		budget: usize,
+		mut apply_one: impl FnMut(&T),
+	) -> Self {
+		let mut leftover: Vec<T> = Vec::new();
+		let mut applied: Vec<T> = Vec::new();
+		let mut admits = 0usize;
+		for op in ops {
+			if op.is_retire() {
+				apply_one(&op);
+				let id = op.grove_id();
+				leftover.retain(|pending: &T| pending.is_retire() || pending.grove_id() != id);
+				applied.push(op);
+				continue;
+			}
+			if admits >= budget {
+				leftover.push(op);
+				continue;
+			}
+			apply_one(&op);
+			admits += 1;
+			applied.push(op);
+		}
+		Self { applied, leftover }
+	}
+}
+
 /// Pending admits/retires. Extract takes the whole queue.
 #[derive(Resource, Clone, Debug)]
 pub struct CatalogOpQueue<T> {
@@ -193,5 +240,60 @@ mod tests {
 		assert_eq!(taken, vec![1, 2, 3]);
 		assert!(queue.is_empty());
 		assert!(queue.take().is_empty());
+	}
+
+	#[derive(Clone, Debug, PartialEq, Eq)]
+	enum FakeOp {
+		Admit(u64),
+		Retire(u64),
+	}
+
+	impl GroveCatalogOp for FakeOp {
+		fn grove_id(&self) -> GroveId {
+			match *self {
+				Self::Admit(id) | Self::Retire(id) => GroveId(id),
+			}
+		}
+
+		fn is_retire(&self) -> bool {
+			matches!(self, Self::Retire(_))
+		}
+	}
+
+	#[test]
+	fn budgeted_apply_forwards_retire_after_deferred_admit() {
+		let mut live = vec![99u64];
+		let mut batch: Vec<_> = (1..=ADMISSION_BUDGET as u64 + 1).map(FakeOp::Admit).collect();
+		batch.push(FakeOp::Retire(99));
+		let CatalogApply { applied, leftover } =
+			CatalogApply::budgeted(batch, ADMISSION_BUDGET, |op| match *op {
+				FakeOp::Admit(id) => live.push(id),
+				FakeOp::Retire(id) => live.retain(|live_id| *live_id != id),
+			});
+		assert_eq!(leftover, [FakeOp::Admit(ADMISSION_BUDGET as u64 + 1)]);
+		assert!(applied.contains(&FakeOp::Retire(99)));
+		assert!(!applied.contains(&FakeOp::Admit(ADMISSION_BUDGET as u64 + 1)));
+		assert!(!live.contains(&99));
+		assert!(!live.contains(&(ADMISSION_BUDGET as u64 + 1)));
+		for id in 1..=ADMISSION_BUDGET as u64 {
+			assert!(live.contains(&id), "{id}");
+		}
+	}
+
+	#[test]
+	fn budgeted_apply_cancels_pending_admit_on_same_id_retire() {
+		let mut live = Vec::new();
+		let mut batch: Vec<_> = (1..=ADMISSION_BUDGET as u64).map(FakeOp::Admit).collect();
+		batch.push(FakeOp::Admit(100));
+		batch.push(FakeOp::Retire(100));
+		let CatalogApply { applied, leftover } =
+			CatalogApply::budgeted(batch, ADMISSION_BUDGET, |op| match *op {
+				FakeOp::Admit(id) => live.push(id),
+				FakeOp::Retire(id) => live.retain(|live_id| *live_id != id),
+			});
+		assert!(leftover.is_empty());
+		assert!(applied.contains(&FakeOp::Retire(100)));
+		assert!(!applied.contains(&FakeOp::Admit(100)));
+		assert!(!live.contains(&100));
 	}
 }

@@ -36,7 +36,7 @@ use bevy::render::sync_world::MainEntityHashSet;
 use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntity, ViewTarget};
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::{GrassGpuCapability, GrassGpuMode, GroveEncodeStats};
+use vegetation_grass_field::{CatalogApply, GrassGpuCapability, GrassGpuMode, GroveEncodeStats};
 use vegetation_groves::temperate_lower_massives::StorybookFieldArea;
 use vegetation_shaders::wesl::{
 	GrassDrawParams, GrassViewUniform, LodThresholds, DRAW_INDEXED_INDIRECT_STRIDE,
@@ -475,7 +475,7 @@ fn prepare_tree_buffers(
 	if !capability.submits() {
 		return;
 	}
-	let leftover = catalog.apply(ops.take(), crate::ADMISSION_BUDGET);
+	let CatalogApply { leftover, .. } = catalog.apply(ops.take(), crate::ADMISSION_BUDGET);
 	ops.ops.extend(leftover);
 	encode.catalog_writes = catalog.last_writes;
 	encode.catalog_bytes = catalog.last_write_bytes;

@@ -12,14 +12,14 @@ use bevy::render::extract_component::{ExtractComponent, ExtractComponentPlugin};
 use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
 use bevy::render::{ExtractSchedule, MainWorld, RenderApp};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::{GrassGpuCapability, GroveId, ADMISSION_BUDGET};
+use vegetation_grass_field::{ADMISSION_BUDGET, CatalogApply, GrassGpuCapability, GroveId};
 use vegetation_shaders::VegetationWeslPlugin;
 
 use crate::bounds::TreeBounds;
 use crate::catalog::{TreeCatalogOp, TreeCatalogOps, TreeGroveCatalog};
 use crate::diagnostics::TreeFieldStats;
 use crate::field::{TreeField, TreeFieldSettings};
-use crate::gpu::{requested_world_tree_mode, TreeGpuPlugin};
+use crate::gpu::{TreeGpuPlugin, requested_world_tree_mode};
 use crate::patch::TreePatch;
 use crate::shaders::TreeShadersPlugin;
 
@@ -147,9 +147,8 @@ pub fn collect_catalog_ops(
 	}
 	let mut batch = std::mem::take(&mut catalog.pending);
 	batch.extend(fresh);
-	let leftover = catalog.apply(batch.iter().cloned(), ADMISSION_BUDGET);
-	let applied = batch.len().saturating_sub(leftover.len());
-	ops.ops.extend(batch.into_iter().take(applied));
+	let CatalogApply { applied, leftover } = catalog.apply(batch, ADMISSION_BUDGET);
+	ops.ops.extend(applied);
 	catalog.pending = leftover;
 }
 
@@ -379,5 +378,110 @@ mod tests {
 		assert!(!field.branches.is_empty());
 		assert_eq!(field.patches.len(), 1);
 		Ok(())
+	}
+
+	fn admit_id(id: u64) -> TreeCatalogOp {
+		admit_from_field(
+			GroveId(id),
+			TreeField::rebuild(
+				[&TreePatch::isolated(1, Vec3::new(id as f32, 0.0, 0.0), TreeRecipe::storybook())],
+				&TreeFieldSettings::default(),
+			),
+			1,
+		)
+	}
+
+	#[test]
+	fn mixed_batch_forwards_retire_after_budgeted_admits() {
+		let mut app = App::new();
+		app.init_resource::<TreeFieldSettings>()
+			.init_resource::<TreeGroveCatalog>()
+			.init_resource::<TreeCatalogOps>()
+			.add_systems(Update, collect_catalog_ops);
+		let live_y = app
+			.world_mut()
+			.spawn(TreePatch::isolated(1, Vec3::ZERO, TreeRecipe::storybook()))
+			.id();
+		app.update();
+		let first = app.world_mut().resource_mut::<TreeCatalogOps>().take();
+		let mut render = TreeGroveCatalog::default();
+		render.apply(first, ADMISSION_BUDGET);
+		assert!(
+			app.world()
+				.resource::<TreeGroveCatalog>()
+				.contains(GroveId::from_entity(live_y))
+		);
+
+		let mut pending: Vec<_> = (0..ADMISSION_BUDGET as u64).map(|i| admit_id(200 + i)).collect();
+		pending.push(admit_id(300));
+		app.world_mut().resource_mut::<TreeGroveCatalog>().pending = pending;
+		app.world_mut().entity_mut(live_y).despawn();
+		app.update();
+
+		let y_id = GroveId::from_entity(live_y);
+		let catalog = app.world().resource::<TreeGroveCatalog>();
+		assert!(!catalog.contains(y_id));
+		assert!(!catalog.contains(GroveId(300)));
+		for i in 0..ADMISSION_BUDGET as u64 {
+			assert!(catalog.contains(GroveId(200 + i)), "{i}");
+		}
+		assert_eq!(catalog.pending.len(), 1);
+		assert!(matches!(
+			catalog.pending.first(),
+			Some(TreeCatalogOp::Admit { id, .. }) if *id == GroveId(300)
+		));
+
+		let forwarded = app.world().resource::<TreeCatalogOps>().ops.clone();
+		assert!(
+			forwarded
+				.iter()
+				.any(|op| matches!(op, TreeCatalogOp::Retire { id } if *id == y_id))
+		);
+		assert!(forwarded.iter().all(|op| match op {
+			TreeCatalogOp::Admit { id, .. } | TreeCatalogOp::Retire { id } => *id != GroveId(300),
+		}));
+
+		let CatalogApply { leftover, .. } = render.apply(forwarded, ADMISSION_BUDGET);
+		assert!(leftover.is_empty());
+		let main = app.world().resource::<TreeGroveCatalog>();
+		assert_eq!(main.contains(y_id), render.contains(y_id));
+		assert_eq!(main.contains(GroveId(300)), render.contains(GroveId(300)));
+		for i in 0..ADMISSION_BUDGET as u64 {
+			assert_eq!(main.contains(GroveId(200 + i)), render.contains(GroveId(200 + i)), "{i}");
+		}
+	}
+
+	#[test]
+	fn mixed_batch_cancels_pending_admit_on_retire() {
+		let mut app = App::new();
+		app.init_resource::<TreeFieldSettings>()
+			.init_resource::<TreeGroveCatalog>()
+			.init_resource::<TreeCatalogOps>()
+			.add_systems(Update, collect_catalog_ops);
+		let mut pending: Vec<_> = (0..ADMISSION_BUDGET as u64).map(|i| admit_id(200 + i)).collect();
+		pending.push(admit_id(300));
+		pending.push(TreeCatalogOp::Retire { id: GroveId(300) });
+		app.world_mut().resource_mut::<TreeGroveCatalog>().pending = pending;
+		app.update();
+
+		let catalog = app.world().resource::<TreeGroveCatalog>();
+		assert!(catalog.pending.is_empty());
+		assert!(!catalog.contains(GroveId(300)));
+		let forwarded = app.world().resource::<TreeCatalogOps>().ops.clone();
+		assert!(
+			forwarded
+				.iter()
+				.any(|op| matches!(op, TreeCatalogOp::Retire { id } if *id == GroveId(300)))
+		);
+		assert!(
+			forwarded
+				.iter()
+				.all(|op| !matches!(op, TreeCatalogOp::Admit { id, .. } if *id == GroveId(300)))
+		);
+
+		let mut render = TreeGroveCatalog::default();
+		let CatalogApply { leftover, .. } = render.apply(forwarded, ADMISSION_BUDGET);
+		assert!(leftover.is_empty());
+		assert!(!render.contains(GroveId(300)));
 	}
 }

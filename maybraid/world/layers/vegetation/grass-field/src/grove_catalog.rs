@@ -4,9 +4,11 @@ use std::collections::HashMap;
 
 use bevy::math::Vec3;
 use bevy::prelude::*;
-use vegetation_shaders::wesl::{BladeDescriptor, GrassPatchHeader, BLADE_DESCRIPTOR_STRIDE};
+use vegetation_shaders::wesl::{BLADE_DESCRIPTOR_STRIDE, BladeDescriptor, GrassPatchHeader};
 
-use crate::catalog::{CatalogOpQueue, GroveEncodeStats, GroveId, RangeArena, RangeSpan};
+use crate::catalog::{
+	CatalogApply, CatalogOpQueue, GroveCatalogOp, GroveEncodeStats, GroveId, RangeArena, RangeSpan,
+};
 
 #[derive(Clone, Debug)]
 pub enum GrassCatalogOp {
@@ -25,6 +27,18 @@ pub enum GrassCatalogOp {
 }
 
 pub type GrassCatalogOps = CatalogOpQueue<GrassCatalogOp>;
+
+impl GroveCatalogOp for GrassCatalogOp {
+	fn grove_id(&self) -> GroveId {
+		match *self {
+			Self::Admit { id, .. } | Self::Retire { id } => id,
+		}
+	}
+
+	fn is_retire(&self) -> bool {
+		matches!(self, Self::Retire { .. })
+	}
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct CatalogUpload {
@@ -84,6 +98,10 @@ impl GrassGroveCatalog {
 		self.live.len()
 	}
 
+	pub fn contains(&self, id: GroveId) -> bool {
+		self.live.contains_key(&id)
+	}
+
 	pub fn encode_plan() -> GroveEncodeStats {
 		GroveEncodeStats::grass_kind()
 	}
@@ -92,39 +110,30 @@ impl GrassGroveCatalog {
 		&mut self,
 		ops: impl IntoIterator<Item = GrassCatalogOp>,
 		budget: usize,
-	) -> Vec<GrassCatalogOp> {
+	) -> CatalogApply<GrassCatalogOp> {
 		self.last_write_bytes = 0;
 		self.last_writes = 0;
 		self.last_uploads.clear();
-		let mut leftover = Vec::new();
-		let mut admits = 0usize;
-		for op in ops {
-			match op {
-				GrassCatalogOp::Retire { id } => self.retire(id),
-				GrassCatalogOp::Admit { .. } if admits >= budget => leftover.push(op),
-				GrassCatalogOp::Admit {
-					id,
-					blades,
-					aabb_min,
-					aabb_max,
-					seed,
-					truncated_plants,
-					grove_residency,
-				} => {
-					self.admit(
-						id,
-						blades,
-						aabb_min,
-						aabb_max,
-						seed,
-						truncated_plants,
-						grove_residency,
-					);
-					admits += 1;
-				}
-			}
-		}
-		leftover
+		CatalogApply::budgeted(ops, budget, |op| match op {
+			GrassCatalogOp::Retire { id } => self.retire(*id),
+			GrassCatalogOp::Admit {
+				id,
+				blades,
+				aabb_min,
+				aabb_max,
+				seed,
+				truncated_plants,
+				grove_residency,
+			} => self.admit(
+				*id,
+				blades.clone(),
+				*aabb_min,
+				*aabb_max,
+				*seed,
+				*truncated_plants,
+				*grove_residency,
+			),
+		})
 	}
 
 	fn admit(
@@ -241,7 +250,7 @@ mod tests {
 	#[test]
 	fn idle_frame_writes_nothing() {
 		let mut catalog = GrassGroveCatalog::default();
-		let leftover = catalog.apply([], ADMISSION_BUDGET);
+		let leftover = catalog.apply([], ADMISSION_BUDGET).leftover;
 		assert!(leftover.is_empty());
 		assert_eq!(catalog.last_writes, 0);
 		assert_eq!(catalog.clones, 0);
@@ -299,5 +308,82 @@ mod tests {
 			GrassGroveCatalog::encode_plan().encode_only(),
 			GroveEncodeStats::grass_kind().encode_only()
 		);
+	}
+
+	fn admit(id: u64) -> GrassCatalogOp {
+		GrassCatalogOp::Admit {
+			id: GroveId(id),
+			blades: grown(Vec3::new(id as f32, 0.0, 0.0)),
+			aabb_min: Vec3::ZERO,
+			aabb_max: Vec3::ONE,
+			seed: id as u32,
+			truncated_plants: 0,
+			grove_residency: true,
+		}
+	}
+
+	fn assert_same_live(
+		main: &GrassGroveCatalog,
+		render: &GrassGroveCatalog,
+		ids: impl IntoIterator<Item = u64>,
+	) {
+		for id in ids {
+			assert_eq!(main.contains(GroveId(id)), render.contains(GroveId(id)), "grove {id}");
+		}
+	}
+
+	#[test]
+	fn mixed_batch_applies_retire_after_budgeted_admits() {
+		let mut main = GrassGroveCatalog::default();
+		main.apply([admit(99)], ADMISSION_BUDGET);
+		let mut render = GrassGroveCatalog::default();
+		render.apply([admit(99)], ADMISSION_BUDGET);
+		assert!(main.contains(GroveId(99)));
+
+		let mut batch: Vec<_> = (1..=ADMISSION_BUDGET as u64).map(admit).collect();
+		batch.push(admit(100));
+		batch.push(GrassCatalogOp::Retire { id: GroveId(99) });
+		let CatalogApply { applied, leftover } = main.apply(batch, ADMISSION_BUDGET);
+
+		assert_eq!(leftover.len(), 1);
+		assert_eq!(leftover[0].grove_id(), GroveId(100));
+		assert!(!leftover[0].is_retire());
+		assert!(applied.iter().any(|op| op.is_retire() && op.grove_id() == GroveId(99)));
+		assert!(applied.iter().all(|op| op.grove_id() != GroveId(100)));
+		assert_eq!(applied.len(), ADMISSION_BUDGET + 1);
+		for id in 1..=ADMISSION_BUDGET as u64 {
+			assert!(main.contains(GroveId(id)), "{id}");
+		}
+		assert!(!main.contains(GroveId(99)));
+		assert!(!main.contains(GroveId(100)));
+
+		let CatalogApply { leftover: render_leftover, .. } =
+			render.apply(applied, ADMISSION_BUDGET);
+		assert!(render_leftover.is_empty());
+		assert_same_live(&main, &render, (1..=ADMISSION_BUDGET as u64).chain([99, 100]));
+	}
+
+	#[test]
+	fn mixed_batch_cancels_pending_admit_on_retire() {
+		let mut main = GrassGroveCatalog::default();
+		let mut batch: Vec<_> = (1..=ADMISSION_BUDGET as u64).map(admit).collect();
+		batch.push(admit(100));
+		batch.push(GrassCatalogOp::Retire { id: GroveId(100) });
+		let CatalogApply { applied, leftover } = main.apply(batch, ADMISSION_BUDGET);
+
+		assert!(leftover.is_empty());
+		assert!(applied.iter().any(|op| op.is_retire() && op.grove_id() == GroveId(100)));
+		assert!(
+			applied
+				.iter()
+				.all(|op| !(matches!(op, GrassCatalogOp::Admit { id, .. } if *id == GroveId(100))))
+		);
+		assert!(!main.contains(GroveId(100)));
+
+		let mut render = GrassGroveCatalog::default();
+		let CatalogApply { leftover: render_leftover, .. } =
+			render.apply(applied, ADMISSION_BUDGET);
+		assert!(render_leftover.is_empty());
+		assert_same_live(&main, &render, (1..=ADMISSION_BUDGET as u64).chain([100]));
 	}
 }
