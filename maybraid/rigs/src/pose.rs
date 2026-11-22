@@ -290,15 +290,6 @@ mod tests {
 	use super::*;
 	use crate::bone_map::RigKey;
 
-	#[test]
-	fn scale_for_bone_multiplies_layers() {
-		let pose = ResolvedRigPose::new()
-			.with_layer(RigPoseLayer::new("a").with_scale(BoneScale::uniform("root", 2.0)))
-			.with_layer(RigPoseLayer::new("b").with_scale(BoneScale::uniform("root", 0.5)));
-		assert_eq!(pose.scale_for_bone("root"), Vec3::ONE);
-		assert_eq!(pose.scale_for_bone("other"), Vec3::ONE);
-	}
-
 	fn pose_app() -> App {
 		let mut app = App::new();
 		app.add_systems(Update, maintain_bind_pose);

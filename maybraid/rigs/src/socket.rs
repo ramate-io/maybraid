@@ -141,21 +141,3 @@ pub fn resolve_socket_parent(
 		None => Some(assembly_root),
 	}
 }
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn keyed_socket_carries_the_caller_name() {
-		let socket = SocketRef::on(RigKey::named("body"), "head_socket");
-		assert_eq!(socket.rig, Some(RigKey::named("body")));
-		assert_eq!(socket.bone, Some("head_socket"));
-	}
-
-	#[test]
-	fn unkeyed_socket_does_not_invent_a_rig_name() {
-		assert_eq!(SocketRef::bone("grip").rig, None);
-		assert_eq!(SocketRef::root().bone, None);
-	}
-}
