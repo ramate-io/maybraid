@@ -111,7 +111,7 @@ fn spawn_presenter(mut commands: Commands) {
 	}
 }
 
-fn collect_catalog_ops(
+pub fn collect_catalog_ops(
 	patches: Query<(Entity, &TreePatch), Changed<TreePatch>>,
 	mut removed_patches: RemovedComponents<TreePatch>,
 	groves: Query<(Entity, &TreeGrove), (Changed<TreeGrove>, Allow<Disabled>)>,
@@ -335,6 +335,39 @@ mod tests {
 		let catalog = app.world().resource::<TreeGroveCatalog>();
 		assert!(catalog.grove_residency);
 		assert_eq!(catalog.live_grove_count(), 1);
+	}
+
+	#[test]
+	fn tree_grove_realize_admits_once_and_unrealize_retires_once() {
+		let mut app = App::new();
+		app.init_resource::<TreeFieldSettings>()
+			.init_resource::<TreeGroveCatalog>()
+			.init_resource::<TreeCatalogOps>()
+			.add_systems(Update, collect_catalog_ops);
+		let patch = TreePatch::isolated(1, Vec3::ZERO, TreeRecipe::storybook());
+		let field = TreeField::rebuild([&patch], &TreeFieldSettings::default());
+		let id = app.world_mut().spawn(TreeGrove(std::sync::Arc::new(field))).id();
+		app.update();
+		assert_eq!(app.world().resource::<TreeGroveCatalog>().live_grove_count(), 1);
+		let admits = app
+			.world()
+			.resource::<TreeCatalogOps>()
+			.ops
+			.iter()
+			.filter(|op| matches!(op, TreeCatalogOp::Admit { .. }))
+			.count();
+		assert_eq!(admits, 1);
+		app.world_mut().entity_mut(id).despawn();
+		app.update();
+		assert_eq!(app.world().resource::<TreeGroveCatalog>().live_grove_count(), 0);
+		let retires = app
+			.world()
+			.resource::<TreeCatalogOps>()
+			.ops
+			.iter()
+			.filter(|op| matches!(op, TreeCatalogOp::Retire { .. }))
+			.count();
+		assert_eq!(retires, 1);
 	}
 
 	#[test]

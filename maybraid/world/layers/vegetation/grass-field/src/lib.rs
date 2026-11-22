@@ -33,7 +33,7 @@ pub use field::{GrassField, GrassFieldSettings};
 pub use grove_catalog::{GrassCatalogOp, GrassCatalogOps, GrassGroveCatalog};
 pub use host::GrassPatchLod;
 pub use patch::{GrassPatch, SurfaceSample};
-pub use plugin::GrassFieldPlugin;
+pub use plugin::{collect_catalog_ops, GrassFieldPlugin};
 pub use select::{frustum_planes, CompactedLists, GrassSelector, WorldFrustum};
 pub use species::GrassSpecies;
 pub use template::BladeTemplate;

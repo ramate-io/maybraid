@@ -114,7 +114,7 @@ fn sync_presenter_shadows(
 	}
 }
 
-fn collect_catalog_ops(
+pub fn collect_catalog_ops(
 	patches: Query<(Entity, &GrassPatch), Changed<GrassPatch>>,
 	mut removed: RemovedComponents<GrassPatch>,
 	settings: Res<GrassFieldSettings>,

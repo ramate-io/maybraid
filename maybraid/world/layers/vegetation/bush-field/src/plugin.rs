@@ -104,7 +104,7 @@ fn spawn_presenter(mut commands: Commands) {
 	}
 }
 
-fn collect_catalog_ops(
+pub fn collect_catalog_ops(
 	patches: Query<(Entity, &BushPatch), Changed<BushPatch>>,
 	mut removed: RemovedComponents<BushPatch>,
 	settings: Res<BushFieldSettings>,

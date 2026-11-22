@@ -5,9 +5,11 @@
 //! Converted — `GrownGrove` → [`crate::ChicoGroveHost`] (`hcsg.rs`) is the only forest
 //! present path. Every [`crate::ForestGroveKind`] claims a GPU field from existing
 //! roots. GPU CPU [`lod::scene::LodScene`] is a single High band that only culls
-//! leftover Mid/Low/far roots; kit chunks stay empty. Nested `StickNode` /
-//! `FoliageNode` kit meshes therefore never spawn on the GPU arm. Stream in/out
-//! is still the 1 km [`crate::GROVE_PRESENT_RADIUS_M`] present ring.
+//! leftover Mid/Low/far roots. Realizing High admits one catalog entry
+//! (`TreeGrove` / `BushPatch` / `GrassPatch`); leaving High retires it. Kit
+//! chunks stay empty, so nested `StickNode` / `FoliageNode` kit meshes never
+//! spawn on the GPU arm. Stream in/out is still the 1 km
+//! [`crate::GROVE_PRESENT_RADIUS_M`] present ring.
 //!
 //! Intentionally out of scope — not grove tiles, so they keep their own meshes:
 //! - `BumpOutPresentationPlugin` `CanopyBumpOut` / `MediumCanopyBumpOut`
@@ -364,7 +366,7 @@ mod tests {
 		assert!(trees > 0, "world-route canopy must admit storybook trees");
 		assert!(bushes > 0, "world-route understory must admit bushes");
 		assert!(grass > 0, "world-route tufts must admit grass");
-		assert_eq!(kit_high, hosts as u32, "each GPU host emits one empty kit primitive");
+		assert_eq!(kit_high, hosts as u32, "each GPU host High band is one catalog primitive");
 		eprintln!(
 			"world-route GPU census: hosts={hosts} trees={trees} bushes={bushes} grass={grass} kit_high_weight={kit_high}"
 		);

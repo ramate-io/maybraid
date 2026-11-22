@@ -36,74 +36,47 @@ impl ChicoGroveHost {
 		&self.visuals
 	}
 
-	/// GPU catalogs own visuals. The 1 km present ring only admits/retires;
-	/// grove entities are not LodScene indexed and carry no Transform/Visibility.
+	/// GPU catalogs own plant visuals. The host still goes through LodScene
+	/// with one High band covering the near-grove ring. Realizing High admits
+	/// a catalog entry; leaving High retires it. Distance LOD stays in the GPU
+	/// program.
 	pub fn stamps_lod_scene_host(&self) -> bool {
-		!self.visuals.replaces_kits()
+		true
 	}
 
 	/// This tile as a nested host, pending at the level `lod_ref` (the
-	/// viewer) sees it. GPU groves skip LOD scaffolding.
+	/// viewer) sees it. GPU groves stamp the same LodScene shell; High
+	/// fulfill streams the catalog entry.
 	pub fn scene(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		self.scene_boxed(lod_ref)
-	}
-
-	fn scene_boxed(&self, lod_ref: &LodRef) -> Box<dyn Scene> {
-		let trees = self.tree_scene();
-		let bushes = self.bush_scene();
-		let grass = self.grass_scene();
 		let host = self.clone();
-		if self.visuals.replaces_kits() {
-			Box::new((
-				bsn! {
-					template(move |_ctx| Ok(host.clone()))
-				},
-				trees,
-				bushes,
-				grass,
-			))
+		(
+			lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds()),
+			bsn! {
+				~{Transform::IDENTITY}
+				Visibility::default()
+				template(move |_ctx| Ok(host.clone()))
+			},
+		)
+	}
+
+	fn catalog_scene(&self) -> Box<dyn Scene> {
+		if let Some(field) = self.visuals.trees.clone() {
+			return Box::new(bsn! { ~{field} });
+		}
+		if let Some(patch) = self.visuals.bushes.clone() {
+			return Box::new(bsn! { ~{patch} });
+		}
+		if let Some(patch) = self.visuals.grass.clone() {
+			return Box::new(bsn! { ~{patch} });
+		}
+		Box::new(Self::empty_scene())
+	}
+
+	fn level_scene(&self, level: LodSceneLevel) -> Box<dyn Scene> {
+		if self.visuals.replaces_kits() && level == LodSceneLevel::High {
+			self.catalog_scene()
 		} else {
-			Box::new((
-				lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds()),
-				bsn! {
-					~{Transform::IDENTITY}
-					Visibility::default()
-					template(move |_ctx| Ok(host.clone()))
-				},
-				trees,
-				bushes,
-				grass,
-			))
-		}
-	}
-
-	fn tree_scene(&self) -> Box<dyn Scene> {
-		match &self.visuals.trees {
-			Some(field) => {
-				let field = field.clone();
-				Box::new(bsn! { ~{field} })
-			}
-			_ => Box::new(Self::empty_scene()),
-		}
-	}
-
-	fn bush_scene(&self) -> Box<dyn Scene> {
-		match &self.visuals.bushes {
-			Some(patch) => {
-				let patch = patch.clone();
-				Box::new(bsn! { ~{patch} })
-			}
-			_ => Box::new(Self::empty_scene()),
-		}
-	}
-
-	fn grass_scene(&self) -> Box<dyn Scene> {
-		match &self.visuals.grass {
-			Some(patch) => {
-				let patch = patch.clone();
-				Box::new(bsn! { ~{patch} })
-			}
-			_ => Box::new(Self::empty_scene()),
+			Box::new(Self::empty_scene())
 		}
 	}
 
@@ -186,13 +159,13 @@ impl LodScene for ChicoGroveHost {
 			.unwrap_or_else(|| self.tile.scene_lod_culls(lod_ref, current))
 	}
 
-	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
-		Self::empty_scene()
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		self.level_scene(level)
 	}
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
 		if self.visuals.replaces_kits() {
-			return Self::empty_chunks();
+			return SceneChunk::primitive(self.level_scene(level));
 		}
 		let drop = self.drop_out();
 		if drop.omits(level) {
@@ -211,7 +184,7 @@ impl LodScene for ChicoGroveHost {
 	}
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		self.scene_boxed(lod_ref)
+		self.scene(lod_ref)
 	}
 }
 
@@ -219,10 +192,31 @@ impl LodScene for ChicoGroveHost {
 mod tests {
 	use super::*;
 	use crate::grove::forest_world_sample;
-	use crate::{ChicoGrove, ForestGroveKind, ForestGroveRecipe};
-	use bevy::prelude::{Entity, Transform, Vec3};
-	use lod::LodScene;
+	use crate::{ChicoGrove, ForestGroveKind, ForestGroveRecipe, GpuFieldKind};
+	use bevy::asset::AssetPlugin;
+	use bevy::camera::visibility::VisibilityPlugin;
+	use bevy::ecs::system::RunSystemOnce;
+	use bevy::prelude::{
+		App, Component, Entity, Mesh3d, MinimalPlugins, Transform, TransformPlugin, Vec3, With,
+		World,
+	};
+	use bevy::scene::{ScenePlugin, WorldSceneExt};
+	use bevy::world_serialization::{WorldAsset, WorldSerializationPlugin};
+	use lod::{LodScene, LodSceneHost};
+	use vegetation_bush_field::{
+		collect_catalog_ops as collect_bush_catalog_ops, BushCatalogOp, BushCatalogOps,
+		BushFieldSettings, BushGroveCatalog, BushPatch,
+	};
+	use vegetation_components::{FoliageNode, StickNode};
+	use vegetation_grass_field::{
+		collect_catalog_ops as collect_grass_catalog_ops, GrassCatalogOp, GrassCatalogOps,
+		GrassFieldSettings, GrassGroveCatalog, GrassPatch,
+	};
 	use vegetation_groves::GroveExtent;
+	use vegetation_tree_field::{
+		collect_catalog_ops as collect_tree_catalog_ops, TreeCatalogOp, TreeCatalogOps,
+		TreeFieldSettings, TreeGrove, TreeGroveCatalog,
+	};
 
 	fn lod_at(translation: Vec3) -> (Transform, Aabb3d) {
 		(Transform::from_translation(translation), Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE))
@@ -322,26 +316,225 @@ mod tests {
 				assert_eq!(
 					host.scene_chunks_with_level(lod_ref, LodSceneLevel::High).total_primitives(),
 					1,
-					"{kind:?} High kit chunks"
+					"{kind:?} High must be one catalog primitive, not kit chunks"
 				);
 			});
 		}
 		crate::GroveGpuVisuals::admit(false);
 	}
 
-	#[test]
-	fn gpu_host_is_not_lod_scene_indexed() {
-		let _lock = crate::GroveGpuVisuals::lock_admission();
-		crate::GroveGpuVisuals::admit(true);
-		let stacked = [
+	fn stacked_gpu_kinds() -> [(ForestGroveKind, ForestLayer); 3] {
+		[
 			(ForestGroveKind::TemperateLowerMassives, ForestLayer::LowerCanopy),
 			(ForestGroveKind::LowBush, ForestLayer::Understory),
 			(ForestGroveKind::TallGrass, ForestLayer::Tufts),
-		];
-		for (kind, layer) in stacked {
+		]
+	}
+
+	fn scene_app() -> App {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_plugins((
+			TransformPlugin,
+			AssetPlugin::default(),
+			ScenePlugin,
+			VisibilityPlugin,
+			WorldSerializationPlugin,
+		));
+		app.init_asset::<WorldAsset>();
+		app
+	}
+
+	fn entities_with<T: Component>(world: &mut World) -> Vec<Entity> {
+		let mut query = world.query_filtered::<Entity, With<T>>();
+		query.iter(world).collect()
+	}
+
+	fn assert_no_kit_or_plant_render_children(world: &mut World, kind: ForestGroveKind) {
+		assert_eq!(
+			entities_with::<StickNode>(world).len(),
+			0,
+			"{kind:?} High realize spawned StickNode kits"
+		);
+		assert_eq!(
+			entities_with::<FoliageNode>(world).len(),
+			0,
+			"{kind:?} High realize spawned FoliageNode kits"
+		);
+		assert_eq!(
+			entities_with::<Mesh3d>(world).len(),
+			0,
+			"{kind:?} High realize spawned Mesh3d kits"
+		);
+	}
+
+	#[test]
+	fn gpu_host_is_lod_scene_indexed_with_high_only_band() {
+		let _lock = crate::GroveGpuVisuals::lock_admission();
+		crate::GroveGpuVisuals::admit(true);
+		for (kind, layer) in stacked_gpu_kinds() {
 			let host = grow_host(kind, layer);
 			assert!(host.gpu_visuals().replaces_kits(), "{kind:?}");
-			assert!(!host.stamps_lod_scene_host(), "{kind:?}");
+			assert!(host.stamps_lod_scene_host(), "{kind:?}");
+			assert_gpu_cpu_lod_high_only(&host);
+			with_lod(Vec3::new(0.0, 20.0, 40.0), |lod_ref| {
+				let mut app = scene_app();
+				app.world_mut()
+					.spawn_scene(host.scene(lod_ref))
+					.unwrap_or_else(|err| panic!("{kind:?} host scene: {err}"));
+				let hosts = entities_with::<LodSceneHost>(app.world_mut());
+				assert_eq!(hosts.len(), 1, "{kind:?} GPU host must stamp LodSceneHost");
+				assert_eq!(
+					app.world().get::<LodSceneLevel>(hosts[0]).copied(),
+					Some(LodSceneLevel::High),
+					"{kind:?} GPU host must pending High"
+				);
+				assert!(
+					entities_with::<TreeGrove>(app.world_mut()).is_empty(),
+					"{kind:?} catalog is High fulfill, not host.scene()"
+				);
+				assert!(entities_with::<BushPatch>(app.world_mut()).is_empty(), "{kind:?}");
+				assert!(entities_with::<GrassPatch>(app.world_mut()).is_empty(), "{kind:?}");
+			});
+		}
+		crate::GroveGpuVisuals::admit(false);
+	}
+
+	#[test]
+	fn gpu_host_high_realize_and_unrealize_is_one_admit_and_retire() {
+		let _lock = crate::GroveGpuVisuals::lock_admission();
+		crate::GroveGpuVisuals::admit(true);
+		for (kind, layer) in stacked_gpu_kinds() {
+			let host = grow_host(kind, layer);
+			assert!(host.gpu_visuals().replaces_kits(), "{kind:?}");
+			with_lod(Vec3::new(0.0, 20.0, 40.0), |lod_ref| {
+				let mut app = scene_app();
+				match crate::GroveGpuVisuals::field_kind(&host.tile, host.layer) {
+					GpuFieldKind::Tree => {
+						app.init_resource::<TreeFieldSettings>()
+							.init_resource::<TreeGroveCatalog>()
+							.init_resource::<TreeCatalogOps>();
+					}
+					GpuFieldKind::Bush => {
+						app.init_resource::<BushFieldSettings>()
+							.init_resource::<BushGroveCatalog>()
+							.init_resource::<BushCatalogOps>();
+					}
+					GpuFieldKind::Grass => {
+						app.init_resource::<GrassFieldSettings>()
+							.init_resource::<GrassGroveCatalog>()
+							.init_resource::<GrassCatalogOps>();
+					}
+				}
+				app.world_mut()
+					.spawn_scene(host.scene_with_level(lod_ref, LodSceneLevel::High))
+					.unwrap_or_else(|err| panic!("{kind:?} High realize: {err}"));
+				assert_no_kit_or_plant_render_children(app.world_mut(), kind);
+				match crate::GroveGpuVisuals::field_kind(&host.tile, host.layer) {
+					GpuFieldKind::Tree => {
+						let ids = entities_with::<TreeGrove>(app.world_mut());
+						assert_eq!(ids.len(), 1, "{kind:?} High realize must spawn one TreeGrove");
+						app.world_mut()
+							.run_system_once(collect_tree_catalog_ops)
+							.expect("tree catalog collect");
+						let catalog = app.world().resource::<TreeGroveCatalog>();
+						assert_eq!(catalog.live_grove_count(), 1, "{kind:?}");
+						let admits = app
+							.world()
+							.resource::<TreeCatalogOps>()
+							.ops
+							.iter()
+							.filter(|op| matches!(op, TreeCatalogOp::Admit { .. }))
+							.count();
+						assert_eq!(admits, 1, "{kind:?} High realize must emit one Admit");
+						app.world_mut().entity_mut(ids[0]).despawn();
+						app.world_mut()
+							.run_system_once(collect_tree_catalog_ops)
+							.expect("tree catalog retire");
+						assert_eq!(
+							app.world().resource::<TreeGroveCatalog>().live_grove_count(),
+							0
+						);
+						let retires = app
+							.world()
+							.resource::<TreeCatalogOps>()
+							.ops
+							.iter()
+							.filter(|op| matches!(op, TreeCatalogOp::Retire { .. }))
+							.count();
+						assert_eq!(retires, 1, "{kind:?} High unrealize must emit one Retire");
+					}
+					GpuFieldKind::Bush => {
+						let ids = entities_with::<BushPatch>(app.world_mut());
+						assert_eq!(ids.len(), 1, "{kind:?} High realize must spawn one BushPatch");
+						app.world_mut()
+							.run_system_once(collect_bush_catalog_ops)
+							.expect("bush catalog collect");
+						assert_eq!(
+							app.world().resource::<BushGroveCatalog>().live_grove_count(),
+							1
+						);
+						let admits = app
+							.world()
+							.resource::<BushCatalogOps>()
+							.ops
+							.iter()
+							.filter(|op| matches!(op, BushCatalogOp::Admit { .. }))
+							.count();
+						assert_eq!(admits, 1, "{kind:?} High realize must emit one Admit");
+						app.world_mut().entity_mut(ids[0]).despawn();
+						app.world_mut()
+							.run_system_once(collect_bush_catalog_ops)
+							.expect("bush catalog retire");
+						assert_eq!(
+							app.world().resource::<BushGroveCatalog>().live_grove_count(),
+							0
+						);
+						let retires = app
+							.world()
+							.resource::<BushCatalogOps>()
+							.ops
+							.iter()
+							.filter(|op| matches!(op, BushCatalogOp::Retire { .. }))
+							.count();
+						assert_eq!(retires, 1, "{kind:?} High unrealize must emit one Retire");
+					}
+					GpuFieldKind::Grass => {
+						let ids = entities_with::<GrassPatch>(app.world_mut());
+						assert_eq!(ids.len(), 1, "{kind:?} High realize must spawn one GrassPatch");
+						app.world_mut()
+							.run_system_once(collect_grass_catalog_ops)
+							.expect("grass catalog collect");
+						assert_eq!(
+							app.world().resource::<GrassGroveCatalog>().live_grove_count(),
+							1
+						);
+						let admits = app
+							.world()
+							.resource::<GrassCatalogOps>()
+							.ops
+							.iter()
+							.filter(|op| matches!(op, GrassCatalogOp::Admit { .. }))
+							.count();
+						assert_eq!(admits, 1, "{kind:?} High realize must emit one Admit");
+						app.world_mut().entity_mut(ids[0]).despawn();
+						app.world_mut()
+							.run_system_once(collect_grass_catalog_ops)
+							.expect("grass catalog retire");
+						assert_eq!(
+							app.world().resource::<GrassGroveCatalog>().live_grove_count(),
+							0
+						);
+						let retires = app
+							.world()
+							.resource::<GrassCatalogOps>()
+							.ops
+							.iter()
+							.filter(|op| matches!(op, GrassCatalogOp::Retire { .. }))
+							.count();
+						assert_eq!(retires, 1, "{kind:?} High unrealize must emit one Retire");
+					}
+				}
+			});
 		}
 		crate::GroveGpuVisuals::admit(false);
 	}

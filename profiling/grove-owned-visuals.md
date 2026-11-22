@@ -16,9 +16,9 @@ Per view, per kind, encode is independent of grove count:
 | bush | 1 | 3 | 6 | 1 |
 | grass | 1 | 2 | 3 | 1 |
 
-Five presenters (tree wood, tree foliage, bush wood, bush foliage, grass) each own a bin and carry `NoFrustumCulling` so CPU AABB does not hide GPU instances. GPU `ChicoGroveHost`s emit no `lod_host_scene_pending` and are not LodScene-indexed; the 1 km present ring only admits and retires. Bands still come from `lod.wesl` grove thresholds (High ~400 m, Medium ~520 m, Low 1 km). Compact lists grow to the admitted branch/leaf counts so one High band cannot overflow 8192 slots and drop foliage. `MAYBRAID_EXPERIMENT_TREE_FIELD=cpu` still uses CPU select. Bush/grass global caps are 262144 plants and 1048576 blades so admitted content is not silently truncated.
+Five presenters (tree wood, tree foliage, bush wood, bush foliage, grass) each own a bin and carry `NoFrustumCulling` so CPU AABB does not hide GPU instances. GPU `ChicoGroveHost`s still go through LodScene with one High band covering the near-grove ring. Realizing High emits `CatalogOp::Admit` (a catalog entry only — no per-plant ECS, Transforms, or Visibility). Leaving or retiring High emits `CatalogOp::Retire`. Distance LOD (near, mid, far, density) stays in the GPU program (`lod.wesl` grove thresholds: High ~400 m, Medium ~520 m, Low 1 km). Compact lists grow to the admitted branch/leaf counts so one High band cannot overflow 8192 slots and drop foliage. `MAYBRAID_EXPERIMENT_TREE_FIELD=cpu` still uses CPU select. Bush/grass global caps are 262144 plants and 1048576 blades so admitted content is not silently truncated.
 
-`--release` tests: catalog idle/admit/retire, encode counts identical for 10 and 1000 groves, `grove_gpu_far_bands_match_legacy_instance_counts`, `gpu_host_is_not_lod_scene_indexed`, `cpu_experiment_keeps_cpu_select_when_compute_is_available`.
+`--release` tests: catalog idle/admit/retire, encode counts identical for 10 and 1000 groves, `grove_gpu_far_bands_match_legacy_instance_counts`, `gpu_host_is_lod_scene_indexed_with_high_only_band`, `gpu_host_high_realize_and_unrealize_is_one_admit_and_retire`, `cpu_experiment_keeps_cpu_select_when_compute_is_available`.
 
 ### Native gates for the checker
 

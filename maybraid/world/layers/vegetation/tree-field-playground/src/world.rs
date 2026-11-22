@@ -150,16 +150,12 @@ fn walk_layerings() -> Vec<(LayeringKind, SelectedLayers)> {
 	out
 }
 
+/// Playground captures have no LodScene fulfill. Spawn the same catalog
+/// components High realize would insert; distance LOD stays in the GPU program.
 fn spawn_gpu_host(world: &mut World, host: &ChicoGroveHost) {
 	let visuals = host.gpu_visuals();
 	if let Some(grove) = visuals.trees.clone() {
-		world.spawn((
-			WorldForest,
-			Name::new("world-forest-trees"),
-			Transform::IDENTITY,
-			Visibility::default(),
-			grove,
-		));
+		world.spawn((WorldForest, Name::new("world-forest-trees"), grove));
 	}
 	if let Some(patch) = visuals.bushes.clone() {
 		world.spawn((WorldForest, Name::new("world-forest-bushes"), patch));
