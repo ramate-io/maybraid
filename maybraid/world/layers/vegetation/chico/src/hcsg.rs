@@ -464,7 +464,8 @@ mod tests {
 	}
 
 	/// Groves on a 2×2 fine patch at the origin, viewed from `at`.
-	fn app(at: Vec3) -> App {
+	fn app(at: Vec3) -> (App, std::sync::MutexGuard<'static, ()>) {
+		let lock = crate::GroveGpuVisuals::lock_admission();
 		crate::GroveGpuVisuals::admit(false);
 		let mut app = App::new();
 		app.add_plugins((MinimalPlugins, StatesPlugin))
@@ -512,7 +513,7 @@ mod tests {
 		let at = Transform::from_translation(at);
 		app.world_mut()
 			.spawn((LodViewer, at, LodNodePose { previous: at, current: at }));
-		app
+		(app, lock)
 	}
 
 	fn settle(app: &mut App) -> anyhow::Result<()> {
@@ -573,7 +574,7 @@ mod tests {
 
 	#[test]
 	fn the_neighborhood_grows_the_selected_layers_on_the_ground() -> anyhow::Result<()> {
-		let mut app = app(Vec3::ZERO);
+		let (mut app, _lock) = app(Vec3::ZERO);
 		settle(&mut app)?;
 
 		let hosts = grown(&mut app);
@@ -608,7 +609,7 @@ mod tests {
 
 	#[test]
 	fn groves_stand_on_the_surface() -> anyhow::Result<()> {
-		let mut app = app(Vec3::ZERO);
+		let (mut app, _lock) = app(Vec3::ZERO);
 		settle(&mut app)?;
 
 		let storage = app.world().resource::<hcsg::HcsgStorage>().clone();
@@ -642,12 +643,21 @@ mod tests {
 	#[test]
 	fn high_band_trees_present_full_canopy() -> anyhow::Result<()> {
 		let at = Vec3::new(280.0, 20.0, 0.0);
-		let mut app = app(at);
+		let (mut app, _lock) = app(at);
 		settle(&mut app)?;
 
 		let tiles: usize = grown(&mut app).iter().map(|node| node.value.tiles.len()).sum();
-		update_until(&mut app, |app| nested_hosts(app) >= tiles);
-		assert!(nested_hosts(&mut app) > 0, "the patch presents grove hosts");
+		assert!(tiles > 0, "High-edge viewer at {at} must still grow groves on the origin patch");
+		for _ in 0..800 {
+			if nested_hosts(&mut app) > 0 {
+				break;
+			}
+			app.update();
+		}
+		assert!(
+			nested_hosts(&mut app) > 0,
+			"the patch presents grove hosts (grown tiles {tiles})"
+		);
 		for _ in 0..240 {
 			app.update();
 		}
@@ -683,7 +693,7 @@ mod tests {
 
 	#[test]
 	fn leaving_the_neighborhood_retires_its_hosts() -> anyhow::Result<()> {
-		let mut app = app(Vec3::ZERO);
+		let (mut app, _lock) = app(Vec3::ZERO);
 		settle(&mut app)?;
 		assert!(!grown(&mut app).is_empty());
 
@@ -697,7 +707,7 @@ mod tests {
 
 	#[test]
 	fn a_restart_reselects_every_grove() -> anyhow::Result<()> {
-		let mut app = app(Vec3::ZERO);
+		let (mut app, _lock) = app(Vec3::ZERO);
 		settle(&mut app)?;
 		let before: BTreeMap<Id, Version> = versions(&mut app).into_iter().collect();
 
@@ -749,7 +759,7 @@ mod tests {
 
 	#[test]
 	fn bump_outs_beyond_the_groves_displace_the_surface_mesh() -> anyhow::Result<()> {
-		let mut app = app(BEYOND);
+		let (mut app, _lock) = app(BEYOND);
 		settle(&mut app)?;
 
 		let nodes = bumped_out(&mut app);
@@ -773,7 +783,7 @@ mod tests {
 
 	#[test]
 	fn the_grove_hole_hides_bump_outs() -> anyhow::Result<()> {
-		let mut app = app(Vec3::ZERO);
+		let (mut app, _lock) = app(Vec3::ZERO);
 		settle(&mut app)?;
 		assert_eq!(bumped_out(&mut app).len(), 4, "the hole keeps its bump-outs warm");
 		assert_eq!(shown_bump_outs(&mut app), 0);
