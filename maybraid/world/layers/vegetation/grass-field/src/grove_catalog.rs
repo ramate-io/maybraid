@@ -43,7 +43,7 @@ impl GroveCatalogOp for GrassCatalogOp {
 #[derive(Clone, Copy, Debug)]
 pub struct CatalogUpload {
 	pub blades: RangeSpan,
-	pub patch_slot: u32,
+	pub grove_slot: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -114,26 +114,43 @@ impl GrassGroveCatalog {
 		self.last_write_bytes = 0;
 		self.last_writes = 0;
 		self.last_uploads.clear();
-		CatalogApply::budgeted(ops, budget, |op| match op {
-			GrassCatalogOp::Retire { id } => self.retire(*id),
-			GrassCatalogOp::Admit {
-				id,
-				blades,
-				aabb_min,
-				aabb_max,
-				seed,
-				truncated_plants,
-				grove_residency,
-			} => self.admit(
-				*id,
-				blades.clone(),
-				*aabb_min,
-				*aabb_max,
-				*seed,
-				*truncated_plants,
-				*grove_residency,
-			),
-		})
+		let mut leftover = Vec::new();
+		let mut applied = Vec::new();
+		let mut admits = 0usize;
+		for op in ops.into_iter() {
+			match op {
+				GrassCatalogOp::Retire { id } => {
+					self.retire(id);
+					leftover
+						.retain(|pending: &GrassCatalogOp| pending.is_retire() || pending.grove_id() != id);
+					applied.push(GrassCatalogOp::Retire { id });
+				}
+				GrassCatalogOp::Admit { .. } if admits >= budget => leftover.push(op),
+				GrassCatalogOp::Admit {
+					id,
+					blades,
+					aabb_min,
+					aabb_max,
+					seed,
+					truncated_plants,
+					grove_residency,
+				} => {
+					applied.push(GrassCatalogOp::Admit {
+						id,
+						blades: blades.clone(),
+						aabb_min,
+						aabb_max,
+						seed,
+						truncated_plants,
+						grove_residency,
+					});
+					self.clones += 1;
+					self.admit(id, blades, aabb_min, aabb_max, seed, truncated_plants, grove_residency);
+					admits += 1;
+				}
+			}
+		}
+		CatalogApply { applied, leftover }
 	}
 
 	fn admit(
@@ -169,7 +186,7 @@ impl GrassGroveCatalog {
 		};
 		self.last_writes += 1;
 		self.last_write_bytes += span.byte_len(BLADE_DESCRIPTOR_STRIDE) + 48;
-		self.last_uploads.push(CatalogUpload { blades: span, patch_slot: slot });
+		self.last_uploads.push(CatalogUpload { blades: span, grove_slot: slot });
 		self.live.insert(id, LiveGrove { slot, blades: span });
 		self.generation = self.generation.wrapping_add(1);
 	}
@@ -189,7 +206,7 @@ impl GrassGroveCatalog {
 		self.last_writes += 1;
 		self.last_write_bytes += live.blades.byte_len(BLADE_DESCRIPTOR_STRIDE).max(16);
 		self.last_uploads
-			.push(CatalogUpload { blades: live.blades, patch_slot: live.slot });
+			.push(CatalogUpload { blades: live.blades, grove_slot: live.slot });
 		self.generation = self.generation.wrapping_add(1);
 		if self.live.is_empty() {
 			self.grove_residency = false;

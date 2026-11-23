@@ -602,7 +602,11 @@ fn cpu_fill_lists<'a>(
 		};
 		let uniform = make_view_uniform(view, extracted);
 		let selector = GrassSelector::from_view(uniform, &extracted.settings);
-		let lists = selector.compact(&catalog.blades, &catalog.patches);
+		let lists = if catalog.grove_residency {
+			selector.compact_grove_catalog(&catalog.patches, &catalog.blades)
+		} else {
+			selector.compact(&catalog.blades, &catalog.patches)
+		};
 		for (lod, indices) in lists.indices.iter().enumerate() {
 			if !indices.is_empty() {
 				let bytes: Vec<u8> = indices.iter().flat_map(|i| i.to_le_bytes()).collect();
@@ -628,7 +632,11 @@ fn record_cpu_stats<'a>(
 		}
 		let uniform = make_view_uniform(view, extracted);
 		let selector = GrassSelector::from_view(uniform, &extracted.settings);
-		let lists = selector.compact(&catalog.blades, &catalog.patches);
+		let lists = if catalog.grove_residency {
+			selector.compact_grove_catalog(&catalog.patches, &catalog.blades)
+		} else {
+			selector.compact(&catalog.blades, &catalog.patches)
+		};
 		record_lists(extracted, &lists, stats.as_deref_mut());
 		break;
 	}
@@ -845,5 +853,21 @@ impl<P: PhaseItem> RenderCommand<P> for DrawGrassCommand {
 			}
 		}
 		RenderCommandResult::Success
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use crate::catalog::GroveEncodeStats;
+
+	#[test]
+	fn encode_counts_match_for_ten_and_thousand_groves() {
+		let ten = GroveEncodeStats::grass_kind();
+		let thousand = GroveEncodeStats::grass_kind();
+		assert_eq!(ten.encode_only(), thousand.encode_only());
+		assert!(ten.passes <= 1);
+		assert!(ten.dispatches <= 4);
+		assert!(ten.draws <= 3);
+		assert_eq!(ten.uniform_writes, 1);
 	}
 }

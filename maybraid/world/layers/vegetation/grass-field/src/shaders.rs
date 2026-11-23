@@ -3,6 +3,10 @@
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 
+pub const SELECT_GROVE_SHADER: &str =
+	concat!("embedded://", env!("CARGO_CRATE_NAME"), "/shaders/select_grove.wesl");
+pub const WRITE_DISPATCH_SHADER: &str =
+	concat!("embedded://", env!("CARGO_CRATE_NAME"), "/shaders/write_dispatch.wesl");
 pub const SELECT_SHADER: &str =
 	concat!("embedded://", env!("CARGO_CRATE_NAME"), "/shaders/select.wesl");
 pub const FINALIZE_SHADER: &str =
@@ -14,6 +18,8 @@ pub struct GrassShadersPlugin;
 
 impl Plugin for GrassShadersPlugin {
 	fn build(&self, app: &mut App) {
+		embedded_asset!(app, "shaders/select_grove.wesl");
+		embedded_asset!(app, "shaders/write_dispatch.wesl");
 		embedded_asset!(app, "shaders/select.wesl");
 		embedded_asset!(app, "shaders/finalize.wesl");
 		embedded_asset!(app, "shaders/blade.wesl");

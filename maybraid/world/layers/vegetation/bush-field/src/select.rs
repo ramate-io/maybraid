@@ -1,6 +1,8 @@
 //! CPU selection matching the wood/foliage compute shaders.
 
-use vegetation_grass_field::WorldFrustum;
+use vegetation_grass_field::{
+	map_work_index, visible_spans_from_records, GroveVisibleSpan, WorldFrustum, WoodyGroveRecord,
+};
 use vegetation_shaders::wesl::{lod_bucket, DrawIndexedIndirect, GrassViewUniform, LodThresholds};
 
 use crate::field::BushFieldSettings;
@@ -115,8 +117,47 @@ impl BushSelector {
 		WoodLod::from_bucket(bucket).map(|lod| lod.bucket())
 	}
 
+	pub fn compact_grove_catalog(
+		&self,
+		groves: &[WoodyGroveRecord],
+		plants: &[PlantDescriptor],
+		branches: &[BranchDescriptor],
+		leaves: &[LeafDescriptor],
+	) -> CompactedBushLists {
+		let height = |record: WoodyGroveRecord| {
+			plants
+				.get(record.plant_off as usize)
+				.map(|plant| plant.height_m)
+				.unwrap_or(record.extent_radius())
+		};
+		let (spans, _, _) = visible_spans_from_records(
+			&self.view,
+			self.thresholds,
+			groves,
+			height,
+			self.view.wind.w,
+		);
+		self.compact_spans(&spans, plants, branches, leaves)
+	}
+
 	pub fn compact(
 		&self,
+		plants: &[PlantDescriptor],
+		branches: &[BranchDescriptor],
+		leaves: &[LeafDescriptor],
+	) -> CompactedBushLists {
+		let spans = [GroveVisibleSpan {
+			branch_off: 0,
+			branch_count: branches.len() as u32,
+			leaf_off: 0,
+			leaf_count: leaves.len() as u32,
+		}];
+		self.compact_spans(&spans, plants, branches, leaves)
+	}
+
+	fn compact_spans(
+		&self,
+		spans: &[GroveVisibleSpan],
 		plants: &[PlantDescriptor],
 		branches: &[BranchDescriptor],
 		leaves: &[LeafDescriptor],
@@ -124,7 +165,14 @@ impl BushSelector {
 		let mut lists = CompactedBushLists::default();
 		let wood_keep = keep_fraction(self.capacities[0], branches.len() as u32);
 		let leaf_keep = keep_fraction(self.capacities[0], leaves.len() as u32);
-		for (branch_index, branch) in branches.iter().enumerate() {
+		for work in 0..spans.iter().map(|s| s.branch_count).sum::<u32>() {
+			let Some(branch_index) = map_work_index(spans, work, true) else {
+				continue;
+			};
+			let branch_index = branch_index as usize;
+			let Some(branch) = branches.get(branch_index) else {
+				continue;
+			};
 			lists.considered_wood += 1;
 			let Some(plant) = plants.get(branch.plant_index as usize) else {
 				continue;
@@ -150,7 +198,14 @@ impl BushSelector {
 			lists.wood[slot].push(branch_index as u32);
 			lists.submitted_wood += 1;
 		}
-		for (leaf_index, leaf) in leaves.iter().enumerate() {
+		for work in 0..spans.iter().map(|s| s.leaf_count).sum::<u32>() {
+			let Some(leaf_index) = map_work_index(spans, work, false) else {
+				continue;
+			};
+			let leaf_index = leaf_index as usize;
+			let Some(leaf) = leaves.get(leaf_index) else {
+				continue;
+			};
 			lists.considered_foliage += 1;
 			let Some(plant) = plants.get(leaf.plant_index as usize) else {
 				continue;
@@ -261,6 +316,29 @@ mod tests {
 			counts: Vec4::new(0.0, 16384.0, 0.0, 0.0),
 			light_direction: Vec4::new(0.4, 0.8, 0.3, 0.0),
 		}
+	}
+
+	#[test]
+	fn culled_grove_catalog_has_zero_pass2_work() {
+		let settings = BushFieldSettings::default();
+		let thresholds = LodThresholds::grove_bush();
+		let view = look_view(Vec3::new(0.0, 10.0, 0.0), Vec3::new(0.0, 5.0, 500.0), 720.0);
+		let mut view = view;
+		view.lod_distances = Vec4::new(0.85, thresholds.near_m, thresholds.mid_m, thresholds.card_m);
+		let selector = BushSelector::from_view(view, &settings);
+		let far = WoodyGroveRecord {
+			aabb_min: Vec3::new(400.0, 0.0, 400.0),
+			aabb_max: Vec3::new(410.0, 8.0, 410.0),
+			branch_off: 10,
+			branch_count: 50,
+			leaf_off: 100,
+			leaf_count: 200,
+			flags: WoodyGroveRecord::FLAG_ACTIVE,
+			..Default::default()
+		};
+		let lists = selector.compact_grove_catalog(&[far], &[], &[], &[]);
+		assert_eq!(lists.submitted_wood, 0);
+		assert_eq!(lists.submitted_foliage, 0);
 	}
 
 	#[test]

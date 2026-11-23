@@ -6,6 +6,9 @@ use vegetation_shaders::wesl::{
 	GrassViewUniform, LodThresholds, GRASS_LOD_COUNT,
 };
 
+use crate::grove_cull::{grass_patch_visible, map_work_index};
+use crate::grove_record::GroveVisibleSpan;
+
 use crate::field::GrassFieldSettings;
 
 /// Clip-space frustum matching `select.wesl`. Shared by grass compute and the bush follow-up.
@@ -125,43 +128,74 @@ impl GrassSelector {
 		GeometryLod::from_bucket(bucket).map(|lod| lod.bucket())
 	}
 
+	pub fn compact_grove_catalog(
+		&self,
+		patches: &[GrassPatchHeader],
+		blades: &[BladeDescriptor],
+	) -> CompactedLists {
+		let spans: Vec<GroveVisibleSpan> = patches
+			.iter()
+			.filter(|patch| grass_patch_visible(&self.view, self.thresholds, patch))
+			.map(|patch| GroveVisibleSpan {
+				branch_off: patch.blade_offset,
+				branch_count: patch.blade_count,
+				leaf_off: 0,
+				leaf_count: 0,
+			})
+			.collect();
+		self.compact_spans(&spans, blades)
+	}
+
 	pub fn compact(
 		&self,
 		blades: &[BladeDescriptor],
 		patches: &[GrassPatchHeader],
 	) -> CompactedLists {
+		let spans: Vec<GroveVisibleSpan> = patches
+			.iter()
+			.filter(|patch| patch.is_active())
+			.map(|patch| GroveVisibleSpan {
+				branch_off: patch.blade_offset,
+				branch_count: patch.blade_count,
+				leaf_off: 0,
+				leaf_count: 0,
+			})
+			.collect();
+		self.compact_spans(&spans, blades)
+	}
+
+	fn compact_spans(&self, spans: &[GroveVisibleSpan], blades: &[BladeDescriptor]) -> CompactedLists {
 		let mut lists = CompactedLists::default();
 		let keep_fraction = if blades.is_empty() {
 			1.0
 		} else {
 			(self.capacities[0] as f32 / blades.len() as f32).min(1.0)
 		};
-		for patch in patches {
-			if !patch.is_active() {
+		for work in 0..spans.iter().map(|s| s.branch_count).sum::<u32>() {
+			let Some(index) = map_work_index(spans, work, true) else {
+				continue;
+			};
+			let index = index as usize;
+			let Some(blade) = blades.get(index) else {
+				continue;
+			};
+			lists.considered += 1;
+			if blade.height_m <= 0.0 {
 				continue;
 			}
-			for index in patch.blade_range() {
-				let Some(blade) = blades.get(index as usize) else {
-					continue;
-				};
-				lists.considered += 1;
-				if blade.height_m <= 0.0 {
-					continue;
-				}
-				if blade.density_rank() >= keep_fraction {
-					continue;
-				}
-				let Some(bucket) = self.classify(blade) else {
-					continue;
-				};
-				let lod = bucket as usize;
-				if lists.indices[lod].len() as u32 >= self.capacities[lod] {
-					lists.overflow[lod] += 1;
-					continue;
-				}
-				lists.indices[lod].push(index);
-				lists.submitted += 1;
+			if blade.density_rank() >= keep_fraction {
+				continue;
 			}
+			let Some(bucket) = self.classify(blade) else {
+				continue;
+			};
+			let lod = bucket as usize;
+			if lists.indices[lod].len() as u32 >= self.capacities[lod] {
+				lists.overflow[lod] += 1;
+				continue;
+			}
+			lists.indices[lod].push(index as u32);
+			lists.submitted += 1;
 		}
 		lists
 	}
@@ -207,6 +241,27 @@ mod tests {
 			counts: Vec4::new(0.0, 65536.0, 0.0, 0.0),
 			light_direction: Vec4::new(0.4, 0.8, 0.3, 0.0),
 		}
+	}
+
+	#[test]
+	fn culled_grove_catalog_has_zero_pass2_work() {
+		let settings = GrassFieldSettings::default();
+		let thresholds = LodThresholds::grove_grass();
+		let mut view = look_view(Vec3::new(0.0, 10.0, 0.0), Vec3::ZERO, 720.0);
+		view.lod_distances = Vec4::new(0.85, thresholds.near_m, thresholds.mid_m, thresholds.card_m);
+		let selector = GrassSelector::from_view(view, &settings);
+		let far = GrassPatchHeader {
+			aabb_min: Vec3::new(400.0, 0.0, 400.0),
+			blade_offset: 10,
+			aabb_max: Vec3::new(410.0, 2.0, 410.0),
+			blade_count: 50,
+			seed: 1,
+			coverage: 1.0,
+			species: 0,
+			flags: GrassPatchHeader::FLAG_ACTIVE,
+		};
+		let lists = selector.compact_grove_catalog(&[far], &[]);
+		assert_eq!(lists.submitted, 0);
 	}
 
 	#[test]

@@ -12,6 +12,7 @@ mod bounds;
 mod capability;
 mod catalog;
 mod diagnostics;
+mod gpu_buffer;
 mod grove_cull;
 mod grove_record;
 mod field;
@@ -31,6 +32,10 @@ pub use catalog::{
 	select_dispatch_size, select_item_index, CatalogApply, CatalogOpQueue, GroveCatalogOp,
 	GroveEncodeStats, GroveId, RangeArena, RangeSpan, ADMISSION_BUDGET,
 	MAX_COMPUTE_WORKGROUPS_PER_DIM,
+};
+pub use gpu_buffer::{
+	ensure_compute_indirect, grow_storage_buffer, GROVE_COMPUTE_INDIRECT_STRIDE,
+	GROVE_COUNTER_VISIBLE_BRANCHES, GROVE_COUNTER_VISIBLE_LEAVES, GROVE_COUNTER_VISIBLE_SPANS,
 };
 pub use grove_cull::{
 	grass_patch_visible, map_work_index, visible_spans_from_records, woody_grove_visible,

@@ -59,14 +59,14 @@ pub struct GroveEncodeStats {
 }
 
 impl GroveEncodeStats {
-	/// Tree/bush wood+foliage: one compute pass, three dispatches, six indirect draws.
+	/// Tree/bush wood+foliage: grove cull, write, wood, foliage, finalize.
 	pub fn woody_kind() -> Self {
-		Self { passes: 1, dispatches: 4, draws: 6, uniform_writes: 1, ..Self::default() }
+		Self { passes: 1, dispatches: 5, draws: 6, uniform_writes: 1, ..Self::default() }
 	}
 
-	/// Grass: one compute pass, three dispatches, three indirect draws.
+	/// Grass: one compute pass, four dispatches (grove cull + write + select + finalize).
 	pub fn grass_kind() -> Self {
-		Self { passes: 1, dispatches: 3, draws: 3, uniform_writes: 1, ..Self::default() }
+		Self { passes: 1, dispatches: 4, draws: 3, uniform_writes: 1, ..Self::default() }
 	}
 
 	pub fn encode_only(&self) -> Self {
@@ -225,11 +225,11 @@ mod tests {
 	#[test]
 	fn encode_counts_do_not_depend_on_grove_count() {
 		assert_eq!(GroveEncodeStats::woody_kind().encode_only().passes, 1);
-		assert_eq!(GroveEncodeStats::woody_kind().dispatches, 4);
+		assert_eq!(GroveEncodeStats::woody_kind().dispatches, 5);
 		assert_eq!(GroveEncodeStats::woody_kind().draws, 6);
 		assert_eq!(GroveEncodeStats::woody_kind().uniform_writes, 1);
 		assert_eq!(GroveEncodeStats::grass_kind().passes, 1);
-		assert_eq!(GroveEncodeStats::grass_kind().dispatches, 3);
+		assert_eq!(GroveEncodeStats::grass_kind().dispatches, 4);
 		assert_eq!(GroveEncodeStats::grass_kind().draws, 3);
 		assert_eq!(GroveEncodeStats::grass_kind().uniform_writes, 1);
 		assert_eq!(
