@@ -47,6 +47,10 @@ fn cull_groves(
     let center = patch_center(header);
     let camera = view.world_position.xyz;
     let distance = length(camera - center);
+    let card_m = view.lod_distances.w;
+    if (distance > card_m) {
+        return;
+    }
     let thresholds = LodThresholds(
         view.lod_distances.y,
         view.lod_distances.z,

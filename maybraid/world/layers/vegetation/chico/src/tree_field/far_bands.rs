@@ -5,7 +5,10 @@ use bevy::math::{Vec3, Vec4};
 use bevy::prelude::{PerspectiveProjection, Transform};
 use lod::scene::LodSceneLevel;
 use vegetation_bush_field::{BushField, BushFieldSettings, BushSelector};
-use vegetation_grass_field::{GrassField, GrassFieldSettings, GrassSelector};
+use vegetation_grass_field::{
+	grass_patch_visible, woody_grove_visible, GrassField, GrassFieldSettings, GrassSelector,
+	WoodyGroveRecord,
+};
 use vegetation_groves::GroveExtent;
 use vegetation_shaders::wesl::{GrassViewUniform, LodThresholds};
 use vegetation_tree_field::TreeSelector;
@@ -66,6 +69,31 @@ fn legacy_level(distance_m: f32) -> LodSceneLevel {
 	}
 }
 
+fn woody_grove_record(
+	bounds_min: Vec3,
+	bounds_max: Vec3,
+	plant_count: u32,
+	branch_count: u32,
+	leaf_count: u32,
+) -> WoodyGroveRecord {
+	WoodyGroveRecord {
+		aabb_min: bounds_min,
+		aabb_max: bounds_max,
+		plant_off: 0,
+		plant_count,
+		branch_off: 0,
+		branch_count,
+		leaf_off: 0,
+		leaf_count,
+		flags: WoodyGroveRecord::FLAG_ACTIVE,
+		..Default::default()
+	}
+}
+
+fn representative_plant_height_m(height_m: impl Iterator<Item = f32>) -> f32 {
+	height_m.max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).unwrap_or(1.0)
+}
+
 fn grow_stacked() -> Vec<ChicoGroveHost> {
 	let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
 	let world = forest_world_sample();
@@ -96,32 +124,76 @@ fn gpu_counts_with(
 	for host in hosts {
 		let visuals = host.gpu_visuals();
 		if let Some(grove) = &visuals.trees {
+			let field = &grove.0;
 			let view = look_view(camera, look, tree_lod);
-			let selector = TreeSelector::from_view(view, &owner_settings());
-			trees += grove
-				.0
-				.plants
-				.iter()
-				.filter(|plant| selector.plant_bucket(plant).is_some())
-				.count();
+			let settings = owner_settings();
+			let record = woody_grove_record(
+				field.bounds.min,
+				field.bounds.max,
+				field.plants.len() as u32,
+				field.branches.len() as u32,
+				field.leaves.len() as u32,
+			);
+			let height = representative_plant_height_m(field.plants.iter().map(|p| p.height_m));
+			if woody_grove_visible(&view, tree_lod, record, settings.wind.speed, height) {
+				let selector = TreeSelector::from_view(view, &settings);
+				trees += field
+					.plants
+					.iter()
+					.filter(|plant| selector.plant_bucket(plant).is_some())
+					.count();
+			}
 		}
 		if let Some(patch) = &visuals.bushes {
 			let settings = BushFieldSettings::default();
 			let field = BushField::rebuild([patch], &settings);
 			let view = look_view(camera, look, bush_lod);
-			let selector = BushSelector::from_view(view, &settings);
-			bushes += field
-				.plants
-				.iter()
-				.filter(|plant| selector.plant_bucket(plant).is_some())
-				.count();
+			let record = woody_grove_record(
+				field.bounds.min,
+				field.bounds.max,
+				field.plants.len() as u32,
+				field.branches.len() as u32,
+				field.leaves.len() as u32,
+			);
+			let height = representative_plant_height_m(field.plants.iter().map(|p| p.height_m));
+			if field.grove_residency
+				&& woody_grove_visible(&view, bush_lod, record, settings.wind.speed, height)
+			{
+				let selector = BushSelector::from_view(view, &settings);
+				bushes += field
+					.plants
+					.iter()
+					.filter(|plant| selector.plant_bucket(plant).is_some())
+					.count();
+			} else if !field.grove_residency {
+				let selector = BushSelector::from_view(view, &settings);
+				bushes += field
+					.plants
+					.iter()
+					.filter(|plant| selector.plant_bucket(plant).is_some())
+					.count();
+			}
 		}
 		if let Some(patch) = &visuals.grass {
 			let settings = GrassFieldSettings::default();
 			let field = GrassField::rebuild([patch], &settings);
 			let view = look_view(camera, look, grass_lod);
 			let selector = GrassSelector::from_view(view, &settings);
-			grass += field.blades.iter().filter(|blade| selector.classify(blade).is_some()).count();
+			if field.grove_residency {
+				for patch in &field.patches {
+					if !grass_patch_visible(&view, grass_lod, patch) {
+						continue;
+					}
+					let start = patch.blade_offset as usize;
+					let end = start + patch.blade_count as usize;
+					grass += field.blades[start..end.min(field.blades.len())]
+						.iter()
+						.filter(|blade| selector.classify(blade).is_some())
+						.count();
+				}
+			} else {
+				grass += field.blades.iter().filter(|blade| selector.classify(blade).is_some()).count();
+			}
 		}
 	}
 	BandCounts { trees, bushes, grass }
@@ -246,33 +318,44 @@ fn grove_gpu_far_bands_match_legacy_instance_counts() {
 			gpu.trees,
 			legacy.trees
 		);
-		assert!(
-			rel(gpu.bushes, legacy.bushes) <= PARITY_REL,
-			"bushes at {distance_m} m: GPU {} vs legacy {}",
-			gpu.bushes,
-			legacy.bushes
-		);
-		if distance_m <= 400.0 {
+		let bush_cut = LodThresholds::grove_bush().card_m;
+		let grass_cut = LodThresholds::grove_grass().card_m;
+		if distance_m <= bush_cut {
+			assert!(
+				rel(gpu.bushes, legacy.bushes) <= PARITY_REL,
+				"bushes at {distance_m} m: GPU {} vs legacy {}",
+				gpu.bushes,
+				legacy.bushes
+			);
+		} else if distance_m > bush_cut {
+			assert_eq!(
+				gpu.bushes, 0,
+				"whole-grove bush residency drops beyond card_m ({bush_cut} m) at {distance_m} m"
+			);
+		}
+		if distance_m <= grass_cut {
 			assert!(
 				rel(gpu.grass, legacy.grass) <= PARITY_REL,
 				"grass at {distance_m} m: GPU {} vs legacy {}",
 				gpu.grass,
 				legacy.grass
 			);
-		} else {
-			assert!(
-				gpu.grass > 0,
-				"GPU grass must remain past the High tuft ring at {distance_m} m"
+		} else if distance_m > grass_cut {
+			assert_eq!(
+				gpu.grass, 0,
+				"whole-grove grass residency drops beyond card_m ({grass_cut} m) at {distance_m} m"
 			);
 		}
-		if distance_m >= 200.0 {
+		if distance_m >= 200.0 && distance_m < bush_cut {
 			assert!(
 				gpu.bushes > old.bushes,
-				"grove bush card_m should keep understory past 110 m at {distance_m} m"
+				"grove bush card_m should keep understory past playground default at {distance_m} m"
 			);
+		}
+		if distance_m >= 200.0 && distance_m < grass_cut {
 			assert!(
 				gpu.grass > old.grass,
-				"grove grass card_m should keep tufts past 90 m at {distance_m} m"
+				"grove grass card_m should keep tufts past playground default at {distance_m} m"
 			);
 		}
 	}

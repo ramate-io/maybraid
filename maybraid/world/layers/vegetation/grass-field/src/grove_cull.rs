@@ -25,6 +25,9 @@ pub fn woody_grove_visible(
 	}
 	let camera = view.world_position.truncate();
 	let distance = camera.distance(center);
+	if distance > thresholds.card_m {
+		return false;
+	}
 	let bucket = lod_bucket(
 		distance,
 		representative_height_m.max(0.5),
@@ -52,6 +55,9 @@ pub fn grass_patch_visible(
 	}
 	let camera = view.world_position.truncate();
 	let distance = camera.distance(center);
+	if distance > thresholds.card_m {
+		return false;
+	}
 	lod_bucket(
 		distance,
 		radius,
@@ -140,6 +146,21 @@ mod tests {
 			counts: Vec4::ZERO,
 			light_direction: Vec4::new(0.4, 0.8, 0.3, 0.0),
 		}
+	}
+
+	#[test]
+	fn residency_card_m_drops_bush_grove_before_nested_lod_bands() {
+		let thresholds = LodThresholds::grove_bush();
+		let view = look(Vec3::new(0.0, 10.0, 0.0), Vec3::new(0.0, 5.0, 150.0), thresholds);
+		let grove = WoodyGroveRecord {
+			aabb_min: Vec3::new(120.0, 0.0, 120.0),
+			aabb_max: Vec3::new(125.0, 6.0, 125.0),
+			branch_off: 0,
+			branch_count: 30,
+			flags: WoodyGroveRecord::FLAG_ACTIVE,
+			..Default::default()
+		};
+		assert!(!woody_grove_visible(&view, thresholds, grove, 0.5, 4.0));
 	}
 
 	#[test]

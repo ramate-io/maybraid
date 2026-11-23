@@ -67,7 +67,7 @@ impl LodThresholds {
 		}
 	}
 
-	/// Grove-owned bushes: same High/Medium/Low distances as the grove tile.
+	/// Grove-owned bushes: nested High/Medium/Low inside the finite residency ring (`card_m`).
 	pub fn grove_bush() -> Self {
 		Self {
 			near_m: 400.0,
@@ -80,7 +80,7 @@ impl LodThresholds {
 		}
 	}
 
-	/// Grove-owned grass: density falloff across the 1 km present ring.
+	/// Grove-owned grass: nested LOD inside the finite residency ring (`card_m`).
 	pub fn grove_grass() -> Self {
 		Self {
 			near_m: 400.0,
