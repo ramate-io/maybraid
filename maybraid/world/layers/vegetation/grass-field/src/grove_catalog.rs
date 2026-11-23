@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use bevy::math::Vec3;
 use bevy::prelude::*;
-use vegetation_shaders::wesl::{BLADE_DESCRIPTOR_STRIDE, BladeDescriptor, GrassPatchHeader};
+use vegetation_shaders::wesl::{BladeDescriptor, GrassPatchHeader, BLADE_DESCRIPTOR_STRIDE};
 
 use crate::catalog::{
 	CatalogApply, CatalogOpQueue, GroveCatalogOp, GroveEncodeStats, GroveId, RangeArena, RangeSpan,
@@ -59,7 +59,6 @@ pub struct GrassGroveCatalog {
 	live: HashMap<GroveId, LiveGrove>,
 	blades_arena: RangeArena,
 	free_slots: Vec<u32>,
-	store_descriptors: bool,
 	consume_ops: bool,
 	pub generation: u64,
 	pub last_write_bytes: u64,
@@ -78,14 +77,13 @@ impl Default for GrassGroveCatalog {
 }
 
 impl GrassGroveCatalog {
-	fn empty(store_descriptors: bool, consume_ops: bool) -> Self {
+	fn empty(consume_ops: bool) -> Self {
 		Self {
 			patches: Vec::new(),
 			blades: Vec::new(),
 			live: HashMap::new(),
 			blades_arena: RangeArena::with_cap(8_192),
 			free_slots: Vec::new(),
-			store_descriptors,
 			consume_ops,
 			generation: 0,
 			last_write_bytes: 0,
@@ -98,16 +96,12 @@ impl GrassGroveCatalog {
 		}
 	}
 
-	pub fn index_only() -> Self {
-		Self::empty(false, false)
-	}
-
 	pub fn with_descriptors() -> Self {
-		Self::empty(true, false)
+		Self::empty(false)
 	}
 
 	pub fn render() -> Self {
-		Self::empty(true, true)
+		Self::empty(true)
 	}
 
 	pub fn is_empty(&self) -> bool {
@@ -141,11 +135,7 @@ impl GrassGroveCatalog {
 	}
 
 	pub fn resident_blades(&self) -> usize {
-		if self.store_descriptors {
-			self.blades.len()
-		} else {
-			self.blades_arena.used as usize
-		}
+		self.blades.len()
 	}
 
 	pub fn encode_plan() -> GroveEncodeStats {
@@ -171,32 +161,16 @@ impl GrassGroveCatalog {
 				truncated_plants,
 				grove_residency,
 			} => {
-				if self.store_descriptors {
-					let blades = if self.consume_ops {
-						std::mem::take(blades)
-					} else {
-						blades.clone()
-					};
-					self.admit(
-						*id,
-						blades,
-						*aabb_min,
-						*aabb_max,
-						*seed,
-						*truncated_plants,
-						*grove_residency,
-					);
-				} else {
-					self.admit_index(
-						*id,
-						blades.len() as u32,
-						*aabb_min,
-						*aabb_max,
-						*seed,
-						*truncated_plants,
-						*grove_residency,
-					);
-				}
+				let blades = if self.consume_ops { std::mem::take(blades) } else { blades.clone() };
+				self.admit(
+					*id,
+					blades,
+					*aabb_min,
+					*aabb_max,
+					*seed,
+					*truncated_plants,
+					*grove_residency,
+				);
 			}
 		})
 	}
@@ -239,38 +213,6 @@ impl GrassGroveCatalog {
 		self.generation = self.generation.wrapping_add(1);
 	}
 
-	fn admit_index(
-		&mut self,
-		id: GroveId,
-		blade_count: u32,
-		aabb_min: Vec3,
-		aabb_max: Vec3,
-		seed: u32,
-		truncated_plants: u32,
-		grove_residency: bool,
-	) {
-		self.retire(id);
-		self.truncated_plants = self.truncated_plants.saturating_add(truncated_plants);
-		self.grove_residency |= grove_residency;
-		let span = self.blades_arena.alloc(blade_count);
-		let slot = self.alloc_slot();
-		self.patches[slot as usize] = GrassPatchHeader {
-			aabb_min,
-			blade_offset: span.offset,
-			aabb_max,
-			blade_count: span.count,
-			seed,
-			coverage: 1.0,
-			species: 0,
-			flags: if span.count == 0 { 0 } else { GrassPatchHeader::FLAG_ACTIVE },
-		};
-		self.last_writes += 1;
-		self.last_write_bytes += span.byte_len(BLADE_DESCRIPTOR_STRIDE) + 48;
-		self.last_uploads.push(CatalogUpload { blades: span, patch_slot: slot });
-		self.live.insert(id, LiveGrove { slot, blades: span });
-		self.generation = self.generation.wrapping_add(1);
-	}
-
 	fn retire(&mut self, id: GroveId) {
 		let Some(live) = self.live.remove(&id) else {
 			return;
@@ -278,14 +220,12 @@ impl GrassGroveCatalog {
 		if let Some(header) = self.patches.get_mut(live.slot as usize) {
 			header.flags = 0;
 		}
-		if self.store_descriptors {
-			for blade in self.blades_mut(live.blades) {
-				blade.height_m = 0.0;
-			}
-			self.last_uploads
-				.push(CatalogUpload { blades: live.blades, patch_slot: live.slot });
-			self.last_write_bytes += live.blades.byte_len(BLADE_DESCRIPTOR_STRIDE).max(16);
+		for blade in self.blades_mut(live.blades) {
+			blade.height_m = 0.0;
 		}
+		self.last_uploads
+			.push(CatalogUpload { blades: live.blades, patch_slot: live.slot });
+		self.last_write_bytes += live.blades.byte_len(BLADE_DESCRIPTOR_STRIDE).max(16);
 		self.blades_arena.free(live.blades);
 		self.free_slots.push(live.slot);
 		self.last_writes += 1;
@@ -463,11 +403,11 @@ mod tests {
 	}
 
 	#[test]
-	fn index_only_keeps_spans_without_descriptors() {
-		let mut catalog = GrassGroveCatalog::index_only();
+	fn main_world_catalog_keeps_blades() {
+		let mut catalog = GrassGroveCatalog::with_descriptors();
 		catalog.apply([admit(1)], ADMISSION_BUDGET);
 		assert!(catalog.contains(GroveId(1)));
-		assert!(catalog.blades.is_empty());
+		assert!(!catalog.blades.is_empty());
 		assert!(catalog.patches.iter().any(|header| header.is_active()));
 		assert!(catalog.active_bounds().is_some());
 	}
@@ -496,11 +436,9 @@ mod tests {
 
 		assert!(leftover.is_empty());
 		assert!(applied.iter().any(|op| op.is_retire() && op.grove_id() == GroveId(100)));
-		assert!(
-			applied
-				.iter()
-				.all(|op| !(matches!(op, GrassCatalogOp::Admit { id, .. } if *id == GroveId(100))))
-		);
+		assert!(applied
+			.iter()
+			.all(|op| !(matches!(op, GrassCatalogOp::Admit { id, .. } if *id == GroveId(100)))));
 		assert!(!main.contains(GroveId(100)));
 
 		let mut render = GrassGroveCatalog::default();

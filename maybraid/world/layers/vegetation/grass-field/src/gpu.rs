@@ -42,12 +42,12 @@ use vegetation_shaders::wesl::{
 
 use crate::capability::{GrassGpuCapability, GrassGpuMode};
 use crate::catalog::{select_dispatch_size, CatalogApply, GroveEncodeStats, GroveId};
-use crate::gpu_arena::{ensure_storage_size, grow_storage_buffer};
+use crate::diagnostics::GrassFieldStats;
+use crate::gpu_arena::{grow_storage_buffer, upload_visible_spans};
+use crate::grove_catalog::{GrassCatalogOps, GrassGroveCatalog};
 use crate::grove_cull::cull_grass_patches;
 use crate::grove_record::GroveVisibleSpan;
-use crate::grove_retain::RetainedGroveFrame;
-use crate::diagnostics::GrassFieldStats;
-use crate::grove_catalog::{GrassCatalogOps, GrassGroveCatalog};
+use crate::grove_retain::{remember_bands, GroveSubmit, RetainedGroveFrame};
 use crate::plugin::{ExtractedGrassField, GrassFieldPresenter};
 use crate::select::GrassSelector;
 use crate::shaders::{BLADE_SHADER, FINALIZE_SHADER, SELECT_SHADER};
@@ -411,11 +411,12 @@ fn prepare_grass_buffers(
 		let Some(work) = state.views.get_mut(&view.retained_view_entity) else {
 			continue;
 		};
-		stamp_grass_view(&device, &queue, view, &extracted, &catalog, work, &mut encode);
+		let span_grew =
+			stamp_grass_view(&device, &queue, view, &extracted, &catalog, work, &mut encode);
 		if grew {
 			work.dirty = true;
 		}
-		if grew || work.dirty {
+		if grew || span_grew {
 			rebind_grass_select(&device, &pipeline_cache, &pipelines, &blades, work);
 		}
 	}
@@ -623,7 +624,7 @@ fn stamp_grass_view(
 	catalog: &GrassGroveCatalog,
 	work: &mut ViewWork,
 	encode: &mut GroveEncodeStats,
-) {
+) -> bool {
 	let thresholds = if extracted.grove_residency {
 		LodThresholds::grove_grass()
 	} else {
@@ -631,63 +632,44 @@ fn stamp_grass_view(
 	};
 	let probe = make_view_uniform(view, extracted);
 	let groves = if extracted.grove_residency {
-		cull_grass_patches(
-			&probe,
-			thresholds,
-			catalog.live_patches(),
-			&|id| work.last_bands.get(&id).copied(),
-		)
+		cull_grass_patches(&probe, thresholds, catalog.live_patches(), &|id| {
+			work.last_bands.get(&id).copied()
+		})
 	} else {
 		Vec::new()
 	};
-	work.last_bands.clear();
-	for grove in &groves {
-		work.last_bands.insert(grove.id, grove.lod);
-	}
-	let next = RetainedGroveFrame::capture(
+	remember_bands(&mut work.last_bands, &groves);
+	let submit = GroveSubmit::plan(
+		&work.retained,
 		catalog.generation,
 		view.viewport.z,
 		view.viewport.w,
 		fov_y(&view.clip_from_view),
 		thresholds.card_m,
 		groves,
+		extracted.grove_residency,
+		extracted.blade_count,
+		0,
 	);
-	work.dirty = !work.retained.is_clean(&next);
-	let blades = if extracted.grove_residency {
-		next.work_counts().0
+	let _span = if submit.dirty {
+		bevy::log::info_span!("grove rebuild").entered()
 	} else {
-		extracted.blade_count
+		bevy::log::info_span!("grove retained (clean)").entered()
 	};
-	work.visible_blades = blades;
-	work.span_count = if extracted.grove_residency { next.groves.len() as u32 } else { 0 };
+	let stamped = {
+		let span_buffer = &mut work.span_buffer;
+		submit.stamp(&mut work.retained, encode, |groves| {
+			upload_visible_spans(device, queue, span_buffer, groves, "grass_visible_spans")
+		})
+	};
+	work.dirty = stamped.dirty;
+	work.visible_blades = stamped.work_branches;
+	work.span_count = stamped.span_count;
 	let mut uniform = make_view_uniform(view, extracted);
-	uniform.counts.x = blades as f32;
-	uniform.light_direction.w = work.span_count as f32;
+	uniform.counts.x = stamped.work_branches as f32;
+	uniform.light_direction.w = stamped.span_count as f32;
 	write_view_uniform(queue, &work.view_uniform, &uniform);
-	encode.uniform_writes += 1;
-	if work.dirty {
-		let _span = bevy::log::info_span!("grove rebuild").entered();
-		if work.span_count > 0 {
-			let bytes: Vec<u8> = next
-				.groves
-				.iter()
-				.flat_map(|grove| grove.span.to_std430_bytes())
-				.collect();
-			ensure_storage_size(
-				device,
-				&mut work.span_buffer,
-				(bytes.len() as u64).max(GroveVisibleSpan::STRIDE),
-				GroveVisibleSpan::STRIDE,
-				"grass_visible_spans",
-			);
-			queue.write_buffer(&work.span_buffer, 0, &bytes);
-			encode.span_uploads += 1;
-		}
-		work.retained = next;
-	} else {
-		let _span = bevy::log::info_span!("grove retained (clean)").entered();
-		encode.retained_clean += 1;
-	}
+	stamped.span_grew
 }
 
 fn rebind_grass_select(
@@ -857,8 +839,7 @@ fn grass_compute(
 			pass.dispatch_workgroups(1, 1, 1);
 		}
 		if let Some(encode) = encode.as_deref_mut() {
-			encode.passes += 1;
-			encode.dispatches += 1 + u32::from(work.visible_blades > 0);
+			GroveSubmit::record_select(encode, true, false, work.visible_blades, 0);
 		}
 	}
 }

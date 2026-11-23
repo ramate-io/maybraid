@@ -5,6 +5,8 @@ use bevy::render::render_resource::{
 };
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 
+use crate::grove_record::{GroveVisibleSpan, VisibleGrove};
+
 /// CPU-side capacity plan matching GPU buffer growth.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ArenaBufferPlan {
@@ -98,6 +100,29 @@ pub fn ensure_storage_size(
 		mapped_at_creation: false,
 	});
 	true
+}
+
+/// Rewrite the visible-span list. Returns whether the buffer was reallocated.
+pub fn upload_visible_spans(
+	device: &RenderDevice,
+	queue: &RenderQueue,
+	current: &mut Buffer,
+	groves: &[VisibleGrove],
+	label: &'static str,
+) -> bool {
+	if groves.is_empty() {
+		return false;
+	}
+	let bytes: Vec<u8> = groves.iter().flat_map(|grove| grove.span.to_std430_bytes()).collect();
+	let grew = ensure_storage_size(
+		device,
+		current,
+		(bytes.len() as u64).max(GroveVisibleSpan::STRIDE),
+		GroveVisibleSpan::STRIDE,
+		label,
+	);
+	queue.write_buffer(current, 0, &bytes);
+	grew
 }
 
 #[cfg(test)]

@@ -4,8 +4,10 @@ use bevy::camera::CameraProjection;
 use bevy::math::{Vec3, Vec4};
 use bevy::prelude::{PerspectiveProjection, Transform};
 use lod::scene::LodSceneLevel;
-use vegetation_bush_field::{BushField, BushFieldSettings, BushSelector};
-use vegetation_grass_field::{grove_lod_band, GrassField, GrassFieldSettings, GrassSelector};
+use vegetation_bush_field::{BushField, BushFieldSettings};
+use vegetation_grass_field::{
+	aabb_nearest_distance, grove_lod_band, GrassField, GrassFieldSettings, WorldFrustum,
+};
 use vegetation_groves::GroveExtent;
 use vegetation_shaders::wesl::{GrassViewUniform, LodThresholds};
 use vegetation_tree_field::TreeSelector;
@@ -81,9 +83,16 @@ fn grow_stacked() -> Vec<ChicoGroveHost> {
 	.collect()
 }
 
-fn grove_center_visible(min: Vec3, max: Vec3, camera: Vec3, thresholds: LodThresholds) -> bool {
-	let center = (min + max) * 0.5;
-	grove_lod_band(camera.distance(center), thresholds, None).is_some()
+fn grove_visible(
+	min: Vec3,
+	max: Vec3,
+	camera: Vec3,
+	view: &GrassViewUniform,
+	thresholds: LodThresholds,
+) -> bool {
+	let frustum = WorldFrustum::from_clip(view.clip_from_world);
+	frustum.contains_aabb(min, max)
+		&& grove_lod_band(aabb_nearest_distance(min, max, camera), thresholds, None).is_some()
 }
 
 fn gpu_counts_with(
@@ -102,37 +111,24 @@ fn gpu_counts_with(
 		let visuals = host.gpu_visuals();
 		if let Some(grove) = &visuals.trees {
 			let view = look_view(camera, look, tree_lod);
-			if grove_center_visible(grove.0.bounds.min, grove.0.bounds.max, camera, tree_lod) {
-				let selector = TreeSelector::from_view(view, &owner_settings());
-				trees += grove
-					.0
-					.plants
-					.iter()
-					.filter(|plant| selector.plant_bucket(plant).is_some())
-					.count();
+			if grove_visible(grove.0.bounds.min, grove.0.bounds.max, camera, &view, tree_lod) {
+				trees += grove.0.plants.iter().filter(|plant| plant.is_active()).count();
 			}
 		}
 		if let Some(patch) = &visuals.bushes {
 			let settings = BushFieldSettings::default();
 			let field = BushField::rebuild([patch], &settings);
 			let view = look_view(camera, look, bush_lod);
-			if grove_center_visible(field.bounds.min, field.bounds.max, camera, bush_lod) {
-				let selector = BushSelector::from_view(view, &settings);
-				bushes += field
-					.plants
-					.iter()
-					.filter(|plant| selector.plant_bucket(plant).is_some())
-					.count();
+			if grove_visible(field.bounds.min, field.bounds.max, camera, &view, bush_lod) {
+				bushes += field.plants.iter().filter(|plant| plant.is_active()).count();
 			}
 		}
 		if let Some(patch) = &visuals.grass {
 			let settings = GrassFieldSettings::default();
 			let field = GrassField::rebuild([patch], &settings);
 			let view = look_view(camera, look, grass_lod);
-			if grove_center_visible(field.bounds.min, field.bounds.max, camera, grass_lod) {
-				let selector = GrassSelector::from_view(view, &settings);
-				grass +=
-					field.blades.iter().filter(|blade| selector.classify(blade).is_some()).count();
+			if grove_visible(field.bounds.min, field.bounds.max, camera, &view, grass_lod) {
+				grass += field.blades.iter().filter(|blade| blade.height_m > 0.0).count();
 			}
 		}
 	}
@@ -266,7 +262,11 @@ fn grove_gpu_far_bands_match_legacy_instance_counts() {
 				legacy.bushes
 			);
 		} else {
-			assert_eq!(gpu.bushes, 0, "grove bushes drop at card_m ~110 m, saw {} at {distance_m} m", gpu.bushes);
+			assert_eq!(
+				gpu.bushes, 0,
+				"grove bushes drop at card_m ~110 m, saw {} at {distance_m} m",
+				gpu.bushes
+			);
 		}
 		if distance_m <= 90.0 {
 			assert!(
@@ -276,7 +276,11 @@ fn grove_gpu_far_bands_match_legacy_instance_counts() {
 				legacy.grass
 			);
 		} else {
-			assert_eq!(gpu.grass, 0, "grove grass drops at card_m ~90 m, saw {} at {distance_m} m", gpu.grass);
+			assert_eq!(
+				gpu.grass, 0,
+				"grove grass drops at card_m ~90 m, saw {} at {distance_m} m",
+				gpu.grass
+			);
 		}
 		let _ = old;
 	}

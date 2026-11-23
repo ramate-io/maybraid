@@ -56,7 +56,7 @@ impl Plugin for BushFieldPlugin {
 		app.insert_resource(BushFieldSettings::from_env());
 		app.init_resource::<BushField>();
 		app.init_resource::<BushFieldStats>();
-		app.insert_resource(BushGroveCatalog::index_only());
+		app.init_resource::<BushGroveCatalog>();
 		app.init_resource::<BushCatalogOps>();
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevBushTime>();
@@ -125,6 +125,7 @@ pub fn collect_catalog_ops(
 		));
 	}
 	if fresh.is_empty() && catalog.pending.is_empty() {
+		let catalog = catalog.bypass_change_detection();
 		catalog.last_writes = 0;
 		catalog.last_write_bytes = 0;
 		catalog.last_uploads.clear();

@@ -17,19 +17,18 @@ pub struct WorldFrustum {
 }
 
 impl WorldFrustum {
-	/// World-space planes from a clip-from-world matrix.
+	/// World-space planes from a clip-from-world matrix (Gribb/Hartmann rows).
 	pub fn from_clip(clip_from_world: Mat4) -> Self {
-		let c = clip_from_world;
-		let col = |i: usize| c.col(i);
+		let row = |i: usize| clip_from_world.row(i);
 		Self {
 			clip_from_world,
 			planes: [
-				col(3) + col(0),
-				col(3) - col(0),
-				col(3) + col(1),
-				col(3) - col(1),
-				col(3) + col(2),
-				col(3) - col(2),
+				row(3) + row(0),
+				row(3) - row(0),
+				row(3) + row(1),
+				row(3) - row(1),
+				row(3) + row(2),
+				row(3) - row(2),
 			],
 		}
 	}
@@ -42,6 +41,26 @@ impl WorldFrustum {
 		let w = p.w + slack;
 		w > 0.0 && p.x.abs() <= w && p.y.abs() <= w && p.z >= -slack && p.z <= w
 	}
+
+	/// Conservative AABB vs frustum: reject only when the p-vertex is outside a plane.
+	pub fn contains_aabb(self, aabb_min: Vec3, aabb_max: Vec3) -> bool {
+		for plane in self.planes {
+			let p = Vec3::new(
+				if plane.x >= 0.0 { aabb_max.x } else { aabb_min.x },
+				if plane.y >= 0.0 { aabb_max.y } else { aabb_min.y },
+				if plane.z >= 0.0 { aabb_max.z } else { aabb_min.z },
+			);
+			if plane.truncate().dot(p) + plane.w < 0.0 {
+				return false;
+			}
+		}
+		true
+	}
+}
+
+/// Distance from `point` to the closest point on the AABB (zero if inside).
+pub fn aabb_nearest_distance(aabb_min: Vec3, aabb_max: Vec3, point: Vec3) -> f32 {
+	point.distance(point.clamp(aabb_min, aabb_max))
 }
 
 /// Gribb/Hartmann world-space frustum planes from a clip-from-world matrix.
@@ -107,6 +126,16 @@ impl GrassSelector {
 	}
 
 	pub fn classify(&self, blade: &BladeDescriptor) -> Option<u32> {
+		self.classify_with_lod(blade, None)
+	}
+
+	fn classify_with_lod(&self, blade: &BladeDescriptor, grove_lod: Option<u32>) -> Option<u32> {
+		if blade.height_m <= 0.0 {
+			return None;
+		}
+		if let Some(lod) = grove_lod {
+			return GeometryLod::from_bucket(lod).map(|lod| lod.bucket());
+		}
 		let camera = self.view.world_position.truncate();
 		let radius = blade.conservative_extent_m(self.view.wind.w);
 		let frustum = WorldFrustum::from_clip(self.view.clip_from_world);
@@ -142,61 +171,72 @@ impl GrassSelector {
 		if matches!(spans, Some(spans) if spans.is_empty()) {
 			return CompactedLists::default();
 		}
-		let owned: Vec<GrassPatchHeader>;
-		let (patches, blade_total): (&[GrassPatchHeader], u32) = match spans {
-			None => (patches, blades.len() as u32),
-			Some(spans) => {
-				let total = spans.iter().map(|span| span.branch_count).sum();
-				owned = spans
-					.iter()
-					.map(|span| GrassPatchHeader {
-						aabb_min: Vec3::ZERO,
-						blade_offset: span.branch_off,
-						aabb_max: Vec3::ZERO,
-						blade_count: span.branch_count,
-						seed: 0,
-						coverage: 1.0,
-						species: 0,
-						flags: GrassPatchHeader::FLAG_ACTIVE,
-					})
-					.collect();
-				(&owned, total)
-			}
-		};
 		let mut lists = CompactedLists::default();
+		let blade_total = spans
+			.map(|spans| spans.iter().map(|span| span.branch_count).sum::<u32>())
+			.unwrap_or(blades.len() as u32);
 		let keep_fraction = if blade_total == 0 {
 			1.0
 		} else {
 			(self.capacities[0] as f32 / blade_total as f32).min(1.0)
 		};
-		for patch in patches {
-			if !patch.is_active() {
-				continue;
+		match spans {
+			None => {
+				for patch in patches {
+					if !patch.is_active() {
+						continue;
+					}
+					self.append_blades(
+						blades,
+						patch.blade_range(),
+						None,
+						keep_fraction,
+						&mut lists,
+					);
+				}
 			}
-			for index in patch.blade_range() {
-				let Some(blade) = blades.get(index as usize) else {
-					continue;
-				};
-				lists.considered += 1;
-				if blade.height_m <= 0.0 {
-					continue;
+			Some(spans) => {
+				for span in spans {
+					self.append_blades(
+						blades,
+						span.branch_range(),
+						Some(span.lod),
+						keep_fraction,
+						&mut lists,
+					);
 				}
-				if blade.density_rank() >= keep_fraction {
-					continue;
-				}
-				let Some(bucket) = self.classify(blade) else {
-					continue;
-				};
-				let lod = bucket as usize;
-				if lists.indices[lod].len() as u32 >= self.capacities[lod] {
-					lists.overflow[lod] += 1;
-					continue;
-				}
-				lists.indices[lod].push(index);
-				lists.submitted += 1;
 			}
 		}
 		lists
+	}
+
+	fn append_blades(
+		&self,
+		blades: &[BladeDescriptor],
+		range: std::ops::Range<u32>,
+		grove_lod: Option<u32>,
+		keep_fraction: f32,
+		lists: &mut CompactedLists,
+	) {
+		for index in range {
+			let Some(blade) = blades.get(index as usize) else {
+				continue;
+			};
+			lists.considered += 1;
+			if blade.density_rank() >= keep_fraction {
+				continue;
+			}
+			let Some(bucket) = self.classify_with_lod(blade, grove_lod) else {
+				continue;
+			};
+			let lod = bucket as usize;
+			if lists.indices[lod].len() as u32 >= self.capacities[lod] {
+				lists.overflow[lod] += 1;
+				continue;
+			}
+			lists.indices[lod].push(index);
+			lists.submitted += 1;
+		}
 	}
 }
 

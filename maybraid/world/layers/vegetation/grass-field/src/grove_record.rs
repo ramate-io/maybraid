@@ -33,10 +33,6 @@ impl WoodyGroveRecord {
 		(self.aabb_min + self.aabb_max) * 0.5
 	}
 
-	pub fn extent_radius(self) -> f32 {
-		(self.aabb_max - self.aabb_min).length() * 0.5
-	}
-
 	pub fn to_std430_bytes(self) -> [u8; WOODY_GROVE_RECORD_STRIDE as usize] {
 		let mut out = [0u8; WOODY_GROVE_RECORD_STRIDE as usize];
 		// Bytes 56..64 are array-element tail padding (must stay zero).
@@ -61,21 +57,32 @@ pub struct GroveVisibleSpan {
 	pub branch_count: u32,
 	pub leaf_off: u32,
 	pub leaf_count: u32,
+	pub lod: u32,
 }
 
 impl GroveVisibleSpan {
-	pub const STRIDE: u64 = 16;
+	/// std430 array stride: five u32s plus 12 B pad to a 16 B multiple.
+	pub const STRIDE: u64 = 32;
 
 	pub fn is_empty(self) -> bool {
 		self.branch_count == 0 && self.leaf_count == 0
 	}
 
-	pub fn to_std430_bytes(self) -> [u8; 16] {
-		let mut out = [0u8; 16];
+	pub fn branch_range(self) -> std::ops::Range<u32> {
+		self.branch_off..self.branch_off + self.branch_count
+	}
+
+	pub fn leaf_range(self) -> std::ops::Range<u32> {
+		self.leaf_off..self.leaf_off + self.leaf_count
+	}
+
+	pub fn to_std430_bytes(self) -> [u8; 32] {
+		let mut out = [0u8; 32];
 		out[0..4].copy_from_slice(&self.branch_off.to_le_bytes());
 		out[4..8].copy_from_slice(&self.branch_count.to_le_bytes());
 		out[8..12].copy_from_slice(&self.leaf_off.to_le_bytes());
 		out[12..16].copy_from_slice(&self.leaf_count.to_le_bytes());
+		out[16..20].copy_from_slice(&self.lod.to_le_bytes());
 		out
 	}
 }
@@ -104,5 +111,11 @@ mod tests {
 		assert_eq!(bytes.len(), WOODY_GROVE_RECORD_STRIDE as usize);
 		assert_eq!(WOODY_GROVE_RECORD_STRIDE, 64);
 		assert!(bytes[56..].iter().all(|&b| b == 0));
+		let span =
+			GroveVisibleSpan { branch_off: 1, branch_count: 2, leaf_off: 3, leaf_count: 4, lod: 2 }
+				.to_std430_bytes();
+		assert_eq!(span.len(), GroveVisibleSpan::STRIDE as usize);
+		assert_eq!(u32::from_le_bytes(span[16..20].try_into().unwrap()), 2);
+		assert!(span[20..].iter().all(|&b| b == 0));
 	}
 }

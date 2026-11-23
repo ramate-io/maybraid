@@ -15,10 +15,12 @@ use vegetation_components::CanopyShadowMode;
 use vegetation_grass_field::{ADMISSION_BUDGET, CatalogApply, GrassGpuCapability, GroveId};
 use vegetation_shaders::VegetationWeslPlugin;
 
+use crate::bounds::TreeBounds;
 use crate::catalog::{TreeCatalogOp, TreeCatalogOps, TreeGroveCatalog};
 use crate::diagnostics::TreeFieldStats;
 use crate::field::{TreeField, TreeFieldSettings};
-use crate::gpu::{TreeGpuPlugin, requested_world_tree_mode};
+use crate::gpu::{requested_world_tree_mode, TreeGpuPlugin};
+use crate::layout::{BranchDescriptor, LeafDescriptor, PlantDescriptor};
 use crate::patch::TreePatch;
 use crate::shaders::TreeShadersPlugin;
 
@@ -63,7 +65,7 @@ impl Plugin for TreeFieldPlugin {
 		app.insert_resource(TreeFieldSettings::from_env());
 		app.init_resource::<TreeField>();
 		app.init_resource::<TreeFieldStats>();
-		app.insert_resource(TreeGroveCatalog::index_only());
+		app.init_resource::<TreeGroveCatalog>();
 		app.init_resource::<TreeCatalogOps>();
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevTreeTime>();
@@ -135,10 +137,10 @@ pub fn collect_catalog_ops(
 	}
 	for (entity, grove) in &groves {
 		catalog.grove_residency = true;
-		let requested = grove.0.plants.len();
-		fresh.push(admit_from_field(GroveId::from_entity(entity), (*grove.0).clone(), requested));
+		fresh.push(admit_from_grove(GroveId::from_entity(entity), grove.0.as_ref()));
 	}
 	if fresh.is_empty() && catalog.pending.is_empty() {
+		let catalog = catalog.bypass_change_detection();
 		catalog.last_writes = 0;
 		catalog.last_write_bytes = 0;
 		catalog.last_uploads.clear();
@@ -152,17 +154,39 @@ pub fn collect_catalog_ops(
 }
 
 fn admit_from_field(id: GroveId, field: TreeField, requested: usize) -> TreeCatalogOp {
-	let truncated = requested.saturating_sub(field.plants.len()) as u32;
-	let (aabb_min, aabb_max) = if field.bounds.is_empty() {
+	admit_from_parts(id, field.plants, field.branches, field.leaves, field.bounds, requested)
+}
+
+fn admit_from_grove(id: GroveId, field: &TreeField) -> TreeCatalogOp {
+	admit_from_parts(
+		id,
+		field.plants.clone(),
+		field.branches.clone(),
+		field.leaves.clone(),
+		field.bounds,
+		field.plants.len(),
+	)
+}
+
+fn admit_from_parts(
+	id: GroveId,
+	plants: Vec<PlantDescriptor>,
+	branches: Vec<BranchDescriptor>,
+	leaves: Vec<LeafDescriptor>,
+	bounds: TreeBounds,
+	requested: usize,
+) -> TreeCatalogOp {
+	let truncated = requested.saturating_sub(plants.len()) as u32;
+	let (aabb_min, aabb_max) = if bounds.is_empty() {
 		(Vec3::ZERO, Vec3::ZERO)
 	} else {
-		(field.bounds.min, field.bounds.max)
+		(bounds.min, bounds.max)
 	};
 	TreeCatalogOp::Admit {
 		id,
-		plants: field.plants,
-		branches: field.branches,
-		leaves: field.leaves,
+		plants,
+		branches,
+		leaves,
 		aabb_min,
 		aabb_max,
 		seed: 0,

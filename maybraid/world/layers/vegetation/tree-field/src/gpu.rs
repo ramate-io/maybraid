@@ -37,9 +37,9 @@ use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntit
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
 use vegetation_grass_field::{
-	cull_woody_groves, ensure_storage_size, grow_storage_buffer, select_dispatch_size, CatalogApply,
-	GrassGpuCapability, GrassGpuMode, GroveEncodeStats, GroveId, GroveVisibleSpan,
-	RetainedGroveFrame,
+	cull_woody_groves, grow_storage_buffer, remember_bands, select_dispatch_size,
+	upload_visible_spans, CatalogApply, GrassGpuCapability, GrassGpuMode, GroveEncodeStats,
+	GroveId, GroveSubmit, GroveVisibleSpan, RetainedGroveFrame,
 };
 use vegetation_groves::temperate_lower_massives::StorybookFieldArea;
 use vegetation_shaders::wesl::{
@@ -582,7 +582,7 @@ fn prepare_tree_buffers(
 		let Some(work) = state.views.get_mut(&view.retained_view_entity) else {
 			continue;
 		};
-		refresh_tree_view(
+		let span_grew = refresh_tree_view(
 			&device,
 			&queue,
 			view,
@@ -595,7 +595,7 @@ fn prepare_tree_buffers(
 		if grew {
 			work.dirty = true;
 		}
-		if grew || work.dirty {
+		if grew || span_grew {
 			rebind_tree_select(
 				&device,
 				&pipeline_cache,
@@ -964,7 +964,7 @@ fn refresh_tree_view(
 	capacity: u32,
 	work: &mut ViewWork,
 	encode: &mut GroveEncodeStats,
-) {
+) -> bool {
 	let thresholds = if extracted.grove_residency {
 		LodThresholds::grove_tree()
 	} else {
@@ -982,56 +982,45 @@ fn refresh_tree_view(
 	} else {
 		Vec::new()
 	};
-	work.last_bands.clear();
-	for grove in &groves {
-		work.last_bands.insert(grove.id, grove.lod);
-	}
-	let next = RetainedGroveFrame::capture(
+	remember_bands(&mut work.last_bands, &groves);
+	let submit = GroveSubmit::plan(
+		&work.retained,
 		catalog.generation,
 		view.viewport.z,
 		view.viewport.w,
 		fov_y(&view.clip_from_view),
 		thresholds.card_m,
 		groves,
+		extracted.grove_residency,
+		catalog.branches.len() as u32,
+		catalog.leaves.len() as u32,
 	);
-	let dirty = !work.retained.is_clean(&next);
-	work.dirty = dirty;
-	let (work_branches, work_leaves, span_count) = if extracted.grove_residency {
-		let (branches, leaves) = next.work_counts();
-		(branches, leaves, next.groves.len() as u32)
+	let _span = if submit.dirty {
+		bevy::log::info_span!("grove rebuild").entered()
 	} else {
-		(catalog.branches.len() as u32, catalog.leaves.len() as u32, 0)
+		bevy::log::info_span!("grove retained (clean)").entered()
 	};
-	work.visible_branches = work_branches;
-	work.visible_leaves = work_leaves;
-	work.span_count = span_count;
-	let uniform =
-		make_view_uniform(view, extracted, catalog, capacity, work_branches, work_leaves, span_count);
+	let stamped = {
+		let span_buffer = &mut work.span_buffer;
+		submit.stamp(&mut work.retained, encode, |groves| {
+			upload_visible_spans(device, queue, span_buffer, groves, "tree_visible_spans")
+		})
+	};
+	work.dirty = stamped.dirty;
+	work.visible_branches = stamped.work_branches;
+	work.visible_leaves = stamped.work_leaves;
+	work.span_count = stamped.span_count;
+	let uniform = make_view_uniform(
+		view,
+		extracted,
+		catalog,
+		capacity,
+		stamped.work_branches,
+		stamped.work_leaves,
+		stamped.span_count,
+	);
 	write_view_uniform(queue, &work.view_uniform, &uniform);
-	encode.uniform_writes += 1;
-	if dirty {
-		let _span = bevy::log::info_span!("grove rebuild").entered();
-		if span_count > 0 {
-			let bytes: Vec<u8> = next
-				.groves
-				.iter()
-				.flat_map(|grove| grove.span.to_std430_bytes())
-				.collect();
-			ensure_storage_size(
-				device,
-				&mut work.span_buffer,
-				(bytes.len() as u64).max(GroveVisibleSpan::STRIDE),
-				GroveVisibleSpan::STRIDE,
-				"tree_visible_spans",
-			);
-			queue.write_buffer(&work.span_buffer, 0, &bytes);
-			encode.span_uploads += 1;
-		}
-		work.retained = next;
-	} else {
-		let _span = bevy::log::info_span!("grove retained (clean)").entered();
-		encode.retained_clean += 1;
-	}
+	stamped.span_grew
 }
 
 fn rebind_tree_select(
@@ -1295,10 +1284,13 @@ fn tree_compute(
 			pass.dispatch_workgroups(1, 1, 1);
 		}
 		if let Some(encode) = encode.as_deref_mut() {
-			encode.passes += 1;
-			encode.dispatches += 1
-				+ u32::from(work.visible_branches > 0)
-				+ u32::from(work.visible_leaves > 0);
+			GroveSubmit::record_select(
+				encode,
+				true,
+				true,
+				work.visible_branches,
+				work.visible_leaves,
+			);
 		}
 	}
 }

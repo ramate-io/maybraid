@@ -65,7 +65,6 @@ pub struct TreeGroveCatalog {
 	branches_arena: RangeArena,
 	leaves_arena: RangeArena,
 	free_slots: Vec<u32>,
-	store_descriptors: bool,
 	consume_ops: bool,
 	pub generation: u64,
 	pub last_write_bytes: u64,
@@ -92,7 +91,7 @@ impl Default for TreeGroveCatalog {
 }
 
 impl TreeGroveCatalog {
-	fn empty(store_descriptors: bool, consume_ops: bool) -> Self {
+	fn empty(consume_ops: bool) -> Self {
 		Self {
 			groves: Vec::new(),
 			plants: Vec::new(),
@@ -103,7 +102,6 @@ impl TreeGroveCatalog {
 			branches_arena: RangeArena::with_cap(8_192),
 			leaves_arena: RangeArena::with_cap(16_384),
 			free_slots: Vec::new(),
-			store_descriptors,
 			consume_ops,
 			generation: 0,
 			last_write_bytes: 0,
@@ -116,19 +114,14 @@ impl TreeGroveCatalog {
 		}
 	}
 
-	/// Main-world index: ids, AABBs, and spans. Descriptors stay in the ops.
-	pub fn index_only() -> Self {
-		Self::empty(false, false)
-	}
-
-	/// Tests and CPU-select mirrors keep descriptor arenas.
+	/// Main-world catalog keeps descriptor arenas for stats and playground UI.
 	pub fn with_descriptors() -> Self {
-		Self::empty(true, false)
+		Self::empty(false)
 	}
 
 	/// Render-world catalog takes descriptor ownership from extract.
 	pub fn render() -> Self {
-		Self::empty(true, true)
+		Self::empty(true)
 	}
 
 	pub fn is_empty(&self) -> bool {
@@ -140,27 +133,15 @@ impl TreeGroveCatalog {
 	}
 
 	pub fn resident_plants(&self) -> usize {
-		if self.store_descriptors {
-			self.plants.len()
-		} else {
-			self.plants_arena.used as usize
-		}
+		self.plants.len()
 	}
 
 	pub fn resident_branches(&self) -> usize {
-		if self.store_descriptors {
-			self.branches.len()
-		} else {
-			self.branches_arena.used as usize
-		}
+		self.branches.len()
 	}
 
 	pub fn resident_leaves(&self) -> usize {
-		if self.store_descriptors {
-			self.leaves.len()
-		} else {
-			self.leaves_arena.used as usize
-		}
+		self.leaves.len()
 	}
 
 	pub fn contains(&self, id: GroveId) -> bool {
@@ -209,34 +190,21 @@ impl TreeGroveCatalog {
 				seed,
 				truncated_plants,
 			} => {
-				if self.store_descriptors {
-					let (plants, branches, leaves) = if self.consume_ops {
-						(std::mem::take(plants), std::mem::take(branches), std::mem::take(leaves))
-					} else {
-						(plants.clone(), branches.clone(), leaves.clone())
-					};
-					self.admit(
-						*id,
-						plants,
-						branches,
-						leaves,
-						*aabb_min,
-						*aabb_max,
-						*seed,
-						*truncated_plants,
-					);
+				let (plants, branches, leaves) = if self.consume_ops {
+					(std::mem::take(plants), std::mem::take(branches), std::mem::take(leaves))
 				} else {
-					self.admit_index(
-						*id,
-						plants.len() as u32,
-						branches.len() as u32,
-						leaves.len() as u32,
-						*aabb_min,
-						*aabb_max,
-						*seed,
-						*truncated_plants,
-					);
-				}
+					(plants.clone(), branches.clone(), leaves.clone())
+				};
+				self.admit(
+					*id,
+					plants,
+					branches,
+					leaves,
+					*aabb_min,
+					*aabb_max,
+					*seed,
+					*truncated_plants,
+				);
 			}
 		})
 	}
@@ -306,41 +274,6 @@ impl TreeGroveCatalog {
 		self.generation = self.generation.wrapping_add(1);
 	}
 
-	fn admit_index(
-		&mut self,
-		id: GroveId,
-		plant_count: u32,
-		branch_count: u32,
-		leaf_count: u32,
-		aabb_min: Vec3,
-		aabb_max: Vec3,
-		seed: u32,
-		truncated_plants: u32,
-	) {
-		self.retire(id);
-		self.truncated_plants = self.truncated_plants.saturating_add(truncated_plants);
-		let plant_span = self.plants_arena.alloc(plant_count);
-		let branch_span = self.branches_arena.alloc(branch_count);
-		let leaf_span = self.leaves_arena.alloc(leaf_count);
-		let slot = self.alloc_slot();
-		self.write_record(slot, aabb_min, aabb_max, seed, plant_span, branch_span, leaf_span);
-		self.last_writes += 1;
-		self.last_write_bytes += plant_span.byte_len(PLANT_DESCRIPTOR_STRIDE)
-			+ branch_span.byte_len(BRANCH_DESCRIPTOR_STRIDE)
-			+ leaf_span.byte_len(LEAF_DESCRIPTOR_STRIDE)
-			+ WOODY_GROVE_RECORD_STRIDE;
-		self.last_uploads.push(CatalogUpload {
-			plants: plant_span,
-			branches: branch_span,
-			leaves: leaf_span,
-		});
-		self.live.insert(
-			id,
-			LiveGrove { slot, plants: plant_span, branches: branch_span, leaves: leaf_span },
-		);
-		self.generation = self.generation.wrapping_add(1);
-	}
-
 	fn write_record(
 		&mut self,
 		slot: u32,
@@ -372,17 +305,15 @@ impl TreeGroveCatalog {
 		if let Some(record) = self.groves.get_mut(live.slot as usize) {
 			record.flags = 0;
 		}
-		if self.store_descriptors {
-			for plant in self.plants_mut(live.plants) {
-				plant.flags &= !PlantDescriptor::FLAG_ACTIVE;
-			}
-			self.last_uploads.push(CatalogUpload {
-				plants: live.plants,
-				branches: RangeSpan::default(),
-				leaves: RangeSpan::default(),
-			});
-			self.last_write_bytes += live.plants.byte_len(PLANT_DESCRIPTOR_STRIDE).max(16);
+		for plant in self.plants_mut(live.plants) {
+			plant.flags &= !PlantDescriptor::FLAG_ACTIVE;
 		}
+		self.last_uploads.push(CatalogUpload {
+			plants: live.plants,
+			branches: RangeSpan::default(),
+			leaves: RangeSpan::default(),
+		});
+		self.last_write_bytes += live.plants.byte_len(PLANT_DESCRIPTOR_STRIDE).max(16);
 		self.plants_arena.free(live.plants);
 		self.branches_arena.free(live.branches);
 		self.leaves_arena.free(live.leaves);
@@ -606,16 +537,6 @@ mod tests {
 			render.apply(applied, ADMISSION_BUDGET);
 		assert!(render_leftover.is_empty());
 		assert_same_live(&main, &render, (1..=ADMISSION_BUDGET as u64).chain([99, 100]));
-	}
-
-	#[test]
-	fn index_only_keeps_spans_without_descriptors() {
-		let mut catalog = TreeGroveCatalog::index_only();
-		catalog.apply([admit(1)], ADMISSION_BUDGET);
-		assert!(catalog.contains(GroveId(1)));
-		assert!(catalog.plants.is_empty());
-		assert!(catalog.groves.iter().any(|record| record.is_active()));
-		assert!(catalog.active_bounds().is_some());
 	}
 
 	#[test]

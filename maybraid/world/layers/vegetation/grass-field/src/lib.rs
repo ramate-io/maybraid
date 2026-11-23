@@ -36,7 +36,9 @@ pub use catalog::{
 };
 pub use diagnostics::GrassFieldStats;
 pub use field::{GrassField, GrassFieldSettings};
-pub use gpu_arena::{ensure_storage_size, grow_storage_buffer, ArenaBufferPlan, ArenaGrow};
+pub use gpu_arena::{
+	ensure_storage_size, grow_storage_buffer, upload_visible_spans, ArenaBufferPlan, ArenaGrow,
+};
 pub use grove_catalog::{GrassCatalogOp, GrassCatalogOps, GrassGroveCatalog};
 pub use grove_cull::{
 	cull_grass_patches, cull_woody_groves, grass_patch_visible, grove_lod_band, map_work_index,
@@ -45,13 +47,13 @@ pub use grove_cull::{
 pub use grove_record::{
 	GroveVisibleSpan, VisibleGrove, WoodyGroveRecord, WOODY_GROVE_RECORD_STRIDE,
 };
-pub use grove_retain::{
-	grove_retain_force_rebuild, RetainedGroveFrame, GROVE_RETAIN_ENV, GROVE_RETAIN_FORCE_REBUILD,
-};
+pub use grove_retain::{remember_bands, GroveSubmit, RetainedGroveFrame};
 pub use host::GrassPatchLod;
 pub use patch::{GrassPatch, SurfaceSample};
 pub use plugin::{collect_catalog_ops, GrassFieldPlugin};
-pub use select::{frustum_planes, CompactedLists, GrassSelector, WorldFrustum};
+pub use select::{
+	aabb_nearest_distance, frustum_planes, CompactedLists, GrassSelector, WorldFrustum,
+};
 pub use species::GrassSpecies;
 pub use template::BladeTemplate;
 pub use vegetation_shaders::wesl::{

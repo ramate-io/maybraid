@@ -70,8 +70,8 @@ impl LodThresholds {
 	/// Grove-owned bushes: nested High/Medium/Low inside the finite residency ring (`card_m`).
 	pub fn grove_bush() -> Self {
 		Self {
-			near_m: 400.0,
-			mid_m: 520.0,
+			near_m: 60.0,
+			mid_m: 85.0,
 			card_m: 110.0,
 			near_density: 1.0,
 			mid_density: 0.85,
@@ -83,8 +83,8 @@ impl LodThresholds {
 	/// Grove-owned grass: nested LOD inside the finite residency ring (`card_m`).
 	pub fn grove_grass() -> Self {
 		Self {
-			near_m: 400.0,
-			mid_m: 520.0,
+			near_m: 54.0,
+			mid_m: 72.0,
 			card_m: 90.0,
 			near_density: 1.0,
 			mid_density: 0.72,
@@ -184,6 +184,9 @@ mod tests {
 		assert!(LodThresholds::grove_tree().nested_ok());
 		assert!(LodThresholds::grove_bush().nested_ok());
 		assert!(LodThresholds::grove_grass().nested_ok());
+		for t in [LodThresholds::grove_bush(), LodThresholds::grove_grass()] {
+			assert!(t.near_m < t.mid_m && t.mid_m < t.card_m);
+		}
 		let grove = LodThresholds::grove_tree();
 		assert_eq!(lod_bucket(50.0, 12.0, 0.0, 1080.0, 1.0, grove), GRASS_LOD_NEAR);
 		assert_eq!(lod_bucket(200.0, 12.0, 0.0, 1080.0, 1.0, grove), GRASS_LOD_NEAR);

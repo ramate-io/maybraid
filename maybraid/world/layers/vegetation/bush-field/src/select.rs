@@ -93,8 +93,15 @@ impl BushSelector {
 	}
 
 	pub fn plant_bucket(&self, plant: &PlantDescriptor) -> Option<u32> {
+		self.plant_bucket_with_lod(plant, None)
+	}
+
+	fn plant_bucket_with_lod(&self, plant: &PlantDescriptor, grove_lod: Option<u32>) -> Option<u32> {
 		if !plant.is_active() {
 			return None;
+		}
+		if let Some(lod) = grove_lod {
+			return WoodLod::from_bucket(lod).map(|lod| lod.bucket());
 		}
 		let camera = self.view.world_position.truncate();
 		let radius = plant.conservative_extent_m(self.view.wind.w);
@@ -140,9 +147,7 @@ impl BushSelector {
 			.unwrap_or(leaves.len() as u32);
 		let wood_keep = keep_fraction(self.capacities[0], branch_total);
 		let leaf_keep = keep_fraction(self.capacities[0], leaf_total);
-		let branch_indices = span_indices(spans, branches.len(), true);
-		let leaf_indices = span_indices(spans, leaves.len(), false);
-		for branch_index in branch_indices {
+		for (branch_index, grove_lod) in span_items(spans, branches.len(), true) {
 			let Some(branch) = branches.get(branch_index) else {
 				continue;
 			};
@@ -150,7 +155,7 @@ impl BushSelector {
 			let Some(plant) = plants.get(branch.plant_index as usize) else {
 				continue;
 			};
-			let Some(bucket) = self.plant_bucket(plant) else {
+			let Some(bucket) = self.plant_bucket_with_lod(plant, grove_lod) else {
 				continue;
 			};
 			let lod = WoodLod::from_bucket(bucket).unwrap_or(WoodLod::Far);
@@ -171,7 +176,7 @@ impl BushSelector {
 			lists.wood[slot].push(branch_index as u32);
 			lists.submitted_wood += 1;
 		}
-		for leaf_index in leaf_indices {
+		for (leaf_index, grove_lod) in span_items(spans, leaves.len(), false) {
 			let Some(leaf) = leaves.get(leaf_index) else {
 				continue;
 			};
@@ -179,7 +184,7 @@ impl BushSelector {
 			let Some(plant) = plants.get(leaf.plant_index as usize) else {
 				continue;
 			};
-			let Some(bucket) = self.plant_bucket(plant) else {
+			let Some(bucket) = self.plant_bucket_with_lod(plant, grove_lod) else {
 				continue;
 			};
 			let lod = WoodLod::from_bucket(bucket).unwrap_or(WoodLod::Far);
@@ -242,18 +247,18 @@ impl BushSelector {
 	}
 }
 
-fn span_indices(spans: Option<&[GroveVisibleSpan]>, fallback_len: usize, branch: bool) -> Vec<usize> {
+fn span_items(
+	spans: Option<&[GroveVisibleSpan]>,
+	fallback_len: usize,
+	branch: bool,
+) -> Vec<(usize, Option<u32>)> {
 	match spans {
-		None => (0..fallback_len).collect(),
+		None => (0..fallback_len).map(|index| (index, None)).collect(),
 		Some(spans) => {
 			let mut out = Vec::new();
 			for span in spans {
-				let (off, count) = if branch {
-					(span.branch_off, span.branch_count)
-				} else {
-					(span.leaf_off, span.leaf_count)
-				};
-				out.extend(off as usize..off as usize + count as usize);
+				let range = if branch { span.branch_range() } else { span.leaf_range() };
+				out.extend(range.map(|index| (index as usize, Some(span.lod))));
 			}
 			out
 		}
