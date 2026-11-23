@@ -930,7 +930,16 @@ fn cpu_fill_lists<'a>(
 		};
 		let uniform = make_view_uniform(view, extracted, catalog, state.list_capacity);
 		let selector = TreeSelector::from_view(uniform, &extracted.settings);
-		let lists = selector.compact(&catalog.plants, &catalog.branches, &catalog.leaves);
+		let lists = if catalog.grove_residency {
+			selector.compact_grove_catalog(
+				&catalog.groves,
+				&catalog.plants,
+				&catalog.branches,
+				&catalog.leaves,
+			)
+		} else {
+			selector.compact(&catalog.plants, &catalog.branches, &catalog.leaves)
+		};
 		for lod in 0..TREE_LOD_COUNT {
 			if !lists.wood[lod].is_empty() {
 				let bytes: Vec<u8> = lists.wood[lod].iter().flat_map(|i| i.to_le_bytes()).collect();
@@ -972,7 +981,16 @@ fn record_cpu_stats<'a>(
 			.max(1);
 		let uniform = make_view_uniform(view, extracted, catalog, capacity);
 		let selector = TreeSelector::from_view(uniform, &extracted.settings);
-		let lists = selector.compact(&catalog.plants, &catalog.branches, &catalog.leaves);
+		let lists = if catalog.grove_residency {
+			selector.compact_grove_catalog(
+				&catalog.groves,
+				&catalog.plants,
+				&catalog.branches,
+				&catalog.leaves,
+			)
+		} else {
+			selector.compact(&catalog.plants, &catalog.branches, &catalog.leaves)
+		};
 		record_lists(&lists, stats.as_deref_mut());
 		break;
 	}
@@ -1346,7 +1364,7 @@ mod tests {
 		let thousand = GroveEncodeStats::woody_kind();
 		assert_eq!(ten.encode_only(), thousand.encode_only());
 		assert!(ten.passes <= 1);
-		assert!(ten.dispatches <= 3);
+		assert!(ten.dispatches <= 4);
 		assert!(ten.draws <= 6);
 		assert_eq!(ten.uniform_writes, 1);
 	}

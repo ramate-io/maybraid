@@ -12,6 +12,8 @@ mod bounds;
 mod capability;
 mod catalog;
 mod diagnostics;
+mod grove_cull;
+mod grove_record;
 mod field;
 mod gpu;
 mod grove_catalog;
@@ -30,6 +32,10 @@ pub use catalog::{
 	GroveEncodeStats, GroveId, RangeArena, RangeSpan, ADMISSION_BUDGET,
 	MAX_COMPUTE_WORKGROUPS_PER_DIM,
 };
+pub use grove_cull::{
+	grass_patch_visible, map_work_index, visible_spans_from_records, woody_grove_visible,
+};
+pub use grove_record::{GroveVisibleSpan, WoodyGroveRecord, WOODY_GROVE_RECORD_STRIDE};
 pub use diagnostics::GrassFieldStats;
 pub use field::{GrassField, GrassFieldSettings};
 pub use grove_catalog::{GrassCatalogOp, GrassCatalogOps, GrassGroveCatalog};

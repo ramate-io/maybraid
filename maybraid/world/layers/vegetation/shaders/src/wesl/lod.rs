@@ -54,12 +54,12 @@ impl LodThresholds {
 	}
 
 	/// Grove-owned tree fields replace High (~400 m), Medium (~500 m), and Low
-	/// (to the 1 km present ring). `card_m` is unbounded so residency culls.
+	/// (to the 1 km present ring). `card_m` matches [`GROVE_PRESENT_RADIUS_M`].
 	pub fn grove_tree() -> Self {
 		Self {
 			near_m: 400.0,
 			mid_m: 520.0,
-			card_m: f32::MAX,
+			card_m: 1_000.0,
 			near_density: 1.0,
 			mid_density: 1.0,
 			card_density: 0.22,
@@ -72,7 +72,7 @@ impl LodThresholds {
 		Self {
 			near_m: 400.0,
 			mid_m: 520.0,
-			card_m: f32::MAX,
+			card_m: 110.0,
 			near_density: 1.0,
 			mid_density: 0.85,
 			card_density: 0.28,
@@ -85,7 +85,7 @@ impl LodThresholds {
 		Self {
 			near_m: 400.0,
 			mid_m: 520.0,
-			card_m: f32::MAX,
+			card_m: 90.0,
 			near_density: 1.0,
 			mid_density: 0.72,
 			card_density: 0.38,

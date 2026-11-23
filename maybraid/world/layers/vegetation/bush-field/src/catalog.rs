@@ -6,6 +6,7 @@ use bevy::math::Vec3;
 use bevy::prelude::*;
 use vegetation_grass_field::{
 	CatalogApply, CatalogOpQueue, GroveCatalogOp, GroveEncodeStats, GroveId, RangeArena, RangeSpan,
+	WoodyGroveRecord, WOODY_GROVE_RECORD_STRIDE,
 };
 
 use crate::layout::{
@@ -74,15 +75,7 @@ pub struct BushGroveCatalog {
 	pub grove_residency: bool,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct GroveRecord {
-	pub aabb_min: Vec3,
-	pub plant_off: u32,
-	pub aabb_max: Vec3,
-	pub plant_count: u32,
-	pub seed: u32,
-	pub flags: u32,
-}
+pub type GroveRecord = WoodyGroveRecord;
 
 /// Descriptor ranges written this apply (admit or retire). Prepare uploads only these.
 #[derive(Clone, Copy, Debug)]
@@ -90,10 +83,6 @@ pub struct CatalogUpload {
 	pub plants: RangeSpan,
 	pub branches: RangeSpan,
 	pub leaves: RangeSpan,
-}
-
-impl GroveRecord {
-	pub const FLAG_ACTIVE: u32 = 1 << 0;
 }
 
 impl Default for BushGroveCatalog {
@@ -156,16 +145,18 @@ impl BushGroveCatalog {
 				aabb_max,
 				seed,
 				truncated_plants,
-			} => self.admit(
-				*id,
-				plants.clone(),
-				branches.clone(),
-				leaves.clone(),
-				*aabb_min,
-				*aabb_max,
-				*seed,
-				*truncated_plants,
-			),
+			} => {
+				self.admit(
+					*id,
+					plants.clone(),
+					branches.clone(),
+					leaves.clone(),
+					*aabb_min,
+					*aabb_max,
+					*seed,
+					*truncated_plants,
+				);
+			}
 		})
 	}
 
@@ -210,9 +201,13 @@ impl BushGroveCatalog {
 		self.write_leaves(leaf_span, &leaves);
 		self.groves[slot as usize] = GroveRecord {
 			aabb_min,
-			plant_off: plant_span.offset,
+			branch_off: branch_span.offset,
 			aabb_max,
+			branch_count: branch_span.count,
+			plant_off: plant_span.offset,
 			plant_count: plant_span.count,
+			leaf_off: leaf_span.offset,
+			leaf_count: leaf_span.count,
 			seed,
 			flags: GroveRecord::FLAG_ACTIVE,
 		};
@@ -220,7 +215,7 @@ impl BushGroveCatalog {
 		self.last_write_bytes += plant_span.byte_len(PLANT_DESCRIPTOR_STRIDE)
 			+ branch_span.byte_len(BRANCH_DESCRIPTOR_STRIDE)
 			+ leaf_span.byte_len(LEAF_DESCRIPTOR_STRIDE)
-			+ 48;
+			+ WOODY_GROVE_RECORD_STRIDE;
 		self.last_uploads.push(CatalogUpload {
 			plants: plant_span,
 			branches: branch_span,

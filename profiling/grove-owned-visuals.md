@@ -12,9 +12,11 @@ Per view, per kind, encode is independent of grove count:
 
 | Kind | passes | dispatches | draws | uniform writes |
 |---|---:|---:|---:|---:|
-| tree | 1 | 3 | 6 | 1 |
-| bush | 1 | 3 | 6 | 1 |
-| grass | 1 | 2 | 3 | 1 |
+| tree | 1 | 4 | 6 | 1 |
+| bush | 1 | 4 | 6 | 1 |
+| grass | 1 | 3 | 3 | 1 |
+
+Woody kinds add one grove-cull compute dispatch per view before wood/foliage selection. Grove-owned `card_m` is finite again (trees 1 km present ring, bushes 110 m, grass 90 m) so pass-2 work is bounded by visible grove spans, not the whole descriptor arena. CPU `MAYBRAID_EXPERIMENT_TREE_FIELD=cpu` mirrors the same per-grove frustum and residency tests via `compact_grove_catalog`.
 
 Five presenters (tree wood, tree foliage, bush wood, bush foliage, grass) each own a bin and carry `NoFrustumCulling` so CPU AABB does not hide GPU instances. GPU `ChicoGroveHost`s still go through LodScene with one High band covering the near-grove ring. Realizing High emits `CatalogOp::Admit` (a catalog entry only — no per-plant ECS, Transforms, or Visibility). Leaving or retiring High emits `CatalogOp::Retire`. Distance LOD (near, mid, far, density) stays in the GPU program (`lod.wesl` grove thresholds: High ~400 m, Medium ~520 m, Low 1 km). Compact lists grow to the admitted branch/leaf counts so one High band cannot overflow 8192 slots and drop foliage. `MAYBRAID_EXPERIMENT_TREE_FIELD=cpu` still uses CPU select. Bush/grass global caps are 262144 plants and 1048576 blades so admitted content is not silently truncated.
 

@@ -91,6 +91,7 @@ impl Plugin for VegetationWeslPlugin {
 		load_shader_library!(app, "wesl/lod.wesl");
 		load_shader_library!(app, "wesl/shading.wesl");
 		load_shader_library!(app, "wesl/layout.wesl");
+		load_shader_library!(app, "wesl/grove.wesl");
 		load_shader_library!(app, "wesl/import_smoke.wesl");
 	}
 }

@@ -234,17 +234,33 @@ fn snapshot_extracted_frame(
 	}
 }
 
+#[derive(Resource, Default)]
+struct TreePresenterBounds {
+	generation: u64,
+	aabb: Aabb,
+}
+
 fn sync_presenter_bounds(
 	catalog: Res<TreeGroveCatalog>,
-	settings: Res<TreeFieldSettings>,
+	mut cache: Local<Option<TreePresenterBounds>>,
 	mut presenters: Query<&mut Aabb, With<TreeFieldPresenter>>,
 ) {
 	if catalog.is_empty() {
 		return;
 	}
+	let refresh = cache.as_ref().is_none_or(|cached| cached.generation != catalog.generation);
+	if !refresh {
+		return;
+	}
 	let mut bounds = TreeBounds::empty();
-	for plant in catalog.plants.iter().filter(|plant| plant.is_active()) {
-		bounds = bounds.union(TreeBounds::from_plant(plant, settings.wind.strength_m));
+	if !catalog.grove_residency {
+		return;
+	}
+	for grove in catalog.groves.iter().filter(|grove| grove.is_active()) {
+		bounds = bounds.union(TreeBounds {
+			min: grove.aabb_min,
+			max: grove.aabb_max,
+		});
 	}
 	if bounds.is_empty() {
 		return;
@@ -253,6 +269,7 @@ fn sync_presenter_bounds(
 		center: Vec3A::from((bounds.min + bounds.max) * 0.5),
 		half_extents: Vec3A::from((bounds.max - bounds.min) * 0.5),
 	};
+	*cache = Some(TreePresenterBounds { generation: catalog.generation, aabb });
 	for mut existing in &mut presenters {
 		*existing = aabb;
 	}
