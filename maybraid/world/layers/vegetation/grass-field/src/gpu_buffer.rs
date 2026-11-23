@@ -1,6 +1,5 @@
 //! Incremental storage-buffer growth and span uploads for grove catalogs.
 
-use bevy::prelude::*;
 use bevy::render::render_resource::{Buffer, BufferDescriptor, BufferUsages};
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 
@@ -59,6 +58,6 @@ pub fn ensure_compute_indirect(device: &RenderDevice, slot: &mut Option<Buffer>)
 		usage: BufferUsages::STORAGE | BufferUsages::INDIRECT | BufferUsages::COPY_DST,
 		mapped_at_creation: false,
 	});
-	slot.insert(buf.clone());
+	let _ = slot.insert(buf.clone());
 	buf
 }

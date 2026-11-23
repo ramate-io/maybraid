@@ -239,6 +239,7 @@ fn snapshot_extracted_frame(
 #[derive(Resource, Default)]
 struct TreePresenterBounds {
 	generation: u64,
+	#[expect(dead_code, reason = "bounds receipt for parity/debug when generation matches")]
 	aabb: Aabb,
 }
 

@@ -1,6 +1,5 @@
 //! Whole-grove visibility before per-branch / per-blade selection.
 
-use bevy::math::Vec3;
 use vegetation_shaders::wesl::{lod_bucket, GrassPatchHeader, GrassViewUniform, LodThresholds};
 
 use crate::grove_record::{GroveVisibleSpan, WoodyGroveRecord};
@@ -113,7 +112,7 @@ pub fn visible_spans_from_records(
 mod tests {
 	use super::*;
 	use bevy::camera::CameraProjection;
-	use bevy::math::Vec4;
+	use bevy::math::{Vec3, Vec4};
 	use bevy::prelude::{PerspectiveProjection, Transform};
 
 	fn look(origin: Vec3, target: Vec3, thresholds: LodThresholds) -> GrassViewUniform {

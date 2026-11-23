@@ -17,7 +17,8 @@ pub struct WoodyGroveRecord {
 	pub flags: u32,
 }
 
-pub const WOODY_GROVE_RECORD_STRIDE: u64 = 56;
+/// WGSL `array<WoodyGroveRecord>` stride (std430 rounds 56 B struct up to 16 B alignment).
+pub const WOODY_GROVE_RECORD_STRIDE: u64 = 64;
 
 impl WoodyGroveRecord {
 	pub const FLAG_ACTIVE: u32 = 1 << 0;
@@ -36,6 +37,7 @@ impl WoodyGroveRecord {
 
 	pub fn to_std430_bytes(self) -> [u8; WOODY_GROVE_RECORD_STRIDE as usize] {
 		let mut out = [0u8; WOODY_GROVE_RECORD_STRIDE as usize];
+		// Bytes 56..64 are array-element tail padding (must stay zero).
 		pack_vec3(&mut out, 0, self.aabb_min);
 		out[12..16].copy_from_slice(&self.branch_off.to_le_bytes());
 		pack_vec3(&mut out, 16, self.aabb_max);
@@ -57,6 +59,19 @@ pub struct GroveVisibleSpan {
 	pub branch_count: u32,
 	pub leaf_off: u32,
 	pub leaf_count: u32,
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn storage_stride_matches_wgsl_array_element_size() {
+		let bytes = WoodyGroveRecord::default().to_std430_bytes();
+		assert_eq!(bytes.len(), WOODY_GROVE_RECORD_STRIDE as usize);
+		assert_eq!(WOODY_GROVE_RECORD_STRIDE, 64);
+		assert!(bytes[56..].iter().all(|&b| b == 0));
+	}
 }
 
 fn pack_vec3(out: &mut [u8], offset: usize, v: Vec3) {

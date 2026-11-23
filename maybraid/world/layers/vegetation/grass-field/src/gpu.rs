@@ -36,14 +36,14 @@ use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntit
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
 use vegetation_shaders::wesl::{
-	GeometryLod, GrassDrawParams, GrassPatchHeader, GrassViewUniform, LodThresholds,
+	GeometryLod, GrassDrawParams, GrassViewUniform, LodThresholds,
 	BLADE_DESCRIPTOR_STRIDE, DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_COUNT,
 	GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW, PATCH_HEADER_STRIDE,
 };
 
 use crate::capability::{GrassGpuCapability, GrassGpuMode};
 use crate::catalog::{select_dispatch_size, CatalogApply, GroveEncodeStats};
-use crate::gpu_buffer::{ensure_compute_indirect, grow_storage_buffer, GROVE_COMPUTE_INDIRECT_STRIDE};
+use crate::gpu_buffer::{ensure_compute_indirect, grow_storage_buffer};
 use crate::diagnostics::GrassFieldStats;
 use crate::grove_catalog::{GrassCatalogOps, GrassGroveCatalog};
 use crate::plugin::{ExtractedGrassField, GrassFieldPresenter};
