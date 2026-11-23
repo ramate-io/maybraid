@@ -2,7 +2,7 @@
 
 use bevy::math::{Mat4, Vec3, Vec4};
 use vegetation_shaders::wesl::{
-	lod_bucket, BladeDescriptor, DrawIndexedIndirect, GeometryLod, GrassPatchHeader,
+	lod_bucket, nested_keep, BladeDescriptor, DrawIndexedIndirect, GeometryLod, GrassPatchHeader,
 	GrassViewUniform, LodThresholds, GRASS_LOD_COUNT,
 };
 
@@ -134,7 +134,15 @@ impl GrassSelector {
 			return None;
 		}
 		if let Some(lod) = grove_lod {
-			return GeometryLod::from_bucket(lod).map(|lod| lod.bucket());
+			let Some(bucket) = GeometryLod::from_bucket(lod).map(|lod| lod.bucket()) else {
+				return None;
+			};
+			let density = match bucket {
+				0 => self.thresholds.near_density,
+				1 => self.thresholds.mid_density,
+				_ => self.thresholds.card_density,
+			};
+			return nested_keep(blade.density_rank(), density).then_some(bucket);
 		}
 		let camera = self.view.world_position.truncate();
 		let radius = blade.conservative_extent_m(self.view.wind.w);
@@ -369,6 +377,36 @@ mod tests {
 		)
 		.compact(&field.blades, &field.patches);
 		assert!(half.submitted <= native.submitted);
+		Ok(())
+	}
+
+	#[test]
+	fn grove_mid_and_card_keep_a_thinned_fraction() -> anyhow::Result<()> {
+		let settings = GrassFieldSettings::default();
+		let patch = GrassPatch::dense_field(9, Vec3::ZERO, Vec2::splat(12.0), 0.5);
+		let field = GrassField::rebuild([&patch], &settings);
+		assert!(field.blades.len() > 32);
+		let mut view = look_view(Vec3::new(6.0, 4.0, 20.0), Vec3::new(6.0, 0.0, 6.0), 720.0);
+		let t = LodThresholds::grove_grass();
+		view.lod_distances = Vec4::new(0.0, t.near_m, t.mid_m, t.card_m);
+		view.lod_density =
+			Vec4::new(t.near_density, t.mid_density, t.card_density, t.min_height_px);
+		let selector = GrassSelector::from_view(view, &settings);
+		let n = field.blades.len() as u32;
+		let span = |lod| crate::grove_record::GroveVisibleSpan {
+			branch_off: 0,
+			branch_count: n,
+			leaf_off: 0,
+			leaf_count: 0,
+			lod,
+		};
+		let mid = selector.compact_spans(&field.blades, &field.patches, Some(&[span(1)]));
+		let card = selector.compact_spans(&field.blades, &field.patches, Some(&[span(2)]));
+		assert!(mid.considered > 0);
+		assert!(card.considered > 0);
+		assert!((mid.submitted as f32) / (mid.considered as f32) < 1.0);
+		assert!((card.submitted as f32) / (card.considered as f32) < 1.0);
+		assert!(card.submitted < mid.submitted);
 		Ok(())
 	}
 

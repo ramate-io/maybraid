@@ -1,6 +1,6 @@
 //! Per-blade visibility, nested density, and LOD. Compacts survivors into per-LOD lists.
 
-import vegetation_shaders::wesl::lod::{catalog_select_index, lod_bucket, LodThresholds};
+import vegetation_shaders::wesl::lod::{catalog_select_index, lod_bucket, nested_keep, LodThresholds};
 import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform};
 import vegetation_shaders::wesl::wind::max_wind_displacement_m;
 import vegetation_shaders::wesl::grove::{GroveVisibleSpan, span_step, SPAN_ITEM_NONE};
@@ -104,6 +104,9 @@ fn select(
         );
     }
     if (bucket > 2u) {
+        return;
+    }
+    if (!nested_keep(blade.shape.w, view.lod_density[bucket])) {
         return;
     }
     append_list(bucket, blade_index, capacity);
