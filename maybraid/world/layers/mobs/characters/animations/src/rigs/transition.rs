@@ -15,6 +15,25 @@ where
 		Self::from_pose(animation, rig.pose.clone())
 	}
 
+	/// Blend only bone transforms, without evaluating child armature effects.
+	pub fn apply_pose_for(
+		&self,
+		rig: &mut HumanoidV0Rig,
+		animation_progress: f32,
+		transition_progress: f32,
+	) {
+		let weight = self.weight(transition_progress);
+		if weight <= 0.0 {
+			rig.pose.copy_from(&self.from_pose);
+			return;
+		}
+		self.animation.apply_for(rig, animation_progress);
+		if weight < 1.0 {
+			rig.scratch.b.copy_from(&rig.pose);
+			PoseBuffer::blend_into(&self.from_pose, &rig.scratch.b, weight, &mut rig.pose);
+		}
+	}
+
 	pub fn apply(
 		&self,
 		rig: &mut HumanoidV0Rig,
@@ -263,5 +282,40 @@ mod tests {
 		let effects = Transition::from_visible(Squat::for_loop(1.0, 1.0), from_pose, from_offset)
 			.apply(&mut rig, 0.0, 0.0);
 		assert!((effects.0.translation - from_offset.0.translation).length() < 1e-5);
+	}
+	#[test]
+	fn pose_only_transition_matches_apply_without_sampling_effects() -> anyhow::Result<()> {
+		use std::cell::Cell;
+
+		struct CountEffects<'a>(&'a Cell<usize>);
+		impl Animation<HumanoidV0Rig> for CountEffects<'_> {
+			fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+				Squat::for_loop(1.0, 1.0).apply_for(rig, progress);
+			}
+
+			fn effects_for(&self, _: &HumanoidV0Rig, _: f32) -> Effects {
+				self.0.set(self.0.get() + 1);
+				ArmatureOffset::from_translation(Vec3::Y)
+			}
+		}
+
+		let calls = Cell::new(0);
+		let mut source = HumanoidV0Rig::imported();
+		Fall::default().apply_for(&mut source, 0.7);
+		let transition = Transition::from_visible(
+			CountEffects(&calls),
+			source.pose.clone(),
+			ArmatureOffset::from_translation(Vec3::X),
+		);
+		for weight in [0.0, 0.5, 1.0] {
+			let mut full = HumanoidV0Rig::imported();
+			let mut pose = HumanoidV0Rig::imported();
+			transition.apply(&mut full, 0.4, weight);
+			let before = calls.get();
+			transition.apply_pose_for(&mut pose, 0.4, weight);
+			assert_eq!(calls.get(), before, "pose-only path evaluated effects");
+			assert_eq!(pose.pose, full.pose, "pose mismatch at weight {weight}");
+		}
+		Ok(())
 	}
 }
