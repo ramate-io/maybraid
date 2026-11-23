@@ -165,6 +165,36 @@ pub struct GrassPatchHeader {
 	pub flags: u32,
 }
 
+/// GPU grove slot. AABB/sphere plus item spans. Inactive slots keep `flags = 0`.
+///
+/// Primary is plants (woody) or blades (grass). Secondary/tertiary are branches
+/// and leaves; grass leaves them empty. std430 array stride is 64.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct GroveRecord {
+	pub aabb_min: Vec3,
+	pub flags: u32,
+	pub aabb_max: Vec3,
+	pub seed: u32,
+	pub plant_off: u32,
+	pub plant_count: u32,
+	pub branch_off: u32,
+	pub branch_count: u32,
+	pub leaf_off: u32,
+	pub leaf_count: u32,
+	_pad: [u32; 2],
+}
+
+/// Compact visible-grove span consumed by pass-2 select. `prefix` is exclusive.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VisibleGroveSpan {
+	pub offset: u32,
+	pub count: u32,
+	pub prefix: u32,
+	pub lod: u32,
+}
+
 impl GrassPatchHeader {
 	pub const FLAG_ACTIVE: u32 = 1 << 0;
 
@@ -174,6 +204,113 @@ impl GrassPatchHeader {
 
 	pub fn blade_range(self) -> std::ops::Range<u32> {
 		self.blade_offset..self.blade_offset.saturating_add(self.blade_count)
+	}
+
+	pub fn grove_record(self) -> GroveRecord {
+		GroveRecord {
+			aabb_min: self.aabb_min,
+			flags: self.flags,
+			aabb_max: self.aabb_max,
+			seed: self.seed,
+			plant_off: self.blade_offset,
+			plant_count: self.blade_count,
+			branch_off: 0,
+			branch_count: 0,
+			leaf_off: 0,
+			leaf_count: 0,
+			_pad: [0; 2],
+		}
+	}
+}
+
+impl GroveRecord {
+	pub const FLAG_ACTIVE: u32 = 1 << 0;
+
+	pub fn active(
+		aabb_min: Vec3,
+		aabb_max: Vec3,
+		seed: u32,
+		plants: (u32, u32),
+		branches: (u32, u32),
+		leaves: (u32, u32),
+	) -> Self {
+		Self {
+			aabb_min,
+			flags: Self::FLAG_ACTIVE,
+			aabb_max,
+			seed,
+			plant_off: plants.0,
+			plant_count: plants.1,
+			branch_off: branches.0,
+			branch_count: branches.1,
+			leaf_off: leaves.0,
+			leaf_count: leaves.1,
+			_pad: [0; 2],
+		}
+	}
+
+	pub fn is_active(self) -> bool {
+		self.flags & Self::FLAG_ACTIVE != 0
+	}
+
+	pub fn sphere(self) -> (Vec3, f32) {
+		let center = (self.aabb_min + self.aabb_max) * 0.5;
+		let radius = (self.aabb_max - self.aabb_min).length() * 0.5;
+		(center, radius)
+	}
+
+	pub fn height_m(self) -> f32 {
+		(self.aabb_max.y - self.aabb_min.y).max(1.0)
+	}
+
+	pub fn plant_range(self) -> std::ops::Range<u32> {
+		self.plant_off..self.plant_off.saturating_add(self.plant_count)
+	}
+
+	pub fn branch_range(self) -> std::ops::Range<u32> {
+		self.branch_off..self.branch_off.saturating_add(self.branch_count)
+	}
+
+	pub fn leaf_range(self) -> std::ops::Range<u32> {
+		self.leaf_off..self.leaf_off.saturating_add(self.leaf_count)
+	}
+
+	pub fn blade_range(self) -> std::ops::Range<u32> {
+		self.plant_range()
+	}
+
+	pub fn to_std430_bytes(self) -> [u8; GROVE_RECORD_STRIDE as usize] {
+		let mut out = [0u8; GROVE_RECORD_STRIDE as usize];
+		pack_vec3(&mut out, 0, self.aabb_min);
+		pack_u32(&mut out, 12, self.flags);
+		pack_vec3(&mut out, 16, self.aabb_max);
+		pack_u32(&mut out, 28, self.seed);
+		pack_u32(&mut out, 32, self.plant_off);
+		pack_u32(&mut out, 36, self.plant_count);
+		pack_u32(&mut out, 40, self.branch_off);
+		pack_u32(&mut out, 44, self.branch_count);
+		pack_u32(&mut out, 48, self.leaf_off);
+		pack_u32(&mut out, 52, self.leaf_count);
+		out
+	}
+}
+
+impl VisibleGroveSpan {
+	pub fn contains(self, compact_index: u32) -> bool {
+		compact_index >= self.prefix && compact_index < self.prefix.saturating_add(self.count)
+	}
+
+	pub fn item_index(self, compact_index: u32) -> u32 {
+		self.offset.saturating_add(compact_index.saturating_sub(self.prefix))
+	}
+
+	pub fn to_std430_bytes(self) -> [u8; VISIBLE_SPAN_STRIDE as usize] {
+		let mut out = [0u8; VISIBLE_SPAN_STRIDE as usize];
+		pack_u32(&mut out, 0, self.offset);
+		pack_u32(&mut out, 4, self.count);
+		pack_u32(&mut out, 8, self.prefix);
+		pack_u32(&mut out, 12, self.lod);
+		out
 	}
 }
 
@@ -282,6 +419,9 @@ impl DrawIndexedIndirect {
 
 pub const BLADE_DESCRIPTOR_STRIDE: u64 = 80;
 pub const PATCH_HEADER_STRIDE: u64 = 48;
+pub const GROVE_RECORD_STRIDE: u64 = 64;
+pub const VISIBLE_SPAN_STRIDE: u64 = 16;
+pub const DISPATCH_INDIRECT_STRIDE: u64 = 12;
 pub const DRAW_INDEXED_INDIRECT_STRIDE: u64 = 20;
 
 #[cfg(test)]
@@ -293,6 +433,8 @@ mod tests {
 	fn storage_strides_match_std430() -> anyhow::Result<()> {
 		assert_eq!(BladeDescriptor::SHADER_SIZE.get(), BLADE_DESCRIPTOR_STRIDE);
 		assert_eq!(GrassPatchHeader::SHADER_SIZE.get(), PATCH_HEADER_STRIDE);
+		assert_eq!(u64::try_from(std::mem::size_of::<GroveRecord>())?, GROVE_RECORD_STRIDE);
+		assert_eq!(u64::try_from(std::mem::size_of::<VisibleGroveSpan>())?, VISIBLE_SPAN_STRIDE);
 		assert_eq!(
 			u64::try_from(std::mem::size_of::<DrawIndexedIndirect>())?,
 			DRAW_INDEXED_INDIRECT_STRIDE

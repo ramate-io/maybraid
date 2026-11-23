@@ -1,7 +1,7 @@
 //! Render-world compute compaction, indirect args, and opaque draws.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy::core_pipeline::core_3d::{
 	Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey, CORE_3D_DEPTH_FORMAT,
@@ -37,16 +37,20 @@ use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
 use vegetation_shaders::wesl::{
 	GeometryLod, GrassDrawParams, GrassViewUniform, LodThresholds, BLADE_DESCRIPTOR_STRIDE,
-	DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_COUNT, GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW,
+	DISPATCH_INDIRECT_STRIDE, DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_COUNT,
+	GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW, GROVE_RECORD_STRIDE, VISIBLE_SPAN_STRIDE,
 };
 
 use crate::capability::{GrassGpuCapability, GrassGpuMode};
 use crate::catalog::{select_dispatch_size, CatalogApply, GroveEncodeStats};
 use crate::diagnostics::GrassFieldStats;
+use crate::gpu_arena::grow_storage_buffer;
 use crate::grove_catalog::{GrassCatalogOps, GrassGroveCatalog};
 use crate::plugin::{ExtractedGrassField, GrassFieldPresenter};
 use crate::select::GrassSelector;
-use crate::shaders::{BLADE_SHADER, FINALIZE_SHADER, SELECT_SHADER};
+use crate::shaders::{
+	BLADE_SHADER, CULL_GROVES_SHADER, FINALIZE_SHADER, PREFIX_SPANS_SHADER, SELECT_SHADER,
+};
 use crate::template::BladeTemplate;
 use crate::SELECT_WORKGROUP;
 
@@ -60,7 +64,7 @@ impl Plugin for GrassGpuPlugin {
 		render_app
 			.init_resource::<PendingGrassQueues>()
 			.init_resource::<GrassGpuState>()
-			.init_resource::<GrassGroveCatalog>()
+			.insert_resource(crate::grove_catalog::GrassGroveCatalog::render())
 			.init_resource::<GroveEncodeStats>()
 			.add_render_command::<Opaque3d, DrawGrass>()
 			.add_systems(RenderStartup, (detect_capability, init_grass_pipelines, init_templates))
@@ -84,9 +88,13 @@ fn detect_capability(mut commands: Commands, adapter: Res<RenderAdapter>) {
 
 #[derive(Resource)]
 struct GrassPipelines {
+	cull_layout: BindGroupLayoutDescriptor,
+	prefix_layout: BindGroupLayoutDescriptor,
 	select_layout: BindGroupLayoutDescriptor,
 	finalize_layout: BindGroupLayoutDescriptor,
 	draw_layout: BindGroupLayoutDescriptor,
+	cull_groves: CachedComputePipelineId,
+	prefix_spans: CachedComputePipelineId,
 	select_pipeline: CachedComputePipelineId,
 	finalize_pipeline: CachedComputePipelineId,
 	draw_variants: Variants<RenderPipeline, GrassDrawSpecializer>,
@@ -123,6 +131,29 @@ fn init_grass_pipelines(
 	asset_server: Res<AssetServer>,
 	pipeline_cache: Res<PipelineCache>,
 ) {
+	let cull_layout = BindGroupLayoutDescriptor::new(
+		"grass_cull_layout",
+		&BindGroupLayoutEntries::sequential(
+			ShaderStages::COMPUTE,
+			(
+				uniform_buffer::<GrassViewUniform>(false),
+				storage_buffer_read_only_sized(false, None),
+				storage_buffer_sized(false, None),
+				storage_buffer_sized(false, None),
+			),
+		),
+	);
+	let prefix_layout = BindGroupLayoutDescriptor::new(
+		"grass_prefix_layout",
+		&BindGroupLayoutEntries::sequential(
+			ShaderStages::COMPUTE,
+			(
+				storage_buffer_sized(false, None),
+				storage_buffer_sized(false, None),
+				storage_buffer_sized(false, None),
+			),
+		),
+	);
 	let select_layout = BindGroupLayoutDescriptor::new(
 		"grass_select_layout",
 		&BindGroupLayoutEntries::sequential(
@@ -134,6 +165,8 @@ fn init_grass_pipelines(
 				storage_buffer_sized(false, None),
 				storage_buffer_sized(false, None),
 				storage_buffer_sized(false, None),
+				storage_buffer_read_only_sized(false, None),
+				storage_buffer_read_only_sized(false, None),
 			),
 		),
 	);
@@ -165,6 +198,20 @@ fn init_grass_pipelines(
 	let finalize_shader = asset_server.load(FINALIZE_SHADER);
 	let blade_shader = asset_server.load(BLADE_SHADER);
 
+	let cull_groves = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+		label: Some("grass_cull_groves".into()),
+		layout: vec![cull_layout.clone()],
+		shader: asset_server.load(CULL_GROVES_SHADER),
+		entry_point: Some(Cow::from("cull")),
+		..default()
+	});
+	let prefix_spans = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+		label: Some("grass_prefix_spans".into()),
+		layout: vec![prefix_layout.clone()],
+		shader: asset_server.load(PREFIX_SPANS_SHADER),
+		entry_point: Some(Cow::from("prefix")),
+		..default()
+	});
 	let select_pipeline = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
 		label: Some("grass_select".into()),
 		layout: vec![select_layout.clone()],
@@ -218,9 +265,13 @@ fn init_grass_pipelines(
 	};
 
 	commands.insert_resource(GrassPipelines {
+		cull_layout,
+		prefix_layout,
 		select_layout,
 		finalize_layout,
 		draw_layout,
+		cull_groves,
+		prefix_spans,
 		select_pipeline,
 		finalize_pipeline,
 		draw_variants: Variants::new(GrassDrawSpecializer, base_descriptor),
@@ -262,19 +313,29 @@ fn init_templates(mut commands: Commands, device: Res<RenderDevice>) {
 #[derive(Resource, Default)]
 struct GrassGpuState {
 	blades: Option<Buffer>,
+	groves: Option<Buffer>,
 	blade_count: u32,
+	grove_count: u32,
 	generation: u64,
-	views: std::collections::HashMap<RetainedViewEntity, ViewWork>,
+	list_capacity: u32,
+	span_capacity: u32,
+	views: HashMap<RetainedViewEntity, ViewWork>,
+	bind_groups_stale: bool,
 }
 
 struct ViewWork {
 	view_uniform: Buffer,
 	counters: Buffer,
+	cull_meta: Buffer,
+	blade_spans: Buffer,
+	blade_dispatch: Buffer,
 	lists: [Buffer; GRASS_LOD_COUNT],
 	indirect: Buffer,
 	/// Kept so GPU buffer handles outlive the bind groups that reference them.
 	#[allow(dead_code)]
 	draw_params: [Buffer; GRASS_LOD_COUNT],
+	cull_bg: BindGroup,
+	prefix_bg: BindGroup,
 	select_bind_group: BindGroup,
 	finalize_bind_group: BindGroup,
 	draw_bind_groups: [BindGroup; GRASS_LOD_COUNT],
@@ -319,59 +380,34 @@ fn prepare_grass_buffers(
 	encode.uniform_writes = 0;
 
 	if catalog.last_writes > 0 {
-		let blade_bytes =
-			(catalog.blades.len() as u64 * BLADE_DESCRIPTOR_STRIDE).max(BLADE_DESCRIPTOR_STRIDE);
-		let grew = state.blades.as_ref().is_none_or(|buf| buf.size() < blade_bytes);
-		if grew {
-			let mut bytes = Vec::new();
-			if catalog.blades.is_empty() {
-				bytes.extend_from_slice(&[0u8; BLADE_DESCRIPTOR_STRIDE as usize]);
-			} else {
-				for blade in &catalog.blades {
-					bytes.extend_from_slice(&blade.to_std430_bytes());
-				}
-			}
-			state.blades = Some(device.create_buffer_with_data(&BufferInitDescriptor {
-				label: Some("grass_blades"),
-				contents: &bytes,
-				usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-			}));
-			state.views.clear();
-		} else {
-			for upload in &catalog.last_uploads {
-				if upload.blades.is_empty() {
-					continue;
-				}
-				let start = upload.blades.offset as usize;
-				let end = (start + upload.blades.count as usize).min(catalog.blades.len());
-				if start < end {
-					let bytes: Vec<u8> = catalog.blades[start..end]
-						.iter()
-						.flat_map(|blade| blade.to_std430_bytes())
-						.collect();
-					if let Some(buffer) = state.blades.as_ref() {
-						queue.write_buffer(
-							buffer,
-							u64::from(upload.blades.offset) * BLADE_DESCRIPTOR_STRIDE,
-							&bytes,
-						);
-					}
-				}
-			}
-		}
-		state.blade_count = catalog.blades.len() as u32;
-		state.generation = catalog.generation;
+		upload_catalog(&device, &queue, &mut state, &catalog);
 	}
 	if catalog.is_empty() {
 		state.views.clear();
 		return;
 	}
 
-	let Some(blades) = state.blades.clone() else {
+	let (Some(blades), Some(groves)) = (state.blades.clone(), state.groves.clone()) else {
 		return;
 	};
-	let capacity = extracted.settings.max_per_lod;
-	let mut live = std::collections::HashSet::new();
+	let capacity = extracted.settings.max_per_lod.max(catalog.resident_blades() as u32).max(1);
+	let grove_slots = catalog.patches.len() as u32;
+	if capacity > state.list_capacity || grove_slots > state.span_capacity {
+		for work in state.views.values_mut() {
+			grow_view_work_buffers(&device, &queue, work, capacity, grove_slots.max(1));
+		}
+		state.list_capacity = state.list_capacity.max(capacity);
+		state.span_capacity = state.span_capacity.max(grove_slots);
+		state.bind_groups_stale = true;
+	}
+	if state.bind_groups_stale {
+		for work in state.views.values_mut() {
+			rebind_grass_work(&device, &pipeline_cache, &pipelines, work, &blades, &groves);
+		}
+		state.bind_groups_stale = false;
+	}
+	let capacity = state.list_capacity.max(1);
+	let mut live = HashSet::new();
 	let mut missing = Vec::new();
 	for view in &views {
 		if !view_submits_grass(view, extracted.shadow_mode) {
@@ -379,7 +415,7 @@ fn prepare_grass_buffers(
 		}
 		live.insert(view.retained_view_entity);
 		if let Some(work) = state.views.get(&view.retained_view_entity) {
-			let uniform = make_view_uniform(view, &extracted);
+			let uniform = make_view_uniform(view, &extracted, &catalog, capacity);
 			write_view_uniform(&queue, &work.view_uniform, &uniform);
 			encode.uniform_writes += 1;
 		} else {
@@ -394,9 +430,11 @@ fn prepare_grass_buffers(
 				&pipeline_cache,
 				&pipelines,
 				&blades,
+				&groves,
 				capacity,
 				view,
 				&extracted,
+				&catalog,
 			);
 			state.views.insert(retained, work);
 			encode.uniform_writes += 1;
@@ -418,7 +456,103 @@ fn prepare_grass_buffers(
 	}
 }
 
-fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedGrassField) -> GrassViewUniform {
+fn upload_catalog(
+	device: &RenderDevice,
+	queue: &RenderQueue,
+	state: &mut GrassGpuState,
+	catalog: &GrassGroveCatalog,
+) {
+	let blade_bytes =
+		(catalog.resident_blades() as u64 * BLADE_DESCRIPTOR_STRIDE).max(BLADE_DESCRIPTOR_STRIDE);
+	let grove_bytes = (catalog.patches.len() as u64 * GROVE_RECORD_STRIDE).max(GROVE_RECORD_STRIDE);
+	let mut grew = false;
+	grew |= grow_storage_buffer(
+		device,
+		queue,
+		&mut state.blades,
+		blade_bytes,
+		BLADE_DESCRIPTOR_STRIDE,
+		"grass_blades",
+	);
+	grew |= grow_storage_buffer(
+		device,
+		queue,
+		&mut state.groves,
+		grove_bytes,
+		GROVE_RECORD_STRIDE,
+		"grass_groves",
+	);
+	state.bind_groups_stale |= grew;
+	for upload in &catalog.last_uploads {
+		if !upload.blades.is_empty() {
+			let start = upload.blades.offset as usize;
+			let end = (start + upload.blades.count as usize).min(catalog.blades.len());
+			if start < end {
+				if let Some(buffer) = state.blades.as_ref() {
+					let bytes: Vec<u8> = catalog.blades[start..end]
+						.iter()
+						.flat_map(|blade| blade.to_std430_bytes())
+						.collect();
+					queue.write_buffer(
+						buffer,
+						u64::from(upload.blades.offset) * BLADE_DESCRIPTOR_STRIDE,
+						&bytes,
+					);
+				}
+			}
+		}
+		if let Some(buffer) = state.groves.as_ref() {
+			if let Some(header) = catalog.patches.get(upload.patch_slot as usize) {
+				queue.write_buffer(
+					buffer,
+					u64::from(upload.patch_slot) * GROVE_RECORD_STRIDE,
+					&header.grove_record().to_std430_bytes(),
+				);
+			}
+		}
+	}
+	state.blade_count = catalog.resident_blades() as u32;
+	state.grove_count = catalog.patches.len() as u32;
+	state.generation = catalog.generation;
+	state.span_capacity = state.span_capacity.max(catalog.patches.len() as u32);
+}
+
+fn grow_view_work_buffers(
+	device: &RenderDevice,
+	queue: &RenderQueue,
+	work: &mut ViewWork,
+	list_capacity: u32,
+	grove_slots: u32,
+) {
+	let list_bytes = u64::from(list_capacity.max(1)) * 4;
+	for list in work.lists.iter_mut() {
+		let mut current = Some(list.clone());
+		grow_storage_buffer(device, queue, &mut current, list_bytes, 4, "grass_lod_list");
+		if let Some(grown) = current {
+			*list = grown;
+		}
+	}
+	let span_bytes = u64::from(grove_slots.max(1)) * VISIBLE_SPAN_STRIDE;
+	let mut spans = Some(work.blade_spans.clone());
+	grow_storage_buffer(
+		device,
+		queue,
+		&mut spans,
+		span_bytes,
+		VISIBLE_SPAN_STRIDE,
+		"grass_blade_spans",
+	);
+	if let Some(grown) = spans {
+		work.blade_spans = grown;
+	}
+}
+
+fn make_view_uniform(
+	view: &ExtractedView,
+	extracted: &ExtractedGrassField,
+	catalog: &GrassGroveCatalog,
+	capacity: u32,
+) -> GrassViewUniform {
 	let world_from_view = view.world_from_view.to_matrix();
 	let view_from_world = world_from_view.inverse();
 	let clip_from_world = view.clip_from_world.unwrap_or(view.clip_from_view * view_from_world);
@@ -463,9 +597,9 @@ fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedGrassField) -> G
 			thresholds.min_height_px,
 		),
 		counts: Vec4::new(
-			extracted.blade_count as f32,
-			extracted.settings.max_per_lod as f32,
-			0.0,
+			catalog.patches.len() as f32,
+			capacity as f32,
+			catalog.resident_blades() as f32,
 			0.0,
 		),
 		light_direction: extracted.light_direction.extend(0.0),
@@ -483,9 +617,11 @@ fn create_view_work(
 	pipeline_cache: &PipelineCache,
 	pipelines: &GrassPipelines,
 	blades: &Buffer,
+	groves: &Buffer,
 	capacity: u32,
 	view: &ExtractedView,
 	extracted: &ExtractedGrassField,
+	catalog: &GrassGroveCatalog,
 ) -> ViewWork {
 	let view_uniform = device.create_buffer(&BufferDescriptor {
 		label: Some("grass_view_uniform"),
@@ -497,6 +633,28 @@ fn create_view_work(
 		label: Some("grass_counters"),
 		size: 32,
 		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+		mapped_at_creation: false,
+	});
+	let cull_meta = device.create_buffer(&BufferDescriptor {
+		label: Some("grass_cull_meta"),
+		size: 16,
+		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+		mapped_at_creation: false,
+	});
+	let span_bytes = catalog.patches.len().max(1) as u64 * VISIBLE_SPAN_STRIDE;
+	let blade_spans = device.create_buffer(&BufferDescriptor {
+		label: Some("grass_blade_spans"),
+		size: span_bytes,
+		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+		mapped_at_creation: false,
+	});
+	let blade_dispatch = device.create_buffer(&BufferDescriptor {
+		label: Some("grass_blade_dispatch"),
+		size: DISPATCH_INDIRECT_STRIDE,
+		usage: BufferUsages::STORAGE
+			| BufferUsages::INDIRECT
+			| BufferUsages::COPY_DST
+			| BufferUsages::COPY_SRC,
 		mapped_at_creation: false,
 	});
 	let list_size = (capacity as u64).max(1) * 4;
@@ -531,9 +689,28 @@ fn create_view_work(
 		})
 	});
 
-	let uniform = make_view_uniform(view, extracted);
+	let uniform = make_view_uniform(view, extracted, catalog, capacity);
 	write_view_uniform(queue, &view_uniform, &uniform);
 
+	let cull_bg = device.create_bind_group(
+		Some("grass_cull_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.cull_layout),
+		&BindGroupEntries::sequential((
+			view_uniform.as_entire_buffer_binding(),
+			groves.as_entire_buffer_binding(),
+			cull_meta.as_entire_buffer_binding(),
+			blade_spans.as_entire_buffer_binding(),
+		)),
+	);
+	let prefix_bg = device.create_bind_group(
+		Some("grass_prefix_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.prefix_layout),
+		&BindGroupEntries::sequential((
+			cull_meta.as_entire_buffer_binding(),
+			blade_spans.as_entire_buffer_binding(),
+			blade_dispatch.as_entire_buffer_binding(),
+		)),
+	);
 	let select_bind_group = device.create_bind_group(
 		Some("grass_select_bg"),
 		&pipeline_cache.get_bind_group_layout(&pipelines.select_layout),
@@ -544,6 +721,8 @@ fn create_view_work(
 			lists[0].as_entire_buffer_binding(),
 			lists[1].as_entire_buffer_binding(),
 			lists[2].as_entire_buffer_binding(),
+			blade_spans.as_entire_buffer_binding(),
+			cull_meta.as_entire_buffer_binding(),
 		)),
 	);
 	let finalize_bind_group = device.create_bind_group(
@@ -571,14 +750,74 @@ fn create_view_work(
 	ViewWork {
 		view_uniform,
 		counters,
+		cull_meta,
+		blade_spans,
+		blade_dispatch,
 		lists,
 		indirect,
 		draw_params,
+		cull_bg,
+		prefix_bg,
 		select_bind_group,
 		finalize_bind_group,
 		draw_bind_groups,
 		cpu_instance_counts: [0; GRASS_LOD_COUNT],
 	}
+}
+
+fn rebind_grass_work(
+	device: &RenderDevice,
+	pipeline_cache: &PipelineCache,
+	pipelines: &GrassPipelines,
+	work: &mut ViewWork,
+	blades: &Buffer,
+	groves: &Buffer,
+) {
+	work.cull_bg = device.create_bind_group(
+		Some("grass_cull_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.cull_layout),
+		&BindGroupEntries::sequential((
+			work.view_uniform.as_entire_buffer_binding(),
+			groves.as_entire_buffer_binding(),
+			work.cull_meta.as_entire_buffer_binding(),
+			work.blade_spans.as_entire_buffer_binding(),
+		)),
+	);
+	work.prefix_bg = device.create_bind_group(
+		Some("grass_prefix_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.prefix_layout),
+		&BindGroupEntries::sequential((
+			work.cull_meta.as_entire_buffer_binding(),
+			work.blade_spans.as_entire_buffer_binding(),
+			work.blade_dispatch.as_entire_buffer_binding(),
+		)),
+	);
+	work.select_bind_group = device.create_bind_group(
+		Some("grass_select_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.select_layout),
+		&BindGroupEntries::sequential((
+			work.view_uniform.as_entire_buffer_binding(),
+			blades.as_entire_buffer_binding(),
+			work.counters.as_entire_buffer_binding(),
+			work.lists[0].as_entire_buffer_binding(),
+			work.lists[1].as_entire_buffer_binding(),
+			work.lists[2].as_entire_buffer_binding(),
+			work.blade_spans.as_entire_buffer_binding(),
+			work.cull_meta.as_entire_buffer_binding(),
+		)),
+	);
+	work.draw_bind_groups = [0, 1, 2].map(|lod| {
+		device.create_bind_group(
+			Some("grass_draw_bg"),
+			&pipeline_cache.get_bind_group_layout(&pipelines.draw_layout),
+			&BindGroupEntries::sequential((
+				work.view_uniform.as_entire_buffer_binding(),
+				blades.as_entire_buffer_binding(),
+				work.lists[lod].as_entire_buffer_binding(),
+				work.draw_params[lod].as_entire_buffer_binding(),
+			)),
+		)
+	});
 }
 
 fn write_view_uniform(queue: &RenderQueue, buffer: &Buffer, uniform: &GrassViewUniform) {
@@ -600,9 +839,9 @@ fn cpu_fill_lists<'a>(
 		let Some(work) = state.views.get_mut(&view.retained_view_entity) else {
 			continue;
 		};
-		let uniform = make_view_uniform(view, extracted);
+		let uniform = make_view_uniform(view, extracted, catalog, state.list_capacity.max(1));
 		let selector = GrassSelector::from_view(uniform, &extracted.settings);
-		let lists = selector.compact(&catalog.blades, &catalog.patches);
+		let lists = selector.compact_groves(&catalog.grove_records(), &catalog.blades);
 		for (lod, indices) in lists.indices.iter().enumerate() {
 			if !indices.is_empty() {
 				let bytes: Vec<u8> = indices.iter().flat_map(|i| i.to_le_bytes()).collect();
@@ -626,9 +865,10 @@ fn record_cpu_stats<'a>(
 		if !view_submits_grass(view, extracted.shadow_mode) {
 			continue;
 		}
-		let uniform = make_view_uniform(view, extracted);
+		let uniform =
+			make_view_uniform(view, extracted, catalog, extracted.settings.max_per_lod.max(1));
 		let selector = GrassSelector::from_view(uniform, &extracted.settings);
-		let lists = selector.compact(&catalog.blades, &catalog.patches);
+		let lists = selector.compact_groves(&catalog.grove_records(), &catalog.blades);
 		record_lists(extracted, &lists, stats.as_deref_mut());
 		break;
 	}
@@ -655,7 +895,6 @@ fn grass_compute(
 	pipeline_cache: Res<PipelineCache>,
 	state: Option<Res<GrassGpuState>>,
 	capability: Option<Res<GrassGpuCapability>>,
-	extracted: Option<Res<ExtractedGrassField>>,
 	device: Res<RenderDevice>,
 	mut encode: Option<ResMut<GroveEncodeStats>>,
 ) {
@@ -668,15 +907,18 @@ fn grass_compute(
 	let Some(capability) = capability else {
 		return;
 	};
-	let Some(extracted) = extracted else {
-		return;
-	};
-	if capability.mode != GrassGpuMode::GpuDriven || extracted.blade_count == 0 {
+	if capability.mode != GrassGpuMode::GpuDriven || state.grove_count == 0 {
 		return;
 	}
-	match pipeline_cache.get_compute_pipeline_state(pipelines.select_pipeline) {
+	match pipeline_cache.get_compute_pipeline_state(pipelines.cull_groves) {
 		CachedPipelineState::Ok(_) => {}
 		_ => return,
+	};
+	let Some(cull_groves) = pipeline_cache.get_compute_pipeline(pipelines.cull_groves) else {
+		return;
+	};
+	let Some(prefix_spans) = pipeline_cache.get_compute_pipeline(pipelines.prefix_spans) else {
+		return;
 	};
 	let Some(select_pipeline) = pipeline_cache.get_compute_pipeline(pipelines.select_pipeline)
 	else {
@@ -688,25 +930,32 @@ fn grass_compute(
 	};
 
 	let max_dim = device.limits().max_compute_workgroups_per_dimension.max(1);
-	let groups = select_dispatch_size(extracted.blade_count, SELECT_WORKGROUP, max_dim);
+	let groves = select_dispatch_size(state.grove_count, SELECT_WORKGROUP, max_dim);
 	for work in state.views.values() {
 		render_context.command_encoder().clear_buffer(&work.counters, 0, None);
+		render_context.command_encoder().clear_buffer(&work.cull_meta, 0, None);
 		{
 			let mut pass =
 				render_context.command_encoder().begin_compute_pass(&ComputePassDescriptor {
 					label: Some("grass_select"),
 					..default()
 				});
+			pass.set_bind_group(0, &work.cull_bg, &[]);
+			pass.set_pipeline(cull_groves);
+			pass.dispatch_workgroups(groves.x, groves.y, groves.z);
+			pass.set_bind_group(0, &work.prefix_bg, &[]);
+			pass.set_pipeline(prefix_spans);
+			pass.dispatch_workgroups(1, 1, 1);
 			pass.set_bind_group(0, &work.select_bind_group, &[]);
 			pass.set_pipeline(select_pipeline);
-			pass.dispatch_workgroups(groups.x, groups.y, groups.z);
+			pass.dispatch_workgroups_indirect(&work.blade_dispatch, 0);
 			pass.set_bind_group(0, &work.finalize_bind_group, &[]);
 			pass.set_pipeline(finalize_pipeline);
 			pass.dispatch_workgroups(1, 1, 1);
 		}
 		if let Some(encode) = encode.as_deref_mut() {
 			encode.passes += 1;
-			encode.dispatches += 2;
+			encode.dispatches += 4;
 		}
 	}
 }

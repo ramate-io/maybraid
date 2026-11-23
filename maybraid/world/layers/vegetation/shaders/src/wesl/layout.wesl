@@ -33,6 +33,30 @@ struct GrassPatchHeader {
     flags: u32,
 }
 
+/// One catalog grove. `flags & 1` is live. Grass uses plant_* as blade spans.
+struct GroveRecord {
+    aabb_min: vec3<f32>,
+    flags: u32,
+    aabb_max: vec3<f32>,
+    seed: u32,
+    plant_off: u32,
+    plant_count: u32,
+    branch_off: u32,
+    branch_count: u32,
+    leaf_off: u32,
+    leaf_count: u32,
+    _pad0: u32,
+    _pad1: u32,
+}
+
+/// Pass-1 compact span. `prefix` is exclusive over visible item counts.
+struct VisibleGroveSpan {
+    offset: u32,
+    count: u32,
+    prefix: u32,
+    lod: u32,
+}
+
 struct GrassViewUniform {
     clip_from_world: mat4x4<f32>,
     world_from_clip: mat4x4<f32>,
@@ -48,7 +72,7 @@ struct GrassViewUniform {
     lod_distances: vec4<f32>,
     /// x = near density, y = mid, z = card, w = min height px.
     lod_density: vec4<f32>,
-    /// x = blade count, y = capacity per LOD list, z = light x, w = light y (z in extras).
+    /// x = grove slot count, y = capacity per LOD list, z/w = extra item counts.
     counts: vec4<f32>,
     light_direction: vec4<f32>,
 }

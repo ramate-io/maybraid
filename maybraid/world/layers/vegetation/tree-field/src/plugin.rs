@@ -12,14 +12,14 @@ use bevy::render::extract_component::{ExtractComponent, ExtractComponentPlugin};
 use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
 use bevy::render::{ExtractSchedule, MainWorld, RenderApp};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::{ADMISSION_BUDGET, CatalogApply, GrassGpuCapability, GroveId};
+use vegetation_grass_field::{CatalogApply, GrassGpuCapability, GroveId, ADMISSION_BUDGET};
 use vegetation_shaders::VegetationWeslPlugin;
 
 use crate::bounds::TreeBounds;
 use crate::catalog::{TreeCatalogOp, TreeCatalogOps, TreeGroveCatalog};
 use crate::diagnostics::TreeFieldStats;
 use crate::field::{TreeField, TreeFieldSettings};
-use crate::gpu::{TreeGpuPlugin, requested_world_tree_mode};
+use crate::gpu::{requested_world_tree_mode, TreeGpuPlugin};
 use crate::patch::TreePatch;
 use crate::shaders::TreeShadersPlugin;
 
@@ -64,7 +64,7 @@ impl Plugin for TreeFieldPlugin {
 		app.insert_resource(TreeFieldSettings::from_env());
 		app.init_resource::<TreeField>();
 		app.init_resource::<TreeFieldStats>();
-		app.init_resource::<TreeGroveCatalog>();
+		app.insert_resource(TreeGroveCatalog::index_only());
 		app.init_resource::<TreeCatalogOps>();
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevTreeTime>();
@@ -136,8 +136,7 @@ pub fn collect_catalog_ops(
 	}
 	for (entity, grove) in &groves {
 		catalog.grove_residency = true;
-		let requested = grove.0.plants.len();
-		fresh.push(admit_from_field(GroveId::from_entity(entity), (*grove.0).clone(), requested));
+		fresh.push(admit_from_grove(GroveId::from_entity(entity), grove));
 	}
 	if fresh.is_empty() && catalog.pending.is_empty() {
 		catalog.last_writes = 0;
@@ -150,6 +149,26 @@ pub fn collect_catalog_ops(
 	let CatalogApply { applied, leftover } = catalog.apply(batch, ADMISSION_BUDGET);
 	ops.ops.extend(applied);
 	catalog.pending = leftover;
+}
+
+fn admit_from_grove(id: GroveId, grove: &TreeGrove) -> TreeCatalogOp {
+	let field = grove.0.as_ref();
+	let truncated = 0u32;
+	let (aabb_min, aabb_max) = if field.bounds.is_empty() {
+		(Vec3::ZERO, Vec3::ZERO)
+	} else {
+		(field.bounds.min, field.bounds.max)
+	};
+	TreeCatalogOp::Admit {
+		id,
+		plants: field.plants.clone(),
+		branches: field.branches.clone(),
+		leaves: field.leaves.clone(),
+		aabb_min,
+		aabb_max,
+		seed: 0,
+		truncated_plants: truncated,
+	}
 }
 
 fn admit_from_field(id: GroveId, field: TreeField, requested: usize) -> TreeCatalogOp {
@@ -216,9 +235,9 @@ fn snapshot_extracted_frame(
 	extracted.prev_time_s = prev_time_s;
 	extracted.light_direction = light_direction.normalize_or(Vec3::Y);
 	extracted.shadow_mode = shadow_mode.map(|mode| *mode).unwrap_or_default();
-	extracted.plant_count = catalog.plants.len() as u32;
-	extracted.branch_count = catalog.branches.len() as u32;
-	extracted.leaf_count = catalog.leaves.len() as u32;
+	extracted.plant_count = catalog.resident_plants() as u32;
+	extracted.branch_count = catalog.resident_branches() as u32;
+	extracted.leaf_count = catalog.resident_leaves() as u32;
 	extracted.grove_residency = catalog.grove_residency;
 	if requested_world_tree_mode().is_some() && catalog.is_changed() {
 		info!(
@@ -236,19 +255,18 @@ fn snapshot_extracted_frame(
 
 fn sync_presenter_bounds(
 	catalog: Res<TreeGroveCatalog>,
-	settings: Res<TreeFieldSettings>,
 	mut presenters: Query<&mut Aabb, With<TreeFieldPresenter>>,
 ) {
-	if catalog.is_empty() {
+	if !catalog.is_changed() {
 		return;
 	}
-	let mut bounds = TreeBounds::empty();
-	for plant in catalog.plants.iter().filter(|plant| plant.is_active()) {
-		bounds = bounds.union(TreeBounds::from_plant(plant, settings.wind.strength_m));
-	}
+	let Some((min, max)) = catalog.active_bounds() else {
+		return;
+	};
+	let bounds = TreeBounds { min, max };
 	if bounds.is_empty() {
 		return;
-	}
+	};
 	let aabb = Aabb {
 		center: Vec3A::from((bounds.min + bounds.max) * 0.5),
 		half_extents: Vec3A::from((bounds.max - bounds.min) * 0.5),
@@ -406,11 +424,10 @@ mod tests {
 		let first = app.world_mut().resource_mut::<TreeCatalogOps>().take();
 		let mut render = TreeGroveCatalog::default();
 		render.apply(first, ADMISSION_BUDGET);
-		assert!(
-			app.world()
-				.resource::<TreeGroveCatalog>()
-				.contains(GroveId::from_entity(live_y))
-		);
+		assert!(app
+			.world()
+			.resource::<TreeGroveCatalog>()
+			.contains(GroveId::from_entity(live_y)));
 
 		let mut pending: Vec<_> = (0..ADMISSION_BUDGET as u64).map(|i| admit_id(200 + i)).collect();
 		pending.push(admit_id(300));
@@ -432,11 +449,9 @@ mod tests {
 		));
 
 		let forwarded = app.world().resource::<TreeCatalogOps>().ops.clone();
-		assert!(
-			forwarded
-				.iter()
-				.any(|op| matches!(op, TreeCatalogOp::Retire { id } if *id == y_id))
-		);
+		assert!(forwarded
+			.iter()
+			.any(|op| matches!(op, TreeCatalogOp::Retire { id } if *id == y_id)));
 		assert!(forwarded.iter().all(|op| match op {
 			TreeCatalogOp::Admit { id, .. } | TreeCatalogOp::Retire { id } => *id != GroveId(300),
 		}));
@@ -468,16 +483,12 @@ mod tests {
 		assert!(catalog.pending.is_empty());
 		assert!(!catalog.contains(GroveId(300)));
 		let forwarded = app.world().resource::<TreeCatalogOps>().ops.clone();
-		assert!(
-			forwarded
-				.iter()
-				.any(|op| matches!(op, TreeCatalogOp::Retire { id } if *id == GroveId(300)))
-		);
-		assert!(
-			forwarded
-				.iter()
-				.all(|op| !matches!(op, TreeCatalogOp::Admit { id, .. } if *id == GroveId(300)))
-		);
+		assert!(forwarded
+			.iter()
+			.any(|op| matches!(op, TreeCatalogOp::Retire { id } if *id == GroveId(300))));
+		assert!(forwarded
+			.iter()
+			.all(|op| !matches!(op, TreeCatalogOp::Admit { id, .. } if *id == GroveId(300))));
 
 		let mut render = TreeGroveCatalog::default();
 		let CatalogApply { leftover, .. } = render.apply(forwarded, ADMISSION_BUDGET);

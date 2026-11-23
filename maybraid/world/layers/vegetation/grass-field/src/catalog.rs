@@ -59,14 +59,14 @@ pub struct GroveEncodeStats {
 }
 
 impl GroveEncodeStats {
-	/// Tree/bush wood+foliage: one compute pass, three dispatches, six indirect draws.
+	/// Tree/bush: grove cull, prefix, wood select, foliage select, finalize.
 	pub fn woody_kind() -> Self {
-		Self { passes: 1, dispatches: 3, draws: 6, uniform_writes: 1, ..Self::default() }
+		Self { passes: 1, dispatches: 5, draws: 6, uniform_writes: 1, ..Self::default() }
 	}
 
-	/// Grass: one compute pass, two dispatches, three indirect draws.
+	/// Grass: grove cull, prefix, blade select, finalize.
 	pub fn grass_kind() -> Self {
-		Self { passes: 1, dispatches: 2, draws: 3, uniform_writes: 1, ..Self::default() }
+		Self { passes: 1, dispatches: 4, draws: 3, uniform_writes: 1, ..Self::default() }
 	}
 
 	pub fn encode_only(&self) -> Self {
@@ -169,12 +169,21 @@ impl<T: GroveCatalogOp> CatalogApply<T> {
 		budget: usize,
 		mut apply_one: impl FnMut(&T),
 	) -> Self {
+		Self::budgeted_mut(ops, budget, |op| apply_one(op))
+	}
+
+	/// Same budget rules as [`Self::budgeted`], but the callback may take fields.
+	pub fn budgeted_mut(
+		ops: impl IntoIterator<Item = T>,
+		budget: usize,
+		mut apply_one: impl FnMut(&mut T),
+	) -> Self {
 		let mut leftover: Vec<T> = Vec::new();
 		let mut applied: Vec<T> = Vec::new();
 		let mut admits = 0usize;
-		for op in ops {
+		for mut op in ops {
 			if op.is_retire() {
-				apply_one(&op);
+				apply_one(&mut op);
 				let id = op.grove_id();
 				leftover.retain(|pending: &T| pending.is_retire() || pending.grove_id() != id);
 				applied.push(op);
@@ -184,7 +193,7 @@ impl<T: GroveCatalogOp> CatalogApply<T> {
 				leftover.push(op);
 				continue;
 			}
-			apply_one(&op);
+			apply_one(&mut op);
 			admits += 1;
 			applied.push(op);
 		}
@@ -225,11 +234,11 @@ mod tests {
 	#[test]
 	fn encode_counts_do_not_depend_on_grove_count() {
 		assert_eq!(GroveEncodeStats::woody_kind().encode_only().passes, 1);
-		assert_eq!(GroveEncodeStats::woody_kind().dispatches, 3);
+		assert_eq!(GroveEncodeStats::woody_kind().dispatches, 5);
 		assert_eq!(GroveEncodeStats::woody_kind().draws, 6);
 		assert_eq!(GroveEncodeStats::woody_kind().uniform_writes, 1);
 		assert_eq!(GroveEncodeStats::grass_kind().passes, 1);
-		assert_eq!(GroveEncodeStats::grass_kind().dispatches, 2);
+		assert_eq!(GroveEncodeStats::grass_kind().dispatches, 4);
 		assert_eq!(GroveEncodeStats::grass_kind().draws, 3);
 		assert_eq!(GroveEncodeStats::grass_kind().uniform_writes, 1);
 		assert_eq!(

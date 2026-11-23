@@ -24,7 +24,7 @@ mod template;
 mod topology;
 
 pub use bounds::TreeBounds;
-pub use catalog::{CatalogUpload, TreeCatalogOp, TreeCatalogOps, TreeGroveCatalog};
+pub use catalog::{CatalogUpload, GroveRecord, TreeCatalogOp, TreeCatalogOps, TreeGroveCatalog};
 pub use deform::MAX_ATTACH_HOPS;
 pub use diagnostics::TreeFieldStats;
 pub use field::{TreeField, TreeFieldSettings};

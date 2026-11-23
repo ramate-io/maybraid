@@ -2,8 +2,9 @@
 
 use bevy::math::{Mat4, Vec3, Vec4};
 use vegetation_shaders::wesl::{
-	lod_bucket, BladeDescriptor, DrawIndexedIndirect, GeometryLod, GrassPatchHeader,
-	GrassViewUniform, LodThresholds, GRASS_LOD_COUNT,
+	compact_grove_spans, grove_lod, lod_bucket, BladeDescriptor, DrawIndexedIndirect, GeometryLod,
+	GrassPatchHeader, GrassViewUniform, GroveRecord, LodThresholds, VisibleGroveSpan,
+	GRASS_LOD_COUNT,
 };
 
 use crate::field::GrassFieldSettings;
@@ -125,22 +126,38 @@ impl GrassSelector {
 		GeometryLod::from_bucket(bucket).map(|lod| lod.bucket())
 	}
 
+	pub fn grove_visible(&self, grove: GroveRecord) -> Option<u32> {
+		grove_lod(grove, &self.view, self.thresholds)
+	}
+
+	pub fn blade_spans(&self, groves: &[GroveRecord]) -> Vec<VisibleGroveSpan> {
+		compact_grove_spans(groves, &self.view, self.thresholds, |grove| {
+			(grove.plant_off, grove.plant_count)
+		})
+	}
+
 	pub fn compact(
 		&self,
 		blades: &[BladeDescriptor],
 		patches: &[GrassPatchHeader],
 	) -> CompactedLists {
+		let groves: Vec<_> = patches.iter().copied().map(GrassPatchHeader::grove_record).collect();
+		self.compact_groves(&groves, blades)
+	}
+
+	/// Grove-first CPU select: frustum/drop each grove, then only its blade span.
+	pub fn compact_groves(
+		&self,
+		groves: &[GroveRecord],
+		blades: &[BladeDescriptor],
+	) -> CompactedLists {
 		let mut lists = CompactedLists::default();
-		let keep_fraction = if blades.is_empty() {
-			1.0
-		} else {
-			(self.capacities[0] as f32 / blades.len() as f32).min(1.0)
-		};
-		for patch in patches {
-			if !patch.is_active() {
-				continue;
-			}
-			for index in patch.blade_range() {
+		let spans = self.blade_spans(groves);
+		let items: u32 = spans.iter().map(|span| span.count).sum();
+		let keep_fraction =
+			if items == 0 { 1.0 } else { (self.capacities[0] as f32 / items as f32).min(1.0) };
+		for span in spans {
+			for index in span.offset..span.offset.saturating_add(span.count) {
 				let Some(blade) = blades.get(index as usize) else {
 					continue;
 				};
@@ -317,6 +334,78 @@ mod tests {
 			lists.triangle_count(),
 			args.iter().map(|a| a.index_count / 3 * a.instance_count).sum::<u32>()
 		);
+		Ok(())
+	}
+
+	fn field_grove(field: &GrassField) -> GroveRecord {
+		field
+			.patches
+			.first()
+			.copied()
+			.map(GrassPatchHeader::grove_record)
+			.unwrap_or_default()
+	}
+
+	#[test]
+	fn grove_outside_frustum_produces_zero_pass2_work() -> anyhow::Result<()> {
+		let settings = GrassFieldSettings::default();
+		let patch = GrassPatch::isolated_clump(3, Vec3::ZERO, 12);
+		let field = GrassField::rebuild([&patch], &settings);
+		let grove = field_grove(&field);
+		let selector = GrassSelector::from_view(
+			look_view(Vec3::new(0.0, 2.0, 8.0), Vec3::new(0.0, 1.0, 80.0), 720.0),
+			&settings,
+		);
+		assert!(selector.blade_spans(&[grove]).is_empty());
+		let lists = selector.compact_groves(&[grove], &field.blades);
+		assert_eq!(lists.considered, 0);
+		assert_eq!(lists.submitted, 0);
+		Ok(())
+	}
+
+	#[test]
+	fn grove_beyond_drop_distance_produces_zero_pass2_work() -> anyhow::Result<()> {
+		let settings = GrassFieldSettings::default();
+		let patch = GrassPatch::isolated_clump(3, Vec3::ZERO, 12);
+		let field = GrassField::rebuild([&patch], &settings);
+		let grove = field_grove(&field);
+		let camera = Vec3::new(0.0, 2.0, 160.0);
+		let mut view = look_view(camera, Vec3::new(0.0, 0.5, 0.0), 720.0);
+		let transform =
+			Transform::from_translation(camera).looking_at(Vec3::new(0.0, 0.5, 0.0), Vec3::Y);
+		let projection = PerspectiveProjection {
+			fov: 1.0,
+			aspect_ratio: 16.0 / 9.0,
+			near: 0.1,
+			far: 10_000.0,
+			..Default::default()
+		};
+		view.clip_from_world = projection.get_clip_from_view() * transform.to_matrix().inverse();
+		view.world_from_clip = view.clip_from_world.inverse();
+		let selector = GrassSelector::from_view(view, &settings);
+		assert!(selector.grove_visible(grove).is_none());
+		let lists = selector.compact_groves(&[grove], &field.blades);
+		assert_eq!(lists.considered, 0);
+		assert_eq!(lists.submitted, 0);
+		Ok(())
+	}
+
+	#[test]
+	fn visible_grove_produces_its_spans() -> anyhow::Result<()> {
+		let settings = GrassFieldSettings::default();
+		let patch = GrassPatch::isolated_clump(3, Vec3::ZERO, 12);
+		let field = GrassField::rebuild([&patch], &settings);
+		let grove = field_grove(&field);
+		let selector = GrassSelector::from_view(
+			look_view(Vec3::new(0.0, 1.5, 6.0), Vec3::ZERO, 720.0),
+			&settings,
+		);
+		let spans = selector.blade_spans(&[grove]);
+		assert_eq!(spans.len(), 1);
+		assert_eq!(spans[0].count, field.blades.len() as u32);
+		let lists = selector.compact_groves(&[grove], &field.blades);
+		assert!(lists.submitted > 0);
+		assert_eq!(lists.considered, field.blades.len() as u32);
 		Ok(())
 	}
 }

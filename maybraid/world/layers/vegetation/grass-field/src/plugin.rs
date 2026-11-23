@@ -13,7 +13,7 @@ use vegetation_shaders::VegetationWeslPlugin;
 
 use crate::bounds::GrassBounds;
 use crate::capability::GrassGpuCapability;
-use crate::catalog::{ADMISSION_BUDGET, CatalogApply, GroveId};
+use crate::catalog::{CatalogApply, GroveId, ADMISSION_BUDGET};
 use crate::diagnostics::GrassFieldStats;
 use crate::field::{GrassField, GrassFieldSettings};
 use crate::gpu::GrassGpuPlugin;
@@ -54,7 +54,7 @@ impl Plugin for GrassFieldPlugin {
 		app.insert_resource(GrassFieldSettings::from_env());
 		app.init_resource::<GrassField>();
 		app.init_resource::<GrassFieldStats>();
-		app.init_resource::<GrassGroveCatalog>();
+		app.insert_resource(GrassGroveCatalog::index_only());
 		app.init_resource::<GrassCatalogOps>();
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevGrassTime>();
@@ -184,7 +184,7 @@ fn snapshot_extracted_frame(
 	extracted.prev_time_s = prev_time_s;
 	extracted.light_direction = light_direction.normalize_or(Vec3::Y);
 	extracted.shadow_mode = shadow_mode.map(|mode| *mode).unwrap_or_default();
-	extracted.blade_count = catalog.blades.len() as u32;
+	extracted.blade_count = catalog.resident_blades() as u32;
 	extracted.patch_count = catalog.patches.len() as u32;
 	extracted.grove_residency = catalog.grove_residency;
 }
@@ -193,13 +193,13 @@ fn sync_presenter_bounds(
 	catalog: Res<GrassGroveCatalog>,
 	mut presenters: Query<&mut Aabb, With<GrassFieldPresenter>>,
 ) {
-	if catalog.is_empty() {
+	if !catalog.is_changed() {
 		return;
 	}
-	let mut bounds = GrassBounds::empty();
-	for header in catalog.patches.iter().filter(|header| header.is_active()) {
-		bounds = bounds.union(GrassBounds { min: header.aabb_min, max: header.aabb_max });
-	}
+	let Some((min, max)) = catalog.active_bounds() else {
+		return;
+	};
+	let bounds = GrassBounds { min, max };
 	if bounds.is_empty() {
 		return;
 	}
@@ -253,11 +253,10 @@ mod tests {
 		let first = app.world_mut().resource_mut::<GrassCatalogOps>().take();
 		let mut render = GrassGroveCatalog::default();
 		render.apply(first, ADMISSION_BUDGET);
-		assert!(
-			app.world()
-				.resource::<GrassGroveCatalog>()
-				.contains(GroveId::from_entity(live_y))
-		);
+		assert!(app
+			.world()
+			.resource::<GrassGroveCatalog>()
+			.contains(GroveId::from_entity(live_y)));
 
 		let mut pending: Vec<_> = (0..ADMISSION_BUDGET as u64).map(|i| admit_id(200 + i)).collect();
 		pending.push(admit_id(300));
@@ -278,11 +277,9 @@ mod tests {
 		));
 
 		let forwarded = app.world().resource::<GrassCatalogOps>().ops.clone();
-		assert!(
-			forwarded
-				.iter()
-				.any(|op| matches!(op, GrassCatalogOp::Retire { id } if *id == y_id))
-		);
+		assert!(forwarded
+			.iter()
+			.any(|op| matches!(op, GrassCatalogOp::Retire { id } if *id == y_id)));
 		assert!(forwarded.iter().all(|op| match op {
 			GrassCatalogOp::Admit { id, .. } | GrassCatalogOp::Retire { id } => *id != GroveId(300),
 		}));
@@ -311,16 +308,12 @@ mod tests {
 		assert!(catalog.pending.is_empty());
 		assert!(!catalog.contains(GroveId(300)));
 		let forwarded = app.world().resource::<GrassCatalogOps>().ops.clone();
-		assert!(
-			forwarded
-				.iter()
-				.any(|op| matches!(op, GrassCatalogOp::Retire { id } if *id == GroveId(300)))
-		);
-		assert!(
-			forwarded
-				.iter()
-				.all(|op| !matches!(op, GrassCatalogOp::Admit { id, .. } if *id == GroveId(300)))
-		);
+		assert!(forwarded
+			.iter()
+			.any(|op| matches!(op, GrassCatalogOp::Retire { id } if *id == GroveId(300))));
+		assert!(forwarded
+			.iter()
+			.all(|op| !matches!(op, GrassCatalogOp::Admit { id, .. } if *id == GroveId(300))));
 
 		let mut render = GrassGroveCatalog::default();
 		let CatalogApply { leftover, .. } = render.apply(forwarded, ADMISSION_BUDGET);

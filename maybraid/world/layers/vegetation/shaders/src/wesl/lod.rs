@@ -1,6 +1,13 @@
 //! CPU mirror of `lod.wesl`.
 
-use crate::wesl::layout::{GRASS_LOD_CARD, GRASS_LOD_MID, GRASS_LOD_NEAR};
+use bevy::math::{Mat4, Vec3};
+
+use crate::wesl::layout::{
+	GrassViewUniform, GroveRecord, VisibleGroveSpan, GRASS_LOD_CARD, GRASS_LOD_MID, GRASS_LOD_NEAR,
+};
+
+/// Far-card / drop distance for grove-owned trees (the 1 km present ring).
+pub const GROVE_TREE_CARD_M: f32 = 1_000.0;
 
 /// Distance (metres) and density (`0..=1`) thresholds. Nested: card ⊂ mid ⊂ near.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -53,13 +60,13 @@ impl LodThresholds {
 		}
 	}
 
-	/// Grove-owned tree fields replace High (~400 m), Medium (~500 m), and Low
-	/// (to the 1 km present ring). `card_m` is unbounded so residency culls.
+	/// Grove-owned trees: High/Medium geometry, then far cards out to the 1 km
+	/// present ring. Finite `card_m` drops the grove past residency.
 	pub fn grove_tree() -> Self {
 		Self {
 			near_m: 400.0,
 			mid_m: 520.0,
-			card_m: f32::MAX,
+			card_m: GROVE_TREE_CARD_M,
 			near_density: 1.0,
 			mid_density: 1.0,
 			card_density: 0.22,
@@ -67,29 +74,29 @@ impl LodThresholds {
 		}
 	}
 
-	/// Grove-owned bushes: same High/Medium/Low distances as the grove tile.
+	/// Grove-owned bushes keep a silhouette until the legacy ~110 m drop.
 	pub fn grove_bush() -> Self {
 		Self {
-			near_m: 400.0,
-			mid_m: 520.0,
-			card_m: f32::MAX,
+			near_m: 32.0,
+			mid_m: 80.0,
+			card_m: 110.0,
 			near_density: 1.0,
-			mid_density: 0.85,
+			mid_density: 0.60,
 			card_density: 0.28,
-			min_height_px: 1.0,
+			min_height_px: 2.0,
 		}
 	}
 
-	/// Grove-owned grass: density falloff across the 1 km present ring.
+	/// Grove-owned grass keeps turf until the legacy ~90 m drop.
 	pub fn grove_grass() -> Self {
 		Self {
-			near_m: 400.0,
-			mid_m: 520.0,
-			card_m: f32::MAX,
+			near_m: 60.0,
+			mid_m: 80.0,
+			card_m: 90.0,
 			near_density: 1.0,
 			mid_density: 0.72,
 			card_density: 0.38,
-			min_height_px: 1.0,
+			min_height_px: 1.15,
 		}
 	}
 
@@ -170,6 +177,92 @@ pub fn lod_bucket(
 	3
 }
 
+/// Clip-space sphere test matching `lod.wesl` / the select shaders.
+pub fn sphere_in_frustum(center: Vec3, radius: f32, clip: Mat4) -> bool {
+	let p = clip * center.extend(1.0);
+	let slack = radius * clip.x_axis.truncate().length() + 0.05;
+	let w = p.w + slack;
+	w > 0.0 && p.x.abs() <= w && p.y.abs() <= w && p.z >= -slack && p.z <= w
+}
+
+/// Grove-level frustum + distance LOD. `None` means the whole grove is dropped.
+pub fn grove_lod(
+	record: GroveRecord,
+	view: &GrassViewUniform,
+	thresholds: LodThresholds,
+) -> Option<u32> {
+	if !record.is_active() {
+		return None;
+	}
+	let (center, radius) = record.sphere();
+	if !sphere_in_frustum(center, radius, view.clip_from_world) {
+		return None;
+	}
+	let distance = view.world_position.truncate().distance(center);
+	let bucket = lod_bucket(
+		distance,
+		record.height_m(),
+		0.0,
+		view.render_height_px(),
+		view.fov_y_radians(),
+		thresholds,
+	);
+	(bucket < 3).then_some(bucket)
+}
+
+/// Fill exclusive prefixes. Returns the compact item count for pass 2.
+pub fn prefix_visible_spans(spans: &mut [VisibleGroveSpan]) -> u32 {
+	let mut prefix = 0u32;
+	for span in spans {
+		span.prefix = prefix;
+		prefix = prefix.saturating_add(span.count);
+	}
+	prefix
+}
+
+/// Map a compact pass-2 index onto `(item_index, lod)`.
+pub fn span_item_index(compact_index: u32, spans: &[VisibleGroveSpan]) -> Option<(u32, u32)> {
+	if spans.is_empty() {
+		return None;
+	}
+	let mut lo = 0usize;
+	let mut hi = spans.len();
+	while lo < hi {
+		let mid = (lo + hi) / 2;
+		let span = spans[mid];
+		if compact_index < span.prefix {
+			hi = mid;
+		} else if compact_index >= span.prefix.saturating_add(span.count) {
+			lo = mid + 1;
+		} else {
+			return Some((span.item_index(compact_index), span.lod));
+		}
+	}
+	None
+}
+
+/// Compact live groves that survive frustum + drop distance.
+pub fn compact_grove_spans(
+	groves: &[GroveRecord],
+	view: &GrassViewUniform,
+	thresholds: LodThresholds,
+	span_of: impl Fn(GroveRecord) -> (u32, u32),
+) -> Vec<VisibleGroveSpan> {
+	let mut spans = Vec::new();
+	for grove in groves {
+		let Some(lod) = grove_lod(*grove, view, thresholds) else {
+			continue;
+		};
+		let (offset, count) = span_of(*grove);
+		if count == 0 {
+			continue;
+		}
+		spans.push(VisibleGroveSpan { offset, count, prefix: 0, lod });
+	}
+	prefix_visible_spans(&mut spans);
+	spans
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -189,6 +282,19 @@ mod tests {
 		assert_eq!(lod_bucket(200.0, 12.0, 0.0, 1080.0, 1.0, grove), GRASS_LOD_NEAR);
 		assert_eq!(lod_bucket(450.0, 12.0, 0.0, 1080.0, 1.0, grove), GRASS_LOD_MID);
 		assert_eq!(lod_bucket(900.0, 12.0, 0.0, 1080.0, 1.0, grove), GRASS_LOD_CARD);
+		assert_eq!(lod_bucket(1_100.0, 12.0, 0.0, 1080.0, 1.0, grove), 3);
+		assert_eq!(LodThresholds::grove_bush().card_m, LodThresholds::bush_default().card_m);
+		assert_eq!(LodThresholds::grove_grass().card_m, LodThresholds::field_default().card_m);
+		assert_eq!(
+			lod_bucket(50.0, 0.55, 0.0, 720.0, 1.0, LodThresholds::grove_grass()),
+			GRASS_LOD_NEAR
+		);
+		assert_eq!(lod_bucket(200.0, 0.55, 0.0, 720.0, 1.0, LodThresholds::grove_grass()), 3);
+		assert_eq!(
+			lod_bucket(50.0, 1.4, 0.0, 720.0, 1.0, LodThresholds::grove_bush()),
+			GRASS_LOD_MID
+		);
+		assert_eq!(lod_bucket(200.0, 1.4, 0.0, 720.0, 1.0, LodThresholds::grove_bush()), 3);
 		let mut far_ids = Vec::new();
 		for i in 0..64u32 {
 			let rank = VegetationHash::density_rank(VegetationHash::plant_id(11, i));
@@ -217,6 +323,48 @@ mod tests {
 		let full = projected_height_px(0.6, 20.0, 1080.0, 1.0);
 		let half = projected_height_px(0.6, 20.0, 540.0, 1.0);
 		assert!((full - 2.0 * half).abs() < 1e-3);
+		Ok(())
+	}
+
+	#[test]
+	fn span_prefix_maps_compact_index_onto_item() -> anyhow::Result<()> {
+		let mut spans = [
+			VisibleGroveSpan { offset: 10, count: 4, prefix: 0, lod: 0 },
+			VisibleGroveSpan { offset: 80, count: 2, prefix: 0, lod: 2 },
+		];
+		assert_eq!(prefix_visible_spans(&mut spans), 6);
+		assert_eq!(span_item_index(0, &spans), Some((10, 0)));
+		assert_eq!(span_item_index(3, &spans), Some((13, 0)));
+		assert_eq!(span_item_index(4, &spans), Some((80, 2)));
+		assert_eq!(span_item_index(5, &spans), Some((81, 2)));
+		assert_eq!(span_item_index(6, &spans), None);
+		Ok(())
+	}
+
+	#[test]
+	fn inactive_or_far_grove_is_dropped() -> anyhow::Result<()> {
+		let live = GroveRecord::active(Vec3::ZERO, Vec3::splat(4.0), 1, (0, 8), (0, 16), (0, 32));
+		let mut dead = live;
+		dead.flags = 0;
+		let mut view = GrassViewUniform {
+			clip_from_world: Mat4::IDENTITY,
+			world_from_clip: Mat4::IDENTITY,
+			world_position: Vec3::new(0.0, 2.0, 8.0).extend(0.0),
+			prev_world_position: Vec3::new(0.0, 2.0, 8.0).extend(0.0),
+			resolution: bevy::math::Vec4::new(1280.0, 720.0, 1.0, 0.0),
+			wind: bevy::math::Vec4::ZERO,
+			lod_distances: bevy::math::Vec4::new(0.0, 18.0, 48.0, 90.0),
+			lod_density: bevy::math::Vec4::new(1.0, 0.72, 0.38, 1.15),
+			counts: bevy::math::Vec4::ZERO,
+			light_direction: bevy::math::Vec4::new(0.4, 0.8, 0.3, 0.0),
+		};
+		view.clip_from_world = Mat4::IDENTITY;
+		assert!(grove_lod(dead, &view, LodThresholds::field_default()).is_none());
+		let mut far = live;
+		far.aabb_min = Vec3::new(0.0, 0.0, 400.0);
+		far.aabb_max = Vec3::new(4.0, 4.0, 404.0);
+		view.world_position = Vec3::new(0.0, 2.0, 0.0).extend(0.0);
+		assert!(grove_lod(far, &view, LodThresholds::grove_grass()).is_none());
 		Ok(())
 	}
 }

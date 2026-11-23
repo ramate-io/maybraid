@@ -1,7 +1,10 @@
 //! CPU selection matching the wood/foliage compute shaders.
 
 use vegetation_grass_field::WorldFrustum;
-use vegetation_shaders::wesl::{lod_bucket, DrawIndexedIndirect, GrassViewUniform, LodThresholds};
+use vegetation_shaders::wesl::{
+	compact_grove_spans, grove_lod, lod_bucket, DrawIndexedIndirect, GrassViewUniform, GroveRecord,
+	LodThresholds, VisibleGroveSpan,
+};
 
 use crate::field::BushFieldSettings;
 use crate::layout::{
@@ -115,17 +118,104 @@ impl BushSelector {
 		WoodLod::from_bucket(bucket).map(|lod| lod.bucket())
 	}
 
+	pub fn grove_visible(&self, grove: GroveRecord) -> Option<u32> {
+		grove_lod(grove, &self.view, self.thresholds)
+	}
+
+	pub fn wood_spans(&self, groves: &[GroveRecord]) -> Vec<VisibleGroveSpan> {
+		compact_grove_spans(groves, &self.view, self.thresholds, |grove| {
+			(grove.branch_off, grove.branch_count)
+		})
+	}
+
+	pub fn foliage_spans(&self, groves: &[GroveRecord]) -> Vec<VisibleGroveSpan> {
+		compact_grove_spans(groves, &self.view, self.thresholds, |grove| {
+			(grove.leaf_off, grove.leaf_count)
+		})
+	}
+
 	pub fn compact(
 		&self,
 		plants: &[PlantDescriptor],
 		branches: &[BranchDescriptor],
 		leaves: &[LeafDescriptor],
 	) -> CompactedBushLists {
+		self.compact_items(
+			plants,
+			branches,
+			leaves,
+			0..branches.len() as u32,
+			0..leaves.len() as u32,
+		)
+	}
+
+	/// Grove-first CPU select: frustum/drop each grove, then only its spans.
+	pub fn compact_groves(
+		&self,
+		groves: &[GroveRecord],
+		plants: &[PlantDescriptor],
+		branches: &[BranchDescriptor],
+		leaves: &[LeafDescriptor],
+	) -> CompactedBushLists {
 		let mut lists = CompactedBushLists::default();
-		let wood_keep = keep_fraction(self.capacities[0], branches.len() as u32);
-		let leaf_keep = keep_fraction(self.capacities[0], leaves.len() as u32);
-		for (branch_index, branch) in branches.iter().enumerate() {
+		let wood_spans = self.wood_spans(groves);
+		let leaf_spans = self.foliage_spans(groves);
+		let wood_items: u32 = wood_spans.iter().map(|span| span.count).sum();
+		let leaf_items: u32 = leaf_spans.iter().map(|span| span.count).sum();
+		let wood_keep = keep_fraction(self.capacities[0], wood_items);
+		let leaf_keep = keep_fraction(self.capacities[0], leaf_items);
+		for span in &wood_spans {
+			self.append_wood_span(
+				&mut lists,
+				plants,
+				branches,
+				span.offset..span.offset.saturating_add(span.count),
+				wood_keep,
+			);
+		}
+		for span in &leaf_spans {
+			self.append_foliage_span(
+				&mut lists,
+				plants,
+				branches,
+				leaves,
+				span.offset..span.offset.saturating_add(span.count),
+				leaf_keep,
+			);
+		}
+		lists
+	}
+
+	fn compact_items(
+		&self,
+		plants: &[PlantDescriptor],
+		branches: &[BranchDescriptor],
+		leaves: &[LeafDescriptor],
+		wood: std::ops::Range<u32>,
+		foliage: std::ops::Range<u32>,
+	) -> CompactedBushLists {
+		let mut lists = CompactedBushLists::default();
+		let wood_keep = keep_fraction(self.capacities[0], wood.end.saturating_sub(wood.start));
+		let leaf_keep =
+			keep_fraction(self.capacities[0], foliage.end.saturating_sub(foliage.start));
+		self.append_wood_span(&mut lists, plants, branches, wood, wood_keep);
+		self.append_foliage_span(&mut lists, plants, branches, leaves, foliage, leaf_keep);
+		lists
+	}
+
+	fn append_wood_span(
+		&self,
+		lists: &mut CompactedBushLists,
+		plants: &[PlantDescriptor],
+		branches: &[BranchDescriptor],
+		wood: std::ops::Range<u32>,
+		wood_keep: f32,
+	) {
+		for branch_index in wood {
 			lists.considered_wood += 1;
+			let Some(branch) = branches.get(branch_index as usize) else {
+				continue;
+			};
 			let Some(plant) = plants.get(branch.plant_index as usize) else {
 				continue;
 			};
@@ -147,11 +237,25 @@ impl BushSelector {
 				lists.wood_overflow[slot] += 1;
 				continue;
 			}
-			lists.wood[slot].push(branch_index as u32);
+			lists.wood[slot].push(branch_index);
 			lists.submitted_wood += 1;
 		}
-		for (leaf_index, leaf) in leaves.iter().enumerate() {
+	}
+
+	fn append_foliage_span(
+		&self,
+		lists: &mut CompactedBushLists,
+		plants: &[PlantDescriptor],
+		branches: &[BranchDescriptor],
+		leaves: &[LeafDescriptor],
+		foliage: std::ops::Range<u32>,
+		leaf_keep: f32,
+	) {
+		for leaf_index in foliage {
 			lists.considered_foliage += 1;
+			let Some(leaf) = leaves.get(leaf_index as usize) else {
+				continue;
+			};
 			let Some(plant) = plants.get(leaf.plant_index as usize) else {
 				continue;
 			};
@@ -186,10 +290,9 @@ impl BushSelector {
 				lists.foliage_overflow[slot] += 1;
 				continue;
 			}
-			lists.foliage[slot].push(leaf_index as u32);
+			lists.foliage[slot].push(leaf_index);
 			lists.submitted_foliage += 1;
 		}
-		lists
 	}
 
 	pub fn pruning_preserves_parents(
@@ -340,6 +443,94 @@ mod tests {
 		)
 		.compact(&field.plants, &field.branches, &field.leaves);
 		assert!(far.triangle_count() < near.triangle_count());
+		Ok(())
+	}
+
+	fn field_grove(field: &BushField) -> GroveRecord {
+		let (min, max) = if field.bounds.is_empty() {
+			(Vec3::ZERO, Vec3::ONE)
+		} else {
+			(field.bounds.min, field.bounds.max)
+		};
+		GroveRecord::active(
+			min,
+			max,
+			1,
+			(0, field.plants.len() as u32),
+			(0, field.branches.len() as u32),
+			(0, field.leaves.len() as u32),
+		)
+	}
+
+	#[test]
+	fn grove_outside_frustum_produces_zero_pass2_work() -> anyhow::Result<()> {
+		let settings = BushFieldSettings::default();
+		let patch = BushPatch::isolated(3, Vec3::ZERO, crate::recipe::BushRecipe::small_scrub());
+		let field = BushField::rebuild([&patch], &settings);
+		let grove = field_grove(&field);
+		let selector = BushSelector::from_view(
+			look_view(Vec3::new(0.0, 4.0, 12.0), Vec3::new(0.0, 1.0, 80.0), 720.0),
+			&settings,
+		);
+		assert!(selector.wood_spans(&[grove]).is_empty());
+		assert!(selector.foliage_spans(&[grove]).is_empty());
+		let lists =
+			selector.compact_groves(&[grove], &field.plants, &field.branches, &field.leaves);
+		assert_eq!(lists.considered_wood, 0);
+		assert_eq!(lists.considered_foliage, 0);
+		assert_eq!(lists.submitted(), 0);
+		Ok(())
+	}
+
+	#[test]
+	fn grove_beyond_drop_distance_produces_zero_pass2_work() -> anyhow::Result<()> {
+		let settings = BushFieldSettings::default();
+		let patch = BushPatch::isolated(3, Vec3::ZERO, crate::recipe::BushRecipe::small_scrub());
+		let field = BushField::rebuild([&patch], &settings);
+		let grove = field_grove(&field);
+		let camera = Vec3::new(0.0, 4.0, 200.0);
+		let mut view = look_view(camera, Vec3::new(0.0, 1.0, 0.0), 720.0);
+		let transform =
+			Transform::from_translation(camera).looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y);
+		let projection = PerspectiveProjection {
+			fov: 1.0,
+			aspect_ratio: 16.0 / 9.0,
+			near: 0.1,
+			far: 10_000.0,
+			..Default::default()
+		};
+		view.clip_from_world = projection.get_clip_from_view() * transform.to_matrix().inverse();
+		view.world_from_clip = view.clip_from_world.inverse();
+		let selector = BushSelector::from_view(view, &settings);
+		assert!(selector.grove_visible(grove).is_none());
+		let lists =
+			selector.compact_groves(&[grove], &field.plants, &field.branches, &field.leaves);
+		assert_eq!(lists.considered_wood, 0);
+		assert_eq!(lists.submitted(), 0);
+		Ok(())
+	}
+
+	#[test]
+	fn visible_grove_produces_its_spans() -> anyhow::Result<()> {
+		let settings = BushFieldSettings::default();
+		let patch = BushPatch::isolated(3, Vec3::ZERO, crate::recipe::BushRecipe::small_scrub());
+		let field = BushField::rebuild([&patch], &settings);
+		let grove = field_grove(&field);
+		let selector = BushSelector::from_view(
+			look_view(Vec3::new(0.0, 2.0, 8.0), Vec3::new(0.0, 0.5, 0.0), 720.0),
+			&settings,
+		);
+		let wood = selector.wood_spans(&[grove]);
+		let foliage = selector.foliage_spans(&[grove]);
+		assert_eq!(wood.len(), 1);
+		assert_eq!(wood[0].offset, 0);
+		assert_eq!(wood[0].count, field.branches.len() as u32);
+		assert_eq!(foliage.len(), 1);
+		assert_eq!(foliage[0].count, field.leaves.len() as u32);
+		let lists =
+			selector.compact_groves(&[grove], &field.plants, &field.branches, &field.leaves);
+		assert!(lists.submitted_wood > 0);
+		assert_eq!(lists.considered_wood, field.branches.len() as u32);
 		Ok(())
 	}
 }

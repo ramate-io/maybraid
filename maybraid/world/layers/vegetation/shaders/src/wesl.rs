@@ -43,29 +43,30 @@ pub mod wind;
 pub use curve::{
 	attachment_frame, blade_rest_sample, blade_width_at, branch_radius_at, branch_rest_sample,
 	leaf_surface_normal, leaf_surface_vertex, leaf_teardrop_width, ribbon_normal, ribbon_vertex,
-	stable_frame,
-	woody_surface_normal, woody_surface_vertex, CurveSample, LocalFrame,
+	stable_frame, woody_surface_normal, woody_surface_vertex, CurveSample, LocalFrame,
 };
 pub use hash::{
 	density_rank, hash_lattice, hash_u32, hash_u32_to_unit, plant_id, value_noise_2, VegetationHash,
 };
 pub use layout::{
 	BladeDescriptor, DrawIndexedIndirect, GeometryLod, GrassDrawParams, GrassPatchHeader,
-	GrassViewUniform, BLADE_DESCRIPTOR_STRIDE, DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_CARD,
-	GRASS_LOD_COUNT, GRASS_LOD_MID, GRASS_LOD_NEAR, GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW,
-	PATCH_HEADER_STRIDE,
+	GrassViewUniform, GroveRecord, VisibleGroveSpan, BLADE_DESCRIPTOR_STRIDE,
+	DISPATCH_INDIRECT_STRIDE, DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_CARD, GRASS_LOD_COUNT,
+	GRASS_LOD_MID, GRASS_LOD_NEAR, GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW,
+	GROVE_RECORD_STRIDE, PATCH_HEADER_STRIDE, VISIBLE_SPAN_STRIDE,
 };
 pub use lod::{
-	lod_bucket, lod_fade, nested_keep, projected_height_px, LodDecision, LodThresholds,
-	ProjectedSize,
+	compact_grove_spans, grove_lod, lod_bucket, lod_fade, nested_keep, prefix_visible_spans,
+	projected_height_px, span_item_index, sphere_in_frustum, LodDecision, LodThresholds,
+	ProjectedSize, GROVE_TREE_CARD_M,
 };
 pub use shading::{
-	canopy_clump_albedo, canopy_interior_shade, crown_albedo, crown_layer_albedo, drape_strand_mask,
-	drape_strand_tint, grass_albedo, grass_variation_palette, leaf_close_uses_cluster,
-	leaf_cluster_alpha_for_style, leaf_cluster_keep, leaf_cluster_keep_for_style, leaf_cluster_mask,
-	leaf_cluster_outward_normal, leaf_cluster_tint, leaf_painterly_lit, meadow_color_field,
-	painterly_lit, two_sided_wrap, wood_albedo, LeafCluster, VegetationPalette, LEAF_CLOSE_CRISP,
-	LEAF_CLOSE_DITHER, LEAF_CLOSE_SMOOTH,
+	canopy_clump_albedo, canopy_interior_shade, crown_albedo, crown_layer_albedo,
+	drape_strand_mask, drape_strand_tint, grass_albedo, grass_variation_palette,
+	leaf_close_uses_cluster, leaf_cluster_alpha_for_style, leaf_cluster_keep,
+	leaf_cluster_keep_for_style, leaf_cluster_mask, leaf_cluster_outward_normal, leaf_cluster_tint,
+	leaf_painterly_lit, meadow_color_field, painterly_lit, two_sided_wrap, wood_albedo,
+	LeafCluster, VegetationPalette, LEAF_CLOSE_CRISP, LEAF_CLOSE_DITHER, LEAF_CLOSE_SMOOTH,
 };
 pub use wind::{
 	deform_along_curve, max_wind_displacement_m, wind_field, WindDeform, WindField, WindInputs,

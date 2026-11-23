@@ -26,7 +26,14 @@ import vegetation_shaders::wesl::curve::{
     leaf_teardrop_width,
 };
 import vegetation_shaders::wesl::wind::{wind_field, deform_along_curve, WindInputs};
-import vegetation_shaders::wesl::lod::{projected_height_px, lod_bucket, nested_keep, LodThresholds};
+import vegetation_shaders::wesl::lod::{
+    projected_height_px,
+    lod_bucket,
+    nested_keep,
+    LodThresholds,
+    sphere_in_frustum,
+    grove_lod_bucket,
+};
 import vegetation_shaders::wesl::shading::{
     grass_albedo,
     grass_variation_palette,
@@ -47,7 +54,12 @@ import vegetation_shaders::wesl::shading::{
     drape_strand_tint,
     VegetationPalette,
 };
-import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform};
+import vegetation_shaders::wesl::layout::{
+    BladeDescriptor,
+    GrassViewUniform,
+    GroveRecord,
+    VisibleGroveSpan,
+};
 
 fn smoke_eval(blade: BladeDescriptor, view: GrassViewUniform, t: f32, side: f32) -> vec4<f32> {
     let id = plant_id(blade.plant_id, 0u);
@@ -116,10 +128,20 @@ fn smoke_eval(blade: BladeDescriptor, view: GrassViewUniform, t: f32, side: f32)
     let _n2 = leaf_cluster_outward_normal(n, blade.normal, vec2<f32>(side, t), 1.0);
     color = color + _n2 * 0.0 * select(0.0, 1.0, _keep) * select(0.0, 1.0, _keep_s) * _interior * _tint * _drape * _dtint;
     let _teardrop = leaf_teardrop_width(t);
+    let _frustum = sphere_in_frustum(blade.root, blade.height_m, view.clip_from_world);
+    var grove: GroveRecord;
+    grove.aabb_min = blade.root - vec3<f32>(1.0);
+    grove.aabb_max = blade.root + vec3<f32>(1.0);
+    grove.flags = 1u;
+    let _grove_lod = grove_lod_bucket(grove.aabb_min, grove.aabb_max, grove.flags, view);
+    var span: VisibleGroveSpan;
+    span.offset = 0u;
+    span.count = 1u;
+    let _keep_span = span.count + select(0u, 1u, _frustum) + _grove_lod;
     if (!keep || bucket > 2u) {
         color = color * 0.0;
     }
-    return vec4(color, 1.0);
+    return vec4(color, 1.0) * f32(_keep_span) * 0.0 + vec4(color, 1.0);
 }
 
 @vertex

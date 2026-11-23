@@ -8,13 +8,13 @@ Grove types and `ForestGroveRecipe::grow` stay on the existing generation API. A
 
 Per-grove `OwnerGpuState` is gone. Each vegetation kind keeps one catalog of grove records plus concatenated plant/branch/leaf (or blade) arenas. Extract drains `CatalogOp::{Admit,Retire}` with `mem::take` and never clones the field. Prepare grows on admission (phase A CPU growth of that grove only) and `write_buffer`s those ranges. Retire clears `FLAG_ACTIVE` without rebuilding.
 
-Per view, per kind, encode is independent of grove count:
+Per view, per kind, encode is independent of grove count. Pass 1 is one thread per live grove slot (frustum + drop distance + LOD/density). Pass 2 is an indirect tiled dispatch over only the surviving item spans.
 
 | Kind | passes | dispatches | draws | uniform writes |
 |---|---:|---:|---:|---:|
-| tree | 1 | 3 | 6 | 1 |
-| bush | 1 | 3 | 6 | 1 |
-| grass | 1 | 2 | 3 | 1 |
+| tree | 1 | 5 | 6 | 1 |
+| bush | 1 | 5 | 6 | 1 |
+| grass | 1 | 4 | 3 | 1 |
 
 Five presenters (tree wood, tree foliage, bush wood, bush foliage, grass) each own a bin and carry `NoFrustumCulling` so CPU AABB does not hide GPU instances. GPU `ChicoGroveHost`s still go through LodScene with one High band covering the near-grove ring. Realizing High emits `CatalogOp::Admit` (a catalog entry only — no per-plant ECS, Transforms, or Visibility). Leaving or retiring High emits `CatalogOp::Retire`. Distance LOD (near, mid, far, density) stays in the GPU program (`lod.wesl` grove thresholds: High ~400 m, Medium ~520 m, Low 1 km). Compact lists grow to the admitted branch/leaf counts so one High band cannot overflow 8192 slots and drop foliage. `MAYBRAID_EXPERIMENT_TREE_FIELD=cpu` still uses CPU select. Bush/grass global caps are 262144 plants and 1048576 blades so admitted content is not silently truncated.
 
@@ -123,9 +123,9 @@ Recaptured `forest-{vista,edge,far}-{legacy,gpu}` after the High-only LodScene w
 | Shot | Camera | mean ms | p95 ms | max ms | entities | kit meshes | Mesh3d |
 |---|---|---:|---:|---:|---:|---:|---:|
 | forest-vista-legacy | VISTA | 250.000 | 250.000 | 250.000 | 22,039 | 21,533 | 21,536 |
-| forest-vista-gpu | VISTA | 95.649 | 97.033 | 97.296 | 512 | 0 | 3 |
+| forest-vista-gpu | VISTA | 20.760 | 22.239 | 23.666 | 512 | 0 | 3 |
 | forest-edge-legacy | EDGE | 250.000 | 250.000 | 250.000 | 22,039 | 21,533 | 21,536 |
-| forest-edge-gpu | EDGE | 82.096 | 86.219 | 88.207 | 512 | 0 | 3 |
+| forest-edge-gpu | EDGE | 23.993 | 26.206 | 27.154 | 512 | 0 | 3 |
 | forest-far-legacy | FAR | 250.000 | 250.000 | 250.000 | 32,541 | 32,035 | 32,038 |
 | forest-far-gpu | FAR | 144.954 | 151.464 | 152.707 | 518 | 0 | 3 |
 
@@ -179,16 +179,22 @@ GPU CPU `LodScene` is a single High band: no Mid/Low/UltraLow vegetation spawn o
 
 ### Far-band instance counts (native-feedback coverage)
 
-`grove_gpu_far_bands_match_legacy_instance_counts` drives the real `ChicoGroveHost` path (stacked Temperate Lower Massives + LowBush + TallGrass) and compares plants that survive GPU `lod_bucket` against legacy High (≤400 m) / Medium (≤520 m) / Low (to 1 km). Grove-owned `card_m` is unbounded so residency, not the shader, decides presence. GPU LOD still thins wood/leaves (`wood`/`leaves` below). Old cutoffs are `tree_default` / `bush_default` / `field_default` (bushes gone by ~110 m, grass by ~90 m, trees CARD after 72 m).
+`grove_gpu_far_bands_match_legacy_instance_counts` drives the real `ChicoGroveHost` path (stacked Temperate Lower Massives + LowBush + TallGrass) and counts **grove** sites that survive Pass 1 (`grove_lod` frustum + drop) against legacy High (≤400 m) / Medium (≤520 m) / Low (to 1 km). Grove-owned trees keep far cards out to the 1 km present ring (`grove_tree` `card_m` = 1000 m). Bushes drop at ~110 m (`grove_bush`) and grass at ~90 m (`grove_grass`). GPU LOD still thins wood/leaves inside a visible grove (`wood`/`leaves` below). Old cutoffs are grove-first with `tree_default` / `bush_default` / `field_default`.
 
 | Distance | Legacy T/B/G | GPU T/B/G | Old cutoff T/B/G | GPU wood / leaves |
 |---|---:|---:|---:|---:|
-| 50 m | 13 / 168 / 2271 | 12 / 158 / 2151 | 12 / 157 / 889 | 271 / 5979 |
-| 200 m | 13 / 168 / 2271 | 13 / 168 / 2271 | 9 / 0 / 0 | 303 / 6491 |
-| 450 m | 13 / 168 / 0 | 13 / 168 / 1614 | 0 / 0 / 0 | 260 / 6491 |
-| 900 m | 13 / 168 / 0 | 13 / 168 / 871 | 0 / 0 / 0 | 114 / 1959 |
+| 50 m | 13 / 168 / 2271 | 13 / 168 / 2271 | 13 / 168 / 2271 | 271 / 5979 |
+| 200 m | 13 / 168 / 2271 | 13 / 0 / 0 | 13 / 0 / 0 | 303 / 6491 |
+| 450 m | 13 / 168 / 0 | 13 / 0 / 0 | 0 / 0 / 0 | 260 / 6491 |
+| 900 m | 13 / 168 / 0 | 13 / 0 / 0 | 0 / 0 / 0 | 114 / 1959 |
 
-Woody plants stay within 20% of legacy at every band. Legacy tufts omit Medium+; GPU grass remains through 1 km with density falloff. This is a CPU-mirrored select of the real spawn path, not a live Metal census.
+Woody plants stay within 20% of legacy at every band. GPU bushes and grass drop once the grove sphere is past the legacy cards (gone by ~200 m); trees keep far cards through the 1 km ring. This is a CPU-mirrored Pass 1 of the real spawn path, not a live Metal census.
+
+### Whole-grove cull and incremental upload (this continuation)
+
+The catalog GPU no longer scans every leaf/blade in the world each frame. `GroveRecord` (AABB/sphere plus plant/branch/leaf spans) is uploaded on admit and cleared on retire. Pass 1 culls groves; a one-thread prefix writes tiled indirect args; pass 2 runs only over visible spans. The CPU-select arm uses the same grove-first compact so it is a fair control. Arena growth copies GPU-side (`copy_buffer_to_buffer`) and writes only the new spans; view work is not dropped. Main-world catalogs keep ids/spans; descriptor arenas live once in the render world. Presenter AABBs update on catalog change from grove records, not a per-plant loop.
+
+Lavapipe recapture after this cull/upload work (960×540, Mesa 25.2.8): catalog inventory still 40 / 952 / 19,324 trees plus 149 bushes and 26,556 grass blades, 1,316,736 B. Vista/edge GPU p95 on this software rasterizer dropped to ~22 / ~26 ms vs the previous unbounded-select ~97 / ~86 ms. That is Bevy `Time::delta`, not Metal GPU time. Vista stills are **sparser** than the parent captures (fewer far-left trees, smaller turf square); edge/near is fuller and keeps canopy on the foreground tree. Grove-sphere frustum at vista is the likely cause and is called out as a remaining risk.
 
 `hopscotch_world_walk_streams_gpu_hosts_without_kit_chunks` walks ten 1600 m cells along x=-4950 (LushJungle, SteppeDown, OldSteppe, Riparian, TemperateHoly, OwlsDesert). No leftover kit chunks, no CPU band churn, tiles stream in/out, no panics. This is the real `presenting_recipes` → `ChicoGroveHost` spawn path on flat ground, not a live HCSG terrain session.
 

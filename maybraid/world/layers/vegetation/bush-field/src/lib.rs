@@ -24,7 +24,7 @@ mod template;
 mod topology;
 
 pub use bounds::BushBounds;
-pub use catalog::{BushCatalogOp, BushCatalogOps, BushGroveCatalog};
+pub use catalog::{BushCatalogOp, BushCatalogOps, BushGroveCatalog, CatalogUpload};
 pub use diagnostics::BushFieldStats;
 pub use field::{BushField, BushFieldSettings};
 pub use host::BushPatchLod;
@@ -42,6 +42,7 @@ pub use topology::{
 	BushPlant, LeafLayer, MAX_BRANCHES_PER_PLANT, MAX_BRANCH_DEPTH, MAX_LEAVES_PER_PLANT,
 };
 pub use vegetation_grass_field::{GrassGpuCapability, GrassGpuMode, WorldFrustum};
+pub use vegetation_shaders::wesl::GroveRecord;
 pub use vegetation_shaders::wesl::{GrassViewUniform, VegetationPalette};
 
 /// Workgroup size for the selection compute passes.

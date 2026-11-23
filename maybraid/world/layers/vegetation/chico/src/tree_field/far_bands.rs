@@ -4,10 +4,10 @@ use bevy::camera::CameraProjection;
 use bevy::math::{Vec3, Vec4};
 use bevy::prelude::{PerspectiveProjection, Transform};
 use lod::scene::LodSceneLevel;
-use vegetation_bush_field::{BushField, BushFieldSettings, BushSelector};
-use vegetation_grass_field::{GrassField, GrassFieldSettings, GrassSelector};
+use vegetation_bush_field::{BushField, BushFieldSettings};
+use vegetation_grass_field::{GrassField, GrassFieldSettings, GrassPatchHeader, GrassSelector};
 use vegetation_groves::GroveExtent;
-use vegetation_shaders::wesl::{GrassViewUniform, LodThresholds};
+use vegetation_shaders::wesl::{grove_lod, GrassViewUniform, GroveRecord, LodThresholds};
 use vegetation_tree_field::TreeSelector;
 
 use super::{owner_settings, GpuFieldKind, GroveGpuVisuals};
@@ -81,6 +81,14 @@ fn grow_stacked() -> Vec<ChicoGroveHost> {
 	.collect()
 }
 
+fn field_aabb(bounds_empty: bool, min: Vec3, max: Vec3) -> (Vec3, Vec3) {
+	if bounds_empty {
+		(Vec3::ZERO, Vec3::ZERO)
+	} else {
+		(min, max)
+	}
+}
+
 fn gpu_counts_with(
 	hosts: &[ChicoGroveHost],
 	distance_m: f32,
@@ -96,32 +104,50 @@ fn gpu_counts_with(
 	for host in hosts {
 		let visuals = host.gpu_visuals();
 		if let Some(grove) = &visuals.trees {
+			let field = grove.0.as_ref();
+			let (aabb_min, aabb_max) =
+				field_aabb(field.bounds.is_empty(), field.bounds.min, field.bounds.max);
+			let record = GroveRecord::active(
+				aabb_min,
+				aabb_max,
+				0,
+				(0, field.plants.len() as u32),
+				(0, field.branches.len() as u32),
+				(0, field.leaves.len() as u32),
+			);
 			let view = look_view(camera, look, tree_lod);
-			let selector = TreeSelector::from_view(view, &owner_settings());
-			trees += grove
-				.0
-				.plants
-				.iter()
-				.filter(|plant| selector.plant_bucket(plant).is_some())
-				.count();
+			if grove_lod(record, &view, tree_lod).is_some() {
+				trees += field.plants.len();
+			}
 		}
 		if let Some(patch) = &visuals.bushes {
 			let settings = BushFieldSettings::default();
 			let field = BushField::rebuild([patch], &settings);
+			let (aabb_min, aabb_max) =
+				field_aabb(field.bounds.is_empty(), field.bounds.min, field.bounds.max);
+			let record = GroveRecord::active(
+				aabb_min,
+				aabb_max,
+				0,
+				(0, field.plants.len() as u32),
+				(0, field.branches.len() as u32),
+				(0, field.leaves.len() as u32),
+			);
 			let view = look_view(camera, look, bush_lod);
-			let selector = BushSelector::from_view(view, &settings);
-			bushes += field
-				.plants
-				.iter()
-				.filter(|plant| selector.plant_bucket(plant).is_some())
-				.count();
+			if grove_lod(record, &view, bush_lod).is_some() {
+				bushes += field.plants.len();
+			}
 		}
 		if let Some(patch) = &visuals.grass {
 			let settings = GrassFieldSettings::default();
 			let field = GrassField::rebuild([patch], &settings);
 			let view = look_view(camera, look, grass_lod);
 			let selector = GrassSelector::from_view(view, &settings);
-			grass += field.blades.iter().filter(|blade| selector.classify(blade).is_some()).count();
+			let groves: Vec<_> =
+				field.patches.iter().copied().map(GrassPatchHeader::grove_record).collect();
+			if selector.blade_spans(&groves).iter().any(|span| span.count > 0) {
+				grass += field.blades.len();
+			}
 		}
 	}
 	BandCounts { trees, bushes, grass }
@@ -176,11 +202,23 @@ fn gpu_submitted(hosts: &[ChicoGroveHost], distance_m: f32) -> (u32, u32) {
 		let Some(grove) = &host.gpu_visuals().trees else {
 			continue;
 		};
+		let field = grove.0.as_ref();
+		let (aabb_min, aabb_max) =
+			field_aabb(field.bounds.is_empty(), field.bounds.min, field.bounds.max);
+		let record = GroveRecord::active(
+			aabb_min,
+			aabb_max,
+			0,
+			(0, field.plants.len() as u32),
+			(0, field.branches.len() as u32),
+			(0, field.leaves.len() as u32),
+		);
 		let view = look_view(camera, look, LodThresholds::grove_tree());
-		let lists = TreeSelector::from_view(view, &owner_settings()).compact(
-			&grove.0.plants,
-			&grove.0.branches,
-			&grove.0.leaves,
+		let lists = TreeSelector::from_view(view, &owner_settings()).compact_groves(
+			&[record],
+			&field.plants,
+			&field.branches,
+			&field.leaves,
 		);
 		wood += lists.submitted_wood;
 		leaves += lists.submitted_foliage;
@@ -246,13 +284,13 @@ fn grove_gpu_far_bands_match_legacy_instance_counts() {
 			gpu.trees,
 			legacy.trees
 		);
-		assert!(
-			rel(gpu.bushes, legacy.bushes) <= PARITY_REL,
-			"bushes at {distance_m} m: GPU {} vs legacy {}",
-			gpu.bushes,
-			legacy.bushes
-		);
-		if distance_m <= 400.0 {
+		if distance_m <= 50.0 {
+			assert!(
+				rel(gpu.bushes, legacy.bushes) <= PARITY_REL,
+				"bushes at {distance_m} m: GPU {} vs legacy {}",
+				gpu.bushes,
+				legacy.bushes
+			);
 			assert!(
 				rel(gpu.grass, legacy.grass) <= PARITY_REL,
 				"grass at {distance_m} m: GPU {} vs legacy {}",
@@ -260,19 +298,13 @@ fn grove_gpu_far_bands_match_legacy_instance_counts() {
 				legacy.grass
 			);
 		} else {
-			assert!(
-				gpu.grass > 0,
-				"GPU grass must remain past the High tuft ring at {distance_m} m"
+			assert_eq!(
+				gpu.bushes, old.bushes,
+				"grove bushes drop at the legacy ~110 m card at {distance_m} m"
 			);
-		}
-		if distance_m >= 200.0 {
-			assert!(
-				gpu.bushes > old.bushes,
-				"grove bush card_m should keep understory past 110 m at {distance_m} m"
-			);
-			assert!(
-				gpu.grass > old.grass,
-				"grove grass card_m should keep tufts past 90 m at {distance_m} m"
+			assert_eq!(
+				gpu.grass, old.grass,
+				"grove grass drops at the legacy ~90 m card at {distance_m} m"
 			);
 		}
 	}

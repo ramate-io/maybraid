@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use bevy::math::Vec3;
 use bevy::prelude::*;
-use vegetation_shaders::wesl::{BLADE_DESCRIPTOR_STRIDE, BladeDescriptor, GrassPatchHeader};
+use vegetation_shaders::wesl::{
+	BladeDescriptor, GrassPatchHeader, GroveRecord, BLADE_DESCRIPTOR_STRIDE, GROVE_RECORD_STRIDE,
+};
 
 use crate::catalog::{
 	CatalogApply, CatalogOpQueue, GroveCatalogOp, GroveEncodeStats, GroveId, RangeArena, RangeSpan,
@@ -59,6 +61,8 @@ pub struct GrassGroveCatalog {
 	live: HashMap<GroveId, LiveGrove>,
 	blades_arena: RangeArena,
 	free_slots: Vec<u32>,
+	store_descriptors: bool,
+	consume_ops: bool,
 	pub generation: u64,
 	pub last_write_bytes: u64,
 	pub last_writes: u32,
@@ -71,12 +75,20 @@ pub struct GrassGroveCatalog {
 
 impl Default for GrassGroveCatalog {
 	fn default() -> Self {
+		Self::with_descriptors()
+	}
+}
+
+impl GrassGroveCatalog {
+	fn empty(store_descriptors: bool, consume_ops: bool) -> Self {
 		Self {
 			patches: Vec::new(),
 			blades: Vec::new(),
 			live: HashMap::new(),
 			blades_arena: RangeArena::with_cap(8_192),
 			free_slots: Vec::new(),
+			store_descriptors,
+			consume_ops,
 			generation: 0,
 			last_write_bytes: 0,
 			last_writes: 0,
@@ -87,6 +99,18 @@ impl Default for GrassGroveCatalog {
 			grove_residency: false,
 		}
 	}
+
+	pub fn index_only() -> Self {
+		Self::empty(false, false)
+	}
+
+	pub fn with_descriptors() -> Self {
+		Self::empty(true, false)
+	}
+
+	pub fn render() -> Self {
+		Self::empty(true, true)
+	}
 }
 
 impl GrassGroveCatalog {
@@ -96,6 +120,34 @@ impl GrassGroveCatalog {
 
 	pub fn live_grove_count(&self) -> usize {
 		self.live.len()
+	}
+
+	pub fn resident_blades(&self) -> usize {
+		if self.store_descriptors {
+			self.blades.len()
+		} else {
+			self.blades_arena.used as usize
+		}
+	}
+
+	pub fn grove_spans(&self, id: GroveId) -> Option<RangeSpan> {
+		self.live.get(&id).map(|live| live.blades)
+	}
+
+	pub fn grove_records(&self) -> Vec<GroveRecord> {
+		self.patches.iter().copied().map(GrassPatchHeader::grove_record).collect()
+	}
+
+	pub fn active_bounds(&self) -> Option<(Vec3, Vec3)> {
+		let mut min = Vec3::splat(f32::MAX);
+		let mut max = Vec3::splat(f32::MIN);
+		let mut any = false;
+		for header in self.patches.iter().filter(|header| header.is_active()) {
+			min = min.min(header.aabb_min);
+			max = max.max(header.aabb_max);
+			any = true;
+		}
+		any.then_some((min, max))
 	}
 
 	pub fn contains(&self, id: GroveId) -> bool {
@@ -114,7 +166,7 @@ impl GrassGroveCatalog {
 		self.last_write_bytes = 0;
 		self.last_writes = 0;
 		self.last_uploads.clear();
-		CatalogApply::budgeted(ops, budget, |op| match op {
+		CatalogApply::budgeted_mut(ops, budget, |op| match op {
 			GrassCatalogOp::Retire { id } => self.retire(*id),
 			GrassCatalogOp::Admit {
 				id,
@@ -124,15 +176,31 @@ impl GrassGroveCatalog {
 				seed,
 				truncated_plants,
 				grove_residency,
-			} => self.admit(
-				*id,
-				blades.clone(),
-				*aabb_min,
-				*aabb_max,
-				*seed,
-				*truncated_plants,
-				*grove_residency,
-			),
+			} => {
+				if self.store_descriptors {
+					let blades =
+						if self.consume_ops { std::mem::take(blades) } else { blades.clone() };
+					self.admit(
+						*id,
+						blades,
+						*aabb_min,
+						*aabb_max,
+						*seed,
+						*truncated_plants,
+						*grove_residency,
+					);
+				} else {
+					self.admit_index(
+						*id,
+						blades.len() as u32,
+						*aabb_min,
+						*aabb_max,
+						*seed,
+						*truncated_plants,
+						*grove_residency,
+					);
+				}
+			}
 		})
 	}
 
@@ -157,6 +225,36 @@ impl GrassGroveCatalog {
 		let slot = self.alloc_slot();
 		let start = span.offset as usize;
 		self.blades[start..start + blades.len()].copy_from_slice(&blades);
+		self.write_header(id, slot, aabb_min, aabb_max, seed, span);
+	}
+
+	fn admit_index(
+		&mut self,
+		id: GroveId,
+		blade_count: u32,
+		aabb_min: Vec3,
+		aabb_max: Vec3,
+		seed: u32,
+		truncated_plants: u32,
+		grove_residency: bool,
+	) {
+		self.retire(id);
+		self.truncated_plants = self.truncated_plants.saturating_add(truncated_plants);
+		self.grove_residency |= grove_residency;
+		let span = self.blades_arena.alloc(blade_count);
+		let slot = self.alloc_slot();
+		self.write_header(id, slot, aabb_min, aabb_max, seed, span);
+	}
+
+	fn write_header(
+		&mut self,
+		id: GroveId,
+		slot: u32,
+		aabb_min: Vec3,
+		aabb_max: Vec3,
+		seed: u32,
+		span: RangeSpan,
+	) {
 		self.patches[slot as usize] = GrassPatchHeader {
 			aabb_min,
 			blade_offset: span.offset,
@@ -168,7 +266,7 @@ impl GrassGroveCatalog {
 			flags: if span.count == 0 { 0 } else { GrassPatchHeader::FLAG_ACTIVE },
 		};
 		self.last_writes += 1;
-		self.last_write_bytes += span.byte_len(BLADE_DESCRIPTOR_STRIDE) + 48;
+		self.last_write_bytes += span.byte_len(BLADE_DESCRIPTOR_STRIDE) + GROVE_RECORD_STRIDE;
 		self.last_uploads.push(CatalogUpload { blades: span, patch_slot: slot });
 		self.live.insert(id, LiveGrove { slot, blades: span });
 		self.generation = self.generation.wrapping_add(1);
@@ -181,8 +279,10 @@ impl GrassGroveCatalog {
 		if let Some(header) = self.patches.get_mut(live.slot as usize) {
 			header.flags = 0;
 		}
-		for blade in self.blades_mut(live.blades) {
-			blade.height_m = 0.0;
+		if self.store_descriptors {
+			for blade in self.blades_mut(live.blades) {
+				blade.height_m = 0.0;
+			}
 		}
 		self.blades_arena.free(live.blades);
 		self.free_slots.push(live.slot);
@@ -310,6 +410,64 @@ mod tests {
 		);
 	}
 
+	#[test]
+	fn retire_then_admit_reuses_freed_span() {
+		let mut catalog = GrassGroveCatalog::default();
+		catalog.apply([admit(1), admit(2)], ADMISSION_BUDGET);
+		let first = catalog.grove_spans(GroveId(1)).expect("grove 1");
+		catalog.apply([GrassCatalogOp::Retire { id: GroveId(1) }], ADMISSION_BUDGET);
+		catalog.apply([admit(3)], ADMISSION_BUDGET);
+		let reused = catalog.grove_spans(GroveId(3)).expect("grove 3");
+		assert_eq!(reused.offset, first.offset);
+		assert!(catalog.contains(GroveId(2)));
+		assert!(!catalog.contains(GroveId(1)));
+	}
+
+	#[test]
+	fn admit_after_growth_preserves_earlier_grove_bytes() {
+		let mut catalog = GrassGroveCatalog::default();
+		catalog.apply([admit(1)], ADMISSION_BUDGET);
+		let first = catalog.blades.clone();
+		let first_span = catalog.grove_spans(GroveId(1)).expect("grove 1");
+		let extra: Vec<_> = (2..24).map(admit).collect();
+		let extra_len = extra.len();
+		catalog.apply(extra, extra_len);
+		let start = first_span.offset as usize;
+		let end = start + first_span.count as usize;
+		assert_eq!(&catalog.blades[start..end], &first[start..end]);
+		assert_eq!(catalog.last_uploads.len(), extra_len);
+		assert!(catalog
+			.last_uploads
+			.iter()
+			.all(|upload| { upload.blades.offset >= first_span.offset + first_span.count }));
+		assert!(catalog.contains(GroveId(1)));
+	}
+
+	#[test]
+	fn index_only_catalog_does_not_keep_descriptors() {
+		let mut catalog = GrassGroveCatalog::index_only();
+		catalog.apply([admit(1)], ADMISSION_BUDGET);
+		assert!(catalog.blades.is_empty());
+		assert_eq!(catalog.live_grove_count(), 1);
+		assert!(catalog.resident_blades() > 0);
+	}
+
+	#[test]
+	fn render_catalog_takes_descriptors_from_ops() {
+		let mut catalog = GrassGroveCatalog::render();
+		let op = admit(1);
+		let blade_count = match &op {
+			GrassCatalogOp::Admit { blades, .. } => blades.len(),
+			GrassCatalogOp::Retire { .. } => 0,
+		};
+		let CatalogApply { applied, .. } = catalog.apply([op], ADMISSION_BUDGET);
+		assert_eq!(catalog.blades.len(), blade_count);
+		match &applied[0] {
+			GrassCatalogOp::Admit { blades, .. } => assert!(blades.is_empty()),
+			GrassCatalogOp::Retire { .. } => panic!("expected admit"),
+		}
+	}
+
 	fn admit(id: u64) -> GrassCatalogOp {
 		GrassCatalogOp::Admit {
 			id: GroveId(id),
@@ -373,11 +531,9 @@ mod tests {
 
 		assert!(leftover.is_empty());
 		assert!(applied.iter().any(|op| op.is_retire() && op.grove_id() == GroveId(100)));
-		assert!(
-			applied
-				.iter()
-				.all(|op| !(matches!(op, GrassCatalogOp::Admit { id, .. } if *id == GroveId(100))))
-		);
+		assert!(applied
+			.iter()
+			.all(|op| !(matches!(op, GrassCatalogOp::Admit { id, .. } if *id == GroveId(100)))));
 		assert!(!main.contains(GroveId(100)));
 
 		let mut render = GrassGroveCatalog::default();

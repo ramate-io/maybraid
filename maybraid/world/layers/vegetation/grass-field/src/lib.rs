@@ -14,6 +14,7 @@ mod catalog;
 mod diagnostics;
 mod field;
 mod gpu;
+mod gpu_arena;
 mod grove_catalog;
 mod host;
 mod patch;
@@ -32,6 +33,7 @@ pub use catalog::{
 };
 pub use diagnostics::GrassFieldStats;
 pub use field::{GrassField, GrassFieldSettings};
+pub use gpu_arena::{grow_storage_buffer, ArenaBufferPlan, ArenaGrow};
 pub use grove_catalog::{GrassCatalogOp, GrassCatalogOps, GrassGroveCatalog};
 pub use host::GrassPatchLod;
 pub use patch::{GrassPatch, SurfaceSample};
@@ -40,8 +42,10 @@ pub use select::{frustum_planes, CompactedLists, GrassSelector, WorldFrustum};
 pub use species::GrassSpecies;
 pub use template::BladeTemplate;
 pub use vegetation_shaders::wesl::{
-	BladeDescriptor, GeometryLod, GrassPatchHeader, GrassViewUniform, VegetationPalette,
+	compact_grove_spans, grove_lod, BladeDescriptor, GeometryLod, GrassPatchHeader,
+	GrassViewUniform, GroveRecord, VegetationPalette, VisibleGroveSpan,
 	DRAW_INDEXED_INDIRECT_STRIDE, GRASS_LOD_CARD, GRASS_LOD_COUNT, GRASS_LOD_MID, GRASS_LOD_NEAR,
+	GROVE_RECORD_STRIDE, VISIBLE_SPAN_STRIDE,
 };
 
 /// Workgroup size for the selection compute pass.

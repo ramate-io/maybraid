@@ -1,1 +1,1 @@
-shot=forest-vista-gpu mode=Gpu samples=36 dt_ms_mean=95.649 dt_ms_p95=97.033 dt_ms_max=97.296 entities=512 kit_meshes=0 mesh3d=3 plants=40 branches=952 leaves=19324 bushes=149 grass=26556 upload_B=1316736
+shot=forest-vista-gpu mode=Gpu samples=36 dt_ms_mean=20.760 dt_ms_p95=22.239 dt_ms_max=23.666 entities=512 kit_meshes=0 mesh3d=3 plants=40 branches=952 leaves=19324 bushes=149 grass=26556 upload_B=1316736

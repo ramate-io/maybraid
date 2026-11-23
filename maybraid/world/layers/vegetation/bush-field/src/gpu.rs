@@ -1,7 +1,7 @@
 //! Render-world compute compaction, indirect args, and opaque wood/foliage draws.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy::core_pipeline::core_3d::{
 	Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey, CORE_3D_DEPTH_FORMAT,
@@ -36,11 +36,13 @@ use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntit
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
 use vegetation_grass_field::{
-	select_dispatch_size, CatalogApply, GrassGpuCapability, GrassGpuMode, GroveEncodeStats,
+	grow_storage_buffer, select_dispatch_size, CatalogApply, GrassGpuCapability, GrassGpuMode,
+	GroveEncodeStats,
 };
 use vegetation_shaders::wesl::{
-	GrassDrawParams, GrassViewUniform, LodThresholds, DRAW_INDEXED_INDIRECT_STRIDE,
-	GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW,
+	GrassDrawParams, GrassViewUniform, LodThresholds, DISPATCH_INDIRECT_STRIDE,
+	DRAW_INDEXED_INDIRECT_STRIDE, GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW,
+	GROVE_RECORD_STRIDE, VISIBLE_SPAN_STRIDE,
 };
 
 use crate::catalog::{BushCatalogOps, BushGroveCatalog};
@@ -52,7 +54,8 @@ use crate::layout::{
 use crate::plugin::{BushFieldPresenter, ExtractedBushField};
 use crate::select::BushSelector;
 use crate::shaders::{
-	FINALIZE_SHADER, FOLIAGE_SHADER, SELECT_FOLIAGE_SHADER, SELECT_WOOD_SHADER, WOOD_SHADER,
+	CULL_GROVES_SHADER, FINALIZE_SHADER, FOLIAGE_SHADER, PREFIX_SPANS_SHADER,
+	SELECT_FOLIAGE_SHADER, SELECT_WOOD_SHADER, WOOD_SHADER,
 };
 use crate::template::{LeafTemplate, WoodTemplate};
 use crate::SELECT_WORKGROUP;
@@ -67,7 +70,7 @@ impl Plugin for BushGpuPlugin {
 		render_app
 			.init_resource::<PendingBushQueues>()
 			.init_resource::<BushGpuState>()
-			.init_resource::<BushGroveCatalog>()
+			.insert_resource(crate::catalog::BushGroveCatalog::render())
 			.init_resource::<GroveEncodeStats>()
 			.add_render_command::<Opaque3d, DrawBushWood>()
 			.add_render_command::<Opaque3d, DrawBushFoliage>()
@@ -92,11 +95,15 @@ fn detect_capability(mut commands: Commands, adapter: Res<RenderAdapter>) {
 
 #[derive(Resource)]
 struct BushPipelines {
+	cull_layout: BindGroupLayoutDescriptor,
+	prefix_layout: BindGroupLayoutDescriptor,
 	select_wood_layout: BindGroupLayoutDescriptor,
 	select_foliage_layout: BindGroupLayoutDescriptor,
 	finalize_layout: BindGroupLayoutDescriptor,
 	wood_draw_layout: BindGroupLayoutDescriptor,
 	foliage_draw_layout: BindGroupLayoutDescriptor,
+	cull_groves: CachedComputePipelineId,
+	prefix_spans: CachedComputePipelineId,
 	select_wood: CachedComputePipelineId,
 	select_foliage: CachedComputePipelineId,
 	finalize: CachedComputePipelineId,
@@ -148,6 +155,32 @@ fn init_bush_pipelines(
 	asset_server: Res<AssetServer>,
 	pipeline_cache: Res<PipelineCache>,
 ) {
+	let cull_layout = BindGroupLayoutDescriptor::new(
+		"bush_cull_layout",
+		&BindGroupLayoutEntries::sequential(
+			ShaderStages::COMPUTE,
+			(
+				uniform_buffer::<GrassViewUniform>(false),
+				storage_buffer_read_only_sized(false, None),
+				storage_buffer_sized(false, None),
+				storage_buffer_sized(false, None),
+				storage_buffer_sized(false, None),
+			),
+		),
+	);
+	let prefix_layout = BindGroupLayoutDescriptor::new(
+		"bush_prefix_layout",
+		&BindGroupLayoutEntries::sequential(
+			ShaderStages::COMPUTE,
+			(
+				storage_buffer_sized(false, None),
+				storage_buffer_sized(false, None),
+				storage_buffer_sized(false, None),
+				storage_buffer_sized(false, None),
+				storage_buffer_sized(false, None),
+			),
+		),
+	);
 	let select_wood_layout = BindGroupLayoutDescriptor::new(
 		"bush_select_wood_layout",
 		&BindGroupLayoutEntries::sequential(
@@ -160,6 +193,8 @@ fn init_bush_pipelines(
 				storage_buffer_sized(false, None),
 				storage_buffer_sized(false, None),
 				storage_buffer_sized(false, None),
+				storage_buffer_read_only_sized(false, None),
+				storage_buffer_read_only_sized(false, None),
 			),
 		),
 	);
@@ -176,6 +211,8 @@ fn init_bush_pipelines(
 				storage_buffer_sized(false, None),
 				storage_buffer_sized(false, None),
 				storage_buffer_sized(false, None),
+				storage_buffer_read_only_sized(false, None),
+				storage_buffer_read_only_sized(false, None),
 			),
 		),
 	);
@@ -218,6 +255,20 @@ fn init_bush_pipelines(
 		),
 	);
 
+	let cull_groves = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+		label: Some("bush_cull_groves".into()),
+		layout: vec![cull_layout.clone()],
+		shader: asset_server.load(CULL_GROVES_SHADER),
+		entry_point: Some(Cow::from("cull")),
+		..default()
+	});
+	let prefix_spans = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+		label: Some("bush_prefix_spans".into()),
+		layout: vec![prefix_layout.clone()],
+		shader: asset_server.load(PREFIX_SPANS_SHADER),
+		entry_point: Some(Cow::from("prefix")),
+		..default()
+	});
 	let select_wood = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
 		label: Some("bush_select_wood".into()),
 		layout: vec![select_wood_layout.clone()],
@@ -248,11 +299,15 @@ fn init_bush_pipelines(
 		opaque_descriptor("bush_foliage", foliage_shader, vec![foliage_draw_layout.clone()]);
 
 	commands.insert_resource(BushPipelines {
+		cull_layout,
+		prefix_layout,
 		select_wood_layout,
 		select_foliage_layout,
 		finalize_layout,
 		wood_draw_layout,
 		foliage_draw_layout,
+		cull_groves,
+		prefix_spans,
 		select_wood,
 		select_foliage,
 		finalize,
@@ -354,16 +409,26 @@ struct BushGpuState {
 	plants: Option<Buffer>,
 	branches: Option<Buffer>,
 	leaves: Option<Buffer>,
+	groves: Option<Buffer>,
 	generation: u64,
 	plant_count: usize,
 	branch_count: usize,
 	leaf_count: usize,
-	views: std::collections::HashMap<RetainedViewEntity, ViewWork>,
+	grove_count: usize,
+	list_capacity: u32,
+	span_capacity: u32,
+	views: HashMap<RetainedViewEntity, ViewWork>,
+	bind_groups_stale: bool,
 }
 
 struct ViewWork {
 	view_uniform: Buffer,
 	counters: Buffer,
+	cull_meta: Buffer,
+	wood_spans: Buffer,
+	leaf_spans: Buffer,
+	wood_dispatch: Buffer,
+	leaf_dispatch: Buffer,
 	wood_lists: [Buffer; BUSH_LOD_COUNT],
 	foliage_lists: [Buffer; BUSH_LOD_COUNT],
 	indirect: Buffer,
@@ -371,6 +436,8 @@ struct ViewWork {
 	wood_params: [Buffer; BUSH_LOD_COUNT],
 	#[allow(dead_code)]
 	foliage_params: [Buffer; BUSH_LOD_COUNT],
+	cull_bg: BindGroup,
+	prefix_bg: BindGroup,
 	select_wood_bg: BindGroup,
 	select_foliage_bg: BindGroup,
 	finalize_bg: BindGroup,
@@ -419,80 +486,50 @@ fn prepare_bush_buffers(
 	encode.uniform_writes = 0;
 
 	if catalog.last_writes > 0 {
-		let plant_bytes =
-			(catalog.plants.len() as u64 * PLANT_DESCRIPTOR_STRIDE).max(PLANT_DESCRIPTOR_STRIDE);
-		let branch_bytes = (catalog.branches.len() as u64 * BRANCH_DESCRIPTOR_STRIDE)
-			.max(BRANCH_DESCRIPTOR_STRIDE);
-		let leaf_bytes =
-			(catalog.leaves.len() as u64 * LEAF_DESCRIPTOR_STRIDE).max(LEAF_DESCRIPTOR_STRIDE);
-		let grew = state.plants.as_ref().is_none_or(|buf| buf.size() < plant_bytes)
-			|| state.branches.as_ref().is_none_or(|buf| buf.size() < branch_bytes)
-			|| state.leaves.as_ref().is_none_or(|buf| buf.size() < leaf_bytes);
-		if grew {
-			state.plants = Some(pack_buffer(
-				&device,
-				"bush_plants",
-				catalog.plants.iter().flat_map(|p| p.to_std430_bytes()).collect(),
-				PLANT_DESCRIPTOR_STRIDE,
-			));
-			state.branches = Some(pack_buffer(
-				&device,
-				"bush_branches",
-				catalog.branches.iter().flat_map(|b| b.to_std430_bytes()).collect(),
-				BRANCH_DESCRIPTOR_STRIDE,
-			));
-			state.leaves = Some(pack_buffer(
-				&device,
-				"bush_leaves",
-				catalog.leaves.iter().flat_map(|l| l.to_std430_bytes()).collect(),
-				LEAF_DESCRIPTOR_STRIDE,
-			));
-			state.views.clear();
-		} else {
-			for upload in &catalog.last_uploads {
-				write_span(
-					&queue,
-					state.plants.as_ref(),
-					upload.plants,
-					&catalog.plants,
-					PLANT_DESCRIPTOR_STRIDE,
-					PlantDescriptor::to_std430_bytes,
-				);
-				write_span(
-					&queue,
-					state.branches.as_ref(),
-					upload.branches,
-					&catalog.branches,
-					BRANCH_DESCRIPTOR_STRIDE,
-					BranchDescriptor::to_std430_bytes,
-				);
-				write_span(
-					&queue,
-					state.leaves.as_ref(),
-					upload.leaves,
-					&catalog.leaves,
-					LEAF_DESCRIPTOR_STRIDE,
-					LeafDescriptor::to_std430_bytes,
-				);
-			}
-		}
-		state.generation = catalog.generation;
-		state.plant_count = catalog.plants.len();
-		state.branch_count = catalog.branches.len();
-		state.leaf_count = catalog.leaves.len();
+		upload_catalog(&device, &queue, &mut state, &catalog);
 	}
 	if catalog.is_empty() {
 		state.views.clear();
 		return;
 	}
 
-	let (Some(plants), Some(branches), Some(leaves)) =
-		(state.plants.clone(), state.branches.clone(), state.leaves.clone())
+	let (Some(plants), Some(branches), Some(leaves), Some(groves)) =
+		(state.plants.clone(), state.branches.clone(), state.leaves.clone(), state.groves.clone())
 	else {
 		return;
 	};
-	let capacity = extracted.settings.max_per_lod;
-	let mut live = std::collections::HashSet::new();
+	let capacity = extracted
+		.settings
+		.max_per_lod
+		.max(catalog.resident_branches() as u32)
+		.max(catalog.resident_leaves() as u32)
+		.max(1);
+	let grove_slots = catalog.groves.len() as u32;
+	if capacity > state.list_capacity || grove_slots > state.span_capacity {
+		for work in state.views.values_mut() {
+			grow_view_work_buffers(&device, &queue, work, capacity, grove_slots.max(1));
+		}
+		state.list_capacity = state.list_capacity.max(capacity);
+		state.span_capacity = state.span_capacity.max(grove_slots);
+		state.bind_groups_stale = true;
+	}
+	if state.bind_groups_stale {
+		for work in state.views.values_mut() {
+			rebind_bush_work(
+				&device,
+				&pipeline_cache,
+				&pipelines,
+				work,
+				&plants,
+				&branches,
+				&leaves,
+				&groves,
+			);
+		}
+		state.bind_groups_stale = false;
+	}
+	let capacity = state.list_capacity.max(1);
+	let mut live = HashSet::new();
 	let mut missing = Vec::new();
 	for view in &views {
 		if !view_submits_bush(view, extracted.shadow_mode) {
@@ -500,7 +537,11 @@ fn prepare_bush_buffers(
 		}
 		live.insert(view.retained_view_entity);
 		if let Some(work) = state.views.get(&view.retained_view_entity) {
-			write_view_uniform(&queue, &work.view_uniform, &make_view_uniform(view, &extracted));
+			write_view_uniform(
+				&queue,
+				&work.view_uniform,
+				&make_view_uniform(view, &extracted, &catalog, capacity),
+			);
 			encode.uniform_writes += 1;
 		} else {
 			missing.push(view.retained_view_entity);
@@ -516,9 +557,11 @@ fn prepare_bush_buffers(
 				&plants,
 				&branches,
 				&leaves,
+				&groves,
 				capacity,
 				view,
 				&extracted,
+				&catalog,
 			);
 			state.views.insert(retained, work);
 			encode.uniform_writes += 1;
@@ -540,13 +583,136 @@ fn prepare_bush_buffers(
 	}
 }
 
-fn pack_buffer(device: &RenderDevice, label: &'static str, bytes: Vec<u8>, stride: u64) -> Buffer {
-	let packed = if bytes.is_empty() { vec![0u8; stride as usize] } else { bytes };
-	device.create_buffer_with_data(&BufferInitDescriptor {
-		label: Some(label),
-		contents: &packed,
-		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-	})
+fn upload_catalog(
+	device: &RenderDevice,
+	queue: &RenderQueue,
+	state: &mut BushGpuState,
+	catalog: &BushGroveCatalog,
+) {
+	let plant_bytes =
+		(catalog.resident_plants() as u64 * PLANT_DESCRIPTOR_STRIDE).max(PLANT_DESCRIPTOR_STRIDE);
+	let branch_bytes = (catalog.resident_branches() as u64 * BRANCH_DESCRIPTOR_STRIDE)
+		.max(BRANCH_DESCRIPTOR_STRIDE);
+	let leaf_bytes =
+		(catalog.resident_leaves() as u64 * LEAF_DESCRIPTOR_STRIDE).max(LEAF_DESCRIPTOR_STRIDE);
+	let grove_bytes = (catalog.groves.len() as u64 * GROVE_RECORD_STRIDE).max(GROVE_RECORD_STRIDE);
+	let mut grew = false;
+	grew |= grow_storage_buffer(
+		device,
+		queue,
+		&mut state.plants,
+		plant_bytes,
+		PLANT_DESCRIPTOR_STRIDE,
+		"bush_plants",
+	);
+	grew |= grow_storage_buffer(
+		device,
+		queue,
+		&mut state.branches,
+		branch_bytes,
+		BRANCH_DESCRIPTOR_STRIDE,
+		"bush_branches",
+	);
+	grew |= grow_storage_buffer(
+		device,
+		queue,
+		&mut state.leaves,
+		leaf_bytes,
+		LEAF_DESCRIPTOR_STRIDE,
+		"bush_leaves",
+	);
+	grew |= grow_storage_buffer(
+		device,
+		queue,
+		&mut state.groves,
+		grove_bytes,
+		GROVE_RECORD_STRIDE,
+		"bush_groves",
+	);
+	state.bind_groups_stale |= grew;
+	for upload in &catalog.last_uploads {
+		write_span(
+			queue,
+			state.plants.as_ref(),
+			upload.plants,
+			&catalog.plants,
+			PLANT_DESCRIPTOR_STRIDE,
+			PlantDescriptor::to_std430_bytes,
+		);
+		write_span(
+			queue,
+			state.branches.as_ref(),
+			upload.branches,
+			&catalog.branches,
+			BRANCH_DESCRIPTOR_STRIDE,
+			BranchDescriptor::to_std430_bytes,
+		);
+		write_span(
+			queue,
+			state.leaves.as_ref(),
+			upload.leaves,
+			&catalog.leaves,
+			LEAF_DESCRIPTOR_STRIDE,
+			LeafDescriptor::to_std430_bytes,
+		);
+		if let Some(buffer) = state.groves.as_ref() {
+			if let Some(record) = catalog.groves.get(upload.grove_slot as usize) {
+				queue.write_buffer(
+					buffer,
+					u64::from(upload.grove_slot) * GROVE_RECORD_STRIDE,
+					&record.to_std430_bytes(),
+				);
+			}
+		}
+	}
+	state.generation = catalog.generation;
+	state.plant_count = catalog.resident_plants();
+	state.branch_count = catalog.resident_branches();
+	state.leaf_count = catalog.resident_leaves();
+	state.grove_count = catalog.groves.len();
+	state.span_capacity = state.span_capacity.max(catalog.groves.len() as u32);
+}
+
+fn grow_view_work_buffers(
+	device: &RenderDevice,
+	queue: &RenderQueue,
+	work: &mut ViewWork,
+	list_capacity: u32,
+	grove_slots: u32,
+) {
+	let list_bytes = u64::from(list_capacity.max(1)) * 4;
+	for list in work.wood_lists.iter_mut().chain(work.foliage_lists.iter_mut()) {
+		let mut current = Some(list.clone());
+		grow_storage_buffer(device, queue, &mut current, list_bytes, 4, "bush_lod_list");
+		if let Some(grown) = current {
+			*list = grown;
+		}
+	}
+	let span_bytes = u64::from(grove_slots.max(1)) * VISIBLE_SPAN_STRIDE;
+	let mut wood_spans = Some(work.wood_spans.clone());
+	grow_storage_buffer(
+		device,
+		queue,
+		&mut wood_spans,
+		span_bytes,
+		VISIBLE_SPAN_STRIDE,
+		"bush_wood_spans",
+	);
+	if let Some(grown) = wood_spans {
+		work.wood_spans = grown;
+	}
+	let mut leaf_spans = Some(work.leaf_spans.clone());
+	grow_storage_buffer(
+		device,
+		queue,
+		&mut leaf_spans,
+		span_bytes,
+		VISIBLE_SPAN_STRIDE,
+		"bush_leaf_spans",
+	);
+	if let Some(grown) = leaf_spans {
+		work.leaf_spans = grown;
+	}
 }
 
 fn write_span<T, const N: usize>(
@@ -574,7 +740,12 @@ fn write_span<T, const N: usize>(
 	queue.write_buffer(buffer, span.offset as u64 * stride, &bytes);
 }
 
-fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedBushField) -> GrassViewUniform {
+fn make_view_uniform(
+	view: &ExtractedView,
+	extracted: &ExtractedBushField,
+	catalog: &BushGroveCatalog,
+	capacity: u32,
+) -> GrassViewUniform {
 	let world_from_view = view.world_from_view.to_matrix();
 	let view_from_world = world_from_view.inverse();
 	let clip_from_world = view.clip_from_world.unwrap_or(view.clip_from_view * view_from_world);
@@ -619,10 +790,10 @@ fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedBushField) -> Gr
 			thresholds.min_height_px,
 		),
 		counts: Vec4::new(
-			extracted.branch_count as f32,
-			extracted.settings.max_per_lod as f32,
-			extracted.leaf_count as f32,
-			extracted.plant_count as f32,
+			catalog.groves.len() as f32,
+			capacity as f32,
+			catalog.resident_leaves() as f32,
+			catalog.resident_plants() as f32,
 		),
 		light_direction: extracted.light_direction.extend(0.0),
 	}
@@ -641,9 +812,11 @@ fn create_view_work(
 	plants: &Buffer,
 	branches: &Buffer,
 	leaves: &Buffer,
+	groves: &Buffer,
 	capacity: u32,
 	view: &ExtractedView,
 	extracted: &ExtractedBushField,
+	catalog: &BushGroveCatalog,
 ) -> ViewWork {
 	let view_uniform = device.create_buffer(&BufferDescriptor {
 		label: Some("bush_view_uniform"),
@@ -655,6 +828,44 @@ fn create_view_work(
 		label: Some("bush_counters"),
 		size: 64,
 		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+		mapped_at_creation: false,
+	});
+	let cull_meta = device.create_buffer(&BufferDescriptor {
+		label: Some("bush_cull_meta"),
+		size: 32,
+		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+		mapped_at_creation: false,
+	});
+	let span_slots = catalog.groves.len().max(1) as u64;
+	let span_bytes = span_slots * VISIBLE_SPAN_STRIDE;
+	let wood_spans = device.create_buffer(&BufferDescriptor {
+		label: Some("bush_wood_spans"),
+		size: span_bytes,
+		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+		mapped_at_creation: false,
+	});
+	let leaf_spans = device.create_buffer(&BufferDescriptor {
+		label: Some("bush_leaf_spans"),
+		size: span_bytes,
+		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+		mapped_at_creation: false,
+	});
+	let wood_dispatch = device.create_buffer(&BufferDescriptor {
+		label: Some("bush_wood_dispatch"),
+		size: DISPATCH_INDIRECT_STRIDE,
+		usage: BufferUsages::STORAGE
+			| BufferUsages::INDIRECT
+			| BufferUsages::COPY_DST
+			| BufferUsages::COPY_SRC,
+		mapped_at_creation: false,
+	});
+	let leaf_dispatch = device.create_buffer(&BufferDescriptor {
+		label: Some("bush_leaf_dispatch"),
+		size: DISPATCH_INDIRECT_STRIDE,
+		usage: BufferUsages::STORAGE
+			| BufferUsages::INDIRECT
+			| BufferUsages::COPY_DST
+			| BufferUsages::COPY_SRC,
 		mapped_at_creation: false,
 	});
 	let list_size = (capacity as u64).max(1) * 4;
@@ -693,9 +904,31 @@ fn create_view_work(
 	});
 	let foliage_params = [0u32, 1, 2].map(|lod| params_buffer(device, lod, 6, 4));
 
-	let uniform = make_view_uniform(view, extracted);
+	let uniform = make_view_uniform(view, extracted, catalog, capacity);
 	write_view_uniform(queue, &view_uniform, &uniform);
 
+	let cull_bg = device.create_bind_group(
+		Some("bush_cull_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.cull_layout),
+		&BindGroupEntries::sequential((
+			view_uniform.as_entire_buffer_binding(),
+			groves.as_entire_buffer_binding(),
+			cull_meta.as_entire_buffer_binding(),
+			wood_spans.as_entire_buffer_binding(),
+			leaf_spans.as_entire_buffer_binding(),
+		)),
+	);
+	let prefix_bg = device.create_bind_group(
+		Some("bush_prefix_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.prefix_layout),
+		&BindGroupEntries::sequential((
+			cull_meta.as_entire_buffer_binding(),
+			wood_spans.as_entire_buffer_binding(),
+			leaf_spans.as_entire_buffer_binding(),
+			wood_dispatch.as_entire_buffer_binding(),
+			leaf_dispatch.as_entire_buffer_binding(),
+		)),
+	);
 	let select_wood_bg = device.create_bind_group(
 		Some("bush_select_wood_bg"),
 		&pipeline_cache.get_bind_group_layout(&pipelines.select_wood_layout),
@@ -707,6 +940,8 @@ fn create_view_work(
 			wood_lists[0].as_entire_buffer_binding(),
 			wood_lists[1].as_entire_buffer_binding(),
 			wood_lists[2].as_entire_buffer_binding(),
+			wood_spans.as_entire_buffer_binding(),
+			cull_meta.as_entire_buffer_binding(),
 		)),
 	);
 	let select_foliage_bg = device.create_bind_group(
@@ -721,6 +956,8 @@ fn create_view_work(
 			foliage_lists[0].as_entire_buffer_binding(),
 			foliage_lists[1].as_entire_buffer_binding(),
 			foliage_lists[2].as_entire_buffer_binding(),
+			leaf_spans.as_entire_buffer_binding(),
+			cull_meta.as_entire_buffer_binding(),
 		)),
 	);
 	let finalize_bg = device.create_bind_group(
@@ -763,11 +1000,18 @@ fn create_view_work(
 	ViewWork {
 		view_uniform,
 		counters,
+		cull_meta,
+		wood_spans,
+		leaf_spans,
+		wood_dispatch,
+		leaf_dispatch,
 		wood_lists,
 		foliage_lists,
 		indirect,
 		wood_params,
 		foliage_params,
+		cull_bg,
+		prefix_bg,
 		select_wood_bg,
 		select_foliage_bg,
 		finalize_bg,
@@ -776,6 +1020,98 @@ fn create_view_work(
 		cpu_wood_counts: [0; BUSH_LOD_COUNT],
 		cpu_foliage_counts: [0; BUSH_LOD_COUNT],
 	}
+}
+
+fn rebind_bush_work(
+	device: &RenderDevice,
+	pipeline_cache: &PipelineCache,
+	pipelines: &BushPipelines,
+	work: &mut ViewWork,
+	plants: &Buffer,
+	branches: &Buffer,
+	leaves: &Buffer,
+	groves: &Buffer,
+) {
+	work.cull_bg = device.create_bind_group(
+		Some("bush_cull_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.cull_layout),
+		&BindGroupEntries::sequential((
+			work.view_uniform.as_entire_buffer_binding(),
+			groves.as_entire_buffer_binding(),
+			work.cull_meta.as_entire_buffer_binding(),
+			work.wood_spans.as_entire_buffer_binding(),
+			work.leaf_spans.as_entire_buffer_binding(),
+		)),
+	);
+	work.prefix_bg = device.create_bind_group(
+		Some("bush_prefix_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.prefix_layout),
+		&BindGroupEntries::sequential((
+			work.cull_meta.as_entire_buffer_binding(),
+			work.wood_spans.as_entire_buffer_binding(),
+			work.leaf_spans.as_entire_buffer_binding(),
+			work.wood_dispatch.as_entire_buffer_binding(),
+			work.leaf_dispatch.as_entire_buffer_binding(),
+		)),
+	);
+	work.select_wood_bg = device.create_bind_group(
+		Some("bush_select_wood_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.select_wood_layout),
+		&BindGroupEntries::sequential((
+			work.view_uniform.as_entire_buffer_binding(),
+			plants.as_entire_buffer_binding(),
+			branches.as_entire_buffer_binding(),
+			work.counters.as_entire_buffer_binding(),
+			work.wood_lists[0].as_entire_buffer_binding(),
+			work.wood_lists[1].as_entire_buffer_binding(),
+			work.wood_lists[2].as_entire_buffer_binding(),
+			work.wood_spans.as_entire_buffer_binding(),
+			work.cull_meta.as_entire_buffer_binding(),
+		)),
+	);
+	work.select_foliage_bg = device.create_bind_group(
+		Some("bush_select_foliage_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.select_foliage_layout),
+		&BindGroupEntries::sequential((
+			work.view_uniform.as_entire_buffer_binding(),
+			plants.as_entire_buffer_binding(),
+			branches.as_entire_buffer_binding(),
+			leaves.as_entire_buffer_binding(),
+			work.counters.as_entire_buffer_binding(),
+			work.foliage_lists[0].as_entire_buffer_binding(),
+			work.foliage_lists[1].as_entire_buffer_binding(),
+			work.foliage_lists[2].as_entire_buffer_binding(),
+			work.leaf_spans.as_entire_buffer_binding(),
+			work.cull_meta.as_entire_buffer_binding(),
+		)),
+	);
+	work.wood_draw_bgs = [0, 1, 2].map(|lod| {
+		device.create_bind_group(
+			Some("bush_wood_draw_bg"),
+			&pipeline_cache.get_bind_group_layout(&pipelines.wood_draw_layout),
+			&BindGroupEntries::sequential((
+				work.view_uniform.as_entire_buffer_binding(),
+				plants.as_entire_buffer_binding(),
+				branches.as_entire_buffer_binding(),
+				work.wood_lists[lod].as_entire_buffer_binding(),
+				work.wood_params[lod].as_entire_buffer_binding(),
+			)),
+		)
+	});
+	work.foliage_draw_bgs = [0, 1, 2].map(|lod| {
+		device.create_bind_group(
+			Some("bush_foliage_draw_bg"),
+			&pipeline_cache.get_bind_group_layout(&pipelines.foliage_draw_layout),
+			&BindGroupEntries::sequential((
+				work.view_uniform.as_entire_buffer_binding(),
+				plants.as_entire_buffer_binding(),
+				branches.as_entire_buffer_binding(),
+				leaves.as_entire_buffer_binding(),
+				work.foliage_lists[lod].as_entire_buffer_binding(),
+				work.foliage_params[lod].as_entire_buffer_binding(),
+			)),
+		)
+	});
 }
 
 fn params_buffer(device: &RenderDevice, lod: u32, index_count: u32, vertex_count: u32) -> Buffer {
@@ -806,9 +1142,14 @@ fn cpu_fill_lists<'a>(
 		let Some(work) = state.views.get_mut(&view.retained_view_entity) else {
 			continue;
 		};
-		let uniform = make_view_uniform(view, extracted);
+		let uniform = make_view_uniform(view, extracted, catalog, state.list_capacity.max(1));
 		let selector = BushSelector::from_view(uniform, &extracted.settings);
-		let lists = selector.compact(&catalog.plants, &catalog.branches, &catalog.leaves);
+		let lists = selector.compact_groves(
+			&catalog.groves,
+			&catalog.plants,
+			&catalog.branches,
+			&catalog.leaves,
+		);
 		for lod in 0..BUSH_LOD_COUNT {
 			if !lists.wood[lod].is_empty() {
 				let bytes: Vec<u8> = lists.wood[lod].iter().flat_map(|i| i.to_le_bytes()).collect();
@@ -838,9 +1179,15 @@ fn record_cpu_stats<'a>(
 		if !view_submits_bush(view, extracted.shadow_mode) {
 			continue;
 		}
-		let uniform = make_view_uniform(view, extracted);
+		let uniform =
+			make_view_uniform(view, extracted, catalog, extracted.settings.max_per_lod.max(1));
 		let selector = BushSelector::from_view(uniform, &extracted.settings);
-		let lists = selector.compact(&catalog.plants, &catalog.branches, &catalog.leaves);
+		let lists = selector.compact_groves(
+			&catalog.groves,
+			&catalog.plants,
+			&catalog.branches,
+			&catalog.leaves,
+		);
 		record_lists(extracted, &lists, stats.as_deref_mut());
 		break;
 	}
@@ -872,7 +1219,6 @@ fn bush_compute(
 	pipeline_cache: Res<PipelineCache>,
 	state: Option<Res<BushGpuState>>,
 	capability: Option<Res<GrassGpuCapability>>,
-	extracted: Option<Res<ExtractedBushField>>,
 	device: Res<RenderDevice>,
 	mut encode: Option<ResMut<GroveEncodeStats>>,
 ) {
@@ -885,15 +1231,18 @@ fn bush_compute(
 	let Some(capability) = capability else {
 		return;
 	};
-	let Some(extracted) = extracted else {
-		return;
-	};
-	if capability.mode != GrassGpuMode::GpuDriven || extracted.plant_count == 0 {
+	if capability.mode != GrassGpuMode::GpuDriven || state.grove_count == 0 {
 		return;
 	}
-	match pipeline_cache.get_compute_pipeline_state(pipelines.select_wood) {
+	match pipeline_cache.get_compute_pipeline_state(pipelines.cull_groves) {
 		CachedPipelineState::Ok(_) => {}
 		_ => return,
+	};
+	let Some(cull_groves) = pipeline_cache.get_compute_pipeline(pipelines.cull_groves) else {
+		return;
+	};
+	let Some(prefix_spans) = pipeline_cache.get_compute_pipeline(pipelines.prefix_spans) else {
+		return;
 	};
 	let Some(select_wood) = pipeline_cache.get_compute_pipeline(pipelines.select_wood) else {
 		return;
@@ -906,29 +1255,35 @@ fn bush_compute(
 	};
 
 	let max_dim = device.limits().max_compute_workgroups_per_dimension.max(1);
-	let wood = select_dispatch_size(extracted.branch_count, SELECT_WORKGROUP, max_dim);
-	let leaf = select_dispatch_size(extracted.leaf_count, SELECT_WORKGROUP, max_dim);
+	let groves = select_dispatch_size(state.grove_count as u32, SELECT_WORKGROUP, max_dim);
 	for work in state.views.values() {
 		render_context.command_encoder().clear_buffer(&work.counters, 0, None);
+		render_context.command_encoder().clear_buffer(&work.cull_meta, 0, None);
 		{
 			let mut pass =
 				render_context.command_encoder().begin_compute_pass(&ComputePassDescriptor {
 					label: Some("bush_select"),
 					..default()
 				});
+			pass.set_bind_group(0, &work.cull_bg, &[]);
+			pass.set_pipeline(cull_groves);
+			pass.dispatch_workgroups(groves.x, groves.y, groves.z);
+			pass.set_bind_group(0, &work.prefix_bg, &[]);
+			pass.set_pipeline(prefix_spans);
+			pass.dispatch_workgroups(1, 1, 1);
 			pass.set_bind_group(0, &work.select_wood_bg, &[]);
 			pass.set_pipeline(select_wood);
-			pass.dispatch_workgroups(wood.x, wood.y, wood.z);
+			pass.dispatch_workgroups_indirect(&work.wood_dispatch, 0);
 			pass.set_bind_group(0, &work.select_foliage_bg, &[]);
 			pass.set_pipeline(select_foliage);
-			pass.dispatch_workgroups(leaf.x, leaf.y, leaf.z);
+			pass.dispatch_workgroups_indirect(&work.leaf_dispatch, 0);
 			pass.set_bind_group(0, &work.finalize_bg, &[]);
 			pass.set_pipeline(finalize);
 			pass.dispatch_workgroups(1, 1, 1);
 		}
 		if let Some(encode) = encode.as_deref_mut() {
 			encode.passes += 1;
-			encode.dispatches += 3;
+			encode.dispatches += 5;
 		}
 	}
 }
