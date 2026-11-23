@@ -12,17 +12,74 @@ import math
 from pathlib import Path
 
 
-# Area 1746 / published longwalk-checkpoints-r2 start. The previous native
-# route held x=-4950, about 7 km west of this neighborhood.
+# Area 1746 is the published longwalk-checkpoints-r2 origin. Straight +Z from
+# that spawn is not walkable: the native scout at 3dbe964 stuck 9.486 m short of
+# (1746.8, 1087.9) with the player airborne (issuecomment-7090987541).
+#
+# Grounded player positions below are the v0.1.5-traces ledger
+# e9542c4_20261117_m4pro-macmini_longwalk-checkpoints-r2.csv (source e9542c4).
+# That walk went northeast along a ridge, not +Z. Stop at outbound-08, the last
+# clean outbound sample before obstacle sidesteps, airborne detours, and Home.
+# The previous native 15-waypoint grove walk held x=-4950, about 7 km west.
 AREA_1746 = (1746.8, 1037.9)
 START = AREA_1746
-X = START[0]
-Z0 = START[1]
-BANDS_M = (50, 200, 450, 900)
+GOTO_TIMEOUT_S = 100
+GOTO_RADIUS_M = 6
+# Ordinary walk, matching the completed x=-4950 grove route. Radius 6 covers
+# the ~30 m weave between published samples; radius 3 is what failed on +Z.
+LONGWALK_TRACES = (
+    "https://github.com/ramate-io/maybraid/releases/download/v0.1.5-traces/"
+    "e9542c4_20261117_m4pro-macmini_longwalk-checkpoints-r2.csv"
+)
+FAILED_PLUS_Z_FIRST = (1746.8, 1087.9)
+PRESENT_RADIUS_M = 1000.0
+
+# (x, z, census). Names match the published CSV checkpoint / path_milestone.
+APPROACH = (
+    (1760.535, 1060.718, False),  # longwalk-probe-forward, 26.6 m path
+    (1833.129, 1187.796, True),  # active_grounded_200m
+    (1833.985, 1190.646, False),  # longwalk-outbound-forward-01
+    (1872.869, 1328.336, True),  # active_grounded_400m
+    (1880.571, 1342.119, False),  # longwalk-outbound-forward-02
+    (1941.966, 1507.476, True),  # active_grounded_600m / outbound-forward-03
+)
+CULL = (
+    (1955.541, 1572.125, False),  # longwalk-outbound-forward-04
+    (1879.133, 1596.722, False),  # longwalk-ridge-lateral-probe
+    (1882.193, 1605.693, False),  # active_grounded_800m
+    (1910.548, 1728.830, False),  # longwalk-outbound-north-01
+    (1924.417, 1749.852, True),  # active_grounded_1000m
+    (1984.378, 1844.725, False),  # longwalk-outbound-forward-05
+    (1948.433, 1866.221, False),  # longwalk-ridge-side-step-01
+    (1973.590, 1902.992, False),  # active_grounded_1200m
+    (2002.410, 1940.022, False),  # longwalk-ridge-forward-after-step
+    (2081.021, 2054.770, False),  # active_grounded_1400m
+    (2113.624, 2107.524, False),  # longwalk-outbound-forward-07
+    (2178.791, 2216.279, False),  # longwalk-outbound-forward-08, 1255 m net
+)
+REENTRY = tuple((x, z, False) for x, z, _ in reversed(CULL[:-1])) + (
+    (APPROACH[-1][0], APPROACH[-1][1], False),
+)
 
 
-def z_at(delta_m):
-    return Z0 + delta_m
+def xz_of(point):
+    return [point[0], point[1]]
+
+
+def hypot_xz(a, b):
+    return math.dist((a[0], a[1]), (b[0], b[1]))
+
+
+def polyline_m(points):
+    return sum(hypot_xz(a, b) for a, b in zip(points, points[1:]))
+
+
+def goto_points():
+    return [START] + [p[:2] for p in APPROACH + CULL + REENTRY]
+
+
+def planned_distance_m():
+    return polyline_m(goto_points())
 
 
 def route(census=False):
@@ -42,33 +99,38 @@ def route(census=False):
             rows.append(dict(cmd="console", line="diagnostics memory"))
             rows.append(dict(cmd="wait", secs=2))
 
-    def maybe_band_census(delta_m):
-        if census and delta_m in BANDS_M:
-            rows.append(dict(cmd="console",
-                             line="diagnostics memory"))
-            rows.append(dict(cmd="wait", secs=2))
-
-    def walk(name, deltas):
+    def walk(name, points):
         mark(name, "start")
-        for delta_m in deltas:
-            rows.append(dict(cmd="goto", xz=[X, z_at(delta_m)], timeout=100,
-                             radius=3, sprint=False))
-            maybe_band_census(delta_m)
+        for x, z, snapshot in points:
+            rows.append(dict(cmd="goto", xz=[x, z], timeout=GOTO_TIMEOUT_S,
+                             radius=GOTO_RADIUS_M, sprint=False))
+            if census and snapshot:
+                rows.append(dict(cmd="console", line="diagnostics memory"))
+                rows.append(dict(cmd="wait", secs=2))
         mark(name, "end")
 
     wait("loaded", 8)
-    walk("approach", [50, 200, 450, 600])
+    walk("approach", APPROACH)
     rows.append(dict(cmd="console", line="diagnostics view 2.094395 0.47"))
     wait("steady-warmup", 3)
     wait("steady", 15)
-    walk("cull", [900, 1100, 1300, 1500, 1700, 1800])
+    walk("cull", CULL)
     wait("culled", 8)
-    walk("reentry", [1600, 1400, 1200, 1000, 800, 600])
+    walk("reentry", REENTRY)
     rows.append(dict(cmd="console", line="diagnostics view 2.094395 0.47"))
     wait("returned-warmup", 3)
     wait("returned", 15)
     rows.append(dict(cmd="quit"))
     return rows
+
+
+def script_header():
+    return (
+        "# Agent API 10+: Area 1746 ridge from published longwalk-checkpoints-r2 "
+        f"({LONGWALK_TRACES}); not +Z. Native +Z scout stuck 9.486 m short of "
+        f"{FAILED_PLUS_Z_FIRST[0]},{FAILED_PLUS_Z_FIRST[1]}. "
+        f"radius={GOTO_RADIUS_M} sprint=false. Scout before pairing.\n"
+    )
 
 
 def inspect(path):
@@ -112,7 +174,7 @@ def inspect(path):
     return dict(phases=phases, failures=failures, incomplete_phases=missing,
                 trailing_partial_line=not raw.endswith("\n"), quit_seen=quit_seen,
                 complete=not failures and not missing,
-                planned_distance_m=3000,
+                planned_distance_m=round(planned_distance_m(), 1),
                 limitation="Sampled path length is not a content-equivalence or culling proof. "
                 "Inspect tile identities, collision/support, foreground, actual present mode, "
                 "and descriptor admission separately. Loading starts before script playback; "
@@ -131,10 +193,7 @@ def main():
     args = parser.parse_args()
     if args.command == "prepare":
         with args.output.open("x") as stream:
-            stream.write(
-                "# Agent API 10+: Area 1746 (1746.8, 1037.9) 3 km walk along +Z; "
-                "overlay longwalk-checkpoints-r2 if the native checker has that script.\n"
-            )
+            stream.write(script_header())
             for row in route(args.census):
                 stream.write(json.dumps(row, separators=(",", ":")) + "\n")
     else:
