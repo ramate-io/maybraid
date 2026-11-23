@@ -17,6 +17,13 @@ class GroveLifecycleRouteTests(unittest.TestCase):
     def gotos(self, census=False):
         return [row for row in lifecycle.route(census) if row["cmd"] == "goto"]
 
+    def test_health_fixture_follows_wait_for_playing(self):
+        rows = lifecycle.route()
+        wait_for = next(i for i, row in enumerate(rows) if row["cmd"] == "wait_for")
+        self.assertEqual(rows[wait_for + 1],
+                         dict(cmd="console", line="diagnostics health 1000000"))
+        self.assertLess(wait_for, next(i for i, row in enumerate(rows) if row["cmd"] == "goto"))
+
     def test_starts_at_area_1746(self):
         start = lifecycle.route()[0]
         self.assertEqual(start["cmd"], "start")

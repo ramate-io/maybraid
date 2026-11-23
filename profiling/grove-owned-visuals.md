@@ -53,7 +53,7 @@ Immediate verification is bound to the [published fork's surface configuration](
 
 ## Native rerun spec (grove-owned GPU vs legacy)
 
-Run both arms on the same machine, same binary SHA, shadows off, 1920×1080 Metal Immediate, VSync off. Do not admit a pair if Immediate falls back to Fifo. Hold NPC activity fixed or mask it in the receipts (the first native pair on `f192490` had different NPC counts along the same path).
+Run both arms on the same machine, same binary SHA, shadows off, 1920×1080 Metal Immediate, VSync off. Do not admit a pair if Immediate falls back to Fifo. Keep ordinary world NPC streaming (no host/body/brain cull, no extra packs). Hold host/body/brain counts fixed or mask them in the receipts (the first native pair on `f192490` had different NPC counts along the same path). Walking reruns use the disclosed agent fixture `diagnostics health 1000000` once after `wait_for` playing so a Raider kill cannot abort the pair; it is not invulnerability and does not disable combat.
 
 1. **Checkpoint census before timing.** `profiling/grove-lifecycle.py prepare --census PATH` snapshots the published path milestones at ~200 / 400 / 600 / 1000 m along the ridge (there is no walkable 50 m due-+Z sample). Record per-band instance counts (trees / bushes / grass, layers, sizes) versus legacy. GPU far bands must stay within about 20% of legacy High / Medium / Low; understory and grass must still be present at 200 m+ (not the old 90–110 m shader cutoff).
 2. **Order pair.** One pass legacy then GPU, then a reversed pass GPU then legacy. Same shadows (`MAYBRAID_SHADOWS=off`), same window, same route script.

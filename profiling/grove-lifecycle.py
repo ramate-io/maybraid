@@ -86,6 +86,11 @@ def route(census=False):
     rows = [dict(cmd="start", xz=list(START)),
             dict(cmd="console", line="diagnostics on"),
             dict(cmd="wait_for", flow="world", pause="playing", timeout=90),
+            # Published health fixture: one current/max raise so a Raider kill
+            # cannot abort the pair. Threat, projectiles, and damage stay live.
+            # Requires --agent-diagnostics / MAYBRAID_AGENT_DIAGNOSTICS=1.
+            # Not invulnerability; does not apply to a replacement life.
+            dict(cmd="console", line="diagnostics health 1000000"),
             dict(cmd="console", line="sky noon")]
 
     def mark(name, side):
@@ -129,7 +134,9 @@ def script_header():
         "# Agent API 10+: Area 1746 ridge from published longwalk-checkpoints-r2 "
         f"({LONGWALK_TRACES}); not +Z. Native +Z scout stuck 9.486 m short of "
         f"{FAILED_PLUS_Z_FIRST[0]},{FAILED_PLUS_Z_FIRST[1]}. "
-        f"radius={GOTO_RADIUS_M} sprint=false. Scout before pairing.\n"
+        f"radius={GOTO_RADIUS_M} sprint=false. "
+        "Disclosed diagnostics health 1000000 fixture after wait_for playing; "
+        "ordinary world NPC streaming, no extra packs. Scout before pairing.\n"
     )
 
 
