@@ -43,11 +43,14 @@ use vegetation_shaders::wesl::{
 use crate::capability::{GrassGpuCapability, GrassGpuMode};
 use crate::catalog::{select_dispatch_size, CatalogApply, GroveEncodeStats, GroveId};
 use crate::diagnostics::GrassFieldStats;
-use crate::gpu_arena::{grow_storage_buffer, upload_visible_spans};
+use crate::gpu_arena::{
+	encode_arena_copies, grow_list_buffers, grow_storage_buffer, stage_buffer_write,
+	upload_visible_spans, PendingBufferCopy, PendingBufferWrite, INITIAL_LIST_ITEMS,
+};
 use crate::grove_catalog::{GrassCatalogOps, GrassGroveCatalog};
 use crate::grove_cull::cull_grass_patches;
 use crate::grove_record::GroveVisibleSpan;
-use crate::grove_retain::{remember_bands, GroveSubmit, RetainedGroveFrame};
+use crate::grove_retain::{remember_bands, GroveRetainPolicy, GroveSubmit, RetainedGroveFrame};
 use crate::plugin::{ExtractedGrassField, GrassFieldPresenter};
 use crate::select::GrassSelector;
 use crate::shaders::{BLADE_SHADER, FINALIZE_SHADER, SELECT_SHADER};
@@ -269,6 +272,8 @@ struct GrassGpuState {
 	blades: Option<Buffer>,
 	blade_count: u32,
 	generation: u64,
+	pending_copies: Vec<PendingBufferCopy>,
+	pending_writes: Vec<PendingBufferWrite>,
 	views: std::collections::HashMap<RetainedViewEntity, ViewWork>,
 }
 
@@ -290,6 +295,7 @@ struct ViewWork {
 	last_bands: std::collections::HashMap<GroveId, u32>,
 	visible_blades: u32,
 	span_count: u32,
+	list_capacity: u32,
 }
 
 fn prepare_grass_buffers(
@@ -305,6 +311,7 @@ fn prepare_grass_buffers(
 	mut stats: Option<ResMut<GrassFieldStats>>,
 	mut encode: ResMut<GroveEncodeStats>,
 	mut state: ResMut<GrassGpuState>,
+	policy: Option<Res<GroveRetainPolicy>>,
 ) {
 	let Some(extracted) = extracted else {
 		return;
@@ -331,17 +338,19 @@ fn prepare_grass_buffers(
 	encode.span_uploads = 0;
 	encode.retained_clean = 0;
 
+	let mut pending_copies = std::mem::take(&mut state.pending_copies);
+	let mut pending_writes = std::mem::take(&mut state.pending_writes);
 	let mut grew = false;
 	if catalog.last_writes > 0 {
 		let blade_bytes =
 			(catalog.blades.len() as u64 * BLADE_DESCRIPTOR_STRIDE).max(BLADE_DESCRIPTOR_STRIDE);
 		grew = grow_storage_buffer(
 			&device,
-			&queue,
 			&mut state.blades,
 			blade_bytes,
 			BLADE_DESCRIPTOR_STRIDE,
 			"grass_blades",
+			&mut pending_copies,
 		);
 		{
 			for upload in &catalog.last_uploads {
@@ -356,10 +365,12 @@ fn prepare_grass_buffers(
 						.flat_map(|blade| blade.to_std430_bytes())
 						.collect();
 					if let Some(buffer) = state.blades.as_ref() {
-						queue.write_buffer(
+						stage_buffer_write(
+							&device,
 							buffer,
 							u64::from(upload.blades.offset) * BLADE_DESCRIPTOR_STRIDE,
 							&bytes,
+							&mut pending_writes,
 						);
 					}
 				}
@@ -370,13 +381,17 @@ fn prepare_grass_buffers(
 	}
 	if catalog.is_empty() {
 		state.views.clear();
+		state.pending_copies = pending_copies;
+		state.pending_writes = pending_writes;
 		return;
 	}
 
 	let Some(blades) = state.blades.clone() else {
+		state.pending_copies = pending_copies;
+		state.pending_writes = pending_writes;
 		return;
 	};
-	let capacity = extracted.settings.max_per_lod;
+	let force_rebuild = policy.map(|policy| policy.forces_rebuild()).unwrap_or(false);
 	let mut live = std::collections::HashSet::new();
 	let mut missing = Vec::new();
 	for view in &views {
@@ -396,7 +411,6 @@ fn prepare_grass_buffers(
 				&pipeline_cache,
 				&pipelines,
 				&blades,
-				capacity,
 				view,
 				&extracted,
 			);
@@ -411,19 +425,27 @@ fn prepare_grass_buffers(
 		let Some(work) = state.views.get_mut(&view.retained_view_entity) else {
 			continue;
 		};
-		let span_grew =
-			stamp_grass_view(&device, &queue, view, &extracted, &catalog, work, &mut encode);
-		if grew {
-			work.dirty = true;
-		}
-		if grew || span_grew {
+		let (span_grew, list_grew) = stamp_grass_view(
+			&device,
+			&queue,
+			view,
+			&extracted,
+			&catalog,
+			work,
+			&mut encode,
+			force_rebuild,
+			&mut pending_copies,
+		);
+		if grew || span_grew || list_grew {
 			rebind_grass_select(&device, &pipeline_cache, &pipelines, &blades, work);
 		}
 	}
+	state.pending_copies = pending_copies;
+	state.pending_writes = pending_writes;
 
 	if capability.mode == GrassGpuMode::CpuSelect {
 		cpu_fill_lists(
-			&queue,
+			&device,
 			&mut state,
 			&extracted,
 			&catalog,
@@ -500,7 +522,6 @@ fn create_view_work(
 	pipeline_cache: &PipelineCache,
 	pipelines: &GrassPipelines,
 	blades: &Buffer,
-	capacity: u32,
 	view: &ExtractedView,
 	extracted: &ExtractedGrassField,
 ) -> ViewWork {
@@ -516,12 +537,12 @@ fn create_view_work(
 		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
 		mapped_at_creation: false,
 	});
-	let list_size = (capacity as u64).max(1) * 4;
+	let list_size = u64::from(INITIAL_LIST_ITEMS) * 4;
 	let lists = [0, 1, 2].map(|_| {
 		device.create_buffer(&BufferDescriptor {
 			label: Some("grass_lod_list"),
 			size: list_size,
-			usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+			usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
 			mapped_at_creation: false,
 		})
 	});
@@ -609,6 +630,7 @@ fn create_view_work(
 		last_bands: std::collections::HashMap::new(),
 		visible_blades: 0,
 		span_count: 0,
+		list_capacity: INITIAL_LIST_ITEMS,
 	}
 }
 
@@ -624,24 +646,26 @@ fn stamp_grass_view(
 	catalog: &GrassGroveCatalog,
 	work: &mut ViewWork,
 	encode: &mut GroveEncodeStats,
-) -> bool {
+	force_rebuild: bool,
+	pending_copies: &mut Vec<PendingBufferCopy>,
+) -> (bool, bool) {
 	let thresholds = if extracted.grove_residency {
 		LodThresholds::grove_grass()
 	} else {
 		extracted.settings.lod
 	};
 	let probe = make_view_uniform(view, extracted);
-	let groves = if extracted.grove_residency {
+	let mut groves = if extracted.grove_residency {
 		cull_grass_patches(&probe, thresholds, catalog.live_patches(), &|id| {
 			work.last_bands.get(&id).copied()
 		})
 	} else {
 		Vec::new()
 	};
+	catalog.stamp_content_gen(&mut groves);
 	remember_bands(&mut work.last_bands, &groves);
 	let submit = GroveSubmit::plan(
 		&work.retained,
-		catalog.generation,
 		view.viewport.z,
 		view.viewport.w,
 		fov_y(&view.clip_from_view),
@@ -650,6 +674,7 @@ fn stamp_grass_view(
 		extracted.grove_residency,
 		extracted.blade_count,
 		0,
+		force_rebuild,
 	);
 	let _span = if submit.dirty {
 		bevy::log::info_span!("grove rebuild").entered()
@@ -665,11 +690,22 @@ fn stamp_grass_view(
 	work.dirty = stamped.dirty;
 	work.visible_blades = stamped.work_branches;
 	work.span_count = stamped.span_count;
+	let list_grew = grow_list_buffers(
+		device,
+		work.lists.iter_mut(),
+		stamped.work_branches.max(1),
+		"grass_instance_list",
+		pending_copies,
+	);
+	if list_grew {
+		work.list_capacity = (work.lists[0].size() / 4) as u32;
+	}
 	let mut uniform = make_view_uniform(view, extracted);
 	uniform.counts.x = stamped.work_branches as f32;
+	uniform.counts.y = work.list_capacity as f32;
 	uniform.light_direction.w = stamped.span_count as f32;
 	write_view_uniform(queue, &work.view_uniform, &uniform);
-	stamped.span_grew
+	(stamped.span_grew, list_grew)
 }
 
 fn rebind_grass_select(
@@ -707,7 +743,7 @@ fn rebind_grass_select(
 }
 
 fn cpu_fill_lists<'a>(
-	queue: &RenderQueue,
+	device: &RenderDevice,
 	state: &mut GrassGpuState,
 	extracted: &ExtractedGrassField,
 	catalog: &GrassGroveCatalog,
@@ -735,7 +771,7 @@ fn cpu_fill_lists<'a>(
 		for (lod, indices) in lists.indices.iter().enumerate() {
 			if !indices.is_empty() {
 				let bytes: Vec<u8> = indices.iter().flat_map(|i| i.to_le_bytes()).collect();
-				queue.write_buffer(&work.lists[lod], 0, &bytes);
+				stage_buffer_write(device, &work.lists[lod], 0, &bytes, &mut state.pending_writes);
 			}
 			work.cpu_instance_counts[lod] = indices.len() as u32;
 		}
@@ -782,16 +818,23 @@ fn grass_compute(
 	mut render_context: RenderContext,
 	pipelines: Option<Res<GrassPipelines>>,
 	pipeline_cache: Res<PipelineCache>,
-	state: Option<Res<GrassGpuState>>,
+	mut state: Option<ResMut<GrassGpuState>>,
 	capability: Option<Res<GrassGpuCapability>>,
 	extracted: Option<Res<ExtractedGrassField>>,
 	device: Res<RenderDevice>,
 	mut encode: Option<ResMut<GroveEncodeStats>>,
 ) {
+	if let Some(state) = state.as_deref_mut() {
+		encode_arena_copies(
+			render_context.command_encoder(),
+			&mut state.pending_copies,
+			&mut state.pending_writes,
+		);
+	}
 	let Some(pipelines) = pipelines else {
 		return;
 	};
-	let Some(state) = state else {
+	let Some(state) = state.as_deref() else {
 		return;
 	};
 	let Some(capability) = capability else {

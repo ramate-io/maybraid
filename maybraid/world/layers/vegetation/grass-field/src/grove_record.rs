@@ -17,6 +17,8 @@ pub struct WoodyGroveRecord {
 	pub leaf_count: u32,
 	pub seed: u32,
 	pub flags: u32,
+	/// CPU retain fingerprint. Not packed into [`Self::to_std430_bytes`].
+	pub content_gen: u64,
 }
 
 /// WGSL `array<WoodyGroveRecord>` stride (std430 rounds a 56 B struct up to 16 B).
@@ -93,6 +95,7 @@ pub struct VisibleGrove {
 	pub id: GroveId,
 	pub lod: u32,
 	pub span: GroveVisibleSpan,
+	pub content_gen: u64,
 }
 
 fn pack_vec3(out: &mut [u8], offset: usize, v: Vec3) {

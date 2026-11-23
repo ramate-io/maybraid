@@ -2,6 +2,10 @@
 
 use std::collections::HashMap;
 
+use bevy::prelude::*;
+use bevy::render::extract_resource::ExtractResource;
+use bevy::render::RenderApp;
+
 use crate::catalog::{GroveEncodeStats, GroveId};
 use crate::grove_record::VisibleGrove;
 
@@ -9,14 +13,29 @@ use crate::grove_record::VisibleGrove;
 pub const GROVE_RETAIN_ENV: &str = "MAYBRAID_GROVE_RETAIN";
 pub const GROVE_RETAIN_FORCE_REBUILD: &str = "force-rebuild";
 
-pub fn grove_retain_force_rebuild() -> bool {
-	std::env::var(GROVE_RETAIN_ENV).ok().as_deref() == Some(GROVE_RETAIN_FORCE_REBUILD)
+/// Startup snapshot of [`GROVE_RETAIN_ENV`]. Prepare reads this, not the env.
+#[derive(Resource, Clone, Copy, Debug, Default, ExtractResource, PartialEq, Eq)]
+#[extract_app(RenderApp)]
+pub struct GroveRetainPolicy {
+	force_rebuild: bool,
 }
 
-/// Last visible (grove_id, lod, span) set plus the view/policy fingerprint.
+impl GroveRetainPolicy {
+	pub fn from_env() -> Self {
+		Self {
+			force_rebuild: std::env::var(GROVE_RETAIN_ENV).ok().as_deref()
+				== Some(GROVE_RETAIN_FORCE_REBUILD),
+		}
+	}
+
+	pub fn forces_rebuild(self) -> bool {
+		self.force_rebuild
+	}
+}
+
+/// Last visible (grove_id, lod, span, content_gen) set plus the view fingerprint.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RetainedGroveFrame {
-	pub generation: u64,
 	pub viewport_w: u32,
 	pub viewport_h: u32,
 	pub fov_bits: u32,
@@ -26,7 +45,6 @@ pub struct RetainedGroveFrame {
 
 impl RetainedGroveFrame {
 	pub fn capture(
-		generation: u64,
 		viewport_w: u32,
 		viewport_h: u32,
 		fov_y: f32,
@@ -34,7 +52,6 @@ impl RetainedGroveFrame {
 		groves: Vec<VisibleGrove>,
 	) -> Self {
 		Self {
-			generation,
 			viewport_w,
 			viewport_h,
 			fov_bits: fov_y.to_bits(),
@@ -43,8 +60,8 @@ impl RetainedGroveFrame {
 		}
 	}
 
-	pub fn is_clean(&self, next: &Self) -> bool {
-		!grove_retain_force_rebuild() && self == next
+	pub fn is_clean(&self, next: &Self, force_rebuild: bool) -> bool {
+		!force_rebuild && self == next
 	}
 
 	pub fn work_counts(&self) -> (u32, u32) {
@@ -73,7 +90,6 @@ impl GroveSubmit {
 	/// The non-grove path is always dirty: GPU select still uses the live camera.
 	pub fn plan(
 		previous: &RetainedGroveFrame,
-		generation: u64,
 		viewport_w: u32,
 		viewport_h: u32,
 		fov_y: f32,
@@ -82,9 +98,9 @@ impl GroveSubmit {
 		grove_residency: bool,
 		fallback_branches: u32,
 		fallback_leaves: u32,
+		force_rebuild: bool,
 	) -> Self {
-		let frame =
-			RetainedGroveFrame::capture(generation, viewport_w, viewport_h, fov_y, card_m, groves);
+		let frame = RetainedGroveFrame::capture(viewport_w, viewport_h, fov_y, card_m, groves);
 		if !grove_residency {
 			return Self {
 				frame,
@@ -94,7 +110,7 @@ impl GroveSubmit {
 				span_count: 0,
 			};
 		}
-		let dirty = !previous.is_clean(&frame);
+		let dirty = !previous.is_clean(&frame, force_rebuild);
 		let (work_branches, work_leaves) = frame.work_counts();
 		let span_count = frame.groves.len() as u32;
 		Self { frame, dirty, work_branches, work_leaves, span_count }
@@ -203,26 +219,50 @@ mod tests {
 				leaf_count: 8,
 				lod,
 			},
+			content_gen: 1,
 		}
+	}
+
+	fn plan(
+		previous: &RetainedGroveFrame,
+		groves: Vec<VisibleGrove>,
+		residency: bool,
+	) -> GroveSubmit {
+		GroveSubmit::plan(previous, 1280, 720, 1.0, 1000.0, groves, residency, 8, 16, false)
+	}
+
+	#[test]
+	fn retain_policy_defaults_to_skip_clean_frames() {
+		assert!(!GroveRetainPolicy::default().forces_rebuild());
 	}
 
 	#[test]
 	fn still_frame_is_clean() {
 		let frame = RetainedGroveFrame {
-			generation: 3,
 			viewport_w: 1280,
 			viewport_h: 720,
 			fov_bits: 1.0f32.to_bits(),
 			card_m_bits: 1000.0f32.to_bits(),
 			groves: vec![grove(1, 0)],
 		};
-		assert!(frame.is_clean(&frame));
+		assert!(frame.is_clean(&frame, false));
 	}
 
 	#[test]
-	fn admit_or_frustum_entry_dirties() {
+	fn admit_elsewhere_does_not_dirty_this_view() {
+		let a = RetainedGroveFrame {
+			viewport_w: 1280,
+			viewport_h: 720,
+			fov_bits: 1,
+			card_m_bits: 2,
+			groves: vec![grove(1, 0)],
+		};
+		assert!(a.is_clean(&a, false));
+	}
+
+	#[test]
+	fn content_gen_or_frustum_entry_dirties() {
 		let mut a = RetainedGroveFrame {
-			generation: 1,
 			viewport_w: 1280,
 			viewport_h: 720,
 			fov_bits: 1,
@@ -230,19 +270,18 @@ mod tests {
 			groves: vec![grove(1, 0)],
 		};
 		let mut b = a.clone();
-		b.generation = 2;
-		assert!(!a.is_clean(&b));
+		b.groves[0].content_gen = 2;
+		assert!(!a.is_clean(&b, false));
 		b = a.clone();
 		b.groves.push(grove(2, 1));
-		assert!(!a.is_clean(&b));
+		assert!(!a.is_clean(&b, false));
 		a.groves[0].lod = 2;
-		assert!(!a.is_clean(&b));
+		assert!(!a.is_clean(&b, false));
 	}
 
 	#[test]
 	fn viewport_or_fov_dirties() {
 		let a = RetainedGroveFrame {
-			generation: 1,
 			viewport_w: 1280,
 			viewport_h: 720,
 			fov_bits: 1,
@@ -251,22 +290,20 @@ mod tests {
 		};
 		let mut b = a.clone();
 		b.viewport_w = 1920;
-		assert!(!a.is_clean(&b));
+		assert!(!a.is_clean(&b, false));
 		b = a.clone();
 		b.fov_bits = 99;
-		assert!(!a.is_clean(&b));
+		assert!(!a.is_clean(&b, false));
 		b = a.clone();
 		b.card_m_bits = 3;
-		assert!(!a.is_clean(&b));
+		assert!(!a.is_clean(&b, false));
 	}
 
 	#[test]
 	fn non_grove_path_is_always_dirty() {
 		let previous = RetainedGroveFrame::default();
-		let first =
-			GroveSubmit::plan(&previous, 1, 1280, 720, 1.0, 220.0, Vec::new(), false, 8, 16);
-		let second =
-			GroveSubmit::plan(&first.frame, 1, 1280, 720, 1.0, 220.0, Vec::new(), false, 8, 16);
+		let first = plan(&previous, Vec::new(), false);
+		let second = plan(&first.frame, Vec::new(), false);
 		assert!(first.dirty);
 		assert!(second.dirty);
 		assert_eq!(first.span_count, 0);
@@ -277,16 +314,14 @@ mod tests {
 	fn still_camera_second_frame_skips_select_and_span_uploads() {
 		let groves = vec![grove(1, 0)];
 		let previous = RetainedGroveFrame::default();
-		let frame1 =
-			GroveSubmit::plan(&previous, 4, 1280, 720, 1.0, 1000.0, groves.clone(), true, 0, 0);
+		let frame1 = plan(&previous, groves.clone(), true);
 		let stats1 = frame1.encode_stats(true);
 		assert!(frame1.dirty);
 		assert_eq!(stats1.span_uploads, 1);
 		assert!(stats1.dispatches > 0);
 		assert_eq!(stats1.draws, 6);
 
-		let frame2 =
-			GroveSubmit::plan(&frame1.frame, 4, 1280, 720, 1.0, 1000.0, groves, true, 0, 0);
+		let frame2 = plan(&frame1.frame, groves, true);
 		let stats2 = frame2.encode_stats(true);
 		assert!(!frame2.dirty);
 		assert_eq!(stats2.dispatches, 0);
@@ -299,10 +334,8 @@ mod tests {
 	#[test]
 	fn camera_move_that_changes_visible_set_redirties() {
 		let previous = RetainedGroveFrame::default();
-		let visible =
-			GroveSubmit::plan(&previous, 1, 1280, 720, 1.0, 1000.0, vec![grove(1, 0)], true, 0, 0);
-		let empty =
-			GroveSubmit::plan(&visible.frame, 1, 1280, 720, 1.0, 1000.0, Vec::new(), true, 0, 0);
+		let visible = plan(&previous, vec![grove(1, 0)], true);
+		let empty = plan(&visible.frame, Vec::new(), true);
 		assert!(empty.dirty);
 		assert_eq!(empty.encode_stats(true).dispatches, 1);
 	}

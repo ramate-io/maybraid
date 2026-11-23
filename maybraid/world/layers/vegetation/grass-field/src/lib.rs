@@ -37,7 +37,9 @@ pub use catalog::{
 pub use diagnostics::GrassFieldStats;
 pub use field::{GrassField, GrassFieldSettings};
 pub use gpu_arena::{
-	ensure_storage_size, grow_storage_buffer, upload_visible_spans, ArenaBufferPlan, ArenaGrow,
+	encode_arena_copies, grow_buffer_in_place, grow_list_buffers, grow_storage_buffer,
+	stage_buffer_write, upload_visible_spans, ArenaBufferPlan, ArenaGrow, PendingBufferCopy,
+	PendingBufferWrite, INITIAL_LIST_ITEMS,
 };
 pub use grove_catalog::{GrassCatalogOp, GrassCatalogOps, GrassGroveCatalog};
 pub use grove_cull::{
@@ -47,7 +49,7 @@ pub use grove_cull::{
 pub use grove_record::{
 	GroveVisibleSpan, VisibleGrove, WoodyGroveRecord, WOODY_GROVE_RECORD_STRIDE,
 };
-pub use grove_retain::{remember_bands, GroveSubmit, RetainedGroveFrame};
+pub use grove_retain::{remember_bands, GroveRetainPolicy, GroveSubmit, RetainedGroveFrame};
 pub use host::GrassPatchLod;
 pub use patch::{GrassPatch, SurfaceSample};
 pub use plugin::{collect_catalog_ops, GrassFieldPlugin};

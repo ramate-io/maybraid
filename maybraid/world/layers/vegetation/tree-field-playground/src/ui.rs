@@ -17,22 +17,13 @@ pub(crate) fn sync_command_status_text(
 	settings: Res<TreeFieldSettings>,
 	mut status: ResMut<GameCommandStatusText>,
 ) {
-	let style = settings
-		.leaf_close_style
-		.or_else(|| {
-			catalog
-				.plants
-				.iter()
-				.find(|plant| plant.is_active())
-				.map(|plant| plant.leaf_close_style())
-		})
-		.unwrap_or_default();
+	let style = settings.leaf_close_style.unwrap_or_default();
 	status.0 = format!(
 		"plants {} | wood {} | leaves {} | wind {:.2} m | leaves {}\n\
 		 GPU wood+foliage | nested LOD | BotW canopy palette",
-		catalog.plants.iter().filter(|plant| plant.is_active()).count(),
-		catalog.branches.len(),
-		catalog.leaves.len(),
+		catalog.resident_plants(),
+		catalog.resident_branches(),
+		catalog.resident_leaves(),
 		settings.wind.strength_m,
 		style.label(),
 	);

@@ -10,8 +10,8 @@ use vegetation_grass_field::{
 };
 
 use crate::layout::{
-	BRANCH_DESCRIPTOR_STRIDE, BranchDescriptor, LEAF_DESCRIPTOR_STRIDE, LeafDescriptor,
-	PLANT_DESCRIPTOR_STRIDE, PlantDescriptor,
+	BranchDescriptor, LeafDescriptor, PlantDescriptor, BRANCH_DESCRIPTOR_STRIDE,
+	LEAF_DESCRIPTOR_STRIDE, PLANT_DESCRIPTOR_STRIDE,
 };
 
 /// Grown descriptors for one grove, moved (not cloned) through extract.
@@ -52,6 +52,7 @@ struct LiveGrove {
 	plants: RangeSpan,
 	branches: RangeSpan,
 	leaves: RangeSpan,
+	content_gen: u64,
 }
 
 #[derive(Resource, Clone, Debug)]
@@ -114,7 +115,7 @@ impl TreeGroveCatalog {
 		}
 	}
 
-	/// Main-world catalog keeps descriptor arenas for stats and playground UI.
+	/// Main-world catalog: records and resident counters, no descriptor copies.
 	pub fn with_descriptors() -> Self {
 		Self::empty(false)
 	}
@@ -133,15 +134,15 @@ impl TreeGroveCatalog {
 	}
 
 	pub fn resident_plants(&self) -> usize {
-		self.plants.len()
+		self.live.values().map(|live| live.plants.count as usize).sum()
 	}
 
 	pub fn resident_branches(&self) -> usize {
-		self.branches.len()
+		self.live.values().map(|live| live.branches.count as usize).sum()
 	}
 
 	pub fn resident_leaves(&self) -> usize {
-		self.leaves.len()
+		self.live.values().map(|live| live.leaves.count as usize).sum()
 	}
 
 	pub fn contains(&self, id: GroveId) -> bool {
@@ -150,7 +151,10 @@ impl TreeGroveCatalog {
 
 	pub fn live_records(&self) -> impl Iterator<Item = (GroveId, WoodyGroveRecord)> + '_ {
 		self.live.iter().filter_map(|(&id, live)| {
-			self.groves.get(live.slot as usize).copied().map(|record| (id, record))
+			self.groves.get(live.slot as usize).copied().map(|mut record| {
+				record.content_gen = live.content_gen;
+				(id, record)
+			})
 		})
 	}
 
@@ -190,21 +194,29 @@ impl TreeGroveCatalog {
 				seed,
 				truncated_plants,
 			} => {
-				let (plants, branches, leaves) = if self.consume_ops {
-					(std::mem::take(plants), std::mem::take(branches), std::mem::take(leaves))
+				if self.consume_ops {
+					self.admit(
+						*id,
+						std::mem::take(plants),
+						std::mem::take(branches),
+						std::mem::take(leaves),
+						*aabb_min,
+						*aabb_max,
+						*seed,
+						*truncated_plants,
+					);
 				} else {
-					(plants.clone(), branches.clone(), leaves.clone())
-				};
-				self.admit(
-					*id,
-					plants,
-					branches,
-					leaves,
-					*aabb_min,
-					*aabb_max,
-					*seed,
-					*truncated_plants,
-				);
+					self.admit_meta(
+						*id,
+						plants.len() as u32,
+						branches.len() as u32,
+						leaves.len() as u32,
+						*aabb_min,
+						*aabb_max,
+						*seed,
+						*truncated_plants,
+					);
+				}
 			}
 		})
 	}
@@ -248,6 +260,7 @@ impl TreeGroveCatalog {
 		self.write_plants(plant_span, &plants);
 		self.write_branches(branch_span, &branches);
 		self.write_leaves(leaf_span, &leaves);
+		self.generation = self.generation.wrapping_add(1);
 		self.write_record(
 			slot,
 			aabb_min,
@@ -256,6 +269,7 @@ impl TreeGroveCatalog {
 			plant_span,
 			branch_span,
 			leaf_span,
+			self.generation,
 		);
 		self.last_writes += 1;
 		self.last_write_bytes += plant_span.byte_len(PLANT_DESCRIPTOR_STRIDE)
@@ -269,9 +283,60 @@ impl TreeGroveCatalog {
 		});
 		self.live.insert(
 			id,
-			LiveGrove { slot, plants: plant_span, branches: branch_span, leaves: leaf_span },
+			LiveGrove {
+				slot,
+				plants: plant_span,
+				branches: branch_span,
+				leaves: leaf_span,
+				content_gen: self.generation,
+			},
 		);
+	}
+
+	/// Main-world admit: span/record bookkeeping only. Descriptors stay on the op.
+	fn admit_meta(
+		&mut self,
+		id: GroveId,
+		plant_count: u32,
+		branch_count: u32,
+		leaf_count: u32,
+		aabb_min: Vec3,
+		aabb_max: Vec3,
+		seed: u32,
+		truncated_plants: u32,
+	) {
+		self.retire(id);
+		self.truncated_plants = self.truncated_plants.saturating_add(truncated_plants);
+		let plant_span = self.plants_arena.alloc(plant_count);
+		let branch_span = self.branches_arena.alloc(branch_count);
+		let leaf_span = self.leaves_arena.alloc(leaf_count);
+		let slot = self.alloc_slot();
 		self.generation = self.generation.wrapping_add(1);
+		self.write_record(
+			slot,
+			aabb_min,
+			aabb_max,
+			seed,
+			plant_span,
+			branch_span,
+			leaf_span,
+			self.generation,
+		);
+		self.last_writes += 1;
+		self.last_write_bytes += plant_span.byte_len(PLANT_DESCRIPTOR_STRIDE)
+			+ branch_span.byte_len(BRANCH_DESCRIPTOR_STRIDE)
+			+ leaf_span.byte_len(LEAF_DESCRIPTOR_STRIDE)
+			+ WOODY_GROVE_RECORD_STRIDE;
+		self.live.insert(
+			id,
+			LiveGrove {
+				slot,
+				plants: plant_span,
+				branches: branch_span,
+				leaves: leaf_span,
+				content_gen: self.generation,
+			},
+		);
 	}
 
 	fn write_record(
@@ -283,6 +348,7 @@ impl TreeGroveCatalog {
 		plants: RangeSpan,
 		branches: RangeSpan,
 		leaves: RangeSpan,
+		content_gen: u64,
 	) {
 		self.groves[slot as usize] = WoodyGroveRecord {
 			aabb_min,
@@ -295,6 +361,7 @@ impl TreeGroveCatalog {
 			leaf_count: leaves.count,
 			seed,
 			flags: WoodyGroveRecord::FLAG_ACTIVE,
+			content_gen,
 		};
 	}
 
@@ -305,18 +372,23 @@ impl TreeGroveCatalog {
 		if let Some(record) = self.groves.get_mut(live.slot as usize) {
 			record.flags = 0;
 		}
-		for plant in self.plants_mut(live.plants) {
-			plant.flags &= !PlantDescriptor::FLAG_ACTIVE;
+		if self.consume_ops {
+			for plant in self.plants_mut(live.plants) {
+				plant.flags &= !PlantDescriptor::FLAG_ACTIVE;
+			}
+			self.last_uploads.push(CatalogUpload {
+				plants: live.plants,
+				branches: RangeSpan::default(),
+				leaves: RangeSpan::default(),
+			});
 		}
-		self.last_uploads.push(CatalogUpload {
-			plants: live.plants,
-			branches: RangeSpan::default(),
-			leaves: RangeSpan::default(),
-		});
 		self.last_write_bytes += live.plants.byte_len(PLANT_DESCRIPTOR_STRIDE).max(16);
 		self.plants_arena.free(live.plants);
 		self.branches_arena.free(live.branches);
 		self.leaves_arena.free(live.leaves);
+		self.plants.truncate(self.plants_arena.used as usize);
+		self.branches.truncate(self.branches_arena.used as usize);
+		self.leaves.truncate(self.leaves_arena.used as usize);
 		self.free_slots.push(live.slot);
 		self.last_writes += 1;
 		self.generation = self.generation.wrapping_add(1);
@@ -428,7 +500,7 @@ mod tests {
 
 	#[test]
 	fn retire_does_not_rebuild() {
-		let mut catalog = TreeGroveCatalog::default();
+		let mut catalog = TreeGroveCatalog::render();
 		let (plants, branches, leaves) = grown(Vec3::ZERO);
 		catalog.apply(
 			[TreeCatalogOp::Admit {
@@ -443,14 +515,23 @@ mod tests {
 			}],
 			ADMISSION_BUDGET,
 		);
-		let resident = catalog.plants.len();
 		catalog.grove_residency = true;
 		catalog.apply([TreeCatalogOp::Retire { id: GroveId(7) }], ADMISSION_BUDGET);
 		assert_eq!(catalog.live_grove_count(), 0);
-		assert_eq!(catalog.plants.len(), resident);
+		assert_eq!(catalog.resident_plants(), 0);
 		assert!(catalog.plants.iter().all(|plant| !plant.is_active()));
 		assert!(!catalog.grove_residency);
 		assert_eq!(catalog.clones, 0);
+	}
+
+	#[test]
+	fn main_world_catalog_keeps_records_not_descriptors() {
+		let mut catalog = TreeGroveCatalog::with_descriptors();
+		catalog.apply([admit(1)], ADMISSION_BUDGET);
+		assert!(catalog.contains(GroveId(1)));
+		assert!(catalog.plants.is_empty());
+		assert!(catalog.resident_plants() > 0);
+		assert!(catalog.live_records().next().is_some());
 	}
 
 	#[test]
@@ -541,7 +622,7 @@ mod tests {
 
 	#[test]
 	fn incremental_admit_preserves_earlier_descriptor_bytes() {
-		let mut catalog = TreeGroveCatalog::with_descriptors();
+		let mut catalog = TreeGroveCatalog::render();
 		catalog.apply([admit(1)], ADMISSION_BUDGET);
 		let first_plants = catalog.plants.clone();
 		let first_len = first_plants.len();
@@ -563,11 +644,9 @@ mod tests {
 
 		assert!(leftover.is_empty());
 		assert!(applied.iter().any(|op| op.is_retire() && op.grove_id() == GroveId(100)));
-		assert!(
-			applied
-				.iter()
-				.all(|op| !(matches!(op, TreeCatalogOp::Admit { id, .. } if *id == GroveId(100))))
-		);
+		assert!(applied
+			.iter()
+			.all(|op| !(matches!(op, TreeCatalogOp::Admit { id, .. } if *id == GroveId(100)))));
 		assert!(!main.contains(GroveId(100)));
 
 		let mut render = TreeGroveCatalog::default();

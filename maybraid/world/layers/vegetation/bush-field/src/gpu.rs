@@ -36,9 +36,11 @@ use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntit
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
 use vegetation_grass_field::{
-	cull_woody_groves, grow_storage_buffer, remember_bands, select_dispatch_size,
-	upload_visible_spans, CatalogApply, GrassGpuCapability, GrassGpuMode, GroveEncodeStats,
-	GroveId, GroveSubmit, GroveVisibleSpan, RetainedGroveFrame,
+	cull_woody_groves, encode_arena_copies, grow_list_buffers, grow_storage_buffer, remember_bands,
+	select_dispatch_size, stage_buffer_write, upload_visible_spans, CatalogApply,
+	GrassGpuCapability, GrassGpuMode, GroveEncodeStats, GroveId, GroveRetainPolicy, GroveSubmit,
+	GroveVisibleSpan, PendingBufferCopy, PendingBufferWrite, RetainedGroveFrame,
+	INITIAL_LIST_ITEMS,
 };
 use vegetation_shaders::wesl::{
 	GrassDrawParams, GrassViewUniform, LodThresholds, DRAW_INDEXED_INDIRECT_STRIDE,
@@ -362,6 +364,8 @@ struct BushGpuState {
 	plant_count: usize,
 	branch_count: usize,
 	leaf_count: usize,
+	pending_copies: Vec<PendingBufferCopy>,
+	pending_writes: Vec<PendingBufferWrite>,
 	views: std::collections::HashMap<RetainedViewEntity, ViewWork>,
 }
 
@@ -389,6 +393,7 @@ struct ViewWork {
 	visible_branches: u32,
 	visible_leaves: u32,
 	span_count: u32,
+	list_capacity: u32,
 }
 
 fn prepare_bush_buffers(
@@ -404,6 +409,7 @@ fn prepare_bush_buffers(
 	mut stats: Option<ResMut<BushFieldStats>>,
 	mut encode: ResMut<GroveEncodeStats>,
 	mut state: ResMut<BushGpuState>,
+	policy: Option<Res<GroveRetainPolicy>>,
 ) {
 	let Some(extracted) = extracted else {
 		return;
@@ -431,6 +437,8 @@ fn prepare_bush_buffers(
 	encode.span_uploads = 0;
 	encode.retained_clean = 0;
 
+	let mut pending_copies = std::mem::take(&mut state.pending_copies);
+	let mut pending_writes = std::mem::take(&mut state.pending_writes);
 	let mut grew = false;
 	if catalog.last_writes > 0 {
 		let plant_bytes =
@@ -441,51 +449,54 @@ fn prepare_bush_buffers(
 			(catalog.leaves.len() as u64 * LEAF_DESCRIPTOR_STRIDE).max(LEAF_DESCRIPTOR_STRIDE);
 		grew = grow_storage_buffer(
 			&device,
-			&queue,
 			&mut state.plants,
 			plant_bytes,
 			PLANT_DESCRIPTOR_STRIDE,
 			"bush_plants",
+			&mut pending_copies,
 		) | grow_storage_buffer(
 			&device,
-			&queue,
 			&mut state.branches,
 			branch_bytes,
 			BRANCH_DESCRIPTOR_STRIDE,
 			"bush_branches",
+			&mut pending_copies,
 		) | grow_storage_buffer(
 			&device,
-			&queue,
 			&mut state.leaves,
 			leaf_bytes,
 			LEAF_DESCRIPTOR_STRIDE,
 			"bush_leaves",
+			&mut pending_copies,
 		);
 		{
 			for upload in &catalog.last_uploads {
 				write_span(
-					&queue,
+					&device,
 					state.plants.as_ref(),
 					upload.plants,
 					&catalog.plants,
 					PLANT_DESCRIPTOR_STRIDE,
 					PlantDescriptor::to_std430_bytes,
+					&mut pending_writes,
 				);
 				write_span(
-					&queue,
+					&device,
 					state.branches.as_ref(),
 					upload.branches,
 					&catalog.branches,
 					BRANCH_DESCRIPTOR_STRIDE,
 					BranchDescriptor::to_std430_bytes,
+					&mut pending_writes,
 				);
 				write_span(
-					&queue,
+					&device,
 					state.leaves.as_ref(),
 					upload.leaves,
 					&catalog.leaves,
 					LEAF_DESCRIPTOR_STRIDE,
 					LeafDescriptor::to_std430_bytes,
+					&mut pending_writes,
 				);
 			}
 		}
@@ -496,15 +507,19 @@ fn prepare_bush_buffers(
 	}
 	if catalog.is_empty() {
 		state.views.clear();
+		state.pending_copies = pending_copies;
+		state.pending_writes = pending_writes;
 		return;
 	}
 
 	let (Some(plants), Some(branches), Some(leaves)) =
 		(state.plants.clone(), state.branches.clone(), state.leaves.clone())
 	else {
+		state.pending_copies = pending_copies;
+		state.pending_writes = pending_writes;
 		return;
 	};
-	let capacity = extracted.settings.max_per_lod;
+	let force_rebuild = policy.map(|policy| policy.forces_rebuild()).unwrap_or(false);
 	let mut live = std::collections::HashSet::new();
 	let mut missing = Vec::new();
 	for view in &views {
@@ -526,7 +541,6 @@ fn prepare_bush_buffers(
 				&plants,
 				&branches,
 				&leaves,
-				capacity,
 				view,
 				&extracted,
 			);
@@ -541,12 +555,18 @@ fn prepare_bush_buffers(
 		let Some(work) = state.views.get_mut(&view.retained_view_entity) else {
 			continue;
 		};
-		let span_grew =
-			stamp_bush_view(&device, &queue, view, &extracted, &catalog, work, &mut encode);
-		if grew {
-			work.dirty = true;
-		}
-		if grew || span_grew {
+		let (span_grew, list_grew) = stamp_bush_view(
+			&device,
+			&queue,
+			view,
+			&extracted,
+			&catalog,
+			work,
+			&mut encode,
+			force_rebuild,
+			&mut pending_copies,
+		);
+		if grew || span_grew || list_grew {
 			rebind_bush_select(
 				&device,
 				&pipeline_cache,
@@ -558,11 +578,13 @@ fn prepare_bush_buffers(
 			);
 		}
 	}
+	state.pending_copies = pending_copies;
+	state.pending_writes = pending_writes;
 
 	if capability.mode == GrassGpuMode::CpuSelect {
 		cpu_fill_lists(
-			&queue,
-			&mut state,
+			&device,
+			state.as_mut(),
 			&extracted,
 			&catalog,
 			views.iter(),
@@ -581,7 +603,9 @@ fn stamp_bush_view(
 	catalog: &BushGroveCatalog,
 	work: &mut ViewWork,
 	encode: &mut GroveEncodeStats,
-) -> bool {
+	force_rebuild: bool,
+	pending_copies: &mut Vec<PendingBufferCopy>,
+) -> (bool, bool) {
 	let thresholds = if extracted.grove_residency {
 		LodThresholds::grove_bush()
 	} else {
@@ -602,7 +626,6 @@ fn stamp_bush_view(
 	remember_bands(&mut work.last_bands, &groves);
 	let submit = GroveSubmit::plan(
 		&work.retained,
-		catalog.generation,
 		view.viewport.z,
 		view.viewport.w,
 		fov_y(&view.clip_from_view),
@@ -611,6 +634,7 @@ fn stamp_bush_view(
 		extracted.grove_residency,
 		extracted.branch_count,
 		extracted.leaf_count,
+		force_rebuild,
 	);
 	let _span = if submit.dirty {
 		bevy::log::info_span!("grove rebuild").entered()
@@ -627,12 +651,24 @@ fn stamp_bush_view(
 	work.visible_branches = stamped.work_branches;
 	work.visible_leaves = stamped.work_leaves;
 	work.span_count = stamped.span_count;
+	let needed = stamped.work_branches.max(stamped.work_leaves).max(1);
+	let list_grew = grow_list_buffers(
+		device,
+		work.wood_lists.iter_mut().chain(work.foliage_lists.iter_mut()),
+		needed,
+		"bush_instance_list",
+		pending_copies,
+	);
+	if list_grew {
+		work.list_capacity = (work.wood_lists[0].size() / 4) as u32;
+	}
 	let mut uniform = make_view_uniform(view, extracted);
 	uniform.counts.x = stamped.work_branches as f32;
+	uniform.counts.y = work.list_capacity as f32;
 	uniform.counts.z = stamped.work_leaves as f32;
 	uniform.light_direction.w = stamped.span_count as f32;
 	write_view_uniform(queue, &work.view_uniform, &uniform);
-	stamped.span_grew
+	(stamped.span_grew, list_grew)
 }
 
 fn rebind_bush_select(
@@ -703,12 +739,13 @@ fn rebind_bush_select(
 }
 
 fn write_span<T, const N: usize>(
-	queue: &RenderQueue,
+	device: &RenderDevice,
 	buffer: Option<&Buffer>,
 	span: vegetation_grass_field::RangeSpan,
 	items: &[T],
 	stride: u64,
 	encode: fn(T) -> [u8; N],
+	pending: &mut Vec<PendingBufferWrite>,
 ) where
 	T: Copy,
 {
@@ -724,7 +761,7 @@ fn write_span<T, const N: usize>(
 		return;
 	}
 	let bytes: Vec<u8> = items[start..end].iter().copied().flat_map(encode).collect();
-	queue.write_buffer(buffer, span.offset as u64 * stride, &bytes);
+	stage_buffer_write(device, buffer, span.offset as u64 * stride, &bytes, pending);
 }
 
 fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedBushField) -> GrassViewUniform {
@@ -794,7 +831,6 @@ fn create_view_work(
 	plants: &Buffer,
 	branches: &Buffer,
 	leaves: &Buffer,
-	capacity: u32,
 	view: &ExtractedView,
 	extracted: &ExtractedBushField,
 ) -> ViewWork {
@@ -810,12 +846,12 @@ fn create_view_work(
 		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
 		mapped_at_creation: false,
 	});
-	let list_size = (capacity as u64).max(1) * 4;
+	let list_size = u64::from(INITIAL_LIST_ITEMS) * 4;
 	let wood_lists = [0, 1, 2].map(|_| {
 		device.create_buffer(&BufferDescriptor {
 			label: Some("bush_wood_list"),
 			size: list_size,
-			usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+			usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
 			mapped_at_creation: false,
 		})
 	});
@@ -823,7 +859,7 @@ fn create_view_work(
 		device.create_buffer(&BufferDescriptor {
 			label: Some("bush_foliage_list"),
 			size: list_size,
-			usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+			usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
 			mapped_at_creation: false,
 		})
 	});
@@ -943,6 +979,7 @@ fn create_view_work(
 		visible_branches: 0,
 		visible_leaves: 0,
 		span_count: 0,
+		list_capacity: INITIAL_LIST_ITEMS,
 	}
 }
 
@@ -960,7 +997,7 @@ fn write_view_uniform(queue: &RenderQueue, buffer: &Buffer, uniform: &GrassViewU
 }
 
 fn cpu_fill_lists<'a>(
-	queue: &RenderQueue,
+	device: &RenderDevice,
 	state: &mut BushGpuState,
 	extracted: &ExtractedBushField,
 	catalog: &BushGroveCatalog,
@@ -993,12 +1030,24 @@ fn cpu_fill_lists<'a>(
 		for lod in 0..BUSH_LOD_COUNT {
 			if !lists.wood[lod].is_empty() {
 				let bytes: Vec<u8> = lists.wood[lod].iter().flat_map(|i| i.to_le_bytes()).collect();
-				queue.write_buffer(&work.wood_lists[lod], 0, &bytes);
+				stage_buffer_write(
+					device,
+					&work.wood_lists[lod],
+					0,
+					&bytes,
+					&mut state.pending_writes,
+				);
 			}
 			if !lists.foliage[lod].is_empty() {
 				let bytes: Vec<u8> =
 					lists.foliage[lod].iter().flat_map(|i| i.to_le_bytes()).collect();
-				queue.write_buffer(&work.foliage_lists[lod], 0, &bytes);
+				stage_buffer_write(
+					device,
+					&work.foliage_lists[lod],
+					0,
+					&bytes,
+					&mut state.pending_writes,
+				);
 			}
 			work.cpu_wood_counts[lod] = lists.wood[lod].len() as u32;
 			work.cpu_foliage_counts[lod] = lists.foliage[lod].len() as u32;
@@ -1051,16 +1100,23 @@ fn bush_compute(
 	mut render_context: RenderContext,
 	pipelines: Option<Res<BushPipelines>>,
 	pipeline_cache: Res<PipelineCache>,
-	state: Option<Res<BushGpuState>>,
+	mut state: Option<ResMut<BushGpuState>>,
 	capability: Option<Res<GrassGpuCapability>>,
 	extracted: Option<Res<ExtractedBushField>>,
 	device: Res<RenderDevice>,
 	mut encode: Option<ResMut<GroveEncodeStats>>,
 ) {
+	if let Some(state) = state.as_deref_mut() {
+		encode_arena_copies(
+			render_context.command_encoder(),
+			&mut state.pending_copies,
+			&mut state.pending_writes,
+		);
+	}
 	let Some(pipelines) = pipelines else {
 		return;
 	};
-	let Some(state) = state else {
+	let Some(state) = state.as_deref() else {
 		return;
 	};
 	let Some(capability) = capability else {

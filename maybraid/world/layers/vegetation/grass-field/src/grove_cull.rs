@@ -126,6 +126,7 @@ pub fn cull_woody_groves(
 				leaf_count: record.leaf_count,
 				lod,
 			},
+			content_gen: record.content_gen,
 		});
 	}
 	visible
@@ -153,6 +154,7 @@ pub fn cull_grass_patches(
 				leaf_count: 0,
 				lod,
 			},
+			content_gen: 0,
 		});
 	}
 	visible
@@ -304,8 +306,18 @@ mod tests {
 	) -> GroveEncodeStats {
 		let visible =
 			cull_woody_groves(view, thresholds, records.iter().copied(), &|_| previous_lod, 0.5);
-		let submit =
-			GroveSubmit::plan(previous, 1, 1280, 720, 1.0, thresholds.card_m, visible, true, 0, 0);
+		let submit = GroveSubmit::plan(
+			previous,
+			1280,
+			720,
+			1.0,
+			thresholds.card_m,
+			visible,
+			true,
+			0,
+			0,
+			false,
+		);
 		let mut encode = GroveEncodeStats::default();
 		let stamped = submit.stamp(previous, &mut encode, |_| {
 			*uploads += 1;

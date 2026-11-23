@@ -12,7 +12,9 @@ use bevy::render::extract_component::{ExtractComponent, ExtractComponentPlugin};
 use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
 use bevy::render::{ExtractSchedule, MainWorld, RenderApp};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::{ADMISSION_BUDGET, CatalogApply, GrassGpuCapability, GroveId};
+use vegetation_grass_field::{
+	CatalogApply, GrassGpuCapability, GroveId, GroveRetainPolicy, ADMISSION_BUDGET,
+};
 use vegetation_shaders::VegetationWeslPlugin;
 
 use crate::bounds::TreeBounds;
@@ -70,7 +72,11 @@ impl Plugin for TreeFieldPlugin {
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevTreeTime>();
 		app.init_resource::<ExtractedTreeField>();
+		app.insert_resource(GroveRetainPolicy::from_env());
 		app.add_plugins(ExtractResourcePlugin::<ExtractedTreeField>::default());
+		if !app.is_plugin_added::<ExtractResourcePlugin<GroveRetainPolicy>>() {
+			app.add_plugins(ExtractResourcePlugin::<GroveRetainPolicy>::default());
+		}
 		app.add_plugins(ExtractComponentPlugin::<TreeFieldPresenter>::default());
 		app.add_systems(Startup, spawn_presenter);
 		app.add_systems(
@@ -87,6 +93,7 @@ impl Plugin for TreeFieldPlugin {
 		if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
 			render_app
 				.init_resource::<TreeCatalogOps>()
+				.insert_resource(GroveRetainPolicy::from_env())
 				.add_systems(ExtractSchedule, extract_catalog_ops);
 		}
 	}
@@ -177,11 +184,8 @@ fn admit_from_parts(
 	requested: usize,
 ) -> TreeCatalogOp {
 	let truncated = requested.saturating_sub(plants.len()) as u32;
-	let (aabb_min, aabb_max) = if bounds.is_empty() {
-		(Vec3::ZERO, Vec3::ZERO)
-	} else {
-		(bounds.min, bounds.max)
-	};
+	let (aabb_min, aabb_max) =
+		if bounds.is_empty() { (Vec3::ZERO, Vec3::ZERO) } else { (bounds.min, bounds.max) };
 	TreeCatalogOp::Admit {
 		id,
 		plants,
@@ -248,9 +252,9 @@ fn snapshot_extracted_frame(
 			target: "maybraid.tree_field",
 			generation = catalog.generation,
 			groves = catalog.live_grove_count(),
-			plants = catalog.plants.len(),
-			branches = catalog.branches.len(),
-			leaves = catalog.leaves.len(),
+			plants = catalog.resident_plants(),
+			branches = catalog.resident_branches(),
+			leaves = catalog.resident_leaves(),
 			truncated = catalog.truncated_plants,
 			"world catalog inventory"
 		);
@@ -424,11 +428,10 @@ mod tests {
 		let first = app.world_mut().resource_mut::<TreeCatalogOps>().take();
 		let mut render = TreeGroveCatalog::default();
 		render.apply(first, ADMISSION_BUDGET);
-		assert!(
-			app.world()
-				.resource::<TreeGroveCatalog>()
-				.contains(GroveId::from_entity(live_y))
-		);
+		assert!(app
+			.world()
+			.resource::<TreeGroveCatalog>()
+			.contains(GroveId::from_entity(live_y)));
 
 		let mut pending: Vec<_> = (0..ADMISSION_BUDGET as u64).map(|i| admit_id(200 + i)).collect();
 		pending.push(admit_id(300));
@@ -450,11 +453,9 @@ mod tests {
 		));
 
 		let forwarded = app.world().resource::<TreeCatalogOps>().ops.clone();
-		assert!(
-			forwarded
-				.iter()
-				.any(|op| matches!(op, TreeCatalogOp::Retire { id } if *id == y_id))
-		);
+		assert!(forwarded
+			.iter()
+			.any(|op| matches!(op, TreeCatalogOp::Retire { id } if *id == y_id)));
 		assert!(forwarded.iter().all(|op| match op {
 			TreeCatalogOp::Admit { id, .. } | TreeCatalogOp::Retire { id } => *id != GroveId(300),
 		}));
@@ -486,16 +487,12 @@ mod tests {
 		assert!(catalog.pending.is_empty());
 		assert!(!catalog.contains(GroveId(300)));
 		let forwarded = app.world().resource::<TreeCatalogOps>().ops.clone();
-		assert!(
-			forwarded
-				.iter()
-				.any(|op| matches!(op, TreeCatalogOp::Retire { id } if *id == GroveId(300)))
-		);
-		assert!(
-			forwarded
-				.iter()
-				.all(|op| !matches!(op, TreeCatalogOp::Admit { id, .. } if *id == GroveId(300)))
-		);
+		assert!(forwarded
+			.iter()
+			.any(|op| matches!(op, TreeCatalogOp::Retire { id } if *id == GroveId(300))));
+		assert!(forwarded
+			.iter()
+			.all(|op| !matches!(op, TreeCatalogOp::Admit { id, .. } if *id == GroveId(300))));
 
 		let mut render = TreeGroveCatalog::default();
 		let CatalogApply { leftover, .. } = render.apply(forwarded, ADMISSION_BUDGET);

@@ -115,6 +115,7 @@ impl RangeArena {
 		if count == 0 {
 			return RangeSpan { offset: 0, count: 0 };
 		}
+		self.coalesce();
 		if let Some(index) = self.free.iter().position(|span| span.count >= count) {
 			let mut span = self.free.remove(index);
 			let allocated = RangeSpan { offset: span.offset, count };
@@ -137,8 +138,41 @@ impl RangeArena {
 	}
 
 	pub fn free(&mut self, span: RangeSpan) {
-		if !span.is_empty() {
-			self.free.push(span);
+		if span.is_empty() {
+			return;
+		}
+		self.free.push(span);
+		self.trim();
+	}
+
+	/// Merge adjacent holes and drop a trailing hole so `used` can shrink.
+	fn coalesce(&mut self) {
+		if self.free.len() < 2 {
+			return;
+		}
+		self.free.sort_by_key(|span| span.offset);
+		let mut merged: Vec<RangeSpan> = Vec::with_capacity(self.free.len());
+		for span in self.free.drain(..) {
+			match merged.last_mut() {
+				Some(last) if last.offset.saturating_add(last.count) == span.offset => {
+					last.count = last.count.saturating_add(span.count);
+				}
+				_ => merged.push(span),
+			}
+		}
+		self.free = merged;
+	}
+
+	fn trim(&mut self) {
+		self.coalesce();
+		let trailing = self
+			.free
+			.last()
+			.copied()
+			.filter(|last| last.offset.saturating_add(last.count) == self.used);
+		if let Some(last) = trailing {
+			self.used = last.offset;
+			self.free.pop();
 		}
 	}
 
@@ -286,6 +320,20 @@ mod tests {
 		let extra = arena.alloc(1);
 		assert!(arena.cap >= 8);
 		assert_eq!(extra.offset, 4);
+	}
+
+	#[test]
+	fn arena_coalesces_adjacent_holes_and_trims_the_tail() {
+		let mut arena = RangeArena::with_cap(8);
+		let a = arena.alloc(4);
+		let b = arena.alloc(4);
+		assert_eq!(arena.used, 8);
+		arena.free(a);
+		arena.free(b);
+		assert_eq!(arena.used, 0, "trailing holes must shrink the bump");
+		let reused = arena.alloc(8);
+		assert_eq!(reused.offset, 0);
+		assert_eq!(arena.used, 8);
 	}
 
 	#[test]

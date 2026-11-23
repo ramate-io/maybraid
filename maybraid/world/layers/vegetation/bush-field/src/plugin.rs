@@ -9,7 +9,9 @@ use bevy::render::extract_component::{ExtractComponent, ExtractComponentPlugin};
 use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
 use bevy::render::{ExtractSchedule, MainWorld, RenderApp};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::{ADMISSION_BUDGET, CatalogApply, GrassGpuCapability, GroveId};
+use vegetation_grass_field::{
+	CatalogApply, GrassGpuCapability, GroveId, GroveRetainPolicy, ADMISSION_BUDGET,
+};
 use vegetation_shaders::VegetationWeslPlugin;
 
 use crate::catalog::{BushCatalogOp, BushCatalogOps, BushGroveCatalog};
@@ -61,7 +63,11 @@ impl Plugin for BushFieldPlugin {
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevBushTime>();
 		app.init_resource::<ExtractedBushField>();
+		app.insert_resource(GroveRetainPolicy::from_env());
 		app.add_plugins(ExtractResourcePlugin::<ExtractedBushField>::default());
+		if !app.is_plugin_added::<ExtractResourcePlugin<GroveRetainPolicy>>() {
+			app.add_plugins(ExtractResourcePlugin::<GroveRetainPolicy>::default());
+		}
 		app.add_plugins(ExtractComponentPlugin::<BushFieldPresenter>::default());
 		app.add_systems(Startup, spawn_presenter);
 		app.add_systems(
@@ -78,6 +84,7 @@ impl Plugin for BushFieldPlugin {
 		if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
 			render_app
 				.init_resource::<BushCatalogOps>()
+				.insert_resource(GroveRetainPolicy::from_env())
 				.add_systems(ExtractSchedule, extract_catalog_ops);
 		}
 	}
@@ -289,11 +296,10 @@ mod tests {
 		let first = app.world_mut().resource_mut::<BushCatalogOps>().take();
 		let mut render = BushGroveCatalog::default();
 		render.apply(first, ADMISSION_BUDGET);
-		assert!(
-			app.world()
-				.resource::<BushGroveCatalog>()
-				.contains(GroveId::from_entity(live_y))
-		);
+		assert!(app
+			.world()
+			.resource::<BushGroveCatalog>()
+			.contains(GroveId::from_entity(live_y)));
 
 		let mut pending: Vec<_> = (0..ADMISSION_BUDGET as u64).map(|i| admit_id(200 + i)).collect();
 		pending.push(admit_id(300));
@@ -314,11 +320,9 @@ mod tests {
 		));
 
 		let forwarded = app.world().resource::<BushCatalogOps>().ops.clone();
-		assert!(
-			forwarded
-				.iter()
-				.any(|op| matches!(op, BushCatalogOp::Retire { id } if *id == y_id))
-		);
+		assert!(forwarded
+			.iter()
+			.any(|op| matches!(op, BushCatalogOp::Retire { id } if *id == y_id)));
 		assert!(forwarded.iter().all(|op| match op {
 			BushCatalogOp::Admit { id, .. } | BushCatalogOp::Retire { id } => *id != GroveId(300),
 		}));
@@ -347,16 +351,12 @@ mod tests {
 		assert!(catalog.pending.is_empty());
 		assert!(!catalog.contains(GroveId(300)));
 		let forwarded = app.world().resource::<BushCatalogOps>().ops.clone();
-		assert!(
-			forwarded
-				.iter()
-				.any(|op| matches!(op, BushCatalogOp::Retire { id } if *id == GroveId(300)))
-		);
-		assert!(
-			forwarded
-				.iter()
-				.all(|op| !matches!(op, BushCatalogOp::Admit { id, .. } if *id == GroveId(300)))
-		);
+		assert!(forwarded
+			.iter()
+			.any(|op| matches!(op, BushCatalogOp::Retire { id } if *id == GroveId(300))));
+		assert!(forwarded
+			.iter()
+			.all(|op| !matches!(op, BushCatalogOp::Admit { id, .. } if *id == GroveId(300))));
 
 		let mut render = BushGroveCatalog::default();
 		let CatalogApply { leftover, .. } = render.apply(forwarded, ADMISSION_BUDGET);
