@@ -64,3 +64,19 @@ fn lod_bucket(
 fn catalog_select_index(gid: vec3<u32>, num_workgroups: vec3<u32>) -> u32 {
     return gid.x + gid.y * num_workgroups.x * 64u;
 }
+
+const SELECT_WORKGROUP_SIZE: u32 = 64u;
+const MAX_COMPUTE_WG_DIM: u32 = 65535u;
+
+fn select_dispatch_grid(item_count: u32) -> vec3<u32> {
+    let groups = (item_count + SELECT_WORKGROUP_SIZE - 1u) / SELECT_WORKGROUP_SIZE;
+    if (groups == 0u) {
+        return vec3<u32>(0u, 0u, 0u);
+    }
+    if (groups <= MAX_COMPUTE_WG_DIM) {
+        return vec3<u32>(groups, 1u, 1u);
+    }
+    let y = (groups + MAX_COMPUTE_WG_DIM - 1u) / MAX_COMPUTE_WG_DIM;
+    let x = min((groups + y - 1u) / y, MAX_COMPUTE_WG_DIM);
+    return vec3<u32>(x, y, 1u);
+}

@@ -12,9 +12,9 @@ Per view, per kind, encode is independent of grove count:
 
 | Kind | passes | dispatches | draws | uniform writes |
 |---|---:|---:|---:|---:|
-| tree | 1 | 4 | 6 | 1 |
-| bush | 1 | 4 | 6 | 1 |
-| grass | 1 | 3 | 3 | 1 |
+| tree | 1 | 5 | 6 | 1 |
+| bush | 1 | 5 | 6 | 1 |
+| grass | 1 | 4 | 3 | 1 |
 
 Woody kinds add one grove-cull compute dispatch per view before wood/foliage selection. Grove-owned `card_m` is finite again (trees 1 km present ring, bushes 110 m, grass 90 m) so pass-2 work is bounded by visible grove spans, not the whole descriptor arena. CPU `MAYBRAID_EXPERIMENT_TREE_FIELD=cpu` mirrors the same per-grove frustum and residency tests via `compact_grove_catalog`.
 

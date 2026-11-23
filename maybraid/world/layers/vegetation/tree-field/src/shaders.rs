@@ -6,6 +6,8 @@ use bevy::shader::load_shader_library;
 
 pub const SELECT_GROVE_SHADER: &str =
 	concat!("embedded://", env!("CARGO_CRATE_NAME"), "/shaders/select_grove.wesl");
+pub const WRITE_DISPATCH_SHADER: &str =
+	concat!("embedded://", env!("CARGO_CRATE_NAME"), "/shaders/write_dispatch.wesl");
 pub const SELECT_WOOD_SHADER: &str =
 	concat!("embedded://", env!("CARGO_CRATE_NAME"), "/shaders/select_wood.wesl");
 pub const SELECT_FOLIAGE_SHADER: &str =
@@ -23,6 +25,7 @@ impl Plugin for TreeShadersPlugin {
 	fn build(&self, app: &mut App) {
 		load_shader_library!(app, "shaders/layout.wesl");
 		embedded_asset!(app, "shaders/select_grove.wesl");
+		embedded_asset!(app, "shaders/write_dispatch.wesl");
 		embedded_asset!(app, "shaders/select_wood.wesl");
 		embedded_asset!(app, "shaders/select_foliage.wesl");
 		embedded_asset!(app, "shaders/finalize.wesl");

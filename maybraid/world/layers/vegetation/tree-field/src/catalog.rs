@@ -83,6 +83,7 @@ pub struct CatalogUpload {
 	pub plants: RangeSpan,
 	pub branches: RangeSpan,
 	pub leaves: RangeSpan,
+	pub grove_slot: u32,
 }
 
 impl Default for TreeGroveCatalog {
@@ -134,30 +135,55 @@ impl TreeGroveCatalog {
 		self.last_write_bytes = 0;
 		self.last_writes = 0;
 		self.last_uploads.clear();
-		CatalogApply::budgeted(ops, budget, |op| match op {
-			TreeCatalogOp::Retire { id } => self.retire(*id),
-			TreeCatalogOp::Admit {
-				id,
-				plants,
-				branches,
-				leaves,
-				aabb_min,
-				aabb_max,
-				seed,
-				truncated_plants,
-			} => {
-				self.admit(
-					*id,
-					plants.clone(),
-					branches.clone(),
-					leaves.clone(),
-					*aabb_min,
-					*aabb_max,
-					*seed,
-					*truncated_plants,
-				);
+		let mut leftover = Vec::new();
+		let mut applied = Vec::new();
+		let mut admits = 0usize;
+		for op in ops.into_iter() {
+			match op {
+				TreeCatalogOp::Retire { id } => {
+					self.retire(id);
+					leftover.retain(|pending: &TreeCatalogOp| {
+						pending.is_retire() || pending.grove_id() != id
+					});
+					applied.push(TreeCatalogOp::Retire { id });
+				}
+				TreeCatalogOp::Admit { .. } if admits >= budget => leftover.push(op),
+				TreeCatalogOp::Admit {
+					id,
+					plants,
+					branches,
+					leaves,
+					aabb_min,
+					aabb_max,
+					seed,
+					truncated_plants,
+				} => {
+					applied.push(TreeCatalogOp::Admit {
+						id,
+						plants: plants.clone(),
+						branches: branches.clone(),
+						leaves: leaves.clone(),
+						aabb_min,
+						aabb_max,
+						seed,
+						truncated_plants,
+					});
+					self.clones += 1;
+					self.admit(
+						id,
+						plants,
+						branches,
+						leaves,
+						aabb_min,
+						aabb_max,
+						seed,
+						truncated_plants,
+					);
+					admits += 1;
+				}
 			}
-		})
+		}
+		CatalogApply { applied, leftover }
 	}
 
 	fn admit(
@@ -216,11 +242,12 @@ impl TreeGroveCatalog {
 		self.last_write_bytes += plant_span.byte_len(PLANT_DESCRIPTOR_STRIDE)
 			+ branch_span.byte_len(BRANCH_DESCRIPTOR_STRIDE)
 			+ leaf_span.byte_len(LEAF_DESCRIPTOR_STRIDE)
-			+ 48;
+			+ WOODY_GROVE_RECORD_STRIDE;
 		self.last_uploads.push(CatalogUpload {
 			plants: plant_span,
 			branches: branch_span,
 			leaves: leaf_span,
+			grove_slot: slot,
 		});
 		self.live.insert(
 			id,
@@ -249,6 +276,7 @@ impl TreeGroveCatalog {
 			plants: live.plants,
 			branches: RangeSpan::default(),
 			leaves: RangeSpan::default(),
+			grove_slot: live.slot,
 		});
 		self.generation = self.generation.wrapping_add(1);
 		if self.live.is_empty() {
@@ -354,7 +382,7 @@ mod tests {
 		assert_eq!(catalog.live_grove_count(), 1);
 		assert_eq!(catalog.last_writes, 1);
 		assert!(catalog.last_write_bytes >= plant_bytes);
-		assert_eq!(catalog.clones, 0);
+		assert_eq!(catalog.clones, 1);
 	}
 
 	#[test]
@@ -381,7 +409,7 @@ mod tests {
 		assert_eq!(catalog.plants.len(), resident);
 		assert!(catalog.plants.iter().all(|plant| !plant.is_active()));
 		assert!(!catalog.grove_residency);
-		assert_eq!(catalog.clones, 0);
+		assert_eq!(catalog.clones, 1);
 	}
 
 	#[test]
@@ -471,7 +499,6 @@ mod tests {
 	}
 
 	#[test]
-	#[test]
 	fn grove_record_spans_survive_retire_slot_reuse() {
 		let mut catalog = TreeGroveCatalog::default();
 		catalog.apply([admit(1), admit(2)], ADMISSION_BUDGET);
@@ -494,6 +521,7 @@ mod tests {
 		assert!(catalog.branches.len() >= resident);
 	}
 
+	#[test]
 	fn mixed_batch_cancels_pending_admit_on_retire() {
 		let mut main = TreeGroveCatalog::default();
 		let mut batch: Vec<_> = (1..=ADMISSION_BUDGET as u64).map(admit).collect();

@@ -175,6 +175,19 @@ impl GrassPatchHeader {
 	pub fn blade_range(self) -> std::ops::Range<u32> {
 		self.blade_offset..self.blade_offset.saturating_add(self.blade_count)
 	}
+
+	pub fn to_std430_bytes(self) -> [u8; PATCH_HEADER_STRIDE as usize] {
+		let mut out = [0u8; PATCH_HEADER_STRIDE as usize];
+		pack_vec3(&mut out, 0, self.aabb_min);
+		out[12..16].copy_from_slice(&self.blade_offset.to_le_bytes());
+		pack_vec3(&mut out, 16, self.aabb_max);
+		out[28..32].copy_from_slice(&self.blade_count.to_le_bytes());
+		out[32..36].copy_from_slice(&self.seed.to_le_bytes());
+		pack_f32(&mut out, 36, self.coverage);
+		out[40..44].copy_from_slice(&self.species.to_le_bytes());
+		out[44..48].copy_from_slice(&self.flags.to_le_bytes());
+		out
+	}
 }
 
 /// Per-view uniforms. std140. Resolution is the *internal* render size.

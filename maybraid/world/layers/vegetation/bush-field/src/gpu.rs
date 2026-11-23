@@ -579,15 +579,6 @@ fn prepare_bush_buffers(
 	}
 }
 
-fn pack_buffer(device: &RenderDevice, label: &'static str, bytes: Vec<u8>, stride: u64) -> Buffer {
-	let packed = if bytes.is_empty() { vec![0u8; stride as usize] } else { bytes };
-	device.create_buffer_with_data(&BufferInitDescriptor {
-		label: Some(label),
-		contents: &packed,
-		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-	})
-}
-
 fn write_span<T, const N: usize>(
 	queue: &RenderQueue,
 	buffer: Option<&Buffer>,
@@ -659,7 +650,9 @@ fn upload_bush_catalog(
 		grove_bytes,
 		WOODY_GROVE_RECORD_STRIDE,
 	);
-	if !(grew_plants || grew_branches || grew_leaves || grew_groves) {
+	if grew_plants || grew_branches || grew_leaves || grew_groves {
+		write_full_bush_catalog(queue, state, catalog);
+	} else {
 		for upload in &catalog.last_uploads {
 			write_span(
 				queue,
@@ -700,6 +693,55 @@ fn upload_bush_catalog(
 	state.plant_count = catalog.plants.len();
 	state.branch_count = catalog.branches.len();
 	state.leaf_count = catalog.leaves.len();
+}
+
+fn write_full_bush_catalog(
+	queue: &RenderQueue,
+	state: &BushGpuState,
+	catalog: &BushGroveCatalog,
+) {
+	if let Some(buffer) = state.plants.as_ref() {
+		if !catalog.plants.is_empty() {
+			let bytes: Vec<u8> = catalog
+				.plants
+				.iter()
+				.copied()
+				.flat_map(PlantDescriptor::to_std430_bytes)
+				.collect();
+			queue.write_buffer(buffer, 0, &bytes);
+		}
+	}
+	if let Some(buffer) = state.branches.as_ref() {
+		if !catalog.branches.is_empty() {
+			let bytes: Vec<u8> = catalog
+				.branches
+				.iter()
+				.copied()
+				.flat_map(BranchDescriptor::to_std430_bytes)
+				.collect();
+			queue.write_buffer(buffer, 0, &bytes);
+		}
+	}
+	if let Some(buffer) = state.leaves.as_ref() {
+		if !catalog.leaves.is_empty() {
+			let bytes: Vec<u8> = catalog
+				.leaves
+				.iter()
+				.copied()
+				.flat_map(LeafDescriptor::to_std430_bytes)
+				.collect();
+			queue.write_buffer(buffer, 0, &bytes);
+		}
+	}
+	if let Some(buffer) = state.groves.as_ref() {
+		for (slot, record) in catalog.groves.iter().enumerate() {
+			queue.write_buffer(
+				buffer,
+				u64::from(slot as u32) * WOODY_GROVE_RECORD_STRIDE,
+				&record.to_std430_bytes(),
+			);
+		}
+	}
 }
 
 fn refresh_bush_view_bind_groups(

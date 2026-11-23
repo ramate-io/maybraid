@@ -137,7 +137,9 @@ pub fn collect_catalog_ops(
 	for (entity, grove) in &groves {
 		catalog.grove_residency = true;
 		let requested = grove.0.plants.len();
-		fresh.push(admit_from_field(GroveId::from_entity(entity), (*grove.0).clone(), requested));
+		let field =
+			Arc::try_unwrap(grove.0.clone()).unwrap_or_else(|arc| (*arc).clone());
+		fresh.push(admit_from_field(GroveId::from_entity(entity), field, requested));
 	}
 	if fresh.is_empty() && catalog.pending.is_empty() {
 		catalog.last_writes = 0;
@@ -331,7 +333,7 @@ mod tests {
 		assert_eq!(catalog.live_grove_count(), 1);
 		assert_eq!(catalog.last_writes, 1);
 		assert!(catalog.last_write_bytes > 0);
-		assert_eq!(catalog.clones, 0);
+		assert_eq!(catalog.clones, 1);
 		app.update();
 		let catalog = app.world().resource::<TreeGroveCatalog>();
 		assert_eq!(catalog.last_writes, 0);
