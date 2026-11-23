@@ -130,11 +130,44 @@ impl GrassSelector {
 		blades: &[BladeDescriptor],
 		patches: &[GrassPatchHeader],
 	) -> CompactedLists {
+		self.compact_spans(blades, patches, None)
+	}
+
+	pub fn compact_spans(
+		&self,
+		blades: &[BladeDescriptor],
+		patches: &[GrassPatchHeader],
+		spans: Option<&[crate::grove_record::GroveVisibleSpan]>,
+	) -> CompactedLists {
+		if matches!(spans, Some(spans) if spans.is_empty()) {
+			return CompactedLists::default();
+		}
+		let owned: Vec<GrassPatchHeader>;
+		let (patches, blade_total): (&[GrassPatchHeader], u32) = match spans {
+			None => (patches, blades.len() as u32),
+			Some(spans) => {
+				let total = spans.iter().map(|span| span.branch_count).sum();
+				owned = spans
+					.iter()
+					.map(|span| GrassPatchHeader {
+						aabb_min: Vec3::ZERO,
+						blade_offset: span.branch_off,
+						aabb_max: Vec3::ZERO,
+						blade_count: span.branch_count,
+						seed: 0,
+						coverage: 1.0,
+						species: 0,
+						flags: GrassPatchHeader::FLAG_ACTIVE,
+					})
+					.collect();
+				(&owned, total)
+			}
+		};
 		let mut lists = CompactedLists::default();
-		let keep_fraction = if blades.is_empty() {
+		let keep_fraction = if blade_total == 0 {
 			1.0
 		} else {
-			(self.capacities[0] as f32 / blades.len() as f32).min(1.0)
+			(self.capacities[0] as f32 / blade_total as f32).min(1.0)
 		};
 		for patch in patches {
 			if !patch.is_active() {
@@ -296,6 +329,21 @@ mod tests {
 		)
 		.compact(&field.blades, &field.patches);
 		assert!(half.submitted <= native.submitted);
+		Ok(())
+	}
+
+	#[test]
+	fn culled_grove_span_list_is_zero_select_work() -> anyhow::Result<()> {
+		let settings = GrassFieldSettings::default();
+		let patch = GrassPatch::isolated_clump(1, Vec3::ZERO, 12);
+		let field = GrassField::rebuild([&patch], &settings);
+		let lists = GrassSelector::from_view(
+			look_view(Vec3::new(0.0, 1.5, 6.0), Vec3::ZERO, 720.0),
+			&settings,
+		)
+		.compact_spans(&field.blades, &field.patches, Some(&[]));
+		assert_eq!(lists.considered, 0);
+		assert_eq!(lists.submitted, 0);
 		Ok(())
 	}
 

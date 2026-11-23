@@ -1,6 +1,6 @@
 //! CPU selection matching the wood/foliage compute shaders.
 
-use vegetation_grass_field::WorldFrustum;
+use vegetation_grass_field::{GroveVisibleSpan, WorldFrustum};
 use vegetation_shaders::wesl::{
 	lod_bucket, nested_keep, DrawIndexedIndirect, GrassViewUniform, LodThresholds,
 };
@@ -123,10 +123,31 @@ impl TreeSelector {
 		branches: &[BranchDescriptor],
 		leaves: &[LeafDescriptor],
 	) -> CompactedTreeLists {
+		self.compact_spans(plants, branches, leaves, None)
+	}
+
+	pub fn compact_spans(
+		&self,
+		plants: &[PlantDescriptor],
+		branches: &[BranchDescriptor],
+		leaves: &[LeafDescriptor],
+		spans: Option<&[GroveVisibleSpan]>,
+	) -> CompactedTreeLists {
 		let mut lists = CompactedTreeLists::default();
-		let wood_keep = keep_fraction(self.capacities[0], branches.len() as u32);
-		let leaf_keep = keep_fraction(self.capacities[0], leaves.len() as u32);
-		for (branch_index, branch) in branches.iter().enumerate() {
+		let branch_total = spans
+			.map(|spans| spans.iter().map(|span| span.branch_count).sum::<u32>())
+			.unwrap_or(branches.len() as u32);
+		let leaf_total = spans
+			.map(|spans| spans.iter().map(|span| span.leaf_count).sum::<u32>())
+			.unwrap_or(leaves.len() as u32);
+		let wood_keep = keep_fraction(self.capacities[0], branch_total);
+		let leaf_keep = keep_fraction(self.capacities[0], leaf_total);
+		let branch_indices = span_indices(spans, branches.len(), true);
+		let leaf_indices = span_indices(spans, leaves.len(), false);
+		for branch_index in branch_indices {
+			let Some(branch) = branches.get(branch_index) else {
+				continue;
+			};
 			lists.considered_wood += 1;
 			let Some(plant) = plants.get(branch.plant_index as usize) else {
 				continue;
@@ -152,7 +173,10 @@ impl TreeSelector {
 			lists.wood[slot].push(branch_index as u32);
 			lists.submitted_wood += 1;
 		}
-		for (leaf_index, leaf) in leaves.iter().enumerate() {
+		for leaf_index in leaf_indices {
+			let Some(leaf) = leaves.get(leaf_index) else {
+				continue;
+			};
 			lists.considered_foliage += 1;
 			let Some(plant) = plants.get(leaf.plant_index as usize) else {
 				continue;
@@ -223,6 +247,24 @@ impl TreeSelector {
 			}
 		}
 		true
+	}
+}
+
+fn span_indices(spans: Option<&[GroveVisibleSpan]>, fallback_len: usize, branch: bool) -> Vec<usize> {
+	match spans {
+		None => (0..fallback_len).collect(),
+		Some(spans) => {
+			let mut out = Vec::new();
+			for span in spans {
+				let (off, count) = if branch {
+					(span.branch_off, span.branch_count)
+				} else {
+					(span.leaf_off, span.leaf_count)
+				};
+				out.extend(off as usize..off as usize + count as usize);
+			}
+			out
+		}
 	}
 }
 
@@ -377,6 +419,27 @@ mod tests {
 		)
 		.compact(&field.plants, &field.branches, &field.leaves);
 		assert!(far.triangle_count() < near.triangle_count());
+		Ok(())
+	}
+
+	#[test]
+	fn culled_grove_span_list_is_zero_select_work() -> anyhow::Result<()> {
+		let settings = TreeFieldSettings::default();
+		let patch = TreePatch::isolated(1, Vec3::ZERO, crate::recipe::TreeRecipe::storybook());
+		let field = TreeField::rebuild([&patch], &settings);
+		let selector = TreeSelector::from_view(
+			look_view(Vec3::new(6.0, 8.0, 14.0), Vec3::ZERO, 720.0),
+			&settings,
+		);
+		let lists = selector.compact_spans(
+			&field.plants,
+			&field.branches,
+			&field.leaves,
+			Some(&[]),
+		);
+		assert_eq!(lists.considered_wood, 0);
+		assert_eq!(lists.considered_foliage, 0);
+		assert_eq!(lists.submitted(), 0);
 		Ok(())
 	}
 }

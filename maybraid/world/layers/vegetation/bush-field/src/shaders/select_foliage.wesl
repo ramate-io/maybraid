@@ -3,6 +3,7 @@
 import vegetation_shaders::wesl::lod::{catalog_select_index, lod_bucket, nested_keep, LodThresholds};
 import vegetation_shaders::wesl::layout::GrassViewUniform;
 import vegetation_shaders::wesl::wind::max_wind_displacement_m;
+import vegetation_shaders::wesl::grove::GroveVisibleSpan;
 import vegetation_bush_field::shaders::layout::{PlantDescriptor, BranchDescriptor, LeafDescriptor};
 
 @group(0) @binding(0) var<uniform> view: GrassViewUniform;
@@ -13,6 +14,19 @@ import vegetation_bush_field::shaders::layout::{PlantDescriptor, BranchDescripto
 @group(0) @binding(5) var<storage, read_write> list_near: array<u32>;
 @group(0) @binding(6) var<storage, read_write> list_mid: array<u32>;
 @group(0) @binding(7) var<storage, read_write> list_far: array<u32>;
+@group(0) @binding(8) var<storage, read> visible_spans: array<GroveVisibleSpan>;
+
+fn map_visible_leaf(work_index: u32, span_count: u32) -> u32 {
+    var cursor = 0u;
+    for (var i = 0u; i < span_count; i++) {
+        let span = visible_spans[i];
+        if (work_index < cursor + span.leaf_count) {
+            return span.leaf_off + (work_index - cursor);
+        }
+        cursor += span.leaf_count;
+    }
+    return 0xFFFFFFFFu;
+}
 
 const PARENT_NONE: u32 = 0xFFFFFFFFu;
 
@@ -94,9 +108,18 @@ fn select(
     @builtin(global_invocation_id) gid: vec3<u32>,
     @builtin(num_workgroups) nwg: vec3<u32>,
 ) {
-    let leaf_index = catalog_select_index(gid, nwg);
-    let leaf_count = u32(view.counts.z);
-    if (leaf_index >= leaf_count) {
+    var leaf_index = catalog_select_index(gid, nwg);
+    var leaf_count = u32(view.counts.z);
+    let span_count = u32(view.light_direction.w);
+    if (span_count > 0u) {
+        if (leaf_index >= leaf_count) {
+            return;
+        }
+        leaf_index = map_visible_leaf(leaf_index, span_count);
+        if (leaf_index == 0xFFFFFFFFu) {
+            return;
+        }
+    } else if (leaf_index >= leaf_count) {
         return;
     }
     let leaf = leaves[leaf_index];

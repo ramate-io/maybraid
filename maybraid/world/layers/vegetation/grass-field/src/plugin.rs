@@ -11,7 +11,6 @@ use bevy::render::{ExtractSchedule, MainWorld, RenderApp};
 use vegetation_components::CanopyShadowMode;
 use vegetation_shaders::VegetationWeslPlugin;
 
-use crate::bounds::GrassBounds;
 use crate::capability::GrassGpuCapability;
 use crate::catalog::{ADMISSION_BUDGET, CatalogApply, GroveId};
 use crate::diagnostics::GrassFieldStats;
@@ -54,7 +53,7 @@ impl Plugin for GrassFieldPlugin {
 		app.insert_resource(GrassFieldSettings::from_env());
 		app.init_resource::<GrassField>();
 		app.init_resource::<GrassFieldStats>();
-		app.init_resource::<GrassGroveCatalog>();
+		app.insert_resource(GrassGroveCatalog::index_only());
 		app.init_resource::<GrassCatalogOps>();
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevGrassTime>();
@@ -184,7 +183,7 @@ fn snapshot_extracted_frame(
 	extracted.prev_time_s = prev_time_s;
 	extracted.light_direction = light_direction.normalize_or(Vec3::Y);
 	extracted.shadow_mode = shadow_mode.map(|mode| *mode).unwrap_or_default();
-	extracted.blade_count = catalog.blades.len() as u32;
+	extracted.blade_count = catalog.resident_blades() as u32;
 	extracted.patch_count = catalog.patches.len() as u32;
 	extracted.grove_residency = catalog.grove_residency;
 }
@@ -193,19 +192,15 @@ fn sync_presenter_bounds(
 	catalog: Res<GrassGroveCatalog>,
 	mut presenters: Query<&mut Aabb, With<GrassFieldPresenter>>,
 ) {
-	if catalog.is_empty() {
+	if !catalog.is_changed() {
 		return;
 	}
-	let mut bounds = GrassBounds::empty();
-	for header in catalog.patches.iter().filter(|header| header.is_active()) {
-		bounds = bounds.union(GrassBounds { min: header.aabb_min, max: header.aabb_max });
-	}
-	if bounds.is_empty() {
+	let Some((min, max)) = catalog.active_bounds() else {
 		return;
-	}
+	};
 	let aabb = Aabb {
-		center: Vec3A::from((bounds.min + bounds.max) * 0.5),
-		half_extents: Vec3A::from((bounds.max - bounds.min) * 0.5),
+		center: Vec3A::from((min + max) * 0.5),
+		half_extents: Vec3A::from((max - min) * 0.5),
 	};
 	for mut existing in &mut presenters {
 		*existing = aabb;

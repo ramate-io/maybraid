@@ -14,7 +14,11 @@ mod catalog;
 mod diagnostics;
 mod field;
 mod gpu;
+mod gpu_arena;
 mod grove_catalog;
+mod grove_cull;
+mod grove_record;
+mod grove_retain;
 mod host;
 mod patch;
 mod plugin;
@@ -32,7 +36,18 @@ pub use catalog::{
 };
 pub use diagnostics::GrassFieldStats;
 pub use field::{GrassField, GrassFieldSettings};
+pub use gpu_arena::{ensure_storage_size, grow_storage_buffer, ArenaBufferPlan, ArenaGrow};
 pub use grove_catalog::{GrassCatalogOp, GrassCatalogOps, GrassGroveCatalog};
+pub use grove_cull::{
+	cull_grass_patches, cull_woody_groves, grass_patch_visible, grove_lod_band, map_work_index,
+	woody_grove_visible, GROVE_BAND_HYSTERESIS_M,
+};
+pub use grove_record::{
+	GroveVisibleSpan, VisibleGrove, WoodyGroveRecord, WOODY_GROVE_RECORD_STRIDE,
+};
+pub use grove_retain::{
+	grove_retain_force_rebuild, RetainedGroveFrame, GROVE_RETAIN_ENV, GROVE_RETAIN_FORCE_REBUILD,
+};
 pub use host::GrassPatchLod;
 pub use patch::{GrassPatch, SurfaceSample};
 pub use plugin::{collect_catalog_ops, GrassFieldPlugin};

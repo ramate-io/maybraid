@@ -15,7 +15,6 @@ use vegetation_components::CanopyShadowMode;
 use vegetation_grass_field::{ADMISSION_BUDGET, CatalogApply, GrassGpuCapability, GroveId};
 use vegetation_shaders::VegetationWeslPlugin;
 
-use crate::bounds::TreeBounds;
 use crate::catalog::{TreeCatalogOp, TreeCatalogOps, TreeGroveCatalog};
 use crate::diagnostics::TreeFieldStats;
 use crate::field::{TreeField, TreeFieldSettings};
@@ -64,7 +63,7 @@ impl Plugin for TreeFieldPlugin {
 		app.insert_resource(TreeFieldSettings::from_env());
 		app.init_resource::<TreeField>();
 		app.init_resource::<TreeFieldStats>();
-		app.init_resource::<TreeGroveCatalog>();
+		app.insert_resource(TreeGroveCatalog::index_only());
 		app.init_resource::<TreeCatalogOps>();
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevTreeTime>();
@@ -216,9 +215,9 @@ fn snapshot_extracted_frame(
 	extracted.prev_time_s = prev_time_s;
 	extracted.light_direction = light_direction.normalize_or(Vec3::Y);
 	extracted.shadow_mode = shadow_mode.map(|mode| *mode).unwrap_or_default();
-	extracted.plant_count = catalog.plants.len() as u32;
-	extracted.branch_count = catalog.branches.len() as u32;
-	extracted.leaf_count = catalog.leaves.len() as u32;
+	extracted.plant_count = catalog.resident_plants() as u32;
+	extracted.branch_count = catalog.resident_branches() as u32;
+	extracted.leaf_count = catalog.resident_leaves() as u32;
 	extracted.grove_residency = catalog.grove_residency;
 	if requested_world_tree_mode().is_some() && catalog.is_changed() {
 		info!(
@@ -236,22 +235,17 @@ fn snapshot_extracted_frame(
 
 fn sync_presenter_bounds(
 	catalog: Res<TreeGroveCatalog>,
-	settings: Res<TreeFieldSettings>,
 	mut presenters: Query<&mut Aabb, With<TreeFieldPresenter>>,
 ) {
-	if catalog.is_empty() {
+	if !catalog.is_changed() {
 		return;
 	}
-	let mut bounds = TreeBounds::empty();
-	for plant in catalog.plants.iter().filter(|plant| plant.is_active()) {
-		bounds = bounds.union(TreeBounds::from_plant(plant, settings.wind.strength_m));
-	}
-	if bounds.is_empty() {
+	let Some((min, max)) = catalog.active_bounds() else {
 		return;
-	}
+	};
 	let aabb = Aabb {
-		center: Vec3A::from((bounds.min + bounds.max) * 0.5),
-		half_extents: Vec3A::from((bounds.max - bounds.min) * 0.5),
+		center: Vec3A::from((min + max) * 0.5),
+		half_extents: Vec3A::from((max - min) * 0.5),
 	};
 	for mut existing in &mut presenters {
 		*existing = aabb;

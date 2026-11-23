@@ -56,6 +56,8 @@ pub struct GroveEncodeStats {
 	pub catalog_bytes: u64,
 	pub catalog_clones: u32,
 	pub truncated_plants: u32,
+	pub span_uploads: u32,
+	pub retained_clean: u32,
 }
 
 impl GroveEncodeStats {
@@ -169,12 +171,21 @@ impl<T: GroveCatalogOp> CatalogApply<T> {
 		budget: usize,
 		mut apply_one: impl FnMut(&T),
 	) -> Self {
+		Self::budgeted_mut(ops, budget, |op| apply_one(op))
+	}
+
+	/// Like [`Self::budgeted`], but the apply callback may take descriptor ownership.
+	pub fn budgeted_mut(
+		ops: impl IntoIterator<Item = T>,
+		budget: usize,
+		mut apply_one: impl FnMut(&mut T),
+	) -> Self {
 		let mut leftover: Vec<T> = Vec::new();
 		let mut applied: Vec<T> = Vec::new();
 		let mut admits = 0usize;
-		for op in ops {
+		for mut op in ops {
 			if op.is_retire() {
-				apply_one(&op);
+				apply_one(&mut op);
 				let id = op.grove_id();
 				leftover.retain(|pending: &T| pending.is_retire() || pending.grove_id() != id);
 				applied.push(op);
@@ -184,7 +195,7 @@ impl<T: GroveCatalogOp> CatalogApply<T> {
 				leftover.push(op);
 				continue;
 			}
-			apply_one(&op);
+			apply_one(&mut op);
 			admits += 1;
 			applied.push(op);
 		}
@@ -221,6 +232,24 @@ impl<T> CatalogOpQueue<T> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn retained_clean_frame_skips_select_but_still_draws() {
+		let dirty = GroveEncodeStats::woody_kind();
+		let clean = GroveEncodeStats {
+			passes: 0,
+			dispatches: 0,
+			draws: 6,
+			uniform_writes: 1,
+			span_uploads: 0,
+			retained_clean: 1,
+			..GroveEncodeStats::default()
+		};
+		assert_eq!(clean.dispatches, 0);
+		assert_eq!(clean.span_uploads, 0);
+		assert_eq!(clean.draws, dirty.draws);
+		assert_eq!(clean.uniform_writes, dirty.uniform_writes);
+	}
 
 	#[test]
 	fn encode_counts_do_not_depend_on_grove_count() {
