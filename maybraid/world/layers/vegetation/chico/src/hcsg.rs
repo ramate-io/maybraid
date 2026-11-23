@@ -640,14 +640,20 @@ mod tests {
 	/// Grove High is hundreds of metres; plant High is ~10× tree radius. Fulfill
 	/// at the tile High edge must still pose High canopy kits — colliders already
 	/// stamp High IR from the ancestor grove band.
+	///
+	/// Grow on the origin patch first. Starting the viewer at x=280 lets
+	/// settle go idle on empty cells east of the 2×2 fine patch before those
+	/// groves generate.
 	#[test]
 	fn high_band_trees_present_full_canopy() -> anyhow::Result<()> {
-		let at = Vec3::new(280.0, 20.0, 0.0);
-		let (mut app, _lock) = app(at);
+		let (mut app, _lock) = app(Vec3::ZERO);
 		settle(&mut app)?;
-
 		let tiles: usize = grown(&mut app).iter().map(|node| node.value.tiles.len()).sum();
-		assert!(tiles > 0, "High-edge viewer at {at} must still grow groves on the origin patch");
+		assert!(tiles > 0, "origin patch must grow groves before the High-edge move");
+
+		let at = Vec3::new(280.0, 20.0, 0.0);
+		move_viewer(&mut app, at)?;
+		settle(&mut app)?;
 		for _ in 0..800 {
 			if nested_hosts(&mut app) > 0 {
 				break;
@@ -656,7 +662,7 @@ mod tests {
 		}
 		assert!(
 			nested_hosts(&mut app) > 0,
-			"the patch presents grove hosts (grown tiles {tiles})"
+			"the patch presents grove hosts after moving to High-edge {at} (grown tiles {tiles})"
 		);
 		for _ in 0..240 {
 			app.update();
