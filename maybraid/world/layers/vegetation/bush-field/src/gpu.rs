@@ -50,8 +50,8 @@ use vegetation_shaders::wesl::{
 use crate::catalog::{BushCatalogOps, BushGroveCatalog};
 use crate::diagnostics::BushFieldStats;
 use crate::layout::{
-	BranchDescriptor, LeafDescriptor, PlantDescriptor, WoodLod, BRANCH_DESCRIPTOR_STRIDE,
-	BUSH_LOD_COUNT, LEAF_DESCRIPTOR_STRIDE, PLANT_DESCRIPTOR_STRIDE,
+	WoodLod, BRANCH_DESCRIPTOR_STRIDE, BUSH_LOD_COUNT, LEAF_DESCRIPTOR_STRIDE,
+	PLANT_DESCRIPTOR_STRIDE,
 };
 use crate::plugin::{BushFieldPresenter, ExtractedBushField};
 use crate::select::BushSelector;
@@ -442,11 +442,11 @@ fn prepare_bush_buffers(
 	let mut grew = false;
 	if catalog.last_writes > 0 {
 		let plant_bytes =
-			(catalog.plants.len() as u64 * PLANT_DESCRIPTOR_STRIDE).max(PLANT_DESCRIPTOR_STRIDE);
-		let branch_bytes = (catalog.branches.len() as u64 * BRANCH_DESCRIPTOR_STRIDE)
+			(catalog.plant_slots() as u64 * PLANT_DESCRIPTOR_STRIDE).max(PLANT_DESCRIPTOR_STRIDE);
+		let branch_bytes = (catalog.branch_slots() as u64 * BRANCH_DESCRIPTOR_STRIDE)
 			.max(BRANCH_DESCRIPTOR_STRIDE);
 		let leaf_bytes =
-			(catalog.leaves.len() as u64 * LEAF_DESCRIPTOR_STRIDE).max(LEAF_DESCRIPTOR_STRIDE);
+			(catalog.leaf_slots() as u64 * LEAF_DESCRIPTOR_STRIDE).max(LEAF_DESCRIPTOR_STRIDE);
 		grew = grow_storage_buffer(
 			&device,
 			&mut state.plants,
@@ -471,39 +471,36 @@ fn prepare_bush_buffers(
 		);
 		{
 			for upload in &catalog.last_uploads {
-				write_span(
+				write_encoded_span(
 					&device,
 					state.plants.as_ref(),
 					upload.plants,
-					&catalog.plants,
 					PLANT_DESCRIPTOR_STRIDE,
-					PlantDescriptor::to_std430_bytes,
+					&catalog.encode_plants(upload),
 					&mut pending_writes,
 				);
-				write_span(
+				write_encoded_span(
 					&device,
 					state.branches.as_ref(),
 					upload.branches,
-					&catalog.branches,
 					BRANCH_DESCRIPTOR_STRIDE,
-					BranchDescriptor::to_std430_bytes,
+					&catalog.encode_branches(upload),
 					&mut pending_writes,
 				);
-				write_span(
+				write_encoded_span(
 					&device,
 					state.leaves.as_ref(),
 					upload.leaves,
-					&catalog.leaves,
 					LEAF_DESCRIPTOR_STRIDE,
-					LeafDescriptor::to_std430_bytes,
+					&catalog.encode_leaves(upload),
 					&mut pending_writes,
 				);
 			}
 		}
 		state.generation = catalog.generation;
-		state.plant_count = catalog.plants.len();
-		state.branch_count = catalog.branches.len();
-		state.leaf_count = catalog.leaves.len();
+		state.plant_count = catalog.plant_slots();
+		state.branch_count = catalog.branch_slots();
+		state.leaf_count = catalog.leaf_slots();
 	}
 	if catalog.is_empty() {
 		state.views.clear();
@@ -738,30 +735,21 @@ fn rebind_bush_select(
 	});
 }
 
-fn write_span<T, const N: usize>(
+fn write_encoded_span(
 	device: &RenderDevice,
 	buffer: Option<&Buffer>,
 	span: vegetation_grass_field::RangeSpan,
-	items: &[T],
 	stride: u64,
-	encode: fn(T) -> [u8; N],
+	bytes: &[u8],
 	pending: &mut Vec<PendingBufferWrite>,
-) where
-	T: Copy,
-{
-	if span.is_empty() {
+) {
+	if span.is_empty() || bytes.is_empty() {
 		return;
 	}
 	let Some(buffer) = buffer else {
 		return;
 	};
-	let start = span.offset as usize;
-	let end = (start + span.count as usize).min(items.len());
-	if start >= end {
-		return;
-	}
-	let bytes: Vec<u8> = items[start..end].iter().copied().flat_map(encode).collect();
-	stage_buffer_write(device, buffer, span.offset as u64 * stride, &bytes, pending);
+	stage_buffer_write(device, buffer, span.offset as u64 * stride, bytes, pending);
 }
 
 fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedBushField) -> GrassViewUniform {
@@ -1018,14 +1006,9 @@ fn cpu_fill_lists<'a>(
 		let selector = BushSelector::from_view(uniform, &extracted.settings);
 		let spans = work.retained.groves.iter().map(|grove| grove.span).collect::<Vec<_>>();
 		let lists = if extracted.grove_residency {
-			selector.compact_spans(
-				&catalog.plants,
-				&catalog.branches,
-				&catalog.leaves,
-				Some(&spans),
-			)
+			selector.compact_catalog(catalog, Some(&spans))
 		} else {
-			selector.compact(&catalog.plants, &catalog.branches, &catalog.leaves)
+			selector.compact_catalog(catalog, None)
 		};
 		for lod in 0..BUSH_LOD_COUNT {
 			if !lists.wood[lod].is_empty() {
@@ -1070,7 +1053,7 @@ fn record_cpu_stats<'a>(
 		}
 		let uniform = make_view_uniform(view, extracted);
 		let selector = BushSelector::from_view(uniform, &extracted.settings);
-		let lists = selector.compact(&catalog.plants, &catalog.branches, &catalog.leaves);
+		let lists = selector.compact_catalog(catalog, None);
 		record_lists(extracted, &lists, stats.as_deref_mut());
 		break;
 	}

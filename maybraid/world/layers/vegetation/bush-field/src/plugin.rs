@@ -1,7 +1,10 @@
 //! Main-world plugin: catalog admits, two kind presenters, render-app wiring.
 
+use std::sync::Arc;
+
 use bevy::camera::primitives::Aabb;
 use bevy::camera::visibility::{self, NoFrustumCulling, VisibilityClass};
+use bevy::ecs::{entity_disabling::Disabled, query::Allow};
 use bevy::light::NotShadowCaster;
 use bevy::math::Vec3A;
 use bevy::prelude::*;
@@ -45,6 +48,10 @@ pub struct ExtractedBushField {
 	pub leaf_count: u32,
 	pub grove_residency: bool,
 }
+
+/// Immutable snapshot used as an admit source. Presenters are not parented here.
+#[derive(Component, Clone, Debug)]
+pub struct BushGrove(pub Arc<BushField>);
 
 /// Registers GPU bush field rendering. Existing kit bushes stay available.
 pub struct BushFieldPlugin;
@@ -112,13 +119,18 @@ fn spawn_presenter(mut commands: Commands) {
 
 pub fn collect_catalog_ops(
 	patches: Query<(Entity, &BushPatch), Changed<BushPatch>>,
-	mut removed: RemovedComponents<BushPatch>,
+	mut removed_patches: RemovedComponents<BushPatch>,
+	groves: Query<(Entity, &BushGrove), (Changed<BushGrove>, Allow<Disabled>)>,
+	mut removed_groves: RemovedComponents<BushGrove>,
 	settings: Res<BushFieldSettings>,
 	mut ops: ResMut<BushCatalogOps>,
 	mut catalog: ResMut<BushGroveCatalog>,
 ) {
 	let mut fresh = Vec::new();
-	for id in removed.read() {
+	for id in removed_patches.read() {
+		fresh.push(BushCatalogOp::Retire { id: GroveId::from_entity(id) });
+	}
+	for id in removed_groves.read() {
 		fresh.push(BushCatalogOp::Retire { id: GroveId::from_entity(id) });
 	}
 	for (entity, patch) in &patches {
@@ -130,6 +142,10 @@ pub fn collect_catalog_ops(
 			BushField::rebuild([patch], &settings),
 			patch.samples.len(),
 		));
+	}
+	for (entity, grove) in &groves {
+		catalog.grove_residency = true;
+		fresh.push(admit_from_grove(GroveId::from_entity(entity), Arc::clone(&grove.0)));
 	}
 	if fresh.is_empty() && catalog.pending.is_empty() {
 		let catalog = catalog.bypass_change_detection();
@@ -146,22 +162,17 @@ pub fn collect_catalog_ops(
 }
 
 fn admit_from_field(id: GroveId, field: BushField, requested: usize) -> BushCatalogOp {
+	admit_from_arc(id, Arc::new(field), requested)
+}
+
+fn admit_from_grove(id: GroveId, field: Arc<BushField>) -> BushCatalogOp {
+	let requested = field.plants.len();
+	admit_from_arc(id, field, requested)
+}
+
+fn admit_from_arc(id: GroveId, field: Arc<BushField>, requested: usize) -> BushCatalogOp {
 	let truncated = requested.saturating_sub(field.plants.len()) as u32;
-	let (aabb_min, aabb_max) = if field.bounds.is_empty() {
-		(Vec3::ZERO, Vec3::ZERO)
-	} else {
-		(field.bounds.min, field.bounds.max)
-	};
-	BushCatalogOp::Admit {
-		id,
-		plants: field.plants,
-		branches: field.branches,
-		leaves: field.leaves,
-		aabb_min,
-		aabb_max,
-		seed: 0,
-		truncated_plants: truncated,
-	}
+	BushCatalogOp::Admit { id, field, truncated_plants: truncated }
 }
 
 fn extract_catalog_ops(mut main_world: ResMut<MainWorld>, mut render: ResMut<BushCatalogOps>) {
@@ -362,5 +373,31 @@ mod tests {
 		let CatalogApply { leftover, .. } = render.apply(forwarded, ADMISSION_BUDGET);
 		assert!(leftover.is_empty());
 		assert!(!render.contains(GroveId(300)));
+	}
+
+	#[test]
+	fn grove_component_and_render_catalog_share_field_arc() {
+		let mut app = App::new();
+		app.init_resource::<BushFieldSettings>()
+			.init_resource::<BushGroveCatalog>()
+			.init_resource::<BushCatalogOps>()
+			.add_systems(Update, collect_catalog_ops);
+		let patch = BushPatch::isolated(1, Vec3::ZERO, BushRecipe::small_scrub());
+		let field = BushField::rebuild([&patch], &BushFieldSettings::default());
+		let grove = Arc::new(field);
+		let entity = app.world_mut().spawn(BushGrove(Arc::clone(&grove))).id();
+		app.update();
+		let ops = app.world_mut().resource_mut::<BushCatalogOps>().take();
+		let mut render = BushGroveCatalog::render();
+		render.apply(ops, ADMISSION_BUDGET);
+		let id = GroveId::from_entity(entity);
+		let catalog_arc = render.source(id).expect("render catalog holds the grove");
+		assert!(Arc::ptr_eq(catalog_arc, &grove), "render catalog must not deep-copy the field");
+		let component = app.world().entity(entity).get::<BushGrove>().expect("grove component");
+		assert!(Arc::ptr_eq(&component.0, catalog_arc));
+		assert!(
+			Arc::strong_count(catalog_arc) >= 3,
+			"entity, render catalog, and test handle share one allocation"
+		);
 	}
 }

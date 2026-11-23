@@ -1,7 +1,10 @@
 //! Main-world plugin: catalog admits, one grass presenter, render-app wiring.
 
+use std::sync::Arc;
+
 use bevy::camera::primitives::Aabb;
 use bevy::camera::visibility::{self, NoFrustumCulling, VisibilityClass};
+use bevy::ecs::{entity_disabling::Disabled, query::Allow};
 use bevy::light::NotShadowCaster;
 use bevy::math::Vec3A;
 use bevy::prelude::*;
@@ -26,6 +29,10 @@ use crate::shaders::GrassShadersPlugin;
 #[component(on_add = visibility::add_visibility_class::<GrassFieldPresenter>)]
 #[extract_app(RenderApp)]
 pub struct GrassFieldPresenter;
+
+/// Immutable snapshot used as an admit source. Presenters are not parented here.
+#[derive(Component, Clone, Debug)]
+pub struct GrassGrove(pub Arc<GrassField>);
 
 /// Frame inputs. Blade arenas stay in [`GrassGroveCatalog`].
 #[derive(Resource, Clone, ExtractResource, Default)]
@@ -118,33 +125,31 @@ fn sync_presenter_shadows(
 
 pub fn collect_catalog_ops(
 	patches: Query<(Entity, &GrassPatch), Changed<GrassPatch>>,
-	mut removed: RemovedComponents<GrassPatch>,
+	mut removed_patches: RemovedComponents<GrassPatch>,
+	groves: Query<(Entity, &GrassGrove), (Changed<GrassGrove>, Allow<Disabled>)>,
+	mut removed_groves: RemovedComponents<GrassGrove>,
 	settings: Res<GrassFieldSettings>,
 	mut ops: ResMut<GrassCatalogOps>,
 	mut catalog: ResMut<GrassGroveCatalog>,
 ) {
 	let mut fresh = Vec::new();
-	for id in removed.read() {
+	for id in removed_patches.read() {
+		fresh.push(GrassCatalogOp::Retire { id: GroveId::from_entity(id) });
+	}
+	for id in removed_groves.read() {
 		fresh.push(GrassCatalogOp::Retire { id: GroveId::from_entity(id) });
 	}
 	for (entity, patch) in &patches {
 		let requested = patch.descriptors().len();
-		let field = GrassField::rebuild([patch], &settings);
-		let truncated = requested.saturating_sub(field.blades.len()) as u32;
-		let (aabb_min, aabb_max) = if field.bounds.is_empty() {
-			(Vec3::ZERO, Vec3::ZERO)
-		} else {
-			(field.bounds.min, field.bounds.max)
-		};
-		fresh.push(GrassCatalogOp::Admit {
-			id: GroveId::from_entity(entity),
-			blades: field.blades,
-			aabb_min,
-			aabb_max,
-			seed: patch.seed,
-			truncated_plants: truncated,
-			grove_residency: patch.grove_residency,
-		});
+		fresh.push(admit_from_field(
+			GroveId::from_entity(entity),
+			GrassField::rebuild([patch], &settings),
+			requested,
+		));
+	}
+	for (entity, grove) in &groves {
+		catalog.grove_residency = true;
+		fresh.push(admit_from_grove(GroveId::from_entity(entity), Arc::clone(&grove.0)));
 	}
 	if fresh.is_empty() && catalog.pending.is_empty() {
 		let catalog = catalog.bypass_change_detection();
@@ -158,6 +163,20 @@ pub fn collect_catalog_ops(
 	let CatalogApply { applied, leftover } = catalog.apply(batch, ADMISSION_BUDGET);
 	ops.ops.extend(applied);
 	catalog.pending = leftover;
+}
+
+fn admit_from_field(id: GroveId, field: GrassField, requested: usize) -> GrassCatalogOp {
+	admit_from_arc(id, Arc::new(field), requested)
+}
+
+fn admit_from_grove(id: GroveId, field: Arc<GrassField>) -> GrassCatalogOp {
+	let requested = field.blades.len();
+	admit_from_arc(id, field, requested)
+}
+
+fn admit_from_arc(id: GroveId, field: Arc<GrassField>, requested: usize) -> GrassCatalogOp {
+	let truncated = requested.saturating_sub(field.blades.len()) as u32;
+	GrassCatalogOp::Admit { id, field, truncated_plants: truncated }
 }
 
 fn extract_catalog_ops(mut main_world: ResMut<MainWorld>, mut render: ResMut<GrassCatalogOps>) {
@@ -227,17 +246,13 @@ mod tests {
 	}
 
 	fn admit_id(id: u64) -> GrassCatalogOp {
-		let patch = GrassPatch::isolated_clump(1, Vec3::new(id as f32, 0.0, 0.0), 8);
-		let field = GrassField::rebuild([&patch], &GrassFieldSettings::default());
-		GrassCatalogOp::Admit {
-			id: GroveId(id),
-			blades: field.blades,
-			aabb_min: Vec3::ZERO,
-			aabb_max: Vec3::ONE,
-			seed: id as u32,
-			truncated_plants: 0,
-			grove_residency: true,
-		}
+		let patch =
+			GrassPatch::isolated_clump(1, Vec3::new(id as f32, 0.0, 0.0), 8).with_grove_residency();
+		admit_from_field(
+			GroveId(id),
+			GrassField::rebuild([&patch], &GrassFieldSettings::default()),
+			8,
+		)
 	}
 
 	#[test]
@@ -318,5 +333,31 @@ mod tests {
 		let CatalogApply { leftover, .. } = render.apply(forwarded, ADMISSION_BUDGET);
 		assert!(leftover.is_empty());
 		assert!(!render.contains(GroveId(300)));
+	}
+
+	#[test]
+	fn grove_component_and_render_catalog_share_field_arc() {
+		let mut app = App::new();
+		app.init_resource::<GrassFieldSettings>()
+			.init_resource::<GrassGroveCatalog>()
+			.init_resource::<GrassCatalogOps>()
+			.add_systems(Update, collect_catalog_ops);
+		let patch = GrassPatch::isolated_clump(1, Vec3::ZERO, 8).with_grove_residency();
+		let field = GrassField::rebuild([&patch], &GrassFieldSettings::default());
+		let grove = Arc::new(field);
+		let entity = app.world_mut().spawn(GrassGrove(Arc::clone(&grove))).id();
+		app.update();
+		let ops = app.world_mut().resource_mut::<GrassCatalogOps>().take();
+		let mut render = GrassGroveCatalog::render();
+		render.apply(ops, ADMISSION_BUDGET);
+		let id = GroveId::from_entity(entity);
+		let catalog_arc = render.source(id).expect("render catalog holds the grove");
+		assert!(Arc::ptr_eq(catalog_arc, &grove), "render catalog must not deep-copy the field");
+		let component = app.world().entity(entity).get::<GrassGrove>().expect("grove component");
+		assert!(Arc::ptr_eq(&component.0, catalog_arc));
+		assert!(
+			Arc::strong_count(catalog_arc) >= 3,
+			"entity, render catalog, and test handle share one allocation"
+		);
 	}
 }

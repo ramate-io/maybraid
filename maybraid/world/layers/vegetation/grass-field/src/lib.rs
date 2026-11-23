@@ -52,7 +52,7 @@ pub use grove_record::{
 pub use grove_retain::{remember_bands, GroveRetainPolicy, GroveSubmit, RetainedGroveFrame};
 pub use host::GrassPatchLod;
 pub use patch::{GrassPatch, SurfaceSample};
-pub use plugin::{collect_catalog_ops, GrassFieldPlugin};
+pub use plugin::{collect_catalog_ops, GrassFieldPlugin, GrassGrove};
 pub use select::{
 	aabb_nearest_distance, frustum_planes, CompactedLists, GrassSelector, WorldFrustum,
 };

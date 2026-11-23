@@ -17,12 +17,10 @@ use vegetation_grass_field::{
 };
 use vegetation_shaders::VegetationWeslPlugin;
 
-use crate::bounds::TreeBounds;
 use crate::catalog::{TreeCatalogOp, TreeCatalogOps, TreeGroveCatalog};
 use crate::diagnostics::TreeFieldStats;
 use crate::field::{TreeField, TreeFieldSettings};
 use crate::gpu::{requested_world_tree_mode, TreeGpuPlugin};
-use crate::layout::{BranchDescriptor, LeafDescriptor, PlantDescriptor};
 use crate::patch::TreePatch;
 use crate::shaders::TreeShadersPlugin;
 
@@ -144,7 +142,7 @@ pub fn collect_catalog_ops(
 	}
 	for (entity, grove) in &groves {
 		catalog.grove_residency = true;
-		fresh.push(admit_from_grove(GroveId::from_entity(entity), grove.0.as_ref()));
+		fresh.push(admit_from_grove(GroveId::from_entity(entity), Arc::clone(&grove.0)));
 	}
 	if fresh.is_empty() && catalog.pending.is_empty() {
 		let catalog = catalog.bypass_change_detection();
@@ -161,41 +159,17 @@ pub fn collect_catalog_ops(
 }
 
 fn admit_from_field(id: GroveId, field: TreeField, requested: usize) -> TreeCatalogOp {
-	admit_from_parts(id, field.plants, field.branches, field.leaves, field.bounds, requested)
+	admit_from_arc(id, Arc::new(field), requested)
 }
 
-fn admit_from_grove(id: GroveId, field: &TreeField) -> TreeCatalogOp {
-	admit_from_parts(
-		id,
-		field.plants.clone(),
-		field.branches.clone(),
-		field.leaves.clone(),
-		field.bounds,
-		field.plants.len(),
-	)
+fn admit_from_grove(id: GroveId, field: Arc<TreeField>) -> TreeCatalogOp {
+	let requested = field.plants.len();
+	admit_from_arc(id, field, requested)
 }
 
-fn admit_from_parts(
-	id: GroveId,
-	plants: Vec<PlantDescriptor>,
-	branches: Vec<BranchDescriptor>,
-	leaves: Vec<LeafDescriptor>,
-	bounds: TreeBounds,
-	requested: usize,
-) -> TreeCatalogOp {
-	let truncated = requested.saturating_sub(plants.len()) as u32;
-	let (aabb_min, aabb_max) =
-		if bounds.is_empty() { (Vec3::ZERO, Vec3::ZERO) } else { (bounds.min, bounds.max) };
-	TreeCatalogOp::Admit {
-		id,
-		plants,
-		branches,
-		leaves,
-		aabb_min,
-		aabb_max,
-		seed: 0,
-		truncated_plants: truncated,
-	}
+fn admit_from_arc(id: GroveId, field: Arc<TreeField>, requested: usize) -> TreeCatalogOp {
+	let truncated = requested.saturating_sub(field.plants.len()) as u32;
+	TreeCatalogOp::Admit { id, field, truncated_plants: truncated }
 }
 
 fn extract_catalog_ops(mut main_world: ResMut<MainWorld>, mut render: ResMut<TreeCatalogOps>) {
@@ -498,5 +472,31 @@ mod tests {
 		let CatalogApply { leftover, .. } = render.apply(forwarded, ADMISSION_BUDGET);
 		assert!(leftover.is_empty());
 		assert!(!render.contains(GroveId(300)));
+	}
+
+	#[test]
+	fn grove_component_and_render_catalog_share_field_arc() {
+		let mut app = App::new();
+		app.init_resource::<TreeFieldSettings>()
+			.init_resource::<TreeGroveCatalog>()
+			.init_resource::<TreeCatalogOps>()
+			.add_systems(Update, collect_catalog_ops);
+		let patch = TreePatch::isolated(1, Vec3::ZERO, TreeRecipe::storybook());
+		let field = TreeField::rebuild([&patch], &TreeFieldSettings::default());
+		let grove = Arc::new(field);
+		let entity = app.world_mut().spawn(TreeGrove(Arc::clone(&grove))).id();
+		app.update();
+		let ops = app.world_mut().resource_mut::<TreeCatalogOps>().take();
+		let mut render = TreeGroveCatalog::render();
+		render.apply(ops, ADMISSION_BUDGET);
+		let id = GroveId::from_entity(entity);
+		let catalog_arc = render.source(id).expect("render catalog holds the grove");
+		assert!(Arc::ptr_eq(catalog_arc, &grove), "render catalog must not deep-copy the field");
+		let component = app.world().entity(entity).get::<TreeGrove>().expect("grove component");
+		assert!(Arc::ptr_eq(&component.0, catalog_arc));
+		assert!(
+			Arc::strong_count(catalog_arc) >= 3,
+			"entity, render catalog, and test handle share one allocation"
+		);
 	}
 }

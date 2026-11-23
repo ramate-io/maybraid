@@ -7,6 +7,8 @@ use vegetation_shaders::wesl::{
 };
 
 use crate::field::GrassFieldSettings;
+use crate::grove_catalog::GrassGroveCatalog;
+use crate::grove_record::GroveVisibleSpan;
 
 /// Clip-space frustum matching `select.wesl`. Shared by grass compute and the bush follow-up.
 #[derive(Clone, Copy, Debug)]
@@ -170,6 +172,46 @@ impl GrassSelector {
 		self.compact_spans(blades, patches, None)
 	}
 
+	pub fn compact_catalog(
+		&self,
+		catalog: &GrassGroveCatalog,
+		spans: Option<&[GroveVisibleSpan]>,
+	) -> CompactedLists {
+		if matches!(spans, Some(spans) if spans.is_empty()) {
+			return CompactedLists::default();
+		}
+		let blade_total: u32 = match spans {
+			Some(spans) => spans.iter().map(|span| span.branch_count).sum(),
+			None => catalog.sources().map(|source| source.blades.len() as u32).sum(),
+		};
+		let keep_fraction = if blade_total == 0 {
+			1.0
+		} else {
+			(self.capacities[0] as f32 / blade_total as f32).min(1.0)
+		};
+		let mut lists = CompactedLists::default();
+		for source in catalog.sources() {
+			let grove_lod = match spans {
+				None => None,
+				Some(spans) => {
+					let Some(span) = spans.iter().find(|span| span.branch_off == source.blade_off)
+					else {
+						continue;
+					};
+					Some(span.lod)
+				}
+			};
+			self.append_field_blades(
+				source.blades,
+				source.blade_off,
+				grove_lod,
+				keep_fraction,
+				&mut lists,
+			);
+		}
+		lists
+	}
+
 	pub fn compact_spans(
 		&self,
 		blades: &[BladeDescriptor],
@@ -243,6 +285,32 @@ impl GrassSelector {
 				continue;
 			}
 			lists.indices[lod].push(index);
+			lists.submitted += 1;
+		}
+	}
+
+	fn append_field_blades(
+		&self,
+		blades: &[BladeDescriptor],
+		blade_off: u32,
+		grove_lod: Option<u32>,
+		keep_fraction: f32,
+		lists: &mut CompactedLists,
+	) {
+		for (local, blade) in blades.iter().enumerate() {
+			lists.considered += 1;
+			if blade.density_rank() >= keep_fraction {
+				continue;
+			}
+			let Some(bucket) = self.classify_with_lod(blade, grove_lod) else {
+				continue;
+			};
+			let lod = bucket as usize;
+			if lists.indices[lod].len() as u32 >= self.capacities[lod] {
+				lists.overflow[lod] += 1;
+				continue;
+			}
+			lists.indices[lod].push(blade_off + local as u32);
 			lists.submitted += 1;
 		}
 	}

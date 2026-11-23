@@ -377,17 +377,17 @@ pub(crate) fn tick_capture(
 			let entities = entities.iter().count();
 			let kits = kits.iter().count();
 			let meshes = meshes.iter().count();
-			let plants = trees.plants.len();
-			let branches = trees.branches.len();
-			let leaves = trees.leaves.len();
+			let plants = trees.resident_plants();
+			let branches = trees.resident_branches();
+			let leaves = trees.resident_leaves();
 			let upload = trees.upload_bytes();
 			let stats = format!(
 				"shot={} mode={:?} samples={} dt_ms_mean={mean:.3} dt_ms_p95={p95:.3} dt_ms_max={max:.3} entities={entities} kit_meshes={kits} mesh3d={meshes} plants={plants} branches={branches} leaves={leaves} bushes={} grass={} upload_B={upload}\n",
 				shot.name,
 				shot.mode,
 				samples,
-				bushes.plants.len(),
-				grass.blades.len(),
+				bushes.resident_plants(),
+				grass.resident_blades(),
 			);
 			info!(target: "maybraid.tree_field", stats = stats.trim(), "tree capture stats");
 			if let Err(error) =

@@ -34,7 +34,7 @@ pub use layout::{
 	LEAF_DESCRIPTOR_STRIDE, PARENT_NONE, PLANT_DESCRIPTOR_STRIDE,
 };
 pub use patch::{BushPatch, BushSample};
-pub use plugin::{collect_catalog_ops, BushFieldPlugin};
+pub use plugin::{collect_catalog_ops, BushFieldPlugin, BushGrove};
 pub use recipe::BushRecipe;
 pub use select::{BushSelector, CompactedBushLists};
 pub use template::{LeafTemplate, WoodTemplate};

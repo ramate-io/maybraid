@@ -343,7 +343,7 @@ fn prepare_grass_buffers(
 	let mut grew = false;
 	if catalog.last_writes > 0 {
 		let blade_bytes =
-			(catalog.blades.len() as u64 * BLADE_DESCRIPTOR_STRIDE).max(BLADE_DESCRIPTOR_STRIDE);
+			(catalog.blade_slots() as u64 * BLADE_DESCRIPTOR_STRIDE).max(BLADE_DESCRIPTOR_STRIDE);
 		grew = grow_storage_buffer(
 			&device,
 			&mut state.blades,
@@ -357,26 +357,22 @@ fn prepare_grass_buffers(
 				if upload.blades.is_empty() {
 					continue;
 				}
-				let start = upload.blades.offset as usize;
-				let end = (start + upload.blades.count as usize).min(catalog.blades.len());
-				if start < end {
-					let bytes: Vec<u8> = catalog.blades[start..end]
-						.iter()
-						.flat_map(|blade| blade.to_std430_bytes())
-						.collect();
-					if let Some(buffer) = state.blades.as_ref() {
-						stage_buffer_write(
-							&device,
-							buffer,
-							u64::from(upload.blades.offset) * BLADE_DESCRIPTOR_STRIDE,
-							&bytes,
-							&mut pending_writes,
-						);
-					}
+				let bytes = catalog.encode_blades(upload);
+				if bytes.is_empty() {
+					continue;
+				}
+				if let Some(buffer) = state.blades.as_ref() {
+					stage_buffer_write(
+						&device,
+						buffer,
+						u64::from(upload.blades.offset) * BLADE_DESCRIPTOR_STRIDE,
+						&bytes,
+						&mut pending_writes,
+					);
 				}
 			}
 		}
-		state.blade_count = catalog.blades.len() as u32;
+		state.blade_count = catalog.blade_slots() as u32;
 		state.generation = catalog.generation;
 	}
 	if catalog.is_empty() {
@@ -764,9 +760,9 @@ fn cpu_fill_lists<'a>(
 		let selector = GrassSelector::from_view(uniform, &extracted.settings);
 		let spans = work.retained.groves.iter().map(|grove| grove.span).collect::<Vec<_>>();
 		let lists = if extracted.grove_residency {
-			selector.compact_spans(&catalog.blades, &catalog.patches, Some(&spans))
+			selector.compact_catalog(catalog, Some(&spans))
 		} else {
-			selector.compact(&catalog.blades, &catalog.patches)
+			selector.compact_catalog(catalog, None)
 		};
 		for (lod, indices) in lists.indices.iter().enumerate() {
 			if !indices.is_empty() {
@@ -793,7 +789,7 @@ fn record_cpu_stats<'a>(
 		}
 		let uniform = make_view_uniform(view, extracted);
 		let selector = GrassSelector::from_view(uniform, &extracted.settings);
-		let lists = selector.compact(&catalog.blades, &catalog.patches);
+		let lists = selector.compact_catalog(catalog, None);
 		record_lists(extracted, &lists, stats.as_deref_mut());
 		break;
 	}
