@@ -11,13 +11,10 @@ use maybraid_controllers_core::{
 use crate::user::SkillMapUser;
 use crate::SkillMapEnabled;
 
-/// Rest nest. Below this the stick has come home.
-pub const FLICK_REST: f32 = 0.28;
-/// Peak must clear this or it was a nudge.
-pub const FLICK_MIN_PEAK: f32 = 0.28;
-/// Faster than a hold, slower than a one-frame tap.
-pub const FLICK_MIN_SECS: f32 = 0.02;
-pub const FLICK_MAX_SECS: f32 = 0.32;
+use maybraid_virtual_pad_controller::FlickLane;
+pub use maybraid_virtual_pad_controller::{
+	FLICK_MAX_SECS, FLICK_MIN_PEAK, FLICK_MIN_SECS, FLICK_REST,
+};
 
 /// One completed flick. Direction is the stick throw; length is how hard (0..1+).
 #[derive(Message, Clone, Copy, Debug, PartialEq)]
@@ -71,53 +68,6 @@ impl SkillMapFlick {
 	}
 }
 
-#[derive(Clone, Debug, Default)]
-struct FlickLane {
-	active: bool,
-	t0: f32,
-	peak: Vec2,
-}
-
-impl FlickLane {
-	fn reset(&mut self) {
-		self.active = false;
-		self.peak = Vec2::ZERO;
-	}
-
-	fn sample(&mut self, t: f32, stick: Vec2) -> Option<Vec2> {
-		let mag = stick.length();
-		if !self.active {
-			if mag >= FLICK_REST {
-				self.active = true;
-				self.t0 = t;
-				self.peak = stick;
-			}
-			return None;
-		}
-		if mag > self.peak.length() {
-			self.peak = stick;
-		}
-		let elapsed = t - self.t0;
-		if elapsed > FLICK_MAX_SECS {
-			if mag < FLICK_REST {
-				self.reset();
-			}
-			return None;
-		}
-		if mag >= FLICK_REST {
-			return None;
-		}
-		self.active = false;
-		let peak = self.peak;
-		self.peak = Vec2::ZERO;
-		if elapsed >= FLICK_MIN_SECS && peak.length() >= FLICK_MIN_PEAK {
-			Some(peak)
-		} else {
-			None
-		}
-	}
-}
-
 /// True while the skill-map steer modifier is down (Xbox **RB** / keyboard **V**)
 /// and the Tanzer bumper chord is not held.
 pub fn skill_map_steer_held(sample: ActorControlSample) -> bool {
@@ -166,7 +116,7 @@ impl SkillMapController {
 	}
 
 	pub fn has_partial(&self) -> bool {
-		self.move_lane.active || self.look_lane.active
+		self.move_lane.is_active() || self.look_lane.is_active()
 	}
 
 	/// Gesture time advances only on delivered frames. Suspension leaves a
