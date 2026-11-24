@@ -20,7 +20,8 @@ pub mod widgets;
 pub use event::{CharacterMenuEvent, OverlayClose, OverlayOpen};
 pub use inventory::{
 	fill_inventory_screen, InventoryAIOPSlot, InventoryCarouselCard, InventoryCharacterPreviewSlot,
-	InventoryScreenArea, InventoryScreenReadOnly, InventoryScreenSlots, InventoryTile,
+	InventoryItemArt, InventoryItemMetrics, InventoryScreenArea, InventoryScreenReadOnly,
+	InventoryScreenSlots, InventoryTile,
 };
 pub use justify::MenuJustify;
 pub use overlay::{

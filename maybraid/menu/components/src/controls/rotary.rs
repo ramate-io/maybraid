@@ -45,6 +45,22 @@ impl RotaryLayout {
 		Self { card_width: 220.0, card_height: 360.0, radius: 340.0, front_offset: 16.0, ..self }
 	}
 
+	/// Larger inventory cards for character-creation / Starter Kit, where the
+	/// center pane has no live character and the drawer can fill that space.
+	pub const fn with_character_creation_cards(self) -> Self {
+		Self { radius: 220.0, front_offset: 16.0, card_width: 216.0, card_height: 176.0, ..self }
+	}
+
+	/// [`Self::INVENTORY`] when a live character occupies the preview; larger
+	/// cards when that pane is empty (character creation).
+	pub const fn for_inventory(has_live_character: bool) -> Self {
+		if has_live_character {
+			Self::INVENTORY
+		} else {
+			Self::INVENTORY.with_character_creation_cards()
+		}
+	}
+
 	/// Portrait cards with fewer than three entries would otherwise stack.
 	pub fn ring_count(self, count: usize) -> usize {
 		if count == 0 {
@@ -377,5 +393,18 @@ mod tests {
 			inventory.x(inventory.angle(1, 0, 2)).abs() < 1.0,
 			"inventory still stacks a two-item ring at the front"
 		);
+	}
+
+	#[test]
+	fn character_creation_cards_keep_inventory_easing_and_grow_the_art_slot() {
+		let inventory = RotaryLayout::INVENTORY;
+		let grant = RotaryLayout::for_inventory(false);
+		assert_eq!(grant, inventory.with_character_creation_cards());
+		assert_eq!(RotaryLayout::for_inventory(true), inventory);
+		assert_eq!(grant.min_scale, inventory.min_scale);
+		assert_eq!(grant.scale_span, inventory.scale_span);
+		assert_eq!(grant.ease, inventory.ease);
+		assert!(grant.card_width > inventory.card_width);
+		assert!(grant.card_height > inventory.card_height);
 	}
 }

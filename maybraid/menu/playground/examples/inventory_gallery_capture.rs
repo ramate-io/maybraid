@@ -139,6 +139,7 @@ enum CaptureScene {
 	Loading,
 	WaitingForIcon,
 	RealStarterKit,
+	RealStarterKitGallery,
 	OverflowFixtureTop,
 	OverflowFixtureScrolled,
 	ModalInventory,
@@ -153,10 +154,14 @@ enum CaptureScene {
 
 impl CaptureScene {
 	fn next(self) -> Self {
+		if capture_only().is_some_and(|only| only == self.file_stem()) {
+			return Self::Done;
+		}
 		match self {
 			Self::Loading => Self::WaitingForIcon,
 			Self::WaitingForIcon => Self::RealStarterKit,
-			Self::RealStarterKit => Self::OverflowFixtureTop,
+			Self::RealStarterKit => Self::RealStarterKitGallery,
+			Self::RealStarterKitGallery => Self::OverflowFixtureTop,
 			Self::OverflowFixtureTop => Self::OverflowFixtureScrolled,
 			Self::OverflowFixtureScrolled => Self::ModalInventory,
 			Self::ModalInventory => Self::ModalFoldersGallery,
@@ -174,6 +179,7 @@ impl CaptureScene {
 			Self::Loading => "inventory_loading",
 			Self::WaitingForIcon => "waiting",
 			Self::RealStarterKit => "real_starter_kit",
+			Self::RealStarterKitGallery => "real_starter_kit_gallery",
 			Self::OverflowFixtureTop => "overflow_fixture_top",
 			Self::OverflowFixtureScrolled => "overflow_fixture_scrolled",
 			Self::ModalInventory => "inventory_modal",
@@ -435,6 +441,12 @@ fn scene_deadline_hit(shown_at: Option<Duration>, now: Duration) -> bool {
 	shown_at.is_some_and(|at| now > at + SCENE_DEADLINE)
 }
 
+fn capture_only() -> Option<String> {
+	std::env::var("INVENTORY_GALLERY_CAPTURE_ONLY")
+		.ok()
+		.filter(|value| !value.is_empty())
+}
+
 fn spawn_grant_scene(
 	commands: &mut Commands,
 	fonts: &HudFonts,
@@ -442,11 +454,13 @@ fn spawn_grant_scene(
 	items: Vec<InventoryItem>,
 	title: &str,
 	icons: Option<&ItemIconCache>,
+	drawer: InventoryDrawerMode,
 ) {
 	let layout = InventoryLayout::starter_kit(items);
 	let session = InventoryMenuSession {
 		region: InventoryRegion::Drawer,
 		folder_navigation: false,
+		drawer,
 		..default()
 	};
 	let mut viewport = Entity::PLACEHOLDER;
@@ -695,6 +709,18 @@ fn spawn_scene(
 				real_starter_items(),
 				STARTER_KIT_LABEL,
 				icons,
+				InventoryDrawerMode::Rotary,
+			);
+		}
+		CaptureScene::RealStarterKitGallery => {
+			spawn_grant_scene(
+				commands,
+				fonts,
+				assets,
+				real_starter_items(),
+				STARTER_KIT_LABEL,
+				icons,
+				InventoryDrawerMode::Gallery,
 			);
 		}
 		CaptureScene::OverflowFixtureTop => {
