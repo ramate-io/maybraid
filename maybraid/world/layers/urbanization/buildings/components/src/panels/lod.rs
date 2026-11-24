@@ -102,6 +102,14 @@ impl PanelLodProbe {
 		Self { center, extent }
 	}
 
+	/// Nearest viewer pose in 3D (the same metric as [`Self::band_for`]).
+	pub fn nearest_pose<'a>(
+		&self,
+		poses: impl IntoIterator<Item = &'a lod::LodNodePose>,
+	) -> Option<&'a lod::LodNodePose> {
+		lod::LodNodePose::nearest_3d(poses, self.center)
+	}
+
 	pub fn band_for(&self, viewer: &Transform) -> PanelLodBand {
 		let dist = viewer.translation.distance(self.center);
 		let factor = dist / self.extent.max(1e-4);
@@ -131,6 +139,15 @@ impl PanelLodProbe {
 }
 
 impl LodScene for PanelLodProbe {
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		let _ = self;
+		LodRef::nearest_3d(lod_refs, to)
+	}
+
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.level_for(lod_ref.current_transform)
 	}
@@ -177,10 +194,13 @@ pub fn update_panel_host_levels(
 	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<(&PanelLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
 ) {
-	let Ok(pose) = viewer.single() else {
+	if viewer.is_empty() {
 		return;
-	};
+	}
 	for (probe, mut level) in &mut hosts {
+		let Some(pose) = probe.nearest_pose(viewer.iter()) else {
+			continue;
+		};
 		let desired = probe.level_for(&pose.current);
 		if *level != desired {
 			*level = desired;

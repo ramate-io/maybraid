@@ -24,7 +24,7 @@ pub const QUANTUM_TIME: Duration = Duration::from_millis(30);
 pub(crate) struct Job {
 	pub id: SubscriptionId,
 	pub regions: Vec<Aabb3d>,
-	pub focus: Option<Vec3>,
+	pub foci: Vec<Vec3>,
 	pub discover: Discover,
 	pub generate: Generate,
 	pub cancelled: Arc<AtomicBool>,
@@ -83,7 +83,7 @@ pub(super) fn pick_job(state: &mut DemandState) -> Option<Job> {
 	Some(Job {
 		id,
 		regions: subscription.regions.clone(),
-		focus: subscription.focus,
+		foci: subscription.foci.clone(),
 		discover: subscription.discover,
 		generate: subscription.generate,
 		cancelled: Arc::clone(&subscription.cancelled),

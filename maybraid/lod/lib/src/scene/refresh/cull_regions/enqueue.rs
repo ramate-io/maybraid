@@ -26,6 +26,8 @@ use super::markers::{LodCullMarkerPlugin, LodHostHasCullableRoots, LodNestedRefr
 use super::produce::LodSceneCullRegion;
 use crate::scene::LodLevelProducer;
 
+use super::super::LodHostBounds;
+
 /// Enqueue culls for hosts overlapping this frame's cull AABBs.
 ///
 /// Reuses [`LodCullProduceCache`] (one untyped spatial query). Lowers a stale
@@ -36,7 +38,10 @@ pub fn produce_lod_cull_for_region<T>(
 	mut commands: Commands,
 	mut cull_writer: MessageWriter<LodCullRequest>,
 	cache: Res<LodCullProduceCache>,
-	hosts: Query<&T, (With<LodSceneHost>, With<LodNestedRefreshAllowed>)>,
+	hosts: Query<
+		(&T, &Transform, Option<&LodHostBounds>),
+		(With<LodSceneHost>, With<LodNestedRefreshAllowed>),
+	>,
 	all_hosts: Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
 	cullable: Query<(), With<LodHostHasCullableRoots>>,
 	mut host_levels: Query<&mut LodSceneLevel, With<LodSceneHost>>,
@@ -58,22 +63,23 @@ pub fn produce_lod_cull_for_region<T>(
 	}
 
 	let refs = lod_refs_from_snapshots(&cache.snapshots);
-	let Some(viewer_ref) = refs.first() else {
+	if refs.is_empty() {
 		return;
-	};
+	}
 
 	for &entity in &cache.hit_entities {
 		if lod_scene_host_or_ancestor_hidden(entity, &child_of, &all_hosts, &visibilities) {
 			continue;
 		}
-		let Ok(scene) = hosts.get(entity) else {
+		let Ok((scene, transform, bounds)) = hosts.get(entity) else {
 			continue;
 		};
 
 		let Ok(mut current) = host_levels.get_mut(entity) else {
 			continue;
 		};
-		let distance_level = scene.scene_lod_level(viewer_ref);
+		let to = LodHostBounds::world_center(transform, bounds);
+		let distance_level = scene.scene_lod_level_from_nearest(&refs, to);
 		let lowered = distance_level < *current;
 		if lowered {
 			*current = distance_level;
@@ -84,8 +90,9 @@ pub fn produce_lod_cull_for_region<T>(
 			continue;
 		}
 
-		let culls = scene.scene_lod_culls(viewer_ref, current_level);
-		if matches!(culls, LodSceneCulls::None) {
+		if refs.iter().all(|lod_ref| {
+			matches!(scene.scene_lod_culls(lod_ref, current_level), LodSceneCulls::None)
+		}) {
 			continue;
 		}
 
@@ -109,7 +116,7 @@ pub fn produce_lod_cull_for_region<T>(
 			if wants_cull.contains(child) {
 				continue;
 			}
-			if culls.should_cull(root.0) {
+			if scene.scene_culls_root_from_levels(&refs, current_level, root.0) {
 				enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull, &pending);
 			}
 		}
@@ -123,9 +130,9 @@ pub fn produce_lod_cull_for_region_erased(world: &mut World) {
 			return;
 		}
 		let refs = lod_refs_from_snapshots(&cache.snapshots);
-		let Some(viewer_ref) = refs.first() else {
+		if refs.is_empty() {
 			return;
-		};
+		}
 		let mut roots = Vec::new();
 
 		for &entity in &cache.hit_entities {
@@ -140,7 +147,7 @@ pub fn produce_lod_cull_for_region_erased(world: &mut World) {
 			let Some(mut current_level) = world.get::<LodSceneLevel>(entity).copied() else {
 				continue;
 			};
-			let Some(distance_level) = producer.level_for(world, entity, viewer_ref) else {
+			let Some(distance_level) = producer.desired_from_all(world, entity, &refs) else {
 				continue;
 			};
 			let lowered = distance_level < current_level;
@@ -151,10 +158,7 @@ pub fn produce_lod_cull_for_region_erased(world: &mut World) {
 			if !lowered && world.get::<LodHostHasCullableRoots>(entity).is_none() {
 				continue;
 			}
-			let Some(culls) = producer.culls_for(world, entity, viewer_ref, current_level) else {
-				continue;
-			};
-			if matches!(culls, LodSceneCulls::None) {
+			if !producer.any_culls(world, entity, &refs, current_level) {
 				continue;
 			}
 
@@ -174,7 +178,7 @@ pub fn produce_lod_cull_for_region_erased(world: &mut World) {
 				};
 				if root.0 == current_level
 					|| world.get::<LodCullInFlight>(root_entity).is_some()
-					|| !culls.should_cull(root.0)
+					|| !producer.culls_root_from_all(world, entity, &refs, current_level, root.0)
 				{
 					continue;
 				}

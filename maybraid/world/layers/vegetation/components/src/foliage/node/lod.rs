@@ -4,6 +4,7 @@
 //! [`super::present`] — one chunk per node, whether the collection merged or
 //! instanced its kits.
 
+use bevy::prelude::Vec3;
 use bevy::scene::prelude::{bsn, Scene};
 use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
@@ -29,6 +30,15 @@ impl LodScene for FoliageNode {
 			~{host}
 			~{probe}
 		}
+	}
+
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		let _ = self;
+		LodRef::nearest_3d(lod_refs, to)
 	}
 
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {

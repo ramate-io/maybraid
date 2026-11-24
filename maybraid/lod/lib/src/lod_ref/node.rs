@@ -33,6 +33,33 @@ impl Default for LodNodePose {
 }
 
 impl LodNodePose {
+	/// Pose that is already at `transform` (no synthetic arrival from the origin).
+	pub fn settled(transform: Transform) -> Self {
+		Self { previous: transform, current: transform }
+	}
+
+	/// Nearest pose by the caller's `distance_squared` reduction.
+	pub fn nearest_by<'a>(
+		poses: impl IntoIterator<Item = &'a Self>,
+		distance_squared: impl Fn(&Self) -> f32,
+	) -> Option<&'a Self> {
+		poses
+			.into_iter()
+			.min_by(|a, b| distance_squared(a).total_cmp(&distance_squared(b)))
+	}
+
+	/// Nearest pose to `to` in 3D.
+	pub fn nearest_3d<'a>(poses: impl IntoIterator<Item = &'a Self>, to: Vec3) -> Option<&'a Self> {
+		Self::nearest_by(poses, |pose| pose.current.translation.distance_squared(to))
+	}
+
+	/// Nearest pose to `to`: min XZ, then min 3D for ties.
+	pub fn nearest<'a>(poses: impl IntoIterator<Item = &'a Self>, to: Vec3) -> Option<&'a Self> {
+		poses.into_iter().min_by(|a, b| {
+			super::compare_driver_distance(a.current.translation, b.current.translation, to)
+		})
+	}
+
 	/// Borrowed [`LodRef`] for this pose + driver `bounds`.
 	pub fn as_lod_ref<'a>(&'a self, entity: Entity, bounds: &'a Aabb3d) -> LodRef<'a> {
 		LodRef {

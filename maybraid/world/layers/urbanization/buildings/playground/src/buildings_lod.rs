@@ -17,7 +17,7 @@ use buildings::{
 };
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
-	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
+	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, LodViewer, OpenLattice, Spotlight,
 };
 use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
 
@@ -40,8 +40,8 @@ pub struct BuildingsCull;
 macro_rules! avian_host {
 	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-								lod_avian::AvianLodSceneRefreshPlugin::<$ty, BuildingsRefresh, With<Camera>>::without_full_scan_cull(),
-								lod_avian::AvianLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
+								lod_avian::AvianLodSceneRefreshPlugin::<$ty, BuildingsRefresh, With<LodViewer>>::without_full_scan_cull(),
+								lod_avian::AvianLodSceneCullPlugin::<$ty, BuildingsCull, With<LodViewer>>::default(),
 							));
 	}};
 }
@@ -49,8 +49,8 @@ macro_rules! avian_host {
 macro_rules! gimme_host {
 	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-								GimmeLodSceneRefreshPlugin::<$ty, BuildingsRefresh, With<Camera>>::without_full_scan_cull(),
-								GimmeLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
+								GimmeLodSceneRefreshPlugin::<$ty, BuildingsRefresh, With<LodViewer>>::without_full_scan_cull(),
+								GimmeLodSceneCullPlugin::<$ty, BuildingsCull, With<LodViewer>>::default(),
 							));
 	}};
 }
@@ -94,10 +94,10 @@ impl Plugin for BuildingsLodRefreshPlugin {
 				..Default::default()
 			})
 			.add_plugins((
-				LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, BuildingsBullseye>::default(),
-				LodSceneRefreshRegionPlugin::<Spotlight, With<Camera>, BuildingsSpotlight>::default(
+				LodSceneRefreshRegionPlugin::<Bullseye, With<LodViewer>, BuildingsBullseye>::default(),
+				LodSceneRefreshRegionPlugin::<Spotlight, With<LodViewer>, BuildingsSpotlight>::default(
 				),
-				LodSceneCullRegionPlugin::<OpenLattice, With<Camera>, BuildingsCull>::default(),
+				LodSceneCullRegionPlugin::<OpenLattice, With<LodViewer>, BuildingsCull>::default(),
 			));
 
 		// Fine-phase domain hosts.

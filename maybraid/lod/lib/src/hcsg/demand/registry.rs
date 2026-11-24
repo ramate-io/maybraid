@@ -47,17 +47,17 @@ impl HcsgDemand {
 		&self,
 		previous: Option<SubscriptionId>,
 		regions: Vec<Aabb3d>,
-		focus: Option<Vec3>,
+		foci: Vec<Vec3>,
 		class: HcsgClass,
 	) -> SubscriptionId {
-		self.subscribe_with_origin::<T>(previous, regions, focus, class, "external")
+		self.subscribe_with_origin::<T>(previous, regions, foci, class, "external")
 	}
 
 	pub(in crate::hcsg) fn subscribe_with_origin<T: GenerationScheme>(
 		&self,
 		previous: Option<SubscriptionId>,
 		regions: Vec<Aabb3d>,
-		focus: Option<Vec3>,
+		foci: Vec<Vec3>,
 		class: HcsgClass,
 		_origin: &'static str,
 	) -> SubscriptionId {
@@ -95,7 +95,7 @@ impl HcsgDemand {
 			id,
 			Subscription {
 				regions,
-				focus,
+				foci,
 				class,
 				pass,
 				discover: discover::<T>,
@@ -157,7 +157,7 @@ impl HcsgDemand {
 		previous: Option<SubscriptionId>,
 		already_requested: bool,
 		regions: &[Aabb3d],
-		focus: Option<Vec3>,
+		foci: &[Vec3],
 		class: HcsgClass,
 		_origin: &'static str,
 	) -> Result<Option<(Option<SubscriptionId>, bool)>, Busy> {
@@ -206,7 +206,7 @@ impl HcsgDemand {
 				id,
 				Subscription {
 					regions: regions.to_vec(),
-					focus,
+					foci: foci.to_vec(),
 					class,
 					pass,
 					discover: discover::<T>,

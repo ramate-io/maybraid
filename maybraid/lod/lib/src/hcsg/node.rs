@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use bevy::math::Vec3;
 use bevy::prelude::{Component, Scene};
 use bevy::shape::Aabb3d;
 
@@ -41,6 +42,18 @@ impl<T: HcsgValue> Clone for HcsgNode<T> {
 impl<T: HcsgValue + SemanticLodScene> SemanticLodScene for HcsgNode<T> {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.value.scene_lod_level(lod_ref)
+	}
+
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		self.value.scene_lod_nearest(lod_refs, to)
+	}
+
+	fn scene_lod_level_from_nearest(&self, lod_refs: &[LodRef], to: Vec3) -> LodSceneLevel {
+		self.value.scene_lod_level_from_nearest(lod_refs, to)
 	}
 
 	fn scene_lod_level_from_levels(&self, lod_refs: &[LodRef]) -> LodSceneLevel {

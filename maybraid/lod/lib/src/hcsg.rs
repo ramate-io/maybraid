@@ -41,8 +41,8 @@ mod system_tests;
 mod tests;
 
 pub use bounds::{
-	viewer_focus, Gated, HcsgBounds, HcsgBoundsPlugin, HcsgClass, HcsgGate, HcsgRegions,
-	LodViewers, ViewerHcsgBounds,
+	viewer_foci, Gated, HcsgBounds, HcsgBoundsPlugin, HcsgClass, HcsgGate, HcsgRegions, LodViewers,
+	ViewerHcsgBounds,
 };
 pub use context::{GenerationContext, GenerationScheme};
 pub use demand::{

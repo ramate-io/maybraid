@@ -183,6 +183,14 @@ impl ForestGroveTile {
 		)
 	}
 
+	pub fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: bevy_math::Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		match_forest_grove_tile!(self, g => g.scene_lod_nearest(lod_refs, to))
+	}
+
 	pub fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		match_forest_grove_tile!(self, g => g.scene_lod_level(lod_ref))
 	}

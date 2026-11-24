@@ -18,9 +18,9 @@ fn subscribe<T: GenerationScheme>(
 	demand: &HcsgDemand,
 	previous: Option<SubscriptionId>,
 	regions: Vec<Aabb3d>,
-	focus: Option<Vec3>,
+	foci: Vec<Vec3>,
 ) -> SubscriptionId {
-	demand.subscribe::<T>(previous, regions, focus, HcsgClass::Near)
+	demand.subscribe::<T>(previous, regions, foci, HcsgClass::Near)
 }
 
 fn subscribe_class<T: GenerationScheme>(
@@ -29,7 +29,7 @@ fn subscribe_class<T: GenerationScheme>(
 	regions: Vec<Aabb3d>,
 	class: HcsgClass,
 ) -> SubscriptionId {
-	demand.subscribe::<T>(previous, regions, None, class)
+	demand.subscribe::<T>(previous, regions, Vec::new(), class)
 }
 
 fn yield_quantum(
@@ -333,7 +333,7 @@ fn worker_fills_subscription_nearest_first() -> anyhow::Result<()> {
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 
 	let subscription =
-		subscribe::<Cover>(&demand, None, vec![span(0.0, 4.0)], Some(Vec3::new(3.5, 0.5, 0.5)));
+		subscribe::<Cover>(&demand, None, vec![span(0.0, 4.0)], vec![Vec3::new(3.5, 0.5, 0.5)]);
 	assert!(demand.wait_idle(IDLE));
 
 	let published = demand.try_read_published(subscription, 0).ok().flatten().unwrap_or_default();
@@ -350,6 +350,29 @@ fn worker_fills_subscription_nearest_first() -> anyhow::Result<()> {
 }
 
 #[test]
+fn worker_fills_nearest_any_of_several_foci_first() -> anyhow::Result<()> {
+	let storage = seeded();
+	let demand = HcsgDemand::default();
+	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
+
+	let subscription = subscribe::<Cover>(
+		&demand,
+		None,
+		vec![span(0.0, 4.0)],
+		vec![Vec3::new(0.5, 0.5, 0.5), Vec3::new(3.5, 0.5, 0.5)],
+	);
+	assert!(demand.wait_idle(IDLE));
+
+	let published = demand.try_read_published(subscription, 0).ok().flatten().unwrap_or_default();
+	let ends = [Id::from_cell(cell(0.0)), Id::from_cell(cell(3.0))];
+	anyhow::ensure!(
+		published.len() >= 2 && ends.contains(&published[0]) && ends.contains(&published[1]),
+		"cells touching either focus should generate first, got {published:?}"
+	);
+	Ok(())
+}
+
+#[test]
 fn worker_republishes_existing_values() -> anyhow::Result<()> {
 	let storage = seeded();
 	let id = Id::from_cell(cell(0.0));
@@ -357,7 +380,7 @@ fn worker_republishes_existing_values() -> anyhow::Result<()> {
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 
-	let subscription = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], None);
+	let subscription = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	assert_eq!(demand.try_read_published(subscription, 0).ok().flatten(), Some(vec![id]));
 	assert!(
@@ -372,8 +395,8 @@ fn replacing_a_subscription_drops_the_previous() -> anyhow::Result<()> {
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 
-	let first = subscribe::<Ground>(&demand, None, vec![span(0.0, 2.0)], None);
-	let second = subscribe::<Ground>(&demand, Some(first), vec![span(10.0, 2.0)], None);
+	let first = subscribe::<Ground>(&demand, None, vec![span(0.0, 2.0)], Vec::new());
+	let second = subscribe::<Ground>(&demand, Some(first), vec![span(10.0, 2.0)], Vec::new());
 	assert_eq!(demand.try_read_published(first, 0), Ok(None));
 	assert!(demand.wait_idle(IDLE));
 	assert_eq!(demand.try_read_published(second, 0).ok().flatten().map(|ids| ids.len()), Some(2));
@@ -386,8 +409,8 @@ fn replacing_a_subscription_drops_the_previous() -> anyhow::Result<()> {
 #[test]
 fn advancing_the_epoch_drops_every_subscription() {
 	let demand = HcsgDemand::default();
-	let ground = subscribe::<Ground>(&demand, None, vec![span(0.0, 2.0)], None);
-	let cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], None);
+	let ground = subscribe::<Ground>(&demand, None, vec![span(0.0, 2.0)], Vec::new());
+	let cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], Vec::new());
 	assert_eq!(demand.advance_epoch(), 1);
 	assert_eq!(demand.epoch(), 1);
 	assert_eq!(demand.try_read_published(ground, 0), Ok(None));
@@ -401,9 +424,9 @@ fn epoch_sweep_evicts_before_a_same_frame_resubscribe() {
 	GenerationContext::new(&storage).get_or_generate::<Ground>(id);
 	assert!(storage.contains::<Ground>(id));
 	let demand = HcsgDemand::default();
-	subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], None);
+	subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], Vec::new());
 	demand.advance_epoch();
-	subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], None);
+	subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], Vec::new());
 	let plan = demand.try_sweep().expect("epoch requests a sweep");
 	assert!(plan.is_empty(), "epoch must evict before adopting a same-frame resubscribe");
 	storage.retain_reached(&plan);
@@ -436,7 +459,7 @@ fn worker_cover_state(regions: Vec<Aabb3d>) -> anyhow::Result<std::collections::
 	let storage = seeded();
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
-	let subscription = subscribe::<Cover>(&demand, None, regions, None);
+	let subscription = subscribe::<Cover>(&demand, None, regions, Vec::new());
 	anyhow::ensure!(demand.wait_idle(IDLE));
 	anyhow::ensure!(
 		demand.try_read_published(subscription, 0).ok().flatten().is_some(),
@@ -460,11 +483,11 @@ fn a_panicking_scheme_does_not_stop_the_worker() -> anyhow::Result<()> {
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 
-	let panicky = subscribe::<Panicky>(&demand, None, vec![span(0.0, 1.0)], None);
+	let panicky = subscribe::<Panicky>(&demand, None, vec![span(0.0, 1.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	assert_eq!(demand.try_read_published(panicky, 0), Ok(Some(Vec::new())));
 
-	let ground = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], None);
+	let ground = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	assert_eq!(demand.try_read_published(ground, 0).ok().flatten().map(|ids| ids.len()), Some(1));
 	Ok(())
@@ -595,7 +618,7 @@ fn a_lone_subscription_fills_one_quantum_at_a_time() -> anyhow::Result<()> {
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 	let n = 100u32;
-	let subscription = subscribe::<Ground>(&demand, None, vec![span(0.0, n as f32)], None);
+	let subscription = subscribe::<Ground>(&demand, None, vec![span(0.0, n as f32)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	let published = demand.try_read_published(subscription, 0).ok().flatten().unwrap_or_default();
 	let expected: Vec<Id> = (0..n).map(|x| Id::from_cell(cell(x as f32))).collect();
@@ -613,13 +636,13 @@ fn a_small_channel_evicts_its_dependencies_while_a_large_unrelated_channel_stays
 	let storage = seeded();
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
-	let _far = subscribe::<FarField>(&demand, None, vec![span(0.0, 40.0)], None);
-	let cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], None);
+	let _far = subscribe::<FarField>(&demand, None, vec![span(0.0, 40.0)], Vec::new());
+	let cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	assert!(storage.contains::<Ground>(Id::from_cell(cell(0.0))));
 	assert!(storage.contains::<FarField>(Id::from_cell(cell(0.0))));
 
-	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(20.0, 2.0)], None);
+	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(20.0, 2.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	assert!(
 		!storage.contains::<Ground>(Id::from_cell(cell(0.0))),
@@ -638,14 +661,14 @@ fn a_replaced_subscription_inherits_its_predecessors_reach() -> anyhow::Result<(
 	let storage = seeded();
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
-	let cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], None);
+	let cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	assert!(storage.contains::<Ground>(Id::from_cell(cell(0.0))));
 
 	// New Cover region still overlaps cell 0 once expanded by base scale 1.
 	// Without inherited reach, Ground would be cleared (only Cover is known
 	// until the next fill) and cell 0 would not be rebuilt.
-	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(1.0, 2.0)], None);
+	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(1.0, 2.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	assert!(
 		storage.contains::<Ground>(Id::from_cell(cell(0.0))),
@@ -660,9 +683,9 @@ fn a_replaced_mid_quantum_keeps_types_that_quantum_reached() {
 	let id = Id::from_cell(cell(0.0));
 	storage.publish(id, Arc::new(Ground { cell: cell(0.0), seed: 7 }), cell(0.0));
 	let demand = HcsgDemand::default();
-	let cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], None);
+	let cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], Vec::new());
 	let job = demand.try_pick().expect("cover work");
-	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(0.0, 2.0)], None);
+	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(0.0, 2.0)], Vec::new());
 	demand.finish_quantum(
 		job.id,
 		QuantumProgress {
@@ -688,7 +711,7 @@ fn no_sweep_runs_when_the_live_subscription_set_has_not_changed() -> anyhow::Res
 	let storage = seeded();
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
-	let _cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], None);
+	let _cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	let sweeps = demand.sweep_count();
 	assert!(sweeps >= 1);
@@ -702,17 +725,17 @@ fn an_evicted_value_regenerates_identically() -> anyhow::Result<()> {
 	let storage = seeded();
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
-	let first = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], None);
+	let first = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	let id = Id::from_cell(cell(0.0));
 	let before = storage.get::<Ground>(id).expect("generated");
 	assert_eq!(before.seed, 7);
 
-	let _away = subscribe::<Ground>(&demand, Some(first), vec![span(20.0, 1.0)], None);
+	let _away = subscribe::<Ground>(&demand, Some(first), vec![span(20.0, 1.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	assert!(!storage.contains::<Ground>(id));
 
-	let _back = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], None);
+	let _back = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	let after = storage.get::<Ground>(id).expect("regenerated");
 	assert_eq!(after.seed, before.seed);
@@ -725,12 +748,12 @@ fn a_scripted_walk_plateaus_store_sizes() -> anyhow::Result<()> {
 	let storage = seeded();
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
-	let mut cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 4.0)], None);
+	let mut cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 4.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	let mut max_ground = 0usize;
 	let mut max_cover = 0usize;
 	for start in (0..40).step_by(4) {
-		cover = subscribe::<Cover>(&demand, Some(cover), vec![span(start as f32, 4.0)], None);
+		cover = subscribe::<Cover>(&demand, Some(cover), vec![span(start as f32, 4.0)], Vec::new());
 		assert!(demand.wait_idle(IDLE));
 		max_ground = max_ground.max(storage.len::<Ground>());
 		max_cover = max_cover.max(storage.len::<Cover>());
@@ -745,7 +768,7 @@ fn a_scripted_walk_plateaus_store_sizes() -> anyhow::Result<()> {
 		!storage.contains::<Cover>(start) && !storage.contains::<Ground>(start),
 		"walking away must evict the start Cover and its Ground"
 	);
-	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(0.0, 4.0)], None);
+	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(0.0, 4.0)], Vec::new());
 	assert!(demand.wait_idle(IDLE));
 	assert!(
 		storage.contains::<Cover>(start) && storage.contains::<Ground>(start),

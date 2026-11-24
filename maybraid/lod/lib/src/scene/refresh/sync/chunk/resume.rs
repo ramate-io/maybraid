@@ -8,7 +8,9 @@
 use bevy::ecs::entity_disabling::Disabled;
 use bevy::prelude::*;
 
-use crate::lod_ref::{point_bounds, LodNode, LodNodeBounds, LodNodePose};
+use crate::lod_ref::{
+	lod_refs_from_snapshots, point_bounds, LodNode, LodNodeBounds, LodNodePose, LodNodeSnapshot,
+};
 use crate::scene::host::{LodLevelRoot, LodLevelRoots};
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodLevelProducer;
@@ -24,22 +26,24 @@ use super::types::{LodCullInFlight, LodLevelRootPending};
 /// Does **not** resume a root that [`crate::LodScene::scene_lod_culls`] still
 /// wants gone (stale High after the camera left the bullseye).
 pub fn cancel_unstarted_cull_for_desired_pending_roots_erased(world: &mut World) {
-	let viewer = {
+	let snapshots: Vec<LodNodeSnapshot> = {
 		let mut query = world.query_filtered::<
 			(Entity, &LodNodePose, Option<&LodNodeBounds>),
 			(With<LodNode>, With<LodViewer>),
 		>();
-		let mut iter = query.iter(world);
-		iter.next().map(|(entity, pose, bounds)| {
-			(
+		query
+			.iter(world)
+			.map(|(entity, pose, bounds)| LodNodeSnapshot {
 				entity,
-				*pose,
-				bounds
+				previous: pose.previous,
+				current: pose.current,
+				bounds: bounds
 					.map(|bounds| bounds.0)
 					.unwrap_or_else(|| point_bounds(pose.current.translation)),
-			)
-		})
+			})
+			.collect()
 	};
+	let refs = lod_refs_from_snapshots(&snapshots);
 	let roots: Vec<_> = {
 		let mut query = world.query_filtered::<
 			(Entity, &LodCullInFlight, &LodLevelRoot),
@@ -67,15 +71,11 @@ pub fn cancel_unstarted_cull_for_desired_pending_roots_erased(world: &mut World)
 		if root.0 != desired {
 			continue;
 		}
-		if let Some((viewer_entity, pose, bounds)) = viewer {
+		if !refs.is_empty() {
 			let Some(producer) = world.get::<LodLevelProducer>(host).copied() else {
 				continue;
 			};
-			let lod_ref = pose.as_lod_ref(viewer_entity, &bounds);
-			if producer
-				.culls_for(world, host, &lod_ref, desired)
-				.is_some_and(|culls| culls.should_cull(root.0))
-			{
+			if producer.culls_root_from_all(world, host, &refs, desired, root.0) {
 				continue;
 			}
 		}

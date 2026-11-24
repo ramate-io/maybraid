@@ -121,12 +121,16 @@ fn queued_replacement_cancellation_and_worker_output_remain_deduplicated() -> an
 		|| -> anyhow::Result<()> {
 			let storage = HcsgStorage::default();
 			let demand = HcsgDemand::default();
-			let old =
-				demand.subscribe::<Root>(None, vec![universal_bounds()], None, HcsgClass::Near);
+			let old = demand.subscribe::<Root>(
+				None,
+				vec![universal_bounds()],
+				Vec::new(),
+				HcsgClass::Near,
+			);
 			demand.subscribe::<Root>(
 				Some(old),
 				vec![universal_bounds(), universal_bounds()],
-				None,
+				Vec::new(),
 				HcsgClass::Near,
 			);
 			std::thread::sleep(Duration::from_millis(5));
@@ -216,7 +220,7 @@ fn discovery_overrun_yields_and_resumed_quantum_retains_correlation() -> anyhow:
 			demand.subscribe::<SlowDiscovery>(
 				None,
 				vec![universal_bounds()],
-				None,
+				Vec::new(),
 				HcsgClass::Near,
 			);
 			let worker = spawn_worker(storage.clone(), demand.clone())?;
@@ -281,10 +285,19 @@ fn demand_lifecycle_output_runs_after_releasing_registry_guard() -> anyhow::Resu
 	tracing::subscriber::with_default(
 		tracing_subscriber::registry().with(Capture::default()).with(probe.clone()),
 		|| {
-			let old =
-				demand.subscribe::<Root>(None, vec![universal_bounds()], None, HcsgClass::Near);
+			let old = demand.subscribe::<Root>(
+				None,
+				vec![universal_bounds()],
+				Vec::new(),
+				HcsgClass::Near,
+			);
 			*probe.previous.lock().unwrap_or_else(PoisonError::into_inner) = Some(old);
-			demand.subscribe::<Root>(Some(old), vec![universal_bounds()], None, HcsgClass::Near);
+			demand.subscribe::<Root>(
+				Some(old),
+				vec![universal_bounds()],
+				Vec::new(),
+				HcsgClass::Near,
+			);
 		},
 	);
 	let checks = probe.available.lock().unwrap_or_else(PoisonError::into_inner);

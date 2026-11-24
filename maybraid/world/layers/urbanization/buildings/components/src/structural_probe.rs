@@ -284,12 +284,14 @@ pub fn update_building_structural_host_levels(
 		With<LodSceneHost>,
 	>,
 ) {
-	let Ok(pose) = viewer.single() else {
+	if viewer.is_empty() {
 		return;
-	};
-	let viewer_world = pose.current.translation;
+	}
 	for (probe, global, mut level) in &mut hosts {
-		let next = probe.level_for_world(viewer_world, global);
+		let Some(pose) = lod::LodNodePose::nearest(viewer.iter(), global.translation()) else {
+			continue;
+		};
+		let next = probe.level_for_world(pose.current.translation, global);
 		if *level != next {
 			*level = next;
 		}

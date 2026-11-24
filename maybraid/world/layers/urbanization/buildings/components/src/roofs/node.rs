@@ -1,6 +1,6 @@
 //! Roof IR node: style + geometry + placement — fine-phase [`LodScene`] host.
 
-use bevy::prelude::{Component, Quat, Transform};
+use bevy::prelude::{Component, Quat, Transform, Vec3};
 use bevy::scene::prelude::Scene;
 use bevy::shape::Aabb3d;
 use lod::lod_ref::LodRef;
@@ -88,6 +88,15 @@ impl RoofNode {
 }
 
 impl LodScene for RoofNode {
+	fn scene_lod_nearest<'a>(
+		&self,
+		lod_refs: &'a [LodRef<'a>],
+		to: Vec3,
+	) -> Option<&'a LodRef<'a>> {
+		let _ = self;
+		LodRef::nearest_3d(lod_refs, to)
+	}
+
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.probe().level_for(lod_ref.current_transform)
 	}

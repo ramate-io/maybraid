@@ -254,7 +254,12 @@ mod tests {
 	#[test]
 	fn finish_world_loading_does_not_unveil_while_near_is_outstanding() -> anyhow::Result<()> {
 		let demand = HcsgDemand::default();
-		demand.subscribe::<UnitXTile>(None, vec![near_region()], None, lod::hcsg::HcsgClass::Near);
+		demand.subscribe::<UnitXTile>(
+			None,
+			vec![near_region()],
+			Vec::new(),
+			lod::hcsg::HcsgClass::Near,
+		);
 		let mut world = gated_world(demand);
 		world
 			.run_system_once(finish_world_loading)
@@ -271,7 +276,7 @@ mod tests {
 		demand.subscribe::<UnitXTile>(
 			None,
 			vec![near_region()],
-			None,
+			Vec::new(),
 			lod::hcsg::HcsgClass::Ambient,
 		);
 		let mut world = gated_world(demand);

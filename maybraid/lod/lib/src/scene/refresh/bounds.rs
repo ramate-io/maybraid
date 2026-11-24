@@ -14,3 +14,15 @@ impl Default for LodHostBounds {
 		Self(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE))
 	}
 }
+
+impl LodHostBounds {
+	/// World-space center of the host footprint, or `transform.translation` if
+	/// the host has no bounds (pointlike).
+	pub fn world_center(transform: &Transform, bounds: Option<&Self>) -> Vec3 {
+		match bounds {
+			Some(bounds) => transform
+				.transform_point((Vec3::from(bounds.0.min) + Vec3::from(bounds.0.max)) * 0.5),
+			None => transform.translation,
+		}
+	}
+}
