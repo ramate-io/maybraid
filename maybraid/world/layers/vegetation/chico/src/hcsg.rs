@@ -518,6 +518,14 @@ mod tests {
 		settle_presentation(app, SettlePresentation::layer_integration(IDLE)).map_err(Into::into)
 	}
 
+	fn wait_for_grove_state(
+		app: &mut App,
+		ready: impl FnMut(&mut App) -> bool,
+	) -> anyhow::Result<()> {
+		SettlePresentation::layer_integration(IDLE).wait_until(app, 200, ready)?;
+		Ok(())
+	}
+
 	fn nested_hosts(app: &mut App) -> usize {
 		app.world_mut()
 			.query_filtered::<(), (With<ChicoGroveHost>, Allow<Disabled>)>()
@@ -575,6 +583,14 @@ mod tests {
 		let mut app = app(Vec3::ZERO);
 		settle(&mut app)?;
 
+		let expected_layers = selected_layers(LayeringKind::LushJungle);
+		wait_for_grove_state(&mut app, |app| {
+			let covered = covered_layers(app).is_ok_and(|covered| {
+				covered.len() == 4 && covered.values().all(|layers| *layers == expected_layers)
+			});
+			covered && grown_tiles_are_nested(app)
+		})?;
+
 		let hosts = grown(&mut app);
 		assert!(!hosts.is_empty(), "the patch grows groves");
 		for node in &hosts {
@@ -591,16 +607,10 @@ mod tests {
 		let covered = covered_layers(&mut app)?;
 		assert_eq!(covered.len(), 4, "every tile the patch covers grows");
 		for layers in covered.values() {
-			assert_eq!(*layers, selected_layers(LayeringKind::LushJungle));
+			assert_eq!(*layers, expected_layers);
 		}
 
 		let tiles: usize = hosts.iter().map(|node| node.value.tiles.len()).sum();
-		for _ in 0..200 {
-			if nested_hosts(&mut app) >= tiles {
-				break;
-			}
-			app.update();
-		}
 		assert_eq!(nested_hosts(&mut app), tiles, "one nested host per grown tile");
 		Ok(())
 	}
@@ -635,31 +645,21 @@ mod tests {
 		Ok(())
 	}
 
-	/// Grove High is hundreds of metres; plant High is ~10× tree radius. Fulfill
-	/// at the tile High edge must still pose High canopy kits — colliders already
-	/// stamp High IR from the ancestor grove band.
-	#[test]
-	fn high_band_trees_present_full_canopy() -> anyhow::Result<()> {
-		let at = Vec3::new(280.0, 20.0, 0.0);
-		let mut app = app(at);
-		settle(&mut app)?;
+	fn grown_tiles_are_nested(app: &mut App) -> bool {
+		let tiles: usize = grown(app).iter().map(|node| node.value.tiles.len()).sum();
+		tiles > 0 && nested_hosts(app) >= tiles
+	}
 
-		let tiles: usize = grown(&mut app).iter().map(|node| node.value.tiles.len()).sum();
-		update_until(&mut app, |app| nested_hosts(app) >= tiles);
-		assert!(nested_hosts(&mut app) > 0, "the patch presents grove hosts");
-		for _ in 0..240 {
-			app.update();
-		}
-
-		let compounds = app
-			.world_mut()
+	fn stick_compounds(app: &mut App) -> usize {
+		app.world_mut()
 			.query::<&crate::stick_physics::StickPhysicsCompound>()
 			.iter(app.world())
-			.count();
-		assert!(compounds > 0, "High/Medium groves still stamp stick colliders");
+			.count()
+	}
 
-		let mut high_canopy = 0usize;
-		let mut thinned_canopy = 0usize;
+	fn cheap_ball_canopies(app: &mut App) -> (usize, usize) {
+		let mut high_canopy = 0;
+		let mut thinned_canopy = 0;
 		for merge in app.world_mut().query::<&scene_ref::MultiSceneMergeRoot>().iter(app.world()) {
 			let Some(path) = merge.0.parts.first().map(|part| part.scene.path.as_str()) else {
 				continue;
@@ -673,6 +673,26 @@ mod tests {
 				thinned_canopy += 1;
 			}
 		}
+		(high_canopy, thinned_canopy)
+	}
+
+	/// Grove High is hundreds of metres; plant High is ~10× tree radius. Fulfill
+	/// at the tile High edge must still pose High canopy kits — colliders already
+	/// stamp High IR from the ancestor grove band.
+	#[test]
+	fn high_band_trees_present_full_canopy() -> anyhow::Result<()> {
+		let at = Vec3::new(280.0, 20.0, 0.0);
+		let mut app = app(at);
+		settle(&mut app)?;
+		wait_for_grove_state(&mut app, |app| {
+			grown_tiles_are_nested(app)
+				&& stick_compounds(app) > 0
+				&& cheap_ball_canopies(app).0 > 0
+		})?;
+
+		assert!(nested_hosts(&mut app) > 0, "the patch presents grove hosts");
+		assert!(stick_compounds(&mut app) > 0, "High/Medium groves still stamp stick colliders");
+		let (high_canopy, thinned_canopy) = cheap_ball_canopies(&mut app);
 		assert!(
 			high_canopy > 0,
 			"High-band trees should pose High cheap-ball canopy kits; got {high_canopy} high / {thinned_canopy} thinned"
@@ -684,12 +704,14 @@ mod tests {
 	fn leaving_the_neighborhood_retires_its_hosts() -> anyhow::Result<()> {
 		let mut app = app(Vec3::ZERO);
 		settle(&mut app)?;
+		wait_for_grove_state(&mut app, |app| !grown(app).is_empty())?;
 		assert!(!grown(&mut app).is_empty());
 
 		let away = Transform::from_xyz(5_000.0, 0.0, 5_000.0);
 		let mut viewers = app.world_mut().query_filtered::<&mut Transform, With<LodViewer>>();
 		*viewers.single_mut(app.world_mut())? = away;
 		settle(&mut app)?;
+		wait_for_grove_state(&mut app, |app| grown(app).is_empty())?;
 		assert!(grown(&mut app).is_empty());
 		Ok(())
 	}
