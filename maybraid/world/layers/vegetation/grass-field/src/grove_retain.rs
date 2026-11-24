@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use bevy::render::extract_resource::ExtractResource;
+use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
 use bevy::render::RenderApp;
 
 use crate::catalog::{GroveEncodeStats, GroveId};
@@ -30,6 +30,21 @@ impl GroveRetainPolicy {
 
 	pub fn forces_rebuild(self) -> bool {
 		self.force_rebuild
+	}
+
+	/// Insert the policy and its extract plugin once, shared by tree, bush, and grass.
+	pub fn install(app: &mut App) {
+		if app.world().get_resource::<Self>().is_none() {
+			app.insert_resource(Self::from_env());
+		}
+		if !app.is_plugin_added::<ExtractResourcePlugin<Self>>() {
+			app.add_plugins(ExtractResourcePlugin::<Self>::default());
+		}
+		if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+			if render_app.world().get_resource::<Self>().is_none() {
+				render_app.insert_resource(Self::from_env());
+			}
+		}
 	}
 }
 
@@ -234,6 +249,15 @@ mod tests {
 	#[test]
 	fn retain_policy_defaults_to_skip_clean_frames() {
 		assert!(!GroveRetainPolicy::default().forces_rebuild());
+	}
+
+	#[test]
+	fn retain_policy_install_is_idempotent() {
+		let mut app = App::new();
+		GroveRetainPolicy::install(&mut app);
+		GroveRetainPolicy::install(&mut app);
+		assert!(app.world().get_resource::<GroveRetainPolicy>().is_some());
+		assert!(app.is_plugin_added::<ExtractResourcePlugin<GroveRetainPolicy>>());
 	}
 
 	#[test]

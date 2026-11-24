@@ -65,9 +65,8 @@ impl Plugin for GrassFieldPlugin {
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevGrassTime>();
 		app.init_resource::<ExtractedGrassField>();
-		app.insert_resource(crate::grove_retain::GroveRetainPolicy::from_env());
+		crate::grove_retain::GroveRetainPolicy::install(app);
 		app.add_plugins(ExtractResourcePlugin::<ExtractedGrassField>::default());
-		app.add_plugins(ExtractResourcePlugin::<crate::grove_retain::GroveRetainPolicy>::default());
 		app.add_plugins(ExtractComponentPlugin::<GrassFieldPresenter>::default());
 		app.add_systems(Startup, spawn_presenter);
 		app.add_systems(
@@ -84,7 +83,6 @@ impl Plugin for GrassFieldPlugin {
 		if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
 			render_app
 				.init_resource::<GrassCatalogOps>()
-				.insert_resource(crate::grove_retain::GroveRetainPolicy::from_env())
 				.add_systems(ExtractSchedule, extract_catalog_ops);
 		}
 	}

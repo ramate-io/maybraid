@@ -70,11 +70,8 @@ impl Plugin for TreeFieldPlugin {
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevTreeTime>();
 		app.init_resource::<ExtractedTreeField>();
-		app.insert_resource(GroveRetainPolicy::from_env());
+		GroveRetainPolicy::install(app);
 		app.add_plugins(ExtractResourcePlugin::<ExtractedTreeField>::default());
-		if !app.is_plugin_added::<ExtractResourcePlugin<GroveRetainPolicy>>() {
-			app.add_plugins(ExtractResourcePlugin::<GroveRetainPolicy>::default());
-		}
 		app.add_plugins(ExtractComponentPlugin::<TreeFieldPresenter>::default());
 		app.add_systems(Startup, spawn_presenter);
 		app.add_systems(
@@ -91,7 +88,6 @@ impl Plugin for TreeFieldPlugin {
 		if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
 			render_app
 				.init_resource::<TreeCatalogOps>()
-				.insert_resource(GroveRetainPolicy::from_env())
 				.add_systems(ExtractSchedule, extract_catalog_ops);
 		}
 	}

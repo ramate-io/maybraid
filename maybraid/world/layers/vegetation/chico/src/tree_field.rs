@@ -180,6 +180,59 @@ mod tests {
 	}
 
 	#[test]
+	fn gpu_env_adds_tree_bush_and_grass_plugins_without_duplicate_retain_policy() {
+		use bevy::render::extract_resource::ExtractResourcePlugin;
+		use vegetation_grass_field::GroveRetainPolicy;
+
+		struct RestoreEnv {
+			mode: Option<String>,
+			shadows: Option<String>,
+		}
+		impl Drop for RestoreEnv {
+			fn drop(&mut self) {
+				unsafe {
+					match &self.mode {
+						Some(value) => std::env::set_var("MAYBRAID_EXPERIMENT_TREE_FIELD", value),
+						None => std::env::remove_var("MAYBRAID_EXPERIMENT_TREE_FIELD"),
+					}
+					match &self.shadows {
+						Some(value) => std::env::set_var("MAYBRAID_SHADOWS", value),
+						None => std::env::remove_var("MAYBRAID_SHADOWS"),
+					}
+				}
+			}
+		}
+
+		let _lock = GroveGpuVisuals::lock_admission();
+		let _restore = RestoreEnv {
+			mode: std::env::var("MAYBRAID_EXPERIMENT_TREE_FIELD").ok(),
+			shadows: std::env::var("MAYBRAID_SHADOWS").ok(),
+		};
+		unsafe {
+			std::env::set_var("MAYBRAID_EXPERIMENT_TREE_FIELD", "gpu");
+			std::env::set_var("MAYBRAID_SHADOWS", "off");
+		}
+		GroveGpuVisuals::admit(false);
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.add_plugins(AssetPlugin::default());
+		register_world_tree_field(&mut app);
+		assert!(GroveGpuVisuals::admitted());
+		assert!(app.is_plugin_added::<TreeFieldPlugin>());
+		assert!(app.is_plugin_added::<BushFieldPlugin>());
+		assert!(app.is_plugin_added::<GrassFieldPlugin>());
+		assert!(app.is_plugin_added::<ExtractResourcePlugin<GroveRetainPolicy>>());
+		assert!(app.world().get_resource::<GroveRetainPolicy>().is_some());
+		assert!(app.world().get_resource::<vegetation_tree_field::TreeGroveCatalog>().is_some());
+		assert!(app.world().get_resource::<vegetation_bush_field::BushGroveCatalog>().is_some());
+		assert!(
+			app.world()
+				.get_resource::<vegetation_grass_field::GrassGroveCatalog>()
+				.is_some()
+		);
+	}
+
+	#[test]
 	fn area_1746_present_ring_selects_tree_bush_and_grass() {
 		use crate::{ForestExtent, ForestLayer, ForestSelection, GROVE_PRESENT_RADIUS_M};
 

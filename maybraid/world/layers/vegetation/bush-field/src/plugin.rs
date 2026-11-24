@@ -70,11 +70,8 @@ impl Plugin for BushFieldPlugin {
 		app.init_resource::<GrassGpuCapability>();
 		app.init_resource::<PrevBushTime>();
 		app.init_resource::<ExtractedBushField>();
-		app.insert_resource(GroveRetainPolicy::from_env());
+		GroveRetainPolicy::install(app);
 		app.add_plugins(ExtractResourcePlugin::<ExtractedBushField>::default());
-		if !app.is_plugin_added::<ExtractResourcePlugin<GroveRetainPolicy>>() {
-			app.add_plugins(ExtractResourcePlugin::<GroveRetainPolicy>::default());
-		}
 		app.add_plugins(ExtractComponentPlugin::<BushFieldPresenter>::default());
 		app.add_systems(Startup, spawn_presenter);
 		app.add_systems(
@@ -91,7 +88,6 @@ impl Plugin for BushFieldPlugin {
 		if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
 			render_app
 				.init_resource::<BushCatalogOps>()
-				.insert_resource(GroveRetainPolicy::from_env())
 				.add_systems(ExtractSchedule, extract_catalog_ops);
 		}
 	}
