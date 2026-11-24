@@ -734,6 +734,11 @@ fn agent_apply_world_ops(
 							{
 								commands.queue(
 									move |world: &mut World| -> bevy::ecs::error::Result {
+										let _observer = bevy::log::tracing::info_span!(
+											target: "maybraid.memory.census",
+											"memory_census_observer", command_id = id
+										)
+										.entered();
 										let census = serde_json::to_value(
 											diagnostics::memory::capture(world),
 										)?;

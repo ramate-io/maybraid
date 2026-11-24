@@ -252,6 +252,16 @@ pub struct LodTreeVisQueue {
 }
 
 impl LodTreeVisQueue {
+	/// Explicit read-only diagnostic: (show jobs, hide jobs, queued stack entries).
+	/// Stack entries are not a count of every remaining descendant or unique entity.
+	pub fn diagnostic_backlog(&self) -> (usize, usize, usize) {
+		(
+			self.shows.len(),
+			self.hides.len(),
+			self.shows.iter().chain(&self.hides).map(|job| job.stack.len()).sum(),
+		)
+	}
+
 	fn enqueue_hide(&mut self, root: Entity, children: Vec<Entity>) {
 		self.cancel(root);
 		if !children.is_empty() {
@@ -1263,5 +1273,21 @@ mod tests {
 		drain_until_empty(&mut world);
 		assert!(world.get::<Disabled>(nested_root).is_none());
 		assert!(world.get::<Disabled>(nested_leaf).is_none());
+	}
+}
+
+#[cfg(test)]
+mod diagnostic_backlog_tests {
+	use super::*;
+
+	#[test]
+	fn backlog_observes_frontier_without_consuming_jobs() {
+		let root = World::new().spawn_empty().id();
+		let mut queue = LodTreeVisQueue::default();
+		queue.enqueue_show(root, vec![root, root]);
+		assert_eq!(queue.diagnostic_backlog(), (1, 0, 2));
+		assert_eq!(queue.diagnostic_backlog(), (1, 0, 2));
+		queue.enqueue_hide(root, vec![root]);
+		assert_eq!(queue.diagnostic_backlog(), (0, 1, 1));
 	}
 }
