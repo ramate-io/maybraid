@@ -61,28 +61,28 @@ fn deform_child(
 fn world_sample(branch: BranchDescriptor, t: f32, wind_xz: vec2<f32>) -> CurveSample {
     let plant = plants[branch.plant_index];
     if (branch.parent_index == PARENT_NONE) {
-        return deform_trunk(branch, plant.root, t, wind_xz);
+        return deform_trunk(branch, branch.p0, t, wind_xz);
     }
     let p1 = branches[branch.parent_index];
     if (p1.parent_index == PARENT_NONE) {
-        let s1 = deform_trunk(p1, plant.root, branch.parent_t, wind_xz);
+        let s1 = deform_trunk(p1, p1.p0, branch.parent_t, wind_xz);
         return deform_child(branch, t, s1, wind_xz);
     }
     let p2 = branches[p1.parent_index];
     if (p2.parent_index == PARENT_NONE) {
-        let s2 = deform_trunk(p2, plant.root, p1.parent_t, wind_xz);
+        let s2 = deform_trunk(p2, p2.p0, p1.parent_t, wind_xz);
         let s1 = deform_child(p1, branch.parent_t, s2, wind_xz);
         return deform_child(branch, t, s1, wind_xz);
     }
     let p3 = branches[p2.parent_index];
     if (p3.parent_index == PARENT_NONE) {
-        let s3 = deform_trunk(p3, plant.root, p2.parent_t, wind_xz);
+        let s3 = deform_trunk(p3, p3.p0, p2.parent_t, wind_xz);
         let s2 = deform_child(p2, p1.parent_t, s3, wind_xz);
         let s1 = deform_child(p1, branch.parent_t, s2, wind_xz);
         return deform_child(branch, t, s1, wind_xz);
     }
     let p4 = branches[p3.parent_index];
-    let s4 = deform_trunk(p4, plant.root, p3.parent_t, wind_xz);
+    let s4 = deform_trunk(p4, p4.p0, p3.parent_t, wind_xz);
     let s3 = deform_child(p3, p2.parent_t, s4, wind_xz);
     let s2 = deform_child(p2, p1.parent_t, s3, wind_xz);
     let s1 = deform_child(p1, branch.parent_t, s2, wind_xz);

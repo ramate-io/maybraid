@@ -1,14 +1,14 @@
 //! Persistent field: compact plant / branch / leaf descriptors, not expanded meshes.
 
 use bevy::prelude::*;
-use vegetation_shaders::wesl::WindInputs;
+use vegetation_shaders::wesl::{LodThresholds, WindInputs};
 
 use crate::bounds::TreeBounds;
 use crate::layout::{
 	BranchDescriptor, LeafCloseStyle, LeafDescriptor, PlantDescriptor, TreePatchHeader, PARENT_NONE,
 };
 use crate::patch::TreePatch;
-use crate::topology::{MAX_BRANCHES_PER_PLANT, MAX_LEAVES_PER_PLANT};
+use crate::topology::{MAX_BRANCHES_PER_PLANT, MAX_BRANCH_DEPTH, MAX_LEAVES_PER_PLANT};
 
 /// Tunables for GPU list capacities and wind. Authoring budgets live here, not in WESL.
 #[derive(Resource, Clone, Debug)]
@@ -18,6 +18,7 @@ pub struct TreeFieldSettings {
 	pub max_leaves: u32,
 	pub max_per_lod: u32,
 	pub wind: WindInputs,
+	pub lod: LodThresholds,
 	pub diagnostics: bool,
 	pub freeze_time_s: Option<f32>,
 	/// When set, every plant uses this close-up leaf style instead of the recipe.
@@ -38,8 +39,9 @@ impl Default for TreeFieldSettings {
 			max_plants: 512,
 			max_branches: 16_384,
 			max_leaves: 65_536,
-			max_per_lod: 8_192,
+			max_per_lod: 65_536,
 			wind: WindInputs::gentle_botw(0.0),
+			lod: LodThresholds::tree_default(),
 			diagnostics: false,
 			freeze_time_s: None,
 			leaf_close_style: None,
@@ -59,6 +61,107 @@ pub struct TreeField {
 }
 
 impl TreeField {
+	/// Bytes written for one owner snapshot (plants + branches + leaves).
+	pub fn upload_bytes(&self) -> u64 {
+		self.plants.len() as u64 * crate::layout::PLANT_DESCRIPTOR_STRIDE
+			+ self.branches.len() as u64 * crate::layout::BRANCH_DESCRIPTOR_STRIDE
+			+ self.leaves.len() as u64 * crate::layout::LEAF_DESCRIPTOR_STRIDE
+	}
+
+	/// Same-build parity receipt over the exact bytes uploaded for this owner.
+	pub fn descriptor_digest(&self) -> u64 {
+		use std::hash::{Hash, Hasher};
+		let mut digest = std::collections::hash_map::DefaultHasher::new();
+		for plant in &self.plants {
+			plant.to_std430_bytes().hash(&mut digest);
+		}
+		for branch in &self.branches {
+			branch.to_std430_bytes().hash(&mut digest);
+		}
+		for leaf in &self.leaves {
+			leaf.to_std430_bytes().hash(&mut digest);
+		}
+		digest.finish()
+	}
+
+	/// Pack already-authored plants without generating a second skeleton or dropping content.
+	/// Callers retain their legacy representation when admission fails.
+	pub fn from_plants(
+		plants: Vec<crate::topology::TreePlant>,
+		settings: &TreeFieldSettings,
+	) -> Result<Self, &'static str> {
+		let branch_count: usize = plants.iter().map(|p| p.branches.len()).sum();
+		let leaf_count: usize = plants.iter().map(|p| p.leaves.len()).sum();
+		if plants.len() > settings.max_plants as usize
+			|| branch_count > settings.max_branches as usize
+			|| leaf_count > settings.max_leaves as usize
+			|| branch_count.max(leaf_count) > settings.max_per_lod as usize
+		{
+			return Err("grove exceeds descriptor or selection capacity");
+		}
+		let mut field = Self::default();
+		for mut plant in plants {
+			for (index, branch) in plant.branches.iter().enumerate() {
+				if branch.depth > MAX_BRANCH_DEPTH {
+					return Err("branch exceeds bounded attachment depth");
+				}
+				if (branch.parent_index != PARENT_NONE && branch.parent_index as usize >= index)
+					|| (branch.major_parent != PARENT_NONE && branch.major_parent as usize > index)
+				{
+					return Err("authored branch references invalid parent");
+				}
+				let parent = (branch.parent_index != PARENT_NONE)
+					.then(|| plant.branches.get(branch.parent_index as usize).copied())
+					.flatten();
+				if !branch.follows_parent_depth(parent) {
+					return Err("branch depth does not follow its parent");
+				}
+			}
+			if plant
+				.leaves
+				.iter()
+				.any(|leaf| leaf.parent_branch as usize >= plant.branches.len())
+			{
+				return Err("authored leaf references invalid branch");
+			}
+			let branch_offset = field.branches.len() as u32;
+			let leaf_offset = field.leaves.len() as u32;
+			let plant_index = field.plants.len() as u32;
+			for mut branch in plant.branches {
+				if branch.parent_index != PARENT_NONE {
+					branch.parent_index += branch_offset;
+				}
+				if branch.major_parent != PARENT_NONE {
+					branch.major_parent += branch_offset;
+				}
+				branch.plant_index = plant_index;
+				field.branches.push(branch);
+			}
+			for mut leaf in plant.leaves {
+				leaf.plant_index = plant_index;
+				leaf.parent_branch += branch_offset;
+				field.leaves.push(leaf);
+			}
+			plant.descriptor.branch_offset = branch_offset;
+			plant.descriptor.branch_count = field.branches.len() as u32 - branch_offset;
+			plant.descriptor.leaf_offset = leaf_offset;
+			plant.descriptor.leaf_count = field.leaves.len() as u32 - leaf_offset;
+			if let Some(style) = settings.leaf_close_style {
+				plant.descriptor = plant.descriptor.with_leaf_close_style(style);
+			}
+			field.bounds = field
+				.bounds
+				.union(TreeBounds::from_plant(&plant.descriptor, settings.wind.strength_m));
+			// Imported canopies may lean beyond the recipe's symmetric envelope.
+			field.bounds = field.bounds.union(TreeBounds {
+				min: plant.descriptor.aabb_min,
+				max: plant.descriptor.aabb_max,
+			});
+			field.plants.push(plant.descriptor);
+		}
+		Ok(field.with_generation(1))
+	}
+
 	pub fn rebuild<'a>(
 		patches: impl IntoIterator<Item = &'a TreePatch>,
 		settings: &TreeFieldSettings,
@@ -116,10 +219,8 @@ impl TreeField {
 				if let Some(style) = settings.leaf_close_style {
 					plant.descriptor = plant.descriptor.with_leaf_close_style(style);
 				}
-				bounds = bounds.union(TreeBounds::from_plant(
-					&plant.descriptor,
-					settings.wind.strength_m,
-				));
+				bounds = bounds
+					.union(TreeBounds::from_plant(&plant.descriptor, settings.wind.strength_m));
 				plants.push(plant.descriptor);
 				kept += 1;
 			}
@@ -143,5 +244,37 @@ impl TreeField {
 
 	pub fn leaf_count(&self) -> u32 {
 		self.leaves.len() as u32
+	}
+}
+
+#[cfg(test)]
+mod authored_tests {
+	use super::*;
+	use crate::{TreePlant, TreeRecipe};
+
+	#[test]
+	fn authored_admission_is_complete_or_rejected() -> anyhow::Result<()> {
+		let source = TreePlant::generate(1, 0, Vec3::ZERO, Vec3::Y, 1., &TreeRecipe::storybook());
+		let settings = TreeFieldSettings::default();
+		let field = TreeField::from_plants(vec![source.clone(), source.clone()], &settings)
+			.map_err(anyhow::Error::msg)?;
+		assert_eq!(field.plants.len(), 2);
+		assert_eq!(field.branches.len(), source.branches.len() * 2);
+		assert_eq!(field.leaves.len(), source.leaves.len() * 2);
+		assert_eq!(field.branches[source.branches.len()].plant_index, 1);
+		assert!(field.leaves[source.leaves.len()].parent_branch >= source.branches.len() as u32);
+		let limited = TreeFieldSettings { max_leaves: 1, ..settings };
+		assert!(TreeField::from_plants(vec![source], &limited).is_err());
+		Ok(())
+	}
+
+	#[test]
+	fn rejects_branch_deeper_than_the_attachment_budget() {
+		let mut source =
+			TreePlant::generate(1, 0, Vec3::ZERO, Vec3::Y, 1., &TreeRecipe::storybook());
+		if let Some(branch) = source.branches.last_mut() {
+			branch.depth = MAX_BRANCH_DEPTH + 1;
+		}
+		assert!(TreeField::from_plants(vec![source], &TreeFieldSettings::default()).is_err());
 	}
 }

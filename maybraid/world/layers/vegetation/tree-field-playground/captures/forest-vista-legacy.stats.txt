@@ -1,0 +1,1 @@
+shot=forest-vista-legacy mode=Kit samples=36 dt_ms_mean=250.000 dt_ms_p95=250.000 dt_ms_max=250.000 entities=22039 kit_meshes=21533 mesh3d=21536 plants=15 branches=360 leaves=7022 bushes=0 grass=24336 upload_B=479648

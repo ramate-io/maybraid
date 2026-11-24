@@ -36,6 +36,8 @@ pub mod vc_tuft;
 #[cfg(all(test, feature = "render"))]
 pub(crate) mod woody_checks;
 #[cfg(feature = "render")]
+mod plant_site;
+#[cfg(feature = "render")]
 mod woody_lod;
 
 pub use distribution::{
@@ -84,6 +86,8 @@ pub use vc_compose::{
 };
 #[cfg(feature = "render")]
 pub use vc_tuft::{remixed_blade_tuft_unit, remixed_spear_tuft_unit, remixed_tuft_unit};
+#[cfg(feature = "render")]
+pub use plant_site::GrovePlantSite;
 #[cfg(feature = "render")]
 pub use woody_lod::{WoodyCanopyPolicy, WoodyGroveLod};
 

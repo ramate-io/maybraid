@@ -4,7 +4,8 @@ use bevy::prelude::*;
 
 use crate::select::CompactedTreeLists;
 
-/// Last-frame CPU-side submission stats (GPU counters are not read back).
+/// Last-frame resident totals across owners and CPU-side submission stats for
+/// the first camera per owner (GPU counters are not read back).
 #[derive(Resource, Clone, Debug, Default)]
 pub struct TreeFieldStats {
 	pub plants_resident: u32,
@@ -16,6 +17,7 @@ pub struct TreeFieldStats {
 	pub submitted_foliage: u32,
 	pub overflow: u32,
 	pub triangles: u32,
+	/// Highest resident owner generation; distinct owners may have equal generations.
 	pub generation: u64,
 }
 
@@ -35,7 +37,12 @@ impl TreeFieldStats {
 			considered_foliage: lists.considered_foliage,
 			submitted_wood: lists.submitted_wood,
 			submitted_foliage: lists.submitted_foliage,
-			overflow: lists.wood_overflow.iter().chain(lists.foliage_overflow.iter()).copied().sum(),
+			overflow: lists
+				.wood_overflow
+				.iter()
+				.chain(lists.foliage_overflow.iter())
+				.copied()
+				.sum(),
 			triangles: lists.triangle_count(),
 			generation,
 		}

@@ -8,6 +8,7 @@
 //! and visibility follow [`vegetation_grass_field`]. Recipes stay in this crate.
 
 mod bounds;
+mod catalog;
 mod deform;
 mod diagnostics;
 mod field;
@@ -23,21 +24,22 @@ mod template;
 mod topology;
 
 pub use bounds::BushBounds;
+pub use catalog::{BushCatalogOp, BushCatalogOps, BushGroveCatalog};
 pub use diagnostics::BushFieldStats;
 pub use field::{BushField, BushFieldSettings};
 pub use host::BushPatchLod;
 pub use layout::{
-	BranchDescriptor, BushPatchHeader, LeafDescriptor, PlantDescriptor, WoodLod, BRANCH_DESCRIPTOR_STRIDE,
-	BUSH_LOD_COUNT, BUSH_LOD_FAR, BUSH_LOD_MID, BUSH_LOD_NEAR, LEAF_DESCRIPTOR_STRIDE, PARENT_NONE,
-	PLANT_DESCRIPTOR_STRIDE,
+	BranchDescriptor, BushPatchHeader, LeafDescriptor, PlantDescriptor, WoodLod,
+	BRANCH_DESCRIPTOR_STRIDE, BUSH_LOD_COUNT, BUSH_LOD_FAR, BUSH_LOD_MID, BUSH_LOD_NEAR,
+	LEAF_DESCRIPTOR_STRIDE, PARENT_NONE, PLANT_DESCRIPTOR_STRIDE,
 };
 pub use patch::{BushPatch, BushSample};
-pub use plugin::BushFieldPlugin;
+pub use plugin::{collect_catalog_ops, BushFieldPlugin, BushGrove};
 pub use recipe::BushRecipe;
 pub use select::{BushSelector, CompactedBushLists};
 pub use template::{LeafTemplate, WoodTemplate};
 pub use topology::{
-	BushPlant, LeafLayer, MAX_BRANCH_DEPTH, MAX_BRANCHES_PER_PLANT, MAX_LEAVES_PER_PLANT,
+	BushPlant, LeafLayer, MAX_BRANCHES_PER_PLANT, MAX_BRANCH_DEPTH, MAX_LEAVES_PER_PLANT,
 };
 pub use vegetation_grass_field::{GrassGpuCapability, GrassGpuMode, WorldFrustum};
 pub use vegetation_shaders::wesl::{GrassViewUniform, VegetationPalette};

@@ -27,6 +27,7 @@ import vegetation_shaders::wesl::curve::{
 };
 import vegetation_shaders::wesl::wind::{wind_field, deform_along_curve, WindInputs};
 import vegetation_shaders::wesl::lod::{projected_height_px, lod_bucket, nested_keep, LodThresholds};
+import vegetation_shaders::wesl::grove::{GroveVisibleSpan, span_step, SPAN_ITEM_NONE};
 import vegetation_shaders::wesl::shading::{
     grass_albedo,
     grass_variation_palette,
@@ -159,5 +160,10 @@ fn fragment() -> @location(0) vec4<f32> {
     view.lod_density = vec4<f32>(1.0, 0.72, 0.38, 1.15);
     view.counts = vec4<f32>(1.0, 1.0, 0.0, 0.0);
     view.light_direction = vec4<f32>(0.4, 0.8, 0.3, 0.0);
+    var span: GroveVisibleSpan;
+    span.branch_count = 0u;
+    span.lod = 0u;
+    let _step = span_step(span, 0u, 0u, 0u);
+    let _mapped = span.branch_off + span.leaf_off + span.leaf_count + span.lod + SPAN_ITEM_NONE + _step.x;
     return smoke_eval(blade, view, 0.5, 1.0);
 }

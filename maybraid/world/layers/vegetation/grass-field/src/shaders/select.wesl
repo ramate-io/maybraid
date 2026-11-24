@@ -1,8 +1,9 @@
 //! Per-blade visibility, nested density, and LOD. Compacts survivors into per-LOD lists.
 
-import vegetation_shaders::wesl::lod::{lod_bucket, LodThresholds};
+import vegetation_shaders::wesl::lod::{catalog_select_index, lod_bucket, nested_keep, LodThresholds};
 import vegetation_shaders::wesl::layout::{BladeDescriptor, GrassViewUniform};
 import vegetation_shaders::wesl::wind::max_wind_displacement_m;
+import vegetation_shaders::wesl::grove::{GroveVisibleSpan, span_step, SPAN_ITEM_NONE};
 
 @group(0) @binding(0) var<uniform> view: GrassViewUniform;
 @group(0) @binding(1) var<storage, read> blades: array<BladeDescriptor>;
@@ -10,6 +11,7 @@ import vegetation_shaders::wesl::wind::max_wind_displacement_m;
 @group(0) @binding(3) var<storage, read_write> list_near: array<u32>;
 @group(0) @binding(4) var<storage, read_write> list_mid: array<u32>;
 @group(0) @binding(5) var<storage, read_write> list_card: array<u32>;
+@group(0) @binding(6) var<storage, read> visible_spans: array<GroveVisibleSpan>;
 
 fn sphere_in_frustum(center: vec3<f32>, radius: f32, clip: mat4x4<f32>) -> bool {
     let p = clip * vec4<f32>(center, 1.0);
@@ -35,44 +37,76 @@ fn append_list(lod: u32, blade_index: u32, capacity: u32) {
 }
 
 @compute @workgroup_size(64, 1, 1)
-fn select(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let blade_index = gid.x;
-    let blade_count = u32(view.counts.x);
-    if (blade_index >= blade_count) {
+fn select(
+    @builtin(global_invocation_id) gid: vec3<u32>,
+    @builtin(num_workgroups) nwg: vec3<u32>,
+) {
+    var blade_index = catalog_select_index(gid, nwg);
+    var blade_count = u32(view.counts.x);
+    let span_count = u32(view.light_direction.w);
+    var bucket = 3u;
+    if (span_count > 0u) {
+        if (blade_index >= blade_count) {
+            return;
+        }
+        var mapped_index = SPAN_ITEM_NONE;
+        var cursor = 0u;
+        for (var i = 0u; i < span_count; i++) {
+            let step = span_step(visible_spans[i], blade_index, cursor, 0u);
+            if (step.x == 1u) {
+                mapped_index = step.y;
+                bucket = step.z;
+                break;
+            }
+            cursor += step.y;
+        }
+        if (mapped_index == SPAN_ITEM_NONE) {
+            return;
+        }
+        blade_index = mapped_index;
+    } else if (blade_index >= blade_count) {
         return;
     }
     let blade = blades[blade_index];
+    if (blade.height_m <= 0.0) {
+        return;
+    }
     let capacity = u32(view.counts.y);
     let keep_fraction = min(1.0, f32(capacity) / max(f32(blade_count), 1.0));
     if (blade.shape.w >= keep_fraction) {
         return;
     }
-    let radius = max_wind_displacement_m(blade.height_m, view.wind.w, blade.shape.z)
-        + blade.height_m
-        + blade.width_m * 2.4;
-    let center = blade.root + blade.normal * (blade.height_m * 0.5);
-    if (!sphere_in_frustum(center, radius, view.clip_from_world)) {
+    if (span_count == 0u) {
+        let radius = max_wind_displacement_m(blade.height_m, view.wind.w, blade.shape.z)
+            + blade.height_m
+            + blade.width_m * 2.4;
+        let center = blade.root + blade.normal * (blade.height_m * 0.5);
+        if (!sphere_in_frustum(center, radius, view.clip_from_world)) {
+            return;
+        }
+        let distance = length(view.world_position.xyz - blade.root);
+        let thresholds = LodThresholds(
+            view.lod_distances.y,
+            view.lod_distances.z,
+            view.lod_distances.w,
+            view.lod_density.x,
+            view.lod_density.y,
+            view.lod_density.z,
+            view.lod_density.w,
+        );
+        bucket = lod_bucket(
+            distance,
+            blade.height_m,
+            blade.shape.w,
+            view.resolution.y,
+            view.resolution.z,
+            thresholds,
+        );
+    }
+    if (bucket > 2u) {
         return;
     }
-    let distance = length(view.world_position.xyz - blade.root);
-    let thresholds = LodThresholds(
-        view.lod_distances.y,
-        view.lod_distances.z,
-        view.lod_distances.w,
-        view.lod_density.x,
-        view.lod_density.y,
-        view.lod_density.z,
-        view.lod_density.w,
-    );
-    let bucket = lod_bucket(
-        distance,
-        blade.height_m,
-        blade.shape.w,
-        view.resolution.y,
-        view.resolution.z,
-        thresholds,
-    );
-    if (bucket > 2u) {
+    if (!nested_keep(blade.shape.w, view.lod_density[bucket])) {
         return;
     }
     append_list(bucket, blade_index, capacity);

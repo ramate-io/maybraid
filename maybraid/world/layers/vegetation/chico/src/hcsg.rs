@@ -321,7 +321,7 @@ impl<G: ForestGround> hcsg::GenerationScheme for GrownGrove<G> {
 }
 
 /// One level holding a nested [`ChicoGroveHost`] per tile; each tile keeps
-/// its own levels.
+/// its own levels. GPU hosts are High-only inside that nested wrapper.
 impl<G: ForestGround> LodScene for GrownGrove<G> {
 	fn scene_lod_status(&self, _lod_ref: &LodRef) -> LodSceneStatus {
 		LodSceneStatus::Unchanged
@@ -464,7 +464,9 @@ mod tests {
 	}
 
 	/// Groves on a 2×2 fine patch at the origin, viewed from `at`.
-	fn app(at: Vec3) -> App {
+	fn app(at: Vec3) -> (App, std::sync::MutexGuard<'static, ()>) {
+		let lock = crate::GroveGpuVisuals::lock_admission();
+		crate::GroveGpuVisuals::admit(false);
 		let mut app = App::new();
 		app.add_plugins((MinimalPlugins, StatesPlugin))
 			.add_plugins((AssetPlugin::default(), ScenePlugin))
@@ -511,7 +513,7 @@ mod tests {
 		let at = Transform::from_translation(at);
 		app.world_mut()
 			.spawn((LodViewer, at, LodNodePose { previous: at, current: at }));
-		app
+		(app, lock)
 	}
 
 	fn settle(app: &mut App) -> anyhow::Result<()> {
@@ -572,7 +574,7 @@ mod tests {
 
 	#[test]
 	fn the_neighborhood_grows_the_selected_layers_on_the_ground() -> anyhow::Result<()> {
-		let mut app = app(Vec3::ZERO);
+		let (mut app, _lock) = app(Vec3::ZERO);
 		settle(&mut app)?;
 
 		let hosts = grown(&mut app);
@@ -607,7 +609,7 @@ mod tests {
 
 	#[test]
 	fn groves_stand_on_the_surface() -> anyhow::Result<()> {
-		let mut app = app(Vec3::ZERO);
+		let (mut app, _lock) = app(Vec3::ZERO);
 		settle(&mut app)?;
 
 		let storage = app.world().resource::<hcsg::HcsgStorage>().clone();
@@ -638,15 +640,30 @@ mod tests {
 	/// Grove High is hundreds of metres; plant High is ~10× tree radius. Fulfill
 	/// at the tile High edge must still pose High canopy kits — colliders already
 	/// stamp High IR from the ancestor grove band.
+	///
+	/// Grow on the origin patch first. Starting the viewer at x=280 lets
+	/// settle go idle on empty cells east of the 2×2 fine patch before those
+	/// groves generate.
 	#[test]
 	fn high_band_trees_present_full_canopy() -> anyhow::Result<()> {
-		let at = Vec3::new(280.0, 20.0, 0.0);
-		let mut app = app(at);
+		let (mut app, _lock) = app(Vec3::ZERO);
 		settle(&mut app)?;
-
 		let tiles: usize = grown(&mut app).iter().map(|node| node.value.tiles.len()).sum();
-		update_until(&mut app, |app| nested_hosts(app) >= tiles);
-		assert!(nested_hosts(&mut app) > 0, "the patch presents grove hosts");
+		assert!(tiles > 0, "origin patch must grow groves before the High-edge move");
+
+		let at = Vec3::new(280.0, 20.0, 0.0);
+		move_viewer(&mut app, at)?;
+		settle(&mut app)?;
+		for _ in 0..800 {
+			if nested_hosts(&mut app) > 0 {
+				break;
+			}
+			app.update();
+		}
+		assert!(
+			nested_hosts(&mut app) > 0,
+			"the patch presents grove hosts after moving to High-edge {at} (grown tiles {tiles})"
+		);
 		for _ in 0..240 {
 			app.update();
 		}
@@ -682,7 +699,7 @@ mod tests {
 
 	#[test]
 	fn leaving_the_neighborhood_retires_its_hosts() -> anyhow::Result<()> {
-		let mut app = app(Vec3::ZERO);
+		let (mut app, _lock) = app(Vec3::ZERO);
 		settle(&mut app)?;
 		assert!(!grown(&mut app).is_empty());
 
@@ -696,7 +713,7 @@ mod tests {
 
 	#[test]
 	fn a_restart_reselects_every_grove() -> anyhow::Result<()> {
-		let mut app = app(Vec3::ZERO);
+		let (mut app, _lock) = app(Vec3::ZERO);
 		settle(&mut app)?;
 		let before: BTreeMap<Id, Version> = versions(&mut app).into_iter().collect();
 
@@ -748,7 +765,7 @@ mod tests {
 
 	#[test]
 	fn bump_outs_beyond_the_groves_displace_the_surface_mesh() -> anyhow::Result<()> {
-		let mut app = app(BEYOND);
+		let (mut app, _lock) = app(BEYOND);
 		settle(&mut app)?;
 
 		let nodes = bumped_out(&mut app);
@@ -772,7 +789,7 @@ mod tests {
 
 	#[test]
 	fn the_grove_hole_hides_bump_outs() -> anyhow::Result<()> {
-		let mut app = app(Vec3::ZERO);
+		let (mut app, _lock) = app(Vec3::ZERO);
 		settle(&mut app)?;
 		assert_eq!(bumped_out(&mut app).len(), 4, "the hole keeps its bump-outs warm");
 		assert_eq!(shown_bump_outs(&mut app), 0);
@@ -955,6 +972,17 @@ mod tests {
 			push_grove_ids_for_tile(&mut ids, tile, &forest, &neighbors);
 		}
 		ids
+	}
+
+	#[test]
+	fn grove_neighborhood_streams_origin_tile_out_beyond_present_radius() {
+		let origin = Vec3::new(50.0, 0.0, 50.0);
+		let far = Vec3::new(50.0, 0.0, GROVE_PRESENT_RADIUS_M + 500.0);
+		let near_region = GroveNeighborhood::around(origin, GROVE_PRESENT_RADIUS_M);
+		let far_region = GroveNeighborhood::around(far, GROVE_PRESENT_RADIUS_M);
+		assert!(origin.x >= near_region.min.x && origin.x <= near_region.max.x);
+		assert!(origin.z >= near_region.min.z && origin.z <= near_region.max.z);
+		assert!(origin.z < far_region.min.z || origin.z > far_region.max.z);
 	}
 
 	#[test]

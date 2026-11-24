@@ -89,6 +89,7 @@ impl Plugin for VegetationWeslPlugin {
 		load_shader_library!(app, "wesl/curve.wesl");
 		load_shader_library!(app, "wesl/wind.wesl");
 		load_shader_library!(app, "wesl/lod.wesl");
+		load_shader_library!(app, "wesl/grove.wesl");
 		load_shader_library!(app, "wesl/shading.wesl");
 		load_shader_library!(app, "wesl/layout.wesl");
 		load_shader_library!(app, "wesl/import_smoke.wesl");
@@ -130,7 +131,7 @@ mod tests {
 	#[test]
 	fn import_smoke_source_imports_each_library_module() -> anyhow::Result<()> {
 		let smoke = include_str!("wesl/import_smoke.wesl");
-		for stem in ["hash", "curve", "wind", "lod", "shading", "layout"] {
+		for stem in ["hash", "curve", "wind", "lod", "grove", "shading", "layout"] {
 			assert!(
 				smoke.contains(&format!("import vegetation_shaders::wesl::{stem}")),
 				"import_smoke.wesl must import {stem}"
@@ -141,6 +142,7 @@ mod tests {
 			include_str!("wesl/curve.wesl"),
 			include_str!("wesl/wind.wesl"),
 			include_str!("wesl/lod.wesl"),
+			include_str!("wesl/grove.wesl"),
 			include_str!("wesl/shading.wesl"),
 			include_str!("wesl/layout.wesl"),
 		];

@@ -1,8 +1,9 @@
 //! Per-branch visibility, plant LOD, and topology-preserving prune.
 
-import vegetation_shaders::wesl::lod::{lod_bucket, LodThresholds};
+import vegetation_shaders::wesl::lod::{catalog_select_index, lod_bucket, LodThresholds};
 import vegetation_shaders::wesl::layout::GrassViewUniform;
 import vegetation_shaders::wesl::wind::max_wind_displacement_m;
+import vegetation_shaders::wesl::grove::{GroveVisibleSpan, span_step, SPAN_ITEM_NONE};
 import vegetation_tree_field::shaders::layout::{PlantDescriptor, BranchDescriptor};
 
 @group(0) @binding(0) var<uniform> view: GrassViewUniform;
@@ -12,6 +13,7 @@ import vegetation_tree_field::shaders::layout::{PlantDescriptor, BranchDescripto
 @group(0) @binding(4) var<storage, read_write> list_near: array<u32>;
 @group(0) @binding(5) var<storage, read_write> list_mid: array<u32>;
 @group(0) @binding(6) var<storage, read_write> list_far: array<u32>;
+@group(0) @binding(7) var<storage, read> visible_spans: array<GroveVisibleSpan>;
 
 const PARENT_NONE: u32 = 0xFFFFFFFFu;
 
@@ -23,6 +25,9 @@ fn sphere_in_frustum(center: vec3<f32>, radius: f32, clip: mat4x4<f32>) -> bool 
 }
 
 fn plant_bucket(plant: PlantDescriptor) -> u32 {
+    if ((plant.flags & 1u) == 0u) {
+        return 3u;
+    }
     let radius = max_wind_displacement_m(plant.height_m, view.wind.w, plant.wood_stiffness)
         + max(plant.height_m, plant.crown_radius_m)
         + plant.crown_radius_m * 0.35;
@@ -76,15 +81,43 @@ fn append_list(lod: u32, index: u32, capacity: u32) {
 }
 
 @compute @workgroup_size(64, 1, 1)
-fn select(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let branch_index = gid.x;
-    let branch_count = u32(view.counts.x);
-    if (branch_index >= branch_count) {
+fn select(
+    @builtin(global_invocation_id) gid: vec3<u32>,
+    @builtin(num_workgroups) nwg: vec3<u32>,
+) {
+    var branch_index = catalog_select_index(gid, nwg);
+    var branch_count = u32(view.counts.x);
+    let span_count = u32(view.light_direction.w);
+    var bucket = 3u;
+    if (span_count > 0u) {
+        if (branch_index >= branch_count) {
+            return;
+        }
+        var mapped_index = SPAN_ITEM_NONE;
+        var cursor = 0u;
+        for (var i = 0u; i < span_count; i++) {
+            let step = span_step(visible_spans[i], branch_index, cursor, 0u);
+            if (step.x == 1u) {
+                mapped_index = step.y;
+                bucket = step.z;
+                break;
+            }
+            cursor += step.y;
+        }
+        if (mapped_index == SPAN_ITEM_NONE) {
+            return;
+        }
+        branch_index = mapped_index;
+    } else if (branch_index >= branch_count) {
         return;
     }
     let branch = branches[branch_index];
     let plant = plants[branch.plant_index];
-    let bucket = plant_bucket(plant);
+    if (span_count == 0u) {
+        bucket = plant_bucket(plant);
+    } else if ((plant.flags & 1u) == 0u) {
+        return;
+    }
     if (bucket > 2u) {
         return;
     }

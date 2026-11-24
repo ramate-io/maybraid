@@ -1,13 +1,14 @@
 //! CPU selection matching the wood/foliage compute shaders.
 
-use vegetation_grass_field::WorldFrustum;
+use vegetation_grass_field::{GroveVisibleSpan, WorldFrustum};
 use vegetation_shaders::wesl::{
 	lod_bucket, nested_keep, DrawIndexedIndirect, GrassViewUniform, LodThresholds,
 };
 
+use crate::catalog::{GroveSource, TreeGroveCatalog};
 use crate::field::TreeFieldSettings;
 use crate::layout::{
-	BranchDescriptor, LeafDescriptor, PlantDescriptor, WoodLod, TREE_LOD_COUNT, PARENT_NONE,
+	BranchDescriptor, LeafDescriptor, PlantDescriptor, WoodLod, PARENT_NONE, TREE_LOD_COUNT,
 };
 use crate::template::LeafTemplate;
 
@@ -49,9 +50,12 @@ impl CompactedTreeLists {
 
 	pub fn wood_indirect_args(&self) -> [DrawIndexedIndirect; TREE_LOD_COUNT] {
 		[
-			DrawIndexedIndirect::empty(WoodLod::Near.index_count()).with_instances(self.wood_count(0)),
-			DrawIndexedIndirect::empty(WoodLod::Mid.index_count()).with_instances(self.wood_count(1)),
-			DrawIndexedIndirect::empty(WoodLod::Far.index_count()).with_instances(self.wood_count(2)),
+			DrawIndexedIndirect::empty(WoodLod::Near.index_count())
+				.with_instances(self.wood_count(0)),
+			DrawIndexedIndirect::empty(WoodLod::Mid.index_count())
+				.with_instances(self.wood_count(1)),
+			DrawIndexedIndirect::empty(WoodLod::Far.index_count())
+				.with_instances(self.wood_count(2)),
 		]
 	}
 
@@ -77,13 +81,35 @@ pub struct TreeSelector {
 impl TreeSelector {
 	pub fn from_view(view: GrassViewUniform, settings: &TreeFieldSettings) -> Self {
 		Self {
-			thresholds: LodThresholds::tree_default(),
+			thresholds: LodThresholds {
+				near_m: view.lod_distances.y,
+				mid_m: view.lod_distances.z,
+				card_m: view.lod_distances.w,
+				near_density: view.lod_density.x,
+				mid_density: view.lod_density.y,
+				card_density: view.lod_density.z,
+				min_height_px: view.lod_density.w,
+			},
 			view,
-			capacities: [settings.max_per_lod; TREE_LOD_COUNT],
+			capacities: [settings.max_per_lod.max(view.counts.y as u32); TREE_LOD_COUNT],
 		}
 	}
 
 	pub fn plant_bucket(&self, plant: &PlantDescriptor) -> Option<u32> {
+		self.plant_bucket_with_lod(plant, None)
+	}
+
+	fn plant_bucket_with_lod(
+		&self,
+		plant: &PlantDescriptor,
+		grove_lod: Option<u32>,
+	) -> Option<u32> {
+		if !plant.is_active() {
+			return None;
+		}
+		if let Some(lod) = grove_lod {
+			return WoodLod::from_bucket(lod).map(|lod| lod.bucket());
+		}
 		let camera = self.view.world_position.truncate();
 		let radius = plant.conservative_extent_m(self.view.wind.w);
 		let frustum = WorldFrustum::from_clip(self.view.clip_from_world);
@@ -109,15 +135,154 @@ impl TreeSelector {
 		branches: &[BranchDescriptor],
 		leaves: &[LeafDescriptor],
 	) -> CompactedTreeLists {
+		self.compact_spans(plants, branches, leaves, None)
+	}
+
+	pub fn compact_catalog(
+		&self,
+		catalog: &TreeGroveCatalog,
+		spans: Option<&[GroveVisibleSpan]>,
+	) -> CompactedTreeLists {
+		let (branch_total, leaf_total): (u32, u32) = match spans {
+			Some(spans) => (
+				spans.iter().map(|span| span.branch_count).sum(),
+				spans.iter().map(|span| span.leaf_count).sum(),
+			),
+			None => catalog.sources().fold((0u32, 0u32), |acc, source| {
+				(
+					acc.0 + source.field.branches.len() as u32,
+					acc.1 + source.field.leaves.len() as u32,
+				)
+			}),
+		};
+		let wood_keep = keep_fraction(self.capacities[0], branch_total);
+		let leaf_keep = keep_fraction(self.capacities[0], leaf_total);
 		let mut lists = CompactedTreeLists::default();
-		let wood_keep = keep_fraction(self.capacities[0], branches.len() as u32);
-		let leaf_keep = keep_fraction(self.capacities[0], leaves.len() as u32);
-		for (branch_index, branch) in branches.iter().enumerate() {
+		for source in catalog.sources() {
+			let grove_lod = match spans {
+				None => None,
+				Some(spans) => {
+					let Some(span) = spans.iter().find(|span| span.branch_off == source.branch_off)
+					else {
+						continue;
+					};
+					Some(span.lod)
+				}
+			};
+			self.append_grove(source, grove_lod, wood_keep, leaf_keep, &mut lists);
+		}
+		lists
+	}
+
+	fn append_grove(
+		&self,
+		source: GroveSource<'_>,
+		grove_lod: Option<u32>,
+		wood_keep: f32,
+		leaf_keep: f32,
+		lists: &mut CompactedTreeLists,
+	) {
+		let plants = &source.field.plants;
+		let branches = &source.field.branches;
+		let leaves = &source.field.leaves;
+		for (local, branch) in branches.iter().enumerate() {
 			lists.considered_wood += 1;
 			let Some(plant) = plants.get(branch.plant_index as usize) else {
 				continue;
 			};
-			let Some(bucket) = self.plant_bucket(plant) else {
+			let Some(bucket) = self.plant_bucket_with_lod(plant, grove_lod) else {
+				continue;
+			};
+			let lod = WoodLod::from_bucket(bucket).unwrap_or(WoodLod::Far);
+			if branch.depth > lod.max_depth() {
+				continue;
+			}
+			if !branch.parent_is_resolvable(branches.len() as u32) {
+				continue;
+			}
+			if branch.keep_rank >= wood_keep && !branch.is_trunk() {
+				continue;
+			}
+			let slot = bucket as usize;
+			if lists.wood[slot].len() as u32 >= self.capacities[slot] {
+				lists.wood_overflow[slot] += 1;
+				continue;
+			}
+			lists.wood[slot].push(source.branch_off + local as u32);
+			lists.submitted_wood += 1;
+		}
+		for (local, leaf) in leaves.iter().enumerate() {
+			lists.considered_foliage += 1;
+			let Some(plant) = plants.get(leaf.plant_index as usize) else {
+				continue;
+			};
+			let Some(bucket) = self.plant_bucket_with_lod(plant, grove_lod) else {
+				continue;
+			};
+			let lod = WoodLod::from_bucket(bucket).unwrap_or(WoodLod::Far);
+			let mut parent_index = leaf.parent_branch;
+			let mut hops = 0u32;
+			loop {
+				let Some(parent) = branches.get(parent_index as usize) else {
+					parent_index = PARENT_NONE;
+					break;
+				};
+				if parent.depth <= lod.max_depth() {
+					break;
+				}
+				if parent.major_parent == PARENT_NONE || hops >= 3 {
+					parent_index = PARENT_NONE;
+					break;
+				}
+				parent_index = parent.major_parent;
+				hops += 1;
+			}
+			if parent_index == PARENT_NONE {
+				continue;
+			}
+			let density = match lod {
+				WoodLod::Near => self.thresholds.near_density,
+				WoodLod::Mid => self.thresholds.mid_density,
+				WoodLod::Far => self.thresholds.card_density,
+			};
+			if !nested_keep(leaf.density_rank, density.min(leaf_keep)) {
+				continue;
+			}
+			let slot = bucket as usize;
+			if lists.foliage[slot].len() as u32 >= self.capacities[slot] {
+				lists.foliage_overflow[slot] += 1;
+				continue;
+			}
+			lists.foliage[slot].push(source.leaf_off + local as u32);
+			lists.submitted_foliage += 1;
+		}
+	}
+
+	pub fn compact_spans(
+		&self,
+		plants: &[PlantDescriptor],
+		branches: &[BranchDescriptor],
+		leaves: &[LeafDescriptor],
+		spans: Option<&[GroveVisibleSpan]>,
+	) -> CompactedTreeLists {
+		let mut lists = CompactedTreeLists::default();
+		let branch_total = spans
+			.map(|spans| spans.iter().map(|span| span.branch_count).sum::<u32>())
+			.unwrap_or(branches.len() as u32);
+		let leaf_total = spans
+			.map(|spans| spans.iter().map(|span| span.leaf_count).sum::<u32>())
+			.unwrap_or(leaves.len() as u32);
+		let wood_keep = keep_fraction(self.capacities[0], branch_total);
+		let leaf_keep = keep_fraction(self.capacities[0], leaf_total);
+		for (branch_index, grove_lod) in span_items(spans, branches.len(), true) {
+			let Some(branch) = branches.get(branch_index) else {
+				continue;
+			};
+			lists.considered_wood += 1;
+			let Some(plant) = plants.get(branch.plant_index as usize) else {
+				continue;
+			};
+			let Some(bucket) = self.plant_bucket_with_lod(plant, grove_lod) else {
 				continue;
 			};
 			let lod = WoodLod::from_bucket(bucket).unwrap_or(WoodLod::Far);
@@ -138,12 +303,15 @@ impl TreeSelector {
 			lists.wood[slot].push(branch_index as u32);
 			lists.submitted_wood += 1;
 		}
-		for (leaf_index, leaf) in leaves.iter().enumerate() {
+		for (leaf_index, grove_lod) in span_items(spans, leaves.len(), false) {
+			let Some(leaf) = leaves.get(leaf_index) else {
+				continue;
+			};
 			lists.considered_foliage += 1;
 			let Some(plant) = plants.get(leaf.plant_index as usize) else {
 				continue;
 			};
-			let Some(bucket) = self.plant_bucket(plant) else {
+			let Some(bucket) = self.plant_bucket_with_lod(plant, grove_lod) else {
 				continue;
 			};
 			let lod = WoodLod::from_bucket(bucket).unwrap_or(WoodLod::Far);
@@ -212,6 +380,24 @@ impl TreeSelector {
 	}
 }
 
+fn span_items(
+	spans: Option<&[GroveVisibleSpan]>,
+	fallback_len: usize,
+	branch: bool,
+) -> Vec<(usize, Option<u32>)> {
+	match spans {
+		None => (0..fallback_len).map(|index| (index, None)).collect(),
+		Some(spans) => {
+			let mut out = Vec::new();
+			for span in spans {
+				let range = if branch { span.branch_range() } else { span.leaf_range() };
+				out.extend(range.map(|index| (index as usize, Some(span.lod))));
+			}
+			out
+		}
+	}
+}
+
 fn keep_fraction(capacity: u32, total: u32) -> f32 {
 	if total == 0 {
 		1.0
@@ -258,6 +444,33 @@ mod tests {
 	}
 
 	#[test]
+	fn resident_grove_keeps_wood_and_canopy_beyond_playground_range() {
+		let settings = TreeFieldSettings::default();
+		let patch = TreePatch::isolated(42, Vec3::ZERO, crate::TreeRecipe::storybook());
+		let field = TreeField::rebuild([&patch], &settings);
+		let camera = Vec3::new(0., 10., 600.);
+		let mut view = look_view(camera, Vec3::new(0., 8., 0.), 720.);
+		let transform =
+			Transform::from_translation(camera).looking_at(Vec3::new(0., 8., 0.), Vec3::Y);
+		let projection = PerspectiveProjection {
+			fov: 1.,
+			aspect_ratio: 16. / 9.,
+			near: 0.1,
+			far: 10000.,
+			..Default::default()
+		};
+		view.clip_from_world = projection.get_clip_from_view() * transform.to_matrix().inverse();
+		view.world_from_clip = view.clip_from_world.inverse();
+		assert_eq!(TreeSelector::from_view(view, &settings).plant_bucket(&field.plants[0]), None);
+		view.lod_distances.w = f32::MAX;
+		let selector = TreeSelector::from_view(view, &settings);
+		assert_eq!(selector.plant_bucket(&field.plants[0]), Some(2));
+		let lists = selector.compact(&field.plants, &field.branches, &field.leaves);
+		assert!(lists.submitted_wood > 0);
+		assert!(lists.submitted_foliage > 0);
+	}
+
+	#[test]
 	fn pruning_does_not_leave_floating_children() -> anyhow::Result<()> {
 		let settings = TreeFieldSettings::default();
 		let patch = TreePatch::grove(4, Vec3::ZERO, Vec2::splat(24.0), 12.0);
@@ -296,7 +509,11 @@ mod tests {
 	#[test]
 	fn off_camera_shadow_view_keeps_casters() -> anyhow::Result<()> {
 		let settings = TreeFieldSettings::default();
-		let patch = TreePatch::isolated(2, Vec3::new(40.0, 0.0, 0.0), crate::recipe::TreeRecipe::storybook());
+		let patch = TreePatch::isolated(
+			2,
+			Vec3::new(40.0, 0.0, 0.0),
+			crate::recipe::TreeRecipe::storybook(),
+		);
 		let field = TreeField::rebuild([&patch], &settings);
 		let camera = TreeSelector::from_view(
 			look_view(Vec3::new(-40.0, 6.0, 0.0), Vec3::new(-80.0, 0.0, 0.0), 720.0),
@@ -332,6 +549,23 @@ mod tests {
 		)
 		.compact(&field.plants, &field.branches, &field.leaves);
 		assert!(far.triangle_count() < near.triangle_count());
+		Ok(())
+	}
+
+	#[test]
+	fn culled_grove_span_list_is_zero_select_work() -> anyhow::Result<()> {
+		let settings = TreeFieldSettings::default();
+		let patch = TreePatch::isolated(1, Vec3::ZERO, crate::recipe::TreeRecipe::storybook());
+		let field = TreeField::rebuild([&patch], &settings);
+		let selector = TreeSelector::from_view(
+			look_view(Vec3::new(6.0, 8.0, 14.0), Vec3::ZERO, 720.0),
+			&settings,
+		);
+		let lists =
+			selector.compact_spans(&field.plants, &field.branches, &field.leaves, Some(&[]));
+		assert_eq!(lists.considered_wood, 0);
+		assert_eq!(lists.considered_foliage, 0);
+		assert_eq!(lists.submitted(), 0);
 		Ok(())
 	}
 }

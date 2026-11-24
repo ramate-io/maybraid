@@ -1,6 +1,7 @@
 //! Render-world compute compaction, indirect args, and opaque wood/foliage draws.
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 use bevy::core_pipeline::core_3d::{
 	Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey, CORE_3D_DEPTH_FORMAT,
@@ -27,17 +28,26 @@ use bevy::render::render_resource::{
 	ShaderStages, Specializer, SpecializerKey, TextureFormat, Variants, VertexAttribute,
 	VertexFormat, VertexState, VertexStepMode,
 };
-use bevy::render::renderer::{RenderAdapter, RenderContext, RenderDevice, RenderGraph, RenderQueue};
+use bevy::render::renderer::{
+	RenderAdapter, RenderContext, RenderDevice, RenderGraph, RenderQueue,
+};
 use bevy::render::sync_world::MainEntityHashSet;
-use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntity};
+use bevy::render::view::{ExtractedView, RenderVisibleEntities, RetainedViewEntity, ViewTarget};
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use vegetation_components::CanopyShadowMode;
-use vegetation_grass_field::{GrassGpuCapability, GrassGpuMode};
+use vegetation_grass_field::{
+	cull_woody_groves, encode_arena_copies, grow_list_buffers, grow_storage_buffer, remember_bands,
+	select_dispatch_size, stage_buffer_write, upload_visible_spans, CatalogApply,
+	GrassGpuCapability, GrassGpuMode, GroveEncodeStats, GroveId, GroveRetainPolicy, GroveSubmit,
+	GroveVisibleSpan, PendingBufferCopy, PendingBufferWrite, RetainedGroveFrame,
+	INITIAL_LIST_ITEMS,
+};
 use vegetation_shaders::wesl::{
 	GrassDrawParams, GrassViewUniform, LodThresholds, DRAW_INDEXED_INDIRECT_STRIDE,
 	GRASS_VIEW_KIND_CAMERA, GRASS_VIEW_KIND_SHADOW,
 };
 
+use crate::catalog::{BushCatalogOps, BushGroveCatalog};
 use crate::diagnostics::BushFieldStats;
 use crate::layout::{
 	WoodLod, BRANCH_DESCRIPTOR_STRIDE, BUSH_LOD_COUNT, LEAF_DESCRIPTOR_STRIDE,
@@ -61,6 +71,8 @@ impl Plugin for BushGpuPlugin {
 		render_app
 			.init_resource::<PendingBushQueues>()
 			.init_resource::<BushGpuState>()
+			.insert_resource(BushGroveCatalog::render())
+			.init_resource::<GroveEncodeStats>()
 			.add_render_command::<Opaque3d, DrawBushWood>()
 			.add_render_command::<Opaque3d, DrawBushFoliage>()
 			.add_systems(RenderStartup, (detect_capability, init_bush_pipelines, init_templates))
@@ -100,6 +112,7 @@ struct BushPipelines {
 struct BushDrawKey {
 	msaa: u32,
 	format: TextureFormat,
+	hdr: bool,
 }
 
 struct BushDrawSpecializer;
@@ -151,6 +164,7 @@ fn init_bush_pipelines(
 				storage_buffer_sized(false, None),
 				storage_buffer_sized(false, None),
 				storage_buffer_sized(false, None),
+				storage_buffer_read_only_sized(false, None),
 			),
 		),
 	);
@@ -167,6 +181,7 @@ fn init_bush_pipelines(
 				storage_buffer_sized(false, None),
 				storage_buffer_sized(false, None),
 				storage_buffer_sized(false, None),
+				storage_buffer_read_only_sized(false, None),
 			),
 		),
 	);
@@ -233,7 +248,8 @@ fn init_bush_pipelines(
 
 	let wood_shader = asset_server.load(WOOD_SHADER);
 	let foliage_shader = asset_server.load(FOLIAGE_SHADER);
-	let wood_descriptor = opaque_descriptor("bush_wood", wood_shader, vec![wood_draw_layout.clone()]);
+	let wood_descriptor =
+		opaque_descriptor("bush_wood", wood_shader, vec![wood_draw_layout.clone()]);
 	let foliage_descriptor =
 		opaque_descriptor("bush_foliage", foliage_shader, vec![foliage_draw_layout.clone()]);
 
@@ -259,11 +275,7 @@ fn opaque_descriptor(
 	RenderPipelineDescriptor {
 		label: Some(label.into()),
 		layout,
-		vertex: VertexState {
-			shader: shader.clone(),
-			buffers: vec![vertex_layout()],
-			..default()
-		},
+		vertex: VertexState { shader: shader.clone(), buffers: vec![vertex_layout()], ..default() },
 		fragment: Some(FragmentState {
 			shader,
 			targets: vec![Some(ColorTargetState {
@@ -299,7 +311,15 @@ struct GpuTemplate {
 
 fn init_templates(mut commands: Commands, device: Res<RenderDevice>) {
 	let lods = [WoodLod::Near, WoodLod::Mid, WoodLod::Far];
-	let wood = lods.map(|lod| gpu_template(&device, &WoodTemplate::for_lod(lod).vertex_bytes(), &WoodTemplate::for_lod(lod).index_bytes(), WoodTemplate::for_lod(lod).indices.len() as u32, "bush_wood_template"));
+	let wood = lods.map(|lod| {
+		gpu_template(
+			&device,
+			&WoodTemplate::for_lod(lod).vertex_bytes(),
+			&WoodTemplate::for_lod(lod).index_bytes(),
+			WoodTemplate::for_lod(lod).indices.len() as u32,
+			"bush_wood_template",
+		)
+	});
 	let leaf = LeafTemplate::teardrop();
 	commands.insert_resource(BushTemplates {
 		wood,
@@ -341,6 +361,11 @@ struct BushGpuState {
 	branches: Option<Buffer>,
 	leaves: Option<Buffer>,
 	generation: u64,
+	plant_count: usize,
+	branch_count: usize,
+	leaf_count: usize,
+	pending_copies: Vec<PendingBufferCopy>,
+	pending_writes: Vec<PendingBufferWrite>,
 	views: std::collections::HashMap<RetainedViewEntity, ViewWork>,
 }
 
@@ -361,10 +386,20 @@ struct ViewWork {
 	foliage_draw_bgs: [BindGroup; BUSH_LOD_COUNT],
 	cpu_wood_counts: [u32; BUSH_LOD_COUNT],
 	cpu_foliage_counts: [u32; BUSH_LOD_COUNT],
+	span_buffer: Buffer,
+	dirty: bool,
+	retained: RetainedGroveFrame,
+	last_bands: std::collections::HashMap<GroveId, u32>,
+	visible_branches: u32,
+	visible_leaves: u32,
+	span_count: u32,
+	list_capacity: u32,
 }
 
 fn prepare_bush_buffers(
 	extracted: Option<Res<ExtractedBushField>>,
+	mut ops: ResMut<BushCatalogOps>,
+	mut catalog: ResMut<BushGroveCatalog>,
 	capability: Option<Res<GrassGpuCapability>>,
 	pipelines: Option<Res<BushPipelines>>,
 	pipeline_cache: Res<PipelineCache>,
@@ -372,7 +407,9 @@ fn prepare_bush_buffers(
 	queue: Res<RenderQueue>,
 	views: Query<&ExtractedView>,
 	mut stats: Option<ResMut<BushFieldStats>>,
+	mut encode: ResMut<GroveEncodeStats>,
 	mut state: ResMut<BushGpuState>,
+	policy: Option<Res<GroveRetainPolicy>>,
 ) {
 	let Some(extracted) = extracted else {
 		return;
@@ -386,36 +423,100 @@ fn prepare_bush_buffers(
 	if !capability.submits() {
 		return;
 	}
+	let CatalogApply { leftover, .. } =
+		catalog.apply(ops.take(), vegetation_grass_field::ADMISSION_BUDGET);
+	ops.ops.extend(leftover);
+	encode.catalog_writes = catalog.last_writes;
+	encode.catalog_bytes = catalog.last_write_bytes;
+	encode.catalog_clones = catalog.clones;
+	encode.truncated_plants = catalog.truncated_plants;
+	encode.passes = 0;
+	encode.dispatches = 0;
+	encode.draws = 0;
+	encode.uniform_writes = 0;
+	encode.span_uploads = 0;
+	encode.retained_clean = 0;
 
-	if state.generation != extracted.field.generation || state.branches.is_none() {
-		state.plants = Some(pack_buffer(
+	let mut pending_copies = std::mem::take(&mut state.pending_copies);
+	let mut pending_writes = std::mem::take(&mut state.pending_writes);
+	let mut grew = false;
+	if catalog.last_writes > 0 {
+		let plant_bytes =
+			(catalog.plant_slots() as u64 * PLANT_DESCRIPTOR_STRIDE).max(PLANT_DESCRIPTOR_STRIDE);
+		let branch_bytes = (catalog.branch_slots() as u64 * BRANCH_DESCRIPTOR_STRIDE)
+			.max(BRANCH_DESCRIPTOR_STRIDE);
+		let leaf_bytes =
+			(catalog.leaf_slots() as u64 * LEAF_DESCRIPTOR_STRIDE).max(LEAF_DESCRIPTOR_STRIDE);
+		grew = grow_storage_buffer(
 			&device,
-			"bush_plants",
-			extracted.field.plants.iter().flat_map(|p| p.to_std430_bytes()).collect(),
+			&mut state.plants,
+			plant_bytes,
 			PLANT_DESCRIPTOR_STRIDE,
-		));
-		state.branches = Some(pack_buffer(
+			"bush_plants",
+			&mut pending_copies,
+		) | grow_storage_buffer(
 			&device,
-			"bush_branches",
-			extracted.field.branches.iter().flat_map(|b| b.to_std430_bytes()).collect(),
+			&mut state.branches,
+			branch_bytes,
 			BRANCH_DESCRIPTOR_STRIDE,
-		));
-		state.leaves = Some(pack_buffer(
+			"bush_branches",
+			&mut pending_copies,
+		) | grow_storage_buffer(
 			&device,
-			"bush_leaves",
-			extracted.field.leaves.iter().flat_map(|l| l.to_std430_bytes()).collect(),
+			&mut state.leaves,
+			leaf_bytes,
 			LEAF_DESCRIPTOR_STRIDE,
-		));
-		state.generation = extracted.field.generation;
+			"bush_leaves",
+			&mut pending_copies,
+		);
+		{
+			for upload in &catalog.last_uploads {
+				write_encoded_span(
+					&device,
+					state.plants.as_ref(),
+					upload.plants,
+					PLANT_DESCRIPTOR_STRIDE,
+					&catalog.encode_plants(upload),
+					&mut pending_writes,
+				);
+				write_encoded_span(
+					&device,
+					state.branches.as_ref(),
+					upload.branches,
+					BRANCH_DESCRIPTOR_STRIDE,
+					&catalog.encode_branches(upload),
+					&mut pending_writes,
+				);
+				write_encoded_span(
+					&device,
+					state.leaves.as_ref(),
+					upload.leaves,
+					LEAF_DESCRIPTOR_STRIDE,
+					&catalog.encode_leaves(upload),
+					&mut pending_writes,
+				);
+			}
+		}
+		state.generation = catalog.generation;
+		state.plant_count = catalog.plant_slots();
+		state.branch_count = catalog.branch_slots();
+		state.leaf_count = catalog.leaf_slots();
+	}
+	if catalog.is_empty() {
 		state.views.clear();
+		state.pending_copies = pending_copies;
+		state.pending_writes = pending_writes;
+		return;
 	}
 
 	let (Some(plants), Some(branches), Some(leaves)) =
 		(state.plants.clone(), state.branches.clone(), state.leaves.clone())
 	else {
+		state.pending_copies = pending_copies;
+		state.pending_writes = pending_writes;
 		return;
 	};
-	let capacity = extracted.settings.max_per_lod;
+	let force_rebuild = policy.map(|policy| policy.forces_rebuild()).unwrap_or(false);
 	let mut live = std::collections::HashSet::new();
 	let mut missing = Vec::new();
 	for view in &views {
@@ -423,9 +524,7 @@ fn prepare_bush_buffers(
 			continue;
 		}
 		live.insert(view.retained_view_entity);
-		if let Some(work) = state.views.get(&view.retained_view_entity) {
-			write_view_uniform(&queue, &work.view_uniform, &make_view_uniform(view, &extracted));
-		} else {
+		if !state.views.contains_key(&view.retained_view_entity) {
 			missing.push(view.retained_view_entity);
 		}
 	}
@@ -439,7 +538,6 @@ fn prepare_bush_buffers(
 				&plants,
 				&branches,
 				&leaves,
-				capacity,
 				view,
 				&extracted,
 			);
@@ -447,21 +545,211 @@ fn prepare_bush_buffers(
 		}
 	}
 	state.views.retain(|key, _| live.contains(key));
+	for view in &views {
+		if !view_submits_bush(view, extracted.shadow_mode) {
+			continue;
+		}
+		let Some(work) = state.views.get_mut(&view.retained_view_entity) else {
+			continue;
+		};
+		let (span_grew, list_grew) = stamp_bush_view(
+			&device,
+			&queue,
+			view,
+			&extracted,
+			&catalog,
+			work,
+			&mut encode,
+			force_rebuild,
+			&mut pending_copies,
+		);
+		if grew || span_grew || list_grew {
+			rebind_bush_select(
+				&device,
+				&pipeline_cache,
+				&pipelines,
+				&plants,
+				&branches,
+				&leaves,
+				work,
+			);
+		}
+	}
+	state.pending_copies = pending_copies;
+	state.pending_writes = pending_writes;
 
 	if capability.mode == GrassGpuMode::CpuSelect {
-		cpu_fill_lists(&queue, &mut state, &extracted, views.iter(), stats.as_deref_mut());
+		cpu_fill_lists(
+			&device,
+			state.as_mut(),
+			&extracted,
+			&catalog,
+			views.iter(),
+			stats.as_deref_mut(),
+		);
 	} else if extracted.settings.diagnostics {
-		record_cpu_stats(&extracted, views.iter(), stats.as_deref_mut());
+		record_cpu_stats(&extracted, &catalog, views.iter(), stats.as_deref_mut());
 	}
 }
 
-fn pack_buffer(device: &RenderDevice, label: &'static str, bytes: Vec<u8>, stride: u64) -> Buffer {
-	let packed = if bytes.is_empty() { vec![0u8; stride as usize] } else { bytes };
-	device.create_buffer_with_data(&BufferInitDescriptor {
-		label: Some(label),
-		contents: &packed,
-		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-	})
+fn stamp_bush_view(
+	device: &RenderDevice,
+	queue: &RenderQueue,
+	view: &ExtractedView,
+	extracted: &ExtractedBushField,
+	catalog: &BushGroveCatalog,
+	work: &mut ViewWork,
+	encode: &mut GroveEncodeStats,
+	force_rebuild: bool,
+	pending_copies: &mut Vec<PendingBufferCopy>,
+) -> (bool, bool) {
+	let thresholds = if extracted.grove_residency {
+		LodThresholds::grove_bush()
+	} else {
+		extracted.settings.lod
+	};
+	let probe = make_view_uniform(view, extracted);
+	let groves = if extracted.grove_residency {
+		cull_woody_groves(
+			&probe,
+			thresholds,
+			catalog.live_records(),
+			&|id| work.last_bands.get(&id).copied(),
+			extracted.settings.wind.strength_m,
+		)
+	} else {
+		Vec::new()
+	};
+	remember_bands(&mut work.last_bands, &groves);
+	let submit = GroveSubmit::plan(
+		&work.retained,
+		view.viewport.z,
+		view.viewport.w,
+		fov_y(&view.clip_from_view),
+		thresholds.card_m,
+		groves,
+		extracted.grove_residency,
+		extracted.branch_count,
+		extracted.leaf_count,
+		force_rebuild,
+	);
+	let _span = if submit.dirty {
+		bevy::log::info_span!("grove rebuild").entered()
+	} else {
+		bevy::log::info_span!("grove retained (clean)").entered()
+	};
+	let stamped = {
+		let span_buffer = &mut work.span_buffer;
+		submit.stamp(&mut work.retained, encode, |groves| {
+			upload_visible_spans(device, queue, span_buffer, groves, "bush_visible_spans")
+		})
+	};
+	work.dirty = stamped.dirty;
+	work.visible_branches = stamped.work_branches;
+	work.visible_leaves = stamped.work_leaves;
+	work.span_count = stamped.span_count;
+	let needed = stamped.work_branches.max(stamped.work_leaves).max(1);
+	let list_grew = grow_list_buffers(
+		device,
+		work.wood_lists.iter_mut().chain(work.foliage_lists.iter_mut()),
+		needed,
+		"bush_instance_list",
+		pending_copies,
+	);
+	if list_grew {
+		work.list_capacity = (work.wood_lists[0].size() / 4) as u32;
+	}
+	let mut uniform = make_view_uniform(view, extracted);
+	uniform.counts.x = stamped.work_branches as f32;
+	uniform.counts.y = work.list_capacity as f32;
+	uniform.counts.z = stamped.work_leaves as f32;
+	uniform.light_direction.w = stamped.span_count as f32;
+	write_view_uniform(queue, &work.view_uniform, &uniform);
+	(stamped.span_grew, list_grew)
+}
+
+fn rebind_bush_select(
+	device: &RenderDevice,
+	pipeline_cache: &PipelineCache,
+	pipelines: &BushPipelines,
+	plants: &Buffer,
+	branches: &Buffer,
+	leaves: &Buffer,
+	work: &mut ViewWork,
+) {
+	work.select_wood_bg = device.create_bind_group(
+		Some("bush_select_wood_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.select_wood_layout),
+		&BindGroupEntries::sequential((
+			work.view_uniform.as_entire_buffer_binding(),
+			plants.as_entire_buffer_binding(),
+			branches.as_entire_buffer_binding(),
+			work.counters.as_entire_buffer_binding(),
+			work.wood_lists[0].as_entire_buffer_binding(),
+			work.wood_lists[1].as_entire_buffer_binding(),
+			work.wood_lists[2].as_entire_buffer_binding(),
+			work.span_buffer.as_entire_buffer_binding(),
+		)),
+	);
+	work.select_foliage_bg = device.create_bind_group(
+		Some("bush_select_foliage_bg"),
+		&pipeline_cache.get_bind_group_layout(&pipelines.select_foliage_layout),
+		&BindGroupEntries::sequential((
+			work.view_uniform.as_entire_buffer_binding(),
+			plants.as_entire_buffer_binding(),
+			branches.as_entire_buffer_binding(),
+			leaves.as_entire_buffer_binding(),
+			work.counters.as_entire_buffer_binding(),
+			work.foliage_lists[0].as_entire_buffer_binding(),
+			work.foliage_lists[1].as_entire_buffer_binding(),
+			work.foliage_lists[2].as_entire_buffer_binding(),
+			work.span_buffer.as_entire_buffer_binding(),
+		)),
+	);
+	work.wood_draw_bgs = [0, 1, 2].map(|lod| {
+		device.create_bind_group(
+			Some("bush_wood_draw_bg"),
+			&pipeline_cache.get_bind_group_layout(&pipelines.wood_draw_layout),
+			&BindGroupEntries::sequential((
+				work.view_uniform.as_entire_buffer_binding(),
+				plants.as_entire_buffer_binding(),
+				branches.as_entire_buffer_binding(),
+				work.wood_lists[lod].as_entire_buffer_binding(),
+				work.wood_params[lod].as_entire_buffer_binding(),
+			)),
+		)
+	});
+	work.foliage_draw_bgs = [0, 1, 2].map(|lod| {
+		device.create_bind_group(
+			Some("bush_foliage_draw_bg"),
+			&pipeline_cache.get_bind_group_layout(&pipelines.foliage_draw_layout),
+			&BindGroupEntries::sequential((
+				work.view_uniform.as_entire_buffer_binding(),
+				plants.as_entire_buffer_binding(),
+				branches.as_entire_buffer_binding(),
+				leaves.as_entire_buffer_binding(),
+				work.foliage_lists[lod].as_entire_buffer_binding(),
+				work.foliage_params[lod].as_entire_buffer_binding(),
+			)),
+		)
+	});
+}
+
+fn write_encoded_span(
+	device: &RenderDevice,
+	buffer: Option<&Buffer>,
+	span: vegetation_grass_field::RangeSpan,
+	stride: u64,
+	bytes: &[u8],
+	pending: &mut Vec<PendingBufferWrite>,
+) {
+	if span.is_empty() || bytes.is_empty() {
+		return;
+	}
+	let Some(buffer) = buffer else {
+		return;
+	};
+	stage_buffer_write(device, buffer, span.offset as u64 * stride, bytes, pending);
 }
 
 fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedBushField) -> GrassViewUniform {
@@ -474,7 +762,11 @@ fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedBushField) -> Gr
 	} else {
 		GRASS_VIEW_KIND_SHADOW
 	};
-	let thresholds = LodThresholds::bush_default();
+	let thresholds = if extracted.grove_residency {
+		LodThresholds::grove_bush()
+	} else {
+		extracted.settings.lod
+	};
 	GrassViewUniform {
 		clip_from_world,
 		world_from_clip,
@@ -505,10 +797,10 @@ fn make_view_uniform(view: &ExtractedView, extracted: &ExtractedBushField) -> Gr
 			thresholds.min_height_px,
 		),
 		counts: Vec4::new(
-			extracted.field.branches.len() as f32,
+			extracted.branch_count as f32,
 			extracted.settings.max_per_lod as f32,
-			extracted.field.leaves.len() as f32,
-			extracted.field.plants.len() as f32,
+			extracted.leaf_count as f32,
+			extracted.plant_count as f32,
 		),
 		light_direction: extracted.light_direction.extend(0.0),
 	}
@@ -527,7 +819,6 @@ fn create_view_work(
 	plants: &Buffer,
 	branches: &Buffer,
 	leaves: &Buffer,
-	capacity: u32,
 	view: &ExtractedView,
 	extracted: &ExtractedBushField,
 ) -> ViewWork {
@@ -543,12 +834,12 @@ fn create_view_work(
 		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
 		mapped_at_creation: false,
 	});
-	let list_size = (capacity as u64).max(1) * 4;
+	let list_size = u64::from(INITIAL_LIST_ITEMS) * 4;
 	let wood_lists = [0, 1, 2].map(|_| {
 		device.create_buffer(&BufferDescriptor {
 			label: Some("bush_wood_list"),
 			size: list_size,
-			usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+			usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
 			mapped_at_creation: false,
 		})
 	});
@@ -556,7 +847,7 @@ fn create_view_work(
 		device.create_buffer(&BufferDescriptor {
 			label: Some("bush_foliage_list"),
 			size: list_size,
-			usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+			usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
 			mapped_at_creation: false,
 		})
 	});
@@ -578,6 +869,12 @@ fn create_view_work(
 		)
 	});
 	let foliage_params = [0u32, 1, 2].map(|lod| params_buffer(device, lod, 6, 4));
+	let span_buffer = device.create_buffer(&BufferDescriptor {
+		label: Some("bush_visible_spans"),
+		size: GroveVisibleSpan::STRIDE * 256,
+		usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+		mapped_at_creation: false,
+	});
 
 	let uniform = make_view_uniform(view, extracted);
 	write_view_uniform(queue, &view_uniform, &uniform);
@@ -593,6 +890,7 @@ fn create_view_work(
 			wood_lists[0].as_entire_buffer_binding(),
 			wood_lists[1].as_entire_buffer_binding(),
 			wood_lists[2].as_entire_buffer_binding(),
+			span_buffer.as_entire_buffer_binding(),
 		)),
 	);
 	let select_foliage_bg = device.create_bind_group(
@@ -607,6 +905,7 @@ fn create_view_work(
 			foliage_lists[0].as_entire_buffer_binding(),
 			foliage_lists[1].as_entire_buffer_binding(),
 			foliage_lists[2].as_entire_buffer_binding(),
+			span_buffer.as_entire_buffer_binding(),
 		)),
 	);
 	let finalize_bg = device.create_bind_group(
@@ -661,6 +960,14 @@ fn create_view_work(
 		foliage_draw_bgs,
 		cpu_wood_counts: [0; BUSH_LOD_COUNT],
 		cpu_foliage_counts: [0; BUSH_LOD_COUNT],
+		span_buffer,
+		dirty: true,
+		retained: RetainedGroveFrame::default(),
+		last_bands: std::collections::HashMap::new(),
+		visible_branches: 0,
+		visible_leaves: 0,
+		span_count: 0,
+		list_capacity: INITIAL_LIST_ITEMS,
 	}
 }
 
@@ -678,9 +985,10 @@ fn write_view_uniform(queue: &RenderQueue, buffer: &Buffer, uniform: &GrassViewU
 }
 
 fn cpu_fill_lists<'a>(
-	queue: &RenderQueue,
+	device: &RenderDevice,
 	state: &mut BushGpuState,
 	extracted: &ExtractedBushField,
+	catalog: &BushGroveCatalog,
 	views: impl Iterator<Item = &'a ExtractedView>,
 	mut stats: Option<&mut BushFieldStats>,
 ) {
@@ -691,23 +999,38 @@ fn cpu_fill_lists<'a>(
 		let Some(work) = state.views.get_mut(&view.retained_view_entity) else {
 			continue;
 		};
+		if !work.dirty {
+			continue;
+		}
 		let uniform = make_view_uniform(view, extracted);
 		let selector = BushSelector::from_view(uniform, &extracted.settings);
-		let lists = selector.compact(
-			&extracted.field.plants,
-			&extracted.field.branches,
-			&extracted.field.leaves,
-		);
+		let spans = work.retained.groves.iter().map(|grove| grove.span).collect::<Vec<_>>();
+		let lists = if extracted.grove_residency {
+			selector.compact_catalog(catalog, Some(&spans))
+		} else {
+			selector.compact_catalog(catalog, None)
+		};
 		for lod in 0..BUSH_LOD_COUNT {
 			if !lists.wood[lod].is_empty() {
-				let bytes: Vec<u8> =
-					lists.wood[lod].iter().flat_map(|i| i.to_le_bytes()).collect();
-				queue.write_buffer(&work.wood_lists[lod], 0, &bytes);
+				let bytes: Vec<u8> = lists.wood[lod].iter().flat_map(|i| i.to_le_bytes()).collect();
+				stage_buffer_write(
+					device,
+					&work.wood_lists[lod],
+					0,
+					&bytes,
+					&mut state.pending_writes,
+				);
 			}
 			if !lists.foliage[lod].is_empty() {
 				let bytes: Vec<u8> =
 					lists.foliage[lod].iter().flat_map(|i| i.to_le_bytes()).collect();
-				queue.write_buffer(&work.foliage_lists[lod], 0, &bytes);
+				stage_buffer_write(
+					device,
+					&work.foliage_lists[lod],
+					0,
+					&bytes,
+					&mut state.pending_writes,
+				);
 			}
 			work.cpu_wood_counts[lod] = lists.wood[lod].len() as u32;
 			work.cpu_foliage_counts[lod] = lists.foliage[lod].len() as u32;
@@ -720,6 +1043,7 @@ fn cpu_fill_lists<'a>(
 
 fn record_cpu_stats<'a>(
 	extracted: &ExtractedBushField,
+	catalog: &BushGroveCatalog,
 	views: impl Iterator<Item = &'a ExtractedView>,
 	mut stats: Option<&mut BushFieldStats>,
 ) {
@@ -729,11 +1053,7 @@ fn record_cpu_stats<'a>(
 		}
 		let uniform = make_view_uniform(view, extracted);
 		let selector = BushSelector::from_view(uniform, &extracted.settings);
-		let lists = selector.compact(
-			&extracted.field.plants,
-			&extracted.field.branches,
-			&extracted.field.leaves,
-		);
+		let lists = selector.compact_catalog(catalog, None);
 		record_lists(extracted, &lists, stats.as_deref_mut());
 		break;
 	}
@@ -746,10 +1066,10 @@ fn record_lists(
 ) {
 	if let Some(stats) = stats {
 		*stats = BushFieldStats::from_lists(
-			extracted.field.plants.len() as u32,
-			extracted.field.branches.len() as u32,
-			extracted.field.leaves.len() as u32,
-			extracted.field.generation,
+			extracted.plant_count,
+			extracted.branch_count,
+			extracted.leaf_count,
+			0,
 			lists,
 		);
 	}
@@ -763,14 +1083,23 @@ fn bush_compute(
 	mut render_context: RenderContext,
 	pipelines: Option<Res<BushPipelines>>,
 	pipeline_cache: Res<PipelineCache>,
-	state: Option<Res<BushGpuState>>,
+	mut state: Option<ResMut<BushGpuState>>,
 	capability: Option<Res<GrassGpuCapability>>,
 	extracted: Option<Res<ExtractedBushField>>,
+	device: Res<RenderDevice>,
+	mut encode: Option<ResMut<GroveEncodeStats>>,
 ) {
+	if let Some(state) = state.as_deref_mut() {
+		encode_arena_copies(
+			render_context.command_encoder(),
+			&mut state.pending_copies,
+			&mut state.pending_writes,
+		);
+	}
 	let Some(pipelines) = pipelines else {
 		return;
 	};
-	let Some(state) = state else {
+	let Some(state) = state.as_deref() else {
 		return;
 	};
 	let Some(capability) = capability else {
@@ -779,7 +1108,7 @@ fn bush_compute(
 	let Some(extracted) = extracted else {
 		return;
 	};
-	if capability.mode != GrassGpuMode::GpuDriven || extracted.field.is_empty() {
+	if capability.mode != GrassGpuMode::GpuDriven || extracted.plant_count == 0 {
 		return;
 	}
 	match pipeline_cache.get_compute_pipeline_state(pipelines.select_wood) {
@@ -796,9 +1125,13 @@ fn bush_compute(
 		return;
 	};
 
-	let wood_groups = extracted.field.branches.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
-	let leaf_groups = extracted.field.leaves.len().div_ceil(SELECT_WORKGROUP as usize).max(1) as u32;
+	let max_dim = device.limits().max_compute_workgroups_per_dimension.max(1);
 	for work in state.views.values() {
+		if !work.dirty {
+			continue;
+		}
+		let wood = select_dispatch_size(work.visible_branches, SELECT_WORKGROUP, max_dim);
+		let leaf = select_dispatch_size(work.visible_leaves, SELECT_WORKGROUP, max_dim);
 		render_context.command_encoder().clear_buffer(&work.counters, 0, None);
 		{
 			let mut pass =
@@ -806,17 +1139,34 @@ fn bush_compute(
 					label: Some("bush_select"),
 					..default()
 				});
-			pass.set_bind_group(0, &work.select_wood_bg, &[]);
-			pass.set_pipeline(select_wood);
-			pass.dispatch_workgroups(wood_groups, 1, 1);
-			pass.set_bind_group(0, &work.select_foliage_bg, &[]);
-			pass.set_pipeline(select_foliage);
-			pass.dispatch_workgroups(leaf_groups, 1, 1);
+			if work.visible_branches > 0 {
+				pass.set_bind_group(0, &work.select_wood_bg, &[]);
+				pass.set_pipeline(select_wood);
+				pass.dispatch_workgroups(wood.x, wood.y, wood.z);
+			}
+			if work.visible_leaves > 0 {
+				pass.set_bind_group(0, &work.select_foliage_bg, &[]);
+				pass.set_pipeline(select_foliage);
+				pass.dispatch_workgroups(leaf.x, leaf.y, leaf.z);
+			}
 			pass.set_bind_group(0, &work.finalize_bg, &[]);
 			pass.set_pipeline(finalize);
 			pass.dispatch_workgroups(1, 1, 1);
 		}
+		if let Some(encode) = encode.as_deref_mut() {
+			GroveSubmit::record_select(
+				encode,
+				true,
+				true,
+				work.visible_branches,
+				work.visible_leaves,
+			);
+		}
 	}
+}
+
+fn bush_color_format(view: &ExtractedView, target: Option<&ViewTarget>) -> TextureFormat {
+	target.map(ViewTarget::main_texture_format).unwrap_or(view.target_format)
 }
 
 fn queue_bush(
@@ -824,12 +1174,15 @@ fn queue_bush(
 	mut pipelines: Option<ResMut<BushPipelines>>,
 	mut opaque_phases: ResMut<ViewBinnedRenderPhases<Opaque3d>>,
 	opaque_draw_functions: Res<DrawFunctions<Opaque3d>>,
-	views: Query<(&ExtractedView, &RenderVisibleEntities, &Msaa)>,
+	views: Query<(&ExtractedView, &RenderVisibleEntities, &Msaa, Option<&ViewTarget>)>,
+	presenters: Query<&BushFieldPresenter>,
 	dirty: Res<DirtySpecializations>,
 	mut pending: ResMut<PendingBushQueues>,
 	mut queued: Local<MainEntityHashSet>,
+	mut queued_format: Local<HashMap<RetainedViewEntity, TextureFormat>>,
 	extracted: Option<Res<ExtractedBushField>>,
 	capability: Option<Res<GrassGpuCapability>>,
+	mut encode: ResMut<GroveEncodeStats>,
 ) {
 	let Some(extracted) = extracted else {
 		return;
@@ -840,12 +1193,12 @@ fn queue_bush(
 	let Some(pipelines) = pipelines.as_mut() else {
 		return;
 	};
-	if !capability.submits() || extracted.field.is_empty() {
+	if !capability.submits() || extracted.plant_count == 0 {
 		return;
 	}
 	let draw_wood = opaque_draw_functions.read().id::<DrawBushWood>();
 	let draw_foliage = opaque_draw_functions.read().id::<DrawBushFoliage>();
-	for (view, visible, msaa) in &views {
+	for (view, visible, msaa, view_target) in &views {
 		if !view_submits_bush(view, extracted.shadow_mode) {
 			continue;
 		}
@@ -855,50 +1208,73 @@ fn queue_bush(
 		let Some(visible_entities) = visible.get::<BushFieldPresenter>() else {
 			continue;
 		};
+		let format = bush_color_format(view, view_target);
+		let hdr = format == TextureFormat::Rgba16Float;
+		let format_changed =
+			queued_format.insert(view.retained_view_entity, format) != Some(format);
 		let pending_queues = pending.prepare_for_new_frame(view.retained_view_entity);
 		for &main_entity in dirty.iter_to_dequeue(view.retained_view_entity, visible_entities) {
 			phase.remove(main_entity);
 		}
-		for (render_entity, main_entity) in dirty.iter_to_queue(
-			view.retained_view_entity,
-			visible_entities,
-			&pending_queues.prev_frame,
-			&mut queued,
-		) {
-			let key = BushDrawKey { msaa: msaa.samples(), format: view.target_format };
-			let Ok(wood_id) = pipelines.wood_variants.specialize(&pipeline_cache, key) else {
+		if format_changed {
+			for (_render_entity, main_entity) in visible_entities.iter_visible() {
+				phase.remove(*main_entity);
+			}
+		}
+		// Offscreen screenshots reuse the retained view with a new color format
+		// (HDR `Rgba16Float` vs Sharp/force-offscreen `Bgra8UnormSrgb`). Dirty
+		// specializations do not requeue those presenters, so force every
+		// visible entity through the new key.
+		let force_queue: Vec<_> = if format_changed {
+			visible_entities.iter_visible().map(|(render, main)| (*render, *main)).collect()
+		} else {
+			Vec::new()
+		};
+		let queue_targets: Vec<(Entity, bevy::render::sync_world::MainEntity)> = if format_changed {
+			force_queue
+		} else {
+			dirty
+				.iter_to_queue(
+					view.retained_view_entity,
+					visible_entities,
+					&pending_queues.prev_frame,
+					&mut queued,
+				)
+				.map(|(render, main)| (*render, *main))
+				.collect()
+		};
+		for (render_entity, main_entity) in &queue_targets {
+			let Ok(presenter) = presenters.get(*render_entity) else {
 				continue;
 			};
-			let Ok(foliage_id) = pipelines.foliage_variants.specialize(&pipeline_cache, key) else {
+			let key = BushDrawKey { msaa: msaa.samples(), format, hdr };
+			let (variants, draw_function, asset_id) = match presenter {
+				BushFieldPresenter::Wood => {
+					(&mut pipelines.wood_variants, draw_wood, AssetId::<Mesh>::default().untyped())
+				}
+				BushFieldPresenter::Foliage => (
+					&mut pipelines.foliage_variants,
+					draw_foliage,
+					AssetId::<StandardMaterial>::default().untyped(),
+				),
+			};
+			let Ok(pipeline) = variants.specialize(&pipeline_cache, key) else {
 				continue;
 			};
-			let entities = (*render_entity, *main_entity);
 			phase.add(
 				Opaque3dBatchSetKey {
-					draw_function: draw_wood,
-					pipeline: wood_id,
+					draw_function,
+					pipeline,
 					material_bind_group_index: None,
 					lightmap_slab: None,
 					slabs: MeshSlabs::default(),
 				},
-				Opaque3dBinKey { asset_id: AssetId::<Mesh>::default().untyped() },
-				entities,
+				Opaque3dBinKey { asset_id },
+				(*render_entity, *main_entity),
 				InputUniformIndex::default(),
 				BinnedRenderPhaseType::NonMesh,
 			);
-			phase.add(
-				Opaque3dBatchSetKey {
-					draw_function: draw_foliage,
-					pipeline: foliage_id,
-					material_bind_group_index: None,
-					lightmap_slab: None,
-					slabs: MeshSlabs::default(),
-				},
-				Opaque3dBinKey { asset_id: AssetId::<StandardMaterial>::default().untyped() },
-				entities,
-				InputUniformIndex::default(),
-				BinnedRenderPhaseType::NonMesh,
-			);
+			encode.draws += BUSH_LOD_COUNT as u32;
 		}
 	}
 }
@@ -931,7 +1307,14 @@ impl<P: PhaseItem> RenderCommand<P> for DrawBushWoodCommand {
 			pass.set_bind_group(0, &work.wood_draw_bgs[lod], &[]);
 			pass.set_vertex_buffer(0, templates.wood[lod].vertices.slice(..));
 			pass.set_index_buffer(templates.wood[lod].indices.slice(..), IndexFormat::Uint32);
-			draw_lod(pass, capability, work, templates.wood[lod].index_count, work.cpu_wood_counts[lod], lod);
+			draw_lod(
+				pass,
+				capability,
+				work,
+				templates.wood[lod].index_count,
+				work.cpu_wood_counts[lod],
+				lod,
+			);
 		}
 		RenderCommandResult::Success
 	}
@@ -993,5 +1376,56 @@ fn draw_lod<'a>(
 			}
 		}
 		GrassGpuMode::Unsupported => {}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use vegetation_grass_field::MAX_COMPUTE_WORKGROUPS_PER_DIM;
+
+	fn specialize_format(format: TextureFormat) -> TextureFormat {
+		let mut descriptor = opaque_descriptor("bush_format_test", Handle::default(), Vec::new());
+		let key = BushDrawKey { msaa: 1, format, hdr: format == TextureFormat::Rgba16Float };
+		BushDrawSpecializer.specialize(key, &mut descriptor).expect("specialize");
+		descriptor.fragment.unwrap().targets[0].as_ref().unwrap().format
+	}
+
+	#[test]
+	fn bush_pipeline_matches_offscreen_and_hdr_formats() {
+		assert_eq!(specialize_format(TextureFormat::Rgba16Float), TextureFormat::Rgba16Float);
+		assert_eq!(specialize_format(TextureFormat::Bgra8UnormSrgb), TextureFormat::Bgra8UnormSrgb);
+		assert_eq!(specialize_format(TextureFormat::Rgba8UnormSrgb), TextureFormat::Rgba8UnormSrgb);
+		assert_eq!(
+			bush_color_format_preference(
+				TextureFormat::Rgba16Float,
+				Some(TextureFormat::Bgra8UnormSrgb)
+			),
+			TextureFormat::Bgra8UnormSrgb
+		);
+	}
+
+	fn bush_color_format_preference(
+		view_format: TextureFormat,
+		target_format: Option<TextureFormat>,
+	) -> TextureFormat {
+		target_format.unwrap_or(view_format)
+	}
+
+	#[test]
+	fn catalog_select_dispatch_fits_native_bush_leaf_overflow() {
+		// Area 1746 Metal smoke: foliage 1D groups were 66744 > 65535.
+		let leaf_count = 66_744 * SELECT_WORKGROUP;
+		let one_d = leaf_count.div_ceil(SELECT_WORKGROUP);
+		assert!(one_d > MAX_COMPUTE_WORKGROUPS_PER_DIM);
+		let size =
+			select_dispatch_size(leaf_count, SELECT_WORKGROUP, MAX_COMPUTE_WORKGROUPS_PER_DIM);
+		assert!(size.x <= MAX_COMPUTE_WORKGROUPS_PER_DIM);
+		assert!(size.y <= MAX_COMPUTE_WORKGROUPS_PER_DIM);
+		assert_eq!(size.z, 1);
+		assert!(
+			u64::from(size.x) * u64::from(size.y) * u64::from(SELECT_WORKGROUP)
+				>= u64::from(leaf_count)
+		);
 	}
 }

@@ -2,11 +2,13 @@
 
 use bevy::math::{Mat4, Vec3, Vec4};
 use vegetation_shaders::wesl::{
-	lod_bucket, BladeDescriptor, DrawIndexedIndirect, GeometryLod, GrassPatchHeader,
+	lod_bucket, nested_keep, BladeDescriptor, DrawIndexedIndirect, GeometryLod, GrassPatchHeader,
 	GrassViewUniform, LodThresholds, GRASS_LOD_COUNT,
 };
 
 use crate::field::GrassFieldSettings;
+use crate::grove_catalog::GrassGroveCatalog;
+use crate::grove_record::GroveVisibleSpan;
 
 /// Clip-space frustum matching `select.wesl`. Shared by grass compute and the bush follow-up.
 #[derive(Clone, Copy, Debug)]
@@ -17,19 +19,18 @@ pub struct WorldFrustum {
 }
 
 impl WorldFrustum {
-	/// World-space planes from a clip-from-world matrix.
+	/// World-space planes from a clip-from-world matrix (Gribb/Hartmann rows).
 	pub fn from_clip(clip_from_world: Mat4) -> Self {
-		let c = clip_from_world;
-		let col = |i: usize| c.col(i);
+		let row = |i: usize| clip_from_world.row(i);
 		Self {
 			clip_from_world,
 			planes: [
-				col(3) + col(0),
-				col(3) - col(0),
-				col(3) + col(1),
-				col(3) - col(1),
-				col(3) + col(2),
-				col(3) - col(2),
+				row(3) + row(0),
+				row(3) - row(0),
+				row(3) + row(1),
+				row(3) - row(1),
+				row(3) + row(2),
+				row(3) - row(2),
 			],
 		}
 	}
@@ -42,6 +43,26 @@ impl WorldFrustum {
 		let w = p.w + slack;
 		w > 0.0 && p.x.abs() <= w && p.y.abs() <= w && p.z >= -slack && p.z <= w
 	}
+
+	/// Conservative AABB vs frustum: reject only when the p-vertex is outside a plane.
+	pub fn contains_aabb(self, aabb_min: Vec3, aabb_max: Vec3) -> bool {
+		for plane in self.planes {
+			let p = Vec3::new(
+				if plane.x >= 0.0 { aabb_max.x } else { aabb_min.x },
+				if plane.y >= 0.0 { aabb_max.y } else { aabb_min.y },
+				if plane.z >= 0.0 { aabb_max.z } else { aabb_min.z },
+			);
+			if plane.truncate().dot(p) + plane.w < 0.0 {
+				return false;
+			}
+		}
+		true
+	}
+}
+
+/// Distance from `point` to the closest point on the AABB (zero if inside).
+pub fn aabb_nearest_distance(aabb_min: Vec3, aabb_max: Vec3, point: Vec3) -> f32 {
+	point.distance(point.clamp(aabb_min, aabb_max))
 }
 
 /// Gribb/Hartmann world-space frustum planes from a clip-from-world matrix.
@@ -107,6 +128,24 @@ impl GrassSelector {
 	}
 
 	pub fn classify(&self, blade: &BladeDescriptor) -> Option<u32> {
+		self.classify_with_lod(blade, None)
+	}
+
+	fn classify_with_lod(&self, blade: &BladeDescriptor, grove_lod: Option<u32>) -> Option<u32> {
+		if blade.height_m <= 0.0 {
+			return None;
+		}
+		if let Some(lod) = grove_lod {
+			let Some(bucket) = GeometryLod::from_bucket(lod).map(|lod| lod.bucket()) else {
+				return None;
+			};
+			let density = match bucket {
+				0 => self.thresholds.near_density,
+				1 => self.thresholds.mid_density,
+				_ => self.thresholds.card_density,
+			};
+			return nested_keep(blade.density_rank(), density).then_some(bucket);
+		}
 		let camera = self.view.world_position.truncate();
 		let radius = blade.conservative_extent_m(self.view.wind.w);
 		let frustum = WorldFrustum::from_clip(self.view.clip_from_world);
@@ -130,37 +169,150 @@ impl GrassSelector {
 		blades: &[BladeDescriptor],
 		patches: &[GrassPatchHeader],
 	) -> CompactedLists {
-		let mut lists = CompactedLists::default();
-		let keep_fraction = if blades.is_empty() {
+		self.compact_spans(blades, patches, None)
+	}
+
+	pub fn compact_catalog(
+		&self,
+		catalog: &GrassGroveCatalog,
+		spans: Option<&[GroveVisibleSpan]>,
+	) -> CompactedLists {
+		if matches!(spans, Some(spans) if spans.is_empty()) {
+			return CompactedLists::default();
+		}
+		let blade_total: u32 = match spans {
+			Some(spans) => spans.iter().map(|span| span.branch_count).sum(),
+			None => catalog.sources().map(|source| source.blades.len() as u32).sum(),
+		};
+		let keep_fraction = if blade_total == 0 {
 			1.0
 		} else {
-			(self.capacities[0] as f32 / blades.len() as f32).min(1.0)
+			(self.capacities[0] as f32 / blade_total as f32).min(1.0)
 		};
-		for patch in patches {
-			if !patch.is_active() {
-				continue;
+		let mut lists = CompactedLists::default();
+		for source in catalog.sources() {
+			let grove_lod = match spans {
+				None => None,
+				Some(spans) => {
+					let Some(span) = spans.iter().find(|span| span.branch_off == source.blade_off)
+					else {
+						continue;
+					};
+					Some(span.lod)
+				}
+			};
+			self.append_field_blades(
+				source.blades,
+				source.blade_off,
+				grove_lod,
+				keep_fraction,
+				&mut lists,
+			);
+		}
+		lists
+	}
+
+	pub fn compact_spans(
+		&self,
+		blades: &[BladeDescriptor],
+		patches: &[GrassPatchHeader],
+		spans: Option<&[crate::grove_record::GroveVisibleSpan]>,
+	) -> CompactedLists {
+		if matches!(spans, Some(spans) if spans.is_empty()) {
+			return CompactedLists::default();
+		}
+		let mut lists = CompactedLists::default();
+		let blade_total = spans
+			.map(|spans| spans.iter().map(|span| span.branch_count).sum::<u32>())
+			.unwrap_or(blades.len() as u32);
+		let keep_fraction = if blade_total == 0 {
+			1.0
+		} else {
+			(self.capacities[0] as f32 / blade_total as f32).min(1.0)
+		};
+		match spans {
+			None => {
+				for patch in patches {
+					if !patch.is_active() {
+						continue;
+					}
+					self.append_blades(
+						blades,
+						patch.blade_range(),
+						None,
+						keep_fraction,
+						&mut lists,
+					);
+				}
 			}
-			for index in patch.blade_range() {
-				let Some(blade) = blades.get(index as usize) else {
-					continue;
-				};
-				lists.considered += 1;
-				if blade.density_rank() >= keep_fraction {
-					continue;
+			Some(spans) => {
+				for span in spans {
+					self.append_blades(
+						blades,
+						span.branch_range(),
+						Some(span.lod),
+						keep_fraction,
+						&mut lists,
+					);
 				}
-				let Some(bucket) = self.classify(blade) else {
-					continue;
-				};
-				let lod = bucket as usize;
-				if lists.indices[lod].len() as u32 >= self.capacities[lod] {
-					lists.overflow[lod] += 1;
-					continue;
-				}
-				lists.indices[lod].push(index);
-				lists.submitted += 1;
 			}
 		}
 		lists
+	}
+
+	fn append_blades(
+		&self,
+		blades: &[BladeDescriptor],
+		range: std::ops::Range<u32>,
+		grove_lod: Option<u32>,
+		keep_fraction: f32,
+		lists: &mut CompactedLists,
+	) {
+		for index in range {
+			let Some(blade) = blades.get(index as usize) else {
+				continue;
+			};
+			lists.considered += 1;
+			if blade.density_rank() >= keep_fraction {
+				continue;
+			}
+			let Some(bucket) = self.classify_with_lod(blade, grove_lod) else {
+				continue;
+			};
+			let lod = bucket as usize;
+			if lists.indices[lod].len() as u32 >= self.capacities[lod] {
+				lists.overflow[lod] += 1;
+				continue;
+			}
+			lists.indices[lod].push(index);
+			lists.submitted += 1;
+		}
+	}
+
+	fn append_field_blades(
+		&self,
+		blades: &[BladeDescriptor],
+		blade_off: u32,
+		grove_lod: Option<u32>,
+		keep_fraction: f32,
+		lists: &mut CompactedLists,
+	) {
+		for (local, blade) in blades.iter().enumerate() {
+			lists.considered += 1;
+			if blade.density_rank() >= keep_fraction {
+				continue;
+			}
+			let Some(bucket) = self.classify_with_lod(blade, grove_lod) else {
+				continue;
+			};
+			let lod = bucket as usize;
+			if lists.indices[lod].len() as u32 >= self.capacities[lod] {
+				lists.overflow[lod] += 1;
+				continue;
+			}
+			lists.indices[lod].push(blade_off + local as u32);
+			lists.submitted += 1;
+		}
 	}
 }
 
@@ -293,6 +445,51 @@ mod tests {
 		)
 		.compact(&field.blades, &field.patches);
 		assert!(half.submitted <= native.submitted);
+		Ok(())
+	}
+
+	#[test]
+	fn grove_mid_and_card_keep_a_thinned_fraction() -> anyhow::Result<()> {
+		let settings = GrassFieldSettings::default();
+		let patch = GrassPatch::dense_field(9, Vec3::ZERO, Vec2::splat(12.0), 0.5);
+		let field = GrassField::rebuild([&patch], &settings);
+		assert!(field.blades.len() > 32);
+		let mut view = look_view(Vec3::new(6.0, 4.0, 20.0), Vec3::new(6.0, 0.0, 6.0), 720.0);
+		let t = LodThresholds::grove_grass();
+		view.lod_distances = Vec4::new(0.0, t.near_m, t.mid_m, t.card_m);
+		view.lod_density =
+			Vec4::new(t.near_density, t.mid_density, t.card_density, t.min_height_px);
+		let selector = GrassSelector::from_view(view, &settings);
+		let n = field.blades.len() as u32;
+		let span = |lod| crate::grove_record::GroveVisibleSpan {
+			branch_off: 0,
+			branch_count: n,
+			leaf_off: 0,
+			leaf_count: 0,
+			lod,
+		};
+		let mid = selector.compact_spans(&field.blades, &field.patches, Some(&[span(1)]));
+		let card = selector.compact_spans(&field.blades, &field.patches, Some(&[span(2)]));
+		assert!(mid.considered > 0);
+		assert!(card.considered > 0);
+		assert!((mid.submitted as f32) / (mid.considered as f32) < 1.0);
+		assert!((card.submitted as f32) / (card.considered as f32) < 1.0);
+		assert!(card.submitted < mid.submitted);
+		Ok(())
+	}
+
+	#[test]
+	fn culled_grove_span_list_is_zero_select_work() -> anyhow::Result<()> {
+		let settings = GrassFieldSettings::default();
+		let patch = GrassPatch::isolated_clump(1, Vec3::ZERO, 12);
+		let field = GrassField::rebuild([&patch], &settings);
+		let lists = GrassSelector::from_view(
+			look_view(Vec3::new(0.0, 1.5, 6.0), Vec3::ZERO, 720.0),
+			&settings,
+		)
+		.compact_spans(&field.blades, &field.patches, Some(&[]));
+		assert_eq!(lists.considered, 0);
+		assert_eq!(lists.submitted, 0);
 		Ok(())
 	}
 

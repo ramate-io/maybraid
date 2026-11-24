@@ -1,0 +1,1 @@
+shot=forest-far-legacy mode=Kit samples=36 dt_ms_mean=250.000 dt_ms_p95=250.000 dt_ms_max=250.000 entities=32541 kit_meshes=32035 mesh3d=32038 plants=40 branches=952 leaves=19324 bushes=149 grass=26556 upload_B=1316736

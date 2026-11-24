@@ -114,6 +114,10 @@ lubikans = { workspace = true, features = ["test-support"] }
 maybraid-audio = { workspace = true }
 maybraid-gameplay = { workspace = true }
 tempfile = { workspace = true }
+vegetation-bush-field = { workspace = true }
+vegetation-grass-field = { workspace = true }
+vegetation-groves = { workspace = true }
+vegetation-tree-field = { workspace = true }
 
 [lints]
 workspace = true
