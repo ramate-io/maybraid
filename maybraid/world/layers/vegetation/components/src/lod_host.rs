@@ -110,6 +110,10 @@ pub fn posed_foliage_multi_scene_merge(
 	)
 }
 
+/// Provenance only for actual StickNode geometry, not bark-colored canopy proxies.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct StickGeometryRoot;
+
 /// Copy ancestor [`NotShadowCaster`] onto newly spawned `Mesh3d` children.
 ///
 /// Merged [`scene_ref::WorldAsset`](bevy::world_serialization::WorldAsset) instances
@@ -119,9 +123,10 @@ pub fn inherit_not_shadow_caster_on_meshes(
 	added: Query<Entity, (Added<Mesh3d>, Without<NotShadowCaster>)>,
 	parents: Query<&ChildOf>,
 	marked: Query<(), With<NotShadowCaster>>,
+	sticks: Query<(), With<StickGeometryRoot>>,
 	mode: Option<Res<CanopyShadowMode>>,
 ) {
-	if mode.is_some_and(|mode| mode.canopy_casts()) {
+	if mode.as_ref().is_some_and(|mode| mode.canopy_casts()) {
 		return;
 	}
 	for entity in &added {
@@ -131,7 +136,10 @@ pub fn inherit_not_shadow_caster_on_meshes(
 				break;
 			};
 			cursor = child_of.parent();
-			if marked.contains(cursor) {
+			if marked.contains(cursor)
+				|| (sticks.contains(cursor)
+					&& !mode.as_ref().is_some_and(|m| m.actual_sticks_cast()))
+			{
 				commands.entity(entity).insert(NotShadowCaster);
 				break;
 			}

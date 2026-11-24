@@ -7,10 +7,13 @@
 //! one material instances across plants so the extra casters do not add a
 //! draw call per tree.
 
+use std::sync::OnceLock;
+
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use lod::scene::LodSceneLevel;
+use material_ref::MaterialId;
 
 use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::node::FoliageNode;
@@ -22,7 +25,7 @@ use crate::VegetationComponents;
 /// Layer reserved for canopy shadow proxies. Isolated capture cameras use 31.
 pub const SHADOW_PROXY_RENDER_LAYER: usize = 30;
 
-/// `MAYBRAID_CANOPY_SHADOWS` overlay: proxy (default), full leaf casters, or none.
+/// `MAYBRAID_CANOPY_SHADOWS` process-start caster policy (proxy by default).
 pub const ENV_CANOPY_SHADOWS: &str = "MAYBRAID_CANOPY_SHADOWS";
 
 /// How canopy participates in sun shadow maps.
@@ -33,6 +36,10 @@ pub enum CanopyShadowMode {
 	Proxy,
 	/// Leaf / frond / cheap-ball canopy meshes cast. Proxies are not realized.
 	Full,
+	/// Actual StickNode geometry plus balls fitted to authored foliage; no leaf cards.
+	Fitted,
+	/// The same fitted canopy balls, with actual sticks still excluded.
+	CanopyFit,
 	/// No canopy casters and no realized proxies (current main + shadows).
 	Off,
 }
@@ -46,9 +53,11 @@ impl CanopyShadowMode {
 		match raw.to_ascii_lowercase().as_str() {
 			"proxy" => Some(Self::Proxy),
 			"full" => Some(Self::Full),
+			"fitted" => Some(Self::Fitted),
+			"canopy-fit" => Some(Self::CanopyFit),
 			"off" => Some(Self::Off),
 			other => {
-				eprintln!("[{ENV_CANOPY_SHADOWS}] unknown {other:?} (use proxy|full|off)");
+				eprintln!("[{ENV_CANOPY_SHADOWS}] unknown {other:?} (use proxy|full|fitted|canopy-fit|off)");
 				None
 			}
 		}
@@ -62,8 +71,23 @@ impl CanopyShadowMode {
 			.unwrap_or(Self::Proxy)
 	}
 
+	/// Process-start policy used by worker-side scene construction.
+	pub fn configured() -> Self {
+		static MODE: OnceLock<CanopyShadowMode> = OnceLock::new();
+		*MODE.get_or_init(Self::from_env)
+	}
+
 	pub fn emit_proxies(self) -> bool {
-		matches!(self, Self::Proxy)
+		matches!(self, Self::Proxy | Self::Fitted | Self::CanopyFit)
+	}
+
+	/// Shared proxy geometry for the full-stick and canopy-only experiments.
+	pub fn fits_canopy(self) -> bool {
+		matches!(self, Self::Fitted | Self::CanopyFit)
+	}
+
+	pub fn actual_sticks_cast(self) -> bool {
+		matches!(self, Self::Fitted)
 	}
 
 	pub fn canopy_casts(self) -> bool {
@@ -74,6 +98,8 @@ impl CanopyShadowMode {
 		match self {
 			Self::Proxy => "proxy",
 			Self::Full => "full",
+			Self::Fitted => "fitted",
+			Self::CanopyFit => "canopy-fit",
 			Self::Off => "off",
 		}
 	}
@@ -105,8 +131,91 @@ pub fn posed_shadow_proxy(transform: Transform) -> impl Scene + 'static {
 pub fn structural_shadow_proxy_scene(
 	vegetation: &impl VegetationComponents,
 ) -> Option<Box<dyn Scene>> {
+	shadow_proxy_scene_for_mode(vegetation, CanopyShadowMode::configured())
+}
+
+fn shadow_proxy_scene_for_mode(
+	vegetation: &impl VegetationComponents,
+	mode: CanopyShadowMode,
+) -> Option<Box<dyn Scene>> {
+	// Preserve legacy eligibility: authored foliage alone must not add new plant populations.
 	let lod = vegetation.structural_lod()?;
-	Some(Box::new(posed_shadow_proxy(transform_from_structural(lod))))
+	let transform = if mode.fits_canopy() {
+		fitted_canopy_transform(vegetation)?
+	} else {
+		transform_from_structural(lod)
+	};
+	Some(Box::new(posed_shadow_proxy(transform)))
+}
+
+/// One plant-local ellipsoid fitted to the union of valid authored High canopy bounds.
+/// Ball nodes may be dense leaf samples, not independent crowns: never emit per sample.
+/// This coarse approximation fills crown gaps; no leaf/frond meshes become casters.
+fn fitted_canopy_transform(vegetation: &impl VegetationComponents) -> Option<Transform> {
+	let mut min = Vec3::splat(f32::INFINITY);
+	let mut max = Vec3::splat(f32::NEG_INFINITY);
+	let mut any = false;
+	for node in vegetation.foliage_nodes_for_level(LodSceneLevel::High).flatten() {
+		let Some(fit) = fitted_foliage_transform(&node) else {
+			continue;
+		};
+		let m = Mat3::from_quat(fit.rotation) * Mat3::from_diagonal(fit.scale);
+		let half = Vec3::new(m.row(0).length(), m.row(1).length(), m.row(2).length());
+		if !fit.translation.is_finite() || !half.is_finite() || half.min_element() <= 0.0 {
+			continue;
+		}
+		min = min.min(fit.translation - half);
+		max = max.max(fit.translation + half);
+		any = true;
+	}
+	any.then(|| Transform::from_translation(min * 0.5 + max * 0.5).with_scale((max - min) * 0.5))
+}
+
+fn fitted_foliage_transform(node: &FoliageNode) -> Option<Transform> {
+	// Bark-colored low columns are visual impostors, not authored canopy crowns.
+	if matches!(&node.material.name, MaterialId::Name(name) if name == crate::STICK_MATERIAL) {
+		return None;
+	}
+	let bounds = match &node.geometry {
+		FoliageGeometry::CheapBall | FoliageGeometry::LayeredBall => {
+			let t = pose(node.placement);
+			return (t.translation.is_finite()
+				&& t.scale.is_finite()
+				&& t.scale.abs().min_element() > 0.0)
+				.then_some(t);
+		}
+		FoliageGeometry::CheapBallCollection(c) => {
+			let mut min = Vec3::splat(f32::INFINITY);
+			let mut max = Vec3::splat(f32::NEG_INFINITY);
+			for placement in &c.placements {
+				let t = pose(*placement);
+				let m = Mat3::from_quat(t.rotation) * Mat3::from_diagonal(t.scale);
+				let half = Vec3::new(m.row(0).length(), m.row(1).length(), m.row(2).length());
+				min = min.min(t.translation - half);
+				max = max.max(t.translation + half);
+			}
+			(!c.placements.is_empty()).then_some((min, max))
+		}
+		FoliageGeometry::FrondCollection(c) => c.aabb(),
+		// An explicit coarse blade envelope, never the wind/discard leaf-card mesh.
+		FoliageGeometry::StraightFrond | FoliageGeometry::StraightFrondSegment => Some((
+			Vec3::new(-crate::FROND_KIT_HALF_X, 0.0, -crate::FROND_KIT_HALF_X),
+			Vec3::new(crate::FROND_KIT_HALF_X, 1.0, crate::FROND_KIT_HALF_X),
+		)),
+	}?;
+	let local_center = bounds.0 * 0.5 + bounds.1 * 0.5;
+	let local_half = (bounds.1 - bounds.0) * 0.5;
+	let parent = pose(node.placement);
+	let center = parent.transform_point(local_center);
+	let half = local_half * parent.scale.abs();
+	if !center.is_finite() || !half.is_finite() || half.min_element() <= 0.0 {
+		return None;
+	}
+	Some(
+		Transform::from_translation(center)
+			.with_rotation(parent.rotation)
+			.with_scale(half),
+	)
 }
 
 /// Proxies that match Low / UltraLow cheap-ball canopy sites (one per ball).
@@ -116,6 +225,11 @@ pub fn shadow_proxy_scenes_from_foliage(
 ) -> Vec<Box<dyn Scene>> {
 	let mut scenes = Vec::new();
 	for node in nodes {
+		if CanopyShadowMode::configured().fits_canopy()
+			&& matches!(&node.material.name, MaterialId::Name(name) if name == crate::STICK_MATERIAL)
+		{
+			continue;
+		}
 		match &node.geometry {
 			FoliageGeometry::CheapBall => {
 				scenes.push(Box::new(posed_shadow_proxy(pose(node.placement))) as Box<dyn Scene>);
@@ -156,7 +270,7 @@ pub struct CanopyShadowProxyPlugin;
 
 impl Plugin for CanopyShadowProxyPlugin {
 	fn build(&self, app: &mut App) {
-		let mode = CanopyShadowMode::from_env();
+		let mode = CanopyShadowMode::configured();
 		app.insert_resource(mode)
 			.add_systems(Startup, log_canopy_shadow_mode)
 			.add_systems(
@@ -224,6 +338,143 @@ mod tests {
 		assert_eq!(CanopyShadowMode::parse_env("nope"), None);
 		assert_eq!(ENV_CANOPY_SHADOWS, "MAYBRAID_CANOPY_SHADOWS");
 		assert_eq!(SHADOW_PROXY_RENDER_LAYER, 30);
+	}
+
+	#[test]
+	fn fitted_mode_is_explicit_and_keeps_cards_excluded() {
+		assert_eq!(CanopyShadowMode::default(), CanopyShadowMode::Proxy);
+		assert_eq!(CanopyShadowMode::parse_env("fitted"), Some(CanopyShadowMode::Fitted));
+		assert!(CanopyShadowMode::Fitted.emit_proxies());
+		assert!(!CanopyShadowMode::Fitted.canopy_casts());
+	}
+
+	#[test]
+	fn canopy_fit_shares_proxy_geometry_but_keeps_actual_sticks_excluded() {
+		let mode = CanopyShadowMode::CanopyFit;
+		assert_eq!(CanopyShadowMode::parse_env("canopy-fit"), Some(mode));
+		assert_eq!(mode.label(), "canopy-fit");
+		assert!(mode.emit_proxies() && mode.fits_canopy());
+		assert!(!mode.canopy_casts() && !mode.actual_sticks_cast());
+		assert!(CanopyShadowMode::Fitted.fits_canopy());
+		assert!(CanopyShadowMode::Fitted.actual_sticks_cast());
+		assert_eq!(CanopyShadowMode::default(), CanopyShadowMode::Proxy);
+	}
+
+	#[test]
+	fn fitted_small_bush_uses_canopy_not_whole_plant_radius() -> anyhow::Result<()> {
+		struct Bush;
+		impl VegetationComponents for Bush {
+			fn structural_lod(&self) -> Option<StructuralLod> {
+				Some(StructuralLod::new(Vec3::Y * 5.0, 10.0))
+			}
+			fn foliage_nodes_for_level(&self, _: LodSceneLevel) -> crate::Layers<FoliageNode> {
+				crate::Layers::from_free(vec![FoliageNode::layered_ball(
+					Placement::new(Vec3::Y, 0.0).with_scale(Vec3::new(0.5, 0.25, 0.75)),
+				)])
+			}
+		}
+		let fit = fitted_canopy_transform(&Bush).ok_or_else(|| anyhow::anyhow!("missing fit"))?;
+		assert_eq!(fit.translation, Vec3::Y);
+		assert_eq!(fit.scale, Vec3::new(0.5, 0.25, 0.75));
+		Ok(())
+	}
+
+	#[test]
+	fn many_blades_are_one_coarse_envelope_not_one_caster_per_card() -> anyhow::Result<()> {
+		struct Blades;
+		impl VegetationComponents for Blades {
+			fn foliage_nodes_for_level(&self, _: LodSceneLevel) -> crate::Layers<FoliageNode> {
+				crate::Layers::from_free(
+					(0..100)
+						.map(|i| {
+							FoliageNode::straight_frond_segment(Placement::new(
+								Vec3::new(i as f32 * 0.01, 2.0, 0.0),
+								0.0,
+							))
+						})
+						.collect(),
+				)
+			}
+		}
+		let fit = fitted_canopy_transform(&Blades).ok_or_else(|| anyhow::anyhow!("missing fit"))?;
+		assert!(fit.translation.y > 2.0);
+		assert!(fit.scale.max_element() < 1.0);
+		Ok(())
+	}
+
+	#[test]
+	fn many_puffs_spawn_one_marker_and_preserve_legacy_eligibility() -> anyhow::Result<()> {
+		use bevy::scene::{ScenePlugin, WorldSceneExt};
+		struct Plant {
+			eligible: bool,
+			nodes: Vec<FoliageNode>,
+		}
+		impl VegetationComponents for Plant {
+			fn structural_lod(&self) -> Option<StructuralLod> {
+				self.eligible.then_some(StructuralLod::new(Vec3::Y * 5.0, 10.0))
+			}
+			fn foliage_nodes_for_level(&self, _: LodSceneLevel) -> crate::Layers<FoliageNode> {
+				crate::Layers::from_free(self.nodes.clone())
+			}
+		}
+		let mut plant = Plant {
+			eligible: true,
+			nodes: (0..100)
+				.map(|i| {
+					FoliageNode::layered_ball(
+						Placement::new(Vec3::new(i as f32 * 0.01, 2.0, 0.0), 0.0)
+							.with_scale(Vec3::splat(0.05)),
+					)
+				})
+				.collect(),
+		};
+		for mode in [CanopyShadowMode::Fitted, CanopyShadowMode::CanopyFit] {
+			let scene = shadow_proxy_scene_for_mode(&plant, mode)
+				.ok_or_else(|| anyhow::anyhow!("missing eligible canopy"))?;
+			let mut app = App::new();
+			app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin::default()));
+			let entity =
+				app.world_mut().spawn_scene(scene).map_err(|e| anyhow::anyhow!("{e:?}"))?.id();
+			let mut proxies = app.world_mut().query::<&CanopyShadowProxy>();
+			assert_eq!(proxies.iter(app.world()).count(), 1);
+			let fit = app
+				.world()
+				.get::<Transform>(entity)
+				.ok_or_else(|| anyhow::anyhow!("missing pose"))?;
+			assert!(fit.translation.distance(Vec3::new(0.495, 2.0, 0.0)) < 1e-5);
+			assert!(fit.scale.distance(Vec3::new(0.545, 0.05, 0.05)) < 1e-5);
+		}
+		plant.eligible = false;
+		for mode in [CanopyShadowMode::Proxy, CanopyShadowMode::Fitted, CanopyShadowMode::CanopyFit]
+		{
+			assert!(shadow_proxy_scene_for_mode(&plant, mode).is_none());
+		}
+		plant.eligible = true;
+		plant.nodes.clear();
+		for mode in [CanopyShadowMode::Fitted, CanopyShadowMode::CanopyFit] {
+			assert!(shadow_proxy_scene_for_mode(&plant, mode).is_none());
+		}
+		assert!(shadow_proxy_scene_for_mode(&plant, CanopyShadowMode::Proxy).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn fitted_collection_composes_parent_and_keeps_authored_axes() -> anyhow::Result<()> {
+		let collection = crate::CheapBallCollection::new([
+			Placement::new(Vec3::X * 2.0, 0.0).with_scale(Vec3::new(0.25, 1.0, 0.5))
+		]);
+		let parent = Placement::new(Vec3::Y * 3.0, std::f32::consts::FRAC_PI_2)
+			.with_scale(Vec3::new(2.0, 3.0, 4.0));
+		let fit = fitted_foliage_transform(&FoliageNode::cheap_ball_collection(collection, parent))
+			.ok_or_else(|| anyhow::anyhow!("missing fit"))?;
+		assert!(fit.translation.distance(pose(parent).transform_point(Vec3::X * 2.0)) < 1e-5);
+		assert!(fit.scale.distance(Vec3::new(0.5, 3.0, 2.0)) < 1e-5);
+		assert!(fitted_foliage_transform(&FoliageNode::cheap_ball_collection(
+			crate::CheapBallCollection::new([]),
+			Placement::IDENTITY
+		))
+		.is_none());
+		Ok(())
 	}
 
 	#[test]

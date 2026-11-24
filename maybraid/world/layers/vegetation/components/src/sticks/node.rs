@@ -14,7 +14,9 @@ use scene_ref::{MultiSceneMerge, MultiScenePart};
 
 use crate::assets::AssetPath;
 use crate::lod_band::warm_mesh_lod_culls;
-use crate::lod_host::{posed_foliage_multi_scene_merge, posed_material_asset_tier};
+use crate::lod_host::{
+	posed_frond_multi_scene_merge, posed_material_asset_tier, StickGeometryRoot,
+};
 use crate::placed::Placement;
 use crate::scene_children::{pose, scene_children};
 use crate::sticks::collection::{
@@ -167,10 +169,9 @@ impl StickNode {
 			return Box::new(Self::empty_scene());
 		}
 		if let Some(merge) = self.collection_multi_scene_merge(collection, level) {
-			return Box::new(posed_foliage_multi_scene_merge(
-				merge,
-				pose(self.placement),
-				self.material.clone(),
+			return Box::new((
+				bsn! { StickGeometryRoot },
+				posed_frond_multi_scene_merge(merge, pose(self.placement), self.material.clone()),
 			));
 		}
 		Box::new((bsn! { NotShadowCaster }, scene_children(Vec::new())))
@@ -184,7 +185,7 @@ impl StickNode {
 			LodSceneLevel::UltraLow => Box::new(Self::empty_scene()),
 			_ => match self.glb_for_level(level) {
 				Some(asset) => Box::new((
-					bsn! { NotShadowCaster },
+					bsn! { StickGeometryRoot },
 					posed_material_asset_tier(
 						Some(asset),
 						pose(self.placement),

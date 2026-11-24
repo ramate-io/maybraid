@@ -7,6 +7,7 @@ use material_ref::{
 	MaterialId, MaterialLib, MaterialRef, MaterialRefCache, MaterialRefKey, StandardMaterialLib,
 	StandardMaterialRefCache,
 };
+use vegetation_components::lod_host::StickGeometryRoot;
 use vegetation_components::{CanopyShadowMode, FROND_MATERIAL, LEAF_MATERIAL, STICK_MATERIAL};
 
 use crate::{FrondMaterial, LeafMaterial, StickMaterial};
@@ -30,7 +31,7 @@ pub fn init_vegetation_material_caches(app: &mut App) {
 
 /// Leaf / stick / frond named recipes. Does not fall through to [`StandardMaterial`].
 #[derive(SystemParam)]
-pub struct VegetationMaterialLib<'w> {
+pub struct VegetationMaterialLib<'w, 's> {
 	pub leaf_materials: ResMut<'w, Assets<LeafMaterial>>,
 	pub leaf_cache: ResMut<'w, LeafMaterialRefCache>,
 	pub stick_materials: ResMut<'w, Assets<StickMaterial>>,
@@ -38,9 +39,12 @@ pub struct VegetationMaterialLib<'w> {
 	pub frond_materials: ResMut<'w, Assets<FrondMaterial>>,
 	pub frond_cache: ResMut<'w, FrondMaterialRefCache>,
 	pub canopy_shadows: Option<Res<'w, CanopyShadowMode>>,
+	pub parents: Query<'w, 's, &'static ChildOf>,
+	pub sticks: Query<'w, 's, (), With<StickGeometryRoot>>,
+	pub excluded: Query<'w, 's, (), With<NotShadowCaster>>,
 }
 
-impl VegetationMaterialLib<'_> {
+impl VegetationMaterialLib<'_, '_> {
 	fn resolve_leaf(&mut self, material_ref: &MaterialRef) -> Handle<LeafMaterial> {
 		let key = MaterialRefKey::from(material_ref);
 		if let Some(handle) = self.leaf_cache.get(&key) {
@@ -72,7 +76,7 @@ impl VegetationMaterialLib<'_> {
 	}
 }
 
-impl MaterialLib for VegetationMaterialLib<'_> {
+impl MaterialLib for VegetationMaterialLib<'_, '_> {
 	fn try_fulfill(
 		&mut self,
 		entity: Entity,
@@ -88,11 +92,31 @@ impl MaterialLib for VegetationMaterialLib<'_> {
 			}
 			MaterialId::Name(name) if name == STICK_MATERIAL => {
 				let handle = self.resolve_stick(material_ref);
+				let cast_sticks =
+					self.canopy_shadows.as_ref().is_some_and(|m| m.actual_sticks_cast());
+				let actual_stick = cast_sticks && {
+					let mut actual_stick = false;
+					let mut independent_exclusion = false;
+					let mut reached_root = false;
+					let mut cursor = entity;
+					for _ in 0..32 {
+						actual_stick |= self.sticks.contains(cursor);
+						independent_exclusion |= self.excluded.contains(cursor);
+						let Ok(parent) = self.parents.get(cursor) else {
+							reached_root = true;
+							break;
+						};
+						cursor = parent.parent();
+					}
+					actual_stick && !independent_exclusion && reached_root
+				};
 				commands
 					.entity(entity)
 					.try_remove::<MeshMaterial3d<StandardMaterial>>()
-					.try_insert(MeshMaterial3d(handle))
-					.try_insert(NotShadowCaster);
+					.try_insert(MeshMaterial3d(handle));
+				if !actual_stick {
+					commands.entity(entity).try_insert(NotShadowCaster);
+				}
 				true
 			}
 			MaterialId::Name(name) if name == FROND_MATERIAL => {
@@ -107,12 +131,12 @@ impl MaterialLib for VegetationMaterialLib<'_> {
 
 /// Shaders-crate standalone lib: Chico recipes, then [`StandardMaterialLib`].
 #[derive(SystemParam)]
-pub struct StandaloneVegetationMaterialLib<'w> {
-	pub chico: VegetationMaterialLib<'w>,
+pub struct StandaloneVegetationMaterialLib<'w, 's> {
+	pub chico: VegetationMaterialLib<'w, 's>,
 	pub standard: StandardMaterialLib<'w>,
 }
 
-impl MaterialLib for StandaloneVegetationMaterialLib<'_> {
+impl MaterialLib for StandaloneVegetationMaterialLib<'_, '_> {
 	fn try_fulfill(
 		&mut self,
 		entity: Entity,
@@ -191,8 +215,8 @@ impl Plugin for VegetationMaterialRefPlugin {
 mod tests {
 	use bevy::prelude::*;
 	use material_ref::{
-		MaterialRef, MaterialRefApplied, MaterialRefPlugin, MaterialRefRoot,
-		StandardMaterialRefCache, material_ref_plugin_installed,
+		material_ref_plugin_installed, MaterialRef, MaterialRefApplied, MaterialRefPlugin,
+		MaterialRefRoot, StandardMaterialRefCache,
 	};
 	use vegetation_components::LEAF_MATERIAL;
 
@@ -219,7 +243,7 @@ mod tests {
 			.init_resource::<LeafMaterialRefCache>()
 			.init_resource::<StickMaterialRefCache>()
 			.init_resource::<FrondMaterialRefCache>()
-			.add_plugins(MaterialRefPlugin::<StandaloneVegetationMaterialLib<'_>>::default());
+			.add_plugins(MaterialRefPlugin::<StandaloneVegetationMaterialLib<'_, '_>>::default());
 
 		let leaf = app.world_mut().spawn(MaterialRefRoot(MaterialRef::named(LEAF_MATERIAL))).id();
 		let other = app.world_mut().spawn(MaterialRefRoot(MaterialRef::named("tuft"))).id();
@@ -228,5 +252,60 @@ mod tests {
 		assert!(app.world().get::<MaterialRefApplied>(leaf).is_some());
 		assert!(app.world().get::<MeshMaterial3d<LeafMaterial>>(leaf).is_some());
 		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(other).is_some());
+	}
+	#[test]
+	fn fitted_casts_actual_sticks_only_and_honors_ancestor_opt_out() {
+		for mode in [CanopyShadowMode::Proxy, CanopyShadowMode::Fitted, CanopyShadowMode::CanopyFit]
+		{
+			let mut app = App::new();
+			app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+				.init_asset::<StandardMaterial>()
+				.init_asset::<LeafMaterial>()
+				.init_asset::<StickMaterial>()
+				.init_asset::<FrondMaterial>()
+				.init_resource::<StandardMaterialRefCache>()
+				.init_resource::<LeafMaterialRefCache>()
+				.init_resource::<StickMaterialRefCache>()
+				.init_resource::<FrondMaterialRefCache>()
+				.insert_resource(mode)
+				.add_plugins(MaterialRefPlugin::<StandaloneVegetationMaterialLib<'_, '_>>::default())
+				.add_systems(
+					PostUpdate,
+					vegetation_components::lod_host::inherit_not_shadow_caster_on_meshes,
+				);
+			let typed = app.world_mut().spawn(StickGeometryRoot).id();
+			let excluded = app.world_mut().spawn((StickGeometryRoot, NotShadowCaster)).id();
+			let actual = app
+				.world_mut()
+				.spawn((
+					ChildOf(typed),
+					Mesh3d::default(),
+					MaterialRefRoot(MaterialRef::named(STICK_MATERIAL)),
+				))
+				.id();
+			let opt_out = app
+				.world_mut()
+				.spawn((
+					ChildOf(excluded),
+					Mesh3d::default(),
+					MaterialRefRoot(MaterialRef::named(STICK_MATERIAL)),
+				))
+				.id();
+			let bark_column = app
+				.world_mut()
+				.spawn((Mesh3d::default(), MaterialRefRoot(MaterialRef::named(STICK_MATERIAL))))
+				.id();
+			let leaf =
+				app.world_mut().spawn(MaterialRefRoot(MaterialRef::named(LEAF_MATERIAL))).id();
+			app.update();
+			app.update();
+			assert_eq!(
+				app.world().get::<NotShadowCaster>(actual).is_none(),
+				mode == CanopyShadowMode::Fitted
+			);
+			for entity in [opt_out, bark_column, leaf] {
+				assert!(app.world().get::<NotShadowCaster>(entity).is_some());
+			}
+		}
 	}
 }

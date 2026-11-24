@@ -8,13 +8,13 @@ use vegetation_shaders::{init_vegetation_material_caches, VegetationMaterialLib}
 
 /// Vegetation playground / world-view lib: bump-out, then leaf/stick/frond, then Standard.
 #[derive(SystemParam)]
-pub struct VegetationOnTerrainMaterialLib<'w> {
+pub struct VegetationOnTerrainMaterialLib<'w, 's> {
 	pub bump_out: BumpOutMaterialLib<'w>,
-	pub chico: VegetationMaterialLib<'w>,
+	pub chico: VegetationMaterialLib<'w, 's>,
 	pub standard: StandardMaterialLib<'w>,
 }
 
-impl MaterialLib for VegetationOnTerrainMaterialLib<'_> {
+impl MaterialLib for VegetationOnTerrainMaterialLib<'_, '_> {
 	fn try_fulfill(
 		&mut self,
 		entity: Entity,
@@ -74,7 +74,7 @@ mod tests {
 			.init_asset::<vegetation_shaders::StickMaterial>()
 			.init_asset::<vegetation_shaders::FrondMaterial>()
 			.add_plugins(VegetationOnTerrainMaterialRefPlugin)
-			.add_plugins(MaterialRefPlugin::<VegetationOnTerrainMaterialLib<'_>>::default());
+			.add_plugins(MaterialRefPlugin::<VegetationOnTerrainMaterialLib<'_, '_>>::default());
 
 		let bump = app
 			.world_mut()

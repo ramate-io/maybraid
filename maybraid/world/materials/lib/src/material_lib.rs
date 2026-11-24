@@ -29,16 +29,16 @@ use vegetation_shaders::{VegetationShadersPlugin, init_vegetation_material_cache
 ///
 /// Further domain libs (Durham recipes on [`MaterialRef`], sky) compose here.
 #[derive(SystemParam)]
-pub struct WorldMaterialLib<'w> {
+pub struct WorldMaterialLib<'w, 's> {
 	pub furniture: FurnitureMaterialLib<'w>,
 	pub character: CharacterMaterialLib<'w>,
 	pub urban: UrbanSurfaceMaterialLib<'w>,
 	pub muzzle: MuzzleFlameMaterialLib<'w>,
 	pub energy: EnergyMaterialLib<'w>,
-	pub vegetation: VegetationOnTerrainMaterialLib<'w>,
+	pub vegetation: VegetationOnTerrainMaterialLib<'w, 's>,
 }
 
-impl MaterialLib for WorldMaterialLib<'_> {
+impl MaterialLib for WorldMaterialLib<'_, '_> {
 	fn try_fulfill(
 		&mut self,
 		entity: Entity,
@@ -76,7 +76,7 @@ impl Plugin for WorldMaterialRefPlugin {
 		init_energy_material_caches(app);
 		init_vegetation_material_caches(app);
 		init_bump_out_material_caches(app);
-		app.add_plugins(MaterialRefPlugin::<WorldMaterialLib<'_>>::default());
+		app.add_plugins(MaterialRefPlugin::<WorldMaterialLib<'_, '_>>::default());
 	}
 }
 
@@ -253,7 +253,7 @@ mod tests {
 			descendants.push((root, mesh));
 		}
 		let mut fulfill = IntoSystem::into_system(
-			material_ref::fulfill_material_ref_descendants::<super::WorldMaterialLib<'_>>,
+			material_ref::fulfill_material_ref_descendants::<super::WorldMaterialLib<'_, '_>>,
 		);
 		fulfill.initialize(world);
 		fulfill
