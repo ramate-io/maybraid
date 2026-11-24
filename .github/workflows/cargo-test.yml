@@ -16,3 +16,13 @@ jobs:
       nix_flake_path: '.'
       runner: 'ubuntu-24.04'
       rust_cache_key: cargo-release-test
+
+  diagnostic-tests:
+    uses: ./.github/workflows/nix-command.yml
+    with:
+      # Default workspace tests do not compile the world memory snapshot or
+      # retirement successor readout. Exercise their real opt-in feature path.
+      command: cargo test --release --locked -p lod -p maybraid-world --features lod/generation-tracing,maybraid-world/memory-census --lib
+      nix_flake_path: '.'
+      runner: 'ubuntu-24.04'
+      rust_cache_key: cargo-release-test
