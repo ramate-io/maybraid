@@ -1,0 +1,706 @@
+diff --git a/maybraid/world/layers/terrain/durham/src/hcsg.rs b/maybraid/world/layers/terrain/durham/src/hcsg.rs
+index 4df50af24..3628be413 100644
+--- a/maybraid/world/layers/terrain/durham/src/hcsg.rs
++++ b/maybraid/world/layers/terrain/durham/src/hcsg.rs
+@@ -133,7 +133,12 @@ impl Plugin for DurhamWorldPlugin {
+ 
+ 	fn finish(&self, app: &mut App) {
+ 		let world = app.world_mut();
+-		let material = world.resource_mut::<Assets<TerrainShader>>().add(TerrainShader::default());
++		// Diagnostic-only, default off. No extra casters, cascades or quality policy.
++		let receive_shadows =
++			std::env::var("MAYBRAID_EXPERIMENT_SHADOW_RECEIVERS").is_ok_and(|value| value == "1");
++		eprintln!("[combined-shadow-receivers] enabled={receive_shadows}");
++		let terrain_material = TerrainShader::default().with_shadow_receiving(receive_shadows);
++		let material = world.resource_mut::<Assets<TerrainShader>>().add(terrain_material);
+ 		let water = world.resource_mut::<Assets<RefractionWater>>().add(RefractionWater::default());
+ 		let config = world.resource::<TerrainConfig>().clone();
+ 		world.insert_resource(mesh_assets(
+diff --git a/maybraid/world/layers/terrain/shaders/src/terrain_shader.rs b/maybraid/world/layers/terrain/shaders/src/terrain_shader.rs
+index a0fa7fe77..c8e5ce7ad 100644
+--- a/maybraid/world/layers/terrain/shaders/src/terrain_shader.rs
++++ b/maybraid/world/layers/terrain/shaders/src/terrain_shader.rs
+@@ -43,6 +43,9 @@ pub struct TerrainShader {
+ 	/// Authored grass coverage and lush/dry blade palette.
+ 	#[uniform(3)]
+ 	pub grass: TerrainGrassUniform,
++	/// Experimental A/B overlay only: x=1 copies standard mesh receiver flags.
++	#[uniform(4)]
++	pub shadow_receiver_params: Vec4,
+ }
+ 
+ impl Default for TerrainShader {
+@@ -52,11 +55,18 @@ impl Default for TerrainShader {
+ 			style_params: Vec4::new(0.35, 2.0, 0.05, 0.82),
+ 			base_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+ 			grass: TerrainGrassUniform::default(),
++			shadow_receiver_params: Vec4::ZERO,
+ 		}
+ 	}
+ }
+ 
+ impl TerrainShader {
++	/// Diagnostic-only process-start control; production fix needs no toggle.
++	pub fn with_shadow_receiving(mut self, enabled: bool) -> Self {
++		self.shadow_receiver_params.x = if enabled { 1.0 } else { 0.0 };
++		self
++	}
++
+ 	/// Sets [`TerrainNoiseUniform::global_seed`] **x** only; per-band seeds unchanged.
+ 	#[inline]
+ 	pub fn with_noise_global_seed(mut self, seed: f32) -> Self {
+diff --git a/maybraid/world/layers/terrain/shaders/src/terrain_shader.wesl b/maybraid/world/layers/terrain/shaders/src/terrain_shader.wesl
+index df5e499b2..328a17d97 100644
+--- a/maybraid/world/layers/terrain/shaders/src/terrain_shader.wesl
++++ b/maybraid/world/layers/terrain/shaders/src/terrain_shader.wesl
+@@ -100,6 +100,10 @@ struct DurhamTerrainGrass {
+ @group(constants::MATERIAL_BIND_GROUP) @binding(3)
+ var<uniform> grass: DurhamTerrainGrass;
+ 
++// Experimental same-binary receiver switch; absent from production fix.
++@group(constants::MATERIAL_BIND_GROUP) @binding(4)
++var<uniform> shadow_receiver_params: vec4<f32>;
++
+ 
+ fn spread_noise(t: f32, amount: f32) -> f32 {
+     let x = saturate(t);
+@@ -1247,7 +1251,9 @@ fn fragment(
+         pbr_input_new();
+ 
+     // Preserve Bevy mesh receiver flags, including NotShadowReceiver.
+-    pbr_input.flags = pbr_input_from_vertex_output(mesh, is_front, false).flags;
++    if (shadow_receiver_params.x > 0.5) {
++        pbr_input.flags = pbr_input_from_vertex_output(mesh, is_front, false).flags;
++    }
+ 
+     let double_sided =
+         (
+diff --git a/maybraid/world/layers/vegetation/shaders/src/stick_material.rs b/maybraid/world/layers/vegetation/shaders/src/stick_material.rs
+index c39a56962..2697f61f7 100644
+--- a/maybraid/world/layers/vegetation/shaders/src/stick_material.rs
++++ b/maybraid/world/layers/vegetation/shaders/src/stick_material.rs
+@@ -18,6 +18,7 @@ pub struct StickMaterialPlugin;
+ impl Plugin for StickMaterialPlugin {
+ 	fn build(&self, app: &mut App) {
+ 		embedded_asset!(app, "stick_material.wesl");
++		eprintln!("[combined-stick-receiver] enabled={}", shadow_receivers_enabled());
+ 		app.add_plugins(MaterialPlugin::<StickMaterial>::default());
+ 	}
+ }
+@@ -26,14 +27,33 @@ impl Plugin for StickMaterialPlugin {
+ pub struct StickMaterial {
+ 	#[uniform(0)]
+ 	pub base_color: Vec4,
++	/// Diagnostic-only same-binary switch shared with the terrain receiver.
++	#[uniform(1)]
++	pub shadow_receiver_params: Vec4,
+ }
+ 
+ impl Default for StickMaterial {
+ 	fn default() -> Self {
+-		Self { base_color: Vec4::new(0.13, 0.085, 0.055, 1.0) }
++		Self {
++			base_color: Vec4::new(0.13, 0.085, 0.055, 1.0),
++			shadow_receiver_params: Vec4::new(
++				if shadow_receivers_enabled() { 1.0 } else { 0.0 },
++				0.0,
++				0.0,
++				0.0,
++			),
++		}
+ 	}
+ }
+ 
++// Diagnostic overlay only: read the process-start switch once, not each frame.
++fn shadow_receivers_enabled() -> bool {
++	static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++	*ENABLED.get_or_init(|| {
++		std::env::var("MAYBRAID_EXPERIMENT_SHADOW_RECEIVERS").is_ok_and(|value| value == "1")
++	})
++}
++
+ impl Material for StickMaterial {
+ 	fn fragment_shader() -> ShaderRef {
+ 		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "stick_material.wesl").into()
+diff --git a/maybraid/world/layers/vegetation/shaders/src/stick_material.wesl b/maybraid/world/layers/vegetation/shaders/src/stick_material.wesl
+index 5c3a9d9a3..191c49541 100644
+--- a/maybraid/world/layers/vegetation/shaders/src/stick_material.wesl
++++ b/maybraid/world/layers/vegetation/shaders/src/stick_material.wesl
+@@ -24,6 +24,10 @@ fn with_distance_fog(color: vec4<f32>, world_position: vec3<f32>, frag_xy: vec2<
+ @group(constants::MATERIAL_BIND_GROUP) @binding(0)
+ var<uniform> base_color: vec4<f32>;
+ 
++// Diagnostic-only same-binary switch; absent from production PR.
++@group(constants::MATERIAL_BIND_GROUP) @binding(1)
++var<uniform> shadow_receiver_params: vec4<f32>;
++
+ 
+ fn fwidth3(v: vec3<f32>) -> vec3<f32> {
+     return abs(dpdx(v)) + abs(dpdy(v));
+@@ -38,7 +42,9 @@ fn fragment(
+ 
+     var pbr_input: PbrInput = pbr_input_new();
+     // Preserve receiver flags, including explicit NotShadowReceiver opt-outs.
+-    pbr_input.flags = pbr_input_from_vertex_output(mesh, is_front, false).flags;
++    if (shadow_receiver_params.x > 0.5) {
++        pbr_input.flags = pbr_input_from_vertex_output(mesh, is_front, false).flags;
++    }
+ 
+     pbr_input.material.base_color = base_color;
+ 
+diff --git a/maybraid/world/lib/src/agent/diagnostics.rs b/maybraid/world/lib/src/agent/diagnostics.rs
+index 014586183..1d7ac5e45 100644
+--- a/maybraid/world/lib/src/agent/diagnostics.rs
++++ b/maybraid/world/lib/src/agent/diagnostics.rs
+@@ -5,6 +5,8 @@ pub(super) mod camera;
+ #[cfg(feature = "memory-census")]
+ pub(super) mod memory;
+ mod npc;
++#[cfg(feature = "debug-commands")]
++mod shadow_admission;
+ 
+ use avian3d::prelude::{GravityScale, LinearVelocity, Sleeping};
+ use bevy::prelude::*;
+diff --git a/maybraid/world/lib/src/agent/diagnostics/camera.rs b/maybraid/world/lib/src/agent/diagnostics/camera.rs
+index 469208194..91c5b9e72 100644
+--- a/maybraid/world/lib/src/agent/diagnostics/camera.rs
++++ b/maybraid/world/lib/src/agent/diagnostics/camera.rs
+@@ -31,6 +31,14 @@ fn complete_request(world: &mut World) {
+ 		return;
+ 	};
+ 	let result = CameraFixture::apply(world, pose);
++	#[cfg(feature = "debug-commands")]
++	if pose.is_none() && world.get_resource::<super::AgentDiagnostics>().is_some_and(|d| d.enabled)
++	{
++		if let Ok(state) = &result {
++			super::shadow_admission::capture(world, state, id);
++		}
++	}
++
+ 	let runtime = world.resource::<AgentRuntime>();
+ 	let t = world.resource::<Time>().elapsed_secs();
+ 	let frame = runtime.frame;
+diff --git a/maybraid/world/lib/src/agent/diagnostics/shadow_admission.rs b/maybraid/world/lib/src/agent/diagnostics/shadow_admission.rs
+new file mode 100644
+index 000000000..c2e38d951
+--- /dev/null
++++ b/maybraid/world/lib/src/agent/diagnostics/shadow_admission.rs
+@@ -0,0 +1,518 @@
++//! Explicit, read-only shadow fixture evidence. Never installed as a scan system.
++
++use bevy::{
++	camera::primitives::Aabb,
++	camera::visibility::{
++		CascadesVisibleEntities, RenderLayers, VisibleEntities, VisibleMeshEntities,
++	},
++	light::{
++		CascadeShadowConfig, Cascades, DirectionalLightShadowMap, NotShadowCaster,
++		NotShadowReceiver,
++	},
++	prelude::*,
++};
++use maybraid_agent::AgentCameraSnapshot;
++use std::collections::HashMap;
++use vegetation_components::{shadow_proxy::proxy_render_layers, CanopyShadowProxy};
++
++const LIMIT: usize = 8;
++const BUILDING_LIMIT: usize = 3;
++const BUILDING_MESH_LIMIT: usize = 48;
++const BUILDING_ANCESTOR_LIMIT: usize = 32;
++
++#[derive(Clone, Copy)]
++struct MeshBounds {
++	entity: Entity,
++	min: Vec3,
++	max: Vec3,
++	distance_squared: f32,
++}
++
++impl MeshBounds {
++	fn observe(
++		entity: Entity,
++		bounds: &Aabb,
++		pose: &GlobalTransform,
++		camera: Vec3,
++	) -> Option<Self> {
++		let center = Vec3::from(bounds.center);
++		let half = Vec3::from(bounds.half_extents);
++		if !center.is_finite()
++			|| !half.is_finite()
++			|| half.cmplt(Vec3::ZERO).any()
++			|| !camera.is_finite()
++		{
++			return None;
++		}
++		let mut min = Vec3::splat(f32::INFINITY);
++		let mut max = Vec3::splat(f32::NEG_INFINITY);
++		// Eight transformed corners also handle rotation, nonuniform scale and reflection.
++		for x in [-1.0, 1.0] {
++			for y in [-1.0, 1.0] {
++				for z in [-1.0, 1.0] {
++					let point = pose.transform_point(center + half * Vec3::new(x, y, z));
++					if !point.is_finite() {
++						return None;
++					}
++					min = min.min(point);
++					max = max.max(point);
++				}
++			}
++		}
++		let distance_squared = camera.distance_squared(camera.clamp(min, max));
++		distance_squared
++			.is_finite()
++			.then_some(Self { entity, min, max, distance_squared })
++	}
++}
++
++struct BuildingObservation {
++	host: Entity,
++	collider: Entity,
++	observed_meshes: usize,
++	missing_or_invalid_bounds: usize,
++	meshes: Vec<MeshBounds>,
++}
++
++fn nearest_buildings(
++	world: &mut World,
++	camera_position: Vec3,
++) -> (Vec<BuildingObservation>, serde_json::Value) {
++	// A collider locates ownership only. Its transform is often yaw compensation,
++	// while the actual geometry contains authored world-space positions.
++	let mut hosts = HashMap::new();
++	let mut named = world.query::<(Entity, &Name, &ChildOf)>();
++	for (collider, name, parent) in named.iter(world) {
++		let host = parent.parent();
++		if name.as_str() == "building-walk-collider"
++			&& world.get::<lod::LodSceneHost>(host).is_some()
++			&& world.get::<bevy::ecs::entity_disabling::Disabled>(host).is_none()
++		{
++			hosts.entry(host).or_insert_with(|| BuildingObservation {
++				host,
++				collider,
++				observed_meshes: 0,
++				missing_or_invalid_bounds: 0,
++				meshes: Vec::new(),
++			});
++		}
++	}
++	let mut inspected_meshes = 0;
++	let mut ancestor_limit_reached = 0;
++	// Explicit request only: no recurring scan, subtree recursion, worker or lock.
++	// Read real mesh bounds, not a host origin or an inferred building center.
++	let mut meshes = world.query::<(Entity, &Mesh3d, Option<&Aabb>, Option<&GlobalTransform>)>();
++	for (entity, _, bounds, pose) in meshes.iter(world) {
++		inspected_meshes += 1;
++		let mut ancestor = Some(entity);
++		let mut owner = None;
++		for _ in 0..BUILDING_ANCESTOR_LIMIT {
++			let Some(current) = ancestor else { break };
++			if hosts.contains_key(&current) {
++				owner = Some(current);
++				break;
++			}
++			ancestor = world.get::<ChildOf>(current).map(ChildOf::parent);
++		}
++		let Some(host) = owner else {
++			ancestor_limit_reached += usize::from(ancestor.is_some());
++			continue;
++		};
++		let Some(record) = hosts.get_mut(&host) else {
++			continue;
++		};
++		record.observed_meshes += 1;
++		let Some(geometry) = bounds
++			.zip(pose)
++			.and_then(|(bounds, pose)| MeshBounds::observe(entity, bounds, pose, camera_position))
++		else {
++			record.missing_or_invalid_bounds += 1;
++			continue;
++		};
++		let index = record.meshes.partition_point(|old| {
++			old.distance_squared < geometry.distance_squared
++				|| (old.distance_squared == geometry.distance_squared
++					&& old.entity.to_bits() < entity.to_bits())
++		});
++		if index < BUILDING_MESH_LIMIT {
++			record.meshes.insert(index, geometry);
++			record.meshes.truncate(BUILDING_MESH_LIMIT);
++		}
++	}
++	let host_count = hosts.len();
++	let missing = hosts.values().map(|host| host.missing_or_invalid_bounds).sum::<usize>();
++	let mut observed: Vec<_> = hosts.into_values().filter(|host| !host.meshes.is_empty()).collect();
++	let hosts_with_bounds = observed.len();
++	observed.sort_by(|a, b| {
++		a.meshes[0]
++			.distance_squared
++			.total_cmp(&b.meshes[0].distance_squared)
++			.then_with(|| a.host.to_bits().cmp(&b.host.to_bits()))
++	});
++	observed.truncate(BUILDING_LIMIT);
++	(
++		observed,
++		serde_json::json!({"inspected_mesh3d":inspected_meshes,
++        "host_count":host_count,"hosts_with_observed_bounds":hosts_with_bounds,
++        "hosts_without_observed_bounds":host_count-hosts_with_bounds,
++        "missing_or_invalid_building_mesh_bounds":missing,
++        "mesh_ancestry_limit_reached":ancestor_limit_reached,
++        "scope":"enabled main-world Mesh3d; bounded32 ancestry; GPU submission unobserved"}),
++	)
++}
++
++fn building_snapshot(
++	world: &World,
++	building: &BuildingObservation,
++	cascades: Option<&[VisibleMeshEntities]>,
++	camera_layers: &RenderLayers,
++	light_layers: &RenderLayers,
++	camera_meshes: Option<&[Entity]>,
++) -> serde_json::Value {
++	let meshes = world.get_resource::<Assets<Mesh>>();
++	let materials = world.get_resource::<Assets<StandardMaterial>>();
++	let observed_meshes: Vec<_> = building.meshes.iter().filter_map(|geometry| {
++        let entity = geometry.entity;
++        let mesh = world.get::<Mesh3d>(entity)?;
++        let material = world.get::<MeshMaterial3d<StandardMaterial>>(entity);
++        let layers = world.get::<RenderLayers>(entity).cloned().unwrap_or_default();
++        let cascade_indices = cascades.map(|lists| lists.iter().enumerate()
++            .filter_map(|(index,list)| list.entities.contains(&entity).then_some(index)).collect::<Vec<_>>());
++        Some(serde_json::json!({
++            "entity":entity.to_bits().to_string(),"name":world.get::<Name>(entity).map(Name::as_str),
++            "translation":world.get::<GlobalTransform>(entity).map(|p|p.translation().to_array()),
++            "translation_scope":"transform origin only, not geometry location",
++            "world_aabb_min":geometry.min.to_array(),"world_aabb_max":geometry.max.to_array(),
++            "world_aabb_center":(geometry.min*0.5+geometry.max*0.5).to_array(),
++            "camera_distance_m":geometry.distance_squared.sqrt(),
++            "mesh_path":mesh.0.path().map(ToString::to_string),
++            "mesh_asset_loaded":meshes.map(|assets|assets.contains(mesh.id())),
++            "standard_material_asset_loaded":material.zip(materials).map(|(material,assets)|assets.contains(material.id())),
++            "inherited_visible":world.get::<InheritedVisibility>(entity).map(|v|v.get()),
++            "camera_listed":camera_meshes.map(|list|list.contains(&entity)),
++            "not_shadow_caster":world.get::<NotShadowCaster>(entity).is_some(),
++            "not_shadow_receiver":world.get::<NotShadowReceiver>(entity).is_some(),
++            "camera_layer_intersection":layers.intersects(camera_layers),
++            "light_layer_intersection":layers.intersects(light_layers),"listed_cascade_indices":cascade_indices,
++        }))
++    }).collect();
++	serde_json::json!({"host":building.host.to_bits().to_string(),"walk_collider":building.collider.to_bits().to_string(),
++        "anchor_translation":world.get::<GlobalTransform>(building.collider).map(|p|p.translation().to_array()),
++        "anchor_scope":"ownership transform only; not a position, distance or spawn target",
++        "physical_camera_distance_m":building.meshes.first().map(|g|g.distance_squared.sqrt()),
++        "observed_meshes":building.observed_meshes,"missing_or_invalid_bounds":building.missing_or_invalid_bounds,
++        "omitted_mesh_records":building.observed_meshes-building.missing_or_invalid_bounds-building.meshes.len(),
++        "truncated":building.observed_meshes>building.meshes.len(),"meshes":observed_meshes,
++        "bounds_scope":"current component Aabb transformed to world axis-aligned bounds; conservative, not exact surface or GPU proof"})
++}
++
++pub(super) fn capture(world: &mut World, camera: &AgentCameraSnapshot, request: u32) {
++	if std::env::var("MAYBRAID_SHADOW_ADMISSION").as_deref() != Ok("1") {
++		return;
++	}
++	let result = snapshot(world, camera, request);
++	info!(target:"maybraid.shadow.admission", "shadow_admission {}",result);
++}
++
++fn snapshot(world: &mut World, camera: &AgentCameraSnapshot, request: u32) -> serde_json::Value {
++	let camera_entity = camera.entity.parse::<u64>().ok().and_then(Entity::try_from_bits);
++	let camera_position = Vec3::from_array(camera.global_translation);
++	let camera_layers = camera_entity
++		.and_then(|e| world.get::<RenderLayers>(e))
++		.cloned()
++		.unwrap_or_default();
++	let mut nearest = Vec::with_capacity(LIMIT + 1);
++	let mut total = 0usize;
++	let mut unrealized = 0usize;
++	let mut missing_pose = 0usize;
++	let mut proxies = world
++		.query_filtered::<(Entity, Option<&GlobalTransform>, Has<Mesh3d>), With<CanopyShadowProxy>>(
++		);
++	for (entity, pose, realized) in proxies.iter(world) {
++		total += 1;
++		if !realized {
++			unrealized += 1;
++			continue;
++		}
++		let Some(pose) = pose else {
++			missing_pose += 1;
++			continue;
++		};
++		let distance = pose.translation().distance_squared(camera_position);
++		if !distance.is_finite() {
++			missing_pose += 1;
++			continue;
++		}
++		let index = nearest.partition_point(|(d, e): &(f32, Entity)| {
++			*d < distance || (*d == distance && e.to_bits() < entity.to_bits())
++		});
++		if index < LIMIT {
++			nearest.insert(index, (distance, entity));
++			nearest.truncate(LIMIT);
++		}
++	}
++	let (buildings, building_scan) = nearest_buildings(world, camera_position);
++	let mut suns = world.query_filtered::<Entity, With<maybraid_sky::SkySun>>();
++	let sun_ids: Vec<_> = suns.iter(world).take(2).collect();
++	let sun = (sun_ids.len() == 1).then(|| sun_ids[0]);
++	let light = sun.and_then(|e| world.get::<DirectionalLight>(e));
++	let light_layers = sun.and_then(|e| world.get::<RenderLayers>(e)).cloned().unwrap_or_default();
++	let cascades = sun
++		.and_then(|e| world.get::<Cascades>(e))
++		.and_then(|c| camera_entity.and_then(|v| c.cascades.get(&v)));
++	let visible = sun
++		.and_then(|e| world.get::<CascadesVisibleEntities>(e))
++		.and_then(|c| camera_entity.and_then(|v| c.entities.get(&v)));
++	let state = if sun_ids.len() != 1 {
++		"unknown-single-sun-required"
++	} else if light.is_none() {
++		"unknown-light-component-missing"
++	} else if !light.is_some_and(|l| l.shadow_maps_enabled) {
++		"maps-disabled"
++	} else if cascades.is_none() || visible.is_none() {
++		"not-computed-for-camera"
++	} else if cascades.map_or(0, Vec::len) != visible.map_or(0, Vec::len) {
++		"unknown-cascade-count-mismatch"
++	} else {
++		"present-main-world-membership-unstamped"
++	};
++	let membership_tick = sun
++		.and_then(|entity| world.get_entity(entity).ok())
++		.and_then(|entity| entity.get_ref::<CascadesVisibleEntities>())
++		.map(|visible| (visible.last_changed().get(), visible.is_changed()));
++	let spheres: Vec<_> = nearest.into_iter().map(|(distance, entity)| {
++        let pose = world.get::<GlobalTransform>(entity);
++        let layers = world.get::<RenderLayers>(entity).cloned().unwrap_or_default();
++        let listed: Option<Vec<_>> = visible.map(|cs| cs.iter().enumerate().filter_map(|(index, c)| c.entities.contains(&entity).then_some(index)).collect());
++        let mut ancestor = world.get::<ChildOf>(entity).map(ChildOf::parent);
++        let mut ancestor_suppressed = false;
++        let mut checked = 0;
++        while let Some(parent) = ancestor {
++            if checked == 32 { break; }
++            ancestor_suppressed |= world.get::<NotShadowCaster>(parent).is_some();
++            ancestor = world.get::<ChildOf>(parent).map(ChildOf::parent);
++            checked += 1;
++        }
++        serde_json::json!({"entity": entity.to_bits().to_string(), "distance_m": distance.sqrt(),
++            "translation": pose.map(|p| p.translation().to_array()), "scale": pose.map(|p| p.to_scale_rotation_translation().0.to_array()),
++            "inherited_visible": world.get::<InheritedVisibility>(entity).map(|v| v.get()),
++            "not_shadow_caster": world.get::<NotShadowCaster>(entity).is_some(),
++            "marked_ancestor": ancestor_suppressed, "ancestor_inspection_complete": ancestor.is_none(),
++            "mesh_asset_loaded":world.get_resource::<Assets<Mesh>>().and_then(|assets| world.get::<Mesh3d>(entity).map(|mesh| assets.contains(mesh.id()))),
++            "material_asset_loaded":world.get_resource::<Assets<StandardMaterial>>().and_then(|assets| world.get::<MeshMaterial3d<StandardMaterial>>(entity).map(|material| assets.contains(material.id()))),
++            "camera_layer_intersection":layers.intersects(&camera_layers),
++            "proxy_layer_intersection": layers.intersects(&proxy_render_layers()),
++            "light_layer_intersection": layers.intersects(&light_layers), "layers": format!("{layers:?}"),
++            "listed_cascade_indices": listed})
++    }).collect();
++	let camera_meshes = camera_entity
++		.and_then(|entity| world.get::<VisibleEntities>(entity))
++		.map(|entities| entities.get(core::any::TypeId::of::<Mesh3d>()));
++	let buildings: Vec<_> = buildings
++		.into_iter()
++		.map(|building| {
++			building_snapshot(
++				world,
++				&building,
++				visible.map(Vec::as_slice),
++				&camera_layers,
++				&light_layers,
++				camera_meshes,
++			)
++		})
++		.collect();
++	let result = serde_json::json!({"request_id":request, "t":world.resource::<Time>().elapsed_secs(),
++        "camera":camera, "camera_layers":format!("{camera_layers:?}"), "sun":sun.map(|e| e.to_bits().to_string()), "state":state,
++        "sun_pose":sun.and_then(|e| world.get::<GlobalTransform>(e)).map(|p| (p.translation().to_array(),p.rotation().to_array())),
++        "sun_illuminance":light.map(|l| l.illuminance),
++        "sun_depth_bias":light.map(|l| l.shadow_depth_bias), "sun_normal_bias":light.map(|l| l.shadow_normal_bias),
++        "directional_shadow_map_size":world.get_resource::<DirectionalLightShadowMap>().map(|m| m.size),
++        "cascade_bounds":sun.and_then(|e| world.get::<CascadeShadowConfig>(e)).map(|c| &c.bounds), "sun_color":light.map(|l| format!("{:?}",l.color)),
++        "light_layers":format!("{light_layers:?}"), "cascade_count":cascades.map(Vec::len),
++        "cascade_cpu_visible_mesh_counts":visible.map(|cs| cs.iter().map(|c| c.entities.len()).collect::<Vec<_>>()),
++        "camera_cpu_visible_mesh3d_count":camera_entity.and_then(|e|world.get::<VisibleEntities>(e)).map(|v|v.get(core::any::TypeId::of::<Mesh3d>()).len()),
++        "membership_freshness":"ECS-write-tick-only-not-a-render-stamp",
++        "membership_last_changed_tick":membership_tick.map(|t|t.0),
++        "membership_changed_since_previous_camera_completion_system_run":membership_tick.map(|t|t.1),
++        "world_previous_system_tick":world.last_change_tick().get(), "world_current_tick":world.read_change_tick().get(),
++        "gpu_shadow_submission":"not-observed",
++        "total_markers":total,"unrealized":unrealized,"missing_or_invalid_pose":missing_pose,
++        "selection":"nearest-realized-limit8", "spheres":spheres,
++        "building_selection":"nearest observed world-AABB surface per host; top3/top48mesh records; bounded32 ancestry",
++        "building_scan":building_scan,
++        "buildings":buildings});
++	result
++}
++
++#[cfg(test)]
++mod tests {
++	use super::*;
++	use bevy::camera::visibility::VisibleMeshEntities;
++	use maybraid_agent::AgentCameraProjection;
++
++	#[test]
++	fn physical_bounds_handle_nonuniform_reflection_and_reject_invalid_geometry() {
++		let entity = World::new().spawn_empty().id();
++		let bounds = Aabb { center: Vec3::ZERO.into(), half_extents: Vec3::ONE.into() };
++		let pose = GlobalTransform::from(
++			Transform::from_translation(Vec3::X * 10.).with_scale(Vec3::new(-2., 3., 4.)),
++		);
++		let observed = MeshBounds::observe(entity, &bounds, &pose, Vec3::ZERO);
++		assert!(observed.is_some_and(|g| g.min == Vec3::new(8., -3., -4.)
++			&& g.max == Vec3::new(12., 3., 4.)
++			&& g.distance_squared == 64.));
++		let invalid = Aabb { center: Vec3::splat(f32::NAN).into(), ..bounds };
++		assert!(MeshBounds::observe(entity, &invalid, &pose, Vec3::ZERO).is_none());
++		let invalid = Aabb { half_extents: (-Vec3::ONE).into(), ..bounds };
++		assert!(MeshBounds::observe(entity, &invalid, &pose, Vec3::ZERO).is_none());
++	}
++
++	#[test]
++	fn snapshot_bounds_real_spheres_and_joins_only_selected_camera_cascades() -> anyhow::Result<()>
++	{
++		let mut world = World::new();
++		world.init_resource::<Time>();
++		let camera_entity = world.spawn_empty().id();
++		let other_camera = world.spawn_empty().id();
++		let camera = AgentCameraSnapshot {
++			entity: camera_entity.to_bits().to_string(),
++			local_translation: [0.; 3],
++			global_translation: [0.; 3],
++			local_rotation: [0., 0., 0., 1.],
++			global_rotation: [0., 0., 0., 1.],
++			controller_yaw: 0.,
++			controller_pitch: 0.,
++			projection: AgentCameraProjection::Perspective {
++				fov: 1.,
++				near: 0.1,
++				far: 1000.,
++				aspect_ratio: 1.,
++			},
++		};
++		let mut meshes = Assets::<Mesh>::default();
++		let mesh = meshes.add(Sphere::new(1.).mesh().ico(1)?);
++		let mut materials = Assets::<StandardMaterial>::default();
++		let material = materials.add(StandardMaterial::default());
++		world.insert_resource(meshes);
++		world.insert_resource(materials);
++		let mut spheres = Vec::new();
++		for x in 1..=12 {
++			spheres.push(
++				world
++					.spawn((
++						CanopyShadowProxy,
++						Mesh3d(mesh.clone()),
++						MeshMaterial3d(material.clone()),
++						GlobalTransform::from_translation(Vec3::X * x as f32),
++						InheritedVisibility::VISIBLE,
++						proxy_render_layers(),
++					))
++					.id(),
++			);
++		}
++		let host = world.spawn(lod::LodSceneHost).id();
++		world.spawn((
++			Name::new("building-walk-collider"),
++			ChildOf(host),
++			GlobalTransform::from_translation(Vec3::X * 1000.),
++		));
++		let wall = world
++			.spawn((
++				Name::new("visible-wall"),
++				Aabb {
++					center: Vec3::new(0., 0., -999.).into(),
++					half_extents: Vec3::new(1., 2., 3.).into(),
++				},
++				GlobalTransform::from(
++					Transform::from_translation(Vec3::X * 1000.)
++						.with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
++				),
++				ChildOf(host),
++				Mesh3d(mesh.clone()),
++				MeshMaterial3d(material),
++				InheritedVisibility::VISIBLE,
++				NotShadowReceiver,
++			))
++			.id();
++		for i in 0..BUILDING_MESH_LIMIT {
++			world.spawn((
++				ChildOf(host),
++				Mesh3d(mesh.clone()),
++				Aabb::default(),
++				GlobalTransform::from_translation(Vec3::X * (100. + i as f32)),
++			));
++		}
++
++		// An apparently nearer origin owns physically farther geometry. Ranking
++		// by origin would pick this host first; real world bounds must not.
++		let decoy = world.spawn(lod::LodSceneHost).id();
++		world.spawn((
++			Name::new("building-walk-collider"),
++			ChildOf(decoy),
++			GlobalTransform::IDENTITY,
++		));
++		world.spawn((
++			ChildOf(decoy),
++			Mesh3d(mesh.clone()),
++			Aabb::default(),
++			GlobalTransform::from_translation(Vec3::X * 10.),
++		));
++		world.spawn((ChildOf(host), Mesh3d(mesh.clone()))); // bounds unavailable, never zero distance
++		let mut parent = host;
++		for _ in 0..BUILDING_ANCESTOR_LIMIT {
++			parent = world.spawn(ChildOf(parent)).id();
++		}
++		world.spawn((
++			ChildOf(parent),
++			Mesh3d(mesh.clone()),
++			Aabb::default(),
++			GlobalTransform::IDENTITY,
++		));
++		let mut cascades = Cascades::default();
++		cascades.cascades.insert(camera_entity, vec![Default::default()]);
++		let mut visible = CascadesVisibleEntities::default();
++		visible
++			.entities
++			.insert(camera_entity, vec![VisibleMeshEntities { entities: vec![spheres[0], wall] }]);
++		visible
++			.entities
++			.insert(other_camera, vec![VisibleMeshEntities { entities: vec![spheres[1]] }]);
++		let sun = world
++			.spawn((
++				maybraid_sky::SkySun,
++				DirectionalLight { shadow_maps_enabled: true, ..default() },
++				cascades,
++				visible,
++				RenderLayers::default().with(vegetation_components::SHADOW_PROXY_RENDER_LAYER),
++			))
++			.id();
++		let data = snapshot(&mut world, &camera, 1);
++		assert_eq!(data["spheres"].as_array().map(Vec::len), Some(LIMIT));
++		assert_eq!(data["total_markers"], 12);
++		assert_eq!(data["spheres"][0]["entity"], spheres[0].to_bits().to_string());
++		assert_eq!(data["spheres"][0]["listed_cascade_indices"], serde_json::json!([0]));
++		assert_eq!(data["spheres"][1]["listed_cascade_indices"], serde_json::json!([]));
++		assert_eq!(data["spheres"][0]["mesh_asset_loaded"], true);
++		assert_eq!(data["spheres"][0]["camera_layer_intersection"], false);
++		assert_eq!(data["spheres"][0]["light_layer_intersection"], true);
++		assert_eq!(data["buildings"].as_array().map(Vec::len), Some(2));
++		assert_eq!(data["building_scan"]["mesh_ancestry_limit_reached"], 1);
++		assert_eq!(data["building_scan"]["missing_or_invalid_building_mesh_bounds"], 1);
++		let building = &data["buildings"][0];
++		assert_eq!(building["host"], host.to_bits().to_string());
++		assert_eq!(building["observed_meshes"], BUILDING_MESH_LIMIT + 2);
++		assert_eq!(building["omitted_mesh_records"], 1);
++		assert_eq!(building["physical_camera_distance_m"], 0.0);
++		assert!(building["meshes"][0]["world_aabb_center"][0]
++			.as_f64()
++			.is_some_and(|x| (x - 1.).abs() < 0.001));
++		assert_eq!(building["truncated"], true);
++		assert_eq!(building["meshes"][0]["entity"], wall.to_bits().to_string());
++		assert_eq!(building["meshes"][0]["standard_material_asset_loaded"], true);
++		assert_eq!(building["meshes"][0]["listed_cascade_indices"], serde_json::json!([0]));
++		assert_eq!(building["meshes"][0]["not_shadow_receiver"], true);
++		world.entity_mut(sun).remove::<CascadesVisibleEntities>();
++		assert_eq!(snapshot(&mut world, &camera, 2)["state"], "not-computed-for-camera");
++		Ok(())
++	}
++}
