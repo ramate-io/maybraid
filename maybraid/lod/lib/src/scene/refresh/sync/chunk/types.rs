@@ -72,6 +72,9 @@ pub struct LodChunkFulfillment {
 	/// Nested host count required for warm-swap; set once when content completes.
 	/// `None` until the first content-complete observation.
 	pub nested_required: Option<usize>,
+	/// [`LodChunkDrainCursor::frame`] when the job began; orders continuation priority
+	/// oldest-first.
+	pub begun_frame: u64,
 }
 
 impl LodChunkFulfillment {

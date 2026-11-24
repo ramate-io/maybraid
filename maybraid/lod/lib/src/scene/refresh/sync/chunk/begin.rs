@@ -26,8 +26,9 @@ use crate::scene::LodLevelProducer;
 use super::super::super::viewer::LodViewer;
 use super::schedule::{admit_begin, begin_scan_limit, charge_begin_weight, LevelBand};
 use super::types::{
-	FulfillClass, LodChunkBeginClock, LodChunkBeginScanCursor, LodChunkFulfillBudget,
-	LodChunkFulfillment, LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
+	FulfillClass, LodChunkBeginClock, LodChunkBeginScanCursor, LodChunkDrainCursor,
+	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
+	LodLevelRootStreamed,
 };
 
 /// Reused candidate buckets for the shared type-erased begin scan (cleared each frame).
@@ -400,6 +401,8 @@ fn admit_candidates_world(
 				initial_visibility,
 			))
 			.id();
+		let begun_frame =
+			world.get_resource::<LodChunkDrainCursor>().map_or(0, |cursor| cursor.frame);
 		let fulfillment = LodChunkFulfillment {
 			queue,
 			expected,
@@ -409,6 +412,7 @@ fn admit_candidates_world(
 			parent_desired: candidate.parent_desired,
 			nested_streamed: 0,
 			nested_required: None,
+			begun_frame,
 		};
 		if fulfillment.is_content_complete() {
 			world.entity_mut(root_entity).insert(LodLevelRootStreamed);

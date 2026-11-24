@@ -39,12 +39,19 @@ pub(super) struct LodChunkDrainTimeScript {
 	pub expire_after_quanta: u32,
 }
 
+/// Most incomplete High roots granted continuation priority in one frame, oldest begin first.
+///
+/// Bounds the forced (over-budget) quanta a frame may spend on continuation, so a busy world
+/// with many partially fulfilled rosters cannot starve ambient work.
+pub(super) const INCOMPLETE_HIGH_ROOTS_PER_FRAME: usize = 4;
+
+/// Most continuation quanta one prioritized root may pull per frame.
+pub(super) const INCOMPLETE_HIGH_QUANTA_PER_ROOT: u32 = 2;
+
 struct TupleBuckets {
 	bands: [Vec<Entity>; LOD_CHUNK_TUPLE_BAND_COUNT],
+	/// Roots that have spawned nothing yet (`spawned == 0`), visited before round-robin work.
 	new_root_bands: [Vec<Entity>; LOD_CHUNK_TUPLE_BAND_COUNT],
-	/// Partially fulfilled High roots: spawned>0, spawned<expected, parent_desired==High.
-	/// Prioritized after new roots to ensure bounded completion time in busy worlds.
-	incomplete_high_bands: [Vec<Entity>; LOD_CHUNK_TUPLE_BAND_COUNT],
 }
 
 impl Default for TupleBuckets {
@@ -52,7 +59,6 @@ impl Default for TupleBuckets {
 		Self {
 			bands: std::array::from_fn(|_| Vec::new()),
 			new_root_bands: std::array::from_fn(|_| Vec::new()),
-			incomplete_high_bands: std::array::from_fn(|_| Vec::new()),
 		}
 	}
 }
@@ -64,14 +70,11 @@ impl TupleBuckets {
 		parent: LodSceneLevel,
 		self_level: LodSceneLevel,
 		is_new: bool,
-		is_incomplete_high: bool,
 	) {
 		let rank =
 			LevelBand::tuple_rank(LevelBand::from_level(parent), LevelBand::from_level(self_level));
 		if is_new {
 			self.new_root_bands[rank].push(entity);
-		} else if is_incomplete_high {
-			self.incomplete_high_bands[rank].push(entity);
 		} else {
 			self.bands[rank].push(entity);
 		}
@@ -112,6 +115,16 @@ struct JobSnapshot {
 	queue_empty: bool,
 	spawned: usize,
 	expected: usize,
+	begun_frame: u64,
+}
+
+impl JobSnapshot {
+	/// Partially fulfilled roster under a High parent: `0 < spawned < expected`.
+	fn is_incomplete_high(&self) -> bool {
+		self.spawned > 0
+			&& self.spawned < self.expected
+			&& self.parent_desired == LodSceneLevel::High
+	}
 }
 
 struct DrainClock {
@@ -135,7 +148,7 @@ impl DrainClock {
 /// Exclusive semantic drain. Times `Lazy::next` + `World::spawn_scene` as one quantum.
 pub fn drain_chunk_lod_fulfill(world: &mut World) {
 	let _span = tracing::trace_span!("lod.drain").entered();
-	
+
 	let budget = *world.resource::<LodChunkFulfillBudget>();
 	let total = world.resource::<LodChunkBudgetClock>().spawn_remaining;
 	if total == 0 {
@@ -148,15 +161,16 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		collect_job_snapshots(world)
 	};
 	let mut buckets = JobBuckets::default();
+	let mut incomplete_high: Vec<(u64, Entity)> = Vec::new();
 	#[cfg(feature = "scene-tracing")]
 	let mut counters = diagnostics::ClassificationCounters::default();
-	
+
 	for snap in snapshots {
 		#[cfg(feature = "scene-tracing")]
 		if snap.spawned == 0 {
 			counters.count_new_root();
 		}
-		
+
 		if snap.queue_empty {
 			#[cfg(feature = "scene-tracing")]
 			counters.count_skipped_queue_empty();
@@ -205,20 +219,17 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 			}
 			continue;
 		};
-		let is_new = snap.spawned == 0;
-		// Incomplete high: recently started (spawned>0 but <3) and incomplete, with High parent.
-		// These get priority after new roots to ensure near-viewer rosters complete their initial
-		// burst in bounded frames. Cap at spawned<3 to avoid prioritizing all 80 incomplete roots,
-		// which would exhaust budget before the newly-incomplete root gets visited.
-		let is_incomplete_high = snap.spawned > 0
-			&& snap.spawned < 3
-			&& snap.spawned < snap.expected
-			&& snap.parent_desired == LodSceneLevel::High;
-		buckets
-			.for_class_mut(class)
-			.push(snap.entity, snap.parent_desired, snap.self_level, is_new, is_incomplete_high);
+		if snap.is_incomplete_high() {
+			incomplete_high.push((snap.begun_frame, snap.entity));
+		}
+		buckets.for_class_mut(class).push(
+			snap.entity,
+			snap.parent_desired,
+			snap.self_level,
+			snap.spawned == 0,
+		);
 	}
-	
+
 	#[cfg(feature = "scene-tracing")]
 	if counters.has_new_roots() {
 		let frame = world.resource::<LodChunkDrainCursor>().frame;
@@ -238,6 +249,25 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 	// has time to pull primitives even when classification is expensive.
 	let mut clock = DrainClock::new();
 
+	// Continuation priority: the oldest few partially fulfilled High rosters pull up to
+	// `INCOMPLETE_HIGH_QUANTA_PER_ROOT` primitives before class shares are split. Their
+	// first quantum is guaranteed (bounded by `INCOMPLETE_HIGH_ROOTS_PER_FRAME`), so a
+	// started roster completes in bounded frames however many ongoing roots share its band.
+	// Prioritized roots stay in their round-robin band for any leftover budget.
+	incomplete_high.sort_unstable();
+	incomplete_high.truncate(INCOMPLETE_HIGH_ROOTS_PER_FRAME);
+	let mut total = total;
+	for &(_, entity) in &incomplete_high {
+		drain_capped(
+			world,
+			entity,
+			&mut total,
+			&budget,
+			&mut clock,
+			INCOMPLETE_HIGH_QUANTA_PER_ROOT,
+		);
+	}
+
 	let (presence_share, desired_share, active_share) = split_presence_desired_active(total);
 	let frame = world.resource::<LodChunkDrainCursor>().frame;
 	let order = class_order(frame);
@@ -250,7 +280,7 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 	let mut remaining = 0u32;
 	for class in order {
 		let _class_span = tracing::trace_span!("lod.drain.class", class = ?class).entered();
-		
+
 		remaining = remaining.saturating_add(share(class));
 		let mut cursors = match class {
 			FulfillClass::Presence => world.resource::<LodChunkDrainCursor>().presence,
@@ -294,6 +324,7 @@ fn collect_job_snapshots(world: &mut World) -> Vec<JobSnapshot> {
 			queue_empty: job.queue.is_empty(),
 			spawned: job.spawned,
 			expected: job.expected,
+			begun_frame: job.begun_frame,
 		})
 		.collect()
 }
@@ -310,41 +341,22 @@ fn drain_tuple_bands(
 	// even if we're over budget. This prevents starvation when collection overhead
 	// alone exceeds the time budget.
 	let mut processed_first_band = false;
-	
+
 	for rank in 0..LOD_CHUNK_TUPLE_BAND_COUNT {
 		// After the first band, respect the budget
 		if processed_first_band && (*remaining == 0 || clock.time_up(world, budget)) {
 			return;
 		}
-		
-		// Priority 1: visit all new roots (spawned==0) first, regardless of cursor position.
-		// This ensures bounded arrival latency - new roots are visited in their first frame,
-		// preventing the unbounded scheduling delay that occurs when many ongoing roots
-		// are ahead of the new root in the round-robin order.
+
+		// New roots (spawned == 0) first, regardless of cursor position: bounded arrival
+		// latency even when many ongoing roots precede them in round-robin order.
 		for &entity in &buckets.new_root_bands[rank] {
-			if !drain_one(world, entity, remaining, budget, clock) {
-				// Budget exhausted after visiting new roots. That's fine - we guaranteed
-				// they were visited. Ongoing work continues next frame.
-				if processed_first_band {
-					return;
-				}
+			if !drain_one(world, entity, remaining, budget, clock) && processed_first_band {
+				return;
 			}
 		}
-		
-		// Priority 2: visit incomplete High roots (spawned>0, spawned<expected, parent High).
-		// After the first spawn, a root would normally wait O(N) frames in the round-robin.
-		// Prioritizing incomplete High roots ensures near-viewer rosters complete in bounded
-		// frames. Cap at 2 quanta per root per frame to prevent starvation of ambient work.
-		for &entity in &buckets.incomplete_high_bands[rank] {
-			if *remaining == 0 || clock.time_up(world, budget) {
-				if processed_first_band {
-					return;
-				}
-			}
-			drain_capped(world, entity, remaining, budget, clock, 2);
-		}
-		
-		// Priority 3: visit ongoing roots (spawned>0, not incomplete High) in round-robin order.
+
+		// Ongoing roots in round-robin order.
 		for_each_rr(&buckets.bands[rank], &mut cursors.bands[rank], |&entity| {
 			drain_one(world, entity, remaining, budget, clock)
 		});
@@ -352,8 +364,7 @@ fn drain_tuple_bands(
 	}
 }
 
-/// Drain up to `max_quanta` primitives from a single root.
-/// Used for incomplete high roots to prevent starvation of ambient work.
+/// Pull up to `max_quanta` primitives from one root; the first is always allowed.
 fn drain_capped(
 	world: &mut World,
 	entity: Entity,
@@ -362,90 +373,15 @@ fn drain_capped(
 	clock: &mut DrainClock,
 	max_quanta: u32,
 ) {
-	// Get initial spawned count
-	let Some(job) = world.get::<LodChunkFulfillment>(entity) else {
-		return;
-	};
-	if job.queue.is_empty() {
-		return;
-	}
-	
-	// Spawn primitives until we hit the cap or budget
 	for i in 0..max_quanta {
-		// Guarantee forward progress: allow at least one quantum for incomplete high roots,
-		// even if budget is exhausted. This ensures bounded completion in busy worlds.
-		let allow_continuation = i == 0;
-		if !allow_continuation && (*remaining == 0 || clock.time_up(world, budget)) {
+		if i > 0 && (*remaining == 0 || clock.time_up(world, budget)) {
 			break;
 		}
-		
-		// Try to spawn one quantum
-		let quantum_start = Instant::now();
-		let Some((weight, scene, host, level)) = ({
-			let _pull_span = tracing::trace_span!("lod.drain.pull").entered();
-			pull_next(world, entity)
-		}) else {
+		if !spawn_one_quantum(world, entity, remaining, budget, clock) {
 			break;
-		};
-		let _spawn_span = tracing::trace_span!("lod.drain.spawn", weight).entered();
-		match world.spawn_scene(scene) {
-			Ok(spawned) => {
-				let child = spawned.id();
-				world.entity_mut(entity).add_child(child);
-			}
-			Err(err) => {
-				warn!(
-					?err,
-					host = ?host,
-					level = ?level,
-					"semantic LOD World::spawn_scene failed"
-				);
-			}
 		}
-		clock.quanta = clock.quanta.saturating_add(1);
-		let quantum = quantum_start.elapsed();
-		let over = budget.max_atomic_spawn_cost.is_zero() || quantum > budget.max_atomic_spawn_cost;
-		if over {
-			debug!(
-				host = ?host,
-				level = ?level,
-				elapsed_us = quantum.as_micros(),
-				max_us = budget.max_atomic_spawn_cost.as_micros(),
-				"semantic LOD spawn quantum exceeded max_atomic_spawn_cost"
-			);
-			world
-				.resource_mut::<LodChunkDrainDiagnostics>()
-				.record_overrun(LodChunkAtomicOverrun { host, level, elapsed: quantum });
-		}
-		
-		// Update job spawned count and telemetry
-		if let Some(mut job) = world.get_mut::<LodChunkFulfillment>(entity) {
-			#[cfg(feature = "scene-tracing")]
-			let telemetry = diagnostics::enabled().then(|| {
-				let was_new = job.spawned == 0;
-				let primitives_left = job.queue.len();
-				(was_new, primitives_left)
-			});
-			
-			job.spawned += 1;
-			
-			#[cfg(feature = "scene-tracing")]
-			if let Some((was_new, primitives_left)) = telemetry {
-				if was_new {
-					let root_level = world.get::<LodLevelRoot>(entity).map(|r| r.0);
-					diagnostics::emit_first_spawn_complete(
-						entity,
-						host,
-						root_level,
-						primitives_left,
-						clock.quanta,
-					);
-				}
-			}
-		}
-		
-		*remaining = remaining.saturating_sub(weight);
 	}
+	finish_if_complete(world, entity);
 }
 
 fn drain_one(
@@ -462,7 +398,7 @@ fn drain_one(
 	if job.queue.is_empty() {
 		return true;
 	}
-	
+
 	// Telemetry: log when a new root (spawned==0) is first visited
 	#[cfg(feature = "scene-tracing")]
 	if job.spawned == 0 && diagnostics::enabled() {
@@ -481,11 +417,11 @@ fn drain_one(
 			clock.quanta,
 		);
 	}
-	
+
 	// Guarantee forward progress: allow at least one quantum for roots that have spawned nothing,
 	// even if we're over budget. This prevents starvation of new High roots in busy worlds.
 	let allow_first_quantum = job.spawned == 0;
-	
+
 	// Check budget (but allow first quantum for forward progress)
 	if !allow_first_quantum && (*remaining == 0 || clock.time_up(world, budget)) {
 		return false;
@@ -495,48 +431,66 @@ fn drain_one(
 		// Inside the loop, check if we should continue after the first quantum
 		let job = world.get::<LodChunkFulfillment>(entity).expect("job vanished mid-drain");
 		let is_first = job.spawned == 0;
-		
+
 		if !is_first && (*remaining == 0 || clock.time_up(world, budget)) {
 			break;
 		}
-		let quantum_start = Instant::now();
-		let Some((weight, scene, host, level)) = ({
-			let _pull_span = tracing::trace_span!("lod.drain.pull").entered();
-			pull_next(world, entity)
-		}) else {
+		if !spawn_one_quantum(world, entity, remaining, budget, clock) {
 			break;
-		};
-		let _spawn_span = tracing::trace_span!("lod.drain.spawn", weight).entered();
-		match world.spawn_scene(scene) {
-			Ok(spawned) => {
-				let child = spawned.id();
-				world.entity_mut(entity).add_child(child);
-			}
-			Err(err) => {
-				warn!(
-					?err,
-					host = ?host,
-					level = ?level,
-					"semantic LOD World::spawn_scene failed"
-				);
-			}
 		}
-		clock.quanta = clock.quanta.saturating_add(1);
-		let quantum = quantum_start.elapsed();
-		let over = budget.max_atomic_spawn_cost.is_zero() || quantum > budget.max_atomic_spawn_cost;
-		if over {
-			debug!(
+	}
+
+	finish_if_complete(world, entity);
+	*remaining > 0 && !clock.time_up(world, budget)
+}
+
+/// One timed `pull_primitive` + `World::spawn_scene` quantum. Returns `false` when the queue
+/// had nothing left to pull.
+fn spawn_one_quantum(
+	world: &mut World,
+	entity: Entity,
+	remaining: &mut u32,
+	budget: &LodChunkFulfillBudget,
+	clock: &mut DrainClock,
+) -> bool {
+	let quantum_start = Instant::now();
+	let Some((weight, scene, host, level)) = ({
+		let _pull_span = tracing::trace_span!("lod.drain.pull").entered();
+		pull_next(world, entity)
+	}) else {
+		return false;
+	};
+	let _spawn_span = tracing::trace_span!("lod.drain.spawn", weight).entered();
+	match world.spawn_scene(scene) {
+		Ok(spawned) => {
+			let child = spawned.id();
+			world.entity_mut(entity).add_child(child);
+		}
+		Err(err) => {
+			warn!(
+				?err,
 				host = ?host,
 				level = ?level,
-				elapsed_us = quantum.as_micros(),
-				max_us = budget.max_atomic_spawn_cost.as_micros(),
-				"semantic LOD spawn quantum exceeded max_atomic_spawn_cost"
+				"semantic LOD World::spawn_scene failed"
 			);
-			world
+		}
+	}
+	clock.quanta = clock.quanta.saturating_add(1);
+	let quantum = quantum_start.elapsed();
+	let over = budget.max_atomic_spawn_cost.is_zero() || quantum > budget.max_atomic_spawn_cost;
+	if over {
+		debug!(
+			host = ?host,
+			level = ?level,
+			elapsed_us = quantum.as_micros(),
+			max_us = budget.max_atomic_spawn_cost.as_micros(),
+			"semantic LOD spawn quantum exceeded max_atomic_spawn_cost"
+		);
+		world
 			.resource_mut::<LodChunkDrainDiagnostics>()
 			.record_overrun(LodChunkAtomicOverrun { host, level, elapsed: quantum });
 	}
-	
+
 	if let Some(mut job) = world.get_mut::<LodChunkFulfillment>(entity) {
 		#[cfg(feature = "scene-tracing")]
 		let telemetry = diagnostics::enabled().then(|| {
@@ -544,9 +498,9 @@ fn drain_one(
 			let primitives_left = job.queue.len();
 			(was_new, primitives_left)
 		});
-		
+
 		job.spawned += 1;
-		
+
 		#[cfg(feature = "scene-tracing")]
 		if let Some((was_new, primitives_left)) = telemetry {
 			if was_new {
@@ -561,11 +515,8 @@ fn drain_one(
 			}
 		}
 	}
-		*remaining = remaining.saturating_sub(weight.max(1));
-	}
-
-	finish_if_complete(world, entity);
-	*remaining > 0 && !clock.time_up(world, budget)
+	*remaining = remaining.saturating_sub(weight.max(1));
+	true
 }
 
 fn pull_next(
@@ -670,6 +621,19 @@ mod tests {
 		vis: Visibility,
 		primitives: usize,
 	) -> (Entity, Entity) {
+		spawn_job_under(world, LodSceneLevel::High, desired, root_level, cold, vis, primitives)
+	}
+
+	fn spawn_job_under(
+		world: &mut World,
+		parent_desired: LodSceneLevel,
+		desired: LodSceneLevel,
+		root_level: LodSceneLevel,
+		cold: bool,
+		vis: Visibility,
+		primitives: usize,
+	) -> (Entity, Entity) {
+		let begun_frame = world.resource::<LodChunkDrainCursor>().frame;
 		let host = world.spawn((LodSceneHost, desired)).id();
 		let fulfillment = LodChunkFulfillment {
 			queue: weighted_queue(primitives),
@@ -677,14 +641,20 @@ mod tests {
 			spawned: 0,
 			cold,
 			host,
-			parent_desired: LodSceneLevel::High,
+			parent_desired,
 			nested_streamed: 0,
 			nested_required: None,
+			begun_frame,
 		};
 		let root = world
 			.spawn((LodLevelRoot(root_level), LodLevelRootPending, vis, fulfillment))
 			.id();
 		(host, root)
+	}
+
+	fn next_frame(app: &mut App, weights: u32) {
+		app.world_mut().resource_mut::<LodChunkDrainCursor>().frame += 1;
+		app.world_mut().resource_mut::<LodChunkBudgetClock>().spawn_remaining = weights;
 	}
 
 	#[test]
@@ -783,7 +753,7 @@ mod tests {
 		// After the fix: (1) clock starts after collection, and (2) first quantum
 		// is always allowed for forward progress.
 		let mut app = drain_app();
-		
+
 		// Set a very short time budget to simulate a busy world
 		app.world_mut().resource_mut::<LodChunkFulfillBudget>().spawn_time_per_frame =
 			Duration::from_micros(1); // Impossibly short - will expire during setup
@@ -838,7 +808,7 @@ mod tests {
 		// After fix: guaranteed bounded arrival latency - new roots (spawned==0) are visited
 		// within a small number of frames regardless of how many ongoing roots exist.
 		let mut app = drain_app();
-		
+
 		// Tight budget to simulate busy world
 		app.world_mut().resource_mut::<LodChunkFulfillBudget>().spawn_time_per_frame =
 			Duration::from_micros(1);
@@ -907,96 +877,126 @@ mod tests {
 		);
 	}
 
-	#[test]
-	fn incomplete_high_root_completes_roster_in_bounded_frames() {
-		// Regression test for continuation fairness: after a High root spawns its first primitive,
-		// it should complete its roster in bounded frames, even in a busy world.
-		//
-		// Problem: After spawned>0, a root moves from "new" to "ongoing" round-robin. In a world
-		// with 80 busy roots, the incomplete root waits O(N) frames for its next quantum.
-		//
-		// Fix: Prioritize incomplete High roots (spawned>0, spawned<expected, parent=High) after
-		// new roots but before general round-robin, capped at 2 quanta per root per frame.
+	/// A requested group (cold High root) under ~80 ongoing ambient roots, with two quanta of
+	/// time per frame. Returns frames from first spawn until the roster completed, or `None`.
+	fn frames_to_complete_started_roster(roster: usize, max_frames: usize) -> Option<usize> {
 		let mut app = drain_app();
-		
-		// Tight budget to simulate busy world
-		app.world_mut().resource_mut::<LodChunkFulfillBudget>().spawn_time_per_frame =
-			Duration::from_micros(1);
+		app.world_mut()
+			.insert_resource(LodChunkDrainTimeScript { expire_after_quanta: 2 });
 		app.world_mut().resource_mut::<LodChunkBudgetClock>().spawn_remaining = 200;
 
-		// Create 80 existing busy High/High roots (same tuple band).
+		// Ambient load: warm Medium roots under Medium parents, each mid-fulfillment.
 		for _ in 0..80 {
+			let (_, root) = spawn_job_under(
+				app.world_mut(),
+				LodSceneLevel::Medium,
+				LodSceneLevel::Medium,
+				LodSceneLevel::Medium,
+				false,
+				Visibility::Inherited,
+				40,
+			);
+			app.world_mut().get_mut::<LodChunkFulfillment>(root).unwrap().spawned = 5;
+		}
+		for _ in 0..10 {
+			drain_chunk_lod_fulfill(app.world_mut());
+			next_frame(&mut app, 200);
+		}
+
+		let (_, group) = spawn_job(
+			app.world_mut(),
+			LodSceneLevel::High,
+			LodSceneLevel::High,
+			true,
+			Visibility::Inherited,
+			roster,
+		);
+		let spawned = |app: &App| app.world().get::<LodChunkFulfillment>(group).unwrap().spawned;
+
+		let mut first_spawn = false;
+		for _ in 0..3 {
+			drain_chunk_lod_fulfill(app.world_mut());
+			next_frame(&mut app, 200);
+			if spawned(&app) > 0 {
+				first_spawn = true;
+				break;
+			}
+		}
+		assert!(first_spawn, "requested group must spawn its first primitive within 3 frames");
+
+		for frame in 0..=max_frames {
+			if spawned(&app) >= roster {
+				return Some(frame);
+			}
+			if frame == max_frames {
+				break;
+			}
+			drain_chunk_lod_fulfill(app.world_mut());
+			next_frame(&mut app, 200);
+		}
+		None
+	}
+
+	#[test]
+	fn started_roster_completes_in_bounded_frames_under_busy_ambient_roots() {
+		// #1616: after its first body, a requested group's roster used to wait on ambient
+		// round-robin (or, with a fixed `spawned < 3` threshold, stall after three bodies).
+		// Continuation priority must finish any roster size at two quanta per frame.
+		for roster in [3usize, 11, 24] {
+			let bound = (roster - 1).div_ceil(INCOMPLETE_HIGH_QUANTA_PER_ROOT as usize);
+			let frames = frames_to_complete_started_roster(roster, bound);
+			assert!(
+				frames.is_some(),
+				"{roster}-primitive roster must complete within {bound} frames after its first spawn"
+			);
+		}
+	}
+
+	#[test]
+	fn continuation_priority_caps_roots_per_frame_oldest_first() {
+		// With the clock already expired, only the prioritized roots get their guaranteed
+		// quantum: the oldest `INCOMPLETE_HIGH_ROOTS_PER_FRAME`, never every incomplete root.
+		let mut app = drain_app();
+		app.world_mut()
+			.insert_resource(LodChunkDrainTimeScript { expire_after_quanta: 0 });
+		app.world_mut().resource_mut::<LodChunkBudgetClock>().spawn_remaining = 200;
+
+		let count = 10u64;
+		let mut roots = Vec::new();
+		for i in 0..count {
 			let (_, root) = spawn_job(
 				app.world_mut(),
 				LodSceneLevel::High,
 				LodSceneLevel::High,
-				false, // Desired class
+				false,
 				Visibility::Inherited,
-				20,
+				10,
 			);
-			// Simulate ongoing work: spawned>0, spawned<expected
-			app.world_mut().get_mut::<LodChunkFulfillment>(root).unwrap().spawned = 5;
+			let mut job = app.world_mut().get_mut::<LodChunkFulfillment>(root).unwrap();
+			job.spawned = 1;
+			// Later-spawned entities began earlier, so age (not entity order) must decide.
+			job.begun_frame = count - i;
+			roots.push((count - i, root));
 		}
 
-		// Run drain to advance cursor and let existing roots consume budget
-		for _ in 0..10 {
-			drain_chunk_lod_fulfill(app.world_mut());
-			app.world_mut().resource_mut::<LodChunkDrainCursor>().frame += 1;
-			app.world_mut().resource_mut::<LodChunkBudgetClock>().spawn_remaining = 200;
+		drain_chunk_lod_fulfill(app.world_mut());
+
+		for (begun_frame, root) in roots {
+			let spawned = app.world().get::<LodChunkFulfillment>(root).unwrap().spawned;
+			let prioritized = begun_frame <= INCOMPLETE_HIGH_ROOTS_PER_FRAME as u64;
+			let expected = if prioritized { 2 } else { 1 };
+			assert_eq!(
+				spawned, expected,
+				"root begun at frame {begun_frame}: prioritized={prioritized}, spawned={spawned}"
+			);
 		}
-
-		// Add a new High/High root with 3 primitives
-		let (_new_host, new_root) = spawn_job(
-			app.world_mut(),
-			LodSceneLevel::High,
-			LodSceneLevel::High,
-			false, // Desired class (parent_desired = High = desired)
-			Visibility::Inherited,
-			3, // small roster
-		);
-		app.world_mut().get_mut::<LodChunkFulfillment>(new_root).unwrap().spawned = 0;
-
-		// Drain until first primitive spawns (guaranteed by new-root-first)
-		let mut spawned = 0;
-		for _frame in 0..5 {
-			drain_chunk_lod_fulfill(app.world_mut());
-			spawned = app.world().get::<LodChunkFulfillment>(new_root).unwrap().spawned;
-			if spawned > 0 {
-				break;
-			}
-			app.world_mut().resource_mut::<LodChunkDrainCursor>().frame += 1;
-			app.world_mut().resource_mut::<LodChunkBudgetClock>().spawn_remaining = 200;
-		}
-		assert!(spawned >= 1, "New root must spawn first primitive within 5 frames");
-
-		// Now the root is incomplete (spawned>0, spawned<expected). It should complete its
-		// roster in bounded frames despite the 80 busy roots.
-		//
-		// With 2-quanta-per-frame cap, expected=3 total needs at most ceil((3-1)/2)=1 additional
-		// frame, plus a safety margin for budget exhaustion. Bound at 10 frames.
-		let max_additional_frames = 10;
-		for _frame in 0..max_additional_frames {
-			if spawned >= 3 {
-				break;
-			}
-			drain_chunk_lod_fulfill(app.world_mut());
-			spawned = app.world().get::<LodChunkFulfillment>(new_root).unwrap().spawned;
-			app.world_mut().resource_mut::<LodChunkDrainCursor>().frame += 1;
-			app.world_mut().resource_mut::<LodChunkBudgetClock>().spawn_remaining = 200;
-		}
-
-		assert_eq!(
-			spawned, 3,
-			"Incomplete High root must complete 3-primitive roster within {max_additional_frames} frames, \
-			 but spawned={spawned}. This indicates unbounded continuation delay."
-		);
 	}
 
 	#[test]
 	fn ambient_roots_make_progress_with_incomplete_high() {
 		// Ensure the incomplete-high prioritization doesn't starve ambient (Medium/Low) work.
 		let mut app = drain_app();
-		
+
 		// Use a reasonable budget that allows visiting multiple bands per frame
 		app.world_mut().resource_mut::<LodChunkFulfillBudget>().spawn_time_per_frame =
 			Duration::from_secs(1);
