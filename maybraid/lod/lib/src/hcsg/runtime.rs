@@ -29,6 +29,10 @@ pub(super) fn ensure_runtime(app: &mut App) {
 	app.init_resource::<LodChunkFulfillBudget>()
 		.configure_sets(Update, HcsgSystems.before(LodRefreshSystems::Track))
 		.add_systems(Last, despawn_retired_hosts);
+	#[cfg(feature = "generation-tracing")]
+	if lod_generation_diagnostics::retired_host::enabled() {
+		app.init_resource::<super::presentation::retirement_probe::RetirementProbe>();
+	}
 	if std::env::var_os(DIAG_ENV).is_some() {
 		app.add_systems(Update, log_store_diagnostics);
 	}

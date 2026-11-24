@@ -1,6 +1,8 @@
 //! Opt-in generation diagnostics. Only `lod/generation-tracing` installs callers.
 //! Counters describe operation scope, including nested work, never exclusive CPU.
 
+pub mod retired_host;
+
 use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU64, Ordering};
