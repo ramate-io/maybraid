@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use characters::{CharacterRoot, HeadCapsule, HitCapsule, LocomotionCapsule};
+use damage::HurtboxOf;
 use lod_avian::PhysicsInteractionLayer;
+use projectiles::PenetrationCost;
 
 pub const HIT_VOLUME_NAME: &str = "hit-capsule";
 pub const HEAD_VOLUME_NAME: &str = "head-capsule";
@@ -13,6 +15,13 @@ pub const HEAD_VOLUME_NAME: &str = "head-capsule";
 /// Marker on the query-only child collider.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct HitVolume;
+
+/// Optional compound that replaces the single pronograde capsule on [`HitVolumeKind::Body`].
+///
+/// Shapes are motor-local. The volume child stays at the body origin so yaw
+/// alignment rotates the whole complex.
+#[derive(Component, Clone, Debug)]
+pub struct HitVolumeCollider(pub Collider);
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum HitVolumeKind {
@@ -27,6 +36,13 @@ pub(crate) struct HitVolumeOf(pub Entity);
 /// despawns the leftover entity after physics consumers.
 #[derive(Component, Clone, Copy, Debug)]
 pub(crate) struct PendingHitVolumeDespawn;
+
+/// Point this motor body (and later its query hulls) at a [`damage::Health`] host.
+pub fn bind_hurtbox_host(commands: &mut Commands, body: Entity, host: Entity) {
+	if body != host {
+		commands.entity(body).insert(HurtboxOf(host));
+	}
+}
 
 pub(crate) fn apply_hit_capsule(commands: &mut Commands, body: Entity, hull: LocomotionCapsule) {
 	// Stance / spawn can re-apply hulls in the same flush that retires the body.
@@ -55,11 +71,18 @@ pub(crate) fn apply_hit_capsule(commands: &mut Commands, body: Entity, hull: Loc
 /// Spawn or refresh one sensor child per query hull. Idempotent.
 pub(crate) fn maintain_hit_volumes(
 	bodies: Query<
-		(Entity, Option<&HitCapsule>, Option<&HeadCapsule>),
+		(
+			Entity,
+			Option<&HitCapsule>,
+			Option<&HeadCapsule>,
+			Option<&HurtboxOf>,
+			Option<&HitVolumeCollider>,
+		),
 		Or<(With<HitCapsule>, With<HeadCapsule>)>,
 	>,
 	changed_hit: Query<Entity, Changed<HitCapsule>>,
 	changed_head: Query<Entity, Changed<HeadCapsule>>,
+	changed_complex: Query<Entity, Changed<HitVolumeCollider>>,
 	volumes: Query<(Entity, &HitVolumeOf, &HitVolumeKind)>,
 	mut removed_hit: RemovedComponents<HitCapsule>,
 	mut removed_head: RemovedComponents<HeadCapsule>,
@@ -77,16 +100,22 @@ pub(crate) fn maintain_hit_volumes(
 		despawn_kind(&mut by_key, body, HitVolumeKind::Head, &mut commands);
 	}
 
-	for (body, hit, head) in &bodies {
+	for (body, hit, head, hurtbox, complex) in &bodies {
+		let host = hurtbox.map(HurtboxOf::host).unwrap_or(body);
 		if let Some(hit) = hit {
+			let (transform, collider) = match complex {
+				Some(complex) => (Transform::IDENTITY, complex.0.clone()),
+				None => (hit.local_transform(), Collider::capsule(hit.radius, hit.length)),
+			};
 			maintain_one(
 				&mut by_key,
 				body,
+				host,
 				HitVolumeKind::Body,
 				HIT_VOLUME_NAME,
-				hit.local_transform(),
-				Collider::capsule(hit.radius, hit.length),
-				changed_hit.get(body).is_ok(),
+				transform,
+				collider,
+				changed_hit.get(body).is_ok() || changed_complex.get(body).is_ok(),
 				&mut commands,
 			);
 		} else {
@@ -96,6 +125,7 @@ pub(crate) fn maintain_hit_volumes(
 			maintain_one(
 				&mut by_key,
 				body,
+				host,
 				HitVolumeKind::Head,
 				HEAD_VOLUME_NAME,
 				head.local_transform(),
@@ -135,6 +165,7 @@ fn despawn_kind(
 fn maintain_one(
 	by_key: &mut HashMap<(Entity, HitVolumeKind), Vec<Entity>>,
 	body: Entity,
+	host: Entity,
 	kind: HitVolumeKind,
 	name: &'static str,
 	transform: Transform,
@@ -148,8 +179,9 @@ fn maintain_one(
 			for extra in extras {
 				retire_volume(commands, *extra);
 			}
-			if changed {
-				if let Ok(mut entity) = commands.get_entity(volume) {
+			if let Ok(mut entity) = commands.get_entity(volume) {
+				entity.try_insert((HurtboxOf(host), PenetrationCost(0.0)));
+				if changed {
 					entity.try_insert((collider, transform));
 				}
 			}
@@ -160,10 +192,12 @@ fn maintain_one(
 				HitVolume,
 				kind,
 				HitVolumeOf(body),
+				HurtboxOf(host),
 				ChildOf(body),
 				transform,
 				collider,
 				Sensor,
+				PenetrationCost(0.0),
 				PhysicsInteractionLayer::animated_layers(),
 			));
 		}
@@ -176,7 +210,16 @@ fn retire_volume(commands: &mut Commands, volume: Entity) {
 	};
 	// Drop the Avian collider this frame so physics observers write to a live
 	// entity. Gameplay queries key off [`HitVolume`], which is also removed.
-	entity.remove::<(Collider, Sensor, CollisionLayers, HitVolume, HitVolumeKind, HitVolumeOf)>();
+	entity.remove::<(
+		Collider,
+		Sensor,
+		CollisionLayers,
+		HitVolume,
+		HitVolumeKind,
+		HitVolumeOf,
+		HurtboxOf,
+		PenetrationCost,
+	)>();
 	entity.try_insert(PendingHitVolumeDespawn);
 }
 
@@ -195,7 +238,7 @@ pub(crate) fn despawn_retired_hit_volumes(
 pub(crate) fn align_hit_volumes(
 	visuals: Query<(&Transform, &ChildOf), With<CharacterRoot>>,
 	hulls: Query<
-		(Option<&HitCapsule>, Option<&HeadCapsule>),
+		(Option<&HitCapsule>, Option<&HeadCapsule>, Option<&HitVolumeCollider>),
 		Or<(With<HitCapsule>, With<HeadCapsule>)>,
 	>,
 	mut volumes: Query<(&HitVolumeOf, &HitVolumeKind, &mut Transform), Without<CharacterRoot>>,
@@ -205,10 +248,11 @@ pub(crate) fn align_hit_volumes(
 		facing.entry(child.parent()).or_insert(transform.rotation);
 	}
 	for (of, kind, mut transform) in &mut volumes {
-		let Ok((hit, head)) = hulls.get(of.0) else {
+		let Ok((hit, head, complex)) = hulls.get(of.0) else {
 			continue;
 		};
 		let rest = match kind {
+			HitVolumeKind::Body if complex.is_some() => Some(Transform::IDENTITY),
 			HitVolumeKind::Body => hit.map(|hit| hit.local_transform()),
 			HitVolumeKind::Head => head.map(|head| head.local_transform()),
 		};
@@ -236,6 +280,71 @@ mod tests {
 	fn kind_count(world: &mut World, body: Entity, kind: HitVolumeKind) -> usize {
 		let mut volumes = world.query::<(&HitVolume, &HitVolumeOf, &HitVolumeKind)>();
 		volumes.iter(world).filter(|(_, of, k)| of.0 == body && **k == kind).count()
+	}
+
+	#[test]
+	fn quadruped_sensor_stamps_hurtbox_of_body() -> Result<()> {
+		let mut app = App::new();
+		app.add_systems(Update, maintain_hit_volumes);
+		let host = app.world_mut().spawn_empty().id();
+		let body = app.world_mut().spawn(Transform::IDENTITY).id();
+		app.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				apply_character_controller(&mut commands, body, LocomotionCapsule::QUADRUPED);
+				bind_hurtbox_host(&mut commands, body, host);
+			})
+			.map_err(|err| anyhow!("{err}"))?;
+		app.update();
+		app.update();
+		let mut volumes = app.world_mut().query::<(&HitVolume, &HurtboxOf, &ChildOf)>();
+		let host_of = volumes
+			.iter(app.world())
+			.find(|(_, _, child)| child.parent() == body)
+			.map(|(_, of, _)| of.host());
+		if host_of != Some(host) {
+			return Err(anyhow!("pronograde sensor should debit HurtboxOf host, got {host_of:?}"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn hit_volume_collider_keeps_one_sensor_on_the_host() -> Result<()> {
+		let mut app = App::new();
+		app.add_systems(Update, maintain_hit_volumes);
+		let host = app.world_mut().spawn_empty().id();
+		let body = app.world_mut().spawn(Transform::IDENTITY).id();
+		app.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				apply_character_controller(&mut commands, body, LocomotionCapsule::QUADRUPED);
+				bind_hurtbox_host(&mut commands, body, host);
+				commands.entity(body).insert(HitVolumeCollider(Collider::compound(vec![(
+					Vec3::new(0.0, -0.8, 1.2),
+					Quat::IDENTITY,
+					Collider::capsule(0.2, 0.6),
+				)])));
+			})
+			.map_err(|err| anyhow!("{err}"))?;
+		app.update();
+		app.update();
+		if volume_count(app.world_mut(), body) != 1 {
+			return Err(anyhow!("compound override must stay one HitVolume child"));
+		}
+		let mut volumes = app.world_mut().query::<(&HitVolume, &HurtboxOf, &Transform, &ChildOf)>();
+		let Some((_, of, transform, _)) =
+			volumes.iter(app.world()).find(|(_, _, _, child)| child.parent() == body)
+		else {
+			return Err(anyhow!("missing hit volume"));
+		};
+		if of.host() != host {
+			return Err(anyhow!("compound volume must debit HurtboxOf host"));
+		}
+		if transform.translation.length() > 1e-4 {
+			return Err(anyhow!(
+				"compound volume stays at the motor origin, got {}",
+				transform.translation
+			));
+		}
+		Ok(())
 	}
 
 	#[test]

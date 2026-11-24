@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use crate::activation::{
 	LubikanActivation, LubikanActivationDenied, LubikanActivationGrant, LubikanActivationOutcome,
-	LubikanActivationSessionId, LubikanReadiness,
+	LubikanActivationPhase, LubikanActivationSessionId, LubikanReadiness,
 };
 use crate::catalog::{LubikanCatalog, LubikanSelfConfig};
 use crate::charge::{LubikanCharge, LubikanChargeMutation};
@@ -15,6 +15,56 @@ use crate::selection::LubikanSelection;
 /// Marker on a body that owns a [`LubikanLedger`].
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LubikanOwner;
+
+/// Play-session / selected-character owner. Holds the [`LubikanLedger`] for
+/// the life of the session. Bodies point here through [`LubikanBodyOf`].
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LubikanCharacter;
+
+/// Body → session owner. The ledger lives on the target, not on the capsule.
+#[derive(Component, Debug, Clone, Copy)]
+#[relationship(relationship_target = LubikanBodies)]
+pub struct LubikanBodyOf(pub Entity);
+
+impl LubikanBodyOf {
+	pub fn character(&self) -> Entity {
+		self.0
+	}
+
+	/// Entity that holds [`LubikanLedger`] for `body`. Fixtures that still
+	/// stamp the ledger on the same entity fall back to `body`.
+	pub fn holder(world: &World, body: Entity) -> Entity {
+		world.get::<Self>(body).map(Self::character).unwrap_or(body)
+	}
+
+	pub fn ledger(world: &World, body: Entity) -> Option<&LubikanLedger> {
+		world.get::<LubikanLedger>(Self::holder(world, body))
+	}
+
+	pub fn ledger_mut(world: &mut World, body: Entity) -> Option<Mut<'_, LubikanLedger>> {
+		let holder = world.get::<Self>(body).map(Self::character).unwrap_or(body);
+		world.get_mut(holder)
+	}
+
+	pub fn binding(world: &World, body: Entity) -> Option<&LubikanAccountBinding> {
+		world.get::<LubikanAccountBinding>(Self::holder(world, body))
+	}
+}
+
+/// Bodies currently attached to a [`LubikanCharacter`].
+#[derive(Component, Debug)]
+#[relationship_target(relationship = LubikanBodyOf)]
+pub struct LubikanBodies(Vec<Entity>);
+
+impl LubikanBodies {
+	pub fn iter(&self) -> impl Iterator<Item = Entity> + '_ {
+		self.0.iter().copied()
+	}
+
+	pub fn current(&self) -> Option<Entity> {
+		self.0.last().copied()
+	}
+}
 
 /// Equipped account snapshotted at bind or event resolution.
 ///
@@ -111,7 +161,6 @@ impl LubikanAccount {
 /// Owned Lubikan accounts for one owner. Self is always present and cannot
 /// be removed or merged into another account.
 #[derive(Component, Clone, Debug, PartialEq)]
-#[component(on_remove = crate::plugin::capture_retiring_ledger)]
 pub struct LubikanLedger {
 	accounts: Vec<LubikanAccount>,
 	selection: LubikanSelection,
@@ -308,7 +357,49 @@ impl LubikanLedger {
 		}
 	}
 
+	pub fn activation_phase(
+		&self,
+		session: LubikanActivationSessionId,
+	) -> Option<LubikanActivationPhase> {
+		self.accounts.iter().find_map(|account| {
+			(account.activation.session == Some(session)).then_some(account.activation.phase)
+		})
+	}
+
+	pub fn account_id_for_session(
+		&self,
+		session: LubikanActivationSessionId,
+	) -> Option<LubikanAccountId> {
+		self.accounts
+			.iter()
+			.find_map(|account| (account.activation.session == Some(session)).then_some(account.id))
+	}
+
+	/// Close an accepted session by id. Mutates at most once per outcome.
+	///
+	/// Completing Self returns that account to Idle in this call so a later
+	/// activate in the same life can spend. Completing any other account leaves
+	/// [`LubikanActivationPhase::Completed`] until that consumer migrates.
+	/// Unknown ids and a repeated completed report leave the ledger unchanged.
+	pub fn close_activation(
+		&mut self,
+		session: LubikanActivationSessionId,
+		outcome: LubikanActivationOutcome,
+	) -> bool {
+		let Some(account) = self.account_id_for_session(session) else {
+			return false;
+		};
+		if !self.finish_activation(session, outcome) {
+			return false;
+		}
+		if outcome == LubikanActivationOutcome::Completed && account.returns_idle_on_complete() {
+			self.reset_activation(account);
+		}
+		true
+	}
+
 	/// Close an accepted session by id. Unknown ids leave the ledger unchanged.
+	/// A second completed report for the same session is a no-op.
 	pub fn finish_activation(
 		&mut self,
 		session: LubikanActivationSessionId,
@@ -322,10 +413,20 @@ impl LubikanLedger {
 			return false;
 		};
 		match outcome {
-			LubikanActivationOutcome::Completed => owned.activation.complete(),
-			LubikanActivationOutcome::Cancelled => owned.activation.reset(),
+			LubikanActivationOutcome::Completed
+				if owned.activation.phase == LubikanActivationPhase::Completed =>
+			{
+				false
+			}
+			LubikanActivationOutcome::Completed => {
+				owned.activation.complete();
+				true
+			}
+			LubikanActivationOutcome::Cancelled => {
+				owned.activation.reset();
+				true
+			}
 		}
-		true
 	}
 
 	/// Apply a lifetime policy. Self remains owned.
@@ -495,6 +596,44 @@ mod tests {
 		assert_eq!(
 			ledger.account(LubikanAccountId::SELF).map(|account| account.activation().phase),
 			Some(LubikanActivationPhase::Idle)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn close_activation_idles_self_once_and_leaves_other_completed() -> Result<()> {
+		let catalog = LubikanCatalog::default();
+		let mut ledger = LubikanLedger::default();
+		let extra = extra(40.0);
+		let other = ledger.ensure_owned(extra);
+		ledger.apply_to(LubikanAccountId::SELF, catalog.activation_cost(LubikanDefinitionId::SELF));
+		ledger.apply_to(other, extra.activation_cost);
+		let self_grant = ledger.try_activate(&catalog, Some(LubikanAccountId::SELF))?;
+		if !ledger.close_activation(self_grant.id, LubikanActivationOutcome::Completed) {
+			return Err(anyhow!("close Self"));
+		}
+		assert_eq!(
+			ledger.account(LubikanAccountId::SELF).map(|account| account.activation().phase),
+			Some(LubikanActivationPhase::Idle)
+		);
+		if ledger.close_activation(self_grant.id, LubikanActivationOutcome::Completed) {
+			return Err(anyhow!("repeated Self close must not mutate"));
+		}
+
+		let other_grant = ledger.try_activate(&catalog, Some(other))?;
+		if !ledger.close_activation(other_grant.id, LubikanActivationOutcome::Completed) {
+			return Err(anyhow!("close other"));
+		}
+		assert_eq!(
+			ledger.account(other).map(|account| account.activation().phase),
+			Some(LubikanActivationPhase::Completed)
+		);
+		if ledger.close_activation(other_grant.id, LubikanActivationOutcome::Completed) {
+			return Err(anyhow!("repeated other complete must not mutate"));
+		}
+		assert_eq!(
+			ledger.account(other).map(|account| account.activation().phase),
+			Some(LubikanActivationPhase::Completed)
 		);
 		Ok(())
 	}

@@ -18,6 +18,10 @@ impl PendingMobGroups {
 	pub fn is_empty(&self) -> bool {
 		self.groups.is_empty()
 	}
+
+	pub fn len(&self) -> usize {
+		self.groups.len()
+	}
 }
 
 pub struct MobGroupsPlugin;

@@ -4,10 +4,15 @@ use bevy::prelude::*;
 
 use crate::{KnownPoi, PoiId, PoiVisitPolicy};
 
+/// Cooldown after an unreachable pin is abandoned. Separate from arrival visits
+/// so a blocked pin is skipped briefly, then eligible again.
+pub const FAILED_POI_RETRY_SECS: f32 = 2.0;
+
 /// Visit history and the explicit roster/cursor used by cycle policies.
 #[derive(Component, Clone, Debug, Default)]
 pub struct PoiVisitState {
 	last_visited_at: BTreeMap<PoiId, f32>,
+	last_failed_at: BTreeMap<PoiId, f32>,
 	visit_counts: BTreeMap<PoiId, u32>,
 	cycle_roster: Vec<PoiId>,
 	cycle_cursor: usize,
@@ -82,8 +87,22 @@ impl PoiVisitState {
 
 	pub fn complete(&mut self, id: PoiId, now: f32) {
 		self.last_visited_at.insert(id, now);
+		self.last_failed_at.remove(&id);
 		let count = self.visit_counts.entry(id).or_default();
 		*count = count.saturating_add(1);
+	}
+
+	pub fn note_failure(&mut self, id: PoiId, now: f32) {
+		self.last_failed_at.insert(id, now);
+	}
+
+	pub fn last_failed_at(&self, id: PoiId) -> Option<f32> {
+		self.last_failed_at.get(&id).copied()
+	}
+
+	pub fn failed_recently(&self, id: PoiId, now: f32) -> bool {
+		self.last_failed_at(id)
+			.is_some_and(|failed_at| (now - failed_at).max(0.0) < FAILED_POI_RETRY_SECS)
 	}
 }
 
@@ -100,19 +119,22 @@ pub fn choose_poi(
 			if roster_size == 0 {
 				return None;
 			}
-			state.reconcile_cycle(roster_size, |id| {
-				candidates.iter().any(|candidate| candidate.id == id)
-			});
+			let cooling: Vec<PoiId> = candidates
+				.iter()
+				.filter(|candidate| state.failed_recently(candidate.id, now))
+				.map(|candidate| candidate.id)
+				.collect();
+			let available = |id| {
+				candidates.iter().any(|candidate| candidate.id == id) && !cooling.contains(&id)
+			};
+			state.reconcile_cycle(roster_size, available);
 			if state.cycle_roster.len() >= roster_size {
-				return state.next_cycle(reshuffle_each_cycle, |id| {
-					candidates.iter().any(|candidate| candidate.id == id)
-				});
+				return state.next_cycle(reshuffle_each_cycle, available);
 			}
 			let selected = best(
-				candidates
-					.iter()
-					.copied()
-					.filter(|candidate| !state.cycle_roster.contains(&candidate.id)),
+				candidates.iter().copied().filter(|candidate| {
+					!state.cycle_roster.contains(&candidate.id) && !cooling.contains(&candidate.id)
+				}),
 				&mut score,
 			)
 			.map(|candidate| candidate.id);
@@ -133,6 +155,9 @@ pub fn choose_poi(
 			let mut fresh = Vec::new();
 			let mut cooled = Vec::new();
 			for candidate in candidates.iter().copied() {
+				if state.failed_recently(candidate.id, now) {
+					continue;
+				}
 				let base = score(candidate);
 				if !base.is_finite() || base <= 0.0 {
 					continue;

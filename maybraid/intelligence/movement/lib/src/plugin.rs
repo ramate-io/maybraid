@@ -10,13 +10,13 @@ use intelligence_lod::{
 	IntelligenceBand, IntelligenceDueEntities, IntelligenceLod, IntelligencePriority,
 };
 
+use crate::MovementIntelligenceSystems;
 use crate::ability::MovementSheet;
 use crate::configure_movement_intelligence_sets;
 use crate::location::MovementLocation;
 use crate::step::MovementDrive;
 use crate::surface::{MovementIntelligenceLimits, MovementIntelligenceSurface, WalkProbeBudget};
 use crate::user::{MovementDriveResult, MovementIntelligence, ReplanMovement};
-use crate::MovementIntelligenceSystems;
 
 /// Registers replan + drive for surface `S` and interaction / ability types `I`, `A`.
 pub struct MovementIntelligencePlugin<S, I = crate::MovementStep, A = crate::MovementAbility>
@@ -59,7 +59,13 @@ pub fn replan_movement<S, I, A>(
 	limits: Res<MovementIntelligenceLimits>,
 	priority: Res<IntelligencePriority>,
 	mut movers: Query<
-		(Entity, &Transform, &mut MovementIntelligence<I, A>, Option<&mut IntelligenceLod>),
+		(
+			Entity,
+			&Transform,
+			Option<&GlobalTransform>,
+			&mut MovementIntelligence<I, A>,
+			Option<&mut IntelligenceLod>,
+		),
 		With<ReplanMovement>,
 	>,
 	mut commands: Commands,
@@ -79,7 +85,7 @@ pub fn replan_movement<S, I, A>(
 	}
 	let due = due_entities.finish(&priority);
 	let fair = due.iter().copied().find(|entity| {
-		movers.get_mut(*entity).is_ok_and(|(_, _, _, lod)| {
+		movers.get_mut(*entity).is_ok_and(|(_, _, _, _, lod)| {
 			lod.as_deref().is_some_and(|lod| {
 				lod.band != IntelligenceBand::Near && lod.skips >= IntelligenceLod::FAIRNESS_CAP
 			})
@@ -90,7 +96,7 @@ pub fn replan_movement<S, I, A>(
 		if remaining == 0 || probes.is_exhausted() {
 			break;
 		}
-		let Ok((_, transform, mut brain, mut lod)) = movers.get_mut(entity) else {
+		let Ok((_, transform, global, mut brain, mut lod)) = movers.get_mut(entity) else {
 			continue;
 		};
 		let band = IntelligenceLod::band_or_near(lod.as_deref());
@@ -98,14 +104,15 @@ pub fn replan_movement<S, I, A>(
 			continue;
 		}
 		remaining -= 1;
-		let from = MovementLocation::new(transform.translation, brain.ability.agent_radius());
+		let at = pose_translation(transform, global);
+		let from = MovementLocation::new(at, brain.ability.agent_radius());
 		let exclude = [entity];
 		let objective = brain.objective;
 		let budget = brain
 			.ability
 			.candidate_budget()
 			.clamp_to(limits.max_budget)
-			.lod_for(transform.translation, objective)
+			.lod_for(at, objective)
 			.clamp_viewer(band);
 		let candidates = surface.recommend_candidates_budgeted(
 			from,
@@ -132,17 +139,27 @@ pub fn replan_movement<S, I, A>(
 	}
 }
 
+fn pose_translation(transform: &Transform, global: Option<&GlobalTransform>) -> Vec3 {
+	global.map(|global| global.translation()).unwrap_or(transform.translation)
+}
+
 pub fn drive_movement<I, A>(
 	time: Res<Time>,
-	mut movers: Query<(Entity, &Transform, &mut MovementIntelligence<I, A>, &mut MotorIntent)>,
+	mut movers: Query<(
+		Entity,
+		&Transform,
+		Option<&GlobalTransform>,
+		&mut MovementIntelligence<I, A>,
+		&mut MotorIntent,
+	)>,
 	mut commands: Commands,
 ) where
 	I: MovementDrive + Send + Sync + 'static,
 	A: Send + Sync + 'static,
 {
 	let dt = time.delta_secs();
-	for (entity, transform, mut brain, mut intent) in &mut movers {
-		let sample = match brain.drive(dt, transform.translation) {
+	for (entity, transform, global, mut brain, mut intent) in &mut movers {
+		let sample = match brain.drive(dt, pose_translation(transform, global)) {
 			MovementDriveResult::Wish(dir) => MotorSample::translation(dir),
 			MovementDriveResult::Stuck { wish: dir } => {
 				if dir.length_squared() < 1e-6 {
@@ -390,18 +407,18 @@ mod tests {
 				MotorIntent::default(),
 			))
 			.id();
-		anyhow::ensure!(world
-			.run_system_once(drive_movement::<MovementStep, MovementAbility>)
-			.is_ok());
+		anyhow::ensure!(
+			world.run_system_once(drive_movement::<MovementStep, MovementAbility>).is_ok()
+		);
 		let before = world
 			.entity(entity)
 			.get_change_ticks::<MotorIntent>()
 			.ok_or_else(|| anyhow::anyhow!("missing intent"))?
 			.changed
 			.get();
-		anyhow::ensure!(world
-			.run_system_once(drive_movement::<MovementStep, MovementAbility>)
-			.is_ok());
+		anyhow::ensure!(
+			world.run_system_once(drive_movement::<MovementStep, MovementAbility>).is_ok()
+		);
 		let after = world
 			.entity(entity)
 			.get_change_ticks::<MotorIntent>()

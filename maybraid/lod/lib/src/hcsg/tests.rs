@@ -1,7 +1,9 @@
+mod publish_invalidation;
+
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bevy::math::{DVec3, Vec3};
 use bevy::shape::Aabb3d;
@@ -54,6 +56,24 @@ fn yield_quantum(
 }
 
 const IDLE: Duration = Duration::from_secs(10);
+
+/// `try_read_published` uses `try_lock`. After `wait_idle` the worker can
+/// already hold that lock for the next sweep, so a single Busy must not look
+/// like a missing publication.
+fn published_ids(demand: &HcsgDemand, id: SubscriptionId) -> Option<Vec<Id>> {
+	let deadline = Instant::now() + IDLE;
+	loop {
+		match demand.try_read_published(id, 0) {
+			Ok(published) => return published,
+			Err(_) => {
+				if Instant::now() >= deadline {
+					return None;
+				}
+				std::thread::yield_now();
+			}
+		}
+	}
+}
 
 /// Session root every [`Ground`] reads.
 struct Root {
@@ -462,11 +482,11 @@ fn a_panicking_scheme_does_not_stop_the_worker() -> anyhow::Result<()> {
 
 	let panicky = subscribe::<Panicky>(&demand, None, vec![span(0.0, 1.0)], None);
 	assert!(demand.wait_idle(IDLE));
-	assert_eq!(demand.try_read_published(panicky, 0), Ok(Some(Vec::new())));
+	assert_eq!(published_ids(&demand, panicky), Some(Vec::new()));
 
 	let ground = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], None);
 	assert!(demand.wait_idle(IDLE));
-	assert_eq!(demand.try_read_published(ground, 0).ok().flatten().map(|ids| ids.len()), Some(1));
+	assert_eq!(published_ids(&demand, ground).map(|ids| ids.len()), Some(1));
 	Ok(())
 }
 

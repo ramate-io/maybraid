@@ -9,6 +9,9 @@ use crate::objective::MovementObjective;
 use crate::step::{MovementDrive, MovementStep};
 
 const FAILED_PLAN_RETRY_SECONDS: f32 = 0.6;
+/// Consecutive empty replans before a higher-order brain should drop this
+/// objective. Meandering uses this to hand an unreachable pin back to selection.
+pub const FAILED_PLAN_HANDOFF_ATTEMPTS: u32 = 3;
 const MIN_TRANSIT_CORRIDOR: f32 = 0.55;
 const MAX_TRANSIT_CORRIDOR: f32 = 0.9;
 const TRANSIT_CORRIDOR_PADDING: f32 = 0.45;
@@ -54,6 +57,10 @@ where
 	pub stuck_seconds: f32,
 	pub last_goal_distance: f32,
 	pub failed_plan_retry_seconds: Option<f32>,
+	/// Empty-replan streak since the last adopted plan, scoped to
+	/// [`Self::failed_plan_objective`].
+	pub failed_plan_attempts: u32,
+	failed_plan_objective: Option<MovementObjective>,
 	pub transit_segment_start: Option<Vec3>,
 	pub transit_closest_distance: f32,
 }
@@ -69,6 +76,8 @@ impl MovementIntelligence {
 			stuck_seconds: 0.0,
 			last_goal_distance: f32::MAX,
 			failed_plan_retry_seconds: None,
+			failed_plan_attempts: 0,
+			failed_plan_objective: None,
 			transit_segment_start: None,
 			transit_closest_distance: f32::MAX,
 		}
@@ -95,6 +104,8 @@ where
 		self.stuck_seconds = 0.0;
 		self.last_goal_distance = f32::MAX;
 		self.failed_plan_retry_seconds = None;
+		self.failed_plan_attempts = 0;
+		self.failed_plan_objective = Some(self.objective);
 		self.transit_segment_start = None;
 		self.transit_closest_distance = f32::MAX;
 	}
@@ -102,7 +113,20 @@ where
 	/// Keep an active route when a refresh finds nothing, then retry if that
 	/// route runs out instead of silently stopping.
 	pub fn note_replan_failed(&mut self) {
+		if self.failed_plan_objective != Some(self.objective) {
+			self.failed_plan_attempts = 0;
+			self.failed_plan_objective = Some(self.objective);
+		}
 		self.failed_plan_retry_seconds = Some(0.0);
+		self.failed_plan_attempts = self.failed_plan_attempts.saturating_add(1);
+	}
+
+	/// True once [`FAILED_PLAN_HANDOFF_ATTEMPTS`] empty replans have stacked
+	/// against the *current* objective. A new `Reach` does not inherit the
+	/// previous pin's streak.
+	pub fn plan_failures_exhausted(&self) -> bool {
+		self.failed_plan_objective == Some(self.objective)
+			&& self.failed_plan_attempts >= FAILED_PLAN_HANDOFF_ATTEMPTS
 	}
 
 	pub fn at_plan_end(&self) -> bool {
@@ -369,6 +393,37 @@ mod tests {
 
 		brain.cursor = brain.plan.len();
 		assert_eq!(brain.drive(FAILED_PLAN_RETRY_SECONDS, Vec3::ZERO), MovementDriveResult::Retry);
+		Ok(())
+	}
+
+	#[test]
+	fn empty_replans_exhaust_after_bounded_attempts() -> anyhow::Result<()> {
+		let mut brain = MovementIntelligence::new(vantage());
+		assert!(!brain.plan_failures_exhausted());
+		for _ in 0..FAILED_PLAN_HANDOFF_ATTEMPTS {
+			brain.note_replan_failed();
+		}
+		assert!(brain.plan_failures_exhausted());
+		brain.adopt_plan(vec![MovementStep::MoveTo(MovementLocation::new(Vec3::X, 0.4))]);
+		assert!(!brain.plan_failures_exhausted());
+		Ok(())
+	}
+
+	#[test]
+	fn empty_replans_do_not_follow_a_new_objective() -> anyhow::Result<()> {
+		let first = vantage();
+		let mut brain = MovementIntelligence::new(first);
+		for _ in 0..FAILED_PLAN_HANDOFF_ATTEMPTS {
+			brain.note_replan_failed();
+		}
+		assert!(brain.plan_failures_exhausted());
+		brain.objective = MovementObjective::Reach(MovementLocation::new(Vec3::X * 8.0, 0.4));
+		assert!(
+			!brain.plan_failures_exhausted(),
+			"a new Reach must not inherit the previous pin's retry streak"
+		);
+		brain.note_replan_failed();
+		assert_eq!(brain.failed_plan_attempts, 1);
 		Ok(())
 	}
 

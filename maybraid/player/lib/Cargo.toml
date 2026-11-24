@@ -17,6 +17,7 @@ character-rigs = { workspace = true }
 damage = { workspace = true }
 durham = { workspace = true }
 lod-avian = { workspace = true }
+projectiles = { workspace = true }
 character-animations = { workspace = true }
 maybraid-audio = { workspace = true }
 maybraid-character-controller = { workspace = true }

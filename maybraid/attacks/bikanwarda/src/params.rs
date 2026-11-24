@@ -24,6 +24,29 @@ impl BikanwardaAttackParams {
 		god_beam: GodBeamParams::PLACEHOLDER,
 		bray: BrayParams::PLACEHOLDER,
 	};
+
+	/// Scale authored meter fields with the encounter form (20 m hull → live height).
+	pub fn scaled_linear(mut self, scale: f32) -> Self {
+		self.parade.first_distance *= scale;
+		self.parade.spacing *= scale;
+		self.parade.blast_radius *= scale;
+		self.parade.line_half_width *= scale;
+		self.parade.blast_height *= scale;
+		if let Some(falloff) = self.parade.blast_falloff.as_mut() {
+			*falloff *= scale;
+		}
+		self.god_beam.column_width *= scale;
+		self.god_beam.column_height *= scale;
+		if let Some(radius) = self.god_beam.telegraph_radius.as_mut() {
+			*radius *= scale;
+		}
+		self.bray.radius *= scale;
+		self.bray.range *= scale;
+		self.bray.half_depth *= scale;
+		self.bray.telegraph_half_width *= scale;
+		self.bray.rumble_radius *= scale;
+		self
+	}
 }
 
 impl Default for BikanwardaAttackParams {
@@ -285,5 +308,14 @@ mod tests {
 		let needed = f32::from(params.waves - 1) * params.interval + params.range / params.speed;
 		assert!(params.execution() + 1e-4 >= needed);
 		Ok(())
+	}
+
+	#[test]
+	fn scaled_linear_shrinks_meter_fields_not_time() {
+		let scaled = BikanwardaAttackParams::PLACEHOLDER.scaled_linear(0.335);
+		assert!((scaled.bray.range - BrayParams::PLACEHOLDER.range * 0.335).abs() < 1e-4);
+		assert!((scaled.bray.radius - BrayParams::PLACEHOLDER.radius * 0.335).abs() < 1e-4);
+		assert!((scaled.bray.windup - BrayParams::PLACEHOLDER.windup).abs() < 1e-6);
+		assert!((scaled.god_beam.execution - GodBeamParams::PLACEHOLDER.execution).abs() < 1e-6);
 	}
 }

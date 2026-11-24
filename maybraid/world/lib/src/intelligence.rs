@@ -142,6 +142,12 @@ impl Plugin for WorldIntelligencePlugin {
 			)
 			.configure_sets(
 				Update,
+				TetherSystems::Reclaim
+					.after(FirearmIntelligenceSystems::Movement)
+					.run_if(on_timer(Duration::from_millis(125))),
+			)
+			.configure_sets(
+				Update,
 				(EvasionSystems::Ingest, EvasionSystems::Rank)
 					.chain()
 					.after(SpottingSystems::Observe)

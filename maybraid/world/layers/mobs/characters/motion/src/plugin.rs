@@ -4,6 +4,7 @@ use bevy::prelude::*;
 
 use intelligence_lod::{IntelligenceFocus, IntelligenceLookFrame, IntelligencePriority};
 
+use crate::actor_rig::bind_actor_body_rigs;
 use crate::clip_cache::AnimClipCache;
 use crate::cue::{prepare_anim_clip_cues, tick_anim_clip_cues};
 use crate::elevation::{DrawTerrainPitchProbes, draw_terrain_pitch_probes};
@@ -102,6 +103,7 @@ impl Plugin for CharacterMotionPlugin {
 			.init_resource::<MailboxApplyLimits>()
 			.init_resource::<MailboxApplySet>()
 			.init_resource::<AnimClipCache>()
+			.add_systems(PreUpdate, bind_actor_body_rigs)
 			.configure_sets(
 				Update,
 				CharacterMotionSystems::Elevation.after(CharacterMotionSystems::Anim),

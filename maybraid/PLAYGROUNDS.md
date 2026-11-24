@@ -16,6 +16,12 @@ If the crate is also a **library** used by world or another host, retire the **b
 
 ## Retired
 
+### `maybraid/world/materials/chain-playground`
+
+- **Last commit:** [`c437b98bf5ed236a287588906a2aa2671e7b0aa4`](https://github.com/ramate-io/maybraid/commit/c437b98bf5ed236a287588906a2aa2671e7b0aa4)
+- **Did:** Isolated mythical-chain host (`/show pair`, hits, day/night, visual style, 30 Hz evidence capture).
+- **Replacement:** [`world-materials-playground`](world/materials/playground/) `chain …` commands. Evidence moved to [`world/materials/lib/evidence/chain`](world/materials/lib/evidence/chain). The shader itself moved into `world-materials::chain`.
+
 Last commit that still contained the trees below: [`9a9a74c6901ed4d7799a4e87d16f74d7dd3b9e47`](https://github.com/ramate-io/maybraid/commit/9a9a74c6901ed4d7799a4e87d16f74d7dd3b9e47).
 
 ### `maybraid/world/layers/vegetation/sbs-trees-playground`

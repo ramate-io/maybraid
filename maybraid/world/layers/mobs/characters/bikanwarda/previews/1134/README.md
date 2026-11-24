@@ -1,6 +1,6 @@
 # Bikanwarda assembly validation ([#1134](https://github.com/ramate-io/maybraid/issues/1134))
 
-Boss-scale Epiphant stills reuse the [#1130](https://github.com/ramate-io/maybraid/issues/1130) capture harness; encounter scale comes from [`encounter_uniform_scale()`](../../src/measure.rs) in `bikanwarda-character` (~10.5× for a 20 m motor envelope).
+Boss-scale Epiphant stills reuse the [#1130](https://github.com/ramate-io/maybraid/issues/1130) capture harness; encounter scale comes from [`encounter_uniform_scale()`](../../src/measure.rs) in `bikanwarda-character` (~3.5× for a 6.7 m motor envelope).
 
 | File | Notes |
 |------|-------|

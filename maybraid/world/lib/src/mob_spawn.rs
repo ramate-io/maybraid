@@ -8,7 +8,9 @@ use barking::{GroupKind, MobEnvironmentSample, MobGroup, PendingMobGroups, Place
 use bevy::prelude::*;
 use durham::DurhamSurface;
 use game_commands::command::CommandConsoleOutput;
+use mob_intelligence::MemberOf;
 use mob_scenes::{MobKind, MobScene};
+use player::Npc;
 use world_player::{surface_or_hold_at, Player};
 
 #[derive(Component, Clone, Debug, PartialEq)]
@@ -20,6 +22,9 @@ pub struct RequestSpawnMobs {
 	pub spacing: f32,
 	pub seed: u32,
 }
+
+#[derive(Component, Clone, Copy, Debug)]
+pub struct RequestMobInspect;
 
 impl RequestSpawnMobs {
 	/// Row-major square grid centered on `center`, `spacing` apart.
@@ -43,7 +48,31 @@ impl RequestSpawnMobs {
 	}
 }
 
+#[cfg(any(test, feature = "test-support", feature = "debug-commands"))]
+pub fn apply_spawn_mob_requests(
+	mut commands: Commands,
+	requests: Query<(Entity, &RequestSpawnMobs)>,
+	players: Query<&Transform, With<Player>>,
+	surface: DurhamSurface,
+	pending: Option<ResMut<PendingMobGroups>>,
+	mut console: Option<ResMut<CommandConsoleOutput>>,
+) {
+	apply_spawn_mob_requests_impl(commands, requests, players, surface, pending, console)
+}
+
+#[cfg(not(any(test, feature = "test-support", feature = "debug-commands")))]
 pub(crate) fn apply_spawn_mob_requests(
+	mut commands: Commands,
+	requests: Query<(Entity, &RequestSpawnMobs)>,
+	players: Query<&Transform, With<Player>>,
+	surface: DurhamSurface,
+	pending: Option<ResMut<PendingMobGroups>>,
+	mut console: Option<ResMut<CommandConsoleOutput>>,
+) {
+	apply_spawn_mob_requests_impl(commands, requests, players, surface, pending, console)
+}
+
+fn apply_spawn_mob_requests_impl(
 	mut commands: Commands,
 	requests: Query<(Entity, &RequestSpawnMobs)>,
 	players: Query<&Transform, With<Player>>,
@@ -104,6 +133,65 @@ pub(crate) fn apply_spawn_mob_requests(
 			extent: request.spacing * (request.count as f32).sqrt().ceil(),
 			mobs,
 		});
+	}
+}
+
+pub(crate) fn apply_mob_inspect(
+	mut commands: Commands,
+	requests: Query<Entity, With<RequestMobInspect>>,
+	hosts: Query<&MobScene>,
+	members: Query<&MemberOf>,
+	npcs: Query<&Npc>,
+	pending: Option<Res<PendingMobGroups>>,
+	players: Query<&GlobalTransform, With<Player>>,
+	mut console: Option<ResMut<CommandConsoleOutput>>,
+) {
+	if requests.is_empty() {
+		return;
+	}
+	for entity in &requests {
+		commands.entity(entity).despawn();
+	}
+
+	let host_count = hosts.iter().count();
+	let member_count = members.iter().count();
+	let npc_count = npcs.iter().count();
+	let pending_count = pending.map_or(0, |p| p.len());
+
+	let nearby_info = if let Ok(player_transform) = players.single() {
+		let player_pos = player_transform.translation();
+		let nearby_hosts: Vec<_> = hosts
+			.iter()
+			.filter_map(|scene| {
+				let dist = scene.center.distance(player_pos);
+				if dist < 100.0 {
+					Some((scene.mob.kind, dist))
+				} else {
+					None
+				}
+			})
+			.collect();
+		format!(
+			", {} nearby (<100m)",
+			if nearby_hosts.is_empty() {
+				"none".to_string()
+			} else {
+				let list: Vec<_> =
+					nearby_hosts.iter().map(|(kind, dist)| format!("{:?}@{:.1}m", kind, dist)).collect();
+				list.join(", ")
+			}
+		)
+	} else {
+		String::new()
+	};
+
+	let line = format!(
+		"mobs: {} host(s), {} member(s), {} npc(s), {} pending group(s){}",
+		host_count, member_count, npc_count, pending_count, nearby_info
+	);
+	info!(target: "maybraid.mobs", "{line}");
+	if let Some(console) = console.as_mut() {
+		console.0 = line;
 	}
 }
 

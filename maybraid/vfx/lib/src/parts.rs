@@ -4,3 +4,4 @@ pub mod flipbook_card;
 pub mod lobe;
 pub mod packaged;
 pub mod particle;
+pub mod soundwave;

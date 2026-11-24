@@ -8,7 +8,7 @@ use characters::{
 };
 
 use crate::body::{
-	CharacterController, Grounded, Jumping, MoveWish, JOG_SPEED, LEAP_SPEED, MOVE_SPEED,
+	CharacterController, Grounded, JOG_SPEED, Jumping, LEAP_SPEED, MOVE_SPEED, MoveWish,
 };
 use crate::identity::PlayerYawOwner;
 use crate::stance::{CharacterStance, StanceKind};
@@ -37,11 +37,7 @@ impl StandLocomotionBand {
 			Self::Still => STAND_MOVE_ENTER,
 			Self::Moving => STAND_MOVE_EXIT,
 		};
-		if speed > threshold {
-			Self::Moving
-		} else {
-			Self::Still
-		}
+		if speed > threshold { Self::Moving } else { Self::Still }
 	}
 
 	fn clip(self, speed: f32) -> AnimClip {
@@ -115,6 +111,9 @@ pub fn drive_player_locomotion(
 				None
 			};
 			let current = anims.get(member).ok();
+			if current.is_some_and(|(root, _)| root.0.clip.id().is_authored_performance()) {
+				continue;
+			}
 			let clip = locomotion_clip(rig.skeleton, jumping, &stance, speed, stand_band);
 			let clip = if jumping.is_none() {
 				let current_clip = current.map(|(root, _)| root.0.clip);
@@ -276,7 +275,7 @@ mod tests {
 
 	#[test]
 	fn production_quadruped_trot_stops_once_and_allows_movement_or_jump() -> anyhow::Result<()> {
-		use characters::{tick_anim_mailbox, MemberOf};
+		use characters::{MemberOf, tick_anim_mailbox};
 		use std::time::Duration;
 
 		let mut world = World::new();
@@ -511,7 +510,7 @@ mod tests {
 
 	#[test]
 	fn production_gait_and_stance_transitions_share_the_mailbox_clock() -> anyhow::Result<()> {
-		use characters::{tick_anim_mailbox, MemberOf};
+		use characters::{MemberOf, tick_anim_mailbox};
 		use std::time::Duration;
 		let mut world = World::new();
 		let mut time = Time::<()>::default();
