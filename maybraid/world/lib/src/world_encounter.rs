@@ -5,7 +5,7 @@
 //! awards do not require combat-hud. Does not own [`lubikans::LubikanSessionStore`].
 
 use bevy::prelude::*;
-use bikanwarda_encounter::BikanwardaEncounterPlugin;
+use bikanwarda_encounter::{BikanwardaEncounterPlugin, BossAssemblyPlugin};
 use character_motion::{AnimClip, AnimRef, AnimRefRoot};
 use damage::Died;
 use encounters::{
@@ -18,6 +18,10 @@ use world_player::Player;
 use maybraid_session::{WorldGameplayEnabled, WorldPlaySessionEnded};
 
 /// Wires Bikanwarda outcomes into the world plugin graph.
+///
+/// Registers gameplay systems (pause, session forwarding, body-replace) and boss assembly.
+/// Boss presentation is registered separately in [`crate::world_layers::WorldLayersPlugin`]
+/// alongside other HCSG presentation plugins.
 pub struct WorldEncounterPlugin;
 
 impl Plugin for WorldEncounterPlugin {
@@ -25,6 +29,16 @@ impl Plugin for WorldEncounterPlugin {
 		if !app.is_plugin_added::<BikanwardaEncounterPlugin>() {
 			app.add_plugins(BikanwardaEncounterPlugin);
 		}
+		// Register boss assembly (gameplay logic)
+		// Boss presentation (HCSG generation) is in WorldLayersPlugin
+		app.add_plugins(BossAssemblyPlugin);
+		
+		// Register boss spawn debug command system (debug-commands feature only)
+		#[cfg(feature = "debug-commands")]
+		{
+			app.add_plugins(crate::boss_spawn::BossSpawnPlugin);
+		}
+		
 		configure(app);
 	}
 }

@@ -37,6 +37,7 @@ pub use surface::{
 };
 pub use user::{
 	MovementDriveResult, MovementIntelligence, MovementIntelligenceSettings, ReplanMovement,
+	FAILED_PLAN_HANDOFF_ATTEMPTS,
 };
 
 /// Plan, then declare a [`player::MotorIntent`] NPC slot, before recovery and apply.

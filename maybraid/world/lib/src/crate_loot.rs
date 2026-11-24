@@ -401,11 +401,13 @@ fn eject_bag(commands: &mut Commands, assets: Option<&AssetServer>, origin: Vec3
 	);
 }
 
-fn apply_pose(transform: &mut Transform, want: Transform) {
+fn apply_pose(transform: &mut Mut<Transform>, want: Transform) {
+	// Keep Bevy's change-aware wrapper until a pose actually needs updating.
+	// Coercing it to &mut Transform before this comparison dirties idle lids.
 	let moved = transform.translation.distance_squared(want.translation) > 1e-8;
 	let turned = transform.rotation.dot(want.rotation).abs() < 0.9999;
 	if moved || turned {
-		*transform = want;
+		**transform = want;
 	}
 }
 
@@ -628,6 +630,36 @@ mod tests {
 		press_x(&mut world)?;
 		assert_eq!(world.query::<&LidSwing>().iter(&world).count(), 0);
 		assert!(world.resource::<CrateLoot>().crates.is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn unchanged_lids_do_not_mark_transforms_changed() -> anyhow::Result<()> {
+		let mut world = World::new();
+		ready(&mut world);
+		let lid = spawn_crate(&mut world, 1, Vec3::ZERO);
+		world.clear_trackers();
+		world
+			.run_system_once(sync_crate_lid_poses)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.query_filtered::<Entity, Changed<Transform>>().iter(&world).count(), 0);
+		let key = CrateKey { cell: Id::Universal, finish_seed: 1, slot: 0 };
+		world
+			.resource_mut::<CrateLoot>()
+			.crates
+			.insert(key, CratePhase::Open { restock_at: 5_000.0 });
+		world
+			.run_system_once(sync_crate_lid_poses)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world
+			.query_filtered::<Entity, Changed<Transform>>()
+			.iter(&world)
+			.any(|e| e == lid));
+		world.clear_trackers();
+		world
+			.run_system_once(sync_crate_lid_poses)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.query_filtered::<Entity, Changed<Transform>>().iter(&world).count(), 0);
 		Ok(())
 	}
 

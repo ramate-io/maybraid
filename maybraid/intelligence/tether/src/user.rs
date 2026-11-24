@@ -1,7 +1,7 @@
 //! Installed tether brain. Presence means the duty is assigned; [`Self::enabled`] is the grant.
 
 use bevy::prelude::*;
-use movement_intelligence::MovementObjective;
+use movement_intelligence::{MovementLocation, MovementObjective};
 
 use crate::memory::TetherMemory;
 use crate::objective::TetherObjective;
@@ -22,6 +22,8 @@ pub struct TetherIntelligenceUser {
 	pub horizon: f32,
 	/// Higher-order grant. When false the brain does not write routing or movement.
 	pub enabled: bool,
+	/// Extra metres treated as remaining so a hull stays inside the geometric leash.
+	pub clearance: f32,
 	pub stuck_timeout: f32,
 	last_remaining: Option<f32>,
 	last_applied: Option<TetherObjective>,
@@ -40,6 +42,7 @@ impl TetherIntelligenceUser {
 			added_radius: 2.0,
 			horizon: 28.0,
 			enabled: true,
+			clearance: 0.0,
 			stuck_timeout: 1.6,
 			last_remaining: None,
 			last_applied: None,
@@ -66,6 +69,32 @@ impl TetherIntelligenceUser {
 	pub fn with_stuck_timeout(mut self, stuck_timeout: f32) -> Self {
 		self.stuck_timeout = stuck_timeout.max(0.0);
 		self
+	}
+
+	pub fn with_clearance(mut self, clearance: f32) -> Self {
+		self.clearance = clearance.max(0.0);
+		self
+	}
+
+	/// Horizontal work left after shrinking the leash by [`Self::clearance`].
+	pub fn remaining_work(&self, from: Vec3, subject: Vec3) -> f32 {
+		match self.objective {
+			TetherObjective::Tether(_, radius) => {
+				let limit = (radius - self.clearance).max(0.0);
+				(crate::objective::xz(from, subject) - limit).max(0.0)
+			}
+			TetherObjective::Stalk(_, _) => self.objective.remaining(from, subject),
+		}
+	}
+
+	pub(crate) fn local_objective(&self, from: Vec3, subject: Vec3) -> MovementObjective {
+		match self.objective {
+			TetherObjective::Tether(_, radius) => MovementObjective::Reach(MovementLocation::new(
+				subject,
+				(radius - self.clearance).max(0.4),
+			)),
+			TetherObjective::Stalk(_, _) => self.objective.movement_objective(from, subject),
+		}
 	}
 
 	/// Snapshot the subject and decide whether to write local movement, a route, or hold.
@@ -95,7 +124,7 @@ impl TetherIntelligenceUser {
 			memory.satisfied = false;
 		}
 
-		let remaining = self.objective.remaining(from, subject);
+		let remaining = self.remaining_work(from, subject);
 		memory.subject = self.objective.subject();
 		memory.remaining = remaining;
 		memory.last_checked_at = now;
@@ -132,7 +161,7 @@ impl TetherIntelligenceUser {
 		self.stuck_seconds = 0.0;
 		self.was_writing = true;
 		if remaining <= self.horizon {
-			TetherAction::Local(self.objective.movement_objective(from, subject))
+			TetherAction::Local(self.local_objective(from, subject))
 		} else {
 			TetherAction::Route(self.objective.route_point(from, subject))
 		}

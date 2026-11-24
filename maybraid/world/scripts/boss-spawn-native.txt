@@ -1,0 +1,43 @@
+# Native full-game boss spawn test script
+# Demonstrates proper readiness checks, boss spawn, and visual verification
+# 
+# Usage:
+#   cargo build --locked -p maybraid --features maybraid-world/debug-commands
+#   RUST_BACKTRACE=1 ./target/debug/maybraid --start-at 1746.8,1025.9 \
+#     script --path maybraid/world/scripts/boss-spawn-native.txt
+
+# Wait for world initialization: player spawned, grounded, and terrain support settled
+script-ctrl wait-for-world-ready
+
+# Additional settle time for terrain streaming and physics stabilization
+script-ctrl wait 3
+
+# Capture initial state (player grounded on terrain)
+screenshot /tmp/boss-spawn-01-ready.png
+
+# Spawn boss 12 meters in front of player (default forward placement)
+boss spawn
+
+# Wait for HCSG restart and boss assembly
+script-ctrl wait 5
+
+# Capture boss spawned state
+screenshot /tmp/boss-spawn-02-spawned.png
+
+# Move camera or wait for boss presentation to fully load
+script-ctrl wait 3
+
+# Final verification capture
+screenshot /tmp/boss-spawn-03-settled.png
+
+# Expected outcomes:
+# - Player grounded at approximately y=0 (terrain height at spawn location)
+# - One BossEncounterRoot entity created
+# - Boss transform at player position + ~12m forward offset
+# - HCSG host presents boss character assembly via NearStream channel
+# 
+# Verification via manual inspection:
+#   1. Check /tmp/boss-spawn-*.png for visual evidence
+#   2. Logs show "[BOSS] Spawning at world position (x, y, z)"
+#   3. No panic or exit code 101
+#   4. Player y position stable (not falling through terrain)

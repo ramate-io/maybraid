@@ -1,0 +1,19 @@
+[package]
+name = "maybraid-memory-census"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# Names are stripped from ordinary release builds. This optional diagnostic
+# needs them to attribute component storage rather than emit anonymous rows.
+bevy = { workspace = true, features = ["debug"] }
+render-item.workspace = true
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+anyhow.workspace = true
+
+[lints]
+workspace = true

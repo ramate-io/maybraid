@@ -1,22 +1,55 @@
-//! Bikanwarda chained-encounter outcomes and summon unlocks.
+//! Bikanwarda chained-encounter generation, outcomes, and summon unlocks.
 //!
-//! [#1121](https://github.com/ramate-io/maybraid/issues/1121). Sleep is
-//! [#1120](https://github.com/ramate-io/maybraid/issues/1120). Generation and
-//! world placement are out of scope.
+//! [#1116](https://github.com/ramate-io/maybraid/issues/1116) HCSG generation and Scripted authoring.
+//! [#1121](https://github.com/ramate-io/maybraid/issues/1121) outcomes and unlocks.
+//! [#1120](https://github.com/ramate-io/maybraid/issues/1120) sleep phase.
+//! [#1117](https://github.com/ramate-io/maybraid/issues/1117) world placement (consumes generation contract).
 
+mod assembly;
+pub mod chains;
+mod combat;
+mod contract;
+mod generation;
 mod identity;
+mod locomotion;
 mod outcomes;
 mod plugin;
+mod presentation;
+mod scripted;
+mod tether;
 mod unlocks;
 
+pub use assembly::{
+	boss_eye_offset, boss_spotting_range, spawn_boss_assemblies, BossAssemblyPlugin,
+};
+pub use combat::{BossAttackCooldown, BossEncounterCombatPlugin, BossInCombat};
+pub use contract::{BossActorRecipe, BossAttackConfig, BossEncounterContract};
+pub use generation::{AuthoredBossSpawns, BikanwardaBossEncounter};
 pub use identity::{
 	chained_encounter_id, enraged_definition, ward_definition, BIKANWARDA_CHAINED_SLUG,
 	ENRAGED_DEFINITION_ID, PLACEHOLDER_ENRAGED_CAPACITY, PLACEHOLDER_ENRAGED_COST,
 	PLACEHOLDER_WARD_CAPACITY, PLACEHOLDER_WARD_COST, WARD_DEFINITION_ID,
 };
+pub use locomotion::{
+	add_player_motor_plugins, initialize_boss_locomotion, BossEncounterLocomotionPlugin,
+	BOSS_TETHER_RADIUS,
+};
 pub use outcomes::{BikanwardaDeparted, BikanwardaDeparture, EncounterUnlockAwarded};
 pub use plugin::BikanwardaEncounterPlugin;
+pub use presentation::{
+	BossActor, BossColumn, BossEncounterPresentationPlugin, BossEncounterRoot, BossPedestal,
+	RequestBossAssembly, COLUMN_HEIGHT, COLUMN_OFFSET_XZ, COLUMN_RADIUS, PEDESTAL_HEIGHT,
+	PEDESTAL_RADIUS,
+};
+pub use scripted::Scripted;
+pub use tether::{BossTetherChain, BossTetherPlugin};
 pub use unlocks::{register_unlocks, BikanwardaUnlockConfig};
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod spotting_tests;
+
+#[cfg(test)]
+mod damage_tests;

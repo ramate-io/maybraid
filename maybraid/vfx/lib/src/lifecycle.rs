@@ -6,6 +6,7 @@ use bevy_hanabi::prelude::{CompiledParticleEffect, EffectSpawner, EffectSystems,
 use crate::membership::{VfxInstanceMembers, VfxMemberOf};
 use crate::parts::flipbook_card::{tick_dust, VfxDust};
 use crate::parts::lobe::{stamp_lobe_materials, tick_lobes};
+use crate::parts::soundwave::{stamp_soundwave_materials, tick_soundwaves};
 use crate::spawn::{
 	realize_layer, VfxEmitter, VfxEmitterArmed, VfxEmitterBurst, VfxFlash, VfxInstance,
 	VfxLayerLife, VfxPendingLayers,
@@ -142,10 +143,12 @@ pub fn vfx_lifecycle_plugin(app: &mut App) {
 		Update,
 		(
 			stamp_lobe_materials,
+			stamp_soundwave_materials,
 			tick_dust,
 			tick_vfx_instances,
 			tick_vfx_flashes,
 			tick_lobes,
+			tick_soundwaves,
 			tick_vfx_layer_lives,
 		)
 			.chain(),

@@ -1,6 +1,8 @@
 //! Bikanwarda outcomes on top of the generic progress owner.
 
 use bevy::prelude::*;
+use bikanwarda_attacks::BikanwardaAttackParams;
+use bikanwarda_character::ENCOUNTER_LINEAR_SCALE;
 use encounters::{EncounterLifetimePolicy, EncounterSleepPolicy, EncountersPlugin};
 use lubikans::{LubikanCatalog, LubikanInterfacePlugin, LubikansPlugin};
 
@@ -25,8 +27,13 @@ impl Plugin for BikanwardaEncounterPlugin {
 		if !app.is_plugin_added::<LubikansPlugin>() {
 			app.add_plugins(LubikansPlugin);
 		}
+		// Note: SpottingAvianPlugin should be installed by the main game/world setup
+		// for boss perception to work. Not installed here to avoid test dependencies.
 		app.insert_resource(EncounterLifetimePolicy::bikanwarda())
-			.insert_resource(EncounterSleepPolicy::bikanwarda());
+			.insert_resource(EncounterSleepPolicy::bikanwarda())
+			.insert_resource(
+				BikanwardaAttackParams::PLACEHOLDER.scaled_linear(ENCOUNTER_LINEAR_SCALE),
+			);
 		app.init_resource::<BikanwardaUnlockConfig>();
 		if app.world().get_resource::<LubikanCatalog>().is_none() {
 			app.init_resource::<LubikanCatalog>();
@@ -36,5 +43,9 @@ impl Plugin for BikanwardaEncounterPlugin {
 			register_unlocks(&mut app.world_mut().resource_mut::<LubikanCatalog>(), &config);
 		}
 		outcomes::configure(app);
+		app.add_plugins(crate::BossEncounterCombatPlugin);
+		app.add_plugins(crate::BossEncounterLocomotionPlugin);
+		app.add_plugins(crate::chains::BikanwardaChainPhysicsPlugin);
+		app.add_plugins(crate::BossTetherPlugin);
 	}
 }

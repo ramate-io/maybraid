@@ -1,0 +1,18 @@
+# Bikanwarda encounter test script
+# Spawns boss and places player at engagement range
+
+# Wait for world to be ready (player spawned, terrain loaded)
+script-ctrl wait-for-world-ready
+
+# Spawn boss at origin
+boss spawn --at 0,0
+
+# Wait for boss to spawn and settle
+script-ctrl wait 2.0
+
+# Teleport player 35m away from boss (northeast direction)
+# Y=110 is a reasonable ground level estimate; actual terrain fit will adjust
+debug teleport 35 110 0
+
+# Wait a moment for teleport to complete
+script-ctrl wait 0.5

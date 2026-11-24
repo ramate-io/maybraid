@@ -14,6 +14,9 @@ use bevy::prelude::{
 };
 use bevy::shape::{Aabb3d, IntersectsVolume};
 
+#[cfg(feature = "generation-tracing")]
+pub(super) mod retirement_probe;
+
 use super::node_store::StoredEntry;
 use crate::gen::{Id, Version};
 use crate::lod_ref::LodRef;
@@ -152,14 +155,24 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 			Ok(entries) => entries,
 			Err(Busy) => return,
 		};
+		// A session/replacement can race the storage phase. Preserve the cursor
+		// and old hosts until a current page can be consumed.
+		if !matches!(demand.try_page_is_live(subscription, published.epoch), Ok(true)) {
+			return;
+		}
 		if entries.len() < published.ids.len() {
 			read_all = false;
 		}
 		for (id, entry) in published.ids.iter().zip(entries) {
-			self.cursor += 1;
 			let Some(entry) = entry else {
-				continue;
+				// A published value disappeared before consumption. Replay via
+				// replacement, preserving the predecessor for atomic cancellation.
+				// Never skip this ID or certify retirement from a partial replay.
+				self.request.retry_subscription();
+				read_all = false;
+				break;
 			};
+			self.cursor += 1;
 			if let Some(host) = self.hosts.get_mut(id).filter(|host| host.version == entry.version)
 			{
 				#[cfg(feature = "generation-tracing")]
@@ -167,21 +180,44 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 				host.session = self.session;
 				continue;
 			}
-			if let Some(stale) = self.hosts.remove(id) {
+			let stale = self.hosts.remove(id);
+			if let Some(stale) = &stale {
 				retire_host(commands, stale.entity);
 			}
 			let (bounds, version) = (entry.bounds, entry.version);
 			let entity = spawn_host(commands, *id, entry, self.request.focus());
+			#[cfg(feature = "generation-tracing")]
+			if let Some(stale) = &stale {
+				retirement_probe::stamp::<T>(
+					commands,
+					stale.entity,
+					"version",
+					Some(entity),
+					self.request.focus(),
+					Some(stale.bounds),
+				);
+			}
 			self.hosts.insert(*id, Host { entity, bounds, version, session: self.session });
 			self.retired_against = None;
 		}
-		if read_all && published.done && self.sweep_pending {
+		if read_all && published.done && !published.failed && self.sweep_pending {
 			self.sweep_pending = false;
 			let session = self.session;
+			#[cfg(feature = "generation-tracing")]
+			let focus = self.request.focus();
 			self.hosts.retain(|_, host| {
 				let current = host.session == session;
 				if !current {
 					retire_host(commands, host.entity);
+					#[cfg(feature = "generation-tracing")]
+					retirement_probe::stamp::<T>(
+						commands,
+						host.entity,
+						"epoch",
+						None,
+						focus,
+						Some(host.bounds),
+					);
 				}
 				current
 			});
@@ -209,10 +245,21 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 		let _scope = _operation.as_ref().and_then(lod_generation_diagnostics::Operation::enter);
 		self.retired_against = Some(self.request.wanted().to_vec());
 		let wanted = self.request.wanted();
+		#[cfg(feature = "generation-tracing")]
+		let focus = self.request.focus();
 		self.hosts.retain(|_, host| {
 			let keep = wanted.iter().any(|region| region.intersects(&host.bounds));
 			if !keep {
 				retire_host(commands, host.entity);
+				#[cfg(feature = "generation-tracing")]
+				retirement_probe::stamp::<T>(
+					commands,
+					host.entity,
+					"bounds",
+					None,
+					focus,
+					Some(host.bounds),
+				);
 			}
 			keep
 		});
@@ -230,6 +277,17 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 /// 2026-10-13 character-switch captures ([#1247](https://github.com/ramate-io/maybraid/issues/1247)).
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct RetiredHost;
+
+impl RetiredHost {
+	/// Hide a direct owner and queue it for the shared retirement drain.
+	///
+	/// The type and reason are only observed when retirement tracing is enabled.
+	pub fn queue_for<T>(commands: &mut Commands, entity: Entity, _reason: &'static str) {
+		commands.entity(entity).try_insert((Self, Visibility::Hidden));
+		#[cfg(feature = "generation-tracing")]
+		retirement_probe::stamp::<T>(commands, entity, _reason, None, None, None);
+	}
+}
 
 fn retire_host(commands: &mut Commands, entity: Entity) {
 	#[cfg(feature = "generation-tracing")]
@@ -272,7 +330,13 @@ pub(super) fn despawn_retired_hosts(world: &mut World) {
 		if despawned > 0 && start.elapsed() >= time_budget {
 			break;
 		}
+		#[cfg(feature = "generation-tracing")]
+		let probe = retirement_probe::PendingSample::begin(world, entity);
 		world.despawn(entity);
+		#[cfg(feature = "generation-tracing")]
+		if let Some(probe) = probe {
+			probe.finish(world);
+		}
 		#[cfg(feature = "generation-tracing")]
 		lod_generation_diagnostics::update(|c| c.removed += 1);
 		despawned += 1;
@@ -408,3 +472,6 @@ mod despawn_budget_tests {
 		Ok(())
 	}
 }
+
+#[cfg(test)]
+mod publication_tests;

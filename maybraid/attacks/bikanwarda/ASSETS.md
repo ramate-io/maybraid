@@ -13,10 +13,13 @@ stand-ins and the sockets below.
 | `eye.L` / `eye.R` | `BikanwardaEyeSocket` | God Beam eye-glow cue | Two emissive points. A single `eyes` locator is enough for the placeholder. |
 | `head` | `BikanwardaHeadSocket` | Bray head-flick placeholder | Neck / skull joint. The placeholder rotates local X during windup and restores the rest pose. |
 
-Boss scale in [#1104](https://github.com/ramate-io/maybraid/issues/1104) is a
-**20 m Epiphant**. Mouth height should sit on the head, not at the feet, so
-sonic rings leave the mouth and travel horizontally at constant size
+Boss scale is a **6.7 m Epiphant** (one-third of the authored 20 m hull,
+driven from `bikanwarda_character::ENCOUNTER_STANDING_HEIGHT_M`). Mouth height
+should sit on the head, not at the feet, so sonic rings leave the mouth and
+travel horizontally at constant size
 ([#1147](https://github.com/ramate-io/maybraid/pull/1147) wave contract).
+The GLB stays the ordinary Epiphant; encounter scale is runtime, not a second
+export.
 
 ## Presentation that is not a GLB
 
@@ -24,7 +27,7 @@ sonic rings leave the mouth and travel horizontally at constant size
 |---|---|
 | `ParadeExplosionCue` | Existing `fiery_explosion` (`maybraid-vfx`). Scale is a host choice; grenades use `blast_radius / 0.5`. |
 | God Beam column | [#1150](https://github.com/ramate-io/maybraid/pull/1150) / [#1122](https://github.com/ramate-io/maybraid/issues/1122) follow `AttackPresentationEvent` + `HazardShape::Cylinder`. Width convention is still open. |
-| Bray rings | [#1150](https://github.com/ramate-io/maybraid/pull/1150) / [#1123](https://github.com/ramate-io/maybraid/issues/1123) follow `WavefrontPresentation`. Do not simulate motion in VFX. |
+| Bray rings | `maybraid-vfx` `soundwave` follows `WavefrontPresentation`. Pose maps the Bevy torus Y-axle onto the live heading. Do not simulate motion in VFX. |
 | `SpatialRumbleCue` | Distance-attenuated pad rumble / camera shake. |
 | `ImpactCue` | Separate landing / stomp channel. |
 

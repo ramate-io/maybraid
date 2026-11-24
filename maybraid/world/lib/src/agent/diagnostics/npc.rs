@@ -3,16 +3,20 @@
 use avian3d::prelude::{GravityScale, LinearVelocity, ShapeHits};
 use bevy::{ecs::system::SystemParam, prelude::*};
 use combat_targeting::CombatTargeting;
+use damage::Health;
 use firearm_intelligence::FirearmTargeting;
 use firearm_user::FirearmUser;
 use firearms::{WeaponLaunchPose, WeaponTrigger};
+use lod::LodSceneLevel;
 use maybraid_agent::{
 	AgentDiagnosticActor, AgentEvent, AgentEventBody, AgentNpcCombat, AgentNpcGroundHit,
-	AgentNpcGroundHits, AgentNpcSelector, AgentNpcSnapshot, AgentNpcSpotContact, AgentNpcSupport,
-	AgentNpcTrajectory, AgentNpcWeapon,
+	AgentNpcGroundHits, AgentNpcMembership, AgentNpcSelector, AgentNpcSnapshot,
+	AgentNpcSpotContact, AgentNpcSupport, AgentNpcTrajectory, AgentNpcWeapon,
 };
 use maybraid_spawns_support::PendingActorSupport;
 use mob_characters::CharacterSceneRecipe;
+use mob_intelligence::MemberOf;
+use mob_scenes::MobScene;
 use player::{CharacterController, Grounded, Player as MotorPlayer, WalkableGround};
 use spotting_intelligence::SpottingUser;
 use world_player::Player as VegetationPlayer;
@@ -34,6 +38,8 @@ type Npcs<'w, 's> = Query<
 struct NpcSnapshotQueries<'w, 's> {
 	npcs: Npcs<'w, 's>,
 	positions: Query<'w, 's, &'static Transform>,
+	lifetime: Query<'w, 's, (Option<&'static Health>, Option<&'static MemberOf>)>,
+	hosts: Query<'w, 's, (Option<&'static MobScene>, Option<&'static LodSceneLevel>)>,
 	physics: Query<
 		'w,
 		's,
@@ -117,6 +123,7 @@ impl NpcSnapshotQueries<'_, '_> {
 			self.physics.get(entity).map_err(|_| "NPC physics unavailable")?;
 		let (targeting, spotting, trajectories, user) =
 			self.combat.get(entity).map_err(|_| "NPC state unavailable")?;
+		let (health, member) = self.lifetime.get(entity).map_err(|_| "NPC lifetime unavailable")?;
 		let engaged = targeting.and_then(|targeting| targeting.engaged);
 		let mut targets = Vec::with_capacity(2);
 		for target in [engaged, player].into_iter().flatten() {
@@ -166,6 +173,21 @@ impl NpcSnapshotQueries<'_, '_> {
 				name: name.map(|name| name.as_str().to_owned()),
 				position: transform.map(|transform| transform.translation.to_array()),
 			},
+			health: health.map(|health| health.current),
+			max_health: health.map(|health| health.max),
+			membership: member.map(|member| {
+				let host = self.hosts.get(member.mob).ok();
+				AgentNpcMembership {
+					host: member.mob.to_bits().to_string(),
+					slot: member.slot,
+					host_center: host
+						.and_then(|(scene, _)| scene)
+						.map(|scene| scene.center.to_array()),
+					selected_level: host
+						.and_then(|(_, level)| level)
+						.map(|level| format!("{level:?}")),
+				}
+			}),
 			velocity: velocity.map(|velocity| velocity.0.to_array()),
 			gravity_scale: gravity.map(|gravity| gravity.0),
 			grounded: motor.then_some(grounded),
@@ -256,6 +278,49 @@ mod tests {
 			})
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?
 			.map_err(anyhow::Error::msg)
+	}
+
+	#[test]
+	fn lifetime_snapshot_preserves_damage_and_stale_host_identity() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let center = Vec3::new(350.0, 12.0, -4.0);
+		let host = world.spawn((MobScene::default().at(center), LodSceneLevel::High)).id();
+		let health = Health { current: 37.0, max: 100.0 };
+		let actor = world
+			.spawn((CharacterSceneRecipe::default(), health, MemberOf { mob: host, slot: 7 }))
+			.id();
+		let selector = AgentNpcSelector::Entity { entity: actor.to_bits().to_string() };
+		let snapshots = capture(&mut world, selector.clone(), None)?;
+		let snapshot = snapshots.first().ok_or_else(|| anyhow::anyhow!("missing snapshot"))?;
+		assert_eq!(snapshot.health, Some(37.0));
+		assert_eq!(snapshot.max_health, Some(100.0));
+		let membership = snapshot
+			.membership
+			.as_ref()
+			.ok_or_else(|| anyhow::anyhow!("missing membership"))?;
+		assert_eq!(membership.host, host.to_bits().to_string());
+		assert_eq!(membership.slot, 7);
+		assert_eq!(membership.host_center, Some(center.to_array()));
+		assert_eq!(membership.selected_level.as_deref(), Some("High"));
+		assert_eq!(world.get::<Health>(actor), Some(&health));
+
+		// Optional host components do not invalidate a selected actor or invent a new identity.
+		world.entity_mut(host).despawn();
+		let snapshots = capture(&mut world, selector.clone(), None)?;
+		let membership = snapshots
+			.first()
+			.and_then(|snapshot| snapshot.membership.as_ref())
+			.ok_or_else(|| anyhow::anyhow!("missing stale membership"))?;
+		assert_eq!(membership.host, host.to_bits().to_string());
+		assert_eq!(membership.host_center, None);
+		assert_eq!(membership.selected_level, None);
+		world.entity_mut(actor).remove::<(Health, MemberOf)>();
+		let snapshots = capture(&mut world, selector, None)?;
+		let snapshot = snapshots.first().ok_or_else(|| anyhow::anyhow!("missing bare snapshot"))?;
+		assert_eq!(snapshot.health, None);
+		assert_eq!(snapshot.max_health, None);
+		assert_eq!(snapshot.membership, None);
+		Ok(())
 	}
 
 	#[test]

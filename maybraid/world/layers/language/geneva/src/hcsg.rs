@@ -602,6 +602,56 @@ mod tests {
 		Ok(())
 	}
 
+	/// Measures output derivation only; dependency generation is completed before
+	/// either implementation is timed. Run explicitly with --ignored --nocapture.
+	#[test]
+	#[ignore = "headless DevelopmentPlaces derivation benchmark"]
+	fn cached_built_place_derivation_benchmark() -> anyhow::Result<()> {
+		let mut app = forested_app();
+		let cold = std::time::Instant::now();
+		settle(&mut app)?;
+		let cold_elapsed = cold.elapsed();
+		let development = les_halles().id();
+		let built = app
+			.world()
+			.resource::<HcsgStorage>()
+			.try_entry::<richmond::Built<Ground>>(development)
+			.map_err(storage_busy)?
+			.map(|entry| entry.value)
+			.ok_or_else(|| anyhow::anyhow!("the cached development was not generated"))?;
+		let expected = DevelopmentPlaces::<Urban>::legacy_of(development, &built.development);
+		let actual = DevelopmentPlaces::<Urban>::of(development, &built.development);
+		assert_eq!(actual.places, expected.places);
+		assert!(actual.places.iter().any(|place| place.building.is_some()));
+		let mut legacy = std::time::Duration::ZERO;
+		let mut reused = std::time::Duration::ZERO;
+		for round in 0..6 {
+			// Alternate order so warming does not consistently favor one path.
+			for old in if round % 2 == 0 { [true, false] } else { [false, true] } {
+				let start = std::time::Instant::now();
+				let places = if old {
+					DevelopmentPlaces::<Urban>::legacy_of(
+						development,
+						std::hint::black_box(&built.development),
+					)
+				} else {
+					DevelopmentPlaces::<Urban>::of(
+						development,
+						std::hint::black_box(&built.development),
+					)
+				};
+				std::hint::black_box(places);
+				if old {
+					legacy += start.elapsed();
+				} else {
+					reused += start.elapsed();
+				}
+			}
+		}
+		println!("cached Built: {} pins; cold fixture settle {:?}; 6 derivations: legacy {:?}, reused {:?}", actual.places.len(), cold_elapsed, legacy, reused);
+		Ok(())
+	}
+
 	#[test]
 	fn built_places_are_named_and_rooms_speak_their_buildings_language() -> anyhow::Result<()> {
 		let mut app = forested_app();
@@ -614,6 +664,16 @@ mod tests {
 			.map_err(storage_busy)?
 			.map(|entry| entry.value)
 			.ok_or_else(|| anyhow::anyhow!("the development's places were not generated"))?;
+		let built = storage
+			.try_entry::<richmond::Built<Ground>>(development)
+			.map_err(storage_busy)?
+			.map(|entry| entry.value)
+			.ok_or_else(|| anyhow::anyhow!("the cached development was not generated"))?;
+		assert_eq!(
+			places.places,
+			DevelopmentPlaces::<Urban>::legacy_of(development, &built.development).places,
+			"all ordered pins, identities, bounds, salience, arrivals and parent indices must match"
+		);
 		let building = places
 			.places
 			.iter()

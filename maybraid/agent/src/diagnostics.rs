@@ -93,8 +93,25 @@ pub struct AgentNpcWeapon {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentNpcMembership {
+	/// Host identity remains meaningful even when its entity has retired.
+	pub host: String,
+	pub slot: u16,
+	/// Cached semantic LOD center, not a nearest-member position.
+	pub host_center: Option<[f32; 3]>,
+	/// Debug name of the host's selected semantic LodSceneLevel.
+	pub selected_level: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentNpcSnapshot {
 	pub actor: AgentDiagnosticActor,
+	#[serde(default)]
+	pub health: Option<f32>,
+	#[serde(default)]
+	pub max_health: Option<f32>,
+	#[serde(default)]
+	pub membership: Option<AgentNpcMembership>,
 	pub velocity: Option<[f32; 3]>,
 	pub gravity_scale: Option<f32>,
 	/// None when this actor has no shared character motor.
@@ -129,6 +146,7 @@ pub enum AgentCameraProjection {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DiagnosticCommand {
 	Enabled(bool),
+	Memory,
 	Health(f32),
 	View { yaw: f32, pitch: f32 },
 	Camera { pose: Option<[f32; 5]> },
@@ -143,6 +161,7 @@ impl DiagnosticCommand {
 		match words.as_slice() {
 			["diagnostics", "on"] => Ok(Self::Enabled(true)),
 			["diagnostics", "off"] => Ok(Self::Enabled(false)),
+			["diagnostics", "memory"] => Ok(Self::Memory),
 			["diagnostics", "health", amount] => {
 				let amount = amount.parse::<f32>().map_err(|_| "health must be a number")?;
 				if !amount.is_finite() || amount <= 0.0 {
@@ -181,7 +200,7 @@ impl DiagnosticCommand {
 				let entity = entity.parse::<u64>().map_err(|_| "invalid decimal entity bits")?;
 				Ok(Self::Npc { entity })
 			}
-			_ => Err("expected diagnostics on | off | health AMOUNT | view YAW PITCH | camera [X Y Z YAW PITCH] | npcs RADIUS | npc ENTITY".into()),
+			_ => Err("expected diagnostics on | off | memory | health AMOUNT | view YAW PITCH | camera [X Y Z YAW PITCH] | npcs RADIUS | npc ENTITY".into()),
 		}
 	}
 }
@@ -189,6 +208,16 @@ impl DiagnosticCommand {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn memory_snapshot_accepts_no_extra_arguments() -> anyhow::Result<()> {
+		assert_eq!(
+			DiagnosticCommand::parse("diagnostics memory").map_err(anyhow::Error::msg)?,
+			DiagnosticCommand::Memory
+		);
+		assert!(DiagnosticCommand::parse("diagnostics memory extra").is_err());
+		Ok(())
+	}
 
 	#[test]
 	fn fixture_health_rejects_non_finite_zero_negative_and_trailing_arguments() {
@@ -283,6 +312,9 @@ mod npc_tests {
 				name: None,
 				position: None,
 			},
+			health: None,
+			max_health: None,
+			membership: None,
 			velocity: None,
 			gravity_scale: None,
 			grounded: None,
@@ -305,6 +337,9 @@ mod npc_tests {
 		};
 		let line = event.to_line().map_err(anyhow::Error::msg)?;
 		let json: serde_json::Value = serde_json::from_str(&line)?;
+		assert!(json["actors"][0]["health"].is_null());
+		assert!(json["actors"][0]["max_health"].is_null());
+		assert!(json["actors"][0]["membership"].is_null());
 		assert!(json["actors"][0]["grounded"].is_null());
 		assert!(json["actors"][0]["pending_support"].is_null());
 		assert!(json["actors"][0]["combat"].is_null());
@@ -312,6 +347,31 @@ mod npc_tests {
 		assert_eq!(json["actors"][0]["actor"]["entity"], u64::MAX.to_string());
 		assert_eq!(AgentEvent::parse_line(&line).map_err(anyhow::Error::msg)?, event);
 		assert_eq!(event.tracy_message(), None);
+		Ok(())
+	}
+	#[test]
+	fn npc_lifetime_evidence_is_optional_in_older_snapshot_records() -> anyhow::Result<()> {
+		let legacy = serde_json::json!({
+			"actor": {"entity": "18446744073709551615", "player": false},
+			"velocity": null, "gravity_scale": null, "grounded": null,
+			"shape_hits": null, "cached_ground_normal": null, "pending_support": null,
+			"combat": null, "weapon": null
+		});
+		let mut snapshot: AgentNpcSnapshot = serde_json::from_value(legacy)?;
+		assert_eq!(snapshot.health, None);
+		assert_eq!(snapshot.membership, None);
+		snapshot.health = Some(37.0);
+		snapshot.max_health = Some(100.0);
+		snapshot.membership = Some(AgentNpcMembership {
+			host: u64::MAX.to_string(),
+			slot: 65535,
+			host_center: None,
+			selected_level: None,
+		});
+		let wire = serde_json::to_value(&snapshot)?;
+		assert_eq!(wire["membership"]["host"], u64::MAX.to_string());
+		assert!(wire["membership"]["host_center"].is_null());
+		assert_eq!(serde_json::from_value::<AgentNpcSnapshot>(wire)?, snapshot);
 		Ok(())
 	}
 }

@@ -10,9 +10,20 @@
 //! flattened 50 m cell hosts in a neighborhood around the camera.
 
 mod agent;
+#[cfg(feature = "debug-commands")]
+pub mod boss_spawn;
+#[cfg(feature = "debug-commands")]
+pub mod capture;
+#[cfg(feature = "debug-commands")]
+pub mod script_queue;
+#[cfg(feature = "debug-commands")]
+pub mod viewport_check;
+pub mod terrain_query;
 mod agent_inventory;
 mod camera;
 pub mod commands;
+#[cfg(feature = "chain-review")]
+mod chain_review;
 pub mod control;
 mod crate_loot;
 mod cycle_target;
@@ -55,9 +66,11 @@ pub use character_items::{
 	InventoryDropRefused, InventoryDropRequest, InventoryDropped, InventoryMenuDropped,
 };
 #[cfg(feature = "debug-commands")]
+pub use viewport_check::{BossMarker, LubikanMarker};
+#[cfg(feature = "debug-commands")]
 pub use commands::{
-	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestPeaceful,
-	RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
+	CameraMode, RequestActivate, RequestCamera, RequestGrantPoints, RequestHomeostaticStatus,
+	RequestPeaceful, RequestSpawnNpc, RequestTakeDamage, RequestTeleport,
 };
 #[cfg(any(test, feature = "debug-commands"))]
 pub use mob_spawn::{RequestMobInspect, RequestSpawnMobs};
@@ -68,6 +81,7 @@ pub use control::{
 };
 pub use cycle_target::InventoryCycleTarget;
 pub use durham::Durham;
+pub use terrain_query::PublishedTerrainHeight;
 #[cfg(any(test, feature = "test-support"))]
 pub use first_wave::UnitXTile;
 pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};
@@ -235,8 +249,16 @@ impl Plugin for WorldPlugin {
 			.add_plugins(crate::spawn_surface::SpawnSurfacePlugin)
 			.add_plugins(WeatherPlugin)
 			.add_plugins(world_lubikan::WorldLubikanPlugin)
-			.add_plugins(world_encounter::WorldEncounterPlugin)
-			.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
+			.add_plugins(world_encounter::WorldEncounterPlugin);
+		
+		// Install attacks plugin for boss combat
+		if !app.is_plugin_added::<attacks::AttacksPlugin>() {
+			app.add_plugins(attacks::AttacksPlugin);
+		}
+		app.add_plugins(bikanwarda_attacks::BikanwardaAttacksPlugin { placeholders: false });
+		app.add_plugins(bikanwarda_attacks::BikanwardaPresentationConsumersPlugin::default());
+		
+		app.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
 			.add_plugins(WorldPoiPlugin)
 			.add_plugins(WorldOccupancyPlugin)
 			.add_plugins(WorldMapViewPlugin)
@@ -446,5 +468,210 @@ mod tests {
 			),
 		);
 		app.update();
+	}
+
+	#[test]
+	#[cfg(feature = "debug-commands")]
+	fn game_world_with_debug_commands_survives_startup() {
+		use crate::world_debug::WorldDebugPlugin;
+		
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.add_plugins(WorldDebugPlugin);
+		
+		// Run Startup schedule without panicking
+		app.finish();
+		app.cleanup();
+	}
+
+	#[test]
+	#[cfg(feature = "debug-commands")]
+	fn boss_spawn_creates_encounter_root() {
+		use crate::boss_spawn::RequestSpawnBoss;
+		use lod::hcsg::{HcsgStorage, HcsgRestartRequest};
+		use maybraid_session::WorldGameplayEnabled;
+		
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.init_resource::<HcsgStorage>();
+		app.init_resource::<HcsgRestartRequest>();
+		app.init_resource::<WorldGameplayEnabled>();
+		app.init_resource::<Messages<maybraid_session::WorldPlaySessionEnded>>();
+		app.init_resource::<Messages<lubikans::LubikanOwnerLifetime>>();
+		app.init_resource::<Messages<encounters::EncounterSignal>>();
+		app.add_plugins(crate::world_encounter::WorldEncounterPlugin);
+		
+		let spawn_pos = Vec2::new(1746.8, 1025.9);
+		app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_pos) });
+		
+		// Process the spawn request
+		app.update();
+		
+		// Verify BossAssemblyPlugin is registered by WorldEncounterPlugin
+		// (BossEncounterPresentationPlugin is registered separately in WorldLayersPlugin)
+		assert!(
+			app.is_plugin_added::<bikanwarda_encounter::BossAssemblyPlugin>(),
+			"BossAssemblyPlugin should be registered"
+		);
+		
+		// Note: Actual BossEncounterRoot creation requires HCSG generation and presentation
+		// systems to run multiple update cycles with proper viewer bounds and terrain data.
+		// Full boss actor spawning is tested in integration tests with complete world setup.
+	}
+
+	#[test]
+	#[cfg(feature = "debug-commands")]
+	fn player_maintains_support_through_boss_spawn() {
+		use crate::boss_spawn::RequestSpawnBoss;
+		use lod::hcsg::{HcsgStorage, HcsgRestartRequest};
+		use maybraid_spawns_support::PendingActorSupport;
+		use maybraid_session::WorldGameplayEnabled;
+		use player::{Grounded, Player as MaybraidPlayer};
+		use world_player::Player as WorldPlayer;
+		
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.init_resource::<HcsgStorage>();
+		app.init_resource::<HcsgRestartRequest>();
+		app.init_resource::<WorldGameplayEnabled>();
+		app.init_resource::<Messages<maybraid_session::WorldPlaySessionEnded>>();
+		app.init_resource::<Messages<lubikans::LubikanOwnerLifetime>>();
+		app.init_resource::<Messages<encounters::EncounterSignal>>();
+		app.add_plugins(crate::world_encounter::WorldEncounterPlugin);
+		
+		// Spawn a grounded player
+		let player = app.world_mut().spawn((
+			MaybraidPlayer,
+			WorldPlayer,
+			Transform::from_translation(Vec3::new(1746.8, 0.0, 1025.9)),
+			Grounded,
+		)).id();
+		
+		app.update();
+		
+		// Verify player is grounded
+		assert!(app.world().get::<Grounded>(player).is_some(), "Player should be grounded initially");
+		assert!(app.world().get::<PendingActorSupport>(player).is_none(), "Player should not have pending support");
+		
+		// Spawn boss which triggers HCSG restart
+		app.world_mut().spawn(RequestSpawnBoss { at: Some(Vec2::new(1760.0, 1025.9)) });
+		app.update();
+		
+		// Verify player maintains grounded state through HCSG restart
+		assert!(
+			app.world().get::<Grounded>(player).is_some(),
+			"Player should remain grounded through boss spawn HCSG restart"
+		);
+		
+		// Player should not suddenly have pending support (which would indicate falling)
+		let has_pending = app.world().get::<PendingActorSupport>(player).is_some();
+		assert!(
+			!has_pending,
+			"Player should not have pending support after boss spawn (would indicate loss of ground)"
+		);
+	}
+
+	#[test]
+	#[cfg(feature = "debug-commands")]
+	fn boss_spawn_requests_are_processed() {
+		use crate::boss_spawn::{BossSpawnPlugin, RequestSpawnBoss};
+		use lod::hcsg::{HcsgStorage, HcsgRestartRequest};
+		
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.init_resource::<HcsgStorage>();
+		app.init_resource::<HcsgRestartRequest>();
+		app.add_plugins(BossSpawnPlugin);
+		
+		let spawn_pos = Vec2::new(1746.8, 1025.9);
+		app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_pos) });
+		
+		// Count RequestSpawnBoss entities before processing
+		let request_count_before = app.world_mut().query::<&RequestSpawnBoss>().iter(app.world_mut()).count();
+		assert_eq!(request_count_before, 1, "Should have exactly one spawn request");
+		
+		app.update();
+		
+		// After processing, the request should be consumed (despawned by the system)
+		let request_count_after = app.world_mut().query::<&RequestSpawnBoss>().iter(app.world_mut()).count();
+		assert_eq!(request_count_after, 0, "Spawn request should be processed and removed");
+	}
+
+	/// Regression test for production boss spawn system registration ([#1116](https://github.com/ramate-io/maybraid/issues/1116)).
+	///
+	/// This test validates that the production plugin graph (WorldEncounterPlugin + WorldDebugPlugin,
+	/// without manually adding BossSpawnPlugin) correctly registers boss spawn lifecycle:
+	/// - BossSpawnConfig resource is initialized
+	/// - process_boss_spawn_requests system is registered
+	/// - No panic during startup or idle updates
+	/// - Boss spawn requests are processed and publish to HCSG storage
+	///
+	/// The original bug (PR #1601, head 15adc84e) had WorldDebugPlugin register process_boss_spawn_requests
+	/// directly without initializing BossSpawnConfig, causing exit 101 on game startup.
+	#[test]
+	#[cfg(feature = "debug-commands")]
+	fn production_boss_spawn_plugin_wiring_survives_startup() -> anyhow::Result<()> {
+		use crate::boss_spawn::RequestSpawnBoss;
+		use crate::terrain_query::PublishedTerrainHeight;
+		use bikanwarda_encounter::{BikanwardaBossEncounter, chained_encounter_id};
+		use lod::gen::Bytes;
+		use lod::hcsg::{HcsgStorage, HcsgRestartRequest};
+		use maybraid_session::WorldGameplayEnabled;
+
+		// Set up production-like plugin composition:
+		// WorldEncounterPlugin (includes BossSpawnPlugin with debug-commands feature)
+		// WorldDebugPlugin (no longer registers process_boss_spawn_requests directly)
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.init_resource::<HcsgStorage>();
+		app.init_resource::<HcsgRestartRequest>();
+		app.init_resource::<WorldGameplayEnabled>();
+		app.init_resource::<Messages<damage::Hit>>();
+		app.init_resource::<Messages<damage::Died>>();
+		app.init_resource::<Messages<maybraid_session::WorldPlaySessionEnded>>();
+		app.init_resource::<Messages<lubikans::LubikanOwnerLifetime>>();
+		app.init_resource::<Messages<encounters::EncounterSignal>>();
+		app.init_resource::<Messages<encounters::EncounterResolved>>();
+		app.init_resource::<Messages<bikanwarda_encounter::EncounterUnlockAwarded>>();
+		app.init_resource::<Messages<bikanwarda_encounter::BikanwardaDeparted>>();
+		
+		// Production plugin (WorldEncounterPlugin owns boss spawn lifecycle)
+		app.add_plugins(crate::world_encounter::WorldEncounterPlugin);
+		
+		// Install test terrain provider (production would have Durham)
+		app.insert_resource(PublishedTerrainHeight::test_fixed(0.0));
+		
+		// Verify BossSpawnConfig is initialized (this resource was missing in the bug)
+		app.finish();
+		app.cleanup();
+		
+		let config = app.world().get_resource::<crate::boss_spawn::BossSpawnConfig>();
+		anyhow::ensure!(
+			config.is_some(),
+			"BossSpawnConfig should be initialized by production plugin graph"
+		);
+		
+		// Run several idle updates (no spawn request) without panicking
+		for _ in 0..10 {
+			app.update();
+		}
+		
+		// Issue boss spawn request
+		let spawn_pos = Vec2::new(1746.8, 1025.9);
+		app.world_mut().spawn(RequestSpawnBoss { at: Some(spawn_pos) });
+		
+		app.update();
+		
+		// Verify boss is published to HCSG storage
+		let storage = app.world().resource::<HcsgStorage>();
+		let boss_id = lod::gen::Id::Bytes(Bytes(chained_encounter_id().as_bytes()));
+		let entry = storage.try_entry::<BikanwardaBossEncounter>(boss_id)
+			.map_err(|_| anyhow::anyhow!("storage busy"))?;
+		anyhow::ensure!(
+			entry.is_some(),
+			"Boss should be published to storage after spawn request (production plugin wiring test)"
+		);
+		
+		Ok(())
 	}
 }

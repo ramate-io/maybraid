@@ -16,6 +16,7 @@ mod fulfill;
 mod key;
 mod lib_trait;
 mod material_ref;
+mod pipeline;
 mod reference;
 mod standard;
 
@@ -31,6 +32,7 @@ pub use material_ref::{
 	PropagateToDescendants, MATERIAL_PALETTE_SLOTS, MATERIAL_RASTER_CHANNELS,
 	MATERIAL_RASTER_SAMPLES, MATERIAL_RASTER_WIDTH, MATERIAL_SCALAR_FLOATS,
 };
+pub use pipeline::OpaqueMaterialInputs;
 pub use reference::ReferenceMaterial;
 pub use standard::{StandardMaterialLib, StandardMaterialRefCache, StandardMaterialRefPlugin};
 

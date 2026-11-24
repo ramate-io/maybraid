@@ -20,6 +20,7 @@ pub(crate) struct HcsgRequest {
 	class: HcsgClass,
 	subscription: Option<SubscriptionId>,
 	requested: Vec<Aabb3d>,
+	retry: bool,
 }
 
 impl Default for HcsgRequest {
@@ -30,6 +31,7 @@ impl Default for HcsgRequest {
 			class: HcsgClass::Near,
 			subscription: None,
 			requested: Vec::new(),
+			retry: false,
 		}
 	}
 }
@@ -67,6 +69,12 @@ impl HcsgRequest {
 		self.subscription = None;
 	}
 
+	/// Replay a stale publication without forgetting the live predecessor.
+	/// The next successful transaction cancels it; Busy retains this retry.
+	pub(crate) fn retry_subscription(&mut self) {
+		self.retry = true;
+	}
+
 	/// Align the subscription with current wanted regions.
 	///
 	/// `Ok(None)`: already aligned. `Ok(Some)`: replaced or dropped.
@@ -84,31 +92,20 @@ impl HcsgRequest {
 		demand: &HcsgDemand,
 		origin: &'static str,
 	) -> Result<Option<RequestSync>, Busy> {
-		let live = match self.subscription {
-			Some(subscription) => demand.try_is_live(subscription)?,
-			None => false,
-		};
-		let wants = !self.wanted.is_empty();
-		if self.wanted == self.requested && live == wants {
+		let Some((subscription, epoch_advanced)) = demand.try_sync_subscription::<T>(
+			self.subscription,
+			self.wanted == self.requested && !self.retry,
+			&self.wanted,
+			self.focus,
+			self.class,
+			origin,
+		)?
+		else {
 			return Ok(None);
-		}
-		let epoch_advanced = self.subscription.is_some() && !live;
-		if epoch_advanced {
-			self.subscription = None;
-		}
+		};
+		self.subscription = subscription;
 		self.requested = self.wanted.clone();
-		if wants {
-			let regions = self.wanted.clone();
-			self.subscription = Some(demand.subscribe_with_origin::<T>(
-				self.subscription,
-				regions,
-				self.focus,
-				self.class,
-				origin,
-			));
-		} else if let Some(subscription) = self.subscription.take() {
-			demand.unsubscribe(subscription);
-		}
+		self.retry = false;
 		Ok(Some(RequestSync { epoch_advanced }))
 	}
 }

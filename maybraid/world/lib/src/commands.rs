@@ -54,9 +54,18 @@ pub enum PlaygroundCommand {
 	/// Debug mob placement (Tracy actor-density flights).
 	#[command(subcommand)]
 	Mobs(Mobs),
+	/// Debug boss encounter generation and placement.
+	#[cfg(feature = "debug-commands")]
+	#[command(subcommand)]
+	Boss(Boss),
 	/// Capture the primary window to a PNG via GPU readback.
 	Screenshot {
 		path: std::path::PathBuf,
+	},
+	/// Capture the final window composition, including HUD and menus.
+	#[cfg(feature = "debug-commands")]
+	ScreenshotWindow {
+		path: PathBuf,
 	},
 	/// Debug commands for testing (debug builds only).
 	#[cfg(feature = "debug-commands")]
@@ -69,6 +78,10 @@ pub enum PlaygroundCommand {
 		#[arg(long)]
 		script: PathBuf,
 	},
+	/// Script control commands (wait, wait-for-world-ready).
+	#[cfg(feature = "debug-commands")]
+	#[command(subcommand, hide = true)]
+	ScriptCtrl(ScriptCommand),
 }
 
 #[derive(Clone, Subcommand)]
@@ -88,6 +101,20 @@ pub enum Mobs {
 	},
 	/// Inspect mob materialization state: host count, pending groups, body/NPC counts.
 	Inspect,
+	/// Show homeostatic mob status: current cell, flagged neighbors, active mobs.
+	#[cfg(feature = "debug-commands")]
+	Homeostatic,
+}
+
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
+pub enum Boss {
+	/// Generate and present the Bikanwarda chained encounter.
+	Spawn {
+		/// Boss center position `X,Z`; defaults to player position.
+		#[arg(long, value_parser = parse_xz, allow_hyphen_values = true)]
+		at: Option<Vec2>,
+	},
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -139,9 +166,30 @@ impl Mobs {
 				commands.spawn(crate::mob_spawn::RequestMobInspect);
 				*console = "mobs inspect: pending".into();
 			}
+			#[cfg(feature = "debug-commands")]
+			Mobs::Homeostatic => {
+				commands.spawn(RequestHomeostaticStatus);
+				*console = "mobs homeostatic: pending".into();
+			}
 		}
 	}
 }
+
+#[cfg(feature = "debug-commands")]
+impl Boss {
+	fn react(self, commands: &mut Commands, console: &mut String) {
+		match self {
+			Boss::Spawn { at } => {
+				commands.spawn(crate::boss_spawn::RequestSpawnBoss { at });
+				*console = "boss spawn: generating Bikanwarda encounter".to_string();
+			}
+		}
+	}
+}
+
+#[cfg(feature = "debug-commands")]
+#[derive(Component, Clone, Copy, Debug)]
+pub struct RequestHomeostaticStatus;
 
 #[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
@@ -210,6 +258,10 @@ pub enum Stats {
 #[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum DebugCommand {
+	/// In-world chain review fixture (requires chain-review).
+	#[cfg(feature = "chain-review")]
+	#[command(subcommand)]
+	Chain(crate::chain_review::ChainReviewCommand),
 	/// Grant Lubikan charge points (goes through LubikanChargeRequest).
 	GrantPoints { amount: f32 },
 	/// Apply damage to the player.
@@ -227,6 +279,28 @@ pub enum DebugCommand {
 	},
 	/// Teleport the player to the specified XYZ world position.
 	Teleport { x: f32, y: f32, z: f32 },
+	/// Capture a timed sequence of screenshots.
+	Capture {
+		/// Output directory for frames
+		dir: std::path::PathBuf,
+		/// Seconds between frames
+		#[arg(long, default_value = "2.0")]
+		every: f32,
+		/// Number of frames to capture
+		#[arg(long, default_value = "10")]
+		count: u32,
+	},
+}
+
+/// Script-only commands for delays and readiness gates.
+#[cfg(feature = "debug-commands")]
+#[derive(Clone, Debug, Parser)]
+#[command(rename_all = "kebab-case")]
+pub enum ScriptCommand {
+	/// Wait for a duration before executing the next command.
+	Wait { seconds: f32 },
+	/// Wait until the world is ready (player spawned, camera active, terrain loaded).
+	WaitForWorldReady,
 }
 
 #[cfg(feature = "debug-commands")]
@@ -253,7 +327,17 @@ impl PlaygroundCommand {
 	pub fn react(self, commands: &mut Commands, console: &mut String) {
 		match self {
 			PlaygroundCommand::Help => *console = Self::long_help_string(),
-			PlaygroundCommand::Script(s) => s.run(commands, console),
+			PlaygroundCommand::Script(s) => {
+				#[cfg(feature = "debug-commands")]
+				{
+					// Scripts use the queue system if world_debug is active
+					*console = format!("script {}: use startup or queued mode", s.path.display());
+				}
+				#[cfg(not(feature = "debug-commands"))]
+				{
+					s.run(commands, console);
+				}
+			}
 			PlaygroundCommand::Mode(mode) => mode.react(commands, console),
 			PlaygroundCommand::SetCharacter { species } => {
 				commands.spawn(RequestSetCharacter { species });
@@ -263,15 +347,29 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Sky(sky) => sky.react(commands, console),
 			PlaygroundCommand::Render(render) => render.react(commands, console),
 			PlaygroundCommand::Mobs(mobs) => mobs.react(commands, console),
+			#[cfg(feature = "debug-commands")]
+			PlaygroundCommand::Boss(boss) => boss.react(commands, console),
 			PlaygroundCommand::Screenshot { path } => {
 				commands.spawn(RequestGameplayScreenshot { path: path.clone(), command_id: None });
 				*console = format!("screenshot {}: pending", path.display());
+			}
+			#[cfg(feature = "debug-commands")]
+			PlaygroundCommand::ScreenshotWindow { path } => {
+				use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+				commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path.clone()));
+				*console =
+					format!("screenshot-window {}: final composition queued", path.display());
 			}
 			#[cfg(feature = "debug-commands")]
 			PlaygroundCommand::Debug(debug) => debug.react(commands, console),
 			#[cfg(feature = "debug-commands")]
 			PlaygroundCommand::AutoCapture { script: _ } => {
 				*console = "Auto-capture removed: use Bevy Screenshot API instead".to_string();
+			}
+			#[cfg(feature = "debug-commands")]
+			PlaygroundCommand::ScriptCtrl(script_cmd) => {
+				// ScriptCtrl commands handled specially in script runner
+				*console = format!("script control: {:?}", script_cmd);
 			}
 		}
 	}
@@ -395,6 +493,14 @@ pub struct RequestTakeDamage {
 pub struct RequestSpawnNpc;
 
 #[cfg(feature = "debug-commands")]
+#[derive(Component, Clone, Debug)]
+pub struct RequestCapture {
+	pub dir: std::path::PathBuf,
+	pub interval_secs: f32,
+	pub count: u32,
+}
+
+#[cfg(feature = "debug-commands")]
 #[derive(Component, Clone, Copy, Debug)]
 pub struct RequestActivate;
 
@@ -418,6 +524,11 @@ pub struct RequestTeleport {
 impl DebugCommand {
 	fn react(self, commands: &mut Commands, console: &mut String) {
 		match self {
+			#[cfg(feature = "chain-review")]
+			DebugCommand::Chain(action) => {
+				commands.spawn(crate::chain_review::RequestChainReview(action));
+				*console = "debug chain: pending (see [chain-review] log)".into();
+			}
 			DebugCommand::GrantPoints { amount } => {
 				commands.spawn(RequestGrantPoints { amount });
 				*console = format!("debug grant-points {amount}: pending");
@@ -446,6 +557,61 @@ impl DebugCommand {
 				commands.spawn(RequestTeleport { position: Vec3::new(x, y, z) });
 				*console = format!("debug teleport ({}, {}, {}): pending", x, y, z);
 			}
+			DebugCommand::Capture { dir, every, count } => {
+				commands.spawn(RequestCapture { dir, interval_secs: every, count });
+				*console = format!("debug capture: {} frames every {:.1}s", count, every);
+			}
+		}
+	}
+}
+
+#[cfg(feature = "debug-commands")]
+impl ScriptCommand {
+	pub fn react(
+		self,
+		queue: &mut crate::script_queue::ScriptQueue,
+		time: &Time,
+		console: &mut String,
+	) {
+		match self {
+			ScriptCommand::Wait { seconds } => {
+				let wait_until = time.elapsed() + std::time::Duration::from_secs_f32(seconds);
+				queue.wait_until = Some(wait_until);
+				*console = format!("script: waiting {:.1}s", seconds);
+			}
+			ScriptCommand::WaitForWorldReady => {
+				queue.wait_for_world_ready = true;
+				*console = "script: waiting for world ready".into();
+			}
+		}
+	}
+}
+
+impl PlaygroundCommand {
+	#[cfg(feature = "debug-commands")]
+	pub fn run_script_with_queue(
+		path: &std::path::Path,
+		queue: &mut crate::script_queue::ScriptQueue,
+		_time: &Time,
+		console: &mut String,
+	) {
+		let lines = match game_commands::command::read_script_lines(path) {
+			Ok(l) => l,
+			Err(e) => {
+				*console = e;
+				return;
+			}
+		};
+		for (idx, line) in lines.iter().enumerate() {
+			match Self::parse_line(line) {
+				Ok(cmd) => {
+					// All commands get enqueued - ScriptCtrl will be handled by queue processor
+					queue.enqueue(cmd);
+				}
+				Err(e) => {
+					*console = format!("{} line {}: {e}", path.display(), idx + 1);
+				}
+			}
 		}
 	}
 }
@@ -461,6 +627,17 @@ impl GameCommand for PlaygroundCommand {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[cfg(feature = "debug-commands")]
+	#[test]
+	fn parse_final_window_screenshot() -> Result<(), String> {
+		let command = PlaygroundCommand::parse_line("screenshot-window /tmp/final-window.png")?;
+		let PlaygroundCommand::ScreenshotWindow { path } = command else {
+			return Err("expected final window capture".into());
+		};
+		assert_eq!(path, PathBuf::from("/tmp/final-window.png"));
+		Ok(())
+	}
 
 	#[test]
 	fn parse_stats_mesh() {

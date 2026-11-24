@@ -212,6 +212,34 @@ impl DevelopmentHost {
 		}
 	}
 
+	/// Derive the ordered authored walk points once for several local room queries.
+	/// Keep this snapshot only for the current host iteration.
+	pub fn interior_stand_points(&self) -> InteriorStandPoints<'_> {
+		match self {
+			Self::LesHallesStorey(building, _) => {
+				let mut points = InteriorStandPoints::of(building.as_ref());
+				points.gallery = Some(building.floor_plan());
+				points
+			}
+			Self::LesHallesStairwell(building, _) => InteriorStandPoints::of(building.as_ref()),
+			Self::LesHallesRoof(building, _) => InteriorStandPoints::of(building.as_ref()),
+			Self::ShepherdsHouse(building, _) => InteriorStandPoints::of(building.as_ref()),
+			Self::ShepherdsHut(building, _) => InteriorStandPoints::of(building.as_ref()),
+			Self::OldCityMarketTerrace(building, _) => InteriorStandPoints::of(building.as_ref()),
+			Self::RingFortCircularTower(building, _) => InteriorStandPoints::of(building.as_ref()),
+			Self::RingFortTrazaloidTower(building, _) => InteriorStandPoints::of(building.as_ref()),
+			Self::RingFortGalleryTerrace(building, _) => InteriorStandPoints::of(building.as_ref()),
+			Self::RingFortGalleryColonnade(building, _) => {
+				InteriorStandPoints::of(building.as_ref())
+			}
+			Self::RingFortGalleryRoof(building, _) => InteriorStandPoints::of(building.as_ref()),
+			Self::SingleHighrise(building, _) => InteriorStandPoints::of(building.as_ref()),
+			Self::TempleSanctum(building, _) => InteriorStandPoints::of(building.as_ref()),
+			Self::WizardsTower(building, _) => InteriorStandPoints::of(building.as_ref()),
+			Self::SkybridgeHall(building, _) => InteriorStandPoints::of(building.as_ref()),
+		}
+	}
+
 	/// High-LOD furniture slots on this host (Richmond packer IR).
 	pub fn furniture_nodes(&self) -> Vec<FurnitureNode> {
 		match self {
@@ -328,6 +356,40 @@ impl DevelopmentHost {
 		}
 		let source = PlaceArrivalSource(Some(self.clone()));
 		Box::new((host, bsn! { place source }))
+	}
+}
+
+/// Ephemeral authored floor/panel points, preserving their original candidate order.
+/// The optional gallery plan is borrowed from the same host for fallback queries.
+pub struct InteriorStandPoints<'a> {
+	points: Vec<bevy::math::Vec3>,
+	gallery: Option<&'a buildings::storeys::les_halles::LesHallesFloorPlan>,
+}
+
+impl InteriorStandPoints<'_> {
+	fn of(building: &impl BuildingComponents) -> Self {
+		let points = building
+			.floor_nodes_for_level(LodSceneLevel::High)
+			.flatten()
+			.into_iter()
+			.filter_map(|floor| floor.walk_on_point())
+			.chain(
+				building
+					.panel_nodes_for_level(LodSceneLevel::High)
+					.flatten()
+					.into_iter()
+					.filter_map(|panel| panel.horizontal_walk_point()),
+			)
+			.filter(|point| point.is_finite())
+			.collect();
+		Self { points, gallery: None }
+	}
+
+	/// Select a stand using the same storey cutoff, distance and stable ties as
+	/// a single host query; use the authored gallery only when no floor qualifies.
+	pub fn nearest(&self, near: Option<bevy::math::Vec3>) -> Option<bevy::math::Vec3> {
+		nearest_floor_point(self.points.iter().copied(), near)
+			.or_else(|| self.gallery.and_then(|plan| les_halles_gallery_stand(plan, near)))
 	}
 }
 
@@ -647,6 +709,98 @@ mod tests {
 			nearest_floor_point([lower, upper], Some(Vec3::new(0.0, 12.0, 0.0))),
 			Some(upper)
 		);
+	}
+
+	#[test]
+	fn interior_snapshot_collects_finite_floor_then_panel_points_once() {
+		use super::InteriorStandPoints;
+		use building_components::floors::geometry::FloorGeometry;
+		use building_components::{
+			BuildingComponents, FloorNode, Layers, PanelGeometry, PanelNode, Placement,
+		};
+		struct Authored {
+			floors: std::cell::Cell<usize>,
+			panels: std::cell::Cell<usize>,
+		}
+		impl BuildingComponents for Authored {
+			fn floor_nodes_for_level(&self, level: lod::LodSceneLevel) -> Layers<FloorNode> {
+				assert_eq!(level, lod::LodSceneLevel::High);
+				self.floors.set(self.floors.get() + 1);
+				Layers::from_free(
+					[Vec3::ZERO, Vec3::splat(f32::NAN), Vec3::X * 4.0]
+						.into_iter()
+						.map(|at| {
+							FloorNode::rough_stone(
+								FloorGeometry::rectangle(),
+								Placement::new(at, 0.0),
+							)
+						})
+						.collect(),
+				)
+			}
+			fn panel_nodes_for_level(&self, level: lod::LodSceneLevel) -> Layers<PanelNode> {
+				assert_eq!(level, lod::LodSceneLevel::High);
+				self.panels.set(self.panels.get() + 1);
+				Layers::from_free(vec![PanelNode::rough_stone(
+					PanelGeometry::rectangle(),
+					Placement::new(Vec3::X * 8.0, 0.0),
+				)])
+			}
+		}
+		let authored =
+			Authored { floors: std::cell::Cell::new(0), panels: std::cell::Cell::new(0) };
+		let expected = vec![
+			FloorNode::rough_stone(FloorGeometry::rectangle(), Placement::new(Vec3::ZERO, 0.0))
+				.walk_on_point(),
+			FloorNode::rough_stone(FloorGeometry::rectangle(), Placement::new(Vec3::X * 4.0, 0.0))
+				.walk_on_point(),
+			PanelNode::rough_stone(PanelGeometry::rectangle(), Placement::new(Vec3::X * 8.0, 0.0))
+				.horizontal_walk_point(),
+		]
+		.into_iter()
+		.flatten()
+		.collect::<Vec<_>>();
+		let snapshot = InteriorStandPoints::of(&authored);
+		assert_eq!(snapshot.points, expected);
+		assert_eq!(snapshot.points.len(), 3);
+		for near in [None, Some(Vec3::ZERO), Some(Vec3::new(8.0, 1.0, 0.0))] {
+			assert_eq!(snapshot.nearest(near), nearest_floor_point(expected.iter().copied(), near));
+		}
+		assert_eq!(authored.floors.get(), 1);
+		assert_eq!(authored.panels.get(), 1);
+	}
+
+	#[test]
+	fn interior_snapshot_preserves_order_ties_and_cutoff() {
+		use super::InteriorStandPoints;
+		let first = Vec3::new(-2.0, 4.0, 0.0);
+		let tied = Vec3::new(2.0, 4.0, 0.0);
+		let upper = Vec3::new(0.0, 12.0, 0.0);
+		let points = InteriorStandPoints { points: vec![first, tied, upper], gallery: None };
+		assert_eq!(points.nearest(None), Some(first));
+		assert_eq!(points.nearest(Some(Vec3::new(0.0, 4.0, 0.0))), Some(first));
+		assert_eq!(points.nearest(Some(Vec3::new(0.0, 11.25, 0.0))), Some(upper));
+		assert_eq!(points.nearest(Some(Vec3::new(0.0, 11.24, 0.0))), Some(first));
+		assert_eq!(points.nearest(Some(Vec3::new(0.0, 3.24, 0.0))), None);
+	}
+
+	#[test]
+	fn interior_snapshot_gallery_fallback_matches_direct_query() -> anyhow::Result<()> {
+		use super::InteriorStandPoints;
+		use buildings::storeys::les_halles::{LesHallesFloorPlan, LesHallesParameterized};
+		let bounds =
+			Aabb3d::from_min_max(Vec3::new(-30.0, 12.0, -30.0), Vec3::new(30.0, 18.0, 30.0));
+		let confines = Confines::from_bounds(bounds);
+		let parameters = LesHallesParameterized::sample(&confines, NoiseParams::default())?;
+		let (plan, _) = LesHallesFloorPlan::from_parameterized(parameters, &confines)?;
+		let points = InteriorStandPoints { points: Vec::new(), gallery: Some(&plan) };
+		for near in [None, Some(Vec3::ZERO), Some(Vec3::new(20.0, 12.0, 0.0))] {
+			assert_eq!(points.nearest(near), les_halles_gallery_stand(&plan, near));
+		}
+		let floor = Vec3::new(7.0, 12.0, 9.0);
+		let points = InteriorStandPoints { points: vec![floor], gallery: Some(&plan) };
+		assert_eq!(points.nearest(None), Some(floor));
+		Ok(())
 	}
 
 	impl SiteGround for DryFlat {

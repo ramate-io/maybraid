@@ -3,6 +3,8 @@
 //! - Generation diagnostics: `lod/generation-tracing` feature, `maybraid.generation.profile` target
 //! - Scene refresh diagnostics: `lod/scene-tracing` feature, `maybraid.lod.drain` target
 
+pub mod retired_host;
+
 use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU64, Ordering};

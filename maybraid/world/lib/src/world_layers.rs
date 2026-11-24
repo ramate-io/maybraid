@@ -2,26 +2,34 @@
 //! furnishing and language, generated on the shared HCSG runtime and presented around the
 //! viewer while Discovery streams.
 
-use barking::{BarkingPresentationPlugin, MobNeighborhood, MobScenePresentationPlugin};
+use barking::{
+	BarkingPresentationPlugin, HomeostaticMobLifecycle, HomeostaticMobSystems,
+	HomeostaticMobsPlugin, MobNeighborhood, MobScenePresentationPlugin,
+};
 use bevy::prelude::*;
+use bikanwarda_encounter::BossEncounterPresentationPlugin;
 use chico::{
 	BumpOutPresentationPlugin, BumpOutRing, CanopyBumpOut, ChicoPresentationPlugin,
 	GroveNeighborhood, MediumCanopyBumpOut,
 };
 use durham::{
-	BackgroundStream, Durham, DurhamWorldPlugin, FarStream, NearStream, StreamPresentationPlugin,
-	StreamRing, Water,
+	BackgroundStream, Durham, DurhamSurface, DurhamWorldPlugin, FarStream, NearStream,
+	StreamPresentationPlugin, StreamRing, Water,
 };
 use geneva::{GenevaPlugin, LanguageNeighborhood};
 use layer_stack::{ActiveGenerationMode, GenerationModePlugin};
-use lod::hcsg::{request_hcsg_session_restart, HcsgBoundsPlugin};
+use lod::hcsg::{
+	register_session_seed, request_hcsg_session_restart, HcsgBoundsPlugin, HcsgSessionRestarted,
+};
 use maputo::{FurnitureNeighborhood, MaputoPresentationPlugin};
 use maybraid_game_mode_discover::{Discovery, InDiscovery};
+use maybraid_session::{SessionCapabilities, SessionCapabilitySystems};
 use richmond::{
 	AuthoredDevelopments, BuiltPresentationPlugin, DevelopmentNeighborhood, PaddedTerrain,
 	RichmondConfig,
 };
 use terrain_layer_model::OnTerrain;
+use terrain_layer_model::TerrainStreaming;
 use urbanization_layer_model::Urbanization;
 
 type Ground = OnTerrain<Durham>;
@@ -47,6 +55,7 @@ impl Plugin for WorldLayersPlugin {
 			seed: WORLD_SEED,
 		}))
 		.insert_resource(crate::poi::PaddedTerrainPoiGround)
+		.add_systems(Update, update_durham_terrain_provider)
 		.insert_resource(richmond.development_config())
 		.insert_resource(richmond.urbanization_selection())
 		.init_resource::<AuthoredDevelopments>()
@@ -90,11 +99,135 @@ impl Plugin for WorldLayersPlugin {
 			MaputoPresentationPlugin::<InDiscovery<FurnitureNeighborhood>, Urban>::default(),
 			BarkingPresentationPlugin::<InDiscovery<MobNeighborhood>, Urban>::default(),
 			MobScenePresentationPlugin,
+			HomeostaticMobsPlugin::<world_player::Player>::default(),
 			GenevaPlugin::<InDiscovery<LanguageNeighborhood>, Urban>::default(),
+			// Boss encounter presentation on the near stream (HCSG generation and scene spawning)
+			BossEncounterPresentationPlugin::<Ring<NearStream>>::default(),
 		))
+		.add_systems(
+			Update,
+			sync_homeostatic_lifetime
+				.after(SessionCapabilitySystems)
+				.after(HcsgSessionRestarted)
+				.before(HomeostaticMobSystems::Lifecycle),
+		)
 		.add_systems(
 			OnEnter(ActiveGenerationMode::of::<Discovery>()),
 			request_hcsg_session_restart,
 		);
+		register_session_seed(app, reset_homeostatic_session);
 	}
+}
+
+fn reset_homeostatic_session(mut lifecycle: ResMut<HomeostaticMobLifecycle>) {
+	lifecycle.request_reset();
+}
+
+/// Installed participation owns population lifetime. Pause only suspends input,
+/// and deliberately does not uninstall these capabilities.
+fn sync_homeostatic_lifetime(
+	session: Option<Res<SessionCapabilities>>,
+	streaming: Res<TerrainStreaming<Durham>>,
+	mode: Res<State<ActiveGenerationMode>>,
+	mut lifecycle: ResMut<HomeostaticMobLifecycle>,
+) {
+	let installed = session
+		.as_deref()
+		.is_none_or(|session| session.gameplay().is_installed() && session.streaming_enabled());
+	let enabled = installed && streaming.enabled && mode.get().is::<Discovery>();
+	if lifecycle.enabled != enabled {
+		lifecycle.enabled = enabled;
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use barking::homeostatic::reset_homeostatic_mobs;
+	use barking::{HomeostaticCellIndex, HomeostaticMob, PlayerHomeostaticCell};
+	use damage::Health;
+	use maybraid_controllers_core::InputRouter;
+	use maybraid_session::WorldGameplayEnabled;
+	use mob_intelligence::{MemberOf, Mob};
+
+	#[test]
+	fn pause_keeps_population_but_home_retires_it_with_the_player_still_present(
+	) -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.insert_resource(TerrainStreaming::<Durham>::new(true))
+			.insert_resource(State::new(ActiveGenerationMode::of::<Discovery>()))
+			.init_resource::<HomeostaticMobLifecycle>()
+			.insert_resource(PlayerHomeostaticCell {
+				current: Some(HomeostaticCellIndex(0, 0)),
+				generation: 1,
+			})
+			.add_systems(Update, (sync_homeostatic_lifetime, reset_homeostatic_mobs).chain())
+			.add_observer(barking::hcsg::retire_members_with_their_mob);
+		// This installs the actual shared worker/session/late-retirement runtime.
+		register_session_seed(&mut app, reset_homeostatic_session);
+		let mut session = SessionCapabilities::default();
+		session.install_play(true);
+		app.insert_resource(session);
+		let player = app.world_mut().spawn(world_player::Player).id();
+		let host = app.world_mut().spawn(Mob::new(12.0)).id();
+		app.world_mut().entity_mut(host).insert(HomeostaticMob {
+			home_cell: HomeostaticCellIndex(0, 0),
+			mob_entity: host,
+			generation: 1,
+		});
+		let health = Health { current: 37.0, max: 100.0 };
+		let body = app.world_mut().spawn((MemberOf { mob: host, slot: 0 }, health)).id();
+		let mut router = InputRouter::default();
+		for paused in [false, true, false] {
+			router.set_paused(paused);
+			let session = *app.world().resource::<SessionCapabilities>();
+			assert!(session.streaming_enabled());
+			assert_eq!(session.gameplay_enabled(&router), !paused);
+			app.insert_resource(WorldGameplayEnabled(session.gameplay_enabled(&router)));
+			app.update();
+			assert!(app.world().get_entity(host).is_ok());
+			assert_eq!(app.world().get::<Health>(body), Some(&health));
+		}
+		app.world_mut().resource_mut::<SessionCapabilities>().install_menu_shell();
+		assert!(!app.world().resource::<SessionCapabilities>().streaming_enabled());
+		app.update();
+		assert!(app.world().get_entity(player).is_ok());
+		assert!(app.world().get_entity(host).is_err());
+		assert!(app.world().get_entity(body).is_err());
+		assert_eq!(app.world().resource::<PlayerHomeostaticCell>().current, None);
+		Ok(())
+	}
+}
+
+/// Update Durham-backed published terrain height provider.
+///
+/// Runs each frame to keep the provider synchronized with Durham terrain state.
+/// The closure captures cloned terrain resources, avoiding any unsafe World access.
+fn update_durham_terrain_provider(
+	mut commands: Commands,
+	hcsg_storage: Res<lod::hcsg::HcsgStorage>,
+	layout: Res<durham::TerrainCellLayout>,
+) {
+	use crate::terrain_query::PublishedTerrainHeight;
+	use durham::SharedTerrainStorage;
+	
+	// Clone the resources (both are cheaply cloneable: HcsgStorage is Arc-wrapped)
+	let storage_clone = (*hcsg_storage).clone();
+	let layout_clone = (*layout).clone();
+	
+	// Create closure that captures cloned resources (no unsafe code needed)
+	let provider = PublishedTerrainHeight(Box::new(move |xz: Vec2| -> Option<f32> {
+		// Query published padded terrain first (same logic as terrain_height_at)
+		type Ground = terrain_layer_model::OnTerrain<durham::Durham>;
+		match richmond::PaddedTerrain::<Ground>::published_height_at(&storage_clone, xz.x, xz.y) {
+			Ok(Some(height)) => return Some(height),
+			Ok(None) => {}
+			Err(_) => return None,
+		}
+		// Fall back to Durham's composed surface (raw terrain without pads)
+		storage_clone.try_composed_height_at(&layout_clone, xz.x, xz.y).ok().flatten()
+	}));
+	
+	commands.insert_resource(provider);
 }

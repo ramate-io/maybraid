@@ -1,10 +1,12 @@
 //! [`HcsgDemand`]: what the worker should fill, one subscription per system.
 
 mod outstanding;
+mod published_region;
 mod registry;
 mod retention;
 mod schedule;
 mod state;
+mod tickets;
 
 use std::sync::{Arc, MutexGuard, PoisonError, TryLockError};
 use std::time::{Duration, Instant};
@@ -16,8 +18,10 @@ use state::DemandShared;
 use super::storage::Busy;
 
 pub use outstanding::Outstanding;
-pub use registry::Published;
+pub use published_region::{PublishedRead, PublishedReadError, PublishedRegion};
+pub use registry::{Published, PUBLICATION_PAGE_IDS};
 pub use state::SubscriptionId;
+pub use tickets::{HcsgTicket, TicketPoll, TicketRequestError, MAX_TICKET_REQUESTS};
 
 pub(crate) use retention::WorkerWait;
 pub(crate) use schedule::{quantum_cost, Job, QuantumProgress, QUANTUM_IDS, QUANTUM_TIME};
@@ -37,6 +41,11 @@ pub(crate) use state::generate;
 pub struct HcsgDemand(Arc<DemandShared>);
 
 impl HcsgDemand {
+	/// Current session identity without waiting on demand or generation.
+	pub fn try_epoch(&self) -> Result<u64, Busy> {
+		Ok(self.try_lock()?.epoch)
+	}
+
 	fn lock(&self) -> MutexGuard<'_, state::DemandState> {
 		self.0.state.lock().unwrap_or_else(PoisonError::into_inner)
 	}

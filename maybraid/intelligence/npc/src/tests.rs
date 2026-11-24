@@ -129,8 +129,26 @@ fn assassin_prefers_a_stalking_idle_tether() {
 	assert!(world.get::<hiding_intelligence::HidingUser>(npc).is_some());
 }
 
+fn combat_contact(subject: Entity) -> combat_targeting::CombatContact {
+	combat_targeting::CombatContact {
+		subject,
+		position: Vec3::X * 6.0,
+		movement_vector: Vec3::ZERO,
+		visible_point: Vec3::X * 6.0,
+		visible_head: None,
+		last_spotted_at: 0.0,
+	}
+}
+
+fn targeting_with_contact(subject: Entity) -> CombatTargeting {
+	let mut targeting = CombatTargeting::default();
+	targeting.upsert_contact(combat_contact(subject));
+	targeting.rebalance(0.0);
+	targeting
+}
+
 #[test]
-fn combat_retracts_meander_and_drops_the_poi_goal() {
+fn combat_without_a_contact_keeps_meander() {
 	let mut app = App::new();
 	app.add_plugins((MinimalPlugins, NpcIntelligencePlugin));
 	let npc = app
@@ -142,6 +160,36 @@ fn combat_retracts_meander_and_drops_the_poi_goal() {
 				threat.tactic = ThreatTactic::Combat;
 				threat
 			},
+			CombatTargeting::default(),
+			MeanderingIntelligenceUser::default(),
+			dummy_goal(),
+		))
+		.id();
+	app.update();
+	assert!(
+		app.world()
+			.get::<MeanderingIntelligenceUser>(npc)
+			.is_some_and(|user| user.enabled),
+		"FFA Combat from distant threat knowledge must not freeze idle patrol"
+	);
+	assert!(app.world().get::<PoiGoal>(npc).is_some());
+}
+
+#[test]
+fn combat_contact_retracts_meander_and_drops_the_poi_goal() {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, NpcIntelligencePlugin));
+	let target = Entity::from_bits(7);
+	let npc = app
+		.world_mut()
+		.spawn((
+			NpcIntelligence::default(),
+			{
+				let mut threat = ThreatManagementIntelligence::default();
+				threat.tactic = ThreatTactic::Combat;
+				threat
+			},
+			targeting_with_contact(target),
 			MeanderingIntelligenceUser::default(),
 			dummy_goal(),
 		))
@@ -186,7 +234,32 @@ fn ignore_restores_meander_and_idle_tether() {
 }
 
 #[test]
-fn combat_always_disables_tether() {
+fn combat_disables_tether_unless_keep_flagged() {
+	let mut world = World::new();
+	let anchor = world.spawn_empty().id();
+	let idle = TetherObjective::Tether(anchor, 12.0);
+	let engaged = TetherObjective::Tether(anchor, 4.0);
+	let mut threat = ThreatManagementIntelligence::default();
+	threat.tactic = ThreatTactic::Combat;
+	let npc = world
+		.spawn((
+			NpcIntelligence {
+				idle_tether: Some(idle),
+				engaged_tether: Some(engaged),
+				keep_tether_in_combat: false,
+			},
+			threat,
+			TetherIntelligenceUser::new(idle).with_enabled(true),
+		))
+		.id();
+	world.run_system_once(mix_npc_brains).unwrap();
+	assert!(world
+		.get::<TetherIntelligenceUser>(npc)
+		.is_some_and(|user| { !user.enabled && user.objective == idle }));
+}
+
+#[test]
+fn combat_keeps_tether_when_flagged() {
 	let mut world = World::new();
 	let anchor = world.spawn_empty().id();
 	let idle = TetherObjective::Tether(anchor, 12.0);
@@ -207,7 +280,7 @@ fn combat_always_disables_tether() {
 	world.run_system_once(mix_npc_brains).unwrap();
 	assert!(world
 		.get::<TetherIntelligenceUser>(npc)
-		.is_some_and(|user| { !user.enabled && user.objective == idle }));
+		.is_some_and(|user| { user.enabled && user.objective == engaged }));
 }
 
 #[test]

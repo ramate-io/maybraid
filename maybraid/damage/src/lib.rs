@@ -19,7 +19,7 @@ pub use history::{
 };
 pub use lifecycle::{
 	down_zero_health, ensure_downed_have_despawn, mark_downed, tick_queued_despawns, DespawnAfter,
-	Downed, DEFAULT_CORPSE_SECS,
+	Downed, NoCorpseCleanup, DEFAULT_CORPSE_SECS,
 };
 
 /// Default DPC used when a bolt is spawned without catalog stats.
@@ -100,8 +100,31 @@ impl Health {
 		self_has_health: bool,
 		parent_has_health: bool,
 	) -> Entity {
+		Self::entity_or_hurtbox_or_parent(
+			entity,
+			None,
+			parent,
+			self_has_health,
+			false,
+			parent_has_health,
+		)
+	}
+
+	/// Resolve a hit onto [`Health`]: the entity, its [`HurtboxOf`] host, then one
+	/// [`ChildOf`] hop. The typed relationship is the sensor/collider path; the
+	/// parent hop keeps direct child-collider mounts working.
+	pub fn entity_or_hurtbox_or_parent(
+		entity: Entity,
+		hurtbox: Option<Entity>,
+		parent: Option<Entity>,
+		self_has_health: bool,
+		hurtbox_has_health: bool,
+		parent_has_health: bool,
+	) -> Entity {
 		if self_has_health {
 			entity
+		} else if hurtbox_has_health {
+			hurtbox.unwrap_or(entity)
 		} else if parent_has_health {
 			parent.unwrap_or(entity)
 		} else {
@@ -149,6 +172,39 @@ impl HeadshotBand {
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct HitPayload {
 	pub amount: f32,
+}
+
+/// Marker on chain-capsule colliders.
+///
+/// [`contacts_to_hits`] skips these targets so a region coalescer can emit
+/// exactly one [`Hit`] per interaction through the generic apply path. This
+/// crate does not know about region chain types.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct ChainSegment;
+
+/// Collider or sensor whose hits debit [`Health`] on the related host.
+///
+/// Inserting this stamps [`HealthHurtboxes`] on the host. Damage apply follows
+/// this relationship instead of walking [`ChildOf`] past one hop.
+#[derive(Component, Clone, Copy, Debug)]
+#[relationship(relationship_target = HealthHurtboxes)]
+pub struct HurtboxOf(pub Entity);
+
+impl HurtboxOf {
+	pub fn host(&self) -> Entity {
+		self.0
+	}
+}
+
+/// Hurtboxes currently attached to one [`Health`] host.
+#[derive(Component, Debug)]
+#[relationship_target(relationship = HurtboxOf)]
+pub struct HealthHurtboxes(Vec<Entity>);
+
+impl HealthHurtboxes {
+	pub fn iter(&self) -> impl Iterator<Item = Entity> + '_ {
+		self.0.iter().copied()
+	}
 }
 
 impl Default for HitPayload {
@@ -214,6 +270,7 @@ impl Plugin for DamagePlugin {
 			.add_message::<ProjectileContact>()
 			.init_resource::<DamageHistory>()
 			.init_resource::<DamageHistoryPolicy>()
+			.init_resource::<from_projectiles::ProjectileHostHits>()
 			.configure_sets(
 				PostUpdate,
 				(
@@ -237,7 +294,10 @@ impl Plugin for DamagePlugin {
 					.chain()
 					.in_set(DamageSystems::Down),
 			)
-			.add_systems(Last, tick_queued_despawns);
+			.add_systems(
+				Last,
+				(tick_queued_despawns, from_projectiles::cleanup_projectile_host_hits),
+			);
 	}
 }
 
@@ -316,5 +376,14 @@ mod tests {
 		assert_eq!(Health::entity_or_parent(body, None, true, false), body);
 		assert_eq!(Health::entity_or_parent(child, Some(body), true, true), child);
 		assert_eq!(Health::entity_or_parent(child, Some(body), false, false), child);
+		let host = Entity::from_bits(3);
+		assert_eq!(
+			Health::entity_or_hurtbox_or_parent(child, Some(host), Some(body), false, true, false),
+			host
+		);
+		assert_eq!(
+			Health::entity_or_hurtbox_or_parent(child, Some(host), Some(body), true, true, true),
+			child
+		);
 	}
 }

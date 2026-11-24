@@ -234,7 +234,15 @@ impl AttackInstance {
 
 	fn wave_spawn(&mut self, spec_index: usize, origin: HazardOrigin, wave: WavefrontSpec, wave_index: u8) -> (Vec3, Vec3) {
 		*self.wave_emissions.entry((spec_index, wave_index)).or_insert_with(|| {
-			(origin.resolve(self.snapshot), wave.heading(self.snapshot))
+			let emission = origin.resolve(self.snapshot);
+			let heading = if matches!(origin, HazardOrigin::Emission) {
+				// For emission origins (mouth sockets), use full 3D direction to aim point
+				wave.heading_from_emission(emission, self.snapshot)
+			} else {
+				// For other origins, use the flattened heading with pitch
+				wave.heading(self.snapshot)
+			};
+			(emission, heading)
 		})
 	}
 
@@ -635,8 +643,9 @@ mod tests {
 		if (first.origin - Vec3::new(0.0, 0.4, 0.2)).length() >= 1e-4 {
 			return Err(anyhow::anyhow!("origin should be the emission"));
 		}
-		if (first.direction - Vec3::Z).length() >= 1e-4 {
-			return Err(anyhow::anyhow!("direction should be the heading"));
+		let expected_direction = (Vec3::Z - Vec3::new(0.0, 0.4, 0.2)).normalize();
+		if (first.direction - expected_direction).length() >= 1e-4 {
+			return Err(anyhow::anyhow!("direction should be emission→aim_point: expected {expected_direction:?}, got {:?}", first.direction));
 		}
 		if (first.speed - 5.0).abs() >= 1e-4 || (first.range - 8.0).abs() >= 1e-4 {
 			return Err(anyhow::anyhow!("speed/range should be authored"));

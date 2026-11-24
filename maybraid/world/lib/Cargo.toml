@@ -14,11 +14,19 @@ rust-version = { workspace = true }
 test-support = []
 # Debug commands for preview evidence capture (grant-points, take-damage, spawn-npc).
 debug-commands = []
+# Local visual review fixture; never installed in ordinary/debug-only gameplay.
+chain-review = ["debug-commands", "dep:projectiles"]
+memory-census = ["dep:maybraid-memory-census", "dep:render-item"]
 
 [dependencies]
+maybraid-memory-census = { path = "../../diagnostics/memory-census", optional = true }
+render-item = { workspace = true, optional = true }
 character-motion = { workspace = true }
 encounters = { workspace = true }
 bikanwarda-encounter = { workspace = true }
+bikanwarda-character = { workspace = true }
+bikanwarda-attacks = { workspace = true }
+attacks = { workspace = true }
 layer-stack = { workspace = true }
 avian3d = { workspace = true }
 bevy = { workspace = true }
@@ -78,6 +86,7 @@ maybraid-vfx = { workspace = true }
 maybraid-sky = { workspace = true }
 maybraid-weather = { workspace = true }
 mob-scenes = { workspace = true }
+projectiles = { workspace = true, optional = true }
 player = { workspace = true }
 player-camera = { workspace = true }
 mob-characters = { workspace = true }

@@ -84,6 +84,7 @@ pub(crate) fn write_firearm_movement_objectives(
 		(
 			Entity,
 			&Transform,
+			Option<&GlobalTransform>,
 			&FirearmIntelligence,
 			&CombatTargeting,
 			&mut FirearmMovementIntelligence,
@@ -95,12 +96,15 @@ pub(crate) fn write_firearm_movement_objectives(
 	mut commands: Commands,
 ) {
 	let now = time.elapsed_secs();
-	for (entity, transform, combat, targeting, mut brain, mut movement, lod) in &mut combatants {
+	for (entity, transform, global, combat, targeting, mut brain, mut movement, lod) in
+		&mut combatants
+	{
+		let at = global.map(GlobalTransform::translation).unwrap_or(transform.translation);
 		let Some(target) = targeting.best_contact() else {
 			if brain.driving {
 				brain.driving = false;
 				movement.objective = MovementObjective::Reach(MovementLocation::new(
-					transform.translation,
+					at,
 					movement.ability.agent_radius,
 				));
 				movement.adopt_plan(Vec::new());
@@ -113,7 +117,7 @@ pub(crate) fn write_firearm_movement_objectives(
 			continue;
 		}
 		brain.driving = true;
-		let next = brain.compose_sight(transform.translation, target.position, fresh);
+		let next = brain.compose_sight(at, target.position, fresh);
 		if !movement.objective.needs_replan(next, REPLAN_THRESHOLD) {
 			continue;
 		}
@@ -212,10 +216,11 @@ mod tests {
 
 		app.update();
 		assert!(app.world().get::<ReplanMovement>(combatant).is_none());
-		assert!(!app
-			.world()
-			.get::<MovementIntelligence>(combatant)
-			.is_some_and(|movement| movement.objective.is_vantage_on()));
+		assert!(
+			!app.world()
+				.get::<MovementIntelligence>(combatant)
+				.is_some_and(|movement| movement.objective.is_vantage_on())
+		);
 	}
 
 	#[test]
@@ -254,9 +259,10 @@ mod tests {
 		app.update();
 		assert!(app.world().get::<ReplanMovement>(near).is_some());
 		assert!(app.world().get::<ReplanMovement>(far_fresh).is_some());
-		assert!(app
-			.world()
-			.get::<MovementIntelligence>(near)
-			.is_some_and(|movement| movement.objective.is_vantage_on()));
+		assert!(
+			app.world()
+				.get::<MovementIntelligence>(near)
+				.is_some_and(|movement| movement.objective.is_vantage_on())
+		);
 	}
 }

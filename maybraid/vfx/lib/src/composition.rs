@@ -117,6 +117,14 @@ impl MeshPart {
 	}
 }
 
+/// Driven or recipe-spawned directional ring. Runtime pose lives in [`crate::parts::soundwave`].
+#[derive(Clone, Debug)]
+pub struct SoundwavePart {
+	pub name: String,
+	pub mesh: Handle<Mesh>,
+	pub duration: f32,
+}
+
 /// Shared packaged flipbook handle and proxy mesh. Duration is a fallback until the manifest loads.
 #[derive(Clone, Debug, Default)]
 pub struct FlipbookPart {
@@ -143,6 +151,7 @@ pub enum EffectPart {
 	Particle(ParticlePart),
 	Light(LightPulse),
 	Mesh(MeshPart),
+	Soundwave(SoundwavePart),
 }
 
 /// One timed piece of a composite: part, delay, local pose, scale.
@@ -191,6 +200,15 @@ impl EffectLayer {
 		}
 	}
 
+	pub fn soundwave(part: SoundwavePart) -> Self {
+		Self {
+			part: EffectPart::Soundwave(part),
+			delay: 0.0,
+			transform: Transform::IDENTITY,
+			scale: 1.0,
+		}
+	}
+
 	pub fn with_delay(mut self, delay: f32) -> Self {
 		self.delay = delay;
 		self
@@ -216,6 +234,7 @@ impl EffectLayer {
 			EffectPart::Particle(part) => part.max_lifetime,
 			EffectPart::Light(pulse) => pulse.fade,
 			EffectPart::Mesh(part) => part.duration,
+			EffectPart::Soundwave(part) => part.duration,
 		}
 	}
 }

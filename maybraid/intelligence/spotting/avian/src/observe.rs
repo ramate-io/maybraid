@@ -185,7 +185,8 @@ pub fn discover_spotting(
 ) {
 	let now = time.elapsed_secs();
 	let animated_filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Animated);
-	let fixed_filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
+	// Base filter without exclusions - will be customized per observer
+	let base_fixed_filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
 	collect_due_discoverers(now, &mut spotters, &mut due_entities);
 	let due = due_entities.finish(&priority);
 	let fair = fair_far_spotter(due, &mut spotters);
@@ -227,6 +228,8 @@ pub fn discover_spotting(
 			&transforms,
 			&mut batch.candidates,
 		);
+		// Exclude observer from LOS rays to prevent self-occlusion
+		let fixed_filter = base_fixed_filter.clone().with_excluded_entities([entity]);
 		frame.discovery_samples += batch.execute(
 			&mut user,
 			now,
@@ -284,7 +287,8 @@ pub fn refresh_spotting(
 		queued_observers = retained_round.len(), observer_cap = limits.max_retained_observers_per_tick,
 		sample_cap = limits.max_retained_samples_per_tick);
 	let _guard = span.enter();
-	let fixed_filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
+	// Base filter without exclusions - will be customized per observer
+	let base_fixed_filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
 	while frame.retained_observers < limits.max_retained_observers_per_tick {
 		let remaining = limits.max_retained_samples_per_tick.saturating_sub(frame.retained_samples);
 		// Preserve the unserved head when this Update's sample credit is exhausted.
@@ -303,6 +307,8 @@ pub fn refresh_spotting(
 		let observer = transform.translation() + transform.rotation() * user.eye_offset;
 		let band = IntelligenceLod::band_or_near(lod.as_deref());
 		batch.candidates.clear();
+		// Exclude observer from LOS rays to prevent self-occlusion
+		let fixed_filter = base_fixed_filter.clone().with_excluded_entities([entity]);
 		frame.retained_samples += batch.execute(
 			&mut user,
 			now,

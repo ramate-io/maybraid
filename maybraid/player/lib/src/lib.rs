@@ -31,7 +31,7 @@ pub use characters::{HeadCapsule, HitCapsule};
 pub use contact::{
 	motor_traction_bundle, register_motor_traction_physics, MotorTraction, MotorTractionHooks,
 };
-pub use hit::HitVolume;
+pub use hit::{bind_hurtbox_host, HitVolume, HitVolumeCollider};
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,
 	PlayerOpticAds, PlayerUse, PlayerVisual, PlayerYawOwner,

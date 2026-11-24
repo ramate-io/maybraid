@@ -15,7 +15,9 @@ use crate::{MobBrain, MobKind, MobMemberRecipe, MobRosterRecipe};
 
 /// Semantic High band radius (metres) for streamed world mobs.
 /// Playgrounds override with [`MobScene::with_high_radius`].
-pub const DEFAULT_MOB_HIGH_RADIUS: f32 = 200.0;
+pub const DEFAULT_MOB_HIGH_RADIUS: f32 = 300.0;
+/// Experimental outer envelope for already materialized members.
+pub const DEFAULT_MOB_RETAIN_RADIUS: f32 = 400.0;
 
 #[derive(Clone, Debug)]
 pub struct Mob<Roster = MobRosterRecipe, Intelligence = MobBrain> {
@@ -43,7 +45,13 @@ impl Mob {
 	}
 
 	pub fn into_scene(self) -> MobScene {
-		MobScene { mob: self, center: Vec3::ZERO, high_radius: DEFAULT_MOB_HIGH_RADIUS }
+		MobScene {
+			mob: self,
+			center: Vec3::ZERO,
+			high_radius: DEFAULT_MOB_HIGH_RADIUS,
+			retain_radius: DEFAULT_MOB_RETAIN_RADIUS,
+			retaining_members: false,
+		}
 	}
 }
 
@@ -52,6 +60,8 @@ pub struct MobScene {
 	pub mob: Mob,
 	pub center: Vec3,
 	pub high_radius: f32,
+	pub retain_radius: f32,
+	pub(crate) retaining_members: bool,
 }
 
 impl Default for MobScene {
@@ -71,6 +81,14 @@ impl MobScene {
 
 	pub fn with_high_radius(mut self, radius: f32) -> Self {
 		self.high_radius = radius.max(1.0);
+		// Existing playground overrides keep their original single boundary.
+		self.retain_radius = self.high_radius;
+		self
+	}
+
+	/// Configure the outer envelope; it cannot be narrower than acquisition.
+	pub fn with_retain_radius(mut self, radius: f32) -> Self {
+		self.retain_radius = radius.max(self.high_radius);
 		self
 	}
 
@@ -109,7 +127,12 @@ impl MobScene {
 	}
 
 	fn level_for(&self, transform: &Transform) -> LodSceneLevel {
-		if transform.translation.distance(self.center) <= self.high_radius {
+		let radius = if self.retaining_members {
+			self.retain_radius.max(self.high_radius)
+		} else {
+			self.high_radius
+		};
+		if transform.translation.distance(self.center) <= radius {
 			LodSceneLevel::High
 		} else {
 			LodSceneLevel::UltraLow
@@ -240,9 +263,43 @@ mod tests {
 	}
 
 	#[test]
-	fn default_high_radius_is_two_hundred_metres() {
-		assert_eq!(DEFAULT_MOB_HIGH_RADIUS, 200.0);
+	fn default_acquire_and_retain_envelopes() {
+		assert_eq!(DEFAULT_MOB_HIGH_RADIUS, 300.0);
+		assert_eq!(MobScene::default().retain_radius, 400.0);
 		assert_eq!(MobScene::default().high_radius, DEFAULT_MOB_HIGH_RADIUS);
+	}
+
+	#[test]
+	fn empty_and_unfulfilled_hosts_do_not_acquire_the_retention_annulus() {
+		let mut mob = MobScene::default();
+		with_lod(350.0, |reference| {
+			assert_eq!(mob.scene_lod_level(reference), LodSceneLevel::UltraLow);
+		});
+		mob.retaining_members = true;
+		with_lod(350.0, |reference| {
+			assert_eq!(mob.scene_lod_level(reference), LodSceneLevel::High);
+		});
+		mob.retaining_members = false;
+		with_lod(350.0, |reference| {
+			assert_eq!(mob.scene_lod_level(reference), LodSceneLevel::UltraLow);
+		});
+	}
+
+	#[test]
+	fn stationary_viewer_rechecks_a_moving_host() {
+		let mut mob = MobScene::default();
+		mob.retaining_members = true;
+		for (center, expected) in [
+			(399.0, LodSceneLevel::High),
+			(401.0, LodSceneLevel::UltraLow),
+			(299.0, LodSceneLevel::High),
+		] {
+			mob.center = Vec3::new(center, 0.0, 0.0);
+			with_lod(0.0, |reference| {
+				assert_eq!(mob.scene_lod_level(reference), expected);
+				assert_eq!(mob.scene_lod_level_from_levels(&[*reference]), expected);
+			});
+		}
 	}
 
 	#[test]

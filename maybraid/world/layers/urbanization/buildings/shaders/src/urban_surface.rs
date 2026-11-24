@@ -10,6 +10,11 @@ use bevy::{
 	render::render_resource::{AsBindGroup, ShaderType},
 	shader::ShaderRef,
 };
+use bevy::{
+	mesh::MeshVertexBufferLayoutRef,
+	pbr::{MaterialPipeline, MaterialPipelineKey},
+	render::render_resource::{RenderPipelineDescriptor, SpecializedMeshPipelineError},
+};
 use material_ref::{
 	MaterialId, MaterialRasters, MaterialRef, MATERIAL_PALETTE_SLOTS, MATERIAL_RASTER_CHANNELS,
 	MATERIAL_RASTER_WIDTH, MATERIAL_SCALAR_FLOATS,
@@ -39,6 +44,9 @@ impl Plugin for UrbanSurfaceMaterialPlugin {
 	fn build(&self, app: &mut App) {
 		embedded_asset!(app, "urban_surface.wesl");
 		app.add_plugins(MaterialPlugin::<UrbanSurfaceMaterial>::default());
+		if std::env::var("MAYBRAID_EXPERIMENT_URBAN_COMPANION").is_ok_and(|value| value == "1") {
+			bevy::pbr::prepare_position_normal_pipeline_companion::<UrbanSurfaceMaterial>(app);
+		}
 	}
 }
 
@@ -172,6 +180,15 @@ impl Material for UrbanSurfaceMaterial {
 
 	fn alpha_mode(&self) -> AlphaMode {
 		AlphaMode::Opaque
+	}
+	fn specialize(
+		_pipeline: &MaterialPipeline,
+		descriptor: &mut RenderPipelineDescriptor,
+		_layout: &MeshVertexBufferLayoutRef,
+		_key: MaterialPipelineKey<Self>,
+	) -> Result<(), SpecializedMeshPipelineError> {
+		material_ref::OpaqueMaterialInputs::omit_unused_uv0(descriptor);
+		Ok(())
 	}
 }
 

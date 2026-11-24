@@ -10,6 +10,7 @@ type CompletablePoiGoal<'a> = (
 	Entity,
 	&'a GlobalTransform,
 	&'a mut PoiGoal,
+	Option<&'a PoiGoalHold>,
 	Option<&'a mut RoutingIntelligenceUser>,
 	Option<&'a mut PoiKnowledge>,
 	Option<&'a mut PoiGoalState>,
@@ -19,6 +20,7 @@ type CompletablePoiGoal<'a> = (
 pub enum PoiGoalStatus {
 	Active,
 	Completed,
+	Failed,
 }
 
 /// Persistent status of the newest POI goal, including completed goals.
@@ -39,6 +41,40 @@ impl PoiGoalState {
 		self.target = target;
 		self.status = PoiGoalStatus::Active;
 		self.generation
+	}
+}
+
+/// Explicit ownership of one goal until its controller releases it.
+/// A stale assignment cannot hold a replacement kind/target/generation.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PoiGoalHold {
+	pub kind: PoiKind,
+	pub target: PoiId,
+	pub generation: u64,
+}
+
+impl PoiGoalHold {
+	pub fn matches(self, goal: &PoiGoal) -> bool {
+		self.kind == goal.kind && self.target == goal.target && self.generation == goal.generation
+	}
+
+	/// Release only this owned assignment, never a foreign replacement goal/hold.
+	pub fn release(self, commands: &mut Commands, user: Entity) {
+		commands.queue(move |world: &mut World| {
+			if world.get::<PoiGoalHold>(user) != Some(&self) {
+				return;
+			}
+			let owns_goal = world.get::<PoiGoal>(user).is_some_and(|goal| self.matches(goal));
+			if let Ok(mut entity) = world.get_entity_mut(user) {
+				entity.remove::<PoiGoalHold>();
+				if owns_goal {
+					entity.remove::<PoiGoal>();
+					if let Some(mut routing) = entity.get_mut::<RoutingIntelligenceUser>() {
+						routing.clear_destination();
+					}
+				}
+			}
+		});
 	}
 }
 
@@ -133,6 +169,20 @@ pub struct PoiGoalCompleted {
 	pub location: MovementLocation,
 }
 
+/// Emitted when movement exhausts retries on an unreachable pin.
+///
+/// This is not an arrival: visit history must not record it, so the pin stays
+/// eligible after a separate failure cooldown.
+#[derive(Message, Clone, Copy, Debug, PartialEq)]
+pub struct PoiGoalFailed {
+	pub user: Entity,
+	pub generation: u64,
+	pub target: PoiId,
+	pub poi_entity: Option<Entity>,
+	pub kind: PoiKind,
+	pub location: MovementLocation,
+}
+
 /// Keeps entity-backed destinations current while preserving remembered POIs.
 pub fn refresh_poi_goals(registry: Res<PoiRegistry>, mut goals: Query<&mut PoiGoal>) {
 	for mut goal in &mut goals {
@@ -159,19 +209,41 @@ pub fn begin_poi_goal(
 	state: Option<&mut PoiGoalState>,
 	destination_salt: u64,
 ) {
+	let goal = make_poi_goal(commands, user, known, now, linger_secs, state, destination_salt);
+	commands.entity(user).insert(goal);
+}
+
+/// Begin and hold the same generation atomically. Controllers retain the returned
+/// identity so a later release cannot clear another owner's replacement.
+pub fn begin_held_poi_goal(
+	commands: &mut Commands,
+	user: Entity,
+	known: KnownPoi,
+	now: f32,
+	state: Option<&mut PoiGoalState>,
+) -> PoiGoalHold {
+	let goal = make_poi_goal(commands, user, known, now, 0.0, state, 0);
+	let hold = PoiGoalHold { kind: goal.kind, target: goal.target, generation: goal.generation };
+	commands.entity(user).insert((goal, hold));
+	hold
+}
+
+fn make_poi_goal(
+	commands: &mut Commands,
+	user: Entity,
+	known: KnownPoi,
+	now: f32,
+	linger_secs: f32,
+	state: Option<&mut PoiGoalState>,
+	destination_salt: u64,
+) -> PoiGoal {
 	let generation = if let Some(state) = state {
 		state.begin(known.id)
 	} else {
 		commands.entity(user).insert(PoiGoalState::new(known.id));
 		1
 	};
-	commands.entity(user).insert(PoiGoal::from_known(
-		generation,
-		known,
-		now,
-		linger_secs,
-		destination_salt,
-	));
+	PoiGoal::from_known(generation, known, now, linger_secs, destination_salt)
 }
 
 /// Converts newly selected or moved POI goals into route or movement objectives.
@@ -208,7 +280,7 @@ pub fn complete_poi_goals(
 	mut commands: Commands,
 ) {
 	let now = time.elapsed_secs();
-	for (entity, transform, mut goal, mut routing, mut knowledge, mut state) in &mut users {
+	for (entity, transform, mut goal, hold, mut routing, mut knowledge, mut state) in &mut users {
 		if state.as_deref().is_some_and(|state| {
 			state.generation != goal.generation
 				|| state.target != goal.target
@@ -221,6 +293,9 @@ pub fn complete_poi_goals(
 				knowledge.remove_source(goal.target, PoiSource::OBJECTIVE);
 			}
 			commands.entity(entity).remove::<PoiGoal>();
+			continue;
+		}
+		if hold.is_some_and(|hold| hold.matches(&goal)) {
 			continue;
 		}
 		let inside = goal.location.contains(transform.translation());
@@ -247,3 +322,52 @@ pub fn complete_poi_goals(
 		commands.entity(entity).remove::<PoiGoal>();
 	}
 }
+
+/// Drops a POI goal after movement has exhausted empty-replan retries, so
+/// meandering (and other selectors) can pick another pin the same frame.
+///
+/// Selection queries `Without<PoiGoal>`; without this handoff an unreachable
+/// pin keeps its goal forever while movement retries the same `Reach`.
+pub fn abandon_unreachable_poi_goals(
+	mut users: Query<(
+		Entity,
+		&PoiGoal,
+		&MovementIntelligence,
+		Option<&mut RoutingIntelligenceUser>,
+		Option<&mut PoiKnowledge>,
+		Option<&mut PoiGoalState>,
+	)>,
+	mut failed: MessageWriter<PoiGoalFailed>,
+	mut commands: Commands,
+) {
+	for (entity, goal, movement, mut routing, mut knowledge, mut state) in &mut users {
+		if !movement.plan_failures_exhausted() {
+			continue;
+		}
+		let next = MovementObjective::Reach(goal.location);
+		if movement.objective != next {
+			continue;
+		}
+		if let Some(routing) = routing.as_deref_mut() {
+			routing.clear_destination();
+		}
+		if let Some(knowledge) = knowledge.as_deref_mut() {
+			knowledge.remove_source(goal.target, PoiSource::OBJECTIVE);
+		}
+		if let Some(state) = state.as_deref_mut() {
+			state.status = PoiGoalStatus::Failed;
+		}
+		failed.write(PoiGoalFailed {
+			user: entity,
+			generation: goal.generation,
+			target: goal.target,
+			poi_entity: goal.poi_entity,
+			kind: goal.kind,
+			location: goal.location,
+		});
+		commands.entity(entity).remove::<PoiGoal>();
+	}
+}
+
+#[cfg(test)]
+mod hold_tests;

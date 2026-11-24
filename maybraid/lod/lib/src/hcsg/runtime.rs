@@ -29,11 +29,19 @@ pub(super) fn ensure_runtime(app: &mut App) {
 	app.init_resource::<LodChunkFulfillBudget>()
 		.configure_sets(Update, HcsgSystems.before(LodRefreshSystems::Track))
 		.add_systems(Last, despawn_retired_hosts);
+	#[cfg(feature = "generation-tracing")]
+	if lod_generation_diagnostics::retired_host::enabled() {
+		app.init_resource::<super::presentation::retirement_probe::RetirementProbe>();
+	}
 	if std::env::var_os(DIAG_ENV).is_some() {
 		app.add_systems(Update, log_store_diagnostics);
 	}
 	let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
 	let demand = app.world_mut().get_resource_or_init::<HcsgDemand>().clone();
+	
+	// Connect storage and demand so publish can invalidate intersecting subscriptions
+	storage.set_demand(demand.clone());
+	
 	match HcsgWorker::spawn(storage, demand) {
 		Ok(worker) => {
 			app.insert_resource(worker);
@@ -50,10 +58,13 @@ fn log_store_diagnostics(storage: Res<HcsgStorage>, time: Res<Time>, mut last: L
 		return;
 	}
 	*last = 0.0;
+	let Ok(sizes) = storage.try_store_sizes() else {
+		return;
+	};
 	let (top, nested) = storage.rebuilds_after_eviction();
 	info!(
 		target: "hcsg",
 		"stores={:?} rebuilds_after_eviction=({top}, {nested})",
-		storage.store_sizes()
+		sizes
 	);
 }
