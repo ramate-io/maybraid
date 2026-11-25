@@ -398,7 +398,7 @@ fn bind_painted_meshes(
 		};
 		match painted_mesh_fits(painted, source, skin) {
 			Ok(()) => {
-				debug!(
+				info!(
 					"Bikanwarda {}: painted mesh bound (skinned={})",
 					slot.object_name(),
 					skin.is_some()
