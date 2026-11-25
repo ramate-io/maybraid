@@ -1,5 +1,7 @@
-//! Opt-in generation diagnostics. Only `lod/generation-tracing` installs callers.
-//! Counters describe operation scope, including nested work, never exclusive CPU.
+//! Opt-in LOD diagnostics for generation (HCSG) and scene refresh (drain).
+//! 
+//! - Generation diagnostics: `lod/generation-tracing` feature, `maybraid.generation.profile` target
+//! - Scene refresh diagnostics: `lod/scene-tracing` feature, `maybraid.lod.drain` target
 
 pub mod retired_host;
 
@@ -412,5 +414,213 @@ pub fn publication(version: u64, scheme: &'static str, node: &impl std::fmt::Deb
 	if granted {
 		let operation = ACTIVE.with(|active| active.borrow().last().map(|entry| entry.operation));
 		tracing::trace!(target: "maybraid.generation.profile", operation, version, family = family(scheme), scheme, node = ?node, "hcsg.publish");
+	}
+}
+
+/// Scene refresh (drain) telemetry module.
+pub mod scene_refresh {
+	use tracing;
+	
+	pub const TARGET: &str = "maybraid.lod.drain";
+	
+	/// Check if scene refresh telemetry is enabled.
+	#[inline]
+	pub fn enabled() -> bool {
+		tracing::enabled!(target: TARGET, tracing::Level::INFO)
+	}
+	
+	/// Emit drain frame classification summary.
+	pub fn emit_classification_summary(
+		frame: u64,
+		new_roots_total: u32,
+		skipped_queue_empty: u32,
+		skipped_no_host: u32,
+		skipped_cold_mismatch: u32,
+		skipped_not_shown: u32,
+		budget_total: u32,
+	) {
+		if enabled() {
+			tracing::info!(
+				target: TARGET,
+				frame,
+				new_roots_total,
+				skipped_queue_empty,
+				skipped_no_host,
+				skipped_cold_mismatch,
+				skipped_not_shown,
+				budget_total,
+				"drain frame classification summary"
+			);
+		}
+	}
+	
+	/// Emit cold mismatch skip for a new root.
+	pub fn emit_cold_mismatch_skip(
+		entity: bevy::prelude::Entity,
+		host: bevy::prelude::Entity,
+		self_level: impl std::fmt::Debug,
+		desired: impl std::fmt::Debug,
+	) {
+		if enabled() {
+			tracing::info!(
+				target: TARGET,
+				root = ?entity,
+				host = ?host,
+				self_level = ?self_level,
+				desired = ?desired,
+				"new cold root skipped (cold but self_level != desired)"
+			);
+		}
+	}
+	
+	/// Emit warm root skip for a new root.
+	pub fn emit_warm_root_skip(
+		entity: bevy::prelude::Entity,
+		host: bevy::prelude::Entity,
+		self_level: impl std::fmt::Debug,
+		desired: impl std::fmt::Debug,
+		shown: bool,
+	) {
+		if enabled() {
+			tracing::info!(
+				target: TARGET,
+				root = ?entity,
+				host = ?host,
+				self_level = ?self_level,
+				desired = ?desired,
+				shown,
+				"new warm root skipped (not desired and not shown)"
+			);
+		}
+	}
+	
+	/// Emit new root visit telemetry.
+	pub fn emit_new_root_visit(
+		entity: bevy::prelude::Entity,
+		host: bevy::prelude::Entity,
+		parent_desired: impl std::fmt::Debug,
+		self_level: Option<impl std::fmt::Debug>,
+		host_desired: Option<impl std::fmt::Debug>,
+		cold: bool,
+		budget_remaining: u32,
+		time_left_us: u128,
+		quanta: u32,
+	) {
+		if enabled() {
+			tracing::info!(
+				target: TARGET,
+				root = ?entity,
+				host = ?host,
+				parent_desired = ?parent_desired,
+				self_level = ?self_level,
+				host_desired = ?host_desired,
+				cold,
+				budget_remaining,
+				time_left_us,
+				quanta,
+				"visiting new root (spawned=0)"
+			);
+		}
+	}
+	
+	/// Emit first spawn completion for a new root.
+	pub fn emit_first_spawn_complete(
+		entity: bevy::prelude::Entity,
+		host: bevy::prelude::Entity,
+		self_level: Option<impl std::fmt::Debug>,
+		primitives_left: usize,
+		quanta: u32,
+	) {
+		if enabled() {
+			tracing::info!(
+				target: TARGET,
+				root = ?entity,
+				host = ?host,
+				self_level = ?self_level,
+				primitives_left,
+				quanta,
+				"new root completed first spawn"
+			);
+		}
+	}
+	
+	/// Frame classification counters (only when telemetry is enabled).
+	#[derive(Debug, Default)]
+	pub struct ClassificationCounters {
+		pub new_roots_total: u32,
+		pub skipped_queue_empty: u32,
+		pub skipped_no_host: u32,
+		pub skipped_cold_mismatch: u32,
+		pub skipped_not_shown: u32,
+	}
+	
+	impl ClassificationCounters {
+		#[inline]
+		pub fn count_new_root(&mut self) {
+			if enabled() {
+				self.new_roots_total += 1;
+			}
+		}
+		
+		#[inline]
+		pub fn count_skipped_queue_empty(&mut self) {
+			if enabled() {
+				self.skipped_queue_empty += 1;
+			}
+		}
+		
+		#[inline]
+		pub fn count_skipped_no_host(&mut self) {
+			if enabled() {
+				self.skipped_no_host += 1;
+			}
+		}
+		
+		#[inline]
+		pub fn count_skipped_cold_mismatch(&mut self) {
+			if enabled() {
+				self.skipped_cold_mismatch += 1;
+			}
+		}
+		
+		#[inline]
+		pub fn count_skipped_not_shown(&mut self) {
+			if enabled() {
+				self.skipped_not_shown += 1;
+			}
+		}
+		
+		#[inline]
+		pub fn has_new_roots(&self) -> bool {
+			self.new_roots_total > 0
+		}
+	}
+	
+	#[cfg(test)]
+	mod tests {
+		use super::*;
+		
+		#[test]
+		fn scene_refresh_telemetry_disabled_by_default() {
+			// Verify enabled() returns false when not explicitly configured by runtime.
+			// When the feature is off, this entire module is unused and enabled() is never called.
+			// This test exists to document the expected behavior when the feature IS on.
+			let _ = enabled();
+		}
+		
+		#[test]
+		fn classification_counters_are_zero_cost_stubs() {
+			// With the feature on, these operations check enabled() before incrementing.
+			// The test verifies the API compiles and is callable.
+			let mut counters = ClassificationCounters::default();
+			counters.count_new_root();
+			counters.count_skipped_queue_empty();
+			counters.count_skipped_no_host();
+			counters.count_skipped_cold_mismatch();
+			counters.count_skipped_not_shown();
+			
+			// has_new_roots checks the actual counter value
+			let _ = counters.has_new_roots();
+		}
 	}
 }

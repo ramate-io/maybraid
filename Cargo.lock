@@ -7088,6 +7088,7 @@ name = "lod-generation-diagnostics"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "bevy",
  "tracing",
  "tracing-subscriber",
 ]
