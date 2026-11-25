@@ -273,9 +273,9 @@ pub(crate) fn primary_mesh_under(world: &bevy::prelude::World, root: Entity) -> 
 	skinned_best.or(rigid_best).map(|(e, _)| e)
 }
 
-type ExtractedMesh = (Vec<Vec3>, Vec<Vec3>, Vec<Vec2>, Vec<[u32; 3]>);
+pub(crate) type ExtractedMesh = (Vec<Vec3>, Vec<Vec3>, Vec<Vec2>, Vec<[u32; 3]>);
 
-fn extract_mesh_local(
+pub(crate) fn extract_mesh_local(
 	mesh: &Mesh,
 	entity: Entity,
 	world: &bevy::prelude::World,
@@ -317,7 +317,7 @@ fn extract_mesh_local(
 	Some((positions, normals, uvs, faces))
 }
 
-fn mesh_positions(mesh: &Mesh) -> Vec<Vec3> {
+pub(crate) fn mesh_positions(mesh: &Mesh) -> Vec<Vec3> {
 	match mesh.attribute(Mesh::ATTRIBUTE_POSITION) {
 		Some(VertexAttributeValues::Float32x3(p)) => {
 			p.iter().map(|a| Vec3::from_array(*a)).collect()
@@ -326,7 +326,7 @@ fn mesh_positions(mesh: &Mesh) -> Vec<Vec3> {
 	}
 }
 
-fn mesh_normals(mesh: &Mesh) -> Vec<Vec3> {
+pub(crate) fn mesh_normals(mesh: &Mesh) -> Vec<Vec3> {
 	match mesh.attribute(Mesh::ATTRIBUTE_NORMAL) {
 		Some(VertexAttributeValues::Float32x3(n)) => {
 			n.iter().map(|a| Vec3::from_array(*a)).collect()
@@ -335,7 +335,7 @@ fn mesh_normals(mesh: &Mesh) -> Vec<Vec3> {
 	}
 }
 
-fn mesh_uvs(mesh: &Mesh) -> Vec<Vec2> {
+pub(crate) fn mesh_uvs(mesh: &Mesh) -> Vec<Vec2> {
 	match mesh.attribute(Mesh::ATTRIBUTE_UV_0) {
 		Some(VertexAttributeValues::Float32x2(uv)) => {
 			uv.iter().map(|a| Vec2::from_array(*a)).collect()
@@ -344,7 +344,7 @@ fn mesh_uvs(mesh: &Mesh) -> Vec<Vec2> {
 	}
 }
 
-fn mesh_faces(mesh: &Mesh) -> Vec<[u32; 3]> {
+pub(crate) fn mesh_faces(mesh: &Mesh) -> Vec<[u32; 3]> {
 	let n = mesh_positions(mesh).len() as u32;
 	let indices: Vec<u32> = match mesh.indices() {
 		Some(Indices::U32(i)) => i.clone(),

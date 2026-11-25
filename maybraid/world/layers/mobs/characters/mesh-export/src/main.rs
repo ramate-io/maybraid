@@ -10,6 +10,7 @@ use character_mesh_export::export::{
 	assembly_block_reason, assembly_ready, assets_root, collect_groups, write_import_zip,
 	write_obj_bundle_with,
 };
+use character_mesh_export::painted;
 use character_mesh_export::texture::TextureConfig;
 use characters::{
 	spawn_fixed_character_assembly, species::epiphant::EpiphantConfig, CharacterAssemblyBudget,
@@ -25,14 +26,24 @@ enum Species {
 
 #[derive(Parser)]
 #[command(name = "character-mesh-export")]
-#[command(about = "Export an assembled Maybraid character to OBJ (rest pose, Y-up)")]
+#[command(
+	about = "Export an assembled Maybraid character to OBJ (rest pose, Y-up), or re-bind a painted OBJ"
+)]
 struct Cli {
 	#[arg(long, value_enum, default_value_t = Species::Epiphant)]
 	species: Species,
 
 	/// Output `.obj` path. A companion `.mtl` and per-component `*_color.png` are written alongside.
+	#[arg(long, required_unless_present = "rebind_painted")]
+	output: Option<PathBuf>,
+
+	/// Painted export OBJ to re-bind onto the live skinned part meshes (instead of exporting).
+	#[arg(long, requires = "glb_output")]
+	rebind_painted: Option<PathBuf>,
+
+	/// Output GLB for `--rebind-painted`: one skinned-ready mesh per component.
 	#[arg(long)]
-	output: PathBuf,
+	glb_output: Option<PathBuf>,
 
 	/// Optional zip of a folder containing OBJ + MTL + PNGs + README for an iPad.
 	#[arg(long)]
@@ -42,6 +53,10 @@ struct Cli {
 	#[arg(long, default_value_t = character_mesh_export::DEFAULT_TEXTURE_RESOLUTION)]
 	texture_resolution: u32,
 
+	/// Hold animation time at zero (always on for `--rebind-painted`).
+	#[arg(long)]
+	freeze_clock: bool,
+
 	/// Maximum frames to wait for GLB load + skin remap.
 	#[arg(long, default_value_t = 600)]
 	timeout_frames: u32,
@@ -49,7 +64,8 @@ struct Cli {
 
 #[derive(Resource)]
 struct ExportJob {
-	output: PathBuf,
+	output: Option<PathBuf>,
+	rebind: Option<(PathBuf, PathBuf)>,
 	zip: Option<PathBuf>,
 	texture_resolution: u32,
 	timeout_frames: u32,
@@ -60,6 +76,7 @@ struct ExportJob {
 
 fn main() -> ExitCode {
 	let cli = Cli::parse();
+	let freeze_clock = cli.rebind_painted.is_some() || cli.freeze_clock;
 	let assets_path = assets_root();
 	if !assets_path.is_dir() {
 		eprintln!("assets root not found: {}", assets_path.display());
@@ -79,6 +96,7 @@ fn main() -> ExitCode {
 	.add_plugins(CharacterHostsPlugin)
 	.insert_resource(ExportJob {
 		output: cli.output,
+		rebind: cli.rebind_painted.zip(cli.glb_output),
 		zip: cli.zip,
 		texture_resolution: cli.texture_resolution,
 		timeout_frames: cli.timeout_frames,
@@ -95,6 +113,14 @@ fn main() -> ExitCode {
 		PostUpdate,
 		tick_export.after(TransformSystems::Propagate).after(RigSystems::Pose),
 	);
+
+	if freeze_clock {
+		// Hold animation time at 0 so the baked surface is the clip's first frame,
+		// not whatever frame wall-clock load time happened to reach.
+		app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+			std::time::Duration::ZERO,
+		));
+	}
 
 	let exit = app.run();
 	match exit {
@@ -113,6 +139,39 @@ fn spawn_character(mut commands: Commands, mut job: ResMut<ExportJob>) {
 	};
 	let root = spawn_fixed_character_assembly(&mut commands, &recipe, Transform::IDENTITY);
 	job.root = Some(root);
+}
+
+fn rebind_painted(
+	world: &mut World,
+	root: Entity,
+	painted: &std::path::Path,
+	glb: &std::path::Path,
+) -> AppExit {
+	let result = (|| -> anyhow::Result<()> {
+		let text = std::fs::read_to_string(painted)?;
+		let objects = painted::parse_painted_obj(&text)?;
+		let sources = painted::collect_source_parts(world, root)?;
+		let bound = painted::bind_all(&sources, &objects)?;
+		for mesh in &bound {
+			println!(
+				"{} vertices={} skinned={} {}",
+				mesh.name,
+				mesh.positions.len(),
+				mesh.joints.is_some(),
+				mesh.stats
+			);
+		}
+		painted::write_bound_glb(glb, &bound)?;
+		println!("Wrote {}", glb.display());
+		Ok(())
+	})();
+	match result {
+		Ok(()) => AppExit::Success,
+		Err(error) => {
+			eprintln!("rebind failed: {error}");
+			app_error(7)
+		}
+	}
 }
 
 fn tick_export(world: &mut World) {
@@ -137,6 +196,12 @@ fn tick_export(world: &mut World) {
 			return;
 		}
 
+		if let Some((painted, glb)) = job.rebind.clone() {
+			exit = rebind_painted(world, root, &painted, &glb);
+			finished = true;
+			return;
+		}
+
 		let groups = collect_groups(world, root);
 		if groups.is_empty() {
 			if job.frames >= job.timeout_frames {
@@ -147,7 +212,12 @@ fn tick_export(world: &mut World) {
 			return;
 		}
 
-		let output = job.output.clone();
+		let Some(output) = job.output.clone() else {
+			eprintln!("--output is required");
+			exit = app_error(2);
+			finished = true;
+			return;
+		};
 		let textures = TextureConfig::new(job.texture_resolution);
 		match write_obj_bundle_with(&output, &groups, textures) {
 			Ok(report) => {

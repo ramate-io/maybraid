@@ -1,7 +1,9 @@
-//! Assemble a character in-process and write a Wavefront OBJ with per-component textures.
+//! Assemble a character in-process and write a Wavefront OBJ with per-component textures,
+//! or re-bind a painted export OBJ onto the live skinned part meshes ([`painted`]).
 
 pub mod export;
 pub mod obj_text;
+pub mod painted;
 pub mod skin;
 pub mod texture;
 pub mod uv;

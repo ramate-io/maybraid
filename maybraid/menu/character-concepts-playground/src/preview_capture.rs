@@ -44,6 +44,8 @@ pub struct PreviewCaptureSettings {
 	pub draw_mouth_emit: bool,
 	/// Multiplier on auto-framed camera distance (close < 1, mid = 1).
 	pub camera_distance_scale: f32,
+	/// Orbit the auto-framed camera about +Y (degrees; 0 = front three-quarter).
+	pub camera_yaw_degrees: f32,
 	/// GPU-readback still path (`CROZON_PREVIEW_CAPTURE_PNG`).
 	pub capture_png: Option<PathBuf>,
 }
@@ -59,6 +61,7 @@ impl PreviewCaptureSettings {
 			hide_ui: env_flag("CROZON_PREVIEW_HIDE_UI").unwrap_or(true),
 			draw_mouth_emit: env_flag("CROZON_PREVIEW_DRAW_MOUTH_EMIT").unwrap_or(false),
 			camera_distance_scale: env_parse_f32("CROZON_PREVIEW_CAMERA_DISTANCE").unwrap_or(1.0),
+			camera_yaw_degrees: env_parse_f32("CROZON_PREVIEW_CAMERA_YAW").unwrap_or(0.0),
 			capture_png: std::env::var("CROZON_PREVIEW_CAPTURE_PNG").ok().map(PathBuf::from),
 		}
 	}
@@ -70,6 +73,7 @@ impl PreviewCaptureSettings {
 			|| self.interrupt_after_secs.is_some()
 			|| self.draw_mouth_emit
 			|| (self.camera_distance_scale - 1.0).abs() > f32::EPSILON
+			|| self.camera_yaw_degrees.abs() > f32::EPSILON
 			|| self.capture_png.is_some()
 	}
 }
@@ -170,6 +174,11 @@ pub fn capture_camera_frame_for_bounds(
 
 pub(crate) fn scale_camera_distance(eye: Vec3, look_at: Vec3, scale: f32) -> Vec3 {
 	look_at + (eye - look_at) * scale.max(0.05)
+}
+
+/// Orbit `eye` about the vertical axis through `look_at`.
+pub(crate) fn yaw_camera(eye: Vec3, look_at: Vec3, degrees: f32) -> Vec3 {
+	look_at + Quat::from_rotation_y(degrees.to_radians()) * (eye - look_at)
 }
 
 fn foot_bearing_part(slot: CharacterPartSlot) -> bool {

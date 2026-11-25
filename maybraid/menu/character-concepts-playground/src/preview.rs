@@ -712,8 +712,8 @@ pub fn sync_preview(
 }
 
 fn spawn_lod_character_preview(commands: &mut Commands, config: &ConceptPreviewConfig) {
-	// Encounter-scale Epiphant preview is Bikanwarda: painted #1589 export as the
-	// visual, existing rigs underneath. Ordinary (1×) Epiphant stays the skinned recipe.
+	// Encounter-scale Epiphant preview is Bikanwarda: the skinned Epiphant parts
+	// drawing Liam's painted maps on the re-bound #1589 meshes.
 	if matches!(config.species(), ConceptSpecies::Epiphant)
 		&& (crate::preview_capture::encounter_scale_from_env() - 1.0).abs() > f32::EPSILON
 	{

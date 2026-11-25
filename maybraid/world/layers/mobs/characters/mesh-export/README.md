@@ -19,6 +19,14 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json WGPU_BACKEND=vulkan \
   --zip /tmp/epiphant_default_preview_procreate.zip
 ```
 
+`--freeze-clock` holds animation time at 0 so repeated exports bake the same pose.
+
+`--rebind-painted <painted.obj> --glb-output <out.glb>` re-binds a painted export OBJ
+onto the live skinned part meshes instead of exporting (clock frozen). Each painted
+triangle is matched to its source triangle by baked corners and normals; the GLB
+gets the painted UVs plus each part's own local positions, normals, `JOINTS_0` and
+`WEIGHTS_0`. See the Epiphant art README.
+
 `--texture-resolution` defaults to **1024** (square, per component). Materials use white `Kd` so the PNG supplies the colour (`map_Kd {component}_color.png`). Metallic/roughness maps are not written.
 
 ## Procreate notes

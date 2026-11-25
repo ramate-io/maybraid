@@ -1,7 +1,9 @@
 # Epiphant default-preview OBJ
 
 Wavefront export of `EpiphantConfig::default_preview()`, assembled the same way as
-runtime (`spawn_fixed_character_assembly`). Rest / bind pose, Y-up, metres.
+runtime (`spawn_fixed_character_assembly`), CPU-skinned into character root space.
+Y-up, metres. `--freeze-clock` holds animation time at 0 so the baked pose is
+repeatable; without it the pose is whatever idle-clip frame load time reached.
 
 Each independently paintable component is its own `o` object, `*_mat` material, and
 `*_color.png` (1024×1024, filled with that part's palette colour). MTL `Kd` is white
@@ -21,23 +23,37 @@ Degenerate geometry may have tiny UVs; every nondegenerate triangle has nonzero 
 
 ```bash
 nix develop --command cargo run -p character-mesh-export --release -- \
-  --species epiphant \
+  --species epiphant --freeze-clock \
   --output maybraid/art/characters/exports/epiphant/epiphant_default_preview.obj
 ```
 
 See [`mesh-export/README.md`](../../../../world/layers/mobs/characters/mesh-export/README.md).
 
-## Runtime GLB (Bevy)
+## Runtime GLB (Bevy): painted maps on the skinned parts
 
-Bevy does not load OBJ. Convert without re-authoring (keeps `o` names, `{part}_mat`,
-UVs; flips V for glTF):
+This OBJ is static. To render Liam's painted maps on the animated Epiphant, re-bind
+the painted OBJ onto the live part meshes:
 
 ```bash
-python3 maybraid/art/characters/exports/epiphant/obj_to_glb.py
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json WGPU_BACKEND=vulkan \
+  cargo run -p character-mesh-export --release -- \
+  --rebind-painted maybraid/art/characters/exports/epiphant/epiphant_default_preview.obj \
+  --glb-output maybraid/assets/characters/epiphant/default/epiphant_default_preview.glb
 ```
 
-Writes `maybraid/assets/characters/epiphant/default/epiphant_default_preview.glb`
-(Scene0 body … Scene7 tail). Bikanwarda loads those scenes as the visible body.
+The exporter assembles the character again (clock frozen, the same pose as this
+OBJ) and matches each painted triangle to the part triangle it came from by baked
+corner positions and normals. It writes one glTF mesh per component (`Mesh0` body,
+`Mesh1` head, `Mesh2` ear_left, `Mesh3` ear_right, `Mesh4` eye_left, `Mesh5`
+eye_right, `Mesh6` nose, `Mesh7` tail) in that part mesh's own local space:
+painted `TEXCOORD_0` (V flipped for glTF), the part's own positions and normals,
+and for skinned parts (body, head) the part GLB's own `JOINTS_0` / `WEIGHTS_0`. No
+weights are painted or invented. It fails if any corner is more than 1 cm off, any
+normal disagrees, or a triangle cannot take its own source triangle.
+
+Re-run it whenever the OBJ is repainted with a new unwrap or the part GLBs change.
+Bikanwarda keeps the ordinary skinned / socketed Epiphant parts and swaps each part's
+mesh for its painted mesh at runtime (`bikanwarda-character` `textures.rs`).
 
 ## Import in Procreate (manual)
 

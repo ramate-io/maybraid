@@ -3103,6 +3103,7 @@ dependencies = [
  "material-ref",
  "png 0.17.16",
  "rigs",
+ "serde_json",
  "tempfile",
  "zip 2.6.1",
 ]

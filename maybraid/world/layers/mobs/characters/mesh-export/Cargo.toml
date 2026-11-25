@@ -25,6 +25,7 @@ clap = { workspace = true }
 material-ref = { workspace = true }
 png = "0.17"
 rigs = { workspace = true }
+serde_json = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]

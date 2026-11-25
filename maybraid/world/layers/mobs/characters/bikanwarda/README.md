@@ -8,40 +8,43 @@ No NPC/world health bars and no `combat-hud` dependency — gameplay hooks are s
 
 Liam painted Color / Roughness / Metallic maps on the [#1589](https://github.com/ramate-io/maybraid/pull/1589) OBJ
 (`maybraid/art/characters/exports/epiphant/epiphant_default_preview.obj`): one `o` /
-`{part}_mat` per component, chart-unwrapped UVs. Bevy does not load OBJ. A
-format-conversion script writes a GLB that keeps those names and UVs:
+`{part}_mat` per component, chart-unwrapped UVs. That OBJ is the live part meshes
+CPU-skinned once, so on its own it cannot deform.
 
-```bash
-python3 maybraid/art/characters/exports/epiphant/obj_to_glb.py
-```
-
-Output: `maybraid/assets/characters/epiphant/default/epiphant_default_preview.glb`
-(one glTF scene per part: Scene0 body … Scene7 tail). No new crate; no Blender
-re-authoring. V is flipped for glTF’s top-left TEXCOORD origin.
+`character-mesh-export --rebind-painted` (see the
+[art README](../../../../../art/characters/exports/epiphant/README.md)) matches every
+painted triangle back to the runtime part triangle it came from and writes
+`maybraid/assets/characters/epiphant/default/epiphant_default_preview.glb`: one mesh
+per component in that part's own local space, with the painted UVs and, for skinned
+parts, the part GLB's own joints and weights.
 
 Runtime maps (git LFS is not used for `maybraid/assets`):
 
 - `{slot}-Color.png` — sRGB albedo
 - `{slot}-MetallicRoughness.png` — linear packed map, **G = roughness, B = metallic**
 
-[`BikanwardaActor`] loads those scenes as unsocketed, unskinned [`PartNode`]s and
-stamps `{part}_mat`. [`BikanwardaCharacterPlugin`] binds [`StandardMaterial`] by
-slot name.
+[`BikanwardaActor`] uses the stock Epiphant part nodes (same skins, sockets, mirrored
+right ear / eye) and stamps `{part}_mat` on each. [`BikanwardaCharacterPlugin`] then
+swaps each part's primary mesh for its painted mesh (`#Mesh{i}/Primitive0`) once the
+part's skin is remapped, keeping the entity's `SkinnedMesh`, and binds
+[`StandardMaterial`] by slot name. A painted mesh is only bound if its bounds match
+the mesh it replaces and it has joints exactly when the part is skinned; otherwise
+the part keeps its stock mesh and logs a warning.
 
-### Animation / gait tradeoff
+### Per component
 
-The #1589 export is a **static rest-pose** mesh (CPU-skinned once at export, then
-OBJ). It is not a skinned GLB. Binding it as the visible body means **the painted
-mesh does not deform** with Bray, sleep, or locomotion clips. That is not faked.
+| Component | Deforms with | Painted maps |
+| --- | --- | --- |
+| body | quadruped body rig (skinned) | `body_mat` |
+| head | pronograde head rig (skinned) | `head_mat` |
+| ear_left / ear_right | head rig `ear_socket.L/R` (rigid, right is mirrored) | `ear_left_mat` / `ear_right_mat` |
+| eye_left / eye_right | head rig `eye_socket.L/R` (rigid, right is mirrored) | `eye_left_mat` / `eye_right_mat` |
+| nose | head rig `nose_socket` (rigid) | `nose_mat` |
+| tail | body rig `tailbone` (rigid) | `tail_mat` |
 
-What still runs on the existing rig:
-
-- Quadruped + pronograde head **rigs** (clips, bone maps)
-- Motor collider / hurtboxes from [`BikanwardaSpec::uniform_scale()`] (6.7 m)
-- Chain anchors and Bray origin (`nose_socket` on the head rig)
-
-The textured mesh is a visual over that rig. Ordinary player Epiphants keep the
-skinned palette assembly.
+Ears, eyes, nose and tail are rigid meshes on sockets for every Epiphant; the part
+GLBs have no skin. Colliders, chain anchors and the Bray origin (`nose_socket`) are
+unchanged. Ordinary player Epiphants keep the palette assembly.
 
 **Preview stills** (Lavapipe + `character-concepts-playground`):
 

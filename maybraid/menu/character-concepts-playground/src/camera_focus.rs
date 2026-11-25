@@ -162,14 +162,12 @@ pub fn apply_camera_suggestion(
 			.unwrap_or_else(|| {
 				crate::preview_capture::capture_camera_frame_fallback(settings.encounter_scale)
 			});
-			let (eye, look_at) = (
-				crate::preview_capture::scale_camera_distance(
-					eye,
-					look_at,
-					settings.camera_distance_scale,
-				),
+			let eye = crate::preview_capture::scale_camera_distance(
+				eye,
 				look_at,
+				settings.camera_distance_scale,
 			);
+			let eye = crate::preview_capture::yaw_camera(eye, look_at, settings.camera_yaw_degrees);
 			for (mut transform, mut controller, _) in &mut cameras {
 				characters_playground::camera::orient_camera(
 					&mut transform,
