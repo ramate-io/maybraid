@@ -1,5 +1,11 @@
 # Contributing
 
+## Contributor guides
+
+- [Performance investigations](contributing/performance-investigations.md) covers native benchmark setup, evidence, and reporting.
+- [Metal GPU profiling](contributing/metal-gpu-profiling.md) explains Instruments, Tracy and Xcode evidence and the provenance of earlier GPU timings.
+- [GPU vegetation](contributing/gpu-vegetation.md) covers the current experiments and how to test the next architecture.
+
 | Task | Description |
 |------|-------------|
 | [Upcoming Events](https://github.com/ramate-io/maybraid/issues?q=is%3Aissue%20state%3Aopen%20label%3Aevent%20label%3Apriority%3Ahigh%2Cpriority%3Aurgent) | High-priority `event` issues with planned completion dates. |
